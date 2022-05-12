@@ -63,7 +63,7 @@ pub fn complete<'b, I: ParseIterator<T>, T: 'b + ByteReader, Node: Debug>(
         } => {
             let mut tok = Token::new(length, token_offset as u32, line);
 
-            //tok.set_source(reader);
+            tok.set_source(reader);
 
             let node = HCObj::TOKEN(tok.clone());
 
