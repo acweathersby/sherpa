@@ -40,7 +40,9 @@ pub fn complete<'b, I: ParseIterator<T>, T: 'b + ByteReader, Node: Debug>(
 
             let pos_b = &tokens[tokens.len() - 1];
 
-            let token = Token::token_from_range(pos_a, pos_b);
+            let mut token = Token::token_from_range(pos_a, pos_b);
+
+            token.set_source(reader);
 
             let root = tokens.len() - len;
 
