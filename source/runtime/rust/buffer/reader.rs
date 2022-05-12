@@ -1,4 +1,4 @@
-use std::{io::Read, rc::Rc};
+use std::{rc::Rc};
 
 use crate::{
     get_token_class_from_codepoint, get_token_length_from_code_point,

@@ -919,7 +919,7 @@ trait ParserCoreIterator<R: ByteReader> {
 
     fn consume(&mut self, index: usize, _: u32, bytecode: &[u32]) -> usize;
 
-    fn reduce(&mut self, mut index: usize, recover_data: u32, bytecode: &[u32]) -> usize {
+    fn reduce(&mut self, index: usize, recover_data: u32, bytecode: &[u32]) -> usize {
         let instruction = bytecode[index];
         let body_id = (instruction) & 0xFFFF;
         let length = (instruction >> 16) & 0xFFF;
