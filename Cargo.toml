@@ -1,0 +1,20 @@
+[package]
+name = "hctk"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "source/runtime/rust/lib.rs"
+
+[dependencies]
+lazy_static = "1.4.0"
+
+[dev-dependencies]
+coz = "0.1"
+bumpalo = "3.8.0"
+
+[profile.dev]
+debug = 2
+
+[profile.release]
+opt-level=3
