@@ -92,6 +92,8 @@ pub fn complete<'b, I: ParseIterator<T>, T: 'b + ByteReader, Node: Debug>(
         }
         crate::ParseAction::ERROR { .. } => return Err(state),
         _ => {
+            let curr_offset = iterator.get_token(1);
+
             return Err(ParseAction::ERROR {
                 error_code: ParseErrorCode::NORMAL,
                 pointer: 0,
