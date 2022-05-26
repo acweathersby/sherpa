@@ -1,5 +1,6 @@
 use std::result;
 
+use super::super::token::kernel_token::KernelToken;
 use super::super::ByteReader;
 use super::stack::KernelStack;
 
@@ -14,44 +15,10 @@ const _PRODUCTION_SCOPE_POP_POINTER: u32 = 2;
 const INSTRUCTION_POINTER_MASK: u32 = 0xFFFFFF;
 const skipped_scan_prod: u16 = 9009;
 
-
 const DEFAULT_PASS_INSTRUCTION: usize = 1;
 
 const NORMAL_STATE_MASK: u32 = 1 << 26;
 
-#[derive(Debug, Copy, Clone)]
-pub struct KernelToken {
-    typ: u16,
-    byte_offset: u32,
-    byte_length: u32,
-    cp_offset: u32,
-    cp_length: u32,
-    line: u32,
-}
-
-impl KernelToken {
-    fn new() -> KernelToken {
-        KernelToken {
-            typ: 0,
-            byte_offset: 0,
-            byte_length: 0,
-            cp_offset: 0,
-            cp_length: 0,
-            line: 0,
-        }
-    }
-
-    fn next(&self) -> KernelToken {
-        return KernelToken {
-            typ: 0,
-            byte_length: 0,
-            cp_length: 0,
-            cp_offset: self.cp_offset + self.cp_length,
-            byte_offset: self.byte_offset + self.byte_length,
-            line: 0,
-        };
-    }
-}
 #[derive(Debug, Copy, Clone)]
 pub enum ParseErrorCode {
     NORMAL,
@@ -74,9 +41,7 @@ pub enum ParseAction {
         error_code: ParseErrorCode,
     },
     SHIFT {
-        length: u32,
-        line: u32,
-        token_type: u32,
+        token: KernelToken,
     },
     SKIP {
         length: u32,
@@ -101,11 +66,9 @@ pub trait ParseIterator<T: ByteReader> {
      * Starts parsing the input and emits
      * parse actions to the handleAction function
      */
-    fn start(&mut self, handle_action: &mut impl FnMut(ParseAction, &T));
+    fn start(&mut self, handle_action: &mut impl FnMut(ParseAction)) -> KernelToken;
 
     fn reader(&self) -> &T;
-
-    fn get_tok(&mut self, index: usize) -> KernelToken;
 }
 pub struct ReferenceIterator<T: ByteReader> {
     bytecode: &'static [u32],
@@ -122,11 +85,15 @@ impl<T: ByteReader> ParseIterator<T> for ReferenceIterator<T> {
         }
     }
 
-    fn start(&mut self, handle_action: &mut impl FnMut(ParseAction, &T)) {
+    fn start(&mut self, handle_action: &mut impl FnMut(ParseAction)) -> KernelToken {
         let mut parser: StateIterator<T> =
             StateIterator::new(self.reader.clone(), self.entry_pointer, handle_action);
 
         parser.parse(self.bytecode);
+
+        let mut tok = parser.get_tok(1);
+
+        tok
     }
 
     fn reader(&self) -> &T {
@@ -208,14 +175,14 @@ pub struct StateIterator<'a, T: ByteReader> {
 
     scanner_iterator: ScannerIterator<T>,
 
-    emit: &'a mut dyn FnMut(ParseAction, &T),
+    emit: &'a mut dyn FnMut(ParseAction),
 }
 
 impl<'a, T: ByteReader> StateIterator<'a, T> {
     pub fn new(
         reader: T,
         entry_pointer: u32,
-        emit: &'a mut impl FnMut(ParseAction, &T),
+        emit: &'a mut impl FnMut(ParseAction),
     ) -> StateIterator<'a, T> {
         let cloned_reader = reader.clone();
         let mut iterator = StateIterator {
@@ -278,13 +245,17 @@ impl<'a, T: ByteReader> StateIterator<'a, T> {
         bytecode: &[u32],
     ) -> KernelToken {
         if current_token.typ == 0 {
-            
             let scanner = &mut self.scanner_iterator;
+
             scanner.stack.reset(scanner_start_pointer);
-            scanner.reader.set_cursor_to(current_token.byte_offset);
-            scanner.tokens[1] = KernelToken::new();
-            scanner.tokens[0] = KernelToken::new();
-            
+            scanner.reader.set_cursor_to(&current_token);
+            scanner.tokens[1] = current_token;
+            scanner.tokens[0] = current_token;
+
+            println!(
+                "1-{}:{}:{}",
+                current_token.line_number, current_token.line_offset, current_token.byte_offset
+            );
             loop {
                 let result = self.scanner_iterator.parse(bytecode);
 
@@ -293,22 +264,33 @@ impl<'a, T: ByteReader> StateIterator<'a, T> {
                         break;
                     }
                     ParseAction::TOKEN { token } => {
-
                         if token.typ == skipped_scan_prod {
-
                             current_token.cp_offset += token.cp_length;
                             current_token.byte_offset += token.byte_length;
+                            current_token.line_offset = token.line_offset;
+                            current_token.line_number = token.line_number;
 
                             self.scanner_iterator.stack.reset(scanner_start_pointer);
-
                             self.scanner_iterator.tokens[0] = self.scanner_iterator.tokens[1];
-                            
+                            println!(
+                                "--{}:{}:{}",
+                                current_token.line_number,
+                                current_token.line_offset,
+                                current_token.byte_offset
+                            );
                         } else {
-
                             current_token.cp_length = token.cp_length;
                             current_token.byte_length = token.byte_length;
                             current_token.typ = token.typ;
-                            
+                            current_token.line_offset = token.line_offset;
+                            current_token.line_number = token.line_number;
+
+                            println!(
+                                "2-{}:{}:{}",
+                                current_token.line_number,
+                                current_token.line_offset,
+                                current_token.byte_offset
+                            );
                             return current_token;
                         }
                     }
@@ -318,7 +300,7 @@ impl<'a, T: ByteReader> StateIterator<'a, T> {
                             error_code: ParseErrorCode::CANNOT_FORK,
                             pointer: 0,
                         });
-                        
+
                         break;
                     }
                     ParseAction::ERROR {
@@ -327,7 +309,7 @@ impl<'a, T: ByteReader> StateIterator<'a, T> {
                         production: _1,
                     } => {
                         self.emit_action(result);
-                        
+
                         break;
                     }
                     _ => {
@@ -336,7 +318,7 @@ impl<'a, T: ByteReader> StateIterator<'a, T> {
                             error_code: ParseErrorCode::INVALID_RETURN,
                             pointer: 0,
                         });
-                        
+
                         break;
                     }
                 }
@@ -364,7 +346,7 @@ impl<'a, T: ByteReader> ParserCoreIterator<T> for StateIterator<'a, T> {
         self.stack.swap_state(state);
     }
 
-     fn get_prod(&self) -> u32 {
+    fn get_prod(&self) -> u32 {
         self.production_id
     }
 
@@ -401,11 +383,10 @@ impl<'a, T: ByteReader> ParserCoreIterator<T> for StateIterator<'a, T> {
     }
 
     fn emit_action(&mut self, action: ParseAction) {
-        (self.emit)(action, &self.reader);
+        (self.emit)(action);
     }
 
     fn consume(&mut self, index: usize, _: u32, bytecode: &[u32]) -> usize {
-
         let mut token = self.get_tok(1);
 
         let instruction = bytecode[index];
@@ -428,6 +409,10 @@ impl<'a, T: ByteReader> ParserCoreIterator<T> for StateIterator<'a, T> {
 
         token.byte_length = 0;
 
+        token.line_offset = self.reader.line_offset();
+
+        token.line_number = self.reader.line_count();
+
         token.typ = 0;
 
         self.set_tok(0, token);
@@ -447,35 +432,21 @@ impl<'a, T: ByteReader> ParserCoreIterator<T> for StateIterator<'a, T> {
         if input_type > 0 {
             // Lexer token id input
 
-            if lexer_type == 1 { 
+            if lexer_type == 1 {
                 /* set next peek lexer */
 
                 let token = self.tokens[self.token_end];
 
                 self.reader.next(token.byte_length);
-                
+
                 if self.reader.at_end() {
                     return 0;
                 }
-                
+
                 self.token_end += 1;
+
                 self.tokens[self.token_end] = token.next();
-
-                match input_type {
-                    1 => {
-                        let token =
-                            self.scanner(
-                                self.tokens[self.token_end], 
-                                scanner_start_pointer, 
-                                bytecode
-                            );
-
-                        return token.typ as i32;
-                    }
-                    _ => 0,
-                }
             } else {
-
                 if self.reader.at_end() {
                     return 1;
                 }
@@ -483,25 +454,39 @@ impl<'a, T: ByteReader> ParserCoreIterator<T> for StateIterator<'a, T> {
                 /* set primary lexer */
 
                 if self.token_end > 1 {
-
                     self.token_end = 1;
 
-                    if !self.reader.set_cursor_to(self.tokens[1].byte_offset) {
+                    if !self.reader.set_cursor_to(&self.tokens[1]) {
                         //self.error();
                         return 0;
                     };
-                    
+
                     (&mut self.tokens[1]).typ = 0;
                 }
-                match input_type {
-                    1 => {
-                        let tok = self.get_tok(1);
-                        self.tokens[1] = self.scanner(tok, scanner_start_pointer, bytecode);
-                        self.tokens[1].typ as i32
-                    }
-                    _ => 0,
+
+                if (self.tokens[1].byte_offset == 55) {
+                    println!("O");
                 }
-               
+            }
+
+            let index = self.token_end;
+
+            let mut tok = self.get_tok(index);
+
+            match input_type {
+                1 => {
+                    tok.line_offset = self.reader.line_offset();
+                    tok.line_number = self.reader.line_count();
+                    tok = self.scanner(tok, scanner_start_pointer, bytecode);
+                    self.tokens[index] = tok;
+
+                    if index == 1 && self.tokens[1].byte_offset == 55 {
+                        println!("O-----");
+                    }
+
+                    tok.typ as i32
+                }
+                _ => 0,
             }
         } else {
             // Production id input
@@ -542,11 +527,21 @@ impl<T: ByteReader> ScannerIterator<T> {
     pub fn parse(&mut self, bytecode: &[u32]) -> ParseAction {
         let mut fail_mode: u32 = 0;
 
+        // To preserve line count and offset information,
+        // we assign the eventual outgoing token with the
+        // the current line information from the reader.
+
+        let mut token = &mut self.tokens[0];
+        token.line_number = self.reader.line_count();
+        token.line_offset = self.reader.line_offset();
+
         loop {
             let state = self.stack.pop_state();
 
             if state < 1 {
-                return ParseAction::TOKEN { token: self.tokens[0] };
+                let token = self.tokens[0];
+
+                return ParseAction::TOKEN { token };
             } else {
                 let mask_gate = NORMAL_STATE_MASK << fail_mode;
 
@@ -556,7 +551,7 @@ impl<T: ByteReader> ScannerIterator<T> {
                     fail_mode = self.instruction_executor(state, fail_mode, bytecode);
                 }
 
-               /*  let mask_mult_gate = 26 + fail_mode;
+                /*  let mask_mult_gate = 26 + fail_mode;
 
                 let entry = (state >> mask_mult_gate) & 0x1;
 
@@ -638,6 +633,10 @@ impl<T: ByteReader> ParserCoreIterator<T> for ScannerIterator<T> {
 
         token.byte_length = 0;
 
+        token.line_offset = self.reader.line_offset();
+
+        token.line_number = self.reader.line_count();
+
         token.typ = 0;
 
         self.set_tok(1, token);
@@ -661,25 +660,22 @@ impl<T: ByteReader> ParserCoreIterator<T> for ScannerIterator<T> {
                 let prev_token = self.tokens[self.token_end];
 
                 self.reader.next(prev_token.byte_length);
-                
+
                 if self.reader.at_end() {
                     return 0;
                 }
-                    
+
                 self.token_end += 1;
                 self.tokens[self.token_end] = prev_token.next();
-
             } else {
-
                 if self.reader.at_end() {
                     return 1;
                 }
 
                 if self.token_end > 1 {
-                    
-                    self.token_end = 1;                    
+                    self.token_end = 1;
 
-                    if !self.reader.set_cursor_to(self.tokens[1].byte_offset) {
+                    if !self.reader.set_cursor_to(&self.tokens[1]) {
                         //self.error();
                         return 0;
                     };
@@ -689,6 +685,9 @@ impl<T: ByteReader> ParserCoreIterator<T> for ScannerIterator<T> {
             }
 
             let token = &mut self.tokens[self.token_end];
+
+            token.line_number = self.reader.line_count();
+            token.line_offset = self.reader.line_offset();
 
             match input_type {
                 2 => {
@@ -745,24 +744,18 @@ trait ParserCoreIterator<R: ByteReader> {
     fn emit_action(&mut self, _: ParseAction) {}
 
     fn emit_shift(&mut self) {
-
         let token = self.get_tok(1);
         let prev_token = self.get_tok(0);
 
         if prev_token.byte_offset + prev_token.byte_length != token.byte_offset {
-
             self.emit_action(ParseAction::SKIP {
                 length: token.cp_offset - (prev_token.cp_length + prev_token.cp_offset),
-                line: prev_token.line,
+                line: prev_token.line_number,
                 token_type: 0,
             });
         }
 
-        self.emit_action(ParseAction::SHIFT {
-            length: token.cp_length,
-            line: prev_token.line,
-            token_type: token.typ as u32,
-        });
+        self.emit_action(ParseAction::SHIFT { token });
     }
 
     fn emit_reduce(&mut self, symbol_length: u32, body_id: u32) {
@@ -780,9 +773,8 @@ trait ParserCoreIterator<R: ByteReader> {
         bytecode: &[u32],
     ) -> u32 {
         let mut index = (state_pointer & STATE_INDEX_MASK) as usize;
-        
-        let result = loop {
 
+        let result = loop {
             //println!("instr: {} address: {} off: {}",bytecode[index] >> 28, index, self.get_reader().cursor());
 
             match bytecode[index] & 0xF0000000 as u32 {
@@ -842,12 +834,8 @@ trait ParserCoreIterator<R: ByteReader> {
                     index = self.assert_consume(index, fail_mode, bytecode);
                 }
 
-                0xF0000000 => {
-                    break self.advanced_return(index, fail_mode, bytecode) as u32
-                }
-                0x00000000 | _ => {
-                    break self.pass(index + 1, fail_mode) as u32
-                }
+                0xF0000000 => break self.advanced_return(index, fail_mode, bytecode) as u32,
+                0x00000000 | _ => break self.pass(index + 1, fail_mode) as u32,
             };
         };
 
@@ -895,12 +883,14 @@ trait ParserCoreIterator<R: ByteReader> {
             }
         }
 
-
         self.set_tok(1, token);
 
         if does_not_match {
             return 2;
         }
+
+        token.line_number = self.get_reader().line_count();
+        token.line_offset = self.get_reader().line_offset();
 
         self.consume(1, 0, bytecode);
 
@@ -982,7 +972,6 @@ trait ParserCoreIterator<R: ByteReader> {
     }
 
     fn set_token(&mut self, index: usize, _: u32, bytecode: &[u32]) -> usize {
-
         let instruction = bytecode[index];
 
         let val = instruction & 0xFFFFFF;
@@ -1107,15 +1096,17 @@ trait ParserCoreIterator<R: ByteReader> {
     fn hash_jump(&mut self, mut index: usize, _: u32, bytecode: &[u32]) -> usize {
         let instruction = bytecode[index];
 
+        index += 1;
+
         let input_type = (instruction >> 22) & 0x7;
 
         let lexer_type = (instruction >> 26) & 0x3;
 
-        let scanner_start_pointer = bytecode[index + 1];
+        let scanner_start_pointer = bytecode[index];
 
-        let table_data = bytecode[index + 2];
+        let table_data = bytecode[index + 1];
 
-        index += 3;
+        index += 2;
 
         let modulus = (1 << ((table_data >> 16) & 0xFFFF)) - 1;
 
@@ -1123,43 +1114,42 @@ trait ParserCoreIterator<R: ByteReader> {
 
         let hash_table_start = index as u32;
 
-        let instruction_field_start = hash_table_start + table_size;
+        let instruction_field_start = (hash_table_start as u32) + table_size;
 
         let instruction_field_size = instruction & 0xFFFF;
 
-        let input_value = self.get_input_value(
-            input_type,
-            lexer_type,
-            scanner_start_pointer,
-            bytecode,
-        ) as u32;
+        let input_value =
+            self.get_input_value(input_type, lexer_type, scanner_start_pointer, bytecode) as u32;
 
         let mut hash_index = input_value & modulus;
 
         loop {
-            let cell = bytecode[(hash_table_start + hash_index) as usize];
+            let cell = bytecode[(hash_table_start + hash_index) as usize] as u32;
 
-            let value = cell & 0x7FF;
+            let value = (cell & 0x7FF) as u32;
 
-            let next = ((cell >> 22) & 0x3FF) as i32 - 512;
+            let next = (((cell >> 22) & 0x3FF) - 512) as i32;
 
             if value == input_value {
-                let instruction_start = (cell >> 11) & 0x7FF;
+                let instruction_start = ((cell >> 11) & 0x7FF) as u32;
 
                 return (instruction_field_start + instruction_start) as usize;
-            } else if next == 0 {
+            }
+
+            if next == 0 {
                 //Failure
                 return (instruction_field_size + instruction_field_start) as usize;
             }
 
-            hash_index = (hash_index as i32 + next) as u32;
+            hash_index = ((hash_index as i32) + next) as u32;
         }
+
+        0
     }
 
     fn index_jump(&mut self, mut index: usize, _: u32, bytecode: &[u32]) -> usize {
-        
         let instruction = bytecode[index];
-        
+
         index += 1;
 
         let scanner_start_pointer = bytecode[index];
@@ -1170,14 +1160,11 @@ trait ParserCoreIterator<R: ByteReader> {
 
         let input_type = (instruction >> 22) & 0x7;
 
-        let token_transition = (instruction >> 26) & 0x3;
+        let lexer_type = (instruction >> 26) & 0x3;
 
-        let input_value = (self.get_input_value(
-            input_type,
-            token_transition,
-            scanner_start_pointer,
-            bytecode,
-        ) - (basis__ as i32)) as u32;
+        let input_value =
+            (self.get_input_value(input_type, lexer_type, scanner_start_pointer, bytecode)
+                - (basis__ as i32)) as u32;
 
         let number_of_rows = table_data >> 16;
 

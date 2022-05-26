@@ -1,8 +1,8 @@
-use std::{rc::Rc};
+use std::{rc::Rc, sync::Arc};
 
 use crate::{
     get_token_class_from_codepoint, get_token_length_from_code_point,
-    get_utf8_byte_length_from_code_point, get_utf8_code_point_from,
+    get_utf8_byte_length_from_code_point, get_utf8_code_point_from, KernelToken,
 };
 
 pub trait ByteReader {
@@ -16,52 +16,60 @@ pub trait ByteReader {
         self.length() <= offset
     }
 
-    /**
-     * Advances the cursor up-to 4-bytes forward and
-     * returns a Word (4byte) covering the next 4 bytes at
-     * the new cursor position.
-     *
-     * If the cursor has reached the end of the input stream
-     * then the previous byte value is returned.
-     */
+    ///
+    /// Advances the cursor up-to 4-bytes forward.
+    ///
     fn next(&mut self, amount: u32);
 
-    /**
-     * Returns the word at the current cursor position, little
-     * Endian
-     */
+    ///
+    /// Returns the word at the current cursor position, little
+    /// Endian
+    ///
     fn word(&self) -> u32;
 
-    /**
-     * Returns the byte at the current cursor position.
-     */
+    ///
+    /// Returns the byte at the current cursor position.
+    ///
     fn byte(&self) -> u8;
 
-    /**
-     * Returns the byte at the current cursor position.
-     */
+    ///
+    /// Returns the byte at the current cursor position.
+    ///
     fn length(&self) -> u32;
 
-    /**
-     * Resets the cursor back to the value of the `offset`
-     * argument. Should the offset value exceed the limits
-     * of the underlying implementation, `false` is returned
-     * , indicating a parse failure as the input stream can
-     * no longer satisfy the requirements of the parser.
-     */
-    fn set_cursor_to(&mut self, offset: u32) -> bool;
+    ///
+    /// Returns the number of lines encountered.
+    ///
+    fn line_count(&self) -> u32;
 
-    /**
-     * Return a new instance of byte reader with the same
-     * state as the source reader. Implementation should provide
-     * adequate shared buffers or other resources used to cache the input
-     * stream data, as multiple ByteReaders may be required read
-     * data at different cursor positions.
-     */
+    ///
+    /// Returns the offset of the most recent line character.
+    ///
+    fn line_offset(&self) -> u32;
+
+    ///
+    /// Resets the cursor back to the value of the `offset`
+    /// argument. Should the offset value exceed the limits
+    /// of the underlying implementation, `false` is returned
+    /// , indicating a parse failure as the input stream can
+    /// no longer satisfy the requirements of the parser.
+    ///
+    fn set_cursor_to(&mut self, token: &KernelToken) -> bool;
+
+    fn set_line_data(&mut self, token: &KernelToken);
+
+    ///
+    /// Return a new instance of byte reader with the same
+    /// state as the source reader. Implementation should provide
+    /// adequate shared buffers or other resources used to cache the input
+    /// stream data, as multiple ByteReaders may be required read
+    /// data at different cursor positions.
+    ///
     fn clone(&self) -> Self;
-    /**
-     * Returns UTF8 codepoint information at the current cursor position.
-     */
+
+    ///
+    /// Returns UTF8 codepoint information at the current cursor position.
+    ///
     fn codepoint(&self) -> u32 {
         return 0;
     }
@@ -80,12 +88,15 @@ pub trait ByteReader {
 
     fn cursor(&self) -> u32;
 
-    fn getSource(&self) -> Option<Rc<Vec<u8>>>;
+    /// Returns an optional vector of the input string data.
+    fn get_source(&self) -> Arc<Vec<u8>>;
 }
 #[derive(Debug, Clone)]
 pub struct UTF8StringReader {
     length: usize,
     cursor: usize,
+    line_count: usize,
+    line_offset: usize,
     string: Rc<Vec<u8>>,
     word: u32,
     codepoint: u32,
@@ -98,6 +109,8 @@ impl UTF8StringReader {
             string: Rc::new(string),
             cursor: 0,
             word: 0,
+            line_count: 0,
+            line_offset: 0,
             codepoint: 0,
         };
         reader.next(0);
@@ -106,21 +119,27 @@ impl UTF8StringReader {
 }
 
 impl ByteReader for UTF8StringReader {
-    fn getSource(&self) -> Option<Rc<Vec<u8>>> {
-        Some(self.string.clone())
+    fn get_source(&self) -> Arc<Vec<u8>> {
+        let vec = (*self.string).clone();
+        Arc::new(vec)
     }
 
     fn at_end(&self) -> bool {
         self.cursor >= self.length
     }
 
-    fn set_cursor_to(&mut self, offset: u32) -> bool {
-        if self.cursor != offset as usize {
-            self.cursor = offset as usize;
+    fn set_cursor_to(&mut self, token: &KernelToken) -> bool {
+        if self.cursor != token.byte_offset as usize {
+            self.cursor = token.byte_offset as usize;
+            self.set_line_data(token);
             self.next(0);
         }
-
         true
+    }
+
+    fn set_line_data(&mut self, token: &KernelToken) {
+        self.line_count = token.line_number as usize;
+        self.line_offset = token.line_offset as usize;
     }
 
     fn clone(&self) -> Self {
@@ -130,6 +149,8 @@ impl ByteReader for UTF8StringReader {
             cursor: self.cursor,
             word: self.word,
             codepoint: self.codepoint,
+            line_count: self.line_count,
+            line_offset: self.line_offset,
         }
     }
 
@@ -143,6 +164,14 @@ impl ByteReader for UTF8StringReader {
 
     fn word(&self) -> u32 {
         self.word
+    }
+
+    fn line_offset(&self) -> u32 {
+        self.line_offset as u32
+    }
+
+    fn line_count(&self) -> u32 {
+        self.line_count as u32
     }
 
     fn codepoint(&self) -> u32 {
@@ -159,7 +188,19 @@ impl ByteReader for UTF8StringReader {
         }
 
         if amount == 1 {
-            self.word = (self.word >> 8) | ((self.byte() as u32) << 24);
+            let byte = self.byte();
+            self.word = (self.word >> 8) | ((byte as u32) << 24);
+            println!(
+                "c {} {} {}",
+                self.cursor,
+                byte,
+                self.string[self.cursor - 1]
+            );
+            if self.string[self.cursor - 1] == 10 {
+                self.line_count += 1;
+                self.line_offset = self.cursor;
+                println!("A {}:{}:{}", self.line_count, self.line_offset, self.cursor);
+            }
         } else {
             let diff =
                 std::cmp::max(std::cmp::min(4, (self.length - self.cursor) as i32), 0) as u32;
@@ -174,9 +215,20 @@ impl ByteReader for UTF8StringReader {
 
             for i in start..end {
                 offset -= 8;
-                word |= (self.string[i as usize] as u32) << offset;
+                let byte = self.string[i as usize];
+                word |= (byte as u32) << offset;
             }
-
+            for i in (self.cursor - amount as usize)..self.cursor {
+                if i >= self.length {
+                    break;
+                }
+                let byte = self.string[i as usize];
+                if byte == 10 {
+                    self.line_count += 1;
+                    self.line_offset = i as usize;
+                    println!("--{}:{}:{}", self.line_count, self.line_offset, self.cursor);
+                }
+            }
             self.word = word;
         }
 

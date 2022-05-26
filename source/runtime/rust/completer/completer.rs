@@ -1,9 +1,9 @@
-use super::token::Token;
+
 use crate::{
     ast::{HCObj, ReduceFunction},
-    ByteReader, ParseAction, ParseErrorCode, ParseIterator,
+    ByteReader, ParseAction, ParseErrorCode, ParseIterator, error::TokenError, token::token::Token,
 };
-use std::fmt::Debug;
+use std::{fmt::Debug, str::FromStr};
 
 pub fn complete<'b, I: ParseIterator<T>, T: 'b + ByteReader, Node: Debug>(
     iterator: &mut I,
@@ -14,8 +14,10 @@ pub fn complete<'b, I: ParseIterator<T>, T: 'b + ByteReader, Node: Debug>(
     let mut stack_pointer: usize = 0;
     let mut token_offset: usize = 0;
     let mut state: ParseAction = ParseAction::NONE {};
+    
+    let source = iterator.reader().get_source();
 
-    let mut action_block = |action, reader: &T| match action {
+    let mut action_block = |action| match action {
         crate::ParseAction::TOKEN { token: _ } => {
             state = action;
         }
@@ -40,9 +42,9 @@ pub fn complete<'b, I: ParseIterator<T>, T: 'b + ByteReader, Node: Debug>(
 
             let pos_b = &tokens[tokens.len() - 1];
 
-            let mut token = Token::token_from_range(pos_a, pos_b);
+            let mut token = Token::from_range(pos_a, pos_b);
 
-            token.set_source(reader);
+            token.set_source(source.clone());
 
             let root = tokens.len() - len;
 
@@ -57,13 +59,11 @@ pub fn complete<'b, I: ParseIterator<T>, T: 'b + ByteReader, Node: Debug>(
             stack_pointer = stack_pointer - len + 1;
         }
         crate::ParseAction::SHIFT {
-            length,
-            line,
-            token_type: _,
+            token,
         } => {
-            let mut tok = Token::new(length, token_offset as u32, line);
+            let mut tok = Token::from_kernel_token(&token);
 
-            tok.set_source(reader);
+            tok.set_source(source.clone());
 
             let node = HCObj::TOKEN(tok.clone());
 
@@ -71,7 +71,7 @@ pub fn complete<'b, I: ParseIterator<T>, T: 'b + ByteReader, Node: Debug>(
 
             tokens.push(tok.clone());
 
-            token_offset += length as usize;
+            token_offset += token.cp_length as usize;
 
             stack_pointer += 1;
         }
@@ -84,17 +84,24 @@ pub fn complete<'b, I: ParseIterator<T>, T: 'b + ByteReader, Node: Debug>(
         }
     };
 
-    iterator.start(&mut action_block);
+    let last_token = iterator.start(&mut action_block);
 
     match state {
         crate::ParseAction::ACCEPT {} => {
-            return Ok(nodes.remove(0));
-        }
-        crate::ParseAction::ERROR { .. } => return Err(state),
-        _ => {
-            let curr_offset = iterator.get_token(1);
 
-            return Err(ParseAction::ERROR {
+            Ok(nodes.remove(0))
+        }
+        crate::ParseAction::ERROR { production, .. } => {
+
+            let error = TokenError::new(production, last_token, Some( iterator.reader().get_source()));
+
+            println!("Last token: {} ", error.report());
+
+            Err(state)
+        },
+        _ => {
+
+            Err(ParseAction::ERROR {
                 error_code: ParseErrorCode::NORMAL,
                 pointer: 0,
                 production: 0,
