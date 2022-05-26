@@ -190,16 +190,10 @@ impl ByteReader for UTF8StringReader {
         if amount == 1 {
             let byte = self.byte();
             self.word = (self.word >> 8) | ((byte as u32) << 24);
-            println!(
-                "c {} {} {}",
-                self.cursor,
-                byte,
-                self.string[self.cursor - 1]
-            );
+
             if self.string[self.cursor - 1] == 10 {
                 self.line_count += 1;
                 self.line_offset = self.cursor;
-                println!("A {}:{}:{}", self.line_count, self.line_offset, self.cursor);
             }
         } else {
             let diff =
@@ -226,7 +220,6 @@ impl ByteReader for UTF8StringReader {
                 if byte == 10 {
                     self.line_count += 1;
                     self.line_offset = i as usize;
-                    println!("--{}:{}:{}", self.line_count, self.line_offset, self.cursor);
                 }
             }
             self.word = word;

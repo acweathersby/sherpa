@@ -252,10 +252,6 @@ impl<'a, T: ByteReader> StateIterator<'a, T> {
             scanner.tokens[1] = current_token;
             scanner.tokens[0] = current_token;
 
-            println!(
-                "1-{}:{}:{}",
-                current_token.line_number, current_token.line_offset, current_token.byte_offset
-            );
             loop {
                 let result = self.scanner_iterator.parse(bytecode);
 
@@ -272,12 +268,6 @@ impl<'a, T: ByteReader> StateIterator<'a, T> {
 
                             self.scanner_iterator.stack.reset(scanner_start_pointer);
                             self.scanner_iterator.tokens[0] = self.scanner_iterator.tokens[1];
-                            println!(
-                                "--{}:{}:{}",
-                                current_token.line_number,
-                                current_token.line_offset,
-                                current_token.byte_offset
-                            );
                         } else {
                             current_token.cp_length = token.cp_length;
                             current_token.byte_length = token.byte_length;
@@ -285,12 +275,6 @@ impl<'a, T: ByteReader> StateIterator<'a, T> {
                             current_token.line_offset = token.line_offset;
                             current_token.line_number = token.line_number;
 
-                            println!(
-                                "2-{}:{}:{}",
-                                current_token.line_number,
-                                current_token.line_offset,
-                                current_token.byte_offset
-                            );
                             return current_token;
                         }
                     }
@@ -463,10 +447,6 @@ impl<'a, T: ByteReader> ParserCoreIterator<T> for StateIterator<'a, T> {
 
                     (&mut self.tokens[1]).typ = 0;
                 }
-
-                if (self.tokens[1].byte_offset == 55) {
-                    println!("O");
-                }
             }
 
             let index = self.token_end;
@@ -479,10 +459,6 @@ impl<'a, T: ByteReader> ParserCoreIterator<T> for StateIterator<'a, T> {
                     tok.line_number = self.reader.line_count();
                     tok = self.scanner(tok, scanner_start_pointer, bytecode);
                     self.tokens[index] = tok;
-
-                    if index == 1 && self.tokens[1].byte_offset == 55 {
-                        println!("O-----");
-                    }
 
                     tok.typ as i32
                 }
@@ -775,8 +751,6 @@ trait ParserCoreIterator<R: ByteReader> {
         let mut index = (state_pointer & STATE_INDEX_MASK) as usize;
 
         let result = loop {
-            //println!("instr: {} address: {} off: {}",bytecode[index] >> 28, index, self.get_reader().cursor());
-
             match bytecode[index] & 0xF0000000 as u32 {
                 0x10000000 => {
                     index = self.consume(index, fail_mode, bytecode);
