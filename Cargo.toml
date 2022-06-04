@@ -4,7 +4,20 @@ version = "0.2.0"
 edition = "2021"
 
 [lib]
-path = "./source/runtime/rust/lib.rs"
+path = "./source/library/rust/lib.rs"
+
+[[bin]]
+name = "hc-grammar"
+path = "./source/application/grammar/main.rs"
+
+[[bin]]
+name = "hc-asytrip"
+path = "./source/application/asytrip/main.rs"
+
+[[bin]]
+name = "hc-bytecode"
+path = "./source/application/bytecode/main.rs"
+
 
 [dependencies]
 lazy_static = "1.4.0"
@@ -18,3 +31,4 @@ debug = 2
 
 [profile.release]
 opt-level=3
+ 
