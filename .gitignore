@@ -1,3 +1,6 @@
 # Build artifacts
 /build
 /target
+
+# Debugging artifacts
+/sandbox
