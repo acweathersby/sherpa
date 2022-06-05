@@ -1,0 +1,92 @@
+# Copyright (C) 2022 Anthony Weathersby - The Hydrocarbon Parser Compiler
+# see /source/typescript/hydrocarbon.ts for full copyright and warranty 
+# disclaimer notice.
+
+@IMPORT ./symbols.hcg as sym
+
+@IGNORE g:sp g:nl tk:cm::comment
+
+<> ast_expression > struct 
+    | statements
+                                                        f:r { { t_Statements, statments:$1 } }
+
+<> struct > \{ struct_prop(+,) \}
+                                                        f:r { { t_Struct, props:$2 } }
+<> struct_prop >  identifier \: expression
+    |  identifier \: struct
+                                                        f:r { { t_Property,  id:$1, val:$3 } }
+    | \t_ identifier
+                                                        f:r { { t_TypeId,  val:$2 } }
+    | \c_ identifier
+                                                        f:r { { t_ClassId, val:$2 } }
+    | t:tok
+                                                        f:r { { t_Token } }
+<> statements > statement(+\, )
+
+<> statement > add
+    | member
+
+<> add > member \+ expression
+                                                        f:r { { t_Add, left: $1, right: $3 } }
+
+<> expression > member
+    | string_convert
+    | numeric_convert
+    | boolean_convert
+    | literal
+    | \[ expression(+,) \]                          
+                                                        f:r { { t_Vector, values: $2  } }
+
+<> string_convert > t:str convert_initializer?
+                                                        f:r { { t_STRING, value: $2  } }
+<> bool_convert > t:bool convert_initializer?
+                                                        f:r { { t_BOOL,  value: $2  } }
+
+<> numeric_convert > 
+       \u8  convert_initializer?
+                                                        f:r { { t_U8,  value: $2  } }
+     | \u16 convert_initializer?
+                                                        f:r { { t_U16, value: $2  } }
+     | \u32 convert_initializer?
+                                                        f:r { { t_U32, value: $2  } }
+     | \u64 convert_initializer?
+                                                        f:r { { t_U64, value: $2  } }
+     | \i8  convert_initializer?
+                                                        f:r { { t_I8,  value: $2  } }
+     | \i16 convert_initializer?
+                                                        f:r { { t_I16, value: $2  } }
+     | \i32 convert_initializer?
+                                                        f:r { { t_I32, value: $2  } }
+     | \i64 convert_initializer?
+                                                        f:r { { t_I64, value: $2  } }
+     | \f16 convert_initializer?
+                                                        f:r { { t_F16, value: $2  } }
+     | \f32 convert_initializer?
+                                                        f:r { { t_F22, value: $2  } }
+     | \f64 convert_initializer?
+                                                        f:r { { t_F64, value: $2  } }
+<> convert_initializer > \( member \)                   
+                                                        f:r { $2 }
+
+<> literal > t:true 
+                                                        f:r { { t_BOOLTrue } }
+    | t:false
+                                                        f:r { { t_BOOLFalse } }
+    | \" (g:id | g:num | g:sym | g:sp | g:nl)(*") \"
+                                                        f:r { { t_String, val:str($2) } }
+    | \' (g:id | g:num | g:sym | g:sp | g:nl)(*") \'
+                                                        f:r { { t_String, val:str($2) } }
+    | g:num(+)
+                                                        f:r { { t_Number, val:f64($1) } }
+
+<> member > reference                                   f:r { { t_Ref, val:$1 } }
+    | reference \. identifier
+                                                        f:r { { t_Member, ref:$1, property:$1 } }
+
+<> reference > \$ identifier 
+                                                        f:r { { t_NamedReference, val: str($2) } }
+        | \$ g:num(+)         
+                                                        f:r { { t_IndexReference, val: i32($1) } }
+
+<> identifier > sym::identifier
+
