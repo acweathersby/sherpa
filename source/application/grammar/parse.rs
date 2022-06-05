@@ -43,12 +43,14 @@ pub fn compile_ast(string: &String) -> Result<Box<Grammar>, ParseError> {
 
 #[test]
 fn test_production_minimum() {
-    let input = String::from("\n\n<> a > b\n");
+    let input = String::from("\n<> a > b\n");
     let result = compile_ast(&input);
     assert!(result.is_ok());
-    if let Ok(grammar) = result {
-        if let Some(blame) = grammar.tok.blame(1, 1) {
-            println!("{}", blame);
-        }
-    }
+}
+
+#[test]
+fn test_production_with_generic_symbol() {
+    let input = String::from("\n<> a > g:sp\n");
+    let result = compile_ast(&input);
+    assert!(result.is_ok());
 }

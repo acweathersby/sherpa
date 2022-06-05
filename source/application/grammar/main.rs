@@ -1,3 +1,4 @@
+mod compile;
 mod grammar_data;
 mod parse;
 

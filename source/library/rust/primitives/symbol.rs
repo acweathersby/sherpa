@@ -1,8 +1,10 @@
+#[derive(Debug, PartialEq, PartialOrd, Clone, Hash, Eq, Ord)]
 pub enum SymbolID {
-    DefinedNumeric(u32),
-    DefinedIdentifier(u32),
-    DefinedGeneric(u32),
-    Production(u32),
+    DefinedNumeric(u64),
+    DefinedIdentifier(u64),
+    DefinedGeneric(u64),
+    Production(u64),
+    TokenProduction(u64),
     GenericSpace,
     GenericHorizontalTab,
     GenericNewLine,
@@ -22,10 +24,11 @@ impl SymbolID {
 
     pub fn as_key(&self) -> u32 {
         match self {
-            Self::DefinedNumeric(val) => *val,
-            Self::DefinedIdentifier(val) => *val,
-            Self::DefinedGeneric(val) => *val,
-            Self::Production(val) => *val,
+            Self::DefinedNumeric(_) => 100,
+            Self::DefinedIdentifier(_) => 100,
+            Self::DefinedGeneric(_) => 100,
+            Self::Production(_) => 100,
+            Self::TokenProduction(_) => 100,
             Self::Undefined => 0,
             Self::Recovery => 0,
             Self::EndOfFile => 1,
@@ -41,7 +44,7 @@ impl SymbolID {
         }
     }
 
-    pub fn production_id(&self) -> Option<u32> {
+    pub fn production_id(&self) -> Option<u64> {
         match *self {
             Self::Production(val) => Some(val),
             _ => None,
@@ -52,6 +55,7 @@ impl SymbolID {
 pub type SymbolUUID = SymbolID;
 
 #[repr(C, align(64))]
+#[derive(Debug, Clone)]
 pub struct Symbol {
     ///
     /// The globally unique identifier of this symbol
@@ -85,13 +89,16 @@ pub struct Symbol {
     /// If this symbol does not exist in scanner space then it is
     /// set to 0
     pub scanner_index: u32,
+    ///
+    /// Always captures, regardless of other symbols
+    pub exclusive: bool,
 }
 
 use std::collections::BTreeMap;
 
 ///
 /// A table that maps a symbol class_id to a utf8 string.
-pub type SymbolStringTable = BTreeMap<u32, (u64, String)>;
+pub type SymbolStringTable = BTreeMap<SymbolID, String>;
 
 ///
 /// A table that maps a symbol uuid to a production id
@@ -99,8 +106,8 @@ pub type ProductionSymbolsTable = BTreeMap<u64, (u32, u32)>;
 
 ///
 /// A table that contains all symbols keyed by their uuid
-pub type SymbolsTable = BTreeMap<u32, (u64, Symbol)>;
+pub type SymbolsTable = BTreeMap<SymbolUUID, Symbol>;
 
 ///
 /// A table that contains symbols defined by their class_id
-pub type ExportSymbolsTable = BTreeMap<u32, (u64, Symbol)>;
+pub type ExportSymbolsTable = BTreeMap<SymbolID, Symbol>;

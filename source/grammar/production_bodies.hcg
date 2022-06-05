@@ -22,7 +22,7 @@
 
 <> production_body >  \! ? sym::reference_symbol? entries fn::reduce_function?                      
             
-            f:r { { t_Body, c_Production, priority:bool($1), symbols:$3, reference:$2, reduce_function:$4, production:t_Production } }
+            f:r { { t_Body, c_Production, priority:bool($1), symbols:$3, reference:$2, reduce_function:$4 } }
 
 <> entries > entries body_entry 
             

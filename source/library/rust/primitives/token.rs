@@ -30,7 +30,9 @@ impl fmt::Debug for Token {
 
         bug.field("length", &self.length)
             .field("offset", &self.offset)
-            .field("line", &self.line_number);
+            .field("line", &self.line_number)
+            .field("line_number", &self.line_number)
+            .field("line_offset", &self.line_offset);
 
         if let Some(_) = self.input {
             bug.field("value", &self.String());
@@ -159,7 +161,7 @@ impl Token {
     /// ### Returns:
     /// - `Option<String>` - A `String` of the blame diagram or `None` if source is
     /// not defined.
-    pub fn blame(&self, max_pre: usize, max_post: usize) -> Option<String> {
+    pub fn blame(&self, max_pre: usize, max_post: usize, inline_comment: &str) -> Option<String> {
         fn increment_end(source: &Vec<u8>, mut end: usize) -> usize {
             while (end as usize) < source.len() && source[end as usize] != 10 {
                 end += 1;
@@ -187,7 +189,7 @@ impl Token {
         ) -> String {
             if let Ok(utf_string) = String::from_utf8(Vec::from(&source[beg..end])) {
                 let lines = format!("{}", line_number);
-                format!("{}: {}\n", &lines, utf_string,)
+                format!("   {}: {}\n", &lines, utf_string,)
             } else {
                 String::from("")
             }
@@ -205,18 +207,20 @@ impl Token {
 
             end = increment_end(&source, end);
 
-            let slice = &source[beg..end];
+            let slice = &source[(beg + 1)..end];
 
             if let Ok(utf_string) = String::from_utf8(Vec::from(slice)) {
                 {
                     let lines = format!("{}", lines);
                     string += &format!(
-                        "{}: {}\n{}\n",
+                        "   {}: {}\n{}\n",
                         &lines,
                         utf_string,
-                        String::from(" ").repeat(lines.len() + 2 + root - beg)
-                            + "\u{001b}[31m"
+                        String::from(" ").repeat(lines.len() + 3 + root - beg)
+                            + " \u{001b}[31m"
                             + &String::from("^").repeat(len)
+                            + " "
+                            + inline_comment
                             + "\u{001b}[0m",
                     );
                 }
@@ -227,7 +231,7 @@ impl Token {
                 if beg_root > 0 {
                     for a in 1..(max_pre + 1) {
                         if beg_root - 1 == 0 {
-                            string = String::from("1:\n") + &string;
+                            string = String::from("   1:\n") + &string;
                             break;
                         }
 

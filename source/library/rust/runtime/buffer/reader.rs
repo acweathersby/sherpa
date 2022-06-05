@@ -186,7 +186,7 @@ impl ByteReader for UTF8StringReader {
         if amount == 1 {
             self.word = (self.word >> 8) | ((self.byte() as u32) << 24);
 
-            if self.string[self.cursor - 1] == 10 {
+            if self.string[self.cursor] == 10 {
                 self.line_count += 1;
                 self.line_offset = self.cursor;
             }
@@ -207,7 +207,9 @@ impl ByteReader for UTF8StringReader {
                 let byte = self.string[i as usize];
                 word |= (byte as u32) << offset;
             }
-            for i in (self.cursor - amount as usize)..std::cmp::min(self.length, self.cursor) {
+            for i in
+                (self.cursor - amount as usize + 1)..std::cmp::min(self.length, self.cursor + 1)
+            {
                 let byte = self.string[i as usize];
                 if byte == 10 {
                     self.line_count += 1;

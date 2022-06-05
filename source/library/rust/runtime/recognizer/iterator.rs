@@ -384,7 +384,7 @@ impl<'a, T: ByteReader> ParserCoreIterator<T> for StateIterator<'a, T> {
 
         self.emit_shift();
 
-        self.reader.next(token.byte_length);
+        //self.reader.next(token.byte_length);
 
         token.cp_offset += token.cp_length;
 
@@ -396,9 +396,8 @@ impl<'a, T: ByteReader> ParserCoreIterator<T> for StateIterator<'a, T> {
 
         token.typ = 0;
 
-        token.line_offset = self.reader.line_offset();
-
-        token.line_number = self.reader.line_count();
+        //token.line_offset = self.reader.line_offset();
+        //token.line_number = self.reader.line_count();
 
         self.set_tok(0, token);
 
@@ -422,19 +421,19 @@ impl<'a, T: ByteReader> ParserCoreIterator<T> for StateIterator<'a, T> {
 
                 let token = self.tokens[self.token_end];
 
-                self.reader.next(token.byte_length);
+                // self.reader.next(token.byte_length);
 
-                if self.reader.at_end() {
-                    return 0;
-                }
+                //if self.reader.at_end() {
+                //    return 0;
+                //}
 
                 self.token_end += 1;
 
                 self.tokens[self.token_end] = token.next();
             } else {
-                if self.reader.at_end() {
-                    return 1;
-                }
+                //if self.reader.at_end() {
+                //    return 1;
+                //}
 
                 /* set primary lexer */
 
@@ -445,7 +444,7 @@ impl<'a, T: ByteReader> ParserCoreIterator<T> for StateIterator<'a, T> {
                         return 0;
                     };
 
-                    (&mut self.tokens[1]).typ = 0;
+                    //(&mut self.tokens[1]).typ = 0;
                 }
             }
 
@@ -455,8 +454,8 @@ impl<'a, T: ByteReader> ParserCoreIterator<T> for StateIterator<'a, T> {
 
             match input_type {
                 1 => {
-                    tok.line_offset = self.reader.line_offset();
-                    tok.line_number = self.reader.line_count();
+                    //tok.line_offset = self.reader.line_offset();
+                    //tok.line_number = self.reader.line_count();
                     tok = self.scanner(tok, scanner_start_pointer, bytecode);
                     self.tokens[index] = tok;
 
@@ -592,8 +591,7 @@ impl<T: ByteReader> ParserCoreIterator<T> for ScannerIterator<T> {
             token.byte_length = 0;
         }
 
-        self.reader
-            .next(token.byte_length + (token.byte_offset - anchor.byte_offset));
+        self.reader.next(token.byte_length);
 
         token.cp_offset += token.cp_length;
 
@@ -685,33 +683,21 @@ impl<T: ByteReader> ParserCoreIterator<T> for ScannerIterator<T> {
 }
 
 trait ParserCoreIterator<R: ByteReader> {
-    fn get_prod(&self) -> u32;
-
-    fn set_prod(&mut self, val: u32);
-
-    fn get_acc(&mut self) -> u32;
-
-    fn set_acc(&mut self, val: u32);
-
-    fn get_tok_top(&self) -> usize;
-
-    fn set_tok_top(&mut self, index: usize);
-
-    fn get_tok(&mut self, index: usize) -> KernelToken;
-
-    fn set_tok(&mut self, index: usize, token: KernelToken);
-
-    fn push_state(&mut self, state: u32);
-
-    fn swap_state(&mut self, state: u32);
-
-    fn read_state(&self) -> u32;
-
-    fn pop_state(&mut self) -> u32;
-
-    fn get_reader(&mut self) -> &mut R;
-
+    fn consume(&mut self, index: usize, _: u32, bytecode: &[u32]) -> usize;
     fn emit_action(&mut self, _: ParseAction) {}
+    fn get_acc(&mut self) -> u32;
+    fn get_prod(&self) -> u32;
+    fn get_reader(&mut self) -> &mut R;
+    fn get_tok_top(&self) -> usize;
+    fn get_tok(&mut self, index: usize) -> KernelToken;
+    fn pop_state(&mut self) -> u32;
+    fn push_state(&mut self, state: u32);
+    fn read_state(&self) -> u32;
+    fn set_acc(&mut self, val: u32);
+    fn set_prod(&mut self, val: u32);
+    fn set_tok_top(&mut self, index: usize);
+    fn set_tok(&mut self, index: usize, token: KernelToken);
+    fn swap_state(&mut self, state: u32);
 
     fn emit_shift(&mut self) {
         let token = self.get_tok(1);
@@ -878,8 +864,6 @@ trait ParserCoreIterator<R: ByteReader> {
 
         index
     }
-
-    fn consume(&mut self, index: usize, _: u32, bytecode: &[u32]) -> usize;
 
     fn reduce(&mut self, index: usize, recover_data: u32, bytecode: &[u32]) -> usize {
         let instruction = bytecode[index];
@@ -1111,8 +1095,6 @@ trait ParserCoreIterator<R: ByteReader> {
 
             hash_index = ((hash_index as i32) + next) as u32;
         }
-
-        0
     }
 
     fn index_jump(&mut self, mut index: usize, _: u32, bytecode: &[u32]) -> usize {
