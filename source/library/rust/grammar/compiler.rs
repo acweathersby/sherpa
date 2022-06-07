@@ -659,6 +659,7 @@ fn pre_process_grammar(
         symbols_string_table,
         production_symbols_table,
         imports: import_names_lookup,
+        closures: HashMap::new(),
     })
 }
 

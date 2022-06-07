@@ -5,7 +5,8 @@ use std::{
 };
 
 use super::{
-    BodyTable, ProductionBodiesTable, ProductionTable, SymbolID, SymbolStringTable, SymbolsTable,
+    BodyTable, Item, ProductionBodiesTable, ProductionTable, SymbolID, SymbolStringTable,
+    SymbolsTable,
 };
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
@@ -69,4 +70,7 @@ pub struct GrammarStore {
     ///
     /// Maps a local import name to an absolute file path and its UUID.
     pub imports: HashMap<String, (String, PathBuf)>,
+    ///
+    /// Closure of all items that can be produced by this grammar.
+    pub closures: HashMap<Item, Vec<Item>>,
 }
