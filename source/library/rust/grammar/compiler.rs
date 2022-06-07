@@ -1,14 +1,16 @@
 use crate::{
     grammar::{hash::hash_id_value, parse::ParseError},
     primitives::{
-        Body, BodyId, BodySymbolRef, BodyTable, GrammarId, GrammarStore, Item,
-        ProductionBodiesTable, ProductionId, ProductionTable, StringId, Symbol, SymbolID,
-        SymbolStringTable, SymbolsTable, Token,
+        Body, BodyId, BodySymbolRef, BodyTable, GrammarId, GrammarStore, ImportProductionNameTable,
+        Item, ProductionBodiesTable, ProductionId, ProductionTable, StringId, Symbol, SymbolID,
+        SymbolStringTable, SymbolsTable, TempGrammarStore, Token,
     },
 };
 use regex::Regex;
 
-use super::{grammar_data::ast::Body as ASTBody, grammar_data::ast::*, parse};
+use super::{
+    create_production_uuid_name, grammar_data::ast::Body as ASTBody, grammar_data::ast::*, parse,
+};
 
 use std::{
     collections::{BTreeSet, HashMap, HashSet, VecDeque},
@@ -18,24 +20,6 @@ use std::{
     thread::{self, JoinHandle},
     time::Duration,
 };
-
-type ImportProductionNameTable = HashMap<String, (String, PathBuf)>;
-
-/// A temporary store of table references that can be passed
-/// as one argument to functions that require access to such tables.
-struct TempGrammarStore<'a> {
-    /// Maps an imported symbol name to a universally unique string
-    /// that may be used to resolve imported grammar production names.
-    pub local_uuid: &'a String,
-    pub absolute_path: &'a PathBuf,
-    pub import_names_lookup: &'a mut ImportProductionNameTable,
-    pub symbols_table: &'a mut SymbolsTable,
-    pub symbols_string_table: &'a mut SymbolStringTable,
-    pub bodies_table: &'a mut BodyTable,
-    pub production_table: &'a mut ProductionTable,
-    pub production_symbols_table: &'a mut BTreeSet<SymbolID>,
-    pub production_bodies_table: &'a mut ProductionBodiesTable,
-}
 
 pub fn compile_all(
     root_grammar_absolute_path: &PathBuf,
@@ -498,7 +482,7 @@ pub fn compile_file_path(absolute_path: &PathBuf) -> Result<GrammarStore, parse:
     match read(absolute_path) {
         Ok(buffer) => {
             let grammar = parse::compile_ast(buffer)?;
-            pre_process_grammar(&grammar, &String::from(""), absolute_path)
+            pre_process_grammar(&grammar, absolute_path)
         }
         Err(err) => Err(parse::ParseError::IO_ERROR(err)),
     }
@@ -509,7 +493,7 @@ pub fn compile_string(
     absolute_path: &PathBuf,
 ) -> Result<GrammarStore, parse::ParseError> {
     let grammar = parse::compile_ast(Vec::from(string.as_bytes()))?;
-    pre_process_grammar(&grammar, string, absolute_path)
+    pre_process_grammar(&grammar, absolute_path)
 }
 
 fn get_uuid_grammar_name(uri: &PathBuf) -> Result<String, ParseError> {
@@ -539,7 +523,6 @@ fn get_uuid_grammar_name(uri: &PathBuf) -> Result<String, ParseError> {
 ///  
 fn pre_process_grammar(
     grammar: &Grammar,
-    source: &String,
     absolute_path: &PathBuf,
 ) -> Result<GrammarStore, parse::ParseError> {
     let mut import_names_lookup = ImportProductionNameTable::new();
@@ -773,11 +756,13 @@ fn get_resolved_production_name(node: &ASTNode, tgs: &TempGrammarStore) -> Strin
                 )
                 }
                 Some((grammar_uuid_name, _)) => {
-                    grammar_uuid_name.to_owned() + "#" + production_name
+                    create_production_uuid_name(grammar_uuid_name, production_name)
                 }
             }
         }
-        ASTNode::Production_Symbol(prod_sym) => tgs.local_uuid.to_owned() + "#" + &prod_sym.name,
+        ASTNode::Production_Symbol(prod_sym) => {
+            create_production_uuid_name(tgs.local_uuid, &prod_sym.name)
+        }
         ASTNode::Production(prod) => get_resolved_production_name(&prod.symbol, tgs),
         ASTNode::Production_Token(prod_tok) => {
             get_resolved_production_name(&prod_tok.production, tgs)
@@ -1325,7 +1310,7 @@ fn test_pre_process_grammar() {
         "\n@IMPORT ./test/me/out.hcg as bob \n<> a > bob::test tk:p?^test a(+,) ( \\1234 | t:sp? ( sp | g:sym g:sp ) f:r { basalt } ) \\nto <> b > tk:p p ",
     );
     if let Ok(grammar) = parse::compile_ast(Vec::from(grammar.as_bytes())) {
-        match pre_process_grammar(&grammar, &String::from("/grammar"), &PathBuf::from("/test")) {
+        match pre_process_grammar(&grammar, &PathBuf::from("/test")) {
             Ok(grammar) => {}
             Err(_) => {
                 panic!("Failed to parse and produce an AST of '<> a > b'");

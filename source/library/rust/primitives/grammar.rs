@@ -74,3 +74,21 @@ pub struct GrammarStore {
     /// Closure of all items that can be produced by this grammar.
     pub closures: HashMap<Item, Vec<Item>>,
 }
+
+pub type ImportProductionNameTable = HashMap<String, (String, PathBuf)>;
+
+/// A temporary store of table references that can be passed
+/// as one argument to functions that require access to such tables.
+pub struct TempGrammarStore<'a> {
+    /// Maps an imported symbol name to a universally unique string
+    /// that may be used to resolve imported grammar production names.
+    pub local_uuid: &'a String,
+    pub absolute_path: &'a PathBuf,
+    pub import_names_lookup: &'a mut ImportProductionNameTable,
+    pub symbols_table: &'a mut SymbolsTable,
+    pub symbols_string_table: &'a mut SymbolStringTable,
+    pub bodies_table: &'a mut BodyTable,
+    pub production_table: &'a mut ProductionTable,
+    pub production_symbols_table: &'a mut BTreeSet<SymbolID>,
+    pub production_bodies_table: &'a mut ProductionBodiesTable,
+}
