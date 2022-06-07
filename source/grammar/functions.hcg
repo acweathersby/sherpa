@@ -21,16 +21,16 @@
 
 <> out_of_band_function > 
 
-        js_function_start_symbol sym::reference_symbol { tk:js_data } 
+        js_function_start_symbol sym::reference_symbol tk:js_data_block
                  
                                                                     f:r {  { 
                                                                             t_Out_Of_Band,
                                                                             c_Function,  
                                                                             reference:$2,     
-                                                                            txt: str($4)
+                                                                            txt: str($3)
                                                                         }  }
 
-    |   js_function_start_symbol sym::production_symbol function_body_index? { tk:js_data } 
+    |   js_function_start_symbol sym::production_symbol function_body_index? tk:js_data_block
 
                                                                     f:r {  { 
                                                                             t_Out_Of_Band, 
@@ -52,19 +52,19 @@
 
 <> function_body_index > ( 
     \. ( 
-                g:num                       f:r{ f64($1) } 
-            |   \*                          f:r{ str($1) } 
-            |   sym::reference_symbol 
+                g:num                       f:r{ { t_FunctionIndexNum, value: f64($1) } } 
+            |   \*                          f:r{ { t_FunctionIndexWildCard } } 
+            |   sym::reference_symbol       f:r{ { t_FunctionIndexId, value: str($1) } } 
     ) 
  )(+)
 
                                                                         }
                                                                     }
-<> reduce_function > js_function_start_symbol ( t:return | t:r ) { tk:js_data }                                 
+<> reduce_function > js_function_start_symbol ( t:return | t:r ) tk:js_data_block                                
                                                                     f:r { {
                                                                         t_Returned,
                                                                         c_Function,        
-                                                                        txt: str($4), 
+                                                                        txt: str($3), 
                                                                         }
                                                                     }
 
@@ -77,6 +77,8 @@
                                                                         }
                                                                     }
 
+
+<> js_function_data > js_data ?=}
 
 <> js_data > js_primitive
     | js_data_block

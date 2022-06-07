@@ -113,9 +113,12 @@
     |   t:scan t:back? t:until token_id_list
                                             f:r { { t_ScanUntil, c_IR, c_IR_Instruction, ids: $4, SCAN_BACKWARDS:bool($2) } }
 
-    |   t:set t:token t:id ( ! g:num f:r{ { t_Num, val: i64($1) } } | sym::terminal_symbol ) g:num
+    |   t:set t:token t:id ( ! g:num f:r{ { t_Num, val: i64($1) } } | sym::terminal_symbol ) g:sp g:num
                                            
-                                            f:r { { t_TokenId, c_IR, c_IR_Instruction, id: $4  } }
+                                            f:r { { t_TokenId, c_IR, c_IR_Instruction, id: $5  } }
+                                            
+    |   t:skip
+                                            f:r { { t_Skip, c_IR, c_IR_Instruction  } }
 
     |   t:pass
                                             f:r { { t_Pass, c_IR, c_IR_Instruction  } }
@@ -157,7 +160,7 @@
             ( 
                         ! g:num f:r{ { t_Num, val: i64($1) } } 
                 |       sym::terminal_symbol
-            )(+) 
+            )(+g:sp) 
         \] 
                                             f:r { $2 }
 
@@ -167,7 +170,7 @@
             ( 
                         ! g:num f:r{ { t_Num, val: i64($1) } } 
                 |       sym::production_symbol
-            )(+) 
+            )(+g:sp) 
         \] 
                                             f:r { $2 }
 

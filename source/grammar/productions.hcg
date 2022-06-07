@@ -37,12 +37,12 @@
 <> production > \<> t:lazy?^l \! ?^p sym::annotated_production_symbol^s \>  pb::production_bodies^b
                                                                         
                                                             f:r { {
-                                                                t_Production , c_Production, priority: bool($3), symbol:$s, bodies:$b, LAZY:bool($l)
+                                                                t_Production , c_Production, priority: bool($3), symbol:$s, bodies:$b, LAZY:bool($l), tok
                                                             } }
 
     | \+> sym::annotated_production_symbol  \>  pb::production_bodies
 
                                                             f:r { {
-                                                                t_ProductionMerged , c_Production, symbol:$2, bodies:$4
+                                                                t_ProductionMerged , c_Production, symbol:$2, bodies:$4, tok
                                                             } }
         

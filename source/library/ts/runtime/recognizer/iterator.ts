@@ -934,7 +934,7 @@ export class StateIterator {
         scanner_start_pointer: number
     ): KernelToken {
 
-        if (current_token.type <= 0) {
+        if (true || current_token.type <= 0) {
             const clone = this.reader.clone();
             clone.setCursorTo(current_token);
 

@@ -29,9 +29,9 @@
 
 use std::cell::UnsafeCell;
 
-use hctk::primitives::ast_node::{HCObj, HCObjTrait, ReduceFunction};
+use crate::primitives::ast_node::{HCObj, HCObjTrait, ReduceFunction};
 
-use hctk::primitives::Token;
+use crate::primitives::Token;
 
 type RF = ReduceFunction<ASTNode>;
 
@@ -51,6 +51,7 @@ SetProd(Box<SetProd>),
 ForkTo(Box<ForkTo>),
 ScanUntil(Box<ScanUntil>),
 TokenId(Box<TokenId>),
+Skip(Box<Skip>),
 Pass(Box<Pass>),
 Fail(Box<Fail>),
 NotInScope(Box<NotInScope>),
@@ -92,7 +93,10 @@ Out_Of_Band(Box<Out_Of_Band>),
 Repeat(Box<Repeat>),
 Lazy(Box<Lazy>),
 Num(Box<Num>),
-HASH_NAME(Box<HASH_NAME>) 
+HASH_NAME(Box<HASH_NAME>),
+FunctionIndexNum(Box<FunctionIndexNum>),
+FunctionIndexWildCard(Box<FunctionIndexWildCard>),
+FunctionIndexId(Box<FunctionIndexId>) 
 }
     
 impl HCObjTrait for ASTNode {
@@ -124,6 +128,8 @@ impl HCObjTrait for ASTNode {
             ScanUntil(bx) => bx.tok.String(),
 
             TokenId(bx) => bx.tok.String(),
+
+            Skip(bx) => bx.tok.String(),
 
             Pass(bx) => bx.tok.String(),
 
@@ -208,6 +214,12 @@ impl HCObjTrait for ASTNode {
             Num(bx) => bx.tok.String(),
 
             HASH_NAME(bx) => bx.tok.String(),
+
+            FunctionIndexNum(bx) => bx.tok.String(),
+
+            FunctionIndexWildCard(bx) => bx.tok.String(),
+
+            FunctionIndexId(bx) => bx.tok.String(),
             _ => String::from(""),
         } */
     }
@@ -233,6 +245,7 @@ SetProd(&'a mut SetProd),
 ForkTo(&'a mut ForkTo),
 ScanUntil(&'a mut ScanUntil),
 TokenId(&'a mut TokenId),
+Skip(&'a mut Skip),
 Pass(&'a mut Pass),
 Fail(&'a mut Fail),
 NotInScope(&'a mut NotInScope),
@@ -274,7 +287,10 @@ Out_Of_Band(&'a mut Out_Of_Band),
 Repeat(&'a mut Repeat),
 Lazy(&'a mut Lazy),
 Num(&'a mut Num),
-HASH_NAME(&'a mut HASH_NAME)
+HASH_NAME(&'a mut HASH_NAME),
+FunctionIndexNum(&'a mut FunctionIndexNum),
+FunctionIndexWildCard(&'a mut FunctionIndexWildCard),
+FunctionIndexId(&'a mut FunctionIndexId)
 }
 
 impl<'a> NodeIteration<'a> {
@@ -318,6 +334,9 @@ impl<'a> NodeIteration<'a> {
                 },
                 TokenId(_0) => {
                     "node-TokenId"
+                },
+                Skip(_0) => {
+                    "node-Skip"
                 },
                 Pass(_0) => {
                     "node-Pass"
@@ -444,6 +463,15 @@ impl<'a> NodeIteration<'a> {
                 },
                 HASH_NAME(_0) => {
                     "node-HASH_NAME"
+                },
+                FunctionIndexNum(_0) => {
+                    "node-FunctionIndexNum"
+                },
+                FunctionIndexWildCard(_0) => {
+                    "node-FunctionIndexWildCard"
+                },
+                FunctionIndexId(_0) => {
+                    "node-FunctionIndexId"
                 }
             REPLACE(node) => "replace",
             _ => "unknown",
@@ -510,6 +538,10 @@ where
                         true
                     },
                     TokenId(par) => {
+                        par.Replace(node, c, d);
+                        true
+                    },
+                    Skip(par) => {
                         par.Replace(node, c, d);
                         true
                     },
@@ -680,6 +712,18 @@ where
                     HASH_NAME(par) => {
                         par.Replace(node, c, d);
                         true
+                    },
+                    FunctionIndexNum(par) => {
+                        par.Replace(node, c, d);
+                        true
+                    },
+                    FunctionIndexWildCard(par) => {
+                        par.Replace(node, c, d);
+                        true
+                    },
+                    FunctionIndexId(par) => {
+                        par.Replace(node, c, d);
+                        true
                     }
                     _ => true,
                 },
@@ -716,7 +760,6 @@ where
     fn Replace(&mut self, n: ASTNode, i: i32, j: i32) -> ASTNode {
         use ASTNode::*;
         match self {
-            _ => ASTNode::NONE,
             
                 Grammar(node) => {
                     node.as_mut().Replace(n, i, j)
@@ -752,6 +795,9 @@ where
                     node.as_mut().Replace(n, i, j)
             },
                 TokenId(node) => {
+                    node.as_mut().Replace(n, i, j)
+            },
+                Skip(node) => {
                     node.as_mut().Replace(n, i, j)
             },
                 Pass(node) => {
@@ -879,7 +925,17 @@ where
             },
                 HASH_NAME(node) => {
                     node.as_mut().Replace(n, i, j)
-            }}
+            },
+                FunctionIndexNum(node) => {
+                    node.as_mut().Replace(n, i, j)
+            },
+                FunctionIndexWildCard(node) => {
+                    node.as_mut().Replace(n, i, j)
+            },
+                FunctionIndexId(node) => {
+                    node.as_mut().Replace(n, i, j)
+            },
+        _ => ASTNode::NONE}
     }
 
     fn Iterate(&'a mut self, 
@@ -890,7 +946,7 @@ where
     ){
         use ASTNode::*;
         match self {
-            _ => {},
+            
             
                 Grammar(node) => {
                     node.as_mut().Iterate(_yield, parent, i, j)
@@ -926,6 +982,9 @@ where
                     node.as_mut().Iterate(_yield, parent, i, j)
             },
                 TokenId(node) => {
+                    node.as_mut().Iterate(_yield, parent, i, j)
+            },
+                Skip(node) => {
                     node.as_mut().Iterate(_yield, parent, i, j)
             },
                 Pass(node) => {
@@ -1053,11 +1112,20 @@ where
             },
                 HASH_NAME(node) => {
                     node.as_mut().Iterate(_yield, parent, i, j)
-            }}
+            },
+                FunctionIndexNum(node) => {
+                    node.as_mut().Iterate(_yield, parent, i, j)
+            },
+                FunctionIndexWildCard(node) => {
+                    node.as_mut().Iterate(_yield, parent, i, j)
+            },
+                FunctionIndexId(node) => {
+                    node.as_mut().Iterate(_yield, parent, i, j)
+            },
+        _ => {}}
     }
 
     fn Token(&self) -> Token {
-        //* 
         use ASTNode::*;
         match self {
             
@@ -1073,6 +1141,7 @@ where
                 ForkTo(node) => node.as_ref().Token(),
                 ScanUntil(node) => node.as_ref().Token(),
                 TokenId(node) => node.as_ref().Token(),
+                Skip(node) => node.as_ref().Token(),
                 Pass(node) => node.as_ref().Token(),
                 Fail(node) => node.as_ref().Token(),
                 NotInScope(node) => node.as_ref().Token(),
@@ -1115,9 +1184,10 @@ where
                 Lazy(node) => node.as_ref().Token(),
                 Num(node) => node.as_ref().Token(),
                 HASH_NAME(node) => node.as_ref().Token(),
-                _ => Token::empty()}
-
-            
+                FunctionIndexNum(node) => node.as_ref().Token(),
+                FunctionIndexWildCard(node) => node.as_ref().Token(),
+                FunctionIndexId(node) => node.as_ref().Token(),
+        _ => Token::empty()}
     }
 
     fn GetType(&self) -> u32 {
@@ -1147,6 +1217,8 @@ where
                 ScanUntil(node) => 
                     node.as_ref().GetType(),
                 TokenId(node) => 
+                    node.as_ref().GetType(),
+                Skip(node) => 
                     node.as_ref().GetType(),
                 Pass(node) => 
                     node.as_ref().GetType(),
@@ -1232,6 +1304,12 @@ where
                     node.as_ref().GetType(),
                 HASH_NAME(node) => 
                     node.as_ref().GetType(),
+                FunctionIndexNum(node) => 
+                    node.as_ref().GetType(),
+                FunctionIndexWildCard(node) => 
+                    node.as_ref().GetType(),
+                FunctionIndexId(node) => 
+                    node.as_ref().GetType(),
                 
             _ => 0,}
     }
@@ -1252,7 +1330,7 @@ pub tok:Token /* TOKEN */
 }
 
 impl Grammar {
-fn new( _preamble:Vec<ASTNode>, _content:Vec<ASTNode>, _tok:Token) -> Box<Self> {
+pub fn new( _preamble:Vec<ASTNode>, _content:Vec<ASTNode>, _tok:Token) -> Box<Self> {
     Box::new(Grammar{
         preamble : _preamble,
         content : _content,
@@ -1465,7 +1543,7 @@ pub prod:ASTNode /* Production_Symbol | Production_Import_Symbol */
 }
 
 impl IR_STATE {
-fn new( _id:String, _instructions:Vec<ASTNode>, _fail:Option<Box<FailState>>, _symbol_meta:Option<Box<Symbols>>, _prod:ASTNode) -> Box<Self> {
+pub fn new( _id:String, _instructions:Vec<ASTNode>, _fail:Option<Box<FailState>>, _symbol_meta:Option<Box<Symbols>>, _prod:ASTNode) -> Box<Self> {
     Box::new(IR_STATE{
         id : _id,
         instructions : _instructions,
@@ -1481,7 +1559,7 @@ fn new( _id:String, _instructions:Vec<ASTNode>, _fail:Option<Box<FailState>>, _s
 fn  replace_instructions(&mut self, child: ASTNode,index: i32,) -> Option<ASTNode> {
     
     match &child {
-        ASTNode::ASSERT(_)|ASTNode::PEEK(_)|ASTNode::Repeat(_)|ASTNode::Reduce(_)|ASTNode::TokenAssign(_)|ASTNode::SetProd(_)|ASTNode::ForkTo(_)|ASTNode::ScanUntil(_)|ASTNode::TokenId(_)|ASTNode::Pass(_)|ASTNode::Fail(_)|ASTNode::NotInScope(_)|ASTNode::SetScope(_)|ASTNode::Consume(_)|ASTNode::Goto(_)|ASTNode::Lazy(_) => {
+        ASTNode::ASSERT(_)|ASTNode::PEEK(_)|ASTNode::Repeat(_)|ASTNode::Reduce(_)|ASTNode::TokenAssign(_)|ASTNode::SetProd(_)|ASTNode::ForkTo(_)|ASTNode::ScanUntil(_)|ASTNode::TokenId(_)|ASTNode::Skip(_)|ASTNode::Pass(_)|ASTNode::Fail(_)|ASTNode::NotInScope(_)|ASTNode::SetScope(_)|ASTNode::Consume(_)|ASTNode::Goto(_)|ASTNode::Lazy(_) => {
             if index as usize >= self.instructions.len() {
                 self.instructions.push(child);
                 None
@@ -1675,6 +1753,13 @@ fn Iterate(
                             };
                         },
 
+                        ASTNode::Skip(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::IR_STATE(*mut_me), 0, j as i32)   
+                            };
+                        },
+
                         ASTNode::Pass(child) => { 
                             unsafe { 
                                 let mut_me = node.get();
@@ -1821,7 +1906,7 @@ pub instructions:Vec<ASTNode> /* VECTOR */
 }
 
 impl ASSERT {
-fn new( _mode:String, _ids:Vec<ASTNode>, _instructions:Vec<ASTNode>) -> Box<Self> {
+pub fn new( _mode:String, _ids:Vec<ASTNode>, _instructions:Vec<ASTNode>) -> Box<Self> {
     Box::new(ASSERT{
         mode : _mode,
         ids : _ids,
@@ -1860,7 +1945,7 @@ fn  replace_ids(&mut self, child: ASTNode,index: i32,) -> Option<ASTNode> {
 fn  replace_instructions(&mut self, child: ASTNode,index: i32,) -> Option<ASTNode> {
     
     match &child {
-        ASTNode::Repeat(_)|ASTNode::Reduce(_)|ASTNode::TokenAssign(_)|ASTNode::SetProd(_)|ASTNode::ForkTo(_)|ASTNode::ScanUntil(_)|ASTNode::TokenId(_)|ASTNode::Pass(_)|ASTNode::Fail(_)|ASTNode::NotInScope(_)|ASTNode::SetScope(_)|ASTNode::Consume(_)|ASTNode::Goto(_)|ASTNode::Lazy(_) => {
+        ASTNode::Repeat(_)|ASTNode::Reduce(_)|ASTNode::TokenAssign(_)|ASTNode::SetProd(_)|ASTNode::ForkTo(_)|ASTNode::ScanUntil(_)|ASTNode::TokenId(_)|ASTNode::Skip(_)|ASTNode::Pass(_)|ASTNode::Fail(_)|ASTNode::NotInScope(_)|ASTNode::SetScope(_)|ASTNode::Consume(_)|ASTNode::Goto(_)|ASTNode::Lazy(_) => {
             if index as usize >= self.instructions.len() {
                 self.instructions.push(child);
                 None
@@ -1998,6 +2083,13 @@ fn Iterate(
                             };
                         },
 
+                        ASTNode::Skip(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::ASSERT(*mut_me), 1, j as i32)   
+                            };
+                        },
+
                         ASTNode::Pass(child) => { 
                             unsafe { 
                                 let mut_me = node.get();
@@ -2102,7 +2194,7 @@ pub instructions:Vec<ASTNode> /* VECTOR */
 }
 
 impl PEEK {
-fn new( _mode:String, _ids:Vec<ASTNode>, _instructions:Vec<ASTNode>) -> Box<Self> {
+pub fn new( _mode:String, _ids:Vec<ASTNode>, _instructions:Vec<ASTNode>) -> Box<Self> {
     Box::new(PEEK{
         mode : _mode,
         ids : _ids,
@@ -2141,7 +2233,7 @@ fn  replace_ids(&mut self, child: ASTNode,index: i32,) -> Option<ASTNode> {
 fn  replace_instructions(&mut self, child: ASTNode,index: i32,) -> Option<ASTNode> {
     
     match &child {
-        ASTNode::Repeat(_)|ASTNode::Reduce(_)|ASTNode::TokenAssign(_)|ASTNode::SetProd(_)|ASTNode::ForkTo(_)|ASTNode::ScanUntil(_)|ASTNode::TokenId(_)|ASTNode::Pass(_)|ASTNode::Fail(_)|ASTNode::NotInScope(_)|ASTNode::SetScope(_)|ASTNode::Consume(_)|ASTNode::Goto(_)|ASTNode::Lazy(_) => {
+        ASTNode::Repeat(_)|ASTNode::Reduce(_)|ASTNode::TokenAssign(_)|ASTNode::SetProd(_)|ASTNode::ForkTo(_)|ASTNode::ScanUntil(_)|ASTNode::TokenId(_)|ASTNode::Skip(_)|ASTNode::Pass(_)|ASTNode::Fail(_)|ASTNode::NotInScope(_)|ASTNode::SetScope(_)|ASTNode::Consume(_)|ASTNode::Goto(_)|ASTNode::Lazy(_) => {
             if index as usize >= self.instructions.len() {
                 self.instructions.push(child);
                 None
@@ -2328,6 +2420,13 @@ fn Iterate(
                             };
                         },
 
+                        ASTNode::Skip(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::PEEK(*mut_me), 1, j as i32)   
+                            };
+                        },
+
                         ASTNode::Pass(child) => { 
                             unsafe { 
                                 let mut_me = node.get();
@@ -2427,17 +2526,13 @@ fn GetType(&self) -> u32 {
 #[derive(Debug, Clone)]
 pub struct Production_Symbol {
     pub name:String /* STRING */,
-pub production:ASTNode /* Body | Production | ProductionMerged */,
-pub val:f64 /* F64 */,
 pub tok:Token /* TOKEN */
 }
 
 impl Production_Symbol {
-    pub fn new( _name:String, _production:ASTNode, _val:f64, _tok:Token) -> Box<Self> {
+pub fn new( _name:String, _tok:Token) -> Box<Self> {
     Box::new(Production_Symbol{
         name : _name,
-        production : _production,
-        val : _val,
         tok : _tok,
     })
 }
@@ -2445,29 +2540,6 @@ impl Production_Symbol {
 
 
 
-fn  replace_production(&mut self, child: ASTNode,) -> Option<ASTNode> {
-    
-    match &child {
-        ASTNode::NONE => {
-            let old = std::mem::replace(&mut self.production, ASTNode::NONE);
-            return Some(old);
-        }
-        
-        ASTNode::Body(_) => { 
-            return Some(std::mem::replace(&mut self.production, child));
-        },
-
-        ASTNode::Production(_) => { 
-            return Some(std::mem::replace(&mut self.production, child));
-        },
-
-        ASTNode::ProductionMerged(_) => { 
-            return Some(std::mem::replace(&mut self.production, child));
-        }
-        _ => None
-        
-    }
-}
 }
 
 
@@ -2493,28 +2565,12 @@ fn Iterate(
     }
         
     
-        unsafe {
-            let reference = node.get();
-            if let child = &mut (*reference).production /* HAS_NULL:true */{
-                 
-                let mut_me_b = node.get();
-                child.Iterate( _yield, &mut NodeIteration::Production_Symbol(*mut_me_b), 0, 0);
-    
-            }
-        }
 }
 
 fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
 
     match i{
-    0 => {
-                    
-        if let Some(old) = self.replace_production(child){ 
-                return old;
-            }else{
-                return ASTNode::NONE;
-            }
-                }
+    
         _ => {}
     };
 
@@ -2542,16 +2598,14 @@ fn GetType(&self) -> u32 {
 pub struct Production_Import_Symbol {
     pub module:String /* STRING */,
 pub name:String /* STRING */,
-pub production:ASTNode /* Body | Production | ProductionMerged */,
 pub tok:Token /* TOKEN */
 }
 
 impl Production_Import_Symbol {
-fn new( _module:String, _name:String, _production:ASTNode, _tok:Token) -> Box<Self> {
+pub fn new( _module:String, _name:String, _tok:Token) -> Box<Self> {
     Box::new(Production_Import_Symbol{
         module : _module,
         name : _name,
-        production : _production,
         tok : _tok,
     })
 }
@@ -2559,29 +2613,6 @@ fn new( _module:String, _name:String, _production:ASTNode, _tok:Token) -> Box<Se
 
 
 
-fn  replace_production(&mut self, child: ASTNode,) -> Option<ASTNode> {
-    
-    match &child {
-        ASTNode::NONE => {
-            let old = std::mem::replace(&mut self.production, ASTNode::NONE);
-            return Some(old);
-        }
-        
-        ASTNode::Body(_) => { 
-            return Some(std::mem::replace(&mut self.production, child));
-        },
-
-        ASTNode::Production(_) => { 
-            return Some(std::mem::replace(&mut self.production, child));
-        },
-
-        ASTNode::ProductionMerged(_) => { 
-            return Some(std::mem::replace(&mut self.production, child));
-        }
-        _ => None
-        
-    }
-}
 }
 
 
@@ -2607,28 +2638,12 @@ fn Iterate(
     }
         
     
-        unsafe {
-            let reference = node.get();
-            if let child = &mut (*reference).production /* HAS_NULL:true */{
-                 
-                let mut_me_b = node.get();
-                child.Iterate( _yield, &mut NodeIteration::Production_Import_Symbol(*mut_me_b), 0, 0);
-    
-            }
-        }
 }
 
 fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
 
     match i{
-    0 => {
-                    
-        if let Some(old) = self.replace_production(child){ 
-                return old;
-            }else{
-                return ASTNode::NONE;
-            }
-                }
+    
         _ => {}
     };
 
@@ -2660,7 +2675,7 @@ pub reduce_fn:ASTNode /* Returned | Referenced */
 }
 
 impl Reduce {
-fn new( _len:i32, _body_id:i32, _reduce_fn:ASTNode) -> Box<Self> {
+pub fn new( _len:i32, _body_id:i32, _reduce_fn:ASTNode) -> Box<Self> {
     Box::new(Reduce{
         len : _len,
         body_id : _body_id,
@@ -2766,7 +2781,7 @@ pub struct TokenAssign {
 }
 
 impl TokenAssign {
-fn new( _ids:Vec<ASTNode>) -> Box<Self> {
+pub fn new( _ids:Vec<ASTNode>) -> Box<Self> {
     Box::new(TokenAssign{
         ids : _ids,
     })
@@ -2948,7 +2963,7 @@ pub struct SetProd {
 }
 
 impl SetProd {
-fn new( _id:ASTNode) -> Box<Self> {
+pub fn new( _id:ASTNode) -> Box<Self> {
     Box::new(SetProd{
         id : _id,
     })
@@ -3054,7 +3069,7 @@ pub struct ForkTo {
 }
 
 impl ForkTo {
-fn new( _states:Vec<ASTNode>) -> Box<Self> {
+pub fn new( _states:Vec<ASTNode>) -> Box<Self> {
     Box::new(ForkTo{
         states : _states,
     })
@@ -3188,7 +3203,7 @@ pub SCAN_BACKWARDS:bool /* BOOL */
 }
 
 impl ScanUntil {
-fn new( _ids:Vec<ASTNode>, _SCAN_BACKWARDS:bool) -> Box<Self> {
+pub fn new( _ids:Vec<ASTNode>, _SCAN_BACKWARDS:bool) -> Box<Self> {
     Box::new(ScanUntil{
         ids : _ids,
         SCAN_BACKWARDS : _SCAN_BACKWARDS,
@@ -3367,11 +3382,11 @@ fn GetType(&self) -> u32 {
 
 #[derive(Debug, Clone)]
 pub struct TokenId {
-    pub id:ASTNode /* Generated | Exclusive_Literal | Literal | End_Of_File | Space | NewLine | IncreaseIndent | DecreaseIndent | Production_Token | Num */
+    pub id:Token /* TOKEN */
 }
 
 impl TokenId {
-fn new( _id:ASTNode) -> Box<Self> {
+pub fn new( _id:Token) -> Box<Self> {
     Box::new(TokenId{
         id : _id,
     })
@@ -3380,57 +3395,6 @@ fn new( _id:ASTNode) -> Box<Self> {
 
 
 
-fn  replace_id(&mut self, child: ASTNode,) -> Option<ASTNode> {
-    
-    match &child {
-        ASTNode::NONE => {
-            let old = std::mem::replace(&mut self.id, ASTNode::NONE);
-            return Some(old);
-        }
-        
-        ASTNode::Generated(_) => { 
-            return Some(std::mem::replace(&mut self.id, child));
-        },
-
-        ASTNode::Exclusive_Literal(_) => { 
-            return Some(std::mem::replace(&mut self.id, child));
-        },
-
-        ASTNode::Literal(_) => { 
-            return Some(std::mem::replace(&mut self.id, child));
-        },
-
-        ASTNode::End_Of_File(_) => { 
-            return Some(std::mem::replace(&mut self.id, child));
-        },
-
-        ASTNode::Space(_) => { 
-            return Some(std::mem::replace(&mut self.id, child));
-        },
-
-        ASTNode::NewLine(_) => { 
-            return Some(std::mem::replace(&mut self.id, child));
-        },
-
-        ASTNode::IncreaseIndent(_) => { 
-            return Some(std::mem::replace(&mut self.id, child));
-        },
-
-        ASTNode::DecreaseIndent(_) => { 
-            return Some(std::mem::replace(&mut self.id, child));
-        },
-
-        ASTNode::Production_Token(_) => { 
-            return Some(std::mem::replace(&mut self.id, child));
-        },
-
-        ASTNode::Num(_) => { 
-            return Some(std::mem::replace(&mut self.id, child));
-        }
-        _ => None
-        
-    }
-}
 }
 
 
@@ -3456,26 +3420,12 @@ fn Iterate(
     }
         
     
-        unsafe {
-            let mut_me_b = node.get();
-            let mut_me_d = node.get();
-
-            ((*mut_me_d).id).Iterate( _yield, &mut NodeIteration::TokenId(*mut_me_b), 0, 0);
-            
-        }
 }
 
 fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
 
     match i{
-    0 => {
-                    
-        if let Some(old) = self.replace_id(child){ 
-                return old;
-            }else{
-                return ASTNode::NONE;
-            }
-                }
+    
         _ => {}
     };
 
@@ -3500,12 +3450,81 @@ fn GetType(&self) -> u32 {
 
 
 #[derive(Debug, Clone)]
+pub struct Skip {
+    
+}
+
+impl Skip {
+pub fn new( ) -> Box<Self> {
+    Box::new(Skip{
+        
+    })
+}
+
+
+
+
+}
+
+
+
+impl<'a> ASTNodeTraits<'a> for Skip
+where
+    Self: Sized,
+{
+
+fn Iterate(
+    &'a mut self,
+    _yield: &mut impl FnMut(&mut NodeIteration<'a>, &mut NodeIteration<'a>,u32, i32, i32) -> bool,
+    parent: &mut NodeIteration<'a>,
+    i: i32,
+    j: i32,
+) {
+    let node = UnsafeCell::from(self);
+
+    unsafe{
+        let mut_me = node.get();
+
+        if !_yield(&mut NodeIteration::Skip(*mut_me), parent, 1507368, i, j) { return };
+    }
+        
+    
+}
+
+fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
+
+    match i{
+    
+        _ => {}
+    };
+
+    ASTNode::NONE
+}
+
+
+fn Token(&self) -> Token{
+    Token::empty()
+}
+
+fn Type()-> u32{
+    return 1507368;
+}
+
+fn GetType(&self) -> u32 {
+    return 1507368;
+}
+}
+
+
+
+
+#[derive(Debug, Clone)]
 pub struct Pass {
     
 }
 
 impl Pass {
-fn new( ) -> Box<Self> {
+pub fn new( ) -> Box<Self> {
     Box::new(Pass{
         
     })
@@ -3535,7 +3554,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Pass(*mut_me), parent, 1507368, i, j) { return };
+        if !_yield(&mut NodeIteration::Pass(*mut_me), parent, 1572904, i, j) { return };
     }
         
     
@@ -3557,11 +3576,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1507368;
+    return 1572904;
 }
 
 fn GetType(&self) -> u32 {
-    return 1507368;
+    return 1572904;
 }
 }
 
@@ -3574,7 +3593,7 @@ pub struct Fail {
 }
 
 impl Fail {
-fn new( ) -> Box<Self> {
+pub fn new( ) -> Box<Self> {
     Box::new(Fail{
         
     })
@@ -3604,7 +3623,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Fail(*mut_me), parent, 1572904, i, j) { return };
+        if !_yield(&mut NodeIteration::Fail(*mut_me), parent, 1638440, i, j) { return };
     }
         
     
@@ -3626,11 +3645,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1572904;
+    return 1638440;
 }
 
 fn GetType(&self) -> u32 {
-    return 1572904;
+    return 1638440;
 }
 }
 
@@ -3643,7 +3662,7 @@ pub struct NotInScope {
 }
 
 impl NotInScope {
-fn new( _ids:Vec<ASTNode>) -> Box<Self> {
+pub fn new( _ids:Vec<ASTNode>) -> Box<Self> {
     Box::new(NotInScope{
         ids : _ids,
     })
@@ -3697,7 +3716,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::NotInScope(*mut_me), parent, 1638440, i, j) { return };
+        if !_yield(&mut NodeIteration::NotInScope(*mut_me), parent, 1703976, i, j) { return };
     }
         
     
@@ -3759,11 +3778,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1638440;
+    return 1703976;
 }
 
 fn GetType(&self) -> u32 {
-    return 1638440;
+    return 1703976;
 }
 }
 
@@ -3776,7 +3795,7 @@ pub struct SetScope {
 }
 
 impl SetScope {
-fn new( _scope:i64) -> Box<Self> {
+pub fn new( _scope:i64) -> Box<Self> {
     Box::new(SetScope{
         scope : _scope,
     })
@@ -3806,7 +3825,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::SetScope(*mut_me), parent, 1703976, i, j) { return };
+        if !_yield(&mut NodeIteration::SetScope(*mut_me), parent, 1769512, i, j) { return };
     }
         
     
@@ -3828,11 +3847,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1703976;
+    return 1769512;
 }
 
 fn GetType(&self) -> u32 {
-    return 1703976;
+    return 1769512;
 }
 }
 
@@ -3845,7 +3864,7 @@ pub struct Consume {
 }
 
 impl Consume {
-fn new( _EMPTY:bool) -> Box<Self> {
+pub fn new( _EMPTY:bool) -> Box<Self> {
     Box::new(Consume{
         EMPTY : _EMPTY,
     })
@@ -3875,7 +3894,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Consume(*mut_me), parent, 1769512, i, j) { return };
+        if !_yield(&mut NodeIteration::Consume(*mut_me), parent, 1835048, i, j) { return };
     }
         
     
@@ -3897,11 +3916,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1769512;
+    return 1835048;
 }
 
 fn GetType(&self) -> u32 {
-    return 1769512;
+    return 1835048;
 }
 }
 
@@ -3914,7 +3933,7 @@ pub struct Returned {
 }
 
 impl Returned {
-fn new( _txt:String) -> Box<Self> {
+pub fn new( _txt:String) -> Box<Self> {
     Box::new(Returned{
         txt : _txt,
     })
@@ -3944,7 +3963,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Returned(*mut_me), parent, 1835520, i, j) { return };
+        if !_yield(&mut NodeIteration::Returned(*mut_me), parent, 1901056, i, j) { return };
     }
         
     
@@ -3966,11 +3985,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1835520;
+    return 1901056;
 }
 
 fn GetType(&self) -> u32 {
-    return 1835520;
+    return 1901056;
 }
 }
 
@@ -3983,7 +4002,7 @@ pub struct Referenced {
 }
 
 impl Referenced {
-fn new( _reference:Box<Reference>) -> Box<Self> {
+pub fn new( _reference:Box<Reference>) -> Box<Self> {
     Box::new(Referenced{
         reference : _reference,
     })
@@ -4022,7 +4041,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Referenced(*mut_me), parent, 1901056, i, j) { return };
+        if !_yield(&mut NodeIteration::Referenced(*mut_me), parent, 1966592, i, j) { return };
     }
         
     
@@ -4058,11 +4077,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1901056;
+    return 1966592;
 }
 
 fn GetType(&self) -> u32 {
-    return 1901056;
+    return 1966592;
 }
 }
 
@@ -4075,7 +4094,7 @@ pub struct Reference {
 }
 
 impl Reference {
-fn new( _val:String) -> Box<Self> {
+pub fn new( _val:String) -> Box<Self> {
     Box::new(Reference{
         val : _val,
     })
@@ -4105,7 +4124,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Reference(*mut_me), parent, 1966336, i, j) { return };
+        if !_yield(&mut NodeIteration::Reference(*mut_me), parent, 2031872, i, j) { return };
     }
         
     
@@ -4127,11 +4146,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1966336;
+    return 2031872;
 }
 
 fn GetType(&self) -> u32 {
-    return 1966336;
+    return 2031872;
 }
 }
 
@@ -4145,7 +4164,7 @@ pub tok:Token /* TOKEN */
 }
 
 impl Generated {
-fn new( _val:String, _tok:Token) -> Box<Self> {
+pub fn new( _val:String, _tok:Token) -> Box<Self> {
     Box::new(Generated{
         val : _val,
         tok : _tok,
@@ -4176,7 +4195,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Generated(*mut_me), parent, 2032896, i, j) { return };
+        if !_yield(&mut NodeIteration::Generated(*mut_me), parent, 2098432, i, j) { return };
     }
         
     
@@ -4198,11 +4217,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 2032896;
+    return 2098432;
 }
 
 fn GetType(&self) -> u32 {
-    return 2032896;
+    return 2098432;
 }
 }
 
@@ -4216,7 +4235,7 @@ pub tok:Token /* TOKEN */
 }
 
 impl Exclusive_Literal {
-fn new( _val:String, _tok:Token) -> Box<Self> {
+pub fn new( _val:String, _tok:Token) -> Box<Self> {
     Box::new(Exclusive_Literal{
         val : _val,
         tok : _tok,
@@ -4247,7 +4266,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Exclusive_Literal(*mut_me), parent, 2098432, i, j) { return };
+        if !_yield(&mut NodeIteration::Exclusive_Literal(*mut_me), parent, 2163968, i, j) { return };
     }
         
     
@@ -4269,11 +4288,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 2098432;
+    return 2163968;
 }
 
 fn GetType(&self) -> u32 {
-    return 2098432;
+    return 2163968;
 }
 }
 
@@ -4287,7 +4306,7 @@ pub tok:Token /* TOKEN */
 }
 
 impl Literal {
-fn new( _val:String, _tok:Token) -> Box<Self> {
+pub fn new( _val:String, _tok:Token) -> Box<Self> {
     Box::new(Literal{
         val : _val,
         tok : _tok,
@@ -4318,7 +4337,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Literal(*mut_me), parent, 2163968, i, j) { return };
+        if !_yield(&mut NodeIteration::Literal(*mut_me), parent, 2229504, i, j) { return };
     }
         
     
@@ -4340,11 +4359,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 2163968;
+    return 2229504;
 }
 
 fn GetType(&self) -> u32 {
-    return 2163968;
+    return 2229504;
 }
 }
 
@@ -4357,7 +4376,7 @@ pub struct End_Of_File {
 }
 
 impl End_Of_File {
-fn new( _tok:Token) -> Box<Self> {
+pub fn new( _tok:Token) -> Box<Self> {
     Box::new(End_Of_File{
         tok : _tok,
     })
@@ -4387,7 +4406,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::End_Of_File(*mut_me), parent, 2229504, i, j) { return };
+        if !_yield(&mut NodeIteration::End_Of_File(*mut_me), parent, 2295040, i, j) { return };
     }
         
     
@@ -4409,11 +4428,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 2229504;
+    return 2295040;
 }
 
 fn GetType(&self) -> u32 {
-    return 2229504;
+    return 2295040;
 }
 }
 
@@ -4426,7 +4445,7 @@ pub struct Space {
 }
 
 impl Space {
-fn new( _position:i16) -> Box<Self> {
+pub fn new( _position:i16) -> Box<Self> {
     Box::new(Space{
         position : _position,
     })
@@ -4456,7 +4475,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Space(*mut_me), parent, 2299904, i, j) { return };
+        if !_yield(&mut NodeIteration::Space(*mut_me), parent, 2365440, i, j) { return };
     }
         
     
@@ -4478,11 +4497,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 2299904;
+    return 2365440;
 }
 
 fn GetType(&self) -> u32 {
-    return 2299904;
+    return 2365440;
 }
 }
 
@@ -4495,7 +4514,7 @@ pub struct NewLine {
 }
 
 impl NewLine {
-fn new( _position:i16) -> Box<Self> {
+pub fn new( _position:i16) -> Box<Self> {
     Box::new(NewLine{
         position : _position,
     })
@@ -4525,7 +4544,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::NewLine(*mut_me), parent, 2365440, i, j) { return };
+        if !_yield(&mut NodeIteration::NewLine(*mut_me), parent, 2430976, i, j) { return };
     }
         
     
@@ -4547,11 +4566,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 2365440;
+    return 2430976;
 }
 
 fn GetType(&self) -> u32 {
-    return 2365440;
+    return 2430976;
 }
 }
 
@@ -4564,7 +4583,7 @@ pub struct IncreaseIndent {
 }
 
 impl IncreaseIndent {
-fn new( _position:i16) -> Box<Self> {
+pub fn new( _position:i16) -> Box<Self> {
     Box::new(IncreaseIndent{
         position : _position,
     })
@@ -4594,7 +4613,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::IncreaseIndent(*mut_me), parent, 2430976, i, j) { return };
+        if !_yield(&mut NodeIteration::IncreaseIndent(*mut_me), parent, 2496512, i, j) { return };
     }
         
     
@@ -4616,11 +4635,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 2430976;
+    return 2496512;
 }
 
 fn GetType(&self) -> u32 {
-    return 2430976;
+    return 2496512;
 }
 }
 
@@ -4633,7 +4652,7 @@ pub struct DecreaseIndent {
 }
 
 impl DecreaseIndent {
-fn new( _position:i16) -> Box<Self> {
+pub fn new( _position:i16) -> Box<Self> {
     Box::new(DecreaseIndent{
         position : _position,
     })
@@ -4663,7 +4682,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::DecreaseIndent(*mut_me), parent, 2496512, i, j) { return };
+        if !_yield(&mut NodeIteration::DecreaseIndent(*mut_me), parent, 2562048, i, j) { return };
     }
         
     
@@ -4685,11 +4704,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 2496512;
+    return 2562048;
 }
 
 fn GetType(&self) -> u32 {
-    return 2496512;
+    return 2562048;
 }
 }
 
@@ -4703,7 +4722,7 @@ pub tok:Token /* TOKEN */
 }
 
 impl Production_Token {
-fn new( _production:ASTNode, _tok:Token) -> Box<Self> {
+pub fn new( _production:ASTNode, _tok:Token) -> Box<Self> {
     Box::new(Production_Token{
         production : _production,
         tok : _tok,
@@ -4753,7 +4772,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Production_Token(*mut_me), parent, 2557184, i, j) { return };
+        if !_yield(&mut NodeIteration::Production_Token(*mut_me), parent, 2622720, i, j) { return };
     }
         
     
@@ -4789,11 +4808,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 2557184;
+    return 2622720;
 }
 
 fn GetType(&self) -> u32 {
-    return 2557184;
+    return 2622720;
 }
 }
 
@@ -4806,7 +4825,7 @@ pub struct Goto {
 }
 
 impl Goto {
-fn new( _state:ASTNode) -> Box<Self> {
+pub fn new( _state:ASTNode) -> Box<Self> {
     Box::new(Goto{
         state : _state,
     })
@@ -4859,7 +4878,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Goto(*mut_me), parent, 2621480, i, j) { return };
+        if !_yield(&mut NodeIteration::Goto(*mut_me), parent, 2687016, i, j) { return };
     }
         
     
@@ -4895,11 +4914,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 2621480;
+    return 2687016;
 }
 
 fn GetType(&self) -> u32 {
-    return 2621480;
+    return 2687016;
 }
 }
 
@@ -4915,7 +4934,7 @@ pub fail:Option<Box<FailState>> /* FailState */
 }
 
 impl FailState {
-fn new( _id:String, _instructions:Vec<ASTNode>, _symbol_meta:Option<Box<Symbols>>, _fail:Option<Box<FailState>>) -> Box<Self> {
+pub fn new( _id:String, _instructions:Vec<ASTNode>, _symbol_meta:Option<Box<Symbols>>, _fail:Option<Box<FailState>>) -> Box<Self> {
     Box::new(FailState{
         id : _id,
         instructions : _instructions,
@@ -4930,7 +4949,7 @@ fn new( _id:String, _instructions:Vec<ASTNode>, _symbol_meta:Option<Box<Symbols>
 fn  replace_instructions(&mut self, child: ASTNode,index: i32,) -> Option<ASTNode> {
     
     match &child {
-        ASTNode::ASSERT(_)|ASTNode::PEEK(_)|ASTNode::Repeat(_)|ASTNode::Reduce(_)|ASTNode::TokenAssign(_)|ASTNode::SetProd(_)|ASTNode::ForkTo(_)|ASTNode::ScanUntil(_)|ASTNode::TokenId(_)|ASTNode::Pass(_)|ASTNode::Fail(_)|ASTNode::NotInScope(_)|ASTNode::SetScope(_)|ASTNode::Consume(_)|ASTNode::Goto(_)|ASTNode::Lazy(_) => {
+        ASTNode::ASSERT(_)|ASTNode::PEEK(_)|ASTNode::Repeat(_)|ASTNode::Reduce(_)|ASTNode::TokenAssign(_)|ASTNode::SetProd(_)|ASTNode::ForkTo(_)|ASTNode::ScanUntil(_)|ASTNode::TokenId(_)|ASTNode::Skip(_)|ASTNode::Pass(_)|ASTNode::Fail(_)|ASTNode::NotInScope(_)|ASTNode::SetScope(_)|ASTNode::Consume(_)|ASTNode::Goto(_)|ASTNode::Lazy(_) => {
             if index as usize >= self.instructions.len() {
                 self.instructions.push(child);
                 None
@@ -5028,7 +5047,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::FailState(*mut_me), parent, 2695176, i, j) { return };
+        if !_yield(&mut NodeIteration::FailState(*mut_me), parent, 2760712, i, j) { return };
     }
         
     
@@ -5098,6 +5117,13 @@ fn Iterate(
                         },
 
                         ASTNode::TokenId(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::FailState(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::Skip(child) => { 
                             unsafe { 
                                 let mut_me = node.get();
                                 child.Iterate(_yield, &mut NodeIteration::FailState(*mut_me), 0, j as i32)   
@@ -5213,11 +5239,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 2695176;
+    return 2760712;
 }
 
 fn GetType(&self) -> u32 {
-    return 2695176;
+    return 2760712;
 }
 }
 
@@ -5231,7 +5257,7 @@ pub skipped:Vec<ASTNode> /* VECTOR */
 }
 
 impl Symbols {
-fn new( _expected:Vec<ASTNode>, _skipped:Vec<ASTNode>) -> Box<Self> {
+pub fn new( _expected:Vec<ASTNode>, _skipped:Vec<ASTNode>) -> Box<Self> {
     Box::new(Symbols{
         expected : _expected,
         skipped : _skipped,
@@ -5311,7 +5337,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Symbols(*mut_me), parent, 2752520, i, j) { return };
+        if !_yield(&mut NodeIteration::Symbols(*mut_me), parent, 2818056, i, j) { return };
     }
         
     
@@ -5513,11 +5539,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 2752520;
+    return 2818056;
 }
 
 fn GetType(&self) -> u32 {
-    return 2752520;
+    return 2818056;
 }
 }
 
@@ -5531,7 +5557,7 @@ pub reference:Box<Reference> /* Reference */
 }
 
 impl AnnotatedSymbol {
-fn new( _symbol:ASTNode, _reference:Box<Reference>) -> Box<Self> {
+pub fn new( _symbol:ASTNode, _reference:Box<Reference>) -> Box<Self> {
     Box::new(AnnotatedSymbol{
         symbol : _symbol,
         reference : _reference,
@@ -5655,7 +5681,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::AnnotatedSymbol(*mut_me), parent, 2818304, i, j) { return };
+        if !_yield(&mut NodeIteration::AnnotatedSymbol(*mut_me), parent, 2883840, i, j) { return };
     }
         
     
@@ -5707,11 +5733,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 2818304;
+    return 2883840;
 }
 
 fn GetType(&self) -> u32 {
-    return 2818304;
+    return 2883840;
 }
 }
 
@@ -5724,7 +5750,7 @@ pub struct OptionalSymbol {
 }
 
 impl OptionalSymbol {
-fn new( _symbol:ASTNode) -> Box<Self> {
+pub fn new( _symbol:ASTNode) -> Box<Self> {
     Box::new(OptionalSymbol{
         symbol : _symbol,
     })
@@ -5837,7 +5863,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::OptionalSymbol(*mut_me), parent, 2883584, i, j) { return };
+        if !_yield(&mut NodeIteration::OptionalSymbol(*mut_me), parent, 2949120, i, j) { return };
     }
         
     
@@ -5873,11 +5899,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 2883584;
+    return 2949120;
 }
 
 fn GetType(&self) -> u32 {
-    return 2883584;
+    return 2949120;
 }
 }
 
@@ -5891,7 +5917,7 @@ pub tok:Token /* TOKEN */
 }
 
 impl Not_Symbol {
-fn new( _symbol:ASTNode, _tok:Token) -> Box<Self> {
+pub fn new( _symbol:ASTNode, _tok:Token) -> Box<Self> {
     Box::new(Not_Symbol{
         symbol : _symbol,
         tok : _tok,
@@ -5941,7 +5967,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Not_Symbol(*mut_me), parent, 2949376, i, j) { return };
+        if !_yield(&mut NodeIteration::Not_Symbol(*mut_me), parent, 3014912, i, j) { return };
     }
         
     
@@ -5977,11 +6003,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 2949376;
+    return 3014912;
 }
 
 fn GetType(&self) -> u32 {
-    return 2949376;
+    return 3014912;
 }
 }
 
@@ -5995,7 +6021,7 @@ pub tok:Token /* TOKEN */
 }
 
 impl Look_Behind {
-fn new( _symbol:ASTNode, _tok:Token) -> Box<Self> {
+pub fn new( _symbol:ASTNode, _tok:Token) -> Box<Self> {
     Box::new(Look_Behind{
         symbol : _symbol,
         tok : _tok,
@@ -6073,7 +6099,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Look_Behind(*mut_me), parent, 3014912, i, j) { return };
+        if !_yield(&mut NodeIteration::Look_Behind(*mut_me), parent, 3080448, i, j) { return };
     }
         
     
@@ -6109,11 +6135,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 3014912;
+    return 3080448;
 }
 
 fn GetType(&self) -> u32 {
-    return 3014912;
+    return 3080448;
 }
 }
 
@@ -6126,7 +6152,7 @@ pub struct NonCaptureSymbol {
 }
 
 impl NonCaptureSymbol {
-fn new( _sym:ASTNode) -> Box<Self> {
+pub fn new( _sym:ASTNode) -> Box<Self> {
     Box::new(NonCaptureSymbol{
         sym : _sym,
     })
@@ -6239,7 +6265,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::NonCaptureSymbol(*mut_me), parent, 3080448, i, j) { return };
+        if !_yield(&mut NodeIteration::NonCaptureSymbol(*mut_me), parent, 3145984, i, j) { return };
     }
         
     
@@ -6275,11 +6301,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 3080448;
+    return 3145984;
 }
 
 fn GetType(&self) -> u32 {
-    return 3080448;
+    return 3145984;
 }
 }
 
@@ -6294,7 +6320,7 @@ pub tok:Token /* TOKEN */
 }
 
 impl List_Production {
-fn new( _terminal_symbol:ASTNode, _symbols:ASTNode, _tok:Token) -> Box<Self> {
+pub fn new( _terminal_symbol:ASTNode, _symbols:ASTNode, _tok:Token) -> Box<Self> {
     Box::new(List_Production{
         terminal_symbol : _terminal_symbol,
         symbols : _symbols,
@@ -6457,7 +6483,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::List_Production(*mut_me), parent, 3145984, i, j) { return };
+        if !_yield(&mut NodeIteration::List_Production(*mut_me), parent, 3211520, i, j) { return };
     }
         
     
@@ -6511,11 +6537,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 3145984;
+    return 3211520;
 }
 
 fn GetType(&self) -> u32 {
-    return 3145984;
+    return 3211520;
 }
 }
 
@@ -6530,7 +6556,7 @@ pub tok:Token /* TOKEN */
 }
 
 impl Optional_List_Production {
-fn new( _terminal_symbol:ASTNode, _symbols:ASTNode, _tok:Token) -> Box<Self> {
+pub fn new( _terminal_symbol:ASTNode, _symbols:ASTNode, _tok:Token) -> Box<Self> {
     Box::new(Optional_List_Production{
         terminal_symbol : _terminal_symbol,
         symbols : _symbols,
@@ -6693,7 +6719,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Optional_List_Production(*mut_me), parent, 3211520, i, j) { return };
+        if !_yield(&mut NodeIteration::Optional_List_Production(*mut_me), parent, 3277056, i, j) { return };
     }
         
     
@@ -6747,11 +6773,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 3211520;
+    return 3277056;
 }
 
 fn GetType(&self) -> u32 {
-    return 3211520;
+    return 3277056;
 }
 }
 
@@ -6765,7 +6791,7 @@ pub tok:Token /* TOKEN */
 }
 
 impl Group_Production {
-fn new( _bodies:Vec<ASTNode>, _tok:Token) -> Box<Self> {
+pub fn new( _bodies:Vec<ASTNode>, _tok:Token) -> Box<Self> {
     Box::new(Group_Production{
         bodies : _bodies,
         tok : _tok,
@@ -6820,7 +6846,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Group_Production(*mut_me), parent, 3277056, i, j) { return };
+        if !_yield(&mut NodeIteration::Group_Production(*mut_me), parent, 3342592, i, j) { return };
     }
         
     
@@ -6865,11 +6891,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 3277056;
+    return 3342592;
 }
 
 fn GetType(&self) -> u32 {
-    return 3277056;
+    return 3342592;
 }
 }
 
@@ -6881,18 +6907,16 @@ pub struct Body {
     pub priority:bool /* BOOL */,
 pub symbols:Vec<ASTNode> /* VECTOR */,
 pub reference:Option<Box<Reference>> /* Reference */,
-pub reduce_function:ASTNode /* Returned | Referenced */,
-pub production:Option<Box<Production>> /* Production */
+pub reduce_function:ASTNode /* Returned | Referenced */
 }
 
 impl Body {
-pub fn new( _priority:bool, _symbols:Vec<ASTNode>, _reference:Option<Box<Reference>>, _reduce_function:ASTNode, _production:Option<Box<Production>>) -> Box<Self> {
+pub fn new( _priority:bool, _symbols:Vec<ASTNode>, _reference:Option<Box<Reference>>, _reduce_function:ASTNode) -> Box<Self> {
     Box::new(Body{
         priority : _priority,
         symbols : _symbols,
         reference : _reference,
         reduce_function : _reduce_function,
-        production : _production,
     })
 }
 
@@ -6971,34 +6995,6 @@ fn  replace_reduce_function(&mut self, child: ASTNode,) -> Option<ASTNode> {
         
     }
 }
-
-fn  replace_production(&mut self, child: ASTNode,) -> Option<ASTNode> {
-    
-    match child {
-        ASTNode::NONE => {
-            if self.production.is_some() {
-                let old = std::mem::replace(&mut self.production, None);
-                if let Some(old_node) = old {
-                    return Some(ASTNode::Production(old_node));
-                }
-            }
-        }
-
-        ASTNode::Production(child) => {
-            if self.production.is_none() {
-                self.production = Some(child);
-            } else {
-                let old = std::mem::replace(&mut self.production, Some(child));
-
-                if let Some(old_node) = old {
-                    return Some(ASTNode::Production(old_node));
-                }
-            }
-        }
-        _ => {}
-    }
-    None
-}
 }
 
 
@@ -7020,7 +7016,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Body(*mut_me), parent, 3358720, i, j) { return };
+        if !_yield(&mut NodeIteration::Body(*mut_me), parent, 3424256, i, j) { return };
     }
         
     
@@ -7201,14 +7197,6 @@ fn Iterate(
     
             }
         }
-    
-        unsafe { 
-            let reference = node.get();
-            if let Some(child) = &mut ( *reference).production /* HAS_NULL:true */{
-                let mut_me_b = node.get();
-                child.Iterate( _yield, &mut NodeIteration::Body(*mut_me_b), 3, 0);
-            }
-        }
 }
 
 fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
@@ -7238,14 +7226,6 @@ fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
                 return ASTNode::NONE;
             }
                 }
-    3 => {
-                    
-        if let Some(old) = self.replace_production(child){ 
-                return old;
-            }else{
-                return ASTNode::NONE;
-            }
-                }
         _ => {}
     };
 
@@ -7258,11 +7238,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 3358720;
+    return 3424256;
 }
 
 fn GetType(&self) -> u32 {
-    return 3358720;
+    return 3424256;
 }
 }
 
@@ -7276,7 +7256,7 @@ pub tok:Token /* TOKEN */
 }
 
 impl Exclude {
-fn new( _sym:Vec<ASTNode>, _tok:Token) -> Box<Self> {
+pub fn new( _sym:Vec<ASTNode>, _tok:Token) -> Box<Self> {
     Box::new(Exclude{
         sym : _sym,
         tok : _tok,
@@ -7331,7 +7311,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Exclude(*mut_me), parent, 3410176, i, j) { return };
+        if !_yield(&mut NodeIteration::Exclude(*mut_me), parent, 3475712, i, j) { return };
     }
         
     
@@ -7435,11 +7415,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 3410176;
+    return 3475712;
 }
 
 fn GetType(&self) -> u32 {
-    return 3410176;
+    return 3475712;
 }
 }
 
@@ -7453,7 +7433,7 @@ pub tok:Token /* TOKEN */
 }
 
 impl Look_Ignore {
-fn new( _sym:Vec<ASTNode>, _tok:Token) -> Box<Self> {
+pub fn new( _sym:Vec<ASTNode>, _tok:Token) -> Box<Self> {
     Box::new(Look_Ignore{
         sym : _sym,
         tok : _tok,
@@ -7508,7 +7488,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Look_Ignore(*mut_me), parent, 3475712, i, j) { return };
+        if !_yield(&mut NodeIteration::Look_Ignore(*mut_me), parent, 3541248, i, j) { return };
     }
         
     
@@ -7612,11 +7592,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 3475712;
+    return 3541248;
 }
 
 fn GetType(&self) -> u32 {
-    return 3475712;
+    return 3541248;
 }
 }
 
@@ -7629,7 +7609,7 @@ pub struct Empty {
 }
 
 impl Empty {
-fn new( _tok:Token) -> Box<Self> {
+pub fn new( _tok:Token) -> Box<Self> {
     Box::new(Empty{
         tok : _tok,
     })
@@ -7659,7 +7639,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Empty(*mut_me), parent, 3539200, i, j) { return };
+        if !_yield(&mut NodeIteration::Empty(*mut_me), parent, 3604736, i, j) { return };
     }
         
     
@@ -7681,11 +7661,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 3539200;
+    return 3604736;
 }
 
 fn GetType(&self) -> u32 {
-    return 3539200;
+    return 3604736;
 }
 }
 
@@ -7697,16 +7677,18 @@ pub struct Production {
     pub priority:bool /* BOOL */,
 pub symbol:ASTNode /* Production_Symbol | Production_Import_Symbol */,
 pub bodies:Vec<ASTNode> /* VECTOR */,
-pub LAZY:bool /* BOOL */
+pub LAZY:bool /* BOOL */,
+pub tok:Token /* TOKEN */
 }
 
 impl Production {
-pub fn new( _priority:bool, _symbol:ASTNode, _bodies:Vec<ASTNode>, _LAZY:bool) -> Box<Self> {
+pub fn new( _priority:bool, _symbol:ASTNode, _bodies:Vec<ASTNode>, _LAZY:bool, _tok:Token) -> Box<Self> {
     Box::new(Production{
         priority : _priority,
         symbol : _symbol,
         bodies : _bodies,
         LAZY : _LAZY,
+        tok : _tok,
     })
 }
 
@@ -7778,7 +7760,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Production(*mut_me), parent, 3620864, i, j) { return };
+        if !_yield(&mut NodeIteration::Production(*mut_me), parent, 3686400, i, j) { return };
     }
         
     
@@ -7835,15 +7817,15 @@ fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
 
 
 fn Token(&self) -> Token{
-    Token::empty()
+    self.tok.clone()
 }
 
 fn Type()-> u32{
-    return 3620864;
+    return 3686400;
 }
 
 fn GetType(&self) -> u32 {
-    return 3620864;
+    return 3686400;
 }
 }
 
@@ -7853,14 +7835,16 @@ fn GetType(&self) -> u32 {
 #[derive(Debug, Clone)]
 pub struct ProductionMerged {
     pub symbol:ASTNode /* Production_Symbol | Production_Import_Symbol */,
-pub bodies:Vec<ASTNode> /* VECTOR */
+pub bodies:Vec<ASTNode> /* VECTOR */,
+pub tok:Token /* TOKEN */
 }
 
 impl ProductionMerged {
-fn new( _symbol:ASTNode, _bodies:Vec<ASTNode>) -> Box<Self> {
+pub fn new( _symbol:ASTNode, _bodies:Vec<ASTNode>, _tok:Token) -> Box<Self> {
     Box::new(ProductionMerged{
         symbol : _symbol,
         bodies : _bodies,
+        tok : _tok,
     })
 }
 
@@ -7932,7 +7916,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::ProductionMerged(*mut_me), parent, 3686400, i, j) { return };
+        if !_yield(&mut NodeIteration::ProductionMerged(*mut_me), parent, 3751936, i, j) { return };
     }
         
     
@@ -7989,15 +7973,15 @@ fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
 
 
 fn Token(&self) -> Token{
-    Token::empty()
+    self.tok.clone()
 }
 
 fn Type()-> u32{
-    return 3686400;
+    return 3751936;
 }
 
 fn GetType(&self) -> u32 {
-    return 3686400;
+    return 3751936;
 }
 }
 
@@ -8010,7 +7994,7 @@ pub struct Ignore {
 }
 
 impl Ignore {
-fn new( _symbols:Vec<ASTNode>) -> Box<Self> {
+pub fn new( _symbols:Vec<ASTNode>) -> Box<Self> {
     Box::new(Ignore{
         symbols : _symbols,
     })
@@ -8064,7 +8048,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Ignore(*mut_me), parent, 3768320, i, j) { return };
+        if !_yield(&mut NodeIteration::Ignore(*mut_me), parent, 3833856, i, j) { return };
     }
         
     
@@ -8168,11 +8152,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 3768320;
+    return 3833856;
 }
 
 fn GetType(&self) -> u32 {
-    return 3768320;
+    return 3833856;
 }
 }
 
@@ -8182,14 +8166,16 @@ fn GetType(&self) -> u32 {
 #[derive(Debug, Clone)]
 pub struct Import {
     pub uri:String /* STRING | STRING */,
-pub reference:Token /* TOKEN */
+pub reference:Token /* TOKEN */,
+pub tok:Token /* TOKEN */
 }
 
 impl Import {
-fn new( _uri:String, _reference:Token) -> Box<Self> {
+pub fn new( _uri:String, _reference:Token, _tok:Token) -> Box<Self> {
     Box::new(Import{
         uri : _uri,
         reference : _reference,
+        tok : _tok,
     })
 }
 
@@ -8217,7 +8203,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Import(*mut_me), parent, 3833856, i, j) { return };
+        if !_yield(&mut NodeIteration::Import(*mut_me), parent, 3899392, i, j) { return };
     }
         
     
@@ -8235,15 +8221,15 @@ fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
 
 
 fn Token(&self) -> Token{
-    Token::empty()
+    self.tok.clone()
 }
 
 fn Type()-> u32{
-    return 3833856;
+    return 3899392;
 }
 
 fn GetType(&self) -> u32 {
-    return 3833856;
+    return 3899392;
 }
 }
 
@@ -8257,7 +8243,7 @@ pub reference:Token /* TOKEN */
 }
 
 impl Export {
-fn new( _production:ASTNode, _reference:Token) -> Box<Self> {
+pub fn new( _production:ASTNode, _reference:Token) -> Box<Self> {
     Box::new(Export{
         production : _production,
         reference : _reference,
@@ -8307,7 +8293,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Export(*mut_me), parent, 3899392, i, j) { return };
+        if !_yield(&mut NodeIteration::Export(*mut_me), parent, 3964928, i, j) { return };
     }
         
     
@@ -8343,11 +8329,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 3899392;
+    return 3964928;
 }
 
 fn GetType(&self) -> u32 {
-    return 3899392;
+    return 3964928;
 }
 }
 
@@ -8363,7 +8349,7 @@ pub index:Token /* TOKEN */
 }
 
 impl Out_Of_Band {
-fn new( _reference:Option<Box<Reference>>, _txt:String, _production:ASTNode, _index:Token) -> Box<Self> {
+pub fn new( _reference:Option<Box<Reference>>, _txt:String, _production:ASTNode, _index:Token) -> Box<Self> {
     Box::new(Out_Of_Band{
         reference : _reference,
         txt : _txt,
@@ -8443,7 +8429,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Out_Of_Band(*mut_me), parent, 3932672, i, j) { return };
+        if !_yield(&mut NodeIteration::Out_Of_Band(*mut_me), parent, 3998208, i, j) { return };
     }
         
     
@@ -8497,11 +8483,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 3932672;
+    return 3998208;
 }
 
 fn GetType(&self) -> u32 {
-    return 3932672;
+    return 3998208;
 }
 }
 
@@ -8514,7 +8500,7 @@ pub struct Repeat {
 }
 
 impl Repeat {
-fn new( ) -> Box<Self> {
+pub fn new( ) -> Box<Self> {
     Box::new(Repeat{
         
     })
@@ -8544,7 +8530,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Repeat(*mut_me), parent, 3997736, i, j) { return };
+        if !_yield(&mut NodeIteration::Repeat(*mut_me), parent, 4063272, i, j) { return };
     }
         
     
@@ -8566,11 +8552,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 3997736;
+    return 4063272;
 }
 
 fn GetType(&self) -> u32 {
-    return 3997736;
+    return 4063272;
 }
 }
 
@@ -8585,7 +8571,7 @@ pub state:ASTNode /* Production_Symbol | Production_Import_Symbol | HASH_NAME */
 }
 
 impl Lazy {
-fn new( _cp_start:Token, _cp_end:Token, _state:ASTNode) -> Box<Self> {
+pub fn new( _cp_start:Token, _cp_end:Token, _state:ASTNode) -> Box<Self> {
     Box::new(Lazy{
         cp_start : _cp_start,
         cp_end : _cp_end,
@@ -8640,7 +8626,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Lazy(*mut_me), parent, 4063272, i, j) { return };
+        if !_yield(&mut NodeIteration::Lazy(*mut_me), parent, 4128808, i, j) { return };
     }
         
     
@@ -8676,11 +8662,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 4063272;
+    return 4128808;
 }
 
 fn GetType(&self) -> u32 {
-    return 4063272;
+    return 4128808;
 }
 }
 
@@ -8693,7 +8679,7 @@ pub struct Num {
 }
 
 impl Num {
-fn new( _val:i64) -> Box<Self> {
+pub fn new( _val:i64) -> Box<Self> {
     Box::new(Num{
         val : _val,
     })
@@ -8723,7 +8709,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Num(*mut_me), parent, 4128768, i, j) { return };
+        if !_yield(&mut NodeIteration::Num(*mut_me), parent, 4194304, i, j) { return };
     }
         
     
@@ -8745,11 +8731,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 4128768;
+    return 4194304;
 }
 
 fn GetType(&self) -> u32 {
-    return 4128768;
+    return 4194304;
 }
 }
 
@@ -8762,7 +8748,7 @@ pub struct HASH_NAME {
 }
 
 impl HASH_NAME {
-fn new( _val:String) -> Box<Self> {
+pub fn new( _val:String) -> Box<Self> {
     Box::new(HASH_NAME{
         val : _val,
     })
@@ -8792,7 +8778,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::HASH_NAME(*mut_me), parent, 4194304, i, j) { return };
+        if !_yield(&mut NodeIteration::HASH_NAME(*mut_me), parent, 4259840, i, j) { return };
     }
         
     
@@ -8814,11 +8800,218 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 4194304;
+    return 4259840;
 }
 
 fn GetType(&self) -> u32 {
-    return 4194304;
+    return 4259840;
+}
+}
+
+
+
+
+#[derive(Debug, Clone)]
+pub struct FunctionIndexNum {
+    pub value:f64 /* F64 */
+}
+
+impl FunctionIndexNum {
+pub fn new( _value:f64) -> Box<Self> {
+    Box::new(FunctionIndexNum{
+        value : _value,
+    })
+}
+
+
+
+
+}
+
+
+
+impl<'a> ASTNodeTraits<'a> for FunctionIndexNum
+where
+    Self: Sized,
+{
+
+fn Iterate(
+    &'a mut self,
+    _yield: &mut impl FnMut(&mut NodeIteration<'a>, &mut NodeIteration<'a>,u32, i32, i32) -> bool,
+    parent: &mut NodeIteration<'a>,
+    i: i32,
+    j: i32,
+) {
+    let node = UnsafeCell::from(self);
+
+    unsafe{
+        let mut_me = node.get();
+
+        if !_yield(&mut NodeIteration::FunctionIndexNum(*mut_me), parent, 4325376, i, j) { return };
+    }
+        
+    
+}
+
+fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
+
+    match i{
+    
+        _ => {}
+    };
+
+    ASTNode::NONE
+}
+
+
+fn Token(&self) -> Token{
+    Token::empty()
+}
+
+fn Type()-> u32{
+    return 4325376;
+}
+
+fn GetType(&self) -> u32 {
+    return 4325376;
+}
+}
+
+
+
+
+#[derive(Debug, Clone)]
+pub struct FunctionIndexWildCard {
+    
+}
+
+impl FunctionIndexWildCard {
+pub fn new( ) -> Box<Self> {
+    Box::new(FunctionIndexWildCard{
+        
+    })
+}
+
+
+
+
+}
+
+
+
+impl<'a> ASTNodeTraits<'a> for FunctionIndexWildCard
+where
+    Self: Sized,
+{
+
+fn Iterate(
+    &'a mut self,
+    _yield: &mut impl FnMut(&mut NodeIteration<'a>, &mut NodeIteration<'a>,u32, i32, i32) -> bool,
+    parent: &mut NodeIteration<'a>,
+    i: i32,
+    j: i32,
+) {
+    let node = UnsafeCell::from(self);
+
+    unsafe{
+        let mut_me = node.get();
+
+        if !_yield(&mut NodeIteration::FunctionIndexWildCard(*mut_me), parent, 4390912, i, j) { return };
+    }
+        
+    
+}
+
+fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
+
+    match i{
+    
+        _ => {}
+    };
+
+    ASTNode::NONE
+}
+
+
+fn Token(&self) -> Token{
+    Token::empty()
+}
+
+fn Type()-> u32{
+    return 4390912;
+}
+
+fn GetType(&self) -> u32 {
+    return 4390912;
+}
+}
+
+
+
+
+#[derive(Debug, Clone)]
+pub struct FunctionIndexId {
+    pub value:String /* STRING */
+}
+
+impl FunctionIndexId {
+pub fn new( _value:String) -> Box<Self> {
+    Box::new(FunctionIndexId{
+        value : _value,
+    })
+}
+
+
+
+
+}
+
+
+
+impl<'a> ASTNodeTraits<'a> for FunctionIndexId
+where
+    Self: Sized,
+{
+
+fn Iterate(
+    &'a mut self,
+    _yield: &mut impl FnMut(&mut NodeIteration<'a>, &mut NodeIteration<'a>,u32, i32, i32) -> bool,
+    parent: &mut NodeIteration<'a>,
+    i: i32,
+    j: i32,
+) {
+    let node = UnsafeCell::from(self);
+
+    unsafe{
+        let mut_me = node.get();
+
+        if !_yield(&mut NodeIteration::FunctionIndexId(*mut_me), parent, 4456448, i, j) { return };
+    }
+        
+    
+}
+
+fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
+
+    match i{
+    
+        _ => {}
+    };
+
+    ASTNode::NONE
+}
+
+
+fn Token(&self) -> Token{
+    Token::empty()
+}
+
+fn Type()-> u32{
+    return 4456448;
+}
+
+fn GetType(&self) -> u32 {
+    return 4456448;
 }
 }
 
@@ -9094,28 +9287,13 @@ let mut v0 = args.remove(i-5);
  args.push(HCO::NODE/*aa99*/(ref_0)) } } }}
 /**
 ```
-{ 
-
-    t_Production_Symbol,
-
-    c_Symbol,
-
-    name:str($1),
-
-    production:c_Production,
-
-    val:-1,
-
-    tok
- }
+{ t_Production_Symbol, c_Symbol, name:str($1), tok }
 ```*/
 fn _fn8 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  if let HCO::TOKEN(r_0) = v0 { 
  let mut ref_0 = ASTNode::Production_Symbol(Production_Symbol::new(
         /* AAA */r_0.String(),
-        ASTNode::NONE,
-        /* AAA */1.0,
         /* AAA */tok,
     ) 
 );;
@@ -9132,8 +9310,6 @@ let mut v0 = args.remove(i-0);
 
     name:str($3),
 
-    production:c_Production,
-
     tok
  }
 ```*/
@@ -9146,7 +9322,6 @@ let mut v0 = args.remove(i-2);
  let mut ref_0 = ASTNode::Production_Import_Symbol(Production_Import_Symbol::new(
         /* AAA */r_0.String(),
         /* AAA */r_1.String(),
-        ASTNode::NONE,
         /* AAA */tok,
     ) 
 );;
@@ -9280,25 +9455,37 @@ let mut v0 = args.remove(i-3);
  args.push(HCO::NODE/*aa99*/(ref_0)) } }}
 /**
 ```
-{ t_TokenId, c_IR, c_IR_Instruction, id:$4 }
+{ t_TokenId, c_IR, c_IR_Instruction, id:$5 }
 ```*/
 fn _fn16 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
-let mut v4 = args.remove(i-0);
-let mut v3 = args.remove(i-1);
-let mut v2 = args.remove(i-2);
-let mut v1 = args.remove(i-3);
-let mut v0 = args.remove(i-4); 
- if let HCO::NODE/*aaRR*/(r_0) = v3 { 
+let mut v5 = args.remove(i-0);
+let mut v4 = args.remove(i-1);
+let mut v3 = args.remove(i-2);
+let mut v2 = args.remove(i-3);
+let mut v1 = args.remove(i-4);
+let mut v0 = args.remove(i-5); 
+ if let HCO::TOKEN(r_0) = v4 { 
  let mut ref_0 = ASTNode::TokenId(TokenId::new(
-        r_0,
+        /* AAA */r_0,
     ) 
 );;
  args.push(HCO::NODE/*aa99*/(ref_0)) }}
 /**
 ```
-{ t_Pass, c_IR, c_IR_Instruction }
+{ t_Skip, c_IR, c_IR_Instruction }
 ```*/
 fn _fn17 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v0 = args.remove(i-0); 
+ let mut ref_0 = ASTNode::Skip(Skip::new(
+        
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0))}
+/**
+```
+{ t_Pass, c_IR, c_IR_Instruction }
+```*/
+fn _fn18 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  let mut ref_0 = ASTNode::Pass(Pass::new(
         
@@ -9309,7 +9496,7 @@ let mut v0 = args.remove(i-0);
 ```
 { t_Fail, c_IR, c_IR_Instruction }
 ```*/
-fn _fn18 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn19 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  let mut ref_0 = ASTNode::Fail(Fail::new(
         
@@ -9320,7 +9507,7 @@ let mut v0 = args.remove(i-0);
 ```
 { t_NotInScope, c_IR, c_IR_Instruction, ids:$5 }
 ```*/
-fn _fn19 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn20 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v5 = args.remove(i-0);
 let mut v4 = args.remove(i-1);
 let mut v3 = args.remove(i-2);
@@ -9337,7 +9524,7 @@ let mut v0 = args.remove(i-5);
 ```
 { t_SetScope, c_IR, c_IR_Instruction, scope:i64($1) }
 ```*/
-fn _fn20 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn21 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v3 = args.remove(i-0);
 let mut v2 = args.remove(i-1);
 let mut v1 = args.remove(i-2);
@@ -9352,7 +9539,7 @@ let mut v0 = args.remove(i-3);
 ```
 { t_Consume, c_IR, c_IR_Instruction, EMPTY:bool($2) }
 ```*/
-fn _fn21 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn22 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::TOKEN(r_0) = v1 { 
@@ -9376,7 +9563,7 @@ let mut v0 = args.remove(i-1);
     SCAN_BACKWARDS:bool($NULL)
  }
 ```*/
-fn _fn22 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn23 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -9391,7 +9578,7 @@ let mut v0 = args.remove(i-2);
 ```
 { t_Consume, c_IR, c_IR_Instruction, EMPTY:bool($NULL) }
 ```*/
-fn _fn23 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn24 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  let mut ref_0 = ASTNode::Consume(Consume::new(
         /* AAA */false,
@@ -9400,15 +9587,13 @@ let mut v0 = args.remove(i-0);
  args.push(HCO::NODE/*aa99*/(ref_0))}
 /**
 ```
-{ t_Returned, c_Function, txt:str($4) }
+{ t_Returned, c_Function, txt:str($3) }
 ```*/
-fn _fn24 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
-let mut v4 = args.remove(i-0);
-let mut v3 = args.remove(i-1);
-let mut v2 = args.remove(i-2);
-let mut v1 = args.remove(i-3);
-let mut v0 = args.remove(i-4); 
- if let HCO::TOKEN(r_0) = v3 { 
+fn _fn25 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v2 = args.remove(i-0);
+let mut v1 = args.remove(i-1);
+let mut v0 = args.remove(i-2); 
+ if let HCO::TOKEN(r_0) = v2 { 
  let mut ref_0 = ASTNode::Returned(Returned::new(
         /* AAA */r_0.String(),
     ) 
@@ -9418,7 +9603,7 @@ let mut v0 = args.remove(i-4);
 ```
 { t_Referenced, c_Function, reference:$3 }
 ```*/
-fn _fn25 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn26 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -9433,7 +9618,7 @@ let mut v0 = args.remove(i-2);
 ```
 { t_Reference, c_Symbol, val:str($1) }
 ```*/
-fn _fn26 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn27 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  if let HCO::TOKEN(r_0) = v0 { 
  let mut ref_0 = ASTNode::Reference(Reference::new(
@@ -9445,7 +9630,7 @@ let mut v0 = args.remove(i-0);
 ```
 { t_Generated, c_Symbol, c_Token, val:str($2), tok }
 ```*/
-fn _fn27 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn28 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::TOKEN(r_0) = v1 { 
@@ -9470,10 +9655,9 @@ let mut v0 = args.remove(i-1);
     tok
  }
 ```*/
-fn _fn28 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
-let mut v2 = args.remove(i-0);
-let mut v1 = args.remove(i-1);
-let mut v0 = args.remove(i-2); 
+fn _fn29 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v1 = args.remove(i-0);
+let mut v0 = args.remove(i-1); 
  let mut ref_0 = ASTNode::Exclusive_Literal(Exclusive_Literal::new(
         /* AAA */v1.String(),
         /* AAA */tok,
@@ -9484,7 +9668,7 @@ let mut v0 = args.remove(i-2);
 ```
 { t_Literal, c_Symbol, c_Token, val:str($1), tok }
 ```*/
-fn _fn29 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn30 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  let mut ref_0 = ASTNode::Literal(Literal::new(
         /* AAA */v0.String(),
@@ -9496,21 +9680,21 @@ let mut v0 = args.remove(i-0);
 ```
 { t_Literal, c_Symbol, c_Token, val:str($2), tok }
 ```*/
-fn _fn30 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
-let mut v2 = args.remove(i-0);
-let mut v1 = args.remove(i-1);
-let mut v0 = args.remove(i-2); 
+fn _fn31 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v1 = args.remove(i-0);
+let mut v0 = args.remove(i-1); 
+ if let HCO::TOKEN(r_0) = v1 { 
  let mut ref_0 = ASTNode::Literal(Literal::new(
-        /* AAA */v1.String(),
+        /* AAA */r_0.String(),
         /* AAA */tok,
     ) 
 );;
- args.push(HCO::NODE/*aa99*/(ref_0))}
+ args.push(HCO::NODE/*aa99*/(ref_0)) }}
 /**
 ```
 { t_End_Of_File, c_Symbol, c_Token, tok }
 ```*/
-fn _fn31 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn32 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  let mut ref_0 = ASTNode::End_Of_File(End_Of_File::new(
         /* AAA */tok,
@@ -9521,7 +9705,7 @@ let mut v0 = args.remove(i-0);
 ```
 { t_Space, c_Meta, c_Format, position:i16(0) }
 ```*/
-fn _fn32 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn33 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  let mut ref_0 = ASTNode::Space(Space::new(
         /* AAA */0.0 as i16,
@@ -9532,7 +9716,7 @@ let mut v0 = args.remove(i-0);
 ```
 { t_NewLine, c_Meta, c_Format, position:i16(0) }
 ```*/
-fn _fn33 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn34 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  let mut ref_0 = ASTNode::NewLine(NewLine::new(
         /* AAA */0.0 as i16,
@@ -9543,7 +9727,7 @@ let mut v0 = args.remove(i-0);
 ```
 { t_IncreaseIndent, c_Meta, c_Format, position:i16(0) }
 ```*/
-fn _fn34 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn35 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  let mut ref_0 = ASTNode::IncreaseIndent(IncreaseIndent::new(
         /* AAA */0.0 as i16,
@@ -9554,7 +9738,7 @@ let mut v0 = args.remove(i-0);
 ```
 { t_DecreaseIndent, c_Meta, c_Format, position:i16(0) }
 ```*/
-fn _fn35 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn36 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  let mut ref_0 = ASTNode::DecreaseIndent(DecreaseIndent::new(
         /* AAA */0.0 as i16,
@@ -9576,7 +9760,7 @@ let mut v0 = args.remove(i-0);
     tok
  }
 ```*/
-fn _fn36 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn37 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::NODE/*aaRR*/(r_0) = v1 { 
@@ -9590,7 +9774,7 @@ let mut v0 = args.remove(i-1);
 ```
 { t_Goto, c_IR, c_IR_Instruction, state:$2 }
 ```*/
-fn _fn37 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn38 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::NODE/*aaRR*/(r_0) = v1 { 
@@ -9618,7 +9802,7 @@ let mut v0 = args.remove(i-1);
     fail:$5
  }
 ```*/
-fn _fn38 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn39 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v5 = args.remove(i-0);
 let mut v4 = args.remove(i-1);
 let mut v3 = args.remove(i-2);
@@ -9657,7 +9841,7 @@ let mut v0 = args.remove(i-5);
     fail:$NULL
  }
 ```*/
-fn _fn39 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn40 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v4 = args.remove(i-0);
 let mut v3 = args.remove(i-1);
 let mut v2 = args.remove(i-2);
@@ -9693,7 +9877,7 @@ let mut v0 = args.remove(i-4);
     fail:$5
  }
 ```*/
-fn _fn40 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn41 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v4 = args.remove(i-0);
 let mut v3 = args.remove(i-1);
 let mut v2 = args.remove(i-2);
@@ -9729,7 +9913,7 @@ let mut v0 = args.remove(i-4);
     fail:$NULL
  }
 ```*/
-fn _fn41 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn42 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v3 = args.remove(i-0);
 let mut v2 = args.remove(i-1);
 let mut v1 = args.remove(i-2);
@@ -9747,7 +9931,7 @@ let mut v0 = args.remove(i-3);
 ```
 { t_Symbols, c_IR, expected:$3, skipped:$4 }
 ```*/
-fn _fn42 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn43 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v3 = args.remove(i-0);
 let mut v2 = args.remove(i-1);
 let mut v1 = args.remove(i-2);
@@ -9764,7 +9948,7 @@ let mut v0 = args.remove(i-3);
 ```
 { t_Symbols, c_IR, expected:$3, skipped:$NULL }
 ```*/
-fn _fn43 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn44 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -9779,7 +9963,7 @@ let mut v0 = args.remove(i-2);
 ```
 { t_AnnotatedSymbol, c_Symbol, symbol:$1, reference:$2 }
 ```*/
-fn _fn44 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn45 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::NODE/*aaRR*/(r_0) = v0 { 
@@ -9795,7 +9979,7 @@ let mut v0 = args.remove(i-1);
 ```
 { t_OptionalSymbol, symbol:$1 }
 ```*/
-fn _fn45 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn46 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::NODE/*aaRR*/(r_0) = v0 { 
@@ -9808,7 +9992,7 @@ let mut v0 = args.remove(i-1);
 ```
 { t_Not_Symbol, c_Symbol, symbol:$2, tok }
 ```*/
-fn _fn46 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn47 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::NODE/*aaRR*/(r_0) = v1 { 
@@ -9822,7 +10006,7 @@ let mut v0 = args.remove(i-1);
 ```
 { t_Look_Behind, c_Symbol, symbol:$2, tok }
 ```*/
-fn _fn47 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn48 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::NODE/*aaRR*/(r_0) = v1 { 
@@ -9836,7 +10020,7 @@ let mut v0 = args.remove(i-1);
 ```
 { t_NonCaptureSymbol, c_Symbol, sym:$2 }
 ```*/
-fn _fn48 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn49 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::NODE/*aaRR*/(r_0) = v1 { 
@@ -9860,7 +10044,7 @@ let mut v0 = args.remove(i-1);
     tok
  }
 ```*/
-fn _fn49 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn50 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v3 = args.remove(i-0);
 let mut v2 = args.remove(i-1);
 let mut v1 = args.remove(i-2);
@@ -9889,7 +10073,7 @@ let mut v0 = args.remove(i-3);
     tok
  }
 ```*/
-fn _fn50 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn51 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v3 = args.remove(i-0);
 let mut v2 = args.remove(i-1);
 let mut v1 = args.remove(i-2);
@@ -9918,7 +10102,7 @@ let mut v0 = args.remove(i-3);
     tok
  }
 ```*/
-fn _fn51 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn52 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -9945,7 +10129,7 @@ let mut v0 = args.remove(i-2);
     tok
  }
 ```*/
-fn _fn52 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn53 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -9961,7 +10145,7 @@ let mut v0 = args.remove(i-2);
 ```
 { t_Group_Production, c_Symbol, bodies:$2, tok }
 ```*/
-fn _fn53 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn54 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -9986,12 +10170,10 @@ let mut v0 = args.remove(i-2);
 
     reference:$2,
 
-    reduce_function:$4,
-
-    production:t_Production
+    reduce_function:$4
  }
 ```*/
-fn _fn54 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn55 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v3 = args.remove(i-0);
 let mut v2 = args.remove(i-1);
 let mut v1 = args.remove(i-2);
@@ -10006,7 +10188,6 @@ let mut v0 = args.remove(i-3);
         r_1,
         Some(r_3),
         r_4,
-        None /* WTF2 */,
     ) 
 );;
  args.push(HCO::NODE/*aa99*/(ref_0)) } } } } }}
@@ -10024,12 +10205,10 @@ let mut v0 = args.remove(i-3);
 
     reference:$1,
 
-    reduce_function:$3,
-
-    production:t_Production
+    reduce_function:$3
  }
 ```*/
-fn _fn55 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn56 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -10042,7 +10221,6 @@ let mut v0 = args.remove(i-2);
         r_0,
         Some(r_2),
         r_3,
-        None /* WTF2 */,
     ) 
 );;
  args.push(HCO::NODE/*aa99*/(ref_0)) } } } }}
@@ -10060,12 +10238,10 @@ let mut v0 = args.remove(i-2);
 
     reference:$NULL,
 
-    reduce_function:$3,
-
-    production:t_Production
+    reduce_function:$3
  }
 ```*/
-fn _fn56 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn57 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -10077,7 +10253,6 @@ let mut v0 = args.remove(i-2);
         r_1,
         None /* WTF2 */,
         r_2,
-        None /* WTF2 */,
     ) 
 );;
  args.push(HCO::NODE/*aa99*/(ref_0)) } } }}
@@ -10095,12 +10270,10 @@ let mut v0 = args.remove(i-2);
 
     reference:$2,
 
-    reduce_function:$NULL,
-
-    production:t_Production
+    reduce_function:$NULL
  }
 ```*/
-fn _fn57 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn58 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -10113,7 +10286,6 @@ let mut v0 = args.remove(i-2);
         r_1,
         Some(r_3),
         ASTNode::NONE,
-        None /* WTF2 */,
     ) 
 );;
  args.push(HCO::NODE/*aa99*/(ref_0)) } } } }}
@@ -10131,12 +10303,10 @@ let mut v0 = args.remove(i-2);
 
     reference:$NULL,
 
-    reduce_function:$2,
-
-    production:t_Production
+    reduce_function:$2
  }
 ```*/
-fn _fn58 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn59 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::NODES/*aa00*/(mut r_0) = v0 { 
@@ -10146,7 +10316,6 @@ let mut v0 = args.remove(i-1);
         r_0,
         None /* WTF2 */,
         r_1,
-        None /* WTF2 */,
     ) 
 );;
  args.push(HCO::NODE/*aa99*/(ref_0)) } }}
@@ -10164,12 +10333,10 @@ let mut v0 = args.remove(i-1);
 
     reference:$1,
 
-    reduce_function:$NULL,
-
-    production:t_Production
+    reduce_function:$NULL
  }
 ```*/
-fn _fn59 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn60 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::NODES/*aa00*/(mut r_0) = v1 { 
@@ -10180,7 +10347,6 @@ let mut v0 = args.remove(i-1);
         r_0,
         Some(r_2),
         ASTNode::NONE,
-        None /* WTF2 */,
     ) 
 );;
  args.push(HCO::NODE/*aa99*/(ref_0)) } } }}
@@ -10198,12 +10364,10 @@ let mut v0 = args.remove(i-1);
 
     reference:$NULL,
 
-    reduce_function:$NULL,
-
-    production:t_Production
+    reduce_function:$NULL
  }
 ```*/
-fn _fn60 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn61 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::TOKEN(r_0) = v0 { 
@@ -10213,7 +10377,6 @@ let mut v0 = args.remove(i-1);
         r_1,
         None /* WTF2 */,
         ASTNode::NONE,
-        None /* WTF2 */,
     ) 
 );;
  args.push(HCO::NODE/*aa99*/(ref_0)) } }}
@@ -10231,12 +10394,10 @@ let mut v0 = args.remove(i-1);
 
     reference:$NULL,
 
-    reduce_function:$NULL,
-
-    production:t_Production
+    reduce_function:$NULL
  }
 ```*/
-fn _fn61 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn62 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  if let HCO::NODES/*aa00*/(mut r_0) = v0 { 
  let mut ref_0 = ASTNode::Body(Body::new(
@@ -10244,7 +10405,6 @@ let mut v0 = args.remove(i-0);
         r_0,
         None /* WTF2 */,
         ASTNode::NONE,
-        None /* WTF2 */,
     ) 
 );;
  args.push(HCO::NODE/*aa99*/(ref_0)) }}
@@ -10252,7 +10412,7 @@ let mut v0 = args.remove(i-0);
 ```
 { t_Exclude, c_Symbol, c_Meta, sym:$2, tok }
 ```*/
-fn _fn62 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn63 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -10267,7 +10427,7 @@ let mut v0 = args.remove(i-2);
 ```
 { t_Look_Ignore, c_Symbol, c_Meta, sym:$2, tok }
 ```*/
-fn _fn63 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn64 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -10282,7 +10442,7 @@ let mut v0 = args.remove(i-2);
 ```
 { t_Empty, c_Symbol, tok }
 ```*/
-fn _fn64 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn65 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  let mut ref_0 = ASTNode::Empty(Empty::new(
         /* AAA */tok,
@@ -10303,10 +10463,12 @@ let mut v0 = args.remove(i-0);
 
     bodies:$b,
 
-    LAZY:bool($l)
+    LAZY:bool($l),
+
+    tok
  }
 ```*/
-fn _fn65 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn66 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v5 = args.remove(i-0);
 let mut v4 = args.remove(i-1);
 let mut v3 = args.remove(i-2);
@@ -10322,6 +10484,7 @@ let mut v0 = args.remove(i-5);
         r_1,
         r_2,
         /* AAA */true,
+        /* AAA */tok,
     ) 
 );;
  args.push(HCO::NODE/*aa99*/(ref_0)) } } } }}
@@ -10335,10 +10498,12 @@ let mut v0 = args.remove(i-5);
 
     symbol:$2,
 
-    bodies:$4
+    bodies:$4,
+
+    tok
  }
 ```*/
-fn _fn66 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn67 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v3 = args.remove(i-0);
 let mut v2 = args.remove(i-1);
 let mut v1 = args.remove(i-2);
@@ -10348,6 +10513,7 @@ let mut v0 = args.remove(i-3);
  let mut ref_0 = ASTNode::ProductionMerged(ProductionMerged::new(
         r_0,
         r_1,
+        /* AAA */tok,
     ) 
 );;
  args.push(HCO::NODE/*aa99*/(ref_0)) } }}
@@ -10365,10 +10531,12 @@ let mut v0 = args.remove(i-3);
 
     bodies:$b,
 
-    LAZY:bool($l)
+    LAZY:bool($l),
+
+    tok
  }
 ```*/
-fn _fn67 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn68 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v4 = args.remove(i-0);
 let mut v3 = args.remove(i-1);
 let mut v2 = args.remove(i-2);
@@ -10382,6 +10550,7 @@ let mut v0 = args.remove(i-4);
         r_1,
         r_2,
         /* AAA */false,
+        /* AAA */tok,
     ) 
 );;
  args.push(HCO::NODE/*aa99*/(ref_0)) } } }}
@@ -10399,10 +10568,12 @@ let mut v0 = args.remove(i-4);
 
     bodies:$b,
 
-    LAZY:bool($l)
+    LAZY:bool($l),
+
+    tok
  }
 ```*/
-fn _fn68 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn69 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v4 = args.remove(i-0);
 let mut v3 = args.remove(i-1);
 let mut v2 = args.remove(i-2);
@@ -10416,6 +10587,7 @@ let mut v0 = args.remove(i-4);
         r_0,
         r_1,
         /* AAA */true,
+        /* AAA */tok,
     ) 
 );;
  args.push(HCO::NODE/*aa99*/(ref_0)) } } }}
@@ -10433,10 +10605,12 @@ let mut v0 = args.remove(i-4);
 
     bodies:$b,
 
-    LAZY:bool($l)
+    LAZY:bool($l),
+
+    tok
  }
 ```*/
-fn _fn69 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn70 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v3 = args.remove(i-0);
 let mut v2 = args.remove(i-1);
 let mut v1 = args.remove(i-2);
@@ -10448,6 +10622,7 @@ let mut v0 = args.remove(i-3);
         r_0,
         r_1,
         /* AAA */false,
+        /* AAA */tok,
     ) 
 );;
  args.push(HCO::NODE/*aa99*/(ref_0)) } }}
@@ -10455,7 +10630,7 @@ let mut v0 = args.remove(i-3);
 ```
 { t_Ignore, c_Preamble, symbols:$2 }
 ```*/
-fn _fn70 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn71 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -10467,9 +10642,9 @@ let mut v0 = args.remove(i-2);
  args.push(HCO::NODE/*aa99*/(ref_0)) }}
 /**
 ```
-{ t_Import, c_Preamble, uri:$2, reference:$4 }
+{ t_Import, c_Preamble, uri:$2, reference:$4, tok }
 ```*/
-fn _fn71 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn72 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v3 = args.remove(i-0);
 let mut v2 = args.remove(i-1);
 let mut v1 = args.remove(i-2);
@@ -10477,6 +10652,7 @@ let mut v0 = args.remove(i-3);
  let mut ref_0 = ASTNode::Import(Import::new(
         /* AAA */v1.String(),
         /* AAA */v3.Token(),
+        /* AAA */tok,
     ) 
 );;
  args.push(HCO::NODE/*aa99*/(ref_0))}
@@ -10484,7 +10660,7 @@ let mut v0 = args.remove(i-3);
 ```
 { t_Export, c_Preamble, production:$2, reference:$4 }
 ```*/
-fn _fn72 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn73 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v3 = args.remove(i-0);
 let mut v2 = args.remove(i-1);
 let mut v1 = args.remove(i-2);
@@ -10499,17 +10675,15 @@ let mut v0 = args.remove(i-3);
  args.push(HCO::NODE/*aa99*/(ref_0)) } }}
 /**
 ```
-{ t_Out_Of_Band, c_Function, reference:$2, txt:str($4) }
+{ t_Out_Of_Band, c_Function, reference:$2, txt:str($3) }
 ```*/
-fn _fn73 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
-let mut v4 = args.remove(i-0);
-let mut v3 = args.remove(i-1);
-let mut v2 = args.remove(i-2);
-let mut v1 = args.remove(i-3);
-let mut v0 = args.remove(i-4); 
+fn _fn74 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v2 = args.remove(i-0);
+let mut v1 = args.remove(i-1);
+let mut v0 = args.remove(i-2); 
  if let HCO::NODE/*aaRR*/(r_0) = v1 { 
  if let ASTNode::Reference(r_1) = r_0 { 
- if let HCO::TOKEN(r_2) = v3 { 
+ if let HCO::TOKEN(r_2) = v2 { 
  let mut ref_0 = ASTNode::Out_Of_Band(Out_Of_Band::new(
         Some(r_1),
         /* AAA */r_2.String(),
@@ -10533,13 +10707,11 @@ let mut v0 = args.remove(i-4);
     txt:str($4)
  }
 ```*/
-fn _fn74 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
-let mut v5 = args.remove(i-0);
-let mut v4 = args.remove(i-1);
-let mut v3 = args.remove(i-2);
-let mut v2 = args.remove(i-3);
-let mut v1 = args.remove(i-4);
-let mut v0 = args.remove(i-5); 
+fn _fn75 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v3 = args.remove(i-0);
+let mut v2 = args.remove(i-1);
+let mut v1 = args.remove(i-2);
+let mut v0 = args.remove(i-3); 
  if let HCO::TOKEN(r_0) = v3 { 
  if let HCO::NODE/*aaRR*/(r_1) = v1 { 
  let mut ref_0 = ASTNode::Out_Of_Band(Out_Of_Band::new(
@@ -10565,7 +10737,7 @@ let mut v0 = args.remove(i-5);
     reference:$4
  }
 ```*/
-fn _fn75 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn76 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v3 = args.remove(i-0);
 let mut v2 = args.remove(i-1);
 let mut v1 = args.remove(i-2);
@@ -10596,12 +10768,10 @@ let mut v0 = args.remove(i-3);
     txt:str($3)
  }
 ```*/
-fn _fn76 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
-let mut v4 = args.remove(i-0);
-let mut v3 = args.remove(i-1);
-let mut v2 = args.remove(i-2);
-let mut v1 = args.remove(i-3);
-let mut v0 = args.remove(i-4); 
+fn _fn77 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v2 = args.remove(i-0);
+let mut v1 = args.remove(i-1);
+let mut v0 = args.remove(i-2); 
  if let HCO::TOKEN(r_0) = v2 { 
  if let HCO::NODE/*aaRR*/(r_1) = v1 { 
  let mut ref_0 = ASTNode::Out_Of_Band(Out_Of_Band::new(
@@ -10627,7 +10797,7 @@ let mut v0 = args.remove(i-4);
     reference:$3
  }
 ```*/
-fn _fn77 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn78 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -10661,7 +10831,7 @@ let mut v0 = args.remove(i-2);
     symbol_meta:$7
  }
 ```*/
-fn _fn78 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn79 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v7 = args.remove(i-0);
 let mut v6 = args.remove(i-1);
 let mut v5 = args.remove(i-2);
@@ -10704,7 +10874,7 @@ let mut v0 = args.remove(i-7);
     symbol_meta:$6
  }
 ```*/
-fn _fn79 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn80 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v6 = args.remove(i-0);
 let mut v5 = args.remove(i-1);
 let mut v4 = args.remove(i-2);
@@ -10744,7 +10914,7 @@ let mut v0 = args.remove(i-6);
     symbol_meta:$NULL
  }
 ```*/
-fn _fn80 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn81 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v6 = args.remove(i-0);
 let mut v5 = args.remove(i-1);
 let mut v4 = args.remove(i-2);
@@ -10784,7 +10954,7 @@ let mut v0 = args.remove(i-6);
     symbol_meta:$NULL
  }
 ```*/
-fn _fn81 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn82 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v5 = args.remove(i-0);
 let mut v4 = args.remove(i-1);
 let mut v3 = args.remove(i-2);
@@ -10806,7 +10976,7 @@ let mut v0 = args.remove(i-5);
 ```
 { t_Repeat, c_IR, c_IR_Instruction }
 ```*/
-fn _fn82 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn83 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -10832,7 +11002,7 @@ let mut v0 = args.remove(i-2);
     state:$6
  }
 ```*/
-fn _fn83 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn84 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v5 = args.remove(i-0);
 let mut v4 = args.remove(i-1);
 let mut v3 = args.remove(i-2);
@@ -10853,7 +11023,7 @@ let mut v0 = args.remove(i-5);
 ```
 { t_Num, val:i64($1) }
 ```*/
-fn _fn84 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn85 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  if let HCO::TOKEN(r_0) = v0 { 
  let mut ref_0 = ASTNode::Num(Num::new(
@@ -10865,7 +11035,7 @@ let mut v0 = args.remove(i-0);
 ```
 { t_HASH_NAME, val:str($1) }
 ```*/
-fn _fn85 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn86 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  if let HCO::TOKEN(r_0) = v0 { 
  let mut ref_0 = ASTNode::HASH_NAME(HASH_NAME::new(
@@ -10875,9 +11045,44 @@ let mut v0 = args.remove(i-0);
  args.push(HCO::NODE/*aa99*/(ref_0)) }}
 /**
 ```
+{ t_FunctionIndexNum, value:f64($1) }
+```*/
+fn _fn87 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v0 = args.remove(i-0); 
+ if let HCO::TOKEN(r_0) = v0 { 
+ let mut ref_0 = ASTNode::FunctionIndexNum(FunctionIndexNum::new(
+        /* AAA */r_0.to_f64(),
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0)) }}
+/**
+```
+{ t_FunctionIndexWildCard }
+```*/
+fn _fn88 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v0 = args.remove(i-0); 
+ let mut ref_0 = ASTNode::FunctionIndexWildCard(FunctionIndexWildCard::new(
+        
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0))}
+/**
+```
+{ t_FunctionIndexId, value:str($1) }
+```*/
+fn _fn89 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v0 = args.remove(i-0); 
+ if let HCO::NODE/*aaRR*/(r_0) = v0 { 
+ let mut ref_0 = ASTNode::FunctionIndexId(FunctionIndexId::new(
+        /* AAA */r_0.String(),
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0)) }}
+/**
+```
 str($3)
 ```*/
-fn _fn86 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn90 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v3 = args.remove(i-0);
 let mut v2 = args.remove(i-1);
 let mut v1 = args.remove(i-2);
@@ -10888,7 +11093,7 @@ let mut v0 = args.remove(i-3);
 ```
 $2
 ```*/
-fn _fn87 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn91 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
@@ -10902,7 +11107,7 @@ let mut v0 = args.remove(i-2);
 ```
 $1+$2
 ```*/
-fn _fn88 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn92 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::TOKEN(r_0) = v1 { 
@@ -10911,7 +11116,7 @@ let mut v0 = args.remove(i-1);
 ```
 $1+$3+[$4]
 ```*/
-fn _fn89 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn93 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v3 = args.remove(i-0);
 let mut v2 = args.remove(i-1);
@@ -10932,7 +11137,7 @@ ref_0.append(&mut r_1);
 ```
 $1+[$2]
 ```*/
-fn _fn90 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn94 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1);
@@ -10949,7 +11154,7 @@ ref_0.append(&mut r_1);
 ```
 [$1]
 ```*/
-fn _fn91 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn95 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v0 = args.remove(i-0);
                                 
@@ -10963,7 +11168,7 @@ ref_0.push(/*RR6*/r_0);
 ```
 $1+$3+[$NULL]
 ```*/
-fn _fn92 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn96 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
@@ -10981,7 +11186,7 @@ ref_0.append(&mut r_0);
 ```
 $1+[$NULL]
 ```*/
-fn _fn93 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn97 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v0 = args.remove(i-0);
                                 
@@ -10995,7 +11200,7 @@ ref_0.append(&mut r_0);
 ```
 $NULL+[$NULL]
 ```*/
-fn _fn94 (args:&mut Vec<HCO>, tok: Token){
+fn _fn98 (args:&mut Vec<HCO>, tok: Token){
                             let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
                                 
@@ -11004,9 +11209,38 @@ let mut v0 = args.remove(i-0);
                             }
 /**
 ```
+[$1]
+```*/
+fn _fn99 (args:&mut Vec<HCO>, tok: Token){ 
+                            let mut i = args.len()-1;
+let mut v0 = args.remove(i-0);
+                            
+ let mut ref_0:Vec<Token> = Vec::new();
+ if let HCO::TOKEN(r_0) = v0 { 
+ref_0.push(/*RR7*/r_0);
+
+                            args.push(HCO::TOKENS(ref_0)); }
+                        }
+/**
+```
+$__first__+$__last__
+```*/
+fn _fn100 (args:&mut Vec<HCO>, tok: Token){ 
+                            let mut i = args.len()-1;
+let mut v1 = args.remove(i-0);
+let mut v0 = args.remove(i-1);
+                            
+ if let HCO::TOKENS(mut r_0)= v0 { 
+ if let HCO::TOKEN(r_1) = v1 { 
+r_0.push(/*UX4 TOKEN*/r_1);
+
+                            args.push(HCO::TOKENS(r_0)); } }
+                        }
+/**
+```
 $3
 ```*/
-fn _fn95 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn101 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v3 = args.remove(i-0);
 let mut v2 = args.remove(i-1);
 let mut v1 = args.remove(i-2);
@@ -11017,7 +11251,7 @@ let mut v0 = args.remove(i-3);
 ```
 $__first__+$__last__
 ```*/
-fn _fn96 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn102 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
@@ -11033,7 +11267,7 @@ r_0.push(/*UX2*/r_1);
 ```
 $1+$2
 ```*/
-fn _fn97 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn103 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1);
@@ -11048,7 +11282,7 @@ r_0.append(&mut r_1);
 ```
 $1
 ```*/
-fn _fn98 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn104 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v0 = args.remove(i-0);
                                 
@@ -11060,7 +11294,7 @@ let mut v0 = args.remove(i-0);
 ```
 $__first__+$__last__
 ```*/
-fn _fn99 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn105 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1);
@@ -11075,7 +11309,7 @@ r_0.push(/*UX2*/r_1);
 ```
 $1
 ```*/
-fn _fn100 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn106 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::NODE/*aaRR*/(r_0) = v0 { 
@@ -11084,7 +11318,7 @@ let mut v0 = args.remove(i-1);
 ```
 [$1]
 ```*/
-fn _fn101 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn107 (args:&mut Vec<HCO>, tok: Token){ 
                             let mut i = args.len()-1;
 let mut v0 = args.remove(i-0);
                             
@@ -11097,7 +11331,7 @@ ref_0.push(/*RR7*/v0.Token());
 ```
 $__first__+$__last__
 ```*/
-fn _fn102 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn108 (args:&mut Vec<HCO>, tok: Token){ 
                             let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1);
@@ -11111,7 +11345,7 @@ r_0.push(/*UX1*/v1.Token());
 ```
 $__first__+$__last__
 ```*/
-fn _fn103 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn109 (args:&mut Vec<HCO>, tok: Token){ 
                             let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1);
@@ -11126,46 +11360,32 @@ let mut v0 = args.remove(i-1);
                         }
 /**
 ```
-[$1]
-```*/
-fn _fn104 (args:&mut Vec<HCO>, tok: Token){ 
-                            let mut i = args.len()-1;
-let mut v0 = args.remove(i-0);
-                            
- let mut ref_0:Vec<Token> = Vec::new();
- if let HCO::TOKEN(r_0) = v0 { 
-ref_0.push(/*RR7*/r_0);
-
-                            args.push(HCO::TOKENS(ref_0)); }
-                        }
-/**
-```
-$__first__+$__last__
-```*/
-fn _fn105 (args:&mut Vec<HCO>, tok: Token){ 
-                            let mut i = args.len()-1;
-let mut v1 = args.remove(i-0);
-let mut v0 = args.remove(i-1);
-                            
- if let HCO::TOKENS(mut r_0)= v0 { 
- if let HCO::TOKEN(r_1) = v1 { 
-r_0.push(/*UX4 TOKEN*/r_1);
-
-                            args.push(HCO::TOKENS(r_0)); } }
-                        }
-/**
-```
 str($1)
 ```*/
-fn _fn106 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn110 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  if let HCO::TOKEN(r_0) = v0 { 
  args.push(HCO::STRING(r_0.String())) }}
 /**
 ```
+str($1)
+```*/
+fn _fn111 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v0 = args.remove(i-0); 
+ args.push(HCO::STRING(v0.String()))}
+/**
+```
+str($__first__)+str($__last__)
+```*/
+fn _fn112 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v1 = args.remove(i-0);
+let mut v0 = args.remove(i-1); 
+ args.push(HCO::STRING(v0.String() + &v1.String()))}
+/**
+```
 $2
 ```*/
-fn _fn107 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn113 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::NODE/*aaRR*/(r_0) = v1 { 
@@ -11174,7 +11394,7 @@ let mut v0 = args.remove(i-1);
 ```
 $2
 ```*/
-fn _fn108 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn114 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1);
@@ -11187,7 +11407,7 @@ let mut v0 = args.remove(i-1);
 ```
 [$2]
 ```*/
-fn _fn109 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn115 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1);
@@ -11200,89 +11420,14 @@ ref_0.push(/*RR6*/r_0);
                                  } 
 /**
 ```
-$__first__+$__last__
+
 ```*/
-fn _fn110 (args:&mut Vec<HCO>, tok: Token){ 
-                                let mut i = args.len()-1;
-let mut v2 = args.remove(i-0);
-let mut v1 = args.remove(i-1);
-let mut v0 = args.remove(i-2);
-                                
- if let HCO::NODES(mut r_0) = v0 { 
- if let HCO::NODE/*aaRR*/(r_1) = v2 { 
-     
-r_0.push(/*UX4 PRODUCTION*/r_1);
-
-                                args.push(HCO::NODES/*aa22*/(r_0)); } }
-                                 } 
-/**
-```
-[$2]
-```*/
-fn _fn111 (args:&mut Vec<HCO>, tok: Token){
-                            let mut i = args.len()-1;
-let mut v1 = args.remove(i-0);
-let mut v0 = args.remove(i-1); 
-                                
- let mut ref_0 = Vec::new();
- if let HCO::NODE(v1) = v1{
-
-     ref_0.push(/*RR7*/v1);
-    }
-
-                                args.push(/*RR1*/HCO::NODES(ref_0));
-                            }
-/**
-```
-[$2]
-```*/
-fn _fn112 (args:&mut Vec<HCO>, tok: Token){ 
-                            let mut i = args.len()-1;
-let mut v1 = args.remove(i-0);
-let mut v0 = args.remove(i-1);
-                            
- let mut ref_0:Vec<String> = Vec::new();
-ref_0.push(/*RR7*/v1.String());
-
-                            args.push(HCO::STRINGS(ref_0)); 
-                        }
-/**
-```
-$__first__+$__last__
-```*/
-fn _fn113 (args:&mut Vec<HCO>, tok: Token){ 
-                                let mut i = args.len()-1;
-let mut v2 = args.remove(i-0);
-let mut v1 = args.remove(i-1);
-let mut v0 = args.remove(i-2);
-                                
- if let HCO::NODES(mut r_0) = v0 { 
-
-    if let HCO::NODE(v2) = v2 {
-
-        r_0.push(/*UX4 PRODUCTION*/v2);
-    }
-
-                                args.push(HCO::NODES/*aa22*/(r_0)); }
-                                 } 
-/**
-```
-f64($1)
-```*/
-fn _fn114 (args:&mut Vec<HCO>, tok: Token){let mut i = args.len()-1;
-let mut v0 = args.remove(i-0); 
- if let HCO::TOKEN(r_0) = v0 { 
-args.push(HCO::F64(r_0.to_f64())) }}
+fn _fn116 (args:&mut Vec<HCO>, tok: Token){}
 /**
 ```
 
 ```*/
-fn _fn115 (args:&mut Vec<HCO>, tok: Token){}
-/**
-```
-
-```*/
-fn _fn116 (args:&mut Vec<HCO>, tok: Token){  let mut i = args.len()-1;
+fn _fn117 (args:&mut Vec<HCO>, tok: Token){  let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1);
  args.push(v1); }
@@ -11290,7 +11435,7 @@ let mut v0 = args.remove(i-1);
 ```
 
 ```*/
-fn _fn117 (args:&mut Vec<HCO>, tok: Token){  let mut i = args.len()-1;
+fn _fn118 (args:&mut Vec<HCO>, tok: Token){  let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2);
@@ -11298,6 +11443,6 @@ let mut v0 = args.remove(i-2);
 
 
 
-pub const FunctionMaps:[RF; 267]= [
-    _fn115,_fn0,_fn1,_fn115,_fn115,_fn115,_fn116,_fn115,_fn115,_fn115,_fn115,_fn115,_fn116,_fn115,_fn117,_fn2,_fn3,_fn4,_fn5,_fn86,_fn116,_fn115,_fn115,_fn115,_fn115,_fn116,_fn116,_fn116,_fn115,_fn115,_fn6,_fn7,_fn6,_fn6,_fn6,_fn6,_fn7,_fn7,_fn7,_fn87,_fn115,_fn115,_fn8,_fn88,_fn116,_fn88,_fn88,_fn115,_fn115,_fn115,_fn9,_fn89,_fn90,_fn91,_fn90,_fn92,_fn93,_fn93,_fn91,_fn94,_fn10,_fn11,_fn12,_fn13,_fn14,_fn15,_fn16,_fn17,_fn18,_fn19,_fn20,_fn21,_fn13,_fn16,_fn22,_fn23,_fn24,_fn25,_fn24,_fn25,_fn115,_fn115,_fn115,_fn116,_fn116,_fn115,_fn115,_fn115,_fn115,_fn115,_fn115,_fn115,_fn117,_fn26,_fn116,_fn115,_fn87,_fn115,_fn115,_fn115,_fn115,_fn115,_fn115,_fn27,_fn28,_fn29,_fn115,_fn115,_fn115,_fn30,_fn31,_fn115,_fn115,_fn115,_fn115,_fn32,_fn33,_fn34,_fn35,_fn36,_fn95,_fn95,_fn37,_fn38,_fn39,_fn40,_fn41,_fn42,_fn43,_fn115,_fn44,_fn45,_fn46,_fn47,_fn48,_fn115,_fn115,_fn115,_fn49,_fn50,_fn51,_fn52,_fn53,_fn91,_fn96,_fn54,_fn55,_fn56,_fn57,_fn58,_fn59,_fn60,_fn61,_fn97,_fn98,_fn94,_fn91,_fn91,_fn87,_fn62,_fn63,_fn63,_fn91,_fn99,_fn64,_fn65,_fn66,_fn67,_fn68,_fn69,_fn115,_fn100,_fn91,_fn99,_fn115,_fn115,_fn115,_fn70,_fn91,_fn99,_fn115,_fn71,_fn71,_fn72,_fn72,_fn91,_fn91,_fn91,_fn99,_fn99,_fn99,_fn73,_fn74,_fn75,_fn76,_fn77,_fn117,_fn78,_fn79,_fn80,_fn81,_fn115,_fn101,_fn102,_fn101,_fn102,_fn101,_fn103,_fn104,_fn105,_fn91,_fn99,_fn91,_fn99,_fn91,_fn99,_fn91,_fn96,_fn91,_fn96,_fn82,_fn83,_fn84,_fn91,_fn96,_fn91,_fn99,_fn91,_fn99,_fn91,_fn99,_fn91,_fn99,_fn106,_fn88,_fn106,_fn106,_fn88,_fn88,_fn106,_fn88,_fn106,_fn88,_fn106,_fn88,_fn106,_fn106,_fn88,_fn88,_fn85,_fn107,_fn108,_fn106,_fn88,_fn106,_fn88,_fn109,_fn110,_fn111,_fn112,_fn113,_fn113,_fn84,_fn84,_fn84,_fn114,_fn106,
+pub const FunctionMaps:[RF; 265]= [
+    _fn116,_fn0,_fn1,_fn116,_fn116,_fn116,_fn117,_fn116,_fn116,_fn116,_fn116,_fn116,_fn117,_fn116,_fn118,_fn2,_fn3,_fn4,_fn5,_fn90,_fn117,_fn116,_fn116,_fn116,_fn116,_fn117,_fn117,_fn117,_fn116,_fn116,_fn6,_fn7,_fn6,_fn6,_fn6,_fn6,_fn7,_fn7,_fn7,_fn91,_fn116,_fn116,_fn8,_fn92,_fn117,_fn92,_fn92,_fn116,_fn116,_fn116,_fn9,_fn93,_fn94,_fn95,_fn94,_fn96,_fn97,_fn97,_fn95,_fn98,_fn10,_fn11,_fn12,_fn13,_fn14,_fn15,_fn16,_fn17,_fn18,_fn19,_fn20,_fn21,_fn22,_fn13,_fn16,_fn23,_fn24,_fn25,_fn26,_fn25,_fn26,_fn116,_fn118,_fn116,_fn116,_fn117,_fn117,_fn116,_fn116,_fn116,_fn116,_fn116,_fn116,_fn116,_fn27,_fn117,_fn116,_fn91,_fn116,_fn116,_fn116,_fn116,_fn116,_fn28,_fn29,_fn30,_fn31,_fn99,_fn100,_fn99,_fn99,_fn100,_fn100,_fn32,_fn116,_fn116,_fn116,_fn116,_fn33,_fn34,_fn35,_fn36,_fn37,_fn101,_fn101,_fn38,_fn39,_fn40,_fn41,_fn42,_fn43,_fn44,_fn116,_fn45,_fn46,_fn47,_fn48,_fn49,_fn116,_fn116,_fn116,_fn50,_fn51,_fn52,_fn53,_fn54,_fn95,_fn102,_fn55,_fn56,_fn57,_fn58,_fn59,_fn60,_fn61,_fn62,_fn103,_fn104,_fn98,_fn95,_fn95,_fn91,_fn63,_fn64,_fn64,_fn95,_fn105,_fn65,_fn66,_fn67,_fn68,_fn69,_fn70,_fn116,_fn106,_fn95,_fn105,_fn116,_fn116,_fn116,_fn71,_fn95,_fn105,_fn116,_fn72,_fn72,_fn73,_fn73,_fn95,_fn95,_fn95,_fn105,_fn105,_fn105,_fn74,_fn75,_fn76,_fn77,_fn78,_fn118,_fn79,_fn80,_fn81,_fn82,_fn116,_fn107,_fn108,_fn107,_fn108,_fn107,_fn109,_fn99,_fn100,_fn95,_fn105,_fn95,_fn102,_fn95,_fn102,_fn95,_fn102,_fn95,_fn102,_fn83,_fn84,_fn85,_fn95,_fn102,_fn95,_fn105,_fn95,_fn105,_fn95,_fn102,_fn95,_fn102,_fn110,_fn92,_fn111,_fn110,_fn112,_fn92,_fn110,_fn92,_fn110,_fn92,_fn86,_fn113,_fn114,_fn110,_fn92,_fn110,_fn92,_fn115,_fn102,_fn115,_fn115,_fn102,_fn102,_fn85,_fn85,_fn85,_fn87,_fn88,_fn89,
 ];

@@ -2,13 +2,13 @@ const JMPTBLE_BYTE_SIZE: usize = 382976;
 
 pub type CharLUType = [u8; JMPTBLE_BYTE_SIZE];
 
+const SYMBOL: u8 = 2;
 const IDENTIFIER: u8 = 3;
 const NUMBER: u8 = 4;
 const NEW_LINE: u8 = 5;
 const SPACE: u8 = 6;
 const _IDENTIFIERS: u8 = 7;
 const _NUMBERS: u8 = 8;
-const _SYMBOL: u8 = 9;
 const _UNICODE_IDENTIFIER: u8 = 10;
 const UNICODE_ID_START: u8 = 32;
 const UNICODE_ID_CONT: u8 = 64;
@@ -18,13 +18,7 @@ const fn aii(mut table: CharLUType, value: u8, indices: &[usize], indice_len: us
 
     while i < indice_len {
         let indice = indices[i];
-
-        if table[indice] == 2 {
-            table[indice] = value;
-        } else {
-            table[indice] |= value;
-        }
-
+        table[indice] |= value;
         i += 1;
     }
 
@@ -201,7 +195,7 @@ const fn char_lu_table_init() -> CharLUType {
         125273,
     ];
 
-    let mut jump_table: CharLUType = [2; JMPTBLE_BYTE_SIZE];
+    let mut jump_table: CharLUType = [0; JMPTBLE_BYTE_SIZE];
 
     jump_table = air(
         jump_table,
@@ -240,7 +234,18 @@ const fn char_lu_table_init() -> CharLUType {
 
     // Add Unicode Identifier Classes
     let f: [usize; 4] = [65, 90, 97, 122];
+
     jump_table = air(jump_table, UNICODE_ID_START, &f, 4);
+
+    let mut i = 0;
+
+    while i < JMPTBLE_BYTE_SIZE {
+        if jump_table[i] == 0 {
+            jump_table[i] = SYMBOL;
+        }
+        i += 1;
+    }
+
     jump_table = air(
         jump_table,
         UNICODE_ID_START,
@@ -265,15 +270,6 @@ const fn char_lu_table_init() -> CharLUType {
         &UNI_ID_CONT_DISCRETE,
         UNI_ID_CONT_DISCRETE.len(),
     );
-
-    /* let mut i = 0;
-
-    /* while i < JMPTBLE_BYTE_SIZE {
-        if jump_table[i] == 0 {
-            jump_table[i] = SYMBOL;
-        }
-        i += 1;
-    } */ */
 
     jump_table
 }

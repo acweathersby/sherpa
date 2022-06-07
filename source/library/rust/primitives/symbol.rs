@@ -1,10 +1,29 @@
-#[derive(Debug, PartialEq, PartialOrd, Clone, Hash, Eq, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
+pub struct StringId(pub u64);
+
+impl From<&String> for StringId {
+    fn from(string: &String) -> Self {
+        StringId(hash_id_value(string))
+    }
+}
+
+impl Display for StringId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0.to_string())
+    }
+}
+
+#[derive(Debug, PartialEq, PartialOrd, Clone, Copy, Hash, Eq, Ord)]
 pub enum SymbolID {
-    DefinedNumeric(u64),
-    DefinedIdentifier(u64),
-    DefinedGeneric(u64),
-    Production(u64),
-    TokenProduction(u64),
+    DefinedNumeric(StringId),
+    DefinedIdentifier(StringId),
+    DefinedGeneric(StringId),
+    Production(ProductionId, GrammarId),
+    /// Stores both the target production hash id
+    /// and the target grammar hash id
+    ///
+    /// Stores both the target production hash id
+    TokenProduction(ProductionId, GrammarId),
     GenericSpace,
     GenericHorizontalTab,
     GenericNewLine,
@@ -20,6 +39,22 @@ pub enum SymbolID {
 }
 
 impl SymbolID {
+    pub fn getProductionId(&self) -> Option<ProductionId> {
+        match self {
+            Self::Production(id, _) => Some(id.clone()),
+            Self::TokenProduction(id, _) => Some(id.clone()),
+            _ => None,
+        }
+    }
+
+    pub fn getGrammarId(&self) -> Option<GrammarId> {
+        match self {
+            Self::Production(_, id) => Some(id.clone()),
+            Self::TokenProduction(_, id) => Some(id.clone()),
+            _ => None,
+        }
+    }
+
     pub const DefinedSymbolIndexBasis: u32 = 11;
 
     pub fn as_key(&self) -> u32 {
@@ -27,8 +62,8 @@ impl SymbolID {
             Self::DefinedNumeric(_) => 100,
             Self::DefinedIdentifier(_) => 100,
             Self::DefinedGeneric(_) => 100,
-            Self::Production(_) => 100,
-            Self::TokenProduction(_) => 100,
+            Self::Production(_, _) => 100,
+            Self::TokenProduction(_, _) => 100,
             Self::Undefined => 0,
             Self::Recovery => 0,
             Self::EndOfFile => 1,
@@ -41,13 +76,6 @@ impl SymbolID {
             Self::GenericIdentifiers => 8,
             Self::GenericNumbers => 9,
             Self::GenericSymbols => 10,
-        }
-    }
-
-    pub fn production_id(&self) -> Option<u64> {
-        match *self {
-            Self::Production(val) => Some(val),
-            _ => None,
         }
     }
 }
@@ -68,7 +96,7 @@ pub struct Symbol {
     /// which either identifies symbol's generic class id
     /// i.e (g:sp , g:nl, g:tab, g:id ...) or by the unique
     /// or the explicit character sequence this symbol represents.
-    pub class_id: SymbolID,
+    pub index: u32,
     ///
     /// The length in bytes of the character sequence
     /// represented by this symbol
@@ -77,24 +105,17 @@ pub struct Symbol {
     /// The number of utf8 code points represented by
     /// this symbol.
     pub code_point_length: u32,
-    ///
-    /// The number of related symbols that comprise
-    /// a scanned token. For use by scanner code.
-    /// If this symbol does not exist in scanner space then it is
-    /// set to 0
-    pub scanner_length: u32,
-    ///
-    /// The zero-based sequence index of this symbol in relation
-    /// to other related symbols that comprise a scanned token.
-    /// If this symbol does not exist in scanner space then it is
-    /// set to 0
-    pub scanner_index: u32,
-    ///
-    /// Always captures, regardless of other symbols
-    pub exclusive: bool,
+    ////
+    /// True if only scanner productions use
+    /// this symbol
+    pub scanner_only: bool,
 }
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fmt::Display};
+
+use crate::grammar::hash::hash_id_value;
+
+use super::{GrammarId, ProductionId};
 
 ///
 /// A table that maps a symbol class_id to a utf8 string.

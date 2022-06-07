@@ -1,4 +1,4 @@
 #! /usr/bin/bash
 
 
-hc tools disassemble --browse ./source/grammar/hcg.hcg
+hc tools disassemble --browse ./source/grammar/hcg.hcg &

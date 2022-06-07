@@ -1,0 +1,11 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "source/application/vscode_client"
+		}
+	],
+	"settings": {}
+}

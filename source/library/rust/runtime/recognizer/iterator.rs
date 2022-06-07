@@ -226,8 +226,6 @@ impl<'a, T: ByteReader> StateIterator<'a, T> {
             } else {
                 let mask_gate = NORMAL_STATE_MASK << fail_mode;
 
-                //let entry = (state >> mask_gate) & 0x1;
-
                 if fail_mode == 0 {
                     last_good_state = state;
                 }
@@ -245,7 +243,7 @@ impl<'a, T: ByteReader> StateIterator<'a, T> {
         scanner_start_pointer: u32,
         bytecode: &[u32],
     ) -> KernelToken {
-        if current_token.typ == 0 {
+        if true || current_token.typ == 0 {
             let scanner = &mut self.scanner_iterator;
 
             scanner.stack.reset(scanner_start_pointer);
@@ -1112,9 +1110,12 @@ trait ParserCoreIterator<R: ByteReader> {
 
         let lexer_type = (instruction >> 26) & 0x3;
 
-        let input_value =
-            (self.get_input_value(input_type, lexer_type, scanner_start_pointer, bytecode)
-                - (basis__ as i32)) as u32;
+        let mut input_value =
+            self.get_input_value(input_type, lexer_type, scanner_start_pointer, bytecode);
+
+        input_value -= basis__ as i32;
+
+        let input_value = input_value as u32;
 
         let number_of_rows = table_data >> 16;
 

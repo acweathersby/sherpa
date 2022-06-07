@@ -1,6 +1,13 @@
 # Build artifacts
 /build
+**/build
 /target
+
+# Binary artifacts
+/bin
 
 # Debugging artifacts
 /sandbox
+
+# Package Manager Directories
+**/node_modules

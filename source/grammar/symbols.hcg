@@ -98,8 +98,6 @@
 
     |   literal_symbol
 
-    |   escaped_symbol
-
     |   EOF_symbol
 
     |   fm::format_meta_symbol
@@ -132,7 +130,7 @@
 
 <> literal_symbol > 
     
-        \t: ( g:id | g:ids | g:nums )(+\" ) ?=sym_delimiter
+        \t: ( identifier | g:sym | g:num )(+" )
           
         f:r { { t_Exclusive_Literal , c_Symbol , c_Token, val:str($2),  tok } }
     
@@ -140,24 +138,24 @@
 
         f:r { { t_Literal , c_Symbol , c_Token, val:str($1),  tok } }
 
+    |   \\ tk:defined_symbol
+    
+        f:r { { t_Literal , c_Symbol , c_Token, val:str($2),  tok } }  
+    
 
-<> escaped_symbol > 
-    
-    \\ ( g:ids | g:syms | g:nums )(+\" ) sym_delimiter           
-    
-        f:r { { t_Literal , c_Symbol , c_Token, val:str($2),  tok } }
+<> defined_symbol > ( g:id | g:sym | g:num )(+)
 
 <> local_production_symbol > 
     
     tk:identifier_syms
         
-        f:r { { t_Production_Symbol , c_Symbol, name:str($1), production:c_Production, val:-1,  tok } }
+        f:r { { t_Production_Symbol , c_Symbol, name:str($1),   tok } }
 
 <> imported_production_symbol > 
 
     tk:identifier_syms \:: tk:identifier_syms
         
-        f:r { { t_Production_Import_Symbol , c_Symbol , module:str($1), name:str($3),  production:c_Production,  tok } } 
+        f:r { { t_Production_Import_Symbol , c_Symbol , module:str($1), name:str($3),  tok } } 
 
 <> annotation_identifier > ( g:sym | g:id | g:num )(+\" ) g:sp? f:r { $1 }
 

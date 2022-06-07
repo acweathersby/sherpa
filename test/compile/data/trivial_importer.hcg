@@ -1,0 +1,3 @@
+@IMPORT ./trivial_importee.hcg as importee
+
+<> hello > importee::hello

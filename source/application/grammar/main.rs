@@ -1,6 +1,4 @@
-mod compile;
-mod grammar_data;
-mod parse;
+use hctk::*;
 
 ///
 /// Build a grammer pack from an hcg file
