@@ -39,6 +39,35 @@ pub enum SymbolID {
 }
 
 impl SymbolID {
+    pub fn to_string(&self, grammar: &GrammarStore) -> String {
+        match self {
+            Self::DefinedNumeric(_) | Self::DefinedIdentifier(_) | Self::DefinedGeneric(_) => {
+                format!("\\{}", grammar.symbols_string_table.get(&self).unwrap())
+            }
+            Self::Production(prod_id, _) => {
+                format!("{}", grammar.production_table.get(&prod_id).unwrap().name)
+            }
+            Self::TokenProduction(prod_id, _) => {
+                format!(
+                    "tk:{}",
+                    grammar.production_table.get(&prod_id).unwrap().name
+                )
+            }
+            Self::Undefined => "[??]".to_string(),
+            Self::Recovery => "g:rec".to_string(),
+            Self::EndOfFile => "$eof".to_string(),
+            Self::GenericHorizontalTab => "g:tab".to_string(),
+            Self::GenericNewLine => "g:nl".to_string(),
+            Self::GenericSpace => "g:sp".to_string(),
+            Self::GenericIdentifier => "g:id".to_string(),
+            Self::GenericNumber => "g:num".to_string(),
+            Self::GenericSymbol => "g:sym".to_string(),
+            Self::GenericIdentifiers => "g:ids".to_string(),
+            Self::GenericNumbers => "g:nums".to_string(),
+            Self::GenericSymbols => "g:syms".to_string(),
+        }
+    }
+
     pub fn getProductionId(&self) -> Option<ProductionId> {
         match self {
             Self::Production(id, _) => Some(id.clone()),
@@ -59,8 +88,7 @@ impl SymbolID {
 
     pub fn as_key(&self) -> u32 {
         match self {
-            Self::DefinedNumeric(_) => 100,
-            Self::DefinedIdentifier(_) => 100,
+            Self::DefinedNumeric(_) | Self::DefinedIdentifier(_) => 100,
             Self::DefinedGeneric(_) => 100,
             Self::Production(_, _) => 100,
             Self::TokenProduction(_, _) => 100,
@@ -115,7 +143,7 @@ use std::{collections::BTreeMap, fmt::Display};
 
 use crate::grammar::hash::hash_id_value;
 
-use super::{GrammarId, ProductionId};
+use super::{GrammarId, GrammarStore, ProductionId};
 
 ///
 /// A table that maps a symbol class_id to a utf8 string.

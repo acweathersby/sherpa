@@ -1,9 +1,9 @@
 use crate::{
-    grammar::{self, hash::hash_id_value, parse::ParseError},
+    grammar::{hash::hash_id_value, parse::ParseError},
     primitives::{
-        Body, BodyId, BodySymbolRef, BodyTable, GrammarId, GrammarStore, ProductionBodiesTable,
-        ProductionId, ProductionTable, StringId, Symbol, SymbolID, SymbolStringTable, SymbolsTable,
-        Token,
+        Body, BodyId, BodySymbolRef, BodyTable, GrammarId, GrammarStore, Item,
+        ProductionBodiesTable, ProductionId, ProductionTable, StringId, Symbol, SymbolID,
+        SymbolStringTable, SymbolsTable, Token,
     },
 };
 use regex::Regex;
@@ -347,7 +347,7 @@ fn get_scanner_info_from_defined<'a>(
 }
 
 fn create_scanner_name(symbol_string: &String) -> String {
-    format!("__{}__", symbol_string)
+    format!("##scan__{}__", symbol_string)
 }
 #[test]
 fn test_trivial_file_compilation() {
@@ -365,7 +365,13 @@ fn test_trivial_file_compilation_with_single_import() {
     path.push("test/compile/data/trivial_importer.hcg");
     match compile_all(&path) {
         Err(err) => panic!("Failed! {}", err),
-        Ok(_) => {}
+        Ok(grammar) => {
+            for (id, ..) in grammar.bodies_table.iter() {
+                let item = Item::from_body(id, &grammar).unwrap().increment().unwrap();
+
+                println!("{}", item.debug_string(&grammar))
+            }
+        }
     }
 }
 

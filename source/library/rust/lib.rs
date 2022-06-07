@@ -8,3 +8,4 @@ pub mod utf8;
 pub use lazy_static::lazy_static;
 pub mod debug;
 pub mod grammar;
+pub mod intermediate;
