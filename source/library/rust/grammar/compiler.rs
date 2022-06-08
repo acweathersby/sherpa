@@ -1,5 +1,5 @@
 use crate::{
-    grammar::{hash::hash_id_value, parse::ParseError},
+    grammar::uuid::hash_id_value,
     primitives::{
         Body, BodyId, BodySymbolRef, BodyTable, GrammarId, GrammarStore, ImportProductionNameTable,
         Item, ProductionBodiesTable, ProductionId, ProductionTable, StringId, Symbol, SymbolID,
@@ -9,106 +9,303 @@ use crate::{
 use regex::Regex;
 
 use super::{
-    create_production_uuid_name, grammar_data::ast::Body as ASTBody, grammar_data::ast::*, parse,
+    create_production_uuid_name, create_scanner_name, get_closure, get_production_start_items,
+    get_uuid_grammar_name, grammar_data::ast::Body as ASTBody, grammar_data::ast::*,
+    is_production_recursive, parse,
 };
 
 use std::{
     collections::{BTreeSet, HashMap, HashSet, VecDeque},
     fs::read,
+    num::NonZeroUsize,
     path::PathBuf,
-    sync::{Arc, Mutex},
-    thread::{self, JoinHandle},
-    time::Duration,
+    sync::Mutex,
+    thread::{self},
 };
+/// Create scanner productions, adds ids to tokens, creates cache data.
+pub fn finalize_grammar(mut grammar: GrammarStore) -> GrammarStore {
+    let number_of_threads = std::thread::available_parallelism()
+        .unwrap_or(NonZeroUsize::new(1).unwrap())
+        .get();
+    //Create scanner productions
 
-pub fn compile_all(
+    create_scanner_productions(&mut grammar);
+
+    //Update symbols
+
+    process_symbols(&mut grammar);
+
+    //Add item data
+
+    //Get production meta data
+
+    finalize_productions(&mut grammar, number_of_threads);
+
+    // Get Item cache data.
+
+    finalize_items(&mut grammar, number_of_threads);
+
+    // Set bytecode ids
+
+    finalize_byte_code_data(&mut grammar);
+
+    grammar
+}
+
+fn finalize_byte_code_data(grammar: &mut GrammarStore) {
+    for (index, body) in grammar.bodies_table.values_mut().enumerate() {
+        body.bytecode_id = index as u32;
+    }
+    for (index, production) in grammar.production_table.values_mut().enumerate() {
+        production.bytecode_id = index as u32;
+    }
+}
+
+fn finalize_productions(grammar: &mut GrammarStore, number_of_threads: usize) {
+    let production_ids = grammar.production_table.keys().cloned().collect::<Vec<_>>();
+    let production_id_chunks = production_ids
+        .chunks(number_of_threads)
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>();
+    for (production_id, is_recursive, _) in thread::scope(|s| {
+        production_id_chunks
+            .iter()
+            .map(|work| {
+                s.spawn(|| {
+                    work.into_iter()
+                        .map(|production_id| {
+                            //temp
+                            let (is_recursive, is_left_recursive) =
+                                is_production_recursive(*production_id, &*grammar);
+                            return (*production_id, is_recursive, is_left_recursive);
+                        })
+                        .collect::<Vec<_>>()
+                })
+            })
+            // Collect now to actually generate the threads
+            .collect::<Vec<_>>()
+            .into_iter()
+            .flat_map(move |s| s.join().unwrap())
+            .collect::<Vec<_>>()
+    }) {
+        let production = grammar.production_table.get_mut(&production_id).unwrap();
+        production.is_recursive = is_recursive;
+    }
+}
+
+fn finalize_items(grammar: &mut GrammarStore, number_of_threads: usize) {
+    //Generate the item closure cache
+    let start_items = grammar
+        .production_table
+        .keys()
+        .flat_map(|p| get_production_start_items(p, &*grammar))
+        .collect::<Vec<_>>();
+    let start_items_chunks = start_items.chunks(number_of_threads).collect::<Vec<_>>();
+    for (item, closure) in thread::scope(|s| {
+        start_items_chunks
+            .iter()
+            .map(|work| {
+                s.spawn(|| {
+                    let mut results = vec![];
+                    let mut pending_items = VecDeque::<Item>::from_iter(work.iter().cloned());
+                    while let Some(item) = pending_items.pop_front() {
+                        if !item.at_end() {
+                            results.push((item, get_closure(&vec![item], &*grammar)));
+                            pending_items.push_back(item.increment().unwrap());
+                        }
+                    }
+                    results
+                })
+            })
+            // Collect now to actually generate the threads
+            .collect::<Vec<_>>()
+            .into_iter()
+            .flat_map(move |s| s.join().unwrap())
+            .collect::<Vec<_>>()
+    }) {
+        grammar.closures.insert(item, closure);
+    }
+}
+
+#[test]
+fn test_trivial_file_compilation() {
+    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("test/compile/data/trivial.hcg");
+    match compile_from_path(&path) {
+        Err(err) => panic!("Failed! {:?}", err),
+        Ok(_) => {}
+    }
+}
+
+#[test]
+fn test_trivial_file_compilation_with_single_import() {
+    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("test/compile/data/trivial_importer.hcg");
+    match compile_from_path(&path) {
+        Err(err) => panic!("Failed! {}", err),
+        Ok(grammar) => {}
+    }
+}
+
+struct WorkVerifier {
+    complete: u32,
+    pending: u32,
+    progress: u32,
+}
+
+impl WorkVerifier {
+    pub fn new(pending: u32) -> Self {
+        WorkVerifier {
+            complete: 0,
+            pending,
+            progress: 0,
+        }
+    }
+
+    pub fn add_units_of_work(&mut self, units_of_work: u32) {
+        self.pending += units_of_work;
+    }
+
+    pub fn start_one_unit_of_work(&mut self) {
+        if self.pending > 0 {
+            self.pending -= 1;
+            self.progress += 1;
+        } else {
+            panic!("No pending work")
+        }
+    }
+
+    pub fn complete_one_unit_of_work(&mut self) {
+        if self.progress > 0 {
+            self.progress -= 1;
+            self.complete += 1;
+        } else {
+            panic!("No work in progress")
+        }
+    }
+
+    pub fn skip_one_unit_of_work(&mut self) {
+        if self.pending > 0 {
+            self.pending -= 1;
+            self.complete += 1;
+        } else {
+            panic!("No pending work")
+        }
+    }
+
+    pub fn is_complete(&self) -> bool {
+        self.pending == 0 || self.progress == 0 || self.complete > 0
+    }
+}
+
+pub fn compile_from_path(
     root_grammar_absolute_path: &PathBuf,
 ) -> Result<GrammarStore, parse::ParseError> {
-    let mut raw_grammars = Arc::new(Mutex::new(Vec::<GrammarStore>::new()));
-    let mut claimed_grammar_paths = Arc::new(Mutex::new(HashSet::<PathBuf>::new()));
-    let mut pending_grammar_paths = Arc::new(Mutex::new(VecDeque::<PathBuf>::new()));
+    let mut pending_grammar_paths = Mutex::new(VecDeque::<PathBuf>::new());
+    let mut claimed_grammar_paths = Mutex::new(HashSet::<PathBuf>::new());
+    // Pending Work, Claimed Work, Completed Work
+    let mut work_verifier = Mutex::new(WorkVerifier::new(1));
 
     pending_grammar_paths
         .lock()
         .unwrap()
         .push_back(root_grammar_absolute_path.to_owned());
 
-    let joins: Vec<JoinHandle<()>> = [0..4]
-        .into_iter()
-        .map(|_| {
-            let mut claimed_grammar_paths = claimed_grammar_paths.clone();
-            let mut raw_grammars = raw_grammars.clone();
-            let mut pending_grammar_paths = pending_grammar_paths.clone();
-            thread::spawn(move || {
-                loop {
-                    match {
-                        let val = pending_grammar_paths.lock().unwrap().pop_front();
-                        val
-                    } {
-                        Some(path) => {
-                            if {
-                                let result = claimed_grammar_paths
-                                    .lock()
-                                    .unwrap()
-                                    .insert(path.to_owned());
-                                result
-                            } {
-                                match compile_file_path(&path) {
-                                    Ok(grammar) => {
-                                        for (_, (_, b)) in &grammar.imports {
-                                            pending_grammar_paths
-                                                .lock()
-                                                .unwrap()
-                                                .push_back(b.to_owned());
+    let number_of_threads = std::thread::available_parallelism()
+        .unwrap_or(NonZeroUsize::new(1).unwrap())
+        .get();
+
+    let mut grammars = thread::scope(|s| {
+        [0..number_of_threads]
+            .into_iter()
+            .map(|i| {
+                s.spawn(|| {
+                    let mut raw_grammars = vec![];
+                    loop {
+                        match {
+                            let val = pending_grammar_paths.lock().unwrap().pop_front();
+                            val
+                        } {
+                            Some(path) => {
+                                if {
+                                    let result = claimed_grammar_paths
+                                        .lock()
+                                        .unwrap()
+                                        .insert(path.to_owned());
+
+                                    {
+                                        let mut work_verifier = work_verifier.lock().unwrap();
+                                        if result {
+                                            work_verifier.start_one_unit_of_work()
+                                        } else {
+                                            work_verifier.skip_one_unit_of_work()
                                         }
-                                        raw_grammars.lock().unwrap().push(grammar);
                                     }
-                                    Err(_) => {}
+
+                                    result
+                                } {
+                                    match compile_file_path(&path) {
+                                        Ok(grammar) => {
+                                            {
+                                                let mut work_verifier = work_verifier.lock().unwrap();
+                                                work_verifier.complete_one_unit_of_work();
+                                                work_verifier
+                                                    .add_units_of_work(grammar.imports.len() as u32);
+                                            }
+                                            for (_, (_, b)) in &grammar.imports {
+                                                pending_grammar_paths
+                                                    .lock()
+                                                    .unwrap()
+                                                    .push_back(b.to_owned());
+                                            }
+                                            raw_grammars.push(grammar);
+                                        }
+                                        Err(_) => {}
+                                    }
+                                };
+                            }
+                            None => {
+                                if {
+                                    let work_verifier = work_verifier.lock().unwrap();
+                                    work_verifier.is_complete()
+                                } {
+                                    break;
                                 }
-                            };
-                        }
-                        None => {
-                            thread::sleep(Duration::from_nanos(250));
-                            if {
-                                let val = pending_grammar_paths.lock().unwrap().is_empty();
-                                val
-                            } && {
-                                let val = claimed_grammar_paths.lock().unwrap().len()
-                                    == raw_grammars.lock().unwrap().len();
-                                val
-                            } {
-                                break;
                             }
                         }
                     }
-                }
-                return ();
+                    raw_grammars
+                })
             })
-        })
-        .collect();
+            .map(|s| s.join().unwrap())
+            .collect::<Vec<_>>()
+            .into_iter()
+            .flatten()
+            .collect::<VecDeque<_>>()
+    });
 
-    for join in joins {
-        join.join();
-    }
-
-    let grammars = raw_grammars.lock().unwrap();
-    let mut root = grammars[0].clone();
+    let mut root = grammars.pop_front().unwrap();
 
     //Merge grammars
 
-    merge_grammars(&mut root, &grammars[1..]);
+    merge_grammars(&mut root, &grammars.into_iter().collect::<Vec<_>>());
 
-    //Create scanner productions
+    let final_grammar = finalize_grammar(root);
 
-    create_scanner_productions(&mut root);
+    Ok(final_grammar)
+}
 
-    //Update symbols
+pub fn compile_from_string(
+    string: &str,
+    absolute_path: &PathBuf,
+) -> Result<GrammarStore, parse::ParseError> {
+    let grammar = parse::compile_ast(Vec::from(string.as_bytes()))?;
 
-    process_symbols(&mut root);
+    let grammar = pre_process_grammar(&grammar, absolute_path)?;
 
-    println!("{:#?}", root);
+    let grammar = finalize_grammar(grammar);
 
-    Ok(root)
+    Ok(grammar)
 }
 
 fn process_symbols(root: &mut GrammarStore) {
@@ -120,7 +317,7 @@ fn process_symbols(root: &mut GrammarStore) {
                 | SymbolID::DefinedGeneric(_)
                 | SymbolID::DefinedNumeric(_)
                 | SymbolID::DefinedIdentifier(_) => {
-                    sym.index = sym_id;
+                    sym.bytecode_id = sym_id;
                     sym_id += 1;
                 }
                 _ => {}
@@ -157,7 +354,7 @@ fn create_scanner_productions(root: &mut GrammarStore) {
                                     Symbol {
                                         byte_length: byte.len_utf8() as u32,
                                         code_point_length: 1,
-                                        index: 0,
+                                        bytecode_id: 0,
                                         uuid: id,
                                         scanner_only: true,
                                     },
@@ -189,6 +386,7 @@ fn create_scanner_productions(root: &mut GrammarStore) {
                             symbols: new_body_symbols,
                             production: scanner_production_id,
                             id: body_id,
+                            bytecode_id: 0,
                         },
                     );
 
@@ -203,6 +401,7 @@ fn create_scanner_productions(root: &mut GrammarStore) {
                             number_of_bodies: 1,
                             priority: 0,
                             token: Token::empty(),
+                            bytecode_id: 0,
                         },
                     );
                 }
@@ -280,6 +479,7 @@ fn create_scanner_productions(root: &mut GrammarStore) {
                                 length: symbols.len() as u16,
                                 production: scanner_production_id,
                                 symbols,
+                                bytecode_id: 0,
                             }
                         })
                         .collect();
@@ -302,6 +502,7 @@ fn create_scanner_productions(root: &mut GrammarStore) {
                             number_of_bodies: bodies.len() as u16,
                             priority: 0,
                             token: production.token.clone(),
+                            bytecode_id: 0,
                         },
                     );
 
@@ -329,36 +530,6 @@ fn get_scanner_info_from_defined<'a>(
         symbol_string,
     )
 }
-
-fn create_scanner_name(symbol_string: &String) -> String {
-    format!("##scan__{}__", symbol_string)
-}
-#[test]
-fn test_trivial_file_compilation() {
-    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    path.push("test/compile/data/trivial.hcg");
-    match compile_all(&path) {
-        Err(err) => panic!("Failed! {:?}", err),
-        Ok(_) => {}
-    }
-}
-
-#[test]
-fn test_trivial_file_compilation_with_single_import() {
-    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    path.push("test/compile/data/trivial_importer.hcg");
-    match compile_all(&path) {
-        Err(err) => panic!("Failed! {}", err),
-        Ok(grammar) => {
-            for (id, ..) in grammar.bodies_table.iter() {
-                let item = Item::from_body(id, &grammar).unwrap().increment().unwrap();
-
-                println!("{}", item.debug_string(&grammar))
-            }
-        }
-    }
-}
-
 ///
 /// Merge related grammars into a single GrammarStore
 ///
@@ -478,38 +649,13 @@ fn merge_grammars(root: &mut GrammarStore, grammars: &[GrammarStore]) {
     }
 }
 
-pub fn compile_file_path(absolute_path: &PathBuf) -> Result<GrammarStore, parse::ParseError> {
+fn compile_file_path(absolute_path: &PathBuf) -> Result<GrammarStore, parse::ParseError> {
     match read(absolute_path) {
         Ok(buffer) => {
             let grammar = parse::compile_ast(buffer)?;
             pre_process_grammar(&grammar, absolute_path)
         }
         Err(err) => Err(parse::ParseError::IO_ERROR(err)),
-    }
-}
-
-pub fn compile_string(
-    string: &String,
-    absolute_path: &PathBuf,
-) -> Result<GrammarStore, parse::ParseError> {
-    let grammar = parse::compile_ast(Vec::from(string.as_bytes()))?;
-    pre_process_grammar(&grammar, absolute_path)
-}
-
-fn get_uuid_grammar_name(uri: &PathBuf) -> Result<String, ParseError> {
-    match uri.file_name() {
-        Some(name) => {
-            let file_name = String::from(name.to_str().unwrap());
-
-            let hash = unsafe {
-                format!("{:x}", hash_id_value(&uri))
-                    .get_unchecked(0..5)
-                    .to_owned()
-            };
-
-            Ok(file_name + &hash)
-        }
-        None => Err(ParseError::UNDEFINED),
     }
 }
 
@@ -716,6 +862,7 @@ fn pre_process_production(
                 is_recursive: false,
                 priority: 0,
                 token: production_node.Token(),
+                bytecode_id: 0,
             },
         );
 
@@ -1095,6 +1242,7 @@ fn pre_process_body(
                 length: b.len() as u16,
                 production: get_production_id(production, tgs),
                 id: BodyId::default(),
+                bytecode_id: 0,
             })
             .collect(),
         productions,
@@ -1136,7 +1284,7 @@ fn intern_symbol(sym: &ASTNode /*, symbols_table, */, tgs: &mut TempGrammarStore
             tgs.symbols_table.insert(
                 id.clone(),
                 Symbol {
-                    index: 0,
+                    bytecode_id: 0,
                     uuid: id.clone(),
                     byte_length,
                     code_point_length,
@@ -1179,7 +1327,7 @@ fn intern_symbol(sym: &ASTNode /*, symbols_table, */, tgs: &mut TempGrammarStore
                     tgs.symbols_table.insert(
                         token_production_id,
                         Symbol {
-                            index: 0,
+                            bytecode_id: 0,
                             uuid: production_id,
                             byte_length: 0,
                             code_point_length: 0,

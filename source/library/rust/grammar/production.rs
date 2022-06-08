@@ -17,7 +17,7 @@ use super::{get_closure, get_closure_cached, get_production_start_items};
 pub fn is_production_recursive(production: ProductionId, grammar: &GrammarStore) -> (bool, bool) {
     let mut seen = HashSet::<Item>::new();
     let mut pipeline = VecDeque::from_iter(get_closure(
-        get_production_start_items(&production, grammar),
+        &get_production_start_items(&production, grammar),
         grammar,
     ));
 
@@ -51,7 +51,12 @@ pub fn is_production_recursive(production: ProductionId, grammar: &GrammarStore)
 }
 
 /// Used to separate a grammar's uuid name from a production's name
-const UUID_NAME_DELIMITER: &str = "#:-";
+const UUID_NAME_DELIMITER: &str = "#:";
+
+/// Generate a unique scanner production name givin a uuid production name
+pub fn create_scanner_name(uuid_production_name: &String) -> String {
+    format!("##scan__{}__", uuid_production_name)
+}
 
 /// Generate a UUID name using the grammars uuid_name and the productions
 /// name (omitting local import name portion of a production)
@@ -91,7 +96,7 @@ mod production_utilities_tests {
 
     #[test]
     fn test_get_production_plain_name() {
-        let grammar = compile_test_grammar("<>billofolious_tantimum^a>o");
+        let grammar = compile_test_grammar("<>billofolious_tantimum^a>\\o");
         assert_eq!(
             get_production_plain_name(grammar.production_table.keys().next().unwrap(), &grammar),
             "billofolious_tantimum"
@@ -106,8 +111,8 @@ mod production_utilities_tests {
     fn test_get_production_by_name() {
         let grammar = compile_test_grammar(
             "
-<> Apple > o
-<> Bad_Cakes > b
+<> Apple > \\o
+<> Bad_Cakes > \\b
 ",
         );
 

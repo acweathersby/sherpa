@@ -86,12 +86,13 @@ impl SymbolID {
 
     pub const DefinedSymbolIndexBasis: u32 = 11;
 
-    pub fn as_key(&self) -> u32 {
+    pub fn bytecode_id(&self, grammar: &GrammarStore) -> u32 {
         match self {
-            Self::DefinedNumeric(_) | Self::DefinedIdentifier(_) => 100,
-            Self::DefinedGeneric(_) => 100,
-            Self::Production(_, _) => 100,
-            Self::TokenProduction(_, _) => 100,
+            Self::DefinedNumeric(_)
+            | Self::DefinedIdentifier(_)
+            | Self::DefinedGeneric(_)
+            | Self::TokenProduction(_, _) => grammar.symbols_table.get(self).unwrap().bytecode_id,
+            Self::Production(_, _) => 0,
             Self::Undefined => 0,
             Self::Recovery => 0,
             Self::EndOfFile => 1,
@@ -124,7 +125,7 @@ pub struct Symbol {
     /// which either identifies symbol's generic class id
     /// i.e (g:sp , g:nl, g:tab, g:id ...) or by the unique
     /// or the explicit character sequence this symbol represents.
-    pub index: u32,
+    pub bytecode_id: u32,
     ///
     /// The length in bytes of the character sequence
     /// represented by this symbol
@@ -141,7 +142,7 @@ pub struct Symbol {
 
 use std::{collections::BTreeMap, fmt::Display};
 
-use crate::grammar::hash::hash_id_value;
+use crate::grammar::uuid::hash_id_value;
 
 use super::{GrammarId, GrammarStore, ProductionId};
 

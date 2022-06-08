@@ -62,7 +62,7 @@ pub struct GrammarStore {
     /// Defined and TokenProduction symbols.
     pub symbols_table: SymbolsTable,
     ///
-    /// Maps SymbolId to it's original source token string.
+    /// Maps SymbolId to its original source token string.
     pub symbols_string_table: SymbolStringTable,
     ///
     /// Store of all production ids encountered in grammar.

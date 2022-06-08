@@ -1,4 +1,7 @@
-use std::fmt::{Display, Error};
+use std::{
+    fmt::{Display, Error},
+    sync::PoisonError,
+};
 
 use crate::{
     primitives::HCObj,
@@ -11,18 +14,22 @@ use super::grammar_data::{
 };
 
 pub fn parse_string(string: &String) {}
-#[derive(Debug)]
 
+#[derive(Debug)]
 pub enum ParseError {
     UNDEFINED,
     IO_ERROR(std::io::Error),
+    MUTEX_ERROR,
+    THREAD_ERROR,
 }
 
 impl Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ParseError::UNDEFINED => f.write_str("An unknown error has occured "),
+            ParseError::UNDEFINED => f.write_str("An unknown error has occurred "),
             ParseError::IO_ERROR(err) => err.fmt(f),
+            ParseError::MUTEX_ERROR => f.write_str("A Mutex has been poisoned"),
+            ParseError::THREAD_ERROR => f.write_str("Unable to get an exclusive lock on an object"),
         }
     }
 }

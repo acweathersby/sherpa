@@ -44,6 +44,9 @@ pub struct Production {
     pub is_recursive: bool,
     pub priority: u32,
     pub token: Token,
+    /// An integer value used by bytecode
+    /// to refer to this production
+    pub bytecode_id: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -75,6 +78,7 @@ pub struct Body {
     pub length: u16,
     pub production: ProductionId,
     pub id: BodyId,
+    pub bytecode_id: u32,
 }
 
 pub type ProductionTable = std::collections::BTreeMap<ProductionId, Production>;

@@ -15,7 +15,7 @@ pub enum TransitionStateType {
     ///symbol. All transition should
     ///have this set except for the
     ///initial state and the goal state.
-    O_TERMINAL,
+    O_ASSERT,
     ///
     ///Transition has occurred from the
     ///completion of non-terminal symbol.
@@ -84,7 +84,7 @@ pub enum TransitionStateType {
 
     I_COMPLETE,
 }
-
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TransitionGraphNode {
     /// The symbols that lead to the
     /// transition to this state.
@@ -92,7 +92,7 @@ pub struct TransitionGraphNode {
     pub transition_type: TransitionStateType,
     pub items: Vec<Item>,
     pub parent: TransitionGraphNodeId,
-    pub root: TransitionGraphNodeId,
+    pub goal: TransitionGraphNodeId,
     pub children: Vec<TransitionGraphNode>,
     pub depth: u32,
     pub id: usize,
@@ -106,9 +106,13 @@ impl TransitionGraphNode {
             items: vec![],
             children: vec![],
             parent: 0,
-            root: 0,
+            goal: 0,
             depth: 0,
             id: 0,
         }
+    }
+
+    pub fn is(&self, transition_type: TransitionStateType) -> bool {
+        self.transition_type.intersects(transition_type)
     }
 }

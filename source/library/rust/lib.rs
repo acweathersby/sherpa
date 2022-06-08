@@ -1,6 +1,9 @@
 #![crate_type = "rlib"]
 #![feature(const_eval_limit)]
 #![const_eval_limit = "0"]
+#![feature(new_uninit)]
+#![feature(get_mut_unchecked)]
+#![feature(scoped_threads)]
 
 pub mod primitives;
 pub mod runtime;
