@@ -43,10 +43,43 @@ pub struct Production {
     pub is_entry: bool,
     pub is_recursive: bool,
     pub priority: u32,
+    ///
+    /// The token defining the substring in the source
+    /// code from which this production was derived.
     pub token: Token,
+    ///
     /// An integer value used by bytecode
     /// to refer to this production
     pub bytecode_id: u32,
+    ///
+    /// If this is a scanner production,
+    /// then this is a non-zero integer value
+    /// that mirrors the TokenProduction or Defined* symbol
+    /// bytecode_id that this production produces.
+    pub symbol_bytecode_id: u32,
+}
+
+impl Production {
+    pub fn new(
+        name: String,
+        id: ProductionId,
+        number_of_bodies: u16,
+        token: Token,
+        is_scanner: bool,
+    ) -> Self {
+        Production {
+            name,
+            id,
+            is_entry: false,
+            is_recursive: false,
+            is_scanner: false,
+            number_of_bodies,
+            priority: 0,
+            token,
+            bytecode_id: 0,
+            symbol_bytecode_id: 0,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

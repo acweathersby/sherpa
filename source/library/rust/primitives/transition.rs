@@ -74,6 +74,8 @@ pub enum TransitionStateType {
 
     I_DESCENT_START,
 
+    ///
+    /// Indicates this node consumes its symbol as a token.
     I_CONSUME,
 
     I_SCANNER,
@@ -92,6 +94,7 @@ pub enum TransitionStateType {
     I_SKIPPED_COLLISION,
 
     I_COMPLETE,
+    O_TERMINAL,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

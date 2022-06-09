@@ -7,16 +7,12 @@ edition = "2021"
 path = "./source/library/rust/lib.rs"
 
 [[bin]]
-name = "hc-grammar"
-path = "./source/application/grammar/main.rs"
+name = "hc-compile"
+path = "./source/application/compile/main.rs"
 
 [[bin]]
-name = "hc-asytrip"
-path = "./source/application/asytrip/main.rs"
-
-[[bin]]
-name = "hc-bytecode"
-path = "./source/application/bytecode/main.rs"
+name = "hc-AScripT"
+path = "./source/application/ascript/main.rs"
 
 [[bin]]
 name = "hc-ls"

@@ -1,9 +1,9 @@
 use crate::{
     grammar::uuid::hash_id_value_u64,
     primitives::{
-        Body, BodyId, BodySymbolRef, BodyTable, GrammarId, GrammarStore, ImportProductionNameTable,
-        Item, ProductionBodiesTable, ProductionId, ProductionTable, StringId, Symbol, SymbolID,
-        SymbolStringTable, SymbolsTable, TempGrammarStore, Token,
+        symbol, Body, BodyId, BodySymbolRef, BodyTable, GrammarId, GrammarStore,
+        ImportProductionNameTable, Item, ProductionBodiesTable, ProductionId, ProductionTable,
+        StringId, Symbol, SymbolID, SymbolStringTable, SymbolsTable, TempGrammarStore, Token,
     },
 };
 use regex::Regex;
@@ -338,17 +338,22 @@ pub fn compile_from_string(
     Ok(grammar)
 }
 
-fn process_symbols(root: &mut GrammarStore) {
-    let mut sym_id = SymbolID::DefinedSymbolIndexBasis;
-    for (id, sym) in root.symbols_table.iter_mut() {
-        if !sym.scanner_only {
-            match id {
+fn process_symbols(grammar: &mut GrammarStore) {
+    let mut symbol_bytecode_id = SymbolID::DefinedSymbolIndexBasis;
+    for sym_id in grammar.symbols_table.keys().cloned().collect::<Vec<_>>() {
+        if !grammar.symbols_table.get(&sym_id).unwrap().scanner_only {
+            match sym_id {
                 SymbolID::TokenProduction(..)
                 | SymbolID::DefinedGeneric(_)
                 | SymbolID::DefinedNumeric(_)
                 | SymbolID::DefinedIdentifier(_) => {
-                    sym.bytecode_id = sym_id;
-                    sym_id += 1;
+                    let symbol = grammar.symbols_table.get_mut(&sym_id).unwrap();
+                    symbol.bytecode_id = symbol_bytecode_id;
+                    let (_, production_id, ..) = get_scanner_info_from_defined(&sym_id, &*grammar);
+                    let scanner_production =
+                        grammar.production_table.get_mut(&production_id).unwrap();
+                    scanner_production.symbol_bytecode_id = symbol_bytecode_id;
+                    symbol_bytecode_id += 1;
                 }
                 _ => {}
             }
@@ -356,10 +361,10 @@ fn process_symbols(root: &mut GrammarStore) {
     }
 }
 
-fn create_scanner_productions(root: &mut GrammarStore) {
+fn create_scanner_productions(grammar: &mut GrammarStore) {
     // Start iterating over known token production references, and add new productions
     // as we encounter them.
-    let mut scanner_production_queue = VecDeque::from_iter(root.symbols_table.keys().cloned());
+    let mut scanner_production_queue = VecDeque::from_iter(grammar.symbols_table.keys().cloned());
 
     while let Some(sym_id) = scanner_production_queue.pop_front() {
         match &sym_id {
@@ -367,8 +372,11 @@ fn create_scanner_productions(root: &mut GrammarStore) {
             | SymbolID::DefinedNumeric(_)
             | SymbolID::DefinedIdentifier(_) => {
                 let (_, scanner_production_id, scanner_name, symbol_string) =
-                    get_scanner_info_from_defined(&sym_id, &*root);
-                if !root.production_table.contains_key(&scanner_production_id) {
+                    get_scanner_info_from_defined(&sym_id, &*grammar);
+                if !grammar
+                    .production_table
+                    .contains_key(&scanner_production_id)
+                {
                     //Defined symbols are split along code points and individually packaged
                     let chars: Vec<char> = symbol_string.chars().collect();
                     let new_body_symbols: Vec<BodySymbolRef> = chars
@@ -377,9 +385,9 @@ fn create_scanner_productions(root: &mut GrammarStore) {
                         .map(|(index, byte)| {
                             let string = byte.to_string();
                             let id = get_literal_id(&string);
-                            if !root.symbols_table.contains_key(&id) {
-                                root.symbols_string_table.insert(id, string);
-                                root.symbols_table.insert(
+                            if !grammar.symbols_table.contains_key(&id) {
+                                grammar.symbols_string_table.insert(id, string);
+                                grammar.symbols_table.insert(
                                     id,
                                     Symbol {
                                         byte_length: byte.len_utf8() as u32,
@@ -402,14 +410,15 @@ fn create_scanner_productions(root: &mut GrammarStore) {
                         })
                         .collect();
 
-                    // Insert new defined symbol derived data into root grammar.
+                    // Insert into grammar any new defined symbol derived from token productions.
 
                     let body_id = BodyId::new(&scanner_production_id, 0);
 
-                    root.production_bodies_table
+                    grammar
+                        .production_bodies_table
                         .insert(scanner_production_id, vec![body_id]);
 
-                    root.bodies_table.insert(
+                    grammar.bodies_table.insert(
                         body_id,
                         Body {
                             length: new_body_symbols.len() as u16,
@@ -420,36 +429,35 @@ fn create_scanner_productions(root: &mut GrammarStore) {
                         },
                     );
 
-                    root.production_table.insert(
+                    grammar.production_table.insert(
                         scanner_production_id,
-                        crate::primitives::Production {
-                            name: scanner_name,
-                            id: scanner_production_id,
-                            is_entry: false,
-                            is_recursive: false,
-                            is_scanner: true,
-                            number_of_bodies: 1,
-                            priority: 0,
-                            token: Token::empty(),
-                            bytecode_id: 0,
-                        },
+                        crate::primitives::Production::new(
+                            scanner_name,
+                            scanner_production_id,
+                            1,
+                            Token::empty(),
+                            true,
+                        ),
                     );
                 }
             }
             SymbolID::Production(prod_id, _) | SymbolID::TokenProduction(prod_id, _) => {
-                let production = root.production_table.get(prod_id).unwrap().clone();
+                let production = grammar.production_table.get(prod_id).unwrap().clone();
                 let scanner_name = create_scanner_name(&production.name);
                 let scanner_production_id = ProductionId::from(&scanner_name);
 
-                if !root.production_table.contains_key(&scanner_production_id) {
-                    let scanner_bodies: Vec<Body> = root
+                if !grammar
+                    .production_table
+                    .contains_key(&scanner_production_id)
+                {
+                    let scanner_bodies: Vec<Body> = grammar
                         .production_bodies_table
                         .get(prod_id)
                         .unwrap()
                         .iter()
                         .enumerate()
                         .map(|(body_index, body_id)| {
-                            let natural_body = root.bodies_table.get(body_id).unwrap();
+                            let natural_body = grammar.bodies_table.get(body_id).unwrap();
                             let scanner_symbols = natural_body.symbols.iter().flat_map(|sym| {
                                 let sym_id = &sym.sym_id;
                                 match sym_id {
@@ -459,7 +467,7 @@ fn create_scanner_productions(root: &mut GrammarStore) {
                                     SymbolID::Production(_, grammar_id)
                                     | SymbolID::TokenProduction(_, grammar_id) => {
                                         let production =
-                                            root.production_table.get(prod_id).unwrap();
+                                            grammar.production_table.get(prod_id).unwrap();
                                         let scanner_name = create_scanner_name(&production.name);
                                         let scanner_production_id =
                                             ProductionId::from(&scanner_name);
@@ -484,7 +492,7 @@ fn create_scanner_productions(root: &mut GrammarStore) {
                                     | SymbolID::DefinedNumeric(_)
                                     | SymbolID::DefinedIdentifier(_) => {
                                         let (new_symbol_id, ..) =
-                                            get_scanner_info_from_defined(sym_id, &*root);
+                                            get_scanner_info_from_defined(sym_id, &*grammar);
 
                                         scanner_production_queue.push_back(*sym_id);
 
@@ -518,25 +526,22 @@ fn create_scanner_productions(root: &mut GrammarStore) {
 
                     for body in scanner_bodies {
                         bodies.push(body.id);
-                        root.bodies_table.insert(body.id, body);
+                        grammar.bodies_table.insert(body.id, body);
                     }
 
-                    root.production_table.insert(
+                    grammar.production_table.insert(
                         scanner_production_id,
-                        crate::primitives::Production {
-                            name: scanner_name,
-                            id: scanner_production_id,
-                            is_entry: false,
-                            is_recursive: false,
-                            is_scanner: true,
-                            number_of_bodies: bodies.len() as u16,
-                            priority: 0,
-                            token: production.token.clone(),
-                            bytecode_id: 0,
-                        },
+                        crate::primitives::Production::new(
+                            scanner_name,
+                            scanner_production_id,
+                            bodies.len() as u16,
+                            production.token.clone(),
+                            true,
+                        ),
                     );
 
-                    root.production_bodies_table
+                    grammar
+                        .production_bodies_table
                         .insert(scanner_production_id, bodies);
                 }
             }
@@ -884,17 +889,13 @@ fn pre_process_production(
 
         tgs.production_table.insert(
             production_id,
-            crate::primitives::Production {
-                id: production_id,
-                name: production_name,
-                number_of_bodies: bodies.len() as u16,
-                is_scanner: false,
-                is_entry: false,
-                is_recursive: false,
-                priority: 0,
-                token: production_node.Token(),
-                bytecode_id: 0,
-            },
+            crate::primitives::Production::new(
+                production_name,
+                production_id,
+                bodies.len() as u16,
+                production_node.Token(),
+                false,
+            ),
         );
 
         tgs.production_bodies_table.insert(production_id, bodies);
