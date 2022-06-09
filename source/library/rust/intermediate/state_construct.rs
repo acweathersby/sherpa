@@ -1,45 +1,44 @@
 //! Construct state IR strings for a given production
 //!
 
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{BTreeMap, VecDeque};
 
 use crate::{
     grammar::get_production_plain_name,
-    primitives::{GrammarStore, ProductionId, SymbolID, TransitionGraphNode},
+    primitives::{
+        GrammarStore, IRStateString, ProductionId, SymbolID, TransitionGraphNode, TransitionMode,
+        TransitionPack,
+    },
 };
 
-use super::transition_tree::{construct_goto, construct_recursive_descent, Scope, TransitionPack};
+use super::transition_tree::{construct_goto, construct_recursive_descent};
 
-#[derive(Debug)]
-pub struct IRStateString {
-    pub comment: String,
-    pub state: String,
-    pub hash: u64,
-}
-
-type IROutput = BTreeMap<u64, IRStateString>;
+type IROutput = Vec<IRStateString>;
 
 pub fn generate_production_states(
     production_id: &ProductionId,
     grammar: &GrammarStore,
 ) -> IROutput {
-    let mut output: IROutput = BTreeMap::new();
+    let mut output: IROutput = Vec::new();
 
     let recursive_descent_data = construct_recursive_descent(production_id, grammar);
 
-    process_transition_nodes(&recursive_descent_data, grammar, &mut output);
+    /* output.append(&mut process_transition_nodes(
+        &recursive_descent_data,
+        grammar,
+    )); */
 
     if recursive_descent_data.goto_items.len() > 0 {
         let goto_data = construct_goto(
             production_id,
             grammar,
-            recursive_descent_data
+            &recursive_descent_data
                 .goto_items
                 .into_iter()
                 .collect::<Vec<_>>(),
         );
 
-        process_transition_nodes(&goto_data, grammar, &mut output);
+        output.append(&mut process_transition_nodes(&goto_data, grammar));
 
         create_fail_state(production_id, grammar, &mut output);
     }
@@ -50,10 +49,10 @@ pub fn generate_production_states(
 fn process_transition_nodes<'a>(
     tpack: &'a TransitionPack,
     grammar: &GrammarStore,
-    output: &mut IROutput,
-) {
+) -> Vec<IRStateString> {
     //We start at leaf nodes and make our way down to the root.
-    let number_of_nodes = tpack.nodes.len();
+    let number_of_nodes = tpack.get_node_len();
+    let mut output = BTreeMap::<usize, IRStateString>::new();
     // Construct utility information
     let mut node_hashes = Vec::<u64>::with_capacity(number_of_nodes);
     for _ in 0..number_of_nodes {
@@ -61,20 +60,23 @@ fn process_transition_nodes<'a>(
     }
 
     let mut children_tables = tpack
-        .nodes
-        .iter()
-        .map(|n| Vec::<&'a TransitionGraphNode>::new())
+        .nodes_iter()
+        .map(|_| Vec::<&'a TransitionGraphNode>::new())
         .collect::<Vec<_>>();
 
-    for child in &tpack.nodes {
-        if child.parent != usize::MAX {
+    for child in tpack.nodes_iter() {
+        if child.has_parent(tpack) {
             children_tables[child.parent].push(child);
+
+            for proxy_parent in &child.proxy_parents {
+                children_tables[*proxy_parent].push(child);
+            }
         }
     }
 
     let mut nodes_pipeline = VecDeque::from_iter(tpack.leaf_nodes.iter().cloned());
 
-    while let Some(node_id) = nodes_pipeline.pop_front() {
+    'outer: while let Some(node_id) = nodes_pipeline.pop_front() {
         if node_hashes[node_id] != 0 {
             // Already dealt with this node. No need to
             // do any more work.
@@ -88,31 +90,31 @@ fn process_transition_nodes<'a>(
                 // Push dependency to be processed, which will cause this
                 // node be pushed back into the queue after it is processed
                 nodes_pipeline.push_back(child.id);
-                continue;
+                continue 'outer;
             }
         }
 
-        let node = &tpack.nodes[node_id];
-        let mut hash = 1u64;
+        let node = tpack.get_node(node_id);
 
-        if node.sym == SymbolID::EndOfFile {
-            hash = create_end_state(node, grammar, output)
+        let state = if node.sym == SymbolID::EndOfFile {
+            create_end_state(node, grammar)
         } else {
-            hash = create_intermediate_state(
-                node,
-                &node_hashes,
-                children_lookup,
-                grammar,
-                output,
-                &tpack.scope,
-            );
-        }
+            create_intermediate_state(node, &node_hashes, children_lookup, grammar, &tpack.mode)
+        };
 
-        node_hashes[node_id] = hash;
-        if node_id != 0 {
+        node_hashes[node_id] = state.get_hash();
+
+        output.insert(node_id, state);
+
+        if !node.is_orphan(tpack) {
             nodes_pipeline.push_back(node.parent);
+            for proxy_parent in &node.proxy_parents {
+                nodes_pipeline.push_back(*proxy_parent);
+            }
         }
     }
+
+    output.into_values().collect::<Vec<_>>()
 }
 
 fn create_fail_state(production_id: &ProductionId, grammar: &GrammarStore, output: &mut IROutput) {}
@@ -129,9 +131,8 @@ fn create_intermediate_state(
     hashes: &[u64],
     children: &[&TransitionGraphNode],
     grammar: &GrammarStore,
-    output: &mut IROutput,
-    scope: &Scope,
-) -> u64 {
+    mode: &TransitionMode,
+) -> IRStateString {
     let mut strings = vec![];
     let mut comment = String::new();
 
@@ -140,6 +141,12 @@ fn create_intermediate_state(
         let symbol = child.sym;
         let symbol_id = symbol.bytecode_id(grammar);
         let symbol_string = symbol.to_string(grammar);
+
+        if *mode == TransitionMode::GoTo {
+            comment += &format!("   node id: {}", node.id);
+            comment += "\n GOTO ";
+        }
+
         comment += &child
             .items
             .iter()
@@ -149,39 +156,27 @@ fn create_intermediate_state(
         match &symbol {
             SymbolID::Production(production_id, _) => {
                 strings.push(format!(
-                    "goto state [ {} ] then goto state [ {} ]",
+                    "goto state [ {} ] then goto state [ s{:02x} ] ",
                     get_production_plain_name(production_id, grammar),
-                    child.id
+                    hash
                 ));
             }
             SymbolID::EndOfFile => {
-                strings.push(format!("goto state [ {} ]", child.id));
+                strings.push(format!("goto state [ s{:02x} ]", hash));
             }
             _ => {
                 strings.push(format!(
-                    "assert TOKEN [ /* {} */ {} ] {{ consume then goto state [ {} ] }}",
-                    symbol_string, symbol_id, child.id
+                    "assert TOKEN [ /* {} */ {} ] {{ consume then goto state [ s{:02x} ] }}",
+                    symbol_string, symbol_id, hash
                 ));
             }
         }
     }
 
-    output.insert(
-        node.id as u64,
-        IRStateString {
-            comment: comment,
-            state: strings.join("\n"),
-            hash: 1,
-        },
-    );
-    1
+    IRStateString::new(&comment, &strings.join("\n"))
 }
 
-fn create_end_state(
-    node: &TransitionGraphNode,
-    grammar: &GrammarStore,
-    output: &mut IROutput,
-) -> u64 {
+fn create_end_state(node: &TransitionGraphNode, grammar: &GrammarStore) -> IRStateString {
     let item = node.items[0];
 
     if !item.at_end() {
@@ -195,16 +190,7 @@ fn create_end_state(
             body.length, body.bytecode_id, production.bytecode_id
         );
 
-        output.insert(
-            node.id as u64,
-            IRStateString {
-                comment: item.debug_string(grammar),
-                state: state_string,
-                hash: 1,
-            },
-        );
-
-        1
+        IRStateString::new("", &state_string)
     }
 }
 #[cfg(test)]
@@ -227,6 +213,17 @@ mod state_constructor_tests {
     #[test]
     pub fn test_generate_production_states_with_basic_grammar_with_one_optional_token() {
         let grammar = compile_test_grammar("<> A > \\h ? \\e ? \\l \\l \\o");
+
+        let prod_id = get_production_by_name("A", &grammar).unwrap();
+
+        let result = generate_production_states(&prod_id, &grammar);
+
+        println!("{:#?}", result);
+    }
+
+    #[test]
+    pub fn test_generate_production_states_with_basic_grammar_with_left_recursion() {
+        let grammar = compile_test_grammar("<> A > A \\1 | \\2 ");
 
         let prod_id = get_production_by_name("A", &grammar).unwrap();
 

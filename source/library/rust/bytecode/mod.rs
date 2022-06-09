@@ -1,11 +1,12 @@
 mod constants;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use std::thread::{self};
 
+use crate::primitives::IRStateString;
 use crate::{
-    intermediate::state_construct::{generate_production_states, IRStateString},
+    intermediate::state_construct::generate_production_states,
     primitives::{grammar::GrammarStore, ProductionId},
 };
 
@@ -44,7 +45,7 @@ fn compile_ir_states(
             .flat_map(move |s| s.join().unwrap())
             .collect::<Vec<_>>()
     }) {
-        let key = ir_state.hash.clone();
+        let key = ir_state.get_hash();
         if !ir_map.contains_key(&key) {
             ir_map.insert(key, ir_state);
         }

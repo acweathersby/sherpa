@@ -3,7 +3,7 @@ pub struct StringId(pub u64);
 
 impl From<&String> for StringId {
     fn from(string: &String) -> Self {
-        StringId(hash_id_value(string))
+        StringId(hash_id_value_u64(string))
     }
 }
 
@@ -142,7 +142,7 @@ pub struct Symbol {
 
 use std::{collections::BTreeMap, fmt::Display};
 
-use crate::grammar::uuid::hash_id_value;
+use crate::grammar::uuid::hash_id_value_u64;
 
 use super::{GrammarId, GrammarStore, ProductionId};
 

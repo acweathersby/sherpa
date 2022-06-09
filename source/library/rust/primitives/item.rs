@@ -6,7 +6,7 @@ use super::{BodyId, BodySymbolRef, GrammarStore, ProductionId, SymbolID};
 /// indicates the next expected terminal or non-terminal.
 ///
 #[repr(C, align(64))]
-#[derive(PartialEq, Eq, Debug, Clone, Copy, Hash)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy, Hash, PartialOrd, Ord)]
 pub struct Item {
     body: BodyId,
     length: u8,
@@ -19,6 +19,7 @@ impl Item {
         let body = grammar.bodies_table.get(&self.body).unwrap();
 
         let mut string = String::new();
+        string += &format!("[ {} ]", self.state);
         string += &grammar.production_table.get(&body.production).unwrap().name;
         string += " =>";
 
@@ -177,5 +178,13 @@ impl Item {
         } else {
             !self.is_term(grammar)
         }
+    }
+
+    pub fn get_production_id(&self, grammar: &GrammarStore) -> ProductionId {
+        grammar
+            .bodies_table
+            .get(&self.get_body())
+            .unwrap()
+            .production
     }
 }

@@ -7,10 +7,14 @@ use std::{collections::hash_map::DefaultHasher, hash::Hasher};
 
 use super::parse::ParseError;
 
-pub fn hash_id_value<T: Hash>(t: T) -> u64 {
+pub fn hash_id_value_u64<T: Hash>(t: T) -> u64 {
     let mut s = DefaultHasher::new();
     t.hash(&mut s);
     s.finish()
+}
+
+pub fn hash_id_value_u128<T: Hash>(t: T) -> u128 {
+    panic!("TODO: hash_id_value_u128")
 }
 
 pub fn get_uuid_grammar_name(uri: &PathBuf) -> Result<String, ParseError> {
@@ -19,7 +23,7 @@ pub fn get_uuid_grammar_name(uri: &PathBuf) -> Result<String, ParseError> {
             let file_name = String::from(name.to_str().unwrap());
 
             let hash = unsafe {
-                format!("{:x}", hash_id_value(&uri))
+                format!("{:x}", hash_id_value_u64(&uri))
                     .get_unchecked(0..5)
                     .to_owned()
             };

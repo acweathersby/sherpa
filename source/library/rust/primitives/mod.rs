@@ -1,5 +1,6 @@
 pub mod ast_node;
 pub mod grammar;
+pub mod ir_state;
 pub mod item;
 pub mod kernel_token;
 pub mod production;
@@ -8,6 +9,7 @@ pub mod token;
 pub mod transition;
 pub use ast_node::*;
 pub use grammar::*;
+pub use ir_state::*;
 pub use item::*;
 pub use kernel_token::*;
 pub use production::*;

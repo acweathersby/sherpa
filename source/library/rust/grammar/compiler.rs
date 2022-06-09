@@ -1,5 +1,5 @@
 use crate::{
-    grammar::uuid::hash_id_value,
+    grammar::uuid::hash_id_value_u64,
     primitives::{
         Body, BodyId, BodySymbolRef, BodyTable, GrammarId, GrammarStore, ImportProductionNameTable,
         Item, ProductionBodiesTable, ProductionId, ProductionTable, StringId, Symbol, SymbolID,
@@ -15,18 +15,17 @@ use super::{
 };
 
 use std::{
-    collections::{BTreeSet, HashMap, HashSet, VecDeque},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
     fs::read,
     num::NonZeroUsize,
     path::PathBuf,
     sync::Mutex,
     thread::{self},
+    vec,
 };
+
 /// Create scanner productions, adds ids to tokens, creates cache data.
-pub fn finalize_grammar(mut grammar: GrammarStore) -> GrammarStore {
-    let number_of_threads = std::thread::available_parallelism()
-        .unwrap_or(NonZeroUsize::new(1).unwrap())
-        .get();
+pub fn finalize_grammar(mut grammar: GrammarStore, number_of_threads: usize) -> GrammarStore {
     //Create scanner productions
 
     create_scanner_productions(&mut grammar);
@@ -125,25 +124,55 @@ fn finalize_items(grammar: &mut GrammarStore, number_of_threads: usize) {
     }) {
         grammar.closures.insert(item, closure);
     }
-}
 
-#[test]
-fn test_trivial_file_compilation() {
-    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    path.push("test/compile/data/trivial.hcg");
-    match compile_from_path(&path) {
-        Err(err) => panic!("Failed! {:?}", err),
-        Ok(_) => {}
+    fn insert(
+        goto_items: &mut BTreeMap<ProductionId, HashSet<Item>>,
+        production_id: &ProductionId,
+        item: Item,
+    ) {
+        if !goto_items.contains_key(production_id) {
+            goto_items.insert(*production_id, HashSet::<Item>::new());
+        }
+
+        goto_items.get_mut(production_id).unwrap().insert(item);
+    }
+
+    for closure in grammar.closures.values().cloned() {
+        for item in closure {
+            if item.is_nonterm(&grammar) {
+                let production_id = &item.get_production_id(grammar);
+                insert(&mut grammar.lr_items, production_id, item);
+            }
+        }
     }
 }
 
-#[test]
-fn test_trivial_file_compilation_with_single_import() {
-    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    path.push("test/compile/data/trivial_importer.hcg");
-    match compile_from_path(&path) {
-        Err(err) => panic!("Failed! {}", err),
-        Ok(grammar) => {}
+#[cfg(test)]
+mod test_grammar_compiler {
+    use std::path::PathBuf;
+
+    use crate::get_num_of_available_threads;
+
+    use super::compile_from_path;
+
+    #[test]
+    fn test_trivial_file_compilation() {
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push("test/compile/data/trivial.hcg");
+        match compile_from_path(&path, get_num_of_available_threads()) {
+            Err(err) => panic!("Failed! {:?}", err),
+            Ok(_) => {}
+        }
+    }
+
+    #[test]
+    fn test_trivial_file_compilation_with_single_import() {
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push("test/compile/data/trivial_importer.hcg");
+        match compile_from_path(&path, get_num_of_available_threads()) {
+            Err(err) => panic!("Failed! {}", err),
+            Ok(_) => {}
+        }
     }
 }
 
@@ -200,6 +229,7 @@ impl WorkVerifier {
 
 pub fn compile_from_path(
     root_grammar_absolute_path: &PathBuf,
+    number_of_threads: usize,
 ) -> Result<GrammarStore, parse::ParseError> {
     let mut pending_grammar_paths = Mutex::new(VecDeque::<PathBuf>::new());
     let mut claimed_grammar_paths = Mutex::new(HashSet::<PathBuf>::new());
@@ -290,7 +320,7 @@ pub fn compile_from_path(
 
     merge_grammars(&mut root, &grammars.into_iter().collect::<Vec<_>>());
 
-    let final_grammar = finalize_grammar(root);
+    let final_grammar = finalize_grammar(root, number_of_threads);
 
     Ok(final_grammar)
 }
@@ -303,7 +333,7 @@ pub fn compile_from_string(
 
     let grammar = pre_process_grammar(&grammar, absolute_path)?;
 
-    let grammar = finalize_grammar(grammar);
+    let grammar = finalize_grammar(grammar, 1);
 
     Ok(grammar)
 }
@@ -680,7 +710,7 @@ fn pre_process_grammar(
     let mut post_process_productions: VecDeque<Box<Production>> = VecDeque::new();
     let mut production_symbols_table = BTreeSet::new();
     let uuid_name = get_uuid_grammar_name(&absolute_path)?;
-    let uuid = GrammarId(hash_id_value(&uuid_name));
+    let uuid = GrammarId(hash_id_value_u64(&uuid_name));
 
     {
         let mut tgs = TempGrammarStore {
@@ -789,6 +819,7 @@ fn pre_process_grammar(
         production_symbols_table,
         imports: import_names_lookup,
         closures: HashMap::new(),
+        lr_items: BTreeMap::new(),
     })
 }
 
@@ -998,7 +1029,7 @@ fn get_grammar_info_from_node<'a>(
 
 fn get_production_hash_from_node(node: &ASTNode, tgs: &TempGrammarStore) -> u64 {
     let name = get_resolved_production_name(node, tgs);
-    hash_id_value(name)
+    hash_id_value_u64(name)
 }
 
 fn pre_process_body(
@@ -1251,7 +1282,7 @@ fn pre_process_body(
 
 fn get_production_id(production: &ASTNode, tgs: &mut TempGrammarStore) -> ProductionId {
     let name = get_resolved_production_name(production, tgs);
-    ProductionId(hash_id_value(name))
+    ProductionId(hash_id_value_u64(name))
 }
 
 ///
@@ -1303,7 +1334,7 @@ fn intern_symbol(sym: &ASTNode /*, symbols_table, */, tgs: &mut TempGrammarStore
         match node {
             ASTNode::Production_Symbol(_) | ASTNode::Production_Import_Symbol(_) => (
                 ProductionId(get_production_hash_from_node(node, tgs)),
-                GrammarId(hash_id_value(get_grammar_info_from_node(node, tgs).0)),
+                GrammarId(hash_id_value_u64(get_grammar_info_from_node(node, tgs).0)),
             ),
             _ => {
                 panic!()

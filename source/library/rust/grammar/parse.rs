@@ -9,8 +9,8 @@ use crate::{
 };
 
 use super::grammar_data::{
-    ast::{ASTNode, FunctionMaps, Grammar},
-    parser_data::{EntryPoint_Hc, BYTECODE},
+    ast::{ASTNode, FunctionMaps, Grammar, IR_STATE},
+    parser_data::{EntryPoint_Hc, EntryPoint_Ir, BYTECODE},
 };
 
 pub fn parse_string(string: &String) {}
@@ -42,19 +42,40 @@ pub fn compile_ast(buffer: Vec<u8>) -> Result<Box<Grammar>, ParseError> {
 
     match result {
         Ok(r) => {
-            //println!("{:?}", r);
             if let HCObj::NODE(node) = r {
                 if let ASTNode::Grammar(node) = node {
-                    return Ok(node);
+                    Ok(node)
+                } else {
+                    Err(ParseError::UNDEFINED)
                 }
+            } else {
+                Err(ParseError::UNDEFINED)
             }
         }
-        Err(err) => {
-            println!("{:?}", err);
-        }
+        Err(err) => Err(ParseError::UNDEFINED),
     }
+}
 
-    Err(ParseError::UNDEFINED)
+pub fn compile_ir(buffer: Vec<u8>) -> Result<Box<IR_STATE>, ParseError> {
+    let mut iterator: ReferenceIterator<UTF8StringReader> =
+        ReferenceIterator::new(UTF8StringReader::new(buffer), EntryPoint_Ir, &BYTECODE);
+
+    let result = complete(&mut iterator, &FunctionMaps);
+
+    match result {
+        Ok(r) => {
+            if let HCObj::NODE(node) = r {
+                if let ASTNode::IR_STATE(node) = node {
+                    Ok(node)
+                } else {
+                    Err(ParseError::UNDEFINED)
+                }
+            } else {
+                Err(ParseError::UNDEFINED)
+            }
+        }
+        Err(err) => Err(ParseError::UNDEFINED),
+    }
 }
 
 #[test]

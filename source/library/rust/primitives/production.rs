@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::grammar::hash_id_value;
+use crate::grammar::hash_id_value_u64;
 
 use super::{SymbolID, Token};
 
@@ -9,7 +9,7 @@ pub struct ProductionId(pub u64);
 
 impl From<&String> for ProductionId {
     fn from(string: &String) -> Self {
-        ProductionId(hash_id_value(string))
+        ProductionId(hash_id_value_u64(string))
     }
 }
 

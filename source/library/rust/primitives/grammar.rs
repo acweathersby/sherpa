@@ -1,12 +1,12 @@
 use std::{
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fmt::Display,
     path::PathBuf,
 };
 
 use super::{
-    BodyTable, Item, ProductionBodiesTable, ProductionTable, SymbolID, SymbolStringTable,
-    SymbolsTable,
+    BodyTable, Item, ProductionBodiesTable, ProductionId, ProductionTable, SymbolID,
+    SymbolStringTable, SymbolsTable,
 };
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
@@ -73,6 +73,8 @@ pub struct GrammarStore {
     ///
     /// Closure of all items that can be produced by this grammar.
     pub closures: HashMap<Item, Vec<Item>>,
+
+    pub lr_items: BTreeMap<ProductionId, HashSet<Item>>,
 }
 
 pub type ImportProductionNameTable = HashMap<String, (String, PathBuf)>;

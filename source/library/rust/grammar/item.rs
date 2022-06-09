@@ -44,23 +44,20 @@ pub fn get_closure(items: &[Item], grammar: &GrammarStore) -> Vec<Item> {
 /// Retrieve the closure of an item that is cached in the grammar store.
 /// Falls back to manually building the closure if it is not cached. Does
 /// not modify the original grammar.
-pub fn get_closure_cached(item: &Item, grammar: &GrammarStore) -> Vec<Item> {
-    match grammar.closures.get(item) {
-        Some(closure) => closure.to_owned(),
-        None => get_closure(&vec![*item], grammar),
-    }
+pub fn get_closure_cached<'a>(item: &Item, grammar: &'a GrammarStore) -> &'a Vec<Item> {
+    grammar.closures.get(&item.to_zero_state()).unwrap()
 }
 
 ///
 /// Memoized form of 'get_closure_cached', which adds the Item's closure to
 /// the grammar store if it is not already present.
-pub fn get_closure_cached_mut(item: &Item, grammar: &mut GrammarStore) -> Vec<Item> {
-    match grammar.closures.get(item) {
-        Some(closure) => closure.to_owned(),
-        None => {
-            let closure = get_closure(&vec![*item], grammar);
-            grammar.closures.insert(*item, closure);
-            return get_closure_cached(item, grammar);
-        }
+pub fn get_closure_cached_mut<'a>(item: &Item, grammar: &'a mut GrammarStore) -> &'a Vec<Item> {
+    let item = &item.to_zero_state();
+
+    if !grammar.closures.contains_key(item) {
+        let closure = get_closure(&vec![*item], grammar);
+        grammar.closures.insert(*item, closure);
     }
+
+    grammar.closures.get(item).unwrap()
 }

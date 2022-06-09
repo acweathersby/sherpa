@@ -2,7 +2,7 @@
 
 use std::collections::{HashSet, VecDeque};
 
-use crate::primitives::{GrammarStore, Item, ProductionId, SymbolID};
+use crate::primitives::{GrammarStore, Item, Production, ProductionId, SymbolID};
 
 use super::{get_closure, get_closure_cached, get_production_start_items};
 
@@ -38,7 +38,7 @@ pub fn is_production_recursive(production: ProductionId, grammar: &GrammarStore)
                 match new_item.get_symbol(grammar) {
                     SymbolID::Production(..) => {
                         for item in get_closure_cached(&new_item, grammar) {
-                            pipeline.push_back(item);
+                            pipeline.push_back(*item);
                         }
                     }
                     _ => pipeline.push_back(new_item),
@@ -52,6 +52,14 @@ pub fn is_production_recursive(production: ProductionId, grammar: &GrammarStore)
 
 /// Used to separate a grammar's uuid name from a production's name
 const UUID_NAME_DELIMITER: &str = "#:";
+
+/// Returns a production  from a production_id or panics
+pub fn get_production<'a>(
+    production_id: &ProductionId,
+    grammar: &'a GrammarStore,
+) -> &'a Production {
+    grammar.production_table.get(production_id).unwrap()
+}
 
 /// Generate a unique scanner production name givin a uuid production name
 pub fn create_scanner_name(uuid_production_name: &String) -> String {
