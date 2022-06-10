@@ -283,7 +283,7 @@ fn create_intermediate_state(
                         .to_string();
 
                         strings.push(format!(
-                            "{} {} [ /* {} */ {} ] {{ {}goto state [ {} ]{} }}",
+                            "{} {} [ /* {} */ {} ] ( {}goto state [ {} ]{} )",
                             assertion_type,
                             symbol_type,
                             symbol_string,
@@ -361,6 +361,7 @@ mod state_constructor_tests {
 
         let result = generate_production_states(&prod_id, &grammar);
 
+        assert_eq!(result.len(), 7);
         println!("{:#?}", result);
     }
 
@@ -373,6 +374,7 @@ mod state_constructor_tests {
         let result = generate_production_states(&prod_id, &grammar);
 
         println!("{:#?}", result);
+        assert_eq!(result.len(), 24);
     }
 
     #[test]
@@ -384,5 +386,6 @@ mod state_constructor_tests {
         let result = generate_production_states(&prod_id, &grammar);
 
         println!("{:#?}", result);
+        assert_eq!(result.len(), 7);
     }
 }

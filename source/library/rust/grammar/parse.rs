@@ -34,7 +34,7 @@ impl Display for ParseError {
     }
 }
 
-pub fn compile_ast(buffer: Vec<u8>) -> Result<Box<Grammar>, ParseError> {
+pub fn compile_grammar_ast(buffer: Vec<u8>) -> Result<Box<Grammar>, ParseError> {
     let mut iterator: ReferenceIterator<UTF8StringReader> =
         ReferenceIterator::new(UTF8StringReader::new(buffer), EntryPoint_Hc, &BYTECODE);
 
@@ -56,7 +56,7 @@ pub fn compile_ast(buffer: Vec<u8>) -> Result<Box<Grammar>, ParseError> {
     }
 }
 
-pub fn compile_ir(buffer: Vec<u8>) -> Result<Box<IR_STATE>, ParseError> {
+pub fn compile_ir_ast(buffer: Vec<u8>) -> Result<Box<IR_STATE>, ParseError> {
     let mut iterator: ReferenceIterator<UTF8StringReader> =
         ReferenceIterator::new(UTF8StringReader::new(buffer), EntryPoint_Ir, &BYTECODE);
 
@@ -81,13 +81,13 @@ pub fn compile_ir(buffer: Vec<u8>) -> Result<Box<IR_STATE>, ParseError> {
 #[test]
 fn test_production_minimum() {
     let input = String::from("\n<> a > b\n");
-    let result = compile_ast(Vec::from(input.as_bytes()));
+    let result = compile_grammar_ast(Vec::from(input.as_bytes()));
     assert!(result.is_ok());
 }
 
 #[test]
 fn test_production_with_generic_symbol() {
     let input = String::from("\n<> a > g:sp\n");
-    let result = compile_ast(Vec::from(input.as_bytes()));
+    let result = compile_grammar_ast(Vec::from(input.as_bytes()));
     assert!(result.is_ok());
 }

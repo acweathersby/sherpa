@@ -72,3 +72,27 @@ fn compile_regular_ir_states(
     );
     return states;
 }
+
+#[cfg(test)]
+mod byte_code_creation_tests {
+    use crate::{
+        debug::compile_test_grammar,
+        grammar::{get_production_by_name, parse::compile_ir_ast},
+        intermediate::state_construct::generate_production_states,
+    };
+
+    #[test]
+    pub fn test_produce_a_single_ir_ast_from_a_single_state_of_a_trivial_production() {
+        let grammar = compile_test_grammar("<> A > \\h");
+
+        let prod_id = get_production_by_name("A", &grammar).unwrap();
+
+        let result = generate_production_states(&prod_id, &grammar);
+
+        let state = result[0].get_code();
+
+        let result = compile_ir_ast(Vec::from(state.as_bytes()));
+
+        assert!(result.is_ok());
+    }
+}

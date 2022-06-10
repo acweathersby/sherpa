@@ -329,7 +329,7 @@ pub fn compile_from_string(
     string: &str,
     absolute_path: &PathBuf,
 ) -> Result<GrammarStore, parse::ParseError> {
-    let grammar = parse::compile_ast(Vec::from(string.as_bytes()))?;
+    let grammar = parse::compile_grammar_ast(Vec::from(string.as_bytes()))?;
 
     let grammar = pre_process_grammar(&grammar, absolute_path)?;
 
@@ -687,7 +687,7 @@ fn merge_grammars(root: &mut GrammarStore, grammars: &[GrammarStore]) {
 fn compile_file_path(absolute_path: &PathBuf) -> Result<GrammarStore, parse::ParseError> {
     match read(absolute_path) {
         Ok(buffer) => {
-            let grammar = parse::compile_ast(buffer)?;
+            let grammar = parse::compile_grammar_ast(buffer)?;
             pre_process_grammar(&grammar, absolute_path)
         }
         Err(err) => Err(parse::ParseError::IO_ERROR(err)),
@@ -1489,7 +1489,7 @@ fn test_pre_process_grammar() {
     let grammar = String::from(
         "\n@IMPORT ./test/me/out.hcg as bob \n<> a > bob::test tk:p?^test a(+,) ( \\1234 | t:sp? ( sp | g:sym g:sp ) f:r { basalt } ) \\nto <> b > tk:p p ",
     );
-    if let Ok(grammar) = parse::compile_ast(Vec::from(grammar.as_bytes())) {
+    if let Ok(grammar) = parse::compile_grammar_ast(Vec::from(grammar.as_bytes())) {
         match pre_process_grammar(&grammar, &PathBuf::from("/test")) {
             Ok(grammar) => {}
             Err(_) => {
