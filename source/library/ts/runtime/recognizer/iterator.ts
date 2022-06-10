@@ -7,7 +7,7 @@
 import {
     ByteReader,
     goto_state_mask, instruction_pointer_mask, KernelToken, normal_state_mask,
-    skipped_scan_prod,
+    SKIPPED_SCAN_PROD,
     state_index_mask
 } from '@hctoolkit/common';
 import { KernelStack } from './stack.js';
@@ -958,7 +958,7 @@ export class StateIterator {
 
                             const token = result.token;
 
-                            if (token.type == skipped_scan_prod) {
+                            if (token.type == SKIPPED_SCAN_PROD) {
 
                                 current_token.codepoint_offset += token.codepoint_length;
                                 current_token.byte_offset += token.byte_length;

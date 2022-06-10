@@ -1,20 +1,27 @@
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
+
 pub struct StringId(pub u64);
 
-impl From<&String> for StringId {
-    fn from(string: &String) -> Self {
+impl From<&String> for StringId
+{
+    fn from(string: &String) -> Self
+    {
         StringId(hash_id_value_u64(string))
     }
 }
 
-impl Display for StringId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for StringId
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+    {
         f.write_str(&self.0.to_string())
     }
 }
 
 #[derive(Debug, PartialEq, PartialOrd, Clone, Copy, Hash, Eq, Ord)]
-pub enum SymbolID {
+
+pub enum SymbolID
+{
     DefinedNumeric(StringId),
     DefinedIdentifier(StringId),
     DefinedGeneric(StringId),
@@ -38,20 +45,23 @@ pub enum SymbolID {
     EndOfFile,
 }
 
-impl SymbolID {
-    pub fn to_string(&self, grammar: &GrammarStore) -> String {
+impl SymbolID
+{
+    pub const DefinedSymbolIndexBasis: u32 = 11;
+
+    pub fn to_string(&self, grammar: &GrammarStore) -> String
+    {
         match self {
-            Self::DefinedNumeric(_) | Self::DefinedIdentifier(_) | Self::DefinedGeneric(_) => {
+            Self::DefinedNumeric(_)
+            | Self::DefinedIdentifier(_)
+            | Self::DefinedGeneric(_) => {
                 format!("\\{}", grammar.symbols_string_table.get(&self).unwrap())
             }
             Self::Production(prod_id, _) => {
                 format!("{}", grammar.production_table.get(&prod_id).unwrap().name)
             }
             Self::TokenProduction(prod_id, _) => {
-                format!(
-                    "tk:{}",
-                    grammar.production_table.get(&prod_id).unwrap().name
-                )
+                format!("tk:{}", grammar.production_table.get(&prod_id).unwrap().name)
             }
             Self::Undefined => "[??]".to_string(),
             Self::Recovery => "g:rec".to_string(),
@@ -68,7 +78,8 @@ impl SymbolID {
         }
     }
 
-    pub fn getProductionId(&self) -> Option<ProductionId> {
+    pub fn getProductionId(&self) -> Option<ProductionId>
+    {
         match self {
             Self::Production(id, _) => Some(id.clone()),
             Self::TokenProduction(id, _) => Some(id.clone()),
@@ -76,7 +87,8 @@ impl SymbolID {
         }
     }
 
-    pub fn getGrammarId(&self) -> Option<GrammarId> {
+    pub fn getGrammarId(&self) -> Option<GrammarId>
+    {
         match self {
             Self::Production(_, id) => Some(id.clone()),
             Self::TokenProduction(_, id) => Some(id.clone()),
@@ -84,15 +96,16 @@ impl SymbolID {
         }
     }
 
-    pub const DefinedSymbolIndexBasis: u32 = 11;
-
-    pub fn bytecode_id(&self, grammar: &GrammarStore) -> u32 {
+    pub fn bytecode_id(&self, grammar: &GrammarStore) -> u32
+    {
         match self {
             Self::DefinedNumeric(_)
             | Self::DefinedIdentifier(_)
             | Self::DefinedGeneric(_)
-            | Self::TokenProduction(_, _) => grammar.symbols_table.get(self).unwrap().bytecode_id,
-            Self::Production(_, _) => 0,
+            | Self::TokenProduction(..) => {
+                grammar.symbols_table.get(self).unwrap().bytecode_id
+            }
+            Self::Production(..) => 0,
             Self::Undefined => 0,
             Self::Recovery => 0,
             Self::EndOfFile => 1,
@@ -113,51 +126,52 @@ pub type SymbolUUID = SymbolID;
 
 #[repr(C, align(64))]
 #[derive(Debug, Clone)]
-pub struct Symbol {
-    ///
+
+pub struct Symbol
+{
     /// The globally unique identifier of this symbol
     /// which encapsulates the set of Symbols that are
     /// unique based on the combination of the symbol's
     /// class_id,
-    pub uuid: SymbolUUID,
-    ///
+    pub uuid:              SymbolUUID,
     /// The unique identifier of the class of this symbol
     /// which either identifies symbol's generic class id
     /// i.e (g:sp , g:nl, g:tab, g:id ...) or by the unique
     /// or the explicit character sequence this symbol represents.
-    pub bytecode_id: u32,
-    ///
+    pub bytecode_id:       u32,
     /// The length in bytes of the character sequence
     /// represented by this symbol
-    pub byte_length: u32,
-    ///
+    pub byte_length:       u32,
     /// The number of utf8 code points represented by
     /// this symbol.
     pub code_point_length: u32,
     ////
     /// True if only scanner productions use
     /// this symbol
-    pub scanner_only: bool,
+    pub scanner_only:      bool,
 }
 
-use std::{collections::BTreeMap, fmt::Display};
+use std::collections::BTreeMap;
+use std::fmt::Display;
 
 use crate::grammar::uuid::hash_id_value_u64;
 
-use super::{GrammarId, GrammarStore, ProductionId};
+use super::GrammarId;
+use super::GrammarStore;
+use super::ProductionId;
 
-///
 /// A table that maps a symbol class_id to a utf8 string.
+
 pub type SymbolStringTable = BTreeMap<SymbolID, String>;
 
-///
 /// A table that maps a symbol uuid to a production id
+
 pub type ProductionSymbolsTable = BTreeMap<u64, (u32, u32)>;
 
-///
 /// A table that contains all symbols keyed by their uuid
+
 pub type SymbolsTable = BTreeMap<SymbolUUID, Symbol>;
 
-///
 /// A table that contains symbols defined by their class_id
+
 pub type ExportSymbolsTable = BTreeMap<SymbolID, Symbol>;

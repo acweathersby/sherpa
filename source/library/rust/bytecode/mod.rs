@@ -4,16 +4,16 @@ use std::collections::BTreeMap;
 
 use std::thread::{self};
 
+use crate::intermediate::state_construct::generate_production_states;
+use crate::primitives::grammar::GrammarStore;
 use crate::primitives::IRStateString;
-use crate::{
-    intermediate::state_construct::generate_production_states,
-    primitives::{grammar::GrammarStore, ProductionId},
-};
+use crate::primitives::ProductionId;
 
 fn compile_ir_states_worker(
     grammar: &GrammarStore,
     productions: &[ProductionId],
-) -> Vec<IRStateString> {
+) -> Vec<IRStateString>
+{
     productions
         .into_iter()
         .map(|p| generate_production_states(p, grammar))
@@ -21,18 +21,20 @@ fn compile_ir_states_worker(
         .collect::<Vec<_>>()
 }
 
-///
 /// Builds ir states for every standard production in
 /// a grammar.
+
 fn compile_ir_states(
     grammar: &GrammarStore,
     work_group: &[ProductionId],
     number_of_threads: usize,
-) -> BTreeMap<u64, IRStateString> {
+) -> BTreeMap<u64, IRStateString>
+{
     let production_id_chunks = work_group
         .chunks(number_of_threads)
         .filter(|s| !s.is_empty())
         .collect::<Vec<_>>();
+
     let mut ir_map = BTreeMap::new();
 
     for ir_state in thread::scope(|s| {
@@ -46,20 +48,23 @@ fn compile_ir_states(
             .collect::<Vec<_>>()
     }) {
         let key = ir_state.get_hash();
+
         if !ir_map.contains_key(&key) {
             ir_map.insert(key, ir_state);
         }
     }
+
     ir_map
 }
 
-///
 /// Builds ir states for every standard production in
 /// a grammar.
+
 fn compile_regular_ir_states(
     grammar: &GrammarStore,
     number_of_threads: usize,
-) -> BTreeMap<u64, IRStateString> {
+) -> BTreeMap<u64, IRStateString>
+{
     let states = compile_ir_states(
         grammar,
         &grammar
@@ -70,24 +75,31 @@ fn compile_regular_ir_states(
             .collect::<Vec<_>>(),
         number_of_threads,
     );
+
     return states;
 }
 
 #[cfg(test)]
-mod byte_code_creation_tests {
-    use crate::{
-        debug::compile_test_grammar,
-        grammar::{get_production_by_name, parse::compile_ir_ast},
-        intermediate::state_construct::generate_production_states,
-    };
+
+mod byte_code_creation_tests
+{
+
+    use crate::debug::compile_test_grammar;
+    use crate::grammar::get_production_by_name;
+    use crate::grammar::parse::compile_ir_ast;
+    use crate::intermediate::state_construct::generate_production_states;
 
     #[test]
-    pub fn test_produce_a_single_ir_ast_from_a_single_state_of_a_trivial_production() {
+
+    pub fn test_produce_a_single_ir_ast_from_a_single_state_of_a_trivial_production()
+    {
         let grammar = compile_test_grammar("<> A > \\h");
 
         let prod_id = get_production_by_name("A", &grammar).unwrap();
 
         let result = generate_production_states(&prod_id, &grammar);
+
+        println!("{}", result[0].get_code());
 
         let state = result[0].get_code();
 

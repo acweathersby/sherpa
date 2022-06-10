@@ -1,23 +1,29 @@
-//! Functions for creating a variety of universally unique identifiers for
-//! grammar primitives.
+//! Functions for creating a variety of universally unique identifiers
+//! for grammar primitives.
 
+use std::collections::hash_map::DefaultHasher;
 use std::hash::Hash;
+use std::hash::Hasher;
 use std::path::PathBuf;
-use std::{collections::hash_map::DefaultHasher, hash::Hasher};
 
 use super::parse::ParseError;
 
-pub fn hash_id_value_u64<T: Hash>(t: T) -> u64 {
+pub fn hash_id_value_u64<T: Hash>(t: T) -> u64
+{
     let mut s = DefaultHasher::new();
+
     t.hash(&mut s);
+
     s.finish()
 }
 
-pub fn hash_id_value_u128<T: Hash>(t: T) -> u128 {
+pub fn hash_id_value_u128<T: Hash>(t: T) -> u128
+{
     panic!("TODO: hash_id_value_u128")
 }
 
-pub fn get_uuid_grammar_name(uri: &PathBuf) -> Result<String, ParseError> {
+pub fn get_uuid_grammar_name(uri: &PathBuf) -> Result<String, ParseError>
+{
     match uri.file_name() {
         Some(name) => {
             let file_name = String::from(name.to_str().unwrap());

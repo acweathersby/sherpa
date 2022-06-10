@@ -1,14 +1,22 @@
-//! Utility functions for the evaluation, interpretation, and comprehension of items
-//!
+//! Utility functions for the evaluation, interpretation, and
+//! comprehension of items
 
-use std::collections::{HashSet, VecDeque};
+use std::collections::HashSet;
+use std::collections::VecDeque;
 
-use crate::primitives::{GrammarStore, Item, ProductionId, SymbolID};
+use crate::primitives::GrammarStore;
+use crate::primitives::Item;
+use crate::primitives::ProductionId;
+use crate::primitives::SymbolID;
 
-///
-/// Retrieve the initial items of a production. Returns vector of items, one
-/// for each body belonging to the production.
-pub fn get_production_start_items(production: &ProductionId, grammar: &GrammarStore) -> Vec<Item> {
+/// Retrieve the initial items of a production. Returns vector of
+/// items, one for each body belonging to the production.
+
+pub fn get_production_start_items(
+    production: &ProductionId,
+    grammar: &GrammarStore,
+) -> Vec<Item>
+{
     grammar
         .production_bodies_table
         .get(production)
@@ -18,10 +26,12 @@ pub fn get_production_start_items(production: &ProductionId, grammar: &GrammarSt
         .collect()
 }
 
-///
 /// Retrieve the closure of a set of items.
-pub fn get_closure(items: &[Item], grammar: &GrammarStore) -> Vec<Item> {
+
+pub fn get_closure(items: &[Item], grammar: &GrammarStore) -> Vec<Item>
+{
     let mut seen = HashSet::<Item>::new();
+
     let mut queue = VecDeque::<Item>::from_iter(items.iter().cloned());
 
     while let Some(item) = queue.pop_front() {
@@ -40,22 +50,28 @@ pub fn get_closure(items: &[Item], grammar: &GrammarStore) -> Vec<Item> {
     seen.into_iter().collect()
 }
 
-///
-/// Retrieve the closure of an item that is cached in the grammar store.
-/// Falls back to manually building the closure if it is not cached. Does
-/// not modify the original grammar.
-pub fn get_closure_cached<'a>(item: &Item, grammar: &'a GrammarStore) -> &'a Vec<Item> {
+/// Retrieve the closure of an item that is cached in the grammar
+/// store. Falls back to manually building the closure if it is not
+/// cached. Does not modify the original grammar.
+
+pub fn get_closure_cached<'a>(item: &Item, grammar: &'a GrammarStore) -> &'a Vec<Item>
+{
     grammar.closures.get(&item.to_zero_state()).unwrap()
 }
 
-///
-/// Memoized form of 'get_closure_cached', which adds the Item's closure to
-/// the grammar store if it is not already present.
-pub fn get_closure_cached_mut<'a>(item: &Item, grammar: &'a mut GrammarStore) -> &'a Vec<Item> {
+/// Memoized form of 'get_closure_cached', which adds the Item's
+/// closure to the grammar store if it is not already present.
+
+pub fn get_closure_cached_mut<'a>(
+    item: &Item,
+    grammar: &'a mut GrammarStore,
+) -> &'a Vec<Item>
+{
     let item = &item.to_zero_state();
 
     if !grammar.closures.contains_key(item) {
         let closure = get_closure(&vec![*item], grammar);
+
         grammar.closures.insert(*item, closure);
     }
 

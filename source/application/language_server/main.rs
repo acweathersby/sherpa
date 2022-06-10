@@ -1,14 +1,24 @@
-use lsp_types::{
-    request::Completion, CompletionItem, CompletionItemKind, CompletionOptions, CompletionResponse,
-    Documentation, ServerCapabilities,
-};
+use lsp_types::request::Completion;
+use lsp_types::CompletionItem;
+use lsp_types::CompletionItemKind;
+use lsp_types::CompletionOptions;
+use lsp_types::CompletionResponse;
+use lsp_types::Documentation;
+use lsp_types::ServerCapabilities;
 use std::error::Error;
 
-use lsp_server::{Connection, ExtractError, Message, Request, RequestId, Response};
+use lsp_server::Connection;
+use lsp_server::ExtractError;
+use lsp_server::Message;
+use lsp_server::Request;
+use lsp_server::RequestId;
+use lsp_server::Response;
 
-fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
-    // Create the transport. Includes the stdio (stdin and stdout) versions but this could
-    // also be implemented to use sockets or HTTP.
+fn main() -> Result<(), Box<dyn Error + Sync + Send>>
+{
+    // Create the transport. Includes the stdio (stdin and stdout)
+    // versions but this could also be implemented to use sockets or
+    // HTTP.
     let (connection, io_threads) = Connection::stdio();
 
     // Run the server
@@ -19,8 +29,11 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
         ..Default::default()
     })
     .unwrap();
+
     let initialization_params = connection.initialize(server_capabilities)?;
+
     eprintln!("Sever Initialized");
+
     // ... Run main loop ...
     for msg in &connection.receiver {
         match msg {
@@ -31,39 +44,51 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
                 if connection.handle_shutdown(&req)? {
                     return Ok(());
                 }
+
                 eprintln!("got request: {:?}", req);
+
                 match cast::<Completion>(req) {
                     Ok((id, params)) => {
                         eprintln!("got Completion request #{}: {:?}", id, params);
-                        let result = Some(CompletionResponse::Array(vec![CompletionItem {
-                            label: String::from("test"),
-                            kind: Some(CompletionItemKind::CLASS),
-                            additional_text_edits: None,
-                            command: None,
-                            commit_characters: None,
-                            data: None,
-                            deprecated: None,
-                            detail: None,
-                            documentation: Some(Documentation::String("A test entry".to_string())),
-                            filter_text: None,
-                            insert_text: Some(String::from("test")),
-                            insert_text_format: None,
-                            insert_text_mode: None,
-                            preselect: Some(true),
-                            sort_text: None,
-                            tags: None,
-                            text_edit: None,
-                        }]));
+
+                        let result =
+                            Some(CompletionResponse::Array(vec![CompletionItem {
+                                label:                 String::from("test"),
+                                kind:                  Some(CompletionItemKind::CLASS),
+                                additional_text_edits: None,
+                                command:               None,
+                                commit_characters:     None,
+                                data:                  None,
+                                deprecated:            None,
+                                detail:                None,
+                                documentation:         Some(Documentation::String(
+                                    "A test entry".to_string(),
+                                )),
+                                filter_text:           None,
+                                insert_text:           Some(String::from("test")),
+                                insert_text_format:    None,
+                                insert_text_mode:      None,
+                                preselect:             Some(true),
+                                sort_text:             None,
+                                tags:                  None,
+                                text_edit:             None,
+                            }]));
+
                         let result = serde_json::to_value(&result).unwrap();
+
                         let resp = Response {
                             id,
                             result: Some(result),
                             error: None,
                         };
+
                         connection.sender.send(Message::Response(resp))?;
+
                         continue;
                     }
-                    Err(err @ ExtractError::JsonError { .. }) => panic!("{:?}", err),
+                    Err(err @ ExtractError::JsonError { .. }) => {
+                        panic!("{:?}", err)
+                    }
                     Err(ExtractError::MethodMismatch(req)) => req,
                 };
             }
@@ -74,6 +99,7 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
     }
 
     io_threads.join()?;
+
     Ok(())
 }
 

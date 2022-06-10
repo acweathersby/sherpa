@@ -1,4 +1,5 @@
-enum ASYTripNodeType {
+enum ASYTripNodeType
+{
     Production,
     Struct,
     Add,

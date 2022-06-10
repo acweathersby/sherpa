@@ -2,56 +2,66 @@ use std::fmt::Display;
 
 use crate::grammar::hash_id_value_u64;
 
-use super::{SymbolID, Token};
+use super::SymbolID;
+use super::Token;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
+
 pub struct ProductionId(pub u64);
 
-impl From<&String> for ProductionId {
-    fn from(string: &String) -> Self {
+impl From<&String> for ProductionId
+{
+    fn from(string: &String) -> Self
+    {
         ProductionId(hash_id_value_u64(string))
     }
 }
 
-impl Display for ProductionId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for ProductionId
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+    {
         f.write_str(&self.0.to_string())
     }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
+
 pub struct BodyId(pub u64);
 
-impl BodyId {
-    pub fn new(prod_id: &ProductionId, body_index: usize) -> Self {
+impl BodyId
+{
+    pub fn new(prod_id: &ProductionId, body_index: usize) -> Self
+    {
         BodyId((prod_id.0 & 0xFFFFFFFF_FFFFF000) + body_index as u64)
     }
 }
 
-impl Display for BodyId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for BodyId
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+    {
         f.write_str(&self.0.to_string())
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Production {
-    pub name: String,
-    pub number_of_bodies: u16,
-    pub id: ProductionId,
-    pub is_scanner: bool,
-    pub is_entry: bool,
-    pub is_recursive: bool,
-    pub priority: u32,
-    ///
+
+pub struct Production
+{
+    pub name:               String,
+    pub number_of_bodies:   u16,
+    pub id:                 ProductionId,
+    pub is_scanner:         bool,
+    pub is_entry:           bool,
+    pub is_recursive:       bool,
+    pub priority:           u32,
     /// The token defining the substring in the source
     /// code from which this production was derived.
-    pub token: Token,
-    ///
+    pub token:              Token,
     /// An integer value used by bytecode
     /// to refer to this production
-    pub bytecode_id: u32,
-    ///
+    pub bytecode_id:        u32,
     /// If this is a scanner production,
     /// then this is a non-zero integer value
     /// that mirrors the TokenProduction or Defined* symbol
@@ -59,14 +69,16 @@ pub struct Production {
     pub symbol_bytecode_id: u32,
 }
 
-impl Production {
+impl Production
+{
     pub fn new(
         name: String,
         id: ProductionId,
         number_of_bodies: u16,
         token: Token,
         is_scanner: bool,
-    ) -> Self {
+    ) -> Self
+    {
         Production {
             name,
             id,
@@ -83,38 +95,42 @@ impl Production {
 }
 
 #[derive(Debug, Clone)]
-pub struct BodySymbolRef {
-    pub sym_id: SymbolID,
+
+pub struct BodySymbolRef
+{
+    pub sym_id:         SymbolID,
     pub original_index: u32,
-    pub annotation: String,
-    pub consumable: bool,
-    ///
+    pub annotation:     String,
+    pub consumable:     bool,
     /// The number of related symbols that comprise
     /// a scanned token. For use by scanner code.
     /// If this symbol does not exist in scanner space then it is
     /// set to 0
     pub scanner_length: u32,
-    ///
     /// The zero-based sequence index of this symbol in relation
     /// to other related symbols that comprise a scanned token.
     /// If this symbol does not exist in scanner space then it is
     /// set to 0
-    pub scanner_index: u32,
-    ///
+    pub scanner_index:  u32,
     /// Always captures, regardless of other symbols
-    pub exclusive: bool,
+    pub exclusive:      bool,
 }
 
 #[derive(Debug, Clone)]
-pub struct Body {
-    pub symbols: Vec<BodySymbolRef>,
-    pub length: u16,
-    pub production: ProductionId,
-    pub id: BodyId,
+
+pub struct Body
+{
+    pub symbols:     Vec<BodySymbolRef>,
+    pub length:      u16,
+    pub production:  ProductionId,
+    pub id:          BodyId,
     pub bytecode_id: u32,
 }
 
 pub type ProductionTable = std::collections::BTreeMap<ProductionId, Production>;
+
 pub type ProductionEntryNamesTable = std::collections::BTreeMap<String, ProductionId>;
+
 pub type ProductionBodiesTable = std::collections::BTreeMap<ProductionId, Vec<BodyId>>;
+
 pub type BodyTable = std::collections::BTreeMap<BodyId, Body>;

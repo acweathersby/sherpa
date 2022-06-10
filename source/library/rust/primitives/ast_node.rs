@@ -3,7 +3,9 @@ use super::token::Token;
 pub type ReduceFunction<T> = fn(args: &mut Vec<HCObj<T>>, tok: Token);
 
 #[derive(Debug, Clone)]
-pub enum HCObj<T: 'static> {
+
+pub enum HCObj<T: 'static>
+{
     NONE,
     LAZY(Lazy),
     NODE(T),
@@ -22,36 +24,55 @@ pub enum HCObj<T: 'static> {
     OBJECTS(Vec<HCObj<T>>),
 }
 
-pub trait HCObjTrait {
+pub trait HCObjTrait
+{
     fn String(&self) -> String;
-    fn to_f64(&self) -> f64 {
+
+    fn to_f64(&self) -> f64
+    {
         0.0
     }
-    fn to_f32(&self) -> f32 {
+
+    fn to_f32(&self) -> f32
+    {
         0.0
     }
-    fn to_i64(&self) -> i64 {
+
+    fn to_i64(&self) -> i64
+    {
         0
     }
-    fn to_i32(&self) -> i32 {
+
+    fn to_i32(&self) -> i32
+    {
         0
     }
-    fn to_i16(&self) -> i16 {
+
+    fn to_i16(&self) -> i16
+    {
         0
     }
-    fn to_i8(&self) -> i8 {
+
+    fn to_i8(&self) -> i8
+    {
         0
     }
-    fn to_bool(&self) -> bool {
+
+    fn to_bool(&self) -> bool
+    {
         false
     }
-    fn Token(&self) -> Token {
+
+    fn Token(&self) -> Token
+    {
         Token::empty()
     }
 }
 
-impl<T: HCObjTrait> HCObjTrait for HCObj<T> {
-    fn String(&self) -> String {
+impl<T: HCObjTrait> HCObjTrait for HCObj<T>
+{
+    fn String(&self) -> String
+    {
         match self {
             HCObj::NODE(node) => node.String(),
             &HCObj::BOOL(val) => {
@@ -67,14 +88,16 @@ impl<T: HCObjTrait> HCObjTrait for HCObj<T> {
         }
     }
 
-    fn Token(&self) -> Token {
+    fn Token(&self) -> Token
+    {
         match self {
             HCObj::TOKEN(val) => val.clone(),
             _ => Token::empty(),
         }
     }
 
-    fn to_bool(&self) -> bool {
+    fn to_bool(&self) -> bool
+    {
         match self {
             HCObj::TOKEN(tok) => match tok.String().parse::<f64>() {
                 Err(_) => false,
@@ -91,7 +114,9 @@ impl<T: HCObjTrait> HCObjTrait for HCObj<T> {
             _ => false,
         }
     }
-    fn to_f64(&self) -> f64 {
+
+    fn to_f64(&self) -> f64
+    {
         match self {
             HCObj::TOKEN(tok) => match tok.String().parse::<f64>() {
                 Err(_) => f64::NAN,
@@ -109,7 +134,9 @@ impl<T: HCObjTrait> HCObjTrait for HCObj<T> {
             _ => 0.0,
         }
     }
-    fn to_f32(&self) -> f32 {
+
+    fn to_f32(&self) -> f32
+    {
         match self {
             HCObj::STRING(str) => str.parse::<f32>().unwrap(),
             HCObj::TOKEN(tok) => match tok.String().parse::<f32>() {
@@ -127,7 +154,9 @@ impl<T: HCObjTrait> HCObjTrait for HCObj<T> {
             _ => 0.0,
         }
     }
-    fn to_i64(&self) -> i64 {
+
+    fn to_i64(&self) -> i64
+    {
         match self {
             HCObj::STRING(str) => str.parse::<i64>().unwrap(),
             HCObj::TOKEN(tok) => match tok.String().parse::<i64>() {
@@ -146,7 +175,8 @@ impl<T: HCObjTrait> HCObjTrait for HCObj<T> {
         }
     }
 
-    fn to_i32(&self) -> i32 {
+    fn to_i32(&self) -> i32
+    {
         match self {
             HCObj::STRING(str) => str.parse::<i32>().unwrap(),
             HCObj::TOKEN(tok) => match tok.String().parse::<i32>() {
@@ -165,7 +195,8 @@ impl<T: HCObjTrait> HCObjTrait for HCObj<T> {
         }
     }
 
-    fn to_i16(&self) -> i16 {
+    fn to_i16(&self) -> i16
+    {
         match self {
             HCObj::STRING(str) => str.parse::<i16>().unwrap(),
             HCObj::TOKEN(tok) => match tok.String().parse::<i16>() {
@@ -184,7 +215,8 @@ impl<T: HCObjTrait> HCObjTrait for HCObj<T> {
         }
     }
 
-    fn to_i8(&self) -> i8 {
+    fn to_i8(&self) -> i8
+    {
         match self {
             HCObj::STRING(str) => str.parse::<i8>().unwrap(),
             HCObj::TOKEN(tok) => match tok.String().parse::<i8>() {
@@ -203,16 +235,20 @@ impl<T: HCObjTrait> HCObjTrait for HCObj<T> {
         }
     }
 }
+
 #[derive(Debug, Clone)]
-pub struct Lazy {
-    tok: Token,
+
+pub struct Lazy
+{
+    tok:           Token,
     entry_pointer: u32,
-    bytecode: &'static [u32],
+    bytecode:      &'static [u32],
 }
-/* impl Lazy<_> {
-    fn parse_scope(&self) {
-        let string = "";
-        let reader = UTF8StringReader::new(string.as_bytes());
-        let result = completer(reader, self.bytecode, self.entry_pointer, self.functions);
-    }
-} */
+
+// impl Lazy<_> {
+// fn parse_scope(&self) {
+// let string = "";
+// let reader = UTF8StringReader::new(string.as_bytes());
+// let result = completer(reader, self.bytecode, self.entry_pointer,
+// self.functions); }
+// }
