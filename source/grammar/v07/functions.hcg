@@ -1,14 +1,10 @@
-# Copyright (C) 2021 Anthony Weathersby - The Hydrocarbon Parser Compiler
-# see /source/typescript/hydrocarbon.ts for full copyright and warranty 
-# disclaimer notice.
-
-# version 6.0
+# Copyright 2022 Anthony Weathersby
 
 @IMPORT ./symbols.hcg as sym
 
 @IMPORT ./comments.hcg as cm
 
-@IMPORT ./asytr as ast
+@IMPORT ./script.hcg as script
 
 @IGNORE g:sp g:nl tk:cm::comment
 
@@ -23,16 +19,7 @@
 
 <> out_of_band_function > 
 
-        ascript_function_start sym::reference_symbol \{ ast::ascript \}
-                 
-                                                                    f:r {  { 
-                                                                            t_Ascript,
-                                                                            c_Function,  
-                                                                            reference:$2,     
-                                                                            ascript: $4
-                                                                        }  }
-
-    |   generic_function_start sym::reference_symbol tk:js_data_block
+    generic_function_start sym::reference_symbol tk:js_data_block
                  
                                                                     f:r {  { 
                                                                             t_Out_Of_Band,
@@ -71,7 +58,19 @@
 
                                                                         }
                                                                     }
-<> reduce_function > generic_function_start ( t:return | t:r ) tk:js_data_block                                
+<> reduce_function >
+
+
+
+    ascript_function_start \{ script::out \}
+                 
+                                                                    f:r {  { 
+                                                                            t_Ascript,
+                                                                            c_Function,  
+                                                                            ast: $3
+                                                                        }  }
+
+    | generic_function_start ( t:return | t:r ) tk:js_data_block                                
                                                                     f:r { {
                                                                         t_Returned,
                                                                         c_Function,        
@@ -108,5 +107,5 @@
 
 <> generic_function_start > \f:
 
-<> ascript_function_start > \ast:
+<> ascript_function_start > \f:ast
     

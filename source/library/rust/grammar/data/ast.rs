@@ -57,8 +57,36 @@ Fail(Box<Fail>),
 NotInScope(Box<NotInScope>),
 SetScope(Box<SetScope>),
 Consume(Box<Consume>),
+Ascript(Box<Ascript>),
 Returned(Box<Returned>),
 Referenced(Box<Referenced>),
+AST_Statements(Box<AST_Statements>),
+AST_Struct(Box<AST_Struct>),
+AST_Property(Box<AST_Property>),
+AST_Struct_Property(Box<AST_Struct_Property>),
+AST_TypeId(Box<AST_TypeId>),
+AST_ClassId(Box<AST_ClassId>),
+AST_Token(Box<AST_Token>),
+AST_Vector(Box<AST_Vector>),
+AST_Ref(Box<AST_Ref>),
+AST_Member(Box<AST_Member>),
+AST_NamedReference(Box<AST_NamedReference>),
+AST_IndexReference(Box<AST_IndexReference>),
+AST_STRING(Box<AST_STRING>),
+AST_U8(Box<AST_U8>),
+AST_U16(Box<AST_U16>),
+AST_U32(Box<AST_U32>),
+AST_U64(Box<AST_U64>),
+AST_I8(Box<AST_I8>),
+AST_I16(Box<AST_I16>),
+AST_I32(Box<AST_I32>),
+AST_I64(Box<AST_I64>),
+AST_F16(Box<AST_F16>),
+AST_F22(Box<AST_F22>),
+AST_F64(Box<AST_F64>),
+AST_BOOL(Box<AST_BOOL>),
+AST_NUMBER(Box<AST_NUMBER>),
+AST_Add(Box<AST_Add>),
 Reference(Box<Reference>),
 Generated(Box<Generated>),
 Exclusive_Literal(Box<Exclusive_Literal>),
@@ -140,9 +168,65 @@ impl HCObjTrait for ASTNode {
 
             Consume(bx) => bx.tok.String(),
 
+            Ascript(bx) => bx.tok.String(),
+
             Returned(bx) => bx.tok.String(),
 
             Referenced(bx) => bx.tok.String(),
+
+            AST_Statements(bx) => bx.tok.String(),
+
+            AST_Struct(bx) => bx.tok.String(),
+
+            AST_Property(bx) => bx.tok.String(),
+
+            AST_Struct_Property(bx) => bx.tok.String(),
+
+            AST_TypeId(bx) => bx.tok.String(),
+
+            AST_ClassId(bx) => bx.tok.String(),
+
+            AST_Token(bx) => bx.tok.String(),
+
+            AST_Vector(bx) => bx.tok.String(),
+
+            AST_Ref(bx) => bx.tok.String(),
+
+            AST_Member(bx) => bx.tok.String(),
+
+            AST_NamedReference(bx) => bx.tok.String(),
+
+            AST_IndexReference(bx) => bx.tok.String(),
+
+            AST_STRING(bx) => bx.tok.String(),
+
+            AST_U8(bx) => bx.tok.String(),
+
+            AST_U16(bx) => bx.tok.String(),
+
+            AST_U32(bx) => bx.tok.String(),
+
+            AST_U64(bx) => bx.tok.String(),
+
+            AST_I8(bx) => bx.tok.String(),
+
+            AST_I16(bx) => bx.tok.String(),
+
+            AST_I32(bx) => bx.tok.String(),
+
+            AST_I64(bx) => bx.tok.String(),
+
+            AST_F16(bx) => bx.tok.String(),
+
+            AST_F22(bx) => bx.tok.String(),
+
+            AST_F64(bx) => bx.tok.String(),
+
+            AST_BOOL(bx) => bx.tok.String(),
+
+            AST_NUMBER(bx) => bx.tok.String(),
+
+            AST_Add(bx) => bx.tok.String(),
 
             Reference(bx) => bx.tok.String(),
 
@@ -248,8 +332,36 @@ Fail(&'a mut Fail),
 NotInScope(&'a mut NotInScope),
 SetScope(&'a mut SetScope),
 Consume(&'a mut Consume),
+Ascript(&'a mut Ascript),
 Returned(&'a mut Returned),
 Referenced(&'a mut Referenced),
+AST_Statements(&'a mut AST_Statements),
+AST_Struct(&'a mut AST_Struct),
+AST_Property(&'a mut AST_Property),
+AST_Struct_Property(&'a mut AST_Struct_Property),
+AST_TypeId(&'a mut AST_TypeId),
+AST_ClassId(&'a mut AST_ClassId),
+AST_Token(&'a mut AST_Token),
+AST_Vector(&'a mut AST_Vector),
+AST_Ref(&'a mut AST_Ref),
+AST_Member(&'a mut AST_Member),
+AST_NamedReference(&'a mut AST_NamedReference),
+AST_IndexReference(&'a mut AST_IndexReference),
+AST_STRING(&'a mut AST_STRING),
+AST_U8(&'a mut AST_U8),
+AST_U16(&'a mut AST_U16),
+AST_U32(&'a mut AST_U32),
+AST_U64(&'a mut AST_U64),
+AST_I8(&'a mut AST_I8),
+AST_I16(&'a mut AST_I16),
+AST_I32(&'a mut AST_I32),
+AST_I64(&'a mut AST_I64),
+AST_F16(&'a mut AST_F16),
+AST_F22(&'a mut AST_F22),
+AST_F64(&'a mut AST_F64),
+AST_BOOL(&'a mut AST_BOOL),
+AST_NUMBER(&'a mut AST_NUMBER),
+AST_Add(&'a mut AST_Add),
 Reference(&'a mut Reference),
 Generated(&'a mut Generated),
 Exclusive_Literal(&'a mut Exclusive_Literal),
@@ -349,11 +461,95 @@ impl<'a> NodeIteration<'a> {
                 Consume(_0) => {
                     "node-Consume"
                 },
+                Ascript(_0) => {
+                    "node-Ascript"
+                },
                 Returned(_0) => {
                     "node-Returned"
                 },
                 Referenced(_0) => {
                     "node-Referenced"
+                },
+                AST_Statements(_0) => {
+                    "node-AST_Statements"
+                },
+                AST_Struct(_0) => {
+                    "node-AST_Struct"
+                },
+                AST_Property(_0) => {
+                    "node-AST_Property"
+                },
+                AST_Struct_Property(_0) => {
+                    "node-AST_Struct_Property"
+                },
+                AST_TypeId(_0) => {
+                    "node-AST_TypeId"
+                },
+                AST_ClassId(_0) => {
+                    "node-AST_ClassId"
+                },
+                AST_Token(_0) => {
+                    "node-AST_Token"
+                },
+                AST_Vector(_0) => {
+                    "node-AST_Vector"
+                },
+                AST_Ref(_0) => {
+                    "node-AST_Ref"
+                },
+                AST_Member(_0) => {
+                    "node-AST_Member"
+                },
+                AST_NamedReference(_0) => {
+                    "node-AST_NamedReference"
+                },
+                AST_IndexReference(_0) => {
+                    "node-AST_IndexReference"
+                },
+                AST_STRING(_0) => {
+                    "node-AST_STRING"
+                },
+                AST_U8(_0) => {
+                    "node-AST_U8"
+                },
+                AST_U16(_0) => {
+                    "node-AST_U16"
+                },
+                AST_U32(_0) => {
+                    "node-AST_U32"
+                },
+                AST_U64(_0) => {
+                    "node-AST_U64"
+                },
+                AST_I8(_0) => {
+                    "node-AST_I8"
+                },
+                AST_I16(_0) => {
+                    "node-AST_I16"
+                },
+                AST_I32(_0) => {
+                    "node-AST_I32"
+                },
+                AST_I64(_0) => {
+                    "node-AST_I64"
+                },
+                AST_F16(_0) => {
+                    "node-AST_F16"
+                },
+                AST_F22(_0) => {
+                    "node-AST_F22"
+                },
+                AST_F64(_0) => {
+                    "node-AST_F64"
+                },
+                AST_BOOL(_0) => {
+                    "node-AST_BOOL"
+                },
+                AST_NUMBER(_0) => {
+                    "node-AST_NUMBER"
+                },
+                AST_Add(_0) => {
+                    "node-AST_Add"
                 },
                 Reference(_0) => {
                     "node-Reference"
@@ -558,11 +754,123 @@ where
                         par.Replace(node, c, d);
                         true
                     },
+                    Ascript(par) => {
+                        par.Replace(node, c, d);
+                        true
+                    },
                     Returned(par) => {
                         par.Replace(node, c, d);
                         true
                     },
                     Referenced(par) => {
+                        par.Replace(node, c, d);
+                        true
+                    },
+                    AST_Statements(par) => {
+                        par.Replace(node, c, d);
+                        true
+                    },
+                    AST_Struct(par) => {
+                        par.Replace(node, c, d);
+                        true
+                    },
+                    AST_Property(par) => {
+                        par.Replace(node, c, d);
+                        true
+                    },
+                    AST_Struct_Property(par) => {
+                        par.Replace(node, c, d);
+                        true
+                    },
+                    AST_TypeId(par) => {
+                        par.Replace(node, c, d);
+                        true
+                    },
+                    AST_ClassId(par) => {
+                        par.Replace(node, c, d);
+                        true
+                    },
+                    AST_Token(par) => {
+                        par.Replace(node, c, d);
+                        true
+                    },
+                    AST_Vector(par) => {
+                        par.Replace(node, c, d);
+                        true
+                    },
+                    AST_Ref(par) => {
+                        par.Replace(node, c, d);
+                        true
+                    },
+                    AST_Member(par) => {
+                        par.Replace(node, c, d);
+                        true
+                    },
+                    AST_NamedReference(par) => {
+                        par.Replace(node, c, d);
+                        true
+                    },
+                    AST_IndexReference(par) => {
+                        par.Replace(node, c, d);
+                        true
+                    },
+                    AST_STRING(par) => {
+                        par.Replace(node, c, d);
+                        true
+                    },
+                    AST_U8(par) => {
+                        par.Replace(node, c, d);
+                        true
+                    },
+                    AST_U16(par) => {
+                        par.Replace(node, c, d);
+                        true
+                    },
+                    AST_U32(par) => {
+                        par.Replace(node, c, d);
+                        true
+                    },
+                    AST_U64(par) => {
+                        par.Replace(node, c, d);
+                        true
+                    },
+                    AST_I8(par) => {
+                        par.Replace(node, c, d);
+                        true
+                    },
+                    AST_I16(par) => {
+                        par.Replace(node, c, d);
+                        true
+                    },
+                    AST_I32(par) => {
+                        par.Replace(node, c, d);
+                        true
+                    },
+                    AST_I64(par) => {
+                        par.Replace(node, c, d);
+                        true
+                    },
+                    AST_F16(par) => {
+                        par.Replace(node, c, d);
+                        true
+                    },
+                    AST_F22(par) => {
+                        par.Replace(node, c, d);
+                        true
+                    },
+                    AST_F64(par) => {
+                        par.Replace(node, c, d);
+                        true
+                    },
+                    AST_BOOL(par) => {
+                        par.Replace(node, c, d);
+                        true
+                    },
+                    AST_NUMBER(par) => {
+                        par.Replace(node, c, d);
+                        true
+                    },
+                    AST_Add(par) => {
                         par.Replace(node, c, d);
                         true
                     },
@@ -804,10 +1112,94 @@ where
                 Consume(node) => {
                     node.as_mut().Replace(n, i, j)
             },
+                Ascript(node) => {
+                    node.as_mut().Replace(n, i, j)
+            },
                 Returned(node) => {
                     node.as_mut().Replace(n, i, j)
             },
                 Referenced(node) => {
+                    node.as_mut().Replace(n, i, j)
+            },
+                AST_Statements(node) => {
+                    node.as_mut().Replace(n, i, j)
+            },
+                AST_Struct(node) => {
+                    node.as_mut().Replace(n, i, j)
+            },
+                AST_Property(node) => {
+                    node.as_mut().Replace(n, i, j)
+            },
+                AST_Struct_Property(node) => {
+                    node.as_mut().Replace(n, i, j)
+            },
+                AST_TypeId(node) => {
+                    node.as_mut().Replace(n, i, j)
+            },
+                AST_ClassId(node) => {
+                    node.as_mut().Replace(n, i, j)
+            },
+                AST_Token(node) => {
+                    node.as_mut().Replace(n, i, j)
+            },
+                AST_Vector(node) => {
+                    node.as_mut().Replace(n, i, j)
+            },
+                AST_Ref(node) => {
+                    node.as_mut().Replace(n, i, j)
+            },
+                AST_Member(node) => {
+                    node.as_mut().Replace(n, i, j)
+            },
+                AST_NamedReference(node) => {
+                    node.as_mut().Replace(n, i, j)
+            },
+                AST_IndexReference(node) => {
+                    node.as_mut().Replace(n, i, j)
+            },
+                AST_STRING(node) => {
+                    node.as_mut().Replace(n, i, j)
+            },
+                AST_U8(node) => {
+                    node.as_mut().Replace(n, i, j)
+            },
+                AST_U16(node) => {
+                    node.as_mut().Replace(n, i, j)
+            },
+                AST_U32(node) => {
+                    node.as_mut().Replace(n, i, j)
+            },
+                AST_U64(node) => {
+                    node.as_mut().Replace(n, i, j)
+            },
+                AST_I8(node) => {
+                    node.as_mut().Replace(n, i, j)
+            },
+                AST_I16(node) => {
+                    node.as_mut().Replace(n, i, j)
+            },
+                AST_I32(node) => {
+                    node.as_mut().Replace(n, i, j)
+            },
+                AST_I64(node) => {
+                    node.as_mut().Replace(n, i, j)
+            },
+                AST_F16(node) => {
+                    node.as_mut().Replace(n, i, j)
+            },
+                AST_F22(node) => {
+                    node.as_mut().Replace(n, i, j)
+            },
+                AST_F64(node) => {
+                    node.as_mut().Replace(n, i, j)
+            },
+                AST_BOOL(node) => {
+                    node.as_mut().Replace(n, i, j)
+            },
+                AST_NUMBER(node) => {
+                    node.as_mut().Replace(n, i, j)
+            },
+                AST_Add(node) => {
                     node.as_mut().Replace(n, i, j)
             },
                 Reference(node) => {
@@ -988,10 +1380,94 @@ where
                 Consume(node) => {
                     node.as_mut().Iterate(_yield, parent, i, j)
             },
+                Ascript(node) => {
+                    node.as_mut().Iterate(_yield, parent, i, j)
+            },
                 Returned(node) => {
                     node.as_mut().Iterate(_yield, parent, i, j)
             },
                 Referenced(node) => {
+                    node.as_mut().Iterate(_yield, parent, i, j)
+            },
+                AST_Statements(node) => {
+                    node.as_mut().Iterate(_yield, parent, i, j)
+            },
+                AST_Struct(node) => {
+                    node.as_mut().Iterate(_yield, parent, i, j)
+            },
+                AST_Property(node) => {
+                    node.as_mut().Iterate(_yield, parent, i, j)
+            },
+                AST_Struct_Property(node) => {
+                    node.as_mut().Iterate(_yield, parent, i, j)
+            },
+                AST_TypeId(node) => {
+                    node.as_mut().Iterate(_yield, parent, i, j)
+            },
+                AST_ClassId(node) => {
+                    node.as_mut().Iterate(_yield, parent, i, j)
+            },
+                AST_Token(node) => {
+                    node.as_mut().Iterate(_yield, parent, i, j)
+            },
+                AST_Vector(node) => {
+                    node.as_mut().Iterate(_yield, parent, i, j)
+            },
+                AST_Ref(node) => {
+                    node.as_mut().Iterate(_yield, parent, i, j)
+            },
+                AST_Member(node) => {
+                    node.as_mut().Iterate(_yield, parent, i, j)
+            },
+                AST_NamedReference(node) => {
+                    node.as_mut().Iterate(_yield, parent, i, j)
+            },
+                AST_IndexReference(node) => {
+                    node.as_mut().Iterate(_yield, parent, i, j)
+            },
+                AST_STRING(node) => {
+                    node.as_mut().Iterate(_yield, parent, i, j)
+            },
+                AST_U8(node) => {
+                    node.as_mut().Iterate(_yield, parent, i, j)
+            },
+                AST_U16(node) => {
+                    node.as_mut().Iterate(_yield, parent, i, j)
+            },
+                AST_U32(node) => {
+                    node.as_mut().Iterate(_yield, parent, i, j)
+            },
+                AST_U64(node) => {
+                    node.as_mut().Iterate(_yield, parent, i, j)
+            },
+                AST_I8(node) => {
+                    node.as_mut().Iterate(_yield, parent, i, j)
+            },
+                AST_I16(node) => {
+                    node.as_mut().Iterate(_yield, parent, i, j)
+            },
+                AST_I32(node) => {
+                    node.as_mut().Iterate(_yield, parent, i, j)
+            },
+                AST_I64(node) => {
+                    node.as_mut().Iterate(_yield, parent, i, j)
+            },
+                AST_F16(node) => {
+                    node.as_mut().Iterate(_yield, parent, i, j)
+            },
+                AST_F22(node) => {
+                    node.as_mut().Iterate(_yield, parent, i, j)
+            },
+                AST_F64(node) => {
+                    node.as_mut().Iterate(_yield, parent, i, j)
+            },
+                AST_BOOL(node) => {
+                    node.as_mut().Iterate(_yield, parent, i, j)
+            },
+                AST_NUMBER(node) => {
+                    node.as_mut().Iterate(_yield, parent, i, j)
+            },
+                AST_Add(node) => {
                     node.as_mut().Iterate(_yield, parent, i, j)
             },
                 Reference(node) => {
@@ -1130,8 +1606,36 @@ where
                 NotInScope(node) => node.as_ref().Token(),
                 SetScope(node) => node.as_ref().Token(),
                 Consume(node) => node.as_ref().Token(),
+                Ascript(node) => node.as_ref().Token(),
                 Returned(node) => node.as_ref().Token(),
                 Referenced(node) => node.as_ref().Token(),
+                AST_Statements(node) => node.as_ref().Token(),
+                AST_Struct(node) => node.as_ref().Token(),
+                AST_Property(node) => node.as_ref().Token(),
+                AST_Struct_Property(node) => node.as_ref().Token(),
+                AST_TypeId(node) => node.as_ref().Token(),
+                AST_ClassId(node) => node.as_ref().Token(),
+                AST_Token(node) => node.as_ref().Token(),
+                AST_Vector(node) => node.as_ref().Token(),
+                AST_Ref(node) => node.as_ref().Token(),
+                AST_Member(node) => node.as_ref().Token(),
+                AST_NamedReference(node) => node.as_ref().Token(),
+                AST_IndexReference(node) => node.as_ref().Token(),
+                AST_STRING(node) => node.as_ref().Token(),
+                AST_U8(node) => node.as_ref().Token(),
+                AST_U16(node) => node.as_ref().Token(),
+                AST_U32(node) => node.as_ref().Token(),
+                AST_U64(node) => node.as_ref().Token(),
+                AST_I8(node) => node.as_ref().Token(),
+                AST_I16(node) => node.as_ref().Token(),
+                AST_I32(node) => node.as_ref().Token(),
+                AST_I64(node) => node.as_ref().Token(),
+                AST_F16(node) => node.as_ref().Token(),
+                AST_F22(node) => node.as_ref().Token(),
+                AST_F64(node) => node.as_ref().Token(),
+                AST_BOOL(node) => node.as_ref().Token(),
+                AST_NUMBER(node) => node.as_ref().Token(),
+                AST_Add(node) => node.as_ref().Token(),
                 Reference(node) => node.as_ref().Token(),
                 Generated(node) => node.as_ref().Token(),
                 Exclusive_Literal(node) => node.as_ref().Token(),
@@ -1213,9 +1717,65 @@ where
                     node.as_ref().GetType(),
                 Consume(node) => 
                     node.as_ref().GetType(),
+                Ascript(node) => 
+                    node.as_ref().GetType(),
                 Returned(node) => 
                     node.as_ref().GetType(),
                 Referenced(node) => 
+                    node.as_ref().GetType(),
+                AST_Statements(node) => 
+                    node.as_ref().GetType(),
+                AST_Struct(node) => 
+                    node.as_ref().GetType(),
+                AST_Property(node) => 
+                    node.as_ref().GetType(),
+                AST_Struct_Property(node) => 
+                    node.as_ref().GetType(),
+                AST_TypeId(node) => 
+                    node.as_ref().GetType(),
+                AST_ClassId(node) => 
+                    node.as_ref().GetType(),
+                AST_Token(node) => 
+                    node.as_ref().GetType(),
+                AST_Vector(node) => 
+                    node.as_ref().GetType(),
+                AST_Ref(node) => 
+                    node.as_ref().GetType(),
+                AST_Member(node) => 
+                    node.as_ref().GetType(),
+                AST_NamedReference(node) => 
+                    node.as_ref().GetType(),
+                AST_IndexReference(node) => 
+                    node.as_ref().GetType(),
+                AST_STRING(node) => 
+                    node.as_ref().GetType(),
+                AST_U8(node) => 
+                    node.as_ref().GetType(),
+                AST_U16(node) => 
+                    node.as_ref().GetType(),
+                AST_U32(node) => 
+                    node.as_ref().GetType(),
+                AST_U64(node) => 
+                    node.as_ref().GetType(),
+                AST_I8(node) => 
+                    node.as_ref().GetType(),
+                AST_I16(node) => 
+                    node.as_ref().GetType(),
+                AST_I32(node) => 
+                    node.as_ref().GetType(),
+                AST_I64(node) => 
+                    node.as_ref().GetType(),
+                AST_F16(node) => 
+                    node.as_ref().GetType(),
+                AST_F22(node) => 
+                    node.as_ref().GetType(),
+                AST_F64(node) => 
+                    node.as_ref().GetType(),
+                AST_BOOL(node) => 
+                    node.as_ref().GetType(),
+                AST_NUMBER(node) => 
+                    node.as_ref().GetType(),
+                AST_Add(node) => 
                     node.as_ref().GetType(),
                 Reference(node) => 
                     node.as_ref().GetType(),
@@ -2377,7 +2937,7 @@ fn GetType(&self) -> u32 {
 pub struct Reduce {
     pub len:i32 /* I32 */,
 pub body_id:i32 /* I32 */,
-pub reduce_fn:ASTNode /* Returned | Referenced */
+pub reduce_fn:ASTNode /* Ascript | Returned | Referenced */
 }
 
 impl Reduce {
@@ -2400,6 +2960,10 @@ fn  replace_reduce_fn(&mut self, child: ASTNode,) -> Option<ASTNode> {
             return Some(old);
         }
         
+        ASTNode::Ascript(_) => { 
+            return Some(std::mem::replace(&mut self.reduce_fn, child));
+        },
+
         ASTNode::Returned(_) => { 
             return Some(std::mem::replace(&mut self.reduce_fn, child));
         },
@@ -3657,6 +4221,108 @@ fn GetType(&self) -> u32 {
 
 
 #[derive(Debug, Clone)]
+pub struct Ascript {
+    pub ast:ASTNode /* AST_Statements | AST_Struct */
+}
+
+impl Ascript {
+pub fn new( _ast:ASTNode) -> Box<Self> {
+    Box::new(Ascript{
+        ast : _ast,
+    })
+}
+
+
+
+
+fn  replace_ast(&mut self, child: ASTNode,) -> Option<ASTNode> {
+    
+    match &child {
+        ASTNode::NONE => {
+            let old = std::mem::replace(&mut self.ast, ASTNode::NONE);
+            return Some(old);
+        }
+        
+        ASTNode::AST_Statements(_) => { 
+            return Some(std::mem::replace(&mut self.ast, child));
+        },
+
+        ASTNode::AST_Struct(_) => { 
+            return Some(std::mem::replace(&mut self.ast, child));
+        }
+        _ => None
+        
+    }
+}
+}
+
+
+
+impl<'a> ASTNodeTraits<'a> for Ascript
+where
+    Self: Sized,
+{
+
+fn Iterate(
+    &'a mut self,
+    _yield: &mut impl FnMut(&mut NodeIteration<'a>, &mut NodeIteration<'a>,u32, i32, i32) -> bool,
+    parent: &mut NodeIteration<'a>,
+    i: i32,
+    j: i32,
+) {
+    let node = UnsafeCell::from(self);
+
+    unsafe{
+        let mut_me = node.get();
+
+        if !_yield(&mut NodeIteration::Ascript(*mut_me), parent, 950528, i, j) { return };
+    }
+        
+    
+        unsafe {
+            let mut_me_b = node.get();
+            let mut_me_d = node.get();
+
+            ((*mut_me_d).ast).Iterate( _yield, &mut NodeIteration::Ascript(*mut_me_b), 0, 0);
+            
+        }
+}
+
+fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
+
+    match i{
+    0 => {
+                    
+        if let Some(old) = self.replace_ast(child){ 
+                return old;
+            }else{
+                return ASTNode::NONE;
+            }
+                }
+        _ => {}
+    };
+
+    ASTNode::NONE
+}
+
+
+fn Token(&self) -> Token{
+    Token::empty()
+}
+
+fn Type()-> u32{
+    return 950528;
+}
+
+fn GetType(&self) -> u32 {
+    return 950528;
+}
+}
+
+
+
+
+#[derive(Debug, Clone)]
 pub struct Returned {
     pub txt:String /* STRING */
 }
@@ -3692,7 +4358,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Returned(*mut_me), parent, 950528, i, j) { return };
+        if !_yield(&mut NodeIteration::Returned(*mut_me), parent, 983296, i, j) { return };
     }
         
     
@@ -3714,11 +4380,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 950528;
+    return 983296;
 }
 
 fn GetType(&self) -> u32 {
-    return 950528;
+    return 983296;
 }
 }
 
@@ -3770,7 +4436,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Referenced(*mut_me), parent, 983296, i, j) { return };
+        if !_yield(&mut NodeIteration::Referenced(*mut_me), parent, 1016064, i, j) { return };
     }
         
     
@@ -3806,11 +4472,2976 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 983296;
+    return 1016064;
 }
 
 fn GetType(&self) -> u32 {
-    return 983296;
+    return 1016064;
+}
+}
+
+
+
+
+#[derive(Debug, Clone)]
+pub struct AST_Statements {
+    pub statements:Vec<ASTNode> /* VECTOR */,
+pub tok:Token /* TOKEN */
+}
+
+impl AST_Statements {
+pub fn new( _statements:Vec<ASTNode>, _tok:Token) -> Box<Self> {
+    Box::new(AST_Statements{
+        statements : _statements,
+        tok : _tok,
+    })
+}
+
+
+
+
+fn  replace_statements(&mut self, child: ASTNode,index: i32,) -> Option<ASTNode> {
+    
+    match &child {
+        ASTNode::AST_Add(_)|ASTNode::AST_Ref(_)|ASTNode::AST_Member(_) => {
+            if index as usize >= self.statements.len() {
+                self.statements.push(child);
+                None
+            }else {
+                self.statements.push(child);
+                let node = self.statements.swap_remove(index as usize);
+                Some(node)
+            }
+        }
+        ASTNode::NONE => {
+            if (index as usize)< self.statements.len() {
+                let node = self.statements.remove(index as usize);
+                Some(node)
+            }else {
+                None
+            }
+        }
+        _ => None
+    }
+}
+}
+
+
+
+impl<'a> ASTNodeTraits<'a> for AST_Statements
+where
+    Self: Sized,
+{
+
+fn Iterate(
+    &'a mut self,
+    _yield: &mut impl FnMut(&mut NodeIteration<'a>, &mut NodeIteration<'a>,u32, i32, i32) -> bool,
+    parent: &mut NodeIteration<'a>,
+    i: i32,
+    j: i32,
+) {
+    let node = UnsafeCell::from(self);
+
+    unsafe{
+        let mut_me = node.get();
+
+        if !_yield(&mut NodeIteration::AST_Statements(*mut_me), parent, 1048576, i, j) { return };
+    }
+        
+    
+        unsafe {
+
+            let mut_me_a = node.get();
+            for j in 0..(*mut_me_a).statements.len() {
+                let mut_me_b = node.get();
+                let child = &mut (*mut_me_b).statements[j];
+
+                match child {
+                    
+                        ASTNode::AST_Add(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Statements(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_Ref(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Statements(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_Member(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Statements(*mut_me), 0, j as i32)   
+                            };
+                        }
+                    _ => {}
+                }
+            }
+        }
+}
+
+fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
+
+    match i{
+    0 => {
+                    
+        if let Some(old) = self.replace_statements(child, j){ 
+            return old;
+        }else{
+            return ASTNode::NONE;
+        }
+                }
+        _ => {}
+    };
+
+    ASTNode::NONE
+}
+
+
+fn Token(&self) -> Token{
+    self.tok.clone()
+}
+
+fn Type()-> u32{
+    return 1048576;
+}
+
+fn GetType(&self) -> u32 {
+    return 1048576;
+}
+}
+
+
+
+
+#[derive(Debug, Clone)]
+pub struct AST_Struct {
+    pub props:Vec<ASTNode> /* VECTOR */,
+pub tok:Token /* TOKEN */
+}
+
+impl AST_Struct {
+pub fn new( _props:Vec<ASTNode>, _tok:Token) -> Box<Self> {
+    Box::new(AST_Struct{
+        props : _props,
+        tok : _tok,
+    })
+}
+
+
+
+
+fn  replace_props(&mut self, child: ASTNode,index: i32,) -> Option<ASTNode> {
+    
+    match &child {
+        ASTNode::AST_Property(_)|ASTNode::AST_Struct_Property(_)|ASTNode::AST_TypeId(_)|ASTNode::AST_ClassId(_)|ASTNode::AST_Token(_) => {
+            if index as usize >= self.props.len() {
+                self.props.push(child);
+                None
+            }else {
+                self.props.push(child);
+                let node = self.props.swap_remove(index as usize);
+                Some(node)
+            }
+        }
+        ASTNode::NONE => {
+            if (index as usize)< self.props.len() {
+                let node = self.props.remove(index as usize);
+                Some(node)
+            }else {
+                None
+            }
+        }
+        _ => None
+    }
+}
+}
+
+
+
+impl<'a> ASTNodeTraits<'a> for AST_Struct
+where
+    Self: Sized,
+{
+
+fn Iterate(
+    &'a mut self,
+    _yield: &mut impl FnMut(&mut NodeIteration<'a>, &mut NodeIteration<'a>,u32, i32, i32) -> bool,
+    parent: &mut NodeIteration<'a>,
+    i: i32,
+    j: i32,
+) {
+    let node = UnsafeCell::from(self);
+
+    unsafe{
+        let mut_me = node.get();
+
+        if !_yield(&mut NodeIteration::AST_Struct(*mut_me), parent, 1081344, i, j) { return };
+    }
+        
+    
+        unsafe {
+
+            let mut_me_a = node.get();
+            for j in 0..(*mut_me_a).props.len() {
+                let mut_me_b = node.get();
+                let child = &mut (*mut_me_b).props[j];
+
+                match child {
+                    
+                        ASTNode::AST_Property(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Struct(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_Struct_Property(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Struct(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_TypeId(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Struct(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_ClassId(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Struct(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_Token(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Struct(*mut_me), 0, j as i32)   
+                            };
+                        }
+                    _ => {}
+                }
+            }
+        }
+}
+
+fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
+
+    match i{
+    0 => {
+                    
+        if let Some(old) = self.replace_props(child, j){ 
+            return old;
+        }else{
+            return ASTNode::NONE;
+        }
+                }
+        _ => {}
+    };
+
+    ASTNode::NONE
+}
+
+
+fn Token(&self) -> Token{
+    self.tok.clone()
+}
+
+fn Type()-> u32{
+    return 1081344;
+}
+
+fn GetType(&self) -> u32 {
+    return 1081344;
+}
+}
+
+
+
+
+#[derive(Debug, Clone)]
+pub struct AST_Property {
+    pub id:String /* STRING */,
+pub value:ASTNode /* AST_Vector | AST_Ref | AST_Member | AST_STRING | AST_U8 | AST_U16 | AST_U32 | AST_U64 | AST_I8 | AST_I16 | AST_I32 | AST_I64 | AST_F16 | AST_F22 | AST_F64 | AST_BOOL | AST_NUMBER */,
+pub tok:Token /* TOKEN */
+}
+
+impl AST_Property {
+pub fn new( _id:String, _value:ASTNode, _tok:Token) -> Box<Self> {
+    Box::new(AST_Property{
+        id : _id,
+        value : _value,
+        tok : _tok,
+    })
+}
+
+
+
+
+fn  replace_value(&mut self, child: ASTNode,) -> Option<ASTNode> {
+    
+    match &child {
+        ASTNode::NONE => {
+            let old = std::mem::replace(&mut self.value, ASTNode::NONE);
+            return Some(old);
+        }
+        
+        ASTNode::AST_Vector(_) => { 
+            return Some(std::mem::replace(&mut self.value, child));
+        },
+
+        ASTNode::AST_Ref(_) => { 
+            return Some(std::mem::replace(&mut self.value, child));
+        },
+
+        ASTNode::AST_Member(_) => { 
+            return Some(std::mem::replace(&mut self.value, child));
+        },
+
+        ASTNode::AST_STRING(_) => { 
+            return Some(std::mem::replace(&mut self.value, child));
+        },
+
+        ASTNode::AST_U8(_) => { 
+            return Some(std::mem::replace(&mut self.value, child));
+        },
+
+        ASTNode::AST_U16(_) => { 
+            return Some(std::mem::replace(&mut self.value, child));
+        },
+
+        ASTNode::AST_U32(_) => { 
+            return Some(std::mem::replace(&mut self.value, child));
+        },
+
+        ASTNode::AST_U64(_) => { 
+            return Some(std::mem::replace(&mut self.value, child));
+        },
+
+        ASTNode::AST_I8(_) => { 
+            return Some(std::mem::replace(&mut self.value, child));
+        },
+
+        ASTNode::AST_I16(_) => { 
+            return Some(std::mem::replace(&mut self.value, child));
+        },
+
+        ASTNode::AST_I32(_) => { 
+            return Some(std::mem::replace(&mut self.value, child));
+        },
+
+        ASTNode::AST_I64(_) => { 
+            return Some(std::mem::replace(&mut self.value, child));
+        },
+
+        ASTNode::AST_F16(_) => { 
+            return Some(std::mem::replace(&mut self.value, child));
+        },
+
+        ASTNode::AST_F22(_) => { 
+            return Some(std::mem::replace(&mut self.value, child));
+        },
+
+        ASTNode::AST_F64(_) => { 
+            return Some(std::mem::replace(&mut self.value, child));
+        },
+
+        ASTNode::AST_BOOL(_) => { 
+            return Some(std::mem::replace(&mut self.value, child));
+        },
+
+        ASTNode::AST_NUMBER(_) => { 
+            return Some(std::mem::replace(&mut self.value, child));
+        }
+        _ => None
+        
+    }
+}
+}
+
+
+
+impl<'a> ASTNodeTraits<'a> for AST_Property
+where
+    Self: Sized,
+{
+
+fn Iterate(
+    &'a mut self,
+    _yield: &mut impl FnMut(&mut NodeIteration<'a>, &mut NodeIteration<'a>,u32, i32, i32) -> bool,
+    parent: &mut NodeIteration<'a>,
+    i: i32,
+    j: i32,
+) {
+    let node = UnsafeCell::from(self);
+
+    unsafe{
+        let mut_me = node.get();
+
+        if !_yield(&mut NodeIteration::AST_Property(*mut_me), parent, 1114112, i, j) { return };
+    }
+        
+    
+        unsafe {
+            let mut_me_b = node.get();
+            let mut_me_d = node.get();
+
+            ((*mut_me_d).value).Iterate( _yield, &mut NodeIteration::AST_Property(*mut_me_b), 0, 0);
+            
+        }
+}
+
+fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
+
+    match i{
+    0 => {
+                    
+        if let Some(old) = self.replace_value(child){ 
+                return old;
+            }else{
+                return ASTNode::NONE;
+            }
+                }
+        _ => {}
+    };
+
+    ASTNode::NONE
+}
+
+
+fn Token(&self) -> Token{
+    self.tok.clone()
+}
+
+fn Type()-> u32{
+    return 1114112;
+}
+
+fn GetType(&self) -> u32 {
+    return 1114112;
+}
+}
+
+
+
+
+#[derive(Debug, Clone)]
+pub struct AST_Struct_Property {
+    pub id:String /* STRING */,
+pub value:Box<AST_Struct> /* AST_Struct */,
+pub tok:Token /* TOKEN */
+}
+
+impl AST_Struct_Property {
+pub fn new( _id:String, _value:Box<AST_Struct>, _tok:Token) -> Box<Self> {
+    Box::new(AST_Struct_Property{
+        id : _id,
+        value : _value,
+        tok : _tok,
+    })
+}
+
+
+
+
+fn  replace_value(&mut self, child: ASTNode,) -> Option<ASTNode> {
+    
+    if let ASTNode::AST_Struct(child) = child {
+        return Some(ASTNode::AST_Struct(std::mem::replace(&mut self.value, child)))
+    }else {
+        return None
+    }
+    
+}
+}
+
+
+
+impl<'a> ASTNodeTraits<'a> for AST_Struct_Property
+where
+    Self: Sized,
+{
+
+fn Iterate(
+    &'a mut self,
+    _yield: &mut impl FnMut(&mut NodeIteration<'a>, &mut NodeIteration<'a>,u32, i32, i32) -> bool,
+    parent: &mut NodeIteration<'a>,
+    i: i32,
+    j: i32,
+) {
+    let node = UnsafeCell::from(self);
+
+    unsafe{
+        let mut_me = node.get();
+
+        if !_yield(&mut NodeIteration::AST_Struct_Property(*mut_me), parent, 1146880, i, j) { return };
+    }
+        
+    
+        unsafe {
+            let mut_me_b = node.get();
+            let mut_me_d = node.get();
+
+            ((*mut_me_d).value).Iterate( _yield, &mut NodeIteration::AST_Struct_Property(*mut_me_b), 0, 0);
+            
+        }
+}
+
+fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
+
+    match i{
+    0 => {
+                    
+        if let Some(old) = self.replace_value(child){ 
+                return old;
+            }else{
+                return ASTNode::NONE;
+            }
+                }
+        _ => {}
+    };
+
+    ASTNode::NONE
+}
+
+
+fn Token(&self) -> Token{
+    self.tok.clone()
+}
+
+fn Type()-> u32{
+    return 1146880;
+}
+
+fn GetType(&self) -> u32 {
+    return 1146880;
+}
+}
+
+
+
+
+#[derive(Debug, Clone)]
+pub struct AST_TypeId {
+    pub value:String /* STRING */,
+pub tok:Token /* TOKEN */
+}
+
+impl AST_TypeId {
+pub fn new( _value:String, _tok:Token) -> Box<Self> {
+    Box::new(AST_TypeId{
+        value : _value,
+        tok : _tok,
+    })
+}
+
+
+
+
+}
+
+
+
+impl<'a> ASTNodeTraits<'a> for AST_TypeId
+where
+    Self: Sized,
+{
+
+fn Iterate(
+    &'a mut self,
+    _yield: &mut impl FnMut(&mut NodeIteration<'a>, &mut NodeIteration<'a>,u32, i32, i32) -> bool,
+    parent: &mut NodeIteration<'a>,
+    i: i32,
+    j: i32,
+) {
+    let node = UnsafeCell::from(self);
+
+    unsafe{
+        let mut_me = node.get();
+
+        if !_yield(&mut NodeIteration::AST_TypeId(*mut_me), parent, 1179648, i, j) { return };
+    }
+        
+    
+}
+
+fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
+
+    match i{
+    
+        _ => {}
+    };
+
+    ASTNode::NONE
+}
+
+
+fn Token(&self) -> Token{
+    self.tok.clone()
+}
+
+fn Type()-> u32{
+    return 1179648;
+}
+
+fn GetType(&self) -> u32 {
+    return 1179648;
+}
+}
+
+
+
+
+#[derive(Debug, Clone)]
+pub struct AST_ClassId {
+    pub value:String /* STRING */,
+pub tok:Token /* TOKEN */
+}
+
+impl AST_ClassId {
+pub fn new( _value:String, _tok:Token) -> Box<Self> {
+    Box::new(AST_ClassId{
+        value : _value,
+        tok : _tok,
+    })
+}
+
+
+
+
+}
+
+
+
+impl<'a> ASTNodeTraits<'a> for AST_ClassId
+where
+    Self: Sized,
+{
+
+fn Iterate(
+    &'a mut self,
+    _yield: &mut impl FnMut(&mut NodeIteration<'a>, &mut NodeIteration<'a>,u32, i32, i32) -> bool,
+    parent: &mut NodeIteration<'a>,
+    i: i32,
+    j: i32,
+) {
+    let node = UnsafeCell::from(self);
+
+    unsafe{
+        let mut_me = node.get();
+
+        if !_yield(&mut NodeIteration::AST_ClassId(*mut_me), parent, 1212416, i, j) { return };
+    }
+        
+    
+}
+
+fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
+
+    match i{
+    
+        _ => {}
+    };
+
+    ASTNode::NONE
+}
+
+
+fn Token(&self) -> Token{
+    self.tok.clone()
+}
+
+fn Type()-> u32{
+    return 1212416;
+}
+
+fn GetType(&self) -> u32 {
+    return 1212416;
+}
+}
+
+
+
+
+#[derive(Debug, Clone)]
+pub struct AST_Token {
+    
+}
+
+impl AST_Token {
+pub fn new( ) -> Box<Self> {
+    Box::new(AST_Token{
+        
+    })
+}
+
+
+
+
+}
+
+
+
+impl<'a> ASTNodeTraits<'a> for AST_Token
+where
+    Self: Sized,
+{
+
+fn Iterate(
+    &'a mut self,
+    _yield: &mut impl FnMut(&mut NodeIteration<'a>, &mut NodeIteration<'a>,u32, i32, i32) -> bool,
+    parent: &mut NodeIteration<'a>,
+    i: i32,
+    j: i32,
+) {
+    let node = UnsafeCell::from(self);
+
+    unsafe{
+        let mut_me = node.get();
+
+        if !_yield(&mut NodeIteration::AST_Token(*mut_me), parent, 1245184, i, j) { return };
+    }
+        
+    
+}
+
+fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
+
+    match i{
+    
+        _ => {}
+    };
+
+    ASTNode::NONE
+}
+
+
+fn Token(&self) -> Token{
+    Token::empty()
+}
+
+fn Type()-> u32{
+    return 1245184;
+}
+
+fn GetType(&self) -> u32 {
+    return 1245184;
+}
+}
+
+
+
+
+#[derive(Debug, Clone)]
+pub struct AST_Vector {
+    pub initializer:Vec<ASTNode> /* VECTOR */,
+pub tok:Token /* TOKEN */
+}
+
+impl AST_Vector {
+pub fn new( _initializer:Vec<ASTNode>, _tok:Token) -> Box<Self> {
+    Box::new(AST_Vector{
+        initializer : _initializer,
+        tok : _tok,
+    })
+}
+
+
+
+
+fn  replace_initializer(&mut self, child: ASTNode,index: i32,) -> Option<ASTNode> {
+    
+    match &child {
+        ASTNode::AST_Vector(_)|ASTNode::AST_Ref(_)|ASTNode::AST_Member(_)|ASTNode::AST_STRING(_)|ASTNode::AST_U8(_)|ASTNode::AST_U16(_)|ASTNode::AST_U32(_)|ASTNode::AST_U64(_)|ASTNode::AST_I8(_)|ASTNode::AST_I16(_)|ASTNode::AST_I32(_)|ASTNode::AST_I64(_)|ASTNode::AST_F16(_)|ASTNode::AST_F22(_)|ASTNode::AST_F64(_)|ASTNode::AST_BOOL(_)|ASTNode::AST_NUMBER(_) => {
+            if index as usize >= self.initializer.len() {
+                self.initializer.push(child);
+                None
+            }else {
+                self.initializer.push(child);
+                let node = self.initializer.swap_remove(index as usize);
+                Some(node)
+            }
+        }
+        ASTNode::NONE => {
+            if (index as usize)< self.initializer.len() {
+                let node = self.initializer.remove(index as usize);
+                Some(node)
+            }else {
+                None
+            }
+        }
+        _ => None
+    }
+}
+}
+
+
+
+impl<'a> ASTNodeTraits<'a> for AST_Vector
+where
+    Self: Sized,
+{
+
+fn Iterate(
+    &'a mut self,
+    _yield: &mut impl FnMut(&mut NodeIteration<'a>, &mut NodeIteration<'a>,u32, i32, i32) -> bool,
+    parent: &mut NodeIteration<'a>,
+    i: i32,
+    j: i32,
+) {
+    let node = UnsafeCell::from(self);
+
+    unsafe{
+        let mut_me = node.get();
+
+        if !_yield(&mut NodeIteration::AST_Vector(*mut_me), parent, 1277952, i, j) { return };
+    }
+        
+    
+        unsafe {
+
+            let mut_me_a = node.get();
+            for j in 0..(*mut_me_a).initializer.len() {
+                let mut_me_b = node.get();
+                let child = &mut (*mut_me_b).initializer[j];
+
+                match child {
+                    
+                        ASTNode::AST_Vector(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Vector(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_Ref(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Vector(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_Member(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Vector(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_STRING(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Vector(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_U8(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Vector(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_U16(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Vector(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_U32(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Vector(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_U64(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Vector(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_I8(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Vector(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_I16(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Vector(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_I32(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Vector(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_I64(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Vector(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_F16(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Vector(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_F22(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Vector(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_F64(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Vector(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_BOOL(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Vector(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_NUMBER(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Vector(*mut_me), 0, j as i32)   
+                            };
+                        }
+                    _ => {}
+                }
+            }
+        }
+}
+
+fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
+
+    match i{
+    0 => {
+                    
+        if let Some(old) = self.replace_initializer(child, j){ 
+            return old;
+        }else{
+            return ASTNode::NONE;
+        }
+                }
+        _ => {}
+    };
+
+    ASTNode::NONE
+}
+
+
+fn Token(&self) -> Token{
+    self.tok.clone()
+}
+
+fn Type()-> u32{
+    return 1277952;
+}
+
+fn GetType(&self) -> u32 {
+    return 1277952;
+}
+}
+
+
+
+
+#[derive(Debug, Clone)]
+pub struct AST_Ref {
+    pub value:ASTNode /* AST_NamedReference | AST_IndexReference */
+}
+
+impl AST_Ref {
+pub fn new( _value:ASTNode) -> Box<Self> {
+    Box::new(AST_Ref{
+        value : _value,
+    })
+}
+
+
+
+
+fn  replace_value(&mut self, child: ASTNode,) -> Option<ASTNode> {
+    
+    match &child {
+        ASTNode::NONE => {
+            let old = std::mem::replace(&mut self.value, ASTNode::NONE);
+            return Some(old);
+        }
+        
+        ASTNode::AST_NamedReference(_) => { 
+            return Some(std::mem::replace(&mut self.value, child));
+        },
+
+        ASTNode::AST_IndexReference(_) => { 
+            return Some(std::mem::replace(&mut self.value, child));
+        }
+        _ => None
+        
+    }
+}
+}
+
+
+
+impl<'a> ASTNodeTraits<'a> for AST_Ref
+where
+    Self: Sized,
+{
+
+fn Iterate(
+    &'a mut self,
+    _yield: &mut impl FnMut(&mut NodeIteration<'a>, &mut NodeIteration<'a>,u32, i32, i32) -> bool,
+    parent: &mut NodeIteration<'a>,
+    i: i32,
+    j: i32,
+) {
+    let node = UnsafeCell::from(self);
+
+    unsafe{
+        let mut_me = node.get();
+
+        if !_yield(&mut NodeIteration::AST_Ref(*mut_me), parent, 1310720, i, j) { return };
+    }
+        
+    
+        unsafe {
+            let mut_me_b = node.get();
+            let mut_me_d = node.get();
+
+            ((*mut_me_d).value).Iterate( _yield, &mut NodeIteration::AST_Ref(*mut_me_b), 0, 0);
+            
+        }
+}
+
+fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
+
+    match i{
+    0 => {
+                    
+        if let Some(old) = self.replace_value(child){ 
+                return old;
+            }else{
+                return ASTNode::NONE;
+            }
+                }
+        _ => {}
+    };
+
+    ASTNode::NONE
+}
+
+
+fn Token(&self) -> Token{
+    Token::empty()
+}
+
+fn Type()-> u32{
+    return 1310720;
+}
+
+fn GetType(&self) -> u32 {
+    return 1310720;
+}
+}
+
+
+
+
+#[derive(Debug, Clone)]
+pub struct AST_Member {
+    pub reference:ASTNode /* AST_NamedReference | AST_IndexReference */,
+pub property:Token /* TOKEN */
+}
+
+impl AST_Member {
+pub fn new( _reference:ASTNode, _property:Token) -> Box<Self> {
+    Box::new(AST_Member{
+        reference : _reference,
+        property : _property,
+    })
+}
+
+
+
+
+fn  replace_reference(&mut self, child: ASTNode,) -> Option<ASTNode> {
+    
+    match &child {
+        ASTNode::NONE => {
+            let old = std::mem::replace(&mut self.reference, ASTNode::NONE);
+            return Some(old);
+        }
+        
+        ASTNode::AST_NamedReference(_) => { 
+            return Some(std::mem::replace(&mut self.reference, child));
+        },
+
+        ASTNode::AST_IndexReference(_) => { 
+            return Some(std::mem::replace(&mut self.reference, child));
+        }
+        _ => None
+        
+    }
+}
+}
+
+
+
+impl<'a> ASTNodeTraits<'a> for AST_Member
+where
+    Self: Sized,
+{
+
+fn Iterate(
+    &'a mut self,
+    _yield: &mut impl FnMut(&mut NodeIteration<'a>, &mut NodeIteration<'a>,u32, i32, i32) -> bool,
+    parent: &mut NodeIteration<'a>,
+    i: i32,
+    j: i32,
+) {
+    let node = UnsafeCell::from(self);
+
+    unsafe{
+        let mut_me = node.get();
+
+        if !_yield(&mut NodeIteration::AST_Member(*mut_me), parent, 1343488, i, j) { return };
+    }
+        
+    
+        unsafe {
+            let mut_me_b = node.get();
+            let mut_me_d = node.get();
+
+            ((*mut_me_d).reference).Iterate( _yield, &mut NodeIteration::AST_Member(*mut_me_b), 0, 0);
+            
+        }
+}
+
+fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
+
+    match i{
+    0 => {
+                    
+        if let Some(old) = self.replace_reference(child){ 
+                return old;
+            }else{
+                return ASTNode::NONE;
+            }
+                }
+        _ => {}
+    };
+
+    ASTNode::NONE
+}
+
+
+fn Token(&self) -> Token{
+    Token::empty()
+}
+
+fn Type()-> u32{
+    return 1343488;
+}
+
+fn GetType(&self) -> u32 {
+    return 1343488;
+}
+}
+
+
+
+
+#[derive(Debug, Clone)]
+pub struct AST_NamedReference {
+    pub value:String /* STRING */,
+pub tok:Token /* TOKEN */
+}
+
+impl AST_NamedReference {
+pub fn new( _value:String, _tok:Token) -> Box<Self> {
+    Box::new(AST_NamedReference{
+        value : _value,
+        tok : _tok,
+    })
+}
+
+
+
+
+}
+
+
+
+impl<'a> ASTNodeTraits<'a> for AST_NamedReference
+where
+    Self: Sized,
+{
+
+fn Iterate(
+    &'a mut self,
+    _yield: &mut impl FnMut(&mut NodeIteration<'a>, &mut NodeIteration<'a>,u32, i32, i32) -> bool,
+    parent: &mut NodeIteration<'a>,
+    i: i32,
+    j: i32,
+) {
+    let node = UnsafeCell::from(self);
+
+    unsafe{
+        let mut_me = node.get();
+
+        if !_yield(&mut NodeIteration::AST_NamedReference(*mut_me), parent, 1376256, i, j) { return };
+    }
+        
+    
+}
+
+fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
+
+    match i{
+    
+        _ => {}
+    };
+
+    ASTNode::NONE
+}
+
+
+fn Token(&self) -> Token{
+    self.tok.clone()
+}
+
+fn Type()-> u32{
+    return 1376256;
+}
+
+fn GetType(&self) -> u32 {
+    return 1376256;
+}
+}
+
+
+
+
+#[derive(Debug, Clone)]
+pub struct AST_IndexReference {
+    pub value:i32 /* I32 */,
+pub tok:Token /* TOKEN */
+}
+
+impl AST_IndexReference {
+pub fn new( _value:i32, _tok:Token) -> Box<Self> {
+    Box::new(AST_IndexReference{
+        value : _value,
+        tok : _tok,
+    })
+}
+
+
+
+
+}
+
+
+
+impl<'a> ASTNodeTraits<'a> for AST_IndexReference
+where
+    Self: Sized,
+{
+
+fn Iterate(
+    &'a mut self,
+    _yield: &mut impl FnMut(&mut NodeIteration<'a>, &mut NodeIteration<'a>,u32, i32, i32) -> bool,
+    parent: &mut NodeIteration<'a>,
+    i: i32,
+    j: i32,
+) {
+    let node = UnsafeCell::from(self);
+
+    unsafe{
+        let mut_me = node.get();
+
+        if !_yield(&mut NodeIteration::AST_IndexReference(*mut_me), parent, 1409024, i, j) { return };
+    }
+        
+    
+}
+
+fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
+
+    match i{
+    
+        _ => {}
+    };
+
+    ASTNode::NONE
+}
+
+
+fn Token(&self) -> Token{
+    self.tok.clone()
+}
+
+fn Type()-> u32{
+    return 1409024;
+}
+
+fn GetType(&self) -> u32 {
+    return 1409024;
+}
+}
+
+
+
+
+#[derive(Debug, Clone)]
+pub struct AST_STRING {
+    pub value:ASTNode /* AST_Ref | AST_Member */,
+pub tok:Token /* TOKEN */
+}
+
+impl AST_STRING {
+pub fn new( _value:ASTNode, _tok:Token) -> Box<Self> {
+    Box::new(AST_STRING{
+        value : _value,
+        tok : _tok,
+    })
+}
+
+
+
+
+fn  replace_value(&mut self, child: ASTNode,) -> Option<ASTNode> {
+    
+    match &child {
+        ASTNode::NONE => {
+            let old = std::mem::replace(&mut self.value, ASTNode::NONE);
+            return Some(old);
+        }
+        
+        ASTNode::AST_Ref(_) => { 
+            return Some(std::mem::replace(&mut self.value, child));
+        },
+
+        ASTNode::AST_Member(_) => { 
+            return Some(std::mem::replace(&mut self.value, child));
+        }
+        _ => None
+        
+    }
+}
+}
+
+
+
+impl<'a> ASTNodeTraits<'a> for AST_STRING
+where
+    Self: Sized,
+{
+
+fn Iterate(
+    &'a mut self,
+    _yield: &mut impl FnMut(&mut NodeIteration<'a>, &mut NodeIteration<'a>,u32, i32, i32) -> bool,
+    parent: &mut NodeIteration<'a>,
+    i: i32,
+    j: i32,
+) {
+    let node = UnsafeCell::from(self);
+
+    unsafe{
+        let mut_me = node.get();
+
+        if !_yield(&mut NodeIteration::AST_STRING(*mut_me), parent, 1441792, i, j) { return };
+    }
+        
+    
+        unsafe {
+            let mut_me_b = node.get();
+            let mut_me_d = node.get();
+
+            ((*mut_me_d).value).Iterate( _yield, &mut NodeIteration::AST_STRING(*mut_me_b), 0, 0);
+            
+        }
+}
+
+fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
+
+    match i{
+    0 => {
+                    
+        if let Some(old) = self.replace_value(child){ 
+                return old;
+            }else{
+                return ASTNode::NONE;
+            }
+                }
+        _ => {}
+    };
+
+    ASTNode::NONE
+}
+
+
+fn Token(&self) -> Token{
+    self.tok.clone()
+}
+
+fn Type()-> u32{
+    return 1441792;
+}
+
+fn GetType(&self) -> u32 {
+    return 1441792;
+}
+}
+
+
+
+
+#[derive(Debug, Clone)]
+pub struct AST_U8 {
+    pub initializer:ASTNode /* AST_Ref | AST_Member */,
+pub tok:Token /* TOKEN */
+}
+
+impl AST_U8 {
+pub fn new( _initializer:ASTNode, _tok:Token) -> Box<Self> {
+    Box::new(AST_U8{
+        initializer : _initializer,
+        tok : _tok,
+    })
+}
+
+
+
+
+fn  replace_initializer(&mut self, child: ASTNode,) -> Option<ASTNode> {
+    
+    match &child {
+        ASTNode::NONE => {
+            let old = std::mem::replace(&mut self.initializer, ASTNode::NONE);
+            return Some(old);
+        }
+        
+        ASTNode::AST_Ref(_) => { 
+            return Some(std::mem::replace(&mut self.initializer, child));
+        },
+
+        ASTNode::AST_Member(_) => { 
+            return Some(std::mem::replace(&mut self.initializer, child));
+        }
+        _ => None
+        
+    }
+}
+}
+
+
+
+impl<'a> ASTNodeTraits<'a> for AST_U8
+where
+    Self: Sized,
+{
+
+fn Iterate(
+    &'a mut self,
+    _yield: &mut impl FnMut(&mut NodeIteration<'a>, &mut NodeIteration<'a>,u32, i32, i32) -> bool,
+    parent: &mut NodeIteration<'a>,
+    i: i32,
+    j: i32,
+) {
+    let node = UnsafeCell::from(self);
+
+    unsafe{
+        let mut_me = node.get();
+
+        if !_yield(&mut NodeIteration::AST_U8(*mut_me), parent, 1474560, i, j) { return };
+    }
+        
+    
+        unsafe {
+            let mut_me_b = node.get();
+            let mut_me_d = node.get();
+
+            ((*mut_me_d).initializer).Iterate( _yield, &mut NodeIteration::AST_U8(*mut_me_b), 0, 0);
+            
+        }
+}
+
+fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
+
+    match i{
+    0 => {
+                    
+        if let Some(old) = self.replace_initializer(child){ 
+                return old;
+            }else{
+                return ASTNode::NONE;
+            }
+                }
+        _ => {}
+    };
+
+    ASTNode::NONE
+}
+
+
+fn Token(&self) -> Token{
+    self.tok.clone()
+}
+
+fn Type()-> u32{
+    return 1474560;
+}
+
+fn GetType(&self) -> u32 {
+    return 1474560;
+}
+}
+
+
+
+
+#[derive(Debug, Clone)]
+pub struct AST_U16 {
+    pub initializer:ASTNode /* AST_Ref | AST_Member */,
+pub tok:Token /* TOKEN */
+}
+
+impl AST_U16 {
+pub fn new( _initializer:ASTNode, _tok:Token) -> Box<Self> {
+    Box::new(AST_U16{
+        initializer : _initializer,
+        tok : _tok,
+    })
+}
+
+
+
+
+fn  replace_initializer(&mut self, child: ASTNode,) -> Option<ASTNode> {
+    
+    match &child {
+        ASTNode::NONE => {
+            let old = std::mem::replace(&mut self.initializer, ASTNode::NONE);
+            return Some(old);
+        }
+        
+        ASTNode::AST_Ref(_) => { 
+            return Some(std::mem::replace(&mut self.initializer, child));
+        },
+
+        ASTNode::AST_Member(_) => { 
+            return Some(std::mem::replace(&mut self.initializer, child));
+        }
+        _ => None
+        
+    }
+}
+}
+
+
+
+impl<'a> ASTNodeTraits<'a> for AST_U16
+where
+    Self: Sized,
+{
+
+fn Iterate(
+    &'a mut self,
+    _yield: &mut impl FnMut(&mut NodeIteration<'a>, &mut NodeIteration<'a>,u32, i32, i32) -> bool,
+    parent: &mut NodeIteration<'a>,
+    i: i32,
+    j: i32,
+) {
+    let node = UnsafeCell::from(self);
+
+    unsafe{
+        let mut_me = node.get();
+
+        if !_yield(&mut NodeIteration::AST_U16(*mut_me), parent, 1507328, i, j) { return };
+    }
+        
+    
+        unsafe {
+            let mut_me_b = node.get();
+            let mut_me_d = node.get();
+
+            ((*mut_me_d).initializer).Iterate( _yield, &mut NodeIteration::AST_U16(*mut_me_b), 0, 0);
+            
+        }
+}
+
+fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
+
+    match i{
+    0 => {
+                    
+        if let Some(old) = self.replace_initializer(child){ 
+                return old;
+            }else{
+                return ASTNode::NONE;
+            }
+                }
+        _ => {}
+    };
+
+    ASTNode::NONE
+}
+
+
+fn Token(&self) -> Token{
+    self.tok.clone()
+}
+
+fn Type()-> u32{
+    return 1507328;
+}
+
+fn GetType(&self) -> u32 {
+    return 1507328;
+}
+}
+
+
+
+
+#[derive(Debug, Clone)]
+pub struct AST_U32 {
+    pub initializer:ASTNode /* AST_Ref | AST_Member */,
+pub tok:Token /* TOKEN */
+}
+
+impl AST_U32 {
+pub fn new( _initializer:ASTNode, _tok:Token) -> Box<Self> {
+    Box::new(AST_U32{
+        initializer : _initializer,
+        tok : _tok,
+    })
+}
+
+
+
+
+fn  replace_initializer(&mut self, child: ASTNode,) -> Option<ASTNode> {
+    
+    match &child {
+        ASTNode::NONE => {
+            let old = std::mem::replace(&mut self.initializer, ASTNode::NONE);
+            return Some(old);
+        }
+        
+        ASTNode::AST_Ref(_) => { 
+            return Some(std::mem::replace(&mut self.initializer, child));
+        },
+
+        ASTNode::AST_Member(_) => { 
+            return Some(std::mem::replace(&mut self.initializer, child));
+        }
+        _ => None
+        
+    }
+}
+}
+
+
+
+impl<'a> ASTNodeTraits<'a> for AST_U32
+where
+    Self: Sized,
+{
+
+fn Iterate(
+    &'a mut self,
+    _yield: &mut impl FnMut(&mut NodeIteration<'a>, &mut NodeIteration<'a>,u32, i32, i32) -> bool,
+    parent: &mut NodeIteration<'a>,
+    i: i32,
+    j: i32,
+) {
+    let node = UnsafeCell::from(self);
+
+    unsafe{
+        let mut_me = node.get();
+
+        if !_yield(&mut NodeIteration::AST_U32(*mut_me), parent, 1540096, i, j) { return };
+    }
+        
+    
+        unsafe {
+            let mut_me_b = node.get();
+            let mut_me_d = node.get();
+
+            ((*mut_me_d).initializer).Iterate( _yield, &mut NodeIteration::AST_U32(*mut_me_b), 0, 0);
+            
+        }
+}
+
+fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
+
+    match i{
+    0 => {
+                    
+        if let Some(old) = self.replace_initializer(child){ 
+                return old;
+            }else{
+                return ASTNode::NONE;
+            }
+                }
+        _ => {}
+    };
+
+    ASTNode::NONE
+}
+
+
+fn Token(&self) -> Token{
+    self.tok.clone()
+}
+
+fn Type()-> u32{
+    return 1540096;
+}
+
+fn GetType(&self) -> u32 {
+    return 1540096;
+}
+}
+
+
+
+
+#[derive(Debug, Clone)]
+pub struct AST_U64 {
+    pub initializer:ASTNode /* AST_Ref | AST_Member */,
+pub tok:Token /* TOKEN */
+}
+
+impl AST_U64 {
+pub fn new( _initializer:ASTNode, _tok:Token) -> Box<Self> {
+    Box::new(AST_U64{
+        initializer : _initializer,
+        tok : _tok,
+    })
+}
+
+
+
+
+fn  replace_initializer(&mut self, child: ASTNode,) -> Option<ASTNode> {
+    
+    match &child {
+        ASTNode::NONE => {
+            let old = std::mem::replace(&mut self.initializer, ASTNode::NONE);
+            return Some(old);
+        }
+        
+        ASTNode::AST_Ref(_) => { 
+            return Some(std::mem::replace(&mut self.initializer, child));
+        },
+
+        ASTNode::AST_Member(_) => { 
+            return Some(std::mem::replace(&mut self.initializer, child));
+        }
+        _ => None
+        
+    }
+}
+}
+
+
+
+impl<'a> ASTNodeTraits<'a> for AST_U64
+where
+    Self: Sized,
+{
+
+fn Iterate(
+    &'a mut self,
+    _yield: &mut impl FnMut(&mut NodeIteration<'a>, &mut NodeIteration<'a>,u32, i32, i32) -> bool,
+    parent: &mut NodeIteration<'a>,
+    i: i32,
+    j: i32,
+) {
+    let node = UnsafeCell::from(self);
+
+    unsafe{
+        let mut_me = node.get();
+
+        if !_yield(&mut NodeIteration::AST_U64(*mut_me), parent, 1572864, i, j) { return };
+    }
+        
+    
+        unsafe {
+            let mut_me_b = node.get();
+            let mut_me_d = node.get();
+
+            ((*mut_me_d).initializer).Iterate( _yield, &mut NodeIteration::AST_U64(*mut_me_b), 0, 0);
+            
+        }
+}
+
+fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
+
+    match i{
+    0 => {
+                    
+        if let Some(old) = self.replace_initializer(child){ 
+                return old;
+            }else{
+                return ASTNode::NONE;
+            }
+                }
+        _ => {}
+    };
+
+    ASTNode::NONE
+}
+
+
+fn Token(&self) -> Token{
+    self.tok.clone()
+}
+
+fn Type()-> u32{
+    return 1572864;
+}
+
+fn GetType(&self) -> u32 {
+    return 1572864;
+}
+}
+
+
+
+
+#[derive(Debug, Clone)]
+pub struct AST_I8 {
+    pub initializer:ASTNode /* AST_Ref | AST_Member */,
+pub tok:Token /* TOKEN */
+}
+
+impl AST_I8 {
+pub fn new( _initializer:ASTNode, _tok:Token) -> Box<Self> {
+    Box::new(AST_I8{
+        initializer : _initializer,
+        tok : _tok,
+    })
+}
+
+
+
+
+fn  replace_initializer(&mut self, child: ASTNode,) -> Option<ASTNode> {
+    
+    match &child {
+        ASTNode::NONE => {
+            let old = std::mem::replace(&mut self.initializer, ASTNode::NONE);
+            return Some(old);
+        }
+        
+        ASTNode::AST_Ref(_) => { 
+            return Some(std::mem::replace(&mut self.initializer, child));
+        },
+
+        ASTNode::AST_Member(_) => { 
+            return Some(std::mem::replace(&mut self.initializer, child));
+        }
+        _ => None
+        
+    }
+}
+}
+
+
+
+impl<'a> ASTNodeTraits<'a> for AST_I8
+where
+    Self: Sized,
+{
+
+fn Iterate(
+    &'a mut self,
+    _yield: &mut impl FnMut(&mut NodeIteration<'a>, &mut NodeIteration<'a>,u32, i32, i32) -> bool,
+    parent: &mut NodeIteration<'a>,
+    i: i32,
+    j: i32,
+) {
+    let node = UnsafeCell::from(self);
+
+    unsafe{
+        let mut_me = node.get();
+
+        if !_yield(&mut NodeIteration::AST_I8(*mut_me), parent, 1605632, i, j) { return };
+    }
+        
+    
+        unsafe {
+            let mut_me_b = node.get();
+            let mut_me_d = node.get();
+
+            ((*mut_me_d).initializer).Iterate( _yield, &mut NodeIteration::AST_I8(*mut_me_b), 0, 0);
+            
+        }
+}
+
+fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
+
+    match i{
+    0 => {
+                    
+        if let Some(old) = self.replace_initializer(child){ 
+                return old;
+            }else{
+                return ASTNode::NONE;
+            }
+                }
+        _ => {}
+    };
+
+    ASTNode::NONE
+}
+
+
+fn Token(&self) -> Token{
+    self.tok.clone()
+}
+
+fn Type()-> u32{
+    return 1605632;
+}
+
+fn GetType(&self) -> u32 {
+    return 1605632;
+}
+}
+
+
+
+
+#[derive(Debug, Clone)]
+pub struct AST_I16 {
+    pub initializer:ASTNode /* AST_Ref | AST_Member */,
+pub tok:Token /* TOKEN */
+}
+
+impl AST_I16 {
+pub fn new( _initializer:ASTNode, _tok:Token) -> Box<Self> {
+    Box::new(AST_I16{
+        initializer : _initializer,
+        tok : _tok,
+    })
+}
+
+
+
+
+fn  replace_initializer(&mut self, child: ASTNode,) -> Option<ASTNode> {
+    
+    match &child {
+        ASTNode::NONE => {
+            let old = std::mem::replace(&mut self.initializer, ASTNode::NONE);
+            return Some(old);
+        }
+        
+        ASTNode::AST_Ref(_) => { 
+            return Some(std::mem::replace(&mut self.initializer, child));
+        },
+
+        ASTNode::AST_Member(_) => { 
+            return Some(std::mem::replace(&mut self.initializer, child));
+        }
+        _ => None
+        
+    }
+}
+}
+
+
+
+impl<'a> ASTNodeTraits<'a> for AST_I16
+where
+    Self: Sized,
+{
+
+fn Iterate(
+    &'a mut self,
+    _yield: &mut impl FnMut(&mut NodeIteration<'a>, &mut NodeIteration<'a>,u32, i32, i32) -> bool,
+    parent: &mut NodeIteration<'a>,
+    i: i32,
+    j: i32,
+) {
+    let node = UnsafeCell::from(self);
+
+    unsafe{
+        let mut_me = node.get();
+
+        if !_yield(&mut NodeIteration::AST_I16(*mut_me), parent, 1638400, i, j) { return };
+    }
+        
+    
+        unsafe {
+            let mut_me_b = node.get();
+            let mut_me_d = node.get();
+
+            ((*mut_me_d).initializer).Iterate( _yield, &mut NodeIteration::AST_I16(*mut_me_b), 0, 0);
+            
+        }
+}
+
+fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
+
+    match i{
+    0 => {
+                    
+        if let Some(old) = self.replace_initializer(child){ 
+                return old;
+            }else{
+                return ASTNode::NONE;
+            }
+                }
+        _ => {}
+    };
+
+    ASTNode::NONE
+}
+
+
+fn Token(&self) -> Token{
+    self.tok.clone()
+}
+
+fn Type()-> u32{
+    return 1638400;
+}
+
+fn GetType(&self) -> u32 {
+    return 1638400;
+}
+}
+
+
+
+
+#[derive(Debug, Clone)]
+pub struct AST_I32 {
+    pub initializer:ASTNode /* AST_Ref | AST_Member */,
+pub tok:Token /* TOKEN */
+}
+
+impl AST_I32 {
+pub fn new( _initializer:ASTNode, _tok:Token) -> Box<Self> {
+    Box::new(AST_I32{
+        initializer : _initializer,
+        tok : _tok,
+    })
+}
+
+
+
+
+fn  replace_initializer(&mut self, child: ASTNode,) -> Option<ASTNode> {
+    
+    match &child {
+        ASTNode::NONE => {
+            let old = std::mem::replace(&mut self.initializer, ASTNode::NONE);
+            return Some(old);
+        }
+        
+        ASTNode::AST_Ref(_) => { 
+            return Some(std::mem::replace(&mut self.initializer, child));
+        },
+
+        ASTNode::AST_Member(_) => { 
+            return Some(std::mem::replace(&mut self.initializer, child));
+        }
+        _ => None
+        
+    }
+}
+}
+
+
+
+impl<'a> ASTNodeTraits<'a> for AST_I32
+where
+    Self: Sized,
+{
+
+fn Iterate(
+    &'a mut self,
+    _yield: &mut impl FnMut(&mut NodeIteration<'a>, &mut NodeIteration<'a>,u32, i32, i32) -> bool,
+    parent: &mut NodeIteration<'a>,
+    i: i32,
+    j: i32,
+) {
+    let node = UnsafeCell::from(self);
+
+    unsafe{
+        let mut_me = node.get();
+
+        if !_yield(&mut NodeIteration::AST_I32(*mut_me), parent, 1671168, i, j) { return };
+    }
+        
+    
+        unsafe {
+            let mut_me_b = node.get();
+            let mut_me_d = node.get();
+
+            ((*mut_me_d).initializer).Iterate( _yield, &mut NodeIteration::AST_I32(*mut_me_b), 0, 0);
+            
+        }
+}
+
+fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
+
+    match i{
+    0 => {
+                    
+        if let Some(old) = self.replace_initializer(child){ 
+                return old;
+            }else{
+                return ASTNode::NONE;
+            }
+                }
+        _ => {}
+    };
+
+    ASTNode::NONE
+}
+
+
+fn Token(&self) -> Token{
+    self.tok.clone()
+}
+
+fn Type()-> u32{
+    return 1671168;
+}
+
+fn GetType(&self) -> u32 {
+    return 1671168;
+}
+}
+
+
+
+
+#[derive(Debug, Clone)]
+pub struct AST_I64 {
+    pub initializer:ASTNode /* AST_Ref | AST_Member */,
+pub tok:Token /* TOKEN */
+}
+
+impl AST_I64 {
+pub fn new( _initializer:ASTNode, _tok:Token) -> Box<Self> {
+    Box::new(AST_I64{
+        initializer : _initializer,
+        tok : _tok,
+    })
+}
+
+
+
+
+fn  replace_initializer(&mut self, child: ASTNode,) -> Option<ASTNode> {
+    
+    match &child {
+        ASTNode::NONE => {
+            let old = std::mem::replace(&mut self.initializer, ASTNode::NONE);
+            return Some(old);
+        }
+        
+        ASTNode::AST_Ref(_) => { 
+            return Some(std::mem::replace(&mut self.initializer, child));
+        },
+
+        ASTNode::AST_Member(_) => { 
+            return Some(std::mem::replace(&mut self.initializer, child));
+        }
+        _ => None
+        
+    }
+}
+}
+
+
+
+impl<'a> ASTNodeTraits<'a> for AST_I64
+where
+    Self: Sized,
+{
+
+fn Iterate(
+    &'a mut self,
+    _yield: &mut impl FnMut(&mut NodeIteration<'a>, &mut NodeIteration<'a>,u32, i32, i32) -> bool,
+    parent: &mut NodeIteration<'a>,
+    i: i32,
+    j: i32,
+) {
+    let node = UnsafeCell::from(self);
+
+    unsafe{
+        let mut_me = node.get();
+
+        if !_yield(&mut NodeIteration::AST_I64(*mut_me), parent, 1703936, i, j) { return };
+    }
+        
+    
+        unsafe {
+            let mut_me_b = node.get();
+            let mut_me_d = node.get();
+
+            ((*mut_me_d).initializer).Iterate( _yield, &mut NodeIteration::AST_I64(*mut_me_b), 0, 0);
+            
+        }
+}
+
+fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
+
+    match i{
+    0 => {
+                    
+        if let Some(old) = self.replace_initializer(child){ 
+                return old;
+            }else{
+                return ASTNode::NONE;
+            }
+                }
+        _ => {}
+    };
+
+    ASTNode::NONE
+}
+
+
+fn Token(&self) -> Token{
+    self.tok.clone()
+}
+
+fn Type()-> u32{
+    return 1703936;
+}
+
+fn GetType(&self) -> u32 {
+    return 1703936;
+}
+}
+
+
+
+
+#[derive(Debug, Clone)]
+pub struct AST_F16 {
+    pub initializer:ASTNode /* AST_Ref | AST_Member */,
+pub tok:Token /* TOKEN */
+}
+
+impl AST_F16 {
+pub fn new( _initializer:ASTNode, _tok:Token) -> Box<Self> {
+    Box::new(AST_F16{
+        initializer : _initializer,
+        tok : _tok,
+    })
+}
+
+
+
+
+fn  replace_initializer(&mut self, child: ASTNode,) -> Option<ASTNode> {
+    
+    match &child {
+        ASTNode::NONE => {
+            let old = std::mem::replace(&mut self.initializer, ASTNode::NONE);
+            return Some(old);
+        }
+        
+        ASTNode::AST_Ref(_) => { 
+            return Some(std::mem::replace(&mut self.initializer, child));
+        },
+
+        ASTNode::AST_Member(_) => { 
+            return Some(std::mem::replace(&mut self.initializer, child));
+        }
+        _ => None
+        
+    }
+}
+}
+
+
+
+impl<'a> ASTNodeTraits<'a> for AST_F16
+where
+    Self: Sized,
+{
+
+fn Iterate(
+    &'a mut self,
+    _yield: &mut impl FnMut(&mut NodeIteration<'a>, &mut NodeIteration<'a>,u32, i32, i32) -> bool,
+    parent: &mut NodeIteration<'a>,
+    i: i32,
+    j: i32,
+) {
+    let node = UnsafeCell::from(self);
+
+    unsafe{
+        let mut_me = node.get();
+
+        if !_yield(&mut NodeIteration::AST_F16(*mut_me), parent, 1736704, i, j) { return };
+    }
+        
+    
+        unsafe {
+            let mut_me_b = node.get();
+            let mut_me_d = node.get();
+
+            ((*mut_me_d).initializer).Iterate( _yield, &mut NodeIteration::AST_F16(*mut_me_b), 0, 0);
+            
+        }
+}
+
+fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
+
+    match i{
+    0 => {
+                    
+        if let Some(old) = self.replace_initializer(child){ 
+                return old;
+            }else{
+                return ASTNode::NONE;
+            }
+                }
+        _ => {}
+    };
+
+    ASTNode::NONE
+}
+
+
+fn Token(&self) -> Token{
+    self.tok.clone()
+}
+
+fn Type()-> u32{
+    return 1736704;
+}
+
+fn GetType(&self) -> u32 {
+    return 1736704;
+}
+}
+
+
+
+
+#[derive(Debug, Clone)]
+pub struct AST_F22 {
+    pub initializer:ASTNode /* AST_Ref | AST_Member */,
+pub tok:Token /* TOKEN */
+}
+
+impl AST_F22 {
+pub fn new( _initializer:ASTNode, _tok:Token) -> Box<Self> {
+    Box::new(AST_F22{
+        initializer : _initializer,
+        tok : _tok,
+    })
+}
+
+
+
+
+fn  replace_initializer(&mut self, child: ASTNode,) -> Option<ASTNode> {
+    
+    match &child {
+        ASTNode::NONE => {
+            let old = std::mem::replace(&mut self.initializer, ASTNode::NONE);
+            return Some(old);
+        }
+        
+        ASTNode::AST_Ref(_) => { 
+            return Some(std::mem::replace(&mut self.initializer, child));
+        },
+
+        ASTNode::AST_Member(_) => { 
+            return Some(std::mem::replace(&mut self.initializer, child));
+        }
+        _ => None
+        
+    }
+}
+}
+
+
+
+impl<'a> ASTNodeTraits<'a> for AST_F22
+where
+    Self: Sized,
+{
+
+fn Iterate(
+    &'a mut self,
+    _yield: &mut impl FnMut(&mut NodeIteration<'a>, &mut NodeIteration<'a>,u32, i32, i32) -> bool,
+    parent: &mut NodeIteration<'a>,
+    i: i32,
+    j: i32,
+) {
+    let node = UnsafeCell::from(self);
+
+    unsafe{
+        let mut_me = node.get();
+
+        if !_yield(&mut NodeIteration::AST_F22(*mut_me), parent, 1769472, i, j) { return };
+    }
+        
+    
+        unsafe {
+            let mut_me_b = node.get();
+            let mut_me_d = node.get();
+
+            ((*mut_me_d).initializer).Iterate( _yield, &mut NodeIteration::AST_F22(*mut_me_b), 0, 0);
+            
+        }
+}
+
+fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
+
+    match i{
+    0 => {
+                    
+        if let Some(old) = self.replace_initializer(child){ 
+                return old;
+            }else{
+                return ASTNode::NONE;
+            }
+                }
+        _ => {}
+    };
+
+    ASTNode::NONE
+}
+
+
+fn Token(&self) -> Token{
+    self.tok.clone()
+}
+
+fn Type()-> u32{
+    return 1769472;
+}
+
+fn GetType(&self) -> u32 {
+    return 1769472;
+}
+}
+
+
+
+
+#[derive(Debug, Clone)]
+pub struct AST_F64 {
+    pub initializer:ASTNode /* AST_Ref | AST_Member */,
+pub tok:Token /* TOKEN */
+}
+
+impl AST_F64 {
+pub fn new( _initializer:ASTNode, _tok:Token) -> Box<Self> {
+    Box::new(AST_F64{
+        initializer : _initializer,
+        tok : _tok,
+    })
+}
+
+
+
+
+fn  replace_initializer(&mut self, child: ASTNode,) -> Option<ASTNode> {
+    
+    match &child {
+        ASTNode::NONE => {
+            let old = std::mem::replace(&mut self.initializer, ASTNode::NONE);
+            return Some(old);
+        }
+        
+        ASTNode::AST_Ref(_) => { 
+            return Some(std::mem::replace(&mut self.initializer, child));
+        },
+
+        ASTNode::AST_Member(_) => { 
+            return Some(std::mem::replace(&mut self.initializer, child));
+        }
+        _ => None
+        
+    }
+}
+}
+
+
+
+impl<'a> ASTNodeTraits<'a> for AST_F64
+where
+    Self: Sized,
+{
+
+fn Iterate(
+    &'a mut self,
+    _yield: &mut impl FnMut(&mut NodeIteration<'a>, &mut NodeIteration<'a>,u32, i32, i32) -> bool,
+    parent: &mut NodeIteration<'a>,
+    i: i32,
+    j: i32,
+) {
+    let node = UnsafeCell::from(self);
+
+    unsafe{
+        let mut_me = node.get();
+
+        if !_yield(&mut NodeIteration::AST_F64(*mut_me), parent, 1802240, i, j) { return };
+    }
+        
+    
+        unsafe {
+            let mut_me_b = node.get();
+            let mut_me_d = node.get();
+
+            ((*mut_me_d).initializer).Iterate( _yield, &mut NodeIteration::AST_F64(*mut_me_b), 0, 0);
+            
+        }
+}
+
+fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
+
+    match i{
+    0 => {
+                    
+        if let Some(old) = self.replace_initializer(child){ 
+                return old;
+            }else{
+                return ASTNode::NONE;
+            }
+                }
+        _ => {}
+    };
+
+    ASTNode::NONE
+}
+
+
+fn Token(&self) -> Token{
+    self.tok.clone()
+}
+
+fn Type()-> u32{
+    return 1802240;
+}
+
+fn GetType(&self) -> u32 {
+    return 1802240;
+}
+}
+
+
+
+
+#[derive(Debug, Clone)]
+pub struct AST_BOOL {
+    pub initializer:ASTNode /* AST_Ref | AST_Member */,
+pub tok:Token /* TOKEN */,
+pub value:bool /* BOOL | BOOL */
+}
+
+impl AST_BOOL {
+pub fn new( _initializer:ASTNode, _tok:Token, _value:bool) -> Box<Self> {
+    Box::new(AST_BOOL{
+        initializer : _initializer,
+        tok : _tok,
+        value : _value,
+    })
+}
+
+
+
+
+fn  replace_initializer(&mut self, child: ASTNode,) -> Option<ASTNode> {
+    
+    match &child {
+        ASTNode::NONE => {
+            let old = std::mem::replace(&mut self.initializer, ASTNode::NONE);
+            return Some(old);
+        }
+        
+        ASTNode::AST_Ref(_) => { 
+            return Some(std::mem::replace(&mut self.initializer, child));
+        },
+
+        ASTNode::AST_Member(_) => { 
+            return Some(std::mem::replace(&mut self.initializer, child));
+        }
+        _ => None
+        
+    }
+}
+}
+
+
+
+impl<'a> ASTNodeTraits<'a> for AST_BOOL
+where
+    Self: Sized,
+{
+
+fn Iterate(
+    &'a mut self,
+    _yield: &mut impl FnMut(&mut NodeIteration<'a>, &mut NodeIteration<'a>,u32, i32, i32) -> bool,
+    parent: &mut NodeIteration<'a>,
+    i: i32,
+    j: i32,
+) {
+    let node = UnsafeCell::from(self);
+
+    unsafe{
+        let mut_me = node.get();
+
+        if !_yield(&mut NodeIteration::AST_BOOL(*mut_me), parent, 1835008, i, j) { return };
+    }
+        
+    
+        unsafe {
+            let reference = node.get();
+            if let child = &mut (*reference).initializer /* HAS_NULL:true */{
+                 
+                let mut_me_b = node.get();
+                child.Iterate( _yield, &mut NodeIteration::AST_BOOL(*mut_me_b), 0, 0);
+    
+            }
+        }
+}
+
+fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
+
+    match i{
+    0 => {
+                    
+        if let Some(old) = self.replace_initializer(child){ 
+                return old;
+            }else{
+                return ASTNode::NONE;
+            }
+                }
+        _ => {}
+    };
+
+    ASTNode::NONE
+}
+
+
+fn Token(&self) -> Token{
+    self.tok.clone()
+}
+
+fn Type()-> u32{
+    return 1835008;
+}
+
+fn GetType(&self) -> u32 {
+    return 1835008;
+}
+}
+
+
+
+
+#[derive(Debug, Clone)]
+pub struct AST_NUMBER {
+    pub value:f64 /* F64 */
+}
+
+impl AST_NUMBER {
+pub fn new( _value:f64) -> Box<Self> {
+    Box::new(AST_NUMBER{
+        value : _value,
+    })
+}
+
+
+
+
+}
+
+
+
+impl<'a> ASTNodeTraits<'a> for AST_NUMBER
+where
+    Self: Sized,
+{
+
+fn Iterate(
+    &'a mut self,
+    _yield: &mut impl FnMut(&mut NodeIteration<'a>, &mut NodeIteration<'a>,u32, i32, i32) -> bool,
+    parent: &mut NodeIteration<'a>,
+    i: i32,
+    j: i32,
+) {
+    let node = UnsafeCell::from(self);
+
+    unsafe{
+        let mut_me = node.get();
+
+        if !_yield(&mut NodeIteration::AST_NUMBER(*mut_me), parent, 1867776, i, j) { return };
+    }
+        
+    
+}
+
+fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
+
+    match i{
+    
+        _ => {}
+    };
+
+    ASTNode::NONE
+}
+
+
+fn Token(&self) -> Token{
+    Token::empty()
+}
+
+fn Type()-> u32{
+    return 1867776;
+}
+
+fn GetType(&self) -> u32 {
+    return 1867776;
+}
+}
+
+
+
+
+#[derive(Debug, Clone)]
+pub struct AST_Add {
+    pub left:ASTNode /* AST_Ref | AST_Member */,
+pub right:ASTNode /* AST_Vector | AST_Ref | AST_Member | AST_STRING | AST_U8 | AST_U16 | AST_U32 | AST_U64 | AST_I8 | AST_I16 | AST_I32 | AST_I64 | AST_F16 | AST_F22 | AST_F64 | AST_BOOL | AST_NUMBER */,
+pub tok:Token /* TOKEN */
+}
+
+impl AST_Add {
+pub fn new( _left:ASTNode, _right:ASTNode, _tok:Token) -> Box<Self> {
+    Box::new(AST_Add{
+        left : _left,
+        right : _right,
+        tok : _tok,
+    })
+}
+
+
+
+
+fn  replace_left(&mut self, child: ASTNode,) -> Option<ASTNode> {
+    
+    match &child {
+        ASTNode::NONE => {
+            let old = std::mem::replace(&mut self.left, ASTNode::NONE);
+            return Some(old);
+        }
+        
+        ASTNode::AST_Ref(_) => { 
+            return Some(std::mem::replace(&mut self.left, child));
+        },
+
+        ASTNode::AST_Member(_) => { 
+            return Some(std::mem::replace(&mut self.left, child));
+        }
+        _ => None
+        
+    }
+}
+
+fn  replace_right(&mut self, child: ASTNode,) -> Option<ASTNode> {
+    
+    match &child {
+        ASTNode::NONE => {
+            let old = std::mem::replace(&mut self.right, ASTNode::NONE);
+            return Some(old);
+        }
+        
+        ASTNode::AST_Vector(_) => { 
+            return Some(std::mem::replace(&mut self.right, child));
+        },
+
+        ASTNode::AST_Ref(_) => { 
+            return Some(std::mem::replace(&mut self.right, child));
+        },
+
+        ASTNode::AST_Member(_) => { 
+            return Some(std::mem::replace(&mut self.right, child));
+        },
+
+        ASTNode::AST_STRING(_) => { 
+            return Some(std::mem::replace(&mut self.right, child));
+        },
+
+        ASTNode::AST_U8(_) => { 
+            return Some(std::mem::replace(&mut self.right, child));
+        },
+
+        ASTNode::AST_U16(_) => { 
+            return Some(std::mem::replace(&mut self.right, child));
+        },
+
+        ASTNode::AST_U32(_) => { 
+            return Some(std::mem::replace(&mut self.right, child));
+        },
+
+        ASTNode::AST_U64(_) => { 
+            return Some(std::mem::replace(&mut self.right, child));
+        },
+
+        ASTNode::AST_I8(_) => { 
+            return Some(std::mem::replace(&mut self.right, child));
+        },
+
+        ASTNode::AST_I16(_) => { 
+            return Some(std::mem::replace(&mut self.right, child));
+        },
+
+        ASTNode::AST_I32(_) => { 
+            return Some(std::mem::replace(&mut self.right, child));
+        },
+
+        ASTNode::AST_I64(_) => { 
+            return Some(std::mem::replace(&mut self.right, child));
+        },
+
+        ASTNode::AST_F16(_) => { 
+            return Some(std::mem::replace(&mut self.right, child));
+        },
+
+        ASTNode::AST_F22(_) => { 
+            return Some(std::mem::replace(&mut self.right, child));
+        },
+
+        ASTNode::AST_F64(_) => { 
+            return Some(std::mem::replace(&mut self.right, child));
+        },
+
+        ASTNode::AST_BOOL(_) => { 
+            return Some(std::mem::replace(&mut self.right, child));
+        },
+
+        ASTNode::AST_NUMBER(_) => { 
+            return Some(std::mem::replace(&mut self.right, child));
+        }
+        _ => None
+        
+    }
+}
+}
+
+
+
+impl<'a> ASTNodeTraits<'a> for AST_Add
+where
+    Self: Sized,
+{
+
+fn Iterate(
+    &'a mut self,
+    _yield: &mut impl FnMut(&mut NodeIteration<'a>, &mut NodeIteration<'a>,u32, i32, i32) -> bool,
+    parent: &mut NodeIteration<'a>,
+    i: i32,
+    j: i32,
+) {
+    let node = UnsafeCell::from(self);
+
+    unsafe{
+        let mut_me = node.get();
+
+        if !_yield(&mut NodeIteration::AST_Add(*mut_me), parent, 1900544, i, j) { return };
+    }
+        
+    
+        unsafe {
+            let mut_me_b = node.get();
+            let mut_me_d = node.get();
+
+            ((*mut_me_d).left).Iterate( _yield, &mut NodeIteration::AST_Add(*mut_me_b), 0, 0);
+            
+        }
+    
+        unsafe {
+            let mut_me_b = node.get();
+            let mut_me_d = node.get();
+
+            ((*mut_me_d).right).Iterate( _yield, &mut NodeIteration::AST_Add(*mut_me_b), 1, 0);
+            
+        }
+}
+
+fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
+
+    match i{
+    0 => {
+                    
+        if let Some(old) = self.replace_left(child){ 
+                return old;
+            }else{
+                return ASTNode::NONE;
+            }
+                }
+    1 => {
+                    
+        if let Some(old) = self.replace_right(child){ 
+                return old;
+            }else{
+                return ASTNode::NONE;
+            }
+                }
+        _ => {}
+    };
+
+    ASTNode::NONE
+}
+
+
+fn Token(&self) -> Token{
+    self.tok.clone()
+}
+
+fn Type()-> u32{
+    return 1900544;
+}
+
+fn GetType(&self) -> u32 {
+    return 1900544;
 }
 }
 
@@ -3853,7 +7484,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Reference(*mut_me), parent, 1015936, i, j) { return };
+        if !_yield(&mut NodeIteration::Reference(*mut_me), parent, 1933440, i, j) { return };
     }
         
     
@@ -3875,11 +7506,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1015936;
+    return 1933440;
 }
 
 fn GetType(&self) -> u32 {
-    return 1015936;
+    return 1933440;
 }
 }
 
@@ -3924,7 +7555,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Generated(*mut_me), parent, 1049216, i, j) { return };
+        if !_yield(&mut NodeIteration::Generated(*mut_me), parent, 1966720, i, j) { return };
     }
         
     
@@ -3946,11 +7577,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1049216;
+    return 1966720;
 }
 
 fn GetType(&self) -> u32 {
-    return 1049216;
+    return 1966720;
 }
 }
 
@@ -3995,7 +7626,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Exclusive_Literal(*mut_me), parent, 1081984, i, j) { return };
+        if !_yield(&mut NodeIteration::Exclusive_Literal(*mut_me), parent, 1999488, i, j) { return };
     }
         
     
@@ -4017,11 +7648,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1081984;
+    return 1999488;
 }
 
 fn GetType(&self) -> u32 {
-    return 1081984;
+    return 1999488;
 }
 }
 
@@ -4066,7 +7697,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Literal(*mut_me), parent, 1114752, i, j) { return };
+        if !_yield(&mut NodeIteration::Literal(*mut_me), parent, 2032256, i, j) { return };
     }
         
     
@@ -4088,11 +7719,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1114752;
+    return 2032256;
 }
 
 fn GetType(&self) -> u32 {
-    return 1114752;
+    return 2032256;
 }
 }
 
@@ -4135,7 +7766,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::End_Of_File(*mut_me), parent, 1147520, i, j) { return };
+        if !_yield(&mut NodeIteration::End_Of_File(*mut_me), parent, 2065024, i, j) { return };
     }
         
     
@@ -4157,11 +7788,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1147520;
+    return 2065024;
 }
 
 fn GetType(&self) -> u32 {
-    return 1147520;
+    return 2065024;
 }
 }
 
@@ -4204,7 +7835,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Space(*mut_me), parent, 1182720, i, j) { return };
+        if !_yield(&mut NodeIteration::Space(*mut_me), parent, 2100224, i, j) { return };
     }
         
     
@@ -4226,11 +7857,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1182720;
+    return 2100224;
 }
 
 fn GetType(&self) -> u32 {
-    return 1182720;
+    return 2100224;
 }
 }
 
@@ -4273,7 +7904,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::NewLine(*mut_me), parent, 1215488, i, j) { return };
+        if !_yield(&mut NodeIteration::NewLine(*mut_me), parent, 2132992, i, j) { return };
     }
         
     
@@ -4295,11 +7926,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1215488;
+    return 2132992;
 }
 
 fn GetType(&self) -> u32 {
-    return 1215488;
+    return 2132992;
 }
 }
 
@@ -4342,7 +7973,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::IncreaseIndent(*mut_me), parent, 1248256, i, j) { return };
+        if !_yield(&mut NodeIteration::IncreaseIndent(*mut_me), parent, 2165760, i, j) { return };
     }
         
     
@@ -4364,11 +7995,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1248256;
+    return 2165760;
 }
 
 fn GetType(&self) -> u32 {
-    return 1248256;
+    return 2165760;
 }
 }
 
@@ -4411,7 +8042,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::DecreaseIndent(*mut_me), parent, 1281024, i, j) { return };
+        if !_yield(&mut NodeIteration::DecreaseIndent(*mut_me), parent, 2198528, i, j) { return };
     }
         
     
@@ -4433,11 +8064,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1281024;
+    return 2198528;
 }
 
 fn GetType(&self) -> u32 {
-    return 1281024;
+    return 2198528;
 }
 }
 
@@ -4501,7 +8132,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Production_Token(*mut_me), parent, 1311360, i, j) { return };
+        if !_yield(&mut NodeIteration::Production_Token(*mut_me), parent, 2228864, i, j) { return };
     }
         
     
@@ -4537,11 +8168,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1311360;
+    return 2228864;
 }
 
 fn GetType(&self) -> u32 {
-    return 1311360;
+    return 2228864;
 }
 }
 
@@ -4607,7 +8238,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Goto(*mut_me), parent, 1343528, i, j) { return };
+        if !_yield(&mut NodeIteration::Goto(*mut_me), parent, 2261032, i, j) { return };
     }
         
     
@@ -4643,11 +8274,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1343528;
+    return 2261032;
 }
 
 fn GetType(&self) -> u32 {
-    return 1343528;
+    return 2261032;
 }
 }
 
@@ -4776,7 +8407,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::FailState(*mut_me), parent, 1380360, i, j) { return };
+        if !_yield(&mut NodeIteration::FailState(*mut_me), parent, 2297864, i, j) { return };
     }
         
     
@@ -4961,11 +8592,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1380360;
+    return 2297864;
 }
 
 fn GetType(&self) -> u32 {
-    return 1380360;
+    return 2297864;
 }
 }
 
@@ -5059,7 +8690,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Symbols(*mut_me), parent, 1409032, i, j) { return };
+        if !_yield(&mut NodeIteration::Symbols(*mut_me), parent, 2326536, i, j) { return };
     }
         
     
@@ -5261,11 +8892,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1409032;
+    return 2326536;
 }
 
 fn GetType(&self) -> u32 {
-    return 1409032;
+    return 2326536;
 }
 }
 
@@ -5403,7 +9034,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::AnnotatedSymbol(*mut_me), parent, 1441920, i, j) { return };
+        if !_yield(&mut NodeIteration::AnnotatedSymbol(*mut_me), parent, 2359424, i, j) { return };
     }
         
     
@@ -5455,11 +9086,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1441920;
+    return 2359424;
 }
 
 fn GetType(&self) -> u32 {
-    return 1441920;
+    return 2359424;
 }
 }
 
@@ -5585,7 +9216,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::OptionalSymbol(*mut_me), parent, 1474560, i, j) { return };
+        if !_yield(&mut NodeIteration::OptionalSymbol(*mut_me), parent, 2392064, i, j) { return };
     }
         
     
@@ -5621,11 +9252,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1474560;
+    return 2392064;
 }
 
 fn GetType(&self) -> u32 {
-    return 1474560;
+    return 2392064;
 }
 }
 
@@ -5689,7 +9320,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Not_Symbol(*mut_me), parent, 1507456, i, j) { return };
+        if !_yield(&mut NodeIteration::Not_Symbol(*mut_me), parent, 2424960, i, j) { return };
     }
         
     
@@ -5725,11 +9356,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1507456;
+    return 2424960;
 }
 
 fn GetType(&self) -> u32 {
-    return 1507456;
+    return 2424960;
 }
 }
 
@@ -5821,7 +9452,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Look_Behind(*mut_me), parent, 1540224, i, j) { return };
+        if !_yield(&mut NodeIteration::Look_Behind(*mut_me), parent, 2457728, i, j) { return };
     }
         
     
@@ -5857,11 +9488,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1540224;
+    return 2457728;
 }
 
 fn GetType(&self) -> u32 {
-    return 1540224;
+    return 2457728;
 }
 }
 
@@ -5987,7 +9618,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::NonCaptureSymbol(*mut_me), parent, 1572992, i, j) { return };
+        if !_yield(&mut NodeIteration::NonCaptureSymbol(*mut_me), parent, 2490496, i, j) { return };
     }
         
     
@@ -6023,11 +9654,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1572992;
+    return 2490496;
 }
 
 fn GetType(&self) -> u32 {
-    return 1572992;
+    return 2490496;
 }
 }
 
@@ -6205,7 +9836,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::List_Production(*mut_me), parent, 1605760, i, j) { return };
+        if !_yield(&mut NodeIteration::List_Production(*mut_me), parent, 2523264, i, j) { return };
     }
         
     
@@ -6259,11 +9890,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1605760;
+    return 2523264;
 }
 
 fn GetType(&self) -> u32 {
-    return 1605760;
+    return 2523264;
 }
 }
 
@@ -6441,7 +10072,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Optional_List_Production(*mut_me), parent, 1638528, i, j) { return };
+        if !_yield(&mut NodeIteration::Optional_List_Production(*mut_me), parent, 2556032, i, j) { return };
     }
         
     
@@ -6495,11 +10126,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1638528;
+    return 2556032;
 }
 
 fn GetType(&self) -> u32 {
-    return 1638528;
+    return 2556032;
 }
 }
 
@@ -6568,7 +10199,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Group_Production(*mut_me), parent, 1671296, i, j) { return };
+        if !_yield(&mut NodeIteration::Group_Production(*mut_me), parent, 2588800, i, j) { return };
     }
         
     
@@ -6613,11 +10244,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1671296;
+    return 2588800;
 }
 
 fn GetType(&self) -> u32 {
-    return 1671296;
+    return 2588800;
 }
 }
 
@@ -6629,7 +10260,7 @@ pub struct Body {
     pub priority:bool /* BOOL */,
 pub symbols:Vec<ASTNode> /* VECTOR */,
 pub reference:Option<Box<Reference>> /* Reference */,
-pub reduce_function:ASTNode /* Returned | Referenced */
+pub reduce_function:ASTNode /* Ascript | Returned | Referenced */
 }
 
 impl Body {
@@ -6706,6 +10337,10 @@ fn  replace_reduce_function(&mut self, child: ASTNode,) -> Option<ASTNode> {
             return Some(old);
         }
         
+        ASTNode::Ascript(_) => { 
+            return Some(std::mem::replace(&mut self.reduce_function, child));
+        },
+
         ASTNode::Returned(_) => { 
             return Some(std::mem::replace(&mut self.reduce_function, child));
         },
@@ -6738,7 +10373,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Body(*mut_me), parent, 1712128, i, j) { return };
+        if !_yield(&mut NodeIteration::Body(*mut_me), parent, 2629632, i, j) { return };
     }
         
     
@@ -6960,11 +10595,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1712128;
+    return 2629632;
 }
 
 fn GetType(&self) -> u32 {
-    return 1712128;
+    return 2629632;
 }
 }
 
@@ -7033,7 +10668,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Exclude(*mut_me), parent, 1737856, i, j) { return };
+        if !_yield(&mut NodeIteration::Exclude(*mut_me), parent, 2655360, i, j) { return };
     }
         
     
@@ -7137,11 +10772,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1737856;
+    return 2655360;
 }
 
 fn GetType(&self) -> u32 {
-    return 1737856;
+    return 2655360;
 }
 }
 
@@ -7210,7 +10845,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Look_Ignore(*mut_me), parent, 1770624, i, j) { return };
+        if !_yield(&mut NodeIteration::Look_Ignore(*mut_me), parent, 2688128, i, j) { return };
     }
         
     
@@ -7314,11 +10949,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1770624;
+    return 2688128;
 }
 
 fn GetType(&self) -> u32 {
-    return 1770624;
+    return 2688128;
 }
 }
 
@@ -7361,7 +10996,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Empty(*mut_me), parent, 1802368, i, j) { return };
+        if !_yield(&mut NodeIteration::Empty(*mut_me), parent, 2719872, i, j) { return };
     }
         
     
@@ -7383,11 +11018,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1802368;
+    return 2719872;
 }
 
 fn GetType(&self) -> u32 {
-    return 1802368;
+    return 2719872;
 }
 }
 
@@ -7482,7 +11117,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Production(*mut_me), parent, 1843200, i, j) { return };
+        if !_yield(&mut NodeIteration::Production(*mut_me), parent, 2760704, i, j) { return };
     }
         
     
@@ -7543,11 +11178,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1843200;
+    return 2760704;
 }
 
 fn GetType(&self) -> u32 {
-    return 1843200;
+    return 2760704;
 }
 }
 
@@ -7638,7 +11273,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::ProductionMerged(*mut_me), parent, 1875968, i, j) { return };
+        if !_yield(&mut NodeIteration::ProductionMerged(*mut_me), parent, 2793472, i, j) { return };
     }
         
     
@@ -7699,11 +11334,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1875968;
+    return 2793472;
 }
 
 fn GetType(&self) -> u32 {
-    return 1875968;
+    return 2793472;
 }
 }
 
@@ -7770,7 +11405,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Ignore(*mut_me), parent, 1916928, i, j) { return };
+        if !_yield(&mut NodeIteration::Ignore(*mut_me), parent, 2834432, i, j) { return };
     }
         
     
@@ -7874,11 +11509,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1916928;
+    return 2834432;
 }
 
 fn GetType(&self) -> u32 {
-    return 1916928;
+    return 2834432;
 }
 }
 
@@ -7925,7 +11560,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Import(*mut_me), parent, 1949696, i, j) { return };
+        if !_yield(&mut NodeIteration::Import(*mut_me), parent, 2867200, i, j) { return };
     }
         
     
@@ -7947,11 +11582,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1949696;
+    return 2867200;
 }
 
 fn GetType(&self) -> u32 {
-    return 1949696;
+    return 2867200;
 }
 }
 
@@ -8015,7 +11650,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Export(*mut_me), parent, 1982464, i, j) { return };
+        if !_yield(&mut NodeIteration::Export(*mut_me), parent, 2899968, i, j) { return };
     }
         
     
@@ -8051,11 +11686,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1982464;
+    return 2899968;
 }
 
 fn GetType(&self) -> u32 {
-    return 1982464;
+    return 2899968;
 }
 }
 
@@ -8151,7 +11786,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Out_Of_Band(*mut_me), parent, 1999104, i, j) { return };
+        if !_yield(&mut NodeIteration::Out_Of_Band(*mut_me), parent, 2916608, i, j) { return };
     }
         
     
@@ -8205,11 +11840,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 1999104;
+    return 2916608;
 }
 
 fn GetType(&self) -> u32 {
-    return 1999104;
+    return 2916608;
 }
 }
 
@@ -8252,7 +11887,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Repeat(*mut_me), parent, 2031656, i, j) { return };
+        if !_yield(&mut NodeIteration::Repeat(*mut_me), parent, 2949160, i, j) { return };
     }
         
     
@@ -8274,11 +11909,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 2031656;
+    return 2949160;
 }
 
 fn GetType(&self) -> u32 {
-    return 2031656;
+    return 2949160;
 }
 }
 
@@ -8348,7 +11983,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Lazy(*mut_me), parent, 2064424, i, j) { return };
+        if !_yield(&mut NodeIteration::Lazy(*mut_me), parent, 2981928, i, j) { return };
     }
         
     
@@ -8384,11 +12019,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 2064424;
+    return 2981928;
 }
 
 fn GetType(&self) -> u32 {
-    return 2064424;
+    return 2981928;
 }
 }
 
@@ -8431,7 +12066,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::HASH_NAME(*mut_me), parent, 2097152, i, j) { return };
+        if !_yield(&mut NodeIteration::HASH_NAME(*mut_me), parent, 3014656, i, j) { return };
     }
         
     
@@ -8453,11 +12088,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 2097152;
+    return 3014656;
 }
 
 fn GetType(&self) -> u32 {
-    return 2097152;
+    return 3014656;
 }
 }
 
@@ -8500,7 +12135,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::FunctionIndexNum(*mut_me), parent, 2129920, i, j) { return };
+        if !_yield(&mut NodeIteration::FunctionIndexNum(*mut_me), parent, 3047424, i, j) { return };
     }
         
     
@@ -8522,11 +12157,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 2129920;
+    return 3047424;
 }
 
 fn GetType(&self) -> u32 {
-    return 2129920;
+    return 3047424;
 }
 }
 
@@ -8569,7 +12204,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::FunctionIndexWildCard(*mut_me), parent, 2162688, i, j) { return };
+        if !_yield(&mut NodeIteration::FunctionIndexWildCard(*mut_me), parent, 3080192, i, j) { return };
     }
         
     
@@ -8591,11 +12226,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 2162688;
+    return 3080192;
 }
 
 fn GetType(&self) -> u32 {
-    return 2162688;
+    return 3080192;
 }
 }
 
@@ -8638,7 +12273,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::FunctionIndexId(*mut_me), parent, 2195456, i, j) { return };
+        if !_yield(&mut NodeIteration::FunctionIndexId(*mut_me), parent, 3112960, i, j) { return };
     }
         
     
@@ -8660,11 +12295,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 2195456;
+    return 3112960;
 }
 
 fn GetType(&self) -> u32 {
-    return 2195456;
+    return 3112960;
 }
 }
 
@@ -8678,7 +12313,7 @@ fn GetType(&self) -> u32 {
 
     c_Grammar,
 
-    c_Version_6,
+    c_Version_7,
 
     preamble:$1,
 
@@ -8707,7 +12342,7 @@ let mut v0 = args.remove(i-1);
 
     c_Grammar,
 
-    c_Version_6,
+    c_Version_7,
 
     preamble:$NULL,
 
@@ -9260,9 +12895,24 @@ let mut v0 = args.remove(i-0);
  args.push(HCO::NODE/*aa99*/(ref_0))}
 /**
 ```
-{ t_Returned, c_Function, txt:str($3) }
+{ t_Ascript, c_Function, ast:$3 }
 ```*/
 fn _fn26 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v3 = args.remove(i-0);
+let mut v2 = args.remove(i-1);
+let mut v1 = args.remove(i-2);
+let mut v0 = args.remove(i-3); 
+ if let HCO::NODE/*aaRR*/(r_0) = v2 { 
+ let mut ref_0 = ASTNode::Ascript(Ascript::new(
+        r_0,
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0)) }}
+/**
+```
+{ t_Returned, c_Function, txt:str($3) }
+```*/
+fn _fn27 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -9276,7 +12926,7 @@ let mut v0 = args.remove(i-2);
 ```
 { t_Referenced, c_Function, reference:$3 }
 ```*/
-fn _fn27 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn28 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -9289,9 +12939,414 @@ let mut v0 = args.remove(i-2);
  args.push(HCO::NODE/*aa99*/(ref_0)) } }}
 /**
 ```
+{ t_AST_Statements, statements:$1, tok }
+```*/
+fn _fn29 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v0 = args.remove(i-0); 
+ if let HCO::NODES/*aa00*/(mut r_0) = v0 { 
+ let mut ref_0 = ASTNode::AST_Statements(AST_Statements::new(
+        r_0,
+        /* AAA */tok,
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0)) }}
+/**
+```
+{ t_AST_Struct, props:$2, tok }
+```*/
+fn _fn30 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v2 = args.remove(i-0);
+let mut v1 = args.remove(i-1);
+let mut v0 = args.remove(i-2); 
+ if let HCO::NODES/*aa00*/(mut r_0) = v1 { 
+ let mut ref_0 = ASTNode::AST_Struct(AST_Struct::new(
+        r_0,
+        /* AAA */tok,
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0)) }}
+/**
+```
+{ t_AST_Property, id:str($1), value:$3, tok }
+```*/
+fn _fn31 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v2 = args.remove(i-0);
+let mut v1 = args.remove(i-1);
+let mut v0 = args.remove(i-2); 
+ if let HCO::NODE/*aaRR*/(r_0) = v2 { 
+ let mut ref_0 = ASTNode::AST_Property(AST_Property::new(
+        /* AAA */v0.String(),
+        r_0,
+        /* AAA */tok,
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0)) }}
+/**
+```
+{ t_AST_Struct_Property, id:str($1), value:$3, tok }
+```*/
+fn _fn32 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v2 = args.remove(i-0);
+let mut v1 = args.remove(i-1);
+let mut v0 = args.remove(i-2); 
+ if let HCO::NODE/*aaRR*/(r_0) = v2 { 
+ if let ASTNode::AST_Struct(r_1) = r_0 { 
+ let mut ref_0 = ASTNode::AST_Struct_Property(AST_Struct_Property::new(
+        /* AAA */v0.String(),
+        r_1,
+        /* AAA */tok,
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0)) } }}
+/**
+```
+{ t_AST_TypeId, value:str($1), tok }
+```*/
+fn _fn33 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v0 = args.remove(i-0); 
+ if let HCO::TOKEN(r_0) = v0 { 
+ let mut ref_0 = ASTNode::AST_TypeId(AST_TypeId::new(
+        /* AAA */r_0.String(),
+        /* AAA */tok,
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0)) }}
+/**
+```
+{ t_AST_ClassId, value:str($1), tok }
+```*/
+fn _fn34 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v0 = args.remove(i-0); 
+ if let HCO::TOKEN(r_0) = v0 { 
+ let mut ref_0 = ASTNode::AST_ClassId(AST_ClassId::new(
+        /* AAA */r_0.String(),
+        /* AAA */tok,
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0)) }}
+/**
+```
+{ t_AST_Token }
+```*/
+fn _fn35 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v0 = args.remove(i-0); 
+ let mut ref_0 = ASTNode::AST_Token(AST_Token::new(
+        
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0))}
+/**
+```
+{ t_AST_Vector, initializer:$2, tok }
+```*/
+fn _fn36 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v2 = args.remove(i-0);
+let mut v1 = args.remove(i-1);
+let mut v0 = args.remove(i-2); 
+ if let HCO::NODES/*aa00*/(mut r_0) = v1 { 
+ let mut ref_0 = ASTNode::AST_Vector(AST_Vector::new(
+        r_0,
+        /* AAA */tok,
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0)) }}
+/**
+```
+{ t_AST_Ref, value:$1 }
+```*/
+fn _fn37 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v0 = args.remove(i-0); 
+ if let HCO::NODE/*aaRR*/(r_0) = v0 { 
+ let mut ref_0 = ASTNode::AST_Ref(AST_Ref::new(
+        r_0,
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0)) }}
+/**
+```
+{ t_AST_Member, reference:$1, property:$3 }
+```*/
+fn _fn38 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v2 = args.remove(i-0);
+let mut v1 = args.remove(i-1);
+let mut v0 = args.remove(i-2); 
+ if let HCO::NODE/*aaRR*/(r_0) = v0 { 
+ let mut ref_0 = ASTNode::AST_Member(AST_Member::new(
+        r_0,
+        /* AAA */v2.Token(),
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0)) }}
+/**
+```
+{ t_AST_NamedReference, value:str($2), tok }
+```*/
+fn _fn39 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v1 = args.remove(i-0);
+let mut v0 = args.remove(i-1); 
+ let mut ref_0 = ASTNode::AST_NamedReference(AST_NamedReference::new(
+        /* AAA */v1.String(),
+        /* AAA */tok,
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0))}
+/**
+```
+{ t_AST_IndexReference, value:i32($1), tok }
+```*/
+fn _fn40 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v1 = args.remove(i-0);
+let mut v0 = args.remove(i-1); 
+ if let HCO::TOKEN(r_0) = v0 { 
+ let mut ref_0 = ASTNode::AST_IndexReference(AST_IndexReference::new(
+        /* AAA */r_0.to_i32(),
+        /* AAA */tok,
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0)) }}
+/**
+```
+{ t_AST_STRING, value:$2, tok }
+```*/
+fn _fn41 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v1 = args.remove(i-0);
+let mut v0 = args.remove(i-1); 
+ if let HCO::NODE/*aaRR*/(r_0) = v1 { 
+ let mut ref_0 = ASTNode::AST_STRING(AST_STRING::new(
+        r_0,
+        /* AAA */tok,
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0)) }}
+/**
+```
+{ t_AST_U8, initializer:$2, tok }
+```*/
+fn _fn42 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v1 = args.remove(i-0);
+let mut v0 = args.remove(i-1); 
+ if let HCO::NODE/*aaRR*/(r_0) = v1 { 
+ let mut ref_0 = ASTNode::AST_U8(AST_U8::new(
+        r_0,
+        /* AAA */tok,
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0)) }}
+/**
+```
+{ t_AST_U16, initializer:$2, tok }
+```*/
+fn _fn43 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v1 = args.remove(i-0);
+let mut v0 = args.remove(i-1); 
+ if let HCO::NODE/*aaRR*/(r_0) = v1 { 
+ let mut ref_0 = ASTNode::AST_U16(AST_U16::new(
+        r_0,
+        /* AAA */tok,
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0)) }}
+/**
+```
+{ t_AST_U32, initializer:$2, tok }
+```*/
+fn _fn44 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v1 = args.remove(i-0);
+let mut v0 = args.remove(i-1); 
+ if let HCO::NODE/*aaRR*/(r_0) = v1 { 
+ let mut ref_0 = ASTNode::AST_U32(AST_U32::new(
+        r_0,
+        /* AAA */tok,
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0)) }}
+/**
+```
+{ t_AST_U64, initializer:$2, tok }
+```*/
+fn _fn45 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v1 = args.remove(i-0);
+let mut v0 = args.remove(i-1); 
+ if let HCO::NODE/*aaRR*/(r_0) = v1 { 
+ let mut ref_0 = ASTNode::AST_U64(AST_U64::new(
+        r_0,
+        /* AAA */tok,
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0)) }}
+/**
+```
+{ t_AST_I8, initializer:$2, tok }
+```*/
+fn _fn46 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v1 = args.remove(i-0);
+let mut v0 = args.remove(i-1); 
+ if let HCO::NODE/*aaRR*/(r_0) = v1 { 
+ let mut ref_0 = ASTNode::AST_I8(AST_I8::new(
+        r_0,
+        /* AAA */tok,
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0)) }}
+/**
+```
+{ t_AST_I16, initializer:$2, tok }
+```*/
+fn _fn47 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v1 = args.remove(i-0);
+let mut v0 = args.remove(i-1); 
+ if let HCO::NODE/*aaRR*/(r_0) = v1 { 
+ let mut ref_0 = ASTNode::AST_I16(AST_I16::new(
+        r_0,
+        /* AAA */tok,
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0)) }}
+/**
+```
+{ t_AST_I32, initializer:$2, tok }
+```*/
+fn _fn48 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v1 = args.remove(i-0);
+let mut v0 = args.remove(i-1); 
+ if let HCO::NODE/*aaRR*/(r_0) = v1 { 
+ let mut ref_0 = ASTNode::AST_I32(AST_I32::new(
+        r_0,
+        /* AAA */tok,
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0)) }}
+/**
+```
+{ t_AST_I64, initializer:$2, tok }
+```*/
+fn _fn49 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v1 = args.remove(i-0);
+let mut v0 = args.remove(i-1); 
+ if let HCO::NODE/*aaRR*/(r_0) = v1 { 
+ let mut ref_0 = ASTNode::AST_I64(AST_I64::new(
+        r_0,
+        /* AAA */tok,
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0)) }}
+/**
+```
+{ t_AST_F16, initializer:$2, tok }
+```*/
+fn _fn50 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v1 = args.remove(i-0);
+let mut v0 = args.remove(i-1); 
+ if let HCO::NODE/*aaRR*/(r_0) = v1 { 
+ let mut ref_0 = ASTNode::AST_F16(AST_F16::new(
+        r_0,
+        /* AAA */tok,
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0)) }}
+/**
+```
+{ t_AST_F22, initializer:$2, tok }
+```*/
+fn _fn51 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v1 = args.remove(i-0);
+let mut v0 = args.remove(i-1); 
+ if let HCO::NODE/*aaRR*/(r_0) = v1 { 
+ let mut ref_0 = ASTNode::AST_F22(AST_F22::new(
+        r_0,
+        /* AAA */tok,
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0)) }}
+/**
+```
+{ t_AST_F64, initializer:$2, tok }
+```*/
+fn _fn52 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v1 = args.remove(i-0);
+let mut v0 = args.remove(i-1); 
+ if let HCO::NODE/*aaRR*/(r_0) = v1 { 
+ let mut ref_0 = ASTNode::AST_F64(AST_F64::new(
+        r_0,
+        /* AAA */tok,
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0)) }}
+/**
+```
+{ t_AST_BOOL, initializer:$2, tok }
+```*/
+fn _fn53 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v1 = args.remove(i-0);
+let mut v0 = args.remove(i-1); 
+ if let HCO::NODE/*aaRR*/(r_0) = v1 { 
+ let mut ref_0 = ASTNode::AST_BOOL(AST_BOOL::new(
+        r_0,
+        /* AAA */tok,
+        false,
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0)) }}
+/**
+```
+{ t_AST_BOOL, value:true }
+```*/
+fn _fn54 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v0 = args.remove(i-0); 
+ let mut ref_0 = ASTNode::AST_BOOL(AST_BOOL::new(
+        ASTNode::NONE,
+        Token::empty(),
+        /* AAA */true,
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0))}
+/**
+```
+{ t_AST_BOOL, value:false }
+```*/
+fn _fn55 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v0 = args.remove(i-0); 
+ let mut ref_0 = ASTNode::AST_BOOL(AST_BOOL::new(
+        ASTNode::NONE,
+        Token::empty(),
+        /* AAA */false,
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0))}
+/**
+```
+{ t_AST_NUMBER, value:f64($1) }
+```*/
+fn _fn56 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v0 = args.remove(i-0); 
+ if let HCO::TOKENS(mut r_0)= v0 { 
+ let mut ref_0 = ASTNode::AST_NUMBER(AST_NUMBER::new(
+        /* AAA */(r_0.len() as f64),
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0)) }}
+/**
+```
+{ t_AST_Add, left:$1, right:$3, tok }
+```*/
+fn _fn57 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v2 = args.remove(i-0);
+let mut v1 = args.remove(i-1);
+let mut v0 = args.remove(i-2); 
+ if let HCO::NODE/*aaRR*/(r_0) = v0 { 
+ if let HCO::NODE/*aaRR*/(r_1) = v2 { 
+ let mut ref_0 = ASTNode::AST_Add(AST_Add::new(
+        r_0,
+        r_1,
+        /* AAA */tok,
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0)) } }}
+/**
+```
 { t_Reference, c_Symbol, val:str($1) }
 ```*/
-fn _fn28 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn58 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  if let HCO::TOKEN(r_0) = v0 { 
  let mut ref_0 = ASTNode::Reference(Reference::new(
@@ -9303,7 +13358,7 @@ let mut v0 = args.remove(i-0);
 ```
 { t_Generated, c_Symbol, c_Token, val:str($2), tok }
 ```*/
-fn _fn29 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn59 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::TOKEN(r_0) = v1 { 
@@ -9328,7 +13383,7 @@ let mut v0 = args.remove(i-1);
     tok
  }
 ```*/
-fn _fn30 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn60 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  let mut ref_0 = ASTNode::Exclusive_Literal(Exclusive_Literal::new(
@@ -9341,7 +13396,7 @@ let mut v0 = args.remove(i-1);
 ```
 { t_Literal, c_Symbol, c_Token, val:str($1), tok }
 ```*/
-fn _fn31 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn61 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  let mut ref_0 = ASTNode::Literal(Literal::new(
         /* AAA */v0.String(),
@@ -9353,7 +13408,7 @@ let mut v0 = args.remove(i-0);
 ```
 { t_Literal, c_Symbol, c_Token, val:str($2), tok }
 ```*/
-fn _fn32 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn62 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::TOKEN(r_0) = v1 { 
@@ -9367,7 +13422,7 @@ let mut v0 = args.remove(i-1);
 ```
 { t_End_Of_File, c_Symbol, c_Token, tok }
 ```*/
-fn _fn33 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn63 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  let mut ref_0 = ASTNode::End_Of_File(End_Of_File::new(
         /* AAA */tok,
@@ -9378,7 +13433,7 @@ let mut v0 = args.remove(i-0);
 ```
 { t_Space, c_Meta, c_Format, position:i16(0) }
 ```*/
-fn _fn34 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn64 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  let mut ref_0 = ASTNode::Space(Space::new(
         /* AAA */0.0 as i16,
@@ -9389,7 +13444,7 @@ let mut v0 = args.remove(i-0);
 ```
 { t_NewLine, c_Meta, c_Format, position:i16(0) }
 ```*/
-fn _fn35 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn65 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  let mut ref_0 = ASTNode::NewLine(NewLine::new(
         /* AAA */0.0 as i16,
@@ -9400,7 +13455,7 @@ let mut v0 = args.remove(i-0);
 ```
 { t_IncreaseIndent, c_Meta, c_Format, position:i16(0) }
 ```*/
-fn _fn36 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn66 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  let mut ref_0 = ASTNode::IncreaseIndent(IncreaseIndent::new(
         /* AAA */0.0 as i16,
@@ -9411,7 +13466,7 @@ let mut v0 = args.remove(i-0);
 ```
 { t_DecreaseIndent, c_Meta, c_Format, position:i16(0) }
 ```*/
-fn _fn37 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn67 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  let mut ref_0 = ASTNode::DecreaseIndent(DecreaseIndent::new(
         /* AAA */0.0 as i16,
@@ -9433,7 +13488,7 @@ let mut v0 = args.remove(i-0);
     tok
  }
 ```*/
-fn _fn38 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn68 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::NODE/*aaRR*/(r_0) = v1 { 
@@ -9447,7 +13502,7 @@ let mut v0 = args.remove(i-1);
 ```
 { t_Goto, c_IR, c_IR_Instruction, state:$2 }
 ```*/
-fn _fn39 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn69 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::NODE/*aaRR*/(r_0) = v1 { 
@@ -9475,7 +13530,7 @@ let mut v0 = args.remove(i-1);
     fail:$5
  }
 ```*/
-fn _fn40 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn70 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v5 = args.remove(i-0);
 let mut v4 = args.remove(i-1);
 let mut v3 = args.remove(i-2);
@@ -9514,7 +13569,7 @@ let mut v0 = args.remove(i-5);
     fail:$NULL
  }
 ```*/
-fn _fn41 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn71 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v4 = args.remove(i-0);
 let mut v3 = args.remove(i-1);
 let mut v2 = args.remove(i-2);
@@ -9550,7 +13605,7 @@ let mut v0 = args.remove(i-4);
     fail:$5
  }
 ```*/
-fn _fn42 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn72 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v4 = args.remove(i-0);
 let mut v3 = args.remove(i-1);
 let mut v2 = args.remove(i-2);
@@ -9586,7 +13641,7 @@ let mut v0 = args.remove(i-4);
     fail:$NULL
  }
 ```*/
-fn _fn43 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn73 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v3 = args.remove(i-0);
 let mut v2 = args.remove(i-1);
 let mut v1 = args.remove(i-2);
@@ -9604,7 +13659,7 @@ let mut v0 = args.remove(i-3);
 ```
 { t_Symbols, c_IR, expected:$3, skipped:$4 }
 ```*/
-fn _fn44 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn74 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v3 = args.remove(i-0);
 let mut v2 = args.remove(i-1);
 let mut v1 = args.remove(i-2);
@@ -9621,7 +13676,7 @@ let mut v0 = args.remove(i-3);
 ```
 { t_Symbols, c_IR, expected:$3, skipped:$NULL }
 ```*/
-fn _fn45 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn75 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -9636,7 +13691,7 @@ let mut v0 = args.remove(i-2);
 ```
 { t_AnnotatedSymbol, c_Symbol, symbol:$1, reference:$2 }
 ```*/
-fn _fn46 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn76 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::NODE/*aaRR*/(r_0) = v0 { 
@@ -9652,7 +13707,7 @@ let mut v0 = args.remove(i-1);
 ```
 { t_OptionalSymbol, symbol:$1 }
 ```*/
-fn _fn47 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn77 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::NODE/*aaRR*/(r_0) = v0 { 
@@ -9665,7 +13720,7 @@ let mut v0 = args.remove(i-1);
 ```
 { t_Not_Symbol, c_Symbol, symbol:$2, tok }
 ```*/
-fn _fn48 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn78 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::NODE/*aaRR*/(r_0) = v1 { 
@@ -9679,7 +13734,7 @@ let mut v0 = args.remove(i-1);
 ```
 { t_Look_Behind, c_Symbol, symbol:$2, tok }
 ```*/
-fn _fn49 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn79 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::NODE/*aaRR*/(r_0) = v1 { 
@@ -9693,7 +13748,7 @@ let mut v0 = args.remove(i-1);
 ```
 { t_NonCaptureSymbol, c_Symbol, sym:$2 }
 ```*/
-fn _fn50 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn80 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::NODE/*aaRR*/(r_0) = v1 { 
@@ -9717,7 +13772,7 @@ let mut v0 = args.remove(i-1);
     tok
  }
 ```*/
-fn _fn51 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn81 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v3 = args.remove(i-0);
 let mut v2 = args.remove(i-1);
 let mut v1 = args.remove(i-2);
@@ -9746,7 +13801,7 @@ let mut v0 = args.remove(i-3);
     tok
  }
 ```*/
-fn _fn52 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn82 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v3 = args.remove(i-0);
 let mut v2 = args.remove(i-1);
 let mut v1 = args.remove(i-2);
@@ -9775,7 +13830,7 @@ let mut v0 = args.remove(i-3);
     tok
  }
 ```*/
-fn _fn53 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn83 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -9802,7 +13857,7 @@ let mut v0 = args.remove(i-2);
     tok
  }
 ```*/
-fn _fn54 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn84 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -9818,7 +13873,7 @@ let mut v0 = args.remove(i-2);
 ```
 { t_Group_Production, c_Symbol, bodies:$2, tok }
 ```*/
-fn _fn55 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn85 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -9846,7 +13901,7 @@ let mut v0 = args.remove(i-2);
     reduce_function:$4
  }
 ```*/
-fn _fn56 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn86 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v3 = args.remove(i-0);
 let mut v2 = args.remove(i-1);
 let mut v1 = args.remove(i-2);
@@ -9881,7 +13936,7 @@ let mut v0 = args.remove(i-3);
     reduce_function:$3
  }
 ```*/
-fn _fn57 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn87 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -9914,7 +13969,7 @@ let mut v0 = args.remove(i-2);
     reduce_function:$3
  }
 ```*/
-fn _fn58 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn88 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -9946,7 +14001,7 @@ let mut v0 = args.remove(i-2);
     reduce_function:$NULL
  }
 ```*/
-fn _fn59 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn89 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -9979,7 +14034,7 @@ let mut v0 = args.remove(i-2);
     reduce_function:$2
  }
 ```*/
-fn _fn60 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn90 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::NODES/*aa00*/(mut r_0) = v0 { 
@@ -10009,7 +14064,7 @@ let mut v0 = args.remove(i-1);
     reduce_function:$NULL
  }
 ```*/
-fn _fn61 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn91 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::NODES/*aa00*/(mut r_0) = v1 { 
@@ -10040,7 +14095,7 @@ let mut v0 = args.remove(i-1);
     reduce_function:$NULL
  }
 ```*/
-fn _fn62 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn92 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::TOKEN(r_0) = v0 { 
@@ -10070,7 +14125,7 @@ let mut v0 = args.remove(i-1);
     reduce_function:$NULL
  }
 ```*/
-fn _fn63 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn93 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  if let HCO::NODES/*aa00*/(mut r_0) = v0 { 
  let mut ref_0 = ASTNode::Body(Body::new(
@@ -10085,7 +14140,7 @@ let mut v0 = args.remove(i-0);
 ```
 { t_Exclude, c_Symbol, c_Meta, sym:$2, tok }
 ```*/
-fn _fn64 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn94 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -10100,7 +14155,7 @@ let mut v0 = args.remove(i-2);
 ```
 { t_Look_Ignore, c_Symbol, c_Meta, sym:$2, tok }
 ```*/
-fn _fn65 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn95 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -10115,7 +14170,7 @@ let mut v0 = args.remove(i-2);
 ```
 { t_Empty, c_Symbol, tok }
 ```*/
-fn _fn66 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn96 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  let mut ref_0 = ASTNode::Empty(Empty::new(
         /* AAA */tok,
@@ -10141,7 +14196,7 @@ let mut v0 = args.remove(i-0);
     tok
  }
 ```*/
-fn _fn67 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn97 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v5 = args.remove(i-0);
 let mut v4 = args.remove(i-1);
 let mut v3 = args.remove(i-2);
@@ -10176,7 +14231,7 @@ let mut v0 = args.remove(i-5);
     tok
  }
 ```*/
-fn _fn68 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn98 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v3 = args.remove(i-0);
 let mut v2 = args.remove(i-1);
 let mut v1 = args.remove(i-2);
@@ -10209,7 +14264,7 @@ let mut v0 = args.remove(i-3);
     tok
  }
 ```*/
-fn _fn69 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn99 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v4 = args.remove(i-0);
 let mut v3 = args.remove(i-1);
 let mut v2 = args.remove(i-2);
@@ -10246,7 +14301,7 @@ let mut v0 = args.remove(i-4);
     tok
  }
 ```*/
-fn _fn70 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn100 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v4 = args.remove(i-0);
 let mut v3 = args.remove(i-1);
 let mut v2 = args.remove(i-2);
@@ -10283,7 +14338,7 @@ let mut v0 = args.remove(i-4);
     tok
  }
 ```*/
-fn _fn71 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn101 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v3 = args.remove(i-0);
 let mut v2 = args.remove(i-1);
 let mut v1 = args.remove(i-2);
@@ -10303,7 +14358,7 @@ let mut v0 = args.remove(i-3);
 ```
 { t_Ignore, c_Preamble, symbols:$2 }
 ```*/
-fn _fn72 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn102 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -10317,7 +14372,7 @@ let mut v0 = args.remove(i-2);
 ```
 { t_Import, c_Preamble, uri:$2, reference:$4, tok }
 ```*/
-fn _fn73 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn103 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v3 = args.remove(i-0);
 let mut v2 = args.remove(i-1);
 let mut v1 = args.remove(i-2);
@@ -10333,7 +14388,7 @@ let mut v0 = args.remove(i-3);
 ```
 { t_Export, c_Preamble, production:$2, reference:$4 }
 ```*/
-fn _fn74 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn104 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v3 = args.remove(i-0);
 let mut v2 = args.remove(i-1);
 let mut v1 = args.remove(i-2);
@@ -10350,7 +14405,7 @@ let mut v0 = args.remove(i-3);
 ```
 { t_Out_Of_Band, c_Function, reference:$2, txt:str($3) }
 ```*/
-fn _fn75 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn105 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -10380,7 +14435,7 @@ let mut v0 = args.remove(i-2);
     txt:str($4)
  }
 ```*/
-fn _fn76 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn106 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v3 = args.remove(i-0);
 let mut v2 = args.remove(i-1);
 let mut v1 = args.remove(i-2);
@@ -10410,7 +14465,7 @@ let mut v0 = args.remove(i-3);
     reference:$4
  }
 ```*/
-fn _fn77 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn107 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v3 = args.remove(i-0);
 let mut v2 = args.remove(i-1);
 let mut v1 = args.remove(i-2);
@@ -10441,7 +14496,7 @@ let mut v0 = args.remove(i-3);
     txt:str($3)
  }
 ```*/
-fn _fn78 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn108 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -10470,7 +14525,7 @@ let mut v0 = args.remove(i-2);
     reference:$3
  }
 ```*/
-fn _fn79 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn109 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -10504,7 +14559,7 @@ let mut v0 = args.remove(i-2);
     symbol_meta:$7
  }
 ```*/
-fn _fn80 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn110 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v7 = args.remove(i-0);
 let mut v6 = args.remove(i-1);
 let mut v5 = args.remove(i-2);
@@ -10547,7 +14602,7 @@ let mut v0 = args.remove(i-7);
     symbol_meta:$6
  }
 ```*/
-fn _fn81 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn111 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v6 = args.remove(i-0);
 let mut v5 = args.remove(i-1);
 let mut v4 = args.remove(i-2);
@@ -10587,7 +14642,7 @@ let mut v0 = args.remove(i-6);
     symbol_meta:$NULL
  }
 ```*/
-fn _fn82 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn112 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v6 = args.remove(i-0);
 let mut v5 = args.remove(i-1);
 let mut v4 = args.remove(i-2);
@@ -10627,7 +14682,7 @@ let mut v0 = args.remove(i-6);
     symbol_meta:$NULL
  }
 ```*/
-fn _fn83 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn113 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v5 = args.remove(i-0);
 let mut v4 = args.remove(i-1);
 let mut v3 = args.remove(i-2);
@@ -10649,7 +14704,7 @@ let mut v0 = args.remove(i-5);
 ```
 { t_Repeat, c_IR, c_IR_Instruction }
 ```*/
-fn _fn84 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn114 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -10675,7 +14730,7 @@ let mut v0 = args.remove(i-2);
     state:$6
  }
 ```*/
-fn _fn85 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn115 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v5 = args.remove(i-0);
 let mut v4 = args.remove(i-1);
 let mut v3 = args.remove(i-2);
@@ -10696,7 +14751,7 @@ let mut v0 = args.remove(i-5);
 ```
 { t_HASH_NAME, val:str($1) }
 ```*/
-fn _fn86 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn116 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  if let HCO::TOKEN(r_0) = v0 { 
  let mut ref_0 = ASTNode::HASH_NAME(HASH_NAME::new(
@@ -10708,7 +14763,7 @@ let mut v0 = args.remove(i-0);
 ```
 { t_FunctionIndexNum, value:f64($1) }
 ```*/
-fn _fn87 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn117 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  if let HCO::TOKEN(r_0) = v0 { 
  let mut ref_0 = ASTNode::FunctionIndexNum(FunctionIndexNum::new(
@@ -10720,7 +14775,7 @@ let mut v0 = args.remove(i-0);
 ```
 { t_FunctionIndexWildCard }
 ```*/
-fn _fn88 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn118 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  let mut ref_0 = ASTNode::FunctionIndexWildCard(FunctionIndexWildCard::new(
         
@@ -10731,7 +14786,7 @@ let mut v0 = args.remove(i-0);
 ```
 { t_FunctionIndexId, value:str($1) }
 ```*/
-fn _fn89 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn119 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  if let HCO::NODE/*aaRR*/(r_0) = v0 { 
  let mut ref_0 = ASTNode::FunctionIndexId(FunctionIndexId::new(
@@ -10743,7 +14798,7 @@ let mut v0 = args.remove(i-0);
 ```
 str($3)
 ```*/
-fn _fn90 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn120 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v3 = args.remove(i-0);
 let mut v2 = args.remove(i-1);
 let mut v1 = args.remove(i-2);
@@ -10754,7 +14809,7 @@ let mut v0 = args.remove(i-3);
 ```
 $2
 ```*/
-fn _fn91 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn121 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
@@ -10768,7 +14823,7 @@ let mut v0 = args.remove(i-2);
 ```
 str($1)
 ```*/
-fn _fn92 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn122 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  if let HCO::TOKEN(r_0) = v0 { 
  args.push(HCO::STRING(r_0.String())) }}
@@ -10776,7 +14831,7 @@ let mut v0 = args.remove(i-0);
 ```
 str($__first__)+str($__last__)
 ```*/
-fn _fn93 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn123 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::TOKEN(r_0) = v1 { 
@@ -10785,7 +14840,7 @@ let mut v0 = args.remove(i-1);
 ```
 $1+$3+[$4]
 ```*/
-fn _fn94 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn124 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v3 = args.remove(i-0);
 let mut v2 = args.remove(i-1);
@@ -10806,7 +14861,7 @@ ref_0.append(&mut r_1);
 ```
 $1+[$2]
 ```*/
-fn _fn95 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn125 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1);
@@ -10823,7 +14878,7 @@ ref_0.append(&mut r_1);
 ```
 [$1]
 ```*/
-fn _fn96 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn126 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v0 = args.remove(i-0);
                                 
@@ -10837,7 +14892,7 @@ ref_0.push(/*RR6*/r_0);
 ```
 $1+$3+[$NULL]
 ```*/
-fn _fn97 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn127 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
@@ -10855,7 +14910,7 @@ ref_0.append(&mut r_0);
 ```
 $1+[$NULL]
 ```*/
-fn _fn98 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn128 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v0 = args.remove(i-0);
                                 
@@ -10869,7 +14924,7 @@ ref_0.append(&mut r_0);
 ```
 $NULL+[$NULL]
 ```*/
-fn _fn99 (args:&mut Vec<HCO>, tok: Token){
+fn _fn129 (args:&mut Vec<HCO>, tok: Token){
                             let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
                                 
@@ -10878,9 +14933,35 @@ let mut v0 = args.remove(i-0);
                             }
 /**
 ```
+$2
+```*/
+fn _fn130 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v2 = args.remove(i-0);
+let mut v1 = args.remove(i-1);
+let mut v0 = args.remove(i-2); 
+ if let HCO::NODE/*aaRR*/(r_0) = v1 { 
+ args.push(HCO::NODE/*aa99*/(r_0)) }}
+/**
+```
+$__first__+$__last__
+```*/
+fn _fn131 (args:&mut Vec<HCO>, tok: Token){ 
+                                let mut i = args.len()-1;
+let mut v2 = args.remove(i-0);
+let mut v1 = args.remove(i-1);
+let mut v0 = args.remove(i-2);
+                                
+ if let HCO::NODES/*aa00*/(mut r_0) = v0 { 
+ if let HCO::NODE/*aaRR*/(r_1) = v2 { 
+r_0.push(/*UX2*/r_1);
+
+                                args.push(HCO::NODES/*aa22*/(r_0)); } }
+                                 } 
+/**
+```
 [$1]
 ```*/
-fn _fn100 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn132 (args:&mut Vec<HCO>, tok: Token){ 
                             let mut i = args.len()-1;
 let mut v0 = args.remove(i-0);
                             
@@ -10894,7 +14975,7 @@ ref_0.push(/*RR7*/r_0);
 ```
 $__first__+$__last__
 ```*/
-fn _fn101 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn133 (args:&mut Vec<HCO>, tok: Token){ 
                             let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1);
@@ -10909,7 +14990,7 @@ r_0.push(/*UX4 TOKEN*/r_1);
 ```
 $3
 ```*/
-fn _fn102 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn134 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v3 = args.remove(i-0);
 let mut v2 = args.remove(i-1);
 let mut v1 = args.remove(i-2);
@@ -10918,25 +14999,9 @@ let mut v0 = args.remove(i-3);
  args.push(HCO::NODE/*aa99*/(r_0)) }}
 /**
 ```
-$__first__+$__last__
-```*/
-fn _fn103 (args:&mut Vec<HCO>, tok: Token){ 
-                                let mut i = args.len()-1;
-let mut v2 = args.remove(i-0);
-let mut v1 = args.remove(i-1);
-let mut v0 = args.remove(i-2);
-                                
- if let HCO::NODES/*aa00*/(mut r_0) = v0 { 
- if let HCO::NODE/*aaRR*/(r_1) = v2 { 
-r_0.push(/*UX2*/r_1);
-
-                                args.push(HCO::NODES/*aa22*/(r_0)); } }
-                                 } 
-/**
-```
 $1+$2
 ```*/
-fn _fn104 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn135 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1);
@@ -10951,7 +15016,7 @@ r_0.append(&mut r_1);
 ```
 $1
 ```*/
-fn _fn105 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn136 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v0 = args.remove(i-0);
                                 
@@ -10963,7 +15028,7 @@ let mut v0 = args.remove(i-0);
 ```
 $__first__+$__last__
 ```*/
-fn _fn106 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn137 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1);
@@ -10978,7 +15043,7 @@ r_0.push(/*UX2*/r_1);
 ```
 $1
 ```*/
-fn _fn107 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn138 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::NODE/*aaRR*/(r_0) = v0 { 
@@ -10987,7 +15052,7 @@ let mut v0 = args.remove(i-1);
 ```
 [$1]
 ```*/
-fn _fn108 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn139 (args:&mut Vec<HCO>, tok: Token){ 
                             let mut i = args.len()-1;
 let mut v0 = args.remove(i-0);
                             
@@ -11000,7 +15065,7 @@ ref_0.push(/*RR7*/v0.Token());
 ```
 $__first__+$__last__
 ```*/
-fn _fn109 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn140 (args:&mut Vec<HCO>, tok: Token){ 
                             let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1);
@@ -11014,13 +15079,13 @@ r_0.push(/*UX1*/v1.Token());
 ```
 $__first__+$__last__
 ```*/
-fn _fn110 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn141 (args:&mut Vec<HCO>, tok: Token){ 
                             let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1);
                             
  if let HCO::TOKENS(mut r_0)= v0 { 
-     if let HCO::TOKEN(v1) = v1 {
+     if let HCO::TOKEN(v1) =v1 {
 
          r_0.push(/*UX4 PRODUCTION*/v1);
         }
@@ -11031,14 +15096,14 @@ let mut v0 = args.remove(i-1);
 ```
 str($1)
 ```*/
-fn _fn111 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn142 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  args.push(HCO::STRING(v0.String()))}
 /**
 ```
 str($__first__)+str($__last__)
 ```*/
-fn _fn112 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn143 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  args.push(HCO::STRING(v0.String() + &v1.String()))}
@@ -11046,7 +15111,7 @@ let mut v0 = args.remove(i-1);
 ```
 $2
 ```*/
-fn _fn113 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn144 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::NODE/*aaRR*/(r_0) = v1 { 
@@ -11055,7 +15120,7 @@ let mut v0 = args.remove(i-1);
 ```
 $2
 ```*/
-fn _fn114 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn145 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1);
@@ -11068,7 +15133,7 @@ let mut v0 = args.remove(i-1);
 ```
 [$2]
 ```*/
-fn _fn115 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn146 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1);
@@ -11083,12 +15148,12 @@ ref_0.push(/*RR6*/r_0);
 ```
 
 ```*/
-fn _fn116 (args:&mut Vec<HCO>, tok: Token){}
+fn _fn147 (args:&mut Vec<HCO>, tok: Token){}
 /**
 ```
 
 ```*/
-fn _fn117 (args:&mut Vec<HCO>, tok: Token){  let mut i = args.len()-1;
+fn _fn148 (args:&mut Vec<HCO>, tok: Token){  let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1);
  args.push(v1); }
@@ -11096,7 +15161,7 @@ let mut v0 = args.remove(i-1);
 ```
 
 ```*/
-fn _fn118 (args:&mut Vec<HCO>, tok: Token){  let mut i = args.len()-1;
+fn _fn149 (args:&mut Vec<HCO>, tok: Token){  let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2);
@@ -11104,6 +15169,6 @@ let mut v0 = args.remove(i-2);
 
 
 
-pub const FunctionMaps:[RF; 265]= [
-    _fn116,_fn0,_fn1,_fn116,_fn116,_fn116,_fn117,_fn116,_fn116,_fn116,_fn116,_fn116,_fn117,_fn116,_fn118,_fn2,_fn3,_fn4,_fn5,_fn90,_fn117,_fn116,_fn116,_fn116,_fn116,_fn117,_fn117,_fn117,_fn116,_fn116,_fn6,_fn6,_fn6,_fn6,_fn6,_fn7,_fn7,_fn7,_fn7,_fn7,_fn91,_fn8,_fn92,_fn93,_fn116,_fn116,_fn9,_fn93,_fn117,_fn93,_fn93,_fn116,_fn116,_fn116,_fn10,_fn94,_fn95,_fn96,_fn95,_fn97,_fn98,_fn98,_fn96,_fn99,_fn11,_fn12,_fn13,_fn14,_fn15,_fn16,_fn17,_fn18,_fn19,_fn20,_fn21,_fn22,_fn23,_fn14,_fn17,_fn24,_fn25,_fn26,_fn27,_fn26,_fn27,_fn116,_fn118,_fn116,_fn116,_fn117,_fn117,_fn116,_fn116,_fn116,_fn116,_fn116,_fn116,_fn116,_fn28,_fn117,_fn116,_fn91,_fn116,_fn116,_fn116,_fn116,_fn116,_fn29,_fn30,_fn31,_fn32,_fn100,_fn101,_fn100,_fn100,_fn101,_fn101,_fn33,_fn116,_fn116,_fn116,_fn116,_fn34,_fn35,_fn36,_fn37,_fn38,_fn102,_fn102,_fn39,_fn40,_fn41,_fn42,_fn43,_fn44,_fn45,_fn116,_fn46,_fn47,_fn48,_fn49,_fn50,_fn116,_fn116,_fn116,_fn51,_fn52,_fn53,_fn54,_fn55,_fn96,_fn103,_fn56,_fn57,_fn58,_fn59,_fn60,_fn61,_fn62,_fn63,_fn104,_fn105,_fn99,_fn96,_fn96,_fn91,_fn64,_fn65,_fn65,_fn96,_fn106,_fn66,_fn67,_fn68,_fn69,_fn70,_fn71,_fn116,_fn107,_fn96,_fn106,_fn116,_fn116,_fn116,_fn72,_fn96,_fn106,_fn116,_fn73,_fn73,_fn74,_fn74,_fn96,_fn96,_fn96,_fn106,_fn106,_fn106,_fn75,_fn76,_fn77,_fn78,_fn79,_fn118,_fn80,_fn81,_fn82,_fn83,_fn116,_fn108,_fn109,_fn108,_fn109,_fn108,_fn110,_fn100,_fn101,_fn96,_fn106,_fn96,_fn106,_fn96,_fn106,_fn96,_fn103,_fn96,_fn103,_fn84,_fn85,_fn96,_fn103,_fn96,_fn106,_fn96,_fn106,_fn96,_fn106,_fn96,_fn106,_fn92,_fn93,_fn111,_fn92,_fn112,_fn93,_fn92,_fn93,_fn92,_fn93,_fn86,_fn113,_fn114,_fn92,_fn93,_fn92,_fn93,_fn115,_fn103,_fn115,_fn115,_fn103,_fn103,_fn87,_fn88,_fn89,
+pub const FunctionMaps:[RF; 326]= [
+    _fn147,_fn0,_fn1,_fn147,_fn147,_fn147,_fn148,_fn147,_fn147,_fn147,_fn147,_fn147,_fn148,_fn147,_fn149,_fn2,_fn3,_fn4,_fn5,_fn120,_fn148,_fn147,_fn147,_fn147,_fn147,_fn148,_fn148,_fn148,_fn147,_fn147,_fn6,_fn6,_fn6,_fn6,_fn6,_fn7,_fn7,_fn7,_fn7,_fn7,_fn121,_fn8,_fn122,_fn123,_fn147,_fn147,_fn9,_fn123,_fn148,_fn123,_fn123,_fn147,_fn147,_fn147,_fn10,_fn124,_fn125,_fn126,_fn125,_fn127,_fn128,_fn128,_fn126,_fn129,_fn11,_fn12,_fn13,_fn14,_fn15,_fn16,_fn17,_fn18,_fn19,_fn20,_fn21,_fn22,_fn23,_fn14,_fn17,_fn24,_fn25,_fn26,_fn27,_fn28,_fn27,_fn28,_fn147,_fn147,_fn29,_fn30,_fn31,_fn32,_fn33,_fn34,_fn35,_fn35,_fn147,_fn148,_fn148,_fn148,_fn148,_fn147,_fn147,_fn147,_fn147,_fn147,_fn147,_fn147,_fn147,_fn36,_fn37,_fn38,_fn39,_fn40,_fn41,_fn130,_fn42,_fn43,_fn44,_fn45,_fn46,_fn47,_fn48,_fn49,_fn50,_fn51,_fn52,_fn53,_fn54,_fn55,_fn56,_fn148,_fn148,_fn126,_fn131,_fn147,_fn147,_fn57,_fn147,_fn149,_fn147,_fn147,_fn148,_fn148,_fn147,_fn147,_fn147,_fn147,_fn147,_fn147,_fn147,_fn58,_fn148,_fn147,_fn121,_fn147,_fn147,_fn147,_fn147,_fn147,_fn59,_fn60,_fn61,_fn62,_fn132,_fn133,_fn132,_fn132,_fn133,_fn133,_fn63,_fn147,_fn147,_fn147,_fn147,_fn64,_fn65,_fn66,_fn67,_fn68,_fn134,_fn134,_fn69,_fn70,_fn71,_fn72,_fn73,_fn74,_fn75,_fn147,_fn76,_fn77,_fn78,_fn79,_fn80,_fn147,_fn147,_fn147,_fn81,_fn82,_fn83,_fn84,_fn85,_fn126,_fn131,_fn86,_fn87,_fn88,_fn89,_fn90,_fn91,_fn92,_fn93,_fn135,_fn136,_fn129,_fn126,_fn126,_fn121,_fn94,_fn95,_fn95,_fn126,_fn137,_fn96,_fn97,_fn98,_fn99,_fn100,_fn101,_fn147,_fn138,_fn126,_fn137,_fn147,_fn147,_fn147,_fn102,_fn126,_fn137,_fn147,_fn103,_fn103,_fn104,_fn104,_fn126,_fn126,_fn126,_fn137,_fn137,_fn137,_fn105,_fn106,_fn107,_fn108,_fn109,_fn149,_fn110,_fn111,_fn112,_fn113,_fn147,_fn139,_fn140,_fn139,_fn140,_fn139,_fn141,_fn132,_fn133,_fn126,_fn137,_fn126,_fn137,_fn126,_fn137,_fn126,_fn131,_fn126,_fn131,_fn114,_fn115,_fn126,_fn131,_fn126,_fn137,_fn126,_fn137,_fn126,_fn131,_fn126,_fn131,_fn132,_fn133,_fn132,_fn133,_fn126,_fn137,_fn126,_fn137,_fn122,_fn123,_fn142,_fn122,_fn143,_fn123,_fn122,_fn123,_fn122,_fn123,_fn116,_fn144,_fn145,_fn122,_fn123,_fn122,_fn123,_fn146,_fn131,_fn146,_fn146,_fn131,_fn131,_fn117,_fn118,_fn119,
 ];

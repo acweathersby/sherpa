@@ -1,6 +1,6 @@
 # Copyright (C) 2022 Anthony Weathersby
 
-# version 7.0
+# version 6.0
 
 
 @IMPORT ./comments.hcg as cm

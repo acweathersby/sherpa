@@ -38,7 +38,6 @@ impl fmt::Debug for Token
 
         bug.field("length", &self.length)
             .field("offset", &self.offset)
-            .field("line", &self.line_number)
             .field("line_number", &self.line_number)
             .field("line_offset", &self.line_offset);
 
@@ -102,6 +101,9 @@ impl Token
 
     pub fn set_path() {}
 
+    /// Defines the source string for this token. Certain Token
+    /// methods will not work correctly if the Token has not been
+    /// attached to its source.
     pub fn set_source(&mut self, source: Arc<Vec<u8>>)
     {
         self.input = Some(source);
@@ -114,6 +116,8 @@ impl Token
         0
     }
 
+    /// Returns the line number of the token location. This may be
+    /// zero if the token is not attached to its source.
     pub fn get_line(&mut self) -> usize
     {
         if self.line_number < 1 {
@@ -149,15 +153,27 @@ impl Token
         use std::cmp::min;
 
         if start < 0 {
-            start = max(self.offset as i32, (self.offset + self.length) as i32 + start)
+            start = max(
+                self.offset as i32,
+                (self.offset + self.length) as i32 + start,
+            )
         } else {
-            start = min(self.offset as i32 + start, (self.offset + self.length) as i32)
+            start = min(
+                self.offset as i32 + start,
+                (self.offset + self.length) as i32,
+            )
         }
 
         if end < 0 {
-            end = max(self.offset as i32, (self.offset + self.length) as i32 + end)
+            end = max(
+                self.offset as i32,
+                (self.offset + self.length) as i32 + end,
+            )
         } else {
-            end = min(self.offset as i32 + end, (self.offset + self.length) as i32)
+            end = min(
+                self.offset as i32 + end,
+                (self.offset + self.length) as i32,
+            )
         }
 
         if end < start {
@@ -182,7 +198,6 @@ impl Token
     /// - `Option<String>` - A `String` of the blame diagram or `None`
     ///   if source is
     /// not defined.
-
     pub fn blame(
         &self,
         max_pre: usize,
@@ -219,7 +234,9 @@ impl Token
             line_number: usize,
         ) -> String
         {
-            if let Ok(utf_string) = String::from_utf8(Vec::from(&source[beg..end])) {
+            if let Ok(utf_string) =
+                String::from_utf8(Vec::from(&source[beg..end]))
+            {
                 let lines = format!("{}", line_number);
 
                 format!("   {}: {}\n", &lines, utf_string,)
@@ -283,7 +300,8 @@ impl Token
                         beg_root = decrement_beg(&source, beg_root - 2);
 
                         string =
-                            create_line(&source, beg_root, end - 1, lines - a) + &string;
+                            create_line(&source, beg_root, end - 1, lines - a)
+                                + &string;
                     }
                 }
 
@@ -303,6 +321,23 @@ impl Token
             Some(string)
         } else {
             None
+        }
+    }
+
+    pub fn len(&self) -> usize
+    {
+        self.length as usize
+    }
+
+    pub fn to_length(&self, length: usize) -> Self
+    {
+        Self {
+            length:      length as u32,
+            offset:      self.offset,
+            line_number: self.line_number,
+            line_offset: self.line_offset,
+            range:       None,
+            input:       self.input.clone(),
         }
     }
 
@@ -359,7 +394,8 @@ impl Token
     fn slice<'a>(&self, start: i32, end: i32) -> String
     {
         if let Some(input) = &self.input {
-            let (adjusted_start, adjusted_end) = self.get_slice_range(start, end);
+            let (adjusted_start, adjusted_end) =
+                self.get_slice_range(start, end);
 
             return unsafe {
                 String::from_utf8_unchecked(Vec::from(

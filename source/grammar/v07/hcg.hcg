@@ -2,9 +2,7 @@
 ############################################## Hydrocarbon Grammar #####################################################
 ########################################################################################################################
 
-# Copyright (C) 2022 Anthony Weathersby - The Hydrocarbon Parser Compiler
-# see /source/typescript/hydrocarbon.ts for full copyright and warranty
-# disclaimer notice.
+# Copyright 2022 Anthony Weathersby
 
 # version 7.0
 
@@ -42,6 +40,8 @@
 
 @IMPORT ./comments.hcg as cmt
 
+@IMPORT ./script.hcg as script
+
 
 # For example: The `pre` reference to the preambles.hcg file, and the `prd` reference to `./productions.hcg` 
 # is used in the last production of this grammar file:
@@ -65,6 +65,8 @@
 @EXPORT sym::annotated_symbol as sym
 
 @EXPORT prd::production as prd
+
+@EXPORT script::out as script
 
 
 # Grammar productions are normally defined by using the following syntax:

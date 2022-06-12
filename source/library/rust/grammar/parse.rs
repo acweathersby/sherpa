@@ -6,6 +6,7 @@ use crate::primitives::HCObj;
 use crate::primitives::Token;
 use crate::runtime::buffer::UTF8StringReader;
 use crate::runtime::completer::complete;
+use crate::runtime::error::TokenError;
 use crate::runtime::recognizer::iterator::*;
 
 use super::data::ast::ASTNode;
@@ -77,7 +78,7 @@ pub enum ParseError
     MUTEX_ERROR,
     THREAD_ERROR,
     COMPILE_PROBLEM(CompileProblem),
-
+    TOKEN_ERROR(TokenError),
     COMPOUND_COMPILE_PROBLEM(CompoundCompileProblem),
 }
 
@@ -86,7 +87,10 @@ impl Display for ParseError
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
     {
         match self {
-            ParseError::UNDEFINED => f.write_str("An unknown error has occurred "),
+            ParseError::UNDEFINED => {
+                f.write_str("An unknown error has occurred ")
+            }
+            ParseError::TOKEN_ERROR(err) => err.fmt(f),
             ParseError::IO_ERROR(err) => err.fmt(f),
             ParseError::MUTEX_ERROR => f.write_str("A Mutex has been poisoned"),
             ParseError::THREAD_ERROR => {
@@ -98,10 +102,15 @@ impl Display for ParseError
     }
 }
 
-pub fn compile_grammar_ast(buffer: Vec<u8>) -> Result<Box<Grammar>, ParseError>
+pub fn compile_grammar_ast(buffer: Vec<u8>)
+    -> Result<Box<Grammar>, ParseError>
 {
     let mut iterator: ReferenceIterator<UTF8StringReader> =
-        ReferenceIterator::new(UTF8StringReader::new(buffer), EntryPoint_Hc, &BYTECODE);
+        ReferenceIterator::new(
+            UTF8StringReader::new(buffer),
+            EntryPoint_Hc,
+            &BYTECODE,
+        );
 
     let result = complete(&mut iterator, &FunctionMaps);
 
@@ -117,14 +126,18 @@ pub fn compile_grammar_ast(buffer: Vec<u8>) -> Result<Box<Grammar>, ParseError>
                 Err(ParseError::UNDEFINED)
             }
         }
-        Err(err) => Err(ParseError::UNDEFINED),
+        Err(err) => Err(err),
     }
 }
 
 pub fn compile_ir_ast(buffer: Vec<u8>) -> Result<Box<IR_STATE>, ParseError>
 {
     let mut iterator: ReferenceIterator<UTF8StringReader> =
-        ReferenceIterator::new(UTF8StringReader::new(buffer), EntryPoint_Ir, &BYTECODE);
+        ReferenceIterator::new(
+            UTF8StringReader::new(buffer),
+            EntryPoint_Ir,
+            &BYTECODE,
+        );
 
     let result = complete(&mut iterator, &FunctionMaps);
 
@@ -159,7 +172,8 @@ fn test_ir_trivial_state()
 
 fn test_ir_trivial_branch_state()
 {
-    let input = String::from("state [ A ] assert TOKEN [ /* a */ 11 ] ( pass )");
+    let input =
+        String::from("state [ A ] assert TOKEN [ /* a */ 11 ] ( pass )");
 
     let result = compile_ir_ast(Vec::from(input.as_bytes()));
 

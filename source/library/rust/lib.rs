@@ -14,6 +14,7 @@ pub mod utf8;
 
 pub use lazy_static::lazy_static;
 
+pub mod ascript;
 pub mod bytecode;
 pub mod debug;
 pub mod grammar;

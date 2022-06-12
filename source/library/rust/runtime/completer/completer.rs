@@ -1,3 +1,4 @@
+use crate::grammar::parse::ParseError;
 use crate::primitives::ast_node::HCObj;
 use crate::primitives::ast_node::ReduceFunction;
 use crate::primitives::token::Token;
@@ -7,12 +8,11 @@ use crate::runtime::recognizer::iterator::ParseAction;
 use crate::runtime::recognizer::iterator::ParseErrorCode;
 use crate::runtime::recognizer::iterator::ParseIterator;
 use std::fmt::Debug;
-use std::str::FromStr;
 
 pub fn complete<'b, I: ParseIterator<T>, T: 'b + ByteReader, Node: Debug>(
     iterator: &mut I,
     fns: &'static [ReduceFunction<Node>],
-) -> Result<HCObj<Node>, ParseAction>
+) -> Result<HCObj<Node>, ParseError>
 {
     let mut tokens: Vec<Token> = Vec::with_capacity(8);
 
@@ -96,20 +96,15 @@ pub fn complete<'b, I: ParseIterator<T>, T: 'b + ByteReader, Node: Debug>(
     match state {
         ParseAction::ACCEPT {} => Ok(nodes.remove(0)),
         ParseAction::ERROR { production, .. } => {
+            let mut tok = Token::from_kernel_token(&last_token);
+            tok.set_source(source.clone());
             let error = TokenError::new(
                 production,
-                last_token,
+                tok,
                 Some(iterator.reader().get_source()),
             );
-
-            println!("Last token: {} ", error.report());
-
-            Err(state)
+            Err(ParseError::TOKEN_ERROR(error))
         }
-        _ => Err(ParseAction::ERROR {
-            error_code: ParseErrorCode::NORMAL,
-            pointer:    0,
-            production: 0,
-        }),
+        _ => Err(ParseError::UNDEFINED),
     }
 }

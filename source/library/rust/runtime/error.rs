@@ -1,18 +1,23 @@
-use std::rc::Rc;
+use std::fmt::Display;
 use std::sync::Arc;
 
-use crate::primitives::kernel_token::KernelToken;
+use crate::primitives::Token;
 
+#[derive(Debug)]
 pub struct TokenError
 {
-    pub token:      KernelToken,
+    pub token:      Token,
     pub input:      Option<Arc<Vec<u8>>>,
     pub production: u32,
 }
 
 impl TokenError
 {
-    pub fn new(production: u32, token: KernelToken, input: Option<Arc<Vec<u8>>>) -> Self
+    pub fn new(
+        production: u32,
+        token: Token,
+        input: Option<Arc<Vec<u8>>>,
+    ) -> Self
     {
         TokenError {
             token,
@@ -20,53 +25,22 @@ impl TokenError
             production,
         }
     }
+}
 
-    pub fn report(&self) -> String
+impl Display for TokenError
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
     {
-        let mut string = String::from("Unexpected Token");
+        let mut token = self.token.clone();
 
-        if let Some(source) = &self.input {
-            // find beginning of line starting at offset of token
-            let root = self.token.cp_offset as usize;
-
-            let mut beg = root;
-
-            let mut end = root;
-
-            let mut lines: usize = 0;
-
-            let mut i = 0;
-
-            while i < root {
-                if source[i] == 10 {
-                    lines += 1
-                }
-
-                i += 1
-            }
-
-            while beg > 0 && source[beg as usize] != 10 {
-                beg -= 1;
-            }
-
-            while (end as usize) < source.len() && source[end as usize] != 10 {
-                end += 1;
-            }
-
-            let slice = &source[(beg)..end];
-
-            if let Ok(utf_string) = String::from_utf8(Vec::from(slice)) {
-                let lines = format!("{}", lines);
-
-                string += &format!(
-                    "\n\n{}: {}\n{}\n",
-                    &lines,
-                    utf_string,
-                    String::from(" ").repeat(lines.len() + 1 + root - beg) + "^",
-                );
-            }
+        if token.len() == 0 {
+            token = token.to_length(1);
         }
 
-        string
+        f.write_str(
+            &token
+                .blame(0, 0, "Unexpected Token")
+                .unwrap_or_else(|| "Unexpected Token".to_string()),
+        )
     }
 }
