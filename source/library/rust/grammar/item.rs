@@ -54,8 +54,12 @@ pub fn get_closure(items: &[Item], grammar: &GrammarStore) -> Vec<Item>
 /// store. Falls back to manually building the closure if it is not
 /// cached. Does not modify the original grammar.
 
-pub fn get_closure_cached<'a>(item: &Item, grammar: &'a GrammarStore) -> &'a Vec<Item>
+pub fn get_closure_cached<'a>(
+    item: &Item,
+    grammar: &'a GrammarStore,
+) -> &'a Vec<Item>
 {
+    println!("{}", item.debug_string(grammar));
     grammar.closures.get(&item.to_zero_state()).unwrap()
 }
 

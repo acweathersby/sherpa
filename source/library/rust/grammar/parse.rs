@@ -18,7 +18,8 @@ use super::data::parser_data::BYTECODE;
 
 pub fn parse_string(string: &String) {}
 
-/// A simple error message and optional location Token
+/// Indicates an issue encountered while processing a grammar
+/// symbol.
 #[derive(Debug)]
 pub struct CompileProblem
 {
@@ -26,8 +27,46 @@ pub struct CompileProblem
     pub message:        String,
     /// Message that appears inline the code location
     /// diagram
-    pub inline_message: Option<String>,
-    pub loc:            Option<Token>,
+    pub inline_message: String,
+    pub loc:            Token,
+}
+
+impl Display for CompileProblem
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+    {
+        f.write_fmt(format_args!(
+            "{}\n{}",
+            self.message,
+            self.loc
+                .blame(1, 1, &self.inline_message)
+                .unwrap_or("".to_string()),
+        ))
+    }
+}
+/// Indicates an issue encountered while processing grammar
+/// symbols that effects multiple locations in one or more files.
+#[derive(Debug)]
+pub struct CompoundCompileProblem
+{
+    pub message:   String,
+    pub locations: Vec<CompileProblem>,
+}
+
+impl Display for CompoundCompileProblem
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+    {
+        f.write_fmt(format_args!(
+            "{}\n{}",
+            self.message,
+            self.locations
+                .iter()
+                .map(|s| format!("{}", s))
+                .collect::<Vec<_>>()
+                .join("\n"),
+        ))
+    }
 }
 
 #[derive(Debug)]
@@ -38,6 +77,8 @@ pub enum ParseError
     MUTEX_ERROR,
     THREAD_ERROR,
     COMPILE_PROBLEM(CompileProblem),
+
+    COMPOUND_COMPILE_PROBLEM(CompoundCompileProblem),
 }
 
 impl Display for ParseError
@@ -51,29 +92,8 @@ impl Display for ParseError
             ParseError::THREAD_ERROR => {
                 f.write_str("Unable to get an exclusive lock on an object")
             }
-            ParseError::COMPILE_PROBLEM(CompileProblem {
-                message,
-                inline_message,
-                loc,
-            }) => {
-                if let Some(loc) = loc {
-                    if let Some(inline_message) = inline_message {
-                        f.write_str(&format!(
-                            "{}\n{}",
-                            message,
-                            loc.blame(1, 1, inline_message).unwrap()
-                        ))
-                    } else {
-                        f.write_str(&format!(
-                            "{}\n{}",
-                            message,
-                            loc.blame(1, 1, "").unwrap()
-                        ))
-                    }
-                } else {
-                    f.write_str(message)
-                }
-            }
+            ParseError::COMPOUND_COMPILE_PROBLEM(err) => err.fmt(f),
+            ParseError::COMPILE_PROBLEM(err) => err.fmt(f),
         }
     }
 }

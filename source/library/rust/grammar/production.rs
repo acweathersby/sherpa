@@ -118,8 +118,10 @@ pub fn get_production_plain_name<'a>(
 /// production matches the query. The order of the productions is not
 /// guaranteed.
 
-pub fn get_production_by_name(name: &str, grammar: &GrammarStore)
-    -> Option<ProductionId>
+pub fn get_production_by_name(
+    name: &str,
+    grammar: &GrammarStore,
+) -> Option<ProductionId>
 {
     for production_id in grammar.production_table.keys() {
         if name == get_production_plain_name(production_id, grammar) {
@@ -144,16 +146,16 @@ mod production_utilities_tests
     {
         let grammar = compile_test_grammar("<>billofolious_tantimum^a>\\o");
 
+        let prod =
+            get_production_by_name("billofolious_tantimum", &grammar).unwrap();
+
         assert_eq!(
-            get_production_plain_name(
-                grammar.production_table.keys().next().unwrap(),
-                &grammar
-            ),
+            get_production_plain_name(&prod, &grammar),
             "billofolious_tantimum"
         );
 
         assert_ne!(
-            grammar.production_table.values().next().unwrap().name,
+            grammar.production_table.get(&prod).unwrap().name,
             "billofolious_tantimum"
         );
     }
@@ -194,7 +196,10 @@ mod production_utilities_tests
 
         let production = get_production_by_name("A", &grammar).unwrap();
 
-        assert_eq!(is_production_recursive(production, &grammar), (true, false));
+        assert_eq!(
+            is_production_recursive(production, &grammar),
+            (true, false)
+        );
 
         let production = get_production_by_name("R", &grammar).unwrap();
 
@@ -210,6 +215,9 @@ mod production_utilities_tests
 
         let production = get_production_by_name("O", &grammar).unwrap();
 
-        assert_eq!(is_production_recursive(production, &grammar), (false, false));
+        assert_eq!(
+            is_production_recursive(production, &grammar),
+            (false, false)
+        );
     }
 }

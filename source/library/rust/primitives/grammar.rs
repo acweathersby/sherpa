@@ -5,6 +5,8 @@ use std::collections::HashSet;
 use std::fmt::Display;
 use std::path::PathBuf;
 
+use crate::grammar::parse::ParseError;
+
 use super::BodyTable;
 use super::Item;
 use super::ProductionBodiesTable;
@@ -95,4 +97,5 @@ pub struct TempGrammarStore<'a>
     pub production_table:         &'a mut ProductionTable,
     pub production_symbols_table: &'a mut BTreeSet<SymbolID>,
     pub production_bodies_table:  &'a mut ProductionBodiesTable,
+    pub errors:                   &'a mut Vec<ParseError>,
 }

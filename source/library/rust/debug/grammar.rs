@@ -7,11 +7,19 @@ use crate::primitives::GrammarStore;
 
 pub fn compile_test_grammar(grammar: &str) -> GrammarStore
 {
-    match compile_from_string(&String::from(grammar), &PathBuf::from("/-internal-/test"))
-    {
-        Ok(result) => result,
-        Err(err) => panic!("{}", err),
+    let (grammar, errors) = compile_from_string(
+        &String::from(grammar),
+        &PathBuf::from("/-internal-/test"),
+    );
+
+    for error in &errors {
+        println!("{}", error);
     }
+
+    assert!(grammar.is_some());
+    assert!(errors.is_empty());
+
+    grammar.unwrap()
 }
 
 #[cfg(test)]
@@ -34,6 +42,9 @@ mod debug_grammar_tests
         <> E > B A | t:g",
         );
 
-        assert_eq!(grammar.source_path.as_os_str().to_str().unwrap(), "/-internal-/test");
+        assert_eq!(
+            grammar.source_path.as_os_str().to_str().unwrap(),
+            "/-internal-/test"
+        );
     }
 }

@@ -1,0 +1,63 @@
+#[cfg(test)]
+use std::path::PathBuf;
+
+use crate::get_num_of_available_threads;
+use crate::grammar::compiler::compile_from_path;
+use crate::grammar::compiler::pre_process_grammar;
+
+use super::parse::compile_grammar_ast;
+use super::parse::{self};
+
+#[test]
+fn test_pre_process_grammar()
+{
+    let grammar = String::from(
+        "\n@IMPORT ./test/me/out.hcg as bob \n<> a > tk:p?^test a(+,) ( \\1234 | t:sp? ( sp | g:sym g:sp ) f:r { basalt } ) \\nto <> b > tk:p p ",
+    );
+
+    if let Ok(grammar) = compile_grammar_ast(Vec::from(grammar.as_bytes())) {
+        let (grammar, errors) =
+            pre_process_grammar(&grammar, &PathBuf::from("/test"));
+
+        for error in &errors {
+            println!("{}", error);
+        }
+
+        assert_eq!(errors.len(), 1);
+    } else {
+        panic!("Failed to parse and produce an AST of '<> a > b'");
+    }
+}
+
+#[test]
+fn test_trivial_file_compilation()
+{
+    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+
+    path.push("test/compile/data/trivial.hcg");
+
+    let (grammar, errors) =
+        compile_from_path(&path, get_num_of_available_threads());
+
+    assert!(grammar.is_some());
+    assert!(errors.is_empty());
+}
+
+#[test]
+fn test_trivial_file_compilation_with_single_import()
+{
+    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+
+    path.push("test/compile/data/trivial_importer.hcg");
+
+    let (grammar, errors) =
+        compile_from_path(&path, get_num_of_available_threads());
+
+    assert!(grammar.is_some());
+
+    for error in &errors {
+        println!("{}", error);
+    }
+
+    assert!(errors.is_empty());
+}

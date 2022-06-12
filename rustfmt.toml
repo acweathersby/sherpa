@@ -1,5 +1,5 @@
 # Line Widths
-max_width = 90
+max_width = 80
 array_width = 70
 fn_call_width = 70
 comment_width = 70
