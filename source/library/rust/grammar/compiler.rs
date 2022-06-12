@@ -22,11 +22,11 @@ use regex::Regex;
 
 use super::create_production_uuid_name;
 use super::create_scanner_name;
+use super::data::ast::Body as ASTBody;
+use super::data::ast::*;
 use super::get_closure;
 use super::get_production_start_items;
 use super::get_uuid_grammar_name;
-use super::grammar_data::ast::Body as ASTBody;
-use super::grammar_data::ast::*;
 use super::is_production_recursive;
 use super::parse;
 
@@ -41,6 +41,147 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use std::thread::{self};
 use std::vec;
+
+/// Compile a complete grammar given a file path to a root *.hcg file
+pub fn compile_from_path(
+    root_grammar_absolute_path: &PathBuf,
+    number_of_threads: usize,
+) -> Result<GrammarStore, parse::ParseError>
+{
+    let mut pending_grammar_paths = Mutex::new(VecDeque::<PathBuf>::new());
+
+    let mut claimed_grammar_paths = Mutex::new(HashSet::<PathBuf>::new());
+
+    // Pending Work, Claimed Work, Completed Work
+    let mut work_verifier = Mutex::new(WorkVerifier::new(1));
+
+    pending_grammar_paths
+        .lock()
+        .unwrap()
+        .push_back(root_grammar_absolute_path.to_owned());
+
+    let number_of_threads = std::thread::available_parallelism()
+        .unwrap_or(NonZeroUsize::new(1).unwrap())
+        .get();
+
+    let mut grammars = thread::scope(|s| {
+        [0..number_of_threads]
+            .into_iter()
+            .map(|i| {
+                s.spawn(|| {
+                    let mut raw_grammars = vec![];
+
+                    loop {
+                        match {
+                            let val = pending_grammar_paths.lock().unwrap().pop_front();
+
+                            val
+                        } {
+                            Some(path) => {
+                                if {
+                                    let result = claimed_grammar_paths
+                                        .lock()
+                                        .unwrap()
+                                        .insert(path.to_owned());
+
+                                    {
+                                        let mut work_verifier =
+                                            work_verifier.lock().unwrap();
+
+                                        if result {
+                                            work_verifier.start_one_unit_of_work()
+                                        } else {
+                                            work_verifier.skip_one_unit_of_work()
+                                        }
+                                    }
+
+                                    result
+                                } {
+                                    match compile_file_path(&path) {
+                                        Ok(grammar) => {
+                                            {
+                                                let mut work_verifier =
+                                                    work_verifier.lock().unwrap();
+
+                                                work_verifier.complete_one_unit_of_work();
+
+                                                work_verifier.add_units_of_work(
+                                                    grammar.imports.len() as u32,
+                                                );
+                                            }
+
+                                            for (_, (_, b)) in &grammar.imports {
+                                                pending_grammar_paths
+                                                    .lock()
+                                                    .unwrap()
+                                                    .push_back(b.to_owned());
+                                            }
+
+                                            raw_grammars.push(grammar);
+                                        }
+                                        Err(_) => {}
+                                    }
+                                };
+                            }
+                            None => {
+                                if {
+                                    let work_verifier = work_verifier.lock().unwrap();
+
+                                    work_verifier.is_complete()
+                                } {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    raw_grammars
+                })
+            })
+            .map(|s| s.join().unwrap())
+            .collect::<Vec<_>>()
+            .into_iter()
+            .flatten()
+            .collect::<VecDeque<_>>()
+    });
+
+    let mut root = grammars.pop_front().unwrap();
+
+    // Merge grammars
+
+    merge_grammars(&mut root, &grammars.into_iter().collect::<Vec<_>>());
+
+    let final_grammar = finalize_grammar(root, number_of_threads);
+
+    Ok(final_grammar)
+}
+
+fn compile_file_path(absolute_path: &PathBuf) -> Result<GrammarStore, parse::ParseError>
+{
+    match read(absolute_path) {
+        Ok(buffer) => {
+            let grammar = parse::compile_grammar_ast(buffer)?;
+
+            pre_process_grammar(&grammar, absolute_path)
+        }
+        Err(err) => Err(parse::ParseError::IO_ERROR(err)),
+    }
+}
+
+/// Compile a grammar defined in a string
+pub fn compile_from_string(
+    string: &str,
+    absolute_path: &PathBuf,
+) -> Result<GrammarStore, parse::ParseError>
+{
+    let grammar = parse::compile_grammar_ast(Vec::from(string.as_bytes()))?;
+
+    let grammar = pre_process_grammar(&grammar, absolute_path)?;
+
+    let grammar = finalize_grammar(grammar, 1);
+
+    Ok(grammar)
+}
 
 /// Create scanner productions, adds ids to tokens, creates cache
 /// data.
@@ -288,133 +429,6 @@ impl WorkVerifier
     {
         self.pending == 0 || self.progress == 0 || self.complete > 0
     }
-}
-
-pub fn compile_from_path(
-    root_grammar_absolute_path: &PathBuf,
-    number_of_threads: usize,
-) -> Result<GrammarStore, parse::ParseError>
-{
-    let mut pending_grammar_paths = Mutex::new(VecDeque::<PathBuf>::new());
-
-    let mut claimed_grammar_paths = Mutex::new(HashSet::<PathBuf>::new());
-
-    // Pending Work, Claimed Work, Completed Work
-    let mut work_verifier = Mutex::new(WorkVerifier::new(1));
-
-    pending_grammar_paths
-        .lock()
-        .unwrap()
-        .push_back(root_grammar_absolute_path.to_owned());
-
-    let number_of_threads = std::thread::available_parallelism()
-        .unwrap_or(NonZeroUsize::new(1).unwrap())
-        .get();
-
-    let mut grammars = thread::scope(|s| {
-        [0..number_of_threads]
-            .into_iter()
-            .map(|i| {
-                s.spawn(|| {
-                    let mut raw_grammars = vec![];
-
-                    loop {
-                        match {
-                            let val = pending_grammar_paths.lock().unwrap().pop_front();
-
-                            val
-                        } {
-                            Some(path) => {
-                                if {
-                                    let result = claimed_grammar_paths
-                                        .lock()
-                                        .unwrap()
-                                        .insert(path.to_owned());
-
-                                    {
-                                        let mut work_verifier =
-                                            work_verifier.lock().unwrap();
-
-                                        if result {
-                                            work_verifier.start_one_unit_of_work()
-                                        } else {
-                                            work_verifier.skip_one_unit_of_work()
-                                        }
-                                    }
-
-                                    result
-                                } {
-                                    match compile_file_path(&path) {
-                                        Ok(grammar) => {
-                                            {
-                                                let mut work_verifier =
-                                                    work_verifier.lock().unwrap();
-
-                                                work_verifier.complete_one_unit_of_work();
-
-                                                work_verifier.add_units_of_work(
-                                                    grammar.imports.len() as u32,
-                                                );
-                                            }
-
-                                            for (_, (_, b)) in &grammar.imports {
-                                                pending_grammar_paths
-                                                    .lock()
-                                                    .unwrap()
-                                                    .push_back(b.to_owned());
-                                            }
-
-                                            raw_grammars.push(grammar);
-                                        }
-                                        Err(_) => {}
-                                    }
-                                };
-                            }
-                            None => {
-                                if {
-                                    let work_verifier = work_verifier.lock().unwrap();
-
-                                    work_verifier.is_complete()
-                                } {
-                                    break;
-                                }
-                            }
-                        }
-                    }
-
-                    raw_grammars
-                })
-            })
-            .map(|s| s.join().unwrap())
-            .collect::<Vec<_>>()
-            .into_iter()
-            .flatten()
-            .collect::<VecDeque<_>>()
-    });
-
-    let mut root = grammars.pop_front().unwrap();
-
-    // Merge grammars
-
-    merge_grammars(&mut root, &grammars.into_iter().collect::<Vec<_>>());
-
-    let final_grammar = finalize_grammar(root, number_of_threads);
-
-    Ok(final_grammar)
-}
-
-pub fn compile_from_string(
-    string: &str,
-    absolute_path: &PathBuf,
-) -> Result<GrammarStore, parse::ParseError>
-{
-    let grammar = parse::compile_grammar_ast(Vec::from(string.as_bytes()))?;
-
-    let grammar = pre_process_grammar(&grammar, absolute_path)?;
-
-    let grammar = finalize_grammar(grammar, 1);
-
-    Ok(grammar)
 }
 
 fn process_symbols(grammar: &mut GrammarStore)
@@ -808,18 +822,6 @@ fn merge_grammars(root: &mut GrammarStore, grammars: &[GrammarStore])
                 }
             }
         }
-    }
-}
-
-fn compile_file_path(absolute_path: &PathBuf) -> Result<GrammarStore, parse::ParseError>
-{
-    match read(absolute_path) {
-        Ok(buffer) => {
-            let grammar = parse::compile_grammar_ast(buffer)?;
-
-            pre_process_grammar(&grammar, absolute_path)
-        }
-        Err(err) => Err(parse::ParseError::IO_ERROR(err)),
     }
 }
 
@@ -1244,13 +1246,10 @@ fn pre_process_body(
             {
                 // Create a virtual production and symbol to go in its place
                 let symbol = ASTNode::Production_Symbol(
-                    super::grammar_data::ast::Production_Symbol::new(
-                        name.clone(),
-                        token.clone(),
-                    ),
+                    super::data::ast::Production_Symbol::new(name.clone(), token.clone()),
                 );
 
-                let production = super::grammar_data::ast::Production::new(
+                let production = super::data::ast::Production::new(
                     false,
                     symbol.clone(),
                     bodies.clone(),
@@ -1395,7 +1394,7 @@ fn pre_process_body(
 
                     if let ASTNode::List_Production(list) = sym {
                         // Create new bodies that will be bound to the symbol.
-                        let body_a = super::grammar_data::ast::Body::new(
+                        let body_a = super::data::ast::Body::new(
                             false,
                             vec![list.symbols.clone()],
                             None,

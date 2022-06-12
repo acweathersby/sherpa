@@ -1,0 +1,101 @@
+# Copyright (C) 2021 Anthony Weathersby - The Hydrocarbon Parser Compiler
+# see /source/typescript/hydrocarbon.ts for full copyright and warranty 
+# disclaimer notice.
+
+# version 6.0
+
+@IMPORT ./symbols.hcg as sym
+
+@IMPORT ./comments.hcg as cm
+
+@IGNORE g:sp g:nl tk:cm::comment
+
+########################################################################################################################
+######################################  FUNCTIONS
+########################################################################################################################
+
+<> hcg_functions > 
+        out_of_band_function
+    |   reduce_function
+    |   function_clause
+
+<> out_of_band_function > 
+
+    generic_function_start sym::reference_symbol tk:js_data_block
+                 
+                                                                    f:r {  { 
+                                                                            t_Out_Of_Band,
+                                                                            c_Function,  
+                                                                            reference:$2,     
+                                                                            txt: str($3)
+                                                                        }  }
+
+    |   generic_function_start sym::production_symbol function_body_index? tk:js_data_block
+
+                                                                    f:r {  { 
+                                                                            t_Out_Of_Band, 
+                                                                            c_Function,  
+                                                                            production:$2,
+                                                                            index: $3,
+                                                                            txt: str($4)
+                                                                        }  }
+
+    |    generic_function_start sym::production_symbol function_body_index? sym::reference_symbol
+
+                                                                    f:r {  { 
+                                                                            t_Out_Of_Band,
+                                                                            c_Function,  
+                                                                            production:$2,
+                                                                            index:$3,
+                                                                            reference:$4
+                                                                        }  }
+
+<> function_body_index > ( 
+    \. ( 
+                g:num                       f:r{ { t_FunctionIndexNum, value: f64($1) } } 
+            |   \*                          f:r{ { t_FunctionIndexWildCard } } 
+            |   sym::reference_symbol       f:r{ { t_FunctionIndexId, value: str($1) } } 
+    ) 
+ )(+)
+
+                                                                        }
+                                                                    }
+<> reduce_function > generic_function_start ( t:return | t:r ) tk:js_data_block                                
+                                                                    f:r { {
+                                                                        t_Returned,
+                                                                        c_Function,        
+                                                                        txt: str($3), 
+                                                                        }
+                                                                    }
+
+     | generic_function_start ( t:return | t:r ) sym::reference_symbol     
+                                                                     f:r { 
+                                                                         {
+                                                                            t_Referenced,
+                                                                            c_Function,             
+                                                                            reference: $3
+                                                                        }
+                                                                    }
+
+
+<> js_function_data > js_data ?=}
+
+<> js_data > js_primitive
+    | js_data_block
+    | js_data js_primitive                                          
+    | js_data js_data_block                                         
+    | $eof
+
+<> js_primitive > g:id 
+    | g:num 
+    | g:sp 
+    | g:tab 
+    | g:nl 
+    | g:sym 
+
+<> js_data_block > \{ js_data \}                                   
+
+<> generic_function_start > \f:
+
+<> ascript_function_start > \ast:
+    

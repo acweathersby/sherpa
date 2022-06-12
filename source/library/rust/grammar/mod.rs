@@ -1,5 +1,5 @@
 pub mod compiler;
-pub mod grammar_data;
+pub mod data;
 pub mod item;
 pub mod parse;
 pub mod production;

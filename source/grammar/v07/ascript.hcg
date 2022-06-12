@@ -6,7 +6,7 @@
 
 @IGNORE g:sp g:nl tk:cm::comment
 
-<> ast_expression > struct 
+<> ascript > struct 
     | statements
                                                         f:r { { t_Statements, statments:$1 } }
 
@@ -15,12 +15,20 @@
 <> struct_prop >  identifier \: expression
     |  identifier \: struct
                                                         f:r { { t_Property,  id:$1, val:$3 } }
-    | \t_ identifier
+    | tk:type_idenfifier
                                                         f:r { { t_TypeId,  val:$2 } }
-    | \c_ identifier
+    | tk:class_identifier
                                                         f:r { { t_ClassId, val:$2 } }
-    | t:tok
+    | ( t:tok | t:token )
                                                         f:r { { t_Token } }
+<> type_idenfifier > 
+    \t_ identifier
+
+<> class_identifier >
+    \c_ identifier
+
+<> type_idenfifier > 
+
 <> statements > statement(+\, )
 
 <> statement > add

@@ -1,5 +1,6 @@
 use std::result;
 
+use crate::bytecode::constants::DEFAULT_FAIL_INSTRUCTION_POINTER;
 use crate::primitives::kernel_token::KernelToken;
 use crate::runtime::buffer::ByteReader;
 use crate::runtime::recognizer::stack::KernelStack;
@@ -69,6 +70,20 @@ pub enum ParseAction
         token: KernelToken,
     },
     FORK {},
+}
+
+/// Debug macro used to create a breakpoint when an iterator hits a
+/// certain
+#[macro_export]
+macro_rules! set_byte_code_break_point {
+    ( $state_ident:ident, $x:expr ) => {
+        #[cfg(debug_assertions)]
+        {
+            if ($state_ident & INSTRUCTION_POINTER_MASK) * 4 == $x {
+                unsafe { std::intrinsics::breakpoint() }
+            }
+        }
+    };
 }
 
 /// Represents a single Iterator
@@ -444,8 +459,6 @@ impl<'a, T: ByteReader> ParserCoreIterator<T> for StateIterator<'a, T>
 
         self.emit_shift();
 
-        // self.reader.next(token.byte_length);
-
         token.cp_offset += token.cp_length;
 
         token.byte_offset += token.byte_length;
@@ -455,9 +468,6 @@ impl<'a, T: ByteReader> ParserCoreIterator<T> for StateIterator<'a, T>
         token.byte_length = 0;
 
         token.typ = 0;
-
-        // token.line_offset = self.reader.line_offset();
-        // token.line_number = self.reader.line_count();
 
         self.set_tok(0, token);
 
@@ -482,20 +492,10 @@ impl<'a, T: ByteReader> ParserCoreIterator<T> for StateIterator<'a, T>
 
                 let token = self.tokens[self.token_end];
 
-                // self.reader.next(token.byte_length);
-
-                // if self.reader.at_end() {
-                //    return 0;
-                //}
-
                 self.token_end += 1;
 
                 self.tokens[self.token_end] = token.next();
             } else {
-                // if self.reader.at_end() {
-                //    return 1;
-                //}
-
                 // set primary lexer
 
                 if self.token_end > 1 {
@@ -504,8 +504,6 @@ impl<'a, T: ByteReader> ParserCoreIterator<T> for StateIterator<'a, T>
                     if !self.reader.set_cursor_to(&self.tokens[1]) {
                         return 0;
                     };
-
-                    //(&mut self.tokens[1]).typ = 0;
                 }
             }
 
@@ -515,8 +513,6 @@ impl<'a, T: ByteReader> ParserCoreIterator<T> for StateIterator<'a, T>
 
             match input_type {
                 1 => {
-                    // tok.line_offset = self.reader.line_offset();
-                    // tok.line_number = self.reader.line_count();
                     tok = self.scanner(tok, scanner_start_pointer, bytecode);
 
                     self.tokens[index] = tok;
@@ -1116,7 +1112,7 @@ trait ParserCoreIterator<R: ByteReader>
     fn fork(&mut self, _index: usize, _: u32, _bytecode: &[u32]) -> usize
     {
         // let instruction = bytecode[index];
-        0
+        DEFAULT_FAIL_INSTRUCTION_POINTER
     }
 
     fn scan_to(&mut self, index: usize, _: u32) -> usize

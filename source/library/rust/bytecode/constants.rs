@@ -1,22 +1,102 @@
 // Global Constants
 const STATE_INDEX_MASK: u32 = (1 << 24) - 1;
 
-const _FAIL_STATE_MASK: u32 = 1 << 27;
+pub const INSTRUCTION_POINTER_MASK: u32 = 0xFFFFFF;
 
-const _NORMAL_STATE_MASK: u32 = 1 << 26;
-
-const _GOTO_STATE_MASK: u32 = 1 << 25;
-
-const _ALPHA_INCREMENT_STACK_POINTER_MASK: u32 = 1 << 0;
-
-const _ALPHA_HAVE_DEFAULT_ACTION_MASK: u32 = 1 << 1;
-
-const _PRODUCTION_SCOPE_POP_POINTER: u32 = 2;
-
-const INSTRUCTION_POINTER_MASK: u32 = 0xFFFFFF;
-
-const SKIPPED_SCAN_PROD: u16 = 9009;
+pub const SKIPPED_SCAN_PROD: u16 = 9009;
 
 const DEFAULT_PASS_INSTRUCTION: usize = 1;
 
-const NORMAL_STATE_MASK: u32 = 1 << 26;
+// Bit mask for bytecode states that are active during failure mode
+pub const FAIL_STATE_MASK: u32 = 1 << 27;
+
+/// Bit mask for bytecode states that are active during normal mode
+pub const NORMAL_STATE_MASK: u32 = 1 << 26;
+
+pub const PASS_INSTRUCTION: u32 = 0;
+
+pub const FAIL_INSTRUCTION: u32 = 15 << 28;
+
+pub const PASS_THROUGH_INSTRUCTION: u32 = FAIL_INSTRUCTION | 1;
+
+/// This is the standard location of a `fail` instruction that is
+/// present in all bytecode blocks produced by Hydrocarbon.
+pub const DEFAULT_FAIL_INSTRUCTION_POINTER: usize = 2;
+
+/// This is the standard location of a `pass-through` instruction that
+/// is present in all bytecode blocks produced by Hydrocarbon.
+pub const DEFAULT_PASS_THROUGH_INSTRUCTION_POINTER: usize = 0;
+
+/// This is the standard location of a `pass` instruction that is
+/// present in all bytecode blocks produced by Hydrocarbon.
+pub const DEFAULT_PASS_INSTRUCTION_POINTER: usize = 1;
+
+///  A "magic" number assigned to a reduce node's length
+/// value to indicate that it is to use the symbol accumulator
+/// to determine how many symbols are to removed from the
+/// parse stack when the reduce function is called.
+pub const IR_REDUCE_NUMERIC_LEN_ID: u32 = 0x90FA0102;
+
+pub const END_ITEM_ADDENDUM: u32 = 1 << 20;
+
+pub const LOCAL_STATE: u32 = 0;
+
+pub const GLOBAL_STATE: i32 = -1;
+
+pub const DEFAULT_CASE_INDICATOR: u32 = 9009;
+
+pub const STATE_BYTECODE_BYTE_START: u32 = 24;
+
+/// Bit mask for bytecode states that are GOTO states
+pub const GOTO_STATE_MASK: u32 = 1 << 25;
+
+/// Bit mask for bytecode states that are SCANNER states
+pub const SCANNER_STATE_MASK: u32 = 1 << 24;
+
+pub const ALPHA_INCREMENT_STACK_POINTER_MASK: u32 = 1 << 0;
+
+pub const ALPHA_HAVE_DEFAULT_ACTION_MASK: u32 = 1 << 1;
+
+pub const PRODUCTION_SCOPE_POP_POINTER: u32 = 2;
+
+#[non_exhaustive]
+/// Bytecode instruction constants
+pub struct INSTRUCTION;
+
+impl INSTRUCTION
+{
+    pub const I00_PASS: u32 = 0;
+    pub const I01_CONSUME: u32 = 1 << 28;
+    pub const I02_GOTO: u32 = 2 << 28;
+    pub const I03_SET_PROD: u32 = 3 << 28;
+    pub const I04_REDUCE: u32 = 4 << 28;
+    pub const I05_TOKEN: u32 = 5 << 28;
+    pub const I05_TOKEN_ASSIGN: u32 = INSTRUCTION::I05_TOKEN | 0x04000000;
+    pub const I05_TOKEN_ASSIGN_CONSUME: u32 = INSTRUCTION::I05_TOKEN | 0x09000000;
+    pub const I05_TOKEN_LENGTH: u32 = INSTRUCTION::I05_TOKEN | 0x08000000;
+    pub const I06_FORK_TO: u32 = 6 << 28;
+    pub const I07_SCAN: u32 = 7 << 28;
+    pub const I07_SCAN_BACK_UNTIL: u32 = INSTRUCTION::I07_SCAN | 0x00100000;
+    pub const I08_NOOP: u32 = 8 << 28;
+    pub const I09_JUMP_OFFSET_TABLE: u32 = 9 << 28;
+    pub const I10_JUMP_HASH_TABLE: u32 = 10 << 28;
+    pub const I11_SET_FAIL_STATE: u32 = 11 << 28;
+    pub const I12_REPEAT: u32 = 12 << 28;
+    pub const I13_NOOP: u32 = 13 << 28;
+    pub const I14_ASSERT_CONSUME: u32 = 14 << 28;
+    pub const I15_FAIL: u32 = 15 << 28;
+    pub const I15_FALL_THROUGH: u32 = 15 << 28 | 1;
+}
+
+#[non_exhaustive]
+/// INPUT TYPE KEYS
+pub struct INPUT_TYPE_KEY;
+
+impl INPUT_TYPE_KEY
+{
+    pub const T01_PRODUCTION: u32 = 1;
+    pub const T02_TOKEN: u32 = 2;
+    pub const T03_CLASS: u32 = 3;
+    pub const T04_CODEPOINT: u32 = 4;
+    pub const T05_BYTE: u32 = 5;
+}

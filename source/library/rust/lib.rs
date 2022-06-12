@@ -4,6 +4,9 @@
 #![feature(new_uninit)]
 #![feature(get_mut_unchecked)]
 #![feature(scoped_threads)]
+#![feature(core_intrinsics)]
+#![feature(box_patterns)]
+#![feature(map_first_last)]
 
 pub mod primitives;
 pub mod runtime;

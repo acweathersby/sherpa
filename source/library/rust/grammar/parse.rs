@@ -3,28 +3,41 @@ use std::fmt::Error;
 use std::sync::PoisonError;
 
 use crate::primitives::HCObj;
+use crate::primitives::Token;
 use crate::runtime::buffer::UTF8StringReader;
 use crate::runtime::completer::complete;
 use crate::runtime::recognizer::iterator::*;
 
-use super::grammar_data::ast::ASTNode;
-use super::grammar_data::ast::FunctionMaps;
-use super::grammar_data::ast::Grammar;
-use super::grammar_data::ast::IR_STATE;
-use super::grammar_data::parser_data::EntryPoint_Hc;
-use super::grammar_data::parser_data::EntryPoint_Ir;
-use super::grammar_data::parser_data::BYTECODE;
+use super::data::ast::ASTNode;
+use super::data::ast::FunctionMaps;
+use super::data::ast::Grammar;
+use super::data::ast::IR_STATE;
+use super::data::parser_data::EntryPoint_Hc;
+use super::data::parser_data::EntryPoint_Ir;
+use super::data::parser_data::BYTECODE;
 
 pub fn parse_string(string: &String) {}
 
+/// A simple error message and optional location Token
 #[derive(Debug)]
+pub struct CompileProblem
+{
+    // Message that appears
+    pub message:        String,
+    /// Message that appears inline the code location
+    /// diagram
+    pub inline_message: Option<String>,
+    pub loc:            Option<Token>,
+}
 
+#[derive(Debug)]
 pub enum ParseError
 {
     UNDEFINED,
     IO_ERROR(std::io::Error),
     MUTEX_ERROR,
     THREAD_ERROR,
+    COMPILE_PROBLEM(CompileProblem),
 }
 
 impl Display for ParseError
@@ -37,6 +50,29 @@ impl Display for ParseError
             ParseError::MUTEX_ERROR => f.write_str("A Mutex has been poisoned"),
             ParseError::THREAD_ERROR => {
                 f.write_str("Unable to get an exclusive lock on an object")
+            }
+            ParseError::COMPILE_PROBLEM(CompileProblem {
+                message,
+                inline_message,
+                loc,
+            }) => {
+                if let Some(loc) = loc {
+                    if let Some(inline_message) = inline_message {
+                        f.write_str(&format!(
+                            "{}\n{}",
+                            message,
+                            loc.blame(1, 1, inline_message).unwrap()
+                        ))
+                    } else {
+                        f.write_str(&format!(
+                            "{}\n{}",
+                            message,
+                            loc.blame(1, 1, "").unwrap()
+                        ))
+                    }
+                } else {
+                    f.write_str(message)
+                }
             }
         }
     }
@@ -103,11 +139,13 @@ fn test_ir_trivial_state()
 
 fn test_ir_trivial_branch_state()
 {
-    let input = String::from("state [ A ] assert TOKEN [ /* a */ 1 ] ( pass )");
+    let input = String::from("state [ A ] assert TOKEN [ /* a */ 11 ] ( pass )");
 
     let result = compile_ir_ast(Vec::from(input.as_bytes()));
 
     assert!(result.is_ok());
+
+    print!("{:#?}", result.unwrap());
 }
 
 #[test]

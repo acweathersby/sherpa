@@ -8,6 +8,8 @@
 
 @IMPORT ./comments.hcg as cm
 
+@IMPORT ./asytr as ast
+
 @IGNORE g:sp g:nl tk:cm::comment
 
 ########################################################################################################################
@@ -21,7 +23,16 @@
 
 <> out_of_band_function > 
 
-        js_function_start_symbol sym::reference_symbol tk:js_data_block
+        ascript_function_start sym::reference_symbol \{ ast::ascript \}
+                 
+                                                                    f:r {  { 
+                                                                            t_Ascript,
+                                                                            c_Function,  
+                                                                            reference:$2,     
+                                                                            ascript: $4
+                                                                        }  }
+
+    |   generic_function_start sym::reference_symbol tk:js_data_block
                  
                                                                     f:r {  { 
                                                                             t_Out_Of_Band,
@@ -30,7 +41,7 @@
                                                                             txt: str($3)
                                                                         }  }
 
-    |   js_function_start_symbol sym::production_symbol function_body_index? tk:js_data_block
+    |   generic_function_start sym::production_symbol function_body_index? tk:js_data_block
 
                                                                     f:r {  { 
                                                                             t_Out_Of_Band, 
@@ -40,7 +51,7 @@
                                                                             txt: str($4)
                                                                         }  }
 
-    |    js_function_start_symbol sym::production_symbol function_body_index? sym::reference_symbol
+    |    generic_function_start sym::production_symbol function_body_index? sym::reference_symbol
 
                                                                     f:r {  { 
                                                                             t_Out_Of_Band,
@@ -60,7 +71,7 @@
 
                                                                         }
                                                                     }
-<> reduce_function > js_function_start_symbol ( t:return | t:r ) tk:js_data_block                                
+<> reduce_function > generic_function_start ( t:return | t:r ) tk:js_data_block                                
                                                                     f:r { {
                                                                         t_Returned,
                                                                         c_Function,        
@@ -68,7 +79,7 @@
                                                                         }
                                                                     }
 
-     | js_function_start_symbol ( t:return | t:r ) sym::reference_symbol     
+     | generic_function_start ( t:return | t:r ) sym::reference_symbol     
                                                                      f:r { 
                                                                          {
                                                                             t_Referenced,
@@ -95,5 +106,7 @@
 
 <> js_data_block > \{ js_data \}                                   
 
-<> js_function_start_symbol > \f:                                  
+<> generic_function_start > \f:
+
+<> ascript_function_start > \ast:
     
