@@ -98,7 +98,10 @@ pub trait ParseIterator<T: ByteReader>
     /// Starts parsing the input and emits
     /// parse actions to the handleAction function
 
-    fn start(&mut self, handle_action: &mut impl FnMut(ParseAction)) -> KernelToken;
+    fn start(
+        &mut self,
+        handle_action: &mut impl FnMut(ParseAction),
+    ) -> KernelToken;
 
     fn reader(&self) -> &T;
 }
@@ -121,10 +124,16 @@ impl<T: ByteReader> ParseIterator<T> for ReferenceIterator<T>
         }
     }
 
-    fn start(&mut self, handle_action: &mut impl FnMut(ParseAction)) -> KernelToken
+    fn start(
+        &mut self,
+        handle_action: &mut impl FnMut(ParseAction),
+    ) -> KernelToken
     {
-        let mut parser: StateIterator<T> =
-            StateIterator::new(self.reader.clone(), self.entry_pointer, handle_action);
+        let mut parser: StateIterator<T> = StateIterator::new(
+            self.reader.clone(),
+            self.entry_pointer,
+            handle_action,
+        );
 
         parser.parse(self.bytecode);
 
@@ -277,7 +286,8 @@ impl<'a, T: ByteReader> StateIterator<'a, T>
                 }
 
                 if (state & mask_gate) != 0 {
-                    fail_mode = self.instruction_executor(state, fail_mode, bytecode);
+                    fail_mode =
+                        self.instruction_executor(state, fail_mode, bytecode);
                 }
             }
         }
@@ -318,7 +328,9 @@ impl<'a, T: ByteReader> StateIterator<'a, T>
 
                             current_token.line_number = token.line_number;
 
-                            self.scanner_iterator.stack.reset(scanner_start_pointer);
+                            self.scanner_iterator
+                                .stack
+                                .reset(scanner_start_pointer);
 
                             self.scanner_iterator.tokens[0] =
                                 self.scanner_iterator.tokens[1];
@@ -548,12 +560,12 @@ impl<T: ByteReader> ScannerIterator<T>
     pub fn new(reader: T, entry_pointer: u32) -> ScannerIterator<T>
     {
         let mut iterator = ScannerIterator {
-            stack:              KernelStack::new(),
-            reader:             reader,
-            tokens:             [KernelToken::new(); 8],
+            stack: KernelStack::new(),
+            reader: reader,
+            tokens: [KernelToken::new(); 8],
             symbol_accumulator: 0,
-            production_id:      0,
-            token_end:          1,
+            production_id: 0,
+            token_end: 1,
         };
 
         iterator.stack.reset(entry_pointer);
@@ -586,7 +598,8 @@ impl<T: ByteReader> ScannerIterator<T>
                 let mask_gate = NORMAL_STATE_MASK << fail_mode;
 
                 if (state & mask_gate) != 0 {
-                    fail_mode = self.instruction_executor(state, fail_mode, bytecode);
+                    fail_mode =
+                        self.instruction_executor(state, fail_mode, bytecode);
                 }
             }
         }
@@ -812,7 +825,8 @@ trait ParserCoreIterator<R: ByteReader>
 
         let prev_token = self.get_tok(0);
 
-        if prev_token.byte_offset + prev_token.byte_length != token.byte_offset {
+        if prev_token.byte_offset + prev_token.byte_length != token.byte_offset
+        {
             self.emit_action(ParseAction::SKIP {
                 length:     token.cp_offset - prev_token.cp_offset,
                 line:       prev_token.line_number,
@@ -901,7 +915,8 @@ trait ParserCoreIterator<R: ByteReader>
                 }
 
                 0xF0000000 => {
-                    break self.advanced_return(index, fail_mode, bytecode) as u32
+                    break self.advanced_return(index, fail_mode, bytecode)
+                        as u32
                 }
                 0x00000000 | _ => break self.pass(index + 1, fail_mode) as u32,
             };
@@ -919,7 +934,12 @@ trait ParserCoreIterator<R: ByteReader>
         return 0;
     }
 
-    fn assert_consume(&mut self, index: usize, _: u32, bytecode: &[u32]) -> usize
+    fn assert_consume(
+        &mut self,
+        index: usize,
+        _: u32,
+        bytecode: &[u32],
+    ) -> usize
     {
         let instruction = bytecode[index];
 
@@ -993,7 +1013,12 @@ trait ParserCoreIterator<R: ByteReader>
         index
     }
 
-    fn reduce(&mut self, index: usize, recover_data: u32, bytecode: &[u32]) -> usize
+    fn reduce(
+        &mut self,
+        index: usize,
+        recover_data: u32,
+        bytecode: &[u32],
+    ) -> usize
     {
         let instruction = bytecode[index];
 
@@ -1002,7 +1027,8 @@ trait ParserCoreIterator<R: ByteReader>
         let length = (instruction >> 16) & 0xFFF;
 
         if (body_id & 0xFFFF) == 0xFFFF {
-            let accumulated_symbols = self.get_acc() - (recover_data & 0xFFFF0000);
+            let accumulated_symbols =
+                self.get_acc() - (recover_data & 0xFFFF0000);
 
             let len = accumulated_symbols >> 16;
 
@@ -1021,7 +1047,12 @@ trait ParserCoreIterator<R: ByteReader>
         }
     }
 
-    fn set_production(&mut self, index: usize, _: u32, bytecode: &[u32]) -> usize
+    fn set_production(
+        &mut self,
+        index: usize,
+        _: u32,
+        bytecode: &[u32],
+    ) -> usize
     {
         let instruction = bytecode[index];
 
@@ -1041,7 +1072,12 @@ trait ParserCoreIterator<R: ByteReader>
         index + 1
     }
 
-    fn push_fail_state(&mut self, index: usize, _: u32, bytecode: &[u32]) -> usize
+    fn push_fail_state(
+        &mut self,
+        index: usize,
+        _: u32,
+        bytecode: &[u32],
+    ) -> usize
     {
         let instruction = bytecode[index];
 
@@ -1079,7 +1115,8 @@ trait ParserCoreIterator<R: ByteReader>
 
             root_token.typ = val as u16;
 
-            root_token.byte_length = scan_token.byte_offset - root_token.byte_offset;
+            root_token.byte_length =
+                scan_token.byte_offset - root_token.byte_offset;
 
             root_token.cp_length = scan_token.cp_offset - root_token.cp_offset;
 
@@ -1097,8 +1134,12 @@ trait ParserCoreIterator<R: ByteReader>
         index + 1
     }
 
-    fn advanced_return(&mut self, index: usize, fail_mode: u32, bytecode: &[u32])
-        -> usize
+    fn advanced_return(
+        &mut self,
+        index: usize,
+        fail_mode: u32,
+        bytecode: &[u32],
+    ) -> usize
     {
         let instruction = bytecode[index];
 
@@ -1194,7 +1235,8 @@ trait ParserCoreIterator<R: ByteReader>
         index
     }
 
-    fn hash_jump(&mut self, mut index: usize, _: u32, bytecode: &[u32]) -> usize
+    fn hash_jump(&mut self, mut index: usize, _: u32, bytecode: &[u32])
+        -> usize
     {
         let instruction = bytecode[index];
 
@@ -1220,14 +1262,18 @@ trait ParserCoreIterator<R: ByteReader>
 
         let instruction_field_size = instruction & 0xFFFF;
 
-        let input_value =
-            self.get_input_value(input_type, lexer_type, scanner_start_pointer, bytecode)
-                as u32;
+        let input_value = self.get_input_value(
+            input_type,
+            lexer_type,
+            scanner_start_pointer,
+            bytecode,
+        ) as u32;
 
         let mut hash_index = input_value & modulus;
 
         loop {
-            let cell = bytecode[(hash_table_start + hash_index) as usize] as u32;
+            let cell =
+                bytecode[(hash_table_start + hash_index) as usize] as u32;
 
             let value = (cell & 0x7FF) as u32;
 
@@ -1241,14 +1287,20 @@ trait ParserCoreIterator<R: ByteReader>
 
             if next == 0 {
                 // Failure
-                return (instruction_field_size + instruction_field_start) as usize;
+                return (instruction_field_size + instruction_field_start)
+                    as usize;
             }
 
             hash_index = ((hash_index as i32) + next) as u32;
         }
     }
 
-    fn index_jump(&mut self, mut index: usize, _: u32, bytecode: &[u32]) -> usize
+    fn index_jump(
+        &mut self,
+        mut index: usize,
+        _: u32,
+        bytecode: &[u32],
+    ) -> usize
     {
         let instruction = bytecode[index];
 
@@ -1264,8 +1316,12 @@ trait ParserCoreIterator<R: ByteReader>
 
         let lexer_type = (instruction >> 26) & 0x3;
 
-        let mut input_value =
-            self.get_input_value(input_type, lexer_type, scanner_start_pointer, bytecode);
+        let mut input_value = self.get_input_value(
+            input_type,
+            lexer_type,
+            scanner_start_pointer,
+            bytecode,
+        );
 
         input_value -= basis__ as i32;
 

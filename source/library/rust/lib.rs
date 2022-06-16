@@ -7,6 +7,14 @@
 #![feature(core_intrinsics)]
 #![feature(box_patterns)]
 #![feature(map_first_last)]
+#![allow(
+    bad_style,
+    dead_code,
+    unused,
+    unused_allocation,
+    unused_comparisons,
+    unused_parens
+)]
 
 pub mod primitives;
 pub mod runtime;

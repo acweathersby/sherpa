@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -9,6 +10,8 @@ use super::ByteReader;
 
 #[derive(Debug, Clone)]
 
+/// File reader is implemented by appending byte blocks to an
+/// underlying store as a file is read.
 pub struct FileReader
 {
     cursor:      usize,
@@ -16,11 +19,12 @@ pub struct FileReader
     line_offset: usize,
     word:        u32,
     codepoint:   u32,
+    // file_handle: fs::File,
 }
 
 impl FileReader
 {
-    pub fn new(absolute_file_path: &PathBuf) -> FileReader
+    pub fn new(file_handle: fs::File) -> FileReader
     {
         let mut reader = FileReader {
             cursor:      0,
@@ -28,6 +32,7 @@ impl FileReader
             line_count:  0,
             line_offset: 0,
             codepoint:   0,
+            // file_handle,
         };
 
         reader.next(0);
@@ -78,6 +83,7 @@ impl ByteReader for FileReader
             codepoint:   self.codepoint,
             line_count:  self.line_count,
             line_offset: self.line_offset,
+            // file_handle: self.file_handle,
         }
     }
 

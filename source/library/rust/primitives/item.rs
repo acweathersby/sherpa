@@ -32,7 +32,9 @@ impl Item
 
         string += " =>";
 
-        for (index, BodySymbolRef { sym_id, .. }) in body.symbols.iter().enumerate() {
+        for (index, BodySymbolRef { sym_id, .. }) in
+            body.symbols.iter().enumerate()
+        {
             if index == self.offset as usize {
                 string += " •";
             }
@@ -81,12 +83,32 @@ impl Item
         }
     }
 
+    pub fn to_last_sym(self) -> Self
+    {
+        Item {
+            body:   self.body,
+            length: self.length,
+            offset: self.length - 1,
+            state:  self.state,
+        }
+    }
+
     pub fn to_start(&self) -> Item
     {
         Item {
             body:   self.body,
             length: self.length,
             offset: 0,
+            state:  self.state,
+        }
+    }
+
+    pub fn to_end(&self) -> Item
+    {
+        Item {
+            body:   self.body,
+            length: self.length,
+            offset: self.length,
             state:  self.state,
         }
     }
@@ -180,7 +202,10 @@ impl Item
         }
     }
 
-    pub fn get_production_id_at_sym(&self, grammar: &GrammarStore) -> ProductionId
+    pub fn get_production_id_at_sym(
+        &self,
+        grammar: &GrammarStore,
+    ) -> ProductionId
     {
         match self.get_symbol(grammar) {
             SymbolID::Production(production, _) => production,

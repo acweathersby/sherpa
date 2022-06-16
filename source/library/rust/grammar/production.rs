@@ -104,13 +104,15 @@ pub fn get_production_plain_name<'a>(
     grammar: &'a GrammarStore,
 ) -> &'a str
 {
-    let production = grammar.production_table.get(production_id).unwrap();
+    if let Some(production) = grammar.production_table.get(production_id) {
+        let name = &production.name;
 
-    let name = &production.name;
+        let split = name.split(UUID_NAME_DELIMITER);
 
-    let split = name.split(UUID_NAME_DELIMITER);
-
-    split.last().unwrap()
+        split.last().unwrap()
+    } else {
+        ""
+    }
 }
 
 /// Retrieves first the production_id of the first production

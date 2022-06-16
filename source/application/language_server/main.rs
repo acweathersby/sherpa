@@ -49,30 +49,34 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>>
 
                 match cast::<Completion>(req) {
                     Ok((id, params)) => {
-                        eprintln!("got Completion request #{}: {:?}", id, params);
+                        eprintln!(
+                            "got Completion request #{}: {:?}",
+                            id, params
+                        );
 
-                        let result =
-                            Some(CompletionResponse::Array(vec![CompletionItem {
-                                label:                 String::from("test"),
-                                kind:                  Some(CompletionItemKind::CLASS),
+                        let result = Some(CompletionResponse::Array(vec![
+                            CompletionItem {
+                                label: String::from("test"),
+                                kind: Some(CompletionItemKind::CLASS),
                                 additional_text_edits: None,
-                                command:               None,
-                                commit_characters:     None,
-                                data:                  None,
-                                deprecated:            None,
-                                detail:                None,
-                                documentation:         Some(Documentation::String(
+                                command: None,
+                                commit_characters: None,
+                                data: None,
+                                deprecated: None,
+                                detail: None,
+                                documentation: Some(Documentation::String(
                                     "A test entry".to_string(),
                                 )),
-                                filter_text:           None,
-                                insert_text:           Some(String::from("test")),
-                                insert_text_format:    None,
-                                insert_text_mode:      None,
-                                preselect:             Some(true),
-                                sort_text:             None,
-                                tags:                  None,
-                                text_edit:             None,
-                            }]));
+                                filter_text: None,
+                                insert_text: Some(String::from("test")),
+                                insert_text_format: None,
+                                insert_text_mode: None,
+                                preselect: Some(true),
+                                sort_text: None,
+                                tags: None,
+                                text_edit: None,
+                            },
+                        ]));
 
                         let result = serde_json::to_value(&result).unwrap();
 
@@ -103,7 +107,9 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>>
     Ok(())
 }
 
-fn cast<R>(req: Request) -> Result<(RequestId, R::Params), ExtractError<Request>>
+fn cast<R>(
+    req: Request,
+) -> Result<(RequestId, R::Params), ExtractError<Request>>
 where
     R: lsp_types::request::Request,
     R::Params: serde::de::DeserializeOwned,

@@ -42,7 +42,10 @@ pub fn get_utf8_code_point_from(word: u32) -> u32
         } else if (word & 0xF0C0C000) == 0xE0808000 {
             ((a & 0xF) << 12) | ((b & 0x3F) << 6) | (c & 0x3F)
         } else if (word & 0xF8C0C0C0) == 0xF0808080 {
-            ((a & 0x7) << 18) | ((b & 0x3F) << 12) | ((c & 0x3F) << 6) | (d & 0x3F)
+            ((a & 0x7) << 18)
+                | ((b & 0x3F) << 12)
+                | ((c & 0x3F) << 6)
+                | (d & 0x3F)
         } else {
             0
         }

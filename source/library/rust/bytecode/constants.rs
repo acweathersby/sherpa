@@ -1,5 +1,5 @@
 // Global Constants
-const STATE_INDEX_MASK: u32 = (1 << 24) - 1;
+pub const STATE_INDEX_MASK: u32 = (1 << 24) - 1;
 
 pub const INSTRUCTION_POINTER_MASK: u32 = 0xFFFFFF;
 
@@ -72,7 +72,8 @@ impl INSTRUCTION
     pub const I04_REDUCE: u32 = 4 << 28;
     pub const I05_TOKEN: u32 = 5 << 28;
     pub const I05_TOKEN_ASSIGN: u32 = INSTRUCTION::I05_TOKEN | 0x04000000;
-    pub const I05_TOKEN_ASSIGN_CONSUME: u32 = INSTRUCTION::I05_TOKEN | 0x09000000;
+    pub const I05_TOKEN_ASSIGN_CONSUME: u32 =
+        INSTRUCTION::I05_TOKEN | 0x09000000;
     pub const I05_TOKEN_LENGTH: u32 = INSTRUCTION::I05_TOKEN | 0x08000000;
     pub const I06_FORK_TO: u32 = 6 << 28;
     pub const I07_SCAN: u32 = 7 << 28;

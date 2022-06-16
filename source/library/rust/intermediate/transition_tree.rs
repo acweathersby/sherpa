@@ -48,7 +48,8 @@ pub fn construct_recursive_descent<'a>(
         .map(|(i, item)| item.to_state(i as u32))
         .collect();
 
-    let mut t_pack = TPack::new(production_id, grammar, TransitionMode::RecursiveDescent);
+    let mut t_pack =
+        TPack::new(production_id, grammar, TransitionMode::RecursiveDescent);
 
     for item in &items {
         t_pack
@@ -142,7 +143,8 @@ pub fn construct_goto<'a>(
                         .scoped_closures
                         .push(get_closure_cached(&stated_item, grammar));
 
-                    stated_item.to_state((t_pack.scoped_closures.len() - 1) as u32)
+                    stated_item
+                        .to_state((t_pack.scoped_closures.len() - 1) as u32)
                 };
 
                 stated_item
@@ -158,7 +160,8 @@ pub fn construct_goto<'a>(
 
         goto_node.set_is(TST::O_GOTO);
 
-        if (group.len() > 0 && (group.iter().any(|i| i.increment().unwrap().at_end())))
+        if (group.len() > 0
+            && (group.iter().any(|i| i.increment().unwrap().at_end())))
             || t_pack.root_production == production_id
         {
             if t_pack.root_production == production_id {
@@ -168,15 +171,27 @@ pub fn construct_goto<'a>(
                     .unwrap_or(&HashSet::new())
                     .iter()
                     .filter(|i| !group.iter().any(|g| *g == **i))
-                    .map(|i| i.increment().unwrap().to_state(OUT_OF_SCOPE_STATE))
+                    .map(|i| {
+                        i.increment().unwrap().to_state(OUT_OF_SCOPE_STATE)
+                    })
                     .collect();
 
                 goto_node.items.append(&mut reducible);
             }
 
-            create_peek(t_pack.insert_node(goto_node), items, grammar, &mut t_pack);
+            create_peek(
+                t_pack.insert_node(goto_node),
+                items,
+                grammar,
+                &mut t_pack,
+            );
         } else {
-            process_node(t_pack.insert_node(goto_node), grammar, &mut t_pack, false);
+            process_node(
+                t_pack.insert_node(goto_node),
+                grammar,
+                &mut t_pack,
+                false,
+            );
         }
     }
 
@@ -199,10 +214,15 @@ pub fn get_goto_starts(
 
     let mut output_items = GotoMap::new();
 
-    let mut batch =
-        VecDeque::from_iter(seed_items.iter().map(|i| i.get_production_id(grammar)));
+    let mut batch = VecDeque::from_iter(
+        seed_items.iter().map(|i| i.get_production_id(grammar)),
+    );
 
-    fn insert(goto_items: &mut GotoMap, production_id: &ProductionId, item: Item)
+    fn insert(
+        goto_items: &mut GotoMap,
+        production_id: &ProductionId,
+        item: Item,
+    )
     {
         if !goto_items.contains_key(production_id) {
             goto_items.insert(*production_id, HashSet::<Item>::new());
@@ -269,7 +289,8 @@ pub fn get_follow_closure(
 
         for item in items {
             if item.is_end() {
-                productions_to_process.push_back(item.get_production_id(grammar));
+                productions_to_process
+                    .push_back(item.get_production_id(grammar));
             }
 
             output.insert(item.decrement().unwrap());
@@ -326,7 +347,8 @@ fn process_node(
         .cloned()
         .collect();
 
-    let n_end: Vec<Item> = items.iter().filter(|i| i.is_end()).cloned().collect();
+    let n_end: Vec<Item> =
+        items.iter().filter(|i| i.is_end()).cloned().collect();
 
     if n_nonterm.len() > 0 {
         let production_ids = HashSet::<ProductionId>::from_iter(
@@ -473,7 +495,8 @@ fn create_peek(
         for item in items {
             for closure_item in get_closure(&vec![item], grammar) {
                 if !closure_item.is_nonterm(grammar) {
-                    t_pack.link_peek_closure(closure_item.to_state(state), item);
+                    t_pack
+                        .link_peek_closure(closure_item.to_state(state), item);
 
                     term_items.push(closure_item.to_state(state));
                 }
@@ -482,7 +505,9 @@ fn create_peek(
 
         for item in term_items {
             let mut node =
-                TGN::new(t_pack, item.get_symbol(grammar), parent_index, vec![item]);
+                TGN::new(t_pack, item.get_symbol(grammar), parent_index, vec![
+                    item,
+                ]);
 
             node.goal = goal_index;
 
@@ -514,7 +539,11 @@ fn create_peek(
 /// Constructs a Vector of Vectors, each of which contain items that
 /// have been grouped by the hash of a common distinguisher.
 
-fn hash_group<T: Copy + Sized, R: Hash + Sized + Eq, Function: Fn(usize, T) -> R>(
+fn hash_group<
+    T: Copy + Sized,
+    R: Hash + Sized + Eq,
+    Function: Fn(usize, T) -> R,
+>(
     vector: Vec<T>,
     hash_yielder: Function,
 ) -> Vec<Vec<T>>
@@ -562,9 +591,10 @@ fn process_peek_leaves(
 {
     let mut resolved_leaves = Vec::<usize>::new();
 
-    for peek_leaf_group in hash_group(leaves, |_, leaf| t_pack.get_node(leaf).goal)
-        .iter()
-        .cloned()
+    for peek_leaf_group in
+        hash_group(leaves, |_, leaf| t_pack.get_node(leaf).goal)
+            .iter()
+            .cloned()
     {
         let primary_peek_parent_index = peek_leaf_group[0];
 
@@ -637,7 +667,8 @@ fn process_peek_leaves(
 
             let have_proxy_parents = proxy_parents.len() > 0;
 
-            for child_index in process_node(goal_index, grammar, t_pack, false) {
+            for child_index in process_node(goal_index, grammar, t_pack, false)
+            {
                 let child_node = t_pack.get_node_mut(child_index);
 
                 child_node.parent = primary_parent;
@@ -742,12 +773,15 @@ fn disambiguate(
                     parent = t_pack.prune_leaf(end_node)
                 }
 
-                handle_unresolved_roots(parent, sym, roots, leaves, grammar, t_pack);
+                handle_unresolved_roots(
+                    parent, sym, roots, leaves, grammar, t_pack,
+                );
             }
         }
     }
 
-    let mut groups = hash_group(term_nodes, |_, n| t_pack.get_node(n).sym.clone());
+    let mut groups =
+        hash_group(term_nodes, |_, n| t_pack.get_node(n).sym.clone());
 
     let mut next_peek_groups = vec![];
 
@@ -801,7 +835,9 @@ fn disambiguate(
                 {
                     leaves.push(prime_node_index);
                 } else {
-                    panic!("Invalid state, unable to continue disambiguating \n");
+                    panic!(
+                        "Invalid state, unable to continue disambiguating \n"
+                    );
                 }
             } else {
                 next_peek_groups.push(peek_transition_group);
@@ -826,12 +862,22 @@ fn disambiguate(
 
     for peek_group in next_peek_groups {
         if peek_group.len() > 0 {
-            if handle_shift_reduce_conflicts(&peek_group, grammar, t_pack, leaves) {
+            if handle_shift_reduce_conflicts(
+                &peek_group,
+                grammar,
+                t_pack,
+                leaves,
+            ) {
                 continue;
             } else if groups_are_aliased(&peek_group, t_pack)
                 || group_is_repeated(&peek_group, t_pack)
             {
-                handle_transition_collision(&peek_group, grammar, t_pack, leaves);
+                handle_transition_collision(
+                    &peek_group,
+                    grammar,
+                    t_pack,
+                    leaves,
+                );
             } else {
                 disambiguate(
                     grammar,
@@ -973,7 +1019,11 @@ fn merge_occluding_groups(
 /// - `g:sym` and any single character thats not a numeric,
 ///   identifier, space, newline, or tab.
 
-fn symbols_occlude(symA: &SymbolID, symB: &SymbolID, grammar: &GrammarStore) -> bool
+fn symbols_occlude(
+    symA: &SymbolID,
+    symB: &SymbolID,
+    grammar: &GrammarStore,
+) -> bool
 {
     match symA {
         SymbolID::DefinedGeneric(_) => match symB {
@@ -1000,9 +1050,11 @@ fn symbols_occlude(symA: &SymbolID, symB: &SymbolID, grammar: &GrammarStore) -> 
 
 fn get_roots(end_nodes: &Vec<usize>, t_pack: &TPack) -> Vec<usize>
 {
-    HashSet::<usize>::from_iter(end_nodes.iter().map(|n| t_pack.get_node(*n).goal))
-        .into_iter()
-        .collect::<Vec<usize>>()
+    HashSet::<usize>::from_iter(
+        end_nodes.iter().map(|n| t_pack.get_node(*n).goal),
+    )
+    .into_iter()
+    .collect::<Vec<usize>>()
 }
 
 fn handle_unresolved_roots(
@@ -1056,10 +1108,12 @@ fn create_term_nodes_from_items(
 
                 t_pack.link_peek_closure(closure_item, *item);
 
-                let node =
-                    TGN::new(t_pack, item.get_symbol(grammar), parent_index, vec![
-                        closure_item,
-                    ]);
+                let node = TGN::new(
+                    t_pack,
+                    item.get_symbol(grammar),
+                    parent_index,
+                    vec![closure_item],
+                );
 
                 term_nodes.push(node);
             }
@@ -1098,7 +1152,9 @@ fn scan_items(
         if let Some(closure_item) =
             t_pack.peek_scoped_closures_linked_lookups.get(lookup_item)
         {
-            for item in get_closure_cached(&closure_item.to_zero_state(), grammar) {
+            for item in
+                get_closure_cached(&closure_item.to_zero_state(), grammar)
+            {
                 if item.is_end() || item.is_nonterm(grammar) {
                     local_closure.push(*item)
                 }
@@ -1167,7 +1223,8 @@ fn process_end_item(
     parent_index: usize,
 ) -> Vec<usize>
 {
-    let end_node = TGN::new(t_pack, SymbolID::EndOfFile, parent_index, vec![end_item]);
+    let end_node =
+        TGN::new(t_pack, SymbolID::EndOfFile, parent_index, vec![end_item]);
 
     let node_index = t_pack.insert_node(end_node);
 

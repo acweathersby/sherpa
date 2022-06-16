@@ -67,7 +67,8 @@
                                                                     f:r {  { 
                                                                             t_Ascript,
                                                                             c_Function,  
-                                                                            ast: $3
+                                                                            ast: $3,
+                                                                            tok
                                                                         }  }
 
     | generic_function_start ( t:return | t:r ) tk:js_data_block                                
@@ -75,6 +76,7 @@
                                                                         t_Returned,
                                                                         c_Function,        
                                                                         txt: str($3), 
+                                                                        tok
                                                                         }
                                                                     }
 
@@ -83,7 +85,8 @@
                                                                          {
                                                                             t_Referenced,
                                                                             c_Function,             
-                                                                            reference: $3
+                                                                            reference: $3,
+                                                                            tok
                                                                         }
                                                                     }
 

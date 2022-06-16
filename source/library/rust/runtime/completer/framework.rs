@@ -95,13 +95,18 @@ impl ASTRefString
                     self.offset - slice_start
                 );
 
-                let pointer_string =
-                    " ".repeat(self.offset - slice_start) + &("^".repeat(self.length));
+                let pointer_string = " ".repeat(self.offset - slice_start)
+                    + &("^".repeat(self.length));
 
                 let ref string = Vec::from(&source[slice_start..slice_end]);
 
                 if let Ok(utf8_string) = str::from_utf8(string) {
-                    return message + "\n" + utf8_string + "\n" + &pointer_string + "\n";
+                    return message
+                        + "\n"
+                        + utf8_string
+                        + "\n"
+                        + &pointer_string
+                        + "\n";
                 }
             }
         }
@@ -147,8 +152,13 @@ pub fn run<T: std::fmt::Debug>(
 
     if success.len() > 0 {
         if let Some(longest_success) = success.get_ref_state(0) {
-            if longest_success.get_root_lexer().byte_offset >= utf_8_input.len() as u32 {
-                return convert_fork_to_astref(longest_success, reduce_functions);
+            if longest_success.get_root_lexer().byte_offset
+                >= utf_8_input.len() as u32
+            {
+                return convert_fork_to_astref(
+                    longest_success,
+                    reduce_functions,
+                );
             }
         }
     }

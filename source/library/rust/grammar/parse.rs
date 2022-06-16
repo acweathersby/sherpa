@@ -15,6 +15,7 @@ use super::data::ast::Grammar;
 use super::data::ast::IR_STATE;
 use super::data::parser_data::EntryPoint_Hc;
 use super::data::parser_data::EntryPoint_Ir;
+use super::data::parser_data::EntryPoint_Script;
 use super::data::parser_data::BYTECODE;
 
 pub fn parse_string(string: &String) {}
@@ -25,11 +26,11 @@ pub fn parse_string(string: &String) {}
 pub struct CompileProblem
 {
     // Message that appears
-    pub message:        String,
+    pub message: String,
     /// Message that appears inline the code location
     /// diagram
     pub inline_message: String,
-    pub loc:            Token,
+    pub loc: Token,
 }
 
 impl Display for CompileProblem
@@ -115,8 +116,8 @@ pub fn compile_grammar_ast(buffer: Vec<u8>)
     let result = complete(&mut iterator, &FunctionMaps);
 
     match result {
-        Ok(r) => {
-            if let HCObj::NODE(node) = r {
+        Ok(result) => {
+            if let HCObj::NODE(node) = result {
                 if let ASTNode::Grammar(node) = node {
                     Ok(node)
                 } else {
@@ -142,13 +143,36 @@ pub fn compile_ir_ast(buffer: Vec<u8>) -> Result<Box<IR_STATE>, ParseError>
     let result = complete(&mut iterator, &FunctionMaps);
 
     match result {
-        Ok(r) => {
-            if let HCObj::NODE(node) = r {
+        Ok(result) => {
+            if let HCObj::NODE(node) = result {
                 if let ASTNode::IR_STATE(node) = node {
                     Ok(node)
                 } else {
                     Err(ParseError::UNDEFINED)
                 }
+            } else {
+                Err(ParseError::UNDEFINED)
+            }
+        }
+        Err(err) => Err(ParseError::UNDEFINED),
+    }
+}
+
+pub fn compile_ascript_ast(buffer: Vec<u8>) -> Result<ASTNode, ParseError>
+{
+    let mut iterator: ReferenceIterator<UTF8StringReader> =
+        ReferenceIterator::new(
+            UTF8StringReader::new(buffer),
+            EntryPoint_Script,
+            &BYTECODE,
+        );
+
+    let result = complete(&mut iterator, &FunctionMaps);
+
+    match result {
+        Ok(result) => {
+            if let HCObj::NODE(node) = result {
+                Ok(node)
             } else {
                 Err(ParseError::UNDEFINED)
             }
@@ -180,6 +204,19 @@ fn test_ir_trivial_branch_state()
     assert!(result.is_ok());
 
     print!("{:#?}", result.unwrap());
+}
+
+#[test]
+
+fn test_trivial_ascript_struct()
+{
+    let input = String::from(" { t_Type, t_Class, value: u32 } ");
+
+    let result = compile_ascript_ast(Vec::from(input.as_bytes()));
+
+    print!("{:#?}", result);
+
+    assert!(result.is_ok());
 }
 
 #[test]

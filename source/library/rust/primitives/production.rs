@@ -1,5 +1,7 @@
 use std::fmt::Display;
 
+use crate::grammar::data::ast::ASTNode;
+use crate::grammar::data::ast::ASTNodeTraits;
 use crate::grammar::hash_id_value_u64;
 
 use super::SymbolID;
@@ -49,19 +51,19 @@ impl Display for BodyId
 
 pub struct Production
 {
-    pub name:               String,
-    pub number_of_bodies:   u16,
-    pub id:                 ProductionId,
-    pub is_scanner:         bool,
-    pub is_entry:           bool,
-    pub is_recursive:       bool,
-    pub priority:           u32,
+    pub name: String,
+    pub number_of_bodies: u16,
+    pub id: ProductionId,
+    pub is_scanner: bool,
+    pub is_entry: bool,
+    pub is_recursive: bool,
+    pub priority: u32,
     /// The token defining the substring in the source
     /// code from which this production was derived.
-    pub token:              Token,
+    pub original_location: Token,
     /// An integer value used by bytecode
     /// to refer to this production
-    pub bytecode_id:        u32,
+    pub bytecode_id: u32,
     /// If this is a scanner production,
     /// then this is a non-zero integer value
     /// that mirrors the TokenProduction or Defined* symbol
@@ -84,10 +86,10 @@ impl Production
             id,
             is_entry: false,
             is_recursive: false,
-            is_scanner: false,
+            is_scanner,
             number_of_bodies,
             priority: 0,
-            token,
+            original_location: token,
             bytecode_id: 0,
             symbol_bytecode_id: 0,
         }
@@ -116,21 +118,49 @@ pub struct BodySymbolRef
     pub exclusive:      bool,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ReduceFunctionId(u64);
+
+impl ReduceFunctionId
+{
+    pub fn new(reduce_function: &ASTNode) -> Self
+    {
+        ReduceFunctionId(hash_id_value_u64(reduce_function.Token().String()))
+    }
+
+    pub fn is_undefined(&self) -> bool
+    {
+        self.0 == 0
+    }
+}
+
+impl Default for ReduceFunctionId
+{
+    fn default() -> Self
+    {
+        ReduceFunctionId(0)
+    }
+}
+
 #[derive(Debug, Clone)]
 
 pub struct Body
 {
-    pub symbols:     Vec<BodySymbolRef>,
-    pub length:      u16,
-    pub production:  ProductionId,
-    pub id:          BodyId,
+    pub symbols: Vec<BodySymbolRef>,
+    pub length: u16,
+    pub production: ProductionId,
+    pub id: BodyId,
     pub bytecode_id: u32,
+    pub reduce_fn_ids: Vec<ReduceFunctionId>,
+    pub origin_location: Token,
 }
 
 pub type ProductionTable = std::collections::BTreeMap<ProductionId, Production>;
 
-pub type ProductionEntryNamesTable = std::collections::BTreeMap<String, ProductionId>;
+pub type ProductionEntryNamesTable =
+    std::collections::BTreeMap<String, ProductionId>;
 
-pub type ProductionBodiesTable = std::collections::BTreeMap<ProductionId, Vec<BodyId>>;
+pub type ProductionBodiesTable =
+    std::collections::BTreeMap<ProductionId, Vec<BodyId>>;
 
 pub type BodyTable = std::collections::BTreeMap<BodyId, Body>;

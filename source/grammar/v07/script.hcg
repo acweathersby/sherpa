@@ -1,0 +1,109 @@
+# Copyright 2022 Anthony Weathersbye.
+
+@IMPORT ./comments.hcg as cm
+
+@IGNORE g:sp g:nl tk:cm::comment
+
+<> out > struct 
+    | statements
+                                                        f:r { { t_AST_Statements, statements:$1, tok } }
+
+<> struct > \{ struct_prop(+\, ) \}
+                                                        f:r { { t_AST_Struct, props:$2, tok } }
+<> struct_prop >  identifier \: expression
+                                                        f:r { { t_AST_Property, id:str($1), value:$3, tok } }
+    |  identifier \: struct
+                                                        f:r { { t_AST_Struct_Property, id:str($1), value:$3, tok } }
+    | tk:type_idenfifier
+                                                        f:r { { t_AST_TypeId,  value:str($1), tok } }
+    | tk:class_identifier
+                                                        f:r { { t_AST_ClassId, value:str($1), tok } }
+    | t:tok 
+                                                        f:r { { t_AST_Token } }
+    | t:token 
+                                                        f:r { { t_AST_Token } }
+<> type_idenfifier > 
+    \t_ identifier
+
+<> class_identifier >
+    \c_ identifier
+
+<> statements > statement(+\, )
+
+<> statement > add
+    | member
+
+<> add > member \+ expression
+                                                        f:r { { t_AST_Add, left: $1, right: $3, tok } }
+
+<> expression > member
+    | string_convert
+    | numeric_convert
+    | bool_convert
+    | literal
+    | \[ expression(*\, ) \]                          
+                                                        f:r { { t_AST_Vector, initializer: $2, tok  } }
+
+<> string_convert > t:str convert_initializer?
+                                                        f:r { { t_AST_STRING, value: $2, tok  } }
+<> bool_convert > t:bool convert_initializer?
+                                                        f:r { { t_AST_BOOL,  initializer: $2, tok  } }
+
+<> numeric_convert > 
+       \u8  convert_initializer?
+                                                        f:r { { t_AST_U8,  initializer: $2, tok  } }
+     | \u16 convert_initializer?
+                                                        f:r { { t_AST_U16, initializer: $2, tok  } }
+     | \u32 convert_initializer?
+                                                        f:r { { t_AST_U32, initializer: $2, tok  } }
+     | \u64 convert_initializer?
+                                                        f:r { { t_AST_U64, initializer: $2, tok  } }
+     | \i8  convert_initializer?
+                                                        f:r { { t_AST_I8,  initializer: $2, tok  } }
+     | \i16 convert_initializer?
+                                                        f:r { { t_AST_I16, initializer: $2, tok  } }
+     | \i32 convert_initializer?
+                                                        f:r { { t_AST_I32, initializer: $2, tok  } }
+     | \i64 convert_initializer?
+                                                        f:r { { t_AST_I64, initializer: $2, tok  } }
+     | \f32 convert_initializer?
+                                                        f:r { { t_AST_F32, initializer: $2, tok  } }
+     | \f64 convert_initializer?
+                                                        f:r { { t_AST_F64, initializer: $2, tok  } }
+<> convert_initializer > \( member \)                   
+                                                        f:r { $2 }
+<> literal > t:true 
+                                                        f:r { { t_AST_BOOL, value: true } }
+    | t:false
+                                                        f:r { { t_AST_BOOL, value: false } }
+    | g:num(+)
+                                                        f:r { { t_AST_NUMBER, value:f64($1) } }
+
+<> member > reference                                  
+
+    | reference \. identifier
+                                                        f:r { { t_AST_Member, reference:$1, property:$3 } }
+
+<> reference > \$ identifier 
+                                                        f:r { { t_AST_NamedReference, value: str($2), tok } }
+        | \$ g:num(+)         
+                                                        f:r { { t_AST_IndexReference, value: i32($1), tok } }
+
+<> identifier > tk:identifier_syms 
+
+<> identifier_syms >  
+
+        identifier_syms g:id
+
+    |   identifier_syms \_
+
+    |   identifier_syms \-
+
+    |   identifier_syms g:num      
+
+    |   \_ 
+
+    |   \- 
+
+    |   g:id
+

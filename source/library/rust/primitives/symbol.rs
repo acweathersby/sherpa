@@ -55,13 +55,22 @@ impl SymbolID
             Self::DefinedNumeric(_)
             | Self::DefinedIdentifier(_)
             | Self::DefinedGeneric(_) => {
-                format!("\\{}", grammar.symbols_string_table.get(&self).unwrap())
+                format!(
+                    "\\{}",
+                    grammar.symbols_string_table.get(&self).unwrap()
+                )
             }
             Self::Production(prod_id, _) => {
-                format!("{}", grammar.production_table.get(&prod_id).unwrap().name)
+                format!(
+                    "{}",
+                    grammar.production_table.get(&prod_id).unwrap().name
+                )
             }
             Self::TokenProduction(prod_id, _) => {
-                format!("tk:{}", grammar.production_table.get(&prod_id).unwrap().name)
+                format!(
+                    "tk:{}",
+                    grammar.production_table.get(&prod_id).unwrap().name
+                )
             }
             Self::Undefined => "[??]".to_string(),
             Self::Recovery => "g:rec".to_string(),
@@ -133,22 +142,22 @@ pub struct Symbol
     /// which encapsulates the set of Symbols that are
     /// unique based on the combination of the symbol's
     /// class_id,
-    pub uuid:              SymbolUUID,
+    pub uuid: SymbolUUID,
     /// The unique identifier of the class of this symbol
     /// which either identifies symbol's generic class id
     /// i.e (g:sp , g:nl, g:tab, g:id ...) or by the unique
     /// or the explicit character sequence this symbol represents.
-    pub bytecode_id:       u32,
+    pub bytecode_id: u32,
     /// The length in bytes of the character sequence
     /// represented by this symbol
-    pub byte_length:       u32,
+    pub byte_length: u32,
     /// The number of utf8 code points represented by
     /// this symbol.
     pub code_point_length: u32,
     ////
     /// True if only scanner productions use
     /// this symbol
-    pub scanner_only:      bool,
+    pub scanner_only: bool,
 }
 
 use std::collections::BTreeMap;

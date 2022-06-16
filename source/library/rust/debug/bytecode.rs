@@ -7,7 +7,11 @@ pub fn disassembly_header(state_pointer: usize) -> String
     format!("{:0>6}: ", state_pointer)
 }
 
-pub fn disassemble_state(states: &[u32], state_pointer: usize, depth: usize) -> String
+pub fn disassemble_state(
+    states: &[u32],
+    state_pointer: usize,
+    depth: usize,
+) -> String
 {
     use super::disassemble_state as ds;
     use super::disassembly_header as dh;
@@ -23,8 +27,11 @@ pub fn disassemble_state(states: &[u32], state_pointer: usize, depth: usize) -> 
                 format!("\n{}EAT", dh(sp)) + &ds(states, sp + 1, depth)
             }
             INSTRUCTION::I02_GOTO => {
-                format!("\n{}GOTO [{}]", dh(sp), states[sp] & INSTRUCTION_POINTER_MASK)
-                    + &ds(states, sp + 1, depth)
+                format!(
+                    "\n{}GOTO [{}]",
+                    dh(sp),
+                    states[sp] & INSTRUCTION_POINTER_MASK
+                ) + &ds(states, sp + 1, depth)
             }
             INSTRUCTION::I03_SET_PROD => {
                 "\n set prod".to_string() + &ds(states, sp + 1, depth)
@@ -32,11 +39,15 @@ pub fn disassemble_state(states: &[u32], state_pointer: usize, depth: usize) -> 
             INSTRUCTION::I04_REDUCE => {
                 "\n reduce".to_string() + &ds(states, sp + 1, depth)
             }
-            INSTRUCTION::I05_TOKEN => "\n token".to_string() + &ds(states, sp + 1, depth),
+            INSTRUCTION::I05_TOKEN => {
+                "\n token".to_string() + &ds(states, sp + 1, depth)
+            }
             INSTRUCTION::I06_FORK_TO => {
                 "\n fork to".to_string() + &ds(states, sp + 1, depth)
             }
-            INSTRUCTION::I07_SCAN => "\n scan".to_string() + &ds(states, sp + 1, depth),
+            INSTRUCTION::I07_SCAN => {
+                "\n scan".to_string() + &ds(states, sp + 1, depth)
+            }
             INSTRUCTION::I08_NOOP => format!("\n{}NOOP", dh(sp)),
             INSTRUCTION::I09_JUMP_OFFSET_TABLE => {
                 let a = states[sp];
@@ -111,6 +122,7 @@ pub fn disassemble_state(states: &[u32], state_pointer: usize, depth: usize) -> 
 mod bytecode_debugging_tests
 {
     use crate::bytecode::compiler::compile_ir_state_to_bytecode;
+    use crate::bytecode::compiler::GenerateHashTable;
     use crate::debug::compile_test_grammar;
     use crate::debug::disassemble_state;
     use crate::grammar::get_production_by_name;
@@ -118,7 +130,8 @@ mod bytecode_debugging_tests
     use crate::intermediate::state_construct::generate_production_states;
 
     #[test]
-    pub fn test_produce_a_single_ir_ast_from_a_single_state_of_a_trivial_production()
+    pub fn test_produce_a_single_ir_ast_from_a_single_state_of_a_trivial_production(
+    )
     {
         let grammar = compile_test_grammar("<> A > \\h");
 
@@ -132,7 +145,9 @@ mod bytecode_debugging_tests
 
         assert!(result.is_ok());
 
-        let bytecode = compile_ir_state_to_bytecode(&result.unwrap(), &grammar);
+        let bytecode = compile_ir_state_to_bytecode(&result.unwrap(), |_| {
+            GenerateHashTable::Yes
+        });
 
         println!("{}", disassemble_state(&bytecode, 0, 0));
     }

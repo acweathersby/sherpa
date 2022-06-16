@@ -26,9 +26,13 @@ pub fn generate_production_states(
 {
     let mut output: IROutput = Vec::new();
 
-    let recursive_descent_data = construct_recursive_descent(production_id, grammar);
+    let recursive_descent_data =
+        construct_recursive_descent(production_id, grammar);
 
-    output.append(&mut process_transition_nodes(&recursive_descent_data, grammar));
+    output.append(&mut process_transition_nodes(
+        &recursive_descent_data,
+        grammar,
+    ));
 
     if recursive_descent_data.goto_items.len() > 0 {
         let goto_data = construct_goto(
@@ -80,7 +84,8 @@ fn process_transition_nodes<'a>(
         }
     }
 
-    let mut nodes_pipeline = VecDeque::from_iter(tpack.leaf_nodes.iter().cloned());
+    let mut nodes_pipeline =
+        VecDeque::from_iter(tpack.leaf_nodes.iter().cloned());
 
     'outer: while let Some(node_id) = nodes_pipeline.pop_front() {
         if node_hashes[node_id] != 0 {
@@ -177,18 +182,19 @@ fn create_goto_start_state(
 
                 if child.is(TransitionStateType::I_PASS) {
                     strings.push(format!(
-                        "assert PRODUCTION [ {} /* {} */ ] ( pass )",
+                        "assert PRODUCTION [ {} ] ( pass )",
                         production_bytecode_id,
-                        get_production_plain_name(production_id, grammar),
+                        // get_production_plain_name(production_id, grammar),
                     ));
                 } else {
-                    let state_name = IRStateString::get_state_name_from_hash(hash);
+                    let state_name =
+                        IRStateString::get_state_name_from_hash(hash);
 
                     strings.push(format!(
-                        "assert PRODUCTION [ {} /* {} */ ] ( goto state [ {} ]{})",
+                        "assert PRODUCTION [ {}  ] ( goto state [ {} ]{})",
                         production_bytecode_id,
                         get_production_plain_name(production_id, grammar),
-                        state_name,
+                        // state_name,
                         post_amble
                     ));
                 }
@@ -202,7 +208,8 @@ fn create_goto_start_state(
     IRStateString::new(
         &comment,
         &strings.join("\n"),
-        get_production_plain_name(root_production, grammar).to_owned() + "_goto",
+        get_production_plain_name(root_production, grammar).to_owned()
+            + "_goto",
     )
 }
 
@@ -284,8 +291,10 @@ fn create_intermediate_state(
                         ));
                     }
                     SymbolID::Recovery => {
-                        strings
-                            .push(format!("goto state [ {} ]{}", state_name, post_amble));
+                        strings.push(format!(
+                            "goto state [ {} ]{}",
+                            state_name, post_amble
+                        ));
                     }
                     SymbolID::EndOfFile => {
                         if single_child {
@@ -295,34 +304,36 @@ fn create_intermediate_state(
                             ));
                         } else {
                             strings.push(format!(
-                                "assert [ 9999 /* DEFAULT-END-ITEM */ ] ( goto state [ {} ]{} )",
+                                "assert [ 9999 ] ( goto state [ {} ]{} )",
                                 state_name, post_amble
                             ));
                         }
                     }
                     _ => {
-                        let assertion_type = (if child.is(TransitionStateType::O_PEEK) {
-                            "peek"
-                        } else {
-                            "assert"
-                        })
-                        .to_string();
+                        let assertion_type =
+                            (if child.is(TransitionStateType::O_PEEK) {
+                                "peek"
+                            } else {
+                                "assert"
+                            })
+                            .to_string();
 
                         let symbol_type =
                             (if is_scanner { "" } else { "TOKEN" }).to_string();
 
-                        let consume = (if child.is(TransitionStateType::I_CONSUME) {
-                            "consume then "
-                        } else {
-                            ""
-                        })
-                        .to_string();
+                        let consume =
+                            (if child.is(TransitionStateType::I_CONSUME) {
+                                "consume then "
+                            } else {
+                                ""
+                            })
+                            .to_string();
 
                         strings.push(format!(
-                            "{} {} [ /* {} */ {} ] ( {}goto state [ {} ]{} )",
+                            "{} {} [ {} ] ( {}goto state [ {} ]{} )",
                             assertion_type,
                             symbol_type,
-                            symbol_string,
+                            // symbol_string,
                             symbol_id,
                             consume,
                             state_name,
@@ -337,7 +348,10 @@ fn create_intermediate_state(
     }
 }
 
-fn create_post_amble(production_id: &ProductionId, grammar: &GrammarStore) -> String
+fn create_post_amble(
+    production_id: &ProductionId,
+    grammar: &GrammarStore,
+) -> String
 {
     format!(
         " then goto state [ {}_goto ]",
@@ -373,7 +387,10 @@ fn create_end_state(
         } else {
             IRStateString::new(
                 "",
-                &format!("assign token {} then set prod to {}", symbol_id, production_id),
+                &format!(
+                    "assign token {} then set prod to {}",
+                    symbol_id, production_id
+                ),
                 String::default(),
             )
         }
@@ -414,7 +431,8 @@ mod state_constructor_tests
 
     #[test]
 
-    pub fn test_generate_production_states_with_basic_grammar_with_one_optional_token()
+    pub fn test_generate_production_states_with_basic_grammar_with_one_optional_token(
+    )
     {
         let grammar = compile_test_grammar("<> A > \\h ? \\e ? \\l \\l \\o");
 
@@ -429,7 +447,8 @@ mod state_constructor_tests
 
     #[test]
 
-    pub fn test_generate_production_states_with_basic_grammar_with_left_recursion()
+    pub fn test_generate_production_states_with_basic_grammar_with_left_recursion(
+    )
     {
         let grammar = compile_test_grammar("<> A > A \\1 | \\2 ");
 

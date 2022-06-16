@@ -73,7 +73,7 @@
 
         t:assert t:peek? ( \PRODUCTION | \TOKEN | \BYTE | \CODEPOINT | \CLASS )  production_id_list \( instruction_sequence \)                     
                                             
-                                            f:r { { t_ASSERT, c_IR, c_IR_Instruction, is_peek: bool($2), c_IR_Branch, mode:str($3), ids: $4, instructions: $6} }
+        f:r { { t_ASSERT, c_IR, c_IR_Instruction, is_peek: bool($2), c_IR_Branch, mode:str($3), ids: $4, instructions: $6} }
 
 <> goto_instruction > 
 

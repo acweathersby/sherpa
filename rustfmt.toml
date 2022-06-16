@@ -1,10 +1,14 @@
 # Line Widths
 max_width = 80
+
 array_width = 70
+
 fn_call_width = 70
+
 comment_width = 70
-enum_discrim_align_threshold = 50
-struct_field_align_threshold = 50
+
+enum_discrim_align_threshold = 10
+struct_field_align_threshold = 10
 newline_style = "Unix"
 tab_spaces = 4
 

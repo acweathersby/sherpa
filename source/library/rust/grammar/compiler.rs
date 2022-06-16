@@ -1,5 +1,6 @@
 use crate::grammar::parse::CompileProblem;
 use crate::grammar::uuid::hash_id_value_u64;
+use crate::primitives::grammar::ReduceFunction;
 use crate::primitives::Body;
 use crate::primitives::BodyId;
 use crate::primitives::BodySymbolRef;
@@ -11,6 +12,8 @@ use crate::primitives::Item;
 use crate::primitives::ProductionBodiesTable;
 use crate::primitives::ProductionId;
 use crate::primitives::ProductionTable;
+use crate::primitives::ReduceFunctionId;
+use crate::primitives::ReduceFunctionTable;
 use crate::primitives::StringId;
 use crate::primitives::Symbol;
 use crate::primitives::SymbolID;
@@ -525,11 +528,11 @@ fn create_scanner_productions(
                                 grammar.symbols_string_table.insert(id, string);
 
                                 grammar.symbols_table.insert(id, Symbol {
-                                    byte_length:       byte.len_utf8() as u32,
+                                    byte_length: byte.len_utf8() as u32,
                                     code_point_length: 1,
-                                    bytecode_id:       0,
-                                    uuid:              id,
-                                    scanner_only:      true,
+                                    bytecode_id: 0,
+                                    uuid: id,
+                                    scanner_only: true,
                                 });
                             }
 
@@ -555,11 +558,13 @@ fn create_scanner_productions(
                         .insert(scanner_production_id, vec![body_id]);
 
                     grammar.bodies_table.insert(body_id, Body {
-                        length:      new_body_symbols.len() as u16,
-                        symbols:     new_body_symbols,
-                        production:  scanner_production_id,
-                        id:          body_id,
+                        length: new_body_symbols.len() as u16,
+                        symbols: new_body_symbols,
+                        production: scanner_production_id,
+                        id: body_id,
                         bytecode_id: 0,
+                        reduce_fn_ids: vec![],
+                        origin_location: Token::empty(),
                     });
 
                     grammar.production_table.insert(
@@ -692,6 +697,10 @@ fn create_scanner_productions(
                                 production: scanner_production_id,
                                 symbols,
                                 bytecode_id: 0,
+                                reduce_fn_ids: vec![],
+                                origin_location: production
+                                    .original_location
+                                    .clone(),
                             }
                         })
                         .collect();
@@ -709,7 +718,7 @@ fn create_scanner_productions(
                             scanner_name,
                             scanner_production_id,
                             bodies.len() as u16,
-                            production.token.clone(),
+                            production.original_location.clone(),
                             true,
                         ),
                     );
@@ -936,6 +945,8 @@ pub fn pre_process_grammar(
 
     let uuid = GrammarId(hash_id_value_u64(&uuid_name));
 
+    let mut reduce_functions = ReduceFunctionTable::new();
+
     let mut parse_errors = vec![];
 
     {
@@ -950,6 +961,7 @@ pub fn pre_process_grammar(
             production_symbols_table: &mut production_symbols_table,
             production_bodies_table: &mut production_bodies_table,
             errors: &mut parse_errors,
+            reduce_functions: &mut reduce_functions,
         };
 
         // Process meta data, including EXPORT, IMPORT, and IGNORE meta
@@ -1054,6 +1066,7 @@ pub fn pre_process_grammar(
             imports: import_names_lookup,
             closures: HashMap::new(),
             lr_items: BTreeMap::new(),
+            reduce_functions,
         },
         parse_errors,
     )
@@ -1086,18 +1099,18 @@ fn pre_process_production(
                                 locations: vec![
                                     CompileProblem {
                                         inline_message: String::new(),
-                                        loc:            production_node.Token(),
-                                        message:        format!(
+                                        loc: production_node.Token(),
+                                        message: format!(
                                             "Redefinition of {} occurs here.",
                                             production_name
                                         ),
                                     },
                                     CompileProblem {
                                         inline_message: String::new(),
-                                        loc:            existing_production
-                                            .token
+                                        loc: existing_production
+                                            .original_location
                                             .clone(),
-                                        message:        format!(
+                                        message: format!(
                                             "production {} first defined here.",
                                             production_name
                                         ),
@@ -1179,7 +1192,10 @@ fn get_resolved_production_name(
                 None => {
                     tgs.errors.push(parse::ParseError::COMPILE_PROBLEM(CompileProblem{
                         inline_message: String::new(),
-                        message: format!("Unknown Grammar : The local grammar name {} does not match any imported grammar names", local_import_grammar_name),
+                        message: format!(
+                            "Unknown Grammar : The local grammar name {} does not match any imported grammar names", 
+                            local_import_grammar_name
+                        ),
                         loc: node.Token(),
                     }));
                     None
@@ -1248,7 +1264,10 @@ fn get_grammar_info_from_node<'a>(
                 None => {
                     tgs.errors.push(parse::ParseError::COMPILE_PROBLEM(CompileProblem{
                         inline_message: String::new(),
-                        message: format!("Unknown grammar : The local grammar name {} does not match any imported grammar names", local_import_grammar_name),
+                        message: format!(
+                            "Unknown grammar : The local grammar name {} does not match any imported grammar names", 
+                            local_import_grammar_name
+                        ),
                         loc: node.Token(),
                     }));
                     None
@@ -1311,17 +1330,18 @@ fn pre_process_body(
         get_resolved_production_name(production, tgs).unwrap();
 
     fn create_body_vectors(
+        token: &Token,
         symbols: &Vec<ASTNode>,
         production_name: &String,
         mut index: u32,
         tgs: &mut TempGrammarStore,
-    ) -> (Vec<Vec<BodySymbolRef>>, Vec<Box<Production>>)
+    ) -> (Vec<(Token, Vec<BodySymbolRef>)>, Vec<Box<Production>>)
     {
         let mut bodies = vec![];
 
         let mut productions = vec![];
 
-        bodies.push(vec![]);
+        bodies.push((token.clone(), vec![]));
 
         for sym in symbols {
             let starting_bodies = bodies.len();
@@ -1412,14 +1432,15 @@ fn pre_process_body(
                                 if let ASTNode::Body(body) = body {
                                     let (mut new_bodies, mut new_productions) =
                                         create_body_vectors(
+                                            &sym.Token(),
                                             &body.symbols,
                                             production_name,
                                             9999,
                                             tgs,
                                         );
 
-                                    for body in new_bodies.iter_mut() {
-                                        if let Some(last) = body.last_mut() {
+                                    for (_, body) in new_bodies.iter_mut() {
+                                        if let Some((last)) = body.last_mut() {
                                             last.original_index = index;
                                         }
                                     }
@@ -1437,7 +1458,8 @@ fn pre_process_body(
                                     let mut new_body = body.clone();
 
                                     new_body
-                                        .extend(pending_body.iter().cloned());
+                                        .1
+                                        .extend(pending_body.1.iter().cloned());
 
                                     new_bodies.push(new_body)
                                 }
@@ -1471,10 +1493,9 @@ fn pre_process_body(
                         tgs.errors.push(parse::ParseError::COMPILE_PROBLEM(
                             CompileProblem {
                                 inline_message: String::new(),
-                                message:
-                                    "I don't know what to do with this."
-                                        .to_string(),
-                                loc:            sym.Token(),
+                                message: "I don't know what to do with this."
+                                    .to_string(),
+                                loc: sym.Token(),
                             },
                         ));
                     }
@@ -1492,6 +1513,7 @@ fn pre_process_body(
                             vec![list.symbols.clone()],
                             None,
                             ASTNode::NONE,
+                            sym.Token(),
                         );
 
                         let mut body_b = body_a.clone();
@@ -1528,10 +1550,9 @@ fn pre_process_body(
                         tgs.errors.push(parse::ParseError::COMPILE_PROBLEM(
                             CompileProblem {
                                 inline_message: String::new(),
-                                message:
-                                    "I don't know what to do with this."
-                                        .to_string(),
-                                loc:            sym.Token(),
+                                message: "I don't know what to do with this."
+                                    .to_string(),
+                                loc: sym.Token(),
                             },
                         ));
                     }
@@ -1550,7 +1571,7 @@ fn pre_process_body(
 
                 if let Some(id) = intern_symbol(sym, tgs) {
                     for i in 0..starting_bodies {
-                        bodies[i].push(BodySymbolRef {
+                        bodies[i].1.push(BodySymbolRef {
                             original_index: index,
                             sym_id:         id.clone(),
                             annotation:     annotation.clone(),
@@ -1569,18 +1590,39 @@ fn pre_process_body(
         (bodies, productions)
     }
 
-    let (bodies, productions) =
-        create_body_vectors(&body.symbols, &production_name, 0, tgs);
+    let (bodies, productions) = create_body_vectors(
+        &body.Token(),
+        &body.symbols,
+        &production_name,
+        0,
+        tgs,
+    );
+
+    let reduce_fn_ids = match body.reduce_function {
+        ASTNode::Reduce(..) | ASTNode::Ascript(..) => {
+            let reduce_id = ReduceFunctionId::new(&body.reduce_function);
+            if !tgs.reduce_functions.contains_key(&reduce_id) {
+                tgs.reduce_functions.insert(
+                    reduce_id.clone(),
+                    ReduceFunction::new(&body.reduce_function),
+                );
+            }
+            vec![reduce_id]
+        }
+        _ => vec![],
+    };
 
     (
         bodies
             .iter()
-            .map(|b| Body {
-                symbols:     b.clone(),
-                length:      b.len() as u16,
-                production:  get_production_id_from_node(production, tgs),
-                id:          BodyId::default(),
+            .map(|(t, b)| Body {
+                symbols: b.clone(),
+                length: b.len() as u16,
+                production: get_production_id_from_node(production, tgs),
+                id: BodyId::default(),
                 bytecode_id: 0,
+                reduce_fn_ids: reduce_fn_ids.clone(),
+                origin_location: t.clone(),
             })
             .collect(),
         productions,
@@ -1658,8 +1700,8 @@ fn intern_symbol(
                         inline_message:
                             "This is not a hashable production symbol."
                                 .to_string(),
-                        message:        "[INTERNAL ERROR]".to_string(),
-                        loc:            node.Token(),
+                        message: "[INTERNAL ERROR]".to_string(),
+                        loc: node.Token(),
                     },
                 ));
                 None
@@ -1699,11 +1741,11 @@ fn intern_symbol(
 
                 if !tgs.symbols_table.contains_key(&token_production_id) {
                     tgs.symbols_table.insert(token_production_id, Symbol {
-                        bytecode_id:       0,
-                        uuid:              production_id,
-                        byte_length:       0,
+                        bytecode_id: 0,
+                        uuid: production_id,
+                        byte_length: 0,
                         code_point_length: 0,
-                        scanner_only:      false,
+                        scanner_only: false,
                     });
                 }
 
@@ -1742,8 +1784,8 @@ fn intern_symbol(
                     inline_message:
                         "Unexpected ASTNode while attempting to intern symbol"
                             .to_string(),
-                    message:        "[INTERNAL ERROR]".to_string(),
-                    loc:            sym.Token(),
+                    message: "[INTERNAL ERROR]".to_string(),
+                    loc: sym.Token(),
                 },
             ));
             None
@@ -1835,8 +1877,8 @@ fn get_symbol_details<'a>(
                             "Unexpected ASTNode {}",
                             sym.GetType()
                         ),
-                        message:        "[INTERNAL ERROR]".to_string(),
-                        loc:            sym.Token(),
+                        message: "[INTERNAL ERROR]".to_string(),
+                        loc: sym.Token(),
                     },
                 ));
                 break;

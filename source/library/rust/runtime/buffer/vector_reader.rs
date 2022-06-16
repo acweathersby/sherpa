@@ -21,6 +21,11 @@ pub struct UTF8StringReader
 
 impl UTF8StringReader
 {
+    pub fn from_str(string: &str) -> Self
+    {
+        Self::new(string.into())
+    }
+
     pub fn new(string: Vec<u8>) -> UTF8StringReader
     {
         let mut reader = UTF8StringReader {
@@ -135,9 +140,10 @@ impl ByteReader for UTF8StringReader
                 self.line_offset = self.cursor;
             }
         } else {
-            let diff =
-                std::cmp::max(std::cmp::min(4, (self.length - self.cursor) as i32), 0)
-                    as u32;
+            let diff = std::cmp::max(
+                std::cmp::min(4, (self.length - self.cursor) as i32),
+                0,
+            ) as u32;
 
             let start = self.cursor as u32;
 

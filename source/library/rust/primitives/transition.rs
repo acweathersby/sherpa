@@ -98,14 +98,14 @@ pub struct TransitionGraphNode
 {
     /// The symbols that lead to the
     /// transition to this state.
-    pub sym:             SymbolID,
+    pub sym: SymbolID,
     pub transition_type: TransitionStateType,
-    pub items:           Vec<Item>,
-    pub parent:          TransitionGraphNodeId,
-    pub goal:            TransitionGraphNodeId,
-    pub proxy_parents:   Vec<usize>,
-    pub depth:           u32,
-    pub id:              usize,
+    pub items: Vec<Item>,
+    pub parent: TransitionGraphNodeId,
+    pub goal: TransitionGraphNodeId,
+    pub proxy_parents: Vec<usize>,
+    pub depth: u32,
+    pub id: usize,
 }
 
 impl TransitionGraphNode
@@ -192,23 +192,23 @@ pub enum TransitionMode
 pub struct TransitionPack<'a>
 {
     /// A set of closures that can be referenced in peek states.
-    pub scoped_closures:                     Vec<&'a [Item]>,
+    pub scoped_closures: Vec<&'a [Item]>,
     /// For a givin item, points to an originating
     /// item that can used to look up it's own closure
     pub peek_scoped_closures_linked_lookups: HashMap<Item, Item>,
-    pub goto_items:                          HashSet<Item>,
-    nodes:                                   Vec<TransitionGraphNode>,
-    pub leaf_nodes:                          Vec<TransitionGraphNodeId>,
-    pub root_production:                     ProductionId,
-    pub mode:                                TransitionMode,
-    pub is_scanner:                          bool,
+    pub goto_items: HashSet<Item>,
+    nodes: Vec<TransitionGraphNode>,
+    pub leaf_nodes: Vec<TransitionGraphNodeId>,
+    pub root_production: ProductionId,
+    pub mode: TransitionMode,
+    pub is_scanner: bool,
     /// Internal pipeline to drive transition tree
     /// creation.
-    node_pipeline:                           VecDeque<TransitionGraphNodeId>,
+    node_pipeline: VecDeque<TransitionGraphNodeId>,
     ////
     /// Stores indices of pruned node slots that can be reused
-    empty_cache:                             VecDeque<usize>,
-    pub goto_scoped_closure:                 Option<Rc<Box<Vec<Item>>>>,
+    empty_cache: VecDeque<usize>,
+    pub goto_scoped_closure: Option<Rc<Box<Vec<Item>>>>,
 }
 
 impl<'a> TransitionPack<'a>
@@ -300,7 +300,8 @@ impl<'a> TransitionPack<'a>
 
     #[inline(always)]
 
-    pub fn get_node<'b>(&'b self, node_index: usize) -> &'b TransitionGraphNode
+    pub fn get_node<'b>(&'b self, node_index: usize)
+        -> &'b TransitionGraphNode
     {
         if self.nodes[node_index].id == TransitionGraphNode::OrphanIndex {
             panic!("Invalid access of a deleted node at index {}", node_index)
@@ -336,7 +337,9 @@ impl<'a> TransitionPack<'a>
         self.peek_scoped_closures_linked_lookups.clear()
     }
 
-    pub fn nodes_iter<'b>(&'b self) -> core::slice::Iter<'b, TransitionGraphNode>
+    pub fn nodes_iter<'b>(
+        &'b self,
+    ) -> core::slice::Iter<'b, TransitionGraphNode>
     {
         self.nodes.iter()
     }
@@ -344,17 +347,17 @@ impl<'a> TransitionPack<'a>
     pub fn clean(self) -> Self
     {
         TransitionPack {
-            scoped_closures:                     Vec::new(),
+            scoped_closures: Vec::new(),
             peek_scoped_closures_linked_lookups: HashMap::new(),
-            goto_items:                          self.goto_items,
-            nodes:                               self.nodes,
-            leaf_nodes:                          self.leaf_nodes,
-            node_pipeline:                       VecDeque::new(),
-            empty_cache:                         VecDeque::new(),
-            root_production:                     self.root_production,
-            mode:                                self.mode,
-            is_scanner:                          self.is_scanner,
-            goto_scoped_closure:                 None,
+            goto_items: self.goto_items,
+            nodes: self.nodes,
+            leaf_nodes: self.leaf_nodes,
+            node_pipeline: VecDeque::new(),
+            empty_cache: VecDeque::new(),
+            root_production: self.root_production,
+            mode: self.mode,
+            is_scanner: self.is_scanner,
+            goto_scoped_closure: None,
         }
     }
 
