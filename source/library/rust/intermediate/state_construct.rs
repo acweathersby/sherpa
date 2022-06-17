@@ -1,9 +1,6 @@
 //! Construct state IR strings for a given production
-
-use std::collections::BTreeMap;
-use std::collections::VecDeque;
-use std::fmt::format;
-
+use super::transition_tree::construct_goto;
+use super::transition_tree::construct_recursive_descent;
 use crate::grammar::get_production_plain_name;
 use crate::primitives::GrammarStore;
 use crate::primitives::IRStateString;
@@ -13,9 +10,9 @@ use crate::primitives::TransitionGraphNode;
 use crate::primitives::TransitionMode;
 use crate::primitives::TransitionPack;
 use crate::primitives::TransitionStateType;
-
-use super::transition_tree::construct_goto;
-use super::transition_tree::construct_recursive_descent;
+use std::collections::BTreeMap;
+use std::collections::VecDeque;
+use std::fmt::format;
 
 type IROutput = Vec<IRStateString>;
 
@@ -396,8 +393,8 @@ fn create_end_state(
         }
     } else {
         let state_string = format!(
-            "reduce {} {} then set prod to {}",
-            body.length, body.bytecode_id, production.bytecode_id
+            "set prod to {} then reduce {} {}",
+            production.bytecode_id, body.length, body.bytecode_id,
         );
 
         IRStateString::new("", &state_string, String::default())

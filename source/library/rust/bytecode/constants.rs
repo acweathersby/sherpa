@@ -1,23 +1,25 @@
 // Global Constants
 pub const STATE_INDEX_MASK: u32 = (1 << 24) - 1;
 
-pub const INSTRUCTION_POINTER_MASK: u32 = 0xFFFFFF;
+/// The portion of a GOTO instruction that maps to the
+/// offset of the goto state.
+pub const GOTO_INSTRUCTION_OFFSET_MASK: u32 = 0xFF_FFFF;
+
+/// The portion of an instruction that stores inline data.
+/// Masks out the instruction header.
+pub const INSTRUCTION_CONTENT_MASK: u32 = 0xFFF_FFFF;
+
+/// The portion of a instruction that contains the instruction's
+/// type.
+pub const INSTRUCTION_HEADER_MASK: u32 = 0xF000_0000;
 
 pub const SKIPPED_SCAN_PROD: u16 = 9009;
-
-const DEFAULT_PASS_INSTRUCTION: usize = 1;
 
 // Bit mask for bytecode states that are active during failure mode
 pub const FAIL_STATE_MASK: u32 = 1 << 27;
 
 /// Bit mask for bytecode states that are active during normal mode
 pub const NORMAL_STATE_MASK: u32 = 1 << 26;
-
-pub const PASS_INSTRUCTION: u32 = 0;
-
-pub const FAIL_INSTRUCTION: u32 = 15 << 28;
-
-pub const PASS_THROUGH_INSTRUCTION: u32 = FAIL_INSTRUCTION | 1;
 
 /// This is the standard location of a `fail` instruction that is
 /// present in all bytecode blocks produced by Hydrocarbon.
@@ -79,8 +81,8 @@ impl INSTRUCTION
     pub const I07_SCAN: u32 = 7 << 28;
     pub const I07_SCAN_BACK_UNTIL: u32 = INSTRUCTION::I07_SCAN | 0x00100000;
     pub const I08_NOOP: u32 = 8 << 28;
-    pub const I09_JUMP_OFFSET_TABLE: u32 = 9 << 28;
-    pub const I10_JUMP_HASH_TABLE: u32 = 10 << 28;
+    pub const I09_JUMP_BRANCH: u32 = 9 << 28;
+    pub const I10_HASH_BRANCH: u32 = 10 << 28;
     pub const I11_SET_FAIL_STATE: u32 = 11 << 28;
     pub const I12_REPEAT: u32 = 12 << 28;
     pub const I13_NOOP: u32 = 13 << 28;
@@ -95,9 +97,55 @@ pub struct INPUT_TYPE_KEY;
 
 impl INPUT_TYPE_KEY
 {
-    pub const T01_PRODUCTION: u32 = 1;
-    pub const T02_TOKEN: u32 = 2;
-    pub const T03_CLASS: u32 = 3;
-    pub const T04_CODEPOINT: u32 = 4;
-    pub const T05_BYTE: u32 = 5;
+    pub const T01_PRODUCTION: u32 = 0;
+    pub const T02_TOKEN: u32 = 1;
+    pub const T03_CLASS: u32 = 2;
+    pub const T04_CODEPOINT: u32 = 3;
+    pub const T05_BYTE: u32 = 4;
+}
+
+#[non_exhaustive]
+pub struct LEXER_TYPE;
+impl LEXER_TYPE
+{
+    pub const ASSERT: u32 = 1;
+    pub const PEEK: u32 = 2;
+}
+
+pub enum BranchSelector
+{
+    Hash,
+    Jump,
+}
+
+/// values - The set of keys used to select a branch to jump to.
+/// branches - An vector of branch bytecode vectors.
+pub type GetBranchSelector = fn(
+    values: &Vec<u32>,
+    max_span: u32,
+    branches: &Vec<Vec<u32>>,
+) -> BranchSelector;
+pub fn default_get_branch_selector(
+    values: &Vec<u32>,
+    max_span: u32,
+    branches: &Vec<Vec<u32>>,
+) -> BranchSelector
+{
+    // Hash table limitations:
+    // Max supported item value: 2046 with skip set to 2048
+    // Max number of values: 1024 (maximum jump span)
+    // Max instruction offset from table header 2042
+
+    let total_instruction_length =
+        branches.iter().map(|b| b.len()).fold(0, |r, v| r + v);
+    let has_unsupported_value = values.iter().cloned().any(|v| v > 2046);
+
+    if (max_span < 2)
+        || total_instruction_length > 2042
+        || has_unsupported_value
+    {
+        BranchSelector::Jump
+    } else {
+        BranchSelector::Hash
+    }
 }

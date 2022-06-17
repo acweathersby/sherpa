@@ -753,7 +753,6 @@ impl<T: ByteReader> ParserCoreIterator<T> for ScannerIterator<T>
             let token = &mut self.tokens[self.token_end];
 
             token.line_number = self.reader.line_count();
-
             token.line_offset = self.reader.line_offset();
 
             match input_type {

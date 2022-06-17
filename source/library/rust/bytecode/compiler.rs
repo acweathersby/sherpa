@@ -1,17 +1,15 @@
-use std::any::Any;
-use std::collections::BTreeMap;
-use std::collections::BTreeSet;
-use std::collections::HashSet;
-
-use std::collections::VecDeque;
-use std::default;
-use std::hash;
-use std::iter::Filter;
-use std::thread::{self};
-use std::vec;
-
+use super::constants::default_get_branch_selector;
+use super::constants::GetBranchSelector;
+use super::constants::DEFAULT_CASE_INDICATOR;
+use super::constants::INPUT_TYPE_KEY;
+use super::constants::INSTRUCTION;
+use crate::bytecode::constants::BranchSelector;
+use crate::bytecode::constants::GOTO_STATE_MASK;
+use crate::bytecode::constants::INSTRUCTION_CONTENT_MASK;
 use crate::bytecode::constants::IR_REDUCE_NUMERIC_LEN_ID;
+use crate::bytecode::constants::LEXER_TYPE;
 use crate::bytecode::constants::NORMAL_STATE_MASK;
+use crate::bytecode::constants::STATE_INDEX_MASK;
 use crate::grammar::data::ast::ASTNode;
 use crate::grammar::data::ast::Consume;
 use crate::grammar::data::ast::ForkTo;
@@ -27,14 +25,100 @@ use crate::grammar::data::ast::TokenAssign;
 use crate::grammar::data::ast::ASSERT;
 use crate::grammar::data::ast::HASH_NAME;
 use crate::grammar::data::ast::IR_STATE;
+use crate::grammar::parse::compile_ir_ast;
 use crate::intermediate::state_construct::generate_production_states;
 use crate::primitives::grammar::GrammarStore;
 use crate::primitives::IRStateString;
 use crate::primitives::ProductionId;
+use std::any::Any;
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
+use std::collections::HashMap;
+use std::collections::HashSet;
+use std::collections::VecDeque;
+use std::default;
+use std::hash;
+use std::iter::Filter;
+use std::thread::{self};
+use std::vec;
 
-use super::constants::DEFAULT_CASE_INDICATOR;
-use super::constants::INPUT_TYPE_KEY;
-use super::constants::INSTRUCTION;
+pub fn build_byte_code_buffer(
+    states: Vec<&IR_STATE>,
+) -> (Vec<u32>, BTreeMap<u32, String>)
+{
+    let states_iter = states
+        .iter()
+        .enumerate()
+        .map(|(i, s)| (s, s.id.clone(), i as u32));
+
+    let mut goto_bookmarks_to_offset =
+        states_iter.clone().map(|_| 0).collect::<Vec<_>>();
+
+    let state_name_to_bookmark = states_iter
+        .clone()
+        .map(|(_, s, i)| (s, i))
+        .collect::<HashMap<_, _>>();
+
+    let mut bytecode = vec![
+        INSTRUCTION::I15_FALL_THROUGH,
+        INSTRUCTION::I00_PASS,
+        INSTRUCTION::I15_FAIL,
+        INSTRUCTION::I08_NOOP,
+        NORMAL_STATE_MASK,
+        INSTRUCTION::I00_PASS,
+    ];
+
+    for ((state, name, i)) in states_iter {
+        println!("offset {}", bytecode.len());
+        goto_bookmarks_to_offset[i as usize] = bytecode.len() as u32;
+        bytecode.append(&mut compile_ir_state_to_bytecode(
+            state,
+            default_get_branch_selector,
+            &state_name_to_bookmark,
+        ));
+    }
+
+    patch_goto_offsets(&mut bytecode, &goto_bookmarks_to_offset);
+
+    let offset_to_state_name = state_name_to_bookmark
+        .into_iter()
+        .map(|(name, bookmark)| {
+            (goto_bookmarks_to_offset[bookmark as usize], name)
+        })
+        .collect::<BTreeMap<_, _>>();
+
+    (bytecode, offset_to_state_name)
+}
+
+/// Converts Goto location bookmarks to bytecode offsets.
+fn patch_goto_offsets(
+    bytecode: &mut Vec<u32>,
+    goto_bookmarks_to_offset: &Vec<u32>,
+)
+{
+    use crate::bytecode::constants::INSTRUCTION as I;
+
+    let mut index = 0;
+
+    while index < bytecode.len() {
+        let instruction = bytecode[index];
+        index += match instruction & 0xF000_0000 {
+            I::I02_GOTO => {
+                let bytecode_bookmark = instruction & STATE_INDEX_MASK;
+                let state_header = instruction & (!STATE_INDEX_MASK);
+                bytecode[index] = state_header
+                    | goto_bookmarks_to_offset[bytecode_bookmark as usize];
+                1
+            }
+            I::I06_FORK_TO => 1,
+            I::I09_JUMP_BRANCH | I::I10_HASH_BRANCH => {
+                let table_length = bytecode[index + 2] >> 16 & 0xFFFF;
+                table_length as usize + 4
+            }
+            _ => 1,
+        }
+    }
+}
 
 fn compile_ir_states_worker(
     grammar: &GrammarStore,
@@ -84,46 +168,17 @@ fn compile_ir_states(
     ir_map
 }
 
-pub enum GenerateHashTable
-{
-    Yes,
-    No,
-}
-
-pub type TableSelector = fn(&Vec<Vec<u32>>) -> GenerateHashTable;
-
-/// Builds ir states for every standard production in
-/// a grammar.
-
-fn compile_regular_ir_states(
-    grammar: &GrammarStore,
-    number_of_threads: usize,
-) -> BTreeMap<u64, IRStateString>
-{
-    let states = compile_ir_states(
-        grammar,
-        &grammar
-            .production_table
-            .values()
-            .filter(|p| !p.is_scanner)
-            .map(|p| p.id)
-            .collect::<Vec<_>>(),
-        number_of_threads,
-    );
-
-    states
-}
-
 pub fn compile_ir_state_to_bytecode(
-    state: &Box<IR_STATE>,
-    table_selector: TableSelector,
+    state: &IR_STATE,
+    get_branch_selector: GetBranchSelector,
+    state_name_to_bookmark: &HashMap<String, u32>,
 ) -> Vec<u32>
 {
     // Determine if we are dealing with a branch state or a single line
     // state. Branch states will always have more than one assert
     // statement.
 
-    if is_branch_state(&state) {
+    if is_branch_state(state) {
         // We are dealing with a branching state
 
         // For each branch we compile new vectors separately
@@ -139,14 +194,18 @@ pub fn compile_ir_state_to_bytecode(
         // 4. Class
         // 5. CodePoint
 
-        build_branching_bytecode(&state.instructions, table_selector)
+        build_branching_bytecode(
+            &state.instructions,
+            get_branch_selector,
+            state_name_to_bookmark,
+        )
     } else {
         // We are dealing with a standard non-branching state
-        build_branchless_bytecode(&state.instructions)
+        build_branchless_bytecode(&state.instructions, state_name_to_bookmark)
     }
 }
 
-fn is_branch_state(state: &Box<IR_STATE>) -> bool
+fn is_branch_state(state: &IR_STATE) -> bool
 {
     state.instructions.iter().all(|i| match i {
         ASTNode::ASSERT(_) => true,
@@ -156,7 +215,8 @@ fn is_branch_state(state: &Box<IR_STATE>) -> bool
 
 fn build_branching_bytecode(
     instructions: &Vec<ASTNode>,
-    table_selector: TableSelector,
+    get_branch_selector: GetBranchSelector,
+    state_name_to_bookmark: &HashMap<String, u32>,
 ) -> Vec<u32>
 {
     let branches = instructions
@@ -198,7 +258,10 @@ fn build_branching_bytecode(
     // Extract the default branch if it exists.
 
     let output = if default_branches.len() > 0 {
-        build_branchless_bytecode(&default_branches[0].instructions)
+        build_branchless_bytecode(
+            &default_branches[0].instructions,
+            state_name_to_bookmark,
+        )
     } else {
         vec![INSTRUCTION::I15_FAIL]
     };
@@ -211,7 +274,8 @@ fn build_branching_bytecode(
             .collect::<Vec<_>>(),
         INPUT_TYPE_KEY::T05_BYTE,
         output,
-        table_selector,
+        get_branch_selector,
+        state_name_to_bookmark,
     );
 
     let output = make_table(
@@ -222,7 +286,8 @@ fn build_branching_bytecode(
             .collect::<Vec<_>>(),
         INPUT_TYPE_KEY::T04_CODEPOINT,
         output,
-        table_selector,
+        get_branch_selector,
+        state_name_to_bookmark,
     );
 
     let output = make_table(
@@ -233,7 +298,8 @@ fn build_branching_bytecode(
             .collect::<Vec<_>>(),
         INPUT_TYPE_KEY::T03_CLASS,
         output,
-        table_selector,
+        get_branch_selector,
+        state_name_to_bookmark,
     );
 
     let output = make_table(
@@ -244,7 +310,8 @@ fn build_branching_bytecode(
             .collect::<Vec<_>>(),
         INPUT_TYPE_KEY::T02_TOKEN,
         output,
-        table_selector,
+        get_branch_selector,
+        state_name_to_bookmark,
     );
 
     let output = make_table(
@@ -255,7 +322,8 @@ fn build_branching_bytecode(
             .collect::<Vec<_>>(),
         INPUT_TYPE_KEY::T01_PRODUCTION,
         output,
-        table_selector,
+        get_branch_selector,
+        state_name_to_bookmark,
     );
 
     output
@@ -265,7 +333,8 @@ fn make_table(
     branches: Vec<&Box<ASSERT>>,
     input_type_key: u32,
     mut default: Vec<u32>,
-    table_selector: TableSelector,
+    get_branch_selector: GetBranchSelector,
+    state_name_to_bookmark: &HashMap<String, u32>,
 ) -> Vec<u32>
 {
     if branches.is_empty() {
@@ -274,7 +343,11 @@ fn make_table(
 
     use super::constants::INSTRUCTION as I;
 
-    let lexer_type = (branches[0].is_peek as u32) + 1;
+    let lexer_type: u32 = if branches[0].is_peek {
+        LEXER_TYPE::PEEK
+    } else {
+        LEXER_TYPE::ASSERT
+    };
     let scanner_pointer = 0;
 
     let mut val_offset_map = branches
@@ -290,7 +363,7 @@ fn make_table(
         })
         .collect::<BTreeMap<_, _>>();
 
-    let max_spread = {
+    let max_span = {
         let mut val = 0;
         let mut prev = *val_offset_map.first_key_value().unwrap().0;
         for id in val_offset_map.keys().cloned() {
@@ -301,11 +374,7 @@ fn make_table(
     };
 
     let mut branch_instructions = vec![];
-
-    // Hash table limitations:
-    // Max supported item value: 2046 with skip set to 2048
-    // Max number of values: 1024 (maximum jump span)
-    // Max instruction offset from table header 2042
+    let mut branch_instructions_length = 0;
 
     for branch in branches {
         if let ASTNode::Skip(_) = &branch.instructions[0] {
@@ -315,10 +384,15 @@ fn make_table(
                 }
             }
         } else {
-            let mut instructions =
-                build_branchless_bytecode(&branch.instructions);
-            let offset = branch_instructions.len();
+            let mut instructions = build_branchless_bytecode(
+                &branch.instructions,
+                state_name_to_bookmark,
+            );
+
+            let offset = branch_instructions_length;
+            branch_instructions_length += instructions.len() as u32;
             branch_instructions.push(instructions);
+
             for id in &branch.ids {
                 if let ASTNode::Num(box Num { val }) = id {
                     val_offset_map.insert(*val as u32, offset as u32);
@@ -329,8 +403,12 @@ fn make_table(
 
     let mut output = vec![];
 
-    match table_selector(&branch_instructions) {
-        GenerateHashTable::Yes => {
+    match get_branch_selector(
+        &val_offset_map.keys().cloned().collect(),
+        max_span,
+        &branch_instructions,
+    ) {
+        BranchSelector::Hash => {
             let values = val_offset_map.keys().cloned().collect::<Vec<_>>();
 
             let offset_lookup_table_length = values.len() as u32;
@@ -338,7 +416,7 @@ fn make_table(
             let instruction_field_start = 4 + offset_lookup_table_length;
 
             let default_offset =
-                (branch_instructions.len() as u32) + instruction_field_start;
+                branch_instructions_length + instruction_field_start;
 
             let mut pending_pairs = val_offset_map
                 .clone()
@@ -419,7 +497,7 @@ fn make_table(
 
             // First word header
             output.push(
-                I::I10_JUMP_HASH_TABLE
+                I::I10_HASH_BRANCH
                     | (input_type_key << 22)
                     | (lexer_type << 26),
             );
@@ -428,27 +506,25 @@ fn make_table(
             output.push(scanner_pointer);
 
             // Third word header
-            output.push(
-                ((mod_base & 0xFFFF) << 16) | val_offset_map.len() as u32,
-            );
+            output.push((offset_lookup_table_length << 16) | mod_base);
 
             output.push(default_offset);
 
             output.append(&mut hash_entries);
         }
-        GenerateHashTable::No => {
+        BranchSelector::Jump => {
             let values = val_offset_map.keys().cloned().collect::<Vec<_>>();
             let (start, end) =
                 (*values.first().unwrap(), *values.last().unwrap());
-            let token_basis = start;
+            let value_offset = start;
             let offset_lookup_table_length = values.len() as u32;
             let instruction_field_start = 4 + offset_lookup_table_length;
             let default_offset =
-                (branch_instructions.len() as u32) + instruction_field_start;
+                branch_instructions_length + instruction_field_start;
 
             // First word header
             output.push(
-                I::I09_JUMP_OFFSET_TABLE
+                I::I09_JUMP_BRANCH
                     | (input_type_key << 22)
                     | (lexer_type << 26),
             );
@@ -457,7 +533,7 @@ fn make_table(
             output.push(scanner_pointer);
 
             // Third word header
-            output.push(offset_lookup_table_length << 16 | token_basis);
+            output.push((offset_lookup_table_length << 16) | value_offset);
 
             // Default Location
             output.push(default_offset);
@@ -483,7 +559,10 @@ fn make_table(
     output
 }
 
-fn build_branchless_bytecode(instructions: &Vec<ASTNode>) -> Vec<u32>
+fn build_branchless_bytecode(
+    instructions: &Vec<ASTNode>,
+    state_name_to_bookmark: &HashMap<String, u32>,
+) -> Vec<u32>
 {
     let mut byte_code: Vec<u32> = vec![];
     use super::constants::INSTRUCTION as I;
@@ -495,7 +574,12 @@ fn build_branchless_bytecode(instructions: &Vec<ASTNode>) -> Vec<u32>
             }
             ASTNode::Goto(box Goto { state }) => {
                 if let ASTNode::HASH_NAME(box HASH_NAME { val }) = state {
-                    let state_pointer_val = map_state_to_pointer(val);
+                    let state_pointer_val =
+                        if let Some(v) = state_name_to_bookmark.get(val) {
+                            *v
+                        } else {
+                            0
+                        };
                     byte_code.push(
                         I::I02_GOTO | NORMAL_STATE_MASK | state_pointer_val,
                     );
@@ -515,19 +599,22 @@ fn build_branchless_bytecode(instructions: &Vec<ASTNode>) -> Vec<u32>
             ASTNode::SetScope(box SetScope { scope }) => {}
             ASTNode::SetProd(box SetProd { id }) => {
                 if let ASTNode::Num(box Num { val }) = id {
-                    byte_code.push(I::I03_SET_PROD | *val as u32)
-                }
-            }
-            ASTNode::Reduce(box Reduce { body_id, len, .. }) => {
-                if *len as u32 == IR_REDUCE_NUMERIC_LEN_ID {
-                    byte_code
-                        .push(I::I04_REDUCE | (*body_id as u32) << 16 | 0xFFFF);
-                } else {
                     byte_code.push(
-                        I::I04_REDUCE | (*len as u32) << 16 | *body_id as u32,
-                    );
+                        I::I03_SET_PROD
+                            | (*val as u32 & INSTRUCTION_CONTENT_MASK),
+                    )
                 }
             }
+            ASTNode::Reduce(box Reduce { body_id, len, .. }) => byte_code.push(
+                I::I04_REDUCE
+                    | if *len as u32 == IR_REDUCE_NUMERIC_LEN_ID {
+                        (0xFFFF0000) & INSTRUCTION_CONTENT_MASK
+                    } else {
+                        (*len as u32) << 16
+                    }
+                    | (*body_id as u32),
+            ),
+
             _ => {}
         }
     }
@@ -541,18 +628,15 @@ fn build_branchless_bytecode(instructions: &Vec<ASTNode>) -> Vec<u32>
     byte_code
 }
 
-fn map_state_to_pointer(state_name: &String) -> u32
-{
-    0
-}
-
 #[cfg(test)]
-
 mod byte_code_creation_tests
 {
 
+    use std::collections::HashMap;
+
     use crate::bytecode::compiler::compile_ir_state_to_bytecode;
-    use crate::bytecode::compiler::GenerateHashTable;
+    use crate::bytecode::compiler::BranchSelector;
+    use crate::bytecode::constants::default_get_branch_selector;
     use crate::debug::compile_test_grammar;
     use crate::grammar::data::ast::ASTNode;
     use crate::grammar::get_production_by_name;
@@ -579,9 +663,11 @@ mod byte_code_creation_tests
 
         assert!(result.is_ok());
 
-        let result = compile_ir_state_to_bytecode(&result.unwrap(), |_| {
-            GenerateHashTable::No
-        });
+        let result = compile_ir_state_to_bytecode(
+            &result.unwrap(),
+            default_get_branch_selector,
+            &HashMap::new(),
+        );
 
         println!("{:#?}", result);
     }
