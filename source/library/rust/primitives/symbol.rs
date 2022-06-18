@@ -158,6 +158,9 @@ pub struct Symbol
     /// True if only scanner productions use
     /// this symbol
     pub scanner_only: bool,
+    /// A name that can be used in debug and
+    /// error reports .
+    pub friendly_name: String,
 }
 
 use std::collections::BTreeMap;

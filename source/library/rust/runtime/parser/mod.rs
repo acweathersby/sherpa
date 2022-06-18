@@ -2,7 +2,8 @@ use std::hash;
 mod reader;
 mod utf8_string_reader;
 
-use crate::bytecode::constants::INPUT_TYPE_KEY;
+use crate::bytecode::constants::DEFAULT_FAIL_INSTRUCTION_OFFSET;
+use crate::bytecode::constants::INPUT_TYPE;
 use crate::bytecode::constants::INSTRUCTION as I;
 use crate::bytecode::constants::INSTRUCTION_CONTENT_MASK;
 use crate::bytecode::constants::INSTRUCTION_HEADER_MASK;
@@ -87,12 +88,12 @@ fn dispatch<T: SymbolReader>(
             I::I06_FORK_TO => break fork(),
             I::I07_SCAN => scan(),
             I::I08_NOOP => noop(index),
-            I::I09_JUMP_BRANCH => jump_table(index, reader, state, bytecode),
-            I::I10_HASH_BRANCH => hash_table(index, reader, state, bytecode),
+            I::I09_VECTOR_BRANCH => vector_jump(index, reader, state, bytecode),
+            I::I10_HASH_BRANCH => hash_jump(index, reader, state, bytecode),
             I::I11_SET_FAIL_STATE => set_fail(),
             I::I12_REPEAT => repeat(),
             I::I13_NOOP => noop(index),
-            I::I14_ASSERT_CONSUME => {}
+            I::I14_ASSERT_CONSUME => DEFAULT_FAIL_INSTRUCTION_OFFSET,
             I::I15_FAIL => break FailState,
             _ => break CompleteState,
         }
@@ -180,7 +181,7 @@ fn repeat() -> u32
 /// Performs an instruction branch selection based on an embedded,
 /// linear-probing hash table.
 #[inline]
-fn hash_table<T: SymbolReader>(
+fn hash_jump<T: SymbolReader>(
     index: u32,
     reader: &mut T,
     state: &mut KernelState,
@@ -203,7 +204,7 @@ fn hash_table<T: SymbolReader>(
 
     loop {
         let input_value = match input_type {
-            INPUT_TYPE_KEY::T01_PRODUCTION => state.production_id,
+            INPUT_TYPE::T01_PRODUCTION => state.production_id,
             _ => {
                 get_token_value(lexer_type, input_type, reader, state, bytecode)
                     as u32
@@ -231,7 +232,7 @@ fn hash_table<T: SymbolReader>(
     }
 }
 #[inline]
-fn jump_table<T: SymbolReader>(
+fn vector_jump<T: SymbolReader>(
     index: u32,
     reader: &mut T,
     state: &mut KernelState,
@@ -253,7 +254,7 @@ fn jump_table<T: SymbolReader>(
 
     loop {
         let input_value = match input_type {
-            INPUT_TYPE_KEY::T01_PRODUCTION => state.production_id,
+            INPUT_TYPE::T01_PRODUCTION => state.production_id,
             _ => {
                 get_token_value(lexer_type, input_type, reader, state, bytecode)
                     as u32
@@ -332,19 +333,19 @@ fn get_token_value<T: SymbolReader>(
         active_token.line_offset = reader.line_offset();
 
         match input_type {
-            INPUT_TYPE_KEY::T03_CLASS => {
+            INPUT_TYPE::T03_CLASS => {
                 active_token.byte_length = reader.codepoint_byte_length();
                 active_token.cp_length = reader.codepoint_length();
 
                 reader.class() as i32
             }
-            INPUT_TYPE_KEY::T04_CODEPOINT => {
+            INPUT_TYPE::T04_CODEPOINT => {
                 active_token.byte_length = reader.codepoint_byte_length();
                 active_token.cp_length = reader.codepoint_length();
 
                 reader.codepoint() as i32
             }
-            INPUT_TYPE_KEY::T05_BYTE => {
+            INPUT_TYPE::T05_BYTE => {
                 active_token.byte_length = 1;
                 active_token.cp_length = 1;
 
@@ -385,15 +386,16 @@ mod test
     use crate::bytecode::compiler::compile_ir_state_to_bytecode;
     use crate::bytecode::constants::BranchSelector;
     use crate::debug::compile_test_grammar;
+    use crate::debug::disassemble_state;
     use crate::grammar::data::ast::ASTNode;
     use crate::grammar::get_production_by_name;
     use crate::grammar::parse::compile_ir_ast;
     use crate::intermediate::state_construct::generate_production_states;
     use crate::runtime::parser::dispatch;
-    use crate::runtime::parser::hash_table;
-    use crate::runtime::parser::jump_table;
+    use crate::runtime::parser::hash_jump;
     use crate::runtime::parser::reader::SymbolReader;
     use crate::runtime::parser::utf8_string_reader::UTF8StringReader;
+    use crate::runtime::parser::vector_jump;
     use crate::runtime::parser::Action;
     use crate::runtime::parser::KernelState;
 
@@ -527,15 +529,15 @@ assert PRODUCTION [3] (pass)",
         );
 
         state.production_id = 1;
-        assert_eq!(hash_table(0, &mut reader, &mut state, &bytecode), 7);
+        assert_eq!(hash_jump(0, &mut reader, &mut state, &bytecode), 7);
         state.production_id = 2;
-        assert_eq!(hash_table(0, &mut reader, &mut state, &bytecode), 8);
+        assert_eq!(hash_jump(0, &mut reader, &mut state, &bytecode), 8);
         state.production_id = 3;
-        assert_eq!(hash_table(0, &mut reader, &mut state, &bytecode), 9);
+        assert_eq!(hash_jump(0, &mut reader, &mut state, &bytecode), 9);
         state.production_id = 4;
-        assert_eq!(hash_table(0, &mut reader, &mut state, &bytecode), 10);
+        assert_eq!(hash_jump(0, &mut reader, &mut state, &bytecode), 10);
         state.production_id = 0;
-        assert_eq!(hash_table(0, &mut reader, &mut state, &bytecode), 10);
+        assert_eq!(hash_jump(0, &mut reader, &mut state, &bytecode), 10);
     }
 
     #[test]
@@ -552,8 +554,7 @@ state [test]
         state.is_scanner = true;
 
         assert_eq!(
-            bytecode
-                [hash_table(0, &mut reader, &mut state, &bytecode) as usize],
+            bytecode[hash_jump(0, &mut reader, &mut state, &bytecode) as usize],
             0
         );
     }
@@ -573,22 +574,24 @@ assert PRODUCTION [3] (pass)"
         let ir_ast = ir_ast.unwrap();
         let bytecode = compile_ir_state_to_bytecode(
             &ir_ast,
-            |_, _, _| BranchSelector::Jump,
+            |_, _, _| BranchSelector::Vector,
             &HashMap::new(),
         );
         let mut reader = UTF8StringReader::from_str("test");
         let mut state = KernelState::new();
 
+        println!("{}", disassemble_state(&bytecode, 0, None).0);
+
         state.production_id = 1;
-        assert_eq!(jump_table(0, &mut reader, &mut state, &bytecode), 7);
+        assert_eq!(vector_jump(0, &mut reader, &mut state, &bytecode), 7);
         state.production_id = 2;
-        assert_eq!(jump_table(0, &mut reader, &mut state, &bytecode), 8);
+        assert_eq!(vector_jump(0, &mut reader, &mut state, &bytecode), 8);
         state.production_id = 3;
-        assert_eq!(jump_table(0, &mut reader, &mut state, &bytecode), 9);
+        assert_eq!(vector_jump(0, &mut reader, &mut state, &bytecode), 9);
         state.production_id = 4;
-        assert_eq!(jump_table(0, &mut reader, &mut state, &bytecode), 10);
+        assert_eq!(vector_jump(0, &mut reader, &mut state, &bytecode), 10);
         state.production_id = 0;
-        assert_eq!(jump_table(0, &mut reader, &mut state, &bytecode), 10);
+        assert_eq!(vector_jump(0, &mut reader, &mut state, &bytecode), 10);
     }
 
     #[test]
@@ -607,7 +610,7 @@ assert BYTE [66] (pass)"
 
         let bytecode = compile_ir_state_to_bytecode(
             &ir_ast,
-            |_, _, _| BranchSelector::Jump,
+            |_, _, _| BranchSelector::Vector,
             &HashMap::new(),
         );
 
@@ -616,8 +619,10 @@ assert BYTE [66] (pass)"
         let mut state = KernelState::new();
         state.is_scanner = true;
 
+        println!("{}", disassemble_state(&bytecode, 0, None).0);
+
         assert_eq!(
-            bytecode[jump_table(index, &mut reader, &mut state, &bytecode)
+            bytecode[vector_jump(index, &mut reader, &mut state, &bytecode)
                 as usize],
             0
         );
@@ -639,6 +644,8 @@ assert BYTE [66] (pass)"
             |_, _, _| BranchSelector::Hash,
             &HashMap::new(),
         );
+
+        println!("{}", disassemble_state(&bytecode, 0, None).0);
 
         let mut reader = UTF8StringReader::from_str(reader_input);
 

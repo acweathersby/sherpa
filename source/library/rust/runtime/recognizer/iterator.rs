@@ -1,6 +1,6 @@
 use std::result;
 
-use crate::bytecode::constants::DEFAULT_FAIL_INSTRUCTION_POINTER;
+use crate::bytecode::constants::DEFAULT_FAIL_INSTRUCTION_OFFSET;
 use crate::primitives::kernel_token::KernelToken;
 use crate::runtime::buffer::ByteReader;
 use crate::runtime::recognizer::stack::KernelStack;
@@ -1152,7 +1152,7 @@ trait ParserCoreIterator<R: ByteReader>
     fn fork(&mut self, _index: usize, _: u32, _bytecode: &[u32]) -> usize
     {
         // let instruction = bytecode[index];
-        DEFAULT_FAIL_INSTRUCTION_POINTER
+        DEFAULT_FAIL_INSTRUCTION_OFFSET as usize
     }
 
     fn scan_to(&mut self, index: usize, _: u32) -> usize

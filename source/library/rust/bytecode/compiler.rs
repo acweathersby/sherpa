@@ -1,7 +1,7 @@
 use super::constants::default_get_branch_selector;
 use super::constants::GetBranchSelector;
 use super::constants::DEFAULT_CASE_INDICATOR;
-use super::constants::INPUT_TYPE_KEY;
+use super::constants::INPUT_TYPE;
 use super::constants::INSTRUCTION;
 use crate::bytecode::constants::BranchSelector;
 use crate::bytecode::constants::GOTO_STATE_MASK;
@@ -69,7 +69,6 @@ pub fn build_byte_code_buffer(
     ];
 
     for ((state, name, i)) in states_iter {
-        println!("offset {}", bytecode.len());
         goto_bookmarks_to_offset[i as usize] = bytecode.len() as u32;
         bytecode.append(&mut compile_ir_state_to_bytecode(
             state,
@@ -111,7 +110,7 @@ fn patch_goto_offsets(
                 1
             }
             I::I06_FORK_TO => 1,
-            I::I09_JUMP_BRANCH | I::I10_HASH_BRANCH => {
+            I::I09_VECTOR_BRANCH | I::I10_HASH_BRANCH => {
                 let table_length = bytecode[index + 2] >> 16 & 0xFFFF;
                 table_length as usize + 4
             }
@@ -272,7 +271,7 @@ fn build_branching_bytecode(
             .cloned()
             .filter(|p| p.mode == "BYTE")
             .collect::<Vec<_>>(),
-        INPUT_TYPE_KEY::T05_BYTE,
+        INPUT_TYPE::T05_BYTE,
         output,
         get_branch_selector,
         state_name_to_bookmark,
@@ -284,7 +283,7 @@ fn build_branching_bytecode(
             .cloned()
             .filter(|p| p.mode == "CODEPOINT")
             .collect::<Vec<_>>(),
-        INPUT_TYPE_KEY::T04_CODEPOINT,
+        INPUT_TYPE::T04_CODEPOINT,
         output,
         get_branch_selector,
         state_name_to_bookmark,
@@ -296,7 +295,7 @@ fn build_branching_bytecode(
             .cloned()
             .filter(|p| p.mode == "CLASS")
             .collect::<Vec<_>>(),
-        INPUT_TYPE_KEY::T03_CLASS,
+        INPUT_TYPE::T03_CLASS,
         output,
         get_branch_selector,
         state_name_to_bookmark,
@@ -308,7 +307,7 @@ fn build_branching_bytecode(
             .cloned()
             .filter(|p| p.mode == "TOKEN")
             .collect::<Vec<_>>(),
-        INPUT_TYPE_KEY::T02_TOKEN,
+        INPUT_TYPE::T02_TOKEN,
         output,
         get_branch_selector,
         state_name_to_bookmark,
@@ -320,7 +319,7 @@ fn build_branching_bytecode(
             .cloned()
             .filter(|p| p.mode == "PRODUCTION")
             .collect::<Vec<_>>(),
-        INPUT_TYPE_KEY::T01_PRODUCTION,
+        INPUT_TYPE::T01_PRODUCTION,
         output,
         get_branch_selector,
         state_name_to_bookmark,
@@ -512,7 +511,7 @@ fn make_table(
 
             output.append(&mut hash_entries);
         }
-        BranchSelector::Jump => {
+        BranchSelector::Vector => {
             let values = val_offset_map.keys().cloned().collect::<Vec<_>>();
             let (start, end) =
                 (*values.first().unwrap(), *values.last().unwrap());
@@ -524,7 +523,7 @@ fn make_table(
 
             // First word header
             output.push(
-                I::I09_JUMP_BRANCH
+                I::I09_VECTOR_BRANCH
                     | (input_type_key << 22)
                     | (lexer_type << 26),
             );
@@ -608,7 +607,7 @@ fn build_branchless_bytecode(
             ASTNode::Reduce(box Reduce { body_id, len, .. }) => byte_code.push(
                 I::I04_REDUCE
                     | if *len as u32 == IR_REDUCE_NUMERIC_LEN_ID {
-                        (0xFFFF0000) & INSTRUCTION_CONTENT_MASK
+                        0xFFFF0000 & INSTRUCTION_CONTENT_MASK
                     } else {
                         (*len as u32) << 16
                     }

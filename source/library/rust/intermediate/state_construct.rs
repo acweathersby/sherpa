@@ -372,7 +372,6 @@ fn create_end_state(
         panic!("Expected state to be in end state")
     } else if is_scanner {
         let symbol_id = production.symbol_bytecode_id;
-
         let production_id = production.bytecode_id;
 
         if symbol_id > 0 {

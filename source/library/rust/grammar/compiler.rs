@@ -236,7 +236,7 @@ pub fn finalize_grammar(
 
     // Update symbols
 
-    process_symbols(&mut grammar, errors);
+    finalize_symbols(&mut grammar, errors);
 
     // Get Item cache data.
 
@@ -453,7 +453,7 @@ impl WorkVerifier
     }
 }
 
-fn process_symbols(
+fn finalize_symbols(
     grammar: &mut GrammarStore,
     errors: &mut Vec<parse::ParseError>,
 )
@@ -487,6 +487,12 @@ fn process_symbols(
                 _ => {}
             }
         }
+
+        grammar
+            .symbols_table
+            .get_mut(&sym_id)
+            .unwrap()
+            .friendly_name = sym_id.to_string(grammar);
     }
 }
 
@@ -533,6 +539,7 @@ fn create_scanner_productions(
                                     bytecode_id: 0,
                                     uuid: id,
                                     scanner_only: true,
+                                    friendly_name: id.to_string(grammar),
                                 });
                             }
 
@@ -1673,6 +1680,7 @@ fn intern_symbol(
                 byte_length,
                 code_point_length,
                 scanner_only: false,
+                friendly_name: String::new(),
             });
         }
 
@@ -1746,6 +1754,7 @@ fn intern_symbol(
                         byte_length: 0,
                         code_point_length: 0,
                         scanner_only: false,
+                        friendly_name: String::new(),
                     });
                 }
 

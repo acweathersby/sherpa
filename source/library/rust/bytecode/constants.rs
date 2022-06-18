@@ -23,15 +23,15 @@ pub const NORMAL_STATE_MASK: u32 = 1 << 26;
 
 /// This is the standard location of a `fail` instruction that is
 /// present in all bytecode blocks produced by Hydrocarbon.
-pub const DEFAULT_FAIL_INSTRUCTION_POINTER: usize = 2;
+pub const DEFAULT_FAIL_INSTRUCTION_OFFSET: u32 = 2;
 
 /// This is the standard location of a `pass-through` instruction that
 /// is present in all bytecode blocks produced by Hydrocarbon.
-pub const DEFAULT_PASS_THROUGH_INSTRUCTION_POINTER: usize = 0;
+pub const DEFAULT_PASS_THROUGH_INSTRUCTION_OFFSET: u32 = 0;
 
 /// This is the standard location of a `pass` instruction that is
 /// present in all bytecode blocks produced by Hydrocarbon.
-pub const DEFAULT_PASS_INSTRUCTION_POINTER: usize = 1;
+pub const DEFAULT_PASS_INSTRUCTION_OFFSET: u32 = 1;
 
 ///  A "magic" number assigned to a reduce node's length
 /// value to indicate that it is to use the symbol accumulator
@@ -81,7 +81,7 @@ impl INSTRUCTION
     pub const I07_SCAN: u32 = 7 << 28;
     pub const I07_SCAN_BACK_UNTIL: u32 = INSTRUCTION::I07_SCAN | 0x00100000;
     pub const I08_NOOP: u32 = 8 << 28;
-    pub const I09_JUMP_BRANCH: u32 = 9 << 28;
+    pub const I09_VECTOR_BRANCH: u32 = 9 << 28;
     pub const I10_HASH_BRANCH: u32 = 10 << 28;
     pub const I11_SET_FAIL_STATE: u32 = 11 << 28;
     pub const I12_REPEAT: u32 = 12 << 28;
@@ -92,10 +92,10 @@ impl INSTRUCTION
 }
 
 #[non_exhaustive]
-/// INPUT TYPE KEYS
-pub struct INPUT_TYPE_KEY;
 
-impl INPUT_TYPE_KEY
+pub struct INPUT_TYPE;
+
+impl INPUT_TYPE
 {
     pub const T01_PRODUCTION: u32 = 0;
     pub const T02_TOKEN: u32 = 1;
@@ -115,7 +115,7 @@ impl LEXER_TYPE
 pub enum BranchSelector
 {
     Hash,
-    Jump,
+    Vector,
 }
 
 /// values - The set of keys used to select a branch to jump to.
@@ -144,7 +144,7 @@ pub fn default_get_branch_selector(
         || total_instruction_length > 2042
         || has_unsupported_value
     {
-        BranchSelector::Jump
+        BranchSelector::Vector
     } else {
         BranchSelector::Hash
     }
