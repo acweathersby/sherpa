@@ -3023,7 +3023,7 @@ pub fn new( _ids:Vec<ASTNode>) -> Box<Self> {
 fn  replace_ids(&mut self, child: ASTNode,index: i32,) -> Option<ASTNode> {
     
     match &child {
-        ASTNode::Generated(_)|ASTNode::Exclusive_Literal(_)|ASTNode::Literal(_)|ASTNode::End_Of_File(_)|ASTNode::Space(_)|ASTNode::NewLine(_)|ASTNode::IncreaseIndent(_)|ASTNode::DecreaseIndent(_)|ASTNode::Production_Token(_)|ASTNode::Num(_) => {
+        ASTNode::Num(_) => {
             if index as usize >= self.ids.len() {
                 self.ids.push(child);
                 None
@@ -3076,78 +3076,12 @@ fn Iterate(
                 let mut_me_b = node.get();
                 let child = &mut (*mut_me_b).ids[j];
 
-                match child {
-                    
-                        ASTNode::Generated(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::TokenAssign(*mut_me), 0, j as i32)   
-                            };
-                        },
-
-                        ASTNode::Exclusive_Literal(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::TokenAssign(*mut_me), 0, j as i32)   
-                            };
-                        },
-
-                        ASTNode::Literal(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::TokenAssign(*mut_me), 0, j as i32)   
-                            };
-                        },
-
-                        ASTNode::End_Of_File(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::TokenAssign(*mut_me), 0, j as i32)   
-                            };
-                        },
-
-                        ASTNode::Space(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::TokenAssign(*mut_me), 0, j as i32)   
-                            };
-                        },
-
-                        ASTNode::NewLine(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::TokenAssign(*mut_me), 0, j as i32)   
-                            };
-                        },
-
-                        ASTNode::IncreaseIndent(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::TokenAssign(*mut_me), 0, j as i32)   
-                            };
-                        },
-
-                        ASTNode::DecreaseIndent(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::TokenAssign(*mut_me), 0, j as i32)   
-                            };
-                        },
-
-                        ASTNode::Production_Token(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::TokenAssign(*mut_me), 0, j as i32)   
-                            };
-                        },
-
-                        ASTNode::Num(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::TokenAssign(*mut_me), 0, j as i32)   
-                            };
-                        }
-                    _ => {}
+                
+                if let ASTNode::Num(child) = child {
+                    unsafe { 
+                        let mut_me = node.get();
+                        child.Iterate(_yield, &mut NodeIteration::TokenAssign(*mut_me), 0, j as i32)   
+                    };
                 }
             }
         }
@@ -3295,13 +3229,15 @@ fn GetType(&self) -> u32 {
 
 #[derive(Debug, Clone)]
 pub struct ForkTo {
-    pub states:Vec<ASTNode> /* VECTOR */
+    pub states:Vec<ASTNode> /* VECTOR */,
+pub production_id:Box<Num> /* Num */
 }
 
 impl ForkTo {
-pub fn new( _states:Vec<ASTNode>) -> Box<Self> {
+pub fn new( _states:Vec<ASTNode>, _production_id:Box<Num>) -> Box<Self> {
     Box::new(ForkTo{
         states : _states,
+        production_id : _production_id,
     })
 }
 
@@ -3331,6 +3267,16 @@ fn  replace_states(&mut self, child: ASTNode,index: i32,) -> Option<ASTNode> {
         }
         _ => None
     }
+}
+
+fn  replace_production_id(&mut self, child: ASTNode,) -> Option<ASTNode> {
+    
+    if let ASTNode::Num(child) = child {
+        return Some(ASTNode::Num(std::mem::replace(&mut self.production_id, child)))
+    }else {
+        return None
+    }
+    
 }
 }
 
@@ -3390,6 +3336,14 @@ fn Iterate(
                 }
             }
         }
+    
+        unsafe {
+            let mut_me_b = node.get();
+            let mut_me_d = node.get();
+
+            ((*mut_me_d).production_id).Iterate( _yield, &mut NodeIteration::ForkTo(*mut_me_b), 1, 0);
+            
+        }
 }
 
 fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
@@ -3402,6 +3356,14 @@ fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
         }else{
             return ASTNode::NONE;
         }
+                }
+    1 => {
+                    
+        if let Some(old) = self.replace_production_id(child){ 
+                return old;
+            }else{
+                return ASTNode::NONE;
+            }
                 }
         _ => {}
     };
@@ -3446,7 +3408,7 @@ pub fn new( _ids:Vec<ASTNode>, _SCAN_BACKWARDS:bool) -> Box<Self> {
 fn  replace_ids(&mut self, child: ASTNode,index: i32,) -> Option<ASTNode> {
     
     match &child {
-        ASTNode::Generated(_)|ASTNode::Exclusive_Literal(_)|ASTNode::Literal(_)|ASTNode::End_Of_File(_)|ASTNode::Space(_)|ASTNode::NewLine(_)|ASTNode::IncreaseIndent(_)|ASTNode::DecreaseIndent(_)|ASTNode::Production_Token(_)|ASTNode::Num(_) => {
+        ASTNode::Num(_) => {
             if index as usize >= self.ids.len() {
                 self.ids.push(child);
                 None
@@ -3499,78 +3461,12 @@ fn Iterate(
                 let mut_me_b = node.get();
                 let child = &mut (*mut_me_b).ids[j];
 
-                match child {
-                    
-                        ASTNode::Generated(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::ScanUntil(*mut_me), 0, j as i32)   
-                            };
-                        },
-
-                        ASTNode::Exclusive_Literal(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::ScanUntil(*mut_me), 0, j as i32)   
-                            };
-                        },
-
-                        ASTNode::Literal(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::ScanUntil(*mut_me), 0, j as i32)   
-                            };
-                        },
-
-                        ASTNode::End_Of_File(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::ScanUntil(*mut_me), 0, j as i32)   
-                            };
-                        },
-
-                        ASTNode::Space(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::ScanUntil(*mut_me), 0, j as i32)   
-                            };
-                        },
-
-                        ASTNode::NewLine(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::ScanUntil(*mut_me), 0, j as i32)   
-                            };
-                        },
-
-                        ASTNode::IncreaseIndent(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::ScanUntil(*mut_me), 0, j as i32)   
-                            };
-                        },
-
-                        ASTNode::DecreaseIndent(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::ScanUntil(*mut_me), 0, j as i32)   
-                            };
-                        },
-
-                        ASTNode::Production_Token(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::ScanUntil(*mut_me), 0, j as i32)   
-                            };
-                        },
-
-                        ASTNode::Num(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::ScanUntil(*mut_me), 0, j as i32)   
-                            };
-                        }
-                    _ => {}
+                
+                if let ASTNode::Num(child) = child {
+                    unsafe { 
+                        let mut_me = node.get();
+                        child.Iterate(_yield, &mut NodeIteration::ScanUntil(*mut_me), 0, j as i32)   
+                    };
                 }
             }
         }
@@ -8464,7 +8360,7 @@ pub fn new( _expected:Vec<ASTNode>, _skipped:Vec<ASTNode>) -> Box<Self> {
 fn  replace_expected(&mut self, child: ASTNode,index: i32,) -> Option<ASTNode> {
     
     match &child {
-        ASTNode::Generated(_)|ASTNode::Exclusive_Literal(_)|ASTNode::Literal(_)|ASTNode::End_Of_File(_)|ASTNode::Space(_)|ASTNode::NewLine(_)|ASTNode::IncreaseIndent(_)|ASTNode::DecreaseIndent(_)|ASTNode::Production_Token(_)|ASTNode::Num(_) => {
+        ASTNode::Num(_) => {
             if index as usize >= self.expected.len() {
                 self.expected.push(child);
                 None
@@ -8489,7 +8385,7 @@ fn  replace_expected(&mut self, child: ASTNode,index: i32,) -> Option<ASTNode> {
 fn  replace_skipped(&mut self, child: ASTNode,index: i32,) -> Option<ASTNode> {
     
     match &child {
-        ASTNode::Generated(_)|ASTNode::Exclusive_Literal(_)|ASTNode::Literal(_)|ASTNode::End_Of_File(_)|ASTNode::Space(_)|ASTNode::NewLine(_)|ASTNode::IncreaseIndent(_)|ASTNode::DecreaseIndent(_)|ASTNode::Production_Token(_)|ASTNode::Num(_) => {
+        ASTNode::Num(_) => {
             if index as usize >= self.skipped.len() {
                 self.skipped.push(child);
                 None
@@ -8542,78 +8438,12 @@ fn Iterate(
                 let mut_me_b = node.get();
                 let child = &mut (*mut_me_b).expected[j];
 
-                match child {
-                    
-                        ASTNode::Generated(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::Symbols(*mut_me), 0, j as i32)   
-                            };
-                        },
-
-                        ASTNode::Exclusive_Literal(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::Symbols(*mut_me), 0, j as i32)   
-                            };
-                        },
-
-                        ASTNode::Literal(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::Symbols(*mut_me), 0, j as i32)   
-                            };
-                        },
-
-                        ASTNode::End_Of_File(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::Symbols(*mut_me), 0, j as i32)   
-                            };
-                        },
-
-                        ASTNode::Space(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::Symbols(*mut_me), 0, j as i32)   
-                            };
-                        },
-
-                        ASTNode::NewLine(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::Symbols(*mut_me), 0, j as i32)   
-                            };
-                        },
-
-                        ASTNode::IncreaseIndent(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::Symbols(*mut_me), 0, j as i32)   
-                            };
-                        },
-
-                        ASTNode::DecreaseIndent(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::Symbols(*mut_me), 0, j as i32)   
-                            };
-                        },
-
-                        ASTNode::Production_Token(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::Symbols(*mut_me), 0, j as i32)   
-                            };
-                        },
-
-                        ASTNode::Num(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::Symbols(*mut_me), 0, j as i32)   
-                            };
-                        }
-                    _ => {}
+                
+                if let ASTNode::Num(child) = child {
+                    unsafe { 
+                        let mut_me = node.get();
+                        child.Iterate(_yield, &mut NodeIteration::Symbols(*mut_me), 0, j as i32)   
+                    };
                 }
             }
         }
@@ -8625,78 +8455,12 @@ fn Iterate(
                 let mut_me_b = node.get();
                 let child = &mut (*mut_me_b).skipped[j];
 
-                match child {
-                    
-                        ASTNode::Generated(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::Symbols(*mut_me), 1, j as i32)   
-                            };
-                        },
-
-                        ASTNode::Exclusive_Literal(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::Symbols(*mut_me), 1, j as i32)   
-                            };
-                        },
-
-                        ASTNode::Literal(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::Symbols(*mut_me), 1, j as i32)   
-                            };
-                        },
-
-                        ASTNode::End_Of_File(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::Symbols(*mut_me), 1, j as i32)   
-                            };
-                        },
-
-                        ASTNode::Space(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::Symbols(*mut_me), 1, j as i32)   
-                            };
-                        },
-
-                        ASTNode::NewLine(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::Symbols(*mut_me), 1, j as i32)   
-                            };
-                        },
-
-                        ASTNode::IncreaseIndent(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::Symbols(*mut_me), 1, j as i32)   
-                            };
-                        },
-
-                        ASTNode::DecreaseIndent(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::Symbols(*mut_me), 1, j as i32)   
-                            };
-                        },
-
-                        ASTNode::Production_Token(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::Symbols(*mut_me), 1, j as i32)   
-                            };
-                        },
-
-                        ASTNode::Num(child) => { 
-                            unsafe { 
-                                let mut_me = node.get();
-                                child.Iterate(_yield, &mut NodeIteration::Symbols(*mut_me), 1, j as i32)   
-                            };
-                        }
-                    _ => {}
+                
+                if let ASTNode::Num(child) = child {
+                    unsafe { 
+                        let mut_me = node.get();
+                        child.Iterate(_yield, &mut NodeIteration::Symbols(*mut_me), 1, j as i32)   
+                    };
                 }
             }
         }
@@ -12562,20 +12326,37 @@ let mut v0 = args.remove(i-3);
  args.push(HCO::NODE/*aa99*/(ref_0)) }}
 /**
 ```
-{ t_ForkTo, c_IR, c_IR_Instruction, states:$4 }
+{ 
+
+    t_ForkTo,
+
+    c_IR,
+
+    c_IR_Instruction,
+
+    states:$4,
+
+    production_id:$8
+ }
 ```*/
 fn _fn15 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
-let mut v4 = args.remove(i-0);
-let mut v3 = args.remove(i-1);
-let mut v2 = args.remove(i-2);
-let mut v1 = args.remove(i-3);
-let mut v0 = args.remove(i-4); 
+let mut v7 = args.remove(i-0);
+let mut v6 = args.remove(i-1);
+let mut v5 = args.remove(i-2);
+let mut v4 = args.remove(i-3);
+let mut v3 = args.remove(i-4);
+let mut v2 = args.remove(i-5);
+let mut v1 = args.remove(i-6);
+let mut v0 = args.remove(i-7); 
  if let HCO::NODES/*aa00*/(mut r_0) = v3 { 
+ if let HCO::NODE/*aaRR*/(r_1) = v7 { 
+ if let ASTNode::Num(r_2) = r_1 { 
  let mut ref_0 = ASTNode::ForkTo(ForkTo::new(
         r_0,
+        r_2,
     ) 
 );;
- args.push(HCO::NODE/*aa99*/(ref_0)) }}
+ args.push(HCO::NODE/*aa99*/(ref_0)) } } }}
 /**
 ```
 { 
@@ -14961,9 +14742,20 @@ r_0.push(/*UX2*/r_1);
                                  } 
 /**
 ```
+$3
+```*/
+fn _fn143 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v3 = args.remove(i-0);
+let mut v2 = args.remove(i-1);
+let mut v1 = args.remove(i-2);
+let mut v0 = args.remove(i-3); 
+ if let HCO::NODE/*aaRR*/(r_0) = v2 { 
+ args.push(HCO::NODE/*aa99*/(r_0)) }}
+/**
+```
 [$1]
 ```*/
-fn _fn143 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn144 (args:&mut Vec<HCO>, tok: Token){ 
                             let mut i = args.len()-1;
 let mut v0 = args.remove(i-0);
                             
@@ -14977,7 +14769,7 @@ ref_0.push(/*RR7*/r_0);
 ```
 $__first__+$__last__
 ```*/
-fn _fn144 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn145 (args:&mut Vec<HCO>, tok: Token){ 
                             let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1);
@@ -14988,17 +14780,6 @@ r_0.push(/*UX4 TOKEN*/r_1);
 
                             args.push(HCO::TOKENS(r_0)); } }
                         }
-/**
-```
-$3
-```*/
-fn _fn145 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
-let mut v3 = args.remove(i-0);
-let mut v2 = args.remove(i-1);
-let mut v1 = args.remove(i-2);
-let mut v0 = args.remove(i-3); 
- if let HCO::NODE/*aaRR*/(r_0) = v2 { 
- args.push(HCO::NODE/*aa99*/(r_0)) }}
 /**
 ```
 $1+$2
@@ -15096,28 +14877,28 @@ let mut v0 = args.remove(i-1);
                         }
 /**
 ```
-str($1)
+$2
 ```*/
 fn _fn153 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v1 = args.remove(i-0);
+let mut v0 = args.remove(i-1); 
+ if let HCO::NODE/*aaRR*/(r_0) = v1 { 
+ args.push(HCO::NODE/*aa99*/(r_0)) }}
+/**
+```
+str($1)
+```*/
+fn _fn154 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  args.push(HCO::STRING(v0.String()))}
 /**
 ```
 str($__first__)+str($__last__)
 ```*/
-fn _fn154 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
-let mut v1 = args.remove(i-0);
-let mut v0 = args.remove(i-1); 
- args.push(HCO::STRING(v0.String() + &v1.String()))}
-/**
-```
-$2
-```*/
 fn _fn155 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
- if let HCO::NODE/*aaRR*/(r_0) = v1 { 
- args.push(HCO::NODE/*aa99*/(r_0)) }}
+ args.push(HCO::STRING(v0.String() + &v1.String()))}
 /**
 ```
 $2
@@ -15171,6 +14952,6 @@ let mut v0 = args.remove(i-2);
 
 
 
-pub const FunctionMaps:[RF; 338]= [
-    _fn158,_fn0,_fn1,_fn158,_fn158,_fn158,_fn159,_fn158,_fn158,_fn158,_fn158,_fn158,_fn159,_fn158,_fn160,_fn2,_fn3,_fn4,_fn5,_fn131,_fn159,_fn158,_fn158,_fn158,_fn158,_fn159,_fn159,_fn159,_fn158,_fn158,_fn6,_fn6,_fn6,_fn6,_fn6,_fn7,_fn7,_fn7,_fn7,_fn7,_fn132,_fn8,_fn133,_fn134,_fn158,_fn158,_fn9,_fn134,_fn159,_fn134,_fn134,_fn158,_fn158,_fn158,_fn10,_fn135,_fn136,_fn137,_fn136,_fn138,_fn139,_fn139,_fn137,_fn140,_fn11,_fn12,_fn13,_fn14,_fn15,_fn16,_fn17,_fn18,_fn19,_fn20,_fn21,_fn22,_fn23,_fn14,_fn17,_fn24,_fn25,_fn26,_fn27,_fn28,_fn27,_fn28,_fn158,_fn158,_fn29,_fn30,_fn31,_fn32,_fn33,_fn34,_fn35,_fn35,_fn158,_fn159,_fn159,_fn159,_fn159,_fn158,_fn158,_fn158,_fn158,_fn158,_fn158,_fn158,_fn158,_fn36,_fn37,_fn158,_fn38,_fn39,_fn40,_fn41,_fn42,_fn141,_fn43,_fn44,_fn45,_fn46,_fn47,_fn48,_fn49,_fn50,_fn51,_fn52,_fn53,_fn54,_fn55,_fn56,_fn57,_fn58,_fn59,_fn60,_fn61,_fn62,_fn63,_fn64,_fn65,_fn66,_fn67,_fn159,_fn159,_fn137,_fn142,_fn158,_fn158,_fn68,_fn158,_fn160,_fn158,_fn158,_fn159,_fn159,_fn158,_fn158,_fn158,_fn158,_fn158,_fn158,_fn158,_fn69,_fn159,_fn158,_fn132,_fn158,_fn158,_fn158,_fn158,_fn158,_fn70,_fn71,_fn72,_fn73,_fn143,_fn144,_fn143,_fn143,_fn144,_fn144,_fn74,_fn158,_fn158,_fn158,_fn158,_fn75,_fn76,_fn77,_fn78,_fn79,_fn145,_fn145,_fn80,_fn81,_fn82,_fn83,_fn84,_fn85,_fn86,_fn158,_fn87,_fn88,_fn89,_fn90,_fn91,_fn158,_fn158,_fn158,_fn92,_fn93,_fn94,_fn95,_fn96,_fn137,_fn142,_fn97,_fn98,_fn99,_fn100,_fn101,_fn102,_fn103,_fn104,_fn146,_fn147,_fn140,_fn137,_fn137,_fn132,_fn105,_fn106,_fn106,_fn137,_fn148,_fn107,_fn108,_fn109,_fn110,_fn111,_fn112,_fn158,_fn149,_fn137,_fn148,_fn158,_fn158,_fn158,_fn113,_fn137,_fn148,_fn158,_fn114,_fn114,_fn115,_fn115,_fn137,_fn137,_fn137,_fn148,_fn148,_fn148,_fn116,_fn117,_fn118,_fn119,_fn120,_fn160,_fn121,_fn122,_fn123,_fn124,_fn158,_fn150,_fn151,_fn150,_fn151,_fn150,_fn152,_fn143,_fn144,_fn137,_fn148,_fn137,_fn148,_fn137,_fn148,_fn137,_fn142,_fn137,_fn142,_fn125,_fn126,_fn137,_fn142,_fn137,_fn148,_fn137,_fn148,_fn137,_fn142,_fn137,_fn142,_fn143,_fn144,_fn143,_fn144,_fn137,_fn148,_fn137,_fn148,_fn133,_fn134,_fn153,_fn133,_fn154,_fn134,_fn133,_fn134,_fn133,_fn134,_fn127,_fn155,_fn156,_fn133,_fn134,_fn133,_fn134,_fn157,_fn142,_fn157,_fn157,_fn142,_fn142,_fn128,_fn129,_fn130,
+pub const FunctionMaps:[RF; 336]= [
+    _fn158,_fn0,_fn1,_fn158,_fn158,_fn158,_fn159,_fn158,_fn158,_fn158,_fn158,_fn158,_fn159,_fn158,_fn160,_fn2,_fn3,_fn4,_fn5,_fn131,_fn159,_fn158,_fn158,_fn158,_fn158,_fn159,_fn159,_fn159,_fn158,_fn158,_fn6,_fn6,_fn6,_fn6,_fn6,_fn7,_fn7,_fn7,_fn7,_fn7,_fn132,_fn8,_fn133,_fn134,_fn158,_fn158,_fn9,_fn134,_fn159,_fn134,_fn134,_fn158,_fn158,_fn158,_fn10,_fn135,_fn136,_fn137,_fn136,_fn138,_fn139,_fn139,_fn137,_fn140,_fn11,_fn12,_fn13,_fn14,_fn15,_fn16,_fn17,_fn18,_fn19,_fn20,_fn21,_fn22,_fn23,_fn14,_fn17,_fn24,_fn25,_fn26,_fn27,_fn28,_fn27,_fn28,_fn158,_fn158,_fn29,_fn30,_fn31,_fn32,_fn33,_fn34,_fn35,_fn35,_fn158,_fn159,_fn159,_fn159,_fn159,_fn158,_fn158,_fn158,_fn158,_fn158,_fn158,_fn158,_fn158,_fn36,_fn37,_fn158,_fn38,_fn39,_fn40,_fn41,_fn42,_fn141,_fn43,_fn44,_fn45,_fn46,_fn47,_fn48,_fn49,_fn50,_fn51,_fn52,_fn53,_fn54,_fn55,_fn56,_fn57,_fn58,_fn59,_fn60,_fn61,_fn62,_fn63,_fn64,_fn65,_fn66,_fn67,_fn159,_fn159,_fn137,_fn142,_fn158,_fn158,_fn68,_fn158,_fn160,_fn158,_fn158,_fn159,_fn159,_fn158,_fn158,_fn158,_fn158,_fn158,_fn158,_fn158,_fn69,_fn159,_fn158,_fn132,_fn143,_fn143,_fn158,_fn158,_fn158,_fn158,_fn158,_fn70,_fn71,_fn72,_fn73,_fn144,_fn145,_fn144,_fn144,_fn145,_fn145,_fn74,_fn158,_fn158,_fn158,_fn158,_fn75,_fn76,_fn77,_fn78,_fn79,_fn80,_fn81,_fn82,_fn83,_fn84,_fn85,_fn86,_fn158,_fn87,_fn88,_fn89,_fn90,_fn91,_fn158,_fn158,_fn158,_fn92,_fn93,_fn94,_fn95,_fn96,_fn137,_fn142,_fn97,_fn98,_fn99,_fn100,_fn101,_fn102,_fn103,_fn104,_fn146,_fn147,_fn140,_fn137,_fn137,_fn132,_fn105,_fn106,_fn106,_fn137,_fn148,_fn107,_fn108,_fn109,_fn110,_fn111,_fn112,_fn158,_fn149,_fn137,_fn148,_fn158,_fn158,_fn158,_fn113,_fn137,_fn148,_fn158,_fn114,_fn114,_fn115,_fn115,_fn137,_fn137,_fn137,_fn148,_fn148,_fn148,_fn116,_fn117,_fn118,_fn119,_fn120,_fn160,_fn121,_fn122,_fn123,_fn124,_fn158,_fn150,_fn151,_fn150,_fn151,_fn150,_fn152,_fn144,_fn145,_fn137,_fn148,_fn137,_fn148,_fn137,_fn148,_fn137,_fn142,_fn137,_fn142,_fn125,_fn126,_fn137,_fn148,_fn137,_fn148,_fn137,_fn148,_fn137,_fn142,_fn137,_fn142,_fn144,_fn145,_fn144,_fn145,_fn137,_fn148,_fn127,_fn153,_fn133,_fn134,_fn154,_fn133,_fn155,_fn134,_fn133,_fn134,_fn133,_fn134,_fn156,_fn133,_fn134,_fn133,_fn134,_fn157,_fn142,_fn157,_fn157,_fn142,_fn142,_fn128,_fn129,_fn130,
 ];

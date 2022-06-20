@@ -48,11 +48,15 @@ impl KernelStack
 
     pub fn pop_state(&mut self) -> u32
     {
-        let state = self.read_state();
+        if self.stack_pointer >= 0 {
+            let state = self.read_state();
 
-        self.stack_pointer -= 1;
+            self.stack_pointer -= 1;
 
-        return state;
+            return state;
+        } else {
+            return 0;
+        }
     }
 
     pub fn read_state(&self) -> u32

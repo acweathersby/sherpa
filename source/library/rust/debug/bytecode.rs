@@ -1,6 +1,8 @@
+use core::num;
 use std::any::Any;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
+use std::fmt::format;
 
 use crate::bytecode::constants::GOTO_INSTRUCTION_OFFSET_MASK;
 use crate::bytecode::constants::GOTO_STATE_MASK;
@@ -8,6 +10,7 @@ use crate::bytecode::constants::INPUT_TYPE;
 use crate::bytecode::constants::INSTRUCTION;
 use crate::bytecode::constants::INSTRUCTION_CONTENT_MASK;
 use crate::bytecode::constants::INSTRUCTION_HEADER_MASK;
+use crate::bytecode::constants::TOKEN_ASSIGN_FLAG;
 use crate::grammar;
 use crate::primitives::Body;
 use crate::primitives::GrammarStore;
@@ -62,7 +65,7 @@ impl<'a> BytecodeGrammarLookups<'a>
 }
 
 pub fn disassemble_state(
-    states: &[u32],
+    bytecode: &[u32],
     state_offset: usize,
     lu: Option<&BytecodeGrammarLookups>,
 ) -> (String, usize)
@@ -72,24 +75,24 @@ pub fn disassemble_state(
 
     let so = state_offset;
 
-    if state_offset >= states.len() {
+    if state_offset >= bytecode.len() {
         ("".to_string(), so)
     } else {
-        let instruction = states[state_offset];
-        match instruction & INSTRUCTION_HEADER_MASK {
+        let instruction = bytecode[state_offset] & INSTRUCTION_CONTENT_MASK;
+        match bytecode[state_offset] & INSTRUCTION_HEADER_MASK {
             INSTRUCTION::I00_PASS => (format!("\n{}PASS", dh(so)), so + 1),
             INSTRUCTION::I01_CONSUME => {
-                let (string, offset) = ds(states, so + 1, lu);
+                let (string, offset) = ds(bytecode, so + 1, lu);
                 (format!("\n{}SHFT", dh(so)) + &string, offset + 1)
             }
             INSTRUCTION::I02_GOTO => {
-                let (string, offset) = ds(states, so + 1, lu);
+                let (string, offset) = ds(bytecode, so + 1, lu);
                 (
                     format!(
                         "\n{}GOTO {}",
                         dh(so),
                         address(
-                            (states[so] & GOTO_INSTRUCTION_OFFSET_MASK)
+                            (bytecode[so] & GOTO_INSTRUCTION_OFFSET_MASK)
                                 as usize
                         )
                     ) + &string,
@@ -98,7 +101,7 @@ pub fn disassemble_state(
             }
             INSTRUCTION::I03_SET_PROD => {
                 let production_id = instruction & INSTRUCTION_CONTENT_MASK;
-                let (string, offset) = ds(states, so + 1, lu);
+                let (string, offset) = ds(bytecode, so + 1, lu);
 
                 if let Some(lu) = lu {
                     let name = &lu
@@ -108,7 +111,7 @@ pub fn disassemble_state(
                         .name;
                     (
                         format!(
-                            "\n{}PROD set to {} [{}]",
+                            "\n{}PROD SET TO {}     // {}",
                             dh(so),
                             production_id,
                             name,
@@ -124,7 +127,7 @@ pub fn disassemble_state(
                 }
             }
             INSTRUCTION::I04_REDUCE => {
-                let (string, offset) = ds(states, so + 1, lu);
+                let (string, offset) = ds(bytecode, so + 1, lu);
                 let symbol_count = instruction >> 16 & 0x0FFF;
                 let body_id = instruction & 0xFFFF;
 
@@ -156,20 +159,55 @@ pub fn disassemble_state(
                 }
             }
             INSTRUCTION::I05_TOKEN => {
-                let (string, offset) = ds(states, so + 1, lu);
-                (format!("\n{}TOKV", dh(so)) + &string, offset)
+                let (string, offset) = ds(bytecode, so + 1, lu);
+                if (instruction & TOKEN_ASSIGN_FLAG) > 0 {
+                    (
+                        format!(
+                            "\n{}TOKN ASSIGN TO {}",
+                            dh(so),
+                            instruction & 0x00FF_FFFF
+                        ) + &string,
+                        offset,
+                    )
+                } else {
+                    (format!("\n{}TOKV", dh(so)) + &string, offset)
+                }
             }
             INSTRUCTION::I06_FORK_TO => {
-                let (string, offset) = ds(states, so + 1, lu);
-                (format!("\n{}FORK", dh(so)) + &string, offset)
+                let target_production = instruction & 0xFFFF;
+                let num_of_states = (instruction >> 16) & 0xFFFF;
+                let end = (so + 1 + num_of_states as usize);
+                let (string, offset) = ds(bytecode, end, lu);
+                let mut state_strings = vec![];
+
+                for offset in (so + 1)..end {
+                    state_strings.push(format!(
+                        "{} -- FORK TO {}",
+                        dh(offset),
+                        address(
+                            (bytecode[offset] & GOTO_INSTRUCTION_OFFSET_MASK)
+                                as usize,
+                        ),
+                    ));
+                }
+
+                (
+                    format!(
+                        "\n{}FORK TO COMPLETE {}\n{}",
+                        dh(so),
+                        target_production,
+                        state_strings.join("\n"),
+                    ) + &string,
+                    offset,
+                )
             }
             INSTRUCTION::I07_SCAN => {
-                let (string, offset) = ds(states, so + 1, lu);
+                let (string, offset) = ds(bytecode, so + 1, lu);
                 (format!("\n{}SCAN", dh(so)) + &string, offset)
             }
             INSTRUCTION::I08_NOOP => (format!("\n{}NOOP", dh(so)), so + 1),
             INSTRUCTION::I09_VECTOR_BRANCH => generate_table_string(
-                states,
+                bytecode,
                 so,
                 lu,
                 "VECT",
@@ -185,7 +223,7 @@ pub fn disassemble_state(
                 },
             ),
             INSTRUCTION::I10_HASH_BRANCH => generate_table_string(
-                states,
+                bytecode,
                 so,
                 lu,
                 "HASH",
@@ -200,11 +238,11 @@ pub fn disassemble_state(
                 },
             ),
             INSTRUCTION::I11_SET_FAIL_STATE => {
-                let (string, offset) = ds(states, so + 1, lu);
+                let (string, offset) = ds(bytecode, so + 1, lu);
                 (format!("\n{}FSET", dh(so)) + &string, offset)
             }
             INSTRUCTION::I12_REPEAT => {
-                let (string, offset) = ds(states, so + 1, lu);
+                let (string, offset) = ds(bytecode, so + 1, lu);
                 (format!("\n{}REPT", dh(so)) + &string, offset)
             }
             INSTRUCTION::I13_NOOP => (format!("\n{}NOOP", dh(so)), so + 1),
@@ -278,7 +316,7 @@ fn generate_table_string(
         )
         + &strings.join("")
         + &default_string;
-    (string, offset + 1)
+    (string, offset)
 }
 
 fn create_failure_entry(entry_offset: usize, goto_offset: usize) -> String
@@ -365,6 +403,17 @@ fn get_input_id(
     }
 }
 
+pub fn print_states(bytecode: &[u32], lu: Option<&BytecodeGrammarLookups>)
+{
+    let mut offset: usize = 0;
+    while offset < bytecode.len() {
+        let (string, next) = disassemble_state(&bytecode, offset, lu);
+        offset = next;
+        print!("{}", string);
+    }
+    println!()
+}
+
 mod bytecode_debugging_tests
 {
     use std::collections::HashMap;
@@ -380,11 +429,13 @@ mod bytecode_debugging_tests
     use crate::grammar::parse::compile_ir_ast;
     use crate::intermediate::state_construct::generate_production_states;
 
+    use super::print_states;
+
     #[test]
     pub fn test_produce_a_single_ir_ast_from_a_single_state_of_a_trivial_production(
     )
     {
-        let grammar = compile_test_grammar("<> A > \\f");
+        let grammar = compile_test_grammar("<> A > \\h ? \\e ? \\l \\l \\o");
 
         let prod_id = get_production_by_name("A", &grammar).unwrap();
 
@@ -405,16 +456,8 @@ mod bytecode_debugging_tests
         let (bytecode, state_lookup) = build_byte_code_buffer(state_refs);
 
         let mut offset: usize = 0;
-        while offset < bytecode.len() {
-            let (string, next) = disassemble_state(
-                &bytecode,
-                offset,
-                Some(&BytecodeGrammarLookups::new(&grammar)),
-            );
-            offset = next;
-            print!("{}", string);
-        }
+        let lu = BytecodeGrammarLookups::new(&grammar);
 
-        println!("")
+        print_states(&bytecode, Some(&lu));
     }
 }

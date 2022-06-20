@@ -98,9 +98,9 @@
                                             
                                             f:r { { t_SetProd, c_IR, c_IR_Instruction, id: $4  } }
 
-    |   t:fork t:to \( state_reference(+\, ) \)
+    |   t:fork t:to \( state_reference(+) \) t:to t:complete token_num
                                             
-                                            f:r { { t_ForkTo, c_IR, c_IR_Instruction, states: $4  } }
+                                            f:r { { t_ForkTo, c_IR, c_IR_Instruction, states: $4, production_id: $8   } }
 
     |   t:scan t:back? t:until token_id_list
                                             f:r { { t_ScanUntil, c_IR, c_IR_Instruction, ids: $4, SCAN_BACKWARDS:bool($2) } }
@@ -151,7 +151,7 @@
         \[ 
             ( 
                         ! token_num 
-                |       sym::terminal_symbol
+
             )(+) 
         \] 
                                             f:r { $2 }

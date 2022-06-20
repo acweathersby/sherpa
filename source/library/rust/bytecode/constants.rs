@@ -15,10 +15,12 @@ pub const INSTRUCTION_HEADER_MASK: u32 = 0xF000_0000;
 
 pub const SKIPPED_SCAN_PROD: u16 = 9009;
 
-// Bit mask for bytecode states that are active during failure mode
+// Bit mask for bytecode states that are active during failure
+// recovery mode
 pub const FAIL_STATE_MASK: u32 = 1 << 27;
 
-/// Bit mask for bytecode states that are active during normal mode
+/// Bit mask for bytecode states that are active during normal parse
+/// mode
 pub const NORMAL_STATE_MASK: u32 = 1 << 26;
 
 /// This is the standard location of a `fail` instruction that is
@@ -32,6 +34,9 @@ pub const DEFAULT_PASS_THROUGH_INSTRUCTION_OFFSET: u32 = 0;
 /// This is the standard location of a `pass` instruction that is
 /// present in all bytecode blocks produced by Hydrocarbon.
 pub const DEFAULT_PASS_INSTRUCTION_OFFSET: u32 = 1;
+
+/// The offset of the first state within any HC bytecode buffer.
+pub const FIRST_STATE_OFFSET: u32 = 6;
 
 ///  A "magic" number assigned to a reduce node's length
 /// value to indicate that it is to use the symbol accumulator
@@ -61,6 +66,8 @@ pub const ALPHA_HAVE_DEFAULT_ACTION_MASK: u32 = 1 << 1;
 
 pub const PRODUCTION_SCOPE_POP_POINTER: u32 = 2;
 
+pub const TOKEN_ASSIGN_FLAG: u32 = 0x04000000;
+
 #[non_exhaustive]
 /// Bytecode instruction constants
 pub struct INSTRUCTION;
@@ -73,7 +80,8 @@ impl INSTRUCTION
     pub const I03_SET_PROD: u32 = 3 << 28;
     pub const I04_REDUCE: u32 = 4 << 28;
     pub const I05_TOKEN: u32 = 5 << 28;
-    pub const I05_TOKEN_ASSIGN: u32 = INSTRUCTION::I05_TOKEN | 0x04000000;
+    pub const I05_TOKEN_ASSIGN: u32 =
+        INSTRUCTION::I05_TOKEN | TOKEN_ASSIGN_FLAG;
     pub const I05_TOKEN_ASSIGN_CONSUME: u32 =
         INSTRUCTION::I05_TOKEN | 0x09000000;
     pub const I05_TOKEN_LENGTH: u32 = INSTRUCTION::I05_TOKEN | 0x08000000;

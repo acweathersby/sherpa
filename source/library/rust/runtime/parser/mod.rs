@@ -8,6 +8,7 @@ use crate::bytecode::constants::INSTRUCTION as I;
 use crate::bytecode::constants::INSTRUCTION_CONTENT_MASK;
 use crate::bytecode::constants::INSTRUCTION_HEADER_MASK;
 use crate::bytecode::constants::LEXER_TYPE;
+use crate::bytecode::constants::NORMAL_STATE_MASK;
 use crate::bytecode::constants::STATE_INDEX_MASK;
 use crate::primitives::KernelToken;
 use crate::primitives::Token;
@@ -20,10 +21,12 @@ struct KernelState
 {
     stack:           KernelStack,
     tokens:          [KernelToken; 3],
+    active_state:    u32,
     sym_accumulator: u32,
     production_id:   u32,
     pointer:         u32,
     in_peek_mode:    bool,
+    in_fail_mode:    bool,
     is_scanner:      bool,
 }
 
@@ -38,9 +41,11 @@ impl KernelState
                 KernelToken::new(),
                 KernelToken::new(),
             ],
+            active_state:    0,
             sym_accumulator: 0,
             production_id:   0,
             pointer:         0,
+            in_fail_mode:    false,
             in_peek_mode:    false,
             is_scanner:      false,
         }
@@ -52,7 +57,12 @@ enum Action
     Undefined,
     CompleteState,
     FailState,
-    Fork,
+    Fork
+    {
+        states_start_offset: u32,
+        num_of_states:       u32,
+        target_production:   u32,
+    },
     Shift((KernelToken, KernelToken)),
     Inter_Reduce
     {
@@ -62,6 +72,56 @@ enum Action
     },
     Skip(KernelToken),
     Accept,
+    Error
+    {
+        message:    &'static str,
+        last_input: KernelToken,
+    },
+}
+
+fn reference_runner<T: SymbolReader>(
+    reader: &mut T,
+    state: &mut KernelState,
+    bytecode: &[u32],
+) -> Action
+{
+    if state.active_state == 0 {
+        // Decode the next state.
+        state.active_state = state.stack.pop_state();
+    }
+
+    loop {
+        if state.active_state < 1 {
+            if reader.offset_at_end(state.tokens[1].byte_offset) {
+                break Action::Accept;
+            } else {
+                break Action::Error {
+                    message:    "Cannot parse this symbol",
+                    last_input: state.tokens[1],
+                };
+            }
+        } else {
+            let mask_gate = NORMAL_STATE_MASK << (state.in_fail_mode as u32);
+
+            if !state.in_fail_mode {}
+
+            if (state.active_state & mask_gate) != 0 {
+                match dispatch(reader, state, bytecode) {
+                    Action::CompleteState => {
+                        state.in_fail_mode = false;
+                        state.active_state = state.stack.pop_state();
+                    }
+                    Action::FailState => {
+                        state.in_fail_mode = true;
+                        state.active_state = state.stack.pop_state();
+                    }
+                    action => break action,
+                }
+            } else {
+                state.active_state = state.stack.pop_state();
+            }
+        }
+    }
 }
 
 /// Yields parser Actions from parsing an input using the
@@ -74,18 +134,20 @@ fn dispatch<T: SymbolReader>(
 {
     use Action::*;
 
-    let mut index = (state.pointer & STATE_INDEX_MASK) as u32;
+    let mut index = (state.active_state & STATE_INDEX_MASK) as u32;
 
     loop {
         let instruction = unsafe { *bytecode.get_unchecked(index as usize) };
 
+        state.active_state = index;
+
         index = match instruction & INSTRUCTION_HEADER_MASK {
             I::I01_CONSUME => break consume(instruction, state),
-            I::I02_GOTO => goto(),
+            I::I02_GOTO => goto(index, instruction, state),
             I::I03_SET_PROD => set_production(index, instruction, state),
             I::I04_REDUCE => break reduce(instruction, state),
             I::I05_TOKEN => set_token_state(),
-            I::I06_FORK_TO => break fork(),
+            I::I06_FORK_TO => break fork(index, instruction),
             I::I07_SCAN => scan(),
             I::I08_NOOP => noop(index),
             I::I09_VECTOR_BRANCH => vector_jump(index, reader, state, bytecode),
@@ -144,9 +206,11 @@ fn reduce(instruction: u32, state: &mut KernelState) -> Action
     }
 }
 
-fn goto() -> u32
+#[inline]
+fn goto(index: u32, instruction: u32, state: &mut KernelState) -> u32
 {
-    0
+    state.stack.push_state(instruction);
+    index + 1
 }
 
 #[inline]
@@ -163,9 +227,18 @@ fn set_token_state() -> u32
     0
 }
 
-fn fork() -> Action
+#[inline]
+fn fork(index: u32, instruction: u32) -> Action
 {
-    Action::Fork
+    let instruction = instruction & INSTRUCTION_CONTENT_MASK;
+    let target_production = instruction & 0xFFFF;
+    let num_of_states = (instruction >> 16) & 0xFFFF;
+
+    Action::Fork {
+        num_of_states,
+        states_start_offset: index + 1,
+        target_production,
+    }
 }
 
 fn scan() -> u32
@@ -367,6 +440,7 @@ fn scanner(token_start: KernelToken) -> KernelToken
     KernelToken::new()
 }
 
+#[inline]
 fn set_fail() -> u32
 {
     0
@@ -383,10 +457,15 @@ mod test
 {
     use std::collections::HashMap;
 
+    use crate::bytecode;
+    use crate::bytecode::compiler::build_byte_code_buffer;
     use crate::bytecode::compiler::compile_ir_state_to_bytecode;
     use crate::bytecode::constants::BranchSelector;
+    use crate::bytecode::constants::FIRST_STATE_OFFSET;
+    use crate::bytecode::constants::NORMAL_STATE_MASK;
     use crate::debug::compile_test_grammar;
     use crate::debug::disassemble_state;
+    use crate::debug::print_states;
     use crate::grammar::data::ast::ASTNode;
     use crate::grammar::get_production_by_name;
     use crate::grammar::parse::compile_ir_ast;
@@ -398,6 +477,86 @@ mod test
     use crate::runtime::parser::vector_jump;
     use crate::runtime::parser::Action;
     use crate::runtime::parser::KernelState;
+
+    use super::reference_runner;
+
+    #[test]
+    fn test_fork()
+    {
+        let (bytecode, mut reader, mut state) = setup_states(
+            vec![
+                "
+state [test_start]
+    
+    fork to ( state [X]  state [Y]  state [Z] ) to complete 2 then pass
+    ",
+                "
+state [X]
+    
+    set prod to 2 then reduce 0 1
+    ",
+                "
+state [Y]
+    
+    set prod to 2 then reduce 0 2
+    ",
+                "
+state [Z]
+    
+    set prod to 2 then reduce 0 3
+    ",
+            ],
+            "",
+        );
+
+        state
+            .stack
+            .push_state(NORMAL_STATE_MASK | FIRST_STATE_OFFSET);
+
+        match reference_runner(&mut reader, &mut state, &bytecode) {
+            Action::Fork {
+                states_start_offset,
+                num_of_states,
+                target_production,
+            } => {
+                assert_eq!(states_start_offset, FIRST_STATE_OFFSET + 1);
+                assert_eq!(num_of_states, 3);
+                assert_eq!(target_production, 2);
+            }
+            _ => panic!("Could not complete parse"),
+        }
+    }
+
+    #[test]
+    fn test_goto()
+    {
+        let (bytecode, mut reader, mut state) = setup_states(
+            vec![
+                "
+state [test_start]
+    
+    goto state [test_end]
+    ",
+                "
+state [test_end]
+    
+    set prod to 444 then pass
+    ",
+            ],
+            "",
+        );
+
+        state
+            .stack
+            .push_state(NORMAL_STATE_MASK | FIRST_STATE_OFFSET);
+
+        match reference_runner(&mut reader, &mut state, &bytecode) {
+            Action::Accept => {
+                assert_eq!(state.production_id, 444);
+            }
+            _ => panic!("Could not complete parse"),
+        }
+    }
 
     #[test]
     fn test_set_production()
@@ -628,6 +787,35 @@ assert BYTE [66] (pass)"
         );
     }
 
+    fn setup_states(
+        state_ir: Vec<&str>,
+        reader_input: &str,
+    ) -> (Vec<u32>, UTF8StringReader, KernelState)
+    {
+        let is_asts = state_ir
+            .into_iter()
+            .map(|s| {
+                let result = compile_ir_ast(Vec::from(s.to_string()));
+
+                match result {
+                    Ok(ast) => *ast,
+                    Err(err) => {
+                        println!("{}", err);
+                        panic!("Could not build state:\n{}", s);
+                    }
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let (bytecode, _) = build_byte_code_buffer(is_asts.iter().collect());
+
+        print_states(&bytecode, None);
+
+        let mut reader = UTF8StringReader::from_str(reader_input);
+        let mut state = KernelState::new();
+
+        (bytecode, reader, state)
+    }
     fn setup_state(
         state_ir: &str,
         reader_input: &str,
@@ -645,10 +833,9 @@ assert BYTE [66] (pass)"
             &HashMap::new(),
         );
 
-        println!("{}", disassemble_state(&bytecode, 0, None).0);
+        print_states(&bytecode, None);
 
         let mut reader = UTF8StringReader::from_str(reader_input);
-
         let mut state = KernelState::new();
 
         (bytecode, reader, state)

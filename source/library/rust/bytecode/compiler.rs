@@ -567,7 +567,13 @@ fn build_branchless_bytecode(
     use super::constants::INSTRUCTION as I;
     for instruction in instructions {
         match instruction {
-            ASTNode::TokenAssign(box TokenAssign { ids }) => {}
+            ASTNode::TokenAssign(box TokenAssign { ids }) => {
+                if let ASTNode::Num(id) = &ids[0] {
+                    byte_code.push(
+                        I::I05_TOKEN_ASSIGN | ((id.val as u32) & 0x00FF_FFFF),
+                    )
+                }
+            }
             ASTNode::Consume(box Consume { EMPTY }) => {
                 byte_code.push(I::I01_CONSUME | *EMPTY as u32)
             }
@@ -590,7 +596,31 @@ fn build_branchless_bytecode(
                 ids,
                 SCAN_BACKWARDS,
             }) => {}
-            ASTNode::ForkTo(box ForkTo { states }) => {}
+            ASTNode::ForkTo(box ForkTo {
+                states,
+                production_id,
+            }) => {
+                byte_code.push(
+                    I::I06_FORK_TO
+                        | ((states.len() << 16) as u32)
+                        | (production_id.val as u32),
+                );
+                for state in states {
+                    if let ASTNode::HASH_NAME(box HASH_NAME { val }) = state {
+                        let state_pointer_val =
+                            if let Some(v) = state_name_to_bookmark.get(val) {
+                                *v
+                            } else {
+                                0
+                            };
+                        byte_code.push(
+                            I::I02_GOTO | NORMAL_STATE_MASK | state_pointer_val,
+                        );
+                    } else {
+                        panic!("Invalid state type in goto instruction");
+                    }
+                }
+            }
             ASTNode::Skip(box Skip) => {}
             ASTNode::Pass(_) => byte_code.push(I::I00_PASS),
             ASTNode::Fail(_) => byte_code.push(I::I15_FAIL),

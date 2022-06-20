@@ -11,6 +11,7 @@ use crate::grammar::data::ast::Ascript;
 use crate::grammar::data::ast::Reduce;
 use crate::grammar::parse::ParseError;
 
+use super::BodyId;
 use super::BodyTable;
 use super::Item;
 use super::ProductionBodiesTable;
@@ -102,8 +103,15 @@ pub struct GrammarStore
     /// Maps a local import name to an absolute file path and its
     /// UUID.
     pub imports: HashMap<String, (String, PathBuf)>,
+
     /// Closure of all items that can be produced by this grammar.
     pub closures: HashMap<Item, Vec<Item>>,
+
+    /// Closure of all items that can be produced by this grammar.
+    pub item_peek_symbols: HashMap<Item, Vec<SymbolID>>,
+
+    /// Closure of all items that can be produced by this grammar.
+    pub production_peek_symbols: HashMap<ProductionId, Vec<SymbolID>>,
 
     pub lr_items: BTreeMap<ProductionId, HashSet<Item>>,
 

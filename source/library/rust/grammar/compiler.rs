@@ -334,7 +334,7 @@ fn finalize_items(
     let start_items_chunks =
         start_items.chunks(number_of_threads).collect::<Vec<_>>();
 
-    for (item, closure) in thread::scope(|s| {
+    for (item, closure, peek_symbols) in thread::scope(|s| {
         start_items_chunks
             .iter()
             .map(|work| {
@@ -346,9 +346,20 @@ fn finalize_items(
 
                     while let Some(item) = pending_items.pop_front() {
                         if !item.at_end() {
+                            let peek_symbols = if let Some(peek_symbols) =
+                                grammar
+                                    .production_peek_symbols
+                                    .get(&item.get_production_id(grammar))
+                            {
+                                peek_symbols.clone()
+                            } else {
+                                vec![]
+                            };
+
                             results.push((
                                 item,
                                 get_closure(&vec![item], &*grammar),
+                                peek_symbols,
                             ));
 
                             pending_items.push_back(item.increment().unwrap());
@@ -364,6 +375,7 @@ fn finalize_items(
             .flat_map(move |s| s.join().unwrap())
             .collect::<Vec<_>>()
     }) {
+        grammar.item_peek_symbols.insert(item.clone(), peek_symbols);
         grammar.closures.insert(item, closure);
     }
 
@@ -787,6 +799,9 @@ fn merge_grammars(
     for import_grammar in grammars {
         grammars_lookup.insert(import_grammar.uuid.clone(), import_grammar);
 
+        root.production_peek_symbols
+            .extend(import_grammar.production_peek_symbols.clone().into_iter());
+
         // Merge all symbols
         for (id, sym) in &import_grammar.symbols_table {
             if !root.symbols_table.contains_key(id) {
@@ -956,6 +971,8 @@ pub fn pre_process_grammar(
 
     let mut parse_errors = vec![];
 
+    let mut global_peek_symbols = vec![];
+
     {
         let mut tgs = TempGrammarStore {
             local_uuid: &uuid_name,
@@ -975,7 +992,13 @@ pub fn pre_process_grammar(
         // data
         for obj in grammar.preamble.iter() {
             match obj {
-                ASTNode::Ignore(ignore) => {}
+                ASTNode::Ignore(box Ignore { symbols }) => {
+                    for symbol in symbols {
+                        if let Some(id) = intern_symbol(symbol, &mut tgs) {
+                            global_peek_symbols.push(id)
+                        }
+                    }
+                }
                 ASTNode::Import(import) => {
                     let mut uri = PathBuf::from(&import.uri);
 
@@ -1059,6 +1082,11 @@ pub fn pre_process_grammar(
         }
     }
 
+    let production_peek_symbols = production_table
+        .keys()
+        .map(|k| (k.clone(), global_peek_symbols.clone()))
+        .collect::<HashMap<_, _>>();
+
     (
         GrammarStore {
             source_path: absolute_path.clone(),
@@ -1072,6 +1100,8 @@ pub fn pre_process_grammar(
             production_symbols_table,
             imports: import_names_lookup,
             closures: HashMap::new(),
+            item_peek_symbols: HashMap::new(),
+            production_peek_symbols,
             lr_items: BTreeMap::new(),
             reduce_functions,
         },

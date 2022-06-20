@@ -1,7 +1,9 @@
 //! Construct state IR strings for a given production
 use super::transition_tree::construct_goto;
 use super::transition_tree::construct_recursive_descent;
+use crate::grammar::get_production;
 use crate::grammar::get_production_plain_name;
+use crate::grammar::get_production_start_items;
 use crate::primitives::GrammarStore;
 use crate::primitives::IRStateString;
 use crate::primitives::ProductionId;
@@ -11,6 +13,7 @@ use crate::primitives::TransitionMode;
 use crate::primitives::TransitionPack;
 use crate::primitives::TransitionStateType;
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::collections::VecDeque;
 use std::fmt::format;
 
@@ -31,20 +34,22 @@ pub fn generate_production_states(
         grammar,
     ));
 
-    if recursive_descent_data.goto_items.len() > 0 {
-        let goto_data = construct_goto(
-            production_id,
-            grammar,
-            &recursive_descent_data
-                .goto_items
-                .into_iter()
-                .collect::<Vec<_>>(),
-        );
+    // if recursive_descent_data.goto_items.len() > 0 {
+    let goto_data = construct_goto(
+        production_id,
+        grammar,
+        &recursive_descent_data
+            .goto_items
+            .into_iter()
+            .collect::<Vec<_>>(),
+    );
 
+    if goto_data.leaf_nodes.len() > 0 {
         output.append(&mut process_transition_nodes(&goto_data, grammar));
-
-        create_fail_state(production_id, grammar, &mut output);
+    } else {
+        output.push(create_passing_goto_state(production_id, grammar));
     }
+    // }
 
     output
 }
@@ -135,20 +140,29 @@ fn process_transition_nodes<'a>(
     output.into_values().collect::<Vec<_>>()
 }
 
-fn create_fail_state(
-    production_id: &ProductionId,
-    grammar: &GrammarStore,
-    output: &mut IROutput,
-)
+fn create_fail_state(production_id: &ProductionId, grammar: &GrammarStore) {}
+
+fn get_goto_name(production_id: &ProductionId, grammar: &GrammarStore)
+    -> String
 {
+    format!(
+        "{}_goto",
+        get_production_plain_name(production_id, grammar).to_owned()
+    )
 }
 
 fn create_passing_goto_state(
     production_id: &ProductionId,
     grammar: &GrammarStore,
-    output: &mut IROutput,
-)
+) -> IRStateString
 {
+    IRStateString::new(
+        "",
+        "pass",
+        get_goto_name(production_id, grammar),
+        None,
+        None,
+    )
 }
 
 fn create_goto_start_state(
@@ -205,8 +219,9 @@ fn create_goto_start_state(
     IRStateString::new(
         &comment,
         &strings.join("\n"),
-        get_production_plain_name(root_production, grammar).to_owned()
-            + "_goto",
+        get_goto_name(root_production, grammar),
+        None,
+        None,
     )
 }
 
@@ -224,8 +239,8 @@ fn create_intermediate_state(
         create_goto_start_state(grammar, hashes, children, root_production)
     } else {
         let mut strings = vec![];
-
         let mut comment = String::new();
+        let mut item_set = BTreeSet::new();
 
         let post_amble = if node.id == 0 {
             create_post_amble(root_production, grammar)
@@ -256,18 +271,18 @@ fn create_intermediate_state(
 
             for child in children {
                 let hash = hashes[child.id];
-
-                let symbol = child.sym;
-
-                let symbol_id = symbol.bytecode_id(grammar);
-
-                let symbol_string = symbol.to_string(grammar);
-
+                let symbol_id = child.sym;
+                let symbol_string = symbol_id.to_string(grammar);
                 let state_name = IRStateString::get_state_name_from_hash(hash);
+
+                if !is_scanner {
+                    for item in &child.items {
+                        item_set.insert(item);
+                    }
+                }
 
                 if *mode == TransitionMode::GoTo {
                     comment += &format!("   node id: {}", node.id);
-
                     comment += "\n GOTO ";
                 }
 
@@ -278,7 +293,7 @@ fn create_intermediate_state(
                     .collect::<Vec<_>>()
                     .join("\n");
 
-                match &symbol {
+                match &symbol_id {
                     SymbolID::Production(production_id, _) => {
                         strings.push(format!(
                             "goto state [ {} ] then goto state [ {} ]{}",
@@ -301,7 +316,7 @@ fn create_intermediate_state(
                             ));
                         } else {
                             strings.push(format!(
-                                "assert [ 9999 ] ( goto state [ {} ]{} )",
+                                "assert PRODUCTION [ 9999 ] ( goto state [ {} ]{} )",
                                 state_name, post_amble
                             ));
                         }
@@ -315,8 +330,11 @@ fn create_intermediate_state(
                             })
                             .to_string();
 
-                        let symbol_type =
-                            (if is_scanner { "" } else { "TOKEN" }).to_string();
+                        let (symbol_id, assert_class) = if (!is_scanner) {
+                            (symbol_id.bytecode_id(grammar), "TOKEN")
+                        } else {
+                            get_symbol_consume_type(&symbol_id, grammar)
+                        };
 
                         let consume =
                             (if child.is(TransitionStateType::I_CONSUME) {
@@ -329,7 +347,7 @@ fn create_intermediate_state(
                         strings.push(format!(
                             "{} {} [ {} ] ( {}goto state [ {} ]{} )",
                             assertion_type,
-                            symbol_type,
+                            assert_class,
                             // symbol_string,
                             symbol_id,
                             consume,
@@ -341,7 +359,73 @@ fn create_intermediate_state(
             }
         }
 
-        IRStateString::new(&comment, &strings.join("\n"), state_name)
+        if is_scanner {
+            IRStateString::new(
+                &comment,
+                &strings.join("\n"),
+                state_name,
+                None,
+                None,
+            )
+        } else {
+            let mut normal_symbol_set = BTreeSet::new();
+            let mut peek_symbols_set = BTreeSet::new();
+
+            for item in item_set {
+                normal_symbol_set.insert(item.get_symbol(grammar));
+                println!("{}", &item.debug_string(grammar));
+                if let Some(peek_symbols) = grammar.item_peek_symbols.get(item)
+                {
+                    for peek_symbol in peek_symbols {
+                        peek_symbols_set.insert(peek_symbol.clone());
+                    }
+                }
+            }
+
+            let peek_symbols_set = peek_symbols_set
+                .difference(&normal_symbol_set)
+                .cloned()
+                .collect::<BTreeSet<_>>();
+
+            IRStateString::new(
+                &comment,
+                &strings.join("\n"),
+                state_name,
+                Some(normal_symbol_set.into_iter().collect()),
+                Some(peek_symbols_set.into_iter().collect()),
+            )
+        }
+    }
+}
+
+fn get_symbol_consume_type(
+    symbol_id: &SymbolID,
+    grammar: &GrammarStore,
+) -> (u32, &'static str)
+{
+    match symbol_id {
+        SymbolID::GenericSpace
+        | SymbolID::GenericHorizontalTab
+        | SymbolID::GenericNewLine
+        | SymbolID::GenericIdentifier
+        | SymbolID::GenericNumber
+        | SymbolID::GenericSymbol
+        | SymbolID::GenericIdentifiers
+        | SymbolID::GenericNumbers
+        | SymbolID::GenericSymbols => (symbol_id.bytecode_id(grammar), "CLASS"),
+        SymbolID::DefinedNumeric(id)
+        | SymbolID::DefinedIdentifier(id)
+        | SymbolID::DefinedGeneric(id) => {
+            let symbol = grammar.symbols_table.get(&symbol_id).unwrap();
+            let id = grammar.symbols_string_table.get(&symbol_id).unwrap();
+            let sym_char = id.as_bytes()[0];
+            if symbol.byte_length > 1 || sym_char > 128 {
+                (symbol.bytecode_id, "CODEPOINT")
+            } else {
+                (sym_char as u32, "BYTE")
+            }
+        }
+        _ => (0, "BYTE"),
     }
 }
 
@@ -374,20 +458,24 @@ fn create_end_state(
         let symbol_id = production.symbol_bytecode_id;
         let production_id = production.bytecode_id;
 
-        if symbol_id > 0 {
+        if symbol_id == 0 {
             IRStateString::new(
                 "",
                 &format!("set prod to {}", production_id),
                 String::default(),
+                None,
+                None,
             )
         } else {
             IRStateString::new(
                 "",
                 &format!(
-                    "assign token {} then set prod to {}",
+                    "assign token [ {} ] then set prod to {}",
                     symbol_id, production_id
                 ),
                 String::default(),
+                None,
+                None,
             )
         }
     } else {
@@ -396,7 +484,7 @@ fn create_end_state(
             production.bytecode_id, body.length, body.bytecode_id,
         );
 
-        IRStateString::new("", &state_string, String::default())
+        IRStateString::new("", &state_string, String::default(), None, None)
     }
 }
 

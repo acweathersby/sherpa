@@ -154,7 +154,7 @@ pub fn compile_ir_ast(buffer: Vec<u8>) -> Result<Box<IR_STATE>, ParseError>
                 Err(ParseError::UNDEFINED)
             }
         }
-        Err(err) => Err(ParseError::UNDEFINED),
+        Err(err) => Err(err),
     }
 }
 
