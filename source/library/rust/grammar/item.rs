@@ -52,7 +52,7 @@ pub fn get_closure(items: &[Item], grammar: &GrammarStore) -> Vec<Item>
 
 /// Retrieve the closure of an item that is cached in the grammar
 /// store. Falls back to manually building the closure if it is not
-/// cached. Does not modify the original grammar.
+/// cached. Does not modify the grammar store object.
 pub fn get_closure_cached<'a>(
     item: &Item,
     grammar: &'a GrammarStore,

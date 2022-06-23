@@ -488,22 +488,22 @@ mod test
                 "
 state [test_start]
     
-    fork to ( state [X]  state [Y]  state [Z] ) to complete 2 then pass
+    fork to ( state [X]  state [Y]  state [Z] ) to complete prod 2 then pass
     ",
                 "
 state [X]
     
-    set prod to 2 then reduce 0 1
+    set prod to 2 then reduce 0 symbols to body 1
     ",
                 "
 state [Y]
     
-    set prod to 2 then reduce 0 2
+    set prod to 2 then reduce 0 symbols to body 2
     ",
                 "
 state [Z]
     
-    set prod to 2 then reduce 0 3
+    set prod to 2 then reduce 0 symbols to body 3
     ",
             ],
             "",
@@ -584,7 +584,7 @@ state [test]
             "
 state [test]
     
-    reduce /* these number of symbols: */ 2 /* to production body_id: */ 1
+    reduce 2 symbols to body 1
     ",
             "0",
         );

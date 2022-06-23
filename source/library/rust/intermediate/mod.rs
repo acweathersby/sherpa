@@ -68,3 +68,140 @@ mod transition_tree_tests
         assert_eq!(result.leaf_nodes.len(), 2);
     }
 }
+
+#[cfg(test)]
+
+mod state_constructor_tests
+{
+
+    use std::collections::BTreeSet;
+
+    use crate::debug::compile_test_grammar;
+    use crate::grammar::get_production_by_name;
+    use crate::grammar::get_production_start_items;
+    use crate::intermediate::state_construct::generate_production_states;
+    use crate::intermediate::state_construct::generate_scanner_intro_state;
+    use crate::primitives::GrammarId;
+    use crate::primitives::SymbolID;
+
+    #[test]
+
+    pub fn test_generate_production_states_with_basic_grammar()
+    {
+        let grammar = compile_test_grammar("<> A > \\h \\e \\l \\l \\o");
+
+        let prod_id = get_production_by_name("A", &grammar).unwrap();
+
+        let result = generate_production_states(&prod_id, &grammar);
+
+        println!("{:#?}", result);
+
+        assert_eq!(result.len(), 7);
+    }
+
+    #[test]
+    pub fn test_generate_production_states_with_basic_grammar_with_one_optional_token(
+    )
+    {
+        let grammar = compile_test_grammar("<> A > \\h ? \\e ? \\l \\l \\o");
+
+        let prod_id = get_production_by_name("A", &grammar).unwrap();
+
+        let result = generate_production_states(&prod_id, &grammar);
+
+        println!("{:#?}", result);
+
+        assert_eq!(result.len(), 21);
+    }
+
+    #[test]
+    pub fn test_generate_production_states_with_basic_grammar_with_left_recursion(
+    )
+    {
+        let grammar = compile_test_grammar("<> A > A \\1 | \\2 ");
+
+        let prod_id = get_production_by_name("A", &grammar).unwrap();
+
+        let result = generate_production_states(&prod_id, &grammar);
+
+        println!("{:#?}", result);
+
+        assert_eq!(result.len(), 5);
+    }
+
+    #[test]
+    pub fn test_generate_production_states_with_synthesized_scanner_state()
+    {
+        let grammar = compile_test_grammar("<> A > \\1 | \\2 | \\3 ");
+
+        let symbols = grammar
+            .symbols_table
+            .keys()
+            .cloned()
+            .collect::<BTreeSet<_>>();
+
+        let result = generate_scanner_intro_state(symbols, &grammar);
+
+        println!("{:#?}", result);
+
+        assert_eq!(result.len(), 5);
+    }
+
+    #[test]
+    pub fn test_generate_production_state_with_scanner_function()
+    {
+        let grammar = compile_test_grammar(
+            "
+<> A > tk:B
+
+<> B > C | D
+
+<> C > \\a D \\c
+
+<> D > \\a \\b
+",
+        );
+
+        let token_production = grammar
+            .symbols_table
+            .keys()
+            .filter(|p| match p {
+                SymbolID::TokenProduction(..) => true,
+                _ => false,
+            })
+            .next()
+            .unwrap();
+
+        let result = generate_scanner_intro_state(
+            BTreeSet::from_iter(vec![*token_production]),
+            &grammar,
+        );
+
+        println!("{:#?}", result);
+
+        assert_eq!(result.len(), 6);
+    }
+
+    #[test]
+    pub fn test_generate_production_with_ambiguity()
+    {
+        let grammar = compile_test_grammar(
+            "
+<> A > B | C
+
+<> B > \\a \\b \\c (*)
+
+<> C > \\a \\b \\c (*)
+
+",
+        );
+
+        let prod_id = get_production_by_name("A", &grammar).unwrap();
+
+        let result = generate_production_states(&prod_id, &grammar);
+
+        println!("{:#?}", result);
+
+        assert_eq!(result.len(), 12);
+    }
+}

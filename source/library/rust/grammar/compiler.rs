@@ -1551,56 +1551,84 @@ fn pre_process_body(
                     // Create a new production that turns `A => a` into
                     // `A => a | A => A a` and produce a symbol id that points
                     // to that production.
+                    static none_: ASTNode = ASTNode::NONE;
+                    match sym {
+                        ASTNode::Optional_List_Production(_)
+                        | ASTNode::List_Production(_) => {
+                            let (symbols, terminal_symbol, tok) = match sym {
+                                ASTNode::Optional_List_Production(list) => (
+                                    &list.symbols,
+                                    &list.terminal_symbol,
+                                    list.tok.clone(),
+                                ),
+                                ASTNode::List_Production(list) => (
+                                    &list.symbols,
+                                    &list.terminal_symbol,
+                                    list.tok.clone(),
+                                ),
+                                _ => (&none_, &none_, Token::new()),
+                            };
 
-                    if let ASTNode::List_Production(list) = sym {
-                        // Create new bodies that will be bound to the symbol.
-                        let body_a = super::data::ast::Body::new(
-                            false,
-                            vec![list.symbols.clone()],
-                            None,
-                            ASTNode::NONE,
-                            sym.Token(),
-                        );
+                            // Create new bodies that will be bound to the
+                            // symbol.
+                            let body_a = super::data::ast::Body::new(
+                                false,
+                                vec![symbols.clone()],
+                                None,
+                                ASTNode::NONE,
+                                sym.Token(),
+                            );
 
-                        let mut body_b = body_a.clone();
+                            let mut body_b = body_a.clone();
 
-                        match list.terminal_symbol {
-                            ASTNode::NONE => {}
-                            _ => {
-                                body_b
-                                    .symbols
-                                    .insert(0, list.terminal_symbol.clone());
+                            match terminal_symbol {
+                                ASTNode::NONE => {}
+                                _ => {
+                                    body_b
+                                        .symbols
+                                        .insert(0, terminal_symbol.clone());
+                                }
                             }
+
+                            let (prod_sym, mut production) = create_production(
+                                &(production_name.to_owned()
+                                    + "_list_"
+                                    + &index.to_string()),
+                                &vec![
+                                    ASTNode::Body(body_b),
+                                    ASTNode::Body(body_a),
+                                ],
+                                tok.clone(),
+                            );
+
+                            // Add the production symbol to the front of body be
+                            // to make the body left
+                            // recursive
+                            if let ASTNode::Body(body) =
+                                &mut production.bodies[0]
+                            {
+                                body.symbols.insert(0, prod_sym.clone());
+                            }
+
+                            productions.push(production);
+
+                            generated_symbol = prod_sym;
+
+                            sym = &generated_symbol;
                         }
-
-                        let (prod_sym, mut production) = create_production(
-                            &(production_name.to_owned()
-                                + "_list_"
-                                + &index.to_string()),
-                            &vec![ASTNode::Body(body_b), ASTNode::Body(body_a)],
-                            list.tok.clone(),
-                        );
-
-                        // Add the production symbol to the front of body be to
-                        // make the body left recursive
-                        if let ASTNode::Body(body) = &mut production.bodies[0] {
-                            body.symbols.insert(0, prod_sym.clone());
+                        _ => {
+                            tgs.errors.push(
+                                parse::ParseError::COMPILE_PROBLEM(
+                                    CompileProblem {
+                                        inline_message: String::new(),
+                                        message:
+                                            "I don't know what to do with this."
+                                                .to_string(),
+                                        loc: sym.Token(),
+                                    },
+                                ),
+                            );
                         }
-
-                        productions.push(production);
-
-                        generated_symbol = prod_sym;
-
-                        sym = &generated_symbol;
-                    } else {
-                        tgs.errors.push(parse::ParseError::COMPILE_PROBLEM(
-                            CompileProblem {
-                                inline_message: String::new(),
-                                message: "I don't know what to do with this."
-                                    .to_string(),
-                                loc: sym.Token(),
-                            },
-                        ));
                     }
                 }
 

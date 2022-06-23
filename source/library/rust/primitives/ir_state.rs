@@ -8,17 +8,18 @@ use crate::grammar::hash_id_value_u64;
 use super::ProductionId;
 use super::SymbolID;
 
-pub struct IRStateString
+pub struct IRState
 {
     comment:        String,
     ir_code:        String,
     hash:           u64,
     state_name:     String,
+    graph_id:       usize,
     normal_symbols: Vec<SymbolID>,
     peek_symbols:   Vec<SymbolID>,
 }
 
-impl IRStateString
+impl IRState
 {
     pub fn get_state_name_from_hash(hash: u64) -> String
     {
@@ -29,17 +30,19 @@ impl IRStateString
         comment: &str,
         ir_code: &str,
         state_name: String,
+        graph_id: usize,
         normal_symbols: Option<Vec<SymbolID>>,
         peek_symbols: Option<Vec<SymbolID>>,
     ) -> Self
     {
         let hash = hash_id_value_u64(ir_code);
 
-        IRStateString {
+        IRState {
             comment: comment.to_string(),
             ir_code: ir_code.to_string(),
             hash,
             state_name,
+            graph_id,
             normal_symbols: if let Some(syms) = normal_symbols {
                 syms
             } else {
@@ -126,9 +129,14 @@ impl IRStateString
             None
         }
     }
+
+    pub fn get_graph_id(&self) -> usize
+    {
+        self.graph_id
+    }
 }
 
-impl Debug for IRStateString
+impl Debug for IRState
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
     {
@@ -141,7 +149,7 @@ impl Debug for IRStateString
     }
 }
 
-impl Display for IRStateString
+impl Display for IRState
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
     {

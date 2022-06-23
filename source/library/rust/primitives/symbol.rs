@@ -42,6 +42,7 @@ pub enum SymbolID
     GenericSymbols,
     Undefined,
     Recovery,
+    Default,
     EndOfFile,
 }
 
@@ -72,6 +73,7 @@ impl SymbolID
                     grammar.production_table.get(&prod_id).unwrap().name
                 )
             }
+            Self::Default => "default".to_string(),
             Self::Undefined => "[??]".to_string(),
             Self::Recovery => "g:rec".to_string(),
             Self::EndOfFile => "$eof".to_string(),
@@ -114,6 +116,7 @@ impl SymbolID
             | Self::TokenProduction(..) => {
                 grammar.symbols_table.get(self).unwrap().bytecode_id
             }
+            Self::Default => 9999,
             Self::Production(..) => 0,
             Self::Undefined => 0,
             Self::Recovery => 0,

@@ -4,12 +4,14 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::hash::Hash;
+use std::process::id;
 use std::rc::Rc;
 use std::vec;
 
 use crate::grammar::get_closure;
 use crate::grammar::get_closure_cached;
 use crate::grammar::get_production_start_items;
+use crate::grammar::hash_id_value_u64;
 use crate::primitives::GrammarId;
 use crate::primitives::GrammarStore;
 use crate::primitives::Item;
@@ -29,8 +31,6 @@ enum TransitionGroupSelector
     EndItem(u64),
     Symbol(SymbolID),
 }
-
-const OUT_OF_SCOPE_STATE: ItemState = ItemState::new(0, 5000);
 
 /// Constructs an initial transition tree that parses a production
 /// using a recursive descent strategy. Productions that are ambiguous
@@ -121,7 +121,7 @@ pub fn construct_goto<'a>(
     let mut t_pack =
         TPack::new(grammar, TransitionMode::GoTo, is_scanner, &start_items);
 
-    let closure = Rc::new(Box::<Vec<Item>>::new(if t_pack.is_scanner {
+    let global_closure = Rc::new(Box::<Vec<Item>>::new(if t_pack.is_scanner {
         vec![]
     } else {
         get_follow_closure(goto_items, grammar, &t_pack.root_productions)
@@ -141,7 +141,7 @@ pub fn construct_goto<'a>(
     for (production_id, group) in
         get_goto_starts(&start_items, grammar, goto_items)
     {
-        t_pack.goto_scoped_closure = Some(closure.clone());
+        t_pack.goto_scoped_closure = Some(global_closure.clone());
 
         let items: Vec<Item> = group
             .iter()
@@ -149,7 +149,7 @@ pub fn construct_goto<'a>(
                 let stated_item = i.increment().unwrap();
 
                 let stated_item = if stated_item.at_end() {
-                    stated_item.to_state(OUT_OF_SCOPE_STATE)
+                    stated_item.to_state(ItemState::OUT_OF_SCOPE_STATE)
                 } else {
                     t_pack
                         .scoped_closures
@@ -186,7 +186,9 @@ pub fn construct_goto<'a>(
                     .iter()
                     .filter(|i| !group.iter().any(|g| *g == **i))
                     .map(|i| {
-                        i.increment().unwrap().to_state(OUT_OF_SCOPE_STATE)
+                        i.increment()
+                            .unwrap()
+                            .to_state(ItemState::OUT_OF_SCOPE_STATE)
                     })
                     .collect();
 
@@ -402,7 +404,7 @@ fn process_node(
 }
 
 /// True if the closure of the givin items does not include
-/// the root production on the right of the cursor
+/// the goal production on the right of the cursor
 
 fn non_recursive(
     items: &Vec<Item>,
@@ -440,45 +442,28 @@ fn create_peek(
         parent.depth = 99999;
     }
 
-    let goals: Vec<usize> = hash_group(items, |i, item| {
-        if item.get_state().get_depth() == 5000 {
-            TransitionGroupSelector::OutOfScope(item.get_symbol(grammar))
-        } else if item.at_end() {
-            TransitionGroupSelector::EndItem(i as u64)
-        } else {
-            TransitionGroupSelector::EndItem(i as u64)
-            // TransitionGroupSelector::Symbol(item.
-            // get_symbol(grammar))
-        }
-    })
-    .iter()
-    .enumerate()
-    .map(|(i, group)| {
-        let root_closure_index = group[0].get_state();
+    let goals: Vec<usize> = items
+        .iter()
+        .enumerate()
+        .map(|(i, item)| {
+            let mut root_node = TGN::new(
+                t_pack,
+                item.get_symbol(grammar).to_owned(),
+                usize::MAX,
+                vec![item.clone()],
+            );
 
-        let items: Vec<Item> = group
-            .into_iter()
-            .map(|i| i.to_state(root_closure_index))
-            .collect();
+            root_node.depth = 0;
 
-        let mut root_node = TGN::new(
-            t_pack,
-            items[0].get_symbol(grammar).to_owned(),
-            usize::MAX,
-            items.clone(),
-        );
-
-        root_node.depth = 0;
-
-        if t_pack.mode == TransitionMode::GoTo {
-            if items[0].at_end() {
-                root_node.transition_type |= TST::I_COMPLETE;
+            if t_pack.mode == TransitionMode::GoTo {
+                if item.at_end() {
+                    root_node.transition_type |= TST::I_COMPLETE;
+                }
             }
-        }
 
-        t_pack.insert_node(root_node)
-    })
-    .collect();
+            t_pack.insert_node(root_node)
+        })
+        .collect();
 
     let mut peek_nodes = vec![];
 
@@ -520,7 +505,7 @@ fn create_peek(
         t_pack.drop_node(&goal);
     }
 
-    t_pack.clear_peek_closures();
+    t_pack.clear_peek_data();
 
     resolved_leaves
 }
@@ -703,9 +688,13 @@ fn process_peek_leaves(
 
                 let have_proxy_parents = proxy_parents.len() > 0;
 
-                for child_index in
-                    process_node(goal_index, goal_index, grammar, t_pack, false)
-                {
+                for child_index in process_node(
+                    goal_index,
+                    primary_parent,
+                    grammar,
+                    t_pack,
+                    false,
+                ) {
                     let child_node = t_pack.get_node_mut(child_index);
 
                     child_node.parent = primary_parent;
@@ -719,8 +708,8 @@ fn process_peek_leaves(
                     resolved_leaves.push(child_index);
                 }
 
-                // Note: Remember all goal nodes are PRUNED at the end
-                // of the peek resolution process
+                // Note: Remember all goal nodes are DROPPED at the
+                // end of the peek resolution process
             }
         }
     }
@@ -811,7 +800,7 @@ fn disambiguate(
                 *goal,
             );
 
-            if terms.is_empty() {
+            if terms.is_empty() && final_ends.is_empty() {
                 end_nodes.push(node_index);
             } else {
                 term_nodes.append(&mut terms);
@@ -829,9 +818,9 @@ fn disambiguate(
             leaves.push(end_nodes[0]);
         }
         _ => {
-            let roots = get_roots(&end_nodes, &t_pack);
+            let goals = get_goals(&end_nodes, &t_pack);
 
-            if roots.len() == 1 {
+            if goals.len() == 1 {
                 for end_node in &end_nodes[1..] {
                     t_pack.drop_node(end_node);
                 }
@@ -840,17 +829,7 @@ fn disambiguate(
 
                 leaves.push(end_nodes[0]);
             } else {
-                let mut parent = 0;
-
-                let sym = t_pack.get_node(end_nodes[0]).sym;
-
-                for end_node in &end_nodes {
-                    parent = t_pack.drop_node(end_node)
-                }
-
-                handle_unresolved_roots(
-                    parent, sym, roots, leaves, grammar, t_pack,
-                );
+                handle_unresolved_nodes(end_nodes, grammar, t_pack, leaves);
             }
         }
     }
@@ -865,11 +844,11 @@ fn disambiguate(
     for group in groups.iter() {
         let prime_node_index = group[0];
 
-        let roots = get_roots(&group, t_pack);
+        let goals = get_goals(&group, t_pack);
 
         set_transition_type(prime_node_index, t_pack, depth);
 
-        if roots.len() > 1 && group.len() > 1 {
+        if goals.len() > 1 && group.len() > 1 {
             let mut peek_transition_group = vec![];
 
             for node_index in group.iter().cloned() {
@@ -904,7 +883,7 @@ fn disambiguate(
             }
 
             if peek_transition_group.is_empty() {
-                if get_roots(&group, t_pack)
+                if get_goals(&group, t_pack)
                     .iter()
                     .all(|i| t_pack.get_node(*i).is(TST::I_OUT_OF_SCOPE))
                 {
@@ -947,12 +926,7 @@ fn disambiguate(
             } else if groups_are_aliased(&peek_group, t_pack)
                 || group_is_repeated(&peek_group, t_pack)
             {
-                handle_transition_collision(
-                    &peek_group,
-                    grammar,
-                    t_pack,
-                    leaves,
-                );
+                handle_unresolved_nodes(peek_group, grammar, t_pack, leaves);
             } else {
                 disambiguate(grammar, t_pack, peek_group, leaves, depth + 1);
             }
@@ -1014,17 +988,19 @@ fn get_continue_items(
 fn group_is_repeated(peek_group: &Vec<usize>, t_pack: &mut TPack) -> bool
 {
     // panic!("Todo: group_is_repeated")
-    false
-}
+    let group_id = peek_group
+        .iter()
+        .flat_map(|i| {
+            let node = t_pack.get_node(*i);
+            node.items.iter().map(|i| i.to_zero_state().to_hash())
+        })
+        .collect::<BTreeSet<_>>();
 
-fn handle_transition_collision(
-    peek_group: &Vec<usize>,
-    grammar: &GrammarStore,
-    t_pack: &mut TPack,
-    leaves: &mut Vec<usize>,
-)
-{
-    panic!("Todo: handle_transition_collision")
+    let ids = group_id.iter().collect::<Vec<_>>();
+
+    let hash_id = hash_id_value_u64(ids.clone());
+
+    !t_pack.peek_ids.insert(hash_id)
 }
 
 fn handle_shift_reduce_conflicts(
@@ -1034,7 +1010,7 @@ fn handle_shift_reduce_conflicts(
     leaves: &mut Vec<usize>,
 ) -> bool
 {
-    let goals = get_roots(peek_group, t_pack)
+    let goals = get_goals(peek_group, t_pack)
         .into_iter()
         .map(|i| (i, &t_pack.get_node(i).items))
         .collect::<Vec<_>>();
@@ -1167,25 +1143,55 @@ fn symbols_occlude(
     }
 }
 
-fn get_roots(end_nodes: &Vec<usize>, t_pack: &TPack) -> Vec<usize>
+fn get_goals(end_nodes: &Vec<usize>, t_pack: &TPack) -> Vec<usize>
 {
-    HashSet::<usize>::from_iter(
+    BTreeSet::<usize>::from_iter(
         end_nodes.iter().map(|n| t_pack.get_node(*n).goal),
     )
     .into_iter()
-    .collect::<Vec<usize>>()
+    .collect::<Vec<_>>()
 }
 
-fn handle_unresolved_roots(
-    parent_index: usize,
-    sym: SymbolID,
-    roots: Vec<usize>,
-    leaves: &Vec<usize>,
+fn handle_unresolved_nodes(
+    peek_group: Vec<usize>,
     grammar: &GrammarStore,
-    t_pack: &TPack,
+    t_pack: &mut TPack,
+    leaves: &mut Vec<usize>,
 )
 {
-    panic!("TODO: handle_unresolved_roots")
+    if t_pack.is_scanner {
+    } else {
+        let goals = get_goals(&peek_group, t_pack);
+
+        if goals.len() < 2 {
+            panic!("Unexpectedly ended up here with only one goal!");
+        }
+
+        // TODO: Filter out low priority goals.
+
+        // Create a fork state -----------------------------------------------
+
+        let prime_node = peek_group[0];
+        let mut parent = 0;
+        let mut items = vec![];
+
+        for node_index in &peek_group[0..peek_group.len()] {
+            items.push(t_pack.get_node(*node_index).items[0].clone());
+            parent = t_pack.drop_node(node_index);
+        }
+
+        let mut fork_node = TGN::new(t_pack, SymbolID::Default, parent, items);
+
+        fork_node.set_type(TST::I_FORK);
+
+        fork_node.parent = parent;
+
+        let fork_node_index = t_pack.insert_node(fork_node);
+
+        for goal_index in goals {
+            process_node(goal_index, fork_node_index, grammar, t_pack, false);
+        }
+    }
 }
 
 /// Set the transition type of a peeking based on whether
@@ -1195,13 +1201,10 @@ fn handle_unresolved_roots(
 
 fn set_transition_type(node_index: usize, t_pack: &mut TPack, depth: u32)
 {
-    let mut node = t_pack.get_node(node_index);
-
-    if depth >= 1 {
-        t_pack.get_node_mut(node_index).set_type(TST::O_PEEK);
-    } else {
-        t_pack.get_node_mut(node_index).set_type(TST::O_ASSERT);
-    }
+    t_pack.get_node_mut(node_index).set_type(match depth {
+        0 => TST::O_ASSERT,
+        _ => TST::O_PEEK,
+    })
 }
 
 /// Retrieve terminal items derived from a
@@ -1222,6 +1225,7 @@ fn scan_items(
     let mut out = HashSet::<(Item, Item)>::new();
     let mut final_items = HashSet::<(Item, Item)>::new();
 
+    static empty_vec: Vec<Item> = Vec::new();
     // Starting at the top we grab the closure to the nearest
     // non-term link.
 
@@ -1230,70 +1234,77 @@ fn scan_items(
         t_pack.get_closure_link(&root_end_item),
         *root_end_item,
     )]);
-
     while let Some((nonterm_closure_link, end_item)) = end_items.pop_front() {
-        if !seen.insert((nonterm_closure_link, end_item).clone()) {
-            continue;
-        }
-
-        let production = end_item.get_production_id(grammar);
-
-        // Grab all productions from the closure that match the end item's
-        // production.
-        static empty_vec: Vec<Item> = Vec::new();
-
-        let production_items = if nonterm_closure_link.is_null() {
-            if let Some(closures) = t_pack
-                .scoped_closures
-                .get(nonterm_closure_link.get_state().get_closure_index())
-            {
-                closures.iter()
-            } else {
-                empty_vec.iter()
-            }
-        } else {
-            get_closure_cached(&nonterm_closure_link.to_zero_state(), grammar)
-                .iter()
-        }
-        .filter(|i| i.get_production_id_at_sym(grammar) == production)
-        .cloned()
-        .collect::<Vec<_>>();
-
-        if production_items.is_empty() {
-            if nonterm_closure_link.is_null() {
-                t_pack.set_closure_link(
-                    end_item.clone(),
-                    nonterm_closure_link.clone(),
-                );
-                final_items
-                    .insert((nonterm_closure_link.clone(), end_item.clone()));
-            } else {
-                end_items.push_back((
-                    t_pack.get_closure_link(&nonterm_closure_link),
-                    end_item.clone(),
-                ));
-            }
-        } else {
-            for production_item in production_items {
-                let incremented_item = production_item
-                    .to_state(end_item.get_state())
-                    .increment()
-                    .unwrap();
-
-                if incremented_item.is_end() {
-                    end_items.push_back((
-                        nonterm_closure_link.clone(),
-                        incremented_item,
-                    ));
+        if seen.insert((nonterm_closure_link, end_item).clone()) {
+            let production = end_item.get_production_id(grammar);
+            // Grab all productions from the closure that match the end item's
+            // production.
+            match {
+                if nonterm_closure_link.is_null() {
+                    if let Some(closures) = t_pack.scoped_closures.get(
+                        nonterm_closure_link.get_state().get_closure_index(),
+                    ) {
+                        closures.iter()
+                    } else {
+                        empty_vec.iter()
+                    }
+                } else if nonterm_closure_link.is_out_of_scope() {
+                    if let Some(closure) = &t_pack.goto_scoped_closure {
+                        closure.iter()
+                    } else {
+                        empty_vec.iter()
+                    }
                 } else {
-                    t_pack.set_closure_link(
-                        incremented_item,
-                        nonterm_closure_link.clone(),
-                    );
-                    out.insert((
-                        nonterm_closure_link.clone(),
-                        incremented_item,
-                    ));
+                    get_closure_cached(
+                        &nonterm_closure_link.to_zero_state(),
+                        grammar,
+                    )
+                    .iter()
+                }
+                .filter(|i| i.get_production_id_at_sym(grammar) == production)
+                .cloned()
+                .collect::<Vec<_>>()
+            } {
+                p if p.is_empty() => {
+                    if nonterm_closure_link.is_null() {
+                        t_pack.set_closure_link(
+                            end_item.clone(),
+                            nonterm_closure_link.clone(),
+                        );
+                        final_items.insert((
+                            nonterm_closure_link.clone(),
+                            end_item.clone(),
+                        ));
+                    } else {
+                        end_items.push_back((
+                            t_pack.get_closure_link(&nonterm_closure_link),
+                            end_item.clone(),
+                        ));
+                    }
+                }
+                production_items => {
+                    for production_item in production_items {
+                        let incremented_item = production_item
+                            .to_state(end_item.get_state())
+                            .increment()
+                            .unwrap();
+
+                        if incremented_item.is_end() {
+                            end_items.push_back((
+                                nonterm_closure_link.clone(),
+                                incremented_item,
+                            ));
+                        } else {
+                            t_pack.set_closure_link(
+                                incremented_item,
+                                nonterm_closure_link.clone(),
+                            );
+                            out.insert((
+                                nonterm_closure_link.clone(),
+                                incremented_item,
+                            ));
+                        }
+                    }
                 }
             }
         }

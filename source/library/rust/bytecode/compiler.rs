@@ -28,7 +28,7 @@ use crate::grammar::data::ast::IR_STATE;
 use crate::grammar::parse::compile_ir_ast;
 use crate::intermediate::state_construct::generate_production_states;
 use crate::primitives::grammar::GrammarStore;
-use crate::primitives::IRStateString;
+use crate::primitives::IRState;
 use crate::primitives::ProductionId;
 use std::any::Any;
 use std::collections::BTreeMap;
@@ -130,7 +130,7 @@ fn patch_goto_offsets(
 fn compile_ir_states_worker(
     grammar: &GrammarStore,
     productions: &[ProductionId],
-) -> Vec<IRStateString>
+) -> Vec<IRState>
 {
     productions
         .into_iter()
@@ -146,7 +146,7 @@ fn compile_ir_states(
     grammar: &GrammarStore,
     work_group: &[ProductionId],
     number_of_threads: usize,
-) -> BTreeMap<u64, IRStateString>
+) -> BTreeMap<u64, IRState>
 {
     let production_id_chunks = work_group
         .chunks(number_of_threads)
@@ -231,17 +231,7 @@ fn build_branching_bytecode(
     let branches = instructions
         .iter()
         .filter_map(|n| match n {
-            ASTNode::ASSERT(assert) => {
-                if let ASTNode::Num(box Num { val }) = assert.ids[0] {
-                    if val as u32 == DEFAULT_CASE_INDICATOR {
-                        None
-                    } else {
-                        Some(assert)
-                    }
-                } else {
-                    None
-                }
-            }
+            ASTNode::ASSERT(assert) => Some(assert),
             _ => None,
         })
         .collect::<Vec<_>>();
@@ -249,23 +239,16 @@ fn build_branching_bytecode(
     let default_branches = instructions
         .iter()
         .filter_map(|n| match n {
-            ASTNode::ASSERT(assert) => {
-                if let ASTNode::Num(box Num { val }) = assert.ids[0] {
-                    if val as u32 == DEFAULT_CASE_INDICATOR {
-                        Some(assert)
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            }
+            ASTNode::DEFAULT(default) => Some(default),
             _ => None,
         })
         .collect::<Vec<_>>();
 
-    // Extract the default branch if it exists.
+    if default_branches.len() > 1 {
+        panic!("Too many default branches found in state!")
+    }
 
+    // Extract the default branch if it exists.
     let output = if default_branches.len() > 0 {
         build_branchless_bytecode(
             &default_branches[0].instructions,

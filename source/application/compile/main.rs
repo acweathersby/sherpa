@@ -1,7 +1,6 @@
 #![feature(scoped_threads)]
 
 use std::collections::BTreeMap;
-use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
@@ -13,7 +12,6 @@ use hctk::debug::print_states;
 use hctk::debug::BytecodeGrammarLookups;
 use hctk::get_num_of_available_threads;
 use hctk::grammar::compiler::compile_from_path;
-use hctk::grammar::compiler::compile_from_string;
 use hctk::grammar::parse::compile_ir_ast;
 use hctk::intermediate::state_construct::generate_production_states;
 use hctk::intermediate::state_construct::generate_scanner_intro_state;
@@ -47,9 +45,6 @@ fn main()
                     .iter()
                     .map(|productions| {
                         s.spawn(|| {
-                            let mut work_queue = VecDeque::from_iter(
-                                productions.iter().cloned(),
-                            );
                             let mut deduped_states = BTreeMap::new();
                             let mut scanner_names = HashSet::new();
 
@@ -125,7 +120,7 @@ fn main()
 
             let state_refs = state_asts.iter().collect::<Vec<_>>();
 
-            let (bytecode, state_lookup) = build_byte_code_buffer(state_refs);
+            let (bytecode, _) = build_byte_code_buffer(state_refs);
 
             print_states(
                 &bytecode,

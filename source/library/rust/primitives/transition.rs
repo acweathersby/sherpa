@@ -144,6 +144,22 @@ impl TransitionGraphNode
         node
     }
 
+    pub fn temp(sym: SymbolID, parent_index: usize, items: Vec<Item>) -> Self
+    {
+        let mut node = TransitionGraphNode {
+            sym,
+            transition_type: TransitionStateType::UNDEFINED,
+            proxy_parents: vec![],
+            items,
+            depth: 0,
+            parent: TransitionGraphNode::OrphanIndex,
+            goal: TransitionGraphNode::OrphanIndex,
+            id: TransitionGraphNode::OrphanIndex,
+        };
+
+        node
+    }
+
     #[inline(always)]
 
     pub fn is_orphan(&self, tpack: &TransitionPack) -> bool
@@ -208,6 +224,7 @@ pub struct TransitionPack<'a>
     empty_cache: VecDeque<usize>,
     pub goto_scoped_closure: Option<Rc<Box<Vec<Item>>>>,
     pub root_productions: BTreeSet<ProductionId>,
+    pub peek_ids: HashSet<u64>,
 }
 
 impl<'a> TransitionPack<'a>
@@ -244,6 +261,7 @@ impl<'a> TransitionPack<'a>
             leaf_nodes: Vec::new(),
             node_pipeline: VecDeque::with_capacity(32),
             empty_cache: VecDeque::with_capacity(16),
+            peek_ids: HashSet::new(),
             mode,
             is_scanner,
             goto_scoped_closure: None,
@@ -350,9 +368,9 @@ impl<'a> TransitionPack<'a>
         }
     }
 
-    pub fn clear_peek_closures(&mut self)
+    pub fn clear_peek_data(&mut self)
     {
-        //  self.closure_links.clear()
+        self.peek_ids.clear();
     }
 
     pub fn nodes_iter<'b>(
@@ -365,6 +383,7 @@ impl<'a> TransitionPack<'a>
     pub fn clean(self) -> Self
     {
         TransitionPack {
+            peek_ids: HashSet::new(),
             scoped_closures: Vec::new(),
             closure_links: HashMap::new(),
             goto_items: self.goto_items,

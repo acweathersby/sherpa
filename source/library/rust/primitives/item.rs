@@ -11,6 +11,11 @@ pub struct ItemState(u32);
 
 impl ItemState
 {
+    const OUT_OF_SCOPE_FLAG: u32 = 0x7000;
+    const OUT_OF_SCOPE_MASK: u32 = (!Self::OUT_OF_SCOPE_FLAG) & 0xFFFF;
+    pub const OUT_OF_SCOPE_STATE: ItemState =
+        ItemState::new(0, Self::OUT_OF_SCOPE_FLAG);
+
     pub const fn default() -> Self
     {
         ItemState(0)
@@ -38,7 +43,7 @@ impl ItemState
 
     pub fn get_closure_index(&self) -> usize
     {
-        self.get_group() as usize
+        (self.get_group() & Self::OUT_OF_SCOPE_MASK) as usize
     }
 
     pub fn to_depth(&self, depth: u32) -> Self
@@ -49,6 +54,11 @@ impl ItemState
     pub fn to_group(&self, group: u32) -> Self
     {
         ItemState::new(group, self.get_depth())
+    }
+
+    pub fn is_out_of_scope(&self) -> bool
+    {
+        self.get_group() & Self::OUT_OF_SCOPE_FLAG > 0
     }
 }
 
@@ -115,6 +125,11 @@ impl Item
     pub fn is_null(&self) -> bool
     {
         self.body.is_null() && self.length == 0 && self.offset == 0
+    }
+
+    pub fn is_out_of_scope(&self) -> bool
+    {
+        self.state.is_out_of_scope()
     }
 
     #[inline(always)]
@@ -327,5 +342,11 @@ impl Item
             .get(&self.get_body())
             .unwrap()
             .production
+    }
+
+    pub fn to_hash(&self) -> u64
+    {
+        ((self.body.0 & 0xFFFFFFF0_F000F000) ^ ((self.offset as u64) << 32))
+            | (self.state.0 as u64)
     }
 }
