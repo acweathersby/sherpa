@@ -1,9 +1,11 @@
+use std::collections::BTreeSet;
 use std::fmt::format;
 use std::fmt::Debug;
 use std::fmt::Display;
 
 use crate::grammar::hash_id_value_u64;
 
+use super::ProductionId;
 use super::SymbolID;
 
 pub struct IRStateString
@@ -67,7 +69,12 @@ impl IRStateString
 
     pub fn get_code<'a>(&self) -> String
     {
-        format!("{}\n{}\n", self.get_state_header(), self.ir_code,)
+        format!(
+            "{}{}\n{}\n",
+            self.get_state_header(),
+            self.get_scanner_header(),
+            self.ir_code,
+        )
     }
 
     pub fn get_comment<'a>(&'a self) -> &'a String
@@ -80,9 +87,44 @@ impl IRStateString
         format!("state [ {} ] \n", self.get_name())
     }
 
+    pub fn get_scanner_header(&self) -> String
+    {
+        if let Some(name) = self.get_scanner_state_name() {
+            format!(" scanner [ {} ] \n", name)
+        } else {
+            String::new()
+        }
+    }
+
     pub fn get_symbols<'a>(&'a self) -> (&'a Vec<SymbolID>, &'a Vec<SymbolID>)
     {
         (&self.normal_symbols, &self.peek_symbols)
+    }
+
+    pub fn get_scanner_symbol_set(&self) -> Option<BTreeSet<SymbolID>>
+    {
+        let (norm, peek) = self.get_symbols();
+
+        let scanner_syms = norm
+            .iter()
+            .chain(peek.iter())
+            .cloned()
+            .collect::<BTreeSet<_>>();
+
+        if scanner_syms.len() > 0 {
+            Some(scanner_syms)
+        } else {
+            None
+        }
+    }
+
+    pub fn get_scanner_state_name(&self) -> Option<String>
+    {
+        if let Some(symbols) = self.get_scanner_symbol_set() {
+            Some(format!("scan_{:02X}", hash_id_value_u64(&symbols)))
+        } else {
+            None
+        }
     }
 }
 

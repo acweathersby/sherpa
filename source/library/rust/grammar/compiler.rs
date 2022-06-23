@@ -23,6 +23,7 @@ use crate::primitives::TempGrammarStore;
 use crate::primitives::Token;
 use regex::Regex;
 
+use super::create_defined_scanner_name;
 use super::create_production_uuid_name;
 use super::create_scanner_name;
 use super::data::ast::Body as ASTBody;
@@ -375,8 +376,10 @@ fn finalize_items(
             .flat_map(move |s| s.join().unwrap())
             .collect::<Vec<_>>()
     }) {
-        grammar.item_peek_symbols.insert(item.clone(), peek_symbols);
-        grammar.closures.insert(item, closure);
+        grammar
+            .item_peek_symbols
+            .insert(item.to_zero_state(), peek_symbols);
+        grammar.closures.insert(item.to_zero_state(), closure);
     }
 
     fn insert(
@@ -629,7 +632,6 @@ fn create_scanner_productions(
                             let scanner_symbols =
                                 natural_body.symbols.iter().flat_map(|sym| {
                                     let sym_id = &sym.sym_id;
-
                                     match sym_id {
                                         // For any production or token
                                         // production symbol encountered, create
@@ -638,9 +640,12 @@ fn create_scanner_productions(
                                         // and submit this production for
                                         // processing into a new scanner
                                         // production.
-                                        SymbolID::Production(_, grammar_id)
+                                        SymbolID::Production(
+                                            prod_id,
+                                            grammar_id,
+                                        )
                                         | SymbolID::TokenProduction(
-                                            _,
+                                            prod_id,
                                             grammar_id,
                                         ) => {
                                             let production = grammar
@@ -752,27 +757,31 @@ fn create_scanner_productions(
     }
 }
 
-fn get_scanner_info_from_defined<'a>(
+#[inline]
+pub fn get_scanner_info_from_defined<'a>(
     sym_id: &SymbolID,
     root: &'a GrammarStore,
 ) -> (SymbolID, ProductionId, String, String)
 {
-    let symbol_string = match sym_id {
+    let (scanner_name, symbol_string) = match sym_id {
         SymbolID::DefinedIdentifier(..)
         | SymbolID::DefinedNumeric(..)
         | SymbolID::DefinedGeneric(..) => {
-            root.symbols_string_table.get(&sym_id).unwrap().clone()
+            let symbol_string =
+                root.symbols_string_table.get(&sym_id).unwrap().clone();
+            (create_defined_scanner_name(&symbol_string), symbol_string)
         }
-        SymbolID::TokenProduction(production_id, _) => root
-            .production_table
-            .get(&production_id)
-            .unwrap()
-            .name
-            .clone(),
-        _ => "".to_string(),
+        SymbolID::TokenProduction(production_id, _) => {
+            let symbol_string = root
+                .production_table
+                .get(&production_id)
+                .unwrap()
+                .name
+                .clone();
+            (create_scanner_name(&symbol_string), symbol_string)
+        }
+        _ => ("".to_string(), "".to_string()),
     };
-
-    let scanner_name = create_scanner_name(&symbol_string);
 
     let scanner_production_id = ProductionId::from(&scanner_name);
 

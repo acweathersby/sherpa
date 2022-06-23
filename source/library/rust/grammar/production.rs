@@ -82,7 +82,12 @@ pub fn get_production<'a>(
 
 pub fn create_scanner_name(uuid_production_name: &String) -> String
 {
-    format!("scanner__{}__", uuid_production_name)
+    format!("scan_tok_{}__", uuid_production_name)
+}
+
+pub fn create_defined_scanner_name(uuid_production_name: &String) -> String
+{
+    format!("scan_def_{}__", uuid_production_name)
 }
 
 /// Generate a UUID name using the grammars uuid_name and the

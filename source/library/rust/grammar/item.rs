@@ -13,13 +13,13 @@ use crate::primitives::SymbolID;
 /// items, one for each body belonging to the production.
 
 pub fn get_production_start_items(
-    production: &ProductionId,
+    production_id: &ProductionId,
     grammar: &GrammarStore,
 ) -> Vec<Item>
 {
     grammar
         .production_bodies_table
-        .get(production)
+        .get(production_id)
         .unwrap()
         .iter()
         .map(|id| Item::from_body(id, grammar).unwrap())
@@ -53,14 +53,17 @@ pub fn get_closure(items: &[Item], grammar: &GrammarStore) -> Vec<Item>
 /// Retrieve the closure of an item that is cached in the grammar
 /// store. Falls back to manually building the closure if it is not
 /// cached. Does not modify the original grammar.
-
 pub fn get_closure_cached<'a>(
     item: &Item,
     grammar: &'a GrammarStore,
 ) -> &'a Vec<Item>
 {
-    println!("{}", item.debug_string(grammar));
-    grammar.closures.get(&item.to_zero_state()).unwrap()
+    static empty_closure: Vec<Item> = vec![];
+    if item.is_end() {
+        &empty_closure
+    } else {
+        grammar.closures.get(&item.to_zero_state()).unwrap()
+    }
 }
 
 /// Memoized form of 'get_closure_cached', which adds the Item's

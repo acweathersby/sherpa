@@ -1,8 +1,64 @@
+use std::fmt::Display;
+
 use super::BodyId;
 use super::BodySymbolRef;
 use super::GrammarStore;
 use super::ProductionId;
 use super::SymbolID;
+
+#[derive(PartialEq, Eq, Debug, Clone, Copy, Hash, PartialOrd, Ord)]
+pub struct ItemState(u32);
+
+impl ItemState
+{
+    pub const fn default() -> Self
+    {
+        ItemState(0)
+    }
+
+    pub const fn new(group: u32, depth: u32) -> Self
+    {
+        ItemState((group << 16) | (depth & 0xFFFF))
+    }
+
+    pub fn increment_depth(&self) -> Self
+    {
+        ItemState::new(self.get_group(), self.get_depth() + 1)
+    }
+
+    pub fn get_depth(&self) -> u32
+    {
+        self.0 & 0xFFFF
+    }
+
+    pub fn get_group(&self) -> u32
+    {
+        (self.0 >> 16) & 0xFFFF
+    }
+
+    pub fn get_closure_index(&self) -> usize
+    {
+        self.get_group() as usize
+    }
+
+    pub fn to_depth(&self, depth: u32) -> Self
+    {
+        ItemState::new(self.get_group(), depth)
+    }
+
+    pub fn to_group(&self, group: u32) -> Self
+    {
+        ItemState::new(group, self.get_depth())
+    }
+}
+
+impl Display for ItemState
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+    {
+        f.write_fmt(format_args!("<{},{}>", self.get_group(), self.get_depth()))
+    }
+}
 
 /// Represents a specific point in a parse sequence
 /// defined by a body and a positional offset that
@@ -13,42 +69,74 @@ use super::SymbolID;
 pub struct Item
 {
     body:   BodyId,
+    state:  ItemState,
     length: u8,
     offset: u8,
-    state:  u32,
 }
 
 impl Item
 {
     pub fn debug_string(&self, grammar: &GrammarStore) -> String
     {
-        let body = grammar.bodies_table.get(&self.body).unwrap();
+        if self.is_null() {
+            format!("{} null", self.state)
+        } else {
+            let body = grammar.bodies_table.get(&self.body).unwrap();
 
-        let mut string = String::new();
+            let mut string = String::new();
 
-        string += &format!("[ {} ]", self.state);
+            string += &format!("{} ", self.state);
 
-        string += &grammar.production_table.get(&body.production).unwrap().name;
+            string +=
+                &grammar.production_table.get(&body.production).unwrap().name;
 
-        string += " =>";
+            string += " =>";
 
-        for (index, BodySymbolRef { sym_id, .. }) in
-            body.symbols.iter().enumerate()
-        {
-            if index == self.offset as usize {
-                string += " •";
+            for (index, BodySymbolRef { sym_id, .. }) in
+                body.symbols.iter().enumerate()
+            {
+                if index == self.offset as usize {
+                    string += " •";
+                }
+
+                string += " ";
+
+                string += &sym_id.to_string(grammar)
             }
 
-            string += " ";
-
-            string += &sym_id.to_string(grammar)
+            if self.at_end() {
+                string += " •";
+            }
+            string
         }
+    }
 
-        if self.at_end() {
-            string += " •";
+    //#[inline(always)]
+    pub fn is_null(&self) -> bool
+    {
+        self.body.is_null() && self.length == 0 && self.offset == 0
+    }
+
+    #[inline(always)]
+    pub fn null(state: ItemState) -> Self
+    {
+        Item {
+            length: 0,
+            body: BodyId::default(),
+            offset: 0,
+            state,
         }
+    }
 
-        string
+    #[inline(always)]
+    pub fn to_null(&self) -> Self
+    {
+        Item {
+            length: 0,
+            body:   BodyId::default(),
+            offset: 0,
+            state:  self.state,
+        }
     }
 
     /// Create an Item from a body_id and a grammar store. Returns
@@ -62,7 +150,7 @@ impl Item
                 body:   *body_id,
                 length: body.length as u8,
                 offset: 0,
-                state:  0,
+                state:  ItemState::default(),
             }),
             _ => None,
         }
@@ -73,7 +161,7 @@ impl Item
         return self.offset == self.length;
     }
 
-    pub fn to_state(&self, state: u32) -> Item
+    pub fn to_state(&self, state: ItemState) -> Item
     {
         Item {
             length: self.length,
@@ -119,7 +207,7 @@ impl Item
             body:   self.body,
             length: self.length,
             offset: self.offset,
-            state:  0,
+            state:  ItemState::default(),
         }
     }
 
@@ -130,7 +218,7 @@ impl Item
                 length: self.length,
                 offset: self.offset + 1,
                 body:   self.body,
-                state:  self.state,
+                state:  self.state.increment_depth(),
             })
         } else {
             None
@@ -166,9 +254,9 @@ impl Item
         self.offset as u32
     }
 
-    pub fn get_state(&self) -> u32
+    pub fn get_state(&self) -> ItemState
     {
-        self.state as u32
+        self.state
     }
 
     pub fn get_length(&self) -> u32
@@ -181,13 +269,6 @@ impl Item
         let body_id = self.body.0;
 
         (body_id & 0xFFFFFFFF_FFFFFF00) | (self.offset as u64)
-    }
-
-    pub fn get_hash_with_state(&self) -> u64
-    {
-        let hash = self.get_hash();
-
-        (hash & 0xFFFFFFFF_000000FF) | (self.state << 8) as u64
     }
 
     pub fn get_symbol(&self, grammar: &GrammarStore) -> SymbolID

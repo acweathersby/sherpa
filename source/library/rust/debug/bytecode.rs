@@ -268,6 +268,7 @@ fn generate_table_string(
 ) -> (String, usize)
 {
     let instruction = states[state_offset];
+    let scanner_pointer = states[state_offset + 1];
     let table_len = states[state_offset + 2] >> 16 & 0xFFFF;
     let input_type = (instruction >> 22) & 0x7;
     let mut strings = vec![];
@@ -310,6 +311,11 @@ fn generate_table_string(
         disassemble_state(states, state_offset + default_offset, lu);
 
     let string = format!("\n{}{} JUMP", header(state_offset), table_name,)
+        + &format!(
+            "{} SCANNER OFFSET {}",
+            header(state_offset + 1),
+            address(scanner_pointer as usize)
+        )
         + &create_failure_entry(
             state_offset + 3,
             state_offset + default_offset,

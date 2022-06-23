@@ -112,6 +112,14 @@ fn patch_goto_offsets(
             I::I06_FORK_TO => 1,
             I::I09_VECTOR_BRANCH | I::I10_HASH_BRANCH => {
                 let table_length = bytecode[index + 2] >> 16 & 0xFFFF;
+
+                let pointer = bytecode[index + 1];
+
+                if pointer != 0 {
+                    bytecode[index + 1] =
+                        goto_bookmarks_to_offset[pointer as usize];
+                }
+
                 table_length as usize + 4
             }
             _ => 1,
@@ -196,6 +204,7 @@ pub fn compile_ir_state_to_bytecode(
         build_branching_bytecode(
             &state.instructions,
             get_branch_selector,
+            &state.scanner,
             state_name_to_bookmark,
         )
     } else {
@@ -215,6 +224,7 @@ fn is_branch_state(state: &IR_STATE) -> bool
 fn build_branching_bytecode(
     instructions: &Vec<ASTNode>,
     get_branch_selector: GetBranchSelector,
+    scanner_name: &String,
     state_name_to_bookmark: &HashMap<String, u32>,
 ) -> Vec<u32>
 {
@@ -272,6 +282,7 @@ fn build_branching_bytecode(
             .filter(|p| p.mode == "BYTE")
             .collect::<Vec<_>>(),
         INPUT_TYPE::T05_BYTE,
+        &String::new(),
         output,
         get_branch_selector,
         state_name_to_bookmark,
@@ -284,6 +295,7 @@ fn build_branching_bytecode(
             .filter(|p| p.mode == "CODEPOINT")
             .collect::<Vec<_>>(),
         INPUT_TYPE::T04_CODEPOINT,
+        &String::new(),
         output,
         get_branch_selector,
         state_name_to_bookmark,
@@ -296,6 +308,7 @@ fn build_branching_bytecode(
             .filter(|p| p.mode == "CLASS")
             .collect::<Vec<_>>(),
         INPUT_TYPE::T03_CLASS,
+        &String::new(),
         output,
         get_branch_selector,
         state_name_to_bookmark,
@@ -308,6 +321,7 @@ fn build_branching_bytecode(
             .filter(|p| p.mode == "TOKEN")
             .collect::<Vec<_>>(),
         INPUT_TYPE::T02_TOKEN,
+        scanner_name,
         output,
         get_branch_selector,
         state_name_to_bookmark,
@@ -320,6 +334,7 @@ fn build_branching_bytecode(
             .filter(|p| p.mode == "PRODUCTION")
             .collect::<Vec<_>>(),
         INPUT_TYPE::T01_PRODUCTION,
+        &String::new(),
         output,
         get_branch_selector,
         state_name_to_bookmark,
@@ -331,6 +346,7 @@ fn build_branching_bytecode(
 fn make_table(
     branches: Vec<&Box<ASSERT>>,
     input_type_key: u32,
+    scanner_name: &String,
     mut default: Vec<u32>,
     get_branch_selector: GetBranchSelector,
     state_name_to_bookmark: &HashMap<String, u32>,
@@ -347,7 +363,20 @@ fn make_table(
     } else {
         LEXER_TYPE::ASSERT
     };
-    let scanner_pointer = 0;
+
+    let scanner_pointer = if input_type_key == INPUT_TYPE::T02_TOKEN {
+        if scanner_name.is_empty() {
+            panic!("Scanner name should not be empty!");
+        }
+
+        if let Some(bookmark) = state_name_to_bookmark.get(scanner_name) {
+            *bookmark
+        } else {
+            0
+        }
+    } else {
+        0
+    };
 
     let mut val_offset_map = branches
         .iter()

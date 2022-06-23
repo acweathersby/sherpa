@@ -37,6 +37,18 @@ impl BodyId
     {
         BodyId((prod_id.0 & 0xFFFFFFFF_FFFFF000) + body_index as u64)
     }
+
+    #[inline(always)]
+    pub fn default() -> Self
+    {
+        Self(0)
+    }
+
+    #[inline(always)]
+    pub fn is_null(&self) -> bool
+    {
+        self.0 == 0
+    }
 }
 
 impl Display for BodyId

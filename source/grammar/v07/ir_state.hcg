@@ -13,9 +13,9 @@
 
 <> state_ir > 
         
-        state_declaration top_level_instructions on_fail? expected_symbols?   
+        state_declaration scanner_declaration? top_level_instructions on_fail? expected_symbols?   
                                             
-                                            f:r { { t_IR_STATE, c_IR, c_IrState, id:$1, instructions: $2, fail: $3, symbol_meta:$4 } }
+                                            f:r { { t_IR_STATE, c_IR, c_IrState, id:$1, scanner: $2, instructions: $3, fail: $4, symbol_meta:$5 } }
 
 <> grammar_injection > 
         
@@ -28,6 +28,11 @@
 <> state_declaration > 
         
         t:state \[  tk:state_hash_token \]     
+                                            f:r { str($3) }
+
+<> scanner_declaration > 
+        
+        t:scanner \[  tk:state_hash_token \]     
                                             f:r { str($3) }
 
 <> state_reference > 
@@ -168,14 +173,15 @@
 
 <> state_hash_token > 
 
-        state_hash_token ( \_ | \- | g:id | g:num )
+        state_hash_token ( \_ | \- | g:id | g:num | g:sym)
     |   g:id
     |   g:num
     |   \_
     |   \-
+    |   g:sym
 
 <> token_num > 
         tk:integer f:r{ { t_Num, val: i64($1) } }
 
 <> integer > 
-        g:num(+\" )
+        g:num(+\" )AA
