@@ -18,7 +18,7 @@
 
 pub mod primitives;
 pub mod runtime;
-pub mod utf8; 
+pub mod utf8;
 
 pub use lazy_static::lazy_static;
 
@@ -40,4 +40,69 @@ pub fn get_num_of_available_threads() -> usize
     std::thread::available_parallelism()
         .unwrap_or(NonZeroUsize::new(1).unwrap())
         .get()
+}
+#[cfg(test)]
+mod test_end_to_end
+{
+    use crate::bytecode::compiler::build_byte_code_buffer;
+    use crate::debug::compile_test_grammar;
+    use crate::debug::parser::collect_shifts_and_skips;
+    use crate::debug::print_states;
+    use crate::debug::BytecodeGrammarLookups;
+    use crate::get_num_of_available_threads;
+    use crate::grammar::get_production_by_name;
+    use crate::grammar::get_production_id_by_name;
+    use crate::intermediate::optimize::optimize_states;
+    use crate::intermediate::state_construct::compile_states;
+    use crate::primitives::Token;
+    use crate::runtime::parser::get_next_action;
+    use crate::runtime::parser::Action;
+    use crate::runtime::parser::SymbolReader;
+    use crate::runtime::parser::UTF8StringReader;
+    use std::sync::Arc;
+
+    #[test]
+    fn test_basic_grammar_build()
+    {
+        let threads = get_num_of_available_threads();
+
+        let grammar = compile_test_grammar(
+            "
+@IGNORE g:sp g:tab
+
+<> start > \\hello \\world 
+",
+        );
+
+        let mut states = compile_states(&grammar, threads);
+        for (_, state) in &mut states {
+            match state.get_ast() {
+                None => {
+                    println!("--FAILED: {:?}", state.compile_ast())
+                }
+                _ => {}
+            }
+        }
+        let optimized_states = optimize_states(&mut states, &grammar);
+        let (bytecode, state_lookup) = build_byte_code_buffer(optimized_states);
+        let entry_point = *state_lookup.get("start").unwrap();
+
+        let target_production_id = get_production_by_name("start", &grammar)
+            .unwrap()
+            .bytecode_id;
+        let (reader, state, shifts, skips) = collect_shifts_and_skips(
+            "hello    \tworld",
+            entry_point,
+            target_production_id,
+            bytecode,
+        );
+
+        assert!(reader.at_end());
+
+        assert_eq!(target_production_id, 0);
+
+        assert_eq!(shifts, ["hello", "world"]);
+
+        assert_eq!(skips, ["    \t"]);
+    }
 }

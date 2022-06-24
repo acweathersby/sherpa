@@ -2,13 +2,13 @@
 
 pub struct KernelToken
 {
-    pub typ:         u16,
     pub byte_offset: u32,
     pub byte_length: u32,
     pub cp_offset:   u32,
     pub cp_length:   u32,
     pub line_number: u32,
     pub line_offset: u32,
+    pub typ:         u32,
 }
 
 impl KernelToken
@@ -26,6 +26,7 @@ impl KernelToken
         }
     }
 
+    #[inline]
     pub fn next(&self) -> KernelToken
     {
         return KernelToken {

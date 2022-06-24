@@ -37,9 +37,6 @@ pub enum SymbolID
     GenericIdentifier,
     GenericNumber,
     GenericSymbol,
-    GenericIdentifiers,
-    GenericNumbers,
-    GenericSymbols,
     Undefined,
     Recovery,
     Default,
@@ -48,7 +45,15 @@ pub enum SymbolID
 
 impl SymbolID
 {
-    pub const DefinedSymbolIndexBasis: u32 = 11;
+    pub const DefinedSymbolIndexBasis: u32 = 8;
+    pub const Generics: [SymbolID; 6] = [
+        SymbolID::GenericSpace,
+        SymbolID::GenericHorizontalTab,
+        SymbolID::GenericNewLine,
+        SymbolID::GenericIdentifier,
+        SymbolID::GenericNumber,
+        SymbolID::GenericSymbol,
+    ];
 
     pub fn to_string(&self, grammar: &GrammarStore) -> String
     {
@@ -83,9 +88,27 @@ impl SymbolID
             Self::GenericIdentifier => "g:id".to_string(),
             Self::GenericNumber => "g:num".to_string(),
             Self::GenericSymbol => "g:sym".to_string(),
-            Self::GenericIdentifiers => "g:ids".to_string(),
-            Self::GenericNumbers => "g:nums".to_string(),
-            Self::GenericSymbols => "g:syms".to_string(),
+        }
+    }
+
+    pub fn to_default_string(&self) -> String
+    {
+        match self {
+            Self::DefinedNumeric(_)
+            | Self::DefinedIdentifier(_)
+            | Self::DefinedGeneric(_) => "__defined".to_string(),
+            Self::Production(prod_id, _) => "__defined".to_string(),
+            Self::TokenProduction(prod_id, _) => "__defined".to_string(),
+            Self::Default => "__default".to_string(),
+            Self::Undefined => "__undefined".to_string(),
+            Self::Recovery => "__rec".to_string(),
+            Self::EndOfFile => "__eof".to_string(),
+            Self::GenericHorizontalTab => "__tab".to_string(),
+            Self::GenericNewLine => "__nl".to_string(),
+            Self::GenericSpace => "__sp".to_string(),
+            Self::GenericIdentifier => "__id".to_string(),
+            Self::GenericNumber => "__num".to_string(),
+            Self::GenericSymbol => "__sym".to_string(),
         }
     }
 
@@ -121,15 +144,12 @@ impl SymbolID
             Self::Undefined => 0,
             Self::Recovery => 0,
             Self::EndOfFile => 1,
-            Self::GenericHorizontalTab => 2,
-            Self::GenericNewLine => 3,
-            Self::GenericSpace => 4,
-            Self::GenericIdentifier => 5,
-            Self::GenericNumber => 6,
-            Self::GenericSymbol => 7,
-            Self::GenericIdentifiers => 8,
-            Self::GenericNumbers => 9,
-            Self::GenericSymbols => 10,
+            Self::GenericHorizontalTab => HORIZONTAL_TAB as u32,
+            Self::GenericNewLine => NEW_LINE as u32,
+            Self::GenericSpace => SPACE as u32,
+            Self::GenericIdentifier => IDENTIFIER as u32,
+            Self::GenericNumber => NUMBER as u32,
+            Self::GenericSymbol => SYMBOL as u32,
         }
     }
 }
@@ -167,9 +187,16 @@ pub struct Symbol
 }
 
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::fmt::Display;
 
 use crate::grammar::uuid::hash_id_value_u64;
+use crate::utf8::lookup_table::HORIZONTAL_TAB;
+use crate::utf8::lookup_table::IDENTIFIER;
+use crate::utf8::lookup_table::NEW_LINE;
+use crate::utf8::lookup_table::NUMBER;
+use crate::utf8::lookup_table::SPACE;
+use crate::utf8::lookup_table::SYMBOL;
 
 use super::GrammarId;
 use super::GrammarStore;

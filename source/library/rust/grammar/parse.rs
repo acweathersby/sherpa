@@ -74,6 +74,7 @@ impl Display for CompoundCompileProblem
 #[derive(Debug)]
 pub enum ParseError
 {
+    NOT_PARSED,
     UNDEFINED,
     IO_ERROR(std::io::Error),
     MUTEX_ERROR,
@@ -83,11 +84,25 @@ pub enum ParseError
     COMPOUND_COMPILE_PROBLEM(CompoundCompileProblem),
 }
 
+impl ParseError
+{
+    pub fn is_not_parsed(&self) -> bool
+    {
+        match self {
+            ParseError::NOT_PARSED => true,
+            _ => false,
+        }
+    }
+}
+
 impl Display for ParseError
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
     {
         match self {
+            ParseError::NOT_PARSED => {
+                f.write_str("This input has not been parsed")
+            }
             ParseError::UNDEFINED => {
                 f.write_str("An unknown error has occurred ")
             }

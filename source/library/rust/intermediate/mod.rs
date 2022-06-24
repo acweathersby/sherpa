@@ -1,3 +1,4 @@
+pub mod optimize;
 pub mod state_construct;
 pub mod transition_tree;
 
@@ -7,7 +8,7 @@ mod transition_tree_tests
 {
 
     use crate::debug::compile_test_grammar;
-    use crate::grammar::get_production_by_name;
+    use crate::grammar::get_production_id_by_name;
     use crate::grammar::get_production_plain_name;
     use crate::grammar::get_production_start_items;
     use crate::intermediate::transition_tree::construct_recursive_descent;
@@ -20,7 +21,7 @@ mod transition_tree_tests
          \\l \\l \\o",
         );
 
-        let production_id = get_production_by_name("A", &grammar).unwrap();
+        let production_id = get_production_id_by_name("A", &grammar).unwrap();
 
         let result = construct_recursive_descent(
             &grammar,
@@ -77,7 +78,7 @@ mod state_constructor_tests
     use std::collections::BTreeSet;
 
     use crate::debug::compile_test_grammar;
-    use crate::grammar::get_production_by_name;
+    use crate::grammar::get_production_id_by_name;
     use crate::grammar::get_production_start_items;
     use crate::intermediate::state_construct::generate_production_states;
     use crate::intermediate::state_construct::generate_scanner_intro_state;
@@ -90,7 +91,7 @@ mod state_constructor_tests
     {
         let grammar = compile_test_grammar("<> A > \\h \\e \\l \\l \\o");
 
-        let prod_id = get_production_by_name("A", &grammar).unwrap();
+        let prod_id = get_production_id_by_name("A", &grammar).unwrap();
 
         let result = generate_production_states(&prod_id, &grammar);
 
@@ -105,7 +106,7 @@ mod state_constructor_tests
     {
         let grammar = compile_test_grammar("<> A > \\h ? \\e ? \\l \\l \\o");
 
-        let prod_id = get_production_by_name("A", &grammar).unwrap();
+        let prod_id = get_production_id_by_name("A", &grammar).unwrap();
 
         let result = generate_production_states(&prod_id, &grammar);
 
@@ -120,7 +121,7 @@ mod state_constructor_tests
     {
         let grammar = compile_test_grammar("<> A > A \\1 | \\2 ");
 
-        let prod_id = get_production_by_name("A", &grammar).unwrap();
+        let prod_id = get_production_id_by_name("A", &grammar).unwrap();
 
         let result = generate_production_states(&prod_id, &grammar);
 
@@ -196,7 +197,7 @@ mod state_constructor_tests
 ",
         );
 
-        let prod_id = get_production_by_name("A", &grammar).unwrap();
+        let prod_id = get_production_id_by_name("A", &grammar).unwrap();
 
         let result = generate_production_states(&prod_id, &grammar);
 

@@ -784,20 +784,20 @@ fn disambiguate(
 
     for node_index in node_ids {
         let node = t_pack.get_node(node_index);
-        let item = &node.items[0].clone();
-        let goal = &node.goal;
+        let item = node.items[0];
+        let goal = node.goal;
         let parent_index = node.parent;
 
         if !item.is_end() {
             term_nodes.push(node_index)
         } else {
             let (mut terms, mut final_ends) = get_continue_items(
-                t_pack.get_node(node_index).items[0],
+                item,
                 parent_index,
                 depth,
                 t_pack,
                 grammar,
-                *goal,
+                goal,
             );
 
             if terms.is_empty() && final_ends.is_empty() {

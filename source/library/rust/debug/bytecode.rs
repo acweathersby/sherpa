@@ -63,6 +63,7 @@ impl<'a> BytecodeGrammarLookups<'a>
         }
     }
 }
+//
 
 pub fn disassemble_state(
     bytecode: &[u32],
@@ -270,6 +271,7 @@ fn generate_table_string(
     let instruction = states[state_offset];
     let scanner_pointer = states[state_offset + 1];
     let table_len = states[state_offset + 2] >> 16 & 0xFFFF;
+    let table_meta = states[state_offset + 2] & 0xFFFF;
     let input_type = (instruction >> 22) & 0x7;
     let mut strings = vec![];
     let default_offset = states[state_offset + 3] as usize;
@@ -310,17 +312,28 @@ fn generate_table_string(
     let (default_string, offset) =
         disassemble_state(states, state_offset + default_offset, lu);
 
-    let string = format!("\n{}{} JUMP", header(state_offset), table_name,)
-        + &format!(
-            "{} SCANNER OFFSET {}",
+    let string = format!(
+        "\n{}{} JUMP | TYPE {}",
+        header(state_offset),
+        table_name,
+        input_type_to_name(input_type)
+    ) + &(if scanner_pointer > 0 {
+        format!(
+            "\n{}SCANNER OFFSET {}",
             header(state_offset + 1),
             address(scanner_pointer as usize)
         )
-        + &create_failure_entry(
-            state_offset + 3,
-            state_offset + default_offset,
-        )
-        + &strings.join("")
+    } else {
+        format!("\n{}NO SCANNER", header(state_offset + 1))
+    }) + &format!(
+        "\n{}LENGTH: {} META: {}",
+        header(state_offset + 2),
+        table_len,
+        table_meta
+    ) + &create_failure_entry(
+        state_offset + 3,
+        state_offset + default_offset,
+    ) + &strings.join("")
         + &default_string;
     (string, offset)
 }
@@ -420,6 +433,16 @@ pub fn print_states(bytecode: &[u32], lu: Option<&BytecodeGrammarLookups>)
     println!()
 }
 
+pub fn print_state(
+    state_offset: usize,
+    bytecode: &[u32],
+    lu: Option<&BytecodeGrammarLookups>,
+)
+{
+    let string = disassemble_state(&bytecode, state_offset, lu).0;
+    println!("{}", string);
+}
+
 mod bytecode_debugging_tests
 {
     use std::collections::HashMap;
@@ -431,7 +454,7 @@ mod bytecode_debugging_tests
     use crate::debug::bytecode::BytecodeGrammarLookups;
     use crate::debug::compile_test_grammar;
     use crate::debug::disassemble_state;
-    use crate::grammar::get_production_by_name;
+    use crate::grammar::get_production_id_by_name;
     use crate::grammar::parse::compile_ir_ast;
     use crate::intermediate::state_construct::generate_production_states;
 
@@ -443,7 +466,7 @@ mod bytecode_debugging_tests
     {
         let grammar = compile_test_grammar("<> A > \\h ? \\e ? \\l \\l \\o");
 
-        let prod_id = get_production_by_name("A", &grammar).unwrap();
+        let prod_id = get_production_id_by_name("A", &grammar).unwrap();
 
         let result = generate_production_states(&prod_id, &grammar);
 

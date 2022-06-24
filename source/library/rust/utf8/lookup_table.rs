@@ -2,25 +2,14 @@ const JMPTBLE_BYTE_SIZE: usize = 382976;
 
 pub type CharLUType = [u8; JMPTBLE_BYTE_SIZE];
 
-const SYMBOL: u8 = 2;
-
-const IDENTIFIER: u8 = 3;
-
-const NUMBER: u8 = 4;
-
-const NEW_LINE: u8 = 5;
-
-const SPACE: u8 = 6;
-
-const _IDENTIFIERS: u8 = 7;
-
-const _NUMBERS: u8 = 8;
-
-const _UNICODE_IDENTIFIER: u8 = 10;
-
-const UNICODE_ID_START: u8 = 32;
-
-const UNICODE_ID_CONT: u8 = 64;
+pub const SYMBOL: u8 = 2;
+pub const IDENTIFIER: u8 = 3;
+pub const NUMBER: u8 = 4;
+pub const NEW_LINE: u8 = 5;
+pub const SPACE: u8 = 6;
+pub const HORIZONTAL_TAB: u8 = 7;
+pub const UNICODE_ID_START: u8 = 32;
+pub const UNICODE_ID_CONT: u8 = 64;
 
 const fn aii(
     mut table: CharLUType,
@@ -277,7 +266,7 @@ const fn char_lu_table_init() -> CharLUType
     // 4. TAB
     let b: [usize; 1] = [9];
 
-    jump_table = aii(jump_table, SPACE, &b, 1);
+    jump_table = aii(jump_table, HORIZONTAL_TAB, &b, 1);
 
     // 8. CARIAGE RETURN
     let c: [usize; 1] = [13];

@@ -3,20 +3,25 @@ use std::fmt::format;
 use std::fmt::Debug;
 use std::fmt::Display;
 
+use crate::grammar::data::ast::ASTNode;
+use crate::grammar::data::ast::IR_STATE;
 use crate::grammar::hash_id_value_u64;
+use crate::grammar::parse::compile_ir_ast;
+use crate::grammar::parse::ParseError;
 
 use super::ProductionId;
 use super::SymbolID;
 
 pub struct IRState
 {
-    comment:        String,
-    ir_code:        String,
-    hash:           u64,
-    state_name:     String,
-    graph_id:       usize,
+    comment: String,
+    ir_code: String,
+    hash: u64,
+    state_name: String,
+    graph_id: usize,
     normal_symbols: Vec<SymbolID>,
-    peek_symbols:   Vec<SymbolID>,
+    peek_symbols: Vec<SymbolID>,
+    ast: Result<IR_STATE, ParseError>,
 }
 
 impl IRState
@@ -53,6 +58,7 @@ impl IRState
             } else {
                 vec![]
             },
+            ast: Err(ParseError::NOT_PARSED),
         }
     }
 
@@ -133,6 +139,41 @@ impl IRState
     pub fn get_graph_id(&self) -> usize
     {
         self.graph_id
+    }
+
+    pub fn compile_ast<'a>(&'a mut self)
+        -> &'a mut Result<IR_STATE, ParseError>
+    {
+        if self.ast.is_ok() {
+            &mut self.ast
+        } else {
+            if self.ast.as_ref().err().unwrap().is_not_parsed() {
+                let string = self.get_code();
+                self.ast = match compile_ir_ast(Vec::from(string.as_bytes())) {
+                    Ok(ast) => Ok(*ast),
+                    Err(err) => Err(err),
+                };
+            }
+            &mut self.ast
+        }
+    }
+
+    pub fn get_ast_mut<'a>(&'a mut self) -> Option<&'a mut IR_STATE>
+    {
+        if self.ast.is_ok() {
+            Some(self.ast.as_mut().ok().unwrap())
+        } else {
+            None
+        }
+    }
+
+    pub fn get_ast<'a>(&'a self) -> Option<&'a IR_STATE>
+    {
+        if self.ast.is_ok() {
+            Some(self.ast.as_ref().ok().unwrap())
+        } else {
+            None
+        }
     }
 }
 

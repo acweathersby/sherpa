@@ -22,7 +22,7 @@ const _PRODUCTION_SCOPE_POP_POINTER: u32 = 2;
 
 const INSTRUCTION_POINTER_MASK: u32 = 0xFFFFFF;
 
-const SKIPPED_SCAN_PROD: u16 = 9009;
+const SKIPPED_SCAN_PROD: u32 = 9009;
 
 const DEFAULT_PASS_INSTRUCTION: usize = 1;
 
@@ -582,7 +582,6 @@ impl<T: ByteReader> ScannerIterator<T>
         // the current line information from the reader.
 
         let mut token = &mut self.tokens[0];
-
         token.line_number = self.reader.line_count();
 
         token.line_offset = self.reader.line_offset();
@@ -1112,7 +1111,7 @@ trait ParserCoreIterator<R: ByteReader>
 
             self.set_prod(val);
 
-            root_token.typ = val as u16;
+            root_token.typ = val;
 
             root_token.byte_length =
                 scan_token.byte_offset - root_token.byte_offset;

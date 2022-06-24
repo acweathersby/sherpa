@@ -44,7 +44,7 @@ use std::vec;
 
 pub fn build_byte_code_buffer(
     states: Vec<&IR_STATE>,
-) -> (Vec<u32>, BTreeMap<u32, String>)
+) -> (Vec<u32>, BTreeMap<String, u32>)
 {
     let states_iter = states
         .iter()
@@ -79,14 +79,14 @@ pub fn build_byte_code_buffer(
 
     patch_goto_offsets(&mut bytecode, &goto_bookmarks_to_offset);
 
-    let offset_to_state_name = state_name_to_bookmark
+    let state_name_to_offset = state_name_to_bookmark
         .into_iter()
         .map(|(name, bookmark)| {
-            (goto_bookmarks_to_offset[bookmark as usize], name)
+            (name, goto_bookmarks_to_offset[bookmark as usize])
         })
         .collect::<BTreeMap<_, _>>();
 
-    (bytecode, offset_to_state_name)
+    (bytecode, state_name_to_offset)
 }
 
 /// Converts Goto location bookmarks to bytecode offsets.
@@ -301,7 +301,7 @@ fn build_branching_bytecode(
         branches
             .iter()
             .cloned()
-            .filter(|p| p.mode == "TOKEN")
+            .filter(|p| p.mode == "TOKEN" || p.is_skip)
             .collect::<Vec<_>>(),
         INPUT_TYPE::T02_TOKEN,
         scanner_name,
@@ -388,7 +388,7 @@ fn make_table(
     let mut branch_instructions_length = 0;
 
     for branch in branches {
-        if let ASTNode::Skip(_) = &branch.instructions[0] {
+        if branch.is_skip {
             for id in &branch.ids {
                 if let ASTNode::Num(box Num { val }) = id {
                     val_offset_map.insert(*val as u32, 0xFFFF_FFFF as u32);
@@ -680,7 +680,7 @@ mod byte_code_creation_tests
     use crate::bytecode::constants::default_get_branch_selector;
     use crate::debug::compile_test_grammar;
     use crate::grammar::data::ast::ASTNode;
-    use crate::grammar::get_production_by_name;
+    use crate::grammar::get_production_id_by_name;
     use crate::grammar::parse::compile_ir_ast;
     use crate::intermediate::state_construct::generate_production_states;
 
@@ -690,7 +690,7 @@ mod byte_code_creation_tests
     {
         let grammar = compile_test_grammar("<> A > \\h");
 
-        let prod_id = get_production_by_name("A", &grammar).unwrap();
+        let prod_id = get_production_id_by_name("A", &grammar).unwrap();
 
         let result = generate_production_states(&prod_id, &grammar);
 

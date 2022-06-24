@@ -475,6 +475,19 @@ fn finalize_symbols(
 {
     let mut symbol_bytecode_id = SymbolID::DefinedSymbolIndexBasis;
 
+    for sym_id in &SymbolID::Generics {
+        let (_, production_id, ..) =
+            get_scanner_info_from_defined(&sym_id, &*grammar);
+
+        let scanner_id = sym_id.bytecode_id(grammar);
+
+        grammar
+            .production_table
+            .get_mut(&production_id)
+            .unwrap()
+            .symbol_bytecode_id = scanner_id;
+    }
+
     for sym_id in grammar.symbols_table.keys().cloned().collect::<Vec<_>>() {
         if !grammar.symbols_table.get(&sym_id).unwrap().scanner_only {
             match sym_id {
@@ -518,11 +531,62 @@ fn create_scanner_productions(
 {
     // Start iterating over known token production references, and add
     // new productions as we encounter them.
-    let mut scanner_production_queue =
-        VecDeque::from_iter(grammar.symbols_table.keys().cloned());
+    let mut scanner_production_queue = VecDeque::from_iter(
+        grammar
+            .symbols_table
+            .keys()
+            .chain(SymbolID::Generics.iter())
+            .cloned(),
+    );
 
     while let Some(sym_id) = scanner_production_queue.pop_front() {
         match &sym_id {
+            sym if SymbolID::Generics.contains(sym) => {
+                let (_, scanner_production_id, scanner_name, symbol_string) =
+                    get_scanner_info_from_defined(&sym_id, &*grammar);
+                if !grammar
+                    .production_table
+                    .contains_key(&scanner_production_id)
+                {
+                    // Insert into grammar any new defined symbol derived from
+                    // token productions.
+
+                    let body_id = BodyId::new(&scanner_production_id, 0);
+
+                    grammar
+                        .production_bodies_table
+                        .insert(scanner_production_id, vec![body_id]);
+
+                    grammar.bodies_table.insert(body_id, Body {
+                        length: 1 as u16,
+                        symbols: vec![BodySymbolRef {
+                            annotation: String::default(),
+                            consumable: true,
+                            exclusive: false,
+                            original_index: 0,
+                            scanner_index: 0 as u32,
+                            scanner_length: 1 as u32,
+                            sym_id,
+                        }],
+                        production: scanner_production_id,
+                        id: body_id,
+                        bytecode_id: 0,
+                        reduce_fn_ids: vec![],
+                        origin_location: Token::empty(),
+                    });
+
+                    grammar.production_table.insert(
+                        scanner_production_id,
+                        crate::primitives::Production::new(
+                            scanner_name,
+                            scanner_production_id,
+                            1,
+                            Token::empty(),
+                            true,
+                        ),
+                    );
+                }
+            }
             SymbolID::DefinedGeneric(_)
             | SymbolID::DefinedNumeric(_)
             | SymbolID::DefinedIdentifier(_) => {
@@ -780,7 +844,10 @@ pub fn get_scanner_info_from_defined<'a>(
                 .clone();
             (create_scanner_name(&symbol_string), symbol_string)
         }
-        _ => ("".to_string(), "".to_string()),
+        sym => {
+            let symbol_string = sym.to_default_string();
+            (create_scanner_name(&symbol_string), symbol_string)
+        }
     };
 
     let scanner_production_id = ProductionId::from(&scanner_name);
@@ -1839,9 +1906,6 @@ fn intern_symbol(
             "id" => Some(SymbolID::GenericIdentifier),
             "num" => Some(SymbolID::GenericNumber),
             "sym" => Some(SymbolID::GenericSymbol),
-            "ids" => Some(SymbolID::GenericIdentifiers),
-            "nums" => Some(SymbolID::GenericNumbers),
-            "syms" => Some(SymbolID::GenericSymbols),
             _ => Some(SymbolID::Undefined),
         },
         ASTNode::Exclusive_Literal(literal) => {

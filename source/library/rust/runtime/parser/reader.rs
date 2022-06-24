@@ -35,7 +35,7 @@ pub trait SymbolReader
         self.length() <= offset
     }
 
-    /// Advances the by `amount`
+    /// Advances the internal cursor by `amount`
 
     fn next(&mut self, amount: u32);
 

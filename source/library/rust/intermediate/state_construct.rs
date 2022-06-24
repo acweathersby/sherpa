@@ -1,4 +1,11 @@
-//! Construct state IR strings for a given production
+//! Methods for constructing IRStates from a grammar
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
+use std::collections::HashSet;
+use std::collections::VecDeque;
+use std::fmt::format;
+use std::thread;
+
 use super::transition_tree::construct_goto;
 use super::transition_tree::construct_recursive_descent;
 use crate::grammar::compiler::get_scanner_info_from_defined;
@@ -15,12 +22,110 @@ use crate::primitives::TransitionGraphNode;
 use crate::primitives::TransitionMode;
 use crate::primitives::TransitionPack;
 use crate::primitives::TransitionStateType;
-use std::collections::BTreeMap;
-use std::collections::BTreeSet;
-use std::collections::VecDeque;
-use std::fmt::format;
 
 type IROutput = Vec<IRState>;
+/// Compiles all production in the `grammar` into unique IRStates
+pub fn compile_states(
+    grammar: &GrammarStore,
+    num_of_threads: usize,
+) -> BTreeMap<String, IRState>
+{
+    let mut deduped_states = BTreeMap::new();
+
+    let productions_ids =
+        grammar.production_table.keys().cloned().collect::<Vec<_>>();
+
+    let work_chunks =
+        productions_ids.chunks(num_of_threads).collect::<Vec<_>>();
+
+    for state in {
+        thread::scope(|s| {
+            work_chunks
+                .iter()
+                .map(|productions| {
+                    s.spawn(|| {
+                        let mut deduped_states = BTreeMap::new();
+                        let mut scanner_names = HashSet::new();
+
+                        for production_id in *productions {
+                            let states = generate_production_states(
+                                production_id,
+                                grammar,
+                            );
+
+                            for state in states {
+                                if let Some(name) =
+                                    state.get_scanner_state_name()
+                                {
+                                    if scanner_names.insert(name) {
+                                        for state in
+                                            generate_scanner_intro_state(
+                                                state
+                                                    .get_scanner_symbol_set()
+                                                    .unwrap(),
+                                                grammar,
+                                            )
+                                        {
+                                            if !deduped_states
+                                                .contains_key(&state.get_name())
+                                            {
+                                                deduped_states.insert(
+                                                    state.get_name(),
+                                                    state,
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if !deduped_states
+                                    .contains_key(&state.get_name())
+                                {
+                                    deduped_states
+                                        .insert(state.get_name(), state);
+                                }
+                            }
+                        }
+
+                        deduped_states.into_values()
+                    })
+                })
+                .collect::<Vec<_>>()
+                .into_iter()
+                .flat_map(move |s| s.join().unwrap())
+                .collect::<Vec<_>>()
+        })
+    } {
+        if !deduped_states.contains_key(&state.get_name()) {
+            deduped_states.insert(state.get_name(), state);
+        }
+    }
+
+    let mut output_states = deduped_states.iter_mut().collect::<Vec<_>>();
+
+    thread::scope(|s| {
+        let work_chunks = output_states.chunks_mut(num_of_threads);
+
+        work_chunks
+            .into_iter()
+            .map(|chunk| {
+                s.spawn(|| {
+                    for (_, state) in chunk {
+                        match state.compile_ast() {
+                            Err(err) => panic!("\n{}", err),
+                            _ => {}
+                        };
+                    }
+                })
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
+            .map(move |s| s.join().unwrap())
+            .collect::<Vec<_>>();
+    });
+
+    deduped_states
+}
 
 pub fn generate_scanner_intro_state(
     symbols: BTreeSet<SymbolID>,
@@ -30,6 +135,7 @@ pub fn generate_scanner_intro_state(
     let symbol_items = symbols
         .iter()
         .flat_map(|s| {
+            println!("{}", s.to_string(grammar));
             let (_, production_id, ..) =
                 get_scanner_info_from_defined(s, grammar);
             get_production_start_items(&production_id, grammar)
@@ -497,7 +603,7 @@ fn create_intermediate_state(
                 }
             }
 
-            match grammar.item_peek_symbols.get(item) {
+            match grammar.item_peek_symbols.get(&item.to_zero_state()) {
                 Some(peek_symbols) => {
                     for peek_symbol in peek_symbols {
                         peek_symbols_set.insert(peek_symbol.clone());
@@ -511,6 +617,11 @@ fn create_intermediate_state(
             .difference(&normal_symbol_set)
             .cloned()
             .collect::<BTreeSet<_>>();
+
+        for symbol_id in &peek_symbols_set {
+            strings
+                .push(format!("skip [ {} ]", symbol_id.bytecode_id(grammar),))
+        }
 
         match normal_symbol_set.len() {
             0 => IRState::new(
@@ -548,10 +659,7 @@ fn get_symbol_consume_type(
         | SymbolID::GenericNewLine
         | SymbolID::GenericIdentifier
         | SymbolID::GenericNumber
-        | SymbolID::GenericSymbol
-        | SymbolID::GenericIdentifiers
-        | SymbolID::GenericNumbers
-        | SymbolID::GenericSymbols => (symbol_id.bytecode_id(grammar), "CLASS"),
+        | SymbolID::GenericSymbol => (symbol_id.bytecode_id(grammar), "CLASS"),
         SymbolID::DefinedNumeric(id)
         | SymbolID::DefinedIdentifier(id)
         | SymbolID::DefinedGeneric(id) => {

@@ -125,7 +125,7 @@ pub fn get_production_plain_name<'a>(
 /// production matches the query. The order of the productions is not
 /// guaranteed.
 
-pub fn get_production_by_name(
+pub fn get_production_id_by_name(
     name: &str,
     grammar: &GrammarStore,
 ) -> Option<ProductionId>
@@ -133,6 +133,20 @@ pub fn get_production_by_name(
     for production_id in grammar.production_table.keys() {
         if name == get_production_plain_name(production_id, grammar) {
             return Some(production_id.to_owned());
+        }
+    }
+
+    None
+}
+
+pub fn get_production_by_name<'a>(
+    name: &str,
+    grammar: &'a GrammarStore,
+) -> Option<&'a Production>
+{
+    for production_id in grammar.production_table.keys() {
+        if name == get_production_plain_name(production_id, grammar) {
+            return Some(grammar.production_table.get(production_id).unwrap());
         }
     }
 
@@ -153,8 +167,8 @@ mod production_utilities_tests
     {
         let grammar = compile_test_grammar("<>billofolious_tantimum^a>\\o");
 
-        let prod =
-            get_production_by_name("billofolious_tantimum", &grammar).unwrap();
+        let prod = get_production_id_by_name("billofolious_tantimum", &grammar)
+            .unwrap();
 
         assert_eq!(
             get_production_plain_name(&prod, &grammar),
@@ -178,11 +192,11 @@ mod production_utilities_tests
 ",
         );
 
-        assert!(get_production_by_name("Apple", &grammar).is_some());
+        assert!(get_production_id_by_name("Apple", &grammar).is_some());
 
-        assert!(get_production_by_name("Bad_Cakes", &grammar).is_some());
+        assert!(get_production_id_by_name("Bad_Cakes", &grammar).is_some());
 
-        assert!(get_production_by_name("Bandible", &grammar).is_none());
+        assert!(get_production_id_by_name("Bandible", &grammar).is_none());
     }
 
     #[test]
@@ -201,26 +215,26 @@ mod production_utilities_tests
 ",
         );
 
-        let production = get_production_by_name("A", &grammar).unwrap();
+        let production = get_production_id_by_name("A", &grammar).unwrap();
 
         assert_eq!(
             is_production_recursive(production, &grammar),
             (true, false)
         );
 
-        let production = get_production_by_name("R", &grammar).unwrap();
+        let production = get_production_id_by_name("R", &grammar).unwrap();
 
         assert_eq!(is_production_recursive(production, &grammar), (true, true));
 
-        let production = get_production_by_name("B", &grammar).unwrap();
+        let production = get_production_id_by_name("B", &grammar).unwrap();
 
         assert_eq!(is_production_recursive(production, &grammar), (true, true));
 
-        let production = get_production_by_name("C", &grammar).unwrap();
+        let production = get_production_id_by_name("C", &grammar).unwrap();
 
         assert_eq!(is_production_recursive(production, &grammar), (true, true));
 
-        let production = get_production_by_name("O", &grammar).unwrap();
+        let production = get_production_id_by_name("O", &grammar).unwrap();
 
         assert_eq!(
             is_production_recursive(production, &grammar),

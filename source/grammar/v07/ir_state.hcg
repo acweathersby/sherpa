@@ -80,6 +80,11 @@
                                             
         f:r { { t_ASSERT, c_IR, c_IR_Instruction, is_peek: bool($2), c_IR_Branch, mode:str($3), ids: $4, instructions: $6} }
 
+        |
+
+        t:skip production_id_list                     
+                                            
+                                            f:r { { t_ASSERT, c_IR, c_IR_Instruction, c_IR_Branch, instructions: $3, is_skip: true } }
 
         |
         
