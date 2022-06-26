@@ -12,6 +12,7 @@ pub struct KernelStack
 
 impl KernelStack
 {
+    #[inline]
     pub fn new() -> KernelStack
     {
         KernelStack {
@@ -20,6 +21,7 @@ impl KernelStack
         }
     }
 
+    #[inline]
     pub fn reset(&mut self, kernel_state: u32)
     {
         self.stack_pointer = 0;
@@ -29,6 +31,7 @@ impl KernelStack
         self.push_state(kernel_state)
     }
 
+    #[inline]
     pub fn push_state(&mut self, kernel_state: u32)
     {
         self.stack_pointer += 1;
@@ -36,16 +39,15 @@ impl KernelStack
         let sp = self.stack_pointer as usize;
 
         self.state_stack[sp] = kernel_state as u64;
-
-        // self.meta_stack[sp] = (self.meta_stack[sp - 1] & 0xFFFF) |
-        // (0 as u32);
     }
 
+    #[inline]
     pub fn swap_state(&mut self, kernel_state: u32)
     {
         self.state_stack[self.stack_pointer as usize] = kernel_state as u64;
     }
 
+    #[inline]
     pub fn pop_state(&mut self) -> u32
     {
         if self.stack_pointer >= 0 {
@@ -59,11 +61,13 @@ impl KernelStack
         }
     }
 
+    #[inline]
     pub fn read_state(&self) -> u32
     {
         (self.state_stack[self.stack_pointer as usize] & 0xFFFF_FFFF) as u32
     }
 
+    #[inline]
     pub fn copy_state_stack(&self, dest: &mut KernelStack)
     {
         for i in 0..=self.stack_pointer {

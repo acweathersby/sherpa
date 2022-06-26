@@ -1,0 +1,14 @@
+@IGNORE g:sp
+
+<> primitive >
+    tk:composite_identifier          f:r { { t_Identifier, c_Primitive, value:str($1) } }
+
+<> identifier > tk:composite_identifier
+
+<> composite_identifier > composite_identifier g:id
+    | composite_identifier \_
+    | composite_identifier \$
+    | composite_identifier g:num
+    | \_ 
+    | \$ 
+    | g:id

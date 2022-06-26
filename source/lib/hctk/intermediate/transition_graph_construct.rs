@@ -32,11 +32,11 @@ enum TransitionGroupSelector
     Symbol(SymbolID),
 }
 
-/// Constructs an initial transition tree that parses a production
+/// Constructs an initial transition graph that parses a production
 /// using a recursive descent strategy. Productions that are ambiguous
 /// or are left recursive cannot be parsed, so this tries to do its
 /// best to define a parse path for a production before we have to
-/// resort to LR based parse strategies.
+/// resort to LR and Forking based parse strategies.
 
 pub fn construct_recursive_descent<'a>(
     grammar: &'a GrammarStore,

@@ -2,10 +2,40 @@ mod parse_functions;
 mod reader;
 mod utf8_string_reader;
 
+use crate::primitives::KernelState;
 pub use parse_functions::get_next_action;
 pub use parse_functions::Action;
 pub use reader::SymbolReader;
 pub use utf8_string_reader::UTF8StringReader;
+
+trait IteratorParser<'a, T: SymbolReader>
+{
+    fn get_parts(
+        &mut self,
+    ) -> (&'a mut T, &'a mut KernelState, &'a [u32], &'a mut bool);
+}
+impl<'a, T: 'a + SymbolReader> Iterator for dyn IteratorParser<'a, T>
+{
+    type Item = Action;
+
+    fn next(&mut self) -> Option<Self::Item>
+    {
+        let (reader, state, bytecode, active) = self.get_parts();
+
+        if *active {
+            let action = get_next_action(reader, state, bytecode);
+            match action {
+                Action::Error { .. } | Action::Accept { .. } => {
+                    *active = false;
+                    Some(action)
+                }
+                action => Some(action),
+            }
+        } else {
+            None
+        }
+    }
+}
 
 #[cfg(test)]
 mod test_parser

@@ -1,0 +1,12 @@
+[package]
+name = "hctk-compile"
+version = "0.2.0"
+edition = "2021"
+
+[[bin]]
+name = "hc-compile"
+path = "./main.rs"
+
+
+[dependencies.hctk]
+path = "../../lib/hctk"

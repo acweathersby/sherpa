@@ -54,6 +54,10 @@ mod test_grammar
         let (grammar, errors) =
             compile_from_path(&path, get_num_of_available_threads());
 
+        for error in &errors {
+            println!("{}", error);
+        }
+
         assert!(grammar.is_some());
         assert!(errors.is_empty());
     }

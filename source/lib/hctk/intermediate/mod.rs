@@ -1,6 +1,6 @@
 pub mod optimize;
 pub mod state_construct;
-pub mod transition_tree;
+pub mod transition_graph_construct;
 
 #[cfg(test)]
 
@@ -11,7 +11,7 @@ mod transition_tree_tests
     use crate::grammar::get_production_id_by_name;
     use crate::grammar::get_production_plain_name;
     use crate::grammar::get_production_start_items;
-    use crate::intermediate::transition_tree::construct_recursive_descent;
+    use crate::intermediate::transition_graph_construct::construct_recursive_descent;
 
     #[test]
     pub fn test_construct_descent_on_basic_grammar()

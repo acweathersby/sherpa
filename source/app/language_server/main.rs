@@ -30,7 +30,7 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>>
     })
     .unwrap();
 
-    let initialization_params = connection.initialize(server_capabilities)?;
+    let _initialization_params = connection.initialize(server_capabilities)?;
 
     eprintln!("Sever Initialized");
 

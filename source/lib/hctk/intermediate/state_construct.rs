@@ -6,8 +6,8 @@ use std::collections::VecDeque;
 use std::fmt::format;
 use std::thread;
 
-use super::transition_tree::construct_goto;
-use super::transition_tree::construct_recursive_descent;
+use super::transition_graph_construct::construct_goto;
+use super::transition_graph_construct::construct_recursive_descent;
 use crate::grammar::compiler::get_scanner_info_from_defined;
 use crate::grammar::get_production;
 use crate::grammar::get_production_plain_name;

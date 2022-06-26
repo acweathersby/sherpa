@@ -428,6 +428,42 @@ fn get_token_value<T: SymbolReader>(
     }
 }
 
+fn scan_for_improvised_token<T: SymbolReader>(
+    scan_state: &mut KernelState,
+    reader: &mut T,
+)
+{
+    let mut assert = scan_state.get_assert_token();
+    assert.byte_length = reader.codepoint_byte_length();
+    assert.cp_length = 1;
+    let mut byte = reader.byte();
+    // Scan to next break point and produce an undefined
+    // token. If we are already at a break point then just
+    // return the single character token.
+    if byte == '\n' as u8
+        || byte == '\t' as u8
+        || byte == '\r' as u8
+        || byte == ' ' as u8
+    {
+        assert = assert.next();
+    } else {
+        while byte != '\n' as u8
+            && byte != '\t' as u8
+            && byte != '\r' as u8
+            && byte != ' ' as u8
+            && !reader.at_end()
+        {
+            reader.next(assert.byte_length);
+            byte = reader.byte();
+            assert = assert.next();
+            assert.byte_length = reader.codepoint_byte_length();
+            assert.cp_length += 1;
+        }
+    }
+    scan_state.set_assert_token(assert);
+    set_token_state(0, 0, scan_state);
+}
+
 fn token_scan<T: SymbolReader>(
     token: KernelToken,
     scanner_start_offset: u32,
@@ -489,38 +525,7 @@ fn token_scan<T: SymbolReader>(
                 if scan_state.in_fail_mode
                     || scan_state.get_anchor_token().typ == 0
                 {
-                    let mut assert = scan_state.get_assert_token();
-                    assert.byte_length = reader.codepoint_byte_length();
-                    assert.cp_length = 1;
-
-                    let mut byte = reader.byte();
-
-                    // Scan to next break point and produce an undefined
-                    // token. If we are already at a break point then just
-                    // return the single character token.
-                    if byte == '\n' as u8
-                        || byte == '\t' as u8
-                        || byte == '\r' as u8
-                        || byte == ' ' as u8
-                    {
-                        assert = assert.next();
-                    } else {
-                        while byte != '\n' as u8
-                            && byte != '\t' as u8
-                            && byte != '\r' as u8
-                            && byte != ' ' as u8
-                            && !reader.at_end()
-                        {
-                            reader.next(assert.byte_length);
-                            byte = reader.byte();
-                            assert = assert.next();
-                            assert.byte_length = reader.codepoint_byte_length();
-                            assert.cp_length += 1;
-                        }
-                    }
-
-                    scan_state.set_assert_token(assert);
-                    set_token_state(0, 0, &mut scan_state);
+                    scan_for_improvised_token(&mut scan_state, reader);
                 }
 
                 break Action::Token(scan_state.get_anchor_token());
@@ -530,16 +535,6 @@ fn token_scan<T: SymbolReader>(
 
                 if ((scan_state.active_state & mask_gate) != 0) {
                     scan_state.in_fail_mode = loop {
-                        #[cfg(any(test, debug_assertions))]
-                        {
-                            print_state(
-                                (scan_state.active_state & STATE_INDEX_MASK)
-                                    as usize,
-                                bytecode,
-                                None,
-                            );
-                        }
-
                         match dispatch(reader, &mut scan_state, bytecode) {
                             Action::CompleteState => {
                                 break false;
@@ -560,7 +555,7 @@ fn token_scan<T: SymbolReader>(
         _ => panic!("Unusable State"),
     }
 }
-
+/// Start or continue a parse on an input
 pub fn get_next_action<T: SymbolReader>(
     reader: &mut T,
     state: &mut KernelState,
@@ -589,8 +584,6 @@ pub fn get_next_action<T: SymbolReader>(
 
             if (state.interrupted || (state.active_state & mask_gate) != 0) {
                 state.interrupted = true;
-                let mut index = (state.active_state & STATE_INDEX_MASK) as u32;
-                print_state(index as usize, bytecode, None);
 
                 match dispatch(reader, state, bytecode) {
                     Action::CompleteState => {
