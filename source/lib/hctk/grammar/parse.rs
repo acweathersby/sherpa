@@ -132,12 +132,8 @@ pub fn compile_grammar_ast(buffer: Vec<u8>)
 
     match result {
         Ok(result) => {
-            if let HCObj::NODE(node) = result {
-                if let ASTNode::Grammar(node) = node {
-                    Ok(node)
-                } else {
-                    Err(ParseError::UNDEFINED)
-                }
+            if let HCObj::NODE(ASTNode::Grammar(node)) = result {
+                Ok(node)
             } else {
                 Err(ParseError::UNDEFINED)
             }
@@ -159,12 +155,8 @@ pub fn compile_ir_ast(buffer: Vec<u8>) -> Result<Box<IR_STATE>, ParseError>
 
     match result {
         Ok(result) => {
-            if let HCObj::NODE(node) = result {
-                if let ASTNode::IR_STATE(node) = node {
-                    Ok(node)
-                } else {
-                    Err(ParseError::UNDEFINED)
-                }
+            if let HCObj::NODE(ASTNode::IR_STATE(node)) = result {
+                Ok(node)
             } else {
                 Err(ParseError::UNDEFINED)
             }

@@ -36,13 +36,11 @@ pub fn get_closure(items: &[Item], grammar: &GrammarStore) -> Vec<Item>
 
     while let Some(item) = queue.pop_front() {
         if seen.insert(item) {
-            match &item.get_symbol(grammar) {
-                SymbolID::Production(prod_id, _) => {
-                    for item in get_production_start_items(prod_id, grammar) {
-                        queue.push_back(item)
-                    }
+            if let SymbolID::Production(prod_id, _) = &item.get_symbol(grammar)
+            {
+                for item in get_production_start_items(prod_id, grammar) {
+                    queue.push_back(item)
                 }
-                _ => {}
             }
         }
     }

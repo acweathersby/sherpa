@@ -300,7 +300,7 @@ impl<'a, T: ByteReader> StateIterator<'a, T>
         bytecode: &[u32],
     ) -> KernelToken
     {
-        if true || current_token.typ == 0 {
+        if current_token.typ == 0 {
             let scanner = &mut self.scanner_iterator;
 
             scanner.stack.reset(scanner_start_pointer);
@@ -360,7 +360,7 @@ impl<'a, T: ByteReader> StateIterator<'a, T>
                     ParseAction::ERROR {
                         pointer: 0,
                         error_code: ParseErrorCode::NORMAL,
-                        production: _1,
+                        production: _,
                     } => {
                         self.emit_action(result);
 
@@ -916,20 +916,20 @@ trait ParserCoreIterator<R: ByteReader>
                     break self.advanced_return(index, fail_mode, bytecode)
                         as u32
                 }
-                0x00000000 | _ => break self.pass(index + 1, fail_mode) as u32,
+                _ => break self.pass(index + 1, fail_mode) as u32,
             };
         };
 
-        return result;
+        result
     } //*/
     fn noop(&mut self, index: usize, _: u32) -> usize
     {
-        return index + 1;
+        index + 1
     }
 
     fn pass(&mut self, mut __: usize, _: u32) -> usize
     {
-        return 0;
+        0
     }
 
     fn assert_consume(
@@ -984,16 +984,16 @@ trait ParserCoreIterator<R: ByteReader>
         self.set_tok(1, token);
 
         if does_not_match {
-            return 2;
+            2
+        } else {
+            token.line_number = self.get_reader().line_count();
+
+            token.line_offset = self.get_reader().line_offset();
+
+            self.consume(1, 0, bytecode);
+
+            index + 1
         }
-
-        token.line_number = self.get_reader().line_count();
-
-        token.line_offset = self.get_reader().line_offset();
-
-        self.consume(1, 0, bytecode);
-
-        return index + 1;
     }
 
     fn goto(&mut self, mut index: usize, a: u32, bytecode: &[u32]) -> usize

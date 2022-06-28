@@ -49,7 +49,7 @@ mod test_grammar
     {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
-        path.push("test/compile/data/trivial.hcg");
+        path.push("../../../test/compile/data/trivial.hcg");
 
         let (grammar, errors) =
             compile_from_path(&path, get_num_of_available_threads());
@@ -67,7 +67,7 @@ mod test_grammar
     {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
-        path.push("test/compile/data/trivial_importer.hcg");
+        path.push("../../../test/compile/data/trivial_importer.hcg");
 
         let (grammar, errors) =
             compile_from_path(&path, get_num_of_available_threads());

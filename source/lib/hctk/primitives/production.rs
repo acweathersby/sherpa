@@ -35,7 +35,7 @@ impl BodyId
 {
     pub fn new(prod_id: &ProductionId, body_index: usize) -> Self
     {
-        BodyId((prod_id.0 & 0xFFFFFFFF_FFFFF000) + body_index as u64)
+        BodyId((prod_id.0 & 0xFFFF_FFFF_FFFF_F000) + body_index as u64)
     }
 
     #[inline(always)]
@@ -130,7 +130,7 @@ pub struct BodySymbolRef
     pub exclusive:      bool,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct ReduceFunctionId(u64);
 
 impl ReduceFunctionId
@@ -146,16 +146,8 @@ impl ReduceFunctionId
     }
 }
 
-impl Default for ReduceFunctionId
-{
-    fn default() -> Self
-    {
-        ReduceFunctionId(0)
-    }
-}
-
+/// A single body derived from a production
 #[derive(Debug, Clone)]
-
 pub struct Body
 {
     pub symbols: Vec<BodySymbolRef>,

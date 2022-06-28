@@ -73,10 +73,10 @@ impl IRState
 
     pub fn get_hash(&self) -> u64
     {
-        self.hash.clone()
+        self.hash
     }
 
-    pub fn get_code<'a>(&self) -> String
+    pub fn get_code(&self) -> String
     {
         format!(
             "{}{}\n{}\n",
@@ -86,7 +86,7 @@ impl IRState
         )
     }
 
-    pub fn get_comment<'a>(&'a self) -> &'a String
+    pub fn get_comment(&self) -> &String
     {
         &self.comment
     }
@@ -105,7 +105,7 @@ impl IRState
         }
     }
 
-    pub fn get_symbols<'a>(&'a self) -> (&'a Vec<SymbolID>, &'a Vec<SymbolID>)
+    pub fn get_symbols(&self) -> (&Vec<SymbolID>, &Vec<SymbolID>)
     {
         (&self.normal_symbols, &self.peek_symbols)
     }
@@ -120,20 +120,17 @@ impl IRState
             .cloned()
             .collect::<BTreeSet<_>>();
 
-        if scanner_syms.len() > 0 {
-            Some(scanner_syms)
-        } else {
+        if scanner_syms.is_empty() {
             None
+        } else {
+            Some(scanner_syms)
         }
     }
 
     pub fn get_scanner_state_name(&self) -> Option<String>
     {
-        if let Some(symbols) = self.get_scanner_symbol_set() {
-            Some(format!("scan_{:02X}", hash_id_value_u64(&symbols)))
-        } else {
-            None
-        }
+        self.get_scanner_symbol_set()
+            .map(|symbols| format!("scan_{:02X}", hash_id_value_u64(&symbols)))
     }
 
     pub fn get_graph_id(&self) -> usize
@@ -141,8 +138,7 @@ impl IRState
         self.graph_id
     }
 
-    pub fn compile_ast<'a>(&'a mut self)
-        -> &'a mut Result<IR_STATE, ParseError>
+    pub fn compile_ast(&mut self) -> &mut Result<IR_STATE, ParseError>
     {
         if self.ast.is_ok() {
             &mut self.ast
@@ -158,7 +154,7 @@ impl IRState
         }
     }
 
-    pub fn get_ast_mut<'a>(&'a mut self) -> Option<&'a mut IR_STATE>
+    pub fn get_ast_mut(&mut self) -> Option<&mut IR_STATE>
     {
         if self.ast.is_ok() {
             Some(self.ast.as_mut().ok().unwrap())
@@ -167,7 +163,7 @@ impl IRState
         }
     }
 
-    pub fn get_ast<'a>(&'a self) -> Option<&'a IR_STATE>
+    pub fn get_ast(&self) -> Option<&IR_STATE>
     {
         if self.ast.is_ok() {
             Some(self.ast.as_ref().ok().unwrap())

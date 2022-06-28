@@ -6,7 +6,7 @@
 
 @IMPORT ./format.hcg as fm
 
-@IGNORE g:sp g:nl tk:cm::comment
+@IGNORE g:sp g:nl g:tab tk:cm::comment
 
 #######################################################################################################################
 ######################################  SYMBOLS
@@ -126,7 +126,7 @@
 
 <> literal_symbol > 
     
-        \t: ( identifier | g:sym | g:num )(+" )
+        \t: tk:defined_symbol
           
         f:r { { t_Exclusive_Literal , c_Symbol , c_Token, val:str($2),  tok } }
     

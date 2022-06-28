@@ -37,24 +37,22 @@ pub fn is_production_recursive(
     while let Some(item) = pipeline.pop_front() {
         if seen.insert(item) {
             if !item.is_end() {
-                match item.get_symbol(grammar) {
-                    SymbolID::Production(prod_id, _) => {
-                        if prod_id == production {
-                            return (true, item.get_offset() == 0);
-                        }
+                if let SymbolID::Production(prod_id, _) =
+                    item.get_symbol(grammar)
+                {
+                    if prod_id == production {
+                        return (true, item.get_offset() == 0);
                     }
-                    _ => {}
                 }
 
                 let new_item = item.increment().unwrap();
 
-                match new_item.get_symbol(grammar) {
-                    SymbolID::Production(..) => {
-                        for item in get_closure_cached(&new_item, grammar) {
-                            pipeline.push_back(*item);
-                        }
+                if let SymbolID::Production(..) = new_item.get_symbol(grammar) {
+                    for item in get_closure_cached(&new_item, grammar) {
+                        pipeline.push_back(*item);
                     }
-                    _ => pipeline.push_back(new_item),
+                } else {
+                    pipeline.push_back(new_item);
                 }
             }
         }

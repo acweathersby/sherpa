@@ -84,7 +84,7 @@
 
         t:skip production_id_list                     
                                             
-                                            f:r { { t_ASSERT, c_IR, c_IR_Instruction, c_IR_Branch, instructions: $3, is_skip: true } }
+                                            f:r { { t_ASSERT, c_IR, c_IR_Instruction, c_IR_Branch, ids: $2, is_skip: true } }
 
         |
         
@@ -195,4 +195,4 @@
         tk:integer f:r{ { t_Num, val: i64($1) } }
 
 <> integer > 
-        g:num(+\" )
+        g:num(+)

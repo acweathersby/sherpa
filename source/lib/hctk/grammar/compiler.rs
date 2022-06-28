@@ -1966,7 +1966,8 @@ fn get_symbol_details<'a>(
     loop {
         match sym {
             ASTNode::AnnotatedSymbol(annotated) => {
-                data.annotation = annotated.reference.val.to_owned();
+                // Removes the dangling `^`, as in `^annotation_name`
+                data.annotation = annotated.reference.val[1..].to_owned();
                 sym = &annotated.symbol;
             }
             ASTNode::OptionalSymbol(optional) => {

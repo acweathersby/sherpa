@@ -13,7 +13,7 @@
 <> struct_prop >  identifier \: expression
                                                         f:r { { t_AST_Property, id:str($1), value:$3, tok } }
     |  identifier \: struct
-                                                        f:r { { t_AST_Struct_Property, id:str($1), value:$3, tok } }
+                                                        f:r { { t_AST_Property, id:str($1), value:$3, tok } }
     | tk:type_idenfifier
                                                         f:r { { t_AST_TypeId,  value:str($1), tok } }
     | tk:class_identifier
@@ -76,7 +76,7 @@
                                                         f:r { { t_AST_BOOL, value: true } }
     | t:false
                                                         f:r { { t_AST_BOOL, value: false } }
-    | g:num(+)
+    | tk:integer
                                                         f:r { { t_AST_NUMBER, value:f64($1) } }
 
 <> member > reference                                  
@@ -86,8 +86,8 @@
 
 <> reference > \$ identifier 
                                                         f:r { { t_AST_NamedReference, value: str($2), tok } }
-        | \$ g:num(+)         
-                                                        f:r { { t_AST_IndexReference, value: i32($1), tok } }
+        | \$ tk:integer         
+                                                        f:r { { t_AST_IndexReference, value: f64($2), tok } }
 
 <> identifier > tk:identifier_syms 
 
@@ -107,3 +107,5 @@
 
     |   g:id
 
+<> integer > 
+        g:num(+)

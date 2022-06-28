@@ -10,6 +10,14 @@ pub struct KernelStack
     pub stack_pointer: i32,
 }
 
+impl Default for KernelStack
+{
+    fn default() -> Self
+    {
+        Self::new()
+    }
+}
+
 impl KernelStack
 {
     pub fn new() -> KernelStack
@@ -53,9 +61,9 @@ impl KernelStack
 
             self.stack_pointer -= 1;
 
-            return state;
+            state
         } else {
-            return 0;
+            0
         }
     }
 
