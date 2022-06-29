@@ -1,12 +1,24 @@
 [package]
-name = "hctk-compile"
+name = "hc-compile"
 version = "0.2.0"
 edition = "2021"
+build = "build.rs"
+
+[lib]
+name = "hc_compile"
+path ="./src/lib.rs"
 
 [[bin]]
 name = "hc-compile"
-path = "./main.rs"
+path = "./src/main.rs"
 
+[dependencies]
+clap = "3.2.7"
+
+[build-dependencies]
+clap = "3.2.7"
+clap_complete = "3.2.3"
 
 [dependencies.hctk]
 path = "../../lib/hctk"
+

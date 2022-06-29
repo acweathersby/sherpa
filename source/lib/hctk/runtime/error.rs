@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use std::sync::Arc;
 
-use crate::primitives::Token;
+use crate::types::Token;
 
 #[derive(Debug)]
 pub struct TokenError
@@ -33,7 +33,7 @@ impl Display for TokenError
     {
         let mut token = self.token.clone();
 
-        if token.len() == 0 {
+        if token.is_empty() {
             token = token.to_length(1);
         }
 

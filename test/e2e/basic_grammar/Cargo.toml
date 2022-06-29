@@ -1,0 +1,17 @@
+[package]
+name = "test-basic-grammar"
+version = "0.0.0"
+edition = "2021"
+
+build = "./build.rs"
+
+[lib]
+name = "test_basic_grammar"
+path = "./main.rs"
+
+[build-dependencies.hc-compile]
+path = "../../../source/app/compile" 
+
+[dependencies.hctk]
+path = "../../../source/lib/hctk"
+

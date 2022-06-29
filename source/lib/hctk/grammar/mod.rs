@@ -1,10 +1,16 @@
-pub mod compiler;
+//! Functions for constructing a
+//! [GrammarStore](crate::types::GrammarStore) from various types of
+//! grammar source files.
+mod compile_grammar;
 pub mod data;
 pub mod item;
 pub mod parse;
 pub mod production;
 pub mod uuid;
 
+pub use compile_grammar::compile_from_path;
+pub use compile_grammar::compile_from_string;
+pub(crate) use compile_grammar::get_scanner_info_from_defined;
 pub use item::*;
 pub use production::*;
 pub use uuid::*;
@@ -16,8 +22,8 @@ mod test_grammar
     use std::path::PathBuf;
 
     use crate::get_num_of_available_threads;
-    use crate::grammar::compiler::compile_from_path;
-    use crate::grammar::compiler::pre_process_grammar;
+    use crate::grammar::compile_grammar::compile_from_path;
+    use crate::grammar::compile_grammar::pre_process_grammar;
 
     use super::parse::compile_grammar_ast;
     use super::parse::{self};

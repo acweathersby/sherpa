@@ -29,9 +29,9 @@
 
 use std::cell::UnsafeCell;
 
-use crate::primitives::ast_node::{HCObj, HCObjTrait, ReduceFunction};
+use super::ast_node::{HCObj, HCObjTrait, ReduceFunction};
 
-use crate::primitives::Token;
+use crate::types::Token;
 
 type RF = ReduceFunction<ASTNode>;
 
@@ -125,176 +125,176 @@ FunctionIndexId(Box<FunctionIndexId>)
 }
     
 impl HCObjTrait for ASTNode {
-    fn String(&self) -> String {
+    fn to_string(&self) -> String {
         String::from("")
         /* use ASTNode::*;
         match self {
             
-            Grammar(bx) => bx.tok.String(),
+            Grammar(bx) => bx.tok.to_string(),
 
-            IR_STATE(bx) => bx.tok.String(),
+            IR_STATE(bx) => bx.tok.to_string(),
 
-            ASSERT(bx) => bx.tok.String(),
+            ASSERT(bx) => bx.tok.to_string(),
 
-            DEFAULT(bx) => bx.tok.String(),
+            DEFAULT(bx) => bx.tok.to_string(),
 
-            Num(bx) => bx.tok.String(),
+            Num(bx) => bx.tok.to_string(),
 
-            Production_Symbol(bx) => bx.tok.String(),
+            Production_Symbol(bx) => bx.tok.to_string(),
 
-            Production_Import_Symbol(bx) => bx.tok.String(),
+            Production_Import_Symbol(bx) => bx.tok.to_string(),
 
-            Reduce(bx) => bx.tok.String(),
+            Reduce(bx) => bx.tok.to_string(),
 
-            TokenAssign(bx) => bx.tok.String(),
+            TokenAssign(bx) => bx.tok.to_string(),
 
-            SetProd(bx) => bx.tok.String(),
+            SetProd(bx) => bx.tok.to_string(),
 
-            ForkTo(bx) => bx.tok.String(),
+            ForkTo(bx) => bx.tok.to_string(),
 
-            ScanUntil(bx) => bx.tok.String(),
+            ScanUntil(bx) => bx.tok.to_string(),
 
-            TokenId(bx) => bx.tok.String(),
+            TokenId(bx) => bx.tok.to_string(),
 
-            Skip(bx) => bx.tok.String(),
+            Skip(bx) => bx.tok.to_string(),
 
-            Pass(bx) => bx.tok.String(),
+            Pass(bx) => bx.tok.to_string(),
 
-            Fail(bx) => bx.tok.String(),
+            Fail(bx) => bx.tok.to_string(),
 
-            NotInScope(bx) => bx.tok.String(),
+            NotInScope(bx) => bx.tok.to_string(),
 
-            SetScope(bx) => bx.tok.String(),
+            SetScope(bx) => bx.tok.to_string(),
 
-            Consume(bx) => bx.tok.String(),
+            Consume(bx) => bx.tok.to_string(),
 
-            Ascript(bx) => bx.tok.String(),
+            Ascript(bx) => bx.tok.to_string(),
 
-            Returned(bx) => bx.tok.String(),
+            Returned(bx) => bx.tok.to_string(),
 
-            Referenced(bx) => bx.tok.String(),
+            Referenced(bx) => bx.tok.to_string(),
 
-            AST_Statements(bx) => bx.tok.String(),
+            AST_Statements(bx) => bx.tok.to_string(),
 
-            AST_Struct(bx) => bx.tok.String(),
+            AST_Struct(bx) => bx.tok.to_string(),
 
-            AST_Property(bx) => bx.tok.String(),
+            AST_Property(bx) => bx.tok.to_string(),
 
-            AST_TypeId(bx) => bx.tok.String(),
+            AST_TypeId(bx) => bx.tok.to_string(),
 
-            AST_ClassId(bx) => bx.tok.String(),
+            AST_ClassId(bx) => bx.tok.to_string(),
 
-            AST_Token(bx) => bx.tok.String(),
+            AST_Token(bx) => bx.tok.to_string(),
 
-            AST_Vector(bx) => bx.tok.String(),
+            AST_Vector(bx) => bx.tok.to_string(),
 
-            AST_Member(bx) => bx.tok.String(),
+            AST_Member(bx) => bx.tok.to_string(),
 
-            AST_NamedReference(bx) => bx.tok.String(),
+            AST_NamedReference(bx) => bx.tok.to_string(),
 
-            AST_IndexReference(bx) => bx.tok.String(),
+            AST_IndexReference(bx) => bx.tok.to_string(),
 
-            AST_STRING(bx) => bx.tok.String(),
+            AST_STRING(bx) => bx.tok.to_string(),
 
-            AST_U8(bx) => bx.tok.String(),
+            AST_U8(bx) => bx.tok.to_string(),
 
-            AST_U16(bx) => bx.tok.String(),
+            AST_U16(bx) => bx.tok.to_string(),
 
-            AST_U32(bx) => bx.tok.String(),
+            AST_U32(bx) => bx.tok.to_string(),
 
-            AST_U64(bx) => bx.tok.String(),
+            AST_U64(bx) => bx.tok.to_string(),
 
-            AST_I8(bx) => bx.tok.String(),
+            AST_I8(bx) => bx.tok.to_string(),
 
-            AST_I16(bx) => bx.tok.String(),
+            AST_I16(bx) => bx.tok.to_string(),
 
-            AST_I32(bx) => bx.tok.String(),
+            AST_I32(bx) => bx.tok.to_string(),
 
-            AST_I64(bx) => bx.tok.String(),
+            AST_I64(bx) => bx.tok.to_string(),
 
-            AST_F32(bx) => bx.tok.String(),
+            AST_F32(bx) => bx.tok.to_string(),
 
-            AST_F64(bx) => bx.tok.String(),
+            AST_F64(bx) => bx.tok.to_string(),
 
-            AST_BOOL(bx) => bx.tok.String(),
+            AST_BOOL(bx) => bx.tok.to_string(),
 
-            AST_NUMBER(bx) => bx.tok.String(),
+            AST_NUMBER(bx) => bx.tok.to_string(),
 
-            AST_Add(bx) => bx.tok.String(),
+            AST_Add(bx) => bx.tok.to_string(),
 
-            Reference(bx) => bx.tok.String(),
+            Reference(bx) => bx.tok.to_string(),
 
-            Generated(bx) => bx.tok.String(),
+            Generated(bx) => bx.tok.to_string(),
 
-            Exclusive_Literal(bx) => bx.tok.String(),
+            Exclusive_Literal(bx) => bx.tok.to_string(),
 
-            Literal(bx) => bx.tok.String(),
+            Literal(bx) => bx.tok.to_string(),
 
-            End_Of_File(bx) => bx.tok.String(),
+            End_Of_File(bx) => bx.tok.to_string(),
 
-            Space(bx) => bx.tok.String(),
+            Space(bx) => bx.tok.to_string(),
 
-            NewLine(bx) => bx.tok.String(),
+            NewLine(bx) => bx.tok.to_string(),
 
-            IncreaseIndent(bx) => bx.tok.String(),
+            IncreaseIndent(bx) => bx.tok.to_string(),
 
-            DecreaseIndent(bx) => bx.tok.String(),
+            DecreaseIndent(bx) => bx.tok.to_string(),
 
-            Production_Token(bx) => bx.tok.String(),
+            Production_Token(bx) => bx.tok.to_string(),
 
-            Goto(bx) => bx.tok.String(),
+            Goto(bx) => bx.tok.to_string(),
 
-            FailState(bx) => bx.tok.String(),
+            FailState(bx) => bx.tok.to_string(),
 
-            Symbols(bx) => bx.tok.String(),
+            Symbols(bx) => bx.tok.to_string(),
 
-            AnnotatedSymbol(bx) => bx.tok.String(),
+            AnnotatedSymbol(bx) => bx.tok.to_string(),
 
-            OptionalSymbol(bx) => bx.tok.String(),
+            OptionalSymbol(bx) => bx.tok.to_string(),
 
-            Not_Symbol(bx) => bx.tok.String(),
+            Not_Symbol(bx) => bx.tok.to_string(),
 
-            Look_Behind(bx) => bx.tok.String(),
+            Look_Behind(bx) => bx.tok.to_string(),
 
-            NonCaptureSymbol(bx) => bx.tok.String(),
+            NonCaptureSymbol(bx) => bx.tok.to_string(),
 
-            List_Production(bx) => bx.tok.String(),
+            List_Production(bx) => bx.tok.to_string(),
 
-            Optional_List_Production(bx) => bx.tok.String(),
+            Optional_List_Production(bx) => bx.tok.to_string(),
 
-            Group_Production(bx) => bx.tok.String(),
+            Group_Production(bx) => bx.tok.to_string(),
 
-            Body(bx) => bx.tok.String(),
+            Body(bx) => bx.tok.to_string(),
 
-            Exclude(bx) => bx.tok.String(),
+            Exclude(bx) => bx.tok.to_string(),
 
-            Look_Ignore(bx) => bx.tok.String(),
+            Look_Ignore(bx) => bx.tok.to_string(),
 
-            Empty(bx) => bx.tok.String(),
+            Empty(bx) => bx.tok.to_string(),
 
-            Production(bx) => bx.tok.String(),
+            Production(bx) => bx.tok.to_string(),
 
-            ProductionMerged(bx) => bx.tok.String(),
+            ProductionMerged(bx) => bx.tok.to_string(),
 
-            Ignore(bx) => bx.tok.String(),
+            Ignore(bx) => bx.tok.to_string(),
 
-            Import(bx) => bx.tok.String(),
+            Import(bx) => bx.tok.to_string(),
 
-            Export(bx) => bx.tok.String(),
+            Export(bx) => bx.tok.to_string(),
 
-            Out_Of_Band(bx) => bx.tok.String(),
+            Out_Of_Band(bx) => bx.tok.to_string(),
 
-            Repeat(bx) => bx.tok.String(),
+            Repeat(bx) => bx.tok.to_string(),
 
-            Lazy(bx) => bx.tok.String(),
+            Lazy(bx) => bx.tok.to_string(),
 
-            HASH_NAME(bx) => bx.tok.String(),
+            HASH_NAME(bx) => bx.tok.to_string(),
 
-            FunctionIndexNum(bx) => bx.tok.String(),
+            FunctionIndexNum(bx) => bx.tok.to_string(),
 
-            FunctionIndexWildCard(bx) => bx.tok.String(),
+            FunctionIndexWildCard(bx) => bx.tok.to_string(),
 
-            FunctionIndexId(bx) => bx.tok.String(),
+            FunctionIndexId(bx) => bx.tok.to_string(),
             _ => String::from(""),
         } */
     }
@@ -12137,8 +12137,8 @@ let mut v0 = args.remove(i-4);
  if let HCO::NODE/*aaRR*/(r_3) = v4 { 
  if let ASTNode::Symbols(r_4) = r_3 { 
  let mut ref_0 = ASTNode::IR_STATE(IR_STATE::new(
-        /* AAA */v0.String(),
-        /* AAA */v1.String(),
+        /* AAA */v0.to_string(),
+        /* AAA */v1.to_string(),
         r_0,
         Some(r_2),
         Some(r_4),
@@ -12178,7 +12178,7 @@ let mut v0 = args.remove(i-3);
  if let HCO::NODE/*aaRR*/(r_3) = v3 { 
  if let ASTNode::Symbols(r_4) = r_3 { 
  let mut ref_0 = ASTNode::IR_STATE(IR_STATE::new(
-        /* AAA */v0.String(),
+        /* AAA */v0.to_string(),
         String::from(""),
         r_0,
         Some(r_2),
@@ -12217,8 +12217,8 @@ let mut v0 = args.remove(i-3);
  if let HCO::NODE/*aaRR*/(r_1) = v3 { 
  if let ASTNode::Symbols(r_2) = r_1 { 
  let mut ref_0 = ASTNode::IR_STATE(IR_STATE::new(
-        /* AAA */v0.String(),
-        /* AAA */v1.String(),
+        /* AAA */v0.to_string(),
+        /* AAA */v1.to_string(),
         r_0,
         None /* WTF2 */,
         Some(r_2),
@@ -12256,8 +12256,8 @@ let mut v0 = args.remove(i-3);
  if let HCO::NODE/*aaRR*/(r_1) = v3 { 
  if let ASTNode::FailState(r_2) = r_1 { 
  let mut ref_0 = ASTNode::IR_STATE(IR_STATE::new(
-        /* AAA */v0.String(),
-        /* AAA */v1.String(),
+        /* AAA */v0.to_string(),
+        /* AAA */v1.to_string(),
         r_0,
         Some(r_2),
         None /* WTF2 */,
@@ -12294,7 +12294,7 @@ let mut v0 = args.remove(i-2);
  if let HCO::NODE/*aaRR*/(r_1) = v2 { 
  if let ASTNode::Symbols(r_2) = r_1 { 
  let mut ref_0 = ASTNode::IR_STATE(IR_STATE::new(
-        /* AAA */v0.String(),
+        /* AAA */v0.to_string(),
         String::from(""),
         r_0,
         None /* WTF2 */,
@@ -12332,7 +12332,7 @@ let mut v0 = args.remove(i-2);
  if let HCO::NODE/*aaRR*/(r_1) = v2 { 
  if let ASTNode::FailState(r_2) = r_1 { 
  let mut ref_0 = ASTNode::IR_STATE(IR_STATE::new(
-        /* AAA */v0.String(),
+        /* AAA */v0.to_string(),
         String::from(""),
         r_0,
         Some(r_2),
@@ -12368,8 +12368,8 @@ let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
  if let HCO::NODES/*aa00*/(mut r_0) = v2 { 
  let mut ref_0 = ASTNode::IR_STATE(IR_STATE::new(
-        /* AAA */v0.String(),
-        /* AAA */v1.String(),
+        /* AAA */v0.to_string(),
+        /* AAA */v1.to_string(),
         r_0,
         None /* WTF2 */,
         None /* WTF2 */,
@@ -12403,7 +12403,7 @@ let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::NODES/*aa00*/(mut r_0) = v1 { 
  let mut ref_0 = ASTNode::IR_STATE(IR_STATE::new(
-        /* AAA */v0.String(),
+        /* AAA */v0.to_string(),
         String::from(""),
         r_0,
         None /* WTF2 */,
@@ -12447,7 +12447,7 @@ let mut v0 = args.remove(i-6);
  if let HCO::NODES/*aa00*/(mut r_3) = v5 { 
  let mut ref_0 = ASTNode::ASSERT(ASSERT::new(
         /* AAA */true,
-        /* AAA */r_1.String(),
+        /* AAA */r_1.to_string(),
         r_2,
         r_3,
         false,
@@ -12543,7 +12543,7 @@ let mut v0 = args.remove(i-5);
  if let HCO::NODES/*aa00*/(mut r_2) = v4 { 
  let mut ref_0 = ASTNode::ASSERT(ASSERT::new(
         /* AAA */false,
-        /* AAA */r_0.String(),
+        /* AAA */r_0.to_string(),
         r_1,
         r_2,
         false,
@@ -12570,7 +12570,7 @@ fn _fn15 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  if let HCO::TOKEN(r_0) = v0 { 
  let mut ref_0 = ASTNode::Production_Symbol(Production_Symbol::new(
-        /* AAA */r_0.String(),
+        /* AAA */r_0.to_string(),
         /* AAA */tok,
     ) 
 );;
@@ -12597,8 +12597,8 @@ let mut v0 = args.remove(i-2);
  if let HCO::TOKEN(r_0) = v0 { 
  if let HCO::TOKEN(r_1) = v2 { 
  let mut ref_0 = ASTNode::Production_Import_Symbol(Production_Import_Symbol::new(
-        /* AAA */r_0.String(),
-        /* AAA */r_1.String(),
+        /* AAA */r_0.to_string(),
+        /* AAA */r_1.to_string(),
         /* AAA */tok,
     ) 
 );;
@@ -12909,7 +12909,7 @@ let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
  if let HCO::TOKEN(r_0) = v2 { 
  let mut ref_0 = ASTNode::Returned(Returned::new(
-        /* AAA */r_0.String(),
+        /* AAA */r_0.to_string(),
         /* AAA */tok,
     ) 
 );;
@@ -12968,7 +12968,7 @@ let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
  if let HCO::NODE/*aaRR*/(r_0) = v2 { 
  let mut ref_0 = ASTNode::AST_Property(AST_Property::new(
-        /* AAA */v0.String(),
+        /* AAA */v0.to_string(),
         r_0,
         /* AAA */tok,
     ) 
@@ -12982,7 +12982,7 @@ fn _fn38 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  if let HCO::TOKEN(r_0) = v0 { 
  let mut ref_0 = ASTNode::AST_TypeId(AST_TypeId::new(
-        /* AAA */r_0.String(),
+        /* AAA */r_0.to_string(),
         /* AAA */tok,
     ) 
 );;
@@ -12995,7 +12995,7 @@ fn _fn39 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  if let HCO::TOKEN(r_0) = v0 { 
  let mut ref_0 = ASTNode::AST_ClassId(AST_ClassId::new(
-        /* AAA */r_0.String(),
+        /* AAA */r_0.to_string(),
         /* AAA */tok,
     ) 
 );;
@@ -13062,7 +13062,7 @@ fn _fn44 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  let mut ref_0 = ASTNode::AST_NamedReference(AST_NamedReference::new(
-        /* AAA */v1.String(),
+        /* AAA */v1.to_string(),
         /* AAA */tok,
     ) 
 );;
@@ -13458,7 +13458,7 @@ fn _fn74 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  if let HCO::TOKEN(r_0) = v0 { 
  let mut ref_0 = ASTNode::Reference(Reference::new(
-        /* AAA */r_0.String(),
+        /* AAA */r_0.to_string(),
     ) 
 );;
  args.push(HCO::NODE/*aa99*/(ref_0)) }}
@@ -13471,7 +13471,7 @@ let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::TOKEN(r_0) = v1 { 
  let mut ref_0 = ASTNode::Generated(Generated::new(
-        /* AAA */r_0.String(),
+        /* AAA */r_0.to_string(),
         /* AAA */tok,
     ) 
 );;
@@ -13496,7 +13496,7 @@ let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::TOKEN(r_0) = v1 { 
  let mut ref_0 = ASTNode::Exclusive_Literal(Exclusive_Literal::new(
-        /* AAA */r_0.String(),
+        /* AAA */r_0.to_string(),
         /* AAA */tok,
     ) 
 );;
@@ -13508,7 +13508,7 @@ let mut v0 = args.remove(i-1);
 fn _fn77 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  let mut ref_0 = ASTNode::Literal(Literal::new(
-        /* AAA */v0.String(),
+        /* AAA */v0.to_string(),
         /* AAA */tok,
     ) 
 );;
@@ -13522,7 +13522,7 @@ let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::TOKEN(r_0) = v1 { 
  let mut ref_0 = ASTNode::Literal(Literal::new(
-        /* AAA */r_0.String(),
+        /* AAA */r_0.to_string(),
         /* AAA */tok,
     ) 
 );;
@@ -13652,7 +13652,7 @@ let mut v0 = args.remove(i-5);
  if let HCO::NODE/*aaRR*/(r_3) = v4 { 
  if let ASTNode::FailState(r_4) = r_3 { 
  let mut ref_0 = ASTNode::FailState(FailState::new(
-        /* AAA */v2.String(),
+        /* AAA */v2.to_string(),
         r_0,
         Some(r_2),
         Some(r_4),
@@ -13688,7 +13688,7 @@ let mut v0 = args.remove(i-4);
  if let HCO::NODE/*aaRR*/(r_1) = v4 { 
  if let ASTNode::Symbols(r_2) = r_1 { 
  let mut ref_0 = ASTNode::FailState(FailState::new(
-        /* AAA */v2.String(),
+        /* AAA */v2.to_string(),
         r_0,
         Some(r_2),
         None /* WTF2 */,
@@ -13724,7 +13724,7 @@ let mut v0 = args.remove(i-4);
  if let HCO::NODE/*aaRR*/(r_1) = v4 { 
  if let ASTNode::FailState(r_2) = r_1 { 
  let mut ref_0 = ASTNode::FailState(FailState::new(
-        /* AAA */v2.String(),
+        /* AAA */v2.to_string(),
         r_0,
         None /* WTF2 */,
         Some(r_2),
@@ -13757,7 +13757,7 @@ let mut v1 = args.remove(i-2);
 let mut v0 = args.remove(i-3); 
  if let HCO::NODES/*aa00*/(mut r_0) = v3 { 
  let mut ref_0 = ASTNode::FailState(FailState::new(
-        /* AAA */v2.String(),
+        /* AAA */v2.to_string(),
         r_0,
         None /* WTF2 */,
         None /* WTF2 */,
@@ -14511,7 +14511,7 @@ let mut v2 = args.remove(i-1);
 let mut v1 = args.remove(i-2);
 let mut v0 = args.remove(i-3); 
  let mut ref_0 = ASTNode::Import(Import::new(
-        /* AAA */v1.String(),
+        /* AAA */v1.to_string(),
         /* AAA */v3.Token(),
         /* AAA */tok,
     ) 
@@ -14547,7 +14547,7 @@ let mut v0 = args.remove(i-2);
  if let HCO::TOKEN(r_2) = v2 { 
  let mut ref_0 = ASTNode::Out_Of_Band(Out_Of_Band::new(
         Some(r_1),
-        /* AAA */r_2.String(),
+        /* AAA */r_2.to_string(),
         ASTNode::NONE,
         Token::empty(),
     ) 
@@ -14577,7 +14577,7 @@ let mut v0 = args.remove(i-3);
  if let HCO::NODE/*aaRR*/(r_1) = v1 { 
  let mut ref_0 = ASTNode::Out_Of_Band(Out_Of_Band::new(
         None /* WTF2 */,
-        /* AAA */r_0.String(),
+        /* AAA */r_0.to_string(),
         r_1,
         /* AAA */v2.Token(),
     ) 
@@ -14637,7 +14637,7 @@ let mut v0 = args.remove(i-2);
  if let HCO::NODE/*aaRR*/(r_1) = v1 { 
  let mut ref_0 = ASTNode::Out_Of_Band(Out_Of_Band::new(
         None /* WTF2 */,
-        /* AAA */r_0.String(),
+        /* AAA */r_0.to_string(),
         r_1,
         Token::empty(),
     ) 
@@ -14892,7 +14892,7 @@ fn _fn132 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  if let HCO::TOKEN(r_0) = v0 { 
  let mut ref_0 = ASTNode::HASH_NAME(HASH_NAME::new(
-        /* AAA */r_0.String(),
+        /* AAA */r_0.to_string(),
     ) 
 );;
  args.push(HCO::NODE/*aa99*/(ref_0)) }}
@@ -14927,7 +14927,7 @@ fn _fn135 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  if let HCO::NODE/*aaRR*/(r_0) = v0 { 
  let mut ref_0 = ASTNode::FunctionIndexId(FunctionIndexId::new(
-        /* AAA */r_0.String(),
+        /* AAA */r_0.to_string(),
     ) 
 );;
  args.push(HCO::NODE/*aa99*/(ref_0)) }}
@@ -14941,7 +14941,7 @@ let mut v2 = args.remove(i-1);
 let mut v1 = args.remove(i-2);
 let mut v0 = args.remove(i-3); 
  if let HCO::TOKEN(r_0) = v2 { 
- args.push(HCO::STRING(r_0.String())) }}
+ args.push(HCO::STRING(r_0.to_string())) }}
 /**
 ```
 $2
@@ -14993,7 +14993,7 @@ fn _fn140 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::TOKEN(r_0) = v1 { 
- args.push(HCO::STRING(v0.String() + &r_0.String())) }}
+ args.push(HCO::STRING(v0.to_string() + &r_0.to_string())) }}
 /**
 ```
 $1+$3+[$4]
@@ -15237,7 +15237,7 @@ str($1)
 fn _fn158 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  if let HCO::TOKEN(r_0) = v0 { 
- args.push(HCO::STRING(r_0.String())) }}
+ args.push(HCO::STRING(r_0.to_string())) }}
 /**
 ```
 $2
@@ -15291,6 +15291,6 @@ let mut v0 = args.remove(i-2);
 
 
 
-pub const FunctionMaps:[RF; 335]= [
-    _fn161,_fn0,_fn1,_fn161,_fn161,_fn161,_fn162,_fn161,_fn161,_fn161,_fn161,_fn161,_fn162,_fn161,_fn163,_fn2,_fn3,_fn4,_fn5,_fn6,_fn7,_fn8,_fn9,_fn136,_fn162,_fn161,_fn161,_fn161,_fn161,_fn162,_fn162,_fn162,_fn136,_fn161,_fn161,_fn10,_fn11,_fn12,_fn10,_fn10,_fn10,_fn10,_fn13,_fn13,_fn13,_fn13,_fn13,_fn137,_fn14,_fn138,_fn139,_fn161,_fn161,_fn15,_fn140,_fn162,_fn140,_fn140,_fn161,_fn161,_fn161,_fn16,_fn141,_fn142,_fn143,_fn142,_fn144,_fn145,_fn145,_fn143,_fn146,_fn17,_fn18,_fn19,_fn20,_fn21,_fn22,_fn23,_fn24,_fn25,_fn26,_fn27,_fn28,_fn29,_fn20,_fn23,_fn30,_fn31,_fn32,_fn33,_fn34,_fn33,_fn34,_fn161,_fn161,_fn35,_fn36,_fn37,_fn37,_fn38,_fn39,_fn40,_fn40,_fn161,_fn162,_fn162,_fn162,_fn162,_fn161,_fn161,_fn161,_fn161,_fn161,_fn161,_fn161,_fn161,_fn41,_fn42,_fn161,_fn43,_fn44,_fn45,_fn138,_fn139,_fn46,_fn47,_fn147,_fn48,_fn49,_fn50,_fn51,_fn52,_fn53,_fn54,_fn55,_fn56,_fn57,_fn58,_fn59,_fn60,_fn61,_fn62,_fn63,_fn64,_fn65,_fn66,_fn67,_fn68,_fn69,_fn70,_fn71,_fn72,_fn162,_fn162,_fn143,_fn148,_fn161,_fn161,_fn73,_fn161,_fn163,_fn161,_fn161,_fn162,_fn162,_fn161,_fn161,_fn161,_fn161,_fn161,_fn161,_fn161,_fn74,_fn162,_fn161,_fn137,_fn149,_fn149,_fn161,_fn161,_fn161,_fn161,_fn161,_fn75,_fn76,_fn77,_fn78,_fn138,_fn139,_fn138,_fn138,_fn139,_fn139,_fn79,_fn161,_fn161,_fn161,_fn161,_fn80,_fn81,_fn82,_fn83,_fn84,_fn85,_fn86,_fn87,_fn88,_fn89,_fn90,_fn91,_fn161,_fn92,_fn93,_fn94,_fn95,_fn96,_fn161,_fn161,_fn161,_fn97,_fn98,_fn99,_fn100,_fn101,_fn143,_fn148,_fn102,_fn103,_fn104,_fn105,_fn106,_fn107,_fn108,_fn109,_fn150,_fn151,_fn146,_fn143,_fn143,_fn137,_fn110,_fn111,_fn111,_fn143,_fn152,_fn112,_fn113,_fn114,_fn115,_fn116,_fn117,_fn161,_fn153,_fn143,_fn152,_fn161,_fn161,_fn161,_fn118,_fn143,_fn152,_fn161,_fn119,_fn119,_fn120,_fn120,_fn143,_fn143,_fn143,_fn152,_fn152,_fn152,_fn121,_fn122,_fn123,_fn124,_fn125,_fn163,_fn126,_fn127,_fn128,_fn129,_fn161,_fn154,_fn155,_fn154,_fn155,_fn154,_fn156,_fn138,_fn139,_fn143,_fn152,_fn143,_fn152,_fn143,_fn152,_fn143,_fn148,_fn143,_fn148,_fn130,_fn131,_fn143,_fn152,_fn143,_fn152,_fn143,_fn152,_fn143,_fn148,_fn143,_fn148,_fn143,_fn152,_fn132,_fn157,_fn158,_fn140,_fn158,_fn140,_fn159,_fn158,_fn140,_fn158,_fn140,_fn160,_fn148,_fn160,_fn160,_fn148,_fn148,_fn133,_fn134,_fn135,
+pub const FunctionMaps:[RF; 337]= [
+    _fn161,_fn0,_fn1,_fn161,_fn161,_fn161,_fn162,_fn161,_fn161,_fn161,_fn161,_fn161,_fn162,_fn161,_fn163,_fn2,_fn3,_fn4,_fn5,_fn6,_fn7,_fn8,_fn9,_fn136,_fn162,_fn161,_fn161,_fn161,_fn161,_fn162,_fn162,_fn162,_fn136,_fn161,_fn161,_fn10,_fn11,_fn12,_fn10,_fn10,_fn10,_fn10,_fn13,_fn13,_fn13,_fn13,_fn13,_fn137,_fn14,_fn138,_fn139,_fn161,_fn161,_fn15,_fn140,_fn162,_fn140,_fn140,_fn161,_fn161,_fn161,_fn16,_fn141,_fn142,_fn143,_fn142,_fn144,_fn145,_fn145,_fn143,_fn146,_fn17,_fn18,_fn19,_fn20,_fn21,_fn22,_fn23,_fn24,_fn25,_fn26,_fn27,_fn28,_fn29,_fn20,_fn23,_fn30,_fn31,_fn32,_fn33,_fn34,_fn33,_fn34,_fn161,_fn161,_fn35,_fn36,_fn37,_fn37,_fn38,_fn39,_fn40,_fn40,_fn161,_fn162,_fn162,_fn162,_fn162,_fn161,_fn161,_fn161,_fn161,_fn161,_fn161,_fn161,_fn161,_fn41,_fn42,_fn161,_fn43,_fn44,_fn45,_fn138,_fn139,_fn46,_fn47,_fn147,_fn48,_fn49,_fn50,_fn51,_fn52,_fn53,_fn54,_fn55,_fn56,_fn57,_fn58,_fn59,_fn60,_fn61,_fn62,_fn63,_fn64,_fn65,_fn66,_fn67,_fn68,_fn69,_fn70,_fn71,_fn72,_fn162,_fn162,_fn143,_fn148,_fn161,_fn161,_fn73,_fn161,_fn163,_fn161,_fn161,_fn162,_fn162,_fn161,_fn161,_fn161,_fn161,_fn161,_fn161,_fn161,_fn74,_fn162,_fn161,_fn137,_fn149,_fn149,_fn161,_fn161,_fn161,_fn161,_fn161,_fn75,_fn76,_fn77,_fn78,_fn138,_fn139,_fn138,_fn138,_fn139,_fn139,_fn79,_fn161,_fn161,_fn161,_fn161,_fn80,_fn81,_fn82,_fn83,_fn84,_fn85,_fn86,_fn87,_fn88,_fn89,_fn90,_fn91,_fn161,_fn92,_fn93,_fn94,_fn95,_fn96,_fn161,_fn161,_fn161,_fn97,_fn98,_fn99,_fn100,_fn101,_fn143,_fn148,_fn102,_fn103,_fn104,_fn105,_fn106,_fn107,_fn108,_fn109,_fn150,_fn151,_fn146,_fn143,_fn143,_fn137,_fn110,_fn111,_fn111,_fn143,_fn152,_fn112,_fn113,_fn114,_fn115,_fn116,_fn117,_fn161,_fn153,_fn143,_fn152,_fn161,_fn161,_fn161,_fn118,_fn143,_fn152,_fn161,_fn119,_fn119,_fn120,_fn120,_fn138,_fn139,_fn143,_fn143,_fn143,_fn152,_fn152,_fn152,_fn121,_fn122,_fn123,_fn124,_fn125,_fn163,_fn126,_fn127,_fn128,_fn129,_fn161,_fn154,_fn155,_fn154,_fn155,_fn154,_fn156,_fn138,_fn139,_fn143,_fn152,_fn143,_fn152,_fn143,_fn152,_fn143,_fn148,_fn143,_fn148,_fn130,_fn131,_fn143,_fn152,_fn143,_fn152,_fn143,_fn152,_fn143,_fn148,_fn143,_fn148,_fn143,_fn152,_fn132,_fn157,_fn158,_fn140,_fn158,_fn140,_fn159,_fn158,_fn140,_fn158,_fn140,_fn160,_fn148,_fn160,_fn160,_fn148,_fn148,_fn133,_fn134,_fn135,
 ];

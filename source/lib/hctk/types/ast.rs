@@ -1,6 +1,7 @@
 use super::token::Token;
 
-pub type ReduceFunction<T> = fn(args: &mut Vec<HCObj<T>>, tok: Token);
+pub type ReduceFunction<T> =
+    fn(args: &mut Vec<HCObj<T>>, tok: Token) -> HCObj<T>;
 
 #[derive(Debug, Clone)]
 
@@ -57,12 +58,10 @@ macro_rules! num_conversion {
         fn $fn_name(&self) -> $output_type
         {
             match self {
-                HCObj::TOKEN(tok) => match tok.String().parse::<$output_type>()
-                {
-                    Err(_) => $default_val,
-                    Ok(val) => val,
-                },
-
+                HCObj::TOKEN(tok) => tok
+                    .to_string()
+                    .parse::<$output_type>()
+                    .unwrap_or($default_val),
                 HCObj::STRING(str) => str.parse::<$output_type>().unwrap(),
                 HCObj::F64(val) => *val as $output_type,
                 HCObj::F32(val) => *val as $output_type,
@@ -120,7 +119,7 @@ impl<T: HCObjTrait> HCObjTrait for HCObj<T>
             HCObj::U16(val) => val.to_string(),
             HCObj::U8(val) => val.to_string(),
             HCObj::STRING(string) => string.to_owned(),
-            HCObj::TOKEN(val) => val.String(),
+            HCObj::TOKEN(val) => val.to_string(),
             _ => String::from(""),
         }
     }
@@ -136,7 +135,7 @@ impl<T: HCObjTrait> HCObjTrait for HCObj<T>
     fn to_bool(&self) -> bool
     {
         match self {
-            HCObj::TOKEN(tok) => match tok.String().parse::<f64>() {
+            HCObj::TOKEN(tok) => match tok.to_string().parse::<f64>() {
                 Err(_) => false,
                 Ok(val) => val != 0.0,
             },

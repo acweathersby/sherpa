@@ -128,15 +128,12 @@ pub enum BranchSelector
 
 /// values - The set of keys used to select a branch to jump to.
 /// branches - An vector of branch bytecode vectors.
-pub type GetBranchSelector = fn(
-    values: &Vec<u32>,
-    max_span: u32,
-    branches: &Vec<Vec<u32>>,
-) -> BranchSelector;
+pub type GetBranchSelector =
+    fn(values: &[u32], max_span: u32, branches: &[Vec<u32>]) -> BranchSelector;
 pub fn default_get_branch_selector(
-    values: &Vec<u32>,
+    values: &[u32],
     max_span: u32,
-    branches: &Vec<Vec<u32>>,
+    branches: &[Vec<u32>],
 ) -> BranchSelector
 {
     // Hash table limitations:
@@ -145,7 +142,7 @@ pub fn default_get_branch_selector(
     // Max instruction offset from table header 2042
 
     let total_instruction_length =
-        branches.iter().map(|b| b.len()).fold(0, |r, v| r + v);
+        branches.iter().map(|b| b.len()).sum::<usize>();
     let has_unsupported_value = values.iter().cloned().any(|v| v > 2046);
 
     if (max_span < 2)

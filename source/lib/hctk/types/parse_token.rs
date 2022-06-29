@@ -1,6 +1,6 @@
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 
-pub struct KernelToken
+pub struct ParseToken
 {
     pub byte_offset: u32,
     pub byte_length: u32,
@@ -11,11 +11,11 @@ pub struct KernelToken
     pub typ:         u32,
 }
 
-impl KernelToken
+impl ParseToken
 {
-    pub fn new() -> KernelToken
+    pub fn new() -> ParseToken
     {
-        KernelToken {
+        ParseToken {
             typ:         0,
             byte_offset: 0,
             byte_length: 0,
@@ -27,9 +27,9 @@ impl KernelToken
     }
 
     #[inline]
-    pub fn next(&self) -> KernelToken
+    pub fn next(&self) -> ParseToken
     {
-        return KernelToken {
+        ParseToken {
             typ:         0,
             byte_length: 0,
             cp_length:   0,
@@ -37,6 +37,14 @@ impl KernelToken
             byte_offset: self.byte_offset + self.byte_length,
             line_number: self.line_number,
             line_offset: self.line_offset,
-        };
+        }
+    }
+}
+
+impl Default for ParseToken
+{
+    fn default() -> Self
+    {
+        Self::new()
     }
 }

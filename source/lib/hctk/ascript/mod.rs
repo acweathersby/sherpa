@@ -1,16 +1,12 @@
-pub mod ast_writer;
-pub mod compile;
-pub mod output_rust;
+pub mod compile_ascript;
 
 #[cfg(test)]
 mod ascript_tests
 {
     use grammar::compile_test_grammar;
 
-    use crate::ascript::ast_writer::ASTWriter;
-    use crate::ascript::compile::compile_reduce_function_expressions;
-    use crate::ascript::compile::compile_struct_type;
-    use crate::ascript::output_rust::output_rust;
+    use crate::ascript::compile_ascript::compile_reduce_function_expressions;
+    use crate::ascript::compile_ascript::compile_struct_type;
     use crate::debug::grammar;
     use crate::grammar::data::ast::ASTNode;
     use crate::grammar::data::ast::AST_Property;
@@ -24,75 +20,12 @@ mod ascript_tests
     use crate::grammar::data::ast::AST_STRING;
     use crate::grammar::parse::compile_ascript_ast;
     use crate::grammar::parse::compile_grammar_ast;
-    use crate::primitives::*;
-
-    #[test]
-    fn test_output_rust_on_practical_grammar()
-    {
-        let grammar = compile_test_grammar(
-            "
-            <> A > \\vec num num^tom num f:ast { { t_Vec, x:f32($tom), y:f32($3), z:f32($4), first: { t_Num, val:u32($1) } } }
-            
-            <> num > \\temp g:num 
-            ",
-        );
-
-        let mut ascript = AScriptStore::new();
-
-        let errors =
-            compile_reduce_function_expressions(&grammar, &mut ascript);
-
-        for error in &errors {
-            println!("{}", error);
-        }
-
-        assert!(errors.is_empty());
-
-        assert_eq!(ascript.struct_table.len(), 2);
-
-        let mut writer = ASTWriter::<String>::new(String::new());
-
-        output_rust(&grammar, &ascript, &mut writer);
-
-        println!("{}", writer.into_string());
-    }
-
-    #[test]
-    fn test_output_rust_on_trivial_grammar()
-    {
-        let grammar = compile_test_grammar(
-            "
-            <> A >\\1 f:ast { { t_Banana, c_Mobius, value:u32($1), string:str($1), useful:true } } 
-            | \\a \\b A f:ast { { t_Banana, value: u32($1), dd:u32($3), tok, useful:false } }
-            ",
-        );
-
-        let mut ascript = AScriptStore::new();
-
-        let errors =
-            compile_reduce_function_expressions(&grammar, &mut ascript);
-
-        for error in &errors {
-            println!("{}", error);
-        }
-
-        assert!(errors.is_empty());
-
-        assert_eq!(ascript.struct_table.len(), 1);
-
-        let mut writer = ASTWriter::<String>::new(String::new());
-
-        output_rust(&grammar, &ascript, &mut writer);
-
-        println!("{}", writer.into_string());
-    }
+    use crate::types::*;
 
     #[test]
     fn test_parse_errors_when_struct_type_is_missing()
     {
-        let ast = compile_ascript_ast(
-            " { c_Test }".as_bytes().iter().cloned().collect::<Vec<_>>(),
-        );
+        let ast = compile_ascript_ast(" { c_Test }".as_bytes().to_vec());
 
         assert!(ast.is_ok());
 
@@ -114,9 +47,9 @@ mod ascript_tests
         }
     }
 
-    fn create_dummy_body() -> crate::primitives::Body
+    fn create_dummy_body() -> crate::types::Body
     {
-        crate::primitives::Body {
+        crate::types::Body {
             bytecode_id: 0,
             id: BodyId::new(&ProductionId(0), 0),
             length: 0,
@@ -131,11 +64,7 @@ mod ascript_tests
     fn test_parse_errors_when_struct_type_is_redefined()
     {
         let ast = compile_ascript_ast(
-            " { t_TestA, t_TestB, t_TestC }"
-                .as_bytes()
-                .iter()
-                .cloned()
-                .collect::<Vec<_>>(),
+            " { t_TestA, t_TestB, t_TestC }".as_bytes().to_vec(),
         );
 
         assert!(ast.is_ok());
@@ -161,22 +90,12 @@ mod ascript_tests
     #[test]
     fn test_parse_errors_when_struct_prop_type_is_redefined()
     {
-        let astA = compile_ascript_ast(
-            " { t_TestA, apple: u32 }"
-                .as_bytes()
-                .iter()
-                .cloned()
-                .collect::<Vec<_>>(),
-        );
+        let astA =
+            compile_ascript_ast(" { t_TestA, apple: u32 }".as_bytes().to_vec());
         assert!(astA.is_ok());
 
-        let astB = compile_ascript_ast(
-            " { t_TestA, apple: i64 }"
-                .as_bytes()
-                .iter()
-                .cloned()
-                .collect::<Vec<_>>(),
-        );
+        let astB =
+            compile_ascript_ast(" { t_TestA, apple: i64 }".as_bytes().to_vec());
 
         assert!(astB.is_ok());
 
@@ -240,9 +159,7 @@ mod ascript_tests
         let grammar =
             "<> A > \\1 f:ast { { t_Test, val: str($1) } } ".to_string();
 
-        let grammar_ast = compile_grammar_ast(
-            grammar.as_bytes().iter().cloned().collect::<Vec<_>>(),
-        );
+        let grammar_ast = compile_grammar_ast(grammar.as_bytes().to_vec());
 
         match grammar_ast {
             Ok(grammar_ast) => {

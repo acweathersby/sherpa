@@ -1,6 +1,6 @@
 use crate::grammar::data::ast::ASTNode;
 
-use crate::primitives::BodyId;
+use crate::types::BodyId;
 
 use std::collections::HashMap;
 
@@ -10,11 +10,11 @@ use std::collections::BTreeSet;
 
 use crate::grammar::get_production_plain_name;
 
-use crate::primitives::GrammarStore;
+use crate::types::GrammarStore;
 
 use std::mem::discriminant;
 
-use crate::primitives::ProductionId;
+use crate::types::ProductionId;
 
 use crate::grammar::hash_id_value_u64;
 
@@ -231,5 +231,13 @@ impl AScriptStore
             production_types: BTreeMap::new(),
             body_reduce_expressions: BTreeMap::new(),
         }
+    }
+}
+
+impl Default for AScriptStore
+{
+    fn default() -> Self
+    {
+        Self::new()
     }
 }

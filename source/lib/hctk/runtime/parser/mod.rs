@@ -1,41 +1,9 @@
 mod parse_functions;
-mod reader;
-mod utf8_string_reader;
 
-use crate::primitives::KernelState;
+use crate::types::ParseAction;
+use crate::types::ParseState;
+use crate::types::SymbolReader;
 pub use parse_functions::get_next_action;
-pub use parse_functions::Action;
-pub use reader::SymbolReader;
-pub use utf8_string_reader::UTF8StringReader;
-
-trait IteratorParser<'a, T: SymbolReader>
-{
-    fn get_parts(
-        &mut self,
-    ) -> (&'a mut T, &'a mut KernelState, &'a [u32], &'a mut bool);
-}
-impl<'a, T: 'a + SymbolReader> Iterator for dyn IteratorParser<'a, T>
-{
-    type Item = Action;
-
-    fn next(&mut self) -> Option<Self::Item>
-    {
-        let (reader, state, bytecode, active) = self.get_parts();
-
-        if *active {
-            let action = get_next_action(reader, state, bytecode);
-            match action {
-                Action::Error { .. } | Action::Accept { .. } => {
-                    *active = false;
-                    Some(action)
-                }
-                action => Some(action),
-            }
-        } else {
-            None
-        }
-    }
-}
 
 #[cfg(test)]
 mod test_parser
@@ -43,8 +11,8 @@ mod test_parser
     use std::collections::HashMap;
 
     use crate::bytecode;
-    use crate::bytecode::compiler::build_byte_code_buffer;
-    use crate::bytecode::compiler::compile_ir_state_to_bytecode;
+    use crate::bytecode::compile_bytecode::build_byte_code_buffer;
+    use crate::bytecode::compile_bytecode::compile_ir_state_to_bytecode;
     use crate::bytecode::constants::BranchSelector;
     use crate::bytecode::constants::FIRST_STATE_OFFSET;
     use crate::bytecode::constants::NORMAL_STATE_MASK;
@@ -54,16 +22,11 @@ mod test_parser
     use crate::grammar::data::ast::ASTNode;
     use crate::grammar::get_production_id_by_name;
     use crate::grammar::parse::compile_ir_ast;
-    use crate::intermediate::state_construct::generate_production_states;
-    use crate::primitives::KernelState;
-    use crate::primitives::KernelToken;
-    use crate::primitives::Token;
+    use crate::intermediate::state_construction::generate_production_states;
     use crate::runtime::parser::parse_functions::dispatch;
     use crate::runtime::parser::parse_functions::hash_jump;
     use crate::runtime::parser::parse_functions::vector_jump;
-    use crate::runtime::parser::parse_functions::Action;
-    use crate::runtime::parser::reader::SymbolReader;
-    use crate::runtime::parser::utf8_string_reader::UTF8StringReader;
+    use crate::types::*;
 
     use super::parse_functions::get_next_action;
 
@@ -99,7 +62,7 @@ state [Z]
         state.init_normal_state(NORMAL_STATE_MASK | FIRST_STATE_OFFSET);
 
         match get_next_action(&mut reader, &mut state, &bytecode) {
-            Action::Fork {
+            ParseAction::Fork {
                 states_start_offset,
                 num_of_states,
                 target_production,
@@ -133,7 +96,7 @@ state [test_end]
         state.init_normal_state(NORMAL_STATE_MASK | FIRST_STATE_OFFSET);
 
         match get_next_action(&mut reader, &mut state, &bytecode) {
-            Action::Accept { production_id } => {
+            ParseAction::Accept { production_id } => {
                 assert_eq!(production_id, 444);
             }
             _ => panic!("Could not complete parse"),
@@ -174,7 +137,7 @@ state [test]
         state.set_production(3);
 
         match dispatch(&mut reader, &mut state, &bytecode) {
-            Action::Reduce {
+            ParseAction::Reduce {
                 body_id,
                 production_id,
                 symbol_count,
@@ -200,7 +163,7 @@ state [test]
 
         reader.next(10);
 
-        state.set_assert_token(KernelToken {
+        state.set_assert_token(ParseToken {
             byte_length: 5,
             byte_offset: 10,
             cp_length:   5,
@@ -211,15 +174,18 @@ state [test]
         });
 
         match dispatch(&mut reader, &mut state, &bytecode) {
-            Action::Shift((skip, shift)) => {
-                assert_eq!(skip.cp_length, 20);
-                assert_eq!(skip.byte_length, 10);
+            ParseAction::Shift {
+                skipped_characters,
+                token,
+            } => {
+                assert_eq!(skipped_characters.cp_length, 20);
+                assert_eq!(skipped_characters.byte_length, 10);
 
-                assert_eq!(shift.cp_offset, 20);
-                assert_eq!(shift.byte_offset, 10);
+                assert_eq!(token.cp_offset, 20);
+                assert_eq!(token.byte_offset, 10);
 
-                assert_eq!(shift.byte_length, 0);
-                assert_eq!(shift.cp_length, 0);
+                assert_eq!(token.byte_length, 0);
+                assert_eq!(token.cp_length, 0);
 
                 // assert_eq!(reader.cursor(), 15);
                 assert_eq!(state.get_anchor_token(), state.get_assert_token());
@@ -240,7 +206,7 @@ state [test]
             "123456781234567812345678",
         );
 
-        state.set_assert_token(KernelToken {
+        state.set_assert_token(ParseToken {
             byte_length: 5,
             byte_offset: 10,
             cp_length:   5,
@@ -251,15 +217,18 @@ state [test]
         });
 
         match dispatch(&mut reader, &mut state, &bytecode) {
-            Action::Shift((skip, shift)) => {
-                assert_eq!(skip.cp_length, 20);
-                assert_eq!(skip.byte_length, 10);
+            ParseAction::Shift {
+                skipped_characters,
+                token,
+            } => {
+                assert_eq!(skipped_characters.cp_length, 20);
+                assert_eq!(skipped_characters.byte_length, 10);
 
-                assert_eq!(shift.cp_offset, 20);
-                assert_eq!(shift.byte_offset, 10);
+                assert_eq!(token.cp_offset, 20);
+                assert_eq!(token.byte_offset, 10);
 
-                assert_eq!(shift.byte_length, 5);
-                assert_eq!(shift.cp_length, 5);
+                assert_eq!(token.byte_length, 5);
+                assert_eq!(token.cp_length, 5);
 
                 // assert_eq!(reader.cursor(), 15);
                 assert_eq!(state.get_anchor_token(), state.get_assert_token());
@@ -327,8 +296,8 @@ assert PRODUCTION [3] (pass)"
             |_, _, _| BranchSelector::Vector,
             &HashMap::new(),
         );
-        let mut reader = UTF8StringReader::from_str("test");
-        let mut state = KernelState::new();
+        let mut reader = UTF8StringReader::from_string("test");
+        let mut state = ParseState::new();
 
         println!("{}", disassemble_state(&bytecode, 0, None).0);
 
@@ -365,8 +334,8 @@ state [test] scanner [none]
         );
 
         let index: u32 = 0;
-        let mut reader = UTF8StringReader::from_str("AB");
-        let mut state = KernelState::new();
+        let mut reader = UTF8StringReader::from_string("AB");
+        let mut state = ParseState::new();
 
         println!("{}", disassemble_state(&bytecode, 0, None).0);
 
@@ -380,7 +349,7 @@ state [test] scanner [none]
     fn setup_states(
         state_ir: Vec<&str>,
         reader_input: &str,
-    ) -> (Vec<u32>, UTF8StringReader, KernelState)
+    ) -> (Vec<u32>, UTF8StringReader, ParseState)
     {
         let is_asts = state_ir
             .into_iter()
@@ -401,15 +370,15 @@ state [test] scanner [none]
 
         print_states(&bytecode, None);
 
-        let mut reader = UTF8StringReader::from_str(reader_input);
-        let mut state = KernelState::new();
+        let mut reader = UTF8StringReader::from_string(reader_input);
+        let mut state = ParseState::new();
 
         (bytecode, reader, state)
     }
     fn setup_state(
         state_ir: &str,
         reader_input: &str,
-    ) -> (Vec<u32>, UTF8StringReader, KernelState)
+    ) -> (Vec<u32>, UTF8StringReader, ParseState)
     {
         let ir_ast = compile_ir_ast(Vec::from(state_ir.to_string()));
 
@@ -425,8 +394,8 @@ state [test] scanner [none]
 
         print_states(&bytecode, None);
 
-        let mut reader = UTF8StringReader::from_str(reader_input);
-        let mut state = KernelState::new();
+        let mut reader = UTF8StringReader::from_string(reader_input);
+        let mut state = ParseState::new();
 
         (bytecode, reader, state)
     }

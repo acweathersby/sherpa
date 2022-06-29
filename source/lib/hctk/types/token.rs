@@ -2,7 +2,7 @@ use std::fmt;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use super::kernel_token::KernelToken;
+use super::parse_token::ParseToken;
 
 #[derive(Clone)]
 
@@ -30,6 +30,18 @@ pub struct Token
     input:       Option<Arc<Vec<u8>>>,
 }
 
+impl fmt::Display for Token
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
+    {
+        if self.input.is_some() {
+            f.write_str(&self.slice(0, self.length as i32))
+        } else {
+            f.write_str("")
+        }
+    }
+}
+
 impl fmt::Debug for Token
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
@@ -41,8 +53,8 @@ impl fmt::Debug for Token
             .field("line_number", &self.line_number)
             .field("line_offset", &self.line_offset);
 
-        if let Some(_) = self.input {
-            bug.field("value", &self.String());
+        if self.input.is_some() {
+            bug.field("value", &self.to_string());
         }
 
         bug.finish()
@@ -63,7 +75,7 @@ impl Token
         }
     }
 
-    pub fn from_kernel_token(tok: &KernelToken) -> Token
+    pub fn from_kernel_token(tok: &ParseToken) -> Token
     {
         Token {
             length:      tok.cp_length,
@@ -77,14 +89,14 @@ impl Token
 
     pub fn from_range(start: &Token, end: &Token) -> Token
     {
-        return Token {
+        Token {
             length:      end.offset - start.offset + end.length,
             offset:      start.offset,
             line_number: start.line_number,
             input:       start.input.clone(),
             line_offset: start.line_offset,
             range:       None,
-        };
+        }
     }
 
     pub fn empty() -> Token
@@ -123,10 +135,8 @@ impl Token
         if self.line_number < 1 {
             if let Some(source) = self.input.clone() {
                 let mut root = self.offset as usize;
-
-                let mut i = 0 as usize;
-
-                let mut lines = 0 as usize;
+                let mut i = 0;
+                let mut lines = 0;
 
                 while i < root {
                     if source[i] == 10 {
@@ -136,7 +146,7 @@ impl Token
                     i += 1
                 }
 
-                self.line_number = lines as u32;
+                self.line_number = lines;
 
                 self.get_line()
             } else {
@@ -205,7 +215,7 @@ impl Token
         inline_comment: &str,
     ) -> Option<String>
     {
-        fn increment_end(source: &Vec<u8>, mut end: usize) -> usize
+        fn increment_end(source: &[u8], mut end: usize) -> usize
         {
             while (end as usize) < source.len() && source[end as usize] != 10 {
                 end += 1;
@@ -214,7 +224,7 @@ impl Token
             end
         }
 
-        fn decrement_beg(source: &Vec<u8>, mut beg: usize) -> usize
+        fn decrement_beg(source: &[u8], mut beg: usize) -> usize
         {
             while beg > 0 && source[beg] != 10 {
                 beg -= 1;
@@ -329,6 +339,11 @@ impl Token
         self.length as usize
     }
 
+    pub fn is_empty(&self) -> bool
+    {
+        self.length == 0
+    }
+
     pub fn to_length(&self, length: usize) -> Self
     {
         Self {
@@ -391,66 +406,63 @@ impl Token
         }
     }
 
-    fn slice<'a>(&self, start: i32, end: i32) -> String
+    fn slice(&self, start: i32, end: i32) -> String
     {
         if let Some(input) = &self.input {
             let (adjusted_start, adjusted_end) =
                 self.get_slice_range(start, end);
 
-            return unsafe {
+            unsafe {
                 String::from_utf8_unchecked(Vec::from(
                     &input[adjusted_start..adjusted_end],
                 ))
-            };
+            }
+        } else {
+            String::default()
         }
-
-        return String::from("");
-    }
-
-    pub fn String<'a>(&self) -> String
-    {
-        if let Some(_) = self.input {
-            let result = self.slice(0 as i32, (self.length) as i32);
-
-            return result;
-        }
-
-        String::from("")
     }
 
     pub fn to_f64(&self) -> f64
     {
-        if let Ok(result) = self.String().parse::<f64>() {
-            return result;
+        if let Ok(result) = self.to_string().parse::<f64>() {
+            result
+        } else {
+            0.0
         }
-
-        return 0f64;
     }
 
     pub fn to_f32(&self) -> f32
     {
-        if let Ok(result) = self.String().parse::<f32>() {
-            return result;
+        if let Ok(result) = self.to_string().parse::<f32>() {
+            result
+        } else {
+            0.0
         }
-
-        return 0f32;
     }
 
     pub fn to_i32(&self) -> i32
     {
-        if let Ok(result) = self.String().parse::<i32>() {
-            return result;
+        if let Ok(result) = self.to_string().parse::<i32>() {
+            result
+        } else {
+            0
         }
-
-        return 0i32;
     }
 
     pub fn to_i64(&self) -> i64
     {
-        if let Ok(result) = self.String().parse::<i64>() {
-            return result;
+        if let Ok(result) = self.to_string().parse::<i64>() {
+            result
+        } else {
+            0
         }
+    }
+}
 
-        return 0i64;
+impl Default for Token
+{
+    fn default() -> Self
+    {
+        Self::new()
     }
 }

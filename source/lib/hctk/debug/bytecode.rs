@@ -12,10 +12,10 @@ use crate::bytecode::constants::INSTRUCTION_CONTENT_MASK;
 use crate::bytecode::constants::INSTRUCTION_HEADER_MASK;
 use crate::bytecode::constants::TOKEN_ASSIGN_FLAG;
 use crate::grammar;
-use crate::primitives::Body;
-use crate::primitives::GrammarStore;
-use crate::primitives::Production;
-use crate::primitives::Symbol;
+use crate::types::Body;
+use crate::types::GrammarStore;
+use crate::types::Production;
+use crate::types::Symbol;
 
 pub fn header(state_offset: usize) -> String
 {
@@ -256,16 +256,18 @@ pub fn disassemble_state(
     }
 }
 
+type GetOffsetTokenIdPair = fn(
+    states: &[u32],
+    table_entry_offset: usize,
+    state_offset: usize,
+) -> (usize, u32, bool);
+
 fn generate_table_string(
     states: &[u32],
     state_offset: usize,
     lu: Option<&BytecodeGrammarLookups>,
     table_name: &str,
-    get_offset_token_id_pair: fn(
-        states: &[u32],
-        table_entry_offset: usize,
-        state_offset: usize,
-    ) -> (usize, u32, bool),
+    get_offset_token_id_pair: GetOffsetTokenIdPair,
 ) -> (String, usize)
 {
     let instruction = states[state_offset];
@@ -426,7 +428,7 @@ pub fn print_states(bytecode: &[u32], lu: Option<&BytecodeGrammarLookups>)
 {
     let mut offset: usize = 0;
     while offset < bytecode.len() {
-        let (string, next) = disassemble_state(&bytecode, offset, lu);
+        let (string, next) = disassemble_state(bytecode, offset, lu);
         offset = next;
         print!("{}", string);
     }
@@ -439,7 +441,7 @@ pub fn print_state(
     lu: Option<&BytecodeGrammarLookups>,
 )
 {
-    let string = disassemble_state(&bytecode, state_offset, lu).0;
+    let string = disassemble_state(bytecode, state_offset, lu).0;
     println!("{}", string);
 }
 
@@ -447,8 +449,8 @@ mod bytecode_debugging_tests
 {
     use std::collections::HashMap;
 
-    use crate::bytecode::compiler::build_byte_code_buffer;
-    use crate::bytecode::compiler::compile_ir_state_to_bytecode;
+    use crate::bytecode::compile_bytecode::build_byte_code_buffer;
+    use crate::bytecode::compile_bytecode::compile_ir_state_to_bytecode;
     use crate::bytecode::constants::default_get_branch_selector;
     use crate::bytecode::constants::BranchSelector;
     use crate::debug::bytecode::BytecodeGrammarLookups;
@@ -456,7 +458,7 @@ mod bytecode_debugging_tests
     use crate::debug::disassemble_state;
     use crate::grammar::get_production_id_by_name;
     use crate::grammar::parse::compile_ir_ast;
-    use crate::intermediate::state_construct::generate_production_states;
+    use crate::intermediate::state_construction::generate_production_states;
 
     use super::print_states;
 

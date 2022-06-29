@@ -6,22 +6,22 @@ use std::collections::VecDeque;
 use std::fmt::format;
 use std::thread;
 
-use super::transition_graph_construct::construct_goto;
-use super::transition_graph_construct::construct_recursive_descent;
-use crate::grammar::compiler::get_scanner_info_from_defined;
+use super::transition_graph_construction::construct_goto;
+use super::transition_graph_construction::construct_recursive_descent;
 use crate::grammar::get_production;
 use crate::grammar::get_production_plain_name;
 use crate::grammar::get_production_start_items;
+use crate::grammar::get_scanner_info_from_defined;
 use crate::grammar::hash_id_value_u64;
-use crate::primitives::GrammarStore;
-use crate::primitives::IRState;
-use crate::primitives::Item;
-use crate::primitives::ProductionId;
-use crate::primitives::SymbolID;
-use crate::primitives::TransitionGraphNode;
-use crate::primitives::TransitionMode;
-use crate::primitives::TransitionPack;
-use crate::primitives::TransitionStateType;
+use crate::types::GrammarStore;
+use crate::types::IRState;
+use crate::types::Item;
+use crate::types::ProductionId;
+use crate::types::SymbolID;
+use crate::types::TransitionGraphNode;
+use crate::types::TransitionMode;
+use crate::types::TransitionPack;
+use crate::types::TransitionStateType;
 
 type IROutput = Vec<IRState>;
 /// Compiles all production in the `grammar` into unique IRStates
@@ -66,24 +66,16 @@ pub fn compile_states(
                                                 grammar,
                                             )
                                         {
-                                            if !deduped_states
-                                                .contains_key(&state.get_name())
-                                            {
-                                                deduped_states.insert(
-                                                    state.get_name(),
-                                                    state,
-                                                );
-                                            }
+                                            deduped_states
+                                                .entry(state.get_name())
+                                                .or_insert(state);
                                         }
                                     }
                                 }
 
-                                if !deduped_states
-                                    .contains_key(&state.get_name())
-                                {
-                                    deduped_states
-                                        .insert(state.get_name(), state);
-                                }
+                                deduped_states
+                                    .entry(state.get_name())
+                                    .or_insert(state);
                             }
                         }
 
@@ -96,9 +88,7 @@ pub fn compile_states(
                 .collect::<Vec<_>>()
         })
     } {
-        if !deduped_states.contains_key(&state.get_name()) {
-            deduped_states.insert(state.get_name(), state);
-        }
+        deduped_states.entry(state.get_name()).or_insert(state);
     }
 
     let mut output_states = deduped_states.iter_mut().collect::<Vec<_>>();
@@ -111,9 +101,8 @@ pub fn compile_states(
             .map(|chunk| {
                 s.spawn(|| {
                     for (_, state) in chunk {
-                        match state.compile_ast() {
-                            Err(err) => panic!("\n{}", err),
-                            _ => {}
+                        if let Err(err) = state.compile_ast() {
+                            panic!("\n{}", err)
                         };
                     }
                 })
@@ -135,7 +124,6 @@ pub fn generate_scanner_intro_state(
     let symbol_items = symbols
         .iter()
         .flat_map(|s| {
-            println!("{}", s.to_string(grammar));
             let (_, production_id, ..) =
                 get_scanner_info_from_defined(s, grammar);
             get_production_start_items(&production_id, grammar)
@@ -156,7 +144,7 @@ pub fn generate_production_states(
         grammar,
         get_production(production_id, grammar).is_scanner,
         &get_production_start_items(production_id, grammar),
-        &format!("{}", get_production_plain_name(production_id, grammar)),
+        &get_production_plain_name(production_id, grammar).to_string(),
         get_production(production_id, grammar).bytecode_id,
     )
 }
@@ -164,7 +152,7 @@ pub fn generate_production_states(
 fn generate_states(
     grammar: &GrammarStore,
     is_scanner: bool,
-    start_items: &Vec<Item>,
+    start_items: &[Item],
     entry_state_name: &String,
     production_id: u32,
 ) -> IROutput
@@ -172,37 +160,35 @@ fn generate_states(
     let mut output: IROutput = Vec::new();
 
     let recursive_descent_data =
-        construct_recursive_descent(grammar, is_scanner, &start_items);
+        construct_recursive_descent(grammar, is_scanner, start_items);
 
     output.append(&mut process_transition_nodes(
         &recursive_descent_data,
         grammar,
-        &entry_state_name,
+        entry_state_name,
         production_id,
     ));
 
-    // if recursive_descent_data.goto_items.len() > 0 {
     let goto_data = construct_goto(
         grammar,
         is_scanner,
-        &start_items,
+        start_items,
         &recursive_descent_data
             .goto_items
             .into_iter()
             .collect::<Vec<_>>(),
     );
 
-    if goto_data.leaf_nodes.len() > 0 {
+    if !goto_data.leaf_nodes.is_empty() {
         output.append(&mut process_transition_nodes(
             &goto_data,
             grammar,
-            &entry_state_name,
+            entry_state_name,
             production_id,
         ));
     } else {
-        output.push(create_passing_goto_state(&entry_state_name));
+        output.push(create_passing_goto_state(entry_state_name));
     }
-    // }
 
     output
 }
@@ -220,11 +206,7 @@ fn process_transition_nodes<'a>(
     let mut output = BTreeMap::<usize, IRState>::new();
 
     // Construct utility information
-    let mut node_hashes = Vec::<u64>::with_capacity(number_of_nodes);
-
-    for _ in 0..number_of_nodes {
-        node_hashes.push(0);
-    }
+    let mut node_hashes = vec![0u64; number_of_nodes];
 
     let mut children_tables = tpack
         .nodes_iter()
@@ -346,7 +328,7 @@ fn create_goto_start_state(
         match &symbol {
             SymbolID::Production(production_id, _) => {
                 contains_root_production = root_productions
-                    .contains(&production_id)
+                    .contains(production_id)
                     || contains_root_production;
 
                 let production_bytecode_id = grammar
@@ -450,7 +432,7 @@ fn create_intermediate_state(
                 grammar,
                 is_scanner,
                 hashes,
-                &vec![*child],
+                &[*child],
                 mode,
                 entry_state_name,
                 production_id,
@@ -603,13 +585,12 @@ fn create_intermediate_state(
                 }
             }
 
-            match grammar.item_peek_symbols.get(&item.to_zero_state()) {
-                Some(peek_symbols) => {
-                    for peek_symbol in peek_symbols {
-                        peek_symbols_set.insert(peek_symbol.clone());
-                    }
+            if let Some(peek_symbols) =
+                grammar.item_peek_symbols.get(&item.to_zero_state())
+            {
+                for peek_symbol in peek_symbols {
+                    peek_symbols_set.insert(*peek_symbol);
                 }
-                _ => {}
             }
         }
 
@@ -662,9 +643,9 @@ fn get_symbol_consume_type(
         | SymbolID::GenericSymbol => (symbol_id.bytecode_id(grammar), "CLASS"),
         SymbolID::DefinedNumeric(id)
         | SymbolID::DefinedIdentifier(id)
-        | SymbolID::DefinedGeneric(id) => {
-            let symbol = grammar.symbols_table.get(&symbol_id).unwrap();
-            let id = grammar.symbols_string_table.get(&symbol_id).unwrap();
+        | SymbolID::DefinedSymbol(id) => {
+            let symbol = grammar.symbols_table.get(symbol_id).unwrap();
+            let id = grammar.symbols_string_table.get(symbol_id).unwrap();
             let sym_char = id.as_bytes()[0];
             if symbol.byte_length > 1 || sym_char > 128 {
                 (symbol.bytecode_id, "CODEPOINT")

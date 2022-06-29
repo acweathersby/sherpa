@@ -146,7 +146,7 @@ impl TransitionGraphNode
 
     pub fn temp(sym: SymbolID, parent_index: usize, items: Vec<Item>) -> Self
     {
-        let mut node = TransitionGraphNode {
+        TransitionGraphNode {
             sym,
             transition_type: TransitionStateType::UNDEFINED,
             proxy_parents: vec![],
@@ -155,9 +155,7 @@ impl TransitionGraphNode
             parent: TransitionGraphNode::OrphanIndex,
             goal: TransitionGraphNode::OrphanIndex,
             id: TransitionGraphNode::OrphanIndex,
-        };
-
-        node
+        }
     }
 
     #[inline(always)]
@@ -250,7 +248,7 @@ impl<'a> TransitionPack<'a>
         grammar: &GrammarStore,
         mode: TransitionMode,
         is_scanner: bool,
-        start_items: &Vec<Item>,
+        start_items: &[Item],
     ) -> Self
     {
         TransitionPack {
@@ -294,7 +292,7 @@ impl<'a> TransitionPack<'a>
     /// Removes the edge between this node and its parent, rendering
     /// it orphaned and available for destruction / reuse
 
-    pub fn drop_node<'b>(&'b mut self, node_index: &usize) -> usize
+    pub fn drop_node(&mut self, node_index: &usize) -> usize
     {
         let node_id;
 
@@ -321,8 +319,7 @@ impl<'a> TransitionPack<'a>
 
     #[inline(always)]
 
-    pub fn get_node<'b>(&'b self, node_index: usize)
-        -> &'b TransitionGraphNode
+    pub fn get_node(&self, node_index: usize) -> &TransitionGraphNode
     {
         if self.nodes[node_index].id == TransitionGraphNode::OrphanIndex {
             panic!("Invalid access of a deleted node at index {}", node_index)
@@ -333,10 +330,10 @@ impl<'a> TransitionPack<'a>
 
     #[inline(always)]
 
-    pub fn get_node_mut<'b>(
-        &'b mut self,
+    pub fn get_node_mut(
+        &mut self,
         node_index: usize,
-    ) -> &'b mut TransitionGraphNode
+    ) -> &mut TransitionGraphNode
     {
         if self.nodes[node_index].id == TransitionGraphNode::OrphanIndex {
             panic!("Invalid access of a deleted node at index {}", node_index)
@@ -373,9 +370,7 @@ impl<'a> TransitionPack<'a>
         self.peek_ids.clear();
     }
 
-    pub fn nodes_iter<'b>(
-        &'b self,
-    ) -> core::slice::Iter<'b, TransitionGraphNode>
+    pub fn nodes_iter(&self) -> core::slice::Iter<TransitionGraphNode>
     {
         self.nodes.iter()
     }

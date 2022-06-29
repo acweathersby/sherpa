@@ -4,10 +4,10 @@
 use std::collections::HashSet;
 use std::collections::VecDeque;
 
-use crate::primitives::GrammarStore;
-use crate::primitives::Item;
-use crate::primitives::ProductionId;
-use crate::primitives::SymbolID;
+use crate::types::GrammarStore;
+use crate::types::Item;
+use crate::types::ProductionId;
+use crate::types::SymbolID;
 
 /// Retrieve the initial items of a production. Returns vector of
 /// items, one for each body belonging to the production.
@@ -75,7 +75,7 @@ pub fn get_closure_cached_mut<'a>(
     let item = &item.to_zero_state();
 
     if !grammar.closures.contains_key(item) {
-        let closure = get_closure(&vec![*item], grammar);
+        let closure = get_closure(&[*item], grammar);
 
         grammar.closures.insert(*item, closure);
     }

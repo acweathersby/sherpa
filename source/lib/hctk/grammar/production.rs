@@ -4,11 +4,11 @@
 use std::collections::HashSet;
 use std::collections::VecDeque;
 
-use crate::primitives::GrammarStore;
-use crate::primitives::Item;
-use crate::primitives::Production;
-use crate::primitives::ProductionId;
-use crate::primitives::SymbolID;
+use crate::types::GrammarStore;
+use crate::types::Item;
+use crate::types::Production;
+use crate::types::ProductionId;
+use crate::types::SymbolID;
 
 use super::get_closure;
 use super::get_closure_cached;
@@ -35,25 +35,21 @@ pub fn is_production_recursive(
     ));
 
     while let Some(item) = pipeline.pop_front() {
-        if seen.insert(item) {
-            if !item.is_end() {
-                if let SymbolID::Production(prod_id, _) =
-                    item.get_symbol(grammar)
-                {
-                    if prod_id == production {
-                        return (true, item.get_offset() == 0);
-                    }
+        if seen.insert(item) && !item.is_end() {
+            if let SymbolID::Production(prod_id, _) = item.get_symbol(grammar) {
+                if prod_id == production {
+                    return (true, item.get_offset() == 0);
                 }
+            }
 
-                let new_item = item.increment().unwrap();
+            let new_item = item.increment().unwrap();
 
-                if let SymbolID::Production(..) = new_item.get_symbol(grammar) {
-                    for item in get_closure_cached(&new_item, grammar) {
-                        pipeline.push_back(*item);
-                    }
-                } else {
-                    pipeline.push_back(new_item);
+            if let SymbolID::Production(..) = new_item.get_symbol(grammar) {
+                for item in get_closure_cached(&new_item, grammar) {
+                    pipeline.push_back(*item);
                 }
+            } else {
+                pipeline.push_back(new_item);
             }
         }
     }
@@ -62,11 +58,10 @@ pub fn is_production_recursive(
 }
 
 /// Used to separate a grammar's uuid name from a production's name
-
 const UUID_NAME_DELIMITER: &str = "#:";
 
-/// Returns a production  from a production_id or panics
-
+/// Returns the [Production] that's mapped to [`production_id`](ProductionId)
+/// within the [`grammar`](GrammarStore), or panics.
 pub fn get_production<'a>(
     production_id: &ProductionId,
     grammar: &'a GrammarStore,
@@ -100,8 +95,7 @@ pub fn create_production_uuid_name(
     grammar_uuid_name.to_owned() + UUID_NAME_DELIMITER + production_name
 }
 
-/// Retrieve the non-import and un-mangled name of a production
-
+/// Retrieve the non-import and unmangled name of a [Production](Production).
 pub fn get_production_plain_name<'a>(
     production_id: &ProductionId,
     grammar: &'a GrammarStore,
@@ -207,9 +201,9 @@ mod production_utilities_tests
 <> B > C
 <> C > D
 <> D > E
-<> E > B A R | t:e
-<> R > R A | R B O | t:r
-<> O > t:o
+<> E > B A R | \\e
+<> R > R A | R B O | \\r
+<> O > \\o
 ",
         );
 

@@ -1,4 +1,4 @@
-use super::token::Token;
+use crate::types::Token;
 
 pub type ReduceFunction<T> = fn(args: &mut Vec<HCObj<T>>, tok: Token);
 
@@ -30,7 +30,7 @@ pub enum HCObj<T: 'static>
 
 pub trait HCObjTrait
 {
-    fn String(&self) -> String;
+    fn to_string(&self) -> String;
 
     fn to_f64(&self) -> f64
     {
@@ -75,10 +75,10 @@ pub trait HCObjTrait
 
 impl<T: HCObjTrait> HCObjTrait for HCObj<T>
 {
-    fn String(&self) -> String
+    fn to_string(&self) -> String
     {
         match self {
-            HCObj::NODE(node) => node.String(),
+            HCObj::NODE(node) => node.to_string(),
             &HCObj::BOOL(val) => {
                 if val {
                     String::from("true")
@@ -87,7 +87,7 @@ impl<T: HCObjTrait> HCObjTrait for HCObj<T>
                 }
             }
             HCObj::STRING(string) => string.to_owned(),
-            HCObj::TOKEN(val) => val.String(),
+            HCObj::TOKEN(val) => val.to_string(),
             _ => String::from(""),
         }
     }
@@ -103,7 +103,7 @@ impl<T: HCObjTrait> HCObjTrait for HCObj<T>
     fn to_bool(&self) -> bool
     {
         match self {
-            HCObj::TOKEN(tok) => match tok.String().parse::<f64>() {
+            HCObj::TOKEN(tok) => match tok.to_string().parse::<f64>() {
                 Err(_) => false,
                 Ok(val) => val != 0.0,
             },
@@ -122,7 +122,7 @@ impl<T: HCObjTrait> HCObjTrait for HCObj<T>
     fn to_f64(&self) -> f64
     {
         match self {
-            HCObj::TOKEN(tok) => match tok.String().parse::<f64>() {
+            HCObj::TOKEN(tok) => match tok.to_string().parse::<f64>() {
                 Err(_) => f64::NAN,
                 Ok(val) => val,
             },
@@ -143,7 +143,7 @@ impl<T: HCObjTrait> HCObjTrait for HCObj<T>
     {
         match self {
             HCObj::STRING(str) => str.parse::<f32>().unwrap(),
-            HCObj::TOKEN(tok) => match tok.String().parse::<f32>() {
+            HCObj::TOKEN(tok) => match tok.to_string().parse::<f32>() {
                 Err(_) => f32::NAN,
                 Ok(val) => val,
             },
@@ -163,10 +163,7 @@ impl<T: HCObjTrait> HCObjTrait for HCObj<T>
     {
         match self {
             HCObj::STRING(str) => str.parse::<i64>().unwrap(),
-            HCObj::TOKEN(tok) => match tok.String().parse::<i64>() {
-                Err(_) => 0,
-                Ok(val) => val,
-            },
+            HCObj::TOKEN(tok) => tok.to_string().parse::<i64>().unwrap_or(0),
             HCObj::F64(val) => *val as i64,
             HCObj::F32(val) => *val as i64,
             HCObj::I64(val) => *val,
@@ -183,10 +180,7 @@ impl<T: HCObjTrait> HCObjTrait for HCObj<T>
     {
         match self {
             HCObj::STRING(str) => str.parse::<i32>().unwrap(),
-            HCObj::TOKEN(tok) => match tok.String().parse::<i32>() {
-                Err(_) => 0,
-                Ok(val) => val,
-            },
+            HCObj::TOKEN(tok) => tok.to_string().parse::<i32>().unwrap_or(0),
             HCObj::F64(val) => *val as i32,
             HCObj::F32(val) => *val as i32,
             HCObj::I64(val) => *val as i32,
@@ -203,10 +197,7 @@ impl<T: HCObjTrait> HCObjTrait for HCObj<T>
     {
         match self {
             HCObj::STRING(str) => str.parse::<i16>().unwrap(),
-            HCObj::TOKEN(tok) => match tok.String().parse::<i16>() {
-                Err(_) => 0,
-                Ok(val) => val,
-            },
+            HCObj::TOKEN(tok) => tok.to_string().parse::<i16>().unwrap_or(0),
             HCObj::F64(val) => *val as i16,
             HCObj::F32(val) => *val as i16,
             HCObj::I64(val) => *val as i16,
@@ -223,10 +214,7 @@ impl<T: HCObjTrait> HCObjTrait for HCObj<T>
     {
         match self {
             HCObj::STRING(str) => str.parse::<i8>().unwrap(),
-            HCObj::TOKEN(tok) => match tok.String().parse::<i8>() {
-                Err(_) => 0,
-                Ok(val) => val,
-            },
+            HCObj::TOKEN(tok) => tok.to_string().parse::<i8>().unwrap_or(0),
             HCObj::F64(val) => *val as i8,
             HCObj::F32(val) => *val as i8,
             HCObj::I64(val) => *val as i8,

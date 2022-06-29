@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::primitives::KernelToken;
+use crate::types::ParseToken;
 use crate::utf8::get_utf8_code_point_from;
 
 use super::ByteReader;
@@ -55,7 +55,7 @@ impl ByteReader for FileReader
         true
     }
 
-    fn set_cursor_to(&mut self, token: &KernelToken) -> bool
+    fn set_cursor_to(&mut self, token: &ParseToken) -> bool
     {
         if self.cursor != token.byte_offset as usize {
             self.cursor = token.byte_offset as usize;
@@ -68,7 +68,7 @@ impl ByteReader for FileReader
         true
     }
 
-    fn set_line_data(&mut self, token: &KernelToken)
+    fn set_line_data(&mut self, token: &ParseToken)
     {
         self.line_count = token.line_number as usize;
 

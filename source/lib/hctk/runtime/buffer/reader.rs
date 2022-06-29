@@ -1,7 +1,7 @@
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::primitives::kernel_token::KernelToken;
+use crate::types::ParseToken;
 use crate::utf8::*;
 
 pub trait ByteReader
@@ -47,9 +47,9 @@ pub trait ByteReader
     /// , indicating a parse failure as the input stream can
     /// no longer satisfy the requirements of the parser.
 
-    fn set_cursor_to(&mut self, token: &KernelToken) -> bool;
+    fn set_cursor_to(&mut self, token: &ParseToken) -> bool;
 
-    fn set_line_data(&mut self, token: &KernelToken);
+    fn set_line_data(&mut self, token: &ParseToken);
 
     /// Return a new instance of byte reader with the same
     /// state as the source reader. Implementation should provide
@@ -64,22 +64,22 @@ pub trait ByteReader
 
     fn codepoint(&self) -> u32
     {
-        return 0;
+        0
     }
 
     fn codepoint_byte_length(&self) -> u32
     {
-        return get_utf8_byte_length_from_code_point(self.codepoint());
+        get_utf8_byte_length_from_code_point(self.codepoint())
     }
 
     fn codepoint_length(&self) -> u32
     {
-        return get_token_length_from_code_point(self.codepoint());
+        get_token_length_from_code_point(self.codepoint())
     }
 
     fn class(&self) -> u32
     {
-        return get_token_class_from_codepoint(self.codepoint());
+        get_token_class_from_codepoint(self.codepoint())
     }
 
     fn cursor(&self) -> u32;

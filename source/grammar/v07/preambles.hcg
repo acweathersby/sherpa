@@ -53,8 +53,7 @@
                                                                         
                                                                         f:r { { t_Import , c_Preamble, uri: $2, reference:$4, tok } } 
 
-<> export_preamble >         \@EXPORT sym::production_symbol ( t:AS | t:as ) g:id
+<> export_preamble >         \@EXPORT sym::production_symbol ( t:AS | t:as ) tk:export_id
                                                                         
                                                                         f:r { { t_Export , c_Preamble, production: $2, reference:$4 } } 
-
-
+<> export_id > g:id(+)

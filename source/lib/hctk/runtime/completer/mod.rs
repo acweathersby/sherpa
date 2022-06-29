@@ -1,3 +1,3 @@
-pub mod completer;
+mod completer;
 
 pub use completer::*;

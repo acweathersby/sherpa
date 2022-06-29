@@ -2,5 +2,12 @@
 
 members = [
     "source/lib/hctk",
-    "source/app/compile"
+    "source/app/compile",
+    "test/e2e/basic_grammar"
 ]
+
+[profile.dev]
+debug = 2
+
+[profile.release]
+opt-level=3

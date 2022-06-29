@@ -16,8 +16,8 @@
     unused_parens
 )]
 
-pub mod primitives;
 pub mod runtime;
+pub mod types;
 pub mod utf8;
 
 pub use lazy_static::lazy_static;
@@ -44,7 +44,7 @@ pub fn get_num_of_available_threads() -> usize
 #[cfg(test)]
 mod test_end_to_end
 {
-    use crate::bytecode::compiler::build_byte_code_buffer;
+    use crate::bytecode::compile_bytecode::build_byte_code_buffer;
     use crate::debug::compile_test_grammar;
     use crate::debug::parser::collect_shifts_and_skips;
     use crate::debug::print_states;
@@ -53,12 +53,9 @@ mod test_end_to_end
     use crate::grammar::get_production_by_name;
     use crate::grammar::get_production_id_by_name;
     use crate::intermediate::optimize::optimize_states;
-    use crate::intermediate::state_construct::compile_states;
-    use crate::primitives::Token;
+    use crate::intermediate::state_construction::compile_states;
     use crate::runtime::parser::get_next_action;
-    use crate::runtime::parser::Action;
-    use crate::runtime::parser::SymbolReader;
-    use crate::runtime::parser::UTF8StringReader;
+    use crate::types::*;
     use std::sync::Arc;
 
     #[test]
@@ -75,12 +72,9 @@ mod test_end_to_end
         );
 
         let mut states = compile_states(&grammar, threads);
-        for (_, state) in &mut states {
-            match state.get_ast() {
-                None => {
-                    println!("--FAILED: {:?}", state.compile_ast())
-                }
-                _ => {}
+        for state in states.values_mut() {
+            if state.get_ast().is_none() {
+                println!("--FAILED: {:?}", state.compile_ast())
             }
         }
         let optimized_states = optimize_states(&mut states, &grammar);

@@ -1,12 +1,12 @@
 use crate::bytecode::constants::NORMAL_STATE_MASK;
 
-use super::KernelStack;
-use super::KernelToken;
+use super::ParseStack;
+use super::ParseToken;
 
-pub struct KernelState
+pub struct ParseState
 {
-    pub stack:           KernelStack,
-    pub tokens:          [KernelToken; 3],
+    pub stack:           ParseStack,
+    pub tokens:          [ParseToken; 3],
     pub active_state:    u32,
     pub sym_accumulator: u32,
     pub production_id:   u32,
@@ -17,17 +17,17 @@ pub struct KernelState
     pub interrupted:     bool,
 }
 
-impl KernelState
+impl ParseState
 {
     pub fn new() -> Self
     {
         Self {
             tokens:          [
-                KernelToken::new(),
-                KernelToken::new(),
-                KernelToken::new(),
+                ParseToken::new(),
+                ParseToken::new(),
+                ParseToken::new(),
             ],
-            stack:           KernelStack::new(),
+            stack:           ParseStack::new(),
             active_state:    0,
             sym_accumulator: 0,
             production_id:   0,
@@ -52,45 +52,45 @@ impl KernelState
     }
 
     #[inline]
-    pub fn set_anchor_token(&mut self, token: KernelToken)
+    pub fn set_anchor_token(&mut self, token: ParseToken)
     {
         self.tokens[0] = token;
     }
 
     #[inline]
-    pub fn set_assert_token(&mut self, token: KernelToken)
+    pub fn set_assert_token(&mut self, token: ParseToken)
     {
         self.tokens[1] = token;
     }
 
     #[inline]
-    pub fn set_peek_token(&mut self, token: KernelToken)
+    pub fn set_peek_token(&mut self, token: ParseToken)
     {
         self.tokens[2] = token;
     }
 
     #[inline]
-    pub fn get_anchor_token(&mut self) -> KernelToken
+    pub fn get_anchor_token(&mut self) -> ParseToken
     {
         self.tokens[0]
     }
 
     #[inline]
-    pub fn get_assert_token(&mut self) -> KernelToken
+    pub fn get_assert_token(&mut self) -> ParseToken
     {
         self.tokens[1]
     }
 
     #[inline]
-    pub fn get_peek_token(&mut self) -> KernelToken
+    pub fn get_peek_token(&mut self) -> ParseToken
     {
         self.tokens[2]
     }
 
     #[inline]
-    pub fn init_normal_state(&mut self, state_offset: u32)
+    pub fn init_normal_state(&mut self, entry_point: u32)
     {
-        self.stack.reset(NORMAL_STATE_MASK | state_offset);
+        self.stack.reset(NORMAL_STATE_MASK | entry_point);
     }
 
     #[inline]
@@ -115,5 +115,13 @@ impl KernelState
     pub fn make_scanner(&mut self)
     {
         self.is_scanner = true
+    }
+}
+
+impl Default for ParseState
+{
+    fn default() -> Self
+    {
+        Self::new()
     }
 }

@@ -2,7 +2,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::RwLock;
 
-use crate::primitives::kernel_token::KernelToken;
+use crate::types::parse_token::ParseToken;
 use crate::utf8::*;
 
 /// A multi-reader, multi-writer view of the underlying parser input
@@ -66,9 +66,9 @@ pub trait SymbolReader
     /// , indicating a parse failure as the input stream can
     /// no longer satisfy the requirements of the parser.
 
-    fn set_cursor_to(&mut self, token: &KernelToken) -> bool;
+    fn set_cursor_to(&mut self, token: &ParseToken) -> bool;
 
-    fn set_line_data(&mut self, token: &KernelToken);
+    fn set_line_data(&mut self, token: &ParseToken);
 
     /// Return a new instance of byte reader with the same
     /// state as the source reader. Implementation should provide

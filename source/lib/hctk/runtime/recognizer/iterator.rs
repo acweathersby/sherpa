@@ -1,9 +1,9 @@
 use std::result;
 
 use crate::bytecode::constants::DEFAULT_FAIL_INSTRUCTION_OFFSET;
-use crate::primitives::kernel_token::KernelToken;
 use crate::runtime::buffer::ByteReader;
 use crate::runtime::recognizer::stack::KernelStack;
+use crate::types::ParseToken;
 
 // Global Constants
 const STATE_INDEX_MASK: u32 = (1 << 24) - 1;
@@ -57,7 +57,7 @@ pub enum ParseAction
     },
     SHIFT
     {
-        token: KernelToken,
+        token: ParseToken,
     },
     SKIP
     {
@@ -67,23 +67,9 @@ pub enum ParseAction
     },
     TOKEN
     {
-        token: KernelToken,
+        token: ParseToken,
     },
     FORK {},
-}
-
-/// Debug macro used to create a breakpoint when an iterator hits a
-/// certain
-#[macro_export]
-macro_rules! set_byte_code_break_point {
-    ( $state_ident:ident, $x:expr ) => {
-        #[cfg(debug_assertions)]
-        {
-            if ($state_ident & INSTRUCTION_POINTER_MASK) * 4 == $x {
-                unsafe { std::intrinsics::breakpoint() }
-            }
-        }
-    };
 }
 
 /// Represents a single Iterator
@@ -101,7 +87,7 @@ pub trait ParseIterator<T: ByteReader>
     fn start(
         &mut self,
         handle_action: &mut impl FnMut(ParseAction),
-    ) -> KernelToken;
+    ) -> ParseToken;
 
     fn reader(&self) -> &T;
 }
@@ -127,7 +113,7 @@ impl<T: ByteReader> ParseIterator<T> for ReferenceIterator<T>
     fn start(
         &mut self,
         handle_action: &mut impl FnMut(ParseAction),
-    ) -> KernelToken
+    ) -> ParseToken
     {
         let mut parser: StateIterator<T> = StateIterator::new(
             self.reader.clone(),
@@ -137,14 +123,12 @@ impl<T: ByteReader> ParseIterator<T> for ReferenceIterator<T>
 
         parser.parse(self.bytecode);
 
-        let mut tok = parser.get_tok(1);
-
-        tok
+        parser.get_tok(1)
     }
 
     fn reader(&self) -> &T
     {
-        return &self.reader;
+        &self.reader
     }
 }
 
@@ -215,7 +199,7 @@ pub struct StateIterator<'a, T: ByteReader>
     reader: T,
 
     // forks: [u32; 8],
-    tokens: [KernelToken; 8],
+    tokens: [ParseToken; 8],
 
     symbol_accumulator: u32,
 
@@ -240,9 +224,9 @@ impl<'a, T: ByteReader> StateIterator<'a, T>
 
         let mut iterator = StateIterator {
             stack: KernelStack::new(),
-            reader: reader,
+            reader,
             // forks: [0; 8],
-            tokens: [KernelToken::new(); 8],
+            tokens: [ParseToken::new(); 8],
             symbol_accumulator: 0,
             production_id: 0,
             token_end: 1,
@@ -295,10 +279,10 @@ impl<'a, T: ByteReader> StateIterator<'a, T>
 
     fn scanner(
         &mut self,
-        mut current_token: KernelToken,
+        mut current_token: ParseToken,
         scanner_start_pointer: u32,
         bytecode: &[u32],
-    ) -> KernelToken
+    ) -> ParseToken
     {
         if current_token.typ == 0 {
             let scanner = &mut self.scanner_iterator;
@@ -435,12 +419,12 @@ impl<'a, T: ByteReader> ParserCoreIterator<T> for StateIterator<'a, T>
         self.token_end = index;
     }
 
-    fn get_tok(&mut self, index: usize) -> KernelToken
+    fn get_tok(&mut self, index: usize) -> ParseToken
     {
         self.tokens[index]
     }
 
-    fn set_tok(&mut self, index: usize, token: KernelToken)
+    fn set_tok(&mut self, index: usize, token: ParseToken)
     {
         self.tokens[index] = token;
     }
@@ -546,7 +530,7 @@ pub struct ScannerIterator<T: ByteReader>
 
     reader: T,
 
-    tokens: [KernelToken; 8],
+    tokens: [ParseToken; 8],
 
     symbol_accumulator: u32,
 
@@ -561,8 +545,8 @@ impl<T: ByteReader> ScannerIterator<T>
     {
         let mut iterator = ScannerIterator {
             stack: KernelStack::new(),
-            reader: reader,
-            tokens: [KernelToken::new(); 8],
+            reader,
+            tokens: [ParseToken::new(); 8],
             symbol_accumulator: 0,
             production_id: 0,
             token_end: 1,
@@ -657,12 +641,12 @@ impl<T: ByteReader> ParserCoreIterator<T> for ScannerIterator<T>
         self.token_end = index;
     }
 
-    fn get_tok(&mut self, index: usize) -> KernelToken
+    fn get_tok(&mut self, index: usize) -> ParseToken
     {
         self.tokens[index]
     }
 
-    fn set_tok(&mut self, index: usize, token: KernelToken)
+    fn set_tok(&mut self, index: usize, token: ParseToken)
     {
         self.tokens[index] = token;
     }
@@ -745,7 +729,7 @@ impl<T: ByteReader> ParserCoreIterator<T> for ScannerIterator<T>
                         return 0;
                     };
 
-                    (&mut self.tokens[1]).typ = 0;
+                    self.tokens[1].typ = 0;
                 }
             }
 
@@ -799,7 +783,7 @@ trait ParserCoreIterator<R: ByteReader>
 
     fn get_tok_top(&self) -> usize;
 
-    fn get_tok(&mut self, index: usize) -> KernelToken;
+    fn get_tok(&mut self, index: usize) -> ParseToken;
 
     fn pop_state(&mut self) -> u32;
 
@@ -813,7 +797,7 @@ trait ParserCoreIterator<R: ByteReader>
 
     fn set_tok_top(&mut self, index: usize);
 
-    fn set_tok(&mut self, index: usize, token: KernelToken);
+    fn set_tok(&mut self, index: usize, token: ParseToken);
 
     fn swap_state(&mut self, state: u32);
 
@@ -854,7 +838,7 @@ trait ParserCoreIterator<R: ByteReader>
     {
         let mut index = (state_pointer & STATE_INDEX_MASK) as usize;
 
-        let result = loop {
+        loop {
             match bytecode[index] & 0xF0000000 as u32 {
                 0x10000000 => {
                     index = self.consume(index, fail_mode, bytecode);
@@ -918,9 +902,7 @@ trait ParserCoreIterator<R: ByteReader>
                 }
                 _ => break self.pass(index + 1, fail_mode) as u32,
             };
-        };
-
-        result
+        }
     } //*/
     fn noop(&mut self, index: usize, _: u32) -> usize
     {

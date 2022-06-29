@@ -9,54 +9,21 @@ use crate::bytecode::constants::LEXER_TYPE;
 use crate::bytecode::constants::NORMAL_STATE_MASK;
 use crate::bytecode::constants::STATE_INDEX_MASK;
 use crate::debug::print_state;
-use crate::primitives::KernelState;
-use crate::primitives::KernelToken;
-use crate::primitives::SymbolID;
-use crate::primitives::Token;
-use crate::runtime::parser::reader::SymbolReader;
-use crate::runtime::recognizer::iterator::ParseAction;
 use crate::runtime::recognizer::stack::KernelStack;
+use crate::types::*;
 
-pub enum Action
-{
-    Undefined,
-    CompleteState,
-    FailState,
-    Token(KernelToken),
-    Fork
-    {
-        states_start_offset: u32,
-        num_of_states:       u32,
-        target_production:   u32,
-    },
-    Shift((KernelToken, KernelToken)),
-    Reduce
-    {
-        production_id: u32,
-        body_id:       u32,
-        symbol_count:  u32,
-    },
-    Accept
-    {
-        production_id: u32,
-    },
-    Error
-    {
-        message:    &'static str,
-        last_input: KernelToken,
-    },
-}
+use ParseAction::*;
 
 /// Yields parser Actions from parsing an input using the
 /// current active grammar bytecode.
 #[inline]
 pub fn dispatch<T: SymbolReader>(
     reader: &mut T,
-    state: &mut KernelState,
+    state: &mut ParseState,
     bytecode: &[u32],
-) -> Action
+) -> ParseAction
 {
-    use Action::*;
+    use ParseAction::*;
 
     let mut index = (state.get_active_state() & STATE_INDEX_MASK) as u32;
 
@@ -104,9 +71,9 @@ pub fn dispatch<T: SymbolReader>(
 fn consume<T: SymbolReader>(
     index: u32,
     instruction: u32,
-    state: &mut KernelState,
+    state: &mut ParseState,
     reader: &mut T,
-) -> (Action, u32)
+) -> (ParseAction, u32)
 {
     if instruction & 0x1 == 1 {
         state.tokens[1].byte_length = 0;
@@ -128,15 +95,21 @@ fn consume<T: SymbolReader>(
     skip.cp_length = shift.cp_offset - skip.cp_offset;
     skip.byte_length = shift.byte_offset - skip.byte_offset;
 
-    (Action::Shift((skip, shift)), index + 1)
+    (
+        ParseAction::Shift {
+            skipped_characters: skip,
+            token: shift,
+        },
+        index + 1,
+    )
 }
 
 #[inline]
 fn reduce(
     index: u32,
     instruction: u32,
-    state: &mut KernelState,
-) -> (Action, u32)
+    state: &mut ParseState,
+) -> (ParseAction, u32)
 {
     let symbol_count = instruction >> 16 & 0x0FFF;
     let body_id = instruction & 0xFFFF;
@@ -145,13 +118,13 @@ fn reduce(
     (
         if symbol_count == 0x0FFF {
             todo!("Acquire symbol count from symbol accumulator");
-            Action::Reduce {
+            ParseAction::Reduce {
                 production_id,
                 body_id,
                 symbol_count: 0,
             }
         } else {
-            Action::Reduce {
+            ParseAction::Reduce {
                 production_id,
                 body_id,
                 symbol_count,
@@ -162,15 +135,14 @@ fn reduce(
 }
 
 #[inline]
-fn goto(index: u32, instruction: u32, state: &mut KernelState) -> u32
+fn goto(index: u32, instruction: u32, state: &mut ParseState) -> u32
 {
     state.stack.push_state(instruction);
     index + 1
 }
 
 #[inline]
-fn set_production(index: u32, instruction: u32, state: &mut KernelState)
-    -> u32
+fn set_production(index: u32, instruction: u32, state: &mut ParseState) -> u32
 {
     let production_id = instruction & INSTRUCTION_CONTENT_MASK;
     state.production_id = production_id;
@@ -178,7 +150,7 @@ fn set_production(index: u32, instruction: u32, state: &mut KernelState)
 }
 
 #[inline]
-fn set_token_state(index: u32, instruction: u32, state: &mut KernelState)
+fn set_token_state(index: u32, instruction: u32, state: &mut ParseState)
     -> u32
 {
     let value = instruction & 0x00FF_FFFF;
@@ -198,14 +170,14 @@ fn set_token_state(index: u32, instruction: u32, state: &mut KernelState)
 }
 
 #[inline]
-fn fork(index: u32, instruction: u32) -> (Action, u32)
+fn fork(index: u32, instruction: u32) -> (ParseAction, u32)
 {
     let instruction = instruction & INSTRUCTION_CONTENT_MASK;
     let target_production = instruction & 0xFFFF;
     let num_of_states = (instruction >> 16) & 0xFFFF;
 
     (
-        Action::Fork {
+        ParseAction::Fork {
             num_of_states,
             states_start_offset: index + 1,
             target_production,
@@ -237,7 +209,7 @@ fn noop(index: u32) -> u32
 }
 
 #[inline]
-fn skip_token<T: SymbolReader>(state: &mut KernelState, reader: &mut T)
+fn skip_token<T: SymbolReader>(state: &mut ParseState, reader: &mut T)
 {
     let index = state.in_peek_mode as usize + 1;
     // let mut token = unsafe { state.tokens.get_unchecked_mut(index) };
@@ -254,7 +226,7 @@ fn skip_token<T: SymbolReader>(state: &mut KernelState, reader: &mut T)
 pub fn hash_jump<T: SymbolReader>(
     index: u32,
     reader: &mut T,
-    state: &mut KernelState,
+    state: &mut ParseState,
     bytecode: &[u32],
 ) -> u32
 {
@@ -306,7 +278,7 @@ pub fn hash_jump<T: SymbolReader>(
 pub fn vector_jump<T: SymbolReader>(
     index: u32,
     reader: &mut T,
-    state: &mut KernelState,
+    state: &mut ParseState,
     bytecode: &[u32],
 ) -> u32
 {
@@ -354,12 +326,11 @@ fn get_token_value<T: SymbolReader>(
     input_type: u32,
     reader: &mut T,
     scanner_start_offset: u32,
-    state: &mut KernelState,
+    state: &mut ParseState,
     bytecode: &[u32],
 ) -> i32
 {
     let active_token = match lexer_type {
-        // Peek mode
         LEXER_TYPE::PEEK => {
             let basis_token = unsafe {
                 *state
@@ -371,8 +342,7 @@ fn get_token_value<T: SymbolReader>(
 
             basis_token.next()
         }
-        // Assert mode
-        _ | LEXER_TYPE::ASSERT => {
+        _ /*| LEXER_TYPE::ASSERT*/ => {
             if state.in_peek_mode {
                 state.in_peek_mode = false;
                 reader.set_cursor_to(unsafe { state.tokens.get_unchecked(1) });
@@ -429,7 +399,7 @@ fn get_token_value<T: SymbolReader>(
 }
 
 fn scan_for_improvised_token<T: SymbolReader>(
-    scan_state: &mut KernelState,
+    scan_state: &mut ParseState,
     reader: &mut T,
 )
 {
@@ -440,17 +410,13 @@ fn scan_for_improvised_token<T: SymbolReader>(
     // Scan to next break point and produce an undefined
     // token. If we are already at a break point then just
     // return the single character token.
-    if byte == '\n' as u8
-        || byte == '\t' as u8
-        || byte == '\r' as u8
-        || byte == ' ' as u8
-    {
+    if byte == b'\n' || byte == b'\t' || byte == b'\r' || byte == b' ' {
         assert = assert.next();
     } else {
-        while byte != '\n' as u8
-            && byte != '\t' as u8
-            && byte != '\r' as u8
-            && byte != ' ' as u8
+        while byte != b'\n'
+            && byte != b'\t'
+            && byte != b'\r'
+            && byte != b' '
             && !reader.at_end()
         {
             reader.next(assert.byte_length);
@@ -465,12 +431,12 @@ fn scan_for_improvised_token<T: SymbolReader>(
 }
 
 fn token_scan<T: SymbolReader>(
-    token: KernelToken,
+    token: ParseToken,
     scanner_start_offset: u32,
-    state: &mut KernelState,
+    state: &mut ParseState,
     reader: &mut T,
     bytecode: &[u32],
-) -> KernelToken
+) -> ParseToken
 {
     #[cfg(test)]
     {
@@ -485,7 +451,7 @@ fn token_scan<T: SymbolReader>(
                 state.production_id -= 1;
             }
 
-            return KernelToken {
+            return ParseToken {
                 byte_length: 0,
                 byte_offset: 0,
                 cp_length:   0,
@@ -498,7 +464,7 @@ fn token_scan<T: SymbolReader>(
     }
     // Initialize Scanner
 
-    let mut scan_state = KernelState::new();
+    let mut scan_state = ParseState::new();
     scan_state.make_scanner();
     scan_state.init_normal_state(scanner_start_offset);
     scan_state.set_anchor_token(token);
@@ -528,7 +494,7 @@ fn token_scan<T: SymbolReader>(
                     scan_for_improvised_token(&mut scan_state, reader);
                 }
 
-                break Action::Token(scan_state.get_anchor_token());
+                break ParseAction::ScannerToken(scan_state.get_anchor_token());
             } else {
                 let mask_gate =
                     NORMAL_STATE_MASK << (scan_state.in_fail_mode as u32);
@@ -536,11 +502,11 @@ fn token_scan<T: SymbolReader>(
                 if ((scan_state.active_state & mask_gate) != 0) {
                     scan_state.in_fail_mode = loop {
                         match dispatch(reader, &mut scan_state, bytecode) {
-                            Action::CompleteState => {
+                            ParseAction::CompleteState => {
                                 break false;
                             }
 
-                            Action::FailState => {
+                            ParseAction::FailState => {
                                 break true;
                             }
                             _ => {}
@@ -551,30 +517,31 @@ fn token_scan<T: SymbolReader>(
             }
         }
     } {
-        Action::Token(token) => token,
+        ParseAction::ScannerToken(token) => token,
         _ => panic!("Unusable State"),
     }
 }
+
 /// Start or continue a parse on an input
+#[inline]
 pub fn get_next_action<T: SymbolReader>(
     reader: &mut T,
-    state: &mut KernelState,
+    state: &mut ParseState,
     bytecode: &[u32],
-) -> Action
+) -> ParseAction
 {
     if state.active_state == 0 {
-        // Decode the next state.
         state.active_state = state.stack.pop_state();
     }
 
     loop {
         if state.active_state < 1 {
             if reader.offset_at_end(state.tokens[1].byte_offset) {
-                break Action::Accept {
+                break ParseAction::Accept {
                     production_id: state.production_id,
                 };
             } else {
-                break Action::Error {
+                break ParseAction::Error {
                     message:    "Cannot parse this symbol",
                     last_input: state.get_assert_token(),
                 };
@@ -586,12 +553,12 @@ pub fn get_next_action<T: SymbolReader>(
                 state.interrupted = true;
 
                 match dispatch(reader, state, bytecode) {
-                    Action::CompleteState => {
+                    ParseAction::CompleteState => {
                         state.interrupted = false;
                         state.in_fail_mode = false;
                         state.active_state = state.stack.pop_state();
                     }
-                    Action::FailState => {
+                    ParseAction::FailState => {
                         state.interrupted = false;
                         state.in_fail_mode = true;
                         state.active_state = state.stack.pop_state();

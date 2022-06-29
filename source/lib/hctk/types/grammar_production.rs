@@ -128,6 +128,8 @@ pub struct BodySymbolRef
     pub scanner_index:  u32,
     /// Always captures, regardless of other symbols
     pub exclusive:      bool,
+
+    pub tok: Token,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
@@ -137,7 +139,7 @@ impl ReduceFunctionId
 {
     pub fn new(reduce_function: &ASTNode) -> Self
     {
-        ReduceFunctionId(hash_id_value_u64(reduce_function.Token().String()))
+        ReduceFunctionId(hash_id_value_u64(reduce_function.Token().to_string()))
     }
 
     pub fn is_undefined(&self) -> bool
@@ -159,11 +161,13 @@ pub struct Body
     pub origin_location: Token,
 }
 
+/// Maps a [ProductionId] to a [Production].
 pub type ProductionTable = std::collections::BTreeMap<ProductionId, Production>;
 
 pub type ProductionEntryNamesTable =
     std::collections::BTreeMap<String, ProductionId>;
 
+/// Maps [ProductionId] to a vector of [BodyIds](BodyId).
 pub type ProductionBodiesTable =
     std::collections::BTreeMap<ProductionId, Vec<BodyId>>;
 

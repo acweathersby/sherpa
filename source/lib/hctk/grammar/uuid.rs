@@ -6,7 +6,7 @@ use std::hash::Hash;
 use std::hash::Hasher;
 use std::path::PathBuf;
 
-use super::parse::ParseError;
+use crate::types::ParseError;
 
 pub fn hash_id_value_u64<T: Hash>(t: T) -> u64
 {

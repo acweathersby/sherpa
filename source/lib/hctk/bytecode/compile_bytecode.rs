@@ -1,3 +1,4 @@
+#![warn(clippy::borrowed_box)]
 use super::constants::default_get_branch_selector;
 use super::constants::GetBranchSelector;
 use super::constants::DEFAULT_CASE_INDICATOR;
@@ -26,10 +27,8 @@ use crate::grammar::data::ast::ASSERT;
 use crate::grammar::data::ast::HASH_NAME;
 use crate::grammar::data::ast::IR_STATE;
 use crate::grammar::parse::compile_ir_ast;
-use crate::intermediate::state_construct::generate_production_states;
-use crate::primitives::grammar::GrammarStore;
-use crate::primitives::IRState;
-use crate::primitives::ProductionId;
+use crate::intermediate::state_construction::generate_production_states;
+use crate::types::*;
 use std::any::Any;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -90,10 +89,7 @@ pub fn build_byte_code_buffer(
 }
 
 /// Converts Goto location bookmarks to bytecode offsets.
-fn patch_goto_offsets(
-    bytecode: &mut Vec<u32>,
-    goto_bookmarks_to_offset: &Vec<u32>,
-)
+fn patch_goto_offsets(bytecode: &mut Vec<u32>, goto_bookmarks_to_offset: &[u32])
 {
     use crate::bytecode::constants::INSTRUCTION as I;
 
@@ -133,9 +129,8 @@ fn compile_ir_states_worker(
 ) -> Vec<IRState>
 {
     productions
-        .into_iter()
-        .map(|p| generate_production_states(p, grammar))
-        .flatten()
+        .iter()
+        .flat_map(|p| generate_production_states(p, grammar))
         .collect::<Vec<_>>()
 }
 
@@ -167,9 +162,7 @@ fn compile_ir_states(
     }) {
         let key = ir_state.get_hash();
 
-        if !ir_map.contains_key(&key) {
-            ir_map.insert(key, ir_state);
-        }
+        ir_map.entry(key).or_insert(ir_state);
     }
 
     ir_map
@@ -215,14 +208,14 @@ pub fn compile_ir_state_to_bytecode(
 
 fn is_branch_state(state: &IR_STATE) -> bool
 {
-    state.instructions.iter().all(|i| match i {
-        ASTNode::ASSERT(_) => true,
-        _ => false,
-    })
+    state
+        .instructions
+        .iter()
+        .all(|i| matches!(i, ASTNode::ASSERT(_)))
 }
 
 fn build_branching_bytecode(
-    instructions: &Vec<ASTNode>,
+    instructions: &[ASTNode],
     get_branch_selector: GetBranchSelector,
     scanner_name: &String,
     state_name_to_bookmark: &HashMap<String, u32>,
@@ -249,7 +242,7 @@ fn build_branching_bytecode(
     }
 
     // Extract the default branch if it exists.
-    let output = if default_branches.len() > 0 {
+    let output = if !default_branches.is_empty() {
         build_branchless_bytecode(
             &default_branches[0].instructions,
             state_name_to_bookmark,
@@ -259,10 +252,16 @@ fn build_branching_bytecode(
     };
 
     let output = make_table(
-        branches
+        &branches
             .iter()
             .cloned()
-            .filter(|p| p.mode == "BYTE")
+            .filter_map(|p| {
+                if p.mode == "BYTE" {
+                    Some(p.as_ref())
+                } else {
+                    None
+                }
+            })
             .collect::<Vec<_>>(),
         INPUT_TYPE::T05_BYTE,
         &String::new(),
@@ -272,10 +271,16 @@ fn build_branching_bytecode(
     );
 
     let output = make_table(
-        branches
+        &branches
             .iter()
             .cloned()
-            .filter(|p| p.mode == "CODEPOINT")
+            .filter_map(|p| {
+                if p.mode == "CODEPOINT" {
+                    Some(p.as_ref())
+                } else {
+                    None
+                }
+            })
             .collect::<Vec<_>>(),
         INPUT_TYPE::T04_CODEPOINT,
         &String::new(),
@@ -285,10 +290,16 @@ fn build_branching_bytecode(
     );
 
     let output = make_table(
-        branches
+        &branches
             .iter()
             .cloned()
-            .filter(|p| p.mode == "CLASS")
+            .filter_map(|p| {
+                if p.mode == "CLASS" {
+                    Some(p.as_ref())
+                } else {
+                    None
+                }
+            })
             .collect::<Vec<_>>(),
         INPUT_TYPE::T03_CLASS,
         &String::new(),
@@ -298,10 +309,16 @@ fn build_branching_bytecode(
     );
 
     let output = make_table(
-        branches
+        &branches
             .iter()
             .cloned()
-            .filter(|p| p.mode == "TOKEN" || p.is_skip)
+            .filter_map(|p| {
+                if p.mode == "TOKEN" || p.is_skip {
+                    Some(p.as_ref())
+                } else {
+                    None
+                }
+            })
             .collect::<Vec<_>>(),
         INPUT_TYPE::T02_TOKEN,
         scanner_name,
@@ -311,10 +328,16 @@ fn build_branching_bytecode(
     );
 
     let output = make_table(
-        branches
+        &branches
             .iter()
             .cloned()
-            .filter(|p| p.mode == "PRODUCTION")
+            .filter_map(|p| {
+                if p.mode == "PRODUCTION" {
+                    Some(p.as_ref())
+                } else {
+                    None
+                }
+            })
             .collect::<Vec<_>>(),
         INPUT_TYPE::T01_PRODUCTION,
         &String::new(),
@@ -327,7 +350,7 @@ fn build_branching_bytecode(
 }
 
 fn make_table(
-    branches: Vec<&Box<ASSERT>>,
+    branches: &[&ASSERT],
     input_type_key: u32,
     scanner_name: &String,
     mut default: Vec<u32>,
@@ -391,7 +414,7 @@ fn make_table(
         if branch.is_skip {
             for id in &branch.ids {
                 if let ASTNode::Num(box Num { val }) = id {
-                    val_offset_map.insert(*val as u32, 0xFFFF_FFFF as u32);
+                    val_offset_map.insert(*val as u32, 0xFFFF_FFFF);
                 }
             }
         } else {
@@ -415,14 +438,12 @@ fn make_table(
     let mut output = vec![];
 
     match get_branch_selector(
-        &val_offset_map.keys().cloned().collect(),
+        &val_offset_map.keys().cloned().collect::<Vec<_>>(),
         max_span,
         &branch_instructions,
     ) {
         BranchSelector::Hash => {
-            let values = val_offset_map.keys().cloned().collect::<Vec<_>>();
-
-            let offset_lookup_table_length = values.len() as u32;
+            let offset_lookup_table_length = val_offset_map.len() as u32;
 
             let instruction_field_start = 4 + offset_lookup_table_length;
 
@@ -455,7 +476,7 @@ fn make_table(
 
             let mut leftover_pairs = vec![];
 
-            // Distribute keys-vals with unique hashes into hash table
+            // Distribute keys-values with unique hashes into hash table
             // slots.
             while let Some(pair) = pending_pairs.pop_front() {
                 let (val, offset) = pair;
@@ -524,11 +545,11 @@ fn make_table(
             output.append(&mut hash_entries);
         }
         BranchSelector::Vector => {
-            let values = val_offset_map.keys().cloned().collect::<Vec<_>>();
+            let mut values = val_offset_map.keys().peekable();
             let (start, end) =
-                (*values.first().unwrap(), *values.last().unwrap());
+                (**values.peek().unwrap(), *values.last().unwrap());
             let value_offset = start;
-            let offset_lookup_table_length = values.len() as u32;
+            let offset_lookup_table_length = val_offset_map.len() as u32;
             let instruction_field_start = 4 + offset_lookup_table_length;
             let default_offset =
                 branch_instructions_length + instruction_field_start;
@@ -638,14 +659,11 @@ fn build_branchless_bytecode(
             ASTNode::Fail(_) => byte_code.push(I::I15_FAIL),
             ASTNode::NotInScope(box NotInScope { ids }) => {}
             ASTNode::SetScope(box SetScope { scope }) => {}
-            ASTNode::SetProd(box SetProd { id }) => {
-                if let ASTNode::Num(box Num { val }) = id {
-                    byte_code.push(
-                        I::I03_SET_PROD
-                            | (*val as u32 & INSTRUCTION_CONTENT_MASK),
-                    )
-                }
-            }
+            ASTNode::SetProd(box SetProd {
+                id: ASTNode::Num(box Num { val }),
+            }) => byte_code.push(
+                I::I03_SET_PROD | (*val as u32 & INSTRUCTION_CONTENT_MASK),
+            ),
             ASTNode::Reduce(box Reduce { body_id, len, .. }) => byte_code.push(
                 I::I04_REDUCE
                     | if *len as u32 == IR_REDUCE_NUMERIC_LEN_ID {
@@ -675,14 +693,14 @@ mod byte_code_creation_tests
 
     use std::collections::HashMap;
 
-    use crate::bytecode::compiler::compile_ir_state_to_bytecode;
-    use crate::bytecode::compiler::BranchSelector;
+    use crate::bytecode::compile_bytecode::compile_ir_state_to_bytecode;
+    use crate::bytecode::compile_bytecode::BranchSelector;
     use crate::bytecode::constants::default_get_branch_selector;
     use crate::debug::compile_test_grammar;
     use crate::grammar::data::ast::ASTNode;
     use crate::grammar::get_production_id_by_name;
     use crate::grammar::parse::compile_ir_ast;
-    use crate::intermediate::state_construct::generate_production_states;
+    use crate::intermediate::state_construction::generate_production_states;
 
     #[test]
     pub fn test_produce_a_single_ir_ast_from_a_single_state_of_a_trivial_production(

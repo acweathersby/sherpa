@@ -7,10 +7,8 @@ use crate::grammar::data::ast::ASTNode;
 use crate::grammar::data::ast::IR_STATE;
 use crate::grammar::hash_id_value_u64;
 use crate::grammar::parse::compile_ir_ast;
-use crate::grammar::parse::ParseError;
 
-use super::ProductionId;
-use super::SymbolID;
+use super::*;
 
 pub struct IRState
 {

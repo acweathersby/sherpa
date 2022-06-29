@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 
 use crate::debug::grammar;
 use crate::grammar::data::ast::IR_STATE;
-use crate::primitives::GrammarStore;
-use crate::primitives::IRState;
+use crate::types::GrammarStore;
+use crate::types::IRState;
 
 pub fn optimize_states<'a>(
     states: &'a mut BTreeMap<String, IRState>,

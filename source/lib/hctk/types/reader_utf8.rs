@@ -2,7 +2,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::RwLock;
 
-use crate::primitives::KernelToken;
+use crate::types::ParseToken;
 use crate::utf8::get_utf8_code_point_from;
 
 use super::reader::SharedSymbolBuffer;
@@ -23,7 +23,7 @@ pub struct UTF8StringReader
 
 impl UTF8StringReader
 {
-    pub fn from_str(string: &str) -> Self
+    pub fn from_string(string: &str) -> Self
     {
         Self::new(string.into())
     }
@@ -60,7 +60,7 @@ impl SymbolReader for UTF8StringReader
         self.cursor >= self.length
     }
 
-    fn set_cursor_to(&mut self, token: &KernelToken) -> bool
+    fn set_cursor_to(&mut self, token: &ParseToken) -> bool
     {
         if self.cursor != token.byte_offset as usize {
             self.cursor = token.byte_offset as usize;
@@ -73,7 +73,7 @@ impl SymbolReader for UTF8StringReader
         true
     }
 
-    fn set_line_data(&mut self, token: &KernelToken)
+    fn set_line_data(&mut self, token: &ParseToken)
     {
         self.line_count = token.line_number as usize;
 
@@ -151,9 +151,9 @@ impl SymbolReader for UTF8StringReader
 
             let end = self.cursor as u32 + (diff as u32);
 
-            let mut word = 0 as u32;
+            let mut word = 0;
 
-            let mut offset = 32 as u32;
+            let mut offset = 32;
 
             for i in start..end {
                 offset -= 8;

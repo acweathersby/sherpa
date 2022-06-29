@@ -1,70 +1,67 @@
-use core::fmt;
 use std::collections::BTreeMap;
-use std::collections::BTreeSet;
-use std::fmt::Display;
-use std::ops::Add;
+use std::io::Result;
 
-use crate::ascript::ast_writer::ASTWriter;
-use crate::ascript::compile::compile_reduce_function_expressions;
-use crate::ascript::compile::get_struct_type_from_node;
-use crate::debug::compile_test_grammar;
-use crate::grammar::data::ast::ASTNode;
-use crate::grammar::data::ast::AST_IndexReference;
-use crate::grammar::data::ast::AST_NamedReference;
-use crate::grammar::data::ast::AST_Property;
-use crate::grammar::data::ast::AST_Struct;
-use crate::grammar::data::ast::AST_Token;
-use crate::grammar::data::ast::AST_BOOL;
-use crate::grammar::data::ast::AST_F32;
-use crate::grammar::data::ast::AST_F64;
-use crate::grammar::data::ast::AST_I16;
-use crate::grammar::data::ast::AST_I32;
-use crate::grammar::data::ast::AST_I64;
-use crate::grammar::data::ast::AST_I8;
-use crate::grammar::data::ast::AST_NUMBER;
-use crate::grammar::data::ast::AST_STRING;
-use crate::grammar::data::ast::AST_U16;
-use crate::grammar::data::ast::AST_U32;
-use crate::grammar::data::ast::AST_U64;
-use crate::grammar::data::ast::AST_U8;
-use crate::primitives::ascript::*;
-use crate::primitives::grammar::ReduceFunction;
-use crate::primitives::Body;
-use crate::primitives::GrammarStore;
-use crate::primitives::SymbolID;
-use std::fmt::Write;
+use hctk::ascript::compile_ascript::get_struct_type_from_node;
+use hctk::grammar::data::ast::ASTNode;
+use hctk::grammar::data::ast::AST_IndexReference;
+use hctk::grammar::data::ast::AST_NamedReference;
+use hctk::grammar::data::ast::AST_Struct;
+use hctk::grammar::data::ast::AST_Token;
+use hctk::grammar::data::ast::AST_BOOL;
+use hctk::grammar::data::ast::AST_F32;
+use hctk::grammar::data::ast::AST_F64;
+use hctk::grammar::data::ast::AST_I16;
+use hctk::grammar::data::ast::AST_I32;
+use hctk::grammar::data::ast::AST_I64;
+use hctk::grammar::data::ast::AST_I8;
+use hctk::grammar::data::ast::AST_NUMBER;
+use hctk::grammar::data::ast::AST_STRING;
+use hctk::grammar::data::ast::AST_U16;
+use hctk::grammar::data::ast::AST_U32;
+use hctk::grammar::data::ast::AST_U64;
+use hctk::grammar::data::ast::AST_U8;
+use hctk::types::*;
+use std::io::Write;
 
-const struct_template: &str = "
-struct {} {
-    {}
-}";
+use crate::code_writer::*;
 
-pub fn output_rust<W: Write + ToString>(
+pub fn output_rust<W: Write>(
     grammar: &GrammarStore,
     ascript: &AScriptStore,
-    writer: &mut ASTWriter<W>,
-)
+    writer: &mut CodeWriter<W>,
+) -> Result<()>
 {
-    // Build look up structures
-    writer.wrtln("use hctk::primitives::ast::*;");
-    writer.wrtln("pub enum ASTNode {").indent();
+    writer.wrtln("use hctk::types::*;")?.newline()?;
 
-    for (_, _struct) in &ascript.struct_table {
-        writer.write_line(&format!("{0}(Box<{0}>),", _struct.type_name));
+    writer
+        .wrtln("#[derive(Debug)]\npub enum ASTNode {")?
+        .indent();
+
+    for _struct in ascript.struct_table.values() {
+        writer.write_line(&format!("{0}(Box<{0}>),", _struct.type_name))?;
     }
 
-    writer.dedent().write_line("}\n");
+    writer
+        .dedent()
+        .wrtln("}")?
+        .newline()?
+        .wrtln("type HCO = HCObj<ASTNode>;")?
+        .newline()?
+        .wrtln("impl HCObjTrait for ASTNode {}")?
+        .newline()?;
 
-    build_structs(grammar, ascript, writer);
+    build_structs(grammar, ascript, writer)?;
 
-    build_functions(grammar, ascript, writer);
+    build_functions(grammar, ascript, writer)?;
+
+    Ok(())
 }
 
-fn build_functions<W: Write + ToString>(
+fn build_functions<W: Write>(
     grammar: &GrammarStore,
     ascript: &AScriptStore,
-    writer: &mut ASTWriter<W>,
-)
+    writer: &mut CodeWriter<W>,
+) -> Result<()>
 {
     let ordered_bodies = grammar
         .bodies_table
@@ -83,7 +80,8 @@ fn build_functions<W: Write + ToString>(
         })
         .collect::<BTreeMap<_, _>>();
 
-    // Build reduce functions
+    // Build reduce functions -------------------------------------
+
     for (id, body) in &ordered_bodies {
         let mut temp_writer = writer.checkpoint();
 
@@ -92,7 +90,7 @@ fn build_functions<W: Write + ToString>(
         } else {
             for function_id in &body.reduce_fn_ids {
                 match grammar.reduce_functions.get(function_id) {
-                    Some(ReduceFunction::Ascript(function)) => {
+                    Some(ReduceFunctionType::Ascript(function)) => {
                         match &function.ast {
                             ASTNode::AST_Struct(box ast_struct) => {
                                 if let AScriptTypeVal::Struct(struct_type) =
@@ -102,11 +100,11 @@ fn build_functions<W: Write + ToString>(
                                     .wrtln(
                                         &format!( "fn ast_fn{:0>3}(args: &mut Vec<HCO>, tok: Token) -> HCO {{", 
                                         body.bytecode_id,
-                                    ))
+                                    ))?
                                     .indent();
 
                                     let mut struct_writer =
-                                        ASTWriter::<String>::new(String::new());
+                                        temp_writer.checkpoint();
 
                                     let (struct_name, ref_name, refs) =
                                         build_struct_constructor(
@@ -116,7 +114,7 @@ fn build_functions<W: Write + ToString>(
                                             &struct_type,
                                             ast_struct,
                                             &mut struct_writer,
-                                        );
+                                        )?;
 
                                     for (i, _) in
                                         body.symbols.iter().enumerate().rev()
@@ -128,15 +126,14 @@ fn build_functions<W: Write + ToString>(
                                         }
                                     }
 
-                                    temp_writer
-                                        .wrtln(&struct_writer.into_string());
+                                    temp_writer.merge_checkpoint(struct_writer);
 
                                     temp_writer.write_line(&format!(
-                                        "HCO::NODE(ASTNode::{}({}))",
+                                        "HCO::NODE(ASTNode::{}(Box::new({})))",
                                         struct_name, ref_name
                                     ));
 
-                                    temp_writer.dedent().wrtln("}");
+                                    temp_writer.dedent().wrtln("}")?;
                                     break;
                                 }
                             }
@@ -152,47 +149,63 @@ fn build_functions<W: Write + ToString>(
             }
         }
 
+        temp_writer.newline()?;
+
         writer.merge_checkpoint(temp_writer);
     }
 
+    // Reduce Function Array -----------------------
+
     writer
         .wrt(&format!(
-            "pub const FunctionMaps:[RF; {}] = {{",
+            "pub const REDUCE_FUNCTIONS:[ReduceFunction<ASTNode>; {}] = [",
             ordered_bodies.len()
-        ))
+        ))?
         .indent()
-        .wrt("\n");
-    for (id, body) in &ordered_bodies {
+        .wrt("\n")?;
+
+    ordered_bodies.iter().for_each(|(id, body)| {
         writer.write(&format!("ast_fn{:0>3},", *id));
-    }
-    writer.dedent().wrtln("\n}");
+    });
+
+    writer.dedent().wrtln("];")?.newline()?;
+
+    Ok(())
 }
 
-fn create_default_function(temp_writer: &mut ASTWriter<String>, body: &&Body)
+fn create_default_function(
+    temp_writer: &mut CodeWriter<Vec<u8>>,
+    body: &&Body,
+) -> Result<()>
 {
     temp_writer
         .wrtln(&format!(
             "fn ast_fn{:0>3}(args: &mut Vec<HCO>, tok: Token) -> HCO {{",
             body.bytecode_id,
-        ))
+        ))?
         .indent();
-    temp_writer.wrtln("let out = args.pop();");
+
+    temp_writer.wrtln("let out = args.pop().unwrap();");
+
     for _ in 0..body.length - 1 {
         temp_writer.wrtln("args.pop();");
     }
-    temp_writer.wrtln("out").dedent().wrtln("}");
+
+    temp_writer.wrtln("out")?.dedent().wrtln("}");
+
+    Ok(())
 }
 
-fn build_struct_constructor<W: Write + ToString>(
+fn build_struct_constructor<W: Write>(
     grammar: &GrammarStore,
     ascript: &AScriptStore,
     body: &Body,
     struct_type: &AScriptStructId,
     ast_struct: &AST_Struct,
-    writer: &mut ASTWriter<W>,
-) -> (String, String, Vec<u32>)
+    writer: &mut CodeWriter<W>,
+) -> Result<(String, String, Vec<u32>)>
 {
-    let archetype_struct = ascript.struct_table.get(&struct_type).unwrap();
+    let archetype_struct = ascript.struct_table.get(struct_type).unwrap();
     let mut used_props = vec![];
     let mut statements = vec![];
     let ast_struct_props = ast_struct
@@ -210,7 +223,7 @@ fn build_struct_constructor<W: Write + ToString>(
     for prop in &archetype_struct.properties {
         if let Some(ast_prop) = ast_struct_props.get(&prop.name) {
             let (reference, init_string, type_name, mut body_index) =
-                render_expression(&ast_prop.value, body, ascript, grammar);
+                render_expression(&ast_prop.value, body, ascript, grammar)?;
 
             if let Some(mut body_index) = body_index {
                 used_props.append(&mut body_index);
@@ -235,23 +248,23 @@ fn build_struct_constructor<W: Write + ToString>(
         writer.wrtln(&statement);
     }
     writer
-        .wrt(&format!("\nlet _struct = {0}::new(", archetype_struct.type_name))
+        .wrt(&format!("\nlet _struct = {0}::new(", archetype_struct.type_name))?
         .indent()
-        .wrt("\n");
+        .wrt("\n")?;
     for prop in &archetype_struct.properties {
         writer.wrt(&format!("{}, ", prop.name));
     }
 
     writer.dedent().write_line("\n);");
 
-    (archetype_struct.type_name.clone(), "_struct".to_string(), used_props)
+    Ok((archetype_struct.type_name.clone(), "_struct".to_string(), used_props))
 }
 
-fn build_structs<W: Write + ToString>(
+fn build_structs<W: Write>(
     grammar: &GrammarStore,
     ascript: &AScriptStore,
-    output: &mut ASTWriter<W>,
-)
+    output: &mut CodeWriter<W>,
+) -> Result<()>
 {
     // Build structs
     for (
@@ -284,7 +297,9 @@ fn build_structs<W: Write + ToString>(
             props.push(("tok".to_string(), "Token".to_string()));
         }
 
-        output.wrtln(&format!("struct {} {{", type_name)).indent();
+        output
+            .wrtln(&format!("#[derive(Debug)]\npub struct {} {{", type_name))?
+            .indent();
 
         for (name, type_) in &props {
             output.write_line(&format!("pub {}: {},", name, type_));
@@ -292,10 +307,10 @@ fn build_structs<W: Write + ToString>(
 
         output
             .dedent()
-            .wrtln("}")
-            .wrtln(&format!("impl {} {{", type_name))
+            .wrtln("}")?
+            .wrtln(&format!("impl {} {{", type_name))?
             .indent()
-            .wrtln("#[inline]\npub fn new (")
+            .wrtln("#[inline]\npub fn new (")?
             .indent();
 
         for (name, type_) in &props {
@@ -304,9 +319,9 @@ fn build_structs<W: Write + ToString>(
 
         output
             .dedent()
-            .wrtln(") -> Self {")
+            .wrtln(") -> Self {")?
             .indent()
-            .wrtln("Self{")
+            .wrtln("Self{")?
             .indent();
 
         for (name, _) in &props {
@@ -315,12 +330,14 @@ fn build_structs<W: Write + ToString>(
 
         output
             .dedent()
-            .wrtln("}")
+            .wrtln("}")?
             .dedent()
-            .wrtln("}")
+            .wrtln("}")?
             .dedent()
-            .wrtln("}");
+            .wrtln("}")?;
     }
+
+    Ok(())
 }
 
 /// returns: (expression_ref: String, expression_data: String)
@@ -329,7 +346,7 @@ pub fn render_expression(
     body: &Body,
     store: &AScriptStore,
     grammar: &GrammarStore,
-) -> (String, String, AScriptTypeVal, Option<Vec<u32>>)
+) -> Result<(String, String, AScriptTypeVal, Option<Vec<u32>>)>
 {
     let (b, s, g) = (body, store, grammar);
 
@@ -338,7 +355,7 @@ pub fn render_expression(
             if let AScriptTypeVal::Struct(struct_type) =
                 get_struct_type_from_node(ast_struct)
             {
-                let mut writer = ASTWriter::<String>::new(String::new());
+                let mut writer = StringBuffer::default();
                 let archetype_struct =
                     store.struct_table.get(&struct_type).unwrap();
                 let (struct_name, ref_name, mut refs) =
@@ -349,86 +366,89 @@ pub fn render_expression(
                         &struct_type,
                         ast_struct,
                         &mut writer,
-                    );
-                (
+                    )?;
+                Ok((
                     ref_name,
-                    writer.into_string(),
+                    String::from_utf8(writer.into_output()).unwrap(),
                     AScriptTypeVal::Struct(struct_type),
                     Some(refs),
-                )
+                ))
             } else {
-                (String::new(), String::new(), AScriptTypeVal::Undefined, None)
+                Ok((
+                    String::new(),
+                    String::new(),
+                    AScriptTypeVal::Undefined,
+                    None,
+                ))
             }
         }
         ASTNode::AST_Token(box AST_Token {}) => {
-            ("tok".to_string(), String::new(), AScriptTypeVal::Token, None)
+            Ok(("tok".to_string(), String::new(), AScriptTypeVal::Token, None))
         }
         ASTNode::AST_Add(..) => {
-            (String::new(), String::new(), AScriptTypeVal::Undefined, None)
+            Ok((String::new(), String::new(), AScriptTypeVal::Undefined, None))
         }
         ASTNode::AST_Vector(..) => {
-            (String::new(), String::new(), AScriptTypeVal::Undefined, None)
+            Ok((String::new(), String::new(), AScriptTypeVal::Undefined, None))
         }
         ASTNode::AST_STRING(box AST_STRING { value, .. }) => match value {
-            ASTNode::AST_NUMBER(box AST_NUMBER { value, .. }) => (
+            ASTNode::AST_NUMBER(box AST_NUMBER { value, .. }) => Ok((
                 "r".to_string(),
-                format!("let r:{} = {};", "String", value.to_string()),
+                format!("let r:{} = {};", "String", value),
                 AScriptTypeVal::String(Some(value.to_string())),
                 None,
-            ),
+            )),
             _ => {
-                let (r, e, t, i) = render_expression(value, b, s, g);
-                match t {
-                    _ => (
-                        r.clone(),
-                        format!("{1}\nlet {0} = {0}.to_string();", r, e),
-                        AScriptTypeVal::String(None),
-                        i,
-                    ),
-                }
+                let (r, e, t, i) = render_expression(value, b, s, g)?;
+                Ok((
+                    r.clone() + "_str",
+                    format!("{1}\nlet {0}_str = {0}.to_string();", r, e),
+                    AScriptTypeVal::String(None),
+                    i,
+                ))
             }
         },
-        ASTNode::AST_BOOL(box AST_BOOL { value, .. }) => (
+        ASTNode::AST_BOOL(box AST_BOOL { value, .. }) => Ok((
             "r".to_string(),
             format!("let r:{} = {};", "bool", *value),
             AScriptTypeVal::Bool(Some(*value)),
             None,
-        ),
+        )),
         ASTNode::AST_U64(box AST_U64 { initializer, .. }) => {
-            convert_numeric::<AScriptTypeValU64>(&initializer, b, s, g)
+            convert_numeric::<AScriptTypeValU64>(initializer, b, s, g)
         }
         ASTNode::AST_U32(box AST_U32 { initializer, .. }) => {
-            convert_numeric::<AScriptTypeValU32>(&initializer, b, s, g)
+            convert_numeric::<AScriptTypeValU32>(initializer, b, s, g)
         }
         ASTNode::AST_U16(box AST_U16 { initializer, .. }) => {
-            convert_numeric::<AScriptTypeValU16>(&initializer, b, s, g)
+            convert_numeric::<AScriptTypeValU16>(initializer, b, s, g)
         }
         ASTNode::AST_U8(box AST_U8 { initializer, .. }) => {
-            convert_numeric::<AScriptTypeValU8>(&initializer, b, s, g)
+            convert_numeric::<AScriptTypeValU8>(initializer, b, s, g)
         }
         ASTNode::AST_I64(box AST_I64 { initializer, .. }) => {
-            convert_numeric::<AScriptTypeValI64>(&initializer, b, s, g)
+            convert_numeric::<AScriptTypeValI64>(initializer, b, s, g)
         }
         ASTNode::AST_I32(box AST_I32 { initializer, .. }) => {
-            convert_numeric::<AScriptTypeValI32>(&initializer, b, s, g)
+            convert_numeric::<AScriptTypeValI32>(initializer, b, s, g)
         }
         ASTNode::AST_I16(box AST_I16 { initializer, .. }) => {
-            convert_numeric::<AScriptTypeValI16>(&initializer, b, s, g)
+            convert_numeric::<AScriptTypeValI16>(initializer, b, s, g)
         }
         ASTNode::AST_I8(box AST_I8 { initializer, .. }) => {
-            convert_numeric::<AScriptTypeValI8>(&initializer, b, s, g)
+            convert_numeric::<AScriptTypeValI8>(initializer, b, s, g)
         }
         ASTNode::AST_F32(box AST_F32 { initializer, .. }) => {
-            convert_numeric::<AScriptTypeValF32>(&initializer, b, s, g)
+            convert_numeric::<AScriptTypeValF32>(initializer, b, s, g)
         }
         ASTNode::AST_F64(box AST_F64 { initializer, .. }) => {
-            convert_numeric::<AScriptTypeValF64>(&initializer, b, s, g)
+            convert_numeric::<AScriptTypeValF64>(initializer, b, s, g)
         }
         ASTNode::AST_NUMBER(..) => {
-            (String::new(), String::new(), AScriptTypeVal::Undefined, None)
+            Ok((String::new(), String::new(), AScriptTypeVal::Undefined, None))
         }
         ASTNode::AST_Member(..) => {
-            (String::new(), String::new(), AScriptTypeVal::Undefined, None)
+            Ok((String::new(), String::new(), AScriptTypeVal::Undefined, None))
         }
         ASTNode::AST_NamedReference(box AST_NamedReference {
             value, ..
@@ -444,34 +464,34 @@ pub fn render_expression(
                     SymbolID::Production(prod_id, ..) => {
                         let types = s.production_types.get(prod_id).unwrap();
                         if types.is_empty() {
-                            (
+                            Ok((
                                 format!("ref_i{}", i),
                                 format!("let ref_i{0} = i{0}.to_tok();", i),
                                 AScriptTypeVal::Token,
                                 Some(vec![i as u32]),
-                            )
+                            ))
                         } else {
-                            (
+                            Ok((
                                 String::new(),
                                 String::new(),
                                 AScriptTypeVal::Undefined,
                                 Some(vec![i as u32]),
-                            )
+                            ))
                         }
                     }
-                    _ => (
+                    _ => Ok((
                         format!("i{}", i),
                         String::new(),
                         AScriptTypeVal::String(None),
                         Some(vec![i as u32]),
-                    ),
+                    )),
                 },
-                None => (
+                None => Ok((
                     String::new(),
                     String::new(),
                     AScriptTypeVal::Undefined,
                     None,
-                ),
+                )),
             }
         }
         ASTNode::AST_IndexReference(box AST_IndexReference {
@@ -488,37 +508,39 @@ pub fn render_expression(
                     SymbolID::Production(prod_id, ..) => {
                         let types = s.production_types.get(prod_id).unwrap();
                         if types.is_empty() {
-                            (
+                            Ok((
                                 format!("ref_i{}", i),
                                 format!("let ref_i{0} = i{0}.to_tok();", i),
                                 AScriptTypeVal::Token,
                                 Some(vec![i as u32]),
-                            )
+                            ))
                         } else {
-                            (
+                            Ok((
                                 String::new(),
                                 String::new(),
                                 AScriptTypeVal::Undefined,
                                 Some(vec![i as u32]),
-                            )
+                            ))
                         }
                     }
-                    _ => (
+                    _ => Ok((
                         format!("i{}", i),
                         String::new(),
                         AScriptTypeVal::String(None),
                         Some(vec![i as u32]),
-                    ),
+                    )),
                 },
-                None => (
+                None => Ok((
                     String::new(),
                     String::new(),
                     AScriptTypeVal::Undefined,
                     None,
-                ),
+                )),
             }
         }
-        _ => (String::new(), String::new(), AScriptTypeVal::Undefined, None),
+        _ => {
+            Ok((String::new(), String::new(), AScriptTypeVal::Undefined, None))
+        }
     }
 }
 
@@ -527,26 +549,26 @@ fn convert_numeric<T: AScriptNumericType>(
     body: &Body,
     script: &AScriptStore,
     grammar: &GrammarStore,
-) -> (String, String, AScriptTypeVal, Option<Vec<u32>>)
+) -> Result<(String, String, AScriptTypeVal, Option<Vec<u32>>)>
 {
     let rust_type = T::prim_type_name();
     let tok_conversion_fn = T::to_fn_name();
     let default_type_value = T::none();
 
     match initializer {
-        ASTNode::AST_NUMBER(box AST_NUMBER { value, .. }) => (
+        ASTNode::AST_NUMBER(box AST_NUMBER { value, .. }) => Ok((
             "r".to_string(),
             format!("let r:{} = {};", rust_type, T::string_from_f64(*value)),
             T::from_f64(*value),
             None,
-        ),
+        )),
         _ => {
             let (r, expression, t, i) =
-                render_expression(initializer, body, script, grammar);
+                render_expression(initializer, body, script, grammar)?;
 
-            let refname = format!("num_{}", r.clone());
+            let refname = format!("num_{}", r);
             match t {
-                AScriptTypeVal::F64(..) | AScriptTypeVal::F32(..) => (
+                AScriptTypeVal::F64(..) | AScriptTypeVal::F32(..) => Ok((
                     refname.clone(),
                     format!(
                         "{2}\nlet {1} = {0} as {3};",
@@ -554,7 +576,7 @@ fn convert_numeric<T: AScriptNumericType>(
                     ),
                     default_type_value,
                     i,
-                ),
+                )),
                 AScriptTypeVal::Bool(..)
                 | AScriptTypeVal::I8(..)
                 | AScriptTypeVal::I16(..)
@@ -563,7 +585,7 @@ fn convert_numeric<T: AScriptNumericType>(
                 | AScriptTypeVal::U8(..)
                 | AScriptTypeVal::U16(..)
                 | AScriptTypeVal::U32(..)
-                | AScriptTypeVal::U64(..) => (
+                | AScriptTypeVal::U64(..) => Ok((
                     refname.clone(),
                     format!(
                         "{2}\nlet {1} = {0} as {3};",
@@ -571,8 +593,8 @@ fn convert_numeric<T: AScriptNumericType>(
                     ),
                     default_type_value,
                     i,
-                ),
-                AScriptTypeVal::String(..) | AScriptTypeVal::Token | _ => (
+                )),
+                _ => Ok((
                     refname.clone(),
                     format!(
                         "{2}\nlet {1} = {0}.{3}();",
@@ -580,7 +602,7 @@ fn convert_numeric<T: AScriptNumericType>(
                     ),
                     default_type_value,
                     i,
-                ),
+                )),
             }
         }
     }

@@ -22,25 +22,48 @@ impl Display for StringId
 
 pub enum SymbolID
 {
+    /// Represents a defined sequence of characters from the set `0-9`.
     DefinedNumeric(StringId),
+
+    /// Represents a defined sequence of characters that are members of the
+    /// unicode character classes `ID_Start` and `ID_Nonstart`.
     DefinedIdentifier(StringId),
-    DefinedGeneric(StringId),
+
+    /// Represents any defined token sequence that contains a mixture of
+    /// identifier, numeric, and general characters. Examples include
+    /// `ba$$`, `#123`, `$10.20`, and `h3ll0W0rld!`.
+    DefinedSymbol(StringId),
+
+    /// Represents any non-terminal production symbol.
     Production(ProductionId, GrammarId),
-    /// Stores both the target production hash id
-    /// and the target grammar hash id
-    ///
-    /// Stores both the target production hash id
+
+    /// Represents any terminal production symbol defined through
+    /// the production token specifier, `tk:`, as in `tk:<production_name>`.
     TokenProduction(ProductionId, GrammarId),
+
+    /// Represent the grammar symbol `g:sp`.
     GenericSpace,
+
+    /// Represent the grammar symbol `g:sp`.
     GenericHorizontalTab,
+
+    /// Represent the grammar symbol `g:tab`.
     GenericNewLine,
+
+    /// Represent the grammar symbol `g:nl`.
     GenericIdentifier,
+
+    /// Represent the grammar symbol `g:id`.
     GenericNumber,
+
+    /// Represent the grammar symbol `g:num`.
     GenericSymbol,
-    Undefined,
+
+    /// Represent the grammar symbol `g:rec`.
     Recovery,
     Default,
     EndOfFile,
+    Undefined,
 }
 
 impl SymbolID
@@ -60,22 +83,19 @@ impl SymbolID
         match self {
             Self::DefinedNumeric(_)
             | Self::DefinedIdentifier(_)
-            | Self::DefinedGeneric(_) => {
-                format!(
-                    "\\{}",
-                    grammar.symbols_string_table.get(&self).unwrap()
-                )
+            | Self::DefinedSymbol(_) => {
+                format!("\\{}", grammar.symbols_string_table.get(self).unwrap())
             }
-            Self::Production(prod_id, _) => {
-                format!(
-                    "{}",
-                    grammar.production_table.get(&prod_id).unwrap().name
-                )
-            }
+            Self::Production(prod_id, _) => grammar
+                .production_table
+                .get(prod_id)
+                .unwrap()
+                .name
+                .to_string(),
             Self::TokenProduction(prod_id, _) => {
                 format!(
                     "tk:{}",
-                    grammar.production_table.get(&prod_id).unwrap().name
+                    grammar.production_table.get(prod_id).unwrap().name
                 )
             }
             Self::Default => "default".to_string(),
@@ -96,7 +116,7 @@ impl SymbolID
         match self {
             Self::DefinedNumeric(_)
             | Self::DefinedIdentifier(_)
-            | Self::DefinedGeneric(_) => "__defined".to_string(),
+            | Self::DefinedSymbol(_) => "__defined".to_string(),
             Self::Production(prod_id, _) => "__defined".to_string(),
             Self::TokenProduction(prod_id, _) => "__defined".to_string(),
             Self::Default => "__default".to_string(),
@@ -115,8 +135,8 @@ impl SymbolID
     pub fn getProductionId(&self) -> Option<ProductionId>
     {
         match self {
-            Self::Production(id, _) => Some(id.clone()),
-            Self::TokenProduction(id, _) => Some(id.clone()),
+            Self::Production(id, _) => Some(*id),
+            Self::TokenProduction(id, _) => Some(*id),
             _ => None,
         }
     }
@@ -124,8 +144,8 @@ impl SymbolID
     pub fn getGrammarId(&self) -> Option<GrammarId>
     {
         match self {
-            Self::Production(_, id) => Some(id.clone()),
-            Self::TokenProduction(_, id) => Some(id.clone()),
+            Self::Production(_, id) => Some(*id),
+            Self::TokenProduction(_, id) => Some(*id),
             _ => None,
         }
     }
@@ -135,7 +155,7 @@ impl SymbolID
         match self {
             Self::DefinedNumeric(_)
             | Self::DefinedIdentifier(_)
-            | Self::DefinedGeneric(_)
+            | Self::DefinedSymbol(_)
             | Self::TokenProduction(..) => {
                 grammar.symbols_table.get(self).unwrap().bytecode_id
             }
@@ -210,10 +230,8 @@ pub type SymbolStringTable = BTreeMap<SymbolID, String>;
 
 pub type ProductionSymbolsTable = BTreeMap<u64, (u32, u32)>;
 
-/// A table that contains all symbols keyed by their uuid
-
+/// A table that contains defined symbols () keyed by their [SymbolUUID].
 pub type SymbolsTable = BTreeMap<SymbolUUID, Symbol>;
 
 /// A table that contains symbols defined by their class_id
-
 pub type ExportSymbolsTable = BTreeMap<SymbolID, Symbol>;

@@ -160,20 +160,17 @@ impl Item
 
     pub fn from_body(body_id: &BodyId, grammar: &GrammarStore) -> Option<Self>
     {
-        match grammar.bodies_table.get(&body_id) {
-            Some(body) => Some(Item {
-                body:   *body_id,
-                length: body.length as u8,
-                offset: 0,
-                state:  ItemState::default(),
-            }),
-            _ => None,
-        }
+        grammar.bodies_table.get(body_id).map(|body| Item {
+            body:   *body_id,
+            length: body.length as u8,
+            offset: 0,
+            state:  ItemState::default(),
+        })
     }
 
     pub fn at_end(&self) -> bool
     {
-        return self.offset == self.length;
+        self.offset == self.length
     }
 
     pub fn to_state(&self, state: ItemState) -> Item
@@ -283,7 +280,7 @@ impl Item
     {
         let body_id = self.body.0;
 
-        (body_id & 0xFFFFFFFF_FFFFFF00) | (self.offset as u64)
+        (body_id & 0xFFFF_FFFF_FFFF_FF00) | (self.offset as u64)
     }
 
     pub fn get_symbol(&self, grammar: &GrammarStore) -> SymbolID
@@ -319,10 +316,10 @@ impl Item
         if self.is_end() {
             false
         } else {
-            match self.get_symbol(grammar) {
-                SymbolID::Production(production, _) => false,
-                _ => true,
-            }
+            !matches!(
+                self.get_symbol(grammar),
+                SymbolID::Production(production, _)
+            )
         }
     }
 
@@ -346,7 +343,7 @@ impl Item
 
     pub fn to_hash(&self) -> u64
     {
-        ((self.body.0 & 0xFFFFFFF0_F000F000) ^ ((self.offset as u64) << 32))
+        ((self.body.0 & 0xFFFF_FFF0_F000_F000) ^ ((self.offset as u64) << 32))
             | (self.state.0 as u64)
     }
 }

@@ -4,18 +4,18 @@ const stack_size: usize = 64;
 // KERNEL STATE
 // ///////////////////////////////////////////
 
-pub struct KernelStack
+pub struct ParseStack
 {
     pub state_stack:   [u64; stack_size],
     pub stack_pointer: i32,
 }
 
-impl KernelStack
+impl ParseStack
 {
     #[inline]
-    pub fn new() -> KernelStack
+    pub fn new() -> ParseStack
     {
-        KernelStack {
+        ParseStack {
             state_stack:   [0; stack_size],
             stack_pointer: 0,
         }
@@ -55,9 +55,9 @@ impl KernelStack
 
             self.stack_pointer -= 1;
 
-            return state;
+            state
         } else {
-            return 0;
+            0
         }
     }
 
@@ -68,10 +68,18 @@ impl KernelStack
     }
 
     #[inline]
-    pub fn copy_state_stack(&self, dest: &mut KernelStack)
+    pub fn copy_state_stack(&self, dest: &mut ParseStack)
     {
         for i in 0..=self.stack_pointer {
             dest.state_stack[i as usize] = self.state_stack[i as usize];
         }
+    }
+}
+
+impl Default for ParseStack
+{
+    fn default() -> Self
+    {
+        Self::new()
     }
 }

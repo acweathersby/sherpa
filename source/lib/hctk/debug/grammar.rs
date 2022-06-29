@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
-use crate::grammar::compiler::compile_from_string;
-use crate::primitives::GrammarStore;
+use crate::grammar::compile_from_string;
+use crate::types::GrammarStore;
 
 /// Compiles a single grammar string
 

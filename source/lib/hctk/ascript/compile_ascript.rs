@@ -30,24 +30,7 @@ use crate::grammar::data::ast::AST_U64;
 use crate::grammar::data::ast::AST_U8;
 use crate::grammar::get_production_plain_name;
 use crate::grammar::hash_id_value_u64;
-use crate::grammar::parse::CompileProblem;
-use crate::grammar::parse::CompoundCompileProblem;
-use crate::grammar::parse::ParseError;
-use crate::primitives::AScriptPropId;
-use crate::primitives::AScriptStore;
-use crate::primitives::AScriptStructId;
-use crate::primitives::AScriptTypeVal;
-use crate::primitives::Token;
-use crate::primitives::grammar::ReduceFunction;
-use crate::primitives::Body;
-use crate::primitives::BodyId;
-use crate::primitives::BodySymbolRef;
-use crate::primitives::GrammarStore;
-use crate::primitives::Item;
-use crate::primitives::ProductionId;
-use crate::primitives::ReduceFunctionId;
-use crate::primitives::SymbolID;
-use crate::primitives::ascript::*;
+use crate::types::*;
 use std::mem::discriminant;
 
 
@@ -75,14 +58,11 @@ pub fn compile_reduce_function_expressions<'a>(
                 None
             } else {
                 for function in &body.reduce_fn_ids {
-                    match grammar.reduce_functions.get(&function).unwrap() {
-                        ReduceFunction::Ascript(ascript) => {
-                            return Some((id.clone(), Some(ascript)))
-                        }
-                        _ => {}
+                    if let ReduceFunctionType::Ascript(ascript) = grammar.reduce_functions.get(function).unwrap() {
+                        return Some((*id, Some(ascript)))
                     }
                 }
-                Some((id.clone(), None))
+                Some((*id, None))
             }
         })
         .collect::<Vec<_>>();
@@ -101,17 +81,14 @@ pub fn compile_reduce_function_expressions<'a>(
             if let Some(ascript_fn) = &ascript_option_fn {
                 match &ascript_fn.ast {
                     ASTNode::AST_Struct(box ast_struct) => {
-                        match get_struct_type_from_node(ast_struct) {
-                            AScriptTypeVal::Struct(id) => {
-                                struct_bodies.push((body_id, ascript_fn));
-                                add_production_type(
-                                    body.production,
-                                    AScriptTypeVal::Struct(id),
-                                    &body.origin_location,
-                                    ascript,
-                                );
-                            }
-                            _ => {}
+                        if let AScriptTypeVal::Struct(id) = get_struct_type_from_node(ast_struct) {
+                            struct_bodies.push((body_id, ascript_fn));
+                            add_production_type(
+                                body.production,
+                                AScriptTypeVal::Struct(id),
+                                &body.origin_location,
+                                ascript,
+                            );
                         }
                     }
                     ASTNode::AST_Statements(ast_stmts) => {
@@ -173,18 +150,18 @@ pub fn compile_reduce_function_expressions<'a>(
 
         ascript
             .production_types
-            .insert(production_id.clone(), HashMap::new());
+            .insert(production_id, HashMap::new());
 
         let resolved_table = HashMap::new();
 
         while let Some((ast_type, token)) = queue.pop_front() {
             match &ast_type {
                 AScriptTypeVal::UnresolvedProduction(production_id) => {
-                    if seen.insert(production_id.clone()) {
+                    if seen.insert(*production_id) {
                         queue.append(&mut VecDeque::from_iter(
                             ascript
                                 .production_types
-                                .get(&production_id)
+                                .get(production_id)
                                 .unwrap()
                                 .clone(),
                         ));
@@ -238,17 +215,11 @@ pub fn add_production_type(
     ascript: &mut AScriptStore,
 )
 {
-    if !ascript.production_types.contains_key(&production_id) {
-        ascript
-            .production_types
-            .insert(production_id.clone(), HashMap::new());
-    }
+    ascript.production_types.entry(production_id).or_insert_with(HashMap::new);
 
     let mut table = ascript.production_types.get_mut(&production_id).unwrap();
 
-    if !table.contains_key(&new_return_type) {
-        table.insert(new_return_type, new_origin.clone());
-    }
+    table.entry(new_return_type).or_insert_with(|| new_origin.clone());
 }
 
 pub fn merge_production_type(
@@ -261,11 +232,7 @@ pub fn merge_production_type(
 {
     let mut errors = vec![];
 
-    if !ascript.production_types.contains_key(&production_id) {
-        ascript
-            .production_types
-            .insert(production_id.clone(), HashMap::new());
-    }
+    ascript.production_types.entry(production_id).or_insert_with(HashMap::new);
 
     if let Some(types) = ascript.production_types.get_mut(&production_id) {
         // Warn about incompatible types
@@ -355,10 +322,10 @@ pub fn compile_expression_type(
 
                 errors.append(&mut sub_errors);
             }
-            if types.len() > 0 {
-                vec![AScriptTypeVal::Vector(Some(types))]
-            } else {
+            if types.is_empty() {
                 vec![AScriptTypeVal::Vector(None)]
+            } else {
+                vec![AScriptTypeVal::Vector(Some(types))]
             }
         }
         ASTNode::AST_STRING(..) => vec![AScriptTypeVal::String(None)],
@@ -418,7 +385,7 @@ pub fn compile_expression_type(
         _ => vec![AScriptTypeVal::Undefined],
     };
 
-    ((types, errors))
+    (types, errors)
 }
 
 pub fn get_struct_type_from_node(ast_struct: &AST_Struct) -> AScriptTypeVal
@@ -514,7 +481,7 @@ pub fn compile_struct_type(
     // append new properties to it. otherwise we create a new
     // struct entry and add props.
 
-    let struct_id = AScriptStructId::new(&type_name);
+    let id = AScriptStructId::new(&type_name);
 
     let mut properties = BTreeSet::new();
 
@@ -525,7 +492,7 @@ pub fn compile_struct_type(
             ASTNode::AST_Token(..) => include_token = true,
             ASTNode::AST_Property(box prop) => {
                 let name = &prop.id;
-                let prop_id = AScriptPropId::new(struct_id, name);
+                let prop_id = AScriptPropId::new(id, name);
 
                 properties.insert(prop_id.clone());
 
@@ -569,22 +536,22 @@ pub fn compile_struct_type(
         }
     }
 
-    if let Some(ascript_struct) = store.struct_table.get_mut(&struct_id) {
+    if let Some(ascript_struct) = store.struct_table.get_mut(&id) {
         ascript_struct.definition_locations.push(ast_struct.Token());
         ascript_struct.properties.append(&mut properties);
         ascript_struct.include_token =
             include_token || ascript_struct.include_token;
     } else {
-        store.struct_table.insert(struct_id, AScriptStruct {
-            id: struct_id,
-            type_name: type_name,
+        store.struct_table.insert(id, AScriptStruct {
+            id,
+            type_name,
             definition_locations: vec![ast_struct.Token()],
             properties,
             include_token,
         });
     }
 
-    (AScriptTypeVal::Struct(struct_id), errors)
+    (AScriptTypeVal::Struct(id), errors)
 }
 
 fn get_ascript_type(node: &ASTNode) -> AScriptTypeVal

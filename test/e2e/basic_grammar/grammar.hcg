@@ -1,0 +1,3 @@
+@IGNORE g:sp
+
+<> test > \hello \world f:ast { { t_Tested, first:str($1), second:str($2), :str($1) } }

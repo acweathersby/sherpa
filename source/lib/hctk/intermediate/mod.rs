@@ -1,6 +1,6 @@
 pub mod optimize;
-pub mod state_construct;
-pub mod transition_graph_construct;
+pub mod state_construction;
+pub mod transition_graph_construction;
 
 #[cfg(test)]
 
@@ -11,7 +11,7 @@ mod transition_tree_tests
     use crate::grammar::get_production_id_by_name;
     use crate::grammar::get_production_plain_name;
     use crate::grammar::get_production_start_items;
-    use crate::intermediate::transition_graph_construct::construct_recursive_descent;
+    use crate::intermediate::transition_graph_construction::construct_recursive_descent;
 
     #[test]
     pub fn test_construct_descent_on_basic_grammar()
@@ -52,8 +52,7 @@ mod transition_tree_tests
         let production = grammar
             .production_table
             .iter()
-            .filter(|p| p.1.is_scanner)
-            .next()
+            .find(|p| p.1.is_scanner)
             .unwrap();
 
         let production_id = production.0;
@@ -80,10 +79,10 @@ mod state_constructor_tests
     use crate::debug::compile_test_grammar;
     use crate::grammar::get_production_id_by_name;
     use crate::grammar::get_production_start_items;
-    use crate::intermediate::state_construct::generate_production_states;
-    use crate::intermediate::state_construct::generate_scanner_intro_state;
-    use crate::primitives::GrammarId;
-    use crate::primitives::SymbolID;
+    use crate::intermediate::state_construction::generate_production_states;
+    use crate::intermediate::state_construction::generate_scanner_intro_state;
+    use crate::types::GrammarId;
+    use crate::types::SymbolID;
 
     #[test]
 
@@ -166,11 +165,7 @@ mod state_constructor_tests
         let token_production = grammar
             .symbols_table
             .keys()
-            .filter(|p| match p {
-                SymbolID::TokenProduction(..) => true,
-                _ => false,
-            })
-            .next()
+            .find(|p| matches!(p, SymbolID::TokenProduction(..)))
             .unwrap();
 
         let result = generate_scanner_intro_state(

@@ -1,3 +1,4 @@
+use std::collections::hash_map::Entry;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
@@ -12,16 +13,16 @@ use crate::grammar::get_closure;
 use crate::grammar::get_closure_cached;
 use crate::grammar::get_production_start_items;
 use crate::grammar::hash_id_value_u64;
-use crate::primitives::GrammarId;
-use crate::primitives::GrammarStore;
-use crate::primitives::Item;
-use crate::primitives::ItemState;
-use crate::primitives::ProductionId;
-use crate::primitives::SymbolID;
-use crate::primitives::TransitionGraphNode as TGN;
-use crate::primitives::TransitionMode;
-use crate::primitives::TransitionPack as TPack;
-use crate::primitives::TransitionStateType as TST;
+use crate::types::GrammarId;
+use crate::types::GrammarStore;
+use crate::types::Item;
+use crate::types::ItemState;
+use crate::types::ProductionId;
+use crate::types::SymbolID;
+use crate::types::TransitionGraphNode as TGN;
+use crate::types::TransitionMode;
+use crate::types::TransitionPack as TPack;
+use crate::types::TransitionStateType as TST;
 
 #[derive(Hash, PartialEq, Eq, Clone, Copy)]
 
@@ -41,7 +42,7 @@ enum TransitionGroupSelector
 pub fn construct_recursive_descent<'a>(
     grammar: &'a GrammarStore,
     is_scanner: bool,
-    start_items: &Vec<Item>,
+    start_items: &[Item],
 ) -> TPack<'a>
 {
     let start_items = apply_state_info(start_items);
@@ -99,7 +100,7 @@ pub fn construct_recursive_descent<'a>(
     t_pack.clean()
 }
 
-fn apply_state_info(start_items: &Vec<Item>) -> Vec<Item>
+fn apply_state_info(start_items: &[Item]) -> Vec<Item>
 {
     let start_items = start_items
         .iter()
@@ -112,8 +113,8 @@ fn apply_state_info(start_items: &Vec<Item>) -> Vec<Item>
 pub fn construct_goto<'a>(
     grammar: &'a GrammarStore,
     is_scanner: bool,
-    start_items: &Vec<Item>,
-    goto_items: &Vec<Item>,
+    start_items: &[Item],
+    goto_items: &[Item],
 ) -> TPack<'a>
 {
     let start_items = apply_state_info(start_items);
@@ -131,7 +132,7 @@ pub fn construct_goto<'a>(
         &t_pack,
         SymbolID::Undefined,
         TGN::OrphanIndex,
-        goto_items.clone(),
+        goto_items.to_vec(),
     );
 
     parent.set_type(TST::I_GOTO_START);
@@ -174,7 +175,7 @@ pub fn construct_goto<'a>(
 
         goto_node.set_type(TST::O_GOTO);
 
-        if (group.len() > 0
+        if (!group.is_empty()
             && (group.iter().any(|i| i.increment().unwrap().at_end())))
             || t_pack.root_productions.contains(&production_id)
         {
@@ -224,7 +225,7 @@ pub fn get_goto_starts(
     // root_production: &ProductionId,
     start_items: &Vec<Item>,
     grammar: &GrammarStore,
-    seed_items: &Vec<Item>,
+    seed_items: &[Item],
 ) -> Vec<(ProductionId, HashSet<Item>)>
 {
     type GotoMap = BTreeMap<ProductionId, HashSet<Item>>;
@@ -280,7 +281,7 @@ pub fn get_goto_starts(
 }
 
 pub fn get_follow_closure(
-    goto_items: &Vec<Item>,
+    goto_items: &[Item],
     grammar: &GrammarStore,
     root_production_ids: &BTreeSet<ProductionId>,
 ) -> Vec<Item>
@@ -290,7 +291,7 @@ pub fn get_follow_closure(
     let mut seen_productions = BTreeSet::<ProductionId>::new();
 
     for production_id in root_production_ids {
-        productions_to_process.push_back(production_id.clone());
+        productions_to_process.push_back(*production_id);
     }
 
     let mut output = HashSet::new();
@@ -332,7 +333,7 @@ fn process_node(
 ) -> Vec<usize>
 {
     let node = t_pack.get_node(node_index).clone();
-    let mut items: Vec<Item> = node.items.iter().cloned().collect();
+    let mut items: Vec<Item> = node.items.clone();
 
     if allow_increment {
         items = items
@@ -343,7 +344,7 @@ fn process_node(
                 } else {
                     let item_next = i.increment().unwrap();
                     let item_link = t_pack.get_closure_link(&i);
-                    t_pack.set_closure_link(item_next.clone(), item_link);
+                    t_pack.set_closure_link(item_next, item_link);
                     item_next
                 }
             })
@@ -365,15 +366,15 @@ fn process_node(
     let n_end: Vec<Item> =
         items.iter().filter(|i| i.is_end()).cloned().collect();
 
-    if n_nonterm.len() > 0 {
+    if !n_nonterm.is_empty() {
         let production_ids = HashSet::<ProductionId>::from_iter(
             n_nonterm
                 .iter()
                 .map(|i| i.get_production_id_at_sym(grammar)),
         );
 
-        if n_term.len() == 0
-            && n_end.len() == 0
+        if n_term.is_empty()
+            && n_end.is_empty()
             && production_ids.len() == 1
             && (node.depth > 1
                 || non_recursive(&n_nonterm, &t_pack.root_productions, grammar))
@@ -388,17 +389,15 @@ fn process_node(
         } else {
             create_peek(parent_index, items, grammar, t_pack)
         }
-    } else if n_end.len() == 1 && n_term.len() == 0 {
+    } else if n_end.len() == 1 && n_term.is_empty() {
         // A single end item
         process_end_item(grammar, t_pack, n_end[0], parent_index)
-    } else if n_end.len() == 0 && n_term.len() == 1 {
+    } else if n_end.is_empty() && n_term.len() == 1 {
         // A single terminal item
         process_terminal_node(grammar, t_pack, n_term[0], parent_index)
-    } else if n_end.len() == 0 && n_term.len() > 1 {
-        // Multiple terminal items
-        create_peek(parent_index, items, grammar, t_pack)
     } else {
-        // Multiple terminal and end items
+        // else if n_end.is_empty() && n_term.len() > 1  {
+        // Multiple terminal items
         create_peek(parent_index, items, grammar, t_pack)
     }
 }
@@ -407,19 +406,16 @@ fn process_node(
 /// the goal production on the right of the cursor
 
 fn non_recursive(
-    items: &Vec<Item>,
+    items: &[Item],
     target_production: &BTreeSet<ProductionId>,
     grammar: &GrammarStore,
 ) -> bool
 {
     for item in get_closure(items, grammar) {
-        match item.get_symbol(grammar) {
-            SymbolID::Production(production, _) => {
-                if target_production.contains(&production) {
-                    return false;
-                }
+        if let SymbolID::Production(production, _) = item.get_symbol(grammar) {
+            if target_production.contains(&production) {
+                return false;
             }
-            _ => {}
         }
     }
 
@@ -450,15 +446,13 @@ fn create_peek(
                 t_pack,
                 item.get_symbol(grammar).to_owned(),
                 usize::MAX,
-                vec![item.clone()],
+                vec![*item],
             );
 
             root_node.depth = 0;
 
-            if t_pack.mode == TransitionMode::GoTo {
-                if item.at_end() {
-                    root_node.transition_type |= TST::I_COMPLETE;
-                }
+            if t_pack.mode == TransitionMode::GoTo && item.at_end() {
+                root_node.transition_type |= TST::I_COMPLETE;
             }
 
             t_pack.insert_node(root_node)
@@ -525,17 +519,17 @@ fn create_term_nodes_from_items(
             t_pack.set_closure_link(*item, *link_item);
             let node =
                 TGN::new(t_pack, item.get_symbol(grammar), parent_index, vec![
-                    item.clone(),
+                    *item,
                 ]);
 
             term_nodes.push(node);
         } else {
-            for closure_item in get_closure(&vec![*item], grammar) {
+            for closure_item in get_closure(&[*item], grammar) {
                 if !closure_item.is_nonterm(grammar) && !discard.contains(item)
                 {
                     let closure_item = closure_item.to_state(item.get_state());
 
-                    t_pack.set_closure_link(closure_item.clone(), *item);
+                    t_pack.set_closure_link(closure_item, *item);
 
                     let node = TGN::new(
                         t_pack,
@@ -567,12 +561,11 @@ fn hash_group<
     let mut hash_groups = HashMap::<R, Vec<T>>::new();
 
     for (i, val) in vector.iter().enumerate() {
-        let hash_value = hash_yielder(i, *val);
-
-        if !hash_groups.contains_key(&hash_value) {
-            hash_groups.insert(hash_value, vec![*val]);
-        } else {
-            hash_groups.get_mut(&hash_value).unwrap().push(*val)
+        match hash_groups.entry(hash_yielder(i, *val)) {
+            Entry::Vacant(e) => {
+                e.insert(vec![*val]);
+            }
+            Entry::Occupied(mut e) => e.get_mut().push(*val),
         }
     }
 
@@ -686,7 +679,7 @@ fn process_peek_leaves(
 
                 let proxy_parents = parent_node_indices[1..].to_owned();
 
-                let have_proxy_parents = proxy_parents.len() > 0;
+                let have_proxy_parents = !proxy_parents.is_empty();
 
                 for child_index in process_node(
                     goal_index,
@@ -818,7 +811,7 @@ fn disambiguate(
             leaves.push(end_nodes[0]);
         }
         _ => {
-            let goals = get_goals(&end_nodes, &t_pack);
+            let goals = get_goals(&end_nodes, t_pack);
 
             if goals.len() == 1 {
                 for end_node in &end_nodes[1..] {
@@ -834,8 +827,7 @@ fn disambiguate(
         }
     }
 
-    let mut groups =
-        hash_group(term_nodes, |_, n| t_pack.get_node(n).sym.clone());
+    let mut groups = hash_group(term_nodes, |_, n| t_pack.get_node(n).sym);
 
     let mut next_peek_groups = vec![];
 
@@ -844,7 +836,7 @@ fn disambiguate(
     for group in groups.iter() {
         let prime_node_index = group[0];
 
-        let goals = get_goals(&group, t_pack);
+        let goals = get_goals(group, t_pack);
 
         set_transition_type(prime_node_index, t_pack, depth);
 
@@ -883,7 +875,7 @@ fn disambiguate(
             }
 
             if peek_transition_group.is_empty() {
-                if get_goals(&group, t_pack)
+                if get_goals(group, t_pack)
                     .iter()
                     .all(|i| t_pack.get_node(*i).is(TST::I_OUT_OF_SCOPE))
                 {
@@ -915,7 +907,7 @@ fn disambiguate(
     }
 
     for peek_group in next_peek_groups {
-        if peek_group.len() > 0 {
+        if !peek_group.is_empty() {
             if handle_shift_reduce_conflicts(
                 &peek_group,
                 grammar,
@@ -985,7 +977,7 @@ fn get_continue_items(
     (term_nodes, final_nodes)
 }
 
-fn group_is_repeated(peek_group: &Vec<usize>, t_pack: &mut TPack) -> bool
+fn group_is_repeated(peek_group: &[usize], t_pack: &mut TPack) -> bool
 {
     // panic!("Todo: group_is_repeated")
     let group_id = peek_group
@@ -1015,36 +1007,32 @@ fn handle_shift_reduce_conflicts(
         .map(|i| (i, &t_pack.get_node(i).items))
         .collect::<Vec<_>>();
 
-    if goals.len() == 2 {
-        if goals[0].1.len() == 1
+    if goals.len() == 2
+        && (goals[0].1.len() == 1
             && goals[1].1.len() == 1
             && (t_pack.mode == TransitionMode::GoTo)
             || (goals[0].1[0].get_production_id(grammar)
-                == goals[1].1[0].get_production_id(grammar))
-        {
-            let shift = goals
-                .iter()
-                .filter(|(_, i)| !i[0].is_end())
-                .collect::<Vec<_>>();
+                == goals[1].1[0].get_production_id(grammar)))
+    {
+        let shift = goals
+            .iter()
+            .filter(|(_, i)| !i[0].is_end())
+            .collect::<Vec<_>>();
 
-            let reduce = goals
-                .iter()
-                .filter(|(_, i)| i[0].is_end())
-                .collect::<Vec<_>>();
+        let mut reduce = goals.iter().filter(|(_, i)| i[0].is_end());
 
-            if !shift.is_empty() && !reduce.is_empty() {
-                let shift_goal = shift[0].0;
+        if !shift.is_empty() && reduce.next().is_some() {
+            let shift_goal = shift[0].0;
 
-                for node_index in peek_group {
-                    if t_pack.get_node(*node_index).goal == shift_goal {
-                        leaves.push(*node_index)
-                    } else {
-                        t_pack.drop_node(node_index);
-                    }
+            for node_index in peek_group {
+                if t_pack.get_node(*node_index).goal == shift_goal {
+                    leaves.push(*node_index)
+                } else {
+                    t_pack.drop_node(node_index);
                 }
-
-                return true;
             }
+
+            return true;
         }
     }
 
@@ -1079,7 +1067,7 @@ fn groups_are_aliased(peek_group: &Vec<usize>, t_pack: &mut TPack) -> bool
 /// account the ambiguous nature of the groups.
 
 fn merge_occluding_groups(
-    groups: &mut Vec<Vec<usize>>,
+    groups: &mut [Vec<usize>],
     t_pack: &TPack,
     grammar: &GrammarStore,
 )
@@ -1087,18 +1075,19 @@ fn merge_occluding_groups(
     // Clone the from_group store so we are able
     // to merge its members into to_groups without
     // going fowl of the borrow checker.
-    for from_group in groups.clone() {
-        let from_sym = t_pack.get_node(from_group[0]).sym;
 
-        for to_group in groups.iter_mut() {
-            let to_sym = t_pack.get_node(to_group[0]).sym;
-
-            if from_sym == to_sym {
+    for i in 0..groups.len() {
+        for j in 0..groups.len() {
+            if i == j {
                 continue;
             }
 
+            let from_sym = t_pack.get_node(groups[i][0]).sym;
+            let to_sym = t_pack.get_node(groups[j][0]).sym;
+
             if symbols_occlude(&to_sym, &from_sym, grammar) {
-                to_group.append(&mut from_group.clone());
+                let mut clone = groups[i].clone();
+                groups[j].append(&mut clone);
             }
         }
     }
@@ -1121,7 +1110,7 @@ fn symbols_occlude(
 ) -> bool
 {
     match symA {
-        SymbolID::DefinedGeneric(_) => match symB {
+        SymbolID::DefinedSymbol(_) => match symB {
             SymbolID::GenericSymbol => {
                 grammar.symbols_table.get(symA).unwrap().code_point_length == 1
             }
@@ -1143,7 +1132,7 @@ fn symbols_occlude(
     }
 }
 
-fn get_goals(end_nodes: &Vec<usize>, t_pack: &TPack) -> Vec<usize>
+fn get_goals(end_nodes: &[usize], t_pack: &TPack) -> Vec<usize>
 {
     BTreeSet::<usize>::from_iter(
         end_nodes.iter().map(|n| t_pack.get_node(*n).goal),
@@ -1156,7 +1145,7 @@ fn handle_unresolved_nodes(
     peek_group: Vec<usize>,
     grammar: &GrammarStore,
     t_pack: &mut TPack,
-    leaves: &mut Vec<usize>,
+    leaves: &mut [usize],
 )
 {
     if t_pack.is_scanner {
@@ -1176,7 +1165,7 @@ fn handle_unresolved_nodes(
         let mut items = vec![];
 
         for node_index in &peek_group[0..peek_group.len()] {
-            items.push(t_pack.get_node(*node_index).items[0].clone());
+            items.push(t_pack.get_node(*node_index).items[0]);
             parent = t_pack.drop_node(node_index);
         }
 
@@ -1207,6 +1196,8 @@ fn set_transition_type(node_index: usize, t_pack: &mut TPack, depth: u32)
     })
 }
 
+type TermAndEndItemGroups = (Vec<(Item, Item)>, Vec<(Item, Item)>);
+
 /// Retrieve terminal items derived from a
 /// completed item.
 ///
@@ -1219,7 +1210,7 @@ fn scan_items(
     root_end_item: &Item,
     grammar: &GrammarStore,
     t_pack: &mut TPack,
-) -> (Vec<(Item, Item)>, Vec<(Item, Item)>)
+) -> TermAndEndItemGroups
 {
     let mut seen = HashSet::<(Item, Item)>::new();
     let mut out = HashSet::<(Item, Item)>::new();
@@ -1231,11 +1222,11 @@ fn scan_items(
 
     // Stores the end item [1] and its immediate closure item [0]
     let mut end_items: VecDeque<(Item, Item)> = VecDeque::from_iter(vec![(
-        t_pack.get_closure_link(&root_end_item),
+        t_pack.get_closure_link(root_end_item),
         *root_end_item,
     )]);
     while let Some((nonterm_closure_link, end_item)) = end_items.pop_front() {
-        if seen.insert((nonterm_closure_link, end_item).clone()) {
+        if seen.insert((nonterm_closure_link, end_item)) {
             let production = end_item.get_production_id(grammar);
             // Grab all productions from the closure that match the end item's
             // production.
@@ -1267,18 +1258,12 @@ fn scan_items(
             } {
                 p if p.is_empty() => {
                     if nonterm_closure_link.is_null() {
-                        t_pack.set_closure_link(
-                            end_item.clone(),
-                            nonterm_closure_link.clone(),
-                        );
-                        final_items.insert((
-                            nonterm_closure_link.clone(),
-                            end_item.clone(),
-                        ));
+                        t_pack.set_closure_link(end_item, nonterm_closure_link);
+                        final_items.insert((nonterm_closure_link, end_item));
                     } else {
                         end_items.push_back((
                             t_pack.get_closure_link(&nonterm_closure_link),
-                            end_item.clone(),
+                            end_item,
                         ));
                     }
                 }
@@ -1291,16 +1276,16 @@ fn scan_items(
 
                         if incremented_item.is_end() {
                             end_items.push_back((
-                                nonterm_closure_link.clone(),
+                                nonterm_closure_link,
                                 incremented_item,
                             ));
                         } else {
                             t_pack.set_closure_link(
                                 incremented_item,
-                                nonterm_closure_link.clone(),
+                                nonterm_closure_link,
                             );
                             out.insert((
-                                nonterm_closure_link.clone(),
+                                nonterm_closure_link,
                                 incremented_item,
                             ));
                         }

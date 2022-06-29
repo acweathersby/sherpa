@@ -1,5 +1,5 @@
-use crate::primitives::GrammarStore;
-use crate::primitives::Item;
+use crate::types::GrammarStore;
+use crate::types::Item;
 
 pub fn debug_items(comment: &str, items: &[Item], grammar: &GrammarStore)
 {
