@@ -5,12 +5,12 @@ edition = "2021"
 build = "build.rs"
 
 [lib]
-name = "hc_compile"
-path ="./src/lib.rs"
+name = "hctk_compile"
+path ="./lib/lib.rs"
 
 [[bin]]
 name = "hc-compile"
-path = "./src/main.rs"
+path = "./app/main.rs"
 
 [dependencies]
 clap = "3.2.7"

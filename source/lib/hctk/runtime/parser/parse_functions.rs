@@ -159,7 +159,7 @@ fn set_token_state(index: u32, instruction: u32, state: &mut ParseState)
 
     let assert = state.get_assert_token();
 
-    anchor.typ = value;
+    anchor.token_type = value;
 
     anchor.byte_length = assert.byte_offset - anchor.byte_offset;
     anchor.cp_length = assert.cp_offset - anchor.cp_offset;
@@ -359,8 +359,7 @@ fn get_token_value<T: SymbolReader>(
         let active_token =
             unsafe { state.tokens.get_unchecked_mut(token_index) };
 
-        active_token.line_number = reader.line_count();
-        active_token.line_offset = reader.line_offset();
+        let (line_number, line_count) = reader.get_line_data();
 
         match input_type {
             INPUT_TYPE::T03_CLASS => {
@@ -394,7 +393,7 @@ fn get_token_value<T: SymbolReader>(
 
         state.tokens[token_index] = scanned_token;
 
-        scanned_token.typ as i32
+        scanned_token.token_type as i32
     }
 }
 
@@ -458,7 +457,8 @@ fn token_scan<T: SymbolReader>(
                 cp_offset:   0,
                 line_number: 0,
                 line_offset: 0,
-                typ:         id,
+                token_type:  id,
+                padding:     0,
             };
         }
     }
@@ -483,13 +483,15 @@ fn token_scan<T: SymbolReader>(
             scan_state.active_state = scan_state.stack.pop_state();
         }
 
-        scan_state.tokens[0].line_number = reader.line_count();
-        scan_state.tokens[0].line_offset = reader.line_offset();
+        let (line_count, line_offset) = reader.get_line_data();
+
+        scan_state.tokens[0].line_number = line_count as u32;
+        scan_state.tokens[0].line_offset = line_offset as u32;
 
         loop {
             if scan_state.active_state < 1 {
                 if scan_state.in_fail_mode
-                    || scan_state.get_anchor_token().typ == 0
+                    || scan_state.get_anchor_token().token_type == 0
                 {
                     scan_for_improvised_token(&mut scan_state, reader);
                 }
@@ -520,6 +522,15 @@ fn token_scan<T: SymbolReader>(
         ParseAction::ScannerToken(token) => token,
         _ => panic!("Unusable State"),
     }
+}
+
+pub fn get_next_actionBB(
+    reader: &mut UTF8StringReader,
+    state: &mut ParseState,
+    bytecode: &[u32],
+) -> ParseAction
+{
+    get_next_action(reader, state, bytecode)
 }
 
 /// Start or continue a parse on an input

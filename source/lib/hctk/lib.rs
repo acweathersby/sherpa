@@ -46,8 +46,8 @@ mod test_end_to_end
 {
     use crate::bytecode::compile_bytecode::build_byte_code_buffer;
     use crate::debug::compile_test_grammar;
+    use crate::debug::generate_disassembly;
     use crate::debug::parser::collect_shifts_and_skips;
-    use crate::debug::print_states;
     use crate::debug::BytecodeGrammarLookups;
     use crate::get_num_of_available_threads;
     use crate::grammar::get_production_by_name;

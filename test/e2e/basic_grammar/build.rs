@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use hc_compile::*;
+use hctk_compile::*;
 
 fn main()
 {

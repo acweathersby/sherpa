@@ -4,6 +4,7 @@ use crate::types::ParseAction;
 use crate::types::ParseState;
 use crate::types::SymbolReader;
 pub use parse_functions::get_next_action;
+pub use parse_functions::get_next_actionBB;
 
 #[cfg(test)]
 mod test_parser
@@ -18,7 +19,7 @@ mod test_parser
     use crate::bytecode::constants::NORMAL_STATE_MASK;
     use crate::debug::compile_test_grammar;
     use crate::debug::disassemble_state;
-    use crate::debug::print_states;
+    use crate::debug::generate_disassembly;
     use crate::grammar::data::ast::ASTNode;
     use crate::grammar::get_production_id_by_name;
     use crate::grammar::parse::compile_ir_ast;
@@ -166,11 +167,9 @@ state [test]
         state.set_assert_token(ParseToken {
             byte_length: 5,
             byte_offset: 10,
-            cp_length:   5,
-            cp_offset:   20,
-            line_number: 0,
-            line_offset: 0,
-            typ:         0,
+            cp_length: 5,
+            cp_offset: 20,
+            ..Default::default()
         });
 
         match dispatch(&mut reader, &mut state, &bytecode) {
@@ -209,11 +208,9 @@ state [test]
         state.set_assert_token(ParseToken {
             byte_length: 5,
             byte_offset: 10,
-            cp_length:   5,
-            cp_offset:   20,
-            line_number: 0,
-            line_offset: 0,
-            typ:         0,
+            cp_length: 5,
+            cp_offset: 20,
+            ..Default::default()
         });
 
         match dispatch(&mut reader, &mut state, &bytecode) {
@@ -368,7 +365,7 @@ state [test] scanner [none]
 
         let (bytecode, _) = build_byte_code_buffer(is_asts.iter().collect());
 
-        print_states(&bytecode, None);
+        generate_disassembly(&bytecode, None);
 
         let mut reader = UTF8StringReader::from_string(reader_input);
         let mut state = ParseState::new();
@@ -392,7 +389,7 @@ state [test] scanner [none]
             &HashMap::new(),
         );
 
-        print_states(&bytecode, None);
+        generate_disassembly(&bytecode, None);
 
         let mut reader = UTF8StringReader::from_string(reader_input);
         let mut state = ParseState::new();

@@ -1,5 +1,7 @@
 use crate::types::ParseToken;
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[repr(C)]
 pub enum ParseAction
 {
     Undefined,
@@ -32,4 +34,12 @@ pub enum ParseAction
         message:    &'static str,
         last_input: ParseToken,
     },
+}
+
+impl Default for ParseAction
+{
+    fn default() -> Self
+    {
+        ParseAction::Undefined
+    }
 }

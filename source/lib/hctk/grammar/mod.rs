@@ -32,7 +32,8 @@ mod test_grammar
     fn test_pre_process_grammar()
     {
         let grammar = String::from(
-        "\n@IMPORT ./test/me/out.hcg as bob \n<> a > tk:p?^test a(+,) ( \\1234 | t:sp? ( sp | g:sym g:sp ) f:r { basalt } ) \\nto <> b > tk:p p ",
+        "\n@IMPORT ./test/me/out.hcg as bob 
+        <> a > tk:p?^test a(+,) ( \\1234 | t:sp? ( sp | g:sym g:sp ) f:r { basalt } ) \\nto <> b > tk:p p ",
     );
 
         if let Ok(grammar) = compile_grammar_ast(Vec::from(grammar.as_bytes()))

@@ -424,15 +424,28 @@ fn get_input_id(
     }
 }
 
-pub fn print_states(bytecode: &[u32], lu: Option<&BytecodeGrammarLookups>)
+pub fn generate_disassembly(
+    bytecode: &[u32],
+    lu: Option<&BytecodeGrammarLookups>,
+) -> String
 {
+    let mut states_strings = vec![];
     let mut offset: usize = 0;
+
     while offset < bytecode.len() {
         let (string, next) = disassemble_state(bytecode, offset, lu);
+
         offset = next;
-        print!("{}", string);
+
+        states_strings.push(string);
     }
-    println!()
+
+    states_strings.join("\n")
+}
+
+pub fn print_states(bytecode: &[u32], lu: Option<&BytecodeGrammarLookups>)
+{
+    println!("{}", generate_disassembly(bytecode, lu));
 }
 
 pub fn print_state(
@@ -460,7 +473,7 @@ mod bytecode_debugging_tests
     use crate::grammar::parse::compile_ir_ast;
     use crate::intermediate::state_construction::generate_production_states;
 
-    use super::print_states;
+    use super::generate_disassembly;
 
     #[test]
     pub fn test_produce_a_single_ir_ast_from_a_single_state_of_a_trivial_production(
@@ -489,6 +502,6 @@ mod bytecode_debugging_tests
         let mut offset: usize = 0;
         let lu = BytecodeGrammarLookups::new(&grammar);
 
-        print_states(&bytecode, Some(&lu));
+        generate_disassembly(&bytecode, Some(&lu));
     }
 }

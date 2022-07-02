@@ -15,13 +15,12 @@ use super::get_closure_cached;
 use super::get_production_start_items;
 
 /// Evaluates whether a production is recursive. Returns
-/// a tuple of booleans.
+/// a douple of booleans.
 ///
 /// The first boolean value indicates that production is recursive.
 ///
 /// The second boolean value indicates a production has left
 /// recursive, either directly or indirectly.
-
 pub fn is_production_recursive(
     production: ProductionId,
     grammar: &GrammarStore,

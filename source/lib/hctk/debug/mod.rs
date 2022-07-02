@@ -1,3 +1,4 @@
+pub mod assembly;
 pub mod bytecode;
 pub mod grammar;
 pub mod items;

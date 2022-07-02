@@ -2,7 +2,7 @@
 #![feature(is_some_with)]
 #![feature(const_format_args)]
 #![feature(const_fmt_arguments_new)]
-use hc_compile::*;
+use hctk_compile::*;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -36,6 +36,18 @@ fn main()
                 build_files(&input_path, &output_path, build_ast);
             } else {
                 println!("Unable to find path {:?}", input_path);
+            }
+        }
+        Some(("byte-asm", sub_matches)) => {
+            let input_path =
+                get_path_arg(sub_matches, "input").unwrap_or_default();
+
+            if input_path == PathBuf::default()
+                || !input_path.extension().is_some_and(|t| *t == "hcg")
+            {
+                eprintln!("Unable to read input:{:?}", input_path);
+            } else {
+                println!("{}", generate_disassembly(&input_path));
             }
         }
         _ => unreachable!(),

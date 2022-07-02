@@ -31,6 +31,15 @@ pub fn build_cli() -> Command<'static>
                 .value_hint(clap::ValueHint::FilePath)
                 .required(true)
             )
-            //.arg(arg![<num_of_threads> "The number of threads that the compiler may use."]),
+    ).subcommand(
+        Command::new("byte-asm")
+            .about("Output the bytecode disassembly for the grammar.")
+            .arg(
+                arg!(
+                    -i --input <INPUT> "A path to a grammar file (.hcg)"
+                )
+                .value_hint(clap::ValueHint::FilePath)
+                .required(true)
+            )
     )
 }

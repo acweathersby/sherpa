@@ -3,7 +3,7 @@
 #![feature(const_format_args)]
 #![feature(const_fmt_arguments_new)]
 #![feature(box_patterns)]
-
+/// Functions for building parsers
 use std::collections::BTreeMap;
 use std::io::BufWriter;
 use std::io::Result;
@@ -11,21 +11,24 @@ use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::thread;
-mod code_writer;
-mod output_rust;
+mod asm;
+mod ast;
+mod writer;
+
+use ast::*;
+use writer::*;
 
 use code_writer::*;
 
 use hctk::ascript::compile_ascript::compile_reduce_function_expressions;
 use hctk::bytecode::compile_bytecode::build_byte_code_buffer;
+use hctk::debug::BytecodeGrammarLookups;
 use hctk::get_num_of_available_threads;
 use hctk::grammar::compile_from_path;
 use hctk::grammar::get_production_plain_name;
 use hctk::grammar::parse::compile_ir_ast;
 use hctk::intermediate::state_construction::compile_states;
 use hctk::types::*;
-
-use crate::output_rust::output_rust;
 
 static DISCLAIMER: fn(&str, &str) -> String = |source_file, file_type| {
     format!(
@@ -50,9 +53,10 @@ static DISCLAIMER: fn(&str, &str) -> String = |source_file, file_type| {
     )
 };
 
+/// Compile grammar into files written to output_path.
 pub fn build_files(input_path: &PathBuf, output_path: &PathBuf, build_ast: bool)
 {
-    println!("Input file: {:?}\n Output file: {:?}", input_path, output_path);
+    eprintln!("Input file: {:?}\n Output file: {:?}", input_path, output_path);
 
     let threads = get_num_of_available_threads();
 
@@ -64,7 +68,7 @@ pub fn build_files(input_path: &PathBuf, output_path: &PathBuf, build_ast: bool)
 
     if !errors.is_empty() {
         for error in errors {
-            println!("{}", error);
+            eprintln!("{}", error);
         }
     } else if let Some(grammar) = grammar {
         thread::scope(|scope| {
@@ -79,9 +83,9 @@ pub fn build_files(input_path: &PathBuf, output_path: &PathBuf, build_ast: bool)
                         writer.write(&DISCLAIMER(input_file_name, "AST Data"));
 
                         if let Err(err) =
-                            write_ascript_data(&grammar, writer, output_rust)
+                            write_ascript_data(&grammar, writer, rust::write)
                         {
-                            println!("Problem writing ast.rs:\n{}", err);
+                            eprintln!("Problem writing ast.rs:\n{}", err);
                         }
                     } else {
                         println!("cargo:warning=Could not write ast.rs");
@@ -117,6 +121,35 @@ pub fn build_files(input_path: &PathBuf, output_path: &PathBuf, build_ast: bool)
     }
 }
 
+/// Produce the disassembly of grammar.
+pub fn generate_disassembly(input_path: &PathBuf) -> String
+{
+    eprintln!("Input file: {:?}\n ", input_path);
+
+    let threads = get_num_of_available_threads();
+
+    eprintln!("Number of threads used: {}", threads);
+
+    let (grammar, errors) = compile_from_path(input_path, threads);
+
+    if !errors.is_empty() {
+        for error in errors {
+            eprintln!("{}", error);
+        }
+        String::new()
+    } else if let Some(grammar) = grammar {
+        let BytecodeOutput { bytecode, .. } =
+            compile_bytecode(&grammar, threads);
+
+        hctk::debug::bytecode::generate_disassembly(
+            &bytecode,
+            Some(&BytecodeGrammarLookups::new(&grammar)),
+        )
+    } else {
+        String::new()
+    }
+}
+
 type AScriptSyntaxWriter<W> =
     fn(&GrammarStore, &AScriptStore, &mut CodeWriter<W>) -> Result<()>;
 
@@ -149,6 +182,28 @@ fn write_parser_data<W: Write>(
     threads: usize,
 ) -> std::io::Result<()>
 {
+    let BytecodeOutput {
+        bytecode,
+        state_name_to_instruction_offset: state_lookups,
+    } = compile_bytecode(grammar, threads);
+
+    if let Err(err) =
+        write_rust_data_file(writer, &state_lookups, grammar, &bytecode)
+    {
+        println!("{}", err);
+    }
+
+    Ok(())
+}
+
+struct BytecodeOutput
+{
+    bytecode: Vec<u32>,
+    state_name_to_instruction_offset: BTreeMap<String, u32>,
+}
+
+fn compile_bytecode(grammar: &GrammarStore, threads: usize) -> BytecodeOutput
+{
     let state_asts = compile_states(grammar, threads)
         .values()
         .map(|s| {
@@ -162,17 +217,15 @@ fn write_parser_data<W: Write>(
             }
         })
         .collect::<Vec<_>>();
+
     let state_refs = state_asts.iter().collect::<Vec<_>>();
 
     let (bytecode, state_lookups) = build_byte_code_buffer(state_refs);
 
-    if let Err(err) =
-        write_rust_data_file(writer, &state_lookups, grammar, &bytecode)
-    {
-        println!("{}", err);
+    BytecodeOutput {
+        bytecode,
+        state_name_to_instruction_offset: state_lookups,
     }
-
-    Ok(())
 }
 
 fn write_rust_data_file<W: Write>(
@@ -246,7 +299,7 @@ fn test_output_rust_on_practical_grammar()
 
     let mut writer = StringBuffer::default();
 
-    output_rust(&grammar, &ascript, &mut writer);
+    rust::write(&grammar, &ascript, &mut writer);
 
     println!("{}", String::from_utf8(writer.into_output()).unwrap());
 }
@@ -277,7 +330,7 @@ fn test_output_rust_on_trivial_grammar()
 
     let mut writer = StringBuffer::default();
 
-    output_rust(&grammar, &ascript, &mut writer);
+    rust::write(&grammar, &ascript, &mut writer);
 
     println!("{}", String::from_utf8(writer.into_output()).unwrap());
 }

@@ -36,7 +36,6 @@ pub trait SymbolReader
     }
 
     /// Advances the internal cursor by `amount`
-
     fn next(&mut self, amount: u32);
 
     /// Returns the word at the current cursor position, little
@@ -45,20 +44,42 @@ pub trait SymbolReader
     fn word(&self) -> u32;
 
     /// Returns the byte at the current cursor position.
-
     fn byte(&self) -> u8;
 
-    /// Returns the byte at the current cursor position.
+    /// Returns the length of the source input. If this unknown
+    /// then returns 0
 
-    fn length(&self) -> u32;
+    fn length(&self) -> u32
+    {
+        0
+    }
 
     /// Returns the number of lines encountered.
-
-    fn line_count(&self) -> u32;
+    #[deprecated]
+    fn line_count(&self) -> u32
+    {
+        0
+    }
 
     /// Returns the offset of the most recent line character.
+    #[deprecated]
+    fn line_offset(&self) -> u32
+    {
+        0
+    }
 
-    fn line_offset(&self) -> u32;
+    /// Return a tuple comprised of the current line count
+    /// and the current line offset, respectively.
+    fn get_line_data(&self) -> (u64, u64)
+    {
+        (0, 0)
+    }
+    /// Return a tuple comprised of the current byte length
+    /// and the current code point length, respectively.
+    fn get_length_data(&self) -> (u64, u64)
+    {
+        (0, 0)
+    }
 
     /// Resets the cursor back to the value of the `offset`
     /// argument. Should the offset value exceed the limits
@@ -68,23 +89,18 @@ pub trait SymbolReader
 
     fn set_cursor_to(&mut self, token: &ParseToken) -> bool;
 
-    fn set_line_data(&mut self, token: &ParseToken);
-
     /// Return a new instance of byte reader with the same
     /// state as the source reader. Implementation should provide
     /// adequate shared buffers or other resources used to cache the
     /// input stream data, as multiple ByteReaders may be required
     /// read data at different cursor positions.
-
+    #[deprecated]
     fn clone(&self) -> Self;
 
     /// Returns UTF8 codepoint information at the current cursor
     /// position.
 
-    fn codepoint(&self) -> u32
-    {
-        return 0;
-    }
+    fn codepoint(&self) -> u32;
 
     fn codepoint_byte_length(&self) -> u32
     {

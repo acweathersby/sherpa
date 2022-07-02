@@ -1,5 +1,8 @@
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-
+/// Represents either a single parsable token or
+/// a range of characters, as in the case of `skip`
+/// tokens.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
+#[repr(C)]
 pub struct ParseToken
 {
     pub byte_offset: u32,
@@ -8,43 +11,26 @@ pub struct ParseToken
     pub cp_length:   u32,
     pub line_number: u32,
     pub line_offset: u32,
-    pub typ:         u32,
+    pub token_type:  u32,
+    pub padding:     u32,
 }
 
 impl ParseToken
 {
     pub fn new() -> ParseToken
     {
-        ParseToken {
-            typ:         0,
-            byte_offset: 0,
-            byte_length: 0,
-            cp_offset:   0,
-            cp_length:   0,
-            line_number: 0,
-            line_offset: 0,
-        }
+        ParseToken::default()
     }
 
     #[inline]
     pub fn next(&self) -> ParseToken
     {
         ParseToken {
-            typ:         0,
-            byte_length: 0,
-            cp_length:   0,
-            cp_offset:   self.cp_offset + self.cp_length,
+            cp_offset: self.cp_offset + self.cp_length,
             byte_offset: self.byte_offset + self.byte_length,
             line_number: self.line_number,
             line_offset: self.line_offset,
+            ..Default::default()
         }
-    }
-}
-
-impl Default for ParseToken
-{
-    fn default() -> Self
-    {
-        Self::new()
     }
 }

@@ -25,7 +25,7 @@ use std::io::Write;
 
 use crate::code_writer::*;
 
-pub fn output_rust<W: Write>(
+pub fn write<W: Write>(
     grammar: &GrammarStore,
     ascript: &AScriptStore,
     writer: &mut CodeWriter<W>,

@@ -284,7 +284,7 @@ impl<'a, T: ByteReader> StateIterator<'a, T>
         bytecode: &[u32],
     ) -> ParseToken
     {
-        if current_token.typ == 0 {
+        if current_token.token_type == 0 {
             let scanner = &mut self.scanner_iterator;
 
             scanner.stack.reset(scanner_start_pointer);
@@ -303,7 +303,7 @@ impl<'a, T: ByteReader> StateIterator<'a, T>
                         break;
                     }
                     ParseAction::TOKEN { token } => {
-                        if token.typ == SKIPPED_SCAN_PROD {
+                        if token.token_type == SKIPPED_SCAN_PROD {
                             current_token.cp_offset += token.cp_length;
 
                             current_token.byte_offset += token.byte_length;
@@ -323,7 +323,7 @@ impl<'a, T: ByteReader> StateIterator<'a, T>
 
                             current_token.byte_length = token.byte_length;
 
-                            current_token.typ = token.typ;
+                            current_token.token_type = token.token_type;
 
                             current_token.line_offset = token.line_offset;
 
@@ -463,7 +463,7 @@ impl<'a, T: ByteReader> ParserCoreIterator<T> for StateIterator<'a, T>
 
         token.byte_length = 0;
 
-        token.typ = 0;
+        token.token_type = 0;
 
         self.set_tok(0, token);
 
@@ -513,7 +513,7 @@ impl<'a, T: ByteReader> ParserCoreIterator<T> for StateIterator<'a, T>
 
                     self.tokens[index] = tok;
 
-                    tok.typ as i32
+                    tok.token_type as i32
                 }
                 _ => 0,
             }
@@ -684,7 +684,7 @@ impl<T: ByteReader> ParserCoreIterator<T> for ScannerIterator<T>
 
         token.line_number = self.reader.line_count();
 
-        token.typ = 0;
+        token.token_type = 0;
 
         self.set_tok(1, token);
 
@@ -729,7 +729,7 @@ impl<T: ByteReader> ParserCoreIterator<T> for ScannerIterator<T>
                         return 0;
                     };
 
-                    self.tokens[1].typ = 0;
+                    self.tokens[1].token_type = 0;
                 }
             }
 
@@ -969,7 +969,6 @@ trait ParserCoreIterator<R: ByteReader>
             2
         } else {
             token.line_number = self.get_reader().line_count();
-
             token.line_offset = self.get_reader().line_offset();
 
             self.consume(1, 0, bytecode);
@@ -1093,7 +1092,7 @@ trait ParserCoreIterator<R: ByteReader>
 
             self.set_prod(val);
 
-            root_token.typ = val;
+            root_token.token_type = val;
 
             root_token.byte_length =
                 scan_token.byte_offset - root_token.byte_offset;

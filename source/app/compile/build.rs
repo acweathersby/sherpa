@@ -3,7 +3,7 @@ use clap_complete::shells::Zsh;
 use std::env;
 use std::io::Error;
 
-include!("src/cli.rs");
+include!("app/cli.rs");
 
 fn main() -> Result<(), Error>
 {
