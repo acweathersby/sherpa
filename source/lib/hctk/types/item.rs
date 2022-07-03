@@ -97,8 +97,11 @@ impl Item
 
             string += &format!("{} ", self.state);
 
-            string +=
-                &grammar.production_table.get(&body.production).unwrap().name;
+            string += &grammar
+                .production_table
+                .get(&body.production)
+                .unwrap()
+                .guid_name;
 
             string += " =>";
 

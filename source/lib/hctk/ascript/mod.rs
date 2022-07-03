@@ -1,12 +1,12 @@
-pub mod compile_ascript;
+pub mod compile;
 
 #[cfg(test)]
 mod ascript_tests
 {
     use grammar::compile_test_grammar;
 
-    use crate::ascript::compile_ascript::compile_reduce_function_expressions;
-    use crate::ascript::compile_ascript::compile_struct_type;
+    use crate::ascript::compile::compile_reduce_function_expressions;
+    use crate::ascript::compile::compile_struct_type;
     use crate::debug::grammar;
     use crate::grammar::data::ast::ASTNode;
     use crate::grammar::data::ast::AST_Property;

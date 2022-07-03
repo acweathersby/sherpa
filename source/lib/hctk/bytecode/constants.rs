@@ -23,6 +23,8 @@ pub const FAIL_STATE_MASK: u32 = 1 << 27;
 /// mode
 pub const NORMAL_STATE_MASK: u32 = 1 << 26;
 
+pub const PEEK_MODE_FLAG: u32 = 1 << 28;
+
 /// This is the standard location of a `fail` instruction that is
 /// present in all bytecode blocks produced by Hydrocarbon.
 pub const DEFAULT_FAIL_INSTRUCTION_OFFSET: u32 = 2;

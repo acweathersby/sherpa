@@ -12,8 +12,8 @@ mod test_parser
     use std::collections::HashMap;
 
     use crate::bytecode;
-    use crate::bytecode::compile_bytecode::build_byte_code_buffer;
-    use crate::bytecode::compile_bytecode::compile_ir_state_to_bytecode;
+    use crate::bytecode::compile::build_byte_code_buffer;
+    use crate::bytecode::compile::compile_ir_state_to_bytecode;
     use crate::bytecode::constants::BranchSelector;
     use crate::bytecode::constants::FIRST_STATE_OFFSET;
     use crate::bytecode::constants::NORMAL_STATE_MASK;
@@ -23,7 +23,7 @@ mod test_parser
     use crate::grammar::data::ast::ASTNode;
     use crate::grammar::get_production_id_by_name;
     use crate::grammar::parse::compile_ir_ast;
-    use crate::intermediate::state_construction::generate_production_states;
+    use crate::intermediate::state::generate_production_states;
     use crate::runtime::parser::parse_functions::dispatch;
     use crate::runtime::parser::parse_functions::hash_jump;
     use crate::runtime::parser::parse_functions::vector_jump;

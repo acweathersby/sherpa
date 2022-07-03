@@ -22,19 +22,15 @@ pub fn hash_id_value_u128<T: Hash>(t: T) -> u128
     0
 }
 
-pub fn get_uuid_grammar_name(uri: &PathBuf) -> Result<String, ParseError>
+pub fn get_guid_grammar_name(uri: &PathBuf) -> Result<String, ParseError>
 {
-    match uri.file_name() {
+    match uri.file_stem() {
         Some(name) => {
             let file_name = String::from(name.to_str().unwrap());
 
-            let hash = unsafe {
-                format!("{:x}", hash_id_value_u64(&uri))
-                    .get_unchecked(0..5)
-                    .to_owned()
-            };
-
-            Ok(file_name + &hash)
+            Ok(unsafe {
+                format!("{}_{:05X}", file_name, hash_id_value_u64(&uri))
+            })
         }
         None => Err(ParseError::UNDEFINED),
     }

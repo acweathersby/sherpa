@@ -32,23 +32,23 @@ fn main()
                 println!("Could not read input file")
             }
 
-            if input_path.exists() {
-                build_files(&input_path, &output_path, build_ast);
-            } else {
-                println!("Unable to find path {:?}", input_path);
-            }
+            // if input_path.exists() {
+            // compile_bytecode_files(&input_path, &output_path, build_ast);
+            // } else {
+            // println!("Unable to find path {:?}", input_path);
+            // }
         }
         Some(("byte-asm", sub_matches)) => {
             let input_path =
                 get_path_arg(sub_matches, "input").unwrap_or_default();
 
-            if input_path == PathBuf::default()
+            /* if input_path == PathBuf::default()
                 || !input_path.extension().is_some_and(|t| *t == "hcg")
             {
                 eprintln!("Unable to read input:{:?}", input_path);
             } else {
                 println!("{}", generate_disassembly(&input_path));
-            }
+            } */
         }
         _ => unreachable!(),
     }

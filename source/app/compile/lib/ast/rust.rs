@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::io::Result;
 
-use hctk::ascript::compile_ascript::get_struct_type_from_node;
+use hctk::ascript::compile::get_struct_type_from_node;
 use hctk::grammar::data::ast::ASTNode;
 use hctk::grammar::data::ast::AST_IndexReference;
 use hctk::grammar::data::ast::AST_NamedReference;
@@ -23,7 +23,7 @@ use hctk::grammar::data::ast::AST_U8;
 use hctk::types::*;
 use std::io::Write;
 
-use crate::code_writer::*;
+use crate::writer::code_writer::*;
 
 pub fn write<W: Write>(
     grammar: &GrammarStore,

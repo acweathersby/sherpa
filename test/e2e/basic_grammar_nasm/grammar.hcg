@@ -1,0 +1,7 @@
+@IGNORE g:sp
+
+@EXPORT test as entry
+
+@EXPORT test as banner
+
+<> test > \hello \world 

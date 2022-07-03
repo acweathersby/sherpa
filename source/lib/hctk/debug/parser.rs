@@ -1,4 +1,4 @@
-use crate::bytecode::compile_bytecode::build_byte_code_buffer;
+use crate::bytecode::compile::build_byte_code_buffer;
 use crate::debug::compile_test_grammar;
 use crate::debug::generate_disassembly;
 use crate::debug::BytecodeGrammarLookups;
@@ -6,7 +6,7 @@ use crate::get_num_of_available_threads;
 use crate::grammar::get_production_by_name;
 use crate::grammar::get_production_id_by_name;
 use crate::intermediate::optimize::optimize_states;
-use crate::intermediate::state_construction::compile_states;
+use crate::intermediate::state::compile_states;
 use crate::runtime::parser::get_next_action;
 use crate::types::*;
 use std::sync::Arc;

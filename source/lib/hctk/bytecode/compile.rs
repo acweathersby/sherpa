@@ -27,7 +27,7 @@ use crate::grammar::data::ast::ASSERT;
 use crate::grammar::data::ast::HASH_NAME;
 use crate::grammar::data::ast::IR_STATE;
 use crate::grammar::parse::compile_ir_ast;
-use crate::intermediate::state_construction::generate_production_states;
+use crate::intermediate::state::generate_production_states;
 use crate::types::*;
 use std::any::Any;
 use std::collections::BTreeMap;
@@ -41,7 +41,7 @@ use std::iter::Filter;
 use std::thread::{self};
 use std::vec;
 
-pub fn build_byte_code_buffer(
+pub(crate) fn build_byte_code_buffer(
     states: Vec<&IR_STATE>,
 ) -> (Vec<u32>, BTreeMap<String, u32>)
 {
@@ -693,14 +693,14 @@ mod byte_code_creation_tests
 
     use std::collections::HashMap;
 
-    use crate::bytecode::compile_bytecode::compile_ir_state_to_bytecode;
-    use crate::bytecode::compile_bytecode::BranchSelector;
+    use crate::bytecode::compile::compile_ir_state_to_bytecode;
+    use crate::bytecode::compile::BranchSelector;
     use crate::bytecode::constants::default_get_branch_selector;
     use crate::debug::compile_test_grammar;
     use crate::grammar::data::ast::ASTNode;
     use crate::grammar::get_production_id_by_name;
     use crate::grammar::parse::compile_ir_ast;
-    use crate::intermediate::state_construction::generate_production_states;
+    use crate::intermediate::state::generate_production_states;
 
     #[test]
     pub fn test_produce_a_single_ir_ast_from_a_single_state_of_a_trivial_production(

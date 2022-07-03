@@ -90,12 +90,12 @@ impl SymbolID
                 .production_table
                 .get(prod_id)
                 .unwrap()
-                .name
+                .guid_name
                 .to_string(),
             Self::TokenProduction(prod_id, _) => {
                 format!(
                     "tk:{}",
-                    grammar.production_table.get(prod_id).unwrap().name
+                    grammar.production_table.get(prod_id).unwrap().guid_name
                 )
             }
             Self::Default => "default".to_string(),

@@ -152,8 +152,11 @@ pub struct GrammarStore
     /// ```hgc
     /// <> export_preamble > \@EXPORT sym::production_symbol ( t:AS | t:as ) tk:export_id
     /// ```
-    /// where `tk:export_id` is assigned to the second tuple value.
-    /// value.
+    /// where `tk:export_id` is assigned to the second tuple position.
+    ///
+    /// If no export names are declared in the root grammar, then this will contain
+    /// the id of the first production declared in the root grammar, assigned to the
+    /// name `default`.
     pub export_names: Vec<(ProductionId, String)>,
 
     /// All items in the grammar that are `B => . A b` for some production `A`.

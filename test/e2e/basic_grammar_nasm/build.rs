@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use hctk_compile::compile_bytecode_files;
+use hctk_compile::compile_asm_files;
 
 fn main()
 {
@@ -11,7 +11,7 @@ fn main()
         if let Ok(input) = cwd.join("./grammar.hcg").canonicalize() {
             println!("{}", input.to_str().unwrap());
             println!("cargo:rerun-if-changed={}", input.to_str().unwrap());
-            compile_bytecode_files(&input, &cwd, true);
+            compile_asm_files(&input, &cwd, true);
         }
     }
 }

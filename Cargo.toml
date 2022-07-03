@@ -3,7 +3,8 @@
 members = [
     "source/lib/hctk",
     "source/app/compile",
-    "test/e2e/basic_grammar"
+    "test/e2e/basic_grammar",
+    "test/e2e/basic_grammar_nasm"
 ]
 
 [profile.dev]

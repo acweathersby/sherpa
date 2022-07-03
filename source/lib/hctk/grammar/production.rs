@@ -57,7 +57,7 @@ pub fn is_production_recursive(
 }
 
 /// Used to separate a grammar's uuid name from a production's name
-const UUID_NAME_DELIMITER: &str = "#:";
+const GUID_NAME_DELIMITER: &str = "_GUID_";
 
 /// Returns the [Production] that's mapped to [`production_id`](ProductionId)
 /// within the [`grammar`](GrammarStore), or panics.
@@ -86,12 +86,12 @@ pub fn create_defined_scanner_name(uuid_production_name: &String) -> String
 /// productions name (omitting local import name portion of a
 /// production)
 
-pub fn create_production_uuid_name(
+pub fn create_production_guid_name(
     grammar_uuid_name: &String,
     production_name: &String,
 ) -> String
 {
-    grammar_uuid_name.to_owned() + UUID_NAME_DELIMITER + production_name
+    grammar_uuid_name.to_owned() + GUID_NAME_DELIMITER + production_name
 }
 
 /// Retrieve the non-import and unmangled name of a [Production](Production).
@@ -101,9 +101,9 @@ pub fn get_production_plain_name<'a>(
 ) -> &'a str
 {
     if let Some(production) = grammar.production_table.get(production_id) {
-        let name = &production.name;
+        let name = &production.guid_name;
 
-        let split = name.split(UUID_NAME_DELIMITER);
+        let split = name.split(GUID_NAME_DELIMITER);
 
         split.last().unwrap()
     } else {
@@ -143,6 +143,39 @@ pub fn get_production_by_name<'a>(
 
     None
 }
+/// A convenient wrapper around information used to construct parser entry points
+/// based on [productions](Production).
+pub struct ExportedProduction<'a>
+{
+    /// The name assigned to the production within the
+    /// export clause of a grammar.
+    /// e.g. `@EXPORT production as <export_name>`
+    pub export_name: &'a str,
+    /// The GUID name assigned of the corresponding production.
+    pub guid_name:   &'a str,
+    /// The exported production.
+    pub production:  &'a Production,
+}
+
+/// Returns a list of [ExportedProductions](ExportedProduction) extracted from
+/// the [grammar](GrammarStore).
+pub fn get_exported_productions<'a>(
+    grammar: &'a GrammarStore,
+) -> Vec<ExportedProduction<'a>>
+{
+    grammar
+        .export_names
+        .iter()
+        .map(|(id, name)| {
+            let production = grammar.production_table.get(id).unwrap();
+            ExportedProduction {
+                export_name: name,
+                guid_name: &production.guid_name,
+                production,
+            }
+        })
+        .collect::<Vec<_>>()
+}
 
 #[cfg(test)]
 
@@ -151,6 +184,27 @@ mod production_utilities_tests
 
     use super::*;
     use crate::debug::compile_test_grammar;
+
+    #[test]
+    fn test_get_default_production()
+    {
+        let grammar = compile_test_grammar(
+            "
+@EXPORT start as test
+
+<> start > \\hello \\and end
+
+<> end > \\goodby
+",
+        );
+
+        let exported_productions = get_exported_productions(&grammar);
+
+        let first = exported_productions.first().unwrap();
+
+        assert_eq!(first.production.original_name, "start");
+        assert_eq!(first.export_name, "test");
+    }
 
     #[test]
 
@@ -167,7 +221,7 @@ mod production_utilities_tests
         );
 
         assert_ne!(
-            grammar.production_table.get(&prod).unwrap().name,
+            grammar.production_table.get(&prod).unwrap().guid_name,
             "billofolious_tantimum"
         );
     }

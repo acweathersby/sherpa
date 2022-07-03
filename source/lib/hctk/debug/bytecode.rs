@@ -109,7 +109,7 @@ pub fn disassemble_state(
                         .bytecode_id_to_production
                         .get(&production_id)
                         .unwrap()
-                        .name;
+                        .guid_name;
                     (
                         format!(
                             "\n{}PROD SET TO {}     // {}",
@@ -403,8 +403,11 @@ fn get_input_id(
     if let Some(lu) = lu {
         match input_type {
             INPUT_TYPE::T01_PRODUCTION => {
-                let production =
-                    &lu.bytecode_id_to_production.get(&token_id).unwrap().name;
+                let production = &lu
+                    .bytecode_id_to_production
+                    .get(&token_id)
+                    .unwrap()
+                    .guid_name;
                 format!("{} [{}]", token_id, production)
             }
             INPUT_TYPE::T02_TOKEN => {
@@ -462,8 +465,8 @@ mod bytecode_debugging_tests
 {
     use std::collections::HashMap;
 
-    use crate::bytecode::compile_bytecode::build_byte_code_buffer;
-    use crate::bytecode::compile_bytecode::compile_ir_state_to_bytecode;
+    use crate::bytecode::compile::build_byte_code_buffer;
+    use crate::bytecode::compile::compile_ir_state_to_bytecode;
     use crate::bytecode::constants::default_get_branch_selector;
     use crate::bytecode::constants::BranchSelector;
     use crate::debug::bytecode::BytecodeGrammarLookups;
@@ -471,7 +474,7 @@ mod bytecode_debugging_tests
     use crate::debug::disassemble_state;
     use crate::grammar::get_production_id_by_name;
     use crate::grammar::parse::compile_ir_ast;
-    use crate::intermediate::state_construction::generate_production_states;
+    use crate::intermediate::state::generate_production_states;
 
     use super::generate_disassembly;
 
@@ -502,6 +505,6 @@ mod bytecode_debugging_tests
         let mut offset: usize = 0;
         let lu = BytecodeGrammarLookups::new(&grammar);
 
-        generate_disassembly(&bytecode, Some(&lu));
+        println!("{}", generate_disassembly(&bytecode, Some(&lu)));
     }
 }

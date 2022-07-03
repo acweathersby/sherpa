@@ -4,15 +4,15 @@ use crate::types::*;
 use regex::Regex;
 
 use super::create_defined_scanner_name;
-use super::create_production_uuid_name;
+use super::create_production_guid_name;
 use super::create_scanner_name;
 use super::data::ast;
 use super::data::ast::ASTNode;
 use super::data::ast::ASTNodeTraits;
 use super::get_closure;
+use super::get_guid_grammar_name;
 use super::get_production_plain_name;
 use super::get_production_start_items;
-use super::get_uuid_grammar_name;
 use super::is_production_recursive;
 use super::parse;
 use super::parse::compile_grammar_ast;
@@ -566,7 +566,8 @@ fn create_scanner_productions(
                     });
 
                     e.insert(crate::types::Production::new(
-                        scanner_name,
+                        &scanner_name,
+                        &scanner_name,
                         scanner_production_id,
                         1,
                         Token::empty(),
@@ -649,7 +650,8 @@ fn create_scanner_productions(
                     });
 
                     e.insert(crate::types::Production::new(
-                        scanner_name,
+                        &scanner_name,
+                        &scanner_name,
                         scanner_production_id,
                         1,
                         Token::empty(),
@@ -668,7 +670,7 @@ fn create_scanner_productions(
             | SymbolID::TokenProduction(prod_id, _) => {
                 let production =
                     grammar.production_table.get(prod_id).unwrap().clone();
-                let scanner_name = create_scanner_name(&production.name);
+                let scanner_name = create_scanner_name(&production.guid_name);
                 let scanner_production_id = ProductionId::from(&scanner_name);
 
                 if !grammar
@@ -711,7 +713,7 @@ fn create_scanner_productions(
 
                                             let scanner_name =
                                                 create_scanner_name(
-                                                    &production.name,
+                                                    &production.guid_name,
                                                 );
 
                                             let scanner_production_id =
@@ -795,7 +797,8 @@ fn create_scanner_productions(
                     grammar.production_table.insert(
                         scanner_production_id,
                         crate::types::Production::new(
-                            scanner_name,
+                            &scanner_name,
+                            &scanner_name,
                             scanner_production_id,
                             bodies.len() as u16,
                             production.original_location.clone(),
@@ -832,7 +835,7 @@ pub(crate) fn get_scanner_info_from_defined(
                 .production_table
                 .get(production_id)
                 .unwrap()
-                .name
+                .guid_name
                 .clone();
             (create_scanner_name(&symbol_string), symbol_string)
         }
@@ -1028,9 +1031,9 @@ pub fn pre_process_grammar(
 
     let mut production_symbols_table = BTreeMap::new();
 
-    let uuid_name = get_uuid_grammar_name(absolute_path).unwrap();
+    let guid_name = get_guid_grammar_name(absolute_path).unwrap();
 
-    let uuid = GrammarId(hash_id_value_u64(&uuid_name));
+    let guid = GrammarId(hash_id_value_u64(&guid_name));
 
     let mut reduce_functions = ReduceFunctionTable::new();
 
@@ -1042,7 +1045,7 @@ pub fn pre_process_grammar(
 
     {
         let mut tgs = TempGrammarStore {
-            local_guid: &uuid_name,
+            local_guid: &guid_name,
             absolute_path,
             import_names_lookup: &mut import_names_lookup,
             symbols_table: &mut symbols_table,
@@ -1102,7 +1105,7 @@ pub fn pre_process_grammar(
                         }
                     }
 
-                    let import_uuid = get_uuid_grammar_name(&uri).unwrap();
+                    let import_uuid = get_guid_grammar_name(&uri).unwrap();
 
                     // Map the foreign grammar's local name to the uuid and
                     // absolute path
@@ -1167,8 +1170,8 @@ pub fn pre_process_grammar(
     (
         GrammarStore {
             source_path: absolute_path.clone(),
-            guid: uuid,
-            guid_name: uuid_name,
+            guid,
+            guid_name,
             production_bodies_table,
             production_table,
             bodies_table,
@@ -1197,7 +1200,7 @@ fn pre_process_production(
 
     if let ASTNode::Production(prod) = production_node {
         let production_id = get_production_id_from_node(production_node, tgs);
-        let production_name =
+        let production_guid_name =
             get_resolved_production_name(production_node, tgs).unwrap();
         let mut bodies = vec![];
 
@@ -1208,7 +1211,7 @@ fn pre_process_production(
                         CompoundCompileProblem {
                             message:   format!(
                                 "production {} already exists!",
-                                production_name
+                                production_guid_name
                             ),
                             locations: vec![
                                 CompileProblem {
@@ -1216,7 +1219,7 @@ fn pre_process_production(
                                     loc: production_node.Token(),
                                     message: format!(
                                         "Redefinition of {} occurs here.",
-                                        production_name
+                                        production_guid_name
                                     ),
                                 },
                                 CompileProblem {
@@ -1226,7 +1229,7 @@ fn pre_process_production(
                                         .clone(),
                                     message: format!(
                                         "production {} first defined here.",
-                                        production_name
+                                        production_guid_name
                                     ),
                                 },
                             ],
@@ -1264,7 +1267,8 @@ fn pre_process_production(
             tgs.production_table.insert(
                 production_id,
                 crate::types::Production::new(
-                    production_name,
+                    &prod.symbol.Token().to_string(),
+                    &production_guid_name,
                     production_id,
                     bodies.len() as u16,
                     production_node.Token(),
@@ -1289,6 +1293,9 @@ fn pre_process_production(
 /// - Production_Token
 /// - Production
 /// - Import_Production
+///
+/// This name is guaranteed to be unique amongst all grammars imported by
+/// the root grammar.
 ///
 /// ## Panics
 /// This function panics if the node is not one of the above.
@@ -1319,16 +1326,16 @@ fn get_resolved_production_name(
                     }));
                     None
                 }
-                Some((grammar_uuid_name, _)) => {
-                    Some(create_production_uuid_name(
-                        grammar_uuid_name,
+                Some((grammar_guid_name, _)) => {
+                    Some(create_production_guid_name(
+                        grammar_guid_name,
                         production_name,
                     ))
                 }
             }
         }
         ASTNode::Production_Symbol(prod_sym) => {
-            Some(create_production_uuid_name(tgs.local_guid, &prod_sym.name))
+            Some(create_production_guid_name(tgs.local_guid, &prod_sym.name))
         }
         ASTNode::Production(prod) => {
             get_resolved_production_name(&prod.symbol, tgs)

@@ -63,7 +63,8 @@ impl Display for BodyId
 
 pub struct Production
 {
-    pub name: String,
+    pub guid_name: String,
+    pub original_name: String,
     pub number_of_bodies: u16,
     pub id: ProductionId,
     pub is_scanner: bool,
@@ -86,7 +87,8 @@ pub struct Production
 impl Production
 {
     pub fn new(
-        name: String,
+        original_name: &str,
+        guid_name: &str,
         id: ProductionId,
         number_of_bodies: u16,
         token: Token,
@@ -94,7 +96,8 @@ impl Production
     ) -> Self
     {
         Production {
-            name,
+            guid_name: guid_name.to_string(),
+            original_name: original_name.to_string(),
             id,
             is_entry: false,
             is_recursive: false,
