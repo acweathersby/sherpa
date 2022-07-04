@@ -93,8 +93,6 @@ mod test_end_to_end
 
         assert!(reader.at_end());
 
-        assert_eq!(target_production_id, 0);
-
         assert_eq!(shifts, ["hello", "world"]);
 
         assert_eq!(skips, ["    \t"]);

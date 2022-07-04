@@ -49,10 +49,16 @@ mod transition_tree_tests
 ",
         );
 
+        for p in grammar.production_table.values() {
+            println!("{}", p.original_name);
+        }
+
         let production = grammar
             .production_table
             .iter()
-            .find(|p| p.1.is_scanner)
+            .find(|p| {
+                p.1.original_name == "scan_tok_test_9AD7F26F987E3173_GUID_B__"
+            })
             .unwrap();
 
         let production_id = production.0;
