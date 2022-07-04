@@ -148,14 +148,14 @@ pub fn write_preamble<W: Write, T: X8664Writer<W>>(
                         if !is_last {
                             writer.code(&format!("jne .opt_{}", i + 1))?;
                         } else {
-                            writer.code("jne push_state")?;
+                            writer.code("jne .push_state")?;
                         }
                         writer.code(&format!(
                             "lea rax, [rel state_{}]",
                             guid_name
                         ))?;
                         if !is_last {
-                            writer.code("jmp push_state")?;
+                            writer.code("jmp .push_state")?;
                         }
                     }
                     Ok(writer)
@@ -268,11 +268,17 @@ pub fn compile_from_bytecode<W: Write, T: X8664Writer<W>>(
 ) -> Result<()>
 {
     write_preamble(grammar, writer);
-    let mut offset = FIRST_STATE_OFFSET;
+    let mut offset = FIRST_STATE_OFFSET as usize;
 
-    while offset < bytecode.len() as u32 {
-        offset =
-            write_state(grammar, bytecode, writer, offset_to_name, offset)?;
+    while offset < bytecode.len() {
+        offset = write_state(
+            grammar,
+            bytecode,
+            writer,
+            offset_to_name,
+            offset,
+            None,
+        )?;
     }
 
     Ok(())
@@ -283,20 +289,162 @@ pub fn write_state<W: Write, T: X8664Writer<W>>(
     bytecode: &[u32],
     writer: &mut T,
     offset_to_name: &BTreeMap<u32, String>,
-    mut offset: u32,
-) -> Result<u32>
+    mut offset: usize,
+    name: Option<&String>,
+) -> Result<usize>
 {
-    offset += 1;
-
-    if let Some(name) = offset_to_name.get(&offset) {
-        writer
-            .label(&format!("state_{}", name), false)?
-            .code("jmp dispatch_loop")?;
-    } else {
-        writer
-            .label(&format!("state_{:X}", offset), false)?
-            .code("jmp dispatch_loop")?;
+    if offset >= bytecode.len() {
+        return Ok(bytecode.len());
     }
+    if let Some(name) = if name.is_some() {
+        name.cloned()
+    } else {
+        if let Some(name) = offset_to_name.get(&(offset as u32)) {
+            Some(format!("state_{}", name))
+        } else {
+            None
+        }
+    } {
+        writer.label(&format!("{}", name), false)?;
+
+        while offset < bytecode.len() {
+            match bytecode[offset] & INSTRUCTION_HEADER_MASK {
+                INSTRUCTION::I00_PASS => {
+                    offset += 1;
+                    writer.code("nop")?;
+                    break;
+                }
+
+                INSTRUCTION::I09_VECTOR_BRANCH => {
+                    let table_name = format!("tstate_{:X}", offset);
+                    let i = offset;
+                    let (first, scan_index, third) = {
+                        let v = &bytecode[i..i + 3];
+                        (v[0], v[1], v[2])
+                    };
+                    let input_type = (first >> 22) & 0x7;
+                    let lexer_type = (first >> 26) & 0x3;
+                    let table_length = third >> 16;
+                    let value_offset = third & 0xFFFF;
+
+                    writer.label(&table_name, false)?;
+
+                    match input_type {
+                        INPUT_TYPE::T01_PRODUCTION => {}
+                        INPUT_TYPE::T02_TOKEN => {}
+                        _ => {
+                            writer
+                                .code("mov [rbx + state_u64_data_offset], rcx")?
+                                .code("mov [rbx + local_rsp_offset], rsp")?
+                                .code("mov rsp, [rbx + foreign_rsp_offset]")?
+                                .code("push rbx")?;
+                            match input_type {
+                                INPUT_TYPE::T05_BYTE => {
+                                    writer
+                                        .code(
+                                            "mov rdi, [rbx + fn_byte_offset]",
+                                        )?
+                                }
+                                INPUT_TYPE::T03_CLASS => {
+                                    writer
+                                        .code("mov rdi, [rbx + fn_class_offset]")?
+                                }
+                                INPUT_TYPE::T04_CODEPOINT => {
+                                    writer
+                                        .code("mov rdi, [rbx + fn_codepoint_offset]")?
+                                }
+                                _ => writer
+                            }
+                            .code("pop rbx")?
+                            .code("mov [rbx + foreign_rsp_offset], rsp")?
+                            .code("mov rsp, [rbx + local_rsp_offset]")?
+                            .code("mov rcx, [rbx + state_u64_data_offset]")?
+                            /*intent*/;
+                        }
+                    }
+
+                    if table_length == 1 {
+                        writer
+                            .code(&format!("cmp rax, {}", value_offset))?
+                            .code(&format!(
+                                "je rax, {}",
+                                &format!("{}_{}", table_name, 0)
+                            ))?
+                            .code(&format!("jmp {}_default", table_name))?;
+                    } else {
+                        writer
+                            .code(&format!("sub rax, {}", value_offset))?
+                            .code(&format!("jl {}_default", table_name))?
+                            .code(&format!("cmp rax, {}", table_length))?
+                            .code(&format!("jg {}_default", table_name))?
+                            .code("lea r10, [ .table ]")?
+                            .code("mov r11, r10")?
+                            .code("shl rax, 1")?
+                            .code("add r11, rax")?
+                            .code("xor eax, eax")?
+                            .code("mov ax, [r11]")?
+                            .code("add r10, rax")?
+                            .code("jump r10")?
+                            .newline()?
+                            .newline()?
+                            .write_internal(b"align 2")?
+                            .label(&format!("table"), true)?;
+                        for i in 0..table_length {
+                            writer.code(&format!(
+                                "DW ( {}_{} - {}.table ) ",
+                                table_name, i, table_name
+                            ))?;
+                        }
+                    }
+
+                    offset += 4;
+
+                    for i in 0..table_length {
+                        offset = write_state(
+                            grammar,
+                            bytecode,
+                            writer,
+                            offset_to_name,
+                            offset,
+                            Some(&format!("{}_{}", table_name, i)),
+                        )?;
+                    }
+
+                    offset = write_state(
+                        grammar,
+                        bytecode,
+                        writer,
+                        offset_to_name,
+                        offset,
+                        Some(&format!("{}_default", table_name)),
+                    )?;
+
+                    writer.code("nop")?;
+                    break;
+                }
+
+                INSTRUCTION::I06_FORK_TO => {
+                    offset += 1;
+                    writer.code("nop")?;
+                    break;
+                }
+                INSTRUCTION::I15_FAIL => {
+                    offset += 1;
+                    writer.code("nop")?;
+                    break;
+                }
+                _ => {
+                    offset += 1;
+                    writer.code("nop")?;
+                }
+            }
+        }
+    } else {
+        writer.code("nop")?;
+        offset += 1;
+    }
+
+    writer.code("jmp dispatch_loop")?;
 
     Ok(offset)
 }
@@ -304,16 +452,10 @@ pub fn write_state<W: Write, T: X8664Writer<W>>(
 #[cfg(test)]
 mod test_x86_generation
 {
-    use std::collections::BTreeMap;
-
-    use hctk::bytecode::compile_bytecode;
-    use hctk::grammar::get_production_id_by_name;
-    use hctk::grammar::parse::compile_ir_ast;
-    use hctk::intermediate::state::generate_production_states;
-
     use crate::asm::x86_64_asm::compile_from_bytecode;
     use crate::writer::nasm_writer::NasmWriter;
     use crate::writer::x86_64_writer::X8664Writer;
+    use hctk::bytecode::compile_bytecode;
 
     #[test]
     fn test_nasm_output_on_trivial_grammar()
@@ -330,7 +472,7 @@ mod test_x86_generation
             &grammar,
             &output.bytecode,
             &mut writer,
-            &output.get_inverted_state_lookup(),
+            &output.get_offset_to_name(),
         );
 
         assert!(result.is_ok());

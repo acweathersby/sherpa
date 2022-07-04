@@ -91,7 +91,7 @@ pub fn compile_asm_files(
                             &grammar,
                             &bytecode_output.bytecode,
                             &mut writer,
-                            &bytecode_output.get_inverted_state_lookup(),
+                            &bytecode_output.get_offset_to_name(),
                         )
                         .is_ok()
                         {
@@ -184,9 +184,6 @@ fn write_rust_parser<W: Write>(
 {
     writer.write(&format!(
         "
-    
-use hctk::types::*;
-
 use hctk::types::*;
 
 type AnonymousPtr = u64;
