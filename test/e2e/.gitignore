@@ -1,3 +1,4 @@
 # Test generated files
 parser_data.rs
 ast.rs
+*parser.rs

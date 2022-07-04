@@ -8,6 +8,8 @@ use hctk::bytecode::compile_bytecode;
 use hctk::bytecode::BytecodeOutput;
 use hctk::get_num_of_available_threads;
 use hctk::grammar::compile_from_path;
+use hctk::grammar::get_exported_productions;
+use hctk::grammar::ExportedProduction;
 use hctk::types::*;
 use std::io::BufWriter;
 use std::io::Write;
@@ -32,29 +34,21 @@ pub fn compile_asm_files(
     // Target Language
 )
 {
-    println!("cargo:warning=TEST-----------------------{:?}", input_path);
     eprintln!("Input file: {:?}\n Output file: {:?}", input_path, output_path);
 
     let threads = get_num_of_available_threads();
 
-    let grammar_name = input_path
-        .file_stem()
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_string();
-
     let (grammar, errors) = compile_from_path(input_path, threads);
-    println!("cargo:warning=TEST-----------------------");
 
     if !errors.is_empty() {
-        println!("cargo:warning=TEST2-----------------------");
         for error in errors {
             println!("cargo:error=\n{}", error);
         }
     } else if let Some(grammar) = grammar {
-        println!("cargo:warning=TEST3-----------------------");
-        let bytecode_output = compile_bytecode(&grammar, threads);
+        let grammar_name = grammar.friendly_name.to_owned();
+        let parser_name = grammar_name.to_owned() + "_parser";
+
+        let bytecode_output = compile_bytecode(&grammar, 1);
 
         thread::scope(|scope| {
             if build_ast {
@@ -67,31 +61,26 @@ pub fn compile_asm_files(
                         output_path.clone()
                     };
 
-                    println!(
-                        "cargo:warning=TEST1-----------------------{:?}",
-                        output_path
-                    );
-
-                    let asm_path = output_path.join("./parser.asm");
-                    let object_path = output_path.join("./parser.o");
-                    let archive_path = output_path
-                        .join(format!("./lib{}_parser.a", &grammar_name));
+                    let asm_path =
+                        output_path.join(parser_name.clone() + ".asm");
+                    let object_path =
+                        output_path.join(parser_name.clone() + ".o");
+                    let archive_path =
+                        output_path.join(format!("./lib{}.a", &parser_name));
 
                     if let Ok(asm_file) = std::fs::File::create(&asm_path) {
                         let mut writer =
                             NasmWriter::new(BufWriter::new(asm_file));
 
                         writer.line(&DISCLAIMER(
-                            &grammar_name,
+                            &parser_name,
                             "Parse x86 Assembly",
                             "; ",
                         ));
 
                         if crate::asm::x86_64_asm::compile_from_bytecode(
-                            &grammar,
-                            &bytecode_output.bytecode,
+                            &bytecode_output,
                             &mut writer,
-                            &bytecode_output.get_offset_to_name(),
                         )
                         .is_ok()
                         {
@@ -132,7 +121,8 @@ pub fn compile_asm_files(
                                             output_path.to_str().unwrap()
                                         );
                                         println!(
-                                            "cargo:rustc-link-lib=static=grammar_parser"
+                                            "cargo:rustc-link-lib=static={}",
+                                            parser_name
                                         );
                                     }
                                 }
@@ -144,7 +134,8 @@ pub fn compile_asm_files(
                     }
                 });
                 scope.spawn(|| {
-                    let data_path = output_path.join("./parser.rs");
+                    let data_path =
+                        output_path.join(format!("./{}.rs", parser_name));
                     if let Ok(parser_data_file) =
                         std::fs::File::create(data_path)
                     {
@@ -165,6 +156,7 @@ pub fn compile_asm_files(
                                     writer,
                                     &grammar,
                                     &grammar_name,
+                                    &parser_name,
                                 );
                             }
                             _ => {}
@@ -180,25 +172,55 @@ fn write_rust_parser<W: Write>(
     mut writer: CodeWriter<W>,
     grammar: &GrammarStore,
     grammar_name: &str,
+    parser_name: &str,
 ) -> std::io::Result<()>
 {
-    writer.write(&format!(
-        "
+    writer
+        .wrt(&format!(
+            "
 use hctk::types::*;
 
 type AnonymousPtr = u64;
 
-#[link(name = \"{}_parser\")]
+#[link(name = \"{}\")]
 extern \"C\" {{
     fn construct_context(ctx: AnonymousPtr);
     fn next(ctx: AnonymousPtr) -> i32;
     fn destroy_context(ctx: AnonymousPtr);
-    fn prime_context(ctx: AnonymousPtr);
-}}
+    fn prime_context(ctx: AnonymousPtr, sp:u64);
+}}",
+            parser_name
+        ))?
+        .wrt(
+            "
+pub enum StartPoint {",
+        )?
+        .indent();
 
-pub struct MyParser<T: SymbolReader>(ASMParserContext<T>);
+    for (
+        i,
+        ExportedProduction {
+            export_name,
+            production,
+            ..
+        },
+    ) in get_exported_productions(grammar).iter().enumerate()
+    {
+        writer
+            .wrtln(&format!(
+                "/// `{}`",
+                production
+                    .original_location
+                    .to_string()
+                    .replace("\n", "\n// ")
+            ))?
+            .wrtln(&format!("{} = {},", export_name.to_uppercase(), i))?;
+    }
 
-impl<T: SymbolReader> Iterator for MyParser<T> {{
+    writer.dedent().wrtln("}")?.wrtln(&format!(
+        "pub struct Context<T: SymbolReader>(ASMParserContext<T>);
+
+impl<T: SymbolReader> Iterator for Context<T> {{
     type Item = i32;
 
     fn next(&mut self) -> Option<Self::Item> {{
@@ -209,11 +231,24 @@ impl<T: SymbolReader> Iterator for MyParser<T> {{
     }}
 }}
 
-impl<T: SymbolReader> MyParser<T> {{
+impl<T: SymbolReader> Context<T> {{
+    /// Create a new parser context to parser the input with 
+    /// the grammar `{0}`
     pub fn new(reader: &mut T) -> Self {{
         let mut parser = Self(ASMParserContext::<T>::new(reader));
         parser.construct_context();
         parser
+    }}
+    
+    /// Initialize the parser to recognize the given starting production
+    /// within the input. This method is chainable.
+    pub fn set_start_point(&mut self, start_point: StartPoint) -> &mut Self {{
+        unsafe {{
+            let _ptr = &mut self.0 as *const ASMParserContext<T>;
+            prime_context(_ptr as u64, start_point as u64);
+        }}
+
+        self
     }}
 
     fn construct_context(&mut self) {{
@@ -231,11 +266,12 @@ impl<T: SymbolReader> MyParser<T> {{
     }}
 }}
 
-impl<T: SymbolReader> Drop for MyParser<T> {{
+impl<T: SymbolReader> Drop for Context<T> {{
     fn drop(&mut self) {{
         self.destroy_context();
     }}
-}}",
+}}
+",
         grammar_name
     ));
 

@@ -31,6 +31,7 @@
 <> preamble_clause >  ignore_preamble
     | import_preamble
     | export_preamble
+    | name_preamble
 
 
 # Production bodies, the symbols defined after `<> <production-name> >` can contain a mixture of 
@@ -44,16 +45,20 @@
 # and is not an actual symbol of the production body). $4 resolves to the g:num symbol.
                                                   
 
-<> ignore_preamble >         \@IGNORE sym::ignore_symbols g:nl                
+<> ignore_preamble >    \@IGNORE sym::ignore_symbols g:nl                
                                                                         
                                                                         f:r { { t_Ignore , c_Preamble, symbols : $2 } }
 
 
-<> import_preamble >         \@IMPORT ( g:id | g:sym  )(+\" ) ( t:AS | t:as ) sym::identifier 
+<> import_preamble >    \@IMPORT ( g:id | g:sym  )(+\" ) ( t:AS | t:as ) sym::identifier 
                                                                         
                                                                         f:r { { t_Import , c_Preamble, uri: $2, reference:$4, tok } } 
 
-<> export_preamble >         \@EXPORT sym::production_symbol ( t:AS | t:as ) tk:export_id
+<> export_preamble >    \@EXPORT sym::production_symbol ( t:AS | t:as ) tk:name_ref
                                                                         
                                                                         f:r { { t_Export , c_Preamble, production: $2, reference:$4 } } 
-<> export_id > g:id(+)
+
+<> name_preamble >      \@NAME tk:name_ref
+                                                                        
+                                                                        f:r { { t_Name , c_Preamble, name: str($2) } } 
+<> name_ref > ( g:id  )( g:id | g:num | \_ )(*)

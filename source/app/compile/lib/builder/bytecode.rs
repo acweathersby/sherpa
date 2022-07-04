@@ -83,36 +83,6 @@ pub fn compile_bytecode_files(
         })
     }
 }
-
-/// Produce the disassembly of grammar.
-pub fn generate_disassembly(input_path: &PathBuf) -> String
-{
-    eprintln!("Input file: {:?}\n ", input_path);
-
-    let threads = get_num_of_available_threads();
-
-    eprintln!("Number of threads used: {}", threads);
-
-    let (grammar, errors) = compile_from_path(input_path, threads);
-
-    if !errors.is_empty() {
-        for error in errors {
-            eprintln!("{}", error);
-        }
-        String::new()
-    } else if let Some(grammar) = grammar {
-        let BytecodeOutput { bytecode, .. } =
-            compile_bytecode(&grammar, threads);
-
-        hctk::debug::bytecode::generate_disassembly(
-            &bytecode,
-            Some(&BytecodeGrammarLookups::new(&grammar)),
-        )
-    } else {
-        String::new()
-    }
-}
-
 fn write_parser_data<W: Write>(
     mut writer: CodeWriter<W>,
     grammar: &GrammarStore,
@@ -122,7 +92,7 @@ fn write_parser_data<W: Write>(
 {
     let BytecodeOutput {
         bytecode,
-        name_to_offset: state_lookups,
+        state_name_to_offset: state_lookups,
         ..
     } = compile_bytecode(grammar, threads);
 

@@ -72,18 +72,26 @@ mod test_end_to_end
         );
 
         let mut states = compile_states(&grammar, threads);
+
         for state in states.values_mut() {
             if state.get_ast().is_none() {
                 println!("--FAILED: {:?}", state.compile_ast())
             }
         }
+
+        let entry_state_name =
+            &get_production_by_name("start", &grammar).unwrap().guid_name;
+
         let optimized_states = optimize_states(&mut states, &grammar);
+
         let (bytecode, state_lookup) = build_byte_code_buffer(optimized_states);
-        let entry_point = *state_lookup.get("start").unwrap();
+
+        let entry_point = *state_lookup.get(entry_state_name).unwrap();
 
         let target_production_id = get_production_by_name("start", &grammar)
             .unwrap()
             .bytecode_id;
+
         let (reader, state, shifts, skips) = collect_shifts_and_skips(
             "hello    \tworld",
             entry_point,

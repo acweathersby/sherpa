@@ -39,7 +39,7 @@ mod test_grammar
         if let Ok(grammar) = compile_grammar_ast(Vec::from(grammar.as_bytes()))
         {
             let (grammar, errors) =
-                pre_process_grammar(&grammar, &PathBuf::from("/test"));
+                pre_process_grammar(&grammar, &PathBuf::from("/test"), "test");
 
             for error in &errors {
                 println!("{}", error);

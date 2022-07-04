@@ -9,17 +9,20 @@ pub use parse_functions::get_next_actionBB;
 #[cfg(test)]
 mod test_parser
 {
+    use std::collections::BTreeMap;
     use std::collections::HashMap;
 
     use crate::bytecode;
     use crate::bytecode::compile::build_byte_code_buffer;
     use crate::bytecode::compile::compile_ir_state_to_bytecode;
+    use crate::bytecode::compile_ir_states_into_bytecode;
     use crate::bytecode::constants::BranchSelector;
     use crate::bytecode::constants::FIRST_STATE_OFFSET;
     use crate::bytecode::constants::NORMAL_STATE_MASK;
     use crate::debug::compile_test_grammar;
     use crate::debug::disassemble_state;
     use crate::debug::generate_disassembly;
+    use crate::debug::grammar;
     use crate::grammar::data::ast::ASTNode;
     use crate::grammar::get_production_id_by_name;
     use crate::grammar::parse::compile_ir_ast;
@@ -278,68 +281,75 @@ state [test] scanner [none]
     #[test]
     fn test_jump_table()
     {
-        let state = "
-state [test]
+        use IRStateType::*;
+
+        let mut ir_state = IRState {
+            code: "
 assert PRODUCTION [1] (pass)
 assert PRODUCTION [2] (pass)
-assert PRODUCTION [3] (pass)"
-            .to_string();
+assert PRODUCTION [3] (pass)
+"
+            .to_string(),
+            name: "test".to_string(),
+            ..Default::default()
+        };
 
-        let ir_ast = compile_ir_ast(Vec::from(state));
+        let ir_ast = ir_state.compile_ast();
+
         assert!(ir_ast.is_ok());
-        let ir_ast = ir_ast.unwrap();
-        let bytecode = compile_ir_state_to_bytecode(
-            &ir_ast,
-            |_, _, _| BranchSelector::Vector,
-            &HashMap::new(),
+
+        let ir_ast = (ir_ast.unwrap()).clone();
+
+        let grammar = GrammarStore::default();
+
+        let output = compile_ir_states_into_bytecode(
+            &grammar,
+            BTreeMap::from_iter(vec![(ir_state.get_name(), ir_state)]),
+            vec![ir_ast],
         );
-        let mut reader = UTF8StringReader::from_string("test");
-        let mut state = ParseState::new();
 
-        println!("{}", disassemble_state(&bytecode, 0, None).0);
+        let bc = &output.bytecode;
 
-        state.set_production(1);
-        assert_eq!(vector_jump(0, &mut reader, &mut state, &bytecode), 7);
-        state.set_production(2);
-        assert_eq!(vector_jump(0, &mut reader, &mut state, &bytecode), 8);
-        state.set_production(3);
-        assert_eq!(vector_jump(0, &mut reader, &mut state, &bytecode), 9);
-        state.set_production(4);
-        assert_eq!(vector_jump(0, &mut reader, &mut state, &bytecode), 10);
-        state.set_production(0);
-        assert_eq!(vector_jump(0, &mut reader, &mut state, &bytecode), 10);
+        let mut r = UTF8StringReader::from_string("test");
+
+        let mut s = ParseState::new();
+
+        println!("{}", generate_disassembly(&output, None));
+        let off = FIRST_STATE_OFFSET;
+        s.set_production(1);
+        assert_eq!(vector_jump(off, &mut r, &mut s, bc), off + 7);
+        s.set_production(2);
+        assert_eq!(vector_jump(off, &mut r, &mut s, bc), off + 8);
+        s.set_production(3);
+        assert_eq!(vector_jump(off, &mut r, &mut s, bc), off + 9);
+        s.set_production(4);
+        assert_eq!(vector_jump(off, &mut r, &mut s, bc), off + 10);
+        s.set_production(0);
+        assert_eq!(vector_jump(off, &mut r, &mut s, bc), off + 10);
     }
-
+    #[ignore]
     #[test]
     fn test_jump_table_skip()
     {
-        let state = "
-state [test] scanner [none]
-    skip [1] 
-    assert TOKEN [0] ( set prod to 44 then pass)"
-            .to_string();
-        let ir_ast = compile_ir_ast(Vec::from(state));
+        use IRStateType::*;
 
-        assert!(ir_ast.is_ok());
+        let val = "
+            skip [1] 
+            assert PRODUCTION [0] ( set prod to 44 then pass)";
 
-        let ir_ast = ir_ast.unwrap();
-
-        let bytecode = compile_ir_state_to_bytecode(
-            &ir_ast,
-            |_, _, _| BranchSelector::Vector,
-            &HashMap::new(),
-        );
-
+        let grammar = Default::default();
+        let output = create_output(val, &grammar);
+        let bytecode = &output.bytecode;
         let index: u32 = 0;
         let mut reader = UTF8StringReader::from_string("AB");
         let mut state = ParseState::new();
 
-        println!("{}", disassemble_state(&bytecode, 0, None).0);
-
-        state.set_production(1);
-        assert_eq!(vector_jump(index, &mut reader, &mut state, &bytecode), 6);
+        println!("{}", disassemble_state(&output, 0, None).0);
 
         state.set_production(2);
+        assert_eq!(vector_jump(index, &mut reader, &mut state, &bytecode), 6);
+
+        state.set_production(0);
         assert_eq!(vector_jump(index, &mut reader, &mut state, &bytecode), 8);
     }
 
@@ -365,8 +375,6 @@ state [test] scanner [none]
 
         let (bytecode, _) = build_byte_code_buffer(is_asts.iter().collect());
 
-        generate_disassembly(&bytecode, None);
-
         let mut reader = UTF8StringReader::from_string(reader_input);
         let mut state = ParseState::new();
 
@@ -389,11 +397,34 @@ state [test] scanner [none]
             &HashMap::new(),
         );
 
-        generate_disassembly(&bytecode, None);
-
         let mut reader = UTF8StringReader::from_string(reader_input);
         let mut state = ParseState::new();
 
         (bytecode, reader, state)
+    }
+
+    fn create_output<'a>(
+        val: &str,
+        grammar: &'a GrammarStore,
+    ) -> bytecode::BytecodeOutput<'a>
+    {
+        let mut ir_state = IRState {
+            code: val.to_string(),
+            name: "test".to_string(),
+            ..Default::default()
+        };
+
+        let ir_ast = ir_state.compile_ast();
+
+        assert!(ir_ast.is_ok());
+
+        let ir_ast = ir_ast.unwrap().clone();
+
+        let output = compile_ir_states_into_bytecode(
+            &grammar,
+            BTreeMap::from_iter(vec![(ir_state.get_name(), ir_state)]),
+            vec![ir_ast],
+        );
+        output
     }
 }

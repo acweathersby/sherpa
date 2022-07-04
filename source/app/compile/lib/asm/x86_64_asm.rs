@@ -1,8 +1,10 @@
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::io::Result;
 use std::io::Write;
 
 use hctk::bytecode::constants::*;
+use hctk::bytecode::BytecodeOutput;
 
 use hctk::grammar::get_exported_productions;
 use hctk::grammar::ExportedProduction;
@@ -113,64 +115,63 @@ pub fn write_preamble<W: Write, T: X8664Writer<W>>(
         .newline()?
         .code("ret")?;
 
-    save_context(
-        restore_context(writer.label("prime_context", false)?)?
-            .comment_line("  Configure our parse state")?
-            .comment_line("  Set the normal mode for our parse state")?
-            .code("mov r10, ( NORMAL_STATE_MASK )")?
-            .code("mov [rbx + state_u64_data_offset], r10")?
-            .code("mov r11, rax")?
-            .code("xor eax, eax")?
-            .inline_grammar(
-                grammar,
-                |writer, grammar: &GrammarStore| -> Result<&mut T> {
-                    // Create a simple lookup for a production entrypoint
-                    let vec = get_exported_productions(grammar);
-                    let last = vec.len() - 1;
-                    for (
-                        i,
-                        ExportedProduction {
-                            export_name,
-                            guid_name,
-                            ..
-                        },
-                    ) in vec.iter().enumerate()
-                    {
-                        let (is_first, is_last) = (i == 0, last == i);
+    writer
+        .label("prime_context", false)?
+        .inline(restore_context)?
+        .comment_line("  Configure our parse state")?
+        .comment_line("  Set the normal mode for our parse state")?
+        .code("mov r10, ( NORMAL_STATE_MASK )")?
+        .code("mov [rbx + state_u64_data_offset], r10")?
+        .code("mov r11, rsi")?
+        .code("xor esi, esi")?
+        .inline_grammar(
+            grammar,
+            |writer, grammar: &GrammarStore| -> Result<&mut T> {
+                // Create a simple lookup for a production entrypoint
+                let vec = get_exported_productions(grammar);
+                let last = vec.len() - 1;
+                for (
+                    i,
+                    ExportedProduction {
+                        export_name,
+                        guid_name,
+                        ..
+                    },
+                ) in vec.iter().enumerate()
+                {
+                    let (is_first, is_last) = (i == 0, last == i);
 
-                        if !is_first {
-                            writer.label(&format!("opt_{}", i), true)?;
-                        }
-                        writer.commented_code(
-                            &format!("cmp  r11, {}", i),
-                            &format!("{} as {}", guid_name, export_name),
-                        )?;
-                        if !is_last {
-                            writer.code(&format!("jne .opt_{}", i + 1))?;
-                        } else {
-                            writer.code("jne .push_state")?;
-                        }
-                        writer.code(&format!(
-                            "lea rax, [rel state_{}]",
-                            guid_name
-                        ))?;
-                        if !is_last {
-                            writer.code("jmp .push_state")?;
-                        }
+                    if !is_first {
+                        writer.label(&format!("opt_{}", i), true)?;
                     }
-                    Ok(writer)
-                },
-            )?
-            .label("push_state", true)?
-            .comment_line("  Add our stack sentinel")?
-            .code("xor r10d, r10d")?
-            .code("push r10")?
-            .code("push r10")?
-            .comment_line("  Push our entry state onto the stack")?
-            .commented_code("push rcx", "state metadata")?
-            .commented_code("push rax", "state address")?,
-    )?
-    .code("ret")?;
+                    writer.commented_code(
+                        &format!("cmp  r11, {}", i),
+                        &format!("{} as {}", guid_name, export_name),
+                    )?;
+                    if !is_last {
+                        writer.code(&format!("jne .opt_{}", i + 1))?;
+                    } else {
+                        writer.code("jne .push_state")?;
+                    }
+                    writer
+                        .code(&format!("lea rax, [rel state_{}]", guid_name))?;
+                    if !is_last {
+                        writer.code("jmp .push_state")?;
+                    }
+                }
+                Ok(writer)
+            },
+        )?
+        .label("push_state", true)?
+        .comment_line("  Add our stack sentinel")?
+        .code("xor r10d, r10d")?
+        .code("push r10")?
+        .code("push r10")?
+        .comment_line("  Push our entry state onto the stack")?
+        .commented_code("push rcx", "state metadata")?
+        .commented_code("push rax", "state address")?
+        .inline(save_context)?
+        .code("ret")?;
 
     writer
         .newline()?
@@ -260,177 +261,283 @@ fn save_context<W: Write, T: X8664Writer<W>>(writer: &mut T) -> Result<&mut T>
         .commented_code("pop rbx", "restore the base pointer")
 }
 
-pub fn compile_from_bytecode<W: Write, T: X8664Writer<W>>(
-    grammar: &GrammarStore,
-    bytecode: &[u32],
-    writer: &mut T,
-    offset_to_name: &BTreeMap<u32, String>,
-) -> Result<()>
-{
-    write_preamble(grammar, writer);
-    let mut offset = FIRST_STATE_OFFSET as usize;
-
-    while offset < bytecode.len() {
-        offset = write_state(
-            grammar,
-            bytecode,
-            writer,
-            offset_to_name,
-            offset,
-            None,
-        )?;
-    }
-
-    Ok(())
-}
-
 pub fn write_state<W: Write, T: X8664Writer<W>>(
-    grammar: &GrammarStore,
-    bytecode: &[u32],
+    output: &BytecodeOutput,
     writer: &mut T,
-    offset_to_name: &BTreeMap<u32, String>,
     mut offset: usize,
     name: Option<&String>,
 ) -> Result<usize>
 {
+    writer.comment_line(&format!("----off: {}", offset))?;
+    let BytecodeOutput {
+        bytecode,
+        offset_to_state_name,
+        ..
+    } = output;
+
+    println!("off: {}", offset);
+
     if offset >= bytecode.len() {
         return Ok(bytecode.len());
     }
-    if let Some(name) = if name.is_some() {
-        name.cloned()
+    if let Some((asm_state_name, ir_state_name)) = if name.is_some() {
+        Some((name.unwrap().clone(), String::new()))
+    } else if let Some(name) = offset_to_state_name.get(&(offset as u32)) {
+        Some((create_named_state_label(name), name.clone()))
     } else {
-        if let Some(name) = offset_to_name.get(&(offset as u32)) {
-            Some(format!("state_{}", name))
-        } else {
-            None
-        }
+        None
     } {
-        writer.label(&format!("{}", name), false)?;
+        writer.label(&format!("{}", asm_state_name), false)?;
+
+        if let Some(state) = output.ir_states.get(&ir_state_name) {
+            match state.get_type() {
+                IRStateType::ProductionStart
+                | IRStateType::ScannerStart
+                | IRStateType::ProductionGoto
+                | IRStateType::ScannerGoto => {
+                    println!("{} {}", asm_state_name, ir_state_name);
+                    // TODO right checker for handling stack expansion.
+                    if state.get_stack_depth() > 0 {
+                        writer.comment_line(&format!(
+                            "--extend stack if it has less than {} bytes free",
+                            state.get_stack_depth() * 2 * 8
+                        ))?;
+                    }
+                }
+                _ => {}
+            }
+        }
 
         while offset < bytecode.len() {
+            writer.comment_line(&format!("--off: {}", offset))?;
             match bytecode[offset] & INSTRUCTION_HEADER_MASK {
                 INSTRUCTION::I00_PASS => {
                     offset += 1;
-                    writer.code("nop")?;
+                    writer.code("xor rcx, FAIL_STATE_MASK")?;
+                    writer.code("or rcx, NORMAL_STATE_MASK")?;
+                    writer.code("jmp dispatch_loop")?;
                     break;
                 }
 
-                INSTRUCTION::I09_VECTOR_BRANCH => {
-                    let table_name = format!("tstate_{:X}", offset);
-                    let i = offset;
-                    let (first, scan_index, third) = {
-                        let v = &bytecode[i..i + 3];
-                        (v[0], v[1], v[2])
+                INSTRUCTION::I01_CONSUME => {
+                    offset += 1;
+                    writer.commented_code("nop", "consume")?;
+                }
+
+                INSTRUCTION::I02_GOTO => {
+                    let goto_offset =
+                        bytecode[offset] & GOTO_INSTRUCTION_OFFSET_MASK;
+
+                    let name = if let Some(name) =
+                        offset_to_state_name.get(&goto_offset)
+                    {
+                        create_named_state_label(name)
+                    } else {
+                        create_offset_label(offset)
                     };
-                    let input_type = (first >> 22) & 0x7;
-                    let lexer_type = (first >> 26) & 0x3;
-                    let table_length = third >> 16;
-                    let value_offset = third & 0xFFFF;
 
-                    writer.label(&table_name, false)?;
-
-                    match input_type {
-                        INPUT_TYPE::T01_PRODUCTION => {}
-                        INPUT_TYPE::T02_TOKEN => {}
-                        _ => {
-                            writer
-                                .code("mov [rbx + state_u64_data_offset], rcx")?
-                                .code("mov [rbx + local_rsp_offset], rsp")?
-                                .code("mov rsp, [rbx + foreign_rsp_offset]")?
-                                .code("push rbx")?;
-                            match input_type {
-                                INPUT_TYPE::T05_BYTE => {
-                                    writer
-                                        .code(
-                                            "mov rdi, [rbx + fn_byte_offset]",
-                                        )?
-                                }
-                                INPUT_TYPE::T03_CLASS => {
-                                    writer
-                                        .code("mov rdi, [rbx + fn_class_offset]")?
-                                }
-                                INPUT_TYPE::T04_CODEPOINT => {
-                                    writer
-                                        .code("mov rdi, [rbx + fn_codepoint_offset]")?
-                                }
-                                _ => writer
-                            }
-                            .code("pop rbx")?
-                            .code("mov [rbx + foreign_rsp_offset], rsp")?
-                            .code("mov rsp, [rbx + local_rsp_offset]")?
-                            .code("mov rcx, [rbx + state_u64_data_offset]")?
-                            /*intent*/;
-                        }
-                    }
-
-                    if table_length == 1 {
-                        writer
-                            .code(&format!("cmp rax, {}", value_offset))?
-                            .code(&format!(
-                                "je rax, {}",
-                                &format!("{}_{}", table_name, 0)
-                            ))?
-                            .code(&format!("jmp {}_default", table_name))?;
+                    if bytecode[offset + 1] & INSTRUCTION_HEADER_MASK
+                        == INSTRUCTION::I00_PASS
+                    {
+                        // Simply perform a jump to the applicable code
+                        writer.code(&format!("jmp {}", name))?;
                     } else {
                         writer
-                            .code(&format!("sub rax, {}", value_offset))?
-                            .code(&format!("jl {}_default", table_name))?
-                            .code(&format!("cmp rax, {}", table_length))?
-                            .code(&format!("jg {}_default", table_name))?
-                            .code("lea r10, [ .table ]")?
-                            .code("mov r11, r10")?
-                            .code("shl rax, 1")?
-                            .code("add r11, rax")?
-                            .code("xor eax, eax")?
-                            .code("mov ax, [r11]")?
-                            .code("add r10, rax")?
-                            .code("jump r10")?
-                            .newline()?
-                            .newline()?
-                            .write_internal(b"align 2")?
-                            .label(&format!("table"), true)?;
-                        for i in 0..table_length {
-                            writer.code(&format!(
-                                "DW ( {}_{} - {}.table ) ",
-                                table_name, i, table_name
-                            ))?;
-                        }
+                            .code(&format!("mov r10, NORMAL_STATE_MASK"))?
+                            .code("push r10")?
+                            .code(&format!("lea r10, [rel {}]", name))?
+                            .code("push r10")?;
                     }
+                    offset += 1;
+                }
 
-                    offset += 4;
+                INSTRUCTION::I03_SET_PROD => {
+                    offset += 1;
+                    writer.commented_code("nop", "set production")?;
+                }
 
-                    for i in 0..table_length {
-                        offset = write_state(
-                            grammar,
-                            bytecode,
-                            writer,
-                            offset_to_name,
-                            offset,
-                            Some(&format!("{}_{}", table_name, i)),
-                        )?;
-                    }
+                INSTRUCTION::I04_REDUCE => {
+                    offset += 1;
+                    writer.commented_code("nop", "reduce")?;
+                }
 
-                    offset = write_state(
-                        grammar,
-                        bytecode,
-                        writer,
-                        offset_to_name,
-                        offset,
-                        Some(&format!("{}_default", table_name)),
-                    )?;
-
-                    writer.code("nop")?;
-                    break;
+                INSTRUCTION::I05_TOKEN => {
+                    offset += 1;
+                    writer.commented_code("nop", "set token")?;
                 }
 
                 INSTRUCTION::I06_FORK_TO => {
-                    offset += 1;
-                    writer.code("nop")?;
+                    let instruction = bytecode[offset];
+                    let instruction = instruction & INSTRUCTION_CONTENT_MASK;
+                    let target_production = instruction & 0xFFFF;
+                    let num_of_states = (instruction >> 16) & 0xFFFF;
+                    offset += (1 + num_of_states) as usize;
+                    writer.commented_code("nop", "fork")?;
+                    writer.code("jmp emit_action")?;
                     break;
+                }
+
+                INSTRUCTION::I07_SCAN => {
+                    offset += 1;
+                    writer.commented_code("nop", "scan")?;
+                }
+
+                INSTRUCTION::I08_NOOP => {
+                    offset += 1;
+                    writer.commented_code("nop", "no operation")?;
+                }
+
+                INSTRUCTION::I09_VECTOR_BRANCH => {
+                    let (
+                        table_name,
+                        input_type,
+                        lexer_type,
+                        table_length,
+                        table_meta,
+                        scanner_offset,
+                    ) = extract_table_data(offset, bytecode);
+
+                    writer.label(&table_name, false)?;
+
+                    let mut is_infallible = false;
+                    create_value_lookup(
+                        input_type,
+                        lexer_type,
+                        scanner_offset,
+                        &mut is_infallible,
+                        writer,
+                    )?;
+
+                    // Write default handling code.
+                    writer
+                        .code(&format!("sub rax, {}", table_meta))?
+                        .code(&format!("jl {}_default", table_name))?
+                        .code(&format!("cmp rax, {}", table_length))?
+                        .code(&format!("jg {}_default", table_name))?;
+
+                    let index_map = bytecode
+                        [(offset + 4)..(offset + 4 + table_length as usize)]
+                        .iter()
+                        .enumerate()
+                        .map(|(i, v)| (i, (i as u32, *v == 0xFFFF_FFFF)))
+                        .collect();
+
+                    // Extract our table values
+                    create_branch_handler(
+                        &index_map,
+                        true,
+                        true,
+                        is_infallible,
+                        writer,
+                        &table_name,
+                    )?;
+
+                    // Offset to next state
+
+                    offset = write_branches(
+                        index_map
+                            .values()
+                            .cloned()
+                            .map(|(a, b)| (a as usize, b))
+                            .collect(),
+                        offset + 4 + table_length as usize,
+                        output,
+                        writer,
+                        table_name,
+                    )?;
+
+                    break;
+                }
+
+                INSTRUCTION::I10_HASH_BRANCH => {
+                    let (
+                        table_name,
+                        input_type,
+                        lexer_type,
+                        table_length,
+                        _,
+                        scanner_offset,
+                    ) = extract_table_data(offset, bytecode);
+
+                    writer.label(&table_name, false)?;
+                    let mut is_infallible = false;
+
+                    create_value_lookup(
+                        input_type,
+                        lexer_type,
+                        scanner_offset,
+                        &mut is_infallible,
+                        writer,
+                    )?;
+                    let entries = &bytecode
+                        [(offset + 4)..(offset + 4 + table_length as usize)];
+
+                    // maps offsets to indices
+                    let offset_map = entries
+                        .iter()
+                        .map(|e| (e >> 11) & 0x7FF)
+                        .collect::<BTreeSet<_>>()
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, v)| (v, (i, v == 0x7FF)))
+                        .collect::<BTreeMap<_, _>>();
+
+                    // Extract our table values
+                    create_branch_handler(
+                        &entries
+                            .iter()
+                            .map(|v| {
+                                let offset = (*v >> 11) & 0x7FF;
+                                (
+                                    // Extract the index value from the hash offset
+                                    (offset_map.get(&offset).unwrap().0),
+                                    // Extract the value from the hash entry
+                                    (v & 0x7FF, offset == 0x7FF),
+                                )
+                            })
+                            .collect(),
+                        true,
+                        true,
+                        is_infallible,
+                        writer,
+                        &table_name,
+                    )?;
+
+                    offset = write_branches(
+                        offset_map.values().cloned().collect(),
+                        offset + 4 + table_length as usize,
+                        output,
+                        writer,
+                        table_name,
+                    )?;
+
+                    break;
+                }
+
+                INSTRUCTION::I11_SET_FAIL_STATE => {
+                    offset += 1;
+                    writer.commented_code("nop", "set fail state")?;
+                }
+
+                INSTRUCTION::I12_REPEAT => {
+                    offset += 1;
+                    writer.commented_code("nop", "repeats")?;
+                }
+
+                INSTRUCTION::I13_NOOP => {
+                    offset += 1;
+                    writer.commented_code("nop", "no operation 13")?;
+                }
+
+                INSTRUCTION::I14_ASSERT_CONSUME => {
+                    offset += 1;
+                    writer.commented_code("nop", "assert consume")?;
                 }
                 INSTRUCTION::I15_FAIL => {
                     offset += 1;
-                    writer.code("nop")?;
+                    writer.code("xor rcx, NORMAL_STATE_MASK")?;
+                    writer.code("or rcx, FAIL_STATE_MASK")?;
+                    writer.code("jmp dispatch_loop")?;
                     break;
                 }
                 _ => {
@@ -444,9 +551,186 @@ pub fn write_state<W: Write, T: X8664Writer<W>>(
         offset += 1;
     }
 
-    writer.code("jmp dispatch_loop")?;
+    Ok(offset)
+}
+
+fn write_branches<W: Write, T: X8664Writer<W>>(
+    table_branches: Vec<(usize, bool)>,
+    mut offset: usize,
+    output: &BytecodeOutput,
+    writer: &mut T,
+    table_name: String,
+) -> Result<usize>
+{
+    for (index, is_skip) in table_branches {
+        let branch_name = format!("{}_{}", table_name, index);
+        if is_skip {
+            writer
+                .label(&branch_name, false)?
+                .comment_line(&format!(
+                    "do what it takes to advance to the next token",
+                ))?
+                .code(&format!("jmp {}", table_name))?;
+        } else {
+            offset = write_state(output, writer, offset, Some(&branch_name))?;
+        }
+    }
+
+    offset = write_state(
+        output,
+        writer,
+        offset,
+        Some(&format!("{}_default", table_name)),
+    )?;
 
     Ok(offset)
+}
+
+fn extract_table_data(
+    offset: usize,
+    bytecode: &Vec<u32>,
+) -> (String, u32, u32, u32, u32, u32)
+{
+    let table_name = create_offset_label(offset);
+    let i = offset;
+    let (first, scanner_offset, third) =
+        (bytecode[i], bytecode[i + 1], bytecode[i + 2]);
+
+    let input_type = (first >> 22) & 0x7;
+    let lexer_type = (first >> 26) & 0x3;
+    let table_length = (third >> 16) & 0xFFFF;
+    let table_meta = third & 0xFFFF;
+    (
+        table_name,
+        input_type,
+        lexer_type,
+        table_length,
+        table_meta,
+        scanner_offset,
+    )
+}
+fn create_named_state_label(name: &String) -> String
+{
+    format!("state_{}", name)
+}
+
+fn create_offset_label(offset: usize) -> String
+{
+    format!("off_{:X}", offset)
+}
+
+fn create_value_lookup<W: Write, T: X8664Writer<W>>(
+    input_type: u32,
+    lexer_type: u32,
+    scanner_offset: u32,
+    is_infallible: &mut bool,
+    writer: &mut T,
+) -> Result<()>
+{
+    match input_type {
+        INPUT_TYPE::T01_PRODUCTION => {
+            *is_infallible = true;
+            writer.comment_line("get production value")?;
+        }
+        INPUT_TYPE::T02_TOKEN => {
+            writer.comment_line("get token value")?;
+        }
+        _ => {
+            writer
+                .code("mov [rbx + state_u64_data_offset], rcx")?
+                .code("mov [rbx + local_rsp_offset], rsp")?
+                .code("mov rsp, [rbx + foreign_rsp_offset]")?
+                .code("push rbx")?;
+            match input_type {
+                INPUT_TYPE::T05_BYTE => {
+                    writer
+                        .code(
+                            "mov rdi, [rbx + fn_byte_offset]",
+                        )?
+                }
+                INPUT_TYPE::T03_CLASS => {
+                    writer
+                        .code("mov rdi, [rbx + fn_class_offset]")?
+                }
+                INPUT_TYPE::T04_CODEPOINT => {
+                    writer
+                        .code("mov rdi, [rbx + fn_codepoint_offset]")?
+                }
+                _ => writer
+            }
+            .code("pop rbx")?
+            .code("mov [rbx + foreign_rsp_offset], rsp")?
+            .code("mov rsp, [rbx + local_rsp_offset]")?
+            .code("mov rcx, [rbx + state_u64_data_offset]")?
+            /*intent*/;
+        }
+    }
+    Ok(())
+}
+
+fn create_branch_handler<W: Write, T: X8664Writer<W>>(
+    vals: &BTreeMap<usize, (u32, bool)>,
+    is_one_span: bool,
+    is_zero_offset: bool,
+    is_infallible: bool,
+    writer: &mut T,
+    local_branch_name: &String,
+) -> Result<()>
+{
+    if is_one_span && is_zero_offset && vals.len() > 5 {
+        // Jump table
+        writer
+            .code("lea r10, [ .table ]")?
+            .code("mov r11, r10")?
+            .code("shl rax, 1")?
+            .code("add r11, rax")?
+            .code("xor eax, eax")?
+            .code("mov ax, [r11]")?
+            .code("add r10, rax")?
+            .code("jump r10")?
+            .newline()?
+            .newline()?
+            .write_internal(b"align 2")?
+            .label(&format!("table"), true)?;
+        for (i, _) in vals {
+            writer.code(&format!(
+                "DW ( {}_{} - {}.table ) ",
+                local_branch_name, i, local_branch_name
+            ))?;
+        }
+    } else if is_infallible {
+        // Binary search
+        // Sort based on value
+        let sorted_val = vals
+            .iter()
+            .map(|(i, (v, skip))| (v, (i, skip)))
+            .collect::<BTreeMap<_, _>>();
+    } else {
+        // Linear probe
+        for (i, (val, skip)) in vals {
+            writer.code(&format!("cmp rax, {}", val))?.code(&format!(
+                "je {}",
+                &format!("{}_{}", local_branch_name, i)
+            ))?;
+        }
+        writer.code(&format!("jmp {}_default", local_branch_name))?;
+    }
+    Ok(())
+}
+
+pub fn compile_from_bytecode<W: Write, T: X8664Writer<W>>(
+    output: &BytecodeOutput,
+    writer: &mut T,
+) -> Result<()>
+{
+    write_preamble(output.grammar, writer);
+    let mut offset = FIRST_STATE_OFFSET as usize;
+
+    while offset < output.bytecode.len() {
+        offset = write_state(output, writer, offset, None)?;
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -456,27 +740,38 @@ mod test_x86_generation
     use crate::writer::nasm_writer::NasmWriter;
     use crate::writer::x86_64_writer::X8664Writer;
     use hctk::bytecode::compile_bytecode;
+    use hctk::debug::generate_disassembly;
 
     #[test]
     fn test_nasm_output_on_trivial_grammar()
     {
         use hctk::debug::compile_test_grammar;
 
-        let grammar = compile_test_grammar("<> A > \\h ? \\e ? \\l \\l \\o");
+        let grammar = compile_test_grammar(
+            "
+@IGNORE g:sp
+
+@EXPORT test as entry
+
+@EXPORT test as banner
+
+@NAME nasm_test
+
+<> test > \\hello \\world 
+",
+        );
 
         let output = compile_bytecode(&grammar, 1);
 
         let mut writer = NasmWriter::new(Vec::<u8>::new());
 
-        let result = compile_from_bytecode(
-            &grammar,
-            &output.bytecode,
-            &mut writer,
-            &output.get_offset_to_name(),
-        );
+        let result = compile_from_bytecode(&output, &mut writer);
+
+        // println!("{:#?}", output.state_name_to_offset);
 
         assert!(result.is_ok());
 
+        println!("\n\n{}\n\n", generate_disassembly(&output, None));
         println!(
             "\n\n{}\n\n",
             String::from_utf8(writer.into_writer()).unwrap()

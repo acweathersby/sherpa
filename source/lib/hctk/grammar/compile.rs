@@ -23,6 +23,7 @@ use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
+use std::ffi::OsStr;
 use std::fs::read;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
@@ -180,8 +181,15 @@ pub fn compile_from_string(
 {
     match compile_grammar_ast(Vec::from(string.as_bytes())) {
         Ok(grammar) => {
-            let (grammar, mut errors) =
-                pre_process_grammar(&grammar, absolute_path);
+            let (grammar, mut errors) = pre_process_grammar(
+                &grammar,
+                absolute_path,
+                absolute_path
+                    .file_stem()
+                    .unwrap_or_else(|| OsStr::new("undefined"))
+                    .to_str()
+                    .unwrap(),
+            );
 
             let grammar = finalize_grammar(grammar, &mut errors, 1);
 
@@ -198,8 +206,15 @@ fn compile_file_path(
     match read(absolute_path) {
         Ok(buffer) => match compile_grammar_ast(buffer) {
             Ok(grammar) => {
-                let (grammar, errors) =
-                    pre_process_grammar(&grammar, absolute_path);
+                let (grammar, errors) = pre_process_grammar(
+                    &grammar,
+                    absolute_path,
+                    absolute_path
+                        .file_stem()
+                        .unwrap_or_else(|| OsStr::new("undefined"))
+                        .to_str()
+                        .unwrap(),
+                );
 
                 (Some(grammar), errors)
             }
@@ -1009,9 +1024,10 @@ fn merge_grammars(
 ///   Used to resolve linked grammars.
 ///  
 
-pub fn pre_process_grammar(
-    grammar: &ast::Grammar,
+pub fn pre_process_grammar<'a>(
+    grammar: &'a ast::Grammar,
     absolute_path: &PathBuf,
+    mut friendly_name: &'a str,
 ) -> (GrammarStore, Vec<ParseError>)
 {
     let mut import_names_lookup = ImportProductionNameTable::new();
@@ -1062,6 +1078,7 @@ pub fn pre_process_grammar(
         // data
         for obj in grammar.preamble.iter() {
             match obj {
+                ASTNode::Name(box ast::Name { name }) => friendly_name = name,
                 ASTNode::Ignore(box ast::Ignore { symbols }) => {
                     for symbol in symbols {
                         if let Some(id) = intern_symbol(symbol, &mut tgs) {
@@ -1185,6 +1202,7 @@ pub fn pre_process_grammar(
             lr_items: BTreeMap::new(),
             reduce_functions,
             export_names,
+            friendly_name: friendly_name.to_owned(),
         },
         parse_errors,
     )

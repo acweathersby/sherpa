@@ -101,6 +101,10 @@ pub struct GrammarStore
     /// then this may be empty.
     pub source_path: PathBuf,
 
+    /// A user friendly name to refer to the grammar by. This is either the value of the
+    /// `@NAME` preamble, or the original file name stem if the preamble value is not present.
+    pub friendly_name: String,
+
     /// A globally unique name to refer to this grammar by. Derived from the
     /// grammar's filepath.
     pub guid_name: String,

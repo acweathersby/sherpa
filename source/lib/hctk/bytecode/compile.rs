@@ -68,6 +68,7 @@ pub(crate) fn build_byte_code_buffer(
     ];
 
     for ((state, name, i)) in states_iter {
+        println!("--- {} ---", name);
         goto_bookmarks_to_offset[i as usize] = bytecode.len() as u32;
         bytecode.append(&mut compile_ir_state_to_bytecode(
             state,
@@ -598,7 +599,19 @@ fn build_branchless_bytecode(
 {
     let mut byte_code: Vec<u32> = vec![];
     use super::constants::INSTRUCTION as I;
-    for instruction in instructions {
+
+    // reverse gotos so jumps operate correctly in a stack structure.
+
+    let gotos = instructions
+        .iter()
+        .filter(|i| matches!(i, ASTNode::Goto(_)))
+        .rev();
+
+    let non_gotos = instructions
+        .iter()
+        .filter(|i| !matches!(i, ASTNode::Goto(_)));
+
+    for instruction in non_gotos.chain(gotos) {
         match instruction {
             ASTNode::TokenAssign(box TokenAssign { ids }) => {
                 if let ASTNode::Num(id) = &ids[0] {

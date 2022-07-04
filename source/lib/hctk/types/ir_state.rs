@@ -10,16 +10,57 @@ use crate::grammar::parse::compile_ir_ast;
 
 use super::*;
 
+#[derive(PartialEq, Eq, Clone, Copy)]
+pub enum IRStateType
+{
+    Undefined,
+    ProductionStart,
+    ProductionGoto,
+    ScannerStart,
+    ScannerGoto,
+    IntermediateState,
+    ForkState,
+    ProductionEndState,
+    ScannerEndState,
+}
+
+impl Default for IRStateType
+{
+    fn default() -> Self
+    {
+        Self::Undefined
+    }
+}
 pub struct IRState
 {
-    comment: String,
-    ir_code: String,
-    hash: u64,
-    state_name: String,
-    graph_id: usize,
-    normal_symbols: Vec<SymbolID>,
-    peek_symbols: Vec<SymbolID>,
-    ast: Result<IR_STATE, ParseError>,
+    pub code: String,
+    pub name: String,
+    pub comment: String,
+    pub hash: u64,
+    pub graph_id: usize,
+    pub normal_symbols: Vec<SymbolID>,
+    pub peek_symbols: Vec<SymbolID>,
+    pub ast: Result<IR_STATE, ParseError>,
+    pub state_type: IRStateType,
+    pub stack_depth: u32,
+}
+impl Default for IRState
+{
+    fn default() -> Self
+    {
+        Self {
+            state_type: IRStateType::default(),
+            comment: String::default(),
+            code: String::default(),
+            name: String::default(),
+            hash: u64::default(),
+            graph_id: usize::default(),
+            normal_symbols: Vec::default(),
+            peek_symbols: Vec::default(),
+            ast: Err(ParseError::NOT_PARSED),
+            stack_depth: u32::default(),
+        }
+    }
 }
 
 impl IRState
@@ -36,15 +77,18 @@ impl IRState
         graph_id: usize,
         normal_symbols: Option<Vec<SymbolID>>,
         peek_symbols: Option<Vec<SymbolID>>,
+        state_type: IRStateType,
+        stack_depth: u32,
     ) -> Self
     {
         let hash = hash_id_value_u64(ir_code);
 
         IRState {
+            state_type,
             comment: comment.to_string(),
-            ir_code: ir_code.to_string(),
+            code: ir_code.to_string(),
             hash,
-            state_name,
+            name: state_name,
             graph_id,
             normal_symbols: if let Some(syms) = normal_symbols {
                 syms
@@ -57,15 +101,26 @@ impl IRState
                 vec![]
             },
             ast: Err(ParseError::NOT_PARSED),
+            stack_depth,
         }
+    }
+
+    pub fn get_type(&self) -> IRStateType
+    {
+        self.state_type
+    }
+
+    pub fn get_stack_depth(&self) -> u32
+    {
+        self.stack_depth
     }
 
     pub fn get_name(&self) -> String
     {
-        if self.state_name.is_empty() {
+        if self.name.is_empty() {
             Self::get_state_name_from_hash(self.hash)
         } else {
-            self.state_name.clone()
+            self.name.clone()
         }
     }
 
@@ -80,7 +135,7 @@ impl IRState
             "{}{}\n{}\n",
             self.get_state_header(),
             self.get_scanner_header(),
-            self.ir_code,
+            self.code,
         )
     }
 
@@ -136,10 +191,10 @@ impl IRState
         self.graph_id
     }
 
-    pub fn compile_ast(&mut self) -> &mut Result<IR_STATE, ParseError>
+    pub fn compile_ast(&mut self) -> Result<&mut IR_STATE, &mut ParseError>
     {
         if self.ast.is_ok() {
-            &mut self.ast
+            self.ast.as_mut()
         } else {
             if self.ast.as_ref().err().unwrap().is_not_parsed() {
                 let string = self.get_code();
@@ -148,7 +203,7 @@ impl IRState
                     Err(err) => Err(err),
                 };
             }
-            &mut self.ast
+            self.ast.as_mut()
         }
     }
 
@@ -179,7 +234,7 @@ impl Debug for IRState
             "{}\\*\n {} \n*\\\n{}\n\n\n",
             self.get_state_header(),
             self.comment,
-            self.ir_code,
+            self.code,
         ))
     }
 }
@@ -192,7 +247,7 @@ impl Display for IRState
             "{}\\*\n {} \n*\\\n{}\n\n\n",
             self.get_state_header(),
             self.comment,
-            self.ir_code,
+            self.code,
         ))
     }
 }

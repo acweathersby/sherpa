@@ -238,8 +238,9 @@ pub fn hash_jump<T: SymbolReader>(
     };
     let input_type = (first >> 22) & 0x7;
     let lexer_type = (first >> 26) & 0x3;
-    let table_size = third >> 16 & 0xFFFF;
+    let table_length = third >> 16 & 0xFFFF;
     let modulo_base = third & 0xFFFF;
+
     let hash_mask = 1 << (modulo_base - 1);
     let table_start = i + 4;
 
@@ -290,8 +291,9 @@ pub fn vector_jump<T: SymbolReader>(
     };
     let input_type = (first >> 22) & 0x7;
     let lexer_type = (first >> 26) & 0x3;
-    let table_length = third >> 16;
+    let table_length = third >> 16 & 0xFFFF;
     let value_offset = third & 0xFFFF;
+
     let table_start = i + 4;
 
     loop {

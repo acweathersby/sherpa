@@ -4,6 +4,7 @@ use crate::grammar::data::ast::IR_STATE;
 use crate::grammar::parse::compile_ir_ast;
 use crate::intermediate::state::compile_states;
 use crate::types::GrammarStore;
+use crate::types::IRState;
 
 use self::compile::build_byte_code_buffer;
 
@@ -11,28 +12,20 @@ pub mod compile;
 pub mod constants;
 pub mod optimize;
 
-pub struct BytecodeOutput
+pub struct BytecodeOutput<'a>
 {
+    pub grammar: &'a GrammarStore,
     /// The bytecode.
-    pub bytecode:       Vec<u32>,
+    pub bytecode: Vec<u32>,
     /// The intermediate representation states that the bytecode
     /// is based on.
-    pub states:         Vec<IR_STATE>,
+    pub states: Vec<IR_STATE>,
     /// Maps plain state names to the offset within the bytecode
     /// vector.
-    pub name_to_offset: BTreeMap<String, u32>,
-}
-
-impl BytecodeOutput
-{
-    /// Returns the inverted version of `name_to_offset`
-    pub fn get_offset_to_name(&self) -> BTreeMap<u32, String>
-    {
-        self.name_to_offset
-            .iter()
-            .map(|(a, b)| (*b, a.clone()))
-            .collect::<BTreeMap<_, _>>()
-    }
+    pub state_name_to_offset: BTreeMap<String, u32>,
+    pub offset_to_state_name: BTreeMap<u32, String>,
+    /// The original [IRStates](IRState) produced during the
+    pub ir_states: BTreeMap<String, IRState>,
 }
 
 pub fn compile_bytecode(
@@ -40,28 +33,41 @@ pub fn compile_bytecode(
     threads: usize,
 ) -> BytecodeOutput
 {
-    let states = compile_states(grammar, threads)
-        .values()
-        .map(|s| {
-            let string = s.get_code();
+    let mut ir_states = compile_states(grammar, threads);
 
-            match compile_ir_ast(Vec::from(string.as_bytes())) {
-                Ok(ast) => *ast,
-                Err(err) => {
-                    panic!("\n{}", err);
-                }
+    let ir_ast_states = ir_states
+        .values_mut()
+        .map(|s| match s.compile_ast() {
+            Ok(ast) => (*ast).clone(),
+            Err(err) => {
+                panic!("\n{}", err);
             }
         })
         .collect::<Vec<_>>();
 
-    let state_refs = states.iter().collect::<Vec<_>>();
+    compile_ir_states_into_bytecode(grammar, ir_states, ir_ast_states)
+}
+
+pub(crate) fn compile_ir_states_into_bytecode<'a>(
+    grammar: &'a GrammarStore,
+    ir_states: BTreeMap<String, IRState>,
+    ir_ast_states: Vec<IR_STATE>,
+) -> BytecodeOutput<'a>
+{
+    let state_refs = ir_ast_states.iter().collect::<Vec<_>>();
 
     let (bytecode, state_lookups) = build_byte_code_buffer(state_refs);
 
     BytecodeOutput {
+        grammar,
         bytecode,
-        states,
-        name_to_offset: state_lookups,
+        ir_states,
+        states: ir_ast_states,
+        offset_to_state_name: state_lookups
+            .iter()
+            .map(|(a, b)| (*b, a.clone()))
+            .collect::<BTreeMap<_, _>>(),
+        state_name_to_offset: state_lookups,
     }
 }
 

@@ -144,7 +144,12 @@ impl TransitionGraphNode
         node
     }
 
-    pub fn temp(sym: SymbolID, parent_index: usize, items: Vec<Item>) -> Self
+    pub fn temp(
+        origin: &TransitionGraphNode,
+        sym: SymbolID,
+        parent_index: usize,
+        items: Vec<Item>,
+    ) -> Self
     {
         TransitionGraphNode {
             sym,
@@ -154,7 +159,7 @@ impl TransitionGraphNode
             depth: 0,
             parent: TransitionGraphNode::OrphanIndex,
             goal: TransitionGraphNode::OrphanIndex,
-            id: TransitionGraphNode::OrphanIndex,
+            id: origin.id * 100000,
         }
     }
 

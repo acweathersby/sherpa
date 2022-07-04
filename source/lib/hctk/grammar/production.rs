@@ -101,11 +101,7 @@ pub fn get_production_plain_name<'a>(
 ) -> &'a str
 {
     if let Some(production) = grammar.production_table.get(production_id) {
-        let name = &production.guid_name;
-
-        let split = name.split(GUID_NAME_DELIMITER);
-
-        split.last().unwrap()
+        &production.original_name
     } else {
         ""
     }
@@ -129,7 +125,9 @@ pub fn get_production_id_by_name(
 
     None
 }
-
+/// Attempts to retrieve a production from the grammar with the matching name.
+/// If the grammar is an aggregate of multiple grammars which define productions
+/// with the same name, the production that is selected is undetermined.
 pub fn get_production_by_name<'a>(
     name: &str,
     grammar: &'a GrammarStore,

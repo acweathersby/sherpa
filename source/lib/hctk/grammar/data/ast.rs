@@ -115,6 +115,7 @@ ProductionMerged(Box<ProductionMerged>),
 Ignore(Box<Ignore>),
 Import(Box<Import>),
 Export(Box<Export>),
+Name(Box<Name>),
 Out_Of_Band(Box<Out_Of_Band>),
 Repeat(Box<Repeat>),
 Lazy(Box<Lazy>),
@@ -282,6 +283,8 @@ impl HCObjTrait for ASTNode {
 
             Export(bx) => bx.tok.to_string(),
 
+            Name(bx) => bx.tok.to_string(),
+
             Out_Of_Band(bx) => bx.tok.to_string(),
 
             Repeat(bx) => bx.tok.to_string(),
@@ -384,6 +387,7 @@ ProductionMerged(&'a mut ProductionMerged),
 Ignore(&'a mut Ignore),
 Import(&'a mut Import),
 Export(&'a mut Export),
+Name(&'a mut Name),
 Out_Of_Band(&'a mut Out_Of_Band),
 Repeat(&'a mut Repeat),
 Lazy(&'a mut Lazy),
@@ -626,6 +630,9 @@ impl<'a> NodeIteration<'a> {
                 },
                 Export(_0) => {
                     "node-Export"
+                },
+                Name(_0) => {
+                    "node-Name"
                 },
                 Out_Of_Band(_0) => {
                     "node-Out_Of_Band"
@@ -972,6 +979,10 @@ where
                         par.Replace(node, c, d);
                         true
                     },
+                    Name(par) => {
+                        par.Replace(node, c, d);
+                        true
+                    },
                     Out_Of_Band(par) => {
                         par.Replace(node, c, d);
                         true
@@ -1264,6 +1275,9 @@ where
                 Export(node) => {
                     node.as_mut().Replace(n, i, j)
             },
+                Name(node) => {
+                    node.as_mut().Replace(n, i, j)
+            },
                 Out_Of_Band(node) => {
                     node.as_mut().Replace(n, i, j)
             },
@@ -1526,6 +1540,9 @@ where
                 Export(node) => {
                     node.as_mut().Iterate(_yield, parent, i, j)
             },
+                Name(node) => {
+                    node.as_mut().Iterate(_yield, parent, i, j)
+            },
                 Out_Of_Band(node) => {
                     node.as_mut().Iterate(_yield, parent, i, j)
             },
@@ -1630,6 +1647,7 @@ where
                 Ignore(node) => node.as_ref().Token(),
                 Import(node) => node.as_ref().Token(),
                 Export(node) => node.as_ref().Token(),
+                Name(node) => node.as_ref().Token(),
                 Out_Of_Band(node) => node.as_ref().Token(),
                 Repeat(node) => node.as_ref().Token(),
                 Lazy(node) => node.as_ref().Token(),
@@ -1797,6 +1815,8 @@ where
                     node.as_ref().GetType(),
                 Export(node) => 
                     node.as_ref().GetType(),
+                Name(node) => 
+                    node.as_ref().GetType(),
                 Out_Of_Band(node) => 
                     node.as_ref().GetType(),
                 Repeat(node) => 
@@ -1843,7 +1863,7 @@ pub fn new( _preamble:Vec<ASTNode>, _content:Vec<ASTNode>, _tok:Token) -> Box<Se
 fn  replace_preamble(&mut self, child: ASTNode,index: i32,) -> Option<ASTNode> {
     
     match &child {
-        ASTNode::Ignore(_)|ASTNode::Import(_)|ASTNode::Export(_) => {
+        ASTNode::Ignore(_)|ASTNode::Import(_)|ASTNode::Export(_)|ASTNode::Name(_) => {
             if index as usize >= self.preamble.len() {
                 self.preamble.push(child);
                 None
@@ -1938,6 +1958,13 @@ fn Iterate(
                         },
 
                         ASTNode::Export(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::Grammar(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::Name(child) => { 
                             unsafe { 
                                 let mut_me = node.get();
                                 child.Iterate(_yield, &mut NodeIteration::Grammar(*mut_me), 0, j as i32)   
@@ -11441,6 +11468,75 @@ fn GetType(&self) -> u32 {
 
 
 #[derive(Debug, Clone)]
+pub struct Name {
+    pub name:String /* STRING */
+}
+
+impl Name {
+pub fn new( _name:String) -> Box<Self> {
+    Box::new(Name{
+        name : _name,
+    })
+}
+
+
+
+
+}
+
+
+
+impl<'a> ASTNodeTraits<'a> for Name
+where
+    Self: Sized,
+{
+
+fn Iterate(
+    &'a mut self,
+    _yield: &mut impl FnMut(&mut NodeIteration<'a>, &mut NodeIteration<'a>,u32, i32, i32) -> bool,
+    parent: &mut NodeIteration<'a>,
+    i: i32,
+    j: i32,
+) {
+    let node = UnsafeCell::from(self);
+
+    unsafe{
+        let mut_me = node.get();
+
+        if !_yield(&mut NodeIteration::Name(*mut_me), parent, 2867200, i, j) { return };
+    }
+        
+    
+}
+
+fn Replace(&mut self, child: ASTNode, i: i32, j: i32) -> ASTNode{
+
+    match i{
+    
+        _ => {}
+    };
+
+    ASTNode::NONE
+}
+
+
+fn Token(&self) -> Token{
+    Token::empty()
+}
+
+fn Type()-> u32{
+    return 2867200;
+}
+
+fn GetType(&self) -> u32 {
+    return 2867200;
+}
+}
+
+
+
+
+#[derive(Debug, Clone)]
 pub struct Out_Of_Band {
     pub reference:Option<Box<Reference>> /* Reference */,
 pub txt:String /* STRING */,
@@ -11529,7 +11625,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Out_Of_Band(*mut_me), parent, 2851072, i, j) { return };
+        if !_yield(&mut NodeIteration::Out_Of_Band(*mut_me), parent, 2883840, i, j) { return };
     }
         
     
@@ -11583,11 +11679,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 2851072;
+    return 2883840;
 }
 
 fn GetType(&self) -> u32 {
-    return 2851072;
+    return 2883840;
 }
 }
 
@@ -11630,7 +11726,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Repeat(*mut_me), parent, 2883624, i, j) { return };
+        if !_yield(&mut NodeIteration::Repeat(*mut_me), parent, 2916392, i, j) { return };
     }
         
     
@@ -11652,11 +11748,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 2883624;
+    return 2916392;
 }
 
 fn GetType(&self) -> u32 {
-    return 2883624;
+    return 2916392;
 }
 }
 
@@ -11726,7 +11822,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::Lazy(*mut_me), parent, 2916392, i, j) { return };
+        if !_yield(&mut NodeIteration::Lazy(*mut_me), parent, 2949160, i, j) { return };
     }
         
     
@@ -11762,11 +11858,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 2916392;
+    return 2949160;
 }
 
 fn GetType(&self) -> u32 {
-    return 2916392;
+    return 2949160;
 }
 }
 
@@ -11809,7 +11905,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::HASH_NAME(*mut_me), parent, 2949120, i, j) { return };
+        if !_yield(&mut NodeIteration::HASH_NAME(*mut_me), parent, 2981888, i, j) { return };
     }
         
     
@@ -11831,11 +11927,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 2949120;
+    return 2981888;
 }
 
 fn GetType(&self) -> u32 {
-    return 2949120;
+    return 2981888;
 }
 }
 
@@ -11878,7 +11974,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::FunctionIndexNum(*mut_me), parent, 2981888, i, j) { return };
+        if !_yield(&mut NodeIteration::FunctionIndexNum(*mut_me), parent, 3014656, i, j) { return };
     }
         
     
@@ -11900,11 +11996,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 2981888;
+    return 3014656;
 }
 
 fn GetType(&self) -> u32 {
-    return 2981888;
+    return 3014656;
 }
 }
 
@@ -11947,7 +12043,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::FunctionIndexWildCard(*mut_me), parent, 3014656, i, j) { return };
+        if !_yield(&mut NodeIteration::FunctionIndexWildCard(*mut_me), parent, 3047424, i, j) { return };
     }
         
     
@@ -11969,11 +12065,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 3014656;
+    return 3047424;
 }
 
 fn GetType(&self) -> u32 {
-    return 3014656;
+    return 3047424;
 }
 }
 
@@ -12016,7 +12112,7 @@ fn Iterate(
     unsafe{
         let mut_me = node.get();
 
-        if !_yield(&mut NodeIteration::FunctionIndexId(*mut_me), parent, 3047424, i, j) { return };
+        if !_yield(&mut NodeIteration::FunctionIndexId(*mut_me), parent, 3080192, i, j) { return };
     }
         
     
@@ -12038,11 +12134,11 @@ fn Token(&self) -> Token{
 }
 
 fn Type()-> u32{
-    return 3047424;
+    return 3080192;
 }
 
 fn GetType(&self) -> u32 {
-    return 3047424;
+    return 3080192;
 }
 }
 
@@ -14536,9 +14632,22 @@ let mut v0 = args.remove(i-3);
  args.push(HCO::NODE/*aa99*/(ref_0)) } }}
 /**
 ```
-{ t_Out_Of_Band, c_Function, reference:$2, txt:str($3) }
+{ t_Name, c_Preamble, name:str($2) }
 ```*/
 fn _fn121 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+let mut v1 = args.remove(i-0);
+let mut v0 = args.remove(i-1); 
+ if let HCO::TOKEN(r_0) = v1 { 
+ let mut ref_0 = ASTNode::Name(Name::new(
+        /* AAA */r_0.to_string(),
+    ) 
+);;
+ args.push(HCO::NODE/*aa99*/(ref_0)) }}
+/**
+```
+{ t_Out_Of_Band, c_Function, reference:$2, txt:str($3) }
+```*/
+fn _fn122 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -14568,7 +14677,7 @@ let mut v0 = args.remove(i-2);
     txt:str($4)
  }
 ```*/
-fn _fn122 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn123 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v3 = args.remove(i-0);
 let mut v2 = args.remove(i-1);
 let mut v1 = args.remove(i-2);
@@ -14598,7 +14707,7 @@ let mut v0 = args.remove(i-3);
     reference:$4
  }
 ```*/
-fn _fn123 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn124 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v3 = args.remove(i-0);
 let mut v2 = args.remove(i-1);
 let mut v1 = args.remove(i-2);
@@ -14629,7 +14738,7 @@ let mut v0 = args.remove(i-3);
     txt:str($3)
  }
 ```*/
-fn _fn124 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn125 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -14658,7 +14767,7 @@ let mut v0 = args.remove(i-2);
     reference:$3
  }
 ```*/
-fn _fn125 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn126 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -14692,7 +14801,7 @@ let mut v0 = args.remove(i-2);
     symbol_meta:$7
  }
 ```*/
-fn _fn126 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn127 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v7 = args.remove(i-0);
 let mut v6 = args.remove(i-1);
 let mut v5 = args.remove(i-2);
@@ -14736,7 +14845,7 @@ let mut v0 = args.remove(i-7);
     symbol_meta:$6
  }
 ```*/
-fn _fn127 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn128 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v6 = args.remove(i-0);
 let mut v5 = args.remove(i-1);
 let mut v4 = args.remove(i-2);
@@ -14777,7 +14886,7 @@ let mut v0 = args.remove(i-6);
     symbol_meta:$NULL
  }
 ```*/
-fn _fn128 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn129 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v6 = args.remove(i-0);
 let mut v5 = args.remove(i-1);
 let mut v4 = args.remove(i-2);
@@ -14818,7 +14927,7 @@ let mut v0 = args.remove(i-6);
     symbol_meta:$NULL
  }
 ```*/
-fn _fn129 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn130 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v5 = args.remove(i-0);
 let mut v4 = args.remove(i-1);
 let mut v3 = args.remove(i-2);
@@ -14841,7 +14950,7 @@ let mut v0 = args.remove(i-5);
 ```
 { t_Repeat, c_IR, c_IR_Instruction }
 ```*/
-fn _fn130 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn131 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -14867,7 +14976,7 @@ let mut v0 = args.remove(i-2);
     state:$6
  }
 ```*/
-fn _fn131 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn132 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v5 = args.remove(i-0);
 let mut v4 = args.remove(i-1);
 let mut v3 = args.remove(i-2);
@@ -14888,7 +14997,7 @@ let mut v0 = args.remove(i-5);
 ```
 { t_HASH_NAME, val:str($1) }
 ```*/
-fn _fn132 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn133 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  if let HCO::TOKEN(r_0) = v0 { 
  let mut ref_0 = ASTNode::HASH_NAME(HASH_NAME::new(
@@ -14900,7 +15009,7 @@ let mut v0 = args.remove(i-0);
 ```
 { t_FunctionIndexNum, value:f64($1) }
 ```*/
-fn _fn133 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn134 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  if let HCO::TOKEN(r_0) = v0 { 
  let mut ref_0 = ASTNode::FunctionIndexNum(FunctionIndexNum::new(
@@ -14912,7 +15021,7 @@ let mut v0 = args.remove(i-0);
 ```
 { t_FunctionIndexWildCard }
 ```*/
-fn _fn134 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn135 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  let mut ref_0 = ASTNode::FunctionIndexWildCard(FunctionIndexWildCard::new(
         
@@ -14923,7 +15032,7 @@ let mut v0 = args.remove(i-0);
 ```
 { t_FunctionIndexId, value:str($1) }
 ```*/
-fn _fn135 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn136 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  if let HCO::NODE/*aaRR*/(r_0) = v0 { 
  let mut ref_0 = ASTNode::FunctionIndexId(FunctionIndexId::new(
@@ -14935,7 +15044,7 @@ let mut v0 = args.remove(i-0);
 ```
 str($3)
 ```*/
-fn _fn136 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn137 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v3 = args.remove(i-0);
 let mut v2 = args.remove(i-1);
 let mut v1 = args.remove(i-2);
@@ -14946,7 +15055,7 @@ let mut v0 = args.remove(i-3);
 ```
 $2
 ```*/
-fn _fn137 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn138 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
@@ -14960,7 +15069,7 @@ let mut v0 = args.remove(i-2);
 ```
 [$1]
 ```*/
-fn _fn138 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn139 (args:&mut Vec<HCO>, tok: Token){ 
                             let mut i = args.len()-1;
 let mut v0 = args.remove(i-0);
                             
@@ -14974,7 +15083,7 @@ ref_0.push(/*RR7*/r_0);
 ```
 $__first__+$__last__
 ```*/
-fn _fn139 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn140 (args:&mut Vec<HCO>, tok: Token){ 
                             let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1);
@@ -14989,7 +15098,7 @@ r_0.push(/*UX4 TOKEN*/r_1);
 ```
 $1+$2
 ```*/
-fn _fn140 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn141 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::TOKEN(r_0) = v1 { 
@@ -14998,7 +15107,7 @@ let mut v0 = args.remove(i-1);
 ```
 $1+$3+[$4]
 ```*/
-fn _fn141 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn142 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v3 = args.remove(i-0);
 let mut v2 = args.remove(i-1);
@@ -15019,7 +15128,7 @@ ref_0.append(&mut r_1);
 ```
 $1+[$2]
 ```*/
-fn _fn142 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn143 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1);
@@ -15036,7 +15145,7 @@ ref_0.append(&mut r_1);
 ```
 [$1]
 ```*/
-fn _fn143 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn144 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v0 = args.remove(i-0);
                                 
@@ -15050,7 +15159,7 @@ ref_0.push(/*RR6*/r_0);
 ```
 $1+$3+[$NULL]
 ```*/
-fn _fn144 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn145 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
@@ -15068,7 +15177,7 @@ ref_0.append(&mut r_0);
 ```
 $1+[$NULL]
 ```*/
-fn _fn145 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn146 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v0 = args.remove(i-0);
                                 
@@ -15082,7 +15191,7 @@ ref_0.append(&mut r_0);
 ```
 $NULL+[$NULL]
 ```*/
-fn _fn146 (args:&mut Vec<HCO>, tok: Token){
+fn _fn147 (args:&mut Vec<HCO>, tok: Token){
                             let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
                                 
@@ -15093,7 +15202,7 @@ let mut v0 = args.remove(i-0);
 ```
 $2
 ```*/
-fn _fn147 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn148 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2); 
@@ -15103,7 +15212,7 @@ let mut v0 = args.remove(i-2);
 ```
 $__first__+$__last__
 ```*/
-fn _fn148 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn149 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
@@ -15119,7 +15228,7 @@ r_0.push(/*UX2*/r_1);
 ```
 $3
 ```*/
-fn _fn149 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn150 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v3 = args.remove(i-0);
 let mut v2 = args.remove(i-1);
 let mut v1 = args.remove(i-2);
@@ -15130,7 +15239,7 @@ let mut v0 = args.remove(i-3);
 ```
 $1+$2
 ```*/
-fn _fn150 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn151 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1);
@@ -15145,7 +15254,7 @@ r_0.append(&mut r_1);
 ```
 $1
 ```*/
-fn _fn151 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn152 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v0 = args.remove(i-0);
                                 
@@ -15157,7 +15266,7 @@ let mut v0 = args.remove(i-0);
 ```
 $__first__+$__last__
 ```*/
-fn _fn152 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn153 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1);
@@ -15172,7 +15281,7 @@ r_0.push(/*UX2*/r_1);
 ```
 $1
 ```*/
-fn _fn153 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn154 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::NODE/*aaRR*/(r_0) = v0 { 
@@ -15181,7 +15290,7 @@ let mut v0 = args.remove(i-1);
 ```
 [$1]
 ```*/
-fn _fn154 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn155 (args:&mut Vec<HCO>, tok: Token){ 
                             let mut i = args.len()-1;
 let mut v0 = args.remove(i-0);
                             
@@ -15194,7 +15303,7 @@ ref_0.push(/*RR7*/v0.Token());
 ```
 $__first__+$__last__
 ```*/
-fn _fn155 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn156 (args:&mut Vec<HCO>, tok: Token){ 
                             let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1);
@@ -15208,7 +15317,7 @@ r_0.push(/*UX1*/v1.Token());
 ```
 $__first__+$__last__
 ```*/
-fn _fn156 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn157 (args:&mut Vec<HCO>, tok: Token){ 
                             let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1);
@@ -15225,7 +15334,7 @@ let mut v0 = args.remove(i-1);
 ```
 $2
 ```*/
-fn _fn157 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn158 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1); 
  if let HCO::NODE/*aaRR*/(r_0) = v1 { 
@@ -15234,7 +15343,7 @@ let mut v0 = args.remove(i-1);
 ```
 str($1)
 ```*/
-fn _fn158 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
+fn _fn159 (args:&mut Vec<HCO>, tok: Token){ let mut i = args.len()-1;
 let mut v0 = args.remove(i-0); 
  if let HCO::TOKEN(r_0) = v0 { 
  args.push(HCO::STRING(r_0.to_string())) }}
@@ -15242,7 +15351,7 @@ let mut v0 = args.remove(i-0);
 ```
 $2
 ```*/
-fn _fn159 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn160 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1);
@@ -15255,7 +15364,7 @@ let mut v0 = args.remove(i-1);
 ```
 [$2]
 ```*/
-fn _fn160 (args:&mut Vec<HCO>, tok: Token){ 
+fn _fn161 (args:&mut Vec<HCO>, tok: Token){ 
                                 let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1);
@@ -15270,12 +15379,12 @@ ref_0.push(/*RR6*/r_0);
 ```
 
 ```*/
-fn _fn161 (args:&mut Vec<HCO>, tok: Token){}
+fn _fn162 (args:&mut Vec<HCO>, tok: Token){}
 /**
 ```
 
 ```*/
-fn _fn162 (args:&mut Vec<HCO>, tok: Token){  let mut i = args.len()-1;
+fn _fn163 (args:&mut Vec<HCO>, tok: Token){  let mut i = args.len()-1;
 let mut v1 = args.remove(i-0);
 let mut v0 = args.remove(i-1);
  args.push(v1); }
@@ -15283,7 +15392,7 @@ let mut v0 = args.remove(i-1);
 ```
 
 ```*/
-fn _fn163 (args:&mut Vec<HCO>, tok: Token){  let mut i = args.len()-1;
+fn _fn164 (args:&mut Vec<HCO>, tok: Token){  let mut i = args.len()-1;
 let mut v2 = args.remove(i-0);
 let mut v1 = args.remove(i-1);
 let mut v0 = args.remove(i-2);
@@ -15291,6 +15400,6 @@ let mut v0 = args.remove(i-2);
 
 
 
-pub const FunctionMaps:[RF; 337]= [
-    _fn161,_fn0,_fn1,_fn161,_fn161,_fn161,_fn162,_fn161,_fn161,_fn161,_fn161,_fn161,_fn162,_fn161,_fn163,_fn2,_fn3,_fn4,_fn5,_fn6,_fn7,_fn8,_fn9,_fn136,_fn162,_fn161,_fn161,_fn161,_fn161,_fn162,_fn162,_fn162,_fn136,_fn161,_fn161,_fn10,_fn11,_fn12,_fn10,_fn10,_fn10,_fn10,_fn13,_fn13,_fn13,_fn13,_fn13,_fn137,_fn14,_fn138,_fn139,_fn161,_fn161,_fn15,_fn140,_fn162,_fn140,_fn140,_fn161,_fn161,_fn161,_fn16,_fn141,_fn142,_fn143,_fn142,_fn144,_fn145,_fn145,_fn143,_fn146,_fn17,_fn18,_fn19,_fn20,_fn21,_fn22,_fn23,_fn24,_fn25,_fn26,_fn27,_fn28,_fn29,_fn20,_fn23,_fn30,_fn31,_fn32,_fn33,_fn34,_fn33,_fn34,_fn161,_fn161,_fn35,_fn36,_fn37,_fn37,_fn38,_fn39,_fn40,_fn40,_fn161,_fn162,_fn162,_fn162,_fn162,_fn161,_fn161,_fn161,_fn161,_fn161,_fn161,_fn161,_fn161,_fn41,_fn42,_fn161,_fn43,_fn44,_fn45,_fn138,_fn139,_fn46,_fn47,_fn147,_fn48,_fn49,_fn50,_fn51,_fn52,_fn53,_fn54,_fn55,_fn56,_fn57,_fn58,_fn59,_fn60,_fn61,_fn62,_fn63,_fn64,_fn65,_fn66,_fn67,_fn68,_fn69,_fn70,_fn71,_fn72,_fn162,_fn162,_fn143,_fn148,_fn161,_fn161,_fn73,_fn161,_fn163,_fn161,_fn161,_fn162,_fn162,_fn161,_fn161,_fn161,_fn161,_fn161,_fn161,_fn161,_fn74,_fn162,_fn161,_fn137,_fn149,_fn149,_fn161,_fn161,_fn161,_fn161,_fn161,_fn75,_fn76,_fn77,_fn78,_fn138,_fn139,_fn138,_fn138,_fn139,_fn139,_fn79,_fn161,_fn161,_fn161,_fn161,_fn80,_fn81,_fn82,_fn83,_fn84,_fn85,_fn86,_fn87,_fn88,_fn89,_fn90,_fn91,_fn161,_fn92,_fn93,_fn94,_fn95,_fn96,_fn161,_fn161,_fn161,_fn97,_fn98,_fn99,_fn100,_fn101,_fn143,_fn148,_fn102,_fn103,_fn104,_fn105,_fn106,_fn107,_fn108,_fn109,_fn150,_fn151,_fn146,_fn143,_fn143,_fn137,_fn110,_fn111,_fn111,_fn143,_fn152,_fn112,_fn113,_fn114,_fn115,_fn116,_fn117,_fn161,_fn153,_fn143,_fn152,_fn161,_fn161,_fn161,_fn118,_fn143,_fn152,_fn161,_fn119,_fn119,_fn120,_fn120,_fn138,_fn139,_fn143,_fn143,_fn143,_fn152,_fn152,_fn152,_fn121,_fn122,_fn123,_fn124,_fn125,_fn163,_fn126,_fn127,_fn128,_fn129,_fn161,_fn154,_fn155,_fn154,_fn155,_fn154,_fn156,_fn138,_fn139,_fn143,_fn152,_fn143,_fn152,_fn143,_fn152,_fn143,_fn148,_fn143,_fn148,_fn130,_fn131,_fn143,_fn152,_fn143,_fn152,_fn143,_fn152,_fn143,_fn148,_fn143,_fn148,_fn143,_fn152,_fn132,_fn157,_fn158,_fn140,_fn158,_fn140,_fn159,_fn158,_fn140,_fn158,_fn140,_fn160,_fn148,_fn160,_fn160,_fn148,_fn148,_fn133,_fn134,_fn135,
+pub const FunctionMaps:[RF; 345]= [
+    _fn162,_fn0,_fn1,_fn162,_fn162,_fn162,_fn163,_fn162,_fn162,_fn162,_fn162,_fn162,_fn163,_fn162,_fn164,_fn2,_fn3,_fn4,_fn5,_fn6,_fn7,_fn8,_fn9,_fn137,_fn163,_fn162,_fn162,_fn162,_fn162,_fn163,_fn163,_fn163,_fn137,_fn162,_fn162,_fn10,_fn11,_fn12,_fn10,_fn10,_fn10,_fn10,_fn13,_fn13,_fn13,_fn13,_fn13,_fn138,_fn14,_fn139,_fn140,_fn162,_fn162,_fn15,_fn141,_fn163,_fn141,_fn141,_fn162,_fn162,_fn162,_fn16,_fn142,_fn143,_fn144,_fn143,_fn145,_fn146,_fn146,_fn144,_fn147,_fn17,_fn18,_fn19,_fn20,_fn21,_fn22,_fn23,_fn24,_fn25,_fn26,_fn27,_fn28,_fn29,_fn20,_fn23,_fn30,_fn31,_fn32,_fn33,_fn34,_fn33,_fn34,_fn162,_fn162,_fn35,_fn36,_fn37,_fn37,_fn38,_fn39,_fn40,_fn40,_fn162,_fn163,_fn163,_fn163,_fn163,_fn162,_fn162,_fn162,_fn162,_fn162,_fn162,_fn162,_fn162,_fn41,_fn42,_fn162,_fn43,_fn44,_fn45,_fn139,_fn140,_fn46,_fn47,_fn148,_fn48,_fn49,_fn50,_fn51,_fn52,_fn53,_fn54,_fn55,_fn56,_fn57,_fn58,_fn59,_fn60,_fn61,_fn62,_fn63,_fn64,_fn65,_fn66,_fn67,_fn68,_fn69,_fn70,_fn71,_fn72,_fn163,_fn163,_fn144,_fn149,_fn162,_fn162,_fn73,_fn162,_fn164,_fn162,_fn162,_fn163,_fn163,_fn162,_fn162,_fn162,_fn162,_fn162,_fn162,_fn162,_fn74,_fn163,_fn162,_fn138,_fn150,_fn150,_fn162,_fn162,_fn162,_fn162,_fn162,_fn75,_fn76,_fn77,_fn78,_fn139,_fn140,_fn139,_fn139,_fn140,_fn140,_fn79,_fn162,_fn162,_fn162,_fn162,_fn80,_fn81,_fn82,_fn83,_fn84,_fn85,_fn86,_fn87,_fn88,_fn89,_fn90,_fn91,_fn162,_fn92,_fn93,_fn94,_fn95,_fn96,_fn162,_fn162,_fn162,_fn97,_fn98,_fn99,_fn100,_fn101,_fn144,_fn149,_fn102,_fn103,_fn104,_fn105,_fn106,_fn107,_fn108,_fn109,_fn151,_fn152,_fn147,_fn144,_fn144,_fn138,_fn110,_fn111,_fn111,_fn144,_fn153,_fn112,_fn113,_fn114,_fn115,_fn116,_fn117,_fn162,_fn154,_fn144,_fn153,_fn162,_fn162,_fn162,_fn162,_fn118,_fn144,_fn153,_fn162,_fn119,_fn119,_fn120,_fn120,_fn163,_fn162,_fn121,_fn144,_fn144,_fn144,_fn153,_fn153,_fn153,_fn122,_fn123,_fn124,_fn125,_fn126,_fn164,_fn127,_fn128,_fn129,_fn130,_fn162,_fn155,_fn156,_fn155,_fn156,_fn155,_fn157,_fn139,_fn140,_fn144,_fn153,_fn144,_fn153,_fn144,_fn153,_fn144,_fn149,_fn144,_fn149,_fn131,_fn132,_fn144,_fn153,_fn144,_fn153,_fn144,_fn153,_fn144,_fn149,_fn144,_fn149,_fn144,_fn153,_fn133,_fn158,_fn159,_fn141,_fn159,_fn141,_fn160,_fn159,_fn141,_fn159,_fn141,_fn139,_fn140,_fn139,_fn139,_fn140,_fn140,_fn161,_fn149,_fn161,_fn161,_fn149,_fn149,_fn134,_fn135,_fn136,
 ];
