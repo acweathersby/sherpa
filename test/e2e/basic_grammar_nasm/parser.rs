@@ -14,9 +14,6 @@
 //! (C) 2022 Anthony Weathersby and the Hydrocarbon Toolkit Authors.
 
 
-    
-use hctk::types::*;
-
 use hctk::types::*;
 
 type AnonymousPtr = u64;
