@@ -21,11 +21,11 @@ pub const FAIL_STATE_MASK: u32 = 1 << 27;
 
 /// Mask the part of the state metadata that stores the
 /// production id.
-pub const PRODUCTION_META_MASK: u32 = 0xFFFFF;
+pub const PRODUCTION_META_MASK: u64 = 0xFFFFF;
 
 /// Mask the part of the state metadata that stores the
 /// production id.
-pub const PRODUCTION_META_MASK_INVERT: u32 = !PRODUCTION_META_MASK;
+pub const PRODUCTION_META_MASK_INVERT: u64 = !PRODUCTION_META_MASK;
 
 /// Bit mask for bytecode states that are active during normal parse
 /// mode

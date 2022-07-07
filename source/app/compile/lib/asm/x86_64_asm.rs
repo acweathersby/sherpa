@@ -1,3 +1,14 @@
+//! This following is a list of registers that a reserved for specific purposes:
+//! ### While in recognizer mode states:
+//! - r15 - stores the state metadata
+//! - rbx - stores the address of the [parser context](hctk::types::ASMParserContext)
+//! ### While in scanner mode states:
+//! Same as above, with the additional registers:
+//! - rdx - stores packed character data. see [hctk::types::SymbolReader::get_type_info]
+//! - r12 - stores token offset data: byte offset in high 32, and codepoint offset in lower 32
+//! - r13 - stores token length data: byte length in high 32, and codepoint length in lower 32
+//! - r14 - stores accepted token offset data
+
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::io::Result;
@@ -26,12 +37,7 @@ const parse_context_size: usize =
 
 const stack_ref_size: usize = std::mem::size_of::<Vec<u8>>();
 
-const ParseAction_size: usize = std::mem::size_of::<ParseAction>();
-
 const token_size: usize = std::mem::size_of::<ParseToken>();
-
-// RBX is the entire context
-// RBP is the inner context
 
 pub fn write_preamble<W: Write, T: X8664Writer<W>>(
     grammar: &GrammarStore,
@@ -55,7 +61,10 @@ pub fn write_preamble<W: Write, T: X8664Writer<W>>(
         .constant("FAIL_STATE_MASK          ", &FAIL_STATE_MASK.to_string())?
         .constant("NORMAL_STATE_MASK        ", &NORMAL_STATE_MASK.to_string())?
         .constant("PEEK_MODE_FLAG           ", &PEEK_MODE_FLAG.to_string())?
-        .constant("PEEK_MODE_FLAG_INVERT    ", &(!PEEK_MODE_FLAG).to_string())?
+        .constant(
+            "PEEK_MODE_FLAG_INVERT    ",
+            &(!(PEEK_MODE_FLAG as u64)).to_string(),
+        )?
         .constant(
             "PRODUCTION_META_MASK           ",
             &PRODUCTION_META_MASK.to_string(),
@@ -65,48 +74,44 @@ pub fn write_preamble<W: Write, T: X8664Writer<W>>(
             &PRODUCTION_META_MASK_INVERT.to_string(),
         )?
         .constant(
-            "STACK_ADDRESS_OFFSET     ",
-            &(parse_context_size - stack_ref_size).to_string(),
-        )?
-        .constant("rbx_foreign_rsp_offset           ", &(8 * 0).to_string())?
-        .constant("rbx_local_rsp_offset             ", &(8 * 1).to_string())?
-        .constant("rbx_local_stack_base             ", &(8 * 2).to_string())?
-        .constant("rbx_inner_context_offset         ", &(8 * 3).to_string())?
-        .constant("rbx_action_pointer               ", &(8 * 4).to_string())?
-        .constant("rbx_struct_reader_ptr_offset     ", &(8 * 5).to_string())?
-        .constant("rbx_fn_get_line_data             ", &(8 * 6).to_string())?
-        .constant("rbx_fn_get_length_data           ", &(8 * 7).to_string())?
-        .constant("rbx_fn_get_type_data                ", &(8 * 8).to_string())?
-        .constant("rbx_fn_next                      ", &(8 * 9).to_string())?
-        .constant("rbx_fn_set_cursor_to_offset      ", &(8 * 10).to_string())?
-        .constant("rbx_peek_token_offset            ", &(8 * 11).to_string())?
-        .constant("rbx_anchor_token_offset          ", &(8 * 15).to_string())?
-        .constant("inner_context_offset             ", &(8 * 19).to_string())?
-        .constant(
-            "rbx_parse_action_offset                ",
-            &(parse_context_size - stack_ref_size - ParseAction_size)
-                .to_string(),
-        )?
-        .constant("rbp_assert_token_offset          ", &(0).to_string())?
-        .constant(
             "STATE_TYPE_MASK        ",
             &(NORMAL_STATE_MASK + FAIL_STATE_MASK).to_string(),
         )?
         .constant(
             "STATE_TYPE_MASK_INVERT        ",
-            &(!(NORMAL_STATE_MASK + FAIL_STATE_MASK)).to_string(),
+            &(!((NORMAL_STATE_MASK + FAIL_STATE_MASK) as u64)).to_string(),
         )?
-        .constant("rbp_state_u64_data_offset        ", &(8 * 4).to_string())?
-        .constant("tok_byte_offset              ", &(4 * 0).to_string())?
-        .constant("tok_cp_offset                ", &(4 * 1).to_string())?
-        .constant("tok_byte_length              ", &(4 * 2).to_string())?
-        .constant("tok_cp_length                ", &(4 * 3).to_string())?
+        .constant(
+            "TOKEN_TYPE_META_MASK_INVERT           ",
+            &(0xFFFF_FFFFu64.to_string()),
+        )?
+        .constant(
+            "STACK_ADDRESS_OFFSET     ",
+            &(parse_context_size - stack_ref_size).to_string(),
+        )?
+        .constant("rbx_peek_token_offset            ", &(8 * 0).to_string())?
+        .constant("rbx_anchor_token_offset          ", &(8 * 4).to_string())?
+        .constant("rbx_assert_token_offset          ", &(8 * 8).to_string())?
+        .constant("rbx_foreign_rsp_offset           ", &(8 * 12).to_string())?
+        .constant("rbx_local_rsp_offset             ", &(8 * 13).to_string())?
+        .constant("rbx_local_stack_base             ", &(8 * 14).to_string())?
+        .constant("rbx_state_u64_data_offset        ", &(8 * 15).to_string())?
+        .constant("rbx_action_pointer               ", &(8 * 16).to_string())?
+        .constant("rbx_struct_reader_ptr_offset     ", &(8 * 17).to_string())?
+        .constant("rbx_fn_get_line_data             ", &(8 * 18).to_string())?
+        .constant("rbx_fn_get_length_data           ", &(8 * 19).to_string())?
+        .constant("rbx_fn_next                      ", &(8 * 20).to_string())?
+        .constant("rbx_fn_set_cursor                ", &(8 * 21).to_string())?
+        .constant("tok_byte_offset                  ", &(4 * 0).to_string())?
+        .constant("tok_cp_offset                    ", &(4 * 1).to_string())?
+        .constant("tok_byte_length                  ", &(4 * 2).to_string())?
+        .constant("tok_cp_length                    ", &(4 * 3).to_string())?
         // Scan byte offset and line number are aliases
-        .constant("tok_scan_byte_offset         ", &(4 * 4).to_string())?
-        .constant("tok_line_number              ", &(4 * 4).to_string())?
-        .constant("tok_line_offset              ", &(4 * 5).to_string())?
-        .constant("tok_type                     ", &(4 * 6).to_string())?
-        .constant("tok_padding                  ", &(4 * 7).to_string())?
+        .constant("tok_scan_byte_offset             ", &(4 * 4).to_string())?
+        .constant("tok_line_number                  ", &(4 * 4).to_string())?
+        .constant("tok_line_offset                  ", &(4 * 5).to_string())?
+        .constant("tok_padding                      ", &(4 * 6).to_string())?
+        .constant("tok_type                         ", &(4 * 7).to_string())?
         .newline()?
         .newline()?;
 
@@ -161,8 +166,6 @@ pub fn write_preamble<W: Write, T: X8664Writer<W>>(
         .code("mov r10, [rbx + rbx_local_stack_base]")?
         .code("add r10, rax")?
         .code("mov [rbx + rbx_local_rsp_offset], r10")?
-        .code("lea r10, [rbx + inner_context_offset]")?
-        .code("mov [rbx + rbx_inner_context_offset], r10")?
         .newline()?
         .comment_line("  Save our state stack")?
         .newline()?
@@ -176,7 +179,7 @@ pub fn write_preamble<W: Write, T: X8664Writer<W>>(
         .comment_line("  Configure our parse state")?
         .comment_line("  Set the normal mode for our parse state")?
         .code("mov r10, ( NORMAL_STATE_MASK )")?
-        .code("mov [rbp + rbp_state_u64_data_offset], r10")?
+        .code("mov [rbx + rbx_state_u64_data_offset], r10")?
         .code("mov r11, rsi")?
         .code("xor esi, esi")?
         .inline_grammar(
@@ -232,16 +235,8 @@ pub fn write_preamble<W: Write, T: X8664Writer<W>>(
         .inline(save_context_external)?
         .code("ret")?;
 
-    writer
-        .newline()?
-        .label("scan_handler", false)?
-        .code("push rdx")?
-        .code("push rsi")?
-        .code("push r14")?;
+    writer.newline()?.label("scan_handler", false)?;
     write_extend_stack_checker(writer, token_size as u32 * 2 + 8 * 12)?
-        .code("pop r14")?
-        .code("pop r13")?
-        .code("pop r12")?
         // Load data for new parse run. We create a new context
         // stores the just the offsets for tokens in the rbp register.
         .inline(save_context_internal)?
@@ -250,18 +245,9 @@ pub fn write_preamble<W: Write, T: X8664Writer<W>>(
         .code("mov rdi, [rbx + rbx_struct_reader_ptr_offset]")?
         .code("call [rbx + rbx_fn_get_line_data]")?
         .inline(restore_context_internal)?
-        .commented_code("push rax", "line information")?
-        .code("mov r8,  [r14 + tok_byte_offset]")?
-        .code("mov r9, [r14 + tok_line_number]")?
-        .code("mov r10, [r14 + tok_type]")?
         .comment_line("setup new context for scanner ------- ")?
-        .code("push rbp")?
-        .code("push 0")?
-        .code("push r10")?
-        .code("push r8")?
-        .code("push r9")?
-        .code("push r8")?
-        .code("mov rbp, rsp")?
+        .code("push r15")?
+        .commented_code("push rax", "line information")?
         .commented_code("push r14", "push the target token address")?
         .commented_code("push r12", "save the return address in the stack")?
         .code("lea r10, [rel scanner_complete]")?
@@ -271,6 +257,8 @@ pub fn write_preamble<W: Write, T: X8664Writer<W>>(
         .code("push rax")?
         .code("push NORMAL_STATE_MASK")?
         .code("push r13")?
+        .code("mov r12,  [r14 + tok_byte_offset]")?
+        .code("mov r13,  [r14 + tok_byte_length]")?
         .commented_code(
             "mov r15, NORMAL_STATE_MASK",
             "set scanner state metadata",
@@ -278,8 +266,8 @@ pub fn write_preamble<W: Write, T: X8664Writer<W>>(
         .inline(save_context_internal)?
         .code("mov rsi, r14")?
         .code("mov rdi, [rbx + rbx_struct_reader_ptr_offset]")?
-        .code("call [rbx + rbx_fn_set_cursor_to_offset]")?
-        .code("mov r14, rax")?
+        .code("call [rbx + rbx_fn_set_cursor]")?
+        .code("mov rdx, rax")?
         .inline(restore_context_internal)?
         .label("scanner_dispatch_loop", false)?
         .code("jmp dispatch_loop")?
@@ -290,21 +278,15 @@ pub fn write_preamble<W: Write, T: X8664Writer<W>>(
         .label("create_token", true)?
         .commented_code("pop rdi", "pop the state return address")?
         .commented_code("pop rax", "pop the target token address")?
-        .comment_line("Pop assert token")?
-        .commented_code("pop r8", "total offset [not used]")?
-        .commented_code("pop r9", "token length [not used]")?
-        .commented_code("pop r10", "tok_scan_byte_offset")?
-        .commented_code("pop r11", "tok type")?
-        .commented_code("pop r15", "scan r15 [not used]")?
-        .commented_code("pop rbp", "old rbp")?
-        .commented_code("pop r12", "line info")?
+        .commented_code("pop r8", "line info")?
         .code("mov rcx, [rax + tok_byte_offset]")?
-        .code("sub r10, rcx")?
-        .code("mov [rax + tok_byte_length], r10")?
-        .code("mov [rax + tok_line_number], r12")?
-        .code("mov [rax + tok_type], r11")?
-        .code("mov rax, r11")?
-        .code("mov r15, [rbp + rbp_state_u64_data_offset]")?
+        .code("sub r14, rcx")?
+        .code("mov [rax + tok_byte_length], r14")?
+        .code("mov [rax + tok_line_number], r8")?
+        .code("mov [rax + tok_padding], r15")?
+        .code("mov rax, r15")?
+        .code("shr rax, 32")?
+        .code("pop r15")?
         .code("jmp rdi")?
         .newline()?;
 
@@ -342,7 +324,7 @@ pub fn write_preamble<W: Write, T: X8664Writer<W>>(
     writer
         .label("emit_action", false)?
         .comment_line("  Save our parse state")?
-        .code("mov [rbp + rbp_state_u64_data_offset], r15")?
+        .code("mov [rbx + rbx_state_u64_data_offset], r15")?
         .inline(save_context_external)?
         .code("xor eax, eax")?
         .code("inc eax")?
@@ -370,9 +352,11 @@ pub fn write_preamble<W: Write, T: X8664Writer<W>>(
     writer
         .label("extend_stack", false)?
         // write_extend_stack_checker:
-        // Loads r12 for the difference and r13 for the return
+        // Loads rax for the difference and rcx for the return
         // address
+        .code("push rcx")?
         .inline(save_context_internal)?
+        .code("push rax")?
         .code("lea rdi, [rbx + STACK_ADDRESS_OFFSET]")?
         .code("call hctk_extend_stack")?
         .code("cmp rax, 0")?
@@ -384,10 +368,12 @@ pub fn write_preamble<W: Write, T: X8664Writer<W>>(
         .code("call hctk_get_stack_size")?
         .code("mov r10, [rbx + rbx_local_stack_base]")?
         .code("add r10, rax")?
-        .code("sub r10, r12")?
+        .code("pop rax")?
+        .code("sub r10, rax")?
         .code("mov [rbx + rbx_local_rsp_offset], r10")?
         .inline(restore_context_internal)?
-        .code("jmp r13")?
+        .code("pop rcx")?
+        .code("jmp rcx")?
         .label("extend_stack_fail", true)?
         .inline(save_context_external)?
         .code("xor eax, eax")?
@@ -424,14 +410,10 @@ fn restore_context_external<W: Write, T: X8664Writer<W>>(
             "preserve the outside stack",
         )?
         .commented_code(
-            "mov rbp, [rbx + rbx_inner_context_offset]",
-            "restore our scanner context base",
-        )?
-        .commented_code(
             "mov rsp, [rbx + rbx_local_rsp_offset]",
             "restore our local state stack",
         )?
-        .code("mov r15, [rbp + rbp_state_u64_data_offset]")
+        .code("mov r15, [rbx + rbx_state_u64_data_offset]")
 }
 
 fn save_context_external<W: Write, T: X8664Writer<W>>(
@@ -440,14 +422,10 @@ fn save_context_external<W: Write, T: X8664Writer<W>>(
 {
     writer
         .comment_line("Saving context")?
-        .code("mov [rbp + rbp_state_u64_data_offset], r15")?
+        .code("mov [rbx + rbx_state_u64_data_offset], r15")?
         .commented_code(
             "mov [rbx + rbx_local_rsp_offset], rsp",
             "preserve our local stack",
-        )?
-        .commented_code(
-            "mov [rbx + rbx_inner_context_offset], rbp",
-            "preserve our scanner context base",
         )?
         .commented_code(
             "mov rsp, [rbx + rbx_foreign_rsp_offset]",
@@ -541,62 +519,46 @@ pub fn write_state<W: Write, T: X8664Writer<W>>(
             match bytecode[offset] & INSTRUCTION_HEADER_MASK {
                 INSTRUCTION::I00_PASS => {
                     offset += 1;
-                    writer.code("mov r10, STATE_TYPE_MASK_INVERT")?;
-                    writer.code("and r15, r10")?;
+                    writer.code("mov rax, STATE_TYPE_MASK_INVERT")?;
+                    writer.code("and r15, rax")?;
                     writer.code("or r15, NORMAL_STATE_MASK")?;
                     writer.code("jmp dispatch_loop")?;
                     break;
                 }
 
                 INSTRUCTION::I01_CONSUME => {
-                    writer.code("xor eax, eax")?;
-
-                    if bytecode[offset] & 1 == 1 {
-                        writer
-                        .code("mov [rbp + rbp_assert_token_offset + tok_byte_length], rax")?;
-                    }
-
                     if is_scanner {
+                        // r12 is token offset
+                        // r13 is token length
+                        if bytecode[offset] & 1 == 1 {
+                            writer.code("xor r13d, r13d")?;
+                        } else {
+                            writer.code("add r12, r13")?;
+                        }
                         writer
-                            .code("lea r10, [rbp + rbp_assert_token_offset]")?
-                            .commented_code(
-                                "mov r9, [r10 + tok_byte_length]",
-                                "assert[r10] length",
-                            )?
-                            .code("mov rsi, r9")?
-                            .commented_code(
-                                "mov r11, [r10 + tok_byte_offset]",
-                                "assert[r10] offset",
-                            )?
-                            .code("add r11, r9")?
-                            .commented_code(
-                                "mov [r10 + tok_byte_offset], r11",
-                                "assert[r10] offset",
-                            )?
-                            .commented_code(
-                                "mov [r10 + tok_byte_length], rax",
-                                "assert[r10] length",
-                            )?
                             .inline(save_context_internal)?
+                            .code("mov rsi, r13")?
+                            .code("shr rsi, 32")?
                             .code(
                                 "mov rdi, [rbx + rbx_struct_reader_ptr_offset]",
                             )?
                             .code("call [rbx + rbx_fn_next]")?
-                            .code(
-                                "mov rdi, [rbx + rbx_struct_reader_ptr_offset]",
-                            )?
-                            .code("call [rbx + rbx_fn_get_type_data]")?
-                            .code("mov r14, rax")?
+                            .code("mov rdx, rax")?
                             .inline(restore_context_internal)?;
                     } else {
+                        writer.code("xor eax, eax")?;
+                        if bytecode[offset] & 1 == 1 {
+                            writer
+                            .code("mov [rbx + rbx_assert_token_offset + tok_byte_length], rax")?;
+                        }
                         // copy data into the emitter
                         // and next the
                         let return_label = create_offset_label(offset);
 
                         writer
                             .code("push r15")?
-                            .code(&format!("lea r10, [rel .{}]", return_label))?
-                            .code("push r10")?
+                            .code(&format!("lea rax, [rel .{}]", return_label))?
+                            .code("push rax")?
                             .code("jmp emit_shift")?
                             .label(&return_label, true)?;
                     }
@@ -626,10 +588,10 @@ pub fn write_state<W: Write, T: X8664Writer<W>>(
                         break;
                     } else {
                         writer
-                            .code(&format!("mov r10, NORMAL_STATE_MASK"))?
-                            .code("push r10")?
-                            .code(&format!("lea r10, [rel {}]", name))?
-                            .code("push r10")?;
+                            .code(&format!("mov rax, NORMAL_STATE_MASK"))?
+                            .code("push rax")?
+                            .code(&format!("lea rax, [rel {}]", name))?
+                            .code("push rax")?;
                     }
                     offset += 1;
                 }
@@ -639,9 +601,9 @@ pub fn write_state<W: Write, T: X8664Writer<W>>(
                         bytecode[offset] & INSTRUCTION_CONTENT_MASK;
                     writer
                         .comment_line("Set production")?
-                        .code("mov r10, PRODUCTION_META_MASK_INVERT")?
-                        .commented_code("and r15, r10", "set production")?
-                        .code(&format!("and r15, {}", production_id))?;
+                        .code("mov rax, PRODUCTION_META_MASK_INVERT")?
+                        .code("and r15, rax")?
+                        .code(&format!("add r15, {}", production_id))?;
                     offset += 1;
                 }
 
@@ -654,19 +616,11 @@ pub fn write_state<W: Write, T: X8664Writer<W>>(
                     let value = bytecode[offset] & 0x00FF_FFFF;
                     writer
                         .comment_line("Set token")?
-                        .code("lea rsi, [rbp + rbp_assert_token_offset]")?
-                        .commented_code(
-                            "mov r10, [rsi + tok_byte_offset]",
-                            "assert[rsi] length",
-                        )?
-                        .commented_code(
-                            "mov [rsi + tok_scan_byte_offset], r10",
-                            "assert[rsi] offset",
-                        )?
-                        .commented_code(
-                            &format!("mov DWORD [rsi + tok_type], {}", value),
-                            "assert[rsi] offset",
-                        )?;
+                        .commented_code("mov r14, r12", "token offset")?
+                        .code("mov rax, TOKEN_TYPE_META_MASK_INVERT")?
+                        .code("and r15, rax")?
+                        .code(&format!("mov rax, {}", (value as u64) << 32))?
+                        .code("add r15, rax")?;
                     offset += 1;
                 }
 
@@ -846,8 +800,8 @@ pub fn write_state<W: Write, T: X8664Writer<W>>(
                 }
                 INSTRUCTION::I15_FAIL => {
                     offset += 1;
-                    writer.code("mov r10, STATE_TYPE_MASK_INVERT")?;
-                    writer.code("and r15, r10")?;
+                    writer.code("mov rax, STATE_TYPE_MASK_INVERT")?;
+                    writer.code("and r15, rax")?;
                     writer.code("or r15, FAIL_STATE_MASK")?;
                     writer.code("jmp dispatch_loop")?;
                     break;
@@ -872,24 +826,24 @@ fn write_emit_shift<W: Write, T: X8664Writer<W>>(
 {
     writer
         .label("emit_shift", false)?
-        .code("lea rsi, [rbp + rbp_assert_token_offset]")?
+        .code("lea rsi, [rbx + rbx_assert_token_offset]")?
         .code("lea rdi, [rbx + rbx_anchor_token_offset]")?
         .code("mov r12, [rdi + tok_byte_offset]")?
         .code("mov r13, [rdi + tok_line_number]")?
         .code("mov r8, [rsi + tok_byte_length]")?
         .code("mov r9, [rsi + tok_byte_offset]")?
         .code("mov r10, [rsi + tok_line_number]")?
-        .code("mov r11, [rsi + tok_type]")?
+        .code("mov r11, [rsi + tok_padding]")?
         .code("mov rcx, r9")?
         .code("add rcx, r8")?
-        .code("mov [rsi + tok_byte_length], rax")?
+        .code("mov QWORD [rsi + tok_byte_length], 0")?
         .code("mov [rsi + tok_byte_offset], rcx")?
         .code("mov [rsi + tok_line_number], r10")?
-        .code("mov [rsi + tok_type], rax")?
-        .code("mov [rdi + tok_byte_length], rax")?
+        .code("mov QWORD [rsi + tok_padding], 0")?
+        .code("mov QWORD [rdi + tok_byte_length], 0")?
         .code("mov [rdi + tok_byte_offset], rcx")?
         .code("mov [rdi + tok_line_number], r10")?
-        .code("mov [rdi + tok_type], rax")?
+        .code("mov QWORD [rdi + tok_padding], 0")?
         .code("mov rax, [rbx + rbx_action_pointer]")?
         .code("mov DWORD [rax], ParseAction_Shift")?
         .code("mov rcx, r9")?
@@ -897,11 +851,11 @@ fn write_emit_shift<W: Write, T: X8664Writer<W>>(
         .code("mov [rax + 8 + tok_byte_length], rcx")?
         .code("mov [rax + 8 + tok_byte_offset], r12")?
         .code("mov [rax + 8 + tok_line_number], r13")?
-        .code("mov QWORD [rax + 8 + tok_type], 0")?
+        .code("mov QWORD [rax + 8 + tok_padding], 0")?
         .code("mov [rax + 40 + tok_byte_length], r8")?
         .code("mov [rax + 40 + tok_byte_offset], r9")?
         .code("mov [rax + 40 + tok_line_number], r10")?
-        .code("mov [rax + 40 + tok_type], r11")?
+        .code("mov [rax + 40 + tok_padding], r11")?
         .inline(save_context_external)?
         .code("ret")
 }
@@ -912,12 +866,12 @@ fn write_extend_stack_checker<W: Write, T: X8664Writer<W>>(
 ) -> Result<&mut T>
 {
     writer
-        .code("mov r12, rsp")?
-        .code("mov r10, [rbx + rbx_local_stack_base]")?
-        .code("sub r12, r10")?
-        .code(&format!("cmp r12, {}", needed_size))?
+        .code("mov rax, rsp")?
+        .code("mov rcx, [rbx + rbx_local_stack_base]")?
+        .code("sub rax, rcx")?
+        .code(&format!("cmp rax, {}", needed_size))?
         .code("jg .start")?
-        .code("lea r13, [rel .start]")?
+        .code("lea rcx, [rel .start]")?
         .code("jmp extend_stack")?
         .label("start", true)
 }
@@ -940,26 +894,20 @@ fn write_branches<W: Write, T: X8664Writer<W>>(
                 .comment_line(&format!("Skip this token",))?;
             match lexer_type {
                 LEXER_TYPE::ASSERT => {
-                    writer.code("lea rsi, [rbp + rbp_assert_token_offset]")?
+                    writer.code("lea rsi, [rbx + rbx_assert_token_offset]")?
                 }
                 _ => writer.code("lea rsi, [rbx + rbx_peek_token_offset]")?,
             }
             .code("mov r8, [rsi + tok_byte_length]")?
             .code("mov r9, [rsi + tok_byte_offset]")?
+            .code("add r9, r8")?
+            .code("mov QWORD [rsi + tok_padding], 0")?
+            .code("mov QWORD [rsi + tok_byte_length], 0")?
             .code("mov r10, [rsi + tok_line_number]")?
-            .code("mov r11, [rsi + tok_type]")?
-            .code("mov rcx, r9")?
-            .code("add rcx, r8")?
-            .code("mov [rsi + tok_byte_length], rax")?
-            .code("mov [rsi + tok_byte_offset], rcx")?
             .code("mov [rsi + tok_line_number], r10")?
-            .code("xor eax, eax")?
-            .code("mov [rsi + tok_type], rax")?
+            .code("mov [rsi + tok_byte_offset], r9")?
             .code(&format!("jmp {}", table_name))?;
         } else {
-            if is_scanner {
-                writer.code("lea rdi, [rbx + rbx_anchor_token_offset]")?;
-            }
             offset = write_state(
                 output,
                 writer,
@@ -1045,7 +993,7 @@ fn create_value_lookup<W: Write, T: X8664Writer<W>>(
                     .code("mov r10, PEEK_MODE_FLAG_INVERT")?
                     .commented_code("and rcx, r10", "unset peek mode")?
                     // set_base_token
-                    .code("lea r14, [rel rbp + rbp_assert_token_offset]")?
+                    .code("lea r14, [rel rbx + rbx_assert_token_offset]")?
                     .code("mov eax, [r14 + tok_type]")?
                     .code("cmp eax, 0")?
                     .code("jne .cached")?
@@ -1058,55 +1006,60 @@ fn create_value_lookup<W: Write, T: X8664Writer<W>>(
                     .code("mov r9, r14")?
                     .code("test ecx, PEEK_MODE_FLAG")?
                     .code("jnz .increment_peek")?
-                    .code("lea r9, [rbp + rbp_assert_token_offset]")?
+                    .code("lea r9, [rbx + rbx_assert_token_offset]")?
                     .code("or ecx, PEEK_MODE_FLAG")?
                     .label(".increment_peek", true)?
-                    .code("xor eax, eax")?
                     .newline()? // Update byte
                     .code("mov r10, [r9 + tok_byte_offset]")?
                     .code("mov r11, [r9 + tok_byte_length]")?
                     .code("add r10, r11")?
                     .code("mov [r14 + tok_byte_offset], r10")?
-                    .code("mov [r14 + tok_byte_length], rax")?
-                    .code("mov [r14 + tok_type], rax")?
                     .newline()?
             }
             .code(&format!(
-                "lea rsi, [rel {}]",
+                "lea r13, [rel {}]",
                 create_named_state_label(scan_state)
             ))?
-            .code("lea rdx, [rel .cached]")?
+            .code("lea r12, [rel .cached]")?
             .code("jmp scan_handler")?
             .label("cached", true)?;
         }
         _ => {
-            writer
-                .code("xor eax,eax")?
-                .code("inc eax")?
-                .code("lea r10, [rel rbp + rbp_assert_token_offset]")?;
             match input_type {
                 INPUT_TYPE::T05_BYTE => {
                     writer
-                        .code("mov [r10 + tok_byte_length], eax")?
-                        .code("mov [r10 + tok_cp_length], eax")?
-                        .code("mov al, r14b")?;
+                        .code("xor r13d, r13d")?
+                        .code("inc r13")?
+                        .code("shl r13, 32")?
+                        .code("inc r13")?
+                        .comment_line("Load the byte data in the low 8 bits")?
+                        .code("mov eax, edx")?
+                        .code("and eax, 0xFF")?;
                 }
                 INPUT_TYPE::T03_CLASS => {
                     writer
-                        .code("mov [r10 + tok_byte_length], eax")?
-                        .code("mov cx, r14w")?
-                        .code("shr ecx, 8")?
-                        .code("mov [r10 + tok_cp_length], ecx")?
-                        .code("mov eax, r14d")?
+                        .code("xor r13d, r13d")?
+                        .code("inc r13d")?
+                        .code("shl r13, 40")?
+                        .code("mov r13w, dx")?
+                        .code("shr r13, 8")?
+                        .comment_line(
+                            "Load the class data in the high 16 bits",
+                        )?
+                        .code("mov eax, edx")?
                         .code("shr rax, 16")?;
                 }
                 INPUT_TYPE::T04_CODEPOINT => {
                     writer
-                        .code("mov [r10 + tok_byte_length], eax")?
-                        .code("mov ecx, r14d")?
-                        .code("shr ecx, 24")?
-                        .code("mov [r10 + tok_cp_length], ecx")?
-                        .code("mov rax, r14")?
+                        .code("xor r13d, r13d")?
+                        .code("inc r13d")?
+                        .code("shl r13, 40")?
+                        .code("mov r13w, dx")?
+                        .code("shr r13, 8")?
+                        .comment_line(
+                            "Load the codepoint data in the high 32 bits",
+                        )?
+                        .code("mov rax, rdx")?
                         .code("shr rax, 32")?;
                 }
                 _ => {}

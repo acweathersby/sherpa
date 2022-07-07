@@ -87,7 +87,7 @@ fn consume<T: SymbolReader>(
     state.set_assert_token(next_token);
 
     if state.is_scanner() {
-        reader.next(shift.byte_length);
+        reader.next(shift.byte_length as i32);
     } else {
         state.set_anchor_token(next_token);
     }
@@ -422,7 +422,7 @@ fn scan_for_improvised_token<T: SymbolReader>(
             && byte != b' ' as u32
             && !reader.at_end()
         {
-            reader.next(assert.byte_length);
+            reader.next(assert.byte_length as i32);
             byte = reader.byte();
             assert = assert.next();
             assert.byte_length = reader.codepoint_byte_length();
@@ -455,14 +455,8 @@ fn token_scan<T: SymbolReader>(
             }
 
             return ParseToken {
-                byte_length: 0,
-                byte_offset: 0,
-                cp_length:   0,
-                cp_offset:   0,
-                line_number: 0,
-                line_offset: 0,
-                token_type:  id,
-                padding:     0,
+                token_type: id,
+                ..Default::default()
             };
         }
     }

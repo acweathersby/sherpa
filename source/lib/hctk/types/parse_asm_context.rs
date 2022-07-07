@@ -5,21 +5,19 @@ use super::*;
 #[repr(C)]
 pub struct ASMParserContext<T: SymbolReader>
 {
-    foreign_rsp: usize,
-    local_rsp: usize, // Points to top of local_state_stack
-    local_stack_base: usize,
-    inner_context: usize,
-    action_ptr: Option<&'static mut ParseAction>,
-    reader: *mut T,
-    get_line_data: fn(&T) -> u64,
-    get_length_data: fn(&T) -> u64,
-    get_type_data: fn(&T) -> u64,
-    next: fn(&mut T, amount: u32) -> u64,
-    set_cursor_to: fn(&mut T, token: &ParseToken) -> u64,
     peek_token: ParseToken,
     anchor_token: ParseToken,
     assert_token: ParseToken,
+    foreign_rsp: usize,
+    local_rsp: usize, // Points to top of local_state_stack
+    local_stack_base: usize,
     state_u64_data: usize,
+    action_pointer: Option<&'static mut ParseAction>,
+    struct_reader_ptr: *mut T,
+    fn_get_line_data: fn(&T) -> u64,
+    fn_get_length_data: fn(&T) -> u64,
+    fn_next: fn(&mut T, amount: i32) -> u64,
+    fn_set_cursor_to: fn(&mut T, token: &ParseToken) -> u64,
     local_state_stack: Vec<usize>,
 }
 
@@ -32,18 +30,16 @@ impl<T: SymbolReader> ASMParserContext<T>
                 foreign_rsp: 0,
                 local_rsp: 0,
                 local_stack_base: 0,
-                inner_context: 0,
-                action_ptr: None,
-                reader,
-                get_type_data: T::get_type_info,
-                next: T::next,
-                set_cursor_to: T::set_cursor_to,
-                get_line_data: T::get_line_data,
-                get_length_data: T::get_length_data,
+                state_u64_data: 0,
+                action_pointer: None,
+                struct_reader_ptr: reader,
+                fn_next: T::next,
+                fn_set_cursor_to: T::set_cursor_to,
+                fn_get_line_data: T::get_line_data,
+                fn_get_length_data: T::get_length_data,
                 peek_token: ParseToken::default(),
                 anchor_token: ParseToken::default(),
                 assert_token: ParseToken::default(),
-                state_u64_data: 0,
                 local_state_stack: vec![0; 32],
             }
         }

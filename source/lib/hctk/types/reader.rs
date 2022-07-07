@@ -38,7 +38,7 @@ pub trait SymbolReader
 
     /// Advances the internal cursor by `amount`. Returns the same
     /// value as `get_type_info`.
-    fn next(&mut self, amount: u32) -> u64;
+    fn next(&mut self, amount: i32) -> u64;
 
     /// Returns the word at the current cursor position, little
     /// Endian
@@ -98,8 +98,20 @@ pub trait SymbolReader
     fn clone(&self) -> Self;
 
     /// Return a packed u64 containing codepoint info the higher 32 bits,
-    /// class in the high 16, and byte in the low 16
-    fn get_type_info(&self) -> u64;
+    /// class in the high 16, codepoint length in the high 8 bits,
+    /// and byte data in the low 8
+    #[inline(always)]
+    fn get_type_info(&self) -> u64
+    {
+        if self.at_end() {
+            0
+        } else {
+            ((self.codepoint() as u64) << 32)
+                | ((self.class() as u64) << 16)
+                | ((self.codepoint_byte_length() as u64) << 8)
+                | (self.byte() as u64)
+        }
+    }
 
     /// Returns UTF8 codepoint information at the current cursor
     /// position.

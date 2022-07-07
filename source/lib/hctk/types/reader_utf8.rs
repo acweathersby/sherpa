@@ -78,15 +78,21 @@ impl SymbolReader for UTF8StringReader
     #[inline(always)]
     fn set_cursor_to(&mut self, token: &ParseToken) -> u64
     {
-        if self.cursor != token.byte_offset as usize {
-            let diff = token.byte_offset as i64 - self.cursor as i64;
-            self.line_count = token.line_number as usize;
-            self.line_offset = token.line_offset as usize;
-            if diff == 1 {
-                self.next(1)
-            } else {
-                self.next(0)
-            }
+        let ParseToken {
+            byte_offset,
+            line_number,
+            line_offset,
+            ..
+        } = *token;
+
+        if self.cursor != byte_offset as usize {
+            let diff = byte_offset as i32 - self.cursor as i32;
+
+            self.line_count = line_number as usize;
+
+            self.line_offset = line_offset as usize;
+
+            self.next(diff)
         } else {
             self.get_type_info()
         }
@@ -141,9 +147,9 @@ impl SymbolReader for UTF8StringReader
         self.codepoint
     }
 
-    fn next(&mut self, amount: u32) -> u64
+    fn next(&mut self, amount: i32) -> u64
     {
-        self.cursor += amount as usize;
+        self.cursor = (self.cursor as i32 + amount) as usize;
 
         self.codepoint = 0;
 
@@ -198,19 +204,6 @@ impl SymbolReader for UTF8StringReader
             self.codepoint = get_utf8_code_point_from(self.word);
 
             self.get_type_info()
-        }
-    }
-
-    #[inline(always)]
-    fn get_type_info(&self) -> u64
-    {
-        if self.at_end() {
-            0
-        } else {
-            ((self.codepoint as u64) << 32)
-                | ((self.class() as u64) << 16)
-                | ((self.codepoint_byte_length() as u64) << 8)
-                | (self.byte() as u64)
         }
     }
 
