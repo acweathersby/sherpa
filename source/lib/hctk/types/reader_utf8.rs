@@ -70,21 +70,21 @@ impl SymbolReader for UTF8StringReader
         ((self.codepoint_byte_length() as u64) << 32)
             | self.codepoint_length() as u64
     }
-
-    fn set_cursor_to(&mut self, token: &ParseToken) -> bool
+    
+    fn set_cursor_to(&mut self, token: &ParseToken) -> u64
     {
         if self.cursor != token.byte_offset as usize {
             let diff = token.byte_offset as i64 - self.cursor as i64;
             self.line_count = token.line_number as usize;
             self.line_offset = token.line_offset as usize;
             if diff == 1 {
-                self.next(1);
+                self.next(1)
             } else {
-                self.next(0);
+                self.next(0)
             }
+        } else {
+            self.get_type_info()
         }
-
-        true
     }
 
     fn clone(&self) -> Self
@@ -130,62 +130,77 @@ impl SymbolReader for UTF8StringReader
         self.codepoint
     }
 
-    fn next(&mut self, amount: u32)
+    fn next(&mut self, amount: u32) -> u64
     {
         self.cursor += amount as usize;
 
         self.codepoint = 0;
 
         if self.at_end() {
-            return;
-        }
-
-        if amount == 1 {
-            self.word = (self.word >> 8) | ((self.byte() as u32) << 24);
-
-            if self.string[self.cursor] == 10 {
-                self.line_count += 1;
-
-                self.line_offset = self.cursor;
-            }
+            0
         } else {
-            let diff = std::cmp::max(
-                std::cmp::min(4, (self.length - self.cursor) as i32),
-                0,
-            ) as u32;
+            if amount == 1 {
+                self.word = (self.word >> 8) | ((self.byte() as u32) << 24);
 
-            let start = self.cursor as u32;
-
-            let end = self.cursor as u32 + (diff as u32);
-
-            let mut word = 0;
-
-            let mut offset = 32;
-
-            for i in start..end {
-                offset -= 8;
-
-                let byte = self.string[i as usize];
-
-                word |= (byte as u32) << offset;
-            }
-
-            for i in (self.cursor - amount as usize + 1)
-                ..std::cmp::min(self.length, self.cursor + 1)
-            {
-                let byte = self.string[i as usize];
-
-                if byte == 10 {
+                if self.string[self.cursor] == 10 {
                     self.line_count += 1;
 
-                    self.line_offset = i as usize;
+                    self.line_offset = self.cursor;
                 }
+            } else {
+                let diff = std::cmp::max(
+                    std::cmp::min(4, (self.length - self.cursor) as i32),
+                    0,
+                ) as u32;
+
+                let start = self.cursor as u32;
+
+                let end = self.cursor as u32 + (diff as u32);
+
+                let mut word = 0;
+
+                let mut offset = 32;
+
+                for i in start..end {
+                    offset -= 8;
+
+                    let byte = self.string[i as usize];
+
+                    word |= (byte as u32) << offset;
+                }
+
+                for i in (self.cursor - amount as usize + 1)
+                    ..std::cmp::min(self.length, self.cursor + 1)
+                {
+                    let byte = self.string[i as usize];
+
+                    if byte == 10 {
+                        self.line_count += 1;
+
+                        self.line_offset = i as usize;
+                    }
+                }
+
+                self.word = word;
             }
 
-            self.word = word;
-        }
+            self.codepoint = get_utf8_code_point_from(self.word);
 
-        self.codepoint = get_utf8_code_point_from(self.word);
+            self.get_type_info()
+        }
+    }
+
+    #[inline(always)]
+    fn get_type_info(&self) -> u64
+    {
+        if self.at_end() {
+            0
+        } else {
+            ((self.codepoint as u64) << 32)
+                | ((self.class() as u64) << 16)
+                | ((self.codepoint_byte_length() as u64) << 8)
+                | (self.byte() as u64)
+        }
     }
 
     fn cursor(&self) -> u32

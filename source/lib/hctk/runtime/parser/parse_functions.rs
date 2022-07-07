@@ -87,7 +87,7 @@ fn consume<T: SymbolReader>(
     state.set_assert_token(next_token);
 
     if state.is_scanner() {
-        reader.next(shift.byte_length)
+        reader.next(shift.byte_length);
     } else {
         state.set_anchor_token(next_token);
     }

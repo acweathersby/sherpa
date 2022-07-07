@@ -76,15 +76,12 @@ pub fn write_preamble<W: Write, T: X8664Writer<W>>(
         .constant("rbx_struct_reader_ptr_offset     ", &(8 * 5).to_string())?
         .constant("rbx_fn_get_line_data             ", &(8 * 6).to_string())?
         .constant("rbx_fn_get_length_data           ", &(8 * 7).to_string())?
-        .constant("rbx_fn_word_offset               ", &(8 * 8).to_string())?
-        .constant("rbx_fn_byte_offset               ", &(8 * 9).to_string())?
-        .constant("rbx_fn_codepoint_offset          ", &(8 * 10).to_string())?
-        .constant("rbx_fn_class_offset              ", &(8 * 11).to_string())?
-        .constant("rbx_fn_next                      ", &(8 * 12).to_string())?
-        .constant("rbx_fn_set_cursor_to_offset      ", &(8 * 13).to_string())?
-        .constant("rbx_peek_token_offset            ", &(8 * 14).to_string())?
-        .constant("rbx_anchor_token_offset          ", &(8 * 18).to_string())?
-        .constant("inner_context_offset             ", &(8 * 22).to_string())?
+        .constant("rbx_fn_get_type_data                ", &(8 * 8).to_string())?
+        .constant("rbx_fn_next                      ", &(8 * 9).to_string())?
+        .constant("rbx_fn_set_cursor_to_offset      ", &(8 * 10).to_string())?
+        .constant("rbx_peek_token_offset            ", &(8 * 11).to_string())?
+        .constant("rbx_anchor_token_offset          ", &(8 * 15).to_string())?
+        .constant("inner_context_offset             ", &(8 * 19).to_string())?
         .constant(
             "rbx_parse_action_offset                ",
             &(parse_context_size - stack_ref_size - ParseAction_size)
@@ -241,18 +238,13 @@ pub fn write_preamble<W: Write, T: X8664Writer<W>>(
         .code("push rdx")?
         .code("push rsi")?
         .code("push r14")?;
-    write_extend_stack_checker(writer, token_size as u32 * 2 + 8 * 12)?;
-
-    writer
+    write_extend_stack_checker(writer, token_size as u32 * 2 + 8 * 12)?
         .code("pop r14")?
         .code("pop r13")?
         .code("pop r12")?
         // Load data for new parse run. We create a new context
         // stores the just the offsets for tokens in the rbp register.
         .inline(save_context_internal)?
-        .code("mov rsi, r14")?
-        .code("mov rdi, [rbx + rbx_struct_reader_ptr_offset]")?
-        .code("call [rbx + rbx_fn_set_cursor_to_offset]")?
         .newline()?
         .comment_line("Update line number and offset info")?
         .code("mov rdi, [rbx + rbx_struct_reader_ptr_offset]")?
@@ -283,6 +275,12 @@ pub fn write_preamble<W: Write, T: X8664Writer<W>>(
             "mov r15, NORMAL_STATE_MASK",
             "set scanner state metadata",
         )?
+        .inline(save_context_internal)?
+        .code("mov rsi, r14")?
+        .code("mov rdi, [rbx + rbx_struct_reader_ptr_offset]")?
+        .code("call [rbx + rbx_fn_set_cursor_to_offset]")?
+        .code("mov r14, rax")?
+        .inline(restore_context_internal)?
         .label("scanner_dispatch_loop", false)?
         .code("jmp dispatch_loop")?
         .newline()?
@@ -368,32 +366,31 @@ pub fn write_preamble<W: Write, T: X8664Writer<W>>(
     writer
         .label("extend_stack", false)?
         // write_extend_stack_checker:
-        // Loads r14 for the difference and r13 for the return
+        // Loads r12 for the difference and r13 for the return
         // address
-        .code("mov r12, rbx")?
         .inline(save_context_internal)?
-        .code("lea rdi, [r12 + STACK_ADDRESS_OFFSET]")?
+        .code("lea rdi, [rbx + STACK_ADDRESS_OFFSET]")?
         .code("call hctk_extend_stack")?
         .code("cmp rax, 0")?
         .code("je .extend_stack_fail")?
-        .code("lea rdi, [r12 + STACK_ADDRESS_OFFSET]")?
+        .code("lea rdi, [rbx + STACK_ADDRESS_OFFSET]")?
         .code("call hctk_get_stack_pointer")?
-        .code("mov [r12 + rbx_local_stack_base], rax")?
-        .code("lea rdi, [r12 + STACK_ADDRESS_OFFSET]")?
+        .code("mov [rbx + rbx_local_stack_base], rax")?
+        .code("lea rdi, [rbx + STACK_ADDRESS_OFFSET]")?
         .code("call hctk_get_stack_size")?
-        .code("mov r10, [r12 + rbx_local_stack_base]")?
+        .code("mov r10, [rbx + rbx_local_stack_base]")?
         .code("add r10, rax")?
-        .code("sub r10, r14")?
-        .code("mov [r12 + rbx_local_rsp_offset], r10")?
+        .code("sub r10, r12")?
+        .code("mov [rbx + rbx_local_rsp_offset], r10")?
         .inline(restore_context_internal)?
         .code("jmp r13")?
         .label("extend_stack_fail", true)?
-        .inline(restore_context_external)?
+        .inline(save_context_external)?
         .code("xor eax, eax")?
         .code("ret")?
         .newline()?;
 
-    // intentional
+    write_emit_shift(writer)?;
 
     Ok(())
 }
@@ -576,53 +573,27 @@ pub fn write_state<W: Write, T: X8664Writer<W>>(
                                 "mov [r10 + tok_byte_length], rax",
                                 "assert[r10] length",
                             )?
+                            .inline(save_context_internal)?
                             .code(
                                 "mov rdi, [rbx + rbx_struct_reader_ptr_offset]",
                             )?
-                            .inline(save_context_internal)?
                             .code("call [rbx + rbx_fn_next]")?
+                            .code(
+                                "mov rdi, [rbx + rbx_struct_reader_ptr_offset]",
+                            )?
+                            .code("call [rbx + rbx_fn_get_type_data]")?
+                            .code("mov r14, rax")?
                             .inline(restore_context_internal)?;
                     } else {
                         // copy data into the emitter
                         // and next the
                         let return_label = create_offset_label(offset);
+
                         writer
-                            .code("lea rsi, [rbp + rbp_assert_token_offset]")?
-                            .code("lea rdi, [rbx + rbx_anchor_token_offset]")?
-                            .code("mov r12, [rdi + tok_byte_offset]")?
-                            .code("mov r13, [rdi + tok_line_number]")?
-                            .code("mov r8, [rsi + tok_byte_length]")?
-                            .code("mov r9, [rsi + tok_byte_offset]")?
-                            .code("mov r10, [rsi + tok_line_number]")?
-                            .code("mov r11, [rsi + tok_type]")?
-                            .code("mov rcx, r9")?
-                            .code("add rcx, r8")?
-                            .code("mov [rsi + tok_byte_length], rax")?
-                            .code("mov [rsi + tok_byte_offset], rcx")?
-                            .code("mov [rsi + tok_line_number], r10")?
-                            .code("mov [rsi + tok_type], rax")?
-                            .code("mov [rdi + tok_byte_length], rax")?
-                            .code("mov [rdi + tok_byte_offset], rcx")?
-                            .code("mov [rdi + tok_line_number], r10")?
-                            .code("mov [rdi + tok_type], rax")?
-                            .code("mov rax, [rbx + rbx_action_pointer]")?
-                            .code("mov DWORD [rax], ParseAction_Shift")?
-                            .code("mov r14, r9")?
-                            .code("sub r14, r12")?
-                            .code("mov [rax + 8 + tok_byte_length], r14")?
-                            .code("mov [rax + 8 + tok_byte_offset], r12")?
-                            .code("mov [rax + 8 + tok_line_number], r13")?
-                            .code("mov QWORD [rax + 8 + tok_type], 0")?
-                            .code("mov [rax + 40 + tok_byte_length], r8")?
-                            .code("mov [rax + 40 + tok_byte_offset], r9")?
-                            .code("mov [rax + 40 + tok_line_number], r10")?
-                            .code("mov [rax + 40 + tok_type], r11")?
-                            .code(&format!("mov r10, r15"))?
                             .code("push r15")?
                             .code(&format!("lea r10, [rel .{}]", return_label))?
                             .code("push r10")?
-                            .inline(save_context_external)?
-                            .code("ret")?
+                            .code("jmp emit_shift")?
                             .label(&return_label, true)?;
                     }
 
@@ -891,21 +862,60 @@ pub fn write_state<W: Write, T: X8664Writer<W>>(
     Ok(offset)
 }
 
+fn write_emit_shift<W: Write, T: X8664Writer<W>>(
+    writer: &mut T,
+) -> Result<&mut T>
+{
+    writer
+        .label("emit_shift", false)?
+        .code("lea rsi, [rbp + rbp_assert_token_offset]")?
+        .code("lea rdi, [rbx + rbx_anchor_token_offset]")?
+        .code("mov r12, [rdi + tok_byte_offset]")?
+        .code("mov r13, [rdi + tok_line_number]")?
+        .code("mov r8, [rsi + tok_byte_length]")?
+        .code("mov r9, [rsi + tok_byte_offset]")?
+        .code("mov r10, [rsi + tok_line_number]")?
+        .code("mov r11, [rsi + tok_type]")?
+        .code("mov rcx, r9")?
+        .code("add rcx, r8")?
+        .code("mov [rsi + tok_byte_length], rax")?
+        .code("mov [rsi + tok_byte_offset], rcx")?
+        .code("mov [rsi + tok_line_number], r10")?
+        .code("mov [rsi + tok_type], rax")?
+        .code("mov [rdi + tok_byte_length], rax")?
+        .code("mov [rdi + tok_byte_offset], rcx")?
+        .code("mov [rdi + tok_line_number], r10")?
+        .code("mov [rdi + tok_type], rax")?
+        .code("mov rax, [rbx + rbx_action_pointer]")?
+        .code("mov DWORD [rax], ParseAction_Shift")?
+        .code("mov rcx, r9")?
+        .code("sub rcx, r12")?
+        .code("mov [rax + 8 + tok_byte_length], rcx")?
+        .code("mov [rax + 8 + tok_byte_offset], r12")?
+        .code("mov [rax + 8 + tok_line_number], r13")?
+        .code("mov QWORD [rax + 8 + tok_type], 0")?
+        .code("mov [rax + 40 + tok_byte_length], r8")?
+        .code("mov [rax + 40 + tok_byte_offset], r9")?
+        .code("mov [rax + 40 + tok_line_number], r10")?
+        .code("mov [rax + 40 + tok_type], r11")?
+        .inline(save_context_external)?
+        .code("ret")
+}
+
 fn write_extend_stack_checker<W: Write, T: X8664Writer<W>>(
     writer: &mut T,
     needed_size: u32,
-) -> Result<()>
+) -> Result<&mut T>
 {
     writer
-        .code("mov r14, rsp")?
+        .code("mov r12, rsp")?
         .code("mov r10, [rbx + rbx_local_stack_base]")?
-        .code("sub r14, r10")?
-        .code(&format!("cmp r14, {}", needed_size))?
+        .code("sub r12, r10")?
+        .code(&format!("cmp r12, {}", needed_size))?
         .code("jg .start")?
         .code("lea r13, [rel .start]")?
         .code("jmp extend_stack")?
-        .label("start", true)?;
-    Ok(())
+        .label("start", true)
 }
 
 fn write_branches<W: Write, T: X8664Writer<W>>(
@@ -1019,94 +1029,84 @@ fn create_value_lookup<W: Write, T: X8664Writer<W>>(
                 .code("and rax, PRODUCTION_META_MASK")?;
         }
         INPUT_TYPE::T02_TOKEN => {
+            let label_name = create_offset_label(offset);
+            let scan_state = output
+                .offset_to_state_name
+                .get(&(scanner_offset as u32))
+                .unwrap();
             if (lexer_type == LEXER_TYPE::ASSERT) {
-                let label_name = create_offset_label(offset);
-                let scan_state = output
-                    .offset_to_state_name
-                    .get(&(scanner_offset as u32))
-                    .unwrap();
                 writer
                     .comment_line("retrieving assert token data")?
                     .label(&label_name, false)?
                     .code("mov r10, PEEK_MODE_FLAG_INVERT")?
-                    .commented_code("and rax, r10", "unset peek mode")?
+                    .commented_code("and rcx, r10", "unset peek mode")?
                     // set_base_token
-                    .code("lea r14, [rbp + rbp_assert_token_offset]")?
+                    .code("lea r14, [rel rbp + rbp_assert_token_offset]")?
                     .code("mov eax, [r14 + tok_type]")?
                     .code("cmp eax, 0")?
                     .code("jne .cached")?
-                    .code(&format!(
-                        "lea rsi, [rel {}]",
-                        create_named_state_label(scan_state)
-                    ))?
-                    .code("lea rdx, [rel .cached]")?
-                    .code("jmp scan_handler")?;
-                writer.label("cached", true)?;
             } else {
                 let label_name = create_offset_label(offset);
                 writer
                     .comment_line("retrieving peek token data")?
                     .label(&label_name, false)?
-                    .code("lea r8, [rbx + rbx_peek_token_offset]")?
-                    .code("mov r9, r8")?
+                    .code("lea r14, [rbx + rbx_peek_token_offset]")?
+                    .code("mov r9, r14")?
                     .code("test ecx, PEEK_MODE_FLAG")?
                     .code("jnz .increment_peek")?
                     .code("lea r9, [rbp + rbp_assert_token_offset]")?
                     .code("or ecx, PEEK_MODE_FLAG")?
+                    .label(".increment_peek", true)?
                     .code("xor eax, eax")?
                     .newline()? // Update byte
-                    .code("mov r10d, [r9 + byte_offset]")?
-                    .code("mov r11d, [r9 + byte_length]")?
-                    .code("add r10d, r11d")?
-                    .code("mov [r8 + byte_offset], r10d")?
-                    .code("mov [r8 + byte_length], eax")?
-                    .newline()? // Update codepoint
-                    .code("mov r10d, [r9 + cp_offset]")?
-                    .code("mov r11d, [r9 + cp_length]")?
-                    .code("add r10d, r11d")?
-                    .code("mov [r8 + cp_offset], r10d")?
-                    .code("mov [r8 + cp_length], eax")?
-                    .newline()?;
-                write_extend_stack_checker(
-                    writer,
-                    token_size as u32 * 2 + 8 * 16,
-                )?;
-                writer.code("lea r8, [rbx + rbx_peek_token_offset]")?;
+                    .code("mov r10, [r9 + tok_byte_offset]")?
+                    .code("mov r11, [r9 + tok_byte_length]")?
+                    .code("add r10, r11")?
+                    .code("mov [r14 + tok_byte_offset], r10")?
+                    .code("mov [r14 + tok_byte_length], rax")?
+                    .code("mov [r14 + tok_type], rax")?
+                    .newline()?
             }
+            .code(&format!(
+                "lea rsi, [rel {}]",
+                create_named_state_label(scan_state)
+            ))?
+            .code("lea rdx, [rel .cached]")?
+            .code("jmp scan_handler")?
+            .label("cached", true)?;
         }
         _ => {
             writer
-                .code("mov r12, rbx")?
-                .code("mov r13, rbp")?
-                .inline(save_context_internal)?;
-            match input_type {
-                INPUT_TYPE::T05_BYTE => writer
-                    .code("lea r10, [rel r13 + rbp_assert_token_offset]")?
-                    .code("xor eax,eax")?
-                    .code("inc eax")?
-                    .code("mov [r10 + tok_byte_length], eax")?
-                    .code("mov [r10 + tok_cp_length], eax")?,
-                INPUT_TYPE::T03_CLASS | INPUT_TYPE::T04_CODEPOINT => writer
-                    .code("mov rdi, [r12 + rbx_struct_reader_ptr_offset]")?
-                    .code("call [r12 + rbx_fn_get_length_data]")?
-                    .code("lea r10, [rel r13 + rbp_assert_token_offset]")?
-                    .code("mov [r10 + tok_byte_length], rax")?,
-                _ => writer,
-            };
-            writer.code("mov rdi, [r12 + rbx_struct_reader_ptr_offset]")?;
+                .code("xor eax,eax")?
+                .code("inc eax")?
+                .code("lea r10, [rel rbp + rbp_assert_token_offset]")?;
             match input_type {
                 INPUT_TYPE::T05_BYTE => {
-                    writer.code("call [r12 + rbx_fn_byte_offset]")?
+                    writer
+                        .code("mov [r10 + tok_byte_length], eax")?
+                        .code("mov [r10 + tok_cp_length], eax")?
+                        .code("mov al, r14b")?;
                 }
                 INPUT_TYPE::T03_CLASS => {
-                    writer.code("call [r12 + rbx_fn_class_offset]")?
+                    writer
+                        .code("mov [r10 + tok_byte_length], eax")?
+                        .code("mov cx, r14w")?
+                        .code("shr ecx, 8")?
+                        .code("mov [r10 + tok_cp_length], ecx")?
+                        .code("mov eax, r14d")?
+                        .code("shr rax, 16")?;
                 }
                 INPUT_TYPE::T04_CODEPOINT => {
-                    writer.code("call [r12 + rbx_fn_codepoint_offset]")?
+                    writer
+                        .code("mov [r10 + tok_byte_length], eax")?
+                        .code("mov ecx, r14d")?
+                        .code("shr ecx, 24")?
+                        .code("mov [r10 + tok_cp_length], ecx")?
+                        .code("mov rax, r14")?
+                        .code("shr rax, 32")?;
                 }
-                _ => writer,
-            }
-            .inline(restore_context_internal)?;
+                _ => {}
+            };
         }
     }
     Ok(())

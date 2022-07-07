@@ -10,28 +10,26 @@ pub fn main()
     let mut ctx = nasm_test_parser::Context::new(&mut reader);
     let start = Instant::now();
 
-    let mut messages = vec![];
+    let mut messages = Vec::<String>::with_capacity(10);
 
     ctx.set_start_point(nasm_test_parser::StartPoint::BANNER);
 
     loop {
         match ctx.next() {
-            Some(ParseAction::Shift {
-                skipped_characters: skip,
-                token,
-            }) => {
-                messages.push(format!(
-                    "Skip {:? } & Extract token {:?} ",
-                    skip, token
-                ));
-            }
+            //  Some(ParseAction::Shift {
+            // skipped_characters: skip,
+            // token,
+            // }) => {
+            // messages.push(format!(
+            // "Skip {:? } & Extract token {:?} ",
+            // skip, token
+            // ));
+            // }
             Some(ParseAction::Accept { production_id }) => {
-                messages.push(format!("Accept production {}", production_id));
+                // messages.push(format!("Accept production {}", production_id));
                 break;
             }
-            _ => {
-                break;
-            }
+            _ => {}
         }
     }
     let duration = start.elapsed();
@@ -53,8 +51,8 @@ mod test
         let mut reader = UTF8StringReader::new("hello world".to_string());
         let mut ctx = nasm_test_parser::Context::new(&mut reader);
 
-        println!("{}", std::mem::size_of::<&ParseAction>());
         ctx.set_start_point(nasm_test_parser::StartPoint::BANNER);
+
         loop {
             match ctx.next() {
                 Some(ParseAction::Shift {

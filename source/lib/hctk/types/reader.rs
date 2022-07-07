@@ -35,8 +35,9 @@ pub trait SymbolReader
         self.length() <= offset
     }
 
-    /// Advances the internal cursor by `amount`
-    fn next(&mut self, amount: u32);
+    /// Advances the internal cursor by `amount`. Returns the same
+    /// value as `get_type_info`.
+    fn next(&mut self, amount: u32) -> u64;
 
     /// Returns the word at the current cursor position, little
     /// Endian
@@ -83,13 +84,9 @@ pub trait SymbolReader
         0
     }
 
-    /// Resets the cursor back to the value of the `offset`
-    /// argument. Should the offset value exceed the limits
-    /// of the underlying implementation, `false` is returned
-    /// , indicating a parse failure as the input stream can
-    /// no longer satisfy the requirements of the parser.
-
-    fn set_cursor_to(&mut self, token: &ParseToken) -> bool;
+    /// Resets the cursor back to the position of the token. Returns
+    /// the same value as `get_type_info`.
+    fn set_cursor_to(&mut self, token: &ParseToken) -> u64;
 
     /// Return a new instance of byte reader with the same
     /// state as the source reader. Implementation should provide
@@ -98,6 +95,10 @@ pub trait SymbolReader
     /// read data at different cursor positions.
     #[deprecated]
     fn clone(&self) -> Self;
+
+    /// Return a packed u64 containing codepoint info the higher 32 bits,
+    /// class in the high 16, and byte in the low 16
+    fn get_type_info(&self) -> u64;
 
     /// Returns UTF8 codepoint information at the current cursor
     /// position.
@@ -123,15 +124,4 @@ pub trait SymbolReader
 
     /// Returns an optional vector of the input string data.
     fn get_source(&self) -> SharedSymbolBuffer;
-}
-
-pub struct UTF8FileReader
-{
-    length:      usize,
-    cursor:      usize,
-    line_count:  usize,
-    line_offset: usize,
-    string:      Rc<Vec<u8>>,
-    word:        u32,
-    codepoint:   u32,
 }
