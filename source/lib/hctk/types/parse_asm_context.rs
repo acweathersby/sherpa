@@ -1,9 +1,9 @@
 use std::collections::VecDeque;
 
 use super::*;
-
+#[derive(Clone)]
 #[repr(C)]
-pub struct ASMParserContext<T: SymbolReader>
+pub struct ParserContext<T: SymbolReader>
 {
     peek_token: ParseToken,
     anchor_token: ParseToken,
@@ -12,7 +12,7 @@ pub struct ASMParserContext<T: SymbolReader>
     local_rsp: usize, // Points to top of local_state_stack
     local_stack_base: usize,
     state_u64_data: usize,
-    action_pointer: Option<&'static mut ParseAction>,
+    action_pointer: usize,
     struct_reader_ptr: *mut T,
     fn_get_line_data: fn(&T) -> u64,
     fn_get_length_data: fn(&T) -> u64,
@@ -21,25 +21,25 @@ pub struct ASMParserContext<T: SymbolReader>
     local_state_stack: Vec<usize>,
 }
 
-impl<T: SymbolReader> ASMParserContext<T>
+impl<T: SymbolReader> ParserContext<T>
 {
     pub fn new(reader: &mut T) -> Self
     {
         unsafe {
             Self {
+                peek_token: ParseToken::default(),
+                anchor_token: ParseToken::default(),
+                assert_token: ParseToken::default(),
                 foreign_rsp: 0,
                 local_rsp: 0,
                 local_stack_base: 0,
                 state_u64_data: 0,
-                action_pointer: None,
+                action_pointer: 0,
                 struct_reader_ptr: reader,
                 fn_next: T::next,
                 fn_set_cursor_to: T::set_cursor_to,
                 fn_get_line_data: T::get_line_data,
                 fn_get_length_data: T::get_length_data,
-                peek_token: ParseToken::default(),
-                anchor_token: ParseToken::default(),
-                assert_token: ParseToken::default(),
                 local_state_stack: vec![0; 32],
             }
         }

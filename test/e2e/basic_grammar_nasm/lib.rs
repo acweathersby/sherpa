@@ -11,19 +11,29 @@ mod test
     pub fn test_build()
     {
         let mut reader = UTF8StringReader::new("hello world".to_string());
-        let mut ctx = nasm_test_parser::Context::new(&mut reader);
+        let mut iter = nasm_test_parser::Context::new(&mut reader);
 
-        ctx.set_start_point(nasm_test_parser::StartPoint::BANNER);
+        iter.set_start_point(nasm_test_parser::StartPoint::BANNER);
 
-        loop {
-            match ctx.next() {
-                Some(ParseAction::Shift {
+        for action in iter {
+            match action {
+                ParseAction::Shift {
                     skipped_characters: skip,
                     token,
-                }) => {
-                    println!("Skip {:? } & Extract token {:?} ", skip, token);
+                } => {
+                    println!("Skip {:?} & Extract token {:?} ", skip, token);
                 }
-                Some(ParseAction::Accept { production_id }) => {
+                ParseAction::Reduce {
+                    production_id,
+                    body_id,
+                    symbol_count,
+                } => {
+                    println!(
+                        "Reduce {} symbols to production {} from completion of body {}",
+                         symbol_count,production_id, body_id,
+                    );
+                }
+                ParseAction::Accept { production_id } => {
                     println!("Accept production {}", production_id);
                     break;
                 }

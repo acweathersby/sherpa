@@ -25,32 +25,25 @@ mod test
         let mut nodes: Vec<HCObj<ASTNode>> = Vec::with_capacity(8);
 
         for action in iter {
-            use ParseAction::*;
-
             match action {
-                Shift { token, .. } => {
-                    let mut token = Token::from_kernel_token(&token);
-                    token.set_source(Arc::new(
-                        "hello world".as_bytes().to_vec(),
-                    ));
-                    nodes.push(HCObj::TOKEN(token));
-                }
-                Reduce { body_id, .. } => {
-                    let node = REDUCE_FUNCTIONS[body_id as usize](
-                        &mut nodes,
-                        Token::new(),
-                    );
-                    nodes.push(node);
-                }
-                Error {
-                    message,
-                    last_input,
+                ParseAction::Shift {
+                    skipped_characters: skip,
+                    token,
                 } => {
-                    let mut token = Token::from_kernel_token(&last_input);
-                    token.set_source(Arc::new(
-                        "hello world".as_bytes().to_vec(),
-                    ));
-                    println!("{}", token.blame(1, 1, message).unwrap());
+                    println!("Skip {:?} & Extract token {:?} ", skip, token);
+                }
+                ParseAction::Reduce {
+                    production_id,
+                    body_id,
+                    symbol_count,
+                } => {
+                    println!(
+                        "Reduce {} symbols to production {} from completion of body {}",
+                         symbol_count,production_id, body_id,
+                    );
+                }
+                ParseAction::Accept { production_id } => {
+                    println!("Accept production {}", production_id);
                     break;
                 }
                 _ => {

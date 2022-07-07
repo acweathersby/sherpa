@@ -33,7 +33,7 @@ pub fn _undefined<W: Write, T: X8664Writer<W>>(
 }
 
 const parse_context_size: usize =
-    std::mem::size_of::<ASMParserContext<UTF8StringReader>>();
+    std::mem::size_of::<ParserContext<UTF8StringReader>>();
 
 const stack_ref_size: usize = std::mem::size_of::<Vec<u8>>();
 
@@ -381,6 +381,7 @@ pub fn write_preamble<W: Write, T: X8664Writer<W>>(
         .newline()?;
 
     write_emit_shift(writer)?;
+    write_emit_reduce(writer)?;
 
     Ok(())
 }
@@ -528,6 +529,7 @@ pub fn write_state<W: Write, T: X8664Writer<W>>(
 
                 INSTRUCTION::I01_CONSUME => {
                     if is_scanner {
+                        // Reminder:
                         // r12 is token offset
                         // r13 is token length
                         if bytecode[offset] & 1 == 1 {
@@ -551,8 +553,7 @@ pub fn write_state<W: Write, T: X8664Writer<W>>(
                             writer
                             .code("mov [rbx + rbx_assert_token_offset + tok_byte_length], rax")?;
                         }
-                        // copy data into the emitter
-                        // and next the
+
                         let return_label = create_offset_label(offset);
 
                         writer
@@ -608,8 +609,23 @@ pub fn write_state<W: Write, T: X8664Writer<W>>(
                 }
 
                 INSTRUCTION::I04_REDUCE => {
-                    offset += 1;
+                    let instruction = bytecode[offset];
+                    let symbol_count = instruction >> 16 & 0x0FFF;
+                    let body_id = instruction & 0xFFFF;
+
+                    let return_label = create_offset_label(offset);
+                    writer
+                        .code("mov r8d, r15d")?
+                        .code("and r8d, PRODUCTION_META_MASK")?
+                        .code(&format!("mov r9d, {}", body_id))?
+                        .code(&format!("mov r10d, {}", symbol_count))?
+                        .code("push r15")?
+                        .code(&format!("lea rax, [rel .{}]", return_label))?
+                        .code("push rax")?
+                        .code("jmp emit_reduce")?
+                        .label(&return_label, true)?;
                     writer.commented_code("nop", "reduce")?;
+                    offset += 1;
                 }
 
                 INSTRUCTION::I05_TOKEN => {
@@ -856,6 +872,21 @@ fn write_emit_shift<W: Write, T: X8664Writer<W>>(
         .code("mov [rax + 40 + tok_byte_offset], r9")?
         .code("mov [rax + 40 + tok_line_number], r10")?
         .code("mov [rax + 40 + tok_padding], r11")?
+        .inline(save_context_external)?
+        .code("ret")
+}
+
+fn write_emit_reduce<W: Write, T: X8664Writer<W>>(
+    writer: &mut T,
+) -> Result<&mut T>
+{
+    writer
+        .label("emit_reduce", false)?
+        .code("mov rax, [rbx + rbx_action_pointer]")?
+        .code("mov DWORD [rax], ParseAction_Reduce")?
+        .code("mov [rax + 8 + 0], r8d")?
+        .code("mov [rax + 8 + 4], r9d")?
+        .code("mov [rax + 8 + 8], r10d")?
         .inline(save_context_external)?
         .code("ret")
 }
@@ -1124,7 +1155,7 @@ pub fn compile_from_bytecode<W: Write, T: X8664Writer<W>>(
     writer: &mut T,
 ) -> Result<()>
 {
-    write_preamble(output.grammar, writer);
+    write_preamble(output.grammar, writer)?;
     let mut offset = FIRST_STATE_OFFSET as usize;
 
     while offset < output.bytecode.len() {
