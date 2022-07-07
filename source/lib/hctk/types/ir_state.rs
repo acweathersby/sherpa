@@ -18,7 +18,8 @@ pub enum IRStateType
     ProductionGoto,
     ScannerStart,
     ScannerGoto,
-    IntermediateState,
+    ProductionIntermediateState,
+    ScannerIntermediateState,
     ForkState,
     ProductionEndState,
     ScannerEndState,
@@ -222,6 +223,17 @@ impl IRState
             Some(self.ast.as_ref().ok().unwrap())
         } else {
             None
+        }
+    }
+
+    pub fn is_scanner(&self) -> bool
+    {
+        match self.state_type {
+            IRStateType::ScannerStart
+            | IRStateType::ScannerGoto
+            | IRStateType::ScannerIntermediateState
+            | IRStateType::ScannerEndState => true,
+            _ => false,
         }
     }
 }

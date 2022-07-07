@@ -88,10 +88,6 @@ pub fn compile_asm_files(
                             file_writer.flush();
                             drop(file_writer);
 
-                            println!(
-                                "cargo:warning=TEST2-----------------------"
-                            );
-
                             match Command::new("nasm")
                                 .args(&[
                                     "-g",
@@ -182,10 +178,10 @@ use hctk::types::*;
 
 type AnonymousPtr = u64;
 
-#[link(name = \"{}\")]
+#[link(name = \"{}\", kind = \"static\" )]
 extern \"C\" {{
     fn construct_context(ctx: AnonymousPtr);
-    fn next(ctx: AnonymousPtr) -> i32;
+    fn next(ctx: AnonymousPtr) -> &'static ParseAction;
     fn destroy_context(ctx: AnonymousPtr);
     fn prime_context(ctx: AnonymousPtr, sp:u64);
 }}",
@@ -221,12 +217,12 @@ pub enum StartPoint {",
         "pub struct Context<T: SymbolReader>(ASMParserContext<T>);
 
 impl<T: SymbolReader> Iterator for Context<T> {{
-    type Item = i32;
+    type Item = ParseAction;
 
     fn next(&mut self) -> Option<Self::Item> {{
         unsafe {{
             let _ptr = &mut self.0 as *const ASMParserContext<T>;
-            Some(next(_ptr as u64))
+            Some(*next(_ptr as u64))
         }}
     }}
 }}

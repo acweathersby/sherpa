@@ -60,23 +60,28 @@ impl SymbolReader for UTF8StringReader
         self.cursor >= self.length
     }
 
-    fn get_line_data(&self) -> (u64, u64)
+    fn get_line_data(&self) -> u64
     {
-        (self.line_count as u64, self.line_offset as u64)
+        ((self.line_count as u64) << 32) | self.line_offset as u64
     }
 
-    fn get_length_data(&self) -> (u64, u64)
+    fn get_length_data(&self) -> u64
     {
-        (self.codepoint_byte_length() as u64, self.codepoint_length() as u64)
+        ((self.codepoint_byte_length() as u64) << 32)
+            | self.codepoint_length() as u64
     }
 
     fn set_cursor_to(&mut self, token: &ParseToken) -> bool
     {
         if self.cursor != token.byte_offset as usize {
-            self.cursor = token.byte_offset as usize;
+            let diff = token.byte_offset as i64 - self.cursor as i64;
             self.line_count = token.line_number as usize;
             self.line_offset = token.line_offset as usize;
-            self.next(0);
+            if diff == 1 {
+                self.next(1);
+            } else {
+                self.next(0);
+            }
         }
 
         true
@@ -100,9 +105,9 @@ impl SymbolReader for UTF8StringReader
         self.length as u32
     }
 
-    fn byte(&self) -> u8
+    fn byte(&self) -> u32
     {
-        unsafe { *self.string.get_unchecked(self.cursor) }
+        unsafe { *self.string.get_unchecked(self.cursor) as u32 }
     }
 
     fn word(&self) -> u32

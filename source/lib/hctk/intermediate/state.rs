@@ -507,9 +507,15 @@ fn create_intermediate_state(
             production_id
         ));
     } else {
-        if state_type == Undefined {
-            state_type = IntermediateState;
-        }
+        state_type = if state_type == Undefined {
+            if is_scanner {
+                ScannerIntermediateState
+            } else {
+                ProductionIntermediateState
+            }
+        } else {
+            state_type
+        };
 
         let single_child = children.len() == 1;
         let mut max_child_depth = 0;

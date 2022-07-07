@@ -44,7 +44,7 @@ pub trait SymbolReader
     fn word(&self) -> u32;
 
     /// Returns the byte at the current cursor position.
-    fn byte(&self) -> u8;
+    fn byte(&self) -> u32;
 
     /// Returns the length of the source input. If this unknown
     /// then returns 0
@@ -70,15 +70,17 @@ pub trait SymbolReader
 
     /// Return a tuple comprised of the current line count
     /// and the current line offset, respectively.
-    fn get_line_data(&self) -> (u64, u64)
+    fn get_line_data(&self) -> u64
     {
-        (0, 0)
+        0
     }
-    /// Return a tuple comprised of the current byte length
-    /// and the current code point length, respectively.
-    fn get_length_data(&self) -> (u64, u64)
+    /// Return a u64 where the high 32bits represents
+    /// the the byte length of the current character
+    /// and the low 32bits represent the UTF16 codepoint
+    /// length.
+    fn get_length_data(&self) -> u64
     {
-        (0, 0)
+        0
     }
 
     /// Resets the cursor back to the value of the `offset`

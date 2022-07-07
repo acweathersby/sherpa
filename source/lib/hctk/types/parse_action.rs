@@ -1,7 +1,7 @@
 use crate::types::ParseToken;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[repr(C)]
+#[repr(C, u32)]
 pub enum ParseAction
 {
     Undefined,

@@ -361,8 +361,6 @@ fn get_token_value<T: SymbolReader>(
         let active_token =
             unsafe { state.tokens.get_unchecked_mut(token_index) };
 
-        let (line_number, line_count) = reader.get_line_data();
-
         match input_type {
             INPUT_TYPE::T03_CLASS => {
                 active_token.byte_length = reader.codepoint_byte_length();
@@ -411,13 +409,17 @@ fn scan_for_improvised_token<T: SymbolReader>(
     // Scan to next break point and produce an undefined
     // token. If we are already at a break point then just
     // return the single character token.
-    if byte == b'\n' || byte == b'\t' || byte == b'\r' || byte == b' ' {
+    if byte == (b'\n' as u32)
+        || byte == (b'\t' as u32)
+        || byte == (b'\r' as u32)
+        || byte == (b' ' as u32)
+    {
         assert = assert.next();
     } else {
-        while byte != b'\n'
-            && byte != b'\t'
-            && byte != b'\r'
-            && byte != b' '
+        while byte != b'\n' as u32
+            && byte != b'\t' as u32
+            && byte != b'\r' as u32
+            && byte != b' ' as u32
             && !reader.at_end()
         {
             reader.next(assert.byte_length);
@@ -485,10 +487,12 @@ fn token_scan<T: SymbolReader>(
             scan_state.active_state = scan_state.stack.pop_state();
         }
 
-        let (line_count, line_offset) = reader.get_line_data();
+        let line_data = reader.get_line_data();
+        let (line_num, line_count) =
+            ((line_data >> 32) as u32, (line_data & 0xFFFF_FFFF) as u32);
 
-        scan_state.tokens[0].line_number = line_count as u32;
-        scan_state.tokens[0].line_offset = line_offset as u32;
+        scan_state.tokens[0].line_number = line_num;
+        scan_state.tokens[0].line_offset = line_count;
 
         loop {
             if scan_state.active_state < 1 {
