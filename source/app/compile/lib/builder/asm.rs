@@ -181,7 +181,7 @@ type AnonymousPtr = u64;
 #[link(name = \"{}\", kind = \"static\" )]
 extern \"C\" {{
     fn construct_context(ctx: AnonymousPtr);
-    fn next(ctx: AnonymousPtr) -> &'static ParseAction;
+    fn next<'a>(ctx: AnonymousPtr, action_ref:&'a mut ParseAction);
     fn destroy_context(ctx: AnonymousPtr);
     fn prime_context(ctx: AnonymousPtr, sp:u64);
 }}",
@@ -218,11 +218,13 @@ pub enum StartPoint {",
 
 impl<T: SymbolReader> Iterator for Context<T> {{
     type Item = ParseAction;
-
+    #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {{
         unsafe {{
             let _ptr = &mut self.0 as *const ASMParserContext<T>;
-            Some(*next(_ptr as u64))
+            let mut action = ParseAction::Undefined;
+            next(_ptr as u64, &mut action);
+            Some(action)
         }}
     }}
 }}
@@ -230,6 +232,7 @@ impl<T: SymbolReader> Iterator for Context<T> {{
 impl<T: SymbolReader> Context<T> {{
     /// Create a new parser context to parser the input with 
     /// the grammar `{0}`
+    #[inline(always)]
     pub fn new(reader: &mut T) -> Self {{
         let mut parser = Self(ASMParserContext::<T>::new(reader));
         parser.construct_context();
@@ -238,6 +241,7 @@ impl<T: SymbolReader> Context<T> {{
     
     /// Initialize the parser to recognize the given starting production
     /// within the input. This method is chainable.
+    #[inline(always)]
     pub fn set_start_point(&mut self, start_point: StartPoint) -> &mut Self {{
         unsafe {{
             let _ptr = &mut self.0 as *const ASMParserContext<T>;
@@ -246,14 +250,14 @@ impl<T: SymbolReader> Context<T> {{
 
         self
     }}
-
+    #[inline(always)]
     fn construct_context(&mut self) {{
         unsafe {{
             let _ptr = &mut self.0 as *const ASMParserContext<T>;
             construct_context(_ptr as u64);
         }}
     }}
-
+    #[inline(always)]
     fn destroy_context(&mut self) {{
         unsafe {{
             let _ptr = &mut self.0 as *const ASMParserContext<T>;

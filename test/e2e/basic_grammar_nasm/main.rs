@@ -53,6 +53,7 @@ mod test
         let mut reader = UTF8StringReader::new("hello world".to_string());
         let mut ctx = nasm_test_parser::Context::new(&mut reader);
 
+        println!("{}", std::mem::size_of::<&ParseAction>());
         ctx.set_start_point(nasm_test_parser::StartPoint::BANNER);
         loop {
             match ctx.next() {

@@ -72,18 +72,19 @@ pub fn write_preamble<W: Write, T: X8664Writer<W>>(
         .constant("rbx_local_rsp_offset             ", &(8 * 1).to_string())?
         .constant("rbx_local_stack_base             ", &(8 * 2).to_string())?
         .constant("rbx_inner_context_offset         ", &(8 * 3).to_string())?
-        .constant("rbx_struct_reader_ptr_offset     ", &(8 * 4).to_string())?
-        .constant("rbx_fn_get_line_data             ", &(8 * 5).to_string())?
-        .constant("rbx_fn_get_length_data           ", &(8 * 6).to_string())?
-        .constant("rbx_fn_word_offset               ", &(8 * 7).to_string())?
-        .constant("rbx_fn_byte_offset               ", &(8 * 8).to_string())?
-        .constant("rbx_fn_codepoint_offset          ", &(8 * 9).to_string())?
-        .constant("rbx_fn_class_offset              ", &(8 * 10).to_string())?
-        .constant("rbx_fn_next                      ", &(8 * 11).to_string())?
-        .constant("rbx_fn_set_cursor_to_offset      ", &(8 * 12).to_string())?
-        .constant("rbx_peek_token_offset            ", &(8 * 13).to_string())?
-        .constant("rbx_anchor_token_offset          ", &(8 * 17).to_string())?
-        .constant("inner_context_offset             ", &(8 * 21).to_string())?
+        .constant("rbx_action_pointer               ", &(8 * 4).to_string())?
+        .constant("rbx_struct_reader_ptr_offset     ", &(8 * 5).to_string())?
+        .constant("rbx_fn_get_line_data             ", &(8 * 6).to_string())?
+        .constant("rbx_fn_get_length_data           ", &(8 * 7).to_string())?
+        .constant("rbx_fn_word_offset               ", &(8 * 8).to_string())?
+        .constant("rbx_fn_byte_offset               ", &(8 * 9).to_string())?
+        .constant("rbx_fn_codepoint_offset          ", &(8 * 10).to_string())?
+        .constant("rbx_fn_class_offset              ", &(8 * 11).to_string())?
+        .constant("rbx_fn_next                      ", &(8 * 12).to_string())?
+        .constant("rbx_fn_set_cursor_to_offset      ", &(8 * 13).to_string())?
+        .constant("rbx_peek_token_offset            ", &(8 * 14).to_string())?
+        .constant("rbx_anchor_token_offset          ", &(8 * 18).to_string())?
+        .constant("inner_context_offset             ", &(8 * 22).to_string())?
         .constant(
             "rbx_parse_action_offset                ",
             &(parse_context_size - stack_ref_size - ParseAction_size)
@@ -352,7 +353,7 @@ pub fn write_preamble<W: Write, T: X8664Writer<W>>(
 
     writer
         .label("end_parse", false)?
-        .code("lea rax, [rel rbx + rbx_parse_action_offset]")?
+        .code("mov rax, [rbx + rbx_action_pointer]")?
         .code("mov DWORD [rax], ParseAction_Accept")?
         .inline(save_context_external)?
         .code("ret")?
@@ -412,6 +413,10 @@ fn restore_context_external<W: Write, T: X8664Writer<W>>(
         .commented_code(
             "mov rbx, rdi",
             "make our offsets relative to the parse context",
+        )?
+        .commented_code(
+            "mov [rbx + rbx_action_pointer], rsi",
+            "preserve reference to our action",
         )?
         .commented_code(
             "mov [rbx + rbx_foreign_rsp_offset], rsp",
@@ -600,9 +605,7 @@ pub fn write_state<W: Write, T: X8664Writer<W>>(
                             .code("mov [rdi + tok_byte_offset], rcx")?
                             .code("mov [rdi + tok_line_number], r10")?
                             .code("mov [rdi + tok_type], rax")?
-                            .code(
-                                "lea rax, [rel rbx + rbx_parse_action_offset]",
-                            )?
+                            .code("mov rax, [rbx + rbx_action_pointer]")?
                             .code("mov DWORD [rax], ParseAction_Shift")?
                             .code("mov r14, r9")?
                             .code("sub r14, r12")?

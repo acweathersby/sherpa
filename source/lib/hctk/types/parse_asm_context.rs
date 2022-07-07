@@ -9,6 +9,7 @@ pub struct ASMParserContext<T: SymbolReader>
     local_rsp: usize, // Points to top of local_state_stack
     local_stack_base: usize,
     inner_context: usize,
+    action_ptr: Option<&'static mut ParseAction>,
     reader: *mut T,
     get_line_data: fn(&T) -> u64,
     get_length_data: fn(&T) -> u64,
@@ -22,7 +23,6 @@ pub struct ASMParserContext<T: SymbolReader>
     anchor_token: ParseToken,
     assert_token: ParseToken,
     state_u64_data: usize,
-    parse_action: ParseAction,
     local_state_stack: Vec<usize>,
 }
 
@@ -36,6 +36,7 @@ impl<T: SymbolReader> ASMParserContext<T>
                 local_rsp: 0,
                 local_stack_base: 0,
                 inner_context: 0,
+                action_ptr: None,
                 reader,
                 class: T::class,
                 codepoint: T::codepoint,
@@ -49,7 +50,6 @@ impl<T: SymbolReader> ASMParserContext<T>
                 anchor_token: ParseToken::default(),
                 assert_token: ParseToken::default(),
                 state_u64_data: 0,
-                parse_action: ParseAction::default(),
                 local_state_stack: vec![0; 32],
             }
         }
