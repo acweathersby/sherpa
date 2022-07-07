@@ -5,7 +5,7 @@ edition = "2021"
 
 build = "./build.rs"
 
-[lib]
+[[bin]]
 name = "test_basic_grammar"
 path = "./main.rs"
 

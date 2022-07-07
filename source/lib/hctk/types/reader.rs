@@ -30,6 +30,7 @@ pub trait SymbolReader
 
     fn at_end(&self) -> bool;
 
+    #[inline(always)]
     fn offset_at_end(&self, offset: u32) -> bool
     {
         self.length() <= offset
@@ -105,16 +106,19 @@ pub trait SymbolReader
 
     fn codepoint(&self) -> u32;
 
+    #[inline(always)]
     fn codepoint_byte_length(&self) -> u32
     {
         return get_utf8_byte_length_from_code_point(self.codepoint());
     }
 
+    #[inline(always)]
     fn codepoint_length(&self) -> u32
     {
         return get_token_length_from_code_point(self.codepoint());
     }
 
+    #[inline(always)]
     fn class(&self) -> u32
     {
         return get_token_class_from_codepoint(self.codepoint());

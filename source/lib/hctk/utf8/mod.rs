@@ -2,6 +2,7 @@ pub mod lookup_table;
 
 use lookup_table::CHAR_LU_TABLE;
 
+#[inline(always)]
 pub fn get_utf8_byte_length_from_code_point(codepoint: u32) -> u32
 {
     if codepoint == 0 || (codepoint & 0x7F) == codepoint {
@@ -15,6 +16,7 @@ pub fn get_utf8_byte_length_from_code_point(codepoint: u32) -> u32
     }
 }
 
+#[inline(always)]
 pub fn get_token_length_from_code_point(codepoint: u32) -> u32
 {
     if codepoint > 0xFFFF {
@@ -24,6 +26,7 @@ pub fn get_token_length_from_code_point(codepoint: u32) -> u32
     }
 }
 
+#[inline(always)]
 pub fn get_utf8_code_point_from(word: u32) -> u32
 {
     if (word & 0x80000000) > 0 {
@@ -52,6 +55,7 @@ pub fn get_utf8_code_point_from(word: u32) -> u32
     }
 }
 
+#[inline(always)]
 pub fn get_token_class_from_codepoint(codepoint: u32) -> u32
 {
     (CHAR_LU_TABLE[codepoint as usize] & 0x1F) as u32

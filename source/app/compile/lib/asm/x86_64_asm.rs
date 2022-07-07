@@ -353,6 +353,10 @@ pub fn write_preamble<W: Write, T: X8664Writer<W>>(
         .label("end_parse", false)?
         .code("mov rax, [rbx + rbx_action_pointer]")?
         .code("mov DWORD [rax], ParseAction_Accept")?
+        .code("mov r10, r15")?
+        .code("mov r11, PRODUCTION_META_MASK")?
+        .code("and r10, r11")?
+        .code("mov DWORD [rax + 8], r10d")?
         .inline(save_context_external)?
         .code("ret")?
         .newline()?;

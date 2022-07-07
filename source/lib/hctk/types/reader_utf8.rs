@@ -48,6 +48,7 @@ impl UTF8StringReader
 
 impl SymbolReader for UTF8StringReader
 {
+    #[inline(always)]
     fn get_source(&self) -> SharedSymbolBuffer
     {
         let vec = self.string.clone();
@@ -55,22 +56,26 @@ impl SymbolReader for UTF8StringReader
         SharedSymbolBuffer::new(RwLock::new(vec![]))
     }
 
+    #[inline(always)]
     fn at_end(&self) -> bool
     {
         self.cursor >= self.length
     }
 
+    #[inline(always)]
     fn get_line_data(&self) -> u64
     {
         ((self.line_count as u64) << 32) | self.line_offset as u64
     }
 
+    #[inline(always)]
     fn get_length_data(&self) -> u64
     {
         ((self.codepoint_byte_length() as u64) << 32)
             | self.codepoint_length() as u64
     }
-    
+
+    #[inline(always)]
     fn set_cursor_to(&mut self, token: &ParseToken) -> u64
     {
         if self.cursor != token.byte_offset as usize {
@@ -100,31 +105,37 @@ impl SymbolReader for UTF8StringReader
         }
     }
 
+    #[inline(always)]
     fn length(&self) -> u32
     {
         self.length as u32
     }
 
+    #[inline(always)]
     fn byte(&self) -> u32
     {
         unsafe { *self.string.get_unchecked(self.cursor) as u32 }
     }
 
+    #[inline(always)]
     fn word(&self) -> u32
     {
         self.word
     }
 
+    #[inline(always)]
     fn line_offset(&self) -> u32
     {
         self.line_offset as u32
     }
 
+    #[inline(always)]
     fn line_count(&self) -> u32
     {
         self.line_count as u32
     }
 
+    #[inline(always)]
     fn codepoint(&self) -> u32
     {
         self.codepoint
@@ -203,6 +214,7 @@ impl SymbolReader for UTF8StringReader
         }
     }
 
+    #[inline(always)]
     fn cursor(&self) -> u32
     {
         self.cursor as u32

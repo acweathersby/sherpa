@@ -7,26 +7,26 @@ use std::time::Instant;
 pub fn main()
 {
     let mut reader = UTF8StringReader::new("hello world".to_string());
-    let mut ctx = nasm_test_parser::Context::new(&mut reader);
-    let start = Instant::now();
-
+    let mut iter = nasm_test_parser::Context::new(&mut reader);
     let mut messages = Vec::<String>::with_capacity(10);
 
-    ctx.set_start_point(nasm_test_parser::StartPoint::BANNER);
+    let start = Instant::now();
 
-    loop {
-        match ctx.next() {
-            //  Some(ParseAction::Shift {
-            // skipped_characters: skip,
-            // token,
-            // }) => {
-            // messages.push(format!(
-            // "Skip {:? } & Extract token {:?} ",
-            // skip, token
-            // ));
-            // }
-            Some(ParseAction::Accept { production_id }) => {
-                // messages.push(format!("Accept production {}", production_id));
+    iter.set_start_point(nasm_test_parser::StartPoint::BANNER);
+
+    for action in iter {
+        match action {
+            ParseAction::Shift {
+                skipped_characters: skip,
+                token,
+            } => {
+                messages.push(format!(
+                    "Skip {:? } & Extract token {:?} ",
+                    skip, token
+                ));
+            }
+            ParseAction::Accept { production_id } => {
+                messages.push(format!("Accept production {}", production_id));
                 break;
             }
             _ => {}
