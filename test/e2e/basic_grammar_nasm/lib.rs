@@ -4,18 +4,15 @@ pub use nasm_test_parser::*;
 #[cfg(test)]
 mod test
 {
-    use crate::nasm_test_parser;
+    use crate::Context;
     use hctk::types::*;
 
     #[test]
     pub fn test_build()
     {
-        let mut reader = UTF8StringReader::new("hello world".to_string());
-        let mut iter = nasm_test_parser::Context::new(&mut reader);
-
-        iter.set_start_point(nasm_test_parser::StartPoint::BANNER);
-
-        for action in iter {
+        for action in Context::new_banner_parser(&mut UTF8StringReader::new(
+            "hello world".to_string(),
+        )) {
             match action {
                 ParseAction::Shift {
                     skipped_characters: skip,

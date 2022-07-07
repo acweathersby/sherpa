@@ -1,5 +1,7 @@
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+use crate::builder::common;
 use crate::builder::disclaimer::DISCLAIMER;
 use crate::writer::code_writer::CodeWriter;
 use crate::writer::nasm_writer::NasmWriter;
@@ -45,8 +47,7 @@ pub fn compile_asm_files(
             println!("cargo:error=\n{}", error);
         }
     } else if let Some(grammar) = grammar {
-        let grammar_name = grammar.friendly_name.to_owned();
-        let parser_name = grammar_name.to_owned() + "_parser";
+        let (grammar_name, parser_name) = common::get_parser_names(&grammar);
 
         let bytecode_output = compile_bytecode(&grammar, 1);
 
@@ -150,6 +151,7 @@ pub fn compile_asm_files(
                             OutputType::Rust => {
                                 write_rust_parser(
                                     writer,
+                                    &bytecode_output.state_name_to_offset,
                                     &grammar,
                                     &grammar_name,
                                     &parser_name,
@@ -166,6 +168,7 @@ pub fn compile_asm_files(
 
 fn write_rust_parser<W: Write>(
     mut writer: CodeWriter<W>,
+    state_lookups: &BTreeMap<String, u32>,
     grammar: &GrammarStore,
     grammar_name: &str,
     parser_name: &str,
@@ -187,34 +190,8 @@ extern \"C\" {{
 }}",
             parser_name
         ))?
-        .wrt(
-            "
-pub enum StartPoint {",
-        )?
-        .indent();
-
-    for (
-        i,
-        ExportedProduction {
-            export_name,
-            production,
-            ..
-        },
-    ) in get_exported_productions(grammar).iter().enumerate()
-    {
-        writer
-            .wrtln(&format!(
-                "/// `{}`",
-                production
-                    .original_location
-                    .to_string()
-                    .replace("\n", "\n// ")
-            ))?
-            .wrtln(&format!("{} = {},", export_name.to_uppercase(), i))?;
-    }
-
-    writer.dedent().wrtln("}")?.wrtln(&format!(
-        "pub struct Context<T: SymbolReader>(ParseContext<T>);
+        .wrtln(&format!(
+            "pub struct Context<T: SymbolReader>(ParseContext<T>);
 
 impl<T: SymbolReader> Iterator for Context<T> {{
     type Item = ParseAction;
@@ -233,7 +210,7 @@ impl<T: SymbolReader> Context<T> {{
     /// Create a new parser context to parser the input with 
     /// the grammar `{0}`
     #[inline(always)]
-    pub fn new(reader: &mut T) -> Self {{
+    fn new(reader: &mut T) -> Self {{
         let mut parser = Self(ParseContext::<T>::new(reader));
         parser.construct_context();
         parser
@@ -242,10 +219,10 @@ impl<T: SymbolReader> Context<T> {{
     /// Initialize the parser to recognize the given starting production
     /// within the input. This method is chainable.
     #[inline(always)]
-    pub fn set_start_point(&mut self, start_point: StartPoint) -> &mut Self {{
+    fn set_start_point(&mut self, start_point: u64) -> &mut Self {{
         unsafe {{
             let _ptr = &mut self.0 as *const ParseContext<T>;
-            prime_context(_ptr as u64, start_point as u64);
+            prime_context(_ptr as u64, start_point);
         }}
 
         self
@@ -263,8 +240,15 @@ impl<T: SymbolReader> Context<T> {{
             let _ptr = &mut self.0 as *const ParseContext<T>;
             destroy_context(_ptr as u64);
         }};
-    }}
-}}
+    }}",
+            grammar_name
+        ))?
+        .indent();
+
+    common::write_rust_entry_function(grammar, state_lookups, &mut writer);
+
+    writer.dedent().wrtln(&format!(
+        "}}
 
 impl<T: SymbolReader> Drop for Context<T> {{
     fn drop(&mut self) {{
@@ -272,7 +256,6 @@ impl<T: SymbolReader> Drop for Context<T> {{
     }}
 }}
 ",
-        grammar_name
     ));
 
     Ok(())

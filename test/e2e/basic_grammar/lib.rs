@@ -1,29 +1,23 @@
 mod ast;
-mod parser_data;
+mod nasm_test_parser;
 pub use ast::*;
-pub use parser_data::*;
+pub use nasm_test_parser::*;
 
 #[cfg(test)]
 mod test
 {
-
     use crate::ast::ASTNode;
-    use crate::ast::REDUCE_FUNCTIONS;
-    use crate::parser_data::EntryPoint_default;
-    use crate::parser_data::BYTECODE;
+    use crate::Context;
     use hctk::types::*;
     use std::sync::Arc;
     #[test]
     pub fn test_build()
     {
-        let reader = UTF8StringReader::from_string("hello world");
-
-        let iter =
-            ReferenceParseIterator::new(reader, &BYTECODE, EntryPoint_default);
-
         let mut nodes: Vec<HCObj<ASTNode>> = Vec::with_capacity(8);
 
-        for action in iter {
+        for action in Context::new_banner_parser(&mut UTF8StringReader::new(
+            "hello world".to_string(),
+        )) {
             match action {
                 ParseAction::Shift {
                     skipped_characters: skip,

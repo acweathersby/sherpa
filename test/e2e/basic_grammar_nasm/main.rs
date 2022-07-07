@@ -4,15 +4,13 @@ use std::time::Instant;
 use test_basic_grammar_nasm::*;
 pub fn main()
 {
-    let mut reader = UTF8StringReader::new("hello world".to_string());
-    let mut iter = Context::new(&mut reader);
     let mut messages = Vec::<String>::with_capacity(10);
 
     let start = Instant::now();
 
-    iter.set_start_point(StartPoint::BANNER);
-
-    for action in iter {
+    for action in Context::new_banner_parser(&mut UTF8StringReader::new(
+        "hello world".to_string(),
+    )) {
         match action {
             ParseAction::Shift {
                 skipped_characters: skip,

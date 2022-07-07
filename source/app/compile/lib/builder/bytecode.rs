@@ -20,6 +20,7 @@ use std::thread;
 
 use crate::ast::compile_ast_data;
 
+use crate::builder::common;
 use crate::builder::disclaimer::DISCLAIMER;
 use crate::writer::code_writer::CodeWriter;
 
@@ -45,6 +46,7 @@ pub fn compile_bytecode_files(
             eprintln!("{}", error);
         }
     } else if let Some(grammar) = grammar {
+        let (grammar_name, parser_name) = common::get_parser_names(&grammar);
         thread::scope(|scope| {
             if build_ast {
                 scope.spawn(|| {
@@ -53,22 +55,21 @@ pub fn compile_bytecode_files(
             }
 
             scope.spawn(|| {
-                if let Ok(parser_data_file) =
-                    std::fs::File::create(output_path.join("./parser_data.rs"))
-                {
+                if let Ok(parser_data_file) = std::fs::File::create(
+                    output_path.join(format!("./{}.rs", parser_name)),
+                ) {
                     let mut writer =
                         CodeWriter::new(BufWriter::new(parser_data_file));
 
                     writer.write(&DISCLAIMER(
-                        input_file_name,
+                        &grammar_name,
                         "Parser Data",
                         "//!",
                     ));
 
-                    write_parser_data(
+                    write_parser_file(
                         writer,
                         &grammar,
-                        &output_path.join("./parser_data.rs"),
                         // Leave two threads available for building
                         // the
                         // ascript code if necessary
@@ -83,10 +84,9 @@ pub fn compile_bytecode_files(
         })
     }
 }
-fn write_parser_data<W: Write>(
+fn write_parser_file<W: Write>(
     mut writer: CodeWriter<W>,
     grammar: &GrammarStore,
-    output_path: &Path,
     threads: usize,
 ) -> std::io::Result<()>
 {
@@ -97,7 +97,7 @@ fn write_parser_data<W: Write>(
     } = compile_bytecode(grammar, threads);
 
     if let Err(err) =
-        write_rust_data_file(writer, &state_lookups, grammar, &bytecode)
+        write_rust_parser_file(writer, &state_lookups, grammar, &bytecode)
     {
         println!("{}", err);
     }
@@ -105,36 +105,66 @@ fn write_parser_data<W: Write>(
     Ok(())
 }
 
-fn write_rust_data_file<W: Write>(
+fn write_rust_parser_file<W: Write>(
     mut writer: CodeWriter<W>,
     state_lookups: &BTreeMap<String, u32>,
     grammar: &GrammarStore,
     bytecode: &Vec<u32>,
 ) -> std::io::Result<()>
 {
-    for ExportedProduction {
-        export_name,
-        guid_name,
-        production,
-    } in get_exported_productions(grammar)
+    writer
+        .wrt(
+            "use hctk::bytecode::constants::NORMAL_STATE_MASK;
+use hctk::runtime::parser::*;
+use hctk::types::*;
+
+pub struct Context<'a, T: SymbolReader>(ParseContext<T>, &'a mut T, bool);
+
+impl<'a, T: SymbolReader> Iterator for Context<'a, T>
+{
+    type Item = ParseAction;
+
+    #[inline(always)]
+    fn next(&mut self) -> Option<Self::Item>
     {
-        if let Some(bytecode_offset) = state_lookups.get(guid_name) {
-            writer
-                .wrt(&format!(
-                    "pub const EntryPoint_{}: u32 = {};",
-                    export_name, bytecode_offset
-                ))?
-                .newline()?;
+        let Context(ctx, reader, active) = self;
+
+        if *active {
+            let action = get_next_action::<T>(reader, ctx, &bytecode);
+            match action {
+                ParseAction::Error { .. } | ParseAction::Accept { .. } => {
+                    *active = false;
+                    Some(action)
+                }
+                action => Some(action),
+            }
         } else {
-            println!(
-                "Unable to get bytecode offset for production {} ",
-                production.original_name,
-            );
+            None
         }
     }
+}
+
+impl<'a, T: SymbolReader> Context<'a, T>
+{
+    #[inline(always)]
+    fn new(reader: &'a mut T) -> Self
+    {
+        Self(ParseContext::<T>::bytecode_context(), reader, true)
+    }
+    ",
+        )?
+        .indent();
+
+    common::write_rust_entry_function_bytecode(
+        grammar,
+        state_lookups,
+        &mut writer,
+    )?;
+
+    writer.dedent().wrtln("}")?;
 
     writer
-        .wrtln(&format!("pub static BYTECODE: [u32; {}] = [", bytecode.len()))?
+        .wrtln(&format!("static bytecode: [u32; {}] = [", bytecode.len()))?
         .indent();
 
     for chunk in bytecode.chunks(9) {

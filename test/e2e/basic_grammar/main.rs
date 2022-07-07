@@ -1,28 +1,25 @@
 mod ast;
-mod parser_data;
 
 use crate::ast::ASTNode;
 use crate::ast::REDUCE_FUNCTIONS;
-use crate::parser_data::EntryPoint_default;
-use crate::parser_data::BYTECODE;
 use hctk::types::UTF8StringReader;
 use hctk::types::*;
 use hctk::types::*;
 use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
+use test_basic_grammar::*;
+
 pub fn main()
 {
-    let reader = UTF8StringReader::from_string("hello world");
-
-    let iter =
-        ReferenceParseIterator::new(reader, &BYTECODE, EntryPoint_default);
     let mut nodes: Vec<HCObj<ASTNode>> = Vec::with_capacity(8);
     let mut messages = Vec::<String>::with_capacity(10);
 
     let start = Instant::now();
 
-    for action in iter {
+    for action in Context::new_banner_parser(&mut UTF8StringReader::new(
+        "hello world".to_string(),
+    )) {
         match action {
             ParseAction::Shift {
                 skipped_characters: skip,

@@ -8,13 +8,11 @@ use test_basic_grammar::*;
 
 pub fn bench(input: &str)
 {
-    let mut reader = UTF8StringReader::new(input.to_string());
-    let iter =
-        ReferenceParseIterator::new(reader, &BYTECODE, EntryPoint_default);
-
     let mut updates = 0;
 
-    for action in iter {
+    for action in Context::new_banner_parser(&mut UTF8StringReader::new(
+        input.to_string(),
+    )) {
         match action {
             ParseAction::Shift { .. } => {
                 updates += 1;

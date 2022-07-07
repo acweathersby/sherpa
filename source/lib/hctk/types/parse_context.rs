@@ -48,7 +48,7 @@ impl<T: SymbolReader> ParseContext<T>
         }
     }
 
-    pub(crate) fn bytecode_context() -> Self
+    pub fn bytecode_context() -> Self
     {
         Self {
             peek_token: ParseToken::default(),
