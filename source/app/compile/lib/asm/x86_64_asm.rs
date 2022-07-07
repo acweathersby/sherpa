@@ -33,7 +33,7 @@ pub fn _undefined<W: Write, T: X8664Writer<W>>(
 }
 
 const parse_context_size: usize =
-    std::mem::size_of::<ParserContext<UTF8StringReader>>();
+    std::mem::size_of::<ParseContext<UTF8StringReader>>();
 
 const stack_ref_size: usize = std::mem::size_of::<Vec<u8>>();
 

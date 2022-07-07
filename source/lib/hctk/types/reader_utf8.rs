@@ -186,7 +186,7 @@ impl SymbolReader for UTF8StringReader
                     word |= (byte as u32) << offset;
                 }
 
-                for i in (self.cursor - amount as usize + 1)
+                for i in (((self.cursor as i32) - amount) as usize + 1)
                     ..std::cmp::min(self.length, self.cursor + 1)
                 {
                     let byte = self.string[i as usize];

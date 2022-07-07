@@ -16,11 +16,16 @@ pub fn collect_shifts_and_skips(
     entry_point: u32,
     target_production_id: u32,
     bytecode: Vec<u32>,
-) -> (UTF8StringReader, ParseState, Vec<String>, Vec<String>)
+) -> (
+    UTF8StringReader,
+    ParseContext<UTF8StringReader>,
+    Vec<String>,
+    Vec<String>,
+)
 {
     let mut reader = UTF8StringReader::from_string(input);
     let source = reader.get_source();
-    let mut state: ParseState = ParseState::new();
+    let mut state = ParseContext::bytecode_context();
     state.init_normal_state(entry_point);
     let mut shifts = vec![];
     let mut skips = vec![];

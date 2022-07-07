@@ -1,18 +1,20 @@
 use crate::runtime::parser::get_next_action;
 use crate::types::ParseAction;
 
-use crate::types::ParseState;
+use crate::types::ParseContext;
 
 use crate::types::SymbolReader;
 
 pub trait IteratorParser<T: SymbolReader>
 {
-    fn get_parts(&mut self) -> (&mut T, &mut ParseState, &[u32], &mut bool);
+    fn get_parts(
+        &mut self,
+    ) -> (&mut T, &mut ParseContext<T>, &[u32], &mut bool);
 }
 
 pub struct ReferenceParseIterator<'a, T: SymbolReader>
 {
-    state:    ParseState,
+    ctx:      ParseContext<T>,
     reader:   T,
     bytecode: &'a [u32],
     active:   bool,
@@ -45,12 +47,12 @@ impl<'a, T: SymbolReader> ReferenceParseIterator<'a, T>
 {
     pub fn new(reader: T, data: &'a [u32], entry_point: u32) -> Self
     {
-        let mut state = ParseState::new();
+        let mut state = ParseContext::bytecode_context();
 
         state.init_normal_state(entry_point);
 
         Self {
-            state,
+            ctx: state,
             reader,
             bytecode: data,
             active: true,
@@ -60,11 +62,12 @@ impl<'a, T: SymbolReader> ReferenceParseIterator<'a, T>
 
 impl<'a, T: SymbolReader> IteratorParser<T> for ReferenceParseIterator<'a, T>
 {
-    fn get_parts(&mut self) -> (&mut T, &mut ParseState, &[u32], &mut bool)
+    fn get_parts(&mut self)
+        -> (&mut T, &mut ParseContext<T>, &[u32], &mut bool)
     {
         let ReferenceParseIterator {
             reader,
-            state,
+            ctx: state,
             bytecode: data,
             active,
             ..

@@ -68,7 +68,6 @@ pub(crate) fn build_byte_code_buffer(
     ];
 
     for ((state, name, i)) in states_iter {
-        println!("--- {} ---", name);
         goto_bookmarks_to_offset[i as usize] = bytecode.len() as u32;
         bytecode.append(&mut compile_ir_state_to_bytecode(
             state,

@@ -1,10 +1,9 @@
 mod parse_functions;
 
 use crate::types::ParseAction;
-use crate::types::ParseState;
+use crate::types::ParseContext;
 use crate::types::SymbolReader;
 pub use parse_functions::get_next_action;
-pub use parse_functions::get_next_actionBB;
 
 #[cfg(test)]
 mod test_parser
@@ -37,7 +36,7 @@ mod test_parser
     #[test]
     fn test_fork()
     {
-        let (bytecode, mut reader, mut state) = setup_states(
+        let (bytecode, mut reader, mut ctx) = setup_states(
             vec![
                 "
 state [test_start]
@@ -63,9 +62,9 @@ state [Z]
             "",
         );
 
-        state.init_normal_state(NORMAL_STATE_MASK | FIRST_STATE_OFFSET);
+        ctx.init_normal_state(NORMAL_STATE_MASK | FIRST_STATE_OFFSET);
 
-        match get_next_action(&mut reader, &mut state, &bytecode) {
+        match get_next_action(&mut reader, &mut ctx, &bytecode) {
             ParseAction::Fork {
                 states_start_offset,
                 num_of_states,
@@ -119,7 +118,7 @@ state [test]
             "0",
         );
 
-        state.set_production(3);
+        state.set_production_to(3);
 
         dispatch(&mut reader, &mut state, &bytecode);
 
@@ -138,7 +137,7 @@ state [test]
             "0",
         );
 
-        state.set_production(3);
+        state.set_production_to(3);
 
         match dispatch(&mut reader, &mut state, &bytecode) {
             ParseAction::Reduce {
@@ -167,13 +166,13 @@ state [test]
 
         reader.next(10);
 
-        state.set_assert_token(ParseToken {
+        state.assert_token = ParseToken {
             byte_length: 5,
             byte_offset: 10,
             cp_length: 5,
             cp_offset: 20,
             ..Default::default()
-        });
+        };
 
         match dispatch(&mut reader, &mut state, &bytecode) {
             ParseAction::Shift {
@@ -190,7 +189,7 @@ state [test]
                 assert_eq!(token.cp_length, 0);
 
                 // assert_eq!(reader.cursor(), 15);
-                assert_eq!(state.get_anchor_token(), state.get_assert_token());
+                assert_eq!(state.anchor_token, state.assert_token);
             }
             _ => panic!("Incorrect value returned"),
         }
@@ -208,13 +207,13 @@ state [test]
             "123456781234567812345678",
         );
 
-        state.set_assert_token(ParseToken {
+        state.assert_token = ParseToken {
             byte_length: 5,
             byte_offset: 10,
             cp_length: 5,
             cp_offset: 20,
             ..Default::default()
-        });
+        };
 
         match dispatch(&mut reader, &mut state, &bytecode) {
             ParseAction::Shift {
@@ -231,7 +230,7 @@ state [test]
                 assert_eq!(token.cp_length, 5);
 
                 // assert_eq!(reader.cursor(), 15);
-                assert_eq!(state.get_anchor_token(), state.get_assert_token());
+                assert_eq!(state.anchor_token, state.assert_token);
             }
             _ => panic!("Incorrect value returned"),
         }
@@ -249,15 +248,15 @@ assert PRODUCTION [3] (pass)",
             "AB",
         );
 
-        state.set_production(1);
+        state.set_production_to(1);
         assert_eq!(hash_jump(0, &mut reader, &mut state, &bytecode), 7);
-        state.set_production(2);
+        state.set_production_to(2);
         assert_eq!(hash_jump(0, &mut reader, &mut state, &bytecode), 8);
-        state.set_production(3);
+        state.set_production_to(3);
         assert_eq!(hash_jump(0, &mut reader, &mut state, &bytecode), 9);
-        state.set_production(4);
+        state.set_production_to(4);
         assert_eq!(hash_jump(0, &mut reader, &mut state, &bytecode), 10);
-        state.set_production(0);
+        state.set_production_to(0);
         assert_eq!(hash_jump(0, &mut reader, &mut state, &bytecode), 10);
     }
 
@@ -272,9 +271,9 @@ state [test] scanner [none]
             "",
         );
 
-        state.set_production(1);
+        state.set_production_to(1);
         assert_eq!(hash_jump(0, &mut reader, &mut state, &bytecode), 6);
-        state.set_production(2);
+        state.set_production_to(2);
         assert_eq!(hash_jump(0, &mut reader, &mut state, &bytecode), 8);
     }
 
@@ -312,19 +311,19 @@ assert PRODUCTION [3] (pass)
 
         let mut r = UTF8StringReader::from_string("test");
 
-        let mut s = ParseState::new();
+        let mut s = ParseContext::bytecode_context();
 
         println!("{}", generate_disassembly(&output, None));
         let off = FIRST_STATE_OFFSET;
-        s.set_production(1);
+        s.set_production_to(1);
         assert_eq!(vector_jump(off, &mut r, &mut s, bc), off + 7);
-        s.set_production(2);
+        s.set_production_to(2);
         assert_eq!(vector_jump(off, &mut r, &mut s, bc), off + 8);
-        s.set_production(3);
+        s.set_production_to(3);
         assert_eq!(vector_jump(off, &mut r, &mut s, bc), off + 9);
-        s.set_production(4);
+        s.set_production_to(4);
         assert_eq!(vector_jump(off, &mut r, &mut s, bc), off + 10);
-        s.set_production(0);
+        s.set_production_to(0);
         assert_eq!(vector_jump(off, &mut r, &mut s, bc), off + 10);
     }
     #[ignore]
@@ -342,21 +341,21 @@ assert PRODUCTION [3] (pass)
         let bytecode = &output.bytecode;
         let index: u32 = 0;
         let mut reader = UTF8StringReader::from_string("AB");
-        let mut state = ParseState::new();
+        let mut state = ParseContext::bytecode_context();
 
         println!("{}", disassemble_state(&output, 0, None).0);
 
-        state.set_production(2);
+        state.set_production_to(2);
         assert_eq!(vector_jump(index, &mut reader, &mut state, &bytecode), 6);
 
-        state.set_production(0);
+        state.set_production_to(0);
         assert_eq!(vector_jump(index, &mut reader, &mut state, &bytecode), 8);
     }
 
     fn setup_states(
         state_ir: Vec<&str>,
         reader_input: &str,
-    ) -> (Vec<u32>, UTF8StringReader, ParseState)
+    ) -> (Vec<u32>, UTF8StringReader, ParseContext<UTF8StringReader>)
     {
         let is_asts = state_ir
             .into_iter()
@@ -376,14 +375,14 @@ assert PRODUCTION [3] (pass)
         let (bytecode, _) = build_byte_code_buffer(is_asts.iter().collect());
 
         let mut reader = UTF8StringReader::from_string(reader_input);
-        let mut state = ParseState::new();
+        let mut ctx = ParseContext::bytecode_context();
 
-        (bytecode, reader, state)
+        (bytecode, reader, ctx)
     }
     fn setup_state(
         state_ir: &str,
         reader_input: &str,
-    ) -> (Vec<u32>, UTF8StringReader, ParseState)
+    ) -> (Vec<u32>, UTF8StringReader, ParseContext<UTF8StringReader>)
     {
         let ir_ast = compile_ir_ast(Vec::from(state_ir.to_string()));
 
@@ -398,9 +397,9 @@ assert PRODUCTION [3] (pass)
         );
 
         let mut reader = UTF8StringReader::from_string(reader_input);
-        let mut state = ParseState::new();
+        let mut ctx = ParseContext::bytecode_context();
 
-        (bytecode, reader, state)
+        (bytecode, reader, ctx)
     }
 
     fn create_output<'a>(

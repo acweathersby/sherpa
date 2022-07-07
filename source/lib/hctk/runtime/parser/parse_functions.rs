@@ -8,7 +8,6 @@ use crate::bytecode::constants::INSTRUCTION_HEADER_MASK;
 use crate::bytecode::constants::LEXER_TYPE;
 use crate::bytecode::constants::NORMAL_STATE_MASK;
 use crate::bytecode::constants::STATE_INDEX_MASK;
-use crate::debug::print_state;
 use crate::runtime::recognizer::stack::KernelStack;
 use crate::types::*;
 
@@ -19,43 +18,43 @@ use ParseAction::*;
 #[inline]
 pub fn dispatch<T: SymbolReader>(
     reader: &mut T,
-    state: &mut ParseState,
+    ctx: &mut ParseContext<T>,
     bytecode: &[u32],
 ) -> ParseAction
 {
     use ParseAction::*;
 
-    let mut index = (state.get_active_state() & STATE_INDEX_MASK) as u32;
+    let mut index = (ctx.get_active_state() & STATE_INDEX_MASK) as u32;
 
     loop {
         let instruction = unsafe { *bytecode.get_unchecked(index as usize) };
 
-        state.set_active_state(index);
+        ctx.set_active_state_to(index);
 
         index = match instruction & INSTRUCTION_HEADER_MASK {
             I::I01_CONSUME => {
                 let (action, index) =
-                    consume(index, instruction, state, reader);
-                state.set_active_state(index);
+                    consume(index, instruction, ctx, reader);
+                ctx.set_active_state_to(index);
                 break action;
             }
-            I::I02_GOTO => goto(index, instruction, state),
-            I::I03_SET_PROD => set_production(index, instruction, state),
+            I::I02_GOTO => goto(index, instruction, ctx),
+            I::I03_SET_PROD => set_production(index, instruction, ctx),
             I::I04_REDUCE => {
-                let (action, index) = reduce(index, instruction, state);
-                state.set_active_state(index);
+                let (action, index) = reduce(index, instruction, ctx);
+                ctx.set_active_state_to(index);
                 break action;
             }
-            I::I05_TOKEN => set_token_state(index, instruction, state),
+            I::I05_TOKEN => set_token_state(index, instruction, ctx),
             I::I06_FORK_TO => {
                 let (action, index) = fork(index, instruction);
-                state.set_active_state(index);
+                ctx.set_active_state_to(index);
                 break action;
             }
             I::I07_SCAN => scan(),
             I::I08_NOOP => noop(index),
-            I::I09_VECTOR_BRANCH => vector_jump(index, reader, state, bytecode),
-            I::I10_HASH_BRANCH => hash_jump(index, reader, state, bytecode),
+            I::I09_VECTOR_BRANCH => vector_jump(index, reader, ctx, bytecode),
+            I::I10_HASH_BRANCH => hash_jump(index, reader, ctx, bytecode),
             I::I11_SET_FAIL_STATE => set_fail(),
             I::I12_REPEAT => repeat(),
             I::I13_NOOP => noop(index),
@@ -71,25 +70,26 @@ pub fn dispatch<T: SymbolReader>(
 fn consume<T: SymbolReader>(
     index: u32,
     instruction: u32,
-    state: &mut ParseState,
+    ctx: &mut ParseContext<T>,
     reader: &mut T,
 ) -> (ParseAction, u32)
 {
     if instruction & 0x1 == 1 {
-        state.tokens[1].byte_length = 0;
-        state.tokens[1].cp_length = 0;
+        ctx.assert_token.byte_length = 0;
+        ctx.assert_token.cp_length = 0;
     }
 
-    let mut skip = state.get_anchor_token();
-    let mut shift = state.get_assert_token();
+    let mut skip = ctx.anchor_token;
+    let mut shift = ctx.assert_token;
 
     let next_token = shift.next();
-    state.set_assert_token(next_token);
 
-    if state.is_scanner() {
+    ctx.assert_token = next_token;
+
+    if ctx.is_scanner() {
         reader.next(shift.byte_length as i32);
     } else {
-        state.set_anchor_token(next_token);
+        ctx.anchor_token = next_token;
     }
 
     skip.cp_length = shift.cp_offset - skip.cp_offset;
@@ -105,15 +105,15 @@ fn consume<T: SymbolReader>(
 }
 
 #[inline]
-fn reduce(
+fn reduce<T: SymbolReader>(
     index: u32,
     instruction: u32,
-    state: &mut ParseState,
+    ctx: &mut ParseContext<T>,
 ) -> (ParseAction, u32)
 {
     let symbol_count = instruction >> 16 & 0x0FFF;
     let body_id = instruction & 0xFFFF;
-    let production_id = state.get_production();
+    let production_id = ctx.get_production();
 
     (
         if symbol_count == 0x0FFF {
@@ -135,36 +135,47 @@ fn reduce(
 }
 
 #[inline]
-fn goto(index: u32, instruction: u32, state: &mut ParseState) -> u32
+fn goto<T: SymbolReader>(
+    index: u32,
+    instruction: u32,
+    ctx: &mut ParseContext<T>,
+) -> u32
 {
-    state.stack.push_state(instruction);
+    ctx.push_state(instruction);
     index + 1
 }
 
 #[inline]
-fn set_production(index: u32, instruction: u32, state: &mut ParseState) -> u32
+fn set_production<T: SymbolReader>(
+    index: u32,
+    instruction: u32,
+    ctx: &mut ParseContext<T>,
+) -> u32
 {
     let production_id = instruction & INSTRUCTION_CONTENT_MASK;
-    state.production_id = production_id;
+    ctx.set_production_to(production_id);
     index + 1
 }
 
 #[inline]
-fn set_token_state(index: u32, instruction: u32, state: &mut ParseState)
-    -> u32
+fn set_token_state<T: SymbolReader>(
+    index: u32,
+    instruction: u32,
+    ctx: &mut ParseContext<T>,
+) -> u32
 {
     let value = instruction & 0x00FF_FFFF;
 
-    let mut anchor = state.get_anchor_token();
+    let mut anchor = ctx.anchor_token;
 
-    let assert = state.get_assert_token();
+    let assert = ctx.assert_token;
 
     anchor.token_type = value;
 
     anchor.byte_length = assert.byte_offset - anchor.byte_offset;
     anchor.cp_length = assert.cp_offset - anchor.cp_offset;
 
-    state.set_anchor_token(anchor);
+    ctx.anchor_token = anchor;
 
     index + 1
 }
@@ -209,15 +220,13 @@ fn noop(index: u32) -> u32
 }
 
 #[inline]
-fn skip_token<T: SymbolReader>(state: &mut ParseState, reader: &mut T)
+fn skip_token<T: SymbolReader>(ctx: &mut ParseContext<T>, reader: &mut T)
 {
-    let index = state.in_peek_mode as usize + 1;
-    // let mut token = unsafe { state.tokens.get_unchecked_mut(index) };
-    // if state.is_scanner {
-    //    reader.next(token.byte_length)
-    //}
-    state.tokens[index] =
-        unsafe { state.tokens.get_unchecked_mut(index).next() };
+    if ctx.in_peek_mode() {
+        ctx.peek_token = ctx.peek_token.next();
+    } else {
+        ctx.assert_token = ctx.assert_token.next();
+    }
 }
 
 /// Performs an instruction branch selection based on an embedded,
@@ -226,7 +235,7 @@ fn skip_token<T: SymbolReader>(state: &mut ParseState, reader: &mut T)
 pub fn hash_jump<T: SymbolReader>(
     index: u32,
     reader: &mut T,
-    state: &mut ParseState,
+    ctx: &mut ParseContext<T>,
     bytecode: &[u32],
 ) -> u32
 {
@@ -246,9 +255,9 @@ pub fn hash_jump<T: SymbolReader>(
 
     loop {
         let input_value = match input_type {
-            INPUT_TYPE::T01_PRODUCTION => state.production_id,
+            INPUT_TYPE::T01_PRODUCTION => ctx.get_production(),
             _ => get_token_value(
-                lexer_type, input_type, reader, scan_index, state, bytecode,
+                lexer_type, input_type, reader, scan_index, ctx, bytecode,
             ) as u32,
         };
         let mut hash_index = (input_value & hash_mask) as usize;
@@ -262,7 +271,7 @@ pub fn hash_jump<T: SymbolReader>(
 
             if value == input_value {
                 if offset == 0x7FF {
-                    skip_token(state, reader);
+                    skip_token(ctx, reader);
                     break;
                 } else {
                     return index + offset;
@@ -279,7 +288,7 @@ pub fn hash_jump<T: SymbolReader>(
 pub fn vector_jump<T: SymbolReader>(
     index: u32,
     reader: &mut T,
-    state: &mut ParseState,
+    ctx: &mut ParseContext<T>,
     bytecode: &[u32],
 ) -> u32
 {
@@ -298,9 +307,9 @@ pub fn vector_jump<T: SymbolReader>(
 
     loop {
         let input_value = match input_type {
-            INPUT_TYPE::T01_PRODUCTION => state.production_id,
+            INPUT_TYPE::T01_PRODUCTION => ctx.get_production(),
             _ => get_token_value(
-                lexer_type, input_type, reader, scan_index, state, bytecode,
+                lexer_type, input_type, reader, scan_index, ctx, bytecode,
             ) as u32,
         };
 
@@ -311,7 +320,7 @@ pub fn vector_jump<T: SymbolReader>(
                 *bytecode.get_unchecked(table_start + value_index as usize)
             };
             if offset == 0xFFFF_FFFF {
-                skip_token(state, reader);
+                skip_token(ctx, reader);
                 continue;
             } else {
                 return index + offset;
@@ -328,56 +337,69 @@ fn get_token_value<T: SymbolReader>(
     input_type: u32,
     reader: &mut T,
     scanner_start_offset: u32,
-    state: &mut ParseState,
+    ctx: &mut ParseContext<T>,
     bytecode: &[u32],
 ) -> i32
 {
-    let active_token = match lexer_type {
+    let mut active_token = match lexer_type {
         LEXER_TYPE::PEEK => {
-            let basis_token = unsafe {
-                *state
-                    .tokens
-                    .get_unchecked((state.in_peek_mode as usize) + 1)
+            let basis_token = if ctx.in_peek_mode() {
+                ctx.peek_token
+            } else {
+                ctx.anchor_token
             };
 
-            state.in_peek_mode = true;
+            ctx.set_peek_mode_to(true);
 
             basis_token.next()
         }
         _ /*| LEXER_TYPE::ASSERT*/ => {
-            if state.in_peek_mode {
-                state.in_peek_mode = false;
-                reader.set_cursor_to(unsafe { state.tokens.get_unchecked(1) });
+            if ctx.in_peek_mode() {
+                
+                ctx.set_peek_mode_to(false);
+
+                reader.set_cursor_to(&ctx.assert_token );
             }
-            state.tokens[1]
+
+            ctx.assert_token
         }
     };
 
-    let token_index = state.in_peek_mode as usize + 1;
-
-    if state.is_scanner {
-        state.tokens[token_index] = active_token;
-
-        let active_token =
-            unsafe { state.tokens.get_unchecked_mut(token_index) };
-
+    if ctx.is_scanner() {
         match input_type {
             INPUT_TYPE::T03_CLASS => {
                 active_token.byte_length = reader.codepoint_byte_length();
                 active_token.cp_length = reader.codepoint_length();
+        
+                if ctx.in_peek_mode() {
+                    ctx.peek_token = active_token;
+                } else {
+                    ctx.assert_token = active_token;
+                }
 
                 reader.class() as i32
             }
             INPUT_TYPE::T04_CODEPOINT => {
                 active_token.byte_length = reader.codepoint_byte_length();
                 active_token.cp_length = reader.codepoint_length();
+        
+                if ctx.in_peek_mode() {
+                    ctx.peek_token = active_token;
+                } else {
+                    ctx.assert_token = active_token;
+                }
 
                 reader.codepoint() as i32
             }
             INPUT_TYPE::T05_BYTE => {
                 active_token.byte_length = 1;
                 active_token.cp_length = 1;
-
+        
+                if ctx.in_peek_mode() {
+                    ctx.peek_token = active_token;
+                } else {
+                    ctx.assert_token = active_token;
+                }
                 reader.byte() as i32
             }
             _ => 0,
@@ -386,23 +408,27 @@ fn get_token_value<T: SymbolReader>(
         let scanned_token = token_scan(
             active_token,
             scanner_start_offset,
-            state,
+            ctx,
             reader,
             bytecode,
         );
 
-        state.tokens[token_index] = scanned_token;
+        if ctx.in_peek_mode() {
+            ctx.peek_token = scanned_token;
+        } else {
+            ctx.assert_token = scanned_token;
+        }
 
         scanned_token.token_type as i32
     }
 }
 
 fn scan_for_improvised_token<T: SymbolReader>(
-    scan_state: &mut ParseState,
+    scan_ctx: &mut ParseContext<T>,
     reader: &mut T,
 )
 {
-    let mut assert = scan_state.get_assert_token();
+    let mut assert = scan_ctx.assert_token;
     assert.byte_length = reader.codepoint_byte_length();
     assert.cp_length = 1;
     let mut byte = reader.byte();
@@ -429,14 +455,14 @@ fn scan_for_improvised_token<T: SymbolReader>(
             assert.cp_length += 1;
         }
     }
-    scan_state.set_assert_token(assert);
-    set_token_state(0, 0, scan_state);
+    scan_ctx.assert_token = assert;
+    set_token_state(0, 0, scan_ctx);
 }
 
 fn token_scan<T: SymbolReader>(
     token: ParseToken,
     scanner_start_offset: u32,
-    state: &mut ParseState,
+    ctx: &mut ParseContext<T>,
     reader: &mut T,
     bytecode: &[u32],
 ) -> ParseToken
@@ -448,10 +474,10 @@ fn token_scan<T: SymbolReader>(
             // of state production id, decrementing production_id each time
             // we hit this function
 
-            let id = state.production_id;
+            let id = ctx.get_production();
 
             if id > 0 {
-                state.production_id -= 1;
+                ctx.set_production_to(id - 1);
             }
 
             return ParseToken {
@@ -462,48 +488,49 @@ fn token_scan<T: SymbolReader>(
     }
     // Initialize Scanner
 
-    let mut scan_state = ParseState::new();
-    scan_state.make_scanner();
-    scan_state.init_normal_state(scanner_start_offset);
-    scan_state.set_anchor_token(token);
-    scan_state.set_assert_token(token);
+    let mut scan_ctx = ParseContext::bytecode_context();
+    scan_ctx.make_scanner();
+    scan_ctx.init_normal_state(scanner_start_offset);
+    scan_ctx.anchor_token = token;
+    scan_ctx.assert_token = token;
     reader.set_cursor_to(&token);
 
     // We are done with the state reference, so we
     // invalidate variable by moving the reference to
     // an unused name to prevent confusion with the
     // `scan_state` variable.
-    let _state = state;
+    let _state = ctx;
 
     match {
-        if scan_state.active_state == 0 {
+        if scan_ctx.get_active_state() == 0 {
             // Decode the next scanner_state.
-            scan_state.active_state = scan_state.stack.pop_state();
+            let state = scan_ctx.pop_state();
+            scan_ctx.set_active_state_to(state);
         }
 
         let line_data = reader.get_line_data();
         let (line_num, line_count) =
             ((line_data >> 32) as u32, (line_data & 0xFFFF_FFFF) as u32);
 
-        scan_state.tokens[0].line_number = line_num;
-        scan_state.tokens[0].line_offset = line_count;
+        scan_ctx.anchor_token.line_number = line_num;
+        scan_ctx.anchor_token.line_offset = line_count;
 
         loop {
-            if scan_state.active_state < 1 {
-                if scan_state.in_fail_mode
-                    || scan_state.get_anchor_token().token_type == 0
+            if scan_ctx.get_active_state() < 1 {
+                if scan_ctx.in_fail_mode()
+                    || scan_ctx.anchor_token.token_type == 0
                 {
-                    scan_for_improvised_token(&mut scan_state, reader);
+                    scan_for_improvised_token(&mut scan_ctx, reader);
                 }
 
-                break ParseAction::ScannerToken(scan_state.get_anchor_token());
+                break ParseAction::ScannerToken(scan_ctx.anchor_token);
             } else {
                 let mask_gate =
-                    NORMAL_STATE_MASK << (scan_state.in_fail_mode as u32);
+                    NORMAL_STATE_MASK << (scan_ctx.in_fail_mode() as u32);
 
-                if ((scan_state.active_state & mask_gate) != 0) {
-                    scan_state.in_fail_mode = loop {
-                        match dispatch(reader, &mut scan_state, bytecode) {
+                if ((scan_ctx.get_active_state() & mask_gate) != 0) {
+                    let fail_mode =loop {
+                        match dispatch(reader, &mut scan_ctx, bytecode) {
                             ParseAction::CompleteState => {
                                 break false;
                             }
@@ -513,9 +540,11 @@ fn token_scan<T: SymbolReader>(
                             }
                             _ => {}
                         }
-                    }
+                    };
+                    scan_ctx.set_fail_mode_to(  fail_mode);
                 }
-                scan_state.active_state = scan_state.stack.pop_state();
+                let state = scan_ctx.pop_state();
+                scan_ctx.set_active_state_to(state);
             }
         }
     } {
@@ -524,60 +553,55 @@ fn token_scan<T: SymbolReader>(
     }
 }
 
-pub fn get_next_actionBB(
-    reader: &mut UTF8StringReader,
-    state: &mut ParseState,
-    bytecode: &[u32],
-) -> ParseAction
-{
-    get_next_action(reader, state, bytecode)
-}
-
 /// Start or continue a parse on an input
 #[inline]
 pub fn get_next_action<T: SymbolReader>(
     reader: &mut T,
-    state: &mut ParseState,
+    ctx: &mut ParseContext<T>,
     bytecode: &[u32],
 ) -> ParseAction
 {
-    if state.active_state == 0 {
-        state.active_state = state.stack.pop_state();
+    if ctx.get_active_state() == 0 {
+        let state = ctx.pop_state();
+        ctx.set_active_state_to(state);
     }
 
     loop {
-        if state.active_state < 1 {
-            if reader.offset_at_end(state.tokens[1].byte_offset) {
+        if ctx.get_active_state() < 1 {
+            if reader.offset_at_end(ctx.assert_token.byte_offset) {
                 break ParseAction::Accept {
-                    production_id: state.production_id,
+                    production_id: ctx.get_production(),
                 };
             } else {
                 break ParseAction::Error {
                     message:    "Cannot parse this symbol",
-                    last_input: state.get_assert_token(),
+                    last_input: ctx.assert_token,
                 };
             }
         } else {
-            let mask_gate = NORMAL_STATE_MASK << (state.in_fail_mode as u32);
+            let mask_gate = NORMAL_STATE_MASK << (ctx.in_fail_mode() as u32);
 
-            if (state.interrupted || (state.active_state & mask_gate) != 0) {
-                state.interrupted = true;
+            if (ctx.is_interrupted() || (ctx.get_active_state() & mask_gate) != 0) {
+                ctx.set_interrupted_to(true);
 
-                match dispatch(reader, state, bytecode) {
+                match dispatch(reader, ctx, bytecode) {
                     ParseAction::CompleteState => {
-                        state.interrupted = false;
-                        state.in_fail_mode = false;
-                        state.active_state = state.stack.pop_state();
+                        ctx.set_interrupted_to(false);
+                        ctx.set_fail_mode_to(false);
+                        let state = ctx.pop_state();
+                        ctx.set_active_state_to(state);
                     }
                     ParseAction::FailState => {
-                        state.interrupted = false;
-                        state.in_fail_mode = true;
-                        state.active_state = state.stack.pop_state();
+                        ctx.set_interrupted_to(false);
+                        ctx.set_fail_mode_to(true);
+                        let state = ctx.pop_state();
+                        ctx.set_active_state_to(state);
                     }
                     action => break action,
                 }
             } else {
-                state.active_state = state.stack.pop_state();
+                let state = ctx.pop_state();
+                ctx.set_active_state_to(state);
             }
         }
     }

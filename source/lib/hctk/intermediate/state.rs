@@ -188,7 +188,6 @@ fn generate_states(
             production_id,
         ));
     } else {
-        println!("---  {}  ---", entry_state_name);
         output.push(create_passing_goto_state(entry_state_name, is_scanner));
     }
 

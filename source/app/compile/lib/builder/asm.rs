@@ -214,14 +214,14 @@ pub enum StartPoint {",
     }
 
     writer.dedent().wrtln("}")?.wrtln(&format!(
-        "pub struct Context<T: SymbolReader>(ParserContext<T>);
+        "pub struct Context<T: SymbolReader>(ParseContext<T>);
 
 impl<T: SymbolReader> Iterator for Context<T> {{
     type Item = ParseAction;
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {{
         unsafe {{
-            let _ptr = &mut self.0 as *const ParserContext<T>;
+            let _ptr = &mut self.0 as *const ParseContext<T>;
             let mut action = ParseAction::Undefined;
             next(_ptr as u64, &mut action);
             Some(action)
@@ -234,7 +234,7 @@ impl<T: SymbolReader> Context<T> {{
     /// the grammar `{0}`
     #[inline(always)]
     pub fn new(reader: &mut T) -> Self {{
-        let mut parser = Self(ParserContext::<T>::new(reader));
+        let mut parser = Self(ParseContext::<T>::new(reader));
         parser.construct_context();
         parser
     }}
@@ -244,7 +244,7 @@ impl<T: SymbolReader> Context<T> {{
     #[inline(always)]
     pub fn set_start_point(&mut self, start_point: StartPoint) -> &mut Self {{
         unsafe {{
-            let _ptr = &mut self.0 as *const ParserContext<T>;
+            let _ptr = &mut self.0 as *const ParseContext<T>;
             prime_context(_ptr as u64, start_point as u64);
         }}
 
@@ -253,14 +253,14 @@ impl<T: SymbolReader> Context<T> {{
     #[inline(always)]
     fn construct_context(&mut self) {{
         unsafe {{
-            let _ptr = &mut self.0 as *const ParserContext<T>;
+            let _ptr = &mut self.0 as *const ParseContext<T>;
             construct_context(_ptr as u64);
         }}
     }}
     #[inline(always)]
     fn destroy_context(&mut self) {{
         unsafe {{
-            let _ptr = &mut self.0 as *const ParserContext<T>;
+            let _ptr = &mut self.0 as *const ParseContext<T>;
             destroy_context(_ptr as u64);
         }};
     }}

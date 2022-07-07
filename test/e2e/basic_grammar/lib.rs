@@ -13,7 +13,6 @@ mod test
     use crate::parser_data::BYTECODE;
     use hctk::types::*;
     use std::sync::Arc;
-    #[ignore = "not using this function yet"]
     #[test]
     pub fn test_build()
     {
