@@ -241,14 +241,14 @@ pub fn hash_jump<T: CharacterReader>(
 {
     let i = index as usize;
     // Decode data
-    let (first, scan_index, third) = unsafe {
-        let v = bytecode.get_unchecked(i..i + 3);
-        (v[0], v[1], v[2])
-    };
-    let input_type = (first >> 22) & 0x7;
-    let lexer_type = (first >> 26) & 0x3;
-    let table_length = third >> 16 & 0xFFFF;
-    let modulo_base = third & 0xFFFF;
+
+    let TableData {
+        input_type,
+        lexer_type,
+        table_length,
+        table_meta: modulo_base,
+        scanner_offset:scan_index,
+    } = TableData::from_bytecode(i, bytecode);
 
     let hash_mask = 1 << (modulo_base - 1);
     let table_start = i + 4;
@@ -294,14 +294,14 @@ pub fn vector_jump<T: CharacterReader>(
 {
     let i = index as usize;
     // Decode data
-    let (first, scan_index, third) = unsafe {
-        let v = bytecode.get_unchecked(i..i + 3);
-        (v[0], v[1], v[2])
-    };
-    let input_type = (first >> 22) & 0x7;
-    let lexer_type = (first >> 26) & 0x3;
-    let table_length = third >> 16 & 0xFFFF;
-    let value_offset = third & 0xFFFF;
+
+    let TableData {
+        input_type,
+        lexer_type,
+        table_length,
+        table_meta: value_offset,
+        scanner_offset:scan_index,
+    } = TableData::from_bytecode(i, bytecode);
 
     let table_start = i + 4;
 

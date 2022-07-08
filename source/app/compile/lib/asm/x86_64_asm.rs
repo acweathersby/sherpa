@@ -640,14 +640,14 @@ pub fn write_state<W: Write, T: X8664Writer<W>>(
                 }
 
                 INSTRUCTION::I09_VECTOR_BRANCH => {
-                    let (
+                    let ASMTableData {
                         table_name,
                         input_type,
                         lexer_type,
                         table_length,
                         table_meta,
                         scanner_offset,
-                    ) = extract_table_data(offset, bytecode);
+                    } = ASMTableData::from_bytecode(offset, bytecode);
 
                     writer.label(&table_name, false)?;
 
@@ -705,14 +705,14 @@ pub fn write_state<W: Write, T: X8664Writer<W>>(
                 }
 
                 INSTRUCTION::I10_HASH_BRANCH => {
-                    let (
+                    let ASMTableData {
                         table_name,
                         input_type,
                         lexer_type,
                         table_length,
-                        _,
                         scanner_offset,
-                    ) = extract_table_data(offset, bytecode);
+                        ..
+                    } = ASMTableData::from_bytecode(offset, bytecode);
 
                     writer.label(&table_name, false)?;
                     let mut is_infallible = false;
@@ -938,29 +938,6 @@ fn write_branches<W: Write, T: X8664Writer<W>>(
     Ok(offset)
 }
 
-fn extract_table_data(
-    offset: usize,
-    bytecode: &Vec<u32>,
-) -> (String, u32, u32, u32, u32, u32)
-{
-    let table_name = create_offset_label(offset);
-    let i = offset;
-    let (first, scanner_offset, third) =
-        (bytecode[i], bytecode[i + 1], bytecode[i + 2]);
-
-    let input_type = (first >> 22) & 0x7;
-    let lexer_type = (first >> 26) & 0x3;
-    let table_length = (third >> 16) & 0xFFFF;
-    let table_meta = third & 0xFFFF;
-    (
-        table_name,
-        input_type,
-        lexer_type,
-        table_length,
-        table_meta,
-        scanner_offset,
-    )
-}
 fn create_named_state_label(name: &String) -> String
 {
     format!("state_{}", name)
@@ -1179,5 +1156,40 @@ mod test_x86_generation
             "\n\n{}\n\n",
             String::from_utf8(writer.into_writer()).unwrap()
         );
+    }
+}
+
+pub struct ASMTableData
+{
+    table_name:     String,
+    input_type:     u32,
+    lexer_type:     u32,
+    table_length:   u32,
+    table_meta:     u32,
+    scanner_offset: u32,
+}
+impl ASMTableData
+{
+    #[inline(always)]
+    pub fn from_bytecode(offset: usize, bytecode: &[u32]) -> ASMTableData
+    {
+        let table_name = create_offset_label(offset);
+
+        let TableData {
+            input_type,
+            lexer_type,
+            table_length,
+            table_meta,
+            scanner_offset,
+        } = TableData::from_bytecode(offset, bytecode);
+
+        ASMTableData {
+            table_name,
+            input_type,
+            lexer_type,
+            table_length,
+            table_meta,
+            scanner_offset,
+        }
     }
 }
