@@ -253,13 +253,8 @@ pub fn write_preamble<W: Write, T: X8664Writer<W>>(
         .commented_code("push r12", "save the return address in the stack")?
         .code("lea r10, [rel scanner_complete]")?
         .commented_code("push r10", "push the address of the completer code")?
-        .code("xor eax, eax")?
-        .code("push rax")?
-        .code("push rax")?
-        .code("push NORMAL_STATE_MASK")?
-        .code("push r13")?
-        .code("mov r12,  [r14 + tok_byte_offset]")?
-        .code("mov r13,  [r14 + tok_byte_length]")?
+        .code("push 0")?
+        .code("push 0")?
         .commented_code(
             "mov r15, NORMAL_STATE_MASK",
             "set scanner state metadata",
@@ -270,8 +265,10 @@ pub fn write_preamble<W: Write, T: X8664Writer<W>>(
         .code("call [rbx + rbx_fn_set_cursor]")?
         .code("mov rdx, rax")?
         .inline(restore_context_internal)?
-        .label("scanner_dispatch_loop", false)?
-        .code("jmp dispatch_loop")?
+        .code("mov r8, r13")?
+        .code("mov r12,  [r14 + tok_byte_offset]")?
+        .code("mov r13,  [r14 + tok_byte_length]")?
+        .code("jmp r8")?
         .newline()?
         .label("scanner_complete", false)?
         .code("test r15, FAIL_STATE_MASK")?
