@@ -9,9 +9,8 @@ fn main()
         .map(|d| PathBuf::from_str(&d).unwrap())
     {
         if let Ok(input) = cwd.join("./grammar.hcg").canonicalize() {
-            println!("{}", input.to_str().unwrap());
-            println!("cargo:rerun-if-changed={}", input.to_str().unwrap());
             compile_asm_files(&input, &cwd, true);
+            println!("cargo:rerun-if-changed={}", input.to_str().unwrap());
         }
     }
 }

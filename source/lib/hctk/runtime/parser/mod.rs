@@ -1,8 +1,8 @@
 mod parse_functions;
 
+use crate::types::CharacterReader;
 use crate::types::ParseAction;
 use crate::types::ParseContext;
-use crate::types::SymbolReader;
 pub use parse_functions::get_next_action;
 
 #[cfg(test)]

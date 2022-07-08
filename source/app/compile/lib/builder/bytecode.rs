@@ -3,19 +3,14 @@ use std::path::PathBuf;
 use hctk::bytecode::compile_bytecode;
 
 use hctk::bytecode::BytecodeOutput;
-use hctk::debug::BytecodeGrammarLookups;
 use hctk::get_num_of_available_threads;
 use hctk::grammar::compile_from_path;
-use hctk::grammar::get_exported_productions;
-use hctk::grammar::get_production_plain_name;
-use hctk::grammar::ExportedProduction;
 
 use hctk::types::*;
 use std::collections::BTreeMap;
 use std::io::BufWriter;
 
 use std::io::Write;
-use std::path::Path;
 use std::thread;
 
 use crate::ast::compile_ast_data;
@@ -118,9 +113,9 @@ fn write_rust_parser_file<W: Write>(
 use hctk::runtime::parser::*;
 use hctk::types::*;
 
-pub struct Context<'a, T: SymbolReader>(ParseContext<T>, &'a mut T, bool);
+pub struct Context<'a, T: CharacterReader>(ParseContext<T>, &'a mut T, bool);
 
-impl<'a, T: SymbolReader> Iterator for Context<'a, T>
+impl<'a, T: CharacterReader> Iterator for Context<'a, T>
 {
     type Item = ParseAction;
 
@@ -144,7 +139,7 @@ impl<'a, T: SymbolReader> Iterator for Context<'a, T>
     }
 }
 
-impl<'a, T: SymbolReader> Context<'a, T>
+impl<'a, T: CharacterReader> Context<'a, T>
 {
     #[inline(always)]
     fn new(reader: &'a mut T) -> Self

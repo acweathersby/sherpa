@@ -2,6 +2,7 @@
 //! ### While in recognizer mode states:
 //! - r15 - stores the state metadata
 //! - rbx - stores the address of the [parser context](hctk::types::ASMParserContext)
+//! - rbp - stores the address of the [reader](hctk::types::CharacterReader)
 //! ### While in scanner mode states:
 //! Same as above, with the additional registers:
 //! - rdx - stores packed character data. see [hctk::types::SymbolReader::get_type_info]

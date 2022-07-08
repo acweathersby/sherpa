@@ -5,8 +5,8 @@ use std::sync::RwLock;
 use crate::types::ParseToken;
 use crate::utf8::get_utf8_code_point_from;
 
+use super::reader::CharacterReader;
 use super::reader::SharedSymbolBuffer;
-use super::reader::SymbolReader;
 
 #[derive(Debug, Clone)]
 
@@ -46,7 +46,7 @@ impl UTF8StringReader
     }
 }
 
-impl SymbolReader for UTF8StringReader
+impl CharacterReader for UTF8StringReader
 {
     #[inline(always)]
     fn get_source(&self) -> SharedSymbolBuffer

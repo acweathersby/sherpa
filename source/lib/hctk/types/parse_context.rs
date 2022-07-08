@@ -5,7 +5,7 @@ use crate::bytecode::constants::NORMAL_STATE_MASK;
 use super::*;
 #[derive(Clone)]
 #[repr(C)]
-pub struct ParseContext<T: SymbolReader>
+pub struct ParseContext<T: CharacterReader>
 {
     pub(crate) peek_token: ParseToken,
     pub(crate) anchor_token: ParseToken,
@@ -23,7 +23,7 @@ pub struct ParseContext<T: SymbolReader>
     local_state_stack: Vec<usize>,
 }
 
-impl<T: SymbolReader> ParseContext<T>
+impl<T: CharacterReader> ParseContext<T>
 {
     pub fn new(reader: &mut T) -> Self
     {

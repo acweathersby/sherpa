@@ -7,11 +7,8 @@ use crate::writer::code_writer::CodeWriter;
 use crate::writer::nasm_writer::NasmWriter;
 use crate::writer::x86_64_writer::X8664Writer;
 use hctk::bytecode::compile_bytecode;
-use hctk::bytecode::BytecodeOutput;
 use hctk::get_num_of_available_threads;
 use hctk::grammar::compile_from_path;
-use hctk::grammar::get_exported_productions;
-use hctk::grammar::ExportedProduction;
 use hctk::types::*;
 use std::io::BufWriter;
 use std::io::Write;
@@ -191,9 +188,9 @@ extern \"C\" {{
             parser_name
         ))?
         .wrtln(&format!(
-            "pub struct Context<T: SymbolReader>(ParseContext<T>);
+            "pub struct Context<T: CharacterReader>(ParseContext<T>);
 
-impl<T: SymbolReader> Iterator for Context<T> {{
+impl<T: CharacterReader> Iterator for Context<T> {{
     type Item = ParseAction;
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {{
@@ -206,7 +203,7 @@ impl<T: SymbolReader> Iterator for Context<T> {{
     }}
 }}
 
-impl<T: SymbolReader> Context<T> {{
+impl<T: CharacterReader> Context<T> {{
     /// Create a new parser context to parser the input with 
     /// the grammar `{0}`
     #[inline(always)]
@@ -250,7 +247,7 @@ impl<T: SymbolReader> Context<T> {{
     writer.dedent().wrtln(&format!(
         "}}
 
-impl<T: SymbolReader> Drop for Context<T> {{
+impl<T: CharacterReader> Drop for Context<T> {{
     fn drop(&mut self) {{
         self.destroy_context();
     }}

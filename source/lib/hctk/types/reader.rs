@@ -23,7 +23,7 @@ pub type SharedSymbolBuffer = Arc<RwLock<Vec<u8>>>;
 ///   current location of the read head.
 /// - Both the codepoint offset and byte offset of the last line
 /// encountered in the input.
-pub trait SymbolReader
+pub trait CharacterReader
 {
     /// Returns true if the cursor has reached the end of
     /// the input stream.

@@ -16,7 +16,7 @@ use ParseAction::*;
 /// Yields parser Actions from parsing an input using the
 /// current active grammar bytecode.
 #[inline]
-pub fn dispatch<T: SymbolReader>(
+pub fn dispatch<T: CharacterReader>(
     reader: &mut T,
     ctx: &mut ParseContext<T>,
     bytecode: &[u32],
@@ -67,7 +67,7 @@ pub fn dispatch<T: SymbolReader>(
 /// Produces a parse action that
 /// contains a token that is the
 #[inline]
-fn consume<T: SymbolReader>(
+fn consume<T: CharacterReader>(
     index: u32,
     instruction: u32,
     ctx: &mut ParseContext<T>,
@@ -105,7 +105,7 @@ fn consume<T: SymbolReader>(
 }
 
 #[inline]
-fn reduce<T: SymbolReader>(
+fn reduce<T: CharacterReader>(
     index: u32,
     instruction: u32,
     ctx: &mut ParseContext<T>,
@@ -135,7 +135,7 @@ fn reduce<T: SymbolReader>(
 }
 
 #[inline]
-fn goto<T: SymbolReader>(
+fn goto<T: CharacterReader>(
     index: u32,
     instruction: u32,
     ctx: &mut ParseContext<T>,
@@ -146,7 +146,7 @@ fn goto<T: SymbolReader>(
 }
 
 #[inline]
-fn set_production<T: SymbolReader>(
+fn set_production<T: CharacterReader>(
     index: u32,
     instruction: u32,
     ctx: &mut ParseContext<T>,
@@ -158,7 +158,7 @@ fn set_production<T: SymbolReader>(
 }
 
 #[inline]
-fn set_token_state<T: SymbolReader>(
+fn set_token_state<T: CharacterReader>(
     index: u32,
     instruction: u32,
     ctx: &mut ParseContext<T>,
@@ -220,7 +220,7 @@ fn noop(index: u32) -> u32
 }
 
 #[inline]
-fn skip_token<T: SymbolReader>(ctx: &mut ParseContext<T>, reader: &mut T)
+fn skip_token<T: CharacterReader>(ctx: &mut ParseContext<T>, reader: &mut T)
 {
     if ctx.in_peek_mode() {
         ctx.peek_token = ctx.peek_token.next();
@@ -232,7 +232,7 @@ fn skip_token<T: SymbolReader>(ctx: &mut ParseContext<T>, reader: &mut T)
 /// Performs an instruction branch selection based on an embedded,
 /// linear-probing hash table.
 #[inline]
-pub fn hash_jump<T: SymbolReader>(
+pub fn hash_jump<T: CharacterReader>(
     index: u32,
     reader: &mut T,
     ctx: &mut ParseContext<T>,
@@ -285,7 +285,7 @@ pub fn hash_jump<T: SymbolReader>(
     }
 }
 #[inline]
-pub fn vector_jump<T: SymbolReader>(
+pub fn vector_jump<T: CharacterReader>(
     index: u32,
     reader: &mut T,
     ctx: &mut ParseContext<T>,
@@ -332,7 +332,7 @@ pub fn vector_jump<T: SymbolReader>(
 }
 
 #[inline]
-fn get_token_value<T: SymbolReader>(
+fn get_token_value<T: CharacterReader>(
     lexer_type: u32,
     input_type: u32,
     reader: &mut T,
@@ -423,7 +423,7 @@ fn get_token_value<T: SymbolReader>(
     }
 }
 
-fn scan_for_improvised_token<T: SymbolReader>(
+fn scan_for_improvised_token<T: CharacterReader>(
     scan_ctx: &mut ParseContext<T>,
     reader: &mut T,
 )
@@ -459,7 +459,7 @@ fn scan_for_improvised_token<T: SymbolReader>(
     set_token_state(0, 0, scan_ctx);
 }
 
-fn token_scan<T: SymbolReader>(
+fn token_scan<T: CharacterReader>(
     token: ParseToken,
     scanner_start_offset: u32,
     ctx: &mut ParseContext<T>,
@@ -555,7 +555,7 @@ fn token_scan<T: SymbolReader>(
 
 /// Start or continue a parse on an input
 #[inline]
-pub fn get_next_action<T: SymbolReader>(
+pub fn get_next_action<T: CharacterReader>(
     reader: &mut T,
     ctx: &mut ParseContext<T>,
     bytecode: &[u32],

@@ -3,16 +3,16 @@ use crate::types::ParseAction;
 
 use crate::types::ParseContext;
 
-use crate::types::SymbolReader;
+use crate::types::CharacterReader;
 
-pub trait IteratorParser<T: SymbolReader>
+pub trait IteratorParser<T: CharacterReader>
 {
     fn get_parts(
         &mut self,
     ) -> (&mut T, &mut ParseContext<T>, &[u32], &mut bool);
 }
 
-pub struct ReferenceParseIterator<'a, T: SymbolReader>
+pub struct ReferenceParseIterator<'a, T: CharacterReader>
 {
     ctx:      ParseContext<T>,
     reader:   T,
@@ -20,7 +20,7 @@ pub struct ReferenceParseIterator<'a, T: SymbolReader>
     active:   bool,
 }
 
-impl<'a, T: SymbolReader> Iterator for ReferenceParseIterator<'a, T>
+impl<'a, T: CharacterReader> Iterator for ReferenceParseIterator<'a, T>
 {
     type Item = ParseAction;
 
@@ -43,7 +43,7 @@ impl<'a, T: SymbolReader> Iterator for ReferenceParseIterator<'a, T>
     }
 }
 
-impl<'a, T: SymbolReader> ReferenceParseIterator<'a, T>
+impl<'a, T: CharacterReader> ReferenceParseIterator<'a, T>
 {
     pub fn new(reader: T, data: &'a [u32], entry_point: u32) -> Self
     {
@@ -60,7 +60,7 @@ impl<'a, T: SymbolReader> ReferenceParseIterator<'a, T>
     }
 }
 
-impl<'a, T: SymbolReader> IteratorParser<T> for ReferenceParseIterator<'a, T>
+impl<'a, T: CharacterReader> IteratorParser<T> for ReferenceParseIterator<'a, T>
 {
     fn get_parts(&mut self)
         -> (&mut T, &mut ParseContext<T>, &[u32], &mut bool)
