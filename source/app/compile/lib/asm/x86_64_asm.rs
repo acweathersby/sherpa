@@ -407,10 +407,7 @@ fn restore_context_external<W: Write, T: X8664Writer<W>>(
             "mov [rbx + rbx_action_pointer], rsi",
             "preserve reference to our action",
         )?
-        .commented_code(
-            "mov [rbx + rbx_foreign_rsp_offset], rsp",
-            "preserve the outside stack",
-        )?
+        .commented_code("mov rbp, rsp", "preserve the outside stack")?
         .commented_code(
             "mov rsp, [rbx + rbx_local_rsp_offset]",
             "restore our local state stack",
@@ -429,10 +426,7 @@ fn save_context_external<W: Write, T: X8664Writer<W>>(
             "mov [rbx + rbx_local_rsp_offset], rsp",
             "preserve our local stack",
         )?
-        .commented_code(
-            "mov rsp, [rbx + rbx_foreign_rsp_offset]",
-            "restore the outside stack",
-        )?
+        .commented_code("mov rsp, rbp", "restore outside stack")?
         .commented_code("pop rbp", "restore the base pointer")?
         .commented_code("pop rbx", "restore rbx")?
         .commented_code("pop r15", "restore r15")?
@@ -447,14 +441,7 @@ fn save_context_internal<W: Write, T: X8664Writer<W>>(
 {
     writer
         .comment_line("Saving context")?
-        .commented_code(
-            "mov [rbx + rbx_local_rsp_offset], rsp",
-            "preserve our local stack",
-        )?
-        .commented_code(
-            "mov rsp, [rbx + rbx_foreign_rsp_offset]",
-            "restore the outside stack",
-        )
+        .commented_code("XCHG rbp, rsp", "preserve our local stack")
 }
 fn restore_context_internal<W: Write, T: X8664Writer<W>>(
     writer: &mut T,
@@ -462,14 +449,7 @@ fn restore_context_internal<W: Write, T: X8664Writer<W>>(
 {
     writer
         .comment_line("Restoring context")?
-        .commented_code(
-            "mov [rbx + rbx_foreign_rsp_offset], rsp",
-            "preserve the outside stack",
-        )?
-        .commented_code(
-            "mov rsp, [rbx + rbx_local_rsp_offset]",
-            "restore our local state stack",
-        )
+        .commented_code("XCHG rsp, rbp", "restore our local stack")
 }
 
 pub fn write_state<W: Write, T: X8664Writer<W>>(
@@ -1060,19 +1040,14 @@ fn create_value_lookup<W: Write, T: X8664Writer<W>>(
             match input_type {
                 INPUT_TYPE::T05_BYTE => {
                     writer
-                        .code("xor r13d, r13d")?
-                        .code("inc r13")?
-                        .code("shl r13, 32")?
-                        .code("inc r13")?
+                        .code("mov r13, 0x0000000100000001")?
                         .comment_line("Load the byte data in the low 8 bits")?
                         .code("mov eax, edx")?
                         .code("and eax, 0xFF")?;
                 }
                 INPUT_TYPE::T03_CLASS => {
                     writer
-                        .code("xor r13d, r13d")?
-                        .code("inc r13d")?
-                        .code("shl r13, 40")?
+                        .code("mov r13, 0x0000010000000000")?
                         .code("mov r13w, dx")?
                         .code("shr r13, 8")?
                         .comment_line(
@@ -1083,9 +1058,7 @@ fn create_value_lookup<W: Write, T: X8664Writer<W>>(
                 }
                 INPUT_TYPE::T04_CODEPOINT => {
                     writer
-                        .code("xor r13d, r13d")?
-                        .code("inc r13d")?
-                        .code("shl r13, 40")?
+                        .code("mov r13, 0x0000010000000000")?
                         .code("mov r13w, dx")?
                         .code("shr r13, 8")?
                         .comment_line(
