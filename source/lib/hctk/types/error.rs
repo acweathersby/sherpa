@@ -1,4 +1,4 @@
-use crate::runtime::error::TokenError;
+use crate::deprecated_runtime::error::TokenError;
 
 use ::std::fmt::Display;
 

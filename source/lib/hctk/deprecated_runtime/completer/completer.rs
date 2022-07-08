@@ -1,13 +1,13 @@
 use crate::grammar::data::ast_node::HCObj;
 use crate::grammar::data::ast_node::ReduceFunction;
-use crate::runtime::buffer::ByteReader;
-use crate::runtime::error::TokenError;
-use crate::runtime::recognizer::iterator::ParseAction;
-use crate::runtime::recognizer::iterator::ParseErrorCode;
-use crate::runtime::recognizer::iterator::ParseIterator;
+use crate::deprecated_runtime::buffer::ByteReader;
+use crate::deprecated_runtime::error::TokenError;
+use crate::deprecated_runtime::recognizer::iterator::ParseAction;
+use crate::deprecated_runtime::recognizer::iterator::ParseErrorCode;
+use crate::deprecated_runtime::recognizer::iterator::ParseIterator;
 use crate::types::*;
 use std::fmt::Debug;
-
+#[deprecated]
 pub fn complete<'b, I: ParseIterator<T>, T: 'b + ByteReader, Node: Debug>(
     iterator: &mut I,
     fns: &'static [ReduceFunction<Node>],

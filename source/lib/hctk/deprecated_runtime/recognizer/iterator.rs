@@ -1,11 +1,13 @@
+#[deprecated]
 use std::result;
 
 use crate::bytecode::constants::DEFAULT_FAIL_INSTRUCTION_OFFSET;
-use crate::runtime::buffer::ByteReader;
-use crate::runtime::recognizer::stack::KernelStack;
+use crate::deprecated_runtime::buffer::ByteReader;
+use crate::deprecated_runtime::recognizer::stack::KernelStack;
 use crate::types::ParseToken;
 
 // Global Constants
+
 const STATE_INDEX_MASK: u32 = (1 << 24) - 1;
 
 const _FAIL_STATE_MASK: u32 = 1 << 27;
@@ -29,16 +31,15 @@ const DEFAULT_PASS_INSTRUCTION: usize = 1;
 const NORMAL_STATE_MASK: u32 = 1 << 26;
 
 #[derive(Debug, Copy, Clone)]
-
+#[deprecated]
 pub enum ParseErrorCode
 {
     NORMAL,
     CANNOT_FORK,
     INVALID_RETURN,
 }
-
 #[derive(Debug, Copy, Clone)]
-
+#[deprecated]
 pub enum ParseAction
 {
     NONE {},
@@ -76,7 +77,7 @@ pub enum ParseAction
 /// that can parse an input when
 /// with parser byte code,  entry pointer
 /// and parse action handler function.
-
+#[deprecated]
 pub trait ParseIterator<T: ByteReader>
 {
     fn new(reader: T, entry_pointer: u32, bytecode: &'static [u32]) -> Self;
@@ -91,7 +92,7 @@ pub trait ParseIterator<T: ByteReader>
 
     fn reader(&self) -> &T;
 }
-
+#[deprecated]
 pub struct ReferenceIterator<T: ByteReader>
 {
     bytecode:      &'static [u32],
@@ -191,7 +192,7 @@ impl<T: ByteReader> ParseIterator<T> for ReferenceIterator<T>
 // It yields parse Actions and reduce information that can be
 // consumed by completers to apply parse actions on the token
 // values
-
+#[deprecated]
 pub struct StateIterator<'a, T: ByteReader>
 {
     stack: KernelStack,
@@ -523,7 +524,7 @@ impl<'a, T: ByteReader> ParserCoreIterator<T> for StateIterator<'a, T>
         }
     }
 }
-
+#[deprecated]
 pub struct ScannerIterator<T: ByteReader>
 {
     stack: KernelStack,
@@ -768,7 +769,7 @@ impl<T: ByteReader> ParserCoreIterator<T> for ScannerIterator<T>
         }
     }
 }
-
+#[deprecated]
 trait ParserCoreIterator<R: ByteReader>
 {
     fn consume(&mut self, index: usize, _: u32, bytecode: &[u32]) -> usize;

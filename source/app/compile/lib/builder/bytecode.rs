@@ -110,7 +110,7 @@ fn write_rust_parser_file<W: Write>(
     writer
         .wrt(
             "use hctk::bytecode::constants::NORMAL_STATE_MASK;
-use hctk::runtime::parser::*;
+use hctk::runtime::*;
 use hctk::types::*;
 
 pub struct Context<'a, T: CharacterReader>(ParseContext<T>, &'a mut T, bool);

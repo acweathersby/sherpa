@@ -1,4 +1,4 @@
-use crate::runtime::parser::get_next_action;
+use crate::runtime::get_next_action;
 use crate::types::ParseAction;
 
 use crate::types::ParseContext;

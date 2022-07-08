@@ -2,7 +2,7 @@ use std::fmt::Display;
 use std::sync::Arc;
 
 use crate::types::Token;
-
+#[deprecated]
 #[derive(Debug)]
 pub struct TokenError
 {

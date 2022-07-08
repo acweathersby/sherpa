@@ -3,7 +3,7 @@ const stack_size: usize = 64;
 // ///////////////////////////////////////////
 // KERNEL STATE
 // ///////////////////////////////////////////
-
+#[deprecated]
 pub struct KernelStack
 {
     pub state_stack:   [u64; stack_size],

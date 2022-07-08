@@ -6,8 +6,8 @@ use crate::utf8::get_utf8_code_point_from;
 
 use super::ByteReader;
 
+#[deprecated]
 #[derive(Debug, Clone)]
-
 pub struct UTF8StringReader
 {
     length:      usize,

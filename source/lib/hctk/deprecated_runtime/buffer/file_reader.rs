@@ -8,6 +8,7 @@ use crate::utf8::get_utf8_code_point_from;
 
 use super::ByteReader;
 
+#[deprecated]
 #[derive(Debug, Clone)]
 
 /// File reader is implemented by appending byte blocks to an

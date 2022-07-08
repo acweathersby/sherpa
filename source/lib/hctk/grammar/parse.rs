@@ -2,9 +2,9 @@ use std::fmt::Display;
 use std::fmt::Error;
 use std::sync::PoisonError;
 
-use crate::runtime::buffer::UTF8StringReader;
-use crate::runtime::completer::complete;
-use crate::runtime::recognizer::iterator::*;
+use crate::deprecated_runtime::buffer::UTF8StringReader;
+use crate::deprecated_runtime::completer::complete;
+use crate::deprecated_runtime::recognizer::iterator::*;
 
 use crate::types::ParseError;
 use crate::types::Token;

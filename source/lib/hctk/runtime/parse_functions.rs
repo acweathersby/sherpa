@@ -8,7 +8,6 @@ use crate::bytecode::constants::INSTRUCTION_HEADER_MASK;
 use crate::bytecode::constants::LEXER_TYPE;
 use crate::bytecode::constants::NORMAL_STATE_MASK;
 use crate::bytecode::constants::STATE_INDEX_MASK;
-use crate::runtime::recognizer::stack::KernelStack;
 use crate::types::*;
 
 use ParseAction::*;

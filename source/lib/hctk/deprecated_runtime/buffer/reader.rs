@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use crate::types::ParseToken;
 use crate::utf8::*;
-
+#[deprecated]
 pub trait ByteReader
 {
     /// Returns true if the cursor has reached the end of

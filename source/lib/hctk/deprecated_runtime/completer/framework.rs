@@ -1,3 +1,4 @@
+
 use super::state_machine::run;
 use super::state_machine::*;
 
@@ -9,8 +10,8 @@ use super::state_machine::*;
 /// required to provide the original string to the
 /// implementation methods in order to extract the
 /// underlying representation of the data.
-#[derive(Debug)]
 
+#[derive(Debug)]
 pub struct ASTRefString
 {
     offset: usize,

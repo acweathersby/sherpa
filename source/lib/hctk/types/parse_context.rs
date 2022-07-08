@@ -69,7 +69,7 @@ impl<T: CharacterReader> ParseContext<T>
     }
 
     /// The following methods are used exclusively by the
-    /// the rust functions in [hctk::runtime::parser::parser_functions.rs]
+    /// the rust functions in [hctk::runtime::parser_functions.rs]
 
     #[inline]
     pub(crate) fn in_fail_mode(&self) -> bool

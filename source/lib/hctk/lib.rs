@@ -17,6 +17,7 @@
 )]
 
 pub mod c_interface;
+pub mod deprecated_runtime;
 pub mod runtime;
 pub mod types;
 pub mod utf8;
@@ -55,7 +56,7 @@ mod test_end_to_end
     use crate::grammar::get_production_id_by_name;
     use crate::intermediate::optimize::optimize_states;
     use crate::intermediate::state::compile_states;
-    use crate::runtime::parser::get_next_action;
+    use crate::runtime::get_next_action;
     use crate::types::*;
     use std::sync::Arc;
 

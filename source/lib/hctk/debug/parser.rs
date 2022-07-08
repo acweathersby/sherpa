@@ -7,7 +7,7 @@ use crate::grammar::get_production_by_name;
 use crate::grammar::get_production_id_by_name;
 use crate::intermediate::optimize::optimize_states;
 use crate::intermediate::state::compile_states;
-use crate::runtime::parser::get_next_action;
+use crate::runtime::get_next_action;
 use crate::types::*;
 use std::sync::Arc;
 
