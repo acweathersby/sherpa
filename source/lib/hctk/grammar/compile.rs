@@ -545,7 +545,36 @@ fn create_scanner_productions(
 
     while let Some(sym_id) = scanner_production_queue.pop_front() {
         match &sym_id {
+            sym if matches!(sym, SymbolID::GenericSpace) => {
+                // Converts the generic symbol `g:sp` into a production that targets the
+                // the defined symbol `b'10'`
+                let (_, scanner_production_id, scanner_name, symbol_string) =
+                    get_scanner_info_from_defined(&sym_id, &*grammar);
+
+                convert_scanner_symbol_to_production(
+                    grammar,
+                    &[&" ".to_string()],
+                    scanner_production_id,
+                    scanner_name,
+                );
+            }
+            sym if matches!(sym, SymbolID::GenericNewLine) => {
+                // Converts the generic symbol `g:sp` into a production that targets the
+                // the defined symbol `b'10'`
+                let (_, scanner_production_id, scanner_name, symbol_string) =
+                    get_scanner_info_from_defined(&sym_id, &*grammar);
+
+                convert_scanner_symbol_to_production(
+                    grammar,
+                    &[&"\n".to_string()],
+                    scanner_production_id,
+                    scanner_name,
+                );
+            }
             sym if SymbolID::Generics.contains(sym) => {
+                // Converts a generic symbol into a scanner production if such a production
+                // does not yet exist in the grammar.
+
                 let (_, scanner_production_id, scanner_name, symbol_string) =
                     get_scanner_info_from_defined(&sym_id, &*grammar);
 
@@ -596,84 +625,16 @@ fn create_scanner_productions(
                 let (_, scanner_production_id, scanner_name, symbol_string) =
                     get_scanner_info_from_defined(&sym_id, &*grammar);
 
-                let GrammarStore {
-                    symbols_string_table,
-                    symbols_table,
-                    production_table,
-                    production_bodies_table,
-                    bodies_table,
-                    ..
-                } = grammar;
+                let strings = [symbol_string.as_str()];
 
-                if let btree_map::Entry::Vacant(e) =
-                    production_table.entry(scanner_production_id)
-                {
-                    // Defined symbols are split along code points and
-                    // individually packaged
-                    let chars: Vec<char> = symbol_string.chars().collect();
-
-                    let new_body_symbols: Vec<BodySymbolRef> = chars
-                        .iter()
-                        .enumerate()
-                        .map(|(index, byte)| {
-                            let string = byte.to_string();
-
-                            let id = get_literal_id(&string);
-
-                            symbols_table.entry(id).or_insert_with(|| {
-                                symbols_string_table.insert(id, string);
-
-                                Symbol {
-                                    byte_length: byte.len_utf8() as u32,
-                                    code_point_length: 1,
-                                    bytecode_id: 0,
-                                    uuid: id,
-                                    scanner_only: true,
-                                    friendly_name: id.to_default_string(),
-                                }
-                            });
-
-                            BodySymbolRef {
-                                annotation: String::default(),
-                                consumable: true,
-                                exclusive: false,
-                                original_index: 0,
-                                scanner_index: index as u32,
-                                scanner_length: chars.len() as u32,
-                                sym_id: id,
-                                tok: Token::default(),
-                            }
-                        })
-                        .collect();
-
-                    // Insert into grammar any new defined symbol derived from
-                    // token productions.
-
-                    let body_id = BodyId::new(&scanner_production_id, 0);
-
-                    production_bodies_table
-                        .insert(scanner_production_id, vec![body_id]);
-
-                    bodies_table.insert(body_id, Body {
-                        length: new_body_symbols.len() as u16,
-                        symbols: new_body_symbols,
-                        production: scanner_production_id,
-                        id: body_id,
-                        bytecode_id: 0,
-                        reduce_fn_ids: vec![],
-                        origin_location: Token::empty(),
-                    });
-
-                    e.insert(crate::types::Production::new(
-                        &scanner_name,
-                        &scanner_name,
-                        scanner_production_id,
-                        1,
-                        Token::empty(),
-                        true,
-                    ));
-                }
+                convert_scanner_symbol_to_production(
+                    grammar,
+                    &strings,
+                    scanner_production_id,
+                    scanner_name,
+                );
             }
+
             // This initially process token-production symbols dumped in to the
             // queue, but as we process these productions, we'll inevitably
             // encounter regular production symbols. The process of converting a
@@ -829,6 +790,120 @@ fn create_scanner_productions(
             _ => {}
         }
     }
+}
+
+/// Converts an array of strings into scanner bodies
+/// for a given scanner production name.
+fn convert_scanner_symbol_to_production(
+    grammar: &mut GrammarStore,
+    strings: &[&str],
+    scanner_production_id: ProductionId,
+    scanner_name: String,
+)
+{
+    let GrammarStore {
+        symbols_string_table,
+        symbols_table,
+        production_table,
+        production_bodies_table,
+        bodies_table,
+        ..
+    } = grammar;
+
+    if let btree_map::Entry::Vacant(e) =
+        production_table.entry(scanner_production_id)
+    {
+        let number_of_bodies = strings.len() as u16;
+
+        let mut body_ids = vec![];
+
+        for (id, symbol_string) in strings.iter().enumerate() {
+            // Insert into grammar any new defined symbol derived from
+            // token productions.
+
+            let new_body_symbols = create_defined_symbols_from_string(
+                symbol_string,
+                symbols_string_table,
+                symbols_table,
+            );
+
+            let body_id = BodyId::new(&scanner_production_id, id);
+
+            body_ids.push(body_id);
+
+            bodies_table.insert(body_id, Body {
+                length: new_body_symbols.len() as u16,
+                symbols: new_body_symbols,
+                production: scanner_production_id,
+                id: body_id,
+                bytecode_id: 0,
+                reduce_fn_ids: vec![],
+                origin_location: Token::empty(),
+            });
+        }
+
+        production_bodies_table.insert(scanner_production_id, body_ids);
+
+        e.insert(crate::types::Production::new(
+            &scanner_name,
+            &scanner_name,
+            scanner_production_id,
+            number_of_bodies,
+            Token::empty(),
+            true,
+        ));
+    }
+}
+
+/// Converts a string sequence into a set of BodySymbolRef references,
+/// interning whatever single byte symbol is not already present in the
+/// grammar. TODO: This may also split utf8 symbols into byte sequences.
+///
+/// Expects `symbols_string_table` and `symbols_table` to be mutable
+/// references to the corresponding members in a [GrammarStore]
+fn create_defined_symbols_from_string(
+    symbol_string: &str,
+    symbols_string_table: &mut BTreeMap<SymbolID, String>,
+    symbols_table: &mut BTreeMap<SymbolID, Symbol>,
+) -> Vec<BodySymbolRef>
+{
+    let chars: Vec<char> = symbol_string.chars().collect();
+
+    let new_body_symbols: Vec<BodySymbolRef> = chars
+        .iter()
+        .enumerate()
+        .map(|(index, byte)| {
+            let string = byte.to_string();
+
+            let id = get_literal_id(&string);
+
+            symbols_table.entry(id).or_insert_with(|| {
+                symbols_string_table.insert(id, string);
+
+                Symbol {
+                    byte_length: byte.len_utf8() as u32,
+                    code_point_length: 1,
+                    bytecode_id: 0,
+                    guid: id,
+                    scanner_only: true,
+                    friendly_name: id.to_default_string(),
+                }
+            });
+
+            BodySymbolRef {
+                annotation: String::default(),
+                consumable: true,
+                exclusive: false,
+                original_index: 0,
+                scanner_index: index as u32,
+                scanner_length: chars.len() as u32,
+                sym_id: id,
+                tok: Token::default(),
+            }
+        })
+        .collect();
+
+    new_body_symbols
 }
 
 #[inline]
