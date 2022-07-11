@@ -185,7 +185,7 @@ pub struct Symbol
     /// which encapsulates the set of Symbols that are
     /// unique based on the combination of the symbol's
     /// class_id,
-    pub uuid: SymbolUUID,
+    pub guid: SymbolUUID,
     /// The unique identifier of the class of this symbol
     /// which either identifies symbol's generic class id
     /// i.e (g:sp , g:nl, g:tab, g:id ...) or by the unique

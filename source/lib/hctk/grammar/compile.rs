@@ -1835,7 +1835,7 @@ fn intern_symbol(
 
             e.insert(Symbol {
                 bytecode_id: 0,
-                uuid: id,
+                guid: id,
                 byte_length,
                 code_point_length,
                 scanner_only: false,
@@ -1906,7 +1906,7 @@ fn intern_symbol(
                 tgs.symbols_table.entry(token_production_id).or_insert(
                     Symbol {
                         bytecode_id: 0,
-                        uuid: production_id,
+                        guid: production_id,
                         byte_length: 0,
                         code_point_length: 0,
                         scanner_only: false,
