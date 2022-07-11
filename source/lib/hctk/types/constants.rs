@@ -89,10 +89,8 @@ impl INSTRUCTION
     pub const I03_SET_PROD: u32 = 3 << 28;
     pub const I04_REDUCE: u32 = 4 << 28;
     pub const I05_TOKEN: u32 = 5 << 28;
-    pub const I05_TOKEN_ASSIGN: u32 =
-        INSTRUCTION::I05_TOKEN | TOKEN_ASSIGN_FLAG;
-    pub const I05_TOKEN_ASSIGN_CONSUME: u32 =
-        INSTRUCTION::I05_TOKEN | 0x09000000;
+    pub const I05_TOKEN_ASSIGN: u32 = INSTRUCTION::I05_TOKEN | TOKEN_ASSIGN_FLAG;
+    pub const I05_TOKEN_ASSIGN_CONSUME: u32 = INSTRUCTION::I05_TOKEN | 0x09000000;
     pub const I05_TOKEN_LENGTH: u32 = INSTRUCTION::I05_TOKEN | 0x08000000;
     pub const I06_FORK_TO: u32 = 6 << 28;
     pub const I07_SCAN: u32 = 7 << 28;
@@ -252,6 +250,7 @@ pub enum BranchSelector
 /// branches - An vector of branch bytecode vectors.
 pub type GetBranchSelector =
     fn(values: &[u32], max_span: u32, branches: &[Vec<u32>]) -> BranchSelector;
+
 pub fn default_get_branch_selector(
     values: &[u32],
     max_span: u32,
@@ -263,15 +262,11 @@ pub fn default_get_branch_selector(
     // Max number of values: 1024 (maximum jump span)
     // Max instruction offset from table header 2042
 
-    let total_instruction_length =
-        branches.iter().map(|b| b.len()).sum::<usize>();
+    let total_instruction_length = branches.iter().map(|b| b.len()).sum::<usize>();
 
     let has_unsupported_value = values.iter().cloned().any(|v| v > 2046);
 
-    if (max_span < 2)
-        || total_instruction_length > 2042
-        || has_unsupported_value
-    {
+    if (max_span < 2) || total_instruction_length > 2042 || has_unsupported_value {
         BranchSelector::Vector
     } else {
         BranchSelector::Hash

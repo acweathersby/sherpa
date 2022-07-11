@@ -1,4 +1,5 @@
-pub struct TableData
+#[derive(Debug, Clone, Copy)]
+pub struct TableHeaderData
 {
     pub input_type:     u32,
     pub lexer_type:     u32,
@@ -7,7 +8,7 @@ pub struct TableData
     pub scanner_offset: u32,
 }
 
-impl TableData
+impl TableHeaderData
 {
     #[inline(always)]
     pub fn from_bytecode(offset: usize, bytecode: &[u32]) -> Self

@@ -17,26 +17,18 @@ pub fn main()
 
     let start = Instant::now();
 
-    for action in Context::new_banner_parser(&mut UTF8StringReader::new(
-        "hello world".to_string(),
-    )) {
-        match action {
-            ParseAction::Shift {
-                skipped_characters: skip,
-                token,
-            } => {
-                messages.push(format!(
-                    "Skip {:? } & Extract token {:?} ",
-                    skip, token
-                ));
-            }
-            ParseAction::Accept { production_id } => {
-                messages.push(format!("Accept production {}", production_id));
-                break;
-            }
-            _ => {}
-        }
-    }
+    let actions =
+        Context::new_banner_parser(&mut UTF8StringReader::new("hello world".to_string()))
+            .collect::<Vec<_>>();
+
+    assert!(matches!(actions[0], ParseAction::Shift { .. }));
+    assert!(matches!(actions[1], ParseAction::Shift { .. }));
+    assert!(
+        matches!(actions[2], ParseAction::Reduce { production_id, .. } if production_id == 1)
+    );
+    assert!(
+        matches!(actions[3], ParseAction::Accept { production_id } if production_id == 1)
+    );
 
     let duration = start.elapsed();
 

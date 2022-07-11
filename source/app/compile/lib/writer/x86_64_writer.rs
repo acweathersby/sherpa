@@ -74,8 +74,7 @@ pub trait X8664Writer<T: Write>
         self.write_internal(string.as_bytes())
     }
 
-    fn commented_code(&mut self, code: &str, comment: &str)
-        -> Result<&mut Self>
+    fn commented_code(&mut self, code: &str, comment: &str) -> Result<&mut Self>
     {
         self.newline()?;
         self.write_internal(b"    ")?;
@@ -123,10 +122,7 @@ pub trait X8664Writer<T: Write>
     fn inline_grammar<'a>(
         &'a mut self,
         grammar: &GrammarStore,
-        inline_function: fn(
-            &'a mut Self,
-            grammar: &GrammarStore,
-        ) -> Result<&'a mut Self>,
+        inline_function: fn(&'a mut Self, grammar: &GrammarStore) -> Result<&'a mut Self>,
     ) -> Result<&mut Self>
     {
         inline_function(self, grammar)

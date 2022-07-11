@@ -7,6 +7,7 @@
 mod asm;
 mod ast;
 mod builder;
+mod options;
 mod writer;
 
 pub use builder::asm::*;

@@ -27,7 +27,7 @@ mod test
                 } => {
                     println!(
                         "Reduce {} symbols to production {} from completion of body {}",
-                         symbol_count,production_id, body_id,
+                        symbol_count, production_id, body_id,
                     );
                 }
                 ParseAction::Accept { production_id } => {
@@ -39,5 +39,19 @@ mod test
                 }
             }
         }
+
+        let actions = Context::new_banner_parser(&mut UTF8StringReader::new(
+            "hello world".to_string(),
+        ))
+        .collect::<Vec<_>>();
+
+        assert!(matches!(actions[0], ParseAction::Shift { .. }));
+        assert!(matches!(actions[1], ParseAction::Shift { .. }));
+        assert!(
+            matches!(actions[2], ParseAction::Reduce { production_id, .. } if production_id == 1)
+        );
+        assert!(
+            matches!(actions[3], ParseAction::Accept { production_id } if production_id == 1)
+        );
     }
 }

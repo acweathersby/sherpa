@@ -5,6 +5,7 @@ use crate::grammar::parse::compile_ir_ast;
 use crate::intermediate::state::compile_states;
 use crate::types::GrammarStore;
 use crate::types::IRState;
+use crate::types::Symbol;
 
 use self::compile::build_byte_code_buffer;
 
@@ -23,6 +24,7 @@ pub struct BytecodeOutput<'a>
     /// vector.
     pub state_name_to_offset: BTreeMap<String, u32>,
     pub offset_to_state_name: BTreeMap<u32, String>,
+    pub bytecode_id_to_symbol_lookup: BTreeMap<u32, &'a Symbol>,
     /// The original [IRStates](IRState) produced during the
     pub ir_states: BTreeMap<String, IRState>,
 }
@@ -67,6 +69,12 @@ pub(crate) fn compile_ir_states_into_bytecode<'a>(
             .map(|(a, b)| (*b, a.clone()))
             .collect::<BTreeMap<_, _>>(),
         state_name_to_offset: state_lookups,
+        bytecode_id_to_symbol_lookup: grammar
+            .symbols_table
+            .values()
+            .chain(Symbol::Generics)
+            .map(|s| (s.bytecode_id, s))
+            .collect::<BTreeMap<_, _>>(),
     }
 }
 

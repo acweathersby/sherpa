@@ -238,13 +238,13 @@ pub fn hash_jump<T: CharacterReader>(
     let i = index as usize;
     // Decode data
 
-    let TableData {
+    let TableHeaderData {
         input_type,
         lexer_type,
         table_length,
         table_meta: modulo_base,
         scanner_offset:scan_index,
-    } = TableData::from_bytecode(i, bytecode);
+    } = TableHeaderData::from_bytecode(i, bytecode);
 
     let hash_mask = 1 << (modulo_base - 1);
     let table_start = i + 4;
@@ -275,7 +275,7 @@ pub fn hash_jump<T: CharacterReader>(
             } else if next != 0 {
                 hash_index = ((hash_index as i32) + next) as usize;
             } else {
-                return index + bytecode[table_start - 1];
+                return index + bytecode[i + 3];
             }
         }
     }
@@ -291,13 +291,13 @@ pub fn vector_jump<T: CharacterReader>(
     let i = index as usize;
     // Decode data
 
-    let TableData {
+    let TableHeaderData {
         input_type,
         lexer_type,
         table_length,
         table_meta: value_offset,
         scanner_offset:scan_index,
-    } = TableData::from_bytecode(i, bytecode);
+    } = TableHeaderData::from_bytecode(i, bytecode);
 
     let table_start = i + 4;
 
@@ -322,7 +322,7 @@ pub fn vector_jump<T: CharacterReader>(
                 return index + offset;
             }
         } else {
-            return index + bytecode[table_start - 1];
+            return index + bytecode[i + 3];
         }
     }
 }

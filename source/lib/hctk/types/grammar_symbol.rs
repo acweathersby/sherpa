@@ -44,19 +44,19 @@ pub enum SymbolID
     /// Represent the grammar symbol `g:sp`.
     GenericSpace,
 
-    /// Represent the grammar symbol `g:sp`.
+    /// Represent the grammar symbol `g:tab`.
     GenericHorizontalTab,
 
-    /// Represent the grammar symbol `g:tab`.
+    /// Represent the grammar symbol `g:nl`.
     GenericNewLine,
 
-    /// Represent the grammar symbol `g:nl`.
+    /// Represent the grammar symbol `g:id`.
     GenericIdentifier,
 
-    /// Represent the grammar symbol `g:id`.
+    /// Represent the grammar symbol `g:num`.
     GenericNumber,
 
-    /// Represent the grammar symbol `g:num`.
+    /// Represent the grammar symbol `g:sym`.
     GenericSymbol,
 
     /// Represent the grammar symbol `g:rec`.
@@ -206,9 +206,64 @@ pub struct Symbol
     pub friendly_name: String,
 }
 
+impl Symbol
+{
+    pub const Generics: [&'static Symbol; 6] = [
+        &Symbol {
+            guid: SymbolID::GenericSpace,
+            bytecode_id: SPACE as u32,
+            byte_length: 1,
+            code_point_length: 1,
+            scanner_only: false,
+            friendly_name: String::new(),
+        },
+        &Symbol {
+            guid: SymbolID::GenericHorizontalTab,
+            bytecode_id: HORIZONTAL_TAB as u32,
+            byte_length: 1,
+            code_point_length: 1,
+            scanner_only: false,
+            friendly_name: String::new(),
+        },
+        &Symbol {
+            guid: SymbolID::GenericNewLine,
+            bytecode_id: NEW_LINE as u32,
+            byte_length: 1,
+            code_point_length: 1,
+            scanner_only: false,
+            friendly_name: String::new(),
+        },
+        &Symbol {
+            guid: SymbolID::GenericIdentifier,
+            bytecode_id: IDENTIFIER as u32,
+            byte_length: 0,
+            code_point_length: 0,
+            scanner_only: false,
+            friendly_name: String::new(),
+        },
+        &Symbol {
+            guid: SymbolID::GenericNumber,
+            bytecode_id: NUMBER as u32,
+            byte_length: 0,
+            code_point_length: 0,
+            scanner_only: false,
+            friendly_name: String::new(),
+        },
+        &Symbol {
+            guid: SymbolID::GenericSymbol,
+            bytecode_id: SYMBOL as u32,
+            byte_length: 0,
+            code_point_length: 0,
+            scanner_only: false,
+            friendly_name: String::new(),
+        },
+    ];
+}
+
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::fmt::Display;
+use std::str::FromStr;
 
 use crate::grammar::uuid::hash_id_value_u64;
 use crate::utf8::lookup_table::HORIZONTAL_TAB;

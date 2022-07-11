@@ -3,6 +3,9 @@ use std::path::PathBuf;
 
 use crate::builder::common;
 use crate::builder::disclaimer::DISCLAIMER;
+use crate::options::Architecture;
+use crate::options::BuildOptions;
+use crate::options::Recognizer;
 use crate::writer::code_writer::CodeWriter;
 use crate::writer::nasm_writer::NasmWriter;
 use crate::writer::x86_64_writer::X8664Writer;
@@ -33,6 +36,12 @@ pub fn compile_asm_files(
     // Target Language
 )
 {
+    let build_options = BuildOptions {
+        recognizer: Recognizer::Assembly,
+        architecture: Architecture::X8664,
+        ..Default::default()
+    };
+
     eprintln!("Input file: {:?}\n Output file: {:?}", input_path, output_path);
 
     let threads = get_num_of_available_threads();
@@ -59,16 +68,13 @@ pub fn compile_asm_files(
                         output_path.clone()
                     };
 
-                    let asm_path =
-                        output_path.join(parser_name.clone() + ".asm");
-                    let object_path =
-                        output_path.join(parser_name.clone() + ".o");
+                    let asm_path = output_path.join(parser_name.clone() + ".asm");
+                    let object_path = output_path.join(parser_name.clone() + ".o");
                     let archive_path =
                         output_path.join(format!("./lib{}.a", &parser_name));
 
                     if let Ok(asm_file) = std::fs::File::create(&asm_path) {
-                        let mut writer =
-                            NasmWriter::new(BufWriter::new(asm_file));
+                        let mut writer = NasmWriter::new(BufWriter::new(asm_file));
 
                         writer.line(&DISCLAIMER(
                             &parser_name,
@@ -77,6 +83,7 @@ pub fn compile_asm_files(
                         ));
 
                         if crate::asm::x86_64_asm::compile_from_bytecode(
+                            &build_options,
                             &bytecode_output,
                             &mut writer,
                         )
@@ -128,19 +135,12 @@ pub fn compile_asm_files(
                     }
                 });
                 scope.spawn(|| {
-                    let data_path =
-                        output_path.join(format!("./{}.rs", parser_name));
-                    if let Ok(parser_data_file) =
-                        std::fs::File::create(data_path)
-                    {
+                    let data_path = output_path.join(format!("./{}.rs", parser_name));
+                    if let Ok(parser_data_file) = std::fs::File::create(data_path) {
                         let mut writer =
                             CodeWriter::new(BufWriter::new(parser_data_file));
 
-                        writer.write(&DISCLAIMER(
-                            &grammar_name,
-                            "Parser Data",
-                            "//!",
-                        ));
+                        writer.write(&DISCLAIMER(&grammar_name, "Parser Data", "//!"));
 
                         let output_type = OutputType::Rust;
 
@@ -188,17 +188,24 @@ extern \"C\" {{
             parser_name
         ))?
         .wrtln(&format!(
-            "pub struct Context<T: CharacterReader>(ParseContext<T>);
+            "pub struct Context<T: CharacterReader>(ParseContext<T>, bool);
 
 impl<T: CharacterReader> Iterator for Context<T> {{
     type Item = ParseAction;
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {{
         unsafe {{
-            let _ptr = &mut self.0 as *const ParseContext<T>;
-            let mut action = ParseAction::Undefined;
-            next(_ptr as u64, &mut action);
-            Some(action)
+            if(!self.1) {{
+                None
+            }} else {{
+                let _ptr = &mut self.0 as *const ParseContext<T>;
+                let mut action = ParseAction::Undefined;
+                next(_ptr as u64, &mut action);
+
+                self.1 = !matches!(action, ParseAction::Accept{{..}});
+
+                Some(action)
+            }}
         }}
     }}
 }}
@@ -208,7 +215,7 @@ impl<T: CharacterReader> Context<T> {{
     /// the grammar `{0}`
     #[inline(always)]
     fn new(reader: &mut T) -> Self {{
-        let mut parser = Self(ParseContext::<T>::new(reader));
+        let mut parser = Self(ParseContext::<T>::new(reader), true);
         parser.construct_context();
         parser
     }}
