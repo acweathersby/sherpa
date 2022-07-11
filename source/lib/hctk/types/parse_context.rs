@@ -1,7 +1,5 @@
 use std::collections::VecDeque;
 
-use crate::bytecode::constants::NORMAL_STATE_MASK;
-
 use super::*;
 #[derive(Clone)]
 #[repr(C)]

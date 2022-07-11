@@ -1,10 +1,9 @@
 #[deprecated]
 use std::result;
 
-use crate::bytecode::constants::DEFAULT_FAIL_INSTRUCTION_OFFSET;
 use crate::deprecated_runtime::buffer::ByteReader;
 use crate::deprecated_runtime::recognizer::stack::KernelStack;
-use crate::types::ParseToken;
+use crate::types::*;
 
 // Global Constants
 

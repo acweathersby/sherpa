@@ -4,20 +4,9 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::fmt::format;
 
-use crate::bytecode::constants::FIRST_STATE_OFFSET;
-use crate::bytecode::constants::GOTO_INSTRUCTION_OFFSET_MASK;
-use crate::bytecode::constants::GOTO_STATE_MASK;
-use crate::bytecode::constants::INPUT_TYPE;
-use crate::bytecode::constants::INSTRUCTION;
-use crate::bytecode::constants::INSTRUCTION_CONTENT_MASK;
-use crate::bytecode::constants::INSTRUCTION_HEADER_MASK;
-use crate::bytecode::constants::TOKEN_ASSIGN_FLAG;
 use crate::bytecode::BytecodeOutput;
 use crate::grammar;
-use crate::types::Body;
-use crate::types::GrammarStore;
-use crate::types::Production;
-use crate::types::Symbol;
+use crate::types::*;
 
 pub fn header(state_offset: usize) -> String
 {
@@ -487,8 +476,6 @@ mod bytecode_debugging_tests
     use crate::bytecode::compile::build_byte_code_buffer;
     use crate::bytecode::compile::compile_ir_state_to_bytecode;
     use crate::bytecode::compile_bytecode;
-    use crate::bytecode::constants::default_get_branch_selector;
-    use crate::bytecode::constants::BranchSelector;
     use crate::debug::bytecode::BytecodeGrammarLookups;
     use crate::debug::compile_test_grammar;
     use crate::debug::disassemble_state;

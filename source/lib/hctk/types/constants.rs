@@ -1,9 +1,9 @@
 // Global Constants
 pub const STATE_INDEX_MASK: u32 = (1 << 24) - 1;
 
-/// The portion of a GOTO instruction that maps to the
-/// offset of the goto state.
-pub const GOTO_INSTRUCTION_OFFSET_MASK: u32 = 0xFF_FFFF;
+/// The portion of a GOTO instruction that contains the state offset.
+/// Alias of [STATE_INDEX_MASK]
+pub const GOTO_INSTRUCTION_OFFSET_MASK: u32 = STATE_INDEX_MASK;
 
 /// The portion of an instruction that stores inline data.
 /// Masks out the instruction header.
@@ -78,9 +78,8 @@ pub const PRODUCTION_SCOPE_POP_POINTER: u32 = 2;
 
 pub const TOKEN_ASSIGN_FLAG: u32 = 0x04000000;
 
-#[non_exhaustive]
 /// Bytecode instruction constants
-pub struct INSTRUCTION;
+pub struct INSTRUCTION(pub u32);
 
 impl INSTRUCTION
 {
@@ -107,6 +106,119 @@ impl INSTRUCTION
     pub const I14_ASSERT_CONSUME: u32 = 14 << 28;
     pub const I15_FAIL: u32 = 15 << 28;
     pub const I15_FALL_THROUGH: u32 = 15 << 28 | 1;
+
+    pub fn is_I00_PASS(&self) -> bool
+    {
+        (self.0 & INSTRUCTION_HEADER_MASK) == Self::I00_PASS
+    }
+
+    pub fn is_I01_CONSUME(&self) -> bool
+    {
+        (self.0 & INSTRUCTION_HEADER_MASK) == Self::I01_CONSUME
+    }
+
+    pub fn is_I02_GOTO(&self) -> bool
+    {
+        (self.0 & INSTRUCTION_HEADER_MASK) == Self::I02_GOTO
+    }
+
+    pub fn is_I03_SET_PROD(&self) -> bool
+    {
+        (self.0 & INSTRUCTION_HEADER_MASK) == Self::I03_SET_PROD
+    }
+
+    pub fn is_I04_REDUCE(&self) -> bool
+    {
+        (self.0 & INSTRUCTION_HEADER_MASK) == Self::I04_REDUCE
+    }
+
+    pub fn is_I05_TOKEN(&self) -> bool
+    {
+        (self.0 & INSTRUCTION_HEADER_MASK) == Self::I05_TOKEN
+    }
+
+    pub fn is_I06_FORK_TO(&self) -> bool
+    {
+        (self.0 & INSTRUCTION_HEADER_MASK) == Self::I06_FORK_TO
+    }
+
+    pub fn is_I07_SCAN(&self) -> bool
+    {
+        (self.0 & INSTRUCTION_HEADER_MASK) == Self::I07_SCAN
+    }
+
+    pub fn is_I08_NOOP(&self) -> bool
+    {
+        (self.0 & INSTRUCTION_HEADER_MASK) == Self::I08_NOOP
+    }
+
+    pub fn is_I09_VECTOR_BRANCH(&self) -> bool
+    {
+        (self.0 & INSTRUCTION_HEADER_MASK) == Self::I09_VECTOR_BRANCH
+    }
+
+    pub fn is_I10_HASH_BRANCH(&self) -> bool
+    {
+        (self.0 & INSTRUCTION_HEADER_MASK) == Self::I10_HASH_BRANCH
+    }
+
+    pub fn is_I11_SET_FAIL_STATE(&self) -> bool
+    {
+        (self.0 & INSTRUCTION_HEADER_MASK) == Self::I11_SET_FAIL_STATE
+    }
+
+    pub fn is_I12_REPEAT(&self) -> bool
+    {
+        (self.0 & INSTRUCTION_HEADER_MASK) == Self::I12_REPEAT
+    }
+
+    pub fn is_I13_NOOP(&self) -> bool
+    {
+        (self.0 & INSTRUCTION_HEADER_MASK) == Self::I13_NOOP
+    }
+
+    pub fn is_I14_ASSERT_CONSUME(&self) -> bool
+    {
+        (self.0 & INSTRUCTION_HEADER_MASK) == Self::I14_ASSERT_CONSUME
+    }
+
+    pub fn is_I15_FAIL(&self) -> bool
+    {
+        (self.0 & INSTRUCTION_HEADER_MASK) == Self::I15_FAIL
+    }
+
+    pub fn get_contents(&self) -> u32
+    {
+        self.0 & INSTRUCTION_CONTENT_MASK
+    }
+
+    pub fn get_type(&self) -> u32
+    {
+        self.0 & INSTRUCTION_HEADER_MASK
+    }
+
+    pub fn to_str(&self) -> &str
+    {
+        match (self.0 & INSTRUCTION_HEADER_MASK) {
+            Self::I00_PASS => "I00_PASS",
+            Self::I01_CONSUME => "I01_CONSUME",
+            Self::I02_GOTO => "I02_GOTO",
+            Self::I03_SET_PROD => "I03_SET_PROD",
+            Self::I04_REDUCE => "I04_REDUCE",
+            Self::I05_TOKEN => "I05_TOKEN",
+            Self::I06_FORK_TO => "I06_FORK_TO",
+            Self::I07_SCAN => "I07_SCAN",
+            Self::I08_NOOP => "I08_NOOP",
+            Self::I09_VECTOR_BRANCH => "I09_VECTOR_BRANCH",
+            Self::I10_HASH_BRANCH => "I10_HASH_BRANCH",
+            Self::I11_SET_FAIL_STATE => "I11_SET_FAIL_STATE",
+            Self::I12_REPEAT => "I12_REPEAT",
+            Self::I13_NOOP => "I13_NOOP",
+            Self::I14_ASSERT_CONSUME => "I14_ASSERT_CONSUME",
+            Self::I15_FAIL => "I15_FAIL",
+            _ => "Undefined",
+        }
+    }
 }
 
 #[non_exhaustive]
@@ -153,6 +265,7 @@ pub fn default_get_branch_selector(
 
     let total_instruction_length =
         branches.iter().map(|b| b.len()).sum::<usize>();
+
     let has_unsupported_value = values.iter().cloned().any(|v| v > 2046);
 
     if (max_span < 2)

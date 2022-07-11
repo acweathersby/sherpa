@@ -1,5 +1,6 @@
 mod ascript;
 mod ast;
+mod constants;
 mod error;
 mod grammar;
 mod grammar_production;
@@ -19,6 +20,7 @@ mod token;
 
 pub use ascript::*;
 pub use ast::*;
+pub use constants::*;
 pub use error::*;
 pub use grammar::*;
 pub use grammar_production::*;

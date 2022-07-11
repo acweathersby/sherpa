@@ -1,13 +1,6 @@
 use std::hash;
 
-use crate::bytecode::constants::DEFAULT_FAIL_INSTRUCTION_OFFSET;
-use crate::bytecode::constants::INPUT_TYPE;
-use crate::bytecode::constants::INSTRUCTION as I;
-use crate::bytecode::constants::INSTRUCTION_CONTENT_MASK;
-use crate::bytecode::constants::INSTRUCTION_HEADER_MASK;
-use crate::bytecode::constants::LEXER_TYPE;
-use crate::bytecode::constants::NORMAL_STATE_MASK;
-use crate::bytecode::constants::STATE_INDEX_MASK;
+
 use crate::types::*;
 
 use ParseAction::*;
@@ -22,10 +15,14 @@ pub fn dispatch<T: CharacterReader>(
 ) -> ParseAction
 {
     use ParseAction::*;
+    use INSTRUCTION as I;
 
     let mut index = (ctx.get_active_state() & STATE_INDEX_MASK) as u32;
 
     loop {
+
+
+
         let instruction = unsafe { *bytecode.get_unchecked(index as usize) };
 
         ctx.set_active_state_to(index);

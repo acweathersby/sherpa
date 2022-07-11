@@ -15,9 +15,6 @@ use std::collections::BTreeSet;
 use std::io::Result;
 use std::io::Write;
 
-use hctk::bytecode::constants::*;
-use hctk::bytecode::BytecodeOutput;
-
 use hctk::grammar::get_exported_productions;
 use hctk::grammar::ExportedProduction;
 use hctk::types::*;

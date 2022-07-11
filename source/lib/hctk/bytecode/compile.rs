@@ -1,16 +1,4 @@
 #![warn(clippy::borrowed_box)]
-use super::constants::default_get_branch_selector;
-use super::constants::GetBranchSelector;
-use super::constants::DEFAULT_CASE_INDICATOR;
-use super::constants::INPUT_TYPE;
-use super::constants::INSTRUCTION;
-use crate::bytecode::constants::BranchSelector;
-use crate::bytecode::constants::GOTO_STATE_MASK;
-use crate::bytecode::constants::INSTRUCTION_CONTENT_MASK;
-use crate::bytecode::constants::IR_REDUCE_NUMERIC_LEN_ID;
-use crate::bytecode::constants::LEXER_TYPE;
-use crate::bytecode::constants::NORMAL_STATE_MASK;
-use crate::bytecode::constants::STATE_INDEX_MASK;
 use crate::grammar::data::ast::ASTNode;
 use crate::grammar::data::ast::Consume;
 use crate::grammar::data::ast::ForkTo;
@@ -91,7 +79,7 @@ pub(crate) fn build_byte_code_buffer(
 /// Converts Goto location bookmarks to bytecode offsets.
 fn patch_goto_offsets(bytecode: &mut Vec<u32>, goto_bookmarks_to_offset: &[u32])
 {
-    use crate::bytecode::constants::INSTRUCTION as I;
+    use INSTRUCTION as I;
 
     let mut index = 0;
 
@@ -362,7 +350,7 @@ fn make_table(
         return default;
     }
 
-    use super::constants::INSTRUCTION as I;
+    use INSTRUCTION as I;
 
     let lexer_type: u32 = if branches[0].is_peek {
         LEXER_TYPE::PEEK
@@ -597,7 +585,7 @@ fn build_branchless_bytecode(
 ) -> Vec<u32>
 {
     let mut byte_code: Vec<u32> = vec![];
-    use super::constants::INSTRUCTION as I;
+    use INSTRUCTION as I;
 
     // reverse gotos so jumps operate correctly in a stack structure.
 

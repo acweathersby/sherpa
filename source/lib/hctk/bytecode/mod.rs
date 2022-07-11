@@ -9,7 +9,6 @@ use crate::types::IRState;
 use self::compile::build_byte_code_buffer;
 
 pub mod compile;
-pub mod constants;
 pub mod optimize;
 
 pub struct BytecodeOutput<'a>
@@ -78,12 +77,12 @@ mod byte_code_creation_tests
     use std::collections::HashMap;
 
     use crate::bytecode::compile::compile_ir_state_to_bytecode;
-    use crate::bytecode::constants::default_get_branch_selector;
     use crate::debug::compile_test_grammar;
     use crate::grammar::data::ast::ASTNode;
     use crate::grammar::get_production_id_by_name;
     use crate::grammar::parse::compile_ir_ast;
     use crate::intermediate::state::generate_production_states;
+    use crate::types::default_get_branch_selector;
 
     #[test]
     pub fn test_produce_a_single_ir_ast_from_a_single_state_of_a_trivial_production(

@@ -53,14 +53,9 @@ pub fn compile_bytecode_files(
                 if let Ok(parser_data_file) = std::fs::File::create(
                     output_path.join(format!("./{}.rs", parser_name)),
                 ) {
-                    let mut writer =
-                        CodeWriter::new(BufWriter::new(parser_data_file));
+                    let mut writer = CodeWriter::new(BufWriter::new(parser_data_file));
 
-                    writer.write(&DISCLAIMER(
-                        &grammar_name,
-                        "Parser Data",
-                        "//!",
-                    ));
+                    writer.write(&DISCLAIMER(&grammar_name, "Parser Data", "//!"));
 
                     write_parser_file(
                         writer,
@@ -68,11 +63,7 @@ pub fn compile_bytecode_files(
                         // Leave two threads available for building
                         // the
                         // ascript code if necessary
-                        1.max(
-                            threads
-                                .checked_sub(build_ast as usize * 2)
-                                .unwrap_or(1),
-                        ),
+                        1.max(threads.checked_sub(build_ast as usize * 2).unwrap_or(1)),
                     );
                 }
             });
@@ -91,9 +82,7 @@ fn write_parser_file<W: Write>(
         ..
     } = compile_bytecode(grammar, threads);
 
-    if let Err(err) =
-        write_rust_parser_file(writer, &state_lookups, grammar, &bytecode)
-    {
+    if let Err(err) = write_rust_parser_file(writer, &state_lookups, grammar, &bytecode) {
         println!("{}", err);
     }
 
@@ -109,8 +98,7 @@ fn write_rust_parser_file<W: Write>(
 {
     writer
         .wrt(
-            "use hctk::bytecode::constants::NORMAL_STATE_MASK;
-use hctk::runtime::*;
+            "use hctk::runtime::*;
 use hctk::types::*;
 
 pub struct Context<'a, T: CharacterReader>(ParseContext<T>, &'a mut T, bool);
@@ -150,11 +138,7 @@ impl<'a, T: CharacterReader> Context<'a, T>
         )?
         .indent();
 
-    common::write_rust_entry_function_bytecode(
-        grammar,
-        state_lookups,
-        &mut writer,
-    )?;
+    common::write_rust_entry_function_bytecode(grammar, state_lookups, &mut writer)?;
 
     writer.dedent().wrtln("}")?;
 
@@ -198,8 +182,7 @@ mod test
 
         let mut ascript = AScriptStore::new();
 
-        let errors =
-            compile_reduce_function_expressions(&grammar, &mut ascript);
+        let errors = compile_reduce_function_expressions(&grammar, &mut ascript);
 
         for error in &errors {
             println!("{}", error);

@@ -15,9 +15,6 @@ mod test_parser
     use crate::bytecode::compile::build_byte_code_buffer;
     use crate::bytecode::compile::compile_ir_state_to_bytecode;
     use crate::bytecode::compile_ir_states_into_bytecode;
-    use crate::bytecode::constants::BranchSelector;
-    use crate::bytecode::constants::FIRST_STATE_OFFSET;
-    use crate::bytecode::constants::NORMAL_STATE_MASK;
     use crate::debug::compile_test_grammar;
     use crate::debug::disassemble_state;
     use crate::debug::generate_disassembly;
