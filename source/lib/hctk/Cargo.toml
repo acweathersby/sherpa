@@ -10,11 +10,7 @@ path = "./lib.rs"
 lazy_static = "1.4.0"
 regex = "1.5.6"
 lsp-server = "0.6.0"
-serde_json = "1.0.81"
-serde = "1.0.137"
-lsp-types = "0.93.0"
 bitmask-enum = "2.0.0"
-siphasher = "0.3.10"
 
 [dev-dependencies]
 coz = "0.1.3"

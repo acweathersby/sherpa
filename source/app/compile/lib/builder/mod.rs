@@ -1,5 +1,7 @@
 pub mod asm;
 
+pub mod llvm;
+
 pub mod bytecode;
 
 pub mod disclaimer;

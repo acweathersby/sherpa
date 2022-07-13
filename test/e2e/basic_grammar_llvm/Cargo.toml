@@ -1,0 +1,27 @@
+[package]
+name = "test-basic-grammar-llvm"
+version = "0.0.0"
+edition = "2021"
+
+build = "./build.rs"
+
+[lib]
+name = "test_basic_grammar_llvm"
+path = "./lib.rs"
+
+[[bin]]
+name = "test_basic_grammar_llvm_bin"
+path = "./main.rs"
+
+[build-dependencies.hc-compile]
+path = "../../../source/app/compile" 
+
+[dependencies.hctk]
+path = "../../../source/lib/hctk"
+
+[dev-dependencies]
+criterion = "0.3.5"
+
+[[bench]]
+name = "bench"
+harness = false

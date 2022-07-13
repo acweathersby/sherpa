@@ -1,5 +1,5 @@
 # Line Widths
-max_width = 80
+max_width = 90
 
 array_width = 70
 
@@ -8,7 +8,7 @@ fn_call_width = 70
 enum_discrim_align_threshold = 10
 struct_field_align_threshold = 10
 newline_style = "Unix"
-tab_spaces = 4
+tab_spaces = 2
 
 hide_parse_errors = true
 

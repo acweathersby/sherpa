@@ -17,7 +17,7 @@ pub fn dispatch<T: CharacterReader>(
     use ParseAction::*;
     use INSTRUCTION as I;
 
-    let mut index = (ctx.get_active_state() & STATE_INDEX_MASK) as u32;
+    let mut index = (ctx.get_active_state() & STATE_ADDRESS_MASK) as u32;
 
     loop {
 
@@ -54,7 +54,7 @@ pub fn dispatch<T: CharacterReader>(
             I::I11_SET_FAIL_STATE => set_fail(),
             I::I12_REPEAT => repeat(),
             I::I13_NOOP => noop(index),
-            I::I14_ASSERT_CONSUME => DEFAULT_FAIL_INSTRUCTION_OFFSET,
+            I::I14_ASSERT_CONSUME => DEFAULT_FAIL_INSTRUCTION_ADDRESS,
             I::I15_FAIL => break FailState,
             _ => break CompleteState,
         }
@@ -243,7 +243,7 @@ pub fn hash_jump<T: CharacterReader>(
         lexer_type,
         table_length,
         table_meta: modulo_base,
-        scanner_offset:scan_index,
+        scanner_address:scan_index,
     } = TableHeaderData::from_bytecode(i, bytecode);
 
     let hash_mask = 1 << (modulo_base - 1);
@@ -296,7 +296,7 @@ pub fn vector_jump<T: CharacterReader>(
         lexer_type,
         table_length,
         table_meta: value_offset,
-        scanner_offset:scan_index,
+        scanner_address:scan_index,
     } = TableHeaderData::from_bytecode(i, bytecode);
 
     let table_start = i + 4;

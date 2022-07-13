@@ -1,0 +1,10 @@
+@IGNORE g:sp
+
+@EXPORT test as entry
+
+@EXPORT test as banner
+
+@NAME llvm_test
+
+<> test > \hello \world 
+
