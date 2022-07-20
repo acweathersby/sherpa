@@ -14,7 +14,7 @@ mod transition_tree_tests
     use crate::intermediate::transition_graph::construct_recursive_descent;
 
     #[test]
-    pub fn test_construct_descent_on_basic_grammar()
+    pub fn construct_descent_on_basic_grammar()
     {
         let grammar = compile_test_grammar(
             "<> A > \\h \\e
@@ -35,7 +35,7 @@ mod transition_tree_tests
     }
 
     #[test]
-    pub fn test_construct_descent_on_scanner_symbol()
+    pub fn construct_descent_on_scanner_symbol()
     {
         let grammar = compile_test_grammar(
             "
@@ -76,7 +76,6 @@ mod transition_tree_tests
 }
 
 #[cfg(test)]
-
 mod state_constructor_tests
 {
 
@@ -92,7 +91,7 @@ mod state_constructor_tests
 
     #[test]
 
-    pub fn test_generate_production_states_with_basic_grammar()
+    pub fn generate_production_states_with_basic_grammar()
     {
         let grammar = compile_test_grammar("<> A > \\h \\e \\l \\l \\o");
 
@@ -106,7 +105,7 @@ mod state_constructor_tests
     }
 
     #[test]
-    pub fn test_generate_production_states_with_basic_grammar_with_one_optional_token(
+    pub fn generate_production_states_with_basic_grammar_with_one_optional_token(
     )
     {
         let grammar = compile_test_grammar("<> A > \\h ? \\e ? \\l \\l \\o");
@@ -121,8 +120,7 @@ mod state_constructor_tests
     }
 
     #[test]
-    pub fn test_generate_production_states_with_basic_grammar_with_left_recursion(
-    )
+    pub fn generate_production_states_with_basic_grammar_with_left_recursion()
     {
         let grammar = compile_test_grammar("<> A > A \\1 | \\2 ");
 
@@ -136,15 +134,32 @@ mod state_constructor_tests
     }
 
     #[test]
-    pub fn test_generate_production_states_with_synthesized_scanner_state()
+    pub fn generate_production_states_with_synthesized_scanner_state()
     {
         let grammar = compile_test_grammar("<> A > \\1 | \\2 | \\3 ");
 
         let symbols = grammar
             .symbols_table
-            .keys()
+            .iter()
+            .filter_map(
+                |(id, sym)| {
+                    if sym.scanner_only {
+                        None
+                    } else {
+                        Some(id)
+                    }
+                },
+            )
             .cloned()
             .collect::<BTreeSet<_>>();
+
+        println!(
+            "{:#?}",
+            symbols
+                .iter()
+                .map(|s| grammar.symbols_string_table.get(s))
+                .collect::<Vec<_>>()
+        );
 
         let result = generate_scanner_intro_state(symbols, &grammar);
 
@@ -154,7 +169,7 @@ mod state_constructor_tests
     }
 
     #[test]
-    pub fn test_generate_production_state_with_scanner_function()
+    pub fn generate_production_state_with_scanner_function()
     {
         let grammar = compile_test_grammar(
             "
@@ -185,7 +200,7 @@ mod state_constructor_tests
     }
 
     #[test]
-    pub fn test_generate_production_with_ambiguity()
+    pub fn generate_production_with_ambiguity()
     {
         let grammar = compile_test_grammar(
             "

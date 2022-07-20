@@ -74,9 +74,9 @@ pub fn compile_llvm_files(
           let archive_path = output_path.join(format!("./lib{}.a", &parser_name));
 
           if let Ok(asm_file) = std::fs::File::create(&llvm_source_path) {
-            let mut writer = NasmWriter::new(BufWriter::new(asm_file));
+            let mut writer = CodeWriter::new(BufWriter::new(asm_file));
 
-            writer.line(&DISCLAIMER(&parser_name, "Parse LLVM IR", "; "));
+            writer.write(&DISCLAIMER(&parser_name, "Parse LLVM IR", "; "));
 
             if crate::llvm::compile_from_bytecode(
               &build_options,
@@ -85,16 +85,14 @@ pub fn compile_llvm_files(
             )
             .is_ok()
             {
-              let mut file_writer = writer.into_writer();
-
-              file_writer.flush();
+              let mut file_writer = writer.into_output();
 
               drop(file_writer);
 
               match Command::new("clang-14")
                 .args(&[
                   "-flto=thin",
-                  "-O3",
+                  //"-O3",
                   "-c",
                   "-o",
                   object_path.to_str().unwrap(),
@@ -177,7 +175,7 @@ extern \"C\" {{
     fn construct_context(ctx: AnonymousPtr);
     fn next<'a>(ctx: AnonymousPtr, action_ref:&'a mut ParseAction);
     fn destroy_context(ctx: AnonymousPtr);
-    fn prime_context(ctx: AnonymousPtr, sp:u64);
+    fn prime_context(ctx: AnonymousPtr, sp:u32);
 }}",
       parser_name
     ))?
@@ -220,7 +218,7 @@ impl<T: CharacterReader> Context<T> {{
     fn set_start_point(&mut self, start_point: u64) -> &mut Self {{
         unsafe {{
             let _ptr = &mut self.0 as *const ParseContext<T>;
-            prime_context(_ptr as u64, start_point);
+            prime_context(_ptr as u64, start_point as u32);
         }}
 
         self

@@ -8,74 +8,69 @@ pub struct ParseContext<T: CharacterReader>
   pub(crate) peek_token: ParseToken,
   pub(crate) anchor_token: ParseToken,
   pub(crate) assert_token: ParseToken,
-  foreign_rsp: usize,
-  local_rsp: usize, // Points to top of local_state_stack
-  local_stack_base: usize,
-  state_u64_data: usize,
-  action_pointer: usize,
-  block_length: usize,
-  block_ptr: usize,
-  cursor_position: usize,
-  reader: usize,
-  get_byte_block_at_cursor: fn(&mut T, usize, &mut *const u8, &mut usize),
-  fn_get_line_data: fn(&T) -> u64,
-  fn_get_length_data: fn(&T) -> u64,
-  fn_next: fn(&mut T, amount: i32) -> u64,
-  fn_set_cursor_to: fn(&mut T, token: &ParseToken) -> u64,
-  local_state_stack: Vec<usize>,
+  action_ptr: usize,
+  goto_stack_ptr: *const u64, // Points to top of local_state_stack
+  stack_top: usize,
+  stack_size: usize,
+  parse_state: usize,
+  unknown: usize,
+  input_block_ptr: usize,
+  input_block_size: usize,
+  input_block_offset: usize,
+  reader: *mut T,
+  get_byte_block_at_cursor: fn(&mut T, &mut *const u8, u64, u64) -> u64,
+  in_peek_mode: bool,
+  // Old inputs
+  local_state_stack: [u64; 32],
 }
 
 impl<T: CharacterReader> ParseContext<T>
 {
   pub fn new(reader: &mut T) -> Self
   {
-    unsafe {
-      let reader = (reader as *mut T) as usize;
-      Self {
-        peek_token: ParseToken::default(),
-        anchor_token: ParseToken::default(),
-        assert_token: ParseToken::default(),
-        foreign_rsp: 0,
-        local_rsp: 0,
-        local_stack_base: 0,
-        state_u64_data: 0,
-        action_pointer: 0,
-        block_length: 0,
-        block_ptr: 20,
-        cursor_position: 0,
-        reader,
-        get_byte_block_at_cursor: T::get_byte_block_at_cursor,
-        fn_next: T::next,
-        fn_set_cursor_to: T::set_cursor_to,
-        fn_get_line_data: T::get_line_data,
-        fn_get_length_data: T::get_length_data,
-        local_state_stack: vec![0; 32],
-      }
-    }
+    let mut ctx = Self {
+      peek_token: ParseToken::default(),
+      anchor_token: ParseToken::default(),
+      assert_token: ParseToken::default(),
+      action_ptr: 0,
+      goto_stack_ptr: [].as_mut_ptr(),
+      stack_top: 0,
+      parse_state: NORMAL_STATE_MASK as usize,
+      unknown: 0xF0F,
+      input_block_ptr: 0,
+      input_block_size: 0,
+      input_block_offset: 0,
+      stack_size: 0,
+      reader,
+      get_byte_block_at_cursor: T::get_byte_block_at_cursor,
+      in_peek_mode: false,
+      local_state_stack: [0; 32],
+    };
+    ctx
   }
 
   pub fn bytecode_context() -> Self
   {
-    Self {
+    let mut ctx = Self {
       peek_token: ParseToken::default(),
       anchor_token: ParseToken::default(),
       assert_token: ParseToken::default(),
-      foreign_rsp: 0,
-      local_rsp: 0,
-      local_stack_base: 0,
-      state_u64_data: 0,
-      action_pointer: 0,
-      block_length: 0,
-      block_ptr: 0,
-      cursor_position: 0,
-      reader: 0,
+      action_ptr: 0,
+      goto_stack_ptr: [].as_mut_ptr(),
+      stack_top: 0,
+      stack_size: 0,
+      parse_state: 0,
+      unknown: 0,
+      input_block_ptr: 0,
+      input_block_size: 0,
+      input_block_offset: 0,
+      reader: 0 as *mut T,
       get_byte_block_at_cursor: T::get_byte_block_at_cursor,
-      fn_next: T::next,
-      fn_set_cursor_to: T::set_cursor_to,
-      fn_get_line_data: T::get_line_data,
-      fn_get_length_data: T::get_length_data,
-      local_state_stack: vec![0; 32],
-    }
+      local_state_stack: [0; 32],
+      in_peek_mode: false,
+    };
+
+    ctx
   }
 
   /// The following methods are used exclusively by the
@@ -84,82 +79,83 @@ impl<T: CharacterReader> ParseContext<T>
   #[inline]
   pub(crate) fn in_fail_mode(&self) -> bool
   {
-    self.reader > 0
+    self.input_block_offset > 0
   }
 
   #[inline]
   pub(crate) fn set_fail_mode_to(&mut self, is_in_fail_mode: bool)
   {
-    self.reader = is_in_fail_mode as usize;
+    self.input_block_offset = is_in_fail_mode as usize;
   }
 
   #[inline]
   pub(crate) fn in_peek_mode(&self) -> bool
   {
-    self.local_stack_base > 0
+    self.in_peek_mode
   }
 
   #[inline]
   pub(crate) fn set_peek_mode_to(&mut self, is_in_peek_mode: bool)
   {
-    self.local_stack_base = is_in_peek_mode as usize;
+    self.in_peek_mode = is_in_peek_mode;
   }
 
   #[inline]
   pub(crate) fn is_interrupted(&self) -> bool
   {
-    self.state_u64_data > 0
+    self.action_ptr > 0
   }
 
   #[inline]
   pub(crate) fn set_interrupted_to(&mut self, is_interrupted: bool)
   {
-    self.state_u64_data = is_interrupted as usize
+    self.action_ptr = is_interrupted as usize
   }
 
   /// Used by the bytecode interpreter
   #[inline]
   pub(crate) fn is_scanner(&self) -> bool
   {
-    self.action_pointer > 0
+    self.input_block_ptr > 0
   }
 
   /// Used by the bytecode interpreter
   #[inline]
   pub(crate) fn make_scanner(&mut self)
   {
-    self.action_pointer = 1;
+    self.input_block_ptr = 1;
   }
 
   #[inline]
   pub(crate) fn get_active_state(&mut self) -> u32
   {
-    self.foreign_rsp as u32
+    self.parse_state as u32
   }
 
   #[inline]
   pub(crate) fn set_active_state_to(&mut self, state: u32)
   {
-    self.foreign_rsp = state as usize;
+    self.parse_state = state as usize;
   }
 
   #[inline]
   pub(crate) fn get_production(&mut self) -> u32
   {
-    self.local_rsp as u32
+    self.input_block_size as u32
   }
 
   #[inline]
   pub(crate) fn set_production_to(&mut self, state: u32)
   {
-    self.local_rsp = state as usize;
+    self.input_block_size = state as usize;
   }
 
   #[inline]
   pub(crate) fn pop_state(&mut self) -> u32
   {
-    if self.local_state_stack.len() > 0 {
-      self.local_state_stack.pop().unwrap() as u32
+    if self.stack_top > 0 {
+      self.stack_top -= 1;
+      self.local_state_stack[self.stack_top] as u32
     } else {
       0
     }
@@ -168,16 +164,21 @@ impl<T: CharacterReader> ParseContext<T>
   #[inline]
   pub(crate) fn push_state(&mut self, state: u32)
   {
-    self.local_state_stack.push(state as usize);
+    if (self.stack_top >= self.stack_size) {
+      panic!("Out of parse stack space!");
+    }
+
+    self.local_state_stack[self.stack_top] = state as u64;
+
+    self.stack_top += 1;
   }
 
   #[inline]
   pub fn init_normal_state(&mut self, entry_point: u32)
   {
-    self.local_state_stack.clear();
-    self
-      .local_state_stack
-      .push((NORMAL_STATE_MASK | entry_point) as usize);
+    self.stack_top = 0;
+
+    self.push_state((NORMAL_STATE_MASK | entry_point));
   }
 }
 

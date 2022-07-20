@@ -7,10 +7,13 @@ pub struct ParseToken
 {
   pub byte_offset: u32,
   pub cp_offset:   u32,
+
   pub byte_length: u32,
   pub cp_length:   u32,
-  pub garbage:     u32,
-  pub token_type:  u32,
+
+  pub token_type: u32,
+  pub garbage:    u32,
+
   pub line_number: u32,
   pub line_offset: u32,
 }

@@ -15,10 +15,6 @@ pub const INSTRUCTION_HEADER_MASK: u32 = 0xF000_0000;
 
 pub const SKIPPED_SCAN_PROD: u16 = 9009;
 
-// Bit mask for bytecode states that are active during failure
-// recovery mode
-pub const FAIL_STATE_MASK: u32 = 1 << 27;
-
 /// Mask the part of the state metadata that stores the
 /// production id.
 pub const PRODUCTION_META_MASK: u64 = 0xFFFFF;
@@ -27,9 +23,15 @@ pub const PRODUCTION_META_MASK: u64 = 0xFFFFF;
 /// production id.
 pub const PRODUCTION_META_MASK_INVERT: u64 = !PRODUCTION_META_MASK;
 
+// Bit mask for bytecode states that are active during failure
+// recovery mode
+pub const FAIL_STATE_MASK: u32 = 1 << 27;
+
 /// Bit mask for bytecode states that are active during normal parse
 /// mode
 pub const NORMAL_STATE_MASK: u32 = 1 << 26;
+
+pub const STATE_MODE_MASK: u32 = FAIL_STATE_MASK | NORMAL_STATE_MASK;
 
 pub const PEEK_MODE_FLAG: u32 = 1 << 28;
 

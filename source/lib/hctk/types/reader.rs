@@ -146,12 +146,12 @@ pub trait CharacterReader
   ///  can be read from the block.
   fn get_byte_block_at_cursor(
     &mut self,
-    cursor: usize,
     block_ptr: &mut *const u8,
-    block_size: &mut usize,
-  )
+    token_offset: u64,
+    requested_size: u64,
+  ) -> u64
   {
     *block_ptr = "".as_ptr();
-    *block_size = 0;
+    0
   }
 }

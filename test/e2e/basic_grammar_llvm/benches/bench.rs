@@ -22,7 +22,7 @@ pub fn bench(input: &str)
     }
   }
 
-  assert!(updates == 1);
+  assert!(updates == 3);
 }
 
 fn criterion_benchmark(c: &mut Criterion)

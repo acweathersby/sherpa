@@ -3,6 +3,7 @@
 #![feature(const_format_args)]
 #![feature(const_fmt_arguments_new)]
 #![feature(box_patterns)]
+#![feature(map_first_last)]
 
 mod asm;
 mod ast;
