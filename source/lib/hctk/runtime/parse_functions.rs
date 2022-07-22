@@ -522,7 +522,7 @@ fn token_scan<T: CharacterReader>(
                 break ParseAction::ScannerToken(scan_ctx.anchor_token);
             } else {
                 let mask_gate =
-                    NORMAL_STATE_MASK << (scan_ctx.in_fail_mode() as u32);
+                    NORMAL_STATE_FLAG << (scan_ctx.in_fail_mode() as u32);
 
                 if ((scan_ctx.get_active_state() & mask_gate) != 0) {
                     let fail_mode =loop {
@@ -570,12 +570,12 @@ pub fn get_next_action<T: CharacterReader>(
                 };
             } else {
                 break ParseAction::Error {
-                    message:    "Cannot parse this symbol",
+                    last_production: ctx.get_production(),
                     last_input: ctx.assert_token,
                 };
             }
         } else {
-            let mask_gate = NORMAL_STATE_MASK << (ctx.in_fail_mode() as u32);
+            let mask_gate = NORMAL_STATE_FLAG << (ctx.in_fail_mode() as u32);
 
             if (ctx.is_interrupted() || (ctx.get_active_state() & mask_gate) != 0) {
                 ctx.set_interrupted_to(true);

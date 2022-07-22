@@ -50,7 +50,7 @@ pub(crate) fn build_byte_code_buffer(
     INSTRUCTION::I00_PASS,
     INSTRUCTION::I15_FAIL,
     INSTRUCTION::I08_NOOP,
-    NORMAL_STATE_MASK,
+    NORMAL_STATE_FLAG,
     INSTRUCTION::I00_PASS,
   ];
 
@@ -588,7 +588,7 @@ fn build_branchless_bytecode(
           } else {
             0
           };
-          byte_code.push(I::I02_GOTO | NORMAL_STATE_MASK | state_pointer_val);
+          byte_code.push(I::I02_GOTO | NORMAL_STATE_FLAG | state_pointer_val);
         } else {
           panic!("Invalid state type in goto instruction");
         }
@@ -611,7 +611,7 @@ fn build_branchless_bytecode(
             } else {
               0
             };
-            byte_code.push(I::I02_GOTO | NORMAL_STATE_MASK | state_pointer_val);
+            byte_code.push(I::I02_GOTO | NORMAL_STATE_FLAG | state_pointer_val);
           } else {
             panic!("Invalid state type in goto instruction");
           }

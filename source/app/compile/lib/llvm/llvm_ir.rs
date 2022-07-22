@@ -10,9 +10,7 @@
 //! - r13 - stores token length data: byte length in high 32, and codepoint length in lower 32
 //! - r14 - stores accepted token offset data
 
-use core::num;
 use hctk::bytecode::BytecodeOutput;
-use hctk::debug::grammar;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::VecDeque;
@@ -20,15 +18,11 @@ use std::io::Result;
 use std::io::Write;
 
 use hctk::grammar::get_exported_productions;
-use hctk::grammar::ExportedProduction;
 use hctk::types::*;
 
-use crate::builder::table::BranchData;
 use crate::builder::table::BranchTableData;
-use crate::builder::table::TableType;
 use crate::options::BuildOptions;
 use crate::writer::code_writer::CodeWriter;
-use crate::writer::x86_64_writer::X8664Writer;
 
 pub fn _undefined<W: Write>(
   _grammar: &GrammarStore,
@@ -38,12 +32,6 @@ pub fn _undefined<W: Write>(
 {
   Ok(())
 }
-
-const parse_context_size: usize = std::mem::size_of::<ParseContext<UTF8StringReader>>();
-
-const stack_ref_size: usize = std::mem::size_of::<Vec<u8>>();
-
-const token_size: usize = std::mem::size_of::<ParseToken>();
 
 pub fn write_preamble<W: Write>(
   writer: &mut CodeWriter<W>,
@@ -59,32 +47,32 @@ pub fn write_preamble<W: Write>(
   i64  ; Line     [#, last_offset] 
 }
 
-%getInputBlock = type i64 (  i64 *, i8 **, i64, i64 ) *
+%getInputBlock = type i32 (  i64 *, i8 **, i32, i32 ) *
 
 
 %s.Context = type {
   [3 x %s.Token],   ; 0 
-  %s.Action *,      ; 1
-  %s.Goto *,        ; 2 - Stack Base
-  %s.Goto *,        ; 3 - Stack Top
-  i64,              ; 4 - Stack Size
-  i64,              ; 5 - Active State
-  i64,              ; 6
-  i8 *,             ; 7 - Input Block
-  i64,              ; 8 - Input Block Length
-  i64,              ; 9 - Input Block Offset
-  i64 *,            ; 10 - Reader 
-  %getInputBlock,   ; 11 - Input block request
-  i1,               ; 12 - InPeekState
+  %getInputBlock,   ; 1  - Input block request
+  %s.Action *,      ; 2  - ParseAction
+  i64 *,            ; 3  - Reader 
+  i8 *,             ; 4  - Input Block
+  %s.Goto *,        ; 5  - Stack Base
+  %s.Goto *,        ; 6  - Stack Top
+  i32,              ; 7  - Stack Size
+  i32,              ; 8  - Input Block Length
+  i32,              ; 9  - Input Block Offset
+  i32,              ; 10 - Production
+  i32,              ; 11 - State
+  i32,              ; 12 - In Peek Mode
   %s.Goto           ; 13 - Default Goto Space
 }
 
-%fn.GT = type i32 ( %s.Context* )
-
-%fn.Goto = type i32 ( %s.Context* ) *
+%fn.Goto = type i32 ( %s.Context*,  %s.Action* ) *
 
 %s.Goto = type {
-  i64, %fn.Goto
+  %fn.Goto,  ; 0 - Function Pointer
+  i32,       ; 1 - Active Production
+  i32        ; 2 - Acceptable State
 }
 
 %s.Action = type { i32, i32 }
@@ -129,44 +117,72 @@ pub fn write_preamble<W: Write>(
   i32 ; production_id 
 }
 
+%s.Action.Error = type { 
+  i32, ; action_type=8
+  %s.Token, ; last_input 
+  i32 ; last_production
+}
+
 ; Common functions
 
-define void @construct_context ( %s.Context* %ctx ) {
+define void @emitError( %s.Context* %ctx, %s.Action* %action ) {
 
-  %default_goto = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 13
+  %sa_ptr = bitcast %s.Action * %action to %s.Action.Error *
 
-  %base_ptr = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 2
-  store  %s.Goto * %default_goto, %s.Goto ** %base_ptr
+  %tk_asrt_ptr = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 0, i64 1
+  %tk_asrt = load %s.Token, %s.Token * %tk_asrt_ptr
 
-  %top_ptr = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 3
-  
-  store volatile %s.Goto * %default_goto, %s.Goto ** %top_ptr
+  %sa1 = load %s.Action.Error, %s.Action.Error* %sa_ptr
+
+  %prod1 = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 10
+  %prod = load i32, i32 * %prod1
+
+  ; Set skip and shift tokens
+
+  %sa2 = insertvalue %s.Action.Error %sa1, i32 8, 0 ; Sets the type to Error
+  %sa3 = insertvalue %s.Action.Error %sa2, %s.Token %tk_asrt, 1 ; Set the last token
+  %sa4 = insertvalue %s.Action.Error %sa3, i32 %prod, 2 ; Set the last production
+
+  store %s.Action.Error %sa4, %s.Action.Error* %sa_ptr
 
   ret void
 }
 
-define void @emitAccept ( %s.Context* %ctx ) {
+define void @construct_context ( %s.Context* %ctx, %s.Action* %action ) {
+
+  %default_goto = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 13
+
+  %base_ptr = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 5
+  store  %s.Goto * %default_goto, %s.Goto ** %base_ptr
+
+  %top_ptr = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 6
   
-  %action_ptr = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 1
-  %action = load %s.Action * , %s.Action ** %action_ptr
+  store %s.Goto * %default_goto, %s.Goto ** %top_ptr
+
+  ret void
+}
+
+define void @emitAccept ( %s.Context* %ctx, %s.Action* %action ) {
+
+  %prod1 = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 10
+  %prod = load i32, i32 * %prod1
+  
   %sa_ptr = bitcast %s.Action * %action to %s.Action.Accept *
 
   %sa1 = load %s.Action.Accept, %s.Action.Accept* %sa_ptr
 
   ; Set skip and shift tokens
 
-  %sa2 = insertvalue %s.Action.Accept %sa1, i32 7, 0 ; Sets the type to Acceot
-  %sa3 = insertvalue %s.Action.Accept %sa2, i32 1, 1 ; Set the skip characters token=
+  %sa2 = insertvalue %s.Action.Accept %sa1, i32 7, 0 ; Sets the type to Accept
+  %sa3 = insertvalue %s.Action.Accept %sa2, i32 %prod, 2 ; Set the skip characters token=
 
-  store volatile %s.Action.Accept %sa3, %s.Action.Accept* %sa_ptr
+  store %s.Action.Accept %sa3, %s.Action.Accept* %sa_ptr
   
   ret void
 }
 
-define i32 @emitReduce ( %s.Context* %ctx, i32 %production_id, i32 %body_id, i32 %symbol_count ) {
-  
-  %action_ptr = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 1
-  %action = load %s.Action * , %s.Action ** %action_ptr
+define i32 @emitReduce ( %s.Context* %ctx, %s.Action* %action, i32 %production_id, i32 %body_id, i32 %symbol_count ) {
+    
   %sa_ptr = bitcast %s.Action * %action to %s.Action.Reduce *
 
   %sa1 = load %s.Action.Reduce, %s.Action.Reduce* %sa_ptr
@@ -183,10 +199,8 @@ define i32 @emitReduce ( %s.Context* %ctx, i32 %production_id, i32 %body_id, i32
   ret i32 1
 }
 
-define i32 @emitShift ( %s.Context* %ctx ) {
+define i32 @emitShift ( %s.Context* %ctx, %s.Action* %action ) {
   
-  %action_ptr = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 1
-  %action = load volatile %s.Action * , %s.Action ** %action_ptr
   %sa_ptr = bitcast %s.Action * %action to %s.Action.Shift *
 
   %tk_anch_ptr = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 0, i64 0
@@ -195,7 +209,7 @@ define i32 @emitShift ( %s.Context* %ctx ) {
   %tk_asrt_ptr = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 0, i64 1
   %tk_asrt = load %s.Token, %s.Token * %tk_asrt_ptr
 
-  %sa1 = load volatile %s.Action.Shift, %s.Action.Shift* %sa_ptr
+  %sa1 = load %s.Action.Shift, %s.Action.Shift* %sa_ptr
 
   ; The length of the skip token is equal to the tokens offset minus the 
   ; assert token's offset
@@ -211,7 +225,7 @@ define i32 @emitShift ( %s.Context* %ctx ) {
   %sa3 = insertvalue %s.Action.Shift %sa2, %s.Token %tk_anch2, 1 ; Set the skip characters token
   %sa4 = insertvalue %s.Action.Shift %sa3, %s.Token %tk_asrt, 2 ; Set the shift token
 
-  store volatile %s.Action.Shift %sa4, %s.Action.Shift* %sa_ptr
+  store %s.Action.Shift %sa4, %s.Action.Shift* %sa_ptr
 
   ; Set new offset of assert and increment tokens
 
@@ -220,105 +234,77 @@ define i32 @emitShift ( %s.Context* %ctx ) {
   %tk_asrt2 = insertvalue %s.Token %tk_asrt, i64 %tk_asrt_off2, 0 
   %tk_asrt3 = insertvalue %s.Token %tk_asrt2, i64 0, 2 ; Set token type to 0
 
-  store volatile %s.Token %tk_asrt3, %s.Token * %tk_anch_ptr
-  store volatile %s.Token %tk_asrt3, %s.Token * %tk_asrt_ptr
+  store %s.Token %tk_asrt3, %s.Token * %tk_anch_ptr
+  store %s.Token %tk_asrt3, %s.Token * %tk_asrt_ptr
   
   ret i32 1
 }
 
-define fastcc i64 @getAdjustedInputPtrInteger( %s.Context* %ctx_ptr, %s.Token * %tok, i64 %requested_size ) {
+define fastcc i8* @getAdjustedInputPtrInteger( %s.Context* %ctx_ptr, %s.Token * %tok, i32 %requested_size ) {
 
   %block_offset1 = getelementptr inbounds %s.Context, %s.Context* %ctx_ptr, i64 0, i32 9
-  %block_offset = load volatile i64, i64 * %block_offset1
+  %block_offset = load i32, i32 * %block_offset1
 
   %block_size1 = getelementptr inbounds %s.Context, %s.Context* %ctx_ptr, i64 0, i32 8
-  %block_size = load volatile i64, i64 * %block_size1
+  %block_size = load i32, i32 * %block_size1
 
   ; get the difference between the current offset position and the end of the current 
   ; block
-  %token_offset = call i64 @readTokenByteOffset( %s.Token * %tok )
-  %needed_size1 = add i64 %token_offset, %requested_size
-  %needed_size = sub i64 %needed_size1, %block_offset
+  %token_offset = call i32 @readTokenByteOffset( %s.Token * %tok )
+  %needed_size1 = add i32 %token_offset, %requested_size
+  %needed_size = sub i32 %needed_size1, %block_offset
 
-  %c1 = icmp ugt i64 %block_size, %needed_size
+  %c1 = icmp ugt i32 %block_size, %needed_size
   br i1 %c1, label %HaveSpace, label %AttemptExtend
 
 AttemptExtend:
 
-
-  %getInputBlock_fn1 = getelementptr inbounds %s.Context, %s.Context* %ctx_ptr, i64 0, i32 11
+  %getInputBlock_fn1 = getelementptr inbounds %s.Context, %s.Context* %ctx_ptr, i64 0, i32 1
   %getInputBlock_fn = load %getInputBlock, %getInputBlock * %getInputBlock_fn1
 
-  %input_reader1 = getelementptr inbounds %s.Context, %s.Context* %ctx_ptr, i64 0, i32 10
+  %input_reader1 = getelementptr inbounds %s.Context, %s.Context* %ctx_ptr, i64 0, i32 3
   %input_reader = load volatile i64 *, i64 ** %input_reader1
 
-  %input_store1 = getelementptr inbounds %s.Context, %s.Context* %ctx_ptr, i64 0, i32 7
+  %input_block2 = getelementptr inbounds %s.Context, %s.Context* %ctx_ptr, i64 0, i32 4
 
-  %new_block_size = call i64 %getInputBlock_fn ( i64 * %input_reader, i8 ** %input_store1, i64 %token_offset,  i64 %requested_size )
+  %new_block_size = call i32 %getInputBlock_fn ( i64 * %input_reader, i8 ** %input_block2, i32 %token_offset,  i32 %requested_size )
 
-  %c2 = icmp eq i64 0, %new_block_size
+  %c2 = icmp eq i32 0, %new_block_size
   br i1 %c2, label %ExtensionFailed, label %ExtensionSuccess
 
 ExtensionFailed:
 
-  ret i64 0
+  ret i8* null
 
 ExtensionSuccess: 
 
-  store i64 %token_offset, i64 * %block_offset1
-  store i64 %new_block_size, i64 * %block_size1
+  store i32 %token_offset, i32 * %block_offset1
+  store i32 %new_block_size, i32 * %block_size1
   
   br label %HaveSpace
 
 HaveSpace:
 
   %block_offset3 = getelementptr inbounds %s.Context, %s.Context* %ctx_ptr, i64 0, i32 9
-  %block_offset2 = load i64, i64 * %block_offset3
+  %block_offset2 = load i32, i32 * %block_offset3
   
-  %input_ptr1 = getelementptr inbounds %s.Context, %s.Context* %ctx_ptr, i64 0, i32 7
-  %input_ptr = load i8*, i8** %input_ptr1
+  %input_block1 = getelementptr inbounds %s.Context, %s.Context* %ctx_ptr, i64 0, i32 4
+  %input_block = load i8*, i8** %input_block1
 
-  %extension = sub i64 %token_offset, %block_offset2
-  
-  %input_int = ptrtoint i8 * %input_ptr to i64
-  %input_adjusted = add i64 %input_int, %extension
+  %extension = sub i32 %token_offset, %block_offset2
 
-  ret i64 %input_adjusted
+  %extension64 = zext i32 %extension to i64
+
+  %input_adjusted = getelementptr i8, i8 * %input_block, i64 %extension64
+
+  ret i8 * %input_adjusted
 }
 
-define i8 @readi8( %s.Context* %ctx, %s.Token * %tok, i64 %input_adjusted ) alwaysinline {
-
-  %input_adjusted_ptr = inttoptr i64 %input_adjusted to i8 *
-
-  %read_value = load volatile i8, i8 * %input_adjusted_ptr
-
-  ret i8 %read_value
-}
-
-define i32 @readi32( %s.Context* %ctx, %s.Token * %tok, i64 %input_adjusted ) alwaysinline {
-
-  %input_adjusted_ptr = inttoptr i64 %input_adjusted to i32 *
-
-  %read_value = load volatile i32, i32 * %input_adjusted_ptr
-
-  ret i32 %read_value
-}
-
-define i64 @readi64( %s.Context* %ctx, %s.Token * %tok, i64 %input_adjusted ) alwaysinline {
-
-  %input_adjusted_ptr = inttoptr i64 %input_adjusted to i64 *
-
-  %read_value = load i64, i64 * %input_adjusted_ptr
-
-  ret i64 %read_value
-}
-
-
-define i1 * @getIsPeekPtr( %s.Context* %ctx ) alwaysinline {
+define i32 * @getIsPeekPtr( %s.Context* %ctx ) alwaysinline {
 
   %peek_ptr = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 12
 
-  ret i1 * %peek_ptr
+  ret i32 * %peek_ptr
 }
 
 define %s.Token * @getAnchorTokPtr( %s.Context* %ctx ) alwaysinline {
@@ -344,18 +330,18 @@ define %s.Token * @getPeekTokPtr( %s.Context* %ctx ) alwaysinline {
 
 define %s.Action * @getActionPtr( %s.Context* %ctx ) alwaysinline {
   
-  %action_store = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 1
+  %action_store = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 2
 
   %action_ptr = load volatile %s.Action *, %s.Action ** %action_store
   
   ret %s.Action * %action_ptr
 }
 
-define i64 * @getParseState( %s.Context* %ctx ) alwaysinline {
+define i32 * @getParseState( %s.Context* %ctx ) alwaysinline {
   
-  %prod_ptr = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 5
+  %parse_state = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 11
   
-  ret i64 * %prod_ptr
+  ret i32 * %parse_state
 }
 
 define i64 @readTokenLength( %s.Token* %tok_ptr ) alwaysinline {
@@ -385,7 +371,7 @@ define i64 @readTokenOffset( %s.Token* %tok_ptr ) alwaysinline {
   ret i64 %offset
 }
 
-define i64 @readTokenByteOffset( %s.Token* %tok_ptr ) alwaysinline {
+define i32 @readTokenByteOffset( %s.Token* %tok_ptr ) alwaysinline {
 
   %offset_ptr = getelementptr inbounds %s.Token, %s.Token* %tok_ptr, i64 0, i32 0
 
@@ -393,7 +379,9 @@ define i64 @readTokenByteOffset( %s.Token* %tok_ptr ) alwaysinline {
 
   %offset_adjusted = lshr i64 %offset, 32
 
-  ret i64 %offset_adjusted
+  %offset_32 = trunc i64 %offset_adjusted to i32
+
+  ret i32 %offset_32
 }
 
 define void @writeTokenOffset( %s.Token* %tok_ptr, i64 %offset ) alwaysinline {
@@ -415,63 +403,57 @@ define void @writeTokenType( %s.Token* %tok_ptr, i64 %type ) alwaysinline {
 }
 
 
-
-define void @setFailState ( %s.Context* %ctx ) {
-
-  ; TODO
-
-  ret void
-}
-
-define void @setPassState ( %s.Context* %ctx ) {
-
-  ; TODO
+")?.wrtln(&format!("
+define void @setFailState ( %s.Context* %ctx ) alwaysinline {{
+  
+  %state1 = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 11
+  store i32 {}, i32 * %state1
 
   ret void
-}
+}}", FAIL_STATE_FLAG))?.wrtln(&format!("
+define void @setPassState ( %s.Context* %ctx ) alwaysinline {{
+  
+  %state1 = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 11
+  store i32 {}, i32 * %state1
 
+  ret void
+}}", NORMAL_STATE_FLAG))?.wrtln("
 define void @ensureStackHasCapacity( %s.Context* %ctx, i64 %needed_capacity ) alwaysinline {
 
   ; TODO
 
   ret void
 }
-
 ")?.wrtln(&format!("
-define void @next ( %s.Context* %ctx, %s.Action* %action ) 
-alwaysinline
+define void @next ( %s.Context* %ctx, %s.Action* %action ) hot
 {{
   
   ; store action pointer into context 
-  %action_store = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 1
-  store %s.Action* %action, %s.Action** %action_store
+  ; %action_store = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 1
+  ; store %s.Action* %action, %s.Action** %action_store
   
   br label %Dispatch
 
 Dispatch:
 
-  %gt = call %s.Goto @pop_state( %s.Context* %ctx )
-  
-  %gt_state = extractvalue %s.Goto %gt, 0
+  %ctx_state_ptr = call i32 * @getParseState( %s.Context* %ctx )
+  %parse_state = load i32, i32 * %ctx_state_ptr
 
-  %cond1 = icmp ne i64 %gt_state, 0
+  %gt = call %s.Goto @pop_state( %s.Context* %ctx )
+  %gt_state = extractvalue %s.Goto %gt, 2
+
+  %cond1 = icmp ne i32 %gt_state, 0
   br i1 %cond1, label %NonEmptyState, label %Quit
 
 NonEmptyState:
-  %ctx_state_ptr = call i64 * @getParseState( %s.Context* %ctx )
-  %parse_state = load i64, i64 * %ctx_state_ptr
-
-  %1 = and i64 %parse_state, {0}
-  %2 = and i64 %gt_state, {0}
-
-  %cond2 = icmp eq i64 %1, %2
+  %cond2 = icmp eq i32 %gt_state, %parse_state
   br i1 %cond2, label %ModeAppropriateState, label %Dispatch
 
 ModeAppropriateState:
 
-  %gt_fn = extractvalue %s.Goto %gt, 1
+  %gt_fn = extractvalue %s.Goto %gt, 0
   
-  %should_emit = call fastcc inreg i32 %gt_fn( %s.Context* %ctx )
+  %should_emit = call fastcc inreg i32 %gt_fn( %s.Context* %ctx, %s.Action* %action )
 
   %cond3 = icmp eq i32 %should_emit, 1
   br i1 %cond3, label %Emit, label %Dispatch
@@ -480,15 +462,23 @@ Emit:
   ret void
 
 Quit:
-  call void @emitAccept( %s.Context* %ctx )
+  %cond4 = icmp ne i32 %parse_state, {}
+  br i1 %cond2, label %SuccessfulParse, label %FailedParse
+
+FailedParse:
+  musttail call void @emitError( %s.Context* %ctx, %s.Action* %action )
+  ret void
+
+SuccessfulParse:
+  musttail call void @emitAccept( %s.Context* %ctx, %s.Action* %action )
   ret void
 }}
-", STATE_MODE_MASK))?.wrtln("
+", FAIL_STATE_FLAG))?.wrtln("
 define %s.Goto @pop_state( %s.Context* %ctx ) alwaysinline {
   
   ; Get top of stack, decrement, and get the value at the decremented stack
   
-  %gt_top_ptr = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 3
+  %gt_top_ptr = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 6
   
   %gt_top_ptr1 = load %s.Goto *, %s.Goto ** %gt_top_ptr
   
@@ -502,12 +492,12 @@ define %s.Goto @pop_state( %s.Context* %ctx ) alwaysinline {
 }
 
 
-define void @push_state( %s.Context* %ctx, i64 %state, %fn.Goto %gt_fn_ptr ) alwaysinline {
+define void @push_state( %s.Context* %ctx, i32 %state, %fn.Goto %gt_fn_ptr ) alwaysinline {
 
-  %gt_val1 = insertvalue %s.Goto undef, i64 %state, 0
-  %gt_val2 = insertvalue %s.Goto %gt_val1, %fn.Goto %gt_fn_ptr, 1
+  %gt_val1 = insertvalue %s.Goto undef, i32 %state, 2
+  %gt_val2 = insertvalue %s.Goto %gt_val1, %fn.Goto %gt_fn_ptr, 0
 
-  %gt_top_ptr = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 3
+  %gt_top_ptr = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 6
   
   %gt_top_ptr1 = load %s.Goto *, %s.Goto ** %gt_top_ptr
 
@@ -531,25 +521,15 @@ define void @destroy_context (  ) {
 fn write_state_init<'a, W: Write>(
   writer: &'a mut CodeWriter<W>,
   output: &BytecodeOutput,
+  sp: &Vec<(usize, u32, String)>,
 ) -> Result<&'a mut CodeWriter<W>>
 {
   writer
     .wrtln("define void @prime_context( %s.Context* %ctx, i32 %initial_state ) alwaysinline cold { ")?
     .indent();
 
-  // start points
-  let sp = get_exported_productions(output.grammar)
-    .iter()
-    .enumerate()
-    .map(|(i, p)| {
-      let address = *(output.state_name_to_offset.get(p.guid_name).unwrap());
-      let name = create_offset_label(address as usize);
-      (i, address, name)
-    })
-    .collect::<Vec<_>>();
-
   writer.wrtln(&format!(
-    "call void @push_state ( %s.Context* %ctx,  i64 0, %fn.Goto @emitShift ) ",
+    "call void @push_state ( %s.Context* %ctx,  i32 0, %fn.Goto @emitShift ) ",
   ))?;
 
   writer.wrtln(&format!(
@@ -568,8 +548,8 @@ fn write_state_init<'a, W: Write>(
       .wrtln(&format!("init_{}:", label))?
       .indent()
       .wrtln(&format!(
-        "call void @push_state ( %s.Context* %ctx,  i64 {}, %fn.Goto @fn.{} ) ",
-        NORMAL_STATE_MASK, label
+        "call void @push_state ( %s.Context* %ctx,  i32 {}, %fn.Goto @fn.{} ) ",
+        NORMAL_STATE_FLAG, label
       ))?;
   }
 
@@ -607,7 +587,7 @@ pub fn write_state<W: Write>(
   mut address: usize,
   predefined_name: Option<&String>,
   mut is_scanner: bool,
-  referenced: &mut Vec<u32>,
+  referenced: &mut Vec<(u32, bool)>,
 ) -> Result<(usize, String)>
 {
   let BytecodeOutput {
@@ -648,6 +628,7 @@ pub fn write_state<W: Write>(
   while address < bytecode.len() {
     match bytecode[address] & INSTRUCTION_HEADER_MASK {
       INSTRUCTION::I00_PASS => {
+        writer.wrtln("call void @setPassState ( %s.Context* %ctx ) ")?;
         writer.wrtln("ret i32 0")?;
         break;
       }
@@ -658,7 +639,7 @@ pub fn write_state<W: Write>(
         writer
           .wrtln(";  I01_CONSUME")?
           .wrtln(&format!(
-            "%val{:X} = call i32 @emitShift( %s.Context* %ctx )",
+            "%val{:X} = musttail call i32 @emitShift( %s.Context* %ctx, %s.Action* %action )",
             address
           ))?
           .wrtln(&format!("ret i32 %val{:X}", address))?;
@@ -670,27 +651,33 @@ pub fn write_state<W: Write>(
         let goto_offset = bytecode[address] & GOTO_STATE_ADDRESS_MASK;
         let name = create_offset_label(goto_offset as usize);
 
-        referenced.push(goto_offset);
-
         if bytecode[address + 1] & INSTRUCTION_HEADER_MASK == INSTRUCTION::I00_PASS {
           // Simply perform a jump to the applicable code
           // skipping the pass instruction entirely
           writer
-            .wrtln(&format!("%val = call i32 @fn.{} ( %s.Context* %ctx ) ", name))?
+            .wrtln(&format!(
+              "%val = call i32 @fn.{} ( %s.Context* %ctx, %s.Action * %action ) ",
+              name
+            ))?
             .wrtln("ret i32 %val")?;
+          referenced.push((goto_offset, false));
           address += 2;
           break;
         } else {
           writer.wrtln(&format!(
-            "call void @push_state( %s.Context* %ctx, i64 {} , %fn.Goto @fn.{} )",
-            NORMAL_STATE_MASK, &name
+            "call void @push_state( %s.Context* %ctx, i32 {} , %fn.Goto @fn.{} )",
+            NORMAL_STATE_FLAG, &name
           ))?;
+          referenced.push((goto_offset, true));
         }
         address += 1;
       }
 
       INSTRUCTION::I03_SET_PROD => {
-        writer.wrtln(";  I03_SET_PROD")?;
+        let production_id = (bytecode[address] & INSTRUCTION_CONTENT_MASK);
+        writer.wrtln(";  I03_SET_PROD")?
+        .wrtln(&format!("%prod{}1 = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 10", address))?
+        .wrtln(&format!("store volatile i32 {}, i32 * %prod{}1", production_id, address))?;
         address += 1;
       }
 
@@ -703,9 +690,11 @@ pub fn write_state<W: Write>(
 
         writer
           .wrtln(";  I04_REDUCE")?
+          .wrtln(&format!("%prod{}1= getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 10", address))?
+          .wrtln(&format!("%prod{0} = load volatile i32, i32 * %prod{0}1", address))?
           .wrtln(&format!(
-            "%val{:X} = call i32 @emitReduce ( %s.Context* %ctx, i32 {}, i32 {}, i32 {}  )",
-            address, 0,  body_id, symbol_count
+            "%val{0:X} = musttail call i32 @emitReduce ( %s.Context* %ctx, %s.Action* %action, i32 %prod{0}, i32 {1}, i32 {2}  )",
+            address, body_id, symbol_count
           ))?
           .wrtln(&format!("ret i32 %val{:X}", address))?;
 
@@ -751,16 +740,16 @@ pub fn write_state<W: Write>(
                   .wrtln(
                     "%tok_ptr = call %s.Token * @getAssertTokPtr( %s.Context* %ctx ) alwaysinline",
                   )?
-                  .wrtln("%is_peek_ptr = call i1 * @getIsPeekPtr( %s.Context* %ctx ) alwaysinline")?
-                  .wrtln("store volatile i1 0, i1 * %is_peek_ptr")?;
+                  .wrtln("%is_peek_ptr = call i32 * @getIsPeekPtr( %s.Context* %ctx ) alwaysinline")?
+                  .wrtln("store volatile i32 0, i32 * %is_peek_ptr")?;
               } else {
                 writer
                     .wrtln(
                       "%tok_ptr = call %s.Token * @getPeekTokPtr( %s.Context* %ctx )",
                     )?
-                    .wrtln("%is_peek_ptr = call i1 * @getIsPeekPtr( %s.Context* %ctx )")?
-                    .wrtln("%is_peek = load i1, i1 * %is_peek_ptr")?
-                    .wrtln("%cond1 = icmp eq i1 %is_peek, i1 1")?
+                    .wrtln("%is_peek_ptr = call i32 * @getIsPeekPtr( %s.Context* %ctx )")?
+                    .wrtln("%is_peek = load i32, i32 * %is_peek_ptr")?
+                    .wrtln("%cond1 = icmp eq i32 %is_peek, i32 1")?
                     .wrtln(&format!(
                       "br i1 %cond1, label %{0}_AlreadyPeeking, label %{0}_NotPeeking",
                       table_name
@@ -851,7 +840,7 @@ pub fn write_state<W: Write>(
                   .unwrap();
 
                 writer.wrtln(
-                    &format!("%adj_input = call i64 @getAdjustedInputPtrInteger( %s.Context* %ctx, %s.Token * %tok_ptr, i64 {} )", max_length)
+                    &format!("%adj_input = call i8 * @getAdjustedInputPtrInteger( %s.Context* %ctx, %s.Token * %tok_ptr, i32 {} )", max_length)
                   )?;
 
                 for (address, branch, strings) in &branches {
@@ -871,8 +860,7 @@ pub fn write_state<W: Write>(
                       len if len == 1 => {
                         writer
                           .wrtln(&format!(
-                            " %input_adjusted_ptr = inttoptr i64 %adj_input to i8 *
-                          %val{} = load volatile i8, i8 * %input_adjusted_ptr",
+                            "%val{} = load volatile i8, i8 * %adj_input",
                             address
                           ))?
                           //.wrtln(&format!("%val{} = call i8 @readi8( %s.Context* %ctx, %s.Token * %tok_ptr, i64 %adj_input ) ", address))?
@@ -887,7 +875,7 @@ pub fn write_state<W: Write>(
                           string_to_byte_num_and_mask(string, sym);
                         writer
                           .wrtln(&format!(
-                            " %input_adjusted_ptr{0} = inttoptr i64 %adj_input to i64 *
+                            " %input_adjusted_ptr{0} = bitcast i8 * %adj_input to i64 *
                               %val{0} = load volatile i64, i64 * %input_adjusted_ptr{0}",
                             address
                           ))?
@@ -1116,7 +1104,7 @@ fn write_emit_reentrance<'a, W: Write>(
   bytecode: &Vec<u32>,
   address: usize,
   writer: &mut CodeWriter<W>,
-  referenced: &mut Vec<u32>,
+  referenced: &mut Vec<(u32, bool)>,
 ) -> Result<()>
 {
   let next_address = match (bytecode[address] & INSTRUCTION_HEADER_MASK) {
@@ -1133,10 +1121,10 @@ fn write_emit_reentrance<'a, W: Write>(
   if next_address != 0 {
     let name = create_offset_label(next_address);
     writer.wrtln(&format!(
-      "call void @push_state( %s.Context* %ctx, i64 {} , %fn.Goto @fn.{} )",
-      NORMAL_STATE_MASK, &name
+      "call void @push_state( %s.Context* %ctx, i32 {} , %fn.Goto @fn.{} )",
+      NORMAL_STATE_FLAG, &name
     ))?;
-    referenced.push(next_address as u32);
+    referenced.push((next_address as u32, true));
   }
   Ok(())
 }
@@ -1186,19 +1174,41 @@ pub fn compile_from_bytecode<W: Write>(
 {
   write_preamble(writer, output)?;
 
-  let mut offset = FIRST_STATE_ADDRESS as usize;
+  // start points
+  let start_points = get_exported_productions(output.grammar)
+    .iter()
+    .enumerate()
+    .map(|(i, p)| {
+      let address = *(output.state_name_to_offset.get(p.guid_name).unwrap());
+      let name = create_offset_label(address as usize);
+      (i, address, name)
+    })
+    .collect::<Vec<_>>();
+
+  let sp_lu = start_points
+    .iter()
+    .map(|(_, address, _)| *address)
+    .collect::<BTreeSet<_>>();
 
   let mut addresses = output
     .ir_states
     .values()
     .filter(|s| !s.is_scanner())
-    .map(|s| output.state_name_to_offset.get(&s.get_name()).unwrap())
-    .cloned()
+    .map(|s| {
+      let address = *output.state_name_to_offset.get(&s.get_name()).unwrap();
+      let pushed_to_stack = sp_lu.contains(&address);
+      (address, pushed_to_stack)
+    })
     .collect::<VecDeque<_>>();
 
   let mut seen = BTreeSet::new();
+  let mut goto_fn = BTreeSet::new();
 
-  while let Some(address) = addresses.pop_front() {
+  while let Some((address, pushed_to_stack)) = addresses.pop_front() {
+    if pushed_to_stack {
+      goto_fn.insert(address);
+    }
+
     if (seen.insert(address)) {
       eprintln!("{:X}", address);
       let mut referenced_addresses = Vec::new();
@@ -1207,8 +1217,9 @@ pub fn compile_from_bytecode<W: Write>(
 
       writer
         .wrtln(&format!(
-          "\ndefine internal i32 @fn.{} ( %s.Context* %ctx ) noinline optnone {{",
-          name
+          "\ndefine internal fastcc inreg i32 @fn.{}  ( %s.Context* %ctx, %s.Action* %action ) {} {{",
+          name,
+          if true { "optnone" } else { "alwaysinline" }
         ))?
         .indent();
 
@@ -1230,7 +1241,7 @@ pub fn compile_from_bytecode<W: Write>(
     }
   }
 
-  write_state_init(writer, output)?;
+  write_state_init(writer, output, &start_points)?;
 
   Ok(())
 }

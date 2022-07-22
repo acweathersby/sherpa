@@ -59,7 +59,7 @@ state [Z]
       "",
     );
 
-    ctx.init_normal_state(NORMAL_STATE_MASK | FIRST_STATE_ADDRESS);
+    ctx.init_normal_state(NORMAL_STATE_FLAG | FIRST_STATE_ADDRESS);
 
     match get_next_action(&mut reader, &mut ctx, &bytecode) {
       ParseAction::Fork {
@@ -93,7 +93,7 @@ state [test_end]
       ],
       "",
     );
-    state.init_normal_state(NORMAL_STATE_MASK | FIRST_STATE_ADDRESS);
+    state.init_normal_state(NORMAL_STATE_FLAG | FIRST_STATE_ADDRESS);
 
     match get_next_action(&mut reader, &mut state, &bytecode) {
       ParseAction::Accept { production_id } => {

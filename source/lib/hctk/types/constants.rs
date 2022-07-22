@@ -25,13 +25,13 @@ pub const PRODUCTION_META_MASK_INVERT: u64 = !PRODUCTION_META_MASK;
 
 // Bit mask for bytecode states that are active during failure
 // recovery mode
-pub const FAIL_STATE_MASK: u32 = 1 << 27;
+pub const FAIL_STATE_FLAG: u32 = 1 << 27;
 
 /// Bit mask for bytecode states that are active during normal parse
 /// mode
-pub const NORMAL_STATE_MASK: u32 = 1 << 26;
+pub const NORMAL_STATE_FLAG: u32 = 1 << 26;
 
-pub const STATE_MODE_MASK: u32 = FAIL_STATE_MASK | NORMAL_STATE_MASK;
+pub const STATE_MODE_MASK: u32 = FAIL_STATE_FLAG | NORMAL_STATE_FLAG;
 
 pub const PEEK_MODE_FLAG: u32 = 1 << 28;
 

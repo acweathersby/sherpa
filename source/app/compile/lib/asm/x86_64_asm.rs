@@ -54,8 +54,8 @@ pub fn write_preamble<W: Write, T: X8664Writer<W>>(
     .constant("ParseAction_Reduce               ", &(6).to_string())?
     .constant("ParseAction_Accept               ", &(7).to_string())?
     .constant("ParseAction_Error                ", &(8).to_string())?
-    .constant("FAIL_STATE_MASK                  ", &FAIL_STATE_MASK.to_string())?
-    .constant("NORMAL_STATE_MASK                ", &NORMAL_STATE_MASK.to_string())?
+    .constant("FAIL_STATE_MASK                  ", &FAIL_STATE_FLAG.to_string())?
+    .constant("NORMAL_STATE_MASK                ", &NORMAL_STATE_FLAG.to_string())?
     .constant("PEEK_MODE_FLAG                   ", &PEEK_MODE_FLAG.to_string())?
     .constant(
       "PEEK_MODE_FLAG_INVERT            ",
@@ -68,11 +68,11 @@ pub fn write_preamble<W: Write, T: X8664Writer<W>>(
     )?
     .constant(
       "STATE_TYPE_MASK                  ",
-      &(NORMAL_STATE_MASK + FAIL_STATE_MASK).to_string(),
+      &(NORMAL_STATE_FLAG + FAIL_STATE_FLAG).to_string(),
     )?
     .constant(
       "STATE_TYPE_MASK_INVERT           ",
-      &(!((NORMAL_STATE_MASK + FAIL_STATE_MASK) as u64)).to_string(),
+      &(!((NORMAL_STATE_FLAG + FAIL_STATE_FLAG) as u64)).to_string(),
     )?
     .constant("TOKEN_TYPE_META_MASK_INVERT      ", &(0xFFFF_FFFFu64.to_string()))?
     .constant(

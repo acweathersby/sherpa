@@ -8,20 +8,19 @@ pub struct ParseContext<T: CharacterReader>
   pub(crate) peek_token: ParseToken,
   pub(crate) anchor_token: ParseToken,
   pub(crate) assert_token: ParseToken,
-  action_ptr: usize,
-  goto_stack_ptr: *const u64, // Points to top of local_state_stack
-  stack_top: usize,
-  stack_size: usize,
-  parse_state: usize,
-  unknown: usize,
-  input_block_ptr: usize,
-  input_block_size: usize,
-  input_block_offset: usize,
+  get_byte_block_at_cursor: fn(&mut T, &mut *const u8, u32, u32) -> u32,
+  action_ptr: *mut ParseAction,
   reader: *mut T,
-  get_byte_block_at_cursor: fn(&mut T, &mut *const u8, u64, u64) -> u64,
-  in_peek_mode: bool,
-  // Old inputs
-  local_state_stack: [u64; 32],
+  input_block: usize,
+  stack_base: *const u64,
+  stack_top: usize,
+  stack_size: u32,
+  input_block_length: u32,
+  input_block_offset: u32,
+  production: u32,
+  state: u32,
+  in_peek_mode: u32,
+  local_state_stack: [u32; 32],
 }
 
 impl<T: CharacterReader> ParseContext<T>
@@ -32,18 +31,18 @@ impl<T: CharacterReader> ParseContext<T>
       peek_token: ParseToken::default(),
       anchor_token: ParseToken::default(),
       assert_token: ParseToken::default(),
-      action_ptr: 0,
-      goto_stack_ptr: [].as_mut_ptr(),
+      action_ptr: 0 as *mut ParseAction,
+      stack_base: [].as_mut_ptr(),
       stack_top: 0,
-      parse_state: NORMAL_STATE_MASK as usize,
-      unknown: 0xF0F,
-      input_block_ptr: 0,
-      input_block_size: 0,
+      state: NORMAL_STATE_FLAG,
+      production: 0,
+      input_block: 0,
+      input_block_length: 0,
       input_block_offset: 0,
       stack_size: 0,
       reader,
       get_byte_block_at_cursor: T::get_byte_block_at_cursor,
-      in_peek_mode: false,
+      in_peek_mode: 0,
       local_state_stack: [0; 32],
     };
     ctx
@@ -51,23 +50,24 @@ impl<T: CharacterReader> ParseContext<T>
 
   pub fn bytecode_context() -> Self
   {
+    const stack_32_bit_size: usize = 32;
     let mut ctx = Self {
       peek_token: ParseToken::default(),
       anchor_token: ParseToken::default(),
       assert_token: ParseToken::default(),
-      action_ptr: 0,
-      goto_stack_ptr: [].as_mut_ptr(),
+      action_ptr: 0 as *mut ParseAction,
+      stack_base: [].as_mut_ptr(),
       stack_top: 0,
-      stack_size: 0,
-      parse_state: 0,
-      unknown: 0,
-      input_block_ptr: 0,
-      input_block_size: 0,
+      stack_size: (stack_32_bit_size as u32) >> 1,
+      state: 0,
+      production: 0,
+      input_block: 0,
+      input_block_length: 0,
       input_block_offset: 0,
       reader: 0 as *mut T,
       get_byte_block_at_cursor: T::get_byte_block_at_cursor,
-      local_state_stack: [0; 32],
-      in_peek_mode: false,
+      local_state_stack: [0; stack_32_bit_size],
+      in_peek_mode: 0,
     };
 
     ctx
@@ -85,69 +85,73 @@ impl<T: CharacterReader> ParseContext<T>
   #[inline]
   pub(crate) fn set_fail_mode_to(&mut self, is_in_fail_mode: bool)
   {
-    self.input_block_offset = is_in_fail_mode as usize;
+    self.state = if is_in_fail_mode {
+      FAIL_STATE_FLAG
+    } else {
+      NORMAL_STATE_FLAG
+    }
   }
 
   #[inline]
   pub(crate) fn in_peek_mode(&self) -> bool
   {
-    self.in_peek_mode
+    self.in_peek_mode > 0
   }
 
   #[inline]
   pub(crate) fn set_peek_mode_to(&mut self, is_in_peek_mode: bool)
   {
-    self.in_peek_mode = is_in_peek_mode;
+    self.in_peek_mode = is_in_peek_mode as u32;
   }
 
   #[inline]
   pub(crate) fn is_interrupted(&self) -> bool
   {
-    self.action_ptr > 0
+    self.action_ptr as usize > 0
   }
 
   #[inline]
   pub(crate) fn set_interrupted_to(&mut self, is_interrupted: bool)
   {
-    self.action_ptr = is_interrupted as usize
+    self.action_ptr = is_interrupted as usize as *mut ParseAction
   }
 
   /// Used by the bytecode interpreter
   #[inline]
   pub(crate) fn is_scanner(&self) -> bool
   {
-    self.input_block_ptr > 0
+    self.input_block > 0
   }
 
   /// Used by the bytecode interpreter
   #[inline]
   pub(crate) fn make_scanner(&mut self)
   {
-    self.input_block_ptr = 1;
+    self.input_block = 1;
   }
 
   #[inline]
   pub(crate) fn get_active_state(&mut self) -> u32
   {
-    self.parse_state as u32
+    self.state as u32
   }
 
   #[inline]
   pub(crate) fn set_active_state_to(&mut self, state: u32)
   {
-    self.parse_state = state as usize;
+    self.state = state;
   }
 
   #[inline]
   pub(crate) fn get_production(&mut self) -> u32
   {
-    self.input_block_size as u32
+    self.production
   }
 
   #[inline]
-  pub(crate) fn set_production_to(&mut self, state: u32)
+  pub(crate) fn set_production_to(&mut self, production: u32)
   {
-    self.input_block_size = state as usize;
+    self.production = production;
   }
 
   #[inline]
@@ -164,11 +168,11 @@ impl<T: CharacterReader> ParseContext<T>
   #[inline]
   pub(crate) fn push_state(&mut self, state: u32)
   {
-    if (self.stack_top >= self.stack_size) {
+    if (self.stack_top >= self.stack_size as usize) {
       panic!("Out of parse stack space!");
     }
 
-    self.local_state_stack[self.stack_top] = state as u64;
+    self.local_state_stack[self.stack_top] = state;
 
     self.stack_top += 1;
   }
@@ -178,7 +182,7 @@ impl<T: CharacterReader> ParseContext<T>
   {
     self.stack_top = 0;
 
-    self.push_state((NORMAL_STATE_MASK | entry_point));
+    self.push_state((NORMAL_STATE_FLAG | entry_point));
   }
 }
 

@@ -1,7 +1,7 @@
 use crate::types::ParseToken;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[repr(C, u32)]
+#[repr(C, u64)]
 pub enum ParseAction
 {
   Undefined,
@@ -31,10 +31,11 @@ pub enum ParseAction
   },
   Error
   {
-    message:    &'static str,
-    last_input: ParseToken,
+    last_input:      ParseToken,
+    last_production: u32,
   },
-  ExpectedMoreInput,
+  EndOfInput,
+  ProductionParseStart,
 }
 
 impl Default for ParseAction

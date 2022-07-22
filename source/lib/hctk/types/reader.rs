@@ -147,9 +147,9 @@ pub trait CharacterReader
   fn get_byte_block_at_cursor(
     &mut self,
     block_ptr: &mut *const u8,
-    token_offset: u64,
-    requested_size: u64,
-  ) -> u64
+    token_offset: u32,
+    requested_size: u32,
+  ) -> u32
   {
     *block_ptr = "".as_ptr();
     0

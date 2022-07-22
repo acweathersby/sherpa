@@ -213,16 +213,16 @@ impl CharacterReader for UTF8StringReader
   fn get_byte_block_at_cursor(
     &mut self,
     block_ptr: &mut *const u8,
-    token_offset: u64,
-    requested_size: u64,
-  ) -> u64
+    token_offset: u32,
+    requested_size: u32,
+  ) -> u32
   {
-    let size = ((self.length as i64) - (token_offset as i64)).max(0) as usize;
+    let size = ((self.length as i64) - (token_offset as i64)).max(0);
 
     if size > 0 {
-      let ptr = (self.string.as_ptr() as u64 + token_offset) as *const u8;
+      let ptr = (self.string.as_ptr() as usize + token_offset as usize) as *const u8;
       *block_ptr = ptr;
-      size as u64
+      size as u32
     } else {
       *block_ptr = self.string.as_ptr();
       0
@@ -433,16 +433,16 @@ impl<'a> CharacterReader for UTF8StringReader2<'a>
   fn get_byte_block_at_cursor(
     &mut self,
     block_ptr: &mut *const u8,
-    token_offset: u64,
-    requested_size: u64,
-  ) -> u64
+    token_offset: u32,
+    requested_size: u32,
+  ) -> u32
   {
-    let size = ((self.length as i64) - (token_offset as i64)).max(0) as usize;
+    let size = ((self.length as i64) - (token_offset as i64)).max(0);
 
     if size > 0 {
-      let ptr = (self.string.as_ptr() as u64 + token_offset) as *const u8;
+      let ptr = (self.string.as_ptr() as u32 + token_offset as u32) as *const u8;
       *block_ptr = ptr;
-      size as u64
+      size as u32
     } else {
       *block_ptr = self.string.as_ptr();
       0
