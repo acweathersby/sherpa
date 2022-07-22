@@ -1,9 +1,0 @@
-@IGNORE g:sp
-
-@EXPORT test as entry
-
-@EXPORT test as banner
-
-@NAME nasm_test
-
-<> test > \hello \world 

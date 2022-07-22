@@ -34,10 +34,6 @@ mod test
           println!("Accept production {}", production_id);
           break;
         }
-        ParseAction::Accept { production_id } => {
-          println!("Accept production {}", production_id);
-          break;
-        }
         _ => {
           break;
         }
@@ -51,10 +47,41 @@ mod test
     assert!(matches!(actions[0], ParseAction::Shift { .. }));
     assert!(matches!(actions[1], ParseAction::Shift { .. }));
     assert!(
-      matches!(actions[2], ParseAction::Reduce { production_id, .. } if production_id == 1)
+      matches!(actions[2], ParseAction::Reduce { production_id, .. } if production_id == 8)
     );
     assert!(
-      matches!(actions[3], ParseAction::Accept { production_id } if production_id == 1)
+      matches!(actions[3], ParseAction::Accept { production_id } if production_id == 8)
+    );
+  }
+
+  #[test]
+  pub fn should_fail_on_second_erroneous_token()
+  {
+    let actions = Context::new_banner_parser(&mut UTF8StringReader::new(
+      "hello wo
+      ld"
+        .to_string(),
+    ))
+    .collect::<Vec<_>>();
+    println!("{:?}", actions);
+    assert!(matches!(actions[0], ParseAction::Shift { .. }));
+    assert!(matches!(actions[1], ParseAction::Error { .. }));
+  }
+
+  #[test]
+  pub fn should_emit_EndOfInputAction()
+  {
+    let actions =
+      Context::new_banner_parser(&mut UTF8StringReader::new("hello world".to_string()))
+        .collect::<Vec<_>>();
+
+    assert!(matches!(actions[0], ParseAction::Shift { .. }));
+    assert!(matches!(actions[1], ParseAction::Shift { .. }));
+    assert!(
+      matches!(actions[2], ParseAction::Reduce { production_id, .. } if production_id == 8)
+    );
+    assert!(
+      matches!(actions[3], ParseAction::Accept { production_id } if production_id == 8)
     );
   }
 }
