@@ -628,15 +628,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "test-basic-grammar-nasm"
-version = "0.0.0"
-dependencies = [
- "criterion",
- "hc-compile",
- "hctk",
-]
-
-[[package]]
 name = "textwrap"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
