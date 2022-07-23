@@ -1,15 +1,3 @@
-//! This following is a list of registers that a reserved for s&pecific purposes:&
-//! ### While in recognizer mode states:
-//! - r15 &- stores the state metadata
-//! - rbx - stores the address of the [parser context](hctk::types::ASMParserContext)
-//! - rbp - stores the address of the [reader](hctk::types::CharacterReader)
-//! ### While in scanner mode states:
-//! Same as above, with the additional registers:
-//! - rdx - stores packed character data. see [hctk::types::SymbolReader::get_type_info]
-//! - r12 - stores token offset data: byte offset in high 32, and codepoint offset in lower 32
-//! - r13 - stores token length data: byte length in high 32, and codepoint length in lower 32
-//! - r14 - stores accepted token offset data
-
 use hctk::bytecode::BytecodeOutput;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -181,7 +169,7 @@ define void @emitAccept ( %s.Context* %ctx, %s.Action* %action ) {
   ret void
 }
 
-define i32 @emitReduce ( %s.Context* %ctx, %s.Action* %action, i32 %production_id, i32 %body_id, i32 %symbol_count ) {
+define fastcc inreg i32 @emitReduce ( %s.Context* %ctx, %s.Action* %action, i32 %production_id, i32 %body_id, i32 %symbol_count ) {
     
   %sa_ptr = bitcast %s.Action * %action to %s.Action.Reduce *
 
@@ -199,7 +187,7 @@ define i32 @emitReduce ( %s.Context* %ctx, %s.Action* %action, i32 %production_i
   ret i32 1
 }
 
-define i32 @emitShift ( %s.Context* %ctx, %s.Action* %action ) {
+define fastcc i32 @emitShift ( %s.Context* %ctx, %s.Action* %action ) {
   
   %sa_ptr = bitcast %s.Action * %action to %s.Action.Shift *
 
@@ -453,7 +441,7 @@ ModeAppropriateState:
 
   %gt_fn = extractvalue %s.Goto %gt, 0
   
-  %should_emit = call fastcc inreg i32 %gt_fn( %s.Context* %ctx, %s.Action* %action )
+  %should_emit = call fastcc i32 %gt_fn( %s.Context* %ctx, %s.Action* %action )
 
   %cond3 = icmp eq i32 %should_emit, 1
   br i1 %cond3, label %Emit, label %Dispatch
@@ -462,15 +450,16 @@ Emit:
   ret void
 
 Quit:
-  %cond4 = icmp ne i32 %parse_state, {}
-  br i1 %cond2, label %SuccessfulParse, label %FailedParse
-
-FailedParse:
-  musttail call void @emitError( %s.Context* %ctx, %s.Action* %action )
-  ret void
+  %parse_state1 = load i32, i32 * %ctx_state_ptr
+  %cond4 = icmp ne i32 %parse_state1, {}
+  br i1 %cond4, label %SuccessfulParse, label %FailedParse
 
 SuccessfulParse:
   musttail call void @emitAccept( %s.Context* %ctx, %s.Action* %action )
+  ret void
+
+FailedParse:
+  musttail call void @emitError( %s.Context* %ctx, %s.Action* %action )
   ret void
 }}
 ", FAIL_STATE_FLAG))?.wrtln("
@@ -562,16 +551,6 @@ fn write_state_init<'a, W: Write>(
   Ok(writer)
 }
 
-fn write_emit_shift<W: Write>(writer: &mut CodeWriter<W>) -> Result<&mut CodeWriter<W>>
-{
-  Ok(writer)
-}
-
-fn write_emit_reduce<W: Write>(writer: &mut CodeWriter<W>) -> Result<&mut CodeWriter<W>>
-{
-  Ok(writer)
-}
-
 /// Set our parse view the cursor position defined in `rsi` so that we
 /// can select read enough bytes to satisfy the view length requirements
 /// of the current state
@@ -639,7 +618,7 @@ pub fn write_state<W: Write>(
         writer
           .wrtln(";  I01_CONSUME")?
           .wrtln(&format!(
-            "%val{:X} = musttail call i32 @emitShift( %s.Context* %ctx, %s.Action* %action )",
+            "%val{:X} = musttail call fastcc i32 @emitShift( %s.Context* %ctx, %s.Action* %action )",
             address
           ))?
           .wrtln(&format!("ret i32 %val{:X}", address))?;
@@ -656,7 +635,7 @@ pub fn write_state<W: Write>(
           // skipping the pass instruction entirely
           writer
             .wrtln(&format!(
-              "%val = call i32 @fn.{} ( %s.Context* %ctx, %s.Action * %action ) ",
+              "%val = musttail call fastcc i32 @fn.{} ( %s.Context* %ctx, %s.Action * %action ) ",
               name
             ))?
             .wrtln("ret i32 %val")?;
@@ -693,7 +672,7 @@ pub fn write_state<W: Write>(
           .wrtln(&format!("%prod{}1= getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 10", address))?
           .wrtln(&format!("%prod{0} = load volatile i32, i32 * %prod{0}1", address))?
           .wrtln(&format!(
-            "%val{0:X} = musttail call i32 @emitReduce ( %s.Context* %ctx, %s.Action* %action, i32 %prod{0}, i32 {1}, i32 {2}  )",
+            "%val{0:X} = call fastcc inreg i32 @emitReduce ( %s.Context* %ctx, %s.Action* %action, i32 %prod{0}, i32 {1}, i32 {2}  )",
             address, body_id, symbol_count
           ))?
           .wrtln(&format!("ret i32 %val{:X}", address))?;
@@ -1217,9 +1196,9 @@ pub fn compile_from_bytecode<W: Write>(
 
       writer
         .wrtln(&format!(
-          "\ndefine internal fastcc inreg i32 @fn.{}  ( %s.Context* %ctx, %s.Action* %action ) {} {{",
+          "\ndefine fastcc i32 @fn.{} ( %s.Context* %ctx, %s.Action* %action ) {} {{",
           name,
-          if true { "optnone" } else { "alwaysinline" }
+          if true { "optnone noinline" } else { "" }
         ))?
         .indent();
 

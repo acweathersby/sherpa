@@ -440,7 +440,7 @@ impl<'a> CharacterReader for UTF8StringReader2<'a>
     let size = ((self.length as i64) - (token_offset as i64)).max(0);
 
     if size > 0 {
-      let ptr = (self.string.as_ptr() as u32 + token_offset as u32) as *const u8;
+      let ptr = (self.string.as_ptr() as usize + token_offset as usize) as *const u8;
       *block_ptr = ptr;
       size as u32
     } else {

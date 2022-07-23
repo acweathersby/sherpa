@@ -55,7 +55,7 @@ pub fn write_preamble<W: Write, T: X8664Writer<W>>(
     .constant("ParseAction_Accept               ", &(7).to_string())?
     .constant("ParseAction_Error                ", &(8).to_string())?
     .constant("FAIL_STATE_MASK                  ", &FAIL_STATE_FLAG.to_string())?
-    .constant("NORMAL_STATE_MASK                ", &NORMAL_STATE_FLAG.to_string())?
+    .constant("NORMAL_STATE_FLAG                ", &NORMAL_STATE_FLAG.to_string())?
     .constant("PEEK_MODE_FLAG                   ", &PEEK_MODE_FLAG.to_string())?
     .constant(
       "PEEK_MODE_FLAG_INVERT            ",
@@ -171,7 +171,7 @@ pub fn write_preamble<W: Write, T: X8664Writer<W>>(
     .inline(restore_context_external)?
     .comment_line("  Configure our parse state")?
     .comment_line("  Set the normal mode for our parse state")?
-    .code("mov r10, ( NORMAL_STATE_MASK )")?
+    .code("mov r10, ( NORMAL_STATE_FLAG )")?
     .code("mov [rbx + rbx_state_u64_data_offset], r10")?
     .code("mov r11, rsi")?
     .code("xor esi, esi")?
@@ -220,7 +220,7 @@ pub fn write_preamble<W: Write, T: X8664Writer<W>>(
     .code("push r10")?
     .code("push r10")?
     .comment_line("  Push our entry state onto the stack")?
-    .commented_code("mov r15, NORMAL_STATE_MASK", "state metadata")?
+    .commented_code("mov r15, NORMAL_STATE_FLAG", "state metadata")?
     .commented_code("push r15", "state metadata")?
     .commented_code("push rax", "state address")?
     .inline(save_context_external)?
@@ -245,7 +245,7 @@ pub fn write_preamble<W: Write, T: X8664Writer<W>>(
     .commented_code("push r10", "push the address of the completer code")?
     .code("push 0")?
     .code("push 0")?
-    .commented_code("mov r15, NORMAL_STATE_MASK", "set scanner state metadata")?
+    .commented_code("mov r15, NORMAL_STATE_FLAG", "set scanner state metadata")?
     .inline(save_context_internal)?
     .code("mov rsi, r14")?
     .code("mov rdi, [rbx + rbx_struct_reader_ptr_offset]")?
@@ -586,7 +586,7 @@ pub fn write_state<W: Write, T: X8664Writer<W>>(
           address += 1;
           writer.code("mov rax, STATE_TYPE_MASK_INVERT")?;
           writer.code("and r15, rax")?;
-          writer.code("or r15, NORMAL_STATE_MASK")?;
+          writer.code("or r15, NORMAL_STATE_FLAG")?;
           writer.code("jmp dispatch_loop")?;
           break;
         }
@@ -648,7 +648,7 @@ pub fn write_state<W: Write, T: X8664Writer<W>>(
             break;
           } else {
             writer
-              .code(&format!("mov rax, NORMAL_STATE_MASK"))?
+              .code(&format!("mov rax, NORMAL_STATE_FLAG"))?
               .code("push rax")?
               .code(&format!("lea rax, [rel {}]", name))?
               .code("push rax")?;

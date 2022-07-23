@@ -11,7 +11,7 @@ const STATE_INDEX_MASK: u32 = (1 << 24) - 1;
 
 const _FAIL_STATE_MASK: u32 = 1 << 27;
 
-const _NORMAL_STATE_MASK: u32 = 1 << 26;
+const _NORMAL_STATE_FLAG: u32 = 1 << 26;
 
 const _GOTO_STATE_MASK: u32 = 1 << 25;
 
@@ -27,7 +27,7 @@ const SKIPPED_SCAN_PROD: u32 = 9009;
 
 const DEFAULT_PASS_INSTRUCTION: usize = 1;
 
-const NORMAL_STATE_MASK: u32 = 1 << 26;
+const NORMAL_STATE_FLAG: u32 = 1 << 26;
 
 #[derive(Debug, Copy, Clone)]
 #[deprecated]
@@ -254,7 +254,7 @@ impl<'a, T: ByteReader> StateIterator<'a, T>
           return;
         }
       } else {
-        let mask_gate = NORMAL_STATE_MASK << fail_mode;
+        let mask_gate = NORMAL_STATE_FLAG << fail_mode;
 
         if fail_mode == 0 {
           last_good_state = state;
@@ -565,7 +565,7 @@ impl<T: ByteReader> ScannerIterator<T>
 
         return ParseAction::TOKEN { token };
       } else {
-        let mask_gate = NORMAL_STATE_MASK << fail_mode;
+        let mask_gate = NORMAL_STATE_FLAG << fail_mode;
 
         if (state & mask_gate) != 0 {
           fail_mode = self.instruction_executor(state, fail_mode, bytecode);

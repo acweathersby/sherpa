@@ -91,7 +91,7 @@ pub fn compile_llvm_files(
 
               match Command::new("clang-14")
                 .args(&[
-                  "-flto=thin",
+                  //"-flto=thin",
                   //"-O3",
                   "-c",
                   "-o",
@@ -194,7 +194,7 @@ impl<T: CharacterReader> Iterator for Context<T> {{
                 let mut action = ParseAction::Undefined;
                 next(_ptr as u64, &mut action);
 
-                self.1 = !matches!(action, ParseAction::Accept{{..}});
+                self.1 = !matches!(action, ParseAction::Accept{{..}}| ParseAction::Error {{ .. }});
 
                 Some(action)
             }}

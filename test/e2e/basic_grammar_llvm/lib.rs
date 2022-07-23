@@ -57,12 +57,9 @@ mod test
   #[test]
   pub fn should_fail_on_second_erroneous_token()
   {
-    let actions = Context::new_banner_parser(&mut UTF8StringReader::new(
-      "hello wo
-      ld"
-        .to_string(),
-    ))
-    .collect::<Vec<_>>();
+    let actions =
+      Context::new_banner_parser(&mut UTF8StringReader::new("hello wold".to_string()))
+        .collect::<Vec<_>>();
     println!("{:?}", actions);
     assert!(matches!(actions[0], ParseAction::Shift { .. }));
     assert!(matches!(actions[1], ParseAction::Error { .. }));
