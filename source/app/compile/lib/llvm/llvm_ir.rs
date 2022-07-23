@@ -819,7 +819,10 @@ pub fn write_state<W: Write>(
                   .unwrap();
 
                 writer.wrtln(
-                    &format!("%adj_input = call i8 * @getAdjustedInputPtrInteger( %s.Context* %ctx, %s.Token * %tok_ptr, i32 {} )", max_length)
+                    &format!(
+                      "%adj_input = call i8 * @getAdjustedInputPtrInteger( %s.Context* %ctx, %s.Token * %tok_ptr, i32 {} )"
+                      , max_length
+                    )
                   )?;
 
                 for (address, branch, strings) in &branches {
@@ -842,7 +845,6 @@ pub fn write_state<W: Write>(
                             "%val{} = load volatile i8, i8 * %adj_input",
                             address
                           ))?
-                          //.wrtln(&format!("%val{} = call i8 @readi8( %s.Context* %ctx, %s.Token * %tok_ptr, i64 %adj_input ) ", address))?
                           .wrtln(&format!(
                             "%cond{0:X} = icmp eq i8 %val{0}, {1}",
                             address,
@@ -858,7 +860,6 @@ pub fn write_state<W: Write>(
                               %val{0} = load volatile i64, i64 * %input_adjusted_ptr{0}",
                             address
                           ))?
-                          //  .wrtln(&format!("%val{} = call i64 @readi64( %s.Context* %ctx, %s.Token * %tok_ptr, i64 %adj_input ) ", address))?
                           .wrtln(&format!(
                             "%masked_val{0} = and i64 %val{0}, {1} ",
                             address, mask
