@@ -38,14 +38,14 @@ pub fn write_preamble<W: Write>(
 %getInputBlock = type i32 (  i64 *, i8 **, i32, i32 ) *
 
 
-%s.Context = type {
+%s.CTX = type {
   [3 x %s.Token],   ; 0 
   %getInputBlock,   ; 1  - Input block request
   %s.Action *,      ; 2  - ParseAction
   i64 *,            ; 3  - Reader 
   i8 *,             ; 4  - Input Block
   %s.Goto *,        ; 5  - Stack Base
-  %s.Goto *,        ; 6  - Stack Top
+  %s.Goto *,        ; 6  - Stack Top 
   i32,              ; 7  - Stack Size
   i32,              ; 8  - Input Block Length
   i32,              ; 9  - Input Block Offset
@@ -55,7 +55,7 @@ pub fn write_preamble<W: Write>(
   %s.Goto           ; 13 - Default Goto Space
 }
 
-%fn.Goto = type i32 ( %s.Context*,  %s.Action* ) *
+%fn.Goto = type i32 ( %s.CTX*,  %s.Action* ) *
 
 %s.Goto = type {
   %fn.Goto,  ; 0 - Function Pointer
@@ -113,16 +113,16 @@ pub fn write_preamble<W: Write>(
 
 ; Common functions
 
-define void @emitError( %s.Context* %ctx, %s.Action* %action ) {
+define void @emitError( %s.CTX* %ctx, %s.Action* %action ) {
 
   %sa_ptr = bitcast %s.Action * %action to %s.Action.Error *
 
-  %tk_asrt_ptr = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 0, i64 1
+  %tk_asrt_ptr = getelementptr %s.CTX, %s.CTX* %ctx, i64 0, i32 0, i64 1
   %tk_asrt = load %s.Token, %s.Token * %tk_asrt_ptr
 
   %sa1 = load %s.Action.Error, %s.Action.Error* %sa_ptr
 
-  %prod1 = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 10
+  %prod1 = getelementptr %s.CTX, %s.CTX* %ctx, i64 0, i32 10
   %prod = load i32, i32 * %prod1
 
   ; Set skip and shift tokens
@@ -136,23 +136,23 @@ define void @emitError( %s.Context* %ctx, %s.Action* %action ) {
   ret void
 }
 
-define void @construct_context ( %s.Context* %ctx, %s.Action* %action ) {
+define void @construct_context ( %s.CTX* %ctx, %s.Action* %action ) {
 
-  %default_goto = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 13
+  %default_goto = getelementptr %s.CTX, %s.CTX* %ctx, i64 0, i32 13
 
-  %base_ptr = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 5
+  %base_ptr = getelementptr %s.CTX, %s.CTX* %ctx, i64 0, i32 5
   store  %s.Goto * %default_goto, %s.Goto ** %base_ptr
 
-  %top_ptr = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 6
+  %top_ptr = getelementptr %s.CTX, %s.CTX* %ctx, i64 0, i32 6
   
   store %s.Goto * %default_goto, %s.Goto ** %top_ptr
 
   ret void
 }
 
-define void @emitAccept ( %s.Context* %ctx, %s.Action* %action ) {
+define void @emitAccept ( %s.CTX* %ctx, %s.Action* %action ) {
 
-  %prod1 = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 10
+  %prod1 = getelementptr %s.CTX, %s.CTX* %ctx, i64 0, i32 10
   %prod = load i32, i32 * %prod1
   
   %sa_ptr = bitcast %s.Action * %action to %s.Action.Accept *
@@ -169,7 +169,7 @@ define void @emitAccept ( %s.Context* %ctx, %s.Action* %action ) {
   ret void
 }
 
-define fastcc inreg i32 @emitReduce ( %s.Context* %ctx, %s.Action* %action, i32 %production_id, i32 %body_id, i32 %symbol_count ) {
+define fastcc inreg i32 @emitReduce ( %s.CTX* %ctx, %s.Action* %action, i32 %production_id, i32 %body_id, i32 %symbol_count ) {
     
   %sa_ptr = bitcast %s.Action * %action to %s.Action.Reduce *
 
@@ -187,14 +187,59 @@ define fastcc inreg i32 @emitReduce ( %s.Context* %ctx, %s.Action* %action, i32 
   ret i32 1
 }
 
-define fastcc i32 @emitShift ( %s.Context* %ctx, %s.Action* %action ) {
+define void @shiftToken( %s.CTX* %ctx ) alwaysinline {
+  ; The length of the skip token is equal to the tokens offset minus the 
+  ; assert token's offset
+
+  %tk_anch_ptr = getelementptr %s.CTX, %s.CTX* %ctx, i64 0, i32 0, i64 0
+
+  %tk_asrt_ptr = getelementptr %s.CTX, %s.CTX* %ctx, i64 0, i32 0, i64 1
+  %tk_asrt = load %s.Token, %s.Token * %tk_asrt_ptr
+
+  %tk_asrt_off = extractvalue %s.Token %tk_asrt, 0 
+
+  ; Set new offset of assert and increment tokens
+
+  %tk_asrt_len = extractvalue %s.Token %tk_asrt, 1
+  %tk_asrt_off2 = add i64 %tk_asrt_off, %tk_asrt_len
+  %tk_asrt2 = insertvalue %s.Token %tk_asrt, i64 %tk_asrt_off2, 0 
+  %tk_asrt3 = insertvalue %s.Token %tk_asrt2, i64 0, 2 ; Set token type to 0
+
+  store %s.Token %tk_asrt3, %s.Token * %tk_anch_ptr
+  store %s.Token %tk_asrt3, %s.Token * %tk_asrt_ptr
+  
+  ret void
+}
+
+define void @scanShiftToken( %s.CTX* %ctx ) alwaysinline {
+  ; The length of the skip token is equal to the tokens offset minus the 
+  ; assert token's offset
+
+  %tk_asrt_ptr = getelementptr %s.CTX, %s.CTX* %ctx, i64 0, i32 0, i64 1
+  %tk_asrt = load %s.Token, %s.Token * %tk_asrt_ptr
+
+  %tk_asrt_off = extractvalue %s.Token %tk_asrt, 0 
+
+  ; Set new offset of assert and increment tokens
+
+  %tk_asrt_len = extractvalue %s.Token %tk_asrt, 1
+  %tk_asrt_off2 = add i64 %tk_asrt_off, %tk_asrt_len
+  %tk_asrt2 = insertvalue %s.Token %tk_asrt, i64 %tk_asrt_off2, 0 
+  %tk_asrt3 = insertvalue %s.Token %tk_asrt2, i64 0, 2 ; Set token type to 0
+
+  store %s.Token %tk_asrt3, %s.Token * %tk_asrt_ptr
+  
+  ret void
+}
+
+define fastcc i32 @emitShift ( %s.CTX* %ctx, %s.Action* %action ) {
   
   %sa_ptr = bitcast %s.Action * %action to %s.Action.Shift *
 
-  %tk_anch_ptr = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 0, i64 0
+  %tk_anch_ptr = getelementptr %s.CTX, %s.CTX* %ctx, i64 0, i32 0, i64 0
   %tk_anch = load %s.Token, %s.Token * %tk_anch_ptr
 
-  %tk_asrt_ptr = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 0, i64 1
+  %tk_asrt_ptr = getelementptr %s.CTX, %s.CTX* %ctx, i64 0, i32 0, i64 1
   %tk_asrt = load %s.Token, %s.Token * %tk_asrt_ptr
 
   %sa1 = load %s.Action.Shift, %s.Action.Shift* %sa_ptr
@@ -215,25 +260,17 @@ define fastcc i32 @emitShift ( %s.Context* %ctx, %s.Action* %action ) {
 
   store %s.Action.Shift %sa4, %s.Action.Shift* %sa_ptr
 
-  ; Set new offset of assert and increment tokens
-
-  %tk_asrt_len = extractvalue %s.Token %tk_asrt, 1
-  %tk_asrt_off2 = add i64 %tk_asrt_off, %tk_asrt_len
-  %tk_asrt2 = insertvalue %s.Token %tk_asrt, i64 %tk_asrt_off2, 0 
-  %tk_asrt3 = insertvalue %s.Token %tk_asrt2, i64 0, 2 ; Set token type to 0
-
-  store %s.Token %tk_asrt3, %s.Token * %tk_anch_ptr
-  store %s.Token %tk_asrt3, %s.Token * %tk_asrt_ptr
+  call void @shiftToken( %s.CTX* %ctx )
   
   ret i32 1
 }
 
-define fastcc i8* @getAdjustedInputPtrInteger( %s.Context* %ctx_ptr, %s.Token * %tok, i32 %requested_size ) {
+define i8* @getAdjustedInputPtrInteger( %s.CTX* %ctx_ptr, %s.Token * %tok, i32 %requested_size ) {
 
-  %block_offset1 = getelementptr inbounds %s.Context, %s.Context* %ctx_ptr, i64 0, i32 9
+  %block_offset1 = getelementptr %s.CTX, %s.CTX* %ctx_ptr, i64 0, i32 9
   %block_offset = load i32, i32 * %block_offset1
 
-  %block_size1 = getelementptr inbounds %s.Context, %s.Context* %ctx_ptr, i64 0, i32 8
+  %block_size1 = getelementptr %s.CTX, %s.CTX* %ctx_ptr, i64 0, i32 8
   %block_size = load i32, i32 * %block_size1
 
   ; get the difference between the current offset position and the end of the current 
@@ -247,13 +284,13 @@ define fastcc i8* @getAdjustedInputPtrInteger( %s.Context* %ctx_ptr, %s.Token * 
 
 AttemptExtend:
 
-  %getInputBlock_fn1 = getelementptr inbounds %s.Context, %s.Context* %ctx_ptr, i64 0, i32 1
+  %getInputBlock_fn1 = getelementptr %s.CTX, %s.CTX* %ctx_ptr, i64 0, i32 1
   %getInputBlock_fn = load %getInputBlock, %getInputBlock * %getInputBlock_fn1
 
-  %input_reader1 = getelementptr inbounds %s.Context, %s.Context* %ctx_ptr, i64 0, i32 3
+  %input_reader1 = getelementptr %s.CTX, %s.CTX* %ctx_ptr, i64 0, i32 3
   %input_reader = load volatile i64 *, i64 ** %input_reader1
 
-  %input_block2 = getelementptr inbounds %s.Context, %s.Context* %ctx_ptr, i64 0, i32 4
+  %input_block2 = getelementptr %s.CTX, %s.CTX* %ctx_ptr, i64 0, i32 4
 
   %new_block_size = call i32 %getInputBlock_fn ( i64 * %input_reader, i8 ** %input_block2, i32 %token_offset,  i32 %requested_size )
 
@@ -273,10 +310,10 @@ ExtensionSuccess:
 
 HaveSpace:
 
-  %block_offset3 = getelementptr inbounds %s.Context, %s.Context* %ctx_ptr, i64 0, i32 9
+  %block_offset3 = getelementptr %s.CTX, %s.CTX* %ctx_ptr, i64 0, i32 9
   %block_offset2 = load i32, i32 * %block_offset3
   
-  %input_block1 = getelementptr inbounds %s.Context, %s.Context* %ctx_ptr, i64 0, i32 4
+  %input_block1 = getelementptr %s.CTX, %s.CTX* %ctx_ptr, i64 0, i32 4
   %input_block = load i8*, i8** %input_block1
 
   %extension = sub i32 %token_offset, %block_offset2
@@ -288,53 +325,53 @@ HaveSpace:
   ret i8 * %input_adjusted
 }
 
-define i32 * @getIsPeekPtr( %s.Context* %ctx ) alwaysinline {
+define i32 * @getIsPeekPtr( %s.CTX* %ctx ) alwaysinline {
 
-  %peek_ptr = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 12
+  %peek_ptr = getelementptr %s.CTX, %s.CTX* %ctx, i64 0, i32 12
 
   ret i32 * %peek_ptr
 }
 
-define %s.Token * @getAnchorTokPtr( %s.Context* %ctx ) alwaysinline {
+define %s.Token * @getAnchorTokPtr( %s.CTX* %ctx ) alwaysinline {
     
-  %tok_ptr = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 0, i32 0
+  %tok_ptr = getelementptr %s.CTX, %s.CTX* %ctx, i64 0, i32 0, i32 0
 
     ret %s.Token * %tok_ptr
 }
 
-define %s.Token * @getAssertTokPtr( %s.Context* %ctx ) alwaysinline {
+define %s.Token * @getAssertTokPtr( %s.CTX* %ctx ) alwaysinline {
   
-  %tok_ptr = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 0, i32 1
-  
-  ret %s.Token * %tok_ptr
-}
-
-define %s.Token * @getPeekTokPtr( %s.Context* %ctx ) alwaysinline {
-  
-  %tok_ptr = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 0, i32 2
+  %tok_ptr = getelementptr %s.CTX, %s.CTX* %ctx, i64 0, i32 0, i32 1
   
   ret %s.Token * %tok_ptr
 }
 
-define %s.Action * @getActionPtr( %s.Context* %ctx ) alwaysinline {
+define %s.Token * @getPeekTokPtr( %s.CTX* %ctx ) alwaysinline {
   
-  %action_store = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 2
+  %tok_ptr = getelementptr %s.CTX, %s.CTX* %ctx, i64 0, i32 0, i32 2
+  
+  ret %s.Token * %tok_ptr
+}
+
+define %s.Action * @getActionPtr( %s.CTX* %ctx ) alwaysinline {
+  
+  %action_store = getelementptr %s.CTX, %s.CTX* %ctx, i64 0, i32 2
 
   %action_ptr = load volatile %s.Action *, %s.Action ** %action_store
   
   ret %s.Action * %action_ptr
 }
 
-define i32 * @getParseState( %s.Context* %ctx ) alwaysinline {
+define i32 * @getParseState( %s.CTX* %ctx ) alwaysinline {
   
-  %parse_state = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 11
+  %parse_state = getelementptr %s.CTX, %s.CTX* %ctx, i64 0, i32 11
   
   ret i32 * %parse_state
 }
 
 define i64 @readTokenLength( %s.Token* %tok_ptr ) alwaysinline {
 
-  %length_ptr = getelementptr inbounds %s.Token, %s.Token* %tok_ptr, i64 0, i32 1
+  %length_ptr = getelementptr %s.Token, %s.Token* %tok_ptr, i64 0, i32 1
 
   %length = load volatile i64, i64 * %length_ptr
 
@@ -343,7 +380,7 @@ define i64 @readTokenLength( %s.Token* %tok_ptr ) alwaysinline {
 
 define void @writeTokenLength( %s.Token* %tok_ptr, i64 %length ) alwaysinline {
 
-  %length_ptr = getelementptr inbounds %s.Token, %s.Token* %tok_ptr, i64 0, i32 1
+  %length_ptr = getelementptr %s.Token, %s.Token* %tok_ptr, i64 0, i32 1
 
   store volatile i64 %length, i64 * %length_ptr
 
@@ -352,7 +389,7 @@ define void @writeTokenLength( %s.Token* %tok_ptr, i64 %length ) alwaysinline {
 
 define i64 @readTokenOffset( %s.Token* %tok_ptr ) alwaysinline {
 
-  %offset_ptr = getelementptr inbounds %s.Token, %s.Token* %tok_ptr, i64 0, i32 0
+  %offset_ptr = getelementptr %s.Token, %s.Token* %tok_ptr, i64 0, i32 0
 
   %offset =  load volatile i64, i64 * %offset_ptr
 
@@ -361,7 +398,7 @@ define i64 @readTokenOffset( %s.Token* %tok_ptr ) alwaysinline {
 
 define i32 @readTokenByteOffset( %s.Token* %tok_ptr ) alwaysinline {
 
-  %offset_ptr = getelementptr inbounds %s.Token, %s.Token* %tok_ptr, i64 0, i32 0
+  %offset_ptr = getelementptr %s.Token, %s.Token* %tok_ptr, i64 0, i32 0
 
   %offset = load i64, i64 * %offset_ptr
 
@@ -374,60 +411,188 @@ define i32 @readTokenByteOffset( %s.Token* %tok_ptr ) alwaysinline {
 
 define void @writeTokenOffset( %s.Token* %tok_ptr, i64 %offset ) alwaysinline {
   
-  %offset_ptr = getelementptr inbounds %s.Token, %s.Token* %tok_ptr, i64 0, i32 0
+  %offset_ptr = getelementptr %s.Token, %s.Token* %tok_ptr, i64 0, i32 0
 
   store volatile i64 %offset, i64 * %offset_ptr
 
   ret void
 }
 
-define void @writeTokenType( %s.Token* %tok_ptr, i64 %type ) alwaysinline {
+define void @writeTokenType( %s.Token* %tok_ptr, i32 %type ) alwaysinline {
   
-  %type_ptr = getelementptr inbounds %s.Token, %s.Token* %tok_ptr, i64 0, i32 2
+  %type_ptr = getelementptr %s.Token, %s.Token* %tok_ptr, i64 0, i32 2
 
-  store volatile i64 %type, i64 * %type_ptr
+  %tok_type = zext i32 %type to i64
+
+  store volatile i64 %tok_type, i64 * %type_ptr
 
   ret void
 }
 
+define i32 @readTokenType( %s.Token* %tok_ptr ) alwaysinline {
+  
+  %type_ptr = getelementptr %s.Token, %s.Token* %tok_ptr, i64 0, i32 2
+
+  %type_32_ptr = bitcast i64 * %type_ptr to i32 *
+  
+  %tok_type = load volatile i32, i32 * %type_32_ptr
+
+  ret i32 %tok_type
+}
 
 ")?.wrtln(&format!("
-define void @setFailState ( %s.Context* %ctx ) alwaysinline {{
+define fastcc %s.Token @scan ( %s.CTX* %ctx, %fn.Goto %scan_function, %s.Token * %root_token ) {{
+  ; create scanning context 
   
-  %state1 = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 11
+  %scan_ctx = alloca %s.CTX
+  
+  ; create the scan context's stack buffer
+
+  %scan_ctx_stack = alloca %s.Goto, i32 32
+
+  %scan_ctx_stack_ptr = getelementptr %s.CTX, %s.CTX* %scan_ctx, i64 0, i32 5
+  %scan_ctx_stack_top_ptr = getelementptr %s.CTX, %s.CTX* %scan_ctx, i64 0, i32 6
+
+  store %s.Goto * %scan_ctx_stack, %s.Goto ** %scan_ctx_stack_ptr
+  store %s.Goto * %scan_ctx_stack, %s.Goto ** %scan_ctx_stack_top_ptr
+  
+  %scan_ctx_stack_size_ptr = getelementptr %s.CTX, %s.CTX* %scan_ctx, i64 0, i32 7
+
+  store i32 512, i32 * %scan_ctx_stack_size_ptr
+
+  ; pointers for transferring input information between the contexts
+
+  %ctx_Reader_ptr = getelementptr %s.CTX, %s.CTX* %ctx, i64 0, i32 3
+  %scan_ctx_Reader_ptr = getelementptr %s.CTX, %s.CTX* %scan_ctx, i64 0, i32 3
+  
+  %ctx_getInputBlock_ptr = getelementptr %s.CTX, %s.CTX* %ctx, i64 0, i32 1
+  %scan_ctx_getInputBlock_ptr = getelementptr %s.CTX, %s.CTX* %scan_ctx, i64 0, i32 1
+
+  %ctx_inputBlock_ptr = getelementptr %s.CTX, %s.CTX* %ctx, i64 0, i32 4
+  %scan_ctx_inputBlock_ptr = getelementptr %s.CTX, %s.CTX* %scan_ctx, i64 0, i32 4
+
+  %ctx_inputBlockLen_ptr = getelementptr %s.CTX, %s.CTX* %ctx, i64 0, i32 8
+  %scan_ctx_inputBlockLen_ptr = getelementptr %s.CTX, %s.CTX* %scan_ctx, i64 0, i32 8
+
+  %ctx_inputBlockOff_ptr = getelementptr %s.CTX, %s.CTX* %ctx, i64 0, i32 9
+  %scan_ctx_inputBlockOff_ptr = getelementptr %s.CTX, %s.CTX* %scan_ctx, i64 0, i32 9
+
+  ; copy the input data from the parse context
+
+  %ctx_Reader = load i64 *, i64 ** %ctx_Reader_ptr
+  store i64 * %ctx_Reader, i64 ** %scan_ctx_Reader_ptr
+
+  %ctx_getInputBlock = load %getInputBlock, %getInputBlock* %ctx_getInputBlock_ptr
+  store %getInputBlock %ctx_getInputBlock, %getInputBlock* %scan_ctx_getInputBlock_ptr
+
+  %ctx_inputBlock = load i8*, i8** %ctx_inputBlock_ptr
+  store i8* %ctx_inputBlock, i8** %scan_ctx_inputBlock_ptr
+
+  %ctx_inputBlockLen = load i32, i32* %ctx_inputBlockLen_ptr
+  store i32 %ctx_inputBlockLen, i32* %scan_ctx_inputBlockLen_ptr
+
+  %ctx_inputBlockOff = load i32, i32* %ctx_inputBlockOff_ptr
+  store i32 %ctx_inputBlockOff, i32* %scan_ctx_inputBlockOff_ptr
+  
+  ; copy the assert token to the anchor and the assert token
+  ; of the scan context
+
+  call void @setPassState( %s.CTX* %scan_ctx )
+
+  %ctx_assert = load %s.Token, %s.Token * %root_token
+
+  %scan_ctx_anchor_ptr = getelementptr %s.CTX, %s.CTX* %scan_ctx, i64 0, i32 0, i64 0
+  %scan_ctx_assert_ptr = getelementptr %s.CTX, %s.CTX* %scan_ctx, i64 0, i32 0, i64 1
+
+  store %s.Token %ctx_assert, %s.Token * %scan_ctx_assert_ptr
+  store %s.Token %ctx_assert, %s.Token * %scan_ctx_anchor_ptr
+
+  call void @push_state( %s.CTX* %scan_ctx, i32 0, %fn.Goto @emitShift )
+  call void @push_state( %s.CTX* %scan_ctx, i32 {}, %fn.Goto %scan_function )
+
+  ; reserve enough space on the stack for an Action enum
+  %scan_action_buffer = alloca i64, i32 32 
+  %scan_action = bitcast i64 * %scan_action_buffer to %s.Action *
+
+  call void @next ( %s.CTX* %scan_ctx, %s.Action* %scan_action ) 
+
+  %scan_action_type_ptr = getelementptr %s.Action, %s.Action* %scan_action, i64 0, i32 0
+  %scan_action_type = load i32, i32 * %scan_action_type_ptr
+
+  ; copy the input data from the scan context to the parse context
+
+  %scan_ctx_inputBlock = load i8*, i8** %scan_ctx_inputBlock_ptr
+  store i8* %scan_ctx_inputBlock, i8** %ctx_inputBlock_ptr
+
+  %scan_ctx_inputBlockLen = load i32, i32* %scan_ctx_inputBlockLen_ptr
+  store i32 %scan_ctx_inputBlockLen, i32* %ctx_inputBlockLen_ptr
+
+  %scan_ctx_inputBlockOff = load i32, i32* %scan_ctx_inputBlockOff_ptr
+  store i32 %scan_ctx_inputBlockOff, i32* %ctx_inputBlockOff_ptr
+
+  ; Produce either a failure token or a success token based on 
+  ; outcome of the `next` call.
+  
+  %cond1 = icmp eq i32 %scan_action_type, 7
+  br i1 %cond1, label %produce_scan_token, label %produce_failed_token
+
+produce_scan_token:
+
+  %offset_max = call i64 @readTokenOffset( %s.Token * %scan_ctx_assert_ptr )
+  %offset_min = call i64 @readTokenOffset( %s.Token * %scan_ctx_anchor_ptr )
+
+  %offsetDiff = sub i64 %offset_max, %offset_min
+
+  call void @writeTokenLength( %s.Token * %scan_ctx_anchor_ptr, i64 %offsetDiff ) 
+
+  %ret_tok1 = load %s.Token, %s.Token * %scan_ctx_anchor_ptr
+
+  ret %s.Token %ret_tok1
+
+produce_failed_token: ;TODO
+
+  %ret_tok2 = load %s.Token, %s.Token * %scan_ctx_anchor_ptr
+
+  ret %s.Token %ret_tok2
+
+}}", NORMAL_STATE_FLAG))?.wrtln(&format!("
+define void @setFailState ( %s.CTX* %ctx ) alwaysinline {{
+  
+  %state1 = getelementptr %s.CTX, %s.CTX* %ctx, i64 0, i32 11
   store i32 {}, i32 * %state1
 
   ret void
 }}", FAIL_STATE_FLAG))?.wrtln(&format!("
-define void @setPassState ( %s.Context* %ctx ) alwaysinline {{
+define void @setPassState ( %s.CTX* %ctx ) alwaysinline {{
   
-  %state1 = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 11
+  %state1 = getelementptr %s.CTX, %s.CTX* %ctx, i64 0, i32 11
   store i32 {}, i32 * %state1
 
   ret void
 }}", NORMAL_STATE_FLAG))?.wrtln("
-define void @ensureStackHasCapacity( %s.Context* %ctx, i64 %needed_capacity ) alwaysinline {
+define void @ensureStackHasCapacity( %s.CTX* %ctx, i64 %needed_capacity ) alwaysinline {
 
   ; TODO
 
   ret void
 }
 ")?.wrtln(&format!("
-define void @next ( %s.Context* %ctx, %s.Action* %action ) hot
+
+define void @next ( %s.CTX* %ctx, %s.Action* %action ) hot
 {{
   
   ; store action pointer into context 
-  ; %action_store = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 1
+  ; %action_store = getelementptr %s.CTX, %s.CTX* %ctx, i64 0, i32 1
   ; store %s.Action* %action, %s.Action** %action_store
   
   br label %Dispatch
 
 Dispatch:
 
-  %ctx_state_ptr = call i32 * @getParseState( %s.Context* %ctx )
+  %ctx_state_ptr = call i32 * @getParseState( %s.CTX* %ctx )
   %parse_state = load i32, i32 * %ctx_state_ptr
 
-  %gt = call %s.Goto @pop_state( %s.Context* %ctx )
+  %gt = call %s.Goto @pop_state( %s.CTX* %ctx )
   %gt_state = extractvalue %s.Goto %gt, 2
 
   %cond1 = icmp ne i32 %gt_state, 0
@@ -441,7 +606,7 @@ ModeAppropriateState:
 
   %gt_fn = extractvalue %s.Goto %gt, 0
   
-  %should_emit = call fastcc i32 %gt_fn( %s.Context* %ctx, %s.Action* %action )
+  %should_emit = call fastcc i32 %gt_fn( %s.CTX* %ctx, %s.Action* %action )
 
   %cond3 = icmp eq i32 %should_emit, 1
   br i1 %cond3, label %Emit, label %Dispatch
@@ -455,23 +620,23 @@ Quit:
   br i1 %cond4, label %SuccessfulParse, label %FailedParse
 
 SuccessfulParse:
-  musttail call void @emitAccept( %s.Context* %ctx, %s.Action* %action )
+  call void @emitAccept( %s.CTX* %ctx, %s.Action* %action )
   ret void
 
 FailedParse:
-  musttail call void @emitError( %s.Context* %ctx, %s.Action* %action )
+  call void @emitError( %s.CTX* %ctx, %s.Action* %action )
   ret void
 }}
 ", FAIL_STATE_FLAG))?.wrtln("
-define %s.Goto @pop_state( %s.Context* %ctx ) alwaysinline {
+define %s.Goto @pop_state( %s.CTX* %ctx ) alwaysinline {
   
   ; Get top of stack, decrement, and get the value at the decremented stack
   
-  %gt_top_ptr = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 6
+  %gt_top_ptr = getelementptr %s.CTX, %s.CTX* %ctx, i64 0, i32 6
   
   %gt_top_ptr1 = load %s.Goto *, %s.Goto ** %gt_top_ptr
   
-  %gt_top_ptr_less = getelementptr inbounds %s.Goto, %s.Goto * %gt_top_ptr1, i64 -1
+  %gt_top_ptr_less = getelementptr %s.Goto, %s.Goto * %gt_top_ptr1, i64 -1
   
   store %s.Goto * %gt_top_ptr_less, %s.Goto ** %gt_top_ptr
 
@@ -481,18 +646,18 @@ define %s.Goto @pop_state( %s.Context* %ctx ) alwaysinline {
 }
 
 
-define void @push_state( %s.Context* %ctx, i32 %state, %fn.Goto %gt_fn_ptr ) alwaysinline {
+define void @push_state( %s.CTX* %ctx, i32 %state, %fn.Goto %gt_fn_ptr ) alwaysinline {
 
   %gt_val1 = insertvalue %s.Goto undef, i32 %state, 2
   %gt_val2 = insertvalue %s.Goto %gt_val1, %fn.Goto %gt_fn_ptr, 0
 
-  %gt_top_ptr = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 6
+  %gt_top_ptr = getelementptr %s.CTX, %s.CTX* %ctx, i64 0, i32 6
   
   %gt_top_ptr1 = load %s.Goto *, %s.Goto ** %gt_top_ptr
 
   store volatile %s.Goto %gt_val2, %s.Goto * %gt_top_ptr1
   
-  %gt_top_ptr_more = getelementptr inbounds %s.Goto, %s.Goto * %gt_top_ptr1, i64 1
+  %gt_top_ptr_more = getelementptr %s.Goto, %s.Goto * %gt_top_ptr1, i64 1
   
   store volatile %s.Goto * %gt_top_ptr_more, %s.Goto ** %gt_top_ptr
 
@@ -514,11 +679,11 @@ fn write_state_init<'a, W: Write>(
 ) -> Result<&'a mut CodeWriter<W>>
 {
   writer
-    .wrtln("define void @prime_context( %s.Context* %ctx, i32 %initial_state ) alwaysinline cold { ")?
+    .wrtln("define void @prime_context( %s.CTX* %ctx, i32 %initial_state ) alwaysinline cold { ")?
     .indent();
 
   writer.wrtln(&format!(
-    "call void @push_state ( %s.Context* %ctx,  i32 0, %fn.Goto @emitShift ) ",
+    "call void @push_state ( %s.CTX* %ctx,  i32 0, %fn.Goto @emitShift ) ",
   ))?;
 
   writer.wrtln(&format!(
@@ -537,7 +702,7 @@ fn write_state_init<'a, W: Write>(
       .wrtln(&format!("init_{}:", label))?
       .indent()
       .wrtln(&format!(
-        "call void @push_state ( %s.Context* %ctx,  i32 {}, %fn.Goto @fn.{} ) ",
+        "call void @push_state ( %s.CTX* %ctx,  i32 {}, %fn.Goto @fn.{} ) ",
         NORMAL_STATE_FLAG, label
       ))?;
   }
@@ -592,7 +757,7 @@ pub fn write_state<W: Write>(
           let needed_size = state.get_stack_depth() * 2 * 8;
           if state.get_stack_depth() > 0 {
             writer.wrtln(&format!(
-              "call void @ensureStackHasCapacity( %s.Context* %ctx, i64 {} )",
+              "call void @ensureStackHasCapacity( %s.CTX* %ctx, i64 {} )",
               needed_size
             ))?;
           }
@@ -607,26 +772,33 @@ pub fn write_state<W: Write>(
   while address < bytecode.len() {
     match bytecode[address] & INSTRUCTION_HEADER_MASK {
       INSTRUCTION::I00_PASS => {
-        writer.wrtln("call void @setPassState ( %s.Context* %ctx ) ")?;
+        writer.wrtln(";  T00_PASS")?;
+        writer.wrtln("call void @setPassState ( %s.CTX* %ctx ) ")?;
         writer.wrtln("ret i32 0")?;
         break;
       }
 
       INSTRUCTION::I01_CONSUME => {
-        write_emit_reentrance(bytecode, address + 1, writer, referenced)?;
-
-        writer
+        if is_scanner {
+          writer
+            .wrtln(";  Scanner I01_CONSUME")?
+            .wrtln("call void @scanShiftToken( %s.CTX* %ctx )")?;
+          address += 1;
+        } else {
+          write_emit_reentrance(bytecode, address + 1, writer, referenced)?;
+          writer
           .wrtln(";  I01_CONSUME")?
           .wrtln(&format!(
-            "%val{:X} = musttail call fastcc i32 @emitShift( %s.Context* %ctx, %s.Action* %action )",
+            "%val{:X} = musttail call fastcc i32 @emitShift( %s.CTX* %ctx, %s.Action* %action )",
             address
           ))?
           .wrtln(&format!("ret i32 %val{:X}", address))?;
-
-        break;
+          break;
+        }
       }
 
       INSTRUCTION::I02_GOTO => {
+        writer.wrtln(";  T02_GOTO")?;
         let goto_offset = bytecode[address] & GOTO_STATE_ADDRESS_MASK;
         let name = create_offset_label(goto_offset as usize);
 
@@ -635,16 +807,16 @@ pub fn write_state<W: Write>(
           // skipping the pass instruction entirely
           writer
             .wrtln(&format!(
-              "%val = musttail call fastcc i32 @fn.{} ( %s.Context* %ctx, %s.Action * %action ) ",
-              name
+              "%val{:X} = musttail call fastcc i32 @fn.{} ( %s.CTX* %ctx, %s.Action * %action ) ",
+              address, name
             ))?
-            .wrtln("ret i32 %val")?;
+            .wrtln(&format!("ret i32 %val{:X}", address))?;
           referenced.push((goto_offset, false));
           address += 2;
           break;
         } else {
           writer.wrtln(&format!(
-            "call void @push_state( %s.Context* %ctx, i32 {} , %fn.Goto @fn.{} )",
+            "call void @push_state( %s.CTX* %ctx, i32 {} , %fn.Goto @fn.{} )",
             NORMAL_STATE_FLAG, &name
           ))?;
           referenced.push((goto_offset, true));
@@ -654,9 +826,16 @@ pub fn write_state<W: Write>(
 
       INSTRUCTION::I03_SET_PROD => {
         let production_id = (bytecode[address] & INSTRUCTION_CONTENT_MASK);
-        writer.wrtln(";  I03_SET_PROD")?
-        .wrtln(&format!("%prod{}1 = getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 10", address))?
-        .wrtln(&format!("store volatile i32 {}, i32 * %prod{}1", production_id, address))?;
+        writer
+          .wrtln(";  I03_SET_PROD")?
+          .wrtln(&format!(
+            "%prod{}1 = getelementptr %s.CTX, %s.CTX* %ctx, i64 0, i32 10",
+            address
+          ))?
+          .wrtln(&format!(
+            "store volatile i32 {}, i32 * %prod{}1",
+            production_id, address
+          ))?;
         address += 1;
       }
 
@@ -669,10 +848,10 @@ pub fn write_state<W: Write>(
 
         writer
           .wrtln(";  I04_REDUCE")?
-          .wrtln(&format!("%prod{}1= getelementptr inbounds %s.Context, %s.Context* %ctx, i64 0, i32 10", address))?
+          .wrtln(&format!("%prod{}1= getelementptr %s.CTX, %s.CTX* %ctx, i64 0, i32 10", address))?
           .wrtln(&format!("%prod{0} = load volatile i32, i32 * %prod{0}1", address))?
           .wrtln(&format!(
-            "%val{0:X} = call fastcc inreg i32 @emitReduce ( %s.Context* %ctx, %s.Action* %action, i32 %prod{0}, i32 {1}, i32 {2}  )",
+            "%val{0:X} = call fastcc inreg i32 @emitReduce ( %s.CTX* %ctx, %s.Action* %action, i32 %prod{0}, i32 {1}, i32 {2}  )",
             address, body_id, symbol_count
           ))?
           .wrtln(&format!("ret i32 %val{:X}", address))?;
@@ -681,7 +860,16 @@ pub fn write_state<W: Write>(
       }
 
       INSTRUCTION::I05_TOKEN => {
-        writer.wrtln(";  I05_TOKEN")?;
+        let token_value = bytecode[address] & 0x00FF_FFFF;
+        writer
+          .wrtln(";  I05_TOKEN")?
+          .wrtln(
+            "%tok_ptr = call %s.Token * @getAnchorTokPtr( %s.CTX* %ctx ) alwaysinline",
+          )?
+          .wrtln(&format!(
+            "call void @writeTokenType( %s.Token * %tok_ptr, i32 {})",
+            token_value
+          ))?;
         address += 1;
       }
 
@@ -701,6 +889,7 @@ pub fn write_state<W: Write>(
       }
 
       INSTRUCTION::I09_VECTOR_BRANCH | INSTRUCTION::I10_HASH_BRANCH => {
+        writer.wrtln(";  I09_VECTOR_BRANCH | INSTRUCTION::I10_HASH_BRANCH")?;
         if let Some(data) = BranchTableData::from_bytecode(address, output) {
           let table_name = create_offset_label(address + 800000);
 
@@ -710,60 +899,78 @@ pub fn write_state<W: Write>(
             scanner_address,
             ..
           } = data.data;
+
+          let mut write_switch_block = false;
+          let mut switch_block_input_type = "i32";
+
           let branches = &data.branches;
+
+          let branch_addresses = branches
+            .values()
+            .map(|p| (p.value, p.address, p.is_skipped))
+            .collect::<BTreeSet<_>>();
+
+          match input_type {
+            INPUT_TYPE::T01_PRODUCTION => {}
+            _ => {
+              if lexer_type == LEXER_TYPE::ASSERT {
+                writer
+                    .wrtln(
+                      "%tok_ptr = call %s.Token * @getAssertTokPtr( %s.CTX* %ctx ) alwaysinline",
+                    )?;
+                if !is_scanner {
+                  writer
+                      .wrtln("%is_peek_ptr = call i32 * @getIsPeekPtr( %s.CTX* %ctx ) alwaysinline")?
+                      .wrtln("store volatile i32 0, i32 * %is_peek_ptr")?;
+                }
+              } else {
+                writer
+                      .wrtln(
+                        "%tok_ptr = call %s.Token * @getPeekTokPtr( %s.CTX* %ctx )",
+                      )?
+                      .wrtln("%is_peek_ptr = call i32 * @getIsPeekPtr( %s.CTX* %ctx )")?
+                      .wrtln("%is_peek = load i32, i32 * %is_peek_ptr")?
+                      .wrtln("%cond1 = icmp eq i32 %is_peek, i32 1")?
+                      .wrtln(&format!(
+                        "br i1 %cond1, label %{0}_AlreadyPeeking, label %{0}_NotPeeking",
+                        table_name
+                      ))?
+                      .dedent()
+                      .wrtln(&format!("%{0}_AlreadyPeeking", table_name))?
+                      .wrtln(
+                        "%prev_tok_ptr = call %s.Token * @getPeekTokPtr( %s.CTX* %ctx )",
+                      )?
+                      .indent()
+                      .wrtln(&format!("br label %{}_Dispatch", table_name))?
+                      .dedent()
+                      .wrtln(&format!("%{0}_NotPeeking", table_name))?
+                      .wrtln(
+                        "%prev_tok_ptr = call %s.Token * @getAssertTokPtr( %s.CTX* %ctx )",
+                      )?
+                      .dedent()
+                      .wrtln(&format!("%{}_Dispatch", table_name))?
+                      .indent()
+                      .wrtln(
+                        "%prev_length = call i64 @readTokenLength( %s.Token * %prev_tok_ptr ) ",
+                      )?
+                      .wrtln(
+                        "%curr_offset = call i64 @readTokenOffset( %s.Token * %tok_ptr ) ",
+                      )?
+                      .wrtln("%new_token_offset = add i64 %prev_length, i64 %curr_offset")?
+                      .wrtln(
+                        "call void @writeTokenOffset( %s.Token * %tok_ptr, i64 %new_token_offset ) ",
+                      )?
+                    //  .wrtln(
+                    //  "call void @writeTokenLength( %s.Token * %tok_ptr, 0 ) ",
+                    //  )?
+                      .wrtln("store i32 1, i32 * %peek_ptr")?;
+              };
+            }
+          }
 
           match input_type {
             INPUT_TYPE::T02_TOKEN => {
-              if (lexer_type == LEXER_TYPE::ASSERT) {
-                writer
-                  .wrtln(
-                    "%tok_ptr = call %s.Token * @getAssertTokPtr( %s.Context* %ctx ) alwaysinline",
-                  )?
-                  .wrtln("%is_peek_ptr = call i32 * @getIsPeekPtr( %s.Context* %ctx ) alwaysinline")?
-                  .wrtln("store volatile i32 0, i32 * %is_peek_ptr")?;
-              } else {
-                writer
-                    .wrtln(
-                      "%tok_ptr = call %s.Token * @getPeekTokPtr( %s.Context* %ctx )",
-                    )?
-                    .wrtln("%is_peek_ptr = call i32 * @getIsPeekPtr( %s.Context* %ctx )")?
-                    .wrtln("%is_peek = load i32, i32 * %is_peek_ptr")?
-                    .wrtln("%cond1 = icmp eq i32 %is_peek, i32 1")?
-                    .wrtln(&format!(
-                      "br i1 %cond1, label %{0}_AlreadyPeeking, label %{0}_NotPeeking",
-                      table_name
-                    ))?
-                    .dedent()
-                    .wrtln(&format!("%{0}_AlreadyPeeking", table_name))?
-                    .wrtln(
-                      "%prev_tok_ptr = call %s.Token * @getPeekTokPtr( %s.Context* %ctx )",
-                    )?
-                    .indent()
-                    .wrtln(&format!("br label %{}_Dispatch", table_name))?
-                    .dedent()
-                    .wrtln(&format!("%{0}_NotPeeking", table_name))?
-                    .wrtln(
-                      "%prev_tok_ptr = call %s.Token * @getAssertTokPtr( %s.Context* %ctx )",
-                    )?
-                    .dedent()
-                    .wrtln(&format!("%{}_Dispatch", table_name))?
-                    .indent()
-                    .wrtln(
-                      "%prev_length = call i64 @readTokenLength( %s.Token * %prev_tok_ptr ) ",
-                    )?
-                    .wrtln(
-                      "%curr_offset = call i64 @readTokenOffset( %s.Token * %tok_ptr ) ",
-                    )?
-                    .wrtln("%new_token_offset = add i64 %prev_length, i64 %curr_offset")?
-                    .wrtln(
-                      "call void @writeTokenOffset( %s.Token * %tok_ptr, i64 %new_token_offset ) ",
-                    )?
-                    .wrtln(
-                    "call void @writeTokenLength( %s.Token * %tok_ptr, 0 ) ",
-                    )?
-                    .wrtln("store i1 1, i1 * %peek_ptr")?;
-              };
-              if data.has_trivial_comparisons() {
+              if data.has_trivial_comparisons() && false {
                 fn string_to_byte_num_and_mask(
                   string: &str,
                   sym: &Symbol,
@@ -820,7 +1027,7 @@ pub fn write_state<W: Write>(
 
                 writer.wrtln(
                     &format!(
-                      "%adj_input = call i8 * @getAdjustedInputPtrInteger( %s.Context* %ctx, %s.Token * %tok_ptr, i32 {} )"
+                      "%adj_input = call i8 * @getAdjustedInputPtrInteger( %s.CTX* %ctx, %s.Token * %tok_ptr, i32 {} )"
                       , max_length
                     )
                   )?;
@@ -889,7 +1096,7 @@ pub fn write_state<W: Write>(
                           | ((sym.code_point_length as usize) << 32))
                       ))?
                       .wrtln(&format!(
-                        "call void @writeTokenType( %s.Token * %tok_ptr, i64 {} ) alwaysinline",
+                        "call void @writeTokenType( %s.Token * %tok_ptr, i32 {} ) alwaysinline",
                         sym.bytecode_id
                       ))?
                       // 9*
@@ -902,87 +1109,107 @@ pub fn write_state<W: Write>(
                 }
                 writer.wrtln(&format!("br label %{}_default", table_name))?;
               } else {
-                // referenced.push(scanner_address);
-                //
-                // let scan_state = output
-                // .offset_to_state_name
-                // .get(&(scanner_address as u32))
-                // .unwrap();
-                //
-                // if (lexer_type == LEXER_TYPE::ASSERT) {
-                // writer
-                // .comment_line(
-                // "Bypass the token scanner if token is already typed.",
-                // )?
-                // .code("mov eax, [r14 + tok_type]")?
-                // .code("cmp eax, 0")?
-                // .code("jne .cached")?;
-                // }
-                //
-                // writer
-                // .code(&format!(
-                // "lea r13, [rel {}]",
-                // create_named_state_label(scan_state)
-                // ))?
-                // .code("lea r12, [rel .cached]")?
-                // .code("jmp scan_handler")?
-                // .label("cached", true)?;
-                //
-                // write_default_table_jumps(&data, writer, &table_name)?;
+                write_switch_block = true;
+                referenced.push((scanner_address as u32, true));
+                writer
+                  .wrtln(&format!("br label %{}", table_name))?
+                  .dedent()
+                  .newline()?
+                  .wrtln(&format!("{}:", table_name))?
+                  .indent()
+                .wrtln(&format!(
+                  "%scan_tok{:X} = call fastcc %s.Token @scan( %s.CTX * %ctx, %fn.Goto @fn.{}, %s.Token * %tok_ptr )",
+                  address,
+                  create_offset_label(scanner_address as usize)
+                ))?
+                .wrtln(&format!("store %s.Token %scan_tok{:X}, %s.Token * %tok_ptr ", address))?
+                .wrtln(&format!("%val{:X} = call i32 @readTokenType( %s.Token * %tok_ptr )", address))?;
               }
             }
             INPUT_TYPE::T01_PRODUCTION => {
-              // writer
-              // .comment_line("get production value")?
-              // .code("mov rax, r15")?
-              // .code("and rax, PRODUCTION_META_MASK")?;
-              //
-              // write_default_table_jumps(&data, writer, &table_name)?;
+              writer.wrtln(";  T01_PRODUCTION")?;
+              write_switch_block = true;
+              writer
+                .wrtln(&format!(
+                  "%prod{}1 = getelementptr %s.CTX, %s.CTX* %ctx, i64 0, i32 10",
+                  address
+                ))?
+                .wrtln(&format!(
+                  "%val{:X} = load volatile i32, i32 * %prod{0}1",
+                  address
+                ))?;
             }
             _ => {
-              // match input_type {
-              // INPUT_TYPE::T05_BYTE => {
-              // writer
-              // .code("mov r13, 0x0000000100000001")?
-              // .comment_line("Load the byte data in the low 8 bits")?
-              // .code("mov eax, edx")?
-              // .code("and eax, 0xFF")?;
-              // }
-              // INPUT_TYPE::T03_CLASS => {
-              // writer
-              // .code("mov r13, 0x0000010000000000")?
-              // .code("mov r13w, dx")?
-              // .code("shr r13, 8")?
-              // .comment_line("Load the class data in the high 16 bits")?
-              // .code("mov eax, edx")?
-              // .code("shr rax, 16")?;
-              // }
-              // INPUT_TYPE::T04_CODEPOINT => {
-              // writer
-              // .code("mov r13, 0x0000010000000000")?
-              // .code("mov r13w, dx")?
-              // .code("shr r13, 8")?
-              // .comment_line("Load the codepoint data in the high 32 bits")?
-              // .code("mov rax, rdx")?
-              // .code("shr rax, 32")?;
-              // }
-              // _ => {}
-              // };
-              //
-              // write_default_table_jumps(&data, writer, &table_name)?;
+              write_switch_block = true;
+              match input_type {
+                INPUT_TYPE::T05_BYTE => {
+                  switch_block_input_type = "i8";
+                  writer.wrtln(
+                      &format!(
+                        "%adj_input{:X} = call i8 * @getAdjustedInputPtrInteger( %s.CTX* %ctx, %s.Token * %tok_ptr, i32 {} )"
+                        ,address, 1
+                      )
+                    )?
+                    .wrtln(&format!("%val{:X} = load i8, i8 * %adj_input{0:X}", address))?
+                    .wrtln(&format!(
+                      "call void @writeTokenLength( %s.Token * %tok_ptr, i64 {} ) alwaysinline",
+                      ((1 as usize) | ((1 as usize) << 32))
+                    ))?;
+                }
+                INPUT_TYPE::T03_CLASS => {
+                  writer.wrtln(
+                    &format!(
+                      "%adj_input{:X} = call i8 * @getAdjustedInputPtrInteger( %s.CTX* %ctx, %s.Token * %tok_ptr, i32 {} )"
+                      ,address,  4
+                    )
+                  )?.wrtln(&format!("%val{:X} = load i8, i8 * %adj_input{0:X}", address))?;
+                }
+                INPUT_TYPE::T04_CODEPOINT => {
+                  writer.wrtln(
+                    &format!(
+                      "%adj_input{:X} = call i8 * @getAdjustedInputPtrInteger( %s.CTX* %ctx, %s.Token * %tok_ptr, i32 {} )"
+                      ,address,  4
+                    )
+                  )?.wrtln(&format!("%val{:X} = load i8, i8 * %adj_input{0:X}", address))?;
+                }
+                _ => {}
+              };
+
+              write_default_table_jumps(&data, writer, &table_name)?;
             }
+          }
+
+          if write_switch_block {
+            writer
+              .wrtln(&format!(
+                "switch {} %val{:X}, label %{}_default [",
+                switch_block_input_type, address, table_name
+              ))?
+              .indent();
+
+            for (value, address, is_skip) in branch_addresses.iter() {
+              if *is_skip {
+                writer.wrtln(&format!(
+                  "{} {}, label %skip_{}",
+                  switch_block_input_type, value, table_name
+                ))?;
+              } else {
+                writer.wrtln(&format!(
+                  "{} {}, label %{}",
+                  switch_block_input_type,
+                  value,
+                  &create_table_branch_label(&table_name, address)
+                ))?;
+              }
+            }
+            writer.dedent().wrtln("]")?;
           }
 
           // Write branches, ending with the default branch.
 
           let mut skip_written = false;
 
-          for (address, is_skip) in branches
-            .values()
-            .map(|p| (p.address, p.is_skipped))
-            .collect::<BTreeSet<_>>()
-            .iter()
-          {
+          for (_, address, is_skip) in branch_addresses.iter() {
             if *is_skip {
               if skip_written {
                 continue;
@@ -1066,7 +1293,8 @@ pub fn write_state<W: Write>(
         address += 1;
       }
       INSTRUCTION::I15_FAIL => {
-        writer.wrtln("call void @setFailState ( %s.Context* %ctx ) ")?;
+        writer.wrtln(";  T01_FAIL")?;
+        writer.wrtln("call void @setFailState ( %s.CTX* %ctx ) ")?;
         writer.wrtln("ret i32 0")?;
         break;
       }
@@ -1101,7 +1329,7 @@ fn write_emit_reentrance<'a, W: Write>(
   if next_address != 0 {
     let name = create_offset_label(next_address);
     writer.wrtln(&format!(
-      "call void @push_state( %s.Context* %ctx, i32 {} , %fn.Goto @fn.{} )",
+      "call void @push_state( %s.CTX* %ctx, i32 {} , %fn.Goto @fn.{} )",
       NORMAL_STATE_FLAG, &name
     ))?;
     referenced.push((next_address as u32, true));
@@ -1134,11 +1362,6 @@ fn write_extend_stack_checker<W: Write>(
 ) -> Result<&mut CodeWriter<W>>
 {
   Ok(writer)
-}
-
-fn create_named_state_label(name: &String) -> String
-{
-  format!("state_{}", name)
 }
 
 fn create_offset_label(offset: usize) -> String
@@ -1189,17 +1412,16 @@ pub fn compile_from_bytecode<W: Write>(
       goto_fn.insert(address);
     }
 
-    if (seen.insert(address)) {
-      eprintln!("{:X}", address);
+    if seen.insert(address) {
       let mut referenced_addresses = Vec::new();
 
       let name = create_offset_label(address as usize);
 
       writer
         .wrtln(&format!(
-          "\ndefine fastcc i32 @fn.{} ( %s.Context* %ctx, %s.Action* %action ) {} {{",
+          "\ndefine fastcc i32 @fn.{} ( %s.CTX* %ctx, %s.Action* %action ) {} {{",
           name,
-          if true { "optnone noinline" } else { "" }
+          if true { "" } else { "" }
         ))?
         .indent();
 
@@ -1222,6 +1444,22 @@ pub fn compile_from_bytecode<W: Write>(
   }
 
   write_state_init(writer, output, &start_points)?;
+  writer
+    .wrtln(&format!(
+      "@llvm.used = appending global [{} x i32 *] [",
+      goto_fn.len() + 1
+    ))?
+    .indent();
 
+  for goto in &goto_fn {
+    writer.wrtln(&format!(
+      "i32 * bitcast ( i32 ( %s.CTX *, %s.Action* ) * @fn.off_{:X} to i32 *),",
+      goto
+    ))?;
+  }
+
+  writer.wrtln("i32 * bitcast ( void ( %s.CTX*, %s.Action* ) * @next to i32 * ) ")?;
+
+  writer.dedent().wrtln("], section \"llvm.metadata\"")?;
   Ok(())
 }
