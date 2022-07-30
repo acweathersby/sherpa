@@ -92,8 +92,9 @@ pub fn compile_llvm_files(
               match Command::new("clang-14")
                 .args(&[
                   //"-flto=thin",
-                  //"-O3",
+                  "-O3",
                   "-c",
+                  //"-g",
                   "-o",
                   object_path.to_str().unwrap(),
                   llvm_source_path.to_str().unwrap(),
@@ -180,9 +181,9 @@ extern \"C\" {{
       parser_name
     ))?
     .wrtln(&format!(
-      "pub struct Context<T: CharacterReader>(ParseContext<T>, bool);
+      "pub struct Context<T: LLVMCharacterReader + ByteCharacterReader + ImmutCharacterReader>(LLVMParseContext<T>, bool);
 
-impl<T: CharacterReader> Iterator for Context<T> {{
+impl<T: LLVMCharacterReader + ByteCharacterReader + ImmutCharacterReader> Iterator for Context<T> {{
     type Item = ParseAction;
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {{
@@ -190,11 +191,11 @@ impl<T: CharacterReader> Iterator for Context<T> {{
             if(!self.1) {{
                 None
             }} else {{
-                let _ptr = &mut self.0 as *const ParseContext<T>;
+                let _ptr = &mut self.0 as *const LLVMParseContext<T>;
                 let mut action = ParseAction::Undefined;
                 next(_ptr as u64, &mut action);
 
-                self.1 = !matches!(action, ParseAction::Accept{{..}}| ParseAction::Error {{ .. }});
+                self.1 = !matches!(action, ParseAction::Accept{{..}}| ParseAction::Error {{ .. }} | ParseAction::EndOfInput {{ .. }});
 
                 Some(action)
             }}
@@ -202,12 +203,12 @@ impl<T: CharacterReader> Iterator for Context<T> {{
     }}
 }}
 
-impl<T: CharacterReader> Context<T> {{
+impl<T: LLVMCharacterReader + ByteCharacterReader + ImmutCharacterReader> Context<T> {{
     /// Create a new parser context to parser the input with 
     /// the grammar `{0}`
     #[inline(always)]
     fn new(reader: &mut T) -> Self {{
-        let mut parser = Self(ParseContext::<T>::new(reader), true);
+        let mut parser = Self(LLVMParseContext::<T>::new(reader), true);
         parser.construct_context();
         parser
     }}
@@ -217,7 +218,7 @@ impl<T: CharacterReader> Context<T> {{
     #[inline(always)]
     fn set_start_point(&mut self, start_point: u64) -> &mut Self {{
         unsafe {{
-            let _ptr = &mut self.0 as *const ParseContext<T>;
+            let _ptr = &mut self.0 as *const LLVMParseContext<T>;
             prime_context(_ptr as u64, start_point as u32);
         }}
 
@@ -226,14 +227,14 @@ impl<T: CharacterReader> Context<T> {{
     #[inline(always)]
     fn construct_context(&mut self) {{
         unsafe {{
-            let _ptr = &mut self.0 as *const ParseContext<T>;
+            let _ptr = &mut self.0 as *const LLVMParseContext<T>;
             construct_context(_ptr as u64);
         }}
     }}
     #[inline(always)]
     fn destroy_context(&mut self) {{
         unsafe {{
-            let _ptr = &mut self.0 as *const ParseContext<T>;
+            let _ptr = &mut self.0 as *const LLVMParseContext<T>;
             destroy_context(_ptr as u64);
         }};
     }}",
@@ -246,7 +247,7 @@ impl<T: CharacterReader> Context<T> {{
   writer.dedent().wrtln(&format!(
     "}}
 
-impl<T: CharacterReader> Drop for Context<T> {{
+impl<T: LLVMCharacterReader + ByteCharacterReader + ImmutCharacterReader> Drop for Context<T> {{
     fn drop(&mut self) {{
         self.destroy_context();
     }}

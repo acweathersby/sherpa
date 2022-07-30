@@ -5,6 +5,8 @@ use std::sync::RwLock;
 use crate::types::parse_token::ParseToken;
 use crate::utf8::*;
 
+use super::InputBlock;
+
 /// A multi-reader, multi-writer view of the underlying parser input
 /// data, used to distribute access to the input string over multiple
 /// Tokens and SymbolReaders.
@@ -23,27 +25,26 @@ pub type SharedSymbolBuffer = Arc<RwLock<Vec<u8>>>;
 ///   current location of the read head.
 /// - Both the codepoint offset and byte offset of the last line
 /// encountered in the input.
-pub trait CharacterReader
+pub trait ImmutCharacterReader
 {
   /// Returns true if the cursor has reached the end of
   /// the input stream.
 
-  fn at_end(&self) -> bool;
+  fn at_end(&self) -> bool
+  {
+    self.cursor() >= self.length()
+  }
 
   #[inline(always)]
   fn offset_at_end(&self, offset: u32) -> bool
   {
-    self.length() <= offset
+    self.length() <= offset as usize
   }
-
-  /// Advances the internal cursor by `amount`. Returns the same
-  /// value as `get_type_info`.
-  fn next(&mut self, amount: i32) -> u64;
 
   /// Returns the word at the current cursor position, little
   /// Endian
 
-  fn word(&self) -> u32;
+  fn dword(&self) -> u32;
 
   /// Returns the byte at the current cursor position.
   fn byte(&self) -> u32;
@@ -51,20 +52,18 @@ pub trait CharacterReader
   /// Returns the length of the source input. If this unknown
   /// then returns 0
 
-  fn length(&self) -> u32
+  fn length(&self) -> usize
   {
     0
   }
 
   /// Returns the number of lines encountered.
-  #[deprecated]
   fn line_count(&self) -> u32
   {
     0
   }
 
   /// Returns the offset of the most recent line character.
-  #[deprecated]
   fn line_offset(&self) -> u32
   {
     0
@@ -88,14 +87,6 @@ pub trait CharacterReader
   /// Resets the cursor back to the position of the token. Returns
   /// the same value as `get_type_info`.
   fn set_cursor_to(&mut self, token: &ParseToken) -> u64;
-
-  /// Return a new instance of byte reader with the same
-  /// state as the source reader. Implementation should provide
-  /// adequate shared buffers or other resources used to cache the
-  /// input stream data, as multiple ByteReaders may be required
-  /// read data at different cursor positions.
-  #[deprecated]
-  fn clone(&self) -> Self;
 
   /// Return a packed u64 containing codepoint info the higher 32 bits,
   /// class in the high 16, codepoint length in the high 8 bits,
@@ -136,22 +127,114 @@ pub trait CharacterReader
     return get_token_class_from_codepoint(self.codepoint());
   }
 
-  fn cursor(&self) -> u32;
+  fn cursor(&self) -> usize;
 
   /// Returns an optional vector of the input string data.
   fn get_source(&self) -> SharedSymbolBuffer;
+}
 
+pub trait MutCharacterReader
+{
+  fn set_cursor(&mut self, cursor: usize);
+  fn set_codepoint(&mut self, code_point: u32);
+  fn set_dword(&mut self, dword: u32);
+  fn set_line_count(&mut self, line_count: u32);
+  fn set_line_offset(&mut self, line_offset: u32);
+  fn next(&mut self, amount: i32) -> u64;
+}
+
+pub trait ByteCharacterReader
+{
+  fn get_bytes(&self) -> &[u8];
+}
+
+pub trait UTF8CharacterReader
+{
+  fn next_utf8<
+    T: ImmutCharacterReader + MutCharacterReader + UTF8CharacterReader + ByteCharacterReader,
+  >(
+    self_: &mut T,
+    amount: i32,
+  ) -> u64
+  {
+    self_.set_cursor((self_.cursor() as i32 + amount) as usize);
+
+    self_.set_codepoint(0);
+
+    if self_.at_end() {
+      0
+    } else {
+      if amount == 1 {
+        self_.set_dword((self_.dword() >> 8) | ((self_.byte() as u32) << 24));
+
+        if self_.get_bytes()[self_.cursor()] == 10 {
+          self_.set_line_count(self_.line_count() + 1);
+
+          self_.set_line_offset(self_.cursor() as u32);
+        }
+      } else {
+        let diff =
+          std::cmp::max(std::cmp::min(4, (self_.length() - self_.cursor()) as i32), 0)
+            as u32;
+
+        let start = self_.cursor() as u32;
+
+        let end = self_.cursor() as u32 + (diff as u32);
+
+        let mut dword = 0;
+
+        let mut offset = 32;
+
+        for i in start..end {
+          offset -= 8;
+
+          let byte = self_.get_bytes()[i as usize];
+
+          dword |= (byte as u32) << offset;
+        }
+
+        for i in (((self_.cursor() as i32) - amount) as usize + 1)
+          ..std::cmp::min(self_.length() as usize, self_.cursor() + 1)
+        {
+          let byte = self_.get_bytes()[i as usize];
+
+          if byte == 10 {
+            self_.set_line_count(self_.line_count() + 1);
+
+            self_.set_line_offset(self_.cursor() as u32);
+          }
+        }
+
+        self_.set_dword(dword);
+      }
+
+      self_.set_codepoint(get_utf8_code_point_from(self_.dword()));
+
+      self_.get_type_info()
+    }
+  }
+}
+
+pub trait LLVMCharacterReader
+{
   /// Get a pointer to a sequence of bytes that can be read from the input given
   /// the cursor position. The second tuple values should be the length bytes that
   ///  can be read from the block.
-  fn get_byte_block_at_cursor(
-    &mut self,
-    block_ptr: &mut *const u8,
-    token_offset: u32,
-    requested_size: u32,
-  ) -> u32
+  fn get_byte_block_at_cursor<T: ImmutCharacterReader + ByteCharacterReader>(
+    self_: &mut T,
+    input_block: &mut InputBlock,
+  )
   {
-    *block_ptr = "".as_ptr();
-    0
+    let cursor = input_block.offset;
+    let size = ((self_.length() as i64) - (cursor as i64)).max(0);
+
+    if size > 0 {
+      let ptr = ((self_.get_bytes().as_ptr() as usize) + cursor as usize) as *const u8;
+      input_block.block = ptr;
+      input_block.length = size as u32;
+    } else {
+      input_block.block = 0 as *const u8;
+      input_block.length = 0;
+    }
   }
 }

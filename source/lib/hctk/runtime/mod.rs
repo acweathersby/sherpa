@@ -1,6 +1,6 @@
 mod parse_functions;
 
-use crate::types::CharacterReader;
+use crate::types::ImmutCharacterReader;
 use crate::types::ParseAction;
 use crate::types::ParseContext;
 pub use parse_functions::get_next_action;
@@ -349,10 +349,10 @@ assert PRODUCTION [3] (pass)
     assert_eq!(vector_jump(index, &mut reader, &mut state, &bytecode), 8);
   }
 
-  fn setup_states(
+  fn setup_states<'a>(
     state_ir: Vec<&str>,
-    reader_input: &str,
-  ) -> (Vec<u32>, UTF8StringReader, ParseContext<UTF8StringReader>)
+    reader_input: &'a str,
+  ) -> (Vec<u32>, UTF8StringReader<'a>, ParseContext<UTF8StringReader<'a>>)
   {
     let is_asts = state_ir
       .into_iter()
@@ -376,10 +376,10 @@ assert PRODUCTION [3] (pass)
 
     (bytecode, reader, ctx)
   }
-  fn setup_state(
+  fn setup_state<'a>(
     state_ir: &str,
-    reader_input: &str,
-  ) -> (Vec<u32>, UTF8StringReader, ParseContext<UTF8StringReader>)
+    reader_input: &'a str,
+  ) -> (Vec<u32>, UTF8StringReader<'a>, ParseContext<UTF8StringReader<'a>>)
   {
     let ir_ast = compile_ir_ast(Vec::from(state_ir.to_string()));
 

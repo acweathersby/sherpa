@@ -28,13 +28,17 @@ pub enum ParseAction
   Accept
   {
     production_id: u32,
+    // reached_EOF:   bool,
   },
   Error
   {
     last_input:      ParseToken,
     last_production: u32,
   },
-  EndOfInput,
+  EndOfInput
+  {
+    current_cursor_offset: u32,
+  },
   ProductionParseStart,
 }
 

@@ -15,6 +15,7 @@ mod parse_stack;
 mod parse_table_data;
 mod parse_token;
 mod reader;
+mod reader_test_utf8;
 mod reader_utf8;
 mod token;
 
@@ -35,5 +36,6 @@ pub use parse_stack::*;
 pub use parse_table_data::*;
 pub use parse_token::*;
 pub use reader::*;
+pub use reader_test_utf8::*;
 pub use reader_utf8::*;
 pub use token::*;

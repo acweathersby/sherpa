@@ -14,20 +14,20 @@ use super::MutCharacterReader;
 use super::UTF8CharacterReader;
 
 #[derive(Debug, Clone)]
-pub struct UTF8StringReader<'a>
+pub struct TestUTF8StringReader<'a>
 {
-  length:      usize,
-  cursor:      usize,
-  line_count:  usize,
-  line_offset: usize,
-  string:      &'a [u8],
-  word:        u32,
-  codepoint:   u32,
+  pub length:      usize,
+  pub cursor:      usize,
+  pub line_count:  usize,
+  pub line_offset: usize,
+  pub string:      &'a [u8],
+  pub word:        u32,
+  pub codepoint:   u32,
 }
 
-impl<'a> LLVMCharacterReader for UTF8StringReader<'a> {}
+impl<'a> LLVMCharacterReader for TestUTF8StringReader<'a> {}
 
-impl<'a> ByteCharacterReader for UTF8StringReader<'a>
+impl<'a> ByteCharacterReader for TestUTF8StringReader<'a>
 {
   fn get_bytes(&self) -> &[u8]
   {
@@ -35,9 +35,9 @@ impl<'a> ByteCharacterReader for UTF8StringReader<'a>
   }
 }
 
-impl<'a> UTF8CharacterReader for UTF8StringReader<'a> {}
+impl<'a> UTF8CharacterReader for TestUTF8StringReader<'a> {}
 
-impl<'a> MutCharacterReader for UTF8StringReader<'a>
+impl<'a> MutCharacterReader for TestUTF8StringReader<'a>
 {
   fn next(&mut self, amount: i32) -> u64
   {
@@ -70,7 +70,7 @@ impl<'a> MutCharacterReader for UTF8StringReader<'a>
   }
 }
 
-impl<'a> ImmutCharacterReader for UTF8StringReader<'a>
+impl<'a> ImmutCharacterReader for TestUTF8StringReader<'a>
 {
   #[inline(always)]
   fn length(&self) -> usize
@@ -158,16 +158,16 @@ impl<'a> ImmutCharacterReader for UTF8StringReader<'a>
   }
 }
 
-impl<'a> UTF8StringReader<'a>
+impl<'a> TestUTF8StringReader<'a>
 {
   pub fn from_string(string: &'a str) -> Self
   {
     Self::new(string)
   }
 
-  pub fn new(string: &'a str) -> UTF8StringReader<'a>
+  pub fn new(string: &'a str) -> TestUTF8StringReader<'a>
   {
-    let mut reader = UTF8StringReader {
+    let mut reader = TestUTF8StringReader {
       string:      string.as_bytes(),
       length:      string.len(),
       cursor:      0,

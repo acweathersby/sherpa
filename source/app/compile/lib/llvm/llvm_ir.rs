@@ -12,6 +12,8 @@ use crate::builder::table::BranchTableData;
 use crate::options::BuildOptions;
 use crate::writer::code_writer::CodeWriter;
 
+use super::llvm_utf8_ir::write_uft8_functions;
+
 pub fn _undefined<W: Write>(
   _grammar: &GrammarStore,
   _bytecode: &[u32],
@@ -20,6 +22,9 @@ pub fn _undefined<W: Write>(
 {
   Ok(())
 }
+
+const FAIL_STATE_FLAG_LLVM: u32 = 2;
+const NORMAL_STATE_FLAG_LLVM: u32 = 1;
 
 pub fn write_preamble<W: Write>(
   writer: &mut CodeWriter<W>,
@@ -111,6 +116,22 @@ pub fn write_preamble<W: Write>(
   i32 ; last_production
 }
 
+%s.Action.EndOfInput = type { 
+  i32, ; action_type=9
+  i32, ; padding
+  i32  ; current_cursor_offset
+}
+
+%s.InputBlock = type {
+  i8 *, ; block pointer
+  i32,  ; block size 
+  i32   ; block offset
+}
+
+; Public functions
+declare i8 @llvm.bitreverse.i8(i8 %id)
+declare i8 @llvm.ctlz.i8(i8 %id, i1 %ptr )
+
 ; Common functions
 
 define void @emitError( %s.CTX* %ctx, %s.Action* %action ) {
@@ -168,8 +189,21 @@ define void @emitAccept ( %s.CTX* %ctx, %s.Action* %action ) {
   
   ret void
 }
+define i32 @emitEndOfInput( %s.CTX* %ctx, %s.Action* %action, i32 %offset ) {
 
-define fastcc inreg i32 @emitReduce ( %s.CTX* %ctx, %s.Action* %action, i32 %production_id, i32 %body_id, i32 %symbol_count ) {
+  %sa_ptr = bitcast %s.Action * %action to %s.Action.EndOfInput *
+  %sa1 = load %s.Action.EndOfInput, %s.Action.EndOfInput* %sa_ptr
+
+  %sa2 = insertvalue %s.Action.EndOfInput %sa1, i32  9, 0 ; Sets the type to EndOfInput
+  %sa3 = insertvalue %s.Action.EndOfInput %sa2, i32 %offset, 2 ; Set the current cursor position
+
+  store %s.Action.EndOfInput %sa3, %s.Action.EndOfInput* %sa_ptr
+
+  ret i32 1
+}
+
+
+define \"cc 11\" i32 @emitReduce ( %s.CTX* %ctx, %s.Action* %action, i32 %production_id, i32 %body_id, i32 %symbol_count ) {
     
   %sa_ptr = bitcast %s.Action * %action to %s.Action.Reduce *
 
@@ -232,7 +266,7 @@ define void @scanShiftToken( %s.CTX* %ctx ) alwaysinline {
   ret void
 }
 
-define fastcc i32 @emitShift ( %s.CTX* %ctx, %s.Action* %action ) {
+define i32 @emitShift ( %s.CTX* %ctx, %s.Action* %action ) {
   
   %sa_ptr = bitcast %s.Action * %action to %s.Action.Shift *
 
@@ -265,7 +299,12 @@ define fastcc i32 @emitShift ( %s.CTX* %ctx, %s.Action* %action ) {
   ret i32 1
 }
 
-define i8* @getAdjustedInputPtrInteger( %s.CTX* %ctx_ptr, %s.Token * %tok, i32 %requested_size ) {
+define %s.InputBlock @getAdjustedInputPtrInteger( %s.CTX* %ctx_ptr, %s.Token * %tok, i32 %requested_size ) {
+
+  %input_block = alloca %s.InputBlock
+  %input_block_input_ptr = getelementptr %s.InputBlock, %s.InputBlock * %input_block, i32 0, i32 0
+  %input_block_size_ptr = getelementptr %s.InputBlock, %s.InputBlock * %input_block, i32 0, i32 1
+  %input_block_offset_ptr = getelementptr %s.InputBlock, %s.InputBlock * %input_block, i32 0, i32 2
 
   %block_offset1 = getelementptr %s.CTX, %s.CTX* %ctx_ptr, i64 0, i32 9
   %block_offset = load i32, i32 * %block_offset1
@@ -278,6 +317,8 @@ define i8* @getAdjustedInputPtrInteger( %s.CTX* %ctx_ptr, %s.Token * %tok, i32 %
   %token_offset = call i32 @readTokenByteOffset( %s.Token * %tok )
   %needed_size1 = add i32 %token_offset, %requested_size
   %needed_size = sub i32 %needed_size1, %block_offset
+
+  store i32 %block_size, i32 * %input_block_size_ptr
 
   %c1 = icmp ugt i32 %block_size, %needed_size
   br i1 %c1, label %HaveSpace, label %AttemptExtend
@@ -292,19 +333,28 @@ AttemptExtend:
 
   %input_block2 = getelementptr %s.CTX, %s.CTX* %ctx_ptr, i64 0, i32 4
 
-  %new_block_size = call i32 %getInputBlock_fn ( i64 * %input_reader, i8 ** %input_block2, i32 %token_offset,  i32 %requested_size )
+  %new_block_size = call i32 %getInputBlock_fn ( 
+    i64 * %input_reader, i8 ** %input_block2, i32 %token_offset,  i32 %requested_size 
+  )
+   
+  store i32 %new_block_size, i32 * %block_size1
+  store i32 %token_offset, i32 * %block_offset1
+  store i32 %new_block_size, i32 * %input_block_size_ptr
 
   %c2 = icmp eq i32 0, %new_block_size
   br i1 %c2, label %ExtensionFailed, label %ExtensionSuccess
 
 ExtensionFailed:
 
-  ret i8* null
+  store i8 * null, i8 ** %input_block_input_ptr
+  store i32 %new_block_size, i32 * %input_block_size_ptr
+  store i32 %token_offset, i32 * %input_block_offset_ptr
+
+  %fail_data = load %s.InputBlock, %s.InputBlock * %input_block
+
+  ret %s.InputBlock %fail_data
 
 ExtensionSuccess: 
-
-  store i32 %token_offset, i32 * %block_offset1
-  store i32 %new_block_size, i32 * %block_size1
   
   br label %HaveSpace
 
@@ -314,15 +364,18 @@ HaveSpace:
   %block_offset2 = load i32, i32 * %block_offset3
   
   %input_block1 = getelementptr %s.CTX, %s.CTX* %ctx_ptr, i64 0, i32 4
-  %input_block = load i8*, i8** %input_block1
+  %input_ptr = load i8*, i8** %input_block1
 
   %extension = sub i32 %token_offset, %block_offset2
-
   %extension64 = zext i32 %extension to i64
+  %input_adjusted = getelementptr i8, i8 * %input_ptr, i64 %extension64
 
-  %input_adjusted = getelementptr i8, i8 * %input_block, i64 %extension64
+  store i8 * %input_adjusted, i8 ** %input_block_input_ptr
+  store i32 %token_offset, i32 * %input_block_offset_ptr
 
-  ret i8 * %input_adjusted
+  %pass_data = load %s.InputBlock, %s.InputBlock * %input_block
+
+  ret %s.InputBlock %pass_data
 }
 
 define i32 * @getIsPeekPtr( %s.CTX* %ctx ) alwaysinline {
@@ -441,7 +494,7 @@ define i32 @readTokenType( %s.Token* %tok_ptr ) alwaysinline {
 }
 
 ")?.wrtln(&format!("
-define fastcc %s.Token @scan ( %s.CTX* %ctx, %fn.Goto %scan_function, %s.Token * %root_token ) {{
+define %s.Token @scan ( %s.CTX* %ctx, %fn.Goto %scan_function, %s.Token * %root_token ) hot {{
   ; create scanning context 
   
   %scan_ctx = alloca %s.CTX
@@ -507,8 +560,8 @@ define fastcc %s.Token @scan ( %s.CTX* %ctx, %fn.Goto %scan_function, %s.Token *
   store %s.Token %ctx_assert, %s.Token * %scan_ctx_assert_ptr
   store %s.Token %ctx_assert, %s.Token * %scan_ctx_anchor_ptr
 
-  call void @push_state( %s.CTX* %scan_ctx, i32 0, %fn.Goto @emitShift )
-  call void @push_state( %s.CTX* %scan_ctx, i32 {}, %fn.Goto %scan_function )
+  call void @push_state( %s.CTX* %scan_ctx, i32 {1}, %fn.Goto @emitEndOfParse )
+  call void @push_state( %s.CTX* %scan_ctx, i32 {0}, %fn.Goto %scan_function )
 
   ; reserve enough space on the stack for an Action enum
   %scan_action_buffer = alloca i64, i32 32 
@@ -555,21 +608,21 @@ produce_failed_token: ;TODO
 
   ret %s.Token %ret_tok2
 
-}}", NORMAL_STATE_FLAG))?.wrtln(&format!("
+}}", NORMAL_STATE_FLAG_LLVM, FAIL_STATE_FLAG_LLVM | NORMAL_STATE_FLAG_LLVM))?.wrtln(&format!("
 define void @setFailState ( %s.CTX* %ctx ) alwaysinline {{
   
   %state1 = getelementptr %s.CTX, %s.CTX* %ctx, i64 0, i32 11
   store i32 {}, i32 * %state1
 
   ret void
-}}", FAIL_STATE_FLAG))?.wrtln(&format!("
+}}", FAIL_STATE_FLAG_LLVM))?.wrtln(&format!("
 define void @setPassState ( %s.CTX* %ctx ) alwaysinline {{
   
   %state1 = getelementptr %s.CTX, %s.CTX* %ctx, i64 0, i32 11
   store i32 {}, i32 * %state1
 
   ret void
-}}", NORMAL_STATE_FLAG))?.wrtln("
+}}", NORMAL_STATE_FLAG_LLVM))?.wrtln("
 define void @ensureStackHasCapacity( %s.CTX* %ctx, i64 %needed_capacity ) alwaysinline {
 
   ; TODO
@@ -577,6 +630,27 @@ define void @ensureStackHasCapacity( %s.CTX* %ctx, i64 %needed_capacity ) always
   ret void
 }
 ")?.wrtln(&format!("
+
+
+define \"cc 11\" i32 @emitEndOfParse ( %s.CTX* %ctx, %s.Action* %action ) {{
+  
+  %ctx_state_ptr = call i32 * @getParseState( %s.CTX* %ctx )
+  %parse_state1 = load i32, i32 * %ctx_state_ptr
+
+  %cond4 = icmp ne i32 %parse_state1, {0}
+  br i1 %cond4, label %SuccessfulParse, label %FailedParse
+
+SuccessfulParse:
+  call void @emitAccept( %s.CTX* %ctx, %s.Action* %action )
+
+  ret i32 1
+
+FailedParse:
+  call void @emitError( %s.CTX* %ctx, %s.Action* %action )
+
+  ret i32 1
+
+}}
 
 define void @next ( %s.CTX* %ctx, %s.Action* %action ) hot
 {{
@@ -595,39 +669,23 @@ Dispatch:
   %gt = call %s.Goto @pop_state( %s.CTX* %ctx )
   %gt_state = extractvalue %s.Goto %gt, 2
 
-  %cond1 = icmp ne i32 %gt_state, 0
-  br i1 %cond1, label %NonEmptyState, label %Quit
-
-NonEmptyState:
-  %cond2 = icmp eq i32 %gt_state, %parse_state
+  %masked_state = and i32 %gt_state, %parse_state
+  %cond2 = icmp ne i32 %masked_state, 0
   br i1 %cond2, label %ModeAppropriateState, label %Dispatch
 
 ModeAppropriateState:
 
   %gt_fn = extractvalue %s.Goto %gt, 0
   
-  %should_emit = call fastcc i32 %gt_fn( %s.CTX* %ctx, %s.Action* %action )
+  %should_emit = call \"cc 11\" i32 %gt_fn( %s.CTX* %ctx, %s.Action* %action )
 
   %cond3 = icmp eq i32 %should_emit, 1
   br i1 %cond3, label %Emit, label %Dispatch
 
 Emit:
   ret void
-
-Quit:
-  %parse_state1 = load i32, i32 * %ctx_state_ptr
-  %cond4 = icmp ne i32 %parse_state1, {}
-  br i1 %cond4, label %SuccessfulParse, label %FailedParse
-
-SuccessfulParse:
-  call void @emitAccept( %s.CTX* %ctx, %s.Action* %action )
-  ret void
-
-FailedParse:
-  call void @emitError( %s.CTX* %ctx, %s.Action* %action )
-  ret void
 }}
-", FAIL_STATE_FLAG))?.wrtln("
+", FAIL_STATE_FLAG_LLVM))?.wrtln("
 define %s.Goto @pop_state( %s.CTX* %ctx ) alwaysinline {
   
   ; Get top of stack, decrement, and get the value at the decremented stack
@@ -682,8 +740,11 @@ fn write_state_init<'a, W: Write>(
     .wrtln("define void @prime_context( %s.CTX* %ctx, i32 %initial_state ) alwaysinline cold { ")?
     .indent();
 
+  writer.wrtln("call void @setPassState( %s.CTX* %ctx )")?;
+
   writer.wrtln(&format!(
-    "call void @push_state ( %s.CTX* %ctx,  i32 0, %fn.Goto @emitShift ) ",
+    "call void @push_state ( %s.CTX* %ctx, i32 {}, %fn.Goto @emitEndOfParse ) ",
+    FAIL_STATE_FLAG_LLVM | NORMAL_STATE_FLAG_LLVM
   ))?;
 
   writer.wrtln(&format!(
@@ -703,7 +764,7 @@ fn write_state_init<'a, W: Write>(
       .indent()
       .wrtln(&format!(
         "call void @push_state ( %s.CTX* %ctx,  i32 {}, %fn.Goto @fn.{} ) ",
-        NORMAL_STATE_FLAG, label
+        NORMAL_STATE_FLAG_LLVM, label
       ))?;
   }
 
@@ -787,12 +848,12 @@ pub fn write_state<W: Write>(
         } else {
           write_emit_reentrance(bytecode, address + 1, writer, referenced)?;
           writer
-          .wrtln(";  I01_CONSUME")?
-          .wrtln(&format!(
-            "%val{:X} = musttail call fastcc i32 @emitShift( %s.CTX* %ctx, %s.Action* %action )",
+            .wrtln(";  I01_CONSUME")?
+            .wrtln(&format!(
+            "%val{:X} = musttail call i32 @emitShift( %s.CTX* %ctx, %s.Action* %action )",
             address
           ))?
-          .wrtln(&format!("ret i32 %val{:X}", address))?;
+            .wrtln(&format!("ret i32 %val{:X}", address))?;
           break;
         }
       }
@@ -807,7 +868,7 @@ pub fn write_state<W: Write>(
           // skipping the pass instruction entirely
           writer
             .wrtln(&format!(
-              "%val{:X} = musttail call fastcc i32 @fn.{} ( %s.CTX* %ctx, %s.Action * %action ) ",
+              "%val{:X} = musttail call \"cc 11\" i32 @fn.{} ( %s.CTX* %ctx, %s.Action * %action ) ",
               address, name
             ))?
             .wrtln(&format!("ret i32 %val{:X}", address))?;
@@ -817,7 +878,7 @@ pub fn write_state<W: Write>(
         } else {
           writer.wrtln(&format!(
             "call void @push_state( %s.CTX* %ctx, i32 {} , %fn.Goto @fn.{} )",
-            NORMAL_STATE_FLAG, &name
+            NORMAL_STATE_FLAG_LLVM, &name
           ))?;
           referenced.push((goto_offset, true));
         }
@@ -851,7 +912,7 @@ pub fn write_state<W: Write>(
           .wrtln(&format!("%prod{}1= getelementptr %s.CTX, %s.CTX* %ctx, i64 0, i32 10", address))?
           .wrtln(&format!("%prod{0} = load volatile i32, i32 * %prod{0}1", address))?
           .wrtln(&format!(
-            "%val{0:X} = call fastcc inreg i32 @emitReduce ( %s.CTX* %ctx, %s.Action* %action, i32 %prod{0}, i32 {1}, i32 {2}  )",
+            "%val{0:X} = call \"cc 11\" i32 @emitReduce ( %s.CTX* %ctx, %s.Action* %action, i32 %prod{0}, i32 {1}, i32 {2}  )",
             address, body_id, symbol_count
           ))?
           .wrtln(&format!("ret i32 %val{:X}", address))?;
@@ -970,7 +1031,7 @@ pub fn write_state<W: Write>(
 
           match input_type {
             INPUT_TYPE::T02_TOKEN => {
-              if data.has_trivial_comparisons() && false {
+              if data.has_trivial_comparisons() {
                 fn string_to_byte_num_and_mask(
                   string: &str,
                   sym: &Symbol,
@@ -1025,12 +1086,7 @@ pub fn write_state<W: Write>(
                   .last()
                   .unwrap();
 
-                writer.wrtln(
-                    &format!(
-                      "%adj_input = call i8 * @getAdjustedInputPtrInteger( %s.CTX* %ctx, %s.Token * %tok_ptr, i32 {} )"
-                      , max_length
-                    )
-                  )?;
+                write_get_input_ptr_lookup(writer, max_length, address)?;
 
                 for (address, branch, strings) in &branches {
                   let sym = data.get_branch_symbol(branch).unwrap();
@@ -1118,7 +1174,7 @@ pub fn write_state<W: Write>(
                   .wrtln(&format!("{}:", table_name))?
                   .indent()
                 .wrtln(&format!(
-                  "%scan_tok{:X} = call fastcc %s.Token @scan( %s.CTX * %ctx, %fn.Goto @fn.{}, %s.Token * %tok_ptr )",
+                  "%scan_tok{:X} = call %s.Token @scan( %s.CTX * %ctx, %fn.Goto @fn.{}, %s.Token * %tok_ptr )",
                   address,
                   create_offset_label(scanner_address as usize)
                 ))?
@@ -1144,33 +1200,29 @@ pub fn write_state<W: Write>(
               match input_type {
                 INPUT_TYPE::T05_BYTE => {
                   switch_block_input_type = "i8";
-                  writer.wrtln(
-                      &format!(
-                        "%adj_input{:X} = call i8 * @getAdjustedInputPtrInteger( %s.CTX* %ctx, %s.Token * %tok_ptr, i32 {} )"
-                        ,address, 1
-                      )
-                    )?
+                  write_get_input_ptr_lookup(writer, 1, address)?;
+                  writer
                     .wrtln(&format!("%val{:X} = load i8, i8 * %adj_input{0:X}", address))?
                     .wrtln(&format!(
                       "call void @writeTokenLength( %s.Token * %tok_ptr, i64 {} ) alwaysinline",
                       ((1 as usize) | ((1 as usize) << 32))
                     ))?;
                 }
+
                 INPUT_TYPE::T03_CLASS => {
-                  writer.wrtln(
-                    &format!(
-                      "%adj_input{:X} = call i8 * @getAdjustedInputPtrInteger( %s.CTX* %ctx, %s.Token * %tok_ptr, i32 {} )"
-                      ,address,  4
-                    )
-                  )?.wrtln(&format!("%val{:X} = load i8, i8 * %adj_input{0:X}", address))?;
+                  write_get_input_ptr_lookup(writer, 4, address)?;
+                  writer.wrtln(&format!(
+                    "%val{:X} = load i8, i8 * %adj_input{0:X}",
+                    address
+                  ))?;
                 }
+
                 INPUT_TYPE::T04_CODEPOINT => {
-                  writer.wrtln(
-                    &format!(
-                      "%adj_input{:X} = call i8 * @getAdjustedInputPtrInteger( %s.CTX* %ctx, %s.Token * %tok_ptr, i32 {} )"
-                      ,address,  4
-                    )
-                  )?.wrtln(&format!("%val{:X} = load i8, i8 * %adj_input{0:X}", address))?;
+                  write_get_input_ptr_lookup(writer, 4, address)?;
+                  writer.wrtln(&format!(
+                    "%val{:X} = load i8, i8 * %adj_input{0:X}",
+                    address
+                  ))?;
                 }
                 _ => {}
               };
@@ -1308,6 +1360,56 @@ pub fn write_state<W: Write>(
   Ok((address, "".to_string()))
 }
 
+fn write_get_input_ptr_lookup<'a, W: Write>(
+  writer: &mut CodeWriter<W>,
+  max_length: usize,
+  address: usize,
+) -> Result<()>
+{
+  writer.wrtln(
+        &format!(
+          "
+%input_block = call %s.InputBlock @getAdjustedInputPtrInteger( %s.CTX* %ctx, %s.Token * %tok_ptr, i32 {} )
+%adj_input = extractvalue %s.InputBlock %input_block, 0
+%block_size = extractvalue %s.InputBlock %input_block, 1
+%block_offset = extractvalue %s.InputBlock %input_block, 2
+"
+          , max_length
+        )
+      )?.wrtln(
+        &format!(
+          "
+%input_ptr_{0:X} = ptrtoint i8 * %adj_input to i64
+%cond_1{0:X} = icmp ne i64 %input_ptr_{0:X}, 0
+br i1 %cond_1{0:X}, label %eval_input_{0:X}, label %handle_eoi_{0:X}
+", address
+        )
+      )?
+      .dedent()
+      .wrtln(&format!("handle_eoi_{0:X}:", address))?
+      .indent();
+
+  writer
+    .wrtln(";  End Of Input")?
+    .wrtln(&format!(
+      "call void @push_state( %s.CTX* %ctx, i32 {} , %fn.Goto @fn.{} )",
+      NORMAL_STATE_FLAG_LLVM,
+      &create_offset_label(address)
+    ))?
+    .wrtln(&format!(
+      "%val{:X} = call i32 @emitEndOfInput( %s.CTX* %ctx, %s.Action* %action, i32 %block_offset )",
+      address
+    ))?
+    .wrtln(&format!("ret i32 %val{:X}\n", address))?;
+
+  writer
+    .dedent()
+    .wrtln(&format!("eval_input_{0:X}:", address))?
+    .indent();
+
+  Ok(())
+}
+
 fn write_emit_reentrance<'a, W: Write>(
   bytecode: &Vec<u32>,
   address: usize,
@@ -1330,7 +1432,7 @@ fn write_emit_reentrance<'a, W: Write>(
     let name = create_offset_label(next_address);
     writer.wrtln(&format!(
       "call void @push_state( %s.CTX* %ctx, i32 {} , %fn.Goto @fn.{} )",
-      NORMAL_STATE_FLAG, &name
+      NORMAL_STATE_FLAG_LLVM, &name
     ))?;
     referenced.push((next_address as u32, true));
   }
@@ -1376,6 +1478,7 @@ pub fn compile_from_bytecode<W: Write>(
 ) -> Result<()>
 {
   write_preamble(writer, output)?;
+  write_uft8_functions(writer)?;
 
   // start points
   let start_points = get_exported_productions(output.grammar)
@@ -1419,7 +1522,7 @@ pub fn compile_from_bytecode<W: Write>(
 
       writer
         .wrtln(&format!(
-          "\ndefine fastcc i32 @fn.{} ( %s.CTX* %ctx, %s.Action* %action ) {} {{",
+          "\ndefine \"cc 11\" i32 @fn.{} ( %s.CTX* %ctx, %s.Action* %action ) {} {{",
           name,
           if true { "" } else { "" }
         ))?
@@ -1444,10 +1547,11 @@ pub fn compile_from_bytecode<W: Write>(
   }
 
   write_state_init(writer, output, &start_points)?;
+
   writer
     .wrtln(&format!(
       "@llvm.used = appending global [{} x i32 *] [",
-      goto_fn.len() + 1
+      goto_fn.len() + 2
     ))?
     .indent();
 
@@ -1458,7 +1562,9 @@ pub fn compile_from_bytecode<W: Write>(
     ))?;
   }
 
-  writer.wrtln("i32 * bitcast ( void ( %s.CTX*, %s.Action* ) * @next to i32 * ) ")?;
+  writer
+    .wrtln("i32 * bitcast ( void ( %s.CTX*, %s.Action* ) * @next to i32 * ), ")?
+    .wrtln("i32 * bitcast ( i32 ( i8 * ) * @getUTF8CodePoint to i32 * ) ")?;
 
   writer.dedent().wrtln("], section \"llvm.metadata\"")?;
   Ok(())
