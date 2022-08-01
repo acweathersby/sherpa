@@ -17,6 +17,7 @@ use crate::types::GrammarStore;
 use crate::types::IRState;
 use crate::types::IRStateType::*;
 use crate::types::Item;
+use crate::types::PeekType;
 use crate::types::ProductionId;
 use crate::types::SymbolID;
 use crate::types::TransitionGraphNode;
@@ -158,10 +159,7 @@ fn generate_states(
     grammar,
     is_scanner,
     start_items,
-    &recursive_descent_data
-      .goto_items
-      .into_iter()
-      .collect::<Vec<_>>(),
+    &recursive_descent_data.goto_items.into_iter().collect::<Vec<_>>(),
   );
 
   if !goto_data.leaf_nodes.is_empty() {
@@ -190,10 +188,8 @@ fn process_transition_nodes<'a>(
 
   let mut output = BTreeMap::<usize, IRState>::new();
 
-  let mut children_tables = tpack
-    .nodes_iter()
-    .map(|_| Vec::<&'a TransitionGraphNode>::new())
-    .collect::<Vec<_>>();
+  let mut children_tables =
+    tpack.nodes_iter().map(|_| Vec::<&'a TransitionGraphNode>::new()).collect::<Vec<_>>();
 
   // Starting with the leaf nodes, construct the reverse
   // edges of our transition graph, converting the relationship
@@ -293,20 +289,17 @@ fn get_goto_name(entry_state_name: &String) -> String
 
 fn create_passing_goto_state(entry_state_name: &String, is_scanner: bool) -> IRState
 {
-  IRState::new(
-    "",
-    "pass",
-    get_goto_name(entry_state_name),
-    0,
-    None,
-    None,
-    if is_scanner {
+  IRState {
+    code: "pass".to_string(),
+    name: get_goto_name(entry_state_name),
+    state_type: if is_scanner {
       ScannerGoto
     } else {
       ProductionGoto
     },
-    0,
-  )
+    ..Default::default()
+  }
+  .into_hashed()
 }
 
 fn create_goto_start_state(
@@ -332,11 +325,8 @@ fn create_goto_start_state(
         contains_root_production =
           root_productions.contains(production_id) || contains_root_production;
 
-        let production_bytecode_id = grammar
-          .production_table
-          .get(production_id)
-          .unwrap()
-          .bytecode_id;
+        let production_bytecode_id =
+          grammar.production_table.get(production_id).unwrap().bytecode_id;
 
         if child.is(TransitionStateType::I_PASS) {
           strings.push(format!(
@@ -370,29 +360,23 @@ on fail state [ {}_goto_failed ]
     assert PRODUCTION [ {} ] ( pass )
 ",
         entry_state_name,
-        grammar
-          .production_table
-          .get(root_production)
-          .unwrap()
-          .bytecode_id
+        grammar.production_table.get(root_production).unwrap().bytecode_id
       ))
     }
   }
 
-  IRState::new(
-    &comment,
-    &strings.join("\n"),
-    get_goto_name(entry_state_name),
-    0,
-    None,
-    None,
-    if is_scanner {
+  IRState {
+    comment,
+    code: strings.join("\n"),
+    name: get_goto_name(entry_state_name),
+    state_type: if is_scanner {
       ScannerGoto
     } else {
       ProductionGoto
     },
-    0,
-  )
+    ..Default::default()
+  }
+  .into_hashed()
 }
 
 fn create_intermediate_state(
@@ -410,8 +394,9 @@ fn create_intermediate_state(
   let mut comment = String::new();
   let mut item_set = BTreeSet::new();
   let mut states = vec![];
+  let mut peek_type: PeekType = PeekType::None;
 
-  let (post_amble, state_name, mut state_stack_depth, mut state_type) = {
+  let (post_amble, state_name, mut stack_depth, mut state_type) = {
     if node.id == 0 {
       (
         create_post_amble(entry_state_name, grammar),
@@ -566,6 +551,14 @@ fn create_intermediate_state(
           })
           .to_string();
 
+          if child.is(TransitionStateType::O_PEEK) {
+            if (node.is(TransitionStateType::O_PEEK)) {
+              peek_type = PeekType::PeekContinue;
+            } else {
+              peek_type = PeekType::PeekStart;
+            }
+          }
+
           let (symbol_id, assert_class) = if (!is_scanner) {
             (symbol_id.bytecode_id(grammar), "TOKEN")
           } else {
@@ -592,46 +585,43 @@ fn create_intermediate_state(
         }
       });
 
-      state_stack_depth += max_child_depth;
+      stack_depth += max_child_depth;
     }
   }
 
   let state = if is_scanner {
-    IRState::new(
-      &comment,
-      &strings.join("\n"),
-      state_name,
-      node.id,
-      None,
-      None,
+    IRState {
+      comment,
+      code: strings.join("\n"),
+      name: state_name,
+      graph_id: node.id,
       state_type,
-      state_stack_depth,
-    )
+      stack_depth,
+      peek_type,
+      ..Default::default()
+    }
+    .into_hashed()
   } else {
-    let (normal_symbol_set, peek_symbols_set) = get_symbols_from_items(item_set, grammar);
+    let (normal_symbol_set, skip_symbols_set) = get_symbols_from_items(item_set, grammar);
 
-    for symbol_id in &peek_symbols_set {
+    for symbol_id in &skip_symbols_set {
       strings.push(format!("skip [ {} ]", symbol_id.bytecode_id(grammar),))
     }
     let have_symbols = !normal_symbol_set.is_empty();
-    IRState::new(
-      &comment,
-      &strings.join("\n"),
-      state_name,
-      node.id,
-      if have_symbols {
-        Some(normal_symbol_set.into_iter().collect())
-      } else {
-        None
-      },
-      if have_symbols {
-        Some(peek_symbols_set.into_iter().collect())
-      } else {
-        None
-      },
+
+    IRState {
+      comment,
+      code: strings.join("\n"),
+      name: state_name,
+      graph_id: node.id,
+      normal_symbols: normal_symbol_set.into_iter().collect(),
+      skip_symbols: skip_symbols_set.into_iter().collect(),
       state_type,
-      state_stack_depth,
-    )
+      stack_depth,
+      peek_type,
+      ..Default::default()
+    }
+    .into_hashed()
   };
 
   states.push(state);
@@ -662,10 +652,8 @@ fn get_symbols_from_items(
     }
   }
 
-  let peek_symbols_set = peek_symbols_set
-    .difference(&normal_symbol_set)
-    .cloned()
-    .collect::<BTreeSet<_>>();
+  let peek_symbols_set =
+    peek_symbols_set.difference(&normal_symbol_set).cloned().collect::<BTreeSet<_>>();
 
   (normal_symbol_set, peek_symbols_set)
 }
@@ -748,18 +736,15 @@ fn create_end_state(
 
   let production = grammar.production_table.get(&body.production).unwrap();
 
-  IRState::new(
-    "",
-    &create_end_string(node, grammar, is_scanner),
-    String::default(),
-    node.id,
-    None,
-    None,
-    if is_scanner {
+  IRState {
+    code: create_end_string(node, grammar, is_scanner),
+    graph_id: node.id,
+    state_type: if is_scanner {
       ProductionEndState
     } else {
       ScannerEndState
     },
-    0,
-  )
+    ..Default::default()
+  }
+  .into_hashed()
 }
