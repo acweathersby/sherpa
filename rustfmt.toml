@@ -3,7 +3,11 @@ max_width = 90
 
 array_width = 70
 
-fn_call_width = 70
+fn_call_width = 90
+
+chain_width = 90
+
+
 
 enum_discrim_align_threshold = 10
 struct_field_align_threshold = 10
@@ -16,6 +20,8 @@ binop_separator = "Front"
 
 blank_lines_lower_bound = 0
 blank_lines_upper_bound = 1
+
+
 
 brace_style = "AlwaysNextLine"
 
@@ -37,3 +43,5 @@ overflow_delimited_expr = true
 reorder_impl_items = true
 
 report_todo = "Always"
+
+struct_lit_width = 70

@@ -757,22 +757,15 @@ fn write_state_init<'a, W: Write>(
   ))?;
 
   for (_, (_, _, label)) in sp.iter().map(|p| (p.1, p)).collect::<BTreeMap<_, _>>() {
-    writer
-      .dedent()
-      .newline()?
-      .wrtln(&format!("init_{}:", label))?
-      .indent()
-      .wrtln(&format!(
+    writer.dedent().newline()?.wrtln(&format!("init_{}:", label))?.indent().wrtln(
+      &format!(
         "call void @push_state ( %s.CTX* %ctx,  i32 {}, %fn.Goto @fn.{} ) ",
         NORMAL_STATE_FLAG_LLVM, label
-      ))?;
+      ),
+    )?;
   }
 
-  writer
-    .newline()?
-    .wrtln("ret void")?
-    .dedent()
-    .wrtln("}\n\n")?;
+  writer.newline()?.wrtln("ret void")?.dedent().wrtln("}\n\n")?;
 
   Ok(writer)
 }
@@ -1402,10 +1395,7 @@ br i1 %cond_1{0:X}, label %eval_input_{0:X}, label %handle_eoi_{0:X}
     ))?
     .wrtln(&format!("ret i32 %val{:X}\n", address))?;
 
-  writer
-    .dedent()
-    .wrtln(&format!("eval_input_{0:X}:", address))?
-    .indent();
+  writer.dedent().wrtln(&format!("eval_input_{0:X}:", address))?.indent();
 
   Ok(())
 }
@@ -1491,10 +1481,8 @@ pub fn compile_from_bytecode<W: Write>(
     })
     .collect::<Vec<_>>();
 
-  let sp_lu = start_points
-    .iter()
-    .map(|(_, address, _)| *address)
-    .collect::<BTreeSet<_>>();
+  let sp_lu =
+    start_points.iter().map(|(_, address, _)| *address).collect::<BTreeSet<_>>();
 
   let mut addresses = output
     .ir_states
@@ -1549,10 +1537,7 @@ pub fn compile_from_bytecode<W: Write>(
   write_state_init(writer, output, &start_points)?;
 
   writer
-    .wrtln(&format!(
-      "@llvm.used = appending global [{} x i32 *] [",
-      goto_fn.len() + 2
-    ))?
+    .wrtln(&format!("@llvm.used = appending global [{} x i32 *] [", goto_fn.len() + 2))?
     .indent();
 
   for goto in &goto_fn {

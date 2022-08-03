@@ -40,10 +40,7 @@ pub(crate) fn create_table<'a>(entry_state: u32, output: &'a BytecodeOutput)
     let state_address = state_address as usize;
 
     if let btree_map::Entry::Vacant(e) = table.entry(state_address) {
-      let state_name = output
-        .offset_to_state_name
-        .get(&(state_address as u32))
-        .unwrap();
+      let state_name = output.offset_to_state_name.get(&(state_address as u32)).unwrap();
 
       let state = output.ir_states.get(state_name).unwrap();
 
@@ -150,21 +147,14 @@ pub(crate) fn create_table<'a>(entry_state: u32, output: &'a BytecodeOutput)
   }
 
   // Convert each row to an integer
-  let state_offset_to_enumuration = table
-    .keys()
-    .enumerate()
-    .map(|(i, o)| (*o, i + 1))
-    .collect::<BTreeMap<_, _>>();
+  let state_offset_to_enumuration =
+    table.keys().enumerate().map(|(i, o)| (*o, i + 1)).collect::<BTreeMap<_, _>>();
 
   let mut byte_major_table: BTreeMap<u32, Vec<&TableCell>> = BTreeMap::new();
   let mut keys = state_offset_to_enumuration.keys();
 
-  let min_state = *state_offset_to_enumuration
-    .get(keys.next().unwrap())
-    .unwrap();
-  let max_state = *state_offset_to_enumuration
-    .get(keys.last().unwrap())
-    .unwrap();
+  let min_state = *state_offset_to_enumuration.get(keys.next().unwrap()).unwrap();
+  let max_state = *state_offset_to_enumuration.get(keys.last().unwrap()).unwrap();
 
   for state in &mut table {
     for cell in state.1 {
@@ -264,6 +254,8 @@ pub struct BranchData
   // pub table_index:  usize,
   pub is_skipped: bool,
   pub address:    usize,
+  /// The value of the branch's key, be it the token type,
+  /// production id, byte, class, or codepoint
   pub value:      u32,
 }
 
@@ -283,12 +275,7 @@ impl<'a> BranchTableData<'a>
     if instr.is_I10_HASH_BRANCH() || instr.is_I09_VECTOR_BRANCH() {
       let data = TableHeaderData::from_bytecode(entry_state, &output.bytecode);
 
-      let TableHeaderData {
-        input_type,
-        table_length,
-        table_meta,
-        ..
-      } = data;
+      let TableHeaderData { input_type, table_length, table_meta, .. } = data;
 
       let branches = match instr.get_type() {
         INSTRUCTION::I09_VECTOR_BRANCH => output.bytecode
@@ -360,10 +347,7 @@ impl<'a> BranchTableData<'a>
 
   pub fn has_trivial_comparisons(&self) -> bool
   {
-    self
-      .branches
-      .iter()
-      .all(|(_, b)| self.min_comparison_bytes(b).is_some())
+    self.branches.iter().all(|(_, b)| self.min_comparison_bytes(b).is_some())
   }
 
   /// Return the number of bytes required to compare

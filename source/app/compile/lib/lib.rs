@@ -8,8 +8,8 @@
 mod asm;
 mod ast;
 mod builder;
-mod llvm;
-mod options;
+pub mod llvm;
+pub mod options;
 mod writer;
 
 pub use builder::asm::*;

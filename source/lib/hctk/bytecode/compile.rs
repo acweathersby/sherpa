@@ -33,17 +33,12 @@ pub(crate) fn build_byte_code_buffer(
   states: Vec<&IR_STATE>,
 ) -> (Vec<u32>, BTreeMap<String, u32>)
 {
-  let states_iter = states
-    .iter()
-    .enumerate()
-    .map(|(i, s)| (s, s.id.clone(), i as u32));
+  let states_iter = states.iter().enumerate().map(|(i, s)| (s, s.id.clone(), i as u32));
 
   let mut goto_bookmarks_to_offset = states_iter.clone().map(|_| 0).collect::<Vec<_>>();
 
-  let state_name_to_bookmark = states_iter
-    .clone()
-    .map(|(_, s, i)| (s, i))
-    .collect::<HashMap<_, _>>();
+  let state_name_to_bookmark =
+    states_iter.clone().map(|(_, s, i)| (s, i)).collect::<HashMap<_, _>>();
 
   let mut bytecode = vec![
     INSTRUCTION::I15_FALL_THROUGH,
@@ -56,6 +51,7 @@ pub(crate) fn build_byte_code_buffer(
 
   for ((state, name, i)) in states_iter {
     goto_bookmarks_to_offset[i as usize] = bytecode.len() as u32;
+    eprintln!("r -- {}", bytecode.len());
     bytecode.append(&mut compile_ir_state_to_bytecode(
       state,
       default_get_branch_selector,
@@ -127,10 +123,8 @@ fn compile_ir_states(
   number_of_threads: usize,
 ) -> BTreeMap<u64, IRState>
 {
-  let production_id_chunks = work_group
-    .chunks(number_of_threads)
-    .filter(|s| !s.is_empty())
-    .collect::<Vec<_>>();
+  let production_id_chunks =
+    work_group.chunks(number_of_threads).filter(|s| !s.is_empty()).collect::<Vec<_>>();
 
   let mut ir_map = BTreeMap::new();
 
@@ -177,7 +171,6 @@ pub fn compile_ir_state_to_bytecode(
     // 3. Byte
     // 4. Class
     // 5. CodePoint
-
     build_branching_bytecode(
       &state.instructions,
       get_branch_selector,
@@ -192,10 +185,7 @@ pub fn compile_ir_state_to_bytecode(
 
 fn is_branch_state(state: &IR_STATE) -> bool
 {
-  state
-    .instructions
-    .iter()
-    .all(|i| matches!(i, ASTNode::ASSERT(_)))
+  state.instructions.iter().all(|i| matches!(i, ASTNode::ASSERT(_)))
 }
 
 fn build_branching_bytecode(
@@ -445,10 +435,8 @@ fn make_table(
 
       let mod_mask = (1 << mod_base) - 1;
 
-      let mut hash_entries = (0..pending_pairs.len())
-        .into_iter()
-        .map(|_| 0)
-        .collect::<Vec<_>>();
+      let mut hash_entries =
+        (0..pending_pairs.len()).into_iter().map(|_| 0).collect::<Vec<_>>();
 
       let mut leftover_pairs = vec![];
 
@@ -507,6 +495,8 @@ fn make_table(
       // Third word header
       output.push((offset_lookup_table_length << 16) | mod_base);
 
+      eprintln!("b: B -> {}", default_offset);
+
       output.push(default_offset);
 
       output.append(&mut hash_entries);
@@ -530,6 +520,8 @@ fn make_table(
 
       // Default Location
       output.push(default_offset);
+
+      eprintln!("b: A -> {}", default_offset);
 
       for branch in start..=end {
         if let Some(offset) = val_offset_map.get(&branch) {
@@ -562,14 +554,9 @@ fn build_branchless_bytecode(
 
   // reverse gotos so jumps operate correctly in a stack structure.
 
-  let gotos = instructions
-    .iter()
-    .filter(|i| matches!(i, ASTNode::Goto(_)))
-    .rev();
+  let gotos = instructions.iter().filter(|i| matches!(i, ASTNode::Goto(_))).rev();
 
-  let non_gotos = instructions
-    .iter()
-    .filter(|i| !matches!(i, ASTNode::Goto(_)));
+  let non_gotos = instructions.iter().filter(|i| !matches!(i, ASTNode::Goto(_)));
 
   for instruction in non_gotos.chain(gotos) {
     match instruction {
@@ -593,14 +580,8 @@ fn build_branchless_bytecode(
           panic!("Invalid state type in goto instruction");
         }
       }
-      ASTNode::ScanUntil(box ScanUntil {
-        ids,
-        SCAN_BACKWARDS,
-      }) => {}
-      ASTNode::ForkTo(box ForkTo {
-        states,
-        production_id,
-      }) => {
+      ASTNode::ScanUntil(box ScanUntil { ids, SCAN_BACKWARDS }) => {}
+      ASTNode::ForkTo(box ForkTo { states, production_id }) => {
         byte_code.push(
           I::I06_FORK_TO | ((states.len() << 16) as u32) | (production_id.val as u32),
         );
@@ -622,9 +603,9 @@ fn build_branchless_bytecode(
       ASTNode::Fail(_) => byte_code.push(I::I15_FAIL),
       ASTNode::NotInScope(box NotInScope { ids }) => {}
       ASTNode::SetScope(box SetScope { scope }) => {}
-      ASTNode::SetProd(box SetProd {
-        id: ASTNode::Num(box Num { val }),
-      }) => byte_code.push(I::I03_SET_PROD | (*val as u32 & INSTRUCTION_CONTENT_MASK)),
+      ASTNode::SetProd(box SetProd { id: ASTNode::Num(box Num { val }) }) => {
+        byte_code.push(I::I03_SET_PROD | (*val as u32 & INSTRUCTION_CONTENT_MASK))
+      }
       ASTNode::Reduce(box Reduce { body_id, len, .. }) => byte_code.push(
         I::I04_REDUCE
           | if *len as u32 == IR_REDUCE_NUMERIC_LEN_ID {
