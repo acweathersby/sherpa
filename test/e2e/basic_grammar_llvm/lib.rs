@@ -50,7 +50,6 @@ mod test
   {
     let actions = Context::new_banner_parser(&mut UTF8StringReader::new("hello wold"))
       .collect::<Vec<_>>();
-    println!("{:?}", actions);
     assert!(matches!(actions[0], ParseAction::Shift { .. }));
     assert!(matches!(actions[1], ParseAction::Error { .. }));
   }

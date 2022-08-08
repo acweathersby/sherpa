@@ -9,6 +9,7 @@ use crate::utf8::get_utf8_code_point_from;
 use super::reader::ImmutCharacterReader;
 use super::reader::SharedSymbolBuffer;
 use super::ByteCharacterReader;
+use super::InputBlock;
 use super::LLVMCharacterReader;
 use super::MutCharacterReader;
 use super::UTF8CharacterReader;
@@ -25,7 +26,31 @@ pub struct TestUTF8StringReader<'a>
   pub codepoint:   u32,
 }
 
-impl<'a> LLVMCharacterReader for TestUTF8StringReader<'a> {}
+impl<'a> LLVMCharacterReader for TestUTF8StringReader<'a>
+{
+  /// Get a pointer to a sequence of bytes that can be read from the input given
+  /// the cursor position. The second tuple values should be the length bytes that
+  ///  can be read from the block.
+  fn get_byte_block_at_cursor<T: ImmutCharacterReader + ByteCharacterReader>(
+    self_: &mut T,
+    input_block: &mut InputBlock,
+  )
+  {
+    let cursor = input_block.offset;
+    let size = ((self_.length() as i64) - (cursor as i64)).max(0);
+
+    if size > 0 {
+      let ptr = ((self_.get_bytes().as_ptr() as usize) + cursor as usize) as *const u8;
+      input_block.block = ptr;
+      input_block.length = size as u32;
+      input_block.is_truncated = false;
+    } else {
+      input_block.block = 0 as *const u8;
+      input_block.length = 0;
+      input_block.is_truncated = true;
+    }
+  }
+}
 
 impl<'a> ByteCharacterReader for TestUTF8StringReader<'a>
 {
@@ -137,12 +162,7 @@ impl<'a> ImmutCharacterReader for TestUTF8StringReader<'a>
   #[inline(always)]
   fn set_cursor_to(&mut self, token: &ParseToken) -> u64
   {
-    let ParseToken {
-      byte_offset,
-      line_number,
-      line_offset,
-      ..
-    } = *token;
+    let ParseToken { byte_offset, line_number, line_offset, .. } = *token;
 
     if self.cursor != byte_offset as usize {
       let diff = byte_offset as i32 - self.cursor as i32;

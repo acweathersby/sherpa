@@ -12,7 +12,7 @@ fn main()
   {
     if let Ok(input) = cwd.join("./grammar.hcg").canonicalize() {
       println!("cargo:rerun-if-changed={}", input.to_str().unwrap());
-      compile_llvm_files(&input, &cwd, true);
+      compile_llvm_files(&input, &cwd, true, None);
     }
   }
 }

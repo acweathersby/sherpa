@@ -34,6 +34,7 @@ pub struct LLVMTypes<'a>
   pub action:      StructType<'a>,
   pub input_block: StructType<'a>,
 }
+
 #[derive(Debug)]
 pub struct CTXGEPIndices
 {
@@ -201,7 +202,7 @@ pub(crate) fn construct_context<'a>(
           ],
           false,
         ),
-        None,
+        Some(Linkage::Private),
       ),
       scan: module.add_function(
         "scan",
@@ -213,7 +214,7 @@ pub(crate) fn construct_context<'a>(
           ],
           false,
         ),
-        None,
+        Some(Linkage::Private),
       ),
       next: module.add_function(
         "next",
@@ -238,12 +239,12 @@ pub(crate) fn construct_context<'a>(
           ],
           false,
         ),
-        None,
+        Some(Linkage::Private),
       ),
       pop_state: module.add_function(
         "pop_state",
         GOTO.fn_type(&[CTX.ptr_type(Generic).into()], false),
-        None,
+        Some(Linkage::Private),
       ),
       emit_reduce: module.add_function(
         "emit_reduce",
@@ -257,7 +258,7 @@ pub(crate) fn construct_context<'a>(
           ],
           false,
         ),
-        None,
+        Some(Linkage::Private),
       ),
       emit_eop: module.add_function("emit_eop", emit_function_type, None),
       emit_shift: module.add_function("emit_shift", emit_function_type, None),
@@ -271,7 +272,7 @@ pub(crate) fn construct_context<'a>(
           ],
           false,
         ),
-        None,
+        Some(Linkage::Private),
       ),
       emit_accept: module.add_function("emit_accept", emit_function_type, None),
       emit_error: module.add_function("emit_error", emit_function_type.clone(), None),
@@ -291,22 +292,22 @@ pub(crate) fn construct_context<'a>(
           ],
           false,
         ),
-        None,
+        Some(Linkage::Private),
       ),
       max: module.add_function(
         "llvm.umax.i32",
         i32.fn_type(&[i32.into(), i32.into()], false),
-        None,
+        Some(Linkage::Private),
       ),
       min: module.add_function(
         "llvm.umin.i32",
         i32.fn_type(&[i32.into(), i32.into()], false),
-        None,
+        Some(Linkage::Private),
       ),
       extend_stack_if_needed: module.add_function(
         "extend_stack_if_needed",
         i32.fn_type(&[CTX.ptr_type(Generic).into(), i32.into()], false),
-        None,
+        Some(Linkage::Private),
       ),
     },
     module,
@@ -1442,6 +1443,13 @@ fn construct_parse_function_statements(
       INSTRUCTION::I02_GOTO => {
         (address, return_val) =
           construct_instruction_goto(address, ctx, pack, referenced);
+
+        match return_val {
+          Some(val) => {
+            break;
+          }
+          None => {}
+        }
       }
       INSTRUCTION::I03_SET_PROD => {
         address = construct_instruction_prod(address, ctx, pack);
@@ -1524,7 +1532,7 @@ pub(crate) fn get_parse_function<'a>(
   let name = format!("parse_fn_{:X}", address);
   match ctx.module.get_function(&name) {
     Some(function) => function,
-    None => ctx.module.add_function(&name, ctx.types.goto_fn, None),
+    None => ctx.module.add_function(&name, ctx.types.goto_fn, Some(Linkage::Private)),
   }
 }
 
@@ -2147,6 +2155,9 @@ pub(crate) fn construct_instruction_goto<'a>(
       .try_as_basic_value()
       .unwrap_left()
       .into_int_value();
+
+    builder.build_return(Some(&return_val));
+
     (address + 1, Some(return_val))
   } else {
     builder.build_call(

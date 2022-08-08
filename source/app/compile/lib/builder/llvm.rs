@@ -12,6 +12,18 @@ use hctk::get_num_of_available_threads;
 use hctk::grammar::compile_from_path;
 use hctk::types::*;
 use inkwell::context::Context;
+use inkwell::module::Module;
+use inkwell::passes::PassManager;
+use inkwell::passes::PassManagerBuilder;
+use inkwell::targets::CodeModel;
+use inkwell::targets::FileType;
+use inkwell::targets::InitializationConfig;
+use inkwell::targets::RelocMode;
+use inkwell::targets::Target;
+use inkwell::targets::TargetData;
+use inkwell::targets::TargetMachine;
+use inkwell::targets::TargetTriple;
+use inkwell::OptimizationLevel;
 use std::io::BufWriter;
 use std::io::Write;
 use std::process::Command;
@@ -26,13 +38,17 @@ pub enum OutputType
   Java,
 }
 
+fn initializeLLVMTargets()
+{
+  Target::initialize_x86(&InitializationConfig::default());
+}
+
 /// Compile grammar into a machine-code based parser for the given architecture and language
 pub fn compile_llvm_files(
   input_path: &PathBuf,
   output_path: &PathBuf,
   build_ast: bool,
-  // Target Architecture
-  // Target Language
+  target_triple: Option<String>,
 )
 {
   let build_options = BuildOptions {
@@ -41,7 +57,12 @@ pub fn compile_llvm_files(
     ..Default::default()
   };
 
+  initializeLLVMTargets();
+
   eprintln!("Input file: {:?}\n Output file: {:?}", input_path, output_path);
+
+  let target_triple =
+    target_triple.unwrap_or(std::env::var("TARGET").unwrap_or(String::default()));
 
   let threads = get_num_of_available_threads();
 
@@ -67,10 +88,31 @@ pub fn compile_llvm_files(
             output_path.clone()
           };
 
-          let _llvm_source_path = output_path.join(parser_name.clone() + ".ll");
-          let bit_code_path = output_path.join(parser_name.clone() + ".bc");
-          let object_path = output_path.join(parser_name.clone() + ".o");
+          let log_file = output_path.join(parser_name.clone() + ".log");
+          let object_path = output_path.join("lib".to_string() + &parser_name + ".o");
           let archive_path = output_path.join(format!("./lib{}.a", &parser_name));
+
+          let target_triple = TargetTriple::create(&target_triple);
+          let mut target_err = String::default();
+
+          if let Ok(parser_data_file) = std::fs::File::create(log_file) {
+            let mut writer = BufWriter::new(parser_data_file);
+            writer.write_fmt(format_args!("target triple: {}\n", target_triple));
+            writer.write_fmt(format_args!("parse name: {}\n", &parser_name));
+            writer.write_fmt(format_args!(
+              "production count: {}\n",
+              &grammar.production_table.len()
+            ));
+            writer
+              .write_fmt(format_args!("body count: {}\n", &grammar.bodies_table.len()));
+
+            writer.write_fmt(format_args!(
+              "symbol count: {}\n",
+              &grammar.symbols_table.len()
+            ));
+            writer.write_fmt(format_args!("target: {:?}\n", target_err));
+            writer.flush();
+          }
 
           if let Ok(ctx) = crate::llvm::compile_from_bytecode(
             &parser_name,
@@ -78,42 +120,48 @@ pub fn compile_llvm_files(
             &build_options,
             &bytecode_output,
           ) {
-            if ctx.module.write_bitcode_to_path(&bit_code_path) {
-              match Command::new("llc-14")
-                .args(&[
-                  //"-flto=thin",
-                  //"-O3",
-                  //"-g",
-                  "-filetype=obj",
-                  "-o",
-                  object_path.to_str().unwrap(),
-                  bit_code_path.to_str().unwrap(),
-                ])
-                .status()
-              {
-                Ok(_) => {
-                  if !(Command::new("llvm-ar-14")
-                    .args(&[
-                      "rc",
-                      archive_path.to_str().unwrap(),
-                      object_path.to_str().unwrap(),
-                    ])
-                    .status()
-                    .unwrap()
-                    .success())
-                  {
-                    panic!("failed");
-                  } else {
-                    println!(
-                      "cargo:rustc-link-search=native={}",
-                      output_path.to_str().unwrap()
-                    );
-                    println!("cargo:rustc-link-lib=static={}", parser_name);
-                  }
+            let opt = OptimizationLevel::Less;
+            let reloc = RelocMode::PIC;
+            let model = CodeModel::Small;
+            let target = Target::from_triple(&target_triple).unwrap();
+            let target_machine = target
+              .create_target_machine(&target_triple, "generic", "", opt, reloc, model)
+              .unwrap();
+
+            apply_llvm_optimizations(opt, &ctx, &target_machine);
+
+            ctx
+              .module
+              .set_data_layout(&target_machine.get_target_data().get_data_layout());
+
+            ctx.module.set_triple(&target_triple);
+
+            match target_machine.write_to_file(
+              &ctx.module,
+              FileType::Object,
+              &object_path,
+            ) {
+              Ok(_) => {
+                println!(
+                  "cargo:rustc-link-search=native={}",
+                  output_path.to_str().unwrap()
+                );
+                println!("cargo:rustc-link-lib=static={}", parser_name);
+                if !(Command::new("llvm-ar-14")
+                  .args(&[
+                    "rc",
+                    archive_path.to_str().unwrap(),
+                    object_path.to_str().unwrap(),
+                  ])
+                  .status()
+                  .unwrap()
+                  .success())
+                {
+                  panic!("failed");
                 }
-                Err(err) => {
-                  println!("cargo:error={}", err);
-                }
+              }
+              Err(err) => {
+                panic!("failed");
               }
             }
           }
@@ -144,6 +192,47 @@ pub fn compile_llvm_files(
       }
     })
   }
+}
+
+fn apply_llvm_optimizations(
+  opt: OptimizationLevel,
+  ctx: &crate::llvm::LLVMParserModule,
+  target_machine: &TargetMachine,
+)
+{
+  let pass_manager_builder = PassManagerBuilder::create();
+  let pass_manager = PassManager::create(());
+  pass_manager_builder.set_optimization_level(opt);
+  // pass_manager_builder.populate_module_pass_manager(&pass_manager);
+  //*
+  pass_manager.add_cfg_simplification_pass();
+  pass_manager.add_function_inlining_pass();
+  pass_manager.add_always_inliner_pass();
+  pass_manager.add_partially_inline_lib_calls_pass();
+  pass_manager.add_merge_functions_pass();
+  pass_manager.add_lower_expect_intrinsic_pass();
+  pass_manager.add_jump_threading_pass();
+  pass_manager.add_memcpy_optimize_pass();
+  pass_manager.run_on(&ctx.module);
+  // pass_manager.add_demote_memory_to_register_pass();
+  pass_manager.add_scalarizer_pass();
+  //------------------------------------------------------------------------
+  pass_manager.add_slp_vectorize_pass();
+  pass_manager.add_loop_vectorize_pass();
+  pass_manager.add_merged_load_store_motion_pass();
+  // ---------------------------------
+  pass_manager.add_gvn_pass();
+  pass_manager.add_lower_switch_pass();
+  pass_manager.add_licm_pass();
+  pass_manager.run_on(&ctx.module);
+  pass_manager.add_function_inlining_pass();
+  // */
+  pass_manager.run_on(&ctx.module);
+  pass_manager.add_global_optimizer_pass();
+  pass_manager.add_global_dce_pass();
+  pass_manager.add_aggressive_dce_pass();
+  pass_manager.run_on(&ctx.module);
+  target_machine.add_analysis_passes(&pass_manager);
 }
 
 fn write_rust_parser<W: Write>(
