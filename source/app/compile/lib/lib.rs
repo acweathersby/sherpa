@@ -5,14 +5,12 @@
 #![feature(box_patterns)]
 #![feature(map_first_last)]
 
-mod asm;
 mod ast;
 mod builder;
 pub mod llvm;
 pub mod options;
 mod writer;
 
-pub use builder::asm::*;
 pub use builder::bytecode::*;
 pub use builder::llvm::*;
 

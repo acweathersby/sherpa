@@ -1,10 +1,7 @@
-mod llvm_ir;
 pub mod llvm_ir_inkwell;
 mod llvm_utf8_ir;
 
-use std::path::Path;
-
-pub use llvm_ir::*;
+pub use llvm_ir_inkwell::*;
 
 #[cfg(test)]
 mod test
@@ -92,18 +89,19 @@ mod test
   {
     let context = Context::create();
 
-    let parse_context = construct_context(&context);
+    let parse_context = construct_context("test", &context);
 
     unsafe { assert!(construct_init_function(&parse_context).is_ok()) }
 
     println!("{}", parse_context.module.to_string());
   }
+
   #[test]
   fn verify_construction_of_push_state_function()
   {
     let context = Context::create();
 
-    let parse_context = construct_context(&context);
+    let parse_context = construct_context("test", &context);
 
     unsafe { assert!(construct_push_state_function(&parse_context).is_ok()) }
 
@@ -115,7 +113,7 @@ mod test
   {
     let context = Context::create();
 
-    let mut parse_context = construct_context(&context);
+    let mut parse_context = construct_context("test", &context);
 
     unsafe { assert!(construct_init_function(&parse_context).is_ok()) }
     unsafe { assert!(construct_push_state_function(&parse_context).is_ok()) }
@@ -146,7 +144,7 @@ mod test
   {
     let context = Context::create();
 
-    let parse_context = construct_context(&context);
+    let parse_context = construct_context("test", &context);
 
     unsafe { assert!(construct_emit_accept_function(&parse_context).is_ok()) }
 
@@ -158,7 +156,7 @@ mod test
   {
     let context = Context::create();
 
-    let parse_context = construct_context(&context);
+    let parse_context = construct_context("test", &context);
 
     unsafe { assert!(construct_emit_shift_function(&parse_context).is_ok()) }
 
@@ -170,7 +168,7 @@ mod test
   {
     let context = Context::create();
 
-    let mut parse_context = construct_context(&context);
+    let mut parse_context = construct_context("test", &context);
 
     unsafe { assert!(construct_emit_shift_function(&parse_context).is_ok()) }
 
@@ -205,7 +203,7 @@ mod test
   {
     let context = Context::create();
 
-    let parse_context = construct_context(&context);
+    let parse_context = construct_context("test", &context);
 
     unsafe { assert!(construct_emit_reduce_function(&parse_context).is_ok()) }
 
@@ -217,7 +215,7 @@ mod test
   {
     let context = Context::create();
 
-    let mut parse_context = construct_context(&context);
+    let mut parse_context = construct_context("test", &context);
 
     unsafe { assert!(construct_emit_reduce_function(&parse_context).is_ok()) }
 
@@ -248,7 +246,7 @@ mod test
   {
     let context = Context::create();
 
-    let parse_context = construct_context(&context);
+    let parse_context = construct_context("test", &context);
 
     unsafe {
       assert!(construct_get_adjusted_input_block_function(&parse_context).is_ok())
@@ -262,7 +260,7 @@ mod test
   {
     let context = Context::create();
 
-    let mut parse_context = construct_context(&context);
+    let mut parse_context = construct_context("test", &context);
 
     unsafe { assert!(construct_init_function(&parse_context).is_ok()) }
     unsafe {
@@ -344,7 +342,7 @@ mod test
   {
     let context = Context::create();
 
-    let parse_context = construct_context(&context);
+    let parse_context = construct_context("test", &context);
 
     unsafe { assert!(construct_scan_function(&parse_context).is_ok()) }
 
@@ -356,7 +354,7 @@ mod test
   {
     let context = Context::create();
 
-    let parse_context = construct_context(&context);
+    let parse_context = construct_context("test", &context);
 
     unsafe { assert!(construct_emit_error_function(&parse_context).is_ok()) }
 
@@ -368,7 +366,7 @@ mod test
   {
     let context = Context::create();
 
-    let parse_context = construct_context(&context);
+    let parse_context = construct_context("test", &context);
 
     unsafe { assert!(construct_emit_end_of_parse(&parse_context).is_ok()) }
 
@@ -380,7 +378,7 @@ mod test
   {
     let context = Context::create();
 
-    let parse_context = construct_context(&context);
+    let parse_context = construct_context("test", &context);
 
     unsafe { assert!(construct_emit_end_of_input(&parse_context).is_ok()) }
 
@@ -392,7 +390,7 @@ mod test
   {
     let context = Context::create();
 
-    let parse_context = construct_context(&context);
+    let parse_context = construct_context("test", &context);
 
     unsafe { assert!(construct_pop_state_function(&parse_context).is_ok()) }
 
@@ -404,7 +402,7 @@ mod test
   {
     let context = Context::create();
 
-    let mut parse_context = construct_context(&context);
+    let mut parse_context = construct_context("test", &context);
 
     unsafe { assert!(construct_init_function(&parse_context).is_ok()) }
     unsafe { assert!(construct_push_state_function(&parse_context).is_ok()) }
@@ -438,7 +436,7 @@ mod test
   {
     let context = Context::create();
 
-    let parse_context = construct_context(&context);
+    let parse_context = construct_context("test", &context);
 
     unsafe { assert!(construct_prime_function(&parse_context, &vec![]).is_ok()) }
 
@@ -450,7 +448,7 @@ mod test
   {
     let context = Context::create();
 
-    let parse_context = construct_context(&context);
+    let parse_context = construct_context("test", &context);
 
     unsafe { assert!(construct_next_function(&parse_context).is_ok()) }
 
@@ -462,7 +460,7 @@ mod test
   {
     let context = Context::create();
 
-    let mut parse_context = construct_context(&context);
+    let mut parse_context = construct_context("test", &context);
 
     unsafe { assert!(construct_init_function(&parse_context).is_ok()) }
     unsafe { assert!(construct_push_state_function(&parse_context).is_ok()) }
@@ -506,7 +504,7 @@ mod test
   {
     let context = Context::create();
 
-    let parse_context = construct_context(&context);
+    let parse_context = construct_context("test", &context);
 
     unsafe { assert!(construct_extend_stack_if_needed(&parse_context).is_ok()) }
 
@@ -518,7 +516,7 @@ mod test
   {
     let context = Context::create();
 
-    let mut parse_context = construct_context(&context);
+    let mut parse_context = construct_context("test", &context);
 
     unsafe { assert!(construct_init_function(&parse_context).is_ok()) };
 
@@ -547,7 +545,7 @@ mod test
   {
     let context = Context::create();
 
-    let mut parse_context = construct_context(&context);
+    let mut parse_context = construct_context("test", &context);
 
     unsafe { assert!(construct_init_function(&parse_context).is_ok()) }
     unsafe { assert!(construct_push_state_function(&parse_context).is_ok()) }
@@ -610,7 +608,7 @@ mod test
   #[test]
   fn test_compile_from_bytecode() -> core::result::Result<(), ()>
   {
-    use crate::llvm::llvm_ir_inkwell::compile_from_bytecode;
+    use crate::llvm::compile_from_bytecode;
     use crate::options::Architecture;
     use crate::options::BuildOptions;
     use hctk::bytecode::compile_bytecode;
@@ -629,6 +627,7 @@ mod test
     let bytecode_output = compile_bytecode(&grammar, 1);
 
     if let Ok(mut ctx) = compile_from_bytecode(
+      "test",
       &Context::create(),
       &BuildOptions { architecture: Architecture::X8664, ..Default::default() },
       &bytecode_output,

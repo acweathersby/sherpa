@@ -87,10 +87,13 @@ pub struct LLVMParserModule<'a>
   pub(crate) exe_engine:  Option<ExecutionEngine<'a>>,
 }
 
-pub(crate) fn construct_context<'a>(ctx: &'a Context) -> LLVMParserModule<'a>
+pub(crate) fn construct_context<'a>(
+  module_name: &str,
+  ctx: &'a Context,
+) -> LLVMParserModule<'a>
 {
   use inkwell::AddressSpace::*;
-  let module = ctx.create_module("parser");
+  let module = ctx.create_module(module_name);
   let builder = ctx.create_builder();
 
   let i8 = ctx.i8_type();
@@ -2231,12 +2234,13 @@ pub(crate) fn construct_instruction_fail(ctx: &LLVMParserModule, pack: &Instruct
 
 /// Compile a LLVM parser module from Hydrocarbon bytecode.
 pub fn compile_from_bytecode<'a>(
+  module_name: &str,
   llvm_context: &'a Context,
   build_options: &BuildOptions,
   output: &BytecodeOutput,
 ) -> core::result::Result<LLVMParserModule<'a>, ()>
 {
-  let mut parse_context = construct_context(&llvm_context);
+  let mut parse_context = construct_context(module_name, &llvm_context);
   let ctx = &mut parse_context;
 
   unsafe {

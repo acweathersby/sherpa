@@ -22,11 +22,8 @@ pub(crate) fn write_rust_entry_function_bytecode<W: Write>(
 ) -> Result<(), std::io::Error>
 {
   Ok(
-    for ExportedProduction {
-      export_name,
-      guid_name,
-      production,
-    } in get_exported_productions(grammar)
+    for ExportedProduction { export_name, guid_name, production } in
+      get_exported_productions(grammar)
     {
       if let Some(bytecode_offset) = state_lookups.get(guid_name) {
         writer
@@ -61,28 +58,16 @@ pub(crate) fn write_rust_entry_function<W: Write>(
 ) -> Result<(), std::io::Error>
 {
   Ok(
-    for (
-      i,
-      ExportedProduction {
-        export_name,
-        production,
-        ..
-      },
-    ) in get_exported_productions(grammar).iter().enumerate()
+    for (i, ExportedProduction { export_name, production, .. }) in
+      get_exported_productions(grammar).iter().enumerate()
     {
       writer
         .newline()?
         .wrtln(&format!(
           "/// `{}`",
-          production
-            .original_location
-            .to_string()
-            .replace("\n", "\n// ")
+          production.original_location.to_string().replace("\n", "\n// ")
         ))?
-        .wrtln(&format!(
-          "pub fn new_{}_parser(reader: &mut T) -> Self{{",
-          export_name
-        ))?
+        .wrtln(&format!("pub fn new_{}_parser(reader: &mut T) -> Self{{", export_name))?
         .indent()
         .wrtln("let mut ctx = Self::new(reader);")?
         .wrtln(&format!("ctx.set_start_point({});", i))?

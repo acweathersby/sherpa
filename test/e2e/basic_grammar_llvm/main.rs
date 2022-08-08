@@ -10,14 +10,9 @@ pub fn main()
 
   let mut a = ParseAction::Undefined;
 
-  for action in
-    Context::new_banner_parser(&mut UTF8StringReader::new("hello world".to_string()))
-  {
+  for action in Context::new_banner_parser(&mut UTF8StringReader::new("hello world")) {
     match action {
-      ParseAction::Shift {
-        skipped_characters: skip,
-        token,
-      } => {
+      ParseAction::Shift { skipped_characters: skip, token } => {
         messages.push(format!("Skip {:? } & Extract token {:?} ", skip, token));
       }
       ParseAction::Accept { production_id } => {

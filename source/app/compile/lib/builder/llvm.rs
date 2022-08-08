@@ -7,12 +7,11 @@ use crate::options::Architecture;
 use crate::options::BuildOptions;
 use crate::options::Recognizer;
 use crate::writer::code_writer::CodeWriter;
-use crate::writer::nasm_writer::NasmWriter;
-use crate::writer::x86_64_writer::X8664Writer;
 use hctk::bytecode::compile_bytecode;
 use hctk::get_num_of_available_threads;
 use hctk::grammar::compile_from_path;
 use hctk::types::*;
+use inkwell::context::Context;
 use std::io::BufWriter;
 use std::io::Write;
 use std::process::Command;
@@ -68,28 +67,19 @@ pub fn compile_llvm_files(
             output_path.clone()
           };
 
-          let llvm_source_path = output_path.join(parser_name.clone() + ".ll");
+          let _llvm_source_path = output_path.join(parser_name.clone() + ".ll");
           let bit_code_path = output_path.join(parser_name.clone() + ".bc");
           let object_path = output_path.join(parser_name.clone() + ".o");
           let archive_path = output_path.join(format!("./lib{}.a", &parser_name));
 
-          if let Ok(asm_file) = std::fs::File::create(&llvm_source_path) {
-            let mut writer = CodeWriter::new(BufWriter::new(asm_file));
-
-            writer.write(&DISCLAIMER(&parser_name, "Parse LLVM IR", "; "));
-
-            if crate::llvm::compile_from_bytecode(
-              &build_options,
-              &bytecode_output,
-              &mut writer,
-            )
-            .is_ok()
-            {
-              let mut file_writer = writer.into_output();
-
-              drop(file_writer);
-
-              match Command::new("clang-14")
+          if let Ok(ctx) = crate::llvm::compile_from_bytecode(
+            &parser_name,
+            &Context::create(),
+            &build_options,
+            &bytecode_output,
+          ) {
+            if ctx.module.write_bitcode_to_path(&bit_code_path) {
+              match Command::new("llc-14")
                 .args(&[
                   //"-flto=thin",
                   "-O3",
@@ -97,7 +87,7 @@ pub fn compile_llvm_files(
                   //"-g",
                   "-o",
                   object_path.to_str().unwrap(),
-                  llvm_source_path.to_str().unwrap(),
+                  bit_code_path.to_str().unwrap(),
                 ])
                 .status()
               {

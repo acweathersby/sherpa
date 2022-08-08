@@ -9,7 +9,7 @@ pub fn bench(input: &str)
 {
   let mut updates = 0;
 
-  for action in Context::new_banner_parser(&mut UTF8StringReader2::new(input)) {
+  for action in Context::new_banner_parser(&mut UTF8StringReader::new(input)) {
     match action {
       ParseAction::Shift { .. } => {
         updates += 1;
