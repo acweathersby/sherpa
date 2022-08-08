@@ -51,7 +51,6 @@ pub(crate) fn build_byte_code_buffer(
 
   for ((state, name, i)) in states_iter {
     goto_bookmarks_to_offset[i as usize] = bytecode.len() as u32;
-    eprintln!("r -- {}", bytecode.len());
     bytecode.append(&mut compile_ir_state_to_bytecode(
       state,
       default_get_branch_selector,
@@ -495,8 +494,6 @@ fn make_table(
       // Third word header
       output.push((offset_lookup_table_length << 16) | mod_base);
 
-      eprintln!("b: B -> {}", default_offset);
-
       output.push(default_offset);
 
       output.append(&mut hash_entries);
@@ -520,8 +517,6 @@ fn make_table(
 
       // Default Location
       output.push(default_offset);
-
-      eprintln!("b: A -> {}", default_offset);
 
       for branch in start..=end {
         if let Some(offset) = val_offset_map.get(&branch) {

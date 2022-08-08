@@ -1,14 +1,13 @@
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::VecDeque;
-use std::fs::File;
-use std::io::Write;
 
 use hctk::bytecode::BytecodeOutput;
 use hctk::grammar::get_exported_productions;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::execution_engine::ExecutionEngine;
+use inkwell::module::Linkage;
 use inkwell::module::Module;
 use inkwell::types::FunctionType;
 use inkwell::types::StructType;
@@ -21,19 +20,19 @@ use crate::builder::table::BranchTableData;
 use crate::options::BuildOptions;
 use hctk::types::*;
 
-const FAIL_STATE_FLAG_LLVM: u32 = 2;
-const NORMAL_STATE_FLAG_LLVM: u32 = 1;
+pub const FAIL_STATE_FLAG_LLVM: u32 = 2;
+pub const NORMAL_STATE_FLAG_LLVM: u32 = 1;
 
 #[derive(Debug)]
 pub struct LLVMTypes<'a>
 {
-  reader:      StructType<'a>,
-  parse_ctx:   StructType<'a>,
-  token:       StructType<'a>,
-  goto:        StructType<'a>,
-  goto_fn:     FunctionType<'a>,
-  action:      StructType<'a>,
-  input_block: StructType<'a>,
+  pub reader:      StructType<'a>,
+  pub parse_ctx:   StructType<'a>,
+  pub token:       StructType<'a>,
+  pub goto:        StructType<'a>,
+  pub goto_fn:     FunctionType<'a>,
+  pub action:      StructType<'a>,
+  pub input_block: StructType<'a>,
 }
 #[derive(Debug)]
 pub struct CTXGEPIndices
@@ -55,20 +54,25 @@ pub struct CTXGEPIndices
 #[derive(Debug)]
 pub struct PublicFunctions<'a>
 {
-  next: FunctionValue<'a>,
-  init: FunctionValue<'a>,
-  pop_state: FunctionValue<'a>,
-  push_state: FunctionValue<'a>,
-  emit_accept: FunctionValue<'a>,
-  emit_error: FunctionValue<'a>,
-  emit_eoi: FunctionValue<'a>,
-  emit_eop: FunctionValue<'a>,
-  emit_shift: FunctionValue<'a>,
-  emit_reduce: FunctionValue<'a>,
-  prime: FunctionValue<'a>,
-  scan: FunctionValue<'a>,
-  get_adjusted_input_block: FunctionValue<'a>,
-  assert_stack_capacity: FunctionValue<'a>,
+  pub(crate) next: FunctionValue<'a>,
+  pub(crate) init: FunctionValue<'a>,
+  pub(crate) pop_state: FunctionValue<'a>,
+  pub(crate) push_state: FunctionValue<'a>,
+  pub(crate) emit_accept: FunctionValue<'a>,
+  pub(crate) emit_error: FunctionValue<'a>,
+  pub(crate) emit_eoi: FunctionValue<'a>,
+  pub(crate) emit_eop: FunctionValue<'a>,
+  pub(crate) emit_shift: FunctionValue<'a>,
+  pub(crate) emit_reduce: FunctionValue<'a>,
+  pub(crate) prime: FunctionValue<'a>,
+  pub(crate) scan: FunctionValue<'a>,
+  pub(crate) memcpy: FunctionValue<'a>,
+  pub(crate) min: FunctionValue<'a>,
+  pub(crate) max: FunctionValue<'a>,
+  pub(crate) get_adjusted_input_block: FunctionValue<'a>,
+  pub(crate) extend_stack_if_needed: FunctionValue<'a>,
+  pub(crate) allocate_stack: FunctionValue<'a>,
+  pub(crate) free_stack: FunctionValue<'a>,
 }
 
 #[derive(Debug)]
@@ -83,7 +87,7 @@ pub struct LLVMParserModule<'a>
   pub(crate) exe_engine:  Option<ExecutionEngine<'a>>,
 }
 
-pub fn construct_context<'a>(ctx: &'a Context) -> LLVMParserModule<'a>
+pub(crate) fn construct_context<'a>(ctx: &'a Context) -> LLVMParserModule<'a>
 {
   use inkwell::AddressSpace::*;
   let module = ctx.create_module("parser");
@@ -107,7 +111,15 @@ pub fn construct_context<'a>(ctx: &'a Context) -> LLVMParserModule<'a>
 
   TOKEN.set_body(&[i64.into(), i64.into(), i64.into(), i64.into()], false);
 
-  INPUT_BLOCK.set_body(&[i8.ptr_type(Generic).into(), i32.into(), i32.into()], false);
+  INPUT_BLOCK.set_body(
+    &[
+      i8.ptr_type(Generic).into(),
+      i32.into(),
+      i32.into(),
+      ctx.bool_type().into(),
+    ],
+    false,
+  );
   let get_input_block_type = ctx
     .void_type()
     .fn_type(
@@ -166,6 +178,16 @@ pub fn construct_context<'a>(ctx: &'a Context) -> LLVMParserModule<'a>
       peek_mode:       12, // 12
     },
     fun: PublicFunctions {
+      allocate_stack: module.add_function(
+        "hctk_allocate_stack",
+        GOTO.ptr_type(Generic).fn_type(&[i32.into()], false),
+        Some(Linkage::External),
+      ),
+      free_stack: module.add_function(
+        "hctk_free_stack",
+        ctx.void_type().fn_type(&[GOTO.ptr_type(Generic).into(), i32.into()], false),
+        Some(Linkage::External),
+      ),
       get_adjusted_input_block: module.add_function(
         "get_adjusted_input_block",
         INPUT_BLOCK.fn_type(
@@ -255,8 +277,31 @@ pub fn construct_context<'a>(ctx: &'a Context) -> LLVMParserModule<'a>
         ctx.void_type().fn_type(&[CTX.ptr_type(Generic).into(), i32.into()], false),
         None,
       ),
-      assert_stack_capacity: module.add_function(
-        "assert_stack_capacity",
+      memcpy: module.add_function(
+        "llvm.memcpy.p0.p0.i32",
+        ctx.void_type().fn_type(
+          &[
+            i8.ptr_type(Generic).into(),
+            i8.ptr_type(Generic).into(),
+            i32.into(),
+            ctx.bool_type().into(),
+          ],
+          false,
+        ),
+        None,
+      ),
+      max: module.add_function(
+        "llvm.umax.i32",
+        i32.fn_type(&[i32.into(), i32.into()], false),
+        None,
+      ),
+      min: module.add_function(
+        "llvm.umin.i32",
+        i32.fn_type(&[i32.into(), i32.into()], false),
+        None,
+      ),
+      extend_stack_if_needed: module.add_function(
+        "extend_stack_if_needed",
         i32.fn_type(&[CTX.ptr_type(Generic).into(), i32.into()], false),
         None,
       ),
@@ -266,7 +311,9 @@ pub fn construct_context<'a>(ctx: &'a Context) -> LLVMParserModule<'a>
   }
 }
 
-fn construct_emit_end_of_input(ctx: &LLVMParserModule) -> std::result::Result<(), ()>
+pub(crate) fn construct_emit_end_of_input(
+  ctx: &LLVMParserModule,
+) -> std::result::Result<(), ()>
 {
   let LLVMParserModule {
     module,
@@ -312,7 +359,7 @@ fn construct_emit_end_of_input(ctx: &LLVMParserModule) -> std::result::Result<()
   }
 }
 
-unsafe fn construct_emit_end_of_parse(
+pub(crate) unsafe fn construct_emit_end_of_parse(
   ctx: &LLVMParserModule,
 ) -> std::result::Result<(), ()>
 {
@@ -372,7 +419,7 @@ unsafe fn construct_emit_end_of_parse(
   }
 }
 
-unsafe fn construct_get_adjusted_input_block_function(
+pub(crate) unsafe fn construct_get_adjusted_input_block_function(
   ctx: &LLVMParserModule,
 ) -> std::result::Result<(), ()>
 {
@@ -409,7 +456,7 @@ unsafe fn construct_get_adjusted_input_block_function(
   let needed_size = b.build_int_sub(needed_size, block_offset, "");
 
   let comparison =
-    b.build_int_compare(inkwell::IntPredicate::UGT, block_size, needed_size, "");
+    b.build_int_compare(inkwell::IntPredicate::UGE, block_size, needed_size, "");
 
   b.build_conditional_branch(comparison, valid_window, attempt_extend);
 
@@ -431,30 +478,16 @@ unsafe fn construct_get_adjusted_input_block_function(
 
   let block = b.build_load(ctx_input_block, "").into_struct_value();
 
-  //   let ptr = b
-  // .build_extract_value(block, 0, "")
-  // .unwrap()
-  // .into_pointer_value();
-  //
-  // let offset = b
-  // .build_extract_value(block, 1, "")
-  // .unwrap()
-  // .into_int_value();
-  //
-  // let size = b
-  // .build_extract_value(block, 2, "")
-  // .unwrap()
-  // .into_int_value();
-  //
-  // let diff = b.build_int_sub(token_offset, offset, "");
+  let ptr = b.build_extract_value(block, 0, "").unwrap().into_pointer_value();
+  let offset = b.build_extract_value(block, 1, "").unwrap().into_int_value();
+  let size = b.build_extract_value(block, 2, "").unwrap().into_int_value();
+  let diff = b.build_int_sub(token_offset, offset, "");
   // offset the pointer by the difference between the token_offset and
-  // and the block  offset
-  //
-  // let adjusted_size = b.build_int_sub(size, diff, "");
-  // let adjusted_ptr = b.build_gep(ptr, &[diff.into()], "");
-  //
-  // let block = b.build_insert_value(block, adjusted_ptr, 0, "").unwrap();
-  // let block = b.build_insert_value(block, adjusted_size, 2, "").unwrap();
+  // and the block offset
+  let adjusted_size = b.build_int_sub(size, diff, "");
+  let adjusted_ptr = b.build_gep(ptr, &[diff.into()], "");
+  let block = b.build_insert_value(block, adjusted_ptr, 0, "").unwrap();
+  let block = b.build_insert_value(block, adjusted_size, 2, "").unwrap();
 
   b.build_return(Some(&block));
 
@@ -465,7 +498,9 @@ unsafe fn construct_get_adjusted_input_block_function(
   }
 }
 
-fn construct_emit_reduce_function(ctx: &LLVMParserModule) -> std::result::Result<(), ()>
+pub(crate) fn construct_emit_reduce_function(
+  ctx: &LLVMParserModule,
+) -> std::result::Result<(), ()>
 {
   let LLVMParserModule {
     module,
@@ -517,7 +552,149 @@ fn construct_emit_reduce_function(ctx: &LLVMParserModule) -> std::result::Result
   }
 }
 
-unsafe fn construct_scan_function(ctx: &LLVMParserModule) -> std::result::Result<(), ()>
+pub(crate) unsafe fn construct_extend_stack_if_needed(
+  ctx: &LLVMParserModule,
+) -> std::result::Result<(), ()>
+{
+  let LLVMParserModule {
+    module,
+    builder: b,
+    types,
+    ctx,
+    ctx_indices: ci,
+    fun: funct,
+    ..
+  } = ctx;
+  let i32 = ctx.i32_type();
+
+  let fn_value = funct.extend_stack_if_needed;
+
+  let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
+  let needed_slot_count = fn_value.get_nth_param(1).unwrap().into_int_value();
+
+  let entry = ctx.append_basic_block(fn_value, "Entry");
+  b.position_at_end(entry);
+
+  // Get difference between current goto and the base goto.
+  let goto_base_ptr_ptr = b.build_struct_gep(parse_ctx, ci.goto_base, "base").unwrap();
+  let goto_base_ptr = b.build_load(goto_base_ptr_ptr, "base").into_pointer_value();
+  let goto_top_ptr_ptr = b.build_struct_gep(parse_ctx, ci.goto_top, "top").unwrap();
+  let goto_top_ptr = b.build_load(goto_top_ptr_ptr, "top").into_pointer_value();
+  let goto_used_bytes = b.build_int_sub(
+    b.build_ptr_to_int(goto_top_ptr, ctx.i64_type().into(), "top"),
+    b.build_ptr_to_int(goto_base_ptr, ctx.i64_type().into(), "base"),
+    "used",
+  );
+  let goto_used_bytes_i32 = b.build_int_truncate(goto_used_bytes, i32.into(), "");
+  let goto_used_slots = b.build_right_shift(
+    goto_used_bytes_i32,
+    ctx.i32_type().const_int(4, false),
+    false,
+    "used",
+  );
+
+  let goto_size_ptr = b.build_struct_gep(parse_ctx, ci.goto_stack_len, "size").unwrap();
+  let goto_slot_count = b.build_load(goto_size_ptr, "size").into_int_value();
+  let goto_slots_remaining =
+    b.build_int_sub(goto_slot_count, goto_used_slots, "remainder");
+
+  // Compare to the stack size
+  let comparison = b.build_int_compare(
+    inkwell::IntPredicate::ULT,
+    goto_slots_remaining,
+    needed_slot_count,
+    "",
+  );
+
+  let extend_block = ctx.append_basic_block(fn_value, "Extend");
+  let free_block = ctx.append_basic_block(fn_value, "FreeStack");
+  let update_block = ctx.append_basic_block(fn_value, "UpdateStack");
+  let return_block = ctx.append_basic_block(fn_value, "Return");
+
+  b.build_conditional_branch(comparison, extend_block, return_block);
+
+  // If the difference is less than the amount requested:
+  b.position_at_end(extend_block);
+  // Create a new stack, copy data from old stack to new one
+  // and, if the old stack was not the original stack,
+  // delete the old stack.
+
+  // create a size that is equal to the needed amount rounded up to the nearest 64bytes
+  let new_slot_count = b.build_int_add(goto_used_slots, needed_slot_count, "new_size");
+  let new_slot_count =
+    b.build_left_shift(new_slot_count, i32.const_int(1, false), "new_size");
+
+  let new_ptr = b
+    .build_call(funct.allocate_stack, &[new_slot_count.into()], "")
+    .try_as_basic_value()
+    .unwrap_left()
+    .into_pointer_value();
+
+  b.build_call(
+    funct.memcpy,
+    &[
+      b.build_bitcast(
+        new_ptr,
+        ctx.i8_type().ptr_type(inkwell::AddressSpace::Generic),
+        "",
+      )
+      .into(),
+      b.build_bitcast(
+        goto_base_ptr,
+        ctx.i8_type().ptr_type(inkwell::AddressSpace::Generic),
+        "",
+      )
+      .into(),
+      goto_used_bytes_i32.into(),
+      ctx.bool_type().const_int(0, false).into(),
+    ],
+    "",
+  );
+
+  let comparison = b.build_int_compare(
+    inkwell::IntPredicate::NE,
+    goto_slot_count,
+    i32.const_int(8, false).into(),
+    "",
+  );
+
+  b.build_conditional_branch(comparison, free_block, update_block);
+
+  b.position_at_end(free_block);
+
+  b.build_call(funct.free_stack, &[goto_base_ptr.into(), goto_slot_count.into()], "");
+
+  b.build_unconditional_branch(update_block);
+  b.position_at_end(update_block);
+
+  b.build_store(goto_base_ptr_ptr, new_ptr);
+
+  let new_stack_top_ptr = b.build_ptr_to_int(new_ptr, ctx.i64_type(), "new_top");
+  let new_stack_top_ptr = b.build_int_add(new_stack_top_ptr, goto_used_bytes, "new_top");
+  let new_stack_top_ptr = b.build_int_to_ptr(
+    new_stack_top_ptr,
+    types.goto.ptr_type(inkwell::AddressSpace::Generic),
+    "new_top",
+  );
+
+  b.build_store(goto_top_ptr_ptr, new_stack_top_ptr);
+  b.build_store(goto_size_ptr, new_slot_count);
+
+  b.build_unconditional_branch(return_block);
+
+  b.position_at_end(return_block);
+  b.build_return(Some(&i32.const_int(1, false)));
+
+  if funct.scan.verify(true) {
+    Ok(())
+  } else {
+    Err(())
+  }
+}
+
+pub(crate) unsafe fn construct_scan_function(
+  ctx: &LLVMParserModule,
+) -> std::result::Result<(), ()>
 {
   let LLVMParserModule {
     module,
@@ -648,7 +825,7 @@ unsafe fn construct_scan_function(ctx: &LLVMParserModule) -> std::result::Result
   }
 }
 
-unsafe fn construct_emit_shift_function(
+pub(crate) unsafe fn construct_emit_shift_function(
   ctx: &LLVMParserModule,
 ) -> std::result::Result<(), ()>
 {
@@ -733,7 +910,7 @@ unsafe fn construct_emit_shift_function(
   }
 }
 
-unsafe fn construct_emit_accept_function(
+pub(crate) unsafe fn construct_emit_accept_function(
   ctx: &LLVMParserModule,
 ) -> std::result::Result<(), ()>
 {
@@ -787,7 +964,7 @@ unsafe fn construct_emit_accept_function(
   }
 }
 
-unsafe fn construct_emit_error_function(
+pub(crate) unsafe fn construct_emit_error_function(
   ctx: &LLVMParserModule,
 ) -> std::result::Result<(), ()>
 {
@@ -852,10 +1029,10 @@ unsafe fn construct_emit_error_function(
   }
 }
 
-unsafe fn construct_init_function(ctx: &LLVMParserModule) -> std::result::Result<(), ()>
+pub(crate) unsafe fn construct_init_function(
+  ctx: &LLVMParserModule,
+) -> std::result::Result<(), ()>
 {
-  use inkwell::AddressSpace::*;
-
   let LLVMParserModule {
     module, builder, types, ctx, ctx_indices: ci, fun: funct, ..
   } = ctx;
@@ -892,7 +1069,7 @@ unsafe fn construct_init_function(ctx: &LLVMParserModule) -> std::result::Result
   }
 }
 
-unsafe fn construct_push_state_function(
+pub(crate) unsafe fn construct_push_state_function(
   ctx: &LLVMParserModule,
 ) -> std::result::Result<(), ()>
 {
@@ -940,7 +1117,7 @@ unsafe fn construct_push_state_function(
   }
 }
 
-unsafe fn construct_pop_state_function(
+pub(crate) unsafe fn construct_pop_state_function(
   ctx: &LLVMParserModule,
 ) -> std::result::Result<(), ()>
 {
@@ -984,7 +1161,9 @@ unsafe fn construct_pop_state_function(
   }
 }
 
-unsafe fn construct_next_function(ctx: &LLVMParserModule) -> std::result::Result<(), ()>
+pub(crate) unsafe fn construct_next_function(
+  ctx: &LLVMParserModule,
+) -> std::result::Result<(), ()>
 {
   let LLVMParserModule {
     module: m,
@@ -1052,42 +1231,67 @@ unsafe fn construct_next_function(ctx: &LLVMParserModule) -> std::result::Result
   }
 }
 
-fn construct_prime_function(ctx: &LLVMParserModule) -> Result<(), ()>
+pub(crate) fn construct_prime_function(
+  ctx: &LLVMParserModule,
+  sp: &Vec<(usize, u32, String)>,
+) -> Result<(), ()>
 {
-  let LLVMParserModule {
-    module: m,
-    builder: b,
-    types: t,
-    ctx,
-    ctx_indices: ci,
-    fun: funct,
-    ..
-  } = ctx;
-
-  let i32 = ctx.i32_type();
-  let zero = i32.const_int(0, false);
+  let i32 = ctx.ctx.i32_type();
+  let b = &ctx.builder;
+  let funct = &ctx.fun;
 
   let fn_value = funct.prime;
 
   let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
-  let target_production = fn_value.get_nth_param(1).unwrap().into_int_value();
-
-  // Set the context's goto pointers to point to the goto block;
-  let block_entry = ctx.append_basic_block(fn_value, "Entry");
-
+  let selector = fn_value.get_nth_param(1).unwrap().into_int_value(); // Set the context's goto pointers to point to the goto block;
+  let block_entry = ctx.ctx.append_basic_block(fn_value, "Entry");
   b.position_at_end(block_entry);
+
+  let blocks = sp
+    .iter()
+    .map(|(id, address, ..)| {
+      (
+        *id,
+        ctx.ctx.append_basic_block(fn_value, &create_offset_label(*address as usize)),
+        get_parse_function(*address as usize, ctx).as_global_value().as_pointer_value(),
+      )
+    })
+    .collect::<Vec<_>>();
 
   b.build_call(
     funct.push_state,
     &[
       parse_ctx.into(),
-      i32.const_int(NORMAL_STATE_FLAG_LLVM as u64, false).into(),
-      funct.emit_accept.as_global_value().as_pointer_value().into(),
+      i32.const_int((NORMAL_STATE_FLAG_LLVM | FAIL_STATE_FLAG_LLVM) as u64, false).into(),
+      funct.emit_eop.as_global_value().as_pointer_value().into(),
     ],
     "",
   );
 
-  b.build_return(None);
+  if (!blocks.is_empty()) {
+    b.build_switch(
+      selector,
+      blocks[0].1.into(),
+      &blocks.iter().map(|b| (i32.const_int(b.0 as u64, false), b.1)).collect::<Vec<_>>(),
+    );
+
+    for (_, block, fn_ptr) in &blocks {
+      b.position_at_end(*block);
+      b.build_call(
+        funct.push_state,
+        &[
+          parse_ctx.into(),
+          i32.const_int(NORMAL_STATE_FLAG_LLVM as u64, false).into(),
+          (*fn_ptr).into(),
+        ],
+        "",
+      );
+
+      b.build_return(None);
+    }
+  } else {
+    b.build_return(None);
+  }
 
   if funct.prime.verify(true) {
     Ok(())
@@ -1095,12 +1299,13 @@ fn construct_prime_function(ctx: &LLVMParserModule) -> Result<(), ()>
     Err(())
   }
 }
-fn create_offset_label(offset: usize) -> String
+
+pub(crate) fn create_offset_label(offset: usize) -> String
 {
   format!("off_{:X}", offset)
 }
 
-fn construct_parse_functions(
+pub(crate) fn construct_parse_functions(
   ctx: &LLVMParserModule,
   output: &BytecodeOutput,
   build_options: &BuildOptions,
@@ -1112,11 +1317,13 @@ fn construct_parse_functions(
     .enumerate()
     .map(|(i, p)| {
       let address = *(output.state_name_to_offset.get(p.guid_name).unwrap());
-      eprintln!("start--: {}", address);
+
       let name = create_offset_label(address as usize);
       (i, address, name)
     })
     .collect::<Vec<_>>();
+
+  construct_prime_function(ctx, &start_points)?;
 
   let sp_lu =
     start_points.iter().map(|(_, address, _)| *address).collect::<BTreeSet<_>>();
@@ -1141,7 +1348,6 @@ fn construct_parse_functions(
     }
 
     if seen.insert(address) {
-      eprintln!("add: {}", address);
       let mut referenced_addresses = Vec::new();
 
       let function = get_parse_function(address as usize, ctx);
@@ -1164,32 +1370,10 @@ fn construct_parse_functions(
     }
   }
 
-  // construct_prime_function(ctx)?;
-  // write_state_init(writer, output, &start_points)?;
-
-  //   writer
-  // .wrtln(&format!(
-  // "@llvm.used = appending global [{} x i32 *] [",
-  // goto_fn.len() + 2
-  // ))?
-  // .indent();
-  //
-  // for goto in &goto_fn {
-  // writer.wrtln(&format!(
-  // "i32 * bitcast ( i32 ( %s.CTX *, %s.Action* ) * @fn.off_{:X} to i32 *),",
-  // goto
-  // ))?;
-  // }
-  //
-  // writer
-  // .wrtln("i32 * bitcast ( void ( %s.CTX*, %s.Action* ) * @next to i32 * ), ")?
-  // .wrtln("i32 * bitcast ( i32 ( i8 * ) * @getUTF8CodePoint to i32 * ) ")?;
-  //
-  // writer.dedent().wrtln("], section \"llvm.metadata\"")?;
   Ok(())
 }
 
-struct InstructionPack<'a>
+pub(crate) struct InstructionPack<'a>
 {
   fun:           &'a FunctionValue<'a>,
   output:        &'a BytecodeOutput<'a>,
@@ -1209,6 +1393,7 @@ fn construct_parse_function_statements(
 
   let mut address = *address;
   let mut is_scanner = *is_scanner;
+  let mut return_val = None;
 
   if address >= bytecode.len() {
     return Ok((bytecode.len(), "".to_string()));
@@ -1223,12 +1408,13 @@ fn construct_parse_function_statements(
         | IRStateType::ScannerStart
         | IRStateType::ProductionGoto
         | IRStateType::ScannerGoto => {
-          // TODO right checker for handling stack expansion.
-          let needed_size = state.get_stack_depth() * 2 * 8;
           if state.get_stack_depth() > 0 {
             ctx.builder.build_call(
-              ctx.fun.assert_stack_capacity,
-              &[parse_cxt.into(), i32.const_int(needed_size as u64, false).into()],
+              ctx.fun.extend_stack_if_needed,
+              &[
+                parse_cxt.into(),
+                i32.const_int((state.get_stack_depth() + 2) as u64, false).into(),
+              ],
               "",
             );
           }
@@ -1251,7 +1437,8 @@ fn construct_parse_function_statements(
         }
       }
       INSTRUCTION::I02_GOTO => {
-        address = construct_instruction_goto(address, ctx, pack, referenced);
+        (address, return_val) =
+          construct_instruction_goto(address, ctx, pack, referenced);
       }
       INSTRUCTION::I03_SET_PROD => {
         address = construct_instruction_prod(address, ctx, pack);
@@ -1282,7 +1469,7 @@ fn construct_parse_function_statements(
         break;
       }
       INSTRUCTION::I00_PASS | _ => {
-        construct_instruction_pass(ctx, pack);
+        construct_instruction_pass(ctx, pack, return_val);
         break;
       }
     }
@@ -1326,8 +1513,10 @@ fn write_emit_reentrance<'a>(
   }
 }
 
-fn get_parse_function<'a>(address: usize, ctx: &'a LLVMParserModule)
-  -> FunctionValue<'a>
+pub(crate) fn get_parse_function<'a>(
+  address: usize,
+  ctx: &'a LLVMParserModule,
+) -> FunctionValue<'a>
 {
   let name = format!("parse_fn_{:X}", address);
   match ctx.module.get_function(&name) {
@@ -1336,19 +1525,19 @@ fn get_parse_function<'a>(address: usize, ctx: &'a LLVMParserModule)
   }
 }
 
-fn write_get_input_ptr_lookup<'a>(
+pub(crate) fn write_get_input_ptr_lookup<'a>(
   ctx: &'a LLVMParserModule,
   pack: &'a InstructionPack,
   max_length: usize,
   address: usize,
   token_ptr: PointerValue<'a>,
-) -> PointerValue<'a>
+) -> (PointerValue<'a>, IntValue<'a>, IntValue<'a>, IntValue<'a>)
 {
   let i32 = ctx.ctx.i32_type();
   let b = &ctx.builder;
   let parse_ctx = pack.fun.get_first_param().unwrap().into_pointer_value();
-  let action_pointer = pack.fun.get_nth_param(1).unwrap().into_pointer_value();
-  let table_name = create_offset_label(address + 800000);
+  // let action_pointer = pack.fun.get_nth_param(1).unwrap().into_pointer_value();
+  // let table_name = create_offset_label(address + 800000);
 
   let input_block = b
     .build_call(
@@ -1367,47 +1556,13 @@ fn write_get_input_ptr_lookup<'a>(
   let input_ptr = b.build_extract_value(input_block, 0, "").unwrap().into_pointer_value();
   let input_size = b.build_extract_value(input_block, 2, "").unwrap().into_int_value();
   let input_offset = b.build_extract_value(input_block, 1, "").unwrap().into_int_value();
+  let input_truncated =
+    b.build_extract_value(input_block, 3, "").unwrap().into_int_value();
 
-  let good_size_block =
-    ctx.ctx.append_basic_block(*pack.fun, &(table_name.clone() + "_have_sizable_block"));
-
-  let too_small_block =
-    ctx.ctx.append_basic_block(*pack.fun, &(table_name.clone() + "_block_too_small"));
-
-  let comparison = b.build_int_compare(
-    inkwell::IntPredicate::ULT,
-    input_size,
-    i32.const_int(max_length as u64, false),
-    "",
-  );
-
-  b.build_conditional_branch(comparison, too_small_block, good_size_block);
-
-  b.position_at_end(too_small_block);
-
-  b.build_call(
-    ctx.fun.push_state,
-    &[
-      parse_ctx.into(),
-      i32.const_int(NORMAL_STATE_FLAG_LLVM as u64, false).into(),
-      pack.fun.as_global_value().as_pointer_value().into(),
-    ],
-    "",
-  );
-
-  b.build_call(
-    ctx.fun.emit_eoi,
-    &[parse_ctx.into(), action_pointer.into(), input_offset.into()],
-    "",
-  );
-  b.build_return(Some(&i32.const_int(1, false)));
-
-  b.position_at_end(good_size_block);
-
-  input_ptr
+  (input_ptr, input_size, input_offset, input_truncated)
 }
 
-fn construct_instruction_branch(
+pub(crate) fn construct_instruction_branch(
   address: usize,
   ctx: &LLVMParserModule,
   pack: &InstructionPack,
@@ -1420,7 +1575,8 @@ fn construct_instruction_branch(
     let i32 = ctx.ctx.i32_type();
     let i64 = ctx.ctx.i64_type();
 
-    let parse_ctx = pack.fun.get_first_param().unwrap().into_pointer_value();
+    let parse_ctx = pack.fun.get_nth_param(0).unwrap().into_pointer_value();
+    let action_pointer = pack.fun.get_nth_param(1).unwrap().into_pointer_value();
 
     // Convert the instruction data into table data.
     let table_name = create_offset_label(address + 800000);
@@ -1433,12 +1589,18 @@ fn construct_instruction_branch(
     let branches = &data.branches;
     let mut token_ptr = i32.ptr_type(inkwell::AddressSpace::Generic).const_null();
     let mut input_ptr = i32.ptr_type(inkwell::AddressSpace::Generic).const_null();
+    let mut input_offset = i32.const_int(0, false);
+    let mut input_size = i32.const_int(0, false);
+    let mut input_truncated = ctx.ctx.bool_type().const_int(0, false);
     let mut value = i32.const_int(0, false);
 
     // Prepare the input token if we are working with
     // Token based branch types (TOKEN, BYTE, CODEPOINT, CLASS)
     match input_type {
-      INPUT_TYPE::T01_PRODUCTION => {}
+      INPUT_TYPE::T01_PRODUCTION => {
+        b.build_unconditional_branch(table_block);
+        b.position_at_end(table_block);
+      }
       _ => {
         let peek_mode_ptr =
           b.build_struct_gep(parse_ctx, ctx.ctx_indices.peek_mode, "").unwrap();
@@ -1451,6 +1613,9 @@ fn construct_instruction_branch(
             let peek_mode_ptr =
               b.build_struct_gep(parse_ctx, ctx.ctx_indices.peek_mode, "").unwrap();
             b.build_store(peek_mode_ptr, i32.const_int(0, false));
+
+            b.build_unconditional_branch(table_block);
+            b.position_at_end(table_block);
           }
         } else {
           // Need to increment the peek token by either the previous length of the peek
@@ -1486,7 +1651,7 @@ fn construct_instruction_branch(
           let new_off = b.build_int_add(prev_token_len, prev_token_off, "");
           b.build_store(peek_token_off_ptr, new_off);
 
-          b.build_unconditional_branch(dispatch_block);
+          b.build_unconditional_branch(table_block);
 
           b.position_at_end(not_peeking_block);
           let assert_token_ptr =
@@ -1499,19 +1664,20 @@ fn construct_instruction_branch(
 
           b.build_store(peek_token_off_ptr, new_off);
 
-          b.build_unconditional_branch(dispatch_block);
-
-          b.position_at_end(dispatch_block);
+          b.build_unconditional_branch(table_block);
+          b.position_at_end(table_block);
         };
       }
     }
 
     let mut build_switch = true;
+    let mut build_truncated_input_block_check = true;
 
     // Creates blocks for each branch, skip, and default.
 
     let default_block =
       ctx.ctx.append_basic_block(*pack.fun, &(table_name.clone() + "_Table_Default"));
+
     let mut blocks = BTreeMap::new();
     for branch in branches.values() {
       if branch.is_skipped {
@@ -1538,20 +1704,8 @@ fn construct_instruction_branch(
       INPUT_TYPE::T02_TOKEN => {
         if data.has_trivial_comparisons() {
           build_switch = false;
-          // Prepare a pointer to the token's type for later reuse in the switch block
 
-          let token_type_ptr = b.build_struct_gep(token_ptr, 2, "").unwrap();
-          fn string_to_byte_num_and_mask(string: &str, sym: &Symbol) -> (usize, usize)
-          {
-            string.as_bytes().iter().enumerate().fold((0, 0), |(val, mask), (i, v)| {
-              let shift_amount = 8 * i;
-              (val | ((*v as usize) << shift_amount), mask | (0xFF << shift_amount))
-            })
-          }
-
-          b.build_unconditional_branch(table_block);
-          b.position_at_end(table_block);
-
+          // Store branch data in tuples comprized of (branch address, branch data,  token string)
           let branches = data
             .branches
             .iter()
@@ -1577,15 +1731,66 @@ fn construct_instruction_branch(
             })
             .collect::<Vec<_>>();
 
+          // Build a buffer to store the largest need register size, rounded to 4 bytes.
+
+          let max_size = branches
+            .iter()
+            .flat_map(|(_, _, s)| s)
+            .fold(0, |a, s| usize::max(a, s.len()));
+
+          (input_ptr, input_size, input_offset, input_truncated) =
+            write_get_input_ptr_lookup(ctx, pack, max_size, address, token_ptr);
+
+          let buffer_pointer = b.build_array_alloca(
+            ctx.ctx.i8_type(),
+            i32.const_int(max_size as u64, false),
+            "",
+          );
+
+          // Perform a memcpy between the input ptr and the buffer, using the smaller
+          // of the two input block length and max_size as the amount of bytes to
+          // copy.
+
+          let min_size = b
+            .build_call(
+              ctx.fun.min,
+              &[i32.const_int(max_size as u64, false).into(), input_size.into()],
+              "",
+            )
+            .try_as_basic_value()
+            .unwrap_left()
+            .into_int_value();
+
+          // Prepare a pointer to the token's type for later reuse in the switch block
+
+          b.build_call(
+            ctx.fun.memcpy,
+            &[
+              buffer_pointer.into(),
+              input_ptr.into(),
+              min_size.into(),
+              ctx.ctx.bool_type().const_int(0, false).into(),
+            ],
+            "",
+          );
+
+          input_ptr = buffer_pointer;
+
+          let token_type_ptr = b.build_struct_gep(token_ptr, 2, "").unwrap();
+          fn string_to_byte_num_and_mask(string: &str, sym: &Symbol) -> (usize, usize)
+          {
+            string.as_bytes().iter().enumerate().fold((0, 0), |(val, mask), (i, v)| {
+              let shift_amount = 8 * i;
+              (val | ((*v as usize) << shift_amount), mask | (0xFF << shift_amount))
+            })
+          }
+
           let max_length = *branches
             .iter()
             .flat_map(|s| s.2.iter().map(|s| s.len()))
             .collect::<BTreeSet<_>>()
             .last()
             .unwrap();
-
-          let input_ptr =
-            write_get_input_ptr_lookup(ctx, pack, max_length, address, token_ptr);
 
           for (index, (address, branch, strings)) in branches.iter().enumerate() {
             let sym = data.get_branch_symbol(branch).unwrap();
@@ -1689,25 +1894,32 @@ fn construct_instruction_branch(
         }
       }
       INPUT_TYPE::T01_PRODUCTION => {
+        build_truncated_input_block_check = false;
         let production_ptr =
           b.build_struct_gep(parse_ctx, ctx.ctx_indices.production, "").unwrap();
         value = b.build_load(production_ptr, "").into_int_value();
       }
       _ => {
+        build_truncated_input_block_check = false;
         match input_type {
           INPUT_TYPE::T05_BYTE => {
-            input_ptr = write_get_input_ptr_lookup(ctx, pack, 1, address, token_ptr);
+            (input_ptr, input_size, input_offset, input_truncated) =
+              write_get_input_ptr_lookup(ctx, pack, 1, address, token_ptr);
+
             value = b.build_load(input_ptr, "").into_int_value();
           }
 
           INPUT_TYPE::T03_CLASS => {
-            input_ptr = write_get_input_ptr_lookup(ctx, pack, 4, address, token_ptr);
+            (input_ptr, input_size, input_offset, input_truncated) =
+              write_get_input_ptr_lookup(ctx, pack, 4, address, token_ptr);
+
             // TODO: Use Class lookup function.
             value = i32.const_int(0, false);
           }
 
           INPUT_TYPE::T04_CODEPOINT => {
-            input_ptr = write_get_input_ptr_lookup(ctx, pack, 4, address, token_ptr);
+            (input_ptr, input_size, input_offset, input_truncated) =
+              write_get_input_ptr_lookup(ctx, pack, 4, address, token_ptr);
             // TODO: Use Codepoint lookup function.
             value = i32.const_int(0, false);
           }
@@ -1749,7 +1961,42 @@ fn construct_instruction_branch(
 
     b.position_at_end(default_block);
 
-    eprintln!("n: {} -> {}", address, pack.output.bytecode[address + 3]);
+    if build_truncated_input_block_check {
+      let good_size_block = ctx
+        .ctx
+        .append_basic_block(*pack.fun, &(table_name.clone() + "_have_sizable_block"));
+
+      let truncated_block = ctx
+        .ctx
+        .append_basic_block(*pack.fun, &(table_name.clone() + "_block_is_truncated"));
+
+      let comparison = b.build_int_compare(
+        inkwell::IntPredicate::EQ,
+        input_truncated,
+        ctx.ctx.bool_type().const_int(1 as u64, false),
+        "",
+      );
+      b.build_conditional_branch(comparison, truncated_block, good_size_block);
+
+      b.position_at_end(truncated_block);
+      b.build_call(
+        ctx.fun.push_state,
+        &[
+          parse_ctx.into(),
+          i32.const_int(NORMAL_STATE_FLAG_LLVM as u64, false).into(),
+          pack.fun.as_global_value().as_pointer_value().into(),
+        ],
+        "",
+      );
+
+      b.build_call(
+        ctx.fun.emit_eoi,
+        &[parse_ctx.into(), action_pointer.into(), input_offset.into()],
+        "",
+      );
+      b.build_return(Some(&i32.const_int(1, false)));
+      b.position_at_end(good_size_block);
+    }
 
     construct_parse_function_statements(
       ctx,
@@ -1765,7 +2012,7 @@ fn construct_instruction_branch(
   Ok(())
 }
 
-fn create_skip_code(
+pub(crate) fn create_skip_code(
   b: &Builder,
   token_ptr: PointerValue,
   i64: inkwell::types::IntType,
@@ -1782,7 +2029,7 @@ fn create_skip_code(
   b.build_unconditional_branch(table_block);
 }
 
-fn construct_scanner_instruction_consume(
+pub(crate) fn construct_scanner_instruction_consume(
   address: usize,
   ctx: &LLVMParserModule,
   pack: &InstructionPack,
@@ -1809,7 +2056,7 @@ fn construct_scanner_instruction_consume(
   address + 1
 }
 
-fn construct_instruction_consume(
+pub(crate) fn construct_instruction_consume(
   address: usize,
   ctx: &LLVMParserModule,
   pack: &InstructionPack,
@@ -1836,7 +2083,7 @@ fn construct_instruction_consume(
   b.build_return(Some(&val));
 }
 
-fn construct_instruction_reduce(
+pub(crate) fn construct_instruction_reduce(
   address: usize,
   ctx: &LLVMParserModule,
   pack: &InstructionPack,
@@ -1871,12 +2118,12 @@ fn construct_instruction_reduce(
   b.build_return(Some(&val));
 }
 
-fn construct_instruction_goto(
+pub(crate) fn construct_instruction_goto<'a>(
   address: usize,
-  ctx: &LLVMParserModule,
-  pack: &InstructionPack,
+  ctx: &'a LLVMParserModule,
+  pack: &'a InstructionPack,
   referenced: &mut Vec<(u32, bool)>,
-) -> usize
+) -> (usize, Option<IntValue<'a>>)
 {
   let bytecode = &pack.output.bytecode;
   let goto_offset = bytecode[address] & GOTO_STATE_ADDRESS_MASK;
@@ -1885,15 +2132,19 @@ fn construct_instruction_goto(
 
   if bytecode[address + 1] & INSTRUCTION_HEADER_MASK == INSTRUCTION::I00_PASS {
     // Call the function directly. This should end up as a tail call.
-    builder.build_call(
-      goto_function,
-      &[
-        pack.fun.get_first_param().unwrap().into_pointer_value().into(),
-        pack.fun.get_nth_param(1).unwrap().into_pointer_value().into(),
-      ],
-      "",
-    );
-    address + 1
+    let return_val = builder
+      .build_call(
+        goto_function,
+        &[
+          pack.fun.get_first_param().unwrap().into_pointer_value().into(),
+          pack.fun.get_nth_param(1).unwrap().into_pointer_value().into(),
+        ],
+        "",
+      )
+      .try_as_basic_value()
+      .unwrap_left()
+      .into_int_value();
+    (address + 1, Some(return_val))
   } else {
     builder.build_call(
       fun.push_state,
@@ -1907,10 +2158,11 @@ fn construct_instruction_goto(
 
     referenced.push((goto_offset, true));
 
-    address + 1
+    (address + 1, None)
   }
 }
-fn construct_instruction_prod(
+
+pub(crate) fn construct_instruction_prod(
   address: usize,
   ctx: &LLVMParserModule,
   pack: &InstructionPack,
@@ -1944,7 +2196,11 @@ fn construct_instruction_token(
   address + 1
 }
 
-fn construct_instruction_pass(ctx: &LLVMParserModule, pack: &InstructionPack)
+pub(crate) fn construct_instruction_pass(
+  ctx: &LLVMParserModule,
+  pack: &InstructionPack,
+  return_val: Option<IntValue>,
+)
 {
   let parse_ctx = pack.fun.get_nth_param(0).unwrap().into_pointer_value();
   let b = &ctx.builder;
@@ -1953,10 +2209,15 @@ fn construct_instruction_pass(ctx: &LLVMParserModule, pack: &InstructionPack)
     state_ptr,
     ctx.ctx.i32_type().const_int(NORMAL_STATE_FLAG_LLVM as u64, false),
   );
-  b.build_return(Some(&ctx.ctx.i32_type().const_int(0, false)));
+
+  if let Some(return_val) = return_val {
+    b.build_return(Some(&return_val));
+  } else {
+    b.build_return(Some(&ctx.ctx.i32_type().const_int(0, false)));
+  }
 }
 
-fn construct_instruction_fail(ctx: &LLVMParserModule, pack: &InstructionPack)
+pub(crate) fn construct_instruction_fail(ctx: &LLVMParserModule, pack: &InstructionPack)
 {
   let parse_ctx = pack.fun.get_nth_param(0).unwrap().into_pointer_value();
   let b = &ctx.builder;
@@ -1988,532 +2249,18 @@ pub fn compile_from_bytecode<'a>(
     construct_init_function(ctx)?;
     construct_next_function(ctx)?;
     construct_pop_state_function(ctx)?;
-    construct_prime_function(ctx)?;
     construct_push_state_function(ctx)?;
     construct_scan_function(ctx)?;
     construct_emit_error_function(ctx)?;
+    construct_extend_stack_if_needed(ctx)?;
   }
 
   construct_parse_functions(ctx, output, build_options)?;
 
+  parse_context.fun.push_state.add_attribute(
+    inkwell::attributes::AttributeLoc::Function,
+    parse_context.ctx.create_string_attribute("alwaysinline", ""),
+  );
+
   Ok(parse_context)
-}
-
-#[cfg(test)]
-mod test
-{
-  use hctk::types::Goto;
-  use hctk::types::InputBlock;
-  use hctk::types::LLVMParseContext;
-  use hctk::types::ParseAction;
-  use hctk::types::ParseToken;
-  use hctk::types::TestUTF8StringReader;
-  use inkwell::context::Context;
-  use inkwell::execution_engine::JitFunction;
-
-  type Init = unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>>);
-  type PushState = unsafe extern "C" fn(
-    *mut LLVMParseContext<TestUTF8StringReader<'static>>,
-    u32,
-    usize,
-  );
-
-  type EmitReduce = unsafe extern "C" fn(
-    *mut LLVMParseContext<TestUTF8StringReader<'static>>,
-    *mut ParseAction,
-    u32,
-    u32,
-    u32,
-  ) -> u32;
-
-  type EmitAccept = unsafe extern "C" fn(
-    *mut LLVMParseContext<TestUTF8StringReader<'static>>,
-    *mut ParseAction,
-  ) -> u32;
-
-  type EmitShift = EmitAccept;
-
-  type Next = unsafe extern "C" fn(
-    *mut LLVMParseContext<TestUTF8StringReader<'static>>,
-    *mut ParseAction,
-  );
-
-  type Prime =
-    unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>>, u32);
-
-  type PopState =
-    unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>>) -> Goto;
-
-  unsafe fn get_parse_function<'a, T: inkwell::execution_engine::UnsafeFunctionPointer>(
-    ctx: &'a super::LLVMParserModule,
-    function_name: &str,
-  ) -> Result<JitFunction<'a, T>, ()>
-  {
-    let init = ctx
-      .exe_engine
-      .as_ref()
-      .unwrap()
-      .get_function::<T>(function_name)
-      .ok()
-      .ok_or("Failed To Compile")
-      .unwrap();
-
-    Ok(init)
-  }
-
-  fn setup_exec_engine(ctx: &mut super::LLVMParserModule)
-  {
-    if ctx.exe_engine.is_none() {
-      ctx.exe_engine = Some(
-        ctx
-          .module
-          .create_jit_execution_engine(inkwell::OptimizationLevel::Aggressive)
-          .unwrap(),
-      );
-    }
-  }
-
-  #[test]
-  fn verify_construction_of_init_function()
-  {
-    let context = Context::create();
-
-    let parse_context = super::construct_context(&context);
-
-    unsafe { assert!(super::construct_init_function(&parse_context).is_ok()) }
-
-    println!("{}", parse_context.module.to_string());
-  }
-
-  #[test]
-  fn should_initialize_context()
-  {
-    let context = Context::create();
-
-    let mut parse_context = super::construct_context(&context);
-
-    unsafe { assert!(super::construct_init_function(&parse_context).is_ok()) };
-
-    unsafe {
-      setup_exec_engine(&mut parse_context);
-      let mut reader = TestUTF8StringReader::new("test");
-      let mut rt_ctx = Box::new(LLVMParseContext::new(&mut reader));
-      let init_fn = get_parse_function::<Init>(&parse_context, "init").unwrap();
-
-      init_fn.call(rt_ctx.as_mut());
-
-      let root = rt_ctx.as_ref() as *const LLVMParseContext<TestUTF8StringReader<'static>>
-        as usize;
-
-      assert_eq!(rt_ctx.stack_top as usize, root);
-      assert_eq!(rt_ctx.stack_base as usize, root);
-      assert_eq!(rt_ctx.stack_size as usize, 8);
-      assert_eq!(rt_ctx.state, super::NORMAL_STATE_FLAG_LLVM);
-
-      println!("{:?}:{:#?}", root, rt_ctx);
-    };
-  }
-
-  #[test]
-  fn verify_construction_of_push_state_function()
-  {
-    let context = Context::create();
-
-    let parse_context = super::construct_context(&context);
-
-    unsafe { assert!(super::construct_push_state_function(&parse_context).is_ok()) }
-
-    println!("{}", parse_context.module.to_string());
-  }
-
-  #[test]
-  fn should_push_new_state()
-  {
-    let context = Context::create();
-
-    let mut parse_context = super::construct_context(&context);
-
-    unsafe { assert!(super::construct_init_function(&parse_context).is_ok()) }
-    unsafe { assert!(super::construct_push_state_function(&parse_context).is_ok()) }
-
-    unsafe {
-      setup_exec_engine(&mut parse_context);
-      let mut reader = TestUTF8StringReader::new("test");
-      let mut rt_ctx = LLVMParseContext::new(&mut reader);
-      let init_fn = get_parse_function::<Init>(&parse_context, "init").unwrap();
-      let push_state_fn =
-        get_parse_function::<PushState>(&parse_context, "push_state").unwrap();
-
-      init_fn.call(&mut rt_ctx);
-      push_state_fn.call(&mut rt_ctx, super::NORMAL_STATE_FLAG_LLVM, 0x10101010_01010101);
-      push_state_fn.call(&mut rt_ctx, super::NORMAL_STATE_FLAG_LLVM, 0x01010101_10101010);
-
-      println!("{:#?}", rt_ctx);
-      assert_eq!(rt_ctx.local_goto_stack[0].goto_fn as usize, 0x10101010_01010101);
-      assert_eq!(rt_ctx.local_goto_stack[0].state, super::NORMAL_STATE_FLAG_LLVM);
-
-      assert_eq!(rt_ctx.local_goto_stack[1].goto_fn as usize, 0x01010101_10101010);
-      assert_eq!(rt_ctx.local_goto_stack[1].state, super::NORMAL_STATE_FLAG_LLVM);
-    };
-  }
-
-  #[test]
-  fn verify_construction_of_emit_accept_function()
-  {
-    let context = Context::create();
-
-    let parse_context = super::construct_context(&context);
-
-    unsafe { assert!(super::construct_emit_accept_function(&parse_context).is_ok()) }
-
-    println!("{}", parse_context.module.to_string());
-  }
-
-  #[test]
-  fn verify_construction_of_emit_shift_function()
-  {
-    let context = Context::create();
-
-    let parse_context = super::construct_context(&context);
-
-    unsafe { assert!(super::construct_emit_shift_function(&parse_context).is_ok()) }
-
-    println!("{}", parse_context.module.to_string());
-  }
-
-  #[test]
-  fn should_emit_shift()
-  {
-    let context = Context::create();
-
-    let mut parse_context = super::construct_context(&context);
-
-    unsafe { assert!(super::construct_emit_shift_function(&parse_context).is_ok()) }
-
-    unsafe {
-      setup_exec_engine(&mut parse_context);
-      let mut reader = TestUTF8StringReader::new("test");
-      let mut rt_ctx = LLVMParseContext::new(&mut reader);
-      let emit_shift =
-        get_parse_function::<EmitShift>(&parse_context, "emit_shift").unwrap();
-
-      rt_ctx.anchor_token.byte_offset = 5;
-      rt_ctx.anchor_token.byte_length = 0;
-      rt_ctx.assert_token.byte_offset = 10;
-
-      let mut action = ParseAction::Undefined;
-
-      emit_shift.call(&mut rt_ctx, &mut action);
-
-      match action {
-        ParseAction::Shift { skipped_characters, token } => {
-          assert_eq!(skipped_characters.byte_length, 5);
-          assert_eq!(skipped_characters.byte_offset, 5);
-          assert_eq!(token.byte_offset, 10);
-        }
-        _ => panic!("Incorrect ParseAction enum type assigned"),
-      }
-    };
-  }
-
-  #[test]
-  fn verify_construction_of_emit_reduce_function()
-  {
-    let context = Context::create();
-
-    let parse_context = super::construct_context(&context);
-
-    unsafe { assert!(super::construct_emit_reduce_function(&parse_context).is_ok()) }
-
-    println!("{}", parse_context.module.to_string());
-  }
-
-  #[test]
-  fn should_emit_reduce()
-  {
-    let context = Context::create();
-
-    let mut parse_context = super::construct_context(&context);
-
-    unsafe { assert!(super::construct_emit_reduce_function(&parse_context).is_ok()) }
-
-    unsafe {
-      setup_exec_engine(&mut parse_context);
-      let mut reader = TestUTF8StringReader::new("test");
-      let mut rt_ctx = LLVMParseContext::new(&mut reader);
-      let emit_reduce =
-        get_parse_function::<EmitReduce>(&parse_context, "emit_reduce").unwrap();
-
-      let mut action = ParseAction::Undefined;
-
-      emit_reduce.call(&mut rt_ctx, &mut action, 1, 2, 3);
-
-      match action {
-        ParseAction::Reduce { production_id, body_id, symbol_count } => {
-          assert_eq!(production_id, 1);
-          assert_eq!(body_id, 2);
-          assert_eq!(symbol_count, 3);
-        }
-        _ => panic!("Incorrect ParseAction enum type assigned"),
-      }
-    };
-  }
-
-  #[test]
-  fn verify_construction_of_get_adjusted_input_block_function()
-  {
-    let context = Context::create();
-
-    let parse_context = super::construct_context(&context);
-
-    unsafe {
-      assert!(super::construct_get_adjusted_input_block_function(&parse_context).is_ok())
-    }
-
-    println!("{}", parse_context.module.to_string());
-  }
-
-  #[test]
-  fn should_produce_extended_block()
-  {
-    let context = Context::create();
-
-    let mut parse_context = super::construct_context(&context);
-
-    unsafe { assert!(super::construct_init_function(&parse_context).is_ok()) }
-    unsafe {
-      assert!(super::construct_get_adjusted_input_block_function(&parse_context).is_ok())
-    }
-
-    // Create a helper function to overcome the struct passing as value between the Jit  code and Rust
-
-    use inkwell::AddressSpace::*;
-
-    let shim = parse_context.module.add_function(
-      "shim",
-      context.void_type().fn_type(
-        &[
-          parse_context.types.parse_ctx.ptr_type(Generic).into(),
-          parse_context.types.token.ptr_type(Generic).into(),
-          context.i32_type().into(),
-          parse_context.types.input_block.ptr_type(Generic).into(),
-        ],
-        false,
-      ),
-      None,
-    );
-    parse_context.builder.position_at_end(context.append_basic_block(shim, "Entry"));
-    let input_block = parse_context
-      .builder
-      .build_call(
-        parse_context.fun.get_adjusted_input_block,
-        &[
-          shim.get_nth_param(0).unwrap().into_pointer_value().into(),
-          shim.get_nth_param(1).unwrap().into_pointer_value().into(),
-          shim.get_nth_param(2).unwrap().into_int_value().into(),
-        ],
-        "",
-      )
-      .try_as_basic_value()
-      .unwrap_left()
-      .into_struct_value();
-    parse_context
-      .builder
-      .build_store(shim.get_nth_param(3).unwrap().into_pointer_value(), input_block);
-    parse_context.builder.build_return(None);
-
-    unsafe {
-      setup_exec_engine(&mut parse_context);
-      let mut reader = TestUTF8StringReader::new("test");
-      let mut rt_ctx = LLVMParseContext::new(&mut reader);
-      let init = get_parse_function::<Init>(&parse_context, "init").unwrap();
-
-      type GetInputBlockShim = unsafe extern "C" fn(
-        *mut LLVMParseContext<TestUTF8StringReader<'static>>,
-        *const ParseToken,
-        u32,
-        *mut InputBlock,
-      ) -> InputBlock;
-
-      let get_ib =
-        get_parse_function::<GetInputBlockShim>(&parse_context, "shim").unwrap();
-
-      init.call(&mut rt_ctx);
-
-      let mut token = rt_ctx.anchor_token;
-
-      token.byte_offset = 3;
-
-      let mut block = InputBlock::default();
-
-      get_ib.call(&mut rt_ctx, &token, 2, &mut block);
-
-      println!("{:?} {:?}", rt_ctx.input_block, block);
-      assert_eq!(*block.block, b't');
-      assert_eq!(block.offset, 3);
-      assert_eq!(block.length, 1);
-    };
-  }
-
-  #[test]
-  fn verify_construction_of_scan_function()
-  {
-    let context = Context::create();
-
-    let parse_context = super::construct_context(&context);
-
-    unsafe { assert!(super::construct_scan_function(&parse_context).is_ok()) }
-
-    println!("{}", parse_context.module.to_string());
-  }
-
-  #[test]
-  fn verify_construction_of_emit_error_function()
-  {
-    let context = Context::create();
-
-    let parse_context = super::construct_context(&context);
-
-    unsafe { assert!(super::construct_emit_error_function(&parse_context).is_ok()) }
-
-    println!("{}", parse_context.module.to_string());
-  }
-
-  #[test]
-  fn verify_construction_of_emit_eop_function()
-  {
-    let context = Context::create();
-
-    let parse_context = super::construct_context(&context);
-
-    unsafe { assert!(super::construct_emit_end_of_parse(&parse_context).is_ok()) }
-
-    println!("{}", parse_context.module.to_string());
-  }
-
-  #[test]
-  fn verify_construction_of_emit_end_of_input_function()
-  {
-    let context = Context::create();
-
-    let parse_context = super::construct_context(&context);
-
-    unsafe { assert!(super::construct_emit_end_of_input(&parse_context).is_ok()) }
-
-    println!("{}", parse_context.module.to_string());
-  }
-
-  #[test]
-  fn verify_construction_of_pop_state_function()
-  {
-    let context = Context::create();
-
-    let parse_context = super::construct_context(&context);
-
-    unsafe { assert!(super::construct_pop_state_function(&parse_context).is_ok()) }
-
-    println!("{}", parse_context.module.to_string());
-  }
-
-  #[test]
-  fn should_pop_new_state()
-  {
-    let context = Context::create();
-
-    let mut parse_context = super::construct_context(&context);
-
-    unsafe { assert!(super::construct_init_function(&parse_context).is_ok()) }
-    unsafe { assert!(super::construct_push_state_function(&parse_context).is_ok()) }
-    unsafe { assert!(super::construct_pop_state_function(&parse_context).is_ok()) }
-
-    unsafe {
-      setup_exec_engine(&mut parse_context);
-      let mut reader = TestUTF8StringReader::new("test");
-      let mut rt_ctx = LLVMParseContext::new(&mut reader);
-      let init_fn = get_parse_function::<Init>(&parse_context, "init").unwrap();
-      let push_state_fn =
-        get_parse_function::<PushState>(&parse_context, "push_state").unwrap();
-      let pop_state =
-        get_parse_function::<PopState>(&parse_context, "pop_state").unwrap();
-
-      init_fn.call(&mut rt_ctx);
-      push_state_fn.call(&mut rt_ctx, 20, 0x10101010_01010101);
-      push_state_fn.call(&mut rt_ctx, 40, 0x10101010_01010101);
-
-      let second = pop_state.call(&mut rt_ctx);
-      let first = pop_state.call(&mut rt_ctx);
-
-      assert_eq!(second.state, 40);
-      assert_eq!(first.state, 20);
-
-      println!("{:#?}", rt_ctx);
-    };
-  }
-  #[test]
-  fn verify_construct_of_prime_function()
-  {
-    let context = Context::create();
-
-    let parse_context = super::construct_context(&context);
-
-    unsafe { assert!(super::construct_prime_function(&parse_context).is_ok()) }
-
-    println!("{}", parse_context.module.to_string());
-  }
-
-  #[test]
-  fn verify_construct_of_next_function()
-  {
-    let context = Context::create();
-
-    let parse_context = super::construct_context(&context);
-
-    unsafe { assert!(super::construct_next_function(&parse_context).is_ok()) }
-
-    println!("{}", parse_context.module.to_string());
-  }
-
-  #[test]
-  fn should_call_next_and_emit_accept()
-  {
-    let context = Context::create();
-
-    let mut parse_context = super::construct_context(&context);
-
-    unsafe { assert!(super::construct_init_function(&parse_context).is_ok()) }
-    unsafe { assert!(super::construct_push_state_function(&parse_context).is_ok()) }
-    unsafe { assert!(super::construct_pop_state_function(&parse_context).is_ok()) }
-    unsafe { assert!(super::construct_next_function(&parse_context).is_ok()) }
-    unsafe { assert!(super::construct_emit_accept_function(&parse_context).is_ok()) }
-    unsafe { assert!(super::construct_prime_function(&parse_context).is_ok()) }
-
-    unsafe {
-      setup_exec_engine(&mut parse_context);
-      let mut reader = TestUTF8StringReader::new("test");
-      let mut rt_ctx = LLVMParseContext::new(&mut reader);
-      let init_fn = get_parse_function::<Init>(&parse_context, "init").unwrap();
-      let push_state_fn =
-        get_parse_function::<PushState>(&parse_context, "push_state").unwrap();
-      let next = get_parse_function::<Next>(&parse_context, "next").unwrap();
-      let emit_accept =
-        get_parse_function::<EmitAccept>(&parse_context, "emit_accept").unwrap();
-      let prime = get_parse_function::<Prime>(&parse_context, "prime").unwrap();
-
-      init_fn.call(&mut rt_ctx);
-
-      prime.call(&mut rt_ctx, 0);
-
-      rt_ctx.production = 202020;
-
-      let mut action = ParseAction::Undefined;
-
-      next.call(&mut rt_ctx, &mut action);
-
-      println!("{:#?}", action);
-
-      assert!(
-        matches!(action, ParseAction::Accept { production_id } if production_id == 202020),
-      );
-    };
-  }
 }

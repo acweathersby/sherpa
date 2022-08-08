@@ -1,3 +1,6 @@
+use std::alloc::alloc;
+use std::alloc::dealloc;
+use std::alloc::Layout;
 use std::collections::VecDeque;
 use std::fmt::Debug;
 
@@ -197,11 +200,7 @@ impl Default for Goto
 {
   fn default() -> Self
   {
-    Self {
-      goto_fn: 0 as *const usize,
-      state:   0,
-      meta:    0,
-    }
+    Self { goto_fn: 0 as *const usize, state: 0, meta: 0 }
   }
 }
 
@@ -210,13 +209,18 @@ impl Default for Goto
 pub struct InputBlock
 {
   /// The pointer to the beginning of the block window slice.
-  pub block:  *const u8,
+  pub block:        *const u8,
   /// The offset of this block, calculated as the relative distance
   /// from the start of the input string to the InputBlock's pointer
   /// position.
-  pub offset: u32,
+  pub offset:       u32,
   /// The number of bytes the block window can view
-  pub length: u32,
+  pub length:       u32,
+  /// Indicates the input continues outside the block's boundary,
+  /// but such input is not accessible at this point. Should result
+  /// in an End_Of_Input parse action if parsing fails on the block's
+  /// upper boundary.
+  pub is_truncated: bool,
 }
 
 impl Default for InputBlock
@@ -224,9 +228,10 @@ impl Default for InputBlock
   fn default() -> Self
   {
     Self {
-      block:  0 as *const u8,
-      offset: 0,
-      length: 0,
+      block:        0 as *const u8,
+      offset:       0,
+      length:       0,
+      is_truncated: false,
     }
   }
 }
@@ -241,8 +246,8 @@ pub struct LLVMParseContext<
   pub assert_token: ParseToken,
   pub peek_token: ParseToken,
   pub input_block: InputBlock,
-  pub stack_base: *const usize,
-  pub stack_top: *const usize,
+  pub stack_base: *const Goto,
+  pub stack_top: *const Goto,
   pub get_byte_block_at_cursor: fn(&mut T, &mut InputBlock),
   pub reader: *mut T,
   pub stack_size: u32,
@@ -283,15 +288,11 @@ impl<T: LLVMCharacterReader + ByteCharacterReader + ImmutCharacterReader>
       peek_token: ParseToken::default(),
       anchor_token: ParseToken::default(),
       assert_token: ParseToken::default(),
-      stack_base: 0 as *const usize,
-      stack_top: 0 as *const usize,
+      stack_base: 0 as *const Goto,
+      stack_top: 0 as *const Goto,
       state: 0,
       production: 0,
-      input_block: InputBlock {
-        block:  0 as *const u8,
-        length: 0,
-        offset: 0,
-      },
+      input_block: InputBlock::default(),
       stack_size: 0,
       reader: reader,
       get_byte_block_at_cursor: T::get_byte_block_at_cursor,
@@ -303,38 +304,21 @@ impl<T: LLVMCharacterReader + ByteCharacterReader + ImmutCharacterReader>
 }
 
 #[no_mangle]
-pub extern "C" fn hctk_get_stack_pointer<'a>(stack: &mut Vec<usize>) -> *mut usize
+pub extern "C" fn hctk_alloc_stack(num_of_slots: u32) -> *mut Goto
 {
-  let ptr = stack.as_mut_ptr();
+  // Each goto slot is 16bytes, so we shift left num_of_slots by 4 to get the bytes size of
+  // the stack.
+  let layout = Layout::from_size_align((num_of_slots << 4) as usize, 16).unwrap();
 
-  ptr
-}
-#[no_mangle]
-pub extern "C" fn hctk_get_stack_size(stack: &Vec<usize>) -> usize
-{
-  let size = stack.len() << 3;
-
-  size
+  unsafe { alloc(layout) as *mut Goto }
 }
 
 #[no_mangle]
-pub extern "C" fn hctk_extend_stack(stack: &mut Vec<usize>) -> usize
+pub extern "C" fn hctk_free_stack(stack_base: *mut Goto, num_of_slots: u32)
 {
-  let old_size = stack.len();
-  if let Err(err) = stack.try_reserve(stack.len() << 1) {
-    println!("Error on parse stack extension {}", err);
-    0
-  } else {
-    // pad out stack if there is more
-    // then double the original size
-    for _ in 0..(stack.capacity() - (old_size << 1)) {
-      stack.push(0);
-    }
+  // Each goto slot is 16bytes, so we shift left num_of_slots by 4 to get the bytes size of
+  // the stack.
+  let layout = Layout::from_size_align((num_of_slots << 4) as usize, 16).unwrap();
 
-    // move all element to back of stack.
-    for i in 0..old_size {
-      stack.push(stack[i]);
-    }
-    1
-  }
+  unsafe { dealloc(stack_base as *mut u8, layout) }
 }

@@ -94,8 +94,6 @@ pub(crate) fn create_table<'a>(entry_state: u32, output: &'a BytecodeOutput)
             let index = cell.goto_state as usize;
             let instruction = INSTRUCTION(bytecode[index]);
 
-            println!("-- {}", instruction.to_str());
-
             if instruction.is_I01_CONSUME() {
               let instruction = INSTRUCTION(bytecode[index + 1]);
               cell.consume_length = 1;

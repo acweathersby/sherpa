@@ -232,9 +232,11 @@ pub trait LLVMCharacterReader
       let ptr = ((self_.get_bytes().as_ptr() as usize) + cursor as usize) as *const u8;
       input_block.block = ptr;
       input_block.length = size as u32;
+      input_block.is_truncated = false;
     } else {
       input_block.block = 0 as *const u8;
       input_block.length = 0;
+      input_block.is_truncated = false;
     }
   }
 }

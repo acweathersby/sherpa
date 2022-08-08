@@ -3,43 +3,46 @@ use clap::Command;
 
 pub fn build_cli() -> Command<'static>
 {
-    Command::new("hc-compile")
+  Command::new("hc-compile")
     .about("A compiler for Hydrocarbon Grammar files (.hcg)")
     .subcommand_required(true)
     .arg_required_else_help(true)
     .allow_external_subcommands(false)
     .after_help("Some help information")
     .subcommand(
-        Command::new("rust")
-            .about("Compile a rust output").arg(
-                arg!(
-                    -a --ast "Produce AScripT output alongside parser data."
-                )
-                .required(false)
-            )
-            .arg(
-                arg!(
-                    -o --output <OUTPUT> "The output directory for compiled artifacts. 
-                    Defaults to the working directory."
-                )
-                .value_hint(clap::ValueHint::DirPath)
-                .required(false)
-            ).arg(
-                arg!(
-                    -i --input <INPUT> "A path to a grammar file (.hcg)"
-                )
-                .value_hint(clap::ValueHint::FilePath)
-                .required(true)
-            )
-    ).subcommand(
-        Command::new("byte-asm")
-            .about("Output the bytecode disassembly for the grammar.")
-            .arg(
-                arg!(
-                    -i --input <INPUT> "A path to a grammar file (.hcg)"
-                )
-                .value_hint(clap::ValueHint::FilePath)
-                .required(true)
-            )
+      Command::new("rust")
+        .about("Compile a rust output")
+        .arg(
+          arg!(
+              -a --ast "Produce AScripT output alongside parser data."
+          )
+          .required(false),
+        )
+        .arg(
+          arg!(
+              -o --output <OUTPUT> "The output directory for compiled artifacts.
+              Defaults to the working directory."
+          )
+          .value_hint(clap::ValueHint::DirPath)
+          .required(false),
+        )
+        .arg(
+          arg!(
+              -i --input <INPUT> "A path to a grammar file (.hcg)"
+          )
+          .value_hint(clap::ValueHint::FilePath)
+          .required(true),
+        ),
+    )
+    .subcommand(
+      Command::new("byte-asm")
+        .about("Output the bytecode disassembly for the grammar.")
+        .arg(
+          arg!(
+              -i --input <INPUT> "A path to a grammar file (.hcg)"
+          )
+          .value_hint(clap::ValueHint::FilePath)
+          .required(true),
+        ),
     )
 }
