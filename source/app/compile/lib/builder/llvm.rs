@@ -82,9 +82,9 @@ pub fn compile_llvm_files(
               match Command::new("llc-14")
                 .args(&[
                   //"-flto=thin",
-                  "-O3",
-                  "-c",
+                  //"-O3",
                   //"-g",
+                  "-filetype=obj",
                   "-o",
                   object_path.to_str().unwrap(),
                   bit_code_path.to_str().unwrap(),
@@ -159,14 +159,11 @@ fn write_rust_parser<W: Write>(
       "
 use hctk::types::*;
 
-type AnonymousPtr = u64;
-
 #[link(name = \"{}\", kind = \"static\" )]
 extern \"C\" {{
-    fn construct_context(ctx: AnonymousPtr);
-    fn next<'a>(ctx: AnonymousPtr, action_ref:&'a mut ParseAction);
-    fn destroy_context(ctx: AnonymousPtr);
-    fn prime_context(ctx: AnonymousPtr, sp:u32);
+    fn init(ctx: *mut u8);
+    fn next(ctx: *mut u8, action:*mut u8);
+    fn prime(ctx: *mut u8, start_point: u32);
 }}",
       parser_name
     ))?
@@ -183,7 +180,8 @@ impl<T: LLVMCharacterReader + ByteCharacterReader + ImmutCharacterReader> Iterat
             }} else {{
                 let _ptr = &mut self.0 as *const LLVMParseContext<T>;
                 let mut action = ParseAction::Undefined;
-                next(_ptr as u64, &mut action);
+                let _action = &mut action as *mut ParseAction;
+                next(_ptr as *mut u8, _action as *mut u8);
 
                 self.1 = !matches!(action, ParseAction::Accept{{..}}| ParseAction::Error {{ .. }} | ParseAction::EndOfInput {{ .. }});
 
@@ -209,7 +207,7 @@ impl<T: LLVMCharacterReader + ByteCharacterReader + ImmutCharacterReader> Contex
     fn set_start_point(&mut self, start_point: u64) -> &mut Self {{
         unsafe {{
             let _ptr = &mut self.0 as *const LLVMParseContext<T>;
-            prime_context(_ptr as u64, start_point as u32);
+            prime(_ptr as *mut u8, start_point as u32);
         }}
 
         self
@@ -218,15 +216,12 @@ impl<T: LLVMCharacterReader + ByteCharacterReader + ImmutCharacterReader> Contex
     fn construct_context(&mut self) {{
         unsafe {{
             let _ptr = &mut self.0 as *const LLVMParseContext<T>;
-            construct_context(_ptr as u64);
+            init(_ptr as *mut u8 );
         }}
     }}
     #[inline(always)]
     fn destroy_context(&mut self) {{
-        unsafe {{
-            let _ptr = &mut self.0 as *const LLVMParseContext<T>;
-            destroy_context(_ptr as u64);
-        }};
+
     }}",
       grammar_name
     ))?

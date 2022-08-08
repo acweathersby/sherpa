@@ -6,7 +6,7 @@ pub use llvm_ir_inkwell::*;
 #[cfg(test)]
 mod test
 {
-  use hctk::types::hctk_alloc_stack;
+  use hctk::types::hctk_allocate_stack;
   use hctk::types::hctk_free_stack;
   use hctk::types::Goto;
   use hctk::types::InputBlock;
@@ -556,11 +556,10 @@ mod test
       let mut reader = TestUTF8StringReader::new("test");
       let mut rt_ctx = LLVMParseContext::new(&mut reader);
 
-      parse_context
-        .exe_engine
-        .as_ref()
-        .unwrap()
-        .add_global_mapping(&parse_context.fun.allocate_stack, hctk_alloc_stack as usize);
+      parse_context.exe_engine.as_ref().unwrap().add_global_mapping(
+        &parse_context.fun.allocate_stack,
+        hctk_allocate_stack as usize,
+      );
 
       parse_context
         .exe_engine
@@ -646,7 +645,7 @@ mod test
             .exe_engine
             .as_ref()
             .unwrap()
-            .add_global_mapping(&ctx.fun.allocate_stack, hctk_alloc_stack as usize);
+            .add_global_mapping(&ctx.fun.allocate_stack, hctk_allocate_stack as usize);
 
           ctx
             .exe_engine

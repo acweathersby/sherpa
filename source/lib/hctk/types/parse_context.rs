@@ -304,7 +304,7 @@ impl<T: LLVMCharacterReader + ByteCharacterReader + ImmutCharacterReader>
 }
 
 #[no_mangle]
-pub extern "C" fn hctk_alloc_stack(num_of_slots: u32) -> *mut Goto
+pub extern "C" fn hctk_allocate_stack(num_of_slots: u32) -> *mut Goto
 {
   // Each goto slot is 16bytes, so we shift left num_of_slots by 4 to get the bytes size of
   // the stack.
