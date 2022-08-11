@@ -1,0 +1,19 @@
+@IGNORE g:sp
+
+@EXPORT statement as entry
+
+@NAME llvm_language_test
+
+<> statement > expression
+
+<> expression > sum 
+
+<> sum > mul \+ sum
+    | mul
+
+<> mul > term \* expression
+    | term
+
+<> term > g:num
+    | \( expression \)
+

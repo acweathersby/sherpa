@@ -1,13 +1,17 @@
-pub mod llvm_ir_inkwell;
+pub mod inkwell_branch_ir;
+pub mod inkwell_ir;
 mod llvm_utf8_ir;
+mod types;
 
-pub use llvm_ir_inkwell::*;
+pub use inkwell_ir::*;
+pub use types::*;
 
 #[cfg(test)]
 mod test
 {
   use hctk::types::hctk_allocate_stack;
   use hctk::types::hctk_free_stack;
+  use hctk::types::CodepointInfo;
   use hctk::types::Goto;
   use hctk::types::InputBlock;
   use hctk::types::LLVMParseContext;
@@ -17,7 +21,8 @@ mod test
   use inkwell::context::Context;
   use inkwell::execution_engine::JitFunction;
 
-  use super::llvm_ir_inkwell::*;
+  use super::inkwell_ir::*;
+  use super::types::*;
 
   type Init = unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>>);
   type PushState = unsafe extern "C" fn(
@@ -146,7 +151,7 @@ mod test
 
     let parse_context = construct_context("test", &context);
 
-    unsafe { assert!(construct_emit_accept_function(&parse_context).is_ok()) }
+    unsafe { assert!(construct_emit_accept(&parse_context).is_ok()) }
 
     println!("{}", parse_context.module.to_string());
   }
@@ -158,7 +163,7 @@ mod test
 
     let parse_context = construct_context("test", &context);
 
-    unsafe { assert!(construct_emit_shift_function(&parse_context).is_ok()) }
+    unsafe { assert!(construct_emit_shift(&parse_context).is_ok()) }
 
     println!("{}", parse_context.module.to_string());
   }
@@ -170,7 +175,7 @@ mod test
 
     let mut parse_context = construct_context("test", &context);
 
-    unsafe { assert!(construct_emit_shift_function(&parse_context).is_ok()) }
+    unsafe { assert!(construct_emit_shift(&parse_context).is_ok()) }
 
     unsafe {
       setup_exec_engine(&mut parse_context);
@@ -344,7 +349,7 @@ mod test
 
     let parse_context = construct_context("test", &context);
 
-    unsafe { assert!(construct_scan_function(&parse_context).is_ok()) }
+    unsafe { assert!(construct_scan(&parse_context).is_ok()) }
 
     println!("{}", parse_context.module.to_string());
   }
@@ -356,7 +361,7 @@ mod test
 
     let parse_context = construct_context("test", &context);
 
-    unsafe { assert!(construct_emit_error_function(&parse_context).is_ok()) }
+    unsafe { assert!(construct_emit_error(&parse_context).is_ok()) }
 
     println!("{}", parse_context.module.to_string());
   }
@@ -438,7 +443,9 @@ mod test
 
     let parse_context = construct_context("test", &context);
 
-    unsafe { assert!(construct_prime_function(&parse_context, &vec![]).is_ok()) }
+    unsafe {
+      assert!(construct_prime_function(&parse_context, &vec![], &mut vec![]).is_ok())
+    }
 
     println!("{}", parse_context.module.to_string());
   }
@@ -466,8 +473,10 @@ mod test
     unsafe { assert!(construct_push_state_function(&parse_context).is_ok()) }
     unsafe { assert!(construct_pop_state_function(&parse_context).is_ok()) }
     unsafe { assert!(construct_next_function(&parse_context).is_ok()) }
-    unsafe { assert!(construct_emit_accept_function(&parse_context).is_ok()) }
-    unsafe { assert!(construct_prime_function(&parse_context, &vec![]).is_ok()) }
+    unsafe { assert!(construct_emit_accept(&parse_context).is_ok()) }
+    unsafe {
+      assert!(construct_prime_function(&parse_context, &vec![], &mut vec![]).is_ok())
+    }
 
     unsafe {
       setup_exec_engine(&mut parse_context);
@@ -537,6 +546,44 @@ mod test
       assert_eq!(rt_ctx.state, NORMAL_STATE_FLAG_LLVM);
 
       println!("{:?}:{:#?}", root, rt_ctx);
+    };
+  }
+
+  #[test]
+  fn verify_utf8_lookup_functions()
+  {
+    let context = Context::create();
+
+    let parse_context = construct_context("test", &context);
+
+    unsafe { assert!(construct_utf8_lookup(&parse_context).is_ok()) }
+    unsafe { assert!(construct_merge_utf8_part(&parse_context).is_ok()) }
+
+    println!("{}", parse_context.module.to_string());
+  }
+
+  #[test]
+  fn should_yield_correct_CP_values_for_inputs()
+  {
+    let context = Context::create();
+    let mut parse_context = construct_context("test", &context);
+
+    unsafe { assert!(construct_utf8_lookup(&parse_context).is_ok()) }
+    unsafe { assert!(construct_merge_utf8_part(&parse_context).is_ok()) }
+
+    unsafe {
+      type GetUtf8CP = unsafe extern "C" fn(*const u8) -> CodepointInfo;
+
+      setup_exec_engine(&mut parse_context);
+
+      let get_code_point =
+        get_parse_function::<GetUtf8CP>(&parse_context, "get_utf8_codepoint_info")
+          .unwrap();
+
+      assert_eq!(get_code_point.call(" ".as_ptr()).val, 32);
+      // assert_eq!(get_code_point.call(" ".as_ptr()).length, 1);
+      assert_eq!(get_code_point.call("☺".as_ptr()).val, 0x263A);
+      // assert_eq!(get_code_point.call("☺".as_ptr()).length, 3);
     };
   }
 
@@ -693,6 +740,56 @@ mod test
         drop(ctx);
         Err(())
       }
+    } else {
+      Err(())
+    }
+  }
+
+  #[test]
+  fn test_compile_from_bytecode2() -> core::result::Result<(), ()>
+  {
+    use crate::llvm::compile_from_bytecode;
+    use crate::options::Architecture;
+    use crate::options::BuildOptions;
+    use hctk::bytecode::compile_bytecode;
+    use hctk::debug::compile_test_grammar;
+    use inkwell::context::Context;
+    use std::fs::File;
+    use std::io::Write;
+    let grammar = compile_test_grammar(
+      "
+      @IGNORE g:sp
+
+      @EXPORT statement as entry
+      
+      @NAME llvm_language_test
+      
+      <> statement > expression
+      
+      <> expression > sum 
+      
+      <> sum > mul \\+ sum
+          | mul
+      
+      <> mul > term \\* expression
+          | term
+      
+      <> term > g:num
+          | \\( expression \\)
+      
+      
+",
+    );
+
+    let bytecode_output = compile_bytecode(&grammar, 1);
+
+    if let Ok(mut ctx) = compile_from_bytecode(
+      "test",
+      &Context::create(),
+      &BuildOptions { architecture: Architecture::X8664, ..Default::default() },
+      &bytecode_output,
+    ) {
+      Ok(())
     } else {
       Err(())
     }

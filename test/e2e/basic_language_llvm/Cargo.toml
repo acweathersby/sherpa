@@ -1,0 +1,20 @@
+[package]
+name = "test-basic-language-llvm"
+version = "0.0.0"
+edition = "2021"
+
+build = "./build.rs"
+
+[lib]
+name = "test_basic_language_llvm"
+path = "./lib.rs"
+
+[[bin]]
+name = "test_basic_language_llvm_bin"
+path = "./main.rs"
+
+[build-dependencies.hc-compile]
+path = "../../../source/app/compile" 
+
+[dependencies.hctk]
+path = "../../../source/lib/hctk"

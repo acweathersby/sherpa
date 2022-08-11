@@ -51,11 +51,14 @@ pub(crate) fn build_byte_code_buffer(
 
   for ((state, name, i)) in states_iter {
     goto_bookmarks_to_offset[i as usize] = bytecode.len() as u32;
-    bytecode.append(&mut compile_ir_state_to_bytecode(
+
+    let addition = &mut compile_ir_state_to_bytecode(
       state,
       default_get_branch_selector,
       &state_name_to_bookmark,
-    ));
+    );
+
+    bytecode.append(addition);
   }
 
   patch_goto_offsets(&mut bytecode, &goto_bookmarks_to_offset);
@@ -184,7 +187,7 @@ pub fn compile_ir_state_to_bytecode(
 
 fn is_branch_state(state: &IR_STATE) -> bool
 {
-  state.instructions.iter().all(|i| matches!(i, ASTNode::ASSERT(_)))
+  state.instructions.iter().all(|i| matches!(i, ASTNode::ASSERT(_) | ASTNode::DEFAULT(_)))
 }
 
 fn build_branching_bytecode(

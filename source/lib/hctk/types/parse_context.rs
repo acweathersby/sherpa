@@ -6,6 +6,8 @@ use std::fmt::Debug;
 
 use regex::internal::Input;
 
+use crate::utf8::get_token_class_from_codepoint;
+
 use super::*;
 pub struct ParseContext<T: ImmutCharacterReader + MutCharacterReader>
 {
@@ -189,6 +191,14 @@ impl<T: ImmutCharacterReader + MutCharacterReader> ParseContext<T>
 
 #[derive(Clone, Debug, Copy)]
 #[repr(C)]
+pub struct CodepointInfo
+{
+  pub val:    u32,
+  pub length: u32,
+}
+
+#[derive(Clone, Debug, Copy)]
+#[repr(C)]
 pub struct Goto
 {
   pub goto_fn: *const usize,
@@ -321,4 +331,10 @@ pub extern "C" fn hctk_free_stack(stack_base: *mut Goto, num_of_slots: u32)
   let layout = Layout::from_size_align((num_of_slots << 4) as usize, 16).unwrap();
 
   unsafe { dealloc(stack_base as *mut u8, layout) }
+}
+
+#[no_mangle]
+pub extern "C" fn hctk_get_token_class_from_codepoint(codepoint: u32) -> u32
+{
+  get_token_class_from_codepoint(codepoint)
 }

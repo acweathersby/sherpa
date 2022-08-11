@@ -15,6 +15,7 @@ use crate::grammar::get_scanner_info_from_defined;
 use crate::grammar::hash_id_value_u64;
 use crate::types::GrammarStore;
 use crate::types::IRState;
+use crate::types::IRStateType;
 use crate::types::IRStateType::*;
 use crate::types::Item;
 use crate::types::PeekType;
@@ -88,8 +89,9 @@ pub fn compile_states(
       .map(|chunk| {
         s.spawn(|| {
           for (_, state) in chunk {
+            let string = state.to_string();
             if let Err(err) = state.compile_ast() {
-              panic!("\n{}", err)
+              panic!("\n{} {}", err, string)
             };
           }
         })
@@ -395,6 +397,7 @@ fn create_intermediate_state(
   let mut item_set = BTreeSet::new();
   let mut states = vec![];
   let mut peek_type: PeekType = PeekType::None;
+  let mut is_token_assertion = false;
 
   let (post_amble, state_name, mut stack_depth, mut state_type) = {
     if node.id == 0 {
@@ -509,7 +512,7 @@ fn create_intermediate_state(
           max_child_depth = max_child_depth.max(child_state.get_stack_depth() + 1);
           format!(
             "goto state [ {} ] then goto state [ {} ]{}",
-            get_production_plain_name(production_id, grammar),
+            grammar.production_table.get(production_id).unwrap().guid_name,
             state_name,
             post_amble
           )
@@ -544,6 +547,8 @@ fn create_intermediate_state(
           }
         }
         _ => {
+          is_token_assertion = true;
+
           let assertion_type = (if child.is(TransitionStateType::O_PEEK) {
             "assert peek"
           } else {
@@ -604,8 +609,10 @@ fn create_intermediate_state(
   } else {
     let (normal_symbol_set, skip_symbols_set) = get_symbols_from_items(item_set, grammar);
 
-    for symbol_id in &skip_symbols_set {
-      strings.push(format!("skip [ {} ]", symbol_id.bytecode_id(grammar),))
+    if is_token_assertion {
+      for symbol_id in &skip_symbols_set {
+        strings.push(format!("skip [ {} ]", symbol_id.bytecode_id(grammar),))
+      }
     }
     let have_symbols = !normal_symbol_set.is_empty();
 

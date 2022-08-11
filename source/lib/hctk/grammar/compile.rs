@@ -230,11 +230,7 @@ fn finalize_grammar(
 
 fn finalize_byte_code_data(grammar: &mut GrammarStore, errors: &mut [ParseError])
 {
-  let GrammarStore {
-    production_table,
-    bodies_table,
-    ..
-  } = grammar;
+  let GrammarStore { production_table, bodies_table, .. } = grammar;
 
   for (index, body) in bodies_table
     .values_mut()
@@ -379,11 +375,7 @@ impl WorkVerifier
 {
   pub fn new(pending: u32) -> Self
   {
-    WorkVerifier {
-      complete: 0,
-      pending,
-      progress: 0,
-    }
+    WorkVerifier { complete: 0, pending, progress: 0 }
   }
 
   pub fn add_units_of_work(&mut self, units_of_work: u32)
@@ -812,8 +804,16 @@ pub(crate) fn get_scanner_info_from_defined(
     SymbolID::DefinedIdentifier(..)
     | SymbolID::DefinedNumeric(..)
     | SymbolID::DefinedSymbol(..) => {
-      let symbol_string = root.symbols_string_table.get(sym_id).unwrap().clone();
-      (create_defined_scanner_name(&symbol_string), symbol_string)
+      let symbol_string = root.symbols_string_table.get(sym_id).unwrap().to_owned();
+
+      let escaped_symbol_string = symbol_string
+        .chars()
+        .into_iter()
+        .map(|c| (c as u32).to_string())
+        .collect::<Vec<_>>()
+        .join("_");
+
+      (create_defined_scanner_name(&escaped_symbol_string), symbol_string)
     }
     SymbolID::TokenProduction(production_id, _) => {
       let symbol_string =
@@ -1077,10 +1077,7 @@ pub fn pre_process_grammar<'a>(
 
           tgs.import_names_lookup.insert(local_name, (import_uuid, uri));
         }
-        ASTNode::Export(box ast::Export {
-          production,
-          reference,
-        }) => {
+        ASTNode::Export(box ast::Export { production, reference }) => {
           let production_id = get_production_id_from_node(production, &mut tgs);
           export_names.push((production_id, reference.to_string()));
         }

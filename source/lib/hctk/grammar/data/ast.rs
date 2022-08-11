@@ -2061,12 +2061,12 @@ fn GetType(&self) -> u32 {
 
 #[derive(Debug, Clone)]
 pub struct IR_STATE {
-    pub id:String /* STRING */,
-pub scanner:String /* STRING */,
-pub instructions:Vec<ASTNode> /* VECTOR */,
-pub fail:Option<Box<FailState>> /* FailState */,
-pub symbol_meta:Option<Box<Symbols>> /* Symbols */,
-pub prod:ASTNode /* Production_Symbol | Production_Import_Symbol */
+    pub id:String,
+    pub scanner:String,
+    pub instructions:Vec<ASTNode> /* VECTOR */,
+    pub fail:Option<Box<FailState>> /* FailState */,
+    pub symbol_meta:Option<Box<Symbols>> /* Symbols */,
+    pub prod:ASTNode /* Production_Symbol | Production_Import_Symbol */
 }
 
 impl IR_STATE {

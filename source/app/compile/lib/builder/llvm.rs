@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::fs::File;
 use std::path::PathBuf;
 
 use crate::builder::common;
@@ -8,6 +9,8 @@ use crate::options::BuildOptions;
 use crate::options::Recognizer;
 use crate::writer::code_writer::CodeWriter;
 use hctk::bytecode::compile_bytecode;
+use hctk::debug;
+use hctk::debug::BytecodeGrammarLookups;
 use hctk::get_num_of_available_threads;
 use hctk::grammar::compile_from_path;
 use hctk::types::*;
@@ -89,6 +92,7 @@ pub fn compile_llvm_files(
           };
 
           let log_file = output_path.join(parser_name.clone() + ".log");
+          let ll_file = output_path.join(parser_name.clone() + ".ll");
           let object_path = output_path.join("lib".to_string() + &parser_name + ".o");
           let archive_path = output_path.join(format!("./lib{}.a", &parser_name));
 
@@ -120,6 +124,11 @@ pub fn compile_llvm_files(
             &build_options,
             &bytecode_output,
           ) {
+            let mut file = File::create(ll_file).unwrap();
+            file.write_all(ctx.module.to_string().as_bytes());
+            file.flush();
+            drop(file);
+
             let opt = OptimizationLevel::Less;
             let reloc = RelocMode::PIC;
             let model = CodeModel::Small;
@@ -128,7 +137,7 @@ pub fn compile_llvm_files(
               .create_target_machine(&target_triple, "generic", "", opt, reloc, model)
               .unwrap();
 
-            apply_llvm_optimizations(opt, &ctx, &target_machine);
+            // apply_llvm_optimizations(opt, &ctx, &target_machine);
 
             ctx
               .module

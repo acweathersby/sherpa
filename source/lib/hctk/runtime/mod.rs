@@ -62,11 +62,7 @@ state [Z]
     ctx.init_normal_state(NORMAL_STATE_FLAG | FIRST_STATE_ADDRESS);
 
     match get_next_action(&mut reader, &mut ctx, &bytecode) {
-      ParseAction::Fork {
-        states_start_offset,
-        num_of_states,
-        target_production,
-      } => {
+      ParseAction::Fork { states_start_offset, num_of_states, target_production } => {
         assert_eq!(states_start_offset, FIRST_STATE_ADDRESS + 1);
         assert_eq!(num_of_states, 3);
         assert_eq!(target_production, 2);
@@ -137,11 +133,7 @@ state [test]
     state.set_production_to(3);
 
     match dispatch(&mut reader, &mut state, &bytecode) {
-      ParseAction::Reduce {
-        body_id,
-        production_id,
-        symbol_count,
-      } => {
+      ParseAction::Reduce { body_id, production_id, symbol_count } => {
         assert_eq!(body_id, 1);
         assert_eq!(symbol_count, 2);
         assert_eq!(production_id, 3);
@@ -172,10 +164,7 @@ state [test]
     };
 
     match dispatch(&mut reader, &mut state, &bytecode) {
-      ParseAction::Shift {
-        skipped_characters,
-        token,
-      } => {
+      ParseAction::Shift { skipped_characters, token } => {
         assert_eq!(skipped_characters.cp_length, 20);
         assert_eq!(skipped_characters.byte_length, 10);
 
@@ -213,10 +202,7 @@ state [test]
     };
 
     match dispatch(&mut reader, &mut state, &bytecode) {
-      ParseAction::Shift {
-        skipped_characters,
-        token,
-      } => {
+      ParseAction::Shift { skipped_characters, token } => {
         assert_eq!(skipped_characters.cp_length, 20);
         assert_eq!(skipped_characters.byte_length, 10);
 
@@ -404,11 +390,8 @@ assert PRODUCTION [3] (pass)
     grammar: &'a GrammarStore,
   ) -> bytecode::BytecodeOutput<'a>
   {
-    let mut ir_state = IRState {
-      code: val.to_string(),
-      name: "test".to_string(),
-      ..Default::default()
-    };
+    let mut ir_state =
+      IRState { code: val.to_string(), name: "test".to_string(), ..Default::default() };
 
     let ir_ast = ir_state.compile_ast();
 

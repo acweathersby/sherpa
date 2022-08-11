@@ -15,7 +15,7 @@ pub fn header(state_offset: usize) -> String
 
 pub fn address(state_offset: usize) -> String
 {
-  format!("{:0>6}", state_offset)
+  format!("{:0>6X}", state_offset)
 }
 
 pub struct BytecodeGrammarLookups<'a>
@@ -67,9 +67,7 @@ pub fn disassemble_state(
 
   let so = state_offset;
 
-  let BytecodeOutput {
-    bytecode, grammar, ..
-  } = output;
+  let BytecodeOutput { bytecode, grammar, .. } = output;
 
   if state_offset >= bytecode.len() {
     ("".to_string(), so)
@@ -97,21 +95,14 @@ pub fn disassemble_state(
         let (string, offset) = ds(output, so + 1, lu);
 
         if let Some(lu) = lu {
-          let name = &lu
-            .bytecode_id_to_production
-            .get(&production_id)
-            .unwrap()
-            .guid_name;
+          let name = &lu.bytecode_id_to_production.get(&production_id).unwrap().guid_name;
           (
             format!("\n{}PROD SET TO {}     // {}", dh(so), production_id, name,)
               + &string,
             offset,
           )
         } else {
-          (
-            format!("\n{}PROD SET TO {}", dh(so), production_id,) + &string,
-            offset,
-          )
+          (format!("\n{}PROD SET TO {}", dh(so), production_id,) + &string, offset)
         }
       }
       INSTRUCTION::I04_REDUCE => {
@@ -298,11 +289,7 @@ fn generate_table_string(
 
 fn create_failure_entry(entry_offset: usize, goto_offset: usize) -> String
 {
-  format!(
-    "\n{}---- JUMP TO {} ON FAIL",
-    header(entry_offset),
-    address(goto_offset)
-  )
+  format!("\n{}---- JUMP TO {} ON FAIL", header(entry_offset), address(goto_offset))
 }
 fn create_normal_entry(
   lu: Option<&BytecodeGrammarLookups>,
@@ -359,11 +346,7 @@ fn get_input_id(
   if let Some(lu) = lu {
     match input_type {
       INPUT_TYPE::T01_PRODUCTION => {
-        let production = &lu
-          .bytecode_id_to_production
-          .get(&token_id)
-          .unwrap()
-          .guid_name;
+        let production = &lu.bytecode_id_to_production.get(&token_id).unwrap().guid_name;
         format!("{} [{}]", token_id, production)
       }
       INPUT_TYPE::T02_TOKEN => {
@@ -395,11 +378,7 @@ pub fn generate_disassembly(
     if offset >= FIRST_STATE_ADDRESS as usize {
       states_strings.push("\n".to_string());
       states_strings.push(
-        output
-          .offset_to_state_name
-          .get(&(offset as u32))
-          .cloned()
-          .unwrap_or_default(),
+        output.offset_to_state_name.get(&(offset as u32)).cloned().unwrap_or_default(),
       )
     }
     let (string, next) = disassemble_state(output, offset, lu);
