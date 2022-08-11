@@ -611,46 +611,67 @@ pub(crate) unsafe fn construct_scan(ctx: &LLVMParserModule)
 
   let fn_value = funct.scan;
 
-  // Set the context's goto pointers to point to the goto block;
+  //## Set the context's goto pointers to point to the goto block;
   let entry = ctx.append_basic_block(fn_value, "Entry");
   let success = ctx.append_basic_block(fn_value, "Produce_Scan_Token");
   let failure = ctx.append_basic_block(fn_value, "Produce_Failed_Token");
 
+  //## Extract Params
   let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
   let scanner_entry_goto = fn_value.get_nth_param(1).unwrap().into_pointer_value();
-  let token_basis = fn_value.get_nth_param(2).unwrap().into_pointer_value();
+  let input_token_ptr = fn_value.get_nth_param(2).unwrap().into_pointer_value();
 
+  //## Entry Block
   b.position_at_end(entry);
 
   let scan_ctx = b.build_alloca(types.parse_ctx, "");
 
-  b.build_call(funct.init, &[scan_ctx.into()], "");
+  // The scan context inherits its goto stack and current input block
+  // from the main parser context. These instruction copy data from one
+  // context to the other.
 
-  let parse_ctx_reader = b.build_struct_gep(parse_ctx, CTX_reader, "").unwrap();
-  let scan_ctx_reader = b.build_struct_gep(scan_ctx, CTX_reader, "").unwrap();
+  // Character Reader
+  b.build_store(
+    b.build_struct_gep(scan_ctx, CTX_reader, "").unwrap(),
+    b.build_load(b.build_struct_gep(parse_ctx, CTX_reader, "").unwrap(), ""),
+  );
 
-  let parse_input_block = b.build_struct_gep(parse_ctx, CTX_input_block, "").unwrap();
-  let scan_input_block = b.build_struct_gep(scan_ctx, CTX_input_block, "").unwrap();
+  // Goto Stack Data
+  b.build_store(
+    b.build_struct_gep(scan_ctx, CTX_goto_base, "").unwrap(),
+    b.build_load(b.build_struct_gep(parse_ctx, CTX_goto_base, "").unwrap(), ""),
+  );
+  b.build_store(
+    b.build_struct_gep(scan_ctx, CTX_goto_top, "").unwrap(),
+    b.build_load(b.build_struct_gep(parse_ctx, CTX_goto_top, "").unwrap(), ""),
+  );
+  b.build_store(
+    b.build_struct_gep(scan_ctx, CTX_goto_stack_len, "").unwrap(),
+    b.build_load(b.build_struct_gep(parse_ctx, CTX_goto_stack_len, "").unwrap(), ""),
+  );
 
-  let parse_get_input_block =
-    b.build_struct_gep(parse_ctx, CTX_get_input_block, "").unwrap();
-  let scan_get_input_block =
-    b.build_struct_gep(scan_ctx, CTX_get_input_block, "").unwrap();
-
-  b.build_store(scan_get_input_block, b.build_load(parse_get_input_block, ""));
-  b.build_store(scan_input_block, b.build_load(parse_input_block, ""));
-  b.build_store(scan_ctx_reader, b.build_load(parse_ctx_reader, ""));
+  // Input Block data
+  b.build_store(
+    b.build_struct_gep(scan_ctx, CTX_input_block, "").unwrap(),
+    b.build_load(b.build_struct_gep(parse_ctx, CTX_input_block, "").unwrap(), ""),
+  );
+  b.build_store(
+    b.build_struct_gep(scan_ctx, CTX_get_input_block, "").unwrap(),
+    b.build_load(b.build_struct_gep(parse_ctx, CTX_get_input_block, "").unwrap(), ""),
+  );
   b.build_store(
     b.build_struct_gep(scan_ctx, CTX_state, "").unwrap(),
     i32.const_int(NORMAL_STATE_FLAG_LLVM as u64, false),
   );
 
-  let root_token = b.build_load(token_basis, "");
+  // Copy input token to the Assert and Anchor token slots of the scan context.
+
+  let input_token = b.build_load(input_token_ptr, "");
   let assert_token = b.build_struct_gep(scan_ctx, CTX_tok_assert, "").unwrap();
   let anchor_token = b.build_struct_gep(scan_ctx, CTX_tok_anchor, "").unwrap();
 
-  b.build_store(assert_token, root_token);
-  b.build_store(anchor_token, root_token);
+  b.build_store(assert_token, input_token);
+  b.build_store(anchor_token, input_token);
 
   b.build_call(
     funct.push_state,
@@ -671,17 +692,32 @@ pub(crate) unsafe fn construct_scan(ctx: &LLVMParserModule)
     ],
     "",
   );
-  // reserve enough space on the stack for an Action enum
 
+  // Reserve enough space on the stack for an Action enum
   let action = b.build_alloca(types.action.array_type(8), "");
+
   let action =
     b.build_bitcast(action, types.action.ptr_type(inkwell::AddressSpace::Generic), "");
 
   b.build_call(funct.next, &[scan_ctx.into(), action.into()], "");
 
-  // copy the input data from the scan context to the parse context
-
-  b.build_store(parse_input_block, b.build_load(scan_input_block, ""));
+  // Copy updated data from the scan context back to the main context
+  b.build_store(
+    b.build_struct_gep(parse_ctx, CTX_goto_base, "").unwrap(),
+    b.build_load(b.build_struct_gep(scan_ctx, CTX_goto_base, "").unwrap(), ""),
+  );
+  b.build_store(
+    b.build_struct_gep(parse_ctx, CTX_goto_top, "").unwrap(),
+    b.build_load(b.build_struct_gep(scan_ctx, CTX_goto_top, "").unwrap(), ""),
+  );
+  b.build_store(
+    b.build_struct_gep(parse_ctx, CTX_goto_stack_len, "").unwrap(),
+    b.build_load(b.build_struct_gep(scan_ctx, CTX_goto_stack_len, "").unwrap(), ""),
+  );
+  b.build_store(
+    b.build_struct_gep(parse_ctx, CTX_input_block, "").unwrap(),
+    b.build_load(b.build_struct_gep(scan_ctx, CTX_input_block, "").unwrap(), ""),
+  );
 
   // Produce either a failure token or a success token based on
   // outcome of the `next` call.
@@ -698,6 +734,7 @@ pub(crate) unsafe fn construct_scan(ctx: &LLVMParserModule)
   );
   b.build_conditional_branch(comparison, success, failure);
 
+  //## Success Block
   b.position_at_end(success);
   let offset_min = b.build_struct_gep(anchor_token, TokOffset, "").unwrap();
   let offset_min = b.build_load(offset_min, "");
@@ -715,6 +752,7 @@ pub(crate) unsafe fn construct_scan(ctx: &LLVMParserModule)
 
   b.build_return(Some(&token));
 
+  //## Failure Block
   b.position_at_end(failure);
   let token = b.build_load(anchor_token, "");
   b.build_return(Some(&token));
