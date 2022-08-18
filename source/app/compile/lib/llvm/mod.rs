@@ -1,6 +1,5 @@
 pub mod inkwell_branch_ir;
 pub mod inkwell_ir;
-mod llvm_utf8_ir;
 mod types;
 
 pub use inkwell_ir::*;
