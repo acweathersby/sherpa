@@ -96,7 +96,7 @@ mod test
 
     let parse_context = construct_context("test", &context);
 
-    unsafe { assert!(construct_init_function(&parse_context).is_ok()) }
+    unsafe { assert!(construct_init(&parse_context).is_ok()) }
 
     println!("{}", parse_context.module.to_string());
   }
@@ -108,7 +108,7 @@ mod test
 
     let parse_context = construct_context("test", &context);
 
-    unsafe { assert!(construct_push_state_function(&parse_context).is_ok()) }
+    unsafe { assert!(construct_push_state(&parse_context).is_ok()) }
 
     println!("{}", parse_context.module.to_string());
   }
@@ -120,8 +120,8 @@ mod test
 
     let mut parse_context = construct_context("test", &context);
 
-    unsafe { assert!(construct_init_function(&parse_context).is_ok()) }
-    unsafe { assert!(construct_push_state_function(&parse_context).is_ok()) }
+    unsafe { assert!(construct_init(&parse_context).is_ok()) }
+    unsafe { assert!(construct_push_state(&parse_context).is_ok()) }
 
     unsafe {
       setup_exec_engine(&mut parse_context);
@@ -267,7 +267,7 @@ mod test
 
     let mut parse_context = construct_context("test", &context);
 
-    unsafe { assert!(construct_init_function(&parse_context).is_ok()) }
+    unsafe { assert!(construct_init(&parse_context).is_ok()) }
     unsafe {
       assert!(construct_get_adjusted_input_block_function(&parse_context).is_ok())
     }
@@ -409,8 +409,8 @@ mod test
 
     let mut parse_context = construct_context("test", &context);
 
-    unsafe { assert!(construct_init_function(&parse_context).is_ok()) }
-    unsafe { assert!(construct_push_state_function(&parse_context).is_ok()) }
+    unsafe { assert!(construct_init(&parse_context).is_ok()) }
+    unsafe { assert!(construct_push_state(&parse_context).is_ok()) }
     unsafe { assert!(construct_pop_state_function(&parse_context).is_ok()) }
 
     unsafe {
@@ -469,8 +469,8 @@ mod test
 
     let mut parse_context = construct_context("test", &context);
 
-    unsafe { assert!(construct_init_function(&parse_context).is_ok()) }
-    unsafe { assert!(construct_push_state_function(&parse_context).is_ok()) }
+    unsafe { assert!(construct_init(&parse_context).is_ok()) }
+    unsafe { assert!(construct_push_state(&parse_context).is_ok()) }
     unsafe { assert!(construct_pop_state_function(&parse_context).is_ok()) }
     unsafe { assert!(construct_next_function(&parse_context).is_ok()) }
     unsafe { assert!(construct_emit_accept(&parse_context).is_ok()) }
@@ -527,7 +527,7 @@ mod test
 
     let mut parse_context = construct_context("test", &context);
 
-    unsafe { assert!(construct_init_function(&parse_context).is_ok()) };
+    unsafe { assert!(construct_init(&parse_context).is_ok()) };
 
     unsafe {
       setup_exec_engine(&mut parse_context);
@@ -594,8 +594,8 @@ mod test
 
     let mut parse_context = construct_context("test", &context);
 
-    unsafe { assert!(construct_init_function(&parse_context).is_ok()) }
-    unsafe { assert!(construct_push_state_function(&parse_context).is_ok()) }
+    unsafe { assert!(construct_init(&parse_context).is_ok()) }
+    unsafe { assert!(construct_push_state(&parse_context).is_ok()) }
     unsafe { assert!(construct_extend_stack_if_needed(&parse_context).is_ok()) }
 
     unsafe {
@@ -655,8 +655,6 @@ mod test
   fn test_compile_from_bytecode() -> core::result::Result<(), ()>
   {
     use crate::llvm::compile_from_bytecode;
-    use crate::options::Architecture;
-    use crate::options::BuildOptions;
     use hctk::bytecode::compile_bytecode;
     use hctk::debug::compile_test_grammar;
     use inkwell::context::Context;
@@ -672,12 +670,9 @@ mod test
 
     let bytecode_output = compile_bytecode(&grammar, 1);
 
-    if let Ok(mut ctx) = compile_from_bytecode(
-      "test",
-      &Context::create(),
-      &BuildOptions { architecture: Architecture::X8664, ..Default::default() },
-      &bytecode_output,
-    ) {
+    if let Ok(mut ctx) =
+      compile_from_bytecode("test", &grammar, &Context::create(), &bytecode_output)
+    {
       let mut file = File::create("../test.ll");
 
       if let Ok(mut file) = file {
@@ -754,8 +749,6 @@ mod test
     use hctk::bytecode::compile_bytecode;
     use hctk::debug::compile_test_grammar;
     use inkwell::context::Context;
-    use std::fs::File;
-    use std::io::Write;
     let grammar = compile_test_grammar(
       "
       @IGNORE g:sp
@@ -783,12 +776,9 @@ mod test
 
     let bytecode_output = compile_bytecode(&grammar, 1);
 
-    if let Ok(mut ctx) = compile_from_bytecode(
-      "test",
-      &Context::create(),
-      &BuildOptions { architecture: Architecture::X8664, ..Default::default() },
-      &bytecode_output,
-    ) {
+    if let Ok(mut ctx) =
+      compile_from_bytecode("test", &grammar, &Context::create(), &bytecode_output)
+    {
       Ok(())
     } else {
       Err(())

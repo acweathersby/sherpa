@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::io::BufWriter;
 use std::io::Result;
 
 use hctk::ascript::compile::get_struct_type_from_node;
@@ -23,6 +24,8 @@ use hctk::grammar::data::ast::AST_U8;
 use hctk::types::*;
 use std::io::Write;
 
+use crate::builder::pipeline::CompileError;
+use crate::builder::pipeline::PipelineTask;
 use crate::writer::code_writer::*;
 
 pub fn write<W: Write>(
@@ -43,7 +46,7 @@ pub fn write<W: Write>(
     .dedent()
     .wrtln("}")?
     .newline()?
-    .wrtln("type HCO = HCObj<ASTNode>;")?
+    .wrtln("pub type HCO = HCObj<ASTNode>;")?
     .newline()?
     .wrtln("impl HCObjTrait for ASTNode {}")?
     .newline()?;
@@ -584,5 +587,31 @@ fn get_default_value(prop_id: &AScriptPropId, ascript: &AScriptStore) -> String
     }
   } else {
     "None".to_string()
+  }
+}
+/// Constructs a task that compiles a grammar's Ascript into a rust AST module. The module
+/// is placed at `<source_output_dir>/<grammar_name>_parser_ast.rs`.
+pub fn build_rust_ast() -> PipelineTask
+{
+  PipelineTask {
+    fun: Box::new(|pipeline| {
+      let grammar = pipeline.get_grammar();
+      let ascript = pipeline.get_ascript();
+      let output_path = pipeline.get_source_output_dir();
+      let data_path =
+        output_path.join(format!("./{}_ast.rs", pipeline.get_parser_name()));
+
+      match std::fs::File::create(data_path) {
+        Ok(ast_data_file) => {
+          let mut writer = CodeWriter::new(BufWriter::new(ast_data_file));
+          write(&grammar, &ascript, &mut writer);
+          drop(writer);
+          Ok(())
+        }
+        Err(err) => Err(CompileError::from_io_error(&err)),
+      }
+    }),
+    require_ascript: true,
+    require_bytecode: false,
   }
 }

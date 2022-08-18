@@ -84,12 +84,9 @@ impl SymbolID
       Self::DefinedNumeric(_) | Self::DefinedIdentifier(_) | Self::DefinedSymbol(_) => {
         format!("\\{}", grammar.symbols_string_table.get(self).unwrap())
       }
-      Self::Production(prod_id, _) => grammar
-        .production_table
-        .get(prod_id)
-        .unwrap()
-        .guid_name
-        .to_string(),
+      Self::Production(prod_id, _) => {
+        grammar.production_table.get(prod_id).unwrap().guid_name.to_string()
+      }
       Self::TokenProduction(prod_id, _) => {
         format!("tk:{}", grammar.production_table.get(prod_id).unwrap().guid_name)
       }
@@ -261,6 +258,11 @@ impl Symbol
       friendly_name: String::new(),
     },
   ];
+
+  pub fn generics_lu() -> BTreeMap<SymbolID, &'static Symbol>
+  {
+    BTreeMap::from_iter(Self::Generics.clone().iter().map(|s| (s.guid, *s)))
+  }
 }
 
 use std::collections::BTreeMap;

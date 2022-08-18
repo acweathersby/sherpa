@@ -6,15 +6,16 @@ use crate::intermediate::state::compile_states;
 use crate::types::GrammarStore;
 use crate::types::IRState;
 use crate::types::Symbol;
+use crate::types::SymbolID;
 
 use self::compile::build_byte_code_buffer;
 
 pub mod compile;
 pub mod optimize;
 
-pub struct BytecodeOutput<'a>
+#[derive(Debug)]
+pub struct BytecodeOutput
 {
-  pub grammar: &'a GrammarStore,
   /// The bytecode.
   pub bytecode: Vec<u32>,
   /// The intermediate representation states that the bytecode
@@ -24,12 +25,12 @@ pub struct BytecodeOutput<'a>
   /// vector.
   pub state_name_to_offset: BTreeMap<String, u32>,
   pub offset_to_state_name: BTreeMap<u32, String>,
-  pub bytecode_id_to_symbol_lookup: BTreeMap<u32, &'a Symbol>,
+  pub bytecode_id_to_symbol_lookup: BTreeMap<u32, SymbolID>,
   /// The original [IRStates](IRState) produced during the
   pub ir_states: BTreeMap<String, IRState>,
 }
 
-pub fn compile_bytecode(grammar: &GrammarStore, threads: usize) -> BytecodeOutput
+pub fn compile_bytecode<'a>(grammar: &'a GrammarStore, threads: usize) -> BytecodeOutput
 {
   let mut ir_states = compile_states(grammar, threads);
 
@@ -50,14 +51,13 @@ pub(crate) fn compile_ir_states_into_bytecode<'a>(
   grammar: &'a GrammarStore,
   ir_states: BTreeMap<String, IRState>,
   ir_ast_states: Vec<IR_STATE>,
-) -> BytecodeOutput<'a>
+) -> BytecodeOutput
 {
   let state_refs = ir_ast_states.iter().collect::<Vec<_>>();
 
   let (bytecode, state_lookups) = build_byte_code_buffer(state_refs);
 
   BytecodeOutput {
-    grammar,
     bytecode,
     ir_states,
     states: ir_ast_states,
@@ -70,7 +70,7 @@ pub(crate) fn compile_ir_states_into_bytecode<'a>(
       .symbols_table
       .values()
       .chain(Symbol::Generics)
-      .map(|s| (s.bytecode_id, s))
+      .map(|s| (s.bytecode_id, s.guid))
       .collect::<BTreeMap<_, _>>(),
   }
 }

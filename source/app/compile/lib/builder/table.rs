@@ -10,6 +10,7 @@ use std::collections::btree_map;
 
 use hctk::bytecode;
 use hctk::bytecode::BytecodeOutput;
+use hctk::debug::grammar;
 use hctk::types::*;
 
 #[derive(Debug, Clone, Copy)]
@@ -22,8 +23,11 @@ struct TableCell<'a>
   consume_length: u32,
 }
 
-pub(crate) fn create_table<'a>(entry_state: u32, output: &'a BytecodeOutput)
-  -> Option<()>
+pub(crate) fn create_table<'a>(
+  entry_state: u32,
+  grammar: &GrammarStore,
+  output: &'a BytecodeOutput,
+) -> Option<()>
 {
   let mut offset = entry_state as usize;
 
@@ -48,13 +52,14 @@ pub(crate) fn create_table<'a>(entry_state: u32, output: &'a BytecodeOutput)
         return None;
       }
 
-      let instruction_type =
-        output.bytecode[state_address as usize] & INSTRUCTION_HEADER_MASK;
+      let instruction = INSTRUCTION::from(&output.bytecode, state_address);
 
-      match instruction_type {
-        INSTRUCTION::I09_VECTOR_BRANCH | INSTRUCTION::I10_HASH_BRANCH => {
+      use InstructionType::*;
+
+      match instruction.to_type() {
+        VECTOR_BRANCH | HASH_BRANCH => {
           let table_data =
-            BranchTableData::from_bytecode(state_address as usize, output).unwrap();
+            BranchTableData::from_bytecode(instruction, grammar, output).unwrap();
 
           let TableHeaderData { input_type, .. } = table_data.data;
 
@@ -92,14 +97,15 @@ pub(crate) fn create_table<'a>(entry_state: u32, output: &'a BytecodeOutput)
           for cell in &mut index_map {
             // load the next state and see if it
             let index = cell.goto_state as usize;
-            let instruction = INSTRUCTION(bytecode[index]);
 
-            if instruction.is_I01_CONSUME() {
-              let instruction = INSTRUCTION(bytecode[index + 1]);
+            let instruction = INSTRUCTION::from(bytecode, index);
+
+            if instruction.is_CONSUME() {
+              let instruction = instruction.next(bytecode);
               cell.consume_length = 1;
-              if instruction.is_I02_GOTO() {
-                let instruction2 = INSTRUCTION(bytecode[index + 2]);
-                if instruction2.is_I02_GOTO() {
+              if instruction.is_GOTO() {
+                let instruction2 = instruction.next(bytecode);
+                if instruction2.is_GOTO() {
                   // replace the cells state with the goto value
                   cell.goto_state = instruction2.get_contents() & GOTO_STATE_ADDRESS_MASK;
 
@@ -111,14 +117,14 @@ pub(crate) fn create_table<'a>(entry_state: u32, output: &'a BytecodeOutput)
                   state_offset_queue.push_back(cell.goto_state);
                 }
               }
-            } else if instruction.is_I05_TOKEN() {
+            } else if instruction.is_TOKEN() {
               cell.goto_state = state_address as u32;
             }
             println!(
               "{} {} {}",
               cell.goto_state,
               (bytecode[cell.goto_state as usize] & INSTRUCTION_HEADER_MASK) >> 28,
-              INSTRUCTION(bytecode[cell.goto_state as usize]).to_str()
+              INSTRUCTION::from(bytecode, cell.goto_state as usize).to_str()
             )
           }
 
@@ -130,7 +136,7 @@ pub(crate) fn create_table<'a>(entry_state: u32, output: &'a BytecodeOutput)
           // legit state, ascertain its action, and in the event the action leads
           // to another goto, follow that goto to a branch or end state
         }
-        INSTRUCTION::I05_TOKEN => {
+        TOKEN => {
           e.insert(vec![TableCell {
             state: state_address as u32,
             debug_state_name: &d,
@@ -231,12 +237,12 @@ pub(crate) fn create_table<'a>(entry_state: u32, output: &'a BytecodeOutput)
 }
 /// Information on byte code branches
 #[derive(Debug, Clone)]
-pub struct BranchTableData<'a>
+pub struct BranchTableData
 {
   /// Stores an offset of the branch that is taken given
   /// a particular symbol, and the symbol that activates
   /// the branch.
-  pub symbols:    BTreeMap<u32, &'a Symbol>,
+  pub symbols:    BTreeMap<u32, Symbol>,
   pub data:       TableHeaderData,
   /// All branches defined within the branch table,
   /// keyed by their bytecode address or by the indexed
@@ -264,25 +270,28 @@ pub enum TableType
   Vector,
 }
 
-impl<'a> BranchTableData<'a>
+impl BranchTableData
 {
-  pub fn from_bytecode(entry_state: usize, output: &'a BytecodeOutput) -> Option<Self>
+  pub fn from_bytecode(
+    instruction: INSTRUCTION,
+    grammar: &GrammarStore,
+    output: &BytecodeOutput,
+  ) -> Option<Self>
   {
-    let instr = INSTRUCTION(output.bytecode[entry_state]);
-
-    if instr.is_I10_HASH_BRANCH() || instr.is_I09_VECTOR_BRANCH() {
-      let data = TableHeaderData::from_bytecode(entry_state, &output.bytecode);
+    let address = instruction.get_address();
+    if instruction.is_HASH_BRANCH() || instruction.is_VECTOR_BRANCH() {
+      let data = TableHeaderData::from_bytecode(address, &output.bytecode);
 
       let TableHeaderData { input_type, table_length, table_meta, .. } = data;
 
-      let branches = match instr.get_type() {
-        INSTRUCTION::I09_VECTOR_BRANCH => output.bytecode
-          [(entry_state + 4)..(entry_state + 4 + table_length as usize)]
+      let branches = match instruction.to_type() {
+        InstructionType::VECTOR_BRANCH => output.bytecode
+          [(address + 4)..(address + 4 + table_length as usize)]
           .iter()
           .enumerate()
           .map(|(i, offset_delta)| {
             let discriminant = (i as u32) + table_meta;
-            let address = (*offset_delta as usize) + entry_state;
+            let address = (*offset_delta as usize) + address;
             let is_skipped = *offset_delta == 0xFFFF_FFFF;
             (if is_skipped { i } else { address }, BranchData {
               value: discriminant,
@@ -291,14 +300,14 @@ impl<'a> BranchTableData<'a>
             })
           })
           .collect::<BTreeMap<_, _>>(),
-        INSTRUCTION::I10_HASH_BRANCH => output.bytecode
-          [(entry_state + 4)..(entry_state + 4 + table_length as usize)]
+        InstructionType::HASH_BRANCH => output.bytecode
+          [(address + 4)..(address + 4 + table_length as usize)]
           .iter()
           .enumerate()
           .map(|(i, cell)| {
             let discriminant = cell & 0x7FF;
             let offset_delta = (cell >> 11) & 0x7FF;
-            let address = (offset_delta as usize) + entry_state;
+            let address = (offset_delta as usize) + address;
             let is_skipped = offset_delta == 0x7FF;
             (if is_skipped { i } else { address }, BranchData {
               value: discriminant,
@@ -318,7 +327,17 @@ impl<'a> BranchTableData<'a>
 
           for (_, branch) in &branches {
             if let Some(symbol) = symbol_lookup.get(&branch.value) {
-              symbols.insert(branch.value, *symbol);
+              match grammar.symbols_table.get(symbol) {
+                Some(symbol) => {
+                  symbols.insert(branch.value, symbol.clone());
+                }
+                None => {
+                  symbols.insert(
+                    branch.value,
+                    (*(Symbol::generics_lu().get(symbol).unwrap())).clone(),
+                  );
+                }
+              }
             } else {
               panic!("Missing symbol!")
             }
@@ -329,7 +348,7 @@ impl<'a> BranchTableData<'a>
       };
 
       Some(BranchTableData {
-        table_type: if instr.is_I10_HASH_BRANCH() {
+        table_type: if instruction.is_HASH_BRANCH() {
           TableType::Hash
         } else {
           TableType::Vector
@@ -372,7 +391,7 @@ impl<'a> BranchTableData<'a>
   pub fn get_branch_symbol(&self, branch: &BranchData) -> Option<&Symbol>
   {
     if let Some(sym) = self.symbols.get(&branch.value) {
-      Some(*sym)
+      Some(sym)
     } else {
       None
     }

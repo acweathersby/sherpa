@@ -67,7 +67,7 @@ pub fn disassemble_state(
 
   let so = state_offset;
 
-  let BytecodeOutput { bytecode, grammar, .. } = output;
+  let BytecodeOutput { bytecode, .. } = output;
 
   if state_offset >= bytecode.len() {
     ("".to_string(), so)

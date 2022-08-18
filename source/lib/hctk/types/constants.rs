@@ -1,3 +1,5 @@
+use std::process::Output;
+
 // Global Constants
 pub const STATE_ADDRESS_MASK: u32 = (1 << 24) - 1;
 
@@ -80,8 +82,29 @@ pub const PRODUCTION_SCOPE_POP_POINTER: u32 = 2;
 
 pub const TOKEN_ASSIGN_FLAG: u32 = 0x04000000;
 
+pub enum InstructionType
+{
+  PASS     = 0,
+  CONSUME  = 1,
+  GOTO     = 2,
+  SET_PROD = 3,
+  REDUCE   = 4,
+  TOKEN    = 5,
+  FORK_TO  = 6,
+  SCAN     = 7,
+  NOOP8    = 8,
+  VECTOR_BRANCH = 9,
+  HASH_BRANCH = 10,
+  SET_FAIL_STATE = 11,
+  REPEAT   = 12,
+  NOOP13   = 13,
+  ASSERT_CONSUME = 14,
+  FAIL     = 15,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Default)]
 /// Bytecode instruction constants
-pub struct INSTRUCTION(pub u32);
+pub struct INSTRUCTION(pub u32, usize);
 
 impl INSTRUCTION
 {
@@ -107,82 +130,135 @@ impl INSTRUCTION
   pub const I15_FAIL: u32 = 15 << 28;
   pub const I15_FALL_THROUGH: u32 = 15 << 28 | 1;
 
-  pub fn is_I00_PASS(&self) -> bool
+  pub fn Pass() -> INSTRUCTION
+  {
+    INSTRUCTION(0, 1)
+  }
+
+  pub fn Fail() -> INSTRUCTION
+  {
+    INSTRUCTION(0, 2)
+  }
+
+  pub fn is_valid(&self) -> bool
+  {
+    self.1 > 0
+  }
+
+  pub fn from(bytecode: &[u32], address: usize) -> Self
+  {
+    if (address > bytecode.len()) {
+      INSTRUCTION(0, 0)
+    } else {
+      INSTRUCTION(bytecode[address], address)
+    }
+  }
+
+  pub fn next(&self, bytecode: &[u32]) -> Self
+  {
+    if (self.1 > bytecode.len()) {
+      INSTRUCTION(0, 0)
+    } else {
+      INSTRUCTION(bytecode[self.1 + 1], self.1 + 1)
+    }
+  }
+
+  pub fn goto(&self, bytecode: &[u32]) -> Self
+  {
+    match self.to_type() {
+      InstructionType::GOTO => {
+        Self::from(bytecode, (self.0 & GOTO_STATE_ADDRESS_MASK) as usize)
+      }
+      _ => INSTRUCTION(0, 0),
+    }
+  }
+
+  pub fn get_address(&self) -> usize
+  {
+    self.1
+  }
+
+  pub fn get_value(&self) -> u32
+  {
+    self.0
+  }
+
+  pub fn is_PASS(&self) -> bool
   {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I00_PASS
   }
 
-  pub fn is_I01_CONSUME(&self) -> bool
+  pub fn is_CONSUME(&self) -> bool
   {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I01_CONSUME
   }
 
-  pub fn is_I02_GOTO(&self) -> bool
+  pub fn is_GOTO(&self) -> bool
   {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I02_GOTO
   }
 
-  pub fn is_I03_SET_PROD(&self) -> bool
+  pub fn is_SET_PROD(&self) -> bool
   {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I03_SET_PROD
   }
 
-  pub fn is_I04_REDUCE(&self) -> bool
+  pub fn is_REDUCE(&self) -> bool
   {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I04_REDUCE
   }
 
-  pub fn is_I05_TOKEN(&self) -> bool
+  pub fn is_TOKEN(&self) -> bool
   {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I05_TOKEN
   }
 
-  pub fn is_I06_FORK_TO(&self) -> bool
+  pub fn is_FORK(&self) -> bool
   {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I06_FORK_TO
   }
 
-  pub fn is_I07_SCAN(&self) -> bool
+  pub fn is_SCAN(&self) -> bool
   {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I07_SCAN
   }
 
-  pub fn is_I08_NOOP(&self) -> bool
+  pub fn is_NOOP8(&self) -> bool
   {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I08_NOOP
   }
 
-  pub fn is_I09_VECTOR_BRANCH(&self) -> bool
+  pub fn is_VECTOR_BRANCH(&self) -> bool
   {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I09_VECTOR_BRANCH
   }
 
-  pub fn is_I10_HASH_BRANCH(&self) -> bool
+  pub fn is_HASH_BRANCH(&self) -> bool
   {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I10_HASH_BRANCH
   }
 
-  pub fn is_I11_SET_FAIL_STATE(&self) -> bool
+  pub fn is_SET_FAIL_STATE(&self) -> bool
   {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I11_SET_FAIL_STATE
   }
 
-  pub fn is_I12_REPEAT(&self) -> bool
+  pub fn is_REPEAT(&self) -> bool
   {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I12_REPEAT
   }
 
-  pub fn is_I13_NOOP(&self) -> bool
+  pub fn is_NOOP13(&self) -> bool
   {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I13_NOOP
   }
 
-  pub fn is_I14_ASSERT_CONSUME(&self) -> bool
+  pub fn is_ASSERT_CONSUME(&self) -> bool
   {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I14_ASSERT_CONSUME
   }
 
-  pub fn is_I15_FAIL(&self) -> bool
+  pub fn is_FAIL(&self) -> bool
   {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I15_FAIL
   }
@@ -195,6 +271,29 @@ impl INSTRUCTION
   pub fn get_type(&self) -> u32
   {
     self.0 & INSTRUCTION_HEADER_MASK
+  }
+
+  pub fn to_type(&self) -> InstructionType
+  {
+    match (self.0 & INSTRUCTION_HEADER_MASK) {
+      Self::I00_PASS => InstructionType::PASS,
+      Self::I01_CONSUME => InstructionType::CONSUME,
+      Self::I02_GOTO => InstructionType::GOTO,
+      Self::I03_SET_PROD => InstructionType::SET_PROD,
+      Self::I04_REDUCE => InstructionType::REDUCE,
+      Self::I05_TOKEN => InstructionType::TOKEN,
+      Self::I06_FORK_TO => InstructionType::FORK_TO,
+      Self::I07_SCAN => InstructionType::SCAN,
+      Self::I08_NOOP => InstructionType::NOOP8,
+      Self::I09_VECTOR_BRANCH => InstructionType::VECTOR_BRANCH,
+      Self::I10_HASH_BRANCH => InstructionType::HASH_BRANCH,
+      Self::I11_SET_FAIL_STATE => InstructionType::SET_FAIL_STATE,
+      Self::I12_REPEAT => InstructionType::REPEAT,
+      Self::I13_NOOP => InstructionType::NOOP13,
+      Self::I14_ASSERT_CONSUME => InstructionType::ASSERT_CONSUME,
+      Self::I15_FAIL => InstructionType::FAIL,
+      _ => InstructionType::PASS,
+    }
   }
 
   pub fn to_str(&self) -> &str

@@ -1,21 +1,12 @@
 use std::collections::BTreeMap;
 use std::fs::File;
-use std::path::PathBuf;
 
 use crate::builder::common;
 use crate::builder::disclaimer::DISCLAIMER;
-use crate::options::Architecture;
-use crate::options::BuildOptions;
-use crate::options::Recognizer;
 use crate::writer::code_writer::CodeWriter;
-use hctk::bytecode::compile_bytecode;
-use hctk::debug;
-use hctk::debug::BytecodeGrammarLookups;
-use hctk::get_num_of_available_threads;
-use hctk::grammar::compile_from_path;
+use crate::CompileError;
 use hctk::types::*;
 use inkwell::context::Context;
-use inkwell::module::Module;
 use inkwell::passes::PassManager;
 use inkwell::passes::PassManagerBuilder;
 use inkwell::targets::CodeModel;
@@ -23,121 +14,107 @@ use inkwell::targets::FileType;
 use inkwell::targets::InitializationConfig;
 use inkwell::targets::RelocMode;
 use inkwell::targets::Target;
-use inkwell::targets::TargetData;
-use inkwell::targets::TargetMachine;
 use inkwell::targets::TargetTriple;
 use inkwell::OptimizationLevel;
 use std::io::BufWriter;
 use std::io::Write;
 use std::process::Command;
-use std::thread;
 
-pub enum OutputType
-{
-  Rust,
-  Cpp,
-  TypeScript,
-  JavaScript,
-  Java,
-}
+use crate::builder::pipeline::PipelineTask;
 
-fn initializeLLVMTargets()
-{
-  Target::initialize_x86(&InitializationConfig::default());
-}
-
-/// Compile grammar into a machine-code based parser for the given architecture and language
-pub fn compile_llvm_files(
-  input_path: &PathBuf,
-  output_path: &PathBuf,
-  build_ast: bool,
+pub fn build_llvm_parser(
   target_triple: Option<String>,
-)
+  light_LTO: bool,
+  output_cargo_build_commands: bool,
+) -> PipelineTask
 {
-  let build_options = BuildOptions {
-    recognizer: Recognizer::Assembly,
-    architecture: Architecture::X8664,
-    ..Default::default()
-  };
+  PipelineTask {
+    fun: Box::new(move |p| {
+      let output_path = p.get_build_output_dir();
+      let parser_name = p.get_parser_name();
+      let grammar_name = p.get_grammar_name();
+      let grammar = p.get_grammar();
+      let bytecode_output = p.get_bytecode();
 
-  initializeLLVMTargets();
+      Target::initialize_x86(&InitializationConfig::default());
 
-  eprintln!("Input file: {:?}\n Output file: {:?}", input_path, output_path);
+      let target_triple = target_triple
+        .clone()
+        .unwrap_or(std::env::var("TARGET").unwrap_or(String::default()));
 
-  let target_triple =
-    target_triple.unwrap_or(std::env::var("TARGET").unwrap_or(String::default()));
+      let log_file = output_path.join(parser_name.clone() + ".log");
+      let ll_file_path = output_path.join(parser_name.clone() + ".ll");
+      let bitcode_path = output_path.join("lib".to_string() + &parser_name + ".bc");
+      let object_path = output_path.join("lib".to_string() + &parser_name + ".o");
+      let archive_path = output_path.join(format!("./lib{}.a", &parser_name));
 
-  let threads = get_num_of_available_threads();
+      let target_triple = TargetTriple::create(&target_triple);
+      let mut target_err = String::default();
 
-  let (grammar, errors) = compile_from_path(input_path, threads);
+      if output_cargo_build_commands {
+        println!("cargo:rustc-link-search=native={}", output_path.to_str().unwrap());
+        println!("cargo:rustc-link-lib=static={}", parser_name);
+      }
 
-  if !errors.is_empty() {
-    for error in errors {
-      println!("cargo:error=\n{}", error);
-    }
-  } else if let Some(grammar) = grammar {
-    let (grammar_name, parser_name) = common::get_parser_names(&grammar);
+      // Write out llvm module to file
 
-    let bytecode_output = compile_bytecode(&grammar, 1);
+      match crate::llvm::compile_from_bytecode(
+        &parser_name,
+        grammar,
+        &Context::create(),
+        &bytecode_output,
+      ) {
+        Ok(ctx) => {
+          let opt = OptimizationLevel::Default;
 
-    thread::scope(|scope| {
-      if build_ast {
-        scope.spawn(|| {
-          let output_path = if let Ok(output_path) =
-            std::env::var("OUT_DIR").map(|d| PathBuf::from(&d))
-          {
-            output_path
+          let mut file = File::create(&ll_file_path).unwrap();
+          file.write_all(ctx.module.to_string().as_bytes());
+          file.flush();
+          drop(file);
+
+          let clang_command = "clang-14";
+          let ar_command = "llvm-ar-14";
+          if light_LTO {
+            if ctx.module.write_bitcode_to_path(&bitcode_path) {
+              match Command::new(clang_command)
+                .args(&[
+                  "-flto=thin",
+                  "-c",
+                  "-o",
+                  object_path.to_str().unwrap(),
+                  ll_file_path.to_str().unwrap(),
+                ])
+                .status()
+              {
+                Ok(_) => {
+                  if !(Command::new(ar_command)
+                    .args(&[
+                      "rc",
+                      archive_path.to_str().unwrap(),
+                      object_path.to_str().unwrap(),
+                    ])
+                    .status()
+                    .unwrap()
+                    .success())
+                  {
+                    Err(CompileError::from_string("Unable to compile llvm bitcode"))
+                  } else {
+                    Ok(())
+                  }
+                }
+                Err(err) => Err(CompileError::from_io_error(&err)),
+              }
+            } else {
+              Err(CompileError::from_string("test"))
+            }
           } else {
-            output_path.clone()
-          };
-
-          let log_file = output_path.join(parser_name.clone() + ".log");
-          let ll_file = output_path.join(parser_name.clone() + ".ll");
-          let object_path = output_path.join("lib".to_string() + &parser_name + ".o");
-          let archive_path = output_path.join(format!("./lib{}.a", &parser_name));
-
-          let target_triple = TargetTriple::create(&target_triple);
-          let mut target_err = String::default();
-
-          if let Ok(parser_data_file) = std::fs::File::create(log_file) {
-            let mut writer = BufWriter::new(parser_data_file);
-            writer.write_fmt(format_args!("target triple: {}\n", target_triple));
-            writer.write_fmt(format_args!("parse name: {}\n", &parser_name));
-            writer.write_fmt(format_args!(
-              "production count: {}\n",
-              &grammar.production_table.len()
-            ));
-            writer
-              .write_fmt(format_args!("body count: {}\n", &grammar.bodies_table.len()));
-
-            writer.write_fmt(format_args!(
-              "symbol count: {}\n",
-              &grammar.symbols_table.len()
-            ));
-            writer.write_fmt(format_args!("target: {:?}\n", target_err));
-            writer.flush();
-          }
-
-          if let Ok(ctx) = crate::llvm::compile_from_bytecode(
-            &parser_name,
-            &Context::create(),
-            &build_options,
-            &bytecode_output,
-          ) {
-            let mut file = File::create(ll_file).unwrap();
-            file.write_all(ctx.module.to_string().as_bytes());
-            file.flush();
-            drop(file);
-
-            let opt = OptimizationLevel::Less;
+            // apply_llvm_optimizations(opt, &ctx);
             let reloc = RelocMode::PIC;
             let model = CodeModel::Small;
             let target = Target::from_triple(&target_triple).unwrap();
             let target_machine = target
               .create_target_machine(&target_triple, "generic", "", opt, reloc, model)
               .unwrap();
-
-            // apply_llvm_optimizations(opt, &ctx, &target_machine);
 
             ctx
               .module
@@ -151,11 +128,6 @@ pub fn compile_llvm_files(
               &object_path,
             ) {
               Ok(_) => {
-                println!(
-                  "cargo:rustc-link-search=native={}",
-                  output_path.to_str().unwrap()
-                );
-                println!("cargo:rustc-link-lib=static={}", parser_name);
                 if !(Command::new("llvm-ar-14")
                   .args(&[
                     "rc",
@@ -166,48 +138,82 @@ pub fn compile_llvm_files(
                   .unwrap()
                   .success())
                 {
-                  panic!("failed");
+                  Err(CompileError::from_string("Unable to compile llvm bitcode"))
+                } else {
+                  Ok(())
                 }
               }
-              Err(err) => {
-                panic!("failed");
-              }
+              Err(err) => Err(CompileError::from_string(&err.to_string())),
             }
           }
-        });
-        scope.spawn(|| {
-          let data_path = output_path.join(format!("./{}.rs", parser_name));
-          if let Ok(parser_data_file) = std::fs::File::create(data_path) {
-            let mut writer = CodeWriter::new(BufWriter::new(parser_data_file));
-
-            writer.write(&DISCLAIMER(&grammar_name, "Parser Data", "//!"));
-
-            let output_type = OutputType::Rust;
-
-            match output_type {
-              OutputType::Rust => {
-                write_rust_parser(
-                  writer,
-                  &bytecode_output.state_name_to_offset,
-                  &grammar,
-                  &grammar_name,
-                  &parser_name,
-                );
-              }
-              _ => {}
-            };
-          }
-        });
+        }
+        Err(()) => Err(CompileError::from_string("Unable to compile llvm bitcode")),
       }
-    })
+    }),
+    require_ascript: false,
+    require_bytecode: true,
   }
 }
 
-fn apply_llvm_optimizations(
-  opt: OptimizationLevel,
-  ctx: &crate::llvm::LLVMParserModule,
-  target_machine: &TargetMachine,
-)
+/// Constructs a task that outputs a Rust parse context interface
+/// for the llvm parser.
+pub fn build_llvm_parser_interface<'a>() -> PipelineTask
+{
+  PipelineTask {
+    fun: Box::new(|p| {
+      let source_path = p.get_source_output_dir();
+      let parser_name = p.get_parser_name();
+      let grammar_name = p.get_grammar_name();
+      let grammar = p.get_grammar();
+      let bytecode_output = p.get_bytecode();
+
+      let data_path = source_path.join(format!("./{}.rs", parser_name));
+
+      match std::fs::File::create(data_path) {
+        Ok(parser_data_file) => {
+          let mut writer = CodeWriter::new(BufWriter::new(parser_data_file));
+
+          match writer.write(&DISCLAIMER(&grammar_name, "Parser Data", "//!")) {
+            Ok(_) => {}
+            Err(err) => return Err(CompileError::from_io_error(&err)),
+          }
+
+          let output_type = OutputType::Rust;
+
+          match output_type {
+            OutputType::Rust => {
+              match write_rust_parser(
+                writer,
+                &bytecode_output.state_name_to_offset,
+                grammar,
+                &grammar_name,
+                &parser_name,
+              ) {
+                Err(err) => Err(CompileError::from_io_error(&err)),
+                Ok(_) => Ok(()),
+              }
+            }
+            _ => Ok(()),
+          }
+        }
+        Err(err) => Err(CompileError::from_io_error(&err)),
+      }
+    }),
+    require_ascript: false,
+    require_bytecode: true,
+  }
+}
+
+pub enum OutputType
+{
+  Rust,
+  Cpp,
+  TypeScript,
+  JavaScript,
+  Java,
+}
+
+fn apply_llvm_optimizations(opt: OptimizationLevel, ctx: &crate::llvm::LLVMParserModule)
 {
   let pass_manager_builder = PassManagerBuilder::create();
   let pass_manager = PassManager::create(());
@@ -241,7 +247,6 @@ fn apply_llvm_optimizations(
   pass_manager.add_global_dce_pass();
   pass_manager.add_aggressive_dce_pass();
   pass_manager.run_on(&ctx.module);
-  target_machine.add_analysis_passes(&pass_manager);
 }
 
 fn write_rust_parser<W: Write>(

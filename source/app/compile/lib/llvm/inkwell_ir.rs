@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 use std::collections::VecDeque;
 
 use hctk::bytecode::BytecodeOutput;
+use hctk::debug::grammar;
 use hctk::grammar::get_exported_productions;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
@@ -12,6 +13,7 @@ use inkwell::values::IntValue;
 use inkwell::values::PointerValue;
 
 use super::types::*;
+use crate::llvm::inkwell_branch_ir::BranchStateCache;
 use crate::options::BuildOptions;
 use hctk::types::*;
 
@@ -946,9 +948,8 @@ pub(crate) unsafe fn construct_emit_error(
   }
 }
 
-pub(crate) unsafe fn construct_init_function(
-  ctx: &LLVMParserModule,
-) -> std::result::Result<(), ()>
+pub(crate) unsafe fn construct_init(ctx: &LLVMParserModule)
+  -> std::result::Result<(), ()>
 {
   let LLVMParserModule { builder, ctx, fun: funct, .. } = ctx;
 
@@ -984,7 +985,7 @@ pub(crate) unsafe fn construct_init_function(
   }
 }
 
-pub(crate) unsafe fn construct_push_state_function(
+pub(crate) unsafe fn construct_push_state(
   ctx: &LLVMParserModule,
 ) -> std::result::Result<(), ()>
 {
@@ -1124,8 +1125,8 @@ pub(crate) unsafe fn construct_next_function(
 
 pub(crate) fn construct_prime_function(
   ctx: &LLVMParserModule,
-  sp: &Vec<(usize, u32, String)>,
-  referenced: &mut Vec<(u32, bool)>,
+  sp: &Vec<(usize, INSTRUCTION, String)>,
+  referenced: &mut Vec<(INSTRUCTION, bool)>,
 ) -> Result<(), ()>
 {
   let i32 = ctx.ctx.i32_type();
@@ -1140,11 +1141,13 @@ pub(crate) fn construct_prime_function(
 
   let blocks = sp
     .iter()
-    .map(|(id, address, ..)| {
+    .map(|(id, instruction, ..)| {
       (
         *id,
-        ctx.ctx.append_basic_block(fn_value, &create_offset_label(*address as usize)),
-        get_parse_function(*address as usize, ctx, referenced)
+        ctx
+          .ctx
+          .append_basic_block(fn_value, &create_offset_label(instruction.get_address())),
+        get_parse_function(*instruction, ctx, referenced)
           .as_global_value()
           .as_pointer_value(),
       )
@@ -1199,66 +1202,106 @@ pub(crate) fn create_offset_label(offset: usize) -> String
 }
 
 pub(crate) fn construct_parse_functions(
+  grammar: &GrammarStore,
   ctx: &LLVMParserModule,
   output: &BytecodeOutput,
-  build_options: &BuildOptions,
 ) -> Result<(), ()>
 {
   let mut seen = BTreeSet::new();
   let mut goto_fn = BTreeSet::new();
 
   // start points
-  let start_points = get_exported_productions(output.grammar)
+  let start_points = get_exported_productions(grammar)
     .iter()
     .enumerate()
     .map(|(i, p)| {
-      let address = *(output.state_name_to_offset.get(p.guid_name).unwrap());
+      let instruction = INSTRUCTION::from(
+        &output.bytecode,
+        *(output.state_name_to_offset.get(p.guid_name).unwrap()) as usize,
+      );
 
-      let name = create_offset_label(address as usize);
-      (i, address, name)
+      let name = create_offset_label(instruction.get_address());
+      (i, instruction, name)
     })
     .collect::<Vec<_>>();
 
   construct_prime_function(ctx, &start_points, &mut Vec::new())?;
 
   let sp_lu =
-    start_points.iter().map(|(_, address, _)| *address).collect::<BTreeSet<_>>();
+    start_points.iter().map(|(_, instruction, _)| *instruction).collect::<BTreeSet<_>>();
 
-  let mut addresses = output
+  let mut instructions = output
     .ir_states
     .values()
     .filter(|s| !s.is_scanner())
     .map(|s| {
-      let address = *output.state_name_to_offset.get(&s.get_name()).unwrap();
-      let pushed_to_stack = sp_lu.contains(&address);
-      (address, pushed_to_stack)
+      let instruction = INSTRUCTION::from(
+        &output.bytecode,
+        *output.state_name_to_offset.get(&s.get_name()).unwrap() as usize,
+      );
+
+      let pushed_to_stack = sp_lu.contains(&instruction);
+
+      (instruction, pushed_to_stack)
     })
     .collect::<VecDeque<_>>();
 
-  while let Some((address, pushed_to_stack)) = addresses.pop_front() {
+  while let Some((instruction, pushed_to_stack)) = instructions.pop_front() {
     if pushed_to_stack {
-      goto_fn.insert(address);
+      goto_fn.insert(instruction);
     }
 
-    if seen.insert(address) {
-      let mut referenced_addresses = Vec::new();
+    if seen.insert(instruction) {
+      let mut references = Vec::new();
 
-      let function = get_parse_function(address as usize, ctx, &mut referenced_addresses);
+      let function = get_parse_function(instruction, ctx, &mut references);
       let block_entry = ctx.ctx.append_basic_block(function, "Entry");
+      let mut is_scanner = false;
       ctx.builder.position_at_end(block_entry);
 
-      let pack = InstructionPack {
-        fun:           &function,
-        output:        output,
-        build_options: build_options,
-        address:       address as usize,
-        is_scanner:    false,
-      };
+      let parse_cxt = function.get_nth_param(0).unwrap().into_pointer_value();
 
-      construct_parse_function_statements(ctx, &pack, &mut referenced_addresses)?;
+      if let Some(ir_state_name) =
+        output.offset_to_state_name.get(&(instruction.get_address() as u32))
+      {
+        if let Some(state) = output.ir_states.get(ir_state_name) {
+          match state.get_type() {
+            IRStateType::ProductionStart
+            | IRStateType::ScannerStart
+            | IRStateType::ProductionGoto
+            | IRStateType::ScannerGoto => {
+              if state.get_stack_depth() > 0 {
+                ctx.builder.build_call(
+                  ctx.fun.extend_stack_if_needed,
+                  &[
+                    parse_cxt.into(),
+                    ctx
+                      .ctx
+                      .i32_type()
+                      .const_int((state.get_stack_depth() + 2) as u64, false)
+                      .into(),
+                  ],
+                  "",
+                );
+              }
+            }
+            _ => {}
+          }
 
-      for address in referenced_addresses {
-        addresses.push_front(address);
+          is_scanner = state.is_scanner();
+        }
+      }
+
+      construct_parse_function_statements(
+        instruction,
+        grammar,
+        ctx,
+        &FunctionPack { fun: &function, output, is_scanner },
+        &mut references,
+      )?;
+
+      for referenced in references {
+        instructions.push_front(referenced);
       }
     }
   }
@@ -1267,62 +1310,35 @@ pub(crate) fn construct_parse_functions(
 }
 
 pub(crate) fn construct_parse_function_statements(
+  mut instruction: INSTRUCTION,
+  grammar: &GrammarStore,
   ctx: &LLVMParserModule,
-  pack: &InstructionPack,
-  referenced: &mut Vec<(u32, bool)>,
-) -> Result<(usize, String), ()>
+  pack: &FunctionPack,
+  referenced: &mut Vec<(INSTRUCTION, bool)>,
+) -> Result<(INSTRUCTION, String), ()>
 {
-  let InstructionPack { fun, output, address, is_scanner, .. } = pack;
-  let BytecodeOutput { bytecode, offset_to_state_name, .. } = pack.output;
+  let FunctionPack { output, is_scanner, .. } = pack;
 
-  let mut address = *address;
-  let mut is_scanner = *is_scanner;
   let mut return_val = None;
 
-  if address >= bytecode.len() {
-    return Ok((bytecode.len(), "".to_string()));
-  }
-  let i32 = ctx.ctx.i32_type();
-  let parse_cxt = fun.get_nth_param(0).unwrap().into_pointer_value();
-
-  if let Some(ir_state_name) = offset_to_state_name.get(&(address as u32)) {
-    if let Some(state) = output.ir_states.get(ir_state_name) {
-      match state.get_type() {
-        IRStateType::ProductionStart
-        | IRStateType::ScannerStart
-        | IRStateType::ProductionGoto
-        | IRStateType::ScannerGoto => {
-          if state.get_stack_depth() > 0 {
-            ctx.builder.build_call(
-              ctx.fun.extend_stack_if_needed,
-              &[
-                parse_cxt.into(),
-                i32.const_int((state.get_stack_depth() + 2) as u64, false).into(),
-              ],
-              "",
-            );
-          }
-        }
-        _ => {}
-      }
-
-      is_scanner = state.is_scanner();
-    }
+  if !instruction.is_valid() {
+    return Ok((instruction, "".to_string()));
   }
 
-  while address < bytecode.len() {
-    match bytecode[address] & INSTRUCTION_HEADER_MASK {
-      INSTRUCTION::I01_CONSUME => {
-        if is_scanner {
-          address = construct_scanner_instruction_consume(address, ctx, pack);
+  while instruction.is_valid() {
+    use InstructionType::*;
+    match instruction.to_type() {
+      CONSUME => {
+        if *is_scanner {
+          instruction = construct_scanner_instruction_consume(instruction, ctx, pack);
         } else {
-          construct_instruction_consume(address, ctx, pack, referenced);
+          construct_instruction_consume(instruction, ctx, pack, referenced);
           break;
         }
       }
-      INSTRUCTION::I02_GOTO => {
-        (address, return_val) =
-          construct_instruction_goto(address, ctx, pack, referenced);
+      GOTO => {
+        (instruction, return_val) =
+          construct_instruction_goto(instruction, ctx, pack, referenced);
 
         match return_val {
           Some(val) => {
@@ -1331,72 +1347,75 @@ pub(crate) fn construct_parse_function_statements(
           None => {}
         }
       }
-      INSTRUCTION::I03_SET_PROD => {
-        address = construct_instruction_prod(address, ctx, pack);
+      SET_PROD => {
+        instruction = construct_instruction_prod(instruction, ctx, pack);
       }
-      INSTRUCTION::I04_REDUCE => {
-        construct_instruction_reduce(address, ctx, pack, referenced);
+      REDUCE => {
+        construct_instruction_reduce(instruction, ctx, pack, referenced);
         break;
       }
-      INSTRUCTION::I05_TOKEN => {
-        address = construct_instruction_token(address, ctx, pack);
+      TOKEN => {
+        instruction = construct_instruction_token(instruction, ctx, pack);
       }
-      INSTRUCTION::I06_FORK_TO => {
+      FORK_TO => {
         // TODO
         break;
       }
-      INSTRUCTION::I07_SCAN => address += 1,
-      INSTRUCTION::I08_NOOP => address += 1,
-      INSTRUCTION::I09_VECTOR_BRANCH | INSTRUCTION::I10_HASH_BRANCH => {
-        construct_instruction_branch(address, ctx, pack, referenced, is_scanner)?;
+      NOOP8 | NOOP13 | SCAN | REPEAT | ASSERT_CONSUME | SET_FAIL_STATE => {
+        instruction = instruction.next(&output.bytecode);
+      }
+      VECTOR_BRANCH | HASH_BRANCH => {
+        construct_instruction_branch(
+          instruction,
+          grammar,
+          ctx,
+          pack,
+          referenced,
+          Default::default(),
+        )?;
         break;
       }
-      INSTRUCTION::I11_SET_FAIL_STATE => address += 1,
-      INSTRUCTION::I12_REPEAT => address += 1,
-      INSTRUCTION::I13_NOOP => address += 1,
-      INSTRUCTION::I14_ASSERT_CONSUME => address += 1,
-      INSTRUCTION::I15_FAIL => {
+      FAIL => {
         construct_instruction_fail(ctx, pack);
         break;
       }
-      INSTRUCTION::I00_PASS | _ => {
+      PASS => {
         construct_instruction_pass(ctx, pack, return_val);
         break;
       }
     }
   }
 
-  Ok((address, String::default()))
+  Ok((instruction, String::default()))
 }
 
 fn write_emit_reentrance<'a>(
-  address: usize,
+  instruction: INSTRUCTION,
   ctx: &LLVMParserModule,
-  pack: &InstructionPack,
-  referenced: &mut Vec<(u32, bool)>,
+  pack: &FunctionPack,
+  referenced: &mut Vec<(INSTRUCTION, bool)>,
 )
 {
   let bytecode = &pack.output.bytecode;
 
-  let next_address = match bytecode[address] & INSTRUCTION_HEADER_MASK {
-    INSTRUCTION::I00_PASS => 0,
-    INSTRUCTION::I02_GOTO => {
-      if bytecode[address + 1] & INSTRUCTION_HEADER_MASK == INSTRUCTION::I00_PASS {
-        (bytecode[address] & GOTO_STATE_ADDRESS_MASK) as usize
-      } else {
-        address
-      }
-    }
-    _ => address,
+  use InstructionType::*;
+
+  let next_instruction = match instruction.to_type() {
+    PASS => INSTRUCTION::Pass(),
+    GOTO => match instruction.next(bytecode).to_type() {
+      PASS => instruction.goto(bytecode),
+      _ => instruction,
+    },
+    _ => instruction,
   };
 
-  if next_address != 0 {
+  if !next_instruction.is_PASS() {
     ctx.builder.build_call(
       ctx.fun.push_state,
       &[
         pack.fun.get_first_param().unwrap().into_pointer_value().into(),
         ctx.ctx.i32_type().const_int(NORMAL_STATE_FLAG_LLVM as u64, false).into(),
-        get_parse_function(next_address, ctx, referenced)
+        get_parse_function(next_instruction, ctx, referenced)
           .as_global_value()
           .as_pointer_value()
           .into(),
@@ -1407,16 +1426,16 @@ fn write_emit_reentrance<'a>(
 }
 
 pub(crate) fn get_parse_function<'a>(
-  address: usize,
+  instruction: INSTRUCTION,
   ctx: &'a LLVMParserModule,
-  referenced: &mut Vec<(u32, bool)>,
+  referenced: &mut Vec<(INSTRUCTION, bool)>,
 ) -> FunctionValue<'a>
 {
-  let name = format!("parse_fn_{:X}", address);
+  let name = format!("parse_fn_{:X}", instruction.get_address());
   match ctx.module.get_function(&name) {
     Some(function) => function,
     None => {
-      referenced.push((address as u32, true));
+      referenced.push((instruction, true));
       ctx.module.add_function(&name, ctx.types.goto_fn, None)
     }
   }
@@ -1440,10 +1459,10 @@ pub(crate) fn create_skip_code(
 }
 
 pub(crate) fn construct_scanner_instruction_consume(
-  address: usize,
+  instruction: INSTRUCTION,
   ctx: &LLVMParserModule,
-  pack: &InstructionPack,
-) -> usize
+  pack: &FunctionPack,
+) -> INSTRUCTION
 {
   let b = &ctx.builder;
 
@@ -1462,19 +1481,19 @@ pub(crate) fn construct_scanner_instruction_consume(
 
   b.build_store(assert_tok_ptr, assert_tok);
 
-  address + 1
+  instruction.next(&pack.output.bytecode)
 }
 
 pub(crate) fn construct_instruction_consume(
-  address: usize,
+  instruction: INSTRUCTION,
   ctx: &LLVMParserModule,
-  pack: &InstructionPack,
-  referenced: &mut Vec<(u32, bool)>,
+  pack: &FunctionPack,
+  referenced: &mut Vec<(INSTRUCTION, bool)>,
 )
 {
   let parse_ctx = pack.fun.get_first_param().unwrap().into_pointer_value();
 
-  write_emit_reentrance(address + 1, ctx, pack, referenced);
+  write_emit_reentrance(instruction.next(&pack.output.bytecode), ctx, pack, referenced);
 
   let b = &ctx.builder;
   let val = b
@@ -1493,18 +1512,17 @@ pub(crate) fn construct_instruction_consume(
 }
 
 pub(crate) fn construct_instruction_reduce(
-  address: usize,
+  instruction: INSTRUCTION,
   ctx: &LLVMParserModule,
-  pack: &InstructionPack,
-  referenced: &mut Vec<(u32, bool)>,
+  pack: &FunctionPack,
+  referenced: &mut Vec<(INSTRUCTION, bool)>,
 )
 {
   let parse_ctx = pack.fun.get_first_param().unwrap().into_pointer_value();
-  let instruction = pack.output.bytecode[address];
-  let symbol_count = instruction >> 16 & 0x0FFF;
-  let body_id = instruction & 0xFFFF;
+  let symbol_count = instruction.get_value() >> 16 & 0x0FFF;
+  let body_id = instruction.get_value() & 0xFFFF;
 
-  write_emit_reentrance(address + 1, ctx, pack, referenced);
+  write_emit_reentrance(instruction.next(&pack.output.bytecode), ctx, pack, referenced);
 
   let b = &ctx.builder;
   let prod = b.build_struct_gep(parse_ctx, CTX_production, "").unwrap();
@@ -1528,57 +1546,63 @@ pub(crate) fn construct_instruction_reduce(
 }
 
 pub(crate) fn construct_instruction_goto<'a>(
-  address: usize,
+  instruction: INSTRUCTION,
   ctx: &'a LLVMParserModule,
-  pack: &'a InstructionPack,
-  referenced: &mut Vec<(u32, bool)>,
-) -> (usize, Option<IntValue<'a>>)
+  pack: &'a FunctionPack,
+  referenced: &mut Vec<(INSTRUCTION, bool)>,
+) -> (INSTRUCTION, Option<IntValue<'a>>)
 {
   let bytecode = &pack.output.bytecode;
-  let goto_offset = bytecode[address] & GOTO_STATE_ADDRESS_MASK;
-  let goto_function = get_parse_function(goto_offset as usize, ctx, referenced);
+
+  let goto_instruction = instruction.goto(bytecode);
+
+  let goto_function = get_parse_function(goto_instruction, ctx, referenced);
+
   let LLVMParserModule { ctx, builder, fun, .. } = ctx;
 
-  if bytecode[address + 1] & INSTRUCTION_HEADER_MASK == INSTRUCTION::I00_PASS {
-    // Call the function directly. This should end up as a tail call.
-    let return_val = builder
-      .build_call(
-        goto_function,
+  match instruction.next(bytecode).to_type() {
+    InstructionType::PASS => {
+      // Call the function directly. This should end up as a tail call.
+      let return_val = builder
+        .build_call(
+          goto_function,
+          &[
+            pack.fun.get_first_param().unwrap().into_pointer_value().into(),
+            pack.fun.get_nth_param(1).unwrap().into_pointer_value().into(),
+          ],
+          "",
+        )
+        .try_as_basic_value()
+        .unwrap_left()
+        .into_int_value();
+
+      builder.build_return(Some(&return_val));
+
+      (instruction.next(bytecode), Some(return_val))
+    }
+    _ => {
+      builder.build_call(
+        fun.push_state,
         &[
           pack.fun.get_first_param().unwrap().into_pointer_value().into(),
-          pack.fun.get_nth_param(1).unwrap().into_pointer_value().into(),
+          ctx.i32_type().const_int(NORMAL_STATE_FLAG_LLVM as u64, false).into(),
+          goto_function.as_global_value().as_pointer_value().into(),
         ],
         "",
-      )
-      .try_as_basic_value()
-      .unwrap_left()
-      .into_int_value();
+      );
 
-    builder.build_return(Some(&return_val));
-
-    (address + 1, Some(return_val))
-  } else {
-    builder.build_call(
-      fun.push_state,
-      &[
-        pack.fun.get_first_param().unwrap().into_pointer_value().into(),
-        ctx.i32_type().const_int(NORMAL_STATE_FLAG_LLVM as u64, false).into(),
-        goto_function.as_global_value().as_pointer_value().into(),
-      ],
-      "",
-    );
-
-    (address + 1, None)
+      (instruction.next(bytecode), None)
+    }
   }
 }
 
 pub(crate) fn construct_instruction_prod(
-  address: usize,
+  instruction: INSTRUCTION,
   ctx: &LLVMParserModule,
-  pack: &InstructionPack,
-) -> usize
+  pack: &FunctionPack,
+) -> INSTRUCTION
 {
-  let production_id = pack.output.bytecode[address] & INSTRUCTION_CONTENT_MASK;
+  let production_id = instruction.get_contents();
   let parse_ctx = pack.fun.get_nth_param(0).unwrap().into_pointer_value();
   let b = &ctx.builder;
   let production_ptr = b.build_struct_gep(parse_ctx, CTX_production, "").unwrap();
@@ -1586,27 +1610,29 @@ pub(crate) fn construct_instruction_prod(
     production_ptr,
     ctx.ctx.i32_type().const_int(production_id as u64, false),
   );
-  address + 1
+  instruction.next(&pack.output.bytecode)
 }
 
 fn construct_instruction_token(
-  address: usize,
+  instruction: INSTRUCTION,
   ctx: &LLVMParserModule,
-  pack: &InstructionPack,
-) -> usize
+  pack: &FunctionPack,
+) -> INSTRUCTION
 {
-  let token_value = pack.output.bytecode[address] & 0x00FF_FFFF;
+  let token_value = instruction.get_contents() & 0x00FF_FFFF;
   let parse_ctx = pack.fun.get_nth_param(0).unwrap().into_pointer_value();
   let b = &ctx.builder;
   let anchor_token = b.build_struct_gep(parse_ctx, CTX_tok_anchor, "").unwrap();
   let anchor_type = b.build_struct_gep(anchor_token, TokType, "").unwrap();
+
   b.build_store(anchor_type, ctx.ctx.i64_type().const_int(token_value as u64, false));
-  address + 1
+
+  instruction.next(&pack.output.bytecode)
 }
 
 pub(crate) fn construct_instruction_pass(
   ctx: &LLVMParserModule,
-  pack: &InstructionPack,
+  pack: &FunctionPack,
   return_val: Option<IntValue>,
 )
 {
@@ -1625,7 +1651,7 @@ pub(crate) fn construct_instruction_pass(
   }
 }
 
-pub(crate) fn construct_instruction_fail(ctx: &LLVMParserModule, pack: &InstructionPack)
+pub(crate) fn construct_instruction_fail(ctx: &LLVMParserModule, pack: &FunctionPack)
 {
   let parse_ctx = pack.fun.get_nth_param(0).unwrap().into_pointer_value();
   let b = &ctx.builder;
@@ -1640,8 +1666,8 @@ pub(crate) fn construct_instruction_fail(ctx: &LLVMParserModule, pack: &Instruct
 /// Compile a LLVM parser module from Hydrocarbon bytecode.
 pub fn compile_from_bytecode<'a>(
   module_name: &str,
+  grammar: &GrammarStore,
   llvm_context: &'a Context,
-  build_options: &BuildOptions,
   output: &BytecodeOutput,
 ) -> core::result::Result<LLVMParserModule<'a>, ()>
 {
@@ -1655,10 +1681,10 @@ pub fn compile_from_bytecode<'a>(
     construct_emit_reduce_function(ctx)?;
     construct_emit_shift(ctx)?;
     construct_get_adjusted_input_block_function(ctx)?;
-    construct_init_function(ctx)?;
+    construct_init(ctx)?;
     construct_next_function(ctx)?;
     construct_pop_state_function(ctx)?;
-    construct_push_state_function(ctx)?;
+    construct_push_state(ctx)?;
     construct_scan(ctx)?;
     construct_emit_error(ctx)?;
     construct_extend_stack_if_needed(ctx)?;
@@ -1666,7 +1692,7 @@ pub fn compile_from_bytecode<'a>(
     construct_utf8_lookup(ctx)?;
   }
 
-  construct_parse_functions(ctx, output, build_options)?;
+  construct_parse_functions(grammar, ctx, output)?;
 
   parse_context.fun.push_state.add_attribute(
     inkwell::attributes::AttributeLoc::Function,

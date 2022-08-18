@@ -17,45 +17,45 @@ pub fn dispatch<T: ImmutCharacterReader + MutCharacterReader>(
     use ParseAction::*;
     use INSTRUCTION as I;
 
-    let mut index = (ctx.get_active_state() & STATE_ADDRESS_MASK) as u32;
+    let mut index = (ctx.get_active_state() & STATE_ADDRESS_MASK);
 
     loop {
 
-
-
-        let instruction = unsafe { *bytecode.get_unchecked(index as usize) };
+        let instruction = INSTRUCTION::from(bytecode, index as usize);
 
         ctx.set_active_state_to(index);
+        
+        use InstructionType::*;
 
-        index = match instruction & INSTRUCTION_HEADER_MASK {
-            I::I01_CONSUME => {
+        index = match instruction.to_type() {
+            CONSUME => {
                 let (action, index) =
                     consume(index, instruction, ctx, reader);
                 ctx.set_active_state_to(index);
                 break action;
             }
-            I::I02_GOTO => goto(index, instruction, ctx),
-            I::I03_SET_PROD => set_production(index, instruction, ctx),
-            I::I04_REDUCE => {
+            GOTO => goto(index, instruction, ctx),
+            SET_PROD => set_production(index, instruction, ctx),
+            REDUCE => {
                 let (action, index) = reduce(index, instruction, ctx);
                 ctx.set_active_state_to(index);
                 break action;
             }
-            I::I05_TOKEN => set_token_state(index, instruction, ctx),
-            I::I06_FORK_TO => {
+            TOKEN => set_token_state(index, instruction, ctx),
+            FORK_TO => {
                 let (action, index) = fork(index, instruction);
                 ctx.set_active_state_to(index);
                 break action;
             }
-            I::I07_SCAN => scan(),
-            I::I08_NOOP => noop(index),
-            I::I09_VECTOR_BRANCH => vector_jump(index, reader, ctx, bytecode),
-            I::I10_HASH_BRANCH => hash_jump(index, reader, ctx, bytecode),
-            I::I11_SET_FAIL_STATE => set_fail(),
-            I::I12_REPEAT => repeat(),
-            I::I13_NOOP => noop(index),
-            I::I14_ASSERT_CONSUME => DEFAULT_FAIL_INSTRUCTION_ADDRESS,
-            I::I15_FAIL => break FailState,
+            SCAN => scan(),
+            NOOP => noop(index),
+            VECTOR_BRANCH => vector_jump(index, reader, ctx, bytecode),
+            HASH_BRANCH => hash_jump(index, reader, ctx, bytecode),
+            SET_FAIL_STATE => set_fail(),
+            REPEAT => repeat(),
+            NOOP => noop(index),
+            ASSERT_CONSUME => DEFAULT_FAIL_INSTRUCTION_ADDRESS,
+            FAIL => break FailState,
             _ => break CompleteState,
         }
     }
@@ -65,12 +65,12 @@ pub fn dispatch<T: ImmutCharacterReader + MutCharacterReader>(
 #[inline]
 fn consume<T: ImmutCharacterReader + MutCharacterReader + MutCharacterReader>(
     index: u32,
-    instruction: u32,
+    instruction: INSTRUCTION,
     ctx: &mut ParseContext<T>,
     reader: &mut T,
 ) -> (ParseAction, u32)
 {
-    if instruction & 0x1 == 1 {
+    if instruction.get_value() & 0x1 == 1 {
         ctx.assert_token.byte_length = 0;
         ctx.assert_token.cp_length = 0;
     }
@@ -103,12 +103,12 @@ fn consume<T: ImmutCharacterReader + MutCharacterReader + MutCharacterReader>(
 #[inline]
 fn reduce<T: ImmutCharacterReader + MutCharacterReader>(
     index: u32,
-    instruction: u32,
+    instruction: INSTRUCTION,
     ctx: &mut ParseContext<T>,
 ) -> (ParseAction, u32)
 {
-    let symbol_count = instruction >> 16 & 0x0FFF;
-    let body_id = instruction & 0xFFFF;
+    let symbol_count = instruction.get_contents() >> 16 & 0x0FFF;
+    let body_id = instruction.get_contents() & 0xFFFF;
     let production_id = ctx.get_production();
 
     (
@@ -133,34 +133,33 @@ fn reduce<T: ImmutCharacterReader + MutCharacterReader>(
 #[inline]
 fn goto<T: ImmutCharacterReader + MutCharacterReader>(
     index: u32,
-    instruction: u32,
+    instruction: INSTRUCTION,
     ctx: &mut ParseContext<T>,
 ) -> u32
 {
-    ctx.push_state(instruction);
+    ctx.push_state(instruction.get_value());
     index + 1
 }
 
 #[inline]
 fn set_production<T: ImmutCharacterReader + MutCharacterReader>(
     index: u32,
-    instruction: u32,
+    instruction: INSTRUCTION,
     ctx: &mut ParseContext<T>,
 ) -> u32
 {
-    let production_id = instruction & INSTRUCTION_CONTENT_MASK;
-    ctx.set_production_to(production_id);
+    ctx.set_production_to(instruction.get_contents());
     index + 1
 }
 
 #[inline]
 fn set_token_state<T: ImmutCharacterReader + MutCharacterReader>(
     index: u32,
-    instruction: u32,
+    instruction: INSTRUCTION,
     ctx: &mut ParseContext<T>,
 ) -> u32
 {
-    let value = instruction & 0x00FF_FFFF;
+    let value = instruction.get_contents() & 0x00FF_FFFF;
 
     let mut anchor = ctx.anchor_token;
 
@@ -177,11 +176,13 @@ fn set_token_state<T: ImmutCharacterReader + MutCharacterReader>(
 }
 
 #[inline]
-fn fork(index: u32, instruction: u32) -> (ParseAction, u32)
+fn fork(index: u32, instruction: INSTRUCTION) -> (ParseAction, u32)
 {
-    let instruction = instruction & INSTRUCTION_CONTENT_MASK;
-    let target_production = instruction & 0xFFFF;
-    let num_of_states = (instruction >> 16) & 0xFFFF;
+    let contents = instruction.get_contents();
+
+    let target_production = contents & 0xFFFF;
+    
+    let num_of_states = (contents >> 16) & 0xFFFF;
 
     (
         ParseAction::Fork {
@@ -253,7 +254,7 @@ pub fn hash_jump<T: ImmutCharacterReader + MutCharacterReader>(
         let input_value = match input_type {
             INPUT_TYPE::T01_PRODUCTION => ctx.get_production(),
             _ => get_token_value(
-                lexer_type, input_type, reader, scan_index, ctx, bytecode,
+                lexer_type, input_type, reader, scan_index.get_value(), ctx, bytecode,
             ) as u32,
         };
         let mut hash_index = (input_value & hash_mask) as usize;
@@ -305,7 +306,7 @@ pub fn vector_jump<T: ImmutCharacterReader + MutCharacterReader>(
         let input_value = match input_type {
             INPUT_TYPE::T01_PRODUCTION => ctx.get_production(),
             _ => get_token_value(
-                lexer_type, input_type, reader, scan_index, ctx, bytecode,
+                lexer_type, input_type, reader, scan_index.get_value(), ctx, bytecode,
             ) as u32,
         };
 
@@ -452,7 +453,8 @@ fn scan_for_improvised_token<T: ImmutCharacterReader + MutCharacterReader>(
         }
     }
     scan_ctx.assert_token = assert;
-    set_token_state(0, 0, scan_ctx);
+
+    set_token_state(0, INSTRUCTION::default(), scan_ctx);
 }
 
 fn token_scan<T: ImmutCharacterReader + MutCharacterReader>(

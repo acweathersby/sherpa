@@ -168,7 +168,7 @@ impl<'a> UTF8StringReader<'a>
   pub fn new(string: &'a str) -> UTF8StringReader<'a>
   {
     let mut reader = UTF8StringReader {
-      string:      string.as_bytes(),
+      string:     string.as_bytes(),
       length:      string.len(),
       cursor:      0,
       word:        0,

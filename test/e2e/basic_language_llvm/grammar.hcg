@@ -4,16 +4,16 @@
 
 @NAME llvm_language_test
 
-<> statement > expression
+<> statement > expression       f:ast { { t_Stmt, v:$1 } }
 
-<> expression > sum 
+<> expression > sum             
 
-<> sum > mul \+ sum
+<> sum > mul \+ sum             f:ast { { t_Sum, l:$1, r:$3 } }
     | mul
 
-<> mul > term \* expression
+<> mul > term \* expression     f:ast { { t_Mul, l:$1, r:$3 } }
     | term
 
-<> term > g:num
-    | \( expression \)
+<> term > \2                f:ast { { t_Num, v: u16($1) } }
 
+    | \( expression \)          f:ast { { t_Paren, v: $2 } }

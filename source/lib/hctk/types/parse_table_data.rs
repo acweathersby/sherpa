@@ -1,3 +1,5 @@
+use super::INSTRUCTION;
+
 #[derive(Debug, Clone, Copy)]
 pub struct TableHeaderData
 {
@@ -5,7 +7,7 @@ pub struct TableHeaderData
   pub lexer_type:      u32,
   pub table_length:    u32,
   pub table_meta:      u32,
-  pub scanner_address: u32,
+  pub scanner_address: INSTRUCTION,
 }
 
 impl TableHeaderData
@@ -30,7 +32,7 @@ impl TableHeaderData
       lexer_type,
       table_length,
       table_meta,
-      scanner_address,
+      scanner_address: INSTRUCTION::from(bytecode, scanner_address as usize),
     }
   }
 }

@@ -206,4 +206,40 @@ mod state_constructor_tests
 
     assert_eq!(result.len(), 12);
   }
+  #[test]
+  pub fn generate_production_with_recursion()
+  {
+    let grammar = compile_test_grammar(
+      "
+      @IGNORE g:sp
+
+      @EXPORT statement as entry
+      
+      @NAME llvm_language_test
+      
+      <> statement > expression
+      
+      <> expression > sum 
+      
+      <> sum > mul \\+ sum
+          | mul
+      
+      <> mul > term \\* expression
+          | term
+      
+      <> term > g:num
+          | \\( expression \\)
+      
+      
+",
+    );
+
+    let prod_id = get_production_id_by_name("term", &grammar).unwrap();
+
+    let result = generate_production_states(&prod_id, &grammar);
+
+    println!("{:#?}", result);
+
+    assert_eq!(result.len(), 6);
+  }
 }

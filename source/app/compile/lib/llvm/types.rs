@@ -1,5 +1,6 @@
 use crate::options::BuildOptions;
 use hctk::bytecode::BytecodeOutput;
+use hctk::types::INSTRUCTION;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::execution_engine::ExecutionEngine;
@@ -8,13 +9,11 @@ use inkwell::types::FunctionType;
 use inkwell::types::StructType;
 use inkwell::values::FunctionValue;
 
-pub(crate) struct InstructionPack<'a>
+pub(crate) struct FunctionPack<'a>
 {
-  pub(crate) fun:           &'a FunctionValue<'a>,
-  pub(crate) output:        &'a BytecodeOutput<'a>,
-  pub(crate) build_options: &'a BuildOptions,
-  pub(crate) address:       usize,
-  pub(crate) is_scanner:    bool,
+  pub(crate) fun:        &'a FunctionValue<'a>,
+  pub(crate) output:     &'a BytecodeOutput,
+  pub(crate) is_scanner: bool,
 }
 
 pub const FAIL_STATE_FLAG_LLVM: u32 = 2;

@@ -385,10 +385,7 @@ assert PRODUCTION [3] (pass)
     (bytecode, reader, ctx)
   }
 
-  fn create_output<'a>(
-    val: &str,
-    grammar: &'a GrammarStore,
-  ) -> bytecode::BytecodeOutput<'a>
+  fn create_output(val: &str, grammar: &GrammarStore) -> bytecode::BytecodeOutput
   {
     let mut ir_state =
       IRState { code: val.to_string(), name: "test".to_string(), ..Default::default() };

@@ -6,4 +6,6 @@ pub mod disclaimer;
 
 pub mod table;
 
-mod common;
+pub mod common;
+
+pub mod pipeline;
