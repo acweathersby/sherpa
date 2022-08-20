@@ -3,6 +3,7 @@ use std::io::BufWriter;
 use std::io::Result;
 
 use hctk::ascript::compile::get_struct_type_from_node;
+use hctk::ascript::compile::production_types_are_structs;
 use hctk::grammar::data::ast::ASTNode;
 use hctk::grammar::data::ast::AST_IndexReference;
 use hctk::grammar::data::ast::AST_NamedReference;
@@ -260,7 +261,7 @@ fn build_structs<W: Write>(
       .map(|p| {
         let AScriptProp { type_val, .. } = ascript.props_table.get(p).unwrap();
 
-        (p.name.clone(), ascript_type_to_string(type_val, ascript, grammar))
+        (p.name.clone(), ascript_type_to_string(type_val, ascript))
       })
       .collect::<Vec<_>>();
 
@@ -414,8 +415,8 @@ pub fn render_expression(
               ))
             } else {
               Ok((
-                String::new(),
-                String::new(),
+                "AA".to_string(),
+                "AA".to_string(),
                 AScriptTypeVal::Undefined,
                 Some(vec![i as u32]),
               ))
@@ -442,18 +443,38 @@ pub fn render_expression(
         Some((i, sym)) => match &sym.sym_id {
           SymbolID::Production(prod_id, ..) => {
             let types = s.production_types.get(prod_id).unwrap();
-            if types.is_empty() {
+            if types.len() == 1 {
+              let _type = types.iter().next().unwrap().0;
+              match types.iter().next().unwrap().0 {
+                AScriptTypeVal::Struct(struct_id) => {
+                  let struct_ = store.struct_table.get(struct_id).unwrap();
+
+                  Ok((
+                    format!("ref_i{}", i),
+                    format!("let ref_i{0} = if let ASTNode::{1}(node) = i{0}.to_node().unwrap() {{*node}} else {{ panic!(\"wrong\")}};", i, struct_.type_name),
+                    _type.to_owned(),
+                    Some(vec![i as u32]),
+                  ))
+                }
+                _ => Ok((
+                  format!("ref_i{}", i),
+                  format!("let ref_i{0} = i{0}.to_tok();", i),
+                  AScriptTypeVal::Token,
+                  Some(vec![i as u32]),
+                )),
+              }
+            } else if production_types_are_structs(types) {
               Ok((
                 format!("ref_i{}", i),
-                format!("let ref_i{0} = i{0}.to_tok();", i),
-                AScriptTypeVal::Token,
+                format!("let ref_i{0} = i{0}.to_node().unwrap();", i),
+                AScriptTypeVal::UnresolvedStruct,
                 Some(vec![i as u32]),
               ))
             } else {
               Ok((
-                String::new(),
-                String::new(),
-                AScriptTypeVal::Undefined,
+                format!("ref_i{}", i),
+                format!("let ref_i{0} = i{0}.to_tok();", i),
+                AScriptTypeVal::Token,
                 Some(vec![i as u32]),
               ))
             }
@@ -526,11 +547,8 @@ fn convert_numeric<T: AScriptNumericType>(
   }
 }
 
-fn ascript_type_to_string(
-  ascript_type: &AScriptTypeVal,
-  ascript: &AScriptStore,
-  grammar: &GrammarStore,
-) -> String
+fn ascript_type_to_string(ascript_type: &AScriptTypeVal, ascript: &AScriptStore)
+  -> String
 {
   match ascript_type {
     AScriptTypeVal::Vector(..) => "Vec<Undefined>".to_string(),
@@ -549,6 +567,61 @@ fn ascript_type_to_string(
     AScriptTypeVal::U8(..) => "u8".to_string(),
     AScriptTypeVal::Undefined => "Undefined".to_string(),
     AScriptTypeVal::Token => "Token".to_string(),
+    AScriptTypeVal::UnresolvedProduction(prod_id) => {
+      let production_types = ascript.production_types.get(prod_id).unwrap();
+      if production_types.len() > 1 {
+        if production_types_are_structs(production_types) {
+          "ASTNode".to_string()
+        } else {
+          "HCObj::None".to_string()
+        }
+      } else {
+        ascript_type_to_string(production_types.iter().next().unwrap().0, ascript)
+      }
+    }
+    _ => {
+      panic!("Could not resolve compiled ascript type")
+    }
+  }
+}
+
+fn get_default_value_(ascript_type: &AScriptTypeVal, ascript: &AScriptStore) -> String
+{
+  match ascript_type {
+    AScriptTypeVal::Vector(..) => "vec![]".to_string(),
+    AScriptTypeVal::Struct(id) => {
+      if let Some(ascript_struct) = ascript.struct_table.get(&id) {
+        format!("{}::default()", ascript_struct.type_name)
+      } else {
+        "ASTNode::None".to_string()
+      }
+    }
+    AScriptTypeVal::String(..) => "String::new()".to_string(),
+    AScriptTypeVal::Bool(..) => "false".to_string(),
+    AScriptTypeVal::F64(..) => "0f64".to_string(),
+    AScriptTypeVal::F32(..) => "0f32".to_string(),
+    AScriptTypeVal::I64(..) => "0i64".to_string(),
+    AScriptTypeVal::I32(..) => "0i32".to_string(),
+    AScriptTypeVal::I16(..) => "0i16".to_string(),
+    AScriptTypeVal::I8(..) => "0i8".to_string(),
+    AScriptTypeVal::U64(..) => "0u64".to_string(),
+    AScriptTypeVal::U32(..) => "0u32".to_string(),
+    AScriptTypeVal::U16(..) => "0u16".to_string(),
+    AScriptTypeVal::U8(..) => "0u8".to_string(),
+    AScriptTypeVal::Undefined => "None".to_string(),
+    AScriptTypeVal::Token => "Token::new()".to_string(),
+    AScriptTypeVal::UnresolvedProduction(prod_id) => {
+      let production_types = ascript.production_types.get(&prod_id).unwrap();
+      if production_types.len() > 1 {
+        if production_types_are_structs(production_types) {
+          "ASTNode".to_string()
+        } else {
+          "HCObj::None".to_string()
+        }
+      } else {
+        get_default_value_(&production_types.iter().next().unwrap().0, ascript)
+      }
+    }
     _ => {
       panic!("Could not resolve compiled ascript type")
     }
@@ -558,60 +631,8 @@ fn ascript_type_to_string(
 fn get_default_value(prop_id: &AScriptPropId, ascript: &AScriptStore) -> String
 {
   if let Some(prop) = ascript.props_table.get(prop_id) {
-    match prop.type_val {
-      AScriptTypeVal::Vector(..) => "vec![]".to_string(),
-      AScriptTypeVal::Struct(id) => {
-        if let Some(ascript_struct) = ascript.struct_table.get(&id) {
-          format!("{}::default()", ascript_struct.type_name)
-        } else {
-          "ASTNode::None".to_string()
-        }
-      }
-      AScriptTypeVal::String(..) => "String::new()".to_string(),
-      AScriptTypeVal::Bool(..) => "CCCfalse".to_string(),
-      AScriptTypeVal::F64(..) => "0f64".to_string(),
-      AScriptTypeVal::F32(..) => "0f32".to_string(),
-      AScriptTypeVal::I64(..) => "0i64".to_string(),
-      AScriptTypeVal::I32(..) => "0i32".to_string(),
-      AScriptTypeVal::I16(..) => "0i16".to_string(),
-      AScriptTypeVal::I8(..) => "0i8".to_string(),
-      AScriptTypeVal::U64(..) => "0u64".to_string(),
-      AScriptTypeVal::U32(..) => "0u32".to_string(),
-      AScriptTypeVal::U16(..) => "0u16".to_string(),
-      AScriptTypeVal::U8(..) => "0u8".to_string(),
-      AScriptTypeVal::Undefined => "None".to_string(),
-      AScriptTypeVal::Token => "Token::new()".to_string(),
-      _ => {
-        panic!("Could not resolve compiled ascript type")
-      }
-    }
+    get_default_value_(&prop.type_val, ascript)
   } else {
     "None".to_string()
-  }
-}
-/// Constructs a task that compiles a grammar's Ascript into a rust AST module. The module
-/// is placed at `<source_output_dir>/<grammar_name>_parser_ast.rs`.
-pub fn build_rust_ast() -> PipelineTask
-{
-  PipelineTask {
-    fun: Box::new(|pipeline| {
-      let grammar = pipeline.get_grammar();
-      let ascript = pipeline.get_ascript();
-      let output_path = pipeline.get_source_output_dir();
-      let data_path =
-        output_path.join(format!("./{}_ast.rs", pipeline.get_parser_name()));
-
-      match std::fs::File::create(data_path) {
-        Ok(ast_data_file) => {
-          let mut writer = CodeWriter::new(BufWriter::new(ast_data_file));
-          write(&grammar, &ascript, &mut writer);
-          drop(writer);
-          Ok(())
-        }
-        Err(err) => Err(CompileError::from_io_error(&err)),
-      }
-    }),
-    require_ascript: true,
-    require_bytecode: false,
   }
 }

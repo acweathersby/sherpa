@@ -9,7 +9,41 @@ use hctk::types::AScriptStore;
 use hctk::types::GrammarStore;
 
 use crate::builder::disclaimer::DISCLAIMER;
+use crate::builder::pipeline::PipelineTask;
 use crate::writer::code_writer::CodeWriter;
+use crate::CompileError;
+use crate::SourceType;
+
+/// Constructs a task that compiles a grammar's Ascript into an AST module of the given `source_type`.
+/// The module is placed at `<source_output_dir>/<grammar_name>_parser_ast.rs`.
+pub fn build_ast(source_type: SourceType) -> PipelineTask
+{
+  PipelineTask {
+    fun: Box::new(move |ctx| match source_type {
+      SourceType::Rust => match ctx.create_file(
+        ctx.get_source_output_dir().join(format!("./{}_ast.rs", ctx.get_parser_name())),
+      ) {
+        Ok(ast_data_file) => {
+          let mut writer = CodeWriter::new(BufWriter::new(ast_data_file));
+          match rust::write(&ctx.get_grammar(), &ctx.get_ascript(), &mut writer) {
+            Ok(_) => {
+              drop(writer);
+              Ok(())
+            }
+            Err(err) => Err(CompileError::from_io_error(&err)),
+          }
+        }
+        Err(err) => Err(CompileError::from_io_error(&err)),
+      },
+      _ => Err(CompileError::from_string(&format!(
+        "Unable to build an AST output for the source type {:?}",
+        source_type
+      ))),
+    }),
+    require_ascript: true,
+    require_bytecode: false,
+  }
+}
 
 pub fn compile_ast_data(
   output_path: &PathBuf,
