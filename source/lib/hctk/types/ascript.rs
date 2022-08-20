@@ -74,6 +74,7 @@ pub enum AScriptTypeVal
   U8(Option<u8>),
   Token,
   UnresolvedProduction(ProductionId),
+  UnresolvedStruct,
   Undefined,
 }
 
@@ -94,6 +95,7 @@ impl AScriptTypeVal
         ),
         None => "Vector[Undefined]".to_string(),
       },
+      AScriptTypeVal::UnresolvedStruct => "UnresolvedStruct".to_string(),
       AScriptTypeVal::Struct(..) => "Struct".to_string(),
       AScriptTypeVal::String(..) => "String".to_string(),
       AScriptTypeVal::Bool(..) => "Bool".to_string(),

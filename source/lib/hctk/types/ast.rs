@@ -27,6 +27,7 @@ pub enum HCObj<T: 'static>
   BOOL(bool),
   OBJECTS(Vec<HCObj<T>>),
 }
+
 macro_rules! default_val {
   ($fn_name:ident, $output_type:ident, $default_val: expr) => {
     fn $fn_name(&self) -> $output_type
@@ -34,6 +35,17 @@ macro_rules! default_val {
       $default_val
     }
   };
+}
+
+impl<T: 'static> HCObj<T>
+{
+  pub fn to_node(self) -> Option<T>
+  {
+    match self {
+      Self::NODE(node) => Some(node),
+      _ => None,
+    }
+  }
 }
 pub trait HCObjTrait
 {
