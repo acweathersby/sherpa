@@ -22,19 +22,26 @@ use std::process::Command;
 
 use crate::builder::pipeline::PipelineTask;
 
+/// Build artifacts for a LLVM based parser.
 pub fn build_llvm_parser(
   target_triple: Option<String>,
+  clang_command: &str,
+  ar_command: &str,
   light_LTO: bool,
   output_cargo_build_commands: bool,
+  output_llvm_ir_file: bool,
 ) -> PipelineTask
 {
+  let clang_command = clang_command.to_string();
+  let ar_command = ar_command.to_string();
+
   PipelineTask {
-    fun: Box::new(move |p| {
-      let output_path = p.get_build_output_dir();
-      let parser_name = p.get_parser_name();
-      let grammar_name = p.get_grammar_name();
-      let grammar = p.get_grammar();
-      let bytecode_output = p.get_bytecode();
+    fun: Box::new(move |task_ctx| {
+      let output_path = task_ctx.get_build_output_dir();
+      let parser_name = task_ctx.get_parser_name();
+      let grammar_name = task_ctx.get_grammar_name();
+      let grammar = task_ctx.get_grammar();
+      let bytecode_output = task_ctx.get_bytecode();
 
       Target::initialize_x86(&InitializationConfig::default());
 
@@ -42,14 +49,12 @@ pub fn build_llvm_parser(
         .clone()
         .unwrap_or(std::env::var("TARGET").unwrap_or(String::default()));
 
-      let log_file = output_path.join(parser_name.clone() + ".log");
       let ll_file_path = output_path.join(parser_name.clone() + ".ll");
       let bitcode_path = output_path.join("lib".to_string() + &parser_name + ".bc");
       let object_path = output_path.join("lib".to_string() + &parser_name + ".o");
       let archive_path = output_path.join(format!("./lib{}.a", &parser_name));
 
       let target_triple = TargetTriple::create(&target_triple);
-      let mut target_err = String::default();
 
       if output_cargo_build_commands {
         println!("cargo:rustc-link-search=native={}", output_path.to_str().unwrap());
@@ -67,16 +72,16 @@ pub fn build_llvm_parser(
         Ok(ctx) => {
           let opt = OptimizationLevel::Default;
 
-          let mut file = File::create(&ll_file_path).unwrap();
-          file.write_all(ctx.module.to_string().as_bytes());
-          file.flush();
-          drop(file);
-
-          let clang_command = "clang-14";
-          let ar_command = "llvm-ar-14";
+          if output_llvm_ir_file {
+            if let Ok(mut file) = task_ctx.create_file(ll_file_path.clone()) {
+              file.write_all(ctx.module.to_string().as_bytes());
+              file.flush();
+            }
+          }
           if light_LTO {
+            task_ctx.add_artifact_path(bitcode_path.clone());
             if ctx.module.write_bitcode_to_path(&bitcode_path) {
-              match Command::new(clang_command)
+              match Command::new(clang_command.clone())
                 .args(&[
                   "-flto=thin",
                   "-c",
@@ -87,7 +92,8 @@ pub fn build_llvm_parser(
                 .status()
               {
                 Ok(_) => {
-                  if !(Command::new(ar_command)
+                  task_ctx.add_artifact_path(object_path.clone());
+                  if !(Command::new(ar_command.clone())
                     .args(&[
                       "rc",
                       archive_path.to_str().unwrap(),

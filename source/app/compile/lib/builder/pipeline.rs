@@ -1,7 +1,9 @@
 use std::error::Error;
 use std::fmt::Display;
+use std::fs::File;
 use std::io;
 use std::path::PathBuf;
+use std::rc::Rc;
 
 use hctk::ascript::compile::compile_reduce_function_expressions;
 use hctk::bytecode::compile_bytecode;
@@ -15,6 +17,8 @@ use std::thread;
 
 pub use hctk::grammar::compile_from_path;
 
+use crate::tasks;
+
 #[derive(Debug)]
 pub struct CompileError
 {
@@ -22,6 +26,11 @@ pub struct CompileError
 }
 impl CompileError
 {
+  pub fn from_parse_error(error: &ParseError) -> Self
+  {
+    Self { message: error.to_string() }
+  }
+
   pub fn from_string(error: &str) -> Self
   {
     Self { message: error.to_string() }
@@ -51,7 +60,8 @@ impl Display for CompileError
 
 impl Error for CompileError {}
 
-pub type TaskFn = Box<dyn Fn(&BuildPipeline) -> Result<(), CompileError> + Sync + Send>;
+pub type TaskFn =
+  Box<dyn Fn(&mut PipelineContext) -> Result<(), CompileError> + Sync + Send>;
 
 pub struct PipelineTask
 {
@@ -60,90 +70,69 @@ pub struct PipelineTask
   pub(crate) require_bytecode: bool,
 }
 
-pub struct BuildPipeline
+#[derive(Debug, Clone)]
+pub enum CachedSource
+{
+  Path(PathBuf),
+  String(String, PathBuf),
+}
+
+pub struct BuildPipeline<'a>
 {
   /// The number of threads that can be used
   /// to split up tasks.
   threads: usize,
-  grammar: GrammarStore,
   ascript: Option<AScriptStore>,
   bytecode: Option<BytecodeOutput>,
   source_output_dir: PathBuf,
   build_output_dir: PathBuf,
-  tasks: Vec<PipelineTask>,
+  tasks: Vec<(PipelineTask, PipelineContext<'a>)>,
   parser_name: String,
   grammar_name: String,
   error_handler: Option<fn(errors: Vec<CompileError>)>,
+  grammar: Option<GrammarStore>,
+  cached_source: CachedSource,
 }
 
-impl<'a> BuildPipeline
+impl<'a> BuildPipeline<'a>
 {
-  fn build_pipeline(
-    number_of_threads: usize,
-    grammar: GrammarStore,
-  ) -> Result<Self, CompileError>
+  fn build_pipeline(number_of_threads: usize, cached_source: CachedSource) -> Self
   {
-    Ok(Self {
-      parser_name: (grammar.friendly_name.clone()) + "_parser",
-      grammar_name: grammar.friendly_name.clone(),
+    Self {
+      parser_name: "undefined_parser".to_string(),
+      grammar_name: "undefined".to_string(),
       threads: number_of_threads,
-      grammar,
       tasks: vec![],
+      grammar: None,
       ascript: None,
       bytecode: None,
+      cached_source,
       error_handler: None,
       source_output_dir: PathBuf::new(),
       build_output_dir: std::env::var("CARGO_MANIFEST_DIR")
         .map_or(std::env::temp_dir(), |d| PathBuf::from(&d)),
-    })
+    }
   }
 
   /// Create a new build pipeline after constructing
   /// a grammar store from a source file. Returns Error
   /// if the grammar could not be created, otherwise, a
   /// BuildPipeline is returned.
-  pub fn from_source(
-    source_path: &PathBuf,
-    number_of_threads: usize,
-  ) -> Result<Self, CompileError>
+  pub fn from_source(source_path: &PathBuf, number_of_threads: usize) -> Self
   {
-    let number_of_threads = if number_of_threads == 0 {
-      get_num_of_available_threads()
-    } else {
-      get_num_of_available_threads().min(number_of_threads)
-    };
-
-    let (grammar, errors) = compile_from_path(source_path, number_of_threads);
-
-    if let Some(grammar) = grammar {
-      Self::build_pipeline(number_of_threads, grammar)
-    } else {
-      let message =
-        errors.into_iter().map(|e| format!("{}", e)).collect::<Vec<_>>().join("\n\n");
-
-      Err(CompileError { message })
-    }
+    Self::build_pipeline(number_of_threads, CachedSource::Path(source_path.to_owned()))
   }
 
   /// Create a new build pipeline after constructing
   /// a grammar store from a source string. Returns Error
   /// if the grammar could not be created, otherwise, a
   /// BuildPipeline is returned.
-  pub fn from_string(
-    grammar_source: &str,
-    base_directory: &PathBuf,
-  ) -> Result<Self, CompileError>
+  pub fn from_string(grammar_source: &str, base_directory: &PathBuf) -> Self
   {
-    let (grammar, errors) = compile_from_string(grammar_source, base_directory);
-
-    if let Some(grammar) = grammar {
-      Self::build_pipeline(get_num_of_available_threads(), grammar)
-    } else {
-      let message =
-        errors.into_iter().map(|e| format!("{}", e)).collect::<Vec<_>>().join("\n\n");
-
-      Err(CompileError { message })
-    }
+    Self::build_pipeline(
+      get_num_of_available_threads(),
+      CachedSource::String(grammar_source.to_string(), base_directory.to_owned()),
+    )
   }
 
   /// Set the path for generated source files.
@@ -160,52 +149,10 @@ impl<'a> BuildPipeline
     self
   }
 
-  pub fn add_task(&mut self, task: PipelineTask) -> &mut Self
+  pub fn add_task(&'a mut self, task: PipelineTask) -> &mut Self
   {
-    if task.require_ascript && self.ascript.is_none() {
-      let mut ascript = AScriptStore::new();
-
-      let errors = compile_reduce_function_expressions(&self.grammar, &mut ascript);
-
-      for error in &errors {
-        println!("{}", error);
-      }
-
-      self.ascript = Some(ascript);
-    }
-
-    if task.require_bytecode && self.bytecode.is_none() {
-      let bytecode_output = compile_bytecode(&self.grammar, 1);
-
-      self.bytecode = Some(bytecode_output);
-    }
-
-    self.tasks.push(task);
+    self.tasks.push((task, PipelineContext::new(self)));
     self
-  }
-
-  pub fn get_source_output_dir(&self) -> &PathBuf
-  {
-    &self.source_output_dir
-  }
-
-  pub fn get_build_output_dir(&self) -> &PathBuf
-  {
-    &self.build_output_dir
-  }
-
-  pub fn get_grammar(&self) -> &GrammarStore
-  {
-    &self.grammar
-  }
-
-  pub fn get_ascript(&self) -> &AScriptStore
-  {
-    if self.ascript.is_none() {
-      panic!("Failed to construct Ascript data");
-    } else {
-      self.ascript.as_ref().unwrap()
-    }
   }
 
   pub fn set_parser_name(&mut self, parser_name: String)
@@ -218,32 +165,61 @@ impl<'a> BuildPipeline
     self.grammar_name = grammar_name;
   }
 
-  pub fn get_parser_name(&self) -> &String
+  pub fn run(&'a mut self) -> Self
   {
-    &self.parser_name
-  }
-
-  pub fn get_grammar_name(&self) -> &String
-  {
-    &self.grammar_name
-  }
-
-  pub fn get_bytecode(&self) -> &BytecodeOutput
-  {
-    if self.bytecode.is_none() {
-      panic!(
-        "Failed to construct BytecodeOutput data. 
-    Ensure all tasks that access `get_ascript` also `require_ascript`"
-      );
-    } else {
-      self.bytecode.as_ref().unwrap()
+    if self.grammar.is_none() {
+      match self.build_grammar() {
+        Err(errors) => {
+          if let Some(error_handler) = &self.error_handler {
+            error_handler(errors);
+          }
+          return Self::build_pipeline(self.threads, self.cached_source.to_owned());
+        }
+        Ok(_) => {}
+      }
     }
-  }
 
-  pub fn run<'b>(&'b self) -> &Self
-  {
-    let errors = thread::scope::<'b>(|scope| {
-      let results = self.tasks.iter().map(|t| scope.spawn(move || ((t.fun)(self))));
+    if self.tasks.iter().any(|t| t.0.require_ascript) && self.ascript.is_none() {
+      let mut ascript = AScriptStore::new();
+
+      let errors = compile_reduce_function_expressions(
+        &self.grammar.as_ref().unwrap(),
+        &mut ascript,
+      );
+
+      if errors.len() > 0 {
+        if let Some(error_handler) = &self.error_handler {
+          error_handler(
+            errors.into_iter().map(|err| CompileError::from_parse_error(&err)).collect(),
+          );
+        }
+
+        return Self::build_pipeline(self.threads, self.cached_source.to_owned());
+      }
+
+      self.ascript = Some(ascript);
+    }
+
+    if self.tasks.iter().any(|t| t.0.require_bytecode) && self.bytecode.is_none() {
+      let bytecode_output = compile_bytecode(&self.grammar.as_ref().unwrap(), 1);
+
+      self.bytecode = Some(bytecode_output);
+    }
+
+    let errors = thread::scope::<'a>(|scope| {
+      let results = self.tasks.iter().map(|(t, ctx)| {
+        scope.spawn(|| {
+          let mut ctx = ctx.clone();
+          ctx.pipeline = Some(self);
+          match (t.fun)(&mut ctx) {
+            Ok(_) => Ok(()),
+            Err(err) => {
+              ctx.clear_artifacts();
+              Err(err)
+            }
+          }
+        })
+      });
 
       let errors = results
         .into_iter()
@@ -263,13 +239,32 @@ impl<'a> BuildPipeline
         error_handler(errors);
       }
     }
-    self
+
+    Self::build_pipeline(self.threads, self.cached_source.to_owned())
   }
 
   pub fn set_error_handler(&mut self, error_handler: fn(Vec<CompileError>)) -> &mut Self
   {
     self.error_handler = Some(error_handler);
     self
+  }
+
+  fn build_grammar(&mut self) -> Result<(), Vec<CompileError>>
+  {
+    let (grammar, errors) = match &self.cached_source {
+      CachedSource::Path(path) => compile_from_path(&path, self.threads),
+      CachedSource::String(string, base_dir) => compile_from_string(&string, &base_dir),
+    };
+
+    match grammar {
+      Some(grammar) => {
+        self.grammar = Some(grammar);
+        Ok(())
+      }
+      None => {
+        Err(errors.into_iter().map(|err| CompileError::from_parse_error(&err)).collect())
+      }
+    }
   }
 }
 
@@ -278,9 +273,107 @@ pub fn TEST_TASK() -> PipelineTask
   PipelineTask {
     require_ascript: true,
     require_bytecode: true,
-    fun: Box::new(|pipeline: &BuildPipeline| {
+    fun: Box::new(|ctx| {
       println!("test task");
       Ok(())
     }),
+  }
+}
+
+#[derive(Clone)]
+pub struct PipelineContext<'a>
+{
+  pipeline:          Option<&'a BuildPipeline<'a>>,
+  artifact_paths:    Vec<PathBuf>,
+  source_output_dir: PathBuf,
+  build_output_dir:  PathBuf,
+  parser_name:       String,
+  grammar_name:      String,
+}
+
+impl<'a> PipelineContext<'a>
+{
+  fn new(pipeline: &BuildPipeline) -> Self
+  {
+    PipelineContext {
+      source_output_dir: pipeline.source_output_dir.clone(),
+      build_output_dir:  pipeline.build_output_dir.clone(),
+      parser_name:       pipeline.parser_name.clone(),
+      grammar_name:      pipeline.grammar_name.clone(),
+      pipeline:          None,
+      artifact_paths:    vec![],
+    }
+  }
+
+  fn clear_artifacts(&self) -> std::io::Result<()>
+  {
+    for path in &self.artifact_paths {
+      if path.exists() {
+        std::fs::remove_file(path)?;
+      }
+    }
+    Ok(())
+  }
+
+  pub fn create_file(&mut self, path: PathBuf) -> std::io::Result<File>
+  {
+    match std::fs::File::create(&path) {
+      Ok(file) => {
+        self.artifact_paths.push(path.clone());
+        Ok(file)
+      }
+      Err(err) => Err(err),
+    }
+  }
+
+  pub fn add_artifact_path(&mut self, path: PathBuf)
+  {
+    self.artifact_paths.push(path.clone());
+  }
+
+  pub fn get_source_output_dir(&self) -> &PathBuf
+  {
+    &self.source_output_dir
+  }
+
+  pub fn get_build_output_dir(&self) -> &PathBuf
+  {
+    &self.build_output_dir
+  }
+
+  pub fn get_grammar(&self) -> &GrammarStore
+  {
+    &self.pipeline.unwrap().grammar.as_ref().unwrap()
+  }
+
+  pub fn get_ascript(&self) -> &AScriptStore
+  {
+    if self.pipeline.unwrap().ascript.is_none() {
+      panic!("Failed to construct Ascript data");
+    } else {
+      self.pipeline.unwrap().ascript.as_ref().unwrap()
+    }
+  }
+
+  pub fn get_parser_name(&self) -> &String
+  {
+    &self.parser_name
+  }
+
+  pub fn get_grammar_name(&self) -> &String
+  {
+    &self.grammar_name
+  }
+
+  pub fn get_bytecode(&self) -> &BytecodeOutput
+  {
+    if self.pipeline.unwrap().bytecode.is_none() {
+      panic!(
+        "Failed to construct BytecodeOutput data. 
+    Ensure all tasks that access `get_ascript` also `require_ascript`"
+      );
+    } else {
+      self.pipeline.unwrap().bytecode.as_ref().unwrap()
+    }
   }
 }

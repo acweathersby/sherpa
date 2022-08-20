@@ -836,6 +836,10 @@ pub(crate) unsafe fn construct_emit_shift(
   b.build_store(anchor_token_ptr, assert_token);
   b.build_store(assert_token_ptr, assert_token);
 
+  let prod_slot = b.build_struct_gep(parse_ctx, CTX_production, "").unwrap();
+
+  b.build_store(prod_slot, i32.const_int((u32::max_value() - 1) as u64, false));
+
   b.build_return(Some(&i32.const_int(1, false)));
 
   if funct.emit_shift.verify(true) {
@@ -1560,38 +1564,51 @@ pub(crate) fn construct_instruction_goto<'a>(
 
   let LLVMParserModule { ctx, builder, fun, .. } = ctx;
 
-  match instruction.next(bytecode).to_type() {
-    InstructionType::PASS => {
-      // Call the function directly. This should end up as a tail call.
-      let return_val = builder
-        .build_call(
-          goto_function,
+  if (instruction.get_value() & FAIL_STATE_FLAG) > 0 {
+    builder.build_call(
+      fun.push_state,
+      &[
+        pack.fun.get_first_param().unwrap().into_pointer_value().into(),
+        ctx.i32_type().const_int(FAIL_STATE_FLAG_LLVM as u64, false).into(),
+        goto_function.as_global_value().as_pointer_value().into(),
+      ],
+      "",
+    );
+    (instruction.next(bytecode), None)
+  } else {
+    match instruction.next(bytecode).to_type() {
+      InstructionType::PASS => {
+        // Call the function directly. This should end up as a tail call.
+        let return_val = builder
+          .build_call(
+            goto_function,
+            &[
+              pack.fun.get_first_param().unwrap().into_pointer_value().into(),
+              pack.fun.get_nth_param(1).unwrap().into_pointer_value().into(),
+            ],
+            "",
+          )
+          .try_as_basic_value()
+          .unwrap_left()
+          .into_int_value();
+
+        builder.build_return(Some(&return_val));
+
+        (instruction.next(bytecode), Some(return_val))
+      }
+      _ => {
+        builder.build_call(
+          fun.push_state,
           &[
             pack.fun.get_first_param().unwrap().into_pointer_value().into(),
-            pack.fun.get_nth_param(1).unwrap().into_pointer_value().into(),
+            ctx.i32_type().const_int(NORMAL_STATE_FLAG_LLVM as u64, false).into(),
+            goto_function.as_global_value().as_pointer_value().into(),
           ],
           "",
-        )
-        .try_as_basic_value()
-        .unwrap_left()
-        .into_int_value();
+        );
 
-      builder.build_return(Some(&return_val));
-
-      (instruction.next(bytecode), Some(return_val))
-    }
-    _ => {
-      builder.build_call(
-        fun.push_state,
-        &[
-          pack.fun.get_first_param().unwrap().into_pointer_value().into(),
-          ctx.i32_type().const_int(NORMAL_STATE_FLAG_LLVM as u64, false).into(),
-          goto_function.as_global_value().as_pointer_value().into(),
-        ],
-        "",
-      );
-
-      (instruction.next(bytecode), None)
+        (instruction.next(bytecode), None)
+      }
     }
   }
 }
