@@ -39,8 +39,8 @@ pub fn build_byte_code_parse(
           writer.write(&DISCLAIMER(&parser_name, "Parser Data", "//!"));
 
           if include_ascript_mixins {
-            writer.wrtln(&format!("mod {}_ast;", parser_name));
-            writer.wrtln(&format!("use {}_ast::*;", parser_name));
+            // writer.wrtln(&format!("mod super::{}_ast;", parser_name));
+            writer.wrtln(&format!("use super::{}_ast::*;", parser_name));
           }
 
           if let Err(err) = write_parser_file(
@@ -110,9 +110,9 @@ fn write_rust_parser_file<W: Write>(
 use hctk::runtime::*;
 use hctk::types::*;
 
-pub struct Context<'a, T: CharacterReader>(ParseContext<T>, &'a mut T, bool);
+pub struct Context<'a, T: ByteCharacterReader + ImmutCharacterReader + MutCharacterReader>(ParseContext<T>, &'a mut T, bool);
 
-impl<'a, T: CharacterReader> Iterator for Context<'a, T>
+impl<'a, T: ByteCharacterReader + ImmutCharacterReader + MutCharacterReader> Iterator for Context<'a, T>
 {
     type Item = ParseAction;
 
@@ -136,7 +136,7 @@ impl<'a, T: CharacterReader> Iterator for Context<'a, T>
     }
 }
 
-impl<'a, T: CharacterReader> Context<'a, T>
+impl<'a, T: ByteCharacterReader + ImmutCharacterReader + MutCharacterReader> Context<'a, T>
 {
     #[inline(always)]
     fn new(reader: &'a mut T) -> Self
@@ -156,45 +156,47 @@ impl<'a, T: CharacterReader> Context<'a, T>
       writer
         .newline()?
         .wrtln(&format!(
-          "pub fn parse_{}(reader: &mut T) -> Result<{}, ParseError>{{ ",
+          "pub fn parse_{}(reader: &'a mut T) -> Result<{}, ParseError>{{ ",
           export_name, "HCO"
         ))?
         .indent()
         .wrtln(&format!(
           "
-        let ctx = Self::new_{}_parser(reader);
+        let mut ctx = Self::new_{}_parser(reader);
         ",
           export_name
         ))?
         .wrtln(
           "
-        let mut stack = Vec::new();
-        for action in ctx {
-          match action {
-            ParseAction::Error { last_input, .. } => {
-              return Err(ParserError::COMPILE_PROBLEM(
-                CompileProblem {
-                  message: \"Unable to parse input\",
-                  inline_message: \"Invalid Token\",
-                  loc: last_input
-                }
-              ));
-            }
-            ParseAction::Shift { skipped_characters: skip, token } => {
-              stack.push(HCO::TOKEN(Token::from_kernel_token(&token)));
-            }
-            ParseAction::Reduce { body_id, .. } => {
-              REDUCE_FUNCTIONS[body_id as usize](&mut stack, Token::new());
-            }
-            ParseAction::Accept { production_id } => {
-              break;
-            }
-            _ => {
-              break;
-            }
-          }
+let mut stack = Vec::new();
+loop {
+  match ctx.next() {
+    Some(ParseAction::Error { last_input, .. }) => {
+      let mut error_token = Token::from_kernel_token(&last_input);
+      error_token.set_source(ctx.1.get_source());
+      return Err(ParseError::COMPILE_PROBLEM(
+        CompileProblem {
+          message: \"Unable to parse input\".to_string(),
+          inline_message: \"Invalid Token\".to_string(),
+          loc: error_token
         }
-        Ok(stack.first.unwrap())
+      ));
+    }
+    Some(ParseAction::Shift { skipped_characters: skip, token }) => {
+      stack.push(HCO::TOKEN(Token::from_kernel_token(&token)));
+    }
+    Some(ParseAction::Reduce { body_id, .. }) => {
+      REDUCE_FUNCTIONS[body_id as usize](&mut stack, Token::new());
+    }
+    Some(ParseAction::Accept { production_id }) => {
+      break;
+    }
+    _ => {
+      break;
+    }
+  }
+}
+Ok(stack.into_iter().next().unwrap())
         ",
         )?
         .dedent()

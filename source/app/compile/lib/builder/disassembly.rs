@@ -1,0 +1,38 @@
+use hctk::debug::generate_disassembly;
+use hctk::debug::BytecodeGrammarLookups;
+use std::io::BufWriter;
+
+use crate::builder::disclaimer::DISCLAIMER;
+use crate::writer::code_writer::CodeWriter;
+
+use super::pipeline::PipelineTask;
+
+/// Generate a disassembly file of the grammar bytecode
+pub fn build_bytecode_disassembly() -> PipelineTask
+{
+  PipelineTask {
+    fun: Box::new(move |task_ctx| {
+      let output_path = task_ctx.get_source_output_dir().clone();
+      let parser_name = task_ctx.get_parser_name().clone();
+
+      if let Ok(parser_data_file) =
+        task_ctx.create_file(output_path.join(format!("./{}_dasm.txt", parser_name)))
+      {
+        let grammar = task_ctx.get_grammar();
+        let bytecode_output = task_ctx.get_bytecode();
+
+        let mut writer = CodeWriter::new(BufWriter::new(parser_data_file));
+
+        writer.write(&DISCLAIMER(&parser_name, "Parser Data", "//!"));
+
+        writer.write(&generate_disassembly(
+          bytecode_output,
+          Some(&BytecodeGrammarLookups::new(grammar)),
+        ));
+      }
+      Ok(())
+    }),
+    require_ascript: false,
+    require_bytecode: true,
+  }
+}

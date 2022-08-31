@@ -1,9 +1,8 @@
 use std::error::Error;
 use std::fmt::Display;
+use std::fs::create_dir_all;
 use std::fs::File;
-use std::io;
 use std::path::PathBuf;
-use std::rc::Rc;
 
 use hctk::ascript::compile::compile_reduce_function_expressions;
 use hctk::bytecode::compile_bytecode;
@@ -137,6 +136,7 @@ impl<'a> BuildPipeline<'a>
   pub fn set_source_output_dir(&mut self, output_path: &PathBuf) -> &mut Self
   {
     self.source_output_dir = output_path.clone();
+
     self
   }
 
@@ -198,7 +198,8 @@ impl<'a> BuildPipeline<'a>
       self.ascript = Some(ascript);
     }
 
-    if self.tasks.iter().any(|t| t.0.require_bytecode) && self.bytecode.is_none() {
+    self.bytecode = None;
+    if self.tasks.iter().any(|t| t.0.require_bytecode) {
       let bytecode_output = compile_bytecode(&self.grammar.as_ref().unwrap(), 1);
 
       self.bytecode = Some(bytecode_output);
@@ -208,6 +209,13 @@ impl<'a> BuildPipeline<'a>
       let results = self.tasks.iter().map(|(t, ctx)| {
         scope.spawn(|| {
           let mut ctx = ctx.clone();
+          match ctx.ensure_paths_exists() {
+            Err(err) => {
+              return Err(CompileError::from_io_error(&err));
+            }
+            _ => {}
+          }
+
           ctx.pipeline = Some(self);
           match (t.fun)(&mut ctx) {
             Ok(_) => Ok(()),
@@ -266,18 +274,6 @@ impl<'a> BuildPipeline<'a>
   }
 }
 
-pub fn TEST_TASK() -> PipelineTask
-{
-  PipelineTask {
-    require_ascript: true,
-    require_bytecode: true,
-    fun: Box::new(|ctx| {
-      println!("test task");
-      Ok(())
-    }),
-  }
-}
-
 #[derive(Clone)]
 pub struct PipelineContext<'a>
 {
@@ -301,6 +297,13 @@ impl<'a> PipelineContext<'a>
       pipeline:          None,
       artifact_paths:    vec![],
     }
+  }
+
+  // Ensure output destinations exist.
+  fn ensure_paths_exists(&self) -> std::io::Result<()>
+  {
+    create_dir_all(self.source_output_dir.clone())?;
+    create_dir_all(self.build_output_dir.clone())
   }
 
   fn clear_artifacts(&self) -> std::io::Result<()>

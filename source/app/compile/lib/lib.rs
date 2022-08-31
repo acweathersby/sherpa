@@ -23,6 +23,7 @@ pub mod tasks
 {
   pub use crate::ast::build_ast;
   pub use crate::builder::bytecode::build_byte_code_parse;
+  pub use crate::builder::disassembly::build_bytecode_disassembly;
   pub use crate::builder::llvm::build_llvm_parser;
   pub use crate::builder::llvm::build_llvm_parser_interface;
 }

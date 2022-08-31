@@ -159,10 +159,10 @@ impl Token
   pub fn empty() -> Token
   {
     Token {
-      length:      0u32,
-      offset:      0u32,
-      line_number: 0u32,
-      line_offset: 0u32,
+      length:      0,
+      offset:      0,
+      line_number: 0,
+      line_offset: 0,
       input:       None,
       range:       None,
     }
@@ -317,7 +317,7 @@ impl Token
 
       end = increment_end(&source, end);
 
-      let slice = &source[(beg + 1)..end];
+      let slice = &source[(beg - (self.line_offset > 0) as usize)..end];
 
       if let Ok(utf_string) = String::from_utf8(Vec::from(slice)) {
         {
@@ -327,7 +327,8 @@ impl Token
             "   {}: {}\n{}\n",
             &lines,
             utf_string,
-            String::from(" ").repeat(lines.len() + 3 + root - beg)
+            String::from(" ")
+              .repeat(lines.len() + 3 + (self.line_offset == 0) as usize + root - beg)
               + " \u{001b}[31m"
               + &String::from("^").repeat(len)
               + " "

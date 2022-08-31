@@ -119,7 +119,7 @@ impl<'a> ImmutCharacterReader for UTF8StringReader<'a>
   {
     let vec = self.string.clone();
 
-    SharedSymbolBuffer::new(RwLock::new(Vec::from(vec)))
+    SharedSymbolBuffer::new(Vec::from(vec))
   }
 
   #[inline(always)]
@@ -137,12 +137,7 @@ impl<'a> ImmutCharacterReader for UTF8StringReader<'a>
   #[inline(always)]
   fn set_cursor_to(&mut self, token: &ParseToken) -> u64
   {
-    let ParseToken {
-      byte_offset,
-      line_number,
-      line_offset,
-      ..
-    } = *token;
+    let ParseToken { byte_offset, line_number, line_offset, .. } = *token;
 
     if self.cursor != byte_offset as usize {
       let diff = byte_offset as i32 - self.cursor as i32;
@@ -168,7 +163,7 @@ impl<'a> UTF8StringReader<'a>
   pub fn new(string: &'a str) -> UTF8StringReader<'a>
   {
     let mut reader = UTF8StringReader {
-      string:     string.as_bytes(),
+      string:      string.as_bytes(),
       length:      string.len(),
       cursor:      0,
       word:        0,

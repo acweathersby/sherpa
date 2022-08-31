@@ -144,7 +144,7 @@ impl<'a> ImmutCharacterReader for TestUTF8StringReader<'a>
   {
     let vec = self.string.clone();
 
-    SharedSymbolBuffer::new(RwLock::new(Vec::from(vec)))
+    SharedSymbolBuffer::new(Vec::from(vec))
   }
 
   #[inline(always)]
