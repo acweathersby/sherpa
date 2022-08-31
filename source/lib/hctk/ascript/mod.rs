@@ -38,7 +38,7 @@ mod ascript_tests
       );
 
       for error in &errors {
-        println!("{}", error);
+        eprintln!("{}", error);
       }
 
       assert_eq!(errors.len(), 1);
@@ -76,7 +76,7 @@ mod ascript_tests
       );
 
       for error in &errors {
-        println!("{}", error);
+        eprintln!("{}", error);
       }
 
       assert_eq!(errors.len(), 1);
@@ -116,7 +116,7 @@ mod ascript_tests
         );
 
         for error in &errors {
-          println!("{}", error);
+          eprintln!("{}", error);
         }
 
         assert_eq!(errors.len(), 1);
@@ -143,7 +143,7 @@ mod ascript_tests
     let errors = compile_reduce_function_expressions(&grammar, &mut store);
 
     for error in &errors {
-      println!("{}", error);
+      eprintln!("{}", error);
     }
 
     assert_eq!(errors.len(), 1);
@@ -198,7 +198,7 @@ mod ascript_tests
         }
       }
       Err(err) => {
-        println!("error\n{}", err);
+        eprintln!("error\n{}", err);
 
         // panic!("Failed to compile grammar ast")
       }

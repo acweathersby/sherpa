@@ -296,7 +296,7 @@ assert PRODUCTION [3] (pass)
 
     let mut s = ParseContext::bytecode_context();
 
-    println!("{}", generate_disassembly(&output, None));
+    eprintln!("{}", generate_disassembly(&output, None));
     let off = FIRST_STATE_ADDRESS;
     s.set_production_to(1);
     assert_eq!(vector_jump(off, &mut r, &mut s, bc), off + 7);
@@ -326,7 +326,7 @@ assert PRODUCTION [3] (pass)
     let mut reader = UTF8StringReader::from_string("AB");
     let mut state = ParseContext::bytecode_context();
 
-    println!("{}", disassemble_state(&output, 0, None).0);
+    eprintln!("{}", disassemble_state(&output, 0, None).0);
 
     state.set_production_to(2);
     assert_eq!(vector_jump(index, &mut reader, &mut state, &bytecode), 6);
@@ -348,7 +348,7 @@ assert PRODUCTION [3] (pass)
         match result {
           Ok(ast) => *ast,
           Err(err) => {
-            println!("{}", err);
+            eprintln!("{}", err);
             panic!("Could not build state:\n{}", s);
           }
         }
@@ -374,9 +374,10 @@ assert PRODUCTION [3] (pass)
     let ir_ast = ir_ast.unwrap();
 
     let bytecode = compile_ir_state_to_bytecode(
-      &ir_ast,
+      &ir_ast.instructions,
       |_, _, _| BranchSelector::Hash,
       &HashMap::new(),
+      &"".to_string(),
     );
 
     let mut reader = UTF8StringReader::from_string(reader_input);

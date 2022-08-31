@@ -1,15 +1,17 @@
+use crate::grammar::data::ast::Ascript;
+use crate::grammar::parse::compile_ascript_ast;
 use crate::grammar::uuid::hash_id_value_u64;
 use crate::types;
 use crate::types::*;
 use regex::Regex;
 
+use super::create_closure;
 use super::create_defined_scanner_name;
 use super::create_production_guid_name;
 use super::create_scanner_name;
 use super::data::ast;
 use super::data::ast::ASTNode;
 use super::data::ast::ASTNodeTraits;
-use super::get_closure;
 use super::get_guid_grammar_name;
 use super::get_production_plain_name;
 use super::get_production_start_items;
@@ -142,7 +144,7 @@ pub fn compile_from_path(
       let grammar = finalize_grammar(grammar, &mut errors, number_of_threads);
       (Some(grammar), errors)
     } else {
-      (Some(grammar), errors)
+      (None, errors)
     }
   }
 }
@@ -205,30 +207,21 @@ fn finalize_grammar(
   number_of_threads: usize,
 ) -> GrammarStore
 {
-  // Create scanner productions
-
-  create_scanner_productions(&mut grammar, errors);
-
-  // Update symbols
+  create_scanner_productions_from_symbols(&mut grammar, errors);
 
   finalize_symbols(&mut grammar, errors);
 
-  // Get Item cache data.
-
   finalize_items(&mut grammar, number_of_threads, errors);
-
-  // Get production meta data
 
   finalize_productions(&mut grammar, number_of_threads, errors);
 
-  // Set bytecode ids
-
-  finalize_byte_code_data(&mut grammar, errors);
+  finalize_bytecode_metadata(&mut grammar, errors);
 
   grammar
 }
 
-fn finalize_byte_code_data(grammar: &mut GrammarStore, errors: &mut [ParseError])
+/// Adds bytecode identifiers to relevant objects.
+fn finalize_bytecode_metadata(grammar: &mut GrammarStore, errors: &mut [ParseError])
 {
   let GrammarStore { production_table, bodies_table, .. } = grammar;
 
@@ -245,6 +238,7 @@ fn finalize_byte_code_data(grammar: &mut GrammarStore, errors: &mut [ParseError]
   }
 }
 
+/// Sets an appropriate `is_recursive` value on all productions.
 fn finalize_productions(
   grammar: &mut GrammarStore,
   number_of_threads: usize,
@@ -268,7 +262,7 @@ fn finalize_productions(
             .map(|production_id| {
               // temp
               let (is_recursive, is_left_recursive) =
-                is_production_recursive(*production_id, &*grammar);
+                is_production_recursive(*production_id, grammar);
 
               (*production_id, is_recursive, is_left_recursive)
             })
@@ -287,6 +281,7 @@ fn finalize_productions(
   }
 }
 
+/// Creates item closure caches and creates start and goto item groups.
 fn finalize_items(
   grammar: &mut GrammarStore,
   number_of_threads: usize,
@@ -297,7 +292,7 @@ fn finalize_items(
   let start_items = grammar
     .production_table
     .keys()
-    .flat_map(|p| get_production_start_items(p, &*grammar))
+    .flat_map(|p| get_production_start_items(p, grammar))
     .collect::<Vec<_>>();
 
   let start_items_chunks = start_items.chunks(number_of_threads).collect::<Vec<_>>();
@@ -312,6 +307,8 @@ fn finalize_items(
           let mut pending_items = VecDeque::<Item>::from_iter(work.iter().cloned());
 
           while let Some(item) = pending_items.pop_front() {
+            let item = item.to_zero_state();
+
             if !item.at_end() {
               let peek_symbols = if let Some(peek_symbols) =
                 grammar.production_peek_symbols.get(&item.get_production_id(grammar))
@@ -321,7 +318,7 @@ fn finalize_items(
                 vec![]
               };
 
-              results.push((item, get_closure(&[item], &*grammar), peek_symbols));
+              results.push((item, create_closure(&[item], grammar), peek_symbols));
 
               pending_items.push_back(item.increment().unwrap());
             }
@@ -446,7 +443,7 @@ fn finalize_symbols(grammar: &mut GrammarStore, errors: &mut [ParseError])
 
           symbol.bytecode_id = symbol_bytecode_id;
 
-          let (_, production_id, ..) = get_scanner_info_from_defined(&sym_id, &*grammar);
+          let (_, production_id, ..) = get_scanner_info_from_defined(&sym_id, grammar);
 
           let scanner_production =
             grammar.production_table.get_mut(&production_id).unwrap();
@@ -464,7 +461,10 @@ fn finalize_symbols(grammar: &mut GrammarStore, errors: &mut [ParseError])
   }
 }
 
-fn create_scanner_productions(grammar: &mut GrammarStore, errors: &mut [ParseError])
+fn create_scanner_productions_from_symbols(
+  grammar: &mut GrammarStore,
+  errors: &mut [ParseError],
+)
 {
   // Start iterating over known token production references, and add
   // new productions as we encounter them.
@@ -478,26 +478,28 @@ fn create_scanner_productions(grammar: &mut GrammarStore, errors: &mut [ParseErr
         // Converts the generic symbol `g:sp` into a production that targets the
         // the defined symbol `b'10'`
         let (_, scanner_production_id, scanner_name, symbol_string) =
-          get_scanner_info_from_defined(&sym_id, &*grammar);
+          get_scanner_info_from_defined(&sym_id, grammar);
 
         convert_scanner_symbol_to_production(
           grammar,
           &[&" ".to_string()],
           scanner_production_id,
           scanner_name,
+          Token::empty(),
         );
       }
       sym if matches!(sym, SymbolID::GenericNewLine) => {
         // Converts the generic symbol `g:sp` into a production that targets the
         // the defined symbol `b'10'`
         let (_, scanner_production_id, scanner_name, symbol_string) =
-          get_scanner_info_from_defined(&sym_id, &*grammar);
+          get_scanner_info_from_defined(&sym_id, grammar);
 
         convert_scanner_symbol_to_production(
           grammar,
           &[&"\n".to_string()],
           scanner_production_id,
           scanner_name,
+          Token::empty(),
         );
       }
       sym if SymbolID::Generics.contains(sym) => {
@@ -505,7 +507,7 @@ fn create_scanner_productions(grammar: &mut GrammarStore, errors: &mut [ParseErr
         // does not yet exist in the grammar.
 
         let (_, scanner_production_id, scanner_name, symbol_string) =
-          get_scanner_info_from_defined(&sym_id, &*grammar);
+          get_scanner_info_from_defined(&sym_id, grammar);
 
         if let btree_map::Entry::Vacant(e) =
           grammar.production_table.entry(scanner_production_id)
@@ -550,15 +552,18 @@ fn create_scanner_productions(grammar: &mut GrammarStore, errors: &mut [ParseErr
       | SymbolID::DefinedNumeric(_)
       | SymbolID::DefinedIdentifier(_) => {
         let (_, scanner_production_id, scanner_name, symbol_string) =
-          get_scanner_info_from_defined(&sym_id, &*grammar);
+          get_scanner_info_from_defined(&sym_id, grammar);
 
         let strings = [symbol_string.as_str()];
+
+        let sym = grammar.symbols_table.get(&sym_id).unwrap();
 
         convert_scanner_symbol_to_production(
           grammar,
           &strings,
           scanner_production_id,
           scanner_name,
+          Token::empty(),
         );
       }
 
@@ -622,7 +627,7 @@ fn create_scanner_productions(grammar: &mut GrammarStore, errors: &mut [ParseErr
                   | SymbolID::DefinedNumeric(_)
                   | SymbolID::DefinedIdentifier(_) => {
                     let (new_symbol_id, ..) =
-                      get_scanner_info_from_defined(sym_id, &*grammar);
+                      get_scanner_info_from_defined(sym_id, grammar);
 
                     scanner_production_queue.push_back(*sym_id);
 
@@ -689,6 +694,7 @@ fn convert_scanner_symbol_to_production(
   strings: &[&str],
   scanner_production_id: ProductionId,
   scanner_name: String,
+  origin_location: Token,
 )
 {
   let GrammarStore {
@@ -726,7 +732,7 @@ fn convert_scanner_symbol_to_production(
         id: body_id,
         bytecode_id: 0,
         reduce_fn_ids: vec![],
-        origin_location: Token::empty(),
+        origin_location: origin_location.clone(),
       });
     }
 
@@ -1188,8 +1194,9 @@ fn pre_process_production(
     } {
       // Extract body data and gather symbol information
       for body in &prod.bodies {
-        if let ASTNode::Body(body) = body {
-          let (new_bodies, productions) = pre_process_body(production_node, body, tgs);
+        if let ASTNode::Body(ast_body) = body {
+          let (new_bodies, productions) =
+            pre_process_body(production_node, ast_body, tgs);
 
           for prod in productions {
             post_process_productions.push_back(prod);
@@ -1264,7 +1271,8 @@ fn get_resolved_production_name(
           tgs.errors.push(ParseError::COMPILE_PROBLEM(CompileProblem{
                         inline_message: String::new(),
                         message: format!(
-                            "Unknown Grammar : The local grammar name {} does not match any imported grammar names", 
+                            "Unable to resolve production: The production \u{001b}[31m{}\u{001b}[0m cannot be found in the imported grammar \u{001b}[31m{}\u{001b}[0m.", 
+                            production_name,
                             local_import_grammar_name
                         ),
                         loc: node.Token(),
@@ -1329,7 +1337,7 @@ fn get_grammar_info_from_node<'a>(
           tgs.errors.push(ParseError::COMPILE_PROBLEM(CompileProblem{
                         inline_message: String::new(),
                         message: format!(
-                            "Unknown grammar : The local grammar name {} does not match any imported grammar names", 
+                            "Unknown Grammar : The local grammar name \u{001b}[31m{}\u{001b}[0m does not match any imported grammar.", 
                             local_import_grammar_name
                         ),
                         loc: node.Token(),
@@ -1453,9 +1461,8 @@ fn pre_process_body(
           // to the group.
 
           // Except, if there are no functions within the production
-          // bodies we can simply inline the symbols into
-          // one or more alternate sets of bodies alongside
-          // the existing bodies.
+          // bodies we can simply lower bodies of the group production
+          // into the host production.
 
           if let ASTNode::Group_Production(group) = sym {
             if annotation.is_empty()
@@ -1550,9 +1557,16 @@ fn pre_process_body(
           // `A => a | A => A a` and produce a symbol id that points
           // to that production.
           static none_: ASTNode = ASTNode::NONE;
+
           match sym {
             ASTNode::Optional_List_Production(_) | ASTNode::List_Production(_) => {
-              let (symbols, terminal_symbol, tok) = match sym {
+              let list_vector_reduce: ASTNode =
+                compile_ascript_ast("[$first, $last]".as_bytes().to_vec()).unwrap();
+
+              let list_symbol_reduce: ASTNode =
+                compile_ascript_ast("[$first]".as_bytes().to_vec()).unwrap();
+
+              let (symbol, terminal_symbol, tok) = match sym {
                 ASTNode::Optional_List_Production(list) => {
                   (&list.symbols, &list.terminal_symbol, list.tok.clone())
                 }
@@ -1566,13 +1580,21 @@ fn pre_process_body(
               // symbol.
               let body_a = super::data::ast::Body::new(
                 false,
-                vec![symbols.clone()],
+                vec![symbol.clone()],
                 None,
-                ASTNode::NONE,
+                ASTNode::Ascript(Ascript::new(
+                  list_symbol_reduce.clone(),
+                  list_symbol_reduce.Token().clone(),
+                )),
                 sym.Token(),
               );
 
               let mut body_b = body_a.clone();
+
+              body_b.reduce_function = ASTNode::Ascript(Ascript::new(
+                list_vector_reduce.clone(),
+                list_vector_reduce.Token().clone(),
+              ));
 
               match terminal_symbol {
                 ASTNode::NONE => {}
@@ -1588,8 +1610,7 @@ fn pre_process_body(
               );
 
               // Add the production symbol to the front of body be
-              // to make the body left
-              // recursive
+              // to make the body left recursive
               if let ASTNode::Body(body) = &mut production.bodies[0] {
                 body.symbols.insert(0, prod_sym.clone());
               }

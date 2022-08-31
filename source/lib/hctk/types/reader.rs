@@ -10,7 +10,7 @@ use super::InputBlock;
 /// A multi-reader, multi-writer view of the underlying parser input
 /// data, used to distribute access to the input string over multiple
 /// Tokens and SymbolReaders.
-pub type SharedSymbolBuffer = Arc<RwLock<Vec<u8>>>;
+pub type SharedSymbolBuffer = Arc<Vec<u8>>;
 
 /// A reader maintains a read head which can be moved bidirectionally
 /// over an array of bytes and yields information on the following:

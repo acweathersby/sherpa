@@ -31,7 +31,7 @@
 <> statements > statement(+\, )
 
 <> statement > add
-    | member
+    | expression
 
 <> add > member \+ expression
                                                         f:r { { t_AST_Add, left: $1, right: $3, tok } }

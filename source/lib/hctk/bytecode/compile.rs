@@ -50,12 +50,28 @@ pub(crate) fn build_byte_code_buffer(
   ];
 
   for ((state, name, i)) in states_iter {
-    goto_bookmarks_to_offset[i as usize] = bytecode.len() as u32;
+    if let Some(fail_state) = &state.fail {
+      let fail_state_address = bytecode.len();
+
+      let fail_addition = &mut compile_ir_state_to_bytecode(
+        &fail_state.instructions,
+        default_get_branch_selector,
+        &state_name_to_bookmark,
+        &state.scanner,
+      );
+      bytecode.append(fail_addition);
+
+      goto_bookmarks_to_offset[i as usize] = bytecode.len() as u32;
+      bytecode.push(INSTRUCTION::I02_GOTO | FAIL_STATE_FLAG | fail_state_address as u32);
+    } else {
+      goto_bookmarks_to_offset[i as usize] = bytecode.len() as u32;
+    }
 
     let addition = &mut compile_ir_state_to_bytecode(
-      state,
+      &state.instructions,
       default_get_branch_selector,
       &state_name_to_bookmark,
+      &state.scanner,
     );
 
     bytecode.append(addition);
@@ -84,8 +100,10 @@ fn patch_goto_offsets(bytecode: &mut Vec<u32>, goto_bookmarks_to_offset: &[u32])
       I::I02_GOTO => {
         let bytecode_bookmark = instruction & STATE_ADDRESS_MASK;
         let state_header = instruction & (!STATE_ADDRESS_MASK);
-        bytecode[index] =
-          state_header | goto_bookmarks_to_offset[bytecode_bookmark as usize];
+        if (state_header & FAIL_STATE_FLAG) == 0 {
+          bytecode[index] =
+            state_header | goto_bookmarks_to_offset[bytecode_bookmark as usize];
+        }
         1
       }
       I::I06_FORK_TO => 1,
@@ -149,16 +167,17 @@ fn compile_ir_states(
 }
 
 pub fn compile_ir_state_to_bytecode(
-  state: &IR_STATE,
+  state_instructions: &Vec<ASTNode>,
   get_branch_selector: GetBranchSelector,
   state_name_to_bookmark: &HashMap<String, u32>,
+  scanner_name: &String,
 ) -> Vec<u32>
 {
   // Determine if we are dealing with a branch state or a single line
   // state. Branch states will always have more than one assert
   // statement.
 
-  if is_branch_state(state) {
+  if is_branch_state(state_instructions) {
     // We are dealing with a branching state
 
     // For each branch we compile new vectors separately
@@ -174,20 +193,20 @@ pub fn compile_ir_state_to_bytecode(
     // 4. Class
     // 5. CodePoint
     build_branching_bytecode(
-      &state.instructions,
+      state_instructions,
       get_branch_selector,
-      &state.scanner,
+      scanner_name,
       state_name_to_bookmark,
     )
   } else {
     // We are dealing with a standard non-branching state
-    build_branchless_bytecode(&state.instructions, state_name_to_bookmark)
+    build_branchless_bytecode(state_instructions, state_name_to_bookmark)
   }
 }
 
-fn is_branch_state(state: &IR_STATE) -> bool
+fn is_branch_state(state_instructions: &Vec<ASTNode>) -> bool
 {
-  state.instructions.iter().all(|i| matches!(i, ASTNode::ASSERT(_) | ASTNode::DEFAULT(_)))
+  state_instructions.iter().all(|i| matches!(i, ASTNode::ASSERT(_) | ASTNode::DEFAULT(_)))
 }
 
 fn build_branching_bytecode(
@@ -229,25 +248,6 @@ fn build_branching_bytecode(
       .iter()
       .cloned()
       .filter_map(|p| {
-        if p.mode == "BYTE" {
-          Some(p.as_ref())
-        } else {
-          None
-        }
-      })
-      .collect::<Vec<_>>(),
-    INPUT_TYPE::T05_BYTE,
-    &String::new(),
-    output,
-    get_branch_selector,
-    state_name_to_bookmark,
-  );
-
-  let output = make_table(
-    &branches
-      .iter()
-      .cloned()
-      .filter_map(|p| {
         if p.mode == "CODEPOINT" {
           Some(p.as_ref())
         } else {
@@ -275,6 +275,25 @@ fn build_branching_bytecode(
       })
       .collect::<Vec<_>>(),
     INPUT_TYPE::T03_CLASS,
+    &String::new(),
+    output,
+    get_branch_selector,
+    state_name_to_bookmark,
+  );
+
+  let output = make_table(
+    &branches
+      .iter()
+      .cloned()
+      .filter_map(|p| {
+        if p.mode == "BYTE" {
+          Some(p.as_ref())
+        } else {
+          None
+        }
+      })
+      .collect::<Vec<_>>(),
+    INPUT_TYPE::T05_BYTE,
     &String::new(),
     output,
     get_branch_selector,
@@ -444,6 +463,7 @@ fn make_table(
 
       // Distribute keys-values with unique hashes into hash table
       // slots.
+
       while let Some(pair) = pending_pairs.pop_front() {
         let (val, offset) = pair;
         let hash_index = ((val as u32) & mod_mask) as usize;
@@ -469,7 +489,7 @@ fn make_table(
           if pointer == 0 {
             break;
           } else {
-            node += pointer as usize;
+            node = (node as i32 + pointer as i32) as usize;
           }
         }
 

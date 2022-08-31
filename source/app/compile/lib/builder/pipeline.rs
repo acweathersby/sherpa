@@ -17,8 +17,6 @@ use std::thread;
 
 pub use hctk::grammar::compile_from_path;
 
-use crate::tasks;
-
 #[derive(Debug)]
 pub struct CompileError
 {

@@ -70,7 +70,7 @@ mod test
     let errors = compile_reduce_function_expressions(&grammar, &mut ascript);
 
     for error in &errors {
-      println!("{}", error);
+      eprintln!("{}", error);
     }
 
     assert!(errors.is_empty());
@@ -81,6 +81,6 @@ mod test
 
     rust::write(&grammar, &ascript, &mut writer);
 
-    println!("{}", String::from_utf8(writer.into_output()).unwrap());
+    eprintln!("{}", String::from_utf8(writer.into_output()).unwrap());
   }
 }

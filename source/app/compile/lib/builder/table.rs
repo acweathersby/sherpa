@@ -327,17 +327,7 @@ impl BranchTableData
 
           for (_, branch) in &branches {
             if let Some(symbol) = symbol_lookup.get(&branch.value) {
-              match grammar.symbols_table.get(symbol) {
-                Some(symbol) => {
-                  symbols.insert(branch.value, symbol.clone());
-                }
-                None => {
-                  symbols.insert(
-                    branch.value,
-                    (*(Symbol::generics_lu().get(symbol).unwrap())).clone(),
-                  );
-                }
-              }
+              symbols.insert(branch.value, symbol.clone());
             } else {
               panic!("Missing symbol!")
             }

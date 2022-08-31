@@ -79,7 +79,7 @@ fn write_ascript_data<W: Write>(
 
   if !errors.is_empty() {
     for error in &errors {
-      println!("{}", error);
+      eprintln!("{}", error);
     }
   } else {
     syntax_writer(grammar, &ascript, &mut writer)?;
@@ -132,13 +132,165 @@ mod test
 
     let errors = compile_reduce_function_expressions(&grammar, &mut ascript);
     for error in &errors {
-      println!("{}", error);
+      eprintln!("{}", error);
     }
 
     let mut writer = StringBuffer::new(vec![]);
 
     rust::write(&grammar, &ascript, &mut writer);
 
-    print!("{}", String::from_utf8(writer.into_output()).unwrap());
+    eprintln!("{}", String::from_utf8(writer.into_output()).unwrap());
+  }
+
+  #[test]
+  fn test_parse_errors_when_production_has_differing_return_types2()
+  {
+    let grammar = compile_test_grammar(
+
+"@NAME wick_element
+
+@IGNORE g:sp g:nl
+
+<> element_block > \\< component_identifier
+    ( element_attribute(+)  f:r { { t_Attributes, c_Attribute, attributes: $1 } } )? 
+    ( element_attributes | general_data | element_block | general_binding )(*) 
+    \\>
+
+                                                                f:ast { { t_Element, id:$2, children: [$3, $4], tok } }
+<> component_identifier > 
+    identifier ( \\: identifier )?
+                                                                f:ast { { t_Ident, name:str($1), sub_name:str($2), tok } }
+
+<> element_attributes >g:nl element_attribute(+)               
+                                                                f:ast { { t_Attributes, c_Attribute, attributes: $2 } }
+
+<> element_attribute > \\- identifier attribute_chars ( ?=g:sp | ?=\\> | ?=g:nl )
+
+                                                                f:ast { { t_GeneralAttr, c_Attribute, key:str($2), val: str($3) } }
+
+    | \\- identifier \\: identifier 
+                                                                f:ast { { t_BindingAttr, c_Attribute, key:str($2), val: str($4) } }
+
+    | \\- t:store \\{ local_values? \\} 
+                                                                f:ast { { t_StoreAttr, c_Attribute, children: $4 } }
+    | \\- t:local \\{ local_values? \\} 
+                                                                f:ast { { t_LocalAttr, c_Attribute, children: $4 } }
+    | \\- t:param \\{ local_values? \\} 
+                                                                f:ast { { t_ParamAttr, c_Attribute, children: $4 } }
+    | \\- t:model \\{ local_values? \\} 
+                                                                f:ast { { t_ModelAttr, c_Attribute, children: $4 } }
+
+<> general_binding > \\: identifier               
+                                                                f:ast { { t_OutputBinding, val:str($2) } }
+
+<> local_values > local_value
+
+<> local_value > identifier ( \\` identifier )? ( \\=  g:num )? ( \\, )(*)
+
+                                                                f:ast { { t_Var, c_Attribute, name:str($1), meta:str($2), value:$3 } }
+
+<> attribute_chars > ( g:id | g:num | g:sym  )(+)
+                                                                f:ast { { t_AttributeData, tok } }
+<> general_data > ( g:id | g:num  | g:nl  )(+)
+                                                                f:ast { { t_GeneralData, tok } }
+
+<> identifier > tk:tok_identifier 
+
+<> tok_identifier > ( g:id) ( g:id | g:num )(+)",
+    );
+
+    let mut store = AScriptStore::new();
+
+    let errors = compile_reduce_function_expressions(&grammar, &mut store);
+
+    for error in &errors {
+      eprintln!("{}", error);
+    }
+
+    eprintln!("{:#?}", store);
+
+    return;
+
+    let mut writer = StringBuffer::new(vec![]);
+
+    rust::write(&grammar, &store, &mut writer);
+
+    eprintln!("{}", String::from_utf8(writer.into_output()).unwrap());
+  }
+
+  #[test]
+  fn test_parse_errors_when_production_has_differing_return_types3()
+  {
+    let grammar = compile_test_grammar(
+      " 
+
+      @NAME wick_element
+
+      @IGNORE g:sp g:nl
+      
+      <> element_block > \\< component_identifier
+          ( element_attribute(+)  f:r { { t_Attributes, c_Attribute, attributes: $1 } } )? 
+          ( element_attributes | general_data | element_block | general_binding )(*) 
+          \\>
+      
+                                                                      f:ast { { t_Element, id:$2, children: [$3, $4], tok } }
+      <> component_identifier > 
+          identifier ( \\: identifier )?
+                                                                      f:ast { { t_Ident, name:str($1), sub_name:str($2), tok } }
+      
+      <> element_attributes >g:nl element_attribute(+)               
+                                                                      f:ast { { t_Attributes, c_Attribute, attributes: $2 } }
+      
+      <> element_attribute > \\- identifier attribute_chars ( ?=g:sp | ?=\\> | ?=g:nl )
+      
+                                                                      f:ast { { t_GeneralAttr, c_Attribute, key:str($2), val1: str($3) } }
+      
+          | \\- identifier \\: identifier 
+                                                                      f:ast { { t_BindingAttr, c_Attribute, key:str($2), val2: str($4) } }
+      
+          | \\- t:store \\{ local_values? \\} 
+                                                                      f:ast { { t_StoreAttr, c_Attribute, children: $4 } }
+          | \\- t:local \\{ local_values? \\} 
+                                                                      f:ast { { t_LocalAttr, c_Attribute, children: $4 } }
+          | \\- t:param \\{ local_values? \\} 
+                                                                      f:ast { { t_ParamAttr, c_Attribute, children: $4 } }
+          | \\- t:model \\{ local_values? \\} 
+                                                                      f:ast { { t_ModelAttr, c_Attribute, children: $4 } }
+      
+      <> general_binding > \\: identifier               
+                                                                      f:ast { { t_OutputBinding, val3:str($2) } }
+      
+      <> local_values > local_value(+)
+      
+      <> local_value > identifier ( \\` identifier )? ( \\=  g:num f:r{ $2 } )? ( \\, )(*)
+      
+                                                                      f:ast { { t_Var, c_Attribute, name:str($1), meta:str($2), value:$3 } }
+      
+      <> attribute_chars > ( g:id | g:num | g:sym  )(+)
+                                                                      f:ast { { t_AttributeData, tok } }
+      <> general_data > ( g:id | g:num  | g:nl  )(+)
+                                                                      f:ast { { t_GeneralData, tok } }
+      
+      <> identifier > tk:tok_identifier 
+      
+      <> tok_identifier > ( g:id) ( g:id | g:num )(+)                 
+      ",
+    );
+
+    let mut store = AScriptStore::new();
+
+    let errors = compile_reduce_function_expressions(&grammar, &mut store);
+
+    for error in &errors {
+      eprintln!("{}", error);
+    }
+
+    eprintln!("{:#?}", store.props_table);
+
+    let mut writer = StringBuffer::new(vec![]);
+
+    rust::write(&grammar, &store, &mut writer);
+
+    // eprintln!("{}", String::from_utf8(writer.into_output()).unwrap());
   }
 }

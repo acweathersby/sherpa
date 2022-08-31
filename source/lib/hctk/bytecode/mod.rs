@@ -25,7 +25,7 @@ pub struct BytecodeOutput
   /// vector.
   pub state_name_to_offset: BTreeMap<String, u32>,
   pub offset_to_state_name: BTreeMap<u32, String>,
-  pub bytecode_id_to_symbol_lookup: BTreeMap<u32, SymbolID>,
+  pub bytecode_id_to_symbol_lookup: BTreeMap<u32, Symbol>,
   /// The original [IRStates](IRState) produced during the
   pub ir_states: BTreeMap<String, IRState>,
 }
@@ -57,6 +57,8 @@ pub(crate) fn compile_ir_states_into_bytecode<'a>(
 
   let (bytecode, state_lookups) = build_byte_code_buffer(state_refs);
 
+  println!("{:#?}", grammar.symbols_table);
+
   BytecodeOutput {
     bytecode,
     ir_states,
@@ -70,7 +72,7 @@ pub(crate) fn compile_ir_states_into_bytecode<'a>(
       .symbols_table
       .values()
       .chain(Symbol::Generics)
-      .map(|s| (s.bytecode_id, s.guid))
+      .map(|s| (s.bytecode_id, s.clone()))
       .collect::<BTreeMap<_, _>>(),
   }
 }
@@ -113,9 +115,10 @@ mod byte_code_creation_tests
     assert!(result.is_ok());
 
     let result = compile_ir_state_to_bytecode(
-      &result.unwrap(),
+      &result.unwrap().instructions,
       default_get_branch_selector,
       &HashMap::new(),
+      &("".to_string()),
     );
 
     println!("{:#?}", result);
@@ -132,18 +135,19 @@ mod byte_code_creation_tests
       
       @NAME llvm_language_test
       
-      <> statement > expression
+      <> statement > expression       f:ast { { t_Stmt, v:$1 } }
+
+      <> expression > sum             
       
-      <> expression > sum 
-      
-      <> sum > mul \\+ sum
+      <> sum > sum \\+ mul             f:ast { { t_Sum, l:$1, r:$3 } }
           | mul
       
-      <> mul > term \\* expression
+      <> mul > mul \\* term     f:ast { { t_Mul, l:$1, r:$3 } }
           | term
       
-      <> term > g:num
-          | \\( expression \\)
+      <> term > \\2                f:ast { { t_Num, v: u16($1) } }
+      
+          | \\( expression \\)          f:ast { { t_Paren, v: $2 } }
       
       
 ",
@@ -151,11 +155,63 @@ mod byte_code_creation_tests
 
     let output = compile_bytecode(&grammar, 1);
 
-    // output.ir_states.iter().for_each(|s| println!("{}", s.1.to_string()));
-
     println!(
       "dD: {}",
       debug::generate_disassembly(&output, Some(&BytecodeGrammarLookups::new(&grammar)))
     );
+  }
+
+  #[test]
+  pub fn generate_production_with_a_recursion()
+  {
+    let grammar = compile_test_grammar(
+      "    
+      <> element_block > \\< component_identifier
+      ( t:tested )? 
+      ( element_block | t:test )(*) 
+      \\>
+      
+  <> component_identifier > 
+      identifier
+
+  <> identifier > tk:tok_identifier 
+  
+  <> tok_identifier > ( g:id ) ( g:id | g:num )(+)
+",
+    );
+
+    let output = compile_bytecode(&grammar, 1);
+    println!(
+      "dD: {}",
+      debug::generate_disassembly(&output, Some(&BytecodeGrammarLookups::new(&grammar)))
+    );
+  }
+
+  #[test]
+  pub fn production_with_multiple_sub_productions()
+  {
+    let grammar = compile_test_grammar(
+      "    
+<> test > t:d A | B | C | D
+<> A > t:a id
+<> B > t:b id
+<> C > t:c id
+<> D > t:d id
+
+<> id > g:id
+",
+    );
+
+    let prod_id = get_production_id_by_name("test", &grammar).unwrap();
+
+    let result = generate_production_states(&prod_id, &grammar);
+
+    for state in result {
+      println!("{:#?}", state.get_code());
+    }
+    // println!(
+    //   "dD: {}",
+    //   debug::generate_disassembly(&output, Some(&BytecodeGrammarLookups::new(&grammar)))
+    // );
   }
 }

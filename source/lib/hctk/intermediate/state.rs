@@ -8,6 +8,7 @@ use std::thread;
 
 use super::transition_graph::construct_goto;
 use super::transition_graph::construct_recursive_descent;
+use super::transition_graph::hash_group;
 use crate::grammar::get_production;
 use crate::grammar::get_production_plain_name;
 use crate::grammar::get_production_start_items;
@@ -18,8 +19,10 @@ use crate::types::IRState;
 use crate::types::IRStateType;
 use crate::types::IRStateType::*;
 use crate::types::Item;
+use crate::types::OriginData;
 use crate::types::PeekType;
 use crate::types::ProductionId;
+use crate::types::Symbol;
 use crate::types::SymbolID;
 use crate::types::TransitionGraphNode;
 use crate::types::TransitionMode;
@@ -27,7 +30,7 @@ use crate::types::TransitionPack;
 use crate::types::TransitionStateType;
 
 type IROutput = Vec<IRState>;
-/// Compiles all production in the `grammar` into unique IRStates
+/// Compiles all production within the grammar into unique IRStates
 pub fn compile_states(
   grammar: &GrammarStore,
   num_of_threads: usize,
@@ -37,72 +40,105 @@ pub fn compile_states(
 
   let productions_ids = grammar.production_table.keys().cloned().collect::<Vec<_>>();
 
-  let work_chunks = productions_ids.chunks(num_of_threads).collect::<Vec<_>>();
+  if num_of_threads == 1 {
+    let work_chunks = productions_ids.chunks(num_of_threads).collect::<Vec<_>>();
+    let mut deduped_states = BTreeMap::new();
+    let mut scanner_names = HashSet::new();
 
-  for state in {
-    thread::scope(|s| {
-      work_chunks
-        .iter()
-        .map(|productions| {
-          s.spawn(|| {
-            let mut deduped_states = BTreeMap::new();
-            let mut scanner_names = HashSet::new();
+    for production_id in &productions_ids {
+      let states = generate_production_states(production_id, grammar);
 
-            for production_id in *productions {
-              let states = generate_production_states(production_id, grammar);
+      for state in states {
+        if let Some(name) = state.get_scanner_state_name() {
+          if scanner_names.insert(name) {
+            for state in generate_scanner_intro_state(
+              state.get_scanner_symbol_set().unwrap(),
+              grammar,
+            ) {
+              deduped_states.entry(state.get_name()).or_insert(state);
+            }
+          }
+        }
+        deduped_states.entry(state.get_name()).or_insert(state);
+      }
+    }
 
-              for state in states {
-                if let Some(name) = state.get_scanner_state_name() {
-                  if scanner_names.insert(name) {
-                    for state in generate_scanner_intro_state(
-                      state.get_scanner_symbol_set().unwrap(),
-                      grammar,
-                    ) {
-                      deduped_states.entry(state.get_name()).or_insert(state);
+    for (_, state) in &mut deduped_states {
+      let string = state.to_string();
+      if let Err(err) = state.compile_ast() {
+        panic!("\n{} {}", err, string)
+      };
+    }
+
+    deduped_states
+  } else {
+    let work_chunks = productions_ids.chunks(num_of_threads).collect::<Vec<_>>();
+
+    for state in {
+      thread::scope(|s| {
+        work_chunks
+          .iter()
+          .map(|productions| {
+            s.spawn(|| {
+              let mut deduped_states = BTreeMap::new();
+              let mut scanner_names = HashSet::new();
+
+              for production_id in *productions {
+                let states = generate_production_states(production_id, grammar);
+
+                for state in states {
+                  if let Some(name) = state.get_scanner_state_name() {
+                    if scanner_names.insert(name) {
+                      for state in generate_scanner_intro_state(
+                        state.get_scanner_symbol_set().unwrap(),
+                        grammar,
+                      ) {
+                        deduped_states.entry(state.get_name()).or_insert(state);
+                      }
                     }
                   }
+
+                  deduped_states.entry(state.get_name()).or_insert(state);
                 }
-
-                deduped_states.entry(state.get_name()).or_insert(state);
               }
-            }
 
-            deduped_states.into_values()
+              deduped_states.into_values()
+            })
+          })
+          .collect::<Vec<_>>()
+          .into_iter()
+          .flat_map(move |s| s.join().unwrap())
+          .collect::<Vec<_>>()
+      })
+    } {
+      deduped_states.entry(state.get_name()).or_insert(state);
+    }
+
+    let mut output_states = deduped_states.iter_mut().collect::<Vec<_>>();
+
+    thread::scope(|s| {
+      let work_chunks = output_states.chunks_mut(num_of_threads);
+
+      work_chunks
+        .into_iter()
+        .map(|chunk| {
+          s.spawn(|| {
+            for (_, state) in chunk {
+              let string = state.to_string();
+              if let Err(err) = state.compile_ast() {
+                panic!("\n{} {}", err, string)
+              };
+            }
           })
         })
         .collect::<Vec<_>>()
         .into_iter()
-        .flat_map(move |s| s.join().unwrap())
-        .collect::<Vec<_>>()
-    })
-  } {
-    deduped_states.entry(state.get_name()).or_insert(state);
+        .map(move |s| s.join().unwrap())
+        .collect::<Vec<_>>();
+    });
+
+    deduped_states
   }
-
-  let mut output_states = deduped_states.iter_mut().collect::<Vec<_>>();
-
-  thread::scope(|s| {
-    let work_chunks = output_states.chunks_mut(num_of_threads);
-
-    work_chunks
-      .into_iter()
-      .map(|chunk| {
-        s.spawn(|| {
-          for (_, state) in chunk {
-            let string = state.to_string();
-            if let Err(err) = state.compile_ast() {
-              panic!("\n{} {}", err, string)
-            };
-          }
-        })
-      })
-      .collect::<Vec<_>>()
-      .into_iter()
-      .map(move |s| s.join().unwrap())
-      .collect::<Vec<_>>();
-  });
-
-  deduped_states
 }
 
 pub fn generate_scanner_intro_state(
@@ -115,6 +151,9 @@ pub fn generate_scanner_intro_state(
     .flat_map(|s| {
       let (_, production_id, ..) = get_scanner_info_from_defined(s, grammar);
       get_production_start_items(&production_id, grammar)
+        .iter()
+        .map(|i| i.to_origin(crate::types::OriginData::Symbol(*s)))
+        .collect::<Vec<_>>()
     })
     .collect::<Vec<_>>();
 
@@ -131,7 +170,10 @@ pub fn generate_production_states(
   generate_states(
     grammar,
     get_production(production_id, grammar).is_scanner,
-    &get_production_start_items(production_id, grammar),
+    &get_production_start_items(production_id, grammar)
+      .into_iter()
+      .map(|i| i.to_origin(OriginData::Production(*production_id)))
+      .collect::<Vec<_>>(),
     &get_production(production_id, grammar).guid_name,
     get_production(production_id, grammar).bytecode_id,
   )
@@ -230,7 +272,7 @@ fn process_transition_nodes<'a>(
 
     let node = tpack.get_node(node_id);
 
-    if node.sym != SymbolID::EndOfFile {
+    if node.terminal_symbol != SymbolID::EndOfFile {
       for state in {
         if tpack.mode == TransitionMode::GoTo && node.id == 0 {
           vec![create_goto_start_state(
@@ -245,10 +287,9 @@ fn process_transition_nodes<'a>(
           create_intermediate_state(
             node,
             grammar,
-            tpack.is_scanner,
+            tpack,
             &output,
-            children_lookup,
-            &tpack.mode,
+            &children_tables,
             entry_state_name,
             production_id,
           )
@@ -320,7 +361,7 @@ fn create_goto_start_state(
 
   for child in children {
     let state = resolved_states.get(&child.id).unwrap();
-    let symbol = child.sym;
+    let symbol = child.terminal_symbol;
 
     match &symbol {
       SymbolID::Production(production_id, _) => {
@@ -384,10 +425,9 @@ on fail state [ {}_goto_failed ]
 fn create_intermediate_state(
   node: &TransitionGraphNode,
   grammar: &GrammarStore,
-  is_scanner: bool,
+  t_pack: &TransitionPack,
   resolved_states: &BTreeMap<usize, IRState>,
-  children: &[&TransitionGraphNode],
-  mode: &TransitionMode,
+  children_tables: &Vec<Vec<&TransitionGraphNode>>,
   entry_state_name: &String,
   production_id: u32,
 ) -> Vec<IRState>
@@ -398,6 +438,10 @@ fn create_intermediate_state(
   let mut states = vec![];
   let mut peek_type: PeekType = PeekType::None;
   let mut is_token_assertion = false;
+  let is_scanner = t_pack.is_scanner;
+  let mode = t_pack.mode;
+  static empty: Vec<&TransitionGraphNode> = vec![];
+  let children = children_tables.get(node.id).unwrap_or(&empty);
 
   let (post_amble, state_name, mut stack_depth, mut state_type) = {
     if node.id == 0 {
@@ -436,6 +480,21 @@ fn create_intermediate_state(
     // Manually create intermediate nodes to handle each initial
     // "forked-to" state that would otherwise be skipped.
 
+    let mut origin = node;
+
+    // while !(origin.is(TransitionStateType::I_PEEK_ORIGIN)) {
+    //  origin = t_pack.get_node(origin.parent);
+    //}
+
+    for child in children_tables.get(origin.id).unwrap() {
+      for item in &child.items {
+        println!("{}", item.debug_string(grammar));
+        item.blame(grammar);
+      }
+    }
+
+    panic!("FORKED!!?!?!?!");
+
     for child in children.iter() {
       let mut state = create_intermediate_state(
         &TransitionGraphNode::temp(
@@ -445,10 +504,9 @@ fn create_intermediate_state(
           vec![],
         ),
         grammar,
-        is_scanner,
+        t_pack,
         resolved_states,
-        &[*child],
-        mode,
+        children_tables,
         entry_state_name,
         production_id,
       );
@@ -480,118 +538,242 @@ fn create_intermediate_state(
     let single_child = children.len() == 1;
     let mut max_child_depth = 0;
 
-    for child in children {
-      let child_state = resolved_states.get(&child.id).unwrap();
-      let symbol_id = child.sym;
-      let symbol_string = symbol_id.to_string(grammar);
-      let state_name = child_state.get_name();
+    /// Group children together to handle cases where multiple children of the same
+    /// type need further refinement.
+    for group in hash_group(children.to_vec(), |_, c| match c.production_symbol {
+      Some(..) => 1,
+      None => match c.terminal_symbol {
+        SymbolID::Production(..) => 1,
+        SymbolID::Recovery => 2,
+        SymbolID::EndOfFile => 3,
+        SymbolID::Default => 4,
+        _ => 5,
+      },
+    }) {
+      for child in &group {
+        let child_state = resolved_states.get(&child.id).unwrap();
+        max_child_depth = max_child_depth.max(child_state.get_stack_depth());
 
-      max_child_depth = max_child_depth.max(child_state.get_stack_depth());
+        for item in &child.items {
+          item_set.insert(*item);
+        }
 
-      for item in &child.items {
-        item_set.insert(item);
+        if mode == TransitionMode::GoTo {
+          comment += &format!("   node id: {}", node.id);
+          comment += "\n GOTO ";
+        }
+
+        comment += &format!(
+          "\n{}",
+          &child
+            .items
+            .iter()
+            .map(|i| i.debug_string(grammar))
+            .collect::<Vec<_>>()
+            .join("\n")
+        );
       }
 
-      if *mode == TransitionMode::GoTo {
-        comment += &format!("   node id: {}", node.id);
-        comment += "\n GOTO ";
-      }
+      if group[0].production_symbol.is_some()
+        || matches!(group[0].terminal_symbol, SymbolID::Production(..))
+      {
+        for child in &group {
+          if let SymbolID::Production(production_id, ..) =
+            child.production_symbol.unwrap_or(child.terminal_symbol)
+          {
+            let child_state = resolved_states.get(&child.id).unwrap();
+            let symbol_id = child.terminal_symbol;
+            let symbol_string = symbol_id.to_string(grammar);
+            let state_name = child_state.get_name();
 
-      comment += &format!(
-        "\n{}",
-        &child
-          .items
-          .iter()
-          .map(|i| i.debug_string(grammar))
-          .collect::<Vec<_>>()
-          .join("\n")
-      );
+            max_child_depth = max_child_depth.max(child_state.get_stack_depth() + 1);
 
-      strings.push(match &symbol_id {
-        SymbolID::Production(production_id, _) => {
-          max_child_depth = max_child_depth.max(child_state.get_stack_depth() + 1);
-          format!(
-            "goto state [ {} ] then goto state [ {} ]{}",
-            grammar.production_table.get(production_id).unwrap().guid_name,
-            state_name,
-            post_amble
-          )
-        }
-        SymbolID::Recovery => {
-          format!("goto state [ {} ]{}", state_name, post_amble)
-        }
-        SymbolID::EndOfFile => {
-          let end_string = create_end_string(child, grammar, is_scanner);
+            if !single_child {
+              if group.len() > 1
+                && matches!(child.terminal_symbol, SymbolID::Production(..))
+              {
+                panic!("Too many unqualified production calls!");
+              } else {
+                is_token_assertion = true;
+                let assertion_type = (if child.is(TransitionStateType::O_PEEK) {
+                  "assert peek"
+                } else {
+                  "assert"
+                })
+                .to_string();
 
-          match single_child {
-            true => format!("{}{}", end_string, post_amble),
-            false => {
-              format!("default ( {}{} )", end_string, post_amble)
-            }
-          }
-        }
-        SymbolID::Default => {
-          let consume = (if child.is(TransitionStateType::I_CONSUME) {
-            "consume then "
-          } else {
-            ""
-          })
-          .to_string();
+                if child.is(TransitionStateType::O_PEEK) {
+                  if (node.is(TransitionStateType::O_PEEK)) {
+                    peek_type = PeekType::PeekContinue;
+                  } else {
+                    peek_type = PeekType::PeekStart;
+                  }
+                }
 
-          match single_child {
-            true => format!("{}goto state [ {} ]{}", consume, state_name, post_amble),
-            false => format!(
-              "default ( {}goto state [ {} ]{} )",
-              consume, state_name, post_amble
-            ),
-          }
-        }
-        _ => {
-          is_token_assertion = true;
+                let (symbol_bytecode_id, assert_class) = if (!is_scanner) {
+                  (symbol_id.bytecode_id(grammar), "TOKEN")
+                } else {
+                  get_symbol_consume_type(&symbol_id, grammar)
+                };
 
-          let assertion_type = (if child.is(TransitionStateType::O_PEEK) {
-            "assert peek"
-          } else {
-            "assert"
-          })
-          .to_string();
-
-          if child.is(TransitionStateType::O_PEEK) {
-            if (node.is(TransitionStateType::O_PEEK)) {
-              peek_type = PeekType::PeekContinue;
+                strings.push(format!(
+                  "{} {} [ {} /* {} */ ] ( goto state [ {} ] then goto state [ {} ]{} )",
+                  assertion_type,
+                  assert_class,
+                  symbol_bytecode_id,
+                  symbol_string,
+                  grammar.production_table.get(&production_id).unwrap().guid_name,
+                  state_name,
+                  post_amble
+                ));
+              }
             } else {
-              peek_type = PeekType::PeekStart;
+              strings.push(format!(
+                "goto state [ {} ] then goto state [ {} ]{}",
+                grammar.production_table.get(&production_id).unwrap().guid_name,
+                state_name,
+                post_amble
+              ));
+            }
+          } else {
+            panic!("WTF!?!?!");
+          }
+        }
+      } else {
+        match group[0].terminal_symbol {
+          SymbolID::Recovery => {
+            for child in group {
+              let child_state = resolved_states.get(&child.id).unwrap();
+              let state_name = child_state.get_name();
+              strings.push(format!("goto state [ {} ]{}", state_name, post_amble))
             }
           }
+          SymbolID::EndOfFile => {
+            if group.len() > 1 && is_scanner {
+              // Defined have higher precedence than
+              // production tokens
 
-          let (symbol_id, assert_class) = if (!is_scanner) {
-            (symbol_id.bytecode_id(grammar), "TOKEN")
-          } else {
-            get_symbol_consume_type(&symbol_id, grammar)
-          };
+              let defined_branches = group
+              .iter()
+              .filter(|n| matches!(n.items[0].get_origin(), OriginData::Symbol(sym) if sym.isDefinedSymbol())).collect::<Vec<_>>();
 
-          let consume = (if child.is(TransitionStateType::I_CONSUME) {
-            "consume then "
-          } else {
-            ""
-          })
-          .to_string();
+              let defined_generics = group.iter()
+              .filter(|n| matches!(n.items[0].get_origin(), OriginData::Symbol(sym) if matches!(sym, SymbolID::GenericNewLine)))
+              .collect::<Vec<_>>();
 
-          format!(
-            "{} {} [ {} ] ( {}goto state [ {} ]{} )",
-            assertion_type,
-            assert_class,
-            // symbol_string,
-            symbol_id,
-            consume,
-            state_name,
-            post_amble
-          )
+              if !defined_branches.is_empty() {
+                // Use the first defined symbol. TODO - Define and use hierarchy rules to determine the best branch
+                // to use as default
+                let child = defined_branches[0];
+
+                let end_string = create_end_string(child, grammar, is_scanner);
+                strings.push(match single_child {
+                  true => format!("{}{}", end_string, post_amble),
+                  false => {
+                    format!("default ( {}{} )", end_string, post_amble)
+                  }
+                })
+              } else {
+                let mut origin = group[0];
+
+                while !(origin.is(TransitionStateType::I_PEEK_ORIGIN)) {
+                  origin = t_pack.get_node(origin.parent);
+                }
+
+                for child in children_tables.get(origin.id).unwrap() {
+                  for item in &child.items {
+                    item.blame(grammar);
+                  }
+                }
+
+                // Group based on originating symbol
+                panic!("Multiple DEFAULT branches found!")
+              }
+            } else {
+              for child in group {
+                let end_string = create_end_string(child, grammar, is_scanner);
+                strings.push(match single_child {
+                  true => format!("{}{}", end_string, post_amble),
+                  false => {
+                    format!("default ( {}{} )", end_string, post_amble)
+                  }
+                })
+              }
+            }
+          }
+          SymbolID::Default => {
+            for child in group {
+              let child_state = resolved_states.get(&child.id).unwrap();
+              let state_name = child_state.get_name();
+              let consume = (if child.is(TransitionStateType::I_CONSUME) {
+                "consume then "
+              } else {
+                ""
+              })
+              .to_string();
+
+              strings.push(match single_child {
+                true => format!("{}goto state [ {} ]{}", consume, state_name, post_amble),
+                false => format!(
+                  "default ( {}goto state [ {} ]{} )",
+                  consume, state_name, post_amble
+                ),
+              });
+            }
+          }
+          _ => {
+            for child in group {
+              let child_state = resolved_states.get(&child.id).unwrap();
+              let symbol_id = child.terminal_symbol;
+              let symbol_string = symbol_id.to_string(grammar);
+              let state_name = child_state.get_name();
+              is_token_assertion = true;
+
+              let assertion_type = (if child.is(TransitionStateType::O_PEEK) {
+                "assert peek"
+              } else {
+                "assert"
+              })
+              .to_string();
+
+              if child.is(TransitionStateType::O_PEEK) {
+                if (node.is(TransitionStateType::O_PEEK)) {
+                  peek_type = PeekType::PeekContinue;
+                } else {
+                  peek_type = PeekType::PeekStart;
+                }
+              }
+
+              let (symbol_id, assert_class) = if (!is_scanner) {
+                (symbol_id.bytecode_id(grammar), "TOKEN")
+              } else {
+                get_symbol_consume_type(&symbol_id, grammar)
+              };
+
+              let consume = (if child.is(TransitionStateType::I_CONSUME) {
+                "consume then "
+              } else {
+                ""
+              })
+              .to_string();
+
+              strings.push(format!(
+                "{} {} [ {} /* {} */ ] ( {}goto state [ {} ]{} )",
+                assertion_type,
+                assert_class,
+                symbol_id,
+                symbol_string,
+                consume,
+                state_name,
+                post_amble
+              ));
+            }
+          }
         }
-      });
-
-      stack_depth += max_child_depth;
+      }
     }
+
+    stack_depth += max_child_depth;
   }
 
   let state = if is_scanner {
@@ -637,7 +819,7 @@ fn create_intermediate_state(
 }
 
 fn get_symbols_from_items(
-  item_set: BTreeSet<&Item>,
+  item_set: BTreeSet<Item>,
   grammar: &GrammarStore,
 ) -> (BTreeSet<SymbolID>, BTreeSet<SymbolID>)
 {
@@ -646,7 +828,15 @@ fn get_symbols_from_items(
 
   for item in item_set {
     match item.get_symbol(grammar) {
-      SymbolID::EndOfFile | SymbolID::Undefined | SymbolID::Production(..) => {}
+      SymbolID::Production(production_id, ..) => {
+        let production_items = get_production_start_items(&production_id, grammar)
+          .into_iter()
+          .filter(|i| i.is_term(grammar))
+          .collect::<BTreeSet<_>>();
+
+        let (norm, peek) = get_symbols_from_items(production_items, grammar);
+      }
+      SymbolID::EndOfFile | SymbolID::Undefined => {}
       sym => {
         normal_symbol_set.insert(item.get_symbol(grammar));
       }

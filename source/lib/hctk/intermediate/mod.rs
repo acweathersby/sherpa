@@ -50,7 +50,7 @@ mod transition_tree_tests
     );
 
     for p in grammar.production_table.values() {
-      println!("{}", p.original_name);
+      eprintln!("{}", p.original_name);
     }
 
     let production = grammar

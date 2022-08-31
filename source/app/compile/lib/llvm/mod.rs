@@ -97,7 +97,7 @@ mod test
 
     unsafe { assert!(construct_init(&parse_context).is_ok()) }
 
-    println!("{}", parse_context.module.to_string());
+    eprintln!("{}", parse_context.module.to_string());
   }
 
   #[test]
@@ -109,7 +109,7 @@ mod test
 
     unsafe { assert!(construct_push_state(&parse_context).is_ok()) }
 
-    println!("{}", parse_context.module.to_string());
+    eprintln!("{}", parse_context.module.to_string());
   }
 
   #[test]
@@ -134,7 +134,7 @@ mod test
       push_state_fn.call(&mut rt_ctx, NORMAL_STATE_FLAG_LLVM, 0x10101010_01010101);
       push_state_fn.call(&mut rt_ctx, NORMAL_STATE_FLAG_LLVM, 0x01010101_10101010);
 
-      println!("{:#?}", rt_ctx);
+      eprintln!("{:#?}", rt_ctx);
       assert_eq!(rt_ctx.local_goto_stack[0].goto_fn as usize, 0x10101010_01010101);
       assert_eq!(rt_ctx.local_goto_stack[0].state, NORMAL_STATE_FLAG_LLVM);
 
@@ -152,7 +152,7 @@ mod test
 
     unsafe { assert!(construct_emit_accept(&parse_context).is_ok()) }
 
-    println!("{}", parse_context.module.to_string());
+    eprintln!("{}", parse_context.module.to_string());
   }
 
   #[test]
@@ -164,7 +164,7 @@ mod test
 
     unsafe { assert!(construct_emit_shift(&parse_context).is_ok()) }
 
-    println!("{}", parse_context.module.to_string());
+    eprintln!("{}", parse_context.module.to_string());
   }
 
   #[test]
@@ -211,7 +211,7 @@ mod test
 
     unsafe { assert!(construct_emit_reduce_function(&parse_context).is_ok()) }
 
-    println!("{}", parse_context.module.to_string());
+    eprintln!("{}", parse_context.module.to_string());
   }
 
   #[test]
@@ -256,7 +256,7 @@ mod test
       assert!(construct_get_adjusted_input_block_function(&parse_context).is_ok())
     }
 
-    println!("{}", parse_context.module.to_string());
+    eprintln!("{}", parse_context.module.to_string());
   }
 
   #[test]
@@ -334,7 +334,7 @@ mod test
 
       get_ib.call(&mut rt_ctx, &token, 2, &mut block);
 
-      println!("{:?} {:?}", rt_ctx.input_block, block);
+      eprintln!("{:?} {:?}", rt_ctx.input_block, block);
       assert_eq!(*block.block, b't');
       assert_eq!(block.offset, 3);
       assert_eq!(block.length, 1);
@@ -350,7 +350,7 @@ mod test
 
     unsafe { assert!(construct_scan(&parse_context).is_ok()) }
 
-    println!("{}", parse_context.module.to_string());
+    eprintln!("{}", parse_context.module.to_string());
   }
 
   #[test]
@@ -362,7 +362,7 @@ mod test
 
     unsafe { assert!(construct_emit_error(&parse_context).is_ok()) }
 
-    println!("{}", parse_context.module.to_string());
+    eprintln!("{}", parse_context.module.to_string());
   }
 
   #[test]
@@ -374,7 +374,7 @@ mod test
 
     unsafe { assert!(construct_emit_end_of_parse(&parse_context).is_ok()) }
 
-    println!("{}", parse_context.module.to_string());
+    eprintln!("{}", parse_context.module.to_string());
   }
 
   #[test]
@@ -386,7 +386,7 @@ mod test
 
     unsafe { assert!(construct_emit_end_of_input(&parse_context).is_ok()) }
 
-    println!("{}", parse_context.module.to_string());
+    eprintln!("{}", parse_context.module.to_string());
   }
 
   #[test]
@@ -398,7 +398,7 @@ mod test
 
     unsafe { assert!(construct_pop_state_function(&parse_context).is_ok()) }
 
-    println!("{}", parse_context.module.to_string());
+    eprintln!("{}", parse_context.module.to_string());
   }
 
   #[test]
@@ -432,7 +432,7 @@ mod test
       assert_eq!(second.state, 40);
       assert_eq!(first.state, 20);
 
-      println!("{:#?}", rt_ctx);
+      eprintln!("{:#?}", rt_ctx);
     };
   }
   #[test]
@@ -446,7 +446,7 @@ mod test
       assert!(construct_prime_function(&parse_context, &vec![], &mut vec![]).is_ok())
     }
 
-    println!("{}", parse_context.module.to_string());
+    eprintln!("{}", parse_context.module.to_string());
   }
 
   #[test]
@@ -458,7 +458,7 @@ mod test
 
     unsafe { assert!(construct_next_function(&parse_context).is_ok()) }
 
-    println!("{}", parse_context.module.to_string());
+    eprintln!("{}", parse_context.module.to_string());
   }
 
   #[test]
@@ -499,7 +499,7 @@ mod test
 
       next.call(&mut rt_ctx, &mut action);
 
-      println!("{:#?}", action);
+      eprintln!("{:#?}", action);
 
       assert!(
         matches!(action, ParseAction::Accept { production_id } if production_id == 202020),
@@ -516,7 +516,7 @@ mod test
 
     unsafe { assert!(construct_extend_stack_if_needed(&parse_context).is_ok()) }
 
-    println!("{}", parse_context.module.to_string());
+    eprintln!("{}", parse_context.module.to_string());
   }
 
   #[test]
@@ -544,7 +544,7 @@ mod test
       assert_eq!(rt_ctx.stack_size as usize, 8);
       assert_eq!(rt_ctx.state, NORMAL_STATE_FLAG_LLVM);
 
-      println!("{:?}:{:#?}", root, rt_ctx);
+      eprintln!("{:?}:{:#?}", root, rt_ctx);
     };
   }
 
@@ -558,7 +558,7 @@ mod test
     unsafe { assert!(construct_utf8_lookup(&parse_context).is_ok()) }
     unsafe { assert!(construct_merge_utf8_part(&parse_context).is_ok()) }
 
-    println!("{}", parse_context.module.to_string());
+    eprintln!("{}", parse_context.module.to_string());
   }
 
   #[test]
@@ -646,7 +646,7 @@ mod test
 
       assert_eq!(rt_ctx.stack_size, ((68 + 2) << 1));
 
-      println!("{:#?}", stack);
+      eprintln!("{:#?}", stack);
     };
   }
 

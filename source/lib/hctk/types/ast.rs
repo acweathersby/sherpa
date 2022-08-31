@@ -1,6 +1,6 @@
-use super::token::Token;
+use crate::types::Token;
 
-pub type ReduceFunction<T> = fn(args: &mut Vec<HCObj<T>>, tok: Token) -> HCObj<T>;
+pub type ReduceFunction<T> = fn(args: &mut Vec<HCObj<T>>, tok: Token);
 
 #[derive(Debug, Clone)]
 
@@ -22,119 +22,207 @@ pub enum HCObj<T: 'static>
   U32(u32),
   U16(u16),
   U8(u8),
+  F32Vec(Vec<f32>),
+  F64Vec(Vec<f64>),
+  I64Vec(Vec<i64>),
+  I32Vec(Vec<i32>),
+  I16Vec(Vec<i16>),
+  I8Vec(Vec<i8>),
+  U64Vec(Vec<u64>),
+  U32Vec(Vec<u32>),
+  U16Vec(Vec<u16>),
+  U8Vec(Vec<u8>),
   TOKEN(Token),
   TOKENS(Vec<Token>),
   BOOL(bool),
   OBJECTS(Vec<HCObj<T>>),
 }
 
-macro_rules! default_val {
-  ($fn_name:ident, $output_type:ident, $default_val: expr) => {
-    fn $fn_name(&self) -> $output_type
+macro_rules! into_vec {
+  ($fn_name:ident, $out_type: ty, $type:ident) => {
+    pub fn $fn_name(self) -> Vec<$out_type>
     {
-      $default_val
-    }
-  };
-}
-
-impl<T: 'static> HCObj<T>
-{
-  pub fn to_node(self) -> Option<T>
-  {
-    match self {
-      Self::NODE(node) => Some(node),
-      _ => None,
-    }
-  }
-}
-pub trait HCObjTrait
-{
-  default_val!(to_string, String, String::new());
-  default_val!(to_f64, f64, f64::NAN);
-  default_val!(to_f32, f32, f32::NAN);
-  default_val!(to_u64, u64, 0);
-  default_val!(to_u32, u32, 0);
-  default_val!(to_u16, u16, 0);
-  default_val!(to_u8, u8, 0);
-  default_val!(to_i64, i64, 0);
-  default_val!(to_i32, i32, 0);
-  default_val!(to_i16, i16, 0);
-  default_val!(to_i8, i8, 0);
-  default_val!(to_bool, bool, false);
-  default_val!(to_tok, Token, Token::empty());
-}
-
-macro_rules! num_conversion {
-  ($fn_name:ident, $output_type:ident, $default_val: expr) => {
-    fn $fn_name(&self) -> $output_type
-    {
-      match self {
-        HCObj::TOKEN(tok) => {
-          tok.to_string().parse::<$output_type>().unwrap_or($default_val)
-        }
-        HCObj::STRING(str) => str.parse::<$output_type>().unwrap(),
-        HCObj::F64(val) => *val as $output_type,
-        HCObj::F32(val) => *val as $output_type,
-        HCObj::I64(val) => *val as $output_type,
-        HCObj::I32(val) => *val as $output_type,
-        HCObj::I16(val) => *val as $output_type,
-        HCObj::I8(val) => *val as $output_type,
-        HCObj::U64(val) => *val as $output_type,
-        HCObj::U32(val) => *val as $output_type,
-        HCObj::U16(val) => *val as $output_type,
-        HCObj::U8(val) => *val as $output_type,
-        HCObj::NODE(node) => node.$fn_name(),
-        &HCObj::BOOL(val) => (val as u64) as $output_type,
-        _ => $default_val,
+      if let HCObj::$type(v) = self {
+        v
+      } else {
+        vec![]
       }
     }
   };
 }
 
+macro_rules! to_numeric {
+  ($fn_name:ident,  $Num:ty) => {
+    fn $fn_name(&self) -> $Num
+    {
+      if self.is_numeric() || matches!(self, HCObj::STRING(..) | HCObj::TOKEN(..)) {
+        match self {
+          HCObj::STRING(str) => str.parse::<i64>().unwrap_or(0) as $Num,
+          HCObj::TOKEN(tok) => tok.to_string().parse::<i64>().unwrap_or(0) as $Num,
+          HCObj::F64(val) => *val as $Num,
+          HCObj::F32(val) => *val as $Num,
+          HCObj::I64(val) => *val as $Num,
+          HCObj::I32(val) => *val as $Num,
+          HCObj::I16(val) => *val as $Num,
+          HCObj::U64(val) => *val as $Num,
+          HCObj::U32(val) => *val as $Num,
+          HCObj::U16(val) => *val as $Num,
+          HCObj::U8(val) => *val as $Num,
+          HCObj::BOOL(val) => (*val as usize) as $Num,
+          _ => 0 as $Num,
+        }
+      } else {
+        0 as $Num
+      }
+    }
+  };
+}
+
+impl<T> HCObj<T>
+{
+  into_vec!(into_nodes, T, NODES);
+
+  into_vec!(into_f64_vec, f64, F64Vec);
+
+  into_vec!(into_f32_vec, f32, F32Vec);
+
+  into_vec!(into_i64_vec, i64, I64Vec);
+
+  into_vec!(into_i32_vec, i32, I32Vec);
+
+  into_vec!(into_i16_vec, i16, I16Vec);
+
+  into_vec!(into_i8_vec, i8, I8Vec);
+
+  into_vec!(into_u64_vec, u64, U64Vec);
+
+  into_vec!(into_u32_vec, u32, U32Vec);
+
+  into_vec!(into_u16_vec, u16, U16Vec);
+
+  into_vec!(into_u8_vec, u8, U8Vec);
+
+  into_vec!(into_tokens, Token, TOKENS);
+
+  pub fn is_numeric(&self) -> bool
+  {
+    matches!(
+      self,
+      HCObj::F64(..)
+        | HCObj::F32(..)
+        | HCObj::I64(..)
+        | HCObj::I32(..)
+        | HCObj::I16(..)
+        | HCObj::U64(..)
+        | HCObj::U32(..)
+        | HCObj::U16(..)
+        | HCObj::U8(..)
+    )
+  }
+}
+
+pub trait HCObjTrait
+{
+  fn to_string(&self) -> String;
+
+  fn to_f64(&self) -> f64
+  {
+    0.0
+  }
+
+  fn to_f32(&self) -> f32
+  {
+    0.0
+  }
+
+  fn to_i64(&self) -> i64
+  {
+    0
+  }
+
+  fn to_i32(&self) -> i32
+  {
+    0
+  }
+
+  fn to_i16(&self) -> i16
+  {
+    0
+  }
+  fn to_i8(&self) -> i8
+  {
+    0
+  }
+
+  fn to_u64(&self) -> u64
+  {
+    0
+  }
+
+  fn to_u32(&self) -> u32
+  {
+    0
+  }
+  fn to_u16(&self) -> u16
+  {
+    0
+  }
+  fn to_u8(&self) -> u8
+  {
+    0
+  }
+
+  fn to_bool(&self) -> bool
+  {
+    false
+  }
+
+  fn to_token(&self) -> Token
+  {
+    Token::empty()
+  }
+}
+
 impl<T: HCObjTrait> HCObjTrait for HCObj<T>
 {
-  num_conversion!(to_u64, u64, 0);
+  to_numeric!(to_i8, i8);
 
-  num_conversion!(to_u32, u32, 0);
+  to_numeric!(to_i16, i16);
 
-  num_conversion!(to_u16, u16, 0);
+  to_numeric!(to_i32, i32);
 
-  num_conversion!(to_u8, u8, 0);
+  to_numeric!(to_i64, i64);
 
-  num_conversion!(to_i64, i64, 0);
+  to_numeric!(to_u8, u8);
 
-  num_conversion!(to_i32, i32, 0);
+  to_numeric!(to_u16, u16);
 
-  num_conversion!(to_i16, i16, 0);
+  to_numeric!(to_u32, u32);
 
-  num_conversion!(to_i8, i8, 0);
+  to_numeric!(to_u64, u64);
 
-  num_conversion!(to_f64, f64, f64::NAN);
+  to_numeric!(to_f32, f32);
 
-  num_conversion!(to_f32, f32, f32::NAN);
+  to_numeric!(to_f64, f64);
 
   fn to_string(&self) -> String
   {
     match self {
       HCObj::NODE(node) => node.to_string(),
-      HCObj::BOOL(val) => val.to_string(),
-      HCObj::F64(val) => val.to_string(),
-      HCObj::F32(val) => val.to_string(),
-      HCObj::I64(val) => val.to_string(),
-      HCObj::I32(val) => val.to_string(),
-      HCObj::I16(val) => val.to_string(),
-      HCObj::I8(val) => val.to_string(),
-      HCObj::U64(val) => val.to_string(),
-      HCObj::U32(val) => val.to_string(),
-      HCObj::U16(val) => val.to_string(),
-      HCObj::U8(val) => val.to_string(),
+      &HCObj::BOOL(val) => {
+        if val {
+          String::from("true")
+        } else {
+          String::from("false")
+        }
+      }
       HCObj::STRING(string) => string.to_owned(),
       HCObj::TOKEN(val) => val.to_string(),
       _ => String::from(""),
     }
   }
 
-  fn to_tok(&self) -> Token
+  fn to_token(&self) -> Token
   {
     match self {
       HCObj::TOKEN(val) => val.clone(),
@@ -144,32 +232,23 @@ impl<T: HCObjTrait> HCObjTrait for HCObj<T>
 
   fn to_bool(&self) -> bool
   {
-    match self {
-      HCObj::TOKEN(tok) => match tok.to_string().parse::<f64>() {
-        Err(_) => false,
-        Ok(val) => val != 0.0,
-      },
-      HCObj::F64(val) => *val != 0.0,
-      HCObj::F32(val) => *val != 0.0,
-      HCObj::I64(val) => *val != 0,
-      HCObj::I32(val) => *val != 0,
-      HCObj::I16(val) => *val != 0,
-      HCObj::I8(val) => *val != 0,
-      HCObj::U64(val) => *val != 0,
-      HCObj::U32(val) => *val != 0,
-      HCObj::U16(val) => *val != 0,
-      HCObj::U8(val) => *val != 0,
-      HCObj::NODE(node) => node.to_bool(),
-      &HCObj::BOOL(val) => val,
-      _ => false,
-    }
+    self.to_u8() != 0
   }
 }
 
 #[derive(Debug, Clone)]
+
 pub struct Lazy
 {
   tok:           Token,
   entry_pointer: u32,
   bytecode:      &'static [u32],
 }
+
+// impl Lazy<_> {
+// fn parse_scope(&self) {
+// let string = "";
+// let reader = UTF8StringReader::new(string.as_bytes());
+// let result = completer(reader, self.bytecode, self.entry_pointer,
+// self.functions); }
+// }

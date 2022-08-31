@@ -22,7 +22,6 @@ pub type TransitionGraphNodeId = usize;
 pub enum TransitionStateType
 {
   UNDEFINED,
-  START,
   /// Transition has occurred from
   /// the consumption of a terminal
   /// symbol. All transition should
@@ -32,18 +31,10 @@ pub enum TransitionStateType
   /// Transition has occurred from the
   /// completion of non-terminal symbol.
   O_PRODUCTION,
-  /// Node represents a branch of one or
-  /// more sub-nodes. Each sub-node should
-  /// should be gated by an assert, peek, or
-  /// consume verification instruction.
-  MULTI,
-  /// Transition has occurred from the
-  /// accepting of a completed root item.
-  ACCEPT,
 
   /// Transition has occurred from the
   /// accepting of a completed root item.
-  AMBIGUOUS,
+  O_ACCEPT,
 
   /// State includes items out of the scope of the current
   /// production that should be used for disambiguating states
@@ -59,14 +50,7 @@ pub enum TransitionStateType
   /// accepting of a root item.
   I_END,
 
-  /// The current state represents a completed
-  /// production. Used by scanner to determine
-  /// when to apply token assignments
-  COMPLETED,
-
   O_GOTO,
-
-  LOOP,
 
   I_GOTO_START,
 
@@ -75,15 +59,13 @@ pub enum TransitionStateType
   /// Indicates this node consumes its symbol as a token.
   I_CONSUME,
 
-  I_SCANNER,
-
   I_PASS,
 
   I_FAIL,
 
-  I_TEST,
+  I_PEEK_ORIGIN,
 
-  I_PEEK_ROOT,
+  I_MERGE_ORIGIN,
 
   /// This state is set when the nodes item has a skipped symbol
   /// that occludes another item that consumes that symbol.
@@ -93,13 +75,21 @@ pub enum TransitionStateType
   O_TERMINAL,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+impl Default for TransitionStateType
+{
+  fn default() -> Self
+  {
+    TransitionStateType::UNDEFINED
+  }
+}
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct TransitionGraphNode
 {
   /// The symbols that lead to the
   /// transition to this state.
-  pub sym: SymbolID,
+  pub terminal_symbol: SymbolID,
+  pub production_symbol: Option<SymbolID>,
   pub transition_type: TransitionStateType,
   pub items: Vec<Item>,
   pub parent: TransitionGraphNodeId,
@@ -121,11 +111,12 @@ impl TransitionGraphNode
   ) -> Self
   {
     let mut node = TransitionGraphNode {
-      sym,
+      terminal_symbol: sym,
       transition_type: TransitionStateType::UNDEFINED,
       proxy_parents: vec![],
       items,
       depth: 0,
+      production_symbol: None,
       parent: TransitionGraphNode::OrphanIndex,
       goal: TransitionGraphNode::OrphanIndex,
       id: TransitionGraphNode::OrphanIndex,
@@ -151,12 +142,16 @@ impl TransitionGraphNode
     items: Vec<Item>,
   ) -> Self
   {
+    if items.is_empty() {
+      panic!("WTsF?!?!?!");
+    }
     TransitionGraphNode {
-      sym,
+      terminal_symbol: sym,
       transition_type: TransitionStateType::UNDEFINED,
       proxy_parents: vec![],
       items,
       depth: 0,
+      production_symbol: None,
       parent: TransitionGraphNode::OrphanIndex,
       goal: TransitionGraphNode::OrphanIndex,
       id: origin.id * 100000,
@@ -197,15 +192,22 @@ impl TransitionGraphNode
   }
 }
 
-#[derive(PartialEq, Eq, Debug)]
-
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum TransitionMode
 {
   RecursiveDescent,
   GoTo,
 }
 
-#[derive(Debug)]
+impl Default for TransitionMode
+{
+  fn default() -> Self
+  {
+    TransitionMode::RecursiveDescent
+  }
+}
+
+#[derive(Debug, Default)]
 
 pub struct TransitionPack<'a>
 {
@@ -228,6 +230,7 @@ pub struct TransitionPack<'a>
   pub goto_scoped_closure: Option<Rc<Box<Vec<Item>>>>,
   pub root_productions: BTreeSet<ProductionId>,
   pub peek_ids: HashSet<u64>,
+  pub start_items: BTreeSet<Item>,
 }
 
 impl<'a> TransitionPack<'a>
@@ -259,21 +262,18 @@ impl<'a> TransitionPack<'a>
   ) -> Self
   {
     TransitionPack {
-      scoped_closures: Vec::new(),
-      closure_links: HashMap::new(),
-      goto_items: HashSet::new(),
-      nodes: Vec::new(),
-      leaf_nodes: Vec::new(),
       node_pipeline: VecDeque::with_capacity(32),
       empty_cache: VecDeque::with_capacity(16),
-      peek_ids: HashSet::new(),
       mode,
       is_scanner,
-      goto_scoped_closure: None,
       root_productions: start_items
         .iter()
         .map(|i| i.get_production_id(grammar))
         .collect::<BTreeSet<_>>(),
+      start_items: BTreeSet::from_iter(
+        start_items.iter().map(|i| i.to_start().to_zero_state()),
+      ),
+      ..Default::default()
     }
   }
 
@@ -301,8 +301,6 @@ impl<'a> TransitionPack<'a>
 
   pub fn drop_node(&mut self, node_index: &usize) -> usize
   {
-    
-
     let node_id;
 
     let parent;
@@ -358,6 +356,17 @@ impl<'a> TransitionPack<'a>
     }
   }
 
+  pub fn get_root_link(&self, i: &Item) -> Item
+  {
+    let mut link = *i;
+    let mut next_link = self.get_closure_link(&link);
+    while !next_link.is_null() {
+      link = next_link;
+      next_link = self.get_closure_link(&link);
+    }
+    link
+  }
+
   #[inline(always)]
   pub fn set_closure_link(&mut self, item_next: Item, item_prev: Item)
   {
@@ -382,18 +391,14 @@ impl<'a> TransitionPack<'a>
   pub fn clean(self) -> Self
   {
     TransitionPack {
-      peek_ids: HashSet::new(),
-      scoped_closures: Vec::new(),
-      closure_links: HashMap::new(),
       goto_items: self.goto_items,
       nodes: self.nodes,
       leaf_nodes: self.leaf_nodes,
-      node_pipeline: VecDeque::new(),
-      empty_cache: VecDeque::new(),
       mode: self.mode,
       is_scanner: self.is_scanner,
-      goto_scoped_closure: None,
       root_productions: self.root_productions,
+      closure_links: self.closure_links,
+      ..Default::default()
     }
   }
 

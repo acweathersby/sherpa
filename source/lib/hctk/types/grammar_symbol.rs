@@ -66,6 +66,14 @@ pub enum SymbolID
   Undefined,
 }
 
+impl Default for SymbolID
+{
+  fn default() -> Self
+  {
+    SymbolID::Undefined
+  }
+}
+
 impl SymbolID
 {
   pub const DefinedSymbolIndexBasis: u32 = 8;

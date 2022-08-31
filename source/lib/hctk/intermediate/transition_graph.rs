@@ -1,4 +1,4 @@
-use std::collections::hash_map::Entry;
+use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
@@ -9,7 +9,8 @@ use std::process::id;
 use std::rc::Rc;
 use std::vec;
 
-use crate::grammar::get_closure;
+use crate::debug::debug_items;
+use crate::grammar::create_closure;
 use crate::grammar::get_closure_cached;
 use crate::grammar::get_production_start_items;
 use crate::grammar::hash_id_value_u64;
@@ -17,6 +18,7 @@ use crate::types::GrammarId;
 use crate::types::GrammarStore;
 use crate::types::Item;
 use crate::types::ItemState;
+use crate::types::OriginData;
 use crate::types::ProductionId;
 use crate::types::SymbolID;
 use crate::types::TransitionGraphNode as TGN;
@@ -280,8 +282,6 @@ fn process_node(
   let node = t_pack.get_node(node_index).clone();
   let mut items: Vec<Item> = node.items.clone();
 
-  println!("{}", items[0].debug_string(grammar));
-
   if allow_increment {
     items = items
       .into_iter()
@@ -330,7 +330,12 @@ fn process_node(
     process_end_item(grammar, t_pack, n_end[0], parent_index)
   } else if n_end.is_empty() && n_term.len() == 1 {
     // A single terminal item
-    process_terminal_node(grammar, t_pack, n_term[0], parent_index)
+    process_terminal_node(grammar, t_pack, &vec![n_term[0]], parent_index)
+  } else if n_end.is_empty()
+    // The terminal symbol is identical in all items.
+    && n_term.iter().map(|t| t.get_symbol(grammar)).collect::<BTreeSet<_>>().len() == 1
+  {
+    process_terminal_node(grammar, t_pack, &n_term, parent_index)
   } else {
     // else if n_end.is_empty() && n_term.len() > 1  {
     // Multiple terminal items
@@ -347,7 +352,7 @@ fn non_recursive(
   grammar: &GrammarStore,
 ) -> bool
 {
-  for item in get_closure(items, grammar) {
+  for item in create_closure(items, grammar) {
     if let SymbolID::Production(production, _) = item.get_symbol(grammar) {
       if target_production.contains(&production) {
         return false;
@@ -365,31 +370,40 @@ fn create_peek(
   t_pack: &mut TPack,
 ) -> Vec<usize>
 {
-  let mut depth = 0;
+  let mut cached_depth = 0;
 
   {
     let parent = t_pack.get_node_mut(parent_index);
-    parent.set_type(TST::I_PEEK_ROOT);
-    depth = parent.depth;
-    parent.depth = 99999;
+    parent.set_type(TST::I_PEEK_ORIGIN);
+    cached_depth = parent.depth;
   }
 
-  let goals: Vec<usize> = items
-    .iter()
-    .enumerate()
-    .map(|(i, item)| {
-      let mut root_node =
-        TGN::new(t_pack, item.get_symbol(grammar).to_owned(), usize::MAX, vec![*item]);
-
-      root_node.depth = 0;
-
-      if t_pack.mode == TransitionMode::GoTo && item.at_end() {
-        root_node.transition_type |= TST::I_COMPLETE;
+  let goals: Vec<usize> = if t_pack.is_scanner {
+    hash_group(items, |_, i| i)
+  } else {
+    hash_group(items, |ind, i| {
+      if i.at_end() {
+        format!("at_end_{}", ind)
+      } else {
+        format!("{:?} {}", i.get_symbol(grammar), i.get_state().is_out_of_scope())
       }
-
-      t_pack.insert_node(root_node)
     })
-    .collect();
+  }
+  .iter()
+  .enumerate()
+  .map(|(i, item)| {
+    let mut root_node =
+      TGN::new(t_pack, item[0].get_symbol(grammar).to_owned(), usize::MAX, item.to_vec());
+
+    root_node.depth = cached_depth;
+
+    if t_pack.mode == TransitionMode::GoTo && item[0].at_end() {
+      root_node.transition_type |= TST::I_COMPLETE;
+    }
+
+    t_pack.insert_node(root_node)
+  })
+  .collect();
 
   let mut peek_nodes = vec![];
 
@@ -416,8 +430,6 @@ fn create_peek(
   let mut leaves = vec![];
 
   disambiguate(grammar, t_pack, peek_nodes, &mut leaves, 0);
-
-  t_pack.get_node_mut(parent_index).depth = depth;
 
   let resolved_leaves = process_peek_leaves(grammar, t_pack, leaves);
 
@@ -449,7 +461,9 @@ fn create_term_nodes_from_items(
 
       term_nodes.push(node);
     } else {
-      for closure_item in get_closure(&[*item], grammar) {
+      for closure_item in create_closure(&[*item], grammar) {
+        let closure_item = closure_item.to_origin(item.get_origin());
+
         if !closure_item.is_nonterm(grammar) && !discard.contains(item) {
           let closure_item = closure_item.to_state(item.get_state());
 
@@ -468,15 +482,18 @@ fn create_term_nodes_from_items(
 
   term_nodes
 }
-/// Constructs a Vector of Vectors, each of which contain items that
-/// have been grouped by the hash of a common distinguisher.
-
-fn hash_group<T: Copy + Sized, R: Hash + Sized + Eq, Function: Fn(usize, T) -> R>(
+/// Constructs a Vector of Vectors, each of which contains a set items from the
+/// original vector that have been grouped by the hash of a common distinguisher.
+pub fn hash_group<
+  T: Copy + Sized,
+  R: Hash + Sized + Ord + Eq,
+  Function: Fn(usize, T) -> R,
+>(
   vector: Vec<T>,
   hash_yielder: Function,
 ) -> Vec<Vec<T>>
 {
-  let mut hash_groups = HashMap::<R, Vec<T>>::new();
+  let mut hash_groups = BTreeMap::<R, Vec<T>>::new();
 
   for (i, val) in vector.iter().enumerate() {
     match hash_groups.entry(hash_yielder(i, *val)) {
@@ -488,180 +505,6 @@ fn hash_group<T: Copy + Sized, R: Hash + Sized + Eq, Function: Fn(usize, T) -> R
   }
 
   hash_groups.into_values().collect()
-}
-
-/// Places goal nodes onto the tips of peek leaf nodes to complete
-/// a peek parse path. We then resume constructing the transition
-/// graph from the goal nodes onward.
-///
-/// ### Notes
-/// - #### Graph Structure
-/// Multiple peek leaves may resolve to a single goal, so we make sure
-/// we only continue construction of the transition graph using a
-/// single goal node by allowing that node to point to multiple parent
-/// nodes by way of the `proxy_parent` vector.
-///
-/// - #### Scanner Nodes
-/// Scanners do not peek, but instead greedily match characters
-/// as they traverse the disambiguating path, yielding the lengths of
-/// disambiguated tokens. Thus, when we reach leaf peek nodes of a
-/// scanner scope, we simply complete any outstanding items and yield
-/// goto productions to be resolved within the goto states. The
-/// transitions of all parent nodes are reconfigured as
-/// ASSERT_CONSUME.
-#[inline]
-fn process_peek_leaves(
-  grammar: &GrammarStore,
-  t_pack: &mut TPack,
-  leaves: Vec<usize>,
-) -> Vec<usize>
-{
-  let mut resolved_leaves = Vec::<usize>::new();
-
-  if t_pack.is_scanner {
-    for node_index in leaves {
-      // for node_index in peek_leaf_group {
-      // Instead of resetting our position back to
-      // the goal item, we simply continue parsing
-      // from whatever position we are at.
-
-      {
-        let node = t_pack.get_node_mut(node_index);
-
-        node.unset_type(TST::O_PEEK);
-      }
-
-      let mut iter_index = node_index;
-
-      while !t_pack.get_node(iter_index).is(TST::I_PEEK_ROOT) {
-        let node = t_pack.get_node_mut(iter_index);
-
-        node.unset_type(TST::O_PEEK);
-
-        node.set_type(TST::I_CONSUME);
-
-        iter_index = node.parent;
-      }
-
-      let node = t_pack.get_node_mut(node_index);
-
-      if node.items.iter().any(|i| i.at_end()) {
-        node.unset_type(TST::I_CONSUME);
-      } else {
-        node.set_type(TST::I_CONSUME);
-      }
-
-      process_node(node_index, node_index, grammar, t_pack, true);
-    }
-  } else {
-    for peek_leaf_group in
-      hash_group(leaves, |_, leaf| t_pack.get_node(leaf).goal).iter().cloned()
-    {
-      let primary_peek_parent_index = peek_leaf_group[0];
-
-      let prime_node = t_pack.get_node(primary_peek_parent_index);
-
-      let goal_index = prime_node.goal;
-
-      let goal_node = t_pack.get_node(goal_index);
-
-      if goal_node.is(TST::I_OUT_OF_SCOPE) {
-        for node_index in peek_leaf_group {
-          t_pack.get_node_mut(node_index).set_type(TST::I_FAIL | TST::I_OUT_OF_SCOPE)
-        }
-      } else {
-        // Use the goal node as a proxy to generate child nodes that
-        // are then linked to the current peek leaf nodes.
-
-        let parent_node_indices = peek_leaf_group
-          .into_iter()
-          .map(|n| {
-            let node_depth = t_pack.get_node(n).depth;
-            let node_parent = t_pack.get_node(n).parent;
-
-            if node_depth == 0 {
-              t_pack.drop_node(&n);
-
-              node_parent
-            } else {
-              n
-            }
-          })
-          .collect::<Vec<_>>();
-
-        let primary_parent = parent_node_indices[0];
-
-        let proxy_parents = parent_node_indices[1..].to_owned();
-
-        let have_proxy_parents = !proxy_parents.is_empty();
-
-        for child_index in
-          process_node(goal_index, primary_parent, grammar, t_pack, false)
-        {
-          let child_node = t_pack.get_node_mut(child_index);
-
-          child_node.parent = primary_parent;
-
-          if have_proxy_parents {
-            child_node.proxy_parents.append(&mut proxy_parents.to_owned());
-          }
-
-          resolved_leaves.push(child_index);
-        }
-
-        // Note: Remember all goal nodes are DROPPED at the
-        // end of the peek resolution process
-      }
-    }
-  }
-
-  resolved_leaves
-}
-
-fn process_end_item(
-  grammar: &GrammarStore,
-  t_pack: &mut TPack,
-  end_item: Item,
-  parent_index: usize,
-) -> Vec<usize>
-{
-  let link = t_pack.get_closure_link(&end_item);
-
-  if t_pack.is_scanner && !t_pack.get_closure_link(&end_item).is_null() {
-    // We need to be in initial closure before we can allow
-    // a complete parse run. Thus we recommission the end_state
-    // portion of the disambiguation logic to continue processing
-    // the states until we arrive at an end_item that is indeed
-    // directly connected to the initial closure.
-
-    let (term_items, end_items) = scan_items(&end_item, grammar, t_pack);
-
-    let items = term_items
-      .into_iter()
-      .map(|(_, i)| i)
-      .chain(end_items.into_iter().map(|(_, i)| i))
-      .collect::<Vec<_>>();
-
-    let node = TGN::new(t_pack, SymbolID::EndOfFile, parent_index, items);
-
-    let node_index = t_pack.insert_node(node);
-
-    let results = process_node(node_index, parent_index, grammar, t_pack, false);
-
-    t_pack.drop_node(&node_index);
-
-    vec![node_index]
-  } else {
-    let end_node = TGN::new(t_pack, SymbolID::EndOfFile, parent_index, vec![end_item]);
-
-    let node_index = t_pack.insert_node(end_node);
-
-    t_pack.get_node_mut(node_index).set_type(TST::I_END | TST::O_ASSERT);
-    t_pack.goto_items.insert(end_item);
-    t_pack.leaf_nodes.push(node_index);
-
-    vec![node_index]
-  }
 }
 
 #[inline]
@@ -697,7 +540,6 @@ fn disambiguate(
         term_nodes.append(&mut terms);
         end_nodes.append(&mut final_ends);
 
-        eprintln!("{}", node_index);
         t_pack.drop_node(&node_index);
       }
     }
@@ -707,28 +549,26 @@ fn disambiguate(
     0 => {}
     1 => {
       set_transition_type(end_nodes[0], t_pack, depth);
-
       leaves.push(end_nodes[0]);
     }
     _ => {
-      let goals = get_goals(&end_nodes, t_pack);
-
-      if goals.len() == 1 {
+      if get_goals(&end_nodes, t_pack).len() == 1 {
         for end_node in &end_nodes[1..] {
-          eprintln!("{}", end_node);
           t_pack.drop_node(end_node);
         }
 
         set_transition_type(end_nodes[0], t_pack, depth);
-
         leaves.push(end_nodes[0]);
       } else {
-        handle_unresolved_nodes(end_nodes, grammar, t_pack, leaves);
+        if t_pack.is_scanner {
+        } else {
+          handle_unresolved_nodes(end_nodes, grammar, t_pack, leaves);
+        }
       }
     }
   }
 
-  let mut groups = hash_group(term_nodes, |_, n| t_pack.get_node(n).sym);
+  let mut groups = hash_group(term_nodes, |_, n| t_pack.get_node(n).terminal_symbol);
 
   let mut next_peek_groups = vec![];
 
@@ -826,6 +666,137 @@ fn disambiguate(
   }
 }
 
+/// Places goal nodes onto the tips of peek leaf nodes to complete
+/// a peek parse path. We then resume constructing the transition
+/// graph from the goal nodes onward.
+///
+/// ### Notes
+/// - #### Graph Structure
+/// Multiple peek leaves may resolve to a single goal, so we make sure
+/// we only continue construction of the transition graph using a
+/// single goal node by allowing that node to point to multiple parent
+/// nodes by way of the `proxy_parent` vector.
+///
+/// - #### Scanner Nodes
+/// Scanners do not peek, but instead greedily match characters
+/// as they traverse the disambiguating path, yielding the lengths of
+/// disambiguated tokens. Thus, when we reach leaf peek nodes of a
+/// scanner scope, we simply complete any outstanding items and yield
+/// goto productions to be resolved within the goto states. The
+/// transitions of all parent nodes are reconfigured as
+/// ASSERT_CONSUME.
+#[inline]
+fn process_peek_leaves(
+  grammar: &GrammarStore,
+  t_pack: &mut TPack,
+  leaves: Vec<usize>,
+) -> Vec<usize>
+{
+  let mut resolved_leaves = Vec::<usize>::new();
+
+  if t_pack.is_scanner {
+    for node_index in leaves {
+      // for node_index in peek_leaf_group {
+      // Instead of resetting our position back to
+      // the goal item, we simply continue parsing
+      // from whatever position we are at.
+
+      {
+        let node = t_pack.get_node_mut(node_index);
+
+        node.unset_type(TST::O_PEEK);
+      }
+
+      let mut iter_index = node_index;
+
+      while !t_pack.get_node(iter_index).is(TST::I_PEEK_ORIGIN) {
+        let node = t_pack.get_node_mut(iter_index);
+
+        node.unset_type(TST::O_PEEK);
+
+        node.set_type(TST::I_CONSUME);
+
+        iter_index = node.parent;
+      }
+
+      let node = t_pack.get_node_mut(node_index);
+
+      if node.items.iter().any(|i| i.at_end()) {
+        node.unset_type(TST::I_CONSUME);
+      } else {
+        node.set_type(TST::I_CONSUME);
+      }
+
+      process_node(node_index, node_index, grammar, t_pack, true);
+    }
+  } else {
+    for peek_leaf_group in
+      hash_group(leaves, |_, leaf| t_pack.get_node(leaf).goal).iter().cloned()
+    {
+      let primary_peek_parent_index = peek_leaf_group[0];
+
+      let prime_node = t_pack.get_node(primary_peek_parent_index).to_owned();
+
+      let goal_index = prime_node.goal;
+
+      let goal_node = t_pack.get_node(goal_index);
+
+      if goal_node.is(TST::I_OUT_OF_SCOPE) {
+        for node_index in peek_leaf_group {
+          t_pack.get_node_mut(node_index).set_type(TST::I_FAIL | TST::I_OUT_OF_SCOPE)
+        }
+      } else {
+        // Use the goal node as a proxy to generate child nodes that
+        // are then linked to the current peek leaf nodes.
+
+        let parent_node_indices = peek_leaf_group
+          .into_iter()
+          .map(|n| {
+            let node_depth = t_pack.get_node(n).depth;
+            let node_parent = t_pack.get_node(n).parent;
+
+            if node_depth == 0 {
+              t_pack.drop_node(&n);
+
+              node_parent
+            } else {
+              n
+            }
+          })
+          .collect::<Vec<_>>();
+
+        let primary_parent = parent_node_indices[0];
+
+        let proxy_parents = parent_node_indices[1..].to_owned();
+
+        let have_proxy_parents = !proxy_parents.is_empty();
+
+        for child_index in
+          process_node(goal_index, primary_parent, grammar, t_pack, false)
+        {
+          let mut child_node = t_pack.get_node_mut(child_index);
+
+          child_node.parent = primary_parent;
+
+          if have_proxy_parents {
+            child_node.proxy_parents.append(&mut proxy_parents.to_owned());
+          }
+
+          resolved_leaves.push(child_index);
+
+          if child_node.production_symbol.is_some() {
+            child_node.terminal_symbol = prime_node.terminal_symbol
+          }
+        }
+
+        // Note: Remember all goal nodes are DROPPED at the
+        // end of the peek resolution process
+      }
+    }
+  }
+
+  resolved_leaves
+}
 fn get_continue_items(
   end_item: Item,
   parent_index: usize,
@@ -871,7 +842,6 @@ fn get_continue_items(
 
 fn group_is_repeated(peek_group: &[usize], t_pack: &mut TPack) -> bool
 {
-  // panic!("Todo: group_is_repeated")
   let group_id = peek_group
     .iter()
     .flat_map(|i| {
@@ -957,7 +927,7 @@ fn groups_are_aliased(peek_group: &Vec<usize>, t_pack: &mut TPack) -> bool
 
 fn merge_occluding_groups(
   groups: &mut [Vec<usize>],
-  t_pack: &TPack,
+  t_pack: &mut TPack,
   grammar: &GrammarStore,
 )
 {
@@ -971,12 +941,27 @@ fn merge_occluding_groups(
         continue;
       }
 
-      let from_sym = t_pack.get_node(groups[i][0]).sym;
-      let to_sym = t_pack.get_node(groups[j][0]).sym;
+      let from_node = t_pack.get_node(groups[i][0]);
+      let to_node = t_pack.get_node(groups[j][0]);
+
+      let from_origin = from_node.items[0].get_origin();
+      let to_origin = from_node.items[0].get_origin();
+
+      // Scanner items that originate from the symbol do not require occlusion
+      // checking.
+      if matches!(from_origin, OriginData::Symbol(..)) && from_origin == to_origin {
+        continue;
+      }
+
+      continue;
+
+      let from_sym = from_node.terminal_symbol;
+      let to_sym = to_node.terminal_symbol;
 
       if symbols_occlude(&to_sym, &from_sym, grammar) {
         let mut clone = groups[i].clone();
         groups[j].append(&mut clone);
+        t_pack.get_node_mut(groups[j][0]).set_type(TST::I_MERGE_ORIGIN);
       }
     }
   }
@@ -1028,10 +1013,24 @@ fn handle_unresolved_nodes(
   peek_group: Vec<usize>,
   grammar: &GrammarStore,
   t_pack: &mut TPack,
-  leaves: &mut [usize],
+  leaves: &mut Vec<usize>,
 )
 {
   if t_pack.is_scanner {
+    //   if (peek_group.iter().map(|i| t_pack.get_node(*i)).all(|n| n.items[0].is_end())) {
+    // leaves.push(peek_group[0]);
+    // println!("All are end")
+    // } else {
+    // panic!("WTF");
+    println!(
+      "AA {:?}",
+      peek_group
+        .iter()
+        .map(|n| t_pack.get_node(*n))
+        .map(|n| (n.id, n.parent))
+        .collect::<Vec<_>>()
+    );
+    // }
   } else {
     let goals = get_goals(&peek_group, t_pack);
 
@@ -1128,15 +1127,16 @@ fn scan_items(
             empty_vec.iter()
           }
         } else {
-          get_closure_cached(&nonterm_closure_link.to_zero_state(), grammar).iter()
+          get_closure_cached(&nonterm_closure_link, grammar).iter()
         }
         .filter(|i| i.get_production_id_at_sym(grammar) == production)
         .cloned()
+        .map(|i| i.to_origin(nonterm_closure_link.get_origin()))
         .collect::<Vec<_>>()
       } {
-        p if p.is_empty() => {
+        empty if empty.is_empty() => {
           if nonterm_closure_link.is_null() {
-            t_pack.set_closure_link(end_item, nonterm_closure_link);
+            // t_pack.set_closure_link(end_item, nonterm_closure_link);
             final_items.insert((nonterm_closure_link, end_item));
           } else {
             end_items
@@ -1159,20 +1159,19 @@ fn scan_items(
       }
     }
   }
-
   (out.into_iter().collect::<Vec<_>>(), final_items.into_iter().collect::<Vec<_>>())
 }
 
 fn process_terminal_node(
   grammar: &GrammarStore,
   t_pack: &mut TPack,
-  term_item: Item,
+  term_items: &Vec<Item>,
   parent_index: usize,
 ) -> Vec<usize>
 {
-  let sym = term_item.get_symbol(grammar);
+  let sym = term_items[0].get_symbol(grammar);
 
-  let new_node = TGN::new(t_pack, sym, parent_index, vec![term_item]);
+  let new_node = TGN::new(t_pack, sym, parent_index, term_items.to_vec());
 
   let node_index = t_pack.insert_node(new_node);
 
@@ -1198,11 +1197,66 @@ fn create_production_call(
     nonterm_items,
   );
 
+  node.production_symbol = Some(SymbolID::Production(production, GrammarId(0)));
+
   node.transition_type |= TST::O_PRODUCTION;
 
   let node_index = t_pack.insert_node(node);
 
   t_pack.queue_node(node_index);
+
+  vec![node_index]
+}
+
+fn process_end_item(
+  grammar: &GrammarStore,
+  t_pack: &mut TPack,
+  end_item: Item,
+  parent_index: usize,
+) -> Vec<usize>
+{
+  t_pack.goto_items.insert(end_item);
+
+  if t_pack.is_scanner
+    && !t_pack.start_items.contains(&end_item.to_start().to_zero_state())
+  {
+    // We need to be in the initial closure before we can allow
+    // a complete scanner run. Thus, the production of the end state
+    // is used to select the next set of items, continuing the scan process
+    // the states until we arrive at an end_item that is indeed
+    // directly connected to the initial closure.
+
+    let (term_items, end_items) = scan_items(&end_item, grammar, t_pack);
+
+    // Filter out items automatically handled by goto
+    let non_goto_items =
+      term_items.iter().filter(|(_, i)| i.get_offset() > 1).cloned().collect::<Vec<_>>();
+
+    if !non_goto_items.is_empty() {
+      let items = non_goto_items
+        .into_iter()
+        .map(|(_, i)| i)
+        .chain(end_items.into_iter().map(|(_, i)| i))
+        .collect::<Vec<_>>();
+
+      let node = TGN::new(t_pack, SymbolID::EndOfFile, parent_index, items);
+
+      let node_index = t_pack.insert_node(node);
+
+      let results = process_node(node_index, parent_index, grammar, t_pack, false);
+
+      t_pack.drop_node(&node_index);
+
+      return vec![node_index];
+    }
+  }
+
+  let end_node = TGN::new(t_pack, SymbolID::EndOfFile, parent_index, vec![end_item]);
+
+  let node_index = t_pack.insert_node(end_node);
+
+  t_pack.get_node_mut(node_index).set_type(TST::I_END | TST::O_ASSERT);
+  t_pack.leaf_nodes.push(node_index);
 
   vec![node_index]
 }

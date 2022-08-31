@@ -392,7 +392,7 @@ pub fn generate_disassembly(
 
 pub fn print_states(output: &BytecodeOutput, lu: Option<&BytecodeGrammarLookups>)
 {
-  println!("{}", generate_disassembly(output, lu));
+  eprintln!("{}", generate_disassembly(output, lu));
 }
 
 pub fn print_state(
@@ -402,7 +402,7 @@ pub fn print_state(
 )
 {
   let string = disassemble_state(output, state_offset, lu).0;
-  println!("{}", string);
+  eprintln!("{}", string);
 }
 
 mod bytecode_debugging_tests
@@ -449,6 +449,6 @@ mod bytecode_debugging_tests
     let mut offset: usize = 0;
     let lu = BytecodeGrammarLookups::new(&grammar);
 
-    println!("{}", generate_disassembly(&output, Some(&lu)));
+    eprintln!("{}", generate_disassembly(&output, Some(&lu)));
   }
 }

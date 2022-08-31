@@ -1661,8 +1661,7 @@ where
     fn GetType(&self) -> u32 {
         use ASTNode::*;
         match self {
-            _ => 0,
-            
+    
                 Grammar(node) => 
                     node.as_ref().GetType(),
                 IR_STATE(node) => 
@@ -1830,7 +1829,8 @@ where
                 FunctionIndexWildCard(node) => 
                     node.as_ref().GetType(),
                 FunctionIndexId(node) => 
-                    node.as_ref().GetType()}
+                    node.as_ref().GetType(),
+                    _ => 0,}
     }
 
     fn Type() -> u32 { 0 }
@@ -2061,12 +2061,12 @@ fn GetType(&self) -> u32 {
 
 #[derive(Debug, Clone)]
 pub struct IR_STATE {
-    pub id:String,
-    pub scanner:String,
-    pub instructions:Vec<ASTNode> /* VECTOR */,
-    pub fail:Option<Box<FailState>> /* FailState */,
-    pub symbol_meta:Option<Box<Symbols>> /* Symbols */,
-    pub prod:ASTNode /* Production_Symbol | Production_Import_Symbol */
+    pub id:String /* STRING */,
+pub scanner:String /* STRING */,
+pub instructions:Vec<ASTNode> /* VECTOR */,
+pub fail:Option<Box<FailState>> /* FailState */,
+pub symbol_meta:Option<Box<Symbols>> /* Symbols */,
+pub prod:ASTNode /* Production_Symbol | Production_Import_Symbol */
 }
 
 impl IR_STATE {
@@ -4620,7 +4620,7 @@ pub fn new( _statements:Vec<ASTNode>, _tok:Token) -> Box<Self> {
 fn  replace_statements(&mut self, child: ASTNode,index: i32,) -> Option<ASTNode> {
     
     match &child {
-        ASTNode::AST_Add(_)|ASTNode::AST_Member(_)|ASTNode::AST_NamedReference(_)|ASTNode::AST_IndexReference(_) => {
+        ASTNode::AST_Add(_)|ASTNode::AST_Vector(_)|ASTNode::AST_Member(_)|ASTNode::AST_NamedReference(_)|ASTNode::AST_IndexReference(_)|ASTNode::AST_STRING(_)|ASTNode::AST_U8(_)|ASTNode::AST_U16(_)|ASTNode::AST_U32(_)|ASTNode::AST_U64(_)|ASTNode::AST_I8(_)|ASTNode::AST_I16(_)|ASTNode::AST_I32(_)|ASTNode::AST_I64(_)|ASTNode::AST_F32(_)|ASTNode::AST_F64(_)|ASTNode::AST_BOOL(_)|ASTNode::AST_NUMBER(_) => {
             if index as usize >= self.statements.len() {
                 self.statements.push(child);
                 None
@@ -4682,6 +4682,13 @@ fn Iterate(
                             };
                         },
 
+                        ASTNode::AST_Vector(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Statements(*mut_me), 0, j as i32)   
+                            };
+                        },
+
                         ASTNode::AST_Member(child) => { 
                             unsafe { 
                                 let mut_me = node.get();
@@ -4697,6 +4704,97 @@ fn Iterate(
                         },
 
                         ASTNode::AST_IndexReference(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Statements(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_STRING(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Statements(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_U8(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Statements(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_U16(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Statements(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_U32(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Statements(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_U64(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Statements(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_I8(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Statements(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_I16(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Statements(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_I32(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Statements(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_I64(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Statements(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_F32(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Statements(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_F64(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Statements(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_BOOL(child) => { 
+                            unsafe { 
+                                let mut_me = node.get();
+                                child.Iterate(_yield, &mut NodeIteration::AST_Statements(*mut_me), 0, j as i32)   
+                            };
+                        },
+
+                        ASTNode::AST_NUMBER(child) => { 
                             unsafe { 
                                 let mut_me = node.get();
                                 child.Iterate(_yield, &mut NodeIteration::AST_Statements(*mut_me), 0, j as i32)   

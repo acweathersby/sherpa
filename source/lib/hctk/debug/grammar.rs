@@ -7,19 +7,17 @@ use crate::types::GrammarStore;
 
 pub fn compile_test_grammar(grammar: &str) -> GrammarStore
 {
-    let (grammar, errors) = compile_from_string(
-        &String::from(grammar),
-        &PathBuf::from("/-internal-/test"),
-    );
+  let (grammar, errors) =
+    compile_from_string(&String::from(grammar), &PathBuf::from("/-internal-/test"));
 
-    for error in &errors {
-        println!("{}", error);
-    }
+  for error in &errors {
+    eprintln!("{}", error);
+  }
 
-    assert!(grammar.is_some());
-    assert!(errors.is_empty());
+  assert!(grammar.is_some());
+  assert!(errors.is_empty());
 
-    grammar.unwrap()
+  grammar.unwrap()
 }
 
 #[cfg(test)]
@@ -27,24 +25,21 @@ pub fn compile_test_grammar(grammar: &str) -> GrammarStore
 mod debug_grammar_tests
 {
 
-    use super::*;
+  use super::*;
 
-    #[test]
+  #[test]
 
-    fn test_compile_test_grammar()
-    {
-        let grammar = compile_test_grammar(
-            "
+  fn test_compile_test_grammar()
+  {
+    let grammar = compile_test_grammar(
+      "
         <> A > B 
         <> B > C
         <> C > D
         <> D > E
         <> E > B A | t:g",
-        );
+    );
 
-        assert_eq!(
-            grammar.source_path.as_os_str().to_str().unwrap(),
-            "/-internal-/test"
-        );
-    }
+    assert_eq!(grammar.source_path.as_os_str().to_str().unwrap(), "/-internal-/test");
+  }
 }

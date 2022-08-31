@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::collections::BTreeMap;
 
 use std::collections::BTreeSet;
+use std::fmt::Debug;
 
 use crate::grammar::get_production_plain_name;
 
@@ -55,10 +56,14 @@ pub enum CompositeTypes
   Token,
 }
 
-#[derive(Debug, PartialEq, Clone, Hash, Eq)]
+#[derive(PartialEq, Clone, Hash, Eq, PartialOrd, Ord)]
 pub enum AScriptTypeVal
 {
-  Vector(Option<Vec<AScriptTypeVal>>),
+  TokenVec,
+  StringVec,
+  GenericStruct(BTreeSet<AScriptStructId>),
+  GenericStructVec(BTreeSet<AScriptStructId>),
+  GenericVec(Option<BTreeSet<AScriptTypeVal>>),
   Struct(AScriptStructId),
   String(Option<String>),
   Bool(Option<bool>),
@@ -72,49 +77,178 @@ pub enum AScriptTypeVal
   U32(Option<u32>),
   U16(Option<u16>),
   U8(Option<u8>),
+  U8Vec,
+  U16Vec,
+  U32Vec,
+  U64Vec,
+  I8Vec,
+  I16Vec,
+  I32Vec,
+  I64Vec,
+  F32Vec,
+  F64Vec,
   Token,
   UnresolvedProduction(ProductionId),
   UnresolvedStruct,
   Undefined,
+  /// A generic struct
+  Any,
+}
+impl Debug for AScriptTypeVal
+{
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+  {
+    f.write_str(&self.debug_string(None))
+  }
 }
 
 impl AScriptTypeVal
 {
+  pub fn is_vec(&self) -> bool
+  {
+    use AScriptTypeVal::*;
+    matches!(
+      self,
+      TokenVec
+        | U8Vec
+        | U16Vec
+        | U32Vec
+        | U64Vec
+        | I8Vec
+        | I16Vec
+        | I32Vec
+        | I64Vec
+        | F32Vec
+        | F64Vec
+        | StringVec
+        | GenericStructVec(_)
+    )
+  }
+
   pub fn is_same_type(&self, other: &Self) -> bool
   {
     discriminant(self) == discriminant(other)
   }
 
-  pub fn type_name(&self, grammar: &GrammarStore) -> String
+  pub fn is_undefined(&self) -> bool
   {
+    matches!(self, AScriptTypeVal::Undefined)
+  }
+
+  pub fn is_unresolved_production(&self) -> bool
+  {
+    matches!(self, AScriptTypeVal::UnresolvedProduction(..))
+  }
+
+  pub fn debug_string(&self, grammar: Option<&GrammarStore>) -> String
+  {
+    use AScriptTypeVal::*;
     match self {
-      AScriptTypeVal::Vector(vec) => match vec {
+      GenericVec(vec) => match vec {
         Some(vector) => format!(
           "Vector[{}]",
-          vector.iter().map(|t| { t.type_name(grammar) }).collect::<Vec<_>>().join(", ")
+          vector
+            .iter()
+            .map(|t| { t.hcobj_type_name(grammar) })
+            .collect::<Vec<_>>()
+            .join(", ")
         ),
         None => "Vector[Undefined]".to_string(),
       },
-      AScriptTypeVal::UnresolvedStruct => "UnresolvedStruct".to_string(),
-      AScriptTypeVal::Struct(..) => "Struct".to_string(),
-      AScriptTypeVal::String(..) => "String".to_string(),
-      AScriptTypeVal::Bool(..) => "Bool".to_string(),
-      AScriptTypeVal::F64(..) => "F64".to_string(),
-      AScriptTypeVal::F32(..) => "F32".to_string(),
-      AScriptTypeVal::I64(..) => "I64".to_string(),
-      AScriptTypeVal::I32(..) => "I32".to_string(),
-      AScriptTypeVal::I16(..) => "I16".to_string(),
-      AScriptTypeVal::I8(..) => "I8".to_string(),
-      AScriptTypeVal::U64(..) => "U64".to_string(),
-      AScriptTypeVal::U32(..) => "U32".to_string(),
-      AScriptTypeVal::U16(..) => "U16".to_string(),
-      AScriptTypeVal::U8(..) => "U8".to_string(),
-      AScriptTypeVal::Undefined => "Undefined".to_string(),
-      AScriptTypeVal::Token => "Token".to_string(),
-      AScriptTypeVal::UnresolvedProduction(id) => {
-        let name = get_production_plain_name(id, grammar);
-        format!("UnresolvedProduction[{}]", name)
-      }
+      UnresolvedStruct => "UnresolvedStruct".to_string(),
+      Struct(id) => format!("Struct<{:?}>", id),
+      String(..) => "String".to_string(),
+      Bool(..) => "Bool".to_string(),
+      F64(..) => "F64".to_string(),
+      F32(..) => "F32".to_string(),
+      I64(..) => "I64".to_string(),
+      I32(..) => "I32".to_string(),
+      I16(..) => "I16".to_string(),
+      I8(..) => "I8".to_string(),
+      U64(..) => "U64".to_string(),
+      U32(..) => "U32".to_string(),
+      U16(..) => "U16".to_string(),
+      U8(..) => "U8".to_string(),
+      F64Vec => "F64Vec".to_string(),
+      F32Vec => "F32Vec".to_string(),
+      I64Vec => "I64Vec".to_string(),
+      I32Vec => "I32Vec".to_string(),
+      I16Vec => "I16Vec".to_string(),
+      I8Vec => "I8Vec".to_string(),
+      U64Vec => "U64Vec".to_string(),
+      U32Vec => "U32Vec".to_string(),
+      U16Vec => "U16Vec".to_string(),
+      U8Vec => "U8Vec".to_string(),
+      TokenVec => "Tokens".to_string(),
+      StringVec => "Strings".to_string(),
+      GenericStructVec(nodes) => format!("Nodes[{:?}]", nodes),
+      Undefined => "Undefined".to_string(),
+      Token => "Token".to_string(),
+      GenericStruct(sub_types) => "Node".to_string(),
+      Any => "Any".to_string(),
+      UnresolvedProduction(id) => match grammar {
+        Some(grammar) => {
+          let name = get_production_plain_name(id, grammar);
+          format!("UnresolvedProduction[{}]", name)
+        }
+        None => format!("UnresolvedProduction[{:?}]", id),
+      },
+    }
+  }
+
+  pub fn hcobj_type_name(&self, grammar: Option<&GrammarStore>) -> String
+  {
+    use AScriptTypeVal::*;
+    match self {
+      GenericVec(vec) => match vec {
+        Some(vector) => format!(
+          "GenericVec{}",
+          vector
+            .iter()
+            .map(|t| { t.hcobj_type_name(grammar) })
+            .collect::<Vec<_>>()
+            .join(", ")
+        ),
+        None => "GenericVec".to_string(),
+      },
+      UnresolvedStruct => "UnresolvedStruct".to_string(),
+      Struct(id) => format!("Struct<{:?}>", id),
+      String(..) => "String".to_string(),
+      Bool(..) => "Bool".to_string(),
+      F64(..) => "F64".to_string(),
+      F32(..) => "F32".to_string(),
+      I64(..) => "I64".to_string(),
+      I32(..) => "I32".to_string(),
+      I16(..) => "I16".to_string(),
+      I8(..) => "I8".to_string(),
+      U64(..) => "U64".to_string(),
+      U32(..) => "U32".to_string(),
+      U16(..) => "U16".to_string(),
+      U8(..) => "U8".to_string(),
+      F64Vec => "F64Vec".to_string(),
+      F32Vec => "F32Vec".to_string(),
+      I64Vec => "I64Vec".to_string(),
+      I32Vec => "I32Vec".to_string(),
+      I16Vec => "I16Vec".to_string(),
+      I8Vec => "I8Vec".to_string(),
+      U64Vec => "U64Vec".to_string(),
+      U32Vec => "U32Vec".to_string(),
+      U16Vec => "U16Vec".to_string(),
+      U8Vec => "U8Vec".to_string(),
+      TokenVec => "Tokens".to_string(),
+      StringVec => "Strings".to_string(),
+      GenericStructVec(..) => "NODES".to_string(),
+      Undefined => "Undefined".to_string(),
+      Token => "Token".to_string(),
+      GenericStruct(sub_types) => "Node".to_string(),
+      Any => "Any".to_string(),
+      UnresolvedProduction(id) => match grammar {
+        Some(grammar) => {
+          let name = get_production_plain_name(id, grammar);
+          format!("UnresolvedProduction[{}]", name)
+        }
+        None => format!("UnresolvedProduction[{:?}]", id),
+      },
     }
   }
 }
@@ -166,6 +300,7 @@ macro_rules! num_type {
         "to_".to_string() + stringify!($type)
       }
     }
+    
   };
 }
 
@@ -194,6 +329,7 @@ pub struct AScriptProp
 {
   pub type_val: AScriptTypeVal,
   pub first_declared_location: Token,
+  pub optional: bool,
 }
 
 #[derive(Debug)]
@@ -212,7 +348,7 @@ pub struct AScriptStore
   /// Store of unique AScriptStructs
   pub struct_table: BTreeMap<AScriptStructId, AScriptStruct>,
   pub props_table: BTreeMap<AScriptPropId, AScriptProp>,
-  pub production_types: BTreeMap<ProductionId, HashMap<AScriptTypeVal, Token>>,
+  pub production_types: BTreeMap<ProductionId, HashMap<AScriptTypeVal, BTreeSet<Token>>>,
   pub body_reduce_expressions: BTreeMap<BodyId, (AScriptTypeVal, ASTNode)>,
 }
 
