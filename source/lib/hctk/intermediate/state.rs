@@ -394,7 +394,7 @@ fn create_goto_start_state(
     }
   }
 
-  if contains_root_production && !is_scanner {
+  if contains_root_production {
     if let Some(root_production) = root_productions.first() {
       strings.push(format!(
         "
