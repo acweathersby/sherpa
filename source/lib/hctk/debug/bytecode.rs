@@ -84,7 +84,7 @@ pub fn disassemble_state(
         if instruction & FAIL_STATE_FLAG > 0 {
           (
             format!(
-              "\n{}PFCK {}",
+              "\n{}RCVR {}",
               dh(so),
               address((bytecode[so] & GOTO_STATE_ADDRESS_MASK) as usize)
             ) + &string,
