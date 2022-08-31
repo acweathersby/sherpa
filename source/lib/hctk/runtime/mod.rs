@@ -326,7 +326,7 @@ assert PRODUCTION [3] (pass)
     let mut reader = UTF8StringReader::from_string("AB");
     let mut state = ParseContext::bytecode_context();
 
-    eprintln!("{}", disassemble_state(&output, 0, None).0);
+    eprintln!("{}", disassemble_state(&output.bytecode, 0, None).0);
 
     state.set_production_to(2);
     assert_eq!(vector_jump(index, &mut reader, &mut state, &bytecode), 6);
