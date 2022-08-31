@@ -81,7 +81,11 @@ impl<'a> ImmutCharacterReader for UTF8StringReader<'a>
   #[inline(always)]
   fn byte(&self) -> u32
   {
-    self.get_bytes()[self.cursor()] as u32
+    if (self.cursor() >= self.length) {
+      0
+    } else {
+      self.get_bytes()[self.cursor()] as u32
+    }
   }
 
   #[inline(always)]

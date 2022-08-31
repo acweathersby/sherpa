@@ -88,11 +88,7 @@ impl<T: ImmutCharacterReader + MutCharacterReader> ParseContext<T>
   #[inline]
   pub(crate) fn set_fail_mode_to(&mut self, is_in_fail_mode: bool)
   {
-    self.state = if is_in_fail_mode {
-      FAIL_STATE_FLAG
-    } else {
-      NORMAL_STATE_FLAG
-    }
+    self.input_block_offset = if is_in_fail_mode { 1 } else { 0 }
   }
 
   #[inline]

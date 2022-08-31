@@ -48,12 +48,12 @@ pub fn dispatch<T: ImmutCharacterReader + MutCharacterReader>(
                 break action;
             }
             SCAN => scan(),
-            NOOP => noop(index),
+            NOOP8 => noop(index),
             VECTOR_BRANCH => vector_jump(index, reader, ctx, bytecode),
             HASH_BRANCH => hash_jump(index, reader, ctx, bytecode),
             SET_FAIL_STATE => set_fail(),
             REPEAT => repeat(),
-            NOOP => noop(index),
+            NOOP13 => noop(index),
             ASSERT_CONSUME => DEFAULT_FAIL_INSTRUCTION_ADDRESS,
             FAIL => break FailState,
             _ => break CompleteState,
@@ -254,7 +254,7 @@ pub fn hash_jump<T: ImmutCharacterReader + MutCharacterReader>(
         let input_value = match input_type {
             INPUT_TYPE::T01_PRODUCTION => ctx.get_production(),
             _ => get_token_value(
-                lexer_type, input_type, reader, scan_index.get_value(), ctx, bytecode,
+                lexer_type, input_type, reader, scan_index.get_address() as u32, ctx, bytecode,
             ) as u32,
         };
         let mut hash_index = (input_value & hash_mask) as usize;
@@ -306,7 +306,7 @@ pub fn vector_jump<T: ImmutCharacterReader + MutCharacterReader>(
         let input_value = match input_type {
             INPUT_TYPE::T01_PRODUCTION => ctx.get_production(),
             _ => get_token_value(
-                lexer_type, input_type, reader, scan_index.get_value(), ctx, bytecode,
+                lexer_type, input_type, reader, scan_index.get_address() as u32, ctx, bytecode,
             ) as u32,
         };
 
