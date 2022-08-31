@@ -1,6 +1,7 @@
 //! Utility functions for the evaluation, interpretation, and
 //! comprehension of items
 
+use std::collections::BTreeSet;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 
@@ -29,7 +30,7 @@ pub fn get_production_start_items(
 /// Create the closure of a set of items.
 pub fn create_closure(items: &[Item], grammar: &GrammarStore) -> Vec<Item>
 {
-  let mut seen = HashSet::<Item>::new();
+  let mut seen = BTreeSet::<Item>::new();
 
   let mut queue = VecDeque::<Item>::from_iter(items.iter().cloned());
 

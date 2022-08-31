@@ -1,7 +1,6 @@
 //! Methods for constructing IRStates from a grammar
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
-use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::fmt::format;
 use std::thread;
@@ -43,7 +42,7 @@ pub fn compile_states(
   if num_of_threads == 1 {
     let work_chunks = productions_ids.chunks(num_of_threads).collect::<Vec<_>>();
     let mut deduped_states = BTreeMap::new();
-    let mut scanner_names = HashSet::new();
+    let mut scanner_names = BTreeSet::new();
 
     for production_id in &productions_ids {
       let states = generate_production_states(production_id, grammar);
@@ -81,7 +80,7 @@ pub fn compile_states(
           .map(|productions| {
             s.spawn(|| {
               let mut deduped_states = BTreeMap::new();
-              let mut scanner_names = HashSet::new();
+              let mut scanner_names = BTreeSet::new();
 
               for production_id in *productions {
                 let states = generate_production_states(production_id, grammar);

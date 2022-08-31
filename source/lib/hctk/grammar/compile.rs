@@ -338,13 +338,13 @@ fn finalize_items(
   }
 
   fn insert(
-    goto_items: &mut BTreeMap<ProductionId, HashSet<Item>>,
+    goto_items: &mut BTreeMap<ProductionId, BTreeSet<Item>>,
     production_id: &ProductionId,
     item: Item,
   )
   {
     if !goto_items.contains_key(production_id) {
-      goto_items.insert(*production_id, HashSet::<Item>::new());
+      goto_items.insert(*production_id, BTreeSet::<Item>::new());
     }
 
     goto_items.get_mut(production_id).unwrap().insert(item);

@@ -1,8 +1,6 @@
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
-use std::collections::HashMap;
-use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::hash::Hash;
 use std::process::id;
@@ -155,7 +153,7 @@ pub fn construct_goto<'a>(
         let mut reducible: Vec<Item> = grammar
           .lr_items
           .get(&production_id)
-          .unwrap_or(&HashSet::new())
+          .unwrap_or(&BTreeSet::new())
           .iter()
           .filter(|i| !group.iter().any(|g| *g == **i))
           .map(|i| i.increment().unwrap().to_state(ItemState::OUT_OF_SCOPE_STATE))
@@ -183,9 +181,9 @@ pub fn get_goto_starts(
   start_items: &Vec<Item>,
   grammar: &GrammarStore,
   seed_items: &[Item],
-) -> Vec<(ProductionId, HashSet<Item>)>
+) -> Vec<(ProductionId, BTreeSet<Item>)>
 {
-  type GotoMap = BTreeMap<ProductionId, HashSet<Item>>;
+  type GotoMap = BTreeMap<ProductionId, BTreeSet<Item>>;
 
   let mut local_lr_items = GotoMap::new();
 
@@ -197,7 +195,7 @@ pub fn get_goto_starts(
   fn insert(goto_items: &mut GotoMap, production_id: &ProductionId, item: Item)
   {
     if !goto_items.contains_key(production_id) {
-      goto_items.insert(*production_id, HashSet::<Item>::new());
+      goto_items.insert(*production_id, BTreeSet::<Item>::new());
     }
 
     goto_items.get_mut(production_id).unwrap().insert(item);
@@ -242,7 +240,7 @@ pub fn get_follow_closure(
     productions_to_process.push_back(*production_id);
   }
 
-  let mut output = HashSet::new();
+  let mut output = BTreeSet::new();
 
   while let Some(production_id) = productions_to_process.pop_front() {
     if !seen_productions.insert(production_id) {
@@ -252,7 +250,7 @@ pub fn get_follow_closure(
     let items: Vec<Item> = grammar
       .lr_items
       .get(&production_id)
-      .unwrap_or(&HashSet::new())
+      .unwrap_or(&BTreeSet::new())
       .iter()
       .map(|i| i.increment().unwrap())
       .collect();
@@ -306,7 +304,7 @@ fn process_node(
   let n_end: Vec<Item> = items.iter().filter(|i| i.is_end()).cloned().collect();
 
   if !n_nonterm.is_empty() {
-    let production_ids = HashSet::<ProductionId>::from_iter(
+    let production_ids = BTreeSet::<ProductionId>::from_iter(
       n_nonterm.iter().map(|i| i.get_production_id_at_sym(grammar)),
     );
 
@@ -416,9 +414,13 @@ fn create_peek(
       .map(|i| (t_pack.get_closure_link(i), *i))
       .collect::<Vec<_>>();
 
-    for mut node in
-      create_term_nodes_from_items(&items, grammar, t_pack, parent_index, &HashSet::new())
-    {
+    for mut node in create_term_nodes_from_items(
+      &items,
+      grammar,
+      t_pack,
+      parent_index,
+      &BTreeSet::new(),
+    ) {
       node.goal = goal_index;
 
       node.depth = t_pack.get_node(goal_index).depth;
@@ -449,7 +451,7 @@ fn create_term_nodes_from_items(
   grammar: &GrammarStore,
   t_pack: &mut TPack,
   parent_index: usize,
-  discard: &HashSet<Item>,
+  discard: &BTreeSet<Item>,
 ) -> Vec<TGN>
 {
   let mut term_nodes = vec![];
@@ -611,7 +613,7 @@ fn disambiguate(
           grammar,
           t_pack,
           prime_node_index,
-          &HashSet::new(),
+          &BTreeSet::new(),
         ) {
           node.goal = goal;
           peek_transition_group.push(t_pack.insert_node(node));
@@ -809,7 +811,7 @@ fn get_continue_items(
   let mut term_nodes = vec![];
   let mut final_nodes = vec![];
 
-  let discard = HashSet::<Item>::new();
+  let discard = BTreeSet::<Item>::new();
 
   if peek_depth == 0
     && t_pack.mode == TransitionMode::GoTo
@@ -1094,9 +1096,9 @@ fn scan_items(
   t_pack: &mut TPack,
 ) -> TermAndEndItemGroups
 {
-  let mut seen = HashSet::<(Item, Item)>::new();
-  let mut out = HashSet::<(Item, Item)>::new();
-  let mut final_items = HashSet::<(Item, Item)>::new();
+  let mut seen = BTreeSet::<(Item, Item)>::new();
+  let mut out = BTreeSet::<(Item, Item)>::new();
+  let mut final_items = BTreeSet::<(Item, Item)>::new();
 
   static empty_vec: Vec<Item> = Vec::new();
   // Starting at the top we grab the closure to the nearest

@@ -2,7 +2,6 @@ use bitmask_enum::bitmask;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
-use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::hash::Hash;
 use std::rc::Rc;
@@ -216,7 +215,7 @@ pub struct TransitionPack<'a>
   /// For a givin item, points to an originating
   /// item that can used to look up it's own closure
   closure_links: HashMap<Item, Item>,
-  pub goto_items: HashSet<Item>,
+  pub goto_items: BTreeSet<Item>,
   nodes: Vec<TransitionGraphNode>,
   pub leaf_nodes: Vec<TransitionGraphNodeId>,
   pub mode: TransitionMode,
@@ -229,7 +228,7 @@ pub struct TransitionPack<'a>
   empty_cache: VecDeque<usize>,
   pub goto_scoped_closure: Option<Rc<Box<Vec<Item>>>>,
   pub root_productions: BTreeSet<ProductionId>,
-  pub peek_ids: HashSet<u64>,
+  pub peek_ids: BTreeSet<u64>,
   pub start_items: BTreeSet<Item>,
 }
 
