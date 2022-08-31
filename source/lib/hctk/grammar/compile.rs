@@ -1408,8 +1408,7 @@ fn pre_process_body(
     bodies.push((token.clone(), vec![]));
 
     for sym in symbols {
-      let starting_bodies = bodies.len();
-
+      let original_bodies = 0..bodies.len();
       fn create_production(
         name: &str,
         bodies: &[ASTNode],
@@ -1451,6 +1450,17 @@ fn pre_process_body(
           // maps meta symbols to a body and its
           // index.
           continue;
+        }
+
+        if is_optional {
+          // Need to create new bodies that contains all permutations
+          // of encountered symbols except for the currently
+          // considered symbol. This is achieved by duplicating all
+          // body vectors, then adding the current symbol to the
+          // original vectors, but not the duplicates.
+          for entry in bodies.clone() {
+            bodies.push(entry)
+          }
         }
 
         if is_group {
@@ -1512,22 +1522,20 @@ fn pre_process_body(
               let mut new_bodies = vec![];
 
               for pending_body in pending_bodies {
-                for body in &mut bodies {
+                for body in &mut bodies[original_bodies.clone()] {
                   let mut new_body = body.clone();
-
                   new_body.1.extend(pending_body.1.iter().cloned());
-
                   new_bodies.push(new_body)
                 }
               }
 
-              bodies = new_bodies;
+              bodies.splice(original_bodies, new_bodies);
 
               index += 1;
 
               // We do not to process the existing symbol as it is
               // now replaced with
-              // it's component symbols,
+              // it's component body symbols,
               // so we'll skip the rest of the loop
               continue;
             } else {
@@ -1550,9 +1558,7 @@ fn pre_process_body(
               loc: sym.Token(),
             }));
           }
-        }
-
-        if is_list {
+        } else if is_list {
           // Create a new production that turns `A => a` into
           // `A => a | A => A a` and produce a symbol id that points
           // to that production.
@@ -1631,19 +1637,8 @@ fn pre_process_body(
           }
         }
 
-        if is_optional {
-          // Need to create new bodies that contains all permutations
-          // of encountered symbols except for the currently
-          // considered symbol. This is achieved by duplicating all
-          // body vectors, then adding the current symbol to the
-          // original vectors, but not the duplicates.
-          for entry in bodies.clone() {
-            bodies.push(entry)
-          }
-        }
-
         if let Some(id) = intern_symbol(sym, tgs) {
-          for (_, vec) in &mut bodies[0..starting_bodies] {
+          for (_, vec) in &mut bodies[original_bodies] {
             vec.push(BodySymbolRef {
               original_index: index,
               sym_id: id,
