@@ -1,16 +1,12 @@
 //! Functions for constructing and leveraging transition tables from
 //! Hydrocarbon bytecode.
 
-use std::any::Any;
 use std::collections::BTreeMap;
-use std::collections::BTreeSet;
 use std::collections::VecDeque;
 
 use std::collections::btree_map;
 
-use hctk::bytecode;
 use hctk::bytecode::BytecodeOutput;
-use hctk::debug::grammar;
 use hctk::types::*;
 
 #[derive(Debug, Clone, Copy)]
@@ -29,8 +25,6 @@ pub(crate) fn create_table<'a>(
   output: &'a BytecodeOutput,
 ) -> Option<()>
 {
-  let mut offset = entry_state as usize;
-
   // let states = BTreeMap::new();
   let d: String = String::from("unknown");
 

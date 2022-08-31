@@ -39,7 +39,6 @@ pub fn build_llvm_parser(
     fun: Box::new(move |task_ctx| {
       let output_path = task_ctx.get_build_output_dir();
       let parser_name = task_ctx.get_parser_name();
-      let grammar_name = task_ctx.get_grammar_name();
       let grammar = task_ctx.get_grammar();
       let bytecode_output = task_ctx.get_bytecode();
 
