@@ -465,10 +465,10 @@ fn make_table(
 
       while let Some(pair) = pending_pairs.pop_front() {
         let (val, offset) = pair;
-        let hash_index = ((val as u32) & mod_mask) as usize;
+        let hash_index = (val & mod_mask) as usize;
         if hash_entries[hash_index] == 0 {
           hash_entries[hash_index] =
-            ((val as u32) & 0x7FF) | ((offset & 0x7FF) << 11) | (512 << 22);
+            (val & 0x7FF) | ((offset & 0x7FF) << 11) | (512 << 22);
         } else {
           leftover_pairs.push(pair);
         }
@@ -480,15 +480,15 @@ fn make_table(
       // delta index.
       for (val, offset) in leftover_pairs {
         let mut pointer = 0;
-        let mut node = (val & mod_mask) as usize;
+        let mut prev_node = (val & mod_mask) as usize;
 
         loop {
-          pointer = (((hash_entries[node] >> 22) & 0x3FF) as i32) - 512;
+          pointer = (((hash_entries[prev_node] >> 22) & 0x3FF) as i32) - 512;
 
           if pointer == 0 {
             break;
           } else {
-            node = (node as i32 + pointer as i32) as usize;
+            prev_node = (prev_node as i32 + pointer as i32) as usize;
           }
         }
 
@@ -496,9 +496,9 @@ fn make_table(
           if hash_entries[i] == 0 {
             // Update the previous node in the chain with the
             // diff pointer to the new node.
-            hash_entries[node] = ((((i as i32 - node as i32) + 512) as u32 & 0x3FF)
-              << 22)
-              | (hash_entries[node] & ((1 << 22) - 1));
+            hash_entries[prev_node] =
+              ((((i as i32 - prev_node as i32) + 512) as u32 & 0x3FF) << 22)
+                | (hash_entries[prev_node] & ((1 << 22) - 1));
             // Add data for the new node.
             hash_entries[i] = ((val) & 0x7FF) | ((offset & 0x7FF) << 11) | (512 << 22);
 
