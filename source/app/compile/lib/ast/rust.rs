@@ -303,35 +303,7 @@ fn build_struct_constructor(
 
           string
         }
-        None => {
-          if property.optional && matches!(property.type_val, AScriptTypeVal::Struct(..)) {
-            "None".to_string()
-          } else {
-            use AScriptTypeVal::*;
-            match property.type_val {
-              Bool(_) => "false".to_string(),
-              U16(_) => "0u16".to_string(),
-              Token => "Token::new()".to_string(),
-              TokenVec  | StringVec
-              | U8Vec
-              | U16Vec
-              | U32Vec
-              | U64Vec
-              | I8Vec
-              | I16Vec
-              | I32Vec
-              | I64Vec
-              | F32Vec
-              | F64Vec
-              | GenericStructVec(..) => "Vec::new()".to_string(),
-              _ => panic!(
-                "Unresolvable undefined prop initializer on prop {} with type {}",
-                prop_id.name,
-                property.type_val.hcobj_type_name(Some(grammar))
-              ),
-            }
-          }
-        }
+        None => "Default::default()".to_string()
       }
     } else {
       get_default_value(prop_id, store)
