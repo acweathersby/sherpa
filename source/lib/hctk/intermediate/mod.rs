@@ -1,4 +1,3 @@
-pub mod optimize;
 pub mod state;
 pub mod transition_graph;
 

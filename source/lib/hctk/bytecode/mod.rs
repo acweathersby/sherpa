@@ -11,7 +11,6 @@ use crate::types::SymbolID;
 use self::compile::build_byte_code_buffer;
 
 pub mod compile;
-pub mod optimize;
 
 #[derive(Debug)]
 pub struct BytecodeOutput
