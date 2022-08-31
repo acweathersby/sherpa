@@ -247,7 +247,7 @@ pub fn hash_jump<T: ImmutCharacterReader + MutCharacterReader>(
         scanner_address:scan_index,
     } = TableHeaderData::from_bytecode(i, bytecode);
 
-    let hash_mask = 1 << (modulo_base - 1);
+    let hash_mask = (1 << modulo_base) - 1;
     let table_start = i + 4;
 
     loop {
