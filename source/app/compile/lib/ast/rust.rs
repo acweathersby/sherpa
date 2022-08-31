@@ -89,20 +89,24 @@ fn build_functions<W: Write>(
 
   let mut refs = vec![];
 
-  for (_, body) in &ordered_bodies {
+  for (id, body) in &ordered_bodies {
     let mut temp_writer = writer.checkpoint();
-    let mut noop = false;
+    let mut noop = 0;
     let fn_name = format!("ast_fn{:0>3}", body.bytecode_id);
 
     temp_writer.wrtln(&format!("fn {}({}){{", fn_name, fn_args))?.indent();
 
     if body.reduce_fn_ids.is_empty() {
-      noop = true;
+      noop = 1;
     } else {
       let mut ref_index = body.symbols.len();
+
       for function_id in &body.reduce_fn_ids {
+
         match grammar.reduce_functions.get(function_id) {
+
           Some(ReduceFunctionType::Ascript(function)) => match &function.ast {
+
             ASTNode::AST_Struct(box ast_struct) => {
               if let AScriptTypeVal::Struct(struct_type) =
                 get_struct_type_from_node(ast_struct)
@@ -200,11 +204,11 @@ fn build_functions<W: Write>(
               };
             }
             _ => {
-              noop = true;
+              noop = 2;
             }
           },
           _ => {
-            noop = true;
+            noop = 3;
           }
         }
       }
@@ -213,11 +217,11 @@ fn build_functions<W: Write>(
     temp_writer.dedent().wrtln("}")?;
     temp_writer.newline()?;
 
-    if !noop {
+    if noop == 0 {
       writer.merge_checkpoint(temp_writer)?;
-      refs.push(fn_name);
+      refs.push(format!("/* {} */ {}",id, fn_name));
     } else {
-      refs.push("noop_fn".to_string())
+      refs.push(format!("/* {} {} */ noop_fn",id, noop));
     }
   }
 
@@ -238,24 +242,16 @@ fn build_functions<W: Write>(
   Ok(())
 }
 
-fn create_default_function(
-  temp_writer: &mut CodeWriter<Vec<u8>>,
-  body: &&Body,
-) -> Result<()>
-{
-  Ok(())
-}
-
 fn build_struct_constructor(
   grammar: &GrammarStore,
-  ascript: &AScriptStore,
+  store: &AScriptStore,
   body: &Body,
   struct_type: &AScriptStructId,
   ast_struct: &AST_Struct,
   ref_index: &mut usize,
 ) -> Result<Ref>
 {
-  let archetype_struct = ascript.struct_table.get(struct_type).unwrap();
+  let archetype_struct = store.struct_table.get(struct_type).unwrap();
   let mut writer = StringBuffer::default();
   let ast_struct_props = ast_struct
     .props
@@ -273,35 +269,46 @@ fn build_struct_constructor(
 
   let mut predecessors = vec![];
 
-  for (prop_name, val_ref) in archetype_struct.properties.iter().map(|prop_id| {
-    let val_ref = if let Some(ast_prop) = ast_struct_props.get(&prop_id.name) {
-      let prop = ascript.props_table.get(prop_id).unwrap();
-      match render_expression(&ast_prop.value, body, ascript, grammar, ref_index) {
-        Some(ref_) => {
-          let mut string = match &prop.type_val {
+  for (_, val_ref) in archetype_struct.properties.iter().map(|prop_id| {
+    let struct_prop_ref = if let Some(ast_prop) = ast_struct_props.get(&prop_id.name) {
+
+      let property = store.props_table.get(prop_id).unwrap();
+      
+      match render_expression(&ast_prop.value, body, store, grammar, ref_index) {
+        Some(mut ref_) => {
+
+          let mut string = match &property.type_val {
             AScriptTypeVal::GenericStructVec(structs_ids) if structs_ids.len() == 1 => {
               format!(
                 "{}.into_iter().map(|v|match v {{ ASTNode::{}(node) => node, _ => panic!(\"could not convert\")}}).collect::<Vec<_>>()",
                 ref_.get_ref_string(),
-                ascript.struct_table.get(structs_ids.first().unwrap()).unwrap().type_name
+                store.struct_table.get(structs_ids.first().unwrap()).unwrap().type_name
               )
             }
             _ => ref_.get_ref_string(),
           };
+
+          let ref_ = match property.type_val {
+          AScriptTypeVal::Struct(..)  => {
+            node_to_struct(ref_, store)
+          }
+            _ => ref_
+          };
+
           predecessors.push(ref_);
 
-          if prop.optional && matches!(prop.type_val, AScriptTypeVal::Struct(..)) {
+          if property.optional && matches!(property.type_val, AScriptTypeVal::Struct(..)) {
             string = format!("Some({})", string);
           }
 
           string
         }
         None => {
-          if prop.optional && matches!(prop.type_val, AScriptTypeVal::Struct(..)) {
+          if property.optional && matches!(property.type_val, AScriptTypeVal::Struct(..)) {
             "None".to_string()
           } else {
             use AScriptTypeVal::*;
-            match prop.type_val {
+            match property.type_val {
               Bool(_) => "false".to_string(),
               U16(_) => "0u16".to_string(),
               Token => "Token::new()".to_string(),
@@ -320,19 +327,23 @@ fn build_struct_constructor(
               _ => panic!(
                 "Unresolvable undefined prop initializer on prop {} with type {}",
                 prop_id.name,
-                prop.type_val.hcobj_type_name(Some(grammar))
+                property.type_val.hcobj_type_name(Some(grammar))
               ),
             }
           }
         }
       }
     } else {
-      get_default_value(prop_id, ascript)
+      get_default_value(prop_id, store)
     };
 
-    (prop_id.name.clone(), val_ref)
+    (prop_id.name.clone(), struct_prop_ref)
   }) {
     writer.wrt(&format!("{}, ", val_ref))?;
+  }
+
+  if archetype_struct.include_token {
+    writer.wrt(&format!("{}, ", "tok"))?;
   }
 
   writer.dedent().write_line("\n)")?;
@@ -360,7 +371,7 @@ fn build_structs<W: Write>(
   for (_, AScriptStruct { include_token, properties, type_name, .. }) in
     &ascript.struct_table
   {
-    let mut props = properties
+    let mut properties = properties
       .iter()
       .map(|p| {
         let AScriptProp { type_val, optional, .. } = ascript.props_table.get(p).unwrap();
@@ -380,20 +391,25 @@ fn build_structs<W: Write>(
       .collect::<Vec<_>>();
 
     if *include_token {
-      props.push(("tok".to_string(), "Token".to_string(), AScriptTypeVal::Token, false));
+      properties.push(("tok".to_string(), "Token".to_string(), AScriptTypeVal::Token, false));
     }
 
     output.wrtln(&format!("#[derive(Debug)]\npub struct {} {{", type_name))?.indent();
 
-    for (name, type_string, type_val, optional) in &props {
+    for (name, type_string, type_val, optional) in &properties {
       match optional {
         true => match type_val {
           AScriptTypeVal::Struct(..) => {
-            output.write_line(&format!("pub {}: Optional<{}>,", name, type_string))?
+            output.write_line(&format!("pub {}: Optional<Box<{}>>,", name, type_string))?
           }
           _ => output.write_line(&format!("pub {}: {},", name, type_string))?,
         },
-        false => output.write_line(&format!("pub {}: {},", name, type_string))?,
+        false => match type_val {
+          AScriptTypeVal::Struct(..) => {
+            output.write_line(&format!("pub {}:Box<{}>,", name, type_string))?
+          }
+          _ => output.write_line(&format!("pub {}: {},", name, type_string))?,
+        }
       };
     }
 
@@ -405,21 +421,26 @@ fn build_structs<W: Write>(
       .wrtln("#[inline]\npub fn new (")?
       .indent();
 
-    for (name, type_string, type_val, optional) in &props {
+    for (name, type_string, type_val, optional) in &properties {
       match optional {
         true => match type_val {
           AScriptTypeVal::Struct(..) => {
-            output.write_line(&format!("{}:Optional<{}>,", name, type_string))?
+            output.write_line(&format!("{}:Optional<Box<{}>>,", name, type_string))?
           }
           _ => output.write_line(&format!("{}:{},", name, type_string))?,
         },
-        false => output.write_line(&format!("{}:{},", name, type_string))?,
+        false => match type_val {
+          AScriptTypeVal::Struct(..) => {
+            output.write_line(&format!("{}:Box<{}>,", name, type_string))?
+          }
+          _ => output.write_line(&format!("{}:{},", name, type_string))?,
+        }
       };
     }
 
     output.dedent().wrtln(") -> Self {")?.indent().wrtln("Self{")?.indent();
 
-    for (name, ..) in &props {
+    for (name, ..) in &properties {
       output.write_line(&format!("{},", name))?;
     }
 
@@ -486,13 +507,15 @@ fn render_expression(
           )
         };
 
-        for _ref in results {
-          let val_ref = _ref.get_ref_string();
-
+        for mut _ref in results {
+          
           if _ref.ast_type.is_vec() {
-            vector_ref.add_post_init_expression(format!("%%.append(&mut {})", val_ref))
+            _ref.make_mutable();
+            let val_ref = _ref.get_ref_string();
+            vector_ref.add_post_init_expression(format!("%%.append(&mut {})", val_ref)).make_mutable()
           } else {
-            vector_ref.add_post_init_expression(format!("%%.push({})", val_ref))
+            let val_ref = _ref.get_ref_string();
+            vector_ref.add_post_init_expression(format!("%%.push({})", val_ref)).make_mutable()
           };
 
           vector_ref.add_predecessor(_ref);
@@ -565,15 +588,25 @@ fn render_expression(
   }
 }
 
-#[derive(Clone)]
-struct Ref
+fn node_to_struct(ref_: Ref, store: &AScriptStore) -> Ref
 {
-  init_index: usize,
-  body_indices: BTreeSet<usize>,
-  init_expression: String,
-  ast_type: AScriptTypeVal,
-  predecessors: Option<Vec<Box<Ref>>>,
-  post_init_statements: Option<Vec<String>>,
+  use AScriptTypeVal::*;
+  match ref_.ast_type.clone() {
+    Struct(struct_type) => {
+      let struct_name = store.struct_table.get(&struct_type).unwrap().type_name.clone();
+      ref_.from(format!("if let ASTNode::{}(obj) = %%
+      {{ obj }}
+      else {{panic!(\"invalid node\")}}", struct_name), Struct(struct_type))
+    }
+    GenericStruct(struct_types) if struct_types.len() == 1 => {
+      let struct_type = *struct_types.first().unwrap();
+      let struct_name = store.struct_table.get(&struct_type).unwrap().type_name.clone();
+      ref_.from(format!("if let ASTNode::{}(obj) = %%
+      {{ obj }}
+      else {{panic!(\"invalid node\")}}", struct_name), Struct(struct_type))
+    }
+    _ => ref_,
+  }
 }
 
 fn render_body_symbol(
@@ -614,8 +647,8 @@ fn render_body_symbol(
           I16Vec => Some(format!("i{0}.into_i16_vec()", index)),
           U8Vec => Some(format!("i{0}.into_u8_vec()", index)),
           I8Vec => Some(format!("i{0}.into_i8_vec()", index)),
-          GenericStruct(..) => Some(format!("i{0}.to_node()", index)),
-          Struct(_) => Some(format!("i{0}.to_node()", index)),
+          GenericStruct(..) => Some(format!("i{0}.into_node().unwrap()", index)),
+          Struct(..) => Some(format!("i{0}.into_node().unwrap()", index)),
           _ => None,
         } {
           Ref::new(index, init_string, _type)
@@ -630,14 +663,14 @@ fn render_body_symbol(
       } else if production_types_are_structs(&types) {
         Ref::new(
           index,
-          format!("i{0}.to_node().unwrap()", index),
+          format!("i{0}.into_node().unwrap()", index),
           GenericStruct(extract_struct_types(&types)),
         )
       } else {
-        Ref::new(index, format!("i{0}.to_tok()", index), Token)
+        Ref::new(index, format!("i{0}.to_token()", index), Token)
       }
     }
-    _ => Ref::new(index, format!("i{0}.to_tok()", index), Token),
+    _ => Ref::new(index, format!("i{0}.to_token()", index), Token),
   };
 
   ref_.add_body_index(index);
@@ -666,7 +699,6 @@ fn convert_numeric<T: AScriptNumericType>(
 {
   let rust_type = T::prim_type_name();
   let tok_conversion_fn = T::to_fn_name();
-  let default_type_value = T::none();
 
   match initializer {
     ASTNode::AST_NUMBER(box AST_NUMBER { value, .. }) => Some(Ref::new(
@@ -817,6 +849,20 @@ fn get_default_value(prop_id: &AScriptPropId, ascript: &AScriptStore) -> String
   }
 }
 
+
+
+#[derive(Clone)]
+struct Ref
+{
+  init_index: usize,
+  body_indices: BTreeSet<usize>,
+  init_expression: String,
+  ast_type: AScriptTypeVal,
+  predecessors: Option<Vec<Box<Ref>>>,
+  post_init_statements: Option<Vec<String>>,
+  is_mutable: bool
+}
+
 impl Ref
 {
   pub fn new(init_index: usize, init_expression: String, ast_type: AScriptTypeVal)
@@ -829,6 +875,7 @@ impl Ref
       ast_type,
       predecessors: None,
       post_init_statements: None,
+      is_mutable: false
     }
   }
 
@@ -840,7 +887,7 @@ impl Ref
       init_expression: "tok".to_string(),
       ast_type: AScriptTypeVal::Token,
       predecessors: None,
-      post_init_statements: None,
+      post_init_statements: None,is_mutable: false
     }
   }
 
@@ -852,8 +899,13 @@ impl Ref
       ast_type,
       body_indices: BTreeSet::new(),
       predecessors: Some(vec![Box::new(self)]),
-      post_init_statements: None,
+      post_init_statements: None,is_mutable: false
     }
+  }
+
+  pub fn make_mutable(&mut self) -> &mut Self {
+    self.is_mutable = true;
+    self
   }
 
   pub fn add_body_index(&mut self, index: usize)
@@ -900,7 +952,7 @@ impl Ref
 
     string += &format!(
       "\nlet{}{} = {};",
-      if self.post_init_statements.is_some() {
+      if self.is_mutable {
         " mut "
       } else {
         " "

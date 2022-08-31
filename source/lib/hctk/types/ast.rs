@@ -78,7 +78,7 @@ macro_rules! to_numeric {
   };
 }
 
-impl<T> HCObj<T>
+impl<T: HCObjTrait> HCObj<T>
 {
   into_vec!(into_nodes, T, NODES);
 
@@ -119,11 +119,22 @@ impl<T> HCObj<T>
         | HCObj::U8(..)
     )
   }
+
+  pub fn into_node(self) -> Option<T>
+  {
+    match self {
+      Self::NODE(node) => Some(node),
+      _ => None,
+    }
+  }
 }
 
 pub trait HCObjTrait
 {
-  fn to_string(&self) -> String;
+  fn to_string(&self) -> String
+  {
+    String::new()
+  }
 
   fn to_f64(&self) -> f64
   {

@@ -235,11 +235,11 @@ impl AScriptTypeVal
       U32Vec => "U32Vec".to_string(),
       U16Vec => "U16Vec".to_string(),
       U8Vec => "U8Vec".to_string(),
-      TokenVec => "Tokens".to_string(),
+      TokenVec => "TOKENS".to_string(),
       StringVec => "Strings".to_string(),
       GenericStructVec(..) => "NODES".to_string(),
       Undefined => "Undefined".to_string(),
-      Token => "Token".to_string(),
+      Token => "TOKEN".to_string(),
       GenericStruct(sub_types) => "Node".to_string(),
       Any => "Any".to_string(),
       UnresolvedProduction(id) => match grammar {
@@ -300,7 +300,6 @@ macro_rules! num_type {
         "to_".to_string() + stringify!($type)
       }
     }
-    
   };
 }
 
