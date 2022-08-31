@@ -81,14 +81,25 @@ pub fn disassemble_state(
       }
       INSTRUCTION::I02_GOTO => {
         let (string, offset) = ds(output, so + 1, lu);
-        (
-          format!(
-            "\n{}GOTO {}",
-            dh(so),
-            address((bytecode[so] & GOTO_STATE_ADDRESS_MASK) as usize)
-          ) + &string,
-          offset,
-        )
+        if instruction & FAIL_STATE_FLAG > 0 {
+          (
+            format!(
+              "\n{}PFCK {}",
+              dh(so),
+              address((bytecode[so] & GOTO_STATE_ADDRESS_MASK) as usize)
+            ) + &string,
+            offset,
+          )
+        } else {
+          (
+            format!(
+              "\n{}GOTO {}",
+              dh(so),
+              address((bytecode[so] & GOTO_STATE_ADDRESS_MASK) as usize)
+            ) + &string,
+            offset,
+          )
+        }
       }
       INSTRUCTION::I03_SET_PROD => {
         let production_id = instruction & INSTRUCTION_CONTENT_MASK;
