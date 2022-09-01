@@ -31,44 +31,21 @@ const NORMAL_STATE_FLAG: u32 = 1 << 26;
 
 #[derive(Debug, Copy, Clone)]
 #[deprecated]
-pub enum ParseErrorCode
-{
+pub enum ParseErrorCode {
   NORMAL,
   CANNOT_FORK,
   INVALID_RETURN,
 }
 #[derive(Debug, Copy, Clone)]
 #[deprecated]
-pub enum ParseAction
-{
+pub enum ParseAction {
   NONE {},
-  REDUCE
-  {
-    body:       u32,
-    production: u32,
-    length:     u32,
-  },
+  REDUCE { body: u32, production: u32, length: u32 },
   ACCEPT {},
-  ERROR
-  {
-    production: u32,
-    pointer:    u32,
-    error_code: ParseErrorCode,
-  },
-  SHIFT
-  {
-    token: ParseToken,
-  },
-  SKIP
-  {
-    length:     u32,
-    line:       u32,
-    token_type: u32,
-  },
-  TOKEN
-  {
-    token: ParseToken,
-  },
+  ERROR { production: u32, pointer: u32, error_code: ParseErrorCode },
+  SHIFT { token: ParseToken },
+  SKIP { length: u32, line: u32, token_type: u32 },
+  TOKEN { token: ParseToken },
   FORK {},
 }
 
@@ -77,8 +54,7 @@ pub enum ParseAction
 /// with parser byte code,  entry pointer
 /// and parse action handler function.
 #[deprecated]
-pub trait ParseIterator<T: ByteReader>
-{
+pub trait ParseIterator<T: ByteReader> {
   fn new(reader: T, entry_pointer: u32, bytecode: &'static [u32]) -> Self;
 
   /// Starts parsing the input and emits
@@ -89,26 +65,18 @@ pub trait ParseIterator<T: ByteReader>
   fn reader(&self) -> &T;
 }
 #[deprecated]
-pub struct ReferenceIterator<T: ByteReader>
-{
+pub struct ReferenceIterator<T: ByteReader> {
   bytecode:      &'static [u32],
   entry_pointer: u32,
   reader:        T,
 }
 
-impl<T: ByteReader> ParseIterator<T> for ReferenceIterator<T>
-{
-  fn new(reader: T, entry_pointer: u32, bytecode: &'static [u32]) -> Self
-  {
-    ReferenceIterator {
-      entry_pointer,
-      reader,
-      bytecode,
-    }
+impl<T: ByteReader> ParseIterator<T> for ReferenceIterator<T> {
+  fn new(reader: T, entry_pointer: u32, bytecode: &'static [u32]) -> Self {
+    ReferenceIterator { entry_pointer, reader, bytecode }
   }
 
-  fn start(&mut self, handle_action: &mut impl FnMut(ParseAction)) -> ParseToken
-  {
+  fn start(&mut self, handle_action: &mut impl FnMut(ParseAction)) -> ParseToken {
     let mut parser: StateIterator<T> =
       StateIterator::new(self.reader.clone(), self.entry_pointer, handle_action);
 
@@ -117,8 +85,7 @@ impl<T: ByteReader> ParseIterator<T> for ReferenceIterator<T>
     parser.get_tok(1)
   }
 
-  fn reader(&self) -> &T
-  {
+  fn reader(&self) -> &T {
     &self.reader
   }
 }
@@ -183,8 +150,7 @@ impl<T: ByteReader> ParseIterator<T> for ReferenceIterator<T>
 // consumed by completers to apply parse actions on the token
 // values
 #[deprecated]
-pub struct StateIterator<'a, T: ByteReader>
-{
+pub struct StateIterator<'a, T: ByteReader> {
   stack: KernelStack,
 
   reader: T,
@@ -203,14 +169,12 @@ pub struct StateIterator<'a, T: ByteReader>
   emit: &'a mut dyn FnMut(ParseAction),
 }
 
-impl<'a, T: ByteReader> StateIterator<'a, T>
-{
+impl<'a, T: ByteReader> StateIterator<'a, T> {
   pub fn new(
     reader: T,
     entry_pointer: u32,
     emit: &'a mut impl FnMut(ParseAction),
-  ) -> StateIterator<'a, T>
-  {
+  ) -> StateIterator<'a, T> {
     let cloned_reader = reader.clone();
 
     let mut iterator = StateIterator {
@@ -230,8 +194,7 @@ impl<'a, T: ByteReader> StateIterator<'a, T>
     iterator
   }
 
-  pub fn parse(&mut self, bytecode: &[u32])
-  {
+  pub fn parse(&mut self, bytecode: &[u32]) {
     let mut fail_mode: u32 = 0;
 
     let mut last_good_state: u32 = 0;
@@ -272,8 +235,7 @@ impl<'a, T: ByteReader> StateIterator<'a, T>
     mut current_token: ParseToken,
     scanner_start_pointer: u32,
     bytecode: &[u32],
-  ) -> ParseToken
-  {
+  ) -> ParseToken {
     if current_token.token_type == 0 {
       let scanner = &mut self.scanner_iterator;
 
@@ -328,11 +290,7 @@ impl<'a, T: ByteReader> StateIterator<'a, T>
 
             break;
           }
-          ParseAction::ERROR {
-            pointer: 0,
-            error_code: ParseErrorCode::NORMAL,
-            production: _,
-          } => {
+          ParseAction::ERROR { pointer: 0, error_code: ParseErrorCode::NORMAL, production: _ } => {
             self.emit_action(result);
 
             break;
@@ -354,80 +312,64 @@ impl<'a, T: ByteReader> StateIterator<'a, T>
   }
 }
 
-impl<'a, T: ByteReader> ParserCoreIterator<T> for StateIterator<'a, T>
-{
-  fn push_state(&mut self, state: u32)
-  {
+impl<'a, T: ByteReader> ParserCoreIterator<T> for StateIterator<'a, T> {
+  fn push_state(&mut self, state: u32) {
     self.stack.push_state(state)
   }
 
-  fn pop_state(&mut self) -> u32
-  {
+  fn pop_state(&mut self) -> u32 {
     self.stack.pop_state()
   }
 
-  fn read_state(&self) -> u32
-  {
+  fn read_state(&self) -> u32 {
     self.stack.read_state()
   }
 
-  fn swap_state(&mut self, state: u32)
-  {
+  fn swap_state(&mut self, state: u32) {
     self.stack.swap_state(state);
   }
 
-  fn get_prod(&self) -> u32
-  {
+  fn get_prod(&self) -> u32 {
     self.production_id
   }
 
-  fn set_prod(&mut self, val: u32)
-  {
+  fn set_prod(&mut self, val: u32) {
     self.production_id = val;
   }
 
-  fn get_acc(&mut self) -> u32
-  {
+  fn get_acc(&mut self) -> u32 {
     self.symbol_accumulator
   }
 
-  fn set_acc(&mut self, val: u32)
-  {
+  fn set_acc(&mut self, val: u32) {
     self.symbol_accumulator = val;
   }
 
-  fn get_tok_top(&self) -> usize
-  {
+  fn get_tok_top(&self) -> usize {
     self.token_end
   }
 
-  fn set_tok_top(&mut self, index: usize)
-  {
+  fn set_tok_top(&mut self, index: usize) {
     self.token_end = index;
   }
 
-  fn get_tok(&mut self, index: usize) -> ParseToken
-  {
+  fn get_tok(&mut self, index: usize) -> ParseToken {
     self.tokens[index]
   }
 
-  fn set_tok(&mut self, index: usize, token: ParseToken)
-  {
+  fn set_tok(&mut self, index: usize, token: ParseToken) {
     self.tokens[index] = token;
   }
 
-  fn get_reader(&mut self) -> &mut T
-  {
+  fn get_reader(&mut self) -> &mut T {
     &mut self.reader
   }
 
-  fn emit_action(&mut self, action: ParseAction)
-  {
+  fn emit_action(&mut self, action: ParseAction) {
     (self.emit)(action);
   }
 
-  fn consume(&mut self, index: usize, _: u32, bytecode: &[u32]) -> usize
-  {
+  fn consume(&mut self, index: usize, _: u32, bytecode: &[u32]) -> usize {
     let mut token = self.get_tok(1);
 
     let instruction = bytecode[index];
@@ -465,8 +407,7 @@ impl<'a, T: ByteReader> ParserCoreIterator<T> for StateIterator<'a, T>
     lexer_type: u32,
     scanner_start_pointer: u32,
     bytecode: &[u32],
-  ) -> i32
-  {
+  ) -> i32 {
     if input_type > 0 {
       // Lexer token id input
 
@@ -511,8 +452,7 @@ impl<'a, T: ByteReader> ParserCoreIterator<T> for StateIterator<'a, T>
   }
 }
 #[deprecated]
-pub struct ScannerIterator<T: ByteReader>
-{
+pub struct ScannerIterator<T: ByteReader> {
   stack: KernelStack,
 
   reader: T,
@@ -526,10 +466,8 @@ pub struct ScannerIterator<T: ByteReader>
   production_id: u32,
 }
 
-impl<T: ByteReader> ScannerIterator<T>
-{
-  pub fn new(reader: T, entry_pointer: u32) -> ScannerIterator<T>
-  {
+impl<T: ByteReader> ScannerIterator<T> {
+  pub fn new(reader: T, entry_pointer: u32) -> ScannerIterator<T> {
     let mut iterator = ScannerIterator {
       stack: KernelStack::new(),
       reader,
@@ -544,8 +482,7 @@ impl<T: ByteReader> ScannerIterator<T>
     iterator
   }
 
-  pub fn parse(&mut self, bytecode: &[u32]) -> ParseAction
-  {
+  pub fn parse(&mut self, bytecode: &[u32]) -> ParseAction {
     let mut fail_mode: u32 = 0;
 
     // To preserve line count and offset information,
@@ -575,75 +512,60 @@ impl<T: ByteReader> ScannerIterator<T>
   }
 }
 
-impl<T: ByteReader> ParserCoreIterator<T> for ScannerIterator<T>
-{
-  fn push_state(&mut self, state: u32)
-  {
+impl<T: ByteReader> ParserCoreIterator<T> for ScannerIterator<T> {
+  fn push_state(&mut self, state: u32) {
     self.stack.push_state(state)
   }
 
-  fn pop_state(&mut self) -> u32
-  {
+  fn pop_state(&mut self) -> u32 {
     self.stack.pop_state()
   }
 
-  fn read_state(&self) -> u32
-  {
+  fn read_state(&self) -> u32 {
     self.stack.read_state()
   }
 
-  fn swap_state(&mut self, state: u32)
-  {
+  fn swap_state(&mut self, state: u32) {
     self.stack.swap_state(state);
   }
 
-  fn get_prod(&self) -> u32
-  {
+  fn get_prod(&self) -> u32 {
     self.production_id
   }
 
-  fn set_prod(&mut self, val: u32)
-  {
+  fn set_prod(&mut self, val: u32) {
     self.production_id = val;
   }
 
-  fn get_acc(&mut self) -> u32
-  {
+  fn get_acc(&mut self) -> u32 {
     self.symbol_accumulator
   }
 
-  fn set_acc(&mut self, val: u32)
-  {
+  fn set_acc(&mut self, val: u32) {
     self.symbol_accumulator = val;
   }
 
-  fn get_tok_top(&self) -> usize
-  {
+  fn get_tok_top(&self) -> usize {
     self.token_end
   }
 
-  fn set_tok_top(&mut self, index: usize)
-  {
+  fn set_tok_top(&mut self, index: usize) {
     self.token_end = index;
   }
 
-  fn get_tok(&mut self, index: usize) -> ParseToken
-  {
+  fn get_tok(&mut self, index: usize) -> ParseToken {
     self.tokens[index]
   }
 
-  fn set_tok(&mut self, index: usize, token: ParseToken)
-  {
+  fn set_tok(&mut self, index: usize, token: ParseToken) {
     self.tokens[index] = token;
   }
 
-  fn get_reader(&mut self) -> &mut T
-  {
+  fn get_reader(&mut self) -> &mut T {
     &mut self.reader
   }
 
-  fn consume(&mut self, index: usize, _: u32, bytecode: &[u32]) -> usize
-  {
+  fn consume(&mut self, index: usize, _: u32, bytecode: &[u32]) -> usize {
     let mut token = self.get_tok(1);
 
     let anchor = self.get_tok(0);
@@ -683,8 +605,7 @@ impl<T: ByteReader> ParserCoreIterator<T> for ScannerIterator<T>
     lexer_type: u32,
     _scanner_start_pointer: u32,
     _bytecode: &[u32],
-  ) -> i32
-  {
+  ) -> i32 {
     if input_type > 0 {
       // Lexer token id input
 
@@ -755,8 +676,7 @@ impl<T: ByteReader> ParserCoreIterator<T> for ScannerIterator<T>
   }
 }
 #[deprecated]
-trait ParserCoreIterator<R: ByteReader>
-{
+trait ParserCoreIterator<R: ByteReader> {
   fn consume(&mut self, index: usize, _: u32, bytecode: &[u32]) -> usize;
 
   fn emit_action(&mut self, _: ParseAction) {}
@@ -787,8 +707,7 @@ trait ParserCoreIterator<R: ByteReader>
 
   fn swap_state(&mut self, state: u32);
 
-  fn emit_shift(&mut self)
-  {
+  fn emit_shift(&mut self) {
     let token = self.get_tok(1);
 
     let prev_token = self.get_tok(0);
@@ -804,8 +723,7 @@ trait ParserCoreIterator<R: ByteReader>
     self.emit_action(ParseAction::SHIFT { token });
   }
 
-  fn emit_reduce(&mut self, symbol_length: u32, body_id: u32)
-  {
+  fn emit_reduce(&mut self, symbol_length: u32, body_id: u32) {
     self.emit_action(ParseAction::REDUCE {
       body:       body_id,
       length:     symbol_length,
@@ -814,13 +732,7 @@ trait ParserCoreIterator<R: ByteReader>
   }
 
   //*
-  fn instruction_executor(
-    &mut self,
-    state_pointer: u32,
-    fail_mode: u32,
-    bytecode: &[u32],
-  ) -> u32
-  {
+  fn instruction_executor(&mut self, state_pointer: u32, fail_mode: u32, bytecode: &[u32]) -> u32 {
     let mut index = (state_pointer & STATE_INDEX_MASK) as usize;
 
     loop {
@@ -886,18 +798,15 @@ trait ParserCoreIterator<R: ByteReader>
       };
     }
   } //*/
-  fn noop(&mut self, index: usize, _: u32) -> usize
-  {
+  fn noop(&mut self, index: usize, _: u32) -> usize {
     index + 1
   }
 
-  fn pass(&mut self, mut __: usize, _: u32) -> usize
-  {
+  fn pass(&mut self, mut __: usize, _: u32) -> usize {
     0
   }
 
-  fn assert_consume(&mut self, index: usize, _: u32, bytecode: &[u32]) -> usize
-  {
+  fn assert_consume(&mut self, index: usize, _: u32, bytecode: &[u32]) -> usize {
     let instruction = bytecode[index];
 
     let mode = instruction & 0x0F000000;
@@ -954,8 +863,7 @@ trait ParserCoreIterator<R: ByteReader>
     }
   }
 
-  fn goto(&mut self, mut index: usize, a: u32, bytecode: &[u32]) -> usize
-  {
+  fn goto(&mut self, mut index: usize, a: u32, bytecode: &[u32]) -> usize {
     let instruction = bytecode[index];
 
     self.push_state(instruction);
@@ -969,8 +877,7 @@ trait ParserCoreIterator<R: ByteReader>
     index
   }
 
-  fn reduce(&mut self, index: usize, recover_data: u32, bytecode: &[u32]) -> usize
-  {
+  fn reduce(&mut self, index: usize, recover_data: u32, bytecode: &[u32]) -> usize {
     let instruction = bytecode[index];
 
     let body_id = (instruction) & 0xFFFF;
@@ -997,8 +904,7 @@ trait ParserCoreIterator<R: ByteReader>
     }
   }
 
-  fn set_production(&mut self, index: usize, _: u32, bytecode: &[u32]) -> usize
-  {
+  fn set_production(&mut self, index: usize, _: u32, bytecode: &[u32]) -> usize {
     let instruction = bytecode[index];
 
     self.set_prod(instruction & 0xFFFFFFF);
@@ -1006,8 +912,7 @@ trait ParserCoreIterator<R: ByteReader>
     index + 1
   }
 
-  fn repeat(&mut self, mut index: usize, _: u32, bytecode: &[u32]) -> usize
-  {
+  fn repeat(&mut self, mut index: usize, _: u32, bytecode: &[u32]) -> usize {
     let instruction = bytecode[index];
 
     let origin_offset = 0xFFFFFFF & instruction;
@@ -1017,8 +922,7 @@ trait ParserCoreIterator<R: ByteReader>
     index + 1
   }
 
-  fn push_fail_state(&mut self, index: usize, _: u32, bytecode: &[u32]) -> usize
-  {
+  fn push_fail_state(&mut self, index: usize, _: u32, bytecode: &[u32]) -> usize {
     let instruction = bytecode[index];
 
     let fail_state_pointer = instruction;
@@ -1036,8 +940,7 @@ trait ParserCoreIterator<R: ByteReader>
     index + 1
   }
 
-  fn set_token(&mut self, index: usize, _: u32, bytecode: &[u32]) -> usize
-  {
+  fn set_token(&mut self, index: usize, _: u32, bytecode: &[u32]) -> usize {
     let instruction = bytecode[index];
 
     let val = instruction & 0xFFFFFF;
@@ -1073,8 +976,7 @@ trait ParserCoreIterator<R: ByteReader>
     index + 1
   }
 
-  fn advanced_return(&mut self, index: usize, fail_mode: u32, bytecode: &[u32]) -> usize
-  {
+  fn advanced_return(&mut self, index: usize, fail_mode: u32, bytecode: &[u32]) -> usize {
     let instruction = bytecode[index];
 
     if (instruction & 1) != 0 {
@@ -1084,14 +986,12 @@ trait ParserCoreIterator<R: ByteReader>
     }
   }
 
-  fn fork(&mut self, _index: usize, _: u32, _bytecode: &[u32]) -> usize
-  {
+  fn fork(&mut self, _index: usize, _: u32, _bytecode: &[u32]) -> usize {
     // let instruction = bytecode[index];
     DEFAULT_FAIL_INSTRUCTION_ADDRESS as usize
   }
 
-  fn scan_to(&mut self, index: usize, _: u32) -> usize
-  {
+  fn scan_to(&mut self, index: usize, _: u32) -> usize {
     // let length = instruction & 0xFFFF;
     //
     // let scanner_start_pointer = self.bytecode[index];
@@ -1169,8 +1069,7 @@ trait ParserCoreIterator<R: ByteReader>
     index
   }
 
-  fn hash_jump(&mut self, mut index: usize, _: u32, bytecode: &[u32]) -> usize
-  {
+  fn hash_jump(&mut self, mut index: usize, _: u32, bytecode: &[u32]) -> usize {
     let instruction = bytecode[index];
 
     index += 1;
@@ -1196,8 +1095,7 @@ trait ParserCoreIterator<R: ByteReader>
     let instruction_field_size = instruction & 0xFFFF;
 
     let input_value =
-      self.get_input_value(input_type, lexer_type, scanner_start_pointer, bytecode)
-        as u32;
+      self.get_input_value(input_type, lexer_type, scanner_start_pointer, bytecode) as u32;
 
     let mut hash_index = input_value & modulus;
 
@@ -1223,8 +1121,7 @@ trait ParserCoreIterator<R: ByteReader>
     }
   }
 
-  fn index_jump(&mut self, mut index: usize, _: u32, bytecode: &[u32]) -> usize
-  {
+  fn index_jump(&mut self, mut index: usize, _: u32, bytecode: &[u32]) -> usize {
     let instruction = bytecode[index];
 
     index += 1;

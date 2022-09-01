@@ -16,8 +16,7 @@ pub use production::*;
 pub use uuid::*;
 
 #[cfg(test)]
-mod test_grammar
-{
+mod test_grammar {
 
   use std::path::PathBuf;
 
@@ -29,16 +28,14 @@ mod test_grammar
   use super::parse::{self};
 
   #[test]
-  fn test_pre_process_grammar()
-  {
+  fn test_pre_process_grammar() {
     let grammar = String::from(
         "\n@IMPORT ./test/me/out.hcg as bob 
         <> a > tk:p?^test a(+,) ( \\1234 | t:sp? ( sp | g:sym g:sp ) f:r { basalt } ) \\nto <> b > tk:p p ",
     );
 
     if let Ok(grammar) = compile_grammar_ast(Vec::from(grammar.as_bytes())) {
-      let (grammar, errors) =
-        pre_process_grammar(&grammar, &PathBuf::from("/test"), "test");
+      let (grammar, errors) = pre_process_grammar(&grammar, &PathBuf::from("/test"), "test");
 
       for error in &errors {
         eprintln!("{}", error);
@@ -51,8 +48,7 @@ mod test_grammar
   }
 
   #[test]
-  fn test_trivial_file_compilation()
-  {
+  fn test_trivial_file_compilation() {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
     path.push("../../../test/compile/data/trivial.hcg");
@@ -68,8 +64,7 @@ mod test_grammar
   }
 
   #[test]
-  fn test_trivial_file_compilation_with_single_import()
-  {
+  fn test_trivial_file_compilation_with_single_import() {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
     path.push("../../../test/compile/data/trivial_importer.hcg");

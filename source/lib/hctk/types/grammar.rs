@@ -17,35 +17,29 @@ use super::*;
 /// value is derived from the filepath of the grammar's source code.
 pub struct GrammarId(pub u64);
 
-impl Display for GrammarId
-{
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
-  {
+impl Display for GrammarId {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.write_str(&self.0.to_string())
   }
 }
 
 /// Stores the absolute paths and source code of a `*.hcg` file.
 #[derive(Debug, Clone)]
-pub struct HCGSource
-{
+pub struct HCGSource {
   /// The absolute path of a hcg file.
   pub absolute_path: PathBuf,
   /// The source code of a hcg file.
   pub source:        String,
 }
 #[derive(Debug, Clone)]
-pub enum ReduceFunctionType
-{
+pub enum ReduceFunctionType {
   Generic(Reduce),
   Ascript(Ascript),
   Undefined,
 }
 
-impl ReduceFunctionType
-{
-  pub fn new(node: &ASTNode) -> Self
-  {
+impl ReduceFunctionType {
+  pub fn new(node: &ASTNode) -> Self {
     match node {
       ASTNode::Reduce(box reduce) => ReduceFunctionType::Generic(reduce.clone()),
       ASTNode::Ascript(box ascript) => ReduceFunctionType::Ascript(ascript.clone()),
@@ -89,8 +83,7 @@ pub type ReduceFunctionTable = BTreeMap<ReduceFunctionId, ReduceFunctionType>;
 ///     );
 ///     ```
 #[derive(Debug, Clone, Default)]
-pub struct GrammarStore
-{
+pub struct GrammarStore {
   /// The absolute path of the grammar's source file. If the source code was passed
   /// in as string (as in the case of [compile_from_string](crate::grammar::compile_from_string))
   /// then this may be empty.
@@ -109,13 +102,13 @@ pub struct GrammarStore
   pub guid: GrammarId,
 
   /// Maps [ProductionId] to a list of [BodyIds](BodyId)
-  pub production_bodies_table: ProductionBodiesTable,
+  pub production_bodies: ProductionBodiesTable,
 
   /// Maps a [ProductionId] to a [Production].
-  pub production_table: ProductionTable,
+  pub productions: ProductionTable,
 
   /// Maps BodyId to body data.
-  pub bodies_table: BodyTable,
+  pub bodies: BodyTable,
 
   /// Maps [SymbolId] to [Symbol] data. Only stores [Symbols](Symbol) that
   /// represent one of the following:
@@ -123,13 +116,13 @@ pub struct GrammarStore
   /// - [SymbolID::DefinedIdentifier]
   /// - [SymbolID::DefinedSymbol]
   /// - [SymbolID::TokenProduction]
-  pub symbols_table: SymbolsTable,
+  pub symbols: SymbolsTable,
 
   /// Maps SymbolId to its original source token string.
-  pub symbols_string_table: SymbolStringTable,
+  pub symbol_strings: SymbolStringTable,
 
   /// Store of all production ids encountered in grammar.
-  pub production_symbols_table: BTreeMap<SymbolID, Token>,
+  pub production_symbols: BTreeMap<SymbolID, Token>,
 
   /// Maps a local import name to an absolute file path and its
   /// UUID.
@@ -170,8 +163,7 @@ pub type ImportProductionNameTable = HashMap<String, (String, PathBuf)>;
 /// A temporary store of table references that can be passed as one
 /// argument to functions that require access to such tables.
 
-pub struct TempGrammarStore<'a>
-{
+pub struct TempGrammarStore<'a> {
   /// Maps an imported symbol name to a universally unique string
   /// that may be used to resolve imported grammar production
   /// names.
@@ -181,9 +173,9 @@ pub struct TempGrammarStore<'a>
   pub symbols_table: &'a mut SymbolsTable,
   pub symbols_string_table: &'a mut SymbolStringTable,
   pub bodies_table: &'a mut BodyTable,
-  pub production_table: &'a mut ProductionTable,
-  pub production_symbols_table: &'a mut BTreeMap<SymbolID, Token>,
-  pub production_bodies_table: &'a mut ProductionBodiesTable,
+  pub prods: &'a mut ProductionTable,
+  pub prod_syms: &'a mut BTreeMap<SymbolID, Token>,
+  pub bodies: &'a mut ProductionBodiesTable,
   pub errors: &'a mut Vec<ParseError>,
   pub reduce_functions: &'a mut ReduceFunctionTable,
 }

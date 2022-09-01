@@ -8,83 +8,63 @@ use crate::bytecode::BytecodeOutput;
 use crate::grammar;
 use crate::types::*;
 
-pub fn header(state_offset: usize) -> String
-{
-  format!("{}| ", address(state_offset))
+pub fn header(idx: usize) -> String {
+  format!("{}| ", address_string(idx))
 }
 
-pub fn address(state_offset: usize) -> String
-{
-  format!("{:0>6X}", state_offset)
+pub fn address_string(idx: usize) -> String {
+  format!("{:0>6X}", idx)
 }
 
-pub struct BytecodeGrammarLookups<'a>
-{
-  pub bytecode_id_to_production: BTreeMap<u32, &'a Production>,
-  pub bytecode_id_to_body:       BTreeMap<u32, &'a Body>,
-  pub bytecode_id_to_symbol:     BTreeMap<u32, &'a Symbol>,
+pub struct BytecodeGrammarLookups<'a> {
+  pub bc_to_prod:   BTreeMap<u32, &'a Production>,
+  pub bc_to_body:   BTreeMap<u32, &'a Body>,
+  pub bc_to_symbol: BTreeMap<u32, &'a Symbol>,
 }
 
-impl<'a> BytecodeGrammarLookups<'a>
-{
-  pub fn new(grammar: &'a GrammarStore) -> Self
-  {
-    let bytecode_id_to_production = grammar
-      .production_table
-      .iter()
-      .map(|(_, p)| (p.bytecode_id, p))
-      .collect::<BTreeMap<_, _>>();
+impl<'a> BytecodeGrammarLookups<'a> {
+  pub fn new(g: &'a GrammarStore) -> Self {
+    let bc_to_prod =
+      g.productions.iter().map(|(_, p)| (p.bytecode_id, p)).collect::<BTreeMap<_, _>>();
 
-    let bytecode_id_to_body = grammar
-      .bodies_table
-      .iter()
-      .map(|(_, p)| (p.bytecode_id, p))
-      .collect::<BTreeMap<_, _>>();
+    let bc_to_body = g.bodies.iter().map(|(_, p)| (p.bc_id, p)).collect::<BTreeMap<_, _>>();
 
-    let bytecode_id_to_symbol = grammar
-      .symbols_table
-      .iter()
-      .map(|(_, p)| (p.bytecode_id, p))
-      .collect::<BTreeMap<_, _>>();
+    let bc_to_symbol =
+      g.symbols.iter().map(|(_, p)| (p.bytecode_id, p)).collect::<BTreeMap<_, _>>();
 
-    BytecodeGrammarLookups {
-      bytecode_id_to_production,
-      bytecode_id_to_body,
-      bytecode_id_to_symbol,
-    }
+    BytecodeGrammarLookups { bc_to_prod, bc_to_body, bc_to_symbol }
   }
 }
 //
 
 pub fn disassemble_state(
-  bytecode: &[u32],
-  state_offset: usize,
+  bc: &[u32],
+  idx: usize,
   lu: Option<&BytecodeGrammarLookups>,
-) -> (String, usize)
-{
+) -> (String, usize) {
   use super::disassemble_state as ds;
   use super::header as dh;
 
-  let so = state_offset;
+  let so = idx;
 
-  if state_offset >= bytecode.len() {
+  if idx >= bc.len() {
     ("".to_string(), so)
   } else {
-    let instruction = bytecode[state_offset] & INSTRUCTION_CONTENT_MASK;
-    match bytecode[state_offset] & INSTRUCTION_HEADER_MASK {
+    let instruction = bc[idx] & INSTRUCTION_CONTENT_MASK;
+    match bc[idx] & INSTRUCTION_HEADER_MASK {
       INSTRUCTION::I00_PASS => (format!("\n{}PASS", dh(so)), so + 1),
       INSTRUCTION::I01_CONSUME => {
-        let (string, offset) = ds(bytecode, so + 1, lu);
+        let (string, offset) = ds(bc, so + 1, lu);
         (format!("\n{}SHFT", dh(so)) + &string, offset + 1)
       }
       INSTRUCTION::I02_GOTO => {
-        let (string, offset) = ds(bytecode, so + 1, lu);
+        let (string, offset) = ds(bc, so + 1, lu);
         if instruction & FAIL_STATE_FLAG > 0 {
           (
             format!(
               "\n{}RCVR {}",
               dh(so),
-              address((bytecode[so] & GOTO_STATE_ADDRESS_MASK) as usize)
+              address_string((bc[so] & GOTO_STATE_ADDRESS_MASK) as usize)
             ) + &string,
             offset,
           )
@@ -93,7 +73,7 @@ pub fn disassemble_state(
             format!(
               "\n{}GOTO {}",
               dh(so),
-              address((bytecode[so] & GOTO_STATE_ADDRESS_MASK) as usize)
+              address_string((bc[so] & GOTO_STATE_ADDRESS_MASK) as usize)
             ) + &string,
             offset,
           )
@@ -101,49 +81,34 @@ pub fn disassemble_state(
       }
       INSTRUCTION::I03_SET_PROD => {
         let production_id = instruction & INSTRUCTION_CONTENT_MASK;
-        let (string, offset) = ds(bytecode, so + 1, lu);
+        let (string, offset) = ds(bc, so + 1, lu);
 
         if let Some(lu) = lu {
-          let name = &lu.bytecode_id_to_production.get(&production_id).unwrap().guid_name;
-          (
-            format!("\n{}PROD SET TO {}     // {}", dh(so), production_id, name,)
-              + &string,
-            offset,
-          )
+          let name = &lu.bc_to_prod.get(&production_id).unwrap().guid_name;
+          (format!("\n{}PROD SET TO {}     // {}", dh(so), production_id, name,) + &string, offset)
         } else {
           (format!("\n{}PROD SET TO {}", dh(so), production_id,) + &string, offset)
         }
       }
       INSTRUCTION::I04_REDUCE => {
-        let (string, offset) = ds(bytecode, so + 1, lu);
+        let (string, offset) = ds(bc, so + 1, lu);
         let symbol_count = instruction >> 16 & 0x0FFF;
         let body_id = instruction & 0xFFFF;
 
         if symbol_count == 0xFFF {
-          (
-            format!("\n{}REDU accumulated symbols to {}", dh(so), body_id) + &string,
-            offset,
-          )
+          (format!("\n{}REDU accumulated symbols to {}", dh(so), body_id) + &string, offset)
         } else {
-          let pluralized = if symbol_count == 1 {
-            "SYMBOL"
-          } else {
-            "SYMBOLS"
-          };
+          let pluralized = if symbol_count == 1 { "SYMBOL" } else { "SYMBOLS" };
           (
-            format!("\n{}REDU {} {} TO {}", dh(so), symbol_count, pluralized, body_id)
-              + &string,
+            format!("\n{}REDU {} {} TO {}", dh(so), symbol_count, pluralized, body_id) + &string,
             offset,
           )
         }
       }
       INSTRUCTION::I05_TOKEN => {
-        let (string, offset) = ds(bytecode, so + 1, lu);
+        let (string, offset) = ds(bc, so + 1, lu);
         if (instruction & TOKEN_ASSIGN_FLAG) > 0 {
-          (
-            format!("\n{}TOKN ASSIGN TO {}", dh(so), instruction & 0x00FF_FFFF) + &string,
-            offset,
-          )
+          (format!("\n{}TOKN ASSIGN TO {}", dh(so), instruction & 0x00FF_FFFF) + &string, offset)
         } else {
           (format!("\n{}TOKV", dh(so)) + &string, offset)
         }
@@ -152,14 +117,14 @@ pub fn disassemble_state(
         let target_production = instruction & 0xFFFF;
         let num_of_states = (instruction >> 16) & 0xFFFF;
         let end = (so + 1 + num_of_states as usize);
-        let (string, offset) = ds(bytecode, end, lu);
+        let (string, offset) = ds(bc, end, lu);
         let mut state_strings = vec![];
 
         for offset in (so + 1)..end {
           state_strings.push(format!(
             "{} -- FORK TO {}",
             dh(offset),
-            address((bytecode[offset] & GOTO_STATE_ADDRESS_MASK) as usize,),
+            address_string((bc[offset] & GOTO_STATE_ADDRESS_MASK) as usize,),
           ));
         }
 
@@ -174,27 +139,26 @@ pub fn disassemble_state(
         )
       }
       INSTRUCTION::I07_SCAN => {
-        let (string, offset) = ds(bytecode, so + 1, lu);
+        let (string, offset) = ds(bc, so + 1, lu);
         (format!("\n{}SCAN", dh(so)) + &string, offset)
       }
       INSTRUCTION::I08_NOOP => (format!("\n{}NOOP", dh(so)), so + 1),
       INSTRUCTION::I09_VECTOR_BRANCH => generate_table_string(
-        bytecode,
+        bc,
         so,
         lu,
         "VECT",
         |states: &[u32], table_entry_offset: usize, state_offset: usize| {
           (
             states[table_entry_offset] as usize,
-            (table_entry_offset - (4 + state_offset)) as u32
-              + (states[state_offset + 2] & 0xFFFF),
+            (table_entry_offset - (4 + state_offset)) as u32 + (states[state_offset + 2] & 0xFFFF),
             states[table_entry_offset] == 0xFFFF_FFFF,
             0,
           )
         },
       ),
       INSTRUCTION::I10_HASH_BRANCH => generate_table_string(
-        bytecode,
+        bc,
         so,
         lu,
         "HASH",
@@ -208,11 +172,11 @@ pub fn disassemble_state(
         },
       ),
       INSTRUCTION::I11_SET_FAIL_STATE => {
-        let (string, offset) = ds(bytecode, so + 1, lu);
+        let (string, offset) = ds(bc, so + 1, lu);
         (format!("\n{}FSET", dh(so)) + &string, offset)
       }
       INSTRUCTION::I12_REPEAT => {
-        let (string, offset) = ds(bytecode, so + 1, lu);
+        let (string, offset) = ds(bc, so + 1, lu);
         (format!("\n{}REPT", dh(so)) + &string, offset)
       }
       INSTRUCTION::I13_NOOP => (format!("\n{}NOOP", dh(so)), so + 1),
@@ -223,100 +187,76 @@ pub fn disassemble_state(
   }
 }
 
-type GetOffsetTokenIdPair = fn(
-  states: &[u32],
-  table_entry_offset: usize,
-  state_offset: usize,
-) -> (usize, u32, bool, i64);
+type GetOffsetTokenIdPair =
+  fn(states: &[u32], table_entry_offset: usize, state_offset: usize) -> (usize, u32, bool, i64);
 
 pub fn generate_table_string(
-  bytecode: &[u32],
-  state_offset: usize,
+  bc: &[u32],
+  idx: usize,
   lu: Option<&BytecodeGrammarLookups>,
   table_name: &str,
   get_offset_token_id_pair: GetOffsetTokenIdPair,
-) -> (String, usize)
-{
-  let states = bytecode;
-  let instruction = states[state_offset];
-  let scanner_pointer = states[state_offset + 1];
-  let table_len = states[state_offset + 2] >> 16 & 0xFFFF;
-  let table_meta = states[state_offset + 2] & 0xFFFF;
+) -> (String, usize) {
+  let states = bc;
+  let instruction = states[idx];
+  let scanner_pointer = states[idx + 1];
+  let table_len = states[idx + 2] >> 16 & 0xFFFF;
+  let table_meta = states[idx + 2] & 0xFFFF;
   let input_type = (instruction >> 22) & 0x7;
   let mut strings = vec![];
-  let default_offset = states[state_offset + 3] as usize;
+  let default_offset = states[idx + 3] as usize;
   let mut delta_offsets = BTreeSet::new();
 
-  for entry_offset in (4 + state_offset)..(state_offset + 4 + table_len as usize) {
+  for entry_offset in (4 + idx)..(idx + 4 + table_len as usize) {
     let (delta_offset, token_id, IS_SKIP, meta) =
-      get_offset_token_id_pair(states, entry_offset, state_offset);
-    let goto_offset = delta_offset + state_offset;
+      get_offset_token_id_pair(states, entry_offset, idx);
+    let goto_offset = delta_offset + idx;
     if delta_offset == default_offset {
       strings.push(create_failure_entry(entry_offset, goto_offset));
     } else if IS_SKIP {
       strings.push(create_skip_entry(lu, token_id, input_type, entry_offset, meta));
     } else {
       delta_offsets.insert(delta_offset);
-      strings.push(create_normal_entry(
-        lu,
-        token_id,
-        input_type,
-        entry_offset,
-        goto_offset,
-        meta,
-      ));
+      strings.push(create_normal_entry(lu, token_id, input_type, entry_offset, goto_offset, meta));
     }
   }
 
   for delta_offset in delta_offsets {
-    strings.push(disassemble_state(bytecode, state_offset + delta_offset, lu).0);
+    strings.push(disassemble_state(bc, idx + delta_offset, lu).0);
   }
 
-  let (default_string, offset) =
-    disassemble_state(bytecode, state_offset + default_offset, lu);
+  let (default_string, offset) = disassemble_state(bc, idx + default_offset, lu);
 
-  let string = format!(
-    "\n{}{} JUMP | TYPE {}",
-    header(state_offset),
-    table_name,
-    input_type_to_name(input_type)
-  ) + &(if scanner_pointer > 0 {
-    format!(
-      "\n{}SCANNER OFFSET {}",
-      header(state_offset + 1),
-      address(scanner_pointer as usize)
-    )
-  } else {
-    format!("\n{}NO SCANNER", header(state_offset + 1))
-  }) + &format!(
-    "\n{}LENGTH: {} META: {}",
-    header(state_offset + 2),
-    table_len,
-    table_meta
-  ) + &create_failure_entry(state_offset + 3, state_offset + default_offset)
-    + &strings.join("")
-    + &default_string;
+  let string =
+    format!("\n{}{} JUMP | TYPE {}", header(idx), table_name, input_type_to_name(input_type))
+      + &(if scanner_pointer > 0 {
+        format!("\n{}SCANNER OFFSET {}", header(idx + 1), address_string(scanner_pointer as usize))
+      } else {
+        format!("\n{}NO SCANNER", header(idx + 1))
+      })
+      + &format!("\n{}LENGTH: {} META: {}", header(idx + 2), table_len, table_meta)
+      + &create_failure_entry(idx + 3, idx + default_offset)
+      + &strings.join("")
+      + &default_string;
   (string, offset)
 }
 
-fn create_failure_entry(entry_offset: usize, goto_offset: usize) -> String
-{
-  format!("\n{}---- JUMP TO {} ON FAIL", header(entry_offset), address(goto_offset))
+fn create_failure_entry(entry_offset: usize, goto_offset: usize) -> String {
+  format!("\n{}---- JUMP TO {} ON FAIL", header(entry_offset), address_string(goto_offset))
 }
 fn create_normal_entry(
   lu: Option<&BytecodeGrammarLookups>,
   token_id: u32,
   input_type: u32,
-  entry_offset: usize,
-  goto_offset: usize,
+  idx: usize,
+  goto_idx: usize,
   meta: i64,
-) -> String
-{
+) -> String {
   let token_string = get_input_id(lu, token_id, input_type);
   format!(
     "\n{}---- JUMP TO {} ON {} ( {} ) [{}]",
-    header(entry_offset),
-    address(goto_offset),
+    header(idx),
+    address_string(goto_idx),
     input_type_to_name(input_type),
     token_string,
     meta
@@ -327,22 +267,20 @@ fn create_skip_entry(
   lu: Option<&BytecodeGrammarLookups>,
   token_id: u32,
   input_type: u32,
-  entry_offset: usize,
+  idx: usize,
   meta: i64,
-) -> String
-{
+) -> String {
   let token_string = get_input_id(lu, token_id, input_type);
   format!(
     "\n{}---- SKIP ON {} ( {} ) [ {} ]",
-    header(entry_offset),
+    header(idx),
     input_type_to_name(input_type),
     token_string,
     meta
   )
 }
 
-fn input_type_to_name(input_type: u32) -> &'static str
-{
+fn input_type_to_name(input_type: u32) -> &'static str {
   match input_type {
     INPUT_TYPE::T01_PRODUCTION => "PRODUCTION",
     INPUT_TYPE::T02_TOKEN => "TOKEN",
@@ -353,20 +291,15 @@ fn input_type_to_name(input_type: u32) -> &'static str
   }
 }
 
-fn get_input_id(
-  lu: Option<&BytecodeGrammarLookups>,
-  token_id: u32,
-  input_type: u32,
-) -> String
-{
+fn get_input_id(lu: Option<&BytecodeGrammarLookups>, token_id: u32, input_type: u32) -> String {
   if let Some(lu) = lu {
     match input_type {
       INPUT_TYPE::T01_PRODUCTION => {
-        let production = &lu.bytecode_id_to_production.get(&token_id).unwrap().guid_name;
+        let production = &lu.bc_to_prod.get(&token_id).unwrap().guid_name;
         format!("{} [{}]", token_id, production)
       }
       INPUT_TYPE::T02_TOKEN => {
-        if let Some(symbol) = lu.bytecode_id_to_symbol.get(&token_id) {
+        if let Some(symbol) = lu.bc_to_symbol.get(&token_id) {
           format!("{} [{}]", token_id, symbol.friendly_name)
         } else {
           token_id.to_string()
@@ -385,17 +318,15 @@ fn get_input_id(
 pub fn generate_disassembly(
   output: &BytecodeOutput,
   lu: Option<&BytecodeGrammarLookups>,
-) -> String
-{
+) -> String {
   let mut states_strings = vec![];
   let mut offset: usize = 0;
 
   while offset < output.bytecode.len() {
     if offset >= FIRST_STATE_ADDRESS as usize {
       states_strings.push("\n".to_string());
-      states_strings.push(
-        output.offset_to_state_name.get(&(offset as u32)).cloned().unwrap_or_default(),
-      )
+      states_strings
+        .push(output.offset_to_state_name.get(&(offset as u32)).cloned().unwrap_or_default())
     }
     let (string, next) = disassemble_state(&output.bytecode, offset, lu);
 
@@ -406,23 +337,16 @@ pub fn generate_disassembly(
   states_strings.join("\n")
 }
 
-pub fn print_states(output: &BytecodeOutput, lu: Option<&BytecodeGrammarLookups>)
-{
+pub fn print_states(output: &BytecodeOutput, lu: Option<&BytecodeGrammarLookups>) {
   eprintln!("{}", generate_disassembly(output, lu));
 }
 
-pub fn print_state(
-  state_offset: usize,
-  output: &BytecodeOutput,
-  lu: Option<&BytecodeGrammarLookups>,
-)
-{
-  let string = disassemble_state(&output.bytecode, state_offset, lu).0;
+pub fn print_state(idx: usize, output: &BytecodeOutput, lu: Option<&BytecodeGrammarLookups>) {
+  let string = disassemble_state(&output.bytecode, idx, lu).0;
   eprintln!("{}", string);
 }
 
-mod bytecode_debugging_tests
-{
+mod bytecode_debugging_tests {
   use std::collections::HashMap;
 
   use crate::bytecode::compile::build_byte_code_buffer;
@@ -438,15 +362,14 @@ mod bytecode_debugging_tests
   use super::generate_disassembly;
 
   #[test]
-  pub fn test_produce_a_single_ir_ast_from_a_single_state_of_a_trivial_production()
-  {
-    let grammar = compile_test_grammar("<> A > \\h ? \\e ? \\l \\l \\o");
+  pub fn test_produce_a_single_ir_ast_from_a_single_state_of_a_trivial_production() {
+    let g = compile_test_grammar("<> A > \\h ? \\e ? \\l \\l \\o");
 
-    let prod_id = get_production_id_by_name("A", &grammar).unwrap();
+    let prod_id = get_production_id_by_name("A", &g).unwrap();
 
-    let output = compile_bytecode(&grammar, 1);
+    let output = compile_bytecode(&g, 1);
 
-    let result = generate_production_states(&prod_id, &grammar);
+    let result = generate_production_states(&prod_id, &g);
 
     let states = result
       .into_iter()
@@ -463,7 +386,7 @@ mod bytecode_debugging_tests
     let (bytecode, state_lookup) = build_byte_code_buffer(state_refs);
 
     let mut offset: usize = 0;
-    let lu = BytecodeGrammarLookups::new(&grammar);
+    let lu = BytecodeGrammarLookups::new(&g);
 
     eprintln!("{}", generate_disassembly(&output, Some(&lu)));
   }

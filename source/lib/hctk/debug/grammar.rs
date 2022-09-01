@@ -5,10 +5,8 @@ use crate::types::GrammarStore;
 
 /// Compiles a single grammar string
 
-pub fn compile_test_grammar(grammar: &str) -> GrammarStore
-{
-  let (grammar, errors) =
-    compile_from_string(&String::from(grammar), &PathBuf::from("/-internal-/test"));
+pub fn compile_test_grammar(g: &str) -> GrammarStore {
+  let (grammar, errors) = compile_from_string(&String::from(g), &PathBuf::from("/-internal-/test"));
 
   for error in &errors {
     eprintln!("{}", error);
@@ -22,15 +20,13 @@ pub fn compile_test_grammar(grammar: &str) -> GrammarStore
 
 #[cfg(test)]
 
-mod debug_grammar_tests
-{
+mod debug_grammar_tests {
 
   use super::*;
 
   #[test]
 
-  fn test_compile_test_grammar()
-  {
+  fn test_compile_test_grammar() {
     let grammar = compile_test_grammar(
       "
         <> A > B 

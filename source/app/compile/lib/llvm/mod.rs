@@ -6,8 +6,7 @@ pub use inkwell_ir::*;
 pub use types::*;
 
 #[cfg(test)]
-mod test
-{
+mod test {
   use hctk::types::hctk_allocate_stack;
   use hctk::types::hctk_free_stack;
   use hctk::types::CodepointInfo;
@@ -24,11 +23,8 @@ mod test
   use super::types::*;
 
   type Init = unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>>);
-  type PushState = unsafe extern "C" fn(
-    *mut LLVMParseContext<TestUTF8StringReader<'static>>,
-    u32,
-    usize,
-  );
+  type PushState =
+    unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>>, u32, usize);
 
   type EmitReduce = unsafe extern "C" fn(
     *mut LLVMParseContext<TestUTF8StringReader<'static>>,
@@ -45,16 +41,12 @@ mod test
 
   type EmitShift = EmitAccept;
 
-  type Next = unsafe extern "C" fn(
-    *mut LLVMParseContext<TestUTF8StringReader<'static>>,
-    *mut ParseAction,
-  );
+  type Next =
+    unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>>, *mut ParseAction);
 
-  type Prime =
-    unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>>, u32);
+  type Prime = unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>>, u32);
 
-  type Extend =
-    unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>>, u32);
+  type Extend = unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>>, u32);
 
   type PopState =
     unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>>) -> Goto;
@@ -62,8 +54,7 @@ mod test
   unsafe fn get_parse_function<'a, T: inkwell::execution_engine::UnsafeFunctionPointer>(
     ctx: &'a LLVMParserModule,
     function_name: &str,
-  ) -> Result<JitFunction<'a, T>, ()>
-  {
+  ) -> Result<JitFunction<'a, T>, ()> {
     let init = ctx
       .exe_engine
       .as_ref()
@@ -76,21 +67,16 @@ mod test
     Ok(init)
   }
 
-  fn setup_exec_engine(ctx: &mut LLVMParserModule)
-  {
+  fn setup_exec_engine(ctx: &mut LLVMParserModule) {
     if ctx.exe_engine.is_none() {
       ctx.exe_engine = Some(
-        ctx
-          .module
-          .create_jit_execution_engine(inkwell::OptimizationLevel::Aggressive)
-          .unwrap(),
+        ctx.module.create_jit_execution_engine(inkwell::OptimizationLevel::Aggressive).unwrap(),
       );
     }
   }
 
   #[test]
-  fn verify_construction_of_init_function()
-  {
+  fn verify_construction_of_init_function() {
     let context = Context::create();
 
     let parse_context = construct_context("test", &context);
@@ -101,8 +87,7 @@ mod test
   }
 
   #[test]
-  fn verify_construction_of_push_state_function()
-  {
+  fn verify_construction_of_push_state_function() {
     let context = Context::create();
 
     let parse_context = construct_context("test", &context);
@@ -113,8 +98,7 @@ mod test
   }
 
   #[test]
-  fn should_push_new_state()
-  {
+  fn should_push_new_state() {
     let context = Context::create();
 
     let mut parse_context = construct_context("test", &context);
@@ -127,8 +111,7 @@ mod test
       let mut reader = TestUTF8StringReader::new("test");
       let mut rt_ctx = LLVMParseContext::new(&mut reader);
       let init_fn = get_parse_function::<Init>(&parse_context, "init").unwrap();
-      let push_state_fn =
-        get_parse_function::<PushState>(&parse_context, "push_state").unwrap();
+      let push_state_fn = get_parse_function::<PushState>(&parse_context, "push_state").unwrap();
 
       init_fn.call(&mut rt_ctx);
       push_state_fn.call(&mut rt_ctx, NORMAL_STATE_FLAG_LLVM, 0x10101010_01010101);
@@ -144,8 +127,7 @@ mod test
   }
 
   #[test]
-  fn verify_construction_of_emit_accept_function()
-  {
+  fn verify_construction_of_emit_accept_function() {
     let context = Context::create();
 
     let parse_context = construct_context("test", &context);
@@ -156,8 +138,7 @@ mod test
   }
 
   #[test]
-  fn verify_construction_of_emit_shift_function()
-  {
+  fn verify_construction_of_emit_shift_function() {
     let context = Context::create();
 
     let parse_context = construct_context("test", &context);
@@ -168,8 +149,7 @@ mod test
   }
 
   #[test]
-  fn should_emit_shift()
-  {
+  fn should_emit_shift() {
     let context = Context::create();
 
     let mut parse_context = construct_context("test", &context);
@@ -180,8 +160,7 @@ mod test
       setup_exec_engine(&mut parse_context);
       let mut reader = TestUTF8StringReader::new("test");
       let mut rt_ctx = LLVMParseContext::new(&mut reader);
-      let emit_shift =
-        get_parse_function::<EmitShift>(&parse_context, "emit_shift").unwrap();
+      let emit_shift = get_parse_function::<EmitShift>(&parse_context, "emit_shift").unwrap();
 
       rt_ctx.anchor_token.byte_offset = 5;
       rt_ctx.anchor_token.byte_length = 0;
@@ -203,8 +182,7 @@ mod test
   }
 
   #[test]
-  fn verify_construction_of_emit_reduce_function()
-  {
+  fn verify_construction_of_emit_reduce_function() {
     let context = Context::create();
 
     let parse_context = construct_context("test", &context);
@@ -215,8 +193,7 @@ mod test
   }
 
   #[test]
-  fn should_emit_reduce()
-  {
+  fn should_emit_reduce() {
     let context = Context::create();
 
     let mut parse_context = construct_context("test", &context);
@@ -227,8 +204,7 @@ mod test
       setup_exec_engine(&mut parse_context);
       let mut reader = TestUTF8StringReader::new("test");
       let mut rt_ctx = LLVMParseContext::new(&mut reader);
-      let emit_reduce =
-        get_parse_function::<EmitReduce>(&parse_context, "emit_reduce").unwrap();
+      let emit_reduce = get_parse_function::<EmitReduce>(&parse_context, "emit_reduce").unwrap();
 
       let mut action = ParseAction::Undefined;
 
@@ -246,30 +222,24 @@ mod test
   }
 
   #[test]
-  fn verify_construction_of_get_adjusted_input_block_function()
-  {
+  fn verify_construction_of_get_adjusted_input_block_function() {
     let context = Context::create();
 
     let parse_context = construct_context("test", &context);
 
-    unsafe {
-      assert!(construct_get_adjusted_input_block_function(&parse_context).is_ok())
-    }
+    unsafe { assert!(construct_get_adjusted_input_block_function(&parse_context).is_ok()) }
 
     eprintln!("{}", parse_context.module.to_string());
   }
 
   #[test]
-  fn should_produce_extended_block()
-  {
+  fn should_produce_extended_block() {
     let context = Context::create();
 
     let mut parse_context = construct_context("test", &context);
 
     unsafe { assert!(construct_init(&parse_context).is_ok()) }
-    unsafe {
-      assert!(construct_get_adjusted_input_block_function(&parse_context).is_ok())
-    }
+    unsafe { assert!(construct_get_adjusted_input_block_function(&parse_context).is_ok()) }
 
     // Create a helper function to overcome the struct passing as value between the Jit  code and Rust
 
@@ -321,8 +291,7 @@ mod test
         *mut InputBlock,
       ) -> InputBlock;
 
-      let get_ib =
-        get_parse_function::<GetInputBlockShim>(&parse_context, "shim").unwrap();
+      let get_ib = get_parse_function::<GetInputBlockShim>(&parse_context, "shim").unwrap();
 
       init.call(&mut rt_ctx);
 
@@ -336,14 +305,13 @@ mod test
 
       eprintln!("{:?} {:?}", rt_ctx.input_block, block);
       assert_eq!(*block.block, b't');
-      assert_eq!(block.offset, 3);
-      assert_eq!(block.length, 1);
+      assert_eq!(block.off, 3);
+      assert_eq!(block.len, 1);
     };
   }
 
   #[test]
-  fn verify_construction_of_scan_function()
-  {
+  fn verify_construction_of_scan_function() {
     let context = Context::create();
 
     let parse_context = construct_context("test", &context);
@@ -354,8 +322,7 @@ mod test
   }
 
   #[test]
-  fn verify_construction_of_emit_error_function()
-  {
+  fn verify_construction_of_emit_error_function() {
     let context = Context::create();
 
     let parse_context = construct_context("test", &context);
@@ -366,8 +333,7 @@ mod test
   }
 
   #[test]
-  fn verify_construction_of_emit_eop_function()
-  {
+  fn verify_construction_of_emit_eop_function() {
     let context = Context::create();
 
     let parse_context = construct_context("test", &context);
@@ -378,8 +344,7 @@ mod test
   }
 
   #[test]
-  fn verify_construction_of_emit_end_of_input_function()
-  {
+  fn verify_construction_of_emit_end_of_input_function() {
     let context = Context::create();
 
     let parse_context = construct_context("test", &context);
@@ -390,8 +355,7 @@ mod test
   }
 
   #[test]
-  fn verify_construction_of_pop_state_function()
-  {
+  fn verify_construction_of_pop_state_function() {
     let context = Context::create();
 
     let parse_context = construct_context("test", &context);
@@ -402,8 +366,7 @@ mod test
   }
 
   #[test]
-  fn should_pop_new_state()
-  {
+  fn should_pop_new_state() {
     let context = Context::create();
 
     let mut parse_context = construct_context("test", &context);
@@ -417,10 +380,8 @@ mod test
       let mut reader = TestUTF8StringReader::new("test");
       let mut rt_ctx = LLVMParseContext::new(&mut reader);
       let init_fn = get_parse_function::<Init>(&parse_context, "init").unwrap();
-      let push_state_fn =
-        get_parse_function::<PushState>(&parse_context, "push_state").unwrap();
-      let pop_state =
-        get_parse_function::<PopState>(&parse_context, "pop_state").unwrap();
+      let push_state_fn = get_parse_function::<PushState>(&parse_context, "push_state").unwrap();
+      let pop_state = get_parse_function::<PopState>(&parse_context, "pop_state").unwrap();
 
       init_fn.call(&mut rt_ctx);
       push_state_fn.call(&mut rt_ctx, 20, 0x10101010_01010101);
@@ -436,22 +397,18 @@ mod test
     };
   }
   #[test]
-  fn verify_construct_of_prime_function()
-  {
+  fn verify_construct_of_prime_function() {
     let context = Context::create();
 
     let parse_context = construct_context("test", &context);
 
-    unsafe {
-      assert!(construct_prime_function(&parse_context, &vec![], &mut vec![]).is_ok())
-    }
+    unsafe { assert!(construct_prime_function(&parse_context, &vec![], &mut vec![]).is_ok()) }
 
     eprintln!("{}", parse_context.module.to_string());
   }
 
   #[test]
-  fn verify_construct_of_next_function()
-  {
+  fn verify_construct_of_next_function() {
     let context = Context::create();
 
     let parse_context = construct_context("test", &context);
@@ -462,8 +419,7 @@ mod test
   }
 
   #[test]
-  fn should_call_next_and_emit_accept()
-  {
+  fn should_call_next_and_emit_accept() {
     let context = Context::create();
 
     let mut parse_context = construct_context("test", &context);
@@ -473,20 +429,16 @@ mod test
     unsafe { assert!(construct_pop_state_function(&parse_context).is_ok()) }
     unsafe { assert!(construct_next_function(&parse_context).is_ok()) }
     unsafe { assert!(construct_emit_accept(&parse_context).is_ok()) }
-    unsafe {
-      assert!(construct_prime_function(&parse_context, &vec![], &mut vec![]).is_ok())
-    }
+    unsafe { assert!(construct_prime_function(&parse_context, &vec![], &mut vec![]).is_ok()) }
 
     unsafe {
       setup_exec_engine(&mut parse_context);
       let mut reader = TestUTF8StringReader::new("test");
       let mut rt_ctx = LLVMParseContext::new(&mut reader);
       let init_fn = get_parse_function::<Init>(&parse_context, "init").unwrap();
-      let push_state_fn =
-        get_parse_function::<PushState>(&parse_context, "push_state").unwrap();
+      let push_state_fn = get_parse_function::<PushState>(&parse_context, "push_state").unwrap();
       let next = get_parse_function::<Next>(&parse_context, "next").unwrap();
-      let emit_accept =
-        get_parse_function::<EmitAccept>(&parse_context, "emit_accept").unwrap();
+      let emit_accept = get_parse_function::<EmitAccept>(&parse_context, "emit_accept").unwrap();
       let prime = get_parse_function::<Prime>(&parse_context, "prime").unwrap();
 
       init_fn.call(&mut rt_ctx);
@@ -501,15 +453,12 @@ mod test
 
       eprintln!("{:#?}", action);
 
-      assert!(
-        matches!(action, ParseAction::Accept { production_id } if production_id == 202020),
-      );
+      assert!(matches!(action, ParseAction::Accept { production_id } if production_id == 202020),);
     };
   }
 
   #[test]
-  fn verify_construct_extend_stack_if_needed()
-  {
+  fn verify_construct_extend_stack_if_needed() {
     let context = Context::create();
 
     let parse_context = construct_context("test", &context);
@@ -520,8 +469,7 @@ mod test
   }
 
   #[test]
-  fn should_initialize_context()
-  {
+  fn should_initialize_context() {
     let context = Context::create();
 
     let mut parse_context = construct_context("test", &context);
@@ -536,8 +484,7 @@ mod test
 
       init_fn.call(rt_ctx.as_mut());
 
-      let root = rt_ctx.as_ref() as *const LLVMParseContext<TestUTF8StringReader<'static>>
-        as usize;
+      let root = rt_ctx.as_ref() as *const LLVMParseContext<TestUTF8StringReader<'static>> as usize;
 
       assert_eq!(rt_ctx.stack_top as usize, root);
       assert_eq!(rt_ctx.stack_base as usize, root);
@@ -549,8 +496,7 @@ mod test
   }
 
   #[test]
-  fn verify_utf8_lookup_functions()
-  {
+  fn verify_utf8_lookup_functions() {
     let context = Context::create();
 
     let parse_context = construct_context("test", &context);
@@ -562,8 +508,7 @@ mod test
   }
 
   #[test]
-  fn should_yield_correct_CP_values_for_inputs()
-  {
+  fn should_yield_correct_CP_values_for_inputs() {
     let context = Context::create();
     let mut parse_context = construct_context("test", &context);
 
@@ -576,8 +521,7 @@ mod test
       setup_exec_engine(&mut parse_context);
 
       let get_code_point =
-        get_parse_function::<GetUtf8CP>(&parse_context, "get_utf8_codepoint_info")
-          .unwrap();
+        get_parse_function::<GetUtf8CP>(&parse_context, "get_utf8_codepoint_info").unwrap();
 
       assert_eq!(get_code_point.call(" ".as_ptr()).val, 32);
       // assert_eq!(get_code_point.call(" ".as_ptr()).length, 1);
@@ -587,8 +531,7 @@ mod test
   }
 
   #[test]
-  fn should_extend_stack()
-  {
+  fn should_extend_stack() {
     let context = Context::create();
 
     let mut parse_context = construct_context("test", &context);
@@ -602,10 +545,11 @@ mod test
       let mut reader = TestUTF8StringReader::new("test");
       let mut rt_ctx = LLVMParseContext::new(&mut reader);
 
-      parse_context.exe_engine.as_ref().unwrap().add_global_mapping(
-        &parse_context.fun.allocate_stack,
-        hctk_allocate_stack as usize,
-      );
+      parse_context
+        .exe_engine
+        .as_ref()
+        .unwrap()
+        .add_global_mapping(&parse_context.fun.allocate_stack, hctk_allocate_stack as usize);
 
       parse_context
         .exe_engine
@@ -614,10 +558,8 @@ mod test
         .add_global_mapping(&parse_context.fun.free_stack, hctk_free_stack as usize);
 
       let init_fn = get_parse_function::<Init>(&parse_context, "init").unwrap();
-      let push_state_fn =
-        get_parse_function::<PushState>(&parse_context, "push_state").unwrap();
-      let extend =
-        get_parse_function::<Extend>(&parse_context, "extend_stack_if_needed").unwrap();
+      let push_state_fn = get_parse_function::<PushState>(&parse_context, "push_state").unwrap();
+      let extend = get_parse_function::<Extend>(&parse_context, "extend_stack_if_needed").unwrap();
 
       init_fn.call(&mut rt_ctx);
       push_state_fn.call(&mut rt_ctx, 10, 200);
@@ -636,9 +578,8 @@ mod test
         push_state_fn.call(&mut rt_ctx, v, v as usize);
       }
 
-      let stack = unsafe {
-        std::slice::from_raw_parts(rt_ctx.stack_base, rt_ctx.stack_size as usize)
-      };
+      let stack =
+        unsafe { std::slice::from_raw_parts(rt_ctx.stack_base, rt_ctx.stack_size as usize) };
 
       assert_eq!(stack[67].state, 67);
 
@@ -651,8 +592,7 @@ mod test
   }
 
   #[test]
-  fn test_compile_from_bytecode() -> core::result::Result<(), ()>
-  {
+  fn test_compile_from_bytecode() -> core::result::Result<(), ()> {
     use crate::llvm::compile_from_bytecode;
     use hctk::bytecode::compile_bytecode;
     use hctk::debug::compile_test_grammar;
@@ -740,8 +680,7 @@ mod test
   }
 
   #[test]
-  fn test_compile_from_bytecode2() -> core::result::Result<(), ()>
-  {
+  fn test_compile_from_bytecode2() -> core::result::Result<(), ()> {
     use crate::llvm::compile_from_bytecode;
     use crate::options::Architecture;
     use crate::options::BuildOptions;

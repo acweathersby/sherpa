@@ -7,13 +7,11 @@ use crate::types::ImmutCharacterReader;
 
 use super::MutCharacterReader;
 
-pub trait IteratorParser<T: ImmutCharacterReader + MutCharacterReader>
-{
+pub trait IteratorParser<T: ImmutCharacterReader + MutCharacterReader> {
   fn get_parts(&mut self) -> (&mut T, &mut ParseContext<T>, &[u32], &mut bool);
 }
 
-pub struct ReferenceParseIterator<'a, T: ImmutCharacterReader + MutCharacterReader>
-{
+pub struct ReferenceParseIterator<'a, T: ImmutCharacterReader + MutCharacterReader> {
   ctx:      ParseContext<T>,
   reader:   T,
   bytecode: &'a [u32],
@@ -25,8 +23,7 @@ impl<'a, T: ImmutCharacterReader + MutCharacterReader + MutCharacterReader> Iter
 {
   type Item = ParseAction;
 
-  fn next(&mut self) -> Option<Self::Item>
-  {
+  fn next(&mut self) -> Option<Self::Item> {
     let (reader, state, bytecode, active) = self.get_parts();
 
     if *active {
@@ -44,35 +41,21 @@ impl<'a, T: ImmutCharacterReader + MutCharacterReader + MutCharacterReader> Iter
   }
 }
 
-impl<'a, T: ImmutCharacterReader + MutCharacterReader> ReferenceParseIterator<'a, T>
-{
-  pub fn new(reader: T, data: &'a [u32], entry_point: u32) -> Self
-  {
+impl<'a, T: ImmutCharacterReader + MutCharacterReader> ReferenceParseIterator<'a, T> {
+  pub fn new(reader: T, data: &'a [u32], entry_point: u32) -> Self {
     let mut state = ParseContext::bytecode_context();
 
     state.init_normal_state(entry_point);
 
-    Self {
-      ctx: state,
-      reader,
-      bytecode: data,
-      active: true,
-    }
+    Self { ctx: state, reader, bytecode: data, active: true }
   }
 }
 
 impl<'a, T: ImmutCharacterReader + MutCharacterReader> IteratorParser<T>
   for ReferenceParseIterator<'a, T>
 {
-  fn get_parts(&mut self) -> (&mut T, &mut ParseContext<T>, &[u32], &mut bool)
-  {
-    let ReferenceParseIterator {
-      reader,
-      ctx: state,
-      bytecode: data,
-      active,
-      ..
-    } = self;
+  fn get_parts(&mut self) -> (&mut T, &mut ParseContext<T>, &[u32], &mut bool) {
+    let ReferenceParseIterator { reader, ctx: state, bytecode: data, active, .. } = self;
 
     (reader, state, data, active)
   }

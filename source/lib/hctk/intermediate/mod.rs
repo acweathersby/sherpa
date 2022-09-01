@@ -3,8 +3,7 @@ pub mod transition_graph;
 
 #[cfg(test)]
 
-mod transition_tree_tests
-{
+mod transition_tree_tests {
 
   use crate::debug::compile_test_grammar;
   use crate::grammar::get_production_id_by_name;
@@ -13,8 +12,7 @@ mod transition_tree_tests
   use crate::intermediate::transition_graph::construct_recursive_descent;
 
   #[test]
-  pub fn construct_descent_on_basic_grammar()
-  {
+  pub fn construct_descent_on_basic_grammar() {
     let grammar = compile_test_grammar(
       "<> A > \\h \\e
          \\l \\l \\o",
@@ -34,8 +32,7 @@ mod transition_tree_tests
   }
 
   #[test]
-  pub fn construct_descent_on_scanner_symbol()
-  {
+  pub fn construct_descent_on_scanner_symbol() {
     let grammar = compile_test_grammar(
       "
 <> A > tk:B
@@ -48,12 +45,12 @@ mod transition_tree_tests
 ",
     );
 
-    for p in grammar.production_table.values() {
+    for p in grammar.productions.values() {
       eprintln!("{}", p.original_name);
     }
 
     let production = grammar
-      .production_table
+      .productions
       .iter()
       .find(|p| p.1.original_name == "scan_tok_test_9AD7F26F987E3173_GUID_B__")
       .unwrap();
@@ -73,8 +70,7 @@ mod transition_tree_tests
 }
 
 #[cfg(test)]
-mod state_constructor_tests
-{
+mod state_constructor_tests {
 
   use std::collections::BTreeSet;
 
@@ -87,8 +83,7 @@ mod state_constructor_tests
   use crate::types::SymbolID;
 
   #[test]
-  pub fn generate_production_states_with_basic_grammar()
-  {
+  pub fn generate_production_states_with_basic_grammar() {
     let grammar = compile_test_grammar("<> A > \\h \\e \\l \\l \\o");
 
     let prod_id = get_production_id_by_name("A", &grammar).unwrap();
@@ -101,8 +96,7 @@ mod state_constructor_tests
   }
 
   #[test]
-  pub fn generate_production_states_with_basic_grammar_with_one_optional_token()
-  {
+  pub fn generate_production_states_with_basic_grammar_with_one_optional_token() {
     let grammar = compile_test_grammar("<> A > \\h ? \\e ? \\l \\l \\o");
 
     let prod_id = get_production_id_by_name("A", &grammar).unwrap();
@@ -115,8 +109,7 @@ mod state_constructor_tests
   }
 
   #[test]
-  pub fn generate_production_states_with_basic_grammar_with_left_recursion()
-  {
+  pub fn generate_production_states_with_basic_grammar_with_left_recursion() {
     let grammar = compile_test_grammar("<> A > A \\1 | \\2 ");
 
     let prod_id = get_production_id_by_name("A", &grammar).unwrap();
@@ -129,21 +122,17 @@ mod state_constructor_tests
   }
 
   #[test]
-  pub fn generate_production_states_with_synthesized_scanner_state()
-  {
+  pub fn generate_production_states_with_synthesized_scanner_state() {
     let grammar = compile_test_grammar("<> A > \\1 | \\2 | \\3 ");
 
     let symbols = grammar
-      .symbols_table
+      .symbols
       .iter()
       .filter_map(|(id, sym)| if sym.scanner_only { None } else { Some(id) })
       .cloned()
       .collect::<BTreeSet<_>>();
 
-    println!(
-      "{:#?}",
-      symbols.iter().map(|s| grammar.symbols_string_table.get(s)).collect::<Vec<_>>()
-    );
+    println!("{:#?}", symbols.iter().map(|s| grammar.symbol_strings.get(s)).collect::<Vec<_>>());
 
     let result = generate_scanner_intro_state(symbols, &grammar);
 
@@ -153,8 +142,7 @@ mod state_constructor_tests
   }
 
   #[test]
-  pub fn generate_production_state_with_scanner_function()
-  {
+  pub fn generate_production_state_with_scanner_function() {
     let grammar = compile_test_grammar(
       "
 <> A > tk:B
@@ -167,16 +155,11 @@ mod state_constructor_tests
 ",
     );
 
-    let token_production = grammar
-      .symbols_table
-      .keys()
-      .find(|p| matches!(p, SymbolID::TokenProduction(..)))
-      .unwrap();
+    let token_production =
+      grammar.symbols.keys().find(|p| matches!(p, SymbolID::TokenProduction(..))).unwrap();
 
-    let result = generate_scanner_intro_state(
-      BTreeSet::from_iter(vec![*token_production]),
-      &grammar,
-    );
+    let result =
+      generate_scanner_intro_state(BTreeSet::from_iter(vec![*token_production]), &grammar);
 
     println!("{:#?}", result);
 
@@ -184,8 +167,7 @@ mod state_constructor_tests
   }
 
   #[test]
-  pub fn generate_production_with_ambiguity()
-  {
+  pub fn generate_production_with_ambiguity() {
     let grammar = compile_test_grammar(
       "
 <> A > B | C
@@ -206,8 +188,7 @@ mod state_constructor_tests
     assert_eq!(result.len(), 12);
   }
   #[test]
-  pub fn generate_production_with_recursion()
-  {
+  pub fn generate_production_with_recursion() {
     let grammar = compile_test_grammar(
       "
       @IGNORE g:sp

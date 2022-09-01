@@ -22,8 +22,7 @@ use parse_ctx_indices::*;
 use token_indices::*;
 
 #[derive(Default)]
-pub(crate) struct BranchStateCache<'a>
-{
+pub(crate) struct BranchStateCache<'a> {
   input_buffer: Option<PointerValue<'a>>,
   input_buffer_length_int: Option<IntValue<'a>>,
   parse_ctx: Option<PointerValue<'a>>,
@@ -32,10 +31,8 @@ pub(crate) struct BranchStateCache<'a>
   input_buffer_length: usize,
 }
 
-impl<'a> BranchStateCache<'a>
-{
-  pub fn next(&self) -> Self
-  {
+impl<'a> BranchStateCache<'a> {
+  pub fn next(&self) -> Self {
     BranchStateCache {
       input_buffer: None,
       input_buffer_length_int: None,
@@ -47,14 +44,13 @@ impl<'a> BranchStateCache<'a>
 
 pub(crate) fn construct_instruction_branch<'a>(
   instruction: INSTRUCTION,
-  grammar: &GrammarStore,
+  g: &GrammarStore,
   ctx: &'a LLVMParserModule,
   pack: &'a FunctionPack,
   referenced: &mut Vec<(INSTRUCTION, bool)>,
   mut state: BranchStateCache<'a>,
-) -> Result<(), ()>
-{
-  if let Some(data) = BranchTableData::from_bytecode(instruction, grammar, pack.output) {
+) -> Result<(), ()> {
+  if let Some(data) = BranchTableData::from_bytecode(instruction, g, pack.output) {
     let b = &ctx.builder;
     let i32 = ctx.ctx.i32_type();
     let i64 = ctx.ctx.i64_type();
@@ -70,10 +66,9 @@ pub(crate) fn construct_instruction_branch<'a>(
     // Convert the instruction data into table data.
     let table_name = create_offset_label(instruction.get_address() + 800000);
 
-    let table_block =
-      ctx.ctx.append_basic_block(*pack.fun, &(table_name.clone() + "_Table"));
+    let table_block = ctx.ctx.append_basic_block(*pack.fun, &(table_name.clone() + "_Table"));
 
-    let TableHeaderData { input_type, lexer_type, scanner_address, .. } = data.data;
+    let TableHeaderData { input_type, lexer_type, scan_index: scanner_address, .. } = data.data;
 
     let branches = &data.branches;
     let mut token_ptr = i32.ptr_type(inkwell::AddressSpace::Generic).const_null();
@@ -110,12 +105,8 @@ pub(crate) fn construct_instruction_branch<'a>(
           token_ptr = b.build_struct_gep(parse_ctx, CTX_tok_peek, "").unwrap();
 
           let peek_mode = b.build_load(peek_mode_ptr, "").into_int_value();
-          let comparison = b.build_int_compare(
-            inkwell::IntPredicate::EQ,
-            peek_mode,
-            i32.const_int(1, false),
-            "",
-          );
+          let comparison =
+            b.build_int_compare(inkwell::IntPredicate::EQ, peek_mode, i32.const_int(1, false), "");
 
           let peek_token_off_ptr = b.build_struct_gep(token_ptr, TokOffset, "").unwrap();
 
@@ -132,13 +123,10 @@ pub(crate) fn construct_instruction_branch<'a>(
           b.build_unconditional_branch(table_block);
 
           b.position_at_end(not_peeking_block);
-          let assert_token_ptr =
-            b.build_struct_gep(parse_ctx, CTX_tok_assert, "").unwrap();
-          let prev_token_len_ptr =
-            b.build_struct_gep(assert_token_ptr, TokLength, "").unwrap();
+          let assert_token_ptr = b.build_struct_gep(parse_ctx, CTX_tok_assert, "").unwrap();
+          let prev_token_len_ptr = b.build_struct_gep(assert_token_ptr, TokLength, "").unwrap();
           let prev_token_len = b.build_load(prev_token_len_ptr, "").into_int_value();
-          let prev_token_off_ptr =
-            b.build_struct_gep(assert_token_ptr, TokOffset, "").unwrap();
+          let prev_token_off_ptr = b.build_struct_gep(assert_token_ptr, TokOffset, "").unwrap();
           let prev_token_off = b.build_load(prev_token_off_ptr, "").into_int_value();
           let new_off = b.build_int_add(prev_token_len, prev_token_off, "");
 
@@ -195,7 +183,7 @@ pub(crate) fn construct_instruction_branch<'a>(
               let sym = data.get_branch_symbol(branch).unwrap();
               let string = match sym.guid {
                 id if id.isDefinedSymbol() => {
-                  vec![grammar.symbols_string_table.get(&id).unwrap().as_str()]
+                  vec![g.symbol_strings.get(&id).unwrap().as_str()]
                 }
                 SymbolID::GenericSpace => {
                   vec![" "]
@@ -209,16 +197,13 @@ pub(crate) fn construct_instruction_branch<'a>(
 
           // Build a buffer to store the largest need register size, rounded to 4 bytes.
 
-          let max_size = branches
-            .iter()
-            .flat_map(|(_, _, s)| s)
-            .fold(0, |a, s| usize::max(a, s.len()));
+          let max_size =
+            branches.iter().flat_map(|(_, _, s)| s).fold(0, |a, s| usize::max(a, s.len()));
 
           let buffer_ptr = construct_buffer(ctx, max_size, &mut state, pack, token_ptr);
 
           let token_type_ptr = b.build_struct_gep(token_ptr, TokType, "").unwrap();
-          fn string_to_byte_num_and_mask(string: &str, sym: &Symbol) -> (usize, usize)
-          {
+          fn string_to_byte_num_and_mask(string: &str, sym: &Symbol) -> (usize, usize) {
             string.as_bytes().iter().enumerate().fold((0, 0), |(val, mask), (i, v)| {
               let shift_amount = 8 * i;
               (val | ((*v as usize) << shift_amount), mask | (0xFF << shift_amount))
@@ -236,28 +221,20 @@ pub(crate) fn construct_instruction_branch<'a>(
                   comparison = b.build_int_compare(
                     inkwell::IntPredicate::EQ,
                     value,
-                    value.get_type().const_int(
-                      string_to_byte_num_and_mask(string, sym).0 as u64,
-                      false,
-                    ),
+                    value
+                      .get_type()
+                      .const_int(string_to_byte_num_and_mask(string, sym).0 as u64, false),
                     "",
                   );
                 }
                 len if len <= 8 => {
                   let (byte_string, mask) = string_to_byte_num_and_mask(string, sym);
                   let adjusted_byte = b
-                    .build_bitcast(
-                      buffer_ptr,
-                      i64.ptr_type(inkwell::AddressSpace::Generic),
-                      "",
-                    )
+                    .build_bitcast(buffer_ptr, i64.ptr_type(inkwell::AddressSpace::Generic), "")
                     .into_pointer_value();
                   let value = b.build_load(adjusted_byte, "").into_int_value();
-                  let masked_value = b.build_and(
-                    value,
-                    value.get_type().const_int(mask as u64, false),
-                    "",
-                  );
+                  let masked_value =
+                    b.build_and(value, value.get_type().const_int(mask as u64, false), "");
                   comparison = b.build_int_compare(
                     inkwell::IntPredicate::EQ,
                     masked_value,
@@ -268,8 +245,7 @@ pub(crate) fn construct_instruction_branch<'a>(
                 _ => {}
               }
 
-              let this_block =
-                ctx.ctx.append_basic_block(*pack.fun, &format!("this_{}", address));
+              let this_block = ctx.ctx.append_basic_block(*pack.fun, &format!("this_{}", address));
 
               let next_block = if index == branches.len() - 1 {
                 default_block
@@ -280,15 +256,14 @@ pub(crate) fn construct_instruction_branch<'a>(
               b.build_conditional_branch(comparison, this_block, next_block);
               b.position_at_end(this_block);
 
-              let token_length_ptr =
-                b.build_struct_gep(token_ptr, TokLength, "").unwrap();
+              let token_length_ptr = b.build_struct_gep(token_ptr, TokLength, "").unwrap();
 
               b.build_store(
                 token_length_ptr,
-                ctx.ctx.i64_type().const_int(
-                  ((sym.byte_length as u64) | ((sym.code_point_length as u64) << 32)),
-                  false,
-                ),
+                ctx
+                  .ctx
+                  .i64_type()
+                  .const_int(((sym.byte_length as u64) | ((sym.cp_len as u64) << 32)), false),
               );
 
               if !branch.is_skipped {
@@ -301,10 +276,7 @@ pub(crate) fn construct_instruction_branch<'a>(
               b.build_unconditional_branch(if branch.is_skipped {
                 blocks.get(&INSTRUCTION::default()).unwrap().1
               } else {
-                blocks
-                  .get(&INSTRUCTION::from(&pack.output.bytecode, branch.address))
-                  .unwrap()
-                  .1
+                blocks.get(&INSTRUCTION::from(&pack.output.bytecode, branch.address)).unwrap().1
               });
               b.position_at_end(next_block);
             }
@@ -339,10 +311,7 @@ pub(crate) fn construct_instruction_branch<'a>(
 
             let tok_len_ptr = b.build_struct_gep(token_ptr, TokLength, "").unwrap();
 
-            b.build_store(
-              tok_len_ptr,
-              ctx.ctx.i64_type().const_int((1 << 32) | 1, false),
-            );
+            b.build_store(tok_len_ptr, ctx.ctx.i64_type().const_int((1 << 32) | 1, false));
 
             value = b.build_load(buffer, "").into_int_value();
           }
@@ -393,50 +362,34 @@ pub(crate) fn construct_instruction_branch<'a>(
       } else {
         match instruction.to_type() {
           InstructionType::HASH_BRANCH | InstructionType::VECTOR_BRANCH => {
-            construct_instruction_branch(
-              *instruction,
-              grammar,
-              ctx,
-              pack,
-              referenced,
-              state.next(),
-            )?;
+            construct_instruction_branch(*instruction, g, ctx, pack, referenced, state.next())?;
           }
           _ => {
-            super::construct_parse_function_statements(
-              *instruction,
-              grammar,
-              ctx,
-              pack,
-              referenced,
-            )?;
+            super::construct_parse_function_statements(*instruction, g, ctx, pack, referenced)?;
           }
         }
       }
     }
     let instruction = INSTRUCTION::from(
       &pack.output.bytecode,
-      (pack.output.bytecode[instruction.get_address() + 3] as usize)
-        + instruction.get_address(),
+      (pack.output.bytecode[instruction.get_address() + 3] as usize) + instruction.get_address(),
     );
 
     b.position_at_end(default_block);
     match instruction.to_type() {
       InstructionType::HASH_BRANCH | InstructionType::VECTOR_BRANCH => {
-        construct_instruction_branch(instruction, grammar, ctx, pack, referenced, state)?;
+        construct_instruction_branch(instruction, g, ctx, pack, referenced, state)?;
       }
       _ => {
         // Build code that deals with the outcomes that arrive when the
         // input block does not have enough bytes to fulfill all branches
         // but the reader could deliver more input.
         if state.input_buffer.is_some() {
-          let good_size_block = ctx
-            .ctx
-            .append_basic_block(*pack.fun, &(table_name.clone() + "_have_sizable_block"));
+          let good_size_block =
+            ctx.ctx.append_basic_block(*pack.fun, &(table_name.clone() + "_have_sizable_block"));
 
-          let truncated_block = ctx
-            .ctx
-            .append_basic_block(*pack.fun, &(table_name.clone() + "_block_is_truncated"));
+          let truncated_block =
+            ctx.ctx.append_basic_block(*pack.fun, &(table_name.clone() + "_block_is_truncated"));
 
           let comparison = b.build_int_compare(
             inkwell::IntPredicate::EQ,
@@ -470,13 +423,7 @@ pub(crate) fn construct_instruction_branch<'a>(
           b.position_at_end(good_size_block);
         }
 
-        super::construct_parse_function_statements(
-          instruction,
-          grammar,
-          ctx,
-          pack,
-          referenced,
-        )?;
+        super::construct_parse_function_statements(instruction, g, ctx, pack, referenced)?;
       }
     }
   }
@@ -488,8 +435,7 @@ fn construct_cp_lu_with_token_len_store<'a>(
   ctx: &'a LLVMParserModule,
   buffer: PointerValue<'a>,
   token_ptr: PointerValue,
-) -> IntValue<'a>
-{
+) -> IntValue<'a> {
   let b = &ctx.builder;
   let cp_info = b
     .build_call(ctx.fun.get_utf8_codepoint_info, &[buffer.into()], "")
@@ -502,8 +448,7 @@ fn construct_cp_lu_with_token_len_store<'a>(
 
   let tok_len = b.build_int_z_extend(cp_len, ctx.ctx.i64_type(), "tok_len");
 
-  let tok_len =
-    b.build_or(tok_len, ctx.ctx.i64_type().const_int(1 << 32, false), "tok_len");
+  let tok_len = b.build_or(tok_len, ctx.ctx.i64_type().const_int(1 << 32, false), "tok_len");
 
   let tok_len_ptr = b.build_struct_gep(token_ptr, TokLength, "").unwrap();
 
@@ -520,8 +465,7 @@ fn construct_buffer<'a>(
   state: &mut BranchStateCache<'a>,
   pack: &'a FunctionPack,
   token_ptr: PointerValue<'a>,
-) -> PointerValue<'a>
-{
+) -> PointerValue<'a> {
   if state.input_buffer.is_some() && state.input_buffer_length >= max_size {
     state.input_buffer.unwrap()
   } else {
@@ -565,8 +509,7 @@ fn construct_buffer<'a>(
   }
 }
 
-struct InputBlockRef<'a>
-{
+struct InputBlockRef<'a> {
   pointer:      PointerValue<'a>,
   size:         IntValue<'a>,
   offset:       IntValue<'a>,
@@ -578,8 +521,7 @@ fn write_get_input_ptr_lookup<'a>(
   pack: &'a FunctionPack,
   max_length: usize,
   token_ptr: PointerValue<'a>,
-) -> InputBlockRef<'a>
-{
+) -> InputBlockRef<'a> {
   let i32 = ctx.ctx.i32_type();
   let b = &ctx.builder;
   let parse_ctx = pack.fun.get_first_param().unwrap().into_pointer_value();
@@ -587,11 +529,7 @@ fn write_get_input_ptr_lookup<'a>(
   let input_block = b
     .build_call(
       ctx.fun.get_adjusted_input_block,
-      &[
-        parse_ctx.into(),
-        token_ptr.into(),
-        i32.const_int(max_length as u64, false).into(),
-      ],
+      &[parse_ctx.into(), token_ptr.into(), i32.const_int(max_length as u64, false).into()],
       "",
     )
     .try_as_basic_value()
@@ -599,18 +537,9 @@ fn write_get_input_ptr_lookup<'a>(
     .into_struct_value();
 
   InputBlockRef {
-    pointer:      b
-      .build_extract_value(input_block, 0, "input_ptr")
-      .unwrap()
-      .into_pointer_value(),
-    offset:       b
-      .build_extract_value(input_block, 1, "input_offset")
-      .unwrap()
-      .into_int_value(),
-    size:         b
-      .build_extract_value(input_block, 2, "input_size")
-      .unwrap()
-      .into_int_value(),
+    pointer:      b.build_extract_value(input_block, 0, "input_ptr").unwrap().into_pointer_value(),
+    offset:       b.build_extract_value(input_block, 1, "input_offset").unwrap().into_int_value(),
+    size:         b.build_extract_value(input_block, 2, "input_size").unwrap().into_int_value(),
     is_truncated: b
       .build_extract_value(input_block, 3, "input_truncated")
       .unwrap()

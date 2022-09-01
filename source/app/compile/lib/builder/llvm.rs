@@ -30,8 +30,7 @@ pub fn build_llvm_parser(
   light_LTO: bool,
   output_cargo_build_commands: bool,
   output_llvm_ir_file: bool,
-) -> PipelineTask
-{
+) -> PipelineTask {
   let clang_command = clang_command.to_string();
   let ar_command = ar_command.to_string();
 
@@ -44,9 +43,8 @@ pub fn build_llvm_parser(
 
       Target::initialize_x86(&InitializationConfig::default());
 
-      let target_triple = target_triple
-        .clone()
-        .unwrap_or(std::env::var("TARGET").unwrap_or(String::default()));
+      let target_triple =
+        target_triple.clone().unwrap_or(std::env::var("TARGET").unwrap_or(String::default()));
 
       let ll_file_path = output_path.join(parser_name.clone() + ".ll");
       let bitcode_path = output_path.join("lib".to_string() + &parser_name + ".bc");
@@ -93,11 +91,7 @@ pub fn build_llvm_parser(
                 Ok(_) => {
                   task_ctx.add_artifact_path(object_path.clone());
                   if !(Command::new(ar_command.clone())
-                    .args(&[
-                      "rc",
-                      archive_path.to_str().unwrap(),
-                      object_path.to_str().unwrap(),
-                    ])
+                    .args(&["rc", archive_path.to_str().unwrap(), object_path.to_str().unwrap()])
                     .status()
                     .unwrap()
                     .success())
@@ -121,24 +115,14 @@ pub fn build_llvm_parser(
               .create_target_machine(&target_triple, "generic", "", opt, reloc, model)
               .unwrap();
 
-            ctx
-              .module
-              .set_data_layout(&target_machine.get_target_data().get_data_layout());
+            ctx.module.set_data_layout(&target_machine.get_target_data().get_data_layout());
 
             ctx.module.set_triple(&target_triple);
 
-            match target_machine.write_to_file(
-              &ctx.module,
-              FileType::Object,
-              &object_path,
-            ) {
+            match target_machine.write_to_file(&ctx.module, FileType::Object, &object_path) {
               Ok(_) => {
                 if !(Command::new("llvm-ar-14")
-                  .args(&[
-                    "rc",
-                    archive_path.to_str().unwrap(),
-                    object_path.to_str().unwrap(),
-                  ])
+                  .args(&["rc", archive_path.to_str().unwrap(), object_path.to_str().unwrap()])
                   .status()
                   .unwrap()
                   .success())
@@ -162,8 +146,7 @@ pub fn build_llvm_parser(
 
 /// Constructs a task that outputs a Rust parse context interface
 /// for the llvm parser.
-pub fn build_llvm_parser_interface<'a>() -> PipelineTask
-{
+pub fn build_llvm_parser_interface<'a>() -> PipelineTask {
   PipelineTask {
     fun: Box::new(|p| {
       let source_path = p.get_source_output_dir();
@@ -209,8 +192,7 @@ pub fn build_llvm_parser_interface<'a>() -> PipelineTask
   }
 }
 
-pub enum OutputType
-{
+pub enum OutputType {
   Rust,
   Cpp,
   TypeScript,
@@ -218,8 +200,7 @@ pub enum OutputType
   Java,
 }
 
-fn apply_llvm_optimizations(opt: OptimizationLevel, ctx: &crate::llvm::LLVMParserModule)
-{
+fn apply_llvm_optimizations(opt: OptimizationLevel, ctx: &crate::llvm::LLVMParserModule) {
   let pass_manager_builder = PassManagerBuilder::create();
   let pass_manager = PassManager::create(());
   pass_manager_builder.set_optimization_level(opt);
@@ -256,12 +237,11 @@ fn apply_llvm_optimizations(opt: OptimizationLevel, ctx: &crate::llvm::LLVMParse
 
 fn write_rust_parser<W: Write>(
   mut writer: CodeWriter<W>,
-  state_lookups: &BTreeMap<String, u32>,
-  grammar: &GrammarStore,
+  states: &BTreeMap<String, u32>,
+  g: &GrammarStore,
   grammar_name: &str,
   parser_name: &str,
-) -> std::io::Result<()>
-{
+) -> std::io::Result<()> {
   writer
     .wrt(&format!(
       "
@@ -335,7 +315,7 @@ impl<T: LLVMCharacterReader + ByteCharacterReader + ImmutCharacterReader> Contex
     ))?
     .indent();
 
-  common::write_rust_entry_function(grammar, state_lookups, &mut writer);
+  common::write_rust_entry_function(g, states, &mut writer);
 
   writer.dedent().wrtln(&format!(
     "}}

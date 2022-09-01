@@ -82,8 +82,7 @@ pub const PRODUCTION_SCOPE_POP_POINTER: u32 = 2;
 
 pub const TOKEN_ASSIGN_FLAG: u32 = 0x04000000;
 
-pub enum InstructionType
-{
+pub enum InstructionType {
   PASS     = 0,
   CONSUME  = 1,
   GOTO     = 2,
@@ -106,8 +105,7 @@ pub enum InstructionType
 /// Bytecode instruction constants
 pub struct INSTRUCTION(pub u32, usize);
 
-impl INSTRUCTION
-{
+impl INSTRUCTION {
   pub const I00_PASS: u32 = 0;
   pub const I01_CONSUME: u32 = 1 << 28;
   pub const I02_GOTO: u32 = 2 << 28;
@@ -130,151 +128,122 @@ impl INSTRUCTION
   pub const I15_FAIL: u32 = 15 << 28;
   pub const I15_FALL_THROUGH: u32 = 15 << 28 | 1;
 
-  pub fn Pass() -> INSTRUCTION
-  {
+  pub fn Pass() -> INSTRUCTION {
     INSTRUCTION(0, 1)
   }
 
-  pub fn Fail() -> INSTRUCTION
-  {
+  pub fn Fail() -> INSTRUCTION {
     INSTRUCTION(0, 2)
   }
 
-  pub fn is_valid(&self) -> bool
-  {
+  pub fn is_valid(&self) -> bool {
     self.1 > 0
   }
 
-  pub fn from(bytecode: &[u32], address: usize) -> Self
-  {
-    if (address > bytecode.len()) {
+  pub fn from(bc: &[u32], address: usize) -> Self {
+    if (address > bc.len()) {
       INSTRUCTION(0, 0)
     } else {
-      INSTRUCTION(bytecode[address], address)
+      INSTRUCTION(bc[address], address)
     }
   }
 
-  pub fn next(&self, bytecode: &[u32]) -> Self
-  {
-    if (self.1 > bytecode.len()) {
+  pub fn next(&self, bc: &[u32]) -> Self {
+    if (self.1 > bc.len()) {
       INSTRUCTION(0, 0)
     } else {
-      INSTRUCTION(bytecode[self.1 + 1], self.1 + 1)
+      INSTRUCTION(bc[self.1 + 1], self.1 + 1)
     }
   }
 
-  pub fn goto(&self, bytecode: &[u32]) -> Self
-  {
+  pub fn goto(&self, bc: &[u32]) -> Self {
     match self.to_type() {
-      InstructionType::GOTO => {
-        Self::from(bytecode, (self.0 & GOTO_STATE_ADDRESS_MASK) as usize)
-      }
+      InstructionType::GOTO => Self::from(bc, (self.0 & GOTO_STATE_ADDRESS_MASK) as usize),
       _ => INSTRUCTION(0, 0),
     }
   }
 
-  pub fn get_address(&self) -> usize
-  {
+  pub fn get_address(&self) -> usize {
     self.1
   }
 
-  pub fn get_value(&self) -> u32
-  {
+  pub fn get_value(&self) -> u32 {
     self.0
   }
 
-  pub fn is_PASS(&self) -> bool
-  {
+  pub fn is_PASS(&self) -> bool {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I00_PASS
   }
 
-  pub fn is_CONSUME(&self) -> bool
-  {
+  pub fn is_CONSUME(&self) -> bool {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I01_CONSUME
   }
 
-  pub fn is_GOTO(&self) -> bool
-  {
+  pub fn is_GOTO(&self) -> bool {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I02_GOTO
   }
 
-  pub fn is_SET_PROD(&self) -> bool
-  {
+  pub fn is_SET_PROD(&self) -> bool {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I03_SET_PROD
   }
 
-  pub fn is_REDUCE(&self) -> bool
-  {
+  pub fn is_REDUCE(&self) -> bool {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I04_REDUCE
   }
 
-  pub fn is_TOKEN(&self) -> bool
-  {
+  pub fn is_TOKEN(&self) -> bool {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I05_TOKEN
   }
 
-  pub fn is_FORK(&self) -> bool
-  {
+  pub fn is_FORK(&self) -> bool {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I06_FORK_TO
   }
 
-  pub fn is_SCAN(&self) -> bool
-  {
+  pub fn is_SCAN(&self) -> bool {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I07_SCAN
   }
 
-  pub fn is_NOOP8(&self) -> bool
-  {
+  pub fn is_NOOP8(&self) -> bool {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I08_NOOP
   }
 
-  pub fn is_VECTOR_BRANCH(&self) -> bool
-  {
+  pub fn is_VECTOR_BRANCH(&self) -> bool {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I09_VECTOR_BRANCH
   }
 
-  pub fn is_HASH_BRANCH(&self) -> bool
-  {
+  pub fn is_HASH_BRANCH(&self) -> bool {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I10_HASH_BRANCH
   }
 
-  pub fn is_SET_FAIL_STATE(&self) -> bool
-  {
+  pub fn is_SET_FAIL_STATE(&self) -> bool {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I11_SET_FAIL_STATE
   }
 
-  pub fn is_REPEAT(&self) -> bool
-  {
+  pub fn is_REPEAT(&self) -> bool {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I12_REPEAT
   }
 
-  pub fn is_NOOP13(&self) -> bool
-  {
+  pub fn is_NOOP13(&self) -> bool {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I13_NOOP
   }
 
-  pub fn is_ASSERT_CONSUME(&self) -> bool
-  {
+  pub fn is_ASSERT_CONSUME(&self) -> bool {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I14_ASSERT_CONSUME
   }
 
-  pub fn is_FAIL(&self) -> bool
-  {
+  pub fn is_FAIL(&self) -> bool {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I15_FAIL
   }
 
-  pub fn get_contents(&self) -> u32
-  {
+  pub fn get_contents(&self) -> u32 {
     self.0 & INSTRUCTION_CONTENT_MASK
   }
 
-  pub fn get_type(&self) -> u32
-  {
+  pub fn get_type(&self) -> u32 {
     self.0 & INSTRUCTION_HEADER_MASK
   }
 
-  pub fn to_type(&self) -> InstructionType
-  {
+  pub fn to_type(&self) -> InstructionType {
     match (self.0 & INSTRUCTION_HEADER_MASK) {
       Self::I00_PASS => InstructionType::PASS,
       Self::I01_CONSUME => InstructionType::CONSUME,
@@ -296,8 +265,7 @@ impl INSTRUCTION
     }
   }
 
-  pub fn to_str(&self) -> &str
-  {
+  pub fn to_str(&self) -> &str {
     match (self.0 & INSTRUCTION_HEADER_MASK) {
       Self::I00_PASS => "I00_PASS",
       Self::I01_CONSUME => "I01_CONSUME",
@@ -324,8 +292,7 @@ impl INSTRUCTION
 
 pub struct INPUT_TYPE;
 
-impl INPUT_TYPE
-{
+impl INPUT_TYPE {
   pub const T01_PRODUCTION: u32 = 0;
   pub const T02_TOKEN: u32 = 1;
   pub const T03_CLASS: u32 = 2;
@@ -335,14 +302,12 @@ impl INPUT_TYPE
 
 #[non_exhaustive]
 pub struct LEXER_TYPE;
-impl LEXER_TYPE
-{
+impl LEXER_TYPE {
   pub const ASSERT: u32 = 1;
   pub const PEEK: u32 = 2;
 }
 
-pub enum BranchSelector
-{
+pub enum BranchSelector {
   Hash,
   Vector,
 }
@@ -356,8 +321,7 @@ pub fn default_get_branch_selector(
   values: &[u32],
   max_span: u32,
   branches: &[Vec<u32>],
-) -> BranchSelector
-{
+) -> BranchSelector {
   // Hash table limitations:
   // Max supported item value: 2046 with skip set to 2048
   // Max number of values: 1024 (maximum jump span)

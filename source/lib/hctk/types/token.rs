@@ -9,8 +9,7 @@ use super::parse_token::ParseToken;
 
 #[derive(Clone)]
 
-pub struct Range
-{
+pub struct Range {
   /// The line number at which the range starts
   pub start_line:   u32,
   /// The line number at which the range ends
@@ -23,62 +22,52 @@ pub struct Range
 
 #[derive(Clone)]
 
-pub struct Token
-{
-  length:      u32,
-  offset:      u32,
-  line_number: u32,
-  line_offset: u32,
-  range:       Option<Range>,
-  input:       Option<Arc<Vec<u8>>>,
+pub struct Token {
+  len:      u32,
+  off:      u32,
+  line_num: u32,
+  line_off: u32,
+  range:    Option<Range>,
+  input:    Option<Arc<Vec<u8>>>,
 }
 
-impl Hash for Token
-{
-  fn hash<H: std::hash::Hasher>(&self, state: &mut H)
-  {
-    self.line_number.hash(state);
-    self.line_offset.hash(state);
-    self.offset.hash(state);
-    self.length.hash(state);
+impl Hash for Token {
+  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    self.line_num.hash(state);
+    self.line_off.hash(state);
+    self.off.hash(state);
+    self.len.hash(state);
     state.finish();
   }
 }
 
-impl PartialEq for Token
-{
-  fn eq(&self, other: &Self) -> bool
-  {
+impl PartialEq for Token {
+  fn eq(&self, other: &Self) -> bool {
     matches!(self.cmp(other), std::cmp::Ordering::Equal)
   }
 }
 
-impl PartialOrd for Token
-{
-  fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering>
-  {
+impl PartialOrd for Token {
+  fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
     Some(self.cmp(other))
   }
 }
 
-impl Eq for Token
-{
+impl Eq for Token {
   fn assert_receiver_is_total_eq(&self) {}
 }
 
-impl Ord for Token
-{
-  fn cmp(&self, other: &Self) -> std::cmp::Ordering
-  {
-    match self.offset == other.offset {
-      true => match self.length == other.length {
+impl Ord for Token {
+  fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    match self.off == other.off {
+      true => match self.len == other.len {
         true => std::cmp::Ordering::Equal,
-        false => match self.length < other.length {
+        false => match self.len < other.len {
           true => std::cmp::Ordering::Less,
           false => std::cmp::Ordering::Greater,
         },
       },
-      false => match self.offset < other.offset {
+      false => match self.off < other.off {
         true => std::cmp::Ordering::Less,
         false => std::cmp::Ordering::Greater,
       },
@@ -86,29 +75,25 @@ impl Ord for Token
   }
 }
 
-impl fmt::Display for Token
-{
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
-  {
+impl fmt::Display for Token {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     if self.input.is_some() {
-      f.write_str(&self.slice(0, self.length as i32))
+      f.write_str(&self.slice(0, self.len as i32))
     } else {
       f.write_str("")
     }
   }
 }
 
-impl fmt::Debug for Token
-{
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
-  {
+impl fmt::Debug for Token {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     let mut bug = f.debug_struct("Token");
 
     bug
-      .field("length", &self.length)
-      .field("offset", &self.offset)
-      .field("line_number", &self.line_number)
-      .field("line_offset", &self.line_offset);
+      .field("length", &self.len)
+      .field("offset", &self.off)
+      .field("line_number", &self.line_num)
+      .field("line_offset", &self.line_off);
 
     if self.input.is_some() {
       bug.field("value", &self.to_string());
@@ -118,53 +103,48 @@ impl fmt::Debug for Token
   }
 }
 
-impl Token
-{
-  pub fn new() -> Token
-  {
+impl Token {
+  pub fn new() -> Token {
     Token {
-      length:      0,
-      offset:      0,
-      line_number: 0,
-      line_offset: 0,
-      range:       None,
-      input:       None,
+      len:      0,
+      off:      0,
+      line_num: 0,
+      line_off: 0,
+      range:    None,
+      input:    None,
     }
   }
 
-  pub fn from_kernel_token(tok: &ParseToken) -> Token
-  {
+  pub fn from_kernel_token(tok: &ParseToken) -> Token {
     Token {
-      length:      tok.cp_length,
-      offset:      tok.cp_offset,
-      line_number: tok.line_number,
-      line_offset: tok.line_offset,
-      input:       None,
-      range:       None,
+      len:      tok.cp_length,
+      off:      tok.cp_offset,
+      line_num: tok.line_number,
+      line_off: tok.line_offset,
+      input:    None,
+      range:    None,
     }
   }
 
-  pub fn from_range(start: &Token, end: &Token) -> Token
-  {
+  pub fn from_range(start: &Token, end: &Token) -> Token {
     Token {
-      length:      end.offset - start.offset + end.length,
-      offset:      start.offset,
-      line_number: start.line_number,
-      input:       start.input.clone(),
-      line_offset: start.line_offset,
-      range:       None,
+      len:      end.off - start.off + end.len,
+      off:      start.off,
+      line_num: start.line_num,
+      input:    start.input.clone(),
+      line_off: start.line_off,
+      range:    None,
     }
   }
 
-  pub fn empty() -> Token
-  {
+  pub fn empty() -> Token {
     Token {
-      length:      0,
-      offset:      0,
-      line_number: 0,
-      line_offset: 0,
-      input:       None,
-      range:       None,
+      len:      0,
+      off:      0,
+      line_num: 0,
+      line_off: 0,
+      input:    None,
+      range:    None,
     }
   }
 
@@ -173,13 +153,11 @@ impl Token
   /// Defines the source string for this token. Certain Token
   /// methods will not work correctly if the Token has not been
   /// attached to its source.
-  pub fn set_source(&mut self, source: Arc<Vec<u8>>)
-  {
+  pub fn set_source(&mut self, source: Arc<Vec<u8>>) {
     self.input = Some(source);
   }
 
-  pub fn get_line_char(&mut self) -> usize
-  {
+  pub fn get_line_char(&mut self) -> usize {
     if let Some(source) = self.input.clone() {}
 
     0
@@ -187,11 +165,10 @@ impl Token
 
   /// Returns the line number of the token location. This may be
   /// zero if the token is not attached to its source.
-  pub fn get_line(&mut self) -> usize
-  {
-    if self.line_number < 1 {
+  pub fn get_line(&mut self) -> usize {
+    if self.line_num < 1 {
       if let Some(source) = self.input.clone() {
-        let mut root = self.offset as usize;
+        let mut root = self.off as usize;
         let mut i = 0;
         let mut lines = 0;
 
@@ -203,38 +180,37 @@ impl Token
           i += 1
         }
 
-        self.line_number = lines;
+        self.line_num = lines;
 
         self.get_line()
       } else {
         0
       }
     } else {
-      self.line_number as usize
+      self.line_num as usize
     }
   }
 
-  fn get_slice_range(&self, mut start: i32, mut end: i32) -> (usize, usize)
-  {
+  fn get_slice_range(&self, mut start: i32, mut end: i32) -> (usize, usize) {
     use std::cmp::max;
     use std::cmp::min;
 
     if start < 0 {
-      start = max(self.offset as i32, (self.offset + self.length) as i32 + start)
+      start = max(self.off as i32, (self.off + self.len) as i32 + start)
     } else {
-      start = min(self.offset as i32 + start, (self.offset + self.length) as i32)
+      start = min(self.off as i32 + start, (self.off + self.len) as i32)
     }
 
     if end < 0 {
-      end = max(self.offset as i32, (self.offset + self.length) as i32 + end)
+      end = max(self.off as i32, (self.off + self.len) as i32 + end)
     } else {
-      end = min(self.offset as i32 + end, (self.offset + self.length) as i32)
+      end = min(self.off as i32 + end, (self.off + self.len) as i32)
     }
 
     if end < start {
-      end = self.offset as i32;
+      end = self.off as i32;
 
-      start = self.offset as i32;
+      start = self.off as i32;
     }
 
     (start as usize, end as usize)
@@ -253,15 +229,8 @@ impl Token
   /// - `Option<String>` - A `String` of the blame diagram or `None`
   ///   if source is
   /// not defined.
-  pub fn blame(
-    &self,
-    max_pre: usize,
-    max_post: usize,
-    inline_comment: &str,
-  ) -> Option<String>
-  {
-    fn increment_end(source: &[u8], mut end: usize) -> usize
-    {
+  pub fn blame(&self, max_pre: usize, max_post: usize, inline_comment: &str) -> Option<String> {
+    fn increment_end(source: &[u8], mut end: usize) -> usize {
       while (end as usize) < source.len() && source[end as usize] != 10 {
         end += 1;
       }
@@ -269,8 +238,7 @@ impl Token
       end
     }
 
-    fn decrement_beg(source: &[u8], mut beg: usize) -> usize
-    {
+    fn decrement_beg(source: &[u8], mut beg: usize) -> usize {
       while beg > 0 && source[beg] != 10 {
         beg -= 1;
       }
@@ -282,13 +250,7 @@ impl Token
       }
     }
 
-    fn create_line(
-      source: &Arc<Vec<u8>>,
-      beg: usize,
-      end: usize,
-      line_number: usize,
-    ) -> String
-    {
+    fn create_line(source: &Arc<Vec<u8>>, beg: usize, end: usize, line_number: usize) -> String {
       if let Ok(utf_string) = String::from_utf8(Vec::from(&source[beg..end])) {
         let lines = format!("{}", line_number);
 
@@ -301,23 +263,23 @@ impl Token
     if let Some(source) = self.input.clone() {
       let mut string = String::from("");
 
-      let root = self.offset as usize;
+      let root = self.off as usize;
 
-      let len = self.length as usize;
+      let len = self.len as usize;
 
       let range = self.get_range();
 
-      let mut beg = (self.line_offset) as usize;
+      let mut beg = (self.line_off) as usize;
 
-      let mut end = (self.line_offset + 1) as usize;
+      let mut end = (self.line_off + 1) as usize;
 
       let mut i = 0;
 
-      let mut lines: usize = (self.line_number + 1) as usize;
+      let mut lines: usize = (self.line_num + 1) as usize;
 
       end = increment_end(&source, end);
 
-      let slice = &source[(beg - (self.line_offset > 0) as usize)..end];
+      let slice = &source[(beg - (self.line_off > 0) as usize)..end];
 
       if let Ok(utf_string) = String::from_utf8(Vec::from(slice)) {
         {
@@ -327,8 +289,7 @@ impl Token
             "   {}: {}\n{}\n",
             &lines,
             utf_string,
-            String::from(" ")
-              .repeat(lines.len() + 3 + (self.line_offset == 0) as usize + root - beg)
+            String::from(" ").repeat(lines.len() + 3 + (self.line_off == 0) as usize + root - beg)
               + " \u{001b}[31m"
               + &String::from("^").repeat(len)
               + " "
@@ -376,40 +337,36 @@ impl Token
     }
   }
 
-  pub fn len(&self) -> usize
-  {
-    self.length as usize
+  pub fn len(&self) -> usize {
+    self.len as usize
   }
 
-  pub fn is_empty(&self) -> bool
-  {
-    self.length == 0
+  pub fn is_empty(&self) -> bool {
+    self.len == 0
   }
 
-  pub fn to_length(&self, length: usize) -> Self
-  {
+  pub fn to_length(&self, length: usize) -> Self {
     Self {
-      length:      length as u32,
-      offset:      self.offset,
-      line_number: self.line_number,
-      line_offset: self.line_offset,
-      range:       None,
-      input:       self.input.clone(),
+      len:      length as u32,
+      off:      self.off,
+      line_num: self.line_num,
+      line_off: self.line_off,
+      range:    None,
+      input:    self.input.clone(),
     }
   }
 
-  pub fn get_range(&self) -> Range
-  {
+  pub fn get_range(&self) -> Range {
     if let Some(source) = self.input.clone() {
-      let start_line = self.line_number + 1;
+      let start_line = self.line_num + 1;
 
-      let start_column: u32 = self.offset - self.line_offset + 1;
+      let start_column: u32 = self.off - self.line_off + 1;
 
       let mut end_line = start_line;
 
       let mut end_column = start_column as u32;
 
-      for i in self.offset..(self.offset + self.length) {
+      for i in self.off..(self.off + self.len) {
         if source[i as usize] == 10 {
           end_line += 1;
 
@@ -422,16 +379,15 @@ impl Token
       Range { start_line, end_line, start_column, end_column }
     } else {
       Range {
-        end_column:   self.offset - self.line_offset + 1 + self.length,
-        start_column: self.offset - self.line_offset + 1,
-        end_line:     self.line_number + 1,
-        start_line:   self.line_number + 1,
+        end_column:   self.off - self.line_off + 1 + self.len,
+        start_column: self.off - self.line_off + 1,
+        end_line:     self.line_num + 1,
+        start_line:   self.line_num + 1,
       }
     }
   }
 
-  fn get_range_mut(&mut self) -> Range
-  {
+  fn get_range_mut(&mut self) -> Range {
     if let Some(range) = &self.range {
       range.to_owned()
     } else {
@@ -443,21 +399,17 @@ impl Token
     }
   }
 
-  fn slice(&self, start: i32, end: i32) -> String
-  {
+  fn slice(&self, start: i32, end: i32) -> String {
     if let Some(input) = &self.input {
       let (adjusted_start, adjusted_end) = self.get_slice_range(start, end);
 
-      unsafe {
-        String::from_utf8_unchecked(Vec::from(&input[adjusted_start..adjusted_end]))
-      }
+      unsafe { String::from_utf8_unchecked(Vec::from(&input[adjusted_start..adjusted_end])) }
     } else {
       String::default()
     }
   }
 
-  pub fn to_f64(&self) -> f64
-  {
+  pub fn to_f64(&self) -> f64 {
     if let Ok(result) = self.to_string().parse::<f64>() {
       result
     } else {
@@ -465,8 +417,7 @@ impl Token
     }
   }
 
-  pub fn to_f32(&self) -> f32
-  {
+  pub fn to_f32(&self) -> f32 {
     if let Ok(result) = self.to_string().parse::<f32>() {
       result
     } else {
@@ -474,8 +425,7 @@ impl Token
     }
   }
 
-  pub fn to_i32(&self) -> i32
-  {
+  pub fn to_i32(&self) -> i32 {
     if let Ok(result) = self.to_string().parse::<i32>() {
       result
     } else {
@@ -483,8 +433,7 @@ impl Token
     }
   }
 
-  pub fn to_i64(&self) -> i64
-  {
+  pub fn to_i64(&self) -> i64 {
     if let Ok(result) = self.to_string().parse::<i64>() {
       result
     } else {
@@ -493,10 +442,8 @@ impl Token
   }
 }
 
-impl Default for Token
-{
-  fn default() -> Self
-  {
+impl Default for Token {
+  fn default() -> Self {
     Self::new()
   }
 }

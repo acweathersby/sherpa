@@ -19,8 +19,7 @@ pub use crate::builder::pipeline::BuildPipeline;
 pub use crate::builder::pipeline::CompileError;
 pub use source_types::*;
 
-pub mod tasks
-{
+pub mod tasks {
   pub use crate::ast::build_ast;
   pub use crate::builder::bytecode::build_byte_code_parse;
   pub use crate::builder::disassembly::build_bytecode_disassembly;
@@ -29,8 +28,7 @@ pub mod tasks
 }
 
 #[cfg(test)]
-mod test
-{
+mod test {
 
   use std::path::PathBuf;
 
@@ -43,24 +41,25 @@ mod test
   use crate::writer::code_writer::StringBuffer;
 
   #[test]
-  fn test_compile_pipeline()
-  {
-    let mut pipeline : BuildPipeline = BuildPipeline::from_string("
+  fn test_compile_pipeline() {
+    let mut pipeline: BuildPipeline = BuildPipeline::from_string(
+      "
     <> A >\\1 f:ast { { t_Banana, c_Mobius, value:u32($1), string:str($1), useful:true } } 
     | \\a \\b A f:ast { { t_Banana, value: u32($1), dd:u32($3), tok, useful:false } }
-    ", &PathBuf::from("/tmp"))
-      .set_source_output_dir(&std::env::temp_dir())
-      .add_task(build_ast(crate::SourceType::Rust))
-      .run();
+    ",
+      &PathBuf::from("/tmp"),
+    )
+    .set_source_output_dir(&std::env::temp_dir())
+    .add_task(build_ast(crate::SourceType::Rust))
+    .run();
   }
 
   #[test]
-  fn test_output_rust_on_trivial_grammar()
-  {
+  fn test_output_rust_on_trivial_grammar() {
     use hctk::debug::compile_test_grammar;
 
     let grammar = compile_test_grammar(
-        "
+      "
         <> A >\\1 f:ast { { t_Banana, c_Mobius, value:u32($1), string:str($1), useful:true } } 
         | \\a \\b A f:ast { { t_Banana, value: u32($1), dd:u32($3), tok, useful:false } }
         ",
@@ -76,7 +75,7 @@ mod test
 
     assert!(errors.is_empty());
 
-    assert_eq!(ascript.struct_table.len(), 1);
+    assert_eq!(ascript.structs.len(), 1);
 
     let mut writer = StringBuffer::default();
 

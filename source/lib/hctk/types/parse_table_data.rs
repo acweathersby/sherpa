@@ -1,24 +1,21 @@
 use super::INSTRUCTION;
 
 #[derive(Debug, Clone, Copy)]
-pub struct TableHeaderData
-{
-  pub input_type:      u32,
-  pub lexer_type:      u32,
-  pub table_length:    u32,
-  pub table_meta:      u32,
-  pub scanner_address: INSTRUCTION,
+pub struct TableHeaderData {
+  pub input_type:   u32,
+  pub lexer_type:   u32,
+  pub table_length: u32,
+  pub table_meta:   u32,
+  pub scan_index:   INSTRUCTION,
 }
 
-impl TableHeaderData
-{
+impl TableHeaderData {
   #[inline(always)]
-  pub fn from_bytecode(offset: usize, bytecode: &[u32]) -> Self
-  {
+  pub fn from_bytecode(offset: usize, bc: &[u32]) -> Self {
     let i = offset;
 
     let (first, scanner_address, third) = unsafe {
-      let v = bytecode.get_unchecked(i..i + 3);
+      let v = bc.get_unchecked(i..i + 3);
       (v[0], v[1], v[2])
     };
 
@@ -32,7 +29,7 @@ impl TableHeaderData
       lexer_type,
       table_length,
       table_meta,
-      scanner_address: INSTRUCTION::from(bytecode, scanner_address as usize),
+      scan_index: INSTRUCTION::from(bc, scanner_address as usize),
     }
   }
 }

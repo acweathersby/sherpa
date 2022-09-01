@@ -6,8 +6,7 @@ use crate::types::ParseContext;
 pub use parse_functions::get_next_action;
 
 #[cfg(test)]
-mod test_parser
-{
+mod test_parser {
   use std::collections::BTreeMap;
   use std::collections::HashMap;
 
@@ -31,8 +30,7 @@ mod test_parser
   use super::parse_functions::get_next_action;
 
   #[test]
-  fn test_fork()
-  {
+  fn test_fork() {
     let (bytecode, mut reader, mut ctx) = setup_states(
       vec![
         "
@@ -72,8 +70,7 @@ state [Z]
   }
 
   #[test]
-  fn test_goto()
-  {
+  fn test_goto() {
     let (bytecode, mut reader, mut state) = setup_states(
       vec![
         "
@@ -100,8 +97,7 @@ state [test_end]
   }
 
   #[test]
-  fn test_set_production()
-  {
+  fn test_set_production() {
     let (bytecode, mut reader, mut state) = setup_state(
       "
 state [test]
@@ -119,8 +115,7 @@ state [test]
   }
 
   #[test]
-  fn test_reduce()
-  {
+  fn test_reduce() {
     let (bytecode, mut reader, mut state) = setup_state(
       "
 state [test]
@@ -142,8 +137,7 @@ state [test]
     }
   }
   #[test]
-  fn test_consume_nothing()
-  {
+  fn test_consume_nothing() {
     let (bytecode, mut reader, mut state) = setup_state(
       "
 state [test]
@@ -155,7 +149,7 @@ state [test]
 
     reader.next(10);
 
-    state.assert_token = ParseToken {
+    state.assert = ParseToken {
       byte_length: 5,
       byte_offset: 10,
       cp_length: 5,
@@ -175,15 +169,14 @@ state [test]
         assert_eq!(token.cp_length, 0);
 
         // assert_eq!(reader.cursor(), 15);
-        assert_eq!(state.anchor_token, state.assert_token);
+        assert_eq!(state.anchor, state.assert);
       }
       _ => panic!("Incorrect value returned"),
     }
   }
 
   #[test]
-  fn test_consume()
-  {
+  fn test_consume() {
     let (bytecode, mut reader, mut state) = setup_state(
       "
 state [test]
@@ -193,7 +186,7 @@ state [test]
       "123456781234567812345678",
     );
 
-    state.assert_token = ParseToken {
+    state.assert = ParseToken {
       byte_length: 5,
       byte_offset: 10,
       cp_length: 5,
@@ -213,15 +206,14 @@ state [test]
         assert_eq!(token.cp_length, 5);
 
         // assert_eq!(reader.cursor(), 15);
-        assert_eq!(state.anchor_token, state.assert_token);
+        assert_eq!(state.anchor, state.assert);
       }
       _ => panic!("Incorrect value returned"),
     }
   }
 
   #[test]
-  fn test_hash_table()
-  {
+  fn test_hash_table() {
     let (bytecode, mut reader, mut state) = setup_state(
       "
 state [test]
@@ -244,8 +236,7 @@ assert PRODUCTION [3] (pass)",
   }
 
   #[test]
-  fn test_hash_table_skip()
-  {
+  fn test_hash_table_skip() {
     let (bytecode, mut reader, mut state) = setup_state(
       "
 state [test] scanner [none]
@@ -261,8 +252,7 @@ state [test] scanner [none]
   }
 
   #[test]
-  fn test_jump_table()
-  {
+  fn test_jump_table() {
     use IRStateType::*;
 
     let mut ir_state = IRState {
@@ -311,8 +301,7 @@ assert PRODUCTION [3] (pass)
   }
   #[ignore]
   #[test]
-  fn test_jump_table_skip()
-  {
+  fn test_jump_table_skip() {
     use IRStateType::*;
 
     let val = "
@@ -338,8 +327,7 @@ assert PRODUCTION [3] (pass)
   fn setup_states<'a>(
     state_ir: Vec<&str>,
     reader_input: &'a str,
-  ) -> (Vec<u32>, UTF8StringReader<'a>, ParseContext<UTF8StringReader<'a>>)
-  {
+  ) -> (Vec<u32>, UTF8StringReader<'a>, ParseContext<UTF8StringReader<'a>>) {
     let is_asts = state_ir
       .into_iter()
       .map(|s| {
@@ -365,8 +353,7 @@ assert PRODUCTION [3] (pass)
   fn setup_state<'a>(
     state_ir: &str,
     reader_input: &'a str,
-  ) -> (Vec<u32>, UTF8StringReader<'a>, ParseContext<UTF8StringReader<'a>>)
-  {
+  ) -> (Vec<u32>, UTF8StringReader<'a>, ParseContext<UTF8StringReader<'a>>) {
     let ir_ast = compile_ir_ast(Vec::from(state_ir.to_string()));
 
     assert!(ir_ast.is_ok());
@@ -386,8 +373,7 @@ assert PRODUCTION [3] (pass)
     (bytecode, reader, ctx)
   }
 
-  fn create_output(val: &str, grammar: &GrammarStore) -> bytecode::BytecodeOutput
-  {
+  fn create_output(val: &str, g: &GrammarStore) -> bytecode::BytecodeOutput {
     let mut ir_state =
       IRState { code: val.to_string(), name: "test".to_string(), ..Default::default() };
 
@@ -398,7 +384,7 @@ assert PRODUCTION [3] (pass)
     let ir_ast = ir_ast.unwrap().clone();
 
     let output = compile_ir_states_into_bytecode(
-      &grammar,
+      &g,
       BTreeMap::from_iter(vec![(ir_state.get_name(), ir_state)]),
       vec![ir_ast],
     );

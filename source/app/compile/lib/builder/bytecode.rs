@@ -23,8 +23,7 @@ use super::pipeline::PipelineTask;
 pub fn build_byte_code_parse(
   source_type: SourceType,
   include_ascript_mixins: bool,
-) -> PipelineTask
-{
+) -> PipelineTask {
   PipelineTask {
     fun: Box::new(move |task_ctx| match source_type {
       SourceType::Rust => {
@@ -50,11 +49,7 @@ pub fn build_byte_code_parse(
             // the
             // ascript code if necessary
             1,
-            if include_ascript_mixins {
-              Some(task_ctx.get_ascript())
-            } else {
-              None
-            },
+            if include_ascript_mixins { Some(task_ctx.get_ascript()) } else { None },
           ) {
             Err(CompileError::from_io_error(&err))
           } else {
@@ -79,17 +74,14 @@ pub fn build_byte_code_parse(
 
 fn write_parser_file<W: Write>(
   mut writer: CodeWriter<W>,
-  grammar: &GrammarStore,
-  threads: usize,
+  g: &GrammarStore,
+  thread_count: usize,
   ascript: Option<&AScriptStore>,
-) -> std::io::Result<()>
-{
+) -> std::io::Result<()> {
   let BytecodeOutput { bytecode, state_name_to_offset: state_lookups, .. } =
-    compile_bytecode(grammar, threads);
+    compile_bytecode(g, thread_count);
 
-  if let Err(err) =
-    write_rust_parser_file(writer, &state_lookups, grammar, &bytecode, ascript)
-  {
+  if let Err(err) = write_rust_parser_file(writer, &state_lookups, g, &bytecode, ascript) {
     eprintln!("{}", err);
   }
 
@@ -99,11 +91,10 @@ fn write_parser_file<W: Write>(
 fn write_rust_parser_file<W: Write>(
   mut writer: CodeWriter<W>,
   state_lookups: &BTreeMap<String, u32>,
-  grammar: &GrammarStore,
-  bytecode: &Vec<u32>,
-  ascript: Option<&AScriptStore>,
-) -> std::io::Result<()>
-{
+  g: &GrammarStore,
+  bc: &Vec<u32>,
+  ast: Option<&AScriptStore>,
+) -> std::io::Result<()> {
   writer
     .wrt(
       "
@@ -147,11 +138,11 @@ impl<'a, T: ByteCharacterReader + ImmutCharacterReader + MutCharacterReader> Con
     )?
     .indent();
 
-  common::write_rust_entry_function_bytecode(grammar, state_lookups, &mut writer)?;
+  common::write_rust_entry_function_bytecode(g, state_lookups, &mut writer)?;
 
-  if let Some(ascript) = ascript {
+  if let Some(ascript) = ast {
     for (_, ExportedProduction { export_name, production, .. }) in
-      get_exported_productions(grammar).iter().enumerate()
+      get_exported_productions(g).iter().enumerate()
     {
       writer
         .newline()?
@@ -168,7 +159,8 @@ impl<'a, T: ByteCharacterReader + ImmutCharacterReader + MutCharacterReader> Con
         ))?
         .wrtln(
           "
-let mut stack = Vec::new();
+let mut nodes = Vec::new();
+let mut tokens = Vec::new();
 loop {
   match ctx.next() {
     Some(ParseAction::Error { last_input, .. }) => {
@@ -183,10 +175,24 @@ loop {
       ));
     }
     Some(ParseAction::Shift { skipped_characters: skip, token }) => {
-      stack.push(HCO::TOKEN(Token::from_kernel_token(&token)));
+      let mut tok = Token::from_kernel_token(&token);
+      tok.set_source(ctx.1.get_source());
+      nodes.push(HCO::TOKEN(tok.clone()));
+      tokens.push(tok);
     }
-    Some(ParseAction::Reduce { body_id, .. }) => {
-      REDUCE_FUNCTIONS[body_id as usize](&mut stack, Token::new());
+    Some(ParseAction::Reduce { body_id, symbol_count, .. }) => {
+      let len = symbol_count as usize;
+      let pos_a = &tokens[tokens.len() - len as usize];
+      let pos_b = &tokens[tokens.len() - 1];
+      let mut tok = Token::from_range(pos_a, pos_b);
+      let root = tokens.len() - len;
+      tokens[root] = tok.clone();
+
+      unsafe {
+        tokens.set_len(root + 1);
+     }
+
+      REDUCE_FUNCTIONS[body_id as usize](&mut nodes, tok);
     }
     Some(ParseAction::Accept { production_id }) => {
       break;
@@ -196,7 +202,7 @@ loop {
     }
   }
 }
-Ok(stack.into_iter().next().unwrap())
+Ok(nodes.into_iter().next().unwrap())
         ",
         )?
         .dedent()
@@ -206,9 +212,9 @@ Ok(stack.into_iter().next().unwrap())
 
   writer.dedent().wrtln("}")?;
 
-  writer.wrtln(&format!("static bytecode: [u32; {}] = [", bytecode.len()))?.indent();
+  writer.wrtln(&format!("static bytecode: [u32; {}] = [", bc.len()))?.indent();
 
-  for chunk in bytecode.chunks(9) {
+  for chunk in bc.chunks(9) {
     writer.insert_newline()?;
     for val in chunk {
       writer.wrt(&val.to_string())?.wrt(", ")?;
@@ -223,15 +229,13 @@ Ok(stack.into_iter().next().unwrap())
 }
 
 #[cfg(test)]
-mod test
-{
+mod test {
   use crate::ast::rust;
   use crate::writer::code_writer::StringBuffer;
   use hctk::ascript::compile::compile_reduce_function_expressions;
   use hctk::types::AScriptStore;
   #[test]
-  fn test_output_rust_on_practical_grammar()
-  {
+  fn test_output_rust_on_practical_grammar() {
     use hctk::debug::compile_test_grammar;
 
     let grammar = compile_test_grammar(
@@ -252,7 +256,7 @@ mod test
 
     assert!(errors.is_empty());
 
-    assert_eq!(ascript.struct_table.len(), 2);
+    assert_eq!(ascript.structs.len(), 2);
 
     let mut writer = StringBuffer::default();
 

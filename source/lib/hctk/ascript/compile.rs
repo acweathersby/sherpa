@@ -38,27 +38,24 @@ use crate::types::*;
 use std::mem::discriminant;
 
 pub fn compile_reduce_function_expressions<'a>(
-  grammar: &'a GrammarStore,
-  ascript: &mut AScriptStore,
-) -> Vec<ParseError>
-{
+  g: &'a GrammarStore,
+  ast: &mut AScriptStore,
+) -> Vec<ParseError> {
   let mut errors = vec![];
   let mut temp_ascript = AScriptStore::new();
 
   // Separate all bodies into a list of  of tuple of body id's and
   // Ascript refence nodes.
 
-  let normal_parse_bodies: Vec<(BodyId, Option<&'a AST_AScript>)> = grammar
-    .bodies_table
+  let normal_parse_bodies: Vec<(BodyId, Option<&'a AST_AScript>)> = g
+    .bodies
     .iter()
     .filter_map(|(id, body)| {
-      if grammar.production_table.get(&body.production).unwrap().is_scanner {
+      if g.productions.get(&body.prod).unwrap().is_scanner {
         None
       } else {
         for function in &body.reduce_fn_ids {
-          if let ReduceFunctionType::Ascript(ascript) =
-            grammar.reduce_functions.get(function).unwrap()
-          {
+          if let ReduceFunctionType::Ascript(ascript) = g.reduce_functions.get(function).unwrap() {
             return Some((*id, Some(ascript)));
           }
         }
@@ -77,37 +74,27 @@ pub fn compile_reduce_function_expressions<'a>(
   let mut struct_bodies: Vec<(BodyId, &'a AST_AScript)> = vec![];
 
   for (body_id, ascript_option_fn) in normal_parse_bodies {
-    if let Some(body) = grammar.bodies_table.get(&body_id) {
+    if let Some(body) = g.bodies.get(&body_id) {
       if let Some(ascript_fn) = &ascript_option_fn {
         match &ascript_fn.ast {
           ASTNode::AST_Struct(box ast_struct) => {
             if let AScriptTypeVal::Struct(id) = get_struct_type_from_node(ast_struct) {
               struct_bodies.push((body_id, ascript_fn));
               add_production_type(
-                body.production,
+                g,
+                ast,
+                body.prod,
                 AScriptTypeVal::Struct(id),
                 &body.origin_location,
-                ascript,
-                grammar,
               );
             }
           }
           ASTNode::AST_Statements(ast_stmts) => {
-            let (sub_types, mut sub_errors) = compile_expression_type(
-              ast_stmts.statements.last().unwrap(),
-              body,
-              ascript,
-              grammar,
-            );
+            let (sub_types, mut sub_errors) =
+              compile_expression_type(g, ast, ast_stmts.statements.last().unwrap(), body);
 
             for sub_type in sub_types {
-              add_production_type(
-                body.production,
-                sub_type,
-                &body.origin_location,
-                ascript,
-                grammar,
-              );
+              add_production_type(g, ast, body.prod, sub_type, &body.origin_location);
             }
 
             errors.append(&mut sub_errors);
@@ -116,32 +103,26 @@ pub fn compile_reduce_function_expressions<'a>(
         }
       } else {
         // Evaluate the last new_return_type symbol in the production.
-        let item = Item::from_body(&body_id, grammar).unwrap();
-        let sym = item.to_last_sym().get_symbol(grammar);
+        let item = Item::from_body(&body_id, g).unwrap();
+        let sym = item.to_last_sym().get_symbol(g);
         let return_type = match sym {
           SymbolID::Production(id, ..) => add_production_type(
-            body.production,
+            g,
+            ast,
+            body.prod,
             AScriptTypeVal::UnresolvedProduction(id),
             &body.origin_location,
-            ascript,
-            grammar,
           ),
-          _ => add_production_type(
-            body.production,
-            AScriptTypeVal::Token,
-            &body.origin_location,
-            ascript,
-            grammar,
-          ),
+          _ => add_production_type(g, ast, body.prod, AScriptTypeVal::Token, &body.origin_location),
         };
       }
     }
   }
 
-  resolve_production_return_types(ascript);
+  resolve_production_return_types(ast);
 
-  for key in Vec::from_iter(ascript.production_types.keys().cloned()) {
-    let _types = ascript.production_types.get(&key).unwrap().to_owned();
+  for key in Vec::from_iter(ast.prod_types.keys().cloned()) {
+    let _types = ast.prod_types.get(&key).unwrap().to_owned();
 
     if _types.len() == 1 {
       let (_type, tokens) = (_types.iter().next().unwrap());
@@ -149,10 +130,9 @@ pub fn compile_reduce_function_expressions<'a>(
         AScriptTypeVal::GenericVec(Some(_types)) => {
           let resolved_vector_type = get_specified_vector_from_generic_vec_values(_types);
 
-          ascript.production_types.insert(
-            key,
-            HashMap::from_iter(vec![(resolved_vector_type, tokens.to_owned())]),
-          );
+          ast
+            .prod_types
+            .insert(key, HashMap::from_iter(vec![(resolved_vector_type, tokens.to_owned())]));
         }
         _ => {}
       }
@@ -160,10 +140,7 @@ pub fn compile_reduce_function_expressions<'a>(
   }
 
   // Ensure all non-scanner productions have been added to the ascript data.
-  assert_eq!(
-    ascript.production_types.len(),
-    grammar.production_table.iter().filter(|p| !p.1.is_scanner).count()
-  );
+  assert_eq!(ast.prod_types.len(), g.productions.iter().filter(|p| !p.1.is_scanner).count());
 
   // We now have the base types for all productions. We can now do a
   // thorough analysis of struct types and production return
@@ -173,50 +150,42 @@ pub fn compile_reduce_function_expressions<'a>(
   // type conflicts
 
   for (body_id, ascript_fn) in struct_bodies {
-    if let Some(body) = grammar.bodies_table.get(&body_id) {
+    if let Some(body) = g.bodies.get(&body_id) {
       if let ASTNode::AST_Struct(box ast_struct) = &ascript_fn.ast {
-        errors.append(&mut compile_struct_type(ast_struct, body, ascript, grammar).1);
+        errors.append(&mut compile_struct_type(g, ast, ast_struct, body).1);
       }
     }
   }
 
-  resolve_prop_types(ascript);
+  resolve_prop_types(ast);
 
   errors
 }
 
-fn resolve_prop_types(ascript: &mut AScriptStore)
-{
+fn resolve_prop_types(ascript: &mut AScriptStore) {
   // Ensure each property entry has a resolved data type.
-  for prop_key in ascript.props_table.keys().cloned().collect::<Vec<_>>() {
-    let type_val = ascript.props_table.get(&prop_key).unwrap().type_val.clone();
+  for prop_key in ascript.props.keys().cloned().collect::<Vec<_>>() {
+    let type_val = ascript.props.get(&prop_key).unwrap().type_val.clone();
 
-    ascript.props_table.get_mut(&prop_key).unwrap().type_val =
-      get_resolved_type(ascript, &type_val);
+    ascript.props.get_mut(&prop_key).unwrap().type_val = get_resolved_type(ascript, &type_val);
   }
 }
 
-fn resolve_production_return_types(ascript: &mut AScriptStore)
-{
+fn resolve_production_return_types(ast: &mut AScriptStore) {
   let mut per_production_refs = HashMap::new();
 
-  let mut pending_production_passes =
-    VecDeque::from_iter(ascript.production_types.keys().cloned());
+  let mut pending_prods = VecDeque::from_iter(ast.prod_types.keys().cloned());
 
-  while let Some(prod_id) = pending_production_passes.pop_front() {
-    let map = ascript.production_types.get(&prod_id).unwrap();
+  while let Some(prod_id) = pending_prods.pop_front() {
+    let map = ast.prod_types.get(&prod_id).unwrap();
     let mut new_map = HashMap::new();
 
     // Production return types of vectors should be combined into a single type
-    let vector_types = map
-      .iter()
-      .filter(|(a, b)| matches!(a, AScriptTypeVal::GenericVec(..)))
-      .collect::<Vec<_>>();
+    let vector_types =
+      map.iter().filter(|(a, b)| matches!(a, AScriptTypeVal::GenericVec(..))).collect::<Vec<_>>();
 
-    let non_vector_types = map
-      .iter()
-      .filter(|(a, b)| !matches!(a, AScriptTypeVal::GenericVec(..)))
-      .collect::<Vec<_>>();
+    let non_vector_types =
+      map.iter().filter(|(a, b)| !matches!(a, AScriptTypeVal::GenericVec(..))).collect::<Vec<_>>();
 
     if !vector_types.is_empty() && !non_vector_types.is_empty() {
       panic!("Incompatible types");
@@ -230,14 +199,13 @@ fn resolve_production_return_types(ascript: &mut AScriptStore)
               .or_insert_with(|| BTreeSet::new())
               .insert(*foreign_prod_id)
             {
-              let other_production_types =
-                ascript.production_types.get(foreign_prod_id).unwrap();
+              let other_production_types = ast.prod_types.get(foreign_prod_id).unwrap();
 
               for (_type, token) in other_production_types {
                 new_map.insert(_type.clone(), token.clone());
               }
 
-              pending_production_passes.push_back(prod_id);
+              pending_prods.push_back(prod_id);
             }
           }
           _ => {
@@ -272,8 +240,7 @@ fn resolve_production_return_types(ascript: &mut AScriptStore)
                     .or_insert_with(|| BTreeSet::new())
                     .insert(*foreign_prod_id)
                   {
-                    let other_production_types =
-                      ascript.production_types.get(foreign_prod_id).unwrap();
+                    let other_production_types = ast.prod_types.get(foreign_prod_id).unwrap();
 
                     for (_type, token) in other_production_types {
                       combined_vector_types.insert(_type.clone());
@@ -289,7 +256,7 @@ fn resolve_production_return_types(ascript: &mut AScriptStore)
             }
 
             if resubmit {
-              pending_production_passes.push_back(prod_id);
+              pending_prods.push_back(prod_id);
             }
           }
           _ => {}
@@ -299,7 +266,7 @@ fn resolve_production_return_types(ascript: &mut AScriptStore)
       new_map.insert(AScriptTypeVal::GenericVec(Some(combined_vector_types)), new_tokens);
     }
 
-    ascript.production_types.insert(prod_id, new_map);
+    ast.prod_types.insert(prod_id, new_map);
   }
 }
 
@@ -307,23 +274,20 @@ fn resolve_production_return_types(ascript: &mut AScriptStore)
 /// this returns a clone of the `base_type`. For vectors and unresolved
 /// productions types, this attempts to replace such types with resolved
 /// versions
-pub fn get_resolved_type(
-  ascript: &AScriptStore,
-  base_type: &AScriptTypeVal,
-) -> AScriptTypeVal
-{
+pub fn get_resolved_type(ascript: &AScriptStore, base_type: &AScriptTypeVal) -> AScriptTypeVal {
   match base_type {
     AScriptTypeVal::UnresolvedProduction(production_id) => {
       if let Some(types) = ascript
-        .production_types
+        .prod_types
         .get(production_id)
         .and_then(|t| Some(t.keys().cloned().collect::<Vec<_>>()))
       {
         if types.len() == 1 {
           types[0].clone()
-        } else if types.iter().all(|t| {
-          matches!(t, AScriptTypeVal::Struct(..) | AScriptTypeVal::GenericStruct(..))
-        }) {
+        } else if types
+          .iter()
+          .all(|t| matches!(t, AScriptTypeVal::Struct(..) | AScriptTypeVal::GenericStruct(..)))
+        {
           let nodes = types
             .iter()
             .flat_map(|t| match t.clone() {
@@ -353,10 +317,9 @@ pub fn get_resolved_type(
 }
 
 pub fn get_resolved_vec_contents(
-  ascript: &AScriptStore,
+  ast: &AScriptStore,
   base_type: &AScriptTypeVal,
-) -> Vec<AScriptTypeVal>
-{
+) -> Vec<AScriptTypeVal> {
   use AScriptTypeVal::*;
 
   match base_type {
@@ -372,13 +335,11 @@ pub fn get_resolved_vec_contents(
     U8Vec => vec![U8(None)],
     GenericStructVec(types) => types.iter().map(|t| AScriptTypeVal::Struct(*t)).collect(),
     GenericVec(Some(types)) => {
-      types.iter().flat_map(|t| get_resolved_vec_contents(ascript, t)).collect()
+      types.iter().flat_map(|t| get_resolved_vec_contents(ast, t)).collect()
     }
     TokenVec => vec![Token],
     StringVec => vec![String(None)],
-    UnresolvedProduction(p) => {
-      get_resolved_vec_contents(ascript, &get_resolved_type(ascript, base_type))
-    }
+    UnresolvedProduction(p) => get_resolved_vec_contents(ast, &get_resolved_type(ast, base_type)),
     none_vec_type => {
       vec![none_vec_type.clone()]
     }
@@ -386,16 +347,15 @@ pub fn get_resolved_vec_contents(
 }
 
 pub fn add_production_type(
-  production_id: ProductionId,
+  g: &GrammarStore,
+  ast: &mut AScriptStore,
+  prod_id: ProductionId,
   new_return_type: AScriptTypeVal,
   new_origin: &Token,
-  ascript: &mut AScriptStore,
-  grammar: &GrammarStore,
-)
-{
-  ascript.production_types.entry(production_id).or_insert_with(HashMap::new);
+) {
+  ast.prod_types.entry(prod_id).or_insert_with(HashMap::new);
 
-  let mut table = ascript.production_types.get_mut(&production_id).unwrap();
+  let mut table = ast.prod_types.get_mut(&prod_id).unwrap();
 
   match table.entry(new_return_type) {
     Entry::Occupied(mut entry) => {
@@ -408,18 +368,17 @@ pub fn add_production_type(
 }
 
 pub fn merge_production_type(
-  production_id: ProductionId,
+  g: &GrammarStore,
+  ast: &mut AScriptStore,
+  prod_id: ProductionId,
   new_return_type: AScriptTypeVal,
   new_origin: &Token,
-  ascript: &mut AScriptStore,
-  grammar: &GrammarStore,
-) -> Vec<ParseError>
-{
+) -> Vec<ParseError> {
   let mut errors = vec![];
 
-  ascript.production_types.entry(production_id).or_insert_with(HashMap::new);
+  ast.prod_types.entry(prod_id).or_insert_with(HashMap::new);
 
-  if let Some(types) = ascript.production_types.get_mut(&production_id) {
+  if let Some(types) = ast.prod_types.get_mut(&prod_id) {
     // Warn about incompatible types
     for (existing_type, origins) in types.iter() {
       match existing_type {
@@ -438,7 +397,7 @@ pub fn merge_production_type(
               .map(|t| CompileProblem {
                 message: format!(
                   "Existing incompatible type {}",
-                  existing_type.hcobj_type_name(Some(grammar))
+                  existing_type.hcobj_type_name(Some(g))
                 ),
                 loc: t.clone(),
                 inline_message: "Derived here".to_string(),
@@ -450,8 +409,8 @@ pub fn merge_production_type(
             errors.push(ParseError::COMPOUND_COMPILE_PROBLEM(CompoundCompileProblem {
               message: format!(
                 "Incompatible production return type {} on production {}",
-                new_return_type.hcobj_type_name(Some(grammar)),
-                get_production_plain_name(&production_id, grammar)
+                new_return_type.hcobj_type_name(Some(g)),
+                get_production_plain_name(&prod_id, g)
               ),
               locations,
             }));
@@ -467,18 +426,16 @@ pub fn merge_production_type(
 }
 
 pub fn compile_expression_type(
+  g: &GrammarStore,
+  ast: &mut AScriptStore,
   ast_expression: &ASTNode,
   body: &Body,
-  store: &mut AScriptStore,
-  grammar: &GrammarStore,
-) -> (Vec<AScriptTypeVal>, Vec<ParseError>)
-{
+) -> (Vec<AScriptTypeVal>, Vec<ParseError>) {
   let mut errors = vec![];
 
   let types = match ast_expression {
     ASTNode::AST_Struct(ast_struct) => {
-      let (struct_type, mut error) =
-        compile_struct_type(ast_struct, body, store, grammar);
+      let (struct_type, mut error) = compile_struct_type(g, ast, ast_struct, body);
 
       errors.append(&mut error);
 
@@ -486,8 +443,7 @@ pub fn compile_expression_type(
     }
     ASTNode::AST_Token(..) => vec![AScriptTypeVal::Token],
     ASTNode::AST_Add(box AST_Add { left, .. }) => {
-      let (sub_types, mut sub_errors) =
-        compile_expression_type(left, body, store, grammar);
+      let (sub_types, mut sub_errors) = compile_expression_type(g, ast, left, body);
       errors.append(&mut sub_errors);
       sub_types
     }
@@ -495,8 +451,7 @@ pub fn compile_expression_type(
       let mut types = BTreeSet::new();
 
       for node in initializer {
-        let (sub_types, mut sub_errors) =
-          compile_expression_type(node, body, store, grammar);
+        let (sub_types, mut sub_errors) = compile_expression_type(g, ast, node, body);
 
         for sub_type in sub_types {
           match sub_type {
@@ -563,12 +518,11 @@ pub fn compile_expression_type(
 }
 
 pub fn compile_struct_type(
+  g: &GrammarStore,
+  ast: &mut AScriptStore,
   ast_struct: &AST_Struct,
   body: &Body,
-  store: &mut AScriptStore,
-  grammar: &GrammarStore,
-) -> (AScriptTypeVal, Vec<ParseError>)
-{
+) -> (AScriptTypeVal, Vec<ParseError>) {
   let mut errors = vec![];
 
   let types = ast_struct
@@ -590,12 +544,9 @@ pub fn compile_struct_type(
     .collect::<Vec<_>>();
 
   // Use the last type as the official type name of the struct.
-  let type_name = if let Some(node) = types.last() {
-    node.value.clone()
-  } else {
-    "unknown".to_string()
-  }[2..]
-    .to_string();
+  let type_name =
+    if let Some(node) = types.last() { node.value.clone() } else { "unknown".to_string() }[2..]
+      .to_string();
 
   // Validate struct type is singular
 
@@ -649,14 +600,13 @@ pub fn compile_struct_type(
 
         properties.insert(prop_id.clone());
 
-        let (prop_types, sub_errors) =
-          compile_expression_type(&prop.value, body, store, grammar);
+        let (prop_types, sub_errors) = compile_expression_type(g, ast, &prop.value, body);
 
         for prop_type in &prop_types {
-          if let Some(existing) = store.props_table.get_mut(&prop_id) {
+          if let Some(existing) = ast.props.get_mut(&prop_id) {
             if !existing.type_val.is_same_type(&prop_type) {
               if existing.type_val.is_undefined() {
-                store.props_table.insert(prop_id.clone(), AScriptProp {
+                ast.props.insert(prop_id.clone(), AScriptProp {
                   type_val: prop_type.to_owned(),
                   first_declared_location: prop.value.Token(),
                   optional: true,
@@ -664,37 +614,32 @@ pub fn compile_struct_type(
               } else if prop_type.is_undefined() {
                 existing.optional = true;
               } else {
-                errors.push(ParseError::COMPOUND_COMPILE_PROBLEM(
-                  CompoundCompileProblem {
-                    message: format!(
-                      "Redefinition of the property {} in struct {}",
-                      name, type_name
-                    ),
+                errors.push(ParseError::COMPOUND_COMPILE_PROBLEM(CompoundCompileProblem {
+                  message: format!("Redefinition of the property {} in struct {}", name, type_name),
 
-                    locations: vec![
-                      CompileProblem {
-                        message: String::new(),
-                        loc: existing.first_declared_location.clone(),
-                        inline_message: format!(
-                          "First defined as {}.",
-                          existing.type_val.hcobj_type_name(Some(grammar))
-                        ),
-                      },
-                      CompileProblem {
-                        message: String::new(),
-                        loc: prop.value.Token(),
-                        inline_message: format!(
-                          "Redefined as {}.",
-                          prop_type.hcobj_type_name(Some(grammar))
-                        ),
-                      },
-                    ],
-                  },
-                ))
+                  locations: vec![
+                    CompileProblem {
+                      message: String::new(),
+                      loc: existing.first_declared_location.clone(),
+                      inline_message: format!(
+                        "First defined as {}.",
+                        existing.type_val.hcobj_type_name(Some(g))
+                      ),
+                    },
+                    CompileProblem {
+                      message: String::new(),
+                      loc: prop.value.Token(),
+                      inline_message: format!(
+                        "Redefined as {}.",
+                        prop_type.hcobj_type_name(Some(g))
+                      ),
+                    },
+                  ],
+                }))
               }
             }
           } else {
-            store.props_table.insert(prop_id.clone(), AScriptProp {
+            ast.props.insert(prop_id.clone(), AScriptProp {
               type_val: prop_type.to_owned(),
               first_declared_location: prop.value.Token(),
               optional: false,
@@ -706,16 +651,16 @@ pub fn compile_struct_type(
     }
   }
 
-  if let Some(ascript_struct) = store.struct_table.get_mut(&id) {
+  if let Some(ascript_struct) = ast.structs.get_mut(&id) {
     ascript_struct.definition_locations.push(ast_struct.Token());
-    ascript_struct.properties.append(&mut properties);
+    ascript_struct.props.append(&mut properties);
     ascript_struct.include_token = include_token || ascript_struct.include_token;
   } else {
-    store.struct_table.insert(id, AScriptStruct {
+    ast.structs.insert(id, AScriptStruct {
       id,
       type_name,
       definition_locations: vec![ast_struct.Token()],
-      properties,
+      props: properties,
       include_token,
     });
   }
@@ -723,23 +668,20 @@ pub fn compile_struct_type(
   (AScriptTypeVal::Struct(id), errors)
 }
 
-pub fn production_types_are_structs(production_types: &BTreeSet<AScriptTypeVal>) -> bool
-{
+pub fn production_types_are_structs(production_types: &BTreeSet<AScriptTypeVal>) -> bool {
   production_types.iter().all(|t| matches!(t.clone(), AScriptTypeVal::Struct(..)))
 }
 
 pub fn get_production_types(
-  ascript: &AScriptStore,
+  ast: &AScriptStore,
   prod_id: &ProductionId,
-) -> BTreeSet<AScriptTypeVal>
-{
-  ascript.production_types.get(prod_id).unwrap().keys().cloned().collect::<BTreeSet<_>>()
+) -> BTreeSet<AScriptTypeVal> {
+  ast.prod_types.get(prod_id).unwrap().keys().cloned().collect::<BTreeSet<_>>()
 }
 /// Returns a specified vector type from a generic vector
 pub fn get_specified_vector_from_generic_vec_values(
   vals: &BTreeSet<AScriptTypeVal>,
-) -> AScriptTypeVal
-{
+) -> AScriptTypeVal {
   if vals.len() > 1 {
     if vals.iter().all(|t| {
       matches!(
@@ -756,9 +698,7 @@ pub fn get_specified_vector_from_generic_vec_values(
             AScriptTypeVal::Struct(id) => {
               vec![id.clone()]
             }
-            AScriptTypeVal::GenericStruct(struct_ids) => {
-              Vec::from_iter(struct_ids.iter().cloned())
-            }
+            AScriptTypeVal::GenericStruct(struct_ids) => Vec::from_iter(struct_ids.iter().cloned()),
             _ => vec![],
           })
           .collect::<BTreeSet<_>>(),
@@ -768,10 +708,7 @@ pub fn get_specified_vector_from_generic_vec_values(
       .all(|t| matches!(t, AScriptTypeVal::String(..) | AScriptTypeVal::StringVec))
     {
       AScriptTypeVal::StringVec
-    } else if vals
-      .iter()
-      .all(|t| matches!(t, AScriptTypeVal::Token | AScriptTypeVal::TokenVec))
-    {
+    } else if vals.iter().all(|t| matches!(t, AScriptTypeVal::Token | AScriptTypeVal::TokenVec)) {
       AScriptTypeVal::TokenVec
     } else if vals.iter().all(|t| {
       matches!(
@@ -853,35 +790,21 @@ pub fn get_specified_vector_from_generic_vec_values(
   }
 }
 
-pub fn get_named_body_ref<'a>(
-  body: &'a Body,
-  value: &str,
-) -> Option<(usize, &'a BodySymbolRef)>
-{
-  if value == "first" {
-    Some((0, body.symbols.first().unwrap()))
-  } else if value == "last" {
-    Some((body.symbols.len() - 1, body.symbols.last().unwrap()))
+pub fn get_named_body_ref<'a>(body: &'a Body, val: &str) -> Option<(usize, &'a BodySymbolRef)> {
+  if val == "first" {
+    Some((0, body.syms.first().unwrap()))
+  } else if val == "last" {
+    Some((body.syms.len() - 1, body.syms.last().unwrap()))
   } else {
-    body.symbols.iter().enumerate().filter(|(_, s)| s.annotation == *value).last()
+    body.syms.iter().enumerate().filter(|(_, s)| s.annotation == *val).last()
   }
 }
 
-pub fn get_index_body_ref<'a>(
-  body: &'a Body,
-  index: &f64,
-) -> Option<(usize, &'a BodySymbolRef)>
-{
-  body
-    .symbols
-    .iter()
-    .enumerate()
-    .filter(|(_, s)| s.original_index == (*index - 1.0) as u32)
-    .last()
+pub fn get_index_body_ref<'a>(body: &'a Body, i: &f64) -> Option<(usize, &'a BodySymbolRef)> {
+  body.syms.iter().enumerate().filter(|(_, s)| s.original_index == (*i - 1.0) as u32).last()
 }
 
-pub fn get_struct_type_from_node(ast_struct: &AST_Struct) -> AScriptTypeVal
-{
+pub fn get_struct_type_from_node(ast_struct: &AST_Struct) -> AScriptTypeVal {
   let types = ast_struct
     .props
     .iter()

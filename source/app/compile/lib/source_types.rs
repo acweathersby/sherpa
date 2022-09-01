@@ -1,6 +1,5 @@
 #[derive(Debug, Clone, Copy)]
-pub enum SourceType
-{
+pub enum SourceType {
   Rust,
   TypeScript,
   Go,

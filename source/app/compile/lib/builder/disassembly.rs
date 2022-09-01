@@ -8,8 +8,7 @@ use crate::writer::code_writer::CodeWriter;
 use super::pipeline::PipelineTask;
 
 /// Generate a disassembly file of the grammar bytecode
-pub fn build_bytecode_disassembly() -> PipelineTask
-{
+pub fn build_bytecode_disassembly() -> PipelineTask {
   PipelineTask {
     fun: Box::new(move |task_ctx| {
       let output_path = task_ctx.get_source_output_dir().clone();

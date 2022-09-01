@@ -8,30 +8,25 @@ use std::path::PathBuf;
 
 use crate::types::ParseError;
 
-pub fn hash_id_value_u64<T: Hash>(t: T) -> u64
-{
-    let mut s = DefaultHasher::new();
+pub fn hash_id_value_u64<T: Hash>(t: T) -> u64 {
+  let mut s = DefaultHasher::new();
 
-    t.hash(&mut s);
+  t.hash(&mut s);
 
-    s.finish()
+  s.finish()
 }
 
-pub fn hash_id_value_u128<T: Hash>(t: T) -> u128
-{
-    0
+pub fn hash_id_value_u128<T: Hash>(t: T) -> u128 {
+  0
 }
 
-pub fn get_guid_grammar_name(uri: &PathBuf) -> Result<String, ParseError>
-{
-    match uri.file_stem() {
-        Some(name) => {
-            let file_name = String::from(name.to_str().unwrap());
+pub fn get_guid_grammar_name(uri: &PathBuf) -> Result<String, ParseError> {
+  match uri.file_stem() {
+    Some(name) => {
+      let file_name = String::from(name.to_str().unwrap());
 
-            Ok(unsafe {
-                format!("{}_{:05X}", file_name, hash_id_value_u64(&uri))
-            })
-        }
-        None => Err(ParseError::UNDEFINED),
+      Ok(unsafe { format!("{}_{:05X}", file_name, hash_id_value_u64(&uri)) })
     }
+    None => Err(ParseError::UNDEFINED),
+  }
 }

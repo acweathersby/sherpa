@@ -1,11 +1,7 @@
+use_small_heuristics = "Max"
+
 # Line Widths
-max_width = 90
-
-array_width = 70
-
-fn_call_width = 90
-
-chain_width = 90
+max_width = 100
 
 
 
@@ -20,10 +16,6 @@ binop_separator = "Front"
 
 blank_lines_lower_bound = 0
 blank_lines_upper_bound = 1
-
-
-
-brace_style = "AlwaysNextLine"
 
 # Comments
 #format_code_in_doc_comments = true

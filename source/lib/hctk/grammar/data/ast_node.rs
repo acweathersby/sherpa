@@ -4,8 +4,7 @@ pub type ReduceFunction<T> = fn(args: &mut Vec<HCObj<T>>, tok: Token);
 
 #[derive(Debug, Clone)]
 
-pub enum HCObj<T: 'static>
-{
+pub enum HCObj<T: 'static> {
   NONE,
   LAZY(Lazy),
   NODE(T),
@@ -40,8 +39,7 @@ pub enum HCObj<T: 'static>
 
 macro_rules! into_vec {
   ($fn_name:ident, $out_type: ty, $type:ident) => {
-    pub fn $fn_name(self) -> Vec<$out_type>
-    {
+    pub fn $fn_name(self) -> Vec<$out_type> {
       if let HCObj::$type(v) = self {
         v
       } else {
@@ -53,8 +51,7 @@ macro_rules! into_vec {
 
 macro_rules! to_numeric {
   ($fn_name:ident,  $Num:ty) => {
-    fn $fn_name(&self) -> $Num
-    {
+    fn $fn_name(&self) -> $Num {
       if self.is_numeric() || matches!(self, HCObj::STRING(..) | HCObj::TOKEN(..)) {
         match self {
           HCObj::STRING(str) => str.parse::<i64>().unwrap_or(0) as $Num,
@@ -78,8 +75,7 @@ macro_rules! to_numeric {
   };
 }
 
-impl<T> HCObj<T>
-{
+impl<T> HCObj<T> {
   into_vec!(into_nodes, T, NODES);
 
   into_vec!(into_f64_vec, f64, F64Vec);
@@ -104,8 +100,7 @@ impl<T> HCObj<T>
 
   into_vec!(into_tokens, Token, TOKENS);
 
-  pub fn is_numeric(&self) -> bool
-  {
+  pub fn is_numeric(&self) -> bool {
     matches!(
       self,
       HCObj::F64(..)
@@ -121,70 +116,56 @@ impl<T> HCObj<T>
   }
 }
 
-pub trait HCObjTrait
-{
+pub trait HCObjTrait {
   fn to_string(&self) -> String;
 
-  fn to_f64(&self) -> f64
-  {
+  fn to_f64(&self) -> f64 {
     0.0
   }
 
-  fn to_f32(&self) -> f32
-  {
+  fn to_f32(&self) -> f32 {
     0.0
   }
 
-  fn to_i64(&self) -> i64
-  {
+  fn to_i64(&self) -> i64 {
     0
   }
 
-  fn to_i32(&self) -> i32
-  {
+  fn to_i32(&self) -> i32 {
     0
   }
 
-  fn to_i16(&self) -> i16
-  {
+  fn to_i16(&self) -> i16 {
     0
   }
-  fn to_i8(&self) -> i8
-  {
-    0
-  }
-
-  fn to_u64(&self) -> u64
-  {
+  fn to_i8(&self) -> i8 {
     0
   }
 
-  fn to_u32(&self) -> u32
-  {
-    0
-  }
-  fn to_u16(&self) -> u16
-  {
-    0
-  }
-  fn to_u8(&self) -> u8
-  {
+  fn to_u64(&self) -> u64 {
     0
   }
 
-  fn to_bool(&self) -> bool
-  {
+  fn to_u32(&self) -> u32 {
+    0
+  }
+  fn to_u16(&self) -> u16 {
+    0
+  }
+  fn to_u8(&self) -> u8 {
+    0
+  }
+
+  fn to_bool(&self) -> bool {
     false
   }
 
-  fn Token(&self) -> Token
-  {
+  fn Token(&self) -> Token {
     Token::empty()
   }
 }
 
-impl<T: HCObjTrait> HCObjTrait for HCObj<T>
-{
+impl<T: HCObjTrait> HCObjTrait for HCObj<T> {
   to_numeric!(to_i8, i8);
 
   to_numeric!(to_i16, i16);
@@ -205,8 +186,7 @@ impl<T: HCObjTrait> HCObjTrait for HCObj<T>
 
   to_numeric!(to_f64, f64);
 
-  fn to_string(&self) -> String
-  {
+  fn to_string(&self) -> String {
     match self {
       HCObj::NODE(node) => node.to_string(),
       &HCObj::BOOL(val) => {
@@ -222,24 +202,21 @@ impl<T: HCObjTrait> HCObjTrait for HCObj<T>
     }
   }
 
-  fn Token(&self) -> Token
-  {
+  fn Token(&self) -> Token {
     match self {
       HCObj::TOKEN(val) => val.clone(),
       _ => Token::empty(),
     }
   }
 
-  fn to_bool(&self) -> bool
-  {
+  fn to_bool(&self) -> bool {
     self.to_u8() != 0
   }
 }
 
 #[derive(Debug, Clone)]
 
-pub struct Lazy
-{
+pub struct Lazy {
   tok:           Token,
   entry_pointer: u32,
   bytecode:      &'static [u32],

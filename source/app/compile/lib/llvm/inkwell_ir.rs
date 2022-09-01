@@ -22,11 +22,7 @@ use token_indices::*;
 
 use super::inkwell_branch_ir::construct_instruction_branch;
 
-pub(crate) fn construct_context<'a>(
-  module_name: &str,
-  ctx: &'a Context,
-) -> LLVMParserModule<'a>
-{
+pub(crate) fn construct_context<'a>(module_name: &str, ctx: &'a Context) -> LLVMParserModule<'a> {
   use inkwell::AddressSpace::*;
   let module = ctx.create_module(module_name);
   let builder = ctx.create_builder();
@@ -53,20 +49,12 @@ pub(crate) fn construct_context<'a>(
   TOKEN.set_body(&[i64.into(), i64.into(), i64.into(), i64.into()], false);
 
   INPUT_BLOCK.set_body(
-    &[
-      i8.ptr_type(Generic).into(),
-      i32.into(),
-      i32.into(),
-      ctx.bool_type().into(),
-    ],
+    &[i8.ptr_type(Generic).into(), i32.into(), i32.into(), ctx.bool_type().into()],
     false,
   );
   let get_input_block_type = ctx
     .void_type()
-    .fn_type(
-      &[READER.ptr_type(Generic).into(), INPUT_BLOCK.ptr_type(Generic).into()],
-      false,
-    )
+    .fn_type(&[READER.ptr_type(Generic).into(), INPUT_BLOCK.ptr_type(Generic).into()], false)
     .ptr_type(Generic);
 
   CTX.set_body(
@@ -133,11 +121,7 @@ pub(crate) fn construct_context<'a>(
       get_adjusted_input_block: module.add_function(
         "get_adjusted_input_block",
         INPUT_BLOCK.fn_type(
-          &[
-            CTX.ptr_type(Generic).into(),
-            TOKEN.ptr_type(Generic).into(),
-            i32.into(),
-          ],
+          &[CTX.ptr_type(Generic).into(), TOKEN.ptr_type(Generic).into(), i32.into()],
           false,
         ),
         None,
@@ -156,10 +140,9 @@ pub(crate) fn construct_context<'a>(
       ),
       next: module.add_function(
         "next",
-        ctx.void_type().fn_type(
-          &[CTX.ptr_type(Generic).into(), ACTION.ptr_type(Generic).into()],
-          false,
-        ),
+        ctx
+          .void_type()
+          .fn_type(&[CTX.ptr_type(Generic).into(), ACTION.ptr_type(Generic).into()], false),
         None,
       ),
       init: module.add_function(
@@ -170,11 +153,7 @@ pub(crate) fn construct_context<'a>(
       push_state: module.add_function(
         "push_state",
         ctx.void_type().fn_type(
-          &[
-            CTX.ptr_type(Generic).into(),
-            i32.into(),
-            GOTO_FN.ptr_type(Generic).into(),
-          ],
+          &[CTX.ptr_type(Generic).into(), i32.into(), GOTO_FN.ptr_type(Generic).into()],
           false,
         ),
         None,
@@ -203,11 +182,7 @@ pub(crate) fn construct_context<'a>(
       emit_eoi: module.add_function(
         "emit_eoi",
         i32.fn_type(
-          &[
-            CTX.ptr_type(Generic).into(),
-            ACTION.ptr_type(Generic).into(),
-            i32.into(),
-          ],
+          &[CTX.ptr_type(Generic).into(), ACTION.ptr_type(Generic).into(), i32.into()],
           false,
         ),
         None,
@@ -258,10 +233,7 @@ pub(crate) fn construct_context<'a>(
   }
 }
 
-pub(crate) fn construct_emit_end_of_input(
-  ctx: &LLVMParserModule,
-) -> std::result::Result<(), ()>
-{
+pub(crate) fn construct_emit_end_of_input(ctx: &LLVMParserModule) -> std::result::Result<(), ()> {
   let LLVMParserModule { builder: b, ctx, fun: funct, .. } = ctx;
 
   let i32 = ctx.i32_type();
@@ -283,8 +255,7 @@ pub(crate) fn construct_emit_end_of_input(
     .into_pointer_value();
 
   let eoi_struct = b.build_load(eoi, "").into_struct_value();
-  let eoi_struct =
-    b.build_insert_value(eoi_struct, i32.const_int(9, false), 0, "").unwrap();
+  let eoi_struct = b.build_insert_value(eoi_struct, i32.const_int(9, false), 0, "").unwrap();
   let eoi_struct = b.build_insert_value(eoi_struct, current_offset, 2, "").unwrap();
 
   b.build_store(eoi, eoi_struct);
@@ -300,8 +271,7 @@ pub(crate) fn construct_emit_end_of_input(
 
 pub(crate) unsafe fn construct_emit_end_of_parse(
   ctx: &LLVMParserModule,
-) -> std::result::Result<(), ()>
-{
+) -> std::result::Result<(), ()> {
   let LLVMParserModule { builder: b, ctx, fun: funct, .. } = ctx;
 
   let i32 = ctx.i32_type();
@@ -350,8 +320,7 @@ pub(crate) unsafe fn construct_emit_end_of_parse(
 
 pub(crate) unsafe fn construct_get_adjusted_input_block_function(
   ctx: &LLVMParserModule,
-) -> std::result::Result<(), ()>
-{
+) -> std::result::Result<(), ()> {
   let LLVMParserModule { builder: b, ctx, fun: funct, .. } = ctx;
 
   let i32 = ctx.i32_type();
@@ -384,8 +353,7 @@ pub(crate) unsafe fn construct_get_adjusted_input_block_function(
   let needed_size = b.build_int_add(token_offset, requested_size, "");
   let needed_size = b.build_int_sub(needed_size, block_offset, "");
 
-  let comparison =
-    b.build_int_compare(inkwell::IntPredicate::UGE, block_size, needed_size, "");
+  let comparison = b.build_int_compare(inkwell::IntPredicate::UGE, block_size, needed_size, "");
 
   b.build_conditional_branch(comparison, valid_window, attempt_extend);
 
@@ -429,8 +397,7 @@ pub(crate) unsafe fn construct_get_adjusted_input_block_function(
 
 pub(crate) fn construct_emit_reduce_function(
   ctx: &LLVMParserModule,
-) -> std::result::Result<(), ()>
-{
+) -> std::result::Result<(), ()> {
   let LLVMParserModule { builder: b, ctx, fun: funct, .. } = ctx;
 
   let i32 = ctx.i32_type();
@@ -455,8 +422,7 @@ pub(crate) fn construct_emit_reduce_function(
     .into_pointer_value();
 
   let reduce_struct = b.build_load(reduce, "").into_struct_value();
-  let reduce_struct =
-    b.build_insert_value(reduce_struct, i32.const_int(6, false), 0, "").unwrap();
+  let reduce_struct = b.build_insert_value(reduce_struct, i32.const_int(6, false), 0, "").unwrap();
   let reduce_struct = b.build_insert_value(reduce_struct, production_id, 2, "").unwrap();
   let reduce_struct = b.build_insert_value(reduce_struct, body_id, 3, "").unwrap();
   let reduce_struct = b.build_insert_value(reduce_struct, symbol_count, 4, "").unwrap();
@@ -474,8 +440,7 @@ pub(crate) fn construct_emit_reduce_function(
 
 pub(crate) unsafe fn construct_extend_stack_if_needed(
   ctx: &LLVMParserModule,
-) -> std::result::Result<(), ()>
-{
+) -> std::result::Result<(), ()> {
   let LLVMParserModule { builder: b, types, ctx, fun: funct, .. } = ctx;
   let i32 = ctx.i32_type();
 
@@ -498,25 +463,16 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
     "used",
   );
   let goto_used_bytes_i32 = b.build_int_truncate(goto_used_bytes, i32.into(), "");
-  let goto_used_slots = b.build_right_shift(
-    goto_used_bytes_i32,
-    ctx.i32_type().const_int(4, false),
-    false,
-    "used",
-  );
+  let goto_used_slots =
+    b.build_right_shift(goto_used_bytes_i32, ctx.i32_type().const_int(4, false), false, "used");
 
   let goto_size_ptr = b.build_struct_gep(parse_ctx, CTX_goto_stack_len, "size").unwrap();
   let goto_slot_count = b.build_load(goto_size_ptr, "size").into_int_value();
-  let goto_slots_remaining =
-    b.build_int_sub(goto_slot_count, goto_used_slots, "remainder");
+  let goto_slots_remaining = b.build_int_sub(goto_slot_count, goto_used_slots, "remainder");
 
   // Compare to the stack size
-  let comparison = b.build_int_compare(
-    inkwell::IntPredicate::ULT,
-    goto_slots_remaining,
-    needed_slot_count,
-    "",
-  );
+  let comparison =
+    b.build_int_compare(inkwell::IntPredicate::ULT, goto_slots_remaining, needed_slot_count, "");
 
   let extend_block = ctx.append_basic_block(fn_value, "Extend");
   let free_block = ctx.append_basic_block(fn_value, "FreeStack");
@@ -533,8 +489,7 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
 
   // create a size that is equal to the needed amount rounded up to the nearest 64bytes
   let new_slot_count = b.build_int_add(goto_used_slots, needed_slot_count, "new_size");
-  let new_slot_count =
-    b.build_left_shift(new_slot_count, i32.const_int(1, false), "new_size");
+  let new_slot_count = b.build_left_shift(new_slot_count, i32.const_int(1, false), "new_size");
 
   let new_ptr = b
     .build_call(funct.allocate_stack, &[new_slot_count.into()], "")
@@ -545,18 +500,9 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
   b.build_call(
     funct.memcpy,
     &[
-      b.build_bitcast(
-        new_ptr,
-        ctx.i8_type().ptr_type(inkwell::AddressSpace::Generic),
-        "",
-      )
-      .into(),
-      b.build_bitcast(
-        goto_base_ptr,
-        ctx.i8_type().ptr_type(inkwell::AddressSpace::Generic),
-        "",
-      )
-      .into(),
+      b.build_bitcast(new_ptr, ctx.i8_type().ptr_type(inkwell::AddressSpace::Generic), "").into(),
+      b.build_bitcast(goto_base_ptr, ctx.i8_type().ptr_type(inkwell::AddressSpace::Generic), "")
+        .into(),
       goto_used_bytes_i32.into(),
       ctx.bool_type().const_int(0, false).into(),
     ],
@@ -604,9 +550,7 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
   }
 }
 
-pub(crate) unsafe fn construct_scan(ctx: &LLVMParserModule)
-  -> std::result::Result<(), ()>
-{
+pub(crate) unsafe fn construct_scan(ctx: &LLVMParserModule) -> std::result::Result<(), ()> {
   let LLVMParserModule { builder: b, types, ctx, fun: funct, .. } = ctx;
 
   let i32 = ctx.i32_type();
@@ -698,8 +642,7 @@ pub(crate) unsafe fn construct_scan(ctx: &LLVMParserModule)
   // Reserve enough space on the stack for an Action enum
   let action = b.build_alloca(types.action.array_type(8), "");
 
-  let action =
-    b.build_bitcast(action, types.action.ptr_type(inkwell::AddressSpace::Generic), "");
+  let action = b.build_bitcast(action, types.action.ptr_type(inkwell::AddressSpace::Generic), "");
 
   b.build_call(funct.next, &[scan_ctx.into(), action.into()], "");
 
@@ -743,12 +686,11 @@ pub(crate) unsafe fn construct_scan(ctx: &LLVMParserModule)
   let offset_max = b.build_struct_gep(assert_token, TokOffset, "").unwrap();
   let offset_max = b.build_load(offset_max, "");
 
-  let offset_diff =
-    b.build_int_sub(offset_max.into_int_value(), offset_min.into_int_value(), "");
+  let offset_diff = b.build_int_sub(offset_max.into_int_value(), offset_min.into_int_value(), "");
 
-  let length = b.build_struct_gep(anchor_token, TokLength, "").unwrap();
+  let len = b.build_struct_gep(anchor_token, TokLength, "").unwrap();
 
-  b.build_store(length, offset_diff);
+  b.build_store(len, offset_diff);
 
   let token = b.build_load(anchor_token, "");
 
@@ -766,18 +708,14 @@ pub(crate) unsafe fn construct_scan(ctx: &LLVMParserModule)
   }
 }
 
-pub(crate) unsafe fn construct_emit_shift(
-  ctx: &LLVMParserModule,
-) -> std::result::Result<(), ()>
-{
+pub(crate) unsafe fn construct_emit_shift(ctx: &LLVMParserModule) -> std::result::Result<(), ()> {
   let LLVMParserModule { module, builder: b, types, ctx, fun: funct, .. } = ctx;
 
   let i32 = ctx.i32_type();
 
   let fn_value = funct.emit_shift;
 
-  let eoi_action =
-    ctx.struct_type(&[i32.into(), types.token.into(), types.token.into()], false);
+  let eoi_action = ctx.struct_type(&[i32.into(), types.token.into(), types.token.into()], false);
 
   // Set the context's goto pointers to point to the goto block;
   let entry = ctx.append_basic_block(fn_value, "Entry");
@@ -800,10 +738,8 @@ pub(crate) unsafe fn construct_emit_shift(
   // The length of the skip token is equal to the tokens offset minus the
   // assert token's offset
 
-  let shift_offset =
-    b.build_extract_value(assert_token, TokOffset, "").unwrap().into_int_value();
-  let skip_offset =
-    b.build_extract_value(skip_token, TokOffset, "").unwrap().into_int_value();
+  let shift_offset = b.build_extract_value(assert_token, TokOffset, "").unwrap().into_int_value();
+  let skip_offset = b.build_extract_value(skip_token, TokOffset, "").unwrap().into_int_value();
 
   let skip_length = b.build_int_sub(shift_offset, skip_offset, "");
 
@@ -814,8 +750,7 @@ pub(crate) unsafe fn construct_emit_shift(
     .into_pointer_value();
 
   let shift_struct = b.build_load(shift, "").into_struct_value();
-  let shift_struct =
-    b.build_insert_value(shift_struct, i32.const_int(5, false), 0, "").unwrap();
+  let shift_struct = b.build_insert_value(shift_struct, i32.const_int(5, false), 0, "").unwrap();
 
   let shift_struct = b.build_insert_value(shift_struct, skip_token, 1, "").unwrap();
 
@@ -823,15 +758,13 @@ pub(crate) unsafe fn construct_emit_shift(
 
   b.build_store(shift, shift_struct);
 
-  let assert_length =
-    b.build_extract_value(assert_token, 1, "").unwrap().into_int_value();
+  let assert_length = b.build_extract_value(assert_token, 1, "").unwrap().into_int_value();
 
   let assert_offset = b.build_int_add(assert_length, shift_offset, "");
 
   let assert_token = b.build_insert_value(assert_token, assert_offset, 0, "").unwrap();
-  let assert_token = b
-    .build_insert_value(assert_token, ctx.i64_type().const_int(0, false), TokType, "")
-    .unwrap();
+  let assert_token =
+    b.build_insert_value(assert_token, ctx.i64_type().const_int(0, false), TokType, "").unwrap();
 
   b.build_store(anchor_token_ptr, assert_token);
   b.build_store(assert_token_ptr, assert_token);
@@ -849,10 +782,7 @@ pub(crate) unsafe fn construct_emit_shift(
   }
 }
 
-pub(crate) unsafe fn construct_emit_accept(
-  ctx: &LLVMParserModule,
-) -> std::result::Result<(), ()>
-{
+pub(crate) unsafe fn construct_emit_accept(ctx: &LLVMParserModule) -> std::result::Result<(), ()> {
   let LLVMParserModule { builder: b, ctx, fun: funct, .. } = ctx;
 
   let i32 = ctx.i32_type();
@@ -872,16 +802,11 @@ pub(crate) unsafe fn construct_emit_accept(
   let production = b.build_struct_gep(parse_ctx, CTX_production, "").unwrap();
   let production = b.build_load(production, "");
   let accept = b
-    .build_bitcast(
-      basic_action,
-      accept_action.ptr_type(inkwell::AddressSpace::Generic),
-      "",
-    )
+    .build_bitcast(basic_action, accept_action.ptr_type(inkwell::AddressSpace::Generic), "")
     .into_pointer_value();
 
   let accept_struct = b.build_load(accept, "").into_struct_value();
-  let accept_struct =
-    b.build_insert_value(accept_struct, i32.const_int(7, false), 0, "").unwrap();
+  let accept_struct = b.build_insert_value(accept_struct, i32.const_int(7, false), 0, "").unwrap();
   let accept_struct = b.build_insert_value(accept_struct, production, 2, "").unwrap();
 
   b.build_store(accept, accept_struct);
@@ -895,18 +820,14 @@ pub(crate) unsafe fn construct_emit_accept(
   }
 }
 
-pub(crate) unsafe fn construct_emit_error(
-  ctx: &LLVMParserModule,
-) -> std::result::Result<(), ()>
-{
+pub(crate) unsafe fn construct_emit_error(ctx: &LLVMParserModule) -> std::result::Result<(), ()> {
   let LLVMParserModule { builder: b, types, ctx, fun: funct, .. } = ctx;
 
   let i32 = ctx.i32_type();
 
   let fn_value = funct.emit_error;
 
-  let error_action =
-    ctx.struct_type(&[i32.into(), types.token.into(), i32.into()], false);
+  let error_action = ctx.struct_type(&[i32.into(), types.token.into(), i32.into()], false);
 
   // Set the context's goto pointers to point to the goto block;
   let entry = ctx.append_basic_block(fn_value, "Entry");
@@ -928,16 +849,11 @@ pub(crate) unsafe fn construct_emit_error(
   // build the ParseAction::Error struct
 
   let error = b
-    .build_bitcast(
-      basic_action,
-      error_action.ptr_type(inkwell::AddressSpace::Generic),
-      "",
-    )
+    .build_bitcast(basic_action, error_action.ptr_type(inkwell::AddressSpace::Generic), "")
     .into_pointer_value();
 
   let error_struct = b.build_load(error, "").into_struct_value();
-  let error_struct =
-    b.build_insert_value(error_struct, i32.const_int(8, false), 0, "").unwrap();
+  let error_struct = b.build_insert_value(error_struct, i32.const_int(8, false), 0, "").unwrap();
   let error_struct = b.build_insert_value(error_struct, error_token, 1, "").unwrap();
   let error_struct = b.build_insert_value(error_struct, production, 2, "").unwrap();
 
@@ -952,9 +868,7 @@ pub(crate) unsafe fn construct_emit_error(
   }
 }
 
-pub(crate) unsafe fn construct_init(ctx: &LLVMParserModule)
-  -> std::result::Result<(), ()>
-{
+pub(crate) unsafe fn construct_init(ctx: &LLVMParserModule) -> std::result::Result<(), ()> {
   let LLVMParserModule { builder, ctx, fun: funct, .. } = ctx;
 
   let i32 = ctx.i32_type();
@@ -989,10 +903,7 @@ pub(crate) unsafe fn construct_init(ctx: &LLVMParserModule)
   }
 }
 
-pub(crate) unsafe fn construct_push_state(
-  ctx: &LLVMParserModule,
-) -> std::result::Result<(), ()>
-{
+pub(crate) unsafe fn construct_push_state(ctx: &LLVMParserModule) -> std::result::Result<(), ()> {
   let LLVMParserModule { builder: b, types, ctx, fun: funct, .. } = ctx;
 
   let i32 = ctx.i32_type();
@@ -1031,8 +942,7 @@ pub(crate) unsafe fn construct_push_state(
 
 pub(crate) unsafe fn construct_pop_state_function(
   ctx: &LLVMParserModule,
-) -> std::result::Result<(), ()>
-{
+) -> std::result::Result<(), ()> {
   use inkwell::AddressSpace::*;
 
   let LLVMParserModule { module, builder: b, types, ctx, fun: funct, .. } = ctx;
@@ -1067,8 +977,7 @@ pub(crate) unsafe fn construct_pop_state_function(
 
 pub(crate) unsafe fn construct_next_function(
   ctx: &LLVMParserModule,
-) -> std::result::Result<(), ()>
-{
+) -> std::result::Result<(), ()> {
   let LLVMParserModule { module: m, builder: b, types: t, ctx, fun: funct, .. } = ctx;
 
   let i32 = ctx.i32_type();
@@ -1101,20 +1010,17 @@ pub(crate) unsafe fn construct_next_function(
   b.build_conditional_branch(condition, block_useful_state, block_dispatch);
 
   b.position_at_end(block_useful_state);
-  let gt_fn = CallableValue::try_from(
-    b.build_extract_value(goto, 0, "").unwrap().into_pointer_value(),
-  )
-  .unwrap();
+  let gt_fn =
+    CallableValue::try_from(b.build_extract_value(goto, 0, "").unwrap().into_pointer_value())
+      .unwrap();
 
   let should_emit = b.build_call(gt_fn, &[parse_ctx.into(), action.into()], "");
 
   // should_emit.set_call_convention(11);
 
-  let should_emit_return =
-    should_emit.try_as_basic_value().unwrap_left().into_int_value();
+  let should_emit_return = should_emit.try_as_basic_value().unwrap_left().into_int_value();
 
-  let condition =
-    b.build_int_compare(inkwell::IntPredicate::EQ, should_emit_return, zero, "");
+  let condition = b.build_int_compare(inkwell::IntPredicate::EQ, should_emit_return, zero, "");
   b.build_conditional_branch(condition, block_dispatch, block_emit);
 
   b.position_at_end(block_emit);
@@ -1131,8 +1037,7 @@ pub(crate) fn construct_prime_function(
   ctx: &LLVMParserModule,
   sp: &Vec<(usize, INSTRUCTION, String)>,
   referenced: &mut Vec<(INSTRUCTION, bool)>,
-) -> Result<(), ()>
-{
+) -> Result<(), ()> {
   let i32 = ctx.ctx.i32_type();
   let b = &ctx.builder;
   let funct = &ctx.fun;
@@ -1148,12 +1053,8 @@ pub(crate) fn construct_prime_function(
     .map(|(id, instruction, ..)| {
       (
         *id,
-        ctx
-          .ctx
-          .append_basic_block(fn_value, &create_offset_label(instruction.get_address())),
-        get_parse_function(*instruction, ctx, referenced)
-          .as_global_value()
-          .as_pointer_value(),
+        ctx.ctx.append_basic_block(fn_value, &create_offset_label(instruction.get_address())),
+        get_parse_function(*instruction, ctx, referenced).as_global_value().as_pointer_value(),
       )
     })
     .collect::<Vec<_>>();
@@ -1200,22 +1101,20 @@ pub(crate) fn construct_prime_function(
   }
 }
 
-pub(crate) fn create_offset_label(offset: usize) -> String
-{
+pub(crate) fn create_offset_label(offset: usize) -> String {
   format!("off_{:X}", offset)
 }
 
 pub(crate) fn construct_parse_functions(
-  grammar: &GrammarStore,
+  g: &GrammarStore,
   ctx: &LLVMParserModule,
   output: &BytecodeOutput,
-) -> Result<(), ()>
-{
+) -> Result<(), ()> {
   let mut seen = BTreeSet::new();
   let mut goto_fn = BTreeSet::new();
 
   // start points
-  let start_points = get_exported_productions(grammar)
+  let start_points = get_exported_productions(g)
     .iter()
     .enumerate()
     .map(|(i, p)| {
@@ -1231,8 +1130,7 @@ pub(crate) fn construct_parse_functions(
 
   construct_prime_function(ctx, &start_points, &mut Vec::new())?;
 
-  let sp_lu =
-    start_points.iter().map(|(_, instruction, _)| *instruction).collect::<BTreeSet<_>>();
+  let sp_lu = start_points.iter().map(|(_, instruction, _)| *instruction).collect::<BTreeSet<_>>();
 
   let mut instructions = output
     .ir_states
@@ -1298,7 +1196,7 @@ pub(crate) fn construct_parse_functions(
 
       construct_parse_function_statements(
         instruction,
-        grammar,
+        g,
         ctx,
         &FunctionPack { fun: &function, output, is_scanner },
         &mut references,
@@ -1315,12 +1213,11 @@ pub(crate) fn construct_parse_functions(
 
 pub(crate) fn construct_parse_function_statements(
   mut instruction: INSTRUCTION,
-  grammar: &GrammarStore,
+  g: &GrammarStore,
   ctx: &LLVMParserModule,
   pack: &FunctionPack,
   referenced: &mut Vec<(INSTRUCTION, bool)>,
-) -> Result<(INSTRUCTION, String), ()>
-{
+) -> Result<(INSTRUCTION, String), ()> {
   let FunctionPack { output, is_scanner, .. } = pack;
 
   let mut return_val = None;
@@ -1341,8 +1238,7 @@ pub(crate) fn construct_parse_function_statements(
         }
       }
       GOTO => {
-        (instruction, return_val) =
-          construct_instruction_goto(instruction, ctx, pack, referenced);
+        (instruction, return_val) = construct_instruction_goto(instruction, ctx, pack, referenced);
 
         match return_val {
           Some(val) => {
@@ -1369,14 +1265,7 @@ pub(crate) fn construct_parse_function_statements(
         instruction = instruction.next(&output.bytecode);
       }
       VECTOR_BRANCH | HASH_BRANCH => {
-        construct_instruction_branch(
-          instruction,
-          grammar,
-          ctx,
-          pack,
-          referenced,
-          Default::default(),
-        )?;
+        construct_instruction_branch(instruction, g, ctx, pack, referenced, Default::default())?;
         break;
       }
       FAIL => {
@@ -1398,8 +1287,7 @@ fn write_emit_reentrance<'a>(
   ctx: &LLVMParserModule,
   pack: &FunctionPack,
   referenced: &mut Vec<(INSTRUCTION, bool)>,
-)
-{
+) {
   let bytecode = &pack.output.bytecode;
 
   use InstructionType::*;
@@ -1433,8 +1321,7 @@ pub(crate) fn get_parse_function<'a>(
   instruction: INSTRUCTION,
   ctx: &'a LLVMParserModule,
   referenced: &mut Vec<(INSTRUCTION, bool)>,
-) -> FunctionValue<'a>
-{
+) -> FunctionValue<'a> {
   let name = format!("parse_fn_{:X}", instruction.get_address());
   match ctx.module.get_function(&name) {
     Some(function) => function,
@@ -1450,8 +1337,7 @@ pub(crate) fn create_skip_code(
   token_ptr: PointerValue,
   i64: inkwell::types::IntType,
   table_block: inkwell::basic_block::BasicBlock,
-)
-{
+) {
   let off_ptr = b.build_struct_gep(token_ptr, TokOffset, "").unwrap();
   let len_ptr = b.build_struct_gep(token_ptr, TokLength, "").unwrap();
   let off = b.build_load(off_ptr, "offset").into_int_value();
@@ -1466,8 +1352,7 @@ pub(crate) fn construct_scanner_instruction_consume(
   instruction: INSTRUCTION,
   ctx: &LLVMParserModule,
   pack: &FunctionPack,
-) -> INSTRUCTION
-{
+) -> INSTRUCTION {
   let b = &ctx.builder;
 
   let parse_ctx = pack.fun.get_first_param().unwrap().into_pointer_value();
@@ -1479,9 +1364,8 @@ pub(crate) fn construct_scanner_instruction_consume(
   let assert_len = b.build_extract_value(assert_tok, 1, "").unwrap().into_int_value();
   let assert_off = b.build_int_add(assert_len, assert_off, "");
   let assert_tok = b.build_insert_value(assert_tok, assert_off, TokOffset, "").unwrap();
-  let assert_tok = b
-    .build_insert_value(assert_tok, ctx.ctx.i64_type().const_int(0, false), TokType, "")
-    .unwrap();
+  let assert_tok =
+    b.build_insert_value(assert_tok, ctx.ctx.i64_type().const_int(0, false), TokType, "").unwrap();
 
   b.build_store(assert_tok_ptr, assert_tok);
 
@@ -1493,8 +1377,7 @@ pub(crate) fn construct_instruction_consume(
   ctx: &LLVMParserModule,
   pack: &FunctionPack,
   referenced: &mut Vec<(INSTRUCTION, bool)>,
-)
-{
+) {
   let parse_ctx = pack.fun.get_first_param().unwrap().into_pointer_value();
 
   write_emit_reentrance(instruction.next(&pack.output.bytecode), ctx, pack, referenced);
@@ -1503,10 +1386,7 @@ pub(crate) fn construct_instruction_consume(
   let val = b
     .build_call(
       ctx.fun.emit_shift,
-      &[
-        parse_ctx.into(),
-        pack.fun.get_nth_param(1).unwrap().into_pointer_value().into(),
-      ],
+      &[parse_ctx.into(), pack.fun.get_nth_param(1).unwrap().into_pointer_value().into()],
       "",
     )
     .try_as_basic_value()
@@ -1520,8 +1400,7 @@ pub(crate) fn construct_instruction_reduce(
   ctx: &LLVMParserModule,
   pack: &FunctionPack,
   referenced: &mut Vec<(INSTRUCTION, bool)>,
-)
-{
+) {
   let parse_ctx = pack.fun.get_first_param().unwrap().into_pointer_value();
   let symbol_count = instruction.get_value() >> 16 & 0x0FFF;
   let body_id = instruction.get_value() & 0xFFFF;
@@ -1554,8 +1433,7 @@ pub(crate) fn construct_instruction_goto<'a>(
   ctx: &'a LLVMParserModule,
   pack: &'a FunctionPack,
   referenced: &mut Vec<(INSTRUCTION, bool)>,
-) -> (INSTRUCTION, Option<IntValue<'a>>)
-{
+) -> (INSTRUCTION, Option<IntValue<'a>>) {
   let bytecode = &pack.output.bytecode;
 
   let goto_instruction = instruction.goto(bytecode);
@@ -1617,16 +1495,12 @@ pub(crate) fn construct_instruction_prod(
   instruction: INSTRUCTION,
   ctx: &LLVMParserModule,
   pack: &FunctionPack,
-) -> INSTRUCTION
-{
+) -> INSTRUCTION {
   let production_id = instruction.get_contents();
   let parse_ctx = pack.fun.get_nth_param(0).unwrap().into_pointer_value();
   let b = &ctx.builder;
   let production_ptr = b.build_struct_gep(parse_ctx, CTX_production, "").unwrap();
-  b.build_store(
-    production_ptr,
-    ctx.ctx.i32_type().const_int(production_id as u64, false),
-  );
+  b.build_store(production_ptr, ctx.ctx.i32_type().const_int(production_id as u64, false));
   instruction.next(&pack.output.bytecode)
 }
 
@@ -1634,8 +1508,7 @@ fn construct_instruction_token(
   instruction: INSTRUCTION,
   ctx: &LLVMParserModule,
   pack: &FunctionPack,
-) -> INSTRUCTION
-{
+) -> INSTRUCTION {
   let token_value = instruction.get_contents() & 0x00FF_FFFF;
   let parse_ctx = pack.fun.get_nth_param(0).unwrap().into_pointer_value();
   let b = &ctx.builder;
@@ -1651,15 +1524,11 @@ pub(crate) fn construct_instruction_pass(
   ctx: &LLVMParserModule,
   pack: &FunctionPack,
   return_val: Option<IntValue>,
-)
-{
+) {
   let parse_ctx = pack.fun.get_nth_param(0).unwrap().into_pointer_value();
   let b = &ctx.builder;
   let state_ptr = b.build_struct_gep(parse_ctx, CTX_state, "").unwrap();
-  b.build_store(
-    state_ptr,
-    ctx.ctx.i32_type().const_int(NORMAL_STATE_FLAG_LLVM as u64, false),
-  );
+  b.build_store(state_ptr, ctx.ctx.i32_type().const_int(NORMAL_STATE_FLAG_LLVM as u64, false));
 
   if let Some(return_val) = return_val {
     b.build_return(Some(&return_val));
@@ -1668,26 +1537,21 @@ pub(crate) fn construct_instruction_pass(
   }
 }
 
-pub(crate) fn construct_instruction_fail(ctx: &LLVMParserModule, pack: &FunctionPack)
-{
+pub(crate) fn construct_instruction_fail(ctx: &LLVMParserModule, pack: &FunctionPack) {
   let parse_ctx = pack.fun.get_nth_param(0).unwrap().into_pointer_value();
   let b = &ctx.builder;
   let state_ptr = b.build_struct_gep(parse_ctx, CTX_state, "").unwrap();
-  b.build_store(
-    state_ptr,
-    ctx.ctx.i32_type().const_int(FAIL_STATE_FLAG_LLVM as u64, false),
-  );
+  b.build_store(state_ptr, ctx.ctx.i32_type().const_int(FAIL_STATE_FLAG_LLVM as u64, false));
   b.build_return(Some(&ctx.ctx.i32_type().const_int(0, false)));
 }
 
 /// Compile a LLVM parser module from Hydrocarbon bytecode.
 pub fn compile_from_bytecode<'a>(
   module_name: &str,
-  grammar: &GrammarStore,
+  g: &GrammarStore,
   llvm_context: &'a Context,
   output: &BytecodeOutput,
-) -> core::result::Result<LLVMParserModule<'a>, ()>
-{
+) -> core::result::Result<LLVMParserModule<'a>, ()> {
   let mut parse_context = construct_context(module_name, &llvm_context);
   let ctx = &mut parse_context;
 
@@ -1709,7 +1573,7 @@ pub fn compile_from_bytecode<'a>(
     construct_utf8_lookup(ctx)?;
   }
 
-  construct_parse_functions(grammar, ctx, output)?;
+  construct_parse_functions(g, ctx, output)?;
 
   parse_context.fun.push_state.add_attribute(
     inkwell::attributes::AttributeLoc::Function,
@@ -1719,9 +1583,7 @@ pub fn compile_from_bytecode<'a>(
   Ok(parse_context)
 }
 
-pub(crate) fn construct_utf8_lookup(ctx: &LLVMParserModule)
-  -> std::result::Result<(), ()>
-{
+pub(crate) fn construct_utf8_lookup(ctx: &LLVMParserModule) -> std::result::Result<(), ()> {
   let i32 = ctx.ctx.i32_type();
   let i8 = ctx.ctx.i8_type();
   let zero = i32.const_int(0, false);
@@ -1766,9 +1628,8 @@ pub(crate) fn construct_utf8_lookup(ctx: &LLVMParserModule)
   // --- Build ASCII Block
   b.position_at_end(block_return_ascii);
 
-  let codepoint_info = b
-    .build_insert_value(codepoint_info_base, b.build_int_z_extend(byte, i32, ""), 0, "")
-    .unwrap();
+  let codepoint_info =
+    b.build_insert_value(codepoint_info_base, b.build_int_z_extend(byte, i32, ""), 0, "").unwrap();
   let codepoint_info =
     b.build_insert_value(codepoint_info, i32.const_int(1, false), 1, "").unwrap();
 
@@ -1851,8 +1712,7 @@ pub(crate) fn construct_utf8_lookup(ctx: &LLVMParserModule)
 
 pub(crate) unsafe fn construct_merge_utf8_part(
   ctx: &LLVMParserModule,
-) -> std::result::Result<(), ()>
-{
+) -> std::result::Result<(), ()> {
   let i32 = ctx.ctx.i32_type();
 
   let b = &ctx.builder;

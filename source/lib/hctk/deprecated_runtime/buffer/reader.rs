@@ -4,16 +4,14 @@ use std::sync::Arc;
 use crate::types::ParseToken;
 use crate::utf8::*;
 #[deprecated]
-pub trait ByteReader
-{
+pub trait ByteReader {
   /// Returns true if the cursor has reached the end of
   /// the input stream.
 
   fn at_end(&self) -> bool;
 
-  fn offset_at_end(&self, offset: u32) -> bool
-  {
-    self.length() <= offset
+  fn offset_at_end(&self, offset: u32) -> bool {
+    self.len() <= offset
   }
 
   /// Advances the cursor up-to 4-bytes forward.
@@ -31,7 +29,7 @@ pub trait ByteReader
 
   /// Returns the byte at the current cursor position.
 
-  fn length(&self) -> u32;
+  fn len(&self) -> u32;
 
   /// Returns the number of lines encountered.
 
@@ -62,23 +60,19 @@ pub trait ByteReader
   /// Returns UTF8 codepoint information at the current cursor
   /// position.
 
-  fn codepoint(&self) -> u32
-  {
+  fn codepoint(&self) -> u32 {
     0
   }
 
-  fn codepoint_byte_length(&self) -> u32
-  {
+  fn codepoint_byte_length(&self) -> u32 {
     get_utf8_byte_length_from_code_point(self.codepoint())
   }
 
-  fn codepoint_length(&self) -> u32
-  {
+  fn codepoint_length(&self) -> u32 {
     get_token_length_from_code_point(self.codepoint())
   }
 
-  fn class(&self) -> u32
-  {
+  fn class(&self) -> u32 {
     get_token_class_from_codepoint(self.codepoint())
   }
 
@@ -89,8 +83,7 @@ pub trait ByteReader
   fn get_source(&self) -> Arc<Vec<u8>>;
 }
 
-pub struct UTF8FileReader
-{
+pub struct UTF8FileReader {
   length:      usize,
   cursor:      usize,
   line_count:  usize,

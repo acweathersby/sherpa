@@ -37,8 +37,7 @@ use std::vec;
 pub fn compile_from_path(
   root_grammar_absolute_path: &PathBuf,
   number_of_threads: usize,
-) -> (Option<GrammarStore>, Vec<ParseError>)
-{
+) -> (Option<GrammarStore>, Vec<ParseError>) {
   let mut pending_grammar_paths = Mutex::new(VecDeque::<PathBuf>::new());
 
   let mut claimed_grammar_paths = Mutex::new(HashSet::<PathBuf>::new());
@@ -67,8 +66,7 @@ pub fn compile_from_path(
             } {
               Some(path) => {
                 let have_work = {
-                  let result =
-                    claimed_grammar_paths.lock().unwrap().insert(path.to_owned());
+                  let result = claimed_grammar_paths.lock().unwrap().insert(path.to_owned());
 
                   {
                     let mut work_verifier = work_verifier.lock().unwrap();
@@ -153,18 +151,13 @@ pub fn compile_from_path(
 pub fn compile_from_string(
   string: &str,
   absolute_path: &PathBuf,
-) -> (Option<GrammarStore>, Vec<ParseError>)
-{
+) -> (Option<GrammarStore>, Vec<ParseError>) {
   match compile_grammar_ast(Vec::from(string.as_bytes())) {
     Ok(grammar) => {
       let (grammar, mut errors) = pre_process_grammar(
         &grammar,
         absolute_path,
-        absolute_path
-          .file_stem()
-          .unwrap_or_else(|| OsStr::new("undefined"))
-          .to_str()
-          .unwrap(),
+        absolute_path.file_stem().unwrap_or_else(|| OsStr::new("undefined")).to_str().unwrap(),
       );
 
       let grammar = finalize_grammar(grammar, &mut errors, 1);
@@ -175,19 +168,14 @@ pub fn compile_from_string(
   }
 }
 
-fn compile_file_path(absolute_path: &PathBuf) -> (Option<GrammarStore>, Vec<ParseError>)
-{
+fn compile_file_path(absolute_path: &PathBuf) -> (Option<GrammarStore>, Vec<ParseError>) {
   match read(absolute_path) {
     Ok(buffer) => match compile_grammar_ast(buffer) {
       Ok(grammar) => {
         let (grammar, errors) = pre_process_grammar(
           &grammar,
           absolute_path,
-          absolute_path
-            .file_stem()
-            .unwrap_or_else(|| OsStr::new("undefined"))
-            .to_str()
-            .unwrap(),
+          absolute_path.file_stem().unwrap_or_else(|| OsStr::new("undefined")).to_str().unwrap(),
         );
 
         (Some(grammar), errors)
@@ -202,35 +190,33 @@ fn compile_file_path(absolute_path: &PathBuf) -> (Option<GrammarStore>, Vec<Pars
 /// data.
 
 fn finalize_grammar(
-  mut grammar: GrammarStore,
+  mut g: GrammarStore,
   mut errors: &mut [ParseError],
-  number_of_threads: usize,
-) -> GrammarStore
-{
-  create_scanner_productions_from_symbols(&mut grammar, errors);
+  thread_count: usize,
+) -> GrammarStore {
+  create_scanner_productions_from_symbols(&mut g, errors);
 
-  finalize_symbols(&mut grammar, errors);
+  finalize_symbols(&mut g, errors);
 
-  finalize_items(&mut grammar, number_of_threads, errors);
+  finalize_items(&mut g, thread_count, errors);
 
-  finalize_productions(&mut grammar, number_of_threads, errors);
+  finalize_productions(&mut g, thread_count, errors);
 
-  finalize_bytecode_metadata(&mut grammar, errors);
+  finalize_bytecode_metadata(&mut g, errors);
 
-  grammar
+  g
 }
 
 /// Adds bytecode identifiers to relevant objects.
-fn finalize_bytecode_metadata(grammar: &mut GrammarStore, errors: &mut [ParseError])
-{
-  let GrammarStore { production_table, bodies_table, .. } = grammar;
+fn finalize_bytecode_metadata(g: &mut GrammarStore, errors: &mut [ParseError]) {
+  let GrammarStore { productions: production_table, bodies: bodies_table, .. } = g;
 
   for (index, body) in bodies_table
     .values_mut()
-    .filter(|(b)| !production_table.get(&b.production).unwrap().is_scanner)
+    .filter(|(b)| !production_table.get(&b.prod).unwrap().is_scanner)
     .enumerate()
   {
-    body.bytecode_id = index as u32;
+    body.bc_id = index as u32;
   }
 
   for (index, production) in production_table.values_mut().enumerate() {
@@ -239,18 +225,11 @@ fn finalize_bytecode_metadata(grammar: &mut GrammarStore, errors: &mut [ParseErr
 }
 
 /// Sets an appropriate `is_recursive` value on all productions.
-fn finalize_productions(
-  grammar: &mut GrammarStore,
-  number_of_threads: usize,
-  errors: &mut [ParseError],
-)
-{
-  let production_ids = grammar.production_table.keys().cloned().collect::<Vec<_>>();
+fn finalize_productions(g: &mut GrammarStore, thread_count: usize, errors: &mut [ParseError]) {
+  let production_ids = g.productions.keys().cloned().collect::<Vec<_>>();
 
-  let production_id_chunks = production_ids
-    .chunks(number_of_threads)
-    .filter(|s| !s.is_empty())
-    .collect::<Vec<_>>();
+  let production_id_chunks =
+    production_ids.chunks(thread_count).filter(|s| !s.is_empty()).collect::<Vec<_>>();
 
   for (production_id, is_recursive, _) in thread::scope(|s| {
     production_id_chunks
@@ -261,8 +240,7 @@ fn finalize_productions(
             .iter()
             .map(|production_id| {
               // temp
-              let (is_recursive, is_left_recursive) =
-                is_production_recursive(*production_id, grammar);
+              let (is_recursive, is_left_recursive) = is_production_recursive(*production_id, g);
 
               (*production_id, is_recursive, is_left_recursive)
             })
@@ -275,27 +253,19 @@ fn finalize_productions(
       .flat_map(move |s| s.join().unwrap())
       .collect::<Vec<_>>()
   }) {
-    let production = grammar.production_table.get_mut(&production_id).unwrap();
+    let production = g.productions.get_mut(&production_id).unwrap();
 
     production.is_recursive = is_recursive;
   }
 }
 
 /// Creates item closure caches and creates start and goto item groups.
-fn finalize_items(
-  grammar: &mut GrammarStore,
-  number_of_threads: usize,
-  errors: &mut [ParseError],
-)
-{
+fn finalize_items(g: &mut GrammarStore, thread_count: usize, errors: &mut [ParseError]) {
   // Generate the item closure cache
-  let start_items = grammar
-    .production_table
-    .keys()
-    .flat_map(|p| get_production_start_items(p, grammar))
-    .collect::<Vec<_>>();
+  let start_items =
+    g.productions.keys().flat_map(|p| get_production_start_items(p, g)).collect::<Vec<_>>();
 
-  let start_items_chunks = start_items.chunks(number_of_threads).collect::<Vec<_>>();
+  let start_items_chunks = start_items.chunks(thread_count).collect::<Vec<_>>();
 
   for (item, closure, peek_symbols) in thread::scope(|s| {
     start_items_chunks
@@ -310,15 +280,14 @@ fn finalize_items(
             let item = item.to_zero_state();
 
             if !item.at_end() {
-              let peek_symbols = if let Some(peek_symbols) =
-                grammar.production_peek_symbols.get(&item.get_production_id(grammar))
-              {
-                peek_symbols.clone()
-              } else {
-                vec![]
-              };
+              let peek_symbols =
+                if let Some(peek_symbols) = g.production_peek_symbols.get(&item.get_prod_id(g)) {
+                  peek_symbols.clone()
+                } else {
+                  vec![]
+                };
 
-              results.push((item, create_closure(&[item], grammar), peek_symbols));
+              results.push((item, create_closure(&[item], g), peek_symbols));
 
               pending_items.push_back(item.increment().unwrap());
             }
@@ -333,16 +302,15 @@ fn finalize_items(
       .flat_map(move |s| s.join().unwrap())
       .collect::<Vec<_>>()
   }) {
-    grammar.item_peek_symbols.insert(item.to_zero_state(), peek_symbols);
-    grammar.closures.insert(item.to_zero_state(), closure);
+    g.item_peek_symbols.insert(item.to_zero_state(), peek_symbols);
+    g.closures.insert(item.to_zero_state(), closure);
   }
 
   fn insert(
     goto_items: &mut BTreeMap<ProductionId, BTreeSet<Item>>,
     production_id: &ProductionId,
     item: Item,
-  )
-  {
+  ) {
     if !goto_items.contains_key(production_id) {
       goto_items.insert(*production_id, BTreeSet::<Item>::new());
     }
@@ -350,38 +318,33 @@ fn finalize_items(
     goto_items.get_mut(production_id).unwrap().insert(item);
   }
 
-  for closure in grammar.closures.values().cloned() {
+  for closure in g.closures.values().cloned() {
     for item in closure {
-      if item.is_nonterm(grammar) {
-        let production_id = &item.get_production_id(grammar);
+      if item.is_nonterm(g) {
+        let production_id = &item.get_prod_id(g);
 
-        insert(&mut grammar.lr_items, production_id, item);
+        insert(&mut g.lr_items, production_id, item);
       }
     }
   }
 }
 
-struct WorkVerifier
-{
+struct WorkVerifier {
   complete: u32,
   pending:  u32,
   progress: u32,
 }
 
-impl WorkVerifier
-{
-  pub fn new(pending: u32) -> Self
-  {
+impl WorkVerifier {
+  pub fn new(pending: u32) -> Self {
     WorkVerifier { complete: 0, pending, progress: 0 }
   }
 
-  pub fn add_units_of_work(&mut self, units_of_work: u32)
-  {
+  pub fn add_units_of_work(&mut self, units_of_work: u32) {
     self.pending += units_of_work;
   }
 
-  pub fn start_one_unit_of_work(&mut self)
-  {
+  pub fn start_one_unit_of_work(&mut self) {
     if self.pending > 0 {
       self.pending -= 1;
 
@@ -391,8 +354,7 @@ impl WorkVerifier
     }
   }
 
-  pub fn complete_one_unit_of_work(&mut self)
-  {
+  pub fn complete_one_unit_of_work(&mut self) {
     if self.progress > 0 {
       self.progress -= 1;
 
@@ -402,8 +364,7 @@ impl WorkVerifier
     }
   }
 
-  pub fn skip_one_unit_of_work(&mut self)
-  {
+  pub fn skip_one_unit_of_work(&mut self) {
     if self.pending > 0 {
       self.pending -= 1;
 
@@ -413,40 +374,36 @@ impl WorkVerifier
     }
   }
 
-  pub fn is_complete(&self) -> bool
-  {
+  pub fn is_complete(&self) -> bool {
     self.pending == 0 || self.progress == 0 || self.complete > 0
   }
 }
 
-fn finalize_symbols(grammar: &mut GrammarStore, errors: &mut [ParseError])
-{
+fn finalize_symbols(g: &mut GrammarStore, errors: &mut [ParseError]) {
   let mut symbol_bytecode_id = SymbolID::DefinedSymbolIndexBasis;
 
   for sym_id in &SymbolID::Generics {
-    let (_, production_id, ..) = get_scanner_info_from_defined(sym_id, grammar);
+    let (_, production_id, ..) = get_scanner_info_from_defined(sym_id, g);
 
-    let scanner_id = sym_id.bytecode_id(grammar);
+    let scanner_id = sym_id.bytecode_id(g);
 
-    grammar.production_table.get_mut(&production_id).unwrap().symbol_bytecode_id =
-      scanner_id;
+    g.productions.get_mut(&production_id).unwrap().symbol_bytecode_id = scanner_id;
   }
 
-  for sym_id in grammar.symbols_table.keys().cloned().collect::<Vec<_>>() {
-    if !grammar.symbols_table.get(&sym_id).unwrap().scanner_only {
+  for sym_id in g.symbols.keys().cloned().collect::<Vec<_>>() {
+    if !g.symbols.get(&sym_id).unwrap().scanner_only {
       match sym_id {
         SymbolID::TokenProduction(..)
         | SymbolID::DefinedSymbol(_)
         | SymbolID::DefinedNumeric(_)
         | SymbolID::DefinedIdentifier(_) => {
-          let symbol = grammar.symbols_table.get_mut(&sym_id).unwrap();
+          let symbol = g.symbols.get_mut(&sym_id).unwrap();
 
           symbol.bytecode_id = symbol_bytecode_id;
 
-          let (_, production_id, ..) = get_scanner_info_from_defined(&sym_id, grammar);
+          let (_, production_id, ..) = get_scanner_info_from_defined(&sym_id, g);
 
-          let scanner_production =
-            grammar.production_table.get_mut(&production_id).unwrap();
+          let scanner_production = g.productions.get_mut(&production_id).unwrap();
 
           scanner_production.symbol_bytecode_id = symbol_bytecode_id;
 
@@ -456,21 +413,15 @@ fn finalize_symbols(grammar: &mut GrammarStore, errors: &mut [ParseError])
       }
     }
 
-    grammar.symbols_table.get_mut(&sym_id).unwrap().friendly_name =
-      sym_id.to_string(grammar);
+    g.symbols.get_mut(&sym_id).unwrap().friendly_name = sym_id.to_string(g);
   }
 }
 
-fn create_scanner_productions_from_symbols(
-  grammar: &mut GrammarStore,
-  errors: &mut [ParseError],
-)
-{
+fn create_scanner_productions_from_symbols(g: &mut GrammarStore, errors: &mut [ParseError]) {
   // Start iterating over known token production references, and add
   // new productions as we encounter them.
-  let mut scanner_production_queue = VecDeque::from_iter(
-    grammar.symbols_table.keys().chain(SymbolID::Generics.iter()).cloned(),
-  );
+  let mut scanner_production_queue =
+    VecDeque::from_iter(g.symbols.keys().chain(SymbolID::Generics.iter()).cloned());
 
   while let Some(sym_id) = scanner_production_queue.pop_front() {
     match &sym_id {
@@ -478,10 +429,10 @@ fn create_scanner_productions_from_symbols(
         // Converts the generic symbol `g:sp` into a production that targets the
         // the defined symbol `b'10'`
         let (_, scanner_production_id, scanner_name, symbol_string) =
-          get_scanner_info_from_defined(&sym_id, grammar);
+          get_scanner_info_from_defined(&sym_id, g);
 
         convert_scanner_symbol_to_production(
-          grammar,
+          g,
           &[&" ".to_string()],
           scanner_production_id,
           scanner_name,
@@ -492,10 +443,10 @@ fn create_scanner_productions_from_symbols(
         // Converts the generic symbol `g:sp` into a production that targets the
         // the defined symbol `b'10'`
         let (_, scanner_production_id, scanner_name, symbol_string) =
-          get_scanner_info_from_defined(&sym_id, grammar);
+          get_scanner_info_from_defined(&sym_id, g);
 
         convert_scanner_symbol_to_production(
-          grammar,
+          g,
           &[&"\n".to_string()],
           scanner_production_id,
           scanner_name,
@@ -507,21 +458,19 @@ fn create_scanner_productions_from_symbols(
         // does not yet exist in the grammar.
 
         let (_, scanner_production_id, scanner_name, symbol_string) =
-          get_scanner_info_from_defined(&sym_id, grammar);
+          get_scanner_info_from_defined(&sym_id, g);
 
-        if let btree_map::Entry::Vacant(e) =
-          grammar.production_table.entry(scanner_production_id)
-        {
+        if let btree_map::Entry::Vacant(e) = g.productions.entry(scanner_production_id) {
           // Insert into grammar any new defined symbol derived from
           // token productions.
 
           let body_id = BodyId::new(&scanner_production_id, 0);
 
-          grammar.production_bodies_table.insert(scanner_production_id, vec![body_id]);
+          g.production_bodies.insert(scanner_production_id, vec![body_id]);
 
-          grammar.bodies_table.insert(body_id, types::Body {
-            length: 1,
-            symbols: vec![BodySymbolRef {
+          g.bodies.insert(body_id, types::Body {
+            len: 1,
+            syms: vec![BodySymbolRef {
               annotation: String::default(),
               consumable: true,
               exclusive: false,
@@ -531,9 +480,9 @@ fn create_scanner_productions_from_symbols(
               sym_id,
               tok: Token::default(),
             }],
-            production: scanner_production_id,
+            prod: scanner_production_id,
             id: body_id,
-            bytecode_id: 0,
+            bc_id: 0,
             reduce_fn_ids: vec![],
             origin_location: Token::empty(),
           });
@@ -548,18 +497,16 @@ fn create_scanner_productions_from_symbols(
           ));
         }
       }
-      SymbolID::DefinedSymbol(_)
-      | SymbolID::DefinedNumeric(_)
-      | SymbolID::DefinedIdentifier(_) => {
+      SymbolID::DefinedSymbol(_) | SymbolID::DefinedNumeric(_) | SymbolID::DefinedIdentifier(_) => {
         let (_, scanner_production_id, scanner_name, symbol_string) =
-          get_scanner_info_from_defined(&sym_id, grammar);
+          get_scanner_info_from_defined(&sym_id, g);
 
         let strings = [symbol_string.as_str()];
 
-        let sym = grammar.symbols_table.get(&sym_id).unwrap();
+        let sym = g.symbols.get(&sym_id).unwrap();
 
         convert_scanner_symbol_to_production(
-          grammar,
+          g,
           &strings,
           scanner_production_id,
           scanner_name,
@@ -575,21 +522,21 @@ fn create_scanner_productions_from_symbols(
       // selectors of TokenProductions and Production
       // symbols.
       SymbolID::Production(prod_id, _) | SymbolID::TokenProduction(prod_id, _) => {
-        let production = grammar.production_table.get(prod_id).unwrap().clone();
+        let production = g.productions.get(prod_id).unwrap().clone();
         let scanner_name = create_scanner_name(&production.guid_name);
         let scanner_production_id = ProductionId::from(&scanner_name);
 
-        if !grammar.production_table.contains_key(&scanner_production_id) {
-          let scanner_bodies: Vec<Body> = grammar
-            .production_bodies_table
+        if !g.productions.contains_key(&scanner_production_id) {
+          let scanner_bodies: Vec<Body> = g
+            .production_bodies
             .get(prod_id)
             .unwrap()
             .iter()
             .enumerate()
             .map(|(body_index, body_id)| {
-              let natural_body = grammar.bodies_table.get(body_id).unwrap();
+              let natural_body = g.bodies.get(body_id).unwrap();
 
-              let scanner_symbols = natural_body.symbols.iter().flat_map(|sym| {
+              let scanner_symbols = natural_body.syms.iter().flat_map(|sym| {
                 let sym_id = &sym.sym_id;
                 match sym_id {
                   // For any production or token
@@ -601,14 +548,13 @@ fn create_scanner_productions_from_symbols(
                   // production.
                   SymbolID::Production(prod_id, grammar_id)
                   | SymbolID::TokenProduction(prod_id, grammar_id) => {
-                    let production = grammar.production_table.get(prod_id).unwrap();
+                    let production = g.productions.get(prod_id).unwrap();
 
                     let scanner_name = create_scanner_name(&production.guid_name);
 
                     let scanner_production_id = ProductionId::from(&scanner_name);
 
-                    let new_symbol_id =
-                      SymbolID::Production(scanner_production_id, *grammar_id);
+                    let new_symbol_id = SymbolID::Production(scanner_production_id, *grammar_id);
 
                     scanner_production_queue.push_back(*sym_id);
 
@@ -626,8 +572,7 @@ fn create_scanner_productions_from_symbols(
                   SymbolID::DefinedSymbol(_)
                   | SymbolID::DefinedNumeric(_)
                   | SymbolID::DefinedIdentifier(_) => {
-                    let (new_symbol_id, ..) =
-                      get_scanner_info_from_defined(sym_id, grammar);
+                    let (new_symbol_id, ..) = get_scanner_info_from_defined(sym_id, g);
 
                     scanner_production_queue.push_back(*sym_id);
 
@@ -650,10 +595,10 @@ fn create_scanner_productions_from_symbols(
 
               Body {
                 id: BodyId::new(&scanner_production_id, body_index),
-                length: symbols.len() as u16,
-                production: scanner_production_id,
-                symbols,
-                bytecode_id: 0,
+                len: symbols.len() as u16,
+                prod: scanner_production_id,
+                syms: symbols,
+                bc_id: 0,
                 reduce_fn_ids: vec![],
                 origin_location: production.original_location.clone(),
               }
@@ -664,10 +609,10 @@ fn create_scanner_productions_from_symbols(
 
           for body in scanner_bodies {
             bodies.push(body.id);
-            grammar.bodies_table.insert(body.id, body);
+            g.bodies.insert(body.id, body);
           }
 
-          grammar.production_table.insert(
+          g.productions.insert(
             scanner_production_id,
             crate::types::Production::new(
               &scanner_name,
@@ -679,7 +624,7 @@ fn create_scanner_productions_from_symbols(
             ),
           );
 
-          grammar.production_bodies_table.insert(scanner_production_id, bodies);
+          g.production_bodies.insert(scanner_production_id, bodies);
         }
       }
       _ => {}
@@ -690,23 +635,22 @@ fn create_scanner_productions_from_symbols(
 /// Converts an array of strings into scanner bodies
 /// for a given scanner production name.
 fn convert_scanner_symbol_to_production(
-  grammar: &mut GrammarStore,
+  g: &mut GrammarStore,
   strings: &[&str],
-  scanner_production_id: ProductionId,
+  prod_id: ProductionId,
   scanner_name: String,
   origin_location: Token,
-)
-{
+) {
   let GrammarStore {
-    symbols_string_table,
-    symbols_table,
-    production_table,
-    production_bodies_table,
-    bodies_table,
+    symbol_strings: symbols_string_table,
+    symbols: symbols_table,
+    productions: production_table,
+    production_bodies: production_bodies_table,
+    bodies: bodies_table,
     ..
-  } = grammar;
+  } = g;
 
-  if let btree_map::Entry::Vacant(e) = production_table.entry(scanner_production_id) {
+  if let btree_map::Entry::Vacant(e) = production_table.entry(prod_id) {
     let number_of_bodies = strings.len() as u16;
 
     let mut body_ids = vec![];
@@ -715,33 +659,30 @@ fn convert_scanner_symbol_to_production(
       // Insert into grammar any new defined symbol derived from
       // token productions.
 
-      let new_body_symbols = create_defined_symbols_from_string(
-        symbol_string,
-        symbols_string_table,
-        symbols_table,
-      );
+      let new_body_symbols =
+        create_defined_symbols_from_string(symbol_string, symbols_string_table, symbols_table);
 
-      let body_id = BodyId::new(&scanner_production_id, id);
+      let body_id = BodyId::new(&prod_id, id);
 
       body_ids.push(body_id);
 
       bodies_table.insert(body_id, Body {
-        length: new_body_symbols.len() as u16,
-        symbols: new_body_symbols,
-        production: scanner_production_id,
+        len: new_body_symbols.len() as u16,
+        syms: new_body_symbols,
+        prod: prod_id,
         id: body_id,
-        bytecode_id: 0,
+        bc_id: 0,
         reduce_fn_ids: vec![],
         origin_location: origin_location.clone(),
       });
     }
 
-    production_bodies_table.insert(scanner_production_id, body_ids);
+    production_bodies_table.insert(prod_id, body_ids);
 
     e.insert(crate::types::Production::new(
       &scanner_name,
       &scanner_name,
-      scanner_production_id,
+      prod_id,
       number_of_bodies,
       Token::empty(),
       true,
@@ -759,8 +700,7 @@ fn create_defined_symbols_from_string(
   symbol_string: &str,
   symbols_string_table: &mut BTreeMap<SymbolID, String>,
   symbols_table: &mut BTreeMap<SymbolID, Symbol>,
-) -> Vec<BodySymbolRef>
-{
+) -> Vec<BodySymbolRef> {
   let chars: Vec<char> = symbol_string.chars().collect();
 
   let new_body_symbols: Vec<BodySymbolRef> = chars
@@ -775,11 +715,11 @@ fn create_defined_symbols_from_string(
         symbols_string_table.insert(id, string);
 
         Symbol {
-          byte_length: byte.len_utf8() as u32,
-          code_point_length: 1,
-          bytecode_id: 0,
-          guid: id,
-          scanner_only: true,
+          byte_length:   byte.len_utf8() as u32,
+          cp_len:        1,
+          bytecode_id:   0,
+          guid:          id,
+          scanner_only:  true,
           friendly_name: id.to_default_string(),
         }
       });
@@ -804,13 +744,12 @@ fn create_defined_symbols_from_string(
 pub(crate) fn get_scanner_info_from_defined(
   sym_id: &SymbolID,
   root: &GrammarStore,
-) -> (SymbolID, ProductionId, String, String)
-{
+) -> (SymbolID, ProductionId, String, String) {
   let (scanner_name, symbol_string) = match sym_id {
     SymbolID::DefinedIdentifier(..)
     | SymbolID::DefinedNumeric(..)
     | SymbolID::DefinedSymbol(..) => {
-      let symbol_string = root.symbols_string_table.get(sym_id).unwrap().to_owned();
+      let symbol_string = root.symbol_strings.get(sym_id).unwrap().to_owned();
 
       let escaped_symbol_string = symbol_string
         .chars()
@@ -822,8 +761,7 @@ pub(crate) fn get_scanner_info_from_defined(
       (create_defined_scanner_name(&escaped_symbol_string), symbol_string)
     }
     SymbolID::TokenProduction(production_id, _) => {
-      let symbol_string =
-        root.production_table.get(production_id).unwrap().guid_name.clone();
+      let symbol_string = root.productions.get(production_id).unwrap().guid_name.clone();
       (create_scanner_name(&symbol_string), symbol_string)
     }
     sym => {
@@ -849,34 +787,29 @@ fn merge_grammars(
   root: &mut GrammarStore,
   grammars: &[GrammarStore],
   errors: &mut Vec<ParseError>,
-)
-{
+) {
   let mut grammars_lookup = HashMap::<GrammarId, &GrammarStore>::new();
 
   // Merge grammar data into a single store
   for import_grammar in grammars {
     grammars_lookup.insert(import_grammar.guid, import_grammar);
 
-    root
-      .production_peek_symbols
-      .extend(import_grammar.production_peek_symbols.clone().into_iter());
+    root.production_peek_symbols.extend(import_grammar.production_peek_symbols.clone().into_iter());
 
     // Merge all symbols
-    for (id, sym) in &import_grammar.symbols_table {
-      if !root.symbols_table.contains_key(id) {
-        root.symbols_table.insert(*id, sym.clone());
+    for (id, sym) in &import_grammar.symbols {
+      if !root.symbols.contains_key(id) {
+        root.symbols.insert(*id, sym.clone());
 
         match id {
           SymbolID::DefinedSymbol(_)
           | SymbolID::DefinedNumeric(_)
-          | SymbolID::DefinedIdentifier(_) => {
-            match import_grammar.symbols_string_table.get(id) {
-              Some(string) => {
-                root.symbols_string_table.insert(*id, string.to_owned());
-              }
-              None => {}
+          | SymbolID::DefinedIdentifier(_) => match import_grammar.symbol_strings.get(id) {
+            Some(string) => {
+              root.symbol_strings.insert(*id, string.to_owned());
             }
-          }
+            None => {}
+          },
           _ => {}
         }
       }
@@ -884,7 +817,7 @@ fn merge_grammars(
   }
 
   // Merge all referenced foreign productions into the root.
-  let mut symbol_queue = VecDeque::from_iter(root.production_symbols_table.clone());
+  let mut symbol_queue = VecDeque::from_iter(root.production_symbols.clone());
 
   while let Some((sym, tok)) = symbol_queue.pop_front() {
     if let Some(grammar_id) = sym.getGrammarId() {
@@ -892,58 +825,46 @@ fn merge_grammars(
         match grammars_lookup.get(&grammar_id) {
           Some(import_grammar) => {
             if let Some(prod_id) = sym.getProductionId() {
-              if let std::collections::btree_map::Entry::Vacant(e) =
-                root.production_table.entry(prod_id)
+              if let std::collections::btree_map::Entry::Vacant(e) = root.productions.entry(prod_id)
               {
-                match import_grammar.production_table.get(&prod_id) {
+                match import_grammar.productions.get(&prod_id) {
                   Some(production) => {
                     // import the foreign production
                     e.insert(production.clone());
 
-                    let bodies = import_grammar
-                      .production_bodies_table
-                      .get(&prod_id)
-                      .unwrap()
-                      .clone();
+                    let bodies = import_grammar.production_bodies.get(&prod_id).unwrap().clone();
 
                     // Import all bodies referenced by this
                     // production
                     for body_id in &bodies {
-                      let body =
-                        import_grammar.bodies_table.get(body_id).unwrap().clone();
+                      let body = import_grammar.bodies.get(body_id).unwrap().clone();
 
                       // Add every Production symbol to
                       // the queue
-                      for sym in &body.symbols {
+                      for sym in &body.syms {
                         match sym.sym_id {
                           SymbolID::Production(..) => {
                             symbol_queue.push_back((sym.sym_id, sym.tok.clone()))
                           }
                           SymbolID::TokenProduction(prod, grammar) => {
-                            root.symbols_table.entry(sym.sym_id).or_insert_with(|| {
-                              (import_grammar
-                                .symbols_table
-                                .get(&sym.sym_id)
-                                .unwrap()
-                                .clone())
+                            root.symbols.entry(sym.sym_id).or_insert_with(|| {
+                              (import_grammar.symbols.get(&sym.sym_id).unwrap().clone())
                             });
 
                             // Remap the production token symbol to regular a production symbol and submit as a merge candidate.
-                            symbol_queue.push_back((
-                              SymbolID::Production(prod, grammar),
-                              sym.tok.clone(),
-                            ))
+                            symbol_queue
+                              .push_back((SymbolID::Production(prod, grammar), sym.tok.clone()))
                           }
                           _ => {}
                         }
                       }
 
-                      root.bodies_table.insert(*body_id, body);
+                      root.bodies.insert(*body_id, body);
                     }
 
                     // Import the map of production id to
                     // bodies
-                    root.production_bodies_table.insert(prod_id, bodies);
+                    root.production_bodies.insert(prod_id, bodies);
                   }
                   None => {
                     errors.push(ParseError::COMPILE_PROBLEM(CompileProblem {
@@ -980,11 +901,10 @@ fn merge_grammars(
 ///  
 
 pub fn pre_process_grammar<'a>(
-  grammar: &'a ast::Grammar,
-  absolute_path: &PathBuf,
+  g: &'a ast::Grammar,
+  path: &PathBuf,
   mut friendly_name: &'a str,
-) -> (GrammarStore, Vec<ParseError>)
-{
+) -> (GrammarStore, Vec<ParseError>) {
   let mut import_names_lookup = ImportProductionNameTable::new();
 
   let mut production_bodies_table = ProductionBodiesTable::new();
@@ -1001,7 +921,7 @@ pub fn pre_process_grammar<'a>(
 
   let mut production_symbols_table = BTreeMap::new();
 
-  let guid_name = get_guid_grammar_name(absolute_path).unwrap();
+  let guid_name = get_guid_grammar_name(path).unwrap();
 
   let guid = GrammarId(hash_id_value_u64(&guid_name));
 
@@ -1016,21 +936,21 @@ pub fn pre_process_grammar<'a>(
   {
     let mut tgs = TempGrammarStore {
       local_guid: &guid_name,
-      absolute_path,
+      absolute_path: path,
       import_names_lookup: &mut import_names_lookup,
       symbols_table: &mut symbols_table,
       symbols_string_table: &mut symbols_string_table,
       bodies_table: &mut bodies_table,
-      production_table: &mut production_table,
-      production_symbols_table: &mut production_symbols_table,
-      production_bodies_table: &mut production_bodies_table,
+      prods: &mut production_table,
+      prod_syms: &mut production_symbols_table,
+      bodies: &mut production_bodies_table,
       errors: &mut parse_errors,
       reduce_functions: &mut reduce_functions,
     };
 
     // Process meta data, including EXPORT, IMPORT, and IGNORE meta
     // data
-    for obj in grammar.preamble.iter() {
+    for obj in g.preamble.iter() {
       match obj {
         ASTNode::Name(box ast::Name { name }) => friendly_name = name,
         ASTNode::Ignore(box ast::Ignore { symbols }) => {
@@ -1049,7 +969,7 @@ pub fn pre_process_grammar<'a>(
           // it's bypassed when running tests to keep tests pure.
 
           if !uri.is_absolute() {
-            match absolute_path.parent() {
+            match path.parent() {
               None => {}
               Some(new_path) => {
                 let mut new_path = new_path.to_owned();
@@ -1093,11 +1013,10 @@ pub fn pre_process_grammar<'a>(
 
     // Process main grammar data, which include
     // Productions, IR states, and out of band functions
-    for node in grammar.content.iter() {
+    for node in g.content.iter() {
       match node {
         ASTNode::Production(_) => {
-          let production =
-            pre_process_production(node, &mut tgs, &mut post_process_productions);
+          let production = pre_process_production(node, &mut tgs, &mut post_process_productions);
           if production != ProductionId::default() && export_names.is_empty() {
             export_names.push((production, "default".to_string()));
           }
@@ -1115,30 +1034,24 @@ pub fn pre_process_grammar<'a>(
     // groups `(... | ...)`
 
     while let Some(node) = post_process_productions.pop_front() {
-      pre_process_production(
-        &ASTNode::Production(node),
-        &mut tgs,
-        &mut post_process_productions,
-      );
+      pre_process_production(&ASTNode::Production(node), &mut tgs, &mut post_process_productions);
     }
   }
 
-  let production_peek_symbols = production_table
-    .keys()
-    .map(|k| (*k, global_peek_symbols.clone()))
-    .collect::<HashMap<_, _>>();
+  let production_peek_symbols =
+    production_table.keys().map(|k| (*k, global_peek_symbols.clone())).collect::<HashMap<_, _>>();
 
   (
     GrammarStore {
-      source_path: absolute_path.clone(),
+      source_path: path.clone(),
       guid,
       guid_name,
-      production_bodies_table,
-      production_table,
-      bodies_table,
-      symbols_table,
-      symbols_string_table,
-      production_symbols_table,
+      production_bodies: production_bodies_table,
+      productions: production_table,
+      bodies: bodies_table,
+      symbols: symbols_table,
+      symbol_strings: symbols_string_table,
+      production_symbols: production_symbols_table,
       imports: import_names_lookup,
       closures: HashMap::new(),
       item_peek_symbols: HashMap::new(),
@@ -1156,17 +1069,15 @@ fn pre_process_production(
   production_node: &ASTNode,
   tgs: &mut TempGrammarStore,
   post_process_productions: &mut VecDeque<Box<ast::Production>>,
-) -> ProductionId
-{
+) -> ProductionId {
   let mut body_index = 0;
 
   if let ASTNode::Production(prod) = production_node {
     let production_id = get_production_id_from_node(production_node, tgs);
-    let production_guid_name =
-      get_resolved_production_name(production_node, tgs).unwrap();
+    let production_guid_name = get_resolved_production_name(production_node, tgs).unwrap();
     let mut bodies = vec![];
 
-    if match tgs.production_table.get(&production_id) {
+    if match tgs.prods.get(&production_id) {
       Some(existing_production) => {
         tgs.errors.push({
           ParseError::COMPOUND_COMPILE_PROBLEM(CompoundCompileProblem {
@@ -1180,10 +1091,7 @@ fn pre_process_production(
               CompileProblem {
                 inline_message: String::new(),
                 loc: existing_production.original_location.clone(),
-                message: format!(
-                  "production {} first defined here.",
-                  production_guid_name
-                ),
+                message: format!("production {} first defined here.", production_guid_name),
               },
             ],
           })
@@ -1195,8 +1103,7 @@ fn pre_process_production(
       // Extract body data and gather symbol information
       for body in &prod.bodies {
         if let ASTNode::Body(ast_body) = body {
-          let (new_bodies, productions) =
-            pre_process_body(production_node, ast_body, tgs);
+          let (new_bodies, productions) = pre_process_body(production_node, ast_body, tgs);
 
           for prod in productions {
             post_process_productions.push_back(prod);
@@ -1216,7 +1123,7 @@ fn pre_process_production(
         }
       }
 
-      tgs.production_table.insert(
+      tgs.prods.insert(
         production_id,
         crate::types::Production::new(
           &prod.symbol.Token().to_string(),
@@ -1228,7 +1135,7 @@ fn pre_process_production(
         ),
       );
 
-      tgs.production_bodies_table.insert(production_id, bodies);
+      tgs.bodies.insert(production_id, bodies);
 
       production_id
     } else {
@@ -1255,11 +1162,7 @@ fn pre_process_production(
 /// This function also panics if a local imported grammar name does
 /// not have a matching `@IMPORT` statement.
 
-fn get_resolved_production_name(
-  node: &ASTNode,
-  tgs: &mut TempGrammarStore,
-) -> Option<String>
-{
+fn get_resolved_production_name(node: &ASTNode, tgs: &mut TempGrammarStore) -> Option<String> {
   match node {
     ASTNode::Production_Import_Symbol(prod_imp_sym) => {
       let production_name = &prod_imp_sym.name;
@@ -1288,14 +1191,11 @@ fn get_resolved_production_name(
       Some(create_production_guid_name(tgs.local_guid, &prod_sym.name))
     }
     ASTNode::Production(prod) => get_resolved_production_name(&prod.symbol, tgs),
-    ASTNode::Production_Token(prod_tok) => {
-      get_resolved_production_name(&prod_tok.production, tgs)
-    }
+    ASTNode::Production_Token(prod_tok) => get_resolved_production_name(&prod_tok.production, tgs),
     _ => {
       tgs.errors.push(ParseError::COMPILE_PROBLEM(CompileProblem {
         inline_message: String::new(),
-        message: "Unexpected node: Unable to resolve production name of this node!"
-          .to_string(),
+        message: "Unexpected node: Unable to resolve production name of this node!".to_string(),
         loc: node.Token(),
       }));
       None
@@ -1324,8 +1224,7 @@ fn get_resolved_production_name(
 fn get_grammar_info_from_node<'a>(
   node: &'a ASTNode,
   tgs: &'a mut TempGrammarStore,
-) -> Option<(&'a str, &'a str, &'a PathBuf)>
-{
+) -> Option<(&'a str, &'a str, &'a PathBuf)> {
   match node {
     ASTNode::Production_Import_Symbol(prod_imp_sym) => {
       let production_name = &prod_imp_sym.name;
@@ -1334,14 +1233,14 @@ fn get_grammar_info_from_node<'a>(
 
       match tgs.import_names_lookup.get(local_import_grammar_name) {
         None => {
-          tgs.errors.push(ParseError::COMPILE_PROBLEM(CompileProblem{
-                        inline_message: String::new(),
-                        message: format!(
-                            "Unknown Grammar : The local grammar name \u{001b}[31m{}\u{001b}[0m does not match any imported grammar.", 
-                            local_import_grammar_name
-                        ),
-                        loc: node.Token(),
-                    }));
+          tgs.errors.push(ParseError::COMPILE_PROBLEM(CompileProblem {
+            inline_message: String::new(),
+            message: format!(
+              "Unknown Grammar : The local grammar name \u{001b}[31m{}\u{001b}[0m does not match any imported grammar.",
+              local_import_grammar_name
+            ),
+            loc: node.Token(),
+          }));
           None
         }
         Some((resolved_grammar_name, path)) => {
@@ -1349,18 +1248,13 @@ fn get_grammar_info_from_node<'a>(
         }
       }
     }
-    ASTNode::Production_Symbol(prod_sym) => {
-      Some((tgs.local_guid, "root", tgs.absolute_path))
-    }
+    ASTNode::Production_Symbol(prod_sym) => Some((tgs.local_guid, "root", tgs.absolute_path)),
     ASTNode::Production(prod) => get_grammar_info_from_node(&prod.symbol, tgs),
-    ASTNode::Production_Token(prod_tok) => {
-      get_grammar_info_from_node(&prod_tok.production, tgs)
-    }
+    ASTNode::Production_Token(prod_tok) => get_grammar_info_from_node(&prod_tok.production, tgs),
     _ => {
       tgs.errors.push(ParseError::COMPILE_PROBLEM(CompileProblem {
         inline_message: String::new(),
-        message: "Unexpected node: Unable to resolve production name of this node!"
-          .to_string(),
+        message: "Unexpected node: Unable to resolve production name of this node!".to_string(),
         loc: node.Token(),
       }));
 
@@ -1369,11 +1263,7 @@ fn get_grammar_info_from_node<'a>(
   }
 }
 
-fn get_production_id_from_node(
-  production: &ASTNode,
-  tgs: &mut TempGrammarStore,
-) -> ProductionId
-{
+fn get_production_id_from_node(production: &ASTNode, tgs: &mut TempGrammarStore) -> ProductionId {
   if let Some(name) = get_resolved_production_name(production, tgs) {
     ProductionId(hash_id_value_u64(name))
   } else {
@@ -1385,8 +1275,7 @@ fn pre_process_body(
   production: &ASTNode,
   body: &ast::Body,
   tgs: &mut TempGrammarStore,
-) -> (Vec<types::Body>, Vec<Box<ast::Production>>)
-{
+) -> (Vec<types::Body>, Vec<Box<ast::Production>>) {
   if let ASTNode::Returned(ret) = &body.reduce_function {
     // Extract the function and insert into function table?
   }
@@ -1399,8 +1288,7 @@ fn pre_process_body(
     production_name: &String,
     mut index: u32,
     tgs: &mut TempGrammarStore,
-  ) -> (Vec<(Token, Vec<BodySymbolRef>)>, Vec<Box<ast::Production>>)
-  {
+  ) -> (Vec<(Token, Vec<BodySymbolRef>)>, Vec<Box<ast::Production>>) {
     let mut bodies = vec![];
 
     let mut productions = vec![];
@@ -1413,20 +1301,15 @@ fn pre_process_body(
         name: &str,
         bodies: &[ASTNode],
         token: Token,
-      ) -> (ASTNode, Box<ast::Production>)
-      {
+      ) -> (ASTNode, Box<ast::Production>) {
         // Create a virtual production and symbol to go in its place
-        let symbol = ASTNode::Production_Symbol(
-          super::data::ast::Production_Symbol::new(name.to_string(), token.clone()),
-        );
+        let symbol = ASTNode::Production_Symbol(super::data::ast::Production_Symbol::new(
+          name.to_string(),
+          token.clone(),
+        ));
 
-        let production = super::data::ast::Production::new(
-          false,
-          symbol.clone(),
-          bodies.to_vec(),
-          false,
-          token,
-        );
+        let production =
+          super::data::ast::Production::new(false, symbol.clone(), bodies.to_vec(), false, token);
 
         (symbol, production)
       }
@@ -1499,13 +1382,8 @@ fn pre_process_body(
 
               for body in &group.bodies {
                 if let ASTNode::Body(body) = body {
-                  let (mut new_bodies, mut new_productions) = create_body_vectors(
-                    &sym.Token(),
-                    &body.symbols,
-                    production_name,
-                    9999,
-                    tgs,
-                  );
+                  let (mut new_bodies, mut new_productions) =
+                    create_body_vectors(&sym.Token(), &body.symbols, production_name, 9999, tgs);
 
                   for (_, body) in new_bodies.iter_mut() {
                     if let Some((last)) = body.last_mut() {
@@ -1680,11 +1558,11 @@ fn pre_process_body(
     bodies
       .iter()
       .map(|(t, b)| types::Body {
-        symbols: b.clone(),
-        length: b.len() as u16,
-        production: get_production_id_from_node(production, tgs),
+        syms: b.clone(),
+        len: b.len() as u16,
+        prod: get_production_id_from_node(production, tgs),
         id: BodyId::default(),
-        bytecode_id: 0,
+        bc_id: 0,
         reduce_fn_ids: reduce_fn_ids.clone(),
         origin_location: t.clone(),
       })
@@ -1696,8 +1574,7 @@ fn pre_process_body(
 /// Returns an appropriate SymbolID::Defined* based on the input
 /// string
 
-fn get_literal_id(string: &String) -> SymbolID
-{
+fn get_literal_id(string: &String) -> SymbolID {
   let identifier = Regex::new(r"[\w_-][\w\d_-]*$").unwrap();
 
   let number = Regex::new(r"\d+$").unwrap();
@@ -1716,10 +1593,8 @@ fn get_literal_id(string: &String) -> SymbolID
 fn intern_symbol(
   sym: &ASTNode, // , symbols_table,
   tgs: &mut TempGrammarStore,
-) -> Option<SymbolID>
-{
-  fn process_literal(string: &String, tgs: &mut TempGrammarStore) -> SymbolID
-  {
+) -> Option<SymbolID> {
+  fn process_literal(string: &String, tgs: &mut TempGrammarStore) -> SymbolID {
     let mut id = get_literal_id(string);
 
     if let std::collections::btree_map::Entry::Vacant(e) = tgs.symbols_table.entry(id) {
@@ -1733,7 +1608,7 @@ fn intern_symbol(
         bytecode_id: 0,
         guid: id,
         byte_length,
-        code_point_length,
+        cp_len: code_point_length,
         scanner_only: false,
         friendly_name: String::new(),
       });
@@ -1745,8 +1620,7 @@ fn intern_symbol(
   fn get_production_hash_ids(
     node: &ASTNode,
     tgs: &mut TempGrammarStore,
-  ) -> Option<(ProductionId, GrammarId)>
-  {
+  ) -> Option<(ProductionId, GrammarId)> {
     match node {
       ASTNode::Production_Symbol(_) | ASTNode::Production_Import_Symbol(_) => {
         let production_id = get_production_id_from_node(node, tgs);
@@ -1768,12 +1642,11 @@ fn intern_symbol(
     node: &ASTNode,
     tgs: &mut TempGrammarStore,
     tok: Token,
-  ) -> Option<SymbolID>
-  {
+  ) -> Option<SymbolID> {
     if let Some((production_id, grammar_id)) = get_production_hash_ids(node, tgs) {
       let id = SymbolID::Production(production_id, grammar_id);
 
-      tgs.production_symbols_table.insert(id, tok);
+      tgs.prod_syms.insert(id, tok);
 
       Some(id)
     } else {
@@ -1785,8 +1658,7 @@ fn intern_symbol(
     node: &ast::Production_Token,
     tgs: &mut TempGrammarStore,
     tok: Token,
-  ) -> Option<SymbolID>
-  {
+  ) -> Option<SymbolID> {
     match process_production(&node.production, tgs, tok) {
       Some(SymbolID::Production(prod_id, grammar_id)) => {
         let production_id = SymbolID::Production(prod_id, grammar_id);
@@ -1794,11 +1666,11 @@ fn intern_symbol(
         let token_production_id = SymbolID::TokenProduction(prod_id, grammar_id);
 
         tgs.symbols_table.entry(token_production_id).or_insert(Symbol {
-          bytecode_id: 0,
-          guid: production_id,
-          byte_length: 0,
-          code_point_length: 0,
-          scanner_only: false,
+          bytecode_id:   0,
+          guid:          production_id,
+          byte_length:   0,
+          cp_len:        0,
+          scanner_only:  false,
           friendly_name: String::new(),
         });
 
@@ -1827,8 +1699,7 @@ fn intern_symbol(
     ASTNode::Production_Token(token) => process_token_production(token, tgs, sym.Token()),
     _ => {
       tgs.errors.push(ParseError::COMPILE_PROBLEM(CompileProblem {
-        inline_message: "Unexpected ASTNode while attempting to intern symbol"
-          .to_string(),
+        inline_message: "Unexpected ASTNode while attempting to intern symbol".to_string(),
         message: "[INTERNAL ERROR]".to_string(),
         loc: sym.Token(),
       }));
@@ -1837,8 +1708,7 @@ fn intern_symbol(
   }
 }
 
-struct SymbolData<'a>
-{
+struct SymbolData<'a> {
   pub annotation:    String,
   pub is_list:       bool,
   pub is_group:      bool,
@@ -1851,11 +1721,7 @@ struct SymbolData<'a>
 
 /// Get a flattened view of a symbol's immediate AST
 
-fn get_symbol_details<'a>(
-  mut sym: &'a ASTNode,
-  tgs: &mut TempGrammarStore,
-) -> SymbolData<'a>
-{
+fn get_symbol_details<'a>(mut sym: &'a ASTNode, tgs: &mut TempGrammarStore) -> SymbolData<'a> {
   let mut data = SymbolData {
     annotation:    String::new(),
     is_list:       false,

@@ -11,18 +11,14 @@ use super::Token;
 
 pub struct ProductionId(pub u64);
 
-impl From<&String> for ProductionId
-{
-  fn from(string: &String) -> Self
-  {
+impl From<&String> for ProductionId {
+  fn from(string: &String) -> Self {
     ProductionId(hash_id_value_u64(string))
   }
 }
 
-impl Display for ProductionId
-{
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
-  {
+impl Display for ProductionId {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.write_str(&self.0.to_string())
   }
 }
@@ -31,38 +27,31 @@ impl Display for ProductionId
 
 pub struct BodyId(pub u64);
 
-impl BodyId
-{
-  pub fn new(prod_id: &ProductionId, body_index: usize) -> Self
-  {
+impl BodyId {
+  pub fn new(prod_id: &ProductionId, body_index: usize) -> Self {
     BodyId((prod_id.0 & 0xFFFF_FFFF_FFFF_F000) + body_index as u64)
   }
 
   #[inline(always)]
-  pub fn default() -> Self
-  {
+  pub fn default() -> Self {
     Self(0)
   }
 
   #[inline(always)]
-  pub fn is_null(&self) -> bool
-  {
+  pub fn is_null(&self) -> bool {
     self.0 == 0
   }
 }
 
-impl Display for BodyId
-{
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
-  {
+impl Display for BodyId {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.write_str(&self.0.to_string())
   }
 }
 
 #[derive(Debug, Clone)]
 
-pub struct Production
-{
+pub struct Production {
   pub guid_name: String,
   pub original_name: String,
   pub number_of_bodies: u16,
@@ -84,8 +73,7 @@ pub struct Production
   pub symbol_bytecode_id: u32,
 }
 
-impl Production
-{
+impl Production {
   pub fn new(
     original_name: &str,
     guid_name: &str,
@@ -93,8 +81,7 @@ impl Production
     number_of_bodies: u16,
     token: Token,
     is_scanner: bool,
-  ) -> Self
-  {
+  ) -> Self {
     Production {
       guid_name: guid_name.to_string(),
       original_name: original_name.to_string(),
@@ -113,8 +100,7 @@ impl Production
 
 #[derive(Debug, Clone)]
 
-pub struct BodySymbolRef
-{
+pub struct BodySymbolRef {
   pub sym_id:         SymbolID,
   pub original_index: u32,
   pub annotation:     String,
@@ -138,28 +124,24 @@ pub struct BodySymbolRef
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct ReduceFunctionId(u64);
 
-impl ReduceFunctionId
-{
-  pub fn new(reduce_function: &ASTNode) -> Self
-  {
+impl ReduceFunctionId {
+  pub fn new(reduce_function: &ASTNode) -> Self {
     ReduceFunctionId(hash_id_value_u64(reduce_function.Token().to_string()))
   }
 
-  pub fn is_undefined(&self) -> bool
-  {
+  pub fn is_undefined(&self) -> bool {
     self.0 == 0
   }
 }
 
 /// A single body derived from a production
 #[derive(Debug, Clone)]
-pub struct Body
-{
-  pub symbols: Vec<BodySymbolRef>,
-  pub length: u16,
-  pub production: ProductionId,
+pub struct Body {
+  pub syms: Vec<BodySymbolRef>,
+  pub len: u16,
+  pub prod: ProductionId,
   pub id: BodyId,
-  pub bytecode_id: u32,
+  pub bc_id: u32,
   pub reduce_fn_ids: Vec<ReduceFunctionId>,
   pub origin_location: Token,
 }

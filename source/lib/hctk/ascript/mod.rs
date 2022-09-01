@@ -1,8 +1,7 @@
 pub mod compile;
 
 #[cfg(test)]
-mod ascript_tests
-{
+mod ascript_tests {
   use grammar::compile_test_grammar;
 
   use crate::ascript::compile::compile_reduce_function_expressions;
@@ -23,18 +22,17 @@ mod ascript_tests
   use crate::types::*;
 
   #[test]
-  fn test_parse_errors_when_struct_type_is_missing()
-  {
+  fn test_parse_errors_when_struct_type_is_missing() {
     let ast = compile_ascript_ast(" { c_Test }".as_bytes().to_vec());
 
     assert!(ast.is_ok());
 
     if let ASTNode::AST_Struct(ast_struct) = ast.unwrap() {
       let (_, errors) = compile_struct_type(
+        &GrammarStore::default(),
+        &mut AScriptStore::new(),
         &ast_struct,
         &create_dummy_body(),
-        &mut AScriptStore::new(),
-        &GrammarStore::default(),
       );
 
       for error in &errors {
@@ -47,32 +45,30 @@ mod ascript_tests
     }
   }
 
-  fn create_dummy_body() -> crate::types::Body
-  {
+  fn create_dummy_body() -> crate::types::Body {
     crate::types::Body {
-      bytecode_id: 0,
+      bc_id: 0,
       id: BodyId::new(&ProductionId(0), 0),
-      length: 0,
+      len: 0,
       origin_location: Token::new(),
-      production: ProductionId(0),
+      prod: ProductionId(0),
       reduce_fn_ids: vec![],
-      symbols: vec![],
+      syms: vec![],
     }
   }
 
   #[test]
-  fn test_parse_errors_when_struct_type_is_redefined()
-  {
+  fn test_parse_errors_when_struct_type_is_redefined() {
     let ast = compile_ascript_ast(" { t_TestA, t_TestB, t_TestC }".as_bytes().to_vec());
 
     assert!(ast.is_ok());
 
     if let ASTNode::AST_Struct(ast_struct) = ast.unwrap() {
       let (_, errors) = compile_struct_type(
+        &GrammarStore::default(),
+        &mut AScriptStore::new(),
         &ast_struct,
         &create_dummy_body(),
-        &mut AScriptStore::new(),
-        &GrammarStore::default(),
       );
 
       for error in &errors {
@@ -86,8 +82,7 @@ mod ascript_tests
   }
 
   #[test]
-  fn test_parse_errors_when_struct_prop_type_is_redefined()
-  {
+  fn test_parse_errors_when_struct_prop_type_is_redefined() {
     let astA = compile_ascript_ast(" { t_TestA, apple: u32 }".as_bytes().to_vec());
     assert!(astA.is_ok());
 
@@ -95,24 +90,20 @@ mod ascript_tests
 
     assert!(astB.is_ok());
 
-    let mut store = AScriptStore::new();
+    let mut ast = AScriptStore::new();
 
     if let ASTNode::AST_Struct(ast_struct) = astA.unwrap() {
-      let (_, errors) = compile_struct_type(
-        &ast_struct,
-        &create_dummy_body(),
-        &mut store,
-        &GrammarStore::default(),
-      );
+      let (_, errors) =
+        compile_struct_type(&GrammarStore::default(), &mut ast, &ast_struct, &create_dummy_body());
 
       assert!(errors.is_empty());
 
       if let ASTNode::AST_Struct(ast_struct) = astB.unwrap() {
         let (_, errors) = compile_struct_type(
+          &GrammarStore::default(),
+          &mut ast,
           &ast_struct,
           &create_dummy_body(),
-          &mut store,
-          &GrammarStore::default(),
         );
 
         for error in &errors {
@@ -129,8 +120,7 @@ mod ascript_tests
   }
 
   #[test]
-  fn test_parse_errors_when_production_has_differing_return_types()
-  {
+  fn test_parse_errors_when_production_has_differing_return_types() {
     let grammar = compile_test_grammar(
       "
             <> A > \\1 f:ast { { t_Test } } 
@@ -150,8 +140,7 @@ mod ascript_tests
   }
 
   #[test]
-  fn test_ASTs_are_defined_for_ascript_return_functions()
-  {
+  fn test_ASTs_are_defined_for_ascript_return_functions() {
     let grammar = "<> A > \\1 f:ast { { t_Test, val: str($1) } } ".to_string();
 
     let grammar_ast = compile_grammar_ast(grammar.as_bytes().to_vec());
@@ -172,9 +161,7 @@ mod ascript_tests
                     panic!("Incorrect type name");
                   }
 
-                  if let ASTNode::AST_Property(box AST_Property { id, value, .. }) =
-                    &props[1]
-                  {
+                  if let ASTNode::AST_Property(box AST_Property { id, value, .. }) = &props[1] {
                     assert_eq!(id, "val");
 
                     if let ASTNode::AST_STRING(..) = value {

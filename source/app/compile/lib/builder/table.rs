@@ -10,8 +10,7 @@ use hctk::bytecode::BytecodeOutput;
 use hctk::types::*;
 
 #[derive(Debug, Clone, Copy)]
-struct TableCell<'a>
-{
+struct TableCell<'a> {
   state: u32,
   debug_state_name: &'a String,
   goto_state: u32,
@@ -21,10 +20,9 @@ struct TableCell<'a>
 
 pub(crate) fn create_table<'a>(
   entry_state: u32,
-  grammar: &GrammarStore,
+  g: &GrammarStore,
   output: &'a BytecodeOutput,
-) -> Option<()>
-{
+) -> Option<()> {
   // let states = BTreeMap::new();
   let d: String = String::from("unknown");
 
@@ -52,23 +50,9 @@ pub(crate) fn create_table<'a>(
 
       match instruction.to_type() {
         VECTOR_BRANCH | HASH_BRANCH => {
-          let table_data =
-            BranchTableData::from_bytecode(instruction, grammar, output).unwrap();
+          let table_data = BranchTableData::from_bytecode(instruction, g, output).unwrap();
 
           let TableHeaderData { input_type, .. } = table_data.data;
-
-          match input_type {
-            INPUT_TYPE::T05_BYTE => {
-              println!("Byte");
-            }
-            INPUT_TYPE::T03_CLASS => {
-              println!("Class");
-            }
-            INPUT_TYPE::T04_CODEPOINT => {
-              println!("CodePoint");
-            }
-            _ => {}
-          };
 
           let mut index_map = table_data
             .branches
@@ -76,10 +60,7 @@ pub(crate) fn create_table<'a>(
             .map(|(_, s)| TableCell {
               state: state_address as u32,
               consume_length: 0,
-              debug_state_name: output
-                .offset_to_state_name
-                .get(&(s.address as u32))
-                .unwrap_or(&d),
+              debug_state_name: output.offset_to_state_name.get(&(s.address as u32)).unwrap_or(&d),
               goto_state: s.address as u32,
               input_byte: s.value,
             })
@@ -156,14 +137,11 @@ pub(crate) fn create_table<'a>(
 
   for state in &mut table {
     for cell in state.1 {
-      if let Some(remapped_name) =
-        state_offset_to_enumuration.get(&(cell.goto_state as usize))
-      {
+      if let Some(remapped_name) = state_offset_to_enumuration.get(&(cell.goto_state as usize)) {
         cell.goto_state = *remapped_name as u32;
       }
 
-      if let Some(remapped_name) = state_offset_to_enumuration.get(&(cell.state as usize))
-      {
+      if let Some(remapped_name) = state_offset_to_enumuration.get(&(cell.state as usize)) {
         cell.state = *remapped_name as u32;
       }
     }
@@ -231,8 +209,7 @@ pub(crate) fn create_table<'a>(
 }
 /// Information on byte code branches
 #[derive(Debug, Clone)]
-pub struct BranchTableData
-{
+pub struct BranchTableData {
   /// Stores an offset of the branch that is taken given
   /// a particular symbol, and the symbol that activates
   /// the branch.
@@ -247,8 +224,7 @@ pub struct BranchTableData
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct BranchData
-{
+pub struct BranchData {
   // pub table_index:  usize,
   pub is_skipped: bool,
   pub address:    usize,
@@ -258,20 +234,17 @@ pub struct BranchData
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum TableType
-{
+pub enum TableType {
   Hash,
   Vector,
 }
 
-impl BranchTableData
-{
+impl BranchTableData {
   pub fn from_bytecode(
     instruction: INSTRUCTION,
-    grammar: &GrammarStore,
+    g: &GrammarStore,
     output: &BytecodeOutput,
-  ) -> Option<Self>
-  {
+  ) -> Option<Self> {
     let address = instruction.get_address();
     if instruction.is_HASH_BRANCH() || instruction.is_VECTOR_BRANCH() {
       let data = TableHeaderData::from_bytecode(address, &output.bytecode);
@@ -332,11 +305,7 @@ impl BranchTableData
       };
 
       Some(BranchTableData {
-        table_type: if instruction.is_HASH_BRANCH() {
-          TableType::Hash
-        } else {
-          TableType::Vector
-        },
+        table_type: if instruction.is_HASH_BRANCH() { TableType::Hash } else { TableType::Vector },
         symbols,
         data,
         branches,
@@ -346,8 +315,7 @@ impl BranchTableData
     }
   }
 
-  pub fn has_trivial_comparisons(&self) -> bool
-  {
+  pub fn has_trivial_comparisons(&self) -> bool {
     self.branches.iter().all(|(_, b)| self.min_comparison_bytes(b).is_some())
   }
 
@@ -355,8 +323,7 @@ impl BranchTableData
   /// the discriminant value with a byte array.
   /// `None` indicates the value is incapable of being directly
   /// compared with a byte array.
-  pub fn min_comparison_bytes(&self, branch: &BranchData) -> Option<u32>
-  {
+  pub fn min_comparison_bytes(&self, branch: &BranchData) -> Option<u32> {
     if let Some(symbol) = self.get_branch_symbol(branch) {
       match symbol.guid {
         SymbolID::GenericHorizontalTab
@@ -372,8 +339,7 @@ impl BranchTableData
     }
   }
 
-  pub fn get_branch_symbol(&self, branch: &BranchData) -> Option<&Symbol>
-  {
+  pub fn get_branch_symbol(&self, branch: &BranchData) -> Option<&Symbol> {
     if let Some(sym) = self.symbols.get(&branch.value) {
       Some(sym)
     } else {
