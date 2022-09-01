@@ -208,7 +208,7 @@ fn process_transition_nodes<'a>(
   let mut output = BTreeMap::<usize, IRState>::new();
 
   let mut children_tables =
-    tpack.nodes_iter().map(|_| Vec::<&'a TransitionGraphNode>::new()).collect::<Vec<_>>();
+    tpack.nodes_iter().map(|_| BTreeSet::<usize>::new()).collect::<Vec<_>>();
 
   // Starting with the leaf nodes, construct the reverse
   // edges of our transition graph, converting the relationship
@@ -216,10 +216,10 @@ fn process_transition_nodes<'a>(
 
   for child in tpack.nodes_iter() {
     if child.has_parent(tpack) {
-      children_tables[child.parent].push(child);
+      children_tables[child.parent].insert(child.id);
 
       for proxy_parent in &child.proxy_parents {
-        children_tables[*proxy_parent].push(child);
+        children_tables[*proxy_parent].insert(child.id);
       }
     }
   }
@@ -235,11 +235,11 @@ fn process_transition_nodes<'a>(
     let children_lookup = children_tables.get(node_id).unwrap();
 
     // Ensure dependencies are met.
-    for child in children_lookup {
-      if !output.contains_key(&child.id) {
+    for child_id in children_lookup {
+      if !output.contains_key(child_id) {
         // Push dependency to be processed, which will cause this node
         // be pushed back into the queue after it is processed
-        nodes_pipeline.push_back(child.id);
+        nodes_pipeline.push_back(*child_id);
 
         continue 'outer;
       }
@@ -252,7 +252,7 @@ fn process_transition_nodes<'a>(
         if tpack.mode == TransitionMode::GoTo && node.id == 0 {
           vec![create_goto_start_state(
             g,
-            tpack.is_scanner,
+            tpack,
             &output,
             children_lookup,
             &tpack.root_prods,
@@ -308,18 +308,20 @@ fn create_passing_goto_state(entry_name: &String, is_scanner: bool) -> IRState {
 
 fn create_goto_start_state(
   g: &GrammarStore,
-  is_scanner: bool,
+  tpack: &TransitionPack,
   resolved_states: &BTreeMap<usize, IRState>,
-  children: &[&TransitionGraphNode],
+  children_ids: &BTreeSet<usize>,
   root_productions: &BTreeSet<ProductionId>,
-  entry_name: &String,
+  entry_state_name: &String,
 ) -> IRState {
+  let is_scanner = tpack.is_scanner;
   let mut strings = vec![];
   let mut comment = String::new();
-  let post_amble = create_post_amble(entry_name, g);
+  let post_amble = create_post_amble(entry_state_name, g);
   let mut contains_root_production = false;
 
-  for child in children {
+  for child_id in children_ids {
+    let child = tpack.get_node(*child_id);
     let state = resolved_states.get(&child.id).unwrap();
     let symbol = child.terminal_symbol;
 
@@ -382,8 +384,8 @@ fn create_intermediate_state(
   g: &GrammarStore,
   t_pack: &TransitionPack,
   resolved_states: &BTreeMap<usize, IRState>,
-  children_tables: &Vec<Vec<&TransitionGraphNode>>,
-  entry_name: &String,
+  children_tables: &Vec<BTreeSet<usize>>,
+  entry_state_name: &String,
   production_id: u32,
 ) -> Vec<IRState> {
   let mut strings = vec![];
@@ -394,8 +396,13 @@ fn create_intermediate_state(
   let mut is_token_assertion = false;
   let is_scanner = t_pack.is_scanner;
   let mode = t_pack.mode;
-  static empty: Vec<&TransitionGraphNode> = vec![];
-  let children = children_tables.get(node.id).unwrap_or(&empty);
+  let children = children_tables
+    .get(node.id)
+    .cloned()
+    .unwrap_or_default()
+    .iter()
+    .map(|c| t_pack.get_node(*c))
+    .collect::<Vec<_>>();
 
   let (post_amble, state_name, mut stack_depth, mut state_type) = {
     if node.id == 0 {
@@ -435,7 +442,8 @@ fn create_intermediate_state(
     //  origin = t_pack.get_node(origin.parent);
     //}
 
-    for child in children_tables.get(origin.id).unwrap() {
+    for child_id in children_tables.get(origin.id).unwrap() {
+      let child = t_pack.get_node(*child_id);
       for item in &child.items {
         println!("{}", item.debug_string(g));
         item.print_blame(g);
@@ -619,7 +627,8 @@ fn create_intermediate_state(
                   origin = t_pack.get_node(origin.parent);
                 }
 
-                for child in children_tables.get(origin.id).unwrap() {
+                for child_id in children_tables.get(origin.id).unwrap() {
+                  let child = t_pack.get_node(*child_id);
                   for item in &child.items {
                     item.print_blame(g);
                   }
