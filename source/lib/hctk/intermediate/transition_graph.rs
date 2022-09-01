@@ -692,26 +692,8 @@ fn process_peek_leaves(g: &GrammarStore, t_pack: &mut TPack, leaves: Vec<usize>)
         // Use the goal node as a proxy to generate child nodes that
         // are then linked to the current peek leaf nodes.
 
-        let parent_node_indices = peek_leaf_group
-          .into_iter()
-          .map(|n| {
-            let node_depth = t_pack.get_node(n).depth;
-            let node_parent = t_pack.get_node(n).parent;
-
-            if node_depth == 0 {
-              t_pack.drop_node(&n);
-
-              node_parent
-            } else {
-              n
-            }
-          })
-          .collect::<Vec<_>>();
-
-        let primary_parent = parent_node_indices[0];
-
-        let proxy_parents = parent_node_indices[1..].to_owned();
-
+        let primary_parent = peek_leaf_group[0];
+        let proxy_parents = peek_leaf_group[1..].to_owned();
         let have_proxy_parents = !proxy_parents.is_empty();
 
         for child_index in process_node(g, t_pack, goal_index, primary_parent, false) {
