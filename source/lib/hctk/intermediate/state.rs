@@ -718,7 +718,8 @@ fn create_intermediate_state(
     }
     .into_hashed()
   } else {
-    let (normal_symbol_set, skip_symbols_set) = get_symbols_from_items(item_set, g);
+    let (normal_symbol_set, skip_symbols_set, _) =
+      get_symbols_from_items(item_set.clone(), g, None);
 
     if is_token_assertion {
       for symbol_id in &skip_symbols_set {
@@ -749,28 +750,38 @@ fn create_intermediate_state(
 
 fn get_symbols_from_items(
   item_set: BTreeSet<Item>,
-  grammar: &GrammarStore,
-) -> (BTreeSet<SymbolID>, BTreeSet<SymbolID>) {
+  g: &GrammarStore,
+  seen: Option<BTreeSet<ProductionId>>,
+) -> (BTreeSet<SymbolID>, BTreeSet<SymbolID>, BTreeSet<ProductionId>) {
   let mut normal_symbol_set = BTreeSet::new();
   let mut peek_symbols_set = BTreeSet::new();
+  let mut seen = seen.unwrap_or_default();
 
   for item in item_set {
-    match item.get_symbol(grammar) {
+    match item.get_symbol(g) {
       SymbolID::Production(production_id, ..) => {
-        let production_items = get_production_start_items(&production_id, grammar)
-          .into_iter()
-          .filter(|i| i.is_term(grammar))
-          .collect::<BTreeSet<_>>();
+        if !seen.insert(production_id) {
+          continue;
+        }
 
-        let (norm, peek) = get_symbols_from_items(production_items, grammar);
+        let production_items =
+          get_production_start_items(&production_id, g).into_iter().collect::<BTreeSet<_>>();
+
+        let (mut norm, mut peek, new_seen) =
+          get_symbols_from_items(production_items, g, Some(seen));
+
+        seen = new_seen;
+
+        normal_symbol_set.append(&mut norm);
+        peek_symbols_set.append(&mut peek);
       }
       SymbolID::EndOfFile | SymbolID::Undefined => {}
       sym => {
-        normal_symbol_set.insert(item.get_symbol(grammar));
+        normal_symbol_set.insert(item.get_symbol(g));
       }
     }
 
-    if let Some(peek_symbols) = grammar.item_peek_symbols.get(&item.to_zero_state()) {
+    if let Some(peek_symbols) = g.item_peek_symbols.get(&item.to_zero_state()) {
       for peek_symbol in peek_symbols {
         peek_symbols_set.insert(*peek_symbol);
       }
@@ -780,7 +791,7 @@ fn get_symbols_from_items(
   let peek_symbols_set =
     peek_symbols_set.difference(&normal_symbol_set).cloned().collect::<BTreeSet<_>>();
 
-  (normal_symbol_set, peek_symbols_set)
+  (normal_symbol_set, peek_symbols_set, seen)
 }
 
 fn get_symbol_consume_type(symbol_id: &SymbolID, g: &GrammarStore) -> (u32, &'static str) {
