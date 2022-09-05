@@ -164,7 +164,7 @@ let mut tokens = Vec::new();
 loop {
   match ctx.next() {
     Some(ParseAction::Error { last_input, .. }) => {
-      let mut error_token = Token::from_kernel_token(&last_input);
+      let mut error_token = Token::from_parse_token(&last_input);
       error_token.set_source(ctx.1.get_source());
       return Err(ParseError::COMPILE_PROBLEM(
         CompileProblem {
@@ -175,7 +175,7 @@ loop {
       ));
     }
     Some(ParseAction::Shift { skipped_characters: skip, token }) => {
-      let mut tok = Token::from_kernel_token(&token);
+      let mut tok = Token::from_parse_token(&token);
       tok.set_source(ctx.1.get_source());
       nodes.push(HCO::TOKEN(tok.clone()));
       tokens.push(tok);

@@ -332,15 +332,7 @@ impl Item {
 
     if self.at_end() {
     } else {
-      let origin_string = match body.syms[self.off as usize].tok.blame(1, 1, "") {
-        Some(string) => string,
-        None => match body.origin_location.blame(1, 1, "") {
-          Some(string) => string,
-          None => "<Unknown Origin>".to_string(),
-        },
-      };
-
-      eprintln!("{}", origin_string);
+      eprintln!("{}", body.syms[self.off as usize].tok.blame(1, 1, ""));
     }
   }
 }

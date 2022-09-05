@@ -18,7 +18,6 @@ pub fn dispatch<T: ImmutCharacterReader + MutCharacterReader>(
   let mut i = (ctx.get_active_state() & STATE_ADDRESS_MASK);
 
   loop {
-    println!("{:x} {} {}", i, (r.byte() as u8).to_string(), r.cursor());
 
     let instr = INSTRUCTION::from(bc, i as usize);
 

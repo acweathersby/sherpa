@@ -501,7 +501,7 @@ pub fn compile_expression_type(
       }
     }
     ASTNode::AST_IndexReference(box AST_IndexReference { value, .. }) => {
-      match get_index_body_ref(body, value) {
+      match get_indexed_body_ref(body, value) {
         Some((_, sym_ref)) => match sym_ref.sym_id {
           SymbolID::Production(id, ..) => {
             vec![AScriptTypeVal::UnresolvedProduction(id)]
@@ -800,7 +800,7 @@ pub fn get_named_body_ref<'a>(body: &'a Body, val: &str) -> Option<(usize, &'a B
   }
 }
 
-pub fn get_index_body_ref<'a>(body: &'a Body, i: &f64) -> Option<(usize, &'a BodySymbolRef)> {
+pub fn get_indexed_body_ref<'a>(body: &'a Body, i: &f64) -> Option<(usize, &'a BodySymbolRef)> {
   body.syms.iter().enumerate().filter(|(_, s)| s.original_index == (*i - 1.0) as u32).last()
 }
 

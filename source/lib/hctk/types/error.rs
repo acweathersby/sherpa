@@ -18,11 +18,7 @@ pub struct CompileProblem {
 
 impl Display for CompileProblem {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    f.write_fmt(format_args!(
-      "{}\n{}",
-      self.message,
-      self.loc.blame(1, 1, &self.inline_message).unwrap_or_default(),
-    ))
+    f.write_fmt(format_args!("{}\n{}", self.message, self.loc.blame(1, 1, &self.inline_message),))
   }
 }
 

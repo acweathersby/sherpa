@@ -873,7 +873,7 @@ fn merge_grammars(
                         get_production_plain_name(&prod_id, root),
                         grammar_id,
                         import_grammar.source_path,
-                        tok.blame(1, 1, "").unwrap()
+                        tok.blame(1, 1, "")
                       ),
                       inline_message: String::new(),
                       loc: Token::empty(),

@@ -12,17 +12,18 @@ use super::InputBlock;
 /// Tokens and SymbolReaders.
 pub type SharedSymbolBuffer = Arc<Vec<u8>>;
 
-/// A reader maintains a read head which can be moved bidirectionally
+/// A reader maintains a read cursor which can be moved bidirectionally
 /// over an array of bytes and yields information on the following:
-/// - The byte offset and Unicode codepoint offset of the read head.
+/// 
+/// - The byte offset and Unicode codepoint offset of the cursor.
 /// - The 8bit value of the current byte
-/// - The Unicode at the read head, if there is a valid symbol there.
+/// - The Unicode codepoint value at the cursor, if there is a valid symbol there.
 /// - The Hydrocarbon character class of the current symbol, if
 ///   available.
 /// This loosely correlates to certain Unicode character classes.
 /// - The UTF8 codepoint length, if it exists.
 /// - The number of newline characters encountered up until the
-///   current location of the read head.
+///   current location of the cursor.
 /// - Both the codepoint offset and byte offset of the last line
 /// encountered in the input.
 pub trait ImmutCharacterReader {

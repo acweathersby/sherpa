@@ -312,12 +312,12 @@ fn create_goto_start_state(
   resolved_states: &BTreeMap<usize, IRState>,
   children_ids: &BTreeSet<usize>,
   root_productions: &BTreeSet<ProductionId>,
-  entry_state_name: &String,
+  entry_name: &String,
 ) -> IRState {
   let is_scanner = tpack.is_scanner;
   let mut strings = vec![];
   let mut comment = String::new();
-  let post_amble = create_post_amble(entry_state_name, g);
+  let post_amble = create_post_amble(entry_name, g);
   let mut contains_root_production = false;
 
   for child_id in children_ids {
@@ -385,7 +385,7 @@ fn create_intermediate_state(
   t_pack: &TransitionPack,
   resolved_states: &BTreeMap<usize, IRState>,
   children_tables: &Vec<BTreeSet<usize>>,
-  entry_state_name: &String,
+  entry_name: &String,
   production_id: u32,
 ) -> Vec<IRState> {
   let mut strings = vec![];

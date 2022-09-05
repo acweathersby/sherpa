@@ -62,7 +62,7 @@ pub fn complete<'b, I: ParseIterator<T>, T: 'b + ByteReader, Node: Debug>(
       stack_pointer = stack_pointer - len + 1;
     }
     ParseAction::SHIFT { token } => {
-      let mut tok = Token::from_kernel_token(&token);
+      let mut tok = Token::from_parse_token(&token);
 
       tok.set_source(source.clone());
 
@@ -86,7 +86,7 @@ pub fn complete<'b, I: ParseIterator<T>, T: 'b + ByteReader, Node: Debug>(
   match state {
     ParseAction::ACCEPT {} => Ok(nodes.remove(0)),
     ParseAction::ERROR { production, .. } => {
-      let mut tok = Token::from_kernel_token(&last_token);
+      let mut tok = Token::from_parse_token(&last_token);
       tok.set_source(source.clone());
       let error = TokenError::new(production, tok, Some(iterator.reader().get_source()));
       Err(ParseError::TOKEN_ERROR(error))

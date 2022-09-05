@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 use std::io::Result;
 use std::vec;
 
-use hctk::ascript::compile::get_index_body_ref;
+use hctk::ascript::compile::get_indexed_body_ref;
 use hctk::ascript::compile::get_named_body_ref;
 use hctk::ascript::compile::get_production_types;
 use hctk::ascript::compile::get_specified_vector_from_generic_vec_values;
@@ -115,7 +115,7 @@ fn build_functions<W: Write>(
 
                 let indices = _ref.get_indices();
 
-                for (i, _) in body.syms.iter().enumerate().rev() {
+                for i in (0..body.syms.len()).rev() {
                   if indices.contains(&i) {
                     temp_writer.wrtln(&format!("let i{} = args.pop().unwrap();", i))?;
                   } else {
@@ -151,7 +151,7 @@ fn build_functions<W: Write>(
                 }
               }
 
-              for i in 0..body.syms.len() {
+              for i in (0..body.syms.len()).rev() {
                 if refs.contains(&i) {
                   temp_writer.wrtln(&format!("let i{} = args.pop().unwrap();", i))?;
                 } else {
@@ -524,7 +524,7 @@ fn render_expression(
       }
     }
     ASTNode::AST_IndexReference(box AST_IndexReference { value, .. }) => {
-      match get_index_body_ref(body, value) {
+      match get_indexed_body_ref(body, value) {
         Some((index, sym_id)) => render_body_symbol(sym_id, ast, index),
         None => None,
       }
