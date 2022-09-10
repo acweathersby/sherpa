@@ -18,10 +18,8 @@
                                                         f:r { { t_AST_TypeId,  value:str($1), tok } }
     | tk:class_identifier
                                                         f:r { { t_AST_ClassId, value:str($1), tok } }
-    | t:tok 
-                                                        f:r { { t_AST_Token } }
-    | t:token 
-                                                        f:r { { t_AST_Token } }
+    | token
+
 <> type_idenfifier > 
     \t_ identifier
 
@@ -43,6 +41,8 @@
     | literal
     | \[ expression(*\, ) \]                          
                                                         f:r { { t_AST_Vector, initializer: $2, tok  } }
+
+    | token
 
 <> string_convert > t:str convert_initializer?
                                                         f:r { { t_AST_STRING, value: $2, tok  } }
@@ -70,7 +70,7 @@
                                                         f:r { { t_AST_F32, initializer: $2, tok  } }
      | \f64 convert_initializer?
                                                         f:r { { t_AST_F64, initializer: $2, tok  } }
-<> convert_initializer > \( member \)                   
+<> convert_initializer > \( ( member | token ) \)                   
                                                         f:r { $2 }
 <> literal > t:true 
                                                         f:r { { t_AST_BOOL, value: true } }
@@ -109,3 +109,10 @@
 
 <> integer > 
         g:num(+)
+
+
+
+<> token > t:tok 
+                                                        f:r { { t_AST_Token } }
+    | t:token 
+                                                        f:r { { t_AST_Token } }
