@@ -193,9 +193,9 @@ impl Default for TransitionMode {
 
 #[derive(Debug, Default)]
 
-pub struct TransitionPack<'a> {
+pub struct TransitionPack {
   /// A set of closures that can be referenced in peek states.
-  pub scoped_closures: Vec<&'a [Item]>,
+  pub scoped_closures: Vec<Vec<Item>>,
   /// For a givin item, points to an originating
   /// item that can used to look up it's own closure
   closure_links: HashMap<Item, Item>,
@@ -214,9 +214,10 @@ pub struct TransitionPack<'a> {
   pub root_prods: BTreeSet<ProductionId>,
   pub peek_ids: BTreeSet<u64>,
   pub starts: BTreeSet<Item>,
+  pub out_of_scope_closure: Option<Vec<Item>>,
 }
 
-impl<'a> TransitionPack<'a> {
+impl TransitionPack {
   pub fn queue_node(&mut self, node_index: usize) {
     if node_index >= self.nodes.len() {
       panic!("Cannot queue a TransitionNode that has not been added to the TransitionPack")

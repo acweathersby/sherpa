@@ -83,9 +83,9 @@ impl SymbolID {
       Self::DefinedNumeric(_) | Self::DefinedIdentifier(_) | Self::DefinedSymbol(_) => {
         format!("\\{}", g.symbol_strings.get(self).unwrap())
       }
-      Self::Production(prod_id, _) => g.productions.get(prod_id).unwrap().guid_name.to_string(),
+      Self::Production(prod_id, _) => g.productions.get(prod_id).unwrap().original_name.to_string(),
       Self::TokenProduction(prod_id, _) => {
-        format!("tk:{}", g.productions.get(prod_id).unwrap().guid_name)
+        format!("tk:{}", g.productions.get(prod_id).unwrap().original_name)
       }
       Self::Default => "default".to_string(),
       Self::Undefined => "[??]".to_string(),

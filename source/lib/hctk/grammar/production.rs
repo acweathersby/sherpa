@@ -55,10 +55,7 @@ const GUID_NAME_DELIMITER: &str = "_GUID_";
 
 /// Returns the [Production] that's mapped to [`production_id`](ProductionId)
 /// within the [`grammar`](GrammarStore), or panics.
-pub fn get_production<'a>(
-  production_id: &ProductionId,
-  g: &'a GrammarStore,
-) -> &'a Production {
+pub fn get_production<'a>(production_id: &ProductionId, g: &'a GrammarStore) -> &'a Production {
   g.productions.get(production_id).unwrap()
 }
 
@@ -82,10 +79,7 @@ pub fn create_production_guid_name(grammar_uuid_name: &String, production_name: 
 }
 
 /// Retrieve the non-import and unmangled name of a [Production](Production).
-pub fn get_production_plain_name<'a>(
-  prod_id: &ProductionId,
-  g: &'a GrammarStore,
-) -> &'a str {
+pub fn get_production_plain_name<'a>(prod_id: &ProductionId, g: &'a GrammarStore) -> &'a str {
   if let Some(prod) = g.productions.get(prod_id) {
     &prod.original_name
   } else {
@@ -136,8 +130,7 @@ pub struct ExportedProduction<'a> {
 /// Returns a list of [ExportedProductions](ExportedProduction) extracted from
 /// the [grammar](GrammarStore).
 pub fn get_exported_productions<'a>(g: &'a GrammarStore) -> Vec<ExportedProduction<'a>> {
-  g
-    .export_names
+  g.export_names
     .iter()
     .map(|(id, name)| {
       let production = g.productions.get(id).unwrap();

@@ -20,6 +20,7 @@ use super::parse;
 use super::parse::compile_grammar_ast;
 
 use std::collections::btree_map;
+use std::collections::btree_map::VacantEntry;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
@@ -306,24 +307,21 @@ fn finalize_items(g: &mut GrammarStore, thread_count: usize, errors: &mut [Parse
     g.closures.insert(item.to_zero_state(), closure);
   }
 
-  fn insert(
-    goto_items: &mut BTreeMap<ProductionId, BTreeSet<Item>>,
-    production_id: &ProductionId,
-    item: Item,
-  ) {
-    if !goto_items.contains_key(production_id) {
-      goto_items.insert(*production_id, BTreeSet::<Item>::new());
-    }
-
-    goto_items.get_mut(production_id).unwrap().insert(item);
-  }
-
   for closure in g.closures.values().cloned() {
     for item in closure {
       if item.is_nonterm(g) {
-        let production_id = &item.get_prod_id(g);
-
-        insert(&mut g.lr_items, production_id, item);
+        let production_id = &item.get_production_id_at_sym(g);
+        match g.lr_items.entry(*production_id) {
+          btree_map::Entry::Vacant(entry) => {
+            entry.insert(vec![item]);
+          }
+          btree_map::Entry::Occupied(mut entry) => {
+            let mut vec = entry.get_mut();
+            if !vec.contains(&item) {
+              vec.push(item);
+            }
+          }
+        }
       }
     }
   }

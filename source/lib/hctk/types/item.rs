@@ -12,7 +12,7 @@ pub struct ItemState(u32);
 impl ItemState {
   const OUT_OF_SCOPE_FLAG: u32 = 0x7000;
   const OUT_OF_SCOPE_MASK: u32 = (!Self::OUT_OF_SCOPE_FLAG) & 0xFFFF;
-  pub const OUT_OF_SCOPE_STATE: ItemState = ItemState::new(0, Self::OUT_OF_SCOPE_FLAG);
+  pub const OUT_OF_SCOPE_STATE: ItemState = ItemState::new(Self::OUT_OF_SCOPE_FLAG, 0);
 
   pub const fn default() -> Self {
     ItemState(0)
@@ -47,7 +47,7 @@ impl ItemState {
   }
 
   pub fn is_out_of_scope(&self) -> bool {
-    self.get_group() & Self::OUT_OF_SCOPE_FLAG > 0
+    (self.get_group() & Self::OUT_OF_SCOPE_FLAG) > 0
   }
 }
 
@@ -89,11 +89,11 @@ impl Item {
 
       let mut string = String::new();
 
-      string += &format!("\n  {:?} ", self.origin);
+      // string += &format!("\n  {:?} ", self.origin);
 
-      string += &format!("\n  {} ", self.state);
+      string += &format!("{} ", self.state);
 
-      string += &g.productions.get(&body.prod).unwrap().guid_name;
+      string += &g.productions.get(&body.prod).unwrap().original_name;
 
       string += " =>";
 

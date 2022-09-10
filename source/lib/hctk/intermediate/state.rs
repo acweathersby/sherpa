@@ -426,8 +426,9 @@ fn create_intermediate_state(
       (String::default(), String::default(), 0, Undefined)
     }
   };
-
-  if node.is(TransitionStateType::I_FORK) {
+  if node.is(TransitionStateType::I_FAIL) {
+    strings.push("fail".to_string());
+  } else if node.is(TransitionStateType::I_FORK) {
     if state_type == Undefined {
       state_type = ForkState;
     }
@@ -514,18 +515,11 @@ fn create_intermediate_state(
         for item in &child.items {
           item_set.insert(*item);
         }
-
-        if mode == TransitionMode::GoTo {
-          comment += &format!("   node id: {}", node.id);
-          comment += "\n GOTO ";
-        }
-
         comment += &format!(
           "\n{}",
           &child.items.iter().map(|i| i.debug_string(g)).collect::<Vec<_>>().join("\n")
         );
       }
-
       if group[0].prod_sym.is_some() || matches!(group[0].terminal_symbol, SymbolID::Production(..))
       {
         for child in &group {
@@ -638,8 +632,13 @@ fn create_intermediate_state(
                 panic!("Multiple DEFAULT branches found!")
               }
             } else {
+              let is_fail = group[0].is(TransitionStateType::I_FAIL);
               for child in group {
-                let end_string = create_end_string(child, g, is_scanner);
+                let end_string = if is_fail {
+                  "fail".to_string()
+                } else {
+                  create_end_string(child, g, is_scanner)
+                };
                 strings.push(match single_child {
                   true => format!("{}{}", end_string, post_amble),
                   false => {
@@ -657,10 +656,19 @@ fn create_intermediate_state(
                 (if child.is(TransitionStateType::I_CONSUME) { "consume then " } else { "" })
                   .to_string();
 
-              strings.push(match single_child {
-                true => format!("{}goto state [ {} ]{}", consume, state_name, post_amble),
-                false => {
-                  format!("default ( {}goto state [ {} ]{} )", consume, state_name, post_amble)
+              let is_fail = child.is(TransitionStateType::I_FAIL);
+
+              strings.push(if is_fail {
+                match single_child {
+                  true => format!("fail"),
+                  false => String::new(),
+                }
+              } else {
+                match single_child {
+                  true => format!("{}goto state [ {} ]{}", consume, state_name, post_amble),
+                  false => {
+                    format!("default ( {}goto state [ {} ]{} )", consume, state_name, post_amble)
+                  }
                 }
               });
             }
@@ -694,17 +702,25 @@ fn create_intermediate_state(
               let consume =
                 (if child.is(TransitionStateType::I_CONSUME) { "consume then " } else { "" })
                   .to_string();
+              let is_fail = child.is(TransitionStateType::I_FAIL);
 
-              strings.push(format!(
-                "{} {} [ {} /* {} */ ] ( {}goto state [ {} ]{} )",
-                assertion_type,
-                assert_class,
-                symbol_id,
-                symbol_string,
-                consume,
-                state_name,
-                post_amble
-              ));
+              if is_fail {
+                strings.push(format!(
+                  "{} {} [ {} /* {} */ ] ( fail )",
+                  assertion_type, assert_class, symbol_id, symbol_string,
+                ));
+              } else {
+                strings.push(format!(
+                  "{} {} [ {} /* {} */ ] ( {}goto state [ {} ]{} )",
+                  assertion_type,
+                  assert_class,
+                  symbol_id,
+                  symbol_string,
+                  consume,
+                  state_name,
+                  post_amble
+                ));
+              }
             }
           }
         }

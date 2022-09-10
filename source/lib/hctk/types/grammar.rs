@@ -152,7 +152,7 @@ pub struct GrammarStore {
   pub export_names: Vec<(ProductionId, String)>,
 
   /// All items in the grammar that are `B => . A b` for some production `A`.
-  pub lr_items: BTreeMap<ProductionId, BTreeSet<Item>>,
+  pub lr_items: BTreeMap<ProductionId, Vec<Item>>,
 
   /// All reduce functions defined in the grammar.
   pub reduce_functions: ReduceFunctionTable,
