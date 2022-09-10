@@ -18,7 +18,6 @@ pub fn dispatch<T: ImmutCharacterReader + MutCharacterReader>(
   let mut i = (ctx.get_active_state() & STATE_ADDRESS_MASK);
 
   loop {
-
     let instr = INSTRUCTION::from(bc, i as usize);
 
     ctx.set_active_state_to(i);
@@ -82,7 +81,6 @@ fn consume<T: ImmutCharacterReader + MutCharacterReader + MutCharacterReader>(
     r.next(shift.byte_length as i32);
   } else {
     ctx.anchor = next_token;
-    println!("{:?}", shift);
   }
 
   skip.cp_length = shift.cp_offset - skip.cp_offset;
@@ -187,10 +185,7 @@ fn noop(i: u32) -> u32 {
 }
 
 #[inline]
-fn skip_token<T: ImmutCharacterReader + MutCharacterReader>(
-  ctx: &mut ParseContext<T>,
-  r: &mut T,
-) {
+fn skip_token<T: ImmutCharacterReader + MutCharacterReader>(ctx: &mut ParseContext<T>, r: &mut T) {
   if ctx.in_peek_mode() {
     ctx.peek = ctx.peek.next();
   } else {
@@ -224,14 +219,9 @@ pub fn hash_jump<T: ImmutCharacterReader + MutCharacterReader>(
   loop {
     let input_value = match input_type {
       INPUT_TYPE::T01_PRODUCTION => ctx.get_production(),
-      _ => get_token_value(
-        lexer_type,
-        input_type,
-        r,
-        scan_index.get_address() as u32,
-        ctx,
-        bc,
-      ) as u32,
+      _ => {
+        get_token_value(lexer_type, input_type, r, scan_index.get_address() as u32, ctx, bc) as u32
+      }
     };
     let mut hash_index = (input_value & hash_mask) as usize;
 
@@ -279,14 +269,9 @@ pub fn vector_jump<T: ImmutCharacterReader + MutCharacterReader>(
   loop {
     let input_value = match input_type {
       INPUT_TYPE::T01_PRODUCTION => ctx.get_production(),
-      _ => get_token_value(
-        lexer_type,
-        input_type,
-        r,
-        scan_index.get_address() as u32,
-        ctx,
-        bc,
-      ) as u32,
+      _ => {
+        get_token_value(lexer_type, input_type, r, scan_index.get_address() as u32, ctx, bc) as u32
+      }
     };
 
     let value_index = (input_value as i32 - value_offset as i32) as u32;
@@ -479,7 +464,7 @@ fn token_scan<T: ImmutCharacterReader + MutCharacterReader>(
 
     loop {
       if scan_ctx.get_active_state() < 1 {
-        if scan_ctx.in_fail_mode() || scan_ctx.anchor.token_type == 0 {
+        if scan_ctx.anchor.token_type == 0 {
           scan_for_improvised_token(&mut scan_ctx, r);
         }
 
