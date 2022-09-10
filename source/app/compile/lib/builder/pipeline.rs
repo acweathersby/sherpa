@@ -317,11 +317,15 @@ impl<'a> PipelineContext<'a> {
   }
 
   pub fn get_parser_name(&self) -> &String {
-    &self.parser_name
+    &self.get_grammar_name()
   }
 
   pub fn get_grammar_name(&self) -> &String {
-    &self.grammar_name
+    &self.get_grammar().friendly_name
+  }
+
+  pub fn get_grammar_path(&self) -> &PathBuf {
+    &self.get_grammar().source_path
   }
 
   pub fn get_bytecode(&self) -> &BytecodeOutput {

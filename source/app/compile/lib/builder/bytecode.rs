@@ -1,10 +1,15 @@
+use hctk::ascript::compile::get_resolved_type;
 use hctk::bytecode::compile_bytecode;
 
 use hctk::bytecode::BytecodeOutput;
 
+use hctk::debug::grammar;
+use hctk::grammar::data::ast::ASTNode;
+use hctk::grammar::data::ast::AST_NamedReference;
 use hctk::grammar::get_exported_productions;
 use hctk::grammar::ExportedProduction;
 use hctk::types::*;
+use std::any::Any;
 use std::collections::BTreeMap;
 use std::io::BufWriter;
 
@@ -13,6 +18,9 @@ use std::io::Write;
 use crate::CompileError;
 use crate::SourceType;
 
+use crate::ast::rust::ascript_type_to_string;
+use crate::ast::rust::create_type_initializer_value;
+use crate::ast::rust::render_expression;
 use crate::builder::common;
 use crate::builder::disclaimer::DISCLAIMER;
 use crate::writer::code_writer::CodeWriter;
@@ -35,7 +43,7 @@ pub fn build_byte_code_parse(
         {
           let mut writer = CodeWriter::new(BufWriter::new(parser_data_file));
 
-          writer.write(&DISCLAIMER(&parser_name, "Parser Data", "//!"));
+          writer.write(&DISCLAIMER("Parser Data", "//!", task_ctx));
 
           if include_ascript_mixins {
             // writer.wrtln(&format!("mod super::{}_ast;", parser_name));
@@ -144,11 +152,42 @@ impl<'a, T: ByteCharacterReader + ImmutCharacterReader + MutCharacterReader> Con
     for (_, ExportedProduction { export_name, production, .. }) in
       get_exported_productions(g).iter().enumerate()
     {
+      let mut ref_index = 0;
+      let ref_ = render_expression(
+        &ASTNode::AST_NamedReference(Box::new(AST_NamedReference {
+          tok:   Token::default(),
+          value: "first".to_string(),
+        })),
+        &Body {
+          syms: vec![BodySymbolRef {
+            consumable: false,
+            annotation: String::default(),
+            exclusive: false,
+            original_index: 0,
+            scanner_index: 1,
+            scanner_length: 1,
+            sym_id: SymbolID::Production(production.id, GrammarId(0)),
+            tok: Token::new(),
+          }],
+          len: 1,
+          prod: production.id,
+          id: BodyId(0),
+          bc_id: 0,
+          reduce_fn_ids: vec![],
+          origin_location: Token::default(),
+        },
+        &ascript,
+        g,
+        &mut ref_index,
+      );
+
+      let ast_type = ref_.as_ref().unwrap().get_type();
       writer
         .newline()?
         .wrtln(&format!(
           "pub fn parse_{}(reader: &'a mut T) -> Result<{}, ParseError>{{ ",
-          export_name, "HCO"
+          export_name,
+          ascript_type_to_string(&ast_type, ascript)
         ))?
         .indent()
         .wrtln(&format!(
@@ -184,13 +223,13 @@ loop {
       let len = symbol_count as usize;
       let pos_a = &tokens[tokens.len() - len as usize];
       let pos_b = &tokens[tokens.len() - 1];
-      let mut tok = Token::from_range(pos_a, pos_b);
+      let tok = Token::from_range(pos_a, pos_b);
       let root = tokens.len() - len;
       tokens[root] = tok.clone();
 
       unsafe {
         tokens.set_len(root + 1);
-     }
+      }
 
       REDUCE_FUNCTIONS[body_id as usize](&mut nodes, tok);
     }
@@ -201,10 +240,21 @@ loop {
       break;
     }
   }
-}
-Ok(nodes.into_iter().next().unwrap())
-        ",
+}",
         )?
+        .wrtln(&{
+          let (string, ref_) = create_type_initializer_value(ref_, &ast_type, false, ascript);
+
+          if let Some(exp) = ref_ {
+            format!(
+              "let i0  = nodes.into_iter().next().unwrap(); {}\nOk({})",
+              exp.to_init_string(),
+              string
+            )
+          } else {
+            "Ok(nodes.into_iter().next().unwrap())".to_string()
+          }
+        })?
         .dedent()
         .wrtln("}")?;
     }

@@ -148,12 +148,12 @@ pub fn build_llvm_parser(
 /// for the llvm parser.
 pub fn build_llvm_parser_interface<'a>() -> PipelineTask {
   PipelineTask {
-    fun: Box::new(|p| {
-      let source_path = p.get_source_output_dir();
-      let parser_name = p.get_parser_name();
-      let grammar_name = p.get_grammar_name();
-      let grammar = p.get_grammar();
-      let bytecode_output = p.get_bytecode();
+    fun: Box::new(|task_ctx| {
+      let source_path = task_ctx.get_source_output_dir();
+      let parser_name = task_ctx.get_parser_name();
+      let grammar_name = task_ctx.get_grammar_name();
+      let grammar = task_ctx.get_grammar();
+      let bytecode_output = task_ctx.get_bytecode();
 
       let data_path = source_path.join(format!("./{}.rs", parser_name));
 
@@ -161,7 +161,7 @@ pub fn build_llvm_parser_interface<'a>() -> PipelineTask {
         Ok(parser_data_file) => {
           let mut writer = CodeWriter::new(BufWriter::new(parser_data_file));
 
-          match writer.write(&DISCLAIMER(&grammar_name, "Parser Data", "//!")) {
+          match writer.write(&DISCLAIMER("Parser Data", "//!", task_ctx)) {
             Ok(_) => {}
             Err(err) => return Err(CompileError::from_io_error(&err)),
           }

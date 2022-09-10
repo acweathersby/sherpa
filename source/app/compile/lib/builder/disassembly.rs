@@ -22,7 +22,7 @@ pub fn build_bytecode_disassembly() -> PipelineTask {
 
         let mut writer = CodeWriter::new(BufWriter::new(parser_data_file));
 
-        writer.write(&DISCLAIMER(&parser_name, "Parser Data", "//!"));
+        writer.write(&DISCLAIMER("Parser Data", "//!", task_ctx));
 
         writer.write(&generate_disassembly(
           bytecode_output,

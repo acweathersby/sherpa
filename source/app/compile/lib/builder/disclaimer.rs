@@ -1,11 +1,16 @@
-pub static DISCLAIMER: fn(source_file: &str, file_type: &str, comment_delimiter: &str) -> String =
-  |source_file, file_type, comment_delimiter| {
-    format!(
-      "
+use super::pipeline::PipelineContext;
+
+pub static DISCLAIMER: fn(
+  file_type: &str,
+  comment_delimiter: &str,
+  ctx: &PipelineContext,
+) -> String = |file_type, comment_delimiter, ctx| {
+  format!(
+    "
 {3} ### `{1}` {2}
 {3}
 {3} - **GENERATOR** :   hc-compile {0}
-{3} - **SOURCE FILE**:  {1}
+{3} - **SOURCE FILE**:  {1} {4:?}
 {3}
 {3} #### WARNING:
 {3}
@@ -17,9 +22,10 @@ pub static DISCLAIMER: fn(source_file: &str, file_type: &str, comment_delimiter:
 {3} (C) 2022 Anthony Weathersby and the Hydrocarbon Toolkit Authors.
 
 ",
-      env!("CARGO_PKG_VERSION"),
-      source_file,
-      file_type,
-      comment_delimiter,
-    )
-  };
+    env!("CARGO_PKG_VERSION"),
+    ctx.get_grammar_name(),
+    file_type,
+    comment_delimiter,
+    ctx.get_grammar_path(),
+  )
+};
