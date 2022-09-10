@@ -115,7 +115,7 @@ impl Token {
     }
   }
 
-  pub fn from_kernel_token(tok: &ParseToken) -> Token {
+  pub fn from_parse_token(tok: &ParseToken) -> Token {
     Token {
       len:      tok.cp_length,
       off:      tok.cp_offset,
@@ -222,19 +222,18 @@ impl Token {
   /// ### Arguments:
   /// - `max_pre` - The maximum number of lines to render before the
   ///   token line.
-  /// - `max_pre` - The maximum number of lines to render after the
+  /// - `max_post` - The maximum number of lines to render after the
   ///   token line.
   ///
   /// ### Returns:
   /// - `Option<String>` - A `String` of the blame diagram or `None`
   ///   if source is
   /// not defined.
-  pub fn blame(&self, max_pre: usize, max_post: usize, inline_comment: &str) -> Option<String> {
+  pub fn blame(&self, max_pre: usize, max_post: usize, inline_comment: &str) -> String {
     fn increment_end(source: &[u8], mut end: usize) -> usize {
-      while (end as usize) < source.len() && source[end as usize] != 10 {
+      while (end as usize) < source.len() && source[end as usize] as char != '\n' {
         end += 1;
       }
-
       end
     }
 
@@ -261,45 +260,36 @@ impl Token {
     }
 
     if let Some(source) = self.input.clone() {
-      let mut string = String::from("");
-
-      let root = self.off as usize;
-
-      let len = self.len as usize;
-
-      let range = self.get_range();
+      let leading_newline = source[0] as char == '\n';
 
       let mut beg = (self.line_off) as usize;
-
-      let mut end = (self.line_off + 1) as usize;
-
+      let mut end = increment_end(&source, beg + 1);
+      let mut line_num: usize = (self.line_num + 1) as usize;
+      let nl_char_adjust = (self.line_num > 0) as usize;
       let mut i = 0;
+      let mut string = String::from("");
+      let root = self.off as usize;
+      let len = self.len as usize;
+      let range = self.get_range();
 
-      let mut lines: usize = (self.line_num + 1) as usize;
-
-      end = increment_end(&source, end);
-
-      let slice = &source[(beg - (self.line_off > 0) as usize)..end];
+      let slice = &source[(beg + nl_char_adjust)..end];
 
       if let Ok(utf_string) = String::from_utf8(Vec::from(slice)) {
-        {
-          let lines = format!("{}", lines);
+        let lines_str = format!("{}", line_num);
 
-          string += &format!(
-            "   {}: {}\n{}\n",
-            &lines,
-            utf_string,
-            String::from(" ").repeat(lines.len() + 3 + (self.line_off == 0) as usize + root - beg)
-              + " \u{001b}[31m"
-              + &String::from("^").repeat(len)
-              + " "
-              + inline_comment
-              + "\u{001b}[0m",
-          );
-        }
+        string += &format!(
+          "   {}: {}\n{}\n",
+          &lines_str,
+          utf_string,
+          String::from(" ").repeat(lines_str.len() + 3 + (1 - nl_char_adjust) + root - beg)
+            + " \u{001b}[31m"
+            + &String::from("^").repeat(len)
+            + " "
+            + inline_comment
+            + "\u{001b}[0m",
+        );
 
         let mut beg_root = beg;
-
         let mut end_root = end;
 
         if beg_root > 0 {
@@ -314,7 +304,7 @@ impl Token {
 
             beg_root = decrement_beg(&source, beg_root - 2);
 
-            string = create_line(&source, beg_root, end - 1, lines - a) + &string;
+            string = create_line(&source, beg_root, end - 1, line_num - a) + &string;
           }
         }
 
@@ -327,13 +317,13 @@ impl Token {
 
           end_root = increment_end(&source, end_root + 1);
 
-          string += &create_line(&source, beg, end_root, lines + a);
+          string += &create_line(&source, beg, end_root, line_num + a);
         }
       }
 
-      Some(string)
+      string
     } else {
-      None
+      "[Token Source Not Valid]".to_string()
     }
   }
 
@@ -446,4 +436,18 @@ impl Default for Token {
   fn default() -> Self {
     Self::new()
   }
+}
+
+#[test]
+pub fn blame_string_places_cursor_in_correct_position() {
+  let mut tok = Token {
+    input:    Some(Arc::new("\n test".to_string().as_bytes().to_vec())),
+    len:      4,
+    off:      2,
+    range:    None,
+    line_num: 1,
+    line_off: 0,
+  };
+
+  println!("{}", tok.blame(1, 1, "test"))
 }
