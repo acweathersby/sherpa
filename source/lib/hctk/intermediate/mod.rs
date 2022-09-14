@@ -222,4 +222,149 @@ mod state_constructor_tests {
 
     assert_eq!(result.len(), 6);
   }
+
+  #[test]
+  pub fn generate_production_with_recursiond() {
+    let grammar = compile_test_grammar(
+      "
+        @EXPORT markdown as md
+
+        <> markdown > lines
+        
+            f:ast { {t_Markdown, lines:$1 } }
+        
+        <> lines > g:nl? line
+        
+            f:ast { [$2] }
+            
+            | lines g:nl line
+            
+            f:ast { [$1, $3] }
+        
+            | lines ( g:nl f:ast{ { t_EmptyLine, c_Line } } )
+        
+            f:ast {  [$1, $2] }
+        
+        <> line >
+        
+            header_token content
+        
+            f:ast { { t_Header, c_Line, length:f64($1), content:$2 } }
+        
+            | 
+            
+            tk:spaces? tk:ol_token content
+        
+            f:ast { { t_OL, c_Line, spaces:str($1), content:$3 } }
+        
+            |
+        
+            tk:spaces? tk:ul_token content
+        
+            f:ast { { t_UL, c_Line, spaces:str($1), content:$3 } }
+        
+            |
+        
+            tk:spaces? tk:quote_token content
+        
+            f:ast { { t_Quote, c_Line, spaces:str($1), content:$3 } }
+        
+            | 
+        
+            tk:spaces? content
+        
+            f:ast { { t_Paragraph, c_Line, spaces:str($1), content:$2 } }
+        
+            |
+             
+            tk:code_block_delimiter code_line_text? code_line(*) cb_sentinel
+        
+            f:ast { { t_CodeBlock, c_Line, syntax:str($2), data:$3 } }
+        
+        <> ol_token > g:num \\. 
+        
+        <> spaces > g:sp(+\\\" )
+        
+        <> header_token > \\% (+)
+        
+        <> ul_token > \\- 
+            | \\+ 
+        
+        <> quote_token > \\>           
+        
+        <> code_line >
+        
+            g:nl code_line_text?
+        
+            f:ast { { t_Text, c_Content, value: str($2) } }
+        
+        <> code_block_delimiter > \\```
+        
+        <> code_block_delimiter_with_nl > g:nl \\```
+        
+        <> cb_sentinel > tk:code_block_delimiter_with_nl
+        
+        <[ recover cb_sentinel_1 ] 
+        
+            consume nothing then set prod to cb_sentinel
+        >
+        
+        <> code_line_text > 
+            (   g:num 
+            |   g:sp
+            |   g:id 
+            |   g:sym
+            )(+\\\" )
+        
+        <> code_block_sentinel >
+        
+            g:nl \\``` 
+        
+        <> content > ( text | format_symbol )(+)
+        
+        <> text > text_symbol(+\\\" )
+            f:ast { { t_Text, c_Content, value: str($1) } }
+        
+        <> text_symbol > 
+                g:sym
+            |   g:sp
+            |   tk:word
+            |   tk:num
+        
+        <> word > g:id 
+            | word g:id
+        
+        <> num > g:num
+            | num g:num
+        
+        <> format_symbol > 
+            \\` 
+            f:ast { { t_InlineCode, c_Content } }
+            | \\* 
+            f:ast { { t_MarkerA, c_Content } }
+            | \\_ 
+            f:ast { { t_MarkerB, c_Content } }
+            | \\{
+            f:ast { { t_QueryStart, c_Content } }
+            | \\}
+            f:ast { { t_QueryEnd, c_Content } }
+            | \\[ 
+            f:ast { { t_AnchorStart, c_Content } }
+            | \\![
+            f:ast { { t_AnchorImageStart, c_Content } }
+            | \\]
+            f:ast { { t_AnchorEnd, c_Content } }
+            | \\](
+            f:ast { { t_AnchorMiddle, c_Content } }
+            | \\)
+            f:ast { { t_AnchorEnd, c_Content, c_Meta } }
+            | \\(
+            f:ast { { t_MetaStart, c_Content, c_Meta } }              
+        ",
+    );
+    if let Some(prod) = get_production_id_by_name("text_symbol(+\\\" )", &grammar) {
+      let result = generate_production_states(&prod, &grammar);
+      println!("{:#?}", result);
+    }
+  }
 }

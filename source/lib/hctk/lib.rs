@@ -3,10 +3,10 @@
 #![const_eval_limit = "0"]
 #![feature(new_uninit)]
 #![feature(get_mut_unchecked)]
-#![feature(scoped_threads)]
 #![feature(core_intrinsics)]
 #![feature(box_patterns)]
 #![feature(map_first_last)]
+#![feature(drain_filter)]
 #![allow(bad_style, dead_code, unused, unused_allocation, unused_comparisons, unused_parens)]
 
 pub mod c_interface;
@@ -14,6 +14,7 @@ pub mod deprecated_runtime;
 pub mod runtime;
 pub mod types;
 pub mod utf8;
+pub mod writer;
 
 pub use lazy_static::lazy_static;
 

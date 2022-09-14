@@ -1,4 +1,5 @@
 use crate::grammar::data::ast::Ascript;
+use crate::grammar::data::ast::Literal;
 use crate::grammar::parse::compile_ascript_ast;
 use crate::grammar::uuid::hash_id_value_u64;
 use crate::types;
@@ -140,8 +141,7 @@ pub fn compile_from_path(
     merge_grammars(&mut grammar, &grammars.into_iter().collect::<Vec<_>>(), &mut errors);
 
     if errors.is_empty() {
-      let grammar = finalize_grammar(grammar, &mut errors, number_of_threads);
-      (Some(grammar), errors)
+      (Some(finalize_grammar(grammar, &mut errors, number_of_threads)), errors)
     } else {
       (None, errors)
     }
@@ -383,7 +383,7 @@ fn finalize_symbols(g: &mut GrammarStore, errors: &mut [ParseError]) {
   for sym_id in &SymbolID::Generics {
     let (_, production_id, ..) = get_scanner_info_from_defined(sym_id, g);
 
-    let scanner_id = sym_id.bytecode_id(g);
+    let scanner_id = sym_id.bytecode_id(Some(g));
 
     g.productions.get_mut(&production_id).unwrap().symbol_bytecode_id = scanner_id;
   }
@@ -520,109 +520,124 @@ fn create_scanner_productions_from_symbols(g: &mut GrammarStore, errors: &mut [P
       // selectors of TokenProductions and Production
       // symbols.
       SymbolID::Production(prod_id, _) | SymbolID::TokenProduction(prod_id, _) => {
-        let production = g.productions.get(prod_id).unwrap().clone();
-        let scanner_name = create_scanner_name(&production.guid_name);
-        let scanner_production_id = ProductionId::from(&scanner_name);
+        match g.productions.get(prod_id) {
+          Some(production) => {
+            let production = production.clone();
+            let scanner_name = create_scanner_name(&production.guid_name);
+            let scanner_production_id = ProductionId::from(&scanner_name);
+            if !g.productions.contains_key(&scanner_production_id) {
+              let scanner_bodies: Vec<Body> = g
+                .production_bodies
+                .get(prod_id)
+                .unwrap()
+                .iter()
+                .enumerate()
+                .map(|(body_index, body_id)| {
+                  let natural_body = g.bodies.get(body_id).unwrap();
 
-        if !g.productions.contains_key(&scanner_production_id) {
-          let scanner_bodies: Vec<Body> = g
-            .production_bodies
-            .get(prod_id)
-            .unwrap()
-            .iter()
-            .enumerate()
-            .map(|(body_index, body_id)| {
-              let natural_body = g.bodies.get(body_id).unwrap();
+                  let scanner_symbols = natural_body.syms.iter().flat_map(|sym| {
+                    let sym_id = &sym.sym_id;
+                    match sym_id {
+                      // For any production or token
+                      // production symbol encountered, create
+                      // a new symbol that references the
+                      // equivalent scanner production name,
+                      // and submit this production for
+                      // processing into a new scanner
+                      // production.
+                      SymbolID::Production(prod_id, grammar_id)
+                      | SymbolID::TokenProduction(prod_id, grammar_id) => {
+                        let production = g.productions.get(prod_id).unwrap();
 
-              let scanner_symbols = natural_body.syms.iter().flat_map(|sym| {
-                let sym_id = &sym.sym_id;
-                match sym_id {
-                  // For any production or token
-                  // production symbol encountered, create
-                  // a new symbol that references the
-                  // equivalent scanner production name,
-                  // and submit this production for
-                  // processing into a new scanner
-                  // production.
-                  SymbolID::Production(prod_id, grammar_id)
-                  | SymbolID::TokenProduction(prod_id, grammar_id) => {
-                    let production = g.productions.get(prod_id).unwrap();
+                        let scanner_name = create_scanner_name(&production.guid_name);
 
-                    let scanner_name = create_scanner_name(&production.guid_name);
+                        let scanner_production_id = ProductionId::from(&scanner_name);
 
-                    let scanner_production_id = ProductionId::from(&scanner_name);
+                        let new_symbol_id =
+                          SymbolID::Production(scanner_production_id, *grammar_id);
 
-                    let new_symbol_id = SymbolID::Production(scanner_production_id, *grammar_id);
+                        scanner_production_queue.push_back(*sym_id);
 
-                    scanner_production_queue.push_back(*sym_id);
+                        vec![BodySymbolRef {
+                          annotation: String::default(),
+                          consumable: true,
+                          exclusive: sym.exclusive,
+                          original_index: 0,
+                          scanner_index: 0,
+                          scanner_length: 1,
+                          sym_id: new_symbol_id,
+                          tok: Token::default(),
+                        }]
+                      }
+                      SymbolID::DefinedSymbol(_)
+                      | SymbolID::DefinedNumeric(_)
+                      | SymbolID::DefinedIdentifier(_) => {
+                        let (new_symbol_id, ..) = get_scanner_info_from_defined(sym_id, g);
 
-                    vec![BodySymbolRef {
-                      annotation: String::default(),
-                      consumable: true,
-                      exclusive: sym.exclusive,
-                      original_index: 0,
-                      scanner_index: 0,
-                      scanner_length: 1,
-                      sym_id: new_symbol_id,
-                      tok: Token::default(),
-                    }]
+                        scanner_production_queue.push_back(*sym_id);
+
+                        vec![BodySymbolRef {
+                          annotation: String::default(),
+                          consumable: true,
+                          exclusive: sym.exclusive,
+                          original_index: 0,
+                          scanner_index: 0,
+                          scanner_length: 1,
+                          sym_id: new_symbol_id,
+                          tok: Token::default(),
+                        }]
+                      }
+                      _ => vec![sym.clone()],
+                    }
+                  });
+
+                  let symbols: Vec<BodySymbolRef> = scanner_symbols.collect();
+
+                  Body {
+                    id: BodyId::new(&scanner_production_id, body_index),
+                    len: symbols.len() as u16,
+                    prod: scanner_production_id,
+                    syms: symbols,
+                    bc_id: 0,
+                    reduce_fn_ids: vec![],
+                    origin_location: production.original_location.clone(),
                   }
-                  SymbolID::DefinedSymbol(_)
-                  | SymbolID::DefinedNumeric(_)
-                  | SymbolID::DefinedIdentifier(_) => {
-                    let (new_symbol_id, ..) = get_scanner_info_from_defined(sym_id, g);
+                })
+                .collect();
 
-                    scanner_production_queue.push_back(*sym_id);
+              let mut bodies = vec![];
 
-                    vec![BodySymbolRef {
-                      annotation: String::default(),
-                      consumable: true,
-                      exclusive: sym.exclusive,
-                      original_index: 0,
-                      scanner_index: 0,
-                      scanner_length: 1,
-                      sym_id: new_symbol_id,
-                      tok: Token::default(),
-                    }]
-                  }
-                  _ => vec![sym.clone()],
-                }
-              });
-
-              let symbols: Vec<BodySymbolRef> = scanner_symbols.collect();
-
-              Body {
-                id: BodyId::new(&scanner_production_id, body_index),
-                len: symbols.len() as u16,
-                prod: scanner_production_id,
-                syms: symbols,
-                bc_id: 0,
-                reduce_fn_ids: vec![],
-                origin_location: production.original_location.clone(),
+              for body in scanner_bodies {
+                bodies.push(body.id);
+                g.bodies.insert(body.id, body);
               }
-            })
-            .collect();
 
-          let mut bodies = vec![];
+              g.productions.insert(
+                scanner_production_id,
+                crate::types::Production::new(
+                  &scanner_name,
+                  &scanner_name,
+                  scanner_production_id,
+                  bodies.len() as u16,
+                  production.original_location.clone(),
+                  true,
+                ),
+              );
 
-          for body in scanner_bodies {
-            bodies.push(body.id);
-            g.bodies.insert(body.id, body);
+              g.production_bodies.insert(scanner_production_id, bodies);
+            }
           }
-
-          g.productions.insert(
-            scanner_production_id,
-            crate::types::Production::new(
-              &scanner_name,
-              &scanner_name,
-              scanner_production_id,
-              bodies.len() as u16,
-              production.original_location.clone(),
-              true,
-            ),
-          );
-
-          g.production_bodies.insert(scanner_production_id, bodies);
+          _ => match g.production_symbols.get(&sym_id) {
+            Some(tok) => {
+              panic!(
+                "Unable to find production definition \n{}",
+                tok.blame(1, 1, "production_name")
+              );
+            }
+            _ => {
+              panic!("Unable to find production definition {:?}", sym_id);
+            }
+          },
         }
       }
       _ => {}
@@ -904,31 +919,18 @@ pub fn pre_process_grammar<'a>(
   mut friendly_name: &'a str,
 ) -> (GrammarStore, Vec<ParseError>) {
   let mut import_names_lookup = ImportProductionNameTable::new();
-
   let mut production_bodies_table = ProductionBodiesTable::new();
-
   let mut production_table = ProductionTable::new();
-
   let mut bodies_table = BodyTable::new();
-
   let mut symbols_table = SymbolsTable::new();
-
   let mut symbols_string_table = SymbolStringTable::new();
-
   let mut post_process_productions: VecDeque<Box<ast::Production>> = VecDeque::new();
-
   let mut production_symbols_table = BTreeMap::new();
-
   let guid_name = get_guid_grammar_name(path).unwrap();
-
   let guid = GrammarId(hash_id_value_u64(&guid_name));
-
   let mut reduce_functions = ReduceFunctionTable::new();
-
   let mut parse_errors = vec![];
-
   let mut global_peek_symbols = vec![];
-
   let mut export_names = vec![];
 
   {
@@ -1072,6 +1074,11 @@ fn pre_process_production(
 
   if let ASTNode::Production(prod) = production_node {
     let production_id = get_production_id_from_node(production_node, tgs);
+    println!(
+      "{:?} {}",
+      production_id,
+      get_resolved_production_name(production_node, tgs).unwrap_or_default()
+    );
     let production_guid_name = get_resolved_production_name(production_node, tgs).unwrap();
     let mut bodies = vec![];
 
@@ -1099,9 +1106,11 @@ fn pre_process_production(
       None => true,
     } {
       // Extract body data and gather symbol information
+      let mut list_index = 0;
       for body in &prod.bodies {
         if let ASTNode::Body(ast_body) = body {
-          let (new_bodies, productions) = pre_process_body(production_node, ast_body, tgs);
+          let (new_bodies, productions) =
+            pre_process_body(production_node, ast_body, tgs, &mut list_index);
 
           for prod in productions {
             post_process_productions.push_back(prod);
@@ -1273,6 +1282,7 @@ fn pre_process_body(
   production: &ASTNode,
   body: &ast::Body,
   tgs: &mut TempGrammarStore,
+  list_index: &mut u32,
 ) -> (Vec<types::Body>, Vec<Box<ast::Production>>) {
   if let ASTNode::Returned(ret) = &body.reduce_function {
     // Extract the function and insert into function table?
@@ -1286,9 +1296,9 @@ fn pre_process_body(
     production_name: &String,
     mut index: u32,
     tgs: &mut TempGrammarStore,
+    list_index: &mut u32,
   ) -> (Vec<(Token, Vec<BodySymbolRef>)>, Vec<Box<ast::Production>>) {
     let mut bodies = vec![];
-
     let mut productions = vec![];
 
     bodies.push((token.clone(), vec![]));
@@ -1356,16 +1366,8 @@ fn pre_process_body(
           // into the host production.
 
           if let ASTNode::Group_Production(group) = sym {
-            if annotation.is_empty()
-              && group.bodies.iter().all(|b| {
-                if let ASTNode::Body(body) = b {
-                  // The body does not have a reduce function.
-                  body.reduce_function.GetType() == 0
-                } else {
-                  false
-                }
-              })
-            {
+            // All bodies are plain without annotations or functions
+            if annotation.is_empty() && !some_bodies_have_reduce_functions(&group.bodies) {
               // For each body in the group clone the existing
               // body
               // lists and process each list
@@ -1380,8 +1382,14 @@ fn pre_process_body(
 
               for body in &group.bodies {
                 if let ASTNode::Body(body) = body {
-                  let (mut new_bodies, mut new_productions) =
-                    create_body_vectors(&sym.Token(), &body.symbols, production_name, 9999, tgs);
+                  let (mut new_bodies, mut new_productions) = create_body_vectors(
+                    &sym.Token(),
+                    &body.symbols,
+                    production_name,
+                    9999,
+                    tgs,
+                    list_index,
+                  );
 
                   for (_, body) in new_bodies.iter_mut() {
                     if let Some((last)) = body.last_mut() {
@@ -1422,9 +1430,7 @@ fn pre_process_body(
               );
 
               productions.push(production);
-
               generated_symbol = prod_sym;
-
               sym = &generated_symbol;
             }
           } else {
@@ -1442,12 +1448,6 @@ fn pre_process_body(
 
           match sym {
             ASTNode::Optional_List_Production(_) | ASTNode::List_Production(_) => {
-              let list_vector_reduce: ASTNode =
-                compile_ascript_ast("[$first, $last]".as_bytes().to_vec()).unwrap();
-
-              let list_symbol_reduce: ASTNode =
-                compile_ascript_ast("[$first]".as_bytes().to_vec()).unwrap();
-
               let (symbol, terminal_symbol, tok) = match sym {
                 ASTNode::Optional_List_Production(list) => {
                   (&list.symbols, &list.terminal_symbol, list.tok.clone())
@@ -1458,49 +1458,63 @@ fn pre_process_body(
                 _ => (&none_, &none_, Token::new()),
               };
 
-              // Create new bodies that will be bound to the
-              // symbol.
-              let body_a = super::data::ast::Body::new(
+              let mut body_a = super::data::ast::Body::new(
                 false,
                 vec![symbol.clone()],
                 None,
-                ASTNode::Ascript(Ascript::new(
-                  list_symbol_reduce.clone(),
-                  list_symbol_reduce.Token().clone(),
-                )),
+                ASTNode::NONE,
                 sym.Token(),
               );
 
               let mut body_b = body_a.clone();
 
-              body_b.reduce_function = ASTNode::Ascript(Ascript::new(
-                list_vector_reduce.clone(),
-                list_vector_reduce.Token().clone(),
-              ));
-
               match terminal_symbol {
-                ASTNode::NONE => {}
+                ASTNode::Literal(box Literal { val, .. }) if val == "\"" || val == "\'" => {}
                 _ => {
-                  body_b.symbols.insert(0, terminal_symbol.clone());
+                  // Create new bodies that will be bound to the
+                  // symbol.
+
+                  let list_vector_reduce: ASTNode =
+                    compile_ascript_ast("[$first, $last]".as_bytes().to_vec()).unwrap();
+
+                  let list_symbol_reduce: ASTNode =
+                    compile_ascript_ast("[$first]".as_bytes().to_vec()).unwrap();
+
+                  body_a.reduce_function = ASTNode::Ascript(Ascript::new(
+                    list_symbol_reduce.clone(),
+                    list_symbol_reduce.Token().clone(),
+                  ));
+
+                  body_b.reduce_function = ASTNode::Ascript(Ascript::new(
+                    list_vector_reduce.clone(),
+                    list_vector_reduce.Token().clone(),
+                  ));
+
+                  match terminal_symbol {
+                    ASTNode::NONE => {}
+                    _ => {
+                      body_b.symbols.insert(0, terminal_symbol.clone());
+                    }
+                  }
                 }
-              }
+              };
+
+              (*list_index) += 1;
 
               let (prod_sym, mut production) = create_production(
-                &(production_name.to_owned() + "_list_" + &index.to_string()),
+                &(production_name.to_owned() + "_list_" + &(*list_index).to_string()),
                 &[ASTNode::Body(body_b), ASTNode::Body(body_a)],
                 tok.clone(),
               );
 
-              // Add the production symbol to the front of body be
-              // to make the body left recursive
+              // Add the production symbol to the front of the body
+              // to make the production left recursive
               if let ASTNode::Body(body) = &mut production.bodies[0] {
                 body.symbols.insert(0, prod_sym.clone());
               }
 
               productions.push(production);
-
               generated_symbol = prod_sym;
-
               sym = &generated_symbol;
             }
             _ => {
@@ -1536,7 +1550,7 @@ fn pre_process_body(
   }
 
   let (bodies, productions) =
-    create_body_vectors(&body.Token(), &body.symbols, &production_name, 0, tgs);
+    create_body_vectors(&body.Token(), &body.symbols, &production_name, 0, tgs, list_index);
 
   let reduce_fn_ids = match body.reduce_function {
     ASTNode::Reduce(..) | ASTNode::Ascript(..) => {
@@ -1569,6 +1583,16 @@ fn pre_process_body(
   )
 }
 
+fn some_bodies_have_reduce_functions(bodies: &Vec<ASTNode>) -> bool {
+  bodies.iter().any(|b| {
+    if let ASTNode::Body(body) = b {
+      body.reduce_function.GetType() != 0
+    } else {
+      false
+    }
+  })
+}
+
 /// Returns an appropriate SymbolID::Defined* based on the input
 /// string
 
@@ -1599,7 +1623,6 @@ fn intern_symbol(
       tgs.symbols_string_table.insert(id, string.to_owned());
 
       let byte_length = string.bytes().len() as u32;
-
       let code_point_length = string.chars().count() as u32;
 
       e.insert(Symbol {
@@ -1641,15 +1664,13 @@ fn intern_symbol(
     tgs: &mut TempGrammarStore,
     tok: Token,
   ) -> Option<SymbolID> {
-    if let Some((production_id, grammar_id)) = get_production_hash_ids(node, tgs) {
+    get_production_hash_ids(node, tgs).map(|(production_id, grammar_id)| {
       let id = SymbolID::Production(production_id, grammar_id);
 
       tgs.prod_syms.insert(id, tok);
 
-      Some(id)
-    } else {
-      None
-    }
+      id
+    })
   }
 
   fn process_token_production(
@@ -1657,22 +1678,24 @@ fn intern_symbol(
     tgs: &mut TempGrammarStore,
     tok: Token,
   ) -> Option<SymbolID> {
-    match process_production(&node.production, tgs, tok) {
+    match process_production(&node.production, tgs, tok.clone()) {
       Some(SymbolID::Production(prod_id, grammar_id)) => {
-        let production_id = SymbolID::Production(prod_id, grammar_id);
+        let id = SymbolID::Production(prod_id, grammar_id);
+        let tok_id = SymbolID::TokenProduction(prod_id, grammar_id);
 
-        let token_production_id = SymbolID::TokenProduction(prod_id, grammar_id);
+        tgs.prod_syms.insert(id, tok.clone());
+        tgs.prod_syms.insert(tok_id, tok);
 
-        tgs.symbols_table.entry(token_production_id).or_insert(Symbol {
+        tgs.symbols_table.entry(tok_id).or_insert(Symbol {
           bytecode_id:   0,
-          guid:          production_id,
+          guid:          id,
           byte_length:   0,
           cp_len:        0,
           scanner_only:  false,
           friendly_name: String::new(),
         });
 
-        Some(token_production_id)
+        Some(tok_id)
       }
       _ => None,
     }

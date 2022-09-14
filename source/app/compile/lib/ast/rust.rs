@@ -32,12 +32,12 @@ use hctk::grammar::data::ast::AST_U8;
 use hctk::types::*;
 use std::io::Write;
 
-use crate::writer::code_writer::*;
+use hctk::writer::code_writer::*;
 
 pub fn write<W: Write>(g: &GrammarStore, ast: &AScriptStore, w: &mut CodeWriter<W>) -> Result<()> {
   w.wrtln("use hctk::types::*;")?.newline()?;
 
-  w.wrtln("#[derive(Debug, Clone)]\npub enum ASTNode {")?.indent();
+  w.wrtln(&format!("#[derive(Debug, Clone)]\npub enum {} {{", ast.ast_name))?.indent();
 
   for _struct in ast.structs.values() {
     w.write_line(&format!("{0}(Box<{0}>),", _struct.type_name))?;
@@ -46,9 +46,9 @@ pub fn write<W: Write>(g: &GrammarStore, ast: &AScriptStore, w: &mut CodeWriter<
   w.dedent()
     .wrtln("}")?
     .newline()?
-    .wrtln("pub type HCO = HCObj<ASTNode>;")?
+    .wrtln(&format!("pub type HCO = HCObj<{}>;", ast.ast_name))?
     .newline()?
-    .wrtln("impl HCObjTrait for ASTNode {}")?
+    .wrtln(&format!("impl HCObjTrait for {} {{}}", ast.ast_name))?
     .newline()?;
 
   build_structs(g, ast, w)?;
@@ -75,6 +75,7 @@ fn build_functions<W: Write>(
     })
     .collect::<BTreeMap<_, _>>();
 
+  let mut resize_fns = BTreeSet::new();
   let fn_args = "args: &mut Vec<HCO>, tok: Token";
 
   // Build reduce functions -------------------------------------
@@ -87,9 +88,19 @@ fn build_functions<W: Write>(
     let mut noop = 0;
     let fn_name = format!("ast_fn{:0>3}", body.bc_id);
 
-    temp_writer.wrtln(&format!("fn {}({}){{", fn_name, fn_args))?.indent();
+    temp_writer
+      .wrtln(&format!(
+        "/*\n{}\n*/\nfn {}({}){{",
+        body.origin_location.to_string().replace("*/", "* /"),
+        fn_name,
+        fn_args
+      ))?
+      .indent();
 
     if body.reduce_fn_ids.is_empty() {
+      if body.len > 1 {
+        resize_fns.insert(body.len);
+      }
       noop = 1;
     } else {
       let mut ref_index = body.syms.len();
@@ -115,7 +126,8 @@ fn build_functions<W: Write>(
                 temp_writer.write_line(&_ref.to_init_string())?;
 
                 temp_writer.write_line(&format!(
-                  "args.push(HCO::NODE(ASTNode::{}(Box::new({}))))",
+                  "args.push(HCO::NODE({}::{}(Box::new({}))))",
+                  ast.ast_name,
                   ast.structs.get(&struct_type).unwrap().type_name,
                   _ref.get_ref_string()
                 ))?;
@@ -202,14 +214,28 @@ fn build_functions<W: Write>(
       w.merge_checkpoint(temp_writer)?;
       refs.push(format!("/* {} */ {}", id, fn_name));
     } else {
-      refs.push(format!("/* {} {} */ noop_fn", id, noop));
+      if body.len > 1 {
+        refs.push(format!("/* {} {} */ noop_fn_{}", id, noop, body.len));
+      } else {
+        refs.push(format!("/* {} {} */ noop_fn", id, noop));
+      }
     }
+  }
+
+  for size in resize_fns {
+    let fn_name = format!("noop_fn_{}", size);
+    w.wrtln(&format!("fn {}({}){{", fn_name, fn_args))?.indent();
+    w.write_line(&format!("args.resize(args.len() - {},HCO::NONE);", size))?;
+    w.write_line("args.push(HCO::TOKEN(tok));")?;
+    w.dedent().wrtln("}")?;
+    w.newline()?;
   }
 
   // Reduce Function Array -----------------------
 
   w.wrt(&format!(
-    "pub const REDUCE_FUNCTIONS:[ReduceFunction<ASTNode>; {}] = [",
+    "pub const REDUCE_FUNCTIONS:[ReduceFunction<{}>; {}] = [",
+    ast.ast_name,
     ordered_bodies.len()
   ))?
   .indent()
@@ -298,8 +324,9 @@ pub fn create_type_initializer_value(
       let mut string = match type_val {
         AScriptTypeVal::GenericStructVec(structs_ids) if structs_ids.len() == 1 => {
           format!(
-                "{}.into_iter().map(|v|match v {{ ASTNode::{}(node) => node, _ => panic!(\"could not convert\")}}).collect::<Vec<_>>()",
+                "{}.into_iter().map(|v|match v {{ {}::{}(node) => node, _ => panic!(\"could not convert\")}}).collect::<Vec<_>>()",
                 ref_.get_ref_string(),
+                ast.ast_name,
                 ast.structs.get(structs_ids.first().unwrap()).unwrap().type_name
               )
         }
@@ -465,10 +492,13 @@ pub fn render_expression(
         format!("\"{}\".to_string()", value),
         AScriptTypeVal::String(Some(value.to_string())),
       )),
-      _ => Some(
-        render_expression(value, b, s, g, ref_index)?
-          .from("%%.to_string()".to_string(), AScriptTypeVal::String(None)),
-      ),
+      _ => {
+        let ref_ = render_expression(value, b, s, g, ref_index)?;
+        match ref_.ast_type {
+          AScriptTypeVal::String(..) => Some(ref_),
+          _ => Some(ref_.from("%%.to_string()".to_string(), AScriptTypeVal::String(None))),
+        }
+      }
     },
     ASTNode::AST_BOOL(box AST_BOOL { value, .. }) => Some(Ref::new(
       bump_ref_index(ref_index),
@@ -523,30 +553,30 @@ pub fn render_expression(
   }
 }
 
-fn node_to_struct(ref_: Ref, store: &AScriptStore) -> Ref {
+fn node_to_struct(ref_: Ref, ast: &AScriptStore) -> Ref {
   use AScriptTypeVal::*;
   match ref_.ast_type.clone() {
     Struct(struct_type) => {
-      let struct_name = store.structs.get(&struct_type).unwrap().type_name.clone();
+      let struct_name = ast.structs.get(&struct_type).unwrap().type_name.clone();
       ref_.from(
         format!(
-          "if let ASTNode::{}(obj) = %%
+          "if let {}::{}(obj) = %%
       {{ obj }}
       else {{panic!(\"invalid node\")}}",
-          struct_name
+          ast.ast_name, struct_name
         ),
         Struct(struct_type),
       )
     }
     GenericStruct(struct_types) if struct_types.len() == 1 => {
       let struct_type = *struct_types.first().unwrap();
-      let struct_name = store.structs.get(&struct_type).unwrap().type_name.clone();
+      let struct_name = ast.structs.get(&struct_type).unwrap().type_name.clone();
       ref_.from(
         format!(
-          "if let ASTNode::{}(obj) = %%
+          "if let {}::{}(obj) = %%
       {{ obj }}
       else {{panic!(\"invalid node\")}}",
-          struct_name
+          ast.ast_name, struct_name
         ),
         Struct(struct_type),
       )
@@ -574,6 +604,7 @@ fn render_body_symbol(sym: &BodySymbolRef, ast: &AScriptStore, i: usize) -> Opti
           I16(..) => Some(format!("i{0}.to_i16()", i)),
           U8(..) => Some(format!("i{0}.to_u8()", i)),
           I8(..) => Some(format!("i{0}.to_i8()", i)),
+          String(..) => Some(format!("i{0}.to_string()", i)),
           Token => Some(format!("i{0}.to_token()", i)),
           GenericStructVec(..) => Some(format!("i{0}.into_nodes()", i)),
           StringVec => Some(format!("i{0}.into_strings()", i)),
@@ -694,7 +725,7 @@ pub fn ascript_type_to_string(ast_type: &AScriptTypeVal, ast: &AScriptStore) -> 
       let production_types = get_production_types(ast, prod_id);
       if production_types.len() > 1 {
         if production_types_are_structs(&production_types) {
-          "ASTNode".to_string()
+          ast.ast_name.clone()
         } else {
           "HCObj::None".to_string()
         }
@@ -712,15 +743,22 @@ pub fn ascript_type_to_string(ast_type: &AScriptTypeVal, ast: &AScriptStore) -> 
     U32Vec => "Vec<u32>".to_string(),
     U16Vec => "Vec<u16>".to_string(),
     U8Vec => "Vec<u8>".to_string(),
+    GenericStruct(struct_ids) => {
+      if struct_ids.len() > 1 {
+        ast.ast_name.clone()
+      } else {
+        format!("Box<{}>", ast.structs.get(struct_ids.first().unwrap()).unwrap().type_name)
+      }
+    }
     GenericStructVec(struct_ids) => {
       if struct_ids.len() > 1 {
-        "Vec<ASTNode>".to_string()
+        format!("Vec<{}>", ast.ast_name)
       } else {
         format!("Vec<Box<{}>>", ast.structs.get(struct_ids.first().unwrap()).unwrap().type_name)
       }
     }
     _ => {
-      panic!("Could not resolve compiled ascript type")
+      panic!("Could not resolve compiled ascript type {:?}", ast_type)
     }
   }
 }
@@ -733,7 +771,7 @@ fn get_default_value_(ast_type: &AScriptTypeVal, ast: &AScriptStore) -> String {
       if let Some(ascript_struct) = ast.structs.get(&id) {
         format!("{}::default()", ascript_struct.type_name)
       } else {
-        "ASTNode::None".to_string()
+        format!("{}::None", ast.ast_name)
       }
     }
     String(..) => "String::new()".to_string(),
@@ -754,7 +792,7 @@ fn get_default_value_(ast_type: &AScriptTypeVal, ast: &AScriptStore) -> String {
       let production_types = get_production_types(ast, prod_id);
       if production_types.len() > 1 {
         if production_types_are_structs(&production_types) {
-          "ASTNode".to_string()
+          ast.ast_name.clone()
         } else {
           "HCObj::None".to_string()
         }

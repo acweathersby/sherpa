@@ -55,7 +55,7 @@ macro_rules! to_numeric {
       if self.is_numeric() || matches!(self, HCObj::STRING(..) | HCObj::TOKEN(..)) {
         match self {
           HCObj::STRING(str) => str.parse::<i64>().unwrap_or(0) as $Num,
-          HCObj::TOKEN(tok) => tok.to_string().parse::<i64>().unwrap_or(0) as $Num,
+          HCObj::TOKEN(tok) => tok.to_numeric_or_length() as $Num,
           HCObj::F64(val) => *val as $Num,
           HCObj::F32(val) => *val as $Num,
           HCObj::I64(val) => *val as $Num,

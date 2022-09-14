@@ -205,6 +205,8 @@ fn process_transition_nodes<'a>(
   // We start at leaf nodes and make our way down to the root.
   let number_of_nodes = tpack.get_node_len();
 
+  let leaf_node_set = tpack.leaf_nodes.iter().collect::<BTreeSet<_>>();
+
   let mut output = BTreeMap::<usize, IRState>::new();
 
   let mut children_tables =
@@ -247,7 +249,7 @@ fn process_transition_nodes<'a>(
 
     let node = tpack.get_node(node_id);
 
-    if node.terminal_symbol != SymbolID::EndOfFile {
+    if !leaf_node_set.contains(&node_id) {
       for state in {
         if tpack.mode == TransitionMode::GoTo && node.id == 0 {
           vec![create_goto_start_state(
@@ -267,12 +269,13 @@ fn process_transition_nodes<'a>(
     } else {
       // End states are discarded at the end, so we will only use this
       // retrieve state's hash for parent states.
-      output.insert(node_id, create_end_state(node, g, tpack.is_scanner));
+      let state = create_end_state(node, g, tpack.is_scanner);
+
+      output.insert(state.get_graph_id(), state);
     }
 
     if !node.is_orphan(tpack) {
       nodes_pipeline.push_back(node.parent);
-
       for proxy_parent in &node.proxy_parents {
         nodes_pipeline.push_back(*proxy_parent);
       }
@@ -281,13 +284,7 @@ fn process_transition_nodes<'a>(
 
   let mut hash_filter = BTreeSet::<u64>::new();
 
-  output
-    .into_values()
-    .filter(|s| {
-      !(s.get_type() == ProductionEndState || s.get_type() == ScannerEndState)
-        && hash_filter.insert(s.get_hash())
-    })
-    .collect::<Vec<_>>()
+  output.into_values().filter(|s| hash_filter.insert(s.get_hash())).collect::<Vec<_>>()
 }
 
 fn create_fail_state(production_id: &ProductionId, g: &GrammarStore) {}
@@ -389,7 +386,7 @@ fn create_intermediate_state(
   production_id: u32,
 ) -> Vec<IRState> {
   let mut strings = vec![];
-  let mut comment = String::new();
+  let mut comment = format!("[{}][{}]", node.id, node.parent);
   let mut item_set = BTreeSet::new();
   let mut states = vec![];
   let mut peek_type: PeekType = PeekType::None;
@@ -451,10 +448,8 @@ fn create_intermediate_state(
       }
     }
 
-    panic!("FORKED!!?!?!?!");
-
     for child in children.iter() {
-      let mut state = create_intermediate_state(
+      let mut new_states = create_intermediate_state(
         &TransitionGraphNode::temp(
           child,
           SymbolID::Undefined,
@@ -471,10 +466,10 @@ fn create_intermediate_state(
 
       child_hashes.push(format!(
         "state [ {} ]",
-        IRState::get_state_name_from_hash(state.last().unwrap().get_hash(),)
+        IRState::get_state_name_from_hash(new_states.last().unwrap().get_hash(),)
       ));
 
-      states.append(&mut state);
+      states.append(&mut new_states);
     }
 
     strings.push(format!(
@@ -503,8 +498,7 @@ fn create_intermediate_state(
       None => match c.terminal_symbol {
         SymbolID::Production(..) => 1,
         SymbolID::Recovery => 2,
-        SymbolID::EndOfFile => 3,
-        SymbolID::Default => 4,
+        SymbolID::EndOfFile | SymbolID::Default => 3,
         _ => 5,
       },
     }) {
@@ -528,7 +522,6 @@ fn create_intermediate_state(
           {
             let child_state = resolved_states.get(&child.id).unwrap();
             let symbol_id = child.terminal_symbol;
-            let symbol_string = symbol_id.to_string(g);
             let state_name = child_state.get_name();
 
             max_child_depth = max_child_depth.max(child_state.get_stack_depth() + 1);
@@ -551,17 +544,16 @@ fn create_intermediate_state(
                 }
 
                 let (symbol_bytecode_id, assert_class) = if (!is_scanner) {
-                  (symbol_id.bytecode_id(g), "TOKEN")
+                  (symbol_id.bytecode_id(Some(g)), "TOKEN")
                 } else {
                   get_symbol_consume_type(&symbol_id, g)
                 };
 
                 strings.push(format!(
-                  "{} {} [ {} /* {} */ ] ( goto state [ {} ] then goto state [ {} ]{} )",
+                  "{} {} [ {} ] ( goto state [ {} ] then goto state [ {} ]{} )",
                   assertion_type,
                   assert_class,
                   symbol_bytecode_id,
-                  symbol_string,
                   g.productions.get(&production_id).unwrap().guid_name,
                   state_name,
                   post_amble
@@ -588,96 +580,79 @@ fn create_intermediate_state(
               strings.push(format!("goto state [ {} ]{}", state_name, post_amble))
             }
           }
-          SymbolID::EndOfFile => {
-            if group.len() > 1 && is_scanner {
-              // Defined have higher precedence than
-              // production tokens
-
-              let defined_branches = group
+          SymbolID::Default | SymbolID::EndOfFile => {
+            if group.len() > 1 {
+              if is_scanner {
+                let defined_branches = group
                 .iter()
                 .filter(|n| matches!(n.items[0].get_origin(), OriginData::Symbol(sym) if sym.isDefinedSymbol()))
                 .collect::<Vec<_>>();
 
-              let defined_generics = group.iter()
+                let defined_generics = group.iter()
               .filter(|n| matches!(n.items[0].get_origin(), OriginData::Symbol(sym) if matches!(sym, SymbolID::GenericNewLine)))
               .collect::<Vec<_>>();
 
-              if !defined_branches.is_empty() {
-                // Use the first defined symbol. TODO - Define and use hierarchy rules to determine the best branch
-                // to use as default
-                let child = defined_branches[0];
+                if !defined_branches.is_empty() {
+                  // Use the first defined symbol. TODO - Define and use hierarchy rules to determine the best branch
+                  // to use as default
+                  let child = defined_branches[0];
 
-                let end_string = create_end_string(child, g, is_scanner);
-                strings.push(match single_child {
-                  true => format!("{}{}", end_string, post_amble),
-                  false => {
-                    format!("default ( {}{} )", end_string, post_amble)
+                  let end_string = create_end_string(child, g, is_scanner);
+                  strings.push(match single_child {
+                    true => format!("{}{}", end_string, post_amble),
+                    false => {
+                      format!("default ( {}{} )", end_string, post_amble)
+                    }
+                  })
+                } else {
+                  let mut origin = group[0];
+
+                  while !(origin.is(TransitionStateType::I_PEEK_ORIGIN)) {
+                    origin = t_pack.get_node(origin.parent);
                   }
-                })
+
+                  for child_id in children_tables.get(origin.id).unwrap() {
+                    let child = t_pack.get_node(*child_id);
+                    for item in &child.items {
+                      item.print_blame(g);
+                    }
+                  }
+
+                  // Group based on originating symbol
+                  panic!("Multiple DEFAULT branches found!")
+                }
               } else {
-                let mut origin = group[0];
-
-                while !(origin.is(TransitionStateType::I_PEEK_ORIGIN)) {
-                  origin = t_pack.get_node(origin.parent);
-                }
-
-                for child_id in children_tables.get(origin.id).unwrap() {
-                  let child = t_pack.get_node(*child_id);
-                  for item in &child.items {
-                    item.print_blame(g);
-                  }
-                }
-
-                // Group based on originating symbol
                 panic!("Multiple DEFAULT branches found!")
               }
             } else {
-              let is_fail = group[0].is(TransitionStateType::I_FAIL);
               for child in group {
-                let end_string = if is_fail {
-                  "fail".to_string()
+                let child_state = resolved_states.get(&child.id).unwrap();
+                let state_name = child_state.get_name();
+
+                let consume =
+                  (if child.is(TransitionStateType::I_CONSUME) { "consume then " } else { "" })
+                    .to_string();
+
+                strings.push(if child.is(TransitionStateType::I_FAIL) {
+                  match single_child {
+                    true => format!("fail"),
+                    false => String::new(),
+                  }
                 } else {
-                  create_end_string(child, g, is_scanner)
-                };
-                strings.push(match single_child {
-                  true => format!("{}{}", end_string, post_amble),
-                  false => {
-                    format!("default ( {}{} )", end_string, post_amble)
+                  match single_child {
+                    true => format!("{}goto state [ {} ]{}", consume, state_name, post_amble),
+                    false => {
+                      format!("default ( {}goto state [ {} ]{} )", consume, state_name, post_amble)
+                    }
                   }
-                })
+                });
               }
-            }
-          }
-          SymbolID::Default => {
-            for child in group {
-              let child_state = resolved_states.get(&child.id).unwrap();
-              let state_name = child_state.get_name();
-              let consume =
-                (if child.is(TransitionStateType::I_CONSUME) { "consume then " } else { "" })
-                  .to_string();
-
-              let is_fail = child.is(TransitionStateType::I_FAIL);
-
-              strings.push(if is_fail {
-                match single_child {
-                  true => format!("fail"),
-                  false => String::new(),
-                }
-              } else {
-                match single_child {
-                  true => format!("{}goto state [ {} ]{}", consume, state_name, post_amble),
-                  false => {
-                    format!("default ( {}goto state [ {} ]{} )", consume, state_name, post_amble)
-                  }
-                }
-              });
             }
           }
           _ => {
             for child in group {
               let child_state = resolved_states.get(&child.id).unwrap();
               let symbol_id = child.terminal_symbol;
-              let symbol_string = symbol_id.to_string(g);
               let state_name = child_state.get_name();
               is_token_assertion = true;
 
@@ -694,7 +669,7 @@ fn create_intermediate_state(
               }
 
               let (symbol_id, assert_class) = if (!is_scanner) {
-                (symbol_id.bytecode_id(g), "TOKEN")
+                (symbol_id.bytecode_id(Some(g)), "TOKEN")
               } else {
                 get_symbol_consume_type(&symbol_id, g)
               };
@@ -702,25 +677,11 @@ fn create_intermediate_state(
               let consume =
                 (if child.is(TransitionStateType::I_CONSUME) { "consume then " } else { "" })
                   .to_string();
-              let is_fail = child.is(TransitionStateType::I_FAIL);
 
-              if is_fail {
-                strings.push(format!(
-                  "{} {} [ {} /* {} */ ] ( fail )",
-                  assertion_type, assert_class, symbol_id, symbol_string,
-                ));
-              } else {
-                strings.push(format!(
-                  "{} {} [ {} /* {} */ ] ( {}goto state [ {} ]{} )",
-                  assertion_type,
-                  assert_class,
-                  symbol_id,
-                  symbol_string,
-                  consume,
-                  state_name,
-                  post_amble
-                ));
-              }
+              strings.push(format!(
+                "{} {} [ {} ] ( {}goto state [ {} ]{} )",
+                assertion_type, assert_class, symbol_id, consume, state_name, post_amble
+              ));
             }
           }
         }
@@ -748,7 +709,7 @@ fn create_intermediate_state(
 
     if is_token_assertion {
       for symbol_id in &skip_symbols_set {
-        strings.push(format!("skip [ {} ]", symbol_id.bytecode_id(g),))
+        strings.push(format!("skip [ {} ]", symbol_id.bytecode_id(Some(g)),))
       }
     }
     let have_symbols = !normal_symbol_set.is_empty();
@@ -826,7 +787,7 @@ fn get_symbol_consume_type(symbol_id: &SymbolID, g: &GrammarStore) -> (u32, &'st
     | SymbolID::GenericNewLine
     | SymbolID::GenericIdentifier
     | SymbolID::GenericNumber
-    | SymbolID::GenericSymbol => (symbol_id.bytecode_id(g), "CLASS"),
+    | SymbolID::GenericSymbol => (symbol_id.bytecode_id(Some(g)), "CLASS"),
     SymbolID::DefinedNumeric(id)
     | SymbolID::DefinedIdentifier(id)
     | SymbolID::DefinedSymbol(id) => {

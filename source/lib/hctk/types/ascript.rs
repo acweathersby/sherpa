@@ -189,8 +189,8 @@ impl AScriptTypeVal {
       },
       UnresolvedStruct => "UnresolvedStruct".to_string(),
       Struct(id) => format!("Struct<{:?}>", id),
-      String(..) => "String".to_string(),
-      Bool(..) => "Bool".to_string(),
+      String(..) => "STRING".to_string(),
+      Bool(..) => "BOOL".to_string(),
       F64(..) => "F64".to_string(),
       F32(..) => "F32".to_string(),
       I64(..) => "I64".to_string(),
@@ -315,6 +315,7 @@ pub struct AScriptStore {
   pub props:          BTreeMap<AScriptPropId, AScriptProp>,
   pub prod_types:     BTreeMap<ProductionId, HashMap<AScriptTypeVal, BTreeSet<Token>>>,
   pub body_reduce_fn: BTreeMap<BodyId, (AScriptTypeVal, ASTNode)>,
+  pub ast_name:       String,
 }
 
 impl AScriptStore {
@@ -324,6 +325,7 @@ impl AScriptStore {
       props:          BTreeMap::new(),
       prod_types:     BTreeMap::new(),
       body_reduce_fn: BTreeMap::new(),
+      ast_name:       "ASTNode".to_string(),
     }
   }
 }

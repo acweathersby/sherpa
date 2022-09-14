@@ -304,7 +304,7 @@ fn get_token_value<T: ImmutCharacterReader + MutCharacterReader>(
             let basis_token = if ctx.in_peek_mode() {
                 ctx.peek
             } else {
-                ctx.anchor
+                ctx.assert
             };
 
             ctx.set_peek_mode_to(true);
@@ -418,6 +418,11 @@ fn token_scan<T: ImmutCharacterReader + MutCharacterReader>(
   r: &mut T,
   bc: &[u32],
 ) -> ParseToken {
+  
+  if(token.token_type != 0){
+    return token
+  }
+
   #[cfg(test)]
   {
     if scan_index == 0 {
@@ -431,8 +436,14 @@ fn token_scan<T: ImmutCharacterReader + MutCharacterReader>(
         ctx.set_production_to(id - 1);
       }
 
-      return ParseToken { token_type: id, ..Default::default() };
+      return ParseToken { token_type: SymbolID::EndOfFile.bytecode_id(None), ..Default::default() };
     }
+  }
+
+  r.set_cursor_to(&token);
+
+  if r.at_end() {
+    return ParseToken{ token_type:0, ..token};
   }
   // Initialize Scanner
 
@@ -441,7 +452,6 @@ fn token_scan<T: ImmutCharacterReader + MutCharacterReader>(
   scan_ctx.init_normal_state(scan_index);
   scan_ctx.anchor = token;
   scan_ctx.assert = token;
-  r.set_cursor_to(&token);
 
   // We are done with the state reference, so we
   // invalidate variable by moving the reference to

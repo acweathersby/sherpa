@@ -187,7 +187,7 @@ impl Item {
     Item {
       body:   self.body,
       len:    self.len,
-      off:    self.len - 1,
+      off:    if self.len > 0 { self.len - 1 } else { 0 },
       state:  self.state,
       origin: self.origin,
     }

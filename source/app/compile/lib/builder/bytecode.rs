@@ -23,7 +23,7 @@ use crate::ast::rust::create_type_initializer_value;
 use crate::ast::rust::render_expression;
 use crate::builder::common;
 use crate::builder::disclaimer::DISCLAIMER;
-use crate::writer::code_writer::CodeWriter;
+use hctk::writer::code_writer::CodeWriter;
 
 use super::pipeline::PipelineTask;
 
@@ -232,6 +232,7 @@ loop {
       }
 
       REDUCE_FUNCTIONS[body_id as usize](&mut nodes, tok);
+
     }
     Some(ParseAction::Accept { production_id }) => {
       break;
@@ -281,9 +282,9 @@ loop {
 #[cfg(test)]
 mod test {
   use crate::ast::rust;
-  use crate::writer::code_writer::StringBuffer;
-  use hctk::ascript::compile::compile_reduce_function_expressions;
+  use hctk::ascript::compile::compile_ascript_store;
   use hctk::types::AScriptStore;
+  use hctk::writer::code_writer::StringBuffer;
   #[test]
   fn test_output_rust_on_practical_grammar() {
     use hctk::debug::compile_test_grammar;
@@ -298,7 +299,7 @@ mod test {
 
     let mut ascript = AScriptStore::new();
 
-    let errors = compile_reduce_function_expressions(&grammar, &mut ascript);
+    let errors = compile_ascript_store(&grammar, &mut ascript);
 
     for error in &errors {
       eprintln!("{}", error);

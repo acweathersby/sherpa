@@ -114,6 +114,7 @@ mod byte_code_creation_tests {
       default_get_branch_selector,
       &HashMap::new(),
       &("".to_string()),
+      "",
     );
 
     println!("{:#?}", result);
@@ -226,7 +227,7 @@ mod byte_code_creation_tests {
       <> element_attributes >g:nl element_attribute(+)               
                                                                       f:ast { { t_Attributes, c_Attribute, attributes: $2 } }
       
-      <> element_attribute > \\- identifier attribute_chars ( ?=g:sp | ?=\\> | ?=g:nl )
+      <> element_attribute > \\- identifier attribute_chars g:sp
       
                                                                       f:ast { { t_GeneralAttr, c_Attribute, key:str($2), val1: str($3) } }
       
@@ -258,30 +259,14 @@ mod byte_code_creation_tests {
       
       <> identifier > tk:tok_identifier 
       
-      <> tok_identifier > ( g:id) ( g:id | g:num )(+)                     ",
+      <> tok_identifier > ( g:id | g:num )(+)                     ",
     );
 
-    // let mut ir_states = compile_states(&grammar, 1);
-
-    println!("{:#?}", grammar.productions.values().map(|b| &b.guid_name).collect::<Vec<_>>());
-
-    let prod_id = get_production_id_by_name(
-      "test_9AD7F26F987E3173_GUID_test_9AD7F26F987E3173_GUID_element_block_list_3",
-      &grammar,
-    )
-    .unwrap();
-
-    let result = generate_production_states(&prod_id, &grammar);
-
-    for state in result {
-      println!(
-        "{} \n [{:?}]",
-        state.get_code(),
-        state.get_symbols().0.iter().map(|s| s.to_string(&grammar)).collect::<Vec<_>>()
-      );
-    }
-
-    //    eprintln!("{:?}", ir_states.first_entry().unwrap().get().to_string());
-    //    eprintln!("{:#?}", ir_states.keys().collect::<BTreeSet<_>>());
+    let output = compile_bytecode(&grammar, 1);
+    return;
+    println!(
+      "dD: {}",
+      debug::generate_disassembly(&output, Some(&BytecodeGrammarLookups::new(&grammar)))
+    );
   }
 }

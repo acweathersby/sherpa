@@ -150,7 +150,7 @@ impl<T: ImmutCharacterReader + MutCharacterReader> ParseContext<T> {
   #[inline]
   pub(crate) fn push_state(&mut self, state: u32) {
     if (self.stack_top >= self.stack_size as usize) {
-      panic!("Out of parse stack space!");
+      panic!("Out of parse stack space! {} {}", self.stack_top, self.stack_size);
     }
 
     self.local_state_stack[self.stack_top] = state;

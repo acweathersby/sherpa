@@ -5,7 +5,7 @@ use hctk::grammar::get_exported_productions;
 use hctk::grammar::ExportedProduction;
 use hctk::types::GrammarStore;
 
-use crate::writer::code_writer::CodeWriter;
+use hctk::writer::code_writer::CodeWriter;
 
 /// Returns a tuple comprised of a grammar name and a parser name
 pub(crate) fn get_parser_names(g: &GrammarStore) -> (String, String) {

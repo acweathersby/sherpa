@@ -365,6 +365,7 @@ assert PRODUCTION [3] (pass)
       |_, _, _| BranchSelector::Hash,
       &HashMap::new(),
       &"".to_string(),
+      "",
     );
 
     let mut reader = UTF8StringReader::from_string(reader_input);

@@ -4,7 +4,7 @@ pub mod compile;
 mod ascript_tests {
   use grammar::compile_test_grammar;
 
-  use crate::ascript::compile::compile_reduce_function_expressions;
+  use crate::ascript::compile::compile_ascript_store;
   use crate::ascript::compile::compile_struct_type;
   use crate::debug::grammar;
   use crate::grammar::data::ast::ASTNode;
@@ -130,7 +130,7 @@ mod ascript_tests {
 
     let mut store = AScriptStore::new();
 
-    let errors = compile_reduce_function_expressions(&grammar, &mut store);
+    let errors = compile_ascript_store(&grammar, &mut store);
 
     for error in &errors {
       eprintln!("{}", error);

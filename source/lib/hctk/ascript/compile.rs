@@ -37,15 +37,12 @@ use crate::types;
 use crate::types::*;
 use std::mem::discriminant;
 
-pub fn compile_reduce_function_expressions<'a>(
-  g: &'a GrammarStore,
-  ast: &mut AScriptStore,
-) -> Vec<ParseError> {
+pub fn compile_ascript_store<'a>(g: &'a GrammarStore, ast: &mut AScriptStore) -> Vec<ParseError> {
   let mut errors = vec![];
   let mut temp_ascript = AScriptStore::new();
 
   // Separate all bodies into a list of  of tuple of body id's and
-  // Ascript refence nodes.
+  // Ascript reference nodes.
 
   let normal_parse_bodies: Vec<(BodyId, Option<&'a AST_AScript>)> = g
     .bodies
@@ -101,10 +98,14 @@ pub fn compile_reduce_function_expressions<'a>(
           }
           _ => {}
         }
-      } else {
-        // Evaluate the last new_return_type symbol in the production.
+      } else if body.len > 1 {
+        // A token comprised the production is returned
         let item = Item::from_body(&body_id, g).unwrap();
         let sym = item.to_last_sym().get_symbol(g);
+        add_production_type(g, ast, body.prod, AScriptTypeVal::Token, &body.origin_location);
+      } else {
+        // Evaluate the last new_return_type symbol in the production.
+        let sym = Item::from_body(&body_id, g).unwrap().to_last_sym().get_symbol(g);
         let return_type = match sym {
           SymbolID::Production(id, ..) => add_production_type(
             g,

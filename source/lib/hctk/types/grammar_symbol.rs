@@ -143,12 +143,18 @@ impl SymbolID {
     }
   }
 
-  pub fn bytecode_id(&self, g: &GrammarStore) -> u32 {
+  pub fn bytecode_id(&self, g: Option<&GrammarStore>) -> u32 {
     match self {
       Self::DefinedNumeric(_)
       | Self::DefinedIdentifier(_)
       | Self::DefinedSymbol(_)
-      | Self::TokenProduction(..) => g.symbols.get(self).unwrap().bytecode_id,
+      | Self::TokenProduction(..) => {
+        if let Some(g) = g {
+          g.symbols.get(self).unwrap().bytecode_id
+        } else {
+          9999
+        }
+      }
       Self::Default => 9999,
       Self::Production(..) => 0,
       Self::Undefined => 0,

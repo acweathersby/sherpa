@@ -3,7 +3,7 @@ use hctk::debug::BytecodeGrammarLookups;
 use std::io::BufWriter;
 
 use crate::builder::disclaimer::DISCLAIMER;
-use crate::writer::code_writer::CodeWriter;
+use hctk::writer::code_writer::CodeWriter;
 
 use super::pipeline::PipelineTask;
 

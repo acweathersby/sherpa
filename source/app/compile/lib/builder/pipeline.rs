@@ -4,7 +4,7 @@ use std::fs::create_dir_all;
 use std::fs::File;
 use std::path::PathBuf;
 
-use hctk::ascript::compile::compile_reduce_function_expressions;
+use hctk::ascript::compile::compile_ascript_store;
 use hctk::bytecode::compile_bytecode;
 use hctk::bytecode::BytecodeOutput;
 use hctk::get_num_of_available_threads;
@@ -157,8 +157,7 @@ impl<'a> BuildPipeline<'a> {
     if self.tasks.iter().any(|t| t.0.require_ascript) && self.ascript.is_none() {
       let mut ascript = AScriptStore::new();
 
-      let errors =
-        compile_reduce_function_expressions(&self.grammar.as_ref().unwrap(), &mut ascript);
+      let errors = compile_ascript_store(&self.grammar.as_ref().unwrap(), &mut ascript);
 
       if errors.len() > 0 {
         if let Some(error_handler) = &self.error_handler {

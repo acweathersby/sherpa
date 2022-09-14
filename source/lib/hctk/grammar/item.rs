@@ -12,7 +12,6 @@ use crate::types::SymbolID;
 
 /// Retrieve the initial items of a production. Returns vector of
 /// items, one for each body belonging to the production.
-
 pub fn get_production_start_items(prod_id: &ProductionId, g: &GrammarStore) -> Vec<Item> {
   g.production_bodies
     .get(prod_id)

@@ -3,9 +3,9 @@ use std::fs::File;
 
 use crate::builder::common;
 use crate::builder::disclaimer::DISCLAIMER;
-use crate::writer::code_writer::CodeWriter;
 use crate::CompileError;
 use hctk::types::*;
+use hctk::writer::code_writer::CodeWriter;
 use inkwell::context::Context;
 use inkwell::passes::PassManager;
 use inkwell::passes::PassManagerBuilder;

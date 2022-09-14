@@ -10,7 +10,6 @@ mod builder;
 mod llvm;
 mod options;
 mod source_types;
-mod writer;
 
 pub use builder::bytecode::*;
 pub use builder::llvm::*;
@@ -35,10 +34,10 @@ mod test {
   use crate::ast::rust;
   use crate::builder::pipeline::BuildPipeline;
   use crate::tasks::build_ast;
-  use hctk::ascript::compile::compile_reduce_function_expressions;
+  use hctk::ascript::compile::compile_ascript_store;
   use hctk::types::*;
 
-  use crate::writer::code_writer::StringBuffer;
+  use hctk::writer::code_writer::StringBuffer;
 
   #[test]
   fn test_compile_pipeline() {
@@ -67,7 +66,7 @@ mod test {
 
     let mut ascript = AScriptStore::new();
 
-    let errors = compile_reduce_function_expressions(&grammar, &mut ascript);
+    let errors = compile_ascript_store(&grammar, &mut ascript);
 
     for error in &errors {
       eprintln!("{}", error);

@@ -10,6 +10,7 @@ use std::vec;
 use crate::debug::debug_items;
 use crate::grammar::create_closure;
 use crate::grammar::get_closure_cached;
+use crate::grammar::get_production_plain_name;
 use crate::grammar::get_production_start_items;
 use crate::grammar::hash_id_value_u64;
 use crate::types::GrammarId;
@@ -134,11 +135,11 @@ pub fn construct_goto(
     if (!group.is_empty() && (group.iter().any(|i| i.increment().unwrap().at_end())))
       || t_pack.root_prods.contains(&production_id)
     {
-      if t_pack.root_prods.contains(&production_id) {
+      if t_pack.root_prods.contains(&production_id)
+      // && !t_pack.is_scanner
+      {
         t_pack.out_of_scope_closure =
           Some(g.lr_items.iter().flat_map(|(_, i)| i).cloned().collect::<Vec<Item>>());
-
-        debug_items("stats:", &t_pack.starts.iter().cloned().collect::<Vec<_>>(), g);
 
         let mut reducible: Vec<Item> = g
           .lr_items
@@ -344,17 +345,13 @@ fn create_peek(
     cached_depth = parent.depth;
   }
 
-  let goals: Vec<usize> = if t_pack.is_scanner {
-    hash_group(items, |_, i| i)
-  } else {
-    hash_group(items, |ind, i| {
-      if i.at_end() {
-        format!("at_end_{}", ind)
-      } else {
-        format!("{:?} {}", i.get_symbol(g), i.get_state().is_out_of_scope())
-      }
-    })
-  }
+  let goals: Vec<usize> = hash_group(items, |ind, i| {
+    if i.at_end() {
+      format!("at_end_{}", ind)
+    } else {
+      format!("{:?} {}", i.get_symbol(g), i.get_state().is_out_of_scope())
+    }
+  })
   .iter()
   .enumerate()
   .map(|(i, item)| {
@@ -417,21 +414,21 @@ fn create_term_item_closure(
   t_pack: &mut TPack,
   items: &Vec<(Item, Item)>,
 ) -> Vec<(Item, Item)> {
-  let mut term_items = vec![];
+  let mut term_items = BTreeSet::new();
   for (link_item, item) in items {
     if item.is_term(g) || item.is_end() {
-      term_items.push((*link_item, *item));
+      term_items.insert((*link_item, *item));
     } else {
       for closure_item in create_closure(&[*item], g) {
         let closure_item = closure_item.to_origin(item.get_origin());
         if !closure_item.is_nonterm(g) {
           let closure_item = closure_item.to_state(item.get_state());
-          term_items.push((*item, closure_item));
+          term_items.insert((*item, closure_item));
         }
       }
     }
   }
-  term_items
+  term_items.into_iter().collect::<Vec<_>>()
 }
 
 fn create_term_nodes_from_items(
@@ -527,21 +524,60 @@ fn disambiguate(
     }
   }
 
-  let mut groups = hash_group(term_nodes, |_, n| t_pack.get_node(n).terminal_symbol);
-
+  let mut groups = hash_group(term_nodes, |_, n| (t_pack.get_node(n).terminal_symbol));
   let mut next_peek_groups = vec![];
-
-  merge_occluding_groups(g, t_pack, &mut groups);
-
   let mut primary_nodes = BTreeSet::new();
   let mut drop_nodes = BTreeSet::new();
 
-  for group in groups.iter() {
+  merge_occluding_groups(g, t_pack, &mut groups);
+
+  for mut group in groups.iter_mut() {
     let prime_node_index = group[0];
 
-    let goals = get_goals(group, t_pack);
-
     set_transition_type(t_pack, prime_node_index, depth);
+
+    if group.iter().any(|i| t_pack.get_node(*i).is_out_of_scope()) {
+      let first = t_pack.get_node(group[0]);
+      if !first.is_out_of_scope() {
+        // Remove nodes that have items that alias in-scope items
+        let in_scope_items = group
+          .iter()
+          .filter_map(|n| {
+            let node = t_pack.get_node(*n);
+            if (!node.is_out_of_scope()) {
+              Some(node.items.iter().map(|i| i.to_zero_state()).collect::<Vec<_>>())
+            } else {
+              None
+            }
+          })
+          .flatten()
+          .collect::<BTreeSet<_>>();
+
+        for _ in group.drain_filter(|i| {
+          let node = t_pack.get_node(*i);
+          if node.is_out_of_scope() && in_scope_items.contains(&node.items[0].to_zero_state()) {
+            false
+          } else {
+            true
+          }
+        }) {}
+
+        if matches!(
+          first.terminal_symbol,
+          SymbolID::GenericNumber | SymbolID::GenericIdentifier | SymbolID::GenericSymbol
+        ) {
+          // Remove out-of-scope items if the symbol of the merged items and
+          // original nodes is generic
+          for _ in group.drain_filter(|i| {
+            let node = t_pack.get_node(*i);
+            let result = !node.is_out_of_scope() || node.terminal_symbol != first.terminal_symbol;
+            return result;
+          }) {}
+        }
+      }
+    }
+
+    let goals = get_goals(group, t_pack);
 
     if goals.len() > 1 && group.len() > 1 {
       let mut peek_transition_group = vec![];
@@ -657,80 +693,42 @@ fn all_nodes_are_outscope(peek_group: &Vec<usize>, t_pack: &mut TPack) -> bool {
 fn process_peek_leaves(g: &GrammarStore, t_pack: &mut TPack, leaves: Vec<usize>) -> Vec<usize> {
   let mut resolved_leaves = Vec::<usize>::new();
 
-  if t_pack.is_scanner {
-    for node_index in leaves {
-      // for node_index in peek_leaf_group {
-      // Instead of resetting our position back to
-      // the goal item, we simply continue parsing
-      // from whatever position we are at.
+  for peek_leaf_group in hash_group(leaves, |_, leaf| t_pack.get_node(leaf).goal).iter().cloned() {
+    let primary_peek_parent_index = peek_leaf_group[0];
+    let prime_node = t_pack.get_node(primary_peek_parent_index).to_owned();
+    let goal_index = prime_node.goal;
+    let goal_node = t_pack.get_node(goal_index);
 
-      {
-        let node = t_pack.get_node_mut(node_index);
-
-        node.unset_type(TST::O_PEEK);
+    if goal_node.is(TST::I_OUT_OF_SCOPE) {
+      for node_index in peek_leaf_group {
+        t_pack.get_node_mut(node_index).set_type(TST::I_FAIL | TST::I_OUT_OF_SCOPE)
       }
+    } else {
+      // Use the goal node as a proxy to generate child nodes that
+      // are then linked to the current peek leaf nodes.
 
-      let mut iter_index = node_index;
+      let primary_parent = peek_leaf_group[0];
+      let proxy_parents = peek_leaf_group[1..].to_owned();
+      let have_proxy_parents = !proxy_parents.is_empty();
 
-      while !t_pack.get_node(iter_index).is(TST::I_PEEK_ORIGIN) {
-        let node = t_pack.get_node_mut(iter_index);
+      for child_index in process_node(g, t_pack, goal_index, primary_parent, false) {
+        let mut child_node = t_pack.get_node_mut(child_index);
 
-        node.unset_type(TST::O_PEEK);
+        child_node.parent = primary_peek_parent_index;
 
-        node.set_type(TST::I_CONSUME);
-
-        iter_index = node.parent;
-      }
-
-      let node = t_pack.get_node_mut(node_index);
-
-      if node.items.iter().any(|i| i.at_end()) {
-        node.unset_type(TST::I_CONSUME);
-      } else {
-        node.set_type(TST::I_CONSUME);
-      }
-
-      process_node(g, t_pack, node_index, node_index, true);
-    }
-  } else {
-    for peek_leaf_group in hash_group(leaves, |_, leaf| t_pack.get_node(leaf).goal).iter().cloned()
-    {
-      let primary_peek_parent_index = peek_leaf_group[0];
-      let prime_node = t_pack.get_node(primary_peek_parent_index).to_owned();
-      let goal_index = prime_node.goal;
-      let goal_node = t_pack.get_node(goal_index);
-
-      if goal_node.is(TST::I_OUT_OF_SCOPE) {
-        for node_index in peek_leaf_group {
-          t_pack.get_node_mut(node_index).set_type(TST::I_FAIL | TST::I_OUT_OF_SCOPE)
-        }
-      } else {
-        // Use the goal node as a proxy to generate child nodes that
-        // are then linked to the current peek leaf nodes.
-
-        let primary_parent = peek_leaf_group[0];
-        let proxy_parents = peek_leaf_group[1..].to_owned();
-        let have_proxy_parents = !proxy_parents.is_empty();
-
-        for child_index in process_node(g, t_pack, goal_index, primary_parent, false) {
-          let mut child_node = t_pack.get_node_mut(child_index);
-
-          child_node.parent = primary_parent;
-
-          if have_proxy_parents {
-            child_node.proxy_parents.append(&mut proxy_parents.to_owned());
-          }
-
-          resolved_leaves.push(child_index);
-
-          if child_node.prod_sym.is_some() {
-            child_node.terminal_symbol = prime_node.terminal_symbol
-          }
+        if have_proxy_parents {
+          child_node.proxy_parents.append(&mut proxy_parents.to_owned());
         }
 
-        // Note: Remember all goal nodes are DROPPED at the
-        // end of the peek resolution process
+        if child_node.prod_sym.is_some() {
+          child_node.terminal_symbol = prime_node.terminal_symbol
+        }
+
+        resolved_leaves.push(child_index);
       }
+
+      // Note: Remember all goal nodes are DROPPED at the
+      // end of the peek resolution process
     }
   }
 
@@ -748,14 +746,20 @@ fn get_continue_items(
   let mut final_nodes = vec![];
   let mut need_to_prune = false;
 
-  let (mut scan_items, final_items) = scan_items(g, t_pack, &end_item);
+  let (mut scan_items, mut final_items) = scan_items(g, t_pack, &end_item);
 
   let scan_items = if end_item.is_out_of_scope() && peek_depth == 0 {
+
+  if end_item.is_out_of_scope() {
+    final_items = vec![];
+  }
+
+  let scan_items = if end_item.is_out_of_scope() && peek_depth < 1 {
     // Remove item pairs that are expected to show up
     // within the "in-scope" nodes.
     create_term_item_closure(g, t_pack, &scan_items)
       .into_iter()
-      .filter(|(old, item)| {
+      .filter(|(_, item)| {
         let item = item.to_zero_state();
         let bool_val = !(t_pack.starts.contains(&item)
           || (item.is_nonterm(g)
@@ -808,6 +812,10 @@ fn handle_shift_reduce_conflicts(
     .into_iter()
     .map(|i| (i, &t_pack.get_node(i).items))
     .collect::<Vec<_>>();
+
+  if goals.iter().any(|(i, _)| t_pack.get_node(*i).is(TST::I_OUT_OF_SCOPE)) {
+    return false;
+  }
 
   if goals.len() == 2
     && (goals[0].1.len() == 1 && goals[1].1.len() == 1 && (t_pack.mode == TransitionMode::GoTo)
@@ -882,7 +890,10 @@ fn merge_occluding_groups(g: &GrammarStore, t_pack: &mut TPack, groups: &mut [Ve
       let from_sym = from_node.terminal_symbol;
       let to_sym = to_node.terminal_symbol;
 
-      if symbols_occlude(&to_sym, &from_sym, g) {
+      if symbols_occlude(&to_sym, &from_sym, g)
+        && ((!from_node.items[0].get_state().is_out_of_scope())
+          || (from_sym.isDefinedSymbol() || to_sym.isDefinedSymbol()))
+      {
         let mut clone = groups[i].clone();
         groups[j].append(&mut clone);
         t_pack.get_node_mut(groups[j][0]).set_type(TST::I_MERGE_ORIGIN);
@@ -1110,38 +1121,6 @@ fn process_end_item(
   parent_index: usize,
 ) -> Vec<usize> {
   t_pack.gotos.insert(end_item);
-
-  if t_pack.is_scanner && !t_pack.starts.contains(&end_item.to_start().to_zero_state()) {
-    // We need to be in the initial closure before we can allow
-    // a complete scanner run. Thus, the production of the end state
-    // is used to select the next set of items, continuing the scan process
-    // the states until we arrive at an end_item that is indeed
-    // directly connected to the initial closure.
-
-    let (term_items, end_items) = scan_items(g, t_pack, &end_item);
-
-    // Filter out items automatically handled by goto
-    let non_goto_items =
-      term_items.iter().filter(|(_, i)| i.get_offset() > 1).cloned().collect::<Vec<_>>();
-
-    if !non_goto_items.is_empty() {
-      let items = non_goto_items
-        .into_iter()
-        .map(|(_, i)| i)
-        .chain(end_items.into_iter().map(|(_, i)| i))
-        .collect::<Vec<_>>();
-
-      let node = TGN::new(t_pack, SymbolID::EndOfFile, parent_index, items);
-
-      let node_index = t_pack.insert_node(node);
-
-      let results = process_node(g, t_pack, node_index, parent_index, false);
-
-      t_pack.drop_node(&node_index);
-
-      return vec![node_index];
-    }
-  }
 
   let end_node = TGN::new(t_pack, SymbolID::EndOfFile, parent_index, vec![end_item]);
 

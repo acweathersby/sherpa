@@ -97,6 +97,10 @@ pub struct TransitionGraphNode {
 impl TransitionGraphNode {
   pub const OrphanIndex: usize = usize::MAX;
 
+  pub fn is_out_of_scope(&self) -> bool {
+    return self.items[0].get_state().is_out_of_scope();
+  }
+
   pub fn new(
     t_pack: &TransitionPack,
     sym: SymbolID,
@@ -134,9 +138,6 @@ impl TransitionGraphNode {
     parent_index: usize,
     items: Vec<Item>,
   ) -> Self {
-    if items.is_empty() {
-      panic!("WTsF?!?!?!");
-    }
     TransitionGraphNode {
       terminal_symbol: sym,
       trans_type: TransitionStateType::UNDEFINED,
@@ -176,6 +177,15 @@ impl TransitionGraphNode {
   #[inline(always)]
   pub fn unset_type(&mut self, transition_type: TransitionStateType) {
     self.trans_type &= self.trans_type ^ transition_type
+  }
+
+  pub fn debug_string(&self, grammar: &GrammarStore) -> String {
+    format!(
+      "{{[{}]\n  par:[{}]  [{:?}]}}",
+      self.id,
+      self.parent,
+      self.items.iter().map(|i| i.debug_string(grammar)).collect::<Vec<_>>()
+    )
   }
 }
 

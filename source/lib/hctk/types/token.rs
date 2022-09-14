@@ -1,11 +1,20 @@
 use std::fmt;
 use std::hash::Hash;
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::grammar::data::ast::HASH_NAME;
 
 use super::parse_token::ParseToken;
+
+/// Simple wrapper for source data and system specific origin path.
+pub struct TokenSource {
+  origin_path: PathBuf,
+  data:        Vec<u8>,
+}
+
+pub type SharedTokenSource = Arc<TokenSource>;
 
 #[derive(Clone)]
 
@@ -400,34 +409,45 @@ impl Token {
   }
 
   pub fn to_f64(&self) -> f64 {
-    if let Ok(result) = self.to_string().parse::<f64>() {
-      result
-    } else {
-      0.0
-    }
+    self.to_numeric_or_length() as f64
   }
 
   pub fn to_f32(&self) -> f32 {
-    if let Ok(result) = self.to_string().parse::<f32>() {
-      result
-    } else {
-      0.0
-    }
+    self.to_numeric_or_length() as f32
+  }
+
+  pub fn to_i16(&self) -> i16 {
+    self.to_numeric_or_length() as i16
+  }
+
+  pub fn to_i8(&self) -> i8 {
+    self.to_numeric_or_length() as i8
   }
 
   pub fn to_i32(&self) -> i32 {
-    if let Ok(result) = self.to_string().parse::<i32>() {
-      result
-    } else {
-      0
-    }
+    self.to_numeric_or_length() as i32
   }
 
   pub fn to_i64(&self) -> i64 {
-    if let Ok(result) = self.to_string().parse::<i64>() {
-      result
-    } else {
-      0
+    self.to_numeric_or_length() as i64
+  }
+
+  pub fn to_u8(&self) -> u8 {
+    self.to_numeric_or_length() as u8
+  }
+
+  pub fn to_u32(&self) -> u32 {
+    self.to_numeric_or_length() as u32
+  }
+
+  pub fn to_u64(&self) -> u64 {
+    self.to_numeric_or_length() as u64
+  }
+
+  pub fn to_numeric_or_length(&self) -> f64 {
+    match self.to_string().parse::<f64>() {
+      Ok(num) => num,
+      Err(_) => self.len as f64,
     }
   }
 }

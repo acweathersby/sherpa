@@ -23,18 +23,28 @@ use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::default;
+use std::env::current_exe;
 use std::hash;
 use std::iter::Filter;
 use std::thread::{self};
 use std::vec;
 
 pub(crate) fn build_byte_code_buffer(states: Vec<&IR_STATE>) -> (Vec<u32>, BTreeMap<String, u32>) {
-  let states_iter = states.iter().enumerate().map(|(i, s)| (s, s.id.clone(), i as u32));
+  let states_iter = states
+    .iter()
+    .flat_map(|s| {
+      if s.fail.is_some() {
+        vec![(s, s.id.clone(), true), (s, s.id.clone() + "_internal", false)]
+      } else {
+        vec![(s, s.id.clone(), false)]
+      }
+    })
+    .enumerate();
 
   let mut goto_bookmarks_to_offset = states_iter.clone().map(|_| 0).collect::<Vec<_>>();
 
   let state_name_to_bookmark =
-    states_iter.clone().map(|(_, s, i)| (s, i)).collect::<HashMap<_, _>>();
+    states_iter.clone().map(|(i, (_, name, _))| (name, i as u32)).collect::<HashMap<_, _>>();
 
   let mut bc = vec![
     INSTRUCTION::I15_FALL_THROUGH,
@@ -45,32 +55,38 @@ pub(crate) fn build_byte_code_buffer(states: Vec<&IR_STATE>) -> (Vec<u32>, BTree
     INSTRUCTION::I00_PASS,
   ];
 
-  for ((state, name, i)) in states_iter {
-    if let Some(fail_state) = &state.fail {
+  for ((i, (state, name, is_fail))) in states_iter {
+    if is_fail {
+      let fail_state = state.fail.as_deref().unwrap();
       let fail_state_address = bc.len();
 
-      let fail_addition = &mut compile_ir_state_to_bytecode(
+      let mut fail_addition = compile_ir_state_to_bytecode(
         &fail_state.instructions,
         default_get_branch_selector,
         &state_name_to_bookmark,
         &state.scanner,
+        &name,
       );
-      bc.append(fail_addition);
 
+      bc.append(&mut fail_addition);
       goto_bookmarks_to_offset[i as usize] = bc.len() as u32;
       bc.push(INSTRUCTION::I02_GOTO | FAIL_STATE_FLAG | fail_state_address as u32);
     } else {
+      if let Some(fail_state) = &state.fail {
+      } else {
+        goto_bookmarks_to_offset[i as usize] = bc.len() as u32;
+      }
+
+      let mut addition = compile_ir_state_to_bytecode(
+        &state.instructions,
+        default_get_branch_selector,
+        &state_name_to_bookmark,
+        &state.scanner,
+        &state.id,
+      );
       goto_bookmarks_to_offset[i as usize] = bc.len() as u32;
+      bc.append(&mut addition);
     }
-
-    let addition = &mut compile_ir_state_to_bytecode(
-      &state.instructions,
-      default_get_branch_selector,
-      &state_name_to_bookmark,
-      &state.scanner,
-    );
-
-    bc.append(addition);
   }
 
   patch_goto_offsets(&mut bc, &goto_bookmarks_to_offset);
@@ -156,7 +172,8 @@ pub fn compile_ir_state_to_bytecode(
   states: &Vec<ASTNode>,
   get_branch_selector: GetBranchSelector,
   state_to_bookmark: &HashMap<String, u32>,
-  scanner_name: &String,
+  scanner_name: &str,
+  state_name: &str,
 ) -> Vec<u32> {
   // Determine if we are dealing with a branch state or a single line
   // state. Branch states will always have more than one assert
@@ -177,10 +194,16 @@ pub fn compile_ir_state_to_bytecode(
     // 3. Byte
     // 4. Class
     // 5. CodePoint
-    build_branching_bytecode(states, get_branch_selector, scanner_name, state_to_bookmark)
+    build_branching_bytecode(
+      states,
+      get_branch_selector,
+      scanner_name,
+      state_to_bookmark,
+      state_name,
+    )
   } else {
     // We are dealing with a standard non-branching state
-    build_branchless_bytecode(states, state_to_bookmark)
+    build_branchless_bytecode(states, state_to_bookmark, state_name)
   }
 }
 
@@ -191,8 +214,9 @@ fn is_branch_state(instr: &Vec<ASTNode>) -> bool {
 fn build_branching_bytecode(
   instr: &[ASTNode],
   get_branch_selector: GetBranchSelector,
-  scanner_name: &String,
+  scanner_name: &str,
   state_to_bookmark: &HashMap<String, u32>,
+  state_name: &str,
 ) -> Vec<u32> {
   let branches = instr
     .iter()
@@ -216,7 +240,7 @@ fn build_branching_bytecode(
 
   // Extract the default branch if it exists.
   let o = if !default_branches.is_empty() {
-    build_branchless_bytecode(&default_branches[0].instructions, state_to_bookmark)
+    build_branchless_bytecode(&default_branches[0].instructions, state_to_bookmark, state_name)
   } else {
     vec![INSTRUCTION::I15_FAIL]
   };
@@ -232,6 +256,7 @@ fn build_branching_bytecode(
     o,
     get_branch_selector,
     state_to_bookmark,
+    state_name,
   );
 
   let o = make_table(
@@ -245,6 +270,7 @@ fn build_branching_bytecode(
     o,
     get_branch_selector,
     state_to_bookmark,
+    state_name,
   );
 
   let o = make_table(
@@ -258,6 +284,7 @@ fn build_branching_bytecode(
     o,
     get_branch_selector,
     state_to_bookmark,
+    state_name,
   );
 
   let o = make_table(
@@ -271,6 +298,7 @@ fn build_branching_bytecode(
     o,
     get_branch_selector,
     state_to_bookmark,
+    state_name,
   );
 
   let o = make_table(
@@ -284,6 +312,7 @@ fn build_branching_bytecode(
     o,
     get_branch_selector,
     state_to_bookmark,
+    state_name,
   );
 
   o
@@ -292,10 +321,11 @@ fn build_branching_bytecode(
 fn make_table(
   branches: &[&ASSERT],
   input_type_key: u32,
-  scanner_name: &String,
+  scanner_name: &str,
   mut default: Vec<u32>,
   get_branch_selector: GetBranchSelector,
   state_to_bookmark: &HashMap<String, u32>,
+  state_name: &str,
 ) -> Vec<u32> {
   if branches.is_empty() {
     return default;
@@ -351,7 +381,8 @@ fn make_table(
         }
       }
     } else {
-      let mut instructions = build_branchless_bytecode(&branch.instructions, state_to_bookmark);
+      let mut instructions =
+        build_branchless_bytecode(&branch.instructions, state_to_bookmark, state_name);
 
       let offset = branch_instructions_length;
       branch_instructions_length += instructions.len() as u32;
@@ -493,17 +524,20 @@ fn make_table(
   o
 }
 
+fn is_goto(state_name: &str) -> bool {
+  state_name.ends_with("_goto")
+}
+
 fn build_branchless_bytecode(
   instructions: &Vec<ASTNode>,
   state_name_to_bookmark: &HashMap<String, u32>,
+  current_state_name: &str,
 ) -> Vec<u32> {
   let mut byte_code: Vec<u32> = vec![];
   use INSTRUCTION as I;
 
   // reverse gotos so jumps operate correctly in a stack structure.
-
   let gotos = instructions.iter().filter(|i| matches!(i, ASTNode::Goto(_))).rev();
-
   let non_gotos = instructions.iter().filter(|i| !matches!(i, ASTNode::Goto(_)));
 
   for instruction in non_gotos.chain(gotos) {
@@ -514,15 +548,23 @@ fn build_branchless_bytecode(
         }
       }
       ASTNode::Consume(box Consume { EMPTY }) => byte_code.push(I::I01_CONSUME | *EMPTY as u32),
-      ASTNode::Goto(box Goto { state }) => {
-        if let ASTNode::HASH_NAME(box HASH_NAME { val }) = state {
-          let state_pointer_val =
-            if let Some(v) = state_name_to_bookmark.get(val) { *v } else { 0 };
+      ASTNode::Goto(box Goto { state }) => match state {
+        ASTNode::HASH_NAME(box HASH_NAME { val }) => {
+          let state_pointer_val = match (val == current_state_name)
+            .then_some(state_name_to_bookmark.get(&(val.to_string() + "_internal")))
+          {
+            Some(Some(v)) => *v,
+            _ => match state_name_to_bookmark.get(val) {
+              Some(v) => *v,
+              None => 0,
+            },
+          };
           byte_code.push(I::I02_GOTO | NORMAL_STATE_FLAG | state_pointer_val);
-        } else {
+        }
+        _ => {
           panic!("Invalid state type in goto instruction");
         }
-      }
+      },
       ASTNode::ScanUntil(box ScanUntil { ids, SCAN_BACKWARDS }) => {}
       ASTNode::ForkTo(box ForkTo { states, production_id }) => {
         byte_code.push(I::I06_FORK_TO | ((states.len() << 16) as u32) | (production_id.val as u32));

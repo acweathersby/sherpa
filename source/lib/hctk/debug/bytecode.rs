@@ -307,7 +307,13 @@ fn get_input_id(lu: Option<&BytecodeGrammarLookups>, token_id: u32, input_type: 
       }
       INPUT_TYPE::T03_CLASS => token_id.to_string(),
       INPUT_TYPE::T04_CODEPOINT => token_id.to_string(),
-      INPUT_TYPE::T05_BYTE => token_id.to_string(),
+      INPUT_TYPE::T05_BYTE => {
+        if token_id < 128 {
+          format!("{} {}", token_id, char::from_u32(token_id).unwrap())
+        } else {
+          token_id.to_string()
+        }
+      }
       _ => token_id.to_string(),
     }
   } else {
