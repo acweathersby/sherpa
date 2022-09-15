@@ -498,7 +498,6 @@ fn disambiguate(
       } else {
         term_nodes.append(&mut terms);
         end_nodes.append(&mut final_ends);
-
         t_pack.drop_node(&node_index);
       }
     }
@@ -517,8 +516,7 @@ fn disambiguate(
         }
         set_transition_type(t_pack, end_nodes[0], depth);
         leaves.push(end_nodes[0]);
-      } else if t_pack.is_scanner {
-      } else {
+      } else if !t_pack.is_scanner {
         handle_unresolved_nodes(g, t_pack, end_nodes, leaves);
       }
     }
@@ -526,8 +524,8 @@ fn disambiguate(
 
   let mut groups = hash_group(term_nodes, |_, n| (t_pack.get_node(n).terminal_symbol));
   let mut next_peek_groups = vec![];
-  let mut primary_nodes = BTreeSet::new();
-  let mut drop_nodes = BTreeSet::new();
+  let mut primary_nodes: BTreeSet<usize> = BTreeSet::new();
+  let mut nodes_to_be_dropped: BTreeSet<usize> = BTreeSet::new();
 
   merge_occluding_groups(g, t_pack, &mut groups);
 
@@ -538,9 +536,14 @@ fn disambiguate(
 
     if group.iter().any(|i| t_pack.get_node(*i).is_out_of_scope()) {
       let first = t_pack.get_node(group[0]);
+      let term_is_generic = matches!(
+        first.terminal_symbol,
+        SymbolID::GenericNumber | SymbolID::GenericIdentifier | SymbolID::GenericSymbol
+      );
+
       if !first.is_out_of_scope() {
         // Remove nodes that have items that alias in-scope items
-        let in_scope_items = group
+        let inscope_items = group
           .iter()
           .filter_map(|n| {
             let node = t_pack.get_node(*n);
@@ -553,27 +556,19 @@ fn disambiguate(
           .flatten()
           .collect::<BTreeSet<_>>();
 
-        for _ in group.drain_filter(|i| {
-          let node = t_pack.get_node(*i);
-          if node.is_out_of_scope() && in_scope_items.contains(&node.items[0].to_zero_state()) {
-            false
-          } else {
-            true
-          }
-        }) {}
-
-        if matches!(
-          first.terminal_symbol,
-          SymbolID::GenericNumber | SymbolID::GenericIdentifier | SymbolID::GenericSymbol
-        ) {
-          // Remove out-of-scope items if the symbol of the merged items and
-          // original nodes is generic
-          for _ in group.drain_filter(|i| {
-            let node = t_pack.get_node(*i);
-            let result = !node.is_out_of_scope() || node.terminal_symbol != first.terminal_symbol;
-            return result;
-          }) {}
-        }
+        // Remove outscope items if the symbol of the merged items and
+        // original nodes is generic, or if the outscope item occludes
+        // an existing inscope item.
+        nodes_to_be_dropped.append(
+          &mut group
+            .drain_filter(|i| {
+              let node = t_pack.get_node(*i);
+              !(node.is_out_of_scope()
+                && (inscope_items.contains(&node.items[0].to_zero_state())
+                  || (term_is_generic && node.terminal_symbol == first.terminal_symbol)))
+            })
+            .collect(),
+        );
       }
     }
 
@@ -581,10 +576,8 @@ fn disambiguate(
 
     if goals.len() > 1 && group.len() > 1 {
       let mut peek_transition_group = vec![];
-
       for node_index in group.iter().cloned() {
         let transition_on_skipped_symbol = t_pack.get_node(node_index).is(TST::I_SKIPPED_COLLISION);
-
         let goal = t_pack.get_node(node_index).goal;
 
         for mut node in create_term_nodes_from_items(
@@ -628,18 +621,18 @@ fn disambiguate(
       leaves.push(prime_node_index);
     }
 
+    primary_nodes.insert(prime_node_index);
+
     for node_index in group.iter() {
       if *node_index != prime_node_index {
         let items = t_pack.get_node(*node_index).items.clone();
-        drop_nodes.insert(node_index);
+        nodes_to_be_dropped.insert(*node_index);
         t_pack.get_node_mut(prime_node_index).items.append(&mut items.clone());
-      } else {
-        primary_nodes.insert(prime_node_index);
       }
     }
   }
 
-  for drop_node in drop_nodes {
+  for drop_node in nodes_to_be_dropped {
     if !primary_nodes.contains(&drop_node) {
       t_pack.drop_node(&drop_node);
     }
@@ -734,6 +727,7 @@ fn process_peek_leaves(g: &GrammarStore, t_pack: &mut TPack, leaves: Vec<usize>)
 
   resolved_leaves
 }
+
 fn get_continue_items(
   g: &GrammarStore,
   t_pack: &mut TPack,
@@ -747,8 +741,6 @@ fn get_continue_items(
   let mut need_to_prune = false;
 
   let (mut scan_items, mut final_items) = scan_items(g, t_pack, &end_item);
-
-  let scan_items = if end_item.is_out_of_scope() && peek_depth == 0 {
 
   if end_item.is_out_of_scope() {
     final_items = vec![];
