@@ -2,6 +2,12 @@ use crate::types::Token;
 
 pub type ReduceFunction<T> = fn(args: &mut Vec<HCObj<T>>, tok: Token);
 
+pub static gen_names: [&str; 30] = [
+  "LAZY", "NODE", "NODES", "STRING", "STRINGS", "F64", "F32", "I64", "I32", "I16", "I8", "U64",
+  "U32", "U16", "U8", "F32Vec", "F64Vec", "I64Vec", "I32Vec", "I16Vec", "I8Vec", "U64Vec",
+  "U32Vec", "U16Vec", "U8Vec", "TOKEN", "TOKENS", "BOOL", "OBJECTS", "NONE",
+];
+
 #[derive(Debug, Clone)]
 
 pub enum HCObj<T: 'static> {

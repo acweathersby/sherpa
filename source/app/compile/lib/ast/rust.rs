@@ -35,9 +35,10 @@ use std::io::Write;
 use hctk::writer::code_writer::*;
 
 pub fn write<W: Write>(g: &GrammarStore, ast: &AScriptStore, w: &mut CodeWriter<W>) -> Result<()> {
+  w.indent_spaces(2);
   w.wrtln("use hctk::types::*;")?.newline()?;
 
-  w.wrtln(&format!("#[derive(Debug, Clone)]\npub enum {} {{", ast.ast_name))?.indent();
+  w.wrtln(&format!("#[derive(Debug, Clone)]\npub enum {} {{", ast.name))?.indent();
 
   for _struct in ast.structs.values() {
     w.write_line(&format!("{0}(Box<{0}>),", _struct.type_name))?;
@@ -46,15 +47,54 @@ pub fn write<W: Write>(g: &GrammarStore, ast: &AScriptStore, w: &mut CodeWriter<
   w.dedent()
     .wrtln("}")?
     .newline()?
-    .wrtln(&format!("pub type HCO = HCObj<{}>;", ast.ast_name))?
+    .wrtln(&format!("pub type {} = HCObj<{}>;", ast.gen_name(), ast.name))?
     .newline()?
-    .wrtln(&format!("impl HCObjTrait for {} {{}}", ast.ast_name))?
+    .wrtln(&format!("impl HCObjTrait for {} {{}}", ast.name))?
     .newline()?;
+
+  build_types_utils(w, ast)?;
 
   build_structs(g, ast, w)?;
 
   build_functions(g, ast, w)?;
 
+  Ok(())
+}
+
+fn build_types_utils<W: Write>(w: &mut CodeWriter<W>, ast: &AScriptStore) -> Result<()> {
+  w.wrtln(&format!("#[derive(Eq, PartialEq, Clone, Copy, Debug)]\npub enum {}Type {{", ast.name))?
+    .indent()
+    .write_line("Undefined,")?;
+  for name in gen_names {
+    w.wrtln(name)?.wrt(",")?;
+  }
+  for AScriptStruct { type_name, .. } in ast.structs.values() {
+    w.wrtln(type_name)?.wrt(",")?;
+  }
+  w.dedent().wrtln("}")?;
+  w.wrtln(&format!("pub trait Get{0} {{ fn get_type(&self) -> {0}; }}", ast.type_name()))?;
+  w.wrtln(&format!("impl Get{0} for {1} {{", ast.type_name(), ast.name))?.indent();
+  w.wrtln(&format!("fn get_type(&self) -> {} {{", ast.type_name()))?.indent();
+  w.wrtln("match self{")?.indent();
+  for AScriptStruct { type_name, .. } in ast.structs.values() {
+    w.wrtln(&format!("{0}::{2}(..) => {1}::{2}", ast.name, ast.type_name(), type_name))?
+      .wrt(",")?;
+  }
+  w.dedent().wrtln("}")?.dedent().wrtln("}")?.dedent().wrtln("}")?;
+
+  w.wrtln(&format!("impl Get{} for {} {{", ast.type_name(), ast.gen_name()))?.indent();
+  w.wrtln(&format!("fn get_type(&self) -> {} {{", ast.type_name()))?.indent();
+  w.wrtln("match self{")?.indent();
+  for name in gen_names {
+    if name == "NODE" {
+      w.write_line(&format!("{}::NODE(node) => node.get_type(),", ast.gen_name()))?;
+    } else if name == "NONE" {
+    } else {
+      w.write_line(&format!("{0}::{2}(..) => {1}::{2},", ast.gen_name(), ast.type_name(), name))?;
+    }
+  }
+  w.write_line(&format!("_ => {}::NONE,", ast.type_name()))?;
+  w.dedent().wrtln("}")?.dedent().wrtln("}")?.dedent().wrtln("}")?;
   Ok(())
 }
 
@@ -66,7 +106,7 @@ fn build_functions<W: Write>(
   let ordered_bodies = g
     .bodies
     .iter()
-    .filter_map(|(id, b)| {
+    .filter_map(|(_, b)| {
       if !g.productions.get(&b.prod).unwrap().is_scanner {
         Some((b.bc_id, b))
       } else {
@@ -76,7 +116,7 @@ fn build_functions<W: Write>(
     .collect::<BTreeMap<_, _>>();
 
   let mut resize_fns = BTreeSet::new();
-  let fn_args = "args: &mut Vec<HCO>, tok: Token";
+  let fn_args = format!("args: &mut Vec<{0}>, tok: Token", ast.gen_name());
 
   // Build reduce functions -------------------------------------
   w.wrtln(&format!("fn noop_fn({}){{}}", fn_args))?.newline()?;
@@ -126,8 +166,9 @@ fn build_functions<W: Write>(
                 temp_writer.write_line(&_ref.to_init_string())?;
 
                 temp_writer.write_line(&format!(
-                  "args.push(HCO::NODE({}::{}(Box::new({}))))",
-                  ast.ast_name,
+                  "args.push({}::NODE({}::{}(Box::new({}))))",
+                  ast.gen_name(),
+                  ast.name,
                   ast.structs.get(&struct_type).unwrap().type_name,
                   _ref.get_ref_string()
                 ))?;
@@ -189,7 +230,8 @@ fn build_functions<W: Write>(
                 | AScriptTypeVal::F64Vec
                 | AScriptTypeVal::String(..)
                 | AScriptTypeVal::Token => temp_writer.write_line(&format!(
-                  "args.push(HCO::{}({}))",
+                  "args.push({}::{}({}))",
+                  ast.gen_name(),
                   return_type.hcobj_type_name(None),
                   &reference
                 ))?,
@@ -225,8 +267,8 @@ fn build_functions<W: Write>(
   for size in resize_fns {
     let fn_name = format!("noop_fn_{}", size);
     w.wrtln(&format!("fn {}({}){{", fn_name, fn_args))?.indent();
-    w.write_line(&format!("args.resize(args.len() - {},HCO::NONE);", size))?;
-    w.write_line("args.push(HCO::TOKEN(tok));")?;
+    w.write_line(&format!("args.resize(args.len() - {},{}::NONE);", size, ast.gen_name()))?;
+    w.write_line(&format!("args.push({}::TOKEN(tok));", ast.gen_name()))?;
     w.dedent().wrtln("}")?;
     w.newline()?;
   }
@@ -235,7 +277,7 @@ fn build_functions<W: Write>(
 
   w.wrt(&format!(
     "pub const REDUCE_FUNCTIONS:[ReduceFunction<{}>; {}] = [",
-    ast.ast_name,
+    ast.name,
     ordered_bodies.len()
   ))?
   .indent()
@@ -326,7 +368,7 @@ pub fn create_type_initializer_value(
           format!(
                 "{}.into_iter().map(|v|match v {{ {}::{}(node) => node, _ => panic!(\"could not convert\")}}).collect::<Vec<_>>()",
                 ref_.get_ref_string(),
-                ast.ast_name,
+                ast.name,
                 ast.structs.get(structs_ids.first().unwrap()).unwrap().type_name
               )
         }
@@ -384,12 +426,15 @@ fn build_structs<W: Write>(
       };
     }
 
-    o.dedent()
-      .wrtln("}")?
-      .wrtln(&format!("impl {} {{", type_name))?
-      .indent()
-      .wrtln("#[inline]\npub fn new (")?
-      .indent();
+    o.dedent().wrtln("}")?;
+
+    // Create the Nodes Member functions
+
+    o.wrtln(&format!("impl {} {{", type_name))?.indent();
+
+    // NODE::new
+
+    o.wrtln("#[inline]\npub fn new (")?.indent();
 
     for (name, type_string, type_val, optional) in &properties {
       match optional {
@@ -405,14 +450,20 @@ fn build_structs<W: Write>(
         },
       };
     }
-
     o.dedent().wrtln(") -> Self {")?.indent().wrtln("Self{")?.indent();
 
     for (name, ..) in &properties {
       o.write_line(&format!("{},", name))?;
     }
+    o.dedent().wrtln("}")?.dedent().wrtln("}")?;
 
-    o.dedent().wrtln("}")?.dedent().wrtln("}")?.dedent().wrtln("}")?;
+    // NODE::get_type
+    o.write_line(&format!(
+      "pub fn get_type(&self) -> {0}Type {{ {0}Type::{1} }}",
+      ast.name, type_name
+    ))?;
+
+    o.dedent().wrtln("}")?;
   }
 
   Ok(())
@@ -563,7 +614,7 @@ fn node_to_struct(ref_: Ref, ast: &AScriptStore) -> Ref {
           "if let {}::{}(obj) = %%
       {{ obj }}
       else {{panic!(\"invalid node\")}}",
-          ast.ast_name, struct_name
+          ast.name, struct_name
         ),
         Struct(struct_type),
       )
@@ -576,7 +627,7 @@ fn node_to_struct(ref_: Ref, ast: &AScriptStore) -> Ref {
           "if let {}::{}(obj) = %%
       {{ obj }}
       else {{panic!(\"invalid node\")}}",
-          ast.ast_name, struct_name
+          ast.name, struct_name
         ),
         Struct(struct_type),
       )
@@ -725,7 +776,7 @@ pub fn ascript_type_to_string(ast_type: &AScriptTypeVal, ast: &AScriptStore) -> 
       let production_types = get_production_types(ast, prod_id);
       if production_types.len() > 1 {
         if production_types_are_structs(&production_types) {
-          ast.ast_name.clone()
+          ast.name.clone()
         } else {
           "HCObj::None".to_string()
         }
@@ -745,14 +796,14 @@ pub fn ascript_type_to_string(ast_type: &AScriptTypeVal, ast: &AScriptStore) -> 
     U8Vec => "Vec<u8>".to_string(),
     GenericStruct(struct_ids) => {
       if struct_ids.len() > 1 {
-        ast.ast_name.clone()
+        ast.name.clone()
       } else {
         format!("Box<{}>", ast.structs.get(struct_ids.first().unwrap()).unwrap().type_name)
       }
     }
     GenericStructVec(struct_ids) => {
       if struct_ids.len() > 1 {
-        format!("Vec<{}>", ast.ast_name)
+        format!("Vec<{}>", ast.name)
       } else {
         format!("Vec<Box<{}>>", ast.structs.get(struct_ids.first().unwrap()).unwrap().type_name)
       }
@@ -771,7 +822,7 @@ fn get_default_value_(ast_type: &AScriptTypeVal, ast: &AScriptStore) -> String {
       if let Some(ascript_struct) = ast.structs.get(&id) {
         format!("{}::default()", ascript_struct.type_name)
       } else {
-        format!("{}::None", ast.ast_name)
+        format!("{}::None", ast.name)
       }
     }
     String(..) => "String::new()".to_string(),
@@ -792,7 +843,7 @@ fn get_default_value_(ast_type: &AScriptTypeVal, ast: &AScriptStore) -> String {
       let production_types = get_production_types(ast, prod_id);
       if production_types.len() > 1 {
         if production_types_are_structs(&production_types) {
-          ast.ast_name.clone()
+          ast.name.clone()
         } else {
           "HCObj::None".to_string()
         }

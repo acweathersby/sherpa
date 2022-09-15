@@ -315,7 +315,7 @@ pub struct AScriptStore {
   pub props:          BTreeMap<AScriptPropId, AScriptProp>,
   pub prod_types:     BTreeMap<ProductionId, HashMap<AScriptTypeVal, BTreeSet<Token>>>,
   pub body_reduce_fn: BTreeMap<BodyId, (AScriptTypeVal, ASTNode)>,
-  pub ast_name:       String,
+  pub name:           String,
 }
 
 impl AScriptStore {
@@ -325,8 +325,21 @@ impl AScriptStore {
       props:          BTreeMap::new(),
       prod_types:     BTreeMap::new(),
       body_reduce_fn: BTreeMap::new(),
-      ast_name:       "ASTNode".to_string(),
+      name:           "ASTNode".to_string(),
     }
+  }
+
+  pub fn set_name(&mut self, name: &str) {
+    self.name = name.to_string();
+  }
+
+  pub fn type_name(&self) -> String {
+    format!("{}Type", self.name)
+  }
+
+  /// The name for the generic type wrapper
+  pub fn gen_name(&self) -> String {
+    format!("Gen{}", self.name)
   }
 }
 

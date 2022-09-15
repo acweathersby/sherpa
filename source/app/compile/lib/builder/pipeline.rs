@@ -66,6 +66,7 @@ pub struct BuildPipeline<'a> {
   /// The number of threads that can be used
   /// to split up tasks.
   threads: usize,
+  ascript_name: Option<String>,
   ascript: Option<AScriptStore>,
   bytecode: Option<BytecodeOutput>,
   source_output_dir: PathBuf,
@@ -85,6 +86,7 @@ impl<'a> BuildPipeline<'a> {
       grammar_name: "undefined".to_string(),
       threads: number_of_threads,
       tasks: vec![],
+      ascript_name: None,
       grammar: None,
       ascript: None,
       bytecode: None,
@@ -113,6 +115,12 @@ impl<'a> BuildPipeline<'a> {
       get_num_of_available_threads(),
       CachedSource::String(grammar_source.to_string(), base_directory.to_owned()),
     )
+  }
+
+  pub fn set_ascript_ast_name(&mut self, name: &str) -> &mut Self {
+    self.ascript_name = Some(name.to_string());
+
+    self
   }
 
   /// Set the path for generated source files.
@@ -167,6 +175,10 @@ impl<'a> BuildPipeline<'a> {
         }
 
         return Self::build_pipeline(self.threads, self.cached_source.to_owned());
+      }
+
+      if let Some(name) = &self.ascript_name {
+        ascript.set_name(name);
       }
 
       self.ascript = Some(ascript);

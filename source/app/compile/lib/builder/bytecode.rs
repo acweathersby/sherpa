@@ -196,30 +196,30 @@ impl<'a, T: ByteCharacterReader + ImmutCharacterReader + MutCharacterReader> Con
         ",
           export_name
         ))?
-        .wrtln(
+        .wrtln(&format!(
           "
 let mut nodes = Vec::new();
 let mut tokens = Vec::new();
-loop {
-  match ctx.next() {
-    Some(ParseAction::Error { last_input, .. }) => {
+loop {{
+  match ctx.next() {{
+    Some(ParseAction::Error {{ last_input, .. }}) => {{
       let mut error_token = Token::from_parse_token(&last_input);
       error_token.set_source(ctx.1.get_source());
       return Err(ParseError::COMPILE_PROBLEM(
-        CompileProblem {
+        CompileProblem {{
           message: \"Unable to parse input\".to_string(),
           inline_message: \"Invalid Token\".to_string(),
           loc: error_token
-        }
+        }}
       ));
-    }
-    Some(ParseAction::Shift { skipped_characters: skip, token }) => {
+    }}
+    Some(ParseAction::Shift {{ skipped_characters: skip, token }}) => {{
       let mut tok = Token::from_parse_token(&token);
       tok.set_source(ctx.1.get_source());
-      nodes.push(HCO::TOKEN(tok.clone()));
+      nodes.push({}::TOKEN(tok.clone()));
       tokens.push(tok);
-    }
-    Some(ParseAction::Reduce { body_id, symbol_count, .. }) => {
+    }}
+    Some(ParseAction::Reduce {{ body_id, symbol_count, .. }}) => {{
       let len = symbol_count as usize;
       let pos_a = &tokens[tokens.len() - len as usize];
       let pos_b = &tokens[tokens.len() - 1];
@@ -227,22 +227,23 @@ loop {
       let root = tokens.len() - len;
       tokens[root] = tok.clone();
 
-      unsafe {
+      unsafe {{
         tokens.set_len(root + 1);
-      }
+      }}
 
       REDUCE_FUNCTIONS[body_id as usize](&mut nodes, tok);
 
-    }
-    Some(ParseAction::Accept { production_id }) => {
+    }}
+    Some(ParseAction::Accept {{ production_id }}) => {{
       break;
-    }
-    _ => {
+    }}
+    _ => {{
       break;
-    }
-  }
-}",
-        )?
+    }}
+  }}
+}}",
+          ascript.gen_name()
+        ))?
         .wrtln(&{
           let (string, ref_) = create_type_initializer_value(ref_, &ast_type, false, ascript);
 
