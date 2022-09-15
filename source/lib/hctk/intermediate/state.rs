@@ -5,9 +5,9 @@ use std::collections::VecDeque;
 use std::fmt::format;
 use std::thread;
 
-use super::transition_graph::construct_goto;
-use super::transition_graph::construct_recursive_descent;
-use super::transition_graph::hash_group;
+use super::transition::construct_goto;
+use super::transition::construct_recursive_descent;
+use super::transition::hash_group;
 use crate::grammar::get_production;
 use crate::grammar::get_production_plain_name;
 use crate::grammar::get_production_start_items;
