@@ -53,7 +53,7 @@ pub fn disassemble_state(
     let instruction = bc[idx] & INSTRUCTION_CONTENT_MASK;
     match bc[idx] & INSTRUCTION_HEADER_MASK {
       INSTRUCTION::I00_PASS => (format!("\n{}PASS", dh(so)), so + 1),
-      INSTRUCTION::I01_CONSUME => {
+      INSTRUCTION::I01_SHIFT => {
         let (string, offset) = ds(bc, so + 1, lu);
         (format!("\n{}SHFT", dh(so)) + &string, offset + 1)
       }
@@ -180,7 +180,7 @@ pub fn disassemble_state(
         (format!("\n{}REPT", dh(so)) + &string, offset)
       }
       INSTRUCTION::I13_NOOP => (format!("\n{}NOOP", dh(so)), so + 1),
-      INSTRUCTION::I14_ASSERT_CONSUME => (format!("\n{}ASTC", dh(so)), so + 1),
+      INSTRUCTION::I14_ASSERT_SHIFT => (format!("\n{}ASTC", dh(so)), so + 1),
       INSTRUCTION::I15_FAIL => (format!("\n{}FAIL", dh(so)), so + 1),
       _ => (format!("\n{}UNDF", dh(so)), so + 1),
     }
@@ -197,17 +197,16 @@ pub fn generate_table_string(
   table_name: &str,
   get_offset_token_id_pair: GetOffsetTokenIdPair,
 ) -> (String, usize) {
+  let TableHeaderData { input_type, lexer_type, table_length, table_meta, scan_index } =
+    TableHeaderData::from_bytecode(idx, bc);
+
   let states = bc;
   let instruction = states[idx];
-  let scanner_pointer = states[idx + 1];
-  let table_len = states[idx + 2] >> 16 & 0xFFFF;
-  let table_meta = states[idx + 2] & 0xFFFF;
-  let input_type = (instruction >> 22) & 0x7;
   let mut strings = vec![];
   let default_offset = states[idx + 3] as usize;
   let mut delta_offsets = BTreeSet::new();
 
-  for entry_offset in (4 + idx)..(idx + 4 + table_len as usize) {
+  for entry_offset in (4 + idx)..(idx + 4 + table_length as usize) {
     let (delta_offset, token_id, IS_SKIP, meta) =
       get_offset_token_id_pair(states, entry_offset, idx);
     let goto_offset = delta_offset + idx;
@@ -227,17 +226,20 @@ pub fn generate_table_string(
 
   let (default_string, offset) = disassemble_state(bc, idx + default_offset, lu);
 
-  let string =
-    format!("\n{}{} JUMP | TYPE {}", header(idx), table_name, input_type_to_name(input_type))
-      + &(if scanner_pointer > 0 {
-        format!("\n{}SCANNER OFFSET {}", header(idx + 1), address_string(scanner_pointer as usize))
-      } else {
-        format!("\n{}NO SCANNER", header(idx + 1))
-      })
-      + &format!("\n{}LENGTH: {} META: {}", header(idx + 2), table_len, table_meta)
-      + &create_failure_entry(idx + 3, idx + default_offset)
-      + &strings.join("")
-      + &default_string;
+  let string = format!(
+    "\n{}{} JUMP | TYPE {} | PEEK {}",
+    header(idx),
+    table_name,
+    input_type_to_name(input_type),
+    lexer_type == LEXER_TYPE::PEEK
+  ) + &(if scan_index.get_address() > 0 {
+    format!("\n{}SCANNER OFFSET {}", header(idx + 1), address_string(scan_index.get_address()))
+  } else {
+    format!("\n{}NO SCANNER", header(idx + 1))
+  }) + &format!("\n{}LENGTH: {} META: {}", header(idx + 2), table_length, table_meta)
+    + &create_failure_entry(idx + 3, idx + default_offset)
+    + &strings.join("")
+    + &default_string;
   (string, offset)
 }
 

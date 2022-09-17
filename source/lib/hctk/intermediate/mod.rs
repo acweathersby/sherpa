@@ -73,6 +73,7 @@ mod transition_tree_tests {
 mod state_constructor_tests {
 
   use std::collections::BTreeSet;
+  use std::iter::FromIterator;
 
   use crate::debug::compile_test_grammar;
   use crate::grammar::get_production_id_by_name;
@@ -81,6 +82,8 @@ mod state_constructor_tests {
   use crate::intermediate::state::generate_scanner_intro_state;
   use crate::types::GrammarId;
   use crate::types::SymbolID;
+
+  use super::state::compile_states;
 
   #[test]
   pub fn generate_production_states_with_basic_grammar() {
@@ -306,7 +309,7 @@ mod state_constructor_tests {
         
         <[ recover cb_sentinel_1 ] 
         
-            consume nothing then set prod to cb_sentinel
+            shift nothing then set prod to cb_sentinel
         >
         
         <> code_line_text > 
@@ -362,9 +365,19 @@ mod state_constructor_tests {
             f:ast { { t_MetaStart, c_Content, c_Meta } }              
         ",
     );
-    if let Some(prod) = get_production_id_by_name("text_symbol(+\\\" )", &grammar) {
-      let result = generate_production_states(&prod, &grammar);
-      println!("{:#?}", result);
-    }
+
+    // compile_states(&grammar, 1);
+
+    let result = generate_scanner_intro_state(
+      BTreeSet::from_iter(vec![
+        SymbolID::from_string("g:nl", Some(&grammar)),
+        SymbolID::from_string("code_block_delimiter_with_nl", Some(&grammar)),
+      ]),
+      &grammar,
+    );
+    // if let Some(prod) = get_production_id_by_name("line", &grammar) {
+    //   let result = generate_production_states(&prod, &grammar);
+    //   println!("{:#?}", result);
+    // }
   }
 }

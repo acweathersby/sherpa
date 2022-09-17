@@ -1,6 +1,5 @@
 #![warn(clippy::borrowed_box)]
 use crate::grammar::data::ast::ASTNode;
-use crate::grammar::data::ast::Consume;
 use crate::grammar::data::ast::ForkTo;
 use crate::grammar::data::ast::Goto;
 use crate::grammar::data::ast::NotInScope;
@@ -10,6 +9,7 @@ use crate::grammar::data::ast::Reduce;
 use crate::grammar::data::ast::ScanUntil;
 use crate::grammar::data::ast::SetProd;
 use crate::grammar::data::ast::SetScope;
+use crate::grammar::data::ast::Shift;
 use crate::grammar::data::ast::TokenAssign;
 use crate::grammar::data::ast::ASSERT;
 use crate::grammar::data::ast::HASH_NAME;
@@ -547,7 +547,7 @@ fn build_branchless_bytecode(
           byte_code.push(I::I05_TOKEN_ASSIGN | ((id.val as u32) & 0x00FF_FFFF))
         }
       }
-      ASTNode::Consume(box Consume { EMPTY }) => byte_code.push(I::I01_CONSUME | *EMPTY as u32),
+      ASTNode::Shift(box Shift { EMPTY }) => byte_code.push(I::I01_SHIFT | *EMPTY as u32),
       ASTNode::Goto(box Goto { state }) => match state {
         ASTNode::HASH_NAME(box HASH_NAME { val }) => {
           let state_pointer_val = match (val == current_state_name)

@@ -241,7 +241,7 @@ fn resolve_production_return_types(ast: &mut AScriptStore) {
                     .or_insert_with(|| BTreeSet::new())
                     .insert(*foreign_prod_id)
                   {
-                    let other_production_types = ast.prod_types.get(foreign_prod_id).unwrap();
+                    let other_production_types = ast.prod_types.get(&foreign_prod_id).unwrap();
 
                     for (_type, token) in other_production_types {
                       combined_vector_types.insert(_type.clone());

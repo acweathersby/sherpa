@@ -137,12 +137,12 @@ state [test]
     }
   }
   #[test]
-  fn test_consume_nothing() {
+  fn test_shift_nothing() {
     let (bytecode, mut reader, mut state) = setup_state(
       "
 state [test]
     
-    consume nothing
+    shift nothing
     ",
       "123456781234567812345678",
     );
@@ -176,12 +176,12 @@ state [test]
   }
 
   #[test]
-  fn test_consume() {
+  fn test_shift() {
     let (bytecode, mut reader, mut state) = setup_state(
       "
 state [test]
     
-    consume
+    shift
     ",
       "123456781234567812345678",
     );

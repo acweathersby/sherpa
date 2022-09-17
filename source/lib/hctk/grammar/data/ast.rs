@@ -57,7 +57,7 @@ pub enum ASTNode {
   Fail(Box<Fail>),
   NotInScope(Box<NotInScope>),
   SetScope(Box<SetScope>),
-  Consume(Box<Consume>),
+  Shift(Box<Shift>),
   Ascript(Box<Ascript>),
   Returned(Box<Returned>),
   Referenced(Box<Referenced>),
@@ -167,7 +167,7 @@ impl HCObjTrait for ASTNode {
     //
     // SetScope(bx) => bx.tok.to_string(),
     //
-    // Consume(bx) => bx.tok.to_string(),
+    // Shift(bx) => bx.tok.to_string(),
     //
     // Ascript(bx) => bx.tok.to_string(),
     //
@@ -327,7 +327,7 @@ pub enum NodeIteration<'a> {
   Fail(&'a mut Fail),
   NotInScope(&'a mut NotInScope),
   SetScope(&'a mut SetScope),
-  Consume(&'a mut Consume),
+  Shift(&'a mut Shift),
   Ascript(&'a mut Ascript),
   Returned(&'a mut Returned),
   Referenced(&'a mut Referenced),
@@ -419,7 +419,7 @@ impl<'a> NodeIteration<'a> {
       Fail(_0) => "node-Fail",
       NotInScope(_0) => "node-NotInScope",
       SetScope(_0) => "node-SetScope",
-      Consume(_0) => "node-Consume",
+      Shift(_0) => "node-Shift",
       Ascript(_0) => "node-Ascript",
       Returned(_0) => "node-Returned",
       Referenced(_0) => "node-Referenced",
@@ -577,7 +577,7 @@ where
               par.Replace(node, c, d);
               true
             }
-            Consume(par) => {
+            Shift(par) => {
               par.Replace(node, c, d);
               true
             }
@@ -892,7 +892,7 @@ where
       Fail(node) => node.as_mut().Replace(n, i, j),
       NotInScope(node) => node.as_mut().Replace(n, i, j),
       SetScope(node) => node.as_mut().Replace(n, i, j),
-      Consume(node) => node.as_mut().Replace(n, i, j),
+      Shift(node) => node.as_mut().Replace(n, i, j),
       Ascript(node) => node.as_mut().Replace(n, i, j),
       Returned(node) => node.as_mut().Replace(n, i, j),
       Referenced(node) => node.as_mut().Replace(n, i, j),
@@ -989,7 +989,7 @@ where
       Fail(node) => node.as_mut().Iterate(_yield, parent, i, j),
       NotInScope(node) => node.as_mut().Iterate(_yield, parent, i, j),
       SetScope(node) => node.as_mut().Iterate(_yield, parent, i, j),
-      Consume(node) => node.as_mut().Iterate(_yield, parent, i, j),
+      Shift(node) => node.as_mut().Iterate(_yield, parent, i, j),
       Ascript(node) => node.as_mut().Iterate(_yield, parent, i, j),
       Returned(node) => node.as_mut().Iterate(_yield, parent, i, j),
       Referenced(node) => node.as_mut().Iterate(_yield, parent, i, j),
@@ -1080,7 +1080,7 @@ where
       Fail(node) => node.as_ref().Token(),
       NotInScope(node) => node.as_ref().Token(),
       SetScope(node) => node.as_ref().Token(),
-      Consume(node) => node.as_ref().Token(),
+      Shift(node) => node.as_ref().Token(),
       Ascript(node) => node.as_ref().Token(),
       Returned(node) => node.as_ref().Token(),
       Referenced(node) => node.as_ref().Token(),
@@ -1171,7 +1171,7 @@ where
       Fail(node) => node.as_ref().GetType(),
       NotInScope(node) => node.as_ref().GetType(),
       SetScope(node) => node.as_ref().GetType(),
-      Consume(node) => node.as_ref().GetType(),
+      Shift(node) => node.as_ref().GetType(),
       Ascript(node) => node.as_ref().GetType(),
       Returned(node) => node.as_ref().GetType(),
       Referenced(node) => node.as_ref().GetType(),
@@ -1490,7 +1490,7 @@ impl IR_STATE {
       | ASTNode::Fail(_)
       | ASTNode::NotInScope(_)
       | ASTNode::SetScope(_)
-      | ASTNode::Consume(_)
+      | ASTNode::Shift(_)
       | ASTNode::Goto(_)
       | ASTNode::Lazy(_) => {
         if index as usize >= self.instructions.len() {
@@ -1713,7 +1713,7 @@ where
             };
           }
 
-          ASTNode::Consume(child) => {
+          ASTNode::Shift(child) => {
             unsafe {
               let mut_me = node.get();
               child.Iterate(_yield, &mut NodeIteration::IR_STATE(*mut_me), 0, j as i32)
@@ -1882,7 +1882,7 @@ impl ASSERT {
       | ASTNode::Fail(_)
       | ASTNode::NotInScope(_)
       | ASTNode::SetScope(_)
-      | ASTNode::Consume(_)
+      | ASTNode::Shift(_)
       | ASTNode::Goto(_)
       | ASTNode::Lazy(_) => {
         if index as usize >= self.instructions.len() {
@@ -2051,7 +2051,7 @@ where
             };
           }
 
-          ASTNode::Consume(child) => {
+          ASTNode::Shift(child) => {
             unsafe {
               let mut_me = node.get();
               child.Iterate(_yield, &mut NodeIteration::ASSERT(*mut_me), 1, j as i32)
@@ -2136,7 +2136,7 @@ impl DEFAULT {
       | ASTNode::Fail(_)
       | ASTNode::NotInScope(_)
       | ASTNode::SetScope(_)
-      | ASTNode::Consume(_)
+      | ASTNode::Shift(_)
       | ASTNode::Goto(_)
       | ASTNode::Lazy(_) => {
         if index as usize >= self.instructions.len() {
@@ -2273,7 +2273,7 @@ where
             };
           }
 
-          ASTNode::Consume(child) => {
+          ASTNode::Shift(child) => {
             unsafe {
               let mut_me = node.get();
               child.Iterate(_yield, &mut NodeIteration::DEFAULT(*mut_me), 0, j as i32)
@@ -3424,17 +3424,17 @@ where
 }
 
 #[derive(Debug, Clone)]
-pub struct Consume {
+pub struct Shift {
   pub EMPTY: bool, // BOOL
 }
 
-impl Consume {
+impl Shift {
   pub fn new(_EMPTY: bool) -> Box<Self> {
-    Box::new(Consume { EMPTY: _EMPTY })
+    Box::new(Shift { EMPTY: _EMPTY })
   }
 }
 
-impl<'a> ASTNodeTraits<'a> for Consume
+impl<'a> ASTNodeTraits<'a> for Shift
 where
   Self: Sized,
 {
@@ -3450,7 +3450,7 @@ where
     unsafe {
       let mut_me = node.get();
 
-      if !_yield(&mut NodeIteration::Consume(*mut_me), parent, 950312, i, j) {
+      if !_yield(&mut NodeIteration::Shift(*mut_me), parent, 950312, i, j) {
         return;
       };
     }
@@ -6956,7 +6956,7 @@ impl FailState {
       | ASTNode::Fail(_)
       | ASTNode::NotInScope(_)
       | ASTNode::SetScope(_)
-      | ASTNode::Consume(_)
+      | ASTNode::Shift(_)
       | ASTNode::Goto(_)
       | ASTNode::Lazy(_) => {
         if index as usize >= self.instructions.len() {
@@ -7161,7 +7161,7 @@ where
             };
           }
 
-          ASTNode::Consume(child) => {
+          ASTNode::Shift(child) => {
             unsafe {
               let mut_me = node.get();
               child.Iterate(_yield, &mut NodeIteration::FailState(*mut_me), 0, j as i32)
@@ -11327,14 +11327,14 @@ fn _fn28(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /// ```
-/// { t_Consume, c_IR, c_IR_Instruction, EMPTY:bool($2) }
+/// { t_Shift, c_IR, c_IR_Instruction, EMPTY:bool($2) }
 /// ```
 fn _fn29(args: &mut Vec<HCO>, tok: Token) {
   let mut i = args.len() - 1;
   let mut v1 = args.remove(i - 0);
   let mut v0 = args.remove(i - 1);
   if let HCO::TOKEN(r_0) = v1 {
-    let mut ref_0 = ASTNode::Consume(Consume::new(/* AAA */ true));
+    let mut ref_0 = ASTNode::Shift(Shift::new(/* AAA */ true));
     args.push(HCO::NODE/*aa99*/(ref_0))
   }
 }
@@ -11366,12 +11366,12 @@ fn _fn30(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /// ```
-/// { t_Consume, c_IR, c_IR_Instruction, EMPTY:bool($NULL) }
+/// { t_Shift, c_IR, c_IR_Instruction, EMPTY:bool($NULL) }
 /// ```
 fn _fn31(args: &mut Vec<HCO>, tok: Token) {
   let mut i = args.len() - 1;
   let mut v0 = args.remove(i - 0);
-  let mut ref_0 = ASTNode::Consume(Consume::new(/* AAA */ false));
+  let mut ref_0 = ASTNode::Shift(Shift::new(/* AAA */ false));
   args.push(HCO::NODE/*aa99*/(ref_0))
 }
 /// ```

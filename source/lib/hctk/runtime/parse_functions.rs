@@ -25,8 +25,8 @@ pub fn dispatch<T: BaseCharacterReader + MutCharacterReader>(
     use InstructionType::*;
 
     i = match instr.to_type() {
-      CONSUME => {
-        let (action, i) = consume(i, instr, ctx, r);
+      SHIFT => {
+        let (action, i) = shift(i, instr, ctx, r);
         ctx.set_active_state_to(i);
         break action;
       }
@@ -50,10 +50,10 @@ pub fn dispatch<T: BaseCharacterReader + MutCharacterReader>(
       SET_FAIL_STATE => set_fail(),
       REPEAT => repeat(),
       NOOP13 => noop(i),
-      ASSERT_CONSUME => DEFAULT_FAIL_INSTRUCTION_ADDRESS,
+      ASSERT_SHIFT => DEFAULT_FAIL_INSTRUCTION_ADDRESS,
       FAIL => break FailState,
       _ => break CompleteState,
-    }
+    };
   }
 }
 /// Produces a parse action that

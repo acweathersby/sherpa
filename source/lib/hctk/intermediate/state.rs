@@ -144,9 +144,13 @@ pub fn generate_scanner_intro_state(symbols: BTreeSet<SymbolID>, g: &GrammarStor
     })
     .collect::<Vec<_>>();
 
-  let name = format!("scan_{:02X}", hash_id_value_u64(&symbols));
-
-  generate_states(g, true, &symbol_items, &name, u32::MAX)
+  generate_states(
+    g,
+    true,
+    &symbol_items,
+    &format!("scan_{:02X}", hash_id_value_u64(&symbols)),
+    u32::MAX,
+  )
 }
 
 pub fn generate_production_states(production_id: &ProductionId, g: &GrammarStore) -> IROutput {
@@ -197,27 +201,27 @@ fn generate_states(
 }
 
 fn process_transition_nodes<'a>(
-  tpack: &'a TransitionPack,
+  t_pack: &'a TransitionPack,
   g: &GrammarStore,
   entry_name: &String,
   prod_id: u32,
 ) -> Vec<IRState> {
   // We start at leaf nodes and make our way down to the root.
-  let number_of_nodes = tpack.get_node_len();
+  let number_of_nodes = t_pack.get_node_len();
 
-  let leaf_node_set = tpack.leaf_nodes.iter().collect::<BTreeSet<_>>();
+  let leaf_node_set = t_pack.leaf_nodes.iter().collect::<BTreeSet<_>>();
 
   let mut output = BTreeMap::<usize, IRState>::new();
 
   let mut children_tables =
-    tpack.nodes_iter().map(|_| BTreeSet::<usize>::new()).collect::<Vec<_>>();
+    t_pack.nodes_iter().map(|_| BTreeSet::<usize>::new()).collect::<Vec<_>>();
 
   // Starting with the leaf nodes, construct the reverse
   // edges of our transition graph, converting the relationship
   // child->parent to parent->child
 
-  for child in tpack.nodes_iter() {
-    if child.has_parent(tpack) {
+  for child in t_pack.nodes_iter() {
+    if child.has_parent(t_pack) {
       children_tables[child.parent].insert(child.id);
 
       for proxy_parent in &child.proxy_parents {
@@ -226,7 +230,7 @@ fn process_transition_nodes<'a>(
     }
   }
 
-  let mut nodes_pipeline = VecDeque::from_iter(tpack.leaf_nodes.iter().cloned());
+  let mut nodes_pipeline = VecDeque::from_iter(t_pack.leaf_nodes.iter().cloned());
 
   'outer: while let Some(node_id) = nodes_pipeline.pop_front() {
     if output.contains_key(&node_id) {
@@ -247,21 +251,24 @@ fn process_transition_nodes<'a>(
       }
     }
 
-    let node = tpack.get_node(node_id);
+    let node = t_pack.get_node(node_id);
 
     if !leaf_node_set.contains(&node_id) {
+      if children_lookup.is_empty() {
+        panic!("Childless node [{}] does is not in leaf node set!", node_id);
+      }
       for state in {
-        if tpack.mode == TransitionMode::GoTo && node.id == 0 {
+        if t_pack.mode == TransitionMode::GoTo && node.id == 0 {
           vec![create_goto_start_state(
             g,
-            tpack,
+            t_pack,
             &output,
             children_lookup,
-            &tpack.root_prods,
+            &t_pack.root_prods,
             entry_name,
           )]
         } else {
-          create_intermediate_state(node, g, tpack, &output, &children_tables, entry_name, prod_id)
+          create_intermediate_state(node, g, t_pack, &output, &children_tables, entry_name, prod_id)
         }
       } {
         output.insert(state.get_graph_id(), state);
@@ -269,12 +276,12 @@ fn process_transition_nodes<'a>(
     } else {
       // End states are discarded at the end, so we will only use this
       // retrieve state's hash for parent states.
-      let state = create_end_state(node, g, tpack.is_scanner);
+      let state = create_reduce_state(node, g, t_pack.is_scanner);
 
       output.insert(state.get_graph_id(), state);
     }
 
-    if !node.is_orphan(tpack) {
+    if !node.is_orphan(t_pack) {
       nodes_pipeline.push_back(node.parent);
       for proxy_parent in &node.proxy_parents {
         nodes_pipeline.push_back(*proxy_parent);
@@ -366,9 +373,15 @@ on fail state [ {}_goto_failed ]
     }
   }
 
+  let code = strings.join("\n");
+
+  if code.is_empty() {
+    panic!("[GOTO] Empty state generated!");
+  }
+
   IRState {
     comment,
-    code: strings.join("\n"),
+    code,
     name: get_goto_name(entry_name),
     state_type: if is_scanner { ScannerGoto } else { ProductionGoto },
     ..Default::default()
@@ -443,7 +456,6 @@ fn create_intermediate_state(
     for child_id in children_tables.get(origin.id).unwrap() {
       let child = t_pack.get_node(*child_id);
       for item in &child.items {
-        println!("{}", item.debug_string(g));
         item.print_blame(g);
       }
     }
@@ -546,7 +558,7 @@ fn create_intermediate_state(
                 let (symbol_bytecode_id, assert_class) = if (!is_scanner) {
                   (symbol_id.bytecode_id(Some(g)), "TOKEN")
                 } else {
-                  get_symbol_consume_type(&symbol_id, g)
+                  get_symbol_shift_type(&symbol_id, g)
                 };
 
                 strings.push(format!(
@@ -597,24 +609,29 @@ fn create_intermediate_state(
                   // to use as default
                   let child = defined_branches[0];
 
-                  let end_string = create_end_string(child, g, is_scanner);
+                  let shift =
+                    (if child.is(TransitionStateType::I_SHIFT) { "shift then " } else { "" })
+                      .to_string();
+
+                  let end_string = create_reduce_string(child, g, is_scanner);
+
                   strings.push(match single_child {
-                    true => format!("{}{}", end_string, post_amble),
+                    true => format!("{}{}{}", shift, end_string, post_amble),
                     false => {
-                      format!("default ( {}{} )", end_string, post_amble)
+                      format!("default ( {}{}{} )", shift, end_string, post_amble)
                     }
                   })
                 } else {
                   let mut origin = group[0];
 
-                  while !(origin.is(TransitionStateType::I_PEEK_ORIGIN)) {
-                    origin = t_pack.get_node(origin.parent);
-                  }
+                  // while !(origin.is(TransitionStateType::I_PEEK_ORIGIN)) {
+                  //  origin = t_pack.get_node(origin.parent);
+                  //}
 
-                  for child_id in children_tables.get(origin.id).unwrap() {
-                    let child = t_pack.get_node(*child_id);
+                  for child in group {
+                    let par = t_pack.get_node(child.parent);
                     for item in &child.items {
-                      item.print_blame(g);
+                      println!("{}", item.debug_string(g));
                     }
                   }
 
@@ -629,8 +646,8 @@ fn create_intermediate_state(
                 let child_state = resolved_states.get(&child.id).unwrap();
                 let state_name = child_state.get_name();
 
-                let consume =
-                  (if child.is(TransitionStateType::I_CONSUME) { "consume then " } else { "" })
+                let shift =
+                  (if child.is(TransitionStateType::I_SHIFT) { "shift then " } else { "" })
                     .to_string();
 
                 strings.push(if child.is(TransitionStateType::I_FAIL) {
@@ -640,9 +657,9 @@ fn create_intermediate_state(
                   }
                 } else {
                   match single_child {
-                    true => format!("{}goto state [ {} ]{}", consume, state_name, post_amble),
+                    true => format!("{}goto state [ {} ]{}", shift, state_name, post_amble),
                     false => {
-                      format!("default ( {}goto state [ {} ]{} )", consume, state_name, post_amble)
+                      format!("default ( {}goto state [ {} ]{} )", shift, state_name, post_amble)
                     }
                   }
                 });
@@ -671,16 +688,15 @@ fn create_intermediate_state(
               let (symbol_id, assert_class) = if (!is_scanner) {
                 (symbol_id.bytecode_id(Some(g)), "TOKEN")
               } else {
-                get_symbol_consume_type(&symbol_id, g)
+                get_symbol_shift_type(&symbol_id, g)
               };
 
-              let consume =
-                (if child.is(TransitionStateType::I_CONSUME) { "consume then " } else { "" })
-                  .to_string();
+              let shift = (if child.is(TransitionStateType::I_SHIFT) { "shift then " } else { "" })
+                .to_string();
 
               strings.push(format!(
                 "{} {} [ {} ] ( {}goto state [ {} ]{} )",
-                assertion_type, assert_class, symbol_id, consume, state_name, post_amble
+                assertion_type, assert_class, symbol_id, shift, state_name, post_amble
               ));
             }
           }
@@ -691,10 +707,27 @@ fn create_intermediate_state(
     stack_depth += max_child_depth;
   }
 
+  let mut code = strings.join("\n");
+
+  if code.is_empty() {
+    panic!(
+      "[BRANCH] Empty state generated! [{}] [{}] {:?} {}",
+      comment,
+      t_pack
+        .root_prods
+        .iter()
+        .map(|s| { get_production_plain_name(s, g) })
+        .collect::<Vec<_>>()
+        .join("   \n"),
+      children_tables.get(node.id).cloned().unwrap_or_default(),
+      node.debug_string(g)
+    );
+  }
+
   let state = if is_scanner {
     IRState {
       comment,
-      code: strings.join("\n"),
+      code,
       name: state_name,
       graph_id: node.id,
       state_type,
@@ -716,7 +749,7 @@ fn create_intermediate_state(
 
     IRState {
       comment,
-      code: strings.join("\n"),
+      code,
       name: state_name,
       graph_id: node.id,
       normal_symbols: normal_symbol_set.into_iter().collect(),
@@ -780,7 +813,7 @@ fn get_symbols_from_items(
   (normal_symbol_set, peek_symbols_set, seen)
 }
 
-fn get_symbol_consume_type(symbol_id: &SymbolID, g: &GrammarStore) -> (u32, &'static str) {
+fn get_symbol_shift_type(symbol_id: &SymbolID, g: &GrammarStore) -> (u32, &'static str) {
   match symbol_id {
     SymbolID::GenericSpace
     | SymbolID::GenericHorizontalTab
@@ -808,7 +841,7 @@ fn create_post_amble(entry_name: &String, g: &GrammarStore) -> String {
   format!(" then goto state [ {}_goto ]", entry_name)
 }
 
-fn create_end_string(node: &TransitionGraphNode, g: &GrammarStore, is_scanner: bool) -> String {
+fn create_reduce_string(node: &TransitionGraphNode, g: &GrammarStore, is_scanner: bool) -> String {
   let item = node.items[0];
 
   let body = g.bodies.get(&item.get_body()).unwrap();
@@ -816,8 +849,9 @@ fn create_end_string(node: &TransitionGraphNode, g: &GrammarStore, is_scanner: b
   let production = g.productions.get(&body.prod).unwrap();
 
   if !item.at_end() {
-    panic!("Expected state to be in end state")
-  } else if is_scanner {
+    // panic!("Expected state to be in end state {}", item.debug_string(g))
+  }
+  if is_scanner {
     let symbol_id = production.symbol_bytecode_id;
     let production_id = production.bytecode_id;
 
@@ -836,15 +870,30 @@ fn create_end_string(node: &TransitionGraphNode, g: &GrammarStore, is_scanner: b
   }
 }
 
-fn create_end_state(node: &TransitionGraphNode, g: &GrammarStore, is_scanner: bool) -> IRState {
+fn create_reduce_state(node: &TransitionGraphNode, g: &GrammarStore, is_scanner: bool) -> IRState {
   let item = node.items[0];
-
   let body = g.bodies.get(&item.get_body()).unwrap();
-
   let production = g.productions.get(&body.prod).unwrap();
 
+  let code = if node.is(TransitionStateType::I_OUT_OF_SCOPE) {
+    "fail".to_string()
+  } else {
+    create_reduce_string(node, g, is_scanner)
+  };
+
+  if code.is_empty() {
+    panic!("[REDUCE] Empty state generated!");
+  }
+
+  let comment = if node.items[0].at_end() {
+    node.items[0].debug_string(g)
+  } else {
+    format!("[{}] Not at end --- {}", node.id, node.items[0].debug_string(g))
+  };
+
   IRState {
-    code: create_end_string(node, g, is_scanner),
+    code,
+    comment,
     graph_id: node.id,
     state_type: if is_scanner { ProductionEndState } else { ScannerEndState },
     ..Default::default()

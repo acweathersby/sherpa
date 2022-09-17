@@ -84,7 +84,7 @@ pub const TOKEN_ASSIGN_FLAG: u32 = 0x04000000;
 
 pub enum InstructionType {
   PASS     = 0,
-  CONSUME  = 1,
+  SHIFT    = 1,
   GOTO     = 2,
   SET_PROD = 3,
   REDUCE   = 4,
@@ -97,7 +97,7 @@ pub enum InstructionType {
   SET_FAIL_STATE = 11,
   REPEAT   = 12,
   NOOP13   = 13,
-  ASSERT_CONSUME = 14,
+  ASSERT_SHIFT = 14,
   FAIL     = 15,
 }
 
@@ -107,13 +107,13 @@ pub struct INSTRUCTION(pub u32, usize);
 
 impl INSTRUCTION {
   pub const I00_PASS: u32 = 0;
-  pub const I01_CONSUME: u32 = 1 << 28;
+  pub const I01_SHIFT: u32 = 1 << 28;
   pub const I02_GOTO: u32 = 2 << 28;
   pub const I03_SET_PROD: u32 = 3 << 28;
   pub const I04_REDUCE: u32 = 4 << 28;
   pub const I05_TOKEN: u32 = 5 << 28;
   pub const I05_TOKEN_ASSIGN: u32 = INSTRUCTION::I05_TOKEN | TOKEN_ASSIGN_FLAG;
-  pub const I05_TOKEN_ASSIGN_CONSUME: u32 = INSTRUCTION::I05_TOKEN | 0x09000000;
+  pub const I05_TOKEN_ASSIGN_SHIFT: u32 = INSTRUCTION::I05_TOKEN | 0x09000000;
   pub const I05_TOKEN_LENGTH: u32 = INSTRUCTION::I05_TOKEN | 0x08000000;
   pub const I06_FORK_TO: u32 = 6 << 28;
   pub const I07_SCAN: u32 = 7 << 28;
@@ -124,7 +124,7 @@ impl INSTRUCTION {
   pub const I11_SET_FAIL_STATE: u32 = 11 << 28;
   pub const I12_REPEAT: u32 = 12 << 28;
   pub const I13_NOOP: u32 = 13 << 28;
-  pub const I14_ASSERT_CONSUME: u32 = 14 << 28;
+  pub const I14_ASSERT_SHIFT: u32 = 14 << 28;
   pub const I15_FAIL: u32 = 15 << 28;
   pub const I15_FALL_THROUGH: u32 = 15 << 28 | 1;
 
@@ -175,8 +175,8 @@ impl INSTRUCTION {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I00_PASS
   }
 
-  pub fn is_CONSUME(&self) -> bool {
-    (self.0 & INSTRUCTION_HEADER_MASK) == Self::I01_CONSUME
+  pub fn is_SHIFT(&self) -> bool {
+    (self.0 & INSTRUCTION_HEADER_MASK) == Self::I01_SHIFT
   }
 
   pub fn is_GOTO(&self) -> bool {
@@ -227,8 +227,8 @@ impl INSTRUCTION {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I13_NOOP
   }
 
-  pub fn is_ASSERT_CONSUME(&self) -> bool {
-    (self.0 & INSTRUCTION_HEADER_MASK) == Self::I14_ASSERT_CONSUME
+  pub fn is_ASSERT_SHIFT(&self) -> bool {
+    (self.0 & INSTRUCTION_HEADER_MASK) == Self::I14_ASSERT_SHIFT
   }
 
   pub fn is_FAIL(&self) -> bool {
@@ -246,7 +246,7 @@ impl INSTRUCTION {
   pub fn to_type(&self) -> InstructionType {
     match (self.0 & INSTRUCTION_HEADER_MASK) {
       Self::I00_PASS => InstructionType::PASS,
-      Self::I01_CONSUME => InstructionType::CONSUME,
+      Self::I01_SHIFT => InstructionType::SHIFT,
       Self::I02_GOTO => InstructionType::GOTO,
       Self::I03_SET_PROD => InstructionType::SET_PROD,
       Self::I04_REDUCE => InstructionType::REDUCE,
@@ -259,7 +259,7 @@ impl INSTRUCTION {
       Self::I11_SET_FAIL_STATE => InstructionType::SET_FAIL_STATE,
       Self::I12_REPEAT => InstructionType::REPEAT,
       Self::I13_NOOP => InstructionType::NOOP13,
-      Self::I14_ASSERT_CONSUME => InstructionType::ASSERT_CONSUME,
+      Self::I14_ASSERT_SHIFT => InstructionType::ASSERT_SHIFT,
       Self::I15_FAIL => InstructionType::FAIL,
       _ => InstructionType::PASS,
     }
@@ -268,7 +268,7 @@ impl INSTRUCTION {
   pub fn to_str(&self) -> &str {
     match (self.0 & INSTRUCTION_HEADER_MASK) {
       Self::I00_PASS => "I00_PASS",
-      Self::I01_CONSUME => "I01_CONSUME",
+      Self::I01_SHIFT => "I01_SHIFT",
       Self::I02_GOTO => "I02_GOTO",
       Self::I03_SET_PROD => "I03_SET_PROD",
       Self::I04_REDUCE => "I04_REDUCE",
@@ -281,7 +281,7 @@ impl INSTRUCTION {
       Self::I11_SET_FAIL_STATE => "I11_SET_FAIL_STATE",
       Self::I12_REPEAT => "I12_REPEAT",
       Self::I13_NOOP => "I13_NOOP",
-      Self::I14_ASSERT_CONSUME => "I14_ASSERT_CONSUME",
+      Self::I14_ASSERT_SHIFT => "I14_ASSERT_SHIFT",
       Self::I15_FAIL => "I15_FAIL",
       _ => "Undefined",
     }

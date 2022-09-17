@@ -516,7 +516,7 @@ fn disambiguate(
         }
         set_transition_type(t_pack, end_nodes[0], depth);
         leaves.push(end_nodes[0]);
-      } else if !t_pack.is_scanner {
+      } else {
         handle_unresolved_nodes(g, t_pack, end_nodes, leaves);
       }
     }
@@ -644,6 +644,7 @@ fn disambiguate(
         for end_node in &peek_group[1..] {
           t_pack.drop_node(end_node);
         }
+
         set_transition_type(t_pack, peek_group[0], depth);
         leaves.push(peek_group[0]);
       } else if handle_shift_reduce_conflicts(g, t_pack, &peek_group, leaves) {
@@ -658,9 +659,7 @@ fn disambiguate(
 }
 
 fn all_nodes_are_outscope(peek_group: &Vec<usize>, t_pack: &mut TPack) -> bool {
-  peek_group
-    .iter()
-    .all(|i| t_pack.get_node(*i).items.iter().all(|i| i.get_state().is_out_of_scope()))
+  peek_group.iter().all(|i| t_pack.get_node(*i).items.iter().all(|i| i.is_out_of_scope()))
 }
 
 /// Places goal nodes onto the tips of peek leaf nodes to complete
@@ -681,7 +680,7 @@ fn all_nodes_are_outscope(peek_group: &Vec<usize>, t_pack: &mut TPack) -> bool {
 /// scanner scope, we simply complete any outstanding items and yield
 /// goto productions to be resolved within the goto states. The
 /// transitions of all parent nodes are reconfigured as
-/// ASSERT_CONSUME.
+/// ASSERT_SHIFT.
 #[inline]
 fn process_peek_leaves(g: &GrammarStore, t_pack: &mut TPack, leaves: Vec<usize>) -> Vec<usize> {
   let mut resolved_leaves = Vec::<usize>::new();
@@ -694,7 +693,8 @@ fn process_peek_leaves(g: &GrammarStore, t_pack: &mut TPack, leaves: Vec<usize>)
 
     if goal_node.is(TST::I_OUT_OF_SCOPE) {
       for node_index in peek_leaf_group {
-        t_pack.get_node_mut(node_index).set_type(TST::I_FAIL | TST::I_OUT_OF_SCOPE)
+        t_pack.get_node_mut(node_index).set_type(TST::I_FAIL | TST::I_OUT_OF_SCOPE);
+        t_pack.leaf_nodes.push(node_index)
       }
     } else {
       // Use the goal node as a proxy to generate child nodes that
@@ -766,13 +766,18 @@ fn get_continue_items(
 
   for mut term_node in create_term_nodes_from_items(&scan_items, g, t_pack, parent_index) {
     term_node.goal = goal;
+
     term_nodes.push(t_pack.insert_node(term_node));
   }
 
   for mut final_node in create_term_nodes_from_items(&final_items, g, t_pack, parent_index) {
     final_node.goal = goal;
+
     final_node.set_type(TST::I_END | TST::O_ASSERT);
-    final_nodes.push(t_pack.insert_node(final_node));
+
+    let node_index = t_pack.insert_node(final_node);
+
+    final_nodes.push(node_index);
   }
 
   (term_nodes, final_nodes)
@@ -858,6 +863,9 @@ fn merge_occluding_groups(g: &GrammarStore, t_pack: &mut TPack, groups: &mut [Ve
   // Clone the from_group store so we are able
   // to merge its members into to_groups without
   // going fowl of the borrow checker.
+  if (!t_pack.is_scanner) {
+    return;
+  }
 
   for i in 0..groups.len() {
     for j in 0..groups.len() {
@@ -869,26 +877,30 @@ fn merge_occluding_groups(g: &GrammarStore, t_pack: &mut TPack, groups: &mut [Ve
       let to_node = t_pack.get_node(groups[j][0]);
 
       let from_origin = from_node.items[0].get_origin();
-      let to_origin = from_node.items[0].get_origin();
+      let to_origin = to_node.items[0].get_origin();
 
-      // Scanner items that originate from the symbol do not require occlusion
+      // Scanner items that originate from the same symbol do not require occlusion
       // checking.
       if matches!(from_origin, OriginData::Symbol(..)) && from_origin == to_origin {
         continue;
       }
 
-      continue;
-
       let from_sym = from_node.terminal_symbol;
       let to_sym = to_node.terminal_symbol;
 
       if symbols_occlude(&to_sym, &from_sym, g)
-        && ((!from_node.items[0].get_state().is_out_of_scope())
+        && ((!from_node.is_out_of_scope())
           || (from_sym.isDefinedSymbol() || to_sym.isDefinedSymbol()))
       {
         let mut clone = groups[i].clone();
         groups[j].append(&mut clone);
         t_pack.get_node_mut(groups[j][0]).set_type(TST::I_MERGE_ORIGIN);
+
+        debug_items(
+          "---",
+          &groups[j].iter().map(|i| t_pack.get_node(*i).items[0]).collect::<Vec<_>>(),
+          g,
+        );
       }
     }
   }
@@ -906,12 +918,34 @@ fn merge_occluding_groups(g: &GrammarStore, t_pack: &mut TPack, groups: &mut [Ve
 
 fn symbols_occlude(symA: &SymbolID, symB: &SymbolID, g: &GrammarStore) -> bool {
   match symA {
-    SymbolID::DefinedSymbol(_) => match symB {
-      SymbolID::GenericSymbol => g.symbols.get(symA).unwrap().cp_len == 1,
+    SymbolID::DefinedSymbol(..) => match g.symbol_strings.get(symA).map(|s| s.as_str()) {
+      Some("\n") => match symB {
+        SymbolID::GenericNewLine => true,
+        _ => false,
+      },
+      Some("\t") => match symB {
+        SymbolID::GenericHorizontalTab => true,
+        _ => false,
+      },
+      Some(" ") => match symB {
+        SymbolID::GenericSpace => true,
+        _ => false,
+      },
+      Some(_) => match symB {
+        SymbolID::GenericSymbol => g.symbols.get(symA).unwrap().cp_len == 1,
+        _ => false,
+      },
       _ => false,
     },
-    SymbolID::DefinedIdentifier(_) => match symB {
-      SymbolID::GenericIdentifier => g.symbols.get(symA).unwrap().cp_len == 1,
+    SymbolID::DefinedIdentifier(_) => match g.symbol_strings.get(symA).map(|s| s.as_str()) {
+      Some("_") | Some("-") => match symB {
+        SymbolID::GenericSymbol => true,
+        _ => false,
+      },
+      Some(_) => match symB {
+        SymbolID::GenericIdentifier => g.symbols.get(symA).unwrap().cp_len == 1,
+        _ => false,
+      },
       _ => false,
     },
     SymbolID::DefinedNumeric(_) => match symB {
@@ -928,6 +962,41 @@ fn get_goals(e_nodes: &[usize], t_pack: &TPack) -> Vec<usize> {
     .collect::<Vec<_>>()
 }
 
+fn handle_unresolved_scanner_nodes(
+  g: &GrammarStore,
+  t_pack: &mut TPack,
+  nodes: Vec<usize>,
+  leaves: &mut Vec<usize>,
+) {
+  let mut defined = nodes;
+  let generic = defined
+    .drain_filter(|n| match t_pack.get_node(*n).items[0].get_origin() {
+      OriginData::Symbol(sym) => !sym.isDefinedSymbol(),
+      _ => false,
+    })
+    .collect::<Vec<_>>();
+  match defined.len() {
+    1 => {
+      leaves.push(defined[0]);
+      for node_id in generic {
+        t_pack.drop_node(&node_id);
+      }
+    }
+    0 => {
+      panic!(
+        "Invalid combination of generics {:#?}!",
+        generic.iter().map(|n| t_pack.get_node(*n).debug_string(g)).collect::<Vec<_>>()
+      );
+    }
+    _ => {
+      panic!(
+        "Invalid combination of generics \n {}!",
+        defined.iter().map(|n| t_pack.get_node(*n).debug_string(g)).collect::<Vec<_>>().join("\n")
+      );
+    }
+  }
+}
+
 fn handle_unresolved_nodes(
   g: &GrammarStore,
   t_pack: &mut TPack,
@@ -935,11 +1004,7 @@ fn handle_unresolved_nodes(
   leaves: &mut Vec<usize>,
 ) {
   if t_pack.is_scanner {
-    //   if (peek_group.iter().map(|i| t_pack.get_node(*i)).all(|n| n.items[0].is_end())) {
-    // leaves.push(peek_group[0]);
-    // } else {
-    // panic!("WTF");
-    // }
+    handle_unresolved_scanner_nodes(g, t_pack, peek_group, leaves)
   } else {
     let goals = get_goals(&peek_group, t_pack);
 
@@ -1078,7 +1143,7 @@ fn process_terminal_node(
 
   let node_index = t_pack.insert_node(new_node);
 
-  t_pack.get_node_mut(node_index).set_type(TST::I_CONSUME | TST::O_TERMINAL);
+  t_pack.get_node_mut(node_index).set_type(TST::I_SHIFT | TST::O_TERMINAL);
 
   t_pack.queue_node(node_index);
 

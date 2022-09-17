@@ -15,7 +15,7 @@ struct TableCell<'a> {
   debug_state_name: &'a String,
   goto_state: u32,
   input_byte: u32,
-  consume_length: u32,
+  shift_length: u32,
 }
 
 pub(crate) fn create_table<'a>(
@@ -59,7 +59,7 @@ pub(crate) fn create_table<'a>(
             .iter()
             .map(|(_, s)| TableCell {
               state: state_address as u32,
-              consume_length: 0,
+              shift_length: 0,
               debug_state_name: output.offset_to_state_name.get(&(s.address as u32)).unwrap_or(&d),
               goto_state: s.address as u32,
               input_byte: s.value,
@@ -75,9 +75,9 @@ pub(crate) fn create_table<'a>(
 
             let instruction = INSTRUCTION::from(bytecode, index);
 
-            if instruction.is_CONSUME() {
+            if instruction.is_SHIFT() {
               let instruction = instruction.next(bytecode);
-              cell.consume_length = 1;
+              cell.shift_length = 1;
               if instruction.is_GOTO() {
                 let instruction2 = instruction.next(bytecode);
                 if instruction2.is_GOTO() {
@@ -117,7 +117,7 @@ pub(crate) fn create_table<'a>(
             debug_state_name: &d,
             input_byte: 0,
             goto_state: state_address as u32,
-            consume_length: 0,
+            shift_length: 0,
           }]);
         }
         _ => {}
@@ -187,7 +187,7 @@ pub(crate) fn create_table<'a>(
         print!("{: <8}", 1);
         base += 1;
       }
-      print!("[{: >2}|{: >2}] ", cell.consume_length, cell.goto_state);
+      print!("[{: >2}|{: >2}] ", cell.shift_length, cell.goto_state);
       base += 1;
     }
 

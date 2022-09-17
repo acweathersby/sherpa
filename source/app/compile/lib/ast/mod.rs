@@ -170,7 +170,7 @@ mod test {
         
         <[ recover cb_sentinel_1 ] 
         
-            consume nothing then set prod to cb_sentinel
+            shift nothing then set prod to cb_sentinel
         >
         
         <> code_line_text > 

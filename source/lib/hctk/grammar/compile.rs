@@ -1327,7 +1327,7 @@ fn pre_process_body(
         is_list,
         is_group,
         is_optional,
-        is_no_consume,
+        is_shift_nothing,
         is_meta,
         is_exclusive,
         sym_atom,
@@ -1533,7 +1533,7 @@ fn pre_process_body(
               original_index: index,
               sym_id: id,
               annotation: annotation.clone(),
-              consumable: !is_no_consume,
+              consumable: !is_shift_nothing,
               exclusive: is_exclusive,
               scanner_index: 0,
               scanner_length: 0,
@@ -1730,28 +1730,28 @@ fn intern_symbol(
 }
 
 struct SymbolData<'a> {
-  pub annotation:    String,
-  pub is_list:       bool,
-  pub is_group:      bool,
-  pub is_optional:   bool,
-  pub is_no_consume: bool,
-  pub is_meta:       bool,
-  pub is_exclusive:  bool,
-  pub sym_atom:      Option<&'a ASTNode>,
+  pub annotation:       String,
+  pub is_list:          bool,
+  pub is_group:         bool,
+  pub is_optional:      bool,
+  pub is_shift_nothing: bool,
+  pub is_meta:          bool,
+  pub is_exclusive:     bool,
+  pub sym_atom:         Option<&'a ASTNode>,
 }
 
 /// Get a flattened view of a symbol's immediate AST
 
 fn get_symbol_details<'a>(mut sym: &'a ASTNode, tgs: &mut TempGrammarStore) -> SymbolData<'a> {
   let mut data = SymbolData {
-    annotation:    String::new(),
-    is_list:       false,
-    is_group:      false,
-    is_optional:   false,
-    is_no_consume: false,
-    is_meta:       false,
-    is_exclusive:  false,
-    sym_atom:      None,
+    annotation:       String::new(),
+    is_list:          false,
+    is_group:         false,
+    is_optional:      false,
+    is_shift_nothing: false,
+    is_meta:          false,
+    is_exclusive:     false,
+    sym_atom:         None,
   };
 
   loop {
@@ -1766,7 +1766,7 @@ fn get_symbol_details<'a>(mut sym: &'a ASTNode, tgs: &mut TempGrammarStore) -> S
         sym = &optional.symbol;
       }
       ASTNode::NonCaptureSymbol(non_cap) => {
-        data.is_no_consume = true;
+        data.is_shift_nothing = true;
         sym = &non_cap.sym;
       }
       ASTNode::Exclude(_) | ASTNode::Look_Ignore(_) => {

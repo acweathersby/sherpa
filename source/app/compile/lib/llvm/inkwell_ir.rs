@@ -1229,11 +1229,11 @@ pub(crate) fn construct_parse_function_statements(
   while instruction.is_valid() {
     use InstructionType::*;
     match instruction.to_type() {
-      CONSUME => {
+      SHIFT => {
         if *is_scanner {
-          instruction = construct_scanner_instruction_consume(instruction, ctx, pack);
+          instruction = construct_scanner_instruction_shift(instruction, ctx, pack);
         } else {
-          construct_instruction_consume(instruction, ctx, pack, referenced);
+          construct_instruction_shift(instruction, ctx, pack, referenced);
           break;
         }
       }
@@ -1261,7 +1261,7 @@ pub(crate) fn construct_parse_function_statements(
         // TODO
         break;
       }
-      NOOP8 | NOOP13 | SCAN | REPEAT | ASSERT_CONSUME | SET_FAIL_STATE => {
+      NOOP8 | NOOP13 | SCAN | REPEAT | ASSERT_SHIFT | SET_FAIL_STATE => {
         instruction = instruction.next(&output.bytecode);
       }
       VECTOR_BRANCH | HASH_BRANCH => {
@@ -1348,7 +1348,7 @@ pub(crate) fn create_skip_code(
   b.build_unconditional_branch(table_block);
 }
 
-pub(crate) fn construct_scanner_instruction_consume(
+pub(crate) fn construct_scanner_instruction_shift(
   instruction: INSTRUCTION,
   ctx: &LLVMParserModule,
   pack: &FunctionPack,
@@ -1372,7 +1372,7 @@ pub(crate) fn construct_scanner_instruction_consume(
   instruction.next(&pack.output.bytecode)
 }
 
-pub(crate) fn construct_instruction_consume(
+pub(crate) fn construct_instruction_shift(
   instruction: INSTRUCTION,
   ctx: &LLVMParserModule,
   pack: &FunctionPack,
