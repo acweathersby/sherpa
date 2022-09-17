@@ -1,6 +1,6 @@
 mod parse_functions;
 
-use crate::types::ImmutCharacterReader;
+use crate::types::BaseCharacterReader;
 use crate::types::ParseAction;
 use crate::types::ParseContext;
 pub use parse_functions::get_next_action;

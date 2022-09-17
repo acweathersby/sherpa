@@ -3,22 +3,22 @@ use crate::types::ParseAction;
 
 use crate::types::ParseContext;
 
-use crate::types::ImmutCharacterReader;
+use crate::types::BaseCharacterReader;
 
 use super::MutCharacterReader;
 
-pub trait IteratorParser<T: ImmutCharacterReader + MutCharacterReader> {
+pub trait IteratorParser<T: BaseCharacterReader + MutCharacterReader> {
   fn get_parts(&mut self) -> (&mut T, &mut ParseContext<T>, &[u32], &mut bool);
 }
 
-pub struct ReferenceParseIterator<'a, T: ImmutCharacterReader + MutCharacterReader> {
+pub struct ReferenceParseIterator<'a, T: BaseCharacterReader + MutCharacterReader> {
   ctx:      ParseContext<T>,
   reader:   T,
   bytecode: &'a [u32],
   active:   bool,
 }
 
-impl<'a, T: ImmutCharacterReader + MutCharacterReader + MutCharacterReader> Iterator
+impl<'a, T: BaseCharacterReader + MutCharacterReader + MutCharacterReader> Iterator
   for ReferenceParseIterator<'a, T>
 {
   type Item = ParseAction;
@@ -41,7 +41,7 @@ impl<'a, T: ImmutCharacterReader + MutCharacterReader + MutCharacterReader> Iter
   }
 }
 
-impl<'a, T: ImmutCharacterReader + MutCharacterReader> ReferenceParseIterator<'a, T> {
+impl<'a, T: BaseCharacterReader + MutCharacterReader> ReferenceParseIterator<'a, T> {
   pub fn new(reader: T, data: &'a [u32], entry_point: u32) -> Self {
     let mut state = ParseContext::bytecode_context();
 
@@ -51,7 +51,7 @@ impl<'a, T: ImmutCharacterReader + MutCharacterReader> ReferenceParseIterator<'a
   }
 }
 
-impl<'a, T: ImmutCharacterReader + MutCharacterReader> IteratorParser<T>
+impl<'a, T: BaseCharacterReader + MutCharacterReader> IteratorParser<T>
   for ReferenceParseIterator<'a, T>
 {
   fn get_parts(&mut self) -> (&mut T, &mut ParseContext<T>, &[u32], &mut bool) {

@@ -7,7 +7,7 @@ use ParseAction::*;
 /// Yields parser Actions from parsing an input using the
 /// current active grammar bytecode.
 #[inline]
-pub fn dispatch<T: ImmutCharacterReader + MutCharacterReader>(
+pub fn dispatch<T: BaseCharacterReader + MutCharacterReader>(
   r: &mut T,
   ctx: &mut ParseContext<T>,
   bc: &[u32],
@@ -59,7 +59,7 @@ pub fn dispatch<T: ImmutCharacterReader + MutCharacterReader>(
 /// Produces a parse action that
 /// contains a token that is the
 #[inline]
-fn consume<T: ImmutCharacterReader + MutCharacterReader + MutCharacterReader>(
+fn shift<T: BaseCharacterReader + MutCharacterReader + MutCharacterReader>(
   i: u32,
   instr: INSTRUCTION,
   ctx: &mut ParseContext<T>,
@@ -90,7 +90,7 @@ fn consume<T: ImmutCharacterReader + MutCharacterReader + MutCharacterReader>(
 }
 
 #[inline]
-fn reduce<T: ImmutCharacterReader + MutCharacterReader>(
+fn reduce<T: BaseCharacterReader + MutCharacterReader>(
   i: u32,
   instr: INSTRUCTION,
   ctx: &mut ParseContext<T>,
@@ -111,7 +111,7 @@ fn reduce<T: ImmutCharacterReader + MutCharacterReader>(
 }
 
 #[inline]
-fn goto<T: ImmutCharacterReader + MutCharacterReader>(
+fn goto<T: BaseCharacterReader + MutCharacterReader>(
   i: u32,
   instr: INSTRUCTION,
   ctx: &mut ParseContext<T>,
@@ -121,7 +121,7 @@ fn goto<T: ImmutCharacterReader + MutCharacterReader>(
 }
 
 #[inline]
-fn set_production<T: ImmutCharacterReader + MutCharacterReader>(
+fn set_production<T: BaseCharacterReader + MutCharacterReader>(
   i: u32,
   instr: INSTRUCTION,
   ctx: &mut ParseContext<T>,
@@ -131,7 +131,7 @@ fn set_production<T: ImmutCharacterReader + MutCharacterReader>(
 }
 
 #[inline]
-fn set_token_state<T: ImmutCharacterReader + MutCharacterReader>(
+fn set_token_state<T: BaseCharacterReader + MutCharacterReader>(
   i: u32,
   instr: INSTRUCTION,
   ctx: &mut ParseContext<T>,
@@ -185,7 +185,7 @@ fn noop(i: u32) -> u32 {
 }
 
 #[inline]
-fn skip_token<T: ImmutCharacterReader + MutCharacterReader>(ctx: &mut ParseContext<T>, r: &mut T) {
+fn skip_token<T: BaseCharacterReader + MutCharacterReader>(ctx: &mut ParseContext<T>, r: &mut T) {
   if ctx.in_peek_mode() {
     ctx.peek = ctx.peek.next();
   } else {
@@ -196,7 +196,7 @@ fn skip_token<T: ImmutCharacterReader + MutCharacterReader>(ctx: &mut ParseConte
 /// Performs an instruction branch selection based on an embedded,
 /// linear-probing hash table.
 #[inline]
-pub fn hash_jump<T: ImmutCharacterReader + MutCharacterReader>(
+pub fn hash_jump<T: BaseCharacterReader + MutCharacterReader>(
   i: u32,
   r: &mut T,
   ctx: &mut ParseContext<T>,
@@ -247,7 +247,7 @@ pub fn hash_jump<T: ImmutCharacterReader + MutCharacterReader>(
   }
 }
 #[inline]
-pub fn vector_jump<T: ImmutCharacterReader + MutCharacterReader>(
+pub fn vector_jump<T: BaseCharacterReader + MutCharacterReader>(
   i: u32,
   r: &mut T,
   ctx: &mut ParseContext<T>,
@@ -291,7 +291,7 @@ pub fn vector_jump<T: ImmutCharacterReader + MutCharacterReader>(
 }
 
 #[inline]
-fn get_token_value<T: ImmutCharacterReader + MutCharacterReader>(
+fn get_token_value<T: BaseCharacterReader + MutCharacterReader>(
   lex_type: u32,
   input_type: u32,
   r: &mut T,
@@ -308,6 +308,8 @@ fn get_token_value<T: ImmutCharacterReader + MutCharacterReader>(
             };
 
             ctx.set_peek_mode_to(true);
+
+            r.set_cursor_to(&basis_token.next());
 
             basis_token.next()
         }
@@ -375,7 +377,7 @@ fn get_token_value<T: ImmutCharacterReader + MutCharacterReader>(
   }
 }
 
-fn scan_for_improvised_token<T: ImmutCharacterReader + MutCharacterReader>(
+fn scan_for_improvised_token<T: BaseCharacterReader + MutCharacterReader>(
   scan_ctx: &mut ParseContext<T>,
   r: &mut T,
 ) {
@@ -411,7 +413,7 @@ fn scan_for_improvised_token<T: ImmutCharacterReader + MutCharacterReader>(
   set_token_state(0, INSTRUCTION::default(), scan_ctx);
 }
 
-fn token_scan<T: ImmutCharacterReader + MutCharacterReader>(
+fn token_scan<T: BaseCharacterReader + MutCharacterReader>(
   token: ParseToken,
   scan_index: u32,
   ctx: &mut ParseContext<T>,
@@ -509,7 +511,7 @@ fn token_scan<T: ImmutCharacterReader + MutCharacterReader>(
 
 /// Start or continue a parse on an input
 #[inline]
-pub fn get_next_action<T: ImmutCharacterReader + MutCharacterReader>(
+pub fn get_next_action<T: BaseCharacterReader + MutCharacterReader>(
   r: &mut T,
   ctx: &mut ParseContext<T>,
   bc: &[u32],

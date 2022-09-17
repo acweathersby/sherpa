@@ -6,7 +6,7 @@ use std::sync::RwLock;
 use crate::types::ParseToken;
 use crate::utf8::get_utf8_code_point_from;
 
-use super::reader::ImmutCharacterReader;
+use super::reader::BaseCharacterReader;
 use super::reader::SharedSymbolBuffer;
 use super::ByteCharacterReader;
 use super::LLVMCharacterReader;
@@ -60,7 +60,7 @@ impl<'a> MutCharacterReader for UTF8StringReader<'a> {
   }
 }
 
-impl<'a> ImmutCharacterReader for UTF8StringReader<'a> {
+impl<'a> BaseCharacterReader for UTF8StringReader<'a> {
   #[inline(always)]
   fn len(&self) -> usize {
     self.len

@@ -10,7 +10,7 @@ use crate::utf8::get_token_class_from_codepoint;
 
 const stack_32_bit_size: usize = 128;
 use super::*;
-pub struct ParseContext<T: ImmutCharacterReader + MutCharacterReader> {
+pub struct ParseContext<T: BaseCharacterReader + MutCharacterReader> {
   pub(crate) peek: ParseToken,
   pub(crate) anchor: ParseToken,
   pub(crate) assert: ParseToken,
@@ -28,7 +28,7 @@ pub struct ParseContext<T: ImmutCharacterReader + MutCharacterReader> {
   pub local_state_stack: [u32; stack_32_bit_size],
 }
 
-impl<T: ImmutCharacterReader + MutCharacterReader> ParseContext<T> {
+impl<T: BaseCharacterReader + MutCharacterReader> ParseContext<T> {
   pub fn new(reader: &mut T) -> Self {
     let mut ctx = Self {
       peek: ParseToken::default(),
@@ -218,7 +218,7 @@ impl Default for InputBlock {
 
 #[derive(Clone)]
 #[repr(C)]
-pub struct LLVMParseContext<T: LLVMCharacterReader + ByteCharacterReader + ImmutCharacterReader> {
+pub struct LLVMParseContext<T: LLVMCharacterReader + ByteCharacterReader + BaseCharacterReader> {
   pub local_goto_stack: [Goto; 8],
   pub anchor_token: ParseToken,
   pub assert_token: ParseToken,
@@ -234,7 +234,7 @@ pub struct LLVMParseContext<T: LLVMCharacterReader + ByteCharacterReader + Immut
   pub in_peek_mode: u32,
 }
 
-impl<T: LLVMCharacterReader + ByteCharacterReader + ImmutCharacterReader> Debug
+impl<T: LLVMCharacterReader + ByteCharacterReader + BaseCharacterReader> Debug
   for LLVMParseContext<T>
 {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -256,7 +256,7 @@ impl<T: LLVMCharacterReader + ByteCharacterReader + ImmutCharacterReader> Debug
   }
 }
 
-impl<T: LLVMCharacterReader + ByteCharacterReader + ImmutCharacterReader> LLVMParseContext<T> {
+impl<T: LLVMCharacterReader + ByteCharacterReader + BaseCharacterReader> LLVMParseContext<T> {
   pub fn new(reader: &mut T) -> Self {
     let mut ctx = Self {
       peek_token: ParseToken::default(),

@@ -6,7 +6,7 @@ use std::sync::RwLock;
 use crate::types::ParseToken;
 use crate::utf8::get_utf8_code_point_from;
 
-use super::reader::ImmutCharacterReader;
+use super::reader::BaseCharacterReader;
 use super::reader::SharedSymbolBuffer;
 use super::ByteCharacterReader;
 use super::InputBlock;
@@ -29,7 +29,7 @@ impl<'a> LLVMCharacterReader for TestUTF8StringReader<'a> {
   /// Get a pointer to a sequence of bytes that can be read from the input given
   /// the cursor position. The second tuple values should be the length bytes that
   ///  can be read from the block.
-  fn get_byte_block_at_cursor<T: ImmutCharacterReader + ByteCharacterReader>(
+  fn get_byte_block_at_cursor<T: BaseCharacterReader + ByteCharacterReader>(
     self_: &mut T,
     input_block: &mut InputBlock,
   ) {
@@ -83,7 +83,7 @@ impl<'a> MutCharacterReader for TestUTF8StringReader<'a> {
   }
 }
 
-impl<'a> ImmutCharacterReader for TestUTF8StringReader<'a> {
+impl<'a> BaseCharacterReader for TestUTF8StringReader<'a> {
   #[inline(always)]
   fn len(&self) -> usize {
     self.len

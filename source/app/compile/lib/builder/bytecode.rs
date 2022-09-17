@@ -109,9 +109,9 @@ fn write_rust_parser_file<W: Write>(
 use hctk::runtime::*;
 use hctk::types::*;
 
-pub struct Context<'a, T: ByteCharacterReader + ImmutCharacterReader + MutCharacterReader>(ParseContext<T>, &'a mut T, bool);
+pub struct Context<'a, T: ByteCharacterReader + BaseCharacterReader + MutCharacterReader>(ParseContext<T>, &'a mut T, bool);
 
-impl<'a, T: ByteCharacterReader + ImmutCharacterReader + MutCharacterReader> Iterator for Context<'a, T>
+impl<'a, T: ByteCharacterReader + BaseCharacterReader + MutCharacterReader> Iterator for Context<'a, T>
 {
     type Item = ParseAction;
 
@@ -135,7 +135,7 @@ impl<'a, T: ByteCharacterReader + ImmutCharacterReader + MutCharacterReader> Ite
     }
 }
 
-impl<'a, T: ByteCharacterReader + ImmutCharacterReader + MutCharacterReader> Context<'a, T>
+impl<'a, T: ByteCharacterReader + BaseCharacterReader + MutCharacterReader> Context<'a, T>
 {
     #[inline(always)]
     fn new(reader: &'a mut T) -> Self
@@ -241,7 +241,8 @@ loop {{
       break;
     }}
   }}
-}}",
+}}
+",
           ascript.gen_name()
         ))?
         .wrtln(&{

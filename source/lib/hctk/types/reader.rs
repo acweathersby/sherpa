@@ -14,7 +14,7 @@ pub type SharedSymbolBuffer = Arc<Vec<u8>>;
 
 /// A reader maintains a read cursor which can be moved bidirectionally
 /// over an array of bytes and yields information on the following:
-/// 
+///
 /// - The byte offset and Unicode codepoint offset of the cursor.
 /// - The 8bit value of the current byte
 /// - The Unicode codepoint value at the cursor, if there is a valid symbol there.
@@ -26,7 +26,7 @@ pub type SharedSymbolBuffer = Arc<Vec<u8>>;
 ///   current location of the cursor.
 /// - Both the codepoint offset and byte offset of the last line
 /// encountered in the input.
-pub trait ImmutCharacterReader {
+pub trait BaseCharacterReader {
   /// Returns true if the cursor has reached the end of
   /// the input stream.
 
@@ -137,7 +137,7 @@ pub trait ByteCharacterReader {
 
 pub trait UTF8CharacterReader {
   fn next_utf8<
-    T: ImmutCharacterReader + MutCharacterReader + UTF8CharacterReader + ByteCharacterReader,
+    T: BaseCharacterReader + MutCharacterReader + UTF8CharacterReader + ByteCharacterReader,
   >(
     self_: &mut T,
     amount: i32,
@@ -202,7 +202,7 @@ pub trait LLVMCharacterReader {
   /// Get a pointer to a sequence of bytes that can be read from the input given
   /// the cursor position. The second tuple values should be the length bytes that
   ///  can be read from the block.
-  fn get_byte_block_at_cursor<T: ImmutCharacterReader + ByteCharacterReader>(
+  fn get_byte_block_at_cursor<T: BaseCharacterReader + ByteCharacterReader>(
     self_: &mut T,
     input_block: &mut InputBlock,
   ) {
