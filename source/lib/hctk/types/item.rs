@@ -18,34 +18,43 @@ impl ItemState {
     ItemState(0)
   }
 
+  /// Create a new [Item]
   pub const fn new(group: u32, depth: u32) -> Self {
     ItemState((group << 16) | (depth & 0xFFFF))
   }
 
+  /// Increase the item's depth by 1
   pub fn increment_depth(&self) -> Self {
     ItemState::new(self.get_group(), self.get_depth() + 1)
   }
 
+  /// Get the item's depth
   pub fn get_depth(&self) -> u32 {
     self.0 & 0xFFFF
   }
 
+  /// Get the group the item belongs to
   pub fn get_group(&self) -> u32 {
     (self.0 >> 16) & 0xFFFF
   }
 
+  /// Get an index to the closure this item originates from
   pub fn get_closure_index(&self) -> usize {
     (self.get_group() & Self::OUT_OF_SCOPE_MASK) as usize
   }
 
+  /// Create a new Item with the given depth
   pub fn to_depth(&self, depth: u32) -> Self {
     ItemState::new(self.get_group(), depth)
   }
 
+  /// Create a new Item with the given group
   pub fn to_group(&self, group: u32) -> Self {
     ItemState::new(group, self.get_depth())
   }
 
+  /// Indicate's the item originate from a production other
+  /// than the one currently being evaluated.
   pub fn is_out_of_scope(&self) -> bool {
     (self.get_group() & Self::OUT_OF_SCOPE_FLAG) > 0
   }

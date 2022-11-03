@@ -55,7 +55,7 @@ pub enum TransitionStateType {
   I_DESCENT_START,
 
   /// Indicates this node consumes its symbol as a token.
-  I_CONSUME,
+  I_SHIFT,
 
   I_PASS,
 

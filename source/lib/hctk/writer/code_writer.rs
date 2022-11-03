@@ -3,8 +3,8 @@ use std::io::Write;
 
 /// Chainable writer for formatted source code
 pub struct CodeWriter<W: Write> {
-  output: W,
-  indent: usize,
+  output:        W,
+  indent:        usize,
 }
 
 pub type StringBuffer = CodeWriter<Vec<u8>>;

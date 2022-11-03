@@ -2,15 +2,13 @@ mod llvm_test_parser;
 pub use llvm_test_parser::*;
 
 #[cfg(test)]
-mod test
-{
+mod test {
 
   use crate::Context;
   use hctk::types::*;
 
   #[test]
-  pub fn test_build()
-  {
+  pub fn test_build() {
     for action in Context::new_banner_parser(&mut UTF8StringReader::new("hello world")) {
       match action {
         ParseAction::Shift { skipped_characters: skip, token } => {
@@ -32,31 +30,25 @@ mod test
       }
     }
 
-    let actions = Context::new_banner_parser(&mut UTF8StringReader::new("hello world"))
-      .collect::<Vec<_>>();
+    let actions =
+      Context::new_banner_parser(&mut UTF8StringReader::new("hello world")).collect::<Vec<_>>();
 
     assert!(matches!(actions[0], ParseAction::Shift { .. }));
     assert!(matches!(actions[1], ParseAction::Shift { .. }));
-    assert!(
-      matches!(actions[2], ParseAction::Reduce { production_id, .. } if production_id == 8)
-    );
-    assert!(
-      matches!(actions[3], ParseAction::Accept { production_id } if production_id == 8)
-    );
+    assert!(matches!(actions[2], ParseAction::Reduce { production_id, .. } if production_id == 8));
+    assert!(matches!(actions[3], ParseAction::Accept { production_id } if production_id == 8));
   }
 
   #[test]
-  pub fn should_fail_on_second_erroneous_token()
-  {
-    let actions = Context::new_banner_parser(&mut UTF8StringReader::new("hello wold"))
-      .collect::<Vec<_>>();
+  pub fn should_fail_on_second_erroneous_token() {
+    let actions =
+      Context::new_banner_parser(&mut UTF8StringReader::new("hello wold")).collect::<Vec<_>>();
     assert!(matches!(actions[0], ParseAction::Shift { .. }));
     assert!(matches!(actions[1], ParseAction::Error { .. }));
   }
 
   #[test]
-  pub fn should_emit_end_of_input_action()
-  {
+  pub fn should_emit_end_of_input_action() {
     let mut reader = TestUTF8StringReader::new("hello world");
 
     reader.length = 5; // Artificially truncating the readers input window

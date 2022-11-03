@@ -131,11 +131,9 @@ pub struct GrammarStore {
   /// Closure of all items that can be produced by this grammar.
   pub closures: HashMap<Item, Vec<Item>>,
 
-  /// Closure of all items that can be produced by this grammar.
-  pub item_peek_symbols: HashMap<Item, Vec<SymbolID>>,
+  pub item_ignore_symbols: HashMap<Item, Vec<SymbolID>>,
 
-  /// Closure of all items that can be produced by this grammar.
-  pub production_peek_symbols: HashMap<ProductionId, Vec<SymbolID>>,
+  pub production_ignore_symbols: HashMap<ProductionId, Vec<SymbolID>>,
 
   /// A mapping of [ProductionId]s to export names
   ///

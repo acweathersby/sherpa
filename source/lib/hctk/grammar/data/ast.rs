@@ -1760,12 +1760,11 @@ where
 
     unsafe {
       let reference = node.get();
-      if let child = &mut (*reference).prod
+      let child = &mut (*reference).prod;
       // HAS_NULL:true
-      {
-        let mut_me_b = node.get();
-        child.Iterate(_yield, &mut NodeIteration::IR_STATE(*mut_me_b), 3, 0);
-      }
+      let mut_me_b = node.get();
+      child.Iterate(_yield, &mut NodeIteration::IR_STATE(*mut_me_b), 3, 0);
+      
     }
   }
 

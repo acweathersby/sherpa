@@ -453,13 +453,6 @@ fn create_intermediate_state(
     //  origin = t_pack.get_node(origin.parent);
     //}
 
-    for child_id in children_tables.get(origin.id).unwrap() {
-      let child = t_pack.get_node(*child_id);
-      for item in &child.items {
-        item.print_blame(g);
-      }
-    }
-
     for child in children.iter() {
       let mut new_states = create_intermediate_state(
         &TransitionGraphNode::temp(
@@ -631,7 +624,7 @@ fn create_intermediate_state(
                   for child in group {
                     let par = t_pack.get_node(child.parent);
                     for item in &child.items {
-                      println!("{}", item.debug_string(g));
+                      eprintln!("{}", item.debug_string(g));
                     }
                   }
 

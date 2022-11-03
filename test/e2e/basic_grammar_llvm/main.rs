@@ -2,8 +2,7 @@ use hctk::types::UTF8StringReader;
 use hctk::types::*;
 use std::time::Instant;
 use test_basic_grammar_llvm::*;
-pub fn main()
-{
+pub fn main() {
   let mut messages = Vec::<String>::with_capacity(10);
 
   let start = Instant::now();

@@ -19,12 +19,8 @@ mod test
 
     assert!(matches!(actions[0], ParseAction::Shift { .. }));
     assert!(matches!(actions[1], ParseAction::Shift { .. }));
-    assert!(
-      matches!(actions[2], ParseAction::Reduce { production_id, .. } if production_id == 1)
-    );
-    assert!(
-      matches!(actions[3], ParseAction::Accept { production_id } if production_id == 1)
-    );
+    assert!(matches!(actions[2], ParseAction::Reduce { production_id, .. } if production_id == 1));
+    assert!(matches!(actions[3], ParseAction::Accept { production_id } if production_id == 1));
 
     // if let HCObj::NODE(ASTNode::Tested(data)) = nodes.pop().unwrap() {
     //     assert_eq!(data.first, "hello");

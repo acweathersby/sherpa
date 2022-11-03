@@ -5,8 +5,7 @@ use hctk::types::UTF8StringReader;
 use hctk::types::*;
 use test_basic_grammar_llvm::*;
 
-pub fn bench(input: &str)
-{
+pub fn bench(input: &str) {
   let mut updates = 0;
 
   for action in Context::new_banner_parser(&mut UTF8StringReader::new(input)) {
@@ -25,8 +24,7 @@ pub fn bench(input: &str)
   assert!(updates == 3);
 }
 
-fn criterion_benchmark(c: &mut Criterion)
-{
+fn criterion_benchmark(c: &mut Criterion) {
   c.bench_function("x86_64 run", |b| b.iter(|| bench("hello world")));
 }
 

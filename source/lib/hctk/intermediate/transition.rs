@@ -895,12 +895,6 @@ fn merge_occluding_groups(g: &GrammarStore, t_pack: &mut TPack, groups: &mut [Ve
         let mut clone = groups[i].clone();
         groups[j].append(&mut clone);
         t_pack.get_node_mut(groups[j][0]).set_type(TST::I_MERGE_ORIGIN);
-
-        debug_items(
-          "---",
-          &groups[j].iter().map(|i| t_pack.get_node(*i).items[0]).collect::<Vec<_>>(),
-          g,
-        );
       }
     }
   }

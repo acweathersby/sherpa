@@ -122,7 +122,10 @@ impl SymbolID {
 
   pub fn isDefinedSymbol(&self) -> bool {
     match self {
-      Self::DefinedNumeric(_) | Self::DefinedIdentifier(_) | Self::DefinedSymbol(_) => true,
+      Self::DefinedNumeric(_)
+      | Self::DefinedIdentifier(_)
+      | Self::DefinedSymbol(_)
+      | Self::TokenProduction(..) => true,
       _ => false,
     }
   }

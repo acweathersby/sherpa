@@ -3,16 +3,14 @@ mod llvm_language_test_parser_ast;
 pub use llvm_language_test_parser::*;
 
 #[cfg(test)]
-mod test
-{
+mod test {
 
   use crate::llvm_language_test_parser_ast::*;
   use crate::Context;
   use hctk::types::*;
 
   #[test]
-  pub fn test_build()
-  {
+  pub fn test_build() {
     let mut stack = Vec::new();
     for action in Context::new_entry_parser(&mut UTF8StringReader::new("(2+(2*2))+1+1+1"))
     {
