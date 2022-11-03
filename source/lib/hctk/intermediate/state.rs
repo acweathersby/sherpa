@@ -700,24 +700,24 @@ fn create_intermediate_state(
     stack_depth += max_child_depth;
   }
 
-  let mut code = strings.join("\n");
-
-  if code.is_empty() {
-    panic!(
-      "[BRANCH] Empty state generated! [{}] [{}] {:?} {}",
-      comment,
-      t_pack
-        .root_prods
-        .iter()
-        .map(|s| { get_production_plain_name(s, g) })
-        .collect::<Vec<_>>()
-        .join("   \n"),
-      children_tables.get(node.id).cloned().unwrap_or_default(),
-      node.debug_string(g)
-    );
-  }
-
   let state = if is_scanner {
+    let mut code = strings.join("\n");
+
+    if code.is_empty() {
+      panic!(
+        "[BRANCH] Empty state generated! [{}] [{}] {:?} {}",
+        comment,
+        t_pack
+          .root_prods
+          .iter()
+          .map(|s| { get_production_plain_name(s, g) })
+          .collect::<Vec<_>>()
+          .join("   \n"),
+        children_tables.get(node.id).cloned().unwrap_or_default(),
+        node.debug_string(g)
+      );
+    }
+
     IRState {
       comment,
       code,
@@ -738,7 +738,25 @@ fn create_intermediate_state(
         strings.push(format!("skip [ {} ]", symbol_id.bytecode_id(Some(g)),))
       }
     }
+
     let have_symbols = !normal_symbol_set.is_empty();
+
+    let mut code = strings.join("\n");
+
+    if code.is_empty() {
+      panic!(
+        "[BRANCH] Empty state generated! [{}] [{}] {:?} {}",
+        comment,
+        t_pack
+          .root_prods
+          .iter()
+          .map(|s| { get_production_plain_name(s, g) })
+          .collect::<Vec<_>>()
+          .join("   \n"),
+        children_tables.get(node.id).cloned().unwrap_or_default(),
+        node.debug_string(g)
+      );
+    }
 
     IRState {
       comment,
@@ -766,7 +784,7 @@ fn get_symbols_from_items(
   seen: Option<BTreeSet<ProductionId>>,
 ) -> (BTreeSet<SymbolID>, BTreeSet<SymbolID>, BTreeSet<ProductionId>) {
   let mut normal_symbol_set = BTreeSet::new();
-  let mut peek_symbols_set = BTreeSet::new();
+  let mut ignore_symbol_set = BTreeSet::new();
   let mut seen = seen.unwrap_or_default();
 
   for item in item_set {
@@ -779,13 +797,13 @@ fn get_symbols_from_items(
         let production_items =
           get_production_start_items(&production_id, g).into_iter().collect::<BTreeSet<_>>();
 
-        let (mut norm, mut peek, new_seen) =
+        let (mut norm, mut ignore, new_seen) =
           get_symbols_from_items(production_items, g, Some(seen));
 
         seen = new_seen;
 
         normal_symbol_set.append(&mut norm);
-        peek_symbols_set.append(&mut peek);
+        ignore_symbol_set.append(&mut ignore);
       }
       SymbolID::EndOfFile | SymbolID::Undefined => {}
       sym => {
@@ -793,17 +811,17 @@ fn get_symbols_from_items(
       }
     }
 
-    if let Some(peek_symbols) = g.item_peek_symbols.get(&item.to_zero_state()) {
-      for peek_symbol in peek_symbols {
-        peek_symbols_set.insert(*peek_symbol);
+    if let Some(ignored_symbols) = g.item_ignore_symbols.get(&item.to_zero_state()) {
+      for ignored_symbol in ignored_symbols {
+        ignore_symbol_set.insert(*ignored_symbol);
       }
     }
   }
 
-  let peek_symbols_set =
-    peek_symbols_set.difference(&normal_symbol_set).cloned().collect::<BTreeSet<_>>();
+  let ignore_symbol_set =
+    ignore_symbol_set.difference(&normal_symbol_set).cloned().collect::<BTreeSet<_>>();
 
-  (normal_symbol_set, peek_symbols_set, seen)
+  (normal_symbol_set, ignore_symbol_set, seen)
 }
 
 fn get_symbol_shift_type(symbol_id: &SymbolID, g: &GrammarStore) -> (u32, &'static str) {

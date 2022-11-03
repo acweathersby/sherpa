@@ -282,7 +282,7 @@ fn finalize_items(g: &mut GrammarStore, thread_count: usize, errors: &mut [Parse
 
             if !item.at_end() {
               let peek_symbols =
-                if let Some(peek_symbols) = g.production_peek_symbols.get(&item.get_prod_id(g)) {
+                if let Some(peek_symbols) = g.production_ignore_symbols.get(&item.get_prod_id(g)) {
                   peek_symbols.clone()
                 } else {
                   vec![]
@@ -303,7 +303,7 @@ fn finalize_items(g: &mut GrammarStore, thread_count: usize, errors: &mut [Parse
       .flat_map(move |s| s.join().unwrap())
       .collect::<Vec<_>>()
   }) {
-    g.item_peek_symbols.insert(item.to_zero_state(), peek_symbols);
+    g.item_ignore_symbols.insert(item.to_zero_state(), peek_symbols);
     g.closures.insert(item.to_zero_state(), closure);
   }
 
@@ -807,7 +807,9 @@ fn merge_grammars(
   for import_grammar in grammars {
     grammars_lookup.insert(import_grammar.guid, import_grammar);
 
-    root.production_peek_symbols.extend(import_grammar.production_peek_symbols.clone().into_iter());
+    root
+      .production_ignore_symbols
+      .extend(import_grammar.production_ignore_symbols.clone().into_iter());
 
     // Merge all symbols
     for (id, sym) in &import_grammar.symbols {
@@ -930,7 +932,7 @@ pub fn pre_process_grammar<'a>(
   let guid = GrammarId(hash_id_value_u64(&guid_name));
   let mut reduce_functions = ReduceFunctionTable::new();
   let mut parse_errors = vec![];
-  let mut global_peek_symbols = vec![];
+  let mut global_ignore_symbols = vec![];
   let mut export_names = vec![];
 
   {
@@ -956,7 +958,7 @@ pub fn pre_process_grammar<'a>(
         ASTNode::Ignore(box ast::Ignore { symbols }) => {
           for symbol in symbols {
             if let Some(id) = intern_symbol(symbol, &mut tgs) {
-              global_peek_symbols.push(id)
+              global_ignore_symbols.push(id)
             }
           }
         }
@@ -1038,8 +1040,8 @@ pub fn pre_process_grammar<'a>(
     }
   }
 
-  let production_peek_symbols =
-    production_table.keys().map(|k| (*k, global_peek_symbols.clone())).collect::<HashMap<_, _>>();
+  let production_ignore_symbols =
+    production_table.keys().map(|k| (*k, global_ignore_symbols.clone())).collect::<HashMap<_, _>>();
 
   (
     GrammarStore {
@@ -1054,8 +1056,8 @@ pub fn pre_process_grammar<'a>(
       production_symbols: production_symbols_table,
       imports: import_names_lookup,
       closures: HashMap::new(),
-      item_peek_symbols: HashMap::new(),
-      production_peek_symbols,
+      item_ignore_symbols: HashMap::new(),
+      production_ignore_symbols,
       lr_items: BTreeMap::new(),
       reduce_functions,
       export_names,
