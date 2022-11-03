@@ -42,6 +42,7 @@ impl Display for CompoundCompileProblem {
 
 #[derive(Debug)]
 pub enum ParseError {
+  EmptyIRState,
   NOT_PARSED,
   UNDEFINED,
   IO_ERROR(std::io::Error),
@@ -61,6 +62,7 @@ impl ParseError {
 impl Display for ParseError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
+      ParseError::EmptyIRState => f.write_str("An empty IRState has been generated"),
       ParseError::NOT_PARSED => f.write_str("This input has not been parsed"),
       ParseError::UNDEFINED => f.write_str("An unknown error has occurred "),
       ParseError::TOKEN_ERROR(err) => err.fmt(f),

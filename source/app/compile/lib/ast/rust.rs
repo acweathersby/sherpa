@@ -36,6 +36,7 @@ use hctk::writer::code_writer::*;
 
 pub fn write<W: Write>(g: &GrammarStore, ast: &AScriptStore, w: &mut CodeWriter<W>) -> Result<()> {
   w.indent_spaces(2);
+
   w.wrtln("use hctk::types::*;")?.newline()?;
 
   w.wrtln(&format!("#[derive(Debug, Clone)]\npub enum {} {{", ast.name))?.indent();

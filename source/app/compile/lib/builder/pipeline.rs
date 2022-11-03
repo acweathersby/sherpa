@@ -3,6 +3,7 @@ use std::fmt::Display;
 use std::fs::create_dir_all;
 use std::fs::File;
 use std::path::PathBuf;
+use std::vec;
 
 use hctk::ascript::compile::compile_ascript_store;
 use hctk::bytecode::compile_bytecode;
@@ -48,7 +49,8 @@ impl Display for CompileError {
 
 impl Error for CompileError {}
 
-pub type TaskFn = Box<dyn Fn(&mut PipelineContext) -> Result<(), CompileError> + Sync + Send>;
+pub type TaskFn =
+  Box<dyn Fn(&mut PipelineContext) -> Result<Option<String>, CompileError> + Sync + Send>;
 
 pub struct PipelineTask {
   pub(crate) fun: TaskFn,
@@ -77,6 +79,7 @@ pub struct BuildPipeline<'a> {
   error_handler: Option<fn(errors: Vec<CompileError>)>,
   grammar: Option<GrammarStore>,
   cached_source: CachedSource,
+  proc_context: bool,
 }
 
 impl<'a> BuildPipeline<'a> {
@@ -95,7 +98,20 @@ impl<'a> BuildPipeline<'a> {
       source_output_dir: PathBuf::new(),
       build_output_dir: std::env::var("CARGO_MANIFEST_DIR")
         .map_or(std::env::temp_dir(), |d| PathBuf::from(&d)),
+      proc_context: false,
     }
+  }
+
+  /// Create a new build pipeline from a string.
+  pub fn proc_context(grammar_source: &str, base_directory: &PathBuf) -> Self {
+    let mut self_ = Self::build_pipeline(
+      get_num_of_available_threads(),
+      CachedSource::String(grammar_source.to_string(), base_directory.to_owned()),
+    );
+
+    self_.proc_context = true;
+
+    self_
   }
 
   /// Create a new build pipeline after constructing
@@ -149,14 +165,16 @@ impl<'a> BuildPipeline<'a> {
     self.grammar_name = grammar_name;
   }
 
-  pub fn run(&'a mut self) -> Self {
+  pub fn run(&'a mut self) -> (Self, Vec<String>) {
+    let mut artifacts = vec![];
+
     if self.grammar.is_none() {
       match self.build_grammar() {
         Err(errors) => {
           if let Some(error_handler) = &self.error_handler {
             error_handler(errors);
           }
-          return Self::build_pipeline(self.threads, self.cached_source.to_owned());
+          return (Self::build_pipeline(self.threads, self.cached_source.to_owned()), vec![]);
         }
         Ok(_) => {}
       }
@@ -174,7 +192,7 @@ impl<'a> BuildPipeline<'a> {
           );
         }
 
-        return Self::build_pipeline(self.threads, self.cached_source.to_owned());
+        return (Self::build_pipeline(self.threads, self.cached_source.to_owned()), vec![]);
       }
 
       if let Some(name) = &self.ascript_name {
@@ -185,6 +203,7 @@ impl<'a> BuildPipeline<'a> {
     }
 
     self.bytecode = None;
+
     if self.tasks.iter().any(|t| t.0.require_bytecode) {
       let bytecode_output = compile_bytecode(&self.grammar.as_ref().unwrap(), 1);
 
@@ -204,7 +223,8 @@ impl<'a> BuildPipeline<'a> {
 
           ctx.pipeline = Some(self);
           match (t.fun)(&mut ctx) {
-            Ok(_) => Ok(()),
+            Ok(Some(artifact)) => Ok(Some(artifact)),
+            Ok(None) => Ok(None),
             Err(err) => {
               ctx.clear_artifacts();
               Err(err)
@@ -217,6 +237,10 @@ impl<'a> BuildPipeline<'a> {
         .into_iter()
         .map(|r| r.join().unwrap())
         .map(|r| match r {
+          Ok(Some(artifact)) => {
+            artifacts.push(artifact);
+            vec![]
+          }
           Ok(_) => vec![],
           Err(e) => vec![e],
         })
@@ -232,7 +256,7 @@ impl<'a> BuildPipeline<'a> {
       }
     }
 
-    Self::build_pipeline(self.threads, self.cached_source.to_owned())
+    return (Self::build_pipeline(self.threads, self.cached_source.to_owned()), artifacts);
   }
 
   pub fn set_error_handler(&mut self, error_handler: fn(Vec<CompileError>)) -> &mut Self {
@@ -264,6 +288,8 @@ pub struct PipelineContext<'a> {
   build_output_dir:  PathBuf,
   parser_name:       String,
   grammar_name:      String,
+  /// This is true if the is built within a proc macro context.
+  is_proc:           bool,
 }
 
 impl<'a> PipelineContext<'a> {
@@ -275,7 +301,12 @@ impl<'a> PipelineContext<'a> {
       grammar_name:      pipeline.grammar_name.clone(),
       pipeline:          None,
       artifact_paths:    vec![],
+      is_proc:           pipeline.proc_context,
     }
+  }
+
+  pub fn in_proc_context(&mut self) -> bool {
+    self.is_proc
   }
 
   // Ensure output destinations exist.

@@ -29,7 +29,7 @@ pub fn build_bytecode_disassembly() -> PipelineTask {
           Some(&BytecodeGrammarLookups::new(grammar)),
         ));
       }
-      Ok(())
+      Ok(None)
     }),
     require_ascript: false,
     require_bytecode: true,

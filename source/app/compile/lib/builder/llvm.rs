@@ -98,7 +98,7 @@ pub fn build_llvm_parser(
                   {
                     Err(CompileError::from_string("Unable to compile llvm bitcode"))
                   } else {
-                    Ok(())
+                    Ok(None)
                   }
                 }
                 Err(err) => Err(CompileError::from_io_error(&err)),
@@ -129,7 +129,7 @@ pub fn build_llvm_parser(
                 {
                   Err(CompileError::from_string("Unable to compile llvm bitcode"))
                 } else {
-                  Ok(())
+                  Ok(None)
                 }
               }
               Err(err) => Err(CompileError::from_string(&err.to_string())),
@@ -178,10 +178,10 @@ pub fn build_llvm_parser_interface<'a>() -> PipelineTask {
                 &parser_name,
               ) {
                 Err(err) => Err(CompileError::from_io_error(&err)),
-                Ok(_) => Ok(()),
+                Ok(_) => Ok(None),
               }
             }
-            _ => Ok(()),
+            _ => Ok(None),
           }
         }
         Err(err) => Err(CompileError::from_io_error(&err)),

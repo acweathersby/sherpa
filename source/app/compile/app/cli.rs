@@ -1,7 +1,7 @@
 use clap::arg;
 use clap::Command;
 
-pub fn build_cli() -> Command<'static> {
+pub fn build_cli() -> Command {
   Command::new("hc-compile")
     .about("A compiler for Hydrocarbon Grammar files (.hcg)")
     .subcommand_required(true)

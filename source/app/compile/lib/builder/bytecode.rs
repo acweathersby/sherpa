@@ -9,6 +9,7 @@ use hctk::grammar::data::ast::AST_NamedReference;
 use hctk::grammar::get_exported_productions;
 use hctk::grammar::ExportedProduction;
 use hctk::types::*;
+use hctk::writer::code_writer::StringBuffer;
 use std::any::Any;
 use std::collections::BTreeMap;
 use std::io::BufWriter;
@@ -38,20 +39,11 @@ pub fn build_byte_code_parse(
         let output_path = task_ctx.get_source_output_dir().clone();
         let parser_name = task_ctx.get_parser_name().clone();
 
-        if let Ok(parser_data_file) =
-          task_ctx.create_file(output_path.join(format!("./{}_bc.rs", parser_name)))
-        {
-          let mut writer = CodeWriter::new(BufWriter::new(parser_data_file));
-
-          writer.write(&DISCLAIMER("Parser Data", "//!", task_ctx));
-
-          if include_ascript_mixins {
-            // writer.wrtln(&format!("mod super::{}_ast;", parser_name));
-            writer.wrtln(&format!("use super::{}_ast::*;", parser_name));
-          }
+        if task_ctx.in_proc_context() {
+          let mut writer = CodeWriter::new(vec![]);
 
           if let Err(err) = write_parser_file(
-            writer,
+            &mut writer,
             &task_ctx.get_grammar(),
             // Leave two threads available for building
             // the
@@ -61,13 +53,38 @@ pub fn build_byte_code_parse(
           ) {
             Err(CompileError::from_io_error(&err))
           } else {
-            Ok(())
+            Ok(Some(unsafe { String::from_utf8_unchecked(writer.into_output()) }))
           }
         } else {
-          Err(CompileError::from_string(&format!(
-            "Unable to build an AST output for the source type {:?}",
-            source_type
-          )))
+          if let Ok(parser_data_file) =
+            task_ctx.create_file(output_path.join(format!("./{}_bc.rs", parser_name)))
+          {
+            let mut writer = CodeWriter::new(BufWriter::new(parser_data_file));
+            writer.write(&DISCLAIMER("Parser Data", "//!", task_ctx)).unwrap();
+            if include_ascript_mixins {
+              // writer.wrtln(&format!("mod super::{}_ast;", parser_name));
+              writer.wrtln(&format!("use super::{}_ast::*;", parser_name)).unwrap();
+            }
+
+            if let Err(err) = write_parser_file(
+              &mut writer,
+              &task_ctx.get_grammar(),
+              // Leave two threads available for building
+              // the
+              // ascript code if necessary
+              1,
+              if include_ascript_mixins { Some(task_ctx.get_ascript()) } else { None },
+            ) {
+              Err(CompileError::from_io_error(&err))
+            } else {
+              Ok(None)
+            }
+          } else {
+            Err(CompileError::from_string(&format!(
+              "Unable to build an AST output for the source type {:?}",
+              source_type
+            )))
+          }
         }
       }
       _ => Err(CompileError::from_string(&format!(
@@ -81,7 +98,7 @@ pub fn build_byte_code_parse(
 }
 
 fn write_parser_file<W: Write>(
-  mut writer: CodeWriter<W>,
+  writer: &mut CodeWriter<W>,
   g: &GrammarStore,
   thread_count: usize,
   ascript: Option<&AScriptStore>,
@@ -97,7 +114,7 @@ fn write_parser_file<W: Write>(
 }
 
 fn write_rust_parser_file<W: Write>(
-  mut writer: CodeWriter<W>,
+  writer: &mut CodeWriter<W>,
   state_lookups: &BTreeMap<String, u32>,
   g: &GrammarStore,
   bc: &Vec<u32>,
@@ -146,7 +163,7 @@ impl<'a, T: ByteCharacterReader + BaseCharacterReader + MutCharacterReader> Cont
     )?
     .indent();
 
-  common::write_rust_entry_function_bytecode(g, state_lookups, &mut writer)?;
+  common::write_rust_entry_function_bytecode(g, state_lookups, writer)?;
 
   if let Some(ascript) = ast {
     for (_, ExportedProduction { export_name, production, .. }) in
@@ -275,8 +292,6 @@ loop {{
   }
 
   writer.dedent().write_line("];")?;
-
-  writer.into_output();
 
   Ok(())
 }

@@ -11,22 +11,32 @@ use std::io::BufWriter;
 pub fn build_ast(source_type: SourceType) -> PipelineTask {
   PipelineTask {
     fun: Box::new(move |ctx| match source_type {
-      SourceType::Rust => match ctx.create_file(
-        ctx.get_source_output_dir().join(format!("./{}_ast.rs", ctx.get_parser_name())),
-      ) {
-        Ok(ast_data_file) => {
-          let mut writer = CodeWriter::new(BufWriter::new(ast_data_file));
-          writer.write(&DISCLAIMER("AST Data", "//!", ctx));
+      SourceType::Rust => {
+        if ctx.in_proc_context() {
+          let mut writer = CodeWriter::new(vec![]);
           match rust::write(&ctx.get_grammar(), &ctx.get_ascript(), &mut writer) {
-            Ok(_) => {
-              drop(writer);
-              Ok(())
+            Ok(_) => Ok(Some(unsafe { String::from_utf8_unchecked(writer.into_output()) })),
+            Err(err) => Err(CompileError::from_io_error(&err)),
+          }
+        } else {
+          match ctx.create_file(
+            ctx.get_source_output_dir().join(format!("./{}_ast.rs", ctx.get_parser_name())),
+          ) {
+            Ok(ast_data_file) => {
+              let mut writer = CodeWriter::new(BufWriter::new(ast_data_file));
+              writer.write(&DISCLAIMER("AST Data", "//!", ctx)).unwrap();
+              match rust::write(&ctx.get_grammar(), &ctx.get_ascript(), &mut writer) {
+                Ok(_) => {
+                  drop(writer);
+                  Ok(None)
+                }
+                Err(err) => Err(CompileError::from_io_error(&err)),
+              }
             }
             Err(err) => Err(CompileError::from_io_error(&err)),
           }
         }
-        Err(err) => Err(CompileError::from_io_error(&err)),
-      },
+      }
       _ => Err(CompileError::from_string(&format!(
         "Unable to build an AST output for the source type {:?}",
         source_type

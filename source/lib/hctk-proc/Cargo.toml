@@ -1,0 +1,13 @@
+[package]
+name = "hctk-inline"
+version = "0.2.0"
+edition = "2021"
+
+
+[lib]
+proc-macro = true
+path = "./lib.rs"
+
+[dependencies]
+hc-compile = { path = "../../app/compile" }
+syn = "1.0.103"

@@ -13,12 +13,13 @@ name = "hc-compile"
 path = "./app/main.rs"
 
 [dependencies]
-clap = "3.2.7"
+clap = "4.0.0"
 inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm14-0"]}
 
+
 [build-dependencies]
-clap = "3.2.7"
-clap_complete = "3.2.3"
+clap = "4.0.0"
+clap_complete = "4.0.0"
 
 [dependencies.hctk]
 path = "../../lib/hctk"

@@ -27,6 +27,6 @@ pub fn get_guid_grammar_name(uri: &PathBuf) -> Result<String, ParseError> {
 
       Ok(unsafe { format!("{}_{:05X}", file_name, hash_id_value_u64(&uri)) })
     }
-    None => Err(ParseError::UNDEFINED),
+    None => Ok("undefined".to_string()),
   }
 }

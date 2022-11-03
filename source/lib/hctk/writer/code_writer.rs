@@ -5,13 +5,14 @@ use std::io::Write;
 pub struct CodeWriter<W: Write> {
   output:        W,
   indent:        usize,
+  indent_spaces: usize,
 }
 
 pub type StringBuffer = CodeWriter<Vec<u8>>;
 
 impl<W: Write> CodeWriter<W> {
   fn internal_write(&mut self, string: &str) -> Result<()> {
-    let indent = " ".repeat(self.indent * 4);
+    let indent = " ".repeat(self.indent * self.indent_spaces);
 
     let mut encountered_first = false;
 
@@ -30,12 +31,16 @@ impl<W: Write> CodeWriter<W> {
     Ok(())
   }
 
+  pub fn indent_spaces(&mut self, count: usize) {
+    self.indent_spaces = count;
+  }
+
   pub fn default() -> StringBuffer {
-    StringBuffer { output: vec![], indent: 0 }
+    StringBuffer { output: vec![], indent: 0, indent_spaces: 2 }
   }
 
   pub fn new(output: W) -> Self {
-    CodeWriter { output, indent: 0 }
+    CodeWriter { output, indent: 0, indent_spaces: 2 }
   }
 
   pub fn indent(&mut self) -> &mut Self {

@@ -14,8 +14,16 @@ impl Display for StringId {
   }
 }
 
-#[derive(Debug, PartialEq, PartialOrd, Clone, Copy, Hash, Eq, Ord)]
+pub const space_sym_str: &str = "g:sp";
+pub const nl_sym_str: &str = "g:nl";
+pub const symbol_sym_str: &str = "g:sym";
+pub const id_sym_str: &str = "g:id";
+pub const num_sym_str: &str = "g:num";
+pub const gen_rec_marker_str: &str = "g:rec";
+pub const tab_sym_str: &str = "g:tab";
+pub const eof_str: &str = "$eof";
 
+#[derive(Debug, PartialEq, PartialOrd, Clone, Copy, Hash, Eq, Ord)]
 pub enum SymbolID {
   /// Represents a defined sequence of characters from the set `0-9`.
   DefinedNumeric(StringId),
@@ -78,6 +86,40 @@ impl SymbolID {
     SymbolID::GenericSymbol,
   ];
 
+  pub fn from_string(symbol_string: &str, g: Option<&GrammarStore>) -> Self {
+    match symbol_string {
+      "default" => Self::Default,
+      "[??]" => Self::Undefined,
+      gen_rec_marker_str => Self::Recovery,
+      eof_str => Self::EndOfFile,
+      tab_sym_str => Self::GenericHorizontalTab,
+      nl_sym_str => Self::GenericNewLine,
+      space_sym_str => Self::GenericSpace,
+      id_sym_str => Self::GenericIdentifier,
+      num_sym_str => Self::GenericNumber,
+      symbol_sym_str => Self::GenericSymbol,
+      _ => {
+        if let Some(g) = g {
+          match g.symbol_strings.iter().find(|(_, string)| string.as_str() == symbol_string) {
+            Some((sym_id, _)) => *sym_id,
+            _ => match get_production_by_name(symbol_string, g) {
+              Some(prod) => {
+                if prod.is_scanner {
+                  Self::TokenProduction(prod.id, g.guid)
+                } else {
+                  Self::TokenProduction(prod.id, g.guid)
+                }
+              }
+              _ => SymbolID::Undefined,
+            },
+          }
+        } else {
+          SymbolID::Undefined
+        }
+      }
+    }
+  }
+
   pub fn to_string(&self, g: &GrammarStore) -> String {
     match self {
       Self::DefinedNumeric(_) | Self::DefinedIdentifier(_) | Self::DefinedSymbol(_) => {
@@ -89,14 +131,14 @@ impl SymbolID {
       }
       Self::Default => "default".to_string(),
       Self::Undefined => "[??]".to_string(),
-      Self::Recovery => "g:rec".to_string(),
-      Self::EndOfFile => "$eof".to_string(),
-      Self::GenericHorizontalTab => "g:tab".to_string(),
-      Self::GenericNewLine => "g:nl".to_string(),
-      Self::GenericSpace => "g:sp".to_string(),
-      Self::GenericIdentifier => "g:id".to_string(),
-      Self::GenericNumber => "g:num".to_string(),
-      Self::GenericSymbol => "g:sym".to_string(),
+      Self::Recovery => gen_rec_marker_str.to_string(),
+      Self::EndOfFile => eof_str.to_string(),
+      Self::GenericHorizontalTab => tab_sym_str.to_string(),
+      Self::GenericNewLine => nl_sym_str.to_string(),
+      Self::GenericSpace => space_sym_str.to_string(),
+      Self::GenericIdentifier => id_sym_str.to_string(),
+      Self::GenericNumber => num_sym_str.to_string(),
+      Self::GenericSymbol => symbol_sym_str.to_string(),
     }
   }
 
@@ -266,6 +308,7 @@ use std::collections::BTreeSet;
 use std::fmt::Display;
 use std::str::FromStr;
 
+use crate::grammar::get_production_by_name;
 use crate::grammar::uuid::hash_id_value_u64;
 use crate::utf8::lookup_table::HORIZONTAL_TAB;
 use crate::utf8::lookup_table::IDENTIFIER;
