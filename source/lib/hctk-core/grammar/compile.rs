@@ -1076,11 +1076,7 @@ fn pre_process_production(
 
   if let ASTNode::Production(prod) = production_node {
     let production_id = get_production_id_from_node(production_node, tgs);
-    println!(
-      "{:?} {}",
-      production_id,
-      get_resolved_production_name(production_node, tgs).unwrap_or_default()
-    );
+
     let production_guid_name = get_resolved_production_name(production_node, tgs).unwrap();
     let mut bodies = vec![];
 

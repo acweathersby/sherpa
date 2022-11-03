@@ -5,17 +5,17 @@ use std::fs::File;
 use std::path::PathBuf;
 use std::vec;
 
-use hctk::ascript::compile::compile_ascript_store;
-use hctk::bytecode::compile_bytecode;
-use hctk::bytecode::BytecodeOutput;
-use hctk::get_num_of_available_threads;
-use hctk::grammar::compile_from_string;
-use hctk::types::AScriptStore;
-use hctk::types::GrammarStore;
-use hctk::types::ParseError;
+use hctk_core::ascript::compile::compile_ascript_store;
+use hctk_core::bytecode::compile_bytecode;
+use hctk_core::bytecode::BytecodeOutput;
+use hctk_core::get_num_of_available_threads;
+use hctk_core::grammar::compile_from_string;
+use hctk_core::types::AScriptStore;
+use hctk_core::types::GrammarStore;
+use hctk_core::types::ParseError;
 use std::thread;
 
-pub use hctk::grammar::compile_from_path;
+pub use hctk_core::grammar::compile_from_path;
 
 #[derive(Debug)]
 pub struct CompileError {
@@ -226,7 +226,7 @@ impl<'a> BuildPipeline<'a> {
             Ok(Some(artifact)) => Ok(Some(artifact)),
             Ok(None) => Ok(None),
             Err(err) => {
-              ctx.clear_artifacts();
+              ctx.clear_artifacts().unwrap();
               Err(err)
             }
           }
@@ -286,8 +286,6 @@ pub struct PipelineContext<'a> {
   artifact_paths:    Vec<PathBuf>,
   source_output_dir: PathBuf,
   build_output_dir:  PathBuf,
-  parser_name:       String,
-  grammar_name:      String,
   /// This is true if the is built within a proc macro context.
   is_proc:           bool,
 }
@@ -297,8 +295,6 @@ impl<'a> PipelineContext<'a> {
     PipelineContext {
       source_output_dir: pipeline.source_output_dir.clone(),
       build_output_dir:  pipeline.build_output_dir.clone(),
-      parser_name:       pipeline.parser_name.clone(),
-      grammar_name:      pipeline.grammar_name.clone(),
       pipeline:          None,
       artifact_paths:    vec![],
       is_proc:           pipeline.proc_context,

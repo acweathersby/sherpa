@@ -1,6 +1,6 @@
 use crate::options::BuildOptions;
-use hctk::bytecode::BytecodeOutput;
-use hctk::types::INSTRUCTION;
+use hctk_core::bytecode::BytecodeOutput;
+use hctk_core::types::INSTRUCTION;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::execution_engine::ExecutionEngine;

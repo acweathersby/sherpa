@@ -9,7 +9,7 @@ use hctk_compile::BuildPipeline;
 extern crate proc_macro;
 
 #[proc_macro]
-pub fn hc(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn compile_mod(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
   let span = proc_macro::Span::call_site();
   let source = span.source_file();
 
@@ -18,8 +18,6 @@ pub fn hc(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
   } else {
     std::env::var("CARGO_MANIFEST_DIR").map(|d| PathBuf::from_str(&d).unwrap()).unwrap()
   };
-
-  dbg!(&input);
 
   let grammar = input.to_string()[1..input.to_string().len() - 1]
     .to_string()
@@ -31,7 +29,7 @@ pub fn hc(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     .set_source_output_dir(&root_dir)
     .add_task(tasks::build_byte_code_parse(hctk_compile::SourceType::Rust, true))
     .add_task(tasks::build_ast(hctk_compile::SourceType::Rust))
-    .add_task(tasks::build_bytecode_disassembly())
+    //.add_task(tasks::build_bytecode_disassembly())
     .set_error_handler(|errors| {
       for error in errors {
         eprintln!("cargo:error=\n{}", error);

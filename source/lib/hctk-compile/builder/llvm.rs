@@ -1,11 +1,10 @@
 use std::collections::BTreeMap;
-use std::fs::File;
 
 use crate::builder::common;
 use crate::builder::disclaimer::DISCLAIMER;
 use crate::CompileError;
-use hctk::types::*;
-use hctk::writer::code_writer::CodeWriter;
+use hctk_core::types::*;
+use hctk_core::writer::code_writer::CodeWriter;
 use inkwell::context::Context;
 use inkwell::passes::PassManager;
 use inkwell::passes::PassManagerBuilder;
@@ -27,7 +26,7 @@ pub fn build_llvm_parser(
   target_triple: Option<String>,
   clang_command: &str,
   ar_command: &str,
-  light_LTO: bool,
+  light_lto: bool,
   output_cargo_build_commands: bool,
   output_llvm_ir_file: bool,
 ) -> PipelineTask {
@@ -71,11 +70,11 @@ pub fn build_llvm_parser(
 
           if output_llvm_ir_file {
             if let Ok(mut file) = task_ctx.create_file(ll_file_path.clone()) {
-              file.write_all(ctx.module.to_string().as_bytes());
-              file.flush();
+              file.write_all(ctx.module.to_string().as_bytes()).unwrap();
+              file.flush().unwrap();
             }
           }
-          if light_LTO {
+          if light_lto {
             task_ctx.add_artifact_path(bitcode_path.clone());
             if ctx.module.write_bitcode_to_path(&bitcode_path) {
               match Command::new(clang_command.clone())
@@ -200,7 +199,7 @@ pub enum OutputType {
   Java,
 }
 
-fn apply_llvm_optimizations(opt: OptimizationLevel, ctx: &crate::llvm::LLVMParserModule) {
+fn _apply_llvm_optimizations(opt: OptimizationLevel, ctx: &crate::llvm::LLVMParserModule) {
   let pass_manager_builder = PassManagerBuilder::create();
   let pass_manager = PassManager::create(());
   pass_manager_builder.set_optimization_level(opt);
@@ -315,7 +314,7 @@ impl<T: LLVMCharacterReader + ByteCharacterReader + ImmutCharacterReader> Contex
     ))?
     .indent();
 
-  common::write_rust_entry_function(g, states, &mut writer);
+  common::write_rust_entry_function(g, states, &mut writer)?;
 
   writer.dedent().wrtln(&format!(
     "}}
@@ -326,7 +325,7 @@ impl<T: LLVMCharacterReader + ByteCharacterReader + ImmutCharacterReader> Drop f
     }}
 }}
 ",
-  ));
+  ))?;
 
   Ok(())
 }

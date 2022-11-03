@@ -1,5 +1,5 @@
 mod parser {
-  hctk_inline::hc! {
+  hctk::compile! {
   "
 @NAME json
 

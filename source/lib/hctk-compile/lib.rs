@@ -1,9 +1,9 @@
-#![feature(scoped_threads)]
 #![feature(is_some_with)]
 #![feature(const_format_args)]
 #![feature(const_fmt_arguments_new)]
 #![feature(box_patterns)]
 #![feature(map_first_last)]
+#![allow(non_snake_case)]
 
 mod ast;
 mod builder;

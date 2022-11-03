@@ -1,18 +1,11 @@
 use std::collections::BTreeMap;
 use std::io::Write;
 
-use hctk::grammar::get_exported_productions;
-use hctk::grammar::ExportedProduction;
-use hctk::types::GrammarStore;
+use hctk_core::grammar::get_exported_productions;
+use hctk_core::grammar::ExportedProduction;
+use hctk_core::types::GrammarStore;
 
-use hctk::writer::code_writer::CodeWriter;
-
-/// Returns a tuple comprised of a grammar name and a parser name
-pub(crate) fn get_parser_names(g: &GrammarStore) -> (String, String) {
-  let g_name = g.friendly_name.to_owned();
-  let parser_name = g_name.to_owned() + "_parser";
-  (g_name, parser_name)
-}
+use hctk_core::writer::code_writer::CodeWriter;
 
 pub(crate) fn write_rust_entry_function_bytecode<W: Write>(
   g: &GrammarStore,
@@ -38,7 +31,7 @@ pub(crate) fn write_rust_entry_function_bytecode<W: Write>(
 
 pub(crate) fn write_rust_entry_function<W: Write>(
   g: &GrammarStore,
-  states: &BTreeMap<String, u32>,
+  _states: &BTreeMap<String, u32>,
   writer: &mut CodeWriter<W>,
 ) -> Result<(), std::io::Error> {
   Ok(

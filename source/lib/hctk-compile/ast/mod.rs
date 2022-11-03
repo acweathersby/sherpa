@@ -3,7 +3,7 @@ use crate::builder::disclaimer::DISCLAIMER;
 use crate::builder::pipeline::PipelineTask;
 use crate::CompileError;
 use crate::SourceType;
-use hctk::writer::code_writer::CodeWriter;
+use hctk_core::writer::code_writer::CodeWriter;
 use std::io::BufWriter;
 
 /// Constructs a task that compiles a grammar's Ascript into an AST module of the given `source_type`.

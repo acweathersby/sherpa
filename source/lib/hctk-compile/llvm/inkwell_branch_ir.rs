@@ -4,9 +4,9 @@ use inkwell::values::IntValue;
 use inkwell::values::PointerValue;
 
 use crate::builder::table::BranchTableData;
-use hctk::types::*;
+use hctk_core::types::*;
 
-pub const FAIL_STATE_FLAG_LLVM: u32 = 2;
+pub const _FAIL_STATE_FLAG_LLVM: u32 = 2;
 pub const NORMAL_STATE_FLAG_LLVM: u32 = 1;
 
 use super::create_skip_code;
@@ -72,7 +72,7 @@ pub(crate) fn construct_instruction_branch<'a>(
 
     let branches = &data.branches;
     let mut token_ptr = i32.ptr_type(inkwell::AddressSpace::Generic).const_null();
-    let mut input_offset = i32.const_int(0, false);
+    let input_offset = i32.const_int(0, false);
     let mut value = i32.const_int(0, false);
 
     // Prepare the input token if we are working with
@@ -203,7 +203,7 @@ pub(crate) fn construct_instruction_branch<'a>(
           let buffer_ptr = construct_buffer(ctx, max_size, &mut state, pack, token_ptr);
 
           let token_type_ptr = b.build_struct_gep(token_ptr, TokType, "").unwrap();
-          fn string_to_byte_num_and_mask(string: &str, sym: &Symbol) -> (usize, usize) {
+          fn string_to_byte_num_and_mask(string: &str, _: &Symbol) -> (usize, usize) {
             string.as_bytes().iter().enumerate().fold((0, 0), |(val, mask), (i, v)| {
               let shift_amount = 8 * i;
               (val | ((*v as usize) << shift_amount), mask | (0xFF << shift_amount))
@@ -263,7 +263,7 @@ pub(crate) fn construct_instruction_branch<'a>(
                 ctx
                   .ctx
                   .i64_type()
-                  .const_int(((sym.byte_length as u64) | ((sym.cp_len as u64) << 32)), false),
+                  .const_int((sym.byte_length as u64) | ((sym.cp_len as u64) << 32), false),
               );
 
               if !branch.is_skipped {
@@ -343,7 +343,7 @@ pub(crate) fn construct_instruction_branch<'a>(
       let mut cases = vec![];
 
       for (instruction, (value, block)) in &blocks {
-        if (*instruction == INSTRUCTION::default()) {
+        if *instruction == INSTRUCTION::default() {
           cases.push((value_type.const_int(*value, false), *block));
         } else {
           cases.push((value_type.const_int(*value, false), *block));
@@ -512,7 +512,7 @@ fn construct_buffer<'a>(
 struct InputBlockRef<'a> {
   pointer:      PointerValue<'a>,
   size:         IntValue<'a>,
-  offset:       IntValue<'a>,
+  _offset:      IntValue<'a>,
   is_truncated: IntValue<'a>,
 }
 
@@ -538,7 +538,7 @@ fn write_get_input_ptr_lookup<'a>(
 
   InputBlockRef {
     pointer:      b.build_extract_value(input_block, 0, "input_ptr").unwrap().into_pointer_value(),
-    offset:       b.build_extract_value(input_block, 1, "input_offset").unwrap().into_int_value(),
+    _offset:      b.build_extract_value(input_block, 1, "input_offset").unwrap().into_int_value(),
     size:         b.build_extract_value(input_block, 2, "input_size").unwrap().into_int_value(),
     is_truncated: b
       .build_extract_value(input_block, 3, "input_truncated")

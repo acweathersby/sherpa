@@ -7,8 +7,5 @@ edition = "2021"
 [lib]
 path = "./lib.rs"
 
-[dependencies.hctk-inline]
-path = "../../../source/lib/hctk-proc"
-
 [dependencies.hctk]
 path = "../../../source/lib/hctk"

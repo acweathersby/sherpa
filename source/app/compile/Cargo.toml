@@ -4,9 +4,6 @@ version = "0.2.0"
 edition = "2021"
 build = "build.rs"
 
-[lib]
-name = "hctk_compile"
-path ="./lib/lib.rs"
 
 [[bin]]
 name = "hc-compile"
@@ -21,6 +18,9 @@ inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", feat
 clap = "4.0.0"
 clap_complete = "4.0.0"
 
-[dependencies.hctk]
-path = "../../lib/hctk"
+[dependencies.hctk_core]
+path = "../../lib/hctk-core"
+
+[dependencies.hctk_compile]
+path = "../../lib/hctk-compile"
 

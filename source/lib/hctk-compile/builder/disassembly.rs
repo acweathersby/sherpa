@@ -1,9 +1,9 @@
-use hctk::debug::generate_disassembly;
-use hctk::debug::BytecodeGrammarLookups;
+use hctk_core::debug::generate_disassembly;
+use hctk_core::debug::BytecodeGrammarLookups;
 use std::io::BufWriter;
 
 use crate::builder::disclaimer::DISCLAIMER;
-use hctk::writer::code_writer::CodeWriter;
+use hctk_core::writer::code_writer::CodeWriter;
 
 use super::pipeline::PipelineTask;
 
@@ -22,12 +22,14 @@ pub fn build_bytecode_disassembly() -> PipelineTask {
 
         let mut writer = CodeWriter::new(BufWriter::new(parser_data_file));
 
-        writer.write(&DISCLAIMER("Parser Data", "//!", task_ctx));
+        writer.write(&DISCLAIMER("Parser Data", "//!", task_ctx)).unwrap();
 
-        writer.write(&generate_disassembly(
-          bytecode_output,
-          Some(&BytecodeGrammarLookups::new(grammar)),
-        ));
+        writer
+          .write(&generate_disassembly(
+            bytecode_output,
+            Some(&BytecodeGrammarLookups::new(grammar)),
+          ))
+          .unwrap();
       }
       Ok(None)
     }),

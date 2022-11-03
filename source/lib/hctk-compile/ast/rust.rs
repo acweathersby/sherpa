@@ -4,35 +4,34 @@ use std::collections::VecDeque;
 use std::io::Result;
 use std::vec;
 
-use hctk::ascript::compile::get_indexed_body_ref;
-use hctk::ascript::compile::get_named_body_ref;
-use hctk::ascript::compile::get_production_types;
-use hctk::ascript::compile::get_specified_vector_from_generic_vec_values;
-use hctk::ascript::compile::get_struct_type_from_node;
-use hctk::ascript::compile::production_types_are_structs;
-use hctk::grammar::data::ast::ASTNode;
-use hctk::grammar::data::ast::AST_IndexReference;
-use hctk::grammar::data::ast::AST_NamedReference;
-use hctk::grammar::data::ast::AST_Struct;
-use hctk::grammar::data::ast::AST_Token;
-use hctk::grammar::data::ast::AST_Vector;
-use hctk::grammar::data::ast::AST_BOOL;
-use hctk::grammar::data::ast::AST_F32;
-use hctk::grammar::data::ast::AST_F64;
-use hctk::grammar::data::ast::AST_I16;
-use hctk::grammar::data::ast::AST_I32;
-use hctk::grammar::data::ast::AST_I64;
-use hctk::grammar::data::ast::AST_I8;
-use hctk::grammar::data::ast::AST_NUMBER;
-use hctk::grammar::data::ast::AST_STRING;
-use hctk::grammar::data::ast::AST_U16;
-use hctk::grammar::data::ast::AST_U32;
-use hctk::grammar::data::ast::AST_U64;
-use hctk::grammar::data::ast::AST_U8;
-use hctk::types::*;
+use hctk_core::ascript::compile::get_indexed_body_ref;
+use hctk_core::ascript::compile::get_named_body_ref;
+use hctk_core::ascript::compile::get_production_types;
+use hctk_core::ascript::compile::get_specified_vector_from_generic_vec_values;
+use hctk_core::ascript::compile::get_struct_type_from_node;
+use hctk_core::ascript::compile::production_types_are_structs;
+use hctk_core::grammar::data::ast::ASTNode;
+use hctk_core::grammar::data::ast::AST_IndexReference;
+use hctk_core::grammar::data::ast::AST_NamedReference;
+use hctk_core::grammar::data::ast::AST_Struct;
+use hctk_core::grammar::data::ast::AST_Token;
+use hctk_core::grammar::data::ast::AST_Vector;
+use hctk_core::grammar::data::ast::AST_BOOL;
+use hctk_core::grammar::data::ast::AST_F32;
+use hctk_core::grammar::data::ast::AST_F64;
+use hctk_core::grammar::data::ast::AST_I16;
+use hctk_core::grammar::data::ast::AST_I32;
+use hctk_core::grammar::data::ast::AST_I64;
+use hctk_core::grammar::data::ast::AST_I8;
+use hctk_core::grammar::data::ast::AST_NUMBER;
+use hctk_core::grammar::data::ast::AST_STRING;
+use hctk_core::grammar::data::ast::AST_U16;
+use hctk_core::grammar::data::ast::AST_U32;
+use hctk_core::grammar::data::ast::AST_U64;
+use hctk_core::grammar::data::ast::AST_U8;
+use hctk_core::types::*;
+use hctk_core::writer::code_writer::*;
 use std::io::Write;
-
-use hctk::writer::code_writer::*;
 
 pub fn write<W: Write>(g: &GrammarStore, ast: &AScriptStore, w: &mut CodeWriter<W>) -> Result<()> {
   w.indent_spaces(2);
@@ -363,7 +362,7 @@ pub fn create_type_initializer_value(
   ast: &AScriptStore,
 ) -> (String, Option<Ref>) {
   match ref_ {
-    Some(mut ref_) => {
+    Some(ref_) => {
       let mut string = match type_val {
         AScriptTypeVal::GenericStructVec(structs_ids) if structs_ids.len() == 1 => {
           format!(
@@ -392,7 +391,7 @@ pub fn create_type_initializer_value(
 }
 
 fn build_structs<W: Write>(
-  g: &GrammarStore,
+  _: &GrammarStore,
   ast: &AScriptStore,
   o: &mut CodeWriter<W>,
 ) -> Result<()> {
@@ -983,7 +982,7 @@ impl Ref {
   }
 
   pub fn add_predecessors(&mut self, predecessors: Vec<Ref>) -> &mut Self {
-    let mut prev = self.predecessors.get_or_insert(vec![]);
+    let prev = self.predecessors.get_or_insert(vec![]);
 
     for predecessor in predecessors {
       prev.push(Box::new(predecessor))

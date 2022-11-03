@@ -2549,12 +2549,9 @@ where
 
     unsafe {
       let reference = node.get();
-      if let child = &mut (*reference).reduce_fn
-      // HAS_NULL:true
-      {
-        let mut_me_b = node.get();
-        child.Iterate(_yield, &mut NodeIteration::Reduce(*mut_me_b), 0, 0);
-      }
+      let child = &mut (*reference).reduce_fn;
+      let mut_me_b = node.get();
+      child.Iterate(_yield, &mut NodeIteration::Reduce(*mut_me_b), 0, 0);
     }
   }
 
@@ -4835,12 +4832,10 @@ where
 
     unsafe {
       let reference = node.get();
-      if let child = &mut (*reference).value
       // HAS_NULL:true
-      {
-        let mut_me_b = node.get();
-        child.Iterate(_yield, &mut NodeIteration::AST_STRING(*mut_me_b), 0, 0);
-      }
+      let child = &mut (*reference).value;
+      let mut_me_b = node.get();
+      child.Iterate(_yield, &mut NodeIteration::AST_STRING(*mut_me_b), 0, 0);
     }
   }
 

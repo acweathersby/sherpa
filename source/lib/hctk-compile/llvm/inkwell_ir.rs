@@ -1,9 +1,8 @@
 use std::collections::BTreeSet;
 use std::collections::VecDeque;
 
-use hctk::bytecode::BytecodeOutput;
-use hctk::debug::grammar;
-use hctk::grammar::get_exported_productions;
+use hctk_core::bytecode::BytecodeOutput;
+use hctk_core::grammar::get_exported_productions;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Linkage;
@@ -13,9 +12,7 @@ use inkwell::values::IntValue;
 use inkwell::values::PointerValue;
 
 use super::types::*;
-use crate::llvm::inkwell_branch_ir::BranchStateCache;
-use crate::options::BuildOptions;
-use hctk::types::*;
+use hctk_core::types::*;
 
 use parse_ctx_indices::*;
 use token_indices::*;

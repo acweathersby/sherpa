@@ -6,19 +6,19 @@ use std::collections::VecDeque;
 
 use std::collections::btree_map;
 
-use hctk::bytecode::BytecodeOutput;
-use hctk::types::*;
+use hctk_core::bytecode::BytecodeOutput;
+use hctk_core::types::*;
 
 #[derive(Debug, Clone, Copy)]
 struct TableCell<'a> {
-  state: u32,
-  debug_state_name: &'a String,
-  goto_state: u32,
-  input_byte: u32,
-  shift_length: u32,
+  _state: u32,
+  _debug_state_name: &'a String,
+  _goto_state: u32,
+  _input_byte: u32,
+  _shift_length: u32,
 }
 
-pub(crate) fn create_table<'a>(
+pub(crate) fn _create_table<'a>(
   entry_state: u32,
   g: &GrammarStore,
   output: &'a BytecodeOutput,
@@ -52,17 +52,17 @@ pub(crate) fn create_table<'a>(
         VECTOR_BRANCH | HASH_BRANCH => {
           let table_data = BranchTableData::from_bytecode(instruction, g, output).unwrap();
 
-          let TableHeaderData { input_type, .. } = table_data.data;
+          let TableHeaderData { .. } = table_data.data;
 
           let mut index_map = table_data
             .branches
             .iter()
             .map(|(_, s)| TableCell {
-              state: state_address as u32,
-              shift_length: 0,
-              debug_state_name: output.offset_to_state_name.get(&(s.address as u32)).unwrap_or(&d),
-              goto_state: s.address as u32,
-              input_byte: s.value,
+              _state: state_address as u32,
+              _shift_length: 0,
+              _debug_state_name: output.offset_to_state_name.get(&(s.address as u32)).unwrap_or(&d),
+              _goto_state: s.address as u32,
+              _input_byte: s.value,
             })
             .collect::<Vec<_>>();
 
@@ -71,35 +71,35 @@ pub(crate) fn create_table<'a>(
 
           for cell in &mut index_map {
             // load the next state and see if it
-            let index = cell.goto_state as usize;
+            let index = cell._goto_state as usize;
 
             let instruction = INSTRUCTION::from(bytecode, index);
 
             if instruction.is_SHIFT() {
               let instruction = instruction.next(bytecode);
-              cell.shift_length = 1;
+              cell._shift_length = 1;
               if instruction.is_GOTO() {
                 let instruction2 = instruction.next(bytecode);
                 if instruction2.is_GOTO() {
                   // replace the cells state with the goto value
-                  cell.goto_state = instruction2.get_contents() & GOTO_STATE_ADDRESS_MASK;
+                  cell._goto_state = instruction2.get_contents() & GOTO_STATE_ADDRESS_MASK;
 
-                  state_offset_queue.push_back(cell.goto_state);
+                  state_offset_queue.push_back(cell._goto_state);
                 } else {
                   // replace the cells state with the goto value
-                  cell.goto_state = instruction.get_contents() & GOTO_STATE_ADDRESS_MASK;
+                  cell._goto_state = instruction.get_contents() & GOTO_STATE_ADDRESS_MASK;
 
-                  state_offset_queue.push_back(cell.goto_state);
+                  state_offset_queue.push_back(cell._goto_state);
                 }
               }
             } else if instruction.is_TOKEN() {
-              cell.goto_state = state_address as u32;
+              cell._goto_state = state_address as u32;
             }
             println!(
               "{} {} {}",
-              cell.goto_state,
-              (bytecode[cell.goto_state as usize] & INSTRUCTION_HEADER_MASK) >> 28,
-              INSTRUCTION::from(bytecode, cell.goto_state as usize).to_str()
+              cell._goto_state,
+              (bytecode[cell._goto_state as usize] & INSTRUCTION_HEADER_MASK) >> 28,
+              INSTRUCTION::from(bytecode, cell._goto_state as usize).to_str()
             )
           }
 
@@ -113,11 +113,11 @@ pub(crate) fn create_table<'a>(
         }
         TOKEN => {
           e.insert(vec![TableCell {
-            state: state_address as u32,
-            debug_state_name: &d,
-            input_byte: 0,
-            goto_state: state_address as u32,
-            shift_length: 0,
+            _state: state_address as u32,
+            _debug_state_name: &d,
+            _input_byte: 0,
+            _goto_state: state_address as u32,
+            _shift_length: 0,
           }]);
         }
         _ => {}
@@ -132,23 +132,23 @@ pub(crate) fn create_table<'a>(
   let mut byte_major_table: BTreeMap<u32, Vec<&TableCell>> = BTreeMap::new();
   let mut keys = state_offset_to_enumuration.keys();
 
-  let min_state = *state_offset_to_enumuration.get(keys.next().unwrap()).unwrap();
+  let _min_state = *state_offset_to_enumuration.get(keys.next().unwrap()).unwrap();
   let max_state = *state_offset_to_enumuration.get(keys.last().unwrap()).unwrap();
 
   for state in &mut table {
     for cell in state.1 {
-      if let Some(remapped_name) = state_offset_to_enumuration.get(&(cell.goto_state as usize)) {
-        cell.goto_state = *remapped_name as u32;
+      if let Some(remapped_name) = state_offset_to_enumuration.get(&(cell._goto_state as usize)) {
+        cell._goto_state = *remapped_name as u32;
       }
 
-      if let Some(remapped_name) = state_offset_to_enumuration.get(&(cell.state as usize)) {
-        cell.state = *remapped_name as u32;
+      if let Some(remapped_name) = state_offset_to_enumuration.get(&(cell._state as usize)) {
+        cell._state = *remapped_name as u32;
       }
     }
   }
   for state in &table {
     for cell in state.1 {
-      match byte_major_table.entry(cell.input_byte) {
+      match byte_major_table.entry(cell._input_byte) {
         btree_map::Entry::Occupied(mut e) => {
           e.get_mut().push(&*cell);
         }
@@ -183,11 +183,11 @@ pub(crate) fn create_table<'a>(
     let mut base = 1;
 
     for cell in row.1 {
-      while base < cell.state {
+      while base < cell._state {
         print!("{: <8}", 1);
         base += 1;
       }
-      print!("[{: >2}|{: >2}] ", cell.shift_length, cell.goto_state);
+      print!("[{: >2}|{: >2}] ", cell._shift_length, cell._goto_state);
       base += 1;
     }
 
@@ -242,7 +242,7 @@ pub enum TableType {
 impl BranchTableData {
   pub fn from_bytecode(
     instruction: INSTRUCTION,
-    g: &GrammarStore,
+    _: &GrammarStore,
     output: &BytecodeOutput,
   ) -> Option<Self> {
     let address = instruction.get_address();
@@ -288,7 +288,7 @@ impl BranchTableData {
 
       let symbol_lookup = &output.bytecode_id_to_symbol_lookup;
 
-      let (symbols) = match input_type {
+      let symbols = match input_type {
         INPUT_TYPE::T02_TOKEN => {
           let mut symbols = BTreeMap::new();
 

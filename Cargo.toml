@@ -2,10 +2,14 @@
 
 members = [
     "source/lib/hctk",
+    "source/lib/hctk-proc",
+    "source/lib/hctk-core",
+    "source/lib/hctk-compile",
     "source/app/compile",
-    "test/e2e/basic_grammar",
-    "test/e2e/basic_grammar_llvm",
-    "test/e2e/basic_language_llvm"
+    #"test/e2e/basic_grammar",
+    #"test/e2e/basic_grammar_llvm",
+    #"test/e2e/basic_language_llvm",
+    "test/e2e/proc_macro"
 ]
 
 [profile.dev]
