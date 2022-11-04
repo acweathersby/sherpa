@@ -15,8 +15,8 @@ use super::data::ast::ASTNode;
 use super::data::ast::ASTNodeTraits;
 use super::get_guid_grammar_name;
 use super::get_production_plain_name;
+use super::get_production_recursion_type;
 use super::get_production_start_items;
-use super::is_production_recursive;
 use super::parse;
 use super::parse::compile_grammar_ast;
 
@@ -232,19 +232,14 @@ fn finalize_productions(g: &mut GrammarStore, thread_count: usize, errors: &mut 
   let production_id_chunks =
     production_ids.chunks(thread_count).filter(|s| !s.is_empty()).collect::<Vec<_>>();
 
-  for (production_id, is_recursive, _) in thread::scope(|s| {
+  for (production_id, recursion_type) in thread::scope(|s| {
     production_id_chunks
       .iter()
       .map(|work| {
         s.spawn(|| {
           work
             .iter()
-            .map(|production_id| {
-              // temp
-              let (is_recursive, is_left_recursive) = is_production_recursive(*production_id, g);
-
-              (*production_id, is_recursive, is_left_recursive)
-            })
+            .map(|production_id| (*production_id, get_production_recursion_type(*production_id, g)))
             .collect::<Vec<_>>()
         })
       })
@@ -256,7 +251,7 @@ fn finalize_productions(g: &mut GrammarStore, thread_count: usize, errors: &mut 
   }) {
     let production = g.productions.get_mut(&production_id).unwrap();
 
-    production.is_recursive = is_recursive;
+    production.recursion_type = recursion_type;
   }
 }
 
@@ -1596,7 +1591,6 @@ fn some_bodies_have_reduce_functions(bodies: &Vec<ASTNode>) -> bool {
 
 fn get_literal_id(string: &String) -> SymbolID {
   let identifier = Regex::new(r"[\w_-][\w\d_-]*$").unwrap();
-
   let number = Regex::new(r"\d+$").unwrap();
 
   if number.is_match(string) {

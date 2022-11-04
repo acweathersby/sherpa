@@ -1,25 +1,15 @@
-use crate::grammar::data::ast::ASTNode;
-
-use crate::types::BodyId;
-
-use std::collections::HashMap;
-
-use std::collections::BTreeMap;
-
-use std::collections::BTreeSet;
-use std::fmt::Debug;
-
-use crate::grammar::get_production_plain_name;
-
-use crate::types::GrammarStore;
-
-use std::mem::discriminant;
-
-use crate::types::ProductionId;
-
-use crate::grammar::hash_id_value_u64;
-
 use super::Token;
+use crate::grammar::data::ast::ASTNode;
+use crate::grammar::get_production_plain_name;
+use crate::grammar::hash_id_value_u64;
+use crate::types::BodyId;
+use crate::types::GrammarStore;
+use crate::types::ProductionId;
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::mem::discriminant;
 
 #[derive(Hash, Debug, PartialEq, Eq, Clone, PartialOrd, Ord, Copy)]
 pub struct AScriptStructId(u64);

@@ -8,6 +8,7 @@ use crate::types::GrammarStore;
 use crate::types::Item;
 use crate::types::Production;
 use crate::types::ProductionId;
+use crate::types::RecursionType;
 use crate::types::SymbolID;
 
 use super::create_closure;
@@ -21,33 +22,46 @@ use super::get_production_start_items;
 ///
 /// The second boolean value indicates a production has left
 /// recursive, either directly or indirectly.
-pub fn is_production_recursive(production: ProductionId, g: &GrammarStore) -> (bool, bool) {
+pub fn get_production_recursion_type(production: ProductionId, g: &GrammarStore) -> RecursionType {
   let mut seen = HashSet::<Item>::new();
 
-  let mut pipeline =
-    VecDeque::from_iter(create_closure(&get_production_start_items(&production, g), g));
+  let mut pipeline = VecDeque::from_iter(
+    create_closure(&get_production_start_items(&production, g), g).iter().map(|i| (0, *i)),
+  );
 
-  while let Some(item) = pipeline.pop_front() {
-    if seen.insert(item) && !item.is_end() {
+  let mut recurse_type = RecursionType::NONE;
+
+  while let Some((offset, item)) = pipeline.pop_front() {
+    if !item.is_end() {
       if let SymbolID::Production(prod_id, _) = item.get_symbol(g) {
         if prod_id == production {
-          return (true, item.get_offset() == 0);
+          if (offset == 0) {
+            if (item.get_prod_id(g) == production) {
+              recurse_type |= RecursionType::LEFT_DIRECT;
+            } else {
+              recurse_type |= RecursionType::LEFT_INDIRECT;
+            }
+          } else {
+            recurse_type |= RecursionType::RIGHT;
+          }
         }
       }
 
-      let new_item = item.increment().unwrap();
+      if seen.insert(item) {
+        let new_item = item.increment().unwrap();
 
-      if let SymbolID::Production(..) = new_item.get_symbol(g) {
-        for item in get_closure_cached(&new_item, g) {
-          pipeline.push_back(*item);
+        if let SymbolID::Production(..) = new_item.get_symbol(g) {
+          for item in get_closure_cached(&new_item, g) {
+            pipeline.push_back((offset + 1, *item));
+          }
+        } else {
+          pipeline.push_back((offset + 1, new_item));
         }
-      } else {
-        pipeline.push_back(new_item);
       }
     }
   }
 
-  (false, false)
+  recurse_type
 }
 
 /// Used to separate a grammar's uuid name from a production's name
@@ -212,22 +226,25 @@ mod production_utilities_tests {
 
     let production = get_production_id_by_name("A", &g).unwrap();
 
-    assert_eq!(is_production_recursive(production, &g), (true, false));
+    assert_eq!(get_production_recursion_type(production, &g), RecursionType::RIGHT);
 
     let production = get_production_id_by_name("R", &g).unwrap();
 
-    assert_eq!(is_production_recursive(production, &g), (true, true));
+    assert!(get_production_recursion_type(production, &g)
+      .contains(RecursionType::LEFT_DIRECT | RecursionType::RIGHT));
 
     let production = get_production_id_by_name("B", &g).unwrap();
 
-    assert_eq!(is_production_recursive(production, &g), (true, true));
+    assert!(get_production_recursion_type(production, &g)
+      .contains(RecursionType::LEFT_INDIRECT | RecursionType::RIGHT));
 
     let production = get_production_id_by_name("C", &g).unwrap();
 
-    assert_eq!(is_production_recursive(production, &g), (true, true));
+    assert!(get_production_recursion_type(production, &g)
+      .contains(RecursionType::LEFT_INDIRECT | RecursionType::RIGHT));
 
     let production = get_production_id_by_name("O", &g).unwrap();
 
-    assert_eq!(is_production_recursive(production, &g), (false, false));
+    assert_eq!(get_production_recursion_type(production, &g), RecursionType::NONE);
   }
 }

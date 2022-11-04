@@ -21,9 +21,8 @@ pub fn compile_mod(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
   let grammar = input.to_string()[1..input.to_string().len() - 1]
     .to_string()
-    .replace("\\\\", "\\")
     .replace("\\\"", "\"")
-    .replace("\\'", "'");
+    .replace("\\\\", "\\");
 
   let (_, artifacts) = BuildPipeline::proc_context(&grammar, &source.path())
     .set_source_output_dir(&root_dir)

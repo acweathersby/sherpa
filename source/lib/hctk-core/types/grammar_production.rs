@@ -1,14 +1,20 @@
-use std::fmt::Display;
+use bitmask_enum::bitmask;
 
 use crate::grammar::data::ast::ASTNode;
 use crate::grammar::data::ast::ASTNodeTraits;
 use crate::grammar::hash_id_value_u64;
+use crate::types::SymbolID;
+use crate::types::Token;
 
-use super::SymbolID;
-use super::Token;
+#[bitmask]
+pub enum RecursionType {
+  NONE  = 0,
+  LEFT_DIRECT = 1,
+  LEFT_INDIRECT = 2,
+  RIGHT = 4,
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
-
 pub struct ProductionId(pub u64);
 
 impl From<&String> for ProductionId {
@@ -17,7 +23,7 @@ impl From<&String> for ProductionId {
   }
 }
 
-impl Display for ProductionId {
+impl std::fmt::Display for ProductionId {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.write_str(&self.0.to_string())
   }
@@ -43,14 +49,13 @@ impl BodyId {
   }
 }
 
-impl Display for BodyId {
+impl std::fmt::Display for BodyId {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.write_str(&self.0.to_string())
   }
 }
 
 #[derive(Debug, Clone)]
-
 pub struct Production {
   pub guid_name: String,
   pub original_name: String,
@@ -58,7 +63,7 @@ pub struct Production {
   pub id: ProductionId,
   pub is_scanner: bool,
   pub is_entry: bool,
-  pub is_recursive: bool,
+  pub recursion_type: RecursionType,
   pub priority: u32,
   /// The token defining the substring in the source
   /// code from which this production was derived.
@@ -87,7 +92,7 @@ impl Production {
       original_name: original_name.to_string(),
       id,
       is_entry: false,
-      is_recursive: false,
+      recursion_type: RecursionType::NONE,
       is_scanner,
       number_of_bodies,
       priority: 0,
@@ -99,7 +104,6 @@ impl Production {
 }
 
 #[derive(Debug, Clone)]
-
 pub struct BodySymbolRef {
   pub sym_id:         SymbolID,
   pub original_index: u32,

@@ -1,8 +1,6 @@
 use crate::deprecated_runtime::error::TokenError;
-
-use ::std::fmt::Display;
-
 use crate::types::Token;
+use ::std::fmt::Display;
 
 /// Indicates an issue encountered while processing a grammar
 /// symbol.

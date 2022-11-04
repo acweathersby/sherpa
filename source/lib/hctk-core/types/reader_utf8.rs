@@ -22,6 +22,7 @@ pub struct UTF8StringReader<'a> {
   string:     &'a [u8],
   word:       u32,
   cp:         u32,
+  source:     SharedSymbolBuffer,
 }
 
 impl<'a> LLVMCharacterReader for UTF8StringReader<'a> {}
@@ -102,9 +103,7 @@ impl<'a> BaseCharacterReader for UTF8StringReader<'a> {
 
   #[inline(always)]
   fn get_source(&self) -> SharedSymbolBuffer {
-    let vec = self.string.clone();
-
-    SharedSymbolBuffer::new(Vec::from(vec))
+    self.source.clone()
   }
 
   #[inline(always)]
@@ -149,6 +148,7 @@ impl<'a> UTF8StringReader<'a> {
       line_count: 0,
       line_off:   0,
       cp:         0,
+      source:     SharedSymbolBuffer::new(Vec::from(string.clone())),
     };
 
     Self::next(&mut reader, 0);

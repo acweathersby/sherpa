@@ -1,11 +1,8 @@
 use crate::runtime::get_next_action;
-use crate::types::ParseAction;
-
-use crate::types::ParseContext;
-
 use crate::types::BaseCharacterReader;
-
-use super::MutCharacterReader;
+use crate::types::MutCharacterReader;
+use crate::types::ParseAction;
+use crate::types::ParseContext;
 
 pub trait IteratorParser<T: BaseCharacterReader + MutCharacterReader> {
   fn get_parts(&mut self) -> (&mut T, &mut ParseContext<T>, &[u32], &mut bool);

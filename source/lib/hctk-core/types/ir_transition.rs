@@ -1,3 +1,8 @@
+use crate::grammar::get_production;
+use crate::types::GrammarStore;
+use crate::types::Item;
+use crate::types::ProductionId;
+use crate::types::SymbolID;
 use bitmask_enum::bitmask;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -7,17 +12,9 @@ use std::hash::Hash;
 use std::rc::Rc;
 use std::vec;
 
-use crate::grammar::get_production;
-
-use super::GrammarStore;
-use super::Item;
-use super::ProductionId;
-use super::SymbolID;
-
 pub type TransitionGraphNodeId = usize;
 
 #[bitmask]
-
 pub enum TransitionStateType {
   UNDEFINED,
   /// Transition has occurred from

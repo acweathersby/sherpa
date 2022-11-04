@@ -1,15 +1,13 @@
+use crate::types::*;
+use crate::utf8::get_token_class_from_codepoint;
+use regex::internal::Input;
 use std::alloc::alloc;
 use std::alloc::dealloc;
 use std::alloc::Layout;
 use std::collections::VecDeque;
 use std::fmt::Debug;
 
-use regex::internal::Input;
-
-use crate::utf8::get_token_class_from_codepoint;
-
 const stack_32_bit_size: usize = 128;
-use super::*;
 pub struct ParseContext<T: BaseCharacterReader + MutCharacterReader> {
   pub(crate) peek: ParseToken,
   pub(crate) anchor: ParseToken,

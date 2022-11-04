@@ -1,12 +1,11 @@
-use std::collections::BTreeSet;
-use std::fmt::format;
-use std::fmt::Debug;
-use std::fmt::Display;
-
 use crate::grammar::data::ast::ASTNode;
 use crate::grammar::data::ast::IR_STATE;
 use crate::grammar::hash_id_value_u64;
 use crate::grammar::parse::compile_ir_ast;
+use std::collections::BTreeSet;
+use std::fmt::format;
+use std::fmt::Debug;
+use std::fmt::Display;
 
 use super::*;
 

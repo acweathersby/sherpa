@@ -14,7 +14,7 @@ mod parser {
   <> member > string \\:  value                      f:ast  { { t_Member, key:$1, val:$3 } }
   
   <> value > string 
-      | number                                    
+    | number                                    
       | object 
       | array 
       | t:true                                    f:ast  { { t_Bool, val: false } }
@@ -22,10 +22,13 @@ mod parser {
       | t:null                                    f:ast  { { t_Null } }
   
   <> string > 
-      \\\" (g:id | g:sym | g:num | g:sp)(*\" ) \\\"     f:ast  { { t_Str, val: str($2) } }    
-      | \\' (g:id | g:sym | g:num | g:sp)(*\" ) \\'     f:ast  { { t_Str, val: str($2) } }    
+      \\\" (g:id | g:sym | g:num | g:sp | escape )(*\" ) \\\"     f:ast  { { t_Str, val: $2 } }    
+      | \\' (g:id | g:sym | g:num | g:sp | escape )(*\" ) \\'     f:ast  { { t_Str, val: $2 } }   
+      
+  <> escape > \\\\ ( g:id | g:sym | g:nl | g:num ) 
+    
   
-  <> number > \\- ? g:num(+) ( \\. g:num(*) )?                                    
+  <> number > (\\- |\\+ ) ? g:num(+) ( \\. g:num(*) )?                                
                                                         f:ast  { { t_Number, val: f64(tok) } }
   "
   }
@@ -38,13 +41,18 @@ mod test {
 
   #[test]
   fn test() {
-    let input = " {\"ds\":2,\"ds\" :[2, -5404.004 ]}".to_string();
+    unsafe {
+      let bytes = include_bytes!("./spirv.data");
+      let spirv = String::from_utf8_unchecked(bytes.to_vec());
 
-    let node = parser::Context::parse_default(&mut UTF8StringReader::new(&input));
+      let input = " {\"d\\\"s\":2,\"ds\" :[2, -5404.004 ]}".to_string();
 
-    println!("{:?}", node);
-    if !node.is_ok() {
-      panic!("Failed to parse input");
+      let node = parser::Context::parse_default(&mut UTF8StringReader::new(&spirv));
+
+      // println!("{:?}", node);
+      if !node.is_ok() {
+        panic!("Failed to parse input");
+      }
     }
   }
 }

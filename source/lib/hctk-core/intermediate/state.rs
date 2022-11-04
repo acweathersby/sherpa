@@ -1,6 +1,7 @@
 //! Methods for constructing IRStates from a grammar
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
+use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::fmt::format;
 use std::thread;
@@ -8,6 +9,8 @@ use std::thread;
 use super::transition::construct_goto;
 use super::transition::construct_recursive_descent;
 use super::transition::hash_group;
+use crate::grammar::create_closure;
+use crate::grammar::get_closure_cached;
 use crate::grammar::get_production;
 use crate::grammar::get_production_plain_name;
 use crate::grammar::get_production_start_items;
@@ -21,6 +24,7 @@ use crate::types::Item;
 use crate::types::OriginData;
 use crate::types::PeekType;
 use crate::types::ProductionId;
+use crate::types::RecursionType;
 use crate::types::Symbol;
 use crate::types::SymbolID;
 use crate::types::TransitionGraphNode;
@@ -144,6 +148,10 @@ pub fn generate_scanner_intro_state(symbols: BTreeSet<SymbolID>, g: &GrammarStor
     })
     .collect::<Vec<_>>();
 
+  // Ensure there are no left recursive productions within the
+  // items
+  check_for_left_recursion(&symbol_items, g);
+
   generate_states(
     g,
     true,
@@ -151,6 +159,48 @@ pub fn generate_scanner_intro_state(symbols: BTreeSet<SymbolID>, g: &GrammarStor
     &format!("scan_{:02X}", hash_id_value_u64(&symbols)),
     u32::MAX,
   )
+}
+
+fn check_for_left_recursion(symbol_items: &Vec<Item>, g: &GrammarStore) {
+  let mut productions = HashSet::new();
+  let mut seen = HashSet::new();
+  let mut pipeline =
+    VecDeque::from_iter(symbol_items.iter().flat_map(|i| get_closure_cached(i, g)).cloned());
+
+  while let Some(item) = pipeline.pop_front() {
+    if seen.insert(item) && !item.is_end() {
+      productions.insert(item.get_prod_id(g));
+
+      let new_item = item.increment().unwrap();
+
+      if let SymbolID::Production(..) = new_item.get_symbol(g) {
+        for item in get_closure_cached(&new_item, g) {
+          pipeline.push_back(*item);
+        }
+      } else {
+        pipeline.push_back(new_item);
+      }
+    }
+  }
+
+  assert!(
+    productions.iter().all(|p| {
+      let production = g.productions.get(p).unwrap();
+      let has_left = production
+        .recursion_type
+        .intersects(RecursionType::LEFT_DIRECT | RecursionType::LEFT_INDIRECT);
+
+      if has_left {
+        println!(
+          "{}",
+          production.original_location.blame(1, 1, "this production is left recursive")
+        );
+      }
+
+      !has_left
+    }),
+    "Scanner productions cannot contain left recursion!"
+  );
 }
 
 pub fn generate_production_states(production_id: &ProductionId, g: &GrammarStore) -> IROutput {

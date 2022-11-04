@@ -1,10 +1,9 @@
+use crate::types::BodyId;
+use crate::types::BodySymbolRef;
+use crate::types::GrammarStore;
+use crate::types::ProductionId;
+use crate::types::SymbolID;
 use std::fmt::Display;
-
-use super::BodyId;
-use super::BodySymbolRef;
-use super::GrammarStore;
-use super::ProductionId;
-use super::SymbolID;
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy, Hash, PartialOrd, Ord)]
 pub struct ItemState(u32);

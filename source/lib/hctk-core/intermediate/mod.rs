@@ -13,10 +13,7 @@ mod transition_tree_tests {
 
   #[test]
   pub fn construct_descent_on_basic_grammar() {
-    let grammar = compile_test_grammar(
-      "<> A > \\h \\e
-         \\l \\l \\o",
-    );
+    let grammar = compile_test_grammar("<> A > \\h \\e \\l \\l \\o");
 
     let production_id = get_production_id_by_name("A", &grammar).unwrap();
 
@@ -63,7 +60,7 @@ mod transition_tree_tests {
       &get_production_start_items(production_id, &grammar),
     );
 
-    assert_eq!(result.get_node_len(), 9);
+    assert_eq!(result.get_node_len(), 8);
 
     assert_eq!(result.leaf_nodes.len(), 2);
   }
@@ -95,7 +92,7 @@ mod state_constructor_tests {
 
     println!("{:#?}", result);
 
-    assert_eq!(result.len(), 7);
+    assert_eq!(result.len(), 8);
   }
 
   #[test]
@@ -108,7 +105,7 @@ mod state_constructor_tests {
 
     println!("{:#?}", result);
 
-    assert_eq!(result.len(), 21);
+    assert_eq!(result.len(), 26);
   }
 
   #[test]
@@ -121,7 +118,7 @@ mod state_constructor_tests {
 
     println!("{:#?}", result);
 
-    assert_eq!(result.len(), 5);
+    assert_eq!(result.len(), 8);
   }
 
   #[test]
@@ -141,7 +138,7 @@ mod state_constructor_tests {
 
     println!("{:#?}", result);
 
-    assert_eq!(result.len(), 5);
+    assert_eq!(result.len(), 11);
   }
 
   #[test]
@@ -166,7 +163,7 @@ mod state_constructor_tests {
 
     println!("{:#?}", result);
 
-    assert_eq!(result.len(), 6);
+    assert_eq!(result.len(), 7);
   }
 
   #[test]
@@ -223,7 +220,7 @@ mod state_constructor_tests {
 
     println!("{:#?}", result);
 
-    assert_eq!(result.len(), 6);
+    assert_eq!(result.len(), 10);
   }
 
   #[test]
