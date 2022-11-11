@@ -190,7 +190,7 @@ impl Default for Goto {
 pub struct InputBlock {
   /// The pointer to the beginning of the block window slice.
   pub block:        *const u8,
-  /// The offset of this block, calculated as the relative distance
+  /// The offset of this block, representing the distance in bytes
   /// from the start of the input string to the InputBlock's pointer
   /// position.
   pub off:          u32,
@@ -255,7 +255,7 @@ impl<T: LLVMCharacterReader + ByteCharacterReader + BaseCharacterReader> Debug
 }
 
 impl<T: LLVMCharacterReader + ByteCharacterReader + BaseCharacterReader> LLVMParseContext<T> {
-  pub fn new(reader: &mut T) -> Self {
+  pub fn new() -> Self {
     let mut ctx = Self {
       peek_token: ParseToken::default(),
       anchor_token: ParseToken::default(),
@@ -266,7 +266,7 @@ impl<T: LLVMCharacterReader + ByteCharacterReader + BaseCharacterReader> LLVMPar
       production: 0,
       input_block: InputBlock::default(),
       stack_size: 0,
-      reader: reader,
+      reader: 0 as *mut T,
       get_byte_block_at_cursor: T::get_byte_block_at_cursor,
       in_peek_mode: 0,
       local_goto_stack: [Goto::default(); 8],
