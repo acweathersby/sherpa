@@ -171,6 +171,10 @@ impl Item {
     self.off == self.len
   }
 
+  pub fn at_start(&self) -> bool {
+    self.off == 0
+  }
+
   pub fn to_state(&self, state: ItemState) -> Item {
     Item {
       len: self.len,

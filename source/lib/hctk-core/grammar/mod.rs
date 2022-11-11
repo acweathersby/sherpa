@@ -86,6 +86,23 @@ mod test_grammar {
 
     assert!(errors.is_empty());
   }
+
+  #[test]
+  fn conversion_of_left_to_right_recursive() {
+    let grammar = String::from("<> B > tk:A  <> A > A \\t \\y | A \\u | \\CCC | \\R A ");
+
+    if let Some(mut g) = compile_from_string(&grammar, &PathBuf::from("/test")).0 {
+      let prod = get_production_id_by_name("A", &g).unwrap();
+
+      assert!(get_production_recursion_type(prod, &g).contains(RecursionType::LEFT_DIRECT));
+
+      let (a, a_prime) = convert_left_to_right(&mut g, prod);
+
+      assert!(get_production_recursion_type(prod, &g).contains(RecursionType::RIGHT));
+      assert!(!get_production_recursion_type(prod, &g).contains(RecursionType::LEFT_DIRECT));
+    }
+  }
+
   #[test]
   fn processing_of_any_groups() {
     let grammar = String::from("<> A > [ unordered \\g ? ( \\r \\l ) ? ] \\ d ");

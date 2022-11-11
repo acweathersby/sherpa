@@ -224,6 +224,38 @@ mod state_constructor_tests {
   }
 
   #[test]
+  pub fn generate_scanner_production_with_recursion() {
+    let grammar = compile_test_grammar(
+      "
+      @IGNORE g:sp
+
+      @EXPORT statement as entry
+      
+      @NAME llvm_language_test
+      
+      <> statement > tk:test
+      
+      <> test > V test?
+          | A test \\t
+
+      <> V > V g:num | \\dd
+
+      <> A > \\a \\- \\b
+      
+",
+    );
+
+    let result = generate_scanner_intro_state(
+      BTreeSet::from_iter(vec![SymbolID::from_string("V", Some(&grammar))]),
+      &grammar,
+    );
+
+    println!("{:#?}", result);
+
+    assert_eq!(result.len(), 11);
+  }
+
+  #[test]
   pub fn generate_production_with_recursiond() {
     let grammar = compile_test_grammar(
       "

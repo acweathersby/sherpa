@@ -50,12 +50,12 @@ pub fn get_production_recursion_type(production: ProductionId, g: &GrammarStore)
       if seen.insert(item) {
         let new_item = item.increment().unwrap();
 
+        pipeline.push_back((offset + 1, new_item));
+
         if let SymbolID::Production(..) = new_item.get_symbol(g) {
           for item in get_closure_cached(&new_item, g) {
             pipeline.push_back((offset + 1, *item));
           }
-        } else {
-          pipeline.push_back((offset + 1, new_item));
         }
       }
     }

@@ -1,3 +1,4 @@
+pub use hctk_compile::*;
 pub use hctk_core::*;
 
 /// Compiles a parse module from a grammar string
@@ -22,3 +23,7 @@ pub use hctk_core::*;
 /// dbg!(node);
 /// ```
 pub use hctk_proc::compile_mod as compile;
+
+pub use hctk_core::types::Token;
+pub use hctk_core::types::UTF8StringReader as UTF8Reader;
+pub use hctk_core::types::UTF8StringReader;

@@ -234,17 +234,21 @@ fn generate_states(
     production_id,
   ));
 
-  let goto_data = construct_goto(
-    g,
-    is_scanner,
-    start_items,
-    &recursive_descent_data.gotos.into_iter().collect::<Vec<_>>(),
-  );
+  // Scanner states are guaranteed to be purely recursive descent compatible
+  //  and thus they have no need for a GOTO path.
+  if !is_scanner {
+    let goto_data = construct_goto(
+      g,
+      is_scanner,
+      start_items,
+      &recursive_descent_data.gotos.into_iter().collect::<Vec<_>>(),
+    );
 
-  if !goto_data.leaf_nodes.is_empty() {
-    output.append(&mut process_transition_nodes(&goto_data, g, entry_name, production_id));
-  } else {
-    output.push(create_passing_goto_state(entry_name, is_scanner));
+    if !goto_data.leaf_nodes.is_empty() {
+      output.append(&mut process_transition_nodes(&goto_data, g, entry_name, production_id));
+    } else {
+      output.push(create_passing_goto_state(entry_name, is_scanner));
+    }
   }
 
   output
@@ -344,12 +348,6 @@ fn process_transition_nodes<'a>(
   output.into_values().filter(|s| hash_filter.insert(s.get_hash())).collect::<Vec<_>>()
 }
 
-fn create_fail_state(production_id: &ProductionId, g: &GrammarStore) {}
-
-fn get_goto_name(entry_name: &String) -> String {
-  format!("{}_goto", entry_name)
-}
-
 fn create_passing_goto_state(entry_name: &String, is_scanner: bool) -> IRState {
   IRState {
     code: "pass".to_string(),
@@ -362,20 +360,20 @@ fn create_passing_goto_state(entry_name: &String, is_scanner: bool) -> IRState {
 
 fn create_goto_start_state(
   g: &GrammarStore,
-  tpack: &TransitionPack,
+  t_pack: &TransitionPack,
   resolved_states: &BTreeMap<usize, IRState>,
   children_ids: &BTreeSet<usize>,
   root_productions: &BTreeSet<ProductionId>,
   entry_name: &String,
 ) -> IRState {
-  let is_scanner = tpack.is_scanner;
+  let is_scanner = t_pack.is_scanner;
   let mut strings = vec![];
   let mut comment = String::new();
   let post_amble = create_post_amble(entry_name, g);
   let mut contains_root_production = false;
 
   for child_id in children_ids {
-    let child = tpack.get_node(*child_id);
+    let child = t_pack.get_node(*child_id);
     let state = resolved_states.get(&child.id).unwrap();
     let symbol = child.terminal_symbol;
 
@@ -466,26 +464,32 @@ fn create_intermediate_state(
 
   let (post_amble, state_name, mut stack_depth, mut state_type) = {
     if node.id == 0 {
-      (create_post_amble(entry_name, g), entry_name.clone(), 1, match mode {
-        TransitionMode::GoTo => {
-          if is_scanner {
-            ScannerGoto
-          } else {
-            ProductionGoto
+      (
+        if is_scanner { "".to_string() } else { create_post_amble(entry_name, g) },
+        entry_name.clone(),
+        1,
+        match mode {
+          TransitionMode::GoTo => {
+            if is_scanner {
+              ScannerGoto
+            } else {
+              ProductionGoto
+            }
           }
-        }
-        TransitionMode::RecursiveDescent => {
-          if is_scanner {
-            ScannerStart
-          } else {
-            ProductionStart
-          }
-        }
-      })
+          TransitionMode::RecursiveDescent => {
+            if is_scanner {
+              ScannerStart
+            } else {
+              ProductionStart
+            }
+          }     
+        },
+      )
     } else {
       (String::default(), String::default(), 0, Undefined)
     }
   };
+
   if node.is(TransitionStateType::I_FAIL) {
     strings.push("fail".to_string());
   } else if node.is(TransitionStateType::I_FORK) {
@@ -498,10 +502,6 @@ fn create_intermediate_state(
     // "forked-to" state that would otherwise be skipped.
 
     let mut origin = node;
-
-    // while !(origin.is(TransitionStateType::I_PEEK_ORIGIN)) {
-    //  origin = t_pack.get_node(origin.parent);
-    //}
 
     for child in children.iter() {
       let mut new_states = create_intermediate_state(
@@ -569,6 +569,7 @@ fn create_intermediate_state(
           &child.items.iter().map(|i| i.debug_string(g)).collect::<Vec<_>>().join("\n")
         );
       }
+
       if group[0].prod_sym.is_some() || matches!(group[0].terminal_symbol, SymbolID::Production(..))
       {
         for child in &group {
@@ -666,10 +667,6 @@ fn create_intermediate_state(
                   })
                 } else {
                   let mut origin = group[0];
-
-                  // while !(origin.is(TransitionStateType::I_PEEK_ORIGIN)) {
-                  //  origin = t_pack.get_node(origin.parent);
-                  //}
 
                   for child in group {
                     let par = t_pack.get_node(child.parent);
@@ -898,10 +895,6 @@ fn get_symbol_shift_type(symbol_id: &SymbolID, g: &GrammarStore) -> (u32, &'stat
   }
 }
 
-fn create_post_amble(entry_name: &String, g: &GrammarStore) -> String {
-  format!(" then goto state [ {}_goto ]", entry_name)
-}
-
 fn create_reduce_string(node: &TransitionGraphNode, g: &GrammarStore, is_scanner: bool) -> String {
   let item = node.items[0];
 
@@ -960,4 +953,12 @@ fn create_reduce_state(node: &TransitionGraphNode, g: &GrammarStore, is_scanner:
     ..Default::default()
   }
   .into_hashed()
+}
+
+fn get_goto_name(entry_name: &String) -> String {
+  format!("{}_goto", entry_name)
+}
+
+fn create_post_amble(entry_name: &String, g: &GrammarStore) -> String {
+  format!(" then goto state [ {}_goto ]", entry_name)
 }

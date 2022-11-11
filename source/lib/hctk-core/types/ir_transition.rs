@@ -87,7 +87,14 @@ pub struct TransitionGraphNode {
   pub parent: TransitionGraphNodeId,
   pub goal: TransitionGraphNodeId,
   pub proxy_parents: Vec<usize>,
-  pub depth: u32,
+  /// The number of symbol shifts that have occurred prior to
+  /// reaching this node.
+  pub shifts: u32,
+  /// If this node is part of a disambiguating sequence, then
+  /// this represents the positive number of shifts since the start of
+  /// disambiguating that have occurred prior to reaching this node.
+  /// Otherwise, this value is less than 0.
+  pub peek_shifts: i32,
   pub id: usize,
 }
 
@@ -109,8 +116,9 @@ impl TransitionGraphNode {
       trans_type: TransitionStateType::UNDEFINED,
       proxy_parents: vec![],
       items,
-      depth: 0,
+      shifts: 0,
       prod_sym: None,
+      peek_shifts: -1,
       parent: TransitionGraphNode::OrphanIndex,
       goal: TransitionGraphNode::OrphanIndex,
       id: TransitionGraphNode::OrphanIndex,
@@ -121,7 +129,7 @@ impl TransitionGraphNode {
 
       node.parent = parent_index;
 
-      node.depth = parent.depth + 1;
+      node.shifts = parent.shifts + 1;
 
       node.goal = parent.goal;
     }
@@ -140,8 +148,9 @@ impl TransitionGraphNode {
       trans_type: TransitionStateType::UNDEFINED,
       proxy_parents: vec![],
       items,
-      depth: 0,
+      shifts: 0,
       prod_sym: None,
+      peek_shifts: -1,
       parent: TransitionGraphNode::OrphanIndex,
       goal: TransitionGraphNode::OrphanIndex,
       id: origin.id * 100000,
@@ -288,6 +297,8 @@ impl TransitionPack {
       node.parent = TransitionGraphNode::OrphanIndex;
 
       node.id = TransitionGraphNode::OrphanIndex;
+
+      node.items.clear();
     }
 
     if node_id < self.nodes.len() {
@@ -334,6 +345,11 @@ impl TransitionPack {
       next_link = self.get_closure_link(&link);
     }
     link
+  }
+
+  pub fn get_previous_link(&self, i: &Item) -> Item {
+    let mut next_link = self.get_closure_link(i);
+    next_link
   }
 
   #[inline(always)]

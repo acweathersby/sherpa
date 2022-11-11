@@ -38,6 +38,11 @@ impl BodyId {
     BodyId((prod_id.0 & 0xFFFF_FFFF_FFFF_F000) + body_index as u64)
   }
 
+  pub fn from_syms(syms: &[SymbolID]) -> Self {
+    let val = hash_id_value_u64(syms);
+    BodyId(val)
+  }
+
   #[inline(always)]
   pub fn default() -> Self {
     Self(0)
