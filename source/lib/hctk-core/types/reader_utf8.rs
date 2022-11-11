@@ -19,7 +19,7 @@ pub struct UTF8StringReader<'a> {
   cursor:     usize,
   line_count: usize,
   line_off:   usize,
-  string:     &'a [u8],
+  data:       &'a [u8],
   word:       u32,
   cp:         u32,
   source:     SharedSymbolBuffer,
@@ -29,7 +29,7 @@ impl<'a> LLVMCharacterReader for UTF8StringReader<'a> {}
 
 impl<'a> ByteCharacterReader for UTF8StringReader<'a> {
   fn get_bytes(&self) -> &[u8] {
-    self.string
+    self.data
   }
 }
 
@@ -136,19 +136,20 @@ impl<'a> BaseCharacterReader for UTF8StringReader<'a> {
 
 impl<'a> UTF8StringReader<'a> {
   pub fn from_string(string: &'a str) -> Self {
-    Self::new(string)
+    Self::new(string.as_bytes())
   }
-
-  pub fn new(string: &'a str) -> UTF8StringReader<'a> {
+  ///
+  /// 
+  pub fn new(data: &'a [u8]) -> UTF8StringReader<'a> {
     let mut reader = UTF8StringReader {
-      string:     string.as_bytes(),
-      len:        string.len(),
+      data:       data,
+      len:        data.len(),
       cursor:     0,
       word:       0,
       line_count: 0,
       line_off:   0,
       cp:         0,
-      source:     SharedSymbolBuffer::new(Vec::from(string.clone())),
+      source:     SharedSymbolBuffer::new(Vec::from(data.clone())),
     };
 
     Self::next(&mut reader, 0);
