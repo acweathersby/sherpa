@@ -144,7 +144,9 @@ pub(crate) fn construct_context<'a>(module_name: &str, ctx: &'a Context) -> LLVM
       ),
       init: module.add_function(
         "init",
-        ctx.void_type().fn_type(&[CTX.ptr_type(Generic).into()], false),
+        ctx
+          .void_type()
+          .fn_type(&[CTX.ptr_type(Generic).into(), READER.ptr_type(Generic).into()], false),
         None,
       ),
       push_state: module.add_function(
@@ -874,6 +876,7 @@ pub(crate) unsafe fn construct_init(ctx: &LLVMParserModule) -> std::result::Resu
   let fn_value = funct.init;
 
   let parse_ctx_ptr = fn_value.get_first_param().unwrap().into_pointer_value();
+  let reader_ptr = fn_value.get_last_param().unwrap().into_pointer_value();
 
   // Set the context's goto pointers to point to the goto block;
   let entry = ctx.append_basic_block(fn_value, "entry");
@@ -885,8 +888,10 @@ pub(crate) unsafe fn construct_init(ctx: &LLVMParserModule) -> std::result::Resu
   let goto_base = builder.build_struct_gep(parse_ctx_ptr, CTX_goto_base, "")?;
   let goto_top = builder.build_struct_gep(parse_ctx_ptr, CTX_goto_top, "")?;
   let goto_len = builder.build_struct_gep(parse_ctx_ptr, CTX_goto_stack_len, "")?;
+  let reader_ctx_ptr = builder.build_struct_gep(parse_ctx_ptr, CTX_reader, "")?;
   let state = builder.build_struct_gep(parse_ctx_ptr, CTX_state, "")?;
 
+  builder.build_store(reader_ctx_ptr, reader_ptr);
   builder.build_store(goto_base, goto_start);
   builder.build_store(goto_top, goto_start);
   builder.build_store(goto_len, i32.const_int(8, false));

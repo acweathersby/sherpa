@@ -65,7 +65,6 @@ pub(crate) fn construct_instruction_branch<'a>(
 
     // Convert the instruction data into table data.
     let table_name = create_offset_label(instruction.get_address() + 800000);
-
     let table_block = ctx.ctx.append_basic_block(*pack.fun, &(table_name.clone() + "_Table"));
 
     let TableHeaderData { input_type, lexer_type, scan_index: scanner_address, .. } = data.data;
@@ -141,7 +140,6 @@ pub(crate) fn construct_instruction_branch<'a>(
     let mut build_switch = true;
 
     // Creates blocks for each branch, skip, and default.
-
     let default_block =
       ctx.ctx.append_basic_block(*pack.fun, &(table_name.clone() + "_Table_Default"));
 
@@ -393,7 +391,7 @@ pub(crate) fn construct_instruction_branch<'a>(
 
           let comparison = b.build_int_compare(
             inkwell::IntPredicate::EQ,
-            state.input_block.unwrap().is_truncated,
+            state.input_block.as_ref().unwrap().is_truncated,
             ctx.ctx.bool_type().const_int(1 as u64, false),
             "",
           );
@@ -414,7 +412,7 @@ pub(crate) fn construct_instruction_branch<'a>(
 
           b.build_call(
             ctx.fun.emit_eoi,
-            &[parse_ctx.into(), action_pointer.into(), input_offset.into()],
+            &[parse_ctx.into(), action_pointer.into(), state.input_block.unwrap().offset.into()],
             "",
           );
           b.build_return(Some(&i32.const_int(1, false)));
@@ -512,7 +510,7 @@ fn construct_buffer<'a>(
 struct InputBlockRef<'a> {
   pointer:      PointerValue<'a>,
   size:         IntValue<'a>,
-  _offset:      IntValue<'a>,
+  offset:       IntValue<'a>,
   is_truncated: IntValue<'a>,
 }
 
@@ -538,7 +536,7 @@ fn write_get_input_ptr_lookup<'a>(
 
   InputBlockRef {
     pointer:      b.build_extract_value(input_block, 0, "input_ptr").unwrap().into_pointer_value(),
-    _offset:      b.build_extract_value(input_block, 1, "input_offset").unwrap().into_int_value(),
+    offset:       b.build_extract_value(input_block, 1, "input_offset").unwrap().into_int_value(),
     size:         b.build_extract_value(input_block, 2, "input_size").unwrap().into_int_value(),
     is_truncated: b
       .build_extract_value(input_block, 3, "input_truncated")

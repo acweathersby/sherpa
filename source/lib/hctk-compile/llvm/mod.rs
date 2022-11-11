@@ -7,22 +7,25 @@ pub use types::*;
 
 #[cfg(test)]
 mod test {
-  use hctk::types::hctk_allocate_stack;
-  use hctk::types::hctk_free_stack;
-  use hctk::types::CodepointInfo;
-  use hctk::types::Goto;
-  use hctk::types::InputBlock;
-  use hctk::types::LLVMParseContext;
-  use hctk::types::ParseAction;
-  use hctk::types::ParseToken;
-  use hctk::types::TestUTF8StringReader;
+  use hctk_core::types::hctk_allocate_stack;
+  use hctk_core::types::hctk_free_stack;
+  use hctk_core::types::CodepointInfo;
+  use hctk_core::types::Goto;
+  use hctk_core::types::InputBlock;
+  use hctk_core::types::LLVMParseContext;
+  use hctk_core::types::ParseAction;
+  use hctk_core::types::ParseToken;
+  use hctk_core::types::TestUTF8StringReader;
   use inkwell::context::Context;
   use inkwell::execution_engine::JitFunction;
 
   use super::inkwell_ir::*;
   use super::types::*;
 
-  type Init = unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>>);
+  type Init = unsafe extern "C" fn(
+    *mut LLVMParseContext<TestUTF8StringReader<'static>>,
+    *mut TestUTF8StringReader<'static>,
+  );
   type PushState =
     unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>>, u32, usize);
 
@@ -109,11 +112,11 @@ mod test {
     unsafe {
       setup_exec_engine(&mut parse_context);
       let mut reader = TestUTF8StringReader::new("test");
-      let mut rt_ctx = LLVMParseContext::new(&mut reader);
+      let mut rt_ctx = LLVMParseContext::new();
       let init_fn = get_parse_function::<Init>(&parse_context, "init").unwrap();
       let push_state_fn = get_parse_function::<PushState>(&parse_context, "push_state").unwrap();
 
-      init_fn.call(&mut rt_ctx);
+      init_fn.call(&mut rt_ctx, &mut reader);
       push_state_fn.call(&mut rt_ctx, NORMAL_STATE_FLAG_LLVM, 0x10101010_01010101);
       push_state_fn.call(&mut rt_ctx, NORMAL_STATE_FLAG_LLVM, 0x01010101_10101010);
 
@@ -159,7 +162,7 @@ mod test {
     unsafe {
       setup_exec_engine(&mut parse_context);
       let mut reader = TestUTF8StringReader::new("test");
-      let mut rt_ctx = LLVMParseContext::new(&mut reader);
+      let mut rt_ctx = LLVMParseContext::new();
       let emit_shift = get_parse_function::<EmitShift>(&parse_context, "emit_shift").unwrap();
 
       rt_ctx.anchor_token.byte_offset = 5;
@@ -203,7 +206,7 @@ mod test {
     unsafe {
       setup_exec_engine(&mut parse_context);
       let mut reader = TestUTF8StringReader::new("test");
-      let mut rt_ctx = LLVMParseContext::new(&mut reader);
+      let mut rt_ctx = LLVMParseContext::new();
       let emit_reduce = get_parse_function::<EmitReduce>(&parse_context, "emit_reduce").unwrap();
 
       let mut action = ParseAction::Undefined;
@@ -281,7 +284,7 @@ mod test {
     unsafe {
       setup_exec_engine(&mut parse_context);
       let mut reader = TestUTF8StringReader::new("test");
-      let mut rt_ctx = LLVMParseContext::new(&mut reader);
+      let mut rt_ctx = LLVMParseContext::new();
       let init = get_parse_function::<Init>(&parse_context, "init").unwrap();
 
       type GetInputBlockShim = unsafe extern "C" fn(
@@ -293,7 +296,7 @@ mod test {
 
       let get_ib = get_parse_function::<GetInputBlockShim>(&parse_context, "shim").unwrap();
 
-      init.call(&mut rt_ctx);
+      init.call(&mut rt_ctx, &mut reader);
 
       let mut token = rt_ctx.anchor_token;
 
@@ -378,12 +381,12 @@ mod test {
     unsafe {
       setup_exec_engine(&mut parse_context);
       let mut reader = TestUTF8StringReader::new("test");
-      let mut rt_ctx = LLVMParseContext::new(&mut reader);
+      let mut rt_ctx = LLVMParseContext::new();
       let init_fn = get_parse_function::<Init>(&parse_context, "init").unwrap();
       let push_state_fn = get_parse_function::<PushState>(&parse_context, "push_state").unwrap();
       let pop_state = get_parse_function::<PopState>(&parse_context, "pop_state").unwrap();
 
-      init_fn.call(&mut rt_ctx);
+      init_fn.call(&mut rt_ctx, &mut reader);
       push_state_fn.call(&mut rt_ctx, 20, 0x10101010_01010101);
       push_state_fn.call(&mut rt_ctx, 40, 0x10101010_01010101);
 
@@ -434,14 +437,14 @@ mod test {
     unsafe {
       setup_exec_engine(&mut parse_context);
       let mut reader = TestUTF8StringReader::new("test");
-      let mut rt_ctx = LLVMParseContext::new(&mut reader);
+      let mut rt_ctx = LLVMParseContext::new();
       let init_fn = get_parse_function::<Init>(&parse_context, "init").unwrap();
       let push_state_fn = get_parse_function::<PushState>(&parse_context, "push_state").unwrap();
       let next = get_parse_function::<Next>(&parse_context, "next").unwrap();
       let emit_accept = get_parse_function::<EmitAccept>(&parse_context, "emit_accept").unwrap();
       let prime = get_parse_function::<Prime>(&parse_context, "prime").unwrap();
 
-      init_fn.call(&mut rt_ctx);
+      init_fn.call(&mut rt_ctx, &mut reader);
 
       prime.call(&mut rt_ctx, 0);
 
@@ -479,10 +482,10 @@ mod test {
     unsafe {
       setup_exec_engine(&mut parse_context);
       let mut reader = TestUTF8StringReader::new("test");
-      let mut rt_ctx = Box::new(LLVMParseContext::new(&mut reader));
+      let mut rt_ctx = Box::new(LLVMParseContext::new());
       let init_fn = get_parse_function::<Init>(&parse_context, "init").unwrap();
 
-      init_fn.call(rt_ctx.as_mut());
+      init_fn.call(rt_ctx.as_mut(), &mut reader);
 
       let root = rt_ctx.as_ref() as *const LLVMParseContext<TestUTF8StringReader<'static>> as usize;
 
@@ -543,7 +546,7 @@ mod test {
     unsafe {
       setup_exec_engine(&mut parse_context);
       let mut reader = TestUTF8StringReader::new("test");
-      let mut rt_ctx = LLVMParseContext::new(&mut reader);
+      let mut rt_ctx = LLVMParseContext::new();
 
       parse_context
         .exe_engine
@@ -561,7 +564,7 @@ mod test {
       let push_state_fn = get_parse_function::<PushState>(&parse_context, "push_state").unwrap();
       let extend = get_parse_function::<Extend>(&parse_context, "extend_stack_if_needed").unwrap();
 
-      init_fn.call(&mut rt_ctx);
+      init_fn.call(&mut rt_ctx, &mut reader);
       push_state_fn.call(&mut rt_ctx, 10, 200);
       push_state_fn.call(&mut rt_ctx, 30, 400);
       extend.call(&mut rt_ctx, 10);
@@ -594,8 +597,8 @@ mod test {
   #[test]
   fn test_compile_from_bytecode() -> core::result::Result<(), ()> {
     use crate::llvm::compile_from_bytecode;
-    use hctk::bytecode::compile_bytecode;
-    use hctk::debug::compile_test_grammar;
+    use hctk_core::bytecode::compile_bytecode;
+    use hctk_core::debug::compile_test_grammar;
     use inkwell::context::Context;
     use std::fs::File;
     use std::io::Write;
@@ -620,7 +623,7 @@ mod test {
         unsafe {
           setup_exec_engine(&mut ctx);
           let mut reader = TestUTF8StringReader::new("hello world");
-          let mut rt_ctx = LLVMParseContext::new(&mut reader);
+          let mut rt_ctx = LLVMParseContext::new();
 
           ctx
             .exe_engine
@@ -638,7 +641,7 @@ mod test {
           let prime_fn = get_parse_function::<Prime>(&ctx, "prime").unwrap();
           let next_fn = get_parse_function::<Next>(&ctx, "next").unwrap();
 
-          init_fn.call(&mut rt_ctx);
+          init_fn.call(&mut rt_ctx, &mut reader);
 
           prime_fn.call(&mut rt_ctx, 0);
 
@@ -684,8 +687,8 @@ mod test {
     use crate::llvm::compile_from_bytecode;
     use crate::options::Architecture;
     use crate::options::BuildOptions;
-    use hctk::bytecode::compile_bytecode;
-    use hctk::debug::compile_test_grammar;
+    use hctk_core::bytecode::compile_bytecode;
+    use hctk_core::debug::compile_test_grammar;
     use inkwell::context::Context;
     let grammar = compile_test_grammar(
       "

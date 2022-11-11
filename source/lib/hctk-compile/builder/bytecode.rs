@@ -1,28 +1,19 @@
 use hctk_core::bytecode::compile_bytecode;
 
 use hctk_core::bytecode::BytecodeOutput;
-
-use hctk_core::grammar::data::ast::ASTNode;
-use hctk_core::grammar::data::ast::AST_NamedReference;
-use hctk_core::grammar::get_exported_productions;
-use hctk_core::grammar::ExportedProduction;
 use hctk_core::types::*;
 
 use std::collections::BTreeMap;
-use std::io::BufWriter;
 
 use std::io::Write;
 
 use crate::CompileError;
 use crate::SourceType;
 
-use crate::ast::rust::ascript_type_to_string;
-use crate::ast::rust::create_type_initializer_value;
-use crate::ast::rust::render_expression;
-use crate::builder::common;
-use crate::builder::disclaimer::DISCLAIMER;
 use hctk_core::writer::code_writer::CodeWriter;
 
+use super::common::add_rust_context_ascript_functions;
+use super::common::write_rust_entry_functions_bytecode;
 use super::pipeline::PipelineTask;
 
 /// Build artifacts for a LLVM based parser.
@@ -33,55 +24,20 @@ pub fn build_byte_code_parse(
   PipelineTask {
     fun: Box::new(move |task_ctx| match source_type {
       SourceType::Rust => {
-        let output_path = task_ctx.get_source_output_dir().clone();
-        let parser_name = task_ctx.get_parser_name().clone();
+        let mut writer = CodeWriter::new(vec![]);
 
-        if task_ctx.in_proc_context() {
-          let mut writer = CodeWriter::new(vec![]);
-
-          if let Err(err) = write_parser_file(
-            &mut writer,
-            &task_ctx.get_grammar(),
-            // Leave two threads available for building
-            // the
-            // ascript code if necessary
-            1,
-            if include_ascript_mixins { Some(task_ctx.get_ascript()) } else { None },
-          ) {
-            Err(CompileError::from_io_error(&err))
-          } else {
-            Ok(Some(unsafe { String::from_utf8_unchecked(writer.into_output()) }))
-          }
+        if let Err(err) = write_parser_file(
+          &mut writer,
+          &task_ctx.get_grammar(),
+          // Leave two threads available for building
+          // the
+          // ascript code if necessary
+          1,
+          if include_ascript_mixins { Some(task_ctx.get_ascript()) } else { None },
+        ) {
+          Err(CompileError::from_io_error(&err))
         } else {
-          if let Ok(parser_data_file) =
-            task_ctx.create_file(output_path.join(format!("./{}_bc.rs", parser_name)))
-          {
-            let mut writer = CodeWriter::new(BufWriter::new(parser_data_file));
-            writer.write(&DISCLAIMER("Parser Data", "//!", task_ctx)).unwrap();
-            if include_ascript_mixins {
-              // writer.wrtln(&format!("mod super::{}_ast;", parser_name));
-              writer.wrtln(&format!("use super::{}_ast::*;", parser_name)).unwrap();
-            }
-
-            if let Err(err) = write_parser_file(
-              &mut writer,
-              &task_ctx.get_grammar(),
-              // Leave two threads available for building
-              // the
-              // ascript code if necessary
-              1,
-              if include_ascript_mixins { Some(task_ctx.get_ascript()) } else { None },
-            ) {
-              Err(CompileError::from_io_error(&err))
-            } else {
-              Ok(None)
-            }
-          } else {
-            Err(CompileError::from_string(&format!(
-              "Unable to build an AST output for the source type {:?}",
-              source_type
-            )))
-          }
+          Ok(Some(unsafe { String::from_utf8_unchecked(writer.into_output()) }))
         }
       }
       _ => Err(CompileError::from_string(&format!(
@@ -123,9 +79,9 @@ fn write_rust_parser_file<W: Write>(
 use hctk::runtime::*;
 use hctk::types::*;
 
-pub struct Context<'a, T: ByteCharacterReader + BaseCharacterReader + MutCharacterReader>(ParseContext<T>, &'a mut T, bool);
+pub struct Context<T: ByteCharacterReader + BaseCharacterReader + MutCharacterReader>(ParseContext<T>, T, bool);
 
-impl<'a, T: ByteCharacterReader + BaseCharacterReader + MutCharacterReader> Iterator for Context<'a, T>
+impl<T: ByteCharacterReader + BaseCharacterReader + MutCharacterReader> Iterator for Context<T>
 {
     type Item = ParseAction;
 
@@ -149,10 +105,10 @@ impl<'a, T: ByteCharacterReader + BaseCharacterReader + MutCharacterReader> Iter
     }
 }
 
-impl<'a, T: ByteCharacterReader + BaseCharacterReader + MutCharacterReader> Context<'a, T>
+impl<T: ByteCharacterReader + BaseCharacterReader + MutCharacterReader> Context<T>
 {
     #[inline(always)]
-    fn new(reader: &'a mut T) -> Self
+    fn new(reader: T) -> Self
     {
         Self(ParseContext::<T>::bytecode_context(), reader, true)
     }
@@ -160,122 +116,8 @@ impl<'a, T: ByteCharacterReader + BaseCharacterReader + MutCharacterReader> Cont
     )?
     .indent();
 
-  common::write_rust_entry_function_bytecode(g, state_lookups, writer)?;
-
-  if let Some(ascript) = ast {
-    for (_, ExportedProduction { export_name, production, .. }) in
-      get_exported_productions(g).iter().enumerate()
-    {
-      let mut ref_index = 0;
-      let ref_ = render_expression(
-        &ASTNode::AST_NamedReference(Box::new(AST_NamedReference {
-          tok:   Token::default(),
-          value: "first".to_string(),
-        })),
-        &Body {
-          syms: vec![BodySymbolRef {
-            consumable: false,
-            annotation: String::default(),
-            exclusive: false,
-            original_index: 0,
-            scanner_index: 1,
-            scanner_length: 1,
-            sym_id: SymbolID::Production(production.id, GrammarId(0)),
-            tok: Token::new(),
-          }],
-          len: 1,
-          prod: production.id,
-          id: BodyId(0),
-          bc_id: 0,
-          reduce_fn_ids: vec![],
-          origin_location: Token::default(),
-        },
-        &ascript,
-        g,
-        &mut ref_index,
-      );
-
-      let ast_type = ref_.as_ref().unwrap().get_type();
-      writer
-        .newline()?
-        .wrtln(&format!(
-          "pub fn parse_{}(reader: &'a mut T) -> Result<{}, ParseError>{{ ",
-          export_name,
-          ascript_type_to_string(&ast_type, ascript)
-        ))?
-        .indent()
-        .wrtln(&format!(
-          "
-        let mut ctx = Self::new_{}_parser(reader);
-        ",
-          export_name
-        ))?
-        .wrtln(&format!(
-          "
-let mut nodes = Vec::new();
-let mut tokens = Vec::new();
-loop {{
-  match ctx.next() {{
-    Some(ParseAction::Error {{ last_input, .. }}) => {{
-      let mut error_token = Token::from_parse_token(&last_input);
-      error_token.set_source(ctx.1.get_source());
-      return Err(ParseError::COMPILE_PROBLEM(
-        CompileProblem {{
-          message: \"Unable to parse input\".to_string(),
-          inline_message: \"Invalid Token\".to_string(),
-          loc: error_token
-        }}
-      ));
-    }}
-    Some(ParseAction::Shift {{ skipped_characters: skip, token }}) => {{
-      let mut tok = Token::from_parse_token(&token);
-      tok.set_source(ctx.1.get_source());
-      nodes.push({}::TOKEN(tok.clone()));
-      tokens.push(tok);
-    }}
-    Some(ParseAction::Reduce {{ body_id, symbol_count, .. }}) => {{
-      let len = symbol_count as usize;
-      let pos_a = &tokens[tokens.len() - len as usize];
-      let pos_b = &tokens[tokens.len() - 1];
-      let tok = Token::from_range(pos_a, pos_b);
-      let root = tokens.len() - len;
-      tokens[root] = tok.clone();
-
-      unsafe {{
-        tokens.set_len(root + 1);
-      }}
-
-      REDUCE_FUNCTIONS[body_id as usize](&mut nodes, tok);
-
-    }}
-    Some(ParseAction::Accept {{ production_id }}) => {{
-      break;
-    }}
-    _ => {{
-      break;
-    }}
-  }}
-}}
-",
-          ascript.gen_name()
-        ))?
-        .wrtln(&{
-          let (string, ref_) = create_type_initializer_value(ref_, &ast_type, false, ascript);
-
-          if let Some(exp) = ref_ {
-            format!(
-              "let i0  = nodes.into_iter().next().unwrap(); {}\nOk({})",
-              exp.to_init_string(),
-              string
-            )
-          } else {
-            "Ok(nodes.into_iter().next().unwrap())".to_string()
-          }
-        })?
-        .dedent()
-        .wrtln("}")?;
-    }
-  }
+  write_rust_entry_functions_bytecode(g, state_lookups, writer)?;
+  add_rust_context_ascript_functions(ast, g, writer)?;
 
   writer.dedent().wrtln("}")?;
 
@@ -296,12 +138,12 @@ loop {{
 #[cfg(test)]
 mod test {
   use crate::ast::rust;
-  use hctk::ascript::compile::compile_ascript_store;
-  use hctk::types::AScriptStore;
-  use hctk::writer::code_writer::StringBuffer;
+  use hctk_core::ascript::compile::compile_ascript_store;
+  use hctk_core::types::AScriptStore;
+  use hctk_core::writer::code_writer::StringBuffer;
   #[test]
   fn test_output_rust_on_practical_grammar() {
-    use hctk::debug::compile_test_grammar;
+    use hctk_core::debug::compile_test_grammar;
 
     let grammar = compile_test_grammar(
         "

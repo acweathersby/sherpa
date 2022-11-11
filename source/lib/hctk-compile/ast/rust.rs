@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::VecDeque;
+use std::fmt::format;
 use std::io::Result;
 use std::vec;
 
@@ -38,15 +39,9 @@ pub fn write<W: Write>(g: &GrammarStore, ast: &AScriptStore, w: &mut CodeWriter<
 
   w.wrtln("use hctk::types::*;")?.newline()?;
 
-  w.wrtln(&format!("#[derive(Debug, Clone)]\npub enum {} {{", ast.name))?.indent();
+  build_astnode_enum(w, ast)?;
 
-  for _struct in ast.structs.values() {
-    w.write_line(&format!("{0}(Box<{0}>),", _struct.type_name))?;
-  }
-
-  w.dedent()
-    .wrtln("}")?
-    .newline()?
+  w.newline()?
     .wrtln(&format!("pub type {} = HCObj<{}>;", ast.gen_name(), ast.name))?
     .newline()?
     .wrtln(&format!("impl HCObjTrait for {} {{}}", ast.name))?
@@ -57,6 +52,41 @@ pub fn write<W: Write>(g: &GrammarStore, ast: &AScriptStore, w: &mut CodeWriter<
   build_structs(g, ast, w)?;
 
   build_functions(g, ast, w)?;
+
+  Ok(())
+}
+
+fn build_astnode_enum<W: Write>(w: &mut CodeWriter<W>, ast: &AScriptStore) -> Result<()> {
+  w.wrtln(&format!("#[derive(Debug, Clone)]\npub enum {} {{", ast.name))?.indent();
+  for _struct in ast.structs.values() {
+    w.write_line(&format!("{0}(Box<{0}>),", _struct.type_name))?;
+  }
+  w.dedent().wrtln("}")?;
+
+  w.wrtln(&format!("impl {} {{", ast.name))?.indent();
+  for _struct in ast.structs.values() {
+    w.wrtln(&format!("pub fn as_{0}(&self) -> Option<&{0}> {{", _struct.type_name))?
+      .indent()
+      .wrtln("match self {")?
+      .indent()
+      .wrtln(&format!("Self::{}(val) => Some(val.as_ref()),", _struct.type_name))?
+      .wrtln("_ => None")?
+      .dedent()
+      .wrtln("}")?
+      .dedent()
+      .wrtln("}")?;
+    w.wrtln(&format!("pub fn as_{0}_mut(&mut self) -> Option<&mut {0}> {{", _struct.type_name))?
+      .indent()
+      .wrtln("match self {")?
+      .indent()
+      .wrtln(&format!("Self::{}(val) => Some(val.as_mut()),", _struct.type_name))?
+      .wrtln("_ => None")?
+      .dedent()
+      .wrtln("}")?
+      .dedent()
+      .wrtln("}")?;
+  }
+  w.dedent().wrtln("}")?;
 
   Ok(())
 }
@@ -80,6 +110,7 @@ fn build_types_utils<W: Write>(w: &mut CodeWriter<W>, ast: &AScriptStore) -> Res
     w.wrtln(&format!("{0}::{2}(..) => {1}::{2}", ast.name, ast.type_name(), type_name))?
       .wrt(",")?;
   }
+  w.write_line("_ => ASTNodeType::NONE,")?;
   w.dedent().wrtln("}")?.dedent().wrtln("}")?.dedent().wrtln("}")?;
 
   w.wrtln(&format!("impl Get{} for {} {{", ast.type_name(), ast.gen_name()))?.indent();
@@ -415,7 +446,7 @@ fn build_structs<W: Write>(
       match optional {
         true => match type_val {
           AScriptTypeVal::Struct(..) => {
-            o.write_line(&format!("pub {}: Optional<{}>,", name, type_string))?
+            o.write_line(&format!("pub {}: Option<{}>,", name, type_string))?
           }
           _ => o.write_line(&format!("pub {}: {},", name, type_string))?,
         },
@@ -440,7 +471,7 @@ fn build_structs<W: Write>(
       match optional {
         true => match type_val {
           AScriptTypeVal::Struct(..) => {
-            o.write_line(&format!("{}:Optional<{}>,", name, type_string))?
+            o.write_line(&format!("{}:Option<{}>,", name, type_string))?
           }
           _ => o.write_line(&format!("{}:{},", name, type_string))?,
         },
@@ -455,6 +486,7 @@ fn build_structs<W: Write>(
     for (name, ..) in &properties {
       o.write_line(&format!("{},", name))?;
     }
+
     o.dedent().wrtln("}")?.dedent().wrtln("}")?;
 
     // NODE::get_type

@@ -1,7 +1,5 @@
 use std::collections::BTreeMap;
 
-use crate::builder::common;
-use crate::builder::disclaimer::DISCLAIMER;
 use crate::CompileError;
 use hctk_core::types::*;
 use hctk_core::writer::code_writer::CodeWriter;
@@ -15,13 +13,30 @@ use inkwell::targets::RelocMode;
 use inkwell::targets::Target;
 use inkwell::targets::TargetTriple;
 use inkwell::OptimizationLevel;
-use std::io::BufWriter;
 use std::io::Write;
 use std::process::Command;
 
 use crate::builder::pipeline::PipelineTask;
 
+use super::common::add_rust_context_ascript_functions;
+use super::common::write_rust_entry_functions;
+
 /// Build artifacts for a LLVM based parser.
+///
+/// # Args
+/// `target_triple` - A LLVM compatible target triple
+///
+/// `clang_command` - The name of the clang executable that can be called from a terminal
+///
+/// `ar_command` - The name of the ar executable that can be called from a terminal
+///
+/// `light_lto` - Enable to use Light Linktime Optimizations. This is typically used with the `rustc` argument
+///  `-C linker-plugin-lto` or the `cargo` environnement variable `RUSTFLAGS` set with `-Clinker-plugin-lto`
+///
+/// `output_cargo_build_commands` - Set to true to output build commands that inform the rust compiler of the link
+/// targets.
+///
+/// `output_llvm_ir_file` - Output a purely decorational version of the LLVM code in intermediate representational form.
 pub fn build_llvm_parser(
   target_triple: Option<String>,
   clang_command: &str,
@@ -145,45 +160,32 @@ pub fn build_llvm_parser(
 
 /// Constructs a task that outputs a Rust parse context interface
 /// for the llvm parser.
-pub fn build_llvm_parser_interface<'a>() -> PipelineTask {
+pub fn build_llvm_parser_interface<'a>(include_ascript_mixins: bool) -> PipelineTask {
   PipelineTask {
-    fun: Box::new(|task_ctx| {
-      let source_path = task_ctx.get_source_output_dir();
+    fun: Box::new(move |task_ctx| {
       let parser_name = task_ctx.get_parser_name();
       let grammar_name = task_ctx.get_grammar_name();
       let grammar = task_ctx.get_grammar();
       let bytecode_output = task_ctx.get_bytecode();
 
-      let data_path = source_path.join(format!("./{}.rs", parser_name));
+      let output_type = OutputType::Rust;
 
-      match std::fs::File::create(data_path) {
-        Ok(parser_data_file) => {
-          let mut writer = CodeWriter::new(BufWriter::new(parser_data_file));
-
-          match writer.write(&DISCLAIMER("Parser Data", "//!", task_ctx)) {
-            Ok(_) => {}
-            Err(err) => return Err(CompileError::from_io_error(&err)),
-          }
-
-          let output_type = OutputType::Rust;
-
-          match output_type {
-            OutputType::Rust => {
-              match write_rust_parser(
-                writer,
-                &bytecode_output.state_name_to_offset,
-                grammar,
-                &grammar_name,
-                &parser_name,
-              ) {
-                Err(err) => Err(CompileError::from_io_error(&err)),
-                Ok(_) => Ok(None),
-              }
-            }
-            _ => Ok(None),
+      match output_type {
+        OutputType::Rust => {
+          let mut writer = CodeWriter::new(vec![]);
+          match write_rust_parser(
+            &mut writer,
+            &bytecode_output.state_name_to_offset,
+            grammar,
+            &grammar_name,
+            &parser_name,
+            if include_ascript_mixins { Some(task_ctx.get_ascript()) } else { None },
+          ) {
+            Err(err) => Err(CompileError::from_io_error(&err)),
+            Ok(_) => Ok(Some(unsafe { String::from_utf8_unchecked(writer.into_output()) })),
           }
         }
-        Err(err) => Err(CompileError::from_io_error(&err)),
+        _ => Ok(None),
       }
     }),
     require_ascript: false,
@@ -235,11 +237,12 @@ fn _apply_llvm_optimizations(opt: OptimizationLevel, ctx: &crate::llvm::LLVMPars
 }
 
 fn write_rust_parser<W: Write>(
-  mut writer: CodeWriter<W>,
+  writer: &mut CodeWriter<W>,
   states: &BTreeMap<String, u32>,
   g: &GrammarStore,
   grammar_name: &str,
   parser_name: &str,
+  ast: Option<&AScriptStore>,
 ) -> std::io::Result<()> {
   writer
     .wrt(&format!(
@@ -248,21 +251,21 @@ use hctk::types::*;
 
 #[link(name = \"{}\", kind = \"static\" )]
 extern \"C\" {{
-    fn init(ctx: *mut u8);
+    fn init(ctx: *mut u8, reader: *mut u8);
     fn next(ctx: *mut u8, action:*mut u8);
     fn prime(ctx: *mut u8, start_point: u32);
 }}",
       parser_name
     ))?
     .wrtln(&format!(
-      "pub struct Context<T: LLVMCharacterReader + ByteCharacterReader + ImmutCharacterReader>(LLVMParseContext<T>, bool);
+      "pub struct Context<T: BaseCharacterReader + LLVMCharacterReader + ByteCharacterReader + MutCharacterReader>(LLVMParseContext<T>, T, bool);
 
-impl<T: LLVMCharacterReader + ByteCharacterReader + ImmutCharacterReader> Iterator for Context<T> {{
+impl<T: BaseCharacterReader + LLVMCharacterReader + ByteCharacterReader + MutCharacterReader> Iterator for Context<T> {{
     type Item = ParseAction;
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {{
         unsafe {{
-            if(!self.1) {{
+            if(!self.2) {{
                 None
             }} else {{
                 let _ptr = &mut self.0 as *const LLVMParseContext<T>;
@@ -270,7 +273,7 @@ impl<T: LLVMCharacterReader + ByteCharacterReader + ImmutCharacterReader> Iterat
                 let _action = &mut action as *mut ParseAction;
                 next(_ptr as *mut u8, _action as *mut u8);
 
-                self.1 = !matches!(action, ParseAction::Accept{{..}}| ParseAction::Error {{ .. }} | ParseAction::EndOfInput {{ .. }});
+                self.2 = !matches!(action, ParseAction::Accept{{..}}| ParseAction::Error {{ .. }} | ParseAction::EndOfInput {{ .. }});
 
                 Some(action)
             }}
@@ -278,12 +281,12 @@ impl<T: LLVMCharacterReader + ByteCharacterReader + ImmutCharacterReader> Iterat
     }}
 }}
 
-impl<T: LLVMCharacterReader + ByteCharacterReader + ImmutCharacterReader> Context<T> {{
+impl<T: BaseCharacterReader + LLVMCharacterReader + ByteCharacterReader + MutCharacterReader> Context<T> {{
     /// Create a new parser context to parser the input with 
     /// the grammar `{0}`
     #[inline(always)]
-    fn new(reader: &mut T) -> Self {{
-        let mut parser = Self(LLVMParseContext::<T>::new(reader), true);
+    fn new(mut reader: T) -> Self {{
+        let mut parser = Self(LLVMParseContext::<T>::new(), reader, true);
         parser.construct_context();
         parser
     }}
@@ -303,7 +306,8 @@ impl<T: LLVMCharacterReader + ByteCharacterReader + ImmutCharacterReader> Contex
     fn construct_context(&mut self) {{
         unsafe {{
             let _ptr = &mut self.0 as *const LLVMParseContext<T>;
-            init(_ptr as *mut u8 );
+            let _rdr = &mut self.1 as *const T;
+            init(_ptr as *mut u8, _rdr as *mut u8);
         }}
     }}
     #[inline(always)]
@@ -314,12 +318,13 @@ impl<T: LLVMCharacterReader + ByteCharacterReader + ImmutCharacterReader> Contex
     ))?
     .indent();
 
-  common::write_rust_entry_function(g, states, &mut writer)?;
+  write_rust_entry_functions(g, states, writer)?;
+  add_rust_context_ascript_functions(ast, g, writer)?;
 
   writer.dedent().wrtln(&format!(
     "}}
 
-impl<T: LLVMCharacterReader + ByteCharacterReader + ImmutCharacterReader> Drop for Context<T> {{
+impl<T: BaseCharacterReader + LLVMCharacterReader + ByteCharacterReader + MutCharacterReader> Drop for Context<T> {{
     fn drop(&mut self) {{
         self.destroy_context();
     }}

@@ -2,6 +2,7 @@ use std::error::Error;
 use std::fmt::Display;
 use std::fs::create_dir_all;
 use std::fs::File;
+use std::io::Write;
 use std::path::PathBuf;
 use std::vec;
 
@@ -78,6 +79,7 @@ pub struct BuildPipeline<'a> {
   grammar_name: String,
   error_handler: Option<fn(errors: Vec<CompileError>)>,
   grammar: Option<GrammarStore>,
+  source_name: Option<String>,
   cached_source: CachedSource,
   proc_context: bool,
 }
@@ -99,6 +101,7 @@ impl<'a> BuildPipeline<'a> {
       build_output_dir: std::env::var("CARGO_MANIFEST_DIR")
         .map_or(std::env::temp_dir(), |d| PathBuf::from(&d)),
       proc_context: false,
+      source_name: None,
     }
   }
 
@@ -133,40 +136,50 @@ impl<'a> BuildPipeline<'a> {
     )
   }
 
-  pub fn set_ascript_ast_name(&mut self, name: &str) -> &mut Self {
+  pub fn set_ascript_ast_name(mut self, name: &str) -> Self {
     self.ascript_name = Some(name.to_string());
 
     self
   }
 
   /// Set the path for generated source files.
-  pub fn set_source_output_dir(&mut self, output_path: &PathBuf) -> &mut Self {
+  pub fn set_source_output_dir(mut self, output_path: &PathBuf) -> Self {
     self.source_output_dir = output_path.clone();
 
     self
   }
 
+  /// If set, a source file will be generated in the root of the build directory, containing
+  /// the concatenated source output from the build steps.
+  /// The % character serves as the place holder for the grammar name.
+  pub fn set_source_file_name(mut self, name: &str) -> Self {
+    self.source_name = Some(name.to_string());
+    self
+  }
+
   /// Set the path for the build directory.
-  pub fn set_build_output_dir(&mut self, output_path: &PathBuf) -> &mut Self {
+  pub fn set_build_output_dir(mut self, output_path: &PathBuf) -> Self {
     self.build_output_dir = output_path.clone();
     self
   }
 
-  pub fn add_task(&'a mut self, task: PipelineTask) -> &mut Self {
-    self.tasks.push((task, PipelineContext::new(self)));
+  pub fn add_task(mut self, task: PipelineTask) -> Self {
+    self.tasks.push((task, PipelineContext::new(&self)));
     self
   }
 
-  pub fn set_parser_name(&mut self, parser_name: String) {
+  pub fn set_parser_name(mut self, parser_name: String) -> Self {
     self.parser_name = parser_name;
+    self
   }
 
-  pub fn set_grammar_name(&mut self, grammar_name: String) {
+  pub fn set_grammar_name(mut self, grammar_name: String) -> Self {
     self.grammar_name = grammar_name;
+    self
   }
 
-  pub fn run(&'a mut self) -> (Self, Vec<String>) {
-    let mut artifacts = vec![];
+  pub fn run(mut self) -> (Self, Vec<String>) {
+    let mut source_parts = vec![];
 
     if self.grammar.is_none() {
       match self.build_grammar() {
@@ -210,7 +223,7 @@ impl<'a> BuildPipeline<'a> {
       self.bytecode = Some(bytecode_output);
     }
 
-    let errors = thread::scope::<'a>(|scope| {
+    let errors = thread::scope(|scope| {
       let results = self.tasks.iter().map(|(t, ctx)| {
         scope.spawn(|| {
           let mut ctx = ctx.clone();
@@ -221,7 +234,7 @@ impl<'a> BuildPipeline<'a> {
             _ => {}
           }
 
-          ctx.pipeline = Some(self);
+          ctx.pipeline = Some(&self);
           match (t.fun)(&mut ctx) {
             Ok(Some(artifact)) => Ok(Some(artifact)),
             Ok(None) => Ok(None),
@@ -238,7 +251,7 @@ impl<'a> BuildPipeline<'a> {
         .map(|r| r.join().unwrap())
         .map(|r| match r {
           Ok(Some(artifact)) => {
-            artifacts.push(artifact);
+            source_parts.push(artifact);
             vec![]
           }
           Ok(_) => vec![],
@@ -256,10 +269,23 @@ impl<'a> BuildPipeline<'a> {
       }
     }
 
-    return (Self::build_pipeline(self.threads, self.cached_source.to_owned()), artifacts);
+    if let Some(source_name) = self.source_name.as_ref() {
+      let source_name = source_name.to_string().replace("%", &self.grammar.unwrap().friendly_name);
+      let source_path = self.build_output_dir.join("./".to_string() + &source_name);
+      eprintln!("{:?} {:?}", source_path, self.build_output_dir);
+      if let Ok(mut parser_data_file) = std::fs::File::create(&source_path) {
+        let data = source_parts.join("\n");
+        parser_data_file.write_all(&data.as_bytes()).unwrap();
+        parser_data_file.flush().unwrap();
+      } else {
+        panic!("ART")
+      }
+    }
+
+    return (Self::build_pipeline(self.threads, self.cached_source.to_owned()), source_parts);
   }
 
-  pub fn set_error_handler(&mut self, error_handler: fn(Vec<CompileError>)) -> &mut Self {
+  pub fn set_error_handler(mut self, error_handler: fn(Vec<CompileError>)) -> Self {
     self.error_handler = Some(error_handler);
     self
   }
@@ -301,7 +327,7 @@ impl<'a> PipelineContext<'a> {
     }
   }
 
-  pub fn in_proc_context(&mut self) -> bool {
+  pub fn in_proc_context(&self) -> bool {
     self.is_proc
   }
 

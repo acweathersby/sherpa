@@ -34,14 +34,14 @@ mod test {
   use crate::ast::rust;
   use crate::builder::pipeline::BuildPipeline;
   use crate::tasks::build_ast;
-  use hctk::ascript::compile::compile_ascript_store;
-  use hctk::types::*;
+  use hctk_core::ascript::compile::compile_ascript_store;
+  use hctk_core::types::*;
 
-  use hctk::writer::code_writer::StringBuffer;
+  use hctk_core::writer::code_writer::StringBuffer;
 
   #[test]
   fn test_compile_pipeline() {
-    let mut pipeline: BuildPipeline = BuildPipeline::from_string(
+    BuildPipeline::from_string(
       "
     <> A >\\1 f:ast { { t_Banana, c_Mobius, value:u32($1), string:str($1), useful:true } } 
     | \\a \\b A f:ast { { t_Banana, value: u32($1), dd:u32($3), tok, useful:false } }
@@ -55,7 +55,7 @@ mod test {
 
   #[test]
   fn test_output_rust_on_trivial_grammar() {
-    use hctk::debug::compile_test_grammar;
+    use hctk_core::debug::compile_test_grammar;
 
     let grammar = compile_test_grammar(
       "
@@ -76,10 +76,10 @@ mod test {
 
     assert_eq!(ascript.structs.len(), 1);
 
-    let mut writer = StringBuffer::default();
+    // let mut writer = StringBuffer::default();
 
-    rust::write(&grammar, &ascript, &mut writer);
+    // rust::write(&grammar, &ascript, &mut writer);
 
-    eprintln!("{}", String::from_utf8(writer.into_output()).unwrap());
+    // println!("{}", String::from_utf8(writer.into_output()).unwrap());
   }
 }
