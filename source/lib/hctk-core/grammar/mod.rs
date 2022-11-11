@@ -20,10 +20,17 @@ mod test_grammar {
 
   use std::path::PathBuf;
 
+  use crate::debug::debug_items;
   use crate::get_num_of_available_threads;
   use crate::grammar::compile::compile_from_path;
   use crate::grammar::compile::pre_process_grammar;
+  use crate::types::RecursionType;
 
+  use super::compile::convert_left_to_right;
+  use super::compile_from_string;
+  use super::get_production_id_by_name;
+  use super::get_production_recursion_type;
+  use super::get_production_start_items;
   use super::parse::compile_grammar_ast;
   use super::parse::{self};
 
@@ -78,5 +85,25 @@ mod test_grammar {
     }
 
     assert!(errors.is_empty());
+  }
+  #[test]
+  fn processing_of_any_groups() {
+    let grammar = String::from("<> A > [ unordered \\g ? ( \\r \\l ) ? ] \\ d ");
+
+    let (grammar, errors) = compile_from_string(&grammar, &PathBuf::from("/test"));
+
+    for error in &errors {
+      eprintln!("{}", error);
+    }
+    
+    assert!(grammar.is_some());
+
+    if let Some(mut g) = grammar {
+      let prod = get_production_id_by_name("A", &g).unwrap();
+
+      // convert_left_to_right(&mut g, prod);
+
+      debug_items("A", &get_production_start_items(&prod, &g), &g);
+    }
   }
 }

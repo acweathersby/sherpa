@@ -1,3 +1,5 @@
+use crate::debug::debug_items;
+use crate::grammar::data::ast::AnyGroup;
 use crate::grammar::data::ast::Ascript;
 use crate::grammar::data::ast::Literal;
 use crate::grammar::parse::compile_ascript_ast;
@@ -34,6 +36,17 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use std::thread::{self};
 use std::vec;
+
+struct SymbolData<'a> {
+  pub annotation:       String,
+  pub is_list:          bool,
+  pub is_group:         bool,
+  pub is_optional:      bool,
+  pub is_shift_nothing: bool,
+  pub is_meta:          bool,
+  pub is_exclusive:     bool,
+  pub sym_atom:         Option<&'a ASTNode>,
+}
 
 /// Compile a complete grammar given a file path to a root *.hcg file.
 pub fn compile_from_path(
@@ -199,9 +212,9 @@ fn finalize_grammar(
 
   finalize_symbols(&mut g, errors);
 
-  finalize_items(&mut g, thread_count, errors);
-
   finalize_productions(&mut g, thread_count, errors);
+
+  finalize_items(&mut g, thread_count, errors);
 
   finalize_bytecode_metadata(&mut g, errors);
 
@@ -232,6 +245,8 @@ fn finalize_productions(g: &mut GrammarStore, thread_count: usize, errors: &mut 
   let production_id_chunks =
     production_ids.chunks(thread_count).filter(|s| !s.is_empty()).collect::<Vec<_>>();
 
+  let mut left_right_conversion_candidates = vec![];
+
   for (production_id, recursion_type) in thread::scope(|s| {
     production_id_chunks
       .iter()
@@ -252,6 +267,15 @@ fn finalize_productions(g: &mut GrammarStore, thread_count: usize, errors: &mut 
     let production = g.productions.get_mut(&production_id).unwrap();
 
     production.recursion_type = recursion_type;
+
+    if production.is_scanner && production.recursion_type.contains(RecursionType::LEFT_DIRECT) {
+      left_right_conversion_candidates.push(production.id);
+    }
+  }
+
+  // Convert left recursive TOKEN productions into right recursion.
+  for candidate_id in left_right_conversion_candidates {
+    convert_left_to_right(g, candidate_id);
   }
 }
 
@@ -1271,6 +1295,157 @@ fn get_production_id_from_node(production: &ASTNode, tgs: &mut TempGrammarStore)
   }
 }
 
+/// Convert a direct left recursive production into a right recursive production.
+///
+///  This uses the following process to convert an immediate recursive production
+///  to one the is right recursive:
+///
+/// With `A -> A r | b | ...` Take `B[ A->b, ... ]` `A'[ A-> A r ... ]`
+///
+/// Replace bodies of `A` with `B'` after `B[ A->b A' ?]` giving `A -> b A' | b | ...`
+///
+/// Then form `A'` after `A' [ A-> r A' ? ... ]` giving `A' -> r A' | r | ...`
+///
+/// Warning: This does nothing with existing reduce functions.
+/// This should only be applied to production where execution of
+/// reduce functions can be ignored.
+pub fn convert_left_to_right(
+  g: &mut GrammarStore,
+  a_prod_id: ProductionId,
+) -> (ProductionId, ProductionId) {
+  let a_prod = g.productions.get_mut(&a_prod_id).unwrap();
+  let a_token = a_prod.original_location.clone();
+  // Ensure the production is left recursive.
+  if !a_prod.recursion_type.contains(RecursionType::LEFT_DIRECT) {
+    panic!("Production is not left direct recursive.");
+  }
+
+  // Remove recursion flag as it no longer applies to this production.
+  a_prod.recursion_type = a_prod.recursion_type.xor(RecursionType::LEFT_DIRECT);
+
+  let body_ids = g.production_bodies.get(&a_prod_id).unwrap().clone();
+
+  let bodies =
+    body_ids.iter().map(|body_id| g.bodies.get(body_id).unwrap().clone()).collect::<Vec<_>>();
+
+  let bodies = body_ids
+    .iter()
+    .map(|body_id| g.bodies.get(body_id).unwrap())
+    .map(|b| match b.syms[0].sym_id {
+      SymbolID::Production(p, _) => (b.id, p == a_prod.id),
+      SymbolID::TokenProduction(p, _) => (b.id, p == a_prod.id),
+      _ => (b.id, false),
+    })
+    .collect::<Vec<_>>();
+
+  let left_bodies =
+    bodies.iter().filter_map(|(i, b)| if *b { Some(i) } else { None }).collect::<Vec<_>>();
+
+  let non_bodies =
+    bodies.iter().filter_map(|(i, b)| if *b { None } else { Some(i) }).collect::<Vec<_>>();
+
+  let a_prime_prod_name = (a_prod.original_name.clone() + "_prime");
+  let a_prime_prod_guid_name = create_production_guid_name(&g.guid_name, &a_prime_prod_name);
+  let a_prime_prod_id = ProductionId::from(&a_prime_prod_guid_name);
+  let a_prime_prod = Production::new(
+    &a_prime_prod_name,
+    &a_prime_prod_guid_name,
+    a_prime_prod_id,
+    (left_bodies.len() * 2) as u16,
+    a_token.clone(),
+    a_prod.is_scanner,
+  );
+
+  let a_prim_sym = BodySymbolRef {
+    sym_id: SymbolID::Production(a_prime_prod_id, g.guid),
+    original_index: 0,
+    annotation: "".to_string(),
+    consumable: true,
+    scanner_length: 0,
+    scanner_index: 0,
+    exclusive: false,
+    tok: a_token.clone(),
+  };
+
+  let new_B_bodies = non_bodies
+    .iter()
+    .enumerate()
+    .flat_map(|(i, b)| {
+      let body = g.bodies.get(b).unwrap();
+
+      let mut body_a = body.clone();
+      let mut body_b = body.clone();
+
+      body_b.syms.push(a_prim_sym.clone());
+      body_a.id = BodyId::new(&a_prod_id, i * 2);
+      body_b.id = BodyId::new(&a_prod_id, i * 2 + 1);
+      body_a.len = body_a.syms.len() as u16;
+      body_b.len = body_b.syms.len() as u16;
+
+      vec![body_a, body_b]
+    })
+    .collect::<Vec<_>>();
+
+  let new_A_bodies = left_bodies
+    .iter()
+    .enumerate()
+    .flat_map(|(i, b)| {
+      let body = g.bodies.get(b).unwrap();
+      let mut body_a = body.clone();
+      let mut body_b = body.clone();
+      body_a.prod = a_prime_prod_id;
+      body_b.prod = a_prime_prod_id;
+      body_a.syms.remove(0);
+      body_b.syms.remove(0);
+      body_b.syms.push(a_prim_sym.clone());
+      body_a.id = BodyId::new(&a_prime_prod_id, i * 2);
+      body_b.id = BodyId::new(&a_prime_prod_id, i * 2 + 1);
+      body_a.len = body_a.syms.len() as u16;
+      body_b.len = body_b.syms.len() as u16;
+      vec![body_a, body_b]
+    })
+    .collect::<Vec<_>>();
+
+  // Replace the base production's bodies with B bodies.
+  // Add A prime production to the grammar.
+
+  g.productions.insert(a_prime_prod_id, a_prime_prod);
+  g.production_bodies.insert(a_prod_id, new_B_bodies.iter().map(|b| b.id).collect::<Vec<_>>());
+  g.production_bodies
+    .insert(a_prime_prod_id, new_A_bodies.iter().map(|b| b.id).collect::<Vec<_>>());
+
+  for b in new_A_bodies {
+    let id = b.id;
+    g.bodies.insert(id, b);
+  }
+
+  for b in new_B_bodies {
+    let id = b.id;
+    g.bodies.insert(id, b);
+  }
+
+  let prod_sym = SymbolID::Production(a_prime_prod_id, g.guid);
+
+  (a_prod_id, a_prime_prod_id)
+}
+
+fn create_production(
+  name: &str,
+  bodies: &[ASTNode],
+  token: Token,
+) -> (ASTNode, Box<ast::Production>) {
+  // Create a virtual production and symbol to go in its place
+  let symbol = ASTNode::Production_Symbol(super::data::ast::Production_Symbol::new(
+    name.to_string(),
+    token.clone(),
+  ));
+
+  let production =
+    super::data::ast::Production::new(false, symbol.clone(), bodies.to_vec(), false, token);
+
+  (symbol, production)
+}
+
 fn pre_process_body(
   production: &ASTNode,
   body: &ast::Body,
@@ -1285,9 +1460,8 @@ fn pre_process_body(
 
   fn create_body_vectors(
     token: &Token,
-    symbols: &Vec<ASTNode>,
+    symbols: &Vec<(usize, &ASTNode)>,
     production_name: &String,
-    mut index: u32,
     tgs: &mut TempGrammarStore,
     list_index: &mut u32,
   ) -> (Vec<(Token, Vec<BodySymbolRef>)>, Vec<Box<ast::Production>>) {
@@ -1296,24 +1470,8 @@ fn pre_process_body(
 
     bodies.push((token.clone(), vec![]));
 
-    for sym in symbols {
+    for (index, sym) in symbols {
       let original_bodies = 0..bodies.len();
-      fn create_production(
-        name: &str,
-        bodies: &[ASTNode],
-        token: Token,
-      ) -> (ASTNode, Box<ast::Production>) {
-        // Create a virtual production and symbol to go in its place
-        let symbol = ASTNode::Production_Symbol(super::data::ast::Production_Symbol::new(
-          name.to_string(),
-          token.clone(),
-        ));
-
-        let production =
-          super::data::ast::Production::new(false, symbol.clone(), bodies.to_vec(), false, token);
-
-        (symbol, production)
-      }
 
       let SymbolData {
         annotation,
@@ -1346,8 +1504,65 @@ fn pre_process_body(
             bodies.push(entry)
           }
         }
+        if let ASTNode::AnyGroup(group) = sym {
+          // New bodies are created with the values of the any group
+          // symbol being distributed to each body.
 
-        if is_group {
+          let mut pending_bodies = vec![];
+
+          fn get_index_permutations(indice_candidates: Vec<usize>) -> Vec<Vec<usize>> {
+            if indice_candidates.len() > 1 {
+              let mut out = vec![];
+              for (i, candidate) in indice_candidates.iter().enumerate() {
+                let mut remainder = indice_candidates.clone();
+                remainder.remove(i);
+                for mut permutation in get_index_permutations(remainder) {
+                  permutation.insert(0, *candidate);
+                  out.push(permutation)
+                }
+              }
+              out
+            } else {
+              vec![indice_candidates]
+            }
+          }
+
+          let indices = group.symbols.iter().enumerate().map(|(i, _)| i).collect();
+
+          let candidate_symbols =
+            group.symbols.iter().enumerate().map(|(i, s)| (i + index, s)).collect::<Vec<_>>();
+
+          for permutation in
+            if group.unordered { get_index_permutations(indices) } else { vec![indices] }
+          {
+            let symbols = permutation.iter().map(|i| candidate_symbols[*i]).collect::<Vec<_>>();
+
+            let (mut new_bodies, mut new_productions) =
+              create_body_vectors(token, &symbols, production_name, tgs, list_index);
+
+            pending_bodies.append(&mut new_bodies);
+
+            productions.append(&mut new_productions);
+          }
+
+          let mut new_bodies = vec![];
+
+          for pending_body in pending_bodies {
+            if pending_body.1.len() == 0 {
+              continue;
+            }
+
+            for body in &mut bodies[original_bodies.clone()] {
+              let mut new_body = body.clone();
+              new_body.1.extend(pending_body.1.iter().cloned());
+              new_bodies.push(new_body)
+            }
+          }
+
+          bodies = new_bodies;
+
+          continue;
+        } else if is_group {
           // Need to create new production that the virtual group
           // production is bound to, add it to the list of
           // currently considered productions, and replace
@@ -1357,7 +1572,6 @@ fn pre_process_body(
           // Except, if there are no functions within the production
           // bodies we can simply lower bodies of the group production
           // into the host production.
-
           if let ASTNode::Group_Production(group) = sym {
             // All bodies are plain without annotations or functions
             if annotation.is_empty() && !some_bodies_have_reduce_functions(&group.bodies) {
@@ -1377,18 +1591,11 @@ fn pre_process_body(
                 if let ASTNode::Body(body) = body {
                   let (mut new_bodies, mut new_productions) = create_body_vectors(
                     &sym.Token(),
-                    &body.symbols,
+                    &body.symbols.iter().map(|s| (9999, s)).collect::<Vec<_>>(),
                     production_name,
-                    9999,
                     tgs,
                     list_index,
                   );
-
-                  for (_, body) in new_bodies.iter_mut() {
-                    if let Some((last)) = body.last_mut() {
-                      last.original_index = index;
-                    }
-                  }
 
                   pending_bodies.append(&mut new_bodies);
 
@@ -1407,8 +1614,6 @@ fn pre_process_body(
               }
 
               bodies.splice(original_bodies, new_bodies);
-
-              index += 1;
 
               // We do not to process the existing symbol as it is
               // now replaced with
@@ -1523,7 +1728,7 @@ fn pre_process_body(
         if let Some(id) = intern_symbol(sym, tgs) {
           for (_, vec) in &mut bodies[original_bodies] {
             vec.push(BodySymbolRef {
-              original_index: index,
+              original_index: *index as u32,
               sym_id: id,
               annotation: annotation.clone(),
               consumable: !is_shift_nothing,
@@ -1534,16 +1739,30 @@ fn pre_process_body(
             });
           }
         }
-
-        index += 1;
       }
     }
 
     (bodies, productions)
   }
 
-  let (bodies, productions) =
-    create_body_vectors(&body.Token(), &body.symbols, &production_name, 0, tgs, list_index);
+  let (bodies, productions) = create_body_vectors(
+    &body.Token(),
+    &body
+      .symbols
+      .iter()
+      .fold((0, vec![]), |mut b, s| {
+        b.1.push((b.0, s));
+        b.0 += match s {
+          ASTNode::AnyGroup(box s) => s.symbols.len(),
+          _ => 1,
+        };
+        b
+      })
+      .1,
+    &production_name,
+    tgs,
+    list_index,
+  );
 
   let reduce_fn_ids = match body.reduce_function {
     ASTNode::Reduce(..) | ASTNode::Ascript(..) => {
@@ -1559,10 +1778,13 @@ fn pre_process_body(
     _ => vec![],
   };
 
-  (
-    bodies
-      .iter()
-      .map(|(t, b)| types::Body {
+  let mut unique_bodies = vec![];
+  let mut seen = HashSet::new();
+
+  for (t, b) in bodies {
+    let sym = BodyId::from_syms(&b.iter().map(|s| s.sym_id).collect::<Vec<_>>());
+    if !seen.contains(&sym) {
+      unique_bodies.push(types::Body {
         syms: b.clone(),
         len: b.len() as u16,
         prod: get_production_id_from_node(production, tgs),
@@ -1570,10 +1792,12 @@ fn pre_process_body(
         bc_id: 0,
         reduce_fn_ids: reduce_fn_ids.clone(),
         origin_location: t.clone(),
-      })
-      .collect(),
-    productions,
-  )
+      });
+      seen.insert(sym);
+    }
+  }
+
+  (unique_bodies, productions)
 }
 
 fn some_bodies_have_reduce_functions(bodies: &Vec<ASTNode>) -> bool {
@@ -1720,18 +1944,6 @@ fn intern_symbol(
     }
   }
 }
-
-struct SymbolData<'a> {
-  pub annotation:       String,
-  pub is_list:          bool,
-  pub is_group:         bool,
-  pub is_optional:      bool,
-  pub is_shift_nothing: bool,
-  pub is_meta:          bool,
-  pub is_exclusive:     bool,
-  pub sym_atom:         Option<&'a ASTNode>,
-}
-
 /// Get a flattened view of a symbol's immediate AST
 
 fn get_symbol_details<'a>(mut sym: &'a ASTNode, tgs: &mut TempGrammarStore) -> SymbolData<'a> {
@@ -1786,6 +1998,7 @@ fn get_symbol_details<'a>(mut sym: &'a ASTNode, tgs: &mut TempGrammarStore) -> S
       // as they represent actual parsable entities which are
       // submitted to the bytecode compiler for evaluation
       ASTNode::Generated(_)
+      | ASTNode::AnyGroup(_)
       | ASTNode::Literal(_)
       | ASTNode::Empty(_)
       | ASTNode::End_Of_File(_)

@@ -76,6 +76,7 @@
           
         f:r { { t_Group_Production, c_Symbol, bodies:$2,  tok } }  
 
+
 <> production_token_symbol > 
     
     \tk: production_symbol       
@@ -196,3 +197,7 @@
     |   \(RST condition_symbol_list \)
 
         f:r { { t_Look_Ignore , c_Symbol , c_Meta,   sym: $2, tok } }
+
+<> any_group > \[ t:unordered? annotated_symbol(+) \]
+        
+    f:r { { t_AnyGroup, c_Symbol, symbols:$3, unordered: bool($2), tok } } 
