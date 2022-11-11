@@ -138,8 +138,8 @@ impl<'a> UTF8StringReader<'a> {
   pub fn from_string(string: &'a str) -> Self {
     Self::new(string.as_bytes())
   }
+
   ///
-  /// 
   pub fn new(data: &'a [u8]) -> UTF8StringReader<'a> {
     let mut reader = UTF8StringReader {
       data:       data,
@@ -155,5 +155,17 @@ impl<'a> UTF8StringReader<'a> {
     Self::next(&mut reader, 0);
 
     reader
+  }
+}
+
+impl<'a> From<&'a String> for UTF8StringReader<'a> {
+  fn from(string: &'a String) -> Self {
+    Self::new(&string.as_bytes())
+  }
+}
+
+impl<'a> From<&'a [u8]> for UTF8StringReader<'a> {
+  fn from(data: &'a [u8]) -> Self {
+    Self::new(data)
   }
 }
