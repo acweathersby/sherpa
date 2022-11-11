@@ -408,20 +408,20 @@ impl Token {
     }
   }
 
-  pub fn to_f64(&self) -> f64 {
-    self.to_numeric_or_length() as f64
-  }
-
   pub fn to_f32(&self) -> f32 {
     self.to_numeric_or_length() as f32
   }
 
-  pub fn to_i16(&self) -> i16 {
-    self.to_numeric_or_length() as i16
+  pub fn to_f64(&self) -> f64 {
+    self.to_numeric_or_length() as f64
   }
 
   pub fn to_i8(&self) -> i8 {
     self.to_numeric_or_length() as i8
+  }
+
+  pub fn to_i16(&self) -> i16 {
+    self.to_numeric_or_length() as i16
   }
 
   pub fn to_i32(&self) -> i32 {
@@ -434,6 +434,10 @@ impl Token {
 
   pub fn to_u8(&self) -> u8 {
     self.to_numeric_or_length() as u8
+  }
+
+  pub fn to_u16(&self) -> u16 {
+    self.to_numeric_or_length() as u16
   }
 
   pub fn to_u32(&self) -> u32 {
