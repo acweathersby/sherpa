@@ -32,9 +32,9 @@ use crate::types::TransitionMode;
 use crate::types::TransitionPack;
 use crate::types::TransitionStateType;
 
-type IROutput = Vec<IRState>;
+type IROutput = Vec<Box<IRState>>;
 /// Compiles all production within the grammar into unique IRStates
-pub fn compile_states(g: &GrammarStore, num_of_threads: usize) -> BTreeMap<String, IRState> {
+pub fn compile_states(g: &GrammarStore, num_of_threads: usize) -> BTreeMap<String, Box<IRState>> {
   let mut deduped_states = BTreeMap::new();
 
   let productions_ids = g.productions.keys().cloned().collect::<Vec<_>>();
@@ -74,31 +74,34 @@ pub fn compile_states(g: &GrammarStore, num_of_threads: usize) -> BTreeMap<Strin
     for state in {
       thread::scope(|s| {
         work_chunks
-          .iter()
+          .into_iter()
           .map(|productions| {
-            s.spawn(|| {
-              let mut deduped_states = BTreeMap::new();
+            s.spawn(move || {
+              let mut out_states = Vec::with_capacity(1024);
               let mut scanner_names = BTreeSet::new();
+              let mut state_names = BTreeSet::new();
 
-              for production_id in *productions {
+              for production_id in productions {
                 let states = generate_production_states(production_id, g);
 
                 for state in states {
                   if let Some(name) = state.get_scanner_state_name() {
-                    if scanner_names.insert(name) {
+                    if scanner_names.insert(name.clone()) {
                       for state in
                         generate_scanner_intro_state(state.get_scanner_symbol_set().unwrap(), g)
                       {
-                        deduped_states.entry(state.get_name()).or_insert(state);
+                        if state_names.insert(state.get_name()) {
+                          out_states.push(state);
+                        }
                       }
                     }
                   }
-
-                  deduped_states.entry(state.get_name()).or_insert(state);
+                  if state_names.insert(state.get_name()) {
+                    out_states.push(state);
+                  }
                 }
               }
-
-              deduped_states.into_values()
+              out_states
             })
           })
           .collect::<Vec<_>>()
@@ -260,13 +263,13 @@ fn process_transition_nodes<'a>(
   g: &GrammarStore,
   entry_name: &String,
   prod_id: u32,
-) -> Vec<IRState> {
+) -> Vec<Box<IRState>> {
   // We start at leaf nodes and make our way down to the root.
   let number_of_nodes = t_pack.get_node_len();
 
   let leaf_node_set = t_pack.leaf_nodes.iter().collect::<BTreeSet<_>>();
 
-  let mut output = BTreeMap::<usize, IRState>::new();
+  let mut output = BTreeMap::<usize, Box<IRState>>::new();
 
   let mut children_tables =
     t_pack.nodes_iter().map(|_| BTreeSet::<usize>::new()).collect::<Vec<_>>();
@@ -349,24 +352,26 @@ fn process_transition_nodes<'a>(
   output.into_values().filter(|s| hash_filter.insert(s.get_hash())).collect::<Vec<_>>()
 }
 
-fn create_passing_goto_state(entry_name: &String, is_scanner: bool) -> IRState {
-  IRState {
-    code: "pass".to_string(),
-    name: get_goto_name(entry_name),
-    state_type: if is_scanner { ScannerGoto } else { ProductionGoto },
-    ..Default::default()
-  }
-  .into_hashed()
+fn create_passing_goto_state(entry_name: &String, is_scanner: bool) -> Box<IRState> {
+  Box::new(
+    IRState {
+      code: "pass".to_string(),
+      name: get_goto_name(entry_name),
+      state_type: if is_scanner { ScannerGoto } else { ProductionGoto },
+      ..Default::default()
+    }
+    .into_hashed(),
+  )
 }
 
 fn create_goto_start_state(
   g: &GrammarStore,
   t_pack: &TransitionPack,
-  resolved_states: &BTreeMap<usize, IRState>,
+  resolved_states: &BTreeMap<usize, Box<IRState>>,
   children_ids: &BTreeSet<usize>,
   root_productions: &BTreeSet<ProductionId>,
   entry_name: &String,
-) -> IRState {
+) -> Box<IRState> {
   let is_scanner = t_pack.is_scanner;
   let mut strings = vec![];
   let mut comment = String::new();
@@ -428,25 +433,27 @@ on fail state [ {}_goto_failed ]
     panic!("[GOTO] Empty state generated!");
   }
 
-  IRState {
-    comment,
-    code,
-    name: get_goto_name(entry_name),
-    state_type: if is_scanner { ScannerGoto } else { ProductionGoto },
-    ..Default::default()
-  }
-  .into_hashed()
+  Box::new(
+    IRState {
+      comment,
+      code,
+      name: get_goto_name(entry_name),
+      state_type: if is_scanner { ScannerGoto } else { ProductionGoto },
+      ..Default::default()
+    }
+    .into_hashed(),
+  )
 }
 
 fn create_intermediate_state(
   node: &TransitionGraphNode,
   g: &GrammarStore,
   t_pack: &TransitionPack,
-  resolved_states: &BTreeMap<usize, IRState>,
+  resolved_states: &BTreeMap<usize, Box<IRState>>,
   children_tables: &Vec<BTreeSet<usize>>,
   entry_name: &String,
   production_id: u32,
-) -> Vec<IRState> {
+) -> Vec<Box<IRState>> {
   let mut strings = vec![];
   let mut comment = format!("[{}][{}]", node.id, node.parent);
   let mut item_set = BTreeSet::new();
@@ -766,17 +773,19 @@ fn create_intermediate_state(
       );
     }
 
-    IRState {
-      comment,
-      code,
-      name: state_name,
-      graph_id: node.id,
-      state_type,
-      stack_depth,
-      peek_type,
-      ..Default::default()
-    }
-    .into_hashed()
+    Box::new(
+      IRState {
+        comment,
+        code,
+        name: state_name,
+        graph_id: node.id,
+        state_type,
+        stack_depth,
+        peek_type,
+        ..Default::default()
+      }
+      .into_hashed(),
+    )
   } else {
     let (normal_symbol_set, skip_symbols_set, _) =
       get_symbols_from_items(item_set.clone(), g, None);
@@ -806,19 +815,21 @@ fn create_intermediate_state(
       );
     }
 
-    IRState {
-      comment,
-      code,
-      name: state_name,
-      graph_id: node.id,
-      normal_symbols: normal_symbol_set.into_iter().collect(),
-      skip_symbols: skip_symbols_set.into_iter().collect(),
-      state_type,
-      stack_depth,
-      peek_type,
-      ..Default::default()
-    }
-    .into_hashed()
+    Box::new(
+      IRState {
+        comment,
+        code,
+        name: state_name,
+        graph_id: node.id,
+        normal_symbols: normal_symbol_set.into_iter().collect(),
+        skip_symbols: skip_symbols_set.into_iter().collect(),
+        state_type,
+        stack_depth,
+        peek_type,
+        ..Default::default()
+      }
+      .into_hashed(),
+    )
   };
 
   states.push(state);
@@ -907,13 +918,13 @@ fn create_reduce_string(node: &TransitionGraphNode, g: &GrammarStore, is_scanner
     // panic!("Expected state to be in end state {}", item.debug_string(g))
   }
   if is_scanner {
-    let symbol_id = production.symbol_bytecode_id;
     let production_id = production.bytecode_id;
 
-    if symbol_id == 0 {
-      format!("set prod to {}", production_id)
-    } else {
-      format!("assign token [ {} ] then set prod to {}", symbol_id, production_id)
+    match node.items[0].get_origin() {
+      OriginData::Symbol(sym) => {
+        format!("assign token [ {} ] then set prod to {}", sym.bytecode_id(Some(g)), production_id)
+      }
+      _ => format!("set prod to {}", production_id),
     }
   } else {
     let state_string = format!(
@@ -925,7 +936,11 @@ fn create_reduce_string(node: &TransitionGraphNode, g: &GrammarStore, is_scanner
   }
 }
 
-fn create_reduce_state(node: &TransitionGraphNode, g: &GrammarStore, is_scanner: bool) -> IRState {
+fn create_reduce_state(
+  node: &TransitionGraphNode,
+  g: &GrammarStore,
+  is_scanner: bool,
+) -> Box<IRState> {
   let item = node.items[0];
   let body = g.bodies.get(&item.get_body()).unwrap();
   let production = g.productions.get(&body.prod).unwrap();
@@ -946,14 +961,16 @@ fn create_reduce_state(node: &TransitionGraphNode, g: &GrammarStore, is_scanner:
     format!("[{}] Not at end --- {}", node.id, node.items[0].debug_string(g))
   };
 
-  IRState {
-    code,
-    comment,
-    graph_id: node.id,
-    state_type: if is_scanner { ProductionEndState } else { ScannerEndState },
-    ..Default::default()
-  }
-  .into_hashed()
+  Box::new(
+    IRState {
+      code,
+      comment,
+      graph_id: node.id,
+      state_type: if is_scanner { ProductionEndState } else { ScannerEndState },
+      ..Default::default()
+    }
+    .into_hashed(),
+  )
 }
 
 fn get_goto_name(entry_name: &String) -> String {

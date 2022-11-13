@@ -276,7 +276,7 @@ assert PRODUCTION [3] (pass)
 
     let output = compile_ir_states_into_bytecode(
       &grammar,
-      BTreeMap::from_iter(vec![(ir_state.get_name(), ir_state)]),
+      BTreeMap::from_iter(vec![(ir_state.get_name(), Box::new(ir_state))]),
       vec![ir_ast],
     );
 
@@ -386,9 +386,10 @@ assert PRODUCTION [3] (pass)
 
     let output = compile_ir_states_into_bytecode(
       &g,
-      BTreeMap::from_iter(vec![(ir_state.get_name(), ir_state)]),
+      BTreeMap::from_iter(vec![(ir_state.get_name(), Box::new(ir_state))]),
       vec![ir_ast],
     );
+    
     output
   }
 }

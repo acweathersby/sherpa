@@ -25,7 +25,7 @@ pub struct BytecodeOutput {
   pub offset_to_state_name: BTreeMap<u32, String>,
   pub bytecode_id_to_symbol_lookup: BTreeMap<u32, Symbol>,
   /// The original [IRStates](IRState) produced during the
-  pub ir_states: BTreeMap<String, IRState>,
+  pub ir_states: BTreeMap<String, Box<IRState>>,
 }
 
 pub fn compile_bytecode<'a>(g: &'a GrammarStore, threads: usize) -> BytecodeOutput {
@@ -46,7 +46,7 @@ pub fn compile_bytecode<'a>(g: &'a GrammarStore, threads: usize) -> BytecodeOutp
 
 pub(crate) fn compile_ir_states_into_bytecode<'a>(
   g: &'a GrammarStore,
-  ir_states: BTreeMap<String, IRState>,
+  ir_states: BTreeMap<String, Box<IRState>>,
   ir_ast_states: Vec<IR_STATE>,
 ) -> BytecodeOutput {
   let state_refs = ir_ast_states.iter().collect::<Vec<_>>();

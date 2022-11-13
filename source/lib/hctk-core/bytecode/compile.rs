@@ -133,7 +133,7 @@ fn patch_goto_offsets(bc: &mut Vec<u32>, goto_to_off: &[u32]) {
   }
 }
 
-fn compile_ir_states_worker(g: &GrammarStore, prods: &[ProductionId]) -> Vec<IRState> {
+fn compile_ir_states_worker(g: &GrammarStore, prods: &[ProductionId]) -> Vec<Box<IRState>> {
   prods.iter().flat_map(|p| generate_production_states(p, g)).collect::<Vec<_>>()
 }
 
@@ -144,7 +144,7 @@ fn compile_ir_states(
   g: &GrammarStore,
   work_group: &[ProductionId],
   thread_count: usize,
-) -> BTreeMap<u64, IRState> {
+) -> BTreeMap<u64, Box<IRState>> {
   let prod_id_groups =
     work_group.chunks(thread_count).filter(|s| !s.is_empty()).collect::<Vec<_>>();
 
