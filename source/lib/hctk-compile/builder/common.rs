@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::fmt::format;
 use std::io::Write;
 
 use hctk_core::grammar::data::ast::ASTNode;
@@ -63,57 +64,75 @@ pub(crate) fn write_rust_entry_functions<W: Write>(
   )
 }
 
-pub fn add_rust_context_ascript_functions<W: Write>(
+pub fn add_ascript_functions<W: Write>(
   ast: Option<&AScriptStore>,
   g: &GrammarStore,
   writer: &mut CodeWriter<W>,
 ) -> Result<(), std::io::Error> {
   Ok(if let Some(ascript) = ast {
-    for (_, ExportedProduction { export_name, production, .. }) in
-      get_exported_productions(g).iter().enumerate()
-    {
-      let mut ref_index = 0;
-      let ref_ = render_expression(
-        &ASTNode::AST_NamedReference(Box::new(AST_NamedReference {
-          tok:   Token::default(),
-          value: "first".to_string(),
-        })),
-        &Body {
-          syms: vec![BodySymbolRef {
-            consumable: false,
-            annotation: String::default(),
-            exclusive: false,
-            original_index: 0,
-            scanner_index: 1,
-            scanner_length: 1,
-            sym_id: SymbolID::Production(production.id, GrammarId(0)),
-            tok: Token::new(),
-          }],
-          len: 1,
-          prod: production.id,
-          id: BodyId(0),
-          bc_id: 0,
-          reduce_fn_ids: vec![],
-          origin_location: Token::default(),
-        },
-        &ascript,
-        g,
-        &mut ref_index,
-      );
+    let export_node_data = get_exported_productions(g)
+      .iter()
+      .map(|ExportedProduction { export_name, production, .. }| {
+        let mut ref_index = 0;
+        let ref_ = render_expression(
+          &ASTNode::AST_NamedReference(Box::new(AST_NamedReference {
+            tok:   Token::default(),
+            value: "first".to_string(),
+          })),
+          &Body {
+            syms: vec![BodySymbolRef {
+              consumable: false,
+              annotation: String::default(),
+              exclusive: false,
+              original_index: 0,
+              scanner_index: 1,
+              scanner_length: 1,
+              sym_id: SymbolID::Production(production.id, GrammarId(0)),
+              tok: Token::new(),
+            }],
+            len: 1,
+            prod: production.id,
+            id: BodyId(0),
+            bc_id: 0,
+            reduce_fn_ids: vec![],
+            origin_location: Token::default(),
+          },
+          &ascript,
+          g,
+          &mut ref_index,
+          0,
+        );
+        let ast_type = ref_.as_ref().unwrap().get_type();
+        let ast_type_string = ascript_type_to_string(&ast_type, ascript);
+        (ref_, ast_type, ast_type_string, export_name.to_string())
+      })
+      .collect::<Vec<_>>();
 
-      let ast_type = ref_.as_ref().unwrap().get_type();
+    // Write out the ast parser implementations for Parser -------------------
+    // -----------------------------------------------------------------------
+
+    writer.write_line(
+      "
+/// Static only object providing convenient methods for parsing 
+/// inputs into AST trees.
+pub struct AST { }
+    ",
+    )?;
+    writer.wrtln("impl AST  {")?.indent();
+
+    for (ref_, ast_type, ast_type_string, export_name) in &export_node_data {
       writer
         .newline()?
         .wrtln(&format!(
-          "pub fn to_{}_ast(mut reader: T) -> Result<{}, ParseError>{{ ",
-          export_name,
-          ascript_type_to_string(&ast_type, ascript)
+          "fn base_{}_from<R>(mut reader: R)  -> Result<{}, ParseError> 
+          where R: ByteCharacterReader + BaseCharacterReader + MutCharacterReader{{ ",
+          export_name, ast_type_string
         ))?
         .indent()
         .wrtln("let source = reader.get_source();")?
         .wrtln(&format!(
           "
-        let mut ctx = Self::new_{}_parser(reader);
+        let mut ctx = Parser::new_{}_parser(reader);
         ",
           export_name
         ))?
@@ -167,7 +186,8 @@ loop {{
           ascript.gen_name()
         ))?
         .wrtln(&{
-          let (string, ref_) = create_type_initializer_value(ref_, &ast_type, false, ascript);
+          let (string, ref_) =
+            create_type_initializer_value(ref_.clone(), &ast_type, false, ascript);
 
           if let Some(exp) = ref_ {
             format!(
@@ -181,6 +201,47 @@ loop {{
         })?
         .dedent()
         .wrtln("}")?;
+    }
+
+    writer.dedent().wrtln("}")?.insert_newline()?;
+
+    // Write out the base Conversion Trait for the AST parsers. --------------
+    // -----------------------------------------------------------------------
+
+    writer.wrtln("pub trait ASTParse<T>  {")?.indent();
+
+    for (_, _, ast_type_string, export_name) in &export_node_data {
+      writer.newline()?.wrtln(&format!(
+        "fn {}_from(input:T) -> Result<{}, ParseError>;",
+        export_name, ast_type_string
+      ))?;
+    }
+
+    writer.dedent().wrtln("}")?.insert_newline()?;
+
+    // Write the ASTParse implementations for common types of inputs ---------
+    // -----------------------------------------------------------------------
+
+    for (_, input_type, reader_type, param_name, arg_expression) in [
+      ("<'a>", "String", "UTF8StringReader", "input", "input.as_bytes()"),
+      ("<'a>", "&str", "UTF8StringReader", "input", "input.as_bytes()"),
+    ] {
+      writer.wrtln(&format!("impl ASTParse<{}> for AST{{", input_type))?.indent();
+      for (_, _, ast_type_string, export_name) in &export_node_data {
+        writer
+          .newline()?
+          .wrtln(&format!(
+            "fn {}_from({}: {}) -> Result<{}, ParseError> {{",
+            export_name, param_name, input_type, ast_type_string
+          ))?
+          .indent()
+          .wrtln(&format!("let data = {};", arg_expression))?
+          .wrtln(&format!("let reader = {}::new(data);", reader_type))?
+          .wrtln(&format!("AST::base_{}_from(reader)", export_name))?
+          .dedent()
+          .write_line("}")?;
+      }
+      writer.dedent().wrtln("}")?;
     }
   })
 }

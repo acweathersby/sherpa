@@ -97,8 +97,6 @@ impl Item {
 
       let mut string = String::new();
 
-      // string += &format!("\n  {:?} ", self.origin);
-
       string += &format!("{} ", self.state);
 
       string += &g.productions.get(&body.prod).unwrap().original_name;

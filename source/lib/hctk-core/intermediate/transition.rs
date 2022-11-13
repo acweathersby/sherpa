@@ -396,6 +396,8 @@ fn create_peek(
 
   let mut leaves = vec![];
 
+  peek_nodes.iter().map(|n| debug_items("comment", &t_pack.get_node(*n).items, g));
+
   disambiguate(g, t_pack, peek_nodes, &mut leaves, 0);
 
   let resolved_leaves = process_peek_leaves(g, t_pack, leaves);
@@ -460,12 +462,14 @@ fn disambiguate(
 ) {
   let mut term_nodes = vec![];
   let mut end_nodes = vec![];
+  let mut exclusive_ended = false;
 
   // We must first complete end-items and generate new
   // nodes that arise from the completion of a production.
 
   for node_index in node_ids {
     let node = t_pack.get_node(node_index);
+    let origin = node.items[0].get_origin();
     let item = node.items[0];
     let goal = node.goal;
     let parent_index = node.parent;
@@ -474,7 +478,12 @@ fn disambiguate(
       term_nodes.push(node_index)
     } else {
       let (mut terms, mut final_ends) =
-        get_continue_nodes(g, t_pack, item, parent_index, peek_depth, goal);
+        { get_continue_nodes(g, t_pack, item, parent_index, peek_depth, goal) };
+
+      exclusive_ended = match origin {
+        OriginData::Symbol(sym) if sym.is_exclusive() => true,
+        _ => exclusive_ended,
+      };
 
       if terms.is_empty() && final_ends.is_empty() {
         end_nodes.push(node_index);
@@ -505,10 +514,20 @@ fn disambiguate(
     }
   }
 
+  let mut nodes_to_be_dropped: BTreeSet<usize> = BTreeSet::new();
+
+  let term_nodes = if exclusive_ended {
+    for node_id in term_nodes {
+      nodes_to_be_dropped.insert(node_id);
+    }
+    vec![]
+  } else {
+    term_nodes
+  };
+
   let mut groups = hash_group(term_nodes, |_, n| (t_pack.get_node(n).terminal_symbol));
   let mut next_peek_groups = vec![];
   let mut primary_nodes: BTreeSet<usize> = BTreeSet::new();
-  let mut nodes_to_be_dropped: BTreeSet<usize> = BTreeSet::new();
 
   merge_occluding_groups(g, t_pack, &mut groups);
 
@@ -940,8 +959,7 @@ fn merge_occluding_groups(g: &GrammarStore, t_pack: &mut TPack, groups: &mut [Ve
       let to_sym = to_node.terminal_symbol;
 
       if symbols_occlude(&to_sym, &from_sym, g)
-        && ((!from_node.is_out_of_scope())
-          || (from_sym.isDefinedSymbol() || to_sym.isDefinedSymbol()))
+        && ((!from_node.is_out_of_scope()) || (from_sym.is_defined() || to_sym.is_defined()))
       {
         let mut clone = groups[i].clone();
         groups[j].append(&mut clone);
@@ -963,37 +981,41 @@ fn merge_occluding_groups(g: &GrammarStore, t_pack: &mut TPack, groups: &mut [Ve
 
 fn symbols_occlude(symA: &SymbolID, symB: &SymbolID, g: &GrammarStore) -> bool {
   match symA {
-    SymbolID::DefinedSymbol(..) => match g.symbol_strings.get(symA).map(|s| s.as_str()) {
-      Some("\n") => match symB {
-        SymbolID::GenericNewLine => true,
+    SymbolID::DefinedSymbol(..) | SymbolID::ExclusiveDefinedSymbol(..) => {
+      match g.symbol_strings.get(symA).map(|s| s.as_str()) {
+        Some("\n") => match symB {
+          SymbolID::GenericNewLine => true,
+          _ => false,
+        },
+        Some("\t") => match symB {
+          SymbolID::GenericHorizontalTab => true,
+          _ => false,
+        },
+        Some(" ") => match symB {
+          SymbolID::GenericSpace => true,
+          _ => false,
+        },
+        Some(_) => match symB {
+          SymbolID::GenericSymbol => g.symbols.get(symA).unwrap().cp_len == 1,
+          _ => false,
+        },
         _ => false,
-      },
-      Some("\t") => match symB {
-        SymbolID::GenericHorizontalTab => true,
+      }
+    }
+    SymbolID::DefinedIdentifier(_) | SymbolID::ExclusiveDefinedIdentifier(_) => {
+      match g.symbol_strings.get(symA).map(|s| s.as_str()) {
+        Some("_") | Some("-") => match symB {
+          SymbolID::GenericSymbol => true,
+          _ => false,
+        },
+        Some(_) => match symB {
+          SymbolID::GenericIdentifier => g.symbols.get(symA).unwrap().cp_len == 1,
+          _ => false,
+        },
         _ => false,
-      },
-      Some(" ") => match symB {
-        SymbolID::GenericSpace => true,
-        _ => false,
-      },
-      Some(_) => match symB {
-        SymbolID::GenericSymbol => g.symbols.get(symA).unwrap().cp_len == 1,
-        _ => false,
-      },
-      _ => false,
-    },
-    SymbolID::DefinedIdentifier(_) => match g.symbol_strings.get(symA).map(|s| s.as_str()) {
-      Some("_") | Some("-") => match symB {
-        SymbolID::GenericSymbol => true,
-        _ => false,
-      },
-      Some(_) => match symB {
-        SymbolID::GenericIdentifier => g.symbols.get(symA).unwrap().cp_len == 1,
-        _ => false,
-      },
-      _ => false,
-    },
-    SymbolID::DefinedNumeric(_) => match symB {
+      }
+    }
+    SymbolID::DefinedNumeric(_) | SymbolID::ExclusiveDefinedNumeric(_) => match symB {
       SymbolID::GenericNumber => g.symbols.get(symA).unwrap().cp_len == 1,
       _ => false,
     },
@@ -1016,7 +1038,16 @@ fn handle_unresolved_scanner_nodes(
   let mut defined = nodes;
   let generic = defined
     .drain_filter(|n| match t_pack.get_node(*n).items[0].get_origin() {
-      OriginData::Symbol(sym) => !sym.isDefinedSymbol(),
+      OriginData::Symbol(sym) => {
+        println!("{:?} {}", sym, sym.is_defined());
+        !sym.is_defined()
+      }
+      OriginData::Production(_) => {
+        panic!("Origin Data should be a symbol!");
+      }
+      OriginData::UNDEFINED => {
+        panic!("Origin Symbols Data not defined!")
+      }
       _ => false,
     })
     .collect::<Vec<_>>();
@@ -1034,6 +1065,10 @@ fn handle_unresolved_scanner_nodes(
       );
     }
     _ => {
+      println!(
+        "{:?}",
+        t_pack.root_prods.iter().map(|p| { get_production_plain_name(p, g) }).collect::<Vec<_>>()
+      );
       panic!(
         "Invalid combination of generics \n {}!",
         defined.iter().map(|n| t_pack.get_node(*n).debug_string(g)).collect::<Vec<_>>().join("\n")

@@ -37,6 +37,18 @@ pub enum SymbolID {
   /// `ba$$`, `#123`, `$10.20`, and `h3ll0W0rld!`.
   DefinedSymbol(StringId),
 
+  /// Represents a defined sequence of characters from the set `0-9`.
+  ExclusiveDefinedNumeric(StringId),
+
+  /// Represents a defined sequence of characters that are members of the
+  /// unicode character classes `ID_Start` and `ID_Nonstart`.
+  ExclusiveDefinedIdentifier(StringId),
+
+  /// Represents any defined token sequence that contains a mixture of
+  /// identifier, numeric, and general characters. Examples include
+  /// `ba$$`, `#123`, `$10.20`, and `h3ll0W0rld!`.
+  ExclusiveDefinedSymbol(StringId),
+
   /// Represents any non-terminal production symbol.
   Production(ProductionId, GrammarId),
 
@@ -122,7 +134,12 @@ impl SymbolID {
 
   pub fn to_string(&self, g: &GrammarStore) -> String {
     match self {
-      Self::DefinedNumeric(_) | Self::DefinedIdentifier(_) | Self::DefinedSymbol(_) => {
+      Self::DefinedNumeric(_)
+      | Self::DefinedIdentifier(_)
+      | Self::DefinedSymbol(_)
+      | Self::ExclusiveDefinedNumeric(_)
+      | Self::ExclusiveDefinedIdentifier(_)
+      | Self::ExclusiveDefinedSymbol(_) => {
         format!("\\{}", g.symbol_strings.get(self).unwrap())
       }
       Self::Production(prod_id, _) => g.productions.get(prod_id).unwrap().original_name.to_string(),
@@ -144,9 +161,12 @@ impl SymbolID {
 
   pub fn to_default_string(&self) -> String {
     match self {
-      Self::DefinedNumeric(_) | Self::DefinedIdentifier(_) | Self::DefinedSymbol(_) => {
-        "__defined".to_string()
-      }
+      Self::DefinedNumeric(_)
+      | Self::DefinedIdentifier(_)
+      | Self::DefinedSymbol(_)
+      | Self::ExclusiveDefinedNumeric(_)
+      | Self::ExclusiveDefinedIdentifier(_)
+      | Self::ExclusiveDefinedSymbol(_) => "__defined".to_string(),
       Self::Production(prod_id, _) => "__defined".to_string(),
       Self::TokenProduction(prod_id, _) => "__defined".to_string(),
       Self::Default => "__default".to_string(),
@@ -162,17 +182,32 @@ impl SymbolID {
     }
   }
 
-  pub fn isDefinedSymbol(&self) -> bool {
+  pub fn is_defined(&self) -> bool {
     match self {
       Self::DefinedNumeric(_)
       | Self::DefinedIdentifier(_)
       | Self::DefinedSymbol(_)
-      | Self::TokenProduction(..) => true,
+      | Self::ExclusiveDefinedNumeric(_)
+      | Self::ExclusiveDefinedIdentifier(_)
+      | Self::ExclusiveDefinedSymbol(_) => true,
       _ => false,
     }
   }
 
-  pub fn getProductionId(&self) -> Option<ProductionId> {
+  pub fn is_exclusive(&self) -> bool {
+    match self {
+      Self::ExclusiveDefinedNumeric(_)
+      | Self::ExclusiveDefinedIdentifier(_)
+      | Self::ExclusiveDefinedSymbol(_) => true,
+      _ => false,
+    }
+  }
+
+  pub fn is_production(&self) -> bool {
+    self.get_production_id().is_some()
+  }
+
+  pub fn get_production_id(&self) -> Option<ProductionId> {
     match self {
       Self::Production(id, _) => Some(*id),
       Self::TokenProduction(id, _) => Some(*id),
@@ -180,7 +215,7 @@ impl SymbolID {
     }
   }
 
-  pub fn getGrammarId(&self) -> Option<GrammarId> {
+  pub fn get_grammar_id(&self) -> Option<GrammarId> {
     match self {
       Self::Production(_, id) => Some(*id),
       Self::TokenProduction(_, id) => Some(*id),
@@ -193,6 +228,9 @@ impl SymbolID {
       Self::DefinedNumeric(_)
       | Self::DefinedIdentifier(_)
       | Self::DefinedSymbol(_)
+      | Self::ExclusiveDefinedNumeric(_)
+      | Self::ExclusiveDefinedIdentifier(_)
+      | Self::ExclusiveDefinedSymbol(_)
       | Self::TokenProduction(..) => {
         if let Some(g) = g {
           g.symbols.get(self).unwrap().bytecode_id

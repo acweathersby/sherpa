@@ -482,7 +482,7 @@ fn create_intermediate_state(
             } else {
               ProductionStart
             }
-          }     
+          }
         },
       )
     } else {
@@ -641,7 +641,7 @@ fn create_intermediate_state(
               if is_scanner {
                 let defined_branches = group
                 .iter()
-                .filter(|n| matches!(n.items[0].get_origin(), OriginData::Symbol(sym) if sym.isDefinedSymbol()))
+                .filter(|n| matches!(n.items[0].get_origin(), OriginData::Symbol(sym) if sym.is_defined()))
                 .collect::<Vec<_>>();
 
                 let defined_generics = group.iter()

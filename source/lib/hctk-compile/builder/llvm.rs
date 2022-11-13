@@ -18,7 +18,7 @@ use std::process::Command;
 
 use crate::builder::pipeline::PipelineTask;
 
-use super::common::add_rust_context_ascript_functions;
+use super::common::add_ascript_functions;
 use super::common::write_rust_entry_functions;
 
 /// Build artifacts for a LLVM based parser.
@@ -319,7 +319,7 @@ impl<T: BaseCharacterReader + LLVMCharacterReader + ByteCharacterReader + MutCha
     .indent();
 
   write_rust_entry_functions(g, states, writer)?;
-  add_rust_context_ascript_functions(ast, g, writer)?;
+  add_ascript_functions(ast, g, writer)?;
 
   writer.dedent().wrtln(&format!(
     "}}

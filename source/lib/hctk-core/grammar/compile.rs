@@ -1,4 +1,5 @@
 use crate::debug::debug_items;
+use crate::debug::grammar;
 use crate::grammar::data::ast::AnyGroup;
 use crate::grammar::data::ast::Ascript;
 use crate::grammar::data::ast::Literal;
@@ -22,6 +23,7 @@ use super::get_production_start_items;
 use super::parse;
 use super::parse::compile_grammar_ast;
 
+use core::panic;
 use std::collections::btree_map;
 use std::collections::btree_map::VacantEntry;
 use std::collections::BTreeMap;
@@ -211,6 +213,23 @@ fn finalize_grammar(
   create_scanner_productions_from_symbols(&mut g, errors);
 
   finalize_symbols(&mut g, errors);
+
+  // Check for missing production symbols in body symbols
+  for (id, b) in &g.bodies {
+    for sym in &b.syms {
+      match sym.sym_id {
+        SymbolID::TokenProduction(prod, _) | SymbolID::Production(prod, _) => {
+          if !g.productions.contains_key(&prod) {
+            panic!(
+              "Unable to find production definition \n{}",
+              sym.tok.blame(1, 1, "production does not exist")
+            );
+          }
+        }
+        _ => {}
+      }
+    }
+  }
 
   finalize_productions(&mut g, thread_count, errors);
 
@@ -409,24 +428,18 @@ fn finalize_symbols(g: &mut GrammarStore, errors: &mut [ParseError]) {
 
   for sym_id in g.symbols.keys().cloned().collect::<Vec<_>>() {
     if !g.symbols.get(&sym_id).unwrap().scanner_only {
-      match sym_id {
-        SymbolID::TokenProduction(..)
-        | SymbolID::DefinedSymbol(_)
-        | SymbolID::DefinedNumeric(_)
-        | SymbolID::DefinedIdentifier(_) => {
-          let symbol = g.symbols.get_mut(&sym_id).unwrap();
+      if matches!(sym_id, SymbolID::TokenProduction(..)) || sym_id.is_defined() {
+        let symbol = g.symbols.get_mut(&sym_id).unwrap();
 
-          symbol.bytecode_id = symbol_bytecode_id;
+        symbol.bytecode_id = symbol_bytecode_id;
 
-          let (_, production_id, ..) = get_scanner_info_from_defined(&sym_id, g);
+        let (_, production_id, ..) = get_scanner_info_from_defined(&sym_id, g);
 
-          let scanner_production = g.productions.get_mut(&production_id).unwrap();
+        let scanner_production = g.productions.get_mut(&production_id).unwrap();
 
-          scanner_production.symbol_bytecode_id = symbol_bytecode_id;
+        scanner_production.symbol_bytecode_id = symbol_bytecode_id;
 
-          symbol_bytecode_id += 1;
-        }
-        _ => {}
+        symbol_bytecode_id += 1;
       }
     }
 
@@ -514,7 +527,7 @@ fn create_scanner_productions_from_symbols(g: &mut GrammarStore, errors: &mut [P
           ));
         }
       }
-      SymbolID::DefinedSymbol(_) | SymbolID::DefinedNumeric(_) | SymbolID::DefinedIdentifier(_) => {
+      sym if sym.is_defined() => {
         let (_, scanner_production_id, scanner_name, symbol_string) =
           get_scanner_info_from_defined(&sym_id, g);
 
@@ -588,9 +601,7 @@ fn create_scanner_productions_from_symbols(g: &mut GrammarStore, errors: &mut [P
                           tok: Token::default(),
                         }]
                       }
-                      SymbolID::DefinedSymbol(_)
-                      | SymbolID::DefinedNumeric(_)
-                      | SymbolID::DefinedIdentifier(_) => {
+                      sym if sym.is_defined() => {
                         let (new_symbol_id, ..) = get_scanner_info_from_defined(sym_id, g);
 
                         scanner_production_queue.push_back(*sym_id);
@@ -598,7 +609,7 @@ fn create_scanner_productions_from_symbols(g: &mut GrammarStore, errors: &mut [P
                         vec![BodySymbolRef {
                           annotation: String::default(),
                           consumable: true,
-                          exclusive: sym.exclusive,
+                          exclusive: sym.is_exclusive(),
                           original_index: 0,
                           scanner_index: 0,
                           scanner_length: 1,
@@ -741,7 +752,7 @@ fn create_defined_symbols_from_string(
     .map(|(index, byte)| {
       let string = byte.to_string();
 
-      let id = get_literal_id(&string);
+      let id = get_literal_id(&string, false);
 
       symbols_table.entry(id).or_insert_with(|| {
         symbols_string_table.insert(id, string);
@@ -778,9 +789,7 @@ pub(crate) fn get_scanner_info_from_defined(
   root: &GrammarStore,
 ) -> (SymbolID, ProductionId, String, String) {
   let (scanner_name, symbol_string) = match sym_id {
-    SymbolID::DefinedIdentifier(..)
-    | SymbolID::DefinedNumeric(..)
-    | SymbolID::DefinedSymbol(..) => {
+    sym if sym.is_defined() => {
       let symbol_string = root.symbol_strings.get(sym_id).unwrap().to_owned();
 
       let escaped_symbol_string = symbol_string
@@ -835,16 +844,13 @@ fn merge_grammars(
       if !root.symbols.contains_key(id) {
         root.symbols.insert(*id, sym.clone());
 
-        match id {
-          SymbolID::DefinedSymbol(_)
-          | SymbolID::DefinedNumeric(_)
-          | SymbolID::DefinedIdentifier(_) => match import_grammar.symbol_strings.get(id) {
+        if id.is_defined() {
+          match import_grammar.symbol_strings.get(id) {
             Some(string) => {
               root.symbol_strings.insert(*id, string.to_owned());
             }
             None => {}
-          },
-          _ => {}
+          }
         }
       }
     }
@@ -854,11 +860,11 @@ fn merge_grammars(
   let mut symbol_queue = VecDeque::from_iter(root.production_symbols.clone());
 
   while let Some((sym, tok)) = symbol_queue.pop_front() {
-    if let Some(grammar_id) = sym.getGrammarId() {
+    if let Some(grammar_id) = sym.get_grammar_id() {
       if grammar_id != root.guid {
         match grammars_lookup.get(&grammar_id) {
           Some(import_grammar) => {
-            if let Some(prod_id) = sym.getProductionId() {
+            if let Some(prod_id) = sym.get_production_id() {
               if let std::collections::btree_map::Entry::Vacant(e) = root.productions.entry(prod_id)
               {
                 match import_grammar.productions.get(&prod_id) {
@@ -1813,16 +1819,28 @@ fn some_bodies_have_reduce_functions(bodies: &Vec<ASTNode>) -> bool {
 /// Returns an appropriate SymbolID::Defined* based on the input
 /// string
 
-fn get_literal_id(string: &String) -> SymbolID {
+fn get_literal_id(string: &String, exclusive: bool) -> SymbolID {
   let identifier = Regex::new(r"[\w_-][\w\d_-]*$").unwrap();
   let number = Regex::new(r"\d+$").unwrap();
 
   if number.is_match(string) {
-    SymbolID::DefinedNumeric(StringId::from(string))
+    if exclusive {
+      SymbolID::ExclusiveDefinedNumeric(StringId::from(string))
+    } else {
+      SymbolID::DefinedNumeric(StringId::from(string))
+    }
   } else if identifier.is_match(string) {
-    SymbolID::DefinedIdentifier(StringId::from(string))
+    if exclusive {
+      SymbolID::ExclusiveDefinedIdentifier(StringId::from(string))
+    } else {
+      SymbolID::DefinedIdentifier(StringId::from(string))
+    }
   } else {
-    SymbolID::DefinedSymbol(StringId::from(string))
+    if exclusive {
+      SymbolID::ExclusiveDefinedSymbol(StringId::from(string))
+    } else {
+      SymbolID::DefinedSymbol(StringId::from(string))
+    }
   }
 }
 
@@ -1832,8 +1850,8 @@ fn intern_symbol(
   sym: &ASTNode, // , symbols_table,
   tgs: &mut TempGrammarStore,
 ) -> Option<SymbolID> {
-  fn process_literal(string: &String, tgs: &mut TempGrammarStore) -> SymbolID {
-    let mut id = get_literal_id(string);
+  fn process_literal(string: &String, tgs: &mut TempGrammarStore, is_exclusive: bool) -> SymbolID {
+    let mut id = get_literal_id(string, is_exclusive);
 
     if let std::collections::btree_map::Entry::Vacant(e) = tgs.symbols_table.entry(id) {
       tgs.symbols_string_table.insert(id, string.to_owned());
@@ -1927,8 +1945,8 @@ fn intern_symbol(
       "sym" => Some(SymbolID::GenericSymbol),
       _ => Some(SymbolID::Undefined),
     },
-    ASTNode::Exclusive_Literal(literal) => Some(process_literal(&literal.val, tgs)),
-    ASTNode::Literal(literal) => Some(process_literal(&literal.val, tgs)),
+    ASTNode::Exclusive_Literal(literal) => Some(process_literal(&literal.val, tgs, true)),
+    ASTNode::Literal(literal) => Some(process_literal(&literal.val, tgs, false)),
     ASTNode::End_Of_File(_) => Some(SymbolID::EndOfFile),
     ASTNode::Production_Symbol(_) | ASTNode::Production_Import_Symbol(_) => {
       process_production(sym, tgs, sym.Token())

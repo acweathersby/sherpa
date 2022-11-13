@@ -257,6 +257,7 @@ impl TransitionPack {
       is_scanner,
       root_prods: starts.iter().map(|i| i.get_prod_id(g)).collect::<BTreeSet<_>>(),
       starts: BTreeSet::from_iter(starts.iter().map(|i| i.to_start().to_zero_state())),
+      nodes: Vec::with_capacity(256),
       ..Default::default()
     }
   }

@@ -3,6 +3,7 @@ use std::fmt::Display;
 use std::fs::create_dir_all;
 use std::fs::File;
 use std::io::Write;
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::vec;
 
@@ -89,7 +90,11 @@ impl<'a> BuildPipeline<'a> {
     Self {
       parser_name: "undefined_parser".to_string(),
       grammar_name: "undefined".to_string(),
-      threads: number_of_threads,
+      threads: if number_of_threads == 0 {
+        std::thread::available_parallelism().unwrap_or(NonZeroUsize::new(1).unwrap()).get()
+      } else {
+        number_of_threads
+      },
       tasks: vec![],
       ascript_name: None,
       grammar: None,
@@ -117,10 +122,11 @@ impl<'a> BuildPipeline<'a> {
     self_
   }
 
-  /// Create a new build pipeline after constructing
-  /// a grammar store from a source file. Returns Error
-  /// if the grammar could not be created, otherwise, a
-  /// BuildPipeline is returned.
+  /// Create a new build pipeline after constructing a grammar store from a source file. Returns
+  /// Error if the grammar could not be created, otherwise, a BuildPipeline is returned.
+  ///
+  /// If `number_of_threads` is `0`, the compiler will use a number of threads equal to the
+  /// the number of CPU cores reported by the system.
   pub fn from_source(source_path: &PathBuf, number_of_threads: usize) -> Self {
     Self::build_pipeline(number_of_threads, CachedSource::Path(source_path.to_owned()))
   }
@@ -218,7 +224,7 @@ impl<'a> BuildPipeline<'a> {
     self.bytecode = None;
 
     if self.tasks.iter().any(|t| t.0.require_bytecode) {
-      let bytecode_output = compile_bytecode(&self.grammar.as_ref().unwrap(), 1);
+      let bytecode_output = compile_bytecode(&self.grammar.as_ref().unwrap(), self.threads);
 
       self.bytecode = Some(bytecode_output);
     }

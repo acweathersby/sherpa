@@ -120,6 +120,52 @@ mod ascript_tests {
   }
 
   #[test]
+  fn test_prop_is_made_optional_when_not_present_or_introduced_in_subsequent_definitions() {
+    let mut ast = AScriptStore::new();
+
+    for struct_ in [
+      " { t_TestA, apple: u32, beetle:bool }",
+      " { t_TestA, beetle:bool }",
+      " { t_TestB }",
+      " { t_TestB, apple: u32 }",
+    ]
+    .iter()
+    .map(|input| compile_ascript_ast(input.as_bytes().to_vec()))
+    {
+      assert!(struct_.is_ok());
+
+      if let ASTNode::AST_Struct(struct_) = struct_.unwrap() {
+        let (_, errors) =
+          compile_struct_type(&GrammarStore::default(), &mut ast, &struct_, &create_dummy_body());
+
+        for error in &errors {
+          eprintln!("{}", error);
+        }
+
+        assert!(errors.is_empty());
+      }
+    }
+
+    for prop in &ast.props {
+      if prop.0.name == "beetle" {
+        assert!(
+          !prop.1.optional,
+          "Expected {}~{} to not be optional",
+          ast.structs.get(&prop.0.struct_id).unwrap().type_name,
+          prop.0.name
+        );
+      } else {
+        assert!(
+          prop.1.optional,
+          "Expected {}~{} to be optional",
+          ast.structs.get(&prop.0.struct_id).unwrap().type_name,
+          prop.0.name
+        );
+      }
+    }
+  }
+
+  #[test]
   fn test_parse_errors_when_production_has_differing_return_types() {
     let grammar = compile_test_grammar(
       "

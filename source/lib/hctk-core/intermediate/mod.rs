@@ -69,10 +69,12 @@ mod transition_tree_tests {
 #[cfg(test)]
 mod state_constructor_tests {
 
+  use std::any::Any;
   use std::collections::BTreeSet;
   use std::iter::FromIterator;
 
   use crate::debug::compile_test_grammar;
+  use crate::grammar::get_production_by_name;
   use crate::grammar::get_production_id_by_name;
   use crate::grammar::get_production_start_items;
   use crate::intermediate::state::generate_production_states;
@@ -160,6 +162,42 @@ mod state_constructor_tests {
 
     let result =
       generate_scanner_intro_state(BTreeSet::from_iter(vec![*token_production]), &grammar);
+
+    println!("{:#?}", result);
+
+    assert_eq!(result.len(), 7);
+  }
+
+  #[test]
+  pub fn handle_moderate_scanner_token_combinations() {
+    let g = compile_test_grammar(
+      "
+<> A > t:c_  | t:t_ | tk:id_syms
+
+<> id_syms >  
+
+    id_syms g:id
+
+    |   id_syms \\_
+
+    |   id_syms \\-
+
+    |   id_syms g:num      
+
+    |   \\_ 
+
+    |   \\- 
+
+    |   g:id
+",
+    );
+
+    let p = get_production_id_by_name("A", &g).unwrap();
+
+    let syms =
+      get_production_start_items(&p, &g).iter().map(|i| i.get_symbol(&g)).collect::<BTreeSet<_>>();
+
+    let result = generate_scanner_intro_state(syms, &g);
 
     println!("{:#?}", result);
 

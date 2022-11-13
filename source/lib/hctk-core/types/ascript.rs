@@ -286,6 +286,9 @@ num_type!(AScriptTypeValI8, I8, i8, i8);
 pub struct AScriptProp {
   pub type_val: AScriptTypeVal,
   pub first_declared_location: Token,
+  /// Tracks the number of times this property has been
+  /// declared in a struct.
+  pub define_count: usize,
   pub optional: bool,
 }
 
@@ -293,7 +296,9 @@ pub struct AScriptProp {
 pub struct AScriptStruct {
   pub id: AScriptStructId,
   pub type_name: String,
-  pub props: BTreeSet<AScriptPropId>,
+  pub prop_ids: BTreeSet<AScriptPropId>,
+  /// Tracks the number of times this struct has been defined
+  pub define_count: usize,
   pub definition_locations: Vec<Token>,
   pub include_token: bool,
 }

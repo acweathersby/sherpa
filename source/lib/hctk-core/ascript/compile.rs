@@ -168,7 +168,7 @@ fn resolve_prop_types(ascript: &mut AScriptStore) {
   for prop_key in ascript.props.keys().cloned().collect::<Vec<_>>() {
     let type_val = ascript.props.get(&prop_key).unwrap().type_val.clone();
 
-    ascript.props.get_mut(&prop_key).unwrap().type_val = get_resolved_type(ascript, &type_val);
+    ascript.props.get_mut(&prop_key).unwrap().type_val = get_resolved_type(ascript, &type_val).0;
   }
 }
 
@@ -275,7 +275,10 @@ fn resolve_production_return_types(ast: &mut AScriptStore) {
 /// this returns a clone of the `base_type`. For vectors and unresolved
 /// productions types, this attempts to replace such types with resolved
 /// versions
-pub fn get_resolved_type(ascript: &AScriptStore, base_type: &AScriptTypeVal) -> AScriptTypeVal {
+pub fn get_resolved_type(
+  ascript: &AScriptStore,
+  base_type: &AScriptTypeVal,
+) -> (AScriptTypeVal, bool) {
   match base_type {
     AScriptTypeVal::UnresolvedProduction(production_id) => {
       if let Some(types) = ascript
@@ -284,7 +287,7 @@ pub fn get_resolved_type(ascript: &AScriptStore, base_type: &AScriptTypeVal) -> 
         .and_then(|t| Some(t.keys().cloned().collect::<Vec<_>>()))
       {
         if types.len() == 1 {
-          types[0].clone()
+          (types[0].clone(), false)
         } else if types
           .iter()
           .all(|t| matches!(t, AScriptTypeVal::Struct(..) | AScriptTypeVal::GenericStruct(..)))
@@ -298,22 +301,22 @@ pub fn get_resolved_type(ascript: &AScriptStore, base_type: &AScriptTypeVal) -> 
             })
             .collect::<BTreeSet<_>>();
 
-          AScriptTypeVal::GenericStruct(nodes)
+          (AScriptTypeVal::GenericStruct(nodes), false)
         } else {
-          AScriptTypeVal::Any
+          (AScriptTypeVal::Any, false)
         }
       } else {
-        AScriptTypeVal::Undefined
+        (AScriptTypeVal::Undefined, false)
       }
     }
 
     AScriptTypeVal::GenericVec(Some(vector_sub_types)) => {
       let contents = BTreeSet::from_iter(get_resolved_vec_contents(ascript, base_type));
       // Flatten the subtypes into one array and get the resulting type from that
-      get_specified_vector_from_generic_vec_values(&contents)
+      (get_specified_vector_from_generic_vec_values(&contents), false)
     }
 
-    _ => base_type.clone(),
+    _ => (base_type.clone(), false),
   }
 }
 
@@ -340,7 +343,7 @@ pub fn get_resolved_vec_contents(
     }
     TokenVec => vec![Token],
     StringVec => vec![String(None)],
-    UnresolvedProduction(p) => get_resolved_vec_contents(ast, &get_resolved_type(ast, base_type)),
+    UnresolvedProduction(p) => get_resolved_vec_contents(ast, &get_resolved_type(ast, base_type).0),
     none_vec_type => {
       vec![none_vec_type.clone()]
     }
@@ -587,9 +590,7 @@ pub fn compile_struct_type(
   // struct entry and add props.
 
   let id = AScriptStructId::new(&type_name);
-
-  let mut properties = BTreeSet::new();
-
+  let mut prop_ids = BTreeSet::new();
   let mut include_token = false;
 
   for prop in &ast_struct.props {
@@ -599,7 +600,7 @@ pub fn compile_struct_type(
         let name = &prop.id;
         let prop_id = AScriptPropId::new(id, name);
 
-        properties.insert(prop_id.clone());
+        prop_ids.insert(prop_id.clone());
 
         let (prop_types, sub_errors) = compile_expression_type(g, ast, &prop.value, body);
 
@@ -607,12 +608,15 @@ pub fn compile_struct_type(
           if let Some(existing) = ast.props.get_mut(&prop_id) {
             if !existing.type_val.is_same_type(&prop_type) {
               if existing.type_val.is_undefined() {
+                let define_count = existing.define_count + 1;
                 ast.props.insert(prop_id.clone(), AScriptProp {
                   type_val: prop_type.to_owned(),
+                  define_count,
                   first_declared_location: prop.value.Token(),
                   optional: true,
                 });
               } else if prop_type.is_undefined() {
+                existing.define_count += 1;
                 existing.optional = true;
               } else {
                 errors.push(ParseError::COMPOUND_COMPILE_PROBLEM(CompoundCompileProblem {
@@ -638,10 +642,13 @@ pub fn compile_struct_type(
                   ],
                 }))
               }
+            } else {
+              existing.define_count += 1;
             }
           } else {
             ast.props.insert(prop_id.clone(), AScriptProp {
               type_val: prop_type.to_owned(),
+              define_count: 1,
               first_declared_location: prop.value.Token(),
               optional: false,
             });
@@ -652,18 +659,30 @@ pub fn compile_struct_type(
     }
   }
 
-  if let Some(ascript_struct) = ast.structs.get_mut(&id) {
+  let mut struct_define_count = 1;
+
+  for prop_id in if let Some(ascript_struct) = ast.structs.get_mut(&id) {
+    ascript_struct.define_count += 1;
+    struct_define_count = ascript_struct.define_count;
     ascript_struct.definition_locations.push(ast_struct.Token());
-    ascript_struct.props.append(&mut properties);
+    ascript_struct.prop_ids.append(&mut prop_ids);
     ascript_struct.include_token = include_token || ascript_struct.include_token;
+    ascript_struct.prop_ids.clone()
   } else {
     ast.structs.insert(id, AScriptStruct {
       id,
       type_name,
+      define_count: 1,
       definition_locations: vec![ast_struct.Token()],
-      props: properties,
+      prop_ids: prop_ids.clone(),
       include_token,
     });
+    prop_ids
+  } {
+    let prop = ast.props.get_mut(&prop_id).unwrap();
+    if prop.define_count != struct_define_count {
+      prop.optional = true;
+    }
   }
 
   (AScriptTypeVal::Struct(id), errors)

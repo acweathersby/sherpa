@@ -12,7 +12,7 @@ use crate::SourceType;
 
 use hctk_core::writer::code_writer::CodeWriter;
 
-use super::common::add_rust_context_ascript_functions;
+use super::common::add_ascript_functions;
 use super::common::write_rust_entry_functions_bytecode;
 use super::pipeline::PipelineTask;
 
@@ -79,16 +79,16 @@ fn write_rust_parser_file<W: Write>(
 use hctk::runtime::*;
 use hctk::types::*;
 
-pub struct Context<T: ByteCharacterReader + BaseCharacterReader + MutCharacterReader>(ParseContext<T>, T, bool);
+pub struct Parser<T: ByteCharacterReader + BaseCharacterReader + MutCharacterReader>(ParseContext<T>, T, bool);
 
-impl<T: ByteCharacterReader + BaseCharacterReader + MutCharacterReader> Iterator for Context<T>
+impl<T: ByteCharacterReader + BaseCharacterReader + MutCharacterReader> Iterator for Parser<T>
 {
     type Item = ParseAction;
 
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item>
     {
-        let Context(ctx, reader, active) = self;
+        let Parser(ctx, reader, active) = self;
 
         if *active {
             let action = get_next_action::<T>(reader, ctx, &bytecode);
@@ -105,7 +105,7 @@ impl<T: ByteCharacterReader + BaseCharacterReader + MutCharacterReader> Iterator
     }
 }
 
-impl<T: ByteCharacterReader + BaseCharacterReader + MutCharacterReader> Context<T>
+impl<T: ByteCharacterReader + BaseCharacterReader + MutCharacterReader> Parser<T>
 {
     #[inline(always)]
     fn new(reader: T) -> Self
@@ -117,9 +117,9 @@ impl<T: ByteCharacterReader + BaseCharacterReader + MutCharacterReader> Context<
     .indent();
 
   write_rust_entry_functions_bytecode(g, state_lookups, writer)?;
-  add_rust_context_ascript_functions(ast, g, writer)?;
-
   writer.dedent().wrtln("}")?;
+
+  add_ascript_functions(ast, g, writer)?;
 
   writer.wrtln(&format!("static bytecode: [u32; {}] = [", bc.len()))?.indent();
 

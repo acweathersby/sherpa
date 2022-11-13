@@ -180,7 +180,7 @@ pub(crate) fn construct_instruction_branch<'a>(
             .map(|(address, branch)| {
               let sym = data.get_branch_symbol(branch).unwrap();
               let string = match sym.guid {
-                id if id.isDefinedSymbol() => {
+                id if id.is_defined() => {
                   vec![g.symbol_strings.get(&id).unwrap().as_str()]
                 }
                 SymbolID::GenericSpace => {
