@@ -1,4 +1,3 @@
-mod ascript;
 mod ast;
 mod constants;
 mod error;
@@ -19,7 +18,6 @@ mod reader_test_utf8;
 mod reader_utf8;
 mod token;
 
-pub use ascript::*;
 pub use ast::*;
 pub use constants::*;
 pub use error::*;

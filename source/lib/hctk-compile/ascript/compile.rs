@@ -1,45 +1,26 @@
-use std::any::Any;
 use std::collections::hash_map::Entry;
-use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::vec;
 
-use crate::ascript;
-use crate::debug::grammar;
-use crate::grammar::data::ast::ASTNode;
-use crate::grammar::data::ast::ASTNodeTraits;
-use crate::grammar::data::ast::AST_Add;
-use crate::grammar::data::ast::AST_IndexReference;
-use crate::grammar::data::ast::AST_NamedReference;
-use crate::grammar::data::ast::AST_Statements;
-use crate::grammar::data::ast::AST_Struct;
-use crate::grammar::data::ast::AST_TypeId;
-use crate::grammar::data::ast::AST_Vector;
-use crate::grammar::data::ast::Ascript as AST_AScript;
-use crate::grammar::data::ast::AST_BOOL;
-use crate::grammar::data::ast::AST_F32;
-use crate::grammar::data::ast::AST_F64;
-use crate::grammar::data::ast::AST_I16;
-use crate::grammar::data::ast::AST_I32;
-use crate::grammar::data::ast::AST_I64;
-use crate::grammar::data::ast::AST_I8;
-use crate::grammar::data::ast::AST_NUMBER;
-use crate::grammar::data::ast::AST_STRING;
-use crate::grammar::data::ast::AST_U16;
-use crate::grammar::data::ast::AST_U32;
-use crate::grammar::data::ast::AST_U64;
-use crate::grammar::data::ast::AST_U8;
-use crate::grammar::get_production_plain_name;
-use crate::grammar::hash_id_value_u64;
-use crate::types;
-use crate::types::*;
-use std::mem::discriminant;
+use hctk_core::grammar::data::ast::ASTNode;
+use hctk_core::grammar::data::ast::ASTNodeTraits;
+use hctk_core::grammar::data::ast::AST_Add;
+use hctk_core::grammar::data::ast::AST_IndexReference;
+use hctk_core::grammar::data::ast::AST_NamedReference;
+use hctk_core::grammar::data::ast::AST_Struct;
+use hctk_core::grammar::data::ast::AST_Vector;
+use hctk_core::grammar::data::ast::Ascript as AST_AScript;
+use hctk_core::grammar::get_production_plain_name;
+use hctk_core::types::*;
+
+use crate::ascript::types::*;
+
+use super::types::AScriptStore;
 
 pub fn compile_ascript_store<'a>(g: &'a GrammarStore, ast: &mut AScriptStore) -> Vec<ParseError> {
   let mut errors = vec![];
-  let mut temp_ascript = AScriptStore::new();
 
   // Separate all bodies into a list of  of tuple of body id's and
   // Ascript reference nodes.

@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::fmt::format;
 use std::io::Write;
 
 use hctk_core::grammar::data::ast::ASTNode;
@@ -11,9 +10,10 @@ use hctk_core::types::*;
 use hctk_core::types::Token;
 use hctk_core::writer::code_writer::CodeWriter;
 
-use crate::ast::rust::ascript_type_to_string;
-use crate::ast::rust::create_type_initializer_value;
-use crate::ast::rust::render_expression;
+use crate::ascript::rust::ascript_type_to_string;
+use crate::ascript::rust::create_type_initializer_value;
+use crate::ascript::rust::render_expression;
+use crate::ascript::types::AScriptStore;
 
 pub(crate) fn write_rust_entry_functions_bytecode<W: Write>(
   g: &GrammarStore,

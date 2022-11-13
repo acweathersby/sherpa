@@ -9,7 +9,6 @@
 #![feature(drain_filter)]
 #![allow(bad_style, dead_code, unused, unused_allocation, unused_comparisons, unused_parens)]
 
-pub mod c_interface;
 pub mod deprecated_runtime;
 pub mod runtime;
 pub mod types;
@@ -18,7 +17,6 @@ pub mod writer;
 
 pub use lazy_static::lazy_static;
 
-pub mod ascript;
 pub mod bytecode;
 pub mod debug;
 pub mod grammar;

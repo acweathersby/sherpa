@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 
 use std::io::Write;
 
+use crate::ascript::types::AScriptStore;
 use crate::CompileError;
 use crate::SourceType;
 
@@ -137,9 +138,9 @@ impl<T: ByteCharacterReader + BaseCharacterReader + MutCharacterReader> Parser<T
 
 #[cfg(test)]
 mod test {
-  use crate::ast::rust;
-  use hctk_core::ascript::compile::compile_ascript_store;
-  use hctk_core::types::AScriptStore;
+  use crate::ascript::compile::compile_ascript_store;
+  use crate::ascript::rust;
+  use crate::ascript::types::AScriptStore;
   use hctk_core::writer::code_writer::StringBuffer;
   #[test]
   fn test_output_rust_on_practical_grammar() {

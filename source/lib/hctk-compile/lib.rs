@@ -5,7 +5,7 @@
 #![feature(map_first_last)]
 #![allow(non_snake_case)]
 
-mod ast;
+mod ascript;
 mod builder;
 mod llvm;
 mod options;
@@ -19,7 +19,7 @@ pub use crate::builder::pipeline::CompileError;
 pub use source_types::*;
 
 pub mod tasks {
-  pub use crate::ast::build_ast;
+  pub use crate::ascript::build_ast;
   pub use crate::builder::bytecode::build_byte_code_parse;
   pub use crate::builder::disassembly::build_bytecode_disassembly;
   pub use crate::builder::llvm::build_llvm_parser;
@@ -31,10 +31,11 @@ mod test {
 
   use std::path::PathBuf;
 
-  use crate::ast::rust;
+  use crate::ascript::compile::compile_ascript_store;
+  use crate::ascript::rust;
+  use crate::ascript::types::AScriptStore;
   use crate::builder::pipeline::BuildPipeline;
   use crate::tasks::build_ast;
-  use hctk_core::ascript::compile::compile_ascript_store;
   use hctk_core::types::*;
 
   use hctk_core::writer::code_writer::StringBuffer;

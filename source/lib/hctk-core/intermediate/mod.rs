@@ -172,7 +172,7 @@ mod state_constructor_tests {
   pub fn handle_moderate_scanner_token_combinations() {
     let g = compile_test_grammar(
       "
-<> A > t:c_  | t:t_ | tk:id_syms
+<> A > \\CC  | tk:id_syms
 
 <> id_syms >  
 

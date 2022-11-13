@@ -7,12 +7,12 @@ use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::vec;
 
-use hctk_core::ascript::compile::compile_ascript_store;
+use crate::ascript::compile::compile_ascript_store;
+use crate::ascript::types::AScriptStore;
 use hctk_core::bytecode::compile_bytecode;
 use hctk_core::bytecode::BytecodeOutput;
 use hctk_core::get_num_of_available_threads;
 use hctk_core::grammar::compile_from_string;
-use hctk_core::types::AScriptStore;
 use hctk_core::types::GrammarStore;
 use hctk_core::types::ParseError;
 use std::thread;
