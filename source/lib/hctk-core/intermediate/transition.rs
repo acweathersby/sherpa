@@ -1038,10 +1038,7 @@ fn handle_unresolved_scanner_nodes(
   let mut defined = nodes;
   let generic = defined
     .drain_filter(|n| match t_pack.get_node(*n).items[0].get_origin() {
-      OriginData::Symbol(sym) => {
-        println!("{:?} {}", sym, sym.is_defined());
-        !sym.is_defined()
-      }
+      OriginData::Symbol(sym) => !sym.is_defined(),
       OriginData::Production(_) => {
         panic!("Origin Data should be a symbol!");
       }

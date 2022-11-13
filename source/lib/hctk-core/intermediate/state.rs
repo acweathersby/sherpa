@@ -68,7 +68,8 @@ pub fn compile_states(g: &GrammarStore, num_of_threads: usize) -> BTreeMap<Strin
 
     deduped_states
   } else {
-    let work_chunks = productions_ids.chunks(num_of_threads).collect::<Vec<_>>();
+    let work_chunks =
+      productions_ids.chunks(productions_ids.len() / (num_of_threads - 1)).collect::<Vec<_>>();
 
     for state in {
       thread::scope(|s| {
