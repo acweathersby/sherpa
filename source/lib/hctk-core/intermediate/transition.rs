@@ -1195,7 +1195,7 @@ fn scan_items(g: &GrammarStore, t_pack: &mut TPack, root_end_item: &Item) -> Ter
         }
         prod_items => {
           for p_item in prod_items {
-            let inc_item = p_item.to_state(end_item.get_state()).increment().unwrap();
+            let inc_item = p_item.increment().unwrap().to_state(end_item.get_state());
 
             if inc_item.is_end() {
               end_items.push_back((closure_link, inc_item));
