@@ -31,17 +31,26 @@ pub struct ParseToken {
   // WARNING: DO NOT change the order of these properties
   // without also adjusting the LLVM compiler code that makes use
   // of this structure.
-  pub byte_offset: u32,
-  pub cp_offset:   u32,
-
-  pub byte_length: u32,
-  pub cp_length:   u32,
-
-  pub token_type: u32,
-  pub garbage:    u32,
-
-  pub line_number: u32,
-  pub line_offset: u32,
+  /// The offset in number of bytes of this token measured from the
+  /// beginning of the source input.
+  pub byte_offset:       u32,
+  /// The offset in Unicode codepoints of this token measured from the
+  /// beginning of the source input.
+  pub cp_offset:         u32,
+  /// The number of bytes this token spans
+  pub byte_length:       u32,
+  /// The number of Unicode codepoints this token spans
+  pub cp_length:         u32,
+  /// The token type value. This varies from grammar to grammar, but the first
+  /// 10 token types are reserved for built in tokens.
+  pub token_type:        u32,
+  /// Unused
+  pub alignment_padding: u32,
+  /// The line number at which this token resides. Based on 0th indexed line positions.
+  pub line_number:       u32,
+  /// The offset in bytes to the current line. `line_offset - byte_offset` gives the number
+  /// off bytes between this token the most recent newline character.
+  pub line_offset:       u32,
 }
 
 impl ParseToken {

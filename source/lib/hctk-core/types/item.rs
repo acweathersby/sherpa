@@ -342,7 +342,7 @@ impl Item {
 
     if self.at_end() {
     } else {
-      eprintln!("{}", body.syms[self.off as usize].tok.blame(1, 1, ""));
+      eprintln!("{}", body.syms[self.off as usize].tok.blame(1, 1, "", None));
     }
   }
 }

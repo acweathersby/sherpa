@@ -222,7 +222,7 @@ fn finalize_grammar(
           if !g.productions.contains_key(&prod) {
             panic!(
               "Unable to find production definition \n{}",
-              sym.tok.blame(1, 1, "production does not exist")
+              sym.tok.blame(1, 1, "production does not exist", None)
             );
           }
         }
@@ -661,7 +661,7 @@ fn create_scanner_productions_from_symbols(g: &mut GrammarStore, errors: &mut [P
             Some(tok) => {
               panic!(
                 "Unable to find production definition \n{}",
-                tok.blame(1, 1, "production_name")
+                tok.blame(1, 1, "production_name", None)
               );
             }
             _ => {
@@ -913,7 +913,7 @@ fn merge_grammars(
                         get_production_plain_name(&prod_id, root),
                         grammar_id,
                         import_grammar.source_path,
-                        tok.blame(1, 1, "")
+                        tok.blame(1, 1, "", None)
                       ),
                       inline_message: String::new(),
                       loc: Token::empty(),

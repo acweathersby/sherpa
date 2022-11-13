@@ -24,6 +24,6 @@ impl Display for TokenError {
       token = token.to_length(1);
     }
 
-    f.write_str(&token.blame(0, 0, "Unexpected Token"))
+    f.write_str(&token.blame(0, 0, "Unexpected Token", None))
   }
 }

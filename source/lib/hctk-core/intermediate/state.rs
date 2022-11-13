@@ -197,7 +197,7 @@ fn check_for_left_recursion(symbol_items: &Vec<Item>, g: &GrammarStore) {
       if has_left {
         println!(
           "{}",
-          production.original_location.blame(1, 1, "this production is left recursive")
+          production.original_location.blame(1, 1, "this production is left recursive", None)
         );
       }
 

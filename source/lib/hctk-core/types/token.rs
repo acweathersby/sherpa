@@ -17,7 +17,6 @@ pub struct TokenSource {
 pub type SharedTokenSource = Arc<TokenSource>;
 
 #[derive(Clone)]
-
 pub struct Range {
   /// The line number at which the range starts
   pub start_line:   u32,
@@ -29,12 +28,31 @@ pub struct Range {
   pub end_column:   u32,
 }
 
-#[derive(Clone)]
+/// Stores color setting code for terminal text coloring of token blame strings.
+#[derive(Debug, Clone, Copy)]
+pub struct BlameColor {
+  highlight: &'static str,
+  reset:     &'static str,
+}
 
+impl BlameColor {
+  /// Sets the color of the highlight to red
+  pub const Red: Option<BlameColor> = Some(BlameColor::new("\u{001b}[31m", "\u{001b}[0m"));
+
+  pub const fn new(highlight: &'static str, reset: &'static str) -> BlameColor {
+    Self { highlight, reset }
+  }
+}
+
+#[derive(Clone)]
 pub struct Token {
   len:      u32,
+  /// The byte offset
   off:      u32,
+  /// The 0th indexed line number at which this Token resides
   line_num: u32,
+  /// The number of characters following the last encountered
+  /// [\n] up to the current offset.
   line_off: u32,
   range:    Option<Range>,
   input:    Option<Arc<Vec<u8>>>,
@@ -225,117 +243,6 @@ impl Token {
     (start as usize, end as usize)
   }
 
-  /// Creates a diagram of the position of this token within the
-  /// source string.
-  ///
-  /// ### Arguments:
-  /// - `max_pre` - The maximum number of lines to render before the
-  ///   token line.
-  /// - `max_post` - The maximum number of lines to render after the
-  ///   token line.
-  ///
-  /// ### Returns:
-  /// - `Option<String>` - A `String` of the blame diagram or `None`
-  ///   if source is
-  /// not defined.
-  pub fn blame(&self, max_pre: usize, max_post: usize, inline_comment: &str) -> String {
-    fn increment_end(source: &[u8], mut end: usize) -> usize {
-      while (end as usize) < source.len() && source[end as usize] as char != '\n' {
-        end += 1;
-      }
-      end
-    }
-
-    fn decrement_beg(source: &[u8], mut beg: usize) -> usize {
-      while beg > 0 && source[beg] != 10 {
-        beg -= 1;
-      }
-
-      if source[beg as usize] == 10 {
-        beg + 1
-      } else {
-        beg
-      }
-    }
-
-    fn create_line(source: &Arc<Vec<u8>>, beg: usize, end: usize, line_number: usize) -> String {
-      if let Ok(utf_string) = String::from_utf8(Vec::from(&source[beg..end])) {
-        let lines = format!("{}", line_number);
-
-        format!("   {}: {}\n", &lines, utf_string,)
-      } else {
-        String::from("")
-      }
-    }
-
-    if let Some(source) = self.input.clone() {
-      let leading_newline = source[0] as char == '\n';
-
-      let mut beg = (self.line_off) as usize;
-      let mut end = increment_end(&source, beg + 1);
-      let mut line_num: usize = (self.line_num + 1) as usize;
-      let nl_char_adjust = (self.line_num > 0) as usize;
-      let mut i = 0;
-      let mut string = String::from("");
-      let root = self.off as usize;
-      let len = self.len as usize;
-      let range = self.get_range();
-
-      let slice = &source[(beg + nl_char_adjust)..end];
-
-      if let Ok(utf_string) = String::from_utf8(Vec::from(slice)) {
-        let lines_str = format!("{}", line_num);
-
-        string += &format!(
-          "   {}: {}\n{}\n",
-          &lines_str,
-          utf_string,
-          String::from(" ").repeat(lines_str.len() + 3 + (1 - nl_char_adjust) + root - beg)
-            + " \u{001b}[31m"
-            + &String::from("^").repeat(len)
-            + " "
-            + inline_comment
-            + "\u{001b}[0m",
-        );
-
-        let mut beg_root = beg;
-        let mut end_root = end;
-
-        if beg_root > 0 {
-          for a in 1..(max_pre + 1) {
-            if beg_root - 1 == 0 {
-              string = String::from("   1:\n") + &string;
-
-              break;
-            }
-
-            let end = beg_root;
-
-            beg_root = decrement_beg(&source, beg_root - 2);
-
-            string = create_line(&source, beg_root, end - 1, line_num - a) + &string;
-          }
-        }
-
-        for a in 1..(max_post + 1) {
-          if end_root >= source.len() {
-            break;
-          }
-
-          let beg = end_root + 1;
-
-          end_root = increment_end(&source, end_root + 1);
-
-          string += &create_line(&source, beg, end_root, line_num + a);
-        }
-      }
-
-      string
-    } else {
-      "[Token Source Not Valid]".to_string()
-    }
-  }
-
   pub fn len(&self) -> usize {
     self.len as usize
   }
@@ -454,6 +361,120 @@ impl Token {
       Err(_) => self.len as f64,
     }
   }
+
+  /// Creates a diagram of the position of this token within the
+  /// source string.
+  ///
+  /// ### Arguments:
+  /// - `max_pre` - The maximum number of lines to render before the
+  ///   token line.
+  /// - `max_post` - The maximum number of lines to render after the
+  ///   token line.
+  ///
+  /// ### Returns:
+  /// - `Option<String>` - A `String` of the blame diagram or `None`
+  ///   if source is
+  /// not defined.
+  pub fn blame(
+    &self,
+    max_pre: usize,
+    max_post: usize,
+    inline_comment: &str,
+    colors: Option<BlameColor>,
+  ) -> String {
+    fn find_next_line(source: &[u8], mut line: i64) -> i64 {
+      line += 1;
+      while (line as usize) < source.len() && source[line as usize] as char != '\n' {
+        line += 1;
+      }
+      line
+    }
+
+    fn find_prev_line(source: &[u8], mut line: i64) -> i64 {
+      line -= 1;
+      while line >= 0 && source[line as usize] as char != '\n' {
+        line -= 1;
+      }
+
+      line
+    }
+
+    fn create_line(
+      source: &Arc<Vec<u8>>,
+      prev_line: i64,
+      next_line: i64,
+      line_number: usize,
+    ) -> String {
+      if let Ok(utf_string) =
+        String::from_utf8(Vec::from(&source[(prev_line + 1) as usize..next_line as usize]))
+      {
+        format!("{: >4}: {}\n", line_number, utf_string,)
+      } else {
+        String::from("")
+      }
+    }
+
+    if let Some(source) = self.input.clone() {
+      let mut string = String::from("");
+      let mut prev_line = (self.line_off) as i64;
+      let mut line_num = (self.line_num + 1) as usize;
+
+      if source[0] as char == '\n' {
+        line_num -= 1;
+      } else if prev_line == 0 {
+        prev_line -= 1;
+      }
+
+      let mut next_line = find_next_line(&source, prev_line);
+
+      if let Ok(utf_string) =
+        String::from_utf8(Vec::from(&source[(prev_line + 1) as usize..next_line as usize]))
+      {
+        let lines_str = format!("{: >4}", line_num);
+
+        string += &format!(
+          "{}: {}\n{}\n",
+          &lines_str,
+          utf_string,
+          String::from(" ").repeat(4 + 1 + self.off as usize - (prev_line + 1) as usize)
+            + &if let Some(BlameColor { highlight, reset }) = colors {
+              " ".to_string()
+                + highlight
+                + &String::from("^").repeat(self.len as usize)
+                + " "
+                + inline_comment
+                + reset
+            } else {
+              " ".to_string() + &String::from("^").repeat(self.len as usize) + " " + inline_comment
+            },
+        );
+
+        if prev_line > 0 {
+          for a in 1..=max_pre {
+            if prev_line <= 0 {
+              break;
+            }
+            let next_line = prev_line;
+            prev_line = find_prev_line(&source, prev_line);
+            string = create_line(&source, prev_line, next_line, line_num - a) + &string;
+          }
+        }
+
+        for a in 1..=max_post {
+          if next_line as usize >= source.len() {
+            break;
+          }
+          let prev_line = next_line;
+          next_line = find_next_line(&source, next_line);
+          string += &create_line(&source, prev_line as i64, next_line, line_num + a);
+        }
+      }
+
+      string
+    } else {
+      "[Token Source Not Valid]".to_string()
+    }
+  }
 }
 
 impl Default for Token {
@@ -462,16 +483,57 @@ impl Default for Token {
   }
 }
 
-#[test]
-pub fn blame_string_places_cursor_in_correct_position() {
-  let mut tok = Token {
-    input:    Some(Arc::new("\n test".to_string().as_bytes().to_vec())),
-    len:      4,
-    off:      2,
-    range:    None,
-    line_num: 1,
-    line_off: 0,
-  };
+#[cfg(test)]
+mod test {
+  use crate::types::BlameColor;
+  use crate::types::Token;
+  use std::sync::Arc;
 
-  println!("{}", tok.blame(1, 1, "test"))
+  #[test]
+  pub fn blame_string_places_cursor_in_correct_position() {
+    let mut tok = Token {
+      input:    Some(Arc::new("\n start \n\n test \n final ".to_string().as_bytes().to_vec())),
+      len:      4,
+      off:      11,
+      range:    None,
+      line_num: 3,
+      line_off: 9,
+    };
+
+    let blame_string = tok.blame(2, 1, "test", None);
+    let lines = blame_string.split("\n").collect::<Vec<_>>();
+
+    println!("{}", blame_string);
+
+    assert_eq!(lines.len(), 6);
+
+    assert_eq!(lines[0], "   1:  start ");
+    assert_eq!(lines[1], "   2: ");
+    assert_eq!(lines[2], "   3:  test ");
+    assert_eq!(lines[3], "       ^^^^ test");
+    assert_eq!(lines[4], "   4:  final ");
+  }
+
+  #[test]
+  pub fn blame_string_places_cursor_in_correct_position2() {
+    let mut tok = Token {
+      input:    Some(Arc::new(" start \n\n test \n final ".to_string().as_bytes().to_vec())),
+      len:      5,
+      off:      1,
+      range:    None,
+      line_num: 0,
+      line_off: 0,
+    };
+
+    let blame_string = tok.blame(2, 3, "start", None);
+    let lines = blame_string.split("\n").collect::<Vec<_>>();
+
+    assert_eq!(lines.len(), 6);
+
+    assert_eq!(lines[0], "   1:  start ");
+    assert_eq!(lines[1], "       ^^^^^ start");
+    assert_eq!(lines[2], "   2: ");
+    assert_eq!(lines[3], "   3:  test ");
+    assert_eq!(lines[4], "   4:  final ");
+  }
 }
