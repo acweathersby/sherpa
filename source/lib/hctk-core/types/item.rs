@@ -302,6 +302,8 @@ impl Item {
     }
   }
 
+  /// If the symbol at this item's position is a non-term, then the ProductionId
+  /// for that symbol is returned. Otherwise an invalid ProductionId is returned.
   pub fn get_production_id_at_sym(&self, g: &GrammarStore) -> ProductionId {
     match self.get_symbol(g) {
       SymbolID::Production(prod, _) => prod,

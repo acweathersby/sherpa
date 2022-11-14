@@ -1,3 +1,4 @@
+use std::collections::btree_map;
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -25,8 +26,77 @@ use crate::types::TransitionMode;
 use crate::types::TransitionPack as TPack;
 use crate::types::TransitionStateType as TST;
 
-#[derive(Hash, PartialEq, Eq, Clone, Copy)]
+/// Remove items that would cause LL branch conflicts and replace
+/// with their derivatives.
+///  
+/// ## For Example
+///
+/// ```hcg
+///  
+/// <> A > B | C
+///
+/// <> C > \d
+///
+/// <> B > C \d
+/// ```
+/// Given the above grammar, the starting items for `A` are
+/// `B => C \d` and `C => \d`. If treated directly as RD items
+/// then the input `d d` requires us to determine if the resulting
+/// Production `C` (from `C => \d *`) should apply to `B => C * \d`
+/// or `A => C *`. Pure RD would either require a peek or a backtrack
+/// since the Production A must call either C or B. However, if using
+/// LR behavior, then we can call `C`, then use A's GOTO state:
+/// ```hcg
+/// A`Goto
+///    1 | B     -> A
+///    2 | C     -> A
+///    3 | C \d  -> B
+/// ```
+/// to reduce `C` to `B` (as a result of the next symbol `\d` matching the conditions
+/// for the transition to GOTO 3: `C * \d -> B`),
+/// then `B` to `A`.
+pub fn deconflict_starts(starts: &[Item], g: &GrammarStore) -> Vec<Item> {
+  let mut ll_items =
+    starts.iter().flat_map(|i| get_closure_cached(i, g)).cloned().collect::<BTreeSet<_>>();
+  let mut lr_items = ll_items.drain_filter(|i| i.is_nonterm(g)).collect::<BTreeSet<_>>();
+  let mut invalid_productions = lr_items
+    .iter()
+    .map(|i| (i.get_production_id_at_sym(g), i.get_prod_id(g)))
+    .fold(BTreeMap::<ProductionId, BTreeSet<ProductionId>>::new(), |mut b, (sym, p)| {
+      match b.entry(sym) {
+        Entry::Occupied(mut e) => {
+          e.get_mut().insert(p);
+        }
+        Entry::Vacant(e) => {
+          e.insert(BTreeSet::from_iter(vec![p]));
+        }
+      };
+      b
+    })
+    .into_iter()
+    .filter_map(|(a, b)| if b.len() > 1 { Some(a) } else { None })
+    .chain(starts.iter().map(|s| s.get_prod_id(g)))
+    .collect::<BTreeSet<_>>();
 
+  let mut changed = true;
+  while changed {
+    changed = false;
+    lr_items.drain_filter(|item| {
+      if invalid_productions.contains(&item.get_production_id_at_sym(g)) {
+        invalid_productions.insert(item.get_prod_id(g));
+        changed = true;
+        true
+      } else {
+        false
+      }
+    });
+  }
+  ll_items.drain_filter(|i| !invalid_productions.contains(&i.get_prod_id(g)));
+  ll_items.append(&mut lr_items);
+  ll_items.into_iter().collect()
+}
+
+#[derive(Hash, PartialEq, Eq, Clone, Copy)]
 enum TransitionGroupSelector {
   OutOfScope(SymbolID),
   EndItem(u64),
@@ -285,6 +355,12 @@ fn process_node(
   let n_nonterm: Vec<Item> = items.iter().filter(|i| i.is_nonterm(g)).cloned().collect();
   let n_end: Vec<Item> = items.iter().filter(|i| i.is_end()).cloned().collect();
 
+  // If the depth is 0 and we are not trying to produce
+  // a scanner state tree, then we can attempt to find the
+  // highest common production between non-term items. That
+  // is the production derivative that is non-term that all
+  // or a subset of non-term items share.
+
   if !n_nonterm.is_empty() {
     let production_ids =
       BTreeSet::<ProductionId>::from_iter(n_nonterm.iter().map(|i| i.get_production_id_at_sym(g)));
@@ -396,7 +472,7 @@ fn create_peek(
 
   let mut leaves = vec![];
 
-  peek_nodes.iter().map(|n| debug_items("comment", &t_pack.get_node(*n).items, g));
+  peek_nodes.iter().map(|n| debug_items("comment", t_pack.get_node(*n).items.clone(), g));
 
   disambiguate(g, t_pack, peek_nodes, &mut leaves, 0);
 
@@ -1036,9 +1112,15 @@ fn handle_unresolved_scanner_nodes(
   leaves: &mut Vec<usize>,
 ) {
   let mut defined = nodes;
-  let generic = defined
+  let mut generic = defined
     .drain_filter(|n| match t_pack.get_node(*n).items[0].get_origin() {
       OriginData::Symbol(sym) => !sym.is_defined(),
+      _ => false,
+    })
+    .collect::<Vec<_>>();
+  let productions = generic
+    .drain_filter(|n| match t_pack.get_node(*n).items[0].get_origin() {
+      OriginData::Symbol(sym) => !sym.is_production(),
       OriginData::Production(_) => {
         panic!("Origin Data should be a symbol!");
       }
@@ -1048,17 +1130,29 @@ fn handle_unresolved_scanner_nodes(
       _ => false,
     })
     .collect::<Vec<_>>();
-  match defined.len() {
-    1 => {
+
+  match (defined.len(), productions.len()) {
+    (1, _) => {
       leaves.push(defined[0]);
-      for node_id in generic {
+      for node_id in generic.iter().chain(productions.iter()) {
         t_pack.drop_node(&node_id);
       }
     }
-    0 => {
+    (0, 1) => {
+      leaves.push(productions[0]);
+      for node_id in generic.iter() {
+        t_pack.drop_node(&node_id);
+      }
+    }
+    (a, b) if a + b > 1 => {
       panic!(
-        "Invalid combination of generics {:#?}!",
-        generic.iter().map(|n| t_pack.get_node(*n).debug_string(g)).collect::<Vec<_>>()
+        "Invalid combination of defined  \n {}!",
+        defined
+          .into_iter()
+          .chain(productions.into_iter())
+          .map(|n| t_pack.get_node(n).debug_string(g))
+          .collect::<Vec<_>>()
+          .join("\n")
       );
     }
     _ => {
@@ -1068,7 +1162,11 @@ fn handle_unresolved_scanner_nodes(
       );
       panic!(
         "Invalid combination of generics \n {}!",
-        defined.iter().map(|n| t_pack.get_node(*n).debug_string(g)).collect::<Vec<_>>().join("\n")
+        generic
+          .into_iter()
+          .map(|n| t_pack.get_node(n).debug_string(g))
+          .collect::<Vec<_>>()
+          .join("\n")
       );
     }
   }
@@ -1102,7 +1200,7 @@ fn handle_unresolved_nodes(
       parent = t_pack.drop_node(node_index);
     }
 
-    debug_items("FORKED!", &items, g);
+    debug_items("FORKED!", items.clone(), g);
 
     let mut fork_node = TGN::new(t_pack, SymbolID::Default, parent, items);
 

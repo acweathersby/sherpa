@@ -214,7 +214,7 @@ fn finalize_grammar(
 
   finalize_symbols(&mut g, errors);
 
-  // Check for missing production symbols in body symbols
+  // Check for missing productions referenced in body symbols
   for (id, b) in &g.bodies {
     for sym in &b.syms {
       match sym.sym_id {
@@ -222,7 +222,7 @@ fn finalize_grammar(
           if !g.productions.contains_key(&prod) {
             panic!(
               "Unable to find production definition \n{}",
-              sym.tok.blame(1, 1, "production does not exist", None)
+              sym.tok.blame(2, 2, "production does not exist", None)
             );
           }
         }

@@ -8,6 +8,7 @@ use std::thread;
 
 use super::transition::construct_goto;
 use super::transition::construct_recursive_descent;
+use super::transition::deconflict_starts;
 use super::transition::hash_group;
 use crate::grammar::create_closure;
 use crate::grammar::get_closure_cached;
@@ -68,8 +69,9 @@ pub fn compile_states(g: &GrammarStore, num_of_threads: usize) -> BTreeMap<Strin
 
     deduped_states
   } else {
-    let work_chunks =
-      productions_ids.chunks(productions_ids.len() / (num_of_threads - 1)).collect::<Vec<_>>();
+    let work_chunks = productions_ids
+      .chunks((productions_ids.len() / (num_of_threads - 1)).max(1))
+      .collect::<Vec<_>>();
 
     for state in {
       thread::scope(|s| {
@@ -229,7 +231,12 @@ fn generate_states(
 ) -> IROutput {
   let mut output: IROutput = Vec::new();
 
-  let recursive_descent_data = construct_recursive_descent(g, is_scanner, start_items);
+
+  let recursive_descent_data = construct_recursive_descent(
+    g,
+    is_scanner,
+    &if !is_scanner { deconflict_starts(&start_items, &g) } else { start_items.to_vec() },
+  );
 
   output.append(&mut process_transition_nodes(
     &recursive_descent_data,

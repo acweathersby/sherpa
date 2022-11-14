@@ -6,9 +6,12 @@ pub mod transition;
 mod transition_tree_tests {
 
   use crate::debug::compile_test_grammar;
+  use crate::debug::debug_items;
   use crate::grammar::get_production_id_by_name;
   use crate::grammar::get_production_plain_name;
   use crate::grammar::get_production_start_items;
+  use crate::intermediate::transition::deconflict_starts;
+
   use crate::intermediate::transition::construct_recursive_descent;
 
   #[test]
@@ -30,7 +33,7 @@ mod transition_tree_tests {
 
   #[test]
   pub fn construct_descent_on_scanner_symbol() {
-    let grammar = compile_test_grammar(
+    let g = compile_test_grammar(
       "
 <> A > tk:B
 
@@ -42,11 +45,11 @@ mod transition_tree_tests {
 ",
     );
 
-    for p in grammar.productions.values() {
+    for p in g.productions.values() {
       eprintln!("{}", p.original_name);
     }
 
-    let production = grammar
+    let production = g
       .productions
       .iter()
       .find(|p| p.1.original_name == "scan_tok_test_9AD7F26F987E3173_GUID_B__")
@@ -54,11 +57,8 @@ mod transition_tree_tests {
 
     let production_id = production.0;
 
-    let result = construct_recursive_descent(
-      &grammar,
-      true,
-      &get_production_start_items(production_id, &grammar),
-    );
+    let result =
+      construct_recursive_descent(&g, true, &get_production_start_items(production_id, &g));
 
     assert_eq!(result.get_node_len(), 8);
 
@@ -74,15 +74,48 @@ mod state_constructor_tests {
   use std::iter::FromIterator;
 
   use crate::debug::compile_test_grammar;
+  use crate::debug::debug_items;
   use crate::grammar::get_production_by_name;
   use crate::grammar::get_production_id_by_name;
   use crate::grammar::get_production_start_items;
   use crate::intermediate::state::generate_production_states;
   use crate::intermediate::state::generate_scanner_intro_state;
+  use crate::intermediate::transition::deconflict_starts;
   use crate::types::GrammarId;
   use crate::types::SymbolID;
 
   use super::state::compile_states;
+
+  #[test]
+  pub fn production_reduction_decisions() {
+    let g = compile_test_grammar(
+      "
+<> A > B | C | R 
+     | \\g
+
+<> C > \\c c
+
+<> c >  \\a | \\b 
+
+<> B > C \\d
+     | \\a \\c
+
+<> R > G \\o 
+    | C \\x
+
+<> G > \\xx
+
+  ",
+    );
+
+    let prod_id = get_production_id_by_name("A", &g).unwrap();
+
+    let result = generate_production_states(&prod_id, &g);
+
+    println!("{:#?}", result);
+
+    assert_eq!(result.len(), 25);
+  }
 
   #[test]
   pub fn generate_production_states_with_basic_grammar() {

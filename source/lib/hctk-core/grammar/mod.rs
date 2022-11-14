@@ -112,7 +112,7 @@ mod test_grammar {
     for error in &errors {
       eprintln!("{}", error);
     }
-    
+
     assert!(grammar.is_some());
 
     if let Some(mut g) = grammar {
@@ -120,7 +120,7 @@ mod test_grammar {
 
       // convert_left_to_right(&mut g, prod);
 
-      debug_items("A", &get_production_start_items(&prod, &g), &g);
+      debug_items("A", get_production_start_items(&prod, &g), &g);
     }
   }
 }
