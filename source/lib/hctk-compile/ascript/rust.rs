@@ -592,12 +592,28 @@ pub fn render_expression(
         }
       }
     },
-    ASTNode::AST_BOOL(box AST_BOOL { value, .. }) => Some(Ref::new(
-      bump_ref_index(ref_index),
-      type_slot,
-      format!("{}", value),
-      AScriptTypeVal::Bool(Some(*value)),
-    )),
+    ASTNode::AST_BOOL(box AST_BOOL { value, initializer, .. }) => match initializer {
+      ASTNode::NONE => Some(Ref::new(
+        bump_ref_index(ref_index),
+        type_slot,
+        format!("{}", value),
+        AScriptTypeVal::Bool(Some(*value)),
+      )),
+      ast => match render_expression(ast, body, s, g, ref_index, type_slot) {
+        Some(_) => Some(Ref::new(
+          bump_ref_index(ref_index),
+          type_slot,
+          "true".to_string(),
+          AScriptTypeVal::Bool(Some(true)),
+        )),
+        None => Some(Ref::new(
+          bump_ref_index(ref_index),
+          type_slot,
+          "false".to_string(),
+          AScriptTypeVal::Bool(Some(false)),
+        )),
+      },
+    },
     ASTNode::AST_U64(box AST_U64 { initializer, .. }) => {
       convert_numeric::<AScriptTypeValU64>(initializer, b, s, g, ref_index, type_slot)
     }
