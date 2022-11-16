@@ -71,7 +71,7 @@ pub fn disassemble_state(
         } else {
           (
             format!(
-              "\n{}GOTO {}",
+              "\n{}PUSH {}",
               dh(so),
               address_string((bc[so] & GOTO_STATE_ADDRESS_MASK) as usize)
             ) + &string,
@@ -311,7 +311,14 @@ fn get_input_id(lu: Option<&BytecodeGrammarLookups>, token_id: u32, input_type: 
       INPUT_TYPE::T04_CODEPOINT => token_id.to_string(),
       INPUT_TYPE::T05_BYTE => {
         if token_id < 128 {
-          format!("{} {}", token_id, char::from_u32(token_id).unwrap())
+          format!(
+            "{} {}",
+            token_id,
+            String::from_utf8(vec![token_id as u8])
+              .unwrap()
+              .replace("\n", "\\n")
+              .replace(" ", "\\s")
+          )
         } else {
           token_id.to_string()
         }
