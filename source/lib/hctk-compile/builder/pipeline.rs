@@ -13,6 +13,7 @@ use hctk_core::bytecode::compile_bytecode;
 use hctk_core::bytecode::BytecodeOutput;
 use hctk_core::get_num_of_available_threads;
 use hctk_core::grammar::compile_from_string;
+use hctk_core::intermediate::optimize::optimize_ir_states;
 use hctk_core::intermediate::state::compile_states;
 use hctk_core::types::GrammarStore;
 use hctk_core::types::ParseError;
@@ -200,7 +201,7 @@ impl<'a> BuildPipeline<'a> {
       }
     }
 
-    if self.tasks.iter().any(|t| t.0.require_ascript) && self.ascript.is_none() {
+    self.ascript = if self.tasks.iter().any(|t| t.0.require_ascript) && self.ascript.is_none() {
       let mut ascript = AScriptStore::new();
 
       let errors = compile_ascript_store(&self.grammar.as_ref().unwrap(), &mut ascript);
@@ -219,18 +220,25 @@ impl<'a> BuildPipeline<'a> {
         ascript.set_name(name);
       }
 
-      self.ascript = Some(ascript);
-    }
+      Some(ascript)
+    } else {
+      self.ascript
+    };
 
-    self.bytecode = None;
-
-    if self.tasks.iter().any(|t| t.0.require_bytecode) {
+    // Build bytecode if needed.
+    self.bytecode = if self.tasks.iter().any(|t| t.0.require_bytecode) {
       let g = &self.grammar.as_ref().unwrap();
-      let mut ir_states = compile_states(g, self.threads);
-      let bytecode_output = compile_bytecode(g, &mut ir_states);
 
-      self.bytecode = Some(bytecode_output);
-    }
+      let ir_states = compile_states(g, self.threads);
+
+      let mut optimized_ir_state = optimize_ir_states(ir_states, g);
+
+      let bytecode_output = compile_bytecode(g, &mut optimized_ir_state);
+
+      Some(bytecode_output)
+    } else {
+      None
+    };
 
     let errors = thread::scope(|scope| {
       let results = self.tasks.iter().map(|(t, ctx)| {

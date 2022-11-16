@@ -1,3 +1,4 @@
+use hctk_core::bytecode;
 use hctk_core::bytecode::compile_bytecode;
 
 use hctk_core::bytecode::BytecodeOutput;
@@ -36,6 +37,7 @@ pub fn build_byte_code_parse(
           // ascript code if necessary
           1,
           if include_ascript_mixins { Some(task_ctx.get_ascript()) } else { None },
+          task_ctx.get_bytecode(),
         ) {
           Err(CompileError::from_io_error(&err))
         } else {
@@ -57,11 +59,9 @@ fn write_parser_file<W: Write>(
   g: &GrammarStore,
   thread_count: usize,
   ascript: Option<&AScriptStore>,
+  bytecode_output: &BytecodeOutput,
 ) -> std::io::Result<()> {
-  let mut ir_states = compile_states(&g, thread_count);
-
-  let BytecodeOutput { bytecode, state_name_to_offset: state_lookups, .. } =
-    compile_bytecode(&g, &mut ir_states);
+  let BytecodeOutput { bytecode, state_name_to_offset: state_lookups, .. } = bytecode_output;
 
   if let Err(err) = write_rust_parser_file(writer, &state_lookups, g, &bytecode, ascript) {
     eprintln!("{}", err);
