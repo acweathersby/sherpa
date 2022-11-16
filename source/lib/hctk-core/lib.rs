@@ -7,6 +7,7 @@
 #![feature(box_patterns)]
 #![feature(map_first_last)]
 #![feature(drain_filter)]
+#![feature(btree_drain_filter)]
 #![allow(bad_style, dead_code, unused, unused_allocation, unused_comparisons, unused_parens)]
 
 pub mod deprecated_runtime;
@@ -35,9 +36,9 @@ pub fn get_num_of_available_threads() -> usize {
 #[cfg(test)]
 mod test_end_to_end {
   use crate::bytecode::compile::build_byte_code_buffer;
+  use crate::debug::collect_shifts_and_skips;
   use crate::debug::compile_test_grammar;
   use crate::debug::generate_disassembly;
-  use crate::debug::parser::collect_shifts_and_skips;
   use crate::debug::BytecodeGrammarLookups;
   use crate::get_num_of_available_threads;
   use crate::grammar::get_production_by_name;

@@ -7,6 +7,7 @@ pub use types::*;
 
 #[cfg(test)]
 mod test {
+  use hctk_core::intermediate::state::compile_states;
   use hctk_core::types::hctk_allocate_stack;
   use hctk_core::types::hctk_free_stack;
   use hctk_core::types::CodepointInfo;
@@ -609,8 +610,8 @@ mod test {
   <> test > \\hello \\world
   ",
     );
-
-    let bytecode_output = compile_bytecode(&grammar, 1);
+    let mut ir_states = compile_states(&grammar, 1);
+    let bytecode_output = compile_bytecode(&grammar, &mut ir_states);
 
     if let Ok(mut ctx) =
       compile_from_bytecode("test", &grammar, &Context::create(), &bytecode_output)
@@ -715,7 +716,8 @@ mod test {
 ",
     );
 
-    let bytecode_output = compile_bytecode(&grammar, 1);
+    let mut ir_states = compile_states(&grammar, 1);
+    let bytecode_output = compile_bytecode(&grammar, &mut ir_states);
 
     if let Ok(mut ctx) =
       compile_from_bytecode("test", &grammar, &Context::create(), &bytecode_output)

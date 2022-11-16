@@ -1135,7 +1135,7 @@ pub(crate) fn construct_parse_functions(
   let sp_lu = start_points.iter().map(|(_, instruction, _)| *instruction).collect::<BTreeSet<_>>();
 
   let mut instructions = output
-    .ir_states
+    .state_data
     .values()
     .filter(|s| !s.is_scanner())
     .map(|s| {
@@ -1168,7 +1168,7 @@ pub(crate) fn construct_parse_functions(
       if let Some(ir_state_name) =
         output.offset_to_state_name.get(&(instruction.get_address() as u32))
       {
-        if let Some(state) = output.ir_states.get(ir_state_name) {
+        if let Some(state) = output.state_data.get(ir_state_name) {
           match state.get_type() {
             IRStateType::ProductionStart
             | IRStateType::ScannerStart

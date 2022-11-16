@@ -113,7 +113,11 @@ pub trait BaseCharacterReader {
 
   #[inline(always)]
   fn class(&self) -> u32 {
-    return get_token_class_from_codepoint(self.codepoint());
+    if self.codepoint() > 0 {
+      get_token_class_from_codepoint(self.codepoint())
+    } else {
+      0
+    }
   }
 
   fn cursor(&self) -> usize;
@@ -144,9 +148,9 @@ pub trait UTF8CharacterReader {
   ) -> u64 {
     self_.set_cursor((self_.cursor() as i32 + amount) as usize);
 
-    self_.set_codepoint(0);
-
     if self_.at_end() {
+      self_.set_dword(0);
+      self_.set_codepoint(0);
       0
     } else {
       if amount == 1 {

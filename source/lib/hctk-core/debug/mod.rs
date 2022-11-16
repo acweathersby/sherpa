@@ -1,7 +1,10 @@
-pub mod bytecode;
-pub mod grammar;
-pub mod items;
-pub mod parser;
+mod bytecode;
+mod grammar;
+mod ir_state;
+mod items;
+mod parser;
 pub use bytecode::*;
 pub use grammar::*;
+pub use ir_state::*;
 pub use items::*;
+pub use parser::*;

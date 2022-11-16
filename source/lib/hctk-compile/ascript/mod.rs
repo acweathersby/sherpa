@@ -268,7 +268,6 @@ mod ascript_compile_tests {
   use crate::ascript::compile::compile_struct_type;
   use crate::ascript::types::AScriptStore;
   use hctk_core::debug::compile_test_grammar;
-  use hctk_core::debug::grammar;
   use hctk_core::grammar::data::ast::ASTNode;
   use hctk_core::grammar::data::ast::AST_Property;
   use hctk_core::grammar::data::ast::AST_Struct;

@@ -233,7 +233,7 @@ pub fn generate_table_string(
     input_type_to_name(input_type),
     lexer_type == LEXER_TYPE::PEEK
   ) + &(if scan_index.get_address() > 0 {
-    format!("\n{}SCANNER OFFSET {}", header(idx + 1), address_string(scan_index.get_address()))
+    format!("\n{}SCANNER ADDRESS {}", header(idx + 1), address_string(scan_index.get_address()))
   } else {
     format!("\n{}NO SCANNER", header(idx + 1))
   }) + &format!("\n{}LENGTH: {} META: {}", header(idx + 2), table_length, table_meta)
@@ -345,11 +345,15 @@ pub fn generate_disassembly(
   states_strings.join("\n")
 }
 
-pub fn print_states(output: &BytecodeOutput, lu: Option<&BytecodeGrammarLookups>) {
+pub fn print_bytecode_states(output: &BytecodeOutput, lu: Option<&BytecodeGrammarLookups>) {
   eprintln!("{}", generate_disassembly(output, lu));
 }
 
-pub fn print_state(idx: usize, output: &BytecodeOutput, lu: Option<&BytecodeGrammarLookups>) {
+pub fn print_bytecode_state(
+  idx: usize,
+  output: &BytecodeOutput,
+  lu: Option<&BytecodeGrammarLookups>,
+) {
   let string = disassemble_state(&output.bytecode, idx, lu).0;
   eprintln!("{}", string);
 }
@@ -365,6 +369,7 @@ mod bytecode_debugging_tests {
   use crate::debug::disassemble_state;
   use crate::grammar::get_production_id_by_name;
   use crate::grammar::parse::compile_ir_ast;
+  use crate::intermediate::state::compile_states;
   use crate::intermediate::state::generate_production_states;
 
   use super::generate_disassembly;
@@ -375,7 +380,8 @@ mod bytecode_debugging_tests {
 
     let prod_id = get_production_id_by_name("A", &g).unwrap();
 
-    let output = compile_bytecode(&g, 1);
+    let mut ir_states = compile_states(&g, 1);
+    let output = compile_bytecode(&g, &mut ir_states);
 
     let result = generate_production_states(&prod_id, &g);
 

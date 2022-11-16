@@ -1,5 +1,4 @@
 use crate::debug::debug_items;
-use crate::debug::grammar;
 use crate::grammar::data::ast::AnyGroup;
 use crate::grammar::data::ast::Ascript;
 use crate::grammar::data::ast::Literal;
@@ -1581,15 +1580,11 @@ fn pre_process_body(
           if let ASTNode::Group_Production(group) = sym {
             // All bodies are plain without annotations or functions
             if annotation.is_empty() && !some_bodies_have_reduce_functions(&group.bodies) {
-              // For each body in the group clone the existing
-              // body
-              // lists and process each list
-              // independently, inserting the new symbols
-              // into the existing bodies. We must make sure the
-              // indices are preserved since only the
-              // last symbol in each body can be bound
-              // to the index of the group production
-              // symbol.
+              // For each body in the group clone the existing body lists and
+              // process each list independently, inserting the new symbols
+              // into the existing bodies. We must make sure the indices are
+              // preserved since only the last symbol in each body can be bound
+              // to the index of the group production symbol.
 
               let mut pending_bodies = vec![];
 
@@ -1602,6 +1597,12 @@ fn pre_process_body(
                     tgs,
                     list_index,
                   );
+                  // The last symbol in each of these new bodies is set
+                  // with the original symbol id
+
+                  for body in &mut new_bodies {
+                    body.1.last_mut().unwrap().original_index = *index as u32;
+                  }
 
                   pending_bodies.append(&mut new_bodies);
 

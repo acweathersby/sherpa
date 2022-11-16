@@ -231,7 +231,6 @@ fn generate_states(
 ) -> IROutput {
   let mut output: IROutput = Vec::new();
 
-
   let recursive_descent_data = construct_recursive_descent(
     g,
     is_scanner,
@@ -363,7 +362,7 @@ fn create_passing_goto_state(entry_name: &String, is_scanner: bool) -> Box<IRSta
   Box::new(
     IRState {
       code: "pass".to_string(),
-      name: get_goto_name(entry_name),
+      id: get_goto_name(entry_name),
       state_type: if is_scanner { ScannerGoto } else { ProductionGoto },
       ..Default::default()
     }
@@ -444,7 +443,7 @@ on fail state [ {}_goto_failed ]
     IRState {
       comment,
       code,
-      name: get_goto_name(entry_name),
+      id: get_goto_name(entry_name),
       state_type: if is_scanner { ScannerGoto } else { ProductionGoto },
       ..Default::default()
     }
@@ -784,7 +783,7 @@ fn create_intermediate_state(
       IRState {
         comment,
         code,
-        name: state_name,
+        id: state_name,
         graph_id: node.id,
         state_type,
         stack_depth,
@@ -826,7 +825,7 @@ fn create_intermediate_state(
       IRState {
         comment,
         code,
-        name: state_name,
+        id: state_name,
         graph_id: node.id,
         normal_symbols: normal_symbol_set.into_iter().collect(),
         skip_symbols: skip_symbols_set.into_iter().collect(),
@@ -890,7 +889,7 @@ fn get_symbols_from_items(
   (normal_symbol_set, ignore_symbol_set, seen)
 }
 
-fn get_symbol_shift_type(symbol_id: &SymbolID, g: &GrammarStore) -> (u32, &'static str) {
+pub fn get_symbol_shift_type(symbol_id: &SymbolID, g: &GrammarStore) -> (u32, &'static str) {
   match symbol_id {
     SymbolID::GenericSpace
     | SymbolID::GenericHorizontalTab

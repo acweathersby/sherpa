@@ -38,7 +38,7 @@ pub(crate) fn _create_table<'a>(
     if let btree_map::Entry::Vacant(e) = table.entry(state_address) {
       let state_name = output.offset_to_state_name.get(&(state_address as u32)).unwrap();
 
-      let state = output.ir_states.get(state_name).unwrap();
+      let state = output.state_data.get(state_name).unwrap();
 
       if !state.is_scanner() {
         return None;

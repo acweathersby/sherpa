@@ -1,6 +1,7 @@
 use hctk_core::bytecode::compile_bytecode;
 
 use hctk_core::bytecode::BytecodeOutput;
+use hctk_core::intermediate::state::compile_states;
 use hctk_core::types::*;
 
 use std::collections::BTreeMap;
@@ -57,8 +58,10 @@ fn write_parser_file<W: Write>(
   thread_count: usize,
   ascript: Option<&AScriptStore>,
 ) -> std::io::Result<()> {
+  let mut ir_states = compile_states(&g, thread_count);
+
   let BytecodeOutput { bytecode, state_name_to_offset: state_lookups, .. } =
-    compile_bytecode(g, thread_count);
+    compile_bytecode(&g, &mut ir_states);
 
   if let Err(err) = write_rust_parser_file(writer, &state_lookups, g, &bytecode, ascript) {
     eprintln!("{}", err);

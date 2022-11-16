@@ -18,7 +18,7 @@ pub fn dispatch<T: BaseCharacterReader + MutCharacterReader>(
   let mut i = (ctx.get_active_state() & STATE_ADDRESS_MASK);
 
   loop {
-   // println!("instr: {:0>5x}", i);
+   println!("instr: {:0>6x} {} b: {} cp: {} cls: {}", i, r.cursor(), r.byte(), r.codepoint(), r.class());
 
     let instr = INSTRUCTION::from(bc, i as usize);
 
@@ -327,8 +327,8 @@ fn get_token_value<T: BaseCharacterReader + MutCharacterReader>(
         }
     };
 
-  if ctx.is_scanner() {
     match input_type {
+
       INPUT_TYPE::T03_CLASS => {
         active_token.byte_length = r.codepoint_byte_length();
         active_token.cp_length = r.codepoint_length();
@@ -341,6 +341,7 @@ fn get_token_value<T: BaseCharacterReader + MutCharacterReader>(
 
         r.class() as i32
       }
+
       INPUT_TYPE::T04_CODEPOINT => {
         active_token.byte_length = r.codepoint_byte_length();
         active_token.cp_length = r.codepoint_length();
@@ -353,6 +354,7 @@ fn get_token_value<T: BaseCharacterReader + MutCharacterReader>(
 
         r.codepoint() as i32
       }
+
       INPUT_TYPE::T05_BYTE => {
         active_token.byte_length = 1;
         active_token.cp_length = 1;
@@ -364,19 +366,22 @@ fn get_token_value<T: BaseCharacterReader + MutCharacterReader>(
         }
         r.byte() as i32
       }
-      _ => 0,
-    }
-  } else {
-    let scanned_token = token_scan(active_token, scan_index, ctx, r, bc);
 
-    if ctx.in_peek_mode() {
-      ctx.peek = scanned_token;
-    } else {
-      ctx.assert = scanned_token;
-    }
+      _ => {
+        debug_assert!(!ctx.is_scanner());
 
-    scanned_token.token_type as i32
-  }
+
+        let scanned_token = token_scan(active_token, scan_index, ctx, r, bc);
+
+        if ctx.in_peek_mode() {
+          ctx.peek = scanned_token;
+        } else {
+          ctx.assert = scanned_token;
+        }
+    
+        scanned_token.token_type as i32
+      },
+    } 
 }
 
 fn scan_for_improvised_token<T: BaseCharacterReader + MutCharacterReader>(

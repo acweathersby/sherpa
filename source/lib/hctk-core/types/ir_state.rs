@@ -16,7 +16,7 @@ pub enum PeekType {
   PeekStart,
   PeekContinue,
 }
-#[derive(PartialEq, Eq, Clone, Copy)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum IRStateType {
   Undefined,
   ProductionStart,
@@ -37,7 +37,7 @@ impl Default for IRStateType {
 }
 pub struct IRState {
   pub code: String,
-  pub name: String,
+  pub id: String,
   pub comment: String,
   pub hash: u64,
   pub graph_id: usize,
@@ -54,7 +54,7 @@ impl Default for IRState {
       state_type: IRStateType::default(),
       comment: String::default(),
       code: String::default(),
-      name: String::default(),
+      id: String::default(),
       hash: u64::default(),
       graph_id: usize::default(),
       normal_symbols: Vec::default(),
@@ -85,10 +85,10 @@ impl IRState {
   }
 
   pub fn get_name(&self) -> String {
-    if self.name.is_empty() {
+    if self.id.is_empty() {
       Self::get_state_name_from_hash(self.hash)
     } else {
-      self.name.clone()
+      self.id.clone()
     }
   }
 

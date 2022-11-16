@@ -69,7 +69,7 @@ impl<'a> BaseCharacterReader for UTF8StringReader<'a> {
 
   #[inline(always)]
   fn byte(&self) -> u32 {
-    if (self.cursor() >= self.len) {
+    if self.at_end() {
       0
     } else {
       self.get_bytes()[self.cursor()] as u32

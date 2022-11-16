@@ -13,6 +13,7 @@ use hctk_core::bytecode::compile_bytecode;
 use hctk_core::bytecode::BytecodeOutput;
 use hctk_core::get_num_of_available_threads;
 use hctk_core::grammar::compile_from_string;
+use hctk_core::intermediate::state::compile_states;
 use hctk_core::types::GrammarStore;
 use hctk_core::types::ParseError;
 use std::thread;
@@ -224,7 +225,9 @@ impl<'a> BuildPipeline<'a> {
     self.bytecode = None;
 
     if self.tasks.iter().any(|t| t.0.require_bytecode) {
-      let bytecode_output = compile_bytecode(&self.grammar.as_ref().unwrap(), self.threads);
+      let g = &self.grammar.as_ref().unwrap();
+      let mut ir_states = compile_states(g, self.threads);
+      let bytecode_output = compile_bytecode(g, &mut ir_states);
 
       self.bytecode = Some(bytecode_output);
     }

@@ -17,7 +17,6 @@ mod test_parser {
   use crate::debug::compile_test_grammar;
   use crate::debug::disassemble_state;
   use crate::debug::generate_disassembly;
-  use crate::debug::grammar;
   use crate::grammar::data::ast::ASTNode;
   use crate::grammar::get_production_id_by_name;
   use crate::grammar::parse::compile_ir_ast;
@@ -262,7 +261,7 @@ assert PRODUCTION [2] (pass)
 assert PRODUCTION [3] (pass)
 "
       .to_string(),
-      name: "test".to_string(),
+      id: "test".to_string(),
       ..Default::default()
     };
 
@@ -276,7 +275,7 @@ assert PRODUCTION [3] (pass)
 
     let output = compile_ir_states_into_bytecode(
       &grammar,
-      BTreeMap::from_iter(vec![(ir_state.get_name(), Box::new(ir_state))]),
+      &BTreeMap::from_iter(vec![(ir_state.get_name(), Box::new(ir_state))]),
       vec![ir_ast],
     );
 
@@ -376,7 +375,7 @@ assert PRODUCTION [3] (pass)
 
   fn create_output(val: &str, g: &GrammarStore) -> bytecode::BytecodeOutput {
     let mut ir_state =
-      IRState { code: val.to_string(), name: "test".to_string(), ..Default::default() };
+      IRState { code: val.to_string(), id: "test".to_string(), ..Default::default() };
 
     let ir_ast = ir_state.compile_ast();
 
@@ -386,10 +385,10 @@ assert PRODUCTION [3] (pass)
 
     let output = compile_ir_states_into_bytecode(
       &g,
-      BTreeMap::from_iter(vec![(ir_state.get_name(), Box::new(ir_state))]),
+      &BTreeMap::from_iter(vec![(ir_state.get_name(), Box::new(ir_state))]),
       vec![ir_ast],
     );
-    
+
     output
   }
 }

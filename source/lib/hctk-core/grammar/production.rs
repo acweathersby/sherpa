@@ -101,6 +101,15 @@ pub fn get_production_plain_name<'a>(prod_id: &ProductionId, g: &'a GrammarStore
   }
 }
 
+/// Retrieve the non-import and unmangled name of a [Production](Production).
+pub fn get_production_guid_name<'a>(prod_id: &ProductionId, g: &'a GrammarStore) -> &'a str {
+  if let Some(prod) = g.productions.get(prod_id) {
+    &prod.guid_name
+  } else {
+    ""
+  }
+}
+
 /// Retrieves first the production_id of the first production
 /// whose plain or guid name matches the query string.
 /// Returns None if no production matches the query.
