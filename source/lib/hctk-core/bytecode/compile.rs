@@ -18,9 +18,13 @@ use crate::grammar::parse::compile_ir_ast;
 use crate::intermediate::state::generate_production_states;
 use crate::types::*;
 use std::any::Any;
+use std::collections::btree_map::VacantEntry;
+use std::collections::hash_map::Entry;
+use std::collections::hash_map::OccupiedEntry;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::default;
 use std::env::current_exe;
@@ -372,6 +376,7 @@ fn make_table(
 
   let mut branch_instructions = vec![];
   let mut branch_instructions_length = 0;
+  let mut existing_instructions = HashMap::<Vec<u32>, u32>::new();
 
   for branch in branches {
     if branch.is_skip {
@@ -381,16 +386,28 @@ fn make_table(
         }
       }
     } else {
-      let mut instructions =
+      let instructions =
         build_branchless_bytecode(&branch.instructions, state_to_bookmark, state_name);
-
-      let offset = branch_instructions_length;
-      branch_instructions_length += instructions.len() as u32;
-      branch_instructions.push(instructions);
-
-      for id in &branch.ids {
-        if let ASTNode::Num(box Num { val }) = id {
-          val_offset_map.insert(*val as u32, offset as u32);
+      match existing_instructions.entry(instructions) {
+        Entry::Occupied(e) => {
+          let offset = e.get();
+          for id in &branch.ids {
+            if let ASTNode::Num(box Num { val }) = id {
+              val_offset_map.insert(*val as u32, *offset as u32);
+            }
+          }
+        }
+        Entry::Vacant(mut e) => {
+          let offset = branch_instructions_length;
+          let instructions = e.key();
+          branch_instructions_length += instructions.len() as u32;
+          branch_instructions.push(instructions.clone());
+          e.insert(offset);
+          for id in &branch.ids {
+            if let ASTNode::Num(box Num { val }) = id {
+              val_offset_map.insert(*val as u32, offset as u32);
+            }
+          }
         }
       }
     }
