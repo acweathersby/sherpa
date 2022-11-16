@@ -1,8 +1,6 @@
 #![feature(proc_macro_span)]
 #![feature(proc_macro_internals)]
-use hctk_core::debug::grammar;
 use std::path::PathBuf;
-use std::str::FromStr;
 use syn::parse::Parse;
 
 use hctk_compile::tasks;

@@ -324,7 +324,7 @@ pub fn get_resolved_vec_contents(
     }
     TokenVec => vec![Token],
     StringVec => vec![String(None)],
-    UnresolvedProduction(p) => get_resolved_vec_contents(ast, &get_resolved_type(ast, base_type).0),
+    UnresolvedProduction(_) => get_resolved_vec_contents(ast, &get_resolved_type(ast, base_type).0),
     none_vec_type => {
       vec![none_vec_type.clone()]
     }
