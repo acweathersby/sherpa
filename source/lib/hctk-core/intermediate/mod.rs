@@ -6,6 +6,8 @@ pub mod transition;
 
 mod transition_tree_tests {
 
+  use std::collections::BTreeSet;
+
   use crate::debug::compile_test_grammar;
   use crate::debug::debug_items;
   use crate::grammar::get_production_id_by_name;
@@ -25,6 +27,7 @@ mod transition_tree_tests {
       &grammar,
       false,
       &get_production_start_items(&production_id, &grammar),
+      BTreeSet::from_iter(vec![production_id]),
     );
 
     assert_eq!(result.get_node_len(), 7);
@@ -58,8 +61,12 @@ mod transition_tree_tests {
 
     let production_id = production.0;
 
-    let result =
-      construct_recursive_descent(&g, true, &get_production_start_items(production_id, &g));
+    let result = construct_recursive_descent(
+      &g,
+      true,
+      &get_production_start_items(production_id, &g),
+      BTreeSet::from_iter(vec![*production_id]),
+    );
 
     assert_eq!(result.get_node_len(), 8);
 

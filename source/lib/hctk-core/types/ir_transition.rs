@@ -67,6 +67,15 @@ pub enum TransitionStateType {
   I_SKIPPED_COLLISION,
 
   I_COMPLETE,
+
+  /// Indicates the item of this node is the result of a goto on a
+  /// root production.
+  I_GOTO_ROOT,
+
+  /// Indicates the item of this node is an end item that results
+  /// from the GOTO of a production.
+  I_GOTO_END,
+
   O_TERMINAL,
 }
 
@@ -102,7 +111,7 @@ impl TransitionGraphNode {
   pub const OrphanIndex: usize = usize::MAX;
 
   pub fn is_out_of_scope(&self) -> bool {
-    return self.items[0].get_state().is_out_of_scope();
+    return self.items[0].get_state().is_goto_end_origin();
   }
 
   pub fn new(
@@ -227,7 +236,7 @@ pub struct TransitionPack {
   /// Stores indices of pruned node slots that can be reused
   empty_cache: VecDeque<usize>,
   pub goto_scoped_closure: Option<Rc<Box<Vec<Item>>>>,
-  pub root_prods: BTreeSet<ProductionId>,
+  pub root_prod_ids: BTreeSet<ProductionId>,
   pub peek_ids: BTreeSet<u64>,
   pub starts: BTreeSet<Item>,
   pub out_of_scope_closure: Option<Vec<Item>>,
@@ -249,13 +258,19 @@ impl TransitionPack {
     self.node_pipeline.pop_front()
   }
 
-  pub fn new(g: &GrammarStore, mode: TransitionMode, is_scanner: bool, starts: &[Item]) -> Self {
+  pub fn new(
+    g: &GrammarStore,
+    mode: TransitionMode,
+    is_scanner: bool,
+    starts: &[Item],
+    root_prod_ids: BTreeSet<ProductionId>,
+  ) -> Self {
     TransitionPack {
       node_pipeline: VecDeque::with_capacity(32),
       empty_cache: VecDeque::with_capacity(16),
       mode,
       is_scanner,
-      root_prods: starts.iter().map(|i| i.get_prod_id(g)).collect::<BTreeSet<_>>(),
+      root_prod_ids,
       starts: BTreeSet::from_iter(starts.iter().map(|i| i.to_start().to_zero_state())),
       nodes: Vec::with_capacity(256),
       ..Default::default()
@@ -310,7 +325,15 @@ impl TransitionPack {
   }
 
   #[inline(always)]
+  pub fn get_goal(&self, node_index: usize) -> &TransitionGraphNode {
+    if self.nodes[node_index].id == TransitionGraphNode::OrphanIndex {
+      panic!("Invalid access of a deleted node at index {}", node_index)
+    }
 
+    self.get_node(self.nodes[node_index].goal)
+  }
+
+  #[inline(always)]
   pub fn get_node(&self, node_index: usize) -> &TransitionGraphNode {
     if self.nodes[node_index].id == TransitionGraphNode::OrphanIndex {
       panic!("Invalid access of a deleted node at index {}", node_index)
@@ -378,7 +401,7 @@ impl TransitionPack {
       leaf_nodes: self.leaf_nodes,
       mode: self.mode,
       is_scanner: self.is_scanner,
-      root_prods: self.root_prods,
+      root_prod_ids: self.root_prod_ids,
       closure_links: self.closure_links,
       ..Default::default()
     }

@@ -230,12 +230,12 @@ fn generate_states(
   production_id: u32,
 ) -> IROutput {
   let mut output: IROutput = Vec::new();
+  let root_ids = start_items.iter().map(|i| i.get_prod_id(g)).collect::<BTreeSet<_>>();
+  let (start_items, goto_seeds) =
+    if !is_scanner { deconflict_starts(&start_items, &g) } else { (start_items.to_vec(), vec![]) };
 
-  let recursive_descent_data = construct_recursive_descent(
-    g,
-    is_scanner,
-    &if !is_scanner { deconflict_starts(&start_items, &g) } else { start_items.to_vec() },
-  );
+  let recursive_descent_data =
+    construct_recursive_descent(g, is_scanner, &start_items, root_ids.clone());
 
   output.append(&mut process_transition_nodes(
     &recursive_descent_data,
@@ -247,12 +247,7 @@ fn generate_states(
   // Scanner states are guaranteed to be purely recursive descent compatible
   //  and thus they have no need for a GOTO path.
   if !is_scanner {
-    let goto_data = construct_goto(
-      g,
-      is_scanner,
-      start_items,
-      &recursive_descent_data.gotos.into_iter().collect::<Vec<_>>(),
-    );
+    let goto_data = construct_goto(g, is_scanner, &start_items, &goto_seeds, root_ids);
 
     if !goto_data.leaf_nodes.is_empty() {
       output.append(&mut process_transition_nodes(&goto_data, g, entry_name, production_id));
@@ -328,7 +323,7 @@ fn process_transition_nodes<'a>(
             t_pack,
             &output,
             children_lookup,
-            &t_pack.root_prods,
+            &t_pack.root_prod_ids,
             entry_name,
           )]
         } else {
@@ -707,7 +702,9 @@ fn create_intermediate_state(
                 strings.push(if child.is(TransitionStateType::I_FAIL) {
                   match single_child {
                     true => format!("fail"),
-                    false => String::new(),
+                    false => {
+                      format!("default ( fail )")
+                    }
                   }
                 } else {
                   match single_child {
@@ -769,7 +766,7 @@ fn create_intermediate_state(
         "[BRANCH] Empty state generated! [{}] [{}] {:?} {}",
         comment,
         t_pack
-          .root_prods
+          .root_prod_ids
           .iter()
           .map(|s| { get_production_plain_name(s, g) })
           .collect::<Vec<_>>()
@@ -811,7 +808,7 @@ fn create_intermediate_state(
         "[BRANCH] Empty state generated! [{}] [{}] {:?} {}",
         comment,
         t_pack
-          .root_prods
+          .root_prod_ids
           .iter()
           .map(|s| { get_production_plain_name(s, g) })
           .collect::<Vec<_>>()
@@ -870,7 +867,7 @@ fn get_symbols_from_items(
         normal_symbol_set.append(&mut norm);
         ignore_symbol_set.append(&mut ignore);
       }
-      SymbolID::EndOfFile | SymbolID::Undefined => {}
+      SymbolID::EndOfFile | SymbolID::Default | SymbolID::Undefined => {}
       sym => {
         normal_symbol_set.insert(item.get_symbol(g));
       }
@@ -947,24 +944,22 @@ fn create_reduce_state(
   g: &GrammarStore,
   is_scanner: bool,
 ) -> Box<IRState> {
-  let item = node.items[0];
-  let body = g.bodies.get(&item.get_body()).unwrap();
-  let production = g.productions.get(&body.prod).unwrap();
-
   let code = if node.is(TransitionStateType::I_OUT_OF_SCOPE) {
     "fail".to_string()
   } else {
     create_reduce_string(node, g, is_scanner)
   };
 
+  let item_strings = node.items.iter().map(|i| i.debug_string(g)).collect::<Vec<_>>();
+
   if code.is_empty() {
     panic!("[REDUCE] Empty state generated!");
   }
 
-  let comment = if node.items[0].at_end() {
-    node.items[0].debug_string(g)
+  let comment = if node.is(TransitionStateType::I_FAIL) {
+    format!("[{}] Out of production scope --- {:?}", node.id, item_strings)
   } else {
-    format!("[{}] Not at end --- {}", node.id, node.items[0].debug_string(g))
+    item_strings.join("\n")
   };
 
   Box::new(

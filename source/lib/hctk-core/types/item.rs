@@ -9,9 +9,12 @@ use std::fmt::Display;
 pub struct ItemState(u32);
 
 impl ItemState {
-  const OUT_OF_SCOPE_FLAG: u32 = 0x7000;
-  const OUT_OF_SCOPE_MASK: u32 = (!Self::OUT_OF_SCOPE_FLAG) & 0xFFFF;
-  pub const OUT_OF_SCOPE_STATE: ItemState = ItemState::new(Self::OUT_OF_SCOPE_FLAG, 0);
+  const GOTO_END_GOAL: u32 = 0x4000;
+  const GOTO_END_GOAL_MASK: u32 = (!Self::GOTO_END_GOAL) & 0xFFFF;
+  pub const GOTO_END_GOAL_STATE: ItemState = ItemState::new(Self::GOTO_END_GOAL, 0);
+  const GOTO_ROOT_END_GOAL: u32 = 0x8000;
+  const GOTO_ROOT_END_GOAL_MASK: u32 = (!Self::GOTO_ROOT_END_GOAL) & 0xFFFF;
+  pub const GOTO_ROOT_END_GOAL_STATE: ItemState = ItemState::new(Self::GOTO_ROOT_END_GOAL, 0);
 
   pub const fn default() -> Self {
     ItemState(0)
@@ -39,7 +42,7 @@ impl ItemState {
 
   /// Get an index to the closure this item originates from
   pub fn get_closure_index(&self) -> usize {
-    (self.get_group() & Self::OUT_OF_SCOPE_MASK) as usize
+    (self.get_group() & (Self::GOTO_END_GOAL_MASK | Self::GOTO_ROOT_END_GOAL_MASK)) as usize
   }
 
   /// Create a new Item with the given depth
@@ -54,8 +57,14 @@ impl ItemState {
 
   /// Indicate's the item originate from a production other
   /// than the one currently being evaluated.
-  pub fn is_out_of_scope(&self) -> bool {
-    (self.get_group() & Self::OUT_OF_SCOPE_FLAG) > 0
+  pub fn is_goto_end_origin(&self) -> bool {
+    (self.get_group() & Self::GOTO_END_GOAL) > 0
+  }
+
+  /// Indicate's the item originate from a production other
+  /// than the one currently being evaluated.
+  pub fn is_goto_root_end_origin(&self) -> bool {
+    (self.get_group() & Self::GOTO_ROOT_END_GOAL) > 0
   }
 }
 
@@ -126,7 +135,15 @@ impl Item {
   }
 
   pub fn is_out_of_scope(&self) -> bool {
-    self.state.is_out_of_scope()
+    self.is_goto_end_origin() || self.is_goto_root_end_origin()
+  }
+
+  pub fn is_goto_end_origin(&self) -> bool {
+    self.state.is_goto_end_origin()
+  }
+
+  pub fn is_goto_root_end_origin(&self) -> bool {
+    self.state.is_goto_root_end_origin()
   }
 
   #[inline(always)]
