@@ -587,6 +587,14 @@ pub fn render_expression(
       _ => {
         let ref_ = render_expression(value, b, s, g, ref_index, type_slot)?;
         match ref_.ast_type {
+          AScriptTypeVal::TokenVec => {
+            // Merge the last and first token together
+            // get the string value from the resulting span of the union
+            Some(ref_.from(
+              "(%%.first().unwrap() + %%.last().unwrap()).to_string()".to_string(),
+              AScriptTypeVal::String(None),
+            ))
+          }
           AScriptTypeVal::String(..) => Some(ref_),
           _ => Some(ref_.from("%%.to_string()".to_string(), AScriptTypeVal::String(None))),
         }

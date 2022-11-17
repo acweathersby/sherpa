@@ -1,5 +1,6 @@
 use std::fmt;
 use std::hash::Hash;
+use std::ops::Add;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -127,6 +128,23 @@ impl fmt::Debug for Token {
     }
 
     bug.finish()
+  }
+}
+
+impl Add for &Token {
+  type Output = Token;
+
+  fn add(self, rhs: Self) -> Self::Output {
+    let (min, max) = if self < rhs { (self, rhs) } else { (rhs, self) };
+
+    Token {
+      len:      max.off - min.off + max.len,
+      off:      min.off,
+      line_num: min.line_num,
+      line_off: min.line_off,
+      range:    None,
+      input:    self.input.clone(),
+    }
   }
 }
 

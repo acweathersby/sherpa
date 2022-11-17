@@ -1646,9 +1646,10 @@ fn pre_process_body(
             }));
           }
         } else if is_list {
-          // Create a new production that turns `A => a` into
-          // `A => a | A => A a` and produce a symbol id that points
-          // to that production.
+          // Create a new production that turns
+          // `A => a` into `A => a | A => A a`
+          // and produce a SymbolId that points to that production.
+
           static none_: ASTNode = ASTNode::NONE;
 
           match sym {
@@ -1673,36 +1674,27 @@ fn pre_process_body(
 
               let mut body_b = body_a.clone();
 
+              let (list_vector_reduce, list_symbol_reduce) =  (
+                compile_ascript_ast("[$first, $last]".as_bytes().to_vec()).unwrap(),
+                compile_ascript_ast("[$first]".as_bytes().to_vec()).unwrap(),
+              );
+
+              body_a.reduce_function = ASTNode::Ascript(Ascript::new(
+                list_symbol_reduce.clone(),
+                list_symbol_reduce.Token().clone(),
+              ));
+
+              body_b.reduce_function = ASTNode::Ascript(Ascript::new(
+                list_vector_reduce.clone(),
+                list_vector_reduce.Token().clone(),
+              ));
+
               match terminal_symbol {
-                ASTNode::Literal(box Literal { val, .. }) if val == "\"" || val == "\'" => {}
+                ASTNode::NONE => {}
                 _ => {
-                  // Create new bodies that will be bound to the
-                  // symbol.
-
-                  let list_vector_reduce: ASTNode =
-                    compile_ascript_ast("[$first, $last]".as_bytes().to_vec()).unwrap();
-
-                  let list_symbol_reduce: ASTNode =
-                    compile_ascript_ast("[$first]".as_bytes().to_vec()).unwrap();
-
-                  body_a.reduce_function = ASTNode::Ascript(Ascript::new(
-                    list_symbol_reduce.clone(),
-                    list_symbol_reduce.Token().clone(),
-                  ));
-
-                  body_b.reduce_function = ASTNode::Ascript(Ascript::new(
-                    list_vector_reduce.clone(),
-                    list_vector_reduce.Token().clone(),
-                  ));
-
-                  match terminal_symbol {
-                    ASTNode::NONE => {}
-                    _ => {
-                      body_b.symbols.insert(0, terminal_symbol.clone());
-                    }
-                  }
+                  body_b.symbols.insert(0, terminal_symbol.clone());
                 }
-              };
+              }
 
               (*list_index) += 1;
 
