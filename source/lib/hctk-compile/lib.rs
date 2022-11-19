@@ -11,8 +11,10 @@ mod llvm;
 mod options;
 mod source_types;
 
-pub use builder::bytecode::*;
-pub use builder::llvm::*;
+use std::fs::create_dir_all;
+use std::path::PathBuf;
+
+pub use builder::bytecode;
 
 pub use crate::builder::pipeline::BuildPipeline;
 pub use crate::builder::pipeline::CompileError;
@@ -26,19 +28,40 @@ pub mod tasks {
   pub use crate::builder::llvm::build_llvm_parser_interface;
 }
 
+/// Convenience function for building a bytecode based parser. Use this in
+/// build scripts to output a parser source file to `{OUT_DIR}/hc_parser/{grammar_name}.rs`.
+pub fn compile_bytecode_parser(grammar_source_path: &PathBuf) {
+  let mut out_dir = std::env::var("OUT_DIR").map(|d| PathBuf::from(&d)).unwrap();
+
+  out_dir.push("./hc_parser/");
+
+  create_dir_all(&out_dir).unwrap();
+
+  BuildPipeline::from_source(&grammar_source_path, 0)
+    .set_source_output_dir(&out_dir)
+    .set_build_output_dir(&out_dir)
+    .set_source_file_name("%.rs")
+    .add_task(tasks::build_byte_code_parse(SourceType::Rust, true))
+    .add_task(tasks::build_ast(SourceType::Rust))
+    .add_task(tasks::build_bytecode_disassembly())
+    .set_error_handler(|errors| {
+      for error in errors {
+        eprintln!("cargo:error=\n{}", error);
+      }
+      panic!("failed")
+    })
+    .run();
+}
+
 #[cfg(test)]
-mod test {
+mod library_smoke_tests {
 
   use std::path::PathBuf;
 
   use crate::ascript::compile::compile_ascript_store;
-  use crate::ascript::rust;
   use crate::ascript::types::AScriptStore;
   use crate::builder::pipeline::BuildPipeline;
   use crate::tasks::build_ast;
-  use hctk_core::types::*;
-
-  use hctk_core::writer::code_writer::StringBuffer;
 
   #[test]
   fn test_compile_pipeline() {
@@ -76,11 +99,5 @@ mod test {
     assert!(errors.is_empty());
 
     assert_eq!(ascript.structs.len(), 1);
-
-    // let mut writer = StringBuffer::default();
-
-    // rust::write(&grammar, &ascript, &mut writer);
-
-    // println!("{}", String::from_utf8(writer.into_output()).unwrap());
   }
 }
