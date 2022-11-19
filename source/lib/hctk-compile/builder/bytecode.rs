@@ -1,8 +1,4 @@
-use hctk_core::bytecode;
-use hctk_core::bytecode::compile_bytecode;
-
 use hctk_core::bytecode::BytecodeOutput;
-use hctk_core::intermediate::state::compile_states;
 use hctk_core::types::*;
 
 use std::collections::BTreeMap;
@@ -144,22 +140,21 @@ mod test {
   use crate::ascript::compile::compile_ascript_store;
   use crate::ascript::rust;
   use crate::ascript::types::AScriptStore;
+  use hctk_core::types::GrammarStore;
   use hctk_core::writer::code_writer::StringBuffer;
   #[test]
   fn test_output_rust_on_practical_grammar() {
-    use hctk_core::debug::compile_test_grammar;
-
-    let grammar = compile_test_grammar(
+    let g = GrammarStore::from_str(
         "
         <> A > \\vec num num^tom num f:ast { { t_Vec, x:f32($tom), y:f32($3), z:f32($4), first: { t_Num, val:u32($1) } } }
         
         <> num > \\temp g:num 
         ",
-    );
+    ).unwrap();
 
     let mut ascript = AScriptStore::new();
 
-    let errors = compile_ascript_store(&grammar, &mut ascript);
+    let errors = compile_ascript_store(&g, &mut ascript);
 
     for error in &errors {
       eprintln!("{}", error);
@@ -171,7 +166,7 @@ mod test {
 
     let mut writer = StringBuffer::default();
 
-    rust::write(&grammar, &ascript, &mut writer);
+    rust::write(&g, &ascript, &mut writer);
 
     eprintln!("{}", String::from_utf8(writer.into_output()).unwrap());
   }

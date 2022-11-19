@@ -14,11 +14,9 @@ mod test_parser {
   use crate::bytecode::compile::build_byte_code_buffer;
   use crate::bytecode::compile::compile_ir_state_to_bytecode;
   use crate::bytecode::compile_ir_states_into_bytecode;
-  use crate::debug::compile_test_grammar;
   use crate::debug::disassemble_state;
   use crate::debug::generate_disassembly;
   use crate::grammar::data::ast::ASTNode;
-  use crate::grammar::get_production_id_by_name;
   use crate::grammar::parse::compile_ir_ast;
   use crate::intermediate::state::generate_production_states;
   use crate::runtime::parse_functions::dispatch;

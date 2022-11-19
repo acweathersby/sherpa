@@ -12,7 +12,6 @@ use hctk_core::grammar::data::ast::AST_NamedReference;
 use hctk_core::grammar::data::ast::AST_Struct;
 use hctk_core::grammar::data::ast::AST_Vector;
 use hctk_core::grammar::data::ast::Ascript as AST_AScript;
-use hctk_core::grammar::get_production_plain_name;
 use hctk_core::types::*;
 
 use crate::ascript::types::*;
@@ -395,7 +394,7 @@ pub fn merge_production_type(
               message: format!(
                 "Incompatible production return type {} on production {}",
                 new_return_type.hcobj_type_name(Some(g)),
-                get_production_plain_name(&prod_id, g)
+                g.get_production_plain_name(&prod_id)
               ),
               locations,
             });

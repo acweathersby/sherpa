@@ -10,7 +10,6 @@ use std::vec;
 
 use crate::grammar::create_closure;
 use crate::grammar::get_closure_cached;
-use crate::grammar::get_production_plain_name;
 use crate::grammar::get_production_start_items;
 use crate::grammar::hash_id_value_u64;
 use crate::types::GrammarId;
@@ -1230,7 +1229,7 @@ fn handle_unresolved_scanner_nodes(
         t_pack
           .root_prod_ids
           .iter()
-          .map(|p_id| get_production_plain_name(p_id, g))
+          .map(|p_id| g.get_production_plain_name(p_id))
           .collect::<Vec<_>>(),
         generic
           .into_iter()

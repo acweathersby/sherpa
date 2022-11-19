@@ -10,7 +10,9 @@ use std::ops::Residual;
 use std::ops::Try;
 use std::path::Path;
 use std::path::PathBuf;
+use std::sync::Arc;
 
+use crate::compile_grammar_from_string;
 use crate::types::*;
 
 /// A Result type that uses the HCTKError enum.

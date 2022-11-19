@@ -12,8 +12,6 @@ use super::transition::get_valid_starts;
 use super::transition::hash_group;
 use crate::grammar::create_closure;
 use crate::grammar::get_closure_cached;
-use crate::grammar::get_production;
-use crate::grammar::get_production_plain_name;
 use crate::grammar::get_production_start_items;
 use crate::grammar::get_scanner_info_from_defined;
 use crate::grammar::hash_id_value_u64;
@@ -209,16 +207,17 @@ fn check_for_left_recursion(symbol_items: &Vec<Item>, g: &GrammarStore) {
   );
 }
 
-pub fn generate_production_states(production_id: &ProductionId, g: &GrammarStore) -> IROutput {
+pub fn generate_production_states(prod_id: &ProductionId, g: &GrammarStore) -> IROutput {
+  let prod = g.get_production(prod_id).unwrap();
   generate_states(
     g,
-    get_production(production_id, g).is_scanner,
-    &get_production_start_items(production_id, g)
+    prod.is_scanner,
+    &get_production_start_items(prod_id, g)
       .into_iter()
-      .map(|i| i.to_origin(OriginData::Production(*production_id)))
+      .map(|i| i.to_origin(OriginData::Production(*prod_id)))
       .collect::<Vec<_>>(),
-    &get_production(production_id, g).guid_name,
-    get_production(production_id, g).bytecode_id,
+    &prod.guid_name,
+    prod.bytecode_id,
   )
 }
 
@@ -780,7 +779,7 @@ fn create_intermediate_state(
         t_pack
           .root_prod_ids
           .iter()
-          .map(|s| { get_production_plain_name(s, g) })
+          .map(|s| { g.get_production_plain_name(s) })
           .collect::<Vec<_>>()
           .join("   \n"),
         children_tables.get(node.id).cloned().unwrap_or_default(),
@@ -822,7 +821,7 @@ fn create_intermediate_state(
         t_pack
           .root_prod_ids
           .iter()
-          .map(|s| { get_production_plain_name(s, g) })
+          .map(|s| { g.get_production_plain_name(s) })
           .collect::<Vec<_>>()
           .join("   \n"),
         children_tables.get(node.id).cloned().unwrap_or_default(),

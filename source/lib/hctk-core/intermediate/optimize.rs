@@ -12,7 +12,6 @@ use std::collections::VecDeque;
 
 use crate::bytecode::compile::build_byte_code_buffer;
 use crate::bytecode::compile_bytecode;
-use crate::debug::compile_test_grammar;
 use crate::debug::print_bytecode_states;
 use crate::debug::print_ir_states;
 use crate::debug::BytecodeGrammarLookups;
@@ -26,8 +25,6 @@ use crate::grammar::data::ast::AST_NUMBER;
 use crate::grammar::data::ast::DEFAULT;
 use crate::grammar::data::ast::HASH_NAME;
 use crate::grammar::data::ast::IR_STATE;
-use crate::grammar::get_production_guid_name;
-use crate::grammar::get_production_id_by_name;
 use crate::types::GrammarStore;
 use crate::types::IRState;
 
@@ -318,12 +315,12 @@ fn is_goto(i: &ASTNode) -> bool {
 }
 
 fn get_entry_states(g: &GrammarStore) -> BTreeSet<String> {
-  g.export_names.iter().map(|(name, ..)| get_production_guid_name(name, g).to_string()).collect()
+  g.exports.iter().map(|(name, ..)| g.get_production_guid_name(name).to_string()).collect()
 }
 
 #[test]
 fn optimize_grammar() {
-  let g = &compile_test_grammar("
+  let g = GrammarStore::from_str("
   
   @NAME hc_symbol
 
@@ -430,9 +427,9 @@ fn optimize_grammar() {
 
         | g:id
   
-  ");
+  ").unwrap();
 
-  let mut states = compile_states(g, 10);
+  let mut states = compile_states(&g, 10);
   let pre_opt_length = states.len();
 
   let state_refs = states.iter().collect::<Vec<_>>();

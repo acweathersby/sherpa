@@ -14,12 +14,26 @@ pub enum RecursionType {
   RIGHT = 4,
 }
 
+/// A convenient wrapper around information used to construct parser entry points
+/// based on [productions](Production).
+pub struct ExportedProduction<'a> {
+  /// The name assigned to the production within the
+  /// export clause of a grammar.
+  /// e.g. `@EXPORT production as <export_name>`
+  pub export_name: &'a str,
+  /// The GUID name assigned of the corresponding production.
+  pub guid_name:   &'a str,
+  /// The exported production.
+  pub production:  &'a Production,
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
 pub struct ProductionId(pub u64);
 
 impl From<&String> for ProductionId {
   fn from(string: &String) -> Self {
-    ProductionId(hash_id_value_u64(string))
+    let val = hash_id_value_u64(string);
+    ProductionId(val)
   }
 }
 

@@ -2,7 +2,6 @@ use std::collections::BTreeSet;
 use std::collections::VecDeque;
 
 use hctk_core::bytecode::BytecodeOutput;
-use hctk_core::grammar::get_exported_productions;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Linkage;
@@ -1116,7 +1115,8 @@ pub(crate) fn construct_parse_functions(
   let mut goto_fn = BTreeSet::new();
 
   // start points
-  let start_points = get_exported_productions(g)
+  let start_points = g
+    .get_exported_productions()
     .iter()
     .enumerate()
     .map(|(i, p)| {

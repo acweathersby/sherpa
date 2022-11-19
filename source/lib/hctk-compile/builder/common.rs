@@ -3,8 +3,6 @@ use std::io::Write;
 
 use hctk_core::grammar::data::ast::ASTNode;
 use hctk_core::grammar::data::ast::AST_NamedReference;
-use hctk_core::grammar::get_exported_productions;
-use hctk_core::grammar::ExportedProduction;
 use hctk_core::types::*;
 
 use hctk_core::types::Token;
@@ -20,21 +18,23 @@ pub(crate) fn write_rust_entry_functions_bytecode<W: Write>(
   states: &BTreeMap<String, u32>,
   writer: &mut CodeWriter<W>,
 ) -> Result<(), std::io::Error> {
-  Ok(for ExportedProduction { export_name, guid_name, production } in get_exported_productions(g) {
-    if let Some(bytecode_offset) = states.get(guid_name) {
-      writer
-        .wrt(&format!("pub fn new_{}_parser(reader: T) -> Self{{", export_name))?
-        .indent()
-        .wrtln("let mut ctx = Self::new(reader);")?
-        .wrtln(&format!("ctx.0.init_normal_state(NORMAL_STATE_FLAG | {});", bytecode_offset))?
-        .wrtln("ctx")?
-        .dedent()
-        .wrtln("}")?
-        .newline()?;
-    } else {
-      println!("Unable to get bytecode offset for production {} ", production.original_name,);
-    }
-  })
+  Ok(
+    for ExportedProduction { export_name, guid_name, production } in g.get_exported_productions() {
+      if let Some(bytecode_offset) = states.get(guid_name) {
+        writer
+          .wrt(&format!("pub fn new_{}_parser(reader: T) -> Self{{", export_name))?
+          .indent()
+          .wrtln("let mut ctx = Self::new(reader);")?
+          .wrtln(&format!("ctx.0.init_normal_state(NORMAL_STATE_FLAG | {});", bytecode_offset))?
+          .wrtln("ctx")?
+          .dedent()
+          .wrtln("}")?
+          .newline()?;
+      } else {
+        println!("Unable to get bytecode offset for production {} ", production.original_name,);
+      }
+    },
+  )
 }
 
 pub(crate) fn write_rust_entry_functions<W: Write>(
@@ -44,7 +44,7 @@ pub(crate) fn write_rust_entry_functions<W: Write>(
 ) -> Result<(), std::io::Error> {
   Ok(
     for (i, ExportedProduction { export_name, production, .. }) in
-      get_exported_productions(g).iter().enumerate()
+      g.get_exported_productions().iter().enumerate()
     {
       writer
         .newline()?
@@ -70,7 +70,8 @@ pub fn add_ascript_functions<W: Write>(
   writer: &mut CodeWriter<W>,
 ) -> Result<(), std::io::Error> {
   Ok(if let Some(ascript) = ast {
-    let export_node_data = get_exported_productions(g)
+    let export_node_data = g
+      .get_exported_productions()
       .iter()
       .map(|ExportedProduction { export_name, production, .. }| {
         let mut ref_index = 0;

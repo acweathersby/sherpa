@@ -72,6 +72,10 @@ pub enum HCError {
   IOError(String),
   Error(std::fmt::Error),
   Text(String),
+  Many {
+    message: String,
+    errors:  Vec<HCError>,
+  },
 }
 
 use HCError::*;
@@ -144,6 +148,11 @@ impl Display for HCError {
         }
         f.write_str(&tok.blame(0, 0, "Unexpected Token", None))
       }
+      Many { message, errors } => f.write_fmt(format_args!(
+        "{} \n-------------------\n {}",
+        message,
+        errors.iter().map(|e| e.to_string()).collect::<Vec<_>>().join("\n")
+      )),
     }
   }
 }

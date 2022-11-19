@@ -94,8 +94,6 @@ mod test_grammar {
 
   use super::compile::convert_left_to_right;
   use super::compile_grammar_from_string;
-  use super::get_production_id_by_name;
-  use super::get_production_recursion_type;
   use super::get_production_start_items;
   use super::parse::compile_grammar_ast;
   use super::parse::{self};
@@ -152,16 +150,16 @@ mod test_grammar {
     )
     .0
     {
-      let prod = get_production_id_by_name("A", &g).unwrap();
+      let prod = g.get_production_id_by_name("A").unwrap();
 
-      assert!(get_production_recursion_type(prod, &g).contains(RecursionType::LEFT_DIRECT));
+      assert!(g.get_production_recursion_type(prod).contains(RecursionType::LEFT_DIRECT));
 
       let mut g2 = g.deref().clone();
 
       let (a, a_prime) = convert_left_to_right(&mut g2, prod);
 
-      assert!(get_production_recursion_type(prod, &g2).contains(RecursionType::RIGHT));
-      assert!(!get_production_recursion_type(prod, &g2).contains(RecursionType::LEFT_DIRECT));
+      assert!(g2.get_production_recursion_type(prod,).contains(RecursionType::RIGHT));
+      assert!(!g2.get_production_recursion_type(prod).contains(RecursionType::LEFT_DIRECT));
     }
   }
 
@@ -179,7 +177,7 @@ mod test_grammar {
     assert!(grammar.is_some());
 
     if let Some(mut g) = grammar {
-      let prod = get_production_id_by_name("A", &g).unwrap();
+      let prod = g.get_production_id_by_name("A").unwrap();
 
       // convert_left_to_right(&mut g, prod);
 

@@ -1,6 +1,6 @@
 #![crate_type = "rlib"]
-#![feature(const_eval_limit)]
 #![const_eval_limit = "0"]
+#![feature(const_eval_limit)]
 #![feature(new_uninit)]
 #![feature(get_mut_unchecked)]
 #![feature(core_intrinsics)]
@@ -12,7 +12,9 @@
 #![feature(try_trait_v2_residual)]
 #![feature(const_trait_impl)]
 #![feature(int_roundings)]
+#![feature(map_try_insert)]
 #![allow(bad_style, dead_code, unused, unused_allocation, unused_comparisons, unused_parens)]
+
 mod deprecated_runtime;
 pub mod grammar;
 pub mod runtime;
@@ -42,12 +44,9 @@ pub fn get_num_of_available_threads() -> usize {
 mod test_end_to_end {
   use crate::bytecode::compile::build_byte_code_buffer;
   use crate::debug::collect_shifts_and_skips;
-  use crate::debug::compile_test_grammar;
   use crate::debug::generate_disassembly;
   use crate::debug::BytecodeGrammarLookups;
   use crate::get_num_of_available_threads;
-  use crate::grammar::get_production_by_name;
-  use crate::grammar::get_production_id_by_name;
   use crate::intermediate::state::compile_states;
   use crate::runtime::get_next_action;
   use crate::types::*;
@@ -57,15 +56,16 @@ mod test_end_to_end {
   fn test_basic_grammar_build() {
     let threads = get_num_of_available_threads();
 
-    let grammar = compile_test_grammar(
+    let g = GrammarStore::from_str(
       "
 @IGNORE g:sp g:tab
 
 <> start > \\hello \\world 
 ",
-    );
+    )
+    .unwrap();
 
-    let mut states = compile_states(&grammar, threads);
+    let mut states = compile_states(&g, threads);
 
     for state in states.values_mut() {
       if state.get_ast().is_none() {
@@ -73,14 +73,14 @@ mod test_end_to_end {
       }
     }
 
-    let entry_state_name = &get_production_by_name("start", &grammar).unwrap().guid_name;
+    let entry_state_name = &g.get_production_by_name("start").unwrap().guid_name;
 
     let (bytecode, state_lookup) =
       build_byte_code_buffer(states.iter().map(|(_, s)| s.get_ast().unwrap()).collect::<Vec<_>>());
 
     let entry_point = *state_lookup.get(entry_state_name).unwrap();
 
-    let target_production_id = get_production_by_name("start", &grammar).unwrap().bytecode_id;
+    let target_production_id = g.get_production_by_name("start").unwrap().bytecode_id;
 
     let (reader, state, shifts, skips) =
       collect_shifts_and_skips("hello    \tworld", entry_point, target_production_id, bytecode);

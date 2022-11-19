@@ -12,6 +12,7 @@ mod test {
   use hctk_core::types::hctk_free_stack;
   use hctk_core::types::CodepointInfo;
   use hctk_core::types::Goto;
+  use hctk_core::types::GrammarStore;
   use hctk_core::types::InputBlock;
   use hctk_core::types::LLVMParseContext;
   use hctk_core::types::ParseAction;
@@ -599,23 +600,21 @@ mod test {
   fn test_compile_from_bytecode() -> core::result::Result<(), ()> {
     use crate::llvm::compile_from_bytecode;
     use hctk_core::bytecode::compile_bytecode;
-    use hctk_core::debug::compile_test_grammar;
     use inkwell::context::Context;
     use std::fs::File;
     use std::io::Write;
-    let grammar = compile_test_grammar(
+    let g = GrammarStore::from_str(
       "
   @IGNORE g:sp
  
   <> test > \\hello \\world
   ",
-    );
-    let mut ir_states = compile_states(&grammar, 1);
-    let bytecode_output = compile_bytecode(&grammar, &mut ir_states);
+    )
+    .unwrap();
+    let mut ir_states = compile_states(&g, 1);
+    let bytecode_output = compile_bytecode(&g, &mut ir_states);
 
-    if let Ok(mut ctx) =
-      compile_from_bytecode("test", &grammar, &Context::create(), &bytecode_output)
-    {
+    if let Ok(mut ctx) = compile_from_bytecode("test", &g, &Context::create(), &bytecode_output) {
       let mut file = File::create("../test.ll");
 
       if let Ok(mut file) = file {
@@ -686,12 +685,9 @@ mod test {
   #[test]
   fn test_compile_from_bytecode2() -> core::result::Result<(), ()> {
     use crate::llvm::compile_from_bytecode;
-    use crate::options::Architecture;
-    use crate::options::BuildOptions;
     use hctk_core::bytecode::compile_bytecode;
-    use hctk_core::debug::compile_test_grammar;
     use inkwell::context::Context;
-    let grammar = compile_test_grammar(
+    let g = GrammarStore::from_str(
       "
       @IGNORE g:sp
 
@@ -714,14 +710,13 @@ mod test {
       
       
 ",
-    );
+    )
+    .unwrap();
 
-    let mut ir_states = compile_states(&grammar, 1);
-    let bytecode_output = compile_bytecode(&grammar, &mut ir_states);
+    let mut ir_states = compile_states(&g, 1);
+    let bytecode_output = compile_bytecode(&g, &mut ir_states);
 
-    if let Ok(mut ctx) =
-      compile_from_bytecode("test", &grammar, &Context::create(), &bytecode_output)
-    {
+    if let Ok(mut ctx) = compile_from_bytecode("test", &g, &Context::create(), &bytecode_output) {
       Ok(())
     } else {
       Err(())

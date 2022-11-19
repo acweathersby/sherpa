@@ -58,6 +58,8 @@ mod library_smoke_tests {
 
   use std::path::PathBuf;
 
+  use hctk_core::types::GrammarStore;
+
   use crate::ascript::compile::compile_ascript_store;
   use crate::ascript::types::AScriptStore;
   use crate::builder::pipeline::BuildPipeline;
@@ -79,18 +81,17 @@ mod library_smoke_tests {
 
   #[test]
   fn test_output_rust_on_trivial_grammar() {
-    use hctk_core::debug::compile_test_grammar;
-
-    let grammar = compile_test_grammar(
+    let g = GrammarStore::from_str(
       "
         <> A >\\1 f:ast { { t_Banana, c_Mobius, value:u32($1), string:str($1), useful:true } } 
         | \\a \\b A f:ast { { t_Banana, value: u32($1), dd:u32($3), tok, useful:false } }
         ",
-    );
+    )
+    .unwrap();
 
     let mut ascript = AScriptStore::new();
 
-    let errors = compile_ascript_store(&grammar, &mut ascript);
+    let errors = compile_ascript_store(&g, &mut ascript);
 
     for error in &errors {
       eprintln!("{}", error);

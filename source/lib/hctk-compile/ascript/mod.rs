@@ -33,15 +33,14 @@ pub fn build_ast(source_type: SourceType) -> PipelineTask {
 mod rust_ast_build {
   use crate::ascript::compile::compile_ascript_store;
   use crate::ascript::types::AScriptStore;
-  use hctk_core::debug::compile_test_grammar;
-  use hctk_core::writer::code_writer::CodeWriter;
+  use hctk_core::types::GrammarStore;
   use hctk_core::writer::code_writer::StringBuffer;
 
   use super::rust;
 
   #[test]
   fn test_grammar() {
-    let grammar = compile_test_grammar(
+    let g = GrammarStore::from_str(
       "
 @IGNORE g:sp
 
@@ -63,24 +62,25 @@ mod rust_ast_build {
 
     | \\( expression \\)          f:ast { { t_Paren, v: $2 } }
 ",
-    );
+    )
+    .unwrap();
     let mut ascript = AScriptStore::new();
 
-    let errors = compile_ascript_store(&grammar, &mut ascript);
+    let errors = compile_ascript_store(&g, &mut ascript);
     for error in &errors {
       eprintln!("{}", error);
     }
 
     let mut writer = StringBuffer::new(vec![]);
 
-    rust::write(&grammar, &ascript, &mut writer);
+    rust::write(&g, &ascript, &mut writer);
 
     eprintln!("{}", String::from_utf8(writer.into_output()).unwrap());
   }
 
   #[test]
   fn test_parse_errors_when_production_has_differing_return_types2() {
-    let grammar = compile_test_grammar(
+    let g = GrammarStore::from_str(
       "
         @EXPORT markdown as md
 
@@ -216,11 +216,12 @@ mod rust_ast_build {
             | \\(
             f:ast { { t_MetaStart, c_Content, c_Meta } }              
         ",
-    );
+    )
+    .unwrap();
 
     let mut store = AScriptStore::new();
 
-    let errors = compile_ascript_store(&grammar, &mut store);
+    let errors = compile_ascript_store(&g, &mut store);
 
     println!("{:#?}", store);
 
@@ -230,22 +231,89 @@ mod rust_ast_build {
 
     let mut writer = StringBuffer::new(vec![]);
 
-    rust::write(&grammar, &store, &mut writer);
+    rust::write(&g, &store, &mut writer);
 
     eprintln!("{}", String::from_utf8(writer.into_output()).unwrap());
   }
 
   #[test]
-  fn test_parse_errors_when_production_has_differing_return_types3() {
-    let grammar = compile_test_grammar(
-      " 
-      <> B > g:id(+)          
-      ",
-    );
+  fn group_productions_get_correct_type_information() {
+    let g = GrammarStore::from_str(
+      "
+      @NAME hc_symbol
+
+      @IGNORE g:sp g:nl
+      
+      
+      <> annotated_symbol > 
+              
+              symbol^s [unordered tk:reference?^r \\? ?^o ]
+      
+                  f:ast {{ t_AnnotatedSymbol, symbol:$s, is_optional:bool($o), reference:str($r), tok  }}
+              
+              | symbol
+      
+      
+      <> symbol > class
+      
+      
+      <> class >
+      
+              t:c: ( \\num | \\nl | \\sp | \\id | \\sym | \\any )
+              
+                  f:ast { { t_Class, c_Symbol , c_Terminal, val:str($2),  tok } }
+      
+      
+      <> reference > 
+      
+              t:^ tk:identifier_syms
+      
+      
+      <> identifier > 
+      
+              tk:identifier_syms 
+      
+      
+      <> identifier_syms >  
+      
+              identifier_syms g:id
+      
+              | identifier_syms \\_
+      
+              | identifier_syms \\-
+      
+              | identifier_syms g:num      
+      
+              | \\_ 
+      
+              | \\- 
+      
+              | g:id
+        ",
+    ).unwrap();
 
     let mut store = AScriptStore::new();
 
-    let errors = compile_ascript_store(&grammar, &mut store);
+    let errors = compile_ascript_store(&g, &mut store);
+    let mut writer = StringBuffer::new(vec![]);
+
+    rust::write(&g, &store, &mut writer);
+  }
+
+  // pri
+
+  #[test]
+  fn test_parse_errors_when_production_has_differing_return_types3() {
+    let g = GrammarStore::from_str(
+      " 
+      <> B > g:id(+)          
+      ",
+    )
+    .unwrap();
+
+    let mut store = AScriptStore::new();
+
+    let errors = compile_ascript_store(&g, &mut store);
 
     for error in &errors {
       eprintln!("{}", error);
@@ -255,7 +323,7 @@ mod rust_ast_build {
 
     let mut writer = StringBuffer::new(vec![]);
 
-    rust::write(&grammar, &store, &mut writer);
+    rust::write(&g, &store, &mut writer);
 
     eprintln!("{}", String::from_utf8(writer.into_output()).unwrap());
   }
@@ -267,17 +335,13 @@ mod ascript_compile_tests {
   use crate::ascript::compile::compile_ascript_store;
   use crate::ascript::compile::compile_struct_type;
   use crate::ascript::types::AScriptStore;
-  use hctk_core::debug::compile_test_grammar;
   use hctk_core::grammar::data::ast::ASTNode;
   use hctk_core::grammar::data::ast::AST_Property;
   use hctk_core::grammar::data::ast::AST_Struct;
   use hctk_core::grammar::data::ast::AST_TypeId;
   use hctk_core::grammar::data::ast::Ascript;
-  use hctk_core::grammar::data::ast::Ascript as AST_AScript;
   use hctk_core::grammar::data::ast::Body;
   use hctk_core::grammar::data::ast::Production;
-  use hctk_core::grammar::data::ast::Reduce;
-  use hctk_core::grammar::data::ast::AST_STRING;
   use hctk_core::grammar::parse::compile_ascript_ast;
   use hctk_core::grammar::parse::compile_grammar_ast;
   use hctk_core::types::*;
@@ -428,16 +492,17 @@ mod ascript_compile_tests {
 
   #[test]
   fn test_parse_errors_when_production_has_differing_return_types() {
-    let grammar = compile_test_grammar(
+    let g = GrammarStore::from_str(
       "
             <> A > \\1 f:ast { { t_Test } } 
             | \\a 
         ",
-    );
+    )
+    .unwrap();
 
     let mut store = AScriptStore::new();
 
-    let errors = compile_ascript_store(&grammar, &mut store);
+    let errors = compile_ascript_store(&g, &mut store);
 
     for error in &errors {
       eprintln!("{}", error);

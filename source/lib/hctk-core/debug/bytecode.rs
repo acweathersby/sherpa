@@ -372,20 +372,19 @@ mod bytecode_debugging_tests {
   use crate::bytecode::compile::compile_ir_state_to_bytecode;
   use crate::bytecode::compile_bytecode;
   use crate::debug::bytecode::BytecodeGrammarLookups;
-  use crate::debug::compile_test_grammar;
   use crate::debug::disassemble_state;
-  use crate::grammar::get_production_id_by_name;
   use crate::grammar::parse::compile_ir_ast;
   use crate::intermediate::state::compile_states;
   use crate::intermediate::state::generate_production_states;
+  use crate::types::GrammarStore;
 
   use super::generate_disassembly;
 
   #[test]
   pub fn test_produce_a_single_ir_ast_from_a_single_state_of_a_trivial_production() {
-    let g = compile_test_grammar("<> A > \\h ? \\e ? \\l \\l \\o");
+    let g = GrammarStore::from_str("<> A > \\h ? \\e ? \\l \\l \\o").unwrap();
 
-    let prod_id = get_production_id_by_name("A", &g).unwrap();
+    let prod_id = g.get_production_id_by_name("A").unwrap();
 
     let mut ir_states = compile_states(&g, 1);
     let output = compile_bytecode(&g, &mut ir_states);

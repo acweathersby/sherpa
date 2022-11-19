@@ -1,5 +1,4 @@
 use hctk_core::grammar::data::ast::ASTNode;
-use hctk_core::grammar::get_production_plain_name;
 use hctk_core::grammar::hash_id_value_u64;
 use hctk_core::types::*;
 use std::collections::BTreeMap;
@@ -155,8 +154,8 @@ impl AScriptTypeVal {
       GenericStruct(sub_types) => "Node".to_string(),
       Any => "Any".to_string(),
       UnresolvedProduction(id) => match g {
-        Some(grammar) => {
-          let name = get_production_plain_name(id, grammar);
+        Some(g) => {
+          let name = g.get_production_plain_name(id);
           format!("UnresolvedProduction[{}]", name)
         }
         None => format!("UnresolvedProduction[{:?}]", id),
@@ -206,8 +205,8 @@ impl AScriptTypeVal {
       GenericStruct(sub_types) => "Node".to_string(),
       Any => "Any".to_string(),
       UnresolvedProduction(id) => match g {
-        Some(grammar) => {
-          let name = get_production_plain_name(id, grammar);
+        Some(g) => {
+          let name = g.get_production_plain_name(id);
           format!("UnresolvedProduction[{}]", name)
         }
         None => format!("UnresolvedProduction[{:?}]", id),

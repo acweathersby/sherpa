@@ -8,25 +8,23 @@ mod transition_tree_tests {
 
   use std::collections::BTreeSet;
 
-  use crate::debug::compile_test_grammar;
   use crate::debug::debug_items;
-  use crate::grammar::get_production_id_by_name;
-  use crate::grammar::get_production_plain_name;
   use crate::grammar::get_production_start_items;
   use crate::intermediate::transition::get_valid_starts;
 
   use crate::intermediate::transition::construct_recursive_descent;
+  use crate::types::GrammarStore;
 
   #[test]
   pub fn construct_descent_on_basic_grammar() {
-    let grammar = compile_test_grammar("<> A > \\h \\e \\l \\l \\o");
+    let g = GrammarStore::from_str("<> A > \\h \\e \\l \\l \\o").unwrap();
 
-    let production_id = get_production_id_by_name("A", &grammar).unwrap();
+    let production_id = g.get_production_id_by_name("A").unwrap();
 
     let result = construct_recursive_descent(
-      &grammar,
+      &g,
       false,
-      &get_production_start_items(&production_id, &grammar),
+      &get_production_start_items(&production_id, &g),
       BTreeSet::from_iter(vec![production_id]),
     );
 
@@ -37,7 +35,7 @@ mod transition_tree_tests {
 
   #[test]
   pub fn construct_descent_on_scanner_symbol() {
-    let g = compile_test_grammar(
+    let g = GrammarStore::from_str(
       "
 <> A > tk:B
 
@@ -47,7 +45,8 @@ mod transition_tree_tests {
 
 <> D > \\a \\b
 ",
-    );
+    )
+    .unwrap();
 
     for p in g.productions.values() {
       eprintln!("{}", p.original_name);
@@ -81,22 +80,20 @@ mod state_constructor_tests {
   use std::collections::BTreeSet;
   use std::iter::FromIterator;
 
-  use crate::debug::compile_test_grammar;
   use crate::debug::debug_items;
-  use crate::grammar::get_production_by_name;
-  use crate::grammar::get_production_id_by_name;
   use crate::grammar::get_production_start_items;
   use crate::intermediate::state::generate_production_states;
   use crate::intermediate::state::generate_scanner_intro_state;
   use crate::intermediate::transition::get_valid_starts;
   use crate::types::GrammarId;
+  use crate::types::GrammarStore;
   use crate::types::SymbolID;
 
   use super::state::compile_states;
 
   #[test]
   pub fn production_reduction_decisions() {
-    let g = compile_test_grammar(
+    let g = GrammarStore::from_str(
       "
 <> A > B | C | R 
      | \\g
@@ -114,9 +111,10 @@ mod state_constructor_tests {
 <> G > \\xx
 
   ",
-    );
+    )
+    .unwrap();
 
-    let prod_id = get_production_id_by_name("A", &g).unwrap();
+    let prod_id = g.get_production_id_by_name("A").unwrap();
 
     let result = generate_production_states(&prod_id, &g);
 
@@ -127,11 +125,11 @@ mod state_constructor_tests {
 
   #[test]
   pub fn generate_production_states_with_basic_grammar() {
-    let grammar = compile_test_grammar("<> A > \\h \\e \\l \\l \\o");
+    let g = GrammarStore::from_str("<> A > \\h \\e \\l \\l \\o").unwrap();
 
-    let prod_id = get_production_id_by_name("A", &grammar).unwrap();
+    let prod_id = g.get_production_id_by_name("A").unwrap();
 
-    let result = generate_production_states(&prod_id, &grammar);
+    let result = generate_production_states(&prod_id, &g);
 
     println!("{:#?}", result);
 
@@ -140,11 +138,11 @@ mod state_constructor_tests {
 
   #[test]
   pub fn generate_production_states_with_basic_grammar_with_one_optional_token() {
-    let grammar = compile_test_grammar("<> A > \\h ? \\e ? \\l \\l \\o");
+    let g = GrammarStore::from_str("<> A > \\h ? \\e ? \\l \\l \\o").unwrap();
 
-    let prod_id = get_production_id_by_name("A", &grammar).unwrap();
+    let prod_id = g.get_production_id_by_name("A").unwrap();
 
-    let result = generate_production_states(&prod_id, &grammar);
+    let result = generate_production_states(&prod_id, &g);
 
     println!("{:#?}", result);
 
@@ -153,11 +151,11 @@ mod state_constructor_tests {
 
   #[test]
   pub fn generate_production_states_with_basic_grammar_with_left_recursion() {
-    let grammar = compile_test_grammar("<> A > A \\1 | \\2 ");
+    let g = GrammarStore::from_str("<> A > A \\1 | \\2 ").unwrap();
 
-    let prod_id = get_production_id_by_name("A", &grammar).unwrap();
+    let prod_id = g.get_production_id_by_name("A").unwrap();
 
-    let result = generate_production_states(&prod_id, &grammar);
+    let result = generate_production_states(&prod_id, &g);
 
     println!("{:#?}", result);
 
@@ -166,18 +164,18 @@ mod state_constructor_tests {
 
   #[test]
   pub fn generate_production_states_with_synthesized_scanner_state() {
-    let grammar = compile_test_grammar("<> A > \\1 | \\2 | \\3 ");
+    let g = GrammarStore::from_str("<> A > \\1 | \\2 | \\3 ").unwrap();
 
-    let symbols = grammar
+    let symbols = g
       .symbols
       .iter()
       .filter_map(|(id, sym)| if sym.scanner_only { None } else { Some(id) })
       .cloned()
       .collect::<BTreeSet<_>>();
 
-    println!("{:#?}", symbols.iter().map(|s| grammar.symbol_strings.get(s)).collect::<Vec<_>>());
+    println!("{:#?}", symbols.iter().map(|s| g.symbol_strings.get(s)).collect::<Vec<_>>());
 
-    let result = generate_scanner_intro_state(symbols, &grammar);
+    let result = generate_scanner_intro_state(symbols, &g);
 
     println!("{:#?}", result);
 
@@ -186,7 +184,7 @@ mod state_constructor_tests {
 
   #[test]
   pub fn generate_production_state_with_scanner_function() {
-    let grammar = compile_test_grammar(
+    let grammar = GrammarStore::from_str(
       "
 <> A > tk:B
 
@@ -196,7 +194,8 @@ mod state_constructor_tests {
 
 <> D > \\a \\b
 ",
-    );
+    )
+    .unwrap();
 
     let token_production =
       grammar.symbols.keys().find(|p| matches!(p, SymbolID::TokenProduction(..))).unwrap();
@@ -211,7 +210,7 @@ mod state_constructor_tests {
 
   #[test]
   pub fn handle_moderate_scanner_token_combinations() {
-    let g = compile_test_grammar(
+    let g = GrammarStore::from_str(
       "
 <> A > \\CC  | tk:id_syms
 
@@ -231,9 +230,10 @@ mod state_constructor_tests {
 
     |   g:id
 ",
-    );
+    )
+    .unwrap();
 
-    let p = get_production_id_by_name("A", &g).unwrap();
+    let p = g.get_production_id_by_name("A").unwrap();
 
     let syms =
       get_production_start_items(&p, &g).iter().map(|i| i.get_symbol(&g)).collect::<BTreeSet<_>>();
@@ -247,7 +247,7 @@ mod state_constructor_tests {
 
   #[test]
   pub fn generate_production_with_ambiguity() {
-    let grammar = compile_test_grammar(
+    let g = GrammarStore::from_str(
       "
 <> A > B | C
 
@@ -256,19 +256,235 @@ mod state_constructor_tests {
 <> C > \\a \\b \\c (*)
 
 ",
-    );
+    )
+    .unwrap();
 
-    let prod_id = get_production_id_by_name("A", &grammar).unwrap();
+    let prod_id = g.get_production_id_by_name("A").unwrap();
 
-    let result = generate_production_states(&prod_id, &grammar);
+    let result = generate_production_states(&prod_id, &g);
 
     println!("{:#?}", result);
 
     assert_eq!(result.len(), 12);
   }
+
+  #[test]
+  pub fn generate_annotated_symbol() {
+    let g = GrammarStore::from_str(
+      "
+      @NAME hc_symbol
+      @NAME ascript
+
+      @IGNORE g:sp g:nl
+      
+      <> body >  
+      
+          struct 
+          
+          | expression(+\\, )
+              f:ast { { t_AST_Statements, statements:$1, tok } }
+      
+      <> expression > 
+          
+          member
+      
+          | string_convert
+      
+          | numeric_convert
+      
+          | bool_convert
+      
+          | literal
+      
+          | vector
+      
+          | token
+      
+      
+      <> struct > 
+      
+          \\{ struct_prop(+\\, ) \\}
+              f:ast { { t_AST_Struct, props:$2, tok } }
+      
+      
+      <> struct_prop >  
+          
+          identifier \\: expression
+              f:ast { { t_AST_Property, id:str($1), value:$3, tok } }
+          
+          |  identifier \\: struct
+              f:ast { { t_AST_Property, id:str($1), value:$3, tok } }
+          
+          |  identifier
+              f:ast { { t_AST_Property, id:str($1), named_reference: str($1), tok } }
+          
+          | type_identifier
+              f:ast { { t_AST_TypeId,  value:str($1), tok } }
+          
+          | class_identifier
+              f:ast { { t_AST_ClassId, value:str($1), tok } }
+      
+          | token
+      
+      
+      <> type_identifier > 
+      
+          t:t_ identifier
+      
+      
+      <> class_identifier >
+      
+          t:c_ identifier
+      
+      
+      <> vector >
+      
+          \\[ expression(*\\, ) \\]
+              f:ast { { t_AST_Vector, initializer: $2, tok  } }
+      
+      
+      <> add > 
+          
+          member \\+ expression
+          
+              f:ast { { t_AST_Add, left: $1, right: $3, tok } }
+      
+      
+      <> member > 
+          
+          reference
+      
+          | reference \\. identifier
+              f:ast { { t_AST_Member, reference:$1, property:$3 } }
+      
+      
+      <> string_convert > 
+          
+          t:str convert_initializer?
+              f:ast { { t_AST_STRING, value: $2, tok  } }
+      
+      
+      <> bool_convert > 
+          
+          t:bool convert_initializer?
+              f:ast { { t_AST_BOOL,  initializer: $2, tok  } }
+      
+      
+      <> numeric_convert > 
+          
+          t:u8  convert_initializer?
+              f:ast { { t_AST_U8,  initializer: $2, tok  } }
+      
+          | t:u16 convert_initializer?
+              f:ast { { t_AST_U16, initializer: $2, tok  } }
+      
+          | t:u32 convert_initializer?
+              f:ast { { t_AST_U32, initializer: $2, tok  } }
+      
+          | t:u64 convert_initializer?
+              f:ast { { t_AST_U64, initializer: $2, tok  } }
+      
+          | t:i8  convert_initializer?
+              f:ast { { t_AST_I8,  initializer: $2, tok  } }
+      
+          | t:i16 convert_initializer?
+              f:ast { { t_AST_I16, initializer: $2, tok  } }
+      
+          | t:i32 convert_initializer?
+              f:ast { { t_AST_I32, initializer: $2, tok  } }
+      
+          | t:i64 convert_initializer?
+              f:ast { { t_AST_I64, initializer: $2, tok  } }
+      
+          | t:f32 convert_initializer?
+              f:ast { { t_AST_F32, initializer: $2, tok  } }
+      
+          | t:f64 convert_initializer?
+              f:ast { { t_AST_F64, initializer: $2, tok  } }
+      
+      
+      <> convert_initializer > 
+      
+          t:( init_objects t:)       
+              f:ast { { t_Init, expression: $2 } }
+      
+      <> init_objects > member | token 
+      
+      
+      <> literal > 
+          
+          t:true 
+              f:ast { { t_AST_BOOL, value: true } }
+      
+          | t:false
+              f:ast { { t_AST_BOOL, value: false } }
+      
+          | tk:integer
+              f:ast { { t_AST_NUMBER, value:f64($1) } }
+      
+      
+      
+      <> reference > 
+          
+          t:$ tk:identifier 
+              f:ast { { t_AST_NamedReference, value: str($2), tok } }
+      
+          | t:$ tk:integer         
+              f:ast { { t_AST_IndexReference, value: i64($2), tok } }
+      
+      
+      <> integer > 
+          
+          g:num(+)
+      
+      
+      <> identifier > 
+      
+          tk:identifier_syms 
+      
+      
+      <> identifier_syms >  
+      
+          identifier_syms g:id
+      
+          | identifier_syms \\_
+      
+          | identifier_syms \\-
+      
+          | identifier_syms g:num      
+      
+          | \\_ 
+      
+          | \\- 
+      
+          | g:id
+      
+      
+      <> token > 
+      
+          t:tok 
+              f:ast { { t_AST_Token } }
+      
+          | t:token 
+              f:ast { { t_AST_Token } }
+      
+      
+",
+    )
+    .unwrap();
+
+    let prod_id = g.get_production_id_by_name("struct_prop").unwrap();
+
+    let result = generate_production_states(&prod_id, &g);
+
+    println!("{:#?}", result);
+
+    assert_eq!(result.len(), 10);
+  }
+
   #[test]
   pub fn generate_production_with_recursion() {
-    let grammar = compile_test_grammar(
+    let g = GrammarStore::from_str(
       "
       @IGNORE g:sp
 
@@ -291,11 +507,12 @@ mod state_constructor_tests {
       
       
 ",
-    );
+    )
+    .unwrap();
 
-    let prod_id = get_production_id_by_name("term", &grammar).unwrap();
+    let prod_id = g.get_production_id_by_name("term").unwrap();
 
-    let result = generate_production_states(&prod_id, &grammar);
+    let result = generate_production_states(&prod_id, &g);
 
     println!("{:#?}", result);
 
@@ -304,7 +521,7 @@ mod state_constructor_tests {
 
   #[test]
   pub fn generate_scanner_production_with_recursion() {
-    let grammar = compile_test_grammar(
+    let g = GrammarStore::from_str(
       "
       @IGNORE g:sp
 
@@ -322,11 +539,12 @@ mod state_constructor_tests {
       <> A > \\a \\- \\b
       
 ",
-    );
+    )
+    .unwrap();
 
     let result = generate_scanner_intro_state(
-      BTreeSet::from_iter(vec![SymbolID::from_string("V", Some(&grammar))]),
-      &grammar,
+      BTreeSet::from_iter(vec![SymbolID::from_string("V", Some(&g))]),
+      &g,
     );
 
     println!("{:#?}", result);
@@ -336,7 +554,7 @@ mod state_constructor_tests {
 
   #[test]
   pub fn generate_production_with_recursiond() {
-    let grammar = compile_test_grammar(
+    let g = GrammarStore::from_str(
       "
         @EXPORT markdown as md
 
@@ -472,16 +690,17 @@ mod state_constructor_tests {
             | \\(
             f:ast { { t_MetaStart, c_Content, c_Meta } }              
         ",
-    );
+    )
+    .unwrap();
 
     // compile_states(&grammar, 1);
 
     let result = generate_scanner_intro_state(
       BTreeSet::from_iter(vec![
-        SymbolID::from_string("g:nl", Some(&grammar)),
-        SymbolID::from_string("code_block_delimiter_with_nl", Some(&grammar)),
+        SymbolID::from_string("g:nl", Some(&g)),
+        SymbolID::from_string("code_block_delimiter_with_nl", Some(&g)),
       ]),
-      &grammar,
+      &g,
     );
     // if let Some(prod) = get_production_id_by_name("line", &grammar) {
     //   let result = generate_production_states(&prod, &grammar);

@@ -1,5 +1,22 @@
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
+use std::fmt::Display;
+use std::str::FromStr;
 
+use crate::grammar::uuid::hash_id_value_u64;
+use crate::utf8::lookup_table::HORIZONTAL_TAB;
+use crate::utf8::lookup_table::IDENTIFIER;
+use crate::utf8::lookup_table::NEW_LINE;
+use crate::utf8::lookup_table::NUMBER;
+use crate::utf8::lookup_table::SPACE;
+use crate::utf8::lookup_table::SYMBOL;
+
+use super::GrammarId;
+use super::GrammarStore;
+use super::HCResult;
+use super::ProductionId;
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
 pub struct StringId(pub u64);
 
 impl From<&String> for StringId {
@@ -114,8 +131,8 @@ impl SymbolID {
         if let Some(g) = g {
           match g.symbol_strings.iter().find(|(_, string)| string.as_str() == symbol_string) {
             Some((sym_id, _)) => *sym_id,
-            _ => match get_production_by_name(symbol_string, g) {
-              Some(prod) => {
+            _ => match g.get_production_by_name(symbol_string) {
+              HCResult::Ok(prod) => {
                 if prod.is_scanner {
                   Self::TokenProduction(prod.id, g.guid)
                 } else {
@@ -364,24 +381,6 @@ impl Symbol {
     BTreeMap::from_iter(Self::Generics.clone().iter().map(|s| (s.guid, *s)))
   }
 }
-
-use std::collections::BTreeMap;
-use std::collections::BTreeSet;
-use std::fmt::Display;
-use std::str::FromStr;
-
-use crate::grammar::get_production_by_name;
-use crate::grammar::uuid::hash_id_value_u64;
-use crate::utf8::lookup_table::HORIZONTAL_TAB;
-use crate::utf8::lookup_table::IDENTIFIER;
-use crate::utf8::lookup_table::NEW_LINE;
-use crate::utf8::lookup_table::NUMBER;
-use crate::utf8::lookup_table::SPACE;
-use crate::utf8::lookup_table::SYMBOL;
-
-use super::GrammarId;
-use super::GrammarStore;
-use super::ProductionId;
 
 /// A table that maps a symbol class_id to a utf8 string.
 
