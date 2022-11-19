@@ -44,6 +44,7 @@ impl<T> HCResult<T> {
   /// let x: HCResult<i32> = HCResult::Ok(2);
   /// assert_eq!(x.is_ok(), true);
   /// ```
+  #[inline]
   pub fn is_ok(&self) -> bool {
     matches!(self, HCResult::Ok(_))
   }
@@ -68,6 +69,7 @@ impl<T> HCResult<T> {
   /// let x: HCResult<i32> = HCResult::Ok(2);
   /// assert_eq!(x.is_err(), false);
   /// ```
+  #[inline]
   pub fn is_err(&self) -> bool {
     matches!(self, HCResult::Err(_))
   }
@@ -92,6 +94,7 @@ impl<T> HCResult<T> {
   /// let x: HCResult<i32> = HCResult::Ok(2);
   /// assert_eq!(x.is_none(), false);
   /// ```
+  #[inline]
   pub fn is_none(&self) -> bool {
     matches!(self, HCResult::None)
   }
@@ -116,8 +119,24 @@ impl<T> HCResult<T> {
   /// let x: HCResult<i32> = HCResult::Ok(2);
   /// assert_eq!(x.is_faulty(), false);
   /// ```
+  #[inline]
   pub fn is_faulty(&self) -> bool {
     self.is_err() || self.is_none()
+  }
+
+  /// Returns the contained [`Ok`] value, consuming the `self` value.
+  ///
+  /// # Panics
+  ///
+  /// Panics if the self value equals [`None`] or [`Err`].
+  #[inline]
+  #[track_caller]
+  pub fn unwrap(self) -> T {
+    match self {
+      HCResult::Ok(val) => val,
+      HCResult::None => panic!("called `HCResult::unwrap()` on an `None` value"),
+      HCResult::Err(err) => panic!("called `HCResult::unwrap()` on an `Err` value: \n {}", err),
+    }
   }
 }
 
