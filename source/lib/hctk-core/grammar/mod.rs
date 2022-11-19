@@ -72,7 +72,10 @@ pub fn compile_grammar_from_string(
   absolute_path: &PathBuf,
 ) -> (Option<Arc<GrammarStore>>, Option<Vec<HCError>>) {
   match compile_grammar_ast(Vec::from(string.as_bytes())) {
-    Ok(grammar) => compile_grammars_into_store(vec![(absolute_path.clone(), grammar)], 0).unwrap(),
+    Ok(grammar) => {
+      compile_grammars_into_store(vec![(absolute_path.clone(), Default::default(), grammar)], 0)
+        .unwrap()
+    }
     Err(err) => (None, Some(vec![err])),
   }
 }
@@ -92,26 +95,29 @@ mod test_grammar {
   use crate::grammar::load::load_all;
   use crate::types::RecursionType;
 
-  use super::compile::convert_left_to_right;
+  use super::compile::convert_left_recursion_to_right;
   use super::compile_grammar_from_string;
   use super::get_production_start_items;
   use super::parse::compile_grammar_ast;
   use super::parse::{self};
 
   #[test]
-  fn test_string_list() {
-    let grammar = String::from("<> A > ( g:id | g:sym )(+\\\' ) ");
+  fn test_merge_productions_file() {
+    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
-    if let Ok(grammar) = compile_grammar_ast(Vec::from(grammar.as_bytes())) {
-      let (grammar, errors) = pre_process_grammar(&grammar, &PathBuf::from("/test"), "test");
+    path.push("../../../test/grammars/merge_root.hcg");
 
-      for error in &errors {
+    let thread_count = get_num_of_available_threads();
+
+    let (grammar, errors) = compile_grammar_from_path(path, get_num_of_available_threads());
+
+    if errors.is_some() {
+      for error in errors.unwrap_or_default() {
         eprintln!("{}", error);
       }
-
-      assert_eq!(errors.len(), 1);
+      panic!("Errors encountered");
     } else {
-      panic!("Failed to parse and produce an AST of '<> a > b'");
+      assert!(grammar.is_some());
     }
   }
 
@@ -156,7 +162,7 @@ mod test_grammar {
 
       let mut g2 = g.deref().clone();
 
-      let (a, a_prime) = convert_left_to_right(&mut g2, prod);
+      let (a, a_prime) = convert_left_recursion_to_right(&mut g2, prod);
 
       assert!(g2.get_production_recursion_type(prod,).contains(RecursionType::RIGHT));
       assert!(!g2.get_production_recursion_type(prod).contains(RecursionType::LEFT_DIRECT));

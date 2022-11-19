@@ -256,11 +256,10 @@ impl SymbolID {
     }
   }
 
-  pub fn get_grammar_id(&self) -> Option<GrammarId> {
+  pub fn get_grammar_id(&self) -> GrammarId {
     match self {
-      Self::Production(_, id) => Some(*id),
-      Self::TokenProduction(_, id) => Some(*id),
-      _ => None,
+      Self::Production(_, id) | Self::TokenProduction(_, id) => *id,
+      _ => GrammarId::default(),
     }
   }
 

@@ -52,7 +52,7 @@ impl ReduceFunctionType {
     }
   }
 }
-pub type ImportProductionNameTable = HashMap<String, (String, PathBuf)>;
+pub type ImportedGrammarReferences = HashMap<String, (String, PathBuf)>;
 
 pub type ReduceFunctionTable = BTreeMap<ReduceFunctionId, ReduceFunctionType>;
 
@@ -112,8 +112,8 @@ pub struct GrammarStore {
   /// Maps a [ProductionId] to a [Production].
   pub productions: ProductionTable,
 
-  /// Maps a production's id to it's original name
-  pub production_names: BTreeMap<ProductionId, String>,
+  /// Maps a production's id to it's original name and guid name
+  pub production_names: BTreeMap<ProductionId, (String, String)>,
 
   /// Maps BodyId to body data.
   pub bodies: BodyTable,
@@ -134,7 +134,7 @@ pub struct GrammarStore {
 
   /// Maps a local import name to an absolute file path and its
   /// UUID.
-  pub imports: HashMap<String, (String, PathBuf)>,
+  pub imports: ImportedGrammarReferences,
 
   /// Closure of all items that can be produced by this grammar.
   pub closures: HashMap<Item, Vec<Item>>,
@@ -163,9 +163,8 @@ pub struct GrammarStore {
   /// All reduce functions defined in the grammar.
   pub reduce_functions: ReduceFunctionTable,
 
-  pub import_names_lookup: ImportProductionNameTable,
+  pub merge_productions: BTreeMap<ProductionId, Vec<Body>>,
 }
-
 impl GrammarStore {
   pub fn from_path(path: PathBuf) -> HCResult<Arc<GrammarStore>> {
     match compile_grammar_from_path(path, 0) {
@@ -215,7 +214,7 @@ impl GrammarStore {
   pub fn get_production_plain_name(&self, prod_id: &ProductionId) -> &str {
     if let Some(prod) = self.productions.get(prod_id) {
       &prod.original_name
-    } else if let Some(name) = self.production_names.get(prod_id) {
+    } else if let Some((name, _)) = self.production_names.get(prod_id) {
       name
     } else {
       ""
@@ -226,6 +225,8 @@ impl GrammarStore {
   pub fn get_production_guid_name(&self, prod_id: &ProductionId) -> &str {
     if let Some(prod) = self.productions.get(prod_id) {
       &prod.guid_name
+    } else if let Some((_, name)) = self.production_names.get(prod_id) {
+      name
     } else {
       ""
     }

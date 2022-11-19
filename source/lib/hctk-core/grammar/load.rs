@@ -13,6 +13,7 @@ use std::sync::Arc;
 use super::data::ast::ASTNode;
 use super::data::ast::Grammar;
 use super::data::ast::Import;
+use super::get_guid_grammar_name;
 use super::multitask::WorkVerifier;
 use std::collections::HashSet;
 use std::collections::VecDeque;
@@ -38,7 +39,7 @@ pub(crate) fn get_usable_thread_count(requested_count: usize) -> usize {
 pub(crate) fn load_all(
   absolute_path: &PathBuf,
   number_of_threads: usize,
-) -> (Vec<(PathBuf, Box<Grammar>)>, Vec<HCError>) {
+) -> (Vec<(PathBuf, HashMap<String, (String, PathBuf)>, Box<Grammar>)>, Vec<HCError>) {
   let mut pending_grammar_paths =
     Mutex::new(VecDeque::<PathBuf>::from_iter(vec![absolute_path.clone()]));
   let mut claimed_grammar_paths = Mutex::new(HashSet::<PathBuf>::new());
@@ -78,6 +79,7 @@ pub(crate) fn load_all(
               Some(path) => match load_grammar(&path) {
                 HCResult::Ok((grammar, imports)) => {
                   let mut units_of_work = imports.len();
+                  let mut imports_refs: ImportedGrammarReferences = Default::default();
 
                   for box Import { uri, reference, tok } in imports {
                     let base_path = PathBuf::from(uri);
@@ -87,6 +89,10 @@ pub(crate) fn load_all(
                       &allowed_extensions,
                     ) {
                       HCResult::Ok(path) => {
+                        imports_refs.insert(
+                          reference.to_string(),
+                          (get_guid_grammar_name(&path).unwrap(), path.clone()),
+                        );
                         pending_grammar_paths.lock().unwrap().push_back(path);
                         work_verifier.lock().unwrap().add_units_of_work(1);
                       }
@@ -105,7 +111,7 @@ pub(crate) fn load_all(
                     }
                   }
 
-                  grammars.push((path, grammar));
+                  grammars.push((path, imports_refs, grammar));
                   {
                     work_verifier.lock().unwrap().complete_one_unit_of_work();
                   }

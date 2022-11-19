@@ -186,7 +186,7 @@ impl Token {
     Token {
       len:      0,
       off:      0,
-      line_num: 0,
+      line_num: u32::MAX,
       line_off: 0,
       input:    None,
       range:    None,
@@ -211,7 +211,7 @@ impl Token {
   /// Returns the line number of the token location. This may be
   /// zero if the token is not attached to its source.
   pub fn get_line(&mut self) -> usize {
-    if self.line_num < 1 {
+    if self.line_num == u32::MAX {
       if let Some(source) = self.input.clone() {
         let mut root = self.off as usize;
         let mut i = 0;
@@ -284,7 +284,7 @@ impl Token {
     if let Some(source) = self.input.clone() {
       let start_line = self.line_num + 1;
 
-      let start_column: u32 = self.off - self.line_off + 1;
+      let start_column: u32 = self.off - self.line_off;
 
       let mut end_line = start_line;
 

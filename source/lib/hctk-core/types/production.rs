@@ -27,6 +27,12 @@ pub struct ExportedProduction<'a> {
   pub production:  &'a Production,
 }
 
+impl Default for RecursionType {
+  fn default() -> Self {
+    RecursionType::NONE
+  }
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
 pub struct ProductionId(pub u64);
 
@@ -74,7 +80,7 @@ impl std::fmt::Display for BodyId {
   }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Production {
   pub guid_name: String,
   pub original_name: String,
@@ -97,32 +103,7 @@ pub struct Production {
   pub symbol_bytecode_id: u32,
 }
 
-impl Production {
-  pub fn new(
-    original_name: &str,
-    guid_name: &str,
-    id: ProductionId,
-    number_of_bodies: u16,
-    token: Token,
-    is_scanner: bool,
-  ) -> Self {
-    Production {
-      guid_name: guid_name.to_string(),
-      original_name: original_name.to_string(),
-      id,
-      is_entry: false,
-      recursion_type: RecursionType::NONE,
-      is_scanner,
-      number_of_bodies,
-      priority: 0,
-      original_location: token,
-      bytecode_id: 0,
-      symbol_bytecode_id: 0,
-    }
-  }
-}
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct BodySymbolRef {
   pub sym_id:         SymbolID,
   pub original_index: u32,
@@ -158,7 +139,7 @@ impl ReduceFunctionId {
 }
 
 /// A single body derived from a production
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Body {
   pub syms: Vec<BodySymbolRef>,
   pub len: u16,

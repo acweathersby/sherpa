@@ -45,6 +45,7 @@ pub enum HCError {
     message: String,
     inline_message: String,
     loc: Token,
+    path: PathBuf,
   },
 
   GrammarCompile_MultiLocation {
@@ -113,11 +114,11 @@ impl From<String> for HCError {
 impl Display for HCError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
-      UNDEFINED => f.write_str("An unknown error has occurred "),
-      Transition_InvalidGenerics { .. } => f.write_str("Transition_InvalidGenerics Error"),
-      Load_InvalidGrammarPath { .. } => f.write_str("Load_InvalidGrammarPath Error"),
+      UNDEFINED => f.write_str("\nAn unknown error has occurred "),
+      Transition_InvalidGenerics { .. } => f.write_str("\nTransition_InvalidGenerics Error"),
+      Load_InvalidGrammarPath { .. } => f.write_str("\nLoad_InvalidGrammarPath Error"),
       Load_InvalidDependency { path, requestor, tok, err } => f.write_fmt(format_args!(
-        "The import grammar path [{}], referenced in [{}:{}], does not exist: \n{}",
+        "\nThe import grammar path [{}], referenced in [{}:{}], does not exist: \n{}",
         path.to_str().unwrap_or(""),
         requestor.to_str().unwrap_or(""),
         tok.clone().get_line() + 1,
@@ -128,16 +129,24 @@ impl Display for HCError {
           BlameColor::Red
         )
       )),
-      IOError(err_string) => f.write_fmt(format_args!("IO Error: {}", err_string)),
+      IOError(err_string) => f.write_fmt(format_args!("\nIO Error: {}", err_string)),
       Text(err_string) => f.write_str(&err_string),
       Self::Error(err) => err.fmt(f),
-      IRError_NotParsed => f.write_str("IRNode has not been parsed"),
-      IRError_BadParse => f.write_str("Errors occurred during while parsing IRNode code"),
-      GrammarCompile_Location { message, inline_message, loc } => {
-        f.write_fmt(format_args!("{}\n{}", message, loc.blame(1, 1, &inline_message, None),))
+      IRError_NotParsed => f.write_str("\nIRNode has not been parsed"),
+      IRError_BadParse => f.write_str("\nErrors occurred during while parsing IRNode code"),
+      GrammarCompile_Location { message, inline_message, loc, path } => {
+        let Range { start_line, start_column, .. } = loc.get_range();
+        f.write_fmt(format_args!(
+          "\n[{}:{}:{}]\n   {}\n{}",
+          path.to_str().unwrap(),
+          start_line,
+          start_column,
+          message,
+          loc.blame(1, 1, &inline_message, BlameColor::Red),
+        ))
       }
       GrammarCompile_MultiLocation { message, locations } => f.write_fmt(format_args!(
-        "{}\n{}",
+        "\n{}\n{}",
         message,
         locations.iter().map(|s| format!("{}", s)).collect::<Vec<_>>().join("\n"),
       )),
@@ -146,10 +155,10 @@ impl Display for HCError {
         if tok.is_empty() {
           tok = tok.to_length(1);
         }
-        f.write_str(&tok.blame(0, 0, "Unexpected Token", None))
+        f.write_str(&tok.blame(0, 0, "Unexpected Token", BlameColor::Red))
       }
       Many { message, errors } => f.write_fmt(format_args!(
-        "{} \n-------------------\n {}",
+        "\n{} \n-------------------\n {}",
         message,
         errors.iter().map(|e| e.to_string()).collect::<Vec<_>>().join("\n")
       )),
