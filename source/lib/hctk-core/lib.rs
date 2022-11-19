@@ -8,6 +8,10 @@
 #![feature(map_first_last)]
 #![feature(drain_filter)]
 #![feature(btree_drain_filter)]
+#![feature(try_trait_v2)]
+#![feature(try_trait_v2_residual)]
+#![feature(const_trait_impl)]
+#![feature(int_roundings)]
 #![allow(bad_style, dead_code, unused, unused_allocation, unused_comparisons, unused_parens)]
 
 pub mod deprecated_runtime;

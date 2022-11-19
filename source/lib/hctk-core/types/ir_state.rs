@@ -16,6 +16,7 @@ pub enum PeekType {
   PeekStart,
   PeekContinue,
 }
+
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum IRStateType {
   Undefined,
@@ -35,6 +36,7 @@ impl Default for IRStateType {
     Self::Undefined
   }
 }
+
 pub struct IRState {
   pub code: String,
   pub id: String,
@@ -43,11 +45,12 @@ pub struct IRState {
   pub graph_id: usize,
   pub normal_symbols: Vec<SymbolID>,
   pub skip_symbols: Vec<SymbolID>,
-  pub ast: Result<IR_STATE, ParseError>,
+  pub ast: Result<IR_STATE, HCError>,
   pub state_type: IRStateType,
   pub stack_depth: u32,
   pub peek_type: PeekType,
 }
+
 impl Default for IRState {
   fn default() -> Self {
     Self {
@@ -59,7 +62,7 @@ impl Default for IRState {
       graph_id: usize::default(),
       normal_symbols: Vec::default(),
       skip_symbols: Vec::default(),
-      ast: Err(ParseError::NOT_PARSED),
+      ast: Err(HCError::IRError_NotParsed),
       stack_depth: u32::default(),
       peek_type: PeekType::None,
     }
@@ -140,18 +143,18 @@ impl IRState {
     self.graph_id
   }
 
-  pub fn compile_ast(&mut self) -> Result<&mut IR_STATE, &mut ParseError> {
-    if self.ast.is_ok() {
-      self.ast.as_mut()
-    } else {
-      if self.ast.as_ref().err().unwrap().is_not_parsed() {
+  pub fn compile_ast(&mut self) -> Result<&mut IR_STATE, &mut HCError> {
+    match self.ast {
+      Ok(_) => self.ast.as_mut(),
+      Err(HCError::IRError_NotParsed) => {
         let string = self.get_code();
         self.ast = match compile_ir_ast(Vec::from(string.as_bytes())) {
           Ok(ast) => Ok(*ast),
           Err(err) => Err(err),
         };
+        self.ast.as_mut()
       }
-      self.ast.as_mut()
+      _ => self.ast.as_mut(),
     }
   }
 

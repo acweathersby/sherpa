@@ -16,7 +16,7 @@ use hctk_core::grammar::compile_from_string;
 use hctk_core::intermediate::optimize::optimize_ir_states;
 use hctk_core::intermediate::state::compile_states;
 use hctk_core::types::GrammarStore;
-use hctk_core::types::ParseError;
+use hctk_core::types::HCError;
 use std::thread;
 
 pub use hctk_core::grammar::compile_from_path;
@@ -26,7 +26,7 @@ pub struct CompileError {
   message: String,
 }
 impl CompileError {
-  pub fn from_parse_error(error: &ParseError) -> Self {
+  pub fn from_parse_error(error: &HCError) -> Self {
     Self { message: error.to_string() }
   }
 
@@ -34,7 +34,7 @@ impl CompileError {
     Self { message: error.to_string() }
   }
 
-  pub fn from_errors(errors: &Vec<ParseError>) -> Self {
+  pub fn from_errors(errors: &Vec<HCError>) -> Self {
     let message = errors.into_iter().map(|e| format!("{}", e)).collect::<Vec<_>>().join("\n\n");
 
     Self { message }

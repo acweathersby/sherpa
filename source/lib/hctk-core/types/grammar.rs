@@ -172,6 +172,6 @@ pub struct TempGrammarStore<'a> {
   pub prods: &'a mut ProductionTable,
   pub prod_syms: &'a mut BTreeMap<SymbolID, Token>,
   pub bodies: &'a mut ProductionBodiesTable,
-  pub errors: &'a mut Vec<ParseError>,
+  pub errors: &'a mut Vec<HCError>,
   pub reduce_functions: &'a mut ReduceFunctionTable,
 }

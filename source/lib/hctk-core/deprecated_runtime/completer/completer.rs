@@ -11,7 +11,7 @@ use std::fmt::Debug;
 pub fn complete<'b, I: ParseIterator<T>, T: 'b + ByteReader, Node: Debug>(
   iterator: &mut I,
   fns: &'static [ReduceFunction<Node>],
-) -> Result<HCObj<Node>, ParseError> {
+) -> Result<HCObj<Node>, HCError> {
   let mut tokens: Vec<Token> = Vec::with_capacity(8);
 
   let mut nodes: Vec<HCObj<Node>> = Vec::with_capacity(8);
@@ -88,9 +88,12 @@ pub fn complete<'b, I: ParseIterator<T>, T: 'b + ByteReader, Node: Debug>(
     ParseAction::ERROR { production, .. } => {
       let mut tok = Token::from_parse_token(&last_token);
       tok.set_source(source.clone());
-      let error = TokenError::new(production, tok, Some(iterator.reader().get_source()));
-      Err(ParseError::TOKEN_ERROR(error))
+      Err(HCError::Runtime_ParseError {
+        production,
+        tok,
+        source: Some(iterator.reader().get_source()),
+      })
     }
-    _ => Err(ParseError::UNDEFINED),
+    _ => Err(HCError::UNDEFINED),
   }
 }

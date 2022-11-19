@@ -19,6 +19,7 @@ use super::get_guid_grammar_name;
 use super::get_production_plain_name;
 use super::get_production_recursion_type;
 use super::get_production_start_items;
+use super::multitask::WorkVerifier;
 use super::parse;
 use super::parse::compile_grammar_ast;
 
@@ -53,7 +54,7 @@ struct SymbolData<'a> {
 pub fn compile_from_path(
   root_grammar_absolute_path: &PathBuf,
   number_of_threads: usize,
-) -> (Option<GrammarStore>, Vec<ParseError>) {
+) -> (Option<GrammarStore>, Vec<HCError>) {
   let mut pending_grammar_paths = Mutex::new(VecDeque::<PathBuf>::new());
 
   let mut claimed_grammar_paths = Mutex::new(HashSet::<PathBuf>::new());
@@ -166,7 +167,7 @@ pub fn compile_from_path(
 pub fn compile_from_string(
   string: &str,
   absolute_path: &PathBuf,
-) -> (Option<GrammarStore>, Vec<ParseError>) {
+) -> (Option<GrammarStore>, Vec<HCError>) {
   match compile_grammar_ast(Vec::from(string.as_bytes())) {
     Ok(grammar) => {
       let (grammar, mut errors) = pre_process_grammar(
@@ -183,7 +184,7 @@ pub fn compile_from_string(
   }
 }
 
-fn compile_file_path(absolute_path: &PathBuf) -> (Option<GrammarStore>, Vec<ParseError>) {
+fn compile_file_path(absolute_path: &PathBuf) -> (Option<GrammarStore>, Vec<HCError>) {
   match read(absolute_path) {
     Ok(buffer) => match compile_grammar_ast(buffer) {
       Ok(grammar) => {
@@ -197,7 +198,7 @@ fn compile_file_path(absolute_path: &PathBuf) -> (Option<GrammarStore>, Vec<Pars
       }
       Err(err) => (None, vec![err]),
     },
-    Err(err) => (None, vec![ParseError::IO_ERROR(err)]),
+    Err(err) => (None, vec![err.into()]),
   }
 }
 
@@ -206,7 +207,7 @@ fn compile_file_path(absolute_path: &PathBuf) -> (Option<GrammarStore>, Vec<Pars
 
 fn finalize_grammar(
   mut g: GrammarStore,
-  mut errors: &mut [ParseError],
+  mut errors: &mut [HCError],
   thread_count: usize,
 ) -> GrammarStore {
   create_scanner_productions_from_symbols(&mut g, errors);
@@ -240,7 +241,7 @@ fn finalize_grammar(
 }
 
 /// Adds bytecode identifiers to relevant objects.
-fn finalize_bytecode_metadata(g: &mut GrammarStore, errors: &mut [ParseError]) {
+fn finalize_bytecode_metadata(g: &mut GrammarStore, errors: &mut [HCError]) {
   let GrammarStore { productions: production_table, bodies: bodies_table, .. } = g;
 
   for (index, body) in bodies_table
@@ -257,7 +258,7 @@ fn finalize_bytecode_metadata(g: &mut GrammarStore, errors: &mut [ParseError]) {
 }
 
 /// Sets an appropriate `is_recursive` value on all productions.
-fn finalize_productions(g: &mut GrammarStore, thread_count: usize, errors: &mut [ParseError]) {
+fn finalize_productions(g: &mut GrammarStore, thread_count: usize, errors: &mut [HCError]) {
   let production_ids = g.productions.keys().cloned().collect::<Vec<_>>();
 
   let production_id_chunks =
@@ -298,7 +299,7 @@ fn finalize_productions(g: &mut GrammarStore, thread_count: usize, errors: &mut 
 }
 
 /// Creates item closure caches and creates start and goto item groups.
-fn finalize_items(g: &mut GrammarStore, thread_count: usize, errors: &mut [ParseError]) {
+fn finalize_items(g: &mut GrammarStore, thread_count: usize, errors: &mut [HCError]) {
   // Generate the item closure cache
   let start_items =
     g.productions.keys().flat_map(|p| get_production_start_items(p, g)).collect::<Vec<_>>();
@@ -364,57 +365,7 @@ fn finalize_items(g: &mut GrammarStore, thread_count: usize, errors: &mut [Parse
   }
 }
 
-struct WorkVerifier {
-  complete: u32,
-  pending:  u32,
-  progress: u32,
-}
-
-impl WorkVerifier {
-  pub fn new(pending: u32) -> Self {
-    WorkVerifier { complete: 0, pending, progress: 0 }
-  }
-
-  pub fn add_units_of_work(&mut self, units_of_work: u32) {
-    self.pending += units_of_work;
-  }
-
-  pub fn start_one_unit_of_work(&mut self) {
-    if self.pending > 0 {
-      self.pending -= 1;
-
-      self.progress += 1;
-    } else {
-      panic!("No pending work")
-    }
-  }
-
-  pub fn complete_one_unit_of_work(&mut self) {
-    if self.progress > 0 {
-      self.progress -= 1;
-
-      self.complete += 1;
-    } else {
-      panic!("No work in progress")
-    }
-  }
-
-  pub fn skip_one_unit_of_work(&mut self) {
-    if self.pending > 0 {
-      self.pending -= 1;
-
-      self.complete += 1;
-    } else {
-      panic!("No pending work")
-    }
-  }
-
-  pub fn is_complete(&self) -> bool {
-    self.pending == 0 || self.progress == 0 || self.complete > 0
-  }
-}
-
-fn finalize_symbols(g: &mut GrammarStore, errors: &mut [ParseError]) {
+fn finalize_symbols(g: &mut GrammarStore, errors: &mut [HCError]) {
   let mut symbol_bytecode_id = SymbolID::DefinedSymbolIndexBasis;
 
   for sym_id in &SymbolID::Generics {
@@ -446,7 +397,7 @@ fn finalize_symbols(g: &mut GrammarStore, errors: &mut [ParseError]) {
   }
 }
 
-fn create_scanner_productions_from_symbols(g: &mut GrammarStore, errors: &mut [ParseError]) {
+fn create_scanner_productions_from_symbols(g: &mut GrammarStore, errors: &mut [HCError]) {
   // Start iterating over known token production references, and add
   // new productions as we encounter them.
   let mut scanner_production_queue =
@@ -823,11 +774,7 @@ pub(crate) fn get_scanner_info_from_defined(
 /// grammars are all other GrammarStores derived from grammars
 /// imported directly or indirectly from the root source grammar.
 
-fn merge_grammars(
-  root: &mut GrammarStore,
-  grammars: &[GrammarStore],
-  errors: &mut Vec<ParseError>,
-) {
+fn merge_grammars(root: &mut GrammarStore, grammars: &[GrammarStore], errors: &mut Vec<HCError>) {
   let mut grammars_lookup = HashMap::<GrammarId, &GrammarStore>::new();
 
   // Merge grammar data into a single store
@@ -906,7 +853,7 @@ fn merge_grammars(
                     root.production_bodies.insert(prod_id, bodies);
                   }
                   None => {
-                    errors.push(ParseError::COMPILE_PROBLEM(CompileProblem {
+                    errors.push(HCError::GrammarCompile_Location {
                       message: format!(
                         "Can't find production {}::{} in {:?} \n{}",
                         get_production_plain_name(&prod_id, root),
@@ -916,7 +863,7 @@ fn merge_grammars(
                       ),
                       inline_message: String::new(),
                       loc: Token::empty(),
-                    }));
+                    });
                   }
                 }
               }
@@ -943,7 +890,7 @@ pub fn pre_process_grammar<'a>(
   g: &'a ast::Grammar,
   path: &PathBuf,
   mut friendly_name: &'a str,
-) -> (GrammarStore, Vec<ParseError>) {
+) -> (GrammarStore, Vec<HCError>) {
   let mut import_names_lookup = ImportProductionNameTable::new();
   let mut production_bodies_table = ProductionBodiesTable::new();
   let mut production_table = ProductionTable::new();
@@ -1007,14 +954,14 @@ pub fn pre_process_grammar<'a>(
                     uri = result;
                   }
                   Err(err) => {
-                    tgs.errors.push(ParseError::COMPILE_PROBLEM(CompileProblem {
+                    tgs.errors.push(HCError::GrammarCompile_Location {
                       message: format!(
                         "Problem encountered when verifying imported grammar [{}]",
                         local_name
                       ),
                       inline_message: "Could not find imported grammar".to_string(),
                       loc: import.Token(),
-                    }));
+                    });
                     continue;
                   }
                 }
@@ -1107,21 +1054,21 @@ fn pre_process_production(
     if match tgs.prods.get(&production_id) {
       Some(existing_production) => {
         tgs.errors.push({
-          ParseError::COMPOUND_COMPILE_PROBLEM(CompoundCompileProblem {
+          HCError::GrammarCompile_MultiLocation {
             message:   format!("production {} already exists!", production_guid_name),
             locations: vec![
-              CompileProblem {
+              HCError::GrammarCompile_Location {
                 inline_message: String::new(),
                 loc: production_node.Token(),
                 message: format!("Redefinition of {} occurs here.", production_guid_name),
               },
-              CompileProblem {
+              HCError::GrammarCompile_Location {
                 inline_message: String::new(),
                 loc: existing_production.original_location.clone(),
                 message: format!("production {} first defined here.", production_guid_name),
               },
             ],
-          })
+          }
         });
         false
       }
@@ -1200,7 +1147,7 @@ fn get_resolved_production_name(node: &ASTNode, tgs: &mut TempGrammarStore) -> O
 
       match tgs.import_names_lookup.get(local_import_grammar_name) {
         None => {
-          tgs.errors.push(ParseError::COMPILE_PROBLEM(CompileProblem{
+          tgs.errors.push(HCError::GrammarCompile_Location {
                         inline_message: String::new(),
                         message: format!(
                             "Unable to resolve production: The production \u{001b}[31m{}\u{001b}[0m cannot be found in the imported grammar \u{001b}[31m{}\u{001b}[0m.", 
@@ -1208,7 +1155,7 @@ fn get_resolved_production_name(node: &ASTNode, tgs: &mut TempGrammarStore) -> O
                             local_import_grammar_name
                         ),
                         loc: node.Token(),
-                    }));
+                    });
           None
         }
         Some((grammar_guid_name, _)) => {
@@ -1222,11 +1169,11 @@ fn get_resolved_production_name(node: &ASTNode, tgs: &mut TempGrammarStore) -> O
     ASTNode::Production(prod) => get_resolved_production_name(&prod.symbol, tgs),
     ASTNode::Production_Token(prod_tok) => get_resolved_production_name(&prod_tok.production, tgs),
     _ => {
-      tgs.errors.push(ParseError::COMPILE_PROBLEM(CompileProblem {
+      tgs.errors.push(HCError::GrammarCompile_Location {
         inline_message: String::new(),
         message: "Unexpected node: Unable to resolve production name of this node!".to_string(),
         loc: node.Token(),
-      }));
+      });
       None
     }
   }
@@ -1262,14 +1209,14 @@ fn get_grammar_info_from_node<'a>(
 
       match tgs.import_names_lookup.get(local_import_grammar_name) {
         None => {
-          tgs.errors.push(ParseError::COMPILE_PROBLEM(CompileProblem {
+          tgs.errors.push(HCError::GrammarCompile_Location {
             inline_message: String::new(),
             message: format!(
               "Unknown Grammar : The local grammar name \u{001b}[31m{}\u{001b}[0m does not match any imported grammar.",
               local_import_grammar_name
             ),
             loc: node.Token(),
-          }));
+          });
           None
         }
         Some((resolved_grammar_name, path)) => {
@@ -1281,11 +1228,11 @@ fn get_grammar_info_from_node<'a>(
     ASTNode::Production(prod) => get_grammar_info_from_node(&prod.symbol, tgs),
     ASTNode::Production_Token(prod_tok) => get_grammar_info_from_node(&prod_tok.production, tgs),
     _ => {
-      tgs.errors.push(ParseError::COMPILE_PROBLEM(CompileProblem {
+      tgs.errors.push(HCError::GrammarCompile_Location {
         inline_message: String::new(),
         message: "Unexpected node: Unable to resolve production name of this node!".to_string(),
         loc: node.Token(),
-      }));
+      });
 
       None
     }
@@ -1639,11 +1586,11 @@ fn pre_process_body(
               sym = &generated_symbol;
             }
           } else {
-            tgs.errors.push(ParseError::COMPILE_PROBLEM(CompileProblem {
+            tgs.errors.push(HCError::GrammarCompile_Location {
               inline_message: String::new(),
               message: "I don't know what to do with this.".to_string(),
               loc: sym.Token(),
-            }));
+            });
           }
         } else if is_list {
           // Create a new production that turns
@@ -1674,7 +1621,7 @@ fn pre_process_body(
 
               let mut body_b = body_a.clone();
 
-              let (list_vector_reduce, list_symbol_reduce) =  (
+              let (list_vector_reduce, list_symbol_reduce) = (
                 compile_ascript_ast("[$first, $last]".as_bytes().to_vec()).unwrap(),
                 compile_ascript_ast("[$first]".as_bytes().to_vec()).unwrap(),
               );
@@ -1715,11 +1662,11 @@ fn pre_process_body(
               sym = &generated_symbol;
             }
             _ => {
-              tgs.errors.push(ParseError::COMPILE_PROBLEM(CompileProblem {
+              tgs.errors.push(HCError::GrammarCompile_Location {
                 inline_message: String::new(),
                 message: "I don't know what to do with this.".to_string(),
                 loc: sym.Token(),
-              }));
+              });
             }
           }
         }
@@ -1876,11 +1823,11 @@ fn intern_symbol(
           .map(|data| (production_id, GrammarId(hash_id_value_u64(data.0))))
       }
       _ => {
-        tgs.errors.push(ParseError::COMPILE_PROBLEM(CompileProblem {
+        tgs.errors.push(HCError::GrammarCompile_Location {
           inline_message: "This is not a hashable production symbol.".to_string(),
           message: "[INTERNAL ERROR]".to_string(),
           loc: node.Token(),
-        }));
+        });
         None
       }
     }
@@ -1946,11 +1893,11 @@ fn intern_symbol(
     }
     ASTNode::Production_Token(token) => process_token_production(token, tgs, sym.Token()),
     _ => {
-      tgs.errors.push(ParseError::COMPILE_PROBLEM(CompileProblem {
+      tgs.errors.push(HCError::GrammarCompile_Location {
         inline_message: "Unexpected ASTNode while attempting to intern symbol".to_string(),
         message: "[INTERNAL ERROR]".to_string(),
         loc: sym.Token(),
-      }));
+      });
       None
     }
   }
@@ -2019,11 +1966,11 @@ fn get_symbol_details<'a>(mut sym: &'a ASTNode, tgs: &mut TempGrammarStore) -> S
         break;
       }
       _ => {
-        tgs.errors.push(ParseError::COMPILE_PROBLEM(CompileProblem {
+        tgs.errors.push(HCError::GrammarCompile_Location {
           inline_message: format!("Unexpected ASTNode {}", sym.GetType()),
           message: "[INTERNAL ERROR]".to_string(),
           loc: sym.Token(),
-        }));
+        });
         break;
       }
     }

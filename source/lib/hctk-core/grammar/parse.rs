@@ -6,7 +6,7 @@ use crate::deprecated_runtime::buffer::UTF8StringReader;
 use crate::deprecated_runtime::completer::complete;
 use crate::deprecated_runtime::recognizer::iterator::*;
 
-use crate::types::ParseError;
+use crate::types::HCError;
 use crate::types::Token;
 
 use super::data::ast::ASTNode;
@@ -19,7 +19,7 @@ use super::data::parser_data::EntryPoint_Ir;
 use super::data::parser_data::EntryPoint_Script;
 use super::data::parser_data::BYTECODE;
 
-pub fn compile_grammar_ast(buffer: Vec<u8>) -> Result<Box<Grammar>, ParseError> {
+pub fn compile_grammar_ast(buffer: Vec<u8>) -> Result<Box<Grammar>, HCError> {
   let mut iterator: ReferenceIterator<UTF8StringReader> =
     ReferenceIterator::new(UTF8StringReader::new(buffer), EntryPoint_Hc, &BYTECODE);
 
@@ -30,14 +30,14 @@ pub fn compile_grammar_ast(buffer: Vec<u8>) -> Result<Box<Grammar>, ParseError> 
       if let HCObj::NODE(ASTNode::Grammar(node)) = result {
         Ok(node)
       } else {
-        Err(ParseError::UNDEFINED)
+        Err(HCError::UNDEFINED)
       }
     }
     Err(err) => Err(err),
   }
 }
 
-pub fn compile_ir_ast(buffer: Vec<u8>) -> Result<Box<IR_STATE>, ParseError> {
+pub fn compile_ir_ast(buffer: Vec<u8>) -> Result<Box<IR_STATE>, HCError> {
   let mut iterator: ReferenceIterator<UTF8StringReader> =
     ReferenceIterator::new(UTF8StringReader::new(buffer), EntryPoint_Ir, &BYTECODE);
 
@@ -48,14 +48,14 @@ pub fn compile_ir_ast(buffer: Vec<u8>) -> Result<Box<IR_STATE>, ParseError> {
       if let HCObj::NODE(ASTNode::IR_STATE(node)) = result {
         Ok(node)
       } else {
-        Err(ParseError::UNDEFINED)
+        Err(HCError::UNDEFINED)
       }
     }
     Err(err) => Err(err),
   }
 }
 
-pub fn compile_ascript_ast(buffer: Vec<u8>) -> Result<ASTNode, ParseError> {
+pub fn compile_ascript_ast(buffer: Vec<u8>) -> Result<ASTNode, HCError> {
   let mut iterator: ReferenceIterator<UTF8StringReader> =
     ReferenceIterator::new(UTF8StringReader::new(buffer), EntryPoint_Script, &BYTECODE);
 
@@ -66,10 +66,10 @@ pub fn compile_ascript_ast(buffer: Vec<u8>) -> Result<ASTNode, ParseError> {
       if let HCObj::NODE(node) = result {
         Ok(node)
       } else {
-        Err(ParseError::UNDEFINED)
+        Err(HCError::UNDEFINED)
       }
     }
-    Err(err) => Err(ParseError::UNDEFINED),
+    Err(err) => Err(HCError::UNDEFINED),
   }
 }
 

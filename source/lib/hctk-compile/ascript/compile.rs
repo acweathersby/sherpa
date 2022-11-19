@@ -19,7 +19,7 @@ use crate::ascript::types::*;
 
 use super::types::AScriptStore;
 
-pub fn compile_ascript_store<'a>(g: &'a GrammarStore, ast: &mut AScriptStore) -> Vec<ParseError> {
+pub fn compile_ascript_store<'a>(g: &'a GrammarStore, ast: &mut AScriptStore) -> Vec<HCError> {
   let mut errors = vec![];
 
   // Separate all bodies into a list of  of tuple of body id's and
@@ -358,7 +358,7 @@ pub fn merge_production_type(
   prod_id: ProductionId,
   new_return_type: AScriptTypeVal,
   new_origin: &Token,
-) -> Vec<ParseError> {
+) -> Vec<HCError> {
   let mut errors = vec![];
 
   ast.prod_types.entry(prod_id).or_insert_with(HashMap::new);
@@ -391,7 +391,7 @@ pub fn merge_production_type(
           );
 
           if !new_return_type.is_same_type(existing_type) {
-            errors.push(ParseError::COMPOUND_COMPILE_PROBLEM(CompoundCompileProblem {
+            errors.push(HCError::COMPOUND_COMPILE_PROBLEM(CompoundCompileProblem {
               message: format!(
                 "Incompatible production return type {} on production {}",
                 new_return_type.hcobj_type_name(Some(g)),
@@ -415,7 +415,7 @@ pub fn compile_expression_type(
   ast: &mut AScriptStore,
   ast_expression: &ASTNode,
   body: &Body,
-) -> (Vec<AScriptTypeVal>, Vec<ParseError>) {
+) -> (Vec<AScriptTypeVal>, Vec<HCError>) {
   let mut errors = vec![];
 
   let types = match ast_expression {
@@ -507,7 +507,7 @@ pub fn compile_struct_type(
   ast: &mut AScriptStore,
   ast_struct: &AST_Struct,
   body: &Body,
-) -> (AScriptTypeVal, Vec<ParseError>) {
+) -> (AScriptTypeVal, Vec<HCError>) {
   let mut errors = vec![];
 
   let types = ast_struct
@@ -536,7 +536,7 @@ pub fn compile_struct_type(
   // Validate struct type is singular
 
   if types.len() > 1 {
-    errors.push(ParseError::COMPOUND_COMPILE_PROBLEM(CompoundCompileProblem {
+    errors.push(HCError::COMPOUND_COMPILE_PROBLEM(CompoundCompileProblem {
       message:   "Struct Type Redefined".to_string(),
       locations: types
         .iter()
@@ -559,7 +559,7 @@ pub fn compile_struct_type(
         .collect::<Vec<_>>(),
     }));
   } else if types.is_empty() {
-    errors.push(ParseError::COMPILE_PROBLEM(CompileProblem {
+    errors.push(HCError::COMPILE_PROBLEM(CompileProblem {
       message: "Struct defined without a type name".to_string(),
       loc: ast_struct.Token(),
       inline_message: "".to_string(),
@@ -600,7 +600,7 @@ pub fn compile_struct_type(
                 existing.define_count += 1;
                 existing.optional = true;
               } else {
-                errors.push(ParseError::COMPOUND_COMPILE_PROBLEM(CompoundCompileProblem {
+                errors.push(HCError::COMPOUND_COMPILE_PROBLEM(CompoundCompileProblem {
                   message: format!("Redefinition of the property {} in struct {}", name, type_name),
 
                   locations: vec![

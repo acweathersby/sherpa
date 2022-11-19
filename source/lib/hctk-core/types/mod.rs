@@ -16,6 +16,7 @@ mod parse_token;
 mod reader;
 mod reader_test_utf8;
 mod reader_utf8;
+mod result;
 mod token;
 
 pub use ast::*;
@@ -36,4 +37,5 @@ pub use parse_token::*;
 pub use reader::*;
 pub use reader_test_utf8::*;
 pub use reader_utf8::*;
+pub use result::*;
 pub use token::*;

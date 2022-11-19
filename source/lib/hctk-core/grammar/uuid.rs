@@ -6,7 +6,7 @@ use std::hash::Hash;
 use std::hash::Hasher;
 use std::path::PathBuf;
 
-use crate::types::ParseError;
+use crate::types::HCError;
 
 pub fn hash_id_value_u64<T: Hash>(t: T) -> u64 {
   let mut s = DefaultHasher::new();
@@ -20,7 +20,7 @@ pub fn hash_id_value_u128<T: Hash>(t: T) -> u128 {
   0
 }
 
-pub fn get_guid_grammar_name(uri: &PathBuf) -> Result<String, ParseError> {
+pub fn get_guid_grammar_name(uri: &PathBuf) -> Result<String, HCError> {
   match uri.file_stem() {
     Some(name) => {
       let file_name = String::from(name.to_str().unwrap());

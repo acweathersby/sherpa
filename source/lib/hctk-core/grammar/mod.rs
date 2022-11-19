@@ -4,6 +4,7 @@
 mod compile;
 pub mod data;
 pub mod item;
+mod multitask;
 pub mod parse;
 pub mod production;
 pub mod uuid;
