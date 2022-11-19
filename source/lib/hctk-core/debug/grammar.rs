@@ -1,11 +1,12 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use crate::grammar::compile_from_string;
 use crate::types::GrammarStore;
 
 /// Compiles a single grammar string
 
-pub fn compile_test_grammar(g: &str) -> GrammarStore {
+pub fn compile_test_grammar(g: &str) -> Arc<GrammarStore> {
   let (grammar, errors) = compile_from_string(&String::from(g), &PathBuf::from("/-internal-/test"));
 
   for error in &errors {

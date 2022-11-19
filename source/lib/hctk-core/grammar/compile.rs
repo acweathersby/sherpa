@@ -1,7 +1,9 @@
 use crate::debug::debug_items;
+use crate::grammar;
 use crate::grammar::data::ast::AnyGroup;
 use crate::grammar::data::ast::Ascript;
 use crate::grammar::data::ast::Literal;
+use crate::grammar::load::get_usable_thread_count;
 use crate::grammar::parse::compile_ascript_ast;
 use crate::grammar::uuid::hash_id_value_u64;
 use crate::types;
@@ -15,10 +17,12 @@ use super::create_scanner_name;
 use super::data::ast;
 use super::data::ast::ASTNode;
 use super::data::ast::ASTNodeTraits;
+use super::data::ast::Grammar;
 use super::get_guid_grammar_name;
 use super::get_production_plain_name;
 use super::get_production_recursion_type;
 use super::get_production_start_items;
+use super::load::load_all;
 use super::multitask::WorkVerifier;
 use super::parse;
 use super::parse::compile_grammar_ast;
@@ -35,6 +39,7 @@ use std::ffi::OsStr;
 use std::fs::read;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread::{self};
 use std::vec;
@@ -50,115 +55,199 @@ struct SymbolData<'a> {
   pub sym_atom:         Option<&'a ASTNode>,
 }
 
-/// Compile a complete grammar given a file path to a root *.hcg file.
-pub fn compile_from_path(
-  root_grammar_absolute_path: &PathBuf,
+/// Takes a vector of PathBufs & grammar AST and compiles them into
+/// A single GrammarStore. This function assumes the first Grammar is
+/// the root grammar.
+pub fn compile_grammars_into_store(
+  grammars: Vec<(PathBuf, Box<Grammar>)>,
   number_of_threads: usize,
-) -> (Option<GrammarStore>, Vec<HCError>) {
-  let mut pending_grammar_paths = Mutex::new(VecDeque::<PathBuf>::new());
-
-  let mut claimed_grammar_paths = Mutex::new(HashSet::<PathBuf>::new());
-
-  // Pending Work, Claimed Work, Completed Work
-  let mut work_verifier = Mutex::new(WorkVerifier::new(1));
-
-  pending_grammar_paths.lock().unwrap().push_back(root_grammar_absolute_path.to_owned());
-
-  let number_of_threads =
-    std::thread::available_parallelism().unwrap_or(NonZeroUsize::new(1).unwrap()).get();
-
-  let mut results = thread::scope(|s| {
-    [0..number_of_threads]
+) -> HCResult<(Option<Arc<GrammarStore>>, Option<Vec<HCError>>)> {
+  let results = thread::scope(|s| {
+    grammars
+      .chunks(grammars.len().div_ceil(get_usable_thread_count(20)))
       .into_iter()
-      .map(|i| {
+      .map(|chunk| {
         s.spawn(|| {
-          let mut raw_grammars = vec![];
-          let mut errors = vec![];
-
-          loop {
-            match {
-              let val = pending_grammar_paths.lock().unwrap().pop_front();
-
-              val
-            } {
-              Some(path) => {
-                let have_work = {
-                  let result = claimed_grammar_paths.lock().unwrap().insert(path.to_owned());
-
-                  {
-                    let mut work_verifier = work_verifier.lock().unwrap();
-
-                    if result {
-                      work_verifier.start_one_unit_of_work()
-                    } else {
-                      work_verifier.skip_one_unit_of_work()
-                    }
-                  }
-
-                  result
-                };
-
-                if have_work {
-                  let (grammar, mut new_errors) = compile_file_path(&path);
-
-                  errors.append(&mut new_errors);
-
-                  let mut work_verifier = work_verifier.lock().unwrap();
-
-                  work_verifier.complete_one_unit_of_work();
-
-                  if let Some(grammar) = grammar {
-                    work_verifier.add_units_of_work(grammar.imports.len() as u32);
-
-                    for (_, b) in grammar.imports.values() {
-                      pending_grammar_paths.lock().unwrap().push_back(b.to_owned());
-                    }
-                    raw_grammars.push(grammar);
-                  }
-                };
-              }
-              None => {
-                let res = {
-                  let work_verifier = work_verifier.lock().unwrap();
-
-                  work_verifier.is_complete()
-                };
-
-                if res {
-                  break;
-                }
-              }
-            }
-          }
-
-          (raw_grammars, errors)
+          chunk
+            .iter()
+            .map(|(absolute_path, grammar)| {
+              let (grammar, errors) = pre_process_grammar(
+                &grammar,
+                absolute_path,
+                absolute_path
+                  .file_stem()
+                  .unwrap_or_else(|| OsStr::new("undefined"))
+                  .to_str()
+                  .unwrap(),
+              );
+              (Arc::new(grammar), errors)
+            })
+            .collect::<Vec<_>>()
         })
       })
       .map(|s| s.join().unwrap())
       .collect::<Vec<_>>()
-      .into_iter()
-      .collect::<VecDeque<_>>()
   });
 
-  let mut errors = vec![];
-  let mut grammars = VecDeque::new();
+  let (mut grammars, mut errors): (Vec<Arc<GrammarStore>>, Vec<Vec<HCError>>) =
+    results.into_iter().flatten().unzip();
 
-  for (mut grammar_results, mut error_results) in results.into_iter() {
-    grammars.append(&mut grammar_results.into_iter().collect::<VecDeque<_>>());
-    errors.append(&mut error_results);
-  }
+  let mut errors = errors.into_iter().flatten().collect::<Vec<_>>();
 
   if grammars.is_empty() {
-    (None, errors)
+    HCResult::Ok((None, Some(errors)))
   } else {
-    let mut grammar = grammars.pop_front().unwrap();
+    let rest = grammars.drain(1..).collect::<Vec<_>>();
 
-    merge_grammars(&mut grammar, &grammars.into_iter().collect::<Vec<_>>(), &mut errors);
+    let mut grammar = Arc::try_unwrap(grammars.pop().unwrap()).unwrap();
+
+    merge_grammars(&mut grammar, &rest, &mut errors);
+
+    let grammar = finalize_grammar(grammar, &mut errors, number_of_threads);
 
     if errors.is_empty() {
-      (Some(finalize_grammar(grammar, &mut errors, number_of_threads)), errors)
+      HCResult::Ok((Some(Arc::new(grammar)), None))
     } else {
-      (None, errors)
+      HCResult::Ok((None, Some(errors)))
+    }
+  }
+}
+#[test]
+fn test_compile_grammars_into_store() {
+  let (grammars, errors) = load_all(
+    &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+      .join("../../../test/grammars/load.hcg")
+      .canonicalize()
+      .unwrap(),
+    10,
+  );
+
+  let result = compile_grammars_into_store(grammars, 10);
+
+  assert!(result.is_ok());
+
+  match result {
+    HCResult::Ok((Some(grammar), _)) => {
+      dbg!(grammar);
+    }
+    HCResult::Ok((_, Some(errors))) => {
+      for err in errors {
+        println!("{}", err);
+      }
+      panic!("Errors occurred while compiling")
+    }
+    _ => {}
+  }
+}
+
+/// Merge related grammars into a single GrammarStore
+///
+/// `root` is assumed to derived from the root source grammar, and
+/// grammars are all other GrammarStores derived from grammars
+/// imported directly or indirectly from the root source grammar.
+
+fn merge_grammars(
+  root: &mut GrammarStore,
+  grammars: &[Arc<GrammarStore>],
+  errors: &mut Vec<HCError>,
+) {
+  let mut grammars_lookup = HashMap::<GrammarId, &GrammarStore>::new();
+
+  // Merge grammar data into a single store
+  for import_grammar in grammars {
+    grammars_lookup.insert(import_grammar.guid, import_grammar);
+
+    root
+      .production_ignore_symbols
+      .extend(import_grammar.production_ignore_symbols.clone().into_iter());
+
+    // Merge all symbols
+    for (id, sym) in &import_grammar.symbols {
+      if !root.symbols.contains_key(id) {
+        root.symbols.insert(*id, sym.clone());
+
+        if id.is_defined() {
+          match import_grammar.symbol_strings.get(id) {
+            Some(string) => {
+              root.symbol_strings.insert(*id, string.to_owned());
+            }
+            None => {}
+          }
+        }
+      }
+    }
+  }
+
+  // Merge all referenced foreign productions into the root.
+  let mut symbol_queue = VecDeque::from_iter(root.production_symbols.clone());
+
+  while let Some((sym, tok)) = symbol_queue.pop_front() {
+    if let Some(grammar_id) = sym.get_grammar_id() {
+      if grammar_id != root.guid {
+        match grammars_lookup.get(&grammar_id) {
+          Some(import_grammar) => {
+            if let Some(prod_id) = sym.get_production_id() {
+              if let std::collections::btree_map::Entry::Vacant(e) = root.productions.entry(prod_id)
+              {
+                match import_grammar.productions.get(&prod_id) {
+                  Some(production) => {
+                    // import the foreign production
+                    e.insert(production.clone());
+
+                    let bodies = import_grammar.production_bodies.get(&prod_id).unwrap().clone();
+
+                    // Import all bodies referenced by this
+                    // production
+                    for body_id in &bodies {
+                      let body = import_grammar.bodies.get(body_id).unwrap().clone();
+
+                      // Add every Production symbol to
+                      // the queue
+                      for sym in &body.syms {
+                        match sym.sym_id {
+                          SymbolID::Production(..) => {
+                            symbol_queue.push_back((sym.sym_id, sym.tok.clone()))
+                          }
+                          SymbolID::TokenProduction(prod, grammar) => {
+                            root.symbols.entry(sym.sym_id).or_insert_with(|| {
+                              (import_grammar.symbols.get(&sym.sym_id).unwrap().clone())
+                            });
+
+                            // Remap the production token symbol to regular a production symbol and submit as a merge candidate.
+                            symbol_queue
+                              .push_back((SymbolID::Production(prod, grammar), sym.tok.clone()))
+                          }
+                          _ => {}
+                        }
+                      }
+
+                      root.bodies.insert(*body_id, body);
+                    }
+
+                    // Import the map of production id to
+                    // bodies
+                    root.production_bodies.insert(prod_id, bodies);
+                  }
+                  None => {
+                    errors.push(HCError::GrammarCompile_Location {
+                      message: format!(
+                        "Can't find production {}::{} in {:?} \n{}",
+                        get_production_plain_name(&prod_id, root),
+                        grammar_id,
+                        import_grammar.source_path,
+                        tok.blame(1, 1, "", None)
+                      ),
+                      inline_message: String::new(),
+                      loc: Token::empty(),
+                    });
+                  }
+                }
+              }
+            }
+          }
+          None => {}
+        }
+      }
     }
   }
 }
@@ -167,7 +256,7 @@ pub fn compile_from_path(
 pub fn compile_from_string(
   string: &str,
   absolute_path: &PathBuf,
-) -> (Option<GrammarStore>, Vec<HCError>) {
+) -> (Option<Arc<GrammarStore>>, Vec<HCError>) {
   match compile_grammar_ast(Vec::from(string.as_bytes())) {
     Ok(grammar) => {
       let (grammar, mut errors) = pre_process_grammar(
@@ -178,27 +267,9 @@ pub fn compile_from_string(
 
       let grammar = finalize_grammar(grammar, &mut errors, 1);
 
-      (Some(grammar), errors)
+      (Some(Arc::new(grammar)), errors)
     }
     Err(err) => (None, vec![err]),
-  }
-}
-
-fn compile_file_path(absolute_path: &PathBuf) -> (Option<GrammarStore>, Vec<HCError>) {
-  match read(absolute_path) {
-    Ok(buffer) => match compile_grammar_ast(buffer) {
-      Ok(grammar) => {
-        let (grammar, errors) = pre_process_grammar(
-          &grammar,
-          absolute_path,
-          absolute_path.file_stem().unwrap_or_else(|| OsStr::new("undefined")).to_str().unwrap(),
-        );
-
-        (Some(grammar), errors)
-      }
-      Err(err) => (None, vec![err]),
-    },
-    Err(err) => (None, vec![err.into()]),
   }
 }
 
@@ -766,114 +837,6 @@ pub(crate) fn get_scanner_info_from_defined(
   let new_symbol_id = SymbolID::Production(scanner_production_id, root.guid);
 
   (new_symbol_id, scanner_production_id, scanner_name, symbol_string)
-}
-
-/// Merge related grammars into a single GrammarStore
-///
-/// `root` is assumed to derived from the root source grammar, and
-/// grammars are all other GrammarStores derived from grammars
-/// imported directly or indirectly from the root source grammar.
-
-fn merge_grammars(root: &mut GrammarStore, grammars: &[GrammarStore], errors: &mut Vec<HCError>) {
-  let mut grammars_lookup = HashMap::<GrammarId, &GrammarStore>::new();
-
-  // Merge grammar data into a single store
-  for import_grammar in grammars {
-    grammars_lookup.insert(import_grammar.guid, import_grammar);
-
-    root
-      .production_ignore_symbols
-      .extend(import_grammar.production_ignore_symbols.clone().into_iter());
-
-    // Merge all symbols
-    for (id, sym) in &import_grammar.symbols {
-      if !root.symbols.contains_key(id) {
-        root.symbols.insert(*id, sym.clone());
-
-        if id.is_defined() {
-          match import_grammar.symbol_strings.get(id) {
-            Some(string) => {
-              root.symbol_strings.insert(*id, string.to_owned());
-            }
-            None => {}
-          }
-        }
-      }
-    }
-  }
-
-  // Merge all referenced foreign productions into the root.
-  let mut symbol_queue = VecDeque::from_iter(root.production_symbols.clone());
-
-  while let Some((sym, tok)) = symbol_queue.pop_front() {
-    if let Some(grammar_id) = sym.get_grammar_id() {
-      if grammar_id != root.guid {
-        match grammars_lookup.get(&grammar_id) {
-          Some(import_grammar) => {
-            if let Some(prod_id) = sym.get_production_id() {
-              if let std::collections::btree_map::Entry::Vacant(e) = root.productions.entry(prod_id)
-              {
-                match import_grammar.productions.get(&prod_id) {
-                  Some(production) => {
-                    // import the foreign production
-                    e.insert(production.clone());
-
-                    let bodies = import_grammar.production_bodies.get(&prod_id).unwrap().clone();
-
-                    // Import all bodies referenced by this
-                    // production
-                    for body_id in &bodies {
-                      let body = import_grammar.bodies.get(body_id).unwrap().clone();
-
-                      // Add every Production symbol to
-                      // the queue
-                      for sym in &body.syms {
-                        match sym.sym_id {
-                          SymbolID::Production(..) => {
-                            symbol_queue.push_back((sym.sym_id, sym.tok.clone()))
-                          }
-                          SymbolID::TokenProduction(prod, grammar) => {
-                            root.symbols.entry(sym.sym_id).or_insert_with(|| {
-                              (import_grammar.symbols.get(&sym.sym_id).unwrap().clone())
-                            });
-
-                            // Remap the production token symbol to regular a production symbol and submit as a merge candidate.
-                            symbol_queue
-                              .push_back((SymbolID::Production(prod, grammar), sym.tok.clone()))
-                          }
-                          _ => {}
-                        }
-                      }
-
-                      root.bodies.insert(*body_id, body);
-                    }
-
-                    // Import the map of production id to
-                    // bodies
-                    root.production_bodies.insert(prod_id, bodies);
-                  }
-                  None => {
-                    errors.push(HCError::GrammarCompile_Location {
-                      message: format!(
-                        "Can't find production {}::{} in {:?} \n{}",
-                        get_production_plain_name(&prod_id, root),
-                        grammar_id,
-                        import_grammar.source_path,
-                        tok.blame(1, 1, "", None)
-                      ),
-                      inline_message: String::new(),
-                      loc: Token::empty(),
-                    });
-                  }
-                }
-              }
-            }
-          }
-          None => {}
-        }
-      }
-    }
-  }
 }
 
 /// Takes a Grammar produces core primitive tables;
