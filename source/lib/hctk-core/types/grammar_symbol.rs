@@ -182,6 +182,30 @@ impl SymbolID {
     }
   }
 
+  pub fn shift_type(&self, g: &GrammarStore) -> (u32, &'static str) {
+    match self {
+      SymbolID::GenericSpace
+      | SymbolID::GenericHorizontalTab
+      | SymbolID::GenericNewLine
+      | SymbolID::GenericIdentifier
+      | SymbolID::GenericNumber
+      | SymbolID::GenericSymbol => (self.bytecode_id(Some(g)), "CLASS"),
+      SymbolID::DefinedNumeric(id)
+      | SymbolID::DefinedIdentifier(id)
+      | SymbolID::DefinedSymbol(id) => {
+        let symbol = g.symbols.get(self).unwrap();
+        let id = g.symbol_strings.get(self).unwrap();
+        let sym_char = id.as_bytes()[0];
+        if symbol.byte_length > 1 || sym_char > 128 {
+          (symbol.bytecode_id, "CODEPOINT")
+        } else {
+          (sym_char as u32, "BYTE")
+        }
+      }
+      _ => (0, "BYTE"),
+    }
+  }
+
   pub fn is_defined(&self) -> bool {
     match self {
       Self::DefinedNumeric(_)

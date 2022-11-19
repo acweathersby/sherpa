@@ -739,7 +739,7 @@ fn create_intermediate_state(
               let (symbol_id, assert_class) = if (!is_scanner) {
                 (symbol_id.bytecode_id(Some(g)), "TOKEN")
               } else {
-                get_symbol_shift_type(&symbol_id, g)
+                symbol_id.shift_type(g)
               };
 
               let shift = (if child.is(TransitionStateType::I_SHIFT) { "shift then " } else { "" })

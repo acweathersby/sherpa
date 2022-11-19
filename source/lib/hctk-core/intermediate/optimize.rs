@@ -31,7 +31,6 @@ use crate::grammar::get_production_id_by_name;
 use crate::types::GrammarStore;
 use crate::types::IRState;
 
-use super::state::get_symbol_shift_type;
 use crate::intermediate::state::compile_states;
 
 /// Attempts to reduce the number of IR states through merging states, and reduce
@@ -130,7 +129,7 @@ pub fn optimize_ir_states(
                 ASTNode::ASSERT(box assert) => match assert.ids[0].clone() {
                   ASTNode::AST_NUMBER(box AST_NUMBER { value, .. }) => {
                     let sym_id = *lookup.get(&(value as u32)).unwrap();
-                    let (id, bc_type) = get_symbol_shift_type(&sym_id, &g);
+                    let (id, bc_type) = sym_id.shift_type(&g);
                     assert.mode = bc_type.to_string();
                     assert.ids = vec![ASTNode::AST_NUMBER(AST_NUMBER::new(id as f64))];
                   }
