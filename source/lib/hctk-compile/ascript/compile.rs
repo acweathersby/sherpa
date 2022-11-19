@@ -370,7 +370,7 @@ pub fn merge_production_type(
         AScriptTypeVal::UnresolvedProduction(..) => {}
 
         existing_type => {
-          let mut locations = vec![CompileProblem {
+          let mut locations = vec![HCError::GrammarCompile_Location {
             message: "".to_string(),
             loc: new_origin.clone(),
             inline_message: "Derived here".to_string(),
@@ -379,7 +379,7 @@ pub fn merge_production_type(
           locations.append(
             &mut origins
               .iter()
-              .map(|t| CompileProblem {
+              .map(|t| HCError::GrammarCompile_Location {
                 message: format!(
                   "Existing incompatible type {}",
                   existing_type.hcobj_type_name(Some(g))
@@ -391,14 +391,14 @@ pub fn merge_production_type(
           );
 
           if !new_return_type.is_same_type(existing_type) {
-            errors.push(HCError::COMPOUND_COMPILE_PROBLEM(CompoundCompileProblem {
+            errors.push(HCError::GrammarCompile_MultiLocation {
               message: format!(
                 "Incompatible production return type {} on production {}",
                 new_return_type.hcobj_type_name(Some(g)),
                 get_production_plain_name(&prod_id, g)
               ),
               locations,
-            }));
+            });
           }
         }
       }
@@ -536,20 +536,20 @@ pub fn compile_struct_type(
   // Validate struct type is singular
 
   if types.len() > 1 {
-    errors.push(HCError::COMPOUND_COMPILE_PROBLEM(CompoundCompileProblem {
+    errors.push(HCError::GrammarCompile_MultiLocation {
       message:   "Struct Type Redefined".to_string(),
       locations: types
         .iter()
         .enumerate()
         .map(|(i, node)| {
           if i == 0 {
-            CompileProblem {
+            HCError::GrammarCompile_Location {
               message: "".to_string(),
               loc: node.Token(),
               inline_message: "First Defined Here".to_string(),
             }
           } else {
-            CompileProblem {
+            HCError::GrammarCompile_Location {
               message: "".to_string(),
               loc: node.Token(),
               inline_message: "Redefined Here".to_string(),
@@ -557,13 +557,13 @@ pub fn compile_struct_type(
           }
         })
         .collect::<Vec<_>>(),
-    }));
+    });
   } else if types.is_empty() {
-    errors.push(HCError::COMPILE_PROBLEM(CompileProblem {
+    errors.push(HCError::GrammarCompile_Location {
       message: "Struct defined without a type name".to_string(),
       loc: ast_struct.Token(),
       inline_message: "".to_string(),
-    }))
+    })
   }
 
   // Check to see if this struct is already defined. If so, we'll
@@ -600,11 +600,11 @@ pub fn compile_struct_type(
                 existing.define_count += 1;
                 existing.optional = true;
               } else {
-                errors.push(HCError::COMPOUND_COMPILE_PROBLEM(CompoundCompileProblem {
+                errors.push(HCError::GrammarCompile_MultiLocation {
                   message: format!("Redefinition of the property {} in struct {}", name, type_name),
 
                   locations: vec![
-                    CompileProblem {
+                    HCError::GrammarCompile_Location {
                       message: String::new(),
                       loc: existing.first_declared_location.clone(),
                       inline_message: format!(
@@ -612,7 +612,7 @@ pub fn compile_struct_type(
                         existing.type_val.hcobj_type_name(Some(g))
                       ),
                     },
-                    CompileProblem {
+                    HCError::GrammarCompile_Location {
                       message: String::new(),
                       loc: prop.value.Token(),
                       inline_message: format!(
@@ -621,7 +621,7 @@ pub fn compile_struct_type(
                       ),
                     },
                   ],
-                }))
+                })
               }
             } else {
               existing.define_count += 1;

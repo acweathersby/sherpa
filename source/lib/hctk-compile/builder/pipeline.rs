@@ -5,21 +5,21 @@ use std::fs::File;
 use std::io::Write;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::vec;
 
 use crate::ascript::compile::compile_ascript_store;
 use crate::ascript::types::AScriptStore;
 use hctk_core::bytecode::compile_bytecode;
 use hctk_core::bytecode::BytecodeOutput;
+use hctk_core::compile_grammar_from_path;
+use hctk_core::compile_grammar_from_string;
 use hctk_core::get_num_of_available_threads;
-use hctk_core::grammar::compile_from_string;
 use hctk_core::intermediate::optimize::optimize_ir_states;
 use hctk_core::intermediate::state::compile_states;
 use hctk_core::types::GrammarStore;
 use hctk_core::types::HCError;
 use std::thread;
-
-pub use hctk_core::grammar::compile_from_path;
 
 #[derive(Debug)]
 pub struct CompileError {
@@ -81,7 +81,7 @@ pub struct BuildPipeline<'a> {
   parser_name: String,
   grammar_name: String,
   error_handler: Option<fn(errors: Vec<CompileError>)>,
-  grammar: Option<GrammarStore>,
+  grammar: Option<Arc<GrammarStore>>,
   source_name: Option<String>,
   cached_source: CachedSource,
   proc_context: bool,
@@ -287,7 +287,7 @@ impl<'a> BuildPipeline<'a> {
     }
 
     if let Some(source_name) = self.source_name.as_ref() {
-      let source_name = source_name.to_string().replace("%", &self.grammar.unwrap().friendly_name);
+      let source_name = source_name.to_string().replace("%", &self.grammar.unwrap().name);
       let source_path = self.build_output_dir.join("./".to_string() + &source_name);
       eprintln!("{:?} {:?}", source_path, self.build_output_dir);
       if let Ok(mut parser_data_file) = std::fs::File::create(&source_path) {
@@ -308,17 +308,17 @@ impl<'a> BuildPipeline<'a> {
   }
 
   fn build_grammar(&mut self) -> Result<(), Vec<CompileError>> {
-    let (grammar, errors) = match &self.cached_source {
-      CachedSource::Path(path) => compile_from_path(&path, self.threads),
-      CachedSource::String(string, base_dir) => compile_from_string(&string, &base_dir),
-    };
-
-    match grammar {
-      Some(grammar) => {
-        self.grammar = Some(grammar);
+    match match &self.cached_source {
+      CachedSource::Path(path) => compile_grammar_from_path(path.to_owned(), self.threads),
+      CachedSource::String(string, base_dir) => compile_grammar_from_string(&string, &base_dir),
+    } {
+      (grammar, None) => {
+        self.grammar = grammar;
         Ok(())
       }
-      None => Err(errors.into_iter().map(|err| CompileError::from_parse_error(&err)).collect()),
+      (_, Some(errors)) => {
+        Err(errors.into_iter().map(|err| CompileError::from_parse_error(&err)).collect())
+      }
     }
   }
 }
@@ -402,7 +402,7 @@ impl<'a> PipelineContext<'a> {
   }
 
   pub fn get_grammar_name(&self) -> &String {
-    &self.get_grammar().friendly_name
+    &self.get_grammar().name
   }
 
   pub fn get_grammar_path(&self) -> &PathBuf {

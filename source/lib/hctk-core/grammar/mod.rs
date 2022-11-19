@@ -10,11 +10,72 @@ pub mod parse;
 pub mod production;
 pub mod uuid;
 
-pub use compile::compile_from_string;
+use std::path::PathBuf;
+use std::sync::Arc;
+
 pub(crate) use compile::get_scanner_info_from_defined;
 pub use item::*;
 pub use production::*;
 pub use uuid::*;
+
+use self::compile::compile_grammars_into_store;
+use self::load::load_all;
+use self::parse::compile_grammar_ast;
+use crate::types::*;
+
+/// Loads and compiles a grammar from a source file.
+///
+/// # Example
+///
+/// Basic usage:
+/// ```
+///  # use std::path::PathBuf;
+/// use hctk_core::compile_grammar_from_path;
+///
+/// let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+///
+/// path.push("../../../test/grammars/trivial.hcg");
+///
+/// let (grammar, errors) = compile_grammar_from_path(path, 10);
+///
+/// assert_eq!(grammar.unwrap().name, "trivial")
+/// ```
+pub fn compile_grammar_from_path(
+  path: PathBuf,
+  thread_count: usize,
+) -> (Option<Arc<GrammarStore>>, Option<Vec<HCError>>) {
+  match load_all(&path, thread_count) {
+    (_, errors) if !errors.is_empty() => (None, Some(errors)),
+    (grammars, _) => compile_grammars_into_store(grammars, thread_count).unwrap(),
+  }
+}
+
+/// Compiles a grammar from a string.
+///
+/// # Example
+///
+/// Basic usage:
+/// ```
+///  # use std::path::PathBuf;
+///  use hctk_core::compile_grammar_from_string;
+///
+/// let (grammar, errors) = compile_grammar_from_string(
+///   "@NAME my_grammar
+///   <> A > \\hello \\world ",
+///   &PathBuf::default(),
+/// );
+///
+/// assert_eq!(grammar.unwrap().name, "my_grammar")
+/// ```
+pub fn compile_grammar_from_string(
+  string: &str,
+  absolute_path: &PathBuf,
+) -> (Option<Arc<GrammarStore>>, Option<Vec<HCError>>) {
+  match compile_grammar_ast(Vec::from(string.as_bytes())) {
+    Ok(grammar) => compile_grammars_into_store(vec![(absolute_path.clone(), grammar)], 0).unwrap(),
+    Err(err) => (None, Some(vec![err])),
+  }
+}
 
 #[cfg(test)]
 mod test_grammar {
@@ -27,36 +88,17 @@ mod test_grammar {
   use crate::get_num_of_available_threads;
   use crate::grammar::compile::compile_grammars_into_store;
   use crate::grammar::compile::pre_process_grammar;
+  use crate::grammar::compile_grammar_from_path;
   use crate::grammar::load::load_all;
   use crate::types::RecursionType;
 
   use super::compile::convert_left_to_right;
-  use super::compile_from_string;
+  use super::compile_grammar_from_string;
   use super::get_production_id_by_name;
   use super::get_production_recursion_type;
   use super::get_production_start_items;
   use super::parse::compile_grammar_ast;
   use super::parse::{self};
-
-  #[test]
-  fn test_pre_process_grammar() {
-    let grammar = String::from(
-        "\n@IMPORT ./test/me/out.hcg as bob 
-        <> a > tk:p?^test a(+,) ( \\1234 | t:sp? ( sp | g:sym g:sp ) f:r { basalt } ) \\nto <> b > tk:p p ",
-    );
-
-    if let Ok(grammar) = compile_grammar_ast(Vec::from(grammar.as_bytes())) {
-      let (grammar, errors) = pre_process_grammar(&grammar, &PathBuf::from("/test"), "test");
-
-      for error in &errors {
-        eprintln!("{}", error);
-      }
-
-      assert_eq!(errors.len(), 1);
-    } else {
-      panic!("Failed to parse and produce an AST of '<> a > b'");
-    }
-  }
 
   #[test]
   fn test_string_list() {
@@ -83,15 +125,7 @@ mod test_grammar {
 
     let thread_count = get_num_of_available_threads();
 
-    let (grammars, errors) = load_all(&path, thread_count);
-
-    for error in &errors {
-      eprintln!("{}", error);
-    }
-
-    let result = compile_grammars_into_store(grammars, thread_count);
-
-    let (grammar, errors) = result.unwrap();
+    let (grammar, errors) = compile_grammar_from_path(path, get_num_of_available_threads());
 
     assert!(grammar.is_some());
     assert!(errors.is_none());
@@ -103,19 +137,7 @@ mod test_grammar {
 
     path.push("../../../test/grammars/trivial_importer.hcg");
 
-    let thread_count = get_num_of_available_threads();
-
-    let (grammars, errors) = load_all(&path, thread_count);
-
-    for error in &errors {
-      eprintln!("{}", error);
-    }
-
-    assert!(errors.is_empty());
-
-    let result = compile_grammars_into_store(grammars, thread_count);
-
-    let (grammar, errors) = result.unwrap();
+    let (grammar, errors) = compile_grammar_from_path(path, get_num_of_available_threads());
 
     assert!(grammar.is_some());
     assert!(errors.is_none());
@@ -124,9 +146,12 @@ mod test_grammar {
 
   #[test]
   fn conversion_of_left_to_right_recursive() {
-    let grammar = String::from("<> B > tk:A  <> A > A \\t \\y | A \\u | \\CCC | \\R A ");
-
-    if let Some(mut g) = compile_from_string(&grammar, &PathBuf::from("/test")).0 {
+    if let Some(mut g) = compile_grammar_from_string(
+      "<> B > tk:A  <> A > A \\t \\y | A \\u | \\CCC | \\R A ",
+      &PathBuf::from("/test"),
+    )
+    .0
+    {
       let prod = get_production_id_by_name("A", &g).unwrap();
 
       assert!(get_production_recursion_type(prod, &g).contains(RecursionType::LEFT_DIRECT));
@@ -142,11 +167,12 @@ mod test_grammar {
 
   #[test]
   fn processing_of_any_groups() {
-    let grammar = String::from("<> A > [ unordered \\g ? ( \\r \\l ) ? ] \\ d ");
+    let (grammar, errors) = compile_grammar_from_string(
+      "<> A > [ unordered \\g ? ( \\r \\l ) ? ] \\ d ",
+      &PathBuf::from("/test"),
+    );
 
-    let (grammar, errors) = compile_from_string(&grammar, &PathBuf::from("/test"));
-
-    for error in &errors {
+    for error in errors.unwrap_or_default() {
       eprintln!("{}", error);
     }
 

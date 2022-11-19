@@ -214,7 +214,7 @@ fn test_load_grammar() {
 /// appended to it: `.hc`, `.hcg` `.grammar`.
 ///
 /// Additionally, if the given file path is relative, then it is appended to the parent dir
-/// path of the current grammar, whose path is proved by the `cgd`, current grammar dir,
+/// path of the current grammar, whose path is provided by the `cgd`, current grammar dir,
 /// argument.
 pub(crate) fn resolve_grammar_path(
   path: &PathBuf,

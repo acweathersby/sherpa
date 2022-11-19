@@ -62,9 +62,10 @@ pub fn compile_grammars_into_store(
   grammars: Vec<(PathBuf, Box<Grammar>)>,
   number_of_threads: usize,
 ) -> HCResult<(Option<Arc<GrammarStore>>, Option<Vec<HCError>>)> {
+  let number_of_threads = get_usable_thread_count(20);
   let results = thread::scope(|s| {
     grammars
-      .chunks(grammars.len().div_ceil(get_usable_thread_count(20)))
+      .chunks(grammars.len().div_ceil(number_of_threads))
       .into_iter()
       .map(|chunk| {
         s.spawn(|| {
@@ -112,6 +113,7 @@ pub fn compile_grammars_into_store(
     }
   }
 }
+
 #[test]
 fn test_compile_grammars_into_store() {
   let (grammars, errors) = load_all(
@@ -252,30 +254,7 @@ fn merge_grammars(
   }
 }
 
-/// Compile a grammar defined in a string
-pub fn compile_from_string(
-  string: &str,
-  absolute_path: &PathBuf,
-) -> (Option<Arc<GrammarStore>>, Vec<HCError>) {
-  match compile_grammar_ast(Vec::from(string.as_bytes())) {
-    Ok(grammar) => {
-      let (grammar, mut errors) = pre_process_grammar(
-        &grammar,
-        absolute_path,
-        absolute_path.file_stem().unwrap_or_else(|| OsStr::new("undefined")).to_str().unwrap(),
-      );
-
-      let grammar = finalize_grammar(grammar, &mut errors, 1);
-
-      (Some(Arc::new(grammar)), errors)
-    }
-    Err(err) => (None, vec![err]),
-  }
-}
-
-/// Create scanner productions, adds ids to tokens, creates cache
-/// data.
-
+/// Create scanner productions and data caches, and converts ids to tokens.
 fn finalize_grammar(
   mut g: GrammarStore,
   mut errors: &mut [HCError],
@@ -995,10 +974,30 @@ pub fn pre_process_grammar<'a>(
       lr_items: BTreeMap::new(),
       reduce_functions,
       export_names,
-      friendly_name: friendly_name.to_owned(),
+      name: friendly_name.to_owned(),
     },
     parse_errors,
   )
+}
+
+#[test]
+fn test_pre_process_grammar() {
+  let grammar = String::from(
+      "\n@IMPORT ./test/me/out.hcg as bob 
+      <> a > tk:p?^test a(+,) ( \\1234 | t:sp? ( sp | g:sym g:sp ) f:r { basalt } ) \\nto <> b > tk:p p ",
+  );
+
+  if let Ok(grammar) = compile_grammar_ast(Vec::from(grammar.as_bytes())) {
+    let (grammar, errors) = pre_process_grammar(&grammar, &PathBuf::from("/test"), "test");
+
+    for error in &errors {
+      eprintln!("{}", error);
+    }
+
+    assert_eq!(errors.len(), 1);
+  } else {
+    panic!("Failed to parse and produce an AST of '<> a > b'");
+  }
 }
 
 fn pre_process_production(

@@ -13,8 +13,8 @@
 #![feature(const_trait_impl)]
 #![feature(int_roundings)]
 #![allow(bad_style, dead_code, unused, unused_allocation, unused_comparisons, unused_parens)]
-
-pub mod deprecated_runtime;
+mod deprecated_runtime;
+pub mod grammar;
 pub mod runtime;
 pub mod types;
 pub mod utf8;
@@ -24,11 +24,12 @@ pub use lazy_static::lazy_static;
 
 pub mod bytecode;
 pub mod debug;
-pub mod grammar;
 pub mod intermediate;
 
-// Common utility functions
+pub use grammar::compile_grammar_from_path;
+pub use grammar::compile_grammar_from_string;
 
+// Common utility functions
 use std::num::NonZeroUsize;
 
 /// Retrieve the number of threads that can be reasonably
