@@ -8,7 +8,7 @@ use std::thread;
 
 use super::transition::construct_goto;
 use super::transition::construct_recursive_descent;
-use super::transition::deconflict_starts;
+use super::transition::get_valid_starts;
 use super::transition::hash_group;
 use crate::grammar::create_closure;
 use crate::grammar::get_closure_cached;
@@ -232,7 +232,7 @@ fn generate_states(
   let mut output: IROutput = Vec::new();
   let root_ids = start_items.iter().map(|i| i.get_prod_id(g)).collect::<BTreeSet<_>>();
   let (start_items, goto_seeds) =
-    if !is_scanner { deconflict_starts(&start_items, &g) } else { (start_items.to_vec(), vec![]) };
+    if !is_scanner { get_valid_starts(&start_items, &g) } else { (start_items.to_vec(), vec![]) };
 
   let recursive_descent_data =
     construct_recursive_descent(g, is_scanner, &start_items, root_ids.clone());
@@ -242,15 +242,23 @@ fn generate_states(
     g,
     entry_name,
     production_id,
+    false,
   ));
 
   // Scanner states are guaranteed to be purely recursive descent compatible
   //  and thus they have no need for a GOTO path.
   if !is_scanner {
-    let goto_data = construct_goto(g, is_scanner, &start_items, &goto_seeds, root_ids);
+    let (goto_data, non_trivial_root_branch) =
+      construct_goto(g, is_scanner, &start_items, &goto_seeds, root_ids);
 
     if !goto_data.leaf_nodes.is_empty() {
-      output.append(&mut process_transition_nodes(&goto_data, g, entry_name, production_id));
+      output.append(&mut process_transition_nodes(
+        &goto_data,
+        g,
+        entry_name,
+        production_id,
+        non_trivial_root_branch,
+      ));
     } else {
       output.push(create_passing_goto_state(entry_name, is_scanner));
     }
@@ -264,6 +272,7 @@ fn process_transition_nodes<'a>(
   g: &GrammarStore,
   entry_name: &String,
   prod_id: u32,
+  non_trivial_root_branch: bool,
 ) -> Vec<Box<IRState>> {
   // We start at leaf nodes and make our way down to the root.
   let number_of_nodes = t_pack.get_node_len();
@@ -325,6 +334,7 @@ fn process_transition_nodes<'a>(
             children_lookup,
             &t_pack.root_prod_ids,
             entry_name,
+            non_trivial_root_branch,
           )]
         } else {
           create_intermediate_state(node, g, t_pack, &output, &children_tables, entry_name, prod_id)
@@ -372,12 +382,12 @@ fn create_goto_start_state(
   children_ids: &BTreeSet<usize>,
   root_productions: &BTreeSet<ProductionId>,
   entry_name: &String,
+  non_trivial_root_branch: bool,
 ) -> Box<IRState> {
   let is_scanner = t_pack.is_scanner;
   let mut strings = vec![];
   let mut comment = String::new();
   let post_amble = create_post_amble(entry_name, g);
-  let mut contains_root_production = false;
 
   for child_id in children_ids {
     let child = t_pack.get_node(*child_id);
@@ -386,9 +396,6 @@ fn create_goto_start_state(
 
     match &symbol {
       SymbolID::Production(production_id, _) => {
-        contains_root_production =
-          root_productions.contains(production_id) || contains_root_production;
-
         let production_bytecode_id = g.productions.get(production_id).unwrap().bytecode_id;
 
         if child.is(TransitionStateType::I_PASS) {
@@ -415,7 +422,7 @@ fn create_goto_start_state(
     }
   }
 
-  if contains_root_production {
+  if non_trivial_root_branch {
     if let Some(root_production) = root_productions.first() {
       strings.push(format!(
         "
@@ -586,54 +593,59 @@ fn create_intermediate_state(
             child.prod_sym.unwrap_or(child.terminal_symbol)
           {
             let child_state = resolved_states.get(&child.id).unwrap();
-            let symbol_id = child.terminal_symbol;
-            let state_name = child_state.get_name();
 
             max_child_depth = max_child_depth.max(child_state.get_stack_depth() + 1);
 
-            if !single_child {
-              if group.len() > 1 && matches!(child.terminal_symbol, SymbolID::Production(..)) {
-                panic!("Too many unqualified production calls!");
-              } else {
-                is_token_assertion = true;
-                let assertion_type =
-                  (if child.is(TransitionStateType::O_PEEK) { "assert peek" } else { "assert" })
-                    .to_string();
-
-                if child.is(TransitionStateType::O_PEEK) {
-                  if (node.is(TransitionStateType::O_PEEK)) {
-                    peek_type = PeekType::PeekContinue;
-                  } else {
-                    peek_type = PeekType::PeekStart;
-                  }
+            strings.push(
+              match (
+                single_child,
+                group.len(),
+                matches!(child.terminal_symbol, SymbolID::Production(..)),
+              ) {
+                (false /* not a single child */, len, true) if len > 1 => {
+                  unreachable!("Too many unqualified production calls!");
                 }
+                (false /* not a single child */, ..) => {
+                  is_token_assertion = true;
+                  let symbol_id = child.terminal_symbol;
+                  let assertion_type =
+                    (if child.is(TransitionStateType::O_PEEK) { "assert peek" } else { "assert" })
+                      .to_string();
 
-                let (symbol_bytecode_id, assert_class) = if (!is_scanner) {
-                  (symbol_id.bytecode_id(Some(g)), "TOKEN")
-                } else {
-                  get_symbol_shift_type(&symbol_id, g)
-                };
+                  if child.is(TransitionStateType::O_PEEK) {
+                    if (node.is(TransitionStateType::O_PEEK)) {
+                      peek_type = PeekType::PeekContinue;
+                    } else {
+                      peek_type = PeekType::PeekStart;
+                    }
+                  }
 
-                strings.push(format!(
-                  "{} {} [ {} ] ( goto state [ {} ] then goto state [ {} ]{} )",
-                  assertion_type,
-                  assert_class,
-                  symbol_bytecode_id,
-                  g.productions.get(&production_id).unwrap().guid_name,
-                  state_name,
-                  post_amble
-                ));
-              }
-            } else {
-              strings.push(format!(
-                "goto state [ {} ] then goto state [ {} ]{}",
-                g.productions.get(&production_id).unwrap().guid_name,
-                state_name,
-                post_amble
-              ));
-            }
-          } else {
-            panic!("WTF!?!?!");
+                  let (symbol_bytecode_id, assert_class) = if (!is_scanner) {
+                    (symbol_id.bytecode_id(Some(g)), "TOKEN")
+                  } else {
+                    symbol_id.shift_type(g)
+                  };
+
+                  format!(
+                    "{} {} [ {} ] ( goto state [ {} ] then goto state [ {} ]{} )",
+                    assertion_type,
+                    assert_class,
+                    symbol_bytecode_id,
+                    g.productions.get(&production_id).unwrap().guid_name,
+                    child_state.get_name(),
+                    post_amble
+                  )
+                }
+                (true /* is a single child */, ..) => {
+                  format!(
+                    "goto state [ {} ] then goto state [ {} ]{}",
+                    g.productions.get(&production_id).unwrap().guid_name,
+                    child_state.get_name(),
+                    post_amble
+                  )
+                }
+              },
+            )
           }
         }
       } else {
@@ -886,56 +898,33 @@ fn get_symbols_from_items(
   (normal_symbol_set, ignore_symbol_set, seen)
 }
 
-pub fn get_symbol_shift_type(symbol_id: &SymbolID, g: &GrammarStore) -> (u32, &'static str) {
-  match symbol_id {
-    SymbolID::GenericSpace
-    | SymbolID::GenericHorizontalTab
-    | SymbolID::GenericNewLine
-    | SymbolID::GenericIdentifier
-    | SymbolID::GenericNumber
-    | SymbolID::GenericSymbol => (symbol_id.bytecode_id(Some(g)), "CLASS"),
-    SymbolID::DefinedNumeric(id)
-    | SymbolID::DefinedIdentifier(id)
-    | SymbolID::DefinedSymbol(id) => {
-      let symbol = g.symbols.get(symbol_id).unwrap();
-      let id = g.symbol_strings.get(symbol_id).unwrap();
-      let sym_char = id.as_bytes()[0];
-      if symbol.byte_length > 1 || sym_char > 128 {
-        (symbol.bytecode_id, "CODEPOINT")
-      } else {
-        (sym_char as u32, "BYTE")
-      }
-    }
-    _ => (0, "BYTE"),
-  }
-}
-
 fn create_reduce_string(node: &TransitionGraphNode, g: &GrammarStore, is_scanner: bool) -> String {
-  let item = node.items[0];
-
-  let body = g.bodies.get(&item.get_body()).unwrap();
-
-  let production = g.productions.get(&body.prod).unwrap();
-
-  if !item.at_end() {
-    // panic!("Expected state to be in end state {}", item.debug_string(g))
-  }
-  if is_scanner {
-    let production_id = production.bytecode_id;
-
-    match node.items[0].get_origin() {
-      OriginData::Symbol(sym) => {
-        format!("assign token [ {} ] then set prod to {}", sym.bytecode_id(Some(g)), production_id)
+  match (node.items.first(), is_scanner, node.is(TransitionStateType::I_PASS)) {
+    (None, false /* not scanner */, true /* default pass state */) => "pass".to_string(),
+    (Some(item), true /* is scanner */, false) => {
+      let body = g.bodies.get(&item.get_body()).unwrap();
+      let production = g.productions.get(&body.prod).unwrap();
+      let production_id = production.bytecode_id;
+      match node.items[0].get_origin() {
+        OriginData::Symbol(sym) => {
+          format!(
+            "assign token [ {} ] then set prod to {}",
+            sym.bytecode_id(Some(g)),
+            production_id
+          )
+        }
+        _ => format!("set prod to {}", production_id),
       }
-      _ => format!("set prod to {}", production_id),
     }
-  } else {
-    let state_string = format!(
-      "set prod to {} then reduce {} symbols to body {}",
-      production.bytecode_id, body.len, body.bc_id,
-    );
-
-    state_string
+    (Some(item), false /* not scanner */, false) => {
+      let body = g.bodies.get(&item.get_body()).unwrap();
+      let production = g.productions.get(&body.prod).unwrap();
+      format!(
+        "set prod to {} then reduce {} symbols to body {}",
+        production.bytecode_id, body.len, body.bc_id,
+      )
+    }
+    _ => panic!("Invalid Leaf Node"),
   }
 }
 

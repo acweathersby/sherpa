@@ -31,6 +31,8 @@ pub enum TransitionStateType {
   /// accepting of a completed root item.
   O_ACCEPT,
 
+  O_GOTO_ROOT_ACCEPT,
+
   /// State includes items out of the scope of the current
   /// production that should be used for disambiguating states
   /// that would cause a reduction to a production ID other than

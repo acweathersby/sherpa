@@ -13,7 +13,7 @@ mod transition_tree_tests {
   use crate::grammar::get_production_id_by_name;
   use crate::grammar::get_production_plain_name;
   use crate::grammar::get_production_start_items;
-  use crate::intermediate::transition::deconflict_starts;
+  use crate::intermediate::transition::get_valid_starts;
 
   use crate::intermediate::transition::construct_recursive_descent;
 
@@ -88,7 +88,7 @@ mod state_constructor_tests {
   use crate::grammar::get_production_start_items;
   use crate::intermediate::state::generate_production_states;
   use crate::intermediate::state::generate_scanner_intro_state;
-  use crate::intermediate::transition::deconflict_starts;
+  use crate::intermediate::transition::get_valid_starts;
   use crate::types::GrammarId;
   use crate::types::SymbolID;
 
