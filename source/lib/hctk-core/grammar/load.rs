@@ -27,7 +27,7 @@ const allowed_extensions: [&str; 3] = ["hc", "hcg", "grammar"];
 
 pub(crate) fn get_usable_thread_count(requested_count: usize) -> usize {
   NonZeroUsize::min(
-    NonZeroUsize::new(usize::min(1, requested_count)).unwrap(),
+    NonZeroUsize::new(usize::max(1, requested_count)).unwrap(),
     std::thread::available_parallelism().unwrap_or(NonZeroUsize::new(1).unwrap()),
   )
   .get()
