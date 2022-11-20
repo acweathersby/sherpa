@@ -373,6 +373,7 @@ pub fn merge_production_type(
             message: "".to_string(),
             loc: new_origin.clone(),
             inline_message: "Derived here".to_string(),
+            path: Default::default(),
           }];
 
           locations.append(
@@ -385,6 +386,7 @@ pub fn merge_production_type(
                 ),
                 loc: t.clone(),
                 inline_message: "Derived here".to_string(),
+                path: Default::default(),
               })
               .collect::<Vec<_>>(),
           );
@@ -546,12 +548,14 @@ pub fn compile_struct_type(
               message: "".to_string(),
               loc: node.Token(),
               inline_message: "First Defined Here".to_string(),
+              path: Default::default(),
             }
           } else {
             HCError::GrammarCompile_Location {
               message: "".to_string(),
               loc: node.Token(),
               inline_message: "Redefined Here".to_string(),
+              path: Default::default(),
             }
           }
         })
@@ -562,6 +566,7 @@ pub fn compile_struct_type(
       message: "Struct defined without a type name".to_string(),
       loc: ast_struct.Token(),
       inline_message: "".to_string(),
+      path: Default::default(),
     })
   }
 
@@ -610,6 +615,7 @@ pub fn compile_struct_type(
                         "First defined as {}.",
                         existing.type_val.hcobj_type_name(Some(g))
                       ),
+                      path: Default::default(),
                     },
                     HCError::GrammarCompile_Location {
                       message: String::new(),
@@ -618,6 +624,7 @@ pub fn compile_struct_type(
                         "Redefined as {}.",
                         prop_type.hcobj_type_name(Some(g))
                       ),
+                      path: Default::default(),
                     },
                   ],
                 })
