@@ -1284,8 +1284,8 @@ pub fn convert_left_recursion_to_right(
   let non_bodies =
     bodies.iter().filter_map(|(i, b)| if *b { None } else { Some(i) }).collect::<Vec<_>>();
 
-  let a_prime_prod_name = (a_prod.original_name.clone() + "_prime");
-  let a_prime_prod_guid_name = create_production_guid_name(&g.guid_name, &a_prime_prod_name);
+  let a_prime_prod_name = format!("{}_prime", a_prod.original_name);
+  let a_prime_prod_guid_name = format!("{}_prime", a_prod.guid_name);
   let a_prime_prod_id = ProductionId::from(&a_prime_prod_guid_name);
   let a_prime_prod = Production {
     id: a_prime_prod_id,
@@ -1756,7 +1756,7 @@ fn get_literal_id(string: &String, exclusive: bool) -> SymbolID {
     (true, false, true) => SymbolID::ExclusiveDefinedIdentifier(StringId::from(string)),
     (false, false, true) => SymbolID::DefinedIdentifier(StringId::from(string)),
     (true, ..) => SymbolID::ExclusiveDefinedSymbol(StringId::from(string)),
-    (false, ..) => SymbolID::DefinedIdentifier(StringId::from(string)),
+    (false, ..) => SymbolID::DefinedSymbol(StringId::from(string)),
   }
 }
 
