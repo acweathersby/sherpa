@@ -60,6 +60,12 @@ pub enum HCError {
     tok:        Token,
     source:     Option<Arc<Vec<u8>>>,
   },
+  Runtime_InvalidParse {
+    message: String,
+    inline_message: String,
+    loc: Token,
+    last_production: u32,
+  },
   //---------------------------------------------------------------------------
   // ----------------- Ir Error Types -----------------------------------------
   //---------------------------------------------------------------------------
@@ -150,6 +156,9 @@ impl Display for HCError {
         message,
         locations.iter().map(|s| format!("{}", s)).collect::<Vec<_>>().join("\n"),
       )),
+      Runtime_InvalidParse { message, inline_message, loc, last_production } => f.write_fmt(
+        format_args!("{}\n{}", message, loc.blame(1, 1, inline_message, BlameColor::Red)),
+      ),
       Runtime_ParseError { production, tok, source } => {
         let mut tok = tok.clone();
         if tok.is_empty() {

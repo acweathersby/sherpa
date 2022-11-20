@@ -125,7 +125,7 @@ pub struct AST { }
       writer
         .newline()?
         .wrtln(&format!(
-          "fn base_{}_from<R>(mut reader: R)  -> Result<{}, ParseError> 
+          "fn base_{}_from<R>(mut reader: R)  -> Result<{}, HCError> 
           where R: ByteCharacterReader + BaseCharacterReader + MutCharacterReader{{ ",
           export_name, ast_type_string
         ))?
@@ -143,16 +143,16 @@ let mut nodes = Vec::new();
 let mut tokens = Vec::new();
 loop {{
   match ctx.next() {{
-    Some(ParseAction::Error {{ last_input, .. }}) => {{
+    Some(ParseAction::Error {{ last_input, last_production }}) => {{
       let mut error_token = Token::from_parse_token(&last_input);
       error_token.set_source(source.clone());
-      return Err(ParseError::COMPILE_PROBLEM(
-        CompileProblem {{
+      return Err(HCError::Runtime_InvalidParse{{
           message: \"Unable to parse input\".to_string(),
           inline_message: \"Invalid Token\".to_string(),
-          loc: error_token
+          loc: error_token,
+          last_production
         }}
-      ));
+      );
     }}
     Some(ParseAction::Shift {{ skipped_characters: skip, token }}) => {{
       let mut tok = Token::from_parse_token(&token);
@@ -213,7 +213,7 @@ loop {{
 
     for (_, _, ast_type_string, export_name) in &export_node_data {
       writer.newline()?.wrtln(&format!(
-        "fn {}_from(input:T) -> Result<{}, ParseError>;",
+        "fn {}_from(input:T) -> Result<{}, HCError>;",
         export_name, ast_type_string
       ))?;
     }
@@ -232,7 +232,7 @@ loop {{
         writer
           .newline()?
           .wrtln(&format!(
-            "fn {}_from({}: {}) -> Result<{}, ParseError> {{",
+            "fn {}_from({}: {}) -> Result<{}, HCError> {{",
             export_name, param_name, input_type, ast_type_string
           ))?
           .indent()
