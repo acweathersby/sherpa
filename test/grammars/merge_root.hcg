@@ -1,0 +1,10 @@
+@NAME merge_root
+
+@IMPORT ./merge_child as merge
+
+<> A > \the \world \is merge::B \!
+
++> merge::B > \small
+
++> merge::C > \diagonal
+
