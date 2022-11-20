@@ -279,17 +279,17 @@ impl GrammarStore {
 
     while let Some((offset, item)) = pipeline.pop_front() {
       if !item.is_end() {
-        if let SymbolID::Production(prod_id, _) = item.get_symbol(self) {
-          if prod_id == prod_id {
-            if (offset == 0) {
-              if (item.get_prod_id(self) == prod_id) {
-                recurse_type |= RecursionType::LEFT_DIRECT;
-              } else {
-                recurse_type |= RecursionType::LEFT_INDIRECT;
-              }
+        let other_prod_id = item.get_production_id_at_sym(self);
+
+        if prod_id == other_prod_id {
+          if (offset == 0) {
+            if (item.get_prod_id(self) == prod_id) {
+              recurse_type |= RecursionType::LEFT_DIRECT;
             } else {
-              recurse_type |= RecursionType::RIGHT;
+              recurse_type |= RecursionType::LEFT_INDIRECT;
             }
+          } else {
+            recurse_type |= RecursionType::RIGHT;
           }
         }
 

@@ -150,6 +150,26 @@ mod test_grammar {
 
   #[test]
   fn conversion_of_left_to_right_recursive() {
+    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+
+    path.push("../../../test/grammars/left_recursive_token_production.hcg");
+
+    let thread_count = get_num_of_available_threads();
+
+    let (grammar, errors) = compile_grammar_from_path(path, get_num_of_available_threads());
+
+    assert!(errors.is_none());
+    assert!(grammar.is_some());
+    let grammar = grammar.unwrap();
+    let left_recursive_prod = grammar.get_production_by_name("tk:left_recursive").unwrap();
+
+    assert!(!left_recursive_prod
+      .recursion_type
+      .contains(RecursionType::LEFT_INDIRECT | RecursionType::LEFT_DIRECT));
+  }
+
+  #[test]
+  fn left_to_right_recursive_conversion() {
     if let Some(mut g) = compile_grammar_from_string(
       "<> B > tk:A  <> A > A \\t \\y | A \\u | \\CCC | \\R A ",
       &PathBuf::from("/test"),

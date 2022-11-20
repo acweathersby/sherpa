@@ -371,15 +371,7 @@ mod ascript_compile_tests {
   }
 
   fn create_dummy_body() -> hctk_core::types::Body {
-    hctk_core::types::Body {
-      bc_id: 0,
-      id: BodyId::new(&ProductionId(0), 0),
-      len: 0,
-      origin_location: Token::new(),
-      prod: ProductionId(0),
-      reduce_fn_ids: vec![],
-      syms: vec![],
-    }
+    hctk_core::types::Body { ..Default::default() }
   }
 
   #[test]

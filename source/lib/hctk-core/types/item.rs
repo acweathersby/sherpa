@@ -324,7 +324,7 @@ impl Item {
   pub fn get_production_id_at_sym(&self, g: &GrammarStore) -> ProductionId {
     match self.get_symbol(g) {
       SymbolID::Production(prod, _) => prod,
-      _ => ProductionId(0),
+      _ => Default::default(),
     }
   }
 

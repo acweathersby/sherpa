@@ -38,8 +38,7 @@ pub struct ProductionId(pub u64);
 
 impl From<&String> for ProductionId {
   fn from(string: &String) -> Self {
-    let val = hash_id_value_u64(string);
-    ProductionId(val)
+    ProductionId(hash_id_value_u64(string))
   }
 }
 

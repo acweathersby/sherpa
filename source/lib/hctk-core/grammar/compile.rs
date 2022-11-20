@@ -359,14 +359,35 @@ fn finalize_bytecode_metadata(g: &mut GrammarStore, e: &mut [HCError]) {
   }
 }
 
-/// Sets an appropriate `is_recursive` value on all productions.
+/// Calculates recursion types of productions, converts direct left recursive scanner productions
+/// to right recursive.
 fn finalize_productions(g: &mut GrammarStore, thread_count: usize, e: &mut [HCError]) {
   let production_ids = g.productions.keys().cloned().collect::<Vec<_>>();
 
+  let conversion_candidate = calculate_recursions_types(production_ids, g, thread_count);
+
+  // Convert left recursive scanner productions into right recursion.
+  for candidate_id in &conversion_candidate {
+    convert_left_recursion_to_right(g, *candidate_id);
+  }
+
+  calculate_recursions_types(conversion_candidate, g, thread_count);
+}
+
+/// Calculates and assigns the recursion type for each ProductionId in the vector.
+///
+/// Additionally, a vector of ProductionIds of scanner productions that are [RecursionType::LEFT_DIRECT]  
+/// is returned, with the assumption that these productions will be converted to
+/// [RecursionType::RIGHT].
+fn calculate_recursions_types(
+  production_ids: Vec<ProductionId>,
+  g: &mut GrammarStore,
+  thread_count: usize,
+) -> Vec<ProductionId> {
+  let mut conversion_candidates = vec![];
+
   let production_id_chunks =
     production_ids.chunks(thread_count).filter(|s| !s.is_empty()).collect::<Vec<_>>();
-
-  let mut left_right_conversion_candidates = vec![];
 
   for (production_id, recursion_type) in thread::scope(|s| {
     production_id_chunks
@@ -390,14 +411,11 @@ fn finalize_productions(g: &mut GrammarStore, thread_count: usize, e: &mut [HCEr
     production.recursion_type = recursion_type;
 
     if production.is_scanner && production.recursion_type.contains(RecursionType::LEFT_DIRECT) {
-      left_right_conversion_candidates.push(production.id);
+      conversion_candidates.push(production.id);
     }
   }
 
-  // Convert left recursive TOKEN productions into right recursion.
-  for candidate_id in left_right_conversion_candidates {
-    convert_left_recursion_to_right(g, candidate_id);
-  }
+  conversion_candidates
 }
 
 /// Creates item closure caches and creates start and goto item groups.
@@ -603,7 +621,7 @@ fn create_scanner_productions_from_symbols(g: &mut GrammarStore, e: &mut [HCErro
                 crate::types::Production {
                   id: scanner_production_id,
                   guid_name: scanner_name.clone(),
-                  original_name: scanner_name,
+                  original_name: format!("tk:{}", production.original_name),
                   original_location: production.original_location.clone(),
                   is_scanner: true,
                   ..Default::default()
@@ -726,6 +744,7 @@ fn convert_scanner_symbol_to_production(
         }
       })
       .collect();
+
     insert_production(
       g,
       crate::types::Production {
@@ -1233,7 +1252,9 @@ pub fn convert_left_recursion_to_right(
   a_prod_id: ProductionId,
 ) -> (ProductionId, ProductionId) {
   let a_prod = g.productions.get_mut(&a_prod_id).unwrap();
+
   let a_token = a_prod.original_location.clone();
+
   // Ensure the production is left recursive.
   if !a_prod.recursion_type.contains(RecursionType::LEFT_DIRECT) {
     panic!("Production is not left direct recursive.");
