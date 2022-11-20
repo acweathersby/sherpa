@@ -31,12 +31,39 @@ pub fn build_ast(source_type: SourceType) -> PipelineTask {
 
 #[cfg(test)]
 mod rust_ast_build {
+  use std::path::PathBuf;
+
   use crate::ascript::compile::compile_ascript_store;
   use crate::ascript::types::AScriptStore;
   use hctk_core::types::GrammarStore;
   use hctk_core::writer::code_writer::StringBuffer;
 
   use super::rust;
+
+  #[test]
+  fn test_grammar_imported_grammar() {
+    let g = GrammarStore::from_path(
+      PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../test/grammars/script_base.hcg")
+        .canonicalize()
+        .unwrap(),
+    )
+    .unwrap();
+    let mut ascript = AScriptStore::new();
+
+    let errors = compile_ascript_store(&g, &mut ascript);
+    for error in &errors {
+      eprintln!("{}", error);
+    }
+
+    assert!(errors.is_empty());
+
+    let mut writer = StringBuffer::new(vec![]);
+
+    rust::write(&g, &ascript, &mut writer).unwrap();
+
+    eprintln!("{}", String::from_utf8(writer.into_output()).unwrap());
+  }
 
   #[test]
   fn test_grammar() {

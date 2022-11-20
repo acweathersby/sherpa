@@ -190,6 +190,9 @@ fn merge_grammars(
       }
     }
 
+    // Merge reduce functions
+    g.reduce_functions.append(&mut import_grammar.reduce_functions.clone());
+
     // Collect all pending merge productions
     for (prod_id, bodies) in &import_grammar.merge_productions {
       match merge_productions.entry(*prod_id) {
