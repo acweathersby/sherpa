@@ -26,7 +26,8 @@ mod transition_tree_tests {
       false,
       &get_production_start_items(&production_id, &g),
       BTreeSet::from_iter(vec![production_id]),
-    );
+    )
+    .0;
 
     assert_eq!(result.get_node_len(), 7);
 
@@ -49,14 +50,11 @@ mod transition_tree_tests {
     .unwrap();
 
     for p in g.productions.values() {
-      eprintln!("{}", p.original_name);
+      eprintln!("{}", p.name);
     }
 
-    let production = g
-      .productions
-      .iter()
-      .find(|p| p.1.original_name == "scan_tok_test_9AD7F26F987E3173_GUID_B__")
-      .unwrap();
+    let production =
+      g.productions.iter().find(|p| p.1.name == "scan_tok_test_9AD7F26F987E3173_GUID_B__").unwrap();
 
     let production_id = production.0;
 
@@ -65,7 +63,8 @@ mod transition_tree_tests {
       true,
       &get_production_start_items(production_id, &g),
       BTreeSet::from_iter(vec![*production_id]),
-    );
+    )
+    .0;
 
     assert_eq!(result.get_node_len(), 8);
 
@@ -79,11 +78,13 @@ mod state_constructor_tests {
   use std::any::Any;
   use std::collections::BTreeSet;
   use std::iter::FromIterator;
+  use std::path::PathBuf;
 
   use crate::debug::debug_items;
   use crate::grammar::get_production_start_items;
   use crate::intermediate::state::generate_production_states;
   use crate::intermediate::state::generate_scanner_intro_state;
+  use crate::intermediate::state::IROutput;
   use crate::intermediate::transition::get_valid_starts;
   use crate::types::GrammarId;
   use crate::types::GrammarStore;
@@ -116,7 +117,7 @@ mod state_constructor_tests {
 
     let prod_id = g.get_production_id_by_name("A").unwrap();
 
-    let result = generate_production_states(&prod_id, &g);
+    let result = generate_production_states(&prod_id, &g).states;
 
     println!("{:#?}", result);
 
@@ -129,7 +130,7 @@ mod state_constructor_tests {
 
     let prod_id = g.get_production_id_by_name("A").unwrap();
 
-    let result = generate_production_states(&prod_id, &g);
+    let result = generate_production_states(&prod_id, &g).states;
 
     println!("{:#?}", result);
 
@@ -142,7 +143,7 @@ mod state_constructor_tests {
 
     let prod_id = g.get_production_id_by_name("A").unwrap();
 
-    let result = generate_production_states(&prod_id, &g);
+    let result = generate_production_states(&prod_id, &g).states;
 
     println!("{:#?}", result);
 
@@ -155,7 +156,7 @@ mod state_constructor_tests {
 
     let prod_id = g.get_production_id_by_name("A").unwrap();
 
-    let result = generate_production_states(&prod_id, &g);
+    let result = generate_production_states(&prod_id, &g).states;
 
     println!("{:#?}", result);
 
@@ -175,7 +176,7 @@ mod state_constructor_tests {
 
     println!("{:#?}", symbols.iter().map(|s| g.symbol_strings.get(s)).collect::<Vec<_>>());
 
-    let result = generate_scanner_intro_state(symbols, &g);
+    let result = generate_scanner_intro_state(symbols, &g).states;
 
     println!("{:#?}", result);
 
@@ -201,11 +202,35 @@ mod state_constructor_tests {
       grammar.symbols.keys().find(|p| matches!(p, SymbolID::TokenProduction(..))).unwrap();
 
     let result =
-      generate_scanner_intro_state(BTreeSet::from_iter(vec![*token_production]), &grammar);
+      generate_scanner_intro_state(BTreeSet::from_iter(vec![*token_production]), &grammar).states;
 
     println!("{:#?}", result);
 
     assert_eq!(result.len(), 7);
+  }
+
+  #[test]
+  pub fn generate_A_state_of_a_merged_grammar_with_extended_production() {
+    let grammar = GrammarStore::from_path(
+      PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../test/grammars/merge_conflict_host.hcg")
+        .canonicalize()
+        .unwrap(),
+    )
+    .unwrap();
+
+    let IROutput { errors, states } = generate_production_states(
+      &grammar.get_production_id_by_name("( mcc::B | C )(+)").unwrap(),
+      &grammar,
+    );
+
+    for error in &errors {
+      println!("{}", error);
+    }
+
+    // assert_eq!(errors.len(), 1);
+
+    assert!(matches!(errors[0], crate::types::HCError::Transition_ProductionAmbiguity { .. }));
   }
 
   #[test]
@@ -238,7 +263,7 @@ mod state_constructor_tests {
     let syms =
       get_production_start_items(&p, &g).iter().map(|i| i.get_symbol(&g)).collect::<BTreeSet<_>>();
 
-    let result = generate_scanner_intro_state(syms, &g);
+    let result = generate_scanner_intro_state(syms, &g).states;
 
     println!("{:#?}", result);
 
@@ -261,7 +286,7 @@ mod state_constructor_tests {
 
     let prod_id = g.get_production_id_by_name("A").unwrap();
 
-    let result = generate_production_states(&prod_id, &g);
+    let result = generate_production_states(&prod_id, &g).states;
 
     println!("{:#?}", result);
 
@@ -475,7 +500,7 @@ mod state_constructor_tests {
 
     let prod_id = g.get_production_id_by_name("struct_prop").unwrap();
 
-    let result = generate_production_states(&prod_id, &g);
+    let result = generate_production_states(&prod_id, &g).states;
 
     println!("{:#?}", result);
 
@@ -512,7 +537,7 @@ mod state_constructor_tests {
 
     let prod_id = g.get_production_id_by_name("term").unwrap();
 
-    let result = generate_production_states(&prod_id, &g);
+    let result = generate_production_states(&prod_id, &g).states;
 
     println!("{:#?}", result);
 
@@ -545,7 +570,8 @@ mod state_constructor_tests {
     let result = generate_scanner_intro_state(
       BTreeSet::from_iter(vec![SymbolID::from_string("V", Some(&g))]),
       &g,
-    );
+    )
+    .states;
 
     println!("{:#?}", result);
 

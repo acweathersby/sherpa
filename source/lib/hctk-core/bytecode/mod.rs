@@ -135,7 +135,7 @@ mod byte_code_creation_tests {
 
     let prod_id = g.get_production_id_by_name("A").unwrap();
 
-    let result = generate_production_states(&prod_id, &g);
+    let result = generate_production_states(&prod_id, &g).states;
 
     println!("{:#?}", result);
 
@@ -239,7 +239,7 @@ mod byte_code_creation_tests {
 
     let prod_id = g.get_production_id_by_name("test").unwrap();
 
-    let result = generate_production_states(&prod_id, &g);
+    let result = generate_production_states(&prod_id, &g).states;
 
     for state in result {
       println!("{:#?}", state.get_code());

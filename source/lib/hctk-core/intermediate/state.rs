@@ -5,6 +5,7 @@ use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::fmt::format;
 use std::thread;
+use std::vec;
 
 use super::transition::construct_goto;
 use super::transition::construct_recursive_descent;
@@ -16,6 +17,7 @@ use crate::grammar::get_production_start_items;
 use crate::grammar::get_scanner_info_from_defined;
 use crate::grammar::hash_id_value_u64;
 use crate::types::GrammarStore;
+use crate::types::HCError;
 use crate::types::IRState;
 use crate::types::IRStateType;
 use crate::types::IRStateType::*;
@@ -31,31 +33,27 @@ use crate::types::TransitionMode;
 use crate::types::TransitionPack;
 use crate::types::TransitionStateType;
 
-type IROutput = Vec<Box<IRState>>;
+pub struct IROutput {
+  pub states: Vec<Box<IRState>>,
+  pub errors: Vec<HCError>,
+}
 /// Compiles all production within the grammar into unique IRStates
 pub fn compile_states(g: &GrammarStore, num_of_threads: usize) -> BTreeMap<String, Box<IRState>> {
   let mut deduped_states = BTreeMap::new();
 
   let productions_ids = g.productions.keys().cloned().collect::<Vec<_>>();
 
+  let mut errors = vec![];
+
   if num_of_threads == 1 {
     let work_chunks = productions_ids.chunks(num_of_threads).collect::<Vec<_>>();
-    let mut deduped_states = BTreeMap::new();
-    let mut scanner_names = BTreeSet::new();
 
-    for production_id in &productions_ids {
-      let states = generate_production_states(production_id, g);
+    let (states, mut e) = process_productions(&productions_ids, g);
 
-      for state in states {
-        if let Some(name) = state.get_scanner_state_name() {
-          if scanner_names.insert(name) {
-            for state in generate_scanner_intro_state(state.get_scanner_symbol_set().unwrap(), g) {
-              deduped_states.entry(state.get_name()).or_insert(state);
-            }
-          }
-        }
-        deduped_states.entry(state.get_name()).or_insert(state);
-      }
+    errors.append(&mut e);
+
+    for state in states {
+      deduped_states.entry(state.get_name()).or_insert(state);
     }
 
     for (_, state) in &mut deduped_states {
@@ -64,52 +62,26 @@ pub fn compile_states(g: &GrammarStore, num_of_threads: usize) -> BTreeMap<Strin
         panic!("\n{} {}", err, string)
       };
     }
-
-    deduped_states
   } else {
     let work_chunks = productions_ids
       .chunks((productions_ids.len() / (num_of_threads - 1)).max(1))
       .collect::<Vec<_>>();
 
-    for state in {
-      thread::scope(|s| {
-        work_chunks
-          .into_iter()
-          .map(|productions| {
-            s.spawn(move || {
-              let mut out_states = Vec::with_capacity(1024);
-              let mut scanner_names = BTreeSet::new();
-              let mut state_names = BTreeSet::new();
+    let (states, mut e): (Vec<_>, Vec<_>) = thread::scope(|s| {
+      work_chunks
+        .into_iter()
+        .map(|productions| s.spawn(move || process_productions(productions, g)))
+        .collect::<Vec<_>>()
+        .into_iter()
+        .map(move |s| s.join().unwrap())
+        .collect::<Vec<_>>()
+    })
+    .into_iter()
+    .unzip();
 
-              for production_id in productions {
-                let states = generate_production_states(production_id, g);
+    errors.append(&mut e.into_iter().flatten().collect());
 
-                for state in states {
-                  if let Some(name) = state.get_scanner_state_name() {
-                    if scanner_names.insert(name.clone()) {
-                      for state in
-                        generate_scanner_intro_state(state.get_scanner_symbol_set().unwrap(), g)
-                      {
-                        if state_names.insert(state.get_name()) {
-                          out_states.push(state);
-                        }
-                      }
-                    }
-                  }
-                  if state_names.insert(state.get_name()) {
-                    out_states.push(state);
-                  }
-                }
-              }
-              out_states
-            })
-          })
-          .collect::<Vec<_>>()
-          .into_iter()
-          .flat_map(move |s| s.join().unwrap())
-          .collect::<Vec<_>>()
-      })
-    } {
+    for state in states.into_iter().flatten() {
       deduped_states.entry(state.get_name()).or_insert(state);
     }
 
@@ -135,9 +107,45 @@ pub fn compile_states(g: &GrammarStore, num_of_threads: usize) -> BTreeMap<Strin
         .map(move |s| s.join().unwrap())
         .collect::<Vec<_>>();
     });
-
-    deduped_states
   }
+  deduped_states
+}
+
+fn process_productions(
+  productions: &[ProductionId],
+  g: &GrammarStore,
+) -> (Vec<Box<IRState>>, Vec<HCError>) {
+  let mut out_states = Vec::with_capacity(1024);
+  let mut scanner_names = BTreeSet::new();
+  let mut state_names = BTreeSet::new();
+  let mut errors = vec![];
+  for production_id in productions {
+    let IROutput { errors: mut e, states } = generate_production_states(production_id, g);
+
+    errors.append(&mut e);
+
+    for state in states {
+      if let Some(name) = state.get_scanner_state_name() {
+        if scanner_names.insert(name.clone()) {
+          let IROutput { errors: mut e, states } =
+            generate_scanner_intro_state(state.get_scanner_symbol_set().unwrap(), g);
+
+          errors.append(&mut e);
+
+          for state in states {
+            if state_names.insert(state.get_name()) {
+              out_states.push(state);
+            }
+          }
+        }
+      }
+      if state_names.insert(state.get_name()) {
+        out_states.push(state);
+      }
+    }
+  }
+
+  (out_states, errors)
 }
 
 pub fn generate_scanner_intro_state(symbols: BTreeSet<SymbolID>, g: &GrammarStore) -> IROutput {
@@ -197,8 +205,8 @@ fn check_for_left_recursion(symbol_items: &Vec<Item>, g: &GrammarStore) {
       if has_left {
         println!(
           "[{}] {}",
-          production.original_name,
-          production.original_location.blame(1, 1, "this production is left recursive", None),
+          production.name,
+          production.location.blame(1, 1, "this production is left recursive", None),
         );
       }
 
@@ -229,42 +237,45 @@ fn generate_states(
   entry_name: &String,
   production_id: u32,
 ) -> IROutput {
-  let mut output: IROutput = Vec::new();
+  let mut errors: Vec<HCError> = vec![];
+  let mut output: Vec<Box<IRState>> = vec![];
+
   let root_ids = start_items.iter().map(|i| i.get_prod_id(g)).collect::<BTreeSet<_>>();
+
   let (start_items, goto_seeds) =
     if !is_scanner { get_valid_starts(&start_items, &g) } else { (start_items.to_vec(), vec![]) };
 
-  let recursive_descent_data =
+  let (recursive_descent_data, mut e) =
     construct_recursive_descent(g, is_scanner, &start_items, root_ids.clone());
 
-  output.append(&mut process_transition_nodes(
-    &recursive_descent_data,
-    g,
-    entry_name,
-    production_id,
-    false,
-  ));
+  errors.append(&mut e);
+
+  let (mut states, mut e) =
+    process_transition_nodes(&recursive_descent_data, g, entry_name, production_id, false);
+
+  errors.append(&mut e);
+  output.append(&mut states);
 
   // Scanner states are guaranteed to be purely recursive descent compatible
   //  and thus they have no need for a GOTO path.
   if !is_scanner {
-    let (goto_data, non_trivial_root_branch) =
+    let ((goto_data, mut e), non_trivial_root_branch) =
       construct_goto(g, is_scanner, &start_items, &goto_seeds, root_ids);
 
+    errors.append(&mut e);
+
     if !goto_data.leaf_nodes.is_empty() {
-      output.append(&mut process_transition_nodes(
-        &goto_data,
-        g,
-        entry_name,
-        production_id,
-        non_trivial_root_branch,
-      ));
+      let (mut states, mut e) =
+        process_transition_nodes(&goto_data, g, entry_name, production_id, non_trivial_root_branch);
+
+      errors.append(&mut e);
+      output.append(&mut states);
     } else {
       output.push(create_passing_goto_state(entry_name, is_scanner));
     }
   }
 
-  output
+  IROutput { states: output, errors: errors }
 }
 
 fn process_transition_nodes<'a>(
@@ -273,13 +284,14 @@ fn process_transition_nodes<'a>(
   entry_name: &String,
   prod_id: u32,
   non_trivial_root_branch: bool,
-) -> Vec<Box<IRState>> {
+) -> (Vec<Box<IRState>>, Vec<HCError>) {
   // We start at leaf nodes and make our way down to the root.
   let number_of_nodes = t_pack.get_node_len();
 
   let leaf_node_set = t_pack.leaf_nodes.iter().collect::<BTreeSet<_>>();
 
   let mut output = BTreeMap::<usize, Box<IRState>>::new();
+  let mut errors = vec![];
 
   let mut children_tables =
     t_pack.nodes_iter().map(|_| BTreeSet::<usize>::new()).collect::<Vec<_>>();
@@ -360,7 +372,7 @@ fn process_transition_nodes<'a>(
 
   let mut hash_filter = BTreeSet::<u64>::new();
 
-  output.into_values().filter(|s| hash_filter.insert(s.get_hash())).collect::<Vec<_>>()
+  (output.into_values().filter(|s| hash_filter.insert(s.get_hash())).collect::<Vec<_>>(), errors)
 }
 
 fn create_passing_goto_state(entry_name: &String, is_scanner: bool) -> Box<IRState> {
@@ -816,18 +828,18 @@ fn create_intermediate_state(
     let mut code = strings.join("\n");
 
     if code.is_empty() {
-      panic!(
-        "[BRANCH] Empty state generated! [{}] [{}] {:?} {}",
-        comment,
-        t_pack
-          .root_prod_ids
-          .iter()
-          .map(|s| { g.get_production_plain_name(s) })
-          .collect::<Vec<_>>()
-          .join("   \n"),
-        children_tables.get(node.id).cloned().unwrap_or_default(),
-        node.debug_string(g)
-      );
+      //  panic!(
+      // "[BRANCH] Empty state generated! [{}] [{}] {:?} {}",
+      // comment,
+      // t_pack
+      // .root_prod_ids
+      // .iter()
+      // .map(|s| { g.get_production_plain_name(s) })
+      // .collect::<Vec<_>>()
+      // .join("   \n"),
+      // children_tables.get(node.id).cloned().unwrap_or_default(),
+      // node.debug_string(g)
+      // );
     }
 
     Box::new(
@@ -902,7 +914,7 @@ fn create_reduce_string(node: &TransitionGraphNode, g: &GrammarStore, is_scanner
   match (node.items.first(), is_scanner, node.is(TransitionStateType::I_PASS)) {
     (None, false /* not scanner */, true /* default pass state */) => "pass".to_string(),
     (Some(item), true /* is scanner */, false) => {
-      let body = g.bodies.get(&item.get_body()).unwrap();
+      let body = g.bodies.get(&item.get_body_id()).unwrap();
       let production = g.productions.get(&body.prod).unwrap();
       let production_id = production.bytecode_id;
       match node.items[0].get_origin() {
@@ -917,7 +929,7 @@ fn create_reduce_string(node: &TransitionGraphNode, g: &GrammarStore, is_scanner
       }
     }
     (Some(item), false /* not scanner */, false) => {
-      let body = g.bodies.get(&item.get_body()).unwrap();
+      let body = g.bodies.get(&item.get_body_id()).unwrap();
       let production = g.productions.get(&body.prod).unwrap();
       format!(
         "set prod to {} then reduce {} symbols to body {}",

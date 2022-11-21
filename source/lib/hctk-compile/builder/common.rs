@@ -31,7 +31,7 @@ pub(crate) fn write_rust_entry_functions_bytecode<W: Write>(
           .wrtln("}")?
           .newline()?;
       } else {
-        println!("Unable to get bytecode offset for production {} ", production.original_name,);
+        println!("Unable to get bytecode offset for production {} ", production.name,);
       }
     },
   )
@@ -48,10 +48,7 @@ pub(crate) fn write_rust_entry_functions<W: Write>(
     {
       writer
         .newline()?
-        .wrtln(&format!(
-          "/// `{}`",
-          production.original_location.to_string().replace("\n", "\n// ")
-        ))?
+        .wrtln(&format!("/// `{}`", production.location.to_string().replace("\n", "\n// ")))?
         .wrtln(&format!("pub fn new_{}_parser(reader: T) -> Self{{", export_name))?
         .indent()
         .wrtln("let mut ctx = Self::new(reader);")?
@@ -82,14 +79,11 @@ pub fn add_ascript_functions<W: Write>(
           })),
           &Body {
             syms: vec![BodySymbolRef {
-              consumable: false,
-              annotation: String::default(),
-              exclusive: false,
-              original_index: 0,
               scanner_index: 1,
               scanner_length: 1,
               sym_id: SymbolID::Production(production.id, GrammarId(0)),
-              tok: Token::new(),
+              grammar_ref: g.id.clone(),
+              ..Default::default()
             }],
             len: 1,
             prod: production.id,

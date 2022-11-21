@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use bitmask_enum::bitmask;
 
 use crate::grammar::data::ast::ASTNode;
@@ -5,6 +7,8 @@ use crate::grammar::data::ast::ASTNodeTraits;
 use crate::grammar::hash_id_value_u64;
 use crate::types::SymbolID;
 use crate::types::Token;
+
+use super::GrammarRef;
 
 #[bitmask]
 pub enum RecursionType {
@@ -82,7 +86,7 @@ impl std::fmt::Display for BodyId {
 #[derive(Debug, Clone, Default)]
 pub struct Production {
   pub guid_name: String,
-  pub original_name: String,
+  pub name: String,
   pub number_of_bodies: u16,
   pub id: ProductionId,
   pub is_scanner: bool,
@@ -91,7 +95,7 @@ pub struct Production {
   pub priority: u32,
   /// The token defining the substring in the source
   /// code from which this production was derived.
-  pub original_location: Token,
+  pub location: Token,
   /// An integer value used by bytecode
   /// to refer to this production
   pub bytecode_id: u32,
@@ -100,9 +104,11 @@ pub struct Production {
   /// that mirrors the TokenProduction or Defined* symbol
   /// bytecode_id that this production produces.
   pub symbol_bytecode_id: u32,
+  /// The symbol of this production
+  pub sym_id: SymbolID,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BodySymbolRef {
   pub sym_id:         SymbolID,
   pub original_index: u32,
@@ -122,6 +128,24 @@ pub struct BodySymbolRef {
   pub exclusive:      bool,
 
   pub tok: Token,
+
+  pub grammar_ref: Arc<GrammarRef>,
+}
+
+impl Default for BodySymbolRef {
+  fn default() -> Self {
+    Self {
+      sym_id: Default::default(),
+      original_index: Default::default(),
+      annotation: Default::default(),
+      consumable: Default::default(),
+      scanner_length: Default::default(),
+      scanner_index: Default::default(),
+      exclusive: Default::default(),
+      tok: Default::default(),
+      grammar_ref: Arc::new(Default::default()),
+    }
+  }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]

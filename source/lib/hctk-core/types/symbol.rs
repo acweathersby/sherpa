@@ -134,9 +134,9 @@ impl SymbolID {
             _ => match g.get_production_by_name(symbol_string) {
               HCResult::Ok(prod) => {
                 if prod.is_scanner {
-                  Self::TokenProduction(prod.id, g.guid)
+                  Self::TokenProduction(prod.id, g.id.guid)
                 } else {
-                  Self::TokenProduction(prod.id, g.guid)
+                  Self::TokenProduction(prod.id, g.id.guid)
                 }
               }
               _ => SymbolID::Undefined,
@@ -159,9 +159,9 @@ impl SymbolID {
       | Self::ExclusiveDefinedSymbol(_) => {
         format!("\\{}", g.symbol_strings.get(self).unwrap())
       }
-      Self::Production(prod_id, _) => g.productions.get(prod_id).unwrap().original_name.to_string(),
+      Self::Production(prod_id, _) => g.productions.get(prod_id).unwrap().name.to_string(),
       Self::TokenProduction(prod_id, _) => {
-        format!("tk:{}", g.productions.get(prod_id).unwrap().original_name)
+        format!("tk:{}", g.productions.get(prod_id).unwrap().name)
       }
       Self::Default => "default".to_string(),
       Self::Undefined => "[??]".to_string(),

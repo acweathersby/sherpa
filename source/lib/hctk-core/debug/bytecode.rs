@@ -389,7 +389,7 @@ mod bytecode_debugging_tests {
     let mut ir_states = compile_states(&g, 1);
     let output = compile_bytecode(&g, &mut ir_states);
 
-    let result = generate_production_states(&prod_id, &g);
+    let result = generate_production_states(&prod_id, &g).states;
 
     let states = result
       .into_iter()

@@ -11,6 +11,8 @@ use std::hash::Hash;
 use std::rc::Rc;
 use std::vec;
 
+use super::HCError;
+
 pub type TransitionGraphNodeId = usize;
 
 #[bitmask]
@@ -110,6 +112,15 @@ pub struct TransitionGraphNode {
 
 impl TransitionGraphNode {
   pub const OrphanIndex: usize = usize::MAX;
+
+  /// Return a clone of the first item in the node's items array
+  ///
+  /// # Panics
+  ///
+  /// Panics if the node's items vector is empty
+  pub fn first_item(&self) -> Item {
+    self.items.first().cloned().unwrap()
+  }
 
   pub fn is_out_of_scope(&self) -> bool {
     return self.items[0].get_state().is_goto_end_origin();
@@ -217,8 +228,9 @@ impl Default for TransitionMode {
   }
 }
 
-#[derive(Debug, Default)]
+pub type TPackResults = (TransitionPack, Vec<HCError>);
 
+#[derive(Debug, Default)]
 pub struct TransitionPack {
   /// A set of closures that can be referenced in peek states.
   pub scoped_closures: Vec<Vec<Item>>,
@@ -241,6 +253,8 @@ pub struct TransitionPack {
   pub peek_ids: BTreeSet<u64>,
   pub starts: BTreeSet<Item>,
   pub out_of_scope_closure: Option<Vec<Item>>,
+  pub errors: Vec<HCError>,
+  pub error_ids: BTreeSet<u64>,
 }
 
 impl TransitionPack {
@@ -395,17 +409,20 @@ impl TransitionPack {
     self.nodes.iter()
   }
 
-  pub fn clean(self) -> Self {
-    TransitionPack {
-      gotos: self.gotos,
-      nodes: self.nodes,
-      leaf_nodes: self.leaf_nodes,
-      mode: self.mode,
-      is_scanner: self.is_scanner,
-      root_prod_ids: self.root_prod_ids,
-      closure_links: self.closure_links,
-      ..Default::default()
-    }
+  pub fn clean(self) -> TPackResults {
+    (
+      TransitionPack {
+        gotos: self.gotos,
+        nodes: self.nodes,
+        leaf_nodes: self.leaf_nodes,
+        mode: self.mode,
+        is_scanner: self.is_scanner,
+        root_prod_ids: self.root_prod_ids,
+        closure_links: self.closure_links,
+        ..Default::default()
+      },
+      self.errors,
+    )
   }
 
   pub fn get_node_len(&self) -> usize {

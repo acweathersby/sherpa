@@ -6,7 +6,9 @@ use crate::grammar::data::ast::ASTNode;
 use crate::grammar::data::ast::Ascript;
 use crate::grammar::data::ast::Reduce;
 use crate::grammar::get_closure_cached;
+use crate::grammar::get_guid_grammar_name;
 use crate::grammar::get_production_start_items;
+use crate::grammar::hash_id_value_u64;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
@@ -52,7 +54,39 @@ impl ReduceFunctionType {
     }
   }
 }
-pub type ImportedGrammarReferences = HashMap<String, (String, PathBuf)>;
+
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
+pub struct GrammarRef {
+  /// A globally unique name to refer to this grammar by. Derived from the
+  /// grammar's filepath.
+  pub guid_name: String,
+  /// The user defined name. This is either the value of the `@NAME` preamble,
+  /// or the original file name stem if this preamble is not present.
+  pub name:      String,
+
+  /// A globally unique identifier for this GrammarStore instance. Derived
+  /// from the source path
+  pub guid: GrammarId,
+
+  /// The absolute path of the grammar's source file. This may be empty if the source code was passed
+  /// in as a string, as with the case of grammars compiled with
+  /// [compile_grammar_from_string](hctk_core::grammar::compile_grammar_from_string)).
+  pub path: PathBuf,
+}
+
+impl GrammarRef {
+  pub fn new(local_name: String, absolute_path: PathBuf) -> Arc<Self> {
+    let guid_name = get_guid_grammar_name(&absolute_path).unwrap();
+    Arc::new(GrammarRef {
+      guid: GrammarId(hash_id_value_u64(&guid_name)),
+      guid_name,
+      name: local_name,
+      path: absolute_path,
+    })
+  }
+}
+
+pub type ImportedGrammarReferences = HashMap<String, Arc<GrammarRef>>;
 
 pub type ReduceFunctionTable = BTreeMap<ReduceFunctionId, ReduceFunctionType>;
 
@@ -90,21 +124,7 @@ pub type ReduceFunctionTable = BTreeMap<ReduceFunctionId, ReduceFunctionType>;
 ///     ```
 #[derive(Debug, Clone, Default)]
 pub struct GrammarStore {
-  /// The absolute path of the grammar's source file. This may be empty if the source code was passed
-  /// in as a string, as with the case of grammars compiled with [compile_grammar_from_string](hctk_core::grammar::compile_grammar_from_string)).
-  pub source_path: PathBuf,
-
-  /// The user defined name. This is either the value of the `@NAME` preamble,
-  /// or the original file name stem if this preamble is not present.
-  pub name: String,
-
-  /// A globally unique name to refer to this grammar by. Derived from the
-  /// grammar's filepath.
-  pub guid_name: String,
-
-  /// A globally unique identifier for this GrammarStore instance. Derived
-  /// from the source path
-  pub guid: GrammarId,
+  pub id: Arc<GrammarRef>,
 
   /// Maps [ProductionId] to a list of [BodyIds](BodyId)
   pub production_bodies: ProductionBodiesTable,
@@ -190,6 +210,12 @@ impl GrammarStore {
     return Self::from_str(string.as_str());
   }
 
+  /// Returns the [Body] that's mapped to [`body_id`](BodyId)
+  /// within the grammar
+  pub fn get_body(&self, body_id: &BodyId) -> HCResult<&Body> {
+    HCResult::Ok(self.bodies.get(body_id)?)
+  }
+
   /// Returns the [Production] that's mapped to [`production_id`](ProductionId)
   /// within the grammar
   pub fn get_production(&self, production_id: &ProductionId) -> HCResult<&Production> {
@@ -213,7 +239,7 @@ impl GrammarStore {
   /// Retrieve the non-import and unmangled name of a [Production](Production).
   pub fn get_production_plain_name(&self, prod_id: &ProductionId) -> &str {
     if let Some(prod) = self.productions.get(prod_id) {
-      &prod.original_name
+      &prod.name
     } else if let Some((name, _)) = self.production_names.get(prod_id) {
       name
     } else {
@@ -331,7 +357,7 @@ mod production_utilities_tests {
     )
     .unwrap();
 
-    assert_eq!(g.source_path.as_os_str().to_str().unwrap(), "/-internal-/test");
+    assert_eq!(g.id.path.as_os_str().to_str().unwrap(), "/-internal-/test");
   }
 
   #[test]
@@ -350,7 +376,7 @@ mod production_utilities_tests {
     let exported_productions = g.get_exported_productions();
     let first = exported_productions.first().unwrap();
 
-    assert_eq!(first.production.original_name, "start");
+    assert_eq!(first.production.name, "start");
 
     assert_eq!(first.export_name, "test");
   }

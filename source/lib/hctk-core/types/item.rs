@@ -1,9 +1,12 @@
+use crate::types::Body;
 use crate::types::BodyId;
 use crate::types::BodySymbolRef;
 use crate::types::GrammarStore;
 use crate::types::ProductionId;
 use crate::types::SymbolID;
 use std::fmt::Display;
+
+use super::HCResult;
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy, Hash, PartialOrd, Ord)]
 pub struct ItemState(u32);
@@ -108,7 +111,7 @@ impl Item {
 
       string += &format!("{} ", self.state);
 
-      string += &g.productions.get(&body.prod).unwrap().original_name;
+      string += &g.productions.get(&body.prod).unwrap().name;
 
       string += " =>";
 
@@ -282,8 +285,19 @@ impl Item {
     self.off == 0
   }
 
-  pub fn get_body(&self) -> BodyId {
+  pub fn get_body_id(&self) -> BodyId {
     self.body
+  }
+
+  pub fn get_body<'a>(&self, g: &'a GrammarStore) -> HCResult<&'a Body> {
+    g.get_body(&self.get_body_id())
+  }
+
+  pub fn get_body_ref<'a>(&self, g: &'a GrammarStore) -> HCResult<&'a BodySymbolRef> {
+    match self.get_body(&g) {
+      HCResult::Ok(body) => HCResult::Ok(&body.syms[self.off as usize]),
+      _ => HCResult::None,
+    }
   }
 
   pub fn get_offset(&self) -> u32 {
@@ -349,7 +363,11 @@ impl Item {
   }
 
   pub fn get_prod_id(&self, g: &GrammarStore) -> ProductionId {
-    g.bodies.get(&self.get_body()).unwrap().prod
+    g.bodies.get(&self.get_body_id()).unwrap().prod
+  }
+
+  pub fn get_prod_as_sym_id(&self, g: &GrammarStore) -> SymbolID {
+    g.get_production(&g.bodies.get(&self.get_body_id()).unwrap().prod).unwrap().sym_id
   }
 
   pub fn to_hash(&self) -> u64 {

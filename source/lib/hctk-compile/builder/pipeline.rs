@@ -287,7 +287,7 @@ impl<'a> BuildPipeline<'a> {
     }
 
     if let Some(source_name) = self.source_name.as_ref() {
-      let source_name = source_name.to_string().replace("%", &self.grammar.unwrap().name);
+      let source_name = source_name.to_string().replace("%", &self.grammar.unwrap().id.name);
       let source_path = self.build_output_dir.join("./".to_string() + &source_name);
       eprintln!("{:?} {:?}", source_path, self.build_output_dir);
       if let Ok(mut parser_data_file) = std::fs::File::create(&source_path) {
@@ -402,11 +402,11 @@ impl<'a> PipelineContext<'a> {
   }
 
   pub fn get_grammar_name(&self) -> &String {
-    &self.get_grammar().name
+    &self.get_grammar().id.name
   }
 
   pub fn get_grammar_path(&self) -> &PathBuf {
-    &self.get_grammar().source_path
+    &self.get_grammar().id.path
   }
 
   pub fn get_bytecode(&self) -> &BytecodeOutput {

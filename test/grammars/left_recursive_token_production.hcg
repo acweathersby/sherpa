@@ -1,0 +1,4 @@
+<> A > tk:left_recursive
+
+<> left_recursive > left_recursive \a   
+    | \A

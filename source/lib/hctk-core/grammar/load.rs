@@ -39,7 +39,7 @@ pub(crate) fn get_usable_thread_count(requested_count: usize) -> usize {
 pub(crate) fn load_all(
   absolute_path: &PathBuf,
   number_of_threads: usize,
-) -> (Vec<(PathBuf, HashMap<String, (String, PathBuf)>, Box<Grammar>)>, Vec<HCError>) {
+) -> (Vec<(PathBuf, ImportedGrammarReferences, Box<Grammar>)>, Vec<HCError>) {
   let mut pending_grammar_paths =
     Mutex::new(VecDeque::<PathBuf>::from_iter(vec![absolute_path.clone()]));
   let mut claimed_grammar_paths = Mutex::new(HashSet::<PathBuf>::new());
@@ -91,7 +91,7 @@ pub(crate) fn load_all(
                       HCResult::Ok(path) => {
                         imports_refs.insert(
                           reference.to_string(),
-                          (get_guid_grammar_name(&path).unwrap(), path.clone()),
+                          GrammarRef::new(reference.to_string(), path.clone()),
                         );
                         pending_grammar_paths.lock().unwrap().push_back(path);
                         work_verifier.lock().unwrap().add_units_of_work(1);

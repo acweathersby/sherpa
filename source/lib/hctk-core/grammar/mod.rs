@@ -23,6 +23,34 @@ use self::load::load_all;
 use self::parse::compile_grammar_ast;
 use crate::types::*;
 
+#[test]
+fn temp_test() {
+  let (grammars, errors) = load_all(
+    &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+      .join("../../../test/e2e/bootstrap/grammar/production.hcg")
+      .canonicalize()
+      .unwrap(),
+    10,
+  );
+
+  let result = compile_grammars_into_store(grammars, 10);
+
+  assert!(result.is_ok());
+
+  match result {
+    HCResult::Ok((Some(grammar), _)) => {
+      //  dbg!(grammar);
+    }
+    HCResult::Ok((_, Some(errors))) => {
+      for err in errors {
+        println!("{}", err);
+      }
+      panic!("Errors occurred while compiling")
+    }
+    _ => {}
+  }
+}
+
 /// Loads and compiles a grammar from a source file.
 ///
 /// # Example
@@ -161,6 +189,7 @@ mod test_grammar {
     assert!(errors.is_none());
     assert!(grammar.is_some());
     let grammar = grammar.unwrap();
+
     let left_recursive_prod = grammar.get_production_by_name("tk:left_recursive").unwrap();
 
     assert!(!left_recursive_prod

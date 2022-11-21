@@ -1,0 +1,7 @@
+@IMPORT ./merge_conflict_child as mcc
+
+<> A > ( mcc::B | C )(+)
+
+<> C > \r \g \b
+
++> mcc::R > C

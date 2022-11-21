@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::VecDeque;
 use std::hash::Hash;
+use std::path::PathBuf;
 use std::process::id;
 use std::rc::Rc;
 use std::vec;
@@ -12,6 +13,7 @@ use crate::grammar::create_closure;
 use crate::grammar::get_closure_cached;
 use crate::grammar::get_production_start_items;
 use crate::grammar::hash_id_value_u64;
+use crate::types::BlameColor;
 use crate::types::GrammarId;
 use crate::types::GrammarStore;
 use crate::types::Item;
@@ -19,6 +21,7 @@ use crate::types::ItemState;
 use crate::types::OriginData;
 use crate::types::ProductionId;
 use crate::types::SymbolID;
+use crate::types::TPackResults;
 use crate::types::TransitionGraphNode as TGN;
 use crate::types::TransitionGraphNodeId;
 use crate::types::TransitionMode;
@@ -150,7 +153,7 @@ pub fn construct_recursive_descent(
   is_scanner: bool,
   starts: &[Item],
   root_ids: BTreeSet<ProductionId>,
-) -> TPack {
+) -> TPackResults {
   let start_items = apply_state_info(starts);
 
   let mut t_pack =
@@ -193,7 +196,7 @@ pub fn construct_goto(
   starts: &[Item],
   goto_seeds: &[Item],
   root_ids: BTreeSet<ProductionId>,
-) -> (TPack, /* True if there exists a non-trivial production branch */ bool) {
+) -> (TPackResults, /* True if there exists a non-trivial production branch */ bool) {
   let start_items = apply_state_info(starts);
 
   let mut t_pack = TPack::new(g, TransitionMode::GoTo, is_scanner, &start_items, root_ids);
@@ -1264,8 +1267,11 @@ fn handle_unresolved_nodes(
     let mut parent = 0;
     let mut items = vec![];
 
+    warn_of_ambiguous_productions(g, t_pack, &goals);
+
     for node_index in &peek_group[0..peek_group.len()] {
-      items.push(t_pack.get_node(*node_index).items[0]);
+      let node = t_pack.get_node(*node_index);
+      items.push(node.items[0]);
       parent = t_pack.drop_node(node_index);
     }
 
@@ -1280,6 +1286,66 @@ fn handle_unresolved_nodes(
     for goal_index in goals {
       process_node(g, t_pack, goal_index, fork_node_index, false);
     }
+  }
+}
+
+fn warn_of_ambiguous_productions(g: &GrammarStore, t_pack: &mut TPack, goals: &Vec<usize>) {
+  // Ensure warning is only made once per goal set.
+  let warning_id =
+    hash_id_value_u64(goals.iter().map(|i| t_pack.get_node(*i).first_item()).collect::<Vec<_>>());
+
+  if !t_pack.error_ids.insert(warning_id) {
+    return;
+  }
+
+  // Look for a common production in each goal. If such production(s) exist,
+  // issue warning(s) about production occlusion.
+  let mut closures = goals
+    .iter()
+    .map(|i| {
+      get_closure_cached(&t_pack.get_node(*i).first_item(), g)
+        .iter()
+        .map(|i| (i.get_symbol(g), i))
+        .collect::<Vec<_>>()
+    })
+    .collect::<Vec<_>>();
+  let smallest = closures
+    .iter()
+    .fold(&closures[0], |f, i| match i.len() < f.len() {
+      true => i,
+      false => f,
+    })
+    .clone();
+  // Get a set of symbols that are present in all closures.
+  let common_symbols = smallest
+    .iter()
+    .filter_map(|(sym, i)| match closures.iter().all(|c| c.iter().any(|(s, _)| s == sym)) {
+      true => Some(sym),
+      false => None,
+    })
+    .collect::<BTreeSet<_>>();
+  // For each closure, remove all items that do not have a symbols that matches one in common_symbols,
+  // or that is of a production whose id is in common_symbols
+  closures.iter_mut().for_each(|c| {
+    c.drain_filter(|(s, i)| {
+      (!common_symbols.contains(s) || common_symbols.contains(&i.get_prod_as_sym_id(g)))
+    });
+  });
+  // At this point we should have isolated the items responsible for the ambiguous parse, provided
+  // we have set of non-empty closures. We can now display an appropriate message to the
+  // user regarding the nature of the ambiguous parse producing bodies.
+  if closures.iter().all(|c| !c.is_empty()) {
+    t_pack.errors.push(crate::types::HCError::Transition_ProductionAmbiguity {
+      body_refs: closures
+        .iter()
+        .flat_map(|c| {
+          c.iter().map(|(_, i)| {
+            let prod = i.get_body_ref(g).unwrap();
+            (prod.grammar_ref.clone(), prod.tok.clone())
+          })
+        })
+        .collect(),
+    });
   }
 }
 

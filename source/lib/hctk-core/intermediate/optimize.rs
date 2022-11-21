@@ -442,7 +442,7 @@ fn optimize_grammar() {
   // print_bytecode_states(&compile_bytecode(g, &mut states), Some(&BytecodeGrammarLookups::new(&g)));
 
   println!(
-    "pre opt {} post opt {}. Reduced to {:.2}% of original size",
+    "pre opt {} post opt {}. The optimized states are {:.2}% of original count",
     pre_opt_length,
     post_opt_length,
     100.0 * (post_opt_length as f64 / pre_opt_length as f64)

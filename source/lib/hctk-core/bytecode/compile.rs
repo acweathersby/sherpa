@@ -137,41 +137,6 @@ fn patch_goto_offsets(bc: &mut Vec<u32>, goto_to_off: &[u32]) {
   }
 }
 
-fn compile_ir_states_worker(g: &GrammarStore, prods: &[ProductionId]) -> Vec<Box<IRState>> {
-  prods.iter().flat_map(|p| generate_production_states(p, g)).collect::<Vec<_>>()
-}
-
-/// Builds ir states for every standard production in
-/// a grammar.
-
-fn compile_ir_states(
-  g: &GrammarStore,
-  work_group: &[ProductionId],
-  thread_count: usize,
-) -> BTreeMap<u64, Box<IRState>> {
-  let prod_id_groups =
-    work_group.chunks(thread_count).filter(|s| !s.is_empty()).collect::<Vec<_>>();
-
-  let mut ir_map = BTreeMap::new();
-
-  for ir_state in thread::scope(|s| {
-    prod_id_groups
-      .iter()
-      .map(|work| s.spawn(|| compile_ir_states_worker(g, work)))
-      // Collect now to actually generate the threads
-      .collect::<Vec<_>>()
-      .into_iter()
-      .flat_map(move |s| s.join().unwrap())
-      .collect::<Vec<_>>()
-  }) {
-    let key = ir_state.get_hash();
-
-    ir_map.entry(key).or_insert(ir_state);
-  }
-
-  ir_map
-}
-
 pub fn compile_ir_state_to_bytecode(
   states: &Vec<ASTNode>,
   get_branch_selector: GetBranchSelector,
