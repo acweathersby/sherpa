@@ -54,7 +54,10 @@ pub fn build_llvm_parser(
       let output_path = task_ctx.get_build_output_dir();
       let parser_name = task_ctx.get_parser_name();
       let grammar = task_ctx.get_grammar();
-      let bytecode_output = task_ctx.get_bytecode();
+
+      let Some(bytecode) = task_ctx.get_bytecode() else {
+        return Err(vec![HCError::from("Cannot compile LLVM parse: Bytecode is not available")]);
+      };
 
       Target::initialize_x86(&InitializationConfig::default());
 
@@ -75,12 +78,8 @@ pub fn build_llvm_parser(
 
       // Write out llvm module to file
 
-      match crate::llvm::compile_from_bytecode(
-        &parser_name,
-        grammar,
-        &Context::create(),
-        &bytecode_output,
-      ) {
+      match crate::llvm::compile_from_bytecode(&parser_name, grammar, &Context::create(), &bytecode)
+      {
         Ok(ctx) => {
           let opt = OptimizationLevel::Default;
 
@@ -167,7 +166,10 @@ pub fn build_llvm_parser_interface<'a>(include_ascript_mixins: bool) -> Pipeline
       let parser_name = task_ctx.get_parser_name();
       let grammar_name = task_ctx.get_grammar_name();
       let grammar = task_ctx.get_grammar();
-      let bytecode_output = task_ctx.get_bytecode();
+
+      let Some(bytecode) = task_ctx.get_bytecode() else {
+        return Err(vec![HCError::from("Cannot compile LLVM Parser Interface: Bytecode is not available")]);
+      };
 
       let output_type = OutputType::Rust;
 
@@ -176,7 +178,7 @@ pub fn build_llvm_parser_interface<'a>(include_ascript_mixins: bool) -> Pipeline
           let mut writer = CodeWriter::new(vec![]);
           match write_rust_parser(
             &mut writer,
-            &bytecode_output.state_name_to_offset,
+            &bytecode.state_name_to_offset,
             grammar,
             &grammar_name,
             &parser_name,

@@ -382,14 +382,7 @@ impl<'a> PipelineContext<'a> {
     &self.get_grammar().id.path
   }
 
-  pub fn get_bytecode(&self) -> &BytecodeOutput {
-    if self.pipeline.unwrap().bytecode.is_none() {
-      panic!(
-        "Failed to construct BytecodeOutput data. 
-    Ensure all tasks that access `get_ascript` also `require_ascript`"
-      );
-    } else {
-      self.pipeline.unwrap().bytecode.as_ref().unwrap()
-    }
+  pub fn get_bytecode(&self) -> Option<&BytecodeOutput> {
+    self.pipeline.unwrap().bytecode.as_ref()
   }
 }

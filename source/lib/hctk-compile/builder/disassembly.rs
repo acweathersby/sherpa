@@ -29,10 +29,7 @@ pub fn build_bytecode_disassembly() -> PipelineTask {
         writer.write(&DISCLAIMER("Parser Data", "//!", task_ctx)).unwrap();
 
         writer
-          .write(&generate_disassembly(
-            bytecode_output,
-            Some(&BytecodeGrammarLookups::new(grammar)),
-          ))
+          .write(&generate_disassembly(bytecode, Some(&BytecodeGrammarLookups::new(grammar))))
           .unwrap();
       }
       Ok(None)
