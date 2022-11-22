@@ -1267,37 +1267,42 @@ fn handle_unresolved_nodes(
     let mut parent = 0;
     let mut items = vec![];
 
-    warn_of_ambiguous_productions(g, t_pack, &goals);
-
     for node_index in &peek_group[0..peek_group.len()] {
       let node = t_pack.get_node(*node_index);
       items.push(node.items[0]);
       parent = t_pack.drop_node(node_index);
     }
 
-    let mut fork_node = TGN::new(t_pack, SymbolID::Default, parent, items);
+    let goal_hash =
+      hash_id_value_u64(goals.iter().map(|i| t_pack.get_node(*i).first_item()).collect::<Vec<_>>());
 
-    fork_node.set_type(TST::I_FORK);
+    match t_pack.events.get(&goal_hash).to_owned() {
+      Some(fork_node_index) => {
+        t_pack.get_node_mut(*fork_node_index).proxy_parents.push(parent);
+      }
 
-    fork_node.parent = parent;
+      None => {
+        warn_of_ambiguous_productions(g, t_pack, &goals);
 
-    let fork_node_index = t_pack.insert_node(fork_node);
+        let mut fork_node = TGN::new(t_pack, SymbolID::Default, parent, items);
 
-    for goal_index in goals {
-      process_node(g, t_pack, goal_index, fork_node_index, false);
+        fork_node.set_type(TST::I_FORK);
+
+        fork_node.parent = parent;
+
+        let fork_node_index = t_pack.insert_node(fork_node);
+
+        t_pack.events.insert(goal_hash, fork_node_index);
+
+        for goal_index in goals {
+          process_node(g, t_pack, goal_index, fork_node_index, false);
+        }
+      }
     }
   }
 }
 
 fn warn_of_ambiguous_productions(g: &GrammarStore, t_pack: &mut TPack, goals: &Vec<usize>) {
-  // Ensure warning is only made once per goal set.
-  let warning_id =
-    hash_id_value_u64(goals.iter().map(|i| t_pack.get_node(*i).first_item()).collect::<Vec<_>>());
-
-  if !t_pack.error_ids.insert(warning_id) {
-    return;
-  }
-
   // Look for a common production in each goal. If such production(s) exist,
   // issue warning(s) about production occlusion.
   let mut closures = goals
@@ -1335,8 +1340,9 @@ fn warn_of_ambiguous_productions(g: &GrammarStore, t_pack: &mut TPack, goals: &V
   // we have set of non-empty closures. We can now display an appropriate message to the
   // user regarding the nature of the ambiguous parse producing bodies.
   if closures.iter().all(|c| !c.is_empty()) {
-    t_pack.errors.push(crate::types::HCError::Transition_ProductionAmbiguity {
-      body_refs: closures
+    t_pack.errors.push(crate::types::HCError::transition_err_ambiguous_production {
+      source_production: g.get_production(t_pack.root_prod_ids.first().unwrap()).unwrap().clone(),
+      body_refs:         closures
         .iter()
         .flat_map(|c| {
           c.iter().map(|(_, i)| {

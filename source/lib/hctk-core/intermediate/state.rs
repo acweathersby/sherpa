@@ -358,7 +358,16 @@ fn process_transition_nodes<'a>(
             non_trivial_root_branch,
           )]
         } else {
-          create_intermediate_state(node, g, t_pack, &output, &children_tables, entry_name, prod_id)
+          create_intermediate_state(
+            node,
+            g,
+            t_pack,
+            &output,
+            &children_tables,
+            entry_name,
+            prod_id,
+            &mut errors,
+          )
         }
       } {
         output.insert(state.get_graph_id(), state);
@@ -541,28 +550,10 @@ fn create_intermediate_state(
 
     let mut origin = node;
 
-    for child in children.iter() {
-      let mut new_states = create_intermediate_state(
-        &TransitionGraphNode::temp(
-          child,
-          SymbolID::Undefined,
-          TransitionGraphNode::OrphanIndex,
-          vec![],
-        ),
-        g,
-        t_pack,
-        resolved_states,
-        children_tables,
-        entry_name,
-        production_id,
-      );
-
-      child_hashes.push(format!(
-        "state [ {} ]",
-        IRState::get_state_name_from_hash(new_states.last().unwrap().get_hash(),)
-      ));
-
-      states.append(&mut new_states);
+    for child in &children {
+      let child_state = resolved_states.get(&child.id).unwrap();
+      child_hashes
+        .push(format!("state [ {} ]", IRState::get_state_name_from_hash(child_state.get_hash(),)));
     }
 
     strings.push(format!(

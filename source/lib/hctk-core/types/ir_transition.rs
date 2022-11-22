@@ -254,7 +254,7 @@ pub struct TransitionPack {
   pub starts: BTreeSet<Item>,
   pub out_of_scope_closure: Option<Vec<Item>>,
   pub errors: Vec<HCError>,
-  pub error_ids: BTreeSet<u64>,
+  pub events: BTreeMap<u64, usize>,
 }
 
 impl TransitionPack {
