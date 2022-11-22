@@ -741,8 +741,8 @@ fn render_body_symbol(
           I16Vec => Some(format!("i{0}.into_i16_vec()", i)),
           U8Vec => Some(format!("i{0}.into_u8_vec()", i)),
           I8Vec => Some(format!("i{0}.into_i8_vec()", i)),
-          GenericStruct(..) => Some(format!("i{0}.into_node().unwrap()", i)),
-          Struct(..) => Some(format!("i{0}.into_node().unwrap()", i)),
+          GenericStruct(..) => Some(format!("i{0}.clone().into_node().unwrap()", i)),
+          Struct(..) => Some(format!("i{0}.clone().into_node().unwrap()", i)),
           _ => None,
         } {
           Ref::new(i, type_slot, init_string, _type)
@@ -756,7 +756,7 @@ fn render_body_symbol(
         Ref::new(
           i,
           type_slot,
-          format!("i{0}.into_node().unwrap()", i),
+          format!("i{0}.clone().into_node().unwrap()", i),
           GenericStruct(extract_struct_types(&types)),
         )
       } else {
