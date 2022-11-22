@@ -306,41 +306,13 @@ fn finalize_grammar(
 ) -> GrammarStore {
   create_scanner_productions_from_symbols(&mut g, e);
 
-  // Check for missing productions referenced in body symbols
-  for (id, b) in &g.bodies {
-    for sym in &b.syms {
-      match sym.sym_id {
-        SymbolID::TokenProduction(prod, _) | SymbolID::Production(prod, _) => {
-          if !g.productions.contains_key(&prod) {
-            panic!(
-              "Unable to find production definition \n{}",
-              sym.tok.blame(2, 2, "production does not exist", None)
-            );
-          }
-        }
-        _ => {}
-      }
-    }
+  if check_for_missing_productions(&g, e) {
+    return g;
   }
 
   finalize_symbols(&mut g, e);
 
-  // Check for missing productions referenced in body symbols
-  for (id, b) in &g.bodies {
-    for sym in &b.syms {
-      match sym.sym_id {
-        SymbolID::TokenProduction(prod, _) | SymbolID::Production(prod, _) => {
-          if !g.productions.contains_key(&prod) {
-            panic!(
-              "Unable to find production definition \n{}",
-              sym.tok.blame(2, 2, "production does not exist", None)
-            );
-          }
-        }
-        _ => {}
-      }
-    }
-  }
+  check_for_missing_productions(&g, e);
 
   finalize_productions(&mut g, thread_count, e);
 
@@ -349,6 +321,34 @@ fn finalize_grammar(
   finalize_bytecode_metadata(&mut g, e);
 
   g
+}
+
+fn check_for_missing_productions(g: &GrammarStore, e: &mut Vec<HCError>) -> bool {
+  let mut have_missing_production = false;
+  // Check for missing productions referenced in body symbols
+  for (id, b) in &g.bodies {
+    for sym in &b.syms {
+      match sym.sym_id {
+        SymbolID::TokenProduction(prod_id, _) | SymbolID::Production(prod_id, _) => {
+          if !g.productions.contains_key(&prod_id) {
+            have_missing_production = true;
+            e.push(HCError::grammar_err_location {
+              message: format!(
+                "Can't find a production definition for [{}]",
+                g.get_production_plain_name(&prod_id)
+              )
+              .to_string(),
+              inline_message: "Missing production referenced".to_string(),
+              loc: sym.tok.clone(),
+              path: Default::default(),
+            });
+          }
+        }
+        _ => {}
+      }
+    }
+  }
+  have_missing_production
 }
 
 /// Adds bytecode identifiers to relevant objects.

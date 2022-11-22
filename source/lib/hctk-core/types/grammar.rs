@@ -60,9 +60,10 @@ pub struct GrammarRef {
   /// A globally unique name to refer to this grammar by. Derived from the
   /// grammar's filepath.
   pub guid_name: String,
+
   /// The user defined name. This is either the value of the `@NAME` preamble,
   /// or the original file name stem if this preamble is not present.
-  pub name:      String,
+  pub name: String,
 
   /// A globally unique identifier for this GrammarStore instance. Derived
   /// from the source path
@@ -96,7 +97,7 @@ pub type ReduceFunctionTable = BTreeMap<ReduceFunctionId, ReduceFunctionType>;
 /// # Instantiation
 ///
 /// Use one of the following functions to construct a GrammarStore:
-/// - [compile_from_path](crate::grammar::compile_from_path)
+/// - ## [compile_from_path](crate::grammar::compile_from_path)
 ///     
 ///     # Examples
 ///     ```
@@ -108,14 +109,14 @@ pub type ReduceFunctionTable = BTreeMap<ReduceFunctionId, ReduceFunctionType>;
 ///         number_of_threads
 ///     );
 ///     ```
-/// - [compile_from_string](crate::grammar::compile_from_string)
+/// - ## [compile_from_string](crate::grammar::compile_from_string)
 ///     
 ///     # Examples
 ///     ```
 ///     use hctk::grammar::compile_from_source;
 ///
 ///     let source = "<> start > \\hello \\world";
-///     let faux_source_path = "/home/user/grammars/my_grammar.hcg";
+///     let faux_source_path = PathBuf::new();
 ///
 ///     let (grammar_store_option, errors) = compile_from_source(
 ///         source,
@@ -185,6 +186,7 @@ pub struct GrammarStore {
 
   pub merge_productions: BTreeMap<ProductionId, Vec<Body>>,
 }
+
 impl GrammarStore {
   pub fn from_path(path: PathBuf) -> HCResult<Arc<GrammarStore>> {
     match compile_grammar_from_path(path, 0) {

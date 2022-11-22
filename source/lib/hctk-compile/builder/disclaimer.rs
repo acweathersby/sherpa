@@ -19,7 +19,7 @@ pub static DISCLAIMER: fn(
 {3}
 {3} #### Copyright
 {3} 
-{3} (C) 2022 Anthony Weathersby and the Hydrocarbon Toolkit Authors.
+{3} (C) 2022 Anthony Weathersby
 
 ",
     env!("CARGO_PKG_VERSION"),

@@ -1,5 +1,4 @@
 #![feature(scoped_threads)]
-#![feature(is_some_with)]
 #![feature(const_format_args)]
 #![feature(const_fmt_arguments_new)]
 use std::path::PathBuf;
