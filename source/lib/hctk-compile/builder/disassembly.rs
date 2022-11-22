@@ -1,5 +1,6 @@
 use hctk_core::debug::generate_disassembly;
 use hctk_core::debug::BytecodeGrammarLookups;
+use hctk_core::types::HCError;
 use std::io::BufWriter;
 
 use crate::builder::disclaimer::DISCLAIMER;
@@ -18,7 +19,10 @@ pub fn build_bytecode_disassembly() -> PipelineTask {
         task_ctx.create_file(output_path.join(format!("./{}_dasm.txt", parser_name)))
       {
         let grammar = task_ctx.get_grammar();
-        let bytecode_output = task_ctx.get_bytecode();
+
+        let Some(bytecode) = task_ctx.get_bytecode() else {
+          return Err(vec![HCError::from("Cannot disassemble Bytecode: Bytecode is not available")]);
+        };
 
         let mut writer = CodeWriter::new(BufWriter::new(parser_data_file));
 

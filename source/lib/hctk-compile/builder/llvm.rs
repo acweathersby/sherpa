@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::ascript::types::AScriptStore;
-use crate::CompileError;
+use crate::bytecode;
 use hctk_core::types::*;
 use hctk_core::writer::code_writer::CodeWriter;
 use inkwell::context::Context;
@@ -111,15 +111,15 @@ pub fn build_llvm_parser(
                     .unwrap()
                     .success())
                   {
-                    Err(CompileError::from_string("Unable to compile llvm bitcode"))
+                    Err(vec![HCError::from("Unable to compile llvm bitcode")])
                   } else {
                     Ok(None)
                   }
                 }
-                Err(err) => Err(CompileError::from_io_error(&err)),
+                Err(err) => Err(vec![HCError::from(err)]),
               }
             } else {
-              Err(CompileError::from_string("test"))
+              Err(vec![HCError::from("test")])
             }
           } else {
             // apply_llvm_optimizations(opt, &ctx);
@@ -142,16 +142,16 @@ pub fn build_llvm_parser(
                   .unwrap()
                   .success())
                 {
-                  Err(CompileError::from_string("Unable to compile llvm bitcode"))
+                  Err(vec![HCError::from("Unable to compile llvm bitcode")])
                 } else {
                   Ok(None)
                 }
               }
-              Err(err) => Err(CompileError::from_string(&err.to_string())),
+              Err(err) => Err(vec![HCError::from(err.to_string())]),
             }
           }
         }
-        Err(()) => Err(CompileError::from_string("Unable to compile llvm bitcode")),
+        Err(()) => Err(vec![HCError::from("Unable to compile llvm bitcode")]),
       }
     }),
     require_ascript: false,
@@ -182,7 +182,7 @@ pub fn build_llvm_parser_interface<'a>(include_ascript_mixins: bool) -> Pipeline
             &parser_name,
             if include_ascript_mixins { Some(task_ctx.get_ascript()) } else { None },
           ) {
-            Err(err) => Err(CompileError::from_io_error(&err)),
+            Err(err) => Err(vec![HCError::from(err)]),
             Ok(_) => Ok(Some(unsafe { String::from_utf8_unchecked(writer.into_output()) })),
           }
         }

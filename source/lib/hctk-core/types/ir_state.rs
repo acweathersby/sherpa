@@ -62,7 +62,7 @@ impl Default for IRState {
       graph_id: usize::default(),
       normal_symbols: Vec::default(),
       skip_symbols: Vec::default(),
-      ast: Err(HCError::IRError_NotParsed),
+      ast: Err(HCError::ir_warn_not_parsed),
       stack_depth: u32::default(),
       peek_type: PeekType::None,
     }
@@ -146,7 +146,7 @@ impl IRState {
   pub fn compile_ast(&mut self) -> Result<&mut IR_STATE, &mut HCError> {
     match self.ast {
       Ok(_) => self.ast.as_mut(),
-      Err(HCError::IRError_NotParsed) => {
+      Err(HCError::ir_warn_not_parsed) => {
         let string = self.get_code();
         self.ast = match compile_ir_ast(Vec::from(string.as_bytes())) {
           Ok(ast) => Ok(*ast),

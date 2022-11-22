@@ -63,6 +63,10 @@ pub fn compile_grammars_into_store(
   grammars: Vec<(PathBuf, ImportedGrammarReferences, Box<Grammar>)>,
   number_of_threads: usize,
 ) -> HCResult<(Option<Arc<GrammarStore>>, Option<Vec<HCError>>)> {
+  if grammars.is_empty() {
+    return HCResult::Err(HCError::Text("Received empty grammar vector!".to_string()));
+  }
+
   let number_of_threads = get_usable_thread_count(20);
   let results = thread::scope(|s| {
     grammars
@@ -256,7 +260,7 @@ fn merge_grammars(
             entry.insert(production.clone());
           }
           None => {
-            e.push(HCError::GrammarCompile_Location {
+            e.push(HCError::grammar_err_location {
               message: format!(
                 "Can't find production {} in {} ({})",
                 g.get_production_plain_name(&prod_id),
@@ -284,7 +288,7 @@ fn merge_grammars(
 
         g.productions.get_mut(&prod_id).unwrap().number_of_bodies = body_count as u16;
       }
-      false => e.push(HCError::GrammarCompile_Location {
+      false => e.push(HCError::grammar_err_location {
         message: "Warning: Attempt to extend a non existent production".to_string(),
         inline_message: "This produces unreachable code".to_string(),
         loc: bodies[0].origin_location.clone(),
@@ -297,7 +301,7 @@ fn merge_grammars(
 /// Create scanner productions and data caches, and converts ids to tokens.
 fn finalize_grammar(
   mut g: GrammarStore,
-  mut e: &mut [HCError],
+  mut e: &mut Vec<HCError>,
   thread_count: usize,
 ) -> GrammarStore {
   create_scanner_productions_from_symbols(&mut g, e);
@@ -992,7 +996,7 @@ fn pre_process_production(
     g.productions.get(&prod_id),
   ) {
     (_, Some(ASTNode::Production_Import_Symbol(_)), ..) => {
-      e.push(HCError::GrammarCompile_Location {
+      e.push(HCError::grammar_err_location {
         inline_message: "Invalid production definition".to_string(),
         loc: production_node.Token(),
         message: format!("Cannot define a production of an imported grammar.\n     note: Try using the `+>` operator to extend an existing production with additional bodies."),
@@ -1001,7 +1005,7 @@ fn pre_process_production(
       prod_id
     }
     (prod, _, ..) if prod == Default::default() => {
-      e.push(HCError::GrammarCompile_Location {
+      e.push(HCError::grammar_err_location {
         inline_message: String::new(),
         loc: production_node.Token(),
         message: format!("This is not a valid production"),
@@ -1047,16 +1051,16 @@ fn pre_process_production(
     }
     (_, _, node, Some(existing_production)) => {
       e.push({
-        HCError::GrammarCompile_MultiLocation {
+        HCError::grammar_err_multi_location {
           message:   format!("production {} already exists!", plain_name),
           locations: vec![
-            HCError::GrammarCompile_Location {
+            HCError::grammar_err_location {
               inline_message: String::new(),
               loc: node.Token(),
               message: format!("Redefinition of {} occurs here.", plain_name),
               path: g.id.path.clone(),
             },
-            HCError::GrammarCompile_Location {
+            HCError::grammar_err_location {
               inline_message: String::new(),
               loc: existing_production.location.clone(),
               message: format!("production {} first defined here.", plain_name),
@@ -1104,7 +1108,7 @@ fn get_productions_names(
       match g.imports.get(local_import_grammar_name) {
         None => {
           e.push(
-            HCError::GrammarCompile_Location {
+            HCError::grammar_err_location {
               inline_message: String::new(),
               message: format!(
                   "Unable to resolve production: The production \u{001b}[31m{}\u{001b}[0m cannot be found in the imported grammar \u{001b}[31m{}\u{001b}[0m.", 
@@ -1126,7 +1130,7 @@ fn get_productions_names(
       Some((create_production_guid_name(&g.id.guid_name, &prod_sym.name), prod_sym.name.clone()))
     }
     _ => {
-      e.push(HCError::GrammarCompile_Location {
+      e.push(HCError::grammar_err_location {
         inline_message: String::new(),
         message: "Unexpected node: Unable to resolve production name of this node!".to_string(),
         loc: node.Token(),
@@ -1164,7 +1168,7 @@ fn get_grammar_info_from_node<'a>(
 
       match g.imports.get(local_import_grammar_name) {
         None => {
-          e.push(HCError::GrammarCompile_Location {
+          e.push(HCError::grammar_err_location {
             inline_message: String::new(),
             message: format!(
               "Unknown Grammar : The local grammar name \u{001b}[31m{}\u{001b}[0m does not match any imported grammar.",
@@ -1179,7 +1183,7 @@ fn get_grammar_info_from_node<'a>(
     }
     Some(ASTNode::Production_Symbol(prod_sym)) => Some(g.id.clone()),
     _ => {
-      e.push(HCError::GrammarCompile_Location {
+      e.push(HCError::grammar_err_location {
         inline_message: String::new(),
         message: "Unexpected node: Unable to resolve production name of this node!".to_string(),
         loc: node.Token(),
@@ -1561,7 +1565,7 @@ fn create_body_vectors(
             sym = &generated_symbol;
           }
         } else {
-          e.push(HCError::GrammarCompile_Location {
+          e.push(HCError::grammar_err_location {
             inline_message: String::new(),
             message: "I don't know what to do with this.".to_string(),
             loc: sym.Token(),
@@ -1639,7 +1643,7 @@ fn create_body_vectors(
             sym = &generated_symbol;
           }
           _ => {
-            e.push(HCError::GrammarCompile_Location {
+            e.push(HCError::grammar_err_location {
               inline_message: String::new(),
               message: "I don't know what to do with this.".to_string(),
               loc: sym.Token(),
@@ -1811,7 +1815,7 @@ fn process_production(
       }
     }
     _ => {
-      e.push(HCError::GrammarCompile_Location {
+      e.push(HCError::grammar_err_location {
         inline_message: "This is not a hashable production symbol.".to_string(),
         message: "[INTERNAL ERROR]".to_string(),
         loc: node.Token(),
@@ -1864,7 +1868,7 @@ fn intern_symbol(sym: &ASTNode, g: &mut GrammarStore, e: &mut Vec<HCError>) -> O
     }
     ASTNode::Production_Token(token) => process_token_production(token, g, sym.Token(), e),
     _ => {
-      e.push(HCError::GrammarCompile_Location {
+      e.push(HCError::grammar_err_location {
         inline_message: "Unexpected ASTNode while attempting to intern symbol".to_string(),
         message: "[INTERNAL ERROR]".to_string(),
         loc: sym.Token(),
@@ -1942,7 +1946,7 @@ fn get_symbol_details<'a>(
         break;
       }
       _ => {
-        e.push(HCError::GrammarCompile_Location {
+        e.push(HCError::grammar_err_location {
           inline_message: format!("Unexpected ASTNode {}", sym.GetType()),
           message: "[INTERNAL ERROR]".to_string(),
           loc: sym.Token(),

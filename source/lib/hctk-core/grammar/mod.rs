@@ -33,6 +33,12 @@ fn temp_test() {
     10,
   );
 
+  if errors.len()> 0 {
+    for error in errors {
+      println!("{}", error);
+    }
+  }
+
   let result = compile_grammars_into_store(grammars, 10);
 
   assert!(result.is_ok());
@@ -121,7 +127,8 @@ mod test_grammar {
   use crate::grammar::compile::pre_process_grammar;
   use crate::grammar::compile_grammar_from_path;
   use crate::grammar::load::load_all;
-  use crate::types::RecursionType;
+  use crate::types::ErrorGroup;
+use crate::types::RecursionType;
 
   use super::compile::convert_left_recursion_to_right;
   use super::compile_grammar_from_string;
@@ -140,13 +147,19 @@ mod test_grammar {
     let (grammar, errors) = compile_grammar_from_path(path, get_num_of_available_threads());
 
     if errors.is_some() {
-      for error in errors.unwrap_or_default() {
+      let errors = errors.unwrap_or_default();
+      for error in &errors {
         eprintln!("{}", error);
       }
-      panic!("Errors encountered");
-    } else {
-      assert!(grammar.is_some());
-    }
+
+      if errors.have_critical() {
+        panic!("Critical Errors encountered");
+      }
+    } 
+    
+    
+    assert!(grammar.is_some());
+    
   }
 
   #[test]

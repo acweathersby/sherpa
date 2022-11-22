@@ -3,8 +3,8 @@ pub mod rust;
 pub mod types;
 
 use crate::builder::pipeline::PipelineTask;
-use crate::CompileError;
 use crate::SourceType;
+use hctk_core::types::HCError;
 use hctk_core::writer::code_writer::CodeWriter;
 
 /// Constructs a task that compiles a grammar's Ascript into an AST module of the given `source_type`.
@@ -16,13 +16,13 @@ pub fn build_ast(source_type: SourceType) -> PipelineTask {
         let mut writer = CodeWriter::new(vec![]);
         match rust::write(&ctx.get_grammar(), &ctx.get_ascript(), &mut writer) {
           Ok(_) => Ok(Some(unsafe { String::from_utf8_unchecked(writer.into_output()) })),
-          Err(err) => Err(CompileError::from_io_error(&err)),
+          Err(err) => Err(vec![HCError::from(err)]),
         }
       }
-      _ => Err(CompileError::from_string(&format!(
+      _ => Err(vec![HCError::from(format!(
         "Unable to build an AST output for the source type {:?}",
         source_type
-      ))),
+      ))]),
     }),
     require_ascript: true,
     require_bytecode: false,

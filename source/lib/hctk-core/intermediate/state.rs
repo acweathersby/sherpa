@@ -16,6 +16,7 @@ use crate::grammar::get_closure_cached;
 use crate::grammar::get_production_start_items;
 use crate::grammar::get_scanner_info_from_defined;
 use crate::grammar::hash_id_value_u64;
+use crate::types::ErrorGroup;
 use crate::types::GrammarStore;
 use crate::types::HCError;
 use crate::types::IRState;
@@ -37,8 +38,12 @@ pub struct IROutput {
   pub states: Vec<Box<IRState>>,
   pub errors: Vec<HCError>,
 }
+
 /// Compiles all production within the grammar into unique IRStates
-pub fn compile_states(g: &GrammarStore, num_of_threads: usize) -> BTreeMap<String, Box<IRState>> {
+pub fn compile_states(
+  g: &GrammarStore,
+  num_of_threads: usize,
+) -> (BTreeMap<String, Box<IRState>>, Vec<HCError>) {
   let mut deduped_states = BTreeMap::new();
 
   let productions_ids = g.productions.keys().cloned().collect::<Vec<_>>();
@@ -56,11 +61,13 @@ pub fn compile_states(g: &GrammarStore, num_of_threads: usize) -> BTreeMap<Strin
       deduped_states.entry(state.get_name()).or_insert(state);
     }
 
-    for (_, state) in &mut deduped_states {
-      let string = state.to_string();
-      if let Err(err) = state.compile_ast() {
-        panic!("\n{} {}", err, string)
-      };
+    if !errors.have_critical() {
+      for (_, state) in &mut deduped_states {
+        let string = state.to_string();
+        if let Err(err) = state.compile_ast() {
+          panic!("\n{} {}", err, string)
+        };
+      }
     }
   } else {
     let work_chunks = productions_ids
@@ -87,28 +94,30 @@ pub fn compile_states(g: &GrammarStore, num_of_threads: usize) -> BTreeMap<Strin
 
     let mut output_states = deduped_states.iter_mut().collect::<Vec<_>>();
 
-    thread::scope(|s| {
-      let work_chunks = output_states.chunks_mut(num_of_threads);
+    if !errors.have_critical() {
+      thread::scope(|s| {
+        let work_chunks = output_states.chunks_mut(num_of_threads);
 
-      work_chunks
-        .into_iter()
-        .map(|chunk| {
-          s.spawn(|| {
-            for (_, state) in chunk {
-              let string = state.to_string();
-              if let Err(err) = state.compile_ast() {
-                panic!("\n{} {}", err, string)
-              };
-            }
+        work_chunks
+          .into_iter()
+          .map(|chunk| {
+            s.spawn(|| {
+              for (_, state) in chunk {
+                let string = state.to_string();
+                if let Err(err) = state.compile_ast() {
+                  panic!("\n{} {}", err, string)
+                };
+              }
+            })
           })
-        })
-        .collect::<Vec<_>>()
-        .into_iter()
-        .map(move |s| s.join().unwrap())
-        .collect::<Vec<_>>();
-    });
+          .collect::<Vec<_>>()
+          .into_iter()
+          .map(move |s| s.join().unwrap())
+          .collect::<Vec<_>>();
+      });
+    }
   }
-  deduped_states
+  (deduped_states, errors)
 }
 
 fn process_productions(
@@ -473,6 +482,7 @@ fn create_intermediate_state(
   children_tables: &Vec<BTreeSet<usize>>,
   entry_name: &String,
   production_id: u32,
+  errors: &mut Vec<HCError>,
 ) -> Vec<Box<IRState>> {
   let mut strings = vec![];
   let mut comment = format!("[{}][{}]", node.id, node.parent);
@@ -786,8 +796,8 @@ fn create_intermediate_state(
     let mut code = strings.join("\n");
 
     if code.is_empty() {
-      panic!(
-        "[BRANCH] Empty state generated! [{}] [{}] {:?} {}",
+      errors.push(HCError::from(format!(
+        "[BRANCH] Empty scanner state generated! [{}] [{}] {:?} {}",
         comment,
         t_pack
           .root_prod_ids
@@ -797,7 +807,7 @@ fn create_intermediate_state(
           .join("   \n"),
         children_tables.get(node.id).cloned().unwrap_or_default(),
         node.debug_string(g)
-      );
+      )));
     }
 
     Box::new(
@@ -828,18 +838,18 @@ fn create_intermediate_state(
     let mut code = strings.join("\n");
 
     if code.is_empty() {
-      //  panic!(
-      // "[BRANCH] Empty state generated! [{}] [{}] {:?} {}",
-      // comment,
-      // t_pack
-      // .root_prod_ids
-      // .iter()
-      // .map(|s| { g.get_production_plain_name(s) })
-      // .collect::<Vec<_>>()
-      // .join("   \n"),
-      // children_tables.get(node.id).cloned().unwrap_or_default(),
-      // node.debug_string(g)
-      // );
+      errors.push(HCError::from(format!(
+        "[BRANCH] Empty state generated! [{}] [{}] {:?} {}",
+        comment,
+        t_pack
+          .root_prod_ids
+          .iter()
+          .map(|s| { g.get_production_plain_name(s) })
+          .collect::<Vec<_>>()
+          .join("   \n"),
+        children_tables.get(node.id).cloned().unwrap_or_default(),
+        node.debug_string(g)
+      )));
     }
 
     Box::new(

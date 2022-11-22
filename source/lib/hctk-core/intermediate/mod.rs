@@ -230,7 +230,7 @@ mod state_constructor_tests {
 
     // assert_eq!(errors.len(), 1);
 
-    assert!(matches!(errors[0], crate::types::HCError::Transition_ProductionAmbiguity { .. }));
+    assert!(matches!(errors[0], crate::types::HCError::transition_err_ambiguous_production { .. }));
   }
 
   #[test]

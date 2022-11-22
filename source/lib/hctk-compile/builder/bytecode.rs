@@ -6,7 +6,6 @@ use std::collections::BTreeMap;
 use std::io::Write;
 
 use crate::ascript::types::AScriptStore;
-use crate::CompileError;
 use crate::SourceType;
 
 use hctk_core::writer::code_writer::CodeWriter;
@@ -15,35 +14,40 @@ use super::common::add_ascript_functions;
 use super::common::write_rust_entry_functions_bytecode;
 use super::pipeline::PipelineTask;
 
-/// Build artifacts for a LLVM based parser.
-pub fn build_byte_code_parse(
+/// Build artifacts for a Bytecode based parser
+pub fn build_bytecode_parser(
   source_type: SourceType,
   include_ascript_mixins: bool,
 ) -> PipelineTask {
   PipelineTask {
-    fun: Box::new(move |task_ctx| match source_type {
-      SourceType::Rust => {
-        let mut writer = CodeWriter::new(vec![]);
+    fun: Box::new(move |task_ctx| {
+      let Some(bytecode) = task_ctx.get_bytecode() else {
+        return Err(vec![HCError::from("Cannot build Bytecode parser: Bytecode is not available")]);
+      };
+      match source_type {
+        SourceType::Rust => {
+          let mut writer = CodeWriter::new(vec![]);
 
-        if let Err(err) = write_parser_file(
-          &mut writer,
-          &task_ctx.get_grammar(),
-          // Leave two threads available for building
-          // the
-          // ascript code if necessary
-          1,
-          if include_ascript_mixins { Some(task_ctx.get_ascript()) } else { None },
-          task_ctx.get_bytecode(),
-        ) {
-          Err(CompileError::from_io_error(&err))
-        } else {
-          Ok(Some(unsafe { String::from_utf8_unchecked(writer.into_output()) }))
+          if let Err(err) = write_parser_file(
+            &mut writer,
+            &task_ctx.get_grammar(),
+            // Leave two threads available for building
+            // the
+            // ascript code if necessary
+            1,
+            if include_ascript_mixins { Some(task_ctx.get_ascript()) } else { None },
+            bytecode,
+          ) {
+            Err(vec![HCError::from(err)])
+          } else {
+            Ok(Some(unsafe { String::from_utf8_unchecked(writer.into_output()) }))
+          }
         }
+        _ => Err(vec![HCError::from(format!(
+          "Unable to build an AST output for the source type {:?}",
+          source_type
+        ))]),
       }
-      _ => Err(CompileError::from_string(&format!(
-        "Unable to build an AST output for the source type {:?}",
-        source_type
-      ))),
     }),
     require_ascript: include_ascript_mixins,
     require_bytecode: true,

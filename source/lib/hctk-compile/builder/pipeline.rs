@@ -17,44 +17,11 @@ use hctk_core::compile_grammar_from_string;
 use hctk_core::get_num_of_available_threads;
 use hctk_core::intermediate::optimize::optimize_ir_states;
 use hctk_core::intermediate::state::compile_states;
-use hctk_core::types::GrammarStore;
-use hctk_core::types::HCError;
+use hctk_core::types::*;
 use std::thread;
 
-#[derive(Debug)]
-pub struct CompileError {
-  message: String,
-}
-impl CompileError {
-  pub fn from_parse_error(error: &HCError) -> Self {
-    Self { message: error.to_string() }
-  }
-
-  pub fn from_string(error: &str) -> Self {
-    Self { message: error.to_string() }
-  }
-
-  pub fn from_errors(errors: &Vec<HCError>) -> Self {
-    let message = errors.into_iter().map(|e| format!("{}", e)).collect::<Vec<_>>().join("\n\n");
-
-    Self { message }
-  }
-
-  pub fn from_io_error(error: &std::io::Error) -> Self {
-    Self { message: format!("{}", error) }
-  }
-}
-
-impl Display for CompileError {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    f.write_str(&self.message)
-  }
-}
-
-impl Error for CompileError {}
-
 pub type TaskFn =
-  Box<dyn Fn(&mut PipelineContext) -> Result<Option<String>, CompileError> + Sync + Send>;
+  Box<dyn Fn(&mut PipelineContext) -> Result<Option<String>, Vec<HCError>> + Sync + Send>;
 
 pub struct PipelineTask {
   pub(crate) fun: TaskFn,
@@ -80,7 +47,6 @@ pub struct BuildPipeline<'a> {
   tasks: Vec<(PipelineTask, PipelineContext<'a>)>,
   parser_name: String,
   grammar_name: String,
-  error_handler: Option<fn(errors: Vec<CompileError>)>,
   grammar: Option<Arc<GrammarStore>>,
   source_name: Option<String>,
   cached_source: CachedSource,
@@ -103,7 +69,6 @@ impl<'a> BuildPipeline<'a> {
       ascript: None,
       bytecode: None,
       cached_source,
-      error_handler: None,
       source_output_dir: PathBuf::new(),
       build_output_dir: std::env::var("CARGO_MANIFEST_DIR")
         .map_or(std::env::temp_dir(), |d| PathBuf::from(&d)),
@@ -186,16 +151,24 @@ impl<'a> BuildPipeline<'a> {
     self
   }
 
-  pub fn run(mut self) -> (Self, Vec<String>) {
+  pub fn run<Function: FnOnce(Vec<HCError>)>(
+    mut self,
+    error_handler: Function,
+  ) -> (Self, Vec<String>, bool) {
     let mut source_parts = vec![];
+    let mut errors = vec![];
 
     if self.grammar.is_none() {
       match self.build_grammar() {
-        Err(errors) => {
-          if let Some(error_handler) = &self.error_handler {
-            error_handler(errors);
-          }
-          return (Self::build_pipeline(self.threads, self.cached_source.to_owned()), vec![]);
+        Err(e) => {
+          error_handler(e);
+
+          // No sense in continuing as there is no grammar for down stream process to work with.
+          return (
+            Self::build_pipeline(self.threads, self.cached_source.to_owned()),
+            vec![],
+            false,
+          );
         }
         Ok(_) => {}
       }
@@ -204,23 +177,17 @@ impl<'a> BuildPipeline<'a> {
     self.ascript = if self.tasks.iter().any(|t| t.0.require_ascript) && self.ascript.is_none() {
       let mut ascript = AScriptStore::new();
 
-      let errors = compile_ascript_store(&self.grammar.as_ref().unwrap(), &mut ascript);
-
-      if errors.len() > 0 {
-        if let Some(error_handler) = &self.error_handler {
-          error_handler(
-            errors.into_iter().map(|err| CompileError::from_parse_error(&err)).collect(),
-          );
+      let mut e = compile_ascript_store(&self.grammar.as_ref().unwrap(), &mut ascript);
+      let have_critical_errors = e.have_critical();
+      errors.append(&mut e);
+      if have_critical_errors {
+        None
+      } else {
+        if let Some(name) = &self.ascript_name {
+          ascript.set_name(name);
         }
-
-        return (Self::build_pipeline(self.threads, self.cached_source.to_owned()), vec![]);
+        Some(ascript)
       }
-
-      if let Some(name) = &self.ascript_name {
-        ascript.set_name(name);
-      }
-
-      Some(ascript)
     } else {
       self.ascript
     };
@@ -229,29 +196,36 @@ impl<'a> BuildPipeline<'a> {
     self.bytecode = if self.tasks.iter().any(|t| t.0.require_bytecode) {
       let g = &self.grammar.as_ref().unwrap();
 
-      let ir_states = compile_states(g, self.threads);
+      let (ir_states, mut e) = compile_states(g, self.threads);
+      let have_critical_errors = e.have_critical();
+      errors.append(&mut e);
 
-      let mut optimized_ir_state = optimize_ir_states(ir_states, g);
+      if !have_critical_errors {
+        let mut optimized_ir_state = optimize_ir_states(ir_states, g);
 
-      let bytecode_output = compile_bytecode(g, &mut optimized_ir_state);
+        let bytecode_output = compile_bytecode(g, &mut optimized_ir_state);
 
-      Some(bytecode_output)
+        Some(bytecode_output)
+      } else {
+        None
+      }
     } else {
       None
     };
 
-    let errors = thread::scope(|scope| {
+    errors.append(&mut thread::scope(|scope| {
       let results = self.tasks.iter().map(|(t, ctx)| {
         scope.spawn(|| {
           let mut ctx = ctx.clone();
           match ctx.ensure_paths_exists() {
             Err(err) => {
-              return Err(CompileError::from_io_error(&err));
+              return Err(vec![HCError::from(err)]);
             }
             _ => {}
           }
 
           ctx.pipeline = Some(&self);
+
           match (t.fun)(&mut ctx) {
             Ok(Some(artifact)) => Ok(Some(artifact)),
             Ok(None) => Ok(None),
@@ -272,42 +246,43 @@ impl<'a> BuildPipeline<'a> {
             vec![]
           }
           Ok(_) => vec![],
-          Err(e) => vec![e],
+          Err(e) => e,
         })
         .flatten()
         .collect::<Vec<_>>();
 
       errors
-    });
+    }));
 
-    if !errors.is_empty() {
-      if let Some(error_handler) = self.error_handler {
-        error_handler(errors);
+    if errors.have_errors() {
+      error_handler(errors.clone());
+    }
+
+    if errors.have_critical() {
+      // Critical errors indicate a breakdown in the build process. Thus, we should
+      // not produce any artifacts and instead exit with an error message.
+      eprintln!("Critical errors have occurred, could not complete build")
+    } else {
+      if let Some(source_name) = self.source_name.as_ref() {
+        let source_name = source_name.to_string().replace("%", &self.grammar.unwrap().id.name);
+        let source_path = self.build_output_dir.join("./".to_string() + &source_name);
+        eprintln!("{:?} {:?}", source_path, self.build_output_dir);
+        if let Ok(mut parser_data_file) = std::fs::File::create(&source_path) {
+          let data = source_parts.join("\n");
+          parser_data_file.write_all(&data.as_bytes()).unwrap();
+          parser_data_file.flush().unwrap();
+        }
       }
     }
 
-    if let Some(source_name) = self.source_name.as_ref() {
-      let source_name = source_name.to_string().replace("%", &self.grammar.unwrap().id.name);
-      let source_path = self.build_output_dir.join("./".to_string() + &source_name);
-      eprintln!("{:?} {:?}", source_path, self.build_output_dir);
-      if let Ok(mut parser_data_file) = std::fs::File::create(&source_path) {
-        let data = source_parts.join("\n");
-        parser_data_file.write_all(&data.as_bytes()).unwrap();
-        parser_data_file.flush().unwrap();
-      } else {
-        panic!("ART")
-      }
-    }
-
-    return (Self::build_pipeline(self.threads, self.cached_source.to_owned()), source_parts);
+    return (
+      Self::build_pipeline(self.threads, self.cached_source.to_owned()),
+      source_parts,
+      !errors.have_critical(),
+    );
   }
 
-  pub fn set_error_handler(mut self, error_handler: fn(Vec<CompileError>)) -> Self {
-    self.error_handler = Some(error_handler);
-    self
-  }
-
-  fn build_grammar(&mut self) -> Result<(), Vec<CompileError>> {
+  fn build_grammar(&mut self) -> Result<(), Vec<HCError>> {
     match match &self.cached_source {
       CachedSource::Path(path) => compile_grammar_from_path(path.to_owned(), self.threads),
       CachedSource::String(string, base_dir) => compile_grammar_from_string(&string, &base_dir),
@@ -316,9 +291,7 @@ impl<'a> BuildPipeline<'a> {
         self.grammar = grammar;
         Ok(())
       }
-      (_, Some(errors)) => {
-        Err(errors.into_iter().map(|err| CompileError::from_parse_error(&err)).collect())
-      }
+      (_, Some(errors)) => Err(errors),
     }
   }
 }

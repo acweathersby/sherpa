@@ -369,7 +369,7 @@ pub fn merge_production_type(
         AScriptTypeVal::UnresolvedProduction(..) => {}
 
         existing_type => {
-          let mut locations = vec![HCError::GrammarCompile_Location {
+          let mut locations = vec![HCError::grammar_err_location {
             message: "".to_string(),
             loc: new_origin.clone(),
             inline_message: "Derived here".to_string(),
@@ -379,7 +379,7 @@ pub fn merge_production_type(
           locations.append(
             &mut origins
               .iter()
-              .map(|t| HCError::GrammarCompile_Location {
+              .map(|t| HCError::grammar_err_location {
                 message: format!(
                   "Existing incompatible type {}",
                   existing_type.hcobj_type_name(Some(g))
@@ -392,7 +392,7 @@ pub fn merge_production_type(
           );
 
           if !new_return_type.is_same_type(existing_type) {
-            errors.push(HCError::GrammarCompile_MultiLocation {
+            errors.push(HCError::grammar_err_multi_location {
               message: format!(
                 "Incompatible production return type {} on production {}",
                 new_return_type.hcobj_type_name(Some(g)),
@@ -537,21 +537,21 @@ pub fn compile_struct_type(
   // Validate struct type is singular
 
   if types.len() > 1 {
-    errors.push(HCError::GrammarCompile_MultiLocation {
+    errors.push(HCError::grammar_err_multi_location {
       message:   "Struct Type Redefined".to_string(),
       locations: types
         .iter()
         .enumerate()
         .map(|(i, node)| {
           if i == 0 {
-            HCError::GrammarCompile_Location {
+            HCError::grammar_err_location {
               message: "".to_string(),
               loc: node.Token(),
               inline_message: "First Defined Here".to_string(),
               path: Default::default(),
             }
           } else {
-            HCError::GrammarCompile_Location {
+            HCError::grammar_err_location {
               message: "".to_string(),
               loc: node.Token(),
               inline_message: "Redefined Here".to_string(),
@@ -562,7 +562,7 @@ pub fn compile_struct_type(
         .collect::<Vec<_>>(),
     });
   } else if types.is_empty() {
-    errors.push(HCError::GrammarCompile_Location {
+    errors.push(HCError::grammar_err_location {
       message: "Struct defined without a type name".to_string(),
       loc: ast_struct.Token(),
       inline_message: "".to_string(),
@@ -604,11 +604,11 @@ pub fn compile_struct_type(
                 existing.define_count += 1;
                 existing.optional = true;
               } else {
-                errors.push(HCError::GrammarCompile_MultiLocation {
+                errors.push(HCError::grammar_err_multi_location {
                   message: format!("Redefinition of the property {} in struct {}", name, type_name),
 
                   locations: vec![
-                    HCError::GrammarCompile_Location {
+                    HCError::grammar_err_location {
                       message: String::new(),
                       loc: existing.first_declared_location.clone(),
                       inline_message: format!(
@@ -617,7 +617,7 @@ pub fn compile_struct_type(
                       ),
                       path: Default::default(),
                     },
-                    HCError::GrammarCompile_Location {
+                    HCError::grammar_err_location {
                       message: String::new(),
                       loc: prop.value.Token(),
                       inline_message: format!(

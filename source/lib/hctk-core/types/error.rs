@@ -20,12 +20,13 @@ pub enum HCError {
   // ----------------- Transition Errors --------------------------------------
   //---------------------------------------------------------------------------
   /// Warning when a fork state is generated for items that have ambiguous production calls.
-  Transition_ProductionAmbiguity {
-    body_refs: Vec<(Arc<GrammarRef>, Token)>,
+  transition_err_ambiguous_production {
+    source_production: Production,
+    body_refs:         Vec<(Arc<GrammarRef>, Token)>,
   },
   /// Error occurs when a scanner parse path cannot be made
   /// unambiguous due two Generic symbol types.
-  Transition_InvalidGenerics {
+  transition_err_invalid_generics {
     /// The root Symbols that whose combination lead to this error
     root_symbols: Vec<SymbolID>,
     /// The item chain, from the root item to
@@ -37,13 +38,13 @@ pub enum HCError {
   // ----------------- Grammar Load Errors ------------------------------------
   //---------------------------------------------------------------------------
   /// A path specified in one grammar file does map to a valid file
-  Load_InvalidGrammarPath {
+  load_err_invalid_grammar_path {
     path: PathBuf,
     reference_token: Option<Token>,
   },
 
   // An imported grammar path referenced in another grammar does not exist
-  Load_InvalidDependency {
+  load_err_invalid_dependency {
     requestor: PathBuf,
     path:      PathBuf,
     tok:       Token,
@@ -52,26 +53,26 @@ pub enum HCError {
   //---------------------------------------------------------------------------
   // ----------------- Grammar Compile Errors -------------------------------------------
   //---------------------------------------------------------------------------
-  GrammarCompile_Location {
+  grammar_err_location {
     message: String,
     inline_message: String,
     loc: Token,
     path: PathBuf,
   },
 
-  GrammarCompile_MultiLocation {
+  grammar_err_multi_location {
     message:   String,
     locations: Vec<HCError>,
   },
   //---------------------------------------------------------------------------
   // ----------------- Runtime Errors -------------------------------------------
   //---------------------------------------------------------------------------
-  Runtime_ParseError {
+  rt_err_parse_error {
     production: u32,
     tok:        Token,
     source:     Option<Arc<Vec<u8>>>,
   },
-  Runtime_InvalidParse {
+  rt_err_invalid_parse {
     message: String,
     inline_message: String,
     loc: Token,
@@ -81,8 +82,8 @@ pub enum HCError {
   //---------------------------------------------------------------------------
   // ----------------- Ir Error Types -----------------------------------------
   //---------------------------------------------------------------------------
-  IRError_BadParse,
-  IRError_NotParsed,
+  ir_err_bad_parse,
+  ir_warn_not_parsed,
 
   //---------------------------------------------------------------------------
   // ----------------- Generic Error Types ------------------------------------
@@ -103,9 +104,21 @@ use HCError::*;
 impl HCError {
   pub fn get_error_type(&self) -> ErrorType {
     match self {
-      Transition_ProductionAmbiguity { .. } => Warning,
+      transition_err_ambiguous_production { .. } => Warning,
       _ => Critical,
     }
+  }
+
+  pub fn is_critical(&self) -> bool {
+    matches!(self.get_error_type(), Critical)
+  }
+
+  pub fn is_hint(&self) -> bool {
+    matches!(self.get_error_type(), Hint)
+  }
+
+  pub fn is_warning(&self) -> bool {
+    matches!(self.get_error_type(), Warning)
   }
 }
 
@@ -143,9 +156,9 @@ impl Display for HCError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
       UNDEFINED => f.write_str("\nAn unknown error has occurred "),
-      Transition_InvalidGenerics { .. } => f.write_str("\nTransition_InvalidGenerics Error"),
-      Load_InvalidGrammarPath { .. } => f.write_str("\nLoad_InvalidGrammarPath Error"),
-      Load_InvalidDependency { path, requestor, tok, err } => f.write_fmt(format_args!(
+      transition_err_invalid_generics { .. } => f.write_str("\nTransition_InvalidGenerics Error"),
+      load_err_invalid_grammar_path { .. } => f.write_str("\nLoad_InvalidGrammarPath Error"),
+      load_err_invalid_dependency { path, requestor, tok, err } => f.write_fmt(format_args!(
         "\nThe import grammar path [{}], referenced in [{}:{}], does not exist: \n{}",
         path.to_str().unwrap_or(""),
         requestor.to_str().unwrap_or(""),
@@ -160,9 +173,9 @@ impl Display for HCError {
       IOError(err_string) => f.write_fmt(format_args!("\nIO Error: {}", err_string)),
       Text(err_string) => f.write_str(&err_string),
       Self::Error(err) => err.fmt(f),
-      IRError_NotParsed => f.write_str("\nIRNode has not been parsed"),
-      IRError_BadParse => f.write_str("\nErrors occurred during while parsing IRNode code"),
-      GrammarCompile_Location { message, inline_message, loc, path } => {
+      ir_warn_not_parsed => f.write_str("\nIRNode has not been parsed"),
+      ir_err_bad_parse => f.write_str("\nErrors occurred during while parsing IRNode code"),
+      grammar_err_location { message, inline_message, loc, path } => {
         let Range { start_line, start_column, .. } = loc.get_range();
         f.write_fmt(format_args!(
           "\n[{}:{}:{}]\n   {}\n{}",
@@ -173,15 +186,15 @@ impl Display for HCError {
           loc.blame(1, 1, &inline_message, BlameColor::Red),
         ))
       }
-      GrammarCompile_MultiLocation { message, locations } => f.write_fmt(format_args!(
+      grammar_err_multi_location { message, locations } => f.write_fmt(format_args!(
         "\n{}\n{}",
         message,
         locations.iter().map(|s| format!("{}", s)).collect::<Vec<_>>().join("\n"),
       )),
-      Runtime_InvalidParse { message, inline_message, loc, last_production } => f.write_fmt(
+      rt_err_invalid_parse { message, inline_message, loc, last_production } => f.write_fmt(
         format_args!("{}\n{}", message, loc.blame(1, 1, inline_message, BlameColor::Red)),
       ),
-      Runtime_ParseError { production, tok, source } => {
+      rt_err_parse_error { production, tok, source } => {
         let mut tok = tok.clone();
         if tok.is_empty() {
           tok = tok.to_length(1);
@@ -193,34 +206,37 @@ impl Display for HCError {
         message,
         errors.iter().map(|e| e.to_string()).collect::<Vec<_>>().join("\n")
       )),
-      Transition_ProductionAmbiguity { body_refs } => f.write_fmt(format_args!(
-        "These production lead to an ambiguous parse:\n{}",
-        body_refs
-          .iter()
-          .map(|(grammar_ref, tok)| {
-            let Range { start_line, start_column, .. } = tok.get_range();
-            format!(
-              "[{}:{}:{}]\n{}",
-              grammar_ref.path.to_str().unwrap(),
-              start_line,
-              start_column,
-              tok.blame(1, 1, "conflicts with other productions", BlameColor::Red)
-            )
-          })
-          .collect::<Vec<_>>()
-          .join("\n")
-      )),
+      transition_err_ambiguous_production { source_production, body_refs } => {
+        f.write_fmt(format_args!(
+          "In the parse path of {}, these production lead to an ambiguous parse:\n{}",
+          source_production.name,
+          body_refs
+            .iter()
+            .map(|(grammar_ref, tok)| {
+              let Range { start_line, start_column, .. } = tok.get_range();
+              format!(
+                "[{}:{}:{}]\n{}",
+                grammar_ref.path.to_str().unwrap(),
+                start_line,
+                start_column,
+                tok.blame(1, 1, "conflicts with other productions", BlameColor::Red)
+              )
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+        ))
+      }
     }
   }
 }
 #[derive(Default, Debug)]
-struct ErrorGroups {
-  hints:    Vec<HCError>,
-  warnings: Vec<HCError>,
-  critical: Vec<HCError>,
+pub struct ErrorGroups {
+  pub hints:    Vec<HCError>,
+  pub warnings: Vec<HCError>,
+  pub critical: Vec<HCError>,
 }
 
-trait ErrorGroup {
+pub trait ErrorGroup {
   /// Returns a sorted set of HCErrors represented by ErrorGroups
   fn get_errors_types(&self) -> ErrorGroups;
 
@@ -235,6 +251,14 @@ trait ErrorGroup {
   fn get_hints(&self) -> Vec<HCError> {
     self.get_errors_types().hints
   }
+
+  fn have_errors(&self) -> bool;
+
+  fn have_critical(&self) -> bool;
+
+  fn have_warnings(&self) -> bool;
+
+  fn have_hints(&self) -> bool;
 }
 
 impl ErrorGroup for Vec<HCError> {
@@ -249,5 +273,27 @@ impl ErrorGroup for Vec<HCError> {
     }
 
     groups
+  }
+
+  fn have_errors(&self) -> bool {
+    !self.is_empty()
+  }
+
+  fn have_critical(&self) -> bool {
+    self.iter().any(|e| e.is_critical())
+  }
+
+  fn have_hints(&self) -> bool {
+    self.iter().any(|e| e.is_hint())
+  }
+
+  fn have_warnings(&self) -> bool {
+    self.iter().any(|e| e.is_warning())
+  }
+}
+
+impl From<&Vec<HCError>> for ErrorGroups {
+  fn from(vec: &Vec<HCError>) -> Self {
+    vec.get_errors_types()
   }
 }

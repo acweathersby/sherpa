@@ -140,7 +140,7 @@ loop {{
     Some(ParseAction::Error {{ last_input, last_production }}) => {{
       let mut error_token = Token::from_parse_token(&last_input);
       error_token.set_source(source.clone());
-      return Err(HCError::Runtime_InvalidParse{{
+      return Err(HCError::rt_err_invalid_parse{{
           message: \"Unable to parse input\".to_string(),
           inline_message: \"Invalid Token\".to_string(),
           loc: error_token,

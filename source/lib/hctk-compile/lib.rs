@@ -1,8 +1,6 @@
-#![feature(is_some_with)]
 #![feature(const_format_args)]
 #![feature(const_fmt_arguments_new)]
 #![feature(box_patterns)]
-#![feature(map_first_last)]
 #![allow(non_snake_case)]
 
 mod ascript;
@@ -17,12 +15,11 @@ use std::path::PathBuf;
 pub use builder::bytecode;
 
 pub use crate::builder::pipeline::BuildPipeline;
-pub use crate::builder::pipeline::CompileError;
 pub use source_types::*;
 
 pub mod tasks {
   pub use crate::ascript::build_ast;
-  pub use crate::builder::bytecode::build_byte_code_parse;
+  pub use crate::builder::bytecode::build_bytecode_parser;
   pub use crate::builder::disassembly::build_bytecode_disassembly;
   pub use crate::builder::llvm::build_llvm_parser;
   pub use crate::builder::llvm::build_llvm_parser_interface;
@@ -30,7 +27,7 @@ pub mod tasks {
 
 /// Convenience function for building a bytecode based parser. Use this in
 /// build scripts to output a parser source file to `{OUT_DIR}/hc_parser/{grammar_name}.rs`.
-pub fn compile_bytecode_parser(grammar_source_path: &PathBuf) {
+pub fn compile_bytecode_parser(grammar_source_path: &PathBuf) -> bool {
   let mut out_dir = std::env::var("OUT_DIR").map(|d| PathBuf::from(&d)).unwrap();
 
   out_dir.push("./hc_parser/");
@@ -41,16 +38,15 @@ pub fn compile_bytecode_parser(grammar_source_path: &PathBuf) {
     .set_source_output_dir(&out_dir)
     .set_build_output_dir(&out_dir)
     .set_source_file_name("%.rs")
-    .add_task(tasks::build_byte_code_parse(SourceType::Rust, true))
+    .add_task(tasks::build_bytecode_parser(SourceType::Rust, true))
     .add_task(tasks::build_ast(SourceType::Rust))
     .add_task(tasks::build_bytecode_disassembly())
-    .set_error_handler(|errors| {
+    .run(|errors| {
       for error in errors {
-        eprintln!("cargo:error=\n{}", error);
+        eprintln!("{}", error);
       }
-      panic!("failed")
     })
-    .run();
+    .2
 }
 
 #[cfg(test)]
@@ -76,7 +72,7 @@ mod library_smoke_tests {
     )
     .set_source_output_dir(&std::env::temp_dir())
     .add_task(build_ast(crate::SourceType::Rust))
-    .run();
+    .run(|e| {});
   }
 
   #[test]

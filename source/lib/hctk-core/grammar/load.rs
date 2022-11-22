@@ -96,13 +96,13 @@ pub(crate) fn load_all(
                         pending_grammar_paths.lock().unwrap().push_back(path);
                         work_verifier.lock().unwrap().add_units_of_work(1);
                       }
-                      HCResult::Err(err) => errors.push(HCError::Load_InvalidDependency {
+                      HCResult::Err(err) => errors.push(HCError::load_err_invalid_dependency {
                         path: base_path,
                         requestor: path.to_owned(),
                         tok,
                         err: Some(Box::new(err)),
                       }),
-                      HCResult::None => errors.push(HCError::Load_InvalidDependency {
+                      HCResult::None => errors.push(HCError::load_err_invalid_dependency {
                         path: base_path,
                         requestor: path.to_owned(),
                         tok,
