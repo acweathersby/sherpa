@@ -83,7 +83,7 @@ impl std::fmt::Display for BodyId {
   }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct Production {
   pub guid_name: String,
   pub name: String,

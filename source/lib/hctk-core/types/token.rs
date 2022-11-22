@@ -261,6 +261,14 @@ impl Token {
     (start as usize, end as usize)
   }
 
+  pub fn get_start(&self) -> usize {
+    self.off as usize
+  }
+
+  pub fn get_end(&self) -> usize {
+    (self.off + self.len) as usize
+  }
+
   pub fn len(&self) -> usize {
     self.len as usize
   }
