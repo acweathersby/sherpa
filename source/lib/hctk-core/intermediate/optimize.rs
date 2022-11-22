@@ -58,7 +58,7 @@ use crate::intermediate::state::compile_states;
 pub fn optimize_ir_states(
   mut states: BTreeMap<String, Box<IRState>>,
   g: &GrammarStore,
-) -> BTreeMap<String, Box<IRState>> {
+) -> Vec<(String, Box<IRState>)> {
   // Preform rounds -------------------------------------
   let entry_states: BTreeSet<String> = get_entry_states(g);
   let mut non_scanner_states = BTreeSet::new();
@@ -180,23 +180,36 @@ pub fn optimize_ir_states(
       break;
     }
   }
-  states
+
+  garbage_collect(states, &entry_states, &non_scanner_states)
 }
 
-fn garbage_collect(
+fn garbage_collect<T>(
   mut states: BTreeMap<String, Box<IRState>>,
   entry_states: &BTreeSet<String>,
   non_scanner_states: &BTreeSet<String>,
-) -> BTreeMap<String, Box<IRState>> {
-  // Create a structure to store the number of references
-  // a givin state has
+) -> T
+where
+  T: FromIterator<(String, Box<IRState>)>,
+{
+  let mut reg_states = Vec::with_capacity(states.len());
+  let mut scanner_states = Vec::with_capacity(states.len());
+  let mut trace_queue = VecDeque::with_capacity(states.len());
+
   let mut references = BTreeSet::from_iter(entry_states.iter().cloned());
-  let mut trace_queue = VecDeque::from_iter(entry_states.iter().cloned());
+
+  trace_queue.append(&mut entry_states.iter().cloned().collect());
 
   // Starting at the entry states, proceed to trace goto references
   // by inserting a referenced strings in the references stet
   while let Some(state_id) = trace_queue.pop_front() {
     if let Some(state) = states.get(&state_id) {
+      if !state.is_scanner() {
+        reg_states.push(state_id);
+      } else {
+        scanner_states.push(state_id);
+      }
+
       if !non_scanner_states.contains(&state.get_name()) {
         if let Some(scanner_state_id) = state.get_scanner_state_name() {
           if references.insert(scanner_state_id.clone()) {
@@ -219,9 +232,11 @@ fn garbage_collect(
     }
   }
 
-  states.drain_filter(|s, _| !references.contains(s));
-
-  states
+  reg_states
+    .into_iter()
+    .chain(scanner_states.into_iter())
+    .map(|r| (r.clone(), states.remove(&r).unwrap()))
+    .collect::<T>()
 }
 
 /// Returns a vector of referenced instruction vectors
@@ -429,7 +444,7 @@ fn optimize_grammar() {
   
   ").unwrap();
 
-  let mut states = compile_states(&g, 10);
+  let (mut states, _) = compile_states(&g, 10);
   let pre_opt_length = states.len();
 
   let state_refs = states.iter().collect::<Vec<_>>();

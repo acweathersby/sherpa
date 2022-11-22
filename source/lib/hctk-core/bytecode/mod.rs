@@ -66,11 +66,11 @@ pub struct BytecodeOutput {
 
 pub fn compile_bytecode<'a>(
   g: &'a GrammarStore,
-  ir_states: &mut BTreeMap<String, Box<IRState>>,
+  ir_states: &mut Vec<(String, Box<IRState>)>,
 ) -> BytecodeOutput {
   let ir_ast_states = ir_states
-    .values_mut()
-    .map(|s| match s.compile_ast() {
+    .iter_mut()
+    .map(|(_, s)| match s.compile_ast() {
       Ok(ast) => (*ast).clone(),
       Err(err) => {
         panic!("\n{}", err);
@@ -83,7 +83,7 @@ pub fn compile_bytecode<'a>(
 
 pub(crate) fn compile_ir_states_into_bytecode<'a>(
   g: &'a GrammarStore,
-  ir_states: &BTreeMap<String, Box<IRState>>,
+  ir_states: &Vec<(String, Box<IRState>)>,
   ir_ast_states: Vec<IR_STATE>,
 ) -> BytecodeOutput {
   let state_refs = ir_ast_states.iter().collect::<Vec<_>>();
@@ -122,6 +122,7 @@ mod byte_code_creation_tests {
   use crate::debug::{self};
   use crate::grammar::data::ast::ASTNode;
   use crate::grammar::parse::compile_ir_ast;
+  use crate::intermediate::optimize::optimize_ir_states;
   use crate::intermediate::state::compile_states;
   use crate::intermediate::state::generate_production_states;
   use crate::types::default_get_branch_selector;
@@ -186,8 +187,9 @@ mod byte_code_creation_tests {
 ",
     )
     .unwrap();
-    let mut ir_states = compile_states(&g, 1);
-    let output = compile_bytecode(&g, &mut ir_states);
+    let (mut ir_states, _) = compile_states(&g, 1);
+
+    let output = compile_bytecode(&g, &mut optimize_ir_states(ir_states, &g));
 
     println!(
       "dD: {}",
@@ -214,8 +216,8 @@ mod byte_code_creation_tests {
     )
     .unwrap();
 
-    let mut ir_states = compile_states(&g, 1);
-    let output = compile_bytecode(&g, &mut ir_states);
+    let (mut states, _) = compile_states(&g, 1);
+    let output = compile_bytecode(&g, &mut optimize_ir_states(states, &g));
     println!(
       "dD: {}",
       debug::generate_disassembly(&output, Some(&BytecodeGrammarLookups::new(&g)))
@@ -304,8 +306,8 @@ mod byte_code_creation_tests {
       <> tok_identifier > ( g:id | g:num )(+)                     ",
     ).unwrap();
 
-    let mut ir_states = compile_states(&g, 1);
-    let output = compile_bytecode(&g, &mut ir_states);
+    let (mut states, _) = compile_states(&g, 1);
+    let output = compile_bytecode(&g, &mut optimize_ir_states(states, &g));
     return;
     println!(
       "dD: {}",

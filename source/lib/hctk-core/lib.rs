@@ -5,7 +5,6 @@
 #![feature(get_mut_unchecked)]
 #![feature(core_intrinsics)]
 #![feature(box_patterns)]
-#![feature(map_first_last)]
 #![feature(drain_filter)]
 #![feature(btree_drain_filter)]
 #![feature(try_trait_v2)]
@@ -65,7 +64,7 @@ mod test_end_to_end {
     )
     .unwrap();
 
-    let mut states = compile_states(&g, threads);
+    let (mut states, _) = compile_states(&g, threads);
 
     for state in states.values_mut() {
       if state.get_ast().is_none() {

@@ -374,6 +374,7 @@ mod bytecode_debugging_tests {
   use crate::debug::bytecode::BytecodeGrammarLookups;
   use crate::debug::disassemble_state;
   use crate::grammar::parse::compile_ir_ast;
+  use crate::intermediate::optimize::optimize_ir_states;
   use crate::intermediate::state::compile_states;
   use crate::intermediate::state::generate_production_states;
   use crate::types::GrammarStore;
@@ -386,8 +387,9 @@ mod bytecode_debugging_tests {
 
     let prod_id = g.get_production_id_by_name("A").unwrap();
 
-    let mut ir_states = compile_states(&g, 1);
-    let output = compile_bytecode(&g, &mut ir_states);
+    let (states, _) = compile_states(&g, 1);
+
+    let output = compile_bytecode(&g, &mut optimize_ir_states(states, &g));
 
     let result = generate_production_states(&prod_id, &g).states;
 

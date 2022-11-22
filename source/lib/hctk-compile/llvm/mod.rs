@@ -7,6 +7,7 @@ pub use types::*;
 
 #[cfg(test)]
 mod test {
+  use hctk_core::intermediate::optimize::optimize_ir_states;
   use hctk_core::intermediate::state::compile_states;
   use hctk_core::types::hctk_allocate_stack;
   use hctk_core::types::hctk_free_stack;
@@ -611,8 +612,8 @@ mod test {
   ",
     )
     .unwrap();
-    let mut ir_states = compile_states(&g, 1);
-    let bytecode_output = compile_bytecode(&g, &mut ir_states);
+    let (mut ir_states, _) = compile_states(&g, 1);
+    let bytecode_output = compile_bytecode(&g, &mut optimize_ir_states(ir_states, &g));
 
     if let Ok(mut ctx) = compile_from_bytecode("test", &g, &Context::create(), &bytecode_output) {
       let mut file = File::create("../test.ll");
@@ -713,8 +714,8 @@ mod test {
     )
     .unwrap();
 
-    let mut ir_states = compile_states(&g, 1);
-    let bytecode_output = compile_bytecode(&g, &mut ir_states);
+    let (mut ir_states, _) = compile_states(&g, 1);
+    let bytecode_output = compile_bytecode(&g, &mut optimize_ir_states(ir_states, &g));
 
     if let Ok(mut ctx) = compile_from_bytecode("test", &g, &Context::create(), &bytecode_output) {
       Ok(())
