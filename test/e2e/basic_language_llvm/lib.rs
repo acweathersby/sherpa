@@ -1,48 +1,24 @@
-mod llvm_language_test_parser;
-mod llvm_language_test_parser_ast;
+pub mod llvm_language_test_parser {
+  include!(concat!(env!("OUT_DIR"), "/llvm_language_test.rs"));
+}
+
 pub use llvm_language_test_parser::*;
 
 #[cfg(test)]
 mod test {
 
-  use crate::llvm_language_test_parser_ast::*;
   use crate::Context;
+  use crate::*;
   use hctk::types::*;
 
   #[test]
   pub fn test_build() {
-    let mut stack = Vec::new();
-    for action in Context::new_entry_parser(&mut UTF8StringReader::new("(2+(2*2))+1+1+1"))
-    {
-      match action {
-        ParseAction::Error { last_input, .. } => {
-          println!("Error: failed at {}", last_input.cp_offset);
-        }
-        ParseAction::Shift { skipped_characters: skip, token } => {
-          stack.push(HCO::TOKEN(Token::from_kernel_token(&token)));
+    let ast = Context::parse_entry(&mut UTF8StringReader::new("(2+(2*2))+1+1+1"));
 
-          println!("Skip {:?} & Extract token {:?} ", skip, token);
-        }
-        ParseAction::Reduce { production_id, body_id, symbol_count } => {
-          REDUCE_FUNCTIONS[production_id as usize](&mut stack, Token::new());
+    println!("{:?}", ast);
 
-          println!(
-            "Reduce {} symbols to production {} from completion of body {}",
-            symbol_count, production_id, body_id,
-          );
-        }
-        ParseAction::Accept { production_id } => {
-          if let Some(top) = stack.pop() {
-            println!("{:#?}", top);
-          }
+    assert!(ast.is_ok());
 
-          println!("Accept production {}", production_id);
-          break;
-        }
-        _ => {
-          break;
-        }
-      }
-    }
+    dbg!(ast);
   }
 }

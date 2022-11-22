@@ -16,4 +16,6 @@
 
 <> term > \2                f:ast { { t_Num, v: u16($1) } }
 
+    | \1                    f:ast { { t_Num, v: u16($1) } }
+
     | \( expression \)          f:ast { { t_Paren, v: $2 } }

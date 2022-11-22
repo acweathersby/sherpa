@@ -51,7 +51,19 @@ mod test_production {
   #[test]
   fn test_symbol_types() {
     // Terminal
-    let node = AST::grammar_from("<> T > (A|B) \n ast: { { t_Test } }");
+    let node = AST::grammar_from("
+    
+  NAME test 
+  IMPORT scarilet/-test/.org as mango 
+  EXPORT sym::name_clause as tom 
+  
+  <> T > (A|B) \n ast: { { t_Test } }
+
+  <> T > (A|B) \n ast: { { t_Test } }
+
+  <> T > ( [ A , B ] | R ) \n ast: { { t_Test } }
+  
+  ");
 
     println!("{:#?}", node);
 

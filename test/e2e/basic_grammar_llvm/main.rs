@@ -9,7 +9,7 @@ pub fn main() {
 
   let mut a = ParseAction::Undefined;
 
-  for action in Context::new_banner_parser(&mut UTF8StringReader::new("hello world")) {
+  for action in llvm_test::Context::new_banner_parser(&mut UTF8StringReader::new("hello world")) {
     match action {
       ParseAction::Shift { skipped_characters: skip, token } => {
         messages.push(format!("Skip {:? } & Extract token {:?} ", skip, token));
@@ -25,9 +25,9 @@ pub fn main() {
   }
   let duration = start.elapsed();
 
-  messages.iter().for_each(|s| println!("{}", s));
-
   println!("-- dur: {:?}", duration);
+
+  messages.iter().for_each(|s| println!("{}", s));
 
   println!("{:?}", a);
 }

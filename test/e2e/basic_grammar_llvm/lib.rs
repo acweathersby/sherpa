@@ -1,15 +1,16 @@
-mod llvm_test_parser;
-pub use llvm_test_parser::*;
+pub mod llvm_test {
+  include!(concat!(env!("OUT_DIR"), "/llvm_test.rs"));
+}
 
 #[cfg(test)]
 mod test {
 
-  use crate::Context;
+  use crate::llvm_test;
   use hctk::types::*;
 
   #[test]
   pub fn test_build() {
-    for action in Context::new_banner_parser(&mut UTF8StringReader::new("hello world")) {
+    for action in llvm_test::Context::new_banner_parser(UTF8StringReader::new("hello world")) {
       match action {
         ParseAction::Shift { skipped_characters: skip, token } => {
           println!("Skip {:?} & Extract token {:?} ", skip, token);
@@ -30,8 +31,8 @@ mod test {
       }
     }
 
-    let actions =
-      Context::new_banner_parser(&mut UTF8StringReader::new("hello world")).collect::<Vec<_>>();
+    let actions = llvm_test::Context::new_banner_parser(UTF8StringReader::new("hello world"))
+      .collect::<Vec<_>>();
 
     assert!(matches!(actions[0], ParseAction::Shift { .. }));
     assert!(matches!(actions[1], ParseAction::Shift { .. }));
@@ -41,8 +42,8 @@ mod test {
 
   #[test]
   pub fn should_fail_on_second_erroneous_token() {
-    let actions =
-      Context::new_banner_parser(&mut UTF8StringReader::new("hello wold")).collect::<Vec<_>>();
+    let actions = llvm_test::Context::new_banner_parser(UTF8StringReader::new("hello wold"))
+      .collect::<Vec<_>>();
     assert!(matches!(actions[0], ParseAction::Shift { .. }));
     assert!(matches!(actions[1], ParseAction::Error { .. }));
   }
@@ -51,9 +52,9 @@ mod test {
   pub fn should_emit_end_of_input_action() {
     let mut reader = TestUTF8StringReader::new("hello world");
 
-    reader.length = 5; // Artificially truncating the readers input window
+    reader.len = 5; // Artificially truncating the readers input window
 
-    let actions = Context::new_banner_parser(&mut reader).collect::<Vec<_>>();
+    let actions = llvm_test::Context::new_banner_parser(reader).collect::<Vec<_>>();
 
     assert!(matches!(actions[0], ParseAction::Shift { .. }));
     assert!(matches!(actions[1], ParseAction::EndOfInput { .. }));

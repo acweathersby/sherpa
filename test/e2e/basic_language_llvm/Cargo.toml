@@ -13,8 +13,8 @@ path = "./lib.rs"
 name = "test_basic_language_llvm_bin"
 path = "./main.rs"
 
-[build-dependencies.hc-compile]
-path = "../../../source/app/compile" 
+[build-dependencies.hctk]
+path = "../../../source/lib/hctk"
 
 [dependencies.hctk]
 path = "../../../source/lib/hctk"

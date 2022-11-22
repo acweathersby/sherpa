@@ -4,7 +4,7 @@
 
 @NAME hc_production
 
-@IGNORE g:sp g:tab g:nl
+@IGNORE g:sp g:nl
 
 @EXPORT grammar as grammar
 
@@ -13,7 +13,7 @@
         
         preamble(*) production(+)
                                 
-            f:ast {{ t_Grammar, c_Version_1_0, preamble:$1, productions: $2, tok }}
+            f:ast {{ t_Grammar, c_Version_1_0, preamble:$1, productions:$2, tok }}
 
 <> preamble >
 
@@ -28,7 +28,7 @@
 
 <> export_clause > 
 
-        t:EXPORT sym::terminal_symbol ( t:AS | t:as ) sym::identifier
+        t:EXPORT sym::non_terminal ( t:AS | t:as ) sym::identifier
 
             f:ast { { t_Export, c_Preamble, production:$2, reference:$4 } } 
 
@@ -36,11 +36,11 @@
 
         t:IMPORT ( g:id | g:sym  )(+) ( t:AS | t:as ) sym::identifier
 
-            f:ast { { t_Import, c_Preamble, uri: str($2), reference:$4 } } 
+            f:ast { { t_Import, c_Preamble, uri: str($2), reference:str($4), tok } } 
 
 <> ignore_clause >
 
-        t:IGNORE t:[  sym::terminal(+) t:]
+        t:IGNORE t:{  sym::terminal(+) t:}
 
             f:ast { { t_Ignore, c_Preamble, symbols: $3 } }
 
@@ -72,7 +72,7 @@
 
 <> ast_definition > 
 
-        \ast: \{ ast::body^ast }
+        \ast: \{ ast::body^ast \}
 
             f:ast {  { t_Ascript, c_Function, ast: $ast, tok }  }
 
