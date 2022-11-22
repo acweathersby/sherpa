@@ -1,0 +1,5 @@
+<> line_comment >
+    \// (g:any) g:nl
+
+<> block_comment >
+    \/-  g:any \-/

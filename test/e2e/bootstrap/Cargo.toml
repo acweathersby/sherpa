@@ -1,0 +1,17 @@
+[package]
+name = "test-bootstrap"
+version = "0.0.0"
+edition = "2021"
+
+[[bin]]
+name = "test_proc"
+path = "./main.rs"
+
+[lib]
+path = "./lib.rs"
+
+[build-dependencies.hctk]
+path = "../../../source/lib/hctk"
+
+[dependencies.hctk]
+path = "../../../source/lib/hctk"

@@ -1,0 +1,94 @@
+@IMPORT ./script.hcg as ast
+
+@IMPORT ./symbol.hcg as sym
+
+@NAME hc_production
+
+@IGNORE g:sp g:tab g:nl
+
+@EXPORT grammar as grammar
+
+
+<> grammar > 
+        
+        preamble(*) production(+)
+                                
+            f:ast {{ t_Grammar, c_Version_1_0, preamble:$1, productions: $2, tok }}
+
+<> preamble >
+
+        export_clause 
+
+        | import_clause
+
+        | name_clause
+
+        | ignore_clause
+
+
+<> export_clause > 
+
+        t:EXPORT sym::terminal_symbol ( t:AS | t:as ) sym::identifier
+
+            f:ast { { t_Export, c_Preamble, production:$2, reference:$4 } } 
+
+<> import_clause > 
+
+        t:IMPORT ( g:id | g:sym  )(+) ( t:AS | t:as ) sym::identifier
+
+            f:ast { { t_Import, c_Preamble, uri: str($2), reference:$4 } } 
+
+<> ignore_clause >
+
+        t:IGNORE t:[  sym::terminal(+) t:]
+
+            f:ast { { t_Ignore, c_Preamble, symbols: $3 } }
+
+<> name_clause >
+
+        t:NAME sym::identifier
+
+            f:ast { { t_Name, c_Preamble, name: str($2) } }
+
+
+<> production > 
+        
+        <> \lazy ?^l \! ?^p sym::annotated_symbol^n \> bodies^b 
+
+            f:ast { { t_Production, is_lazy:bool($l), is_priority:bool($p), name:str($n), name_sym:$n, bodies: $b, tok } }
+
+
+<> bodies > 
+        
+        body(+\| )
+
+
+<> body > 
+
+        \! ?^p ( sym::annotated_symbol | any_group )(+)^s ast_definition?^a
+
+            f:ast { { t_Body, is_priority:bool($p), symbols:$s, ast_definition:$a, tok } }
+
+
+<> ast_definition > 
+
+        \ast: \{ ast::body^ast }
+
+            f:ast {  { t_Ascript, c_Function, ast: $ast, tok }  }
+
++> sym::symbol > group
+
+<> group > 
+
+        \( bodies \)        
+          
+            f:ast { { t_Group_Production, c_Symbol, bodies:$2,  tok } }  
+
+
+<> any_group > 
+
+        \[ sym::annotated_symbol(+)^s \]
+
+            f:ast { { t_AnyGroup, symbols:$s, tok } }
+
+
