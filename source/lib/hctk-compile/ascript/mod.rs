@@ -42,7 +42,7 @@ mod rust_ast_build {
   fn test_temp() {
     let g = GrammarStore::from_path(
       PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../test/e2e/bootstrap/grammar/script.hcg")
+        .join("../../../test/e2e/bootstrap/grammar/ir.hcg")
         .canonicalize()
         .unwrap(),
     )

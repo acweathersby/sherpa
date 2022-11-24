@@ -180,6 +180,20 @@ where
   }
 }
 
+impl<T> FromResidual<HCResult<Infallible>> for Result<T, HCError> {
+  #[inline]
+  #[track_caller]
+  fn from_residual(residual: HCResult<Infallible>) -> Self {
+    match residual {
+      HCResult::Err(err) => Err(err),
+      HCResult::MultipleErrors(errors) => {
+        Err(HCError::Many { message: Default::default(), errors: errors })
+      }
+      _ => Err(HCError::UNDEFINED),
+    }
+  }
+}
+
 impl<T> FromResidual<Option<Infallible>> for HCResult<T> {
   #[inline]
   #[track_caller]

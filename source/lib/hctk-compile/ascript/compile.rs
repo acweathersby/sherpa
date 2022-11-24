@@ -106,54 +106,6 @@ pub fn compile_ascript_store(ast: &mut AScriptStore) -> Vec<HCError> {
     return e;
   }
 
-  for key in Vec::from_iter(ast.prod_types.keys().cloned()) {
-    let _types = ast.prod_types.get(&key).unwrap().to_owned();
-
-    if _types.len() == 1 {
-      let (_type, tokens) = (_types.iter().next().unwrap());
-      match _type.into() {
-        AScriptTypeVal::GenericVec(Some(_types)) => {
-          let resolved_vector_type = get_specified_vector_from_generic_vec_values(
-            &_types.iter().map(|v| v.into()).collect(),
-          );
-
-          if resolved_vector_type.is_undefined() {
-            panic!("Need to report invalid Vec type");
-            // ///
-            // e.push(HCError::grammar_err_multi_location {
-            // message: format!(
-            // "Invalid combination of types within vector {}",
-            // _type.debug_string(Some(&g))
-            // ),
-            //
-            // locations: _types
-            // .iter()
-            // .flat_map(|type_| {
-            // body_id.iter().map(|tok| HCError::grammar_err {
-            // inline_message: format!("produces [{}]", type_.debug_string(Some(&g))),
-            // loc: Token::empty(),
-            // message: String::default(),
-            // path: g.id.path.clone(),
-            // })
-            // })
-            // .collect(),
-            // })
-            //
-          } else {
-            ast.prod_types.insert(
-              key,
-              HashMap::from_iter(vec![(
-                TaggedType { type_: resolved_vector_type, ..Default::default() },
-                tokens.to_owned(),
-              )]),
-            );
-          }
-        }
-        _ => {}
-      }
-    }
-  }
-
   // Ensure all non-scanner productions have been added to the ascript data.
   assert_eq!(ast.prod_types.len(), g.parse_productions.len());
 
@@ -201,7 +153,6 @@ fn resolve_production_reduce_types(ast: &mut AScriptStore, e: &mut Vec<HCError>)
   while let Some(prod_id) = pending_prods.pop_front() {
     if !ast.prod_types.contains_key(&prod_id) {
       unreachable!("All production should be accounted for");
-      continue;
     }
 
     let mut resubmit = false;
@@ -240,7 +191,7 @@ fn resolve_production_reduce_types(ast: &mut AScriptStore, e: &mut Vec<HCError>)
       };
 
       for (other, mut body_ids) in scalar_types {
-        prime = match (prime.type_.clone(), other.type_.clone()) {
+        prime = match (&(prime.type_), &(other.type_)) {
           (Struct(typeA), Struct(typeB)) if typeA != typeB => {
             prime_body_ids.append(&mut body_ids);
             TaggedType {
@@ -248,8 +199,8 @@ fn resolve_production_reduce_types(ast: &mut AScriptStore, e: &mut Vec<HCError>)
               ..Default::default()
             }
           }
-          (Struct(typeB), GenericStruct(mut btree_set))
-          | (GenericStruct(mut btree_set), Struct(typeB)) => {
+          (Struct(_), GenericStruct(btree_set)) => {
+            let mut btree_set = btree_set.clone();
             btree_set.insert(prime);
             prime_body_ids.append(&mut body_ids);
             TaggedType {
@@ -257,12 +208,21 @@ fn resolve_production_reduce_types(ast: &mut AScriptStore, e: &mut Vec<HCError>)
               ..Default::default()
             }
           }
-          (type_, UnresolvedProduction(foreign_prod_id)) => {
-            resubmit = resubmit.max(insert_production_types(ast, foreign_prod_id));
+          (GenericStruct(btree_set), Struct(_)) => {
+            let mut btree_set = btree_set.clone();
+            btree_set.insert(other);
+            prime_body_ids.append(&mut body_ids);
+            TaggedType {
+              type_: GenericStruct(BTreeSet::from_iter(btree_set)),
+              ..Default::default()
+            }
+          }
+          (_, UnresolvedProduction(foreign_prod_id)) => {
+            resubmit = resubmit.max(insert_production_types(ast, *foreign_prod_id));
             prime
           }
           (UnresolvedProduction(foreign_prod_id), _) => {
-            resubmit = resubmit.max(insert_production_types(ast, foreign_prod_id));
+            resubmit = resubmit.max(insert_production_types(ast, *foreign_prod_id));
             other
           }
           (Undefined, _) => {
@@ -278,7 +238,7 @@ fn resolve_production_reduce_types(ast: &mut AScriptStore, e: &mut Vec<HCError>)
               prod_id,
               ast.g.clone(),
               (a.clone(), prime_body_ids.iter().cloned().collect()),
-              (b, body_ids.iter().cloned().collect()),
+              (b.clone(), body_ids.iter().cloned().collect()),
               ast.get_type_names(),
             ));
             prime
@@ -292,7 +252,6 @@ fn resolve_production_reduce_types(ast: &mut AScriptStore, e: &mut Vec<HCError>)
     }
 
     if !vector_types.is_empty() {
-      // Note: (Invariant) All Vecs are GenericVec at this point.
       use AScriptTypeVal::*;
       let (mut prime, mut prime_body_ids) = (TaggedType::default(), BTreeSet::new());
       let mut vector_types = VecDeque::from_iter(vector_types);
@@ -331,13 +290,11 @@ fn resolve_production_reduce_types(ast: &mut AScriptStore, e: &mut Vec<HCError>)
       };
 
       while let Some((other, mut body_ids)) = vector_types.pop_front() {
-        prime = match (prime.type_.clone(), other.type_.clone()) {
+        prime = match (prime.type_, other.type_) {
           (GenericVec(Some(vecA)), GenericVec(Some(vecB))) => {
             // Check for compatibility, and extract productions from vectors
-            let mut known_types = fun_name(vecA, &mut vector_types);
-
-            known_types.extend(fun_name(vecB, &mut vector_types));
-
+            let mut known_types = fun_name(vecB, &mut vector_types);
+            known_types.extend(vecA);
             prime_body_ids.append(&mut body_ids);
             TaggedType { type_: GenericVec(Some(known_types)), ..Default::default() }
           }
@@ -345,21 +302,20 @@ fn resolve_production_reduce_types(ast: &mut AScriptStore, e: &mut Vec<HCError>)
             prime_body_ids.append(&mut body_ids);
             TaggedType { type_: GenericVec(Some(vecA)), ..Default::default() }
           }
-          (GenericVec(None), GenericVec(Some(vecB))) => {
-            prime_body_ids.append(&mut body_ids);
-            TaggedType { type_: GenericVec(Some(vecB)), ..Default::default() }
+          (Undefined, GenericVec(Some(vecB))) | (GenericVec(None), GenericVec(Some(vecB))) => {
+            let known_types = fun_name(vecB, &mut vector_types);
+            TaggedType { type_: GenericVec(Some(known_types)), ..Default::default() }
           }
-          (GenericVec(None), GenericVec(None)) => {
+          (Undefined, GenericVec(None)) | (GenericVec(None), GenericVec(None)) => {
             prime_body_ids.append(&mut body_ids);
             TaggedType { type_: GenericVec(None), ..Default::default() }
           }
-          (Undefined, _) => {
-            prime_body_ids.append(&mut body_ids);
-            other
-          }
-          _ => unreachable!("Only GenericVector types Should be defined at this point."),
+          _ => unreachable!(
+            "Failed Invariant: Only GenericVector types should be encountered at this point."
+          ),
         }
       }
+
       if !prime.type_.is_undefined() {
         new_map.insert(prime, prime_body_ids);
       }
@@ -367,22 +323,7 @@ fn resolve_production_reduce_types(ast: &mut AScriptStore, e: &mut Vec<HCError>)
 
     ast.prod_types.insert(prod_id, new_map);
 
-    if ast.g.get_production_plain_name(&prod_id) == "A" {
-      println!(
-        "Resolving {} \n{:#?}",
-        ast.g.get_production_plain_name(&prod_id),
-        ast
-          .prod_types
-          .get(&prod_id)
-          .unwrap()
-          .iter()
-          .map(|(t, _)| { t.type_.debug_string(Some(&ast.g)) })
-          .collect::<Vec<_>>()
-      );
-    }
-
     if resubmit {
-      println!("Repeating {} ", ast.g.get_production_plain_name(&prod_id));
       pending_prods.push_back(prod_id);
     }
   }
@@ -406,25 +347,59 @@ fn resolve_production_reduce_types(ast: &mut AScriptStore, e: &mut Vec<HCError>)
         .map(|(t, _)| { t.debug_string(Some(&ast.g)) })
         .collect::<Vec<_>>()
     );
-
-    if !vector_types.is_empty() && !scalar_types.is_empty() {
-      e.push(ErrUnionOfScalarsAndVectors::new(
-        ast.g.clone(),
-        prod_id,
-        scalar_types
-          .iter()
-          .flat_map(|(type_, bodies)| {
-            bodies.iter().map(|b| ((*type_).into(), *b)).collect::<Vec<_>>()
-          })
-          .collect(),
-        vector_types
-          .iter()
-          .flat_map(|(type_, bodies)| {
-            bodies.iter().map(|b| ((*type_).into(), *b)).collect::<Vec<_>>()
-          })
-          .collect(),
-        ast.get_type_names(),
-      ));
+    match (!vector_types.is_empty(), !scalar_types.is_empty()) {
+      (true, true) => {
+        e.push(ErrUnionOfScalarsAndVectors::new(
+          ast.g.clone(),
+          prod_id,
+          scalar_types
+            .iter()
+            .flat_map(|(type_, bodies)| {
+              bodies.iter().map(|b| ((*type_).into(), *b)).collect::<Vec<_>>()
+            })
+            .collect(),
+          vector_types
+            .iter()
+            .flat_map(|(type_, bodies)| {
+              bodies.iter().map(|b| ((*type_).into(), *b)).collect::<Vec<_>>()
+            })
+            .collect(),
+          ast.get_type_names(),
+        ));
+      }
+      (true, false) => {
+        debug_assert!(
+          vector_types.len() == 1,
+          "Failed Invariant: All productions should have a single resolved type"
+        );
+        let (_type, tokens) = vector_types.into_iter().next().unwrap();
+        match _type.into() {
+          AScriptTypeVal::GenericVec(Some(_types)) => {
+            let resolved_vector_type = get_specified_vector_from_generic_vec_values(
+              &_types.iter().map(|v| v.into()).collect(),
+            );
+            if resolved_vector_type.is_undefined() {
+              e.push(ErrIncompatibleProductionVectorTypes::new(
+                prod_id,
+                ast.g.clone(),
+                _types.iter().cloned().collect(),
+                ast.get_type_names(),
+              ));
+            } else {
+              ast.prod_types.insert(
+                prod_id,
+                HashMap::from_iter(vec![(
+                  TaggedType { type_: resolved_vector_type, ..Default::default() },
+                  tokens.to_owned(),
+                )]),
+              );
+            }
+          }
+          _ => {}
+        }
+      }
+      (false, true) => {}
+      _ => {}
     }
   }
 }

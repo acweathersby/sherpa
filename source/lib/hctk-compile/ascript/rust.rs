@@ -249,6 +249,13 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
 
               temp_writer.merge_checkpoint(statement_writer)?;
 
+              let return_type = match return_type {
+                AScriptTypeVal::Undefined | AScriptTypeVal::GenericVec(None) => {
+                  prod_data.iter().next().unwrap().0.into()
+                }
+                r => r,
+              };
+
               match return_type {
                 AScriptTypeVal::GenericStructVec(..)
                 | AScriptTypeVal::TokenVec
@@ -281,8 +288,8 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
                   return_type.hcobj_type_name(None),
                   &reference
                 ))?,
-                _ => {
-                  println!("{}", return_type.debug_string(None));
+                r => {
+                  println!("{}", r.debug_string(None));
                   temp_writer.write_line(&reference)?
                 }
               };

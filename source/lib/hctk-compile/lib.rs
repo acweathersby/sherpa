@@ -15,7 +15,9 @@ mod source_types;
 use std::fs::create_dir_all;
 use std::path::PathBuf;
 
+pub use ascript::*;
 pub use builder::bytecode;
+
 use hctk_core::types::HCErrorContainer;
 
 pub use crate::builder::pipeline::BuildPipeline;

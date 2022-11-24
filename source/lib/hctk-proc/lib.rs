@@ -33,7 +33,7 @@ fn process_errors(errors: Vec<HCError>, offsets: Offsets) {
 
   for err in errors {
     match err {
-      grammar_err_location { message, inline_message, loc, path } => {
+      grammar_err { message, inline_message, loc, path } => {
         let start = loc.get_start();
         let end = loc.get_end();
         match (offsets.spans.get(&start), offsets.spans.get(&end)) {

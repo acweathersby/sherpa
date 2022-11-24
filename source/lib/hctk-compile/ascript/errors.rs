@@ -7,6 +7,7 @@ use hctk_core::types::*;
 use super::types::AScriptProp;
 use super::types::AScriptStructId;
 use super::types::AScriptTypeVal;
+use super::types::TaggedType;
 
 /// This error occurs when multiple definitions of the same Struct
 /// define the same property with different types.
@@ -17,6 +18,22 @@ use super::types::AScriptTypeVal;
 /// <> A > ... :{ t_TypeA, prop: str } // <- `prop` defined as `str` type
 ///
 /// <> B > ... :{ t_TypeA, prop: u32 } // <- `prop` redefined to `u32` type
+/// ```
+/// ### Rust
+/// ```
+/// # use hctk_core::types::*;
+/// # use hctk_compile::types::AScriptStore;
+/// let g = GrammarStore::from_str(
+/// "
+/// <> A > \\b f:ast { { t_TypeA, prop: str } }
+///
+/// <> B > \\a f:ast { { t_TypeA, prop: u32 } }
+/// "
+/// )?;
+///
+/// AScriptStore::new(g).unwrap();
+///
+/// # Ok(())
 /// ```
 #[derive(Debug)]
 pub struct ErrPropRedefinition {
@@ -68,11 +85,25 @@ impl ExtendedError for ErrPropRedefinition {
 /// types on a production.
 ///
 /// # Example
+/// ### HC Grammar
 /// ```hcg
 /// 
-/// <> A > \\a \\b // <- This body produces scalar type [Token]
-///    
-///    | \\c (+)   // <- This body produces vector type [Vector of [Token]]
+/// <> A > \r :{ t_TypeA, prop: str }  // <- This body produces a struct
+///      | \t (+)                    // <- This body produces a Vector of Tokens
+/// ```
+/// ### Rust
+/// ```
+/// # use hctk_core::types::*;
+/// # use hctk_compile::types::AScriptStore;
+/// let g = GrammarStore::from_str(
+/// "<> A > \\r f:ast { { t_TypeA, prop: str } }
+///      | \\t (+)
+/// "
+/// )?;
+///
+/// AScriptStore::new(g).unwrap();
+///
+/// # Ok(())
 /// ```
 #[derive(Debug)]
 pub struct ErrUnionOfScalarsAndVectors {
@@ -134,79 +165,25 @@ Vector Types:
 /// and Structs, or Strings and Tokens.
 ///
 /// # Example
+/// ### HC Grammar
 /// ```hcg
 /// 
-/// <> A > B :{ t_TypeA, prop: str }  // <- This body produces a struct
+/// <> A > \\r :{ t_TypeA, prop: str }  // <- This body produces a struct
 ///      | \\t                        // <- This body produces a Token
 /// ```
-#[derive(Debug)]
-pub struct ErrIncompatibleProductionVectorScalar {
-  p:          ProductionId,
-  g:          Arc<GrammarStore>,
-  type_a:     (AScriptTypeVal, Vec<BodyId>),
-  type_b:     (AScriptTypeVal, Vec<BodyId>),
-  type_names: Arc<BTreeMap<AScriptStructId, String>>,
-}
-
-impl ErrIncompatibleProductionVectorScalar {
-  pub fn new(
-    p: ProductionId,
-    g: Arc<GrammarStore>,
-    type_a: (AScriptTypeVal, Vec<BodyId>),
-    type_b: (AScriptTypeVal, Vec<BodyId>),
-    type_names: Arc<BTreeMap<AScriptStructId, String>>,
-  ) -> HCError {
-    HCError::ExtendedError(Arc::new(Self { p, g, type_a, type_b, type_names }))
-  }
-}
-
-impl ExtendedError for ErrIncompatibleProductionVectorScalar {
-  fn report(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    let ErrIncompatibleProductionVectorScalar {
-      p,
-      g,
-      type_a: (type_a, a_bodies),
-      type_b: (type_b, b_bodies),
-      type_names,
-    } = self;
-
-    let body_draw = |&b| {
-      let body = g.get_body(&b).unwrap();
-      format!(
-        "[{}]\n{}\n{}",
-        body.tok.path_ref(&body.grammar_ref.path),
-        body.item().blame_string(g),
-        body.tok.blame(0, 0, "", BlameColor::Red)
-      )
-    };
-
-    f.write_fmt(format_args!(
-      "[{}] produces an incompatible set of types:
-- Type [{}] is produced by the following bodies:
-{}
-- Type [{}] is produced by the following bodies:
-{}",
-      g.get_production_plain_name(p),
-      type_a.blame_string(g, type_names),
-      a_bodies.iter().map(body_draw).collect::<Vec<_>>().join("\n"),
-      type_b.blame_string(g, type_names),
-      b_bodies.iter().map(body_draw).collect::<Vec<_>>().join("\n")
-    ))
-  }
-
-  fn severity(&self) -> HCErrorSeverity {
-    HCErrorSeverity::Critical
-  }
-}
-
-/// Occurs when a production returns incompatible type values, such numeric values
-/// and Structs, or Strings and Tokens.
+/// ### Rust
+/// ```
+/// # use hctk_core::types::*;
+/// # use hctk_compile::types::AScriptStore;
+/// let g = GrammarStore::from_str(
+/// "<> A > \\r f:ast { { t_TypeA, prop: str } }
+///      | \\t
+/// "
+/// )?;
 ///
-/// # Example
-/// ```hcg
-/// 
-/// <> A > B :{ t_TypeA, prop: str }  // <- This body produces a struct
-///      | \\t                        // <- This body produces a Token
+/// AScriptStore::new(g).unwrap();
+///
+/// # Ok(())
 /// ```
 #[derive(Debug)]
 pub struct ErrIncompatibleProductionScalerTypes {
@@ -250,7 +227,7 @@ impl ExtendedError for ErrIncompatibleProductionScalerTypes {
     };
 
     f.write_fmt(format_args!(
-      "[{}] produces an incompatible set of vector types:
+      "[{}] produces an incompatible set of scalar types:
 - Type [{}] is produced by the following bodies:
 {}
 - Type [{}] is produced by the following bodies:
@@ -268,21 +245,36 @@ impl ExtendedError for ErrIncompatibleProductionScalerTypes {
   }
 }
 
-/// Occurs when a production returns incompatible vector type values, such numeric values
+/// Occurs when a production returns incompatible vector type values, such as numeric values
 /// and Structs, or Strings and Tokens.
 ///
 /// # Example
+///
+/// ### HC Grammar
 /// ```hcg
-/// 
-/// <> A > (B :{ t_TypeA, prop: str })(+)  // <- This body produces a struct Vector
-///      | (\\t )(+)                       // <- This body produces a Token Vector
+/// <> A > (\r :{ t_TypeA, prop: str })(+)  // <- This body produces a struct Vector
+///
+///      | (\t )(+)                       // <- This body produces a Token Vector
+/// ```
+/// ### Rust
+/// ```
+/// # use hctk_core::types::*;
+/// # use hctk_compile::types::AScriptStore;
+/// let g = GrammarStore::from_str(
+/// " <> A > ( \\r f:ast{ { t_TypeA, prop:$1 } } )(+)
+///      | (\\t )(+)
+/// "
+/// )?;
+///
+/// AScriptStore::new(g).unwrap();
+///
+/// # Ok(())
 /// ```
 #[derive(Debug)]
 pub struct ErrIncompatibleProductionVectorTypes {
-  p:          ProductionId,
-  g:          Arc<GrammarStore>,
-  type_a:     (AScriptTypeVal, Vec<BodyId>),
-  type_b:     (AScriptTypeVal, Vec<BodyId>),
+  p: ProductionId,
+  g: Arc<GrammarStore>,
+  vector_types: Vec<TaggedType>,
   type_names: Arc<BTreeMap<AScriptStructId, String>>,
 }
 
@@ -290,45 +282,33 @@ impl ErrIncompatibleProductionVectorTypes {
   pub fn new(
     p: ProductionId,
     g: Arc<GrammarStore>,
-    type_a: (AScriptTypeVal, Vec<BodyId>),
-    type_b: (AScriptTypeVal, Vec<BodyId>),
+    vector_types: Vec<TaggedType>,
     type_names: Arc<BTreeMap<AScriptStructId, String>>,
   ) -> HCError {
-    HCError::ExtendedError(Arc::new(Self { p, g, type_a, type_b, type_names }))
+    HCError::ExtendedError(Arc::new(Self { p, g, vector_types, type_names }))
   }
 }
 
 impl ExtendedError for ErrIncompatibleProductionVectorTypes {
   fn report(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    let ErrIncompatibleProductionVectorTypes {
-      p,
-      g,
-      type_a: (type_a, a_bodies),
-      type_b: (type_b, b_bodies),
-      type_names,
-    } = self;
+    let ErrIncompatibleProductionVectorTypes { p, g, vector_types, type_names } = self;
 
-    let body_draw = |&b| {
-      let body = g.get_body(&b).unwrap();
+    let body_draw = |b: &TaggedType| {
+      let body = g.get_body(&b.into()).unwrap();
+      let type_: AScriptTypeVal = b.into();
       format!(
-        "[{}]\n{}\n{}",
+        "[{}]\n body {}\n produces vector type [{}] \n{}",
         body.tok.path_ref(&body.grammar_ref.path),
         body.item().blame_string(g),
-        body.tok.blame(0, 0, "", BlameColor::Red)
+        type_.blame_string(g, type_names),
+        body.tok.blame(0, 0, "defined here", BlameColor::Red)
       )
     };
 
     f.write_fmt(format_args!(
-      "Incompatible types are produced by production [{}]:
-- Type [{}] is produced by the following bodies:
-{}
-- Type [{}] is produced by the following bodies:
-{}",
+      "Incompatible vector types are produced by production [{}]:\n\n{}",
       g.get_production_plain_name(p),
-      type_a.blame_string(g, type_names),
-      a_bodies.iter().map(body_draw).collect::<Vec<_>>().join("\n"),
-      type_b.blame_string(g, type_names),
-      b_bodies.iter().map(body_draw).collect::<Vec<_>>().join("\n")
+      vector_types.iter().map(body_draw).collect::<Vec<_>>().join("\n"),
     ))
   }
 
