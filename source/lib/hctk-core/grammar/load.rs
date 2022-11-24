@@ -91,7 +91,7 @@ pub(crate) fn load_all(
                       HCResult::Ok(path) => {
                         imports_refs.insert(
                           reference.to_string(),
-                          GrammarRef::new(reference.to_string(), path.clone()),
+                          GrammarIds::new(reference.to_string(), path.clone()),
                         );
                         pending_grammar_paths.lock().unwrap().push_back(path);
                         work_verifier.lock().unwrap().add_units_of_work(1);
@@ -102,6 +102,7 @@ pub(crate) fn load_all(
                         tok,
                         err: Some(Box::new(err)),
                       }),
+                      HCResult::MultipleErrors(mut new_errors) => errors.append(&mut new_errors),
                       HCResult::None => errors.push(HCError::load_err_invalid_dependency {
                         path: base_path,
                         requestor: path.to_owned(),

@@ -175,18 +175,13 @@ impl<'a> BuildPipeline<'a> {
     }
 
     self.ascript = if self.tasks.iter().any(|t| t.0.require_ascript) && self.ascript.is_none() {
-      let mut ascript = AScriptStore::new();
-
-      let mut e = compile_ascript_store(&self.grammar.as_ref().unwrap(), &mut ascript);
-      let have_critical_errors = e.have_critical();
-      errors.append(&mut e);
-      if have_critical_errors {
-        None
-      } else {
-        if let Some(name) = &self.ascript_name {
-          ascript.set_name(name);
+      match AScriptStore::new(self.grammar.as_ref().unwrap().clone()) {
+        HCResult::MultipleErrors(mut e) => {
+          errors.append(&mut e);
+          None
         }
-        Some(ascript)
+        HCResult::Ok(ascript) => Some(ascript),
+        _ => unreachable!("Should not generate other invalid types"),
       }
     } else {
       self.ascript
@@ -362,12 +357,8 @@ impl<'a> PipelineContext<'a> {
     &self.pipeline.unwrap().grammar.as_ref().unwrap()
   }
 
-  pub fn get_ascript(&self) -> &AScriptStore {
-    if self.pipeline.unwrap().ascript.is_none() {
-      panic!("Failed to construct Ascript data");
-    } else {
-      self.pipeline.unwrap().ascript.as_ref().unwrap()
-    }
+  pub fn get_ascript(&self) -> Option<&AScriptStore> {
+    self.pipeline.unwrap().ascript.as_ref()
   }
 
   pub fn get_parser_name(&self) -> &String {

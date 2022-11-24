@@ -16,9 +16,9 @@ use crate::grammar::get_closure_cached;
 use crate::grammar::get_production_start_items;
 use crate::grammar::get_scanner_info_from_defined;
 use crate::grammar::hash_id_value_u64;
-use crate::types::ErrorGroup;
 use crate::types::GrammarStore;
 use crate::types::HCError;
+use crate::types::HCErrorContainer;
 use crate::types::IRState;
 use crate::types::IRStateType;
 use crate::types::IRStateType::*;
@@ -215,7 +215,7 @@ fn check_for_left_recursion(symbol_items: &Vec<Item>, g: &GrammarStore) {
         println!(
           "[{}] {}",
           production.name,
-          production.location.blame(1, 1, "this production is left recursive", None),
+          production.tok.blame(1, 1, "this production is left recursive", None),
         );
       }
 
@@ -916,7 +916,7 @@ fn create_reduce_string(node: &TransitionGraphNode, g: &GrammarStore, is_scanner
     (None, false /* not scanner */, true /* default pass state */) => "pass".to_string(),
     (Some(item), true /* is scanner */, false) => {
       let body = g.bodies.get(&item.get_body_id()).unwrap();
-      let production = g.productions.get(&body.prod).unwrap();
+      let production = g.productions.get(&body.prod_id).unwrap();
       let production_id = production.bytecode_id;
       match node.items[0].get_origin() {
         OriginData::Symbol(sym) => {
@@ -931,7 +931,7 @@ fn create_reduce_string(node: &TransitionGraphNode, g: &GrammarStore, is_scanner
     }
     (Some(item), false /* not scanner */, false) => {
       let body = g.bodies.get(&item.get_body_id()).unwrap();
-      let production = g.productions.get(&body.prod).unwrap();
+      let production = g.productions.get(&body.prod_id).unwrap();
       format!(
         "set prod to {} then reduce {} symbols to body {}",
         production.bytecode_id, body.len, body.bc_id,

@@ -37,6 +37,8 @@ pub struct BlameColor {
 }
 
 impl BlameColor {
+  /// Sets the color of the highlight to blue
+  pub const Blue: Option<BlameColor> = Some(BlameColor::new("\u{001b}[31m", "\u{001b}[0m"));
   /// Sets the color of the highlight to red
   pub const Red: Option<BlameColor> = Some(BlameColor::new("\u{001b}[31m", "\u{001b}[0m"));
 
@@ -160,6 +162,17 @@ impl Token {
     }
   }
 
+  pub fn from_vals(len: u32, off: u32, line_number: u32, line_offset: u32) -> Token {
+    Token {
+      len,
+      off,
+      line_num: line_number,
+      line_off: line_offset,
+      range: None,
+      input: None,
+    }
+  }
+
   pub fn from_parse_token(tok: &ParseToken) -> Token {
     Token {
       len:      tok.cp_length,
@@ -182,11 +195,11 @@ impl Token {
     }
   }
 
-  pub fn empty() -> Token {
+  pub const fn empty() -> Token {
     Token {
       len:      0,
       off:      0,
-      line_num: u32::MAX,
+      line_num: u32::MAX - 1,
       line_off: 0,
       input:    None,
       range:    None,
@@ -285,6 +298,35 @@ impl Token {
       line_off: self.line_off,
       range:    None,
       input:    self.input.clone(),
+    }
+  }
+
+  /// Returns a string containing the starting line and col
+  /// token in the form `"{line num}:{col num}"`
+  pub fn loc_stub(&self) -> String {
+    let Range { start_line, start_column, .. } = self.get_range();
+    format!("{}:{}", start_line, start_column)
+  }
+
+  /// Returns a string that appends the Token's `loc_stub` to
+  /// the end of a path.
+  ///
+  /// # Example
+  ///
+  /// ```
+  /// # use hctk_core::types::Token;
+  /// # use std::path::PathBuf;
+  /// # use std::str::FromStr;
+  /// let tok = Token::from_vals(5, 20, 9, 11);
+  ///
+  /// let path = PathBuf::from_str("/my/temp/file.txt").unwrap();
+  ///
+  /// assert_eq!(tok.path_ref(&path), "/my/temp/file.txt:10:10")
+  /// ```
+  pub fn path_ref(&self, path: &PathBuf) -> String {
+    match path.to_str() {
+      Some(string) => string.to_owned() + ":" + &self.loc_stub(),
+      _ => Default::default(),
     }
   }
 
@@ -444,6 +486,9 @@ impl Token {
       let mut string = String::from("");
       let mut prev_line = (self.line_off) as i64;
       let mut line_num = (self.line_num + 1) as usize;
+      let mut remainder = self.len + (self.off - self.line_off);
+      let mut next_line;
+      let mut col_diff = (self.off - self.line_off - (prev_line != 0) as u32) as usize;
 
       if source[0] as char == '\n' {
         line_num -= 1;
@@ -451,49 +496,77 @@ impl Token {
         prev_line -= 1;
       }
 
-      let mut next_line = find_next_line(&source, prev_line);
-
-      if let Ok(utf_string) =
-        String::from_utf8(Vec::from(&source[(prev_line + 1) as usize..next_line as usize]))
-      {
-        let lines_str = format!("{: >4}", line_num);
-
-        string += &format!(
-          "{}: {}\n{}\n",
-          &lines_str,
-          utf_string,
-          String::from(" ").repeat(4 + 1 + self.off as usize - (prev_line + 1) as usize)
-            + &if let Some(BlameColor { highlight, reset }) = colors {
-              " ".to_string()
-                + highlight
-                + &String::from("^").repeat(self.len as usize)
-                + " "
-                + inline_comment
-                + reset
-            } else {
-              " ".to_string() + &String::from("^").repeat(self.len as usize) + " " + inline_comment
-            },
-        );
-
-        if prev_line > 0 {
-          for a in 1..=max_pre {
-            if prev_line <= 0 {
-              break;
-            }
-            let next_line = prev_line;
-            prev_line = find_prev_line(&source, prev_line);
-            string = create_line(&source, prev_line, next_line, line_num - a) + &string;
-          }
-        }
-
-        for a in 1..=max_post {
-          if next_line as usize >= source.len() {
+      if prev_line > 0 {
+        let mut prev_line = prev_line;
+        for a in 1..=max_pre {
+          if prev_line <= 0 {
             break;
           }
-          let prev_line = next_line;
-          next_line = find_next_line(&source, next_line);
-          string += &create_line(&source, prev_line as i64, next_line, line_num + a);
+          let next_line = prev_line;
+          prev_line = find_prev_line(&source, prev_line);
+          string = create_line(&source, prev_line, next_line, line_num - a) + &string;
         }
+      }
+
+      loop {
+        next_line = find_next_line(&source, prev_line);
+        if let Ok(utf_string) =
+          String::from_utf8(Vec::from(&source[(prev_line + 1) as usize..next_line as usize]))
+        {
+          let leading_spaces = utf_string.len() - utf_string.trim_start().len();
+          let diff = usize::max(leading_spaces, col_diff);
+          let highlight_len = utf_string.len()
+            - diff
+            - i64::max(0, (next_line as i64 - (self.off + self.len) as i64)) as usize;
+
+          let lines_str = format!("{: >4}", line_num);
+          string += &format!(
+            "{}: {}\n{}",
+            &lines_str,
+            utf_string,
+            String::from(" ").repeat(4 + 1 + diff)
+              + &if let Some(BlameColor { highlight, reset }) = colors {
+                " ".to_string()
+                  + highlight
+                  + &String::from("^").repeat(highlight_len as usize)
+                  + " "
+              } else {
+                " ".to_string() + &String::from("^").repeat(highlight_len as usize) + " "
+              },
+          );
+
+          line_num += 1;
+          prev_line = next_line;
+          col_diff = 0;
+
+          match (next_line >= (self.off + self.len) as i64, colors) {
+            (true, Some(BlameColor { reset, .. })) => {
+              string += &format!("{}{}\n", inline_comment, reset);
+              break;
+            }
+            (true, None) => {
+              string += &(inline_comment.to_owned() + "\n");
+              break;
+            }
+            (false, Some(BlameColor { reset, .. })) => {
+              string += &(reset.to_owned() + "\n");
+            }
+            (false, None) => {
+              string += "\n";
+            }
+          }
+        } else {
+          break;
+        }
+      }
+
+      for a in 0..max_post {
+        if next_line as usize >= source.len() {
+          break;
+        }
+        let prev_line = next_line;
+        next_line = find_next_line(&source, next_line);
+        string += &create_line(&source, prev_line as i64, next_line, line_num + a);
       }
 
       string
@@ -553,6 +626,8 @@ mod test {
 
     let blame_string = tok.blame(2, 3, "start", None);
     let lines = blame_string.split("\n").collect::<Vec<_>>();
+
+    println!("{}", blame_string);
 
     assert_eq!(lines.len(), 6);
 

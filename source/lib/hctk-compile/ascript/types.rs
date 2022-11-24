@@ -6,6 +6,9 @@ use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::mem::discriminant;
+use std::sync::Arc;
+
+use super::compile::compile_ascript_store;
 
 #[derive(Hash, Debug, PartialEq, Eq, Clone, PartialOrd, Ord, Copy)]
 pub struct AScriptStructId(u64);
@@ -28,21 +31,78 @@ impl AScriptPropId {
   }
 }
 
-#[derive(Debug, PartialEq, Clone, Hash, Eq)]
-pub enum CompositeTypes {
-  Atom(AScriptTypeVal),
-  Node,
-  Any,
-  Token,
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd, Default)]
+pub struct TaggedType {
+  pub type_:        AScriptTypeVal,
+  pub tag:          BodyId,
+  pub symbol_index: u32,
+}
+
+impl TaggedType {
+  pub fn sanitize(self) -> Self {
+    Self {
+      symbol_index: 0,
+      tag:          BodyId::default(),
+      type_:        self.type_,
+    }
+  }
+
+  pub fn debug_string(&self, g: Option<&GrammarStore>) -> String {
+    format!("Tagged: [{}] {}", self.symbol_index, self.type_.debug_string(g))
+  }
+}
+
+impl Into<AScriptTypeVal> for TaggedType {
+  fn into(self) -> AScriptTypeVal {
+    self.type_
+  }
+}
+
+impl Into<AScriptTypeVal> for &TaggedType {
+  fn into(self) -> AScriptTypeVal {
+    self.type_.clone()
+  }
+}
+
+impl Into<BodyId> for TaggedType {
+  fn into(self) -> BodyId {
+    self.tag
+  }
+}
+
+impl Into<BodyId> for &TaggedType {
+  fn into(self) -> BodyId {
+    self.tag
+  }
+}
+
+impl Into<AScriptStructId> for &TaggedType {
+  fn into(self) -> AScriptStructId {
+    match self.type_ {
+      AScriptTypeVal::Struct(id) => id,
+      _ => AScriptStructId(0),
+    }
+  }
+}
+
+impl Into<AScriptStructId> for TaggedType {
+  fn into(self) -> AScriptStructId {
+    match self.type_ {
+      AScriptTypeVal::Struct(id) => id,
+      _ => AScriptStructId(0),
+    }
+  }
 }
 
 #[derive(PartialEq, Clone, Hash, Eq, PartialOrd, Ord)]
 pub enum AScriptTypeVal {
   TokenVec,
   StringVec,
-  GenericStruct(BTreeSet<AScriptStructId>),
-  GenericStructVec(BTreeSet<AScriptStructId>),
-  GenericVec(Option<BTreeSet<AScriptTypeVal>>),
+  GenericStruct(BTreeSet<TaggedType>),
+  GenericStructVec(BTreeSet<TaggedType>),
+  /// Exists during initial compile phases and are eventual replaced
+  /// with one of the defined Vec types
+  GenericVec(Option<BTreeSet<TaggedType>>),
   Struct(AScriptStructId),
   String(Option<String>),
   Bool(Option<bool>),
@@ -68,11 +128,17 @@ pub enum AScriptTypeVal {
   F64Vec,
   Token,
   UnresolvedProduction(ProductionId),
-  UnresolvedStruct,
   Undefined,
   /// A generic struct
   Any,
 }
+
+impl Default for AScriptTypeVal {
+  fn default() -> Self {
+    AScriptTypeVal::Undefined
+  }
+}
+
 impl Debug for AScriptTypeVal {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.write_str(&self.debug_string(None))
@@ -97,6 +163,7 @@ impl AScriptTypeVal {
         | F64Vec
         | StringVec
         | GenericStructVec(_)
+        | GenericVec(_)
     )
   }
 
@@ -112,17 +179,68 @@ impl AScriptTypeVal {
     matches!(self, AScriptTypeVal::UnresolvedProduction(..))
   }
 
+  pub fn get_production_id(&self) -> ProductionId {
+    match self {
+      AScriptTypeVal::UnresolvedProduction(id) => id.clone(),
+      _ => ProductionId::default(),
+    }
+  }
+
+  pub fn blame_string(
+    &self,
+    g: &GrammarStore,
+    struct_types: &BTreeMap<AScriptStructId, String>,
+  ) -> String {
+    use AScriptTypeVal::*;
+    match self {
+      GenericVec(vec) => match vec {
+        Some(vector) => format!(
+          "Vector of [{}]",
+          vector
+            .iter()
+            .filter_map(|t| {
+              match t.into() {
+                Undefined => None,
+                t => Some(t.blame_string(g, struct_types)),
+              }
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+        ),
+        None => "UndefinedVector".to_string(),
+      },
+      GenericStructVec(nodes) => format!(
+        "Structs<[{}]>",
+        nodes
+          .iter()
+          .map(|id| struct_types.get(&id.into()).cloned().unwrap_or_default())
+          .collect::<Vec<_>>()
+          .join(", ")
+      ),
+      Struct(id) => format!("Struct<{}>", struct_types.get(id).cloned().unwrap_or_default()),
+      _ => self.debug_string(Some(g)),
+    }
+  }
+
   pub fn debug_string(&self, g: Option<&GrammarStore>) -> String {
     use AScriptTypeVal::*;
     match self {
       GenericVec(vec) => match vec {
         Some(vector) => format!(
-          "Vector[{}]",
-          vector.iter().map(|t| { t.hcobj_type_name(g) }).collect::<Vec<_>>().join(", ")
+          "Vector of [{}]",
+          vector
+            .iter()
+            .filter_map(|t| {
+              match t.into() {
+                Undefined => None,
+                t => Some(t.debug_string(g)),
+              }
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
         ),
-        None => "Vector[Undefined]".to_string(),
+        None => "UndefinedVector".to_string(),
       },
-      UnresolvedStruct => "UnresolvedStruct".to_string(),
       Struct(id) => format!("Struct<{:?}>", id),
       String(..) => "String".to_string(),
       Bool(..) => "Bool".to_string(),
@@ -169,11 +287,14 @@ impl AScriptTypeVal {
       GenericVec(vec) => match vec {
         Some(vector) => format!(
           "GenericVec{}",
-          vector.iter().map(|t| { t.hcobj_type_name(g) }).collect::<Vec<_>>().join(", ")
+          vector
+            .iter()
+            .map(|t| { AScriptTypeVal::from(Into::into(t)).hcobj_type_name(g) })
+            .collect::<Vec<_>>()
+            .join(", ")
         ),
         None => "GenericVec".to_string(),
       },
-      UnresolvedStruct => "UnresolvedStruct".to_string(),
       Struct(id) => format!("Struct<{:?}>", id),
       String(..) => "STRING".to_string(),
       Bool(..) => "BOOL".to_string(),
@@ -278,14 +399,15 @@ num_type!(AScriptTypeValI16, I16, i16, i16);
 
 num_type!(AScriptTypeValI8, I8, i8, i8);
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Default)]
 pub struct AScriptProp {
-  pub type_val: AScriptTypeVal,
-  pub first_declared_location: Token,
+  pub type_val:    TaggedType,
+  pub location:    Token,
+  pub grammar_ref: Arc<GrammarIds>,
   /// Tracks the number of times this property has been
   /// declared in a struct.
-  pub define_count: usize,
-  pub optional: bool,
+  pub body_ids:    BTreeSet<BodyId>,
+  pub optional:    bool,
 }
 
 #[derive(Debug)]
@@ -294,7 +416,7 @@ pub struct AScriptStruct {
   pub type_name: String,
   pub prop_ids: BTreeSet<AScriptPropId>,
   /// Tracks the number of times this struct has been defined
-  pub define_count: usize,
+  pub body_ids: BTreeSet<BodyId>,
   pub definition_locations: Vec<Token>,
   pub include_token: bool,
 }
@@ -302,26 +424,31 @@ pub struct AScriptStruct {
 #[derive(Debug)]
 pub struct AScriptStore {
   /// Store of unique AScriptStructs
-  pub structs:        BTreeMap<AScriptStructId, AScriptStruct>,
-  pub props:          BTreeMap<AScriptPropId, AScriptProp>,
-  pub prod_types:     BTreeMap<ProductionId, HashMap<AScriptTypeVal, BTreeSet<Token>>>,
+  pub structs: BTreeMap<AScriptStructId, AScriptStruct>,
+  pub props: BTreeMap<AScriptPropId, AScriptProp>,
+  pub prod_types: BTreeMap<ProductionId, HashMap<TaggedType, BTreeSet<BodyId>>>,
   pub body_reduce_fn: BTreeMap<BodyId, (AScriptTypeVal, ASTNode)>,
-  pub name:           String,
+  pub name: String,
+  pub g: Arc<GrammarStore>,
+  pub struct_lookups: Option<Arc<BTreeMap<AScriptStructId, String>>>,
 }
 
 impl AScriptStore {
-  pub fn new() -> Self {
-    AScriptStore {
-      structs:        BTreeMap::new(),
-      props:          BTreeMap::new(),
-      prod_types:     BTreeMap::new(),
+  pub fn new(grammar: Arc<GrammarStore>) -> HCResult<Self> {
+    let mut new_self = AScriptStore {
+      structs: BTreeMap::new(),
+      props: BTreeMap::new(),
+      prod_types: BTreeMap::new(),
       body_reduce_fn: BTreeMap::new(),
-      name:           "ASTNode".to_string(),
-    }
-  }
+      name: "ASTNode".to_string(),
+      struct_lookups: None,
+      g: grammar,
+    };
 
-  pub fn set_name(&mut self, name: &str) {
-    self.name = name.to_string();
+    match compile_ascript_store(&mut new_self) {
+      errors if errors.have_errors() => HCResult::MultipleErrors(errors),
+      _ => HCResult::Ok(new_self),
+    }
   }
 
   pub fn type_name(&self) -> String {
@@ -332,10 +459,33 @@ impl AScriptStore {
   pub fn gen_name(&self) -> String {
     format!("Gen{}", self.name)
   }
+
+  pub fn get_type_names(&mut self) -> Arc<BTreeMap<AScriptStructId, String>> {
+    self
+      .struct_lookups
+      .get_or_insert_with(|| {
+        Arc::new(
+          self
+            .structs
+            .iter()
+            .map(|(_, struct_)| (struct_.id.clone(), struct_.type_name.clone()))
+            .collect(),
+        )
+      })
+      .clone()
+  }
 }
 
 impl Default for AScriptStore {
   fn default() -> Self {
-    Self::new()
+    AScriptStore {
+      g: Default::default(),
+      structs: BTreeMap::new(),
+      props: BTreeMap::new(),
+      prod_types: BTreeMap::new(),
+      body_reduce_fn: BTreeMap::new(),
+      struct_lookups: None,
+      name: "ASTNode".to_string(),
+    }
   }
 }

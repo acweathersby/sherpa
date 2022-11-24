@@ -48,7 +48,7 @@ pub(crate) fn write_rust_entry_functions<W: Write>(
     {
       writer
         .newline()?
-        .wrtln(&format!("/// `{}`", production.location.to_string().replace("\n", "\n// ")))?
+        .wrtln(&format!("/// `{}`", production.tok.to_string().replace("\n", "\n// ")))?
         .wrtln(&format!("pub fn new_{}_parser(reader: T) -> Self{{", export_name))?
         .indent()
         .wrtln("let mut ctx = Self::new(reader);")?
@@ -73,12 +73,13 @@ pub fn add_ascript_functions<W: Write>(
       .map(|ExportedProduction { export_name, production, .. }| {
         let mut ref_index = 0;
         let ref_ = render_expression(
+          &ascript,
           &ASTNode::AST_NamedReference(Box::new(AST_NamedReference {
             tok:   Token::default(),
             value: "first".to_string(),
           })),
           &Body {
-            syms: vec![BodySymbolRef {
+            syms: vec![BodySymbol {
               scanner_index: 1,
               scanner_length: 1,
               sym_id: SymbolID::Production(production.id, GrammarId(0)),
@@ -86,14 +87,13 @@ pub fn add_ascript_functions<W: Write>(
               ..Default::default()
             }],
             len: 1,
-            prod: production.id,
+            prod_id: production.id,
             id: BodyId(0),
             bc_id: 0,
             reduce_fn_ids: vec![],
-            origin_location: Token::default(),
+            grammar_ref: g.id.clone(),
+            tok: Token::default(),
           },
-          &ascript,
-          g,
           &mut ref_index,
           0,
         );

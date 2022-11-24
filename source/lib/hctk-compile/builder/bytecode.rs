@@ -35,7 +35,7 @@ pub fn build_bytecode_parser(
             // the
             // ascript code if necessary
             1,
-            if include_ascript_mixins { Some(task_ctx.get_ascript()) } else { None },
+            if include_ascript_mixins { task_ctx.get_ascript() } else { None },
             bytecode,
           ) {
             Err(vec![HCError::from(err)])
@@ -156,21 +156,13 @@ mod test {
         ",
     ).unwrap();
 
-    let mut ascript = AScriptStore::new();
-
-    let errors = compile_ascript_store(&g, &mut ascript);
-
-    for error in &errors {
-      eprintln!("{}", error);
-    }
-
-    assert!(errors.is_empty());
+    let mut ascript = AScriptStore::new(g).unwrap();
 
     assert_eq!(ascript.structs.len(), 2);
 
     let mut writer = StringBuffer::default();
 
-    rust::write(&g, &ascript, &mut writer);
+    rust::write(&ascript, &mut writer);
 
     eprintln!("{}", String::from_utf8(writer.into_output()).unwrap());
   }

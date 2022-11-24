@@ -1,6 +1,6 @@
 use crate::types::Body;
 use crate::types::BodyId;
-use crate::types::BodySymbolRef;
+use crate::types::BodySymbol;
 use crate::types::GrammarStore;
 use crate::types::ProductionId;
 use crate::types::SymbolID;
@@ -101,6 +101,7 @@ pub struct Item {
 }
 
 impl Item {
+  /// Creates a view of the item useful for debugging
   pub fn debug_string(&self, g: &GrammarStore) -> String {
     if self.is_null() {
       format!("{} null", self.state)
@@ -111,11 +112,11 @@ impl Item {
 
       string += &format!("{} ", self.state);
 
-      string += &g.productions.get(&body.prod).unwrap().name;
+      string += &g.productions.get(&body.prod_id).unwrap().name;
 
       string += " =>";
 
-      for (index, BodySymbolRef { sym_id, .. }) in body.syms.iter().enumerate() {
+      for (index, BodySymbol { sym_id, .. }) in body.syms.iter().enumerate() {
         if index == self.off as usize {
           string += " •";
         }
@@ -128,6 +129,30 @@ impl Item {
       if self.at_end() {
         string += " •";
       }
+      string
+    }
+  }
+
+  /// Creates a view of the item usefully for error reporting.
+  /// > Note: The item's position signifier `•` is not rendered.
+  pub fn blame_string(&self, g: &GrammarStore) -> String {
+    if self.is_null() {
+      format!("{} null", self.state)
+    } else {
+      let body = g.bodies.get(&self.body).unwrap();
+
+      let mut string = String::new();
+
+      string += &g.productions.get(&body.prod_id).unwrap().name;
+
+      string += " =>";
+
+      for (index, BodySymbol { sym_id, .. }) in body.syms.iter().enumerate() {
+        string += " ";
+
+        string += &sym_id.to_string(g)
+      }
+
       string
     }
   }
@@ -176,13 +201,7 @@ impl Item {
   /// grammar.
 
   pub fn from_body(body_id: &BodyId, g: &GrammarStore) -> Option<Self> {
-    g.bodies.get(body_id).map(|body| Item {
-      body:   *body_id,
-      len:    body.len as u8,
-      off:    0,
-      state:  ItemState::default(),
-      origin: OriginData::UNDEFINED,
-    })
+    g.bodies.get(body_id).map(|body| Item::from(body))
   }
 
   pub fn at_end(&self) -> bool {
@@ -293,7 +312,7 @@ impl Item {
     g.get_body(&self.get_body_id())
   }
 
-  pub fn get_body_ref<'a>(&self, g: &'a GrammarStore) -> HCResult<&'a BodySymbolRef> {
+  pub fn get_body_ref<'a>(&self, g: &'a GrammarStore) -> HCResult<&'a BodySymbol> {
     match self.get_body(&g) {
       HCResult::Ok(body) => HCResult::Ok(&body.syms[self.off as usize]),
       _ => HCResult::None,
@@ -363,11 +382,11 @@ impl Item {
   }
 
   pub fn get_prod_id(&self, g: &GrammarStore) -> ProductionId {
-    g.bodies.get(&self.get_body_id()).unwrap().prod
+    g.bodies.get(&self.get_body_id()).unwrap().prod_id
   }
 
   pub fn get_prod_as_sym_id(&self, g: &GrammarStore) -> SymbolID {
-    g.get_production(&g.bodies.get(&self.get_body_id()).unwrap().prod).unwrap().sym_id
+    g.get_production(&g.bodies.get(&self.get_body_id()).unwrap().prod_id).unwrap().sym_id
   }
 
   pub fn to_hash(&self) -> u64 {
@@ -380,6 +399,18 @@ impl Item {
     if self.at_end() {
     } else {
       eprintln!("{}", body.syms[self.off as usize].tok.blame(1, 1, "", None));
+    }
+  }
+}
+
+impl From<&Body> for Item {
+  fn from(body: &Body) -> Self {
+    Item {
+      body:   body.id,
+      len:    body.len as u8,
+      off:    0,
+      state:  ItemState::default(),
+      origin: OriginData::UNDEFINED,
     }
   }
 }

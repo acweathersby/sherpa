@@ -55,8 +55,9 @@ impl ReduceFunctionType {
   }
 }
 
+/// Identifiers for a Grammar
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
-pub struct GrammarRef {
+pub struct GrammarIds {
   /// A globally unique name to refer to this grammar by. Derived from the
   /// grammar's filepath.
   pub guid_name: String,
@@ -75,10 +76,10 @@ pub struct GrammarRef {
   pub path: PathBuf,
 }
 
-impl GrammarRef {
+impl GrammarIds {
   pub fn new(local_name: String, absolute_path: PathBuf) -> Arc<Self> {
     let guid_name = get_guid_grammar_name(&absolute_path).unwrap();
-    Arc::new(GrammarRef {
+    Arc::new(GrammarIds {
       guid: GrammarId(hash_id_value_u64(&guid_name)),
       guid_name,
       name: local_name,
@@ -87,7 +88,7 @@ impl GrammarRef {
   }
 }
 
-pub type ImportedGrammarReferences = HashMap<String, Arc<GrammarRef>>;
+pub type ImportedGrammarReferences = HashMap<String, Arc<GrammarIds>>;
 
 pub type ReduceFunctionTable = BTreeMap<ReduceFunctionId, ReduceFunctionType>;
 
@@ -125,7 +126,7 @@ pub type ReduceFunctionTable = BTreeMap<ReduceFunctionId, ReduceFunctionType>;
 ///     ```
 #[derive(Debug, Clone, Default)]
 pub struct GrammarStore {
-  pub id: Arc<GrammarRef>,
+  pub id: Arc<GrammarIds>,
 
   /// Maps [ProductionId] to a list of [BodyIds](BodyId)
   pub production_bodies: ProductionBodiesTable,
@@ -185,6 +186,9 @@ pub struct GrammarStore {
   pub reduce_functions: ReduceFunctionTable,
 
   pub merge_productions: BTreeMap<ProductionId, Vec<Body>>,
+
+  /// All productions that are reachable from the entry points.
+  pub parse_productions: BTreeSet<ProductionId>,
 }
 
 impl GrammarStore {

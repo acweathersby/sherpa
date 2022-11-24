@@ -2,6 +2,7 @@
 //! Methods for reporting errors are provided
 
 use std::convert;
+use std::convert::Infallible;
 use std::fmt::Display;
 use std::fmt::Error;
 use std::ops::ControlFlow;
@@ -10,6 +11,8 @@ use std::ops::Residual;
 use std::ops::Try;
 use std::path::Path;
 use std::path::PathBuf;
+use std::process::ExitCode;
+use std::process::Termination;
 use std::sync::Arc;
 
 use crate::compile_grammar_from_string;
@@ -18,10 +21,11 @@ use crate::types::*;
 /// A Result type that uses the HCTKError enum.
 // pub type HCResult<T> = Result<T, HCError>;
 
-#[derive(PartialEq, Debug, Hash)]
+#[derive(Debug)]
 pub enum HCResult<T> {
   Ok(T),
   Err(HCError),
+  MultipleErrors(Vec<HCError>),
   None,
 }
 
@@ -73,7 +77,7 @@ impl<T> HCResult<T> {
   /// ```
   #[inline]
   pub fn is_err(&self) -> bool {
-    matches!(self, HCResult::Err(_))
+    matches!(self, HCResult::Err(_) | HCResult::MultipleErrors(_))
   }
 
   /// Returns `true` if the result is `None`
@@ -138,6 +142,12 @@ impl<T> HCResult<T> {
       HCResult::Ok(val) => val,
       HCResult::None => panic!("called `HCResult::unwrap()` on an `None` value"),
       HCResult::Err(err) => panic!("called `HCResult::unwrap()` on an `Err` value: \n {}", err),
+      HCResult::MultipleErrors(errors) => {
+        panic!(
+          "called `HCResult::unwrap()` on an `MultipleErrors` value: \n {:#?}",
+          errors.debug_print()
+        )
+      }
     }
   }
 }
@@ -156,13 +166,13 @@ where
   }
 }
 
-impl<T, E> FromResidual<Result<convert::Infallible, E>> for HCResult<T>
+impl<T, E> FromResidual<Result<Infallible, E>> for HCResult<T>
 where
   HCError: From<E>,
 {
   #[inline]
   #[track_caller]
-  fn from_residual(residual: Result<convert::Infallible, E>) -> Self {
+  fn from_residual(residual: Result<Infallible, E>) -> Self {
     match residual {
       Err(e) => HCResult::Err(HCError::from(e)),
       _ => HCResult::from_residual(residual),
@@ -170,10 +180,10 @@ where
   }
 }
 
-impl<T> FromResidual<Option<convert::Infallible>> for HCResult<T> {
+impl<T> FromResidual<Option<Infallible>> for HCResult<T> {
   #[inline]
   #[track_caller]
-  fn from_residual(residual: Option<convert::Infallible>) -> Self {
+  fn from_residual(residual: Option<Infallible>) -> Self {
     match residual {
       Option::None => HCResult::None,
       Some(e) => HCResult::from_residual(residual),
@@ -181,21 +191,22 @@ impl<T> FromResidual<Option<convert::Infallible>> for HCResult<T> {
   }
 }
 
-impl<T> FromResidual<HCResult<T>> for HCResult<T> {
+impl<T> FromResidual<HCResult<Infallible>> for HCResult<T> {
   #[inline]
   #[track_caller]
-  fn from_residual(residual: HCResult<T>) -> Self {
-    residual
+  fn from_residual(residual: HCResult<Infallible>) -> Self {
+    match residual {
+      HCResult::Err(err) => HCResult::Err(err),
+      HCResult::MultipleErrors(err) => HCResult::MultipleErrors(err),
+      HCResult::Err(err) => HCResult::Err(err),
+      _ => HCResult::None,
+    }
   }
-}
-
-impl<T> Residual<T> for HCResult<T> {
-  type TryType = HCResult<T>;
 }
 
 impl<T> Try for HCResult<T> {
   type Output = T;
-  type Residual = HCResult<T>;
+  type Residual = HCResult<Infallible>;
 
   #[inline]
   fn from_output(output: Self::Output) -> Self {
@@ -207,7 +218,28 @@ impl<T> Try for HCResult<T> {
     match self {
       HCResult::Ok(v) => ControlFlow::Continue(v),
       HCResult::Err(e) => ControlFlow::Break(HCResult::Err(e)),
+      HCResult::MultipleErrors(e) => ControlFlow::Break(HCResult::MultipleErrors(e)),
       HCResult::None => ControlFlow::Break(HCResult::None),
+    }
+  }
+}
+
+impl<T> Termination for HCResult<T> {
+  fn report(self) -> std::process::ExitCode {
+    match self {
+      HCResult::MultipleErrors(errors) => {
+        errors.stderr_print();
+        ExitCode::FAILURE
+      }
+      HCResult::Err(error) => {
+        eprintln!("{}", error);
+        ExitCode::FAILURE
+      }
+      HCResult::None => {
+        eprintln!("No Results");
+        ExitCode::FAILURE
+      }
+      HCResult::Ok(val) => ExitCode::SUCCESS,
     }
   }
 }

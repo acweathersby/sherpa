@@ -18,6 +18,7 @@ pub fn dispatch<T: BaseCharacterReader + MutCharacterReader>(
   let mut i = (ctx.get_active_state() & STATE_ADDRESS_MASK);
 
   loop {
+    // println!("instr: {:0>6x} {} b: {} cp: {} cls: {}", i, r.cursor(), r.byte(), r.codepoint(), r.class());
 
     let instr = INSTRUCTION::from(bc, i as usize);
 

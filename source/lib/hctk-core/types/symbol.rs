@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::fmt::Display;
 use std::str::FromStr;
+use std::sync::Arc;
 
 use crate::grammar::uuid::hash_id_value_u64;
 use crate::utf8::lookup_table::HORIZONTAL_TAB;
@@ -12,9 +13,11 @@ use crate::utf8::lookup_table::SPACE;
 use crate::utf8::lookup_table::SYMBOL;
 
 use super::GrammarId;
+use super::GrammarIds;
 use super::GrammarStore;
 use super::HCResult;
 use super::ProductionId;
+use super::Token;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
 pub struct StringId(pub u64);
@@ -223,6 +226,13 @@ impl SymbolID {
     }
   }
 
+  pub fn is_token_production(&self) -> bool {
+    match self {
+      Self::TokenProduction(..) => true,
+      _ => false,
+    }
+  }
+
   pub fn is_defined(&self) -> bool {
     match self {
       Self::DefinedNumeric(_)
@@ -296,7 +306,7 @@ impl SymbolID {
 pub type SymbolUUID = SymbolID;
 
 #[repr(C, align(64))]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 
 pub struct Symbol {
   /// The globally unique identifier of this symbol
@@ -322,6 +332,10 @@ pub struct Symbol {
   /// A name that can be used in debug and
   /// error reports .
   pub friendly_name: String,
+  /// The first location this symbol was identified
+  pub loc:           Token,
+
+  pub g_ref: Option<Arc<GrammarIds>>,
 }
 
 impl Symbol {
@@ -329,50 +343,62 @@ impl Symbol {
     &Symbol {
       guid:          SymbolID::GenericSpace,
       bytecode_id:   SPACE as u32,
-      byte_length:   1,
       cp_len:        1,
-      scanner_only:  false,
+      byte_length:   1,
       friendly_name: String::new(),
+      loc:           Token::empty(),
+      scanner_only:  false,
+      g_ref:         None,
     },
     &Symbol {
       guid:          SymbolID::GenericHorizontalTab,
       bytecode_id:   HORIZONTAL_TAB as u32,
       byte_length:   1,
       cp_len:        1,
-      scanner_only:  false,
       friendly_name: String::new(),
+      loc:           Token::empty(),
+      scanner_only:  false,
+      g_ref:         None,
     },
     &Symbol {
       guid:          SymbolID::GenericNewLine,
       bytecode_id:   NEW_LINE as u32,
       byte_length:   1,
       cp_len:        1,
-      scanner_only:  false,
       friendly_name: String::new(),
+      loc:           Token::empty(),
+      scanner_only:  false,
+      g_ref:         None,
     },
     &Symbol {
       guid:          SymbolID::GenericIdentifier,
       bytecode_id:   IDENTIFIER as u32,
-      byte_length:   0,
       cp_len:        1,
-      scanner_only:  false,
+      byte_length:   0,
       friendly_name: String::new(),
+      loc:           Token::empty(),
+      scanner_only:  false,
+      g_ref:         None,
     },
     &Symbol {
       guid:          SymbolID::GenericNumber,
       bytecode_id:   NUMBER as u32,
-      byte_length:   0,
       cp_len:        1,
-      scanner_only:  false,
+      byte_length:   0,
       friendly_name: String::new(),
+      loc:           Token::empty(),
+      scanner_only:  false,
+      g_ref:         None,
     },
     &Symbol {
       guid:          SymbolID::GenericSymbol,
       bytecode_id:   SYMBOL as u32,
-      byte_length:   0,
       cp_len:        1,
-      scanner_only:  false,
+      byte_length:   0,
       friendly_name: String::new(),
+      loc:           Token::empty(),
+      scanner_only:  false,
+      g_ref:         None,
     },
   ];
 

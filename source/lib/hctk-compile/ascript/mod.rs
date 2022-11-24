@@ -1,4 +1,5 @@
 pub mod compile;
+pub mod errors;
 pub mod rust;
 pub mod types;
 
@@ -11,18 +12,15 @@ use hctk_core::writer::code_writer::CodeWriter;
 /// The module is placed at `<source_output_dir>/<grammar_name>_parser_ast.rs`.
 pub fn build_ast(source_type: SourceType) -> PipelineTask {
   PipelineTask {
-    fun: Box::new(move |ctx| match source_type {
-      SourceType::Rust => {
+    fun: Box::new(move |ctx| match (source_type, ctx.get_ascript()) {
+      (SourceType::Rust, Some(ascript)) => {
         let mut writer = CodeWriter::new(vec![]);
-        match rust::write(&ctx.get_grammar(), &ctx.get_ascript(), &mut writer) {
+        match rust::write(ascript, &mut writer) {
           Ok(_) => Ok(Some(unsafe { String::from_utf8_unchecked(writer.into_output()) })),
           Err(err) => Err(vec![HCError::from(err)]),
         }
       }
-      _ => Err(vec![HCError::from(format!(
-        "Unable to build an AST output for the source type {:?}",
-        source_type
-      ))]),
+      _ => Ok(Some(String::default())),
     }),
     require_ascript: true,
     require_bytecode: false,
@@ -33,12 +31,30 @@ pub fn build_ast(source_type: SourceType) -> PipelineTask {
 mod rust_ast_build {
   use std::path::PathBuf;
 
-  use crate::ascript::compile::compile_ascript_store;
   use crate::ascript::types::AScriptStore;
   use hctk_core::types::GrammarStore;
+  use hctk_core::types::HCResult;
   use hctk_core::writer::code_writer::StringBuffer;
 
   use super::rust;
+
+  #[test]
+  fn test_temp() {
+    let g = GrammarStore::from_path(
+      PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../test/e2e/bootstrap/grammar/script.hcg")
+        .canonicalize()
+        .unwrap(),
+    )
+    .unwrap();
+    let mut ascript = AScriptStore::new(g).unwrap();
+
+    let mut writer = StringBuffer::new(vec![]);
+
+    rust::write(&ascript, &mut writer).unwrap();
+
+    eprintln!("{}", String::from_utf8(writer.into_output()).unwrap());
+  }
 
   #[test]
   fn test_grammar_imported_grammar() {
@@ -49,18 +65,11 @@ mod rust_ast_build {
         .unwrap(),
     )
     .unwrap();
-    let mut ascript = AScriptStore::new();
-
-    let errors = compile_ascript_store(&g, &mut ascript);
-    for error in &errors {
-      eprintln!("{}", error);
-    }
-
-    assert!(errors.is_empty());
+    let mut ascript = AScriptStore::new(g).unwrap();
 
     let mut writer = StringBuffer::new(vec![]);
 
-    rust::write(&g, &ascript, &mut writer).unwrap();
+    rust::write(&ascript, &mut writer).unwrap();
 
     eprintln!("{}", String::from_utf8(writer.into_output()).unwrap());
   }
@@ -91,16 +100,11 @@ mod rust_ast_build {
 ",
     )
     .unwrap();
-    let mut ascript = AScriptStore::new();
-
-    let errors = compile_ascript_store(&g, &mut ascript);
-    for error in &errors {
-      eprintln!("{}", error);
-    }
+    let mut ascript = AScriptStore::new(g).unwrap();
 
     let mut writer = StringBuffer::new(vec![]);
 
-    rust::write(&g, &ascript, &mut writer);
+    rust::write(&ascript, &mut writer);
 
     eprintln!("{}", String::from_utf8(writer.into_output()).unwrap());
   }
@@ -246,21 +250,69 @@ mod rust_ast_build {
     )
     .unwrap();
 
-    let mut store = AScriptStore::new();
-
-    let errors = compile_ascript_store(&g, &mut store);
-
-    println!("{:#?}", store);
-
-    for error in &errors {
-      eprintln!("{}", error);
-    }
+    let mut ascript = AScriptStore::new(g).unwrap();
 
     let mut writer = StringBuffer::new(vec![]);
 
-    rust::write(&g, &store, &mut writer);
+    rust::write(&ascript, &mut writer);
 
     eprintln!("{}", String::from_utf8(writer.into_output()).unwrap());
+  }
+
+  #[test]
+  fn handles_multipart_arrays() -> HCResult<()> {
+    use HCResult::*;
+    let g = GrammarStore::from_str(
+      "     
+      <> A > B(+) | C 
+
+      <> B > \\tok
+
+      <> C > D(+ t:t ) 
+             ( t:x t:y t:z )?
+             ( t:x t:y t:z f:ast { { t_A } } )?
+
+              f:ast { [ $1, $2, $3 ] }
+
+        | ( t:ggg t:rrr )
+
+              f:ast{  [$1] }
+
+      <> D > \\xxx
+  ",
+    )
+    .unwrap();
+
+    let ascript = AScriptStore::new(g)?;
+
+    let mut writer = StringBuffer::new(vec![]);
+
+    rust::write(&ascript, &mut writer)?;
+
+    Ok(())
+  }
+
+  #[test]
+  fn rust_vector_return_types_print_correctly() -> HCResult<()> {
+    use HCResult::*;
+    let g = GrammarStore::from_str(
+      " 
+        <> A > B f:ast { { t_A, r:$1 } }
+
+        <> B > \\z ? ( \\d  )(*)  f:ast { [$1, $2] }
+        ",
+    )
+    .unwrap();
+
+    let ascript = AScriptStore::new(g)?;
+
+    let mut writer = StringBuffer::new(vec![]);
+
+    rust::write(&ascript, &mut writer)?;
+
+    println!("{}", String::from_utf8(writer.into_output())?);
+
+    Ok(())
   }
 
   #[test]
@@ -319,12 +371,10 @@ mod rust_ast_build {
         ",
     ).unwrap();
 
-    let mut store = AScriptStore::new();
-
-    let errors = compile_ascript_store(&g, &mut store);
+    let mut ascript = AScriptStore::new(g).unwrap();
     let mut writer = StringBuffer::new(vec![]);
 
-    rust::write(&g, &store, &mut writer);
+    rust::write(&ascript, &mut writer);
   }
 
   // pri
@@ -338,19 +388,13 @@ mod rust_ast_build {
     )
     .unwrap();
 
-    let mut store = AScriptStore::new();
+    let mut ascript = AScriptStore::new(g).unwrap();
 
-    let errors = compile_ascript_store(&g, &mut store);
-
-    for error in &errors {
-      eprintln!("{}", error);
-    }
-
-    eprintln!("{:#?}", store);
+    eprintln!("{:#?}", ascript);
 
     let mut writer = StringBuffer::new(vec![]);
 
-    rust::write(&g, &store, &mut writer);
+    rust::write(&ascript, &mut writer);
 
     eprintln!("{}", String::from_utf8(writer.into_output()).unwrap());
   }
@@ -360,6 +404,7 @@ mod rust_ast_build {
 mod ascript_compile_tests {
 
   use crate::ascript::compile::compile_ascript_store;
+  use crate::ascript::compile::compile_struct_props;
   use crate::ascript::compile::compile_struct_type;
   use crate::ascript::types::AScriptStore;
   use hctk_core::grammar::data::ast::ASTNode;
@@ -381,15 +426,12 @@ mod ascript_compile_tests {
 
     if let ASTNode::AST_Struct(ast_struct) = ast.unwrap() {
       let (_, errors) = compile_struct_type(
-        &GrammarStore::default(),
-        &mut AScriptStore::new(),
+        &mut AScriptStore::default(),
         &ast_struct,
-        &create_dummy_body(),
+        &create_dummy_body(BodyId(0)),
       );
 
-      for error in &errors {
-        eprintln!("{}", error);
-      }
+      errors.debug_print();
 
       assert_eq!(errors.len(), 1);
     } else {
@@ -397,8 +439,8 @@ mod ascript_compile_tests {
     }
   }
 
-  fn create_dummy_body() -> hctk_core::types::Body {
-    hctk_core::types::Body { ..Default::default() }
+  fn create_dummy_body(id: BodyId) -> hctk_core::types::Body {
+    hctk_core::types::Body { id, ..Default::default() }
   }
 
   #[test]
@@ -409,15 +451,12 @@ mod ascript_compile_tests {
 
     if let ASTNode::AST_Struct(ast_struct) = ast.unwrap() {
       let (_, errors) = compile_struct_type(
-        &GrammarStore::default(),
-        &mut AScriptStore::new(),
+        &mut AScriptStore::default(),
         &ast_struct,
-        &create_dummy_body(),
+        &create_dummy_body(BodyId(0)),
       );
 
-      for error in &errors {
-        eprintln!("{}", error);
-      }
+      errors.debug_print();
 
       assert_eq!(errors.len(), 1);
     } else {
@@ -429,30 +468,25 @@ mod ascript_compile_tests {
   fn test_parse_errors_when_struct_prop_type_is_redefined() {
     let astA = compile_ascript_ast(" { t_TestA, apple: u32 }".as_bytes().to_vec());
     assert!(astA.is_ok());
-
     let astB = compile_ascript_ast(" { t_TestA, apple: i64 }".as_bytes().to_vec());
-
     assert!(astB.is_ok());
 
-    let mut ast = AScriptStore::new();
+    let mut ast = AScriptStore::default();
 
+    let body = create_dummy_body(BodyId(0));
     if let ASTNode::AST_Struct(ast_struct) = astA.unwrap() {
-      let (_, errors) =
-        compile_struct_type(&GrammarStore::default(), &mut ast, &ast_struct, &create_dummy_body());
+      let (id, mut errors) = compile_struct_type(&mut ast, &ast_struct, &body);
+      let (_, mut e) = compile_struct_props(&mut ast, &id, &ast_struct, &body);
+      errors.append(&mut e);
+      errors.debug_print();
 
-      assert!(errors.is_empty());
+      assert!(!errors.have_errors());
 
       if let ASTNode::AST_Struct(ast_struct) = astB.unwrap() {
-        let (_, errors) = compile_struct_type(
-          &GrammarStore::default(),
-          &mut ast,
-          &ast_struct,
-          &create_dummy_body(),
-        );
-
-        for error in &errors {
-          eprintln!("{}", error);
-        }
+        let (id, mut errors) = compile_struct_type(&mut ast, &ast_struct, &body);
+        let (_, mut e) = compile_struct_props(&mut ast, &id, &ast_struct, &body);
+        errors.append(&mut e);
+        errors.debug_print();
 
         assert_eq!(errors.len(), 1);
       } else {
@@ -465,9 +499,9 @@ mod ascript_compile_tests {
 
   #[test]
   fn test_prop_is_made_optional_when_not_present_or_introduced_in_subsequent_definitions() {
-    let mut ast = AScriptStore::new();
+    let mut ast = AScriptStore::default();
 
-    for struct_ in [
+    for (i, struct_) in [
       " { t_TestA, apple: u32, beetle:bool }",
       " { t_TestA, beetle:bool }",
       " { t_TestB }",
@@ -475,16 +509,21 @@ mod ascript_compile_tests {
     ]
     .iter()
     .map(|input| compile_ascript_ast(input.as_bytes().to_vec()))
+    .enumerate()
     {
       assert!(struct_.is_ok());
 
       if let ASTNode::AST_Struct(struct_) = struct_.unwrap() {
-        let (_, errors) =
-          compile_struct_type(&GrammarStore::default(), &mut ast, &struct_, &create_dummy_body());
+        let body = create_dummy_body(BodyId(i as u64));
+        let (id, errors) = compile_struct_type(&mut ast, &struct_, &body);
 
-        for error in &errors {
-          eprintln!("{}", error);
-        }
+        errors.debug_print();
+
+        assert!(errors.is_empty());
+
+        let errors = compile_struct_props(&mut ast, &id, &struct_, &body).1;
+
+        errors.debug_print();
 
         assert!(errors.is_empty());
       }
@@ -519,15 +558,13 @@ mod ascript_compile_tests {
     )
     .unwrap();
 
-    let mut store = AScriptStore::new();
-
-    let errors = compile_ascript_store(&g, &mut store);
-
-    for error in &errors {
-      eprintln!("{}", error);
+    match AScriptStore::new(g) {
+      HCResult::MultipleErrors(errors) => {
+        errors.debug_print();
+        assert_eq!(errors.len(), 1);
+      }
+      _ => unreachable!("This should have generated an error"),
     }
-
-    assert_eq!(errors.len(), 1);
   }
 
   #[test]

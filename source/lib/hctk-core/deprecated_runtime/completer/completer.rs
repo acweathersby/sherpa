@@ -88,7 +88,8 @@ pub fn complete<'b, I: ParseIterator<T>, T: 'b + ByteReader, Node: Debug>(
     ParseAction::ERROR { production, .. } => {
       let mut tok = Token::from_parse_token(&last_token);
       tok.set_source(source.clone());
-      Err(HCError::rt_err_parse_error {
+      Err(HCError::rt_err {
+        path: Default::default(),
         production,
         tok,
         source: Some(iterator.reader().get_source()),

@@ -210,6 +210,27 @@ mod state_constructor_tests {
   }
 
   #[test]
+  pub fn generate_conflicts() {
+    let grammar = GrammarStore::from_path(
+      PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../test/e2e/bootstrap/grammar/comment.hcg")
+        .canonicalize()
+        .unwrap(),
+    )
+    .unwrap();
+
+    let IROutput { errors, states } =
+      generate_production_states(&grammar.get_production_id_by_name("comment").unwrap(), &grammar);
+
+    for error in &errors {
+      println!("{}", error);
+    }
+
+    println!("{:#?}", states);
+    // assert_eq!(errors.len(), 1);
+  }
+
+  #[test]
   pub fn generate_A_state_of_a_merged_grammar_with_extended_production() {
     let grammar = GrammarStore::from_path(
       PathBuf::from(env!("CARGO_MANIFEST_DIR"))

@@ -1681,7 +1681,6 @@ where
     fn GetType(&self) -> u32 {
         use ASTNode::*;
         match self {
-            _ => 0,
             
                 Grammar(node) => 
                     node.as_ref().GetType(),
@@ -1852,7 +1851,9 @@ where
                 FunctionIndexWildCard(node) => 
                     node.as_ref().GetType(),
                 FunctionIndexId(node) => 
-                    node.as_ref().GetType()}
+                    node.as_ref().GetType(),
+                
+            _ => 0,}
     }
 
     fn Type() -> u32 { 0 }

@@ -25,6 +25,7 @@ use crate::grammar::data::ast::AST_NUMBER;
 use crate::grammar::data::ast::DEFAULT;
 use crate::grammar::data::ast::HASH_NAME;
 use crate::grammar::data::ast::IR_STATE;
+use crate::types::ExportedProduction;
 use crate::types::GrammarStore;
 use crate::types::IRState;
 
@@ -330,7 +331,10 @@ fn is_goto(i: &ASTNode) -> bool {
 }
 
 fn get_entry_states(g: &GrammarStore) -> BTreeSet<String> {
-  g.exports.iter().map(|(name, ..)| g.get_production_guid_name(name).to_string()).collect()
+  g.get_exported_productions()
+    .iter()
+    .map(|ExportedProduction { guid_name, .. }| guid_name.to_string())
+    .collect()
 }
 
 #[test]

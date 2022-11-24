@@ -2,6 +2,9 @@
 #![feature(const_fmt_arguments_new)]
 #![feature(box_patterns)]
 #![allow(non_snake_case)]
+#![feature(drain_filter)]
+#![feature(btree_drain_filter)]
+#![feature(hash_drain_filter)]
 
 mod ascript;
 mod builder;
@@ -13,6 +16,7 @@ use std::fs::create_dir_all;
 use std::path::PathBuf;
 
 pub use builder::bytecode;
+use hctk_core::types::HCErrorContainer;
 
 pub use crate::builder::pipeline::BuildPipeline;
 pub use source_types::*;
@@ -27,22 +31,23 @@ pub mod tasks {
 
 /// Convenience function for building a bytecode based parser. Use this in
 /// build scripts to output a parser source file to `{OUT_DIR}/hc_parser/{grammar_name}.rs`.
-pub fn compile_bytecode_parser(grammar_source_path: &PathBuf) -> bool {
+pub fn compile_bytecode_parser(grammar_source_path: &PathBuf, include_ascript: bool) -> bool {
   let mut out_dir = std::env::var("OUT_DIR").map(|d| PathBuf::from(&d)).unwrap();
 
   out_dir.push("./hc_parser/");
 
   create_dir_all(&out_dir).unwrap();
 
-  BuildPipeline::from_source(&grammar_source_path, 0)
+  let pipeline = BuildPipeline::from_source(&grammar_source_path, 0)
     .set_source_output_dir(&out_dir)
     .set_build_output_dir(&out_dir)
     .set_source_file_name("%.rs")
-    .add_task(tasks::build_bytecode_parser(SourceType::Rust, true))
-    .add_task(tasks::build_ast(SourceType::Rust))
+    .add_task(tasks::build_bytecode_parser(SourceType::Rust, include_ascript));
+
+  if include_ascript { pipeline.add_task(tasks::build_ast(SourceType::Rust)) } else { pipeline }
     .add_task(tasks::build_bytecode_disassembly())
     .run(|errors| {
-      for error in errors {
+      for error in &errors {
         eprintln!("{}", error);
       }
     })
@@ -85,15 +90,7 @@ mod library_smoke_tests {
     )
     .unwrap();
 
-    let mut ascript = AScriptStore::new();
-
-    let errors = compile_ascript_store(&g, &mut ascript);
-
-    for error in &errors {
-      eprintln!("{}", error);
-    }
-
-    assert!(errors.is_empty());
+    let mut ascript = AScriptStore::new(g).unwrap();
 
     assert_eq!(ascript.structs.len(), 1);
   }

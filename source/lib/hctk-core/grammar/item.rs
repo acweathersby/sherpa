@@ -12,6 +12,7 @@ use crate::types::SymbolID;
 
 /// Retrieve the initial items of a production. Returns vector of
 /// items, one for each body belonging to the production.
+#[inline]
 pub fn get_production_start_items(prod_id: &ProductionId, g: &GrammarStore) -> Vec<Item> {
   g.production_bodies
     .get(prod_id)
@@ -43,6 +44,7 @@ pub fn create_closure(items: &[Item], g: &GrammarStore) -> Vec<Item> {
 /// Retrieve the closure of an item that is cached in the grammar
 /// store. Falls back to manually building the closure if it is not
 /// cached. Does not modify the grammar store object.
+#[inline]
 pub fn get_closure_cached<'a>(item: &Item, g: &'a GrammarStore) -> &'a Vec<Item> {
   static empty_closure: Vec<Item> = vec![];
   if item.is_end() {
@@ -58,7 +60,7 @@ pub fn get_closure_cached<'a>(item: &Item, g: &'a GrammarStore) -> &'a Vec<Item>
 
 /// Memoized form of 'get_closure_cached', which adds the Item's
 /// closure to the grammar store if it is not already present.
-
+#[inline]
 pub fn get_closure_cached_mut<'a>(item: &Item, g: &'a mut GrammarStore) -> &'a Vec<Item> {
   let item = &item.to_zero_state();
 

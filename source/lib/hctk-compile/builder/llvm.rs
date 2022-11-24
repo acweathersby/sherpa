@@ -182,7 +182,7 @@ pub fn build_llvm_parser_interface<'a>(include_ascript_mixins: bool) -> Pipeline
             grammar,
             &grammar_name,
             &parser_name,
-            if include_ascript_mixins { Some(task_ctx.get_ascript()) } else { None },
+            if include_ascript_mixins { task_ctx.get_ascript() } else { None },
           ) {
             Err(err) => Err(vec![HCError::from(err)]),
             Ok(_) => Ok(Some(unsafe { String::from_utf8_unchecked(writer.into_output()) })),

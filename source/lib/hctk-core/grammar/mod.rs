@@ -33,7 +33,7 @@ fn temp_test() {
     10,
   );
 
-  if errors.len()> 0 {
+  if errors.len() > 0 {
     for error in errors {
       println!("{}", error);
     }
@@ -127,8 +127,8 @@ mod test_grammar {
   use crate::grammar::compile::pre_process_grammar;
   use crate::grammar::compile_grammar_from_path;
   use crate::grammar::load::load_all;
-  use crate::types::ErrorGroup;
-use crate::types::RecursionType;
+  use crate::types::HCErrorContainer;
+  use crate::types::RecursionType;
 
   use super::compile::convert_left_recursion_to_right;
   use super::compile_grammar_from_string;
@@ -155,11 +155,9 @@ use crate::types::RecursionType;
       if errors.have_critical() {
         panic!("Critical Errors encountered");
       }
-    } 
-    
-    
+    }
+
     assert!(grammar.is_some());
-    
   }
 
   #[test]
