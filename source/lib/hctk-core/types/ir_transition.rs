@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::hash::Hash;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::vec;
 
 use super::HCError;
@@ -206,12 +207,18 @@ impl TransitionGraphNode {
     self.trans_type &= self.trans_type ^ transition_type
   }
 
-  pub fn debug_string(&self, grammar: &GrammarStore) -> String {
+  pub fn debug_string(&self, g: &GrammarStore) -> String {
     format!(
-      "{{[{}]\n  par:[{}]  [{:?}]}}",
+      "{{[{}] par:[{}] sym:{}\n    [\n{}\n    ]}}",
       self.id,
       self.parent,
-      self.items.iter().map(|i| i.debug_string(grammar)).collect::<Vec<_>>()
+      self.terminal_symbol.to_string(g),
+      self
+        .items
+        .iter()
+        .map(|i| "   ".to_string() + &i.debug_string(g))
+        .collect::<Vec<_>>()
+        .join("\n")
     )
   }
 }
@@ -255,6 +262,8 @@ pub struct TransitionPack {
   pub out_of_scope_closure: Option<Vec<Item>>,
   pub errors: Vec<HCError>,
   pub events: BTreeMap<u64, usize>,
+
+  pub g: Arc<GrammarStore>,
 }
 
 impl TransitionPack {
@@ -274,7 +283,7 @@ impl TransitionPack {
   }
 
   pub fn new(
-    g: &GrammarStore,
+    g: Arc<GrammarStore>,
     mode: TransitionMode,
     is_scanner: bool,
     starts: &[Item],
@@ -288,6 +297,7 @@ impl TransitionPack {
       root_prod_ids,
       starts: BTreeSet::from_iter(starts.iter().map(|i| i.to_start().to_zero_state())),
       nodes: Vec::with_capacity(256),
+      g,
       ..Default::default()
     }
   }
@@ -427,5 +437,13 @@ impl TransitionPack {
 
   pub fn get_node_len(&self) -> usize {
     self.nodes.len()
+  }
+
+  pub fn print_nodes(&self) {
+    for node in &self.nodes {
+      if !node.is_orphan(self) || node.id == 0 {
+        println!("{}\n", node.debug_string(&self.g));
+      }
+    }
   }
 }

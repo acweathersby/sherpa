@@ -99,6 +99,7 @@ pub enum SymbolID {
   Default,
   EndOfFile,
   Undefined,
+  Start,
 }
 
 impl Default for SymbolID {
@@ -166,6 +167,7 @@ impl SymbolID {
       Self::TokenProduction(prod_id, _) => {
         format!("tk:{}", g.productions.get(prod_id).unwrap().name)
       }
+      Self::Start => "start".to_string(),
       Self::Default => "default".to_string(),
       Self::Undefined => "[??]".to_string(),
       Self::Recovery => gen_rec_marker_str.to_string(),
@@ -190,6 +192,7 @@ impl SymbolID {
       Self::Production(prod_id, _) => "__defined".to_string(),
       Self::TokenProduction(prod_id, _) => "__defined".to_string(),
       Self::Default => "__default".to_string(),
+      Self::Start => "__start".to_string(),
       Self::Undefined => "__undefined".to_string(),
       Self::Recovery => "__rec".to_string(),
       Self::EndOfFile => "__eof".to_string(),
@@ -288,7 +291,7 @@ impl SymbolID {
           9999
         }
       }
-      Self::Default => 9999,
+      Self::Default | Self::Start => 9999,
       Self::Production(..) => 0,
       Self::Undefined => 0,
       Self::Recovery => 0,

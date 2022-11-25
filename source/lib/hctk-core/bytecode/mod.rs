@@ -136,7 +136,7 @@ mod byte_code_creation_tests {
 
     let prod_id = g.get_production_id_by_name("A").unwrap();
 
-    let result = generate_production_states(&prod_id, &g).states;
+    let result = generate_production_states(&prod_id, g).states;
 
     println!("{:#?}", result);
 
@@ -187,7 +187,7 @@ mod byte_code_creation_tests {
 ",
     )
     .unwrap();
-    let (mut ir_states, _) = compile_states(&g, 1);
+    let (mut ir_states, _) = compile_states(g.clone(), 1);
 
     let output = compile_bytecode(&g, &mut optimize_ir_states(ir_states, &g));
 
@@ -216,7 +216,7 @@ mod byte_code_creation_tests {
     )
     .unwrap();
 
-    let (mut states, _) = compile_states(&g, 1);
+    let (mut states, _) = compile_states(g.clone(), 1);
     let output = compile_bytecode(&g, &mut optimize_ir_states(states, &g));
     println!(
       "dD: {}",
@@ -241,7 +241,7 @@ mod byte_code_creation_tests {
 
     let prod_id = g.get_production_id_by_name("test").unwrap();
 
-    let result = generate_production_states(&prod_id, &g).states;
+    let result = generate_production_states(&prod_id, g).states;
 
     for state in result {
       println!("{:#?}", state.get_code());
@@ -306,7 +306,7 @@ mod byte_code_creation_tests {
       <> tok_identifier > ( g:id | g:num )(+)                     ",
     ).unwrap();
 
-    let (mut states, _) = compile_states(&g, 1);
+    let (mut states, _) = compile_states(g.clone(), 1);
     let output = compile_bytecode(&g, &mut optimize_ir_states(states, &g));
     return;
     println!(

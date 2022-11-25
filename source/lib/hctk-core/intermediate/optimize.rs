@@ -448,7 +448,7 @@ fn optimize_grammar() {
   
   ").unwrap();
 
-  let (mut states, _) = compile_states(&g, 10);
+  let (mut states, _) = compile_states(g.clone(), 10);
   let pre_opt_length = states.len();
 
   let state_refs = states.iter().collect::<Vec<_>>();

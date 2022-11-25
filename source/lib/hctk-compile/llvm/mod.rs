@@ -612,7 +612,7 @@ mod test {
   ",
     )
     .unwrap();
-    let (mut ir_states, _) = compile_states(&g, 1);
+    let (mut ir_states, _) = compile_states(g.clone(), 1);
     let bytecode_output = compile_bytecode(&g, &mut optimize_ir_states(ir_states, &g));
 
     if let Ok(mut ctx) = compile_from_bytecode("test", &g, &Context::create(), &bytecode_output) {
@@ -714,7 +714,7 @@ mod test {
     )
     .unwrap();
 
-    let (mut ir_states, _) = compile_states(&g, 1);
+    let (mut ir_states, _) = compile_states(g.clone(), 1);
     let bytecode_output = compile_bytecode(&g, &mut optimize_ir_states(ir_states, &g));
 
     if let Ok(mut ctx) = compile_from_bytecode("test", &g, &Context::create(), &bytecode_output) {

@@ -64,7 +64,7 @@ mod test_end_to_end {
     )
     .unwrap();
 
-    let (mut states, _) = compile_states(&g, threads);
+    let (mut states, _) = compile_states(g.clone(), threads);
 
     for state in states.values_mut() {
       if state.get_ast().is_none() {

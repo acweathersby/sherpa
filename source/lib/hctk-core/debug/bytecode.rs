@@ -387,11 +387,11 @@ mod bytecode_debugging_tests {
 
     let prod_id = g.get_production_id_by_name("A").unwrap();
 
-    let (states, _) = compile_states(&g, 1);
+    let (states, _) = compile_states(g.clone(), 1);
 
     let output = compile_bytecode(&g, &mut optimize_ir_states(states, &g));
 
-    let result = generate_production_states(&prod_id, &g).states;
+    let result = generate_production_states(&prod_id, g.clone()).states;
 
     let states = result
       .into_iter()

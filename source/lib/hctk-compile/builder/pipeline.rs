@@ -189,16 +189,16 @@ impl<'a> BuildPipeline<'a> {
 
     // Build bytecode if needed.
     self.bytecode = if self.tasks.iter().any(|t| t.0.require_bytecode) {
-      let g = &self.grammar.as_ref().unwrap();
+      let g = self.grammar.as_ref().unwrap();
 
-      let (ir_states, mut e) = compile_states(g, self.threads);
+      let (ir_states, mut e) = compile_states(g.clone(), self.threads);
       let have_critical_errors = e.have_critical();
       errors.append(&mut e);
 
       if !have_critical_errors {
-        let mut optimized_ir_state = optimize_ir_states(ir_states, g);
+        let mut optimized_ir_state = optimize_ir_states(ir_states, &g);
 
-        let bytecode_output = compile_bytecode(g, &mut optimized_ir_state);
+        let bytecode_output = compile_bytecode(&g, &mut optimized_ir_state);
 
         Some(bytecode_output)
       } else {
