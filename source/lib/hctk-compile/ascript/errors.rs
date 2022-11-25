@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::fmt::format;
 use std::sync::Arc;
 
 use hctk_core::types::*;
@@ -44,6 +43,8 @@ pub struct ErrPropRedefinition {
 }
 
 impl ErrPropRedefinition {
+  pub const friendly_name: &'static str = "AScript: Structure Property Redefinition";
+
   pub fn new(
     struct_type: String,
     prop_name: String,
@@ -78,6 +79,10 @@ impl ExtendedError for ErrPropRedefinition {
 
   fn severity(&self) -> HCErrorSeverity {
     HCErrorSeverity::Critical
+  }
+
+  fn friendly_name(&self) -> &str {
+    ErrPropRedefinition::friendly_name
   }
 }
 
@@ -115,6 +120,8 @@ pub struct ErrUnionOfScalarsAndVectors {
 }
 
 impl ErrUnionOfScalarsAndVectors {
+  pub const friendly_name: &'static str = "AScript: Vector / Scalar Collision";
+
   pub fn new(
     grammar: Arc<GrammarStore>,
     prod_id: ProductionId,
@@ -159,6 +166,10 @@ Vector Types:
   fn severity(&self) -> HCErrorSeverity {
     HCErrorSeverity::Critical
   }
+
+  fn friendly_name(&self) -> &str {
+    ErrUnionOfScalarsAndVectors::friendly_name
+  }
 }
 
 /// Occurs when a production returns incompatible type values, such numeric values
@@ -195,6 +206,8 @@ pub struct ErrIncompatibleProductionScalerTypes {
 }
 
 impl ErrIncompatibleProductionScalerTypes {
+  pub const friendly_name: &'static str = "AScript: Incompatible Scalar Types";
+
   pub fn new(
     p: ProductionId,
     g: Arc<GrammarStore>,
@@ -243,6 +256,10 @@ impl ExtendedError for ErrIncompatibleProductionScalerTypes {
   fn severity(&self) -> HCErrorSeverity {
     HCErrorSeverity::Critical
   }
+
+  fn friendly_name(&self) -> &str {
+    ErrIncompatibleProductionScalerTypes::friendly_name
+  }
 }
 
 /// Occurs when a production returns incompatible vector type values, such as numeric values
@@ -279,6 +296,8 @@ pub struct ErrIncompatibleProductionVectorTypes {
 }
 
 impl ErrIncompatibleProductionVectorTypes {
+  pub const friendly_name: &'static str = "AScript: Incompatible Vector Types";
+
   pub fn new(
     p: ProductionId,
     g: Arc<GrammarStore>,
@@ -314,5 +333,9 @@ impl ExtendedError for ErrIncompatibleProductionVectorTypes {
 
   fn severity(&self) -> HCErrorSeverity {
     HCErrorSeverity::Critical
+  }
+
+  fn friendly_name(&self) -> &str {
+    ErrIncompatibleProductionVectorTypes::friendly_name
   }
 }

@@ -33,6 +33,14 @@ pub use grammar::compile_grammar_from_string;
 // Common utility functions
 use std::num::NonZeroUsize;
 
+pub mod errors {
+  pub use crate::intermediate::errors::*;
+  pub use crate::types::HCError;
+  pub use crate::types::HCError::*;
+  pub use crate::types::HCErrorSeverity;
+  pub use crate::types::HCErrorSeverity::*;
+}
+
 /// Retrieve the number of threads that can be reasonably
 /// run concurrently on the platform
 

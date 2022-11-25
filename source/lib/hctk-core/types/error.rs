@@ -24,11 +24,6 @@ pub enum HCError {
   //---------------------------------------------------------------------------
   // ----------------- Transition Errors --------------------------------------
   //---------------------------------------------------------------------------
-  /// Warning when a fork state is generated for items that have ambiguous production calls.
-  transition_err_ambiguous_production {
-    source_production: Production,
-    body_refs:         Vec<(Arc<GrammarIds>, Token)>,
-  },
   /// Error occurs when a scanner parse path cannot be made
   /// unambiguous due two Generic symbol types.
   transition_err_invalid_generics {
@@ -118,6 +113,9 @@ pub trait ExtendedError: Debug + Send + Sync {
   fn report(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result;
 
   fn severity(&self) -> HCErrorSeverity;
+
+  /// A concise name for this error. This may include formatting, white-space, and special characters.
+  fn friendly_name(&self) -> &str;
 }
 
 impl From<Arc<dyn ExtendedError>> for HCError {
@@ -130,8 +128,16 @@ impl HCError {
   pub fn get_error_type(&self) -> HCErrorSeverity {
     match self {
       ExtendedError(err) => err.severity(),
-      transition_err_ambiguous_production { .. } => Warning,
       _ => Critical,
+    }
+  }
+
+  /// Compares the friendly name of an error with a string,
+  /// returning `true` if the two match.
+  pub fn is(&self, friendly_name: &str) -> bool {
+    match self {
+      ExtendedError(err) => err.friendly_name() == friendly_name,
+      _ => false,
     }
   }
 
@@ -261,26 +267,6 @@ impl Display for HCError {
         message,
         errors.iter().map(|e| e.to_string()).collect::<Vec<_>>().join("\n")
       )),
-      transition_err_ambiguous_production { source_production, body_refs } => {
-        f.write_fmt(format_args!(
-          "In the parse path of {}, these production lead to an ambiguous parse:\n{}",
-          source_production.name,
-          body_refs
-            .iter()
-            .map(|(grammar_ref, tok)| {
-              let Range { start_line, start_column, .. } = tok.get_range();
-              format!(
-                "[{}:{}:{}]\n{}",
-                grammar_ref.path.to_str().unwrap(),
-                start_line,
-                start_column,
-                tok.blame(1, 1, "conflicts with other productions", BlameColor::Red)
-              )
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
-        ))
-      }
     }
   }
 }
