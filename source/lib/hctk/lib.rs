@@ -1,4 +1,5 @@
 pub use hctk_compile::*;
+pub use hctk_core::types;
 pub use hctk_core::*;
 
 /// Compiles a parse module from a grammar string

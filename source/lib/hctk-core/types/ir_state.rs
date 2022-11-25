@@ -76,6 +76,7 @@ impl IRState {
 
   pub fn into_hashed(mut self) -> Self {
     self.hash = hash_id_value_u64(self.code.clone());
+    self.code = self.code.replace("%%%%", &self.get_name());
     self
   }
 

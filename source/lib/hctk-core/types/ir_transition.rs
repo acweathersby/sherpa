@@ -80,7 +80,10 @@ pub enum TransitionStateType {
   /// from the GOTO of a production.
   I_GOTO_END,
 
+  I_GOTO_LR,
+
   O_TERMINAL,
+  I_LR_START,
 }
 
 impl Default for TransitionStateType {
@@ -91,9 +94,9 @@ impl Default for TransitionStateType {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct TransitionGraphNode {
-  /// The symbols that lead to the
-  /// transition to this state.
-  pub terminal_symbol: SymbolID,
+  /// The symbols that labels the edge that
+  /// connects the parent state to this state.
+  pub edge_symbol: SymbolID,
   pub prod_sym: Option<SymbolID>,
   pub trans_type: TransitionStateType,
   pub items: Vec<Item>,
@@ -134,7 +137,7 @@ impl TransitionGraphNode {
     items: Vec<Item>,
   ) -> Self {
     let mut node = TransitionGraphNode {
-      terminal_symbol: sym,
+      edge_symbol: sym,
       trans_type: TransitionStateType::UNDEFINED,
       proxy_parents: vec![],
       items,
@@ -166,7 +169,7 @@ impl TransitionGraphNode {
     items: Vec<Item>,
   ) -> Self {
     TransitionGraphNode {
-      terminal_symbol: sym,
+      edge_symbol: sym,
       trans_type: TransitionStateType::UNDEFINED,
       proxy_parents: vec![],
       items,
@@ -212,7 +215,7 @@ impl TransitionGraphNode {
       "{{[{}] par:[{}] sym:{}\n    [\n{}\n    ]}}",
       self.id,
       self.parent,
-      self.terminal_symbol.to_string(g),
+      self.edge_symbol.to_string(g),
       self
         .items
         .iter()
@@ -220,6 +223,10 @@ impl TransitionGraphNode {
         .collect::<Vec<_>>()
         .join("\n")
     )
+  }
+
+  pub fn linked_to_self(&self) -> bool {
+    self.parent == self.id || self.proxy_parents.iter().any(|i| self.id == *i)
   }
 }
 
@@ -262,7 +269,10 @@ pub struct TransitionPack {
   pub out_of_scope_closure: Option<Vec<Item>>,
   pub errors: Vec<HCError>,
   pub events: BTreeMap<u64, usize>,
-
+  /// If this TPack defines a goto transition sequence,
+  /// then this is true if root goto state does not simply
+  /// resolve to a pass action.
+  pub non_trivial_root: bool,
   pub g: Arc<GrammarStore>,
 }
 
@@ -275,6 +285,10 @@ impl TransitionPack {
     } else {
       self.node_pipeline.push_back(node_index)
     }
+  }
+
+  pub fn get_first_prod_id(&self) -> Option<ProductionId> {
+    self.root_prod_ids.first().cloned()
   }
 
   #[inline(always)]
@@ -429,6 +443,7 @@ impl TransitionPack {
         is_scanner: self.is_scanner,
         root_prod_ids: self.root_prod_ids,
         closure_links: self.closure_links,
+        non_trivial_root: self.non_trivial_root,
         ..Default::default()
       },
       self.errors,

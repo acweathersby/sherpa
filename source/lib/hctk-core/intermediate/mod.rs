@@ -1,6 +1,7 @@
 pub mod optimize;
 pub mod state;
 pub mod transition;
+mod utils;
 
 #[cfg(test)]
 
@@ -10,7 +11,7 @@ mod transition_tree_tests {
 
   use crate::debug::debug_items;
   use crate::grammar::get_production_start_items;
-  use crate::intermediate::transition::get_valid_starts;
+  use crate::intermediate::utils::get_valid_starts;
 
   use crate::intermediate::transition::construct_recursive_descent;
   use crate::types::GrammarStore;
@@ -85,7 +86,7 @@ mod state_constructor_tests {
   use crate::intermediate::state::generate_production_states;
   use crate::intermediate::state::generate_scanner_intro_state;
   use crate::intermediate::state::IROutput;
-  use crate::intermediate::transition::get_valid_starts;
+  use crate::intermediate::utils::get_valid_starts;
   use crate::types::GrammarId;
   use crate::types::GrammarStore;
   use crate::types::SymbolID;

@@ -157,6 +157,10 @@ impl Item {
     }
   }
 
+  pub fn id_string(&self) -> String {
+    format!("<{}>:{}-{}-{}", self.state, self.get_body_id(), self.off, self.len)
+  }
+
   //#[inline(always)]
   pub fn is_null(&self) -> bool {
     self.body.is_null() && self.len == 0 && self.off == 0

@@ -1,7 +1,9 @@
+use super::utils::*;
 use std::collections::btree_map;
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
+use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::hash::Hash;
 use std::path::PathBuf;
@@ -10,6 +12,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::vec;
 
+use crate::debug::debug_items;
 use crate::grammar::create_closure;
 use crate::grammar::get_closure_cached;
 use crate::grammar::get_production_start_items;
@@ -17,6 +20,7 @@ use crate::grammar::hash_id_value_u64;
 use crate::types::BlameColor;
 use crate::types::GrammarId;
 use crate::types::GrammarStore;
+use crate::types::HCResult;
 use crate::types::Item;
 use crate::types::ItemState;
 use crate::types::OriginData;
@@ -28,120 +32,6 @@ use crate::types::TransitionGraphNodeId;
 use crate::types::TransitionMode;
 use crate::types::TransitionPack as TPack;
 use crate::types::TransitionStateType as TST;
-
-/// Remove items that would cause LL branch conflicts and replace
-/// with their derivatives.
-///  
-/// ## For Example
-///
-/// ```hcg
-///  
-/// <> A > B | C
-///
-/// <> C > \d
-///
-/// <> B > C \d
-/// ```
-/// Given the above grammar, the starting items for `A` are
-/// `B => C \d` and `C => \d`. If treated directly as RD items
-/// then the input `d d` requires us to determine if the resulting
-/// Production `C` (from `C => \d *`) should apply to `B => C * \d`
-/// or `A => C *`. Pure RD would either require a peek or a backtrack
-/// since the Production A must call either C or B. However, if using
-/// LR behavior, then we can call `C`, then use A's GOTO state:
-/// ```hcg
-/// A`Goto
-///    1 | B     -> A
-///    2 | C     -> A
-///    3 | C \d  -> B
-/// ```
-/// to reduce `C` to `B` (as a result of the next symbol `\d` matching the conditions
-/// for the transition to GOTO 3: `C * \d -> B`),
-/// then `B` to `A`.
-pub fn get_valid_starts(starts: &[Item], g: &GrammarStore) -> (Vec<Item>, Vec<Item>) {
-  if starts.len() == 1 {
-    // There's is now way the parse of single can encounter conflicts, so it is simply returned.
-    (starts.to_vec(), vec![])
-  } else {
-    let mut goto_seeds = BTreeSet::new();
-
-    let mut valid_term_items =
-      starts.iter().flat_map(|i| get_closure_cached(i, g)).cloned().collect::<BTreeSet<_>>();
-
-    let mut valid_non_term =
-      valid_term_items.drain_filter(|i| i.is_nonterm(g)).collect::<BTreeSet<_>>();
-
-    // Detects if a specific non-term symbol is parsed by one or more
-    // unique productions. If this is the case, then we make the productions
-    // invalid.
-    let mut invalid_productions = valid_non_term
-      .iter()
-      .map(|i| (i.get_production_id_at_sym(g), i.get_prod_id(g)))
-      .fold(BTreeMap::<ProductionId, BTreeSet<ProductionId>>::new(), |mut b, (sym, p)| {
-        match b.entry(sym) {
-          Entry::Occupied(mut e) => {
-            e.get_mut().insert(p);
-          }
-          Entry::Vacant(e) => {
-            e.insert(BTreeSet::from_iter(vec![p]));
-          }
-        };
-        b
-      })
-      .into_iter()
-      .filter_map(|(a, b)| if b.len() > 1 { Some(a) } else { None })
-      .chain(starts.iter().map(|s| s.get_prod_id(g)))
-      .collect::<BTreeSet<_>>();
-
-    // Now we filter out the invalid productions.
-    // Any production that parses a invalid non-term is itself invalid
-    // We remove all items of that production from the output  (placing them instead
-    // into the goto seeds set), and place the production into the invalid production set.
-    // This continues until there are no new productions added to the invalid set.
-    let mut changed = true;
-    while changed {
-      changed = false;
-      goto_seeds.append(
-        &mut valid_non_term
-          .drain_filter(|item| {
-            if invalid_productions.contains(&item.get_production_id_at_sym(g)) {
-              invalid_productions.insert(item.get_prod_id(g));
-              changed = true;
-              true
-            } else if invalid_productions.contains(&item.get_prod_id(g)) {
-              true
-            } else {
-              false
-            }
-          })
-          .collect(),
-      );
-    }
-
-    // Now we have a nearly complete valid set of non-term items. There may be
-    // some items that parse a non-term symbol whose items also exist in the
-    // valid set. These items are now moved to the goto seeds set.
-    let valid_productions =
-      valid_non_term.iter().map(|i| i.get_prod_id(g)).collect::<BTreeSet<_>>();
-    goto_seeds.append(
-      &mut valid_non_term
-        .drain_filter(|i| valid_productions.contains(&i.get_production_id_at_sym(g)))
-        .collect(),
-    );
-
-    // Now the term items of productions being parsed by non-term items need not
-    // be present in the term set. We'll remove them now.
-    let parsed_productions =
-      valid_non_term.iter().map(|i| i.get_production_id_at_sym(g)).collect::<BTreeSet<_>>();
-    valid_term_items.drain_filter(|i| parsed_productions.contains(&i.get_prod_id(g)));
-
-    // The union of valid non-term items and the remaining term items is our
-    // start set.
-    valid_term_items.append(&mut valid_non_term);
-
-    (valid_term_items.into_iter().collect(), goto_seeds.into_iter().collect())
-  }
-}
 
 /// Constructs an initial transition graph that parses a production
 /// using a recursive descent strategy. Productions that are ambiguous
@@ -160,13 +50,7 @@ pub fn construct_recursive_descent(
   let mut t =
     TPack::new(g.clone(), TransitionMode::RecursiveDescent, is_scanner, &start_items, root_ids);
 
-  for item in &start_items {
-    t.scoped_closures.push(get_closure_cached(item, &g).clone());
-
-    if item.is_nonterm(&g) {
-      t.set_closure_link(*item, item.to_null());
-    }
-  }
+  add_item_closures(&start_items, &mut t);
 
   let root_index = t.insert_node(TGN::new(&t, SymbolID::Undefined, usize::MAX, start_items));
 
@@ -196,7 +80,7 @@ pub fn construct_goto(
   starts: &[Item],
   goto_seeds: &[Item],
   root_ids: BTreeSet<ProductionId>,
-) -> (TPackResults, /* True if there exists a non-trivial production branch */ bool) {
+) -> TPackResults {
   let start_items = apply_state_info(starts);
 
   let mut t = TPack::new(g.clone(), TransitionMode::GoTo, is_scanner, &start_items, root_ids);
@@ -233,7 +117,6 @@ pub fn construct_goto(
           stated_item.to_state(ItemState::GOTO_END_GOAL_STATE)
         } else {
           t.scoped_closures.push(get_closure_cached(&stated_item, &g).clone());
-
           stated_item.to_state(ItemState::new((t.scoped_closures.len() - 1) as u32, 0))
         };
 
@@ -292,7 +175,9 @@ pub fn construct_goto(
     process_node(&mut t, node_index, node_index, node_index != 0);
   }
 
-  (t.clean(), unfulfilled_root.is_none())
+  t.non_trivial_root = unfulfilled_root.is_none();
+
+  t.clean()
 }
 
 pub fn get_goto_starts(
@@ -421,21 +306,6 @@ fn process_node(t: &mut TPack, node_id: usize, par_id: usize, allow_increment: b
   }
 }
 
-/// True if the closure of the givin items does not include
-/// the goal production on the right of the cursor
-
-fn non_recursive(items: &[Item], target_prod: &BTreeSet<ProductionId>, g: &GrammarStore) -> bool {
-  for item in create_closure(items, g) {
-    if let SymbolID::Production(production, _) = item.get_symbol(g) {
-      if target_prod.contains(&production) {
-        return false;
-      }
-    }
-  }
-
-  true
-}
-
 fn create_peek(t: &mut TPack, par_id: usize, items: Vec<Item>) -> Vec<usize> {
   let mut cached_depth = 0;
   let mut peek_nodes = vec![];
@@ -482,7 +352,7 @@ fn create_peek(t: &mut TPack, par_id: usize, items: Vec<Item>) -> Vec<usize> {
       .items
       .to_owned()
       .iter()
-      .map(|i| (t.get_closure_link(i), *i))
+      .map(|i| LinkedItem { link: t.get_closure_link(i), item: *i })
       .collect::<Vec<_>>();
 
     for mut node in create_term_nodes_from_items(&create_term_item_closure(t, &items), t, par_id) {
@@ -513,17 +383,17 @@ fn create_peek(t: &mut TPack, par_id: usize, items: Vec<Item>) -> Vec<usize> {
   resolved_leaves
 }
 
-fn create_term_item_closure(t: &mut TPack, items: &Vec<(Item, Item)>) -> Vec<(Item, Item)> {
+fn create_term_item_closure(t: &mut TPack, items: &Vec<LinkedItem>) -> Vec<LinkedItem> {
   let mut term_items = BTreeSet::new();
-  for (link_item, item) in items {
-    if item.is_term(&t.g) || item.is_end() {
-      term_items.insert((*link_item, *item));
+  for linked in items {
+    if linked.item.is_term(&t.g) || linked.item.is_end() {
+      term_items.insert(*linked);
     } else {
-      for closure_item in create_closure(&[*item], &t.g) {
-        let closure_item = closure_item.to_origin(item.get_origin());
+      for closure_item in create_closure(&[linked.item], &t.g) {
+        let closure_item = closure_item.to_origin(linked.item.get_origin());
         if !closure_item.is_nonterm(&t.g) {
-          let closure_item = closure_item.to_state(item.get_state());
-          term_items.insert((*item, closure_item));
+          let closure_item = closure_item.to_state(linked.item.get_state());
+          term_items.insert(LinkedItem { link: linked.item, item: closure_item });
         }
       }
     }
@@ -531,16 +401,12 @@ fn create_term_item_closure(t: &mut TPack, items: &Vec<(Item, Item)>) -> Vec<(It
   term_items.into_iter().collect::<Vec<_>>()
 }
 
-fn create_term_nodes_from_items(
-  items: &Vec<(Item, Item)>,
-  t: &mut TPack,
-  par_id: usize,
-) -> Vec<TGN> {
+fn create_term_nodes_from_items(items: &Vec<LinkedItem>, t: &mut TPack, par_id: usize) -> Vec<TGN> {
   let mut term_nodes = vec![];
 
-  for (link_item, item) in items {
-    t.set_closure_link(*item, *link_item);
-    let node = TGN::new(t, item.get_symbol(&t.g), par_id, vec![*item]);
+  for linked in items {
+    t.set_closure_link(linked.item, linked.link);
+    let node = TGN::new(t, linked.item.get_symbol(&t.g), par_id, vec![linked.item]);
     term_nodes.push(node);
   }
 
@@ -614,7 +480,7 @@ fn disambiguate(t: &mut TPack, node_ids: Vec<usize>, leaves: &mut Vec<usize>, pe
     term_nodes
   };
 
-  let mut groups = hash_group_vec(term_nodes, |_, n| (t.get_node(n).terminal_symbol));
+  let mut groups = hash_group_vec(term_nodes, |_, n| (t.get_node(n).edge_symbol));
   let mut next_peek_groups = vec![];
   let mut primary_nodes: BTreeSet<usize> = BTreeSet::new();
 
@@ -628,7 +494,7 @@ fn disambiguate(t: &mut TPack, node_ids: Vec<usize>, leaves: &mut Vec<usize>, pe
     if group.iter().any(|i| t.get_node(*i).is_out_of_scope()) {
       let first = t.get_node(group[0]);
       let term_is_generic = matches!(
-        first.terminal_symbol,
+        first.edge_symbol,
         SymbolID::GenericNumber | SymbolID::GenericIdentifier | SymbolID::GenericSymbol
       );
 
@@ -656,7 +522,7 @@ fn disambiguate(t: &mut TPack, node_ids: Vec<usize>, leaves: &mut Vec<usize>, pe
               let node = t.get_node(*i);
               !(node.is_out_of_scope()
                 && (inscope_items.contains(&node.items[0].to_zero_state())
-                  || (term_is_generic && node.terminal_symbol == first.terminal_symbol)))
+                  || (term_is_generic && node.edge_symbol == first.edge_symbol)))
             })
             .collect(),
         );
@@ -681,9 +547,9 @@ fn disambiguate(t: &mut TPack, node_ids: Vec<usize>, leaves: &mut Vec<usize>, pe
               .map(|i| {
                 let link = t.get_closure_link(&i);
                 if transition_on_skipped_symbol {
-                  (link, i)
+                  LinkedItem { link, item: i }
                 } else {
-                  (link, i.increment().unwrap())
+                  LinkedItem { link, item: i.increment().unwrap() }
                 }
               })
               .collect::<Vec<_>>(),
@@ -892,7 +758,7 @@ fn process_peek_leaves(t: &mut TPack, leaves: Vec<usize>) -> Vec<usize> {
       }
 
       if child_node.prod_sym.is_some() {
-        child_node.terminal_symbol = prime_node.terminal_symbol
+        child_node.edge_symbol = prime_node.edge_symbol
       }
 
       resolved_leaves.push(child_index);
@@ -920,19 +786,19 @@ fn get_continue_nodes(
   let mut final_nodes = vec![];
   let mut need_to_prune = false;
 
-  let (mut scan_items, mut final_items) = scan_items(t, &end_item);
+  let TermAndEndItemGroups { term_items, mut end_items } = scan_items(t, &end_item, None);
 
   if end_item.is_out_of_scope() {
-    final_items = vec![];
+    end_items = vec![];
   }
 
   let scan_items = if end_item.is_out_of_scope() && peek_depth < 1 {
     // Remove item pairs that are expected to show up
     // within the "in-scope" nodes.
-    create_term_item_closure(t, &scan_items)
+    create_term_item_closure(t, &term_items)
       .into_iter()
-      .filter(|(_, item)| {
-        let item = item.to_zero_state();
+      .filter(|l| {
+        let item = l.item.to_zero_state();
         let bool_val = !(t.starts.contains(&item)
           || (item.is_nonterm(&t.g)
             && (t.root_prod_ids.contains(&item.get_prod_id(&t.g))
@@ -941,7 +807,7 @@ fn get_continue_nodes(
       })
       .collect::<Vec<_>>()
   } else {
-    create_term_item_closure(t, &scan_items)
+    create_term_item_closure(t, &term_items)
   };
 
   for mut term_node in create_term_nodes_from_items(&scan_items, t, parent_index) {
@@ -952,7 +818,7 @@ fn get_continue_nodes(
     term_nodes.push(t.insert_node(term_node));
   }
 
-  for mut final_node in create_term_nodes_from_items(&final_items, t, parent_index) {
+  for mut final_node in create_term_nodes_from_items(&end_items, t, parent_index) {
     final_node.goal = goal;
 
     final_node.set_type(TST::I_END | TST::O_ASSERT);
@@ -1066,8 +932,8 @@ fn merge_occluding_groups(t: &mut TPack, groups: &mut [Vec<usize>]) {
         continue;
       }
 
-      let from_sym = from_node.terminal_symbol;
-      let to_sym = to_node.terminal_symbol;
+      let from_sym = from_node.edge_symbol;
+      let to_sym = to_node.edge_symbol;
 
       if symbols_occlude(&to_sym, &from_sym, &t.g)
         && ((!from_node.is_out_of_scope()) || (from_sym.is_defined() || to_sym.is_defined()))
@@ -1077,60 +943,6 @@ fn merge_occluding_groups(t: &mut TPack, groups: &mut [Vec<usize>]) {
         t.get_node_mut(groups[j][0]).set_type(TST::I_MERGE_ORIGIN);
       }
     }
-  }
-}
-
-/// Compares whether symbolB occludes symbolA
-/// ( produces an ambiguous parse path )
-///
-/// Symbols that can occlude are as follows
-///
-/// - `g:id` and any single identifier character.
-/// - `g:num` and any single numeric character.
-/// - `g:sym` and any single character thats not a numeric,
-///   identifier, space, newline, or tab.
-
-fn symbols_occlude(symA: &SymbolID, symB: &SymbolID, g: &GrammarStore) -> bool {
-  match symA {
-    SymbolID::DefinedSymbol(..) | SymbolID::ExclusiveDefinedSymbol(..) => {
-      match g.symbol_strings.get(symA).map(|s| s.as_str()) {
-        Some("\n") => match symB {
-          SymbolID::GenericNewLine => true,
-          _ => false,
-        },
-        Some("\t") => match symB {
-          SymbolID::GenericHorizontalTab => true,
-          _ => false,
-        },
-        Some(" ") => match symB {
-          SymbolID::GenericSpace => true,
-          _ => false,
-        },
-        Some(_) => match symB {
-          SymbolID::GenericSymbol => g.symbols.get(symA).unwrap().cp_len == 1,
-          _ => false,
-        },
-        _ => false,
-      }
-    }
-    SymbolID::DefinedIdentifier(_) | SymbolID::ExclusiveDefinedIdentifier(_) => {
-      match g.symbol_strings.get(symA).map(|s| s.as_str()) {
-        Some("_") | Some("-") => match symB {
-          SymbolID::GenericSymbol => true,
-          _ => false,
-        },
-        Some(_) => match symB {
-          SymbolID::GenericIdentifier => g.symbols.get(symA).unwrap().cp_len == 1,
-          _ => false,
-        },
-        _ => false,
-      }
-    }
-    SymbolID::DefinedNumeric(_) | SymbolID::ExclusiveDefinedNumeric(_) => match symB {
-      SymbolID::GenericNumber => g.symbols.get(symA).unwrap().cp_len == 1,
-      _ => false,
-    },
-    _ => false,
   }
 }
 
@@ -1312,7 +1124,6 @@ fn warn_of_ambiguous_productions(t: &mut TPack, goals: &Vec<usize>) {
 /// it is first node in the peek path or not. If it is the first
 /// node, we do regular ASSERT action on the terminal symbol.
 /// Otherwise we use a PEEK action.
-
 fn set_transition_type(t: &mut TPack, node_index: usize, depth: u32) {
   t.get_node_mut(node_index).set_type(match depth {
     0 => TST::O_ASSERT,
@@ -1320,7 +1131,30 @@ fn set_transition_type(t: &mut TPack, node_index: usize, depth: u32) {
   })
 }
 
-type TermAndEndItemGroups = (Vec<(Item, Item)>, Vec<(Item, Item)>);
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+struct LinkedItem {
+  pub link: Item,
+  pub item: Item,
+}
+
+struct TermAndEndItemGroups {
+  pub term_items: Vec<LinkedItem>,
+  pub end_items:  Vec<LinkedItem>,
+}
+
+impl TermAndEndItemGroups {
+  pub fn get_all_items(&self) -> Vec<Item> {
+    self.term_items.iter().chain(self.end_items.iter()).map(|t| t.item).collect()
+  }
+
+  pub fn get_term_items(&self) -> Vec<Item> {
+    self.term_items.iter().map(|t| t.item).collect()
+  }
+
+  pub fn get_end_items(&self) -> Vec<Item> {
+    self.end_items.iter().map(|t| t.item).collect()
+  }
+}
 
 /// Retrieve terminal items derived from a
 /// completed item.
@@ -1330,71 +1164,97 @@ type TermAndEndItemGroups = (Vec<(Item, Item)>, Vec<(Item, Item)>);
 /// previous link item for closure resolution, and the second item is
 /// a non-end item  produced from the reduction of the
 /// `root_end_item`.
-fn scan_items(t: &mut TPack, root_end_item: &Item) -> TermAndEndItemGroups {
-  let mut seen = BTreeSet::<(Item, Item)>::new();
-  let mut out = BTreeSet::<(Item, Item)>::new();
-  let mut fin_items = BTreeSet::<(Item, Item)>::new();
+fn scan_items(
+  t: &mut TPack,
+  root_end_item: &Item,
+  lr_state_ref: Option<usize>,
+) -> TermAndEndItemGroups {
+  let mut seen = BTreeSet::<LinkedItem>::new();
+  let mut out = BTreeSet::<LinkedItem>::new();
+  let mut fin_items = BTreeSet::<LinkedItem>::new();
 
   static empty_vec: Vec<Item> = Vec::new();
   // Starting at the top we grab the closure to the nearest
   // non-term link.
 
   // Stores the end item [1] and its immediate closure item [0]
-  let mut end_items: VecDeque<(Item, Item)> =
-    VecDeque::from_iter(vec![(t.get_closure_link(root_end_item), *root_end_item)]);
-  while let Some((closure_link, end_item)) = end_items.pop_front() {
-    if seen.insert((closure_link, end_item)) {
-      let prod = end_item.get_prod_id(&t.g);
+  let mut end_items = VecDeque::from_iter(vec![(
+    LinkedItem { link: t.get_closure_link(root_end_item), item: *root_end_item },
+    lr_state_ref,
+  )]);
+  while let Some((linked, state_ref)) = end_items.pop_front() {
+    if seen.insert(linked) {
+      let prod = linked.item.get_prod_id(&t.g);
       // Grab all productions from the closure that match the end item's
       // production.
       match {
-        if closure_link.is_null() {
-          if end_item.is_out_of_scope() {
-            t.out_of_scope_closure.as_deref().unwrap_or(&empty_vec).iter()
-          } else {
-            t.scoped_closures
-              .get(closure_link.get_state().get_closure_index())
-              .unwrap_or(&empty_vec)
-              .iter()
+        let (iter, prev_state) = match (state_ref, linked) {
+          (Some(prev_node), _) if prev_node >= 0 && prev_node != TGN::OrphanIndex => {
+            // Use the prev_node
+            let node = t.get_node(prev_node);
+            (node.items.iter(), Some(node.parent))
           }
-        } else if closure_link.is_out_of_scope() {
-          if let Some(closure) = &t.goto_scoped_closure {
-            closure.iter()
-          } else {
-            empty_vec.iter()
-          }
-        } else {
-          get_closure_cached(&closure_link, &t.g).iter()
-        }
-        .filter(|i| i.get_production_id_at_sym(&t.g) == prod)
-        .cloned()
-        .map(|i| i.to_origin(closure_link.get_origin()))
-        .collect::<Vec<_>>()
-      } {
-        empty if empty.is_empty() => {
-          if closure_link.is_null() {
-            // t_pack.set_closure_link(end_item, nonterm_closure_link);
-            fin_items.insert((closure_link, end_item));
-          } else {
-            end_items.push_back((t.get_closure_link(&closure_link), end_item));
-          }
-        }
-        prod_items => {
-          for p_item in prod_items {
-            let inc_item = p_item.increment().unwrap().to_state(end_item.get_state());
-
-            if inc_item.is_end() {
-              end_items.push_back((closure_link, inc_item));
+          (_, LinkedItem { link, item }) if link.is_null() => (
+            if item.is_out_of_scope() {
+              t.out_of_scope_closure.as_deref().unwrap_or(&empty_vec).iter()
             } else {
-              t.set_closure_link(inc_item, closure_link);
-              out.insert((closure_link, inc_item));
+              t.scoped_closures
+                .get(link.get_state().get_closure_index())
+                .unwrap_or(&empty_vec)
+                .iter()
+            },
+            None,
+          ),
+          (_, LinkedItem { link, item }) if link.is_out_of_scope() => (
+            if let Some(closure) = &t.goto_scoped_closure {
+              closure.iter()
+            } else {
+              empty_vec.iter()
+            },
+            None,
+          ),
+          _ => (get_closure_cached(&linked.link, &t.g).iter(), None),
+        };
+        (
+          iter
+            .filter(|i| i.get_production_id_at_sym(&t.g) == prod)
+            .cloned()
+            .map(|i| i.to_origin(linked.link.get_origin()))
+            .collect::<Vec<_>>(),
+          prev_state,
+        )
+      } {
+        (empty, prev_state) if empty.is_empty() => {
+          if linked.link.is_null() {
+            // t_pack.set_closure_link(end_item, nonterm_closure_link);
+            fin_items.insert(linked);
+          } else {
+            end_items.push_back((
+              LinkedItem { link: t.get_closure_link(&linked.link), item: linked.item },
+              prev_state,
+            ));
+          }
+        }
+        (prod_items, prev_state) => {
+          for p_item in prod_items {
+            let item = p_item.increment().unwrap().to_state(linked.item.get_state());
+
+            if item.is_end() {
+              end_items.push_back((LinkedItem { link: linked.link, item }, prev_state));
+            } else {
+              t.set_closure_link(item, linked.link);
+              out.insert(LinkedItem { link: linked.link, item });
             }
           }
         }
       }
     }
   }
-  (out.into_iter().collect::<Vec<_>>(), fin_items.into_iter().collect::<Vec<_>>())
+
+  TermAndEndItemGroups {
+    end_items:  fin_items.into_iter().collect(),
+    term_items: out.into_iter().collect(),
+  }
 }
 
 fn process_terminal_node(t: &mut TPack, term_items: &Vec<Item>, parent_index: usize) -> Vec<usize> {
@@ -1437,19 +1297,11 @@ fn process_end_item(t: &mut TPack, end_item: Item, parent_index: usize) -> Vec<u
     // is used to select the next set of items to be scanned, continuing the scan process
     // until we arrive at an end_item that belongs to the root closu.
 
-    let (term_items, end_items) = scan_items(t, &end_item);
+    let scanned_items = scan_items(t, &end_item, None);
 
     // Filter out items automatically handled by goto
-    let non_goto_items = term_items; //.iter().filter(|(_, i)| i.get_offset() > 1).cloned().collect::<Vec<_>>();
-
-    if !non_goto_items.is_empty() {
-      let items = non_goto_items
-        .into_iter()
-        .map(|(_, i)| i)
-        .chain(end_items.into_iter().map(|(_, i)| i))
-        .collect::<Vec<_>>();
-
-      let node = TGN::new(t, SymbolID::EndOfFile, parent_index, items);
+    if !scanned_items.term_items.is_empty() {
+      let node = TGN::new(t, SymbolID::EndOfFile, parent_index, scanned_items.get_all_items());
 
       let node_index = t.insert_node(node);
 
@@ -1468,27 +1320,222 @@ fn process_end_item(t: &mut TPack, end_item: Item, parent_index: usize) -> Vec<u
   let node_index = t.insert_node(end_node);
 
   t.get_node_mut(node_index).set_type(TST::I_END | TST::O_ASSERT);
+
   t.leaf_nodes.push(node_index);
 
   vec![node_index]
 }
 
-/// Constructs a Vector of Vectors, each of which contains a set items from the
-/// original vector that have been grouped by the hash of a common distinguisher.
-pub fn hash_group<T: Copy + Sized, R: Hash + Sized + Ord + Eq, Function: Fn(usize, T) -> R>(
-  vector: Vec<T>,
-  hash_yielder: Function,
-) -> Vec<Vec<T>> {
-  let mut hash_groups = BTreeMap::<R, Vec<T>>::new();
+fn add_item_closures(start_items: &Vec<Item>, t: &mut TPack) {
+  for item in start_items {
+    t.scoped_closures.push(get_closure_cached(item, &t.g).clone());
 
-  for (i, val) in vector.iter().enumerate() {
-    match hash_groups.entry(hash_yielder(i, *val)) {
-      Entry::Vacant(e) => {
-        e.insert(vec![*val]);
+    if item.is_nonterm(&t.g) {
+      t.set_closure_link(*item, item.to_null());
+    }
+  }
+}
+/// Constructs nodes that uses the LR strategy for parsing
+/// This means that any state may have a GOTO clause, with in Hydrocarbon
+/// Case means a alternative node branch that stores all GOTO nodes,
+/// whose address is then pushed first pushed to the stack before transitioning
+/// to sibling nodes.
+fn TODO_constructLR_transitions(
+  t: &mut TPack,
+  starts: &Vec<Item>,
+  parent_index: usize,
+  start_symbol: SymbolID,
+) -> HCResult<usize> {
+  let closure = starts.iter().flat_map(|i| get_closure_cached(i, &t.g)).cloned().collect();
+
+  // In this mode, we take the closure of the entry items, and create
+  // transitions from each set of terminals and non-terminals to new states, which are
+  // comprised of the shifted items of the previous state.
+  // Non-terminal transition represent the parent states goto, and are grouped into
+  // a separate state the is prefixed push to the branches of the parent state.
+
+  let mut encountered_states = HashMap::<BTreeSet<Item>, usize>::new();
+
+  // create the root node for the start items
+  let root_node = TGN::new(t, start_symbol, parent_index, closure);
+  let root_node_index = t.insert_node(root_node);
+  t.get_node_mut(root_node_index).set_type(TST::I_LR_START);
+  let mut to_process = VecDeque::from_iter(vec![root_node_index]);
+
+  while let Some(parent_index) = to_process.pop_front() {
+    let mut closure = t
+      .get_node(parent_index)
+      .items
+      .iter()
+      .flat_map(|i| match i.is_end() {
+        true => vec![*i],
+        _ => get_closure_cached(i, &t.g).clone(),
+      })
+      .collect::<BTreeSet<_>>();
+
+    // debug_items(&format!("state: {}\n", parent_index), closure.clone(), &t.g);
+
+    // let terms = closure.drain_filter(|i| i.is_nonterm(g)).collect::<BTreeSet<_>>();
+    let end_items = closure.drain_filter(|i| i.is_end()).collect::<BTreeSet<_>>();
+    let terms_and_non_terms = closure; // Non-terms become this state's GOTO
+
+    for (symbol, group) in hash_group_btreemap(terms_and_non_terms, |i, v| v.get_symbol(&t.g)) {
+      // Create a new transition node and add the incremented items to  it.
+      let incremented_items = group.into_iter().map(|i| i.increment().unwrap()).collect::<Vec<_>>();
+      let canonical_items =
+        incremented_items.iter().map(|i| i.to_zero_state()).collect::<BTreeSet<_>>();
+
+      match encountered_states.entry(canonical_items) {
+        std::collections::hash_map::Entry::Occupied(e) => {
+          let child_index = *e.get();
+          t.get_node_mut(child_index).proxy_parents.push(parent_index);
+        }
+        std::collections::hash_map::Entry::Vacant(e) => {
+          // If we can call into a state then we shall
+          match symbol {
+            SymbolID::Production(prod_id, _) => {
+              let child_node = TGN::new(t, symbol, parent_index, incremented_items);
+              let child_index = t.insert_node(child_node);
+              t.get_node_mut(child_index).set_type(TST::I_GOTO_LR);
+              to_process.push_back(child_index);
+              e.insert(child_index);
+            }
+            _ => {
+              let child_node = TGN::new(t, symbol, parent_index, incremented_items);
+              let child_index = t.insert_node(child_node);
+              t.get_node_mut(child_index).set_type(TST::I_SHIFT | TST::O_TERMINAL);
+              to_process.push_back(child_index);
+              e.insert(child_index);
+            }
+          }
+        }
       }
-      Entry::Occupied(mut e) => e.get_mut().push(*val),
+      //
+    }
+
+    match end_items.len() {
+      2.. => {
+        let ancestor_index = Some(t.get_node(parent_index).parent);
+
+        /// Get the follow for each node.
+        let end_items =
+          end_items.into_iter().map(|i| (i, scan_items(t, &i, ancestor_index))).collect::<Vec<_>>();
+
+        if end_items
+          .iter()
+          .all(|(i, items)| items.end_items.is_empty() && !items.term_items.is_empty())
+        {
+          let symbol_groups = hash_group_btreemap(
+            end_items
+              .iter()
+              .flat_map(|(i, items)| {
+                items
+                  .get_term_items()
+                  .iter()
+                  .flat_map(|i| get_closure_cached(i, &t.g))
+                  .collect::<BTreeSet<_>>()
+                  .iter()
+                  .filter_map(|u| u.is_term(&t.g).then(|| (i.clone(), **u)))
+                  .collect::<Vec<_>>()
+              })
+              .collect::<Vec<_>>(),
+            |i, (_, term)| term.get_symbol(&t.g),
+          );
+
+          if symbol_groups.iter().any(|g| g.1.len() > 1) {
+            return HCResult::Err(format!("Could not disambiguate grammar here:",).into());
+          } else {
+            for (sym, mut items) in symbol_groups {
+              let (end_item, term_item) = items.pop().unwrap();
+              let end_node = TGN::new(t, sym, parent_index, vec![end_item]);
+              let node_index = t.insert_node(end_node);
+              t.get_node_mut(node_index).set_type(TST::I_END | TST::O_ASSERT);
+              t.leaf_nodes.push(node_index);
+            }
+          }
+        } else {
+          for (i, items) in &end_items {
+            println!("{}", i.debug_string(&t.g));
+            debug_items("term items", items.get_term_items().clone(), &t.g);
+            debug_items("end items", items.get_end_items().clone(), &t.g);
+          }
+
+          return HCResult::Err(
+            format!(
+              "Encountered conflicting end items:\n{}\n",
+              end_items
+                .into_iter()
+                .map(|(i, _)| "   ".to_string()
+                  + &i.blame_string(&t.g)
+                  + "\n"
+                  + &i.get_body(&t.g).unwrap().tok.blame(0, 0, "Defined here", BlameColor::Red))
+                .collect::<Vec<_>>()
+                .join("\n")
+            )
+            .into(),
+          );
+        }
+      }
+      1 => {
+        // Default State
+        process_end_item(t, end_items.into_iter().next().unwrap(), parent_index);
+      }
+      _ => {}
     }
   }
 
-  hash_groups.into_values().collect()
+  HCResult::Ok(root_node_index)
+}
+
+#[cfg(test)]
+mod transition_tests {
+  use std::collections::BTreeSet;
+
+  use crate::grammar::get_production_start_items;
+  use crate::intermediate::state::process_transition_nodes;
+  use crate::types::GrammarStore;
+  use crate::types::HCResult;
+  use crate::types::TransitionMode;
+  use crate::types::TransitionPack;
+  use HCResult::*;
+
+  use super::TODO_constructLR_transitions;
+
+  #[test]
+  fn test_TODO_constructLR_transitions() -> HCResult<()> {
+    let g = GrammarStore::from_str(
+      " @IGNORE g:sp 
+
+        <> A > X\\c
+             | Y \\d
+
+        <> X > \\x X?
+
+        <> Y > \\x Y?
+      ",
+    )?;
+
+    let prod_id = g.get_production_id_by_name("A")?;
+    let items = get_production_start_items(&prod_id, &g);
+
+    let mut t = TransitionPack::new(
+      g,
+      TransitionMode::RecursiveDescent,
+      false,
+      &items,
+      BTreeSet::from_iter(vec![prod_id]),
+    );
+
+    TODO_constructLR_transitions(&mut t, &items, usize::MAX, crate::types::SymbolID::Start)?;
+
+    // t.print_nodes();
+
+    let (states, _) = process_transition_nodes(&t, &"Titus".to_string());
+
+    for state in states {
+      println!("{}", state.to_string())
+    }
+
+    Ok(())
+  }
 }
