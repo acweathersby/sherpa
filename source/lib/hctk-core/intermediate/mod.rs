@@ -1,3 +1,4 @@
+pub mod errors;
 pub mod optimize;
 pub mod state;
 pub mod transition;
@@ -54,8 +55,7 @@ mod transition_tree_tests {
       eprintln!("{}", p.name);
     }
 
-    let production =
-      g.productions.iter().find(|p| p.1.name == "scan_tok_test_9AD7F26F987E3173_GUID_B__").unwrap();
+    let production = g.productions.iter().find(|p| p.1.name == "tk:B").unwrap();
 
     let production_id = production.0;
 
@@ -82,6 +82,7 @@ mod state_constructor_tests {
   use std::path::PathBuf;
 
   use crate::debug::debug_items;
+  use crate::errors::WarnTransitionAmbiguousProduction;
   use crate::grammar::get_production_start_items;
   use crate::intermediate::state::generate_production_states;
   use crate::intermediate::state::generate_scanner_intro_state;
@@ -89,9 +90,14 @@ mod state_constructor_tests {
   use crate::intermediate::utils::get_valid_starts;
   use crate::types::GrammarId;
   use crate::types::GrammarStore;
+  use crate::types::HCResult;
   use crate::types::SymbolID;
+  use crate::types::TransitionMode;
+  use crate::types::TransitionPack;
 
   use super::state::compile_states;
+  use super::state::process_transition_nodes;
+  use super::transition::construct_LR;
 
   #[test]
   pub fn production_reduction_decisions() {
@@ -241,10 +247,8 @@ mod state_constructor_tests {
     )
     .unwrap();
 
-    let IROutput { errors, states } = generate_production_states(
-      &grammar.get_production_id_by_name("( mcc::B | C )(+)").unwrap(),
-      grammar,
-    );
+    let IROutput { errors, states } =
+      generate_production_states(&grammar.get_production_id_by_name("A_list_1").unwrap(), grammar);
 
     for error in &errors {
       println!("{}", error);
@@ -252,7 +256,7 @@ mod state_constructor_tests {
 
     // assert_eq!(errors.len(), 1);
 
-    assert!(matches!(errors[0], crate::types::HCError::transition_err_ambiguous_production { .. }));
+    assert!(errors[0].is(WarnTransitionAmbiguousProduction::friendly_name));
   }
 
   #[test]
@@ -576,7 +580,7 @@ mod state_constructor_tests {
       
       @NAME llvm_language_test
       
-      <> statement > tk:test
+      <> statement > tk:test tk:V
       
       <> test > V test?
           | A test \\t
@@ -754,5 +758,45 @@ mod state_constructor_tests {
     //   let result = generate_production_states(&prod, &grammar);
     //   println!("{:#?}", result);
     // }
+  }
+
+  #[test]
+  fn test_construct_LR() -> HCResult<()> {
+    let g = GrammarStore::from_str(
+      " @IGNORE g:sp 
+
+        <> A > X\\c
+             | Y \\d
+
+        <> X > \\x X?
+
+        <> Y > \\x Y?
+      ",
+    )?;
+
+    let prod_id = g.get_production_id_by_name("A")?;
+    let items = get_production_start_items(&prod_id, &g);
+
+    generate_production_states(&prod_id, g.clone());
+
+    let mut t = TransitionPack::new(
+      g,
+      TransitionMode::RecursiveDescent,
+      false,
+      &items,
+      BTreeSet::from_iter(vec![prod_id]),
+    );
+
+    construct_LR(&mut t, &items, Option::None, crate::types::SymbolID::Start)?;
+
+    // t.print_nodes();
+
+    let (states, _) = process_transition_nodes(&t, &"Titus".to_string());
+
+    for state in states {
+      println!("{}", state.to_string())
+    }
+
+    HCResult::Ok(())
   }
 }

@@ -339,12 +339,6 @@ impl Item {
     self.len as u32
   }
 
-  pub fn get_hash(&self) -> u64 {
-    let body_id = self.body.0;
-
-    (body_id & 0xFFFF_FFFF_FFFF_FF00) | (self.off as u64)
-  }
-
   pub fn get_symbol(&self, g: &GrammarStore) -> SymbolID {
     if self.at_end() {
       SymbolID::EndOfFile

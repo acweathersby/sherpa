@@ -19,6 +19,7 @@ use crate::grammar::hash_id_value_u64;
 use crate::types::GrammarStore;
 use crate::types::HCError;
 use crate::types::HCErrorContainer;
+use crate::types::HCErrorPrint;
 use crate::types::IRState;
 use crate::types::IRStateType;
 use crate::types::IRStateType::*;
@@ -29,6 +30,7 @@ use crate::types::ProductionId;
 use crate::types::RecursionType;
 use crate::types::Symbol;
 use crate::types::SymbolID;
+use crate::types::TGNId;
 use crate::types::TransitionGraphNode;
 use crate::types::TransitionMode;
 use crate::types::TransitionPack;
@@ -241,10 +243,10 @@ pub(crate) fn process_transition_nodes<'a>(
   // We start at leaf nodes and make our way down to the root.
   let leaf_node_set = t.leaf_nodes.iter().collect::<BTreeSet<_>>();
 
-  let mut output = BTreeMap::<usize, Box<IRState>>::new();
+  let mut output = BTreeMap::<TGNId, Box<IRState>>::new();
   let mut errors = vec![];
 
-  let mut children_tables = t.nodes_iter().map(|_| BTreeSet::<usize>::new()).collect::<Vec<_>>();
+  let mut children_tables = t.nodes_iter().map(|_| BTreeSet::<TGNId>::new()).collect::<Vec<_>>();
 
   // Starting with the leaf nodes, construct a the reverse
   // edges of our transition graph, converting the relationship
@@ -252,9 +254,10 @@ pub(crate) fn process_transition_nodes<'a>(
 
   for child in t.nodes_iter() {
     if child.has_parent(t) {
-      if child.parent != child.id {
-        children_tables[child.parent].insert(child.id);
+      if let Some(parent_id) = child.parent.filter(|i| child.id != *i) {
+        children_tables[parent_id].insert(child.id);
       }
+
       for proxy_parent in &child.proxy_parents {
         if *proxy_parent != child.id {
           children_tables[*proxy_parent].insert(child.id);
@@ -271,7 +274,7 @@ pub(crate) fn process_transition_nodes<'a>(
       continue;
     }
 
-    let children_lookup = children_tables.get(node_id).unwrap();
+    let children_lookup = children_tables.get(node_id.usize()).unwrap();
 
     // Ensure dependencies are met.
     for child_id in children_lookup {
@@ -292,21 +295,18 @@ pub(crate) fn process_transition_nodes<'a>(
       if children_lookup.is_empty() {
         panic!("Childless node [{}] does is not in leaf node set!", node_id);
       }
-      for state in {
-        if t.mode == TransitionMode::GoTo && node.id == 0 {
-          vec![create_goto_state(
-            t,
-            &output,
-            &children_lookup.iter().map(|i| t.get_node(*i)).collect(),
-            entry_name,
-            &create_post_amble(entry_name, &t.g),
-          )]
-        } else {
-          create_intermediate_state(node, t, &output, &children_tables, entry_name, &mut errors)
-        }
-      } {
+
+      if node.is(TransitionStateType::I_GOTO_START | TransitionStateType::I_GOTO_LR) {
+        let state = create_goto_state(node, t, &output, &children_tables, &entry_name, &mut errors);
         output.insert(state.get_graph_id(), state);
       }
+
+      /// If able, parse the node as standard transition node, creating an entry name
+      if !node.is(TransitionStateType::I_GOTO_START) {
+        let state =
+          create_intermediate_state(node, t, &output, &children_tables, entry_name, &mut errors);
+        output.insert(state.get_graph_id(), state);
+      };
     } else {
       // End states are discarded at the end, so we will only use this
       // retrieve state's hash for parent states.
@@ -315,8 +315,8 @@ pub(crate) fn process_transition_nodes<'a>(
       output.insert(state.get_graph_id(), state);
     }
 
-    if !node.is_orphan(t) {
-      nodes_pipeline.push_back(node.parent);
+    if let Some(parent_id) = node.parent {
+      nodes_pipeline.push_back(parent_id);
       for proxy_parent in &node.proxy_parents {
         nodes_pipeline.push_back(*proxy_parent);
       }
@@ -340,18 +340,61 @@ fn create_passing_goto_state(entry_name: &String, is_scanner: bool) -> Box<IRSta
   )
 }
 
-fn create_goto_state(
-  t: &TransitionPack,
-  resolved_states: &BTreeMap<usize, Box<IRState>>,
-  children_ids: &Vec<&TransitionGraphNode>,
+fn fun_name(
+  node: &TransitionGraphNode,
   entry_name: &String,
-  post_amble: &String,
+  t: &TransitionPack,
+) -> (String, String, u32, IRStateType) {
+  if node.id.is_root() {
+    (
+      if t.is_scanner || node.is(TransitionStateType::I_LR_START) {
+        "".to_string()
+      } else {
+        create_post_amble(entry_name, &t.g)
+      },
+      if node.is(TransitionStateType::I_GOTO_START) {
+        entry_name.clone() + "_goto"
+      } else {
+        entry_name.clone()
+      },
+      1,
+      match t.mode {
+        TransitionMode::GoTo => {
+          if t.is_scanner {
+            ScannerGoto
+          } else {
+            ProductionGoto
+          }
+        }
+        TransitionMode::RecursiveDescent => {
+          if t.is_scanner {
+            ScannerStart
+          } else {
+            ProductionStart
+          }
+        }
+      },
+    )
+  } else {
+    (String::default(), String::default(), 0, Undefined)
+  }
+}
+
+fn create_goto_state(
+  node: &TransitionGraphNode,
+  t: &TransitionPack,
+  resolved_states: &BTreeMap<TGNId, Box<IRState>>,
+  children_tables: &Vec<BTreeSet<TGNId>>,
+  entry_name: &String,
+  errors: &mut Vec<HCError>,
 ) -> Box<IRState> {
-  let is_scanner = t.is_scanner;
+  let mut children = get_children(t, node, children_tables);
   let mut strings = vec![];
   let mut comment = String::new();
 
-  for child in children_ids {
+  let (mut post_amble, state_name, mut stack_depth, mut state_type) = fun_name(node, entry_name, t);
+
+  for child in children {
     let state = resolved_states.get(&child.id).unwrap();
     let symbol = child.edge_symbol;
 
@@ -377,9 +420,7 @@ fn create_goto_state(
           ));
         }
       }
-      _ => {
-        panic!("Child symbol types should production in root goto node")
-      }
+      _ => {}
     }
   }
 
@@ -406,8 +447,9 @@ on fail state [ {}_goto_failed ]
     IRState {
       comment,
       code,
-      id: get_goto_name(entry_name),
-      state_type: if is_scanner { ScannerGoto } else { ProductionGoto },
+      id: state_name,
+      graph_id: node.id.to_goto_id(),
+      state_type: if t.is_scanner { ScannerGoto } else { ProductionGoto },
       ..Default::default()
     }
     .into_hashed(),
@@ -417,66 +459,27 @@ on fail state [ {}_goto_failed ]
 fn create_intermediate_state(
   node: &TransitionGraphNode,
   t: &TransitionPack,
-  resolved_states: &BTreeMap<usize, Box<IRState>>,
-  children_tables: &Vec<BTreeSet<usize>>,
+  resolved_states: &BTreeMap<TGNId, Box<IRState>>,
+  children_tables: &Vec<BTreeSet<TGNId>>,
   entry_name: &String,
   errors: &mut Vec<HCError>,
-) -> Vec<Box<IRState>> {
-  let mut gotos: Option<Vec<&TransitionGraphNode>> = None;
+) -> Box<IRState> {
   let mut strings = vec![];
-  let mut comment = format!("[{}][{}]", node.id, node.parent);
+  let mut comment = format!("[{}][{:?}]", node.id, node.parent);
   let mut item_set = BTreeSet::new();
   let mut peek_type: PeekType = PeekType::None;
   let mut is_token_assertion = false;
-  let is_scanner = t.is_scanner;
-  let mode = t.mode;
-  let mut children = children_tables
-    .get(node.id)
-    .cloned()
-    .unwrap_or_default()
-    .iter()
-    .map(|c| t.get_node(*c))
-    .collect::<Vec<_>>();
+  let mut children = get_children(t, node, children_tables);
 
   if node.linked_to_self() {
     children.push(node);
   }
 
-  let (mut post_amble, state_name, mut stack_depth, mut state_type) = {
-    if node.id == 0 {
-      (
-        if is_scanner || node.is(TransitionStateType::I_LR_START) {
-          "".to_string()
-        } else {
-          create_post_amble(entry_name, &t.g)
-        },
-        entry_name.clone(),
-        1,
-        match mode {
-          TransitionMode::GoTo => {
-            if is_scanner {
-              ScannerGoto
-            } else {
-              ProductionGoto
-            }
-          }
-          TransitionMode::RecursiveDescent => {
-            if is_scanner {
-              ScannerStart
-            } else {
-              ProductionStart
-            }
-          }
-        },
-      )
-    } else {
-      (String::default(), String::default(), 0, Undefined)
-    }
-  };
+  let (mut post_amble, state_name, mut stack_depth, mut state_type) = fun_name(node, entry_name, t);
 
   if node.is(TransitionStateType::I_FAIL) {
     strings.push("fail".to_string());
-  } else if node.is(TransitionStateType::I_FORK) {
+  } else if node.is(TransitionStateType::O_FORK) {
     if state_type == Undefined {
       state_type = ForkState;
     }
@@ -500,7 +503,7 @@ fn create_intermediate_state(
     ));
   } else {
     state_type = if state_type == Undefined {
-      if is_scanner {
+      if t.is_scanner {
         ScannerIntermediateState
       } else {
         ProductionIntermediateState
@@ -526,15 +529,15 @@ fn create_intermediate_state(
 
     /// Group children together to handle cases where multiple children of the same
     /// type need further refinement.
-    for (group_type, group) in hash_group_btreemap(children.to_vec(), |_, c| {
-      match (c.prod_sym, c.edge_symbol, c.is(TransitionStateType::I_GOTO_LR)) {
-        (_, _, true) => Goto,
-        (Some(_), ..) | (_, SymbolID::Production(..), _) => ProductionCall,
-        (None, SymbolID::Recovery, _) => Recovery,
-        (None, SymbolID::EndOfFile, _) | (None, SymbolID::Default, _) => Default,
+    for (group_type, group) in
+      hash_group_btreemap(children.to_vec(), |_, c| match (c.prod_sym, c.edge_symbol) {
+        (_, SymbolID::Production(..)) => Goto,
+        (Some(_), ..) => ProductionCall,
+        (None, SymbolID::Recovery) => Recovery,
+        (None, SymbolID::EndOfFile) | (None, SymbolID::Default) => Default,
         _ => TerminalTransition,
-      }
-    }) {
+      })
+    {
       for child in &group {
         if *child == node {
           continue;
@@ -549,14 +552,11 @@ fn create_intermediate_state(
       }
       match group_type {
         Goto => {
-          let mut goto_string = String::new();
-
-          gotos = Some(group);
-
-          post_amble = String::from(" then goto [%%%%_goto]") + &post_amble;
+          let state_name = resolved_states.get(&node.id.to_goto_id()).unwrap().get_name();
+          post_amble = format!(" then goto [{}]", state_name) + &post_amble;
         }
         Default if group.len() > 1 => {
-          if is_scanner {
+          if t.is_scanner {
             let defined_branches = group
               .iter()
               .filter(
@@ -576,7 +576,7 @@ fn create_intermediate_state(
               let shift = (if child.is(TransitionStateType::I_SHIFT) { "shift then " } else { "" })
                 .to_string();
 
-              let end_string = create_reduce_string(child, &t.g, is_scanner);
+              let end_string = create_reduce_string(child, &t.g, t.is_scanner);
 
               strings.push(match single_child {
                 true => format!("{}{}{}", shift, end_string, post_amble),
@@ -588,7 +588,6 @@ fn create_intermediate_state(
               let mut origin = group[0];
 
               for child in group {
-                let par = t.get_node(child.parent);
                 for item in &child.items {
                   eprintln!("{}", item.debug_string(&t.g));
                 }
@@ -614,9 +613,6 @@ fn create_intermediate_state(
 
             match group_type {
               Default => {
-                let child_state = resolved_states.get(&child.id).unwrap();
-                let state_name = child_state.get_name();
-
                 let shift =
                   (if child.is(TransitionStateType::I_SHIFT) { "shift then " } else { "" })
                     .to_string();
@@ -654,22 +650,22 @@ fn create_intermediate_state(
                       (false /* not a single child */, ..) => {
                         is_token_assertion = true;
                         let symbol_id = child.edge_symbol;
-                        let assertion_type = (if child.is(TransitionStateType::O_PEEK) {
+                        let assertion_type = (if child.is(TransitionStateType::O_PEEK_SHIFT) {
                           "assert peek"
                         } else {
                           "assert"
                         })
                         .to_string();
 
-                        if child.is(TransitionStateType::O_PEEK) {
-                          if (node.is(TransitionStateType::O_PEEK)) {
+                        if child.is(TransitionStateType::O_PEEK_SHIFT) {
+                          if (node.is(TransitionStateType::O_PEEK_SHIFT)) {
                             peek_type = PeekType::PeekContinue;
                           } else {
                             peek_type = PeekType::PeekStart;
                           }
                         }
 
-                        let (symbol_bytecode_id, assert_class) = if (!is_scanner) {
+                        let (symbol_bytecode_id, assert_class) = if (!t.is_scanner) {
                           (symbol_id.bytecode_id(Some(&t.g)), "TOKEN")
                         } else {
                           symbol_id.shift_type(&t.g)
@@ -701,19 +697,22 @@ fn create_intermediate_state(
                 let symbol_id = child.edge_symbol;
                 is_token_assertion = true;
 
-                let assertion_type =
-                  (if child.is(TransitionStateType::O_PEEK) { "assert peek" } else { "assert" })
-                    .to_string();
+                let assertion_type = (if child.is(TransitionStateType::O_PEEK_SHIFT) {
+                  "assert peek"
+                } else {
+                  "assert"
+                })
+                .to_string();
 
-                if child.is(TransitionStateType::O_PEEK) {
-                  if (node.is(TransitionStateType::O_PEEK)) {
+                if child.is(TransitionStateType::O_PEEK_SHIFT) {
+                  if (node.is(TransitionStateType::O_PEEK_SHIFT)) {
                     peek_type = PeekType::PeekContinue;
                   } else {
                     peek_type = PeekType::PeekStart;
                   }
                 }
 
-                let (symbol_id, assert_class) = if (!is_scanner) {
+                let (symbol_id, assert_class) = if (!t.is_scanner) {
                   (symbol_id.bytecode_id(Some(&t.g)), "TOKEN")
                 } else {
                   symbol_id.shift_type(&t.g)
@@ -741,7 +740,7 @@ fn create_intermediate_state(
     stack_depth += max_child_depth;
   }
 
-  if is_scanner {
+  if t.is_scanner {
     let mut code = strings.join("\n");
 
     if code.is_empty() {
@@ -753,12 +752,12 @@ fn create_intermediate_state(
           .map(|s| { t.g.get_production_plain_name(s) })
           .collect::<Vec<_>>()
           .join("   \n"),
-        children_tables.get(node.id).cloned().unwrap_or_default(),
+        children_tables.get(node.id.usize()).cloned().unwrap_or_default(),
         node.debug_string(&t.g)
       )));
     }
 
-    vec![Box::new(
+    Box::new(
       IRState {
         comment,
         code,
@@ -770,7 +769,7 @@ fn create_intermediate_state(
         ..Default::default()
       }
       .into_hashed(),
-    )]
+    )
   } else {
     let (normal_symbol_set, skip_symbols_set, _) =
       get_symbols_from_items(item_set.clone(), &t.g, None);
@@ -794,12 +793,12 @@ fn create_intermediate_state(
           .map(|s| { t.g.get_production_plain_name(s) })
           .collect::<Vec<_>>()
           .join("   \n"),
-        children_tables.get(node.id).cloned().unwrap_or_default(),
+        children_tables.get(node.id.usize()).cloned().unwrap_or_default(),
         node.debug_string(&t.g)
       )));
     }
 
-    let state = Box::new(
+    Box::new(
       IRState {
         comment,
         code,
@@ -813,17 +812,23 @@ fn create_intermediate_state(
         ..Default::default()
       }
       .into_hashed(),
-    );
-
-    if let Some(goto_nodes) = gotos {
-      vec![
-        create_goto_state(t, resolved_states, &goto_nodes, &state.get_name(), &Default::default()),
-        state,
-      ]
-    } else {
-      vec![state]
-    }
+    )
   }
+}
+
+fn get_children<'a>(
+  t: &'a TransitionPack,
+  node: &TransitionGraphNode,
+  children_tables: &Vec<BTreeSet<TGNId>>,
+) -> Vec<&'a TransitionGraphNode> {
+  let mut children = children_tables
+    .get(node.id.usize())
+    .cloned()
+    .unwrap_or_default()
+    .iter()
+    .map(|c| t.get_node(*c))
+    .collect::<Vec<_>>();
+  children
 }
 
 fn create_reduce_string(node: &TransitionGraphNode, g: &GrammarStore, is_scanner: bool) -> String {

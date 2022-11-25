@@ -42,7 +42,7 @@ pub struct IRState {
   pub id: String,
   pub comment: String,
   pub hash: u64,
-  pub graph_id: usize,
+  pub graph_id: TGNId,
   pub normal_symbols: Vec<SymbolID>,
   pub skip_symbols: Vec<SymbolID>,
   pub ast: Result<IR_STATE, HCError>,
@@ -59,7 +59,7 @@ impl Default for IRState {
       code: String::default(),
       id: String::default(),
       hash: u64::default(),
-      graph_id: usize::default(),
+      graph_id: TGNId::default(),
       normal_symbols: Vec::default(),
       skip_symbols: Vec::default(),
       ast: Err(HCError::ir_warn_not_parsed),
@@ -90,7 +90,12 @@ impl IRState {
 
   pub fn get_name(&self) -> String {
     if self.id.is_empty() {
-      Self::get_state_name_from_hash(self.hash)
+      match self.state_type {
+        IRStateType::ProductionGoto | IRStateType::ScannerGoto => {
+          Self::get_state_name_from_hash(self.hash) + "_goto"
+        }
+        _ => Self::get_state_name_from_hash(self.hash),
+      }
     } else {
       self.id.clone()
     }
@@ -140,7 +145,7 @@ impl IRState {
     self.get_scanner_symbol_set().map(|symbols| format!("scan_{:02X}", hash_id_value_u64(&symbols)))
   }
 
-  pub fn get_graph_id(&self) -> usize {
+  pub fn get_graph_id(&self) -> TGNId {
     self.graph_id
   }
 

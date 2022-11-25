@@ -2,13 +2,16 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use crate::grammar::get_closure_cached;
+use crate::grammar::get_closure_cached_plus_ends;
 use crate::types::*;
 
 /// Warning when a fork state is generated for items that have ambiguous production calls.
 #[derive(Debug)]
 pub struct WarnTransitionAmbiguousProduction {
+  goal_items: Vec<Item>,
   source_production: Production,
-  body_refs:         Vec<(Arc<GrammarIds>, Token)>,
+  body_refs: Vec<(Arc<GrammarIds>, Token)>,
+  g: Arc<GrammarStore>,
 }
 
 impl WarnTransitionAmbiguousProduction {
@@ -19,14 +22,18 @@ impl WarnTransitionAmbiguousProduction {
   pub fn check(t: &TransitionPack, conflicting_goals: &Vec<TGNId>) -> HCResult<HCError> {
     let conflicting_nodes = conflicting_goals.iter().map(|n| t.get_node(*n)).collect::<Vec<_>>();
     let peek_root_node = t.get_peek_origin(conflicting_goals[0]);
+    let goal_items = conflicting_goals
+      .iter()
+      .map(|i| t.get_node(*i).first_item().to_zero_state())
+      .collect::<Vec<_>>();
 
     // Look for a common production in each goal. If such production(s) exist,
     // issue warning(s) about production occlusion.
-    let mut closures = conflicting_goals
+    let mut closures = goal_items
       .iter()
       .map(|i| {
-        get_closure_cached(&t.get_node(*i).first_item(), &t.g)
-          .iter()
+        get_closure_cached_plus_ends(i, &t.g)
+          .into_iter()
           .map(|i| (i.get_symbol(&t.g), i))
           .collect::<Vec<_>>()
       })
@@ -48,6 +55,7 @@ impl WarnTransitionAmbiguousProduction {
         false => None,
       })
       .collect::<BTreeSet<_>>();
+
     // For each closure, remove all items that do not have a symbols that matches one in common_symbols,
     // or that is of a production whose id is in common_symbols
     closures.iter_mut().for_each(|c| {
@@ -60,13 +68,21 @@ impl WarnTransitionAmbiguousProduction {
     // user regarding the nature of the ambiguous parse producing bodies.
     if closures.iter().all(|c| !c.is_empty()) {
       HCResult::Ok(HCError::ExtendedError(Arc::new(Self {
+        g: t.g.clone(),
+        goal_items,
         source_production: t.g.get_production(t.root_prod_ids.first().unwrap()).unwrap().clone(),
-        body_refs:         closures
+        body_refs: closures
           .iter()
           .flat_map(|c| {
-            c.iter().map(|(_, i)| {
-              let prod = i.get_body_ref(&t.g).unwrap();
-              (prod.grammar_ref.clone(), prod.tok.clone())
+            c.iter().map(|(_, i)| match i.get_body_ref(&t.g) {
+              HCResult::Ok(body_ref) => {
+                let prod = body_ref;
+                (prod.grammar_ref.clone(), prod.tok.clone())
+              }
+              _ => {
+                let prod = i.decrement().unwrap().get_body_ref(&t.g).unwrap();
+                (prod.grammar_ref.clone(), prod.tok.clone())
+              }
             })
           })
           .collect(),
@@ -79,13 +95,14 @@ impl WarnTransitionAmbiguousProduction {
 
 impl ExtendedError for WarnTransitionAmbiguousProduction {
   fn report(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    let WarnTransitionAmbiguousProduction { source_production, body_refs } = self;
+    let WarnTransitionAmbiguousProduction { g, goal_items, source_production, body_refs } = self;
 
     // let conflicting_productions
 
     f.write_fmt(format_args!(
-      "In the parse path of {}, these production lead to an ambiguous parse:\n{}",
+      "In the parse path of {}, these items [\n{} \n] could not be disambiguated. The following are ambiguous:\n{}",
       source_production.name,
+      goal_items.iter().map(|i| "   ".to_string() + &i.debug_string(g)).collect::<Vec<_>>().join("\n"),
       body_refs
         .iter()
         .map(|(grammar_ref, tok)| {

@@ -8,52 +8,116 @@ use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::hash::Hash;
+use std::ops::Index;
+use std::ops::IndexMut;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::vec;
 
 use super::HCError;
 
-pub type TransitionGraphNodeId = usize;
+#[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+pub struct TGNId(u32);
+
+impl TGNId {
+  const GOTO_CLASS: u32 = 4000000000u32;
+  pub const Invalid: Self = Self(u32::MAX);
+
+  fn new(index: u32) -> Self {
+    Self(index)
+  }
+
+  pub fn is_root(&self) -> bool {
+    self.0 == 0
+  }
+
+  pub fn usize(&self) -> usize {
+    self.0 as usize
+  }
+
+  pub fn to_goto_id(&self) -> Self {
+    Self(self.0 | Self::GOTO_CLASS)
+  }
+}
+
+impl Default for TGNId {
+  fn default() -> Self {
+    Self::Invalid
+  }
+}
+
+impl From<TGNId> for u32 {
+  fn from(value: TGNId) -> Self {
+    value.0
+  }
+}
+
+impl From<TGNId> for usize {
+  fn from(value: TGNId) -> Self {
+    value.0 as usize
+  }
+}
+
+impl std::fmt::Display for TGNId {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    self.0.fmt(f)
+  }
+}
+
+impl<T: Sized> Index<TGNId> for Vec<T> {
+  type Output = T;
+
+  #[inline(always)]
+  fn index(&self, index: TGNId) -> &Self::Output {
+    &self[index.0 as usize]
+  }
+}
+
+impl<T: Sized> IndexMut<TGNId> for Vec<T> {
+  #[inline(always)]
+  fn index_mut(&mut self, index: TGNId) -> &mut Self::Output {
+    &mut self[index.0 as usize]
+  }
+}
+
+pub type TGNRef = Option<TGNId>;
 
 #[bitmask]
 pub enum TransitionStateType {
-  UNDEFINED,
+  EMPTY,
   /// Transition has occurred from
   /// the consumption of a terminal
   /// symbol. All transition should
   /// have this set except for the
   /// initial state and the goal state.
-  O_ASSERT,
+  O_SHIFT,
+
   /// Transition has occurred from the
   /// completion of non-terminal symbol.
-  O_PRODUCTION,
+  O_CALL,
 
   /// Transition has occurred from the
   /// accepting of a completed root item.
   O_ACCEPT,
 
-  O_GOTO_ROOT_ACCEPT,
+  /// Transition shift next token, but the reader state is
+  /// preserved and eventually reset to the last non-peek
+  /// transition.
+  O_PEEK_SHIFT,
+
+  O_FORK,
 
   /// State includes items out of the scope of the current
   /// production that should be used for disambiguating states
   /// that would cause a reduction to a production ID other than
   /// the current production.
   I_OUT_OF_SCOPE,
-  /// Consumption of tokens is not allowed
-  O_PEEK,
-
-  I_FORK,
 
   /// Transition has occurred from the
   /// accepting of a root item.
   I_END,
 
-  O_GOTO,
-
   I_GOTO_START,
-
-  I_DESCENT_START,
 
   /// Indicates this node consumes its symbol as a token.
   I_SHIFT,
@@ -62,33 +126,31 @@ pub enum TransitionStateType {
 
   I_FAIL,
 
+  /// Nodes marked as `I_PEEK_ORIGIN` are the root nodes of a
+  /// peek branch.
   I_PEEK_ORIGIN,
-
-  I_MERGE_ORIGIN,
 
   /// This state is set when the nodes item has a skipped symbol
   /// that occludes another item that consumes that symbol.
   I_SKIPPED_COLLISION,
 
-  I_COMPLETE,
-
   /// Indicates the item of this node is the result of a goto on a
   /// root production.
   I_GOTO_ROOT,
+
+  I_GOTO_LR_BRANCH,
 
   /// Indicates the item of this node is an end item that results
   /// from the GOTO of a production.
   I_GOTO_END,
 
   I_GOTO_LR,
-
-  O_TERMINAL,
   I_LR_START,
 }
 
 impl Default for TransitionStateType {
   fn default() -> Self {
-    TransitionStateType::UNDEFINED
+    TransitionStateType::EMPTY
   }
 }
 
@@ -100,9 +162,14 @@ pub struct TransitionGraphNode {
   pub prod_sym: Option<SymbolID>,
   pub trans_type: TransitionStateType,
   pub items: Vec<Item>,
-  pub parent: TransitionGraphNodeId,
-  pub goal: TransitionGraphNodeId,
-  pub proxy_parents: Vec<usize>,
+  pub parent: TGNRef,
+  /// This is set if this node is a member of a peek branch.
+  /// Represents the state which normal parsing will return to
+  /// when resolved leaves of the peek branch are reached.
+  pub peek_goal: TGNRef,
+  /// The peek branch origin
+  pub peek_origin: TGNRef,
+  pub proxy_parents: Vec<TGNId>,
   /// The number of symbol shifts that have occurred prior to
   /// reaching this node.
   pub shifts: u32,
@@ -111,12 +178,10 @@ pub struct TransitionGraphNode {
   /// disambiguating that have occurred prior to reaching this node.
   /// Otherwise, this value is less than 0.
   pub peek_shifts: i32,
-  pub id: usize,
+  pub id: TGNId,
 }
 
 impl TransitionGraphNode {
-  pub const OrphanIndex: usize = usize::MAX;
-
   /// Return a clone of the first item in the node's items array
   ///
   /// # Panics
@@ -133,33 +198,43 @@ impl TransitionGraphNode {
   pub fn new(
     t_pack: &TransitionPack,
     sym: SymbolID,
-    parent_index: usize,
+    parent_index: TGNRef,
     items: Vec<Item>,
   ) -> Self {
     let mut node = TransitionGraphNode {
       edge_symbol: sym,
-      trans_type: TransitionStateType::UNDEFINED,
-      proxy_parents: vec![],
+      trans_type: TransitionStateType::EMPTY,
       items,
-      shifts: 0,
-      prod_sym: None,
       peek_shifts: -1,
-      parent: TransitionGraphNode::OrphanIndex,
-      goal: TransitionGraphNode::OrphanIndex,
-      id: TransitionGraphNode::OrphanIndex,
+      id: TGNId::Invalid,
+      ..Default::default()
     };
 
-    if t_pack.nodes.len() > parent_index {
-      let parent = &t_pack.nodes[parent_index];
-
-      node.parent = parent_index;
-
-      node.shifts = parent.shifts + 1;
-
-      node.goal = parent.goal;
+    if let Some(parent_index) = parent_index {
+      node.set_parent(t_pack, parent_index);
     }
 
     node
+  }
+
+  pub fn set_parent(&mut self, t_pack: &TransitionPack, parent_index: TGNId) {
+    let parent = &t_pack.graph_nodes[parent_index];
+    self.parent = Some(parent_index);
+    self.shifts = parent.shifts + 1;
+    self.peek_goal = parent.peek_goal;
+    self.peek_origin = parent.peek_origin;
+  }
+
+  pub fn is_peek_origin(&self) -> bool {
+    self.is(TransitionStateType::I_PEEK_ORIGIN)
+  }
+
+  pub fn is_peek_node(&self) -> bool {
+    self.peek_goal.is_some()
+  }
+
+  pub fn is_peek_goal_node(&self) -> bool {
+    self.peek_origin.is_some() && !self.is_peek_node()
   }
 
   pub fn temp(
@@ -170,29 +245,23 @@ impl TransitionGraphNode {
   ) -> Self {
     TransitionGraphNode {
       edge_symbol: sym,
-      trans_type: TransitionStateType::UNDEFINED,
+      trans_type: TransitionStateType::EMPTY,
       proxy_parents: vec![],
       items,
-      shifts: 0,
-      prod_sym: None,
       peek_shifts: -1,
-      parent: TransitionGraphNode::OrphanIndex,
-      goal: TransitionGraphNode::OrphanIndex,
-      id: origin.id * 100000,
+      id: TGNId::new(origin.id.0 * 100000),
+      ..Default::default()
     }
   }
 
   #[inline(always)]
-
   pub fn is_orphan(&self, tpack: &TransitionPack) -> bool {
     !self.has_parent(tpack)
   }
 
   #[inline(always)]
   pub fn has_parent(&self, tpack: &TransitionPack) -> bool {
-    self.parent != Self::OrphanIndex
-      && self.id != Self::OrphanIndex
-      && self.parent < tpack.nodes.len()
+    self.parent.is_some() && self.id != TGNId::Invalid
   }
 
   #[inline(always)]
@@ -214,7 +283,7 @@ impl TransitionGraphNode {
     format!(
       "{{[{}] par:[{}] sym:{}\n    [\n{}\n    ]}}",
       self.id,
-      self.parent,
+      self.parent.unwrap_or(TGNId::Invalid),
       self.edge_symbol.to_string(g),
       self
         .items
@@ -226,7 +295,12 @@ impl TransitionGraphNode {
   }
 
   pub fn linked_to_self(&self) -> bool {
-    self.parent == self.id || self.proxy_parents.iter().any(|i| self.id == *i)
+    match self.parent {
+      Some(parent_index) => {
+        parent_index == self.id || self.proxy_parents.iter().any(|i| self.id == *i)
+      }
+      _ => false,
+    }
   }
 }
 
@@ -244,58 +318,44 @@ impl Default for TransitionMode {
 
 pub type TPackResults = (TransitionPack, Vec<HCError>);
 
+/// Maintains a set of transition nodes and related properties that describe
+/// either a complete or intermediate parse graph.
+///
+/// Note: Since transition functions can create Recursive Ascent as well as
+/// Recursive Descent style graphs, the resulting graph may contain cycles.
 #[derive(Debug, Default)]
 pub struct TransitionPack {
   /// A set of closures that can be referenced in peek states.
   pub scoped_closures: Vec<Vec<Item>>,
-  /// For a givin item, points to an originating
-  /// item that can used to look up it's own closure
-  closure_links: HashMap<Item, Item>,
   pub gotos: BTreeSet<Item>,
-  nodes: Vec<TransitionGraphNode>,
-  pub leaf_nodes: Vec<TransitionGraphNodeId>,
+  pub leaf_nodes: Vec<TGNId>,
   pub mode: TransitionMode,
   pub is_scanner: bool,
-  /// Internal pipeline to drive transition tree
-  /// creation.
-  node_pipeline: VecDeque<TransitionGraphNodeId>,
-  ////
-  /// Stores indices of pruned node slots that can be reused
-  empty_cache: VecDeque<usize>,
   pub goto_scoped_closure: Option<Rc<Box<Vec<Item>>>>,
   pub root_prod_ids: BTreeSet<ProductionId>,
   pub peek_ids: BTreeSet<u64>,
   pub starts: BTreeSet<Item>,
   pub out_of_scope_closure: Option<Vec<Item>>,
   pub errors: Vec<HCError>,
-  pub events: BTreeMap<u64, usize>,
+  pub events: BTreeMap<u64, TGNId>,
   /// If this TPack defines a goto transition sequence,
   /// then this is true if root goto state does not simply
   /// resolve to a pass action.
   pub non_trivial_root: bool,
   pub g: Arc<GrammarStore>,
+  //
+  graph_nodes: Vec<TransitionGraphNode>,
+  node_pipeline: VecDeque<TGNId>,
+  /// Internal pipeline to drive transition tree
+  /// creation.
+  /// Stores indices of pruned node slots that can be reused
+  empty_cache: VecDeque<TGNId>,
+  /// For a givin item, points to an originating
+  /// item that can used to look up it's own closure
+  closure_links: HashMap<Item, Item>,
 }
 
 impl TransitionPack {
-  pub fn queue_node(&mut self, node_index: usize) {
-    if node_index >= self.nodes.len() {
-      panic!("Cannot queue a TransitionNode that has not been added to the TransitionPack")
-    } else if self.get_node(node_index).id >= self.nodes.len() {
-      panic!("Cannot queue a TransitionNode that has been pruned from the TransitionPack")
-    } else {
-      self.node_pipeline.push_back(node_index)
-    }
-  }
-
-  pub fn get_first_prod_id(&self) -> Option<ProductionId> {
-    self.root_prod_ids.first().cloned()
-  }
-
-  #[inline(always)]
-  pub fn get_next_queued(&mut self) -> Option<usize> {
-    self.node_pipeline.pop_front()
-  }
-
   pub fn new(
     g: Arc<GrammarStore>,
     mode: TransitionMode,
@@ -310,25 +370,38 @@ impl TransitionPack {
       is_scanner,
       root_prod_ids,
       starts: BTreeSet::from_iter(starts.iter().map(|i| i.to_start().to_zero_state())),
-      nodes: Vec::with_capacity(256),
+      graph_nodes: Vec::with_capacity(256),
       g,
       ..Default::default()
     }
   }
 
-  pub fn insert_node(&mut self, mut node: TransitionGraphNode) -> usize {
+  pub fn queue_node(&mut self, node_index: TGNId) {
+    self.node_pipeline.push_back(node_index)
+  }
+
+  pub fn get_first_prod_id(&self) -> Option<ProductionId> {
+    self.root_prod_ids.first().cloned()
+  }
+
+  #[inline(always)]
+  pub fn get_next_queued(&mut self) -> TGNRef {
+    self.node_pipeline.pop_front()
+  }
+
+  pub fn insert_node(&mut self, mut node: TransitionGraphNode) -> TGNId {
     if let Some(slot_index) = self.empty_cache.pop_front() {
       node.id = slot_index;
 
-      self.nodes[slot_index] = node;
+      self.graph_nodes[slot_index] = node;
 
       slot_index
     } else {
-      let id = self.nodes.len();
+      let id = TGNId::new(self.graph_nodes.len() as u32);
 
       node.id = id;
 
-      self.nodes.push(node);
+      self.graph_nodes.push(node);
 
       id
     }
@@ -337,58 +410,106 @@ impl TransitionPack {
   /// Removes the edge between this node and its parent, rendering
   /// it orphaned and available for destruction / reuse
 
-  pub fn drop_node(&mut self, node_index: &usize) -> usize {
+  pub fn drop_node(&mut self, node_index: &TGNId) -> TGNRef {
     let node_id;
-
     let parent;
 
     {
-      let mut node = self.get_node_mut(*node_index);
+      let node = self.get_node_mut(*node_index);
 
       node_id = node.id;
 
       parent = node.parent;
 
-      node.parent = TransitionGraphNode::OrphanIndex;
-
-      node.id = TransitionGraphNode::OrphanIndex;
-
+      node.parent = None;
+      node.peek_goal = None;
+      node.peek_origin = None;
+      node.id = TGNId::Invalid;
       node.items.clear();
     }
 
-    if node_id < self.nodes.len() {
-      self.empty_cache.push_back(node_id);
+    if *node_index != TGNId::Invalid {
+      self.empty_cache.push_back(*node_index);
     }
 
     parent
   }
 
+  /// If the node at node_index is `node.is_peek_node()`, then this
+  /// returns the node's peek_goal node.
+  ///
+  /// # Panic
+  ///
+  /// Panics in debug if the node at `node_index` is dead, or
+  /// if the node is not a peek node.
   #[inline(always)]
-  pub fn get_goal(&self, node_index: usize) -> &TransitionGraphNode {
-    if self.nodes[node_index].id == TransitionGraphNode::OrphanIndex {
-      panic!("Invalid access of a deleted node at index {}", node_index)
-    }
+  pub fn get_goal(&self, node_index: TGNId) -> &TransitionGraphNode {
+    debug_assert!(
+      self.graph_nodes[node_index].id != TGNId::Invalid,
+      "Invalid access of a deleted node at index {}",
+      node_index
+    );
 
-    self.get_node(self.nodes[node_index].goal)
+    debug_assert!(
+      self.graph_nodes[node_index].is_peek_node(),
+      "Invalid access of a non-peek node at index {}",
+      node_index
+    );
+
+    self.get_node(self.graph_nodes[node_index].peek_goal.unwrap())
+  }
+
+  /// If the node at node_index is `node.is_peek_node()` or is `node.is_peek_goal()`, then this
+  /// returns the node's peek_origin node.
+  ///
+  /// # Panic
+  ///
+  /// Panics in debug if the node at `node_index` is dead, or
+  /// if the node is not a peek node or peek goal node.
+  #[inline(always)]
+  pub fn get_peek_origin(&self, node_index: TGNId) -> &TransitionGraphNode {
+    let node = &self.graph_nodes[node_index];
+
+    debug_assert!(
+      node.id != TGNId::Invalid,
+      "Invalid access of a deleted node at index {}",
+      node_index
+    );
+
+    if node.is_peek_origin() {
+      node
+    } else {
+      debug_assert!(
+        !node.is_peek_node() || !node.is_peek_goal_node(),
+        "Invalid access of a non-peek node at index {}",
+        node_index
+      );
+
+      self.get_peek_origin(node.peek_origin.unwrap())
+    }
   }
 
   #[inline(always)]
-  pub fn get_node(&self, node_index: usize) -> &TransitionGraphNode {
-    if self.nodes[node_index].id == TransitionGraphNode::OrphanIndex {
-      panic!("Invalid access of a deleted node at index {}", node_index)
-    }
+  pub fn get_node(&self, node_index: TGNId) -> &TransitionGraphNode {
+    debug_assert!(
+      self.graph_nodes[node_index].id != TGNId::Invalid,
+      "Invalid access of a deleted node at index {}",
+      node_index
+    );
 
-    &self.nodes[node_index]
+    &self.graph_nodes[node_index]
   }
 
   #[inline(always)]
 
-  pub fn get_node_mut(&mut self, node_index: usize) -> &mut TransitionGraphNode {
-    if self.nodes[node_index].id == TransitionGraphNode::OrphanIndex {
-      panic!("Invalid access of a deleted node at index {}", node_index)
-    }
+  pub fn get_node_mut(&mut self, node_index: TGNId) -> &mut TransitionGraphNode {
+    debug_assert!(
+      self.graph_nodes[node_index].id != TGNId::Invalid,
+      "Invalid access of a deleted node at index {}",
+      node_index
+    );
 
-    &mut self.nodes[node_index]
+    &mut self.graph_nodes[node_index]
   }
 
   #[inline(always)]
@@ -430,20 +551,21 @@ impl TransitionPack {
   }
 
   pub fn nodes_iter(&self) -> core::slice::Iter<TransitionGraphNode> {
-    self.nodes.iter()
+    self.graph_nodes.iter()
   }
 
   pub fn clean(self) -> TPackResults {
     (
       TransitionPack {
         gotos: self.gotos,
-        nodes: self.nodes,
+        graph_nodes: self.graph_nodes,
         leaf_nodes: self.leaf_nodes,
         mode: self.mode,
         is_scanner: self.is_scanner,
         root_prod_ids: self.root_prod_ids,
         closure_links: self.closure_links,
         non_trivial_root: self.non_trivial_root,
+        g: self.g,
         ..Default::default()
       },
       self.errors,
@@ -451,12 +573,12 @@ impl TransitionPack {
   }
 
   pub fn get_node_len(&self) -> usize {
-    self.nodes.len()
+    self.graph_nodes.len()
   }
 
   pub fn print_nodes(&self) {
-    for node in &self.nodes {
-      if !node.is_orphan(self) || node.id == 0 {
+    for node in &self.graph_nodes {
+      if !node.is_orphan(self) || node.id.0 == 0 {
         println!("{}\n", node.debug_string(&self.g));
       }
     }
