@@ -17,26 +17,17 @@ use std::sync::Arc;
 use std::vec;
 
 use crate::debug::debug_items;
-use crate::grammar::create_closure;
 use crate::grammar::get_closure_cached;
 use crate::grammar::get_production_start_items;
 use crate::grammar::hash_id_value_u64;
 use crate::types::BlameColor;
 use crate::types::GrammarId;
-use crate::types::GrammarStore;
 use crate::types::HCResult;
 use crate::types::Item;
-use crate::types::ItemState;
-use crate::types::OriginData;
 use crate::types::ProductionId;
 use crate::types::RecursionType;
 use crate::types::SymbolID;
-use crate::types::TGNId;
-use crate::types::TPackResults;
-use crate::types::TransitionGraphNode as TGN;
-use crate::types::TransitionMode;
-use crate::types::TransitionPack as TPack;
-use crate::types::TransitionStateType as TST;
+use crate::types::*;
 
 /// Remove items that would cause LL branch conflicts and replace
 /// with their derivatives.
@@ -314,14 +305,15 @@ pub fn non_recursive(
   target_prod: &BTreeSet<ProductionId>,
   g: &GrammarStore,
 ) -> bool {
-  for item in create_closure(items, g) {
-    if let SymbolID::Production(production, _) = item.get_symbol(g) {
-      if target_prod.contains(&production) {
-        return false;
+  for item in items {
+    for item in get_closure_cached(item, g) {
+      if let SymbolID::Production(production, _) = item.get_symbol(g) {
+        if target_prod.contains(&production) {
+          return false;
+        }
       }
     }
   }
-
   true
 }
 
@@ -366,4 +358,43 @@ pub fn check_for_left_recursion(symbol_items: &Vec<Item>, g: &GrammarStore) {
     }),
     "Scanner productions cannot contain left recursion!"
   );
+}
+
+/// Returns a vector of items that have whose position is immediately before
+/// a non-terminal symbol that matches one of the root ids.
+pub fn get_follow_closure(g: &GrammarStore, root_ids: &BTreeSet<ProductionId>) -> Vec<Item> {
+  let mut pending_prods = VecDeque::<ProductionId>::new();
+  let mut seen_prods = BTreeSet::<ProductionId>::new();
+
+  for prod_id in root_ids {
+    pending_prods.push_back(*prod_id);
+  }
+
+  let mut output = BTreeSet::new();
+
+  while let Some(production_id) = pending_prods.pop_front() {
+    if !seen_prods.insert(production_id) {
+      continue;
+    }
+
+    let items: Vec<Item> = g
+      .lr_items
+      .get(&production_id)
+      .unwrap_or(&Vec::new())
+      .iter()
+      .map(|i| i.increment().unwrap())
+      .collect();
+
+    for item in items {
+      if item.is_end() {
+        pending_prods.push_back(item.get_prod_id(g));
+      }
+
+      output.insert(item.decrement().unwrap());
+    }
+
+    seen_prods.insert(production_id);
+  }
+
+  output.into_iter().collect()
 }

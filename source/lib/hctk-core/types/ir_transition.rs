@@ -1,3 +1,4 @@
+use crate::grammar::get_closure_cached;
 use crate::types::GrammarStore;
 use crate::types::Item;
 use crate::types::ProductionId;
@@ -156,12 +157,12 @@ impl Default for TransitionStateType {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct TransitionGraphNode {
+  pub trans_type: TransitionStateType,
+  pub items: Vec<Item>,
   /// The symbols that labels the edge that
   /// connects the parent state to this state.
   pub edge_symbol: SymbolID,
   pub prod_sym: Option<SymbolID>,
-  pub trans_type: TransitionStateType,
-  pub items: Vec<Item>,
   pub parent: TGNRef,
   /// This is set if this node is a member of a peek branch.
   /// Represents the state which normal parsing will return to
@@ -169,6 +170,9 @@ pub struct TransitionGraphNode {
   pub peek_goal: TGNRef,
   /// The peek branch origin
   pub peek_origin: TGNRef,
+  /// The parent node whose closure
+  /// produced the items belonging to this node.
+  pub closure_parent: TGNRef,
   pub proxy_parents: Vec<TGNId>,
   /// The number of symbol shifts that have occurred prior to
   /// reaching this node.
@@ -211,18 +215,14 @@ impl TransitionGraphNode {
     };
 
     if let Some(parent_index) = parent_index {
-      node.set_parent(t_pack, parent_index);
+      let parent = &t_pack.graph_nodes[parent_index];
+      node.parent = Some(parent_index);
+      node.shifts = parent.shifts + 1;
+      node.peek_goal = parent.peek_goal;
+      node.peek_origin = parent.peek_origin;
     }
 
     node
-  }
-
-  pub fn set_parent(&mut self, t_pack: &TransitionPack, parent_index: TGNId) {
-    let parent = &t_pack.graph_nodes[parent_index];
-    self.parent = Some(parent_index);
-    self.shifts = parent.shifts + 1;
-    self.peek_goal = parent.peek_goal;
-    self.peek_origin = parent.peek_origin;
   }
 
   pub fn is_peek_origin(&self) -> bool {
@@ -235,6 +235,11 @@ impl TransitionGraphNode {
 
   pub fn is_peek_goal_node(&self) -> bool {
     self.peek_origin.is_some() && !self.is_peek_node()
+  }
+
+  /// Returns the closure of this node's items
+  pub fn get_closure<'a>(&self, g: &'a GrammarStore) -> BTreeSet<&'a Item> {
+    self.items.iter().flat_map(|i| get_closure_cached(i, &g)).collect::<BTreeSet<_>>()
   }
 
   pub fn temp(
@@ -325,17 +330,15 @@ pub type TPackResults = (TransitionPack, Vec<HCError>);
 /// Recursive Descent style graphs, the resulting graph may contain cycles.
 #[derive(Debug, Default)]
 pub struct TransitionPack {
-  /// A set of closures that can be referenced in peek states.
-  pub scoped_closures: Vec<Vec<Item>>,
-  pub gotos: BTreeSet<Item>,
+  pub goto_scoped_closure: Option<Rc<Box<Vec<Item>>>>,
+  pub out_of_scope_closure: Option<Vec<Item>>,
+  pub goto_seeds: BTreeSet<Item>,
   pub leaf_nodes: Vec<TGNId>,
   pub mode: TransitionMode,
   pub is_scanner: bool,
-  pub goto_scoped_closure: Option<Rc<Box<Vec<Item>>>>,
   pub root_prod_ids: BTreeSet<ProductionId>,
   pub peek_ids: BTreeSet<u64>,
   pub starts: BTreeSet<Item>,
-  pub out_of_scope_closure: Option<Vec<Item>>,
   pub errors: Vec<HCError>,
   pub events: BTreeMap<u64, TGNId>,
   /// If this TPack defines a goto transition sequence,
@@ -345,7 +348,7 @@ pub struct TransitionPack {
   pub g: Arc<GrammarStore>,
   //
   graph_nodes: Vec<TransitionGraphNode>,
-  node_pipeline: VecDeque<TGNId>,
+  node_pipeline: VecDeque<(TGNId, Vec<Item>)>,
   /// Internal pipeline to drive transition tree
   /// creation.
   /// Stores indices of pruned node slots that can be reused
@@ -376,8 +379,8 @@ impl TransitionPack {
     }
   }
 
-  pub fn queue_node(&mut self, node_index: TGNId) {
-    self.node_pipeline.push_back(node_index)
+  pub fn queue_node(&mut self, node_index: TGNId, items: Vec<Item>) {
+    self.node_pipeline.push_back((node_index, items))
   }
 
   pub fn get_first_prod_id(&self) -> Option<ProductionId> {
@@ -385,7 +388,7 @@ impl TransitionPack {
   }
 
   #[inline(always)]
-  pub fn get_next_queued(&mut self) -> TGNRef {
+  pub fn get_next_queued(&mut self) -> Option<(TGNId, Vec<Item>)> {
     self.node_pipeline.pop_front()
   }
 
@@ -409,7 +412,6 @@ impl TransitionPack {
 
   /// Removes the edge between this node and its parent, rendering
   /// it orphaned and available for destruction / reuse
-
   pub fn drop_node(&mut self, node_index: &TGNId) -> TGNRef {
     let node_id;
     let parent;
@@ -512,40 +514,6 @@ impl TransitionPack {
     &mut self.graph_nodes[node_index]
   }
 
-  #[inline(always)]
-  pub fn get_closure_link(&self, i: &Item) -> Item {
-    if let Some(link) = self.closure_links.get(i) {
-      *link
-    } else {
-      Item::null(i.get_state())
-    }
-  }
-
-  pub fn get_root_link(&self, i: &Item) -> Item {
-    let mut link = *i;
-    let mut next_link = self.get_closure_link(&link);
-    while !next_link.is_null() {
-      link = next_link;
-      next_link = self.get_closure_link(&link);
-    }
-    link
-  }
-
-  pub fn get_previous_link(&self, i: &Item) -> Item {
-    let mut next_link = self.get_closure_link(i);
-    next_link
-  }
-
-  #[inline(always)]
-  pub fn set_closure_link(&mut self, item_next: Item, item_prev: Item) {
-    if item_next.get_state().get_group() != item_prev.get_state().get_group() {
-      panic!("Incorrect linking of Items with differing states!");
-    }
-    if item_next != item_prev {
-      self.closure_links.insert(item_next, item_prev);
-    }
-  }
-
   pub fn clear_peek_data(&mut self) {
     self.peek_ids.clear();
   }
@@ -557,7 +525,7 @@ impl TransitionPack {
   pub fn clean(self) -> TPackResults {
     (
       TransitionPack {
-        gotos: self.gotos,
+        goto_seeds: self.goto_seeds,
         graph_nodes: self.graph_nodes,
         leaf_nodes: self.leaf_nodes,
         mode: self.mode,

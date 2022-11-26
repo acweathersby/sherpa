@@ -2,7 +2,6 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use crate::grammar::get_closure_cached;
-use crate::grammar::get_closure_cached_plus_ends;
 use crate::types::*;
 
 /// Warning when a fork state is generated for items that have ambiguous production calls.
@@ -32,10 +31,7 @@ impl WarnTransitionAmbiguousProduction {
     let mut closures = goal_items
       .iter()
       .map(|i| {
-        get_closure_cached_plus_ends(i, &t.g)
-          .into_iter()
-          .map(|i| (i.get_symbol(&t.g), i))
-          .collect::<Vec<_>>()
+        get_closure_cached(i, &t.g).into_iter().map(|i| (i.get_symbol(&t.g), i)).collect::<Vec<_>>()
       })
       .collect::<Vec<_>>();
 

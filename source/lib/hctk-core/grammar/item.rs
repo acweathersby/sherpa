@@ -47,14 +47,10 @@ pub fn create_closure(items: &[Item], g: &GrammarStore) -> Vec<Item> {
 #[inline]
 pub fn get_closure_cached<'a>(item: &Item, g: &'a GrammarStore) -> &'a Vec<Item> {
   static empty_closure: Vec<Item> = vec![];
-  if item.is_end() {
+  if g.closures.get(&item.to_zero_state()).is_none() {
     &empty_closure
   } else {
-    if g.closures.get(&item.to_zero_state()).is_none() {
-      &empty_closure
-    } else {
-      g.closures.get(&item.to_zero_state()).unwrap()
-    }
+    g.closures.get(&item.to_zero_state()).unwrap()
   }
 }
 

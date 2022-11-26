@@ -317,8 +317,8 @@ impl Item {
   }
 
   pub fn get_body_ref<'a>(&self, g: &'a GrammarStore) -> HCResult<&'a BodySymbol> {
-    match self.get_body(&g) {
-      HCResult::Ok(body) => HCResult::Ok(&body.syms[self.off as usize]),
+    match (self.at_end(), self.get_body(&g)) {
+      (false, HCResult::Ok(body)) => HCResult::Ok(&body.syms[self.off as usize]),
       _ => HCResult::None,
     }
   }

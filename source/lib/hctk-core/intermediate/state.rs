@@ -11,7 +11,6 @@ use std::vec;
 
 use super::transition::construct_goto;
 use super::transition::construct_recursive_descent;
-use crate::grammar::create_closure;
 use crate::grammar::get_closure_cached;
 use crate::grammar::get_production_start_items;
 use crate::grammar::get_scanner_info_from_defined;
@@ -202,11 +201,10 @@ fn generate_states(
 
   let root_ids = start_items.iter().map(|i| i.get_prod_id(&g)).collect::<BTreeSet<_>>();
 
-  let (start_items, goto_seeds) =
-    if !is_scanner { get_valid_starts(&start_items, &g) } else { (start_items.to_vec(), vec![]) };
-
   let (t, mut e) =
     construct_recursive_descent(g.clone(), is_scanner, &start_items, root_ids.clone());
+
+  e.debug_print();
 
   errors.append(&mut e);
 
@@ -219,7 +217,7 @@ fn generate_states(
   //  and thus they have no need for a GOTO path.
   if !is_scanner {
     let (goto_data, mut e) =
-      construct_goto(g.clone(), is_scanner, &start_items, &goto_seeds, root_ids);
+      construct_goto(g.clone(), is_scanner, &t.goto_seeds.iter().cloned().collect(), root_ids);
 
     errors.append(&mut e);
 
@@ -311,7 +309,6 @@ pub(crate) fn process_transition_nodes<'a>(
       // End states are discarded at the end, so we will only use this
       // retrieve state's hash for parent states.
       let state = create_reduce_state(node, &t.g, t.is_scanner);
-
       output.insert(state.get_graph_id(), state);
     }
 

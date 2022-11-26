@@ -484,11 +484,11 @@ impl Token {
 
     if let Some(source) = self.input.clone() {
       let mut string = String::from("");
-      let mut prev_line = (self.line_off) as i64;
+      let mut prev_line = find_prev_line(&source, self.off as i64) as i64;
       let mut line_num = (self.line_num + 1) as usize;
       let mut remainder = self.len + (self.off - self.line_off);
       let mut next_line;
-      let mut col_diff = (self.off - self.line_off - (prev_line != 0) as u32) as usize;
+      let mut col_diff = (self.off - prev_line as u32 - (prev_line != 0) as u32) as usize;
 
       if source[0] as char == '\n' {
         line_num -= 1;

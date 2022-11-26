@@ -305,7 +305,6 @@ mod state_constructor_tests {
 <> B > \\a \\b \\c (*)
 
 <> C > \\a \\b \\c (*)
-
 ",
     )
     .unwrap();
@@ -777,26 +776,25 @@ mod state_constructor_tests {
     let prod_id = g.get_production_id_by_name("A")?;
     let items = get_production_start_items(&prod_id, &g);
 
-    generate_production_states(&prod_id, g.clone());
+    let states = generate_production_states(&prod_id, g.clone()).states;
 
-    let mut t = TransitionPack::new(
-      g,
-      TransitionMode::RecursiveDescent,
-      false,
-      &items,
-      BTreeSet::from_iter(vec![prod_id]),
-    );
-
-    construct_LR(&mut t, &items, Option::None, crate::types::SymbolID::Start)?;
-
+    // let mut t = TransitionPack::new(
+    // g,
+    // TransitionMode::RecursiveDescent,
+    // false,
+    // &items,
+    // BTreeSet::from_iter(vec![prod_id]),
+    // );
+    //
+    // construct_LR(&mut t, &items, Option::None, crate::types::SymbolID::Start)?;
+    //
     // t.print_nodes();
-
-    let (states, _) = process_transition_nodes(&t, &"Titus".to_string());
-
+    //
+    // let (states, _) = process_transition_nodes(&t, &"Titus".to_string());
+    //
     for state in states {
       println!("{}", state.to_string())
     }
-
     HCResult::Ok(())
   }
 }

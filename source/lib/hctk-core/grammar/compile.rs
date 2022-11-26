@@ -500,6 +500,8 @@ fn finalize_items(g: &mut GrammarStore, thread_count: usize, errors: &mut [HCErr
               results.push((item, create_closure(&[item], g), peek_symbols));
 
               pending_items.push_back(item.increment().unwrap());
+            } else {
+              results.push((item, vec![item], vec![]))
             }
           }
 
