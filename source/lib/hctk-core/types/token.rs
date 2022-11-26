@@ -1,5 +1,11 @@
 use super::parse_token::ParseToken;
-use std::{fmt, hash::Hash, ops::Add, path::PathBuf, sync::Arc};
+use std::{
+  fmt::{self, Write},
+  hash::Hash,
+  ops::{Add, Sub},
+  path::PathBuf,
+  sync::Arc,
+};
 
 #[derive(Clone)]
 pub struct Range {
@@ -101,19 +107,21 @@ impl fmt::Display for Token {
 
 impl fmt::Debug for Token {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    let mut bug = f.debug_struct("Token");
-
-    bug
-      .field("length", &self.len)
-      .field("offset", &self.off)
-      .field("line_number", &self.line_num)
-      .field("line_offset", &self.line_off);
-
-    if self.input.is_some() {
-      bug.field("value", &self.to_string());
+    if self.input.is_some() && self.len < 10 {
+      f.write_fmt(format_args!(
+        "Token{{ off:{}, len:{},  line:{}, l_off:{}, val: {} }}",
+        self.len,
+        self.off,
+        self.line_num,
+        self.line_off,
+        self.to_string()
+      ))
+    } else {
+      f.write_fmt(format_args!(
+        "Token{{ off:{}, len:{}, line:{}, l_off:{} }}",
+        self.len, self.off, self.line_num, self.line_off,
+      ))
     }
-
-    bug.finish()
   }
 }
 
@@ -122,7 +130,6 @@ impl Add for &Token {
 
   fn add(self, rhs: Self) -> Self::Output {
     let (min, max) = if self < rhs { (self, rhs) } else { (rhs, self) };
-
     Token {
       len:      max.off - min.off + max.len,
       off:      min.off,
@@ -134,7 +141,42 @@ impl Add for &Token {
   }
 }
 
+impl Add<Token> for u32 {
+  type Output = Token;
+
+  /// Shifts the offset of token right by `rhs`.
+  ///
+  /// Note: This may recalculate the line offset, which
+  /// may be more expensive than one would expect.
+  #[inline(always)]
+  fn add(self, mut rhs: Token) -> Self::Output {
+    rhs.off += self;
+    rhs.recalculate_line_offset();
+    Token { ..rhs }
+  }
+}
+
+impl Add<u32> for Token {
+  type Output = Token;
+
+  /// Extends the size of token by `rhs`
+  #[inline(always)]
+  fn add(self, rhs: u32) -> Self::Output {
+    Token { len: self.len + rhs, ..self }
+  }
+}
+impl Add<u32> for &Token {
+  type Output = Token;
+
+  /// Extends the `len` of token by `rhs`
+  #[inline(always)]
+  fn add(self, rhs: u32) -> Self::Output {
+    self.clone() + rhs
+  }
+}
+
 impl Token {
+  #[inline(always)]
   pub fn new() -> Token {
     Token {
       len:      0,
@@ -146,6 +188,7 @@ impl Token {
     }
   }
 
+  #[inline(always)]
   pub fn from_vals(len: u32, off: u32, line_number: u32, line_offset: u32) -> Token {
     Token {
       len,
@@ -157,6 +200,7 @@ impl Token {
     }
   }
 
+  #[inline(always)]
   pub fn from_parse_token(tok: &ParseToken) -> Token {
     Token {
       len:      tok.cp_length,
@@ -168,6 +212,7 @@ impl Token {
     }
   }
 
+  #[inline(always)]
   pub fn from_range(start: &Token, end: &Token) -> Token {
     Token {
       len:      end.off - start.off + end.len,
@@ -179,6 +224,7 @@ impl Token {
     }
   }
 
+  #[inline(always)]
   pub const fn empty() -> Token {
     Token {
       len:      0,
@@ -190,18 +236,16 @@ impl Token {
     }
   }
 
-  pub fn set_path() {}
-
   /// Defines the source string for this token. Certain Token
   /// methods will not work correctly if the Token has not been
   /// attached to its source.
+  #[inline(always)]
   pub fn set_source(&mut self, source: Arc<Vec<u8>>) {
     self.input = Some(source);
   }
 
   pub fn get_line_char(&mut self) -> usize {
     if let Some(source) = self.input.clone() {}
-
     0
   }
 
@@ -233,6 +277,7 @@ impl Token {
     }
   }
 
+  #[inline(always)]
   fn get_slice_range(&self, mut start: i32, mut end: i32) -> (usize, usize) {
     use std::cmp::{max, min};
 
@@ -257,22 +302,27 @@ impl Token {
     (start as usize, end as usize)
   }
 
+  #[inline(always)]
   pub fn get_start(&self) -> usize {
     self.off as usize
   }
 
+  #[inline(always)]
   pub fn get_end(&self) -> usize {
     (self.off + self.len) as usize
   }
 
+  #[inline(always)]
   pub fn len(&self) -> usize {
     self.len as usize
   }
 
+  #[inline(always)]
   pub fn is_empty(&self) -> bool {
     self.len == 0
   }
 
+  #[inline(always)]
   pub fn to_length(&self, length: usize) -> Self {
     Self {
       len:      length as u32,
@@ -306,6 +356,7 @@ impl Token {
   ///
   /// assert_eq!(tok.path_ref(&path), "/my/temp/file.txt:10:10")
   /// ```
+  #[inline(always)]
   pub fn path_ref(&self, path: &PathBuf) -> String {
     match path.to_str() {
       Some(string) => string.to_owned() + ":" + &self.loc_stub(),
@@ -313,6 +364,7 @@ impl Token {
     }
   }
 
+  #[inline(always)]
   pub fn get_range(&self) -> Range {
     if let Some(source) = self.input.clone() {
       let start_line = self.line_num + 1;
@@ -344,6 +396,7 @@ impl Token {
     }
   }
 
+  #[inline(always)]
   fn get_range_mut(&mut self) -> Range {
     if let Some(range) = &self.range {
       range.to_owned()
@@ -356,6 +409,7 @@ impl Token {
     }
   }
 
+  #[inline(always)]
   fn slice(&self, start: i32, end: i32) -> String {
     if let Some(input) = &self.input {
       let (adjusted_start, adjusted_end) = self.get_slice_range(start, end);
@@ -366,50 +420,88 @@ impl Token {
     }
   }
 
+  #[inline(always)]
   pub fn to_f32(&self) -> f32 {
     self.to_numeric_or_length() as f32
   }
 
+  #[inline(always)]
   pub fn to_f64(&self) -> f64 {
     self.to_numeric_or_length() as f64
   }
 
+  #[inline(always)]
   pub fn to_i8(&self) -> i8 {
     self.to_numeric_or_length() as i8
   }
 
+  #[inline(always)]
   pub fn to_i16(&self) -> i16 {
     self.to_numeric_or_length() as i16
   }
 
+  #[inline(always)]
   pub fn to_i32(&self) -> i32 {
     self.to_numeric_or_length() as i32
   }
 
+  #[inline(always)]
   pub fn to_i64(&self) -> i64 {
     self.to_numeric_or_length() as i64
   }
 
+  #[inline(always)]
   pub fn to_u8(&self) -> u8 {
     self.to_numeric_or_length() as u8
   }
 
+  #[inline(always)]
   pub fn to_u16(&self) -> u16 {
     self.to_numeric_or_length() as u16
   }
 
+  #[inline(always)]
   pub fn to_u32(&self) -> u32 {
     self.to_numeric_or_length() as u32
   }
 
+  #[inline(always)]
   pub fn to_u64(&self) -> u64 {
     self.to_numeric_or_length() as u64
   }
 
+  #[inline(always)]
   pub fn to_numeric_or_length(&self) -> f64 {
     match self.to_string().parse::<f64>() {
       Ok(num) => num,
       Err(_) => self.len as f64,
+    }
+  }
+
+  #[inline(always)]
+  fn find_next_line(source: &[u8], mut line: i64) -> i64 {
+    line += 1;
+    while (line as usize) < source.len() && source[line as usize] as char != '\n' {
+      line += 1;
+    }
+    line
+  }
+
+  #[inline(always)]
+  fn find_prev_line(source: &[u8], mut line: i64) -> i64 {
+    line -= 1;
+    while line >= 0 && source[line as usize] as char != '\n' {
+      line -= 1;
+    }
+
+    line
+  }
+
+  #[inline(always)]
+  fn recalculate_line_offset(&mut self) {
+    if let Some(source) = self.input.clone() {
+      let mut prev_line = Self::find_prev_line(&source, (self.off + 1) as i64);
+      self.line_off = prev_line.max(0).min(u32::MAX as i64) as u32;
     }
   }
 
@@ -433,23 +525,6 @@ impl Token {
     inline_comment: &str,
     colors: Option<BlameColor>,
   ) -> String {
-    fn find_next_line(source: &[u8], mut line: i64) -> i64 {
-      line += 1;
-      while (line as usize) < source.len() && source[line as usize] as char != '\n' {
-        line += 1;
-      }
-      line
-    }
-
-    fn find_prev_line(source: &[u8], mut line: i64) -> i64 {
-      line -= 1;
-      while line >= 0 && source[line as usize] as char != '\n' {
-        line -= 1;
-      }
-
-      line
-    }
-
     fn create_line(
       source: &Arc<Vec<u8>>,
       prev_line: i64,
@@ -467,7 +542,7 @@ impl Token {
 
     if let Some(source) = self.input.clone() {
       let mut string = String::from("");
-      let mut prev_line = find_prev_line(&source, self.off as i64) as i64;
+      let mut prev_line = Self::find_prev_line(&source, self.off as i64) as i64;
       let mut line_num = (self.line_num + 1) as usize;
       let mut next_line;
       let mut col_diff = (self.off as i64 - prev_line - (prev_line != 0) as i64).max(0) as usize;
@@ -485,13 +560,13 @@ impl Token {
             break;
           }
           let next_line = prev_line;
-          prev_line = find_prev_line(&source, prev_line);
+          prev_line = Self::find_prev_line(&source, prev_line);
           string = create_line(&source, prev_line, next_line, line_num - a) + &string;
         }
       }
 
       loop {
-        next_line = find_next_line(&source, prev_line);
+        next_line = Self::find_next_line(&source, prev_line);
         if let Ok(utf_string) =
           String::from_utf8(Vec::from(&source[(prev_line + 1) as usize..next_line as usize]))
         {
@@ -547,7 +622,7 @@ impl Token {
           break;
         }
         let prev_line = next_line;
-        next_line = find_next_line(&source, next_line);
+        next_line = Self::find_next_line(&source, next_line);
         string += &create_line(&source, prev_line as i64, next_line, line_num + a);
       }
 
