@@ -1,21 +1,5 @@
-use std::fmt;
-use std::hash::Hash;
-use std::ops::Add;
-use std::path::PathBuf;
-use std::rc::Rc;
-use std::sync::Arc;
-
-use crate::grammar::data::ast::HASH_NAME;
-
 use super::parse_token::ParseToken;
-
-/// Simple wrapper for source data and system specific origin path.
-pub struct TokenSource {
-  origin_path: PathBuf,
-  data:        Vec<u8>,
-}
-
-pub type SharedTokenSource = Arc<TokenSource>;
+use std::{fmt, hash::Hash, ops::Add, path::PathBuf, sync::Arc};
 
 #[derive(Clone)]
 pub struct Range {
@@ -250,8 +234,7 @@ impl Token {
   }
 
   fn get_slice_range(&self, mut start: i32, mut end: i32) -> (usize, usize) {
-    use std::cmp::max;
-    use std::cmp::min;
+    use std::cmp::{max, min};
 
     if start < 0 {
       start = max(self.off as i32, (self.off + self.len) as i32 + start)
@@ -584,8 +567,7 @@ impl Default for Token {
 
 #[cfg(test)]
 mod test {
-  use crate::types::BlameColor;
-  use crate::types::Token;
+  use crate::types::{BlameColor, Token};
   use std::sync::Arc;
 
   #[test]

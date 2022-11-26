@@ -1,23 +1,16 @@
-use std::fmt::Display;
-use std::fmt::Error;
-use std::sync::PoisonError;
-
-use crate::deprecated_runtime::buffer::UTF8StringReader;
-use crate::deprecated_runtime::completer::complete;
-use crate::deprecated_runtime::recognizer::iterator::*;
-
-use crate::types::HCError;
-use crate::types::Token;
-
-use super::data::ast::ASTNode;
-use super::data::ast::FunctionMaps;
-use super::data::ast::Grammar;
-use super::data::ast::IR_STATE;
-use super::data::ast_node::HCObj;
-use super::data::parser_data::EntryPoint_Hc;
-use super::data::parser_data::EntryPoint_Ir;
-use super::data::parser_data::EntryPoint_Script;
-use super::data::parser_data::BYTECODE;
+use super::data::{
+  ast::{ASTNode, FunctionMaps, Grammar, IR_STATE},
+  ast_node::HCObj,
+  parser_data::{EntryPoint_Hc, EntryPoint_Ir, EntryPoint_Script, BYTECODE},
+};
+use crate::{
+  deprecated_runtime::{buffer::UTF8StringReader, completer::complete, recognizer::iterator::*},
+  types::{HCError, Token},
+};
+use std::{
+  fmt::{Display, Error},
+  sync::PoisonError,
+};
 
 pub fn compile_grammar_ast(buffer: Vec<u8>) -> Result<Box<Grammar>, HCError> {
   let mut iterator: ReferenceIterator<UTF8StringReader> =

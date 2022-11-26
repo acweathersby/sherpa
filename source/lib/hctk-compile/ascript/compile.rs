@@ -1,28 +1,28 @@
-use std::collections::btree_map;
-use std::collections::hash_map::Entry;
-use std::collections::BTreeMap;
-use std::collections::BTreeSet;
-use std::collections::HashMap;
-use std::collections::VecDeque;
-use std::vec;
-
-use hctk_core::grammar::data::ast::ASTNode;
-use hctk_core::grammar::data::ast::ASTNodeTraits;
-use hctk_core::grammar::data::ast::AST_Add;
-use hctk_core::grammar::data::ast::AST_IndexReference;
-use hctk_core::grammar::data::ast::AST_NamedReference;
-use hctk_core::grammar::data::ast::AST_Struct;
-use hctk_core::grammar::data::ast::AST_Vector;
-use hctk_core::grammar::data::ast::Ascript as AST_AScript;
-use hctk_core::types::*;
-
-use crate::ascript::errors::ErrIncompatibleProductionScalerTypes;
-use crate::ascript::errors::ErrPropRedefinition;
-use crate::ascript::types::*;
-
-use super::errors::ErrIncompatibleProductionVectorTypes;
-use super::errors::ErrUnionOfScalarsAndVectors;
-use super::types::AScriptStore;
+use super::{
+  errors::{ErrIncompatibleProductionVectorTypes, ErrUnionOfScalarsAndVectors},
+  types::AScriptStore,
+};
+use crate::ascript::{
+  errors::{ErrIncompatibleProductionScalerTypes, ErrPropRedefinition},
+  types::*,
+};
+use hctk_core::{
+  grammar::data::ast::{
+    ASTNode,
+    ASTNodeTraits,
+    AST_Add,
+    AST_IndexReference,
+    AST_NamedReference,
+    AST_Struct,
+    AST_Vector,
+    Ascript as AST_AScript,
+  },
+  types::*,
+};
+use std::{
+  collections::{btree_map, hash_map::Entry, BTreeSet, HashMap, VecDeque},
+  vec,
+};
 
 pub fn compile_ascript_store(ast: &mut AScriptStore) -> Vec<HCError> {
   let mut e = vec![];

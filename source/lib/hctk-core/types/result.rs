@@ -1,22 +1,12 @@
 //! Global catch-all for errors.
 //! Methods for reporting errors are provided
 
-use std::convert;
-use std::convert::Infallible;
-use std::fmt::Display;
-use std::fmt::Error;
-use std::ops::ControlFlow;
-use std::ops::FromResidual;
-use std::ops::Residual;
-use std::ops::Try;
-use std::path::Path;
-use std::path::PathBuf;
-use std::process::ExitCode;
-use std::process::Termination;
-use std::sync::Arc;
-
-use crate::compile_grammar_from_string;
 use crate::types::*;
+use std::{
+  convert::Infallible,
+  ops::{ControlFlow, FromResidual, Try},
+  process::{ExitCode, Termination},
+};
 
 /// A Result type that uses the HCTKError enum.
 // pub type HCResult<T> = Result<T, HCError>;

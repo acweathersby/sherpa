@@ -1,11 +1,6 @@
-use std::rc::Rc;
-use std::sync::Arc;
-use std::sync::RwLock;
-
-use crate::types::parse_token::ParseToken;
-use crate::utf8::*;
-
 use super::InputBlock;
+use crate::{types::parse_token::ParseToken, utf8::*};
+use std::sync::Arc;
 
 /// A multi-reader, multi-writer view of the underlying parser input
 /// data, used to distribute access to the input string over multiple

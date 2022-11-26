@@ -1,10 +1,7 @@
-use std::collections::BTreeMap;
-
-use inkwell::values::IntValue;
-use inkwell::values::PointerValue;
-
 use crate::builder::table::BranchTableData;
 use hctk_core::types::*;
+use inkwell::values::{IntValue, PointerValue};
+use std::collections::BTreeMap;
 
 pub const _FAIL_STATE_FLAG_LLVM: u32 = 2;
 pub const NORMAL_STATE_FLAG_LLVM: u32 = 1;

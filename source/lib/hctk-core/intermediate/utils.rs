@@ -2,32 +2,15 @@
 //! to organize here to keep those file clean. The functions here may also be
 //! general enough to be used in modules other than transition, as well.
 
-use std::collections::btree_map;
-use std::collections::btree_map::Entry;
-use std::collections::BTreeMap;
-use std::collections::BTreeSet;
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::collections::VecDeque;
-use std::hash::Hash;
-use std::path::PathBuf;
-use std::process::id;
-use std::rc::Rc;
-use std::sync::Arc;
-use std::vec;
-
-use crate::debug::debug_items;
-use crate::grammar::get_closure_cached;
-use crate::grammar::get_production_start_items;
-use crate::grammar::hash_id_value_u64;
-use crate::types::BlameColor;
-use crate::types::GrammarId;
-use crate::types::HCResult;
-use crate::types::Item;
-use crate::types::ProductionId;
-use crate::types::RecursionType;
-use crate::types::SymbolID;
-use crate::types::*;
+use crate::{
+  grammar::{get_closure_cached, get_production_start_items},
+  types::{Item, ProductionId, RecursionType, SymbolID, *},
+};
+use std::{
+  collections::{btree_map::Entry, BTreeMap, BTreeSet, HashSet, VecDeque},
+  hash::Hash,
+  vec,
+};
 
 /// Remove items that would cause LL branch conflicts and replace
 /// with their derivatives.

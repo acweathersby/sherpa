@@ -2,14 +2,15 @@ use std::sync::Arc;
 
 use bitmask_enum::bitmask;
 
-use crate::grammar::data::ast::ASTNode;
-use crate::grammar::data::ast::ASTNodeTraits;
-use crate::grammar::hash_id_value_u64;
-use crate::types::SymbolID;
-use crate::types::Token;
+use crate::{
+  grammar::{
+    data::ast::{ASTNode, ASTNodeTraits},
+    hash_id_value_u64,
+  },
+  types::{SymbolID, Token},
+};
 
-use super::GrammarIds;
-use super::Item;
+use super::{GrammarIds, Item};
 
 #[bitmask]
 pub enum RecursionType {

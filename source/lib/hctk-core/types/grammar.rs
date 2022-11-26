@@ -1,22 +1,22 @@
 use super::*;
-use crate::compile_grammar_from_path;
-use crate::compile_grammar_from_string;
-use crate::grammar::create_closure;
-use crate::grammar::data::ast::ASTNode;
-use crate::grammar::data::ast::Ascript;
-use crate::grammar::data::ast::Reduce;
-use crate::grammar::get_closure_cached;
-use crate::grammar::get_guid_grammar_name;
-use crate::grammar::get_production_start_items;
-use crate::grammar::hash_id_value_u64;
-use std::collections::BTreeMap;
-use std::collections::BTreeSet;
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::collections::VecDeque;
-use std::fmt::Display;
-use std::path::PathBuf;
-use std::sync::Arc;
+use crate::{
+  compile_grammar_from_path,
+  compile_grammar_from_string,
+  grammar::{
+    create_closure,
+    data::ast::{ASTNode, Ascript, Reduce},
+    get_closure_cached,
+    get_guid_grammar_name,
+    get_production_start_items,
+    hash_id_value_u64,
+  },
+};
+use std::{
+  collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
+  fmt::Display,
+  path::PathBuf,
+  sync::Arc,
+};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
 
@@ -347,8 +347,7 @@ impl GrammarStore {
 
 #[cfg(test)]
 mod production_utilities_tests {
-  use super::GrammarStore as G;
-  use super::*;
+  use super::{GrammarStore as G, *};
 
   #[test]
 

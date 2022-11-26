@@ -10,17 +10,14 @@ pub mod parse;
 pub mod production;
 pub mod uuid;
 
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 pub(crate) use compile::get_scanner_info_from_defined;
 pub use item::*;
 pub use production::*;
 pub use uuid::*;
 
-use self::compile::compile_grammars_into_store;
-use self::load::load_all;
-use self::parse::compile_grammar_ast;
+use self::{compile::compile_grammars_into_store, load::load_all, parse::compile_grammar_ast};
 use crate::types::*;
 
 #[test]
@@ -39,7 +36,7 @@ fn temp_test() {
     }
   }
 
-  let result = compile_grammars_into_store(grammars, 10);
+  let result = compile_grammars_into_store(grammars);
 
   assert!(result.is_ok());
 
@@ -80,7 +77,7 @@ pub fn compile_grammar_from_path(
 ) -> (Option<Arc<GrammarStore>>, Option<Vec<HCError>>) {
   match load_all(&path, thread_count) {
     (_, errors) if !errors.is_empty() => (None, Some(errors)),
-    (grammars, _) => compile_grammars_into_store(grammars, thread_count).unwrap(),
+    (grammars, _) => compile_grammars_into_store(grammars).unwrap(),
   }
 }
 
@@ -107,7 +104,7 @@ pub fn compile_grammar_from_string(
 ) -> (Option<Arc<GrammarStore>>, Option<Vec<HCError>>) {
   match compile_grammar_ast(Vec::from(string.as_bytes())) {
     Ok(grammar) => {
-      compile_grammars_into_store(vec![(absolute_path.clone(), Default::default(), grammar)], 0)
+      compile_grammars_into_store(vec![(absolute_path.clone(), Default::default(), grammar)])
         .unwrap()
     }
     Err(err) => (None, Some(vec![err])),
@@ -121,20 +118,18 @@ mod test_grammar {
 
   use lazy_static::__Deref;
 
-  use crate::debug::debug_items;
-  use crate::get_num_of_available_threads;
-  use crate::grammar::compile::compile_grammars_into_store;
-  use crate::grammar::compile::pre_process_grammar;
-  use crate::grammar::compile_grammar_from_path;
-  use crate::grammar::load::load_all;
-  use crate::types::HCErrorContainer;
-  use crate::types::RecursionType;
+  use crate::{
+    debug::debug_items,
+    get_num_of_available_threads,
+    grammar::compile_grammar_from_path,
+    types::{HCErrorContainer, RecursionType},
+  };
 
-  use super::compile::convert_left_recursion_to_right;
-  use super::compile_grammar_from_string;
-  use super::get_production_start_items;
-  use super::parse::compile_grammar_ast;
-  use super::parse::{self};
+  use super::{
+    compile::convert_left_recursion_to_right,
+    compile_grammar_from_string,
+    get_production_start_items,
+  };
 
   #[test]
   fn test_merge_productions_file() {

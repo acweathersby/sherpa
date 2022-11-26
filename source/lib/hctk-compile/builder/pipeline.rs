@@ -1,24 +1,21 @@
-use std::error::Error;
-use std::fmt::Display;
-use std::fs::create_dir_all;
-use std::fs::File;
-use std::io::Write;
-use std::num::NonZeroUsize;
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::vec;
-
-use crate::ascript::compile::compile_ascript_store;
-use crate::ascript::types::AScriptStore;
-use hctk_core::bytecode::compile_bytecode;
-use hctk_core::bytecode::BytecodeOutput;
-use hctk_core::compile_grammar_from_path;
-use hctk_core::compile_grammar_from_string;
-use hctk_core::get_num_of_available_threads;
-use hctk_core::intermediate::optimize::optimize_ir_states;
-use hctk_core::intermediate::state::compile_states;
-use hctk_core::types::*;
-use std::thread;
+use crate::ascript::{compile::compile_ascript_store, types::AScriptStore};
+use hctk_core::{
+  bytecode::{compile_bytecode, BytecodeOutput},
+  compile_grammar_from_path,
+  compile_grammar_from_string,
+  get_num_of_available_threads,
+  intermediate::{optimize::optimize_ir_states, state::compile_states},
+  types::*,
+};
+use std::{
+  fs::{create_dir_all, File},
+  io::Write,
+  num::NonZeroUsize,
+  path::PathBuf,
+  sync::Arc,
+  thread,
+  vec,
+};
 
 pub type TaskFn =
   Box<dyn Fn(&mut PipelineContext) -> Result<Option<String>, Vec<HCError>> + Sync + Send>;

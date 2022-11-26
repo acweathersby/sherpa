@@ -1,23 +1,16 @@
-use std::collections::btree_map;
-use std::collections::btree_map::Entry;
-use std::collections::BTreeMap;
-use std::collections::BTreeSet;
-use std::collections::HashMap;
-use std::collections::VecDeque;
-use std::hash::Hash;
-use std::path::PathBuf;
-use std::process::id;
-use std::rc::Rc;
-use std::sync::Arc;
-use std::vec;
-
-use super::errors::*;
-use super::utils::*;
-use crate::grammar::*;
-use crate::types::TransitionGraphNode as TGN;
-use crate::types::TransitionPack as TPack;
-use crate::types::TransitionStateType as TST;
-use crate::types::*;
+use super::{errors::*, utils::*};
+use crate::{
+  debug::debug_items,
+  grammar::*,
+  types::{TransitionGraphNode as TGN, TransitionPack as TPack, TransitionStateType as TST, *},
+};
+use std::{
+  collections::{BTreeSet, HashMap, VecDeque},
+  hash::Hash,
+  rc::Rc,
+  sync::Arc,
+  vec,
+};
 
 /// Constructs an initial transition graph that parses a production
 /// using a recursive descent strategy. Productions that are ambiguous

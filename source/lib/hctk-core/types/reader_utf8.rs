@@ -1,17 +1,4 @@
-use std::io::Read;
-use std::rc::Rc;
-use std::sync::Arc;
-use std::sync::RwLock;
-
-use crate::types::ParseToken;
-use crate::utf8::get_utf8_code_point_from;
-
-use super::reader::BaseCharacterReader;
-use super::reader::SharedSymbolBuffer;
-use super::ByteCharacterReader;
-use super::LLVMCharacterReader;
-use super::MutCharacterReader;
-use super::UTF8CharacterReader;
+use super::*;
 
 #[derive(Debug, Clone)]
 pub struct UTF8StringReader<'a> {

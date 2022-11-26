@@ -1,13 +1,12 @@
-use crate::options::BuildOptions;
 use hctk_core::bytecode::BytecodeOutput;
-use hctk_core::types::INSTRUCTION;
-use inkwell::builder::Builder;
-use inkwell::context::Context;
-use inkwell::execution_engine::ExecutionEngine;
-use inkwell::module::Module;
-use inkwell::types::FunctionType;
-use inkwell::types::StructType;
-use inkwell::values::FunctionValue;
+use inkwell::{
+  builder::Builder,
+  context::Context,
+  execution_engine::ExecutionEngine,
+  module::Module,
+  types::{FunctionType, StructType},
+  values::FunctionValue,
+};
 
 pub(crate) struct FunctionPack<'a> {
   pub(crate) fun:        &'a FunctionValue<'a>,

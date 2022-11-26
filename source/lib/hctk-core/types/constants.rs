@@ -1,5 +1,3 @@
-use std::process::Output;
-
 // Global Constants
 pub const STATE_ADDRESS_MASK: u32 = (1 << 24) - 1;
 

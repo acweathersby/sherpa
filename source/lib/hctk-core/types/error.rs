@@ -1,14 +1,11 @@
 use super::*;
-use crate::types::Token;
 use ::std::fmt::Display;
-use std::fmt::Debug;
-use std::hash::Hash;
-use std::path::Path;
-use std::path::PathBuf;
-use std::rc::Rc;
-use std::string::FromUtf16Error;
-use std::string::FromUtf8Error;
-use std::sync::Arc;
+use std::{
+  fmt::Debug,
+  path::PathBuf,
+  string::{FromUtf16Error, FromUtf8Error},
+  sync::Arc,
+};
 
 /// Severity types of an HCErrors
 pub enum HCErrorSeverity {

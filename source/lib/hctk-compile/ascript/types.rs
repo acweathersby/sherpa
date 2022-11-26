@@ -1,12 +1,13 @@
-use hctk_core::grammar::data::ast::ASTNode;
-use hctk_core::grammar::hash_id_value_u64;
-use hctk_core::types::*;
-use std::collections::BTreeMap;
-use std::collections::BTreeSet;
-use std::collections::HashMap;
-use std::fmt::Debug;
-use std::mem::discriminant;
-use std::sync::Arc;
+use hctk_core::{
+  grammar::{data::ast::ASTNode, hash_id_value_u64},
+  types::*,
+};
+use std::{
+  collections::{BTreeMap, BTreeSet, HashMap},
+  fmt::Debug,
+  mem::discriminant,
+  sync::Arc,
+};
 
 use super::compile::compile_ascript_store;
 

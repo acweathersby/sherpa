@@ -12,7 +12,7 @@
 #![feature(const_trait_impl)]
 #![feature(int_roundings)]
 #![feature(map_try_insert)]
-#![allow(bad_style, dead_code, unused, unused_allocation, unused_comparisons, unused_parens)]
+#![allow(bad_style)]
 
 mod deprecated_runtime;
 pub mod grammar;
@@ -27,18 +27,16 @@ pub mod bytecode;
 pub mod debug;
 pub mod intermediate;
 
-pub use grammar::compile_grammar_from_path;
-pub use grammar::compile_grammar_from_string;
+pub use grammar::{compile_grammar_from_path, compile_grammar_from_string};
 
 // Common utility functions
 use std::num::NonZeroUsize;
 
 pub mod errors {
-  pub use crate::intermediate::errors::*;
-  pub use crate::types::HCError;
-  pub use crate::types::HCError::*;
-  pub use crate::types::HCErrorSeverity;
-  pub use crate::types::HCErrorSeverity::*;
+  pub use crate::{
+    intermediate::errors::*,
+    types::{HCError, HCError::*, HCErrorSeverity, HCErrorSeverity::*},
+  };
 }
 
 /// Retrieve the number of threads that can be reasonably
@@ -49,15 +47,13 @@ pub fn get_num_of_available_threads() -> usize {
 }
 #[cfg(test)]
 mod test_end_to_end {
-  use crate::bytecode::compile::build_byte_code_buffer;
-  use crate::debug::collect_shifts_and_skips;
-  use crate::debug::generate_disassembly;
-  use crate::debug::BytecodeGrammarLookups;
-  use crate::get_num_of_available_threads;
-  use crate::intermediate::state::compile_states;
-  use crate::runtime::get_next_action;
-  use crate::types::*;
-  use std::sync::Arc;
+  use crate::{
+    bytecode::compile::build_byte_code_buffer,
+    debug::collect_shifts_and_skips,
+    get_num_of_available_threads,
+    intermediate::state::compile_states,
+    types::*,
+  };
 
   #[test]
   fn test_basic_grammar_build() {

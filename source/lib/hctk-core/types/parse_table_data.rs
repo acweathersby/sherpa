@@ -1,4 +1,4 @@
-use super::INSTRUCTION;
+use super::*;
 
 #[derive(Debug, Clone, Copy)]
 pub struct TableHeaderData {

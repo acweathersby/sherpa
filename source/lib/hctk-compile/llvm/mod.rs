@@ -7,23 +7,24 @@ pub use types::*;
 
 #[cfg(test)]
 mod test {
-  use hctk_core::intermediate::optimize::optimize_ir_states;
-  use hctk_core::intermediate::state::compile_states;
-  use hctk_core::types::hctk_allocate_stack;
-  use hctk_core::types::hctk_free_stack;
-  use hctk_core::types::CodepointInfo;
-  use hctk_core::types::Goto;
-  use hctk_core::types::GrammarStore;
-  use hctk_core::types::InputBlock;
-  use hctk_core::types::LLVMParseContext;
-  use hctk_core::types::ParseAction;
-  use hctk_core::types::ParseToken;
-  use hctk_core::types::TestUTF8StringReader;
-  use inkwell::context::Context;
-  use inkwell::execution_engine::JitFunction;
+  use hctk_core::{
+    intermediate::{optimize::optimize_ir_states, state::compile_states},
+    types::{
+      hctk_allocate_stack,
+      hctk_free_stack,
+      CodepointInfo,
+      Goto,
+      GrammarStore,
+      InputBlock,
+      LLVMParseContext,
+      ParseAction,
+      ParseToken,
+      TestUTF8StringReader,
+    },
+  };
+  use inkwell::{context::Context, execution_engine::JitFunction};
 
-  use super::inkwell_ir::*;
-  use super::types::*;
+  use super::{inkwell_ir::*, types::*};
 
   type Init = unsafe extern "C" fn(
     *mut LLVMParseContext<TestUTF8StringReader<'static>>,
@@ -602,8 +603,7 @@ mod test {
     use crate::llvm::compile_from_bytecode;
     use hctk_core::bytecode::compile_bytecode;
     use inkwell::context::Context;
-    use std::fs::File;
-    use std::io::Write;
+    use std::{fs::File, io::Write};
     let g = GrammarStore::from_str(
       "
   @IGNORE g:sp

@@ -1,28 +1,23 @@
 mod parse_functions;
 
-use crate::types::BaseCharacterReader;
-use crate::types::ParseAction;
-use crate::types::ParseContext;
 pub use parse_functions::get_next_action;
 
 #[cfg(test)]
 mod test_parser {
-  use std::collections::BTreeMap;
-  use std::collections::HashMap;
+  use std::collections::{BTreeMap, HashMap};
 
-  use crate::bytecode;
-  use crate::bytecode::compile::build_byte_code_buffer;
-  use crate::bytecode::compile::compile_ir_state_to_bytecode;
-  use crate::bytecode::compile_ir_states_into_bytecode;
-  use crate::debug::disassemble_state;
-  use crate::debug::generate_disassembly;
-  use crate::grammar::data::ast::ASTNode;
-  use crate::grammar::parse::compile_ir_ast;
-  use crate::intermediate::state::generate_production_states;
-  use crate::runtime::parse_functions::dispatch;
-  use crate::runtime::parse_functions::hash_jump;
-  use crate::runtime::parse_functions::vector_jump;
-  use crate::types::*;
+  use crate::{
+    bytecode,
+    bytecode::{
+      compile::{build_byte_code_buffer, compile_ir_state_to_bytecode},
+      compile_ir_states_into_bytecode,
+    },
+    debug::{disassemble_state, generate_disassembly},
+    grammar::{data::ast::ASTNode, parse::compile_ir_ast},
+    intermediate::state::generate_production_states,
+    runtime::parse_functions::{dispatch, hash_jump, vector_jump},
+    types::*,
+  };
 
   use super::parse_functions::get_next_action;
 

@@ -1,39 +1,36 @@
 //! Methods for constructing IRStates from a grammar
-use super::utils::*;
-use std::collections::BTreeMap;
-use std::collections::BTreeSet;
-use std::collections::HashSet;
-use std::collections::VecDeque;
-use std::fmt::format;
-use std::sync::Arc;
-use std::thread;
-use std::vec;
-
-use super::transition::construct_goto;
-use super::transition::construct_recursive_descent;
-use crate::grammar::get_closure_cached;
-use crate::grammar::get_production_start_items;
-use crate::grammar::get_scanner_info_from_defined;
-use crate::grammar::hash_id_value_u64;
-use crate::types::GrammarStore;
-use crate::types::HCError;
-use crate::types::HCErrorContainer;
-use crate::types::HCErrorPrint;
-use crate::types::IRState;
-use crate::types::IRStateType;
-use crate::types::IRStateType::*;
-use crate::types::Item;
-use crate::types::OriginData;
-use crate::types::PeekType;
-use crate::types::ProductionId;
-use crate::types::RecursionType;
-use crate::types::Symbol;
-use crate::types::SymbolID;
-use crate::types::TGNId;
-use crate::types::TransitionGraphNode;
-use crate::types::TransitionMode;
-use crate::types::TransitionPack;
-use crate::types::TransitionStateType;
+use super::{
+  transition::{construct_goto, construct_recursive_descent},
+  utils::*,
+};
+use crate::{
+  grammar::{get_production_start_items, get_scanner_info_from_defined, hash_id_value_u64},
+  types::{
+    GrammarStore,
+    HCError,
+    HCErrorContainer,
+    HCErrorPrint,
+    IRState,
+    IRStateType,
+    IRStateType::*,
+    Item,
+    OriginData,
+    PeekType,
+    ProductionId,
+    SymbolID,
+    TGNId,
+    TransitionGraphNode,
+    TransitionMode,
+    TransitionPack,
+    TransitionStateType,
+  },
+};
+use std::{
+  collections::{BTreeMap, BTreeSet, VecDeque},
+  sync::Arc,
+  thread,
+  vec,
+};
 
 pub struct IROutput {
   pub states: Vec<Box<IRState>>,
@@ -52,8 +49,6 @@ pub fn compile_states(
   let mut errors = vec![];
 
   if num_of_threads == 1 {
-    let work_chunks = productions_ids.chunks(num_of_threads).collect::<Vec<_>>();
-
     let (states, mut e) = process_productions(&productions_ids, g);
 
     errors.append(&mut e);
@@ -75,7 +70,7 @@ pub fn compile_states(
       .chunks((productions_ids.len() / (num_of_threads - 1)).max(1))
       .collect::<Vec<_>>();
 
-    let (states, mut e): (Vec<_>, Vec<_>) = thread::scope(|s| {
+    let (states, e): (Vec<_>, Vec<_>) = thread::scope(|s| {
       work_chunks
         .into_iter()
         .map(|productions| s.spawn(|| process_productions(productions, g.clone())))
@@ -97,9 +92,8 @@ pub fn compile_states(
 
     if !errors.have_critical() {
       thread::scope(|s| {
-        let work_chunks = output_states.chunks_mut(num_of_threads);
-
-        work_chunks
+        let _ = output_states
+          .chunks_mut(num_of_threads)
           .into_iter()
           .map(|chunk| {
             s.spawn(|| {
@@ -485,8 +479,6 @@ fn create_intermediate_state(
     // Manually create intermediate nodes to handle each initial
     // "forked-to" state that would otherwise be skipped.
 
-    let mut origin = node;
-
     for child in &children {
       let child_state = resolved_states.get(&child.id).unwrap();
       child_hashes
@@ -561,10 +553,6 @@ fn create_intermediate_state(
               )
               .collect::<Vec<_>>();
 
-            let defined_generics = group.iter()
-          .filter(|n| matches!(n.items[0].get_origin(), OriginData::Symbol(sym) if matches!(sym, SymbolID::GenericNewLine)))
-          .collect::<Vec<_>>();
-
             if !defined_branches.is_empty() {
               // Use the first defined symbol. TODO - Define and use hierarchy rules to determine the best branch
               // to use as default
@@ -582,8 +570,6 @@ fn create_intermediate_state(
                 }
               })
             } else {
-              let mut origin = group[0];
-
               for child in group {
                 for item in &child.items {
                   eprintln!("{}", item.debug_string(&t.g));
@@ -690,6 +676,11 @@ fn create_intermediate_state(
                   )
                 }
               }
+              Recovery => {
+                let child_state = resolved_states.get(&child.id).unwrap();
+                let state_name = child_state.get_name();
+                strings.push(format!("goto state [ {} ]{}", state_name, post_amble))
+              }
               TerminalTransition | _ => {
                 let symbol_id = child.edge_symbol;
                 is_token_assertion = true;
@@ -724,11 +715,6 @@ fn create_intermediate_state(
                   assertion_type, assert_class, symbol_id, shift, state_name, post_amble
                 ));
               }
-              Recovery => {
-                let child_state = resolved_states.get(&child.id).unwrap();
-                let state_name = child_state.get_name();
-                strings.push(format!("goto state [ {} ]{}", state_name, post_amble))
-              }
             }
           }
         }
@@ -738,7 +724,7 @@ fn create_intermediate_state(
   }
 
   if t.is_scanner {
-    let mut code = strings.join("\n");
+    let code = strings.join("\n");
 
     if code.is_empty() {
       errors.push(HCError::from(format!(
@@ -777,9 +763,7 @@ fn create_intermediate_state(
       }
     }
 
-    let have_symbols = !normal_symbol_set.is_empty();
-
-    let mut code = strings.join("\n");
+    let code = strings.join("\n");
 
     if code.is_empty() {
       errors.push(HCError::from(format!(
@@ -818,14 +802,13 @@ fn get_children<'a>(
   node: &TransitionGraphNode,
   children_tables: &Vec<BTreeSet<TGNId>>,
 ) -> Vec<&'a TransitionGraphNode> {
-  let mut children = children_tables
+  children_tables
     .get(node.id.usize())
     .cloned()
     .unwrap_or_default()
     .iter()
     .map(|c| t.get_node(*c))
-    .collect::<Vec<_>>();
-  children
+    .collect::<Vec<_>>()
 }
 
 fn create_reduce_string(node: &TransitionGraphNode, g: &GrammarStore, is_scanner: bool) -> String {

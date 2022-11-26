@@ -1,14 +1,7 @@
 //! Utility functions for the evaluation, interpretation, and
 //! comprehension of items
-
-use std::collections::BTreeSet;
-use std::collections::HashSet;
-use std::collections::VecDeque;
-
-use crate::types::GrammarStore;
-use crate::types::Item;
-use crate::types::ProductionId;
-use crate::types::SymbolID;
+use crate::types::{GrammarStore, Item, ProductionId, SymbolID};
+use std::collections::{BTreeSet, VecDeque};
 
 /// Retrieve the initial items of a production. Returns vector of
 /// items, one for each body belonging to the production.

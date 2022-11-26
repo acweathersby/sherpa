@@ -1,21 +1,14 @@
+use super::*;
 use crate::grammar::get_closure_cached;
-use crate::types::GrammarStore;
-use crate::types::Item;
-use crate::types::ProductionId;
-use crate::types::SymbolID;
 use bitmask_enum::bitmask;
-use std::collections::BTreeMap;
-use std::collections::BTreeSet;
-use std::collections::HashMap;
-use std::collections::VecDeque;
-use std::hash::Hash;
-use std::ops::Index;
-use std::ops::IndexMut;
-use std::rc::Rc;
-use std::sync::Arc;
-use std::vec;
-
-use super::HCError;
+use std::{
+  collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
+  hash::Hash,
+  ops::{Index, IndexMut},
+  rc::Rc,
+  sync::Arc,
+  vec,
+};
 
 #[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct TGNId(u32);

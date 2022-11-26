@@ -1,12 +1,6 @@
-use core::num;
-use std::any::Any;
-use std::collections::BTreeMap;
-use std::collections::BTreeSet;
-use std::fmt::format;
+use std::collections::{BTreeMap, BTreeSet};
 
-use crate::bytecode::BytecodeOutput;
-use crate::grammar;
-use crate::types::*;
+use crate::{bytecode::BytecodeOutput, types::*};
 
 pub fn header(idx: usize) -> String {
   format!("{}| ", address_string(idx))
@@ -42,8 +36,7 @@ pub fn disassemble_state(
   idx: usize,
   lu: Option<&BytecodeGrammarLookups>,
 ) -> (String, usize) {
-  use super::disassemble_state as ds;
-  use super::header as dh;
+  use super::{disassemble_state as ds, header as dh};
 
   let so = idx;
 
@@ -368,16 +361,19 @@ pub fn print_bytecode_state(
 mod bytecode_debugging_tests {
   use std::collections::HashMap;
 
-  use crate::bytecode::compile::build_byte_code_buffer;
-  use crate::bytecode::compile::compile_ir_state_to_bytecode;
-  use crate::bytecode::compile_bytecode;
-  use crate::debug::bytecode::BytecodeGrammarLookups;
-  use crate::debug::disassemble_state;
-  use crate::grammar::parse::compile_ir_ast;
-  use crate::intermediate::optimize::optimize_ir_states;
-  use crate::intermediate::state::compile_states;
-  use crate::intermediate::state::generate_production_states;
-  use crate::types::GrammarStore;
+  use crate::{
+    bytecode::{
+      compile::{build_byte_code_buffer, compile_ir_state_to_bytecode},
+      compile_bytecode,
+    },
+    debug::{bytecode::BytecodeGrammarLookups, disassemble_state},
+    grammar::parse::compile_ir_ast,
+    intermediate::{
+      optimize::optimize_ir_states,
+      state::{compile_states, generate_production_states},
+    },
+    types::GrammarStore,
+  };
 
   use super::generate_disassembly;
 
@@ -405,9 +401,8 @@ mod bytecode_debugging_tests {
 
     let state_refs = states.iter().collect::<Vec<_>>();
 
-    let (bytecode, state_lookup) = build_byte_code_buffer(state_refs);
+    let _ = build_byte_code_buffer(state_refs);
 
-    let mut offset: usize = 0;
     let lu = BytecodeGrammarLookups::new(&g);
 
     eprintln!("{}", generate_disassembly(&output, Some(&lu)));

@@ -1,12 +1,11 @@
-use hctk_core::debug::generate_disassembly;
-use hctk_core::debug::BytecodeGrammarLookups;
-use hctk_core::types::HCError;
-use std::io::BufWriter;
-
-use crate::builder::disclaimer::DISCLAIMER;
-use hctk_core::writer::code_writer::CodeWriter;
-
 use super::pipeline::PipelineTask;
+use crate::builder::disclaimer::DISCLAIMER;
+use hctk_core::{
+  debug::{generate_disassembly, BytecodeGrammarLookups},
+  types::HCError,
+  writer::code_writer::CodeWriter,
+};
+use std::io::BufWriter;
 
 /// Generate a disassembly file of the grammar bytecode
 pub fn build_bytecode_disassembly() -> PipelineTask {

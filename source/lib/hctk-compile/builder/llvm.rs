@@ -1,26 +1,13 @@
-use std::collections::BTreeMap;
-
-use crate::ascript::types::AScriptStore;
-use crate::bytecode;
-use hctk_core::types::*;
-use hctk_core::writer::code_writer::CodeWriter;
-use inkwell::context::Context;
-use inkwell::passes::PassManager;
-use inkwell::passes::PassManagerBuilder;
-use inkwell::targets::CodeModel;
-use inkwell::targets::FileType;
-use inkwell::targets::InitializationConfig;
-use inkwell::targets::RelocMode;
-use inkwell::targets::Target;
-use inkwell::targets::TargetTriple;
-use inkwell::OptimizationLevel;
-use std::io::Write;
-use std::process::Command;
-
-use crate::builder::pipeline::PipelineTask;
-
-use super::common::add_ascript_functions;
-use super::common::write_rust_entry_functions;
+use super::common::{add_ascript_functions, write_rust_entry_functions};
+use crate::{ascript::types::AScriptStore, builder::pipeline::PipelineTask};
+use hctk_core::{types::*, writer::code_writer::CodeWriter};
+use inkwell::{
+  context::Context,
+  passes::{PassManager, PassManagerBuilder},
+  targets::{CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetTriple},
+  OptimizationLevel,
+};
+use std::{collections::BTreeMap, io::Write, process::Command};
 
 /// Build artifacts for a LLVM based parser.
 ///

@@ -1,4 +1,4 @@
-use crate::types::Token;
+use super::*;
 
 pub type ReduceFunction<T> = fn(args: &mut Vec<HCObj<T>>, tok: Token);
 

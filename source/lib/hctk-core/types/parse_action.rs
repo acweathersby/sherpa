@@ -1,4 +1,4 @@
-use crate::types::ParseToken;
+use super::*;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(C, u64)]

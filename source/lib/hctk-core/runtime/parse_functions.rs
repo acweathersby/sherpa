@@ -1,8 +1,4 @@
-use std::hash;
-
 use crate::types::*;
-
-use ParseAction::*;
 
 /// Yields parser Actions from parsing an input using the
 /// current active grammar bytecode.
@@ -13,7 +9,6 @@ pub fn dispatch<T: BaseCharacterReader + MutCharacterReader>(
   bc: &[u32],
 ) -> ParseAction {
   use ParseAction::*;
-  use INSTRUCTION as I;
 
   let mut i = (ctx.get_active_state() & STATE_ADDRESS_MASK);
 

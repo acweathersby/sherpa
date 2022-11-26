@@ -1,17 +1,13 @@
-use std::collections::BTreeMap;
-use std::io::Write;
-
-use hctk_core::grammar::data::ast::ASTNode;
-use hctk_core::grammar::data::ast::AST_NamedReference;
-use hctk_core::types::*;
-
-use hctk_core::types::Token;
-use hctk_core::writer::code_writer::CodeWriter;
-
-use crate::ascript::rust::ascript_type_to_string;
-use crate::ascript::rust::create_type_initializer_value;
-use crate::ascript::rust::render_expression;
-use crate::ascript::types::AScriptStore;
+use crate::ascript::{
+  rust::{ascript_type_to_string, create_type_initializer_value, render_expression},
+  types::AScriptStore,
+};
+use hctk_core::{
+  grammar::data::ast::{ASTNode, AST_NamedReference},
+  types::{Token, *},
+  writer::code_writer::CodeWriter,
+};
+use std::{collections::BTreeMap, io::Write};
 
 pub(crate) fn write_rust_entry_functions_bytecode<W: Write>(
   g: &GrammarStore,

@@ -1,14 +1,10 @@
-use std::collections::BTreeMap;
-
-use crate::grammar::data::ast::IR_STATE;
-use crate::grammar::parse::compile_ir_ast;
-use crate::intermediate::state::compile_states;
-use crate::types::GrammarStore;
-use crate::types::IRState;
-use crate::types::Symbol;
-use crate::types::SymbolID;
-
 use self::compile::build_byte_code_buffer;
+use crate::{
+  grammar::{data::ast::IR_STATE, parse::compile_ir_ast},
+  intermediate::state::compile_states,
+  types::{GrammarStore, IRState, Symbol, SymbolID},
+};
+use std::collections::BTreeMap;
 
 pub mod compile;
 
@@ -74,20 +70,24 @@ pub(crate) fn compile_ir_states_into_bytecode<'a>(
 #[cfg(test)]
 mod byte_code_creation_tests {
 
-  use std::collections::BTreeSet;
-  use std::collections::HashMap;
+  use std::collections::{BTreeSet, HashMap};
 
-  use crate::bytecode::compile::compile_ir_state_to_bytecode;
-  use crate::debug::compile_test_grammar;
-  use crate::debug::BytecodeGrammarLookups;
-  use crate::debug::{self};
-  use crate::grammar::data::ast::ASTNode;
-  use crate::grammar::get_production_id_by_name;
-  use crate::grammar::get_production_plain_name;
-  use crate::grammar::parse::compile_ir_ast;
-  use crate::intermediate::state::compile_states;
-  use crate::intermediate::state::generate_production_states;
-  use crate::types::default_get_branch_selector;
+  use crate::{
+    bytecode::compile::compile_ir_state_to_bytecode,
+    debug::{
+      compile_test_grammar,
+      BytecodeGrammarLookups,
+      {self},
+    },
+    grammar::{
+      data::ast::ASTNode,
+      get_production_id_by_name,
+      get_production_plain_name,
+      parse::compile_ir_ast,
+    },
+    intermediate::state::{compile_states, generate_production_states},
+    types::default_get_branch_selector,
+  };
 
   use super::compile_bytecode;
 

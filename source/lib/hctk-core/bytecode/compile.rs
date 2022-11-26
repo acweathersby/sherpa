@@ -1,37 +1,27 @@
 #![warn(clippy::borrowed_box)]
-use crate::grammar::data::ast::ASTNode;
-use crate::grammar::data::ast::ForkTo;
-use crate::grammar::data::ast::Goto;
-use crate::grammar::data::ast::NotInScope;
-use crate::grammar::data::ast::Num;
-use crate::grammar::data::ast::Pass;
-use crate::grammar::data::ast::Reduce;
-use crate::grammar::data::ast::ScanUntil;
-use crate::grammar::data::ast::SetProd;
-use crate::grammar::data::ast::SetScope;
-use crate::grammar::data::ast::Shift;
-use crate::grammar::data::ast::TokenAssign;
-use crate::grammar::data::ast::ASSERT;
-use crate::grammar::data::ast::HASH_NAME;
-use crate::grammar::data::ast::IR_STATE;
-use crate::grammar::parse::compile_ir_ast;
-use crate::intermediate::state::generate_production_states;
-use crate::types::*;
-use std::any::Any;
-use std::collections::btree_map::VacantEntry;
-use std::collections::hash_map::Entry;
-use std::collections::hash_map::OccupiedEntry;
-use std::collections::BTreeMap;
-use std::collections::BTreeSet;
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::collections::VecDeque;
-use std::default;
-use std::env::current_exe;
-use std::hash;
-use std::iter::Filter;
-use std::thread::{self};
-use std::vec;
+use crate::{
+  grammar::data::ast::{
+    ASTNode,
+    ForkTo,
+    Goto,
+    NotInScope,
+    Num,
+    Reduce,
+    ScanUntil,
+    SetProd,
+    SetScope,
+    Shift,
+    TokenAssign,
+    ASSERT,
+    HASH_NAME,
+    IR_STATE,
+  },
+  types::*,
+};
+use std::{
+  collections::{hash_map::Entry, BTreeMap, HashMap, VecDeque},
+  vec,
+};
 
 pub(crate) fn build_byte_code_buffer(states: Vec<&IR_STATE>) -> (Vec<u32>, BTreeMap<String, u32>) {
   let states_iter = states

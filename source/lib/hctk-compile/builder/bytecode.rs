@@ -1,18 +1,11 @@
-use hctk_core::bytecode::BytecodeOutput;
-use hctk_core::types::*;
+use crate::{ascript::types::AScriptStore, SourceType};
+use hctk_core::{bytecode::BytecodeOutput, types::*, writer::code_writer::CodeWriter};
+use std::{collections::BTreeMap, io::Write};
 
-use std::collections::BTreeMap;
-
-use std::io::Write;
-
-use crate::ascript::types::AScriptStore;
-use crate::SourceType;
-
-use hctk_core::writer::code_writer::CodeWriter;
-
-use super::common::add_ascript_functions;
-use super::common::write_rust_entry_functions_bytecode;
-use super::pipeline::PipelineTask;
+use super::{
+  common::{add_ascript_functions, write_rust_entry_functions_bytecode},
+  pipeline::PipelineTask,
+};
 
 /// Build artifacts for a Bytecode based parser
 pub fn build_bytecode_parser(
@@ -141,11 +134,8 @@ impl<T: ByteCharacterReader + BaseCharacterReader + MutCharacterReader> Parser<T
 
 #[cfg(test)]
 mod test {
-  use crate::ascript::compile::compile_ascript_store;
-  use crate::ascript::rust;
-  use crate::ascript::types::AScriptStore;
-  use hctk_core::types::GrammarStore;
-  use hctk_core::writer::code_writer::StringBuffer;
+  use crate::ascript::{compile::compile_ascript_store, rust, types::AScriptStore};
+  use hctk_core::{types::GrammarStore, writer::code_writer::StringBuffer};
   #[test]
   fn test_output_rust_on_practical_grammar() {
     let g = GrammarStore::from_str(

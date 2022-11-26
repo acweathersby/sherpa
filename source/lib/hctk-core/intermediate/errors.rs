@@ -1,8 +1,5 @@
-use std::collections::BTreeSet;
-use std::sync::Arc;
-
-use crate::grammar::get_closure_cached;
-use crate::types::*;
+use crate::{grammar::get_closure_cached, types::*};
+use std::{collections::BTreeSet, sync::Arc};
 
 /// Warning when a fork state is generated for items that have ambiguous production calls.
 #[derive(Debug)]

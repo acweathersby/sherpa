@@ -1,12 +1,6 @@
-use std::collections::BTreeMap;
-use std::sync::Arc;
-
+use super::types::{AScriptProp, AScriptStructId, AScriptTypeVal, TaggedType};
 use hctk_core::types::*;
-
-use super::types::AScriptProp;
-use super::types::AScriptStructId;
-use super::types::AScriptTypeVal;
-use super::types::TaggedType;
+use std::{collections::BTreeMap, sync::Arc};
 
 /// This error occurs when multiple definitions of the same Struct
 /// define the same property with different types.

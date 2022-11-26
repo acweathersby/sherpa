@@ -1,11 +1,6 @@
 //! Utility functions for the evaluation, interpretation, and
 //! comprehension of productions
 
-use std::collections::HashSet;
-use std::collections::VecDeque;
-
-use crate::types::*;
-
 /// Used to separate a grammar's uuid name from a production's name
 const GUID_NAME_DELIMITER: &str = "_GUID_";
 

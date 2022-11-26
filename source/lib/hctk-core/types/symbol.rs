@@ -1,23 +1,9 @@
-use std::collections::BTreeMap;
-use std::collections::BTreeSet;
-use std::fmt::Display;
-use std::str::FromStr;
-use std::sync::Arc;
-
-use crate::grammar::uuid::hash_id_value_u64;
-use crate::utf8::lookup_table::HORIZONTAL_TAB;
-use crate::utf8::lookup_table::IDENTIFIER;
-use crate::utf8::lookup_table::NEW_LINE;
-use crate::utf8::lookup_table::NUMBER;
-use crate::utf8::lookup_table::SPACE;
-use crate::utf8::lookup_table::SYMBOL;
-
-use super::GrammarId;
-use super::GrammarIds;
-use super::GrammarStore;
-use super::HCResult;
-use super::ProductionId;
-use super::Token;
+use super::{GrammarId, GrammarIds, GrammarStore, HCResult, ProductionId, Token};
+use crate::{
+  grammar::uuid::hash_id_value_u64,
+  utf8::lookup_table::{HORIZONTAL_TAB, IDENTIFIER, NEW_LINE, NUMBER, SPACE, SYMBOL},
+};
+use std::{collections::BTreeMap, fmt::Display, sync::Arc};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
 pub struct StringId(pub u64);

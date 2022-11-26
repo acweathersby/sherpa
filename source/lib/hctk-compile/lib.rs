@@ -12,23 +12,23 @@ mod llvm;
 mod options;
 mod source_types;
 
-use std::fs::create_dir_all;
-use std::path::PathBuf;
+use std::{fs::create_dir_all, path::PathBuf};
 
 pub use ascript::*;
 pub use builder::bytecode;
-
-use hctk_core::types::HCErrorContainer;
 
 pub use crate::builder::pipeline::BuildPipeline;
 pub use source_types::*;
 
 pub mod tasks {
-  pub use crate::ascript::build_ast;
-  pub use crate::builder::bytecode::build_bytecode_parser;
-  pub use crate::builder::disassembly::build_bytecode_disassembly;
-  pub use crate::builder::llvm::build_llvm_parser;
-  pub use crate::builder::llvm::build_llvm_parser_interface;
+  pub use crate::{
+    ascript::build_ast,
+    builder::{
+      bytecode::build_bytecode_parser,
+      disassembly::build_bytecode_disassembly,
+      llvm::{build_llvm_parser, build_llvm_parser_interface},
+    },
+  };
 }
 
 /// Convenience function for building a bytecode based parser. Use this in
@@ -63,10 +63,11 @@ mod library_smoke_tests {
 
   use hctk_core::types::GrammarStore;
 
-  use crate::ascript::compile::compile_ascript_store;
-  use crate::ascript::types::AScriptStore;
-  use crate::builder::pipeline::BuildPipeline;
-  use crate::tasks::build_ast;
+  use crate::{
+    ascript::{compile::compile_ascript_store, types::AScriptStore},
+    builder::pipeline::BuildPipeline,
+    tasks::build_ast,
+  };
 
   #[test]
   fn test_compile_pipeline() {

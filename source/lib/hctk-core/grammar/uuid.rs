@@ -1,12 +1,12 @@
 //! Functions for creating a variety of universally unique identifiers
 //! for grammar primitives.
 
-use std::collections::hash_map::DefaultHasher;
-use std::hash::Hash;
-use std::hash::Hasher;
-use std::path::PathBuf;
-
 use crate::types::HCError;
+use std::{
+  collections::hash_map::DefaultHasher,
+  hash::{Hash, Hasher},
+  path::PathBuf,
+};
 
 pub fn hash_id_value_u64<T: Hash>(t: T) -> u64 {
   let mut s = DefaultHasher::new();

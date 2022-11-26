@@ -1,38 +1,44 @@
-use std::collections::BTreeMap;
-use std::collections::BTreeSet;
-use std::collections::VecDeque;
-use std::io::Result;
-use std::vec;
-
-use super::compile::get_indexed_body_ref;
-use super::compile::get_named_body_ref;
-use super::compile::get_production_types;
-use super::compile::get_specified_vector_from_generic_vec_values;
-use super::compile::get_struct_type_from_node;
-use super::compile::production_types_are_structs;
-use super::types::*;
-use hctk_core::grammar::data::ast::ASTNode;
-use hctk_core::grammar::data::ast::AST_IndexReference;
-use hctk_core::grammar::data::ast::AST_NamedReference;
-use hctk_core::grammar::data::ast::AST_Struct;
-use hctk_core::grammar::data::ast::AST_Token;
-use hctk_core::grammar::data::ast::AST_Vector;
-use hctk_core::grammar::data::ast::AST_BOOL;
-use hctk_core::grammar::data::ast::AST_F32;
-use hctk_core::grammar::data::ast::AST_F64;
-use hctk_core::grammar::data::ast::AST_I16;
-use hctk_core::grammar::data::ast::AST_I32;
-use hctk_core::grammar::data::ast::AST_I64;
-use hctk_core::grammar::data::ast::AST_I8;
-use hctk_core::grammar::data::ast::AST_NUMBER;
-use hctk_core::grammar::data::ast::AST_STRING;
-use hctk_core::grammar::data::ast::AST_U16;
-use hctk_core::grammar::data::ast::AST_U32;
-use hctk_core::grammar::data::ast::AST_U64;
-use hctk_core::grammar::data::ast::AST_U8;
-use hctk_core::types::*;
-use hctk_core::writer::code_writer::*;
-use std::io::Write;
+use super::{
+  compile::{
+    get_indexed_body_ref,
+    get_named_body_ref,
+    get_production_types,
+    get_specified_vector_from_generic_vec_values,
+    get_struct_type_from_node,
+    production_types_are_structs,
+  },
+  types::*,
+};
+use hctk_core::{
+  grammar::data::ast::{
+    ASTNode,
+    AST_IndexReference,
+    AST_NamedReference,
+    AST_Struct,
+    AST_Token,
+    AST_Vector,
+    AST_BOOL,
+    AST_F32,
+    AST_F64,
+    AST_I16,
+    AST_I32,
+    AST_I64,
+    AST_I8,
+    AST_NUMBER,
+    AST_STRING,
+    AST_U16,
+    AST_U32,
+    AST_U64,
+    AST_U8,
+  },
+  types::*,
+  writer::code_writer::*,
+};
+use std::{
+  collections::{BTreeMap, BTreeSet, VecDeque},
+  io::{Result, Write},
+  vec,
+};
 
 pub fn write<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Result<()> {
   w.indent_spaces(2);

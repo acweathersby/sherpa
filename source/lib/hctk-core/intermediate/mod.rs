@@ -10,12 +10,13 @@ mod transition_tree_tests {
 
   use std::collections::BTreeSet;
 
-  use crate::debug::debug_items;
-  use crate::grammar::get_production_start_items;
-  use crate::intermediate::utils::get_valid_starts;
+  use crate::{
+    debug::debug_items,
+    grammar::get_production_start_items,
+    intermediate::utils::get_valid_starts,
+  };
 
-  use crate::intermediate::transition::construct_recursive_descent;
-  use crate::types::GrammarStore;
+  use crate::{intermediate::transition::construct_recursive_descent, types::GrammarStore};
 
   #[test]
   pub fn construct_descent_on_basic_grammar() {
@@ -76,28 +77,23 @@ mod transition_tree_tests {
 #[cfg(test)]
 mod state_constructor_tests {
 
-  use std::any::Any;
-  use std::collections::BTreeSet;
-  use std::iter::FromIterator;
-  use std::path::PathBuf;
+  use std::{any::Any, collections::BTreeSet, iter::FromIterator, path::PathBuf};
 
-  use crate::debug::debug_items;
-  use crate::errors::WarnTransitionAmbiguousProduction;
-  use crate::grammar::get_production_start_items;
-  use crate::intermediate::state::generate_production_states;
-  use crate::intermediate::state::generate_scanner_intro_state;
-  use crate::intermediate::state::IROutput;
-  use crate::intermediate::utils::get_valid_starts;
-  use crate::types::GrammarId;
-  use crate::types::GrammarStore;
-  use crate::types::HCResult;
-  use crate::types::SymbolID;
-  use crate::types::TransitionMode;
-  use crate::types::TransitionPack;
+  use crate::{
+    debug::debug_items,
+    errors::WarnTransitionAmbiguousProduction,
+    grammar::get_production_start_items,
+    intermediate::{
+      state::{generate_production_states, generate_scanner_intro_state, IROutput},
+      utils::get_valid_starts,
+    },
+    types::{GrammarId, GrammarStore, HCResult, SymbolID, TransitionMode, TransitionPack},
+  };
 
-  use super::state::compile_states;
-  use super::state::process_transition_nodes;
-  use super::transition::construct_LR;
+  use super::{
+    state::{compile_states, process_transition_nodes},
+    transition::construct_LR,
+  };
 
   #[test]
   pub fn production_reduction_decisions() {

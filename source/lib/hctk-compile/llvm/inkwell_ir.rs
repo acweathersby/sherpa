@@ -1,22 +1,14 @@
-use std::collections::BTreeSet;
-use std::collections::VecDeque;
-
-use hctk_core::bytecode::BytecodeOutput;
-use inkwell::builder::Builder;
-use inkwell::context::Context;
-use inkwell::module::Linkage;
-use inkwell::values::CallableValue;
-use inkwell::values::FunctionValue;
-use inkwell::values::IntValue;
-use inkwell::values::PointerValue;
-
-use super::types::*;
-use hctk_core::types::*;
-
+use super::{inkwell_branch_ir::construct_instruction_branch, types::*};
+use hctk_core::{bytecode::BytecodeOutput, types::*};
+use inkwell::{
+  builder::Builder,
+  context::Context,
+  module::Linkage,
+  values::{CallableValue, FunctionValue, IntValue, PointerValue},
+};
 use parse_ctx_indices::*;
+use std::collections::{BTreeSet, VecDeque};
 use token_indices::*;
-
-use super::inkwell_branch_ir::construct_instruction_branch;
 
 pub(crate) fn construct_context<'a>(module_name: &str, ctx: &'a Context) -> LLVMParserModule<'a> {
   use inkwell::AddressSpace::*;

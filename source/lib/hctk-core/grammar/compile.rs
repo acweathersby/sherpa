@@ -1,50 +1,35 @@
-use crate::debug::debug_items;
-use crate::deprecated_runtime::error;
-use crate::grammar;
-use crate::grammar::data::ast::AnyGroup;
-use crate::grammar::data::ast::Ascript;
-use crate::grammar::data::ast::Literal;
-use crate::grammar::load::get_usable_thread_count;
-use crate::grammar::parse::compile_ascript_ast;
-use crate::grammar::uuid::hash_id_value_u64;
-use crate::types;
-use crate::types::*;
+use super::{
+  create_closure,
+  create_defined_scanner_name,
+  create_production_guid_name,
+  create_scanner_name,
+  data::{
+    ast,
+    ast::{ASTNode, ASTNodeTraits, Grammar},
+  },
+  get_production_start_items,
+  parse::compile_grammar_ast,
+};
+use crate::{
+  grammar::{
+    data::ast::Ascript,
+    load::{get_usable_thread_count, load_all},
+    parse::compile_ascript_ast,
+  },
+  types,
+  types::*,
+};
+use core::panic;
 use lazy_static::lazy_static;
 use regex::Regex;
-
-use super::create_closure;
-use super::create_defined_scanner_name;
-use super::create_production_guid_name;
-use super::create_scanner_name;
-use super::data::ast;
-use super::data::ast::ASTNode;
-use super::data::ast::ASTNodeTraits;
-use super::data::ast::Grammar;
-use super::data::ast::ProductionMerged;
-use super::get_guid_grammar_name;
-use super::get_production_start_items;
-use super::load::load_all;
-use super::multitask::WorkVerifier;
-use super::parse;
-use super::parse::compile_grammar_ast;
-
-use core::panic;
-use std::any::Any;
-use std::collections::btree_map;
-use std::collections::btree_map::VacantEntry;
-use std::collections::BTreeMap;
-use std::collections::BTreeSet;
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::collections::VecDeque;
-use std::ffi::OsStr;
-use std::fs::read;
-use std::num::NonZeroUsize;
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::sync::Mutex;
-use std::thread::{self};
-use std::vec;
+use std::{
+  collections::{btree_map, BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
+  ffi::OsStr,
+  path::PathBuf,
+  sync::Arc,
+  thread::{self},
+  vec,
+};
 
 struct SymbolData<'a> {
   pub annotation:       String,
@@ -62,7 +47,6 @@ struct SymbolData<'a> {
 /// the root grammar.
 pub fn compile_grammars_into_store(
   grammars: Vec<(PathBuf, ImportedGrammarReferences, Box<Grammar>)>,
-  number_of_threads: usize,
 ) -> HCResult<(Option<Arc<GrammarStore>>, Option<Vec<HCError>>)> {
   if grammars.is_empty() {
     return HCResult::Err(HCError::Text("Received empty grammar vector!".to_string()));
@@ -135,7 +119,7 @@ fn test_compile_grammars_into_store() {
     10,
   );
 
-  let result = compile_grammars_into_store(grammars, 10);
+  let result = compile_grammars_into_store(grammars);
 
   assert!(result.is_ok());
 
@@ -906,7 +890,6 @@ pub fn pre_process_grammar<'a>(
   name: &'a str,
   imports: ImportedGrammarReferences,
 ) -> (GrammarStore, Vec<HCError>) {
-  let guid_name = get_guid_grammar_name(path).unwrap();
   let mut g = GrammarStore {
     id: GrammarIds::new(name.to_string(), path.clone()),
     imports,
@@ -956,12 +939,12 @@ pub fn pre_process_grammar<'a>(
           // - Create the merge bodies and intern them in the grammar.
           // - When merging, if existing productions exist in the target
 
-          let (prod_id, guid_name, plain_name) = get_production_identifiers(&node, &mut g, &mut e);
+          let (prod_id, ..) = get_production_identifiers(&node, &mut g, &mut e);
           let mut list_index = 0;
           for body in &prod.bodies {
             match body {
               ASTNode::Body(body) => {
-                let (mut bodies, productions) =
+                let (mut bodies, _) =
                   pre_process_body(&node, body, &mut g, &mut list_index, &mut e);
 
                 match g.merge_productions.entry(prod_id) {
@@ -977,13 +960,11 @@ pub fn pre_process_grammar<'a>(
             }
           }
         }
-        ASTNode::IR_STATE(ir_state) => {}
-        ASTNode::Out_Of_Band(oob_fn) => {}
         _ => {}
       }
     }
 
-    // Continue processing any generated productions. This may loop
+    // Continue processing any generated _. This may loop
     // for a while as any given production may have several nested
     // anonymous productions through lists `...(+) | ...(*)` and
     // groups `(... | ...)`

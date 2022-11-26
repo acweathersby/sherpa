@@ -3,10 +3,8 @@ pub mod errors;
 pub mod rust;
 pub mod types;
 
-use crate::builder::pipeline::PipelineTask;
-use crate::SourceType;
-use hctk_core::types::HCError;
-use hctk_core::writer::code_writer::CodeWriter;
+use crate::{builder::pipeline::PipelineTask, SourceType};
+use hctk_core::{types::HCError, writer::code_writer::CodeWriter};
 
 /// Constructs a task that compiles a grammar's Ascript into an AST module of the given `source_type`.
 /// The module is placed at `<source_output_dir>/<grammar_name>_parser_ast.rs`.
@@ -32,9 +30,10 @@ mod rust_ast_build {
   use std::path::PathBuf;
 
   use crate::ascript::types::AScriptStore;
-  use hctk_core::types::GrammarStore;
-  use hctk_core::types::HCResult;
-  use hctk_core::writer::code_writer::StringBuffer;
+  use hctk_core::{
+    types::{GrammarStore, HCResult},
+    writer::code_writer::StringBuffer,
+  };
 
   use super::rust;
 
@@ -403,20 +402,17 @@ mod rust_ast_build {
 #[cfg(test)]
 mod ascript_compile_tests {
 
-  use crate::ascript::compile::compile_ascript_store;
-  use crate::ascript::compile::compile_struct_props;
-  use crate::ascript::compile::compile_struct_type;
-  use crate::ascript::types::AScriptStore;
-  use hctk_core::grammar::data::ast::ASTNode;
-  use hctk_core::grammar::data::ast::AST_Property;
-  use hctk_core::grammar::data::ast::AST_Struct;
-  use hctk_core::grammar::data::ast::AST_TypeId;
-  use hctk_core::grammar::data::ast::Ascript;
-  use hctk_core::grammar::data::ast::Body;
-  use hctk_core::grammar::data::ast::Production;
-  use hctk_core::grammar::parse::compile_ascript_ast;
-  use hctk_core::grammar::parse::compile_grammar_ast;
-  use hctk_core::types::*;
+  use crate::ascript::{
+    compile::{compile_ascript_store, compile_struct_props, compile_struct_type},
+    types::AScriptStore,
+  };
+  use hctk_core::{
+    grammar::{
+      data::ast::{ASTNode, AST_Property, AST_Struct, AST_TypeId, Ascript, Body, Production},
+      parse::{compile_ascript_ast, compile_grammar_ast},
+    },
+    types::*,
+  };
 
   #[test]
   fn test_parse_errors_when_struct_type_is_missing() {

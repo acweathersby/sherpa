@@ -1,24 +1,19 @@
 //! Functions for Grammar file path resolution and loading,
 //! and initial parse functions
 
+use super::{
+  data::ast::{ASTNode, Grammar, Import},
+  multitask::WorkVerifier,
+};
 use crate::types::*;
-use std::collections::HashMap;
-use std::fs::read;
-use std::num::NonZeroUsize;
-use std::path::Path;
-use std::path::PathBuf;
-use std::path::{self};
-use std::sync::Arc;
-
-use super::data::ast::ASTNode;
-use super::data::ast::Grammar;
-use super::data::ast::Import;
-use super::get_guid_grammar_name;
-use super::multitask::WorkVerifier;
-use std::collections::HashSet;
-use std::collections::VecDeque;
-use std::sync::Mutex;
-use std::thread::{self};
+use std::{
+  collections::{HashSet, VecDeque},
+  fs::read,
+  num::NonZeroUsize,
+  path::{Path, PathBuf},
+  sync::Mutex,
+  thread::{self},
+};
 
 // TODO: Replace with the new grammar parser
 use super::parse::compile_grammar_ast;

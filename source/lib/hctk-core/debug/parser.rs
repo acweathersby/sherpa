@@ -1,10 +1,4 @@
-use crate::bytecode::compile::build_byte_code_buffer;
-use crate::debug::generate_disassembly;
-use crate::debug::BytecodeGrammarLookups;
-use crate::get_num_of_available_threads;
-use crate::intermediate::state::compile_states;
-use crate::runtime::get_next_action;
-use crate::types::*;
+use crate::{runtime::get_next_action, types::*};
 use std::sync::Arc;
 
 pub fn collect_shifts_and_skips(

@@ -1,13 +1,8 @@
 //! Functions for constructing and leveraging transition tables from
 //! Hydrocarbon bytecode.
 
-use std::collections::BTreeMap;
-use std::collections::VecDeque;
-
-use std::collections::btree_map;
-
-use hctk_core::bytecode::BytecodeOutput;
-use hctk_core::types::*;
+use hctk_core::{bytecode::BytecodeOutput, types::*};
+use std::collections::{btree_map, BTreeMap, VecDeque};
 
 #[derive(Debug, Clone, Copy)]
 struct TableCell<'a> {

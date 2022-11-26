@@ -4,32 +4,12 @@
 //! preferably more than one. The focus is to remove states
 //! that are comprised only of GOTO statements, folding these
 //! into the respective states that reference them.
-use std::collections::btree_map;
-use std::collections::btree_map::OccupiedEntry;
-use std::collections::BTreeMap;
-use std::collections::BTreeSet;
-use std::collections::VecDeque;
-
-use crate::bytecode::compile::build_byte_code_buffer;
-use crate::bytecode::compile_bytecode;
-use crate::debug::print_bytecode_states;
-use crate::debug::print_ir_states;
-use crate::debug::BytecodeGrammarLookups;
-use crate::grammar;
-use crate::grammar::data::ast::ASTNode;
-use crate::grammar::data::ast::Fail;
-use crate::grammar::data::ast::Goto;
-use crate::grammar::data::ast::Num;
-use crate::grammar::data::ast::ASSERT;
-use crate::grammar::data::ast::AST_NUMBER;
-use crate::grammar::data::ast::DEFAULT;
-use crate::grammar::data::ast::HASH_NAME;
-use crate::grammar::data::ast::IR_STATE;
-use crate::types::ExportedProduction;
-use crate::types::GrammarStore;
-use crate::types::IRState;
-
-use crate::intermediate::state::compile_states;
+use crate::{
+  grammar::data::ast::{ASTNode, Fail, Goto, Num, ASSERT, AST_NUMBER, DEFAULT, HASH_NAME},
+  intermediate::state::compile_states,
+  types::{ExportedProduction, GrammarStore, IRState},
+};
+use std::collections::{btree_map, btree_map::OccupiedEntry, BTreeMap, BTreeSet, VecDeque};
 
 /// Attempts to reduce the number of IR states through merging states, and reduce
 /// and reduce bytecode complexity by transforming instructions where appropriate.
@@ -448,14 +428,12 @@ fn optimize_grammar() {
   
   ").unwrap();
 
-  let (mut states, _) = compile_states(g.clone(), 10);
+  let (states, _) = compile_states(g.clone(), 10);
   let pre_opt_length = states.len();
-
-  let state_refs = states.iter().collect::<Vec<_>>();
 
   // print_bytecode_states(&compile_bytecode(g, &mut states), Some(&BytecodeGrammarLookups::new(&g)));
 
-  let mut states = optimize_ir_states(states, &g);
+  let states = optimize_ir_states(states, &g);
   let post_opt_length = states.len();
 
   // print_bytecode_states(&compile_bytecode(g, &mut states), Some(&BytecodeGrammarLookups::new(&g)));
