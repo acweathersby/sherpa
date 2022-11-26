@@ -375,11 +375,11 @@ fn optimize_grammar() {
 
 <> list >
 
-        symbol \\(+  terminal?  \\)
+        symbol \\(+  terminal?  t:)
         
             f:ast { { t_List_Production, c_Symbol, terminal_symbol:$3, symbols:$1, tok } }
 
-        | symbol \\(* terminal?  \\)
+        | symbol \\(* terminal?  t:)
         
             f:ast {{ t_List_Production, c_Symbol, terminal_symbol:$3, symbols:$1, tok, optional:true }}
 
@@ -428,7 +428,7 @@ fn optimize_grammar() {
   
   ").unwrap();
 
-  let (states, _) = compile_states(g.clone(), 10);
+  let (states, _) = compile_states(g.clone(), 1);
   let pre_opt_length = states.len();
 
   // print_bytecode_states(&compile_bytecode(g, &mut states), Some(&BytecodeGrammarLookups::new(&g)));

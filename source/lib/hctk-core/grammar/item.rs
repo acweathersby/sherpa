@@ -34,9 +34,7 @@ pub fn create_closure(items: &[Item], g: &GrammarStore) -> Vec<Item> {
   seen.into_iter().collect()
 }
 
-/// Retrieve the closure of an item that is cached in the grammar
-/// store. Falls back to manually building the closure if it is not
-/// cached. Does not modify the grammar store object.
+/// Retrieve the closure of an item that is cached in the grammar store.
 #[inline]
 pub fn get_closure_cached<'a>(item: &Item, g: &'a GrammarStore) -> &'a Vec<Item> {
   static empty_closure: Vec<Item> = vec![];
@@ -44,6 +42,22 @@ pub fn get_closure_cached<'a>(item: &Item, g: &'a GrammarStore) -> &'a Vec<Item>
     &empty_closure
   } else {
     g.closures.get(&item.to_zero_state()).unwrap()
+  }
+}
+
+/// Retrieve the closure of an item that is cached in the grammar
+/// store and applies the state of the base item to all closure members.
+#[inline]
+pub fn get_closure_cached_with_state<'a>(item: &Item, g: &'a GrammarStore) -> Vec<Item> {
+  if g.closures.get(&item.to_zero_state()).is_none() {
+    vec![]
+  } else {
+    g.closures
+      .get(&item.to_zero_state())
+      .unwrap()
+      .into_iter()
+      .map(|i| i.to_state(item.get_state()))
+      .collect()
   }
 }
 

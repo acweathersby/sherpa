@@ -4,28 +4,35 @@ use std::fmt::Display;
 use super::HCResult;
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy, Hash, PartialOrd, Ord)]
-pub struct ItemState(u32);
+pub struct ItemState(
+  u32,
+  /// An index to the original object that produced this item, be it a production, a symbol,
+  /// or undefined
+  OriginData,
+);
 
 impl ItemState {
   const GOTO_END_GOAL: u32 = 0x4000;
   const GOTO_END_GOAL_MASK: u32 = (!Self::GOTO_END_GOAL) & 0xFFFF;
-  pub const GOTO_END_GOAL_STATE: ItemState = ItemState::new(Self::GOTO_END_GOAL, 0);
+  pub const GOTO_END_GOAL_STATE: ItemState =
+    ItemState::new(Self::GOTO_END_GOAL, 0, OriginData::UNDEFINED);
   const GOTO_ROOT_END_GOAL: u32 = 0x8000;
   const GOTO_ROOT_END_GOAL_MASK: u32 = (!Self::GOTO_ROOT_END_GOAL) & 0xFFFF;
-  pub const GOTO_ROOT_END_GOAL_STATE: ItemState = ItemState::new(Self::GOTO_ROOT_END_GOAL, 0);
+  pub const GOTO_ROOT_END_GOAL_STATE: ItemState =
+    ItemState::new(Self::GOTO_ROOT_END_GOAL, 0, OriginData::UNDEFINED);
 
   pub const fn default() -> Self {
-    ItemState(0)
+    ItemState(0, OriginData::UNDEFINED)
   }
 
   /// Create a new [Item]
-  pub const fn new(group: u32, depth: u32) -> Self {
-    ItemState((group << 16) | (depth & 0xFFFF))
+  pub const fn new(group: u32, depth: u32, origin: OriginData) -> Self {
+    ItemState((group << 16) | (depth & 0xFFFF), origin)
   }
 
   /// Increase the item's depth by 1
   pub fn increment_depth(&self) -> Self {
-    ItemState::new(self.get_group(), self.get_depth() + 1)
+    ItemState::new(self.get_group(), self.get_depth() + 1, self.1)
   }
 
   /// Get the item's depth
@@ -45,12 +52,17 @@ impl ItemState {
 
   /// Create a new Item with the given depth
   pub fn to_depth(&self, depth: u32) -> Self {
-    ItemState::new(self.get_group(), depth)
+    ItemState::new(self.get_group(), depth, self.1)
   }
 
   /// Create a new Item with the given group
   pub fn to_group(&self, group: u32) -> Self {
-    ItemState::new(group, self.get_depth())
+    ItemState::new(group, self.get_depth(), self.1)
+  }
+
+  /// Create a new Item with the given group
+  pub fn to_origin(&self, origin: OriginData) -> Self {
+    ItemState::new(self.get_group(), self.get_depth(), origin)
   }
 
   /// Indicate's the item originate from a production other
@@ -68,7 +80,7 @@ impl ItemState {
 
 impl Display for ItemState {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    f.write_fmt(format_args!("<{},{}>", self.get_group(), self.get_depth()))
+    f.write_fmt(format_args!("<g:{},d:{}>", self.get_group(), self.get_depth()))
   }
 }
 
@@ -86,13 +98,10 @@ pub enum OriginData {
 #[derive(PartialEq, Eq, Debug, Clone, Copy, Hash, PartialOrd, Ord)]
 
 pub struct Item {
-  body:   BodyId,
-  state:  ItemState,
-  len:    u8,
-  off:    u8,
-  // An index to the original object
-  // that produced this item, be it a production,
-  origin: OriginData,
+  body:  BodyId,
+  state: ItemState,
+  len:   u8,
+  off:   u8,
 }
 
 impl Item {
@@ -125,6 +134,18 @@ impl Item {
         string += " •";
       }
       string
+    }
+  }
+
+  /// Two items belong to the same lane if one of the following
+  /// conditions is met:
+  /// 1. Both Items have states that are in the same group.
+  /// 2. Either Item is in the 0 group.
+  pub fn in_same_lane(&self, other: &Item) -> bool {
+    match (self.state.get_group(), other.state.get_group()) {
+      (a, b) if a == b => true,
+      (_, 0) | (0, _) => true,
+      _ => false,
     }
   }
 
@@ -175,24 +196,12 @@ impl Item {
 
   #[inline(always)]
   pub fn null(state: ItemState) -> Self {
-    Item {
-      len: 0,
-      body: BodyId::default(),
-      off: 0,
-      state,
-      origin: OriginData::UNDEFINED,
-    }
+    Item { len: 0, body: BodyId::default(), off: 0, state }
   }
 
   #[inline(always)]
   pub fn to_null(&self) -> Self {
-    Item {
-      len:    0,
-      body:   BodyId::default(),
-      off:    0,
-      state:  self.state,
-      origin: self.origin,
-    }
+    Item { len: 0, body: BodyId::default(), off: 0, state: self.state }
   }
 
   /// Create an Item from a body_id and a grammar store. Returns
@@ -212,87 +221,83 @@ impl Item {
   }
 
   pub fn to_state(&self, state: ItemState) -> Item {
-    Item {
-      len: self.len,
-      off: self.off,
-      body: self.body,
-      state,
-      origin: self.origin,
-    }
+    Item { len: self.len, off: self.off, body: self.body, state }
   }
 
   pub fn to_origin(&self, origin: OriginData) -> Self {
     Item {
-      body: self.body,
-      len: self.len,
-      off: self.off,
-      state: self.state,
-      origin,
+      body:  self.body,
+      len:   self.len,
+      off:   self.off,
+      state: self.state.to_origin(origin),
     }
   }
 
   pub fn to_last_sym(self) -> Self {
     Item {
-      body:   self.body,
-      len:    self.len,
-      off:    if self.len > 0 { self.len - 1 } else { 0 },
-      state:  self.state,
-      origin: self.origin,
+      body:  self.body,
+      len:   self.len,
+      off:   if self.len > 0 { self.len - 1 } else { 0 },
+      state: self.state,
     }
   }
 
   pub fn to_start(&self) -> Item {
-    Item {
-      body:   self.body,
-      len:    self.len,
-      off:    0,
-      state:  self.state,
-      origin: self.origin,
-    }
+    Item { body: self.body, len: self.len, off: 0, state: self.state }
   }
 
   pub fn to_end(&self) -> Item {
+    Item { body: self.body, len: self.len, off: self.len, state: self.state }
+  }
+
+  pub fn to_origin_only_state(&self) -> Item {
     Item {
-      body:   self.body,
-      len:    self.len,
-      off:    self.len,
-      state:  self.state,
-      origin: self.origin,
+      body:  self.body,
+      len:   self.len,
+      off:   self.off,
+      state: self.state.to_group(0).to_depth(0),
     }
   }
 
   pub fn to_zero_state(&self) -> Item {
     Item {
-      body:   self.body,
-      len:    self.len,
-      off:    self.off,
-      state:  ItemState::default(),
-      origin: OriginData::UNDEFINED,
+      body:  self.body,
+      len:   self.len,
+      off:   self.off,
+      state: ItemState::default(),
     }
   }
 
   pub fn increment(&self) -> Option<Item> {
     if !self.at_end() {
       Some(Item {
-        len:    self.len,
-        off:    self.off + 1,
-        body:   self.body,
-        state:  self.state.increment_depth(),
-        origin: self.origin,
+        len:   self.len,
+        off:   self.off + 1,
+        body:  self.body,
+        state: self.state.increment_depth(),
       })
     } else {
       None
     }
   }
 
+  /// Increments the Item if it is not at the end position,
+  /// otherwise returns the Item as is.
+  pub fn try_increment(&self) -> Item {
+    if !self.at_end() {
+      self.increment().unwrap()
+    } else {
+      self.clone()
+    }
+  }
+
   pub fn decrement(&self) -> Option<Item> {
     if !self.is_start() {
       Some(Item {
-        len:    self.len,
-        off:    self.off - 1,
-        body:   self.body,
-        state:  self.state,
-        origin: self.origin,
+        len:   self.len,
+        off:   self.off - 1,
+        body:  self.body,
+        state: self.state,
       })
     } else {
       None
@@ -327,7 +332,7 @@ impl Item {
   }
 
   pub fn get_origin(&self) -> OriginData {
-    self.origin
+    self.state.1
   }
 
   pub fn get_length(&self) -> u32 {
@@ -399,11 +404,10 @@ impl Item {
 impl From<&Body> for Item {
   fn from(body: &Body) -> Self {
     Item {
-      body:   body.id,
-      len:    body.len as u8,
-      off:    0,
-      state:  ItemState::default(),
-      origin: OriginData::UNDEFINED,
+      body:  body.id,
+      len:   body.len as u8,
+      off:   0,
+      state: ItemState::default(),
     }
   }
 }

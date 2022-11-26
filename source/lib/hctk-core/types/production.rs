@@ -87,10 +87,15 @@ impl std::fmt::Display for BodyId {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct Production {
+  pub id: ProductionId,
+  /// A globally unique name of this production. This should always be distinct, particularly in cases
+  /// were a host grammar imports a donor grammar that
+  /// defines productions with the same name as those
+  /// in the host.
   pub guid_name: String,
+  /// The human friendly name of this production
   pub name: String,
   pub number_of_bodies: u16,
-  pub id: ProductionId,
   pub is_scanner: bool,
   pub is_entry: bool,
   pub recursion_type: RecursionType,

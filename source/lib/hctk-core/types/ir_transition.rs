@@ -1,5 +1,5 @@
 use super::*;
-use crate::grammar::get_closure_cached;
+use crate::grammar::{get_closure_cached, get_closure_cached_with_state};
 use bitmask_enum::bitmask;
 use std::{
   collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
@@ -231,8 +231,8 @@ impl TransitionGraphNode {
   }
 
   /// Returns the closure of this node's items
-  pub fn get_closure<'a>(&self, g: &'a GrammarStore) -> BTreeSet<&'a Item> {
-    self.items.iter().flat_map(|i| get_closure_cached(i, &g)).collect::<BTreeSet<_>>()
+  pub fn get_closure<'a>(&self, g: &'a GrammarStore) -> BTreeSet<Item> {
+    self.items.iter().flat_map(|i| get_closure_cached_with_state(i, &g)).collect::<BTreeSet<_>>()
   }
 
   pub fn temp(
