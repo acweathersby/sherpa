@@ -5,6 +5,7 @@ use hctk_core::{
 use std::{
   collections::{BTreeMap, BTreeSet, HashMap},
   fmt::Debug,
+  hash::Hash,
   mem::discriminant,
   sync::Arc,
 };
@@ -418,16 +419,18 @@ pub struct AScriptStruct {
   pub prop_ids: BTreeSet<AScriptPropId>,
   /// Tracks the number of times this struct has been defined
   pub body_ids: BTreeSet<BodyId>,
-  pub definition_locations: Vec<Token>,
+  pub definition_locations: BTreeSet<Token>,
   pub include_token: bool,
 }
+
+pub type ProductionTypesTable = BTreeMap<ProductionId, HashMap<TaggedType, BTreeSet<BodyId>>>;
 
 #[derive(Debug)]
 pub struct AScriptStore {
   /// Store of unique AScriptStructs
   pub structs: BTreeMap<AScriptStructId, AScriptStruct>,
   pub props: BTreeMap<AScriptPropId, AScriptProp>,
-  pub prod_types: BTreeMap<ProductionId, HashMap<TaggedType, BTreeSet<BodyId>>>,
+  pub prod_types: ProductionTypesTable,
   pub body_reduce_fn: BTreeMap<BodyId, (AScriptTypeVal, ASTNode)>,
   pub name: String,
   pub g: Arc<GrammarStore>,

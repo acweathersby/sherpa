@@ -469,9 +469,8 @@ impl Token {
       let mut string = String::from("");
       let mut prev_line = find_prev_line(&source, self.off as i64) as i64;
       let mut line_num = (self.line_num + 1) as usize;
-      let mut remainder = self.len + (self.off - self.line_off);
       let mut next_line;
-      let mut col_diff = (self.off - prev_line as u32 - (prev_line != 0) as u32) as usize;
+      let mut col_diff = (self.off as i64 - prev_line - (prev_line != 0) as i64).max(0) as usize;
 
       if source[0] as char == '\n' {
         line_num -= 1;

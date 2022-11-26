@@ -39,6 +39,8 @@ mod rust_ast_build {
 
   #[test]
   fn test_temp() {
+    use std::{io::Write, path::PathBuf, vec};
+
     let g = GrammarStore::from_path(
       PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../../test/e2e/bootstrap/grammar/ir.hcg")
@@ -269,7 +271,7 @@ mod rust_ast_build {
 
       <> C > D(+ t:t ) 
              ( t:x t:y t:z )?
-             ( t:x t:y t:z f:ast { { t_A } } )?
+             ( t:x t:y t:z f:ast { tok } )?
 
               f:ast { [ $1, $2, $3 ] }
 
@@ -402,9 +404,12 @@ mod rust_ast_build {
 #[cfg(test)]
 mod ascript_compile_tests {
 
-  use crate::ascript::{
-    compile::{compile_ascript_store, compile_struct_props, compile_struct_type},
-    types::AScriptStore,
+  use crate::{
+    ascript::{
+      compile::{compile_ascript_store, compile_struct_props, compile_struct_type},
+      types::AScriptStore,
+    },
+    compile::verify_property_presence,
   };
   use hctk_core::{
     grammar::{
@@ -523,6 +528,10 @@ mod ascript_compile_tests {
 
         assert!(errors.is_empty());
       }
+    }
+
+    for struct_id in ast.structs.keys().cloned().collect::<Vec<_>>() {
+      verify_property_presence(&mut ast, &struct_id);
     }
 
     for prop in &ast.props {
