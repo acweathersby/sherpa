@@ -335,3 +335,5 @@ pub fn default_get_branch_selector(
     BranchSelector::Hash
   }
 }
+
+pub const prime_symbol: &'static str = "_prime";

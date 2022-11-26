@@ -1313,8 +1313,8 @@ pub fn convert_left_recursion_to_right(
   let non_bodies =
     bodies.iter().filter_map(|(i, b)| if *b { None } else { Some(i) }).collect::<Vec<_>>();
 
-  let a_prime_prod_name = format!("{}'", a_prod.name);
-  let a_prime_prod_guid_name = format!("{}'", a_prod.guid_name);
+  let a_prime_prod_name = format!("{}{}", a_prod.name, prime_symbol);
+  let a_prime_prod_guid_name = format!("{}{}", a_prod.guid_name, prime_symbol);
   let a_prime_prod_id = ProductionId::from(&a_prime_prod_guid_name);
   let a_prime_prod = Production {
     id: a_prime_prod_id,
