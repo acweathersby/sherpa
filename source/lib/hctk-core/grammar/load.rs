@@ -5,7 +5,7 @@ use super::{
   data::ast::{ASTNode, Grammar, Import},
   multitask::WorkVerifier,
 };
-use crate::types::*;
+use crate::{journal::Journal, types::*};
 use std::{
   collections::{HashSet, VecDeque},
   fs::read,
@@ -32,19 +32,24 @@ pub(crate) fn get_usable_thread_count(requested_count: usize) -> usize {
 /// Returns a vector grammars in no particular order except the first grammar belongs to
 /// the file path
 pub(crate) fn load_all(
+  j: &mut Journal,
   absolute_path: &PathBuf,
   number_of_threads: usize,
 ) -> (Vec<(PathBuf, ImportedGrammarReferences, Box<Grammar>)>, Vec<HCError>) {
   let mut pending_grammar_paths =
     Mutex::new(VecDeque::<PathBuf>::from_iter(vec![absolute_path.clone()]));
-  let mut claimed_grammar_paths = Mutex::new(HashSet::<PathBuf>::new());
-  let mut work_verifier = Mutex::new(WorkVerifier::new(1));
+  let claimed_grammar_paths = Mutex::new(HashSet::<PathBuf>::new());
+  let work_verifier = Mutex::new(WorkVerifier::new(1));
 
   let results = thread::scope(|s| {
     [0..get_usable_thread_count(number_of_threads)]
       .into_iter()
       .map(|i| {
-        s.spawn(|| {
+        let mut j = j.transfer();
+        let claimed_grammar_paths = &claimed_grammar_paths;
+        let work_verifier = &work_verifier;
+        let pending_grammar_paths = &pending_grammar_paths;
+        s.spawn(move || {
           let mut grammars = vec![];
           let mut errors = vec![];
 
@@ -71,9 +76,8 @@ pub(crate) fn load_all(
                 val
               }
             } {
-              Some(path) => match load_grammar(&path) {
+              Some(path) => match load_grammar(&mut j, &path) {
                 HCResult::Ok((grammar, imports)) => {
-                  let mut units_of_work = imports.len();
                   let mut imports_refs: ImportedGrammarReferences = Default::default();
 
                   for box Import { uri, reference, tok } in imports {
@@ -142,7 +146,9 @@ pub(crate) fn load_all(
 
 #[test]
 fn test_load_all() {
+  let mut j = Journal::new(None);
   let (grammars, errors) = load_all(
+    &mut j,
     &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
       .join("../../../test/grammars/load.hcg")
       .canonicalize()
@@ -157,6 +163,7 @@ fn test_load_all() {
   assert_eq!(errors.len(), 0);
 
   let (grammars, errors) = load_all(
+    &mut j,
     &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
       .join("../../../test/grammars/invalid_load.hcg")
       .canonicalize()
@@ -172,7 +179,10 @@ fn test_load_all() {
 }
 
 /// Loads and parses a grammar file, returning the parsed grammar node and a vector of Import nodes.
-pub(crate) fn load_grammar(absolute_path: &PathBuf) -> HCResult<(Box<Grammar>, Vec<Box<Import>>)> {
+pub(crate) fn load_grammar(
+  j: &mut Journal,
+  absolute_path: &PathBuf,
+) -> HCResult<(Box<Grammar>, Vec<Box<Import>>)> {
   match read(absolute_path) {
     Ok(buffer) => match compile_grammar_ast(buffer) {
       Ok(grammar) => {
@@ -194,12 +204,16 @@ pub(crate) fn load_grammar(absolute_path: &PathBuf) -> HCResult<(Box<Grammar>, V
 
 #[test]
 fn test_load_grammar() {
-  let result =
-    load_grammar(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../test_grammars/load.hcg"));
+  let mut j = Journal::new(None);
+  let result = load_grammar(
+    &mut j,
+    &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../test_grammars/load.hcg"),
+  );
 
   assert!(result.is_faulty());
 
   let result = load_grammar(
+    &mut j,
     &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
       .join("../../../test/grammars/load.hcg")
       .canonicalize()

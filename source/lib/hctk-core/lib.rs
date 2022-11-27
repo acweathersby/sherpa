@@ -16,6 +16,7 @@
 
 mod deprecated_runtime;
 pub mod grammar;
+mod journal;
 pub mod runtime;
 pub mod types;
 pub mod utf8;
@@ -51,15 +52,19 @@ mod test_end_to_end {
     bytecode::compile::build_byte_code_buffer,
     debug::collect_shifts_and_skips,
     get_num_of_available_threads,
-    intermediate::state::compile_states,
+    intermediate::compile::compile_states,
+    journal::Journal,
     types::*,
   };
 
   #[test]
-  fn test_basic_grammar_build() {
+  fn test_pipeline() -> HCResult<()> {
     let threads = get_num_of_available_threads();
 
+    let mut j = Journal::new(None);
+
     let g = GrammarStore::from_str(
+      &mut j,
       "
 @IGNORE g:sp g:tab
 
@@ -68,7 +73,7 @@ mod test_end_to_end {
     )
     .unwrap();
 
-    let (mut states, _) = compile_states(g.clone(), threads);
+    let mut states = compile_states(&mut j, threads)?;
 
     for state in states.values_mut() {
       if state.get_ast().is_none() {
@@ -93,5 +98,7 @@ mod test_end_to_end {
     assert_eq!(shifts, ["hello", "world"]);
 
     assert_eq!(skips, ["    \t"]);
+
+    HCResult::Ok(())
   }
 }

@@ -10,6 +10,7 @@ use crate::{
     get_production_start_items,
     hash_id_value_u64,
   },
+  journal::Journal,
 };
 use std::{
   collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
@@ -187,14 +188,18 @@ pub struct GrammarStore {
 
   pub merge_productions: BTreeMap<ProductionId, Vec<Body>>,
 
-  /// All productions that are reachable from the entry points.
+  /// All productions that are reachable from the entry productions, including
+  /// the entry productions.
   pub parse_productions: BTreeSet<ProductionId>,
 }
 
 impl GrammarStore {
-  pub fn from_path(path: PathBuf) -> HCResult<Arc<GrammarStore>> {
-    match compile_grammar_from_path(path, 0) {
-      (Some(grammar), _) => HCResult::Ok(grammar),
+  pub fn from_path(j: &mut Journal, path: PathBuf) -> HCResult<Arc<GrammarStore>> {
+    match compile_grammar_from_path(j, path, 0) {
+      (Some(grammar), _) => {
+        j.set_grammar(grammar.clone());
+        HCResult::Ok(grammar)
+      }
       (_, Some(errors)) => {
         HCResult::Err(HCError::Many { message: "Unable to compile Grammar".to_string(), errors })
       }
@@ -202,9 +207,12 @@ impl GrammarStore {
     }
   }
 
-  pub fn from_str(string: &str) -> HCResult<Arc<GrammarStore>> {
-    match compile_grammar_from_string(string, &PathBuf::from("/internal/")) {
-      (Some(grammar), _) => HCResult::Ok(grammar),
+  pub fn from_str(j: &mut Journal, string: &str) -> HCResult<Arc<GrammarStore>> {
+    match compile_grammar_from_string(j, string, &PathBuf::from("/internal/")) {
+      (Some(grammar), _) => {
+        j.set_grammar(grammar.clone());
+        HCResult::Ok(grammar)
+      }
       (_, Some(errors)) => {
         HCResult::Err(HCError::Many { message: "Unable to compile Grammar".to_string(), errors })
       }
@@ -212,8 +220,8 @@ impl GrammarStore {
     }
   }
 
-  pub fn from_string(string: String) -> HCResult<Arc<GrammarStore>> {
-    return Self::from_str(string.as_str());
+  pub fn from_string(j: &mut Journal, string: String) -> HCResult<Arc<GrammarStore>> {
+    return Self::from_str(j, string.as_str());
   }
 
   /// Returns the [Body] that's mapped to [`body_id`](BodyId)
@@ -253,7 +261,7 @@ impl GrammarStore {
     }
   }
 
-  /// Retrieve the non-import and unmangled name of a [Production](Production).
+  /// Retrieve the globally unique name of a [Production](Production).
   pub fn get_production_guid_name(&self, prod_id: &ProductionId) -> &str {
     if let Some(prod) = self.productions.get(prod_id) {
       &prod.guid_name
@@ -310,7 +318,7 @@ impl GrammarStore {
     let mut recurse_type = RecursionType::NONE;
 
     while let Some((offset, item)) = pipeline.pop_front() {
-      if !item.is_end() {
+      if !item.completed() {
         let other_prod_id = item.get_production_id_at_sym(self);
 
         if prod_id == other_prod_id {
@@ -352,7 +360,9 @@ mod production_utilities_tests {
   #[test]
 
   fn test_compile_test_grammar() {
+    let mut j = Journal::new(None);
     let g = G::from_str(
+      &mut j,
       "
         <> A > B 
         <> B > C
@@ -362,12 +372,14 @@ mod production_utilities_tests {
     )
     .unwrap();
 
-    assert_eq!(g.id.path.as_os_str().to_str().unwrap(), "/-internal-/test");
+    assert_eq!(g.id.path.as_os_str().to_str().unwrap(), "/internal/");
   }
 
   #[test]
   fn test_get_default_production() {
+    let mut j = Journal::new(None);
     let g = G::from_str(
+      &mut j,
       "
 @EXPORT start as test
 
@@ -389,7 +401,8 @@ mod production_utilities_tests {
   #[test]
 
   fn test_get_production_plain_name() {
-    let g = G::from_str("<>billofolious_tantimum^a>\\o").unwrap();
+    let mut j = Journal::new(None);
+    let g = G::from_str(&mut j, "<>billofolious_tantimum^a>\\o").unwrap();
 
     let prod = g.get_production_id_by_name("billofolious_tantimum").unwrap();
 
@@ -401,7 +414,9 @@ mod production_utilities_tests {
   #[test]
 
   fn test_get_production_by_name() {
+    let mut j = Journal::new(None);
     let g = G::from_str(
+      &mut j,
       "
       <> Apple > \\o
       <> Bad_Cakes > \\b
@@ -419,7 +434,9 @@ mod production_utilities_tests {
   #[test]
 
   fn test_is_production_recursive() {
+    let mut j = Journal::new(None);
     let g = G::from_str(
+      &mut j,
       "
       <> A > B 
       <> B > C

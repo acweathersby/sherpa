@@ -151,7 +151,7 @@ Vector Types:
 {}
 ",
       g.get_production_plain_name(p),
-      g.get_production(p).unwrap().tok.blame(0, 0, "production defined here", BlameColor::Red),
+      g.get_production(p).unwrap().loc.blame(0, 0, "production defined here", BlameColor::Red),
       scalars.iter().map(create_blame_string).collect::<Vec<_>>().join("\n"),
       vectors.iter().map(create_blame_string).collect::<Vec<_>>().join("\n")
     ))

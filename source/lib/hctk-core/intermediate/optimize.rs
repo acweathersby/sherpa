@@ -6,10 +6,9 @@
 //! into the respective states that reference them.
 use crate::{
   grammar::data::ast::{ASTNode, Fail, Goto, Num, ASSERT, AST_NUMBER, DEFAULT, HASH_NAME},
-  intermediate::state::compile_states,
   types::{ExportedProduction, GrammarStore, IRState},
 };
-use std::collections::{btree_map, btree_map::OccupiedEntry, BTreeMap, BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 /// Attempts to reduce the number of IR states through merging states, and reduce
 /// and reduce bytecode complexity by transforming instructions where appropriate.
@@ -90,7 +89,7 @@ pub fn optimize_ir_states(
     // For each state, try to lower any state that is a pure
     // GOTO state into the respective reference states.
     for state in states.values_mut() {
-      if goto_replacements.contains_key(&state.id) {
+      if goto_replacements.contains_key(&state.name) {
         continue;
       }
 
@@ -315,134 +314,4 @@ fn get_entry_states(g: &GrammarStore) -> BTreeSet<String> {
     .iter()
     .map(|ExportedProduction { guid_name, .. }| guid_name.to_string())
     .collect()
-}
-
-#[test]
-fn optimize_grammar() {
-  let g = GrammarStore::from_str("
-  
-  @NAME hc_symbol
-
-@IGNORE g:sp g:nl
-
-
-<> annotated_symbol > 
-        
-        symbol^s [unordered tk:reference?^r \\? ?^o ]
-
-            f:ast {{ t_AnnotatedSymbol, symbol:$s, is_optional:bool($o), reference:str($r), tok  }}
-        
-        | symbol
-
-
-<> symbol >
-
-        terminal
-
-        | non_terminal
-
-        | list
-
-        | terminal_non_terminal
-
-        | class
-
-
-<> class >
-
-        t:c: ( \\num | \\nl | \\sp | \\id | \\sym | \\any )
-        
-            f:ast { { t_Class, c_Symbol , c_Terminal, val:str($2),  tok } }
-        
-
-<> terminal_non_terminal >
-
-        t:tk: non_terminal
-
-             f:ast { { t_Production_Terminal , c_Symbol , c_Terminal, production:$2, tok } }
-
-
-<> non_terminal > 
-
-        tk:identifier_syms
-        
-             f:ast { { t_Production_Symbol , c_Symbol, name:str($1),   tok } }
-
-        | tk:identifier_syms \\:: tk:identifier_syms
-        
-             f:ast { { t_Production_Import_Symbol , c_Symbol , module:str($1), name:str($3), tok } } 
-
-
-<> list >
-
-        symbol \\(+  terminal?  t:)
-        
-            f:ast { { t_List_Production, c_Symbol, terminal_symbol:$3, symbols:$1, tok } }
-
-        | symbol \\(* terminal?  t:)
-        
-            f:ast {{ t_List_Production, c_Symbol, terminal_symbol:$3, symbols:$1, tok, optional:true }}
-
-
-<> terminal > 
-    
-        ( g:sym | g:num )(+\\\" )
-
-            f:ast { { t_Terminal , c_Symbol , c_Terminal, val:str($1),  tok } }
-
-        | t:\\ tk:defined_symbol
-    
-            f:ast { { t_Terminal , c_Symbol , c_Terminal, val:str($2),  tok } } 
-
-
-<> defined_symbol > 
-
-        ( g:id | g:sym | g:num )(+)
-
-
-<> reference > 
-
-        t:^ tk:identifier_syms
-
-
-<> identifier > 
-
-        tk:identifier_syms 
-
-
-<> identifier_syms >  
-
-        identifier_syms g:id
-
-        | identifier_syms \\_
-
-        | identifier_syms \\-
-
-        | identifier_syms g:num      
-
-        | \\_ 
-
-        | \\- 
-
-        | g:id
-  
-  ").unwrap();
-
-  let (states, _) = compile_states(g.clone(), 1);
-  let pre_opt_length = states.len();
-
-  // print_bytecode_states(&compile_bytecode(g, &mut states), Some(&BytecodeGrammarLookups::new(&g)));
-
-  let states = optimize_ir_states(states, &g);
-  let post_opt_length = states.len();
-
-  // print_bytecode_states(&compile_bytecode(g, &mut states), Some(&BytecodeGrammarLookups::new(&g)));
-
-  println!(
-    "pre opt {} post opt {}. The optimized states are {:.2}% of original count",
-    pre_opt_length,
-    post_opt_length,
-    100.0 * (post_opt_length as f64 / pre_opt_length as f64)
-  );
-  assert!(pre_opt_length > post_opt_length);
 }

@@ -2,7 +2,10 @@ use std::collections::BTreeMap;
 
 use crate::grammar::data::ast::IR_STATE;
 
-use crate::types::{GrammarStore, IRState, IRStateType, Symbol};
+use crate::{
+  journal::Journal,
+  types::{GrammarStore, IRState, IRStateType, Symbol},
+};
 
 use self::compile::build_byte_code_buffer;
 
@@ -60,7 +63,7 @@ pub struct BytecodeOutput {
 }
 
 pub fn compile_bytecode<'a>(
-  g: &'a GrammarStore,
+  j: &mut Journal,
   ir_states: &mut Vec<(String, Box<IRState>)>,
 ) -> BytecodeOutput {
   let ir_ast_states = ir_states
@@ -73,11 +76,11 @@ pub fn compile_bytecode<'a>(
     })
     .collect::<Vec<_>>();
 
-  compile_ir_states_into_bytecode(g, ir_states, ir_ast_states)
+  compile_ir_states_into_bytecode(j, ir_states, ir_ast_states)
 }
 
 pub(crate) fn compile_ir_states_into_bytecode<'a>(
-  g: &'a GrammarStore,
+  j: &mut Journal,
   ir_states: &Vec<(String, Box<IRState>)>,
   ir_ast_states: Vec<IR_STATE>,
 ) -> BytecodeOutput {
@@ -93,7 +96,9 @@ pub(crate) fn compile_ir_states_into_bytecode<'a>(
       .map(|(a, b)| (*b, a.clone()))
       .collect::<BTreeMap<_, _>>(),
     state_name_to_offset: state_lookups,
-    bytecode_id_to_symbol_lookup: g
+    bytecode_id_to_symbol_lookup: j
+      .grammar()
+      .unwrap()
       .symbols
       .values()
       .chain(Symbol::Generics)
@@ -119,21 +124,22 @@ mod byte_code_creation_tests {
     },
     grammar::{data::ast::ASTNode, parse::compile_ir_ast},
     intermediate::{
-      optimize::optimize_ir_states,
-      state::{compile_states, generate_production_states},
+      optimize::optimize_ir_states, compile::{compile_production_states, compile_states},
     },
-    types::{default_get_branch_selector, GrammarStore},
+    journal::Journal,
+    types::{default_get_branch_selector, GrammarStore, HCResult},
   };
 
   use super::compile_bytecode;
 
   #[test]
-  pub fn test_produce_a_single_ir_ast_from_a_single_state_of_a_trivial_production() {
-    let g = GrammarStore::from_str("<> A > \\h").unwrap();
+  pub fn test_produce_a_single_ir_ast_from_a_single_state_of_a_trivial_production() -> HCResult<()>{
+    let mut j = Journal::new(None);
+    let g = GrammarStore::from_str(&mut j, "<> A > \\h").unwrap();
 
     let prod_id = g.get_production_id_by_name("A").unwrap();
 
-    let result = generate_production_states(&prod_id, g).states;
+    let result = compile_production_states(&mut j, prod_id)?;
 
     println!("{:#?}", result);
 
@@ -154,11 +160,43 @@ mod byte_code_creation_tests {
     );
 
     println!("{:#?}", result);
+
+    HCResult::Ok(())
   }
 
   #[test]
-  pub fn test_production_of_bytecode_for_simple_expression_grammar() {
-    let g = GrammarStore::from_str(
+  pub fn temp_test1() -> HCResult<()>{
+    let mut j = Journal::new(None);
+    let g = GrammarStore::from_str(&mut j, 
+      "
+    @NAME test
+
+    @IGNORE g:sp 
+    
+    <> Term  >  Num     f:ast { [ $1 ] }
+        | \\( Num \\)   f:ast { [ $2 ] }
+    
+    
+    <> Num > g:num
+
+",
+    )
+    .unwrap();
+
+    let states = compile_states(&mut j, 1)?;
+
+    for (_, state) in &states {
+      println!("{}\n", state.get_code());
+    }
+
+    let output = compile_bytecode(&mut j, &mut optimize_ir_states(states, &g));
+    HCResult::Ok(())
+  }
+
+  #[test]
+  pub fn test_production_of_bytecode_for_simple_expression_grammar() -> HCResult<()>{
+    let mut j = Journal::new(None);
+    let g = GrammarStore::from_str(&mut j, 
       "
       @IGNORE g:sp
 
@@ -184,19 +222,21 @@ mod byte_code_creation_tests {
 ",
     )
     .unwrap();
-    let (mut ir_states, _) = compile_states(g.clone(), 1);
+    let mut states = compile_states(&mut j, 1)?;
 
-    let output = compile_bytecode(&g, &mut optimize_ir_states(ir_states, &g));
+    let output = compile_bytecode(&mut j, &mut optimize_ir_states(states, &g));
 
     println!(
       "dD: {}",
       debug::generate_disassembly(&output, Some(&BytecodeGrammarLookups::new(&g)))
     );
+    HCResult::Ok(())
   }
 
   #[test]
-  pub fn generate_production_with_a_recursion() {
-    let g = GrammarStore::from_str(
+  pub fn generate_production_with_a_recursion() -> HCResult<()>{
+    let mut j = Journal::new(None);
+    let g = GrammarStore::from_str(&mut j, 
       "    
       <> element_block > \\< component_identifier
       ( t:tested )? 
@@ -213,17 +253,20 @@ mod byte_code_creation_tests {
     )
     .unwrap();
 
-    let (mut states, _) = compile_states(g.clone(), 1);
-    let output = compile_bytecode(&g, &mut optimize_ir_states(states, &g));
+    let states = compile_states(&mut j, 1)?;
+    let output = compile_bytecode(&mut j, &mut optimize_ir_states(states, &g));
     println!(
       "dD: {}",
       debug::generate_disassembly(&output, Some(&BytecodeGrammarLookups::new(&g)))
     );
+
+    HCResult::Ok(())
   }
 
   #[test]
-  pub fn production_with_multiple_sub_productions() {
-    let g = GrammarStore::from_str(
+  pub fn production_with_multiple_sub_productions() -> HCResult<()>{
+    let mut j = Journal::new(None);
+    let g = GrammarStore::from_str(&mut j, 
       "    
 <> test > t:d A | B | C | D
 <> A > t:a id
@@ -238,7 +281,7 @@ mod byte_code_creation_tests {
 
     let prod_id = g.get_production_id_by_name("test").unwrap();
 
-    let result = generate_production_states(&prod_id, g).states;
+    let result = compile_production_states(&mut j, prod_id)?;
 
     for state in result {
       println!("{:#?}", state.get_code());
@@ -247,10 +290,13 @@ mod byte_code_creation_tests {
     //   "dD: {}",
     //   debug::generate_disassembly(&output, Some(&BytecodeGrammarLookups::new(&g)))
     // );
+
+    HCResult::Ok(())
   }
   #[test]
-  pub fn temp_test() {
-    let g = GrammarStore::from_str(
+  pub fn temp_test() -> HCResult<()>{
+    let mut j = Journal::new(None);
+    let g = GrammarStore::from_str(&mut j, 
       "@NAME wick_element
 
       @IGNORE g:sp g:nl
@@ -303,12 +349,8 @@ mod byte_code_creation_tests {
       <> tok_identifier > ( g:id | g:num )(+)                     ",
     ).unwrap();
 
-    let (mut states, _) = compile_states(g.clone(), 1);
-    let output = compile_bytecode(&g, &mut optimize_ir_states(states, &g));
-    return;
-    println!(
-      "dD: {}",
-      debug::generate_disassembly(&output, Some(&BytecodeGrammarLookups::new(&g)))
-    );
+    let states = compile_states(&mut j, 1)?;
+    let output = compile_bytecode(&mut j, &mut optimize_ir_states(states, &g));
+    HCResult::Ok(())
   }
 }

@@ -296,7 +296,7 @@ fn make_table(
 
   let scanner_pointer = if input_type_key == INPUT_TYPE::T02_TOKEN {
     if scanner_name.is_empty() {
-      panic!("Scanner name should not be empty!");
+      panic!("Scanner name should not be empty! {}", state_name);
     }
 
     if let Some(bookmark) = state_to_bookmark.get(scanner_name) {

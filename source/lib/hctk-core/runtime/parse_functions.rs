@@ -13,7 +13,7 @@ pub fn dispatch<T: BaseCharacterReader + MutCharacterReader>(
   let mut i = (ctx.get_active_state() & STATE_ADDRESS_MASK);
 
   loop {
-    // println!("instr: {:0>6x} {} b: {} cp: {} cls: {}", i, r.cursor(), r.byte(), r.codepoint(), r.class());
+    //println!("instr: {:0>6x} {} b: {} cp: {} cls: {}", i, r.cursor(), r.byte(), r.codepoint(), r.class());
 
     let instr = INSTRUCTION::from(bc, i as usize);
 
@@ -440,7 +440,7 @@ fn token_scan<T: BaseCharacterReader + MutCharacterReader>(
         ctx.set_production_to(id - 1);
       }
 
-      return ParseToken { token_type: SymbolID::EndOfFile.bytecode_id(None), ..Default::default() };
+      return ParseToken { token_type: SymbolID::EndOfInput.bytecode_id(None), ..Default::default() };
     }
   }
 

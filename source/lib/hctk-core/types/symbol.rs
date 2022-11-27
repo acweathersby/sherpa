@@ -83,9 +83,23 @@ pub enum SymbolID {
   /// Represent the grammar symbol `g:rec`.
   Recovery,
   Default,
-  EndOfFile,
+  /// Represent end of input. This is also used
+  /// to represent the `symbol` of items in the completed
+  /// position
+  EndOfInput,
+  /// Used to differentiate different completed items in the
+  /// `peek` module.
+  DistinctCompletion(u32),
   Undefined,
+  UndefinedA,
+  UndefinedB,
+  UndefinedC,
+  UndefinedD,
   Start,
+  /// Represents a symbol that does not belong to
+  /// a given closure, used to detect and resolve shift
+  /// conflicts within nested productions.
+  OutOfScope,
 }
 
 impl Default for SymbolID {
@@ -110,7 +124,7 @@ impl SymbolID {
       "default" => Self::Default,
       "[??]" => Self::Undefined,
       gen_rec_marker_str => Self::Recovery,
-      eof_str => Self::EndOfFile,
+      eof_str => Self::EndOfInput,
       tab_sym_str => Self::GenericHorizontalTab,
       nl_sym_str => Self::GenericNewLine,
       space_sym_str => Self::GenericSpace,
@@ -155,15 +169,15 @@ impl SymbolID {
       }
       Self::Start => "start".to_string(),
       Self::Default => "default".to_string(),
-      Self::Undefined => "[??]".to_string(),
       Self::Recovery => gen_rec_marker_str.to_string(),
-      Self::EndOfFile => eof_str.to_string(),
+      Self::EndOfInput => eof_str.to_string(),
       Self::GenericHorizontalTab => tab_sym_str.to_string(),
       Self::GenericNewLine => nl_sym_str.to_string(),
       Self::GenericSpace => space_sym_str.to_string(),
       Self::GenericIdentifier => id_sym_str.to_string(),
       Self::GenericNumber => num_sym_str.to_string(),
       Self::GenericSymbol => symbol_sym_str.to_string(),
+      _ => "[??]".to_string(),
     }
   }
 
@@ -179,15 +193,15 @@ impl SymbolID {
       Self::TokenProduction(prod_id, _) => "__defined".to_string(),
       Self::Default => "__default".to_string(),
       Self::Start => "__start".to_string(),
-      Self::Undefined => "__undefined".to_string(),
       Self::Recovery => "__rec".to_string(),
-      Self::EndOfFile => "__eof".to_string(),
+      Self::EndOfInput => "__eof".to_string(),
       Self::GenericHorizontalTab => "__tab".to_string(),
       Self::GenericNewLine => "__nl".to_string(),
       Self::GenericSpace => "__sp".to_string(),
       Self::GenericIdentifier => "__id".to_string(),
       Self::GenericNumber => "__num".to_string(),
       Self::GenericSymbol => "__sym".to_string(),
+      _ => "__undefined".to_string(),
     }
   }
 
@@ -269,25 +283,30 @@ impl SymbolID {
       | Self::DefinedSymbol(_)
       | Self::ExclusiveDefinedNumeric(_)
       | Self::ExclusiveDefinedIdentifier(_)
-      | Self::ExclusiveDefinedSymbol(_)
-      | Self::TokenProduction(..) => {
+      | Self::ExclusiveDefinedSymbol(_) => {
         if let Some(g) = g {
           g.symbols.get(self).unwrap().bytecode_id
         } else {
-          9999
+          99999
         }
       }
-      Self::Default | Self::Start => 9999,
-      Self::Production(..) => 0,
-      Self::Undefined => 0,
-      Self::Recovery => 0,
-      Self::EndOfFile => 1,
+      Self::TokenProduction(prod_id, _) => match g {
+        Some(g) => g.get_production(prod_id).unwrap().symbol_bytecode_id,
+        None => 99999,
+      },
+      Self::Production(prod_id, _) => match g {
+        Some(g) => g.get_production(prod_id).unwrap().bytecode_id,
+        None => 99999,
+      },
+      Self::Default | Self::Start => 99999,
+      Self::EndOfInput => 1,
       Self::GenericHorizontalTab => HORIZONTAL_TAB as u32,
       Self::GenericNewLine => NEW_LINE as u32,
       Self::GenericSpace => SPACE as u32,
       Self::GenericIdentifier => IDENTIFIER as u32,
       Self::GenericNumber => NUMBER as u32,
       Self::GenericSymbol => SYMBOL as u32,
+      _ => 0,
     }
   }
 }

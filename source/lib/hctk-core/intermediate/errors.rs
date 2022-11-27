@@ -15,7 +15,7 @@ impl WarnTransitionAmbiguousProduction {
 
   /// Checks to see if the conditions of this warning are met. If so
   /// then returns `HCResult::Ok(HCError)`, or `HCResult::None` otherwise.
-  pub fn check(t: &TransitionPack, conflicting_goals: &Vec<TGNId>) -> HCResult<HCError> {
+  pub(crate) fn check(t: &TransitionGraph, conflicting_goals: &Vec<NodeId>) -> HCResult<HCError> {
     let conflicting_nodes = conflicting_goals.iter().map(|n| t.get_node(*n)).collect::<Vec<_>>();
     let peek_root_node = t.get_peek_origin(conflicting_goals[0]);
     let goal_items = conflicting_goals
@@ -119,5 +119,36 @@ impl ExtendedError for WarnTransitionAmbiguousProduction {
 
   fn friendly_name(&self) -> &str {
     WarnTransitionAmbiguousProduction::friendly_name
+  }
+}
+
+/// Indicates a particular set of symbol lead to the creation of ambiguous token scanner
+#[derive(Debug)]
+pub struct ErrOccludingTokens {
+  pub symbols: BTreeSet<SymbolID>,
+}
+
+impl ErrOccludingTokens {
+  pub const friendly_name: &'static str = "ErrOccludingTokens";
+
+  pub fn new(symbols: BTreeSet<SymbolID>) -> HCError {
+    HCError::ExtendedError(Arc::new(Self { symbols }))
+  }
+}
+
+impl ExtendedError for ErrOccludingTokens {
+  fn report(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let ErrOccludingTokens { symbols } = self;
+
+    // let conflicting_productions
+    f.write_fmt(format_args!("These symbols occlude: {:?}", symbols))
+  }
+
+  fn severity(&self) -> crate::types::HCErrorSeverity {
+    crate::errors::Warning
+  }
+
+  fn friendly_name(&self) -> &str {
+    ErrOccludingTokens::friendly_name
   }
 }

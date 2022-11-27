@@ -44,7 +44,7 @@ pub(crate) fn write_rust_entry_functions<W: Write>(
     {
       writer
         .newline()?
-        .wrtln(&format!("/// `{}`", production.tok.to_string().replace("\n", "\n// ")))?
+        .wrtln(&format!("/// `{}`", production.loc.to_string().replace("\n", "\n// ")))?
         .wrtln(&format!("pub fn new_{}_parser(reader: T) -> Self{{", export_name))?
         .indent()
         .wrtln("let mut ctx = Self::new(reader);")?

@@ -3,7 +3,8 @@
 //! general enough to be used in modules other than transition, as well.
 
 use crate::{
-  grammar::{get_closure_cached, get_production_start_items},
+  grammar::{get_closure_cached, get_production_start_items, get_scanner_info_from_defined},
+  journal::Journal,
   types::{Item, ProductionId, RecursionType, SymbolID, *},
 };
 use std::{
@@ -12,118 +13,65 @@ use std::{
   vec,
 };
 
-/// Remove items that would cause LL branch conflicts and replace
-/// with their derivatives.
-///  
-/// ## For Example
-///
-/// ```hcg
-///  
-/// <> A > B | C
-///
-/// <> C > \d
-///
-/// <> B > C \d
-/// ```
-/// Given the above grammar, the starting items for `A` are
-/// `B => C \d` and `C => \d`. If treated directly as RD items
-/// then the input `d d` requires us to determine if the resulting
-/// Production `C` (from `C => \d *`) should apply to `B => C * \d`
-/// or `A => C *`. Pure RD would either require a peek or a backtrack
-/// since the Production A must call either C or B. However, if using
-/// LR behavior, then we can call `C`, then use A's GOTO state:
-/// ```hcg
-/// A`Goto
-///    1 | B     -> A
-///    2 | C     -> A
-///    3 | C \d  -> B
-/// ```
-/// to reduce `C` to `B` (as a result of the next symbol `\d` matching the conditions
-/// for the transition to GOTO 3: `C * \d -> B`),
-/// then `B` to `A`.
-pub fn get_valid_starts(starts: &[Item], g: &GrammarStore) -> (Vec<Item>, Vec<Item>) {
-  if starts.len() == 1 {
-    // There's is now way the parse of single can encounter conflicts, so it is simply returned.
-    (starts.to_vec(), vec![])
-  } else {
-    let mut goto_seeds = BTreeSet::new();
+/// Remove items that would cause infinite recursion
+pub fn get_valid_starts_RD(
+  starts: &[Item],
+  g: &GrammarStore,
+  invalid_productions: &BTreeSet<ProductionId>,
+) -> (Items, Items) {
+  let mut output: BTreeSet<Item> = BTreeSet::new();
+  let mut goto_seeds: BTreeSet<Item> = BTreeSet::new();
 
-    let mut valid_term_items =
-      starts.iter().flat_map(|i| get_closure_cached(i, g)).cloned().collect::<BTreeSet<_>>();
+  for item in starts {
+    let mut closure = get_closure_cached(item, g).clone();
+    let mut local_invalid = BTreeSet::new();
 
-    let mut valid_non_term =
-      valid_term_items.drain_filter(|i| i.is_nonterm(g)).collect::<BTreeSet<_>>();
+    println!("{}", item.debug_string(g));
 
-    // Detects if a specific non-term symbol is parsed by one or more
-    // unique productions. If this is the case, then we make the productions
-    // invalid.
-    let mut invalid_productions = valid_non_term
-      .iter()
-      .map(|i| (i.get_production_id_at_sym(g), i.get_prod_id(g)))
-      .fold(BTreeMap::<ProductionId, BTreeSet<ProductionId>>::new(), |mut b, (sym, p)| {
-        match b.entry(sym) {
-          Entry::Occupied(mut e) => {
-            e.get_mut().insert(p);
-          }
-          Entry::Vacant(e) => {
-            e.insert(BTreeSet::from_iter(vec![p]));
-          }
-        };
-        b
-      })
-      .into_iter()
-      .filter_map(|(a, b)| if b.len() > 1 { Some(a) } else { None })
-      .chain(starts.iter().map(|s| s.get_prod_id(g)))
-      .collect::<BTreeSet<_>>();
-
-    // Now we filter out the invalid productions.
-    // Any production that parses a invalid non-term is itself invalid
-    // We remove all items of that production from the output  (placing them instead
-    // into the goto seeds set), and place the production into the invalid production set.
-    // This continues until there are no new productions added to the invalid set.
-    let mut changed = true;
-    while changed {
-      changed = false;
-      goto_seeds.append(
-        &mut valid_non_term
-          .drain_filter(|item| {
-            if invalid_productions.contains(&item.get_production_id_at_sym(g)) {
-              invalid_productions.insert(item.get_prod_id(g));
-              changed = true;
-              true
-            } else if invalid_productions.contains(&item.get_prod_id(g)) {
-              true
-            } else {
-              false
-            }
-          })
-          .collect(),
-      );
+    for item in &closure {
+      println!("{}", item.debug_string(g));
+      if invalid_productions.contains(&item.get_production_id_at_sym(g)) {
+        local_invalid.insert(item.get_prod_id(g));
+      }
     }
 
-    // Now we have a nearly complete valid set of non-term items. There may be
-    // some items that parse a non-term symbol whose items also exist in the
-    // valid set. These items are now moved to the goto seeds set.
-    let valid_productions =
-      valid_non_term.iter().map(|i| i.get_prod_id(g)).collect::<BTreeSet<_>>();
-    goto_seeds.append(
-      &mut valid_non_term
-        .drain_filter(|i| valid_productions.contains(&i.get_production_id_at_sym(g)))
-        .collect(),
-    );
+    if local_invalid.len() > 0 {
+      let mut changed = true;
 
-    // Now the term items of productions being parsed by non-term items need not
-    // be present in the term set. We'll remove them now.
-    let parsed_productions =
-      valid_non_term.iter().map(|i| i.get_production_id_at_sym(g)).collect::<BTreeSet<_>>();
-    valid_term_items.drain_filter(|i| parsed_productions.contains(&i.get_prod_id(g)));
+      while changed {
+        changed = false;
+        goto_seeds.append(
+          &mut (closure
+            .drain_filter(|item| {
+              if local_invalid.contains(&item.get_production_id_at_sym(g)) {
+                local_invalid.insert(item.get_prod_id(g));
+                changed = true;
+                true
+              } else {
+                false
+              }
+            })
+            .collect()),
+        );
+      }
 
-    // The union of valid non-term items and the remaining term items is our
-    // start set.
-    valid_term_items.append(&mut valid_non_term);
+      let remaining_productions = closure
+        .iter()
+        .filter_map(|i| match i.is_nonterm(g) {
+          true => Some(i.get_production_id_at_sym(g)),
+          _ => None,
+        })
+        .collect::<BTreeSet<_>>();
 
-    (valid_term_items.into_iter().collect(), goto_seeds.into_iter().collect())
+      closure.drain_filter(|item| remaining_productions.contains(&item.get_prod_id(g)));
+
+      output.append(&mut closure.to_set())
+    } else {
+      output.insert(*item);
+    }
   }
+
+  (output.to_vec(), goto_seeds.to_vec())
 }
 
 /// Constructs a Vector of Vectors, each of which contains a set items from the
@@ -156,10 +104,10 @@ pub fn hash_group_vec<
 
 #[inline]
 pub fn hash_group_btreemap<
-  T: Copy + Sized,
+  T: Sized,
   R: Hash + Sized + Ord + Eq,
   E: IntoIterator<Item = T> + Extend<T> + Default,
-  Function: Fn(usize, T) -> R,
+  Function: Fn(usize, &T) -> R,
 >(
   vector: E,
   hash_yielder: Function,
@@ -167,7 +115,7 @@ pub fn hash_group_btreemap<
   let mut hash_groups = BTreeMap::<R, E>::new();
 
   for (i, val) in vector.into_iter().enumerate() {
-    match hash_groups.entry(hash_yielder(i, val)) {
+    match hash_groups.entry(hash_yielder(i, &val)) {
       Entry::Vacant(e) => {
         let mut new_container = E::default();
         new_container.extend(vec![val]);
@@ -185,8 +133,8 @@ pub fn get_symbols_from_items(
   item_set: BTreeSet<Item>,
   g: &GrammarStore,
   seen: Option<BTreeSet<ProductionId>>,
+  mut normal_symbol_set: BTreeSet<SymbolID>,
 ) -> (BTreeSet<SymbolID>, BTreeSet<SymbolID>, BTreeSet<ProductionId>) {
-  let mut normal_symbol_set = BTreeSet::new();
   let mut ignore_symbol_set = BTreeSet::new();
   let mut seen = seen.unwrap_or_default();
 
@@ -201,14 +149,14 @@ pub fn get_symbols_from_items(
           get_production_start_items(&production_id, g).into_iter().collect::<BTreeSet<_>>();
 
         let (mut norm, mut ignore, new_seen) =
-          get_symbols_from_items(production_items, g, Some(seen));
+          get_symbols_from_items(production_items, g, Some(seen), Default::default());
 
         seen = new_seen;
 
         normal_symbol_set.append(&mut norm);
         ignore_symbol_set.append(&mut ignore);
       }
-      SymbolID::EndOfFile | SymbolID::Default | SymbolID::Undefined => {}
+      SymbolID::EndOfInput | SymbolID::Default | SymbolID::Undefined => {}
       sym => {
         normal_symbol_set.insert(item.get_symbol(g));
       }
@@ -281,33 +229,14 @@ pub fn symbols_occlude(symA: &SymbolID, symB: &SymbolID, g: &GrammarStore) -> bo
   }
 }
 
-/// True if the closure of the givin items does not include
-/// the goal production on the right of the cursor
-pub fn non_recursive(
-  items: &[Item],
-  target_prod: &BTreeSet<ProductionId>,
-  g: &GrammarStore,
-) -> bool {
-  for item in items {
-    for item in get_closure_cached(item, g) {
-      if let SymbolID::Production(production, _) = item.get_symbol(g) {
-        if target_prod.contains(&production) {
-          return false;
-        }
-      }
-    }
-  }
-  true
-}
-
-pub fn check_for_left_recursion(symbol_items: &Vec<Item>, g: &GrammarStore) {
+pub fn check_for_left_recursion(symbol_items: &Items, g: &GrammarStore) {
   let mut productions = HashSet::new();
   let mut seen = HashSet::new();
   let mut pipeline =
     VecDeque::from_iter(symbol_items.iter().flat_map(|i| get_closure_cached(i, g)).cloned());
 
   while let Some(item) = pipeline.pop_front() {
-    if seen.insert(item) && !item.is_end() {
+    if seen.insert(item) && !item.completed() {
       productions.insert(item.get_prod_id(g));
 
       let new_item = item.increment().unwrap();
@@ -333,7 +262,7 @@ pub fn check_for_left_recursion(symbol_items: &Vec<Item>, g: &GrammarStore) {
         println!(
           "[{}] {}",
           production.name,
-          production.tok.blame(1, 1, "this production is left recursive", None),
+          production.loc.blame(1, 1, "this production is left recursive", None),
         );
       }
 
@@ -343,9 +272,9 @@ pub fn check_for_left_recursion(symbol_items: &Vec<Item>, g: &GrammarStore) {
   );
 }
 
-/// Returns a vector of items that have whose position is immediately before
+/// Returns a vector of items whose position is immediately after
 /// a non-terminal symbol that matches one of the root ids.
-pub fn get_follow_closure(g: &GrammarStore, root_ids: &BTreeSet<ProductionId>) -> Vec<Item> {
+pub fn get_follow_closure(g: &GrammarStore, root_ids: &BTreeSet<ProductionId>) -> Items {
   let mut pending_prods = VecDeque::<ProductionId>::new();
   let mut seen_prods = BTreeSet::<ProductionId>::new();
 
@@ -360,7 +289,7 @@ pub fn get_follow_closure(g: &GrammarStore, root_ids: &BTreeSet<ProductionId>) -
       continue;
     }
 
-    let items: Vec<Item> = g
+    let items: Items = g
       .lr_items
       .get(&production_id)
       .unwrap_or(&Vec::new())
@@ -369,7 +298,7 @@ pub fn get_follow_closure(g: &GrammarStore, root_ids: &BTreeSet<ProductionId>) -
       .collect();
 
     for item in items {
-      if item.is_end() {
+      if item.completed() {
         pending_prods.push_back(item.get_prod_id(g));
       }
 
@@ -380,4 +309,30 @@ pub fn get_follow_closure(g: &GrammarStore, root_ids: &BTreeSet<ProductionId>) -
   }
 
   output.into_iter().collect()
+}
+
+/// Constructs Scanner items from a set of symbols.
+pub fn generate_scanner_symbol_items(symbols: BTreeSet<SymbolID>, j: &mut Journal) -> Items {
+  let g = j.grammar().unwrap();
+
+  let items = symbols
+    .iter()
+    .flat_map(|s| {
+      let (_, prod_id, ..) = get_scanner_info_from_defined(s, &g);
+      get_production_start_items(&prod_id, &g)
+        .iter()
+        .map(|i| i.to_origin(crate::types::OriginData::Symbol(*s)))
+        .collect::<Items>()
+    })
+    .collect::<Items>();
+
+  // Ensure there are no left recursive productions within the items
+  check_for_left_recursion(&items, &g);
+
+  items
+}
+
+/// Constructs Scanner items from a set of symbols.
+pub fn generate_recursive_descent_items(j: &mut Journal, prod_id: ProductionId) -> Items {
+  get_production_start_items(&prod_id, &j.grammar().unwrap())
 }

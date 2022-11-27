@@ -102,7 +102,7 @@ pub struct Production {
   pub priority: u32,
   /// The token defining the substring in the source
   /// code from which this production was derived.
-  pub tok: Token,
+  pub loc: Token,
   /// An integer value used by bytecode
   /// to refer to this production
   pub bytecode_id: u32,

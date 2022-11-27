@@ -54,7 +54,17 @@ mod rust_ast_build {
 
     rust::write(&ascript, &mut writer).unwrap();
 
-    eprintln!("{}", String::from_utf8(writer.into_output()).unwrap());
+    let out_file =
+      PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../test/e2e/bootstrap/ir.rs");
+
+    if let Ok(mut parser_data_file) = std::fs::File::create(&out_file) {
+      parser_data_file
+        .write_all(&String::from_utf8(writer.into_output()).unwrap().as_bytes())
+        .unwrap();
+      parser_data_file.flush().unwrap();
+    }
+
+    // eprintln!("{}", String::from_utf8(writer.into_output()).unwrap());
   }
 
   #[test]

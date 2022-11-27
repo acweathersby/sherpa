@@ -19,6 +19,8 @@ pub enum IRStateType {
   ProductionStart,
   ProductionGoto,
   ScannerStart,
+  Scanner,
+  Parser,
   ScannerGoto,
   ProductionIntermediateState,
   ScannerIntermediateState,
@@ -35,10 +37,10 @@ impl Default for IRStateType {
 
 pub struct IRState {
   pub code: String,
-  pub id: String,
+  pub name: String,
   pub comment: String,
   pub hash: u64,
-  pub graph_id: TGNId,
+  pub graph_id: NodeId,
   pub normal_symbols: Vec<SymbolID>,
   pub skip_symbols: Vec<SymbolID>,
   pub ast: Result<IR_STATE, HCError>,
@@ -53,9 +55,9 @@ impl Default for IRState {
       state_type: IRStateType::default(),
       comment: String::default(),
       code: String::default(),
-      id: String::default(),
+      name: String::default(),
       hash: u64::default(),
-      graph_id: TGNId::default(),
+      graph_id: NodeId::default(),
       normal_symbols: Vec::default(),
       skip_symbols: Vec::default(),
       ast: Err(HCError::ir_warn_not_parsed),
@@ -85,7 +87,7 @@ impl IRState {
   }
 
   pub fn get_name(&self) -> String {
-    if self.id.is_empty() {
+    if self.name.is_empty() {
       match self.state_type {
         IRStateType::ProductionGoto | IRStateType::ScannerGoto => {
           Self::get_state_name_from_hash(self.hash) + "_goto"
@@ -93,7 +95,7 @@ impl IRState {
         _ => Self::get_state_name_from_hash(self.hash),
       }
     } else {
-      self.id.clone()
+      self.name.clone()
     }
   }
 
@@ -141,7 +143,7 @@ impl IRState {
     self.get_scanner_symbol_set().map(|symbols| format!("scan_{:02X}", hash_id_value_u64(&symbols)))
   }
 
-  pub fn get_graph_id(&self) -> TGNId {
+  pub fn get_graph_id(&self) -> NodeId {
     self.graph_id
   }
 
@@ -180,6 +182,7 @@ impl IRState {
     match self.state_type {
       IRStateType::ScannerStart
       | IRStateType::ScannerGoto
+      | IRStateType::Scanner
       | IRStateType::ScannerIntermediateState
       | IRStateType::ScannerEndState => true,
       _ => false,

@@ -1,3 +1,5 @@
+use crate::journal::Journal;
+
 use super::*;
 use ::std::fmt::Display;
 use std::{
@@ -110,6 +112,11 @@ pub trait ExtendedError: Debug + Send + Sync {
   fn report(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result;
 
   fn severity(&self) -> HCErrorSeverity;
+
+  /// Create an error report with full access to Journal data.
+  fn rich_report(&self, j: &Journal, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.write_str("Empty Error Message")
+  }
 
   /// A concise name for this error. This may include formatting, white-space, and special characters.
   fn friendly_name(&self) -> &str;

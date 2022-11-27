@@ -14,7 +14,7 @@ mod test_parser {
     },
     debug::{disassemble_state, generate_disassembly},
     grammar::{data::ast::ASTNode, parse::compile_ir_ast},
-    intermediate::state::generate_production_states,
+    journal::Journal,
     runtime::parse_functions::{dispatch, hash_jump, vector_jump},
     types::*,
   };
@@ -254,7 +254,7 @@ assert PRODUCTION [2] (pass)
 assert PRODUCTION [3] (pass)
 "
       .to_string(),
-      id: "test".to_string(),
+      name: "test".to_string(),
       ..Default::default()
     };
 
@@ -263,11 +263,11 @@ assert PRODUCTION [3] (pass)
     assert!(ir_ast.is_ok());
 
     let ir_ast = (ir_ast.unwrap()).clone();
-
+    let mut j = Journal::new(None);
     let grammar = GrammarStore::default();
 
     let output = compile_ir_states_into_bytecode(
-      &grammar,
+      &mut j,
       &mut vec![(ir_state.get_name(), Box::new(ir_state))],
       vec![ir_ast],
     );
@@ -299,9 +299,8 @@ assert PRODUCTION [3] (pass)
     let val = "
             skip [1] 
             assert PRODUCTION [0] ( set prod to 44 then pass)";
-
-    let grammar = Default::default();
-    let output = create_output(val, &grammar);
+    let mut j = Journal::new(None);
+    let output = create_output(&mut j, val);
     let bytecode = &output.bytecode;
     let index: u32 = 0;
     let mut reader = UTF8StringReader::from_string("AB");
@@ -366,9 +365,9 @@ assert PRODUCTION [3] (pass)
     (bytecode, reader, ctx)
   }
 
-  fn create_output(val: &str, g: &GrammarStore) -> bytecode::BytecodeOutput {
+  fn create_output(j: &mut Journal, val: &str) -> bytecode::BytecodeOutput {
     let mut ir_state =
-      IRState { code: val.to_string(), id: "test".to_string(), ..Default::default() };
+      IRState { code: val.to_string(), name: "test".to_string(), ..Default::default() };
 
     let ir_ast = ir_state.compile_ast();
 
@@ -377,7 +376,7 @@ assert PRODUCTION [3] (pass)
     let ir_ast = ir_ast.unwrap().clone();
 
     let output = compile_ir_states_into_bytecode(
-      &g,
+      j,
       &mut vec![(ir_state.get_name(), Box::new(ir_state))],
       vec![ir_ast],
     );

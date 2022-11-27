@@ -369,25 +369,28 @@ mod bytecode_debugging_tests {
     debug::{bytecode::BytecodeGrammarLookups, disassemble_state},
     grammar::parse::compile_ir_ast,
     intermediate::{
+      compile::{compile_production_states, compile_states},
       optimize::optimize_ir_states,
-      state::{compile_states, generate_production_states},
     },
-    types::GrammarStore,
+    journal::Journal,
+    types::{GrammarStore, HCResult},
   };
 
   use super::generate_disassembly;
 
   #[test]
-  pub fn test_produce_a_single_ir_ast_from_a_single_state_of_a_trivial_production() {
-    let g = GrammarStore::from_str("<> A > \\h ? \\e ? \\l \\l \\o").unwrap();
+  pub fn test_produce_a_single_ir_ast_from_a_single_state_of_a_trivial_production() -> HCResult<()>
+  {
+    let mut j = Journal::new(None);
+    let g = GrammarStore::from_str(&mut j, "<> A > \\h ? \\e ? \\l \\l \\o").unwrap();
 
     let prod_id = g.get_production_id_by_name("A").unwrap();
 
-    let (states, _) = compile_states(g.clone(), 1);
+    let states = compile_states(&mut j, 1)?;
 
-    let output = compile_bytecode(&g, &mut optimize_ir_states(states, &g));
+    let output = compile_bytecode(&mut j, &mut optimize_ir_states(states, &g));
 
-    let result = generate_production_states(&prod_id, g.clone()).states;
+    let result = compile_production_states(&mut j, prod_id)?;
 
     let states = result
       .into_iter()
@@ -406,5 +409,7 @@ mod bytecode_debugging_tests {
     let lu = BytecodeGrammarLookups::new(&g);
 
     eprintln!("{}", generate_disassembly(&output, Some(&lu)));
+
+    HCResult::Ok(())
   }
 }

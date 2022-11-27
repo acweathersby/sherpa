@@ -1,5 +1,13 @@
+use crate::{
+  debug::debug_items,
+  grammar::{get_closure_cached, get_closure_cached_with_state, get_production_start_items},
+};
+
 use super::*;
-use std::fmt::Display;
+use std::{
+  collections::{BTreeSet, VecDeque},
+  fmt::Display,
+};
 
 use super::HCResult;
 
@@ -31,28 +39,45 @@ impl ItemState {
   }
 
   /// Increase the item's depth by 1
+  #[deprecated]
   pub fn increment_depth(&self) -> Self {
-    ItemState::new(self.get_group(), self.get_depth() + 1, self.1)
+    ItemState::new(self.get_lane(), self.get_depth() + 1, self.1)
   }
 
   /// Get the item's depth
+  #[deprecated]
   pub fn get_depth(&self) -> u32 {
     self.0 & 0xFFFF
   }
 
   /// Get the group the item belongs to
-  pub fn get_group(&self) -> u32 {
+  pub fn get_lane(&self) -> u32 {
     (self.0 >> 16) & 0xFFFF
+  }
+
+  /// Get the group the item belongs to
+  pub fn get_origin(&self) -> OriginData {
+    self.1
+  }
+
+  /// Get the SymbolId in the origin if the origin is
+  /// of type `OriginData::Symbol`. Otherwise returns `SymbolId::Undefined`
+  pub fn get_origin_sym(&self) -> SymbolID {
+    match self.get_origin() {
+      OriginData::Symbol(sym) => sym,
+      _ => SymbolID::Undefined,
+    }
   }
 
   /// Get an index to the closure this item originates from
   pub fn get_closure_index(&self) -> usize {
-    (self.get_group() & (Self::GOTO_END_GOAL_MASK | Self::GOTO_ROOT_END_GOAL_MASK)) as usize
+    (self.get_lane() & (Self::GOTO_END_GOAL_MASK | Self::GOTO_ROOT_END_GOAL_MASK)) as usize
   }
 
   /// Create a new Item with the given depth
+  #[deprecated]
   pub fn to_depth(&self, depth: u32) -> Self {
-    ItemState::new(self.get_group(), depth, self.1)
+    ItemState::new(self.get_lane(), depth, self.1)
   }
 
   /// Create a new Item with the given group
@@ -62,25 +87,25 @@ impl ItemState {
 
   /// Create a new Item with the given group
   pub fn to_origin(&self, origin: OriginData) -> Self {
-    ItemState::new(self.get_group(), self.get_depth(), origin)
+    ItemState::new(self.get_lane(), self.get_depth(), origin)
   }
 
   /// Indicate's the item originate from a production other
   /// than the one currently being evaluated.
   pub fn is_goto_end_origin(&self) -> bool {
-    (self.get_group() & Self::GOTO_END_GOAL) > 0
+    (self.get_lane() & Self::GOTO_END_GOAL) > 0
   }
 
   /// Indicate's the item originate from a production other
   /// than the one currently being evaluated.
   pub fn is_goto_root_end_origin(&self) -> bool {
-    (self.get_group() & Self::GOTO_ROOT_END_GOAL) > 0
+    (self.get_lane() & Self::GOTO_ROOT_END_GOAL) > 0
   }
 }
 
 impl Display for ItemState {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    f.write_fmt(format_args!("<g:{},d:{}>", self.get_group(), self.get_depth()))
+    f.write_fmt(format_args!("<g:{},d:{}>", self.get_lane(), self.get_depth()))
   }
 }
 
@@ -88,6 +113,7 @@ impl Display for ItemState {
 pub enum OriginData {
   Symbol(SymbolID),
   Production(ProductionId),
+  BodyId(BodyId),
   UNDEFINED,
 }
 
@@ -130,7 +156,7 @@ impl Item {
         string += &sym_id.to_string(g)
       }
 
-      if self.at_end() {
+      if self.completed() {
         string += " •";
       }
       string
@@ -142,7 +168,7 @@ impl Item {
   /// 1. Both Items have states that are in the same group.
   /// 2. Either Item is in the 0 group.
   pub fn in_same_lane(&self, other: &Item) -> bool {
-    match (self.state.get_group(), other.state.get_group()) {
+    match (self.state.get_lane(), other.state.get_lane()) {
       (a, b) if a == b => true,
       (_, 0) | (0, _) => true,
       _ => false,
@@ -163,7 +189,7 @@ impl Item {
 
       string += " =>";
 
-      for (index, BodySymbol { sym_id, .. }) in body.syms.iter().enumerate() {
+      for BodySymbol { sym_id, .. } in body.syms.iter() {
         string += " ";
 
         string += &sym_id.to_string(g)
@@ -212,8 +238,8 @@ impl Item {
     g.bodies.get(body_id).map(|body| Item::from(body))
   }
 
-  pub fn at_end(&self) -> bool {
-    self.off == self.len
+  pub fn completed(&self) -> bool {
+    self.off >= self.len
   }
 
   pub fn at_start(&self) -> bool {
@@ -269,7 +295,7 @@ impl Item {
   }
 
   pub fn increment(&self) -> Option<Item> {
-    if !self.at_end() {
+    if !self.completed() {
       Some(Item {
         len:   self.len,
         off:   self.off + 1,
@@ -281,10 +307,10 @@ impl Item {
     }
   }
 
-  /// Increments the Item if it is not at the end position,
+  /// Increments the Item if it is not in the completed position,
   /// otherwise returns the Item as is.
   pub fn try_increment(&self) -> Item {
-    if !self.at_end() {
+    if !self.completed() {
       self.increment().unwrap()
     } else {
       self.clone()
@@ -316,32 +342,49 @@ impl Item {
     g.get_body(&self.get_body_id())
   }
 
+  #[inline(always)]
   pub fn get_body_ref<'a>(&self, g: &'a GrammarStore) -> HCResult<&'a BodySymbol> {
-    match (self.at_end(), self.get_body(&g)) {
+    match (self.completed(), self.get_body(&g)) {
       (false, HCResult::Ok(body)) => HCResult::Ok(&body.syms[self.off as usize]),
       _ => HCResult::None,
     }
   }
 
+  #[inline(always)]
   pub fn get_offset(&self) -> u32 {
     self.off as u32
   }
 
+  #[inline(always)]
   pub fn get_state(&self) -> ItemState {
     self.state
   }
 
+  #[inline(always)]
   pub fn get_origin(&self) -> OriginData {
-    self.state.1
+    self.state.get_origin()
   }
 
-  pub fn get_length(&self) -> u32 {
+  /// Get the SymbolId in the origin if the origin is
+  /// of type `OriginData::Symbol`. Otherwise returns `SymbolId::Undefined`
+  #[inline(always)]
+  pub fn get_origin_sym(&self) -> SymbolID {
+    match self.get_origin() {
+      OriginData::Symbol(sym) => sym,
+      _ => SymbolID::Undefined,
+    }
+  }
+
+  #[inline(always)]
+  pub fn len(&self) -> u32 {
     self.len as u32
   }
 
+  /// Retrieve the symbol at the items position. This will be
+  /// `SymbolId::Completed` if the item is at the completed position.
   pub fn get_symbol(&self, g: &GrammarStore) -> SymbolID {
-    if self.at_end() {
-      SymbolID::EndOfFile
+    if self.completed() {
+      SymbolID::EndOfInput
     } else {
       match g.bodies.get(&self.body) {
         Some(body) => body.syms[self.off as usize].sym_id,
@@ -359,12 +402,8 @@ impl Item {
     }
   }
 
-  pub fn is_end(&self) -> bool {
-    self.len <= self.off
-  }
-
   pub fn is_term(&self, g: &GrammarStore) -> bool {
-    if self.is_end() {
+    if self.completed() {
       false
     } else {
       !matches!(self.get_symbol(g), SymbolID::Production(production, _))
@@ -372,7 +411,7 @@ impl Item {
   }
 
   pub fn is_nonterm(&self, g: &GrammarStore) -> bool {
-    if self.is_end() {
+    if self.completed() {
       false
     } else {
       !self.is_term(g)
@@ -394,7 +433,7 @@ impl Item {
   pub fn print_blame(&self, g: &GrammarStore) {
     let body = g.bodies.get(&self.body).unwrap();
 
-    if self.at_end() {
+    if self.completed() {
     } else {
       eprintln!("{}", body.syms[self.off as usize].tok.blame(1, 1, "", None));
     }
@@ -409,5 +448,244 @@ impl From<&Body> for Item {
       off:   0,
       state: ItemState::default(),
     }
+  }
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Copy)]
+pub struct LinkedItem {
+  pub item:         Item,
+  pub closure_node: MaybeNodeId,
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct LinkedItemWithGoto {
+  pub item:         Item,
+  pub closure_node: MaybeNodeId,
+  pub goto_items:   Items,
+}
+
+pub struct TermAndEndItemGroups {
+  pub term_items:      Vec<LinkedItem>,
+  pub completed_items: Vec<LinkedItem>,
+}
+
+impl TermAndEndItemGroups {
+  pub fn get_all_items(&self) -> Items {
+    self.term_items.iter().chain(self.completed_items.iter()).map(|t| t.item).collect()
+  }
+
+  pub fn get_term_items(&self) -> Items {
+    self.term_items.iter().map(|t| t.item).collect()
+  }
+}
+
+impl Into<LinkedItemWithGoto> for LinkedItem {
+  fn into(self) -> LinkedItemWithGoto {
+    LinkedItemWithGoto {
+      item:         self.item,
+      closure_node: self.closure_node,
+      goto_items:   Default::default(),
+    }
+  }
+}
+
+pub type Items = Vec<Item>;
+pub type ItemSet = BTreeSet<Item>;
+
+pub trait ItemContainer: Clone + IntoIterator<Item = Item> {
+  fn term_item_vec(&self, g: &GrammarStore) -> Items;
+  fn non_term_item_vec(&self, g: &GrammarStore) -> Items;
+  fn completed_item_vec(&self) -> Items;
+
+  fn to_origin_only_state(self) -> Self;
+  fn to_zero_state(self) -> Self;
+  fn to_state(self, state: ItemState) -> Self;
+
+  #[inline(always)]
+  fn term_item_set(&self, g: &GrammarStore) -> ItemSet {
+    self.term_item_vec(g).into_iter().collect()
+  }
+
+  #[inline(always)]
+  fn non_term_item_set(&self, g: &GrammarStore) -> ItemSet {
+    self.non_term_item_vec(g).into_iter().collect()
+  }
+
+  #[inline(always)]
+  fn end_item_set(&self) -> ItemSet {
+    self.completed_item_vec().into_iter().collect()
+  }
+
+  #[inline(always)]
+  fn try_increment(&self) -> Items {
+    self.clone().to_vec().into_iter().map(|i| i.try_increment()).collect()
+  }
+
+  #[inline(always)]
+  fn to_end(&self) -> Items {
+    self.clone().to_vec().into_iter().map(|i| i.to_end()).collect()
+  }
+
+  #[inline(always)]
+  fn from_linked(linked: &Vec<LinkedItem>) -> Items {
+    linked.iter().map(|i| i.item).collect()
+  }
+
+  #[inline(always)]
+  fn from_linked_goto(linked: &Vec<LinkedItemWithGoto>) -> Items {
+    linked.iter().map(|i| i.item).collect()
+  }
+
+  #[inline(always)]
+  fn print_items(&self, g: &GrammarStore, comment: &str) {
+    debug_items(comment, self.clone(), g);
+  }
+
+  fn to_debug_string(&self, g: &GrammarStore, sep: &str) -> String {
+    self.clone().to_vec().iter().map(|i| i.debug_string(g)).collect::<Vec<_>>().join(sep)
+  }
+
+  #[inline(always)]
+  fn closure(&self, g: &GrammarStore) -> ItemSet {
+    let vec = self.clone().to_vec();
+
+    let mut output = vec![];
+
+    for item in vec {
+      output.append(&mut get_closure_cached(&item, g).clone())
+    }
+
+    output.to_set()
+  }
+
+  #[inline(always)]
+  fn closure_with_state(&self, g: &GrammarStore) -> ItemSet {
+    let vec = self.clone().to_vec();
+
+    let mut output = vec![];
+
+    for item in vec {
+      output.append(&mut get_closure_cached_with_state(&item, g))
+    }
+
+    output.to_set()
+  }
+  /// Does not enter the closure of Productions that are present
+  /// in prod_id. If it detects items the have any member of `prod_ids`
+  /// as the initial symbol, it discards those items.
+  #[inline(always)]
+  fn rd_closure_with_state(
+    &self,
+    g: &GrammarStore,
+    prod_ids: &BTreeSet<ProductionId>,
+  ) -> (ItemSet, ItemSet) {
+    let mut seen = BTreeSet::<Item>::new();
+    let mut left_recursive_items = BTreeSet::<Item>::new();
+    let items = self.clone().to_vec();
+
+    let mut queue = VecDeque::<Item>::from_iter(items.iter().cloned());
+
+    while let Some(item) = queue.pop_front() {
+      if prod_ids.contains(&item.get_production_id_at_sym(g)) {
+        left_recursive_items.insert(item);
+        continue;
+      }
+      if seen.insert(item) {
+        if let SymbolID::Production(prod_id, _) = &item.get_symbol(g) {
+          for i in get_production_start_items(prod_id, g) {
+            queue.push_back(i.to_state(item.get_state()));
+          }
+        }
+      }
+    }
+
+    (seen, left_recursive_items)
+  }
+
+  fn to_set(self) -> ItemSet;
+  fn to_vec(self) -> Items;
+}
+
+impl ItemContainer for ItemSet {
+  #[inline(always)]
+  fn to_origin_only_state(self) -> Self {
+    self.into_iter().map(|i| i.to_origin_only_state()).collect()
+  }
+
+  #[inline(always)]
+  fn to_zero_state(self) -> Self {
+    self.into_iter().map(|i| i.to_zero_state()).collect()
+  }
+
+  #[inline(always)]
+  fn to_state(self, state: ItemState) -> Self {
+    self.into_iter().map(|i| i.to_state(state)).collect()
+  }
+
+  #[inline(always)]
+  fn non_term_item_vec(&self, g: &GrammarStore) -> Items {
+    self.iter().filter(|i| i.is_nonterm(g)).cloned().collect()
+  }
+
+  #[inline(always)]
+  fn term_item_vec(&self, g: &GrammarStore) -> Items {
+    self.iter().filter(|i| i.is_term(g)).cloned().collect()
+  }
+
+  #[inline(always)]
+  fn completed_item_vec(&self) -> Items {
+    self.iter().filter(|i| i.completed()).cloned().collect()
+  }
+
+  #[inline(always)]
+  fn to_set(self) -> ItemSet {
+    self
+  }
+
+  #[inline(always)]
+  fn to_vec(self) -> Items {
+    self.into_iter().collect()
+  }
+}
+
+impl ItemContainer for Items {
+  #[inline(always)]
+  fn to_origin_only_state(self) -> Self {
+    self.into_iter().map(|i| i.to_origin_only_state()).collect()
+  }
+
+  #[inline(always)]
+  fn to_zero_state(self) -> Self {
+    self.into_iter().map(|i| i.to_zero_state()).collect()
+  }
+
+  #[inline(always)]
+  fn to_state(self, state: ItemState) -> Self {
+    self.into_iter().map(|i| i.to_state(state)).collect()
+  }
+
+  #[inline(always)]
+  fn non_term_item_vec(&self, g: &GrammarStore) -> Items {
+    self.iter().filter(|i| i.is_nonterm(g)).cloned().collect()
+  }
+
+  #[inline(always)]
+  fn term_item_vec(&self, g: &GrammarStore) -> Items {
+    self.iter().filter(|i| i.is_term(g)).cloned().collect()
+  }
+
+  #[inline(always)]
+  fn completed_item_vec(&self) -> Items {
+    self.iter().filter(|i| i.completed()).cloned().collect()
+  }
+
+  #[inline(always)]
+  fn to_set(self) -> ItemSet {
+    self.into_iter().collect()
+  }
+
+  #[inline(always)]
+  fn to_vec(self) -> Items {
+    self
   }
 }

@@ -16,6 +16,8 @@ use crate::{
     load::{get_usable_thread_count, load_all},
     parse::compile_ascript_ast,
   },
+  intermediate::utils::generate_scanner_symbol_items,
+  journal::Journal,
   types,
   types::*,
 };
@@ -111,7 +113,9 @@ pub fn compile_grammars_into_store(
 
 #[test]
 fn test_compile_grammars_into_store() {
+  let mut j = Journal::new(None);
   let (grammars, errors) = load_all(
+    &mut j,
     &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
       .join("../../../test/grammars/load.hcg")
       .canonicalize()
@@ -149,11 +153,11 @@ fn finalize_grammar(
     return g;
   }
 
-  finalize_symbols(&mut g, e);
-
   check_for_missing_productions(&g, e);
 
   finalize_productions(&mut g, thread_count, e);
+
+  finalize_symbols(&mut g, e);
 
   finalize_items(&mut g, thread_count, e);
 
@@ -473,7 +477,7 @@ fn finalize_items(g: &mut GrammarStore, thread_count: usize, errors: &mut [HCErr
           while let Some(item) = pending_items.pop_front() {
             let item = item.to_zero_state();
 
-            if !item.at_end() {
+            if !item.completed() {
               let peek_symbols =
                 if let Some(peek_symbols) = g.production_ignore_symbols.get(&item.get_prod_id(g)) {
                   peek_symbols.clone()
@@ -525,6 +529,8 @@ fn finalize_items(g: &mut GrammarStore, thread_count: usize, errors: &mut [HCErr
 fn finalize_symbols(g: &mut GrammarStore, e: &mut [HCError]) {
   let mut symbol_bytecode_id = SymbolID::DefinedSymbolIndexBasis;
 
+  // Ensure there is a symbol for every token production
+
   for sym_id in &SymbolID::Generics {
     let (_, production_id, ..) = get_scanner_info_from_defined(sym_id, g);
 
@@ -551,6 +557,25 @@ fn finalize_symbols(g: &mut GrammarStore, e: &mut [HCError]) {
     }
 
     g.symbols.get_mut(&sym_id).unwrap().friendly_name = sym_id.to_string(g);
+  }
+  for prod in g.productions.values_mut() {
+    if prod.sym_id.is_token_production() && !g.symbols.contains_key(&prod.sym_id) {
+      #[cfg(debug_assertions)]
+      {
+        debug_assert!(
+          prod.id
+            == match prod.sym_id {
+              SymbolID::Production(prod_id, _) | SymbolID::TokenProduction(prod_id, _) => prod_id,
+              _ => ProductionId(0),
+            },
+          "TokenSymbols prod id does not match production's id",
+        );
+      }
+    }
+
+    prod.symbol_bytecode_id = symbol_bytecode_id;
+
+    symbol_bytecode_id += 1;
   }
 }
 
@@ -659,7 +684,7 @@ fn create_scanner_productions_from_symbols(g: &mut GrammarStore, e: &mut Vec<HCE
                   id: scanner_production_id,
                   guid_name: scanner_name.clone(),
                   name: format!("tk:{}", production.name),
-                  tok: production.tok.clone(),
+                  loc: production.loc.clone(),
                   is_scanner: true,
                   sym_id: SymbolID::TokenProduction(scanner_production_id, g.id.guid),
                   ..Default::default()
@@ -725,7 +750,7 @@ fn create_scanner_productions_from_symbols(g: &mut GrammarStore, e: &mut Vec<HCE
                       len: syms.len() as u16,
                       prod_id: scanner_production_id,
                       syms,
-                      tok: production.tok.clone(),
+                      tok: production.loc.clone(),
                       ..Default::default()
                     }
                   })
@@ -852,14 +877,15 @@ pub(crate) fn get_scanner_info_from_defined(
       let escaped_symbol_string = symbol_string
         .chars()
         .into_iter()
-        .map(|c| (c as u32).to_string())
+        .map(|c| format!("{:X}", (c as u32)))
         .collect::<Vec<_>>()
-        .join("_");
+        .join("");
 
       (create_defined_scanner_name(&escaped_symbol_string), symbol_string)
     }
     SymbolID::TokenProduction(production_id, _) => {
       let symbol_string = root.productions.get(production_id).unwrap().guid_name.clone();
+
       (create_scanner_name(&symbol_string), symbol_string)
     }
     sym => {
@@ -1065,7 +1091,7 @@ fn pre_process_production(
           id: prod_id,
           guid_name,
           name: plain_name, // prod.symbol.Token().to_string()
-          tok: production_node.Token(),
+          loc: production_node.Token(),
           sym_id: SymbolID::Production(prod_id, g.id.guid),
           ..Default::default()
         },
@@ -1087,7 +1113,7 @@ fn pre_process_production(
             },
             HCError::grammar_err {
               inline_message: String::new(),
-              loc: existing_production.tok.clone(),
+              loc: existing_production.loc.clone(),
               message: format!("production {} first defined here.", plain_name),
               path: g.id.path.clone(),
             },
@@ -1282,7 +1308,7 @@ pub fn convert_left_recursion_to_right(
 ) -> (ProductionId, ProductionId) {
   let a_prod = g.productions.get_mut(&a_prod_id).unwrap();
 
-  let a_token = a_prod.tok.clone();
+  let a_token = a_prod.loc.clone();
 
   // Ensure the production is left recursive.
   if !a_prod.recursion_type.contains(RecursionType::LEFT_DIRECT) {
@@ -1321,8 +1347,13 @@ pub fn convert_left_recursion_to_right(
     guid_name: a_prime_prod_guid_name,
     name: a_prime_prod_name,
     number_of_bodies: (left_bodies.len() * 2) as u16,
-    tok: a_token.clone(),
+    loc: a_token.clone(),
     is_scanner: a_prod.is_scanner,
+    sym_id: if a_prod.is_scanner {
+      SymbolID::TokenProduction(a_prime_prod_id, g.id.guid)
+    } else {
+      SymbolID::Production(a_prime_prod_id, g.id.guid)
+    },
     ..Default::default()
   };
 
@@ -1391,8 +1422,6 @@ pub fn convert_left_recursion_to_right(
     let id = b.id;
     g.bodies.insert(id, b);
   }
-
-  let prod_sym = SymbolID::Production(a_prime_prod_id, g.id.guid);
 
   (a_prod_id, a_prime_prod_id)
 }
@@ -1900,7 +1929,7 @@ fn intern_symbol(sym: &ASTNode, g: &mut GrammarStore, e: &mut Vec<HCError>) -> O
       Some(process_literal(&literal.val, g, true, sym.Token()))
     }
     ASTNode::Literal(literal) => Some(process_literal(&literal.val, g, false, sym.Token())),
-    ASTNode::End_Of_File(_) => Some(SymbolID::EndOfFile),
+    ASTNode::End_Of_File(_) => Some(SymbolID::EndOfInput),
     ASTNode::Production_Symbol(_) | ASTNode::Production_Import_Symbol(_) => {
       process_production(sym, g, sym.Token(), e)
     }

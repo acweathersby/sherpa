@@ -18,11 +18,13 @@ pub use production::*;
 pub use uuid::*;
 
 use self::{compile::compile_grammars_into_store, load::load_all, parse::compile_grammar_ast};
-use crate::types::*;
+use crate::{journal::Journal, types::*};
 
 #[test]
 fn temp_test() {
+  let mut j = Journal::new(None);
   let (grammars, errors) = load_all(
+    &mut j,
     &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
       .join("../../../test/e2e/bootstrap/grammar/production.hcg")
       .canonicalize()
@@ -72,10 +74,11 @@ fn temp_test() {
 /// assert_eq!(grammar.unwrap().name, "trivial")
 /// ```
 pub fn compile_grammar_from_path(
+  j: &mut Journal,
   path: PathBuf,
   thread_count: usize,
 ) -> (Option<Arc<GrammarStore>>, Option<Vec<HCError>>) {
-  match load_all(&path, thread_count) {
+  match load_all(j, &path, thread_count) {
     (_, errors) if !errors.is_empty() => (None, Some(errors)),
     (grammars, _) => compile_grammars_into_store(grammars).unwrap(),
   }
@@ -99,6 +102,7 @@ pub fn compile_grammar_from_path(
 /// assert_eq!(grammar.unwrap().name, "my_grammar")
 /// ```
 pub fn compile_grammar_from_string(
+  j: &mut Journal,
   string: &str,
   absolute_path: &PathBuf,
 ) -> (Option<Arc<GrammarStore>>, Option<Vec<HCError>>) {
@@ -122,6 +126,7 @@ mod test_grammar {
     debug::debug_items,
     get_num_of_available_threads,
     grammar::compile_grammar_from_path,
+    journal::Journal,
     types::{HCErrorContainer, RecursionType},
   };
 
@@ -133,13 +138,14 @@ mod test_grammar {
 
   #[test]
   fn test_merge_productions_file() {
+    let mut j = Journal::new(None);
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
     path.push("../../../test/grammars/merge_root.hcg");
 
     let thread_count = get_num_of_available_threads();
 
-    let (grammar, errors) = compile_grammar_from_path(path, get_num_of_available_threads());
+    let (grammar, errors) = compile_grammar_from_path(&mut j, path, get_num_of_available_threads());
 
     if errors.is_some() {
       let errors = errors.unwrap_or_default();
@@ -157,13 +163,14 @@ mod test_grammar {
 
   #[test]
   fn test_trivial_file_compilation() {
+    let mut j = Journal::new(None);
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
     path.push("../../../test/grammars/trivial.hcg");
 
     let thread_count = get_num_of_available_threads();
 
-    let (grammar, errors) = compile_grammar_from_path(path, get_num_of_available_threads());
+    let (grammar, errors) = compile_grammar_from_path(&mut j, path, get_num_of_available_threads());
 
     assert!(grammar.is_some());
     assert!(errors.is_none());
@@ -171,11 +178,12 @@ mod test_grammar {
 
   #[test]
   fn test_trivial_file_compilation_with_single_import() {
+    let mut j = Journal::new(None);
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
     path.push("../../../test/grammars/trivial_importer.hcg");
 
-    let (grammar, errors) = compile_grammar_from_path(path, get_num_of_available_threads());
+    let (grammar, errors) = compile_grammar_from_path(&mut j, path, get_num_of_available_threads());
 
     assert!(grammar.is_some());
     assert!(errors.is_none());
@@ -184,13 +192,14 @@ mod test_grammar {
 
   #[test]
   fn conversion_of_left_to_right_recursive() {
+    let mut j = Journal::new(None);
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
     path.push("../../../test/grammars/left_recursive_token_production.hcg");
 
     let thread_count = get_num_of_available_threads();
 
-    let (grammar, errors) = compile_grammar_from_path(path, get_num_of_available_threads());
+    let (grammar, errors) = compile_grammar_from_path(&mut j, path, get_num_of_available_threads());
 
     assert!(errors.is_none());
     assert!(grammar.is_some());
@@ -205,7 +214,9 @@ mod test_grammar {
 
   #[test]
   fn left_to_right_recursive_conversion() {
+    let mut j = Journal::new(None);
     if let Some(mut g) = compile_grammar_from_string(
+      &mut j,
       "<> B > tk:A  <> A > A \\t \\y | A \\u | \\CCC | \\R A ",
       &PathBuf::from("/test"),
     )
@@ -226,7 +237,9 @@ mod test_grammar {
 
   #[test]
   fn processing_of_any_groups() {
+    let mut j = Journal::new(None);
     let (grammar, errors) = compile_grammar_from_string(
+      &mut j,
       "<> A > [ unordered \\g ? ( \\r \\l ) ? ] \\ d ",
       &PathBuf::from("/test"),
     );
