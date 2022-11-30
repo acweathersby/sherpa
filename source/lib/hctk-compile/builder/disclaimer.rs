@@ -5,6 +5,7 @@ pub static DISCLAIMER: fn(
   comment_delimiter: &str,
   ctx: &PipelineContext,
 ) -> String = |file_type, comment_delimiter, ctx| {
+  let grammar = ctx.get_journal().grammar().unwrap();
   format!(
     "
 {3} ### `{1}` {2}
@@ -23,9 +24,9 @@ pub static DISCLAIMER: fn(
 
 ",
     env!("CARGO_PKG_VERSION"),
-    ctx.get_grammar_name(),
+    grammar.id.name,
     file_type,
     comment_delimiter,
-    ctx.get_grammar_path(),
+    grammar.id.path,
   )
 };

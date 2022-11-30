@@ -33,7 +33,7 @@
 use super::{
   follow::get_follow_items,
   peek::{insert_items_into_node, peek},
-  utils::get_valid_starts_RD,
+  utils::get_valid_recursive_descent_start_items,
 };
 use crate::{
   intermediate::peek::create_and_insert_node,
@@ -46,13 +46,21 @@ pub(crate) fn construct_recursive_descent(
   j: &mut Journal,
   is_scanner: bool,
   starts: &Vec<Item>,
-) -> TPackResults {
+) -> HCResult<TPackResults> {
   let g = j.grammar().unwrap();
   let start_productions = BTreeSet::from_iter(starts.iter().map(|i| i.get_prod_id(&g)));
 
   let (start_items, goto_seeds) = (!is_scanner)
-    .then(|| get_valid_starts_RD(starts, &g, &start_productions))
+    .then(|| get_valid_recursive_descent_start_items(starts, &g, &start_productions))
     .unwrap_or((starts.clone(), vec![]));
+
+  #[cfg(debug_assertions)]
+  {
+    j.report_mut().add_note(
+      "Start Items",
+      start_items.iter().map(|i| i.debug_string(&g)).collect::<Vec<_>>().join("\n"),
+    )
+  }
 
   let mut t =
     TPack::new(g.clone(), TransitionMode::RecursiveDescent, is_scanner, &starts, start_productions);
@@ -70,10 +78,10 @@ pub(crate) fn construct_recursive_descent(
   t.queue_node(ProcessGroup { node_index: root_index, items: start_items, ..Default::default() });
 
   while let Some(process_group) = t.get_next_queued() {
-    process_node(&mut t, j, process_group);
+    process_node(&mut t, j, process_group)?;
   }
 
-  t.clean()
+  HCResult::Ok(t.clean())
 }
 
 /// Converts items into child nodes of the given parent node
@@ -81,7 +89,7 @@ pub(super) fn process_node(
   t: &mut TPack,
   j: &mut Journal,
   ProcessGroup { items, node_index: par_id, discriminant, depth }: ProcessGroup,
-) {
+) -> HCResult<()> {
   match (discriminant, items.len()) {
     (Some((d_sym, d_items)), item_len) => {
       // These items have already been processed and can be transitioned base on the
@@ -96,7 +104,7 @@ pub(super) fn process_node(
       let sym = items[0].get_symbol(&t.g);
       match (sym, item_len) {
         (SymbolID::EndOfInput, 1) => {
-          create_completed_node(t, items[0], par_id, depth);
+          create_completed_node(j, t, items[0], par_id, depth);
         }
         (SymbolID::EndOfInput, 2..) => {
           panic!("Can't transition on multiple completed items!");
@@ -117,7 +125,7 @@ pub(super) fn process_node(
       let sym = item.get_symbol(&t.g);
       match sym {
         SymbolID::EndOfInput => {
-          create_completed_node(t, item, par_id, depth);
+          create_completed_node(j, t, item, par_id, depth);
         }
         SymbolID::Production(prod_id, _) => {
           create_production_call(t, sym, prod_id, items, Some(par_id), depth);
@@ -128,12 +136,14 @@ pub(super) fn process_node(
       }
     }
     (None, 2..) => {
-      peek(t, j, par_id, items, depth);
+      peek(t, j, par_id, items, depth)?;
     }
     _ => {
       unreachable!("Should not be any other combinations produced at this point.")
     }
   }
+
+  HCResult::Ok(())
 }
 
 pub(super) fn create_terminal_node(
@@ -178,7 +188,7 @@ pub(super) fn create_production_call<'a>(
     EdgeType::Default,
     parent_index,
     parent_index,
-    items.non_term_item_vec(&t.g),
+    nonterm_items,
   );
 
   t.get_node_mut(node_index).prod_sym = Some(SymbolID::Production(prod_id, GrammarId(0)));
@@ -188,7 +198,13 @@ pub(super) fn create_production_call<'a>(
   t.get_node_mut(node_index)
 }
 
-pub(super) fn create_completed_node(t: &mut TPack, item: Item, parent_index: NodeId, depth: usize) {
+pub(super) fn create_completed_node(
+  j: &mut Journal,
+  t: &mut TPack,
+  item: Item,
+  parent_index: NodeId,
+  depth: usize,
+) {
   debug_assert!(
     item.completed(),
     "Only items in the completed position should be passed to this function"
@@ -217,10 +233,13 @@ pub(super) fn create_completed_node(t: &mut TPack, item: Item, parent_index: Nod
 
       #[cfg(debug_assertions)]
       {
-        println!(
-          "\nScan Mode: Continuing processing of [{}] through these follow items [\n{}\n]\n",
-          item.debug_string(&t.g),
-          scanned_items.get_all_items().to_debug_string(&t.g, "\n")
+        j.report_mut().add_note(
+          "Scan Mode Item Continuation",
+          format!(
+            "\n Continuing processing of [{}] through these follow items [\n{}\n]\n",
+            item.debug_string(&t.g),
+            scanned_items.get_all_items().to_debug_string(&t.g, "\n")
+          ),
         );
       }
 
@@ -243,13 +262,16 @@ pub(super) fn create_completed_node(t: &mut TPack, item: Item, parent_index: Nod
     } else {
       #[cfg(debug_assertions)]
       {
-        println!(
-          "\nScan Mode: Completed item [{}] which produces token [{}]",
-          item.debug_string(&t.g),
-          match item.get_origin() {
-            OriginData::Symbol(sym) => sym.to_string(&t.g),
-            _ => String::new(),
-          }
+        j.report_mut().add_note(
+          "Scan Mode Item Completion",
+          format!(
+            "\nCompleted item [{}] which produces token [{}]",
+            item.debug_string(&t.g),
+            match item.get_origin() {
+              OriginData::Symbol(sym) => sym.to_string(&t.g),
+              _ => String::new(),
+            }
+          ),
         );
       }
     }

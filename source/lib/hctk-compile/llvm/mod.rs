@@ -8,19 +8,21 @@ pub use types::*;
 #[cfg(test)]
 mod test {
   use hctk_core::{
-    intermediate::{optimize::optimize_ir_states, state::compile_states},
+    intermediate::{compile::compile_states, optimize::optimize_ir_states},
     types::{
       hctk_allocate_stack,
       hctk_free_stack,
       CodepointInfo,
       Goto,
       GrammarStore,
+      HCResult,
       InputBlock,
       LLVMParseContext,
       ParseAction,
       ParseToken,
       TestUTF8StringReader,
     },
+    Journal,
   };
   use inkwell::{context::Context, execution_engine::JitFunction};
 
@@ -218,7 +220,7 @@ mod test {
       emit_reduce.call(&mut rt_ctx, &mut action, 1, 2, 3);
 
       match action {
-        ParseAction::Reduce { production_id, body_id, symbol_count } => {
+        ParseAction::Reduce { production_id, rule_id: body_id, symbol_count } => {
           assert_eq!(production_id, 1);
           assert_eq!(body_id, 2);
           assert_eq!(symbol_count, 3);
@@ -599,12 +601,15 @@ mod test {
   }
 
   #[test]
-  fn test_compile_from_bytecode() -> core::result::Result<(), ()> {
+  fn test_compile_from_bytecode() -> HCResult<()> {
     use crate::llvm::compile_from_bytecode;
     use hctk_core::bytecode::compile_bytecode;
     use inkwell::context::Context;
     use std::{fs::File, io::Write};
+
+    let mut j = Journal::new(None);
     let g = GrammarStore::from_str(
+      &mut j,
       "
   @IGNORE g:sp
  
@@ -612,8 +617,9 @@ mod test {
   ",
     )
     .unwrap();
-    let (mut ir_states, _) = compile_states(g.clone(), 1);
-    let bytecode_output = compile_bytecode(&g, &mut optimize_ir_states(ir_states, &g));
+    let ir_states = compile_states(&mut j, 1)?;
+    let ir_states = optimize_ir_states(&mut j, ir_states);
+    let bytecode_output = compile_bytecode(&mut j, ir_states);
 
     if let Ok(mut ctx) = compile_from_bytecode("test", &g, &Context::create(), &bytecode_output) {
       let mut file = File::create("../test.ll");
@@ -665,7 +671,7 @@ mod test {
           next_fn.call(&mut rt_ctx, &mut action);
 
           assert!(
-            matches!(action, ParseAction::Reduce { production_id, symbol_count, .. } if production_id == 2 && symbol_count == 2)
+            matches!(action, ParseAction::Reduce { production_id, symbol_count, .. } if production_id == 0 && symbol_count == 2)
           );
 
           next_fn.call(&mut rt_ctx, &mut action);
@@ -673,22 +679,24 @@ mod test {
           assert!(matches!(action, ParseAction::Accept { .. }));
         };
 
-        Ok(())
+        HCResult::Ok(())
       } else {
         drop(ctx);
-        Err(())
+        HCResult::None
       }
     } else {
-      Err(())
+      HCResult::None
     }
   }
 
   #[test]
-  fn test_compile_from_bytecode2() -> core::result::Result<(), ()> {
+  fn test_compile_from_bytecode2() -> HCResult<()> {
     use crate::llvm::compile_from_bytecode;
     use hctk_core::bytecode::compile_bytecode;
     use inkwell::context::Context;
+    let mut j = Journal::new(None);
     let g = GrammarStore::from_str(
+      &mut j,
       "
       @IGNORE g:sp
 
@@ -714,13 +722,14 @@ mod test {
     )
     .unwrap();
 
-    let (mut ir_states, _) = compile_states(g.clone(), 1);
-    let bytecode_output = compile_bytecode(&g, &mut optimize_ir_states(ir_states, &g));
+    let mut ir_states = compile_states(&mut j, 1)?;
+    let ir_states = optimize_ir_states(&mut j, ir_states);
+    let bytecode_output = compile_bytecode(&mut j, ir_states);
 
     if let Ok(mut ctx) = compile_from_bytecode("test", &g, &Context::create(), &bytecode_output) {
-      Ok(())
+      HCResult::Ok(())
     } else {
-      Err(())
+      HCResult::None
     }
   }
 }

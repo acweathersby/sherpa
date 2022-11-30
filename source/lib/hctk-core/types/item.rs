@@ -23,36 +23,24 @@ impl ItemState {
   const GOTO_END_GOAL: u32 = 0x4000;
   const GOTO_END_GOAL_MASK: u32 = (!Self::GOTO_END_GOAL) & 0xFFFF;
   pub const GOTO_END_GOAL_STATE: ItemState =
-    ItemState::new(Self::GOTO_END_GOAL, 0, OriginData::UNDEFINED);
+    ItemState::new(Self::GOTO_END_GOAL, OriginData::UNDEFINED);
   const GOTO_ROOT_END_GOAL: u32 = 0x8000;
   const GOTO_ROOT_END_GOAL_MASK: u32 = (!Self::GOTO_ROOT_END_GOAL) & 0xFFFF;
   pub const GOTO_ROOT_END_GOAL_STATE: ItemState =
-    ItemState::new(Self::GOTO_ROOT_END_GOAL, 0, OriginData::UNDEFINED);
+    ItemState::new(Self::GOTO_ROOT_END_GOAL, OriginData::UNDEFINED);
 
   pub const fn default() -> Self {
     ItemState(0, OriginData::UNDEFINED)
   }
 
   /// Create a new [Item]
-  pub const fn new(group: u32, depth: u32, origin: OriginData) -> Self {
-    ItemState((group << 16) | (depth & 0xFFFF), origin)
-  }
-
-  /// Increase the item's depth by 1
-  #[deprecated]
-  pub fn increment_depth(&self) -> Self {
-    ItemState::new(self.get_lane(), self.get_depth() + 1, self.1)
-  }
-
-  /// Get the item's depth
-  #[deprecated]
-  pub fn get_depth(&self) -> u32 {
-    self.0 & 0xFFFF
+  pub const fn new(group: u32, origin: OriginData) -> Self {
+    ItemState(group, origin)
   }
 
   /// Get the group the item belongs to
   pub fn get_lane(&self) -> u32 {
-    (self.0 >> 16) & 0xFFFF
+    self.0
   }
 
   /// Get the group the item belongs to
@@ -74,20 +62,14 @@ impl ItemState {
     (self.get_lane() & (Self::GOTO_END_GOAL_MASK | Self::GOTO_ROOT_END_GOAL_MASK)) as usize
   }
 
-  /// Create a new Item with the given depth
-  #[deprecated]
-  pub fn to_depth(&self, depth: u32) -> Self {
-    ItemState::new(self.get_lane(), depth, self.1)
-  }
-
   /// Create a new Item with the given group
   pub fn to_group(&self, group: u32) -> Self {
-    ItemState::new(group, self.get_depth(), self.1)
+    ItemState::new(group, self.1)
   }
 
   /// Create a new Item with the given group
   pub fn to_origin(&self, origin: OriginData) -> Self {
-    ItemState::new(self.get_lane(), self.get_depth(), origin)
+    ItemState::new(self.get_lane(), origin)
   }
 
   /// Indicate's the item originate from a production other
@@ -101,11 +83,15 @@ impl ItemState {
   pub fn is_goto_root_end_origin(&self) -> bool {
     (self.get_lane() & Self::GOTO_ROOT_END_GOAL) > 0
   }
+
+  pub fn debug_string(&self, g: &GrammarStore) -> String {
+    format!("<group: {} [ {:?} ]>", self.get_lane(), self.get_origin().debug_string(g))
+  }
 }
 
 impl Display for ItemState {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    f.write_fmt(format_args!("<g:{},d:{}>", self.get_lane(), self.get_depth()))
+    f.write_fmt(format_args!("<group: {}, origin:{:?}>", self.get_lane(), self.get_origin()))
   }
 }
 
@@ -113,18 +99,30 @@ impl Display for ItemState {
 pub enum OriginData {
   Symbol(SymbolID),
   Production(ProductionId),
-  BodyId(BodyId),
+  RuleId(RuleId),
   UNDEFINED,
 }
 
+impl OriginData {
+  pub fn debug_string(&self, g: &GrammarStore) -> String {
+    use OriginData::*;
+    match self {
+      Symbol(sym_id) => sym_id.to_string(g),
+      Production(prod_id) => g.get_production_plain_name(prod_id).to_string(),
+      RuleId(rule_id) => g.get_rule(rule_id).unwrap().tok.to_string(),
+      UNDEFINED => "undefined".to_string(),
+    }
+  }
+}
+
 /// Represents a specific point in a parse sequence
-/// defined by a body and a positional offset that
+/// defined by a rule and a positional offset that
 /// indicates the next expected terminal or non-terminal.
 #[repr(C, align(64))]
 #[derive(PartialEq, Eq, Debug, Clone, Copy, Hash, PartialOrd, Ord)]
 
 pub struct Item {
-  body:  BodyId,
+  rule:  RuleId,
   state: ItemState,
   len:   u8,
   off:   u8,
@@ -136,17 +134,17 @@ impl Item {
     if self.is_null() {
       format!("{} null", self.state)
     } else {
-      let body = g.bodies.get(&self.body).unwrap();
+      let rule = g.rules.get(&self.rule).unwrap();
 
       let mut string = String::new();
 
-      string += &format!("{} ", self.state);
+      string += &format!("| {}\n|    ", self.state.debug_string(g));
 
-      string += &g.productions.get(&body.prod_id).unwrap().name;
+      string += &g.productions.get(&rule.prod_id).unwrap().name;
 
       string += " =>";
 
-      for (index, BodySymbol { sym_id, .. }) in body.syms.iter().enumerate() {
+      for (index, RuleSymbol { sym_id, .. }) in rule.syms.iter().enumerate() {
         if index == self.off as usize {
           string += " •";
         }
@@ -181,15 +179,15 @@ impl Item {
     if self.is_null() {
       format!("{} null", self.state)
     } else {
-      let body = g.bodies.get(&self.body).unwrap();
+      let rule = g.rules.get(&self.rule).unwrap();
 
       let mut string = String::new();
 
-      string += &g.productions.get(&body.prod_id).unwrap().name;
+      string += &g.productions.get(&rule.prod_id).unwrap().name;
 
       string += " =>";
 
-      for BodySymbol { sym_id, .. } in body.syms.iter() {
+      for RuleSymbol { sym_id, .. } in rule.syms.iter() {
         string += " ";
 
         string += &sym_id.to_string(g)
@@ -200,12 +198,12 @@ impl Item {
   }
 
   pub fn id_string(&self) -> String {
-    format!("<{}>:{}-{}-{}", self.state, self.get_body_id(), self.off, self.len)
+    format!("<{}>:{}-{}-{}", self.state, self.get_rule_id(), self.off, self.len)
   }
 
   //#[inline(always)]
   pub fn is_null(&self) -> bool {
-    self.body.is_null() && self.len == 0 && self.off == 0
+    self.rule.is_null() && self.len == 0 && self.off == 0
   }
 
   pub fn is_out_of_scope(&self) -> bool {
@@ -222,20 +220,20 @@ impl Item {
 
   #[inline(always)]
   pub fn null(state: ItemState) -> Self {
-    Item { len: 0, body: BodyId::default(), off: 0, state }
+    Item { len: 0, rule: RuleId::default(), off: 0, state }
   }
 
   #[inline(always)]
   pub fn to_null(&self) -> Self {
-    Item { len: 0, body: BodyId::default(), off: 0, state: self.state }
+    Item { len: 0, rule: RuleId::default(), off: 0, state: self.state }
   }
 
-  /// Create an Item from a body_id and a grammar store. Returns
-  /// None if the body_id does not match a stored body in the
-  /// grammar.
+  /// Create an Item from a rule_id and a grammar store. Returns
+  /// None if the rule_id does not match a stored rule in the
+  /// grammar. Sets the items origin to OriginData::RuleID
 
-  pub fn from_body(body_id: &BodyId, g: &GrammarStore) -> Option<Self> {
-    g.bodies.get(body_id).map(|body| Item::from(body))
+  pub fn from_rule(rule_id: &RuleId, g: &GrammarStore) -> Option<Self> {
+    g.rules.get(rule_id).map(|rule| Item::from(rule).to_origin(OriginData::RuleId(rule.id)))
   }
 
   pub fn completed(&self) -> bool {
@@ -247,12 +245,12 @@ impl Item {
   }
 
   pub fn to_state(&self, state: ItemState) -> Item {
-    Item { len: self.len, off: self.off, body: self.body, state }
+    Item { len: self.len, off: self.off, rule: self.rule, state }
   }
 
   pub fn to_origin(&self, origin: OriginData) -> Self {
     Item {
-      body:  self.body,
+      rule:  self.rule,
       len:   self.len,
       off:   self.off,
       state: self.state.to_origin(origin),
@@ -261,7 +259,7 @@ impl Item {
 
   pub fn to_last_sym(self) -> Self {
     Item {
-      body:  self.body,
+      rule:  self.rule,
       len:   self.len,
       off:   if self.len > 0 { self.len - 1 } else { 0 },
       state: self.state,
@@ -269,25 +267,25 @@ impl Item {
   }
 
   pub fn to_start(&self) -> Item {
-    Item { body: self.body, len: self.len, off: 0, state: self.state }
+    Item { rule: self.rule, len: self.len, off: 0, state: self.state }
   }
 
   pub fn to_end(&self) -> Item {
-    Item { body: self.body, len: self.len, off: self.len, state: self.state }
+    Item { rule: self.rule, len: self.len, off: self.len, state: self.state }
   }
 
   pub fn to_origin_only_state(&self) -> Item {
     Item {
-      body:  self.body,
+      rule:  self.rule,
       len:   self.len,
       off:   self.off,
-      state: self.state.to_group(0).to_depth(0),
+      state: self.state.to_group(0),
     }
   }
 
-  pub fn to_zero_state(&self) -> Item {
+  pub fn to_empty_state(&self) -> Item {
     Item {
-      body:  self.body,
+      rule:  self.rule,
       len:   self.len,
       off:   self.off,
       state: ItemState::default(),
@@ -299,8 +297,8 @@ impl Item {
       Some(Item {
         len:   self.len,
         off:   self.off + 1,
-        body:  self.body,
-        state: self.state.increment_depth(),
+        rule:  self.rule,
+        state: self.state,
       })
     } else {
       None
@@ -322,7 +320,7 @@ impl Item {
       Some(Item {
         len:   self.len,
         off:   self.off - 1,
-        body:  self.body,
+        rule:  self.rule,
         state: self.state,
       })
     } else {
@@ -334,18 +332,18 @@ impl Item {
     self.off == 0
   }
 
-  pub fn get_body_id(&self) -> BodyId {
-    self.body
+  pub fn get_rule_id(&self) -> RuleId {
+    self.rule
   }
 
-  pub fn get_body<'a>(&self, g: &'a GrammarStore) -> HCResult<&'a Body> {
-    g.get_body(&self.get_body_id())
+  pub fn get_rule<'a>(&self, g: &'a GrammarStore) -> HCResult<&'a Rule> {
+    g.get_rule(&self.get_rule_id())
   }
 
   #[inline(always)]
-  pub fn get_body_ref<'a>(&self, g: &'a GrammarStore) -> HCResult<&'a BodySymbol> {
-    match (self.completed(), self.get_body(&g)) {
-      (false, HCResult::Ok(body)) => HCResult::Ok(&body.syms[self.off as usize]),
+  pub fn get_rule_ref<'a>(&self, g: &'a GrammarStore) -> HCResult<&'a RuleSymbol> {
+    match (self.completed(), self.get_rule(&g)) {
+      (false, HCResult::Ok(rule)) => HCResult::Ok(&rule.syms[self.off as usize]),
       _ => HCResult::None,
     }
   }
@@ -386,8 +384,8 @@ impl Item {
     if self.completed() {
       SymbolID::EndOfInput
     } else {
-      match g.bodies.get(&self.body) {
-        Some(body) => body.syms[self.off as usize].sym_id,
+      match g.rules.get(&self.rule) {
+        Some(rule) => rule.syms[self.off as usize].sym_id,
         _ => SymbolID::Undefined,
       }
     }
@@ -406,7 +404,7 @@ impl Item {
     if self.completed() {
       false
     } else {
-      !matches!(self.get_symbol(g), SymbolID::Production(production, _))
+      !matches!(self.get_symbol(g), SymbolID::Production(_, _))
     }
   }
 
@@ -419,32 +417,32 @@ impl Item {
   }
 
   pub fn get_prod_id(&self, g: &GrammarStore) -> ProductionId {
-    g.bodies.get(&self.get_body_id()).unwrap().prod_id
+    g.rules.get(&self.get_rule_id()).unwrap().prod_id
   }
 
   pub fn get_prod_as_sym_id(&self, g: &GrammarStore) -> SymbolID {
-    g.get_production(&g.bodies.get(&self.get_body_id()).unwrap().prod_id).unwrap().sym_id
+    g.get_production(&g.rules.get(&self.get_rule_id()).unwrap().prod_id).unwrap().sym_id
   }
 
   pub fn to_hash(&self) -> u64 {
-    ((self.body.0 & 0xFFFF_FFF0_F000_F000) ^ ((self.off as u64) << 32)) | (self.state.0 as u64)
+    ((self.rule.0 & 0xFFFF_FFF0_F000_F000) ^ ((self.off as u64) << 32)) | (self.state.0 as u64)
   }
 
   pub fn print_blame(&self, g: &GrammarStore) {
-    let body = g.bodies.get(&self.body).unwrap();
+    let rule = g.rules.get(&self.rule).unwrap();
 
     if self.completed() {
     } else {
-      eprintln!("{}", body.syms[self.off as usize].tok.blame(1, 1, "", None));
+      eprintln!("{}", rule.syms[self.off as usize].tok.blame(1, 1, "", None));
     }
   }
 }
 
-impl From<&Body> for Item {
-  fn from(body: &Body) -> Self {
+impl From<&Rule> for Item {
+  fn from(rule: &Rule) -> Self {
     Item {
-      body:  body.id,
-      len:   body.len as u8,
+      rule:  rule.id,
+      len:   rule.len as u8,
       off:   0,
       state: ItemState::default(),
     }
@@ -464,18 +462,22 @@ pub struct LinkedItemWithGoto {
   pub goto_items:   Items,
 }
 
-pub struct TermAndEndItemGroups {
-  pub term_items:      Vec<LinkedItem>,
-  pub completed_items: Vec<LinkedItem>,
+pub struct FollowItemGroups {
+  pub uncompleted_items: Vec<LinkedItem>,
+  pub completed_items:   Vec<LinkedItem>,
 }
 
-impl TermAndEndItemGroups {
+impl FollowItemGroups {
   pub fn get_all_items(&self) -> Items {
-    self.term_items.iter().chain(self.completed_items.iter()).map(|t| t.item).collect()
+    self.uncompleted_items.iter().chain(self.completed_items.iter()).map(|t| t.item).collect()
   }
 
-  pub fn get_term_items(&self) -> Items {
-    self.term_items.iter().map(|t| t.item).collect()
+  pub fn get_uncompleted_items(&self) -> Items {
+    self.uncompleted_items.iter().map(|t| t.item).collect()
+  }
+
+  pub fn get_completed_items(&self) -> Items {
+    self.completed_items.iter().map(|t| t.item).collect()
   }
 }
 
@@ -614,7 +616,7 @@ impl ItemContainer for ItemSet {
 
   #[inline(always)]
   fn to_zero_state(self) -> Self {
-    self.into_iter().map(|i| i.to_zero_state()).collect()
+    self.into_iter().map(|i| i.to_empty_state()).collect()
   }
 
   #[inline(always)]
@@ -656,7 +658,7 @@ impl ItemContainer for Items {
 
   #[inline(always)]
   fn to_zero_state(self) -> Self {
-    self.into_iter().map(|i| i.to_zero_state()).collect()
+    self.into_iter().map(|i| i.to_empty_state()).collect()
   }
 
   #[inline(always)]

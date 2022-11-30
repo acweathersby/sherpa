@@ -106,8 +106,8 @@ impl ExtendedError for ErrPropRedefinition {
 /// ```
 #[derive(Debug)]
 pub struct ErrUnionOfScalarsAndVectors {
-  scalars:    Vec<(AScriptTypeVal, BodyId)>,
-  vectors:    Vec<(AScriptTypeVal, BodyId)>,
+  scalars:    Vec<(AScriptTypeVal, RuleId)>,
+  vectors:    Vec<(AScriptTypeVal, RuleId)>,
   p:          ProductionId,
   g:          Arc<GrammarStore>,
   type_names: Arc<BTreeMap<AScriptStructId, String>>,
@@ -119,8 +119,8 @@ impl ErrUnionOfScalarsAndVectors {
   pub fn new(
     grammar: Arc<GrammarStore>,
     prod_id: ProductionId,
-    scalars: Vec<(AScriptTypeVal, BodyId)>,
-    vectors: Vec<(AScriptTypeVal, BodyId)>,
+    scalars: Vec<(AScriptTypeVal, RuleId)>,
+    vectors: Vec<(AScriptTypeVal, RuleId)>,
     type_names: Arc<BTreeMap<AScriptStructId, String>>,
   ) -> HCError {
     HCError::ExtendedError(Arc::new(Self { scalars, vectors, p: prod_id, g: grammar, type_names }))
@@ -131,8 +131,8 @@ impl ExtendedError for ErrUnionOfScalarsAndVectors {
   fn report(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let ErrUnionOfScalarsAndVectors { g, p, scalars, vectors, type_names } = self;
 
-    let create_blame_string = |(type_, body_id): &(AScriptTypeVal, BodyId)| -> String {
-      let body = g.get_body(body_id).unwrap();
+    let create_blame_string = |(type_, body_id): &(AScriptTypeVal, RuleId)| -> String {
+      let body = g.get_rule(body_id).unwrap();
       format!(
         " -- [{}]\n    Body [{}]\n    reduces to [{}] type:\n\n{}",
         body.tok.path_ref(&body.grammar_ref.path),
@@ -194,8 +194,8 @@ Vector Types:
 pub struct ErrIncompatibleProductionScalerTypes {
   p:          ProductionId,
   g:          Arc<GrammarStore>,
-  type_a:     (AScriptTypeVal, Vec<BodyId>),
-  type_b:     (AScriptTypeVal, Vec<BodyId>),
+  type_a:     (AScriptTypeVal, Vec<RuleId>),
+  type_b:     (AScriptTypeVal, Vec<RuleId>),
   type_names: Arc<BTreeMap<AScriptStructId, String>>,
 }
 
@@ -205,8 +205,8 @@ impl ErrIncompatibleProductionScalerTypes {
   pub fn new(
     p: ProductionId,
     g: Arc<GrammarStore>,
-    type_a: (AScriptTypeVal, Vec<BodyId>),
-    type_b: (AScriptTypeVal, Vec<BodyId>),
+    type_a: (AScriptTypeVal, Vec<RuleId>),
+    type_b: (AScriptTypeVal, Vec<RuleId>),
     type_names: Arc<BTreeMap<AScriptStructId, String>>,
   ) -> HCError {
     HCError::ExtendedError(Arc::new(Self { p, g, type_a, type_b, type_names }))
@@ -224,7 +224,7 @@ impl ExtendedError for ErrIncompatibleProductionScalerTypes {
     } = self;
 
     let body_draw = |&b| {
-      let body = g.get_body(&b).unwrap();
+      let body = g.get_rule(&b).unwrap();
       format!(
         "[{}]\n{}\n{}",
         body.tok.path_ref(&body.grammar_ref.path),
@@ -307,7 +307,7 @@ impl ExtendedError for ErrIncompatibleProductionVectorTypes {
     let ErrIncompatibleProductionVectorTypes { p, g, vector_types, type_names } = self;
 
     let body_draw = |b: &TaggedType| {
-      let body = g.get_body(&b.into()).unwrap();
+      let body = g.get_rule(&b.into()).unwrap();
       let type_: AScriptTypeVal = b.into();
       format!(
         "[{}]\n body {}\n produces vector type [{}] \n{}",

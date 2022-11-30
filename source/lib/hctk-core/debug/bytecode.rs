@@ -12,7 +12,7 @@ pub fn address_string(idx: usize) -> String {
 
 pub struct BytecodeGrammarLookups<'a> {
   pub bc_to_prod:   BTreeMap<u32, &'a Production>,
-  pub bc_to_body:   BTreeMap<u32, &'a Body>,
+  pub bc_to_body:   BTreeMap<u32, &'a Rule>,
   pub bc_to_symbol: BTreeMap<u32, &'a Symbol>,
 }
 
@@ -21,7 +21,7 @@ impl<'a> BytecodeGrammarLookups<'a> {
     let bc_to_prod =
       g.productions.iter().map(|(_, p)| (p.bytecode_id, p)).collect::<BTreeMap<_, _>>();
 
-    let bc_to_body = g.bodies.iter().map(|(_, p)| (p.bc_id, p)).collect::<BTreeMap<_, _>>();
+    let bc_to_body = g.rules.iter().map(|(_, p)| (p.bytecode_id, p)).collect::<BTreeMap<_, _>>();
 
     let bc_to_symbol =
       g.symbols.iter().map(|(_, p)| (p.bytecode_id, p)).collect::<BTreeMap<_, _>>();
@@ -388,7 +388,9 @@ mod bytecode_debugging_tests {
 
     let states = compile_states(&mut j, 1)?;
 
-    let output = compile_bytecode(&mut j, &mut optimize_ir_states(states, &g));
+    let results = optimize_ir_states(&mut j, states);
+
+    let output = compile_bytecode(&mut j, results);
 
     let result = compile_production_states(&mut j, prod_id)?;
 

@@ -33,6 +33,7 @@ mod rust_ast_build {
   use hctk_core::{
     types::{GrammarStore, HCResult},
     writer::code_writer::StringBuffer,
+    Journal,
   };
 
   use super::rust;
@@ -40,8 +41,9 @@ mod rust_ast_build {
   #[test]
   fn test_temp() {
     use std::{io::Write, path::PathBuf, vec};
-
+    let mut j = Journal::new(None);
     let g = GrammarStore::from_path(
+      &mut j,
       PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../../test/e2e/bootstrap/grammar/ir.hcg")
         .canonicalize()
@@ -69,7 +71,9 @@ mod rust_ast_build {
 
   #[test]
   fn test_grammar_imported_grammar() {
+    let mut j = Journal::new(None);
     let g = GrammarStore::from_path(
+      &mut j,
       PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../../test/grammars/script_base.hcg")
         .canonicalize()
@@ -87,7 +91,9 @@ mod rust_ast_build {
 
   #[test]
   fn test_grammar() {
+    let mut j = Journal::new(None);
     let g = GrammarStore::from_str(
+      &mut j,
       "
 @IGNORE g:sp
 
@@ -122,7 +128,9 @@ mod rust_ast_build {
 
   #[test]
   fn test_parse_errors_when_production_has_differing_return_types2() {
+    let mut j = Journal::new(None);
     let g = GrammarStore::from_str(
+      &mut j,
       "
         @EXPORT markdown as md
 
@@ -273,7 +281,9 @@ mod rust_ast_build {
   #[test]
   fn handles_multipart_arrays() -> HCResult<()> {
     use HCResult::*;
+    let mut j = Journal::new(Option::None);
     let g = GrammarStore::from_str(
+      &mut j,
       "     
       <> A > B(+) | C 
 
@@ -306,7 +316,9 @@ mod rust_ast_build {
   #[test]
   fn rust_vector_return_types_print_correctly() -> HCResult<()> {
     use HCResult::*;
+    let mut j = Journal::new(Option::None);
     let g = GrammarStore::from_str(
+      &mut j,
       " 
         <> A > B f:ast { { t_A, r:$1 } }
 
@@ -328,7 +340,9 @@ mod rust_ast_build {
 
   #[test]
   fn group_productions_get_correct_type_information() {
+    let mut j = Journal::new(Option::None);
     let g = GrammarStore::from_str(
+      &mut j,
       "
       @NAME hc_symbol
 
@@ -392,7 +406,9 @@ mod rust_ast_build {
 
   #[test]
   fn test_parse_errors_when_production_has_differing_return_types3() {
+    let mut j = Journal::new(Option::None);
     let g = GrammarStore::from_str(
+      &mut j,
       " 
       <> B > g:id(+)          
       ",
@@ -427,6 +443,7 @@ mod ascript_compile_tests {
       parse::{compile_ascript_ast, compile_grammar_ast},
     },
     types::*,
+    Journal,
   };
 
   #[test]
@@ -439,7 +456,7 @@ mod ascript_compile_tests {
       let (_, errors) = compile_struct_type(
         &mut AScriptStore::default(),
         &ast_struct,
-        &create_dummy_body(BodyId(0)),
+        &create_dummy_body(RuleId(0)),
       );
 
       errors.debug_print();
@@ -450,8 +467,8 @@ mod ascript_compile_tests {
     }
   }
 
-  fn create_dummy_body(id: BodyId) -> hctk_core::types::Body {
-    hctk_core::types::Body { id, ..Default::default() }
+  fn create_dummy_body(id: RuleId) -> hctk_core::types::Rule {
+    hctk_core::types::Rule { id, ..Default::default() }
   }
 
   #[test]
@@ -464,7 +481,7 @@ mod ascript_compile_tests {
       let (_, errors) = compile_struct_type(
         &mut AScriptStore::default(),
         &ast_struct,
-        &create_dummy_body(BodyId(0)),
+        &create_dummy_body(RuleId(0)),
       );
 
       errors.debug_print();
@@ -484,7 +501,7 @@ mod ascript_compile_tests {
 
     let mut ast = AScriptStore::default();
 
-    let body = create_dummy_body(BodyId(0));
+    let body = create_dummy_body(RuleId(0));
     if let ASTNode::AST_Struct(ast_struct) = astA.unwrap() {
       let (id, mut errors) = compile_struct_type(&mut ast, &ast_struct, &body);
       let (_, mut e) = compile_struct_props(&mut ast, &id, &ast_struct, &body);
@@ -525,7 +542,7 @@ mod ascript_compile_tests {
       assert!(struct_.is_ok());
 
       if let ASTNode::AST_Struct(struct_) = struct_.unwrap() {
-        let body = create_dummy_body(BodyId(i as u64));
+        let body = create_dummy_body(RuleId(i as u64));
         let (id, errors) = compile_struct_type(&mut ast, &struct_, &body);
 
         errors.debug_print();
@@ -565,7 +582,9 @@ mod ascript_compile_tests {
 
   #[test]
   fn test_parse_errors_when_production_has_differing_return_types() {
+    let mut j = Journal::new(Option::None);
     let g = GrammarStore::from_str(
+      &mut j,
       "
             <> A > \\1 f:ast { { t_Test } } 
             | \\a 

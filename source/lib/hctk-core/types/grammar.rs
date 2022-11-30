@@ -58,7 +58,7 @@ impl ReduceFunctionType {
 
 /// Identifiers for a Grammar
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
-pub struct GrammarIds {
+pub struct GrammarRef {
   /// A globally unique name to refer to this grammar by. Derived from the
   /// grammar's filepath.
   pub guid_name: String,
@@ -77,10 +77,10 @@ pub struct GrammarIds {
   pub path: PathBuf,
 }
 
-impl GrammarIds {
+impl GrammarRef {
   pub fn new(local_name: String, absolute_path: PathBuf) -> Arc<Self> {
     let guid_name = get_guid_grammar_name(&absolute_path).unwrap();
-    Arc::new(GrammarIds {
+    Arc::new(GrammarRef {
       guid: GrammarId(hash_id_value_u64(&guid_name)),
       guid_name,
       name: local_name,
@@ -89,7 +89,7 @@ impl GrammarIds {
   }
 }
 
-pub type ImportedGrammarReferences = HashMap<String, Arc<GrammarIds>>;
+pub type ImportedGrammarReferences = HashMap<String, Arc<GrammarRef>>;
 
 pub type ReduceFunctionTable = BTreeMap<ReduceFunctionId, ReduceFunctionType>;
 
@@ -127,9 +127,9 @@ pub type ReduceFunctionTable = BTreeMap<ReduceFunctionId, ReduceFunctionType>;
 ///     ```
 #[derive(Debug, Clone, Default)]
 pub struct GrammarStore {
-  pub id: Arc<GrammarIds>,
+  pub id: Arc<GrammarRef>,
 
-  /// Maps [ProductionId] to a list of [BodyIds](BodyId)
+  /// Maps [ProductionId] to a list of [RuleIds](RuleId)
   pub production_bodies: ProductionBodiesTable,
 
   /// Maps a [ProductionId] to a [Production].
@@ -138,8 +138,8 @@ pub struct GrammarStore {
   /// Maps a production's id to it's original name and guid name
   pub production_names: BTreeMap<ProductionId, (String, String)>,
 
-  /// Maps BodyId to body data.
-  pub bodies: BodyTable,
+  /// Maps RuleId to rule data.
+  pub rules: RuleTable,
 
   /// Maps [SymbolId] to [Symbol] data. Only stores [Symbols](Symbol) that
   /// represent one of the following:
@@ -186,7 +186,7 @@ pub struct GrammarStore {
   /// All reduce functions defined in the grammar.
   pub reduce_functions: ReduceFunctionTable,
 
-  pub merge_productions: BTreeMap<ProductionId, Vec<Body>>,
+  pub merge_productions: BTreeMap<ProductionId, Vec<Rule>>,
 
   /// All productions that are reachable from the entry productions, including
   /// the entry productions.
@@ -196,6 +196,23 @@ pub struct GrammarStore {
 impl GrammarStore {
   pub fn from_path(j: &mut Journal, path: PathBuf) -> HCResult<Arc<GrammarStore>> {
     match compile_grammar_from_path(j, path, 0) {
+      (Some(grammar), _) => {
+        j.set_grammar(grammar.clone());
+        HCResult::Ok(grammar)
+      }
+      (_, Some(errors)) => {
+        HCResult::Err(HCError::Many { message: "Unable to compile Grammar".to_string(), errors })
+      }
+      (None, None) => unreachable!("compile_grammar_from_string should never return (None, None)"),
+    }
+  }
+
+  pub fn from_str_with_base_dir(
+    j: &mut Journal,
+    string: &str,
+    base_dir: &PathBuf,
+  ) -> HCResult<Arc<GrammarStore>> {
+    match compile_grammar_from_string(j, string, base_dir) {
       (Some(grammar), _) => {
         j.set_grammar(grammar.clone());
         HCResult::Ok(grammar)
@@ -224,10 +241,10 @@ impl GrammarStore {
     return Self::from_str(j, string.as_str());
   }
 
-  /// Returns the [Body] that's mapped to [`body_id`](BodyId)
+  /// Returns the [Rule] that's mapped to [`rule_id`](RuleId)
   /// within the grammar
-  pub fn get_body(&self, body_id: &BodyId) -> HCResult<&Body> {
-    HCResult::Ok(self.bodies.get(body_id)?)
+  pub fn get_rule(&self, rule_id: &RuleId) -> HCResult<&Rule> {
+    HCResult::Ok(self.rules.get(rule_id)?)
   }
 
   /// Returns the [Production] that's mapped to [`production_id`](ProductionId)

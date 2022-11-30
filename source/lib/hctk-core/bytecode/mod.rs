@@ -1,9 +1,12 @@
 use std::collections::BTreeMap;
 
-use crate::grammar::data::ast::IR_STATE;
+use crate::{
+  debug::{self, BytecodeGrammarLookups},
+  grammar::data::ast::IR_STATE,
+};
 
 use crate::{
-  journal::Journal,
+  journal::{report::ReportType, Journal},
   types::{GrammarStore, IRState, IRStateType, Symbol},
 };
 
@@ -64,7 +67,7 @@ pub struct BytecodeOutput {
 
 pub fn compile_bytecode<'a>(
   j: &mut Journal,
-  ir_states: &mut Vec<(String, Box<IRState>)>,
+  mut ir_states: Vec<(String, Box<IRState>)>,
 ) -> BytecodeOutput {
   let ir_ast_states = ir_states
     .iter_mut()
@@ -76,12 +79,30 @@ pub fn compile_bytecode<'a>(
     })
     .collect::<Vec<_>>();
 
-  compile_ir_states_into_bytecode(j, ir_states, ir_ast_states)
+  let bytecode = compile_ir_states_into_bytecode(j, ir_states, ir_ast_states);
+
+  if j.config().build_disassembly {
+    let grammar = j.grammar().unwrap();
+    j.set_active_report(&format!("[{}] Disassembly", &grammar.id.name), ReportType::Disassembly);
+
+    let report = j.report_mut();
+
+    report.start_timer("Build Time");
+
+    let disassembly =
+      debug::generate_disassembly(&bytecode, Some(&BytecodeGrammarLookups::new(&grammar)));
+
+    report.stop_timer("Build Time");
+
+    report.add_note("Output", disassembly);
+  }
+
+  bytecode
 }
 
 pub(crate) fn compile_ir_states_into_bytecode<'a>(
   j: &mut Journal,
-  ir_states: &Vec<(String, Box<IRState>)>,
+  ir_states: Vec<(String, Box<IRState>)>,
   ir_ast_states: Vec<IR_STATE>,
 ) -> BytecodeOutput {
   let state_refs = ir_ast_states.iter().collect::<Vec<_>>();
@@ -124,7 +145,8 @@ mod byte_code_creation_tests {
     },
     grammar::{data::ast::ASTNode, parse::compile_ir_ast},
     intermediate::{
-      optimize::optimize_ir_states, compile::{compile_production_states, compile_states},
+      compile::{compile_production_states, compile_states},
+      optimize::optimize_ir_states,
     },
     journal::Journal,
     types::{default_get_branch_selector, GrammarStore, HCResult},
@@ -133,17 +155,20 @@ mod byte_code_creation_tests {
   use super::compile_bytecode;
 
   #[test]
-  pub fn test_produce_a_single_ir_ast_from_a_single_state_of_a_trivial_production() -> HCResult<()>{
+  pub fn test_produce_a_single_ir_ast_from_a_single_state_of_a_trivial_production() -> HCResult<()>
+  {
     let mut j = Journal::new(None);
     let g = GrammarStore::from_str(&mut j, "<> A > \\h").unwrap();
 
     let prod_id = g.get_production_id_by_name("A").unwrap();
 
-    let result = compile_production_states(&mut j, prod_id)?;
+    let mut result = compile_production_states(&mut j, prod_id)?;
 
     println!("{:#?}", result);
 
-    let state = result[0].get_code();
+    let ir_state = result.remove(0);
+
+    let state = ir_state.get_code();
 
     let result = compile_ir_ast(Vec::from(state.as_bytes()));
 
@@ -155,7 +180,7 @@ mod byte_code_creation_tests {
       &result.unwrap().instructions,
       default_get_branch_selector,
       &HashMap::new(),
-      &("".to_string()),
+      &ir_state.get_scanner_state_name()?,
       "",
     );
 
@@ -165,9 +190,10 @@ mod byte_code_creation_tests {
   }
 
   #[test]
-  pub fn temp_test1() -> HCResult<()>{
+  pub fn temp_test1() -> HCResult<()> {
     let mut j = Journal::new(None);
-    let g = GrammarStore::from_str(&mut j, 
+    let g = GrammarStore::from_str(
+      &mut j,
       "
     @NAME test
 
@@ -185,18 +211,18 @@ mod byte_code_creation_tests {
 
     let states = compile_states(&mut j, 1)?;
 
-    for (_, state) in &states {
-      println!("{}\n", state.get_code());
-    }
+    let mut results = optimize_ir_states(&mut j, states);
 
-    let output = compile_bytecode(&mut j, &mut optimize_ir_states(states, &g));
+    compile_bytecode(&mut j, results);
+
     HCResult::Ok(())
   }
 
   #[test]
-  pub fn test_production_of_bytecode_for_simple_expression_grammar() -> HCResult<()>{
+  pub fn test_production_of_bytecode_for_simple_expression_grammar() -> HCResult<()> {
     let mut j = Journal::new(None);
-    let g = GrammarStore::from_str(&mut j, 
+    let g = GrammarStore::from_str(
+      &mut j,
       "
       @IGNORE g:sp
 
@@ -224,7 +250,9 @@ mod byte_code_creation_tests {
     .unwrap();
     let mut states = compile_states(&mut j, 1)?;
 
-    let output = compile_bytecode(&mut j, &mut optimize_ir_states(states, &g));
+    let mut results = optimize_ir_states(&mut j, states);
+
+    let output = compile_bytecode(&mut j, results);
 
     println!(
       "dD: {}",
@@ -234,9 +262,10 @@ mod byte_code_creation_tests {
   }
 
   #[test]
-  pub fn generate_production_with_a_recursion() -> HCResult<()>{
+  pub fn generate_production_with_a_recursion() -> HCResult<()> {
     let mut j = Journal::new(None);
-    let g = GrammarStore::from_str(&mut j, 
+    let g = GrammarStore::from_str(
+      &mut j,
       "    
       <> element_block > \\< component_identifier
       ( t:tested )? 
@@ -254,7 +283,9 @@ mod byte_code_creation_tests {
     .unwrap();
 
     let states = compile_states(&mut j, 1)?;
-    let output = compile_bytecode(&mut j, &mut optimize_ir_states(states, &g));
+    let mut results = optimize_ir_states(&mut j, states);
+
+    let output = compile_bytecode(&mut j, results);
     println!(
       "dD: {}",
       debug::generate_disassembly(&output, Some(&BytecodeGrammarLookups::new(&g)))
@@ -264,9 +295,10 @@ mod byte_code_creation_tests {
   }
 
   #[test]
-  pub fn production_with_multiple_sub_productions() -> HCResult<()>{
+  pub fn production_with_multiple_sub_productions() -> HCResult<()> {
     let mut j = Journal::new(None);
-    let g = GrammarStore::from_str(&mut j, 
+    let g = GrammarStore::from_str(
+      &mut j,
       "    
 <> test > t:d A | B | C | D
 <> A > t:a id
@@ -294,7 +326,7 @@ mod byte_code_creation_tests {
     HCResult::Ok(())
   }
   #[test]
-  pub fn temp_test() -> HCResult<()>{
+  pub fn temp_test() -> HCResult<()> {
     let mut j = Journal::new(None);
     let g = GrammarStore::from_str(&mut j, 
       "@NAME wick_element
@@ -350,7 +382,11 @@ mod byte_code_creation_tests {
     ).unwrap();
 
     let states = compile_states(&mut j, 1)?;
-    let output = compile_bytecode(&mut j, &mut optimize_ir_states(states, &g));
+
+    let mut results = optimize_ir_states(&mut j, states);
+
+    compile_bytecode(&mut j, results);
+
     HCResult::Ok(())
   }
 }

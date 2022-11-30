@@ -1,22 +1,17 @@
 #![crate_type = "rlib"]
 #![const_eval_limit = "0"]
 #![feature(const_eval_limit)]
-#![feature(new_uninit)]
-#![feature(get_mut_unchecked)]
-#![feature(core_intrinsics)]
 #![feature(box_patterns)]
 #![feature(drain_filter)]
 #![feature(btree_drain_filter)]
 #![feature(try_trait_v2)]
-#![feature(try_trait_v2_residual)]
-#![feature(const_trait_impl)]
 #![feature(int_roundings)]
 #![feature(map_try_insert)]
 #![allow(bad_style)]
 
 mod deprecated_runtime;
 pub mod grammar;
-mod journal;
+pub mod journal;
 pub mod runtime;
 pub mod types;
 pub mod utf8;
@@ -33,10 +28,16 @@ pub use grammar::{compile_grammar_from_path, compile_grammar_from_string};
 // Common utility functions
 use std::num::NonZeroUsize;
 
+pub use journal::{
+  config::{Config, ResolutionMode},
+  report::{Report, ReportType},
+  Journal,
+};
+
 pub mod errors {
   pub use crate::{
     intermediate::errors::*,
-    types::{HCError, HCError::*, HCErrorSeverity, HCErrorSeverity::*},
+    types::{HCError, HCError::*, HCErrorSeverity},
   };
 }
 
@@ -98,6 +99,10 @@ mod test_end_to_end {
     assert_eq!(shifts, ["hello", "world"]);
 
     assert_eq!(skips, ["    \t"]);
+
+    j.flush_reports();
+
+    j.debug_report(crate::ReportType::Any);
 
     HCResult::Ok(())
   }

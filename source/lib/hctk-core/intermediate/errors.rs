@@ -6,7 +6,7 @@ use std::{collections::BTreeSet, sync::Arc};
 pub struct WarnTransitionAmbiguousProduction {
   goal_items: Vec<Item>,
   source_production: Production,
-  body_refs: Vec<(Arc<GrammarIds>, Token)>,
+  body_refs: Vec<(Arc<GrammarRef>, Token)>,
   g: Arc<GrammarStore>,
 }
 
@@ -20,7 +20,7 @@ impl WarnTransitionAmbiguousProduction {
     let peek_root_node = t.get_peek_origin(conflicting_goals[0]);
     let goal_items = conflicting_goals
       .iter()
-      .map(|i| t.get_node(*i).first_item().to_zero_state())
+      .map(|i| t.get_node(*i).first_item().to_empty_state())
       .collect::<Vec<_>>();
 
     // Look for a common production in each goal. If such production(s) exist,
@@ -67,13 +67,13 @@ impl WarnTransitionAmbiguousProduction {
         body_refs: closures
           .iter()
           .flat_map(|c| {
-            c.iter().map(|(_, i)| match i.get_body_ref(&t.g) {
+            c.iter().map(|(_, i)| match i.get_rule_ref(&t.g) {
               HCResult::Ok(body_ref) => {
                 let prod = body_ref;
                 (prod.grammar_ref.clone(), prod.tok.clone())
               }
               _ => {
-                let prod = i.decrement().unwrap().get_body_ref(&t.g).unwrap();
+                let prod = i.decrement().unwrap().get_rule_ref(&t.g).unwrap();
                 (prod.grammar_ref.clone(), prod.tok.clone())
               }
             })
@@ -114,7 +114,7 @@ impl ExtendedError for WarnTransitionAmbiguousProduction {
   }
 
   fn severity(&self) -> crate::types::HCErrorSeverity {
-    crate::errors::Warning
+    HCErrorSeverity::Warning
   }
 
   fn friendly_name(&self) -> &str {
@@ -125,13 +125,13 @@ impl ExtendedError for WarnTransitionAmbiguousProduction {
 /// Indicates a particular set of symbol lead to the creation of ambiguous token scanner
 #[derive(Debug)]
 pub struct ErrOccludingTokens {
-  pub symbols: BTreeSet<SymbolID>,
+  pub symbols: SymbolSet,
 }
 
 impl ErrOccludingTokens {
   pub const friendly_name: &'static str = "ErrOccludingTokens";
 
-  pub fn new(symbols: BTreeSet<SymbolID>) -> HCError {
+  pub fn new(symbols: SymbolSet) -> HCError {
     HCError::ExtendedError(Arc::new(Self { symbols }))
   }
 }
@@ -145,7 +145,7 @@ impl ExtendedError for ErrOccludingTokens {
   }
 
   fn severity(&self) -> crate::types::HCErrorSeverity {
-    crate::errors::Warning
+    HCErrorSeverity::Warning
   }
 
   fn friendly_name(&self) -> &str {

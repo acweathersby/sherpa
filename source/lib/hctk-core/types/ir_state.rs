@@ -127,7 +127,7 @@ impl IRState {
     (&self.normal_symbols, &self.skip_symbols)
   }
 
-  pub fn get_scanner_symbol_set(&self) -> Option<BTreeSet<SymbolID>> {
+  pub fn get_scanner_symbol_set(&self) -> Option<SymbolSet> {
     let (norm, peek) = self.get_symbols();
 
     let scanner_syms = norm.iter().chain(peek.iter()).cloned().collect::<BTreeSet<_>>();

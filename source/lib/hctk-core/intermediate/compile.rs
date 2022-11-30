@@ -7,7 +7,7 @@ use super::{
 use crate::{
   grammar::hash_id_value_u64,
   journal::{config::ResolutionMode, Journal},
-  types::{HCResult, IRState, ItemContainer, ProductionId, SymbolID},
+  types::{HCResult, IRState, ItemContainer, ProductionId, ScannerId, SymbolID, SymbolSet},
 };
 use std::{
   collections::{BTreeMap, BTreeSet},
@@ -24,19 +24,33 @@ pub(crate) fn compile_production_states(
   let state_name = grammar.get_production_guid_name(&prod_id);
 
   j.set_active_report(
-    &format!("Production [{}] IR Compilation", state_name),
-    crate::journal::report::ReportType::ProductionCompile,
+    &format!("Production [{}] IR Compilation", grammar.get_production_plain_name(&prod_id)),
+    crate::journal::report::ReportType::ProductionCompile(prod_id),
   );
 
   j.report_mut().start_timer("RD Compilation");
 
   let items = generate_recursive_descent_items(j, prod_id);
 
-  let (t, _) = construct_recursive_descent(j, false, &items);
+  let t = match construct_recursive_descent(j, false, &items) {
+    HCResult::Ok((t, _)) => t,
+    HCResult::Err(err) => {
+      j.report_mut().stop_timer("RD Compilation");
+      j.report_mut().add_error(err);
+      return HCResult::None;
+    }
+    // Only expecting single errors to be ejected by these functions.
+    _ => return HCResult::None,
+  };
 
   let mut rd_states = construct_ir(j, &state_name, &t)?;
 
   j.report_mut().stop_timer("RD Compilation");
+
+  #[cfg(debug_assertions)]
+  {
+    j.report_mut().add_note("RD Graph Nodes", t.write_nodes());
+  }
 
   if j.config().resolution_mode.intersects(ResolutionMode::RecursiveAscent) {
     j.report_mut().start_timer("RA Compilation");
@@ -48,6 +62,11 @@ pub(crate) fn compile_production_states(
     rd_states.append(&mut ra_states);
 
     j.report_mut().stop_timer("RA Compilation");
+
+    #[cfg(debug_assertions)]
+    {
+      j.report_mut().add_note("RA Graph Nodes", t.write_nodes());
+    }
 
     HCResult::Ok(rd_states)
   } else if t.goto_seeds.len() > 0 {
@@ -73,8 +92,8 @@ pub(crate) fn compile_token_production_states(
   let state_name = grammar.get_production_guid_name(&prod_id);
 
   j.set_active_report(
-    &format!("Token Production [{}] IR Compilation", state_name),
-    crate::journal::report::ReportType::ProductionCompile,
+    &format!("Token Production [{}] IR Compilation", grammar.get_production_plain_name(&prod_id)),
+    crate::journal::report::ReportType::TokenProductionCompile(prod_id),
   );
 
   j.report_mut().start_timer("RD Compilation");
@@ -88,11 +107,25 @@ pub(crate) fn compile_token_production_states(
     })
     .collect();
 
-  let (t, _) = construct_recursive_descent(j, true, &items);
+  let t = match construct_recursive_descent(j, true, &items) {
+    HCResult::Ok((t, _)) => t,
+    HCResult::Err(err) => {
+      j.report_mut().stop_timer("RD Compilation");
+      j.report_mut().add_error(err);
+      return HCResult::None;
+    }
+    // Only expecting single errors to be ejected by these functions.
+    _ => return HCResult::None,
+  };
 
   let rd_states = construct_ir(j, &state_name, &t)?;
 
   j.report_mut().stop_timer("RD Compilation");
+
+  #[cfg(debug_assertions)]
+  {
+    j.report_mut().add_note("RD Graph Nodes", t.write_nodes());
+  }
 
   HCResult::Ok(rd_states)
 }
@@ -100,7 +133,7 @@ pub(crate) fn compile_token_production_states(
 // Compiles a scanner state from a set of symbol ids.
 pub(crate) fn compile_scanner_states(
   j: &mut Journal,
-  symbols: BTreeSet<SymbolID>,
+  symbols: SymbolSet,
 ) -> HCResult<Vec<Box<IRState>>> {
   let grammar = j.grammar()?;
 
@@ -108,7 +141,7 @@ pub(crate) fn compile_scanner_states(
 
   j.set_active_report(
     &format!("Scanner [{}] IR Compilation", state_name),
-    crate::journal::report::ReportType::ProductionCompile,
+    crate::journal::report::ReportType::ScannerCompile(ScannerId::new(&symbols)),
   );
 
   j.report_mut().add_note(
@@ -123,11 +156,25 @@ pub(crate) fn compile_scanner_states(
 
   let items = generate_scanner_symbol_items(symbols, j);
 
-  let (t, _) = construct_recursive_descent(j, true, &items);
+  let t = match construct_recursive_descent(j, true, &items) {
+    HCResult::Ok((t, _)) => t,
+    HCResult::Err(err) => {
+      j.report_mut().stop_timer("RD Compilation");
+      j.report_mut().add_error(err);
+      return HCResult::None;
+    }
+    // Only expecting single errors to be ejected by these functions.
+    _ => return HCResult::None,
+  };
 
   let rd_states = construct_ir(j, &state_name, &t)?;
 
   j.report_mut().stop_timer("RD Compilation");
+
+  #[cfg(debug_assertions)]
+  {
+    j.report_mut().add_note("RD Graph Nodes", t.write_nodes());
+  }
 
   HCResult::Ok(rd_states)
 }
@@ -208,7 +255,7 @@ pub fn compile_states(
           for error in errors {
             println!("{}", error);
           }
-          panic!("Failed due to previous errors");
+          return HCResult::None;
         }
         _ => {}
       }

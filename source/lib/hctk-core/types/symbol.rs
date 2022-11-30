@@ -1,9 +1,13 @@
-use super::{GrammarId, GrammarIds, GrammarStore, HCResult, ProductionId, Token};
+use super::{GrammarId, GrammarRef, GrammarStore, HCResult, ProductionId, Token};
 use crate::{
   grammar::uuid::hash_id_value_u64,
   utf8::lookup_table::{HORIZONTAL_TAB, IDENTIFIER, NEW_LINE, NUMBER, SPACE, SYMBOL},
 };
-use std::{collections::BTreeMap, fmt::Display, sync::Arc};
+use std::{
+  collections::{BTreeMap, BTreeSet},
+  fmt::Display,
+  sync::Arc,
+};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
 pub struct StringId(pub u64);
@@ -343,7 +347,7 @@ pub struct Symbol {
   /// The first location this symbol was identified
   pub loc:           Token,
 
-  pub g_ref: Option<Arc<GrammarIds>>,
+  pub g_ref: Option<Arc<GrammarRef>>,
 }
 
 impl Symbol {
@@ -428,3 +432,15 @@ pub type SymbolsTable = BTreeMap<SymbolUUID, Symbol>;
 
 /// A table that contains symbols defined by their class_id
 pub type ExportSymbolsTable = BTreeMap<SymbolID, Symbol>;
+
+pub type SymbolSet = BTreeSet<SymbolID>;
+
+#[derive(Debug, PartialEq, PartialOrd, Clone, Copy, Hash, Eq, Ord, Default)]
+/// Identifies a Scanner for a particular set of SymbolIds
+pub struct ScannerId(u64);
+
+impl ScannerId {
+  pub fn new(symbol_set: &SymbolSet) -> Self {
+    Self(hash_id_value_u64(symbol_set))
+  }
+}

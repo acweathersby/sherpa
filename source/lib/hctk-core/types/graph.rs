@@ -266,11 +266,6 @@ impl GraphNode {
     self.transition_items.first().cloned().unwrap()
   }
 
-  #[deprecated]
-  pub fn is_out_of_scope(&self) -> bool {
-    return self.transition_items[0].get_state().is_goto_end_origin();
-  }
-
   pub fn new(
     t_pack: &TransitionGraph,
     sym: SymbolID,
@@ -380,7 +375,10 @@ impl GraphNode {
       self.node_type.to_string(),
       if self.is(NodeAttributes::I_LR) { " LR" } else { "" },
       self
-        .get_unique_transition_item_set()
+        .transition_items
+        .clone()
+        .to_origin_only_state()
+        .to_set()
         .iter()
         .map(|i| "   ".to_string() + &i.debug_string(g))
         .collect::<Vec<_>>()
@@ -610,10 +608,6 @@ impl TransitionGraph {
     &mut self.graph_nodes[node_index]
   }
 
-  pub fn clear_peek_data(&mut self) {
-    self.peek_ids.clear();
-  }
-
   pub fn nodes_iter(&self) -> core::slice::Iter<GraphNode> {
     self.graph_nodes.iter()
   }
@@ -638,6 +632,17 @@ impl TransitionGraph {
 
   pub fn get_node_len(&self) -> usize {
     self.graph_nodes.len()
+  }
+
+  pub fn write_nodes(&self) -> String {
+    let mut string = String::new();
+    for node in &self.graph_nodes {
+      if !node.is_orphan(self) || node.id.0 == 0 {
+        string += &format!("\n{}\n", node.debug_string(&self.g));
+      }
+    }
+
+    string
   }
 
   pub fn print_nodes(&self) {

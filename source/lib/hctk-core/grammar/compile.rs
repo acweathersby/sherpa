@@ -16,8 +16,7 @@ use crate::{
     load::{get_usable_thread_count, load_all},
     parse::compile_ascript_ast,
   },
-  intermediate::utils::generate_scanner_symbol_items,
-  journal::Journal,
+  journal::{report::ReportType, Journal},
   types,
   types::*,
 };
@@ -48,6 +47,7 @@ struct SymbolData<'a> {
 /// A single GrammarStore. This function assumes the first Grammar is
 /// the root grammar.
 pub fn compile_grammars_into_store(
+  j: &mut Journal,
   grammars: Vec<(PathBuf, ImportedGrammarReferences, Box<Grammar>)>,
 ) -> HCResult<(Option<Arc<GrammarStore>>, Option<Vec<HCError>>)> {
   if grammars.is_empty() {
@@ -60,11 +60,13 @@ pub fn compile_grammars_into_store(
       .chunks(grammars.len().div_ceil(number_of_threads))
       .into_iter()
       .map(|chunk| {
-        s.spawn(|| {
+        let mut j = j.transfer();
+        s.spawn(move || {
           chunk
             .iter()
             .map(|(absolute_path, import_refs, grammar)| {
               let (grammar, errors) = pre_process_grammar(
+                &mut j,
                 &grammar,
                 absolute_path,
                 absolute_path
@@ -95,10 +97,10 @@ pub fn compile_grammars_into_store(
 
     let mut grammar = Arc::try_unwrap(grammars.pop().unwrap()).unwrap();
 
-    merge_grammars(&mut grammar, &rest, &mut errors);
+    merge_grammars(j, &mut grammar, &rest, &mut errors);
 
     if errors.is_empty() {
-      let grammar = finalize_grammar(grammar, &mut errors, number_of_threads);
+      let grammar = finalize_grammar(j, grammar, &mut errors, number_of_threads);
 
       if errors.is_empty() {
         HCResult::Ok((Some(Arc::new(grammar)), None))
@@ -123,7 +125,7 @@ fn test_compile_grammars_into_store() {
     10,
   );
 
-  let result = compile_grammars_into_store(grammars);
+  let result = compile_grammars_into_store(&mut j, grammars);
 
   assert!(result.is_ok());
 
@@ -143,10 +145,18 @@ fn test_compile_grammars_into_store() {
 
 /// Create scanner productions and data caches, and converts ids to tokens.
 fn finalize_grammar(
+  j: &mut Journal,
   mut g: GrammarStore,
   mut e: &mut Vec<HCError>,
   thread_count: usize,
 ) -> GrammarStore {
+  j.set_active_report(
+    &format!("Grammar [{}] Compilation", g.id.name),
+    ReportType::GrammarCompile(g.id.guid),
+  );
+
+  j.report_mut().start_timer("Finalize");
+
   create_scanner_productions_from_symbols(&mut g, e);
 
   if check_for_missing_productions(&g, e) || e.have_critical() {
@@ -164,6 +174,8 @@ fn finalize_grammar(
   set_parse_productions(&mut g);
 
   finalize_bytecode_metadata(&mut g, e);
+
+  j.report_mut().stop_timer("Finalize");
 
   g
 }
@@ -207,10 +219,18 @@ fn set_parse_productions(g: &mut GrammarStore) {
 /// grammars are all other GrammarStores derived from grammars
 /// imported directly or indirectly from the root source grammar.
 fn merge_grammars(
+  j: &mut Journal,
   g: &mut GrammarStore,
   foreign_grammars: &[Arc<GrammarStore>],
   e: &mut Vec<HCError>,
 ) {
+  j.set_active_report(
+    &format!("Grammar [{}] Compilation", g.id.name),
+    ReportType::GrammarCompile(g.id.guid),
+  );
+
+  j.report_mut().start_timer("Merge");
+
   let grammar_lu = HashMap::<GrammarId, Arc<GrammarStore>>::from_iter(
     foreign_grammars.iter().map(|g| (g.id.guid, g.clone())),
   );
@@ -279,7 +299,7 @@ fn merge_grammars(
           Some(production) => {
             // Import all bodies referenced by this foreign production
             let bodies = import_g.production_bodies.get(&prod_id).unwrap().clone();
-            for body in bodies.iter().map(|b| import_g.bodies.get(&b).unwrap()).cloned() {
+            for body in bodies.iter().map(|b| import_g.rules.get(&b).unwrap()).cloned() {
               // Add every Production symbol to the queue
               symbol_queue.append(
                 &mut body
@@ -313,7 +333,7 @@ fn merge_grammars(
                   .collect(),
               );
 
-              g.bodies.insert(body.id, body);
+              g.rules.insert(body.id, body);
             }
 
             // Import the mapping of the foreign production_id to the foreign body_ids
@@ -343,7 +363,7 @@ fn merge_grammars(
         // extend the existing bodies with the new bodies
         let body_count = insert_bodes(g, &prod_id, bodies).len();
 
-        g.productions.get_mut(&prod_id).unwrap().number_of_bodies = body_count as u16;
+        g.productions.get_mut(&prod_id).unwrap().number_of_rules = body_count as u16;
       }
       false => e.push(HCError::grammar_err {
         message: "Warning: Attempt to extend a non existent production".to_string(),
@@ -353,12 +373,14 @@ fn merge_grammars(
       }),
     }
   }
+
+  j.report_mut().stop_timer("Merge");
 }
 
 fn check_for_missing_productions(g: &GrammarStore, e: &mut Vec<HCError>) -> bool {
   let mut have_missing_production = false;
   // Check for missing productions referenced in body symbols
-  for (id, b) in &g.bodies {
+  for (id, b) in &g.rules {
     for sym in &b.syms {
       match sym.sym_id {
         SymbolID::TokenProduction(prod_id, _) | SymbolID::Production(prod_id, _) => {
@@ -380,12 +402,12 @@ fn check_for_missing_productions(g: &GrammarStore, e: &mut Vec<HCError>) -> bool
 
 /// Adds bytecode identifiers to relevant objects.
 fn finalize_bytecode_metadata(g: &mut GrammarStore, e: &mut [HCError]) {
-  let GrammarStore { parse_productions, productions, bodies, .. } = g;
+  let GrammarStore { parse_productions, productions, rules: bodies, .. } = g;
 
   for (index, body) in
     bodies.values_mut().filter(|(b)| parse_productions.contains(&b.prod_id)).enumerate()
   {
-    body.bc_id = index as u32;
+    body.bytecode_id = index as u32;
   }
 
   for (index, prod_id) in parse_productions.iter().enumerate() {
@@ -475,7 +497,7 @@ fn finalize_items(g: &mut GrammarStore, thread_count: usize, errors: &mut [HCErr
           let mut pending_items = VecDeque::<Item>::from_iter(work.iter().cloned());
 
           while let Some(item) = pending_items.pop_front() {
-            let item = item.to_zero_state();
+            let item = item.to_empty_state();
 
             if !item.completed() {
               let peek_symbols =
@@ -502,8 +524,8 @@ fn finalize_items(g: &mut GrammarStore, thread_count: usize, errors: &mut [HCErr
       .flat_map(move |s| s.join().unwrap())
       .collect::<Vec<_>>()
   }) {
-    g.item_ignore_symbols.insert(item.to_zero_state(), peek_symbols);
-    g.closures.insert(item.to_zero_state(), closure);
+    g.item_ignore_symbols.insert(item.to_empty_state(), peek_symbols);
+    g.closures.insert(item.to_empty_state(), closure);
   }
 
   for closure in g.closures.values().cloned() {
@@ -634,9 +656,9 @@ fn create_scanner_productions_from_symbols(g: &mut GrammarStore, e: &mut Vec<HCE
               sym_id: SymbolID::Production(prod_id, g.id.guid),
               ..Default::default()
             },
-            vec![types::Body {
+            vec![types::Rule {
               len: 1,
-              syms: vec![BodySymbol {
+              syms: vec![RuleSymbol {
                 consumable: true,
                 scanner_length: 1,
                 sym_id,
@@ -695,7 +717,7 @@ fn create_scanner_productions_from_symbols(g: &mut GrammarStore, e: &mut Vec<HCE
                   .iter()
                   .enumerate()
                   .map(|(body_index, body_id)| {
-                    let natural_body = g.bodies.get(body_id).unwrap();
+                    let natural_body = g.rules.get(body_id).unwrap();
 
                     let scanner_symbols = natural_body.syms.iter().flat_map(|sym| {
                       let sym_id = &sym.sym_id;
@@ -716,7 +738,7 @@ fn create_scanner_productions_from_symbols(g: &mut GrammarStore, e: &mut Vec<HCE
 
                           scanner_production_queue.push_back(*sym_id);
 
-                          vec![BodySymbol {
+                          vec![RuleSymbol {
                             consumable: true,
                             exclusive: sym.exclusive,
                             scanner_length: 1,
@@ -730,7 +752,7 @@ fn create_scanner_productions_from_symbols(g: &mut GrammarStore, e: &mut Vec<HCE
 
                           scanner_production_queue.push_back(*sym_id);
 
-                          vec![BodySymbol {
+                          vec![RuleSymbol {
                             consumable: true,
                             exclusive: sym.is_exclusive(),
                             scanner_length: 1,
@@ -743,10 +765,10 @@ fn create_scanner_productions_from_symbols(g: &mut GrammarStore, e: &mut Vec<HCE
                       }
                     });
 
-                    let syms: Vec<BodySymbol> = scanner_symbols.collect();
+                    let syms: Vec<RuleSymbol> = scanner_symbols.collect();
 
-                    Body {
-                      id: BodyId::new(&scanner_production_id, body_index),
+                    Rule {
+                      id: RuleId::new(&scanner_production_id, body_index),
                       len: syms.len() as u16,
                       prod_id: scanner_production_id,
                       syms,
@@ -790,7 +812,7 @@ fn convert_scanner_symbol_to_production(
         // token productions.
         let new_body_symbols =
           create_defined_symbols_from_string(g, symbol_string, origin_location.clone());
-        Body {
+        Rule {
           len: new_body_symbols.len() as u16,
           syms: new_body_symbols,
           prod_id,
@@ -825,10 +847,10 @@ fn create_defined_symbols_from_string(
   g: &mut GrammarStore,
   symbol_string: &str,
   loc: Token,
-) -> Vec<BodySymbol> {
+) -> Vec<RuleSymbol> {
   let chars: Vec<char> = symbol_string.chars().collect();
 
-  let new_body_symbols: Vec<BodySymbol> = chars
+  let new_body_symbols: Vec<RuleSymbol> = chars
     .iter()
     .enumerate()
     .map(|(index, byte)| {
@@ -851,7 +873,7 @@ fn create_defined_symbols_from_string(
         }
       });
 
-      BodySymbol {
+      RuleSymbol {
         consumable: true,
         scanner_index: index as u32,
         scanner_length: chars.len() as u32,
@@ -906,21 +928,29 @@ pub(crate) fn get_scanner_info_from_defined(
 ///
 /// - `grammar` - A hcg AST node
 /// - `source` - The source string of the hcg.
-/// - `absolute_path` - The absolute path of the hcg's source file
+/// - `path` - The absolute path of the hcg's source file
 ///   Used to resolve linked grammars.
 ///  
 
 pub fn pre_process_grammar<'a>(
+  j: &mut Journal,
   ast: &'a ast::Grammar,
   path: &PathBuf,
   name: &'a str,
   imports: ImportedGrammarReferences,
 ) -> (GrammarStore, Vec<HCError>) {
   let mut g = GrammarStore {
-    id: GrammarIds::new(name.to_string(), path.clone()),
+    id: GrammarRef::new(name.to_string(), path.clone()),
     imports,
     ..Default::default()
   };
+
+  j.set_active_report(
+    &format!("Grammar [{}] Compilation", name),
+    ReportType::GrammarCompile(g.id.guid),
+  );
+
+  j.report_mut().start_timer("Compile Time");
 
   let mut global_ignore_symbols = vec![];
   let mut e = vec![];
@@ -932,7 +962,7 @@ pub fn pre_process_grammar<'a>(
     for obj in ast.preamble.iter() {
       match obj {
         ASTNode::Name(box ast::Name { name }) => {
-          g.id = GrammarIds::new(name.to_string(), path.clone());
+          g.id = GrammarRef::new(name.to_string(), path.clone());
         }
         ASTNode::Ignore(box ast::Ignore { symbols }) => {
           for symbol in symbols {
@@ -1008,11 +1038,14 @@ pub fn pre_process_grammar<'a>(
   g.production_ignore_symbols =
     g.productions.keys().map(|k| (*k, global_ignore_symbols.clone())).collect::<HashMap<_, _>>();
 
+  j.report_mut().stop_timer("Compile Time");
+
   (g, e)
 }
 
 #[test]
 fn test_pre_process_grammar() {
+  let mut j = Journal::new(None);
   let grammar = String::from(
       "\n@IMPORT ./test/me/out.hcg as bob 
       <> a > tk:p?^test a(+,) ( \\1234 | t:sp? ( sp | g:sym g:sp ) f:r { basalt } ) \\nto <> b > tk:p p ",
@@ -1020,7 +1053,7 @@ fn test_pre_process_grammar() {
 
   if let Ok(grammar) = compile_grammar_ast(Vec::from(grammar.as_bytes())) {
     let (grammar, errors) =
-      pre_process_grammar(&grammar, &PathBuf::from("/test"), "test", Default::default());
+      pre_process_grammar(&mut j, &grammar, &PathBuf::from("/test"), "test", Default::default());
 
     for error in &errors {
       eprintln!("{}", error);
@@ -1211,7 +1244,7 @@ fn get_grammar_info_from_node<'a>(
   node: &'a ASTNode,
   g: &'a GrammarStore,
   e: &mut Vec<HCError>,
-) -> Option<Arc<GrammarIds>> {
+) -> Option<Arc<GrammarRef>> {
   match get_production_symbol(node, g) {
     Some(ASTNode::Production_Import_Symbol(prod_imp_sym)) => {
       let production_name = &prod_imp_sym.name;
@@ -1321,11 +1354,11 @@ pub fn convert_left_recursion_to_right(
   let body_ids = g.production_bodies.get(&a_prod_id).unwrap().clone();
 
   let bodies =
-    body_ids.iter().map(|body_id| g.bodies.get(body_id).unwrap().clone()).collect::<Vec<_>>();
+    body_ids.iter().map(|body_id| g.rules.get(body_id).unwrap().clone()).collect::<Vec<_>>();
 
   let bodies = body_ids
     .iter()
-    .map(|body_id| g.bodies.get(body_id).unwrap())
+    .map(|body_id| g.rules.get(body_id).unwrap())
     .map(|b| match b.syms[0].sym_id {
       SymbolID::Production(p, _) => (b.id, p == a_prod.id),
       SymbolID::TokenProduction(p, _) => (b.id, p == a_prod.id),
@@ -1346,7 +1379,7 @@ pub fn convert_left_recursion_to_right(
     id: a_prime_prod_id,
     guid_name: a_prime_prod_guid_name,
     name: a_prime_prod_name,
-    number_of_bodies: (left_bodies.len() * 2) as u16,
+    number_of_rules: (left_bodies.len() * 2) as u16,
     loc: a_token.clone(),
     is_scanner: a_prod.is_scanner,
     sym_id: if a_prod.is_scanner {
@@ -1357,7 +1390,7 @@ pub fn convert_left_recursion_to_right(
     ..Default::default()
   };
 
-  let a_prim_sym = BodySymbol {
+  let a_prim_sym = RuleSymbol {
     sym_id: SymbolID::Production(a_prime_prod_id, g.id.guid),
     consumable: true,
     tok: a_token.clone(),
@@ -1369,14 +1402,14 @@ pub fn convert_left_recursion_to_right(
     .iter()
     .enumerate()
     .flat_map(|(i, b)| {
-      let body = g.bodies.get(b).unwrap();
+      let body = g.rules.get(b).unwrap();
 
       let mut body_a = body.clone();
       let mut body_b = body.clone();
 
       body_b.syms.push(a_prim_sym.clone());
-      body_a.id = BodyId::new(&a_prod_id, i * 2);
-      body_b.id = BodyId::new(&a_prod_id, i * 2 + 1);
+      body_a.id = RuleId::new(&a_prod_id, i * 2);
+      body_b.id = RuleId::new(&a_prod_id, i * 2 + 1);
       body_a.len = body_a.syms.len() as u16;
       body_b.len = body_b.syms.len() as u16;
 
@@ -1388,7 +1421,7 @@ pub fn convert_left_recursion_to_right(
     .iter()
     .enumerate()
     .flat_map(|(i, b)| {
-      let body = g.bodies.get(b).unwrap();
+      let body = g.rules.get(b).unwrap();
       let mut body_a = body.clone();
       let mut body_b = body.clone();
       body_a.prod_id = a_prime_prod_id;
@@ -1396,8 +1429,8 @@ pub fn convert_left_recursion_to_right(
       body_a.syms.remove(0);
       body_b.syms.remove(0);
       body_b.syms.push(a_prim_sym.clone());
-      body_a.id = BodyId::new(&a_prime_prod_id, i * 2);
-      body_b.id = BodyId::new(&a_prime_prod_id, i * 2 + 1);
+      body_a.id = RuleId::new(&a_prime_prod_id, i * 2);
+      body_b.id = RuleId::new(&a_prime_prod_id, i * 2 + 1);
       body_a.len = body_a.syms.len() as u16;
       body_b.len = body_b.syms.len() as u16;
       vec![body_a, body_b]
@@ -1415,12 +1448,12 @@ pub fn convert_left_recursion_to_right(
 
   for b in new_A_bodies {
     let id = b.id;
-    g.bodies.insert(id, b);
+    g.rules.insert(id, b);
   }
 
   for b in new_B_bodies {
     let id = b.id;
-    g.bodies.insert(id, b);
+    g.rules.insert(id, b);
   }
 
   (a_prod_id, a_prime_prod_id)
@@ -1450,7 +1483,7 @@ fn create_body_vectors(
   g: &mut GrammarStore,
   list_index: &mut u32,
   e: &mut Vec<HCError>,
-) -> (Vec<(Token, Vec<BodySymbol>)>, Vec<Box<ast::Production>>) {
+) -> (Vec<(Token, Vec<RuleSymbol>)>, Vec<Box<ast::Production>>) {
   let mut bodies = vec![];
   let mut productions = vec![];
 
@@ -1710,7 +1743,7 @@ fn create_body_vectors(
 
       if let Some(id) = intern_symbol(sym, g, e) {
         for (_, vec) in &mut bodies[original_bodies] {
-          vec.push(BodySymbol {
+          vec.push(RuleSymbol {
             original_index: *index as u32,
             sym_id: id,
             annotation: annotation.clone(),
@@ -1734,7 +1767,7 @@ fn pre_process_body(
   g: &mut GrammarStore,
   list_index: &mut u32,
   e: &mut Vec<HCError>,
-) -> (Vec<types::Body>, Vec<Box<ast::Production>>) {
+) -> (Vec<types::Rule>, Vec<Box<ast::Production>>) {
   match get_productions_names(production, g, e) {
     Some((_, prod_name)) => {
       let (bodies, productions) = create_body_vectors(
@@ -1774,9 +1807,9 @@ fn pre_process_body(
       let mut seen = HashSet::new();
 
       for (t, b) in bodies {
-        let sym = BodyId::from_syms(&b.iter().map(|s| s.sym_id).collect::<Vec<_>>());
+        let sym = RuleId::from_syms(&b.iter().map(|s| s.sym_id).collect::<Vec<_>>());
         if !seen.contains(&sym) {
-          unique_bodies.push(types::Body {
+          unique_bodies.push(types::Rule {
             syms: b.clone(),
             len: b.len() as u16,
             prod_id: get_prod_id(production, g, e),
@@ -2030,10 +2063,10 @@ fn get_symbol_details<'a>(
 }
 
 #[inline]
-fn insert_production(g: &mut GrammarStore, mut prod: Production, bodies: Vec<types::Body>) {
+fn insert_production(g: &mut GrammarStore, mut prod: Production, bodies: Vec<types::Rule>) {
   let prod_id = prod.id;
 
-  prod.number_of_bodies = insert_bodes(g, &prod_id, bodies).len() as u16;
+  prod.number_of_rules = insert_bodes(g, &prod_id, bodies).len() as u16;
 
   g.productions.insert(prod_id, prod);
 }
@@ -2042,17 +2075,17 @@ fn insert_production(g: &mut GrammarStore, mut prod: Production, bodies: Vec<typ
 fn insert_bodes(
   g: &mut GrammarStore,
   prod_id: &ProductionId,
-  bodies: Vec<types::Body>,
-) -> Vec<BodyId> {
+  bodies: Vec<types::Rule>,
+) -> Vec<RuleId> {
   let offset_index = g.production_bodies.get(&prod_id).map_or(0, |b| b.len());
 
   let body_ids = bodies
     .into_iter()
     .enumerate()
     .map(|(i, mut b)| {
-      let id = BodyId::new(&prod_id, offset_index + i);
+      let id = RuleId::new(&prod_id, offset_index + i);
       b.id = id;
-      g.bodies.insert(id, b);
+      g.rules.insert(id, b);
       id
     })
     .collect::<Vec<_>>();

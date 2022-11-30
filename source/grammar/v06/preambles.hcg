@@ -26,7 +26,7 @@
 # `g:num(*,)` would match inputs of one or more series integers separated by a comma, 
 # such as `1,2,3,4,5,6,7,8,9`, `123456789`, or `12,345,6789`.
 
-# TODO: Detailed annotation on production body separator `|`
+# TODO: Detailed annotation on production rule separator `|`
 
 <> preamble_clause >  ignore_preamble
     | import_preamble
@@ -39,9 +39,9 @@
 # In either the Constructor Reduce function or the Return Expression Reduce function
 # the symbols of the production can be addressed using the $ operator, which resolves
 # to the index location of the terminal symbol or non-terminal production within the 
-# production body. In the following case, $3 resolves to the third symbol in the proceeding
-# precedence_preamble body, sym::terminal_symbol ( keep in mind [(ERR g:sp)] is a meta object 
-# and is not an actual symbol of the production body). $4 resolves to the g:num symbol.
+# production rule. In the following case, $3 resolves to the third symbol in the proceeding
+# precedence_preamble rule, sym::terminal_symbol ( keep in mind [(ERR g:sp)] is a meta object 
+# and is not an actual symbol of the production rule). $4 resolves to the g:num symbol.
                                                   
 
 <> ignore_preamble >         \@IGNORE sym::ignore_symbols g:nl                

@@ -36,7 +36,7 @@ impl AScriptPropId {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd, Default)]
 pub struct TaggedType {
   pub type_:        AScriptTypeVal,
-  pub tag:          BodyId,
+  pub tag:          RuleId,
   pub symbol_index: u32,
 }
 
@@ -44,7 +44,7 @@ impl TaggedType {
   pub fn sanitize(self) -> Self {
     Self {
       symbol_index: 0,
-      tag:          BodyId::default(),
+      tag:          RuleId::default(),
       type_:        self.type_,
     }
   }
@@ -66,14 +66,14 @@ impl Into<AScriptTypeVal> for &TaggedType {
   }
 }
 
-impl Into<BodyId> for TaggedType {
-  fn into(self) -> BodyId {
+impl Into<RuleId> for TaggedType {
+  fn into(self) -> RuleId {
     self.tag
   }
 }
 
-impl Into<BodyId> for &TaggedType {
-  fn into(self) -> BodyId {
+impl Into<RuleId> for &TaggedType {
+  fn into(self) -> RuleId {
     self.tag
   }
 }
@@ -405,10 +405,10 @@ num_type!(AScriptTypeValI8, I8, i8, i8);
 pub struct AScriptProp {
   pub type_val:    TaggedType,
   pub location:    Token,
-  pub grammar_ref: Arc<GrammarIds>,
+  pub grammar_ref: Arc<GrammarRef>,
   /// Tracks the number of times this property has been
   /// declared in a struct.
-  pub body_ids:    BTreeSet<BodyId>,
+  pub body_ids:    BTreeSet<RuleId>,
   pub optional:    bool,
 }
 
@@ -418,12 +418,12 @@ pub struct AScriptStruct {
   pub type_name: String,
   pub prop_ids: BTreeSet<AScriptPropId>,
   /// Tracks the number of times this struct has been defined
-  pub body_ids: BTreeSet<BodyId>,
+  pub body_ids: BTreeSet<RuleId>,
   pub definition_locations: BTreeSet<Token>,
   pub include_token: bool,
 }
 
-pub type ProductionTypesTable = BTreeMap<ProductionId, HashMap<TaggedType, BTreeSet<BodyId>>>;
+pub type ProductionTypesTable = BTreeMap<ProductionId, HashMap<TaggedType, BTreeSet<RuleId>>>;
 
 #[derive(Debug)]
 pub struct AScriptStore {
@@ -431,7 +431,7 @@ pub struct AScriptStore {
   pub structs: BTreeMap<AScriptStructId, AScriptStruct>,
   pub props: BTreeMap<AScriptPropId, AScriptProp>,
   pub prod_types: ProductionTypesTable,
-  pub body_reduce_fn: BTreeMap<BodyId, (AScriptTypeVal, ASTNode)>,
+  pub body_reduce_fn: BTreeMap<RuleId, (AScriptTypeVal, ASTNode)>,
   pub name: String,
   pub g: Arc<GrammarStore>,
   pub struct_lookups: Option<Arc<BTreeMap<AScriptStructId, String>>>,

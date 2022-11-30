@@ -39,8 +39,8 @@ pub fn build_llvm_parser(
   PipelineTask {
     fun: Box::new(move |task_ctx| {
       let output_path = task_ctx.get_build_output_dir();
-      let parser_name = task_ctx.get_parser_name();
-      let grammar = task_ctx.get_grammar();
+      let grammar = task_ctx.get_journal().grammar().unwrap();
+      let parser_name = grammar.id.name.clone();
 
       let Some(bytecode) = task_ctx.get_bytecode() else {
         return Err(vec![HCError::from("Cannot compile LLVM parse: Bytecode is not available")]);
@@ -65,8 +65,12 @@ pub fn build_llvm_parser(
 
       // Write out llvm module to file
 
-      match crate::llvm::compile_from_bytecode(&parser_name, grammar, &Context::create(), &bytecode)
-      {
+      match crate::llvm::compile_from_bytecode(
+        &parser_name,
+        &grammar,
+        &Context::create(),
+        &bytecode,
+      ) {
         Ok(ctx) => {
           let opt = OptimizationLevel::Default;
 
@@ -150,9 +154,8 @@ pub fn build_llvm_parser(
 pub fn build_llvm_parser_interface<'a>(include_ascript_mixins: bool) -> PipelineTask {
   PipelineTask {
     fun: Box::new(move |task_ctx| {
-      let parser_name = task_ctx.get_parser_name();
-      let grammar_name = task_ctx.get_grammar_name();
-      let grammar = task_ctx.get_grammar();
+      let grammar = task_ctx.get_journal().grammar().unwrap();
+      let parser_name = grammar.id.name.clone();
 
       let Some(bytecode) = task_ctx.get_bytecode() else {
         return Err(vec![HCError::from("Cannot compile LLVM Parser Interface: Bytecode is not available")]);
@@ -166,8 +169,8 @@ pub fn build_llvm_parser_interface<'a>(include_ascript_mixins: bool) -> Pipeline
           match write_rust_parser(
             &mut writer,
             &bytecode.state_name_to_offset,
-            grammar,
-            &grammar_name,
+            &grammar,
+            &parser_name,
             &parser_name,
             if include_ascript_mixins { task_ctx.get_ascript() } else { None },
           ) {

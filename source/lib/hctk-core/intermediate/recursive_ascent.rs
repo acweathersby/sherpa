@@ -82,7 +82,7 @@ pub(crate) fn construct_recursive_ascent(
           .get(&production_id)
           .unwrap_or(&Vec::new())
           .iter()
-          .filter(|i| !group.iter().any(|g| *g == **i))
+          .filter(|i| !group.iter().any(|g| (*g).to_empty_state() == (**i).to_empty_state()))
           .map(|i| i.increment().unwrap().to_state(ItemState::GOTO_ROOT_END_GOAL_STATE))
           .collect();
 
@@ -91,7 +91,7 @@ pub(crate) fn construct_recursive_ascent(
       }
       let items = goto_node.transition_items.clone().to_set().to_vec();
       let node_index = t.insert_node(goto_node);
-      items.print_items(&t.g, " GOTO + OoutOFScope");
+
       t.queue_node(ProcessGroup { node_index, items, ..Default::default() });
     } else {
       let node_index = t.insert_node(goto_node);

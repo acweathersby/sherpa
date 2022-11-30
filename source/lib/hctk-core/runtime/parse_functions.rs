@@ -13,7 +13,7 @@ pub fn dispatch<T: BaseCharacterReader + MutCharacterReader>(
   let mut i = (ctx.get_active_state() & STATE_ADDRESS_MASK);
 
   loop {
-    //println!("instr: {:0>6x} {} b: {} cp: {} cls: {}", i, r.cursor(), r.byte(), r.codepoint(), r.class());
+    // println!("instr: {:0>6x} {} b: {} cp: {} cls: {}", i, r.cursor(), r.byte(), r.codepoint(), r.class());
 
     let instr = INSTRUCTION::from(bc, i as usize);
 
@@ -99,9 +99,9 @@ fn reduce<T: BaseCharacterReader + MutCharacterReader>(
   (
     if symbol_count == 0x0FFF {
       todo!("Acquire symbol count from symbol accumulator");
-      ParseAction::Reduce { production_id, body_id, symbol_count: 0 }
+      ParseAction::Reduce { production_id, rule_id: body_id, symbol_count: 0 }
     } else {
-      ParseAction::Reduce { production_id, body_id, symbol_count }
+      ParseAction::Reduce { production_id, rule_id: body_id, symbol_count }
     },
     i + 1,
   )
@@ -322,61 +322,59 @@ fn get_token_value<T: BaseCharacterReader + MutCharacterReader>(
         }
     };
 
-    match input_type {
+  match input_type {
+    INPUT_TYPE::T03_CLASS => {
+      active_token.byte_length = r.codepoint_byte_length();
+      active_token.cp_length = r.codepoint_length();
 
-      INPUT_TYPE::T03_CLASS => {
-        active_token.byte_length = r.codepoint_byte_length();
-        active_token.cp_length = r.codepoint_length();
-
-        if ctx.in_peek_mode() {
-          ctx.peek = active_token;
-        } else {
-          ctx.assert = active_token;
-        }
-
-        r.class() as i32
+      if ctx.in_peek_mode() {
+        ctx.peek = active_token;
+      } else {
+        ctx.assert = active_token;
       }
 
-      INPUT_TYPE::T04_CODEPOINT => {
-        active_token.byte_length = r.codepoint_byte_length();
-        active_token.cp_length = r.codepoint_length();
+      r.class() as i32
+    }
 
-        if ctx.in_peek_mode() {
-          ctx.peek = active_token;
-        } else {
-          ctx.assert = active_token;
-        }
+    INPUT_TYPE::T04_CODEPOINT => {
+      active_token.byte_length = r.codepoint_byte_length();
+      active_token.cp_length = r.codepoint_length();
 
-        r.codepoint() as i32
+      if ctx.in_peek_mode() {
+        ctx.peek = active_token;
+      } else {
+        ctx.assert = active_token;
       }
 
-      INPUT_TYPE::T05_BYTE => {
-        active_token.byte_length = 1;
-        active_token.cp_length = 1;
+      r.codepoint() as i32
+    }
 
-        if ctx.in_peek_mode() {
-          ctx.peek = active_token;
-        } else {
-          ctx.assert = active_token;
-        }
-        r.byte() as i32
+    INPUT_TYPE::T05_BYTE => {
+      active_token.byte_length = 1;
+      active_token.cp_length = 1;
+
+      if ctx.in_peek_mode() {
+        ctx.peek = active_token;
+      } else {
+        ctx.assert = active_token;
+      }
+      r.byte() as i32
+    }
+
+    _ => {
+      debug_assert!(!ctx.is_scanner());
+
+      let scanned_token = token_scan(active_token, scan_index, ctx, r, bc);
+
+      if ctx.in_peek_mode() {
+        ctx.peek = scanned_token;
+      } else {
+        ctx.assert = scanned_token;
       }
 
-      _ => {
-        debug_assert!(!ctx.is_scanner());
-
-
-        let scanned_token = token_scan(active_token, scan_index, ctx, r, bc);
-
-        if ctx.in_peek_mode() {
-          ctx.peek = scanned_token;
-        } else {
-          ctx.assert = scanned_token;
-        }
-    
-        scanned_token.token_type as i32
-      },
-    } 
+      scanned_token.token_type as i32
+    }
+  }
 }
 
 fn scan_for_improvised_token<T: BaseCharacterReader + MutCharacterReader>(
@@ -422,9 +420,8 @@ fn token_scan<T: BaseCharacterReader + MutCharacterReader>(
   r: &mut T,
   bc: &[u32],
 ) -> ParseToken {
-  
-  if(token.token_type != 0){
-    return token
+  if (token.token_type != 0) {
+    return token;
   }
 
   #[cfg(test)]
@@ -440,14 +437,17 @@ fn token_scan<T: BaseCharacterReader + MutCharacterReader>(
         ctx.set_production_to(id - 1);
       }
 
-      return ParseToken { token_type: SymbolID::EndOfInput.bytecode_id(None), ..Default::default() };
+      return ParseToken {
+        token_type: SymbolID::EndOfInput.bytecode_id(None),
+        ..Default::default()
+      };
     }
   }
 
   r.set_cursor_to(&token);
 
   if r.at_end() {
-    return ParseToken{ token_type:0, ..token};
+    return ParseToken { token_type: 0, ..token };
   }
   // Initialize Scanner
 

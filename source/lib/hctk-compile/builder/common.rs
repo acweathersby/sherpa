@@ -74,8 +74,8 @@ pub fn add_ascript_functions<W: Write>(
             tok:   Token::default(),
             value: "first".to_string(),
           })),
-          &Body {
-            syms: vec![BodySymbol {
+          &Rule {
+            syms: vec![RuleSymbol {
               scanner_index: 1,
               scanner_length: 1,
               sym_id: SymbolID::Production(production.id, GrammarId(0)),
@@ -84,8 +84,8 @@ pub fn add_ascript_functions<W: Write>(
             }],
             len: 1,
             prod_id: production.id,
-            id: BodyId(0),
-            bc_id: 0,
+            id: RuleId(0),
+            bytecode_id: 0,
             reduce_fn_ids: vec![],
             grammar_ref: g.id.clone(),
             tok: Token::default(),

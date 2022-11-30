@@ -1,5 +1,4 @@
-use clap::arg;
-use clap::Command;
+use clap::{arg, Command};
 
 pub fn build_cli() -> Command {
   Command::new("hc-compile")

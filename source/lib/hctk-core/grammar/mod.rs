@@ -18,7 +18,10 @@ pub use production::*;
 pub use uuid::*;
 
 use self::{compile::compile_grammars_into_store, load::load_all, parse::compile_grammar_ast};
-use crate::{journal::Journal, types::*};
+use crate::{
+  journal::{report::ReportType, Journal},
+  types::*,
+};
 
 #[test]
 fn temp_test() {
@@ -38,7 +41,7 @@ fn temp_test() {
     }
   }
 
-  let result = compile_grammars_into_store(grammars);
+  let result = compile_grammars_into_store(&mut j, grammars);
 
   assert!(result.is_ok());
 
@@ -78,9 +81,18 @@ pub fn compile_grammar_from_path(
   path: PathBuf,
   thread_count: usize,
 ) -> (Option<Arc<GrammarStore>>, Option<Vec<HCError>>) {
+  j.set_active_report("General Grammar Compile", ReportType::GrammarCompile(Default::default()));
+  j.report_mut().start_timer("Grammar Compile Time");
+  j.report_mut().add_note("Root Grammar Path", path.to_str().unwrap().to_string());
   match load_all(j, &path, thread_count) {
-    (_, errors) if !errors.is_empty() => (None, Some(errors)),
-    (grammars, _) => compile_grammars_into_store(grammars).unwrap(),
+    (_, errors) if !errors.is_empty() => {
+      j.report_mut().stop_timer("Grammar Compile Time");
+      (None, Some(errors))
+    }
+    (grammars, _) => {
+      j.report_mut().stop_timer("Grammar Compile Time");
+      compile_grammars_into_store(j, grammars).unwrap()
+    }
   }
 }
 
@@ -106,12 +118,19 @@ pub fn compile_grammar_from_string(
   string: &str,
   absolute_path: &PathBuf,
 ) -> (Option<Arc<GrammarStore>>, Option<Vec<HCError>>) {
+  j.set_active_report("General Grammar Compiler", ReportType::GrammarCompile(Default::default()));
+  j.report_mut().start_timer("Compile");
+  j.report_mut().add_note("Source", string.to_string());
   match compile_grammar_ast(Vec::from(string.as_bytes())) {
     Ok(grammar) => {
-      compile_grammars_into_store(vec![(absolute_path.clone(), Default::default(), grammar)])
+      j.report_mut().stop_timer("Compile");
+      compile_grammars_into_store(j, vec![(absolute_path.clone(), Default::default(), grammar)])
         .unwrap()
     }
-    Err(err) => (None, Some(vec![err])),
+    Err(err) => {
+      j.report_mut().stop_timer("Compile");
+      (None, Some(vec![err]))
+    }
   }
 }
 

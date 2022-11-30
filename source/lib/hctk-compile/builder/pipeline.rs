@@ -4,8 +4,10 @@ use hctk_core::{
   compile_grammar_from_path,
   compile_grammar_from_string,
   get_num_of_available_threads,
-  intermediate::{optimize::optimize_ir_states, state::compile_states},
+  intermediate::{compile::compile_states, optimize::optimize_ir_states},
   types::*,
+  Config,
+  Journal,
 };
 use std::{
   fs::{create_dir_all, File},
@@ -44,7 +46,7 @@ pub struct BuildPipeline<'a> {
   tasks: Vec<(PipelineTask, PipelineContext<'a>)>,
   parser_name: String,
   grammar_name: String,
-  grammar: Option<Arc<GrammarStore>>,
+  journal: Journal,
   source_name: Option<String>,
   cached_source: CachedSource,
   proc_context: bool,
@@ -52,6 +54,7 @@ pub struct BuildPipeline<'a> {
 
 impl<'a> BuildPipeline<'a> {
   fn build_pipeline(number_of_threads: usize, cached_source: CachedSource) -> Self {
+    let config = Some(Config { ..Default::default() });
     Self {
       parser_name: "undefined_parser".to_string(),
       grammar_name: "undefined".to_string(),
@@ -62,7 +65,7 @@ impl<'a> BuildPipeline<'a> {
       },
       tasks: vec![],
       ascript_name: None,
-      grammar: None,
+      journal: Journal::new(config),
       ascript: None,
       bytecode: None,
       cached_source,
@@ -148,31 +151,21 @@ impl<'a> BuildPipeline<'a> {
     self
   }
 
+  pub fn get_journal(&self) -> Journal {
+    self.journal.transfer()
+  }
+
   pub fn run<Function: FnOnce(Vec<HCError>)>(
     mut self,
     error_handler: Function,
-  ) -> (Self, Vec<String>, bool) {
+  ) -> HCResult<(Self, Vec<String>, bool)> {
     let mut source_parts = vec![];
     let mut errors = vec![];
 
-    if self.grammar.is_none() {
-      match self.build_grammar() {
-        Err(e) => {
-          error_handler(e);
-
-          // No sense in continuing as there is no grammar for down stream process to work with.
-          return (
-            Self::build_pipeline(self.threads, self.cached_source.to_owned()),
-            vec![],
-            false,
-          );
-        }
-        Ok(_) => {}
-      }
-    }
+    self.build_grammar()?;
 
     self.ascript = if self.tasks.iter().any(|t| t.0.require_ascript) && self.ascript.is_none() {
-      match AScriptStore::new(self.grammar.as_ref().unwrap().clone()) {
+      match AScriptStore::new(self.journal.grammar().unwrap()) {
         HCResult::MultipleErrors(mut e) => {
           errors.append(&mut e);
           None
@@ -186,21 +179,13 @@ impl<'a> BuildPipeline<'a> {
 
     // Build bytecode if needed.
     self.bytecode = if self.tasks.iter().any(|t| t.0.require_bytecode) {
-      let g = self.grammar.as_ref().unwrap();
+      let ir_states = compile_states(&mut self.journal, self.threads)?;
 
-      let (ir_states, mut e) = compile_states(g.clone(), self.threads);
-      let have_critical_errors = e.have_critical();
-      errors.append(&mut e);
+      let ir_states = optimize_ir_states(&mut self.journal, ir_states);
 
-      if !have_critical_errors {
-        let mut optimized_ir_state = optimize_ir_states(ir_states, &g);
+      let bytecode_output = compile_bytecode(&mut self.journal, ir_states);
 
-        let bytecode_output = compile_bytecode(&g, &mut optimized_ir_state);
-
-        Some(bytecode_output)
-      } else {
-        None
-      }
+      Some(bytecode_output)
     } else {
       None
     };
@@ -256,7 +241,8 @@ impl<'a> BuildPipeline<'a> {
       eprintln!("Critical errors have occurred, could not complete build")
     } else {
       if let Some(source_name) = self.source_name.as_ref() {
-        let source_name = source_name.to_string().replace("%", &self.grammar.unwrap().id.name);
+        let source_name =
+          source_name.to_string().replace("%", &self.journal.grammar().unwrap().id.name);
         let source_path = self.build_output_dir.join("./".to_string() + &source_name);
         eprintln!("{:?} {:?}", source_path, self.build_output_dir);
         if let Ok(mut parser_data_file) = std::fs::File::create(&source_path) {
@@ -267,23 +253,19 @@ impl<'a> BuildPipeline<'a> {
       }
     }
 
-    return (
+    HCResult::Ok((
       Self::build_pipeline(self.threads, self.cached_source.to_owned()),
       source_parts,
       !errors.have_critical(),
-    );
+    ))
   }
 
-  fn build_grammar(&mut self) -> Result<(), Vec<HCError>> {
-    match match &self.cached_source {
-      CachedSource::Path(path) => compile_grammar_from_path(path.to_owned(), self.threads),
-      CachedSource::String(string, base_dir) => compile_grammar_from_string(&string, &base_dir),
-    } {
-      (grammar, None) => {
-        self.grammar = grammar;
-        Ok(())
+  fn build_grammar(&mut self) -> HCResult<Arc<GrammarStore>> {
+    match &self.cached_source {
+      CachedSource::Path(path) => GrammarStore::from_path(&mut self.journal, path.clone()),
+      CachedSource::String(string, base_dir) => {
+        GrammarStore::from_str_with_base_dir(&mut self.journal, &string, &base_dir)
       }
-      (_, Some(errors)) => Err(errors),
     }
   }
 }
@@ -350,24 +332,12 @@ impl<'a> PipelineContext<'a> {
     &self.build_output_dir
   }
 
-  pub fn get_grammar(&self) -> &GrammarStore {
-    &self.pipeline.unwrap().grammar.as_ref().unwrap()
+  pub fn get_journal(&self) -> Journal {
+    self.pipeline.unwrap().get_journal()
   }
 
   pub fn get_ascript(&self) -> Option<&AScriptStore> {
     self.pipeline.unwrap().ascript.as_ref()
-  }
-
-  pub fn get_parser_name(&self) -> &String {
-    &self.get_grammar_name()
-  }
-
-  pub fn get_grammar_name(&self) -> &String {
-    &self.get_grammar().id.name
-  }
-
-  pub fn get_grammar_path(&self) -> &PathBuf {
-    &self.get_grammar().id.path
   }
 
   pub fn get_bytecode(&self) -> Option<&BytecodeOutput> {

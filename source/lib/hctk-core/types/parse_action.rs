@@ -18,7 +18,7 @@ pub enum ParseAction {
   },
   Reduce {
     production_id: u32,
-    body_id:       u32,
+    rule_id:       u32,
     symbol_count:  u32,
   },
   Accept {

@@ -40,7 +40,7 @@ pub(super) fn construct_ir(
       let children_lookup = &children_lut[node_id];
 
       // Ensure dependencies are met.
-      for child in children_lookup {
+      for (_, child) in children_lookup {
         if child.id != node_id {
           if !output.contains_key(&child.id) && !leaf_node_set.contains(&child.id) {
             // Push dependency to be processed, which will cause this node
@@ -55,7 +55,14 @@ pub(super) fn construct_ir(
         panic!("Childless node [{}] is not in leaf node set!", node_id);
       }
 
-      let states = create_state(entry_name, t, j, node, children_lookup, &output)?;
+      let states = create_state(
+        entry_name,
+        t,
+        j,
+        node,
+        &children_lookup.values().map(|v| *v).collect::<Vec<_>>(),
+        &output,
+      )?;
 
       for state in states {
         output.insert(state.get_graph_id(), state);
@@ -82,7 +89,7 @@ fn create_state(
   t: &TransitionGraph,
   j: &mut Journal,
   node: &GraphNode,
-  children: &HashSet<&GraphNode>,
+  children: &Vec<&GraphNode>,
   states: &BTreeMap<NodeId, Box<IRState>>,
 ) -> HCResult<Vec<Box<IRState>>> {
   let mut w = CodeWriter::new(vec![]);
@@ -319,8 +326,8 @@ fn create_branch_wrap(
   let postfix = postfix.filter(|_| !matches!(child.node_type, NodeType::Fail | NodeType::Pass));
 
   w.newline()?;
-  match (edge_type) {
-    (EdgeType::Assert) => {
+  match edge_type {
+    EdgeType::Assert => {
       w.write_fmt(format_args!(
         "assert {} [ {}{} ] ( {}{}{} )",
         assert_class,
@@ -436,11 +443,11 @@ fn create_reduce_string(node: &GraphNode, g: &GrammarStore, is_scanner: bool) ->
       }
     }
     (Some(item), false /* not scanner */, false) => {
-      let body = g.bodies.get(&item.get_body_id()).unwrap();
-      let production = g.productions.get(&body.prod_id).unwrap();
+      let rule = g.rules.get(&item.get_rule_id()).unwrap();
+      let production = g.productions.get(&rule.prod_id).unwrap();
       format!(
         "set prod to {} then reduce {} symbols to body {}",
-        production.bytecode_id, body.len, body.bc_id,
+        production.bytecode_id, rule.len, rule.bytecode_id,
       )
     }
     _ => panic!("Invalid Leaf Node"),
@@ -461,20 +468,26 @@ fn get_node_state_name(
   state_name
 }
 
-fn create_parent_to_child_map<'a>(t: &'a TransitionGraph) -> Vec<HashSet<&'a GraphNode>> {
+fn create_parent_to_child_map<'a>(
+  t: &'a TransitionGraph,
+) -> Vec<BTreeMap<SymbolID, &'a GraphNode>> {
   let mut children_tables =
-    t.nodes_iter().map(|_| HashSet::<&'a GraphNode>::new()).collect::<Vec<_>>();
+    t.nodes_iter().map(|_| BTreeMap::<SymbolID, &'a GraphNode>::new()).collect::<Vec<_>>();
   // Starting with the leaf nodes, construct a the reverse
   // edges of our transition graph, converting the relationship
   // child->parent to parent->child
   for child in t.nodes_iter() {
     if child.has_parent(t) {
       if let Some(parent_id) = child.parent.filter(|i| child.id != *i) {
-        children_tables[parent_id].insert(child);
+        if children_tables[parent_id].insert(child.edge_symbol, child).is_some() {
+          panic!("Overriding Node");
+        }
       }
 
       for proxy_parent in &child.proxy_parents {
-        children_tables[*proxy_parent].insert(child);
+        if children_tables[*proxy_parent].insert(child.edge_symbol, child).is_some() {
+          panic!("Overriding Node");
+        }
       }
     }
   }

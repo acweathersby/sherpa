@@ -3,7 +3,12 @@
 //! general enough to be used in modules other than transition, as well.
 
 use crate::{
-  grammar::{get_closure_cached, get_production_start_items, get_scanner_info_from_defined},
+  grammar::{
+    get_closure_cached,
+    get_closure_cached_with_state,
+    get_production_start_items,
+    get_scanner_info_from_defined,
+  },
   journal::Journal,
   types::{Item, ProductionId, RecursionType, SymbolID, *},
 };
@@ -14,16 +19,17 @@ use std::{
 };
 
 /// Remove items that would cause infinite recursion
-pub fn get_valid_starts_RD(
+pub fn get_valid_recursive_descent_start_items(
   starts: &[Item],
   g: &GrammarStore,
   invalid_productions: &BTreeSet<ProductionId>,
 ) -> (Items, Items) {
-  let mut output: BTreeSet<Item> = BTreeSet::new();
+  let mut output: BTreeMap<Item, Item> = BTreeMap::new();
   let mut goto_seeds: BTreeSet<Item> = BTreeSet::new();
+  let starts = starts.to_vec();
 
-  for item in starts {
-    let mut closure = get_closure_cached(item, g).clone();
+  for item in starts.term_item_vec(g).iter().chain(starts.non_term_item_vec(g).iter()) {
+    let mut closure = get_closure_cached_with_state(item, g).clone();
     let mut local_invalid = BTreeSet::new();
 
     println!("{}", item.debug_string(g));
@@ -65,13 +71,19 @@ pub fn get_valid_starts_RD(
 
       closure.drain_filter(|item| remaining_productions.contains(&item.get_prod_id(g)));
 
-      output.append(&mut closure.to_set())
+      for item in closure {
+        if !output.contains_key(&item.to_empty_state()) {
+          output.insert(item.to_empty_state(), item);
+        }
+      }
     } else {
-      output.insert(*item);
+      if !output.contains_key(&item.to_empty_state()) {
+        output.insert(item.to_empty_state(), *item);
+      }
     }
   }
 
-  (output.to_vec(), goto_seeds.to_vec())
+  (output.into_values().collect(), goto_seeds.to_vec())
 }
 
 /// Constructs a Vector of Vectors, each of which contains a set items from the
@@ -133,8 +145,8 @@ pub fn get_symbols_from_items(
   item_set: BTreeSet<Item>,
   g: &GrammarStore,
   seen: Option<BTreeSet<ProductionId>>,
-  mut normal_symbol_set: BTreeSet<SymbolID>,
-) -> (BTreeSet<SymbolID>, BTreeSet<SymbolID>, BTreeSet<ProductionId>) {
+  mut normal_symbol_set: SymbolSet,
+) -> (SymbolSet, SymbolSet, BTreeSet<ProductionId>) {
   let mut ignore_symbol_set = BTreeSet::new();
   let mut seen = seen.unwrap_or_default();
 
@@ -148,8 +160,12 @@ pub fn get_symbols_from_items(
         let production_items =
           get_production_start_items(&production_id, g).into_iter().collect::<BTreeSet<_>>();
 
-        let (mut norm, mut ignore, new_seen) =
-          get_symbols_from_items(production_items, g, Some(seen), Default::default());
+        let (mut norm, mut ignore, new_seen) = get_symbols_from_items(
+          production_items.to_zero_state(),
+          g,
+          Some(seen),
+          Default::default(),
+        );
 
         seen = new_seen;
 
@@ -158,11 +174,11 @@ pub fn get_symbols_from_items(
       }
       SymbolID::EndOfInput | SymbolID::Default | SymbolID::Undefined => {}
       sym => {
-        normal_symbol_set.insert(item.get_symbol(g));
+        normal_symbol_set.insert(sym);
       }
     }
 
-    if let Some(ignored_symbols) = g.item_ignore_symbols.get(&item.to_zero_state()) {
+    if let Some(ignored_symbols) = g.item_ignore_symbols.get(&item.to_empty_state()) {
       for ignored_symbol in ignored_symbols {
         ignore_symbol_set.insert(*ignored_symbol);
       }
@@ -312,7 +328,7 @@ pub fn get_follow_closure(g: &GrammarStore, root_ids: &BTreeSet<ProductionId>) -
 }
 
 /// Constructs Scanner items from a set of symbols.
-pub fn generate_scanner_symbol_items(symbols: BTreeSet<SymbolID>, j: &mut Journal) -> Items {
+pub fn generate_scanner_symbol_items(symbols: SymbolSet, j: &mut Journal) -> Items {
   let g = j.grammar().unwrap();
 
   let items = symbols

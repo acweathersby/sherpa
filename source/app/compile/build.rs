@@ -1,7 +1,5 @@
-use clap_complete::generate_to;
-use clap_complete::shells::Zsh;
-use std::env;
-use std::io::Error;
+use clap_complete::{generate_to, shells::Zsh};
+use std::{env, io::Error};
 
 include!("app/cli.rs");
 

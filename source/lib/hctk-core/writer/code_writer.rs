@@ -1,5 +1,4 @@
-use std::io::Result;
-use std::io::Write;
+use std::io::{Result, Write};
 
 /// Chainable writer for formatted source code
 pub struct CodeWriter<W: Write> {

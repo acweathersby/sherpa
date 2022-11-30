@@ -11,7 +11,7 @@ pub fn get_production_start_items(prod_id: &ProductionId, g: &GrammarStore) -> V
     .get(prod_id)
     .unwrap()
     .iter()
-    .map(|id| Item::from_body(id, g).unwrap())
+    .map(|id| Item::from_rule(id, g).unwrap())
     .collect()
 }
 
@@ -25,7 +25,7 @@ pub fn create_closure(items: &[Item], g: &GrammarStore) -> Vec<Item> {
     if seen.insert(item) {
       if let SymbolID::Production(prod_id, _) = &item.get_symbol(g) {
         for item in get_production_start_items(prod_id, g) {
-          queue.push_back(item)
+          queue.push_back(item.to_empty_state())
         }
       }
     }
@@ -38,10 +38,10 @@ pub fn create_closure(items: &[Item], g: &GrammarStore) -> Vec<Item> {
 #[inline]
 pub fn get_closure_cached<'a>(item: &Item, g: &'a GrammarStore) -> &'a Vec<Item> {
   static empty_closure: Vec<Item> = vec![];
-  if g.closures.get(&item.to_zero_state()).is_none() {
+  if g.closures.get(&item.to_empty_state()).is_none() {
     &empty_closure
   } else {
-    g.closures.get(&item.to_zero_state()).unwrap()
+    g.closures.get(&item.to_empty_state()).unwrap()
   }
 }
 
@@ -49,11 +49,11 @@ pub fn get_closure_cached<'a>(item: &Item, g: &'a GrammarStore) -> &'a Vec<Item>
 /// store and applies the state of the base item to all closure members.
 #[inline]
 pub fn get_closure_cached_with_state<'a>(item: &Item, g: &'a GrammarStore) -> Vec<Item> {
-  if g.closures.get(&item.to_zero_state()).is_none() {
+  if g.closures.get(&item.to_empty_state()).is_none() {
     vec![]
   } else {
     g.closures
-      .get(&item.to_zero_state())
+      .get(&item.to_empty_state())
       .unwrap()
       .into_iter()
       .map(|i| i.to_state(item.get_state()))
@@ -65,7 +65,7 @@ pub fn get_closure_cached_with_state<'a>(item: &Item, g: &'a GrammarStore) -> Ve
 /// closure to the grammar store if it is not already present.
 #[inline]
 pub fn get_closure_cached_mut<'a>(item: &Item, g: &'a mut GrammarStore) -> &'a Vec<Item> {
-  let item = &item.to_zero_state();
+  let item = &item.to_empty_state();
 
   if !g.closures.contains_key(item) {
     let closure = create_closure(&[*item], g);

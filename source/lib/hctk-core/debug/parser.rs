@@ -55,7 +55,7 @@ pub fn collect_shifts_and_skips(
           );
         }
       }
-      ParseAction::Reduce { production_id, body_id, symbol_count } => {}
+      ParseAction::Reduce { production_id, rule_id: body_id, symbol_count } => {}
       _ => panic!("Unexpected Action!"),
     }
   }

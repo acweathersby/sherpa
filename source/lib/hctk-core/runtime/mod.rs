@@ -120,8 +120,8 @@ state [test]
     state.set_production_to(3);
 
     match dispatch(&mut reader, &mut state, &bytecode) {
-      ParseAction::Reduce { body_id, production_id, symbol_count } => {
-        assert_eq!(body_id, 1);
+      ParseAction::Reduce { rule_id, production_id, symbol_count } => {
+        assert_eq!(rule_id, 1);
         assert_eq!(symbol_count, 2);
         assert_eq!(production_id, 3);
       }
@@ -268,7 +268,7 @@ assert PRODUCTION [3] (pass)
 
     let output = compile_ir_states_into_bytecode(
       &mut j,
-      &mut vec![(ir_state.get_name(), Box::new(ir_state))],
+      vec![(ir_state.get_name(), Box::new(ir_state))],
       vec![ir_ast],
     );
 
@@ -294,8 +294,6 @@ assert PRODUCTION [3] (pass)
   #[ignore]
   #[test]
   fn test_jump_table_skip() {
-    use IRStateType::*;
-
     let val = "
             skip [1] 
             assert PRODUCTION [0] ( set prod to 44 then pass)";
@@ -375,11 +373,10 @@ assert PRODUCTION [3] (pass)
 
     let ir_ast = ir_ast.unwrap().clone();
 
-    let output = compile_ir_states_into_bytecode(
-      j,
-      &mut vec![(ir_state.get_name(), Box::new(ir_state))],
-      vec![ir_ast],
-    );
+    let output =
+      compile_ir_states_into_bytecode(j, vec![(ir_state.get_name(), Box::new(ir_state))], vec![
+        ir_ast,
+      ]);
 
     output
   }

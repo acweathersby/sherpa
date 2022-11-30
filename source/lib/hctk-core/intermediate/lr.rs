@@ -57,7 +57,7 @@ pub(super) fn construct_LR(t: &mut TPack, j: &mut Journal, root_node: GraphNode)
       // Create a new transition node and add the incremented items to  it.
       let incremented_items = group.into_iter().map(|i| i.increment().unwrap()).collect::<Vec<_>>();
       let canonical_items =
-        incremented_items.iter().map(|i| i.to_zero_state()).collect::<BTreeSet<_>>();
+        incremented_items.iter().map(|i| i.to_empty_state()).collect::<BTreeSet<_>>();
 
       match encountered_states.entry(canonical_items) {
         std::collections::hash_map::Entry::Occupied(e) => {
@@ -105,14 +105,14 @@ pub(super) fn construct_LR(t: &mut TPack, j: &mut Journal, root_node: GraphNode)
 
         if end_items
           .iter()
-          .all(|(i, items)| items.completed_items.is_empty() && !items.term_items.is_empty())
+          .all(|(i, items)| items.completed_items.is_empty() && !items.uncompleted_items.is_empty())
         {
           let symbol_groups = hash_group_btreemap(
             end_items
               .iter()
               .flat_map(|(i, items)| {
                 items
-                  .get_term_items()
+                  .get_uncompleted_items()
                   .iter()
                   .flat_map(|i| get_closure_cached(i, &g))
                   .collect::<BTreeSet<_>>()
@@ -146,7 +146,7 @@ pub(super) fn construct_LR(t: &mut TPack, j: &mut Journal, root_node: GraphNode)
                 .map(|(i, _)| "   ".to_string()
                   + &i.blame_string(&g)
                   + "\n"
-                  + &i.get_body(&g).unwrap().tok.blame(0, 0, "Defined here", BlameColor::Red))
+                  + &i.get_rule(&g).unwrap().tok.blame(0, 0, "Defined here", BlameColor::Red))
                 .collect::<Vec<_>>()
                 .join("\n")
             )

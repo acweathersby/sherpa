@@ -46,14 +46,20 @@ pub fn compile_bytecode_parser(grammar_source_path: &PathBuf, include_ascript: b
     .set_source_file_name("%.rs")
     .add_task(tasks::build_bytecode_parser(SourceType::Rust, include_ascript));
 
-  if include_ascript { pipeline.add_task(tasks::build_ast(SourceType::Rust)) } else { pipeline }
-    .add_task(tasks::build_bytecode_disassembly())
-    .run(|errors| {
-      for error in &errors {
-        eprintln!("{}", error);
-      }
-    })
-    .2
+  match if include_ascript {
+    pipeline.add_task(tasks::build_ast(SourceType::Rust))
+  } else {
+    pipeline
+  }
+  .add_task(tasks::build_bytecode_disassembly())
+  .run(|errors| {
+    for error in &errors {
+      eprintln!("{}", error);
+    }
+  }) {
+    hctk_core::types::HCResult::Ok(_) => true,
+    _ => false,
+  }
 }
 
 #[cfg(test)]
@@ -61,7 +67,7 @@ mod library_smoke_tests {
 
   use std::path::PathBuf;
 
-  use hctk_core::types::GrammarStore;
+  use hctk_core::{journal::Journal, types::GrammarStore};
 
   use crate::{
     ascript::{compile::compile_ascript_store, types::AScriptStore},
@@ -85,7 +91,9 @@ mod library_smoke_tests {
 
   #[test]
   fn test_output_rust_on_trivial_grammar() {
+    let mut j = Journal::new(None);
     let g = GrammarStore::from_str(
+      &mut j,
       "
         <> A >\\1 f:ast { { t_Banana, c_Mobius, value:u32($1), string:str($1), useful:true } } 
         | \\a \\b A f:ast { { t_Banana, value: u32($1), dd:u32($3), tok, useful:false } }

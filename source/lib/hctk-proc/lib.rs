@@ -3,15 +3,10 @@
 #![feature(proc_macro_diagnostic)]
 #![feature(proc_macro_span_shrink)]
 use hctk_core::types::HCError;
-use proc_macro::Diagnostic;
-use proc_macro::Span;
-use proc_macro::TokenStream;
-use proc_macro::TokenTree;
-use std::collections::BTreeMap;
-use std::path::PathBuf;
+use proc_macro::{Diagnostic, Span, TokenStream, TokenTree};
+use std::{collections::BTreeMap, path::PathBuf};
 
-use hctk_compile::tasks;
-use hctk_compile::BuildPipeline;
+use hctk_compile::{tasks, BuildPipeline};
 
 extern crate proc_macro;
 

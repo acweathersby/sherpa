@@ -90,7 +90,7 @@ pub(crate) fn load_all(
                       HCResult::Ok(path) => {
                         imports_refs.insert(
                           reference.to_string(),
-                          GrammarIds::new(reference.to_string(), path.clone()),
+                          GrammarRef::new(reference.to_string(), path.clone()),
                         );
                         pending_grammar_paths.lock().unwrap().push_back(path);
                         work_verifier.lock().unwrap().add_units_of_work(1);

@@ -23,7 +23,7 @@ pub fn build_bytecode_parser(
 
           if let Err(err) = write_parser_file(
             &mut writer,
-            &task_ctx.get_grammar(),
+            &task_ctx.get_journal().grammar().unwrap(),
             // Leave two threads available for building
             // the
             // ascript code if necessary
@@ -135,10 +135,11 @@ impl<T: ByteCharacterReader + BaseCharacterReader + MutCharacterReader> Parser<T
 #[cfg(test)]
 mod test {
   use crate::ascript::{compile::compile_ascript_store, rust, types::AScriptStore};
-  use hctk_core::{types::GrammarStore, writer::code_writer::StringBuffer};
+  use hctk_core::{journal::Journal, types::GrammarStore, writer::code_writer::StringBuffer};
   #[test]
   fn test_output_rust_on_practical_grammar() {
-    let g = GrammarStore::from_str(
+    let mut j = Journal::new(None);
+    let g = GrammarStore::from_str(&mut j,
         "
         <> A > \\vec num num^tom num f:ast { { t_Vec, x:f32($tom), y:f32($3), z:f32($4), first: { t_Num, val:u32($1) } } }
         

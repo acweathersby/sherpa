@@ -1,8 +1,7 @@
 #![feature(scoped_threads)]
 #![feature(const_format_args)]
 #![feature(const_fmt_arguments_new)]
-use std::path::PathBuf;
-use std::str::FromStr;
+use std::{path::PathBuf, str::FromStr};
 
 mod cli;
 

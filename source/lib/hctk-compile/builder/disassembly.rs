@@ -12,13 +12,11 @@ pub fn build_bytecode_disassembly() -> PipelineTask {
   PipelineTask {
     fun: Box::new(move |task_ctx| {
       let output_path = task_ctx.get_source_output_dir().clone();
-      let parser_name = task_ctx.get_parser_name().clone();
+      let grammar = &task_ctx.get_journal().grammar().unwrap();
 
       if let Ok(parser_data_file) =
-        task_ctx.create_file(output_path.join(format!("./{}_dasm.txt", parser_name)))
+        task_ctx.create_file(output_path.join(format!("./{}_dasm.txt", grammar.id.name)))
       {
-        let grammar = task_ctx.get_grammar();
-
         let Some(bytecode) = task_ctx.get_bytecode() else {
           return Err(vec![HCError::from("Cannot disassemble Bytecode: Bytecode is not available")]);
         };

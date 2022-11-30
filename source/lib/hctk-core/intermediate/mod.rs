@@ -18,7 +18,7 @@ mod transition_tree_tests {
       recursive_descent::construct_recursive_descent,
       utils::generate_recursive_descent_items,
     },
-    journal::Journal,
+    journal::{config::Config, report::ReportType, Journal},
     types::HCResult,
   };
 
@@ -33,7 +33,7 @@ mod transition_tree_tests {
 
     let items = generate_recursive_descent_items(&mut j, production_id);
 
-    let result = construct_recursive_descent(&mut j, false, &items).0;
+    let (result, _) = construct_recursive_descent(&mut j, false, &items)?;
 
     assert_eq!(result.get_node_len(), 7);
 
@@ -43,7 +43,7 @@ mod transition_tree_tests {
 
   #[test]
   pub fn construct_descent_on_scanner_symbol() -> HCResult<()> {
-    let mut j = Journal::new(None);
+    let mut j = Journal::new(Some(Config { allow_occluding_symbols: true, ..Default::default() }));
     let g = GrammarStore::from_str(
       &mut j,
       "
@@ -55,8 +55,9 @@ mod transition_tree_tests {
 
 <> D > \\a \\b
 ",
-    )
-    .unwrap();
+    )?;
+
+    let grammar = j.grammar()?;
 
     for p in g.productions.values() {
       eprintln!("{}", p.name);
@@ -64,11 +65,22 @@ mod transition_tree_tests {
 
     let production = g.productions.iter().find(|p| p.1.name == "tk:B").unwrap();
 
-    let production_id = production.0;
+    let prod_id = production.0;
 
-    let items = generate_recursive_descent_items(&mut j, *production_id);
+    let items = generate_recursive_descent_items(&mut j, *prod_id)
+      .into_iter()
+      .map(|i| {
+        i.to_origin(crate::types::OriginData::Symbol(
+          grammar.get_production(prod_id).unwrap().sym_id,
+        ))
+      })
+      .collect();
 
-    let result = construct_recursive_descent(&mut j, false, &items).0;
+    let (result, _) = construct_recursive_descent(&mut j, true, &items)?;
+
+    result.print_nodes();
+    j.flush_reports();
+    j.debug_report(ReportType::Any);
 
     assert_eq!(result.get_node_len(), 8);
 
@@ -83,11 +95,11 @@ mod state_constructor_tests {
   use std::{collections::BTreeSet, iter::FromIterator, path::PathBuf};
 
   use crate::{
-    errors::WarnTransitionAmbiguousProduction,
+    errors::{HCErrorSeverity, WarnTransitionAmbiguousProduction},
     grammar::get_production_start_items,
     intermediate::compile::{compile_production_states, compile_scanner_states},
-    journal::Journal,
-    types::{GrammarStore, HCErrorContainer, HCResult, SymbolID},
+    journal::{report::ReportType, Journal},
+    types::{GrammarStore, HCErrorContainer, HCResult, ScannerId, SymbolID, SymbolSet},
   };
 
   #[test]
@@ -119,9 +131,12 @@ mod state_constructor_tests {
 
     let result = compile_production_states(&mut j, prod_id)?;
 
+    j.flush_reports();
+    j.debug_report(ReportType::ProductionCompile(prod_id));
+
     println!("{:#?}", result);
 
-    assert_eq!(result.len(), 25);
+    assert_eq!(result.len(), 11);
     HCResult::Ok(())
   }
 
@@ -136,7 +151,7 @@ mod state_constructor_tests {
 
     println!("{:#?}", result);
 
-    assert_eq!(result.len(), 8);
+    assert_eq!(result.len(), 7);
     HCResult::Ok(())
   }
 
@@ -151,7 +166,7 @@ mod state_constructor_tests {
 
     println!("{:#?}", result);
 
-    assert_eq!(result.len(), 26);
+    assert_eq!(result.len(), 17);
     HCResult::Ok(())
   }
 
@@ -162,11 +177,22 @@ mod state_constructor_tests {
 
     let prod_id = g.get_production_id_by_name("A").unwrap();
 
-    let result = compile_production_states(&mut j, prod_id)?;
+    match compile_production_states(&mut j, prod_id) {
+      HCResult::Ok(result) => {
+        println!("{:#?}", result);
 
-    println!("{:#?}", result);
+        j.flush_reports();
+        j.debug_report(ReportType::Any);
 
-    assert_eq!(result.len(), 8);
+        assert_eq!(result.len(), 5);
+      }
+      _ => {
+        j.flush_reports();
+        j.debug_report(ReportType::Any);
+        return HCResult::None;
+      }
+    }
+
     HCResult::Ok(())
   }
 
@@ -188,7 +214,7 @@ mod state_constructor_tests {
 
     println!("{:#?}", result);
 
-    assert_eq!(result.len(), 11);
+    assert_eq!(result.len(), 4);
     HCResult::Ok(())
   }
 
@@ -216,7 +242,7 @@ mod state_constructor_tests {
 
     println!("{:#?}", result);
 
-    assert_eq!(result.len(), 7);
+    assert_eq!(result.len(), 5);
     HCResult::Ok(())
   }
 
@@ -321,11 +347,16 @@ mod state_constructor_tests {
 
     let prod_id = g.get_production_id_by_name("A").unwrap();
 
-    let result = compile_production_states(&mut j, prod_id)?;
+    match compile_production_states(&mut j, prod_id) {
+      HCResult::Ok(_) => {
+        panic!("Expected error to be produced")
+      }
+      _ => {
+        j.flush_reports();
+        j.debug_report(ReportType::Any);
+      }
+    }
 
-    println!("{:#?}", result);
-
-    assert_eq!(result.len(), 12);
     HCResult::Ok(())
   }
 
@@ -359,14 +390,7 @@ mod state_constructor_tests {
       
           | literal
       
-          | vector
-      
-          | token
-      
-      
-      <> struct > 
-      
-          \\{ struct_prop(+\\, ) \\}
+          | struct_prop(+\\, ) \\}
               f:ast { { t_AST_Struct, props:$2, tok } }
       
       
@@ -540,6 +564,9 @@ mod state_constructor_tests {
 
     let result = compile_production_states(&mut j, prod_id)?;
 
+    j.flush_reports();
+    j.debug_report(ReportType::ProductionCompile(prod_id));
+
     println!("{:#?}", result);
 
     assert_eq!(result.len(), 10);
@@ -580,9 +607,12 @@ mod state_constructor_tests {
 
     let result = compile_production_states(&mut j, prod_id)?;
 
+    j.flush_reports();
+    j.debug_report(ReportType::ProductionCompile(prod_id));
+
     println!("{:#?}", result);
 
-    assert_eq!(result.len(), 10);
+    assert_eq!(result.len(), 6);
     HCResult::Ok(())
   }
 
@@ -611,14 +641,17 @@ mod state_constructor_tests {
     )
     .unwrap();
 
-    let result = compile_scanner_states(
-      &mut j,
-      BTreeSet::from_iter(vec![SymbolID::from_string("V", Some(&g))]),
-    )?;
+    let symbols = SymbolSet::from_iter(vec![SymbolID::from_string("V", Some(&g))]);
+
+    let result = compile_scanner_states(&mut j, symbols.clone())?;
 
     println!("{:#?}", result);
 
-    assert_eq!(result.len(), 11);
+    j.flush_reports();
+    j.debug_report(ReportType::ScannerCompile(ScannerId::new(&symbols)));
+
+    assert_eq!(result.len(), 3);
+
     HCResult::Ok(())
   }
 
@@ -802,26 +835,12 @@ mod state_constructor_tests {
     let states = compile_production_states(&mut j, prod_id)?;
 
     let report = j.report();
-    if report.errors().have_critical() {
+    if report.have_errors_of_type(HCErrorSeverity::Critical) {
       for error in report.errors() {
         println!("{}", error);
       }
     }
 
-    // let mut t = TransitionPack::new(
-    // g,
-    // TransitionMode::RecursiveDescent,
-    // false,
-    // &items,
-    // BTreeSet::from_iter(vec![prod_id]),
-    // );
-    //
-    // construct_LR(&mut t, &items, Option::None, crate::types::SymbolID::Start)?;
-    //
-    // t.print_nodes();
-    //
-    // let (states, _) = process_transition_nodes(&t, &"Titus".to_string());
-    //
     for state in states {
       println!("{}", state.to_string())
     }
@@ -832,30 +851,36 @@ mod state_constructor_tests {
 #[cfg(test)]
 mod new_tests {
 
+  use std::iter::Product;
+
   use crate::{
     bytecode::compile_bytecode,
     debug::{generate_disassembly, BytecodeGrammarLookups},
-    journal::Journal,
-    types::{GrammarStore, HCResult},
+    journal::{config::Config, report::ReportType, Journal},
+    types::{GrammarStore, HCResult, ProductionId},
   };
 
   use super::{compile::compile_states, optimize::optimize_ir_states};
 
   #[test]
   fn test_peek() -> HCResult<()> {
-    let mut j = Journal::new(None);
+    let mut j = Journal::new(Some(Config {
+      build_disassembly: true,
+      allow_occluding_symbols: true,
+      ..Default::default()
+    }));
     let g = GrammarStore::from_str(
       &mut j,
       r##"
     @IGNORE g:sp
     
-    <> A > \functio \( Ident \{ 
-        |  Ident \( \toffee \(
-        | A \good-game
+    <> term >  tk:ident \= value_list
 
-    <> Ident > tk:id
-
-    <> id > g:id(+)
+    <> value_list > \" formal_value_list(+g:sp) \"
+    
+    <> formal_value_list > ident
+    
+    <> ident > g:id(+) 
 
     "##,
     )
@@ -864,27 +889,39 @@ mod new_tests {
     let states = compile_states(&mut j, 10)?;
     let pre_opt_length = states.len();
 
-    for state in &states {
-      println!("{}\n", state.1.get_code());
-    }
-
-    let mut states = optimize_ir_states(states, &g);
+    let mut states = optimize_ir_states(&mut j, states);
     let post_opt_length = states.len();
-    println!(
-      "pre opt {} post opt {}. The optimized states are {:.2}% of original count",
-      pre_opt_length,
-      post_opt_length,
-      100.0 * (post_opt_length as f64 / pre_opt_length as f64)
-    );
 
-    let output = compile_bytecode(&mut j, &mut states);
+    compile_bytecode(&mut j, states);
 
-    let lu = BytecodeGrammarLookups::new(&g);
+    j.flush_reports();
 
-    eprintln!("{}", generate_disassembly(&output, Some(&lu)));
+    // j.debug_report(ReportType::ProductionCompile(g.get_production_id_by_name("A").unwrap()));
+    let report_type = ReportType::ProductionCompile(ProductionId::default());
+    j.get_reports(report_type, |report| {
+      let ReportType::ProductionCompile(prod_id) = report.report_type else {return};
 
-    j.debug_report();
+      if let Some(note) = report.get_note("RD Graph Nodes") {
+        println!(
+          "Production [ {} ] Recursive Descent Graph =>\n{}",
+          g.get_production_plain_name(&prod_id),
+          note
+        );
+      }
 
+      if let Some(note) = report.get_note("RA Graph Nodes") {
+        println!(
+          "Production [ {} ] Recursive Ascent Graph =>\n{}",
+          g.get_production_plain_name(&prod_id),
+          note
+        );
+      }
+    });
+    //  j.get_reports(ReportType::Disassembly, |report| {
+    // if let Some(note) = report.get_note("Output") {
+    // println!("{}", note);
+    // }
+    // });
     HCResult::Ok(())
   }
 }

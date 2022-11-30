@@ -4,7 +4,7 @@ use super::{
   lr::construct_LR,
   utils::{hash_group_btreemap, hash_group_vec, symbols_occlude},
 };
-use crate::{errors::ErrOccludingTokens, grammar::hash_id_value_u64, journal::Journal, types::*};
+use crate::{grammar::hash_id_value_u64, journal::Journal, types::*};
 use std::collections::{BTreeSet, VecDeque};
 use EdgeType::*;
 use NodeType::*;
@@ -54,8 +54,8 @@ pub(crate) fn peek(
     let mut EXCLUSIVE_COMPLETED = false;
 
     // Sort the items into groups of terminal and completed items.
-    let closure = items.closure_with_state(g);
-    let mut term_items = closure.term_item_vec(g);
+    let mut closure = items.closure_with_state(g);
+
     let completed_items = closure.completed_item_vec();
 
     // Resolve completed items by getting their follow set.
@@ -67,19 +67,18 @@ pub(crate) fn peek(
           .append(&mut Vec::from_linked(&follow_and_terminal_completed.completed_items));
 
         // Merge follow set into term_items.
-        term_items.append(
-          &mut Vec::from_linked(&follow_and_terminal_completed.term_items)
-            .closure_with_state(g)
-            .term_item_vec(g),
+        closure.append(
+          &mut Vec::from_linked(&follow_and_terminal_completed.uncompleted_items)
+            .closure_with_state(g),
         )
       }
       // Items that truly in the completed position, that is for a completed item
       //  `I => ... *` there is no follow item `X => ... * I ...` in the closures of
       // the nodes predecessor, are then turned into completed nodes. The catch here
       // is any conflicting completed items may be unresolvable ...
-      match (terminal_completions.len()) {
+      match terminal_completions.len() {
         1 if j.occlusion_tracking_mode() => {
-          // We can skip further processing if in occlusions tracking mode
+          // We can skip further processing if in occlusion tracking mode
         }
         1 => {
           let items = terminal_completions;
@@ -94,10 +93,11 @@ pub(crate) fn peek(
             #[cfg(debug_assertions)]
             {
               if EXCLUSIVE_COMPLETED {
-                println!(
+                j.report_mut().add_note("Exclusive short-circuit", format!(
                   "Short circuiting completion of other items due to one or more exclusive symbols being completed: [\n{}\n]",
-                  exclusive.iter().map(|i| format!("    {{ {} => {} }}", i.debug_string(&t.g), i.get_origin_sym().to_string(&t.g))).collect::<Vec<_>>().join("\n")
-              );
+                  exclusive.iter().map(|i| format!("    {{ {} => {} }}", 
+                  i.debug_string(&t.g), i.get_origin_sym().to_string(&t.g))).collect::<Vec<_>>().join("\n")
+              ));
               }
             }
           }
@@ -154,12 +154,32 @@ pub(crate) fn peek(
           if t.is_scanner {
             resolveConflictingSymbols(t, j, terminal_completions, depth, global_depth, par_id);
           } else {
-            unimplemented!("Resolve multiple completed items");
+            return HCResult::Err(HCError::grammar_err_multi_location {
+              message:   "Could not resolve production. Grammar has ambiguities.".to_string(),
+              locations: terminal_completions
+                .iter()
+                .map(|i| HCError::grammar_err {
+                  message: "Test".to_string(),
+                  inline_message: "Test".to_string(),
+                  loc: match i.get_origin() {
+                    OriginData::RuleId(rule_id) => t.g.get_rule(&rule_id).unwrap().tok.clone(),
+                    _ => i.decrement().unwrap().get_rule_ref(&t.g).unwrap().tok.clone(),
+                  },
+                  path: i.decrement().unwrap().get_rule_ref(&t.g).unwrap().grammar_ref.path.clone(),
+                })
+                .collect(),
+            });
           }
         }
         _ => {}
       }
     }
+
+    let term_items = closure.term_item_vec(g);
+
+    let mut updated_closure = closure.non_term_item_vec(&t.g);
+
+    t.get_node_mut(par_id).goto_items.append(&mut updated_closure);
 
     if EXCLUSIVE_COMPLETED {
       continue;
@@ -229,7 +249,7 @@ pub(crate) fn peek(
                   Assert,
                   Some(par_id),
                   Some(par_id),
-                  items.non_term_item_vec(g),
+                  items.try_increment().non_term_item_vec(g),
                 );
                 // Continue processing the now disambiguated items.
                 t.queue_node(ProcessGroup {
@@ -341,7 +361,7 @@ pub(crate) fn peek(
 
                 if items.completed_items.is_empty() {
                   Some(
-                    Vec::from_linked(&items.term_items)
+                    Vec::from_linked(&items.uncompleted_items)
                       .into_iter()
                       .map(|i| i.decrement().unwrap().get_symbol(g))
                       .collect::<BTreeSet<_>>(),
@@ -634,13 +654,15 @@ fn merge_occluding_token_groups(
         #[cfg(debug_assertions)]
         {
           if !journal.occlusion_tracking_mode() {
-            println!(
+            journal.report_mut().add_note("Symbol Group Merge", 
+            format!(
             "\nDue to the ambiguous symbols [{} ≈ {}] the peek group [\n\n{}\n\n] will be merged into [\n\n{}\n\n]\n",
             to_sym.to_string(&t.g),
             from_sym.to_string(&t.g),
             from_group.to_debug_string(&t.g, "\n"),
+            
             groups[j].1.to_debug_string(&t.g, "\n")
-          )
+          ));
           }
         }
         let mut clone = from_group.clone();

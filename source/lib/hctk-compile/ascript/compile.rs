@@ -52,9 +52,9 @@ fn gather_ascript_info_from_grammar(
 
   let g = ast.g.clone();
 
-  let normal_parse_bodies: Vec<(BodyId, Option<&AST_AScript>)> = ast
+  let normal_parse_bodies: Vec<(RuleId, Option<&AST_AScript>)> = ast
     .g
-    .bodies
+    .rules
     .iter()
     .filter_map(|(id, body)| match g.clone().parse_productions.contains(&body.prod_id) {
       true => {
@@ -76,9 +76,9 @@ fn gather_ascript_info_from_grammar(
   // table, again adding these atomic struct types to the production
   // types.
 
-  let mut struct_bodies: Vec<(BodyId, &AST_AScript)> = vec![];
+  let mut struct_bodies: Vec<(RuleId, &AST_AScript)> = vec![];
   for (body_id, ascript_option_fn) in normal_parse_bodies {
-    if let Some(body) = g.clone().bodies.get(&body_id) {
+    if let Some(body) = g.clone().rules.get(&body_id) {
       if let Some(ascript_fn) = &ascript_option_fn {
         match &ascript_fn.ast {
           ASTNode::AST_Struct(box ast_struct) => {
@@ -123,7 +123,7 @@ fn gather_ascript_info_from_grammar(
 
 fn add_production_type(
   prod_types: &mut ProductionTypesTable,
-  body: &Body,
+  body: &Rule,
   new_return_type: TaggedType,
 ) {
   let table = prod_types.entry(body.prod_id).or_insert_with(HashMap::new);
@@ -161,7 +161,7 @@ fn resolve_production_reduce_types(
         |ast: &mut AScriptStore,
          foreign_prod_id: ProductionId,
          original: TaggedType,
-         body_ids: BTreeSet<BodyId>| {
+         body_ids: BTreeSet<RuleId>| {
           if foreign_prod_id != prod_id {
             match ast.prod_types.get(&foreign_prod_id) {
               Some(types_) if !types_.is_empty() => {
@@ -258,7 +258,7 @@ fn resolve_production_reduce_types(
       let mut vector_types = VecDeque::from_iter(vector_types);
 
       let mut remap_vector = |mut known_types: BTreeSet<TaggedType>,
-                              vector_types: &mut VecDeque<(TaggedType, BTreeSet<BodyId>)>|
+                              vector_types: &mut VecDeque<(TaggedType, BTreeSet<RuleId>)>|
        -> BTreeSet<TaggedType> {
         vector_types.extend(
           known_types
@@ -429,7 +429,7 @@ fn resolve_structure_properties(ast: &mut AScriptStore, e: &mut Vec<HCError>) {
   for struct_id in ast.structs.keys().cloned().collect::<Vec<_>>() {
     let bodies = ast.structs.get(&struct_id).unwrap().body_ids.clone();
     for body_id in bodies {
-      let body = g.get_body(&body_id).unwrap();
+      let body = g.get_rule(&body_id).unwrap();
       for function in &body.reduce_fn_ids {
         if let ReduceFunctionType::Ascript(ascript) = g.reduce_functions.get(function).unwrap() {
           if let ASTNode::AST_Struct(box ast_struct) = &ascript.ast {
@@ -544,7 +544,7 @@ pub fn get_resolved_vec_contents(
 pub fn compile_expression_type(
   ast: &mut AScriptStore,
   ast_expression: &ASTNode,
-  body: &Body,
+  body: &Rule,
 ) -> (Vec<TaggedType>, Vec<HCError>) {
   use AScriptTypeVal::*;
   let mut errors = vec![];
@@ -725,7 +725,7 @@ pub fn compile_expression_type(
 pub fn compile_struct_type(
   ast: &mut AScriptStore,
   ast_struct: &AST_Struct,
-  body: &Body,
+  body: &Rule,
 ) -> (AScriptStructId, Vec<HCError>) {
   let mut errors = vec![];
   let mut types = vec![];
@@ -817,7 +817,7 @@ pub fn compile_struct_props(
   ast: &mut AScriptStore,
   id: &AScriptStructId,
   ast_struct: &AST_Struct,
-  body: &Body,
+  body: &Rule,
 ) -> (AScriptTypeVal, Vec<HCError>) {
   let mut errors = vec![];
 
@@ -1075,9 +1075,9 @@ pub fn get_specified_vector_from_generic_vec_values(
 }
 
 pub fn get_body_symbol_reference<'a>(
-  body: &'a Body,
+  body: &'a Rule,
   reference: &ASTNode,
-) -> Option<(usize, &'a BodySymbol)> {
+) -> Option<(usize, &'a RuleSymbol)> {
   match reference {
     ASTNode::AST_NamedReference(box AST_NamedReference { value, .. }) => {
       get_named_body_ref(body, value)
@@ -1089,7 +1089,7 @@ pub fn get_body_symbol_reference<'a>(
   }
 }
 
-pub fn get_named_body_ref<'a>(body: &'a Body, val: &str) -> Option<(usize, &'a BodySymbol)> {
+pub fn get_named_body_ref<'a>(body: &'a Rule, val: &str) -> Option<(usize, &'a RuleSymbol)> {
   if val == "first" {
     Some((0, body.syms.first().unwrap()))
   } else if val == "last" {
@@ -1099,7 +1099,7 @@ pub fn get_named_body_ref<'a>(body: &'a Body, val: &str) -> Option<(usize, &'a B
   }
 }
 
-pub fn get_indexed_body_ref<'a>(body: &'a Body, i: &f64) -> Option<(usize, &'a BodySymbol)> {
+pub fn get_indexed_body_ref<'a>(body: &'a Rule, i: &f64) -> Option<(usize, &'a RuleSymbol)> {
   body.syms.iter().enumerate().filter(|(_, s)| s.original_index == (*i - 1.0) as u32).last()
 }
 

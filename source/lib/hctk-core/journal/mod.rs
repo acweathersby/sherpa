@@ -13,6 +13,7 @@ use bitmask_enum::bitmask;
 use std::{
   collections::{BTreeMap, BTreeSet, HashMap},
   fmt::{Debug, Display},
+  mem::Discriminant,
   sync::{Arc, LockResult, RwLock},
   time::{Duration, Instant},
 };
@@ -24,9 +25,9 @@ use self::{
 
 #[derive(Default, Debug)]
 pub struct ScratchPad {
-  pub occluding_symbols: HashMap<SymbolID, BTreeSet<SymbolID>>,
+  pub occluding_symbols: HashMap<SymbolID, SymbolSet>,
   pub occlusion_tracking: bool,
-  pub reports: HashMap<String, Box<Report>>,
+  pub reports: HashMap<ReportType, Box<Report>>,
 }
 
 #[derive(Debug)]
@@ -42,11 +43,11 @@ pub struct Journal {
 
   scratch_pad: Box<ScratchPad>,
 
-  occluding_symbols: Option<Arc<HashMap<SymbolID, BTreeSet<SymbolID>>>>,
+  occluding_symbols: Option<Arc<HashMap<SymbolID, SymbolSet>>>,
 
   errors: Vec<HCError>,
 
-  active_report: Option<(String, Box<Report>)>,
+  active_report: Option<Box<Report>>,
 
   report_sink: Report,
 
@@ -106,35 +107,76 @@ impl Journal {
     self.errors.push(error);
   }
 
-  pub fn set_active_report(&mut self, report_name: &str, report_type: ReportType) {
-    fn set_report(p: &mut ScratchPad, n: &str, t: ReportType) -> Option<(String, Box<Report>)> {
-      match p.reports.contains_key(n) {
-        true => p.reports.remove(n).map(|r| (n.to_string(), r)),
-        false => Some((n.to_string(), Box::new(Report { report_type: t, ..Default::default() }))),
+  /// Sets the active report to `report_type`, optionally creating a new report of that type
+  /// if one does not already exists. Returns the previously set ReportType.
+  pub fn set_active_report(&mut self, report_name: &str, report_type: ReportType) -> ReportType {
+    fn set_report(p: &mut ScratchPad, n: &str, t: ReportType) -> Option<Box<Report>> {
+      match p.reports.contains_key(&t) {
+        true => p.reports.remove(&t),
+        false => {
+          Some(Box::new(Report { name: n.to_string(), report_type: t, ..Default::default() }))
+        }
       }
     }
 
     self.active_report = match self.active_report.take() {
-      Some((name, r)) if name != report_name => {
-        self.scratch_pad.reports.insert(name, r);
+      Some(r) if r.report_type != report_type => {
+        self.scratch_pad.reports.insert(r.report_type, r);
         set_report(&mut self.scratch_pad, report_name, report_type)
       }
       None => set_report(&mut self.scratch_pad, report_name, report_type),
       report => report,
     };
+
+    self.report().report_type
+  }
+
+  /// Loads a report in an closure for read access. Closure is only called
+  /// if the report can be found
+  pub fn get_report<T: Fn(&Report)>(&self, report_type: ReportType, closure: T) {
+    match self.scratch_pad.reports.get(&report_type) {
+      Some(report) => closure(report.as_ref()),
+      _ => match self.global_pad.read() {
+        LockResult::Ok(global_pad) => match global_pad.reports.get(&report_type) {
+          Some(report) => closure(report.as_ref()),
+          _ => {}
+        },
+        _ => {}
+      },
+    }
+  }
+
+  /// Retrieves all reports that match the `report_type` and calls `closure` for each
+  /// one, passing in the matched report as a reference.
+  pub fn get_reports<T: Fn(&Report)>(&self, report_type: ReportType, closure: T) {
+    for report in self.scratch_pad.reports.values() {
+      if report.type_matches(report_type) {
+        closure(report);
+      }
+    }
+    match self.global_pad.read() {
+      LockResult::Ok(global_pad) => {
+        for report in global_pad.reports.values() {
+          if report.type_matches(report_type) {
+            closure(report);
+          }
+        }
+      }
+      _ => {}
+    }
   }
 
   /// Get a mutable reference to the active report.
   pub fn report_mut(&mut self) -> &mut Report {
-    self.active_report.as_mut().map(|(_, r)| r.as_mut()).unwrap_or(&mut self.report_sink)
+    self.active_report.as_mut().map(|r| r.as_mut()).unwrap_or(&mut self.report_sink)
   }
 
   /// Get a immutable reference to the active report.
   pub fn report(&self) -> &Report {
-    self.active_report.as_ref().map(|(_, r)| r.as_ref()).unwrap_or(&self.report_sink)
+    self.active_report.as_ref().map(|r| r.as_ref()).unwrap_or(&self.report_sink)
   }
 
-  pub fn debug_report(&self) {
+  pub fn debug_report(&self, discriminant: ReportType) {
     match self.global_pad.read() {
       LockResult::Ok(global_pad) => {
         let reports = global_pad
@@ -144,14 +186,16 @@ impl Journal {
           .collect::<BTreeMap<_, _>>();
 
         for (start, (name, report)) in reports {
-          println!(
-            "\n{:=<80}\nReport [{}] at {:?}:\n{}\n{:=<80}",
-            "",
-            name,
-            (start.duration_since(self.create_time)),
-            report.debug_string(),
-            ""
-          )
+          if report.type_matches(discriminant) {
+            println!(
+              "\n{:=<80}\nReport [{}] at {:?}:\n{}\n{:=<80}",
+              "",
+              report.name,
+              (start.duration_since(self.create_time)),
+              report.debug_string(),
+              ""
+            )
+          }
         }
       }
       LockResult::Err(err) => println!("Unable to acquire a read lock on the global pad:\n{}", err),
@@ -165,8 +209,8 @@ impl Journal {
         // Insert reports into global pad.
         global_pad.reports.extend(self.scratch_pad.reports.drain());
         match self.active_report.take() {
-          Some((name, report)) => {
-            global_pad.reports.insert(name, report);
+          Some(report) => {
+            global_pad.reports.insert(report.report_type, report);
           }
           None => {}
         }
@@ -202,9 +246,16 @@ impl Journal {
 
       self.scratch_pad.occlusion_tracking = true;
 
-      let (t, _) = construct_recursive_descent(self, true, &items);
-
-      self.occluding_symbols = Some(Arc::new(self.scratch_pad.occluding_symbols.clone()));
+      let t = match construct_recursive_descent(self, true, &items) {
+        HCResult::Ok(_) => {
+          self.occluding_symbols = Some(Arc::new(self.scratch_pad.occluding_symbols.clone()));
+        }
+        HCResult::Err(err) => {
+          self.report_mut().add_error(err);
+        }
+        // Only expecting single errors to be ejected by these functions.
+        _ => {}
+      };
 
       self.scratch_pad.occluding_symbols.clear();
 
@@ -222,7 +273,7 @@ impl Journal {
     self.grammar.iter().cloned().next()
   }
 
-  pub fn add_occlusions(&mut self, occluding_symbols: BTreeSet<SymbolID>) {
+  pub fn add_occlusions(&mut self, occluding_symbols: SymbolSet) {
     for sym_a in &occluding_symbols {
       let table =
         self.scratch_pad.occluding_symbols.entry(*sym_a).or_insert_with(|| BTreeSet::new());
@@ -267,7 +318,7 @@ impl Journal {
   /// When using the occlusion table, we force the compiler to consider the symbols as the
   /// "same", which should then cause it to generate a peek state that uses the following
   /// symbols [ \( & \{ ] to resolve the conflict.
-  pub fn get_occlusion_table<'b>(&'b self) -> &'b HashMap<SymbolID, BTreeSet<SymbolID>> {
+  pub fn get_occlusion_table<'b>(&'b self) -> &'b HashMap<SymbolID, SymbolSet> {
     match self.occluding_symbols.as_ref() {
       Some(oc) => oc,
       None => &self.scratch_pad.occluding_symbols,

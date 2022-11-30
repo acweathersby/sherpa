@@ -138,17 +138,15 @@ fn build_types_utils<W: Write>(w: &mut CodeWriter<W>, ast: &AScriptStore) -> Res
 fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Result<()> {
   let g = ast.g.clone();
   let ordered_bodies = g
-    .bodies
+    .rules
     .iter()
-    .filter_map(
-      |(_, b)| {
-        if g.parse_productions.contains(&b.prod_id) {
-          Some((b.bc_id, b))
-        } else {
-          None
-        }
-      },
-    )
+    .filter_map(|(_, b)| {
+      if g.parse_productions.contains(&b.prod_id) {
+        Some((b.bytecode_id, b))
+      } else {
+        None
+      }
+    })
     .collect::<BTreeMap<_, _>>();
 
   let mut resize_fns = BTreeSet::new();
@@ -178,7 +176,7 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
 
     let mut temp_writer = w.checkpoint();
     let mut noop = 0;
-    let fn_name = format!("ast_fn{:0>3}", body.bc_id);
+    let fn_name = format!("ast_fn{:0>3}", body.bytecode_id);
 
     temp_writer
       .wrtln(&format!(
@@ -354,7 +352,7 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
 
 fn build_struct_constructor(
   ast: &AScriptStore,
-  body: &Body,
+  body: &Rule,
   struct_type: &AScriptStructId,
   ast_struct: &AST_Struct,
   ref_index: &mut usize,
@@ -528,7 +526,7 @@ fn build_structs<W: Write>(ast: &AScriptStore, o: &mut CodeWriter<W>) -> Result<
 pub fn render_expression(
   ast: &AScriptStore,
   ast_expression: &ASTNode,
-  body: &Body,
+  body: &Rule,
   ref_index: &mut usize,
   type_slot: usize,
 ) -> Option<Ref> {
@@ -721,7 +719,7 @@ fn node_to_struct(ref_: Ref, ast: &AScriptStore) -> Ref {
 }
 
 fn render_body_symbol(
-  sym: &BodySymbol,
+  sym: &RuleSymbol,
   ast: &AScriptStore,
   i: usize,
   type_slot: usize,
@@ -803,7 +801,7 @@ fn extract_struct_types(types: &BTreeSet<AScriptTypeVal>) -> BTreeSet<TaggedType
 
 fn convert_numeric<T: AScriptNumericType>(
   init: &ASTNode,
-  body: &Body,
+  body: &Rule,
   ast: &AScriptStore,
   ref_index: &mut usize,
   type_slot: usize,

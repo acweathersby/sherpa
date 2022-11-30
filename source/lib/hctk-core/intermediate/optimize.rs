@@ -7,6 +7,7 @@
 use crate::{
   grammar::data::ast::{ASTNode, Fail, Goto, Num, ASSERT, AST_NUMBER, DEFAULT, HASH_NAME},
   types::{ExportedProduction, GrammarStore, IRState},
+  Journal,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -36,9 +37,17 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 /// assert!(unoptimized_state_count > optimized_state_count);
 /// ```
 pub fn optimize_ir_states(
+  j: &mut Journal,
   mut states: BTreeMap<String, Box<IRState>>,
-  g: &GrammarStore,
 ) -> Vec<(String, Box<IRState>)> {
+  let grammar = j.grammar().unwrap();
+  let g = &grammar;
+
+  j.set_active_report("Optimize States", crate::ReportType::Optimize);
+  j.report_mut().start_timer("Duration");
+
+  let starting_states = states.len();
+
   // Preform rounds -------------------------------------
   let entry_states: BTreeSet<String> = get_entry_states(g);
   let mut non_scanner_states = BTreeSet::new();
@@ -161,7 +170,28 @@ pub fn optimize_ir_states(
     }
   }
 
-  garbage_collect(states, &entry_states, &non_scanner_states)
+  let result: Vec<(String, Box<IRState>)> =
+    garbage_collect(states, &entry_states, &non_scanner_states);
+
+  j.report_mut().stop_timer("Duration");
+
+  let ending_states = result.len();
+
+  if ending_states < starting_states {
+    j.report_mut().add_note(
+      "Results",
+      format!(
+        "Reduced {} states to {}, {}% reduction",
+        starting_states,
+        ending_states,
+        (1. / ((ending_states as f64) / (starting_states as f64))) * 100.
+      ),
+    )
+  } else {
+    j.report_mut().add_note("Results", format!("Unable to reduce state count."))
+  }
+
+  result
 }
 
 fn garbage_collect<T>(

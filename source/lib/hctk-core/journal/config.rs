@@ -25,9 +25,14 @@ impl Default for ResolutionMode {
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Config {
-  pub resolution_mode:         ResolutionMode,
-  /// If true, the parser will produce peek productions
-  /// for symbols that occlude. An extra compile step must
-  /// be taken to produce the symbol occlusion table.
+  pub resolution_mode: ResolutionMode,
+
+  /// The Parser will produce peek productions for symbols that occlude.
+  /// An extra compile step must be taken to produce the symbol occlusion table.
   pub allow_occluding_symbols: bool,
+  /// Convert bytecode into a human readable "disassembly" format. This can be
+  /// accessed in the journal through `Disassembly` report type. The main note
+  /// in that report is labeled "Output", which will contain the
+  /// dissemble text.
+  pub build_disassembly:       bool,
 }
