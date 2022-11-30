@@ -853,6 +853,8 @@ mod new_tests {
     debug::{generate_disassembly, BytecodeGrammarLookups},
     journal::{config::Config, report::ReportType, Journal},
     types::{GrammarStore, HCResult, ProductionId},
+    Item,
+    ItemState,
   };
 
   use super::{compile::compile_states, optimize::optimize_ir_states};
@@ -926,8 +928,11 @@ mod new_tests {
       build_disassembly: true,
       allow_occluding_symbols: true,
       debug_add_ir_states_note: true,
+      enable_breadcrumb_parsing: true,
       ..Default::default()
     }));
+    println!("Item State Size {}", std::mem::size_of::<ItemState>());
+    println!("Item Size {}", std::mem::size_of::<Item>());
     let g = GrammarStore::from_str(
       &mut j,
       r##"
@@ -938,10 +943,12 @@ mod new_tests {
 
     <> A > Adent \x
 
-    <> B > Bdent \x
+    <> B > Bdent
 
 
-    <> Adent > g:id
+    <> Adent > Cdent
+
+    <> Cdent > g:id
 
     <> Bdent > g:id
 
@@ -951,7 +958,7 @@ mod new_tests {
 
     // compile_production_states_LR(&mut j, g.get_production_id_by_name("term")?);
 
-    compile_production_states(&mut j, g.get_production_id_by_name("term")?)?;
+    compile_production_states(&mut j, g.get_production_id_by_name("term")?);
 
     j.flush_reports();
 

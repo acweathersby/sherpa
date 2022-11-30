@@ -118,13 +118,12 @@ pub(super) fn construct_inline_LR(
         // Get the follow for each node.
         let end_items = end_items
           .into_iter()
-          .map(|i| (i, get_follow_items(t, &i, Some(parent_index))))
+          .map(|i| (i, get_follow_items(t, &i, Some(parent_index), 0).0))
           .collect::<Vec<_>>();
 
-        if end_items
-          .iter()
-          .all(|(i, items)| items.completed_items.is_empty() && !items.uncompleted_items.is_empty())
-        {
+        if end_items.iter().all(|(i, items)| {
+          items.final_completed_items.is_empty() && !items.uncompleted_items.is_empty()
+        }) {
           let symbol_groups = hash_group_btreemap(
             end_items
               .iter()

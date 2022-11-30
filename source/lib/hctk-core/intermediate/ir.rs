@@ -3,12 +3,13 @@
 //! Takes completed TransitionGraphs and builds a set of globally unique IRStates.
 use super::utils::*;
 use crate::{
+  grammar::item,
   journal::Journal,
   types::{GraphNode, TransitionGraph, *},
   writer::code_writer::CodeWriter,
 };
 use std::{
-  collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
+  collections::{btree_set, BTreeMap, BTreeSet, VecDeque},
   vec,
 };
 
@@ -172,7 +173,7 @@ fn create_state(
           EdgeType::Default => {
             for child in children {
               if t.is_scanner && child.node_type == NodeType::Complete {
-                prefix = Some(create_reduce_string(child, &t.g, true));
+                prefix = Some(create_reduction_string(child, &t.g, true));
               }
 
               create_branch_wrap(
@@ -186,7 +187,7 @@ fn create_state(
                 if total_children_count == 1 { EdgeType::Undefined } else { child.edge_type },
               );
               if t.is_scanner && child.node_type == NodeType::Complete {
-                prefix = Some(create_reduce_string(child, &t.g, true) + " then ");
+                prefix = Some(create_reduction_string(child, &t.g, true) + " then ");
               }
             }
           }
@@ -388,7 +389,6 @@ fn create_child_state(
   t: &TransitionGraph,
 ) -> String {
   let state_name = get_node_state_name(child, node, resolved_states);
-  let sym = child.edge_symbol;
 
   match child.node_type {
     NodeType::ProductionCall => {
@@ -404,7 +404,7 @@ fn create_child_state(
     }
     NodeType::Complete => {
       if !t.is_scanner {
-        create_reduce_string(child, &t.g, false)
+        create_reduction_string(child, &t.g, false)
       } else {
         String::new()
       }
@@ -412,10 +412,75 @@ fn create_child_state(
     NodeType::Shift => {
       format!("shift then goto state [ {} ]", state_name,)
     }
-    NodeType::PeekTransition
-    | NodeType::InitialPeekTransition
-    | NodeType::Fork
-    | NodeType::Goto => {
+    NodeType::BreadcrumbShiftCompletion => {
+      format!(
+        "complete crumb trail [{}] /* {} */ then shift then goto state [ {} ]",
+        child.transition_items[0].get_state().get_lane(),
+        child.transition_items[0].debug_string(&t.g),
+        state_name,
+      )
+    }
+    NodeType::BreadcrumbEndCompletion => {
+      let string = create_reduction_string(child, &t.g, false);
+      format!(
+        "complete crumb trail [{}] /* {} */ then {}",
+        child.transition_items[0].get_state().get_lane(),
+        child.transition_items[0].debug_string(&t.g),
+        state_name,
+      )
+    }
+
+    NodeType::BreadcrumbTransition => {
+      let mut breadcrumb = String::new();
+      let mut lane_items =
+        hash_group_btreemap(node.transition_items.clone(), |_, item| item.get_state().get_lane())
+          .into_iter()
+          .map(|(l, item)| (l, (item, 0u32)))
+          .collect::<BTreeMap<_, _>>();
+
+      for (items, _) in lane_items.values().cloned().collect::<Vec<_>>() {
+        for item in items {
+          let state = item.get_state();
+          match state.get_lanes() {
+            (a, b) if a != b => {
+              lane_items.entry(b).and_modify(|(a, b)| {
+                (*b) += 1;
+              });
+            }
+            _ => {}
+          }
+        }
+      }
+
+      for (lane, (items, count)) in lane_items {
+        let completed_items = items.completed_item_vec();
+
+        if !completed_items.is_empty() {
+          for item in &completed_items {
+            match item.get_state().get_lanes() {
+              (c, p) if p != c => {
+                breadcrumb += &format!("\n        crumb [ {} | map {} ] then ", c, p);
+              }
+              _ => {}
+            }
+
+            let reduce_string = create_rule_reduction_string_new(&t.g, item);
+            breadcrumb += &format!(
+              "\n        crumb [ {} | {} ] then ",
+              item.get_state().get_lane(),
+              reduce_string
+            );
+          }
+        } else {
+        }
+        if count == 0 {
+          breadcrumb += &format!("\n        crumb [ {} | shift ] then ", lane)
+        }
+      }
+
+      format!("{}\n        shift then goto state [ {} ]", breadcrumb, state_name,)
+    }
+    NodeType::PeekTransition | NodeType::Fork | NodeType::Goto => {
       format!("goto state [ {} ]", state_name,)
     }
     NodeType::Pass => "pass".to_string(),
@@ -426,31 +491,40 @@ fn create_child_state(
   }
 }
 
-fn create_reduce_string(node: &GraphNode, g: &GrammarStore, is_scanner: bool) -> String {
+fn create_reduction_string(node: &GraphNode, g: &GrammarStore, is_scanner: bool) -> String {
   match (node.transition_items.first(), is_scanner, node.node_type == NodeType::Pass) {
     (None, false /* not scanner */, true /* default pass state */) => "pass".to_string(),
     (Some(item), true /* is scanner */, false) => match item.get_origin() {
-      OriginData::Symbol(sym) => {
-        format!(
-          "assign token [ {}{} ]",
-          sym.bytecode_id(Some(g)),
-          format!(" /*{}*/", sym.to_string(g)),
-        )
-      }
+      OriginData::Symbol(sym) => create_token_reduction_string(g, sym),
       _ => {
         unreachable!("All items assigned to scanner nodes should have OriginData::Symbol data");
       }
     },
-    (Some(item), false /* not scanner */, false) => {
-      let rule = g.rules.get(&item.get_rule_id()).unwrap();
-      let production = g.productions.get(&rule.prod_id).unwrap();
-      format!(
-        "set prod to {} then reduce {} symbols to body {}",
-        production.bytecode_id, rule.len, rule.bytecode_id,
-      )
-    }
+    (Some(item), false /* not scanner */, false) => create_rule_reduction_string(g, item),
     _ => panic!("Invalid Leaf Node"),
   }
+}
+
+fn create_token_reduction_string(g: &GrammarStore, sym: SymbolID) -> String {
+  format!("assign token [ {}{} ]", sym.bytecode_id(Some(g)), format!(" /*{}*/", sym.to_string(g)),)
+}
+
+fn create_rule_reduction_string(g: &GrammarStore, item: &Item) -> String {
+  let rule = g.rules.get(&item.get_rule_id()).unwrap();
+  let production = g.productions.get(&rule.prod_id).unwrap();
+  format!(
+    "set prod to {} then reduce {} symbols to body {}",
+    production.bytecode_id, rule.len, rule.bytecode_id,
+  )
+}
+
+fn create_rule_reduction_string_new(g: &GrammarStore, item: &Item) -> String {
+  let rule = g.rules.get(&item.get_rule_id()).unwrap();
+  let production = g.productions.get(&rule.prod_id).unwrap();
+  format!(
+    "reduce {} symbols from rule {} to prod {}",
+    rule.len, rule.bytecode_id, production.bytecode_id,
+  )
 }
 
 fn get_node_state_name(

@@ -52,7 +52,7 @@ pub(crate) fn construct_recursive_ascent(
       .map(|i| {
         let stated_item = if i.completed() {
           have_end_items = true;
-          i.to_state(ItemState::GOTO_END_GOAL_STATE)
+          i.to_state(ItemState::OUT_OF_SCOPE)
         } else {
           i.increment().unwrap()
         };
@@ -84,7 +84,7 @@ pub(crate) fn construct_recursive_ascent(
           .unwrap_or(&Vec::new())
           .iter()
           .filter(|i| !group.iter().any(|g| (*g).to_empty_state() == (**i).to_empty_state()))
-          .map(|i| i.increment().unwrap().to_state(ItemState::GOTO_ROOT_END_GOAL_STATE))
+          .map(|i| i.increment().unwrap().to_state(ItemState::OUT_OF_SCOPE))
           .collect();
 
         goto_node.transition_items.append(&mut reducible.clone());

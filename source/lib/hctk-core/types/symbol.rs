@@ -93,7 +93,7 @@ pub enum SymbolID {
   EndOfInput,
   /// Used to differentiate different completed items in the
   /// `peek` module.
-  DistinctCompletion(u32),
+  DistinctGroup(u32),
   Undefined,
   UndefinedA,
   UndefinedB,

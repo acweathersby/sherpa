@@ -65,7 +65,7 @@ pub(crate) fn construct_recursive_descent(
 
   t.goto_seeds.append(&mut goto_seeds.to_set());
 
-  let mut root_node = GraphNode::new(&t, SymbolID::Start, None, starts.clone(), NodeType::RDStart);
+  let mut root_node = GraphNode::new(&t, SymbolID::Start, None, vec![], NodeType::RDStart);
 
   root_node.edge_type = EdgeType::Start;
 
@@ -73,7 +73,22 @@ pub(crate) fn construct_recursive_descent(
 
   let root_index = t.insert_node(root_node);
 
-  t.queue_node(ProcessGroup { node_index: root_index, items: start_items, ..Default::default() });
+  t.queue_node(ProcessGroup {
+    node_index: root_index,
+    items: start_items
+      .into_iter()
+      .enumerate()
+      .map(|(i, item)| {
+        if j.config().enable_breadcrumb_parsing {
+          let i = i as u32;
+          item.to_state(item.get_state().to_lanes(i + 1, i + 1))
+        } else {
+          item
+        }
+      })
+      .collect(),
+    ..Default::default()
+  });
 
   while let Some(process_group) = t.get_next_queued() {
     process_node(&mut t, j, process_group)?;
@@ -208,18 +223,25 @@ pub(super) fn create_completed_node(
     "Only items in the completed position should be passed to this function"
   );
 
-  if t.is_scanner {
+  if t.is_scanner || j.config().enable_breadcrumb_parsing {
     let goal = item.get_origin_sym();
 
-    debug_assert!(
-      goal != SymbolID::Undefined,
-      "All completed scanner items should have OriginData::Symbol data\n the item [\n {} \n] has origin data {:?}",
-      item.debug_string(&t.g),
-      item.get_origin()
-    );
+    if t.is_scanner {
+      debug_assert!(
+        goal != SymbolID::Undefined,
+        "All completed scanner items should have OriginData::Symbol data\n the item [\n {} \n] has origin data {:?}",
+        item.debug_string(&t.g),
+        item.get_origin()
+      );
+    }
 
-    let matching_starts =
-      t.starts.iter().cloned().filter(|s| s.get_origin_sym() == goal).collect::<BTreeSet<Item>>();
+    let matching_starts = t
+      .starts
+      .iter()
+      .cloned()
+      .filter(|s| s.get_origin_sym() == goal)
+      .map(|i| i.to_origin_only_state())
+      .collect::<BTreeSet<Item>>();
 
     if !matching_starts.contains(&&item.to_start().to_origin_only_state()) {
       // All our completed items need to
@@ -227,7 +249,8 @@ pub(super) fn create_completed_node(
       // is used to select the next set of items to be scanned, continuing the scan process
       // until we arrive at an end_item that belongs to the root closure.
 
-      let scanned_items = get_follow_items(t, &item, Some(parent_index));
+      let (scanned_items, _) =
+        get_follow_items(t, &item, Some(parent_index), item.get_state().get_lane() + 1);
 
       #[cfg(debug_assertions)]
       {
@@ -262,14 +285,15 @@ pub(super) fn create_completed_node(
       {
         j.report_mut().add_note(
           "Scan Mode Item Completion",
-          format!(
-            "\nCompleted item [{}] which produces token [{}]",
-            item.debug_string(&t.g),
-            match item.get_origin() {
-              OriginData::Symbol(sym) => sym.to_string(&t.g),
-              _ => String::new(),
-            }
-          ),
+          format!("\nCompleted item [{}] which produces [{}]", item.debug_string(&t.g), match item
+            .get_origin()
+          {
+            OriginData::Symbol(sym) => "symbol :".to_string() + &sym.to_string(&t.g),
+            OriginData::RuleId(rule_id) =>
+              "Production :".to_string()
+                + &t.g.get_production(&t.g.rules.get(&rule_id).unwrap().prod_id).unwrap().name,
+            _ => String::new(),
+          }),
         );
       }
     }

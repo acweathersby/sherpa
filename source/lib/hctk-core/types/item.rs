@@ -12,40 +12,40 @@ use std::{
 use super::HCResult;
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy, Hash, PartialOrd, Ord)]
-pub struct ItemState(
-  u32,
+pub struct ItemState {
+  curr_lane: u32,
+  prev_lane: u32,
+
   /// An index to the original object that produced this item, be it a production, a symbol,
   /// or undefined
-  OriginData,
-);
+  origin: OriginData,
+}
 
 impl ItemState {
-  const GOTO_END_GOAL: u32 = 0x4000;
-  const GOTO_END_GOAL_MASK: u32 = (!Self::GOTO_END_GOAL) & 0xFFFF;
-  pub const GOTO_END_GOAL_STATE: ItemState =
-    ItemState::new(Self::GOTO_END_GOAL, OriginData::UNDEFINED);
-  const GOTO_ROOT_END_GOAL: u32 = 0x8000;
-  const GOTO_ROOT_END_GOAL_MASK: u32 = (!Self::GOTO_ROOT_END_GOAL) & 0xFFFF;
-  pub const GOTO_ROOT_END_GOAL_STATE: ItemState =
-    ItemState::new(Self::GOTO_ROOT_END_GOAL, OriginData::UNDEFINED);
+  pub const OUT_OF_SCOPE: ItemState = ItemState::new(0x8000, OriginData::OutOfScope);
 
   pub const fn default() -> Self {
-    ItemState(0, OriginData::UNDEFINED)
+    ItemState { curr_lane: 0, prev_lane: 0, origin: OriginData::Undefined }
   }
 
   /// Create a new [Item]
-  pub const fn new(group: u32, origin: OriginData) -> Self {
-    ItemState(group, origin)
+  pub const fn new(lane: u32, origin: OriginData) -> Self {
+    ItemState { prev_lane: lane, curr_lane: lane, origin }
   }
 
-  /// Get the group the item belongs to
+  /// Get the current lane of the state
   pub fn get_lane(&self) -> u32 {
-    self.0
+    self.curr_lane
+  }
+
+  /// Get the current and previous lane of the state
+  pub fn get_lanes(&self) -> (u32, u32) {
+    (self.curr_lane, self.prev_lane)
   }
 
   /// Get the group the item belongs to
   pub fn get_origin(&self) -> OriginData {
-    self.1
+    self.origin
   }
 
   /// Get the SymbolId in the origin if the origin is
@@ -57,50 +57,66 @@ impl ItemState {
     }
   }
 
-  /// Get an index to the closure this item originates from
-  pub fn get_closure_index(&self) -> usize {
-    (self.get_lane() & (Self::GOTO_END_GOAL_MASK | Self::GOTO_ROOT_END_GOAL_MASK)) as usize
+  pub fn to_new_lane(&self, new_lane: u32) -> Self {
+    Self { curr_lane: new_lane, prev_lane: self.curr_lane, origin: self.origin }
+  }
+
+  pub fn in_same_lane(&self, other: &ItemState) -> bool {
+    match (self.curr_lane, self.prev_lane, other.curr_lane) {
+      (a, b, c) if a == c || b == c => true,
+      (_, 0, _) | (0, ..) => true,
+      _ => false,
+    }
+  }
+
+  pub fn is_out_of_scope(&self) -> bool {
+    matches!(self.origin, OriginData::OutOfScope)
   }
 
   /// Create a new Item with the given group
-  pub fn to_group(&self, group: u32) -> Self {
-    ItemState::new(group, self.1)
+  pub fn to_lane(&self, lane: u32) -> Self {
+    ItemState { curr_lane: lane, ..self.clone() }
+  }
+
+  /// Create a new Item with the given group
+  pub fn to_lanes(&self, curr_lane: u32, prev_lane: u32) -> Self {
+    ItemState { curr_lane, prev_lane, ..self.clone() }
   }
 
   /// Create a new Item with the given group
   pub fn to_origin(&self, origin: OriginData) -> Self {
-    ItemState::new(self.get_lane(), origin)
+    ItemState { origin, ..self.clone() }
   }
 
-  /// Indicate's the item originate from a production other
-  /// than the one currently being evaluated.
-  pub fn is_goto_end_origin(&self) -> bool {
-    (self.get_lane() & Self::GOTO_END_GOAL) > 0
-  }
-
-  /// Indicate's the item originate from a production other
-  /// than the one currently being evaluated.
-  pub fn is_goto_root_end_origin(&self) -> bool {
-    (self.get_lane() & Self::GOTO_ROOT_END_GOAL) > 0
+  pub fn to_out_of_scope(&self) -> Self {
+    ItemState { origin: OriginData::OutOfScope, ..self.clone() }
   }
 
   pub fn debug_string(&self, g: &GrammarStore) -> String {
-    format!("<group: {} [ {:?} ]>", self.get_lane(), self.get_origin().debug_string(g))
+    if self.curr_lane != self.prev_lane {
+      format!("[{}]->[{}] | {}", self.curr_lane, self.prev_lane, self.origin.debug_string(g))
+    } else {
+      format!("[{}] | {}", self.curr_lane, self.origin.debug_string(g))
+    }
   }
 }
 
 impl Display for ItemState {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    f.write_fmt(format_args!("<group: {}, origin:{:?}>", self.get_lane(), self.get_origin()))
+    if self.curr_lane != self.prev_lane {
+      f.write_fmt(format_args!("[{}]->[{}] | {:?}", self.curr_lane, self.prev_lane, self.origin))
+    } else {
+      f.write_fmt(format_args!("[{}] | {:?}", self.curr_lane, self.origin))
+    }
   }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum OriginData {
+  Undefined,
+  OutOfScope,
   Symbol(SymbolID),
-  Production(ProductionId),
   RuleId(RuleId),
-  UNDEFINED,
 }
 
 impl OriginData {
@@ -108,9 +124,13 @@ impl OriginData {
     use OriginData::*;
     match self {
       Symbol(sym_id) => sym_id.to_string(g),
-      Production(prod_id) => g.get_production_plain_name(prod_id).to_string(),
-      RuleId(rule_id) => g.get_rule(rule_id).unwrap().tok.to_string(),
-      UNDEFINED => "undefined".to_string(),
+      RuleId(rule_id) => {
+        let rule = g.get_rule(rule_id).unwrap();
+        let prod = g.get_production(&rule.prod_id).unwrap();
+        format!("{}[{}]", prod.name, rule.bytecode_id)
+      }
+      OutOfScope => "Out Of Scope".to_string(),
+      Undefined => "undefined".to_string(),
     }
   }
 }
@@ -138,11 +158,11 @@ impl Item {
 
       let mut string = String::new();
 
-      string += &format!("| {}\n|    ", self.state.debug_string(g));
+      string += &format!("<{}> ", self.state.debug_string(g));
 
       string += &g.productions.get(&rule.prod_id).unwrap().name;
 
-      string += " =>";
+      string += " >";
 
       for (index, RuleSymbol { sym_id, .. }) in rule.syms.iter().enumerate() {
         if index == self.off as usize {
@@ -163,14 +183,10 @@ impl Item {
 
   /// Two items belong to the same lane if one of the following
   /// conditions is met:
-  /// 1. Both Items have states that are in the same group.
-  /// 2. Either Item is in the 0 group.
+  /// 1. Both Items have states that are in the same lane.
+  /// 2. Either Item is in the root [0] lane.
   pub fn in_same_lane(&self, other: &Item) -> bool {
-    match (self.state.get_lane(), other.state.get_lane()) {
-      (a, b) if a == b => true,
-      (_, 0) | (0, _) => true,
-      _ => false,
-    }
+    self.state.in_same_lane(&other.state)
   }
 
   /// Creates a view of the item usefully for error reporting.
@@ -207,15 +223,7 @@ impl Item {
   }
 
   pub fn is_out_of_scope(&self) -> bool {
-    self.is_goto_end_origin() || self.is_goto_root_end_origin()
-  }
-
-  pub fn is_goto_end_origin(&self) -> bool {
-    self.state.is_goto_end_origin()
-  }
-
-  pub fn is_goto_root_end_origin(&self) -> bool {
-    self.state.is_goto_root_end_origin()
+    self.state.is_out_of_scope()
   }
 
   #[inline(always)]
@@ -279,7 +287,7 @@ impl Item {
       rule:  self.rule,
       len:   self.len,
       off:   self.off,
-      state: self.state.to_group(0),
+      state: self.state.to_lanes(0, 0),
     }
   }
 
@@ -359,6 +367,11 @@ impl Item {
   }
 
   #[inline(always)]
+  pub fn to_local_state(&self) -> ItemState {
+    self.state.to_lanes(self.state.curr_lane, self.state.curr_lane)
+  }
+
+  #[inline(always)]
   pub fn get_origin(&self) -> OriginData {
     self.state.get_origin()
   }
@@ -425,7 +438,8 @@ impl Item {
   }
 
   pub fn to_hash(&self) -> u64 {
-    ((self.rule.0 & 0xFFFF_FFF0_F000_F000) ^ ((self.off as u64) << 32)) | (self.state.0 as u64)
+    ((self.rule.0 & 0xFFFF_FFF0_F000_F000) ^ ((self.off as u64) << 32))
+      | (self.state.curr_lane as u64)
   }
 
   pub fn print_blame(&self, g: &GrammarStore) {
@@ -464,12 +478,13 @@ pub struct LinkedItemWithGoto {
 
 pub struct FollowItemGroups {
   pub uncompleted_items: Vec<LinkedItem>,
-  pub completed_items:   Vec<LinkedItem>,
+  pub intermediate_completed_items: Vec<LinkedItem>,
+  pub final_completed_items: Vec<LinkedItem>,
 }
 
 impl FollowItemGroups {
   pub fn get_all_items(&self) -> Items {
-    self.uncompleted_items.iter().chain(self.completed_items.iter()).map(|t| t.item).collect()
+    self.uncompleted_items.iter().chain(self.final_completed_items.iter()).map(|t| t.item).collect()
   }
 
   pub fn get_uncompleted_items(&self) -> Items {
@@ -477,7 +492,7 @@ impl FollowItemGroups {
   }
 
   pub fn get_completed_items(&self) -> Items {
-    self.completed_items.iter().map(|t| t.item).collect()
+    self.final_completed_items.iter().map(|t| t.item).collect()
   }
 }
 
@@ -529,8 +544,8 @@ pub trait ItemContainer: Clone + IntoIterator<Item = Item> {
   }
 
   #[inline(always)]
-  fn from_linked(linked: &Vec<LinkedItem>) -> Items {
-    linked.iter().map(|i| i.item).collect()
+  fn from_linked<T: IntoIterator<Item = LinkedItem>>(linked: T) -> Items {
+    linked.into_iter().map(|i| i.item).collect()
   }
 
   #[inline(always)]
@@ -567,7 +582,11 @@ pub trait ItemContainer: Clone + IntoIterator<Item = Item> {
     let mut output = vec![];
 
     for item in vec {
-      output.append(&mut get_closure_cached_with_state(&item, g))
+      if item.is_null() {
+        output.push(item)
+      } else {
+        output.append(&mut get_closure_cached_with_state(&item, g))
+      }
     }
 
     output.to_set()

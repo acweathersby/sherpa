@@ -80,6 +80,7 @@ pub(crate) fn compile_production_states(
     HCResult::Err(err) => {
       j.report_mut().stop_timer("Recursive Descent Compile");
       j.report_mut().add_error(err);
+
       return HCResult::None;
     }
     // Only expecting single errors to be ejected by these functions.

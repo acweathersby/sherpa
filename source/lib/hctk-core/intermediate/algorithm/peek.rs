@@ -17,6 +17,7 @@ pub(crate) fn peek(
 ) -> HCResult<()> {
   let grammar = t.g.clone();
   let g = &grammar;
+  let mut lane_counter = items.iter().fold(u32::MAX, |u,i| i.get_state().get_lane().min(u).max(1));
 
   t.get_node_mut(root_par_id).set_attribute(NodeAttributes::I_PEEK_ORIGIN);
 
@@ -24,11 +25,11 @@ pub(crate) fn peek(
 
   // Split items into groups based on symbol Ids.
   let goals = hash_group_btreemap(items.clone(), |index, i| {
-    if i.completed() {
-      SymbolID::DistinctCompletion(index as u32)
+    if i.completed() || j.config().enable_breadcrumb_parsing {
+      SymbolID::DistinctGroup(index as u32)
     } else if i.is_out_of_scope() {
       SymbolID::OutOfScope
-    } else {
+    } else{
       i.get_symbol(g)
     }
   })
@@ -41,14 +42,19 @@ pub(crate) fn peek(
     .iter()
     .enumerate()
     .flat_map(|(index, (_, items))| {
-      items.clone().into_iter().map(move |i| i.to_state(i.get_state().to_group(index as u32 + 1)))
+      items.clone().into_iter().map(move |i| i.to_state(i.get_state().to_lane(index as u32 + lane_counter)))
     })
     .collect::<Vec<_>>();
+
+
+  initial_items.print_items(g, "Initial items");
+
+  lane_counter += initial_items.len() as u32;
 
   t.get_node_mut(root_par_id).goto_items = initial_items.non_term_item_vec(g);
   // With our items now setup in lanes, we can start disambiguating
   let mut pending_items = VecDeque::from_iter(vec![(root_par_id, 0, initial_items)]);
-
+ 
   while let Some((par_id, depth, items)) = pending_items.pop_front() {
     let mut EXCLUSIVE_COMPLETED = false;
 
@@ -59,15 +65,24 @@ pub(crate) fn peek(
 
     // Resolve completed items by getting their follow set.
     if completed_items.len() > 0 {
+
+      insert_items_into_node(completed_items.clone(), t, par_id);
+
       let mut terminal_completions = vec![];
       for completed_item in completed_items {
-        let follow_and_terminal_completed = get_follow_items(t, &completed_item, Some(par_id));
-        terminal_completions
-          .append(&mut Vec::from_linked(&follow_and_terminal_completed.completed_items));
 
+        let (follow_and_terminal_completed, l) = get_follow_items(t, &completed_item, Some(par_id), lane_counter);
+
+        lane_counter = l;
+
+        terminal_completions
+          .append(&mut Vec::from_linked(follow_and_terminal_completed.final_completed_items));
+
+
+        insert_items_into_node(Vec::from_linked(follow_and_terminal_completed.intermediate_completed_items), t, par_id);
         // Merge follow set into term_items.
         closure.append(
-          &mut Vec::from_linked(&follow_and_terminal_completed.uncompleted_items)
+          &mut Vec::from_linked(follow_and_terminal_completed.uncompleted_items)
             .closure_with_state(g),
         )
       }
@@ -81,8 +96,6 @@ pub(crate) fn peek(
         }
         1 => {
           let items = terminal_completions;
-          let (_, goal_items) = get_goal_contents(&items, &goals);
-          let goal_items = goal_items.into_iter().flatten().cloned().collect();
 
           if t.is_scanner {
             let exclusive: Vec<&Item> =
@@ -95,7 +108,7 @@ pub(crate) fn peek(
                 j.report_mut().add_note("Exclusive short-circuit", format!(
                   "Short circuiting completion of other items due to one or more exclusive symbols being completed: [\n{}\n]",
                   exclusive.iter().map(|i| format!("    {{ {} => {} }}", 
-                  i.debug_string(&t.g), i.get_origin_sym().to_string(&t.g))).collect::<Vec<_>>().join("\n")
+                  i.debug_string(g), i.get_origin_sym().to_string(g))).collect::<Vec<_>>().join("\n")
               ));
               }
             }
@@ -106,16 +119,17 @@ pub(crate) fn peek(
           if depth == 0 {
             t.queue_node(ProcessGroup {
               node_index:   par_id,
-              items:        goal_items,
+              items:        get_goal_items(&items, &goals),
               discriminant: Some((SymbolID::Default, items)),
               depth:        global_depth,
             });
-          } else if t.is_scanner {
+          } else if t.is_scanner || j.config().enable_breadcrumb_parsing {
+            items.print_items(g, &format!("peek end"));
             let node_index = create_and_insert_node(
               t,
               SymbolID::EndOfInput,
               vec![],
-              Complete,
+              if t.is_scanner { Complete } else { BreadcrumbEndCompletion},
               Default,
               Some(par_id),
               Some(par_id),
@@ -143,7 +157,7 @@ pub(crate) fn peek(
             // Submit these items to be processed.
             t.queue_node(ProcessGroup {
               node_index,
-              items: goal_items.clone(),
+              items: get_goal_items(&items, &goals),
               discriminant: None,
               depth: global_depth,
             });
@@ -153,6 +167,8 @@ pub(crate) fn peek(
           if t.is_scanner {
             resolveConflictingSymbols(t, j, terminal_completions, depth, global_depth, par_id);
           } else {
+
+            items.print_items(g, "Conflicting items");
             return HCResult::Err(HCError::grammar_err_multi_location {
               message:   "Could not resolve production. Grammar has ambiguities.".to_string(),
               locations: terminal_completions
@@ -162,9 +178,9 @@ pub(crate) fn peek(
                   inline_message: "Test".to_string(),
                   loc: match i.get_origin() {
                     OriginData::RuleId(rule_id) => t.g.get_rule(&rule_id).unwrap().tok.clone(),
-                    _ => i.decrement().unwrap().get_rule_ref(&t.g).unwrap().tok.clone(),
+                    _ => i.decrement().unwrap().get_rule_ref(g).unwrap().tok.clone(),
                   },
-                  path: i.decrement().unwrap().get_rule_ref(&t.g).unwrap().grammar_ref.path.clone(),
+                  path: i.decrement().unwrap().get_rule_ref(g).unwrap().grammar_ref.path.clone(),
                 })
                 .collect(),
             });
@@ -175,8 +191,11 @@ pub(crate) fn peek(
     }
 
     let term_items = closure.term_item_vec(g);
+    
+    insert_items_into_node(term_items.clone(), t, par_id);
 
-    let mut updated_closure = closure.non_term_item_vec(&t.g);
+    let mut updated_closure = closure.non_term_item_vec(g);
+
 
     t.get_node_mut(par_id).goto_items.append(&mut updated_closure);
 
@@ -198,18 +217,13 @@ pub(crate) fn peek(
 
       let peek_groups = hash_group_vec(items.clone(), |_, i| i.get_state().get_lane());
 
-      insert_items_into_node(items.clone(), t, par_id);
-
       match peek_groups.len() {
         1 if j.occlusion_tracking_mode() => {
           // We can skip further processing if in occlusions tracking mode
         }
         1 => {
-          let (goal_sym, goal_items) = get_goal_contents(&items, &goals);
-          let goal_items: Items = goal_items.into_iter().flatten().cloned().collect();
-
-          match goal_sym[0] {
-            SymbolID::OutOfScope => {
+          match items[0].get_state().get_origin() {
+            OriginData::OutOfScope => {
               // This symbol belongs to a follow item of the production. In this
               // we simply fail to allow the production to complete using the fall
               // back function
@@ -226,25 +240,25 @@ pub(crate) fn peek(
 
               t.leaf_nodes.push(index);
             }
-            SymbolID::DistinctCompletion(_) => {
-              unreachable!("Completed items should have been taken care of at this point");
-            }
+            //SymbolID::DistinctGroup(_) => {
+            //  unreachable!("Completed items should have been taken care of at this point");
+            //}
             _ => {
               if depth == 0 {
                 // Reprocess the root node (which is always par_id when depth == 0)
                 // with the disambiguated items.
                 t.queue_node(ProcessGroup {
                   node_index:   par_id,
-                  items:        goal_items.clone(),
+                  items:        get_goal_items(&items, &goals),
                   discriminant: Some((sym, items)),
                   depth:        global_depth,
                 });
-              } else if t.is_scanner {
+              } else if t.is_scanner || j.config().enable_breadcrumb_parsing {
                 let node_index = create_and_insert_node(
                   t,
                   sym,
                   vec![],
-                  Shift,
+                  if t.is_scanner { Shift } else { BreadcrumbShiftCompletion },
                   Assert,
                   Some(par_id),
                   Some(par_id),
@@ -258,12 +272,13 @@ pub(crate) fn peek(
                   depth: global_depth,
                 });
               } else {
+                let goal_items = get_goal_items(&items, &goals);
                 let node_index = create_and_insert_node(
                   t,
                   sym,
                   vec![],
                   PeekTransition,
-                  get_edge_type(depth, t),
+                  get_edge_type(j,t,depth),
                   Some(par_id),
                   Some(root_par_id),
                   goal_items.non_term_item_vec(g),
@@ -299,8 +314,8 @@ pub(crate) fn peek(
               t,
               sym,
               lr_starts.clone(),
-              get_node_type(t),
-              get_edge_type(depth, t),
+              get_node_type(j,t),
+              get_edge_type(j,t,depth),
               Some(par_id),
               Some(par_id),
               lr_starts.non_term_item_vec(g),
@@ -317,7 +332,7 @@ pub(crate) fn peek(
                   sym,
                   lr_starts.clone(),
                   Fork,
-                  get_edge_type(depth, t),
+                  get_edge_type(j,t,depth),
                   Some(par_id),
                   Some(par_id),
                   lr_starts.non_term_item_vec(g),
@@ -350,17 +365,17 @@ pub(crate) fn peek(
               }
             }
           } else {
-            if !t.is_scanner && global_depth == 0 {
+            if !t.is_scanner && !j.config().enable_breadcrumb_parsing && global_depth == 0 {
               // Check to see if we can issue a call instead of increment.
               // For that to work, all items need to be in an initial state,
               // and the follow items must all have shifted from the same
               // non-terminal.
-              let mut call_groups = hash_group_btreemap(items.clone(), |_, i| {
-                let items = get_follow_items(t, &i, Some(par_id));
+    /*           let mut call_groups = hash_group_btreemap(items.clone(), |_, i| {
+                let (items, _) = get_follow_items(t, &i, Some(par_id), 0);
 
-                if items.completed_items.is_empty() {
+                if items.final_completed_items.is_empty() {
                   Some(
-                    Vec::from_linked(&items.uncompleted_items)
+                    Vec::from_linked(items.uncompleted_items)
                       .into_iter()
                       .map(|i| i.decrement().unwrap().get_symbol(g))
                       .collect::<BTreeSet<_>>(),
@@ -375,8 +390,8 @@ pub(crate) fn peek(
                 let (syms, items) = call_groups.pop().unwrap();
 
                 let mut node =
-                  GraphNode::new(&t, sym, Some(par_id), items.to_end(), get_node_type(t));
-                node.edge_type = get_edge_type(depth, t);
+                  GraphNode::new(&t, sym, Some(par_id), items.to_end(), get_node_type(j,t));
+                node.edge_type = get_edge_type(j,t,depth);
                 node.prod_sym = Some(syms.unwrap().into_iter().next().unwrap());
                 node.closure_parent = Some(par_id);
 
@@ -384,7 +399,7 @@ pub(crate) fn peek(
                 // Submit these items to be processed.
                 t.goto_seeds.append(&mut items.to_zero_state().to_set());
                 continue;
-              }
+              } */
             }
 
             // Pack items into new peek node and submit their increments for
@@ -395,13 +410,14 @@ pub(crate) fn peek(
               t,
               sym,
               vec![],
-              get_node_type(t),
-              get_edge_type(depth, t),
+              get_node_type(j,t),
+              get_edge_type(j,t,depth),
               Some(par_id),
               Some(par_id),
               incremented_items.non_term_item_vec(g),
             );
 
+            incremented_items.print_items(g, &format!("peek transition on {}", sym.to_string(g)));
             pending_items.push_back((node_index, depth + 1, incremented_items));
           }
         }
@@ -416,16 +432,24 @@ pub(crate) fn peek(
   HCResult::Ok(())
 }
 
-fn get_node_type(t: &TransitionGraph) -> NodeType {
+fn get_goal_items(items: &Vec<Item>, goals: &Vec<(SymbolID, Vec<Item>)>) -> Vec<Item> {
+    let (_, goal_items) = get_goal_contents(items, goals);
+    let goal_items = goal_items.into_iter().flatten().cloned().collect();
+    goal_items
+}
+
+fn get_node_type(j: &Journal, t: &TransitionGraph) -> NodeType {
   if t.is_scanner {
     NodeType::Shift
+  } else if j.config().enable_breadcrumb_parsing  {
+    NodeType::BreadcrumbTransition
   } else {
     NodeType::PeekTransition
   }
 }
 
-fn get_edge_type(depth: usize, t: &TransitionGraph) -> EdgeType {
-  if depth > 0 && !t.is_scanner {
+fn get_edge_type(j:&Journal, t: &TransitionGraph, depth: usize, ) -> EdgeType {
+  if depth > 0 && !t.is_scanner && !j.config().enable_breadcrumb_parsing {
     EdgeType::Peek
   } else {
     EdgeType::Assert

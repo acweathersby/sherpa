@@ -32,10 +32,7 @@ pub fn get_valid_recursive_descent_start_items(
     let mut closure = get_closure_cached_with_state(item, g).clone();
     let mut local_invalid = BTreeSet::new();
 
-    println!("{}", item.debug_string(g));
-
     for item in &closure {
-      println!("{}", item.debug_string(g));
       if invalid_productions.contains(&item.get_production_id_at_sym(g)) {
         local_invalid.insert(item.get_prod_id(g));
       }

@@ -88,7 +88,9 @@ pub enum NodeType {
   Goto,
   TerminalTransition,
   PeekTransition,
-  InitialPeekTransition,
+  BreadcrumbTransition,
+  BreadcrumbEndCompletion,
+  BreadcrumbShiftCompletion,
   ProductionCall,
   Recovery,
   Complete,
@@ -306,8 +308,8 @@ impl GraphNode {
   pub fn debug_string(&self, g: &GrammarStore) -> String {
     format!(
       "\n|[{}]--->[{}]{}\n|   sym: {}\n|  edge: {}\n|  node: {}{}\n| items:[\n{}\n]",
-      self.parent.map(|i| i.to_string()).unwrap_or(String::from("")),
       self.id,
+      self.parent.map(|i| i.to_string()).unwrap_or(String::from("")),
       self
         .proxy_parents
         .iter()
@@ -321,7 +323,7 @@ impl GraphNode {
       self
         .transition_items
         .clone()
-        .to_origin_only_state()
+        //.to_origin_only_state()
         .to_set()
         .iter()
         .map(|i| "   ".to_string() + &i.debug_string(g))
@@ -453,13 +455,10 @@ impl TransitionGraph {
   /// Removes the edge between this node and its parent, rendering
   /// it orphaned and available for destruction / reuse
   pub fn drop_node(&mut self, node_index: &NodeId) -> MaybeNodeId {
-    let node_id;
     let parent;
 
     {
       let node = self.get_node_mut(*node_index);
-
-      node_id = node.id;
 
       parent = node.parent;
 
