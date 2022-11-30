@@ -135,7 +135,7 @@ pub fn disassemble_state(
         let (string, offset) = ds(bc, so + 1, lu);
         (format!("\n{}SCAN", dh(so)) + &string, offset)
       }
-      INSTRUCTION::I08_NOOP => (format!("\n{}NOOP", dh(so)), so + 1),
+      INSTRUCTION::I08_EAT_CRUMBS => (format!("\n{}NOOP", dh(so)), so + 1),
       INSTRUCTION::I09_VECTOR_BRANCH => generate_table_string(
         bc,
         so,

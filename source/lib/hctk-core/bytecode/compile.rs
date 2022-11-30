@@ -44,7 +44,7 @@ pub(crate) fn build_byte_code_buffer(states: Vec<&IR_STATE>) -> (Vec<u32>, BTree
     INSTRUCTION::I15_FALL_THROUGH,
     INSTRUCTION::I00_PASS,
     INSTRUCTION::I15_FAIL,
-    INSTRUCTION::I08_NOOP,
+    INSTRUCTION::I08_EAT_CRUMBS,
     NORMAL_STATE_FLAG,
     INSTRUCTION::I00_PASS,
   ];

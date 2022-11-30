@@ -81,22 +81,22 @@ pub const PRODUCTION_SCOPE_POP_POINTER: u32 = 2;
 pub const TOKEN_ASSIGN_FLAG: u32 = 0x04000000;
 
 pub enum InstructionType {
-  PASS     = 0,
-  SHIFT    = 1,
-  GOTO     = 2,
-  SET_PROD = 3,
-  REDUCE   = 4,
-  TOKEN    = 5,
-  FORK_TO  = 6,
-  SCAN     = 7,
-  NOOP8    = 8,
+  PASS       = 0,
+  SHIFT      = 1,
+  GOTO       = 2,
+  SET_PROD   = 3,
+  REDUCE     = 4,
+  TOKEN      = 5,
+  FORK_TO    = 6,
+  SCAN       = 7,
+  EAT_CRUMBS = 8,
   VECTOR_BRANCH = 9,
   HASH_BRANCH = 10,
   SET_FAIL_STATE = 11,
-  REPEAT   = 12,
-  NOOP13   = 13,
+  REPEAT     = 12,
+  NOOP13     = 13,
   ASSERT_SHIFT = 14,
-  FAIL     = 15,
+  FAIL       = 15,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Default)]
@@ -116,7 +116,7 @@ impl INSTRUCTION {
   pub const I06_FORK_TO: u32 = 6 << 28;
   pub const I07_SCAN: u32 = 7 << 28;
   pub const I07_SCAN_BACK_UNTIL: u32 = INSTRUCTION::I07_SCAN | 0x00100000;
-  pub const I08_NOOP: u32 = 8 << 28;
+  pub const I08_EAT_CRUMBS: u32 = 8 << 28;
   pub const I09_VECTOR_BRANCH: u32 = 9 << 28;
   pub const I10_HASH_BRANCH: u32 = 10 << 28;
   pub const I11_SET_FAIL_STATE: u32 = 11 << 28;
@@ -202,7 +202,7 @@ impl INSTRUCTION {
   }
 
   pub fn is_NOOP8(&self) -> bool {
-    (self.0 & INSTRUCTION_HEADER_MASK) == Self::I08_NOOP
+    (self.0 & INSTRUCTION_HEADER_MASK) == Self::I08_EAT_CRUMBS
   }
 
   pub fn is_VECTOR_BRANCH(&self) -> bool {
@@ -251,7 +251,7 @@ impl INSTRUCTION {
       Self::I05_TOKEN => InstructionType::TOKEN,
       Self::I06_FORK_TO => InstructionType::FORK_TO,
       Self::I07_SCAN => InstructionType::SCAN,
-      Self::I08_NOOP => InstructionType::NOOP8,
+      Self::I08_EAT_CRUMBS => InstructionType::EAT_CRUMBS,
       Self::I09_VECTOR_BRANCH => InstructionType::VECTOR_BRANCH,
       Self::I10_HASH_BRANCH => InstructionType::HASH_BRANCH,
       Self::I11_SET_FAIL_STATE => InstructionType::SET_FAIL_STATE,
@@ -273,7 +273,7 @@ impl INSTRUCTION {
       Self::I05_TOKEN => "I05_TOKEN",
       Self::I06_FORK_TO => "I06_FORK_TO",
       Self::I07_SCAN => "I07_SCAN",
-      Self::I08_NOOP => "I08_NOOP",
+      Self::I08_EAT_CRUMBS => "I08_NOOP",
       Self::I09_VECTOR_BRANCH => "I09_VECTOR_BRANCH",
       Self::I10_HASH_BRANCH => "I10_HASH_BRANCH",
       Self::I11_SET_FAIL_STATE => "I11_SET_FAIL_STATE",

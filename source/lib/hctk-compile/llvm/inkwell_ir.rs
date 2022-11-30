@@ -1255,7 +1255,7 @@ pub(crate) fn construct_parse_function_statements(
         // TODO
         break;
       }
-      NOOP8 | NOOP13 | SCAN | REPEAT | ASSERT_SHIFT | SET_FAIL_STATE => {
+      EAT_CRUMBS | NOOP13 | SCAN | REPEAT | ASSERT_SHIFT | SET_FAIL_STATE => {
         instruction = instruction.next(&output.bytecode);
       }
       VECTOR_BRANCH | HASH_BRANCH => {

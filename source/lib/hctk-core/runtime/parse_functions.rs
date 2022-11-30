@@ -41,7 +41,7 @@ pub fn dispatch<T: BaseCharacterReader + MutCharacterReader>(
         break action;
       }
       SCAN => scan(),
-      NOOP8 => noop(i),
+      EAT_CRUMBS => noop(i),
       VECTOR_BRANCH => vector_jump(i, r, ctx, bc),
       HASH_BRANCH => hash_jump(i, r, ctx, bc),
       SET_FAIL_STATE => set_fail(),
@@ -114,6 +114,33 @@ fn goto<T: BaseCharacterReader + MutCharacterReader>(
   ctx: &mut ParseContext<T>,
 ) -> u32 {
   ctx.push_state(instr.get_value());
+  i + 1
+}
+
+#[inline]
+fn eat_crumbs<T: BaseCharacterReader + MutCharacterReader>(
+  i: u32,
+  instr: INSTRUCTION,
+  ctx: &mut ParseContext<T>,
+) -> u32 {
+  ctx.push_state(instr.get_value());
+  // The collapse function takes the current production, retasked
+  // to be a `lane` selector, and compares that against the a 
+  // sentinal value. If the value matches the production, 
+  // then one of three things will occur:
+  // 1. A shift is issued of length N, which is defined in
+  //    the next instruction on the stack.
+  // 2. A rule reduction is issued, with rule id and production
+  //    id information stored in the next instruction on the 
+  //    stack. 
+  // 3. A lane merge occurs, and the production value is changed 
+  //    to the value of the new lane (which is really an earlier
+  //    generation lane).
+  // If the lane does not match, we still pop off the next value
+  // and let the compiler proceed.
+
+
+
   i + 1
 }
 

@@ -933,19 +933,23 @@ mod new_tests {
       r##"
     @IGNORE g:sp
     
-    <> term >  tk:ident g:sp? \= value_list
+    <> term >  \x A \( g:id? \)  f:ast { { t_Function_Definition } }
+            |  \x B \;           f:ast { { t_Type_Definition } }
 
-    <> value_list > \" formal_value_list(+g:sp) \"
-    
-    <> formal_value_list > ident
-    
-    <> ident > g:id(+) 
+    <> A > Adent \x
+
+    <> B > Bdent \x
+
+
+    <> Adent > g:id
+
+    <> Bdent > g:id
 
     "##,
     )
     .unwrap();
 
-    compile_production_states_LR(&mut j, g.get_production_id_by_name("term")?)?;
+    // compile_production_states_LR(&mut j, g.get_production_id_by_name("term")?);
 
     compile_production_states(&mut j, g.get_production_id_by_name("term")?)?;
 

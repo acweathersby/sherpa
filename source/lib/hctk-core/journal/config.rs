@@ -29,17 +29,20 @@ pub struct Config {
 
   /// The Parser will produce peek productions for symbols that occlude.
   /// An extra compile step must be taken to produce the symbol occlusion table.
-  pub allow_occluding_symbols:  bool,
+  pub allow_occluding_symbols:   bool,
   /// Convert bytecode into a human readable "disassembly" format. This can be
   /// accessed in the journal through `Disassembly` report type. The main note
   /// in that report is labeled "Output", which will contain the
   /// dissemble text.
-  pub build_disassembly:        bool,
+  pub build_disassembly:         bool,
   /// Add IR states string dump to IR compilation reports. This affects the ReportTypes
   /// - [ReportType::TokenProductionCompile(ProductionId)](ReportType)
   /// - [ReportType::ScannerCompile(ScannerId)](ReportType)
   /// - [ReportType::ProductionCompile(ProductionId)](ReportType)
   ///
   /// The note can be found labeled `IRStates`
-  pub debug_add_ir_states_note: bool,
+  pub debug_add_ir_states_note:  bool,
+  /// Uses the bread crumb parser technique to overcome local
+  /// ambiguities.
+  pub enable_breadcrumb_parsing: bool,
 }
