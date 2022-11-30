@@ -1,5 +1,5 @@
 use super::types::{AScriptProp, AScriptStructId, AScriptTypeVal, TaggedType};
-use hctk_core::types::*;
+use hctk_core::*;
 use std::{collections::BTreeMap, sync::Arc};
 
 /// This error occurs when multiple definitions of the same Struct

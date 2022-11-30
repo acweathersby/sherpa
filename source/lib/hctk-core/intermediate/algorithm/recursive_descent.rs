@@ -30,13 +30,11 @@
 //! case, the compiler can make fork states that then turns the resulting parser into either
 //! GRD(&ast;), GRDLR(&ast;), or GRADLR(&ast;)
 
-use super::{
-  follow::get_follow_items,
-  peek::{insert_items_into_node, peek},
-  utils::get_valid_recursive_descent_start_items,
-};
+use peek::insert_items_into_node;
+
+use super::{create_and_insert_node, follow::get_follow_items, peek};
 use crate::{
-  intermediate::peek::create_and_insert_node,
+  intermediate::utils::get_valid_recursive_descent_start_items,
   journal::Journal,
   types::{GraphNode, TransitionGraph as TPack, *},
 };

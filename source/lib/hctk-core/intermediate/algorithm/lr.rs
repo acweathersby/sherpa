@@ -1,6 +1,7 @@
-use super::{follow::get_follow_items, utils::*};
+use super::get_follow_items;
 use crate::{
   grammar::*,
+  intermediate::utils::hash_group_btreemap,
   journal::Journal,
   types::{GraphNode, NodeAttributes as TST, TransitionGraph as TPack, *},
 };
@@ -9,12 +10,36 @@ use std::{
   vec,
 };
 
+pub(crate) fn construct_LR(
+  j: &mut Journal,
+  is_scanner: bool,
+  starts: &Vec<Item>,
+) -> HCResult<TPackResults> {
+  let g = j.grammar().unwrap();
+
+  let start_productions = BTreeSet::from_iter(starts.iter().map(|i| i.get_prod_id(&g)));
+
+  let mut t = TPack::new(g.clone(), TransitionMode::LR, is_scanner, &starts, start_productions);
+
+  let mut root_node = GraphNode::new(&t, SymbolID::Start, None, starts.clone(), NodeType::LRStart);
+
+  root_node.edge_type = EdgeType::Start;
+
+  construct_inline_LR(&mut t, j, root_node)?;
+
+  HCResult::Ok(t.clean())
+}
+
 /// Constructs nodes that uses the LR strategy for parsing
 /// This means that any state may have a GOTO clause, with in Hydrocarbon
 /// Case means a alternative node branch that stores all GOTO nodes,
 /// whose address is then pushed first pushed to the stack before transitioning
 /// to sibling nodes.
-pub(super) fn construct_LR(t: &mut TPack, j: &mut Journal, root_node: GraphNode) -> HCResult<()> {
+pub(super) fn construct_inline_LR(
+  t: &mut TPack,
+  j: &mut Journal,
+  root_node: GraphNode,
+) -> HCResult<()> {
   let mut nodes = Vec::<NodeId>::new();
   let mut leaf_items = vec![];
 
@@ -34,7 +59,6 @@ pub(super) fn construct_LR(t: &mut TPack, j: &mut Journal, root_node: GraphNode)
 
   let root_node_index = t.insert_node(root_node);
 
-  t.get_node_mut(root_node_index).set_attribute(TST::I_LR_START);
   let mut to_process = VecDeque::from_iter(vec![root_node_index]);
   nodes.push(root_node_index);
 
@@ -48,10 +72,6 @@ pub(super) fn construct_LR(t: &mut TPack, j: &mut Journal, root_node: GraphNode)
     // let terms = closure.drain_filter(|i| i.is_nonterm(g)).collect::<BTreeSet<_>>();
     let end_items = closure.drain_filter(|i| i.completed()).collect::<BTreeSet<_>>();
     let terms_and_non_terms = closure; // Non-terms become this state's GOTO
-
-    if terms_and_non_terms.iter().any(|i| i.is_nonterm(&t.g)) {
-      t.get_node_mut(parent_index).set_attribute(TST::I_GOTO_LR);
-    }
 
     for (symbol, group) in hash_group_btreemap(terms_and_non_terms, |i, v| v.get_symbol(&g)) {
       // Create a new transition node and add the incremented items to  it.
@@ -71,7 +91,6 @@ pub(super) fn construct_LR(t: &mut TPack, j: &mut Journal, root_node: GraphNode)
               let mut child_node =
                 GraphNode::new(t, symbol, Some(parent_index), incremented_items, NodeType::Goto);
               child_node.edge_type = EdgeType::Goto;
-              child_node.set_attribute(TST::I_LR | TST::I_GOTO_LR_BRANCH);
               child_node.closure_parent = Some(parent_index);
               let child_index = t.insert_node(child_node);
               to_process.push_back(child_index);
@@ -83,7 +102,6 @@ pub(super) fn construct_LR(t: &mut TPack, j: &mut Journal, root_node: GraphNode)
                 GraphNode::new(t, symbol, Some(parent_index), incremented_items, NodeType::Shift);
               child_node.edge_type = EdgeType::Assert;
               child_node.closure_parent = Some(parent_index);
-              child_node.set_attribute(TST::I_LR | TST::I_SHIFT);
               let child_index = t.insert_node(child_node);
               to_process.push_back(child_index);
               nodes.push(child_index);
@@ -177,6 +195,5 @@ pub(super) fn construct_LR(t: &mut TPack, j: &mut Journal, root_node: GraphNode)
 fn create_end_node(t: &mut TPack, sym: SymbolID, parent_index: NodeId, end_item: &Item) -> NodeId {
   let end_node = GraphNode::new(t, sym, Some(parent_index), vec![*end_item], NodeType::Complete);
   let node_index = t.insert_node(end_node);
-  t.get_node_mut(node_index).set_attribute(TST::I_COMPLETED | TST::O_SHIFT);
   node_index
 }

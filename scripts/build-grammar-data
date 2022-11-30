@@ -1,3 +1,0 @@
-#! /usr/bin/bash
-
-hc compile parser --O0 --t rust --asytrip --o ./source/lib/hctk-core/grammar/data/ ./source/grammar/v07/hcg.hcg

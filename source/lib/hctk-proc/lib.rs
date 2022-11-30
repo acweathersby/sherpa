@@ -2,7 +2,7 @@
 #![feature(proc_macro_internals)]
 #![feature(proc_macro_diagnostic)]
 #![feature(proc_macro_span_shrink)]
-use hctk_core::types::HCError;
+use hctk_core::HCError;
 use proc_macro::{Diagnostic, Span, TokenStream, TokenTree};
 use std::{collections::BTreeMap, path::PathBuf};
 

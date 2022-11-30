@@ -1,7 +1,8 @@
 use super::{
+  construct_LR,
+  construct_recursive_ascent,
+  construct_recursive_descent,
   ir::construct_ir,
-  recursive_ascent::construct_recursive_ascent,
-  recursive_descent::construct_recursive_descent,
   utils::{generate_recursive_descent_items, generate_scanner_symbol_items},
 };
 use crate::{
@@ -13,6 +14,48 @@ use std::{
   collections::{BTreeMap, BTreeSet},
   thread,
 };
+
+pub(crate) fn compile_production_states_LR(
+  j: &mut Journal,
+  prod_id: ProductionId,
+) -> HCResult<Vec<Box<IRState>>> {
+  let grammar = j.grammar()?;
+
+  let state_name = grammar.get_production_guid_name(&prod_id);
+
+  j.set_active_report(
+    &format!("Production [{}] LR IR Compilation", grammar.get_production_plain_name(&prod_id)),
+    crate::journal::report::ReportType::ProductionCompile(prod_id),
+  );
+
+  j.report_mut().start_timer("LR Parser Compilation");
+
+  let items = generate_recursive_descent_items(j, prod_id);
+
+  let t = match construct_LR(j, false, &items) {
+    HCResult::Ok((t, _)) => t,
+    HCResult::Err(err) => {
+      j.report_mut().stop_timer("LR Descent Compile");
+      j.report_mut().add_error(err);
+      return HCResult::None;
+    }
+    // Only expecting single errors to be ejected by these functions.
+    _ => return HCResult::None,
+  };
+
+  let rd_states = construct_ir(j, &state_name, &t)?;
+
+  j.report_mut().stop_timer("LR Descent Compile");
+
+  #[cfg(debug_assertions)]
+  {
+    j.report_mut().add_note("RD Graph Nodes", t.write_nodes());
+  }
+
+  addIRStateNote(j, &rd_states);
+
+  HCResult::Ok(rd_states)
+}
 
 // Compile the parser states of a single production
 pub(crate) fn compile_production_states(
@@ -28,14 +71,14 @@ pub(crate) fn compile_production_states(
     crate::journal::report::ReportType::ProductionCompile(prod_id),
   );
 
-  j.report_mut().start_timer("RD Compilation");
+  j.report_mut().start_timer("Recursive Descent Compile");
 
   let items = generate_recursive_descent_items(j, prod_id);
 
   let t = match construct_recursive_descent(j, false, &items) {
     HCResult::Ok((t, _)) => t,
     HCResult::Err(err) => {
-      j.report_mut().stop_timer("RD Compilation");
+      j.report_mut().stop_timer("Recursive Descent Compile");
       j.report_mut().add_error(err);
       return HCResult::None;
     }
@@ -45,7 +88,7 @@ pub(crate) fn compile_production_states(
 
   let mut rd_states = construct_ir(j, &state_name, &t)?;
 
-  j.report_mut().stop_timer("RD Compilation");
+  j.report_mut().stop_timer("Recursive Descent Compile");
 
   #[cfg(debug_assertions)]
   {
@@ -53,7 +96,7 @@ pub(crate) fn compile_production_states(
   }
 
   if j.config().resolution_mode.intersects(ResolutionMode::RecursiveAscent) {
-    j.report_mut().start_timer("RA Compilation");
+    j.report_mut().start_timer("Recursive Ascent Compile");
 
     let (t, _) = construct_recursive_ascent(j, t.goto_seeds, t.root_prod_ids);
 
@@ -61,16 +104,18 @@ pub(crate) fn compile_production_states(
 
     rd_states.append(&mut ra_states);
 
-    j.report_mut().stop_timer("RA Compilation");
+    j.report_mut().stop_timer("Recursive Ascent Compile");
 
     #[cfg(debug_assertions)]
     {
       j.report_mut().add_note("RA Graph Nodes", t.write_nodes());
     }
 
+    addIRStateNote(j, &rd_states);
+
     HCResult::Ok(rd_states)
   } else if t.goto_seeds.len() > 0 {
-    j.report_mut().stop_timer("RA Compilation");
+    j.report_mut().stop_timer("Recursive Ascent Compile");
     panic!(
       "Grammar cannot be compiled purely as Recursive Descent. This error has
      occurred because the config as not been set to enable recursive ascent states. 
@@ -78,6 +123,8 @@ pub(crate) fn compile_production_states(
       t.goto_seeds.to_debug_string(&grammar, "\n")
     );
   } else {
+    addIRStateNote(j, &rd_states);
+
     HCResult::Ok(rd_states)
   }
 }
@@ -96,7 +143,7 @@ pub(crate) fn compile_token_production_states(
     crate::journal::report::ReportType::TokenProductionCompile(prod_id),
   );
 
-  j.report_mut().start_timer("RD Compilation");
+  j.report_mut().start_timer("Recursive Descent Compile");
 
   let items = generate_recursive_descent_items(j, prod_id)
     .into_iter()
@@ -110,7 +157,7 @@ pub(crate) fn compile_token_production_states(
   let t = match construct_recursive_descent(j, true, &items) {
     HCResult::Ok((t, _)) => t,
     HCResult::Err(err) => {
-      j.report_mut().stop_timer("RD Compilation");
+      j.report_mut().stop_timer("Recursive Descent Compile");
       j.report_mut().add_error(err);
       return HCResult::None;
     }
@@ -120,12 +167,14 @@ pub(crate) fn compile_token_production_states(
 
   let rd_states = construct_ir(j, &state_name, &t)?;
 
-  j.report_mut().stop_timer("RD Compilation");
+  j.report_mut().stop_timer("Recursive Descent Compile");
 
   #[cfg(debug_assertions)]
   {
     j.report_mut().add_note("RD Graph Nodes", t.write_nodes());
   }
+
+  addIRStateNote(j, &rd_states);
 
   HCResult::Ok(rd_states)
 }
@@ -152,14 +201,14 @@ pub(crate) fn compile_scanner_states(
     ),
   );
 
-  j.report_mut().start_timer("RD Compilation");
+  j.report_mut().start_timer("Recursive Descent Compile");
 
   let items = generate_scanner_symbol_items(symbols, j);
 
   let t = match construct_recursive_descent(j, true, &items) {
     HCResult::Ok((t, _)) => t,
     HCResult::Err(err) => {
-      j.report_mut().stop_timer("RD Compilation");
+      j.report_mut().stop_timer("Recursive Descent Compile");
       j.report_mut().add_error(err);
       return HCResult::None;
     }
@@ -169,14 +218,23 @@ pub(crate) fn compile_scanner_states(
 
   let rd_states = construct_ir(j, &state_name, &t)?;
 
-  j.report_mut().stop_timer("RD Compilation");
+  j.report_mut().stop_timer("Recursive Descent Compile");
 
   #[cfg(debug_assertions)]
   {
     j.report_mut().add_note("RD Graph Nodes", t.write_nodes());
   }
 
+  addIRStateNote(j, &rd_states);
+
   HCResult::Ok(rd_states)
+}
+
+fn addIRStateNote(j: &mut Journal, rd_states: &Vec<Box<IRState>>) {
+  if j.config().debug_add_ir_states_note {
+    j.report_mut()
+      .add_note("IRStates", rd_states.iter().map(|s| s.get_code()).collect::<Vec<_>>().join("\n"))
+  }
 }
 
 fn compile_state_chunk(

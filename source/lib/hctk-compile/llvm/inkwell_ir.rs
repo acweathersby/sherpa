@@ -1,5 +1,5 @@
 use super::{inkwell_branch_ir::construct_instruction_branch, types::*};
-use hctk_core::{bytecode::BytecodeOutput, types::*};
+use hctk_core::{compile::BytecodeOutput, GrammarStore, IRStateType, FAIL_STATE_FLAG, INSTRUCTION};
 use inkwell::{
   builder::Builder,
   context::Context,
@@ -1221,7 +1221,7 @@ pub(crate) fn construct_parse_function_statements(
   }
 
   while instruction.is_valid() {
-    use InstructionType::*;
+    use hctk_core::InstructionType::*;
     match instruction.to_type() {
       SHIFT => {
         if *is_scanner {
@@ -1284,7 +1284,7 @@ fn write_emit_reentrance<'a>(
 ) {
   let bytecode = &pack.output.bytecode;
 
-  use InstructionType::*;
+  use hctk_core::InstructionType::*;
 
   let next_instruction = match instruction.to_type() {
     PASS => INSTRUCTION::Pass(),
@@ -1449,7 +1449,7 @@ pub(crate) fn construct_instruction_goto<'a>(
     (instruction.next(bytecode), None)
   } else {
     match instruction.next(bytecode).to_type() {
-      InstructionType::PASS => {
+      hctk_core::InstructionType::PASS => {
         // Call the function directly. This should end up as a tail call.
         let return_val = builder
           .build_call(

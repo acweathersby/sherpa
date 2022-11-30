@@ -1,10 +1,9 @@
 //! Functions for resolving a set of ambiguous Items.
 use super::{
   follow::get_follow_items,
-  lr::construct_LR,
-  utils::{hash_group_btreemap, hash_group_vec, symbols_occlude},
+  lr::construct_inline_LR,
 };
-use crate::{grammar::hash_id_value_u64, journal::Journal, types::*};
+use crate::{grammar::hash_id_value_u64, journal::Journal, types::*, intermediate::utils::{hash_group_btreemap, hash_group_vec, symbols_occlude}};
 use std::collections::{BTreeSet, VecDeque};
 use EdgeType::*;
 use NodeType::*;
@@ -307,7 +306,7 @@ pub(crate) fn peek(
               lr_starts.non_term_item_vec(g),
             );
 
-            match construct_LR(t, j, root_node) {
+            match construct_inline_LR(t, j, root_node) {
               HCResult::Ok(_) => {
                 // Our grammar is now (RD/RAD + LR)
               }

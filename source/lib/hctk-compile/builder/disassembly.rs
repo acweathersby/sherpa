@@ -2,8 +2,8 @@ use super::pipeline::PipelineTask;
 use crate::builder::disclaimer::DISCLAIMER;
 use hctk_core::{
   debug::{generate_disassembly, BytecodeGrammarLookups},
-  types::HCError,
   writer::code_writer::CodeWriter,
+  *,
 };
 use std::io::BufWriter;
 

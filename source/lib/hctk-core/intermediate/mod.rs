@@ -1,23 +1,17 @@
+pub(crate) mod algorithm;
 pub mod compile;
 pub mod errors;
-mod follow;
 mod ir;
-mod lr;
 pub mod optimize;
-mod peek;
-mod recursive_ascent;
-pub(crate) mod recursive_descent;
 pub(crate) mod utils;
+pub use algorithm::*;
 
 #[cfg(test)]
 
 mod transition_tree_tests {
 
   use crate::{
-    intermediate::{
-      recursive_descent::construct_recursive_descent,
-      utils::generate_recursive_descent_items,
-    },
+    intermediate::{construct_recursive_descent, utils::generate_recursive_descent_items},
     journal::{config::Config, report::ReportType, Journal},
     types::HCResult,
   };
@@ -855,6 +849,7 @@ mod new_tests {
 
   use crate::{
     bytecode::compile_bytecode,
+    compile::{compile_production_states, compile_production_states_LR},
     debug::{generate_disassembly, BytecodeGrammarLookups},
     journal::{config::Config, report::ReportType, Journal},
     types::{GrammarStore, HCResult, ProductionId},
@@ -922,6 +917,42 @@ mod new_tests {
     // println!("{}", note);
     // }
     // });
+    HCResult::Ok(())
+  }
+
+  #[test]
+  fn test_peek3() -> HCResult<()> {
+    let mut j = Journal::new(Some(Config {
+      build_disassembly: true,
+      allow_occluding_symbols: true,
+      debug_add_ir_states_note: true,
+      ..Default::default()
+    }));
+    let g = GrammarStore::from_str(
+      &mut j,
+      r##"
+    @IGNORE g:sp
+    
+    <> term >  tk:ident g:sp? \= value_list
+
+    <> value_list > \" formal_value_list(+g:sp) \"
+    
+    <> formal_value_list > ident
+    
+    <> ident > g:id(+) 
+
+    "##,
+    )
+    .unwrap();
+
+    compile_production_states_LR(&mut j, g.get_production_id_by_name("term")?)?;
+
+    compile_production_states(&mut j, g.get_production_id_by_name("term")?)?;
+
+    j.flush_reports();
+
+    j.debug_report(ReportType::ProductionCompile(Default::default()));
+
     HCResult::Ok(())
   }
 }

@@ -142,67 +142,11 @@ impl std::fmt::Display for EdgeType {
 #[bitmask]
 pub enum NodeAttributes {
   EMPTY,
-  /// Transition has occurred from
-  /// the consumption of a terminal
-  /// symbol. All transition should
-  /// have this set except for the
-  /// initial state and the goal state.
-  O_SHIFT,
-
-  /// Transition has occurred from the
-  /// completion of non-terminal symbol.
-  O_CALL,
-
-  /// Transition has occurred from the
-  /// accepting of a completed root item.
-  O_ACCEPT,
-
-  /// Transition shift next token, but the reader state is
-  /// preserved and eventually reset to the last non-peek
-  /// transition.
-  O_PEEK_SHIFT,
-
-  O_FORK,
-
-  /// State includes items out of the scope of the current
-  /// production that should be used for disambiguating states
-  /// that would cause a reduction to a production ID other than
-  /// the current production.
-  I_OUT_OF_SCOPE,
-
-  /// Transition has occurred from the
-  /// accepting of a root item.
-  I_COMPLETED,
-
-  I_GOTO_START,
-
-  /// Indicates this node consumes its symbol as a token.
-  I_SHIFT,
-
-  I_PASS,
-
-  I_FAIL,
 
   /// Nodes marked as `I_PEEK_ORIGIN` are the root nodes of a
   /// peek branch.
   I_PEEK_ORIGIN,
 
-  /// This state is set when the nodes item has a skipped symbol
-  /// that occludes another item that consumes that symbol.
-  I_SKIPPED_COLLISION,
-
-  /// Indicates the item of this node is the result of a goto on a
-  /// root production.
-  I_GOTO_ROOT,
-
-  I_GOTO_LR_BRANCH,
-
-  /// Indicates the item of this node is an completed item that results
-  /// from the GOTO of a production.
-  I_GOTO_COMPLETED,
-
-  I_GOTO_LR,
-  I_LR_START,
   I_LR,
 }
 
@@ -399,7 +343,8 @@ impl GraphNode {
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum TransitionMode {
   RecursiveDescent,
-  GoTo,
+  RecursiveAscent,
+  LR,
 }
 
 impl Default for TransitionMode {

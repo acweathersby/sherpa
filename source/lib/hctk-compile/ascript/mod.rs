@@ -4,7 +4,7 @@ pub mod rust;
 pub mod types;
 
 use crate::{builder::pipeline::PipelineTask, SourceType};
-use hctk_core::{types::HCError, writer::code_writer::CodeWriter};
+use hctk_core::{writer::code_writer::CodeWriter, HCError};
 
 /// Constructs a task that compiles a grammar's Ascript into an AST module of the given `source_type`.
 /// The module is placed at `<source_output_dir>/<grammar_name>_parser_ast.rs`.
@@ -30,11 +30,7 @@ mod rust_ast_build {
   use std::path::PathBuf;
 
   use crate::ascript::types::AScriptStore;
-  use hctk_core::{
-    types::{GrammarStore, HCResult},
-    writer::code_writer::StringBuffer,
-    Journal,
-  };
+  use hctk_core::{writer::code_writer::StringBuffer, GrammarStore, HCResult, Journal};
 
   use super::rust;
 
@@ -432,18 +428,16 @@ mod ascript_compile_tests {
 
   use crate::{
     ascript::{
-      compile::{compile_ascript_store, compile_struct_props, compile_struct_type},
+      compile::{compile_struct_props, compile_struct_type},
       types::AScriptStore,
     },
     compile::verify_property_presence,
   };
   use hctk_core::{
-    grammar::{
-      data::ast::{ASTNode, AST_Property, AST_Struct, AST_TypeId, Ascript, Body, Production},
-      parse::{compile_ascript_ast, compile_grammar_ast},
-    },
-    types::*,
+    ast::{ASTNode, AST_Property, AST_Struct, AST_TypeId, Ascript, Body, Production},
+    compile::{compile_ascript_ast, compile_grammar_ast},
     Journal,
+    *,
   };
 
   #[test]
@@ -467,8 +461,8 @@ mod ascript_compile_tests {
     }
   }
 
-  fn create_dummy_body(id: RuleId) -> hctk_core::types::Rule {
-    hctk_core::types::Rule { id, ..Default::default() }
+  fn create_dummy_body(id: RuleId) -> hctk_core::Rule {
+    hctk_core::Rule { id, ..Default::default() }
   }
 
   #[test]

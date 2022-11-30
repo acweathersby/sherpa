@@ -1,4 +1,4 @@
-use hctk_core::bytecode::BytecodeOutput;
+use hctk_core::compile::BytecodeOutput;
 use inkwell::{
   builder::Builder,
   context::Context,

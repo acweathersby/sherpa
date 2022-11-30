@@ -110,6 +110,7 @@ fn create_state(
     debug_assert!(
       !node.id.is_root()
         || t.mode == TransitionMode::RecursiveDescent
+        || t.mode == TransitionMode::LR
         || children.iter().all(|c| { c.edge_type == EdgeType::Goto }),
       "The children of the root goto function should all be EdgeType::Goto {}",
       children.iter().map(|c| c.debug_string(&t.g)).collect::<Vec<_>>().join("\n")
@@ -316,7 +317,7 @@ fn create_branch_wrap(
 ) -> HCResult<()> {
   let sym = child.edge_symbol;
 
-  let (symbol_bytecode_id, assert_class, _) = if !t.is_scanner {
+  let (symbol_bytecode_id, assert_class, sym_comment) = if !t.is_scanner {
     (sym.bytecode_id(Some(&t.g)), "TOKEN", sym.to_string(&t.g))
   } else {
     let (bc, class) = child.edge_symbol.shift_type(&t.g);
@@ -332,7 +333,7 @@ fn create_branch_wrap(
         "assert {} [ {}{} ] ( {}{}{} )",
         assert_class,
         symbol_bytecode_id,
-        empty_string, // format!(" /*{}*/"sym_comment),
+        format!(" /*{}*/", sym_comment),
         prefix.unwrap_or(&empty_string),
         create_child_state(child, node, resolved_states, t),
         postfix.unwrap_or(&empty_string),
@@ -343,7 +344,7 @@ fn create_branch_wrap(
         "assert peek {} [ {}{} ] ( {}{}{} )",
         assert_class,
         symbol_bytecode_id,
-        empty_string, // format!(" /*{}*/"sym_comment),
+        format!(" /*{}*/", sym_comment),
         prefix.unwrap_or(&empty_string),
         create_child_state(child, node, resolved_states, t),
         postfix.unwrap_or(&empty_string),
@@ -353,7 +354,7 @@ fn create_branch_wrap(
       w.write_fmt(format_args!(
         "assert PRODUCTION [ {}{} ] ( {}{}{} )",
         symbol_bytecode_id,
-        empty_string, // format!(" /*{}*/"sym_comment),
+        format!(" /*{}*/", sym_comment),
         prefix.unwrap_or(&empty_string),
         create_child_state(child, node, resolved_states, t),
         postfix.unwrap_or(&empty_string),
@@ -426,22 +427,20 @@ fn create_child_state(
 }
 
 fn create_reduce_string(node: &GraphNode, g: &GrammarStore, is_scanner: bool) -> String {
-  match (node.transition_items.first(), is_scanner, node.is(NodeAttributes::I_PASS)) {
+  match (node.transition_items.first(), is_scanner, node.node_type == NodeType::Pass) {
     (None, false /* not scanner */, true /* default pass state */) => "pass".to_string(),
-    (Some(item), true /* is scanner */, false) => {
-      match item.get_origin() {
-        OriginData::Symbol(sym) => {
-          format!(
-            "assign token [ {}{} ]",
-            sym.bytecode_id(Some(g)),
-            empty_string, // format!(" /*{}*/",sym.to_string(g)),
-          )
-        }
-        _ => {
-          unreachable!("All items assigned to scanner nodes should have OriginData::Symbol data");
-        }
+    (Some(item), true /* is scanner */, false) => match item.get_origin() {
+      OriginData::Symbol(sym) => {
+        format!(
+          "assign token [ {}{} ]",
+          sym.bytecode_id(Some(g)),
+          format!(" /*{}*/", sym.to_string(g)),
+        )
       }
-    }
+      _ => {
+        unreachable!("All items assigned to scanner nodes should have OriginData::Symbol data");
+      }
+    },
     (Some(item), false /* not scanner */, false) => {
       let rule = g.rules.get(&item.get_rule_id()).unwrap();
       let production = g.productions.get(&rule.prod_id).unwrap();

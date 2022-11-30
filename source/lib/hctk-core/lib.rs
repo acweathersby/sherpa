@@ -9,24 +9,22 @@
 #![feature(map_try_insert)]
 #![allow(bad_style)]
 
+mod bytecode;
 mod deprecated_runtime;
-pub mod grammar;
-pub mod journal;
+mod grammar;
+mod intermediate;
+mod journal;
+mod types;
+
 pub mod runtime;
-pub mod types;
 pub mod utf8;
 pub mod writer;
 
 pub use lazy_static::lazy_static;
 
-pub mod bytecode;
+pub use types::*;
+
 pub mod debug;
-pub mod intermediate;
-
-pub use grammar::{compile_grammar_from_path, compile_grammar_from_string};
-
-// Common utility functions
-use std::num::NonZeroUsize;
 
 pub use journal::{
   config::{Config, ResolutionMode},
@@ -34,19 +32,37 @@ pub use journal::{
   Journal,
 };
 
+pub mod guid {
+  pub use crate::grammar::{hash_id_value_u128, hash_id_value_u64};
+}
+
+/// The AST types of the Sherpa Grammar
+pub mod ast {
+  pub use crate::grammar::data::ast::*;
+}
+
+pub mod compile {
+  pub use crate::{
+    bytecode::{compile_bytecode, BytecodeOutput},
+    grammar::parse::{compile_ascript_ast, compile_grammar_ast, compile_ir_ast},
+    intermediate::{compile::*, optimize::*},
+  };
+}
+
 pub mod errors {
   pub use crate::{
     intermediate::errors::*,
     types::{HCError, HCError::*, HCErrorSeverity},
   };
 }
-
 /// Retrieve the number of threads that can be reasonably
 /// run concurrently on the platform
-
 pub fn get_num_of_available_threads() -> usize {
   std::thread::available_parallelism().unwrap_or(NonZeroUsize::new(1).unwrap()).get()
 }
+
+// Common utility functions
+use std::num::NonZeroUsize;
 #[cfg(test)]
 mod test_end_to_end {
   use crate::{

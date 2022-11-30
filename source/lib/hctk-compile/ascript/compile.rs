@@ -7,7 +7,7 @@ use crate::ascript::{
   types::*,
 };
 use hctk_core::{
-  grammar::data::ast::{
+  ast::{
     ASTNode,
     ASTNodeTraits,
     AST_Add,
@@ -17,7 +17,8 @@ use hctk_core::{
     AST_Vector,
     Ascript as AST_AScript,
   },
-  types::*,
+  ProductionId,
+  *,
 };
 use std::{
   collections::{btree_map, hash_map::Entry, BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},

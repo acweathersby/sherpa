@@ -8,23 +8,23 @@ pub use types::*;
 #[cfg(test)]
 mod test {
   use hctk_core::{
-    intermediate::{compile::compile_states, optimize::optimize_ir_states},
-    types::{
-      hctk_allocate_stack,
-      hctk_free_stack,
-      CodepointInfo,
-      Goto,
-      GrammarStore,
-      HCResult,
-      InputBlock,
-      LLVMParseContext,
-      ParseAction,
-      ParseToken,
-      TestUTF8StringReader,
-    },
+    compile::{compile_bytecode, compile_states, optimize_ir_states},
+    hctk_allocate_stack,
+    hctk_free_stack,
+    CodepointInfo,
+    Goto,
+    GrammarStore,
+    HCResult,
+    InputBlock,
     Journal,
+    LLVMParseContext,
+    ParseAction,
+    ParseToken,
+    TestUTF8StringReader,
   };
   use inkwell::{context::Context, execution_engine::JitFunction};
+
+  use crate::compile_bytecode_parser;
 
   use super::{inkwell_ir::*, types::*};
 
@@ -603,7 +603,6 @@ mod test {
   #[test]
   fn test_compile_from_bytecode() -> HCResult<()> {
     use crate::llvm::compile_from_bytecode;
-    use hctk_core::bytecode::compile_bytecode;
     use inkwell::context::Context;
     use std::{fs::File, io::Write};
 
@@ -692,7 +691,7 @@ mod test {
   #[test]
   fn test_compile_from_bytecode2() -> HCResult<()> {
     use crate::llvm::compile_from_bytecode;
-    use hctk_core::bytecode::compile_bytecode;
+    use hctk_core::compile::compile_bytecode;
     use inkwell::context::Context;
     let mut j = Journal::new(None);
     let g = GrammarStore::from_str(
@@ -727,6 +726,7 @@ mod test {
     let bytecode_output = compile_bytecode(&mut j, ir_states);
 
     if let Ok(mut ctx) = compile_from_bytecode("test", &g, &Context::create(), &bytecode_output) {
+      println!("{:?}", ctx);
       HCResult::Ok(())
     } else {
       HCResult::None

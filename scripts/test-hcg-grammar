@@ -1,3 +1,0 @@
-#! /usr/bin/bash
-
-hc tools disassemble --browse ./source/grammar/v7/hcg.hcg

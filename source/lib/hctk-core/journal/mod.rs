@@ -2,25 +2,19 @@
 //!  and reporting events that occur during grammar compilation.
 pub mod config;
 pub mod report;
-use crate::{
-  intermediate::{
-    recursive_descent::construct_recursive_descent,
-    utils::generate_scanner_symbol_items,
-  },
-  types::*,
-};
-use bitmask_enum::bitmask;
-use std::{
-  collections::{BTreeMap, BTreeSet, HashMap},
-  fmt::{Debug, Display},
-  mem::Discriminant,
-  sync::{Arc, LockResult, RwLock},
-  time::{Duration, Instant},
-};
-
 use self::{
   config::Config,
   report::{Report, ReportType},
+};
+use crate::{
+  intermediate::{construct_recursive_descent, utils::generate_scanner_symbol_items},
+  types::*,
+};
+use std::{
+  collections::{BTreeMap, BTreeSet, HashMap},
+  fmt::{Debug, Display},
+  sync::{Arc, LockResult, RwLock},
+  time::Instant,
 };
 
 #[derive(Default, Debug)]

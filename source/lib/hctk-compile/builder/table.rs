@@ -1,7 +1,7 @@
 //! Functions for constructing and leveraging transition tables from
 //! Hydrocarbon bytecode.
 
-use hctk_core::{bytecode::BytecodeOutput, types::*};
+use hctk_core::{compile::BytecodeOutput, GrammarStore, *};
 use std::collections::{btree_map, BTreeMap, VecDeque};
 
 #[derive(Debug, Clone, Copy)]

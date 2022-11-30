@@ -10,7 +10,7 @@ use super::{
   types::*,
 };
 use hctk_core::{
-  grammar::data::ast::{
+  ast::{
     ASTNode,
     AST_IndexReference,
     AST_NamedReference,
@@ -31,8 +31,8 @@ use hctk_core::{
     AST_U64,
     AST_U8,
   },
-  types::*,
   writer::code_writer::*,
+  *,
 };
 use std::{
   collections::{BTreeMap, BTreeSet, VecDeque},

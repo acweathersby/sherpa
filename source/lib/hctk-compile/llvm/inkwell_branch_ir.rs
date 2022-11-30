@@ -1,5 +1,5 @@
 use crate::builder::table::BranchTableData;
-use hctk_core::types::*;
+use hctk_core::*;
 use inkwell::values::{IntValue, PointerValue};
 use std::collections::BTreeMap;
 

@@ -1,8 +1,8 @@
 use super::*;
 use crate::{
-  compile_grammar_from_path,
-  compile_grammar_from_string,
   grammar::{
+    compile_grammar_from_path,
+    compile_grammar_from_string,
     create_closure,
     data::ast::{ASTNode, Ascript, Reduce},
     get_closure_cached,

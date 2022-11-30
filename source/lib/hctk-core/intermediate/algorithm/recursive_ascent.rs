@@ -10,12 +10,14 @@
 //!
 //! Note: Since scanner productions are guaranteed to not have left recursion of any kind, there
 //! is no need to run TokenProductions through this process.
-use super::{peek::create_node, recursive_descent::process_node, utils::*};
 use crate::{
+  intermediate::utils::{get_follow_closure, hash_group_btreemap},
   journal::Journal,
   types::{GraphNode, NodeAttributes as TST, TransitionGraph as TPack, *},
 };
 use std::{collections::BTreeSet, rc::Rc, vec};
+
+use super::{create_node, process_node};
 
 pub(crate) fn construct_recursive_ascent(
   j: &mut Journal,
@@ -24,7 +26,7 @@ pub(crate) fn construct_recursive_ascent(
 ) -> TPackResults {
   let g = j.grammar().unwrap();
 
-  let mut t = TPack::new(g.clone(), TransitionMode::GoTo, false, &vec![], root_ids);
+  let mut t = TPack::new(g.clone(), TransitionMode::RecursiveAscent, false, &vec![], root_ids);
 
   t.goto_scoped_closure = Some(Rc::new(Box::<Vec<Item>>::new(
     (!t.is_scanner).then(|| get_follow_closure(&g, &t.root_prod_ids)).unwrap_or_default(),
@@ -35,7 +37,6 @@ pub(crate) fn construct_recursive_ascent(
   let mut root_node =
     GraphNode::new(&t, SymbolID::Start, None, goto_seeds.clone().to_vec(), NodeType::RAStart);
   root_node.edge_type = EdgeType::Start;
-  root_node.set_attribute(TST::I_GOTO_START);
   let parent_index = Some(t.insert_node(root_node));
 
   let mut unfulfilled_root = Some(*t.root_prod_ids.first().unwrap());
@@ -112,7 +113,6 @@ pub(crate) fn construct_recursive_ascent(
       NodeType::Pass,
     );
     goto_node.edge_type = EdgeType::Goto;
-    goto_node.set_attribute(TST::I_PASS);
     let index = t.insert_node(goto_node);
     t.leaf_nodes.push(index);
   }

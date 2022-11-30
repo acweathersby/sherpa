@@ -57,7 +57,7 @@ pub fn compile_bytecode_parser(grammar_source_path: &PathBuf, include_ascript: b
       eprintln!("{}", error);
     }
   }) {
-    hctk_core::types::HCResult::Ok(_) => true,
+    hctk_core::HCResult::Ok(_) => true,
     _ => false,
   }
 }
@@ -67,13 +67,9 @@ mod library_smoke_tests {
 
   use std::path::PathBuf;
 
-  use hctk_core::{journal::Journal, types::GrammarStore};
+  use hctk_core::{GrammarStore, Journal};
 
-  use crate::{
-    ascript::{compile::compile_ascript_store, types::AScriptStore},
-    builder::pipeline::BuildPipeline,
-    tasks::build_ast,
-  };
+  use crate::{ascript::types::AScriptStore, builder::pipeline::BuildPipeline, tasks::build_ast};
 
   #[test]
   fn test_compile_pipeline() {
