@@ -25,17 +25,17 @@ pub(crate) fn compile_production_states_LR(
 
   j.set_active_report(
     &format!("Production [{}] LR IR Compilation", grammar.get_production_plain_name(&prod_id)),
-    crate::journal::report::ReportType::ProductionCompile(prod_id),
+    crate::journal::report::ReportType::ProductionCompileLR(prod_id),
   );
 
-  j.report_mut().start_timer("LR Parser Compilation");
+  j.report_mut().start_timer("Graph Compile");
 
   let items = generate_recursive_descent_items(j, prod_id);
 
   let t = match construct_LR(j, false, &items) {
     HCResult::Ok((t, _)) => t,
     HCResult::Err(err) => {
-      j.report_mut().stop_timer("LR Descent Compile");
+      j.report_mut().stop_timer("Graph Compile");
       j.report_mut().add_error(err);
       return HCResult::None;
     }
@@ -45,7 +45,7 @@ pub(crate) fn compile_production_states_LR(
 
   let rd_states = construct_ir(j, &state_name, &t)?;
 
-  j.report_mut().stop_timer("LR Descent Compile");
+  j.report_mut().stop_timer("Graph Compile");
 
   #[cfg(debug_assertions)]
   {

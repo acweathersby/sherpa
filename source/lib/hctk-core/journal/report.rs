@@ -19,9 +19,11 @@ pub enum ReportType {
   ByteCodeCompile,
   /// Custom report classes
   Any,
+  AnyProductionCompile,
   IntermediateCompile,
   Disassembly,
   ProductionCompile(ProductionId),
+  ProductionCompileLR(ProductionId),
   Optimize,
 }
 
@@ -115,13 +117,23 @@ impl Report {
   }
 
   pub fn type_matches(&self, discriminant: ReportType) -> bool {
-    use ReportType::{ProductionCompile as PC, TokenProductionCompile as TPC, *};
+    use ReportType::{
+      ProductionCompile as PC,
+      ProductionCompileLR as PC_LR,
+      TokenProductionCompile as TPC,
+      *,
+    };
     match (discriminant, self.report_type) {
       (ScannerCompile(any), ScannerCompile(_)) if any == ScannerId::default() => true,
       (GrammarCompile(any), GrammarCompile(_)) if any == GrammarId::default() => true,
+      (PC_LR(any), PC_LR(_)) if any == ProductionId::default() => true,
       (TPC(any), TPC(_)) if any == ProductionId::default() => true,
       (PC(any), PC(_)) if any == ProductionId::default() => true,
-      (IntermediateCompile, TokenProductionCompile(_))
+
+      (AnyProductionCompile, PC(_))
+      | (AnyProductionCompile, PC_LR(_))
+      | (AnyProductionCompile, TPC(_))
+      | (IntermediateCompile, TokenProductionCompile(_))
       | (IntermediateCompile, ScannerCompile(_))
       | (IntermediateCompile, ProductionCompile(_))
       | (AScriptCompile, AScriptCompile)

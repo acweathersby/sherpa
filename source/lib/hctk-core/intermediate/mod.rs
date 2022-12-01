@@ -2,6 +2,7 @@ pub(crate) mod algorithm;
 pub mod compile;
 pub mod errors;
 mod ir;
+mod ir_parser;
 pub mod optimize;
 pub(crate) mod utils;
 pub use algorithm::*;
@@ -37,7 +38,7 @@ mod transition_tree_tests {
 
   #[test]
   pub fn construct_descent_on_scanner_symbol() -> HCResult<()> {
-    let mut j = Journal::new(Some(Config { allow_occluding_symbols: true, ..Default::default() }));
+    let mut j = Journal::new(Some(Config { allow_occluding_symbols: false, ..Default::default() }));
     let g = GrammarStore::from_str(
       &mut j,
       "
@@ -252,8 +253,10 @@ mod state_constructor_tests {
     )
     .unwrap();
 
-    let states =
-      compile_production_states(&mut j, grammar.get_production_id_by_name("comment").unwrap())?;
+    let states = compile_production_states(
+      &mut j,
+      grammar.get_production_id_by_name("line_comment").unwrap(),
+    )?;
 
     println!("{:#?}", states);
     // assert_eq!(errors.len(), 1);
@@ -272,14 +275,16 @@ mod state_constructor_tests {
     )
     .unwrap();
 
-    let states =
-      compile_production_states(&mut j, grammar.get_production_id_by_name("A_list_1").unwrap())?;
+    compile_production_states(&mut j, grammar.get_production_id_by_name("A_list_1").unwrap());
 
     // assert_eq!(errors.len(), 1);
 
-    let report = j.report();
+    j.flush_reports();
+    j.debug_report(ReportType::Any);
 
-    assert!(report.errors()[0].is(WarnTransitionAmbiguousProduction::friendly_name));
+    // println!("{}", report.debug_string());
+
+    // assert!(report.errors()[0].is(WarnTransitionAmbiguousProduction::friendly_name));
 
     HCResult::Ok(())
   }
@@ -290,7 +295,7 @@ mod state_constructor_tests {
     let g = GrammarStore::from_str(
       &mut j,
       "
-<> A > \\CC  | tk:id_syms
+<> A > \\C | tk:id_syms
 
 <> id_syms >  
 
@@ -298,13 +303,7 @@ mod state_constructor_tests {
 
     |   id_syms \\_
 
-    |   id_syms \\-
-
-    |   id_syms g:num      
-
     |   \\_ 
-
-    |   \\- 
 
     |   g:id
 ",
@@ -801,6 +800,8 @@ mod state_constructor_tests {
         SymbolID::from_string("code_block_delimiter_with_nl", Some(&g)),
       ]),
     )?;
+
+    assert_eq!(result.len(), 7);
     // if let Some(prod) = get_production_id_by_name("line", &grammar) {
     //   let result = compile_production_states(&prod, &grammar);
     //   println!("{:#?}", result);
@@ -962,7 +963,7 @@ mod new_tests {
 
     j.flush_reports();
 
-    j.debug_report(ReportType::ProductionCompile(Default::default()));
+    j.debug_report(ReportType::AnyProductionCompile);
 
     HCResult::Ok(())
   }

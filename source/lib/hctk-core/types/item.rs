@@ -5,7 +5,7 @@ use crate::{
 
 use super::*;
 use std::{
-  collections::{BTreeSet, VecDeque},
+  collections::{binary_heap::Iter, BTreeSet, VecDeque},
   fmt::Display,
 };
 
@@ -57,11 +57,11 @@ impl ItemState {
     }
   }
 
-  pub fn to_new_lane(&self, new_lane: u32) -> Self {
-    Self { curr_lane: new_lane, prev_lane: self.curr_lane, origin: self.origin }
+  pub fn same_curr_lane(&self, other: &ItemState) -> bool {
+    self.curr_lane == other.curr_lane
   }
 
-  pub fn in_same_lane(&self, other: &ItemState) -> bool {
+  pub fn in_either_lane(&self, other: &ItemState) -> bool {
     match (self.curr_lane, self.prev_lane, other.curr_lane) {
       (a, b, c) if a == c || b == c => true,
       (_, 0, _) | (0, ..) => true,
@@ -73,9 +73,25 @@ impl ItemState {
     matches!(self.origin, OriginData::OutOfScope)
   }
 
-  /// Create a new Item with the given group
+  /// Makes the `prev_lane` also the `curr_lane`
+  pub fn to_prev_lane(&self) -> Self {
+    ItemState { curr_lane: self.prev_lane, ..self.clone() }
+  }
+
+  /// Makes the `curr_lane` also the `prev_lane`
+  pub fn to_curr_lane(&self) -> Self {
+    ItemState { prev_lane: self.curr_lane, ..self.clone() }
+  }
+
+  /// Create a new Item with the given lane
   pub fn to_lane(&self, lane: u32) -> Self {
     ItemState { curr_lane: lane, ..self.clone() }
+  }
+
+  /// Shifts the current into the previous lane slot, and
+  /// inserts `curr_lane` in its place.
+  pub fn to_lane_fork(&self, curr_lane: u32) -> Self {
+    Self { curr_lane, prev_lane: self.curr_lane, ..self.clone() }
   }
 
   /// Create a new Item with the given group
@@ -116,6 +132,7 @@ pub enum OriginData {
   Undefined,
   OutOfScope,
   Symbol(SymbolID),
+  GoalIndex(usize),
   RuleId(RuleId),
 }
 
@@ -129,8 +146,25 @@ impl OriginData {
         let prod = g.get_production(&rule.prod_id).unwrap();
         format!("{}[{}]", prod.name, rule.bytecode_id)
       }
+      GoalIndex(i) => format!("Goal[{}]", i),
       OutOfScope => "Out Of Scope".to_string(),
-      Undefined => "undefined".to_string(),
+      Undefined => "*".to_string(),
+    }
+  }
+
+  pub fn blame_string(&self, g: &GrammarStore) -> String {
+    use OriginData::*;
+    match self {
+      Symbol(sym_id) => sym_id.to_string(g),
+      RuleId(rule_id) => {
+        let rule = g.get_rule(rule_id).unwrap();
+        let prod = g.get_production(&rule.prod_id).unwrap();
+
+        rule.tok.blame(1, 1, "", BlameColor::Red)
+      }
+      GoalIndex(i) => format!("Goal[{}]", i),
+      OutOfScope => "Out Of Scope".to_string(),
+      Undefined => "*".to_string(),
     }
   }
 }
@@ -186,7 +220,7 @@ impl Item {
   /// 1. Both Items have states that are in the same lane.
   /// 2. Either Item is in the root [0] lane.
   pub fn in_same_lane(&self, other: &Item) -> bool {
-    self.state.in_same_lane(&other.state)
+    self.state.in_either_lane(&other.state)
   }
 
   /// Creates a view of the item usefully for error reporting.
@@ -244,59 +278,56 @@ impl Item {
     g.rules.get(rule_id).map(|rule| Item::from(rule).to_origin(OriginData::RuleId(rule.id)))
   }
 
+  #[inline(always)]
   pub fn completed(&self) -> bool {
     self.off >= self.len
   }
 
+  #[inline(always)]
   pub fn at_start(&self) -> bool {
     self.off == 0
   }
 
+  #[inline(always)]
   pub fn to_state(&self, state: ItemState) -> Item {
-    Item { len: self.len, off: self.off, rule: self.rule, state }
+    Item { state, ..self.clone() }
   }
 
+  #[inline(always)]
   pub fn to_origin(&self, origin: OriginData) -> Self {
-    Item {
-      rule:  self.rule,
-      len:   self.len,
-      off:   self.off,
-      state: self.state.to_origin(origin),
-    }
+    Item { state: self.state.to_origin(origin), ..self.clone() }
   }
 
+  #[inline(always)]
   pub fn to_last_sym(self) -> Self {
-    Item {
-      rule:  self.rule,
-      len:   self.len,
-      off:   if self.len > 0 { self.len - 1 } else { 0 },
-      state: self.state,
-    }
+    Item { off: if self.len > 0 { self.len - 1 } else { 0 }, ..self.clone() }
   }
 
+  #[inline(always)]
   pub fn to_start(&self) -> Item {
-    Item { rule: self.rule, len: self.len, off: 0, state: self.state }
+    Item { off: 0, ..self.clone() }
   }
 
-  pub fn to_end(&self) -> Item {
-    Item { rule: self.rule, len: self.len, off: self.len, state: self.state }
+  #[inline(always)]
+  pub fn to_completed(&self) -> Item {
+    Item { off: self.len, ..self.clone() }
   }
 
+  #[inline(always)]
   pub fn to_origin_only_state(&self) -> Item {
-    Item {
-      rule:  self.rule,
-      len:   self.len,
-      off:   self.off,
-      state: self.state.to_lanes(0, 0),
-    }
+    Item { state: self.state.to_lanes(0, 0), ..self.clone() }
   }
 
+  #[inline(always)]
   pub fn to_empty_state(&self) -> Item {
-    Item {
-      rule:  self.rule,
-      len:   self.len,
-      off:   self.off,
-      state: ItemState::default(),
+    Item { state: ItemState::default(), ..self.clone() }
+  }
+
+  #[inline(always)]
+  pub fn to_local_state(&self) -> Item {
+    Self {
+      state: self.state.to_lanes(self.state.curr_lane, self.state.curr_lane),
+      ..self.clone()
     }
   }
 
@@ -367,11 +398,6 @@ impl Item {
   }
 
   #[inline(always)]
-  pub fn to_local_state(&self) -> ItemState {
-    self.state.to_lanes(self.state.curr_lane, self.state.curr_lane)
-  }
-
-  #[inline(always)]
   pub fn get_origin(&self) -> OriginData {
     self.state.get_origin()
   }
@@ -394,7 +420,9 @@ impl Item {
   /// Retrieve the symbol at the items position. This will be
   /// `SymbolId::Completed` if the item is at the completed position.
   pub fn get_symbol(&self, g: &GrammarStore) -> SymbolID {
-    if self.completed() {
+    if self.is_null() {
+      SymbolID::Undefined
+    } else if self.completed() {
       SymbolID::EndOfInput
     } else {
       match g.rules.get(&self.rule) {
@@ -529,18 +557,17 @@ pub trait ItemContainer: Clone + IntoIterator<Item = Item> {
   }
 
   #[inline(always)]
-  fn end_item_set(&self) -> ItemSet {
+  fn completed_item_set(&self) -> ItemSet {
     self.completed_item_vec().into_iter().collect()
   }
-
   #[inline(always)]
   fn try_increment(&self) -> Items {
     self.clone().to_vec().into_iter().map(|i| i.try_increment()).collect()
   }
 
   #[inline(always)]
-  fn to_end(&self) -> Items {
-    self.clone().to_vec().into_iter().map(|i| i.to_end()).collect()
+  fn to_complete(&self) -> Items {
+    self.clone().to_vec().into_iter().map(|i| i.to_completed()).collect()
   }
 
   #[inline(always)]

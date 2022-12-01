@@ -17,14 +17,15 @@ pub(crate) fn peek(
 ) -> HCResult<()> {
   let grammar = t.g.clone();
   let g = &grammar;
-  let mut lane_counter = items.iter().fold(u32::MAX, |u,i| i.get_state().get_lane().min(u).max(1));
+
+  items.print_items(g, "Start items");
 
   t.get_node_mut(root_par_id).set_attribute(NodeAttributes::I_PEEK_ORIGIN);
 
   // t.get_node_mut(root_par_id).transition_items.clear();
 
   // Split items into groups based on symbol Ids.
-  let goals = hash_group_btreemap(items.clone(), |index, i| {
+  let goals = hash_group_vec(items.clone(), |index, i| {
     if i.completed() || j.config().enable_breadcrumb_parsing {
       SymbolID::DistinctGroup(index as u32)
     } else if i.is_out_of_scope() {
@@ -32,26 +33,36 @@ pub(crate) fn peek(
     } else{
       i.get_symbol(g)
     }
-  })
-  .into_iter()
-  .collect::<Vec<_>>();
+  });
 
   // We now create a set of item lanes based on the symbol groups that will persist throughout
   // the peeking process.
   let initial_items = goals
     .iter()
     .enumerate()
-    .flat_map(|(index, (_, items))| {
-      items.clone().into_iter().map(move |i| i.to_state(i.get_state().to_lane(index as u32 + lane_counter)))
+    .flat_map(|(index, vec)| {
+
+      let lane = t.increment_lane(1);
+
+      let item_vec = vec.iter().into_iter().map(move |i| i.to_state(i.get_state().to_lane(lane).to_origin(OriginData::GoalIndex(index))));
+      
+      let slides: ItemSet = item_vec.clone().map(|i| i.to_null()).collect();
+
+      #[cfg(debug_assertions)] {
+        println!("{:?}", root_par_id);
+        slides.print_items(g, ">> Slides ---------------------");
+      }
+
+      t.get_node_mut(root_par_id).goto_items.append(&mut slides.to_vec());
+
+      item_vec
     })
     .collect::<Vec<_>>();
 
 
   initial_items.print_items(g, "Initial items");
 
-  lane_counter += initial_items.len() as u32;
-
-  t.get_node_mut(root_par_id).goto_items = initial_items.non_term_item_vec(g);
+  // t.get_node_mut(root_par_id).goto_items = initial_items.non_term_item_vec(g);
   // With our items now setup in lanes, we can start disambiguating
   let mut pending_items = VecDeque::from_iter(vec![(root_par_id, 0, initial_items)]);
  
@@ -71,9 +82,7 @@ pub(crate) fn peek(
       let mut terminal_completions = vec![];
       for completed_item in completed_items {
 
-        let (follow_and_terminal_completed, l) = get_follow_items(t, &completed_item, Some(par_id), lane_counter);
-
-        lane_counter = l;
+        let follow_and_terminal_completed = get_follow_items(t, &completed_item, Some(par_id));
 
         terminal_completions
           .append(&mut Vec::from_linked(follow_and_terminal_completed.final_completed_items));
@@ -135,10 +144,14 @@ pub(crate) fn peek(
               Some(par_id),
               Vec::default(),
             );
+
+            
+            let origin = get_goal_origin(&items, &goals);
+
             // Submit these items to be processed.
             t.queue_node(ProcessGroup {
               node_index,
-              items: items,
+              items: items.into_iter().map(|i|i.to_origin(origin)).collect(),
               discriminant: None,
               depth: global_depth,
             });
@@ -165,7 +178,12 @@ pub(crate) fn peek(
         }
         2.. => {
           if t.is_scanner {
-            resolveConflictingSymbols(t, j, terminal_completions, depth, global_depth, par_id);
+            resolveConflictingSymbols(t, j, terminal_completions.into_iter().map(|i| {
+              match i.get_origin() {
+                OriginData::GoalIndex(index) => i.to_origin(goals[index][0].get_origin()),
+                _ => unreachable!()
+              }
+            }).collect(), depth, global_depth, par_id);
           } else {
 
             items.print_items(g, "Conflicting items");
@@ -215,14 +233,14 @@ pub(crate) fn peek(
       // IF this value is 1, then we have successfully found a peek leaf that
       // is ambiguous.
 
-      let peek_groups = hash_group_vec(items.clone(), |_, i| i.get_state().get_lane());
-
+      let peek_groups = hash_group_vec(items.clone(), |_, i| i.get_state().get_origin());
+      let origin = get_goal_origin(&items, &goals);
       match peek_groups.len() {
         1 if j.occlusion_tracking_mode() => {
           // We can skip further processing if in occlusions tracking mode
         }
         1 => {
-          match items[0].get_state().get_origin() {
+          match origin {
             OriginData::OutOfScope => {
               // This symbol belongs to a follow item of the production. In this
               // we simply fail to allow the production to complete using the fall
@@ -254,6 +272,7 @@ pub(crate) fn peek(
                   depth:        global_depth,
                 });
               } else if t.is_scanner || j.config().enable_breadcrumb_parsing {
+                let items: Items = items.try_increment().into_iter().map(|i|i.to_origin(origin) ).collect();
                 let node_index = create_and_insert_node(
                   t,
                   sym,
@@ -262,12 +281,12 @@ pub(crate) fn peek(
                   Assert,
                   Some(par_id),
                   Some(par_id),
-                  items.try_increment().non_term_item_vec(g),
+                  items.non_term_item_vec(g),
                 );
                 // Continue processing the now disambiguated items.
                 t.queue_node(ProcessGroup {
                   node_index,
-                  items: items.try_increment(),
+                  items,
                   discriminant: None,
                   depth: global_depth,
                 });
@@ -305,7 +324,7 @@ pub(crate) fn peek(
 
           if !t.peek_ids.insert(hash_id_value_u64(items.clone().to_zero_state().to_set())) {
             // Item set has been repeated
-            let (_, goal_items) = get_goal_contents(&items, &goals);
+            let goal_items = get_goal_contents(&items, &goals);
             let lr_starts = goal_items.clone().into_iter().flatten().cloned().collect::<Vec<_>>();
             // We can try to disambiguating using LR parsing:
 
@@ -432,10 +451,14 @@ pub(crate) fn peek(
   HCResult::Ok(())
 }
 
-fn get_goal_items(items: &Vec<Item>, goals: &Vec<(SymbolID, Vec<Item>)>) -> Vec<Item> {
-    let (_, goal_items) = get_goal_contents(items, goals);
-    let goal_items = goal_items.into_iter().flatten().cloned().collect();
-    goal_items
+#[inline]
+fn get_goal_items(items: &Vec<Item>, goals: &Vec<Vec<Item>>) -> Vec<Item> {
+    get_goal_contents(items, goals).into_iter().flatten().cloned().collect()
+}
+
+#[inline]
+fn get_goal_origin(items: &Vec<Item>, goals: &Vec<Vec<Item>>) -> OriginData {
+    get_goal_contents(items, goals).into_iter().flatten().next().unwrap().get_origin()
 }
 
 fn get_node_type(j: &Journal, t: &TransitionGraph) -> NodeType {
@@ -604,15 +627,17 @@ fn resolveConflictingSymbols(
 
 fn get_goal_contents<'a>(
   items: &Items,
-  goals: &'a Vec<(SymbolID, Items)>,
-) -> (Vec<&'a SymbolID>, Vec<&'a Items>) {
-  hash_group_btreemap(items.clone(), |_, i| i.get_state().get_lane() - 1)
+  goals: &'a Vec<Items>,
+) -> Vec<&'a Items> {
+  hash_group_btreemap(items.clone(), |_, i| match i.get_origin() {
+    OriginData::GoalIndex(index) =>index,
+    _  => panic!("Should only have items with Goal Indices in this context!")
+  })
     .into_iter()
     .map(|(g, i)| {
-      let (goal_sym, goal_items) = &goals[g as usize];
-      (goal_sym, goal_items)
-    })
-    .unzip()
+      let goal_items = &goals[g];
+      goal_items
+    }).collect()
 }
 
 pub(super) fn insert_items_into_node(mut items: Items, t: &mut TransitionGraph, node_id: NodeId) {

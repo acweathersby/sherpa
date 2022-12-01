@@ -473,10 +473,12 @@ fn create_child_state(
           }
         } else {
         }
-        if count == 0 {
-          breadcrumb += &format!("\n        crumb [ {} | shift ] then ", lane)
-        }
+        // if count == 0 {
+        // breadcrumb += &format!("\n        crumb [ {} | shift ] then ", lane)
+        //}
       }
+
+      breadcrumb += &format!("\n        crumb [ 0 | shift ] then ");
 
       format!("{}\n        shift then goto state [ {} ]", breadcrumb, state_name,)
     }

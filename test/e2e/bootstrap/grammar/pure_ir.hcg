@@ -1,0 +1,200 @@
+# Copyright (C) 2022 Anthony Weathersby
+
+# version 1.0.0
+
+@IMPORT ./comment.hcg as cm
+
+@IGNORE g:sp g:nl tk:cm::comment
+
+<> state_ir > 
+        
+        state_declaration scanner_declaration? top_level_instructions on_fail? expected_symbols?   
+                                            
+            f:ast { { t_IR_STATE, c_IR, c_IrState, id:$1, scanner: $2, instructions: $3, fail: $4, symbol_meta:$5 } }
+
+<> state_declaration > 
+        
+        t:state \[  tk:state_hash_token \]     
+            
+            f:ast { str($3) }
+
+<> scanner_declaration > 
+        
+        t:scanner \[  tk:state_hash_token \]     
+            
+            f:ast { str($3) }
+
+<> state_reference > 
+        
+        t:state \[ state_name \]
+        
+            f:ast { $3 }
+
+<> state_name >  
+    
+    tk:state_hash_token 
+        
+        f:ast { { t_HASH_NAME, val:str($1) } }
+
+<> top_level_instructions > 
+
+        assertion_instruction(+) 
+    
+    |   instruction_sequence                             
+
+<> instruction_sequence > 
+
+        sequence_instruction(+ t:then ) 
+        ( t:then goto_instruction(+ t:then ) )? 
+        ( t:then t:repeat t:state f:ast{ { t_Repeat, c_IR, c_IR_Instruction } } )? 
+        
+        f:ast{ $1 + $2 + [$3] }
+
+    |   goto_instruction(* t:then ) ( t:then t:repeat t:state f:ast{ { t_Repeat, c_IR, c_IR_Instruction } } )? 
+        
+        f:ast{ $1 + [$2] }
+        
+    |   ( t:lazy \( g:nums g:nums \) state_reference 
+            
+            f:ast { { t_Lazy, c_IR, c_IR_Instruction, cp_start:$3, cp_end:$4, state: $6 } } )                                       
+
+        f:ast { [$1] }
+
+<> assertion_instruction >
+
+        t:assert t:peek? assert_class production_id_list \( instruction_sequence \)                     
+                                            
+            f:ast { { t_ASSERT, c_IR, c_IR_Instruction, is_peek: bool($2), c_IR_Branch, mode:str($3), ids: $4, instructions: $6} }
+
+        | t:skip production_id_list
+            
+            f:ast { { t_ASSERT, c_IR, c_IR_Instruction, c_IR_Branch, ids: $2, is_skip: true } }
+
+        | t:default  \( instruction_sequence \)                     
+            
+            f:ast { { t_DEFAULT, c_IR, c_IR_Instruction, c_IR_Branch, instructions: $3} }
+
+<> assert_class > \PRODUCTION | \TOKEN  | \BYTE | \CODEPOINT | \CLASS 
+
+<> goto_instruction > 
+
+    t:goto state_reference
+        
+        f:ast { { t_Goto, c_IR, c_IR_Instruction, state: $2 } }
+
+<> sequence_instruction >
+
+        reduce_instruction
+                                            
+    |   breadcrumb
+    
+    |   t:assign t:token token_id_list
+        
+        f:ast { { t_TokenAssign, c_IR, c_IR_Instruction, ids: $3 } }
+
+    | t:set t:prod t:to token_num
+                                            
+        f:ast { { t_SetProd, c_IR, c_IR_Instruction, id: $4  } }
+
+    | t:fork t:to \( state_reference(+) \) t:to t:complete t:prod token_num
+                                            
+        f:ast { { t_ForkTo, c_IR, c_IR_Instruction, states: $4, production_id: $9   } }
+
+    | t:scan t:back? t:until token_id_list
+
+        f:ast { { t_ScanUntil, c_IR, c_IR_Instruction, ids: $4, SCAN_BACKWARDS:bool($2) } }
+
+    | t:set t:token t:id token_num token_num
+       
+        f:ast { { t_TokenId, c_IR, c_IR_Instruction, id: $5  } }
+        
+    | t:skip`
+    
+        f:ast { { t_Skip, c_IR, c_IR_Instruction  } }
+
+    | t:pass
+
+        f:ast { { t_Pass, c_IR, c_IR_Instruction  } }
+
+    | t:fail
+
+        f:ast { { t_Fail, c_IR, c_IR_Instruction } }
+
+    | t:not t:within t:scopes \[ ( token_num )(+) \]
+    
+        f:ast { { t_NotInScope, c_IR, c_IR_Instruction, ids:$5 } }
+                                  
+    | t:set t:scope t:to tk:integer
+    
+        f:ast { { t_SetScope, c_IR, c_IR_Instruction, scope:i64($1) } }
+        
+    | t:shift t:nothing?
+
+        f:ast { { t_Shift, c_IR, c_IR_Instruction, EMPTY:bool($2) } }
+
+<> reduce_instruction > 
+
+    t:reduce tk:integer ( t:symbols t:with t:rule )? tk:integer
+
+        f:ast { { t_Reduce, c_IR, c_IR_Instruction, len: i32($2), rule_id: i32($4) } }
+
+                                    
+<> breadcrumb > 
+
+    t:crumb \[ tk:integer \| breadcrumb_action \]
+
+        f:ast { { t_Crumb, lane:i32($3), action: $5 } }
+
+    | t:crumb t:complete \[ tk:integer \] 
+
+        f:ast { { t_CrumbComplete, lane: i32($4)  } }
+
+<> breadcrumb_action >
+
+    t:map tk:integer
+
+        f:ast { { t_Map, to: i32($2) } }
+
+    | reduce_instruction
+
+    | t:shift
+
+        f:ast { { t_Shift } }
+
+<> on_fail > 
+    
+    t:on t:fail state_declaration top_level_instructions on_fail? expected_symbols?
+        
+        f:ast { { t_FailState, c_IR, c_IR_State, id:$3, instructions: $4, symbol_meta: $6, fail: $5 } }
+
+<> expected_symbols > 
+
+        \symbols: \expected token_id_list ( \skipped token_id_list f:ast{ $2 } )?
+
+            f:ast { { t_Symbols, c_IR, expected:$3, skipped:$4 } }
+
+<> token_id_list > 
+
+        \[ ( token_num  )(+)  \] 
+            
+            f:ast { $2 }
+
+<> production_id_list > 
+
+        \[ token_num \] 
+            
+            f:ast { $2 }
+
+<> state_hash_token > 
+
+        state_hash_token ( \_ | \- | g:id | g:num )
+    |   g:id
+    |   g:num
+    |   \_
+    |   \-
+
+<> token_num > 
+        tk:integer f:ast{ { t_Num, val: i64($1) } }
+
+<> integer > 
+        g:num(+)

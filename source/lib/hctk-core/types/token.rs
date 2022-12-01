@@ -572,9 +572,10 @@ impl Token {
         {
           let leading_spaces = utf_string.len() - utf_string.trim_start().len();
           let diff = usize::max(leading_spaces, col_diff);
-          let highlight_len = utf_string.len()
-            - diff
-            - i64::max(0, (next_line as i64 - (self.off + self.len) as i64)) as usize;
+          let highlight_len = ((utf_string.len() as i64)
+            - (diff as i64)
+            - i64::max(0, (next_line as i64 - (self.off + self.len) as i64)))
+          .max(0) as usize;
 
           let lines_str = format!("{: >4}", line_num);
           string += &format!(

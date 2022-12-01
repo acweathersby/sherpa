@@ -63,32 +63,31 @@ pub(crate) fn construct_recursive_descent(
   let mut t =
     TPack::new(g.clone(), TransitionMode::RecursiveDescent, is_scanner, &starts, start_productions);
 
-  t.goto_seeds.append(&mut goto_seeds.to_set());
+  t.increment_lane(1); // Lane 0 is reserved.
 
-  let mut root_node = GraphNode::new(&t, SymbolID::Start, None, vec![], NodeType::RDStart);
+  let lane_items: Items = start_items
+    .into_iter()
+    .map(|item| {
+      if j.config().enable_breadcrumb_parsing || is_scanner || true {
+        item.to_state(item.get_state().to_lane(t.increment_lane(1)).to_curr_lane())
+      } else {
+        item
+      }
+    })
+    .collect();
+
+  t.goto_seeds.append(&mut goto_seeds.to_set());
+  t.accept_items.append(&mut lane_items.clone().to_complete().to_set());
+
+  let mut root_node = GraphNode::new(&t, SymbolID::Start, None, starts.clone(), NodeType::RDStart);
 
   root_node.edge_type = EdgeType::Start;
 
-  root_node.goto_items = starts.non_term_item_vec(&g);
+  root_node.goto_items = lane_items.non_term_item_vec(&g);
 
   let root_index = t.insert_node(root_node);
 
-  t.queue_node(ProcessGroup {
-    node_index: root_index,
-    items: start_items
-      .into_iter()
-      .enumerate()
-      .map(|(i, item)| {
-        if j.config().enable_breadcrumb_parsing {
-          let i = i as u32;
-          item.to_state(item.get_state().to_lanes(i + 1, i + 1))
-        } else {
-          item
-        }
-      })
-      .collect(),
-    ..Default::default()
-  });
+  t.queue_node(ProcessGroup { node_index: root_index, items: lane_items, ..Default::default() });
 
   while let Some(process_group) = t.get_next_queued() {
     process_node(&mut t, j, process_group)?;
@@ -243,14 +242,20 @@ pub(super) fn create_completed_node(
       .map(|i| i.to_origin_only_state())
       .collect::<BTreeSet<Item>>();
 
-    if !matching_starts.contains(&&item.to_start().to_origin_only_state()) {
+    matching_starts.print_items(&t.g, "matching starts");
+    println!(
+      "WTF: {} {}",
+      item.to_start().to_origin_only_state().debug_string(&t.g),
+      matching_starts.contains(&item.to_start().to_origin_only_state())
+    );
+
+    if !matching_starts.contains(&item.to_start().to_origin_only_state()) {
       // All our completed items need to
       // a scanner run to exit successfully. Thus, the production of the completed state
       // is used to select the next set of items to be scanned, continuing the scan process
       // until we arrive at an end_item that belongs to the root closure.
 
-      let (scanned_items, _) =
-        get_follow_items(t, &item, Some(parent_index), item.get_state().get_lane() + 1);
+      let scanned_items = get_follow_items(t, &item, Some(parent_index));
 
       #[cfg(debug_assertions)]
       {

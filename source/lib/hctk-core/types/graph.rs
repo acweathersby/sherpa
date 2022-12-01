@@ -230,7 +230,7 @@ impl GraphNode {
     };
 
     if let Some(parent_index) = parent_index {
-      let parent = &t_pack.graph_nodes[parent_index];
+      let parent = &t_pack.nodes[parent_index];
       node.parent = Some(parent_index);
       node.shifts = parent.shifts + 1;
       node.peek_goal = parent.peek_goal;
@@ -389,7 +389,7 @@ pub(crate) struct TransitionGraph {
   pub non_trivial_root: bool,
   pub g: Arc<GrammarStore>,
   //
-  graph_nodes: Vec<GraphNode>,
+  nodes: Vec<GraphNode>,
   node_pipeline: VecDeque<ProcessGroup>,
   /// Internal pipeline to drive transition tree
   /// creation.
@@ -398,6 +398,9 @@ pub(crate) struct TransitionGraph {
   /// For a givin item, points to an originating
   /// item that can used to look up it's own closure
   closure_links: HashMap<Item, Item>,
+
+  pub accept_items: ItemSet,
+  lane_counter:     u32,
 }
 
 impl TransitionGraph {
@@ -415,10 +418,30 @@ impl TransitionGraph {
       is_scanner,
       root_prod_ids,
       starts: BTreeSet::from_iter(starts.iter().map(|i| i.to_start().to_origin_only_state())),
-      graph_nodes: Vec::with_capacity(256),
+      nodes: Vec::with_capacity(256),
       g,
       ..Default::default()
     }
+  }
+
+  /// Increments the monotonic lane counter by `amount`, and returns the
+  /// the counters previous value.
+  pub fn increment_lane(&mut self, amount: u32) -> u32 {
+    let prev_val = self.lane_counter;
+    self.lane_counter += amount;
+    prev_val
+  }
+
+  /// If this is the root node, then this is the set of all
+  /// transition items coerced into completed Items. Origin
+  /// and lane info is stripped from these items. Other wise
+  /// the set is empty.
+  pub fn accept_items(&self) -> &ItemSet {
+    &self.accept_items
+  }
+
+  pub fn get_root(&self) -> &GraphNode {
+    &self.nodes[0]
   }
 
   pub fn queue_node(&mut self, process_group: ProcessGroup) {
@@ -438,15 +461,15 @@ impl TransitionGraph {
     if let Some(slot_index) = self.empty_cache.pop_front() {
       node.id = slot_index;
 
-      self.graph_nodes[slot_index] = node;
+      self.nodes[slot_index] = node;
 
       slot_index
     } else {
-      let id = NodeId::new(self.graph_nodes.len() as u32);
+      let id = NodeId::new(self.nodes.len() as u32);
 
       node.id = id;
 
-      self.graph_nodes.push(node);
+      self.nodes.push(node);
 
       id
     }
@@ -476,91 +499,37 @@ impl TransitionGraph {
     parent
   }
 
-  /// If the node at node_index is `node.is_peek_node()`, then this
-  /// returns the node's peek_goal node.
-  ///
-  /// # Panic
-  ///
-  /// Panics in debug if the node at `node_index` is dead, or
-  /// if the node is not a peek node.
-  #[inline(always)]
-  pub fn get_goal(&self, node_index: NodeId) -> &GraphNode {
-    debug_assert!(
-      self.graph_nodes[node_index].id != NodeId::Invalid,
-      "Invalid access of a deleted node at index {}",
-      node_index
-    );
-
-    debug_assert!(
-      self.graph_nodes[node_index].is_peek_node(),
-      "Invalid access of a non-peek node at index {}",
-      node_index
-    );
-
-    self.get_node(self.graph_nodes[node_index].peek_goal.unwrap())
-  }
-
-  /// If the node at node_index is `node.is_peek_node()` or is `node.is_peek_goal()`, then this
-  /// returns the node's peek_origin node.
-  ///
-  /// # Panic
-  ///
-  /// Panics in debug if the node at `node_index` is dead, or
-  /// if the node is not a peek node or peek goal node.
-  #[inline(always)]
-  pub fn get_peek_origin(&self, node_index: NodeId) -> &GraphNode {
-    let node = &self.graph_nodes[node_index];
-
-    debug_assert!(
-      node.id != NodeId::Invalid,
-      "Invalid access of a deleted node at index {}",
-      node_index
-    );
-
-    if node.is_peek_origin() {
-      node
-    } else {
-      debug_assert!(
-        !node.is_peek_node() || !node.is_peek_goal_node(),
-        "Invalid access of a non-peek node at index {}",
-        node_index
-      );
-
-      self.get_peek_origin(node.peek_origin.unwrap())
-    }
-  }
-
   #[inline(always)]
   pub fn get_node(&self, node_index: NodeId) -> &GraphNode {
     debug_assert!(
-      self.graph_nodes[node_index].id != NodeId::Invalid,
+      self.nodes[node_index].id != NodeId::Invalid,
       "Invalid access of a deleted node at index {}",
       node_index
     );
 
-    &self.graph_nodes[node_index]
+    &self.nodes[node_index]
   }
 
   #[inline(always)]
   pub fn get_node_mut(&mut self, node_index: NodeId) -> &mut GraphNode {
     debug_assert!(
-      self.graph_nodes[node_index].id != NodeId::Invalid,
+      self.nodes[node_index].id != NodeId::Invalid,
       "Invalid access of a deleted node at index {}",
       node_index
     );
 
-    &mut self.graph_nodes[node_index]
+    &mut self.nodes[node_index]
   }
 
   pub fn nodes_iter(&self) -> core::slice::Iter<GraphNode> {
-    self.graph_nodes.iter()
+    self.nodes.iter()
   }
 
   pub fn clean(self) -> TPackResults {
     (
       TransitionGraph {
         goto_seeds: self.goto_seeds,
-        graph_nodes: self.graph_nodes,
+        nodes: self.nodes,
         leaf_nodes: self.leaf_nodes,
         mode: self.mode,
         is_scanner: self.is_scanner,
@@ -575,12 +544,12 @@ impl TransitionGraph {
   }
 
   pub fn get_node_len(&self) -> usize {
-    self.graph_nodes.len()
+    self.nodes.len()
   }
 
   pub fn write_nodes(&self) -> String {
     let mut string = String::new();
-    for node in &self.graph_nodes {
+    for node in &self.nodes {
       if !node.is_orphan(self) || node.id.0 == 0 {
         string += &format!("\n{}\n", node.debug_string(&self.g));
       }
@@ -590,7 +559,7 @@ impl TransitionGraph {
   }
 
   pub fn print_nodes(&self) {
-    for node in &self.graph_nodes {
+    for node in &self.nodes {
       if !node.is_orphan(self) || node.id.0 == 0 {
         println!("{}\n", node.debug_string(&self.g));
       }

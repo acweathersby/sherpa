@@ -17,7 +17,6 @@ impl WarnTransitionAmbiguousProduction {
   /// then returns `HCResult::Ok(HCError)`, or `HCResult::None` otherwise.
   pub(crate) fn check(t: &TransitionGraph, conflicting_goals: &Vec<NodeId>) -> HCResult<HCError> {
     let conflicting_nodes = conflicting_goals.iter().map(|n| t.get_node(*n)).collect::<Vec<_>>();
-    let peek_root_node = t.get_peek_origin(conflicting_goals[0]);
     let goal_items = conflicting_goals
       .iter()
       .map(|i| t.get_node(*i).first_item().to_empty_state())

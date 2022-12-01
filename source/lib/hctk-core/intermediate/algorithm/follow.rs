@@ -1,4 +1,7 @@
-use crate::types::{TransitionGraph as TPack, *};
+use crate::{
+  intermediate::utils::{hash_group_btreemap, hash_group_vec},
+  types::{TransitionGraph as TPack, *},
+};
 use std::{
   collections::{BTreeSet, VecDeque},
   vec,
@@ -14,18 +17,16 @@ pub(super) fn get_follow_items(
   t: &mut TPack,
   root_completed_item: &Item,
   prev_state_ref: MaybeNodeId,
-  mut lane_counter: u32,
-) -> (FollowItemGroups, u32) {
+) -> FollowItemGroups {
   let mut seen = BTreeSet::<(ItemState, LinkedItem)>::new();
   let mut out = BTreeSet::<LinkedItem>::new();
   let mut fin_items = BTreeSet::<LinkedItem>::new();
   let mut intermediate = BTreeSet::<LinkedItem>::new();
   let grammar = t.g.clone();
   let g = &grammar;
+  let empty = vec![];
 
   println!("\n\n---- Follow start on {} ----", root_completed_item.debug_string(g));
-
-  lane_counter = lane_counter.max(1);
 
   static empty_vec: Vec<Item> = Vec::new();
   // Starting at the top we grab the closure to the nearest
@@ -38,118 +39,208 @@ pub(super) fn get_follow_items(
   )]);
   while let Some((state, linked)) = completed_items.pop_front() {
     println!(
-      "\nLooking for matches for  {} in {:?}",
+      "\nLooking for matches for  {} in {:?} with state {}",
       linked.item.debug_string(g),
-      linked.closure_node
+      linked.closure_node,
+      state.debug_string(g)
     );
     let completed_item = linked.item.clone();
     let current_node = linked.closure_node;
 
     if seen.insert((state, linked.clone())) {
+      let (iter, prev_node) = match linked {
+        LinkedItem { closure_node: Some(curr_node), .. } => {
+          let node = t.get_node(curr_node);
+
+          node
+            .goto_items
+            .closure_with_state(&t.g)
+            .to_vec()
+            .print_items(&t.g, &format!("\n Closure {:?}", curr_node));
+          (node.goto_items.closure_with_state(&t.g).to_vec().into_iter(), node.closure_parent)
+        }
+        LinkedItem { item, closure_node: None, .. } => (
+          if item.is_out_of_scope() {
+            t.out_of_scope_closure.as_ref().unwrap_or(&empty_vec).clone().into_iter()
+          } else {
+            vec![].into_iter()
+          },
+          None,
+        ),
+      };
+
+      let local_closure_lookup =
+        hash_group_btreemap(iter.collect::<Items>(), |_, i| i.get_production_id_at_sym(&t.g));
+
       let prod = linked.item.get_prod_id(g);
+
+      let null_items = local_closure_lookup
+        .get(&ProductionId(0))
+        .unwrap_or(&empty)
+        .iter()
+        .filter(|i| i.is_null() && i.get_state().same_curr_lane(&state));
+
+      let goto_items = local_closure_lookup.get(&prod).unwrap_or(&empty).iter().filter(|i| {
+        state.in_either_lane(&i.get_state()) && i.get_production_id_at_sym(&t.g) == prod
+      });
+
+      let closure: Items = null_items.cloned().chain(goto_items.cloned()).collect();
+
       // Grab all productions from the closure that match the end item's
       // production.
-      match {
-        let (iter, prev_node) = match linked {
-          LinkedItem { closure_node: Some(curr_node), .. } => {
-            let node = t.get_node(curr_node);
-
-            node
-              .goto_items
-              .closure_with_state(&t.g)
-              .to_vec()
-              .print_items(&t.g, &format!("\n Closure {:?}", curr_node));
-            (node.goto_items.closure_with_state(&t.g).to_vec().into_iter(), node.closure_parent)
-          }
-          LinkedItem { item, closure_node: None, .. } => (
-            if item.is_out_of_scope() {
-              t.out_of_scope_closure.as_ref().unwrap_or(&empty_vec).clone().into_iter()
-            } else {
-              vec![].into_iter()
-            },
-            None,
-          ),
-        };
-
-        let closure = iter
-          .clone()
-          .filter(|i| {
-            if i.is_null() {
-              i.get_state().get_lane() == state.get_lane()
-            } else {
-              state.in_same_lane(&i.get_state()) && i.get_production_id_at_sym(&t.g) == prod
-            }
-          })
-          .collect::<Vec<_>>();
-
-        (completed_item, closure, prev_node, current_node)
-      } {
+      match { (completed_item, closure, prev_node, current_node) } {
         (completed_item, empty_closure, Some(prev_node), current_node)
           if empty_closure.is_empty() =>
         {
+          #[cfg(debug_assertions)]
+          {}
           println!("no closure for Node [{:?}] - Selecting previous node", current_node);
           completed_items.push_back((state, LinkedItem {
             item:         completed_item,
             closure_node: Some(prev_node),
           }));
         }
-        (completed_item, empty_closure, None, current_node) if empty_closure.is_empty() => {
-          println!("no closure for Node [{:?}] - Should be at root node.", current_node);
+        (completed_item, empty_closure, None, Some(root_node)) if empty_closure.is_empty() => {
+          debug_assert!(
+            root_node.usize() == 0,
+            "The root node should be the only one that ends up in this branch"
+          );
+
+          if t
+            .get_node(root_node)
+            .transition_items
+            .contains(&completed_item.to_start().to_origin_only_state())
+          {
+            fin_items.insert(LinkedItem {
+              item:         completed_item.to_origin_only_state(),
+              closure_node: None,
+            });
+          }
+
+          println!("no closure for Node [{:?}] - Should be at root node.", root_node);
           // This item should match one of the root items when set to completed
           if completed_item == *root_completed_item {
             fin_items.insert(LinkedItem { item: completed_item, closure_node: None });
           }
         }
         (completed_item, mut closure, prev_node, Some(current_node)) => {
+          let proxy_state = completed_item.get_state();
           closure.print_items(g, &format!("Node [{:?}] closure:", current_node));
+          let null_items: Items = closure.drain_filter(|i| i.is_null()).collect();
+          if !null_items.is_empty() {
+            for null_item in null_items {
+              completed_items.push_back((null_item.get_state().to_prev_lane(), LinkedItem {
+                item:         completed_item,
+                closure_node: Some(current_node),
+              }));
+            }
+          } else {
+            let mut uncompleted_items = closure.try_increment();
+            let completed = uncompleted_items
+              .drain_filter(|i| i.completed())
+              .map(|i| (proxy_state, i))
+              .collect::<Vec<_>>();
+            let mut uncompleted_items = uncompleted_items.to_state(proxy_state);
+            let mut seen = ItemSet::new();
+            let mut completed_queue = VecDeque::from_iter(completed);
 
-          for null_item in closure.drain_filter(|i| i.is_null()) {
-            completed_items.push_back((null_item.get_state(), LinkedItem {
-              item:         completed_item,
-              closure_node: Some(current_node),
-            }));
-          }
+            while let Some((proxy_state, item)) = completed_queue.pop_front() {
+              if seen.insert(item.to_empty_state().to_start()) {
+                #[cfg(debug_assertions)]
+                {
+                  println!("---- {}", item.debug_string(&t.g));
+                }
+                // Preserve the item's original state
+                let original_state = item.get_state();
+                let fork_state = proxy_state.to_lane_fork(t.increment_lane(1));
 
-          let mut uncompleted_items =
-            closure.try_increment().to_state(completed_item.to_local_state());
+                // Put the completed item into a new lane.
+                let forked_item = item.to_state(fork_state);
 
-          let completed = uncompleted_items.drain_filter(|i| i.completed()).collect::<Items>();
+                // Grab the production the item reduces to.
+                let prod = forked_item.get_prod_id(&t.g);
 
-          // let mut lane_increment = lane_counter - +;
+                // Based on the item's original state, find all other
+                // items that are "goto" on the production.
+                let goto_items: Items = local_closure_lookup
+                  .get(&prod)
+                  .unwrap_or(&empty)
+                  .iter()
+                  .filter(|i| {
+                    !seen.contains(&i.to_empty_state().to_start())
+                      && original_state.in_either_lane(&i.get_state())
+                      && i.get_production_id_at_sym(&t.g) == prod
+                  })
+                  .cloned()
+                  .collect();
 
-          for item in &completed {
-            if uncompleted_items.is_empty() {
-              let state = completed_item.get_state();
-              let state = state.to_lanes(lane_counter, state.get_lane());
-              let item = item.to_state(state);
+                #[cfg(debug_assertions)]
+                {
+                  local_closure_lookup
+                    .get(&prod)
+                    .unwrap_or(&empty)
+                    .print_items(&t.g, "debug gotos");
+                  goto_items.print_items(&t.g, "results");
+                }
 
-              t.get_node_mut(current_node).goto_items.push(Item::null(state));
+                // Place a null slide into the active state's goto closure.
+                t.get_node_mut(current_node).goto_items.push(forked_item.to_null());
 
-              lane_counter += 1;
+                if goto_items.len() > 0 {
+                  let incremented = goto_items.into_iter().map(|i| i.try_increment());
 
-              completed_items
-                .push_back((state, LinkedItem { item, closure_node: Some(current_node) }));
+                  completed_queue.append(
+                    &mut incremented
+                      .clone()
+                      .filter(|i| i.completed())
+                      .map(|i| (fork_state, i))
+                      .collect(),
+                  );
 
-              completed_items.push_back((state, LinkedItem { item, closure_node: prev_node }));
+                  uncompleted_items.append(
+                    &mut incremented
+                      .filter(|i| !i.completed())
+                      .map(|i| i.to_state(fork_state))
+                      .collect(),
+                  );
 
-              intermediate.insert(LinkedItem { item, closure_node: Some(current_node) });
-            } else if *item != *root_completed_item {
-              out.insert(LinkedItem { item: *item, closure_node: Some(current_node) });
-            } else {
-              // panic!("Returning the same item!")
+                  // Preserve
+                  intermediate.insert(LinkedItem {
+                    item:         forked_item,
+                    closure_node: Some(current_node),
+                  });
+                } else {
+                  // Let the item "fall into" the previous state's closure
+                  completed_items.push_back((original_state, LinkedItem {
+                    item:         forked_item,
+                    closure_node: prev_node,
+                  }));
+                }
+              }
+            }
+
+            for item in uncompleted_items {
+              out.insert(LinkedItem {
+                item:         item.to_local_state(),
+                closure_node: Some(current_node),
+              });
             }
           }
-
-          if !completed.is_empty() && uncompleted_items.is_empty() {
-            // lane_counter = lane_increment;
-          }
-
-          for item in uncompleted_items {
-            out.insert(LinkedItem { item, closure_node: Some(current_node) });
-          }
         }
-        _ => {
-          unreachable!("All conditions should be covered by the above")
+        (_completed_item, _closure, _prev_node, _current_node) => {
+          // Check to see if we have an accept item
+          #[cfg(debug_assertions)]
+          {
+            println!("Evaluating potential leaf node ------------------");
+            println!("---- {}", _completed_item.to_state(state).debug_string(&t.g));
+            t.accept_items().print_items(g, "Accepting Items");
+          }
+          if t.accept_items().contains(&_completed_item.to_state(state)) {
+            fin_items.insert(LinkedItem { item: completed_item, closure_node: None });
+          } else {
+            dbg!(_completed_item, _closure, _prev_node, _current_node);
+            println!("All possible conditions should be covered by the above")
+          }
         }
       }
     }
@@ -160,12 +251,10 @@ pub(super) fn get_follow_items(
   Items::from_linked(out.clone()).print_items(g, "Uncompleted Items");
 
   println!("---- Follow end on {} ----\n\n", root_completed_item.debug_string(g));
-  (
-    FollowItemGroups {
-      final_completed_items: fin_items.into_iter().collect(),
-      intermediate_completed_items: intermediate.into_iter().collect(),
-      uncompleted_items: out.into_iter().collect(),
-    },
-    lane_counter,
-  )
+
+  FollowItemGroups {
+    final_completed_items: fin_items.into_iter().collect(),
+    intermediate_completed_items: intermediate.into_iter().collect(),
+    uncompleted_items: out.into_iter().collect(),
+  }
 }

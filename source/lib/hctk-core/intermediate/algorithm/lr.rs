@@ -21,7 +21,13 @@ pub(crate) fn construct_LR(
 
   let mut t = TPack::new(g.clone(), TransitionMode::LR, is_scanner, &starts, start_productions);
 
-  let mut root_node = GraphNode::new(&t, SymbolID::Start, None, starts.clone(), NodeType::LRStart);
+  let mut root_node = GraphNode::new(
+    &t,
+    SymbolID::Start,
+    None,
+    starts.into_iter().map(|i| i.to_empty_state()).collect(),
+    NodeType::LRStart,
+  );
 
   root_node.edge_type = EdgeType::Start;
 
@@ -115,10 +121,14 @@ pub(super) fn construct_inline_LR(
 
     match end_items.len() {
       2.. => {
+        end_items.print_items(g, "LR End Items");
         // Get the follow for each node.
         let end_items = end_items
           .into_iter()
-          .map(|i| (i, get_follow_items(t, &i, Some(parent_index), 0).0))
+          .map(|i| i.to_origin_only_state())
+          .collect::<ItemSet>()
+          .into_iter()
+          .map(|i| (i, get_follow_items(t, &i, Some(parent_index))))
           .collect::<Vec<_>>();
 
         if end_items.iter().all(|(i, items)| {
@@ -138,12 +148,22 @@ pub(super) fn construct_inline_LR(
                   .collect::<Vec<_>>()
               })
               .collect::<Vec<_>>(),
-            |i, (_, term)| term.get_symbol(&g),
+            |_, (_, term)| term.get_symbol(&g),
           );
 
           if symbol_groups.iter().any(|g| g.1.len() > 1) {
             error_cleanup(t, nodes);
-            return HCResult::Err(format!("Could not disambiguate grammar here:",).into());
+            return HCResult::Err(
+              format!(
+                "Could not disambiguate grammar here: \n{}",
+                end_items
+                  .iter()
+                  .map(|i| { i.0.get_origin().blame_string(&t.g) + &i.0.blame_string(&t.g) })
+                  .collect::<Vec<String>>()
+                  .join("\n")
+              )
+              .into(),
+            );
           } else {
             for (sym, mut items) in symbol_groups {
               let (end_item, _) = items.pop().unwrap();
