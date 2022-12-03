@@ -11,3 +11,5 @@
 
 # Package Manager Directories
 **/node_modules
+
+*.sherpa*
