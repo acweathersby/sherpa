@@ -2,20 +2,16 @@ mod ast;
 pub use ast::*;
 
 #[cfg(test)]
-mod test
-{
-  use crate::ast::ASTNode;
-  use crate::Context;
-  use hctk::types::*;
+mod test {
+  use crate::{ast::ASTNode, Context};
+  use sherpa::types::*;
   use std::sync::Arc;
   #[test]
-  pub fn test_build()
-  {
+  pub fn test_build() {
     let mut nodes: Vec<HCObj<ASTNode>> = Vec::with_capacity(8);
 
-    let actions =
-      ParseContext::new_banner_parser(&mut UTF8StringReader::new("hello world"))
-        .collect::<Vec<_>>();
+    let actions = ParseContext::new_banner_parser(&mut UTF8StringReader::new("hello world"))
+      .collect::<Vec<_>>();
 
     assert!(matches!(actions[0], ParseAction::Shift { .. }));
     assert!(matches!(actions[1], ParseAction::Shift { .. }));

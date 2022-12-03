@@ -1,10 +1,10 @@
 [workspace]
 
 members = [
-    "source/lib/hctk",
-    "source/lib/hctk-proc",
-    "source/lib/hctk-core",
-    "source/lib/hctk-compile",
+    "source/lib/sherpa",
+    "source/lib/sherpa-proc",
+    "source/lib/sherpa-core",
+    "source/lib/sherpa-compile",
     "source/app/compile",
     #"test/e2e/basic_grammar",
     "test/e2e/basic_grammar_llvm",

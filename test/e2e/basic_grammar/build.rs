@@ -1,7 +1,6 @@
-use std::path::PathBuf;
-use std::str::FromStr;
+use std::{path::PathBuf, str::FromStr};
 
-use hctk_compile::compile_bytecode_files;
+use sherpa_compile::compile_bytecode_files;
 
 fn main() {
   if let Ok(cwd) = std::env::var("CARGO_MANIFEST_DIR").map(|d| PathBuf::from_str(&d).unwrap()) {

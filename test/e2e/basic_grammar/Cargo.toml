@@ -16,8 +16,8 @@ path = "./main.rs"
 [build-dependencies.hc-compile]
 path = "../../../source/app/compile" 
 
-[dependencies.hctk]
-path = "../../../source/lib/hctk"
+[dependencies.sherpa]
+path = "../../../source/lib/sherpa"
 
 [dev-dependencies]
 criterion = "0.3.5"

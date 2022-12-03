@@ -10,5 +10,5 @@ path = "./main.rs"
 [lib]
 path = "./lib.rs"
 
-[dependencies.hctk]
-path = "../../../source/lib/hctk"
+[dependencies.sherpa]
+path = "../../../source/lib/sherpa"

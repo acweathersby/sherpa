@@ -1,12 +1,11 @@
 mod ast;
 
-use crate::ast::ASTNode;
-use crate::ast::REDUCE_FUNCTIONS;
-use hctk::types::UTF8StringReader;
-use hctk::types::*;
-use std::sync::Arc;
-use std::time::Duration;
-use std::time::Instant;
+use crate::ast::{ASTNode, REDUCE_FUNCTIONS};
+use sherpa::types::{UTF8StringReader, *};
+use std::{
+  sync::Arc,
+  time::{Duration, Instant},
+};
 use test_basic_grammar::*;
 
 pub fn main() {

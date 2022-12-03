@@ -17,8 +17,8 @@ path = "./main.rs"
 [dev-dependencies]
 criterion = "0.4.0"
 
-[build-dependencies.hctk]
-path = "../../../source/lib/hctk"
+[build-dependencies.sherpa]
+path = "../../../source/lib/sherpa"
 
-[dependencies.hctk]
-path = "../../../source/lib/hctk"
+[dependencies.sherpa]
+path = "../../../source/lib/sherpa"

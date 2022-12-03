@@ -1,4 +1,4 @@
-use hctk::types::UTF8StringReader;
+use sherpa::types::UTF8StringReader;
 use test_proc_macro::parser;
 
 pub fn main() {

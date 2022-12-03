@@ -1,5 +1,4 @@
-use hctk::types::UTF8StringReader;
-use hctk::types::*;
+use sherpa::types::{UTF8StringReader, *};
 use std::time::Instant;
 use test_basic_grammar_llvm::*;
 pub fn main() {

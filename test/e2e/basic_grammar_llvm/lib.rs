@@ -6,7 +6,7 @@ pub mod llvm_test {
 mod test {
 
   use crate::llvm_test;
-  use hctk::types::*;
+  use sherpa::types::*;
 
   #[test]
   pub fn test_build() {

@@ -1,8 +1,5 @@
-use criterion::criterion_group;
-use criterion::criterion_main;
-use criterion::Criterion;
-use hctk::types::UTF8StringReader;
-use hctk::types::*;
+use criterion::{criterion_group, criterion_main, Criterion};
+use sherpa::types::{UTF8StringReader, *};
 use test_basic_grammar_llvm::*;
 
 pub fn bench(input: &str) {

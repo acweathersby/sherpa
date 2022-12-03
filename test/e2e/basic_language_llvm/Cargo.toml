@@ -13,8 +13,8 @@ path = "./lib.rs"
 name = "test_basic_language_llvm_bin"
 path = "./main.rs"
 
-[build-dependencies.hctk]
-path = "../../../source/lib/hctk"
+[build-dependencies.sherpa]
+path = "../../../source/lib/sherpa"
 
-[dependencies.hctk]
-path = "../../../source/lib/hctk"
+[dependencies.sherpa]
+path = "../../../source/lib/sherpa"

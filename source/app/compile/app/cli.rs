@@ -1,8 +1,8 @@
 use clap::{arg, Command};
 
 pub fn build_cli() -> Command {
-  Command::new("hc-compile")
-    .about("A compiler for Hydrocarbon Grammar files (.hcg)")
+  Command::new("sherpa-compile")
+    .about("A compiler for Sherpa Grammar files (.sg)")
     .subcommand_required(true)
     .arg_required_else_help(true)
     .allow_external_subcommands(false)
@@ -26,7 +26,7 @@ pub fn build_cli() -> Command {
         )
         .arg(
           arg!(
-              -i --input <INPUT> "A path to a grammar file (.hcg)"
+              -i --input <INPUT> "A path to a grammar file (.sg)"
           )
           .value_hint(clap::ValueHint::FilePath)
           .required(true),
@@ -35,7 +35,7 @@ pub fn build_cli() -> Command {
     .subcommand(
       Command::new("byte-asm").about("Output the bytecode disassembly for the grammar.").arg(
         arg!(
-            -i --input <INPUT> "A path to a grammar file (.hcg)"
+            -i --input <INPUT> "A path to a grammar file (.sg)"
         )
         .value_hint(clap::ValueHint::FilePath)
         .required(true),

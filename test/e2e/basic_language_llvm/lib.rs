@@ -7,9 +7,8 @@ pub use llvm_language_test_parser::*;
 #[cfg(test)]
 mod test {
 
-  use crate::Context;
-  use crate::*;
-  use hctk::types::*;
+  use crate::{Context, *};
+  use sherpa::types::*;
 
   #[test]
   pub fn test_build() {

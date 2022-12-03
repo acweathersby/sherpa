@@ -1,12 +1,12 @@
 [package]
-name = "hc-compile"
-version = "0.2.0"
+name = "sherpa-compile"
+version = "1.0.0-beta1"
 edition = "2021"
 build = "build.rs"
 
 
 [[bin]]
-name = "hc-compile"
+name = "sherpa-compile"
 path = "./app/main.rs"
 
 [dependencies]
@@ -18,9 +18,9 @@ inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", feat
 clap = "4.0.0"
 clap_complete = "4.0.0"
 
-[dependencies.hctk_core]
-path = "../../lib/hctk-core"
+[dependencies.sherpa_core]
+path = "../../lib/sherpa-core"
 
-[dependencies.hctk_compile]
-path = "../../lib/hctk-compile"
+[dependencies.sherpa_compile]
+path = "../../lib/sherpa-compile"
 
