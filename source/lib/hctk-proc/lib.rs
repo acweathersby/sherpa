@@ -129,14 +129,11 @@ pub fn compile_mod(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
   // } else {
   // pipeline
   // };
-  let (_, artifacts, success) =
-    pipeline.add_task(tasks::build_ast(hctk_compile::SourceType::Rust)).run(|errors| {
-      process_errors(errors, offsets);
-    });
 
-  if success {
-    artifacts.join("\n").parse().unwrap()
-  } else {
-    Default::default()
+  match pipeline.add_task(tasks::build_ast(hctk_compile::SourceType::Rust)).run(|errors| {
+    process_errors(errors, offsets);
+  }) {
+    hctk_core::HCResult::Ok((_, artifacts, _)) => artifacts.join("\n").parse().unwrap(),
+    _ => Default::default(),
   }
 }

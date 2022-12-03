@@ -48,7 +48,7 @@ fn gather_ascript_info_from_grammar(
   e: &mut Vec<HCError>,
   prod_types: &mut ProductionTypesTable,
 ) {
-  // Separate all bodies into a list of  of tuple of body id's and
+  // Separate all bodies into a list of  of tuple of RuleId's and
   // Ascript reference nodes.
 
   let g = ast.g.clone();
@@ -57,9 +57,9 @@ fn gather_ascript_info_from_grammar(
     .g
     .rules
     .iter()
-    .filter_map(|(id, body)| match g.clone().parse_productions.contains(&body.prod_id) {
+    .filter_map(|(id, rule)| match g.clone().parse_productions.contains(&rule.prod_id) {
       true => {
-        for function in &body.reduce_fn_ids {
+        for function in &rule.reduce_fn_ids {
           if let ReduceFunctionType::Ascript(ascript) = g.reduce_functions.get(function).unwrap() {
             return Some((*id, Some(ascript)));
           }
@@ -70,7 +70,7 @@ fn gather_ascript_info_from_grammar(
     })
     .collect::<Vec<_>>();
 
-  // For reduce function in each body divide into those that resolve
+  // For reduce function in each rule divide into those that resolve
   // into atomic types and those that don't (those that resolve into
   // productions). Add the types of the atomic functions to the
   // production types. Add any structs encountered into a separate
@@ -78,26 +78,26 @@ fn gather_ascript_info_from_grammar(
   // types.
 
   let mut struct_bodies: Vec<(RuleId, &AST_AScript)> = vec![];
-  for (body_id, ascript_option_fn) in normal_parse_bodies {
-    if let Some(body) = g.clone().rules.get(&body_id) {
+  for (rule_id, ascript_option_fn) in normal_parse_bodies {
+    if let Some(rule) = g.clone().rules.get(&rule_id) {
       if let Some(ascript_fn) = &ascript_option_fn {
         match &ascript_fn.ast {
           ASTNode::AST_Struct(box ast_struct) => {
-            let (id, mut sub_errors) = compile_struct_type(ast, ast_struct, body);
-            struct_bodies.push((body_id, ascript_fn));
-            add_production_type(prod_types, &body, TaggedType {
+            let (id, mut sub_errors) = compile_struct_type(ast, ast_struct, rule);
+            struct_bodies.push((rule_id, ascript_fn));
+            add_production_type(prod_types, &rule, TaggedType {
               type_:        AScriptTypeVal::Struct(id),
-              tag:          body_id,
+              tag:          rule_id,
               symbol_index: 0,
             });
             e.append(&mut sub_errors);
           }
           ASTNode::AST_Statements(ast_stmts) => {
             let (sub_types, mut sub_errors) =
-              compile_expression_type(ast, ast_stmts.statements.last().unwrap(), body);
+              compile_expression_type(ast, ast_stmts.statements.last().unwrap(), rule);
 
             for sub_type in sub_types {
-              add_production_type(prod_types, &body, sub_type);
+              add_production_type(prod_types, &rule, sub_type);
             }
 
             e.append(&mut sub_errors);
@@ -105,16 +105,16 @@ fn gather_ascript_info_from_grammar(
           _ => {}
         }
       } else {
-        match Item::from(body).to_last_sym().get_symbol(&g) {
-          SymbolID::Production(id, ..) => add_production_type(prod_types, &body, TaggedType {
+        match Item::from(rule).to_last_sym().get_symbol(&g) {
+          SymbolID::Production(id, ..) => add_production_type(prod_types, &rule, TaggedType {
             type_:        AScriptTypeVal::UnresolvedProduction(id),
-            tag:          body_id,
-            symbol_index: (body.len - 1) as u32,
+            tag:          rule_id,
+            symbol_index: (rule.len - 1) as u32,
           }),
-          _ => add_production_type(prod_types, &body, TaggedType {
+          _ => add_production_type(prod_types, &rule, TaggedType {
             type_:        AScriptTypeVal::Token,
-            tag:          body_id,
-            symbol_index: (body.len - 1) as u32,
+            tag:          rule_id,
+            symbol_index: (rule.len - 1) as u32,
           }),
         };
       }
@@ -124,10 +124,10 @@ fn gather_ascript_info_from_grammar(
 
 fn add_production_type(
   prod_types: &mut ProductionTypesTable,
-  body: &Rule,
+  rule: &Rule,
   new_return_type: TaggedType,
 ) {
-  let table = prod_types.entry(body.prod_id).or_insert_with(HashMap::new);
+  let table = prod_types.entry(rule.prod_id).or_insert_with(HashMap::new);
 
   match table.entry(new_return_type.clone()) {
     Entry::Occupied(mut entry) => {
@@ -429,12 +429,12 @@ fn resolve_structure_properties(ast: &mut AScriptStore, e: &mut Vec<HCError>) {
 
   for struct_id in ast.structs.keys().cloned().collect::<Vec<_>>() {
     let bodies = ast.structs.get(&struct_id).unwrap().body_ids.clone();
-    for body_id in bodies {
-      let body = g.get_rule(&body_id).unwrap();
-      for function in &body.reduce_fn_ids {
+    for rule_id in bodies {
+      let rule = g.get_rule(&rule_id).unwrap();
+      for function in &rule.reduce_fn_ids {
         if let ReduceFunctionType::Ascript(ascript) = g.reduce_functions.get(function).unwrap() {
           if let ASTNode::AST_Struct(box ast_struct) = &ascript.ast {
-            e.append(&mut compile_struct_props(ast, &struct_id, ast_struct, &body).1);
+            e.append(&mut compile_struct_props(ast, &struct_id, ast_struct, &rule).1);
           }
         }
       }
@@ -490,7 +490,7 @@ pub fn get_resolved_type(ascript: &AScriptStore, base_type: &AScriptTypeVal) -> 
         let nodes = types
           .iter()
           .flat_map(|t| match t.into() {
-            AScriptTypeVal::Struct(id) => vec![t.clone()],
+            AScriptTypeVal::Struct(_) => vec![t.clone()],
             AScriptTypeVal::GenericStruct(ids) => ids.iter().cloned().collect(),
             _ => vec![],
           })
@@ -502,7 +502,7 @@ pub fn get_resolved_type(ascript: &AScriptStore, base_type: &AScriptTypeVal) -> 
       }
     }
 
-    AScriptTypeVal::GenericVec(Some(vector_sub_types)) => {
+    AScriptTypeVal::GenericVec(Some(_)) => {
       let contents = BTreeSet::from_iter(get_resolved_vec_contents(ascript, base_type));
       // Flatten the subtypes into one array and get the resulting type from that
       get_specified_vector_from_generic_vec_values(&contents)
@@ -545,30 +545,30 @@ pub fn get_resolved_vec_contents(
 pub fn compile_expression_type(
   ast: &mut AScriptStore,
   ast_expression: &ASTNode,
-  body: &Rule,
+  rule: &Rule,
 ) -> (Vec<TaggedType>, Vec<HCError>) {
   use AScriptTypeVal::*;
   let mut errors = vec![];
 
   let types = match ast_expression {
     ASTNode::AST_Struct(ast_struct) => {
-      let (struct_type, mut error) = compile_struct_type(ast, ast_struct, body);
+      let (struct_type, mut error) = compile_struct_type(ast, ast_struct, rule);
 
       errors.append(&mut error);
 
       vec![TaggedType {
         symbol_index: 9999,
-        tag:          body.id,
+        tag:          rule.id,
         type_:        Struct(struct_type),
       }]
     }
     ASTNode::AST_Token(..) => vec![TaggedType {
-      symbol_index: body.syms.len() as u32,
-      tag:          body.id,
+      symbol_index: rule.syms.len() as u32,
+      tag:          rule.id,
       type_:        Token,
     }],
     ASTNode::AST_Add(box AST_Add { left, .. }) => {
-      let (sub_types, mut sub_errors) = compile_expression_type(ast, left, body);
+      let (sub_types, mut sub_errors) = compile_expression_type(ast, left, rule);
       errors.append(&mut sub_errors);
       sub_types
     }
@@ -576,7 +576,7 @@ pub fn compile_expression_type(
       let mut types = BTreeSet::new();
 
       for node in initializer {
-        let (sub_types, mut sub_errors) = compile_expression_type(ast, node, body);
+        let (sub_types, mut sub_errors) = compile_expression_type(ast, node, rule);
 
         for sub_type in sub_types {
           match (&sub_type).into() {
@@ -598,122 +598,122 @@ pub fn compile_expression_type(
       }
       if types.is_empty() {
         vec![TaggedType {
-          symbol_index: body.syms.len() as u32,
-          tag:          body.id,
+          symbol_index: rule.syms.len() as u32,
+          tag:          rule.id,
           type_:        GenericVec(None),
         }]
       } else {
         vec![TaggedType {
-          symbol_index: body.syms.len() as u32,
-          tag:          body.id,
+          symbol_index: rule.syms.len() as u32,
+          tag:          rule.id,
           type_:        GenericVec(Some(types)),
         }]
       }
     }
     ASTNode::AST_STRING(..) => vec![TaggedType {
-      symbol_index: body.syms.len() as u32,
-      tag:          body.id,
+      symbol_index: rule.syms.len() as u32,
+      tag:          rule.id,
       type_:        String(None),
     }],
     ASTNode::AST_BOOL(..) => vec![TaggedType {
-      symbol_index: body.syms.len() as u32,
-      tag:          body.id,
+      symbol_index: rule.syms.len() as u32,
+      tag:          rule.id,
       type_:        Bool(None),
     }],
     ASTNode::AST_U8(..) => vec![TaggedType {
-      symbol_index: body.syms.len() as u32,
-      tag:          body.id,
+      symbol_index: rule.syms.len() as u32,
+      tag:          rule.id,
       type_:        U8(None),
     }],
     ASTNode::AST_U16(..) => vec![TaggedType {
-      symbol_index: body.syms.len() as u32,
-      tag:          body.id,
+      symbol_index: rule.syms.len() as u32,
+      tag:          rule.id,
       type_:        U16(None),
     }],
     ASTNode::AST_U32(..) => vec![TaggedType {
-      symbol_index: body.syms.len() as u32,
-      tag:          body.id,
+      symbol_index: rule.syms.len() as u32,
+      tag:          rule.id,
       type_:        U32(None),
     }],
     ASTNode::AST_U64(..) => vec![TaggedType {
-      symbol_index: body.syms.len() as u32,
-      tag:          body.id,
+      symbol_index: rule.syms.len() as u32,
+      tag:          rule.id,
       type_:        U64(None),
     }],
     ASTNode::AST_I8(..) => vec![TaggedType {
-      symbol_index: body.syms.len() as u32,
-      tag:          body.id,
+      symbol_index: rule.syms.len() as u32,
+      tag:          rule.id,
       type_:        I8(None),
     }],
     ASTNode::AST_I16(..) => vec![TaggedType {
-      symbol_index: body.syms.len() as u32,
-      tag:          body.id,
+      symbol_index: rule.syms.len() as u32,
+      tag:          rule.id,
       type_:        I16(None),
     }],
     ASTNode::AST_I32(..) => vec![TaggedType {
-      symbol_index: body.syms.len() as u32,
-      tag:          body.id,
+      symbol_index: rule.syms.len() as u32,
+      tag:          rule.id,
       type_:        I32(None),
     }],
     ASTNode::AST_I64(..) => vec![TaggedType {
-      symbol_index: body.syms.len() as u32,
-      tag:          body.id,
+      symbol_index: rule.syms.len() as u32,
+      tag:          rule.id,
       type_:        I64(None),
     }],
     ASTNode::AST_F32(..) => vec![TaggedType {
-      symbol_index: body.syms.len() as u32,
-      tag:          body.id,
+      symbol_index: rule.syms.len() as u32,
+      tag:          rule.id,
       type_:        F32(None),
     }],
     ASTNode::AST_F64(..) => vec![TaggedType {
-      symbol_index: body.syms.len() as u32,
-      tag:          body.id,
+      symbol_index: rule.syms.len() as u32,
+      tag:          rule.id,
       type_:        F64(None),
     }],
     ASTNode::AST_NUMBER(..) => vec![TaggedType {
-      symbol_index: body.syms.len() as u32,
-      tag:          body.id,
+      symbol_index: rule.syms.len() as u32,
+      tag:          rule.id,
       type_:        F64(None),
     }],
     ASTNode::AST_Member(..) => vec![TaggedType {
-      symbol_index: body.syms.len() as u32,
-      tag:          body.id,
+      symbol_index: rule.syms.len() as u32,
+      tag:          rule.id,
       type_:        Undefined,
     }],
     ASTNode::AST_NamedReference(_) | ASTNode::AST_IndexReference(_) => {
-      match get_body_symbol_reference(body, ast_expression) {
+      match get_body_symbol_reference(rule, ast_expression) {
         Some((_, sym_ref)) => match sym_ref.sym_id {
           SymbolID::Production(id, ..) => match ast.prod_types.get(&id) {
             Some(types) => types
               .keys()
               .map(|t| TaggedType {
                 symbol_index: sym_ref.original_index,
-                tag:          body.id,
+                tag:          rule.id,
                 type_:        t.type_.clone(),
               })
               .collect(),
             None => vec![TaggedType {
               symbol_index: sym_ref.original_index,
-              tag:          body.id,
+              tag:          rule.id,
               type_:        UnresolvedProduction(id),
             }],
           },
           _ => vec![TaggedType {
             symbol_index: sym_ref.original_index,
-            tag:          body.id,
+            tag:          rule.id,
             type_:        Token,
           }],
         },
         None => vec![TaggedType {
-          symbol_index: body.syms.len() as u32,
-          tag:          body.id,
+          symbol_index: rule.syms.len() as u32,
+          tag:          rule.id,
           type_:        Undefined,
         }],
       }
     }
     _ => vec![TaggedType {
-      symbol_index: body.syms.len() as u32,
-      tag:          body.id,
+      symbol_index: rule.syms.len() as u32,
+      tag:          rule.id,
       type_:        Undefined,
     }],
   };
@@ -721,12 +721,12 @@ pub fn compile_expression_type(
   (types, errors)
 }
 
-/// Compiles a struct type from a production body and
+/// Compiles a struct type from a production rule and
 /// ascript struct node.
 pub fn compile_struct_type(
   ast: &mut AScriptStore,
   ast_struct: &AST_Struct,
-  body: &Rule,
+  rule: &Rule,
 ) -> (AScriptStructId, Vec<HCError>) {
   let mut errors = vec![];
   let mut types = vec![];
@@ -741,7 +741,7 @@ pub fn compile_struct_type(
       // Precompile property to ensure we gather all sub-structs;
       // We don't care about the actual value at this point.
       ASTNode::AST_Property(box prop) => {
-        compile_expression_type(ast, &prop.value, body);
+        compile_expression_type(ast, &prop.value, rule);
       }
       _ => {}
     }
@@ -793,7 +793,7 @@ pub fn compile_struct_type(
   match ast.structs.entry(id.clone()) {
     btree_map::Entry::Occupied(mut entry) => {
       let struct_ = entry.get_mut();
-      struct_.body_ids.insert(body.id);
+      struct_.body_ids.insert(rule.id);
       struct_.definition_locations.insert(ast_struct.Token());
       struct_.include_token = struct_.include_token.max(include_token);
     }
@@ -801,7 +801,7 @@ pub fn compile_struct_type(
       entry.insert(AScriptStruct {
         id,
         type_name,
-        body_ids: BTreeSet::from_iter(vec![body.id]),
+        body_ids: BTreeSet::from_iter(vec![rule.id]),
         definition_locations: BTreeSet::from_iter(vec![ast_struct.Token()]),
         prop_ids: BTreeSet::new(),
         include_token,
@@ -818,7 +818,7 @@ pub fn compile_struct_props(
   ast: &mut AScriptStore,
   id: &AScriptStructId,
   ast_struct: &AST_Struct,
-  body: &Rule,
+  rule: &Rule,
 ) -> (AScriptTypeVal, Vec<HCError>) {
   let mut errors = vec![];
 
@@ -829,7 +829,7 @@ pub fn compile_struct_props(
   if ast.structs.get(&id).unwrap().type_name == "SetProd" {
     println!(
       "Configuring SetProd:\nbody:{}\ncurr_struct:\n{:#?}\nprops:[\n{}\n]\nast:{:#?}",
-      body.item().debug_string(&ast.g),
+      rule.item().debug_string(&ast.g),
       ast.structs.get(&id),
       ast
         .structs
@@ -859,7 +859,7 @@ pub fn compile_struct_props(
 
         prop_ids.insert(prop_id.clone());
 
-        for prop_type in compile_expression_type(ast, &prop.value, body).0 {
+        for prop_type in compile_expression_type(ast, &prop.value, rule).0 {
           match ast.props.get_mut(&prop_id) {
             Some(existing) => {
               use AScriptTypeVal::*;
@@ -872,39 +872,39 @@ pub fn compile_struct_props(
                     ])),
                     ..Default::default()
                   };
-                  existing.body_ids.insert(body.id);
+                  existing.body_ids.insert(rule.id);
                 }
                 (GenericStruct(mut btree_set), Struct(typeB), ..) => {
                   btree_set.insert(prop_type);
                   existing.type_val =
                     TaggedType { type_: GenericStruct(btree_set), ..Default::default() };
-                  existing.body_ids.insert(body.id);
+                  existing.body_ids.insert(rule.id);
                 }
                 (Struct(typeA), GenericStruct(mut btree_set), ..) => {
                   btree_set.insert(existing.type_val.clone());
                   existing.type_val =
                     TaggedType { type_: GenericStruct(btree_set), ..Default::default() };
-                  existing.body_ids.insert(body.id);
+                  existing.body_ids.insert(rule.id);
                 }
                 (GenericStructVec(mut vecA), GenericStructVec(mut vecB), ..) => {
                   vecA.append(&mut vecB);
                   existing.type_val =
                     TaggedType { type_: GenericStructVec(vecA), ..Default::default() };
-                  existing.body_ids.insert(body.id);
+                  existing.body_ids.insert(rule.id);
                 }
                 (Undefined, _) => {
-                  existing.body_ids.insert(body.id);
+                  existing.body_ids.insert(rule.id);
                   existing.type_val = prop_type.to_owned();
                   existing.location = prop.value.Token();
-                  existing.grammar_ref = body.grammar_ref.clone();
+                  existing.grammar_ref = rule.grammar_ref.clone();
                   existing.optional = true;
                 }
                 (_, Undefined) => {
-                  existing.body_ids.insert(body.id);
+                  existing.body_ids.insert(rule.id);
                   existing.optional = true;
                 }
                 (a, b) if a.is_same_type(&b) => {
-                  existing.body_ids.insert(body.id);
+                  existing.body_ids.insert(rule.id);
                 }
                 _ => {
                   errors.push(ErrPropRedefinition::new(
@@ -914,7 +914,7 @@ pub fn compile_struct_props(
                     AScriptProp {
                       type_val: prop_type.into(),
                       location: prop.value.Token(),
-                      grammar_ref: body.grammar_ref.clone(),
+                      grammar_ref: rule.grammar_ref.clone(),
                       ..Default::default()
                     },
                   ));
@@ -924,9 +924,9 @@ pub fn compile_struct_props(
             _ => {
               ast.props.insert(prop_id.clone(), AScriptProp {
                 type_val: prop_type.into(),
-                body_ids: BTreeSet::from_iter(vec![body.id]),
+                body_ids: BTreeSet::from_iter(vec![rule.id]),
                 location: prop.value.Token(),
-                grammar_ref: body.grammar_ref.clone(),
+                grammar_ref: rule.grammar_ref.clone(),
                 ..Default::default()
               });
             }
@@ -940,7 +940,7 @@ pub fn compile_struct_props(
   match ast.structs.entry(id.clone()) {
     btree_map::Entry::Occupied(mut entry) => {
       let struct_ = entry.get_mut();
-      struct_.body_ids.insert(body.id);
+      struct_.body_ids.insert(rule.id);
       struct_.definition_locations.insert(ast_struct.Token());
       struct_.prop_ids.append(&mut prop_ids);
       struct_.include_token = include_token || struct_.include_token;
@@ -1076,32 +1076,32 @@ pub fn get_specified_vector_from_generic_vec_values(
 }
 
 pub fn get_body_symbol_reference<'a>(
-  body: &'a Rule,
+  rule: &'a Rule,
   reference: &ASTNode,
 ) -> Option<(usize, &'a RuleSymbol)> {
   match reference {
     ASTNode::AST_NamedReference(box AST_NamedReference { value, .. }) => {
-      get_named_body_ref(body, value)
+      get_named_body_ref(rule, value)
     }
     ASTNode::AST_IndexReference(box AST_IndexReference { value, .. }) => {
-      get_indexed_body_ref(body, value)
+      get_indexed_body_ref(rule, value)
     }
     _ => None,
   }
 }
 
-pub fn get_named_body_ref<'a>(body: &'a Rule, val: &str) -> Option<(usize, &'a RuleSymbol)> {
+pub fn get_named_body_ref<'a>(rule: &'a Rule, val: &str) -> Option<(usize, &'a RuleSymbol)> {
   if val == "first" {
-    Some((0, body.syms.first().unwrap()))
+    Some((0, rule.syms.first().unwrap()))
   } else if val == "last" {
-    Some((body.syms.len() - 1, body.syms.last().unwrap()))
+    Some((rule.syms.len() - 1, rule.syms.last().unwrap()))
   } else {
-    body.syms.iter().enumerate().filter(|(_, s)| s.annotation == *val).last()
+    rule.syms.iter().enumerate().filter(|(_, s)| s.annotation == *val).last()
   }
 }
 
-pub fn get_indexed_body_ref<'a>(body: &'a Rule, i: &f64) -> Option<(usize, &'a RuleSymbol)> {
-  body.syms.iter().enumerate().filter(|(_, s)| s.original_index == (*i - 1.0) as u32).last()
+pub fn get_indexed_body_ref<'a>(rule: &'a Rule, i: &f64) -> Option<(usize, &'a RuleSymbol)> {
+  rule.syms.iter().enumerate().filter(|(_, s)| s.original_index == (*i - 1.0) as u32).last()
 }
 
 pub fn get_struct_type_from_node(ast_struct: &AST_Struct) -> AScriptTypeVal {

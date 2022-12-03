@@ -73,8 +73,7 @@ fn write_rust_parser_file<W: Write>(
   writer
     .wrt(
       "
-use hctk::runtime::*;
-use hctk::types::*;
+use hctk::rt::*;
 
 pub struct Parser<T: ByteCharacterReader + BaseCharacterReader + MutCharacterReader>(ParseContext<T>, T, bool);
 

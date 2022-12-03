@@ -129,7 +129,10 @@ impl<T: HCObjTrait> HCObj<T> {
   }
 }
 
-pub trait HCObjTrait {
+pub trait HCObjTrait
+where
+  Self: Sized,
+{
   fn to_string(&self) -> String {
     String::new()
   }
@@ -178,6 +181,9 @@ pub trait HCObjTrait {
   fn to_token(&self) -> Token {
     Token::empty()
   }
+  fn into_strings(self) -> Vec<String> {
+    Default::default()
+  }
 }
 
 impl<T: HCObjTrait> HCObjTrait for HCObj<T> {
@@ -200,6 +206,13 @@ impl<T: HCObjTrait> HCObjTrait for HCObj<T> {
   to_numeric!(to_f32, f32);
 
   to_numeric!(to_f64, f64);
+
+  fn into_strings(self) -> Vec<String> {
+    match self {
+      HCObj::STRINGS(strings) => strings,
+      _ => Default::default(),
+    }
+  }
 
   fn to_string(&self) -> String {
     match self {

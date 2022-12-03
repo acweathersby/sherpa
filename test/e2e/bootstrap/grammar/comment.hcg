@@ -1,5 +1,5 @@
-<> line_comment >
-    \// (g:any) g:nl
+<> comment > line_comment | block_comment
 
-<> block_comment >
-    \/-  g:any \-/
+<> line_comment > \/ \/ ( g:id | g:sp | g:sym | g:num ) g:nl
+
+<> block_comment > \/-  ( g:id | g:sp | g:sym | g:num ) \-/

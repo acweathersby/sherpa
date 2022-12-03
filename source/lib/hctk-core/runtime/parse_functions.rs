@@ -13,7 +13,7 @@ pub fn dispatch<T: BaseCharacterReader + MutCharacterReader>(
   let mut i = (ctx.get_active_state() & STATE_ADDRESS_MASK);
 
   loop {
-    // println!("instr: {:0>6x} {} b: {} cp: {} cls: {}", i, r.cursor(), r.byte(), r.codepoint(), r.class());
+    //println!("instr: {:0>6x} {} b: {} cp: {} cls: {}{}", i, r.cursor(), r.byte(), r.codepoint(), r.class(), ctx.is_scanner());
 
     let instr = INSTRUCTION::from(bc, i as usize);
 
@@ -93,15 +93,15 @@ fn reduce<T: BaseCharacterReader + MutCharacterReader>(
   ctx: &mut ParseContext<T>,
 ) -> (ParseAction, u32) {
   let symbol_count = instr.get_contents() >> 16 & 0x0FFF;
-  let body_id = instr.get_contents() & 0xFFFF;
+  let rule_id = instr.get_contents() & 0xFFFF;
   let production_id = ctx.get_production();
 
   (
     if symbol_count == 0x0FFF {
       todo!("Acquire symbol count from symbol accumulator");
-      ParseAction::Reduce { production_id, rule_id: body_id, symbol_count: 0 }
+      ParseAction::Reduce { production_id, rule_id, symbol_count: 0 }
     } else {
-      ParseAction::Reduce { production_id, rule_id: body_id, symbol_count }
+      ParseAction::Reduce { production_id, rule_id, symbol_count }
     },
     i + 1,
   )

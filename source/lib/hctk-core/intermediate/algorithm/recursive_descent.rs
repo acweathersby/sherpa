@@ -125,8 +125,8 @@ pub(super) fn process_node(
           create_completed_node(j, t, items[0], par_id, depth);
         }
         (SymbolID::EndOfInput, 2..) => {
-          items.print_items(&t.g, "multiple endS!");
-          t.accept_items.print_items(&t.g, "Accepts endS!");
+          items.print_items(&t.g, "multiple ends!");
+          t.accept_items.print_items(&t.g, "Accepts ends!");
           panic!("Can't transition on multiple completed items!");
         }
         (SymbolID::Production(prod_id, _), _) => {

@@ -150,7 +150,7 @@ loop {{
       nodes.push({}::TOKEN(tok.clone()));
       tokens.push(tok);
     }}
-    Some(ParseAction::Reduce {{ body_id, symbol_count, .. }}) => {{
+    Some(ParseAction::Reduce {{ rule_id, symbol_count, .. }}) => {{
       let len = symbol_count as usize;
       let pos_a = &tokens[tokens.len() - len as usize];
       let pos_b = &tokens[tokens.len() - 1];
@@ -162,7 +162,7 @@ loop {{
         tokens.set_len(root + 1);
       }}
 
-      REDUCE_FUNCTIONS[body_id as usize](&mut nodes, tok);
+      REDUCE_FUNCTIONS[rule_id as usize](&mut nodes, tok);
 
     }}
     Some(ParseAction::Accept {{ production_id }}) => {{

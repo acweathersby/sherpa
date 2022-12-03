@@ -4,7 +4,7 @@ use crate::types::{GrammarStore, Item, ProductionId, SymbolID};
 use std::collections::{BTreeSet, VecDeque};
 
 /// Retrieve the initial items of a production. Returns vector of
-/// items, one for each body belonging to the production.
+/// items, one for each rule belonging to the production.
 #[inline]
 pub fn get_production_start_items(prod_id: &ProductionId, g: &GrammarStore) -> Vec<Item> {
   g.production_bodies

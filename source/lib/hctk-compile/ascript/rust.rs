@@ -157,15 +157,15 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
 
   let mut refs = vec![];
 
-  for (id, body) in &ordered_bodies {
-    let prod_id = body.prod_id;
+  for (id, rule) in &ordered_bodies {
+    let prod_id = rule.prod_id;
     let prod_data = ast.prod_types.get(&prod_id).unwrap();
 
     if prod_data.len() != 1 {
       unreachable!(
         "\n\nProduction result not been resolved\n[{}] == {}\n\n\n{}\n\n",
         ast.g.get_production_plain_name(&prod_id),
-        body.item().blame_string(&ast.g),
+        rule.item().blame_string(&ast.g),
         prod_data
           .iter()
           .map(|(p, _)| { p.debug_string(Some(&ast.g)) })
@@ -176,36 +176,36 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
 
     let mut temp_writer = w.checkpoint();
     let mut noop = 0;
-    let fn_name = format!("ast_fn{:0>3}", body.bytecode_id);
+    let fn_name = format!("ast_fn{:0>3}", rule.bytecode_id);
 
     temp_writer
       .wrtln(&format!(
         "/*\n{}\n*/\nfn {}({}){{",
-        body.item().blame_string(&ast.g).replace("*/", "* /"),
+        rule.item().blame_string(&ast.g).replace("*/", "* /"),
         fn_name,
         fn_args
       ))?
       .indent();
 
-    if body.reduce_fn_ids.is_empty() {
-      if body.len > 1 {
-        resize_fns.insert(body.len);
+    if rule.reduce_fn_ids.is_empty() {
+      if rule.len > 1 {
+        resize_fns.insert(rule.len);
       }
       noop = 1;
     } else {
-      let mut ref_index = body.syms.len();
+      let mut ref_index = rule.syms.len();
 
-      for function_id in &body.reduce_fn_ids {
+      for function_id in &rule.reduce_fn_ids {
         match g.reduce_functions.get(function_id) {
           Some(ReduceFunctionType::Ascript(function)) => match &function.ast {
             ASTNode::AST_Struct(box ast_struct) => {
               if let AScriptTypeVal::Struct(struct_type) = get_struct_type_from_node(ast_struct) {
                 let _ref =
-                  build_struct_constructor(ast, body, &struct_type, ast_struct, &mut ref_index, 0)?;
+                  build_struct_constructor(ast, rule, &struct_type, ast_struct, &mut ref_index, 0)?;
 
                 let indices = _ref.get_indices();
 
-                for i in (0..body.syms.len()).rev() {
+                for i in (0..rule.syms.len()).rev() {
                   if indices.contains(&i) {
                     temp_writer.wrtln(&format!("let i{} = args.pop().unwrap();", i))?;
                   } else {
@@ -232,7 +232,7 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
               let mut statement_writer = temp_writer.checkpoint();
 
               for (i, statement) in statements.statements.iter().enumerate() {
-                match render_expression(ast, statement, body, &mut ref_index, i) {
+                match render_expression(ast, statement, rule, &mut ref_index, i) {
                   Some(_ref) => {
                     refs.append(&mut _ref.get_indices());
                     return_type = _ref.ast_type.clone();
@@ -243,7 +243,7 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
                 }
               }
 
-              for i in (0..body.syms.len()).rev() {
+              for i in (0..rule.syms.len()).rev() {
                 if refs.contains(&i) {
                   temp_writer.wrtln(&format!("let i{} = args.pop().unwrap();", i))?;
                 } else {
@@ -316,8 +316,8 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
       w.merge_checkpoint(temp_writer)?;
       refs.push(format!("/* {} */ {}", id, fn_name));
     } else {
-      if body.len > 1 {
-        refs.push(format!("/* {} {} */ noop_fn_{}", id, noop, body.len));
+      if rule.len > 1 {
+        refs.push(format!("/* {} {} */ noop_fn_{}", id, noop, rule.len));
       } else {
         refs.push(format!("/* {} {} */ noop_fn", id, noop));
       }
@@ -352,7 +352,7 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
 
 fn build_struct_constructor(
   ast: &AScriptStore,
-  body: &Rule,
+  rule: &Rule,
   struct_type: &AScriptStructId,
   ast_struct: &AST_Struct,
   ref_index: &mut usize,
@@ -379,7 +379,7 @@ fn build_struct_constructor(
   for (_, val_ref) in archetype_struct.prop_ids.iter().enumerate().map(|(i, prop_id)| {
     let struct_prop_ref = if let Some(ast_prop) = ast_struct_props.get(&prop_id.name) {
       let property = ast.props.get(prop_id).unwrap();
-      let ref_ = render_expression(ast, &ast_prop.value, body, ref_index, i + type_slot * 100);
+      let ref_ = render_expression(ast, &ast_prop.value, rule, ref_index, i + type_slot * 100);
       let (string, ref_) =
         create_type_initializer_value(ref_, &(&property.type_val).into(), property.optional, ast);
       if let Some(ref_) = ref_ {
@@ -526,17 +526,17 @@ fn build_structs<W: Write>(ast: &AScriptStore, o: &mut CodeWriter<W>) -> Result<
 pub fn render_expression(
   ast: &AScriptStore,
   ast_expression: &ASTNode,
-  body: &Rule,
+  rule: &Rule,
   ref_index: &mut usize,
   type_slot: usize,
 ) -> Option<Ref> {
-  let (b, s) = (body, ast);
+  let (b, s) = (rule, ast);
 
   match ast_expression {
     ASTNode::AST_Struct(ast_struct) => {
       if let AScriptTypeVal::Struct(struct_type) = get_struct_type_from_node(ast_struct) {
         if let Ok(_ref) =
-          build_struct_constructor(ast, body, &struct_type, ast_struct, ref_index, type_slot)
+          build_struct_constructor(ast, rule, &struct_type, ast_struct, ref_index, type_slot)
         {
           Some(_ref)
         } else {
@@ -551,7 +551,7 @@ pub fn render_expression(
     ASTNode::AST_Vector(box AST_Vector { initializer, .. }) => {
       let mut results = initializer
         .iter()
-        .filter_map(|n| render_expression(ast, n, body, ref_index, type_slot))
+        .filter_map(|n| render_expression(ast, n, rule, ref_index, type_slot))
         .collect::<VecDeque<_>>();
 
       if results.is_empty() {
@@ -623,7 +623,7 @@ pub fn render_expression(
         format!("{}", value),
         AScriptTypeVal::Bool(Some(*value)),
       )),
-      ast => match render_expression(s, ast, body, ref_index, type_slot) {
+      ast => match render_expression(s, ast, rule, ref_index, type_slot) {
         Some(_) => Some(Ref::new(
           bump_ref_index(ref_index),
           type_slot,
@@ -671,13 +671,13 @@ pub fn render_expression(
     ASTNode::AST_NUMBER(..) => None,
     ASTNode::AST_Member(..) => None,
     ASTNode::AST_NamedReference(box AST_NamedReference { value, .. }) => {
-      match get_named_body_ref(body, value) {
+      match get_named_body_ref(rule, value) {
         Some((index, sym_id)) => render_body_symbol(sym_id, ast, index, type_slot),
         None => None,
       }
     }
     ASTNode::AST_IndexReference(box AST_IndexReference { value, .. }) => {
-      match get_indexed_body_ref(body, value) {
+      match get_indexed_body_ref(rule, value) {
         Some((index, sym_id)) => render_body_symbol(sym_id, ast, index, type_slot),
         None => None,
       }
@@ -801,7 +801,7 @@ fn extract_struct_types(types: &BTreeSet<AScriptTypeVal>) -> BTreeSet<TaggedType
 
 fn convert_numeric<T: AScriptNumericType>(
   init: &ASTNode,
-  body: &Rule,
+  rule: &Rule,
   ast: &AScriptStore,
   ref_index: &mut usize,
   type_slot: usize,
@@ -817,7 +817,7 @@ fn convert_numeric<T: AScriptNumericType>(
       T::from_f64(*value),
     )),
     _ => {
-      let ref_ = render_expression(ast, init, body, ref_index, type_slot)?;
+      let ref_ = render_expression(ast, init, rule, ref_index, type_slot)?;
 
       match ref_.ast_type {
         AScriptTypeVal::F64(..)
@@ -886,6 +886,7 @@ pub fn ascript_type_to_string(ast_type: &AScriptTypeVal, ast: &AScriptStore) -> 
     U16Vec => "Vec<u16>".to_string(),
     U8Vec => "Vec<u8>".to_string(),
     TokenVec => "Vec<Token>".to_string(),
+    StringVec => "Vec<String>".to_string(),
     GenericStruct(struct_ids) => {
       if struct_ids.len() > 1 {
         ast.name.clone()

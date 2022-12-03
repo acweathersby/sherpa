@@ -1,5 +1,5 @@
 pub use hctk_compile::*;
-pub use hctk_core::{types, *};
+pub use hctk_core::*;
 
 /// Compiles a parse module from a grammar string
 /// #Example
@@ -24,4 +24,4 @@ pub use hctk_core::{types, *};
 /// ```
 pub use hctk_proc::compile_mod as compile;
 
-pub use hctk_core::types::{Token, UTF8StringReader as UTF8Reader, UTF8StringReader};
+pub use hctk_core::{Token, UTF8StringReader as UTF8Reader, UTF8StringReader};

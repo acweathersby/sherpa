@@ -32,11 +32,11 @@ pub mod tasks {
 }
 
 /// Convenience function for building a bytecode based parser. Use this in
-/// build scripts to output a parser source file to `{OUT_DIR}/hc_parser/{grammar_name}.rs`.
+/// build scripts to output a parser source file to `{OUT_DIR}/sherpa_out/{grammar_name}.rs`.
 pub fn compile_bytecode_parser(grammar_source_path: &PathBuf, include_ascript: bool) -> bool {
   let mut out_dir = std::env::var("OUT_DIR").map(|d| PathBuf::from(&d)).unwrap();
 
-  out_dir.push("./hc_parser/");
+  out_dir.push("./sherpa_out/");
 
   create_dir_all(&out_dir).unwrap();
 

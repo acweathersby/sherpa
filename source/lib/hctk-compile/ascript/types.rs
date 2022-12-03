@@ -318,7 +318,7 @@ impl AScriptTypeVal {
       U16Vec => "U16Vec".to_string(),
       U8Vec => "U8Vec".to_string(),
       TokenVec => "TOKENS".to_string(),
-      StringVec => "Strings".to_string(),
+      StringVec => "STRINGS".to_string(),
       GenericStructVec(..) => "NODES".to_string(),
       Undefined => "Undefined".to_string(),
       Token => "TOKEN".to_string(),

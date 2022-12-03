@@ -6,6 +6,12 @@
 
 @IGNORE g:sp g:nl tk:cm::comment
 
+@EXPORT start_ir as state
+
+@EXPORT ir as ir
+
+<> ir > state_ir(+)
+
 <> state_ir > 
         
         state_declaration scanner_declaration? top_level_instructions on_fail? expected_symbols?   
@@ -26,15 +32,10 @@
 
 <> state_reference > 
         
-        t:state \[ state_name \]
+        t:state \[ tk:state_hash_token  \]
         
-            f:ast { $3 }
-
-<> state_name >  
-    
-    tk:state_hash_token 
+            f:ast { { t_HASH_NAME, val:str($3) } } 
         
-        f:ast { { t_HASH_NAME, val:str($1) } }
 
 <> top_level_instructions > 
 
@@ -52,7 +53,7 @@
 
     |   goto_instruction(* t:then ) ( t:then t:repeat t:state f:ast{ { t_Repeat, c_IR, c_IR_Instruction } } )? 
         
-        f:ast{ $1 + [$2] }
+        f:ast{ [$1 + $2] }
         
     |   ( t:lazy \( g:nums g:nums \) state_reference 
             
@@ -177,13 +178,13 @@
 
         \[ ( token_num  )(+)  \] 
             
-            f:ast { $2 }
+            f:ast { [ $2 ] }
 
 <> production_id_list > 
 
-        \[ token_num \] 
+        \[ tk:integer \] 
             
-            f:ast { $2 }
+            f:ast{ { t_Num, val: i64($2) } }
 
 <> state_hash_token > 
 

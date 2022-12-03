@@ -220,9 +220,9 @@ mod test {
       emit_reduce.call(&mut rt_ctx, &mut action, 1, 2, 3);
 
       match action {
-        ParseAction::Reduce { production_id, rule_id: body_id, symbol_count } => {
+        ParseAction::Reduce { production_id, rule_id, symbol_count } => {
           assert_eq!(production_id, 1);
-          assert_eq!(body_id, 2);
+          assert_eq!(rule_id, 2);
           assert_eq!(symbol_count, 3);
         }
         _ => panic!("Incorrect ParseAction enum type assigned"),

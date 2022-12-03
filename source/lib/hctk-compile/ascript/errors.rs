@@ -87,8 +87,8 @@ impl ExtendedError for ErrPropRedefinition {
 /// ### HC Grammar
 /// ```hcg
 /// 
-/// <> A > \r :{ t_TypeA, prop: str }  // <- This body produces a struct
-///      | \t (+)                    // <- This body produces a Vector of Tokens
+/// <> A > \r :{ t_TypeA, prop: str }  // <- This rule produces a struct
+///      | \t (+)                    // <- This rule produces a Vector of Tokens
 /// ```
 /// ### Rust
 /// ```
@@ -131,14 +131,14 @@ impl ExtendedError for ErrUnionOfScalarsAndVectors {
   fn report(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let ErrUnionOfScalarsAndVectors { g, p, scalars, vectors, type_names } = self;
 
-    let create_blame_string = |(type_, body_id): &(AScriptTypeVal, RuleId)| -> String {
-      let body = g.get_rule(body_id).unwrap();
+    let create_blame_string = |(type_, rule_id): &(AScriptTypeVal, RuleId)| -> String {
+      let rule = g.get_rule(rule_id).unwrap();
       format!(
         " -- [{}]\n    Body [{}]\n    reduces to [{}] type:\n\n{}",
-        body.tok.path_ref(&body.grammar_ref.path),
-        body.item().blame_string(g),
+        rule.tok.path_ref(&rule.grammar_ref.path),
+        rule.item().blame_string(g),
         type_.blame_string(g, type_names),
-        body.tok.blame(0, 0, "defined here", BlameColor::Blue)
+        rule.tok.blame(0, 0, "defined here", BlameColor::Blue)
       )
     };
 
@@ -173,8 +173,8 @@ Vector Types:
 /// ### HC Grammar
 /// ```hcg
 /// 
-/// <> A > \\r :{ t_TypeA, prop: str }  // <- This body produces a struct
-///      | \\t                        // <- This body produces a Token
+/// <> A > \\r :{ t_TypeA, prop: str }  // <- This rule produces a struct
+///      | \\t                        // <- This rule produces a Token
 /// ```
 /// ### Rust
 /// ```
@@ -224,12 +224,12 @@ impl ExtendedError for ErrIncompatibleProductionScalerTypes {
     } = self;
 
     let body_draw = |&b| {
-      let body = g.get_rule(&b).unwrap();
+      let rule = g.get_rule(&b).unwrap();
       format!(
         "[{}]\n{}\n{}",
-        body.tok.path_ref(&body.grammar_ref.path),
-        body.item().blame_string(g),
-        body.tok.blame(0, 0, "", BlameColor::Red)
+        rule.tok.path_ref(&rule.grammar_ref.path),
+        rule.item().blame_string(g),
+        rule.tok.blame(0, 0, "", BlameColor::Red)
       )
     };
 
@@ -263,9 +263,9 @@ impl ExtendedError for ErrIncompatibleProductionScalerTypes {
 ///
 /// ### HC Grammar
 /// ```hcg
-/// <> A > (\r :{ t_TypeA, prop: str })(+)  // <- This body produces a struct Vector
+/// <> A > (\r :{ t_TypeA, prop: str })(+)  // <- This rule produces a struct Vector
 ///
-///      | (\t )(+)                       // <- This body produces a Token Vector
+///      | (\t )(+)                       // <- This rule produces a Token Vector
 /// ```
 /// ### Rust
 /// ```
@@ -307,14 +307,14 @@ impl ExtendedError for ErrIncompatibleProductionVectorTypes {
     let ErrIncompatibleProductionVectorTypes { p, g, vector_types, type_names } = self;
 
     let body_draw = |b: &TaggedType| {
-      let body = g.get_rule(&b.into()).unwrap();
+      let rule = g.get_rule(&b.into()).unwrap();
       let type_: AScriptTypeVal = b.into();
       format!(
-        "[{}]\n body {}\n produces vector type [{}] \n{}",
-        body.tok.path_ref(&body.grammar_ref.path),
-        body.item().blame_string(g),
+        "[{}]\n rule {}\n produces vector type [{}] \n{}",
+        rule.tok.path_ref(&rule.grammar_ref.path),
+        rule.item().blame_string(g),
         type_.blame_string(g, type_names),
-        body.tok.blame(0, 0, "defined here", BlameColor::Red)
+        rule.tok.blame(0, 0, "defined here", BlameColor::Red)
       )
     };
 

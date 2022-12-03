@@ -16,7 +16,7 @@ mod intermediate;
 mod journal;
 mod types;
 
-pub mod runtime;
+mod runtime;
 pub mod utf8;
 pub mod writer;
 
@@ -55,6 +55,29 @@ pub mod errors {
     types::{HCError, HCError::*, HCErrorSeverity},
   };
 }
+
+/// All types and functions used by bytecode parsers.
+pub mod rt {
+  pub use crate::{
+    ast::*,
+    runtime::*,
+    BaseCharacterReader,
+    ByteCharacterReader,
+    HCError,
+    HCObj,
+    HCObjTrait,
+    HCResult,
+    MutCharacterReader,
+    ParseAction,
+    ParseContext,
+    ReduceFunction,
+    Token,
+    UTF8CharacterReader,
+    UTF8StringReader,
+    NORMAL_STATE_FLAG,
+  };
+}
+
 /// Retrieve the number of threads that can be reasonably
 /// run concurrently on the platform
 pub fn get_num_of_available_threads() -> usize {

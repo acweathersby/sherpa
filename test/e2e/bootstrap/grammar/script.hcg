@@ -5,15 +5,15 @@
 <> body >  
 
     struct 
+
+    | expression
     
-    | expression(+\, )
-        f:ast { { t_AST_Statements, statements:$1, tok } }
+    | \{ expression(+\; ) \}
+        f:ast { { t_AST_Statements, statements:$2, tok } }
 
 <> expression > 
-    
-    member
 
-    | string_convert
+    string_convert
 
     | numeric_convert
 
@@ -25,11 +25,13 @@
 
     | token
 
+    | add
+
 
 <> struct > 
 
-    \{ struct_prop(+\, ) \}
-        f:ast { { t_AST_Struct, props:$2, tok } }
+    \{ type_identifier^t (\, struct_prop(+\, ) )? \}
+        f:ast { { t_AST_Struct, typ:$t, props:$3, tok } }
 
 
 <> struct_prop >  
@@ -42,9 +44,6 @@
     
     |  identifier
         f:ast { { t_AST_Property, id:str($1), named_reference: str($1), tok } }
-    
-    | type_identifier
-        f:ast { { t_AST_TypeId,  value:str($1), tok } }
     
     | class_identifier
         f:ast { { t_AST_ClassId, value:str($1), tok } }
@@ -70,9 +69,11 @@
 
 <> add > 
     
-    member \+ expression
+    add \+ expression
     
         f:ast { { t_AST_Add, left: $1, right: $3, tok } }
+
+    | member
 
 
 <> member > 

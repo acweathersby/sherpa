@@ -119,7 +119,7 @@ impl fmt::Debug for Token {
     } else {
       f.write_fmt(format_args!(
         "Token{{ off:{}, len:{}, line:{}, l_off:{} }}",
-        self.len, self.off, self.line_num, self.line_off,
+        self.off, self.len, self.line_num, self.line_off,
       ))
     }
   }

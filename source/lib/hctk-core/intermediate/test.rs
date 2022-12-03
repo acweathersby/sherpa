@@ -929,3 +929,26 @@ fn test_peek3() -> HCResult<()> {
 
   HCResult::Ok(())
 }
+
+#[test]
+fn string_terminators_should_not_be_overridden_by_sym_class() -> HCResult<()> {
+  let mut j = Journal::new(None);
+
+  let g = GrammarStore::from_str(&mut j, " <> str >  \" g:sym(*) \" ")?;
+
+  let prod_id = g.get_production_id_by_name("str")?;
+
+  let states = compile_production_states(&mut j, prod_id)?;
+
+  let report = j.report();
+  if report.have_errors_of_type(HCErrorSeverity::Critical) {
+    for error in report.errors() {
+      println!("{}", error);
+    }
+  }
+
+  for state in states {
+    println!("{}", state.to_string())
+  }
+  HCResult::Ok(())
+}

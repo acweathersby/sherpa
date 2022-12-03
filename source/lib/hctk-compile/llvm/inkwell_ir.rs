@@ -402,7 +402,7 @@ pub(crate) fn construct_emit_reduce_function(
 
   let basic_action = fn_value.get_nth_param(1).unwrap().into_pointer_value();
   let production_id = fn_value.get_nth_param(2).unwrap().into_int_value();
-  let body_id = fn_value.get_nth_param(3).unwrap().into_int_value();
+  let rule_id = fn_value.get_nth_param(3).unwrap().into_int_value();
   let symbol_count = fn_value.get_nth_param(4).unwrap().into_int_value();
 
   b.position_at_end(entry);
@@ -414,7 +414,7 @@ pub(crate) fn construct_emit_reduce_function(
   let reduce_struct = b.build_load(reduce, "").into_struct_value();
   let reduce_struct = b.build_insert_value(reduce_struct, i32.const_int(6, false), 0, "").unwrap();
   let reduce_struct = b.build_insert_value(reduce_struct, production_id, 2, "").unwrap();
-  let reduce_struct = b.build_insert_value(reduce_struct, body_id, 3, "").unwrap();
+  let reduce_struct = b.build_insert_value(reduce_struct, rule_id, 3, "").unwrap();
   let reduce_struct = b.build_insert_value(reduce_struct, symbol_count, 4, "").unwrap();
 
   b.build_store(reduce, reduce_struct);
@@ -1397,7 +1397,7 @@ pub(crate) fn construct_instruction_reduce(
 ) {
   let parse_ctx = pack.fun.get_first_param().unwrap().into_pointer_value();
   let symbol_count = instruction.get_value() >> 16 & 0x0FFF;
-  let body_id = instruction.get_value() & 0xFFFF;
+  let rule_id = instruction.get_value() & 0xFFFF;
 
   write_emit_reentrance(instruction.next(&pack.output.bytecode), ctx, pack, referenced);
 
@@ -1411,7 +1411,7 @@ pub(crate) fn construct_instruction_reduce(
         parse_ctx.into(),
         pack.fun.get_nth_param(1).unwrap().into_pointer_value().into(),
         prod.into(),
-        ctx.ctx.i32_type().const_int(body_id as u64, false).into(),
+        ctx.ctx.i32_type().const_int(rule_id as u64, false).into(),
         ctx.ctx.i32_type().const_int(symbol_count as u64, false).into(),
       ],
       "",

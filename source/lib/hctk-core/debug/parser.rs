@@ -26,7 +26,7 @@ pub fn collect_shifts_and_skips(
         panic!("{} [{}]:\n{}", "message", token, token.blame(1, 1, "", None));
         break;
       }
-      ParseAction::Fork { states_start_offset, num_of_states, target_production } => {
+      ParseAction::Fork { .. } => {
         panic!("No implementation of fork resolution is available")
       }
       ParseAction::Shift { skipped_characters, token } => {
@@ -55,7 +55,7 @@ pub fn collect_shifts_and_skips(
           );
         }
       }
-      ParseAction::Reduce { production_id, rule_id: body_id, symbol_count } => {}
+      ParseAction::Reduce { .. } => {}
       _ => panic!("Unexpected Action!"),
     }
   }

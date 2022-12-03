@@ -558,14 +558,14 @@ fn build_branchless_bytecode(
       ASTNode::SetProd(box SetProd { id: ASTNode::Num(box Num { val }) }) => {
         byte_code.push(I::I03_SET_PROD | (*val as u32 & INSTRUCTION_CONTENT_MASK))
       }
-      ASTNode::Reduce(box Reduce { body_id, len, .. }) => byte_code.push(
+      ASTNode::Reduce(box Reduce { body_id: rule_id, len, .. }) => byte_code.push(
         I::I04_REDUCE
           | if *len as u32 == IR_REDUCE_NUMERIC_LEN_ID {
             0xFFFF0000 & INSTRUCTION_CONTENT_MASK
           } else {
             (*len as u32) << 16
           }
-          | (*body_id as u32),
+          | (*rule_id as u32),
       ),
 
       _ => {}

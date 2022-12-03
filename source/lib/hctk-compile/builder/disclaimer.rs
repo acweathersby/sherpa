@@ -10,8 +10,8 @@ pub static DISCLAIMER: fn(
     "
 {3} ### `{1}` {2}
 {3}
-{3} - **GENERATOR** :   hc-compile {0}
-{3} - **SOURCE FILE**:  {1} {4:?}
+{3} - **GENERATOR**: sherpa {0}
+{3} - **SOURCE**: {4}
 {3}
 {3} #### WARNING:
 {3}
@@ -27,6 +27,6 @@ pub static DISCLAIMER: fn(
     grammar.id.name,
     file_type,
     comment_delimiter,
-    grammar.id.path,
+    grammar.id.path.to_str().unwrap(),
   )
 };

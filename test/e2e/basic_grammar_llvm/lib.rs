@@ -15,10 +15,10 @@ mod test {
         ParseAction::Shift { skipped_characters: skip, token } => {
           println!("Skip {:?} & Extract token {:?} ", skip, token);
         }
-        ParseAction::Reduce { production_id, body_id, symbol_count } => {
+        ParseAction::Reduce { production_id, rule_id, symbol_count } => {
           println!(
             "Reduce {} symbols to production {} from completion of body {}",
-            symbol_count, production_id, body_id,
+            symbol_count, production_id, rule_id,
           );
         }
         ParseAction::Accept { production_id } => {

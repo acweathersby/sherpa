@@ -495,18 +495,18 @@ mod ascript_compile_tests {
 
     let mut ast = AScriptStore::default();
 
-    let body = create_dummy_body(RuleId(0));
+    let rule = create_dummy_body(RuleId(0));
     if let ASTNode::AST_Struct(ast_struct) = astA.unwrap() {
-      let (id, mut errors) = compile_struct_type(&mut ast, &ast_struct, &body);
-      let (_, mut e) = compile_struct_props(&mut ast, &id, &ast_struct, &body);
+      let (id, mut errors) = compile_struct_type(&mut ast, &ast_struct, &rule);
+      let (_, mut e) = compile_struct_props(&mut ast, &id, &ast_struct, &rule);
       errors.append(&mut e);
       errors.debug_print();
 
       assert!(!errors.have_errors());
 
       if let ASTNode::AST_Struct(ast_struct) = astB.unwrap() {
-        let (id, mut errors) = compile_struct_type(&mut ast, &ast_struct, &body);
-        let (_, mut e) = compile_struct_props(&mut ast, &id, &ast_struct, &body);
+        let (id, mut errors) = compile_struct_type(&mut ast, &ast_struct, &rule);
+        let (_, mut e) = compile_struct_props(&mut ast, &id, &ast_struct, &rule);
         errors.append(&mut e);
         errors.debug_print();
 
@@ -536,14 +536,14 @@ mod ascript_compile_tests {
       assert!(struct_.is_ok());
 
       if let ASTNode::AST_Struct(struct_) = struct_.unwrap() {
-        let body = create_dummy_body(RuleId(i as u64));
-        let (id, errors) = compile_struct_type(&mut ast, &struct_, &body);
+        let rule = create_dummy_body(RuleId(i as u64));
+        let (id, errors) = compile_struct_type(&mut ast, &struct_, &rule);
 
         errors.debug_print();
 
         assert!(errors.is_empty());
 
-        let errors = compile_struct_props(&mut ast, &id, &struct_, &body).1;
+        let errors = compile_struct_props(&mut ast, &id, &struct_, &rule).1;
 
         errors.debug_print();
 
