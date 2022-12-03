@@ -42,6 +42,14 @@ pub struct Report {
 }
 
 impl Report {
+  pub fn stop_all_timers(&mut self) {
+    for (_, timer) in &mut self.timings {
+      if timer.is_active() {
+        timer.stop();
+      }
+    }
+  }
+
   pub fn have_errors_of_type(&self, severity: HCErrorSeverity) -> bool {
     self.error_level.intersects(severity)
   }

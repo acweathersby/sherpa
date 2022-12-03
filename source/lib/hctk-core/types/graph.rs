@@ -331,15 +331,6 @@ impl GraphNode {
         .join("\n")
     )
   }
-
-  pub fn linked_to_self(&self) -> bool {
-    match self.parent {
-      Some(parent_index) => {
-        parent_index == self.id || self.proxy_parents.iter().any(|i| self.id == *i)
-      }
-      _ => false,
-    }
-  }
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
@@ -424,8 +415,8 @@ impl TransitionGraph {
     }
   }
 
-  /// Increments the monotonic lane counter by `amount`, and returns the
-  /// the counters previous value.
+  /// Increments the monotonic lane counter by `amount`, and returns
+  /// the previous value of the counter.
   pub fn increment_lane(&mut self, amount: u32) -> u32 {
     let prev_val = self.lane_counter;
     self.lane_counter += amount;
@@ -438,10 +429,6 @@ impl TransitionGraph {
   /// the set is empty.
   pub fn accept_items(&self) -> &ItemSet {
     &self.accept_items
-  }
-
-  pub fn get_root(&self) -> &GraphNode {
-    &self.nodes[0]
   }
 
   pub fn queue_node(&mut self, process_group: ProcessGroup) {

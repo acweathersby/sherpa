@@ -1,6 +1,9 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+  collections::{BTreeMap, BTreeSet},
+  sync::Arc,
+};
 
-use crate::{bytecode::BytecodeOutput, types::*};
+use crate::{bytecode::BytecodeOutput, types::*, Journal};
 
 pub fn header(idx: usize) -> String {
   format!("{}| ", address_string(idx))
@@ -10,23 +13,40 @@ pub fn address_string(idx: usize) -> String {
   format!("{:0>6X}", idx)
 }
 
-pub struct BytecodeGrammarLookups<'a> {
-  pub bc_to_prod:   BTreeMap<u32, &'a Production>,
-  pub bc_to_body:   BTreeMap<u32, &'a Rule>,
-  pub bc_to_symbol: BTreeMap<u32, &'a Symbol>,
+pub struct BytecodeGrammarLookups {
+  g: Arc<GrammarStore>,
+  bc_to_prod: BTreeMap<u32, ProductionId>,
+  bc_to_rule: BTreeMap<u32, RuleId>,
+  bc_to_symbol: BTreeMap<u32, SymbolID>,
 }
 
-impl<'a> BytecodeGrammarLookups<'a> {
-  pub fn new(g: &'a GrammarStore) -> Self {
+impl BytecodeGrammarLookups {
+  pub fn new(g: Arc<GrammarStore>) -> Self {
     let bc_to_prod =
-      g.productions.iter().map(|(_, p)| (p.bytecode_id, p)).collect::<BTreeMap<_, _>>();
+      g.productions.iter().map(|(id, p)| (p.bytecode_id, *id)).collect::<BTreeMap<_, _>>();
 
-    let bc_to_body = g.rules.iter().map(|(_, p)| (p.bytecode_id, p)).collect::<BTreeMap<_, _>>();
+    let bc_to_rule = g.rules.iter().map(|(id, r)| (r.bytecode_id, *id)).collect::<BTreeMap<_, _>>();
 
     let bc_to_symbol =
-      g.symbols.iter().map(|(_, p)| (p.bytecode_id, p)).collect::<BTreeMap<_, _>>();
+      g.symbols.iter().map(|(id, s)| (s.bytecode_id, *id)).collect::<BTreeMap<_, _>>();
 
-    BytecodeGrammarLookups { bc_to_prod, bc_to_body, bc_to_symbol }
+    BytecodeGrammarLookups { g, bc_to_prod, bc_to_rule, bc_to_symbol }
+  }
+
+  pub fn get_prod(&self, bytecode: u32) -> Option<&Production> {
+    self.g.productions.get(self.bc_to_prod.get(&bytecode)?)
+  }
+
+  pub fn get_rule(&self, bytecode: u32) -> Option<&Rule> {
+    self.g.rules.get(self.bc_to_rule.get(&bytecode)?)
+  }
+
+  pub fn get_sym(&self, bytecode: u32) -> Option<&Symbol> {
+    self.g.symbols.get(self.bc_to_symbol.get(&bytecode)?)
+  }
+
+  pub fn get_grammar(&self) -> &GrammarStore {
+    &self.g
   }
 }
 //
@@ -77,7 +97,7 @@ pub fn disassemble_state(
         let (string, offset) = ds(bc, so + 1, lu);
 
         if let Some(lu) = lu {
-          let name = &lu.bc_to_prod.get(&production_id).unwrap().guid_name;
+          let name = &lu.get_prod(production_id).unwrap().guid_name;
           (format!("\n{}PROD SET TO {}     // {}", dh(so), production_id, name,) + &string, offset)
         } else {
           (format!("\n{}PROD SET TO {}", dh(so), production_id,) + &string, offset)
@@ -290,12 +310,12 @@ fn get_input_id(lu: Option<&BytecodeGrammarLookups>, token_id: u32, input_type: 
   if let Some(lu) = lu {
     match input_type {
       INPUT_TYPE::T01_PRODUCTION => {
-        let production = &lu.bc_to_prod.get(&token_id).unwrap().guid_name;
-        format!("{} [{}]", token_id, production)
+        let production = &lu.get_prod(token_id).unwrap().guid_name;
+        format!("{:<3} [{:^1}]", token_id, production)
       }
       INPUT_TYPE::T02_TOKEN => {
-        if let Some(symbol) = lu.bc_to_symbol.get(&token_id) {
-          format!("{} [{}]", token_id, symbol.friendly_name)
+        if let Some(symbol) = lu.get_sym(token_id) {
+          format!("{:<3} [{:^1}]", token_id, symbol.friendly_name)
         } else {
           token_id.to_string()
         }
@@ -305,7 +325,7 @@ fn get_input_id(lu: Option<&BytecodeGrammarLookups>, token_id: u32, input_type: 
       INPUT_TYPE::T05_BYTE => {
         if token_id < 128 {
           format!(
-            "{} {}",
+            "{:<3} [{:^3}]",
             token_id,
             String::from_utf8(vec![token_id as u8])
               .unwrap()
@@ -322,11 +342,14 @@ fn get_input_id(lu: Option<&BytecodeGrammarLookups>, token_id: u32, input_type: 
     token_id.to_string()
   }
 }
+// Making the Journal reference an optional requirement allows this function to
+// work independent of any grammar that may been input for the bytecode generation.
+// This allows the use of this function in situations where the bytecode is the only
+// thing a user may have access to but they still want to get some insight in to the
+// operations of the state machine.
+pub fn generate_disassembly(output: &BytecodeOutput, j: Option<&mut Journal>) -> String {
+  let lu = j.map(|j| BytecodeGrammarLookups::new(j.grammar().unwrap()));
 
-pub fn generate_disassembly(
-  output: &BytecodeOutput,
-  lu: Option<&BytecodeGrammarLookups>,
-) -> String {
   let mut states_strings = vec![];
   let mut offset: usize = 0;
 
@@ -336,7 +359,8 @@ pub fn generate_disassembly(
       states_strings
         .push(output.offset_to_state_name.get(&(offset as u32)).cloned().unwrap_or_default())
     }
-    let (string, next) = disassemble_state(&output.bytecode, offset, lu);
+
+    let (string, next) = disassemble_state(&output.bytecode, offset, lu.as_ref());
 
     offset = next;
     states_strings.push(string);
@@ -345,8 +369,8 @@ pub fn generate_disassembly(
   states_strings.join("\n")
 }
 
-pub fn print_bytecode_states(output: &BytecodeOutput, lu: Option<&BytecodeGrammarLookups>) {
-  eprintln!("{}", generate_disassembly(output, lu));
+pub fn print_bytecode_states(output: &BytecodeOutput, j: Option<&mut Journal>) {
+  eprintln!("{}", generate_disassembly(output, j));
 }
 
 pub fn print_bytecode_state(
@@ -408,9 +432,7 @@ mod bytecode_debugging_tests {
 
     let _ = build_byte_code_buffer(state_refs);
 
-    let lu = BytecodeGrammarLookups::new(&g);
-
-    eprintln!("{}", generate_disassembly(&output, Some(&lu)));
+    eprintln!("{}", generate_disassembly(&output, Some(&mut j)));
 
     HCResult::Ok(())
   }

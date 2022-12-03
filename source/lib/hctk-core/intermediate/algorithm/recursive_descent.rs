@@ -68,7 +68,7 @@ pub(crate) fn construct_recursive_descent(
   let lane_items: Items = start_items
     .into_iter()
     .map(|item| {
-      if j.config().enable_breadcrumb_parsing || is_scanner || true {
+      if j.config().enable_breadcrumb_parsing || is_scanner {
         item.to_state(item.get_state().to_lane(t.increment_lane(1)).to_curr_lane())
       } else {
         item
@@ -90,7 +90,12 @@ pub(crate) fn construct_recursive_descent(
   t.queue_node(ProcessGroup { node_index: root_index, items: lane_items, ..Default::default() });
 
   while let Some(process_group) = t.get_next_queued() {
-    process_node(&mut t, j, process_group)?;
+    match process_node(&mut t, j, process_group) {
+      HCResult::Ok(_) => {}
+      HCResult::Err(err) => return HCResult::Err(err),
+      HCResult::MultipleErrors(err) => return HCResult::MultipleErrors(err),
+      HCResult::None => return HCResult::None,
+    }
   }
 
   HCResult::Ok(t.clean())
@@ -108,7 +113,8 @@ pub(super) fn process_node(
       // the given symbols. This assumes all items have the same symbol
       debug_assert!(
         items.iter().map(|i| i.get_symbol(&t.g)).collect::<BTreeSet<_>>().len() == 1,
-        "When provided with a discriminator symbol, all Items should have the same symbol"
+        "When provided with a discriminator symbol, all Items should have the same symbol {}",
+        items.to_debug_string(&t.g, "\n")
       );
 
       insert_items_into_node(d_items, t, par_id);
@@ -119,6 +125,8 @@ pub(super) fn process_node(
           create_completed_node(j, t, items[0], par_id, depth);
         }
         (SymbolID::EndOfInput, 2..) => {
+          items.print_items(&t.g, "multiple endS!");
+          t.accept_items.print_items(&t.g, "Accepts endS!");
           panic!("Can't transition on multiple completed items!");
         }
         (SymbolID::Production(prod_id, _), _) => {
@@ -147,9 +155,10 @@ pub(super) fn process_node(
         }
       }
     }
-    (None, 2..) => {
-      peek(t, j, par_id, items, depth)?;
-    }
+    (None, 2..) => match peek(t, j, par_id, items, depth) {
+      HCResult::Ok(_) => {}
+      err => return err,
+    },
     _ => {
       unreachable!("Should not be any other combinations produced at this point.")
     }
@@ -242,13 +251,6 @@ pub(super) fn create_completed_node(
       .map(|i| i.to_origin_only_state())
       .collect::<BTreeSet<Item>>();
 
-    matching_starts.print_items(&t.g, "matching starts");
-    println!(
-      "WTF: {} {}",
-      item.to_start().to_origin_only_state().debug_string(&t.g),
-      matching_starts.contains(&item.to_start().to_origin_only_state())
-    );
-
     if !matching_starts.contains(&item.to_start().to_origin_only_state()) {
       // All our completed items need to
       // a scanner run to exit successfully. Thus, the production of the completed state
@@ -257,7 +259,7 @@ pub(super) fn create_completed_node(
 
       let scanned_items = get_follow_items(t, &item, Some(parent_index));
 
-      #[cfg(debug_assertions)]
+      #[cfg(follow_tracking)]
       {
         j.report_mut().add_note(
           "Scan Mode Item Continuation",
@@ -286,7 +288,7 @@ pub(super) fn create_completed_node(
         );
       }
     } else {
-      #[cfg(debug_assertions)]
+      #[cfg(follow_tracking)]
       {
         j.report_mut().add_note(
           "Scan Mode Item Completion",

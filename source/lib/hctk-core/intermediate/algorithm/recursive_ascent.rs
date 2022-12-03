@@ -13,7 +13,7 @@
 use crate::{
   intermediate::utils::{get_follow_closure, hash_group_btreemap},
   journal::Journal,
-  types::{GraphNode, NodeAttributes as TST, TransitionGraph as TPack, *},
+  types::{GraphNode, TransitionGraph as TPack, *},
 };
 use std::{collections::BTreeSet, rc::Rc, vec};
 
@@ -23,7 +23,7 @@ pub(crate) fn construct_recursive_ascent(
   j: &mut Journal,
   goto_seeds: BTreeSet<Item>,
   root_ids: BTreeSet<ProductionId>,
-) -> TPackResults {
+) -> HCResult<TPackResults> {
   let g = j.grammar().unwrap();
 
   let mut t = TPack::new(g.clone(), TransitionMode::RecursiveAscent, false, &vec![], root_ids);
@@ -31,6 +31,10 @@ pub(crate) fn construct_recursive_ascent(
   t.goto_scoped_closure = Some(Rc::new(Box::<Vec<Item>>::new(
     (!t.is_scanner).then(|| get_follow_closure(&g, &t.root_prod_ids)).unwrap_or_default(),
   )));
+
+  let goto_seeds = goto_seeds.to_zero_state().to_set();
+
+  t.accept_items = goto_seeds.clone();
 
   // Get closures of all items that could transition on the same production.
 
@@ -118,10 +122,10 @@ pub(crate) fn construct_recursive_ascent(
   }
 
   while let Some(process_group) = t.get_next_queued() {
-    process_node(&mut t, j, process_group);
+    process_node(&mut t, j, process_group)?;
   }
 
   t.non_trivial_root = unfulfilled_root.is_none();
 
-  t.clean()
+  HCResult::Ok(t.clean())
 }

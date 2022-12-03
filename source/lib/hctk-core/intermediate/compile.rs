@@ -8,7 +8,7 @@ use super::{
 use crate::{
   grammar::hash_id_value_u64,
   journal::{config::ResolutionMode, Journal},
-  types::{HCResult, IRState, ItemContainer, ProductionId, ScannerId, SymbolID, SymbolSet},
+  types::{HCResult, IRState, ItemContainer, ProductionId, ScannerId, SymbolSet},
 };
 use std::{
   collections::{BTreeMap, BTreeSet},
@@ -57,6 +57,36 @@ pub(crate) fn compile_production_states_LR(
   HCResult::Ok(rd_states)
 }
 
+pub fn handle_error<T>(
+  error_title: &'static str,
+  result: HCResult<T>,
+  j: &mut Journal,
+) -> HCResult<T> {
+  match result {
+    HCResult::Err(err) => {
+      j.report_mut().add_note(error_title, "An Error Has Occurred".to_string());
+      j.report_mut().stop_all_timers();
+      j.report_mut().add_error(err);
+      HCResult::None
+    }
+    HCResult::MultipleErrors(errors) => {
+      j.report_mut().add_note(error_title, "Errors Have Occurred".to_string());
+      j.report_mut().stop_all_timers();
+      for err in errors {
+        j.report_mut().add_error(err);
+      }
+      HCResult::None
+    }
+    HCResult::None => {
+      j.report_mut().add_note(error_title, "Errors Have Occurred".to_string());
+      j.report_mut().stop_all_timers();
+      HCResult::None
+    }
+    // Only expecting single errors to be ejected by these functions.
+    result => result,
+  }
+}
+
 // Compile the parser states of a single production
 pub(crate) fn compile_production_states(
   j: &mut Journal,
@@ -75,17 +105,8 @@ pub(crate) fn compile_production_states(
 
   let items = generate_recursive_descent_items(j, prod_id);
 
-  let t = match construct_recursive_descent(j, false, &items) {
-    HCResult::Ok((t, _)) => t,
-    HCResult::Err(err) => {
-      j.report_mut().stop_timer("Recursive Descent Compile");
-      j.report_mut().add_error(err);
-
-      return HCResult::None;
-    }
-    // Only expecting single errors to be ejected by these functions.
-    _ => return HCResult::None,
-  };
+  let (t, _) =
+    handle_error("Recursive Descent Stopped", construct_recursive_descent(j, false, &items), j)?;
 
   let mut rd_states = construct_ir(j, &state_name, &t)?;
 
@@ -94,12 +115,20 @@ pub(crate) fn compile_production_states(
   #[cfg(debug_assertions)]
   {
     j.report_mut().add_note("RD Graph Nodes", t.write_nodes());
+    j.report_mut().add_note(
+      "RD States",
+      rd_states.iter().map(|s| s.get_code()).collect::<Vec<String>>().join("\n\n"),
+    );
   }
 
   if j.config().resolution_mode.intersects(ResolutionMode::RecursiveAscent) {
     j.report_mut().start_timer("Recursive Ascent Compile");
 
-    let (t, _) = construct_recursive_ascent(j, t.goto_seeds, t.root_prod_ids);
+    let (t, _) = handle_error(
+      "Recursive Ascent Stopped",
+      construct_recursive_ascent(j, t.goto_seeds, t.root_prod_ids),
+      j,
+    )?;
 
     let mut ra_states = construct_ir(j, &state_name, &t)?;
 
@@ -155,16 +184,8 @@ pub(crate) fn compile_token_production_states(
     })
     .collect();
 
-  let t = match construct_recursive_descent(j, true, &items) {
-    HCResult::Ok((t, _)) => t,
-    HCResult::Err(err) => {
-      j.report_mut().stop_timer("Recursive Descent Compile");
-      j.report_mut().add_error(err);
-      return HCResult::None;
-    }
-    // Only expecting single errors to be ejected by these functions.
-    _ => return HCResult::None,
-  };
+  let (t, _) =
+    handle_error("Recursive Descent Stopped", construct_recursive_descent(j, true, &items), j)?;
 
   let rd_states = construct_ir(j, &state_name, &t)?;
 
@@ -206,16 +227,8 @@ pub(crate) fn compile_scanner_states(
 
   let items = generate_scanner_symbol_items(symbols, j);
 
-  let t = match construct_recursive_descent(j, true, &items) {
-    HCResult::Ok((t, _)) => t,
-    HCResult::Err(err) => {
-      j.report_mut().stop_timer("Recursive Descent Compile");
-      j.report_mut().add_error(err);
-      return HCResult::None;
-    }
-    // Only expecting single errors to be ejected by these functions.
-    _ => return HCResult::None,
-  };
+  let (t, _) =
+    handle_error("Recursive Descent Stopped", construct_recursive_descent(j, true, &items), j)?;
 
   let rd_states = construct_ir(j, &state_name, &t)?;
 
@@ -238,38 +251,57 @@ fn addIRStateNote(j: &mut Journal, rd_states: &Vec<Box<IRState>>) {
   }
 }
 
-fn compile_state_chunk(
+fn compile_slice_of_states(
   j: &mut Journal,
   deduped_states: &mut BTreeMap<String, Box<IRState>>,
-  chunk: &[(ProductionId, bool)],
+  slice: &[(ProductionId, bool)],
 ) -> HCResult<()> {
   let mut scanner_names = BTreeSet::new();
-  for (prod_id, is_scanner) in chunk {
+  let mut have_errors = false;
+
+  #[inline]
+  fn insert_states(states: Vec<Box<IRState>>, deduped_states: &mut BTreeMap<String, Box<IRState>>) {
+    for state in states {
+      deduped_states.entry(state.get_name()).or_insert(state);
+    }
+  }
+
+  for (prod_id, is_scanner) in slice {
     if *is_scanner {
-      let states = compile_token_production_states(j, *prod_id)?;
-      for state in states {
-        deduped_states.entry(state.get_name()).or_insert(state);
+      if let HCResult::Ok(states) = compile_token_production_states(j, *prod_id) {
+        insert_states(states, deduped_states);
+      } else {
+        have_errors = true;
       }
     } else {
-      let states = compile_production_states(j, *prod_id)?;
-
-      for state in states {
-        if let Some(name) = state.get_scanner_state_name() {
-          if scanner_names.insert(name.clone()) {
-            let states = compile_scanner_states(j, state.get_scanner_symbol_set()?)?;
-
-            for state in states {
-              deduped_states.entry(state.get_name()).or_insert(state);
+      if let HCResult::Ok(states) = compile_production_states(j, *prod_id) {
+        for state in states {
+          if let Some(name) = state.get_scanner_state_name() {
+            if scanner_names.insert(name.clone()) {
+              if let HCResult::Ok(states) =
+                compile_scanner_states(j, state.get_scanner_symbol_set()?)
+              {
+                insert_states(states, deduped_states);
+              } else {
+                have_errors = true;
+              }
             }
           }
+          insert_states(vec![state], deduped_states);
         }
-        deduped_states.entry(state.get_name()).or_insert(state);
+      } else {
+        have_errors = true;
       }
     }
   }
 
-  HCResult::Ok(())
+  if have_errors {
+    HCResult::None
+  } else {
+    HCResult::Ok(())
+  }
 }
+
 /// Compiles IRStates from all production and scanner symbol sets within the grammar.
 pub fn compile_states(
   j: &mut Journal,
@@ -280,46 +312,52 @@ pub fn compile_states(
   let mut deduped_states = BTreeMap::new();
   let productions_ids = g.productions.iter().map(|(id, p)| (*id, p.is_scanner)).collect::<Vec<_>>();
 
-  if num_of_threads == 1 {
-    compile_state_chunk(j, &mut deduped_states, &productions_ids)?;
-  } else {
-    let work_chunks = productions_ids
-      .chunks((productions_ids.len() / (num_of_threads - 1)).max(1))
-      .collect::<Vec<_>>();
+  let work_chunks = productions_ids
+    .chunks((productions_ids.len() / (num_of_threads - 1)).max(1))
+    .collect::<Vec<_>>();
 
-    for states in thread::scope(|s| {
-      work_chunks
-        .into_iter()
-        .map(|productions| {
-          let mut j = j.transfer();
-          s.spawn(move || -> HCResult<_> {
-            let mut deduped_states = BTreeMap::new();
-            compile_state_chunk(&mut j, &mut deduped_states, productions)?;
-            HCResult::Ok(deduped_states)
-          })
+  for states in thread::scope(|s| {
+    work_chunks
+      .into_iter()
+      .map(|productions| {
+        let mut j = j.transfer();
+        s.spawn(move || -> HCResult<_> {
+          let mut deduped_states = BTreeMap::new();
+          compile_slice_of_states(&mut j, &mut deduped_states, productions)?;
+          HCResult::Ok(deduped_states)
         })
-        .collect::<Vec<_>>()
-        .into_iter()
-        .map(|s| s.join().unwrap())
-        .collect::<Vec<_>>()
-    }) {
-      match states {
-        HCResult::Ok(mut states) => {
-          deduped_states.append(&mut states);
+      })
+      .collect::<Vec<_>>()
+      .into_iter()
+      .map(|s| s.join().unwrap())
+      .collect::<Vec<_>>()
+  }) {
+    match states {
+      HCResult::Ok(mut states) => {
+        deduped_states.append(&mut states);
+      }
+      HCResult::Err(err) => {
+        // All captured errors in the compilation process are rolled
+        // into reports and a HCResult::None is returned in its place.
+        // Any other type of error is something due to unaccounted
+        // behavior (unwrapping a None option, etc), so we do a hard
+        // panic to report these incidences.
+        panic!("An unexpected error has occurred:\n{}", err);
+      }
+      HCResult::MultipleErrors(errors) => {
+        // Same as above
+        for error in errors {
+          println!("{}", error);
         }
-        HCResult::Err(err) => {
-          panic!("{}", err);
-        }
-        HCResult::MultipleErrors(errors) => {
-          for error in errors {
-            println!("{}", error);
-          }
-          return HCResult::None;
-        }
-        _ => {}
+        panic!("Unexpected errors have occurred, cannot continue");
+      }
+      _ => {
+        // Reports in the Journal contain the errors.
+        return HCResult::None;
       }
     }
   }
+
   let size = deduped_states.len();
   let mut chunks = deduped_states.values_mut().collect::<Vec<_>>();
   thread::scope(|s| {
@@ -330,7 +368,7 @@ pub fn compile_states(
           for state in chunk {
             let string = state.to_string();
             if let Err(err) = state.compile_ast() {
-              panic!("\n{} {}", err, string)
+              // panic!("\n{} {}", err, string)
             };
           }
         })

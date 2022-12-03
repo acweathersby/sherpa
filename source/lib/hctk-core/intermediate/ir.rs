@@ -3,13 +3,12 @@
 //! Takes completed TransitionGraphs and builds a set of globally unique IRStates.
 use super::utils::*;
 use crate::{
-  grammar::item,
   journal::Journal,
   types::{GraphNode, TransitionGraph, *},
   writer::code_writer::CodeWriter,
 };
 use std::{
-  collections::{btree_set, BTreeMap, BTreeSet, VecDeque},
+  collections::{BTreeMap, BTreeSet, VecDeque},
   vec,
 };
 
@@ -44,32 +43,29 @@ pub(super) fn construct_ir(
       for (_, child) in children_lookup {
         if child.id != node_id {
           if !output.contains_key(&child.id) && !leaf_node_set.contains(&child.id) {
-            // Push dependency to be processed, which will cause this node
+            // Push dependency to back on to the queue, which will cause this node
             // be pushed back into the queue after its children are processed
             continue 'outer;
-            nodes_pipeline.push_back(child.id);
           }
         }
       }
 
-      if children_lookup.is_empty() {
-        panic!("Childless node [{}] is not in leaf node set!", node_id);
+      #[cfg(debug_assertions)]
+      {
+        if children_lookup.is_empty() {
+          panic!("Childless node [{}] is not in leaf node set!", node_id);
+        }
       }
 
-      let states = create_state(
-        entry_name,
-        t,
-        j,
-        node,
-        &children_lookup.values().map(|v| *v).collect::<Vec<_>>(),
-        &output,
-      )?;
+      let children = children_lookup.values().map(|v| *v).collect::<Vec<_>>();
+
+      let states = create_state(entry_name, t, j, node, &children, &output)?;
 
       for state in states {
         output.insert(state.get_graph_id(), state);
       }
     }
-
+    // Add all parent dependencies to the queue
     if let Some(parent_id) = node.parent {
       nodes_pipeline.push_back(parent_id);
       for proxy_parent in &node.proxy_parents {
@@ -334,7 +330,7 @@ fn create_branch_wrap(
         "assert {} [ {}{} ] ( {}{}{} )",
         assert_class,
         symbol_bytecode_id,
-        format!(" /*{}*/", sym_comment),
+        escaped_comment(sym_comment),
         prefix.unwrap_or(&empty_string),
         create_child_state(child, node, resolved_states, t),
         postfix.unwrap_or(&empty_string),
@@ -345,7 +341,7 @@ fn create_branch_wrap(
         "assert peek {} [ {}{} ] ( {}{}{} )",
         assert_class,
         symbol_bytecode_id,
-        format!(" /*{}*/", sym_comment),
+        escaped_comment(sym_comment),
         prefix.unwrap_or(&empty_string),
         create_child_state(child, node, resolved_states, t),
         postfix.unwrap_or(&empty_string),
@@ -355,7 +351,7 @@ fn create_branch_wrap(
       w.write_fmt(format_args!(
         "assert PRODUCTION [ {}{} ] ( {}{}{} )",
         symbol_bytecode_id,
-        format!(" /*{}*/", sym_comment),
+        escaped_comment(sym_comment),
         prefix.unwrap_or(&empty_string),
         create_child_state(child, node, resolved_states, t),
         postfix.unwrap_or(&empty_string),
@@ -414,18 +410,17 @@ fn create_child_state(
     }
     NodeType::BreadcrumbShiftCompletion => {
       format!(
-        "complete crumb trail [{}] /* {} */ then shift then goto state [ {} ]",
+        "complete crumb trail [{}]{} then shift then goto state [ {} ]",
         child.transition_items[0].get_state().get_lane(),
-        child.transition_items[0].debug_string(&t.g),
+        escaped_comment(child.transition_items[0].debug_string(&t.g)),
         state_name,
       )
     }
     NodeType::BreadcrumbEndCompletion => {
-      let string = create_reduction_string(child, &t.g, false);
       format!(
-        "complete crumb trail [{}] /* {} */ then {}",
+        "complete crumb trail [{}]{} then {}",
         child.transition_items[0].get_state().get_lane(),
-        child.transition_items[0].debug_string(&t.g),
+        escaped_comment(child.transition_items[0].debug_string(&t.g)),
         state_name,
       )
     }
@@ -443,7 +438,7 @@ fn create_child_state(
           let state = item.get_state();
           match state.get_lanes() {
             (a, b) if a != b => {
-              lane_items.entry(b).and_modify(|(a, b)| {
+              lane_items.entry(b).and_modify(|(_, b)| {
                 (*b) += 1;
               });
             }
@@ -452,7 +447,7 @@ fn create_child_state(
         }
       }
 
-      for (lane, (items, count)) in lane_items {
+      for (_, (items, _)) in lane_items {
         let completed_items = items.completed_item_vec();
 
         if !completed_items.is_empty() {
@@ -508,7 +503,7 @@ fn create_reduction_string(node: &GraphNode, g: &GrammarStore, is_scanner: bool)
 }
 
 fn create_token_reduction_string(g: &GrammarStore, sym: SymbolID) -> String {
-  format!("assign token [ {}{} ]", sym.bytecode_id(Some(g)), format!(" /*{}*/", sym.to_string(g)),)
+  format!("assign token [ {}{} ]", sym.bytecode_id(Some(g)), escaped_comment(sym.to_string(g)))
 }
 
 fn create_rule_reduction_string(g: &GrammarStore, item: &Item) -> String {
@@ -567,4 +562,9 @@ fn create_parent_to_child_map<'a>(
     }
   }
   children_tables
+}
+
+#[inline]
+fn escaped_comment(comment_body: String) -> String {
+  format!(" /* {} */", comment_body.replace("\n", "\\n").replace("*", "&ast;"))
 }

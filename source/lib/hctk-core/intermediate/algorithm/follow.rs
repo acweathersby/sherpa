@@ -25,7 +25,7 @@ pub(super) fn get_follow_items(
   let grammar = t.g.clone();
   let g = &grammar;
   let empty = vec![];
-
+  #[cfg(follow_tracking)]
   println!("\n\n---- Follow start on {} ----", root_completed_item.debug_string(g));
 
   static empty_vec: Vec<Item> = Vec::new();
@@ -38,6 +38,7 @@ pub(super) fn get_follow_items(
     (LinkedItem { item: *root_completed_item, closure_node: prev_state_ref }),
   )]);
   while let Some((state, linked)) = completed_items.pop_front() {
+    #[cfg(follow_tracking)]
     println!(
       "\nLooking for matches for  {} in {:?} with state {}",
       linked.item.debug_string(g),
@@ -51,12 +52,14 @@ pub(super) fn get_follow_items(
       let (iter, prev_node) = match linked {
         LinkedItem { closure_node: Some(curr_node), .. } => {
           let node = t.get_node(curr_node);
-
-          node
-            .goto_items
-            .closure_with_state(&t.g)
-            .to_vec()
-            .print_items(&t.g, &format!("\n Closure {:?}", curr_node));
+          #[cfg(follow_tracking)]
+          {
+            node
+              .goto_items
+              .closure_with_state(&t.g)
+              .to_vec()
+              .print_items(&t.g, &format!("\n Closure {:?}", curr_node));
+          }
           (node.goto_items.closure_with_state(&t.g).to_vec().into_iter(), node.closure_parent)
         }
         LinkedItem { item, closure_node: None, .. } => (
@@ -74,11 +77,18 @@ pub(super) fn get_follow_items(
 
       let prod = linked.item.get_prod_id(g);
 
-      let null_items = local_closure_lookup
-        .get(&ProductionId(0))
-        .unwrap_or(&empty)
-        .iter()
-        .filter(|i| i.is_null() && i.get_state().same_curr_lane(&state));
+      let null_items =
+        local_closure_lookup.get(&ProductionId(0)).unwrap_or(&empty).iter().filter(|i| {
+          if i.is_null() {
+            if state.is_null() {
+              i.get_state().get_lanes().0 == state.get_lanes().1
+            } else {
+              i.get_state().same_curr_lane(&state)
+            }
+          } else {
+            false
+          }
+        });
 
       let goto_items = local_closure_lookup.get(&prod).unwrap_or(&empty).iter().filter(|i| {
         state.in_either_lane(&i.get_state()) && i.get_production_id_at_sym(&t.g) == prod
@@ -92,8 +102,7 @@ pub(super) fn get_follow_items(
         (completed_item, empty_closure, Some(prev_node), current_node)
           if empty_closure.is_empty() =>
         {
-          #[cfg(debug_assertions)]
-          {}
+          #[cfg(follow_tracking)]
           println!("no closure for Node [{:?}] - Selecting previous node", current_node);
           completed_items.push_back((state, LinkedItem {
             item:         completed_item,
@@ -116,8 +125,10 @@ pub(super) fn get_follow_items(
               closure_node: None,
             });
           }
-
-          println!("no closure for Node [{:?}] - Should be at root node.", root_node);
+          #[cfg(follow_tracking)]
+          {
+            println!("no closure for Node [{:?}] - Should be at root node.", root_node);
+          }
           // This item should match one of the root items when set to completed
           if completed_item == *root_completed_item {
             fin_items.insert(LinkedItem { item: completed_item, closure_node: None });
@@ -125,7 +136,10 @@ pub(super) fn get_follow_items(
         }
         (completed_item, mut closure, prev_node, Some(current_node)) => {
           let proxy_state = completed_item.get_state();
-          closure.print_items(g, &format!("Node [{:?}] closure:", current_node));
+          #[cfg(follow_tracking)]
+          {
+            closure.print_items(g, &format!("Node [{:?}] closure:", current_node));
+          }
           let null_items: Items = closure.drain_filter(|i| i.is_null()).collect();
           if !null_items.is_empty() {
             for null_item in null_items {
@@ -146,7 +160,7 @@ pub(super) fn get_follow_items(
 
             while let Some((proxy_state, item)) = completed_queue.pop_front() {
               if seen.insert(item.to_empty_state().to_start()) {
-                #[cfg(debug_assertions)]
+                #[cfg(follow_tracking)]
                 {
                   println!("---- {}", item.debug_string(&t.g));
                 }
@@ -174,7 +188,7 @@ pub(super) fn get_follow_items(
                   .cloned()
                   .collect();
 
-                #[cfg(debug_assertions)]
+                #[cfg(follow_tracking)]
                 {
                   local_closure_lookup
                     .get(&prod)
@@ -229,7 +243,7 @@ pub(super) fn get_follow_items(
         }
         (_completed_item, _closure, _prev_node, _current_node) => {
           // Check to see if we have an accept item
-          #[cfg(debug_assertions)]
+          #[cfg(follow_tracking)]
           {
             println!("Evaluating potential leaf node ------------------");
             println!("---- {}", _completed_item.to_state(state).debug_string(&t.g));
@@ -245,12 +259,13 @@ pub(super) fn get_follow_items(
       }
     }
   }
-
-  Items::from_linked(fin_items.clone()).print_items(g, "Completed Final Items");
-  Items::from_linked(intermediate.clone()).print_items(g, "Intermediate Items");
-  Items::from_linked(out.clone()).print_items(g, "Uncompleted Items");
-
-  println!("---- Follow end on {} ----\n\n", root_completed_item.debug_string(g));
+  #[cfg(follow_tracking)]
+  {
+    Items::from_linked(fin_items.clone()).print_items(g, "Completed Final Items");
+    Items::from_linked(intermediate.clone()).print_items(g, "Intermediate Items");
+    Items::from_linked(out.clone()).print_items(g, "Uncompleted Items");
+    println!("---- Follow end on {} ----\n\n", root_completed_item.debug_string(g));
+  }
 
   FollowItemGroups {
     final_completed_items: fin_items.into_iter().collect(),

@@ -7,14 +7,15 @@ use super::*;
 use std::{
   collections::{binary_heap::Iter, BTreeSet, VecDeque},
   fmt::Display,
+  vec,
 };
 
 use super::HCResult;
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy, Hash, PartialOrd, Ord)]
 pub struct ItemState {
-  curr_lane: u32,
-  prev_lane: u32,
+  current_lane: u32,
+  prev_lane:    u32,
 
   /// An index to the original object that produced this item, be it a production, a symbol,
   /// or undefined
@@ -22,25 +23,25 @@ pub struct ItemState {
 }
 
 impl ItemState {
-  pub const OUT_OF_SCOPE: ItemState = ItemState::new(0x8000, OriginData::OutOfScope);
+  pub const OUT_OF_SCOPE: ItemState = ItemState::new(0x80000, OriginData::OutOfScope(0x80000));
 
   pub const fn default() -> Self {
-    ItemState { curr_lane: 0, prev_lane: 0, origin: OriginData::Undefined }
+    ItemState { current_lane: 0, prev_lane: 0, origin: OriginData::Undefined }
   }
 
   /// Create a new [Item]
   pub const fn new(lane: u32, origin: OriginData) -> Self {
-    ItemState { prev_lane: lane, curr_lane: lane, origin }
+    ItemState { prev_lane: lane, current_lane: lane, origin }
   }
 
   /// Get the current lane of the state
   pub fn get_lane(&self) -> u32 {
-    self.curr_lane
+    self.current_lane
   }
 
   /// Get the current and previous lane of the state
   pub fn get_lanes(&self) -> (u32, u32) {
-    (self.curr_lane, self.prev_lane)
+    (self.current_lane, self.prev_lane)
   }
 
   /// Get the group the item belongs to
@@ -58,11 +59,11 @@ impl ItemState {
   }
 
   pub fn same_curr_lane(&self, other: &ItemState) -> bool {
-    self.curr_lane == other.curr_lane
+    self.current_lane == other.current_lane
   }
 
   pub fn in_either_lane(&self, other: &ItemState) -> bool {
-    match (self.curr_lane, self.prev_lane, other.curr_lane) {
+    match (self.current_lane, self.prev_lane, other.current_lane) {
       (a, b, c) if a == c || b == c => true,
       (_, 0, _) | (0, ..) => true,
       _ => false,
@@ -70,33 +71,41 @@ impl ItemState {
   }
 
   pub fn is_out_of_scope(&self) -> bool {
-    matches!(self.origin, OriginData::OutOfScope)
+    matches!(self.origin, OriginData::OutOfScope(_))
+  }
+
+  pub fn to_null(&self) -> Self {
+    ItemState { origin: OriginData::Null, ..self.clone() }
+  }
+
+  pub fn is_null(&self) -> bool {
+    self.origin == OriginData::Null
   }
 
   /// Makes the `prev_lane` also the `curr_lane`
   pub fn to_prev_lane(&self) -> Self {
-    ItemState { curr_lane: self.prev_lane, ..self.clone() }
+    ItemState { current_lane: self.prev_lane, ..self.clone() }
   }
 
   /// Makes the `curr_lane` also the `prev_lane`
   pub fn to_curr_lane(&self) -> Self {
-    ItemState { prev_lane: self.curr_lane, ..self.clone() }
+    ItemState { prev_lane: self.current_lane, ..self.clone() }
   }
 
   /// Create a new Item with the given lane
   pub fn to_lane(&self, lane: u32) -> Self {
-    ItemState { curr_lane: lane, ..self.clone() }
+    ItemState { current_lane: lane, ..self.clone() }
   }
 
   /// Shifts the current into the previous lane slot, and
   /// inserts `curr_lane` in its place.
   pub fn to_lane_fork(&self, curr_lane: u32) -> Self {
-    Self { curr_lane, prev_lane: self.curr_lane, ..self.clone() }
+    Self { current_lane: curr_lane, prev_lane: self.current_lane, ..self.clone() }
   }
 
   /// Create a new Item with the given group
   pub fn to_lanes(&self, curr_lane: u32, prev_lane: u32) -> Self {
-    ItemState { curr_lane, prev_lane, ..self.clone() }
+    ItemState { current_lane: curr_lane, prev_lane, ..self.clone() }
   }
 
   /// Create a new Item with the given group
@@ -105,24 +114,24 @@ impl ItemState {
   }
 
   pub fn to_out_of_scope(&self) -> Self {
-    ItemState { origin: OriginData::OutOfScope, ..self.clone() }
+    ItemState { origin: OriginData::OutOfScope(0), ..self.clone() }
   }
 
   pub fn debug_string(&self, g: &GrammarStore) -> String {
-    if self.curr_lane != self.prev_lane {
-      format!("[{}]->[{}] | {}", self.curr_lane, self.prev_lane, self.origin.debug_string(g))
+    if self.current_lane != self.prev_lane {
+      format!("[{}]->[{}] | {}", self.current_lane, self.prev_lane, self.origin.debug_string(g))
     } else {
-      format!("[{}] | {}", self.curr_lane, self.origin.debug_string(g))
+      format!("[{}] | {}", self.current_lane, self.origin.debug_string(g))
     }
   }
 }
 
 impl Display for ItemState {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    if self.curr_lane != self.prev_lane {
-      f.write_fmt(format_args!("[{}]->[{}] | {:?}", self.curr_lane, self.prev_lane, self.origin))
+    if self.current_lane != self.prev_lane {
+      f.write_fmt(format_args!("[{}]->[{}] | {:?}", self.current_lane, self.prev_lane, self.origin))
     } else {
-      f.write_fmt(format_args!("[{}] | {:?}", self.curr_lane, self.origin))
+      f.write_fmt(format_args!("[{}] | {:?}", self.current_lane, self.origin))
     }
   }
 }
@@ -130,7 +139,8 @@ impl Display for ItemState {
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum OriginData {
   Undefined,
-  OutOfScope,
+  OutOfScope(usize),
+  Null,
   Symbol(SymbolID),
   GoalIndex(usize),
   RuleId(RuleId),
@@ -147,8 +157,9 @@ impl OriginData {
         format!("{}[{}]", prod.name, rule.bytecode_id)
       }
       GoalIndex(i) => format!("Goal[{}]", i),
-      OutOfScope => "Out Of Scope".to_string(),
+      OutOfScope(_) => "Out Of Scope".to_string(),
       Undefined => "*".to_string(),
+      Null => "null".to_string(),
     }
   }
 
@@ -163,8 +174,9 @@ impl OriginData {
         rule.tok.blame(1, 1, "", BlameColor::Red)
       }
       GoalIndex(i) => format!("Goal[{}]", i),
-      OutOfScope => "Out Of Scope".to_string(),
+      OutOfScope(_) => "Out Of Scope".to_string(),
       Undefined => "*".to_string(),
+      Null => "null".to_string(),
     }
   }
 }
@@ -267,7 +279,12 @@ impl Item {
 
   #[inline(always)]
   pub fn to_null(&self) -> Self {
-    Item { len: 0, rule: RuleId::default(), off: 0, state: self.state }
+    Item {
+      len:   0,
+      rule:  RuleId::default(),
+      off:   0,
+      state: self.state.to_null(),
+    }
   }
 
   /// Create an Item from a rule_id and a grammar store. Returns
@@ -326,7 +343,7 @@ impl Item {
   #[inline(always)]
   pub fn to_local_state(&self) -> Item {
     Self {
-      state: self.state.to_lanes(self.state.curr_lane, self.state.curr_lane),
+      state: self.state.to_lanes(self.state.current_lane, self.state.current_lane),
       ..self.clone()
     }
   }
@@ -467,7 +484,7 @@ impl Item {
 
   pub fn to_hash(&self) -> u64 {
     ((self.rule.0 & 0xFFFF_FFF0_F000_F000) ^ ((self.off as u64) << 32))
-      | (self.state.curr_lane as u64)
+      | (self.state.current_lane as u64)
   }
 
   pub fn print_blame(&self, g: &GrammarStore) {

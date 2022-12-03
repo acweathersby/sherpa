@@ -1,7 +1,7 @@
 //! Functions for resolving a set of ambiguous Items.
 use super::{
   follow::get_follow_items,
-  lr::construct_inline_LR,
+  LR::construct_inline_LR,
 };
 use crate::{grammar::hash_id_value_u64, journal::Journal, types::*, intermediate::utils::{hash_group_btreemap, hash_group_vec, symbols_occlude}};
 use std::collections::{BTreeSet, VecDeque};
@@ -18,18 +18,16 @@ pub(crate) fn peek(
   let grammar = t.g.clone();
   let g = &grammar;
 
-  items.print_items(g, "Start items");
-
   t.get_node_mut(root_par_id).set_attribute(NodeAttributes::I_PEEK_ORIGIN);
 
   // t.get_node_mut(root_par_id).transition_items.clear();
 
   // Split items into groups based on symbol Ids.
   let goals = hash_group_vec(items.clone(), |index, i| {
-    if i.completed() || j.config().enable_breadcrumb_parsing {
-      SymbolID::DistinctGroup(index as u32)
-    } else if i.is_out_of_scope() {
+     if i.is_out_of_scope() {
       SymbolID::OutOfScope
+    } else if i.completed() || j.config().enable_breadcrumb_parsing || t.is_scanner {
+      SymbolID::DistinctGroup(index as u32)
     } else{
       i.get_symbol(g)
     }
@@ -43,24 +41,23 @@ pub(crate) fn peek(
     .flat_map(|(index, vec)| {
 
       let lane = t.increment_lane(1);
-
-      let item_vec = vec.iter().into_iter().map(move |i| i.to_state(i.get_state().to_lane(lane).to_origin(OriginData::GoalIndex(index))));
+      
+      let item_vec = 
+        vec.iter().into_iter().map(move |i| i.to_state(i.get_state().to_lane(lane).to_origin(
+          if i.is_out_of_scope() {
+            OriginData::OutOfScope(index)
+          }else {
+            OriginData::GoalIndex(index)
+          }
+        )));
       
       let slides: ItemSet = item_vec.clone().map(|i| i.to_null()).collect();
-
-      #[cfg(debug_assertions)] {
-        println!("{:?}", root_par_id);
-        slides.print_items(g, ">> Slides ---------------------");
-      }
 
       t.get_node_mut(root_par_id).goto_items.append(&mut slides.to_vec());
 
       item_vec
     })
     .collect::<Vec<_>>();
-
-
-  initial_items.print_items(g, "Initial items");
 
   // t.get_node_mut(root_par_id).goto_items = initial_items.non_term_item_vec(g);
   // With our items now setup in lanes, we can start disambiguating
@@ -79,37 +76,51 @@ pub(crate) fn peek(
 
       insert_items_into_node(completed_items.clone(), t, par_id);
 
-      let mut terminal_completions = vec![];
+      let mut maybe_accept = vec![];
       for completed_item in completed_items {
 
         let follow_and_terminal_completed = get_follow_items(t, &completed_item, Some(par_id));
 
-        terminal_completions
+        maybe_accept
           .append(&mut Vec::from_linked(follow_and_terminal_completed.final_completed_items));
 
-
         insert_items_into_node(Vec::from_linked(follow_and_terminal_completed.intermediate_completed_items), t, par_id);
+
         // Merge follow set into term_items.
         closure.append(
           &mut Vec::from_linked(follow_and_terminal_completed.uncompleted_items)
             .closure_with_state(g),
         )
       }
-      // Items that truly in the completed position, that is for a completed item
+      // Items that are truly in the completed position, that is for a completed item
       //  `I => ... *` there is no follow item `X => ... * I ...` in the closures of
       // the nodes predecessor, are then turned into completed nodes. The catch here
       // is any conflicting completed items may be unresolvable ...
-      match terminal_completions.len() {
+      match maybe_accept.len() {
         1 if j.occlusion_tracking_mode() => {
           // We can skip further processing if in occlusion tracking mode
         }
+        (1..) if all_items_are_out_of_scope(&maybe_accept) => {
+     
+          let index = create_and_insert_node(
+            t,
+            SymbolID::EndOfInput,
+            vec![],
+            Fail,
+            Default,
+            Some(par_id),
+            Some(par_id),
+            vec![],
+          );
+          t.leaf_nodes.push(index);
+        }
         1 => {
-          let items = terminal_completions;
+          let items = maybe_accept;
 
           if t.is_scanner {
             let exclusive: Vec<&Item> =
               items.iter().filter(|i| i.get_origin_sym().is_exclusive()).collect();
-            EXCLUSIVE_COMPLETED = exclusive.iter().any(|i| i.get_origin_sym().is_exclusive());
+              EXCLUSIVE_COMPLETED = exclusive.iter().any(|i| i.get_origin_sym().is_exclusive());
 
             #[cfg(debug_assertions)]
             {
@@ -133,7 +144,7 @@ pub(crate) fn peek(
               depth:        global_depth,
             });
           } else if t.is_scanner || j.config().enable_breadcrumb_parsing {
-            items.print_items(g, &format!("peek end"));
+
             let node_index = create_and_insert_node(
               t,
               SymbolID::EndOfInput,
@@ -142,7 +153,7 @@ pub(crate) fn peek(
               Default,
               Some(par_id),
               Some(par_id),
-              Vec::default(),
+              vec![],
             );
 
             
@@ -176,33 +187,32 @@ pub(crate) fn peek(
             });
           }
         }
+        (2..) if t.is_scanner  => {
+          resolveConflictingSymbols(t, j, maybe_accept.into_iter().map(|i| {
+            match i.get_origin() {
+              OriginData::GoalIndex(index) => i.to_origin(goals[index][0].get_origin()),
+              _ => unreachable!()
+            }
+          }).collect(), depth, global_depth, par_id);
+        }
         2.. => {
-          if t.is_scanner {
-            resolveConflictingSymbols(t, j, terminal_completions.into_iter().map(|i| {
-              match i.get_origin() {
-                OriginData::GoalIndex(index) => i.to_origin(goals[index][0].get_origin()),
-                _ => unreachable!()
-              }
-            }).collect(), depth, global_depth, par_id);
-          } else {
-
-            items.print_items(g, "Conflicting items");
-            return HCResult::Err(HCError::grammar_err_multi_location {
-              message:   "Could not resolve production. Grammar has ambiguities.".to_string(),
-              locations: terminal_completions
-                .iter()
-                .map(|i| HCError::grammar_err {
-                  message: "Test".to_string(),
-                  inline_message: "Test".to_string(),
-                  loc: match i.get_origin() {
-                    OriginData::RuleId(rule_id) => t.g.get_rule(&rule_id).unwrap().tok.clone(),
-                    _ => i.decrement().unwrap().get_rule_ref(g).unwrap().tok.clone(),
-                  },
-                  path: i.decrement().unwrap().get_rule_ref(g).unwrap().grammar_ref.path.clone(),
-                })
-                .collect(),
-            });
-          }
+          maybe_accept.print_items(g, "Conflicting items");
+          t.accept_items.print_items(g, "GOALS");
+          return HCResult::Err(HCError::grammar_err_multi_location {
+            message:   "Could not resolve production. Grammar has ambiguities.".to_string(),
+            locations: maybe_accept
+              .iter()
+              .map(|i| HCError::grammar_err {
+                message: "Test".to_string(),
+                inline_message: "Test".to_string(),
+                loc: match i.get_origin() {
+                  OriginData::RuleId(rule_id) => t.g.get_rule(&rule_id).unwrap().tok.clone(),
+                  _ => i.decrement().unwrap().get_rule_ref(g).unwrap().tok.clone(),
+                },
+                path: i.decrement().unwrap().get_rule_ref(g).unwrap().grammar_ref.path.clone(),
+              })
+              .collect(),
+          });
         }
         _ => {}
       }
@@ -235,85 +245,78 @@ pub(crate) fn peek(
 
       let peek_groups = hash_group_vec(items.clone(), |_, i| i.get_state().get_origin());
       let origin = get_goal_origin(&items, &goals);
+
       match peek_groups.len() {
         1 if j.occlusion_tracking_mode() => {
           // We can skip further processing if in occlusions tracking mode
         }
-        1 => {
-          match origin {
-            OriginData::OutOfScope => {
-              // This symbol belongs to a follow item of the production. In this
-              // we simply fail to allow the production to complete using the fall
-              // back function
-              let index = create_and_insert_node(
-                t,
-                sym,
-                items,
-                Fail,
-                Assert,
-                Some(par_id),
-                Some(par_id),
-                vec![],
-              );
+        (1..) if all_items_are_out_of_scope(&items) => {
+          // This symbol belongs to a follow item of the production. In this
+          // we simply fail to allow the production to complete using the fall
+          // back function
+          let index = create_and_insert_node(
+            t,
+            sym,
+            items,
+            Fail,
+            Assert,
+            Some(par_id),
+            Some(par_id),
+            vec![],
+          );
 
-              t.leaf_nodes.push(index);
-            }
-            //SymbolID::DistinctGroup(_) => {
-            //  unreachable!("Completed items should have been taken care of at this point");
-            //}
-            _ => {
-              if depth == 0 {
-                // Reprocess the root node (which is always par_id when depth == 0)
-                // with the disambiguated items.
-                t.queue_node(ProcessGroup {
-                  node_index:   par_id,
-                  items:        get_goal_items(&items, &goals),
-                  discriminant: Some((sym, items)),
-                  depth:        global_depth,
-                });
-              } else if t.is_scanner || j.config().enable_breadcrumb_parsing {
-                let items: Items = items.try_increment().into_iter().map(|i|i.to_origin(origin) ).collect();
-                let node_index = create_and_insert_node(
-                  t,
-                  sym,
-                  vec![],
-                  if t.is_scanner { Shift } else { BreadcrumbShiftCompletion },
-                  Assert,
-                  Some(par_id),
-                  Some(par_id),
-                  items.non_term_item_vec(g),
-                );
-                // Continue processing the now disambiguated items.
-                t.queue_node(ProcessGroup {
-                  node_index,
-                  items,
-                  discriminant: None,
-                  depth: global_depth,
-                });
-              } else {
-                let goal_items = get_goal_items(&items, &goals);
-                let node_index = create_and_insert_node(
-                  t,
-                  sym,
-                  vec![],
-                  PeekTransition,
-                  get_edge_type(j,t,depth),
-                  Some(par_id),
-                  Some(root_par_id),
-                  goal_items.non_term_item_vec(g),
-                );
-                // Submit these items to be processed.
-                t.queue_node(ProcessGroup {
-                  node_index,
-                  items: goal_items.clone(),
-                  discriminant: None,
-                  depth: global_depth,
-                });
-              }
-            }
-          }
+          t.leaf_nodes.push(index);
         }
-
+        1 if depth == 0 => {
+            // Reprocess the root node (which is always par_id when depth == 0)
+            // with the disambiguated items.
+            t.queue_node(ProcessGroup {
+              node_index:   par_id,
+              items:        get_goal_items(&items, &goals),
+              discriminant: Some((sym, items)),
+              depth:        global_depth,
+            });
+          }
+        1  if t.is_scanner || j.config().enable_breadcrumb_parsing => {
+            let items: Items = items.try_increment().into_iter().map(|i|i.to_origin(origin) ).collect();
+            let node_index = create_and_insert_node(
+              t,
+              sym,
+              vec![],
+              if t.is_scanner { Shift } else { BreadcrumbShiftCompletion },
+              Assert,
+              Some(par_id),
+              Some(par_id),
+              items.non_term_item_vec(g),
+            );
+            // Continue processing the now disambiguated items.
+            t.queue_node(ProcessGroup {
+              node_index,
+              items,
+              discriminant: None,
+              depth: global_depth,
+            });
+          } 
+        1 => {
+            let goal_items = get_goal_items(&items, &goals);
+            let node_index = create_and_insert_node(
+              t,
+              sym,
+              vec![],
+              PeekTransition,
+              get_edge_type(j,t,depth),
+              Some(par_id),
+              Some(root_par_id),
+              goal_items.non_term_item_vec(g),
+            );
+            // Submit these items to be processed.
+            t.queue_node(ProcessGroup {
+              node_index,
+              items: goal_items.clone(),
+              discriminant: None,
+              depth: global_depth,
+            });
+          }
         2.. => {
           // We combine these items into a new node, then prepare their increments
           // for the next round.
@@ -436,7 +439,6 @@ pub(crate) fn peek(
               incremented_items.non_term_item_vec(g),
             );
 
-            incremented_items.print_items(g, &format!("peek transition on {}", sym.to_string(g)));
             pending_items.push_back((node_index, depth + 1, incremented_items));
           }
         }
@@ -449,6 +451,10 @@ pub(crate) fn peek(
   }
 
   HCResult::Ok(())
+}
+
+fn all_items_are_out_of_scope(terminal_completions: &Vec<Item>) -> bool {
+    terminal_completions.iter().all(|i| matches!(i.get_origin(), OriginData::OutOfScope(_)))
 }
 
 #[inline]
@@ -497,19 +503,21 @@ fn resolveConflictingSymbols(
           _ => false,
         }
       }));
+      #[cfg(follow_tracking)]{
 
-      println!(
-        "\nScan Mode: Conflicting items and their symbols:\n{}\n",
-        completed_symbol_items
+        println!(
+          "\nScan Mode: Conflicting items and their symbols:\n{}\n",
+          completed_symbol_items
           .iter()
           .map(|i| match i.get_origin() {
             OriginData::Symbol(sym) =>
-              format!("{{ {} => {} }}", i.debug_string(&t.g), sym.to_string(&t.g)),
+            format!("{{ {} => {} }}", i.debug_string(&t.g), sym.to_string(&t.g)),
             _ => String::new(),
           })
           .collect::<Vec<_>>()
           .join("\n")
-      );
+        );
+      }
     }
   }
 
@@ -630,11 +638,12 @@ fn get_goal_contents<'a>(
   goals: &'a Vec<Items>,
 ) -> Vec<&'a Items> {
   hash_group_btreemap(items.clone(), |_, i| match i.get_origin() {
-    OriginData::GoalIndex(index) =>index,
+    OriginData::GoalIndex(index) |
+    OriginData::OutOfScope(index) =>index,
     _  => panic!("Should only have items with Goal Indices in this context!")
   })
     .into_iter()
-    .map(|(g, i)| {
+    .map(|(g, _)| {
       let goal_items = &goals[g];
       goal_items
     }).collect()

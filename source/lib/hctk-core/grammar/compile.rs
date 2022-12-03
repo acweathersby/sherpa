@@ -2101,3 +2101,78 @@ fn insert_bodes(
 
   g.production_bodies.get(prod_id).unwrap().to_owned()
 }
+
+/// Loads and compiles a grammar from a source file.
+///
+/// # Example
+///
+/// Basic usage:
+/// ```
+///  # use std::path::PathBuf;
+/// use hctk_core::compile_grammar_from_path;
+///
+/// let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+///
+/// path.push("../../../test/grammars/trivial.hcg");
+///
+/// let (grammar, errors) = compile_grammar_from_path(path, 10);
+///
+/// assert_eq!(grammar.unwrap().name, "trivial")
+/// ```
+pub fn compile_grammar_from_path(
+  j: &mut Journal,
+  path: PathBuf,
+  thread_count: usize,
+) -> (Option<Arc<GrammarStore>>, Option<Vec<HCError>>) {
+  j.set_active_report("General Grammar Compile", ReportType::GrammarCompile(Default::default()));
+  j.report_mut().start_timer("Grammar Compile Time");
+  j.report_mut().add_note("Root Grammar Path", path.to_str().unwrap().to_string());
+  match load_all(j, &path, thread_count) {
+    (_, errors) if !errors.is_empty() => {
+      j.report_mut().stop_timer("Grammar Compile Time");
+      (None, Some(errors))
+    }
+    (grammars, _) => {
+      j.report_mut().stop_timer("Grammar Compile Time");
+      compile_grammars_into_store(j, grammars).unwrap()
+    }
+  }
+}
+
+/// Compiles a grammar from a string.
+///
+/// # Example
+///
+/// Basic usage:
+/// ```
+///  # use std::path::PathBuf;
+///  use hctk_core::compile_grammar_from_string;
+///
+/// let (grammar, errors) = compile_grammar_from_string(
+///   "@NAME my_grammar
+///   <> A > \\hello \\world ",
+///   &PathBuf::default(),
+/// );
+///
+/// assert_eq!(grammar.unwrap().name, "my_grammar")
+/// ```
+pub fn compile_grammar_from_string(
+  j: &mut Journal,
+  string: &str,
+  absolute_path: &PathBuf,
+) -> (Option<Arc<GrammarStore>>, Option<Vec<HCError>>) {
+  j.set_active_report("General Grammar Compiler", ReportType::GrammarCompile(Default::default()));
+  j.report_mut().start_timer("Compile");
+  j.report_mut().add_note("Source", string.to_string());
+  match compile_grammar_ast(Vec::from(string.as_bytes())) {
+    Ok(grammar) => {
+      j.report_mut().stop_timer("Compile");
+      compile_grammars_into_store(j, vec![(absolute_path.clone(), Default::default(), grammar)])
+        .unwrap()
+    }
+    Err(err) => {
+      j.report_mut().stop_timer("Compile");
+      (None, Some(vec![err]))
+    }
+  }
+}

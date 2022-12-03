@@ -156,7 +156,7 @@ impl Journal {
           }
         }
       }
-      _ => {}
+      LockResult::Err(err) => println!("Unable to acquire a read lock on the global pad:\n{}", err),
     }
   }
 
@@ -171,29 +171,29 @@ impl Journal {
   }
 
   pub fn debug_report(&self, discriminant: ReportType) {
-    match self.global_pad.read() {
-      LockResult::Ok(global_pad) => {
-        let reports = global_pad
-          .reports
-          .iter()
-          .map(|(name, report)| (report.create_time, (name, report)))
-          .collect::<BTreeMap<_, _>>();
+    self.get_reports(discriminant, |report| {
+      println!(
+        "\n{:=<80}\nReport [{}] at {:?}:\n{}\n{:=<80}",
+        "",
+        report.name,
+        (report.create_time.duration_since(self.create_time)),
+        report.debug_string(),
+        ""
+      )
+    });
+  }
 
-        for (start, (name, report)) in reports {
-          if report.type_matches(discriminant) {
-            println!(
-              "\n{:=<80}\nReport [{}] at {:?}:\n{}\n{:=<80}",
-              "",
-              report.name,
-              (start.duration_since(self.create_time)),
-              report.debug_string(),
-              ""
-            )
-          }
+  /// Prints all errors that have been generated to console.
+  pub fn debug_error_report(&self) {
+    self.get_reports(ReportType::Any, |report| {
+      let errors = report.errors();
+      if errors.len() > 0 {
+        println!("\n{:=<80}\nReport [{}] errors:", "", report.name);
+        for err in report.errors() {
+          println!("{}", err);
         }
       }
-      LockResult::Err(err) => println!("Unable to acquire a read lock on the global pad:\n{}", err),
-    }
+    });
   }
 
   /// Move report data from the local pad to the global pad
@@ -334,18 +334,27 @@ impl Drop for Journal {
 
 #[derive(Clone, Copy)]
 pub struct Timing {
-  label: &'static str,
-  start: Instant,
-  end:   Instant,
+  label:  &'static str,
+  start:  Instant,
+  end:    Instant,
+  active: bool,
 }
 
 impl Timing {
+  #[inline(always)]
   pub fn new(label: &'static str) -> Self {
-    Timing { label, start: Instant::now(), end: Instant::now() }
+    Timing { label, start: Instant::now(), end: Instant::now(), active: true }
   }
 
+  #[inline(always)]
   pub fn stop(&mut self) {
     self.end = Instant::now();
+    self.active = false;
+  }
+
+  #[inline(always)]
+  pub fn is_active(&self) -> bool {
+    self.active
   }
 }
 
