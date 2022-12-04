@@ -1,6 +1,6 @@
 use crate::{
   ascript::types::AScriptStore,
-  compile::{config::SourceType, BytecodeOutput},
+  compile::BytecodeOutput,
   types::*,
   writer::code_writer::CodeWriter,
 };
@@ -8,7 +8,7 @@ use std::{collections::BTreeMap, io::Write};
 
 use super::{
   common::{add_ascript_functions, write_rust_entry_functions_bytecode},
-  pipeline::PipelineTask,
+  pipeline::{PipelineTask, SourceType},
 };
 
 /// Build artifacts for a Bytecode based parser

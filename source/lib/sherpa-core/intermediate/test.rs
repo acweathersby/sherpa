@@ -8,12 +8,18 @@ use crate::{
     compile_states,
     optimize_ir_states,
   },
+  debug::generate_disassembly,
   errors::SherpaErrorSeverity,
   grammar::get_production_start_items,
   journal::{config::Config, report::ReportType, Journal},
   types::*,
+  util::get_num_of_available_threads,
 };
-use std::{collections::BTreeSet, iter::FromIterator, path::PathBuf};
+use std::{
+  collections::{BTreeMap, BTreeSet},
+  iter::FromIterator,
+  path::PathBuf,
+};
 
 #[test]
 pub fn construct_descent_on_basic_grammar() -> SherpaResult<()> {
@@ -69,7 +75,7 @@ pub fn construct_descent_on_scanner_symbol() -> SherpaResult<()> {
 
   result.print_nodes();
   j.flush_reports();
-  j.debug_report(ReportType::Any);
+  j.debug_print_reports(ReportType::Any);
 
   assert_eq!(result.get_node_len(), 8);
 
@@ -107,7 +113,7 @@ pub fn production_reduction_decisions() -> SherpaResult<()> {
   let result = compile_production_states(&mut j, prod_id)?;
 
   j.flush_reports();
-  j.debug_report(ReportType::ProductionCompile(prod_id));
+  j.debug_print_reports(ReportType::ProductionCompile(prod_id));
 
   println!("{:#?}", result);
 
@@ -157,13 +163,13 @@ pub fn compile_production_states_with_basic_grammar_with_left_recursion() -> She
       println!("{:#?}", result);
 
       j.flush_reports();
-      j.debug_report(ReportType::Any);
+      j.debug_print_reports(ReportType::Any);
 
       assert_eq!(result.len(), 5);
     }
     _ => {
       j.flush_reports();
-      j.debug_report(ReportType::Any);
+      j.debug_print_reports(ReportType::Any);
       return SherpaResult::None;
     }
   }
@@ -258,7 +264,7 @@ pub fn generate_A_state_of_a_merged_grammar_with_extended_production() -> Sherpa
   // assert_eq!(errors.len(), 1);
 
   j.flush_reports();
-  j.debug_report(ReportType::Any);
+  j.debug_print_reports(ReportType::Any);
 
   // println!("{}", report.debug_string());
 
@@ -324,7 +330,7 @@ pub fn generate_production_with_ambiguity() -> SherpaResult<()> {
     }
     _ => {
       j.flush_reports();
-      j.debug_report(ReportType::Any);
+      j.debug_print_reports(ReportType::Any);
     }
   }
 
@@ -536,7 +542,7 @@ pub fn generate_annotated_symbol() -> SherpaResult<()> {
   let result = compile_production_states(&mut j, prod_id)?;
 
   j.flush_reports();
-  j.debug_report(ReportType::ProductionCompile(prod_id));
+  j.debug_print_reports(ReportType::ProductionCompile(prod_id));
 
   println!("{:#?}", result);
 
@@ -579,7 +585,7 @@ pub fn generate_production_with_recursion() -> SherpaResult<()> {
   let result = compile_production_states(&mut j, prod_id)?;
 
   j.flush_reports();
-  j.debug_report(ReportType::ProductionCompile(prod_id));
+  j.debug_print_reports(ReportType::ProductionCompile(prod_id));
 
   println!("{:#?}", result);
 
@@ -619,7 +625,7 @@ pub fn generate_scanner_production_with_recursion() -> SherpaResult<()> {
   println!("{:#?}", result);
 
   j.flush_reports();
-  j.debug_report(ReportType::ScannerCompile(ScannerId::new(&symbols)));
+  j.debug_print_reports(ReportType::ScannerCompile(ScannerStateId::new(&symbols)));
 
   assert_eq!(result.len(), 3);
 
@@ -923,30 +929,98 @@ fn test_peek3() -> SherpaResult<()> {
 
   j.flush_reports();
 
-  j.debug_report(ReportType::AnyProductionCompile);
+  j.debug_print_reports(ReportType::AnyProductionCompile);
 
   SherpaResult::Ok(())
 }
 
+//#[test]
+// fn string_terminators_should_not_be_overridden_by_sym_class() -> SherpaResult<()> {
+// let input = " <> str >  \" g:sym(*) \" ";
+// let production_name = "str";
+//
+// let (j, states) = build_production_states(input, production_name)?;
+//
+// let report = j.report();
+// if report.have_errors_of_type(SherpaErrorSeverity::Critical) {
+// for error in report.errors() {
+// println!("{}", error);
+// }
+// }
+//
+// for state in states {
+// println!("{}", state.to_string())
+// }
+//
+// SherpaResult::Ok(())
+// }
 #[test]
-fn string_terminators_should_not_be_overridden_by_sym_class() -> SherpaResult<()> {
-  let mut j = Journal::new(None);
+fn grammar_with_exclusive_symbols() -> SherpaResult<()> {
+  let input = r##" 
+  @IGNORE g:sp
 
-  let g = GrammarStore::from_str(&mut j, " <> str >  \" g:sym(*) \" ")?;
+  <> A >   B t:d
+       |   B t:g
 
-  let prod_id = g.get_production_id_by_name("str")?;
+  <> B >   C t:r
+       |   D t:x
 
-  let states = compile_production_states(&mut j, prod_id)?;
+  <> C > t:c t:g
 
-  let report = j.report();
-  if report.have_errors_of_type(SherpaErrorSeverity::Critical) {
-    for error in report.errors() {
-      println!("{}", error);
-    }
+  <> D > t:d t:g
+  "##;
+
+  "d g g";
+
+  let (mut j, states) = build_states(input)?;
+
+  let states = optimize_ir_states(&mut j, states);
+
+  for (_, state) in &states {
+    println!("{}", state.get_code());
   }
 
-  for state in states {
-    println!("{}", state.to_string())
-  }
+  let bc = compile_bytecode(&mut j, states);
+
+  println!("{}", generate_disassembly(&bc, Some(&mut j)));
+
+  j.flush_reports();
+  j.debug_print_reports(ReportType::Optimize);
+
   SherpaResult::Ok(())
 }
+
+fn build_states(input: &str) -> SherpaResult<(Journal, BTreeMap<String, Box<IRState>>)> {
+  let mut j = Journal::new(Some(Config { enable_breadcrumb_parsing: false, ..Default::default() }));
+  let g = GrammarStore::from_str(&mut j, input)?;
+
+  let states = compile_states(&mut j, get_num_of_available_threads())?;
+
+  SherpaResult::Ok((j, states))
+}
+
+fn build_production_states(
+  input: &str,
+  production_names: &[&str],
+) -> SherpaResult<(Journal, Vec<Vec<Box<IRState>>>)> {
+  let mut j = Journal::new(Some(Config { enable_breadcrumb_parsing: false, ..Default::default() }));
+  let g = GrammarStore::from_str(&mut j, input)?;
+
+  let mut states = vec![];
+
+  for name in production_names {
+    let prod_id = g.get_production_id_by_name(name)?;
+    states.push(compile_production_states(&mut j, prod_id)?);
+  }
+
+  SherpaResult::Ok((j, states))
+}
+
+// fn build_states(input: &str) -> SherpaResult<(Journal, Vec<Box<IRState>>)> {
+// let mut j = Journal::new(Some(Config { enable_breadcrumb_parsing: true, ..Default::default() }));
+// let g = GrammarStore::from_str(&mut j, input)?;
+// let prod_id = g.get_production_id_by_name(production_name)?;
+// let states = compile_production_states(&mut j, prod_id)?;
+//
+// SherpaResult::Ok((j, states))
+// }

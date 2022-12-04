@@ -93,10 +93,6 @@ impl Journal {
     false
   }
 
-  pub(crate) fn add_error(&mut self, error: SherpaError) {
-    self.errors.push(error);
-  }
-
   /// Sets the active report to `report_type`, optionally creating a new report of that type
   /// if one does not already exists. Returns the previously set ReportType.
   pub(crate) fn set_active_report(
@@ -170,7 +166,7 @@ impl Journal {
     self.active_report.as_ref().map(|r| r.as_ref()).unwrap_or(&self.report_sink)
   }
 
-  pub fn debug_report(&self, discriminant: ReportType) {
+  pub fn debug_print_reports(&self, discriminant: ReportType) {
     self.get_reports(discriminant, |report| {
       eprintln!(
         "\n{:=<80}\nReport [{}] at {:?}:\n{}\n{:=<80}",

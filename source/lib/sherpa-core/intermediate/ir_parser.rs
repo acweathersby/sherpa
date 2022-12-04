@@ -29,7 +29,7 @@ mod test_parser_build {
     compile_bytecode(&mut j, states);
 
     j.flush_reports();
-    j.debug_report(ReportType::Any);
+    j.debug_print_reports(ReportType::Any);
 
     SherpaResult::Ok(())
   }

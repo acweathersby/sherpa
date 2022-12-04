@@ -434,13 +434,3 @@ pub type SymbolsTable = BTreeMap<SymbolUUID, Symbol>;
 pub type ExportSymbolsTable = BTreeMap<SymbolID, Symbol>;
 
 pub type SymbolSet = BTreeSet<SymbolID>;
-
-#[derive(Debug, PartialEq, PartialOrd, Clone, Copy, Hash, Eq, Ord, Default)]
-/// Identifies a Scanner for a particular set of SymbolIds
-pub struct ScannerId(u64);
-
-impl ScannerId {
-  pub fn new(symbol_set: &SymbolSet) -> Self {
-    Self(hash_id_value_u64(symbol_set))
-  }
-}

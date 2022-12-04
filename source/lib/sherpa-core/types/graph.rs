@@ -18,7 +18,7 @@ impl NodeId {
   const GOTO_VIRTUAL_CLASS: u32 = 4000000000u32;
   pub const Invalid: Self = Self(u32::MAX);
 
-  fn new(index: u32) -> Self {
+  pub(crate) fn new(index: u32) -> Self {
     Self(index)
   }
 

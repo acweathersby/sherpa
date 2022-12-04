@@ -27,6 +27,7 @@ use std::{
   collections::{btree_map, BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
   ffi::OsStr,
   path::PathBuf,
+  result,
   sync::Arc,
   thread::{self},
   vec,
@@ -105,10 +106,10 @@ pub fn compile_grammars_into_store(
       if errors.is_empty() {
         SherpaResult::Ok((Some(Arc::new(grammar)), None))
       } else {
-        SherpaResult::Ok((None, Some(errors)))
+        SherpaResult::MultipleErrors(errors)
       }
     } else {
-      SherpaResult::Ok((None, Some(errors)))
+      SherpaResult::MultipleErrors(errors)
     }
   }
 }
@@ -2124,17 +2125,47 @@ pub fn compile_grammar_from_path(
   path: PathBuf,
   thread_count: usize,
 ) -> (Option<Arc<GrammarStore>>, Option<Vec<SherpaError>>) {
-  j.set_active_report("General Grammar Compile", ReportType::GrammarCompile(Default::default()));
+  let r_type = ReportType::GrammarCompile(Default::default());
+  let r_name = "General Grammar Compile";
+  j.set_active_report(r_name, r_type);
   j.report_mut().start_timer("Grammar Compile Time");
   j.report_mut().add_note("Root Grammar Path", path.to_str().unwrap().to_string());
   match load_all(j, &path, thread_count) {
     (_, errors) if !errors.is_empty() => {
+      j.set_active_report(r_name, r_type);
       j.report_mut().stop_timer("Grammar Compile Time");
-      (None, Some(errors))
+      for error in errors {
+        j.report_mut().add_error(error);
+      }
+      (None, None)
     }
     (grammars, _) => {
+      j.set_active_report(r_name, r_type);
       j.report_mut().stop_timer("Grammar Compile Time");
-      compile_grammars_into_store(j, grammars).unwrap()
+      match compile_grammars_into_store(j, grammars) {
+        SherpaResult::Err(err) => {
+          j.set_active_report(r_name, r_type);
+          j.report_mut().stop_timer("Grammar Compile Time");
+          j.report_mut().add_error(err);
+          (None, None)
+        }
+        SherpaResult::MultipleErrors(errors) => {
+          j.set_active_report(r_name, r_type);
+          j.report_mut().stop_timer("Grammar Compile Time");
+          for error in errors {
+            j.report_mut().add_error(error);
+          }
+          (None, None)
+        }
+        SherpaResult::None => {
+          j.report_mut().stop_timer("Grammar Compile Time");
+          (None, None)
+        }
+        SherpaResult::Ok(result) => {
+          j.report_mut().stop_timer("Grammar Compile Time");
+          result
+        }
+      }
     }
   }
 }

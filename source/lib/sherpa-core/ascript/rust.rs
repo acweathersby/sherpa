@@ -43,8 +43,6 @@ use std::{
 pub fn write<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Result<()> {
   w.indent_spaces(2);
 
-  w.wrtln("use sherpa::types::*;")?.newline()?;
-
   build_astnode_enum(w, ast)?;
 
   w.newline()?

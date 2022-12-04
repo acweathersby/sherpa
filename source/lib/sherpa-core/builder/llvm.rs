@@ -245,7 +245,6 @@ fn write_rust_parser<W: Write>(
   writer
     .wrt(&format!(
       "
-use sherpa::types::*;
 
 #[link(name = \"{}\", kind = \"static\" )]
 extern \"C\" {{

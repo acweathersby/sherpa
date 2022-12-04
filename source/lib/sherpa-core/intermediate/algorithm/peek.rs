@@ -73,6 +73,7 @@ pub(crate) fn peek(
 
     // Resolve completed items by getting their follow set.
     if completed_items.len() > 0 {
+      completed_items.print_items(g, "Completed ITems");
 
       insert_items_into_node(completed_items.clone(), t, par_id);
 
@@ -86,21 +87,26 @@ pub(crate) fn peek(
 
         insert_items_into_node(Vec::from_linked(follow_and_terminal_completed.intermediate_completed_items), t, par_id);
 
-        // Merge follow set into term_items.
-        closure.append(
-          &mut Vec::from_linked(follow_and_terminal_completed.uncompleted_items)
-            .closure_with_state(g),
-        )
+      //  if !completed_item.is_out_of_scope() {
+          closure.append(
+            &mut Vec::from_linked(follow_and_terminal_completed.uncompleted_items)
+              .closure_with_state(g),
+          )
+        //}
       }
       // Items that are truly in the completed position, that is for a completed item
       //  `I => ... *` there is no follow item `X => ... * I ...` in the closures of
       // the nodes predecessor, are then turned into completed nodes. The catch here
       // is any conflicting completed items may be unresolvable ...
-      match maybe_accept.len() {
+
+      // See note OUT_OF_SCOPE handling below for commentary on what is going on with this statement.
+      let items: Items = maybe_accept.iter().filter(|i| !i.is_out_of_scope()).cloned().collect();
+
+      match items.len() {
         1 if j.occlusion_tracking_mode() => {
           // We can skip further processing if in occlusion tracking mode
         }
-        (1..) if all_items_are_out_of_scope(&maybe_accept) => {
+        0 | (1..) if all_items_are_out_of_scope(&maybe_accept) => {
      
           let index = create_and_insert_node(
             t,
@@ -115,7 +121,6 @@ pub(crate) fn peek(
           t.leaf_nodes.push(index);
         }
         1 => {
-          let items = maybe_accept;
 
           if t.is_scanner {
             let exclusive: Vec<&Item> =
@@ -188,7 +193,7 @@ pub(crate) fn peek(
           }
         }
         (2..) if t.is_scanner  => {
-          resolveConflictingSymbols(t, j, maybe_accept.into_iter().map(|i| {
+          resolveConflictingSymbols(t, j, items.into_iter().map(|i| {
             match i.get_origin() {
               OriginData::GoalIndex(index) => i.to_origin(goals[index][0].get_origin()),
               _ => unreachable!()
@@ -196,11 +201,11 @@ pub(crate) fn peek(
           }).collect(), depth, global_depth, par_id);
         }
         2.. => {
-          maybe_accept.print_items(g, "Conflicting items");
+          items.print_items(g, "Conflicting items");
           t.accept_items.print_items(g, "GOALS");
           return SherpaResult::Err(SherpaError::grammar_err_multi_location {
             message:   "Could not resolve production. Grammar has ambiguities.".to_string(),
-            locations: maybe_accept
+            locations: items
               .iter()
               .map(|i| SherpaError::grammar_err {
                 message: "Test".to_string(),
@@ -238,26 +243,36 @@ pub(crate) fn peek(
     // Merge groups whose symbols occlude.
     merge_occluding_token_groups(t, j, &mut groups);
 
-    for (sym, items) in groups {
+    for (sym, mixed_items) in groups {
       // detect the number of distinct lanes present in the current group.
       // IF this value is 1, then we have successfully found a peek leaf that
-      // is ambiguous.
+      // is ambiguous
+
+      // ---[OUT_OF_SCOPE handling]---------------------------------------------------------
+      // Here we isolate out of scope items from our normal parse items. This leads to 
+      // to the transition to out-of-scope ( and thus failed states ) only occurring on 
+      // the first level of peek, making our RA algorithm `k=1`, at least when out of
+      // scope symbols are concerned. It is feasible to maintain ambiguous states that
+      // have a mixture of in-scope and out-of-scope items for more levels of peeking,
+      // allowing for a high `k` value however this not the approach taken ATM. This 
+      // may change in the future. 
+      let items: Items = mixed_items.iter().filter(|i| !i.is_out_of_scope()).cloned().collect();
+      // -----------------------------------------------------------------------------------
 
       let peek_groups = hash_group_vec(items.clone(), |_, i| i.get_state().get_origin());
-      let origin = get_goal_origin(&items, &goals);
 
       match peek_groups.len() {
         1 if j.occlusion_tracking_mode() => {
           // We can skip further processing if in occlusions tracking mode
         }
-        (1..) if all_items_are_out_of_scope(&items) => {
+        0 |  (1..) if all_items_are_out_of_scope(&mixed_items) => {
           // This symbol belongs to a follow item of the production. In this
           // we simply fail to allow the production to complete using the fall
           // back function
           let index = create_and_insert_node(
             t,
             sym,
-            items,
+            mixed_items,
             Fail,
             Assert,
             Some(par_id),
@@ -278,6 +293,7 @@ pub(crate) fn peek(
             });
           }
         1  if t.is_scanner || j.config().enable_breadcrumb_parsing => {
+          let origin = get_goal_origin(&items, &goals);
             let items: Items = items.try_increment().into_iter().map(|i|i.to_origin(origin) ).collect();
             let node_index = create_and_insert_node(
               t,
@@ -392,7 +408,7 @@ pub(crate) fn peek(
               // For that to work, all items need to be in an initial state,
               // and the follow items must all have shifted from the same
               // non-terminal.
-    /*           let mut call_groups = hash_group_btreemap(items.clone(), |_, i| {
+    /*           let mut call_groups = hash_group_btreemap(in_scope_items.clone(), |_, i| {
                 let (items, _) = get_follow_items(t, &i, Some(par_id), 0);
 
                 if items.final_completed_items.is_empty() {
@@ -454,7 +470,7 @@ pub(crate) fn peek(
 }
 
 fn all_items_are_out_of_scope(terminal_completions: &Vec<Item>) -> bool {
-    terminal_completions.iter().all(|i| matches!(i.get_origin(), OriginData::OutOfScope(_)))
+    terminal_completions.iter().all(|i| i.is_out_of_scope())
 }
 
 #[inline]

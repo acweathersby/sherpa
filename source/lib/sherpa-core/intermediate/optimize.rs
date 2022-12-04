@@ -7,9 +7,9 @@
 use crate::{
   grammar::data::ast::{ASTNode, Fail, Goto, Num, ASSERT, AST_NUMBER, DEFAULT, HASH_NAME},
   journal::{Journal, ReportType},
-  types::{ExportedProduction, GrammarStore, IRState},
+  types::{BranchType, ExportedProduction, GrammarStore, IRState},
 };
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 
 /// Attempts to reduce the number of IR states through merging states, and reduce
 /// and reduce bytecode complexity by transforming instructions where appropriate.
@@ -48,24 +48,43 @@ pub fn optimize_ir_states(
 
   let starting_states = states.len();
 
+  // Setup config flags
+  let inline_redundant_assertions = true;
+  let remove_gotos_to_pass_states = true;
+
   // Preform rounds -------------------------------------
   let entry_states: BTreeSet<String> = get_entry_states(g);
   let mut non_scanner_states = BTreeSet::new();
 
   loop {
+    // Maps a pure goto state id, in which  the state is only comprised of goto actions,
+    // to a list of that stat's actions.
     let mut goto_replacements = BTreeMap::new();
     let mut redundant_assert_replacements = BTreeMap::new();
     let mut pass_states = BTreeSet::new();
     let mut fail_states = BTreeSet::new();
+    let mut branch_references = HashMap::new();
 
     for state in states.values() {
+      if inline_redundant_assertions {
+        for (branch_data, instructions) in get_branches(state) {
+          if let Some(branch_data) = branch_data {
+            if !branch_data.default {
+              branch_references.insert((state.get_name(), branch_data), instructions.clone());
+            }
+          }
+        }
+      }
+
       if let Ok(state) = &state.ast {
         // Goto instructions are always placed at the end of any
         // instruction sequence, so if the first node is a GOTO
         // then all subsequent nodes must also be GOTO.
         match (state.instructions.len(), &state.instructions[0], state.instructions.last()) {
           (1, ASTNode::Pass(_), _) => {
-            pass_states.insert(state.id.clone());
+            if remove_gotos_to_pass_states {
+              pass_states.insert(state.id.clone());
+            }
           }
           (1, ASTNode::Fail(_), _) => {
             fail_states.insert(state.id.clone());
@@ -98,6 +117,8 @@ pub fn optimize_ir_states(
     // For each state, try to lower any state that is a pure
     // GOTO state into the respective reference states.
     for state in states.values_mut() {
+      let state_name = state.get_name();
+
       if goto_replacements.contains_key(&state.name) {
         continue;
       }
@@ -131,31 +152,65 @@ pub fn optimize_ir_states(
 
       for (data, branch) in get_branches_mut(state.as_mut()) {
         // Replace the first goto if it points to a pure goto state.
-        if let Some((index, goto)) = branch.iter().cloned().enumerate().find(|(_, i)| is_goto(i)) {
-          if let ASTNode::Goto(box Goto { state, .. }) = &goto {
-            if let ASTNode::HASH_NAME(box HASH_NAME { val, .. }) = &state {
-              if let Some(instructions) = goto_replacements.get(val) {
-                branch.splice(index..=index, instructions.iter().cloned());
-                changes = true;
-              } else if let Some((id, instructions)) = redundant_assert_replacements.get(val) {
-                if *id == data.id && !data.peek && !matches!(branch[0], ASTNode::Shift(_)) {
-                  branch.splice(index..=index, instructions.iter().cloned());
-                  changes = true;
+        match data {
+          Some(data) => {
+            if let Some((index, goto)) =
+              branch.iter().cloned().enumerate().find(|(_, i)| is_goto(i))
+            {
+              if let ASTNode::Goto(box Goto { state, .. }) = &goto {
+                if let ASTNode::HASH_NAME(box HASH_NAME { val, .. }) = &state {
+                  if let Some(instructions) = goto_replacements.get(val) {
+                    branch.splice(index..=index, instructions.iter().cloned());
+                    changes = true;
+                  } else if let Some((id, instructions)) = redundant_assert_replacements.get(val) {
+                    if *id == data.id && !data.peek && !matches!(branch[0], ASTNode::Shift(_)) {
+                      branch.splice(index..=index, instructions.iter().cloned());
+                      changes = true;
+                    }
+                  } else if let Some(_) = fail_states.get(val) {
+                    branch.clear();
+                    branch.push(ASTNode::Fail(Fail::new()));
+                  }
                 }
-              } else if let Some(_) = fail_states.get(val) {
-                branch.clear();
-                branch.push(ASTNode::Fail(Fail::new()));
+              }
+
+              if inline_redundant_assertions {
+                // If a branch of a branching state contains no transitive action, namely SHIFT,
+                // and the first action within that branch is a goto to a state that is itself
+                // a branching, and which contains a branch that matches the same assert type & symbol
+                // of the originating branch in the first state, then the contents of the second
+                // branch should be merged into the first branch, replacing the goto statement
+                // in the first branch.
+
+                match branch.first() {
+                  Some(ASTNode::Goto(box Goto { state: goto_state, .. })) => {
+                    if let ASTNode::HASH_NAME(box HASH_NAME { val, .. }) = &goto_state {
+                      // Grab the other branch. Make sure it's not a circular reference.
+                      if *val != state_name {
+                        if let Some(instructions) = branch_references.get(&(val.clone(), data)) {
+                          branch.splice(0..=0, instructions.iter().cloned());
+                          changes = true;
+                        }
+                      }
+                    }
+                  }
+                  _ => {}
+                }
               }
             }
           }
+          _ => {}
         }
-        // Remove the last goto if it points to a pass state
-        if let Some(goto) = branch.last() {
-          if let ASTNode::Goto(box Goto { state, .. }) = &goto {
-            if let ASTNode::HASH_NAME(box HASH_NAME { val, .. }) = &state {
-              if let Some(instructions) = pass_states.get(val) {
-                branch.remove(branch.len() - 1);
-                changes = true;
+
+        if remove_gotos_to_pass_states {
+          // Remove the last goto if it points to a pass state
+          if let Some(goto) = branch.last() {
+            if let ASTNode::Goto(box Goto { state, .. }) = &goto {
+              if let ASTNode::HASH_NAME(box HASH_NAME { val, .. }) = &state {
+                if pass_states.contains(val) {
+                  branch.remove(branch.len() - 1);
+                  changes = true;
+                }
               }
             }
           }
@@ -163,7 +218,7 @@ pub fn optimize_ir_states(
       }
     }
 
-    states = garbage_collect(states, &entry_states, &non_scanner_states);
+    states = garbage_collect(j, states, &entry_states, &non_scanner_states);
 
     if !changes {
       break;
@@ -171,7 +226,7 @@ pub fn optimize_ir_states(
   }
 
   let result: Vec<(String, Box<IRState>)> =
-    garbage_collect(states, &entry_states, &non_scanner_states);
+    garbage_collect(j, states, &entry_states, &non_scanner_states);
 
   j.report_mut().stop_timer("Duration");
 
@@ -194,7 +249,10 @@ pub fn optimize_ir_states(
   result
 }
 
+/// Remove unreferenced states, when tracking linkage from the root entry states,
+/// and reorders states in an attempt to cluster closely associated states.
 fn garbage_collect<T>(
+  j: &mut Journal,
   mut states: BTreeMap<String, Box<IRState>>,
   entry_states: &BTreeSet<String>,
   non_scanner_states: &BTreeSet<String>,
@@ -228,7 +286,7 @@ where
         }
       }
 
-      for branch in get_branches(state) {
+      for (_, branch) in get_branches(state) {
         for goto in branch.iter().filter(|i| is_goto(*i)) {
           if let ASTNode::Goto(box Goto { state, .. }) = &goto {
             if let ASTNode::HASH_NAME(box HASH_NAME { val, .. }) = &state {
@@ -242,63 +300,111 @@ where
     }
   }
 
-  reg_states
+  let output = reg_states
     .into_iter()
     .chain(scanner_states.into_iter())
     .map(|r| (r.clone(), states.remove(&r).unwrap()))
-    .collect::<T>()
+    .collect::<T>();
+
+  if !states.is_empty() {
+    j.report_mut().add_note(
+      "Garbage Collect",
+      format!(
+        "Removed the following states\n{}",
+        states.into_iter().map(|s| s.0).collect::<Vec<_>>().join("\n")
+      ),
+    );
+  }
+
+  output
+}
+
+#[derive(Debug, Hash, Clone, PartialEq, Eq)]
+struct BranchData {
+  /// The bytecode id of the discriminator symbol of this branch.
+  id:      u32,
+  /// The type of the discriminator symbol. This is the empty string in the case
+  /// of a default branch.
+  id_type: BranchType,
+  /// Whether this branch evaluates and automatically increments the peek cursor.
+  peek:    bool,
+  /// Whether this branch is a default action. There should only be one of these
+  /// per branching state.
+  default: bool,
 }
 
 /// Returns a vector of referenced instruction vectors
 /// which may either either contain the root instruction vector, or the
 /// the vectors of individual branches in the case of a branch state
-fn get_branches<'a>(state: &'a IRState) -> Vec<&'a Vec<ASTNode>> {
+fn get_branches<'a>(state: &'a IRState) -> Vec<(Option<BranchData>, &'a Vec<ASTNode>)> {
   if let Ok(state) = &state.ast {
     if matches!(state.instructions[0], ASTNode::ASSERT(_) | ASTNode::DEFAULT(_)) {
       state
         .instructions
         .iter()
         .map(|i| match i {
-          ASTNode::ASSERT(box ASSERT { instructions, .. }) => instructions,
-          ASTNode::DEFAULT(box DEFAULT { instructions, .. }) => instructions,
+          ASTNode::ASSERT(box ASSERT { ids, instructions, is_peek, mode, .. }) => (
+            Some(BranchData {
+              id:      get_branch_id(ids),
+              peek:    *is_peek,
+              default: false,
+              id_type: BranchType::from(mode.clone()),
+            }),
+            instructions,
+          ),
+          ASTNode::DEFAULT(box DEFAULT { instructions, .. }) => (
+            Some(BranchData {
+              id:      0,
+              peek:    false,
+              default: true,
+              id_type: BranchType::UNKNOWN,
+            }),
+            instructions,
+          ),
           _ => unreachable!("Expected only ASSERT and DEFAULT nodes in instruction vector."),
         })
         .collect()
     } else {
-      vec![&state.instructions]
+      vec![(None, &state.instructions)]
     }
   } else {
     vec![]
   }
 }
 
-struct BranchData {
-  id:      u32,
-  peek:    bool,
-  default: bool,
-}
-
 /// Returns a vector of mutable referenced instruction vector
 /// which may either contain the root instruction vector, or the
 /// the vectors of individual branches in the case of a branch state
-fn get_branches_mut<'a>(state: &'a mut IRState) -> Vec<(BranchData, &'a mut Vec<ASTNode>)> {
+fn get_branches_mut<'a>(state: &'a mut IRState) -> Vec<(Option<BranchData>, &'a mut Vec<ASTNode>)> {
   if let Ok(state) = &mut state.ast {
     if matches!(state.instructions[0], ASTNode::ASSERT(_) | ASTNode::DEFAULT(_)) {
       state
         .instructions
         .iter_mut()
         .map(|i| match i {
-          ASTNode::ASSERT(box ASSERT { ids, instructions, is_peek, .. }) => {
-            (BranchData { id: get_branch_id(ids), peek: *is_peek, default: false }, instructions)
-          }
-          ASTNode::DEFAULT(box DEFAULT { instructions, .. }) => {
-            (BranchData { id: 0, peek: false, default: true }, instructions)
-          }
+          ASTNode::ASSERT(box ASSERT { ids, instructions, is_peek, mode, .. }) => (
+            Some(BranchData {
+              id:      get_branch_id(ids),
+              peek:    *is_peek,
+              default: false,
+              id_type: BranchType::from(mode.clone()),
+            }),
+            instructions,
+          ),
+          ASTNode::DEFAULT(box DEFAULT { instructions, .. }) => (
+            Some(BranchData {
+              id:      0,
+              peek:    false,
+              default: true,
+              id_type: BranchType::UNKNOWN,
+            }),
+            instructions,
+          ),
           _ => unreachable!("Expected only ASSERT and DEFAULT nodes in instruction vector."),
         })
         .collect()
     } else {
-      vec![(BranchData { id: 0, peek: false, default: false }, &mut state.instructions)]
+      vec![(None, &mut state.instructions)]
     }
   } else {
     vec![]

@@ -1,19 +1,20 @@
 use crate::{
-  ascript::types::AScriptStore,
+  ascript::{build_ast, types::AScriptStore},
   compile::{compile_bytecode, compile_states, optimize_ir_states, BytecodeOutput},
-  get_num_of_available_threads,
   journal::*,
   types::*,
+  util::get_num_of_available_threads,
 };
 use std::{
   fs::{create_dir_all, File},
   io::Write,
-  num::NonZeroUsize,
   path::PathBuf,
   sync::Arc,
   thread,
   vec,
 };
+
+use super::{bytecode::build_bytecode_parser, disassembly::build_bytecode_disassembly};
 
 pub type TaskFn =
   Box<dyn Fn(&mut PipelineContext) -> Result<Option<String>, Vec<SherpaError>> + Sync + Send>;
@@ -49,16 +50,12 @@ pub struct BuildPipeline<'a> {
 }
 
 impl<'a> BuildPipeline<'a> {
-  fn build_pipeline(number_of_threads: usize, cached_source: CachedSource) -> Self {
-    let config = Some(Config { ..Default::default() });
+  fn build_pipeline(config: Config, cached_source: CachedSource) -> Self {
+    let config = Some(config);
     Self {
       parser_name: "undefined_parser".to_string(),
       grammar_name: "undefined".to_string(),
-      threads: if number_of_threads == 0 {
-        std::thread::available_parallelism().unwrap_or(NonZeroUsize::new(1).unwrap()).get()
-      } else {
-        number_of_threads
-      },
+      threads: get_num_of_available_threads(),
       tasks: vec![],
       ascript_name: None,
       journal: Journal::new(config),
@@ -74,9 +71,9 @@ impl<'a> BuildPipeline<'a> {
   }
 
   /// Create a new build pipeline from a string.
-  pub fn proc_context(grammar_source: &str, base_directory: &PathBuf) -> Self {
+  pub fn proc_context(grammar_source: &str, base_directory: &PathBuf, config: Config) -> Self {
     let mut self_ = Self::build_pipeline(
-      get_num_of_available_threads(),
+      config,
       CachedSource::String(grammar_source.to_string(), base_directory.to_owned()),
     );
 
@@ -90,17 +87,17 @@ impl<'a> BuildPipeline<'a> {
   ///
   /// If `number_of_threads` is `0`, the compiler will use a number of threads equal to the
   /// the number of CPU cores reported by the system.
-  pub fn from_source(source_path: &PathBuf, number_of_threads: usize) -> Self {
-    Self::build_pipeline(number_of_threads, CachedSource::Path(source_path.to_owned()))
+  pub fn from_source(source_path: &PathBuf, config: Config) -> Self {
+    Self::build_pipeline(config, CachedSource::Path(source_path.to_owned()))
   }
 
   /// Create a new build pipeline after constructing
   /// a grammar store from a source string. Returns Error
   /// if the grammar could not be created, otherwise, a
   /// BuildPipeline is returned.
-  pub fn from_string(grammar_source: &str, base_directory: &PathBuf) -> Self {
+  pub fn from_string(grammar_source: &str, base_directory: &PathBuf, config: Config) -> Self {
     Self::build_pipeline(
-      get_num_of_available_threads(),
+      config,
       CachedSource::String(grammar_source.to_string(), base_directory.to_owned()),
     )
   }
@@ -158,7 +155,14 @@ impl<'a> BuildPipeline<'a> {
     let mut source_parts = vec![];
     let mut errors = vec![];
 
-    self.build_grammar()?;
+    match self.build_grammar() {
+      SherpaResult::Ok(_) => {}
+      _ => {
+        self.journal.flush_reports();
+        self.journal.debug_print_reports(ReportType::Any);
+        return SherpaResult::None;
+      }
+    }
 
     self.ascript = if self.tasks.iter().any(|t| t.0.require_ascript) && self.ascript.is_none() {
       match AScriptStore::new(self.journal.grammar().unwrap()) {
@@ -250,7 +254,7 @@ impl<'a> BuildPipeline<'a> {
     }
 
     SherpaResult::Ok((
-      Self::build_pipeline(self.threads, self.cached_source.to_owned()),
+      Self::build_pipeline(*self.journal.config(), self.cached_source.to_owned()),
       source_parts,
       !errors.have_critical(),
     ))
@@ -339,4 +343,43 @@ impl<'a> PipelineContext<'a> {
   pub fn get_bytecode(&self) -> Option<&BytecodeOutput> {
     self.pipeline.unwrap().bytecode.as_ref()
   }
+}
+
+/// Convenience function for building a bytecode based parser. Use this in
+/// build scripts to output a parser source file to `{OUT_DIR}/sherpa_out/{grammar_name}.rs`.
+pub fn compile_bytecode_parser(grammar_source_path: &PathBuf, config: Config) -> bool {
+  let mut out_dir = std::env::var("OUT_DIR").map(|d| PathBuf::from(&d)).unwrap();
+
+  out_dir.push("./sherpa_out/");
+
+  create_dir_all(&out_dir).unwrap();
+
+  let pipeline = BuildPipeline::from_source(&grammar_source_path, config)
+    .set_source_output_dir(&out_dir)
+    .set_build_output_dir(&out_dir)
+    .set_source_file_name("%.rs")
+    .add_task(build_bytecode_parser(SourceType::Rust, config.enable_ascript));
+
+  match if config.enable_ascript {
+    pipeline.add_task(build_ast(SourceType::Rust))
+  } else {
+    pipeline
+  }
+  .add_task(build_bytecode_disassembly())
+  .run(|errors| {
+    for error in &errors {
+      eprintln!("{}", error);
+    }
+  }) {
+    SherpaResult::Ok(_) => true,
+    _ => false,
+  }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum SourceType {
+  Rust,
+  TypeScript,
+  Go,
+  Cpp,
 }

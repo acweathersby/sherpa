@@ -5,7 +5,10 @@
 use proc_macro::{Diagnostic, Span, TokenStream, TokenTree};
 use std::{collections::BTreeMap, path::PathBuf};
 
-use sherpa_compile::{tasks, BuildPipeline};
+use sherpa_core::{
+  pipeline::{tasks, BuildPipeline, SourceType},
+  rt::{SherpaError, SherpaResult},
+};
 
 extern crate proc_macro;
 
@@ -110,7 +113,7 @@ pub fn compile_mod(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
   let root_dir = std::env::var("CARGO_MANIFEST_DIR").map(|d| PathBuf::from(&d)).unwrap();
 
-  let pipeline = BuildPipeline::proc_context(&grammar, &root_dir);
+  let pipeline = BuildPipeline::proc_context(&grammar, &root_dir, Default::default());
 
   let mut pipeline = pipeline.set_source_output_dir(&root_dir);
 
@@ -120,7 +123,7 @@ pub fn compile_mod(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
       .add_task(tasks::build_llvm_parser(None, "clang-14", "llvm-ar-14", false, true, false))
       .add_task(tasks::build_llvm_parser_interface(true)),
 
-    _ => pipeline.add_task(tasks::build_bytecode_parser(sherpa_compile::SourceType::Rust, true)),
+    _ => pipeline.add_task(tasks::build_bytecode_parser(SourceType::Rust, true)),
   };
 
   //   pipeline = if input.build_disassembly {
@@ -129,10 +132,10 @@ pub fn compile_mod(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
   // pipeline
   // };
 
-  match pipeline.add_task(tasks::build_ast(sherpa_compile::SourceType::Rust)).run(|errors| {
+  match pipeline.add_task(tasks::build_ast(sherpa_core::pipeline::SourceType::Rust)).run(|errors| {
     process_errors(errors, offsets);
   }) {
-    sherpa_core::SherpaResult::Ok((_, artifacts, _)) => artifacts.join("\n").parse().unwrap(),
+    SherpaResult::Ok((_, artifacts, _)) => artifacts.join("\n").parse().unwrap(),
     _ => Default::default(),
   }
 }

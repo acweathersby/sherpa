@@ -115,6 +115,7 @@ pub type ReduceFunctionTable = BTreeMap<ReduceFunctionId, ReduceFunctionType>;
 
 #[derive(Debug, Clone, Default)]
 pub struct GrammarStore {
+  
   pub id: Arc<GrammarRef>,
 
   /// Maps [ProductionId] to a list of [RuleIds](RuleId)
@@ -188,10 +189,7 @@ impl GrammarStore {
         j.set_grammar(grammar.clone());
         SherpaResult::Ok(grammar)
       }
-      (_, Some(errors)) => SherpaResult::Err(SherpaError::Many {
-        message: "Unable to compile Grammar".to_string(),
-        errors,
-      }),
+      (..) => SherpaResult::None,
       (None, None) => unreachable!("compile_grammar_from_string should never return (None, None)"),
     }
   }

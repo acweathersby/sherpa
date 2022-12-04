@@ -5,12 +5,55 @@ use std::{
   fmt::{Debug, Display},
 };
 
+#[derive(Debug, PartialEq, PartialOrd, Clone, Copy, Hash, Eq, Ord, Default)]
+/// Identifies an IR scanner state for a particular set of SymbolIds
+pub struct ScannerStateId(u64);
+
+impl ScannerStateId {
+  pub fn new(symbol_set: &SymbolSet) -> Self {
+    Self(hash_id_value_u64(symbol_set))
+  }
+}
+
+#[derive(Debug, PartialEq, PartialOrd, Clone, Copy, Hash, Eq, Ord, Default)]
+/// Identifies an IR state
+pub struct StateId(u64);
+
+impl StateId {
+  pub fn new(state_name: &String) -> Self {
+    Self(hash_id_value_u64(state_name))
+  }
+}
+
 #[derive(PartialEq, Eq, Clone, Copy)]
 
 pub(crate) enum PeekType {
   None,
   PeekStart,
   PeekContinue,
+}
+
+#[derive(Debug, Hash, Clone, PartialEq, Eq)]
+pub(crate) enum BranchType {
+  PRODUCTION,
+  TOKEN,
+  BYTE,
+  CLASS,
+  CODEPOINT,
+  UNKNOWN,
+}
+
+impl From<String> for BranchType {
+  fn from(value: String) -> Self {
+    match value.as_str() {
+      "PRODUCTION" => Self::PRODUCTION,
+      "TOKEN" => Self::TOKEN,
+      "BYTE" => Self::BYTE,
+      "CLASS" => Self::CLASS,
+      "CODEPOINT" => Self::CODEPOINT,
+      _ => Self::UNKNOWN,
+    }
+  }
 }
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]

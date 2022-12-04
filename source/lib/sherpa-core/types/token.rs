@@ -110,8 +110,8 @@ impl fmt::Debug for Token {
     if self.input.is_some() && self.len < 10 {
       f.write_fmt(format_args!(
         "Token{{ off:{}, len:{},  line:{}, l_off:{}, val: {} }}",
-        self.len,
         self.off,
+        self.len,
         self.line_num,
         self.line_off,
         self.to_string()

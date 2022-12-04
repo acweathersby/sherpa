@@ -27,7 +27,7 @@ pub(crate) fn construct_recursive_ascent(
   let g = j.grammar().unwrap();
 
   let mut t = TPack::new(g.clone(), TransitionMode::RecursiveAscent, false, &vec![], root_ids);
-
+  t.increment_lane(1);
   t.goto_scoped_closure = Some(Rc::new(Box::<Vec<Item>>::new(
     (!t.is_scanner).then(|| get_follow_closure(&g, &t.root_prod_ids)).unwrap_or_default(),
   )));
@@ -42,7 +42,6 @@ pub(crate) fn construct_recursive_ascent(
     GraphNode::new(&t, SymbolID::Start, None, goto_seeds.clone().to_vec(), NodeType::RAStart);
   root_node.edge_type = EdgeType::Start;
   let parent_index = Some(t.insert_node(root_node));
-
   let mut unfulfilled_root = Some(*t.root_prod_ids.first().unwrap());
 
   for (production_id, group) in
@@ -50,6 +49,7 @@ pub(crate) fn construct_recursive_ascent(
   {
     let have_root_production = t.root_prod_ids.contains(&production_id);
     let mut have_end_items = false;
+    let lane = t.increment_lane(1);
 
     let mut items: Vec<Item> = group
       .iter()
@@ -58,7 +58,7 @@ pub(crate) fn construct_recursive_ascent(
           have_end_items = true;
           i.to_state(ItemState::OUT_OF_SCOPE)
         } else {
-          i.increment().unwrap()
+          i.try_increment().to_state(ItemState::new(lane, OriginData::Undefined))
         };
 
         stated_item
@@ -102,6 +102,8 @@ pub(crate) fn construct_recursive_ascent(
       let node_index = t.insert_node(goto_node);
       t.queue_node(ProcessGroup { node_index, items, ..Default::default() });
     }
+
+    t.accept_items.append(&mut group.clone().to_complete().to_set());
   }
 
   // If the root production is not covered in the goto branches

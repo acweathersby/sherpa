@@ -1,7 +1,7 @@
 use bitmask_enum::bitmask;
 
 #[bitmask]
-pub enum ResolutionMode {
+pub enum ParseAlgorithm {
   /// Allow the use of LR states to resolve conflicts when building regular parsers
   LR_Resolution = 0b1,
   /// Allow the use of recursive ascent states to resolve left recursion
@@ -17,34 +17,77 @@ pub enum ResolutionMode {
   All  = 0b1111,
 }
 
-impl Default for ResolutionMode {
+impl Default for ParseAlgorithm {
   fn default() -> Self {
     Self::All
   }
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy)]
 pub struct Config {
-  pub resolution_mode: ResolutionMode,
-
+  /// Combine [ParseAlgorithm] flags to specify what parser algorithms
+  /// are available to the compiler.
+  ///
+  /// Defaults to [ParseAlgorithm::All]
+  pub enabled_algorithms: ParseAlgorithm,
   /// The Parser will produce peek productions for symbols that occlude.
   /// An extra compile step must be taken to produce the symbol occlusion table.
-  pub allow_occluding_symbols:   bool,
+  ///
+  /// Defaults to `false`.
+  pub allow_occluding_symbols: bool,
   /// Convert bytecode into a human readable "disassembly" format. This can be
   /// accessed in the journal through `Disassembly` report type. The main note
   /// in that report is labeled "Output", which will contain the
   /// dissemble text.
-  pub build_disassembly:         bool,
+  ///
+  /// Defaults to `false`.
+  pub build_disassembly: bool,
   /// Add IR states string dump to IR compilation reports. This affects the ReportTypes
   /// - [ReportType::TokenProductionCompile(ProductionId)](ReportType)
   /// - [ReportType::ScannerCompile(ScannerId)](ReportType)
   /// - [ReportType::ProductionCompile(ProductionId)](ReportType)
   ///
   /// The note can be found labeled `IRStates`
-  pub debug_add_ir_states_note:  bool,
-  /// Uses the bread crumb parser technique to overcome local
-  /// ambiguities.
+  ///
+  /// Defaults to `false`.
+  pub debug_add_ir_states_note: bool,
+  /// Uses the bread crumb parser technique to overcome local ambiguities
+  /// without backtracking.
+  ///
+  /// Defaults to `false`.
   pub enable_breadcrumb_parsing: bool,
+  /// Inline instructions of branches that have the same signature
+  /// and contain no transitive actions (shift, reduce, accept).
+  /// This will decrease parser instructions at the expense of increasing
+  /// bytecode size.
+  ///
+  /// Defaults to `false`.
+  pub opt_inline_redundant_assertions: bool,
+  /// Remove goto statements that reference a pass state (a state that only
+  /// has one `pass` instruction).
+  ///
+  /// Defaults to `true`.
+  pub opt_remove_gotos_to_pass_states: bool,
+
+  /// Enable the generation of AScripT AST code.
+  ///
+  /// Defaults to `true`
+  pub enable_ascript: bool,
+}
+
+impl Default for Config {
+  fn default() -> Self {
+    Self {
+      enabled_algorithms: ParseAlgorithm::All,
+      allow_occluding_symbols: false,
+      build_disassembly: false,
+      debug_add_ir_states_note: false,
+      enable_breadcrumb_parsing: false,
+      opt_inline_redundant_assertions: false,
+      opt_remove_gotos_to_pass_states: true,
+      enable_ascript: true,
+    }
+  }
 }
 
 use std::collections::BTreeSet;
@@ -126,11 +169,4 @@ impl BuildOptions {
   pub fn has_extension(&self, ext: Extension) -> bool {
     self.extensions.contains(&ext)
   }
-}
-#[derive(Debug, Clone, Copy)]
-pub enum SourceType {
-  Rust,
-  TypeScript,
-  Go,
-  Cpp,
 }

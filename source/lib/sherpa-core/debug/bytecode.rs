@@ -3,10 +3,7 @@ use std::{
   sync::Arc,
 };
 
-use crate::{
-  compile::{BytecodeOutput, Journal},
-  types::*,
-};
+use crate::{compile::BytecodeOutput, types::*, Journal};
 
 fn header(idx: usize) -> String {
   format!("{}| ", address_string(idx))

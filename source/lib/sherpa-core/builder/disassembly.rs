@@ -7,7 +7,7 @@ use crate::{
 };
 use std::io::BufWriter;
 
-/// Generate a disassembly file of the grammar bytecode
+/// Generate a disassembly representation of the grammar's bytecode
 pub fn build_bytecode_disassembly() -> PipelineTask {
   PipelineTask {
     fun: Box::new(move |task_ctx| {

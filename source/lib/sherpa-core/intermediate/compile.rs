@@ -7,8 +7,8 @@ use super::{
 };
 use crate::{
   grammar::hash_id_value_u64,
-  journal::{config::ResolutionMode, Journal},
-  types::{IRState, ItemContainer, ProductionId, ScannerId, SherpaResult, SymbolSet},
+  journal::{config::ParseAlgorithm, Journal},
+  types::{IRState, ItemContainer, ProductionId, ScannerStateId, SherpaResult, SymbolSet},
 };
 use std::{
   collections::{BTreeMap, BTreeSet},
@@ -121,7 +121,7 @@ pub(crate) fn compile_production_states(
     );
   }
 
-  if j.config().resolution_mode.intersects(ResolutionMode::RecursiveAscent) {
+  if j.config().enabled_algorithms.intersects(ParseAlgorithm::RecursiveAscent) {
     j.report_mut().start_timer("Recursive Ascent Compile");
 
     let (t, _) = handle_error(
@@ -212,7 +212,7 @@ pub(crate) fn compile_scanner_states(
 
   j.set_active_report(
     &format!("Scanner [{}] IR Compilation", state_name),
-    crate::journal::report::ReportType::ScannerCompile(ScannerId::new(&symbols)),
+    crate::journal::report::ReportType::ScannerCompile(ScannerStateId::new(&symbols)),
   );
 
   j.report_mut().add_note(

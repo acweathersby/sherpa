@@ -6,10 +6,9 @@ mod test;
 pub mod types;
 
 use crate::{
-  builder::pipeline::PipelineTask,
+  builder::pipeline::{PipelineTask, SourceType},
   types::SherpaError,
   writer::code_writer::CodeWriter,
-  SourceType,
 };
 
 /// Constructs a task that compiles a grammar's Ascript into an AST module of the given `source_type`.

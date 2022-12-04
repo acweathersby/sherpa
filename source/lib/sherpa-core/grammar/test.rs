@@ -1,7 +1,6 @@
 use super::compile_grammar_from_string;
 use crate::{
   debug::debug_items,
-  get_num_of_available_threads,
   grammar::{
     compile::{compile_grammars_into_store, convert_left_recursion_to_right},
     compile_grammar_from_path,
@@ -10,6 +9,7 @@ use crate::{
   },
   journal::{report::ReportType, Journal},
   types::{RecursionType, SherpaErrorContainer, *},
+  util::get_num_of_available_threads,
 };
 use lazy_static::__Deref;
 use std::{path::PathBuf, sync::Arc};

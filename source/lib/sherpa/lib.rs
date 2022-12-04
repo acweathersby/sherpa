@@ -23,4 +23,4 @@ pub use sherpa_core::*;
 /// ```
 pub use sherpa_proc::compile_mod as compile;
 
-pub use sherpa_core::{Token, UTF8StringReader as UTF8Reader, UTF8StringReader};
+pub use sherpa_core::*;

@@ -17,7 +17,7 @@ pub enum ReportType {
   /// compilation reports
   GrammarCompile(GrammarId),
   TokenProductionCompile(ProductionId),
-  ScannerCompile(ScannerId),
+  ScannerCompile(ScannerStateId),
   OcclusionCompile,
   // The following are implemented in in other packages
   AScriptCompile,
@@ -142,7 +142,7 @@ impl Report {
       *,
     };
     match (discriminant, self.report_type) {
-      (ScannerCompile(any), ScannerCompile(_)) if any == ScannerId::default() => true,
+      (ScannerCompile(any), ScannerCompile(_)) if any == ScannerStateId::default() => true,
       (GrammarCompile(any), GrammarCompile(_)) if any == GrammarId::default() => true,
       (PC_LR(any), PC_LR(_)) if any == ProductionId::default() => true,
       (TPC(any), TPC(_)) if any == ProductionId::default() => true,
