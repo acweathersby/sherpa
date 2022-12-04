@@ -4,9 +4,8 @@ mod test_parser_build {
 
   use crate::{
     compile::{compile_bytecode, compile_states, optimize_ir_states},
-    GrammarStore,
-    Journal,
-    SherpaResult,
+    journal::*,
+    types::{GrammarStore, SherpaResult},
   };
 
   #[test]
@@ -30,7 +29,7 @@ mod test_parser_build {
     compile_bytecode(&mut j, states);
 
     j.flush_reports();
-    j.debug_report(crate::ReportType::Any);
+    j.debug_report(ReportType::Any);
 
     SherpaResult::Ok(())
   }

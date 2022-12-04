@@ -1,10 +1,9 @@
-use crate::ascript::types::AScriptStore;
-use sherpa_core::{
+use crate::{
+  ascript::types::AScriptStore,
   compile::{compile_bytecode, compile_states, optimize_ir_states, BytecodeOutput},
   get_num_of_available_threads,
-  Config,
-  Journal,
-  *,
+  journal::*,
+  types::*,
 };
 use std::{
   fs::{create_dir_all, File},

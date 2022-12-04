@@ -1,5 +1,9 @@
-use crate::{ascript::types::AScriptStore, SourceType};
-use sherpa_core::{compile::BytecodeOutput, writer::code_writer::CodeWriter, *};
+use crate::{
+  ascript::types::AScriptStore,
+  compile::{config::SourceType, BytecodeOutput},
+  types::*,
+  writer::code_writer::CodeWriter,
+};
 use std::{collections::BTreeMap, io::Write};
 
 use super::{
@@ -133,8 +137,12 @@ impl<T: ByteCharacterReader + BaseCharacterReader + MutCharacterReader> Parser<T
 
 #[cfg(test)]
 mod test {
-  use crate::ascript::{compile::compile_ascript_store, rust, types::AScriptStore};
-  use sherpa_core::{writer::code_writer::StringBuffer, GrammarStore, Journal};
+  use crate::{
+    ascript::{compile::compile_ascript_store, rust, types::AScriptStore},
+    journal::*,
+    types::*,
+    writer::code_writer::StringBuffer,
+  };
   #[test]
   fn test_output_rust_on_practical_grammar() {
     let mut j = Journal::new(None);

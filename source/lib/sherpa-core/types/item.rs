@@ -13,7 +13,7 @@ use std::{
 use super::SherpaResult;
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy, Hash, PartialOrd, Ord)]
-pub struct ItemState {
+pub(crate) struct ItemState {
   current_lane: u32,
   prev_lane:    u32,
 
@@ -137,7 +137,7 @@ impl Display for ItemState {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub enum OriginData {
+pub(crate) enum OriginData {
   Undefined,
   OutOfScope(usize),
   Null,
@@ -186,8 +186,7 @@ impl OriginData {
 /// indicates the next expected terminal or non-terminal.
 #[repr(C, align(64))]
 #[derive(PartialEq, Eq, Debug, Clone, Copy, Hash, PartialOrd, Ord)]
-
-pub struct Item {
+pub(crate) struct Item {
   rule:  RuleId,
   state: ItemState,
   len:   u8,
@@ -509,19 +508,19 @@ impl From<&Rule> for Item {
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Copy)]
-pub struct LinkedItem {
+pub(crate) struct LinkedItem {
   pub item:         Item,
   pub closure_node: MaybeNodeId,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct LinkedItemWithGoto {
+pub(crate) struct LinkedItemWithGoto {
   pub item:         Item,
   pub closure_node: MaybeNodeId,
   pub goto_items:   Items,
 }
 
-pub struct FollowItemGroups {
+pub(crate) struct FollowItemGroups {
   pub uncompleted_items: Vec<LinkedItem>,
   pub intermediate_completed_items: Vec<LinkedItem>,
   pub final_completed_items: Vec<LinkedItem>,
@@ -551,10 +550,10 @@ impl Into<LinkedItemWithGoto> for LinkedItem {
   }
 }
 
-pub type Items = Vec<Item>;
-pub type ItemSet = BTreeSet<Item>;
+pub(crate) type Items = Vec<Item>;
+pub(crate) type ItemSet = BTreeSet<Item>;
 
-pub trait ItemContainer: Clone + IntoIterator<Item = Item> {
+pub(crate) trait ItemContainer: Clone + IntoIterator<Item = Item> {
   fn term_item_vec(&self, g: &GrammarStore) -> Items;
   fn non_term_item_vec(&self, g: &GrammarStore) -> Items;
   fn completed_item_vec(&self) -> Items;

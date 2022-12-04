@@ -1,7 +1,7 @@
 //! Functions for constructing and leveraging transition tables from
 //! Hydrocarbon bytecode.
 
-use sherpa_core::{compile::BytecodeOutput, GrammarStore, *};
+use crate::{compile::BytecodeOutput, types::*};
 use std::collections::{btree_map, BTreeMap, VecDeque};
 
 #[derive(Debug, Clone, Copy)]
@@ -204,7 +204,7 @@ pub(crate) fn _create_table<'a>(
 }
 /// Information on byte code branches
 #[derive(Debug, Clone)]
-pub struct BranchTableData {
+pub(crate) struct BranchTableData {
   /// Stores an offset of the branch that is taken given
   /// a particular symbol, and the symbol that activates
   /// the branch.
@@ -219,7 +219,7 @@ pub struct BranchTableData {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct BranchData {
+pub(crate) struct BranchData {
   // pub table_index:  usize,
   pub is_skipped: bool,
   pub address:    usize,
@@ -229,7 +229,7 @@ pub struct BranchData {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum TableType {
+pub(crate) enum TableType {
   Hash,
   Vector,
 }

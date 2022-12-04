@@ -1,7 +1,7 @@
 use super::*;
 
 #[derive(Debug, Clone, Copy)]
-pub struct TableHeaderData {
+pub(crate) struct TableHeaderData {
   pub input_type:   u32,
   pub lexer_type:   u32,
   pub table_length: u32,

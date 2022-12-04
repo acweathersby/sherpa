@@ -3,7 +3,6 @@
 #![feature(proc_macro_diagnostic)]
 #![feature(proc_macro_span_shrink)]
 use proc_macro::{Diagnostic, Span, TokenStream, TokenTree};
-use sherpa_core::SherpaError;
 use std::{collections::BTreeMap, path::PathBuf};
 
 use sherpa_compile::{tasks, BuildPipeline};

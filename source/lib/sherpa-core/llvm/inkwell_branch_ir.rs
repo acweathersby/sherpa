@@ -1,22 +1,18 @@
-use crate::builder::table::BranchTableData;
-use inkwell::values::{IntValue, PointerValue};
-use sherpa_core::*;
 use std::collections::BTreeMap;
+
+use super::{
+  create_offset_label,
+  create_skip_code,
+  get_parse_function,
+  parse_ctx_indices::*,
+  token_indices::{TokLength, TokOffset, TokType},
+  FunctionPack,
+};
+use crate::{builder::table::BranchTableData, llvm::LLVMParserModule, types::*};
+use inkwell::values::{IntValue, PointerValue};
 
 pub const _FAIL_STATE_FLAG_LLVM: u32 = 2;
 pub const NORMAL_STATE_FLAG_LLVM: u32 = 1;
-
-use super::create_skip_code;
-
-use super::get_parse_function;
-
-use super::types::LLVMParserModule;
-
-use super::create_offset_label;
-
-use super::types::*;
-use parse_ctx_indices::*;
-use token_indices::*;
 
 #[derive(Default)]
 pub(crate) struct BranchStateCache<'a> {
@@ -198,6 +194,7 @@ pub(crate) fn construct_instruction_branch<'a>(
           let buffer_ptr = construct_buffer(ctx, max_size, &mut state, pack, token_ptr);
 
           let token_type_ptr = b.build_struct_gep(token_ptr, TokType, "").unwrap();
+
           fn string_to_byte_num_and_mask(string: &str, _: &Symbol) -> (usize, usize) {
             string.as_bytes().iter().enumerate().fold((0, 0), |(val, mask), (i, v)| {
               let shift_amount = 8 * i;

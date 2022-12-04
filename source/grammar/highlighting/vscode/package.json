@@ -1,0 +1,42 @@
+{
+    "name": "sherpa_grammar",
+    "displayName": "Sherpa Grammar",
+    "description": "Syntax highlighting for Sherpa grammar files [*.sherpa]",
+    "publisher": "candle-smith",
+    "version": "1.0.4",
+    "engines": {
+        "vscode": "^1.22.0"
+    },
+    "scripts": {
+        "local.install": "vsce package && code --install-extension ./*.vsix"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "contributes": {
+        "languages": [
+            {
+                "id": "sherpa-grammar",
+                "aliases": [
+                    "Sherpa Grammar",
+                    "sherpa-grammar"
+                ],
+                "extensions": [
+                    "sherpa",
+                    ".sherpa"
+                ],
+                "configuration": "./language-configuration.json"
+            }
+        ],
+        "grammars": [
+            {
+                "language": "sherpa-grammar",
+                "scopeName": "source.sherpa",
+                "path": "./syntaxes/sherpa-grammar.tmLanguage.json"
+            }
+        ]
+    },
+    "repository": {
+        "url": "github.com/acweathersby/sherpa/sherpa.git/dev/source/grammar/highlighting"
+    }
+}

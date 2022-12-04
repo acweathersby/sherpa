@@ -2,14 +2,19 @@ use super::Timing;
 use crate::types::*;
 use std::{collections::HashMap, time::Instant};
 
-/// Classes for different report types. Some values can support Identifier types
-/// to better refine report searches. Do get all reports of a certain class that
-/// use Identifier, use `Default::default()` (e.g. `ReportType::GrammarCompile(Default::default())`).
+/// Selection classes for different report types, used to filter reports results.
+///
+/// Some values wrap an identifier type to better specifier searches. To get all
+/// reports of a certain class that use an identifier, use `Default::default()`
+/// (e.g. [ReportType]::GrammarCompile(Default::default())).
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ReportType {
   /// This is a default report that is returned when an active report
-  /// is not set.
+  /// is not set. This will not match any report
   Sink,
+  /// Matches a report of the compilation of a specific grammar, or
+  /// if [GrammarId] is `GrammarId::default`, then matches all grammar
+  /// compilation reports
   GrammarCompile(GrammarId),
   TokenProductionCompile(ProductionId),
   ScannerCompile(ScannerId),
@@ -17,10 +22,13 @@ pub enum ReportType {
   // The following are implemented in in other packages
   AScriptCompile,
   ByteCodeCompile,
-  /// Custom report classes
+  /// Matches all report types.
   Any,
+  /// Matches all production compilation reports.
   AnyProductionCompile,
+  /// Matches all IR compiling reports
   IntermediateCompile,
+  // Matches the dissassembly generation report.
   Disassembly,
   ProductionCompile(ProductionId),
   ProductionCompileLR(ProductionId),
@@ -30,19 +38,19 @@ pub enum ReportType {
 #[derive(Debug, Clone)]
 /// Store information about a certain aspect of grammar compilation.
 pub struct Report {
-  pub name:        String,
-  pub report_type: ReportType,
+  pub(crate) name:        String,
+  pub(crate) report_type: ReportType,
   /// At table mapping a report note label to a
   /// note body.
-  pub notes:       Vec<(&'static str, String)>,
-  pub errors:      Vec<SherpaError>,
-  pub timings:     HashMap<&'static str, Timing>,
-  pub create_time: Instant,
-  pub error_level: SherpaErrorSeverity,
+  pub(crate) notes:       Vec<(&'static str, String)>,
+  pub(crate) errors:      Vec<SherpaError>,
+  pub(crate) timings:     HashMap<&'static str, Timing>,
+  pub(crate) create_time: Instant,
+  pub(crate) error_level: SherpaErrorSeverity,
 }
 
 impl Report {
-  pub fn stop_all_timers(&mut self) {
+  pub(crate) fn stop_all_timers(&mut self) {
     for (_, timer) in &mut self.timings {
       if timer.is_active() {
         timer.stop();
@@ -71,20 +79,20 @@ impl Report {
       .map(|(_, n)| n)
   }
 
-  pub fn add_error(&mut self, error: SherpaError) {
+  pub(crate) fn add_error(&mut self, error: SherpaError) {
     self.error_level |= error.get_severity();
     self.errors.push(error);
   }
 
-  pub fn add_note(&mut self, note_name: &'static str, note: String) {
+  pub(crate) fn add_note(&mut self, note_name: &'static str, note: String) {
     self.notes.push((note_name, note));
   }
 
-  pub fn start_timer(&mut self, timer_label: &'static str) {
+  pub(crate) fn start_timer(&mut self, timer_label: &'static str) {
     self.timings.insert(timer_label, Timing::new(timer_label));
   }
 
-  pub fn stop_timer(&mut self, timer_label: &'static str) {
+  pub(crate) fn stop_timer(&mut self, timer_label: &'static str) {
     let instant = Instant::now();
 
     match self.timings.entry(timer_label) {
@@ -95,7 +103,7 @@ impl Report {
     }
   }
 
-  pub fn report_duration(&mut self, timer_label: &'static str) {
+  pub(crate) fn report_duration(&mut self, timer_label: &'static str) {
     match self.timings.entry(timer_label) {
       std::collections::hash_map::Entry::Occupied(e) => {
         let timing = e.get();
@@ -105,7 +113,7 @@ impl Report {
     }
   }
 
-  pub fn debug_string(&self) -> String {
+  pub(crate) fn debug_string(&self) -> String {
     format!(
       "Notes:\n{}\nTimings:\n{}\nErrors:\n{}",
       self
@@ -124,6 +132,8 @@ impl Report {
     )
   }
 
+  /// Returns `true` if the type of this Report either completely or partially
+  /// matches the `discriminant`.
   pub fn type_matches(&self, discriminant: ReportType) -> bool {
     use ReportType::{
       ProductionCompile as PC,

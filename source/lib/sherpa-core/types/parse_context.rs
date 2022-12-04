@@ -164,13 +164,6 @@ impl<T: BaseCharacterReader + MutCharacterReader> ParseContext<T> {
 
 #[derive(Clone, Debug, Copy)]
 #[repr(C)]
-pub struct CodepointInfo {
-  pub val: u32,
-  pub len: u32,
-}
-
-#[derive(Clone, Debug, Copy)]
-#[repr(C)]
 pub struct Goto {
   pub goto_fn: *const usize,
   pub state:   u32,

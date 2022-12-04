@@ -1,13 +1,23 @@
-use super::{
-  errors::{ErrIncompatibleProductionVectorTypes, ErrUnionOfScalarsAndVectors},
-  types::AScriptStore,
+use super::types::{
+  AScriptPropId,
+  AScriptStore,
+  AScriptStruct,
+  AScriptStructId,
+  AScriptTypeVal,
+  ProductionTypesTable,
+  TaggedType,
 };
-use crate::ascript::{
-  errors::{ErrIncompatibleProductionScalerTypes, ErrPropRedefinition},
-  types::*,
-};
-use sherpa_core::{
-  ast::{
+use crate::{
+  ascript::{
+    errors::{
+      ErrIncompatibleProductionScalerTypes,
+      ErrIncompatibleProductionVectorTypes,
+      ErrPropRedefinition,
+      ErrUnionOfScalarsAndVectors,
+    },
+    types::AScriptProp,
+  },
+  grammar::data::ast::{
     ASTNode,
     ASTNodeTraits,
     AST_Add,
@@ -15,17 +25,16 @@ use sherpa_core::{
     AST_NamedReference,
     AST_Struct,
     AST_Vector,
-    Ascript as AST_AScript,
+    Ascript,
   },
-  ProductionId,
-  *,
+  types::*,
 };
 use std::{
-  collections::{btree_map, hash_map::Entry, BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
+  collections::{btree_map, hash_map::Entry, BTreeSet, HashMap, VecDeque},
   vec,
 };
 
-pub fn compile_ascript_store(ast: &mut AScriptStore) -> Vec<SherpaError> {
+pub(crate) fn compile_ascript_store(ast: &mut AScriptStore) -> Vec<SherpaError> {
   let mut e = vec![];
   let mut temp_production_types = ProductionTypesTable::new();
 
@@ -53,7 +62,7 @@ fn gather_ascript_info_from_grammar(
 
   let g = ast.g.clone();
 
-  let normal_parse_bodies: Vec<(RuleId, Option<&AST_AScript>)> = ast
+  let normal_parse_bodies: Vec<(RuleId, Option<&Ascript>)> = ast
     .g
     .rules
     .iter()
@@ -77,7 +86,7 @@ fn gather_ascript_info_from_grammar(
   // table, again adding these atomic struct types to the production
   // types.
 
-  let mut struct_bodies: Vec<(RuleId, &AST_AScript)> = vec![];
+  let mut struct_bodies: Vec<(RuleId, &Ascript)> = vec![];
   for (rule_id, ascript_option_fn) in normal_parse_bodies {
     if let Some(rule) = g.clone().rules.get(&rule_id) {
       if let Some(ascript_fn) = &ascript_option_fn {
@@ -105,7 +114,7 @@ fn gather_ascript_info_from_grammar(
           _ => {}
         }
       } else {
-        match Item::from(rule).to_last_sym().get_symbol(&g) {
+        match rule.last_symbol_id() {
           SymbolID::Production(id, ..) => add_production_type(prod_types, &rule, TaggedType {
             type_:        AScriptTypeVal::UnresolvedProduction(id),
             tag:          rule_id,
@@ -829,7 +838,7 @@ pub fn compile_struct_props(
   if ast.structs.get(&id).unwrap().type_name == "SetProd" {
     println!(
       "Configuring SetProd:\nbody:{}\ncurr_struct:\n{:#?}\nprops:[\n{}\n]\nast:{:#?}",
-      rule.item().debug_string(&ast.g),
+      rule.blame_string(&ast.g),
       ast.structs.get(&id),
       ast
         .structs

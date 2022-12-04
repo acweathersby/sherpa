@@ -10,7 +10,6 @@ path = "./lib.rs"
 
 
 [dependencies]
-sherpa_compile = { path = "../sherpa-compile" }
 sherpa_core = { path = "../sherpa-core" }
 syn = "1.0.103"
 

@@ -3,17 +3,20 @@ use std::{
   sync::Arc,
 };
 
-use crate::{bytecode::BytecodeOutput, types::*, Journal};
+use crate::{
+  compile::{BytecodeOutput, Journal},
+  types::*,
+};
 
-pub fn header(idx: usize) -> String {
+fn header(idx: usize) -> String {
   format!("{}| ", address_string(idx))
 }
 
-pub fn address_string(idx: usize) -> String {
+fn address_string(idx: usize) -> String {
   format!("{:0>6X}", idx)
 }
 
-pub struct BytecodeGrammarLookups {
+pub(crate) struct BytecodeGrammarLookups {
   g: Arc<GrammarStore>,
   bc_to_prod: BTreeMap<u32, ProductionId>,
   bc_to_rule: BTreeMap<u32, RuleId>,
@@ -51,12 +54,13 @@ impl BytecodeGrammarLookups {
 }
 //
 
-pub fn disassemble_state(
+pub(crate) fn disassemble_state(
   bc: &[u32],
   idx: usize,
   lu: Option<&BytecodeGrammarLookups>,
 ) -> (String, usize) {
-  use super::{disassemble_state as ds, header as dh};
+  use disassemble_state as ds;
+  use header as dh;
 
   let so = idx;
 
@@ -203,7 +207,7 @@ pub fn disassemble_state(
 type GetOffsetTokenIdPair =
   fn(states: &[u32], table_entry_offset: usize, state_offset: usize) -> (usize, u32, bool, i64);
 
-pub fn generate_table_string(
+pub(crate) fn generate_table_string(
   bc: &[u32],
   idx: usize,
   lu: Option<&BytecodeGrammarLookups>,
@@ -369,11 +373,11 @@ pub fn generate_disassembly(output: &BytecodeOutput, j: Option<&mut Journal>) ->
   states_strings.join("\n")
 }
 
-pub fn print_bytecode_states(output: &BytecodeOutput, j: Option<&mut Journal>) {
+pub(crate) fn print_bytecode_states(output: &BytecodeOutput, j: Option<&mut Journal>) {
   eprintln!("{}", generate_disassembly(output, j));
 }
 
-pub fn print_bytecode_state(
+pub(crate) fn print_bytecode_state(
   idx: usize,
   output: &BytecodeOutput,
   lu: Option<&BytecodeGrammarLookups>,

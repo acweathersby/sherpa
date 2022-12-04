@@ -1,5 +1,5 @@
 use super::types::{AScriptProp, AScriptStructId, AScriptTypeVal, TaggedType};
-use sherpa_core::*;
+use crate::types::*;
 use std::{collections::BTreeMap, sync::Arc};
 
 /// This error occurs when multiple definitions of the same Struct
@@ -142,7 +142,7 @@ impl ExtendedError for ErrUnionOfScalarsAndVectors {
       format!(
         " -- [{}]\n    Body [{}]\n    reduces to [{}] type:\n\n{}",
         rule.tok.path_ref(&rule.grammar_ref.path),
-        rule.item().blame_string(g),
+        rule.tok.blame(1, 1, "", BlameColor::Red),
         type_.blame_string(g, type_names),
         rule.tok.blame(0, 0, "defined here", BlameColor::Blue)
       )
@@ -234,7 +234,7 @@ impl ExtendedError for ErrIncompatibleProductionScalerTypes {
       format!(
         "[{}]\n{}\n{}",
         rule.tok.path_ref(&rule.grammar_ref.path),
-        rule.item().blame_string(g),
+        rule.blame_string(g),
         rule.tok.blame(0, 0, "", BlameColor::Red)
       )
     };
@@ -318,7 +318,7 @@ impl ExtendedError for ErrIncompatibleProductionVectorTypes {
       format!(
         "[{}]\n rule {}\n produces vector type [{}] \n{}",
         rule.tok.path_ref(&rule.grammar_ref.path),
-        rule.item().blame_string(g),
+        rule.blame_string(g),
         type_.blame_string(g, type_names),
         rule.tok.blame(0, 0, "defined here", BlameColor::Red)
       )

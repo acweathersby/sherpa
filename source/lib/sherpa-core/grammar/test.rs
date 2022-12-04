@@ -1,4 +1,4 @@
-use super::{compile_grammar_from_string, parse::compile_grammar_ast};
+use super::compile_grammar_from_string;
 use crate::{
   debug::debug_items,
   get_num_of_available_threads,
@@ -59,7 +59,7 @@ fn test_merge_productions_file() {
 
   let thread_count = get_num_of_available_threads();
 
-  let (grammar, errors) = compile_grammar_from_path(&mut j, path, get_num_of_available_threads());
+  let (grammar, errors) = compile_grammar_from_path(&mut j, path, 1);
 
   if errors.is_some() {
     let errors = errors.unwrap_or_default();

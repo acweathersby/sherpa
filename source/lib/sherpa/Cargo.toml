@@ -9,8 +9,5 @@ path ="./lib.rs"
 [dependencies.sherpa_core]
 path = "../../lib/sherpa-core"
 
-[dependencies.sherpa_compile]
-path = "../../lib/sherpa-compile"
-
 [dependencies.sherpa_proc]
 path = "../../lib/sherpa-proc"

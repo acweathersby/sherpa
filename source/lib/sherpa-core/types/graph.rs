@@ -12,7 +12,7 @@ use std::{
 };
 
 #[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
-pub struct NodeId(u32);
+pub(crate) struct NodeId(u32);
 
 impl NodeId {
   const GOTO_VIRTUAL_CLASS: u32 = 4000000000u32;
@@ -75,11 +75,11 @@ impl<T: Sized> IndexMut<NodeId> for Vec<T> {
   }
 }
 
-pub type MaybeNodeId = Option<NodeId>;
+pub(crate) type MaybeNodeId = Option<NodeId>;
 
 /// TODO: Isolate and build goto states.
 #[derive(Hash, PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Copy)]
-pub enum NodeType {
+pub(crate) enum NodeType {
   Undefined,
   LRStart,
   RDStart,
@@ -117,7 +117,7 @@ impl std::fmt::Display for NodeType {
 
 /// TODO: Isolate and build goto states.
 #[derive(Hash, PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Copy)]
-pub enum EdgeType {
+pub(crate) enum EdgeType {
   Undefined,
   // The order of `Goto` is important.
   Goto,
@@ -142,7 +142,7 @@ impl std::fmt::Display for EdgeType {
 }
 
 #[bitmask]
-pub enum NodeAttributes {
+pub(crate) enum NodeAttributes {
   EMPTY,
 
   /// Nodes marked as `I_PEEK_ORIGIN` are the root nodes of a
@@ -334,7 +334,7 @@ impl GraphNode {
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
-pub enum TransitionMode {
+pub(crate) enum TransitionMode {
   RecursiveDescent,
   RecursiveAscent,
   LR,

@@ -8,10 +8,10 @@ use std::{
   sync::Arc,
 };
 
-pub mod severity {
+pub(crate) mod severity {
 
   use bitmask_enum::bitmask;
-  /// Severity types of an SherpaErrors
+  /// Severity types of SherpaErrors
   #[bitmask_enum::bitmask]
   pub enum SherpaErrorSeverity {
     Hint     = 0b100,
@@ -27,19 +27,6 @@ pub use severity::SherpaErrorSeverity;
 /// error types.
 #[derive(Clone, Debug)]
 pub enum SherpaError {
-  //---------------------------------------------------------------------------
-  // ----------------- Transition Errors --------------------------------------
-  //---------------------------------------------------------------------------
-  /// Error occurs when a scanner parse path cannot be made
-  /// unambiguous due two Generic symbol types.
-  transition_err_invalid_generics {
-    /// The root Symbols that whose combination lead to this error
-    root_symbols: Vec<SymbolID>,
-    /// The item chain, from the root item to
-    /// the leaf, for each branch
-    chains:       Vec<Vec<Item>>,
-  },
-
   //---------------------------------------------------------------------------
   // ----------------- Grammar Load Errors ------------------------------------
   //---------------------------------------------------------------------------
@@ -211,7 +198,6 @@ impl Display for SherpaError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
       UNDEFINED => f.write_str("\nAn unknown error has occurred "),
-      transition_err_invalid_generics { .. } => f.write_str("\nTransition_InvalidGenerics Error"),
       load_err_invalid_grammar_path { .. } => f.write_str("\nLoad_InvalidGrammarPath Error"),
       load_err_invalid_dependency { path, requestor, tok, err } => f.write_fmt(format_args!(
         "\n[{}:{}]\nThe import grammar path [{}] does not exist: \n{}",

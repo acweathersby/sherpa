@@ -1,4 +1,3 @@
-pub use sherpa_compile::*;
 pub use sherpa_core::*;
 
 /// Compiles a parse module from a grammar string

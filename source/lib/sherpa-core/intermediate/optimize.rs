@@ -6,8 +6,8 @@
 //! into the respective states that reference them.
 use crate::{
   grammar::data::ast::{ASTNode, Fail, Goto, Num, ASSERT, AST_NUMBER, DEFAULT, HASH_NAME},
+  journal::{Journal, ReportType},
   types::{ExportedProduction, GrammarStore, IRState},
-  Journal,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -43,7 +43,7 @@ pub fn optimize_ir_states(
   let grammar = j.grammar().unwrap();
   let g = &grammar;
 
-  j.set_active_report("Optimize States", crate::ReportType::Optimize);
+  j.set_active_report("Optimize States", ReportType::Optimize);
   j.report_mut().start_timer("Duration");
 
   let starting_states = states.len();

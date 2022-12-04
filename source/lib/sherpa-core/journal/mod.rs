@@ -2,7 +2,7 @@
 //!  and reporting events that occur during grammar compilation.
 pub mod config;
 pub mod report;
-use self::{
+pub use self::{
   config::Config,
   report::{Report, ReportType},
 };
@@ -18,7 +18,7 @@ use std::{
 };
 
 #[derive(Default, Debug)]
-pub struct ScratchPad {
+struct ScratchPad {
   pub occluding_symbols: HashMap<SymbolID, SymbolSet>,
   pub occlusion_tracking: bool,
   pub reports: HashMap<ReportType, Box<Report>>,
@@ -76,10 +76,6 @@ impl Journal {
     }
   }
 
-  pub fn set_config(&mut self, partial_config: Config) {
-    self.config = Config { ..partial_config }
-  }
-
   /// Get an immutable reference to the configuration settings.
   pub fn config(&self) -> &Config {
     &self.config
@@ -97,13 +93,17 @@ impl Journal {
     false
   }
 
-  pub fn add_error(&mut self, error: SherpaError) {
+  pub(crate) fn add_error(&mut self, error: SherpaError) {
     self.errors.push(error);
   }
 
   /// Sets the active report to `report_type`, optionally creating a new report of that type
   /// if one does not already exists. Returns the previously set ReportType.
-  pub fn set_active_report(&mut self, report_name: &str, report_type: ReportType) -> ReportType {
+  pub(crate) fn set_active_report(
+    &mut self,
+    report_name: &str,
+    report_type: ReportType,
+  ) -> ReportType {
     fn set_report(p: &mut ScratchPad, n: &str, t: ReportType) -> Option<Box<Report>> {
       match p.reports.contains_key(&t) {
         true => p.reports.remove(&t),
@@ -161,7 +161,7 @@ impl Journal {
   }
 
   /// Get a mutable reference to the active report.
-  pub fn report_mut(&mut self) -> &mut Report {
+  pub(crate) fn report_mut(&mut self) -> &mut Report {
     self.active_report.as_mut().map(|r| r.as_mut()).unwrap_or(&mut self.report_sink)
   }
 
@@ -172,7 +172,7 @@ impl Journal {
 
   pub fn debug_report(&self, discriminant: ReportType) {
     self.get_reports(discriminant, |report| {
-      println!(
+      eprintln!(
         "\n{:=<80}\nReport [{}] at {:?}:\n{}\n{:=<80}",
         "",
         report.name,
@@ -333,7 +333,7 @@ impl Drop for Journal {
 }
 
 #[derive(Clone, Copy)]
-pub struct Timing {
+pub(super) struct Timing {
   label:  &'static str,
   start:  Instant,
   end:    Instant,

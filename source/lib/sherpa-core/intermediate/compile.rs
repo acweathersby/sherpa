@@ -57,7 +57,7 @@ pub(crate) fn compile_production_states_LR(
   SherpaResult::Ok(rd_states)
 }
 
-pub fn handle_error<T>(
+fn handle_error<T>(
   error_title: &'static str,
   result: SherpaResult<T>,
   j: &mut Journal,

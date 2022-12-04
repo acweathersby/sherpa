@@ -7,7 +7,7 @@ use crate::{
     data::ast::{ASTNode, ASTNodeTraits},
     hash_id_value_u64,
   },
-  types::{SymbolID, Token},
+  types::*,
 };
 
 use super::{GrammarRef, Item};
@@ -217,8 +217,18 @@ impl Ord for Rule {
 }
 
 impl Rule {
-  pub fn item(&self) -> Item {
+  pub(crate) fn item(&self) -> Item {
     Item::from(self)
+  }
+
+  /// Creates a String diagram of the Rule.
+  pub fn blame_string(&self, g: &GrammarStore) -> String {
+    self.item().blame_string(g)
+  }
+
+  /// Returns the last [SymbolID] of the rule.
+  pub fn last_symbol_id(&self) -> SymbolID {
+    self.syms.last().map(|i| i.sym_id).unwrap()
   }
 }
 

@@ -1,20 +1,31 @@
-use std::collections::BTreeMap;
-
+use self::compile::build_byte_code_buffer;
 use crate::{
   debug::{self, BytecodeGrammarLookups},
-  grammar::data::ast::IR_STATE,
-};
-
-use crate::{
+  grammar::{data::ast::IR_STATE, parse::compile_ir_ast},
   journal::{report::ReportType, Journal},
-  types::{GrammarStore, IRState, IRStateType, Symbol},
+  types::{GrammarStore, IRState, IRStateType, Symbol, SymbolID},
 };
+use std::collections::BTreeMap;
 
-use self::compile::build_byte_code_buffer;
 pub mod compile;
-
 #[cfg(test)]
 mod test;
+
+// mod test;
+#[derive(Debug)]
+/// An opaque store of Sherpa parser bytecode and related metadata.
+pub struct BytecodeOutput {
+  /// The bytecode.
+  pub bytecode: Vec<u32>,
+  /// Maps plain state names to the offset within the bytecode
+  /// vector.
+  pub state_name_to_offset: BTreeMap<String, u32>,
+  pub offset_to_state_name: BTreeMap<u32, String>,
+  pub bytecode_id_to_symbol_lookup: BTreeMap<u32, Symbol>,
+  pub state_data: BTreeMap<String, StateData>,
+  /// The intermediate representation states that the bytecode is based on.
+  pub(crate) states: Vec<IR_STATE>,
+}
 
 /// Store metadata for each state present in the bytecode.
 #[derive(Debug)]
@@ -26,7 +37,7 @@ pub struct StateData {
 }
 
 impl StateData {
-  pub fn from_ir_state(state: &IRState) -> Self {
+  pub(crate) fn from_ir_state(state: &IRState) -> Self {
     Self {
       state_type:  state.state_type,
       stack_depth: state.stack_depth,
@@ -50,21 +61,6 @@ impl StateData {
   pub fn get_name(&self) -> String {
     self.name.clone()
   }
-}
-
-#[derive(Debug)]
-pub struct BytecodeOutput {
-  /// The bytecode.
-  pub bytecode: Vec<u32>,
-  /// The intermediate representation states that the bytecode
-  /// is based on.
-  pub states: Vec<IR_STATE>,
-  /// Maps plain state names to the offset within the bytecode
-  /// vector.
-  pub state_name_to_offset: BTreeMap<String, u32>,
-  pub offset_to_state_name: BTreeMap<u32, String>,
-  pub bytecode_id_to_symbol_lookup: BTreeMap<u32, Symbol>,
-  pub state_data: BTreeMap<String, StateData>,
 }
 
 pub fn compile_bytecode<'a>(

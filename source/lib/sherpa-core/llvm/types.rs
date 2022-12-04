@@ -6,7 +6,8 @@ use inkwell::{
   types::{FunctionType, StructType},
   values::FunctionValue,
 };
-use sherpa_core::compile::BytecodeOutput;
+
+use crate::compile::BytecodeOutput;
 
 pub(crate) struct FunctionPack<'a> {
   pub(crate) fun:        &'a FunctionValue<'a>,

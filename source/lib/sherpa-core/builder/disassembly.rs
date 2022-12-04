@@ -1,6 +1,10 @@
 use super::pipeline::PipelineTask;
-use crate::builder::disclaimer::DISCLAIMER;
-use sherpa_core::{debug::generate_disassembly, writer::code_writer::CodeWriter, *};
+use crate::{
+  builder::disclaimer::DISCLAIMER,
+  debug::generate_disassembly,
+  types::*,
+  writer::code_writer::CodeWriter,
+};
 use std::io::BufWriter;
 
 /// Generate a disassembly file of the grammar bytecode

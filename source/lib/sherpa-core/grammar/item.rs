@@ -6,7 +6,7 @@ use std::collections::{BTreeSet, VecDeque};
 /// Retrieve the initial items of a production. Returns vector of
 /// items, one for each rule belonging to the production.
 #[inline]
-pub fn get_production_start_items(prod_id: &ProductionId, g: &GrammarStore) -> Vec<Item> {
+pub(crate) fn get_production_start_items(prod_id: &ProductionId, g: &GrammarStore) -> Vec<Item> {
   g.production_bodies
     .get(prod_id)
     .unwrap()
@@ -16,7 +16,7 @@ pub fn get_production_start_items(prod_id: &ProductionId, g: &GrammarStore) -> V
 }
 
 /// Create the closure of a set of items.
-pub fn create_closure(items: &[Item], g: &GrammarStore) -> Vec<Item> {
+pub(crate) fn create_closure(items: &[Item], g: &GrammarStore) -> Vec<Item> {
   let mut seen = BTreeSet::<Item>::new();
 
   let mut queue = VecDeque::<Item>::from_iter(items.iter().cloned());
@@ -36,7 +36,7 @@ pub fn create_closure(items: &[Item], g: &GrammarStore) -> Vec<Item> {
 
 /// Retrieve the closure of an item that is cached in the grammar store.
 #[inline]
-pub fn get_closure_cached<'a>(item: &Item, g: &'a GrammarStore) -> &'a Vec<Item> {
+pub(crate) fn get_closure_cached<'a>(item: &Item, g: &'a GrammarStore) -> &'a Vec<Item> {
   static empty_closure: Vec<Item> = vec![];
   if g.closures.get(&item.to_empty_state()).is_none() {
     &empty_closure
@@ -48,7 +48,7 @@ pub fn get_closure_cached<'a>(item: &Item, g: &'a GrammarStore) -> &'a Vec<Item>
 /// Retrieve the closure of an item that is cached in the grammar
 /// store and applies the state of the base item to all closure members.
 #[inline]
-pub fn get_closure_cached_with_state<'a>(item: &Item, g: &'a GrammarStore) -> Vec<Item> {
+pub(crate) fn get_closure_cached_with_state<'a>(item: &Item, g: &'a GrammarStore) -> Vec<Item> {
   if g.closures.get(&item.to_empty_state()).is_none() {
     vec![]
   } else {
@@ -64,7 +64,7 @@ pub fn get_closure_cached_with_state<'a>(item: &Item, g: &'a GrammarStore) -> Ve
 /// Memoized form of 'get_closure_cached', which adds the Item's
 /// closure to the grammar store if it is not already present.
 #[inline]
-pub fn get_closure_cached_mut<'a>(item: &Item, g: &'a mut GrammarStore) -> &'a Vec<Item> {
+pub(crate) fn get_closure_cached_mut<'a>(item: &Item, g: &'a mut GrammarStore) -> &'a Vec<Item> {
   let item = &item.to_empty_state();
 
   if !g.closures.contains_key(item) {

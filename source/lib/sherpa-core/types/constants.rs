@@ -242,7 +242,7 @@ impl INSTRUCTION {
   }
 
   pub fn to_type(&self) -> InstructionType {
-    match (self.0 & INSTRUCTION_HEADER_MASK) {
+    match self.0 & INSTRUCTION_HEADER_MASK {
       Self::I00_PASS => InstructionType::PASS,
       Self::I01_SHIFT => InstructionType::SHIFT,
       Self::I02_GOTO => InstructionType::GOTO,
@@ -264,7 +264,7 @@ impl INSTRUCTION {
   }
 
   pub fn to_str(&self) -> &str {
-    match (self.0 & INSTRUCTION_HEADER_MASK) {
+    match self.0 & INSTRUCTION_HEADER_MASK {
       Self::I00_PASS => "I00_PASS",
       Self::I01_SHIFT => "I01_SHIFT",
       Self::I02_GOTO => "I02_GOTO",

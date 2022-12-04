@@ -19,7 +19,7 @@ use std::{
 };
 
 /// Remove items that would cause infinite recursion
-pub fn get_valid_recursive_descent_start_items(
+pub(crate) fn get_valid_recursive_descent_start_items(
   starts: &[Item],
   g: &GrammarStore,
   invalid_productions: &BTreeSet<ProductionId>,
@@ -138,7 +138,7 @@ pub fn hash_group_btreemap<
 }
 
 /// Gathers symbols from a set of items into normal and skipped sets.
-pub fn get_symbols_from_items(
+pub(crate) fn get_symbols_from_items(
   item_set: BTreeSet<Item>,
   g: &GrammarStore,
   seen: Option<BTreeSet<ProductionId>>,
@@ -242,7 +242,7 @@ pub fn symbols_occlude(symA: &SymbolID, symB: &SymbolID, g: &GrammarStore) -> bo
   }
 }
 
-pub fn check_for_left_recursion(symbol_items: &Items, g: &GrammarStore) {
+pub(crate) fn check_for_left_recursion(symbol_items: &Items, g: &GrammarStore) {
   let mut productions = HashSet::new();
   let mut seen = HashSet::new();
   let mut pipeline =
@@ -287,7 +287,7 @@ pub fn check_for_left_recursion(symbol_items: &Items, g: &GrammarStore) {
 
 /// Returns a vector of items whose position is immediately after
 /// a non-terminal symbol that matches one of the root ids.
-pub fn get_follow_closure(g: &GrammarStore, root_ids: &BTreeSet<ProductionId>) -> Items {
+pub(crate) fn get_follow_closure(g: &GrammarStore, root_ids: &BTreeSet<ProductionId>) -> Items {
   let mut pending_prods = VecDeque::<ProductionId>::new();
   let mut seen_prods = BTreeSet::<ProductionId>::new();
 
@@ -325,7 +325,7 @@ pub fn get_follow_closure(g: &GrammarStore, root_ids: &BTreeSet<ProductionId>) -
 }
 
 /// Constructs Scanner items from a set of symbols.
-pub fn generate_scanner_symbol_items(symbols: SymbolSet, j: &mut Journal) -> Items {
+pub(crate) fn generate_scanner_symbol_items(symbols: SymbolSet, j: &mut Journal) -> Items {
   let g = j.grammar().unwrap();
 
   let items = symbols
@@ -346,6 +346,6 @@ pub fn generate_scanner_symbol_items(symbols: SymbolSet, j: &mut Journal) -> Ite
 }
 
 /// Constructs Scanner items from a set of symbols.
-pub fn generate_recursive_descent_items(j: &mut Journal, prod_id: ProductionId) -> Items {
+pub(crate) fn generate_recursive_descent_items(j: &mut Journal, prod_id: ProductionId) -> Items {
   get_production_start_items(&prod_id, &j.grammar().unwrap())
 }

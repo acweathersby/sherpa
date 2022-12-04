@@ -7,7 +7,7 @@ use std::{
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 
-pub enum PeekType {
+pub(crate) enum PeekType {
   None,
   PeekStart,
   PeekContinue,
@@ -36,17 +36,17 @@ impl Default for IRStateType {
 }
 
 pub struct IRState {
-  pub code: String,
-  pub name: String,
-  pub comment: String,
-  pub hash: u64,
-  pub graph_id: NodeId,
-  pub normal_symbols: Vec<SymbolID>,
-  pub skip_symbols: Vec<SymbolID>,
-  pub ast: Result<IR_STATE, SherpaError>,
-  pub state_type: IRStateType,
-  pub stack_depth: u32,
-  pub peek_type: PeekType,
+  pub(crate) code: String,
+  pub(crate) name: String,
+  pub(crate) comment: String,
+  pub(crate) hash: u64,
+  pub(crate) graph_id: NodeId,
+  pub(crate) normal_symbols: Vec<SymbolID>,
+  pub(crate) skip_symbols: Vec<SymbolID>,
+  pub(crate) ast: Result<IR_STATE, SherpaError>,
+  pub(crate) state_type: IRStateType,
+  pub(crate) stack_depth: u32,
+  pub(crate) peek_type: PeekType,
 }
 
 impl Default for IRState {
@@ -78,7 +78,7 @@ impl IRState {
     self
   }
 
-  pub fn get_type(&self) -> IRStateType {
+  pub(crate) fn get_type(&self) -> IRStateType {
     self.state_type
   }
 
@@ -143,7 +143,7 @@ impl IRState {
     self.get_scanner_symbol_set().map(|symbols| format!("scan_{:02X}", hash_id_value_u64(&symbols)))
   }
 
-  pub fn get_graph_id(&self) -> NodeId {
+  pub(crate) fn get_graph_id(&self) -> NodeId {
     self.graph_id
   }
 

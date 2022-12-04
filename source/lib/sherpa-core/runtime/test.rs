@@ -5,9 +5,9 @@ use crate::{
     compile::{build_byte_code_buffer, compile_ir_state_to_bytecode},
     compile_ir_states_into_bytecode,
   },
+  compile::Journal,
   debug::{disassemble_state, generate_disassembly},
   grammar::parse::compile_ir_ast,
-  journal::Journal,
   runtime::parse_functions::{dispatch, hash_jump, vector_jump},
   types::*,
 };

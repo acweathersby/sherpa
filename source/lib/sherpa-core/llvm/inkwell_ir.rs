@@ -1,20 +1,27 @@
-use super::{inkwell_branch_ir::construct_instruction_branch, types::*};
+use super::{
+  parse_ctx_indices::*,
+  token_indices::{TokLength, TokOffset, TokType},
+  FunctionPack,
+  FAIL_STATE_FLAG_LLVM,
+};
+use crate::{
+  compile::BytecodeOutput,
+  llvm::{
+    inkwell_branch_ir::construct_instruction_branch,
+    LLVMParserModule,
+    LLVMTypes,
+    PublicFunctions,
+    NORMAL_STATE_FLAG_LLVM,
+  },
+  types::*,
+};
 use inkwell::{
   builder::Builder,
   context::Context,
   module::Linkage,
   values::{CallableValue, FunctionValue, IntValue, PointerValue},
 };
-use parse_ctx_indices::*;
-use sherpa_core::{
-  compile::BytecodeOutput,
-  GrammarStore,
-  IRStateType,
-  FAIL_STATE_FLAG,
-  INSTRUCTION,
-};
 use std::collections::{BTreeSet, VecDeque};
-use token_indices::*;
 
 pub(crate) fn construct_context<'a>(module_name: &str, ctx: &'a Context) -> LLVMParserModule<'a> {
   use inkwell::AddressSpace::*;
@@ -1211,7 +1218,7 @@ pub(crate) fn construct_parse_functions(
   Ok(())
 }
 
-pub(crate) fn construct_parse_function_statements(
+pub(super) fn construct_parse_function_statements(
   mut instruction: INSTRUCTION,
   g: &GrammarStore,
   ctx: &LLVMParserModule,
@@ -1227,7 +1234,7 @@ pub(crate) fn construct_parse_function_statements(
   }
 
   while instruction.is_valid() {
-    use sherpa_core::InstructionType::*;
+    use InstructionType::*;
     match instruction.to_type() {
       SHIFT => {
         if *is_scanner {
@@ -1290,7 +1297,7 @@ fn write_emit_reentrance<'a>(
 ) {
   let bytecode = &pack.output.bytecode;
 
-  use sherpa_core::InstructionType::*;
+  use InstructionType::*;
 
   let next_instruction = match instruction.to_type() {
     PASS => INSTRUCTION::Pass(),
@@ -1455,7 +1462,7 @@ pub(crate) fn construct_instruction_goto<'a>(
     (instruction.next(bytecode), None)
   } else {
     match instruction.next(bytecode).to_type() {
-      sherpa_core::InstructionType::PASS => {
+      InstructionType::PASS => {
         // Call the function directly. This should end up as a tail call.
         let return_val = builder
           .build_call(

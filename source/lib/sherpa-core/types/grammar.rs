@@ -112,19 +112,7 @@ pub type ReduceFunctionTable = BTreeMap<ReduceFunctionId, ReduceFunctionType>;
 ///     );
 ///     ```
 /// - ## [compile_from_string](crate::grammar::compile_from_string)
-///     
-///     # Examples
-///     ```
-///     use sherpa::grammar::compile_from_source;
-///
-///     let source = "<> start > \\hello \\world";
-///     let faux_source_path = PathBuf::new();
-///
-///     let (grammar_store_option, errors) = compile_from_source(
-///         source,
-///         faux_source_path
-///     );
-///     ```
+
 #[derive(Debug, Clone, Default)]
 pub struct GrammarStore {
   pub id: Arc<GrammarRef>,
@@ -160,9 +148,9 @@ pub struct GrammarStore {
   pub imports: ImportedGrammarReferences,
 
   /// Closure of all items that can be produced by this grammar.
-  pub closures: HashMap<Item, Vec<Item>>,
+  pub(crate) closures: HashMap<Item, Vec<Item>>,
 
-  pub item_ignore_symbols: HashMap<Item, Vec<SymbolID>>,
+  pub(crate) item_ignore_symbols: HashMap<Item, Vec<SymbolID>>,
 
   pub production_ignore_symbols: HashMap<ProductionId, Vec<SymbolID>>,
 
@@ -181,7 +169,7 @@ pub struct GrammarStore {
   pub exports: Vec<(ProductionId, String)>,
 
   /// All items in the grammar that are `B => . A b` for some production `A`.
-  pub lr_items: BTreeMap<ProductionId, Vec<Item>>,
+  pub(crate) lr_items: BTreeMap<ProductionId, Vec<Item>>,
 
   /// All reduce functions defined in the grammar.
   pub reduce_functions: ReduceFunctionTable,
@@ -226,6 +214,24 @@ impl GrammarStore {
     }
   }
 
+  /// Compile a GrammarStore from a grammar source `str`.
+  ///
+  /// # Example
+  /// ```rust
+  /// use sherpa_core::compile::{GrammarStore, Journal, ReportType};
+  ///  
+  /// let mut j = Journal::new(None); // Use journal with default config;
+  ///
+  /// let g = GrammarStore::from_str(&mut j,
+  /// r###"
+  /// <> A > \hello \world
+  /// "###
+  /// );
+  ///
+  /// // Print the compilation report.
+  /// j.flush_reports();
+  /// j.debug_report(ReportType::GrammarCompile(Default::default()));
+  /// ```
   pub fn from_str(j: &mut Journal, string: &str) -> SherpaResult<Arc<GrammarStore>> {
     match compile_grammar_from_string(j, string, &PathBuf::from("/internal/")) {
       (Some(grammar), _) => {
@@ -342,8 +348,8 @@ impl GrammarStore {
         let other_prod_id = item.get_production_id_at_sym(self);
 
         if prod_id == other_prod_id {
-          if (offset == 0) {
-            if (item.get_prod_id(self) == prod_id) {
+          if offset == 0 {
+            if item.get_prod_id(self) == prod_id {
               recurse_type |= RecursionType::LEFT_DIRECT;
             } else {
               recurse_type |= RecursionType::LEFT_INDIRECT;

@@ -9,8 +9,8 @@ use super::{
   },
   types::*,
 };
-use sherpa_core::{
-  ast::{
+use crate::{
+  grammar::data::ast::{
     ASTNode,
     AST_IndexReference,
     AST_NamedReference,
@@ -31,8 +31,8 @@ use sherpa_core::{
     AST_U64,
     AST_U8,
   },
+  types::*,
   writer::code_writer::*,
-  *,
 };
 use std::{
   collections::{BTreeMap, BTreeSet, VecDeque},
@@ -165,7 +165,7 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
       unreachable!(
         "\n\nProduction result not been resolved\n[{}] == {}\n\n\n{}\n\n",
         ast.g.get_production_plain_name(&prod_id),
-        rule.item().blame_string(&ast.g),
+        rule.tok.blame(1, 1, "", BlameColor::Red),
         prod_data
           .iter()
           .map(|(p, _)| { p.debug_string(Some(&ast.g)) })
@@ -181,7 +181,7 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
     temp_writer
       .wrtln(&format!(
         "/*\n{}\n*/\nfn {}({}){{",
-        rule.item().blame_string(&ast.g).replace("*/", "* /"),
+        rule.tok.blame(1, 1, "", BlameColor::Red).replace("*/", "* /"),
         fn_name,
         fn_args
       ))?

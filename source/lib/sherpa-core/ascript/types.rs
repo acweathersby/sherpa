@@ -1,4 +1,8 @@
-use sherpa_core::{ast::ASTNode, guid::hash_id_value_u64, *};
+use super::compile::compile_ascript_store;
+use crate::{
+  grammar::{data::ast::ASTNode, hash_id_value_u64},
+  types::*,
+};
 use std::{
   collections::{BTreeMap, BTreeSet, HashMap},
   fmt::Debug,
@@ -6,8 +10,6 @@ use std::{
   mem::discriminant,
   sync::Arc,
 };
-
-use super::compile::compile_ascript_store;
 
 #[derive(Hash, Debug, PartialEq, Eq, Clone, PartialOrd, Ord, Copy)]
 pub struct AScriptStructId(u64);
