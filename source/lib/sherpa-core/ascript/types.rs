@@ -187,6 +187,28 @@ impl AScriptTypeVal {
     }
   }
 
+  /// This type is a non-aggregate scalar or vector type.
+  /// For vectors, this means its elements are not an enum type.
+  pub fn is_atom(&self) -> bool {
+    use AScriptTypeVal::*;
+    match self {
+      Token | Struct(..) | String(..) | Bool(..) | F64(..) | F32(..) | I64(..) | I32(..)
+      | I16(..) | I8(..) | U64(..) | U32(..) | U16(..) | U8(..) | F64Vec | F32Vec | I64Vec
+      | I32Vec | I16Vec | I8Vec | U64Vec | U32Vec | U16Vec | U8Vec | TokenVec | StringVec => true,
+      GenericStructVec(nodes) => {
+        if nodes.len() == 1 {
+          match nodes.first() {
+            Some(TaggedType { type_: Struct(_), .. }) => true,
+            _ => false,
+          }
+        } else {
+          false
+        }
+      }
+      Undefined | GenericVec(..) | GenericStruct(..) | Any | UnresolvedProduction(..) => false,
+    }
+  }
+
   pub fn blame_string(
     &self,
     g: &GrammarStore,
@@ -433,6 +455,7 @@ pub struct AScriptStore {
   pub body_reduce_fn: BTreeMap<RuleId, (AScriptTypeVal, ASTNode)>,
   pub name: String,
   pub g: Arc<GrammarStore>,
+  // Maps a struct id to a struct type name
   pub struct_lookups: Option<Arc<BTreeMap<AScriptStructId, String>>>,
 }
 

@@ -19,7 +19,7 @@
 use lazy_static::lazy_static;
 
 mod ascript;
-mod builder;
+mod build;
 mod bytecode;
 pub mod debug;
 mod deprecated_runtime;
@@ -89,16 +89,14 @@ pub mod rt {
 /// Create a build pipeline
 pub mod pipeline {
 
-  pub use crate::builder::pipeline::{compile_bytecode_parser, BuildPipeline, SourceType};
+  pub use crate::build::pipeline::{compile_bytecode_parser, BuildPipeline, SourceType};
 
   pub mod tasks {
-    pub use crate::{
-      ascript::build_ast,
-      builder::{
-        bytecode::build_bytecode_parser,
-        disassembly::build_bytecode_disassembly,
-        llvm::{build_llvm_parser, build_llvm_parser_interface},
-      },
+    pub use crate::build::{
+      ascript::build_ascript_types_and_functions,
+      bytecode::build_bytecode_parser,
+      disassembly::build_bytecode_disassembly,
+      llvm::{build_llvm_parser, build_llvm_parser_interface},
     };
   }
 }

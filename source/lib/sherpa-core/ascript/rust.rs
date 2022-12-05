@@ -177,12 +177,7 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
     let fn_name = format!("ast_fn{:0>3}", rule.bytecode_id);
 
     temp_writer
-      .wrtln(&format!(
-        "/*\n{}\n*/\nfn {}({}){{",
-        rule.tok.blame(1, 1, "", BlameColor::Red).replace("*/", "* /"),
-        fn_name,
-        fn_args
-      ))?
+      .wrtln(&format!("/*\n{}\n*/\nfn {}({}){{", rule.item().rule_string(&g), fn_name, fn_args))?
       .indent();
 
     if rule.reduce_fn_ids.is_empty() {

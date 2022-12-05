@@ -11,3 +11,5 @@ pub mod common;
 pub mod pipeline;
 
 pub mod disassembly;
+
+pub mod ascript;

@@ -226,6 +226,28 @@ impl Item {
     }
   }
 
+  /// Creates a view of the rule
+  pub fn rule_string(&self, g: &GrammarStore) -> String {
+    if self.is_null() {
+      format!("{} null", self.state)
+    } else {
+      let rule = g.rules.get(&self.rule).unwrap();
+
+      let mut string = String::new();
+
+      string += &g.productions.get(&rule.prod_id).unwrap().name;
+
+      string += " =>";
+
+      for (index, RuleSymbol { sym_id, .. }) in rule.syms.iter().enumerate() {
+        string += " ";
+
+        string += &sym_id.to_string(g)
+      }
+      string
+    }
+  }
+
   /// Two items belong to the same lane if one of the following
   /// conditions is met:
   /// 1. Both Items have states that are in the same lane.

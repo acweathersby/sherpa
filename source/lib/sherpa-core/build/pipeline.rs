@@ -1,5 +1,5 @@
 use crate::{
-  ascript::{build_ast, types::AScriptStore},
+  ascript::types::AScriptStore,
   compile::{compile_bytecode, compile_states, optimize_ir_states, BytecodeOutput},
   journal::*,
   types::*,
@@ -14,7 +14,11 @@ use std::{
   vec,
 };
 
-use super::{bytecode::build_bytecode_parser, disassembly::build_bytecode_disassembly};
+use super::{
+  ascript::build_ascript_types_and_functions,
+  bytecode::build_bytecode_parser,
+  disassembly::build_bytecode_disassembly,
+};
 
 pub type TaskFn =
   Box<dyn Fn(&mut PipelineContext) -> Result<Option<String>, Vec<SherpaError>> + Sync + Send>;
@@ -358,10 +362,10 @@ pub fn compile_bytecode_parser(grammar_source_path: &PathBuf, config: Config) ->
     .set_source_output_dir(&out_dir)
     .set_build_output_dir(&out_dir)
     .set_source_file_name("%.rs")
-    .add_task(build_bytecode_parser(SourceType::Rust, config.enable_ascript));
+    .add_task(build_bytecode_parser(SourceType::Rust));
 
   match if config.enable_ascript {
-    pipeline.add_task(build_ast(SourceType::Rust))
+    pipeline.add_task(build_ascript_types_and_functions(SourceType::Rust))
   } else {
     pipeline
   }

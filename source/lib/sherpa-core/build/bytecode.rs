@@ -1,21 +1,13 @@
-use crate::{
-  ascript::types::AScriptStore,
-  compile::BytecodeOutput,
-  types::*,
-  writer::code_writer::CodeWriter,
-};
+use crate::{compile::BytecodeOutput, types::*, writer::code_writer::CodeWriter};
 use std::{collections::BTreeMap, io::Write};
 
 use super::{
-  common::{add_ascript_functions, write_rust_entry_functions_bytecode},
+  common::write_rust_entry_functions_bytecode,
   pipeline::{PipelineTask, SourceType},
 };
 
 /// Build artifacts for a Bytecode based parser
-pub fn build_bytecode_parser(
-  source_type: SourceType,
-  include_ascript_mixins: bool,
-) -> PipelineTask {
+pub fn build_bytecode_parser(source_type: SourceType) -> PipelineTask {
   PipelineTask {
     fun: Box::new(move |task_ctx| {
       let Some(bytecode) = task_ctx.get_bytecode() else {
@@ -25,16 +17,9 @@ pub fn build_bytecode_parser(
         SourceType::Rust => {
           let mut writer = CodeWriter::new(vec![]);
 
-          if let Err(err) = write_parser_file(
-            &mut writer,
-            &task_ctx.get_journal().grammar().unwrap(),
-            // Leave two threads available for building
-            // the
-            // ascript code if necessary
-            1,
-            if include_ascript_mixins { task_ctx.get_ascript() } else { None },
-            bytecode,
-          ) {
+          if let Err(err) =
+            write_parser_file(&mut writer, &task_ctx.get_journal().grammar().unwrap(), bytecode)
+          {
             Err(vec![SherpaError::from(err)])
           } else {
             Ok(Some(unsafe { String::from_utf8_unchecked(writer.into_output()) }))
@@ -46,7 +31,7 @@ pub fn build_bytecode_parser(
         ))]),
       }
     }),
-    require_ascript: include_ascript_mixins,
+    require_ascript: false,
     require_bytecode: true,
   }
 }
@@ -54,13 +39,11 @@ pub fn build_bytecode_parser(
 fn write_parser_file<W: Write>(
   writer: &mut CodeWriter<W>,
   g: &GrammarStore,
-  thread_count: usize,
-  ascript: Option<&AScriptStore>,
   bytecode_output: &BytecodeOutput,
 ) -> std::io::Result<()> {
   let BytecodeOutput { bytecode, state_name_to_offset: state_lookups, .. } = bytecode_output;
 
-  if let Err(err) = write_rust_parser_file(writer, &state_lookups, g, &bytecode, ascript) {
+  if let Err(err) = write_rust_parser_file(writer, &state_lookups, g, &bytecode) {
     eprintln!("{}", err);
   }
 
@@ -72,7 +55,6 @@ fn write_rust_parser_file<W: Write>(
   state_lookups: &BTreeMap<String, u32>,
   g: &GrammarStore,
   bc: &Vec<u32>,
-  ast: Option<&AScriptStore>,
 ) -> std::io::Result<()> {
   writer
     .wrt(
@@ -119,9 +101,7 @@ impl<T: ByteCharacterReader + BaseCharacterReader + MutCharacterReader> Parser<T
   write_rust_entry_functions_bytecode(g, state_lookups, writer)?;
   writer.dedent().wrtln("}")?;
 
-  add_ascript_functions(ast, g, writer)?;
-
-  writer.wrtln(&format!("static bytecode: [u32; {}] = [", bc.len()))?.indent();
+  writer.wrtln(&format!("pub static bytecode: [u32; {}] = [", bc.len()))?.indent();
 
   for chunk in bc.chunks(9) {
     writer.insert_newline()?;
@@ -138,7 +118,7 @@ impl<T: ByteCharacterReader + BaseCharacterReader + MutCharacterReader> Parser<T
 #[cfg(test)]
 mod test {
   use crate::{
-    ascript::{compile::compile_ascript_store, rust, types::AScriptStore},
+    ascript::{rust, types::AScriptStore},
     journal::*,
     types::*,
     writer::code_writer::StringBuffer,

@@ -8,7 +8,7 @@ use super::{
   token_indices::{TokLength, TokOffset, TokType},
   FunctionPack,
 };
-use crate::{builder::table::BranchTableData, llvm::LLVMParserModule, types::*};
+use crate::{build::table::BranchTableData, llvm::LLVMParserModule, types::*};
 use inkwell::values::{IntValue, PointerValue};
 
 pub const _FAIL_STATE_FLAG_LLVM: u32 = 2;

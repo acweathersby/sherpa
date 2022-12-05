@@ -121,9 +121,8 @@ pub fn compile_mod(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     (ParserType::LLVM, Ok(out_dir)) => pipeline
       .set_build_output_dir(&out_dir)
       .add_task(tasks::build_llvm_parser(None, "clang-14", "llvm-ar-14", false, true, false))
-      .add_task(tasks::build_llvm_parser_interface(true)),
-
-    _ => pipeline.add_task(tasks::build_bytecode_parser(SourceType::Rust, true)),
+      .add_task(tasks::build_llvm_parser_interface()),
+    _ => pipeline.add_task(tasks::build_ascript_types_and_functions(SourceType::Rust)),
   };
 
   //   pipeline = if input.build_disassembly {
@@ -132,9 +131,11 @@ pub fn compile_mod(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
   // pipeline
   // };
 
-  match pipeline.add_task(tasks::build_ast(sherpa_core::pipeline::SourceType::Rust)).run(|errors| {
-    process_errors(errors, offsets);
-  }) {
+  match pipeline
+    .add_task(tasks::build_ascript_types_and_functions(sherpa_core::pipeline::SourceType::Rust))
+    .run(|errors| {
+      process_errors(errors, offsets);
+    }) {
     SherpaResult::Ok((_, artifacts, _)) => artifacts.join("\n").parse().unwrap(),
     _ => Default::default(),
   }

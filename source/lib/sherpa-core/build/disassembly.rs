@@ -1,6 +1,6 @@
 use super::pipeline::PipelineTask;
 use crate::{
-  builder::disclaimer::DISCLAIMER,
+  build::disclaimer::DISCLAIMER,
   debug::generate_disassembly,
   types::*,
   writer::code_writer::CodeWriter,
