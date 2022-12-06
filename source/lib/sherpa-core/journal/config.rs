@@ -23,7 +23,7 @@ impl Default for ParseAlgorithm {
   }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Config {
   /// Combine [ParseAlgorithm] flags to specify what parser algorithms
   /// are available to the compiler.
@@ -73,6 +73,23 @@ pub struct Config {
   ///
   /// Defaults to `true`
   pub enable_ascript: bool,
+
+  /// The language type of non-LLVM outputs
+  ///
+  /// Defaults to [SourceType::Rust]
+  pub source_type:     SourceType,
+  /// Path to the `llvm_ar` executable.
+  ///
+  /// Defaults to `llvm-ar-14`
+  pub llvm_ar_path:    String,
+  /// Path to the `clang` executable.
+  ///
+  /// Defaults to `clang-14`
+  pub llvm_clang_path: String,
+  /// Enable LLVM light link time optimizations
+  ///
+  /// Default to `true`
+  pub llvm_light_lto:  bool,
 }
 
 impl Default for Config {
@@ -86,11 +103,17 @@ impl Default for Config {
       opt_inline_redundant_assertions: false,
       opt_remove_gotos_to_pass_states: true,
       enable_ascript: true,
+      source_type: SourceType::Rust,
+      llvm_ar_path: "llvm-ar-14".to_string(),
+      llvm_clang_path: "clang-14".to_string(),
+      llvm_light_lto: true,
     }
   }
 }
 
 use std::collections::BTreeSet;
+
+use crate::build::pipeline::SourceType;
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Language {
   Rust,

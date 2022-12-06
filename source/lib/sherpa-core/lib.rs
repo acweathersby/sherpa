@@ -16,8 +16,6 @@
 #![allow(bad_style)]
 #![allow(non_snake_case)]
 
-use lazy_static::lazy_static;
-
 mod ascript;
 mod build;
 mod bytecode;
@@ -29,7 +27,6 @@ mod journal;
 mod llvm;
 mod runtime;
 mod types;
-mod utf8;
 mod util;
 mod writer;
 
@@ -37,6 +34,8 @@ mod writer;
 mod test;
 
 pub use journal::{Config, Journal, Report, ReportType};
+
+pub use types::{SherpaError, SherpaResult};
 
 pub mod compile {
   pub use crate::{
@@ -70,12 +69,9 @@ pub mod rt {
       ast::*,
       BaseCharacterReader,
       ByteCharacterReader,
-      HCObj,
-      HCObjTrait,
       MutCharacterReader,
       ParseAction,
       ParseContext,
-      ReduceFunction,
       SherpaError,
       SherpaResult,
       Token,

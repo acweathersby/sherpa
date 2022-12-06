@@ -27,10 +27,10 @@
  */
 
 
-use crate::lazy_static;
+
 use std::collections::HashMap;
 
-lazy_static! {
+lazy_static::lazy_static! {
 pub static ref TokenLookup:HashMap<i16, &'static str> = HashMap::from(
     [
         (0i16, ""),
@@ -1110,7 +1110,7 @@ pub const ReduceNames:[&'static str; 582] = ["hydrocarbon[0]",
 "__prod_comments__comment_primitive__[580]",
 "__prod_comments__comment_primitive__[581]"];
 
-lazy_static! {
+lazy_static::lazy_static! {
     pub static ref ExpectedTokenLookup: HashMap<i32, Vec<i16>> = HashMap::from(
         [(12349i32, vec![9009i16]),
 (12357i32, vec![9009i16]),

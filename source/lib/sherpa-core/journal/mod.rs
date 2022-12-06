@@ -65,7 +65,7 @@ impl Journal {
   pub fn transfer(&self) -> Self {
     Self {
       grammar: self.grammar.clone(),
-      config: self.config,
+      config: self.config.clone(),
       global_pad: self.global_pad.clone(),
       scratch_pad: Default::default(),
       occluding_symbols: self.occluding_symbols.clone(),

@@ -79,7 +79,7 @@ pub(super) fn construct_inline_LR(
     let end_items = closure.drain_filter(|i| i.completed()).collect::<BTreeSet<_>>();
     let terms_and_non_terms = closure; // Non-terms become this state's GOTO
 
-    for (symbol, group) in hash_group_btreemap(terms_and_non_terms, |i, v| v.get_symbol(&g)) {
+    for (symbol, group) in hash_group_btreemap(terms_and_non_terms, |_, v| v.get_symbol(&g)) {
       // Create a new transition node and add the incremented items to  it.
       let incremented_items = group.into_iter().map(|i| i.increment().unwrap()).collect::<Vec<_>>();
       let canonical_items =
@@ -91,9 +91,9 @@ pub(super) fn construct_inline_LR(
           t.get_node_mut(child_index).proxy_parents.push(parent_index);
         }
         std::collections::hash_map::Entry::Vacant(e) => {
-          // If we can call into a state then we shall
+          // TODO: If we can call into a state then we shall
           match symbol {
-            SymbolID::Production(prod_id, _) => {
+            SymbolID::Production(..) => {
               let mut child_node =
                 GraphNode::new(t, symbol, Some(parent_index), incremented_items, NodeType::Goto);
               child_node.edge_type = EdgeType::Goto;

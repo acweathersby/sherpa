@@ -113,14 +113,14 @@ pub fn compile_mod(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
   let root_dir = std::env::var("CARGO_MANIFEST_DIR").map(|d| PathBuf::from(&d)).unwrap();
 
-  let pipeline = BuildPipeline::proc_context(&grammar, &root_dir, Default::default());
+  let mut pipeline = BuildPipeline::proc_context(&grammar, &root_dir, Default::default());
 
-  let mut pipeline = pipeline.set_source_output_dir(&root_dir);
+  pipeline.set_source_output_dir(&root_dir);
 
-  pipeline = match (ParserType::BYTECODE, std::env::var("OUT_DIR").map(|d| PathBuf::from(&d))) {
+  match (ParserType::BYTECODE, std::env::var("OUT_DIR").map(|d| PathBuf::from(&d))) {
     (ParserType::LLVM, Ok(out_dir)) => pipeline
       .set_build_output_dir(&out_dir)
-      .add_task(tasks::build_llvm_parser(None, "clang-14", "llvm-ar-14", false, true, false))
+      .add_task(tasks::build_llvm_parser(None, true, false))
       .add_task(tasks::build_llvm_parser_interface()),
     _ => pipeline.add_task(tasks::build_ascript_types_and_functions(SourceType::Rust)),
   };

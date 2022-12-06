@@ -1,5 +1,5 @@
 use super::*;
-use crate::runtime::get_next_action;
+use crate::functions::get_next_action;
 
 pub trait IteratorParser<T: BaseCharacterReader + MutCharacterReader> {
   fn get_parts(&mut self) -> (&mut T, &mut ParseContext<T>, &[u32], &mut bool);

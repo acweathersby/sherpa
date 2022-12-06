@@ -86,19 +86,12 @@ impl<'a> BuildPipeline<'a> {
     self_
   }
 
-  /// Create a new build pipeline after constructing a grammar store from a source file. Returns
-  /// Error if the grammar could not be created, otherwise, a BuildPipeline is returned.
-  ///
-  /// If `number_of_threads` is `0`, the compiler will use a number of threads equal to the
-  /// the number of CPU cores reported by the system.
+  /// Create a new build pipeline based on a source grammar file.
   pub fn from_source(source_path: &PathBuf, config: Config) -> Self {
     Self::build_pipeline(config, CachedSource::Path(source_path.to_owned()))
   }
 
-  /// Create a new build pipeline after constructing
-  /// a grammar store from a source string. Returns Error
-  /// if the grammar could not be created, otherwise, a
-  /// BuildPipeline is returned.
+  /// Create a new build pipeline based on a source grammar string.
   pub fn from_string(grammar_source: &str, base_directory: &PathBuf, config: Config) -> Self {
     Self::build_pipeline(
       config,
@@ -106,14 +99,14 @@ impl<'a> BuildPipeline<'a> {
     )
   }
 
-  pub fn set_ascript_ast_name(mut self, name: &str) -> Self {
+  pub fn set_ascript_ast_name(&mut self, name: &str) -> &mut Self {
     self.ascript_name = Some(name.to_string());
 
     self
   }
 
   /// Set the path for generated source files.
-  pub fn set_source_output_dir(mut self, output_path: &PathBuf) -> Self {
+  pub fn set_source_output_dir(&mut self, output_path: &PathBuf) -> &mut Self {
     self.source_output_dir = output_path.clone();
 
     self
@@ -122,28 +115,28 @@ impl<'a> BuildPipeline<'a> {
   /// If set, a source file will be generated in the root of the build directory, containing
   /// the concatenated source output from the build steps.
   /// The % character serves as the place holder for the grammar name.
-  pub fn set_source_file_name(mut self, name: &str) -> Self {
+  pub fn set_source_file_name(&mut self, name: &str) -> &mut Self {
     self.source_name = Some(name.to_string());
     self
   }
 
   /// Set the path for the build directory.
-  pub fn set_build_output_dir(mut self, output_path: &PathBuf) -> Self {
+  pub fn set_build_output_dir(&mut self, output_path: &PathBuf) -> &mut Self {
     self.build_output_dir = output_path.clone();
     self
   }
 
-  pub fn add_task(mut self, task: PipelineTask) -> Self {
+  pub fn add_task(&mut self, task: PipelineTask) -> &mut Self {
     self.tasks.push((task, PipelineContext::new(&self)));
     self
   }
 
-  pub fn set_parser_name(mut self, parser_name: String) -> Self {
+  pub fn set_parser_name(&mut self, parser_name: String) -> &mut Self {
     self.parser_name = parser_name;
     self
   }
 
-  pub fn set_grammar_name(mut self, grammar_name: String) -> Self {
+  pub fn set_grammar_name(&mut self, grammar_name: String) -> &mut Self {
     self.grammar_name = grammar_name;
     self
   }
@@ -153,7 +146,7 @@ impl<'a> BuildPipeline<'a> {
   }
 
   pub fn run<Function: FnOnce(Vec<SherpaError>)>(
-    mut self,
+    &mut self,
     error_handler: Function,
   ) -> SherpaResult<(Self, Vec<String>, bool)> {
     let mut source_parts = vec![];
@@ -178,17 +171,14 @@ impl<'a> BuildPipeline<'a> {
         _ => unreachable!("Should not generate other invalid types"),
       }
     } else {
-      self.ascript
+      self.ascript.take()
     };
 
     // Build bytecode if needed.
     self.bytecode = if self.tasks.iter().any(|t| t.0.require_bytecode) {
       let ir_states = compile_states(&mut self.journal, self.threads)?;
-
       let ir_states = optimize_ir_states(&mut self.journal, ir_states);
-
       let bytecode_output = compile_bytecode(&mut self.journal, ir_states);
-
       Some(bytecode_output)
     } else {
       None
@@ -258,7 +248,7 @@ impl<'a> BuildPipeline<'a> {
     }
 
     SherpaResult::Ok((
-      Self::build_pipeline(*self.journal.config(), self.cached_source.to_owned()),
+      Self::build_pipeline(self.journal.config().clone(), self.cached_source.to_owned()),
       source_parts,
       !errors.have_critical(),
     ))
@@ -358,19 +348,20 @@ pub fn compile_bytecode_parser(grammar_source_path: &PathBuf, config: Config) ->
 
   create_dir_all(&out_dir).unwrap();
 
-  let pipeline = BuildPipeline::from_source(&grammar_source_path, config)
+  let mut pipeline = BuildPipeline::from_source(&grammar_source_path, config.clone());
+
+  pipeline
     .set_source_output_dir(&out_dir)
     .set_build_output_dir(&out_dir)
     .set_source_file_name("%.rs")
-    .add_task(build_bytecode_parser(SourceType::Rust));
+    .add_task(build_bytecode_parser(SourceType::Rust))
+    .add_task(build_bytecode_disassembly());
 
-  match if config.enable_ascript {
-    pipeline.add_task(build_ascript_types_and_functions(SourceType::Rust))
-  } else {
-    pipeline
+  if config.enable_ascript {
+    pipeline.add_task(build_ascript_types_and_functions(SourceType::Rust));
   }
-  .add_task(build_bytecode_disassembly())
-  .run(|errors| {
+
+  match pipeline.run(|errors| {
     for error in &errors {
       eprintln!("{}", error);
     }

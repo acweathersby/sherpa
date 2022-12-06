@@ -179,7 +179,7 @@ pub fn add_ascript_functions<W: Write>(
   // Create impl for all exported productions that can be mapped to a ascript single
   // AScripT type. For those that map to multiple outputs, create an impl on the main
   // AST enum for named parsers on those types.
-  for (_, ast_type, ast_type_string, export_name) in &export_node_data {
+  for (Ref, ast_type, ast_type_string, export_name) in &export_node_data {
     match ast_type {
       AScriptTypeVal::Struct(id) => {
         let AScriptStruct { type_name, .. } = ascript.structs.get(id).unwrap();
@@ -209,6 +209,30 @@ pub fn from_str(input: &str) -> SherpaResult<{1}> {{
       }
       _ => {
         // Building a parse function on the AST enum for this function.
+        writer.write("impl ASTNode {")?;
+        writer
+          .indent()
+          .wrt(&format!(
+            "
+/// Create a [{2}] from a `String` input.
+pub fn parse_string_as_{0}(input: String) -> SherpaResult<{1}> {{
+  let data = input.as_bytes();
+  let reader = UTF8StringReader::new(data);
+  ast_compile::{0}_from(reader)
+}}
+
+/// Create a [{2}] from a `&str` input.
+pub fn parse_str_as_{0}(input: &str) -> SherpaResult<{1}> {{
+  let data = input.as_bytes();
+  let reader = UTF8StringReader::new(data);
+  ast_compile::{0}_from(reader)
+}}",
+            export_name,
+            ast_type_string,
+            ast_type.debug_string(Some(g))
+          ))?
+          .dedent()
+          .write_line("}\n")?;
       }
     }
   }

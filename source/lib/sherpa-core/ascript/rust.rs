@@ -1,3 +1,5 @@
+use sherpa_runtime::types::ast::DEFAULT_AST_TYPE_NAMES;
+
 use super::{
   compile::{
     get_indexed_body_ref,
@@ -99,7 +101,7 @@ fn build_types_utils<W: Write>(w: &mut CodeWriter<W>, ast: &AScriptStore) -> Res
   w.wrtln(&format!("#[derive(Eq, PartialEq, Clone, Copy, Debug)]\npub enum {}Type {{", ast.name))?
     .indent()
     .write_line("Undefined,")?;
-  for name in gen_names {
+  for name in DEFAULT_AST_TYPE_NAMES {
     w.wrtln(name)?.wrt(",")?;
   }
   for AScriptStruct { type_name, .. } in ast.structs.values() {
@@ -120,7 +122,7 @@ fn build_types_utils<W: Write>(w: &mut CodeWriter<W>, ast: &AScriptStore) -> Res
   w.wrtln(&format!("impl Get{} for {} {{", ast.type_name(), ast.gen_name()))?.indent();
   w.wrtln(&format!("fn get_type(&self) -> {} {{", ast.type_name()))?.indent();
   w.wrtln("match self{")?.indent();
-  for name in gen_names {
+  for name in DEFAULT_AST_TYPE_NAMES {
     if name == "NODE" {
       w.write_line(&format!("{}::NODE(node) => node.get_type(),", ast.gen_name()))?;
     } else if name == "NONE" {

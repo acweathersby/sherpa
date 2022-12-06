@@ -1,16 +1,17 @@
 [workspace]
 
 members = [
+    "source/app/cli",
     "source/lib/sherpa",
     "source/lib/sherpa-proc",
     "source/lib/sherpa-core",
-    "source/lib/sherpa-compile",
-    "source/app/compile",
+    "source/lib/sherpa-rust-rt",
+    #"source/app/compile",
     #"test/e2e/basic_grammar",
-    "test/e2e/basic_grammar_llvm",
-    "test/e2e/basic_language_llvm",
+    #"test/e2e/basic_grammar_llvm",
+    #"test/e2e/basic_language_llvm",
     "test/e2e/bootstrap",
-    "test/e2e/proc_macro"
+    #"test/e2e/proc_macro"
 ]
 
 [profile.dev]

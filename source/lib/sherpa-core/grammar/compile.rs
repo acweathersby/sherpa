@@ -21,7 +21,7 @@ use crate::{
   types::*,
 };
 use core::panic;
-use lazy_static::lazy_static;
+
 use regex::Regex;
 use std::{
   collections::{btree_map, BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
@@ -1832,7 +1832,7 @@ fn some_bodies_have_reduce_functions(rules: &Vec<ASTNode>) -> bool {
   })
 }
 
-lazy_static! {
+lazy_static::lazy_static! {
   static ref identifier_re: Regex = Regex::new(r"[\w_-][\w\d_-]*$").unwrap();
   static ref number_re: Regex = Regex::new(r"\d+$").unwrap();
 }

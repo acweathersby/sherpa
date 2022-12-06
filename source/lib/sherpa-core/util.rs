@@ -5,3 +5,5 @@ use std::num::NonZeroUsize;
 pub(crate) fn get_num_of_available_threads() -> usize {
   std::thread::available_parallelism().unwrap_or(NonZeroUsize::new(1).unwrap()).get()
 }
+
+pub const SHERPA_VERSION: &str = env!("CARGO_PKG_VERSION");

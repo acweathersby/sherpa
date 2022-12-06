@@ -8,9 +8,7 @@ use std::{
   process::{ExitCode, Termination},
 };
 
-/// A Result type that uses the sherpaError enum.
-// pub type SherpaResult<T> = Result<T, SherpaError>;
-
+/// A result type that uses the [SherpaError] enum type for errors results.
 #[derive(Debug)]
 pub enum SherpaResult<T> {
   Ok(T),

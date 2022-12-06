@@ -463,7 +463,7 @@ fn token_scan<T: BaseCharacterReader + MutCharacterReader>(
       }
 
       return ParseToken {
-        token_type: SymbolID::EndOfInput.bytecode_id(None),
+        token_type: END_OF_INPUT_TOKEN_ID,
         ..Default::default()
       };
     }

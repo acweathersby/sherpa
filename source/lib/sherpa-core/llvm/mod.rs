@@ -1,8 +1,11 @@
 pub mod inkwell_branch_ir;
 pub mod inkwell_ir;
-//#[cfg(test)]
-// mod test;
 mod types;
 
 pub use inkwell_ir::*;
 pub use types::*;
+
+#[cfg(test)]
+mod test;
+#[cfg(test)]
+mod test_reader;

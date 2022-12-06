@@ -1,22 +1,20 @@
 use crate::{
-  compile::{compile_bytecode, compile_states, optimize_ir_states},
-  llvm::compile_from_bytecode,
+  compile::{compile_bytecode, compile_states, optimize_ir_states, GrammarStore},
+  llvm::{compile_from_bytecode, test_reader::TestUTF8StringReader},
+  Journal,
+  SherpaResult,
+};
+use inkwell::{context::Context, execution_engine::JitFunction};
+use sherpa_runtime::types::{
   sherpa_allocate_stack,
   sherpa_free_stack,
   Goto,
-  GrammarStore,
   InputBlock,
-  Journal,
   LLVMParseContext,
   ParseAction,
   ParseToken,
-  SherpaResult,
-  TestUTF8StringReader,
 };
-use inkwell::{context::Context, execution_engine::JitFunction};
 use std::{fs::File, io::Write};
-
-use crate::compile_bytecode_parser;
 
 use super::{inkwell_ir::*, types::*};
 
@@ -550,12 +548,12 @@ fn should_extend_stack() {
     setup_exec_engine(&mut parse_context);
     let mut reader = TestUTF8StringReader::new("test");
     let mut rt_ctx = LLVMParseContext::new();
+    let num_of_slots = 64;
 
-    parse_context
-      .exe_engine
-      .as_ref()
-      .unwrap()
-      .add_global_mapping(&parse_context.fun.allocate_stack, sherpa_allocate_stack as usize);
+    parse_context.exe_engine.as_ref().unwrap().add_global_mapping(
+      &parse_context.fun.allocate_stack,
+      sherpa_allocate_stack(num_of_slots) as usize,
+    );
 
     parse_context
       .exe_engine
@@ -685,7 +683,6 @@ fn test_compile_from_bytecode() -> SherpaResult<()> {
 fn test_compile_from_bytecode2() -> SherpaResult<()> {
   use crate::llvm::compile_from_bytecode;
   use inkwell::context::Context;
-  use sherpa_core::compile::compile_bytecode;
   let mut j = Journal::new(None);
   let g = GrammarStore::from_str(
     &mut j,

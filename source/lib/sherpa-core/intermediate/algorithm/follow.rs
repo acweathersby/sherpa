@@ -9,7 +9,7 @@ use std::{
 
 /// Retrieve items following the reduction of the `root_completed_item`. This is similar to an [Earley
 /// parser](https://en.wikipedia.org/wiki/Earley_parser)'s complete action, where completed productions are
-/// matched to items in previous states to find new items to process.
+/// matched to items in previous states, leading to new items to process.
 pub(super) fn get_follow_items(
   t: &mut TPack,
   root_completed_item: &Item,
@@ -22,7 +22,7 @@ pub(super) fn get_follow_items(
   let grammar = t.g.clone();
   let g = &grammar;
   let empty = vec![];
-  // #[cfg(follow_tracking)]
+  #[cfg(follow_tracking)]
   println!("\n\n---- Follow start on {} ----", root_completed_item.debug_string(g));
 
   static empty_vec: Vec<Item> = Vec::new();
@@ -35,7 +35,7 @@ pub(super) fn get_follow_items(
     (LinkedItem { item: *root_completed_item, closure_node: prev_state_ref }),
   )]);
   while let Some((state, linked)) = completed_items.pop_front() {
-    //#[cfg(follow_tracking)]
+    #[cfg(follow_tracking)]
     println!(
       "\nLooking for matches for  {} in {:?} with state {}",
       linked.item.debug_string(g),
@@ -103,7 +103,7 @@ pub(super) fn get_follow_items(
         (completed_item, empty_closure, Some(prev_node), current_node)
           if empty_closure.is_empty() =>
         {
-          // #[cfg(follow_tracking)]
+          #[cfg(follow_tracking)]
           println!("no closure for Node [{:?}] - Selecting previous node", current_node);
           completed_items.push_back((state, LinkedItem {
             item:         completed_item,
@@ -126,7 +126,7 @@ pub(super) fn get_follow_items(
               closure_node: None,
             });
           }
-          // #[cfg(follow_tracking)]
+          #[cfg(follow_tracking)]
           {
             println!("no closure for Node [{:?}] - Should be at root node.", root_node);
           }
@@ -137,7 +137,7 @@ pub(super) fn get_follow_items(
         }
         (completed_item, mut closure, prev_node, Some(current_node)) => {
           let proxy_state = completed_item.get_state();
-          //#[cfg(follow_tracking)]
+          #[cfg(follow_tracking)]
           {
             closure.print_items(g, &format!("Node [{:?}] closure:", current_node));
           }
@@ -249,7 +249,7 @@ pub(super) fn get_follow_items(
         }
         (_completed_item, _closure, _prev_node, _current_node) => {
           // Check to see if we have an accept item
-          //#[cfg(follow_tracking)]
+          #[cfg(follow_tracking)]
           {
             println!("Evaluating potential leaf node ------------------");
             println!("---- {}", _completed_item.to_state(state).debug_string(&t.g));
@@ -265,7 +265,7 @@ pub(super) fn get_follow_items(
       }
     }
   }
-  //#[cfg(follow_tracking)]
+  #[cfg(follow_tracking)]
   {
     Items::from_linked(fin_items.clone()).print_items(g, "Completed Final Items");
     Items::from_linked(intermediate.clone()).print_items(g, "Intermediate Items");

@@ -1,7 +1,14 @@
+use sherpa_runtime::types::END_OF_INPUT_TOKEN_ID;
+
 use super::{GrammarId, GrammarRef, GrammarStore, ProductionId, SherpaResult, Token};
-use crate::{
-  grammar::uuid::hash_id_value_u64,
-  utf8::lookup_table::{HORIZONTAL_TAB, IDENTIFIER, NEW_LINE, NUMBER, SPACE, SYMBOL},
+use crate::grammar::uuid::hash_id_value_u64;
+use sherpa_runtime::utf8::lookup_table::{
+  HORIZONTAL_TAB,
+  IDENTIFIER,
+  NEW_LINE,
+  NUMBER,
+  SPACE,
+  SYMBOL,
 };
 use std::{
   collections::{BTreeMap, BTreeSet},
@@ -303,7 +310,7 @@ impl SymbolID {
         None => 99999,
       },
       Self::Default | Self::Start => 99999,
-      Self::EndOfInput => 1,
+      Self::EndOfInput => END_OF_INPUT_TOKEN_ID,
       Self::GenericHorizontalTab => HORIZONTAL_TAB as u32,
       Self::GenericNewLine => NEW_LINE as u32,
       Self::GenericSpace => SPACE as u32,

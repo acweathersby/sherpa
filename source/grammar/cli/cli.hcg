@@ -1,0 +1,23 @@
+@IGNORE g:sp
+
+@EXPORT cli as cli
+
+<> cli > command parameters? 
+
+
+<> flags > 
+
+    \-- tk:flag_ident argument?
+
+        f:ast { { t_SingleFlagArg, arg:$3 } }
+
+    | \- tk:flag_ident argument?
+
+        f:ast { { t_DoupleFlagArg, arg:$3 } }
+
+    | argument
+
+<> argument >
+
+
+<> flag_ident > 

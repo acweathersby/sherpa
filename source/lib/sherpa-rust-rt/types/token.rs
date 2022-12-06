@@ -510,9 +510,9 @@ impl Token {
   ///
   /// ### Arguments:
   /// - `max_pre` - The maximum number of lines to render before the
-  ///   token line.
+  ///   token line(s).
   /// - `max_post` - The maximum number of lines to render after the
-  ///   token line.
+  ///   token line(s).
   ///
   /// ### Returns:
   /// - `Option<String>` - A `String` of the blame diagram or `None`

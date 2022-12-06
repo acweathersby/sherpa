@@ -1,0 +1,7 @@
+[package]
+name = "sherpa_runtime"
+version = "1.0.0-beta1"
+edition = "2021"
+
+[lib]
+path = "./lib.rs"

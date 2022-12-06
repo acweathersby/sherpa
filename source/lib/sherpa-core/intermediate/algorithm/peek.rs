@@ -73,7 +73,6 @@ pub(crate) fn peek(
 
     // Resolve completed items by getting their follow set.
     if completed_items.len() > 0 {
-      completed_items.print_items(g, "Completed ITems");
 
       insert_items_into_node(completed_items.clone(), t, par_id);
 

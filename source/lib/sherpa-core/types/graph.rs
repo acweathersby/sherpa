@@ -259,7 +259,6 @@ impl GraphNode {
   }
 
   /// Returns the closure of this node's items
-  #[deprecated]
   pub fn get_closure<'a>(&self, g: &'a GrammarStore) -> BTreeSet<Item> {
     self
       .transition_items

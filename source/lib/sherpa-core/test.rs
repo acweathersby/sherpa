@@ -65,17 +65,19 @@ fn test_pipeline() -> SherpaResult<()> {
 
 #[test]
 fn test_compile_pipeline() {
-  BuildPipeline::from_string(
+  let mut pipeline = BuildPipeline::from_string(
     "
     <> A >\\1 f:ast { { t_Banana, c_Mobius, value:u32($1), string:str($1), useful:true } } 
     | \\a \\b A f:ast { { t_Banana, value: u32($1), dd:u32($3), tok, useful:false } }
     ",
     &PathBuf::from("/tmp"),
     Default::default(),
-  )
-  .set_source_output_dir(&std::env::temp_dir())
-  .add_task(build_ascript_types_and_functions(SourceType::Rust))
-  .run(|e| {});
+  );
+
+  pipeline
+    .set_source_output_dir(&std::env::temp_dir())
+    .add_task(build_ascript_types_and_functions(SourceType::Rust))
+    .run(|e| {});
 }
 
 #[test]

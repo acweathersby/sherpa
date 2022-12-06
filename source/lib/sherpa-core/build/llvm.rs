@@ -204,20 +204,19 @@ impl<T: BaseCharacterReader + LLVMCharacterReader + ByteCharacterReader + MutCha
 /// `output_llvm_ir_file` - Output a purely decorational version of the LLVM code in intermediate representational form.
 pub fn build_llvm_parser(
   target_triple: Option<String>,
-  clang_command: &str,
-  ar_command: &str,
-  light_lto: bool,
   output_cargo_build_commands: bool,
   output_llvm_ir_file: bool,
 ) -> PipelineTask {
-  let clang_command = clang_command.to_string();
-  let ar_command = ar_command.to_string();
-
   PipelineTask {
     fun: Box::new(move |task_ctx| {
       let output_path = task_ctx.get_build_output_dir();
-      let grammar = task_ctx.get_journal().grammar().unwrap();
+      let j = task_ctx.get_journal();
+      let grammar = j.grammar().unwrap();
       let parser_name = grammar.id.name.clone();
+
+      let light_lto = j.config().llvm_light_lto;
+      let clang_command = j.config().llvm_clang_path.clone();
+      let ar_command = j.config().llvm_ar_path.clone();
 
       let Some(bytecode) = task_ctx.get_bytecode() else {
         return Err(vec![SherpaError::from("Cannot compile LLVM parse: Bytecode is not available")]);
@@ -303,13 +302,15 @@ pub fn build_llvm_parser(
 
             match target_machine.write_to_file(&ctx.module, FileType::Object, &object_path) {
               Ok(_) => {
-                if !(Command::new("llvm-ar-14")
+                if !(Command::new(ar_command)
                   .args(&["rc", archive_path.to_str().unwrap(), object_path.to_str().unwrap()])
                   .status()
                   .unwrap()
                   .success())
                 {
-                  Err(vec![SherpaError::from("Unable to compile llvm bitcode")])
+                  Err(vec![SherpaError::from(
+                    "Unable to compile llvm bitcode: Incorrect path to LLVM-AR executable",
+                  )])
                 } else {
                   Ok(None)
                 }
