@@ -1,7 +1,11 @@
 use self::compile::build_byte_code_buffer;
 use crate::{
+  compile::get_branches,
   debug::{self, BytecodeGrammarLookups},
-  grammar::{data::ast::IR_STATE, parse::compile_ir_ast},
+  grammar::{
+    data::ast::{ASTNode, Goto, IR_STATE},
+    parse::compile_ir_ast,
+  },
   journal::{report::ReportType, Journal},
   types::{GrammarStore, IRState, IRStateType, Symbol, SymbolID},
 };
@@ -31,16 +35,23 @@ pub struct BytecodeOutput {
 #[derive(Debug)]
 pub struct StateData {
   state_type:  IRStateType,
-  stack_depth: u32,
+  goto_depth:  u32,
   _is_scanner: bool,
   name:        String,
 }
 
 impl StateData {
   pub(crate) fn from_ir_state(state: &IRState) -> Self {
+    let mut max_gotos = 0;
+
+    for (_, instr) in get_branches(state) {
+      max_gotos =
+        max_gotos.max(instr.iter().fold(0, |a, i| a + (matches!(i, ASTNode::Goto(..)) as u32)));
+    }
+
     Self {
       state_type:  state.state_type,
-      stack_depth: state.stack_depth,
+      goto_depth:  max_gotos,
       _is_scanner: state.is_scanner(),
       name:        state.get_name(),
     }
@@ -50,8 +61,9 @@ impl StateData {
     self.state_type
   }
 
-  pub fn get_stack_depth(&self) -> u32 {
-    self.stack_depth
+  /// The maximum number of GOTO's this state will push
+  pub fn get_goto_depth(&self) -> u32 {
+    self.goto_depth
   }
 
   pub fn is_scanner(&self) -> bool {
@@ -121,8 +133,8 @@ pub(crate) fn compile_ir_states_into_bytecode<'a>(
       .map(|s| (s.bytecode_id, s.clone()))
       .collect::<BTreeMap<_, _>>(),
     state_data: ir_states
-      .iter()
-      .map(|(s, state)| (s.clone(), StateData::from_ir_state(state)))
+      .into_iter()
+      .map(|(s, state)| (s.clone(), StateData::from_ir_state(&state)))
       .collect(),
   }
 }

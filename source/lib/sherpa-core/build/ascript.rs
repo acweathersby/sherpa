@@ -89,7 +89,7 @@ pub fn add_ascript_functions<W: Write>(
     .collect::<Vec<_>>();
 
   writer.wrtln("pub mod ast_compile  {")?.indent();
-  writer.write("use super::*;");
+  writer.write("use super::*;")?;
 
   // Create a module that will store convience functions for compiling AST
   // structures based on on grammar entry points.
@@ -97,8 +97,8 @@ pub fn add_ascript_functions<W: Write>(
     writer
       .newline()?
       .wrtln(&format!(
-        "pub fn {0}_from<R>(reader: R)  -> SherpaResult<{1}> 
-            where R: ByteCharacterReader + BaseCharacterReader + MutCharacterReader{{ ",
+        "pub fn {0}_from<R>(reader: R)  -> Result<{1}, SherpaParseError> 
+            where R: ByteCharacterReader + LLVMCharacterReader + BaseCharacterReader + MutCharacterReader + std::fmt::Debug{{ ",
         export_name, ast_type_string
       ))?
       .indent()
@@ -110,7 +110,7 @@ pub fn add_ascript_functions<W: Write>(
         export_name
       ))?
       .wrtln(&format!(
-        "
+        r###"
   let mut nodes = Vec::new();
   let mut tokens = Vec::new();
   loop {{
@@ -118,9 +118,9 @@ pub fn add_ascript_functions<W: Write>(
       Some(ParseAction::Error {{ last_input, last_production }}) => {{
         let mut error_token = Token::from_parse_token(&last_input);
         error_token.set_source(source.clone());
-        return SherpaResult::Err(SherpaError::rt_err_invalid_parse{{
-            message: \"Unable to parse input\".to_string(),
-            inline_message: \"Invalid Token\".to_string(),
+        return Err(SherpaParseError::InvalidParse{{
+            message: "Unable to parse input".to_string(),
+            inline_message: "Invalid Token".to_string(),
             loc: error_token,
             last_production
           }}
@@ -133,6 +133,7 @@ pub fn add_ascript_functions<W: Write>(
         tokens.push(tok);
       }}
       Some(ParseAction::Reduce {{ rule_id, symbol_count, .. }}) => {{
+
         let len = symbol_count as usize;
         let pos_a = &tokens[tokens.len() - len as usize];
         let pos_b = &tokens[tokens.len() - 1];
@@ -155,7 +156,7 @@ pub fn add_ascript_functions<W: Write>(
       }}
     }}
   }}
-  ",
+  "###,
         ascript.gen_name()
       ))?
       .wrtln(&{
@@ -163,12 +164,12 @@ pub fn add_ascript_functions<W: Write>(
         if let Some(exp) = ref_ {
           format!(
             "let i0  = nodes.into_iter().next().unwrap(); {}
-            SherpaResult::Ok({})",
+            Ok({})",
             exp.to_init_string(),
             string
           )
         } else {
-          "SherpaResult::Ok(nodes.into_iter().next().unwrap())".to_string()
+          "Ok(nodes.into_iter().next().unwrap())".to_string()
         }
       })?
       .dedent()
@@ -190,14 +191,14 @@ pub fn add_ascript_functions<W: Write>(
           .wrt(&format!(
             "
 /// Create a [{2}] node from a `String` input.
-pub fn from_string(input: String) -> SherpaResult<{1}> {{
+pub fn from_string(input: String) -> Result<{1}, SherpaParseError> {{
   let data = input.as_bytes();
   let reader = UTF8StringReader::new(data);
   ast_compile::{0}_from(reader)
 }}
 
 /// Create a [{2}] node from a `&str` input.
-pub fn from_str(input: &str) -> SherpaResult<{1}> {{
+pub fn from_str(input: &str) -> Result<{1}, SherpaParseError> {{
   let data = input.as_bytes();
   let reader = UTF8StringReader::new(data);
   ast_compile::{0}_from(reader)
@@ -215,14 +216,14 @@ pub fn from_str(input: &str) -> SherpaResult<{1}> {{
           .wrt(&format!(
             "
 /// Create a [{2}] from a `String` input.
-pub fn parse_string_as_{0}(input: String) -> SherpaResult<{1}> {{
+pub fn parse_string_as_{0}(input: String) -> Result<{1}, SherpaParseError> {{
   let data = input.as_bytes();
   let reader = UTF8StringReader::new(data);
   ast_compile::{0}_from(reader)
 }}
 
 /// Create a [{2}] from a `&str` input.
-pub fn parse_str_as_{0}(input: &str) -> SherpaResult<{1}> {{
+pub fn parse_str_as_{0}(input: &str) -> Result<{1}, SherpaParseError> {{
   let data = input.as_bytes();
   let reader = UTF8StringReader::new(data);
   ast_compile::{0}_from(reader)
@@ -244,7 +245,7 @@ pub fn parse_str_as_{0}(input: &str) -> SherpaResult<{1}> {{
 
   for (_, _, ast_type_string, export_name) in &export_node_data {
     writer.newline()?.wrtln(&format!(
-      "fn {}_from(input:T) -> Result<{}, SherpaError>;",
+      "fn {}_from(input:T) -> Result<{}, SherpaParseError>;",
       export_name, ast_type_string
     ))?;
   }
@@ -263,7 +264,7 @@ pub fn parse_str_as_{0}(input: &str) -> SherpaResult<{1}> {{
   // writer
   // .newline()?
   // .wrtln(&format!(
-  // "fn {}_from({}: {}) -> Result<{}, SherpaError> {{",
+  // "fn {}_from({}: {}) -> Result<{}, SherpaParseError> {{",
   // export_name, param_name, input_type, ast_type_string
   // ))?
   // .indent()

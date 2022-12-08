@@ -7,17 +7,21 @@ pub use llvm_language_test_parser::*;
 #[cfg(test)]
 mod test {
 
-  use crate::{Context, *};
-  use sherpa::types::*;
+  use std::time::Instant;
+
+  use sherpa_runtime::types::*;
+
+  use crate::{Parser, Stmt};
 
   #[test]
   pub fn test_build() {
-    let ast = Context::parse_entry(&mut UTF8StringReader::new("(2+(2*2))+1+1+1"));
+    let n = Instant::now();
+    let ast = Stmt::from_str("1");
+
+    println!("{:?}", n.elapsed());
 
     println!("{:?}", ast);
 
     assert!(ast.is_ok());
-
-    dbg!(ast);
   }
 }

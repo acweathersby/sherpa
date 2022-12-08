@@ -76,8 +76,12 @@
 
 
 <> terminal > 
+
+        (g:sym | g:num)(+) g:sp?
+        
+        f:ast { { t_Terminal , c_Symbol , c_Terminal, val:str($1),  tok } } 
     
-        t:" ( g:id | g:sym | g:num | g:sp | escaped )(+) t:"
+        | t:" ( g:id | g:sym | g:num | g:sp | escaped )(+) t:"
     
             f:ast { { t_Terminal , c_Symbol , c_Terminal, val:str($2),  tok } } 
 

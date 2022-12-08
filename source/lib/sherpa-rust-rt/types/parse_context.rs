@@ -205,10 +205,12 @@ impl Default for InputBlock {
   }
 }
 
+pub const LLVM_BASE_STACK_SIZE: usize = 8;
+
 #[derive(Clone)]
 #[repr(C)]
 pub struct LLVMParseContext<T: LLVMCharacterReader + ByteCharacterReader + BaseCharacterReader> {
-  pub local_goto_stack: [Goto; 8],
+  pub local_goto_stack: [Goto; LLVM_BASE_STACK_SIZE],
   pub anchor_token: ParseToken,
   pub assert_token: ParseToken,
   pub peek_token: ParseToken,
@@ -260,7 +262,7 @@ impl<T: LLVMCharacterReader + ByteCharacterReader + BaseCharacterReader> LLVMPar
       reader: 0 as *mut T,
       get_byte_block_at_cursor: T::get_byte_block_at_cursor,
       in_peek_mode: 0,
-      local_goto_stack: [Goto::default(); 8],
+      local_goto_stack: [Goto::default(); LLVM_BASE_STACK_SIZE],
     }
   }
 }

@@ -58,6 +58,9 @@ pub(crate) fn construct_instruction_branch<'a>(
 
     // Convert the instruction data into table data.
     let table_name = create_offset_label(instruction.get_address() + 800000);
+
+    // TODO: Construct buffer
+
     let table_block = ctx.ctx.append_basic_block(*pack.fun, &(table_name.clone() + "_Table"));
 
     let TableHeaderData { input_type, lexer_type, scan_index: scanner_address, .. } = data.data;
@@ -464,10 +467,29 @@ fn construct_buffer<'a>(
     let input_block = write_get_input_ptr_lookup(ctx, pack, max_size, token_ptr);
 
     let i32 = ctx.ctx.i32_type();
+    let i8 = ctx.ctx.i8_type();
     let b = &ctx.builder;
 
-    let buffer_pointer =
-      b.build_array_alloca(ctx.ctx.i8_type(), i32.const_int(max_size as u64, false), "");
+    let buff_size = i32.const_int(max_size as u64, false);
+
+    // TODO: move this section outside of the skip loop so we aren't continuously
+    // allocate space on the stack.
+
+    // Allocate memory on the stack
+    let buffer_pointer = b.build_array_alloca(ctx.ctx.i8_type(), buff_size, "");
+
+    // Zero fill the buffer.
+    b.build_call(
+      ctx.fun.memset,
+      &[
+        buffer_pointer.into(),
+        i8.const_int(0, false).into(),
+        buff_size.into(),
+        ctx.ctx.bool_type().const_int(0, false).into(),
+      ],
+      "",
+    );
+
     // Perform a memcpy between the input ptr and the buffer, using the smaller
     // of the two input block length and max_size as the amount of bytes to
     // copy.

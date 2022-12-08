@@ -145,6 +145,12 @@ impl<'a> UTF8StringReader<'a> {
   }
 }
 
+impl<'a> From<&'a str> for UTF8StringReader<'a> {
+  fn from(string: &'a str) -> Self {
+    Self::new(&string.as_bytes())
+  }
+}
+
 impl<'a> From<&'a String> for UTF8StringReader<'a> {
   fn from(string: &'a String) -> Self {
     Self::new(&string.as_bytes())

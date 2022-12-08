@@ -25,7 +25,6 @@ mod grammar;
 mod intermediate;
 mod journal;
 mod llvm;
-mod runtime;
 mod types;
 mod util;
 mod writer;
@@ -59,26 +58,6 @@ pub mod errors {
   pub use crate::{
     intermediate::errors::*,
     types::{SherpaError, SherpaError::*, SherpaErrorSeverity},
-  };
-}
-/// All types and functions used by bytecode parsers.
-pub mod rt {
-  pub use crate::{
-    runtime::*,
-    types::{
-      ast::*,
-      BaseCharacterReader,
-      ByteCharacterReader,
-      MutCharacterReader,
-      ParseAction,
-      ParseContext,
-      SherpaError,
-      SherpaResult,
-      Token,
-      UTF8CharacterReader,
-      UTF8StringReader,
-      NORMAL_STATE_FLAG,
-    },
   };
 }
 

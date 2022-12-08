@@ -8,8 +8,8 @@ members = [
     "source/lib/sherpa-rust-rt",
     #"source/app/compile",
     #"test/e2e/basic_grammar",
-    #"test/e2e/basic_grammar_llvm",
-    #"test/e2e/basic_language_llvm",
+    "test/e2e/basic_grammar_llvm",
+    "test/e2e/basic_language_llvm",
     "test/e2e/bootstrap",
     #"test/e2e/proc_macro"
 ]

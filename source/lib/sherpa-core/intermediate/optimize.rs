@@ -320,7 +320,7 @@ where
 }
 
 #[derive(Debug, Hash, Clone, PartialEq, Eq)]
-struct BranchData {
+pub(crate) struct BranchData {
   /// The bytecode id of the discriminator symbol of this branch.
   id:      u32,
   /// The type of the discriminator symbol. This is the empty string in the case
@@ -336,7 +336,7 @@ struct BranchData {
 /// Returns a vector of referenced instruction vectors
 /// which may either either contain the root instruction vector, or the
 /// the vectors of individual branches in the case of a branch state
-fn get_branches<'a>(state: &'a IRState) -> Vec<(Option<BranchData>, &'a Vec<ASTNode>)> {
+pub(crate) fn get_branches<'a>(state: &'a IRState) -> Vec<(Option<BranchData>, &'a Vec<ASTNode>)> {
   if let Ok(state) = &state.ast {
     if matches!(state.instructions[0], ASTNode::ASSERT(_) | ASTNode::DEFAULT(_)) {
       state

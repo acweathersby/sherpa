@@ -4,10 +4,11 @@ version = "0.0.0"
 edition = "2021"
 
 [[bin]]
-name = "test_proc"
+name = "test_bootstrap"
 path = "./main.rs"
 
 [lib]
+name = "test_boot_lib"
 path = "./lib.rs"
 
 [build-dependencies.sherpa]

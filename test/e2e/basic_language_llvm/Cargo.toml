@@ -16,5 +16,5 @@ path = "./main.rs"
 [build-dependencies.sherpa]
 path = "../../../source/lib/sherpa"
 
-[dependencies.sherpa]
-path = "../../../source/lib/sherpa"
+[dependencies.sherpa_runtime]
+path = "../../../source/lib/sherpa-rust-rt"

@@ -28,9 +28,9 @@
 
 <> export_clause > 
 
-        t:EXPORT sym::non_terminal ( t:AS | t:as ) sym::identifier
+        t:EXPORT sym::non_terminal (( t:AS | t:as ) sym::identifier)?
 
-            f:ast { { t_Export, c_Preamble, production:$2, reference:$4 } } 
+            f:ast { { t_Export, c_Preamble, production:$2, reference:$3 } } 
 
 <> import_clause > 
 
@@ -82,6 +82,10 @@
             f:ast {  { t_Ascript, c_Function, ast: $ast, tok }  }
 
 +> sym::symbol > group
+
++> sym::non_terminal > sym::non_terminal^p t:< sym::production_symbol^t t:>
+
+        f:ast { { t_TemplateProductionSymbol, prod_sym:$p, template_productions:$t } }
 
 <> group > 
 

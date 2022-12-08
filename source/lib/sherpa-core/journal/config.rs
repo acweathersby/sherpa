@@ -88,7 +88,7 @@ pub struct Config {
   pub llvm_clang_path: String,
   /// Enable LLVM light link time optimizations
   ///
-  /// Default to `true`
+  /// Default to `false`
   pub llvm_light_lto:  bool,
 }
 
@@ -106,7 +106,7 @@ impl Default for Config {
       source_type: SourceType::Rust,
       llvm_ar_path: "llvm-ar-14".to_string(),
       llvm_clang_path: "clang-14".to_string(),
-      llvm_light_lto: true,
+      llvm_light_lto: false,
     }
   }
 }

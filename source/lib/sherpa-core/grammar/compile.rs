@@ -19,6 +19,7 @@ use crate::{
   journal::{report::ReportType, Journal},
   types,
   types::*,
+  util::get_num_of_available_threads,
 };
 use core::panic;
 
@@ -55,10 +56,9 @@ pub fn compile_grammars_into_store(
     return SherpaResult::Err(SherpaError::Text("Received empty grammar vector!".to_string()));
   }
 
-  let number_of_threads = get_usable_thread_count(20);
   let results = thread::scope(|s| {
     grammars
-      .chunks(grammars.len().div_ceil(number_of_threads))
+      .chunks(grammars.len().div_ceil(get_num_of_available_threads()))
       .into_iter()
       .map(|chunk| {
         let mut j = j.transfer();
@@ -101,7 +101,7 @@ pub fn compile_grammars_into_store(
     merge_grammars(j, &mut grammar, &rest, &mut errors);
 
     if errors.is_empty() {
-      let grammar = finalize_grammar(j, grammar, &mut errors, number_of_threads);
+      let grammar = finalize_grammar(j, grammar, &mut errors, get_num_of_available_threads());
 
       if errors.is_empty() {
         SherpaResult::Ok((Some(Arc::new(grammar)), None))
@@ -448,8 +448,10 @@ fn calculate_recursions_types(
 ) -> Vec<ProductionId> {
   let mut conversion_candidates = vec![];
 
-  let production_id_chunks =
-    production_ids.chunks(thread_count).filter(|s| !s.is_empty()).collect::<Vec<_>>();
+  let production_id_chunks = production_ids
+    .chunks(get_num_of_available_threads())
+    .filter(|s| !s.is_empty())
+    .collect::<Vec<_>>();
 
   for (production_id, recursion_type) in thread::scope(|s| {
     production_id_chunks
@@ -486,7 +488,7 @@ fn finalize_items(g: &mut GrammarStore, thread_count: usize, errors: &mut [Sherp
   let start_items =
     g.productions.keys().flat_map(|p| get_production_start_items(p, g)).collect::<Vec<_>>();
 
-  let start_items_chunks = start_items.chunks(thread_count).collect::<Vec<_>>();
+  let start_items_chunks = start_items.chunks(get_num_of_available_threads()).collect::<Vec<_>>();
 
   for (item, closure, peek_symbols) in thread::scope(|s| {
     start_items_chunks

@@ -88,8 +88,6 @@ pub struct IRState {
   pub(crate) skip_symbols: Vec<SymbolID>,
   pub(crate) ast: Result<IR_STATE, SherpaError>,
   pub(crate) state_type: IRStateType,
-  pub(crate) stack_depth: u32,
-  pub(crate) peek_type: PeekType,
 }
 
 impl Default for IRState {
@@ -104,8 +102,6 @@ impl Default for IRState {
       normal_symbols: Vec::default(),
       skip_symbols: Vec::default(),
       ast: Err(SherpaError::ir_warn_not_parsed),
-      stack_depth: u32::default(),
-      peek_type: PeekType::None,
     }
   }
 }
@@ -123,10 +119,6 @@ impl IRState {
 
   pub(crate) fn get_type(&self) -> IRStateType {
     self.state_type
-  }
-
-  pub fn get_stack_depth(&self) -> u32 {
-    self.stack_depth
   }
 
   pub fn get_name(&self) -> String {

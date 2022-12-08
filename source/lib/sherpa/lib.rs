@@ -1,3 +1,12 @@
+//! # Sherpa
+//! #### A different kind of parser compiler.
+//!
+//! # Usage
+//! ```
+//! ```
+//! # Proc Macro
+//! ```
+//! ```
 pub use sherpa_core::*;
 
 /// Compiles a parse module from a grammar string

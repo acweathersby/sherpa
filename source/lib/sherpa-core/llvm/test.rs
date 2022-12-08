@@ -13,6 +13,7 @@ use sherpa_runtime::types::{
   LLVMParseContext,
   ParseAction,
   ParseToken,
+  LLVM_BASE_STACK_SIZE,
 };
 use std::{fs::File, io::Write};
 
@@ -238,7 +239,7 @@ fn should_produce_extended_block() {
   unsafe { assert!(construct_init(&parse_context).is_ok()) }
   unsafe { assert!(construct_get_adjusted_input_block_function(&parse_context).is_ok()) }
 
-  // Create a helper function to overcome the struct passing as value between the Jit  code and Rust
+  // Create a helper function to overcome the struct passing as value between the Jit code and Rust
 
   use inkwell::AddressSpace::*;
 
@@ -270,9 +271,11 @@ fn should_produce_extended_block() {
     .try_as_basic_value()
     .unwrap_left()
     .into_struct_value();
+
   parse_context
     .builder
     .build_store(shim.get_nth_param(3).unwrap().into_pointer_value(), input_block);
+
   parse_context.builder.build_return(None);
 
   unsafe {
@@ -286,7 +289,7 @@ fn should_produce_extended_block() {
       *const ParseToken,
       u32,
       *mut InputBlock,
-    ) -> InputBlock;
+    );
 
     let get_ib = get_parse_function::<GetInputBlockShim>(&parse_context, "shim").unwrap();
 
@@ -296,8 +299,23 @@ fn should_produce_extended_block() {
 
     token.byte_offset = 3;
 
+    println!(
+      "context:{:p}, fn:{:p} off:{:X}",
+      &rt_ctx,
+      &rt_ctx.get_byte_block_at_cursor,
+      (&rt_ctx.get_byte_block_at_cursor as *const _) as usize - (&rt_ctx as *const _) as usize
+    );
+
     let mut block = InputBlock::default();
 
+    println!(
+      "context:{:p}, fn:{:p} off:{:X}",
+      &rt_ctx,
+      &rt_ctx.get_byte_block_at_cursor,
+      (&rt_ctx.get_byte_block_at_cursor as *const _) as usize - (&rt_ctx as *const _) as usize
+    );
+
+    println!("context:{:p} block:{:p} token:{:p}", &mut rt_ctx, &mut block, &token);
     get_ib.call(&mut rt_ctx, &token, 2, &mut block);
 
     eprintln!("{:?} {:?}", rt_ctx.input_block, block);
@@ -426,6 +444,7 @@ fn should_call_next_and_emit_accept() {
   unsafe { assert!(construct_pop_state_function(&parse_context).is_ok()) }
   unsafe { assert!(construct_next_function(&parse_context).is_ok()) }
   unsafe { assert!(construct_emit_accept(&parse_context).is_ok()) }
+  unsafe { assert!(construct_emit_end_of_parse(&parse_context).is_ok()) }
   unsafe { assert!(construct_prime_function(&parse_context, &vec![], &mut vec![]).is_ok()) }
 
   unsafe {
@@ -439,7 +458,6 @@ fn should_call_next_and_emit_accept() {
     let prime = get_parse_function::<Prime>(&parse_context, "prime").unwrap();
 
     init_fn.call(&mut rt_ctx, &mut reader);
-
     prime.call(&mut rt_ctx, 0);
 
     rt_ctx.production = 202020;
@@ -509,7 +527,7 @@ fn should_yield_correct_CP_values_for_inputs() {
   let context = Context::create();
   let mut parse_context = construct_context("test", &context);
 
-  unsafe { assert!(construct_utf8_lookup(&parse_context).is_ok()) }
+  assert!(construct_utf8_lookup(&parse_context).is_ok());
   unsafe { assert!(construct_merge_utf8_part(&parse_context).is_ok()) }
 
   unsafe {
@@ -527,10 +545,11 @@ fn should_yield_correct_CP_values_for_inputs() {
     let get_code_point =
       get_parse_function::<GetUtf8CP>(&parse_context, "get_utf8_codepoint_info").unwrap();
 
+    dbg!(get_code_point.call(" ".as_ptr()));
     assert_eq!(get_code_point.call(" ".as_ptr()).val, 32);
-    // assert_eq!(get_code_point.call(" ".as_ptr()).length, 1);
+    // assert_eq!(get_code_point.call(" ".as_ptr()).len, 1);
     assert_eq!(get_code_point.call("☺".as_ptr()).val, 0x263A);
-    // assert_eq!(get_code_point.call("☺".as_ptr()).length, 3);
+    // assert_eq!(get_code_point.call("☺".as_ptr()).len, 3);
   };
 }
 
@@ -540,20 +559,20 @@ fn should_extend_stack() {
 
   let mut parse_context = construct_context("test", &context);
 
-  unsafe { assert!(construct_init(&parse_context).is_ok()) }
-  unsafe { assert!(construct_push_state(&parse_context).is_ok()) }
-  unsafe { assert!(construct_extend_stack_if_needed(&parse_context).is_ok()) }
-
   unsafe {
     setup_exec_engine(&mut parse_context);
     let mut reader = TestUTF8StringReader::new("test");
     let mut rt_ctx = LLVMParseContext::new();
-    let num_of_slots = 64;
 
-    parse_context.exe_engine.as_ref().unwrap().add_global_mapping(
-      &parse_context.fun.allocate_stack,
-      sherpa_allocate_stack(num_of_slots) as usize,
-    );
+    unsafe { assert!(construct_init(&parse_context).is_ok()) }
+    unsafe { assert!(construct_push_state(&parse_context).is_ok()) }
+    unsafe { assert!(construct_extend_stack_if_needed(&parse_context).is_ok()) }
+
+    parse_context
+      .exe_engine
+      .as_ref()
+      .unwrap()
+      .add_global_mapping(&parse_context.fun.allocate_stack, sherpa_allocate_stack as usize);
 
     parse_context
       .exe_engine

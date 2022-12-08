@@ -100,6 +100,8 @@ fn write_rust_parser<W: Write>(
   writer
     .wrt(&format!(
       "
+use sherpa_runtime::types::*;
+use sherpa_runtime::types::ast::*;
 
 #[link(name = \"{}\", kind = \"static\" )]
 extern \"C\" {{
@@ -110,21 +112,24 @@ extern \"C\" {{
       parser_name
     ))?
     .wrtln(&format!(
-      "pub struct Context<T: BaseCharacterReader + LLVMCharacterReader + ByteCharacterReader + MutCharacterReader>(LLVMParseContext<T>, T, bool);
+      
+      r###"
+      
+pub struct Parser<T: BaseCharacterReader + LLVMCharacterReader + ByteCharacterReader + MutCharacterReader + std::fmt::Debug>(LLVMParseContext<T>, T, bool);
 
-impl<T: BaseCharacterReader + LLVMCharacterReader + ByteCharacterReader + MutCharacterReader> Iterator for Context<T> {{
+impl<T: BaseCharacterReader + LLVMCharacterReader + ByteCharacterReader + MutCharacterReader + std::fmt::Debug> Iterator for Parser<T> {{
     type Item = ParseAction;
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {{
+        
         unsafe {{
-            if(!self.2) {{
+            if !self.2 {{
                 None
             }} else {{
                 let _ptr = &mut self.0 as *const LLVMParseContext<T>;
                 let mut action = ParseAction::Undefined;
                 let _action = &mut action as *mut ParseAction;
                 next(_ptr as *mut u8, _action as *mut u8);
-
                 self.2 = !matches!(action, ParseAction::Accept{{..}}| ParseAction::Error {{ .. }} | ParseAction::EndOfInput {{ .. }});
 
                 Some(action)
@@ -133,7 +138,7 @@ impl<T: BaseCharacterReader + LLVMCharacterReader + ByteCharacterReader + MutCha
     }}
 }}
 
-impl<T: BaseCharacterReader + LLVMCharacterReader + ByteCharacterReader + MutCharacterReader> Context<T> {{
+impl<T: BaseCharacterReader + LLVMCharacterReader + ByteCharacterReader + MutCharacterReader + std::fmt::Debug> Parser<T> {{
     /// Create a new parser context to parser the input with 
     /// the grammar `{0}`
     #[inline(always)]
@@ -165,7 +170,7 @@ impl<T: BaseCharacterReader + LLVMCharacterReader + ByteCharacterReader + MutCha
     #[inline(always)]
     fn destroy_context(&mut self) {{
 
-    }}",
+    }}"###,
       grammar_name
     ))?
     .indent();
@@ -175,7 +180,7 @@ impl<T: BaseCharacterReader + LLVMCharacterReader + ByteCharacterReader + MutCha
   writer.dedent().wrtln(&format!(
     "}}
 
-impl<T: BaseCharacterReader + LLVMCharacterReader + ByteCharacterReader + MutCharacterReader> Drop for Context<T> {{
+impl<T: BaseCharacterReader + LLVMCharacterReader + ByteCharacterReader + MutCharacterReader + std::fmt::Debug> Drop for Parser<T> {{
     fn drop(&mut self) {{
         self.destroy_context();
     }}
@@ -192,11 +197,6 @@ impl<T: BaseCharacterReader + LLVMCharacterReader + ByteCharacterReader + MutCha
 /// `target_triple` - A LLVM compatible target triple
 ///
 /// `clang_command` - The name of the clang executable that can be called from a terminal
-///
-/// `ar_command` - The name of the ar executable that can be called from a terminal
-///
-/// `light_lto` - Enable to use Light Linktime Optimizations. This is typically used with the `rustc` argument
-///  `-C linker-plugin-lto` or the `cargo` environnement variable `RUSTFLAGS` set with `-Clinker-plugin-lto`
 ///
 /// `output_cargo_build_commands` - Set to true to output build commands that inform the rust compiler of the link
 /// targets.
@@ -250,7 +250,7 @@ pub fn build_llvm_parser(
         Ok(ctx) => {
           let opt = OptimizationLevel::Default;
 
-          if output_llvm_ir_file {
+          if output_llvm_ir_file || true {
             if let Ok(mut file) = task_ctx.create_file(ll_file_path.clone()) {
               file.write_all(ctx.module.to_string().as_bytes()).unwrap();
               file.flush().unwrap();
@@ -265,7 +265,7 @@ pub fn build_llvm_parser(
                   "-c",
                   "-o",
                   object_path.to_str().unwrap(),
-                  ll_file_path.to_str().unwrap(),
+                  bitcode_path.to_str().unwrap(),
                 ])
                 .status()
               {

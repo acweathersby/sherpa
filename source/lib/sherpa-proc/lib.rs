@@ -7,7 +7,8 @@ use std::{collections::BTreeMap, path::PathBuf};
 
 use sherpa_core::{
   pipeline::{tasks, BuildPipeline, SourceType},
-  rt::{SherpaError, SherpaResult},
+  SherpaError,
+  SherpaResult,
 };
 
 extern crate proc_macro;

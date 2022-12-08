@@ -60,7 +60,7 @@ pub(crate) fn construct_context<'a>(module_name: &str, ctx: &'a Context) -> LLVM
 
   CTX.set_body(
     &[
-      GOTO.array_type(8).into(),
+      GOTO.array_type(LLVM_BASE_STACK_SIZE as u32).into(),
       TOKEN.into(),
       TOKEN.into(),
       TOKEN.into(),
@@ -84,14 +84,14 @@ pub(crate) fn construct_context<'a>(module_name: &str, ctx: &'a Context) -> LLVM
     builder,
     ctx,
     types: LLVMTypes {
-      reader:         READER,
-      action:         ACTION,
-      token:          TOKEN,
-      parse_ctx:      CTX,
-      goto:           GOTO,
-      goto_fn:        GOTO_FN,
-      input_block:    INPUT_BLOCK,
-      codepoint_info: CP_INFO,
+      reader:      READER,
+      action:      ACTION,
+      token:       TOKEN,
+      parse_ctx:   CTX,
+      goto:        GOTO,
+      goto_fn:     GOTO_FN,
+      input_block: INPUT_BLOCK,
+      cp_info:     CP_INFO,
     },
     fun: PublicFunctions {
       get_token_class_from_codepoint: module.add_function(
@@ -206,6 +206,14 @@ pub(crate) fn construct_context<'a>(module_name: &str, ctx: &'a Context) -> LLVM
             i32.into(),
             ctx.bool_type().into(),
           ],
+          false,
+        ),
+        None,
+      ),
+      memset: module.add_function(
+        "llvm.memset.p0.i32",
+        ctx.void_type().fn_type(
+          &[i8.ptr_type(Generic).into(), i8.into(), i32.into(), ctx.bool_type().into()],
           false,
         ),
         None,
@@ -1039,6 +1047,10 @@ pub(crate) unsafe fn construct_next_function(
   }
 }
 
+/// The prime function's purpose is fist create a base goto state that emits a failure
+/// to prevent stack underflow when descending to the bottom of the goto stack, and also
+/// insert the first GOTO entry that will initiate the parser to start parsing based on
+/// an entry production id.
 pub(crate) fn construct_prime_function(
   ctx: &LLVMParserModule,
   sp: &Vec<(usize, INSTRUCTION, String)>,
@@ -1065,6 +1077,7 @@ pub(crate) fn construct_prime_function(
     })
     .collect::<Vec<_>>();
 
+  // Push the End-Of-Parse goto onto the stack. This will prevent underflow of the stack
   b.build_call(
     funct.push_state,
     &[
@@ -1174,27 +1187,15 @@ pub(crate) fn construct_parse_functions(
         output.offset_to_state_name.get(&(instruction.get_address() as u32))
       {
         if let Some(state) = output.state_data.get(ir_state_name) {
-          match state.get_type() {
-            IRStateType::ProductionStart
-            | IRStateType::ScannerStart
-            | IRStateType::ProductionGoto
-            | IRStateType::ScannerGoto => {
-              if state.get_stack_depth() > 0 {
-                ctx.builder.build_call(
-                  ctx.fun.extend_stack_if_needed,
-                  &[
-                    parse_cxt.into(),
-                    ctx
-                      .ctx
-                      .i32_type()
-                      .const_int((state.get_stack_depth() + 2) as u64, false)
-                      .into(),
-                  ],
-                  "",
-                );
-              }
-            }
-            _ => {}
+          if state.get_goto_depth() > 1 {
+            ctx.builder.build_call(
+              ctx.fun.extend_stack_if_needed,
+              &[
+                parse_cxt.into(),
+                ctx.ctx.i32_type().const_int((state.get_goto_depth() + 2) as u64, false).into(),
+              ],
+              "",
+            );
           }
 
           is_scanner = state.is_scanner();
@@ -1610,8 +1611,8 @@ pub(crate) fn construct_utf8_lookup(ctx: &LLVMParserModule) -> std::result::Resu
   b.position_at_end(block_entry);
 
   let codepoint_info =
-    b.build_insert_value(ctx.types.codepoint_info.get_undef(), zero, 0, "").unwrap();
-  let codepoint_info_base = b.build_insert_value(codepoint_info, zero, 1, "").unwrap();
+    b.build_insert_value(ctx.types.cp_info.get_undef(), zero, 0, "cp_info").unwrap();
+  let codepoint_info_base = b.build_insert_value(codepoint_info, zero, 1, "cp_info").unwrap();
 
   // Determine number of leading bits set
 
@@ -1634,9 +1635,11 @@ pub(crate) fn construct_utf8_lookup(ctx: &LLVMParserModule) -> std::result::Resu
 
   // --- Build ASCII Block
   b.position_at_end(block_return_ascii);
-
+  // Insert the codepoint into the CP_INFO struct
   let codepoint_info =
     b.build_insert_value(codepoint_info_base, b.build_int_z_extend(byte, i32, ""), 0, "").unwrap();
+
+  // Insert the codepoint byte length into the CP_INFO struct
   let codepoint_info =
     b.build_insert_value(codepoint_info, i32.const_int(1, false), 1, "").unwrap();
 

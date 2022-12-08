@@ -1,4 +1,6 @@
-use crate::{runtime::get_next_action, types::*};
+use sherpa_runtime::functions::get_next_action;
+
+use crate::types::*;
 use std::sync::Arc;
 
 pub fn collect_shifts_and_skips(

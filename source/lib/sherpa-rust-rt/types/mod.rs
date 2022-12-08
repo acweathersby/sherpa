@@ -1,5 +1,6 @@
 pub mod ast;
 mod constants;
+mod error;
 mod parse_action;
 mod parse_context;
 mod parse_iterator;
@@ -11,6 +12,7 @@ mod reader_utf8;
 mod token;
 
 pub use constants::*;
+pub use error::*;
 pub use parse_action::*;
 pub use parse_context::*;
 pub use parse_iterator::*;

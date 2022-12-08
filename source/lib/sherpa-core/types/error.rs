@@ -71,12 +71,6 @@ pub enum SherpaError {
     source:     Option<Arc<Vec<u8>>>,
     path:       PathBuf,
   },
-  rt_err_invalid_parse {
-    message: String,
-    inline_message: String,
-    loc: Token,
-    last_production: u32,
-  },
 
   //---------------------------------------------------------------------------
   // ----------------- Ir Error Types -----------------------------------------
@@ -241,9 +235,7 @@ impl Display for SherpaError {
         message,
         locations.iter().map(|s| format!("{}", s)).collect::<Vec<_>>().join("\n"),
       )),
-      rt_err_invalid_parse { message, inline_message, loc, last_production } => f.write_fmt(
-        format_args!("{}\n{}", message, loc.blame(1, 1, inline_message, BlameColor::Red)),
-      ),
+     
       rt_err { path, production, tok, source } => match path.to_str() {
         Some(path) => f.write_fmt(format_args!(
           "\n[{}:{}]\nUnexpected token [{}]\n{}",

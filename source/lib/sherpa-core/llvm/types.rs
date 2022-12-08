@@ -20,14 +20,14 @@ pub const NORMAL_STATE_FLAG_LLVM: u32 = 1;
 
 #[derive(Debug)]
 pub struct LLVMTypes<'a> {
-  pub reader:         StructType<'a>,
-  pub parse_ctx:      StructType<'a>,
-  pub token:          StructType<'a>,
-  pub goto:           StructType<'a>,
-  pub goto_fn:        FunctionType<'a>,
-  pub action:         StructType<'a>,
-  pub input_block:    StructType<'a>,
-  pub codepoint_info: StructType<'a>,
+  pub reader:      StructType<'a>,
+  pub parse_ctx:   StructType<'a>,
+  pub token:       StructType<'a>,
+  pub goto:        StructType<'a>,
+  pub goto_fn:     FunctionType<'a>,
+  pub action:      StructType<'a>,
+  pub input_block: StructType<'a>,
+  pub cp_info:     StructType<'a>,
 }
 
 #[derive(Debug)]
@@ -61,6 +61,7 @@ pub struct PublicFunctions<'a> {
   pub(crate) prime: FunctionValue<'a>,
   pub(crate) scan: FunctionValue<'a>,
   pub(crate) memcpy: FunctionValue<'a>,
+  pub(crate) memset: FunctionValue<'a>,
   pub(crate) min: FunctionValue<'a>,
   pub(crate) max: FunctionValue<'a>,
   pub(crate) get_adjusted_input_block: FunctionValue<'a>,

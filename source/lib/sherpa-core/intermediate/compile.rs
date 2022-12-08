@@ -313,7 +313,7 @@ pub fn compile_states(
   let productions_ids = g.productions.iter().map(|(id, p)| (*id, p.is_scanner)).collect::<Vec<_>>();
 
   let work_chunks = productions_ids
-    .chunks((productions_ids.len() / (num_of_threads - 1)).max(1))
+    .chunks((productions_ids.len() / (num_of_threads).max(1)).max(1))
     .collect::<Vec<_>>();
 
   for states in thread::scope(|s| {
