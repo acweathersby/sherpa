@@ -16,6 +16,7 @@ use crate::{
   types::*,
 };
 use inkwell::{
+  attributes::{Attribute, AttributeLoc},
   builder::Builder,
   context::Context,
   module::Linkage,
@@ -500,7 +501,7 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
 
   // create a size that is equal to the needed amount rounded up to the nearest 64bytes
   let new_slot_count = b.build_int_add(goto_used_slots, needed_slot_count, "new_size");
-  let new_slot_count = b.build_left_shift(new_slot_count, i32.const_int(1, false), "new_size");
+  let new_slot_count = b.build_left_shift(new_slot_count, i32.const_int(3, false), "new_size");
 
   let new_ptr = b
     .build_call(funct.allocate_stack, &[new_slot_count.into()], "")
@@ -565,6 +566,7 @@ pub(crate) unsafe fn construct_scan(ctx: &LLVMParserModule) -> std::result::Resu
   let LLVMParserModule { builder: b, types, ctx, fun: funct, .. } = ctx;
 
   let i32 = ctx.i32_type();
+  let i64 = ctx.i64_type();
 
   let fn_value = funct.scan;
 
@@ -709,6 +711,11 @@ pub(crate) unsafe fn construct_scan(ctx: &LLVMParserModule) -> std::result::Resu
 
   //## Failure Block
   b.position_at_end(failure);
+
+  let type_ = b.build_struct_gep(anchor_token, TokType, "").unwrap();
+
+  b.build_store(type_, i64.const_int(0, false));
+
   let token = b.build_load(anchor_token, "");
   b.build_return(Some(&token));
 

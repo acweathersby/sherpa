@@ -18,6 +18,7 @@ use super::{
   ascript::build_ascript_types_and_functions,
   bytecode::build_bytecode_parser,
   disassembly::build_bytecode_disassembly,
+  llvm::{build_llvm_parser, build_llvm_parser_interface},
 };
 
 pub type TaskFn =
@@ -340,11 +341,9 @@ impl<'a> PipelineContext<'a> {
 }
 
 /// Convenience function for building a bytecode based parser. Use this in
-/// build scripts to output a parser source file to `{OUT_DIR}/sherpa_out/{grammar_name}.rs`.
+/// build scripts to output a parser source file to `{OUT_DIR}/{grammar_name}.rs`.
 pub fn compile_bytecode_parser(grammar_source_path: &PathBuf, config: Config) -> bool {
-  let mut out_dir = std::env::var("OUT_DIR").map(|d| PathBuf::from(&d)).unwrap();
-
-  out_dir.push("./sherpa_out/");
+  let out_dir = std::env::var("OUT_DIR").map(|d| PathBuf::from(&d)).unwrap();
 
   create_dir_all(&out_dir).unwrap();
 
@@ -356,6 +355,36 @@ pub fn compile_bytecode_parser(grammar_source_path: &PathBuf, config: Config) ->
     .set_source_file_name("%.rs")
     .add_task(build_bytecode_parser(SourceType::Rust))
     .add_task(build_bytecode_disassembly());
+
+  if config.enable_ascript {
+    pipeline.add_task(build_ascript_types_and_functions(SourceType::Rust));
+  }
+
+  match pipeline.run(|errors| {
+    for error in &errors {
+      eprintln!("{}", error);
+    }
+  }) {
+    SherpaResult::Ok(_) => true,
+    _ => false,
+  }
+}
+
+/// Convenience function for building a llvm machine code parser. Use this in
+/// build scripts to output a parser source file to `{OUT_DIR}/{grammar_name}.rs`.
+pub fn compile_llvm_parser(grammar_source_path: &PathBuf, config: Config) -> bool {
+  let out_dir = std::env::var("OUT_DIR").map(|d| PathBuf::from(&d)).unwrap();
+
+  create_dir_all(&out_dir).unwrap();
+
+  let mut pipeline = BuildPipeline::from_source(&grammar_source_path, config.clone());
+
+  pipeline
+    .set_source_output_dir(&out_dir)
+    .set_build_output_dir(&out_dir)
+    .set_source_file_name("%.rs")
+    .add_task(build_llvm_parser(None, true, true))
+    .add_task(build_llvm_parser_interface());
 
   if config.enable_ascript {
     pipeline.add_task(build_ascript_types_and_functions(SourceType::Rust));

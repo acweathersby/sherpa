@@ -3,6 +3,7 @@ use crate::utf8::get_token_class_from_codepoint;
 use std::{
   alloc::{alloc, dealloc, Layout},
   fmt::Debug,
+  num,
 };
 
 const STACK_32_BIT_SIZE: usize = 128;
@@ -21,7 +22,7 @@ pub struct ParseContext<T: BaseCharacterReader + MutCharacterReader> {
   pub production: u32,
   pub state: u32,
   pub in_peek_mode: u32,
-  pub local_state_stack: [u32; STACK_32_BIT_SIZE],
+  pub local_state_stack: Vec<u32>,
 }
 
 impl<T: BaseCharacterReader + MutCharacterReader> ParseContext<T> {
@@ -41,7 +42,7 @@ impl<T: BaseCharacterReader + MutCharacterReader> ParseContext<T> {
       stack_size: 0,
       reader,
       in_peek_mode: 0,
-      local_state_stack: [0; STACK_32_BIT_SIZE],
+      local_state_stack: vec![],
     };
     ctx
   }
@@ -61,7 +62,7 @@ impl<T: BaseCharacterReader + MutCharacterReader> ParseContext<T> {
       input_block_length: 0,
       input_block_offset: 0,
       reader: 0 as *mut T,
-      local_state_stack: [0; STACK_32_BIT_SIZE],
+      local_state_stack: vec![],
       in_peek_mode: 0,
     };
 
@@ -137,7 +138,7 @@ impl<T: BaseCharacterReader + MutCharacterReader> ParseContext<T> {
   pub fn pop_state(&mut self) -> u32 {
     if self.stack_top > 0 {
       self.stack_top -= 1;
-      self.local_state_stack[self.stack_top] as u32
+      return self.local_state_stack.pop().unwrap();
     } else {
       0
     }
@@ -145,11 +146,7 @@ impl<T: BaseCharacterReader + MutCharacterReader> ParseContext<T> {
 
   #[inline]
   pub fn push_state(&mut self, state: u32) {
-    if (self.stack_top >= self.stack_size as usize) {
-      panic!("Out of parse stack space! {} {}", self.stack_top, self.stack_size);
-    }
-
-    self.local_state_stack[self.stack_top] = state;
+    self.local_state_stack.push(state);
 
     self.stack_top += 1;
   }
@@ -271,6 +268,7 @@ impl<T: LLVMCharacterReader + ByteCharacterReader + BaseCharacterReader> LLVMPar
 pub extern "C" fn sherpa_allocate_stack(num_of_slots: u32) -> *mut Goto {
   // Each goto slot is 16bytes, so we shift left num_of_slots by 4 to get the bytes size of
   // the stack.
+  println!("ALLOCATION OF {} bytes for {} slots", num_of_slots << 4, num_of_slots);
   let layout = Layout::from_size_align((num_of_slots << 4) as usize, 16).unwrap();
 
   unsafe { alloc(layout) as *mut Goto }
@@ -278,6 +276,7 @@ pub extern "C" fn sherpa_allocate_stack(num_of_slots: u32) -> *mut Goto {
 
 #[no_mangle]
 pub extern "C" fn sherpa_free_stack(stack_base: *mut Goto, num_of_slots: u32) {
+  println!("Freeing {} bytes for {} slots", num_of_slots << 4, num_of_slots);
   // Each goto slot is 16bytes, so we shift left num_of_slots by 4 to get the bytes size of
   // the stack.
   let layout = Layout::from_size_align((num_of_slots << 4) as usize, 16).unwrap();

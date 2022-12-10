@@ -250,7 +250,7 @@ pub fn build_llvm_parser(
         Ok(ctx) => {
           let opt = OptimizationLevel::Default;
 
-          if output_llvm_ir_file || true {
+          if output_llvm_ir_file {
             if let Ok(mut file) = task_ctx.create_file(ll_file_path.clone()) {
               file.write_all(ctx.module.to_string().as_bytes()).unwrap();
               file.flush().unwrap();
@@ -271,7 +271,7 @@ pub fn build_llvm_parser(
               {
                 Ok(_) => {
                   task_ctx.add_artifact_path(object_path.clone());
-                  if !(Command::new(ar_command.clone())
+                  if !(Command::new(ar_command)
                     .args(&["rc", archive_path.to_str().unwrap(), object_path.to_str().unwrap()])
                     .status()
                     .unwrap()
@@ -288,7 +288,7 @@ pub fn build_llvm_parser(
               Err(vec![SherpaError::from("test")])
             }
           } else {
-            // apply_llvm_optimizations(opt, &ctx);
+            _apply_llvm_optimizations(opt, &ctx);
             let reloc = RelocMode::PIC;
             let model = CodeModel::Small;
             let target = Target::from_triple(&target_triple).unwrap();

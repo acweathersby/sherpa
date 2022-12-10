@@ -311,6 +311,7 @@ impl BranchTableData {
   }
 
   pub fn has_trivial_comparisons(&self) -> bool {
+    
     self.branches.iter().all(|(_, b)| self.min_comparison_bytes(b).is_some())
   }
 

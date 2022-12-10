@@ -59,7 +59,9 @@ fn write_rust_parser_file<W: Write>(
   writer
     .wrt(
       "
-use sherpa::rt::*;
+use sherpa_runtime::types::*;
+use sherpa_runtime::types::ast::*;
+use sherpa_runtime::functions::get_next_action;
 
 pub struct Parser<T: ByteCharacterReader + BaseCharacterReader + MutCharacterReader>(ParseContext<T>, T, bool);
 

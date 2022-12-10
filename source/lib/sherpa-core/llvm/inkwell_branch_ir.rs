@@ -59,15 +59,55 @@ pub(crate) fn construct_instruction_branch<'a>(
     // Convert the instruction data into table data.
     let table_name = create_offset_label(instruction.get_address() + 800000);
 
-    // TODO: Construct buffer
+    let TableHeaderData { input_type, lexer_type, scan_index: scanner_address, .. } = data.data;
+
+    let trivial_token_comparisons =
+      (input_type == INPUT_TYPE::T02_TOKEN && data.has_trivial_comparisons());
+
+    // Retrieve the maximum number of bytes that will be read
+    // per round within this function.
+    let max_size = match input_type {
+      INPUT_TYPE::T02_TOKEN => {
+        if trivial_token_comparisons {
+          getBranchTokenData(g, &data)
+            .iter()
+            .flat_map(|(_, _, s)| s)
+            .fold(0, |a, s| usize::max(a, s.len()))
+        } else {
+          0
+        }
+      }
+      INPUT_TYPE::T05_BYTE => 1,
+      INPUT_TYPE::T03_CLASS | INPUT_TYPE::T04_CODEPOINT => 4,
+      _ => 0,
+    };
+
+    // Construct a buffer, if necessary, that will hold up to `max_size` bytes.
+    let mut buffer_ptr = if state.input_buffer.is_some() && state.input_buffer_length >= max_size {
+      state.input_buffer.unwrap()
+    } else if max_size > 0 {
+      state.input_buffer_length = max_size;
+      let i32 = ctx.ctx.i32_type();
+      let i8 = ctx.ctx.i8_type();
+      let b = &ctx.builder;
+      let buff_size = i32.const_int(max_size as u64, false);
+      // Allocate memory on the stack
+      b.build_array_alloca(ctx.ctx.i8_type(), buff_size, "")
+    } else {
+      i32.ptr_type(inkwell::AddressSpace::Generic).const_null()
+    };
 
     let table_block = ctx.ctx.append_basic_block(*pack.fun, &(table_name.clone() + "_Table"));
 
-    let TableHeaderData { input_type, lexer_type, scan_index: scanner_address, .. } = data.data;
+    // Creates blocks for each branch, skip, and default.
+    let default_block =
+      ctx.ctx.append_basic_block(*pack.fun, &(table_name.clone() + "_Table_Default"));
+
+    let branch_block =
+      ctx.ctx.append_basic_block(*pack.fun, &(table_name.clone() + "_Table_Branches"));
 
     let branches = &data.branches;
     let mut token_ptr = i32.ptr_type(inkwell::AddressSpace::Generic).const_null();
-    let input_offset = i32.const_int(0, false);
     let mut value = i32.const_int(0, false);
 
     // Prepare the input token if we are working with
@@ -91,7 +131,6 @@ pub(crate) fn construct_instruction_branch<'a>(
         } else {
           // Need to increment the peek token by either the previous length of the peek
           // token, or the current length of the assert token.
-
           let is_peeking_block =
             ctx.ctx.append_basic_block(*pack.fun, &(table_name.clone() + "_Is_Peeking"));
           let not_peeking_block =
@@ -130,14 +169,84 @@ pub(crate) fn construct_instruction_branch<'a>(
           b.build_unconditional_branch(table_block);
           b.position_at_end(table_block);
         };
+
+        // Only initialize input buffer if we are directly comparing it's data with
+        // token values, otherwise we are using scanner functions, and there
+        // is no need to access input data.
+        if (input_type != INPUT_TYPE::T02_TOKEN) || trivial_token_comparisons {
+          // Build Input lookup
+          let input_block = write_get_input_ptr_lookup(ctx, pack, max_size, token_ptr);
+
+          // If the block size is less than 1 then jump to default
+          let comparison = b.build_int_compare(
+            inkwell::IntPredicate::EQ,
+            i32.const_int(0, false),
+            input_block.size,
+            "",
+          );
+
+          b.build_conditional_branch(comparison, default_block, branch_block);
+          b.position_at_end(branch_block);
+
+          buffer_ptr = input_block.pointer.clone();
+
+          /* -- *
+          //
+
+          let i32 = ctx.ctx.i32_type();
+          let i8 = ctx.ctx.i8_type();
+          let b = &ctx.builder;
+
+          let buff_size = i32.const_int(max_size as u64, false);
+
+          // TODO: move this section outside of the skip loop so we aren't continuously
+          // allocate space on the stack.
+
+          // Zero fill the buffer.
+          b.build_call(
+            ctx.fun.memset,
+            &[
+              buffer_ptr.into(),
+              i8.const_int(0, false).into(),
+              buff_size.into(),
+              ctx.ctx.bool_type().const_int(0, false).into(),
+            ],
+            "",
+          );
+
+          // Perform a memcpy between the input ptr and the buffer, using the smaller
+          // of the two input block length and max_size as the amount of bytes to
+          // copy.
+          let min_size = b
+            .build_call(
+              ctx.fun.min,
+              &[i32.const_int(max_size as u64, false).into(), input_block.size.into()],
+              "",
+            )
+            .try_as_basic_value()
+            .unwrap_left()
+            .into_int_value();
+
+          b.build_call(
+            ctx.fun.memcpy,
+            &[
+              buffer_ptr.into(),
+              input_block.pointer.into(),
+              min_size.into(),
+              ctx.ctx.bool_type().const_int(0, false).into(),
+            ],
+            "",
+          );
+          // */
+          // Prepare a pointer to the token's type for later reuse in the switch block
+          state.input_block = Some(input_block);
+          state.input_buffer = Some(buffer_ptr.clone().into());
+        }
       }
     }
 
     let mut build_switch = true;
-
-    // Creates blocks for each branch, skip, and default.
-    let default_block =
-      ctx.ctx.append_basic_block(*pack.fun, &(table_name.clone() + "_Table_Default"));
+    // Check to see if we need to create a local data buffer.
 
     let mut blocks = BTreeMap::new();
 
@@ -166,35 +275,12 @@ pub(crate) fn construct_instruction_branch<'a>(
 
     match input_type {
       INPUT_TYPE::T02_TOKEN => {
-        if data.has_trivial_comparisons() {
+        if trivial_token_comparisons {
           build_switch = false;
 
-          // Store branch data in tuples comprized of (branch address, branch data,  token string)
-          let branches = data
-            .branches
-            .iter()
-            .map(|(address, branch)| {
-              let sym = data.get_branch_symbol(branch).unwrap();
-              let string = match sym.guid {
-                id if id.is_defined() => {
-                  vec![g.symbol_strings.get(&id).unwrap().as_str()]
-                }
-                SymbolID::GenericSpace => {
-                  vec![" "]
-                }
-                _ => vec![""],
-              };
-
-              (address, branch, string)
-            })
-            .collect::<Vec<_>>();
+          let branches = getBranchTokenData(g, &data);
 
           // Build a buffer to store the largest need register size, rounded to 4 bytes.
-
-          let max_size =
-            branches.iter().flat_map(|(_, _, s)| s).fold(0, |a, s| usize::max(a, s.len()));
-
-          let buffer_ptr = construct_buffer(ctx, max_size, &mut state, pack, token_ptr);
 
           let token_type_ptr = b.build_struct_gep(token_ptr, TokType, "").unwrap();
 
@@ -299,37 +385,23 @@ pub(crate) fn construct_instruction_branch<'a>(
         let production_ptr = b.build_struct_gep(parse_ctx, CTX_production, "").unwrap();
         value = b.build_load(production_ptr, "").into_int_value();
       }
-      _ => {
-        match input_type {
-          INPUT_TYPE::T05_BYTE => {
-            let buffer = construct_buffer(ctx, 1, &mut state, pack, token_ptr);
-
-            let tok_len_ptr = b.build_struct_gep(token_ptr, TokLength, "").unwrap();
-
-            b.build_store(tok_len_ptr, ctx.ctx.i64_type().const_int((1 << 32) | 1, false));
-
-            value = b.build_load(buffer, "").into_int_value();
-          }
-
-          INPUT_TYPE::T03_CLASS => {
-            let buffer = construct_buffer(ctx, 4, &mut state, pack, token_ptr);
-
-            let cp_val = construct_cp_lu_with_token_len_store(ctx, buffer, token_ptr);
-
-            value = b
-              .build_call(ctx.fun.get_token_class_from_codepoint, &[cp_val.into()], "")
-              .try_as_basic_value()
-              .unwrap_left()
-              .into_int_value();
-          }
-
-          INPUT_TYPE::T04_CODEPOINT => {
-            let buffer = construct_buffer(ctx, 4, &mut state, pack, token_ptr);
-            value = construct_cp_lu_with_token_len_store(ctx, buffer, token_ptr);
-          }
-          _ => {}
-        };
+      INPUT_TYPE::T05_BYTE => {
+        let tok_len_ptr = b.build_struct_gep(token_ptr, TokLength, "").unwrap();
+        b.build_store(tok_len_ptr, ctx.ctx.i64_type().const_int((1 << 32) | 1, false));
+        value = b.build_load(buffer_ptr, "").into_int_value();
       }
+      INPUT_TYPE::T03_CLASS => {
+        let cp_val = construct_cp_lu_with_token_len_store(ctx, buffer_ptr, token_ptr);
+        value = b
+          .build_call(ctx.fun.get_token_class_from_codepoint, &[cp_val.into()], "")
+          .try_as_basic_value()
+          .unwrap_left()
+          .into_int_value();
+      }
+      INPUT_TYPE::T04_CODEPOINT => {
+        value = construct_cp_lu_with_token_len_store(ctx, buffer_ptr, token_ptr);
+      }
+      _ => {}
     }
 
     if build_switch {
@@ -426,6 +498,32 @@ pub(crate) fn construct_instruction_branch<'a>(
   Ok(())
 }
 
+/// Store branch data in tuples comprized of (branch address, branch data,  token string)
+fn getBranchTokenData<'a>(
+  g: &'a GrammarStore,
+  data: &'a BranchTableData,
+) -> Vec<(&'a usize, &'a crate::build::table::BranchData, Vec<&'a str>)> {
+  let branches = data
+    .branches
+    .iter()
+    .map(|(address, branch)| {
+      let sym = data.get_branch_symbol(branch).unwrap();
+      let string = match sym.guid {
+        id if id.is_defined() => {
+          vec![g.symbol_strings.get(&id).unwrap().as_str()]
+        }
+        SymbolID::GenericSpace => {
+          vec![" "]
+        }
+        _ => vec![""],
+      };
+
+      (address, branch, string)
+    })
+    .collect::<Vec<_>>();
+  branches
+}
+
 fn construct_cp_lu_with_token_len_store<'a>(
   ctx: &'a LLVMParserModule,
   buffer: PointerValue<'a>,
@@ -450,6 +548,25 @@ fn construct_cp_lu_with_token_len_store<'a>(
   b.build_store(tok_len_ptr, tok_len);
 
   cp_val
+}
+
+fn construct_buffer_data<'a>(
+  ctx: &'a LLVMParserModule,
+  max_size: usize,
+  state: &mut BranchStateCache<'a>,
+  pack: &'a FunctionPack,
+  token_ptr: PointerValue<'a>,
+) -> PointerValue<'a> {
+  if state.input_buffer.is_some() && state.input_buffer_length >= max_size {
+    state.input_buffer.unwrap()
+  } else {
+    let i32 = ctx.ctx.i32_type();
+    let i8 = ctx.ctx.i8_type();
+    let b = &ctx.builder;
+    let buff_size = i32.const_int(max_size as u64, false);
+    // Allocate memory on the stack
+    b.build_array_alloca(ctx.ctx.i8_type(), buff_size, "")
+  }
 }
 
 /// Builds instructions that copy the data of the input block
@@ -514,8 +631,8 @@ fn construct_buffer<'a>(
       "",
     );
 
-    state.input_block = Some(input_block);
     state.input_buffer_length_int = Some(min_size);
+    state.input_block = Some(input_block);
     state.input_buffer = Some(buffer_pointer);
     state.input_buffer_length = max_size;
 

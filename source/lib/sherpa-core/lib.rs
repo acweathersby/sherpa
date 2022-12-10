@@ -64,7 +64,12 @@ pub mod errors {
 /// Create a build pipeline
 pub mod pipeline {
 
-  pub use crate::build::pipeline::{compile_bytecode_parser, BuildPipeline, SourceType};
+  pub use crate::build::pipeline::{
+    compile_bytecode_parser,
+    compile_llvm_parser,
+    BuildPipeline,
+    SourceType,
+  };
 
   pub mod tasks {
     pub use crate::build::{
