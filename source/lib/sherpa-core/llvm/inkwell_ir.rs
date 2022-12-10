@@ -67,10 +67,10 @@ pub(crate) fn construct_context<'a>(module_name: &str, ctx: &'a Context) -> LLVM
       TOKEN.into(),
       INPUT_BLOCK.into(),
       GOTO.ptr_type(Generic).into(),
-      GOTO.ptr_type(Generic).into(),
+      i32.into(),
+      i32.into(),
       get_input_block_type.into(),
       READER.ptr_type(Generic).into(),
-      i32.into(),
       i32.into(),
       i32.into(),
       i32.into(),
@@ -199,7 +199,7 @@ pub(crate) fn construct_context<'a>(module_name: &str, ctx: &'a Context) -> LLVM
         None,
       ),
       memcpy: module.add_function(
-        "llvm.memcpy.p0.p0.i32",
+        "llvm.memcpy.p0i8.p0i8.i32",
         ctx.void_type().fn_type(
           &[
             i8.ptr_type(Generic).into(),
@@ -456,35 +456,54 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
   let LLVMParserModule { builder: b, types, ctx, fun: funct, .. } = ctx;
   let i32 = ctx.i32_type();
 
-  let fn_value = funct.extend_stack_if_needed;
+  /*/ Pseudo code ----------------------------------------
 
+  GOTO {
+    top,
+    base,
+    size, -- number of [slots] taken by the current goto stack
+    count, -- number of [slots] remaining
+  }
+
+
+  num_of_ele = ctx.top_goto - cxt.base_goto
+
+  remaining_size = ctx.goto_size - num_of_ele
+
+  if remaining_size < needed_size:
+
+    new_size = (needed_size + num_of_ele) << 4
+
+    new_base_pointer = extend_stack(new_size)
+
+    memcpy(new_base_pointer, ctx.base_goto, num_of_ele)
+
+    if ctx.base_goto != ctx.root_base_goto
+      extend_stack(cxt.base_goto, ctx.goto_size)
+
+    cxt.base_goto = new_base_pointer
+    cxt.top_goto =  cxt.base_goto + num_of_ele
+
+
+  -- End Pseudo code -------------------------------------
+  */
+
+  let fn_value = funct.extend_stack_if_needed;
   let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
   let needed_slot_count = fn_value.get_nth_param(1).unwrap().into_int_value();
 
   let entry = ctx.append_basic_block(fn_value, "Entry");
   b.position_at_end(entry);
 
-  // Get difference between current goto and the base goto.
-  let goto_base_ptr_ptr = b.build_struct_gep(parse_ctx, CTX_goto_base, "base").unwrap();
-  let goto_base_ptr = b.build_load(goto_base_ptr_ptr, "base").into_pointer_value();
-  let goto_top_ptr_ptr = b.build_struct_gep(parse_ctx, CTX_goto_top, "top").unwrap();
-  let goto_top_ptr = b.build_load(goto_top_ptr_ptr, "top").into_pointer_value();
-  let goto_used_bytes = b.build_int_sub(
-    b.build_ptr_to_int(goto_top_ptr, ctx.i64_type().into(), "top"),
-    b.build_ptr_to_int(goto_base_ptr, ctx.i64_type().into(), "base"),
-    "used",
-  );
-  let goto_used_bytes_i32 = b.build_int_truncate(goto_used_bytes, i32.into(), "");
-  let goto_used_slots =
-    b.build_right_shift(goto_used_bytes_i32, ctx.i32_type().const_int(4, false), false, "used");
+  // Compare the number of needed slots with the current top
 
-  let goto_size_ptr = b.build_struct_gep(parse_ctx, CTX_goto_stack_len, "size").unwrap();
-  let goto_slot_count = b.build_load(goto_size_ptr, "size").into_int_value();
-  let goto_slots_remaining = b.build_int_sub(goto_slot_count, goto_used_slots, "remainder");
+  let goto_remaining_ptr =
+    b.build_struct_gep(parse_ctx, CTX_goto_stack_remaining, "remaining").unwrap();
+  let goto_remaining = b.build_load(goto_remaining_ptr, "remaining").into_int_value();
 
   // Compare to the stack size
   let comparison =
-    b.build_int_compare(inkwell::IntPredicate::ULT, goto_slots_remaining, needed_slot_count, "");
+    b.build_int_compare(inkwell::IntPredicate::ULT, goto_remaining, needed_slot_count, "");
 
   let extend_block = ctx.append_basic_block(fn_value, "Extend");
   let free_block = ctx.append_basic_block(fn_value, "FreeStack");
@@ -498,9 +517,35 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
   // Create a new stack, copy data from old stack to new one
   // and, if the old stack was not the original stack,
   // delete the old stack.
+  let goto_top_ptr_ptr =
+    b.build_struct_gep(parse_ctx, CTX_goto_ptr, "goto_top_stack_pointer").unwrap();
+  let goto_top_ptr = b.build_load(goto_top_ptr_ptr, "goto_top_ptr").into_pointer_value();
+
+  let goto_slot_size_ptr =
+    b.build_struct_gep(parse_ctx, CTX_goto_stack_len, "goto_size_ptr").unwrap();
+  let goto_slot_count = b.build_load(goto_slot_size_ptr, "goto_size").into_int_value();
+
+  let goto_byte_size =
+    b.build_left_shift(goto_slot_count, ctx.i32_type().const_int(4, false), "goto_byte_size");
+  let goto_remaining_bytes =
+    b.build_left_shift(goto_remaining, ctx.i32_type().const_int(4, false), "remaining_bytes");
+
+  let goto_used_bytes = b.build_int_sub(goto_byte_size, goto_remaining_bytes, "goto_used_bytes");
+  let goto_used_bytes_64 = b.build_int_cast(goto_used_bytes, ctx.i64_type(), "");
+
+  let goto_base_ptr_int = b.build_int_sub(
+    b.build_ptr_to_int(goto_top_ptr, ctx.i64_type().into(), ""),
+    goto_used_bytes_64,
+    "goto_base",
+  );
+  let goto_base_ptr = b.build_int_to_ptr(
+    goto_base_ptr_int,
+    types.goto.ptr_type(inkwell::AddressSpace::Generic),
+    "goto_base",
+  );
 
   // create a size that is equal to the needed amount rounded up to the nearest 64bytes
-  let new_slot_count = b.build_int_add(goto_used_slots, needed_slot_count, "new_size");
+  let new_slot_count = b.build_int_add(goto_slot_count, needed_slot_count, "new_size");
   let new_slot_count = b.build_left_shift(new_slot_count, i32.const_int(3, false), "new_size");
 
   let new_ptr = b
@@ -515,7 +560,7 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
       b.build_bitcast(new_ptr, ctx.i8_type().ptr_type(inkwell::AddressSpace::Generic), "").into(),
       b.build_bitcast(goto_base_ptr, ctx.i8_type().ptr_type(inkwell::AddressSpace::Generic), "")
         .into(),
-      goto_used_bytes_i32.into(),
+      goto_used_bytes.into(),
       ctx.bool_type().const_int(0, false).into(),
     ],
     "",
@@ -537,10 +582,10 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
   b.build_unconditional_branch(update_block);
   b.position_at_end(update_block);
 
-  b.build_store(goto_base_ptr_ptr, new_ptr);
+  b.build_store(goto_top_ptr_ptr, new_ptr);
 
   let new_stack_top_ptr = b.build_ptr_to_int(new_ptr, ctx.i64_type(), "new_top");
-  let new_stack_top_ptr = b.build_int_add(new_stack_top_ptr, goto_used_bytes, "new_top");
+  let new_stack_top_ptr = b.build_int_add(new_stack_top_ptr, goto_used_bytes_64, "new_top");
   let new_stack_top_ptr = b.build_int_to_ptr(
     new_stack_top_ptr,
     types.goto.ptr_type(inkwell::AddressSpace::Generic),
@@ -548,14 +593,17 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
   );
 
   b.build_store(goto_top_ptr_ptr, new_stack_top_ptr);
-  b.build_store(goto_size_ptr, new_slot_count);
+  b.build_store(goto_slot_size_ptr, new_slot_count);
+
+  let slot_diff = b.build_int_sub(new_slot_count, goto_slot_count, "slot_diff");
+  let new_remaining_count = b.build_int_add(slot_diff, goto_remaining, "remaining");
+  b.build_store(goto_remaining_ptr, new_remaining_count);
 
   b.build_unconditional_branch(return_block);
-
   b.position_at_end(return_block);
   b.build_return(Some(&i32.const_int(1, false)));
 
-  if funct.scan.verify(true) {
+  if funct.extend_stack_if_needed.verify(true) {
     Ok(())
   } else {
     Err(())
@@ -597,12 +645,12 @@ pub(crate) unsafe fn construct_scan(ctx: &LLVMParserModule) -> std::result::Resu
 
   // Goto Stack Data
   b.build_store(
-    b.build_struct_gep(scan_ctx, CTX_goto_base, "").unwrap(),
-    b.build_load(b.build_struct_gep(parse_ctx, CTX_goto_base, "").unwrap(), ""),
+    b.build_struct_gep(scan_ctx, CTX_goto_ptr, "").unwrap(),
+    b.build_load(b.build_struct_gep(parse_ctx, CTX_goto_ptr, "").unwrap(), ""),
   );
   b.build_store(
-    b.build_struct_gep(scan_ctx, CTX_goto_top, "").unwrap(),
-    b.build_load(b.build_struct_gep(parse_ctx, CTX_goto_top, "").unwrap(), ""),
+    b.build_struct_gep(scan_ctx, CTX_goto_stack_remaining, "").unwrap(),
+    b.build_load(b.build_struct_gep(parse_ctx, CTX_goto_stack_remaining, "").unwrap(), ""),
   );
   b.build_store(
     b.build_struct_gep(scan_ctx, CTX_goto_stack_len, "").unwrap(),
@@ -661,12 +709,12 @@ pub(crate) unsafe fn construct_scan(ctx: &LLVMParserModule) -> std::result::Resu
 
   // Copy updated data from the scan context back to the main context
   b.build_store(
-    b.build_struct_gep(parse_ctx, CTX_goto_base, "").unwrap(),
-    b.build_load(b.build_struct_gep(scan_ctx, CTX_goto_base, "").unwrap(), ""),
+    b.build_struct_gep(parse_ctx, CTX_goto_ptr, "").unwrap(),
+    b.build_load(b.build_struct_gep(scan_ctx, CTX_goto_ptr, "").unwrap(), ""),
   );
   b.build_store(
-    b.build_struct_gep(parse_ctx, CTX_goto_top, "").unwrap(),
-    b.build_load(b.build_struct_gep(scan_ctx, CTX_goto_top, "").unwrap(), ""),
+    b.build_struct_gep(parse_ctx, CTX_goto_stack_remaining, "").unwrap(),
+    b.build_load(b.build_struct_gep(scan_ctx, CTX_goto_stack_remaining, "").unwrap(), ""),
   );
   b.build_store(
     b.build_struct_gep(parse_ctx, CTX_goto_stack_len, "").unwrap(),
@@ -904,15 +952,15 @@ pub(crate) unsafe fn construct_init(ctx: &LLVMParserModule) -> std::result::Resu
 
   let goto_stack = builder.build_struct_gep(parse_ctx_ptr, CTX_goto_stack, "")?;
   let goto_start = builder.build_gep(goto_stack, &[zero, zero], "");
-  let goto_base = builder.build_struct_gep(parse_ctx_ptr, CTX_goto_base, "")?;
-  let goto_top = builder.build_struct_gep(parse_ctx_ptr, CTX_goto_top, "")?;
+  let goto_top = builder.build_struct_gep(parse_ctx_ptr, CTX_goto_ptr, "")?;
+  let goto_remaining = builder.build_struct_gep(parse_ctx_ptr, CTX_goto_stack_remaining, "")?;
   let goto_len = builder.build_struct_gep(parse_ctx_ptr, CTX_goto_stack_len, "")?;
   let reader_ctx_ptr = builder.build_struct_gep(parse_ctx_ptr, CTX_reader, "")?;
   let state = builder.build_struct_gep(parse_ctx_ptr, CTX_state, "")?;
 
   builder.build_store(reader_ctx_ptr, reader_ptr);
-  builder.build_store(goto_base, goto_start);
   builder.build_store(goto_top, goto_start);
+  builder.build_store(goto_remaining, i32.const_int(8, false));
   builder.build_store(goto_len, i32.const_int(8, false));
   builder.build_store(state, i32.const_int(NORMAL_STATE_FLAG_LLVM as u64, false));
   builder.build_return(None);
@@ -942,15 +990,17 @@ pub(crate) unsafe fn construct_push_state(ctx: &LLVMParserModule) -> std::result
   let new_goto = b.build_insert_value(types.goto.get_undef(), goto_state, 1, "").unwrap();
   let new_goto = b.build_insert_value(new_goto, goto_fn, 0, "").unwrap();
 
-  let goto_top_ptr = b.build_struct_gep(parse_ctx, CTX_goto_top, "")?;
-  // let goto_top = b.build_in_bounds_gep(goto_top_ptr, &[zero], "");
+  let goto_top_ptr = b.build_struct_gep(parse_ctx, CTX_goto_ptr, "")?;
   let goto_top = b.build_load(goto_top_ptr, "").into_pointer_value();
-
   b.build_store(goto_top, new_goto);
 
   let goto_top = b.build_gep(goto_top, &[i32.const_int(1, false)], "");
-
   b.build_store(goto_top_ptr, goto_top);
+
+  let goto_remaining_ptr = b.build_struct_gep(parse_ctx, CTX_goto_stack_remaining, "")?;
+  let goto_remaining = b.build_load(goto_remaining_ptr, "").into_int_value();
+  let goto_remaining = b.build_int_sub(goto_remaining, i32.const_int(1, false), "");
+  b.build_store(goto_remaining_ptr, goto_remaining);
 
   b.build_return(None);
 
@@ -979,11 +1029,16 @@ pub(crate) unsafe fn construct_pop_state_function(
 
   b.position_at_end(entry);
 
-  let goto_top_ptr = b.build_struct_gep(parse_ctx, CTX_goto_top, "")?;
+  let goto_top_ptr = b.build_struct_gep(parse_ctx, CTX_goto_ptr, "")?;
   // let goto_top = b.build_in_bounds_gep(goto_top_ptr, &[zero], "");
   let goto_top = b.build_load(goto_top_ptr, "").into_pointer_value();
   let goto_top = b.build_gep(goto_top, &[i32.const_int(1, false).const_neg()], "");
   b.build_store(goto_top_ptr, goto_top);
+
+  let goto_remaining_ptr = b.build_struct_gep(parse_ctx, CTX_goto_stack_remaining, "")?;
+  let goto_remaining = b.build_load(goto_remaining_ptr, "").into_int_value();
+  let goto_remaining = b.build_int_add(goto_remaining, i32.const_int(1, false), "");
+  b.build_store(goto_remaining_ptr, goto_remaining);
 
   let old_goto = b.build_load(goto_top, "");
 
@@ -1587,6 +1642,12 @@ pub fn compile_from_bytecode<'a>(
     construct_merge_utf8_part(ctx)?;
     construct_utf8_lookup(ctx)?;
   }
+
+  // Add optimizations here
+  ctx
+    .fun
+    .pop_state
+    .add_attribute(AttributeLoc::Function, ctx.ctx.create_string_attribute("", "alwaysinline"));
 
   construct_parse_functions(g, ctx, output)?;
 

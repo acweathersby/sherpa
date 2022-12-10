@@ -401,12 +401,14 @@ fn should_pop_new_state() {
     init_fn.call(&mut rt_ctx, &mut reader);
     push_state_fn.call(&mut rt_ctx, 20, 0x10101010_01010101);
     push_state_fn.call(&mut rt_ctx, 40, 0x10101010_01010101);
+    assert_eq!(rt_ctx.goto_stack_remaining, 6);
 
     let second = pop_state.call(&mut rt_ctx);
     let first = pop_state.call(&mut rt_ctx);
 
     assert_eq!(second.state, 40);
     assert_eq!(first.state, 20);
+    assert_eq!(rt_ctx.goto_stack_remaining, 8);
 
     eprintln!("{:#?}", rt_ctx);
   };
@@ -473,17 +475,6 @@ fn should_call_next_and_emit_accept() {
 }
 
 #[test]
-fn verify_construct_extend_stack_if_needed() {
-  let context = Context::create();
-
-  let parse_context = construct_context("test", &context);
-
-  unsafe { assert!(construct_extend_stack_if_needed(&parse_context).is_ok()) }
-
-  eprintln!("{}", parse_context.module.to_string());
-}
-
-#[test]
 fn should_initialize_context() {
   let context = Context::create();
 
@@ -501,9 +492,9 @@ fn should_initialize_context() {
 
     let root = rt_ctx.as_ref() as *const LLVMParseContext<TestUTF8StringReader<'static>> as usize;
 
-    assert_eq!(rt_ctx.stack_top as usize, root);
-    assert_eq!(rt_ctx.stack_base as usize, root);
-    assert_eq!(rt_ctx.stack_size as usize, 8);
+    assert_eq!(rt_ctx.goto_stack_ptr as usize, root);
+    assert_eq!(rt_ctx.goto_stack_remaining as usize, 8);
+    assert_eq!(rt_ctx.goto_stack_size as usize, 8);
     assert_eq!(rt_ctx.state, NORMAL_STATE_FLAG_LLVM);
 
     eprintln!("{:?}:{:#?}", root, rt_ctx);
@@ -554,6 +545,17 @@ fn should_yield_correct_CP_values_for_inputs() {
 }
 
 #[test]
+fn verify_construct_extend_stack_if_needed() {
+  let context = Context::create();
+
+  let parse_context = construct_context("test", &context);
+
+  unsafe { assert!(construct_extend_stack_if_needed(&parse_context).is_ok()) }
+
+  eprintln!("{}", parse_context.module.to_string());
+}
+
+#[test]
 fn should_extend_stack() {
   let context = Context::create();
 
@@ -589,26 +591,32 @@ fn should_extend_stack() {
     push_state_fn.call(&mut rt_ctx, 30, 400);
     extend.call(&mut rt_ctx, 10);
 
-    assert_eq!(rt_ctx.stack_size, (12 << 1));
+    assert_eq!(rt_ctx.goto_stack_size, (18 << 3));
 
     push_state_fn.call(&mut rt_ctx, 50, 600);
     push_state_fn.call(&mut rt_ctx, 70, 800);
 
-    extend.call(&mut rt_ctx, 30);
-    assert_eq!(rt_ctx.stack_size, (34 << 1));
+    extend.call(&mut rt_ctx, 200);
+
+    assert_eq!(rt_ctx.goto_stack_size - rt_ctx.goto_stack_remaining, 4);
 
     for v in 4..(34 << 1) {
       push_state_fn.call(&mut rt_ctx, v, v as usize);
     }
 
-    let stack =
-      unsafe { std::slice::from_raw_parts(rt_ctx.stack_base, rt_ctx.stack_size as usize) };
+    assert_eq!(rt_ctx.goto_stack_size - rt_ctx.goto_stack_remaining, (34 << 1));
+
+    let stack = unsafe {
+      let ptr = (rt_ctx.goto_stack_ptr as usize)
+        - (((rt_ctx.goto_stack_size as usize) - (rt_ctx.goto_stack_remaining as usize)) << 4);
+      std::slice::from_raw_parts(ptr as *const Goto, rt_ctx.goto_stack_size as usize)
+    };
 
     assert_eq!(stack[67].state, 67);
 
     extend.call(&mut rt_ctx, 2);
 
-    assert_eq!(rt_ctx.stack_size, ((68 + 2) << 1));
+    assert_eq!(rt_ctx.goto_stack_size, 2752);
 
     eprintln!("{:#?}", stack);
   };

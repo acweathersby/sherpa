@@ -97,11 +97,11 @@ pub mod parse_ctx_indices {
   pub const CTX_tok_assert: u32 = 2; // 2
   pub const CTX_tok_peek: u32 = 3; // 3
   pub const CTX_input_block: u32 = 4; // 4
-  pub const CTX_goto_base: u32 = 5; // 5
-  pub const CTX_goto_top: u32 = 6; // 6
-  pub const CTX_get_input_block: u32 = 7; // 7
-  pub const CTX_reader: u32 = 8; // 8
-  pub const CTX_goto_stack_len: u32 = 9; // 9
+  pub const CTX_goto_ptr: u32 = 5; // 5
+  pub const CTX_goto_stack_len: u32 = 6; // 6
+  pub const CTX_goto_stack_remaining: u32 = 7; // 7
+  pub const CTX_get_input_block: u32 = 8; // 8
+  pub const CTX_reader: u32 = 9; // 9
   pub const CTX_production: u32 = 10; // 10
   pub const CTX_state: u32 = 11; // 11
   pub const CTX_peek_mode: u32 = 12; // 12

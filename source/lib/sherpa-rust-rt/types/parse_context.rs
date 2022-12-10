@@ -4,6 +4,7 @@ use std::{
   alloc::{alloc, dealloc, Layout},
   fmt::Debug,
   num,
+  time::Instant,
 };
 
 const STACK_32_BIT_SIZE: usize = 128;
@@ -212,11 +213,11 @@ pub struct LLVMParseContext<T: LLVMCharacterReader + ByteCharacterReader + BaseC
   pub assert_token: ParseToken,
   pub peek_token: ParseToken,
   pub input_block: InputBlock,
-  pub stack_base: *const Goto,
-  pub stack_top: *const Goto,
+  pub goto_stack_ptr: *const Goto,
+  pub goto_stack_size: u32,
+  pub goto_stack_remaining: u32,
   pub get_byte_block_at_cursor: fn(&mut T, &mut InputBlock),
   pub reader: *mut T,
-  pub stack_size: u32,
   pub production: u32,
   pub state: u32,
   pub in_peek_mode: u32,
@@ -232,11 +233,11 @@ impl<T: LLVMCharacterReader + ByteCharacterReader + BaseCharacterReader> Debug
     dbgstr.field("assert_token", &self.assert_token);
     dbgstr.field("peek_token", &self.peek_token);
     dbgstr.field("input_block", &self.input_block);
-    dbgstr.field("stack_base", &self.stack_base);
-    dbgstr.field("stack_top", &self.stack_top);
+    dbgstr.field("goto_stack_base", &self.goto_stack_ptr);
+    dbgstr.field("goto_stack_size", &self.goto_stack_size);
+    dbgstr.field("goto_stack_remaining", &self.goto_stack_remaining);
     dbgstr.field("get_byte_block_at_cursor", &"MASKED");
     dbgstr.field("reader", &self.reader);
-    dbgstr.field("stack_size", &self.stack_size);
     dbgstr.field("production", &self.production);
     dbgstr.field("state", &self.state);
     dbgstr.field("in_peek_mode", &self.in_peek_mode);
@@ -250,12 +251,12 @@ impl<T: LLVMCharacterReader + ByteCharacterReader + BaseCharacterReader> LLVMPar
       peek_token: ParseToken::default(),
       anchor_token: ParseToken::default(),
       assert_token: ParseToken::default(),
-      stack_base: 0 as *const Goto,
-      stack_top: 0 as *const Goto,
+      goto_stack_ptr: 0 as *const Goto,
+      goto_stack_size: 0,
+      goto_stack_remaining: 0,
       state: 0,
       production: 0,
       input_block: InputBlock::default(),
-      stack_size: 0,
       reader: 0 as *mut T,
       get_byte_block_at_cursor: T::get_byte_block_at_cursor,
       in_peek_mode: 0,
@@ -268,20 +269,37 @@ impl<T: LLVMCharacterReader + ByteCharacterReader + BaseCharacterReader> LLVMPar
 pub extern "C" fn sherpa_allocate_stack(num_of_slots: u32) -> *mut Goto {
   // Each goto slot is 16bytes, so we shift left num_of_slots by 4 to get the bytes size of
   // the stack.
-  println!("ALLOCATION OF {} bytes for {} slots", num_of_slots << 4, num_of_slots);
+
   let layout = Layout::from_size_align((num_of_slots << 4) as usize, 16).unwrap();
 
-  unsafe { alloc(layout) as *mut Goto }
+  unsafe {
+    let ptr = alloc(layout) as *mut Goto;
+
+    #[cfg(debug_assertions)]
+    {
+      println!(
+        "ALLOCATION OF {} bytes for {} slots at address: {:p}",
+        num_of_slots << 4,
+        num_of_slots,
+        ptr
+      );
+    }
+
+    ptr
+  }
 }
 
 #[no_mangle]
-pub extern "C" fn sherpa_free_stack(stack_base: *mut Goto, num_of_slots: u32) {
-  println!("Freeing {} bytes for {} slots", num_of_slots << 4, num_of_slots);
+pub extern "C" fn sherpa_free_stack(ptr: *mut Goto, num_of_slots: u32) {
+  #[cfg(debug_assertions)]
+  {
+    println!("Freeing {} bytes for {} slots at address {:p}", num_of_slots << 4, num_of_slots, ptr);
+  }
   // Each goto slot is 16bytes, so we shift left num_of_slots by 4 to get the bytes size of
   // the stack.
   let layout = Layout::from_size_align((num_of_slots << 4) as usize, 16).unwrap();
 
-  unsafe { dealloc(stack_base as *mut u8, layout) }
+  unsafe { dealloc(ptr as *mut u8, layout) }
 }
 
 #[no_mangle]
