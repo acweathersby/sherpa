@@ -28,18 +28,22 @@ impl<'a> LLVMCharacterReader for TestUTF8StringReader<'a> {
     self_: &mut T,
     input_block: &mut InputBlock,
   ) {
-    let cursor = input_block.off;
-    let size = ((self_.len() as i64) - (cursor as i64)).max(0);
+    let cursor = input_block.start;
+    let size = ((self_.len() as i64) - (cursor as i64)).max(0) as u32;
 
     if size > 0 {
       let ptr = ((self_.get_bytes().as_ptr() as usize) + cursor as usize) as *const u8;
       input_block.block = ptr;
-      input_block.len = size as u32;
+      input_block.start = cursor;
+      input_block.readable_bytes = size;
+      input_block.end = cursor + size;
       input_block.is_truncated = false;
     } else {
       input_block.block = 0 as *const u8;
-      input_block.len = 0;
-      input_block.is_truncated = true;
+      input_block.start = 0;
+      input_block.end = 0;
+      input_block.readable_bytes = 0;
+      input_block.is_truncated = false;
     }
   }
 }

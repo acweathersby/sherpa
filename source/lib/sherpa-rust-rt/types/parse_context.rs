@@ -178,27 +178,30 @@ impl Default for Goto {
 #[repr(C)]
 pub struct InputBlock {
   /// The pointer to the beginning of the block window slice.
-  pub block:        *const u8,
-  /// The offset of this block, representing the distance in bytes
-  /// from the start of the input string to the InputBlock's pointer
-  /// position.
-  pub off:          u32,
-  /// The number of bytes the block window can view
-  pub len:          u32,
+  pub block: *const u8,
+  /// The global index of the beginning by of this block, when counted from
+  /// from the beginning of the input string.
+  pub start: u32,
+  /// The global index of the position just after the last byte of this block,
+  /// when counted from the beginning of the input string.
+  pub end: u32,
+  /// The number of bytes that can be ready from this block.
+  pub readable_bytes: u32,
   /// Indicates the input continues outside the block's boundary,
   /// but such input is not accessible at this point. Should result
-  /// in an End_Of_Input parse action if parsing fails on the block's
-  /// upper boundary.
+  /// in an End_Of_Input parse action if parsing fails due to lack of
+  /// additional input.
   pub is_truncated: bool,
 }
 
 impl Default for InputBlock {
   fn default() -> Self {
     Self {
-      block:        0 as *const u8,
-      off:          0,
-      len:          0,
-      is_truncated: false,
+      block: 0 as *const u8,
+      start: 0,
+      end: 0,
+      readable_bytes: 0,
+      is_truncated: true,
     }
   }
 }

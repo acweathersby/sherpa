@@ -1,4 +1,4 @@
-use std::{rc::Rc, sync::Arc};
+use std::sync::Arc;
 
 use crate::types::ParseToken;
 use sherpa_runtime::utf8::*;
@@ -80,14 +80,4 @@ pub trait ByteReader {
   /// Returns an optional vector of the input string data.
 
   fn get_source(&self) -> Arc<Vec<u8>>;
-}
-
-pub struct UTF8FileReader {
-  length:      usize,
-  cursor:      usize,
-  line_count:  usize,
-  line_offset: usize,
-  string:      Rc<Vec<u8>>,
-  word:        u32,
-  codepoint:   u32,
 }

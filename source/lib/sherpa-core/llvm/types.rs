@@ -91,6 +91,14 @@ pub mod token_indices {
   pub const TokType: u32 = 2;
 }
 
+pub mod input_block_indices {
+  pub const InputBlockPtr: u32 = 0;
+  pub const InputBlockStart: u32 = 1;
+  pub const InputBlockEnd: u32 = 2;
+  pub const InputBlockSize: u32 = 3;
+  pub const InputBlockTruncated: u32 = 4;
+}
+
 pub mod parse_ctx_indices {
   pub const CTX_goto_stack: u32 = 0; // 0
   pub const CTX_tok_anchor: u32 = 1; // 1

@@ -247,7 +247,7 @@ pub fn build_llvm_parser(
         &Context::create(),
         &bytecode,
       ) {
-        Ok(ctx) => {
+        SherpaResult::Ok(ctx) => {
           let opt = OptimizationLevel::Default;
 
           if output_llvm_ir_file {
@@ -319,7 +319,7 @@ pub fn build_llvm_parser(
             }
           }
         }
-        Err(()) => Err(vec![SherpaError::from("Unable to compile llvm bitcode")]),
+        err => Err(vec![SherpaError::from("Unable to compile llvm bitcode")]),
       }
     }),
     require_ascript: false,

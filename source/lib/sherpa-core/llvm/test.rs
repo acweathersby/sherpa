@@ -320,8 +320,8 @@ fn should_produce_extended_block() {
 
     eprintln!("{:?} {:?}", rt_ctx.input_block, block);
     assert_eq!(*block.block, b't');
-    assert_eq!(block.off, 3);
-    assert_eq!(block.len, 1);
+    assert_eq!(block.start, 3);
+    assert_eq!(block.end, 4);
   };
 }
 
@@ -638,7 +638,9 @@ fn test_compile_from_bytecode() -> SherpaResult<()> {
   let ir_states = optimize_ir_states(&mut j, ir_states);
   let bytecode_output = compile_bytecode(&mut j, ir_states);
 
-  if let Ok(mut ctx) = compile_from_bytecode("test", &g, &Context::create(), &bytecode_output) {
+  if let SherpaResult::Ok(mut ctx) =
+    compile_from_bytecode("test", &g, &Context::create(), &bytecode_output)
+  {
     let mut file = File::create("../test.ll");
 
     if let Ok(mut file) = file {
@@ -742,7 +744,9 @@ fn test_compile_from_bytecode2() -> SherpaResult<()> {
   let ir_states = optimize_ir_states(&mut j, ir_states);
   let bytecode_output = compile_bytecode(&mut j, ir_states);
 
-  if let Ok(mut ctx) = compile_from_bytecode("test", &g, &Context::create(), &bytecode_output) {
+  if let SherpaResult::Ok(mut ctx) =
+    compile_from_bytecode("test", &g, &Context::create(), &bytecode_output)
+  {
     println!("{:?}", ctx);
     SherpaResult::Ok(())
   } else {

@@ -1,4 +1,11 @@
 use super::{
+  input_block_indices::{
+    InputBlockEnd,
+    InputBlockPtr,
+    InputBlockSize,
+    InputBlockStart,
+    InputBlockTruncated,
+  },
   parse_ctx_indices::*,
   token_indices::{TokLength, TokOffset, TokType},
   FunctionPack,
@@ -51,7 +58,18 @@ pub(crate) fn construct_context<'a>(module_name: &str, ctx: &'a Context) -> LLVM
   TOKEN.set_body(&[i64.into(), i64.into(), i64.into(), i64.into()], false);
 
   INPUT_BLOCK.set_body(
-    &[i8.ptr_type(Generic).into(), i32.into(), i32.into(), ctx.bool_type().into()],
+    &[
+      // Input pointer
+      i8.ptr_type(Generic).into(),
+      // start index
+      i32.into(),
+      // end index
+      i32.into(),
+      // readable bytes
+      i32.into(),
+      // is truncated
+      ctx.bool_type().into(),
+    ],
     false,
   );
   let get_input_block_type = ctx
@@ -332,78 +350,97 @@ pub(crate) unsafe fn construct_emit_end_of_parse(
 
 pub(crate) unsafe fn construct_get_adjusted_input_block_function(
   ctx: &LLVMParserModule,
-) -> std::result::Result<(), ()> {
+) -> SherpaResult<()> {
   let LLVMParserModule { builder: b, ctx, fun: funct, .. } = ctx;
 
   let i32 = ctx.i32_type();
+  let bool = ctx.bool_type();
 
   let fn_value = funct.get_adjusted_input_block;
 
   // Set the context's goto pointers to point to the goto block;
   let entry = ctx.append_basic_block(fn_value, "Entry");
+  let can_extend_check = ctx.append_basic_block(fn_value, "CanExtendCheck");
   let attempt_extend = ctx.append_basic_block(fn_value, "Attempt_Extend");
   let valid_window = ctx.append_basic_block(fn_value, "Valid_Window");
 
-  let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
-  let offset_token = fn_value.get_nth_param(1).unwrap().into_pointer_value();
-  let requested_size = fn_value.get_nth_param(2).unwrap().into_int_value();
+  let parse_ctx = fn_value.get_nth_param(0)?.into_pointer_value();
+  let offset_token = fn_value.get_nth_param(1)?.into_pointer_value();
+  let needed_size = fn_value.get_nth_param(2)?.into_int_value();
 
   b.position_at_end(entry);
 
-  let ctx_input_block = b.build_struct_gep(parse_ctx, CTX_input_block, "").unwrap();
+  let ctx_input_block = b.build_struct_gep(parse_ctx, CTX_input_block, "")?;
 
-  let block_offset_ptr = b.build_struct_gep(ctx_input_block, 1, "").unwrap();
-  let block_offset = b.build_load(block_offset_ptr, "").into_int_value();
-
-  let block_size_ptr = b.build_struct_gep(ctx_input_block, 2, "").unwrap();
-  let block_size = b.build_load(block_size_ptr, "").into_int_value();
-
-  let token_offset = b.build_struct_gep(offset_token, TokOffset, "").unwrap();
+  let token_offset = b.build_struct_gep(offset_token, TokOffset, "token_cursor")?;
   let token_offset = b.build_load(token_offset, "").into_int_value();
   let token_offset = b.build_int_truncate(token_offset, i32.into(), "");
 
-  let needed_size = b.build_int_add(token_offset, requested_size, "");
-  let needed_size = b.build_int_sub(needed_size, block_offset, "");
+  let requested_end_index = b.build_int_add(token_offset, needed_size, "");
 
-  let comparison = b.build_int_compare(inkwell::IntPredicate::UGE, block_size, needed_size, "");
+  // if the requested_end_cursor_position is > the blocks end position, and the
+  // the block is truncated, then request a new block.
 
-  b.build_conditional_branch(comparison, valid_window, attempt_extend);
+  let end_byte_index_ptr = b.build_struct_gep(ctx_input_block, InputBlockEnd, "end_ptr")?;
+  let end_byte_index = b.build_load(end_byte_index_ptr, "end").into_int_value();
+
+  let comparison =
+    b.build_int_compare(inkwell::IntPredicate::UGE, end_byte_index, requested_end_index, "");
+
+  b.build_conditional_branch(comparison, valid_window, can_extend_check);
+
+  b.position_at_end(can_extend_check);
+
+  let truncated_ptr = b.build_struct_gep(ctx_input_block, InputBlockTruncated, "truncated_ptr")?;
+  let truncated = b.build_load(truncated_ptr, "end").into_int_value();
+
+  let comparison =
+    b.build_int_compare(inkwell::IntPredicate::EQ, truncated, bool.const_int(1, false), "");
+
+  b.build_conditional_branch(comparison, attempt_extend, valid_window);
+
+  // If the truncated value is `true`, then we can extend:
 
   b.position_at_end(attempt_extend);
 
-  b.build_store(block_offset_ptr, token_offset);
+  let block_start_ptr = b.build_struct_gep(ctx_input_block, InputBlockStart, "")?;
+  let block_start = b.build_load(block_start_ptr, "").into_int_value();
 
-  let reader = b.build_struct_gep(parse_ctx, CTX_reader, "").unwrap();
+  b.build_store(block_start_ptr, token_offset);
+
+  let reader = b.build_struct_gep(parse_ctx, CTX_reader, "")?;
   let reader = b.build_load(reader, "");
-  let get_byte_block = b.build_struct_gep(parse_ctx, CTX_get_input_block, "").unwrap();
+  let get_byte_block = b.build_struct_gep(parse_ctx, CTX_get_input_block, "")?;
   let get_byte_block = b.build_load(get_byte_block, "").into_pointer_value();
-  let get_byte_block = CallableValue::try_from(get_byte_block).unwrap();
+  let get_byte_block = CallableValue::try_from(get_byte_block)?;
 
   b.build_call(get_byte_block, &[reader.into(), ctx_input_block.into()], "");
 
   b.build_unconditional_branch(valid_window);
 
+  // otherwise we can only adjust the remaining value:
+
   b.position_at_end(valid_window);
 
   let block = b.build_load(ctx_input_block, "").into_struct_value();
 
-  let ptr = b.build_extract_value(block, 0, "").unwrap().into_pointer_value();
-  let offset = b.build_extract_value(block, 1, "").unwrap().into_int_value();
-  let size = b.build_extract_value(block, 2, "").unwrap().into_int_value();
-  let diff = b.build_int_sub(token_offset, offset, "");
+  let ptr = b.build_extract_value(block, InputBlockPtr, "")?.into_pointer_value();
+  let start = b.build_extract_value(block, InputBlockStart, "")?.into_int_value();
+  let end = b.build_extract_value(block, InputBlockEnd, "")?.into_int_value();
+  let diff = b.build_int_sub(token_offset, start, "");
   // offset the pointer by the difference between the token_offset and
   // and the block offset
-  let adjusted_size = b.build_int_sub(size, diff, "");
+  let adjusted_size = b.build_int_sub(end, token_offset, "");
   let adjusted_ptr = b.build_gep(ptr, &[diff.into()], "");
-  let block = b.build_insert_value(block, adjusted_ptr, 0, "").unwrap();
-  let block = b.build_insert_value(block, adjusted_size, 2, "").unwrap();
+  let block = b.build_insert_value(block, adjusted_ptr, InputBlockPtr, "")?;
+  let block = b.build_insert_value(block, adjusted_size, InputBlockSize, "")?;
 
   b.build_return(Some(&block));
 
   if funct.get_adjusted_input_block.verify(true) {
-    Ok(())
+    SherpaResult::Ok(())
   } else {
-    Err(())
+    SherpaResult::Err(SherpaError::from("Could not validate get_adjusted_input_block"))
   }
 }
 
@@ -456,38 +493,6 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
   let LLVMParserModule { builder: b, types, ctx, fun: funct, .. } = ctx;
   let i32 = ctx.i32_type();
 
-  /*/ Pseudo code ----------------------------------------
-
-  GOTO {
-    top,
-    base,
-    size, -- number of [slots] taken by the current goto stack
-    count, -- number of [slots] remaining
-  }
-
-
-  num_of_ele = ctx.top_goto - cxt.base_goto
-
-  remaining_size = ctx.goto_size - num_of_ele
-
-  if remaining_size < needed_size:
-
-    new_size = (needed_size + num_of_ele) << 4
-
-    new_base_pointer = extend_stack(new_size)
-
-    memcpy(new_base_pointer, ctx.base_goto, num_of_ele)
-
-    if ctx.base_goto != ctx.root_base_goto
-      extend_stack(cxt.base_goto, ctx.goto_size)
-
-    cxt.base_goto = new_base_pointer
-    cxt.top_goto =  cxt.base_goto + num_of_ele
-
-
-  -- End Pseudo code -------------------------------------
-  */
-
   let fn_value = funct.extend_stack_if_needed;
   let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
   let needed_slot_count = fn_value.get_nth_param(1).unwrap().into_int_value();
@@ -495,13 +500,11 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
   let entry = ctx.append_basic_block(fn_value, "Entry");
   b.position_at_end(entry);
 
-  // Compare the number of needed slots with the current top
-
+  // Compare the number of needed slots with the number of available slots
   let goto_remaining_ptr =
     b.build_struct_gep(parse_ctx, CTX_goto_stack_remaining, "remaining").unwrap();
   let goto_remaining = b.build_load(goto_remaining_ptr, "remaining").into_int_value();
 
-  // Compare to the stack size
   let comparison =
     b.build_int_compare(inkwell::IntPredicate::ULT, goto_remaining, needed_slot_count, "");
 
@@ -775,7 +778,7 @@ pub(crate) unsafe fn construct_scan(ctx: &LLVMParserModule) -> std::result::Resu
 }
 
 pub(crate) unsafe fn construct_emit_shift(ctx: &LLVMParserModule) -> std::result::Result<(), ()> {
-  let LLVMParserModule { module, builder: b, types, ctx, fun: funct, .. } = ctx;
+  let LLVMParserModule { builder: b, types, ctx, fun: funct, .. } = ctx;
 
   let i32 = ctx.i32_type();
 
@@ -1014,9 +1017,7 @@ pub(crate) unsafe fn construct_push_state(ctx: &LLVMParserModule) -> std::result
 pub(crate) unsafe fn construct_pop_state_function(
   ctx: &LLVMParserModule,
 ) -> std::result::Result<(), ()> {
-  use inkwell::AddressSpace::*;
-
-  let LLVMParserModule { module, builder: b, types, ctx, fun: funct, .. } = ctx;
+  let LLVMParserModule { builder: b, ctx, fun: funct, .. } = ctx;
 
   let i32 = ctx.i32_type();
 
@@ -1621,7 +1622,7 @@ pub fn compile_from_bytecode<'a>(
   g: &GrammarStore,
   llvm_context: &'a Context,
   output: &BytecodeOutput,
-) -> core::result::Result<LLVMParserModule<'a>, ()> {
+) -> SherpaResult<LLVMParserModule<'a>> {
   let mut parse_context = construct_context(module_name, &llvm_context);
   let ctx = &mut parse_context;
 
@@ -1656,7 +1657,7 @@ pub fn compile_from_bytecode<'a>(
     parse_context.ctx.create_string_attribute("alwaysinline", ""),
   );
 
-  Ok(parse_context)
+  SherpaResult::Ok(parse_context)
 }
 
 pub(crate) fn construct_utf8_lookup(ctx: &LLVMParserModule) -> std::result::Result<(), ()> {

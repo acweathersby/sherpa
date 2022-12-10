@@ -4,6 +4,7 @@ use super::{
   create_offset_label,
   create_skip_code,
   get_parse_function,
+  input_block_indices::{InputBlockPtr, InputBlockSize, InputBlockStart, InputBlockTruncated},
   parse_ctx_indices::*,
   token_indices::{TokLength, TokOffset, TokType},
   FunctionPack,
@@ -481,7 +482,7 @@ pub(crate) fn construct_instruction_branch<'a>(
 
           b.build_call(
             ctx.fun.emit_eoi,
-            &[parse_ctx.into(), action_pointer.into(), state.input_block.unwrap().offset.into()],
+            &[parse_ctx.into(), action_pointer.into(), state.input_block.unwrap().start.into()],
             "",
           );
           b.build_return(Some(&i32.const_int(1, false)));
@@ -568,82 +569,13 @@ fn construct_buffer_data<'a>(
     b.build_array_alloca(ctx.ctx.i8_type(), buff_size, "")
   }
 }
-
-/// Builds instructions that copy the data of the input block
-/// to a stack allocated buffer.
-fn construct_buffer<'a>(
-  ctx: &'a LLVMParserModule,
-  max_size: usize,
-  state: &mut BranchStateCache<'a>,
-  pack: &'a FunctionPack,
-  token_ptr: PointerValue<'a>,
-) -> PointerValue<'a> {
-  if state.input_buffer.is_some() && state.input_buffer_length >= max_size {
-    state.input_buffer.unwrap()
-  } else {
-    let input_block = write_get_input_ptr_lookup(ctx, pack, max_size, token_ptr);
-
-    let i32 = ctx.ctx.i32_type();
-    let i8 = ctx.ctx.i8_type();
-    let b = &ctx.builder;
-
-    let buff_size = i32.const_int(max_size as u64, false);
-
-    // TODO: move this section outside of the skip loop so we aren't continuously
-    // allocate space on the stack.
-
-    // Allocate memory on the stack
-    let buffer_pointer = b.build_array_alloca(ctx.ctx.i8_type(), buff_size, "");
-
-    // Zero fill the buffer.
-    b.build_call(
-      ctx.fun.memset,
-      &[
-        buffer_pointer.into(),
-        i8.const_int(0, false).into(),
-        buff_size.into(),
-        ctx.ctx.bool_type().const_int(0, false).into(),
-      ],
-      "",
-    );
-
-    // Perform a memcpy between the input ptr and the buffer, using the smaller
-    // of the two input block length and max_size as the amount of bytes to
-    // copy.
-    let min_size = b
-      .build_call(
-        ctx.fun.min,
-        &[i32.const_int(max_size as u64, false).into(), input_block.size.into()],
-        "",
-      )
-      .try_as_basic_value()
-      .unwrap_left()
-      .into_int_value();
-    // Prepare a pointer to the token's type for later reuse in the switch block
-    b.build_call(
-      ctx.fun.memcpy,
-      &[
-        buffer_pointer.into(),
-        input_block.pointer.into(),
-        min_size.into(),
-        ctx.ctx.bool_type().const_int(0, false).into(),
-      ],
-      "",
-    );
-
-    state.input_buffer_length_int = Some(min_size);
-    state.input_block = Some(input_block);
-    state.input_buffer = Some(buffer_pointer);
-    state.input_buffer_length = max_size;
-
-    buffer_pointer
-  }
-}
-
 struct InputBlockRef<'a> {
   pointer:      PointerValue<'a>,
+  /// The number of bytes that can be read 
+  /// from this block
   size:         IntValue<'a>,
-  offset:       IntValue<'a>,
+  /// The offset of the block 
+  start:        IntValue<'a>,
   is_truncated: IntValue<'a>,
 }
 
@@ -668,11 +600,20 @@ fn write_get_input_ptr_lookup<'a>(
     .into_struct_value();
 
   InputBlockRef {
-    pointer:      b.build_extract_value(input_block, 0, "input_ptr").unwrap().into_pointer_value(),
-    offset:       b.build_extract_value(input_block, 1, "input_offset").unwrap().into_int_value(),
-    size:         b.build_extract_value(input_block, 2, "input_size").unwrap().into_int_value(),
+    pointer:      b
+      .build_extract_value(input_block, InputBlockPtr, "input_ptr")
+      .unwrap()
+      .into_pointer_value(),
+    start:        b
+      .build_extract_value(input_block, InputBlockStart, "input_offset")
+      .unwrap()
+      .into_int_value(),
+    size:         b
+      .build_extract_value(input_block, InputBlockSize, "input_size")
+      .unwrap()
+      .into_int_value(),
     is_truncated: b
-      .build_extract_value(input_block, 3, "input_truncated")
+      .build_extract_value(input_block, InputBlockTruncated, "input_truncated")
       .unwrap()
       .into_int_value(),
   }
