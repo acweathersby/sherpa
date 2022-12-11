@@ -17,7 +17,7 @@ use sherpa_runtime::types::{
 };
 use std::{fs::File, io::Write};
 
-use super::{inkwell_ir::*, types::*};
+use super::{standard_functions::*, types::*};
 
 type Init = unsafe extern "C" fn(
   *mut LLVMParseContext<TestUTF8StringReader<'static>>,

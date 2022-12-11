@@ -1,8 +1,8 @@
-pub mod inkwell_branch_ir;
-pub mod inkwell_ir;
+pub mod parser_functions;
+pub mod standard_functions;
 mod types;
 
-pub use inkwell_ir::*;
+pub use standard_functions::*;
 pub use types::*;
 
 #[cfg(test)]
