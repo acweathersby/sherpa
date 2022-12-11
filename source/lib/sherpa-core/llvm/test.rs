@@ -248,7 +248,7 @@ fn should_produce_extended_block() {
     context.void_type().fn_type(
       &[
         parse_context.types.parse_ctx.ptr_type(Generic).into(),
-        parse_context.types.token.ptr_type(Generic).into(),
+        context.i32_type().into(),
         context.i32_type().into(),
         parse_context.types.input_block.ptr_type(Generic).into(),
       ],
@@ -263,7 +263,7 @@ fn should_produce_extended_block() {
       parse_context.fun.get_adjusted_input_block,
       &[
         shim.get_nth_param(0).unwrap().into_pointer_value().into(),
-        shim.get_nth_param(1).unwrap().into_pointer_value().into(),
+        shim.get_nth_param(1).unwrap().into_int_value().into(),
         shim.get_nth_param(2).unwrap().into_int_value().into(),
       ],
       "",
@@ -286,7 +286,7 @@ fn should_produce_extended_block() {
 
     type GetInputBlockShim = unsafe extern "C" fn(
       *mut LLVMParseContext<TestUTF8StringReader<'static>>,
-      *const ParseToken,
+      u32,
       u32,
       *mut InputBlock,
     );
@@ -316,7 +316,7 @@ fn should_produce_extended_block() {
     );
 
     println!("context:{:p} block:{:p} token:{:p}", &mut rt_ctx, &mut block, &token);
-    get_ib.call(&mut rt_ctx, &token, 2, &mut block);
+    get_ib.call(&mut rt_ctx, 3, 2, &mut block);
 
     eprintln!("{:?} {:?}", rt_ctx.input_block, block);
     assert_eq!(*block.block, b't');
@@ -747,7 +747,7 @@ fn test_compile_from_bytecode2() -> SherpaResult<()> {
   if let SherpaResult::Ok(mut ctx) =
     compile_from_bytecode("test", &g, &Context::create(), &bytecode_output)
   {
-    println!("{:?}", ctx);
+    println!("{:#?}", ctx);
     SherpaResult::Ok(())
   } else {
     SherpaResult::None

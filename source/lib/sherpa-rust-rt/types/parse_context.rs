@@ -223,7 +223,8 @@ pub struct LLVMParseContext<T: LLVMCharacterReader + ByteCharacterReader + BaseC
   pub reader: *mut T,
   pub production: u32,
   pub state: u32,
-  pub in_peek_mode: u32,
+  pub in_peek_mode: bool,
+  pub is_active: bool,
 }
 
 impl<T: LLVMCharacterReader + ByteCharacterReader + BaseCharacterReader> Debug
@@ -262,8 +263,9 @@ impl<T: LLVMCharacterReader + ByteCharacterReader + BaseCharacterReader> LLVMPar
       input_block: InputBlock::default(),
       reader: 0 as *mut T,
       get_byte_block_at_cursor: T::get_byte_block_at_cursor,
-      in_peek_mode: 0,
       local_goto_stack: [Goto::default(); LLVM_BASE_STACK_SIZE],
+      in_peek_mode: false,
+      is_active: false,
     }
   }
 }

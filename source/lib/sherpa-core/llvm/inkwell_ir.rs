@@ -23,13 +23,12 @@ use crate::{
   types::*,
 };
 use inkwell::{
-  attributes::{Attribute, AttributeLoc},
-  builder::Builder,
+  attributes::AttributeLoc,
   context::Context,
   module::Linkage,
   values::{CallableValue, FunctionValue, IntValue, PointerValue},
 };
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::{BTreeSet, HashSet, VecDeque};
 
 pub(crate) fn construct_context<'a>(module_name: &str, ctx: &'a Context) -> LLVMParserModule<'a> {
   use inkwell::AddressSpace::*;
@@ -37,6 +36,7 @@ pub(crate) fn construct_context<'a>(module_name: &str, ctx: &'a Context) -> LLVM
   let builder = ctx.create_builder();
 
   let i8 = ctx.i8_type();
+  let bool = ctx.bool_type();
   let i64 = ctx.i64_type();
   let i32 = ctx.i32_type();
   let CP_INFO = ctx.opaque_struct_type("s.CP_INFO");
@@ -91,7 +91,8 @@ pub(crate) fn construct_context<'a>(module_name: &str, ctx: &'a Context) -> LLVM
       READER.ptr_type(Generic).into(),
       i32.into(),
       i32.into(),
-      i32.into(),
+      bool.into(),
+      bool.into(),
     ],
     false,
   );
@@ -140,20 +141,13 @@ pub(crate) fn construct_context<'a>(module_name: &str, ctx: &'a Context) -> LLVM
       ),
       get_adjusted_input_block: module.add_function(
         "get_adjusted_input_block",
-        INPUT_BLOCK.fn_type(
-          &[CTX.ptr_type(Generic).into(), TOKEN.ptr_type(Generic).into(), i32.into()],
-          false,
-        ),
+        INPUT_BLOCK.fn_type(&[CTX.ptr_type(Generic).into(), i32.into(), i32.into()], false),
         None,
       ),
       scan: module.add_function(
         "scan",
         TOKEN.fn_type(
-          &[
-            CTX.ptr_type(Generic).into(),
-            GOTO_FN.ptr_type(Generic).into(),
-            TOKEN.ptr_type(Generic).into(),
-          ],
+          &[CTX.ptr_type(Generic).into(), GOTO_FN.ptr_type(Generic).into(), i64.into()],
           false,
         ),
         None,
@@ -305,6 +299,7 @@ pub(crate) unsafe fn construct_emit_end_of_parse(
   let LLVMParserModule { builder: b, ctx, fun: funct, .. } = ctx;
 
   let i32 = ctx.i32_type();
+  let bool = ctx.bool_type();
 
   let fn_value = funct.emit_eop;
 
@@ -318,8 +313,12 @@ pub(crate) unsafe fn construct_emit_end_of_parse(
 
   b.position_at_end(entry);
 
-  let state = b.build_struct_gep(parse_ctx, CTX_state, "").unwrap();
-  let state = b.build_load(state, "");
+  // Update the active state to be inactive
+  let active_ptr = b.build_struct_gep(parse_ctx, CTX_is_active, "").unwrap();
+  b.build_store(active_ptr, bool.const_zero());
+
+  let state_ptr = b.build_struct_gep(parse_ctx, CTX_state, "").unwrap();
+  let state = b.build_load(state_ptr, "");
 
   let comparison = b.build_int_compare(
     inkwell::IntPredicate::NE,
@@ -365,18 +364,14 @@ pub(crate) unsafe fn construct_get_adjusted_input_block_function(
   let valid_window = ctx.append_basic_block(fn_value, "Valid_Window");
 
   let parse_ctx = fn_value.get_nth_param(0)?.into_pointer_value();
-  let offset_token = fn_value.get_nth_param(1)?.into_pointer_value();
+  let byte_offset = fn_value.get_nth_param(1)?.into_int_value();
   let needed_size = fn_value.get_nth_param(2)?.into_int_value();
 
   b.position_at_end(entry);
 
   let ctx_input_block = b.build_struct_gep(parse_ctx, CTX_input_block, "")?;
 
-  let token_offset = b.build_struct_gep(offset_token, TokOffset, "token_cursor")?;
-  let token_offset = b.build_load(token_offset, "").into_int_value();
-  let token_offset = b.build_int_truncate(token_offset, i32.into(), "");
-
-  let requested_end_index = b.build_int_add(token_offset, needed_size, "");
+  let requested_end_index = b.build_int_add(byte_offset, needed_size, "");
 
   // if the requested_end_cursor_position is > the blocks end position, and the
   // the block is truncated, then request a new block.
@@ -404,9 +399,8 @@ pub(crate) unsafe fn construct_get_adjusted_input_block_function(
   b.position_at_end(attempt_extend);
 
   let block_start_ptr = b.build_struct_gep(ctx_input_block, InputBlockStart, "")?;
-  let block_start = b.build_load(block_start_ptr, "").into_int_value();
 
-  b.build_store(block_start_ptr, token_offset);
+  b.build_store(block_start_ptr, byte_offset);
 
   let reader = b.build_struct_gep(parse_ctx, CTX_reader, "")?;
   let reader = b.build_load(reader, "");
@@ -427,10 +421,10 @@ pub(crate) unsafe fn construct_get_adjusted_input_block_function(
   let ptr = b.build_extract_value(block, InputBlockPtr, "")?.into_pointer_value();
   let start = b.build_extract_value(block, InputBlockStart, "")?.into_int_value();
   let end = b.build_extract_value(block, InputBlockEnd, "")?.into_int_value();
-  let diff = b.build_int_sub(token_offset, start, "");
+  let diff = b.build_int_sub(byte_offset, start, "");
   // offset the pointer by the difference between the token_offset and
   // and the block offset
-  let adjusted_size = b.build_int_sub(end, token_offset, "");
+  let adjusted_size = b.build_int_sub(end, byte_offset, "");
   let adjusted_ptr = b.build_gep(ptr, &[diff.into()], "");
   let block = b.build_insert_value(block, adjusted_ptr, InputBlockPtr, "")?;
   let block = b.build_insert_value(block, adjusted_size, InputBlockSize, "")?;
@@ -549,7 +543,7 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
 
   // create a size that is equal to the needed amount rounded up to the nearest 64bytes
   let new_slot_count = b.build_int_add(goto_slot_count, needed_slot_count, "new_size");
-  let new_slot_count = b.build_left_shift(new_slot_count, i32.const_int(3, false), "new_size");
+  let new_slot_count = b.build_left_shift(new_slot_count, i32.const_int(2, false), "new_size");
 
   let new_ptr = b
     .build_call(funct.allocate_stack, &[new_slot_count.into()], "")
@@ -629,7 +623,7 @@ pub(crate) unsafe fn construct_scan(ctx: &LLVMParserModule) -> std::result::Resu
   //## Extract Params
   let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
   let scanner_entry_goto = fn_value.get_nth_param(1).unwrap().into_pointer_value();
-  let input_token_ptr = fn_value.get_nth_param(2).unwrap().into_pointer_value();
+  let start_offset = fn_value.get_nth_param(2).unwrap().into_int_value();
 
   //## Entry Block
   b.position_at_end(entry);
@@ -675,8 +669,16 @@ pub(crate) unsafe fn construct_scan(ctx: &LLVMParserModule) -> std::result::Resu
   );
 
   // Copy input token to the Assert and Anchor token slots of the scan context.
+  let input_token_ptr = b.build_alloca(types.token, "input_token");
+  let input_token_offset_ptr =
+    b.build_struct_gep(input_token_ptr, TokOffset, "input_token_offset").unwrap();
+  b.build_store(input_token_offset_ptr, start_offset);
 
-  let input_token = b.build_load(input_token_ptr, "");
+  let input_token_len_ptr =
+    b.build_struct_gep(input_token_ptr, TokLength, "input_token_length").unwrap();
+  b.build_store(input_token_len_ptr, i64.const_int(0, false));
+
+  let input_token = b.build_load(input_token_ptr, "input_token");
   let assert_token = b.build_struct_gep(scan_ctx, CTX_tok_assert, "").unwrap();
   let anchor_token = b.build_struct_gep(scan_ctx, CTX_tok_anchor, "").unwrap();
 
@@ -975,45 +977,6 @@ pub(crate) unsafe fn construct_init(ctx: &LLVMParserModule) -> std::result::Resu
   }
 }
 
-pub(crate) unsafe fn construct_push_state(ctx: &LLVMParserModule) -> std::result::Result<(), ()> {
-  let LLVMParserModule { builder: b, types, ctx, fun: funct, .. } = ctx;
-
-  let i32 = ctx.i32_type();
-
-  let fn_value = funct.push_state;
-
-  // Set the context's goto pointers to point to the goto block;
-  let entry = ctx.append_basic_block(fn_value, "Entry");
-
-  let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
-  let goto_state = fn_value.get_nth_param(1).unwrap().into_int_value();
-  let goto_fn = fn_value.get_nth_param(2).unwrap().into_pointer_value();
-
-  b.position_at_end(entry);
-  let new_goto = b.build_insert_value(types.goto.get_undef(), goto_state, 1, "").unwrap();
-  let new_goto = b.build_insert_value(new_goto, goto_fn, 0, "").unwrap();
-
-  let goto_top_ptr = b.build_struct_gep(parse_ctx, CTX_goto_ptr, "")?;
-  let goto_top = b.build_load(goto_top_ptr, "").into_pointer_value();
-  b.build_store(goto_top, new_goto);
-
-  let goto_top = b.build_gep(goto_top, &[i32.const_int(1, false)], "");
-  b.build_store(goto_top_ptr, goto_top);
-
-  let goto_remaining_ptr = b.build_struct_gep(parse_ctx, CTX_goto_stack_remaining, "")?;
-  let goto_remaining = b.build_load(goto_remaining_ptr, "").into_int_value();
-  let goto_remaining = b.build_int_sub(goto_remaining, i32.const_int(1, false), "");
-  b.build_store(goto_remaining_ptr, goto_remaining);
-
-  b.build_return(None);
-
-  if funct.push_state.verify(true) {
-    Ok(())
-  } else {
-    Err(())
-  }
-}
-
 pub(crate) unsafe fn construct_pop_state_function(
   ctx: &LLVMParserModule,
 ) -> std::result::Result<(), ()> {
@@ -1120,14 +1083,18 @@ pub(crate) fn construct_prime_function(
   referenced: &mut Vec<(INSTRUCTION, bool)>,
 ) -> Result<(), ()> {
   let i32 = ctx.ctx.i32_type();
+  let bool = ctx.ctx.bool_type();
   let b = &ctx.builder;
   let funct = &ctx.fun;
   let fn_value = funct.prime;
 
   let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
   let selector = fn_value.get_nth_param(1).unwrap().into_int_value(); // Set the context's goto pointers to point to the goto block;
-  let block_entry = ctx.ctx.append_basic_block(fn_value, "Entry");
-  b.position_at_end(block_entry);
+  let entry = ctx.ctx.append_basic_block(fn_value, "Entry");
+  b.position_at_end(entry);
+
+  let active_ptr = b.build_struct_gep(parse_ctx, CTX_is_active, "").unwrap();
+  b.build_store(active_ptr, bool.const_int(1, false));
 
   let blocks = sp
     .iter()
@@ -1151,7 +1118,7 @@ pub(crate) fn construct_prime_function(
     "",
   );
 
-  if (!blocks.is_empty()) {
+  if !blocks.is_empty() {
     b.build_switch(
       selector,
       blocks[0].1.into(),
@@ -1191,9 +1158,10 @@ pub(crate) fn construct_parse_functions(
   g: &GrammarStore,
   ctx: &LLVMParserModule,
   output: &BytecodeOutput,
-) -> Result<(), ()> {
+) -> SherpaResult<()> {
   let mut seen = BTreeSet::new();
   let mut goto_fn = BTreeSet::new();
+  let mut functions = HashSet::new();
 
   // start points
   let start_points = g
@@ -1240,6 +1208,9 @@ pub(crate) fn construct_parse_functions(
       let mut references = Vec::new();
 
       let function = get_parse_function(instruction, ctx, &mut references);
+
+      functions.insert(function);
+
       let block_entry = ctx.ctx.append_basic_block(function, "Entry");
       let mut is_scanner = false;
       ctx.builder.position_at_end(block_entry);
@@ -1279,7 +1250,13 @@ pub(crate) fn construct_parse_functions(
     }
   }
 
-  Ok(())
+  for function in functions {
+    if !function.verify(true) {
+      return SherpaResult::Err(SherpaError::from("Could not build parse function"));
+    }
+  }
+
+  SherpaResult::Ok(())
 }
 
 pub(super) fn construct_parse_function_statements(
@@ -1309,7 +1286,7 @@ pub(super) fn construct_parse_function_statements(
         }
       }
       GOTO => {
-        (instruction, return_val) = construct_instruction_goto(instruction, ctx, pack, referenced);
+        (instruction, return_val) = construct_instruction_gotos(instruction, ctx, pack, referenced);
 
         match return_val {
           Some(val) => {
@@ -1403,22 +1380,6 @@ pub(crate) fn get_parse_function<'a>(
   }
 }
 
-pub(crate) fn create_skip_code(
-  b: &Builder,
-  token_ptr: PointerValue,
-  i64: inkwell::types::IntType,
-  table_block: inkwell::basic_block::BasicBlock,
-) {
-  let off_ptr = b.build_struct_gep(token_ptr, TokOffset, "").unwrap();
-  let len_ptr = b.build_struct_gep(token_ptr, TokLength, "").unwrap();
-  let off = b.build_load(off_ptr, "offset").into_int_value();
-  let len = b.build_load(len_ptr, "length").into_int_value();
-  let new_off = b.build_int_add(off, len, "new_offset");
-  b.build_store(off_ptr, new_off);
-  b.build_store(len_ptr, i64.const_int(0, false));
-  b.build_unconditional_branch(table_block);
-}
-
 pub(crate) fn construct_scanner_instruction_shift(
   instruction: INSTRUCTION,
   ctx: &LLVMParserModule,
@@ -1499,65 +1460,144 @@ pub(crate) fn construct_instruction_reduce(
   b.build_return(Some(&val));
 }
 
-pub(crate) fn construct_instruction_goto<'a>(
+pub(crate) unsafe fn construct_push_state(ctx: &LLVMParserModule) -> std::result::Result<(), ()> {
+  let LLVMParserModule { builder: b, types, ctx, fun: funct, .. } = ctx;
+
+  let i32 = ctx.i32_type();
+
+  let fn_value = funct.push_state;
+
+  // Set the context's goto pointers to point to the goto block;
+  let entry = ctx.append_basic_block(fn_value, "Entry");
+
+  let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
+  let goto_state = fn_value.get_nth_param(1).unwrap().into_int_value();
+  let goto_fn = fn_value.get_nth_param(2).unwrap().into_pointer_value();
+
+  b.position_at_end(entry);
+  let new_goto = b.build_insert_value(types.goto.get_undef(), goto_state, 1, "").unwrap();
+  let new_goto = b.build_insert_value(new_goto, goto_fn, 0, "").unwrap();
+
+  let goto_top_ptr = b.build_struct_gep(parse_ctx, CTX_goto_ptr, "")?;
+  let goto_top = b.build_load(goto_top_ptr, "").into_pointer_value();
+  b.build_store(goto_top, new_goto);
+
+  let goto_top = b.build_gep(goto_top, &[i32.const_int(1, false)], "");
+  b.build_store(goto_top_ptr, goto_top);
+
+  let goto_remaining_ptr = b.build_struct_gep(parse_ctx, CTX_goto_stack_remaining, "")?;
+  let goto_remaining = b.build_load(goto_remaining_ptr, "").into_int_value();
+  let goto_remaining = b.build_int_sub(goto_remaining, i32.const_int(1, false), "");
+  b.build_store(goto_remaining_ptr, goto_remaining);
+
+  b.build_return(None);
+
+  if funct.push_state.verify(true) {
+    Ok(())
+  } else {
+    Err(())
+  }
+}
+
+pub(crate) fn construct_instruction_gotos<'a>(
   instruction: INSTRUCTION,
   ctx: &'a LLVMParserModule,
   pack: &'a FunctionPack,
   referenced: &mut Vec<(INSTRUCTION, bool)>,
 ) -> (INSTRUCTION, Option<IntValue<'a>>) {
+  fn get_goto_fun<'a>(
+    instruction: INSTRUCTION,
+    bytecode: &Vec<u32>,
+    ctx: &'a LLVMParserModule,
+    referenced: &mut Vec<(INSTRUCTION, bool)>,
+  ) -> FunctionValue<'a> {
+    get_parse_function(instruction.goto(bytecode), ctx, referenced)
+  }
+
+  fn get_goto_state<'a>(last: INSTRUCTION, ctx: &'a LLVMParserModule) -> IntValue<'a> {
+    if (last.get_value() & FAIL_STATE_FLAG) > 0 {
+      ctx.ctx.i32_type().const_int(FAIL_STATE_FLAG_LLVM as u64, false)
+    } else {
+      ctx.ctx.i32_type().const_int(NORMAL_STATE_FLAG_LLVM as u64, false)
+    }
+  }
+
   let bytecode = &pack.output.bytecode;
+  let mut address = instruction.get_address();
+  let b = &ctx.builder;
+  let i32 = ctx.ctx.i32_type();
 
-  let goto_instruction = instruction.goto(bytecode);
+  let parse_ctx = pack.fun.get_first_param().unwrap().into_pointer_value();
 
-  let goto_function = get_parse_function(goto_instruction, ctx, referenced);
+  let mut gotos = vec![];
 
-  let LLVMParserModule { ctx, builder, fun, .. } = ctx;
+  // Extract all gotos from the function.
+  while INSTRUCTION::from(bytecode, address).is_GOTO() {
+    gotos.push(INSTRUCTION::from(bytecode, address));
+    address += 1;
+  }
 
-  if (instruction.get_value() & FAIL_STATE_FLAG) > 0 {
-    builder.build_call(
-      fun.push_state,
-      &[
-        pack.fun.get_first_param().unwrap().into_pointer_value().into(),
-        ctx.i32_type().const_int(FAIL_STATE_FLAG_LLVM as u64, false).into(),
-        goto_function.as_global_value().as_pointer_value().into(),
-      ],
-      "",
-    );
-    (instruction.next(bytecode), None)
-  } else {
-    match instruction.next(bytecode).to_type() {
-      InstructionType::PASS => {
-        // Call the function directly. This should end up as a tail call.
-        let return_val = builder
-          .build_call(
-            goto_function,
-            &[
-              pack.fun.get_first_param().unwrap().into_pointer_value().into(),
-              pack.fun.get_nth_param(1).unwrap().into_pointer_value().into(),
-            ],
-            "",
-          )
-          .try_as_basic_value()
-          .unwrap_left()
-          .into_int_value();
+  let last = gotos.pop().unwrap();
 
-        builder.build_return(Some(&return_val));
+  if gotos.len() > 0 {
+    let goto_top_ptr = b.build_struct_gep(parse_ctx, CTX_goto_ptr, "").unwrap();
+    let mut goto_top = b.build_load(goto_top_ptr, "").into_pointer_value();
+    for goto in &gotos {
+      // Create new goto struct
+      let goto_fn =
+        get_goto_fun(*goto, bytecode, ctx, referenced).as_global_value().as_pointer_value();
+      let goto_state = get_goto_state(*goto, ctx);
+      let new_goto = b.build_insert_value(ctx.types.goto.get_undef(), goto_state, 1, "").unwrap();
+      let new_goto = b.build_insert_value(new_goto, goto_fn, 0, "").unwrap();
 
-        (instruction.next(bytecode), Some(return_val))
-      }
-      _ => {
-        builder.build_call(
-          fun.push_state,
-          &[
-            pack.fun.get_first_param().unwrap().into_pointer_value().into(),
-            ctx.i32_type().const_int(NORMAL_STATE_FLAG_LLVM as u64, false).into(),
-            goto_function.as_global_value().as_pointer_value().into(),
-          ],
+      // Store in the current slot
+      b.build_store(goto_top, new_goto);
+
+      // Increment the slot
+      goto_top = unsafe { b.build_gep(goto_top, &[i32.const_int(1, false)], "") };
+    }
+    // Store the top slot
+    b.build_store(goto_top_ptr, goto_top);
+
+    // Decrement goto remaining
+    let goto_remaining_ptr = b.build_struct_gep(parse_ctx, CTX_goto_stack_remaining, "").unwrap();
+    let goto_remaining = b.build_load(goto_remaining_ptr, "").into_int_value();
+    let goto_remaining =
+      b.build_int_sub(goto_remaining, i32.const_int(gotos.len() as u64, false), "");
+    b.build_store(goto_remaining_ptr, goto_remaining);
+  }
+
+  let goto_function = get_goto_fun(last, bytecode, ctx, referenced);
+  match last.next(bytecode).to_type() {
+    InstructionType::PASS => {
+      // Call the function directly. This should end up as a tail call.
+      let return_val = ctx
+        .builder
+        .build_call(
+          goto_function,
+          &[parse_ctx.into(), pack.fun.get_nth_param(1).unwrap().into_pointer_value().into()],
           "",
-        );
+        )
+        .try_as_basic_value()
+        .unwrap_left()
+        .into_int_value();
 
-        (instruction.next(bytecode), None)
-      }
+      b.build_return(Some(&return_val));
+
+      (last.next(bytecode), Some(return_val))
+    }
+    _ => {
+      b.build_call(
+        ctx.fun.push_state,
+        &[
+          parse_ctx.into(),
+          get_goto_state(last, ctx).into(),
+          goto_function.as_global_value().as_pointer_value().into(),
+        ],
+        "",
+      );
+
+      (last.next(bytecode), None)
     }
   }
 }

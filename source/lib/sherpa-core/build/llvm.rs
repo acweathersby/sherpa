@@ -56,23 +56,25 @@ pub enum OutputType {
 }
 
 fn _apply_llvm_optimizations(opt: OptimizationLevel, ctx: &crate::llvm::LLVMParserModule) {
+  //return;
   let pass_manager_builder = PassManagerBuilder::create();
   let pass_manager = PassManager::create(());
   pass_manager_builder.set_optimization_level(opt);
-  // pass_manager_builder.populate_module_pass_manager(&pass_manager);
+  //pass_manager_builder.populate_module_pass_manager(&pass_manager);
   //*
-  pass_manager.add_cfg_simplification_pass();
+
   pass_manager.add_function_inlining_pass();
   pass_manager.add_always_inliner_pass();
   pass_manager.add_partially_inline_lib_calls_pass();
+  pass_manager.run_on(&ctx.module);
+
   pass_manager.add_merge_functions_pass();
   pass_manager.add_lower_expect_intrinsic_pass();
   pass_manager.add_jump_threading_pass();
   pass_manager.add_memcpy_optimize_pass();
   pass_manager.run_on(&ctx.module);
-  // pass_manager.add_demote_memory_to_register_pass();
-  pass_manager.add_scalarizer_pass();
   //------------------------------------------------------------------------
+  pass_manager.add_scalarizer_pass();
   pass_manager.add_slp_vectorize_pass();
   pass_manager.add_loop_vectorize_pass();
   pass_manager.add_merged_load_store_motion_pass();
@@ -81,13 +83,18 @@ fn _apply_llvm_optimizations(opt: OptimizationLevel, ctx: &crate::llvm::LLVMPars
   pass_manager.add_lower_switch_pass();
   pass_manager.add_licm_pass();
   pass_manager.run_on(&ctx.module);
+
   pass_manager.add_function_inlining_pass();
-  // */
   pass_manager.run_on(&ctx.module);
+
   pass_manager.add_global_optimizer_pass();
   pass_manager.add_global_dce_pass();
   pass_manager.add_aggressive_dce_pass();
+  pass_manager.add_cfg_simplification_pass();
   pass_manager.run_on(&ctx.module);
+
+  //pass_manager.add_demote_memory_to_register_pass();
+  //pass_manager.run_on(&ctx.module);
 }
 
 fn write_rust_parser<W: Write>(
@@ -115,7 +122,7 @@ extern \"C\" {{
       
       r###"
       
-pub struct Parser<T: BaseCharacterReader + LLVMCharacterReader + ByteCharacterReader + MutCharacterReader + std::fmt::Debug>(LLVMParseContext<T>, T, bool);
+pub struct Parser<T: BaseCharacterReader + LLVMCharacterReader + ByteCharacterReader + MutCharacterReader + std::fmt::Debug>(LLVMParseContext<T>, T);
 
 impl<T: BaseCharacterReader + LLVMCharacterReader + ByteCharacterReader + MutCharacterReader + std::fmt::Debug> Iterator for Parser<T> {{
     type Item = ParseAction;
@@ -123,15 +130,13 @@ impl<T: BaseCharacterReader + LLVMCharacterReader + ByteCharacterReader + MutCha
     fn next(&mut self) -> Option<Self::Item> {{
         
         unsafe {{
-            if !self.2 {{
+            if !self.0.is_active {{
                 None
             }} else {{
                 let _ptr = &mut self.0 as *const LLVMParseContext<T>;
                 let mut action = ParseAction::Undefined;
                 let _action = &mut action as *mut ParseAction;
                 next(_ptr as *mut u8, _action as *mut u8);
-                self.2 = !matches!(action, ParseAction::Accept{{..}}| ParseAction::Error {{ .. }} | ParseAction::EndOfInput {{ .. }});
-
                 Some(action)
             }}
         }}
@@ -143,7 +148,7 @@ impl<T: BaseCharacterReader + LLVMCharacterReader + ByteCharacterReader + MutCha
     /// the grammar `{0}`
     #[inline(always)]
     fn new(mut reader: T) -> Self {{
-        let mut parser = Self(LLVMParseContext::<T>::new(), reader, true);
+        let mut parser = Self(LLVMParseContext::<T>::new(), reader);
         parser.construct_context();
         parser
     }}
@@ -248,15 +253,17 @@ pub fn build_llvm_parser(
         &bytecode,
       ) {
         SherpaResult::Ok(ctx) => {
-          let opt = OptimizationLevel::Default;
+          let opt = OptimizationLevel::Aggressive;
 
-          if output_llvm_ir_file {
-            if let Ok(mut file) = task_ctx.create_file(ll_file_path.clone()) {
-              file.write_all(ctx.module.to_string().as_bytes()).unwrap();
-              file.flush().unwrap();
-            }
-          }
+        
           if light_lto {
+            if output_llvm_ir_file {
+              if let Ok(mut file) = task_ctx.create_file(ll_file_path.clone()) {
+                file.write_all(ctx.module.to_string().as_bytes()).unwrap();
+                file.flush().unwrap();
+              }
+            }
+
             task_ctx.add_artifact_path(bitcode_path.clone());
             if ctx.module.write_bitcode_to_path(&bitcode_path) {
               match Command::new(clang_command.clone())
@@ -289,6 +296,14 @@ pub fn build_llvm_parser(
             }
           } else {
             _apply_llvm_optimizations(opt, &ctx);
+            
+            if output_llvm_ir_file {
+              if let Ok(mut file) = task_ctx.create_file(ll_file_path.clone()) {
+                file.write_all(ctx.module.to_string().as_bytes()).unwrap();
+                file.flush().unwrap();
+              }
+            }
+
             let reloc = RelocMode::PIC;
             let model = CodeModel::Small;
             let target = Target::from_triple(&target_triple).unwrap();

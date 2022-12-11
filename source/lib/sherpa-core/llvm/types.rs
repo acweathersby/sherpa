@@ -113,4 +113,5 @@ pub mod parse_ctx_indices {
   pub const CTX_production: u32 = 10; // 10
   pub const CTX_state: u32 = 11; // 11
   pub const CTX_peek_mode: u32 = 12; // 12
+  pub const CTX_is_active: u32 = 13; // 13
 }
