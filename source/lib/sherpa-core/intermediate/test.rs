@@ -990,6 +990,37 @@ fn grammar_with_exclusive_symbols() -> SherpaResult<()> {
   SherpaResult::Ok(())
 }
 
+#[test]
+fn raddler() -> SherpaResult<()> {
+  let input = r##" 
+  @IGNORE g:sp
+
+  <> p > r g:id
+         | p g:id
+         | g:id
+
+  <> r > p g:id
+       |   g:num
+  "##;
+
+  let (mut j, states) = build_states(input)?;
+
+  let states = optimize_ir_states(&mut j, states);
+
+  for (_, state) in &states {
+    println!("{}", state.get_code());
+  }
+
+  let bc = compile_bytecode(&mut j, states);
+
+  println!("{}", generate_disassembly(&bc, Some(&mut j)));
+
+  j.flush_reports();
+  j.debug_print_reports(ReportType::ProductionCompile(Default::default()));
+
+  SherpaResult::Ok(())
+}
+
 fn build_states(input: &str) -> SherpaResult<(Journal, BTreeMap<String, Box<IRState>>)> {
   let mut j = Journal::new(Some(Config { enable_breadcrumb_parsing: false, ..Default::default() }));
   let g = GrammarStore::from_str(&mut j, input)?;

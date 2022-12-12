@@ -9,12 +9,6 @@ use inkwell::{
 
 use crate::compile::BytecodeOutput;
 
-pub(crate) struct FunctionPack<'a> {
-  pub(crate) fun:        &'a FunctionValue<'a>,
-  pub(crate) output:     &'a BytecodeOutput,
-  pub(crate) is_scanner: bool,
-}
-
 pub const FAIL_STATE_FLAG_LLVM: u32 = 2;
 pub const NORMAL_STATE_FLAG_LLVM: u32 = 1;
 

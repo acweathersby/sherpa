@@ -121,7 +121,7 @@ impl INSTRUCTION {
   }
 
   pub fn next(&self, bc: &[u32]) -> Self {
-    if (self.1 > bc.len()) {
+    if (self.1 >= bc.len() - 1) {
       INSTRUCTION(0, 0)
     } else {
       INSTRUCTION(bc[self.1 + 1], self.1 + 1)
