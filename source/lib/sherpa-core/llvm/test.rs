@@ -1,6 +1,10 @@
 use crate::{
   compile::{compile_bytecode, compile_states, optimize_ir_states, GrammarStore},
-  llvm::{compile_from_bytecode, test_reader::TestUTF8StringReader},
+  llvm::{
+    compile_from_bytecode,
+    parser_functions::construct_parse_function,
+    test_reader::TestUTF8StringReader,
+  },
   Journal,
   SherpaResult,
 };
@@ -12,8 +16,6 @@ use sherpa_runtime::types::{
   InputBlock,
   LLVMParseContext,
   ParseAction,
-  ParseToken,
-  LLVM_BASE_STACK_SIZE,
 };
 use std::{fs::File, io::Write};
 
@@ -77,7 +79,7 @@ fn setup_exec_engine(ctx: &mut LLVMParserModule) {
 fn verify_construction_of_init_function() {
   let context = Context::create();
 
-  let parse_context = construct_context("test", &context);
+  let parse_context = construct_module("test", &context);
 
   unsafe { assert!(construct_init(&parse_context).is_ok()) }
 
@@ -88,65 +90,96 @@ fn verify_construction_of_init_function() {
 fn verify_construction_of_push_state_function() {
   let context = Context::create();
 
-  let parse_context = construct_context("test", &context);
+  let parse_context = construct_module("test", &context);
 
-  unsafe { assert!(construct_push_state(&parse_context).is_ok()) }
+  unsafe { assert!(construct_push_state_function(&parse_context).is_ok()) }
 
   eprintln!("{}", parse_context.module.to_string());
 }
+fn build_fast_call_shim<'a>(
+  module: &LLVMParserModule<'a>,
+  fun: inkwell::values::FunctionValue<'a>,
+) -> SherpaResult<()> {
+  let name = fun.get_name().to_str().unwrap();
+  let builder = &module.builder;
+  let shim = module.module.add_function(&format!("{}_shim", name), fun.get_type(), None);
+  shim.set_call_conventions(7);
+  builder.position_at_end(module.ctx.append_basic_block(shim, "Entry"));
+
+  let result = build_fast_call(
+    module,
+    fun,
+    &shim.get_params().into_iter().map(|i| i.into()).collect::<Vec<_>>(),
+  )?;
+
+  match result.try_as_basic_value().left() {
+    Some(value) => builder.build_return(Some(&value)),
+    _ => builder.build_return(None),
+  };
+
+  SherpaResult::Ok(())
+}
 
 #[test]
-fn should_push_new_state() {
+fn should_push_new_state() -> SherpaResult<()> {
   let context = Context::create();
 
-  let mut parse_context = construct_context("test", &context);
+  let mut parse_context = construct_module("test", &context);
 
   unsafe { assert!(construct_init(&parse_context).is_ok()) }
-  unsafe { assert!(construct_push_state(&parse_context).is_ok()) }
+  unsafe { assert!(construct_push_state_function(&parse_context).is_ok()) }
 
   unsafe {
+    build_fast_call_shim(&parse_context, parse_context.fun.push_state)?;
+
     setup_exec_engine(&mut parse_context);
+
     let mut reader = TestUTF8StringReader::new("test");
     let mut rt_ctx = LLVMParseContext::new();
     let init_fn = get_parse_function::<Init>(&parse_context, "init").unwrap();
-    let push_state_fn = get_parse_function::<PushState>(&parse_context, "push_state").unwrap();
+    let push_state_fn = get_parse_function::<PushState>(&parse_context, "push_state_shim").unwrap();
 
     init_fn.call(&mut rt_ctx, &mut reader);
     push_state_fn.call(&mut rt_ctx, NORMAL_STATE_FLAG_LLVM, 0x10101010_01010101);
     push_state_fn.call(&mut rt_ctx, NORMAL_STATE_FLAG_LLVM, 0x01010101_10101010);
 
     eprintln!("{:#?}", rt_ctx);
-    assert_eq!(rt_ctx.local_goto_stack[0].goto_fn as usize, 0x10101010_01010101);
-    assert_eq!(rt_ctx.local_goto_stack[0].state, NORMAL_STATE_FLAG_LLVM);
+    assert_eq!(rt_ctx.goto_stack[0].goto_fn as usize, 0x10101010_01010101);
+    assert_eq!(rt_ctx.goto_stack[0].state, NORMAL_STATE_FLAG_LLVM);
 
-    assert_eq!(rt_ctx.local_goto_stack[1].goto_fn as usize, 0x01010101_10101010);
-    assert_eq!(rt_ctx.local_goto_stack[1].state, NORMAL_STATE_FLAG_LLVM);
+    assert_eq!(rt_ctx.goto_stack[1].goto_fn as usize, 0x01010101_10101010);
+    assert_eq!(rt_ctx.goto_stack[1].state, NORMAL_STATE_FLAG_LLVM);
   };
+  SherpaResult::Ok(())
 }
 
 #[test]
-fn verify_construction_of_emit_accept_function() {
+fn verify_construction_of_emit_accept_function() -> SherpaResult<()> {
   let context = Context::create();
 
-  let parse_context = construct_context("test", &context);
+  let parse_context = construct_module("test", &context);
 
-  unsafe { assert!(construct_emit_accept(&parse_context).is_ok()) }
+  unsafe {
+    construct_emit_accept(&parse_context)?;
+  }
 
   eprintln!("{}", parse_context.module.to_string());
+
+  SherpaResult::Ok(())
 }
 
 #[test]
 fn verify_construction_of_emit_shift_function() {
   let context = Context::create();
 
-  let parse_context = construct_context("test", &context);
+  let parse_context = construct_module("test", &context);
 
   unsafe { assert!(construct_emit_shift(&parse_context).is_ok()) }
 
   eprintln!("{}", parse_context.module.to_string());
 }
 
-#[test]
+/* #[test]
 fn should_emit_shift() {
   let context = Context::create();
 
@@ -177,13 +210,13 @@ fn should_emit_shift() {
       _ => panic!("Incorrect ParseAction enum type assigned"),
     }
   };
-}
+} */
 
 #[test]
 fn verify_construction_of_emit_reduce_function() {
   let context = Context::create();
 
-  let parse_context = construct_context("test", &context);
+  let parse_context = construct_module("test", &context);
 
   unsafe { assert!(construct_emit_reduce_function(&parse_context).is_ok()) }
 
@@ -191,18 +224,18 @@ fn verify_construction_of_emit_reduce_function() {
 }
 
 #[test]
-fn should_emit_reduce() {
+fn should_emit_reduce() -> SherpaResult<()> {
   let context = Context::create();
 
-  let mut parse_context = construct_context("test", &context);
+  let mut parse_context = construct_module("test", &context);
 
   unsafe { assert!(construct_emit_reduce_function(&parse_context).is_ok()) }
 
   unsafe {
+    build_fast_call_shim(&parse_context, parse_context.fun.emit_reduce)?;
     setup_exec_engine(&mut parse_context);
-    let mut reader = TestUTF8StringReader::new("test");
     let mut rt_ctx = LLVMParseContext::new();
-    let emit_reduce = get_parse_function::<EmitReduce>(&parse_context, "emit_reduce").unwrap();
+    let emit_reduce = get_parse_function::<EmitReduce>(&parse_context, "emit_reduce_shim").unwrap();
 
     let mut action = ParseAction::Undefined;
 
@@ -217,13 +250,15 @@ fn should_emit_reduce() {
       _ => panic!("Incorrect ParseAction enum type assigned"),
     }
   };
+
+  SherpaResult::Ok(())
 }
 
 #[test]
 fn verify_construction_of_get_adjusted_input_block_function() {
   let context = Context::create();
 
-  let parse_context = construct_context("test", &context);
+  let parse_context = construct_module("test", &context);
 
   unsafe { assert!(construct_get_adjusted_input_block_function(&parse_context).is_ok()) }
 
@@ -234,7 +269,7 @@ fn verify_construction_of_get_adjusted_input_block_function() {
 fn should_produce_extended_block() {
   let context = Context::create();
 
-  let mut parse_context = construct_context("test", &context);
+  let mut parse_context = construct_module("test", &context);
 
   unsafe { assert!(construct_init(&parse_context).is_ok()) }
   unsafe { assert!(construct_get_adjusted_input_block_function(&parse_context).is_ok()) }
@@ -295,9 +330,7 @@ fn should_produce_extended_block() {
 
     init.call(&mut rt_ctx, &mut reader);
 
-    let mut token = rt_ctx.anchor_token;
-
-    token.byte_offset = 3;
+    rt_ctx.token_offset = (3 << 32) | 3;
 
     println!(
       "context:{:p}, fn:{:p} off:{:X}",
@@ -315,7 +348,7 @@ fn should_produce_extended_block() {
       (&rt_ctx.get_byte_block_at_cursor as *const _) as usize - (&rt_ctx as *const _) as usize
     );
 
-    println!("context:{:p} block:{:p} token:{:p}", &mut rt_ctx, &mut block, &token);
+    println!("context:{:p} block:{:p} token:{}", &rt_ctx, &mut block, &rt_ctx.token_offset);
     get_ib.call(&mut rt_ctx, 3, 2, &mut block);
 
     eprintln!("{:?} {:?}", rt_ctx.input_block, block);
@@ -325,7 +358,7 @@ fn should_produce_extended_block() {
   };
 }
 
-#[test]
+/* #[test]
 fn verify_construction_of_scan_function() {
   let context = Context::create();
 
@@ -334,13 +367,13 @@ fn verify_construction_of_scan_function() {
   unsafe { assert!(construct_scan(&parse_context).is_ok()) }
 
   eprintln!("{}", parse_context.module.to_string());
-}
+} */
 
 #[test]
 fn verify_construction_of_emit_error_function() {
   let context = Context::create();
 
-  let parse_context = construct_context("test", &context);
+  let parse_context = construct_module("test", &context);
 
   unsafe { assert!(construct_emit_error(&parse_context).is_ok()) }
 
@@ -351,7 +384,7 @@ fn verify_construction_of_emit_error_function() {
 fn verify_construction_of_emit_eop_function() {
   let context = Context::create();
 
-  let parse_context = construct_context("test", &context);
+  let parse_context = construct_module("test", &context);
 
   unsafe { assert!(construct_emit_end_of_parse(&parse_context).is_ok()) }
 
@@ -362,32 +395,21 @@ fn verify_construction_of_emit_eop_function() {
 fn verify_construction_of_emit_end_of_input_function() {
   let context = Context::create();
 
-  let parse_context = construct_context("test", &context);
+  let parse_context = construct_module("test", &context);
 
   unsafe { assert!(construct_emit_end_of_input(&parse_context).is_ok()) }
 
   eprintln!("{}", parse_context.module.to_string());
 }
 
-#[test]
-fn verify_construction_of_pop_state_function() {
-  let context = Context::create();
-
-  let parse_context = construct_context("test", &context);
-
-  unsafe { assert!(construct_pop_state_function(&parse_context).is_ok()) }
-
-  eprintln!("{}", parse_context.module.to_string());
-}
-
-#[test]
+/* #[test]
 fn should_pop_new_state() {
   let context = Context::create();
 
   let mut parse_context = construct_context("test", &context);
 
   unsafe { assert!(construct_init(&parse_context).is_ok()) }
-  unsafe { assert!(construct_push_state(&parse_context).is_ok()) }
+  unsafe { assert!(construct_push_state_function(&parse_context).is_ok()) }
   unsafe { assert!(construct_pop_state_function(&parse_context).is_ok()) }
 
   unsafe {
@@ -412,8 +434,8 @@ fn should_pop_new_state() {
 
     eprintln!("{:#?}", rt_ctx);
   };
-}
-#[test]
+} */
+/* #[test]
 fn verify_construct_of_prime_function() {
   let context = Context::create();
 
@@ -422,32 +444,21 @@ fn verify_construct_of_prime_function() {
   unsafe { assert!(construct_prime_function(&parse_context, &vec![], &mut vec![]).is_ok()) }
 
   eprintln!("{}", parse_context.module.to_string());
-}
+} */
 
-#[test]
-fn verify_construct_of_next_function() {
-  let context = Context::create();
-
-  let parse_context = construct_context("test", &context);
-
-  unsafe { assert!(construct_next_function(&parse_context).is_ok()) }
-
-  eprintln!("{}", parse_context.module.to_string());
-}
-
-#[test]
+/* #[test]
 fn should_call_next_and_emit_accept() {
   let context = Context::create();
 
   let mut parse_context = construct_context("test", &context);
 
   unsafe { assert!(construct_init(&parse_context).is_ok()) }
-  unsafe { assert!(construct_push_state(&parse_context).is_ok()) }
+  unsafe { assert!(construct_push_state_function(&parse_context).is_ok()) }
   unsafe { assert!(construct_pop_state_function(&parse_context).is_ok()) }
   unsafe { assert!(construct_next_function(&parse_context).is_ok()) }
   unsafe { assert!(construct_emit_accept(&parse_context).is_ok()) }
   unsafe { assert!(construct_emit_end_of_parse(&parse_context).is_ok()) }
-  unsafe { assert!(construct_prime_function(&parse_context, &vec![], &mut vec![]).is_ok()) }
+  //unsafe { assert!(construct_prime_function(&parse_context, &vec![], &mut vec![]).is_ok()) }
 
   unsafe {
     setup_exec_engine(&mut parse_context);
@@ -472,13 +483,13 @@ fn should_call_next_and_emit_accept() {
 
     assert!(matches!(action, ParseAction::Accept { production_id } if production_id == 202020),);
   };
-}
+} */
 
 #[test]
 fn should_initialize_context() {
   let context = Context::create();
 
-  let mut parse_context = construct_context("test", &context);
+  let mut parse_context = construct_module("test", &context);
 
   unsafe { assert!(construct_init(&parse_context).is_ok()) };
 
@@ -505,10 +516,10 @@ fn should_initialize_context() {
 fn verify_utf8_lookup_functions() {
   let context = Context::create();
 
-  let parse_context = construct_context("test", &context);
+  let parse_context = construct_module("test", &context);
 
-  unsafe { assert!(construct_utf8_lookup(&parse_context).is_ok()) }
-  unsafe { assert!(construct_merge_utf8_part(&parse_context).is_ok()) }
+  unsafe { assert!(construct_utf8_lookup_function(&parse_context).is_ok()) }
+  unsafe { assert!(construct_merge_utf8_part_function(&parse_context).is_ok()) }
 
   eprintln!("{}", parse_context.module.to_string());
 }
@@ -516,10 +527,10 @@ fn verify_utf8_lookup_functions() {
 #[test]
 fn should_yield_correct_CP_values_for_inputs() {
   let context = Context::create();
-  let mut parse_context = construct_context("test", &context);
+  let mut module = construct_module("test", &context);
 
-  assert!(construct_utf8_lookup(&parse_context).is_ok());
-  unsafe { assert!(construct_merge_utf8_part(&parse_context).is_ok()) }
+  assert!(construct_utf8_lookup_function(&module).is_ok());
+  unsafe { assert!(construct_merge_utf8_part_function(&module).is_ok()) }
 
   unsafe {
     #[derive(Clone, Debug, Copy)]
@@ -531,10 +542,12 @@ fn should_yield_correct_CP_values_for_inputs() {
 
     type GetUtf8CP = unsafe extern "C" fn(*const u8) -> CodepointInfo;
 
-    setup_exec_engine(&mut parse_context);
+    build_fast_call_shim(&module, module.fun.get_utf8_codepoint_info);
+
+    setup_exec_engine(&mut module);
 
     let get_code_point =
-      get_parse_function::<GetUtf8CP>(&parse_context, "get_utf8_codepoint_info").unwrap();
+      get_parse_function::<GetUtf8CP>(&module, "get_utf8_codepoint_info_shim").unwrap();
 
     dbg!(get_code_point.call(" ".as_ptr()));
     assert_eq!(get_code_point.call(" ".as_ptr()).val, 32);
@@ -548,50 +561,54 @@ fn should_yield_correct_CP_values_for_inputs() {
 fn verify_construct_extend_stack_if_needed() {
   let context = Context::create();
 
-  let parse_context = construct_context("test", &context);
+  let module = construct_module("test", &context);
 
-  unsafe { assert!(construct_extend_stack_if_needed(&parse_context).is_ok()) }
+  unsafe { assert!(construct_extend_stack_if_needed(&module).is_ok()) }
 
-  eprintln!("{}", parse_context.module.to_string());
+  eprintln!("{}", module.module.to_string());
 }
 
 #[test]
 fn should_extend_stack() {
   let context = Context::create();
 
-  let mut parse_context = construct_context("test", &context);
+  let mut module = construct_module("test", &context);
 
   unsafe {
-    setup_exec_engine(&mut parse_context);
+    build_fast_call_shim(&module, module.fun.push_state);
+    build_fast_call_shim(&module, module.fun.extend_stack_if_needed);
+
+    setup_exec_engine(&mut module);
+
     let mut reader = TestUTF8StringReader::new("test");
     let mut rt_ctx = LLVMParseContext::new();
 
-    unsafe { assert!(construct_init(&parse_context).is_ok()) }
-    unsafe { assert!(construct_push_state(&parse_context).is_ok()) }
-    unsafe { assert!(construct_extend_stack_if_needed(&parse_context).is_ok()) }
+    unsafe { assert!(construct_init(&module).is_ok()) }
+    unsafe { assert!(construct_push_state_function(&module).is_ok()) }
+    unsafe { assert!(construct_extend_stack_if_needed(&module).is_ok()) }
 
-    parse_context
+    module
       .exe_engine
       .as_ref()
       .unwrap()
-      .add_global_mapping(&parse_context.fun.allocate_stack, sherpa_allocate_stack as usize);
+      .add_global_mapping(&module.fun.allocate_stack, sherpa_allocate_stack as usize);
 
-    parse_context
+    module
       .exe_engine
       .as_ref()
       .unwrap()
-      .add_global_mapping(&parse_context.fun.free_stack, sherpa_free_stack as usize);
+      .add_global_mapping(&module.fun.free_stack, sherpa_free_stack as usize);
 
-    let init_fn = get_parse_function::<Init>(&parse_context, "init").unwrap();
-    let push_state_fn = get_parse_function::<PushState>(&parse_context, "push_state").unwrap();
-    let extend = get_parse_function::<Extend>(&parse_context, "extend_stack_if_needed").unwrap();
+    let init_fn = get_parse_function::<Init>(&module, "init").unwrap();
+    let push_state_fn = get_parse_function::<PushState>(&module, "push_state_shim").unwrap();
+    let extend = get_parse_function::<Extend>(&module, "extend_stack_if_needed_shim").unwrap();
 
     init_fn.call(&mut rt_ctx, &mut reader);
     push_state_fn.call(&mut rt_ctx, 10, 200);
     push_state_fn.call(&mut rt_ctx, 30, 400);
     extend.call(&mut rt_ctx, 10);
 
-    assert_eq!(rt_ctx.goto_stack_size, (18 << 3));
+    assert_eq!(rt_ctx.goto_stack_size, (18 << 2));
 
     push_state_fn.call(&mut rt_ctx, 50, 600);
     push_state_fn.call(&mut rt_ctx, 70, 800);
@@ -616,10 +633,38 @@ fn should_extend_stack() {
 
     extend.call(&mut rt_ctx, 2);
 
-    assert_eq!(rt_ctx.goto_stack_size, 2752);
+    assert_eq!(rt_ctx.goto_stack_size, 1088);
 
     eprintln!("{:#?}", stack);
   };
+}
+
+#[test]
+fn test_compile_parse_function() -> SherpaResult<()> {
+  let mut j = Journal::new(None);
+  let g = GrammarStore::from_str(
+    &mut j,
+    "
+  @IGNORE g:sp
+ 
+  <> test > \\hello \\world
+  ",
+  )
+  .unwrap();
+  let ir_states = compile_states(&mut j, 1)?;
+  let ir_states = optimize_ir_states(&mut j, ir_states);
+  let bytecode_output = compile_bytecode(&mut j, ir_states);
+  let context = Context::create();
+
+  let parse_context = construct_module("test", &context);
+
+  unsafe {
+    construct_parse_function(&g, &parse_context, &bytecode_output)?;
+  }
+
+  eprintln!("{}", parse_context.module.to_string());
+
+  SherpaResult::Ok(())
 }
 
 #[test]
@@ -637,75 +682,73 @@ fn test_compile_from_bytecode() -> SherpaResult<()> {
   let ir_states = compile_states(&mut j, 1)?;
   let ir_states = optimize_ir_states(&mut j, ir_states);
   let bytecode_output = compile_bytecode(&mut j, ir_states);
+  let ctx = Context::create();
 
-  if let SherpaResult::Ok(mut ctx) =
-    compile_from_bytecode("test", &g, &Context::create(), &bytecode_output)
-  {
-    let mut file = File::create("../test.ll");
+  let mut ctx = compile_from_bytecode("test", &g, &ctx, &bytecode_output)?;
 
-    if let Ok(mut file) = file {
-      file.write_all(ctx.module.to_string().as_bytes());
+  let mut file = File::create("../test.ll")?;
 
-      unsafe {
-        setup_exec_engine(&mut ctx);
-        let mut reader = TestUTF8StringReader::new("hello world");
-        let mut rt_ctx = LLVMParseContext::new();
+  file.write_all(ctx.module.to_string().as_bytes())?;
 
-        ctx
-          .exe_engine
-          .as_ref()
-          .unwrap()
-          .add_global_mapping(&ctx.fun.allocate_stack, sherpa_allocate_stack as usize);
+  unsafe {
+    setup_exec_engine(&mut ctx);
+    let mut reader = TestUTF8StringReader::new("hello world");
+    let mut rt_ctx = LLVMParseContext::new();
 
-        ctx
-          .exe_engine
-          .as_ref()
-          .unwrap()
-          .add_global_mapping(&ctx.fun.free_stack, sherpa_free_stack as usize);
+    ctx
+      .exe_engine
+      .as_ref()
+      .unwrap()
+      .add_global_mapping(&ctx.fun.allocate_stack, sherpa_allocate_stack as usize);
 
-        let init_fn = get_parse_function::<Init>(&ctx, "init").unwrap();
-        let prime_fn = get_parse_function::<Prime>(&ctx, "prime").unwrap();
-        let next_fn = get_parse_function::<Next>(&ctx, "next").unwrap();
+    ctx
+      .exe_engine
+      .as_ref()
+      .unwrap()
+      .add_global_mapping(&ctx.fun.free_stack, sherpa_free_stack as usize);
 
-        init_fn.call(&mut rt_ctx, &mut reader);
+    let init_fn = get_parse_function::<Init>(&ctx, "init").unwrap();
+    let prime_fn = get_parse_function::<Prime>(&ctx, "prime").unwrap();
+    let next_fn = get_parse_function::<Next>(&ctx, "next").unwrap();
 
-        prime_fn.call(&mut rt_ctx, 0);
+    init_fn.call(&mut rt_ctx, &mut reader);
 
-        let mut action = ParseAction::Undefined;
+    prime_fn.call(&mut rt_ctx, 0);
 
-        next_fn.call(&mut rt_ctx, &mut action);
+    let mut action = ParseAction::Undefined;
 
-        assert!(
-          matches!(action, ParseAction::Shift {  token, .. } if token.byte_offset == 0 && token.byte_length == 5)
-        );
+    next_fn.call(&mut rt_ctx, &mut action);
 
-        next_fn.call(&mut rt_ctx, &mut action);
+    dbg!(action);
 
-        assert!(matches!(action, ParseAction::Shift {  token,skipped_characters  } if
-          (token.byte_offset == 6 && token.byte_length == 5)
-          &&
-          (skipped_characters.byte_length == 1 && skipped_characters.byte_offset == 5 )
-        ));
+    assert!(
+      matches!(action, ParseAction::Shift { token_byte_offset, token_byte_length, .. } if token_byte_offset == 0 && token_byte_length == 5)
+    );
 
-        next_fn.call(&mut rt_ctx, &mut action);
+    next_fn.call(&mut rt_ctx, &mut action);
 
-        assert!(
-          matches!(action, ParseAction::Reduce { production_id, symbol_count, .. } if production_id == 0 && symbol_count == 2)
-        );
+    dbg!(action);
 
-        next_fn.call(&mut rt_ctx, &mut action);
+    assert!(
+      matches!(action, ParseAction::Shift { anchor_byte_offset, token_byte_offset, token_byte_length,..  } if
+        (token_byte_offset == 6 && token_byte_length == 5)
+        &&
+        (token_byte_offset- anchor_byte_offset == 1 && anchor_byte_offset == 5 )
+      )
+    );
 
-        assert!(matches!(action, ParseAction::Accept { .. }));
-      };
+    next_fn.call(&mut rt_ctx, &mut action);
 
-      SherpaResult::Ok(())
-    } else {
-      drop(ctx);
-      SherpaResult::None
-    }
-  } else {
-    SherpaResult::None
-  }
+    assert!(
+      matches!(action, ParseAction::Reduce { production_id, symbol_count, .. } if production_id == 0 && symbol_count == 2)
+    );
+
+    next_fn.call(&mut rt_ctx, &mut action);
+
+    assert!(matches!(action, ParseAction::Accept { .. }));
+  };
+
+  SherpaResult::Ok(())
 }
 
 #[test]

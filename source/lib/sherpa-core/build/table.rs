@@ -310,8 +310,10 @@ impl BranchTableData {
     }
   }
 
+  /// Returns true if the combination of token values can be compared using
+  /// symbol bitwise expressions. This implies that the tokens are all fixed
+  /// length strings.
   pub fn has_trivial_comparisons(&self) -> bool {
-    
     self.branches.iter().all(|(_, b)| self.min_comparison_bytes(b).is_some())
   }
 

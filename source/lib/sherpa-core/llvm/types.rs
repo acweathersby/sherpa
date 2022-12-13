@@ -4,10 +4,10 @@ use inkwell::{
   execution_engine::ExecutionEngine,
   module::Module,
   types::{FunctionType, StructType},
-  values::FunctionValue,
+  values::{BasicValue, BasicValueEnum, FunctionValue, PointerValue},
 };
 
-use crate::compile::BytecodeOutput;
+use crate::SherpaResult;
 
 pub const FAIL_STATE_FLAG_LLVM: u32 = 2;
 pub const NORMAL_STATE_FLAG_LLVM: u32 = 1;
@@ -25,24 +25,10 @@ pub struct LLVMTypes<'a> {
 }
 
 #[derive(Debug)]
-pub struct CTXGEPIndices {
-  pub goto_base:       u32,
-  pub goto_stack:      u32,
-  pub goto_stack_len:  u32,
-  pub goto_top:        u32,
-  pub tok_anchor:      u32,
-  pub tok_assert:      u32,
-  pub tok_peek:        u32,
-  pub input_block:     u32,
-  pub reader:          u32,
-  pub state:           u32,
-  pub production:      u32,
-  pub peek_mode:       u32,
-  pub get_input_block: u32,
-}
-#[derive(Debug)]
 pub struct PublicFunctions<'a> {
+  /// Called within a parse loop to get the next parse action.
   pub(crate) next: FunctionValue<'a>,
+  pub(crate) dispatch: FunctionValue<'a>,
   pub(crate) init: FunctionValue<'a>,
   pub(crate) pop_state: FunctionValue<'a>,
   pub(crate) push_state: FunctionValue<'a>,
@@ -66,6 +52,7 @@ pub struct PublicFunctions<'a> {
   pub(crate) merge_utf8_part: FunctionValue<'a>,
   pub(crate) ctlz_i8: FunctionValue<'a>,
   pub(crate) get_token_class_from_codepoint: FunctionValue<'a>,
+  pub(crate) TAIL_CALLABLE_PARSE_FUNCTION: FunctionType<'a>,
 }
 
 #[derive(Debug)]
@@ -78,13 +65,6 @@ pub struct LLVMParserModule<'a> {
   pub(crate) exe_engine: Option<ExecutionEngine<'a>>,
 }
 
-pub mod token_indices {
-  pub const TokLength: u32 = 1;
-  pub const TokLine: u32 = 3;
-  pub const TokOffset: u32 = 0;
-  pub const TokType: u32 = 2;
-}
-
 pub mod input_block_indices {
   pub const InputBlockPtr: u32 = 0;
   pub const InputBlockStart: u32 = 1;
@@ -93,19 +73,121 @@ pub mod input_block_indices {
   pub const InputBlockTruncated: u32 = 4;
 }
 
-pub mod parse_ctx_indices {
-  pub const CTX_goto_stack: u32 = 0; // 0
-  pub const CTX_tok_anchor: u32 = 1; // 1
-  pub const CTX_tok_assert: u32 = 2; // 2
-  pub const CTX_tok_peek: u32 = 3; // 3
-  pub const CTX_input_block: u32 = 4; // 4
-  pub const CTX_goto_ptr: u32 = 5; // 5
-  pub const CTX_goto_stack_len: u32 = 6; // 6
-  pub const CTX_goto_stack_remaining: u32 = 7; // 7
-  pub const CTX_get_input_block: u32 = 8; // 8
-  pub const CTX_reader: u32 = 9; // 9
-  pub const CTX_production: u32 = 10; // 10
-  pub const CTX_state: u32 = 11; // 11
-  pub const CTX_peek_mode: u32 = 12; // 12
-  pub const CTX_is_active: u32 = 13; // 13
+#[derive(Clone, Copy, Debug)]
+pub enum CTX_AGGREGATE_INDICES {
+  /// ```rust
+  /// pub goto_stack: [Goto; LLVM_BASE_STACK_SIZE]
+  /// ```
+  goto_stack = 0,
+  /// ```rust
+  /// pub input_block: InputBlock
+  /// ```
+  input_block,
+  /// ```rust
+  /// pub goto_stack_ptr: *const Goto
+  /// ```
+  goto_stack_ptr,
+  /// ```rust
+  /// pub anchor_offset: u64
+  /// ```
+  anchor_offset,
+  /// ```rust
+  /// pub token_offset: u64
+  /// ```
+  token_offset,
+  /// ```rust
+  /// pub peek_offset: u64
+  /// ```
+  peek_offset,
+  /// ```rust
+  /// pub token_length: u64
+  /// ```
+  token_length,
+  /// ```rust
+  /// pub token_type: u64
+  /// ```
+  token_type,
+  /// ```rust
+  /// pub line_data: u64
+  /// ```
+  line_data,
+  /// ```rust
+  /// pub goto_stack_size: u32
+  /// ```
+  goto_stack_size,
+  /// ```rust
+  /// pub goto_stack_remaining: u32
+  /// ```
+  goto_remaining,
+  /// ```rust
+  /// pub get_byte_block_at_cursor: fn(&mut T, &mut InputBlock)
+  /// ```
+  get_input_block,
+  /// ```rust
+  /// pub reader: *mut T
+  /// ```
+  reader,
+  /// ```rust
+  /// pub production: u32
+  /// ```
+  production,
+  /// ```rust
+  /// pub state: u32
+  /// ```
+  state,
+  /// ```rust
+  /// pub in_peek_mode: bool
+  /// ```
+  in_peek_mode,
+  /// ```rust
+  /// pub is_active: bool
+  /// ```
+  is_active,
 }
+
+impl Into<u32> for CTX_AGGREGATE_INDICES {
+  fn into(self) -> u32 {
+    self as u32
+  }
+}
+
+impl CTX_AGGREGATE_INDICES {
+  pub fn get_ptr<'a>(
+    &self,
+    module: &'a LLVMParserModule,
+    parse_ctx: PointerValue<'a>,
+  ) -> SherpaResult<PointerValue<'a>> {
+    SherpaResult::Ok(module.builder.build_struct_gep(
+      parse_ctx,
+      (*self).into(),
+      &format!("{:?}_ptr", self),
+    )?)
+  }
+
+  pub fn load<'a>(
+    &self,
+    module: &'a LLVMParserModule,
+    parser_context: PointerValue<'a>,
+  ) -> SherpaResult<BasicValueEnum<'a>> {
+    let val =
+      module.builder.build_load(self.get_ptr(module, parser_context)?, &format!("{:?}_val", self));
+
+    SherpaResult::Ok(val)
+  }
+
+  pub fn store<'a, V>(
+    &self,
+    module: &'a LLVMParserModule,
+    parser_context: PointerValue<'a>,
+    value: V,
+  ) -> SherpaResult<()>
+  where
+    V: BasicValue<'a>,
+  {
+    module.builder.build_store(self.get_ptr(module, parser_context)?, value);
+
+    SherpaResult::Ok(())
+  }
+}
+/// Index value for a tail calling convention
+pub const fastCC: u32 = 8;

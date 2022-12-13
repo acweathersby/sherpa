@@ -54,6 +54,7 @@ pub const TOKEN_ASSIGN_FLAG: u32 = 0x04000000;
 
 pub const END_OF_INPUT_TOKEN_ID: u32 = 0x1;
 
+#[derive(Debug)]
 pub enum InstructionType {
   PASS       = 0,
   SHIFT      = 1,
@@ -112,26 +113,42 @@ impl INSTRUCTION {
     self.1 > 0
   }
 
+  pub fn invalid() -> Self {
+    INSTRUCTION(0, 0)
+  }
+
   pub fn from(bc: &[u32], address: usize) -> Self {
-    if (address > bc.len()) {
-      INSTRUCTION(0, 0)
+    if address > bc.len() {
+      Self::invalid()
     } else {
       INSTRUCTION(bc[address], address)
     }
   }
 
   pub fn next(&self, bc: &[u32]) -> Self {
-    if (self.1 >= bc.len() - 1) {
-      INSTRUCTION(0, 0)
+    if self.1 >= bc.len() - 1 {
+      Self::invalid()
     } else {
       INSTRUCTION(bc[self.1 + 1], self.1 + 1)
     }
   }
 
+  /// If this instruction is a GOTO, returns the address of the target state
+  /// Otherwise returns an invalid instruction.
   pub fn goto(&self, bc: &[u32]) -> Self {
     match self.to_type() {
       InstructionType::GOTO => Self::from(bc, (self.0 & GOTO_STATE_ADDRESS_MASK) as usize),
-      _ => INSTRUCTION(0, 0),
+      _ => Self::invalid(),
+    }
+  }
+
+  /// IF this is a branching instruction (HASH or VECTOR), then returns the first instruction
+  /// located within the default block. Otherwise returns an invalid instruction
+  pub fn branch_default(&self, bc: &[u32]) -> Self {
+    if self.is_HASH_BRANCH() || self.is_VECTOR_BRANCH() {
+      Self::from(&bc, (bc[self.get_address() + 3] as usize) + self.get_address())
+    } else {
+      Self::invalid()
     }
   }
 

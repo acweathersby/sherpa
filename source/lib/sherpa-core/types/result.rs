@@ -213,11 +213,13 @@ impl<T> Try for SherpaResult<T> {
   type Residual = SherpaResult<Infallible>;
 
   #[inline]
+  #[track_caller]
   fn from_output(output: Self::Output) -> Self {
     SherpaResult::Ok(output)
   }
 
   #[inline]
+  #[track_caller]
   fn branch(self) -> ControlFlow<Self::Residual, Self::Output> {
     match self {
       SherpaResult::Ok(v) => ControlFlow::Continue(v),
@@ -229,6 +231,8 @@ impl<T> Try for SherpaResult<T> {
 }
 
 impl<T> Termination for SherpaResult<T> {
+  #[inline]
+  #[track_caller]
   fn report(self) -> std::process::ExitCode {
     match self {
       SherpaResult::MultipleErrors(errors) => {

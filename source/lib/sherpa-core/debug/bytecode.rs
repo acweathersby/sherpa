@@ -211,8 +211,13 @@ pub(crate) fn generate_table_string(
   table_name: &str,
   get_offset_token_id_pair: GetOffsetTokenIdPair,
 ) -> (String, usize) {
-  let TableHeaderData { input_type, lexer_type, table_length, table_meta, scan_index } =
-    TableHeaderData::from_bytecode(idx, bc);
+  let TableHeaderData {
+    input_type,
+    lexer_type,
+    table_length,
+    table_meta,
+    scan_state_entry_instruction: scan_index,
+  } = TableHeaderData::from_bytecode(idx, bc);
 
   let states = bc;
   let instruction = states[idx];

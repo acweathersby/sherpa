@@ -1,4 +1,5 @@
 use super::{
+  fastCC,
   input_block_indices::{
     InputBlockEnd,
     InputBlockPtr,
@@ -6,9 +7,14 @@ use super::{
     InputBlockStart,
     InputBlockTruncated,
   },
-  parse_ctx_indices::*,
-  parser_functions::construct_parse_functions,
-  token_indices::{TokLength, TokOffset, TokType},
+  parser_functions::{
+    build_tail_call_with_return,
+    construct_dispatch_function,
+    construct_next_function,
+    construct_parse_function,
+    construct_scan,
+  },
+  CTX_AGGREGATE_INDICES as CTX,
   FAIL_STATE_FLAG_LLVM,
 };
 use crate::{
@@ -16,9 +22,13 @@ use crate::{
   llvm::{LLVMParserModule, LLVMTypes, PublicFunctions, NORMAL_STATE_FLAG_LLVM},
   types::*,
 };
-use inkwell::{attributes::AttributeLoc, context::Context, module::Linkage, values::CallableValue};
+use inkwell::{
+  context::Context,
+  module::Linkage,
+  values::{BasicMetadataValueEnum, CallSiteValue, CallableValue},
+};
 
-pub(crate) fn construct_context<'a>(module_name: &str, ctx: &'a Context) -> LLVMParserModule<'a> {
+pub(crate) fn construct_module<'a>(module_name: &str, ctx: &'a Context) -> LLVMParserModule<'a> {
   use inkwell::AddressSpace::*;
   let module = ctx.create_module(module_name);
   let builder = ctx.create_builder();
@@ -39,7 +49,14 @@ pub(crate) fn construct_context<'a>(module_name: &str, ctx: &'a Context) -> LLVM
 
   ACTION.set_body(&[i32.into(), i32.into()], false);
 
-  GOTO.set_body(&[i64.into(), i32.into(), i32.into()], false);
+  let TAIL_CALLABLE_PARSE_FUNCTION = ctx
+    .void_type()
+    .fn_type(&[CTX.ptr_type(Generic).into(), ACTION.ptr_type(Generic).into()], false);
+
+  GOTO.set_body(
+    &[TAIL_CALLABLE_PARSE_FUNCTION.ptr_type(Generic).into(), i32.into(), i32.into()],
+    false,
+  );
 
   CP_INFO.set_body(&[i32.into(), i32.into()], false);
 
@@ -68,11 +85,14 @@ pub(crate) fn construct_context<'a>(module_name: &str, ctx: &'a Context) -> LLVM
   CTX.set_body(
     &[
       GOTO.array_type(LLVM_BASE_STACK_SIZE as u32).into(),
-      TOKEN.into(),
-      TOKEN.into(),
-      TOKEN.into(),
       INPUT_BLOCK.into(),
       GOTO.ptr_type(Generic).into(),
+      i64.into(),
+      i64.into(),
+      i64.into(),
+      i64.into(),
+      i64.into(),
+      i64.into(),
       i32.into(),
       i32.into(),
       get_input_block_type.into(),
@@ -85,8 +105,180 @@ pub(crate) fn construct_context<'a>(module_name: &str, ctx: &'a Context) -> LLVM
     false,
   );
 
-  let emit_function_type =
-    i32.fn_type(&[CTX.ptr_type(Generic).into(), ACTION.ptr_type(Generic).into()], false);
+  let fun = PublicFunctions {
+    /// Public functions
+    init: module.add_function(
+      "init",
+      ctx
+        .void_type()
+        .fn_type(&[CTX.ptr_type(Generic).into(), READER.ptr_type(Generic).into()], false),
+      Some(Linkage::External),
+    ),
+    prime: module.add_function(
+      "prime",
+      ctx.void_type().fn_type(&[CTX.ptr_type(Generic).into(), i32.into()], false),
+      Some(Linkage::External),
+    ),
+    next: module.add_function("next", TAIL_CALLABLE_PARSE_FUNCTION, None),
+    /// ------------------------------------------------------------------------
+    TAIL_CALLABLE_PARSE_FUNCTION,
+    // These functions can be tail called, as they all use the same interface
+    dispatch: module.add_function("dispatch", TAIL_CALLABLE_PARSE_FUNCTION, Some(Linkage::Private)),
+    emit_accept: module.add_function(
+      "emit_accept",
+      TAIL_CALLABLE_PARSE_FUNCTION,
+      Some(Linkage::Private),
+    ),
+    emit_error: module.add_function(
+      "emit_error",
+      TAIL_CALLABLE_PARSE_FUNCTION.clone(),
+      Some(Linkage::Private),
+    ),
+    emit_eop: module.add_function("emit_eop", TAIL_CALLABLE_PARSE_FUNCTION, Some(Linkage::Private)),
+    /// ------------------------------------------------------------------------
+    ///
+    emit_reduce: module.add_function(
+      "emit_reduce",
+      ctx.void_type().fn_type(
+        &[
+          CTX.ptr_type(Generic).into(),
+          ACTION.ptr_type(Generic).into(),
+          i32.into(),
+          i32.into(),
+          i32.into(),
+        ],
+        false,
+      ),
+      Some(Linkage::Private),
+    ),
+    emit_shift: module.add_function(
+      "emit_shift",
+      ctx.void_type().fn_type(
+        &[ACTION.ptr_type(Generic).into(), i64.into(), i64.into(), i64.into(), i64.into()],
+        false,
+      ),
+      Some(Linkage::Private),
+    ),
+    emit_eoi: module.add_function(
+      "emit_eoi",
+      ctx.void_type().fn_type(
+        &[CTX.ptr_type(Generic).into(), ACTION.ptr_type(Generic).into(), i32.into()],
+        false,
+      ),
+      Some(Linkage::Private),
+    ),
+    /// ------------------------------------------------------------------------
+    get_token_class_from_codepoint: module.add_function(
+      "sherpa_get_token_class_from_codepoint",
+      i32.fn_type(&[i32.into()], false),
+      Some(Linkage::Private),
+    ),
+    get_utf8_codepoint_info: module.add_function(
+      "get_utf8_codepoint_info",
+      CP_INFO.fn_type(&[i8.ptr_type(Generic).into()], false),
+      Some(Linkage::Private),
+    ),
+    merge_utf8_part: module.add_function(
+      "merge_utf8_part",
+      i32.fn_type(&[i8.ptr_type(Generic).into(), i32.into(), i32.into()], false),
+      Some(Linkage::Private),
+    ),
+    allocate_stack: module.add_function(
+      "sherpa_allocate_stack",
+      GOTO.ptr_type(Generic).fn_type(&[i32.into()], false),
+      Some(Linkage::External),
+    ),
+    free_stack: module.add_function(
+      "sherpa_free_stack",
+      ctx.void_type().fn_type(&[GOTO.ptr_type(Generic).into(), i32.into()], false),
+      Some(Linkage::External),
+    ),
+    get_adjusted_input_block: module.add_function(
+      "get_adjusted_input_block",
+      INPUT_BLOCK.fn_type(&[CTX.ptr_type(Generic).into(), i32.into(), i32.into()], false),
+      Some(Linkage::Private),
+    ),
+    scan: module.add_function(
+      "scan",
+      ctx.void_type().fn_type(
+        &[
+          CTX.ptr_type(Generic).into(),
+          TAIL_CALLABLE_PARSE_FUNCTION.ptr_type(Generic).into(),
+          i64.into(),
+          i64.into(),
+        ],
+        false,
+      ),
+      Some(Linkage::Private),
+    ),
+    push_state: module.add_function(
+      "push_state",
+      ctx.void_type().fn_type(
+        &[
+          CTX.ptr_type(Generic).into(),
+          i32.into(),
+          TAIL_CALLABLE_PARSE_FUNCTION.ptr_type(Generic).into(),
+        ],
+        false,
+      ),
+      Some(Linkage::Private),
+    ),
+    pop_state: module.add_function(
+      "pop_state",
+      GOTO.fn_type(&[CTX.ptr_type(Generic).into()], false),
+      Some(Linkage::Private),
+    ),
+    extend_stack_if_needed: module.add_function(
+      "extend_stack_if_needed",
+      i32.fn_type(&[CTX.ptr_type(Generic).into(), i32.into()], false),
+      Some(Linkage::Private),
+    ),
+    /// LLVM intrinsics ------------------------------------------------------------
+    memcpy: module.add_function(
+      "llvm.memcpy.p0i8.p0i8.i32",
+      ctx.void_type().fn_type(
+        &[
+          i8.ptr_type(Generic).into(),
+          i8.ptr_type(Generic).into(),
+          i32.into(),
+          ctx.bool_type().into(),
+        ],
+        false,
+      ),
+      None,
+    ),
+    memset: module.add_function(
+      "llvm.memset.p0.i32",
+      ctx.void_type().fn_type(
+        &[i8.ptr_type(Generic).into(), i8.into(), i32.into(), ctx.bool_type().into()],
+        false,
+      ),
+      None,
+    ),
+    max: module.add_function("llvm.umax.i32", i32.fn_type(&[i32.into(), i32.into()], false), None),
+    min: module.add_function("llvm.umin.i32", i32.fn_type(&[i32.into(), i32.into()], false), None),
+    ctlz_i8: module.add_function(
+      "llvm.ctlz.i8",
+      i8.fn_type(&[i8.into(), ctx.bool_type().into()], false),
+      None,
+    ),
+  };
+
+  // Set all functions that are not part of the public interface to fastCC.
+  fun.dispatch.set_call_conventions(fastCC);
+  fun.scan.set_call_conventions(fastCC);
+  fun.emit_accept.set_call_conventions(fastCC);
+  fun.emit_error.set_call_conventions(fastCC);
+  fun.emit_eop.set_call_conventions(fastCC);
+  fun.emit_reduce.set_call_conventions(fastCC);
+  fun.emit_shift.set_call_conventions(fastCC);
+  fun.emit_eoi.set_call_conventions(fastCC);
+  fun.pop_state.set_call_conventions(fastCC);
+  fun.push_state.set_call_conventions(fastCC);
+  fun.get_utf8_codepoint_info.set_call_conventions(fastCC);
+  fun.get_token_class_from_codepoint.set_call_conventions(fastCC);
+  fun.get_adjusted_input_block.set_call_conventions(fastCC);
+  fun.extend_stack_if_needed.set_call_conventions(fastCC);
 
   LLVMParserModule {
     builder,
@@ -101,146 +293,14 @@ pub(crate) fn construct_context<'a>(module_name: &str, ctx: &'a Context) -> LLVM
       input_block: INPUT_BLOCK,
       cp_info:     CP_INFO,
     },
-    fun: PublicFunctions {
-      get_token_class_from_codepoint: module.add_function(
-        "sherpa_get_token_class_from_codepoint",
-        i32.fn_type(&[i32.into()], false),
-        None,
-      ),
-      get_utf8_codepoint_info: module.add_function(
-        "get_utf8_codepoint_info",
-        CP_INFO.fn_type(&[i8.ptr_type(Generic).into()], false),
-        None,
-      ),
-      merge_utf8_part: module.add_function(
-        "merge_utf8_part",
-        i32.fn_type(&[i8.ptr_type(Generic).into(), i32.into(), i32.into()], false),
-        None,
-      ),
-      allocate_stack: module.add_function(
-        "sherpa_allocate_stack",
-        GOTO.ptr_type(Generic).fn_type(&[i32.into()], false),
-        Some(Linkage::External),
-      ),
-      free_stack: module.add_function(
-        "sherpa_free_stack",
-        ctx.void_type().fn_type(&[GOTO.ptr_type(Generic).into(), i32.into()], false),
-        Some(Linkage::External),
-      ),
-      get_adjusted_input_block: module.add_function(
-        "get_adjusted_input_block",
-        INPUT_BLOCK.fn_type(&[CTX.ptr_type(Generic).into(), i32.into(), i32.into()], false),
-        None,
-      ),
-      scan: module.add_function(
-        "scan",
-        TOKEN.fn_type(&[CTX.ptr_type(Generic).into(), i64.into(), i64.into()], false),
-        None,
-      ),
-      next: module.add_function(
-        "next",
-        ctx
-          .void_type()
-          .fn_type(&[CTX.ptr_type(Generic).into(), ACTION.ptr_type(Generic).into()], false),
-        None,
-      ),
-      init: module.add_function(
-        "init",
-        ctx
-          .void_type()
-          .fn_type(&[CTX.ptr_type(Generic).into(), READER.ptr_type(Generic).into()], false),
-        None,
-      ),
-      push_state: module.add_function(
-        "push_state",
-        ctx.void_type().fn_type(&[CTX.ptr_type(Generic).into(), i32.into(), i64.into()], false),
-        None,
-      ),
-      pop_state: module.add_function(
-        "pop_state",
-        GOTO.fn_type(&[CTX.ptr_type(Generic).into()], false),
-        None,
-      ),
-      emit_reduce: module.add_function(
-        "emit_reduce",
-        i32.fn_type(
-          &[
-            CTX.ptr_type(Generic).into(),
-            ACTION.ptr_type(Generic).into(),
-            i32.into(),
-            i32.into(),
-            i32.into(),
-          ],
-          false,
-        ),
-        None,
-      ),
-      emit_eop: module.add_function("emit_eop", emit_function_type, None),
-      emit_shift: module.add_function("emit_shift", emit_function_type, None),
-      emit_eoi: module.add_function(
-        "emit_eoi",
-        i32.fn_type(
-          &[CTX.ptr_type(Generic).into(), ACTION.ptr_type(Generic).into(), i32.into()],
-          false,
-        ),
-        None,
-      ),
-      emit_accept: module.add_function("emit_accept", emit_function_type, None),
-      emit_error: module.add_function("emit_error", emit_function_type.clone(), None),
-      prime: module.add_function(
-        "prime",
-        ctx.void_type().fn_type(&[CTX.ptr_type(Generic).into(), i32.into()], false),
-        None,
-      ),
-      memcpy: module.add_function(
-        "llvm.memcpy.p0i8.p0i8.i32",
-        ctx.void_type().fn_type(
-          &[
-            i8.ptr_type(Generic).into(),
-            i8.ptr_type(Generic).into(),
-            i32.into(),
-            ctx.bool_type().into(),
-          ],
-          false,
-        ),
-        None,
-      ),
-      memset: module.add_function(
-        "llvm.memset.p0.i32",
-        ctx.void_type().fn_type(
-          &[i8.ptr_type(Generic).into(), i8.into(), i32.into(), ctx.bool_type().into()],
-          false,
-        ),
-        None,
-      ),
-      max: module.add_function(
-        "llvm.umax.i32",
-        i32.fn_type(&[i32.into(), i32.into()], false),
-        None,
-      ),
-      min: module.add_function(
-        "llvm.umin.i32",
-        i32.fn_type(&[i32.into(), i32.into()], false),
-        None,
-      ),
-      ctlz_i8: module.add_function(
-        "llvm.ctlz.i8",
-        i8.fn_type(&[i8.into(), ctx.bool_type().into()], false),
-        None,
-      ),
-      extend_stack_if_needed: module.add_function(
-        "extend_stack_if_needed",
-        i32.fn_type(&[CTX.ptr_type(Generic).into(), i32.into()], false),
-        None,
-      ),
-    },
+    fun,
     module,
     exe_engine: None,
   }
 }
 
-pub(crate) fn construct_emit_end_of_input(ctx: &LLVMParserModule) -> std::result::Result<(), ()> {
-  let LLVMParserModule { builder: b, ctx, fun: funct, .. } = ctx;
+pub(crate) fn construct_emit_end_of_input(module: &LLVMParserModule) -> SherpaResult<()> {
+  let LLVMParserModule { builder: b, ctx, fun: funct, .. } = module;
 
   let i32 = ctx.i32_type();
 
@@ -266,19 +326,17 @@ pub(crate) fn construct_emit_end_of_input(ctx: &LLVMParserModule) -> std::result
 
   b.build_store(eoi, eoi_struct);
 
-  b.build_return(Some(&i32.const_int(1, false)));
+  b.build_return(None);
 
   if funct.emit_eoi.verify(true) {
-    Ok(())
+    SherpaResult::Ok(())
   } else {
-    Err(())
+    SherpaResult::Err(SherpaError::from("Could not build emit_eoi function"))
   }
 }
 
-pub(crate) unsafe fn construct_emit_end_of_parse(
-  ctx: &LLVMParserModule,
-) -> std::result::Result<(), ()> {
-  let LLVMParserModule { builder: b, ctx, fun: funct, .. } = ctx;
+pub(crate) unsafe fn construct_emit_end_of_parse(module: &LLVMParserModule) -> SherpaResult<()> {
+  let LLVMParserModule { builder: b, ctx, fun: funct, .. } = module;
 
   let i32 = ctx.i32_type();
   let bool = ctx.bool_type();
@@ -290,21 +348,17 @@ pub(crate) unsafe fn construct_emit_end_of_parse(
   let success = ctx.append_basic_block(fn_value, "SuccessfulParse");
   let failure = ctx.append_basic_block(fn_value, "FailedParse");
 
-  let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
-  let basic_action = fn_value.get_nth_param(1).unwrap().into_pointer_value();
+  let parse_ctx = fn_value.get_nth_param(0)?.into_pointer_value();
+  let basic_action = fn_value.get_nth_param(1)?.into_pointer_value();
 
   b.position_at_end(entry);
 
   // Update the active state to be inactive
-  let active_ptr = b.build_struct_gep(parse_ctx, CTX_is_active, "").unwrap();
-  b.build_store(active_ptr, bool.const_zero());
-
-  let state_ptr = b.build_struct_gep(parse_ctx, CTX_state, "").unwrap();
-  let state = b.build_load(state_ptr, "");
+  CTX::is_active.store(module, parse_ctx, bool.const_zero())?;
 
   let comparison = b.build_int_compare(
     inkwell::IntPredicate::NE,
-    state.into_int_value(),
+    CTX::state.load(module, parse_ctx)?.into_int_value(),
     i32.const_int(FAIL_STATE_FLAG_LLVM as u64, false).into(),
     "",
   );
@@ -312,27 +366,23 @@ pub(crate) unsafe fn construct_emit_end_of_parse(
 
   b.position_at_end(success);
 
-  b.build_call(funct.emit_accept, &[parse_ctx.into(), basic_action.into()], "");
-
-  b.build_return(Some(&i32.const_int(1, false)));
+  build_tail_call_with_return(module, fn_value, funct.emit_accept);
 
   b.position_at_end(failure);
 
-  b.build_call(funct.emit_error, &[parse_ctx.into(), basic_action.into()], "");
-
-  b.build_return(Some(&i32.const_int(1, false)));
+  build_tail_call_with_return(module, fn_value, funct.emit_accept);
 
   if funct.emit_eop.verify(true) {
-    Ok(())
+    SherpaResult::Ok(())
   } else {
-    Err(())
+    SherpaResult::Err(SherpaError::from("Could not build emit_eop function"))
   }
 }
 
 pub(crate) unsafe fn construct_get_adjusted_input_block_function(
-  ctx: &LLVMParserModule,
+  module: &LLVMParserModule,
 ) -> SherpaResult<()> {
-  let LLVMParserModule { builder: b, ctx, fun: funct, .. } = ctx;
+  let LLVMParserModule { builder: b, ctx, fun: funct, .. } = module;
 
   let i32 = ctx.i32_type();
   let bool = ctx.bool_type();
@@ -351,7 +401,7 @@ pub(crate) unsafe fn construct_get_adjusted_input_block_function(
 
   b.position_at_end(entry);
 
-  let ctx_input_block = b.build_struct_gep(parse_ctx, CTX_input_block, "")?;
+  let ctx_input_block = CTX::input_block.get_ptr(module, parse_ctx)?;
 
   let requested_end_index = b.build_int_add(byte_offset, needed_size, "");
 
@@ -384,13 +434,11 @@ pub(crate) unsafe fn construct_get_adjusted_input_block_function(
 
   b.build_store(block_start_ptr, byte_offset);
 
-  let reader = b.build_struct_gep(parse_ctx, CTX_reader, "")?;
-  let reader = b.build_load(reader, "");
-  let get_byte_block = b.build_struct_gep(parse_ctx, CTX_get_input_block, "")?;
-  let get_byte_block = b.build_load(get_byte_block, "").into_pointer_value();
-  let get_byte_block = CallableValue::try_from(get_byte_block)?;
-
-  b.build_call(get_byte_block, &[reader.into(), ctx_input_block.into()], "");
+  b.build_call(
+    CallableValue::try_from(CTX::get_input_block.load(module, parse_ctx)?.into_pointer_value())?,
+    &[CTX::reader.load(module, parse_ctx)?.into(), ctx_input_block.into()],
+    "",
+  );
 
   b.build_unconditional_branch(valid_window);
 
@@ -420,10 +468,8 @@ pub(crate) unsafe fn construct_get_adjusted_input_block_function(
   }
 }
 
-pub(crate) fn construct_emit_reduce_function(
-  ctx: &LLVMParserModule,
-) -> std::result::Result<(), ()> {
-  let LLVMParserModule { builder: b, ctx, fun: funct, .. } = ctx;
+pub(crate) fn construct_emit_reduce_function(module: &LLVMParserModule) -> SherpaResult<()> {
+  let LLVMParserModule { builder: b, ctx, fun: funct, .. } = module;
 
   let i32 = ctx.i32_type();
 
@@ -454,19 +500,19 @@ pub(crate) fn construct_emit_reduce_function(
 
   b.build_store(reduce, reduce_struct);
 
-  b.build_return(Some(&i32.const_int(1, false)));
+  b.build_return(None);
 
   if funct.emit_reduce.verify(true) {
-    Ok(())
+    SherpaResult::Ok(())
   } else {
-    Err(())
+    SherpaResult::Err(SherpaError::from("Could not validate emit_reduce"))
   }
 }
 
 pub(crate) unsafe fn construct_extend_stack_if_needed(
-  ctx: &LLVMParserModule,
-) -> std::result::Result<(), ()> {
-  let LLVMParserModule { builder: b, types, ctx, fun: funct, .. } = ctx;
+  module: &LLVMParserModule,
+) -> SherpaResult<()> {
+  let LLVMParserModule { builder: b, types, ctx, fun: funct, .. } = module;
   let i32 = ctx.i32_type();
 
   let fn_value = funct.extend_stack_if_needed;
@@ -477,9 +523,7 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
   b.position_at_end(entry);
 
   // Compare the number of needed slots with the number of available slots
-  let goto_remaining_ptr =
-    b.build_struct_gep(parse_ctx, CTX_goto_stack_remaining, "remaining").unwrap();
-  let goto_remaining = b.build_load(goto_remaining_ptr, "remaining").into_int_value();
+  let goto_remaining = CTX::goto_remaining.load(module, parse_ctx)?.into_int_value();
 
   let comparison =
     b.build_int_compare(inkwell::IntPredicate::ULT, goto_remaining, needed_slot_count, "");
@@ -496,13 +540,9 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
   // Create a new stack, copy data from old stack to new one
   // and, if the old stack was not the original stack,
   // delete the old stack.
-  let goto_top_ptr_ptr =
-    b.build_struct_gep(parse_ctx, CTX_goto_ptr, "goto_top_stack_pointer").unwrap();
-  let goto_top_ptr = b.build_load(goto_top_ptr_ptr, "goto_top_ptr").into_pointer_value();
 
-  let goto_slot_size_ptr =
-    b.build_struct_gep(parse_ctx, CTX_goto_stack_len, "goto_size_ptr").unwrap();
-  let goto_slot_count = b.build_load(goto_slot_size_ptr, "goto_size").into_int_value();
+  let goto_top_ptr = CTX::goto_stack_ptr.load(module, parse_ctx)?.into_pointer_value();
+  let goto_slot_count = CTX::goto_stack_size.load(module, parse_ctx)?.into_int_value();
 
   let goto_byte_size =
     b.build_left_shift(goto_slot_count, ctx.i32_type().const_int(4, false), "goto_byte_size");
@@ -561,8 +601,6 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
   b.build_unconditional_branch(update_block);
   b.position_at_end(update_block);
 
-  b.build_store(goto_top_ptr_ptr, new_ptr);
-
   let new_stack_top_ptr = b.build_ptr_to_int(new_ptr, ctx.i64_type(), "new_top");
   let new_stack_top_ptr = b.build_int_add(new_stack_top_ptr, goto_used_bytes_64, "new_top");
   let new_stack_top_ptr = b.build_int_to_ptr(
@@ -571,138 +609,107 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
     "new_top",
   );
 
-  b.build_store(goto_top_ptr_ptr, new_stack_top_ptr);
-  b.build_store(goto_slot_size_ptr, new_slot_count);
+  CTX::goto_stack_ptr.store(module, parse_ctx, new_stack_top_ptr)?;
+  CTX::goto_stack_size.store(module, parse_ctx, new_slot_count)?;
 
   let slot_diff = b.build_int_sub(new_slot_count, goto_slot_count, "slot_diff");
   let new_remaining_count = b.build_int_add(slot_diff, goto_remaining, "remaining");
-  b.build_store(goto_remaining_ptr, new_remaining_count);
+  CTX::goto_remaining.store(module, parse_ctx, new_remaining_count);
 
   b.build_unconditional_branch(return_block);
   b.position_at_end(return_block);
   b.build_return(Some(&i32.const_int(1, false)));
 
   if funct.extend_stack_if_needed.verify(true) {
-    Ok(())
+    SherpaResult::Ok(())
   } else {
-    Err(())
+    SherpaResult::Err(SherpaError::from("Could not validate extend_stack_if_needed"))
   }
 }
 
-pub(crate) unsafe fn construct_emit_shift(ctx: &LLVMParserModule) -> std::result::Result<(), ()> {
-  let LLVMParserModule { builder: b, types, ctx, fun: funct, .. } = ctx;
+pub(crate) unsafe fn construct_emit_shift(module: &LLVMParserModule) -> SherpaResult<()> {
+  let LLVMParserModule { builder: b, types, ctx, fun: funct, .. } = module;
 
+  let i64 = ctx.i64_type();
   let i32 = ctx.i32_type();
 
   let fn_value = funct.emit_shift;
 
-  let eoi_action = ctx.struct_type(&[i32.into(), types.token.into(), types.token.into()], false);
-
   // Set the context's goto pointers to point to the goto block;
   let entry = ctx.append_basic_block(fn_value, "Entry");
 
-  let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
-  let basic_action = fn_value.get_nth_param(1).unwrap().into_pointer_value();
+  let basic_action = fn_value.get_nth_param(0)?.into_pointer_value();
+  let anchor_offset = fn_value.get_nth_param(1)?.into_int_value();
+  let token_offset = fn_value.get_nth_param(2)?.into_int_value();
+  let token_length = fn_value.get_nth_param(3)?.into_int_value();
+  let token_line_info = fn_value.get_nth_param(4)?.into_int_value();
+
+  let token_action = ctx
+    .struct_type(&[i32.into(), i32.into(), i64.into(), i64.into(), i64.into(), i64.into()], false);
 
   b.position_at_end(entry);
 
-  // load the anchor token to be used as the skipped symbols
-
-  let anchor_token_ptr = b.build_struct_gep(parse_ctx, CTX_tok_anchor, "").unwrap();
-  let skip_token = b.build_load(anchor_token_ptr, "").into_struct_value();
-
-  // load the anchor token to be used as the skipped symbols
-
-  let assert_token_ptr = b.build_struct_gep(parse_ctx, CTX_tok_assert, "").unwrap();
-  let assert_token = b.build_load(assert_token_ptr, "").into_struct_value();
-
-  // The length of the skip token is equal to the tokens offset minus the
-  // assert token's offset
-
-  let shift_offset = b.build_extract_value(assert_token, TokOffset, "").unwrap().into_int_value();
-  let skip_offset = b.build_extract_value(skip_token, TokOffset, "").unwrap().into_int_value();
-
-  let skip_length = b.build_int_sub(shift_offset, skip_offset, "");
-
-  let skip_token = b.build_insert_value(skip_token, skip_length, TokLength, "").unwrap();
-
   let shift = b
-    .build_bitcast(basic_action, eoi_action.ptr_type(inkwell::AddressSpace::Generic), "")
+    .build_bitcast(basic_action, token_action.ptr_type(inkwell::AddressSpace::Generic), "")
     .into_pointer_value();
-
   let shift_struct = b.build_load(shift, "").into_struct_value();
-  let shift_struct = b.build_insert_value(shift_struct, i32.const_int(5, false), 0, "").unwrap();
-
-  let shift_struct = b.build_insert_value(shift_struct, skip_token, 1, "").unwrap();
-
-  let shift_struct = b.build_insert_value(shift_struct, assert_token, 2, "").unwrap();
-
+  let shift_struct = b.build_insert_value(shift_struct, i32.const_int(5, false), 0, "")?;
+  let shift_struct = b.build_insert_value(shift_struct, anchor_offset, 2, "")?;
+  let shift_struct = b.build_insert_value(shift_struct, token_offset, 3, "")?;
+  let shift_struct = b.build_insert_value(shift_struct, token_length, 4, "")?;
+  let shift_struct = b.build_insert_value(shift_struct, token_line_info, 5, "")?;
   b.build_store(shift, shift_struct);
 
-  let assert_length = b.build_extract_value(assert_token, 1, "").unwrap().into_int_value();
-
-  let assert_offset = b.build_int_add(assert_length, shift_offset, "");
-
-  let assert_token = b.build_insert_value(assert_token, assert_offset, 0, "").unwrap();
-  let assert_token =
-    b.build_insert_value(assert_token, ctx.i64_type().const_int(0, false), TokType, "").unwrap();
-
-  b.build_store(anchor_token_ptr, assert_token);
-  b.build_store(assert_token_ptr, assert_token);
-
-  let prod_slot = b.build_struct_gep(parse_ctx, CTX_production, "").unwrap();
-
-  b.build_store(prod_slot, i32.const_int((u32::max_value() - 1) as u64, false));
-
-  b.build_return(Some(&i32.const_int(1, false)));
+  // load the anchor token to be used as the skipped symbols
+  b.build_return(None);
 
   if funct.emit_shift.verify(true) {
-    Ok(())
+    SherpaResult::Ok(())
   } else {
-    Err(())
+    SherpaResult::Err(SherpaError::from("Could not validate emit_shift"))
   }
 }
 
-pub(crate) unsafe fn construct_emit_accept(ctx: &LLVMParserModule) -> std::result::Result<(), ()> {
-  let LLVMParserModule { builder: b, ctx, fun: funct, .. } = ctx;
+pub(crate) unsafe fn construct_emit_accept(module: &LLVMParserModule) -> SherpaResult<()> {
+  let LLVMParserModule { builder: b, ctx: c, fun: funct, .. } = module;
 
-  let i32 = ctx.i32_type();
+  let i32 = c.i32_type();
 
   let fn_value = funct.emit_accept;
 
-  let accept_action = ctx.struct_type(&[i32.into(), i32.into(), i32.into()], false);
+  let accept_action = c.struct_type(&[i32.into(), i32.into(), i32.into()], false);
 
   // Set the context's goto pointers to point to the goto block;
-  let entry = ctx.append_basic_block(fn_value, "Entry");
+  let entry = c.append_basic_block(fn_value, "Entry");
 
-  let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
-  let basic_action = fn_value.get_nth_param(1).unwrap().into_pointer_value();
+  let parse_ctx = fn_value.get_nth_param(0)?.into_pointer_value();
+  let basic_action = fn_value.get_nth_param(1)?.into_pointer_value();
 
   b.position_at_end(entry);
 
-  let production = b.build_struct_gep(parse_ctx, CTX_production, "").unwrap();
+  let production = CTX::production.get_ptr(module, parse_ctx)?;
   let production = b.build_load(production, "");
   let accept = b
     .build_bitcast(basic_action, accept_action.ptr_type(inkwell::AddressSpace::Generic), "")
     .into_pointer_value();
 
   let accept_struct = b.build_load(accept, "").into_struct_value();
-  let accept_struct = b.build_insert_value(accept_struct, i32.const_int(7, false), 0, "").unwrap();
-  let accept_struct = b.build_insert_value(accept_struct, production, 2, "").unwrap();
+  let accept_struct = b.build_insert_value(accept_struct, i32.const_int(7, false), 0, "")?;
+  let accept_struct = b.build_insert_value(accept_struct, production, 2, "")?;
 
   b.build_store(accept, accept_struct);
 
-  b.build_return(Some(&i32.const_int(1, false)));
+  b.build_return(None);
 
   if funct.emit_accept.verify(true) {
-    Ok(())
+    SherpaResult::Ok(())
   } else {
-    Err(())
+    SherpaResult::Err(SherpaError::from("Could not build emit_accept function"))
   }
 }
 
-pub(crate) unsafe fn construct_emit_error(ctx: &LLVMParserModule) -> std::result::Result<(), ()> {
-  let LLVMParserModule { builder: b, types, ctx, fun: funct, .. } = ctx;
+pub(crate) unsafe fn construct_emit_error(module: &LLVMParserModule) -> SherpaResult<()> {
+  let LLVMParserModule { builder: b, types, ctx, fun: funct, .. } = module;
 
   let i32 = ctx.i32_type();
 
@@ -719,12 +726,12 @@ pub(crate) unsafe fn construct_emit_error(ctx: &LLVMParserModule) -> std::result
 
   // load the anchor token as the error token
 
-  let error_token = b.build_struct_gep(parse_ctx, CTX_tok_anchor, "").unwrap();
-  let error_token = b.build_load(error_token, "");
+  //let error_token = b.build_struct_gep(parse_ctx, CTX_tok_anchor, "").unwrap();
+  let error_token = types.token.get_undef();
 
   // load the last production value
 
-  let production = b.build_struct_gep(parse_ctx, CTX_production, "").unwrap();
+  let production = CTX::production.get_ptr(module, parse_ctx)?;
   let production = b.build_load(production, "");
 
   // build the ParseAction::Error struct
@@ -740,146 +747,50 @@ pub(crate) unsafe fn construct_emit_error(ctx: &LLVMParserModule) -> std::result
 
   b.build_store(error, error_struct);
 
-  b.build_return(Some(&i32.const_int(1, false)));
+  b.build_return(None);
 
   if funct.emit_error.verify(true) {
-    Ok(())
+    SherpaResult::Ok(())
   } else {
-    Err(())
+    SherpaResult::Err(SherpaError::from("Could not build emit_error function"))
   }
 }
 
-pub(crate) unsafe fn construct_init(ctx: &LLVMParserModule) -> std::result::Result<(), ()> {
-  let LLVMParserModule { builder, ctx, fun: funct, .. } = ctx;
+pub(crate) unsafe fn construct_init(module: &LLVMParserModule) -> SherpaResult<()> {
+  let LLVMParserModule { builder, ctx, fun: funct, .. } = module;
 
   let i32 = ctx.i32_type();
   let zero = i32.const_int(0, false);
 
   let fn_value = funct.init;
 
-  let parse_ctx_ptr = fn_value.get_first_param().unwrap().into_pointer_value();
+  let parse_ctx = fn_value.get_first_param().unwrap().into_pointer_value();
   let reader_ptr = fn_value.get_last_param().unwrap().into_pointer_value();
 
   // Set the context's goto pointers to point to the goto block;
-  let entry = ctx.append_basic_block(fn_value, "entry");
 
-  builder.position_at_end(entry);
+  builder.position_at_end(ctx.append_basic_block(fn_value, "Entry"));
 
-  let goto_stack = builder.build_struct_gep(parse_ctx_ptr, CTX_goto_stack, "")?;
-  let goto_start = builder.build_gep(goto_stack, &[zero, zero], "");
-  let goto_top = builder.build_struct_gep(parse_ctx_ptr, CTX_goto_ptr, "")?;
-  let goto_remaining = builder.build_struct_gep(parse_ctx_ptr, CTX_goto_stack_remaining, "")?;
-  let goto_len = builder.build_struct_gep(parse_ctx_ptr, CTX_goto_stack_len, "")?;
-  let reader_ctx_ptr = builder.build_struct_gep(parse_ctx_ptr, CTX_reader, "")?;
-  let state = builder.build_struct_gep(parse_ctx_ptr, CTX_state, "")?;
+  CTX::reader.store(module, parse_ctx, reader_ptr)?;
 
-  builder.build_store(reader_ctx_ptr, reader_ptr);
-  builder.build_store(goto_top, goto_start);
-  builder.build_store(goto_remaining, i32.const_int(8, false));
-  builder.build_store(goto_len, i32.const_int(8, false));
-  builder.build_store(state, i32.const_int(NORMAL_STATE_FLAG_LLVM as u64, false));
+  CTX::goto_stack_ptr.store(
+    module,
+    parse_ctx,
+    builder.build_gep(CTX::goto_stack.get_ptr(module, parse_ctx)?, &[zero.into(), zero.into()], ""),
+  )?;
+
+  CTX::goto_stack_size.store(module, parse_ctx, i32.const_int(8, false))?;
+
+  CTX::goto_remaining.store(module, parse_ctx, i32.const_int(8, false))?;
+
+  CTX::state.store(module, parse_ctx, i32.const_int(NORMAL_STATE_FLAG_LLVM as u64, false))?;
+
   builder.build_return(None);
 
   if funct.init.verify(true) {
-    Ok(())
+    SherpaResult::Ok(())
   } else {
-    Err(())
-  }
-}
-
-pub(crate) unsafe fn construct_pop_state_function(
-  ctx: &LLVMParserModule,
-) -> std::result::Result<(), ()> {
-  let LLVMParserModule { builder: b, ctx, fun: funct, .. } = ctx;
-
-  let i32 = ctx.i32_type();
-
-  let fn_value = funct.pop_state;
-
-  // Set the context's goto pointers to point to the goto block;
-  let entry = ctx.append_basic_block(fn_value, "Entry");
-
-  let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
-
-  b.position_at_end(entry);
-
-  let goto_top_ptr = b.build_struct_gep(parse_ctx, CTX_goto_ptr, "")?;
-  // let goto_top = b.build_in_bounds_gep(goto_top_ptr, &[zero], "");
-  let goto_top = b.build_load(goto_top_ptr, "").into_pointer_value();
-  let goto_top = b.build_gep(goto_top, &[i32.const_int(1, false).const_neg()], "");
-  b.build_store(goto_top_ptr, goto_top);
-
-  let goto_remaining_ptr = b.build_struct_gep(parse_ctx, CTX_goto_stack_remaining, "")?;
-  let goto_remaining = b.build_load(goto_remaining_ptr, "").into_int_value();
-  let goto_remaining = b.build_int_add(goto_remaining, i32.const_int(1, false), "");
-  b.build_store(goto_remaining_ptr, goto_remaining);
-
-  let old_goto = b.build_load(goto_top, "");
-
-  b.build_return(Some(&old_goto));
-
-  if funct.pop_state.verify(true) {
-    Ok(())
-  } else {
-    Err(())
-  }
-}
-
-pub(crate) unsafe fn construct_next_function(
-  ctx: &LLVMParserModule,
-) -> std::result::Result<(), ()> {
-  let LLVMParserModule { module: m, builder: b, types: t, ctx, fun: funct, .. } = ctx;
-
-  let i32 = ctx.i32_type();
-  let zero = i32.const_int(0, false);
-
-  let fn_value = funct.next;
-
-  let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
-  let action = fn_value.get_nth_param(1).unwrap().into_pointer_value();
-
-  // Set the context's goto pointers to point to the goto block;
-  let block_entry = ctx.append_basic_block(fn_value, "Entry");
-  let block_dispatch = ctx.append_basic_block(fn_value, "Dispatch");
-  let block_useful_state = ctx.append_basic_block(fn_value, "ModeAppropriateState");
-  let block_emit = ctx.append_basic_block(fn_value, "Emit");
-
-  b.position_at_end(block_entry);
-  b.build_unconditional_branch(block_dispatch);
-
-  b.position_at_end(block_dispatch);
-  let state = b.build_load(b.build_struct_gep(parse_ctx, CTX_state, "state")?, "state");
-  let goto = b
-    .build_call(funct.pop_state, &[parse_ctx.into()], "")
-    .try_as_basic_value()
-    .unwrap_left()
-    .into_struct_value();
-  let goto_state = b.build_extract_value(goto, 1, "").unwrap();
-  let masked_state = b.build_and(state.into_int_value(), goto_state.into_int_value(), "");
-  let condition = b.build_int_compare(inkwell::IntPredicate::NE, masked_state, zero, "");
-  b.build_conditional_branch(condition, block_useful_state, block_dispatch);
-
-  b.position_at_end(block_useful_state);
-  let gt_fn =
-    CallableValue::try_from(b.build_extract_value(goto, 0, "").unwrap().into_pointer_value())
-      .unwrap();
-
-  let should_emit = b.build_call(gt_fn, &[parse_ctx.into(), action.into()], "");
-
-  // should_emit.set_call_convention(11);
-
-  let should_emit_return = should_emit.try_as_basic_value().unwrap_left().into_int_value();
-
-  let condition = b.build_int_compare(inkwell::IntPredicate::EQ, should_emit_return, zero, "");
-  b.build_conditional_branch(condition, block_dispatch, block_emit);
-
-  b.position_at_end(block_emit);
-  b.build_return(None);
-
-  if funct.next.verify(true) {
-    Ok(())
-  } else {
-    Err(())
+    SherpaResult::Err(SherpaError::from("Could not validate init"))
   }
 }
 
@@ -887,10 +798,8 @@ pub(crate) fn create_offset_label(offset: usize) -> String {
   format!("off_{:X}", offset)
 }
 
-pub(crate) unsafe fn construct_push_state_function(
-  ctx: &LLVMParserModule,
-) -> std::result::Result<(), ()> {
-  let LLVMParserModule { builder: b, types, ctx, fun: funct, .. } = ctx;
+pub(crate) unsafe fn construct_push_state_function(module: &LLVMParserModule) -> SherpaResult<()> {
+  let LLVMParserModule { builder: b, types, ctx, fun: funct, .. } = module;
 
   let i32 = ctx.i32_type();
 
@@ -901,20 +810,20 @@ pub(crate) unsafe fn construct_push_state_function(
 
   let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
   let goto_state = fn_value.get_nth_param(1).unwrap().into_int_value();
-  let goto_int_address = fn_value.get_nth_param(2).unwrap().into_int_value();
+  let goto_pointer = fn_value.get_nth_param(2).unwrap().into_pointer_value();
 
   b.position_at_end(entry);
   let new_goto = b.build_insert_value(types.goto.get_undef(), goto_state, 1, "").unwrap();
-  let new_goto = b.build_insert_value(new_goto, goto_int_address, 0, "").unwrap();
+  let new_goto = b.build_insert_value(new_goto, goto_pointer, 0, "").unwrap();
 
-  let goto_top_ptr = b.build_struct_gep(parse_ctx, CTX_goto_ptr, "")?;
+  let goto_top_ptr = CTX::goto_stack_ptr.get_ptr(module, parse_ctx)?;
   let goto_top = b.build_load(goto_top_ptr, "").into_pointer_value();
   b.build_store(goto_top, new_goto);
 
   let goto_top = b.build_gep(goto_top, &[i32.const_int(1, false)], "");
   b.build_store(goto_top_ptr, goto_top);
 
-  let goto_remaining_ptr = b.build_struct_gep(parse_ctx, CTX_goto_stack_remaining, "")?;
+  let goto_remaining_ptr = CTX::goto_remaining.get_ptr(module, parse_ctx)?;
   let goto_remaining = b.build_load(goto_remaining_ptr, "").into_int_value();
   let goto_remaining = b.build_int_sub(goto_remaining, i32.const_int(1, false), "");
   b.build_store(goto_remaining_ptr, goto_remaining);
@@ -922,15 +831,13 @@ pub(crate) unsafe fn construct_push_state_function(
   b.build_return(None);
 
   if funct.push_state.verify(true) {
-    Ok(())
+    SherpaResult::Ok(())
   } else {
-    Err(())
+    SherpaResult::Err(SherpaError::from("Could not validate push_state"))
   }
 }
 
-pub(crate) fn construct_utf8_lookup_function(
-  ctx: &LLVMParserModule,
-) -> std::result::Result<(), ()> {
+pub(crate) fn construct_utf8_lookup_function(ctx: &LLVMParserModule) -> SherpaResult<()> {
   let i32 = ctx.ctx.i32_type();
   let i8 = ctx.ctx.i8_type();
   let zero = i32.const_int(0, false);
@@ -1052,27 +959,27 @@ pub(crate) fn construct_utf8_lookup_function(
 
   b.build_return(Some(&codepoint_info_base));
 
-  if fn_value.verify(true) {
-    Ok(())
+  if funct.get_utf8_codepoint_info.verify(true) {
+    SherpaResult::Ok(())
   } else {
-    Err(())
+    SherpaResult::Err(SherpaError::from("Could not validate get_utf8_codepoint_info"))
   }
 }
 
 pub(crate) unsafe fn construct_merge_utf8_part_function(
-  ctx: &LLVMParserModule,
-) -> std::result::Result<(), ()> {
-  let i32 = ctx.ctx.i32_type();
+  module: &LLVMParserModule,
+) -> SherpaResult<()> {
+  let i32 = module.ctx.i32_type();
 
-  let b = &ctx.builder;
-  let funct = &ctx.fun;
+  let b = &module.builder;
+  let funct = &module.fun;
   let fn_value = funct.merge_utf8_part;
 
   let input_ptr = fn_value.get_nth_param(0).unwrap().into_pointer_value();
   let val = fn_value.get_nth_param(1).unwrap().into_int_value();
   let off = fn_value.get_nth_param(2).unwrap().into_int_value();
 
-  let block_entry = ctx.ctx.append_basic_block(fn_value, "Entry");
+  let block_entry = module.ctx.append_basic_block(fn_value, "Entry");
   b.position_at_end(block_entry);
 
   let byte_ptr = b.build_gep(input_ptr, &[off], "byte_ptr");
@@ -1086,10 +993,24 @@ pub(crate) unsafe fn construct_merge_utf8_part_function(
   b.build_return(Some(&cp));
 
   if fn_value.verify(true) {
-    Ok(())
+    SherpaResult::Ok(())
   } else {
-    Err(())
+    SherpaResult::Err(SherpaError::from("Could not validate merge_utf8_part"))
   }
+}
+
+pub fn build_fast_call<'a, T>(
+  module: &'a LLVMParserModule,
+  callee_fun: T,
+  args: &[BasicMetadataValueEnum<'a>],
+) -> SherpaResult<CallSiteValue<'a>>
+where
+  T: Into<CallableValue<'a>>,
+{
+  let call_site = module.builder.build_call(callee_fun, args, "FAST_CALL_SITE");
+  call_site.set_call_convention(fastCC);
+
+  SherpaResult::Ok(call_site)
 }
 
 /// Compile a LLVM parser module from Hydrocarbon bytecode.
@@ -1099,38 +1020,32 @@ pub fn compile_from_bytecode<'a>(
   llvm_context: &'a Context,
   output: &BytecodeOutput,
 ) -> SherpaResult<LLVMParserModule<'a>> {
-  let mut parse_context = construct_context(module_name, &llvm_context);
-  let ctx = &mut parse_context;
+  let mut llvm_module = construct_module(module_name, &llvm_context);
+  let module = &mut llvm_module;
 
   unsafe {
-    construct_emit_accept(ctx)?;
-    construct_emit_end_of_input(ctx)?;
-    construct_emit_end_of_parse(ctx)?;
-    construct_emit_reduce_function(ctx)?;
-    construct_emit_shift(ctx)?;
-    construct_get_adjusted_input_block_function(ctx)?;
-    construct_init(ctx)?;
-    //construct_next_function(ctx)?;
-    //construct_pop_state_function(ctx)?;
-    construct_push_state_function(ctx)?;
-    construct_emit_error(ctx)?;
-    construct_extend_stack_if_needed(ctx)?;
-    construct_merge_utf8_part_function(ctx)?;
-    construct_utf8_lookup_function(ctx)?;
+    construct_init(module)?;
+    construct_emit_accept(module)?;
+    construct_emit_end_of_input(module)?;
+    construct_emit_end_of_parse(module)?;
+    construct_emit_reduce_function(module)?;
+    construct_emit_shift(module)?;
+    construct_dispatch_function(module)?;
+    construct_get_adjusted_input_block_function(module)?;
+    construct_push_state_function(module)?;
+    construct_emit_error(module)?;
+    construct_extend_stack_if_needed(module)?;
+    construct_merge_utf8_part_function(module)?;
+    construct_utf8_lookup_function(module)?;
+    construct_scan(module)?;
+    construct_next_function(module)?;
+    construct_parse_function(g, module, output)?;
   }
 
-  // Add optimizations here
-  ctx
-    .fun
-    .pop_state
-    .add_attribute(AttributeLoc::Function, ctx.ctx.create_string_attribute("", "alwaysinline"));
-
-  construct_parse_functions(g, ctx, output)?;
-
-  parse_context.fun.push_state.add_attribute(
+  llvm_module.fun.push_state.add_attribute(
     inkwell::attributes::AttributeLoc::Function,
-    parse_context.ctx.create_string_attribute("alwaysinline", ""),
+    llvm_module.ctx.create_string_attribute("alwaysinline", ""),
   );
 
-  SherpaResult::Ok(parse_context)
+  SherpaResult::Ok(llvm_module)
 }

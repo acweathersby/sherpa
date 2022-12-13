@@ -13,8 +13,14 @@ pub enum ParseAction {
     target_production:   u32,
   },
   Shift {
-    skipped_characters: ParseToken,
-    token: ParseToken,
+    anchor_byte_offset: u32,
+    anchor_cp_offset:   u32,
+    token_byte_offset:  u32,
+    token_cp_offset:    u32,
+    token_byte_length:  u32,
+    token_cp_length:    u32,
+    token_line_offset:  u32,
+    token_line_count:   u32,
   },
   Reduce {
     production_id: u32,

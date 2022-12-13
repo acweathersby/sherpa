@@ -66,12 +66,14 @@ fn _apply_llvm_optimizations(opt: OptimizationLevel, ctx: &crate::llvm::LLVMPars
   pass_manager.add_function_inlining_pass();
   pass_manager.add_always_inliner_pass();
   pass_manager.add_partially_inline_lib_calls_pass();
+  pass_manager.add_tail_call_elimination_pass();
   pass_manager.run_on(&ctx.module);
 
   pass_manager.add_merge_functions_pass();
   pass_manager.add_lower_expect_intrinsic_pass();
   pass_manager.add_jump_threading_pass();
   pass_manager.add_memcpy_optimize_pass();
+  pass_manager.add_cfg_simplification_pass();
   pass_manager.run_on(&ctx.module);
   //------------------------------------------------------------------------
   pass_manager.add_scalarizer_pass();
@@ -81,6 +83,7 @@ fn _apply_llvm_optimizations(opt: OptimizationLevel, ctx: &crate::llvm::LLVMPars
   // ---------------------------------
   pass_manager.add_gvn_pass();
   pass_manager.add_lower_switch_pass();
+  
   pass_manager.add_licm_pass();
   pass_manager.run_on(&ctx.module);
 
@@ -90,11 +93,13 @@ fn _apply_llvm_optimizations(opt: OptimizationLevel, ctx: &crate::llvm::LLVMPars
   pass_manager.add_global_optimizer_pass();
   pass_manager.add_global_dce_pass();
   pass_manager.add_aggressive_dce_pass();
-  pass_manager.add_cfg_simplification_pass();
   pass_manager.run_on(&ctx.module);
 
-  //pass_manager.add_demote_memory_to_register_pass();
-  //pass_manager.run_on(&ctx.module);
+
+  pass_manager.add_instruction_simplify_pass();
+  pass_manager.run_on(&ctx.module);
+//  pass_manager.add_demote_memory_to_register_pass();
+//  pass_manager.run_on(&ctx.module);
 }
 
 fn write_rust_parser<W: Write>(
@@ -295,7 +300,6 @@ pub fn build_llvm_parser(
               Err(vec![SherpaError::from("test")])
             }
           } else {
-            _apply_llvm_optimizations(opt, &ctx);
             
             if output_llvm_ir_file {
               if let Ok(mut file) = task_ctx.create_file(ll_file_path.clone()) {
@@ -311,9 +315,11 @@ pub fn build_llvm_parser(
               .create_target_machine(&target_triple, "generic", "", opt, reloc, model)
               .unwrap();
 
+            ctx.module.set_triple(&target_triple);
+              
             ctx.module.set_data_layout(&target_machine.get_target_data().get_data_layout());
 
-            ctx.module.set_triple(&target_triple);
+            _apply_llvm_optimizations(opt, &ctx);
 
             match target_machine.write_to_file(&ctx.module, FileType::Object, &object_path) {
               Ok(_) => {

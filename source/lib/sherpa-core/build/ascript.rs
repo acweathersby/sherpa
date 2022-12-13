@@ -126,8 +126,20 @@ pub fn add_ascript_functions<W: Write>(
           }}
         );
       }}
-      Some(ParseAction::Shift {{ skipped_characters: skip, token }}) => {{
-        let mut tok = Token::from_parse_token(&token);
+      Some(ParseAction::Shift {{ 
+        token_byte_offset,
+        token_byte_length,
+        token_line_offset,
+        token_line_count,
+        ..
+       }}) => {{
+        let mut tok = Token::from_vals(
+          token_byte_length,
+          token_byte_offset,
+          token_line_count, 
+          token_line_offset
+        );
+        
         tok.set_source(source.clone());
         nodes.push({}::TOKEN(tok.clone()));
         tokens.push(tok);

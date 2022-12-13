@@ -31,15 +31,14 @@ pub fn collect_shifts_and_skips(
       ParseAction::Fork { .. } => {
         panic!("No implementation of fork resolution is available")
       }
-      ParseAction::Shift { skipped_characters, token } => {
-        if skipped_characters.byte_offset > 0 {
+      ParseAction::Shift { anchor_byte_offset, token_byte_length, token_byte_offset, .. } => {
+        if anchor_byte_offset > 0 {
           unsafe {
             skips.push(
               input
                 .to_string()
                 .get_unchecked(
-                  skipped_characters.byte_offset as usize
-                    ..(skipped_characters.byte_offset + skipped_characters.byte_length) as usize,
+                  anchor_byte_offset as usize..(token_byte_offset - anchor_byte_offset) as usize,
                 )
                 .to_owned(),
             );
@@ -51,7 +50,7 @@ pub fn collect_shifts_and_skips(
             input
               .to_string()
               .get_unchecked(
-                token.byte_offset as usize..(token.byte_offset + token.byte_length) as usize,
+                token_byte_offset as usize..(token_byte_offset + token_byte_length) as usize,
               )
               .to_owned(),
           );

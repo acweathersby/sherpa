@@ -2,11 +2,13 @@ use super::*;
 
 #[derive(Debug, Clone, Copy)]
 pub struct TableHeaderData {
-  pub input_type:   u32,
-  pub lexer_type:   u32,
+  pub input_type: u32,
+  pub lexer_type: u32,
   pub table_length: u32,
-  pub table_meta:   u32,
-  pub scan_index:   INSTRUCTION,
+  pub table_meta: u32,
+  /// The instruction of the scanner state, if this table has
+  /// one.
+  pub scan_state_entry_instruction: INSTRUCTION,
 }
 
 impl TableHeaderData {
@@ -29,7 +31,11 @@ impl TableHeaderData {
       lexer_type,
       table_length,
       table_meta,
-      scan_index: INSTRUCTION::from(bc, scanner_address as usize),
+      scan_state_entry_instruction: if scanner_address > 0 {
+        INSTRUCTION::from(bc, scanner_address as usize)
+      } else {
+        INSTRUCTION::invalid()
+      },
     }
   }
 }

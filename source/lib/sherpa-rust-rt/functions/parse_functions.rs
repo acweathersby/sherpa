@@ -81,7 +81,16 @@ fn shift<T: BaseCharacterReader + MutCharacterReader + MutCharacterReader>(
   skip.cp_length = shift.cp_offset - skip.cp_offset;
   skip.byte_length = shift.byte_offset - skip.byte_offset;
 
-  (ParseAction::Shift { skipped_characters: skip, token: shift }, i + 1)
+  (ParseAction::Shift { 
+    anchor_byte_offset:skip.byte_offset,
+    anchor_cp_offset: skip.cp_offset,
+    token_byte_offset:shift.byte_offset,
+    token_cp_offset: shift.cp_offset,
+    token_byte_length:shift.byte_length,
+    token_cp_length: shift.cp_length,
+    token_line_count: shift.line_number,
+    token_line_offset: shift.line_offset,
+   }, i + 1)
 }
 
 #[inline]
@@ -232,7 +241,7 @@ pub fn hash_jump<T: BaseCharacterReader + MutCharacterReader>(
     lexer_type,
     table_length,
     table_meta: modulo_base,
-    scan_index,
+    scan_state_entry_instruction: scan_index,
   } = TableHeaderData::from_bytecode(i, bc);
 
   let hash_mask = (1 << modulo_base) - 1;
@@ -283,7 +292,7 @@ pub fn vector_jump<T: BaseCharacterReader + MutCharacterReader>(
     lexer_type,
     table_length,
     table_meta: value_offset,
-    scan_index,
+    scan_state_entry_instruction: scan_index,
   } = TableHeaderData::from_bytecode(i, bc);
 
   let table_start = i + 4;
@@ -533,8 +542,7 @@ fn token_scan<T: BaseCharacterReader + MutCharacterReader>(
   } {
     ParseAction::ScannerToken(token) => token,
     _ => panic!("Unusable State"),
-  }
-}
+  }}
 
 /// Start or continue a parse on an input
 #[inline]

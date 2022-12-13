@@ -211,12 +211,15 @@ pub const LLVM_BASE_STACK_SIZE: usize = 8;
 #[derive(Clone)]
 #[repr(C)]
 pub struct LLVMParseContext<T: LLVMCharacterReader + ByteCharacterReader + BaseCharacterReader> {
-  pub local_goto_stack: [Goto; LLVM_BASE_STACK_SIZE],
-  pub anchor_token: ParseToken,
-  pub assert_token: ParseToken,
-  pub peek_token: ParseToken,
+  pub goto_stack: [Goto; LLVM_BASE_STACK_SIZE],
   pub input_block: InputBlock,
   pub goto_stack_ptr: *const Goto,
+  pub anchor_offset: u64,
+  pub token_offset: u64,
+  pub peek_offset: u64,
+  pub token_length: u64,
+  pub token_type: u64,
+  pub line_data: u64,
   pub goto_stack_size: u32,
   pub goto_stack_remaining: u32,
   pub get_byte_block_at_cursor: fn(&mut T, &mut InputBlock),
@@ -232,10 +235,12 @@ impl<T: LLVMCharacterReader + ByteCharacterReader + BaseCharacterReader> Debug
 {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let mut dbgstr = f.debug_struct("LLVMParseContext");
-    dbgstr.field("local_goto_stack", &self.local_goto_stack);
-    dbgstr.field("anchor_token", &self.anchor_token);
-    dbgstr.field("assert_token", &self.assert_token);
-    dbgstr.field("peek_token", &self.peek_token);
+    dbgstr.field("local_goto_stack", &self.goto_stack);
+    dbgstr.field("anchor_offset", &self.token_offset);
+    dbgstr.field("peek_offset", &self.token_offset);
+    dbgstr.field("token_offset", &self.token_offset);
+    dbgstr.field("token_length", &self.line_data);
+    dbgstr.field("line_data", &self.line_data);
     dbgstr.field("input_block", &self.input_block);
     dbgstr.field("goto_stack_base", &self.goto_stack_ptr);
     dbgstr.field("goto_stack_size", &self.goto_stack_size);
@@ -252,18 +257,21 @@ impl<T: LLVMCharacterReader + ByteCharacterReader + BaseCharacterReader> Debug
 impl<T: LLVMCharacterReader + ByteCharacterReader + BaseCharacterReader> LLVMParseContext<T> {
   pub fn new() -> Self {
     Self {
-      peek_token: ParseToken::default(),
-      anchor_token: ParseToken::default(),
-      assert_token: ParseToken::default(),
       goto_stack_ptr: 0 as *const Goto,
       goto_stack_size: 0,
       goto_stack_remaining: 0,
+      token_offset: 0,
+      line_data: 0,
+      anchor_offset: 0,
+      peek_offset: 0,
+      token_length: 0,
+      token_type: 0,
       state: 0,
       production: 0,
       input_block: InputBlock::default(),
       reader: 0 as *mut T,
       get_byte_block_at_cursor: T::get_byte_block_at_cursor,
-      local_goto_stack: [Goto::default(); LLVM_BASE_STACK_SIZE],
+      goto_stack: [Goto::default(); LLVM_BASE_STACK_SIZE],
       in_peek_mode: false,
       is_active: false,
     }
