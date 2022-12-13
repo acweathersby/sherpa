@@ -1058,11 +1058,8 @@ pub(crate) unsafe fn construct_prime_function(
 
   let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
   let selector = fn_value.get_nth_param(1).unwrap().into_int_value(); // Set the context's goto pointers to point to the goto block;
-  let entry = module.ctx.append_basic_block(fn_value, "Entry");
-  b.position_at_end(entry);
 
-  CTX::is_active.store(module, parse_ctx, bool.const_int(1, false))?;
-
+  b.position_at_end(module.ctx.append_basic_block(fn_value, "Entry"));
   let blocks = sp
     .iter()
     .map(|(id, instruction)| {
@@ -1073,6 +1070,13 @@ pub(crate) unsafe fn construct_prime_function(
       )
     })
     .collect::<Vec<_>>();
+
+  build_fast_call(module, funct.extend_stack_if_needed, &[
+    parse_ctx.into(),
+    i32.const_int(8, false).into(),
+  ]);
+
+  CTX::is_active.store(module, parse_ctx, bool.const_int(1, false))?;
 
   // Push the End-Of-Parse goto onto the stack. This will prevent underflow of the stack
   build_push_fn_state(

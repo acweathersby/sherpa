@@ -50,6 +50,8 @@ type Prime = unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'st
 
 type Extend = unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>>, u32);
 
+type Drop = unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>>);
+
 type PopState = unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>>) -> Goto;
 
 unsafe fn get_parse_function<'a, T: inkwell::execution_engine::UnsafeFunctionPointer>(
@@ -75,27 +77,6 @@ fn setup_exec_engine(ctx: &mut LLVMParserModule) {
   }
 }
 
-#[test]
-fn verify_construction_of_init_function() {
-  let context = Context::create();
-
-  let parse_context = construct_module("test", &context);
-
-  unsafe { assert!(construct_init(&parse_context).is_ok()) }
-
-  eprintln!("{}", parse_context.module.to_string());
-}
-
-#[test]
-fn verify_construction_of_push_state_function() {
-  let context = Context::create();
-
-  let parse_context = construct_module("test", &context);
-
-  unsafe { assert!(construct_push_state_function(&parse_context).is_ok()) }
-
-  eprintln!("{}", parse_context.module.to_string());
-}
 fn build_fast_call_shim<'a>(
   module: &LLVMParserModule<'a>,
   fun: inkwell::values::FunctionValue<'a>,
@@ -121,34 +102,95 @@ fn build_fast_call_shim<'a>(
 }
 
 #[test]
+fn verify_construction_of_init_function() {
+  let context = Context::create();
+
+  let parse_context = construct_module("test", &context);
+
+  unsafe { assert!(construct_init(&parse_context).is_ok()) }
+
+  eprintln!("{}", parse_context.module.to_string());
+}
+
+#[test]
+fn verify_construction_of_push_state_function() {
+  let context = Context::create();
+
+  let parse_context = construct_module("test", &context);
+
+  unsafe { assert!(construct_push_state_function(&parse_context).is_ok()) }
+
+  eprintln!("{}", parse_context.module.to_string());
+}
+
+#[test]
 fn should_push_new_state() -> SherpaResult<()> {
   let context = Context::create();
 
-  let mut parse_context = construct_module("test", &context);
-
-  unsafe { assert!(construct_init(&parse_context).is_ok()) }
-  unsafe { assert!(construct_push_state_function(&parse_context).is_ok()) }
+  let mut module = construct_module("test", &context);
 
   unsafe {
-    build_fast_call_shim(&parse_context, parse_context.fun.push_state)?;
+    setup_exec_engine(&mut module);
 
-    setup_exec_engine(&mut parse_context);
+    module
+      .exe_engine
+      .as_ref()
+      .unwrap()
+      .add_global_mapping(&module.fun.allocate_stack, sherpa_allocate_stack as usize);
+
+    module
+      .exe_engine
+      .as_ref()
+      .unwrap()
+      .add_global_mapping(&module.fun.free_stack, sherpa_free_stack as usize);
+
+    construct_init(&module)?;
+    construct_push_state_function(&module)?;
+    construct_extend_stack_if_needed(&module)?;
+    construct_internal_free_stack(&module)?;
+    construct_drop(&module)?;
+
+    build_fast_call_shim(&module, module.fun.push_state)?;
+    build_fast_call_shim(&module, module.fun.extend_stack_if_needed)?;
 
     let mut reader = TestUTF8StringReader::new("test");
+
     let mut rt_ctx = LLVMParseContext::new();
-    let init_fn = get_parse_function::<Init>(&parse_context, "init").unwrap();
-    let push_state_fn = get_parse_function::<PushState>(&parse_context, "push_state_shim").unwrap();
+
+    let push_state_fn = get_parse_function::<PushState>(&module, "push_state_shim").unwrap();
+
+    let init_fn = get_parse_function::<Init>(&module, "init").unwrap();
+
+    let extend_stack_if_needed =
+      get_parse_function::<Extend>(&module, "extend_stack_if_needed_shim").unwrap();
+
+    let drop_fn = get_parse_function::<Drop>(&module, "drop").unwrap();
 
     init_fn.call(&mut rt_ctx, &mut reader);
+    extend_stack_if_needed.call(&mut rt_ctx, 8);
+
     push_state_fn.call(&mut rt_ctx, NORMAL_STATE_FLAG_LLVM, 0x10101010_01010101);
     push_state_fn.call(&mut rt_ctx, NORMAL_STATE_FLAG_LLVM, 0x01010101_10101010);
 
-    eprintln!("{:#?}", rt_ctx);
-    assert_eq!(rt_ctx.goto_stack[0].goto_fn as usize, 0x10101010_01010101);
-    assert_eq!(rt_ctx.goto_stack[0].state, NORMAL_STATE_FLAG_LLVM);
+    let stack = std::slice::from_raw_parts(
+      {
+        (rt_ctx.goto_stack_ptr as usize
+          - ((rt_ctx.goto_stack_size - rt_ctx.goto_stack_remaining) << 4) as usize)
+          as *mut Goto
+      },
+      rt_ctx.goto_stack_size as usize,
+    );
 
-    assert_eq!(rt_ctx.goto_stack[1].goto_fn as usize, 0x01010101_10101010);
-    assert_eq!(rt_ctx.goto_stack[1].state, NORMAL_STATE_FLAG_LLVM);
+    eprintln!("{:#?}", rt_ctx);
+    assert_eq!(stack[0].goto_fn as usize, 0x10101010_01010101);
+    assert_eq!(stack[0].state, NORMAL_STATE_FLAG_LLVM);
+
+    assert_eq!(stack[1].goto_fn as usize, 0x01010101_10101010);
+    assert_eq!(stack[1].state, NORMAL_STATE_FLAG_LLVM);
+
+    drop_fn.call(&mut rt_ctx);
+
+    assert_eq!(rt_ctx.goto_stack_size, 0);
   };
   SherpaResult::Ok(())
 }
@@ -229,11 +271,13 @@ fn should_emit_reduce() -> SherpaResult<()> {
 
   let mut parse_context = construct_module("test", &context);
 
-  unsafe { assert!(construct_emit_reduce_function(&parse_context).is_ok()) }
-
   unsafe {
-    build_fast_call_shim(&parse_context, parse_context.fun.emit_reduce)?;
     setup_exec_engine(&mut parse_context);
+
+    build_fast_call_shim(&parse_context, parse_context.fun.emit_reduce)?;
+
+    construct_emit_reduce_function(&parse_context)?;
+
     let mut rt_ctx = LLVMParseContext::new();
     let emit_reduce = get_parse_function::<EmitReduce>(&parse_context, "emit_reduce_shim").unwrap();
 
@@ -569,34 +613,33 @@ fn verify_construct_extend_stack_if_needed() {
 }
 
 #[test]
-fn should_extend_stack() {
+fn should_extend_stack() -> SherpaResult<()> {
   let context = Context::create();
 
   let mut module = construct_module("test", &context);
 
   unsafe {
+    setup_exec_engine(&mut module);
+
     build_fast_call_shim(&module, module.fun.push_state);
     build_fast_call_shim(&module, module.fun.extend_stack_if_needed);
-
-    setup_exec_engine(&mut module);
 
     let mut reader = TestUTF8StringReader::new("test");
     let mut rt_ctx = LLVMParseContext::new();
 
-    unsafe { assert!(construct_init(&module).is_ok()) }
-    unsafe { assert!(construct_push_state_function(&module).is_ok()) }
-    unsafe { assert!(construct_extend_stack_if_needed(&module).is_ok()) }
+    construct_init(&module)?;
+    construct_push_state_function(&module)?;
+    construct_extend_stack_if_needed(&module)?;
+    construct_internal_free_stack(&module)?;
 
     module
       .exe_engine
-      .as_ref()
-      .unwrap()
+      .as_ref()?
       .add_global_mapping(&module.fun.allocate_stack, sherpa_allocate_stack as usize);
 
     module
       .exe_engine
-      .as_ref()
-      .unwrap()
+      .as_ref()?
       .add_global_mapping(&module.fun.free_stack, sherpa_free_stack as usize);
 
     let init_fn = get_parse_function::<Init>(&module, "init").unwrap();
@@ -637,6 +680,8 @@ fn should_extend_stack() {
 
     eprintln!("{:#?}", stack);
   };
+
+  SherpaResult::Ok(())
 }
 
 #[test]
@@ -677,8 +722,8 @@ fn test_compile_from_bytecode() -> SherpaResult<()> {
  
   <> test > \\hello \\world
   ",
-  )
-  .unwrap();
+  )?;
+
   let ir_states = compile_states(&mut j, 1)?;
   let ir_states = optimize_ir_states(&mut j, ir_states);
   let bytecode_output = compile_bytecode(&mut j, ir_states);
@@ -697,19 +742,14 @@ fn test_compile_from_bytecode() -> SherpaResult<()> {
 
     ctx
       .exe_engine
-      .as_ref()
-      .unwrap()
+      .as_ref()?
       .add_global_mapping(&ctx.fun.allocate_stack, sherpa_allocate_stack as usize);
 
-    ctx
-      .exe_engine
-      .as_ref()
-      .unwrap()
-      .add_global_mapping(&ctx.fun.free_stack, sherpa_free_stack as usize);
+    ctx.exe_engine.as_ref()?.add_global_mapping(&ctx.fun.free_stack, sherpa_free_stack as usize);
 
-    let init_fn = get_parse_function::<Init>(&ctx, "init").unwrap();
-    let prime_fn = get_parse_function::<Prime>(&ctx, "prime").unwrap();
-    let next_fn = get_parse_function::<Next>(&ctx, "next").unwrap();
+    let init_fn = get_parse_function::<Init>(&ctx, "init")?;
+    let prime_fn = get_parse_function::<Prime>(&ctx, "prime")?;
+    let next_fn = get_parse_function::<Next>(&ctx, "next")?;
 
     init_fn.call(&mut rt_ctx, &mut reader);
 

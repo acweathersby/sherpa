@@ -120,6 +120,7 @@ extern \"C\" {{
     fn init(ctx: *mut u8, reader: *mut u8);
     fn next(ctx: *mut u8, action:*mut u8);
     fn prime(ctx: *mut u8, start_point: u32);
+    fn drop(ctx: *mut u8);
 }}",
       parser_name
     ))?
@@ -179,7 +180,8 @@ impl<T: BaseCharacterReader + LLVMCharacterReader + ByteCharacterReader + MutCha
     }}
     #[inline(always)]
     fn destroy_context(&mut self) {{
-
+      let _ptr = &mut self.0 as *const LLVMParseContext<T>;
+      unsafe {{ drop(_ptr as *mut u8); }}
     }}"###,
       grammar_name
     ))?

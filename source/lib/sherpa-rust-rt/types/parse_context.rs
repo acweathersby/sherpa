@@ -211,9 +211,8 @@ pub const LLVM_BASE_STACK_SIZE: usize = 8;
 #[derive(Clone)]
 #[repr(C)]
 pub struct LLVMParseContext<T: LLVMCharacterReader + ByteCharacterReader + BaseCharacterReader> {
-  pub goto_stack: [Goto; LLVM_BASE_STACK_SIZE],
   pub input_block: InputBlock,
-  pub goto_stack_ptr: *const Goto,
+  pub goto_stack_ptr: *mut Goto,
   pub anchor_offset: u64,
   pub token_offset: u64,
   pub peek_offset: u64,
@@ -235,7 +234,6 @@ impl<T: LLVMCharacterReader + ByteCharacterReader + BaseCharacterReader> Debug
 {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let mut dbgstr = f.debug_struct("LLVMParseContext");
-    dbgstr.field("local_goto_stack", &self.goto_stack);
     dbgstr.field("anchor_offset", &self.token_offset);
     dbgstr.field("peek_offset", &self.token_offset);
     dbgstr.field("token_offset", &self.token_offset);
@@ -257,7 +255,7 @@ impl<T: LLVMCharacterReader + ByteCharacterReader + BaseCharacterReader> Debug
 impl<T: LLVMCharacterReader + ByteCharacterReader + BaseCharacterReader> LLVMParseContext<T> {
   pub fn new() -> Self {
     Self {
-      goto_stack_ptr: 0 as *const Goto,
+      goto_stack_ptr: 0 as *mut Goto,
       goto_stack_size: 0,
       goto_stack_remaining: 0,
       token_offset: 0,
@@ -271,7 +269,6 @@ impl<T: LLVMCharacterReader + ByteCharacterReader + BaseCharacterReader> LLVMPar
       input_block: InputBlock::default(),
       reader: 0 as *mut T,
       get_byte_block_at_cursor: T::get_byte_block_at_cursor,
-      goto_stack: [Goto::default(); LLVM_BASE_STACK_SIZE],
       in_peek_mode: false,
       is_active: false,
     }

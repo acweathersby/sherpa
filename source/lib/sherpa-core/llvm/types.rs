@@ -48,6 +48,10 @@ pub struct PublicFunctions<'a> {
   pub(crate) extend_stack_if_needed: FunctionValue<'a>,
   pub(crate) allocate_stack: FunctionValue<'a>,
   pub(crate) free_stack: FunctionValue<'a>,
+  /// An internal function to free the goto stack if it's size is greater
+  /// than 0
+  pub(crate) internal_free_stack: FunctionValue<'a>,
+  pub(crate) drop: FunctionValue<'a>,
   pub(crate) get_utf8_codepoint_info: FunctionValue<'a>,
   pub(crate) merge_utf8_part: FunctionValue<'a>,
   pub(crate) ctlz_i8: FunctionValue<'a>,
@@ -76,13 +80,9 @@ pub mod input_block_indices {
 #[derive(Clone, Copy, Debug)]
 pub enum CTX_AGGREGATE_INDICES {
   /// ```rust
-  /// pub goto_stack: [Goto; LLVM_BASE_STACK_SIZE]
-  /// ```
-  goto_stack = 0,
-  /// ```rust
   /// pub input_block: InputBlock
   /// ```
-  input_block,
+  input_block = 0,
   /// ```rust
   /// pub goto_stack_ptr: *const Goto
   /// ```
