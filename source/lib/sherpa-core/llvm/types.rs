@@ -14,14 +14,22 @@ pub const NORMAL_STATE_FLAG_LLVM: u32 = 1;
 
 #[derive(Debug)]
 pub struct LLVMTypes<'a> {
-  pub reader:      StructType<'a>,
-  pub parse_ctx:   StructType<'a>,
-  pub token:       StructType<'a>,
-  pub goto:        StructType<'a>,
-  pub goto_fn:     FunctionType<'a>,
-  pub action:      StructType<'a>,
+  pub stack_struct: StructType<'a>,
+  pub ast_slot: StructType<'a>,
+  pub reader: StructType<'a>,
+  pub parse_ctx: StructType<'a>,
+  pub token: StructType<'a>,
+  pub goto: StructType<'a>,
+  pub goto_fn: FunctionType<'a>,
+  pub action: StructType<'a>,
   pub input_block: StructType<'a>,
-  pub cp_info:     StructType<'a>,
+  pub cp_info: StructType<'a>,
+  pub parse_result: StructType<'a>,
+  /// The form of all functions that can be tail called.
+  pub(crate) TAIL_CALLABLE_PARSE_FUNCTION: FunctionType<'a>,
+  /// Called by the AST builder to handle shift actions.
+  pub(crate) SHIFT_HANDLER_FUNCTION: FunctionType<'a>,
+  pub(crate) RESULT_HANDLER_FUNCTION: FunctionType<'a>,
 }
 
 #[derive(Debug)]
@@ -56,7 +64,7 @@ pub struct PublicFunctions<'a> {
   pub(crate) merge_utf8_part: FunctionValue<'a>,
   pub(crate) ctlz_i8: FunctionValue<'a>,
   pub(crate) get_token_class_from_codepoint: FunctionValue<'a>,
-  pub(crate) TAIL_CALLABLE_PARSE_FUNCTION: FunctionType<'a>,
+  pub(crate) ast_builder: FunctionValue<'a>,
 }
 
 #[derive(Debug)]
@@ -87,6 +95,14 @@ pub enum CTX_AGGREGATE_INDICES {
   /// pub goto_stack_ptr: *const Goto
   /// ```
   goto_stack_ptr,
+  /// ```rust
+  /// pub reader: *mut T
+  /// ```
+  reader,
+  /// ```rust
+  /// pub get_byte_block_at_cursor: fn(&mut T, &mut InputBlock)
+  /// ```
+  get_input_block,
   /// ```rust
   /// pub anchor_offset: u64
   /// ```
@@ -119,14 +135,6 @@ pub enum CTX_AGGREGATE_INDICES {
   /// pub goto_stack_remaining: u32
   /// ```
   goto_remaining,
-  /// ```rust
-  /// pub get_byte_block_at_cursor: fn(&mut T, &mut InputBlock)
-  /// ```
-  get_input_block,
-  /// ```rust
-  /// pub reader: *mut T
-  /// ```
-  reader,
   /// ```rust
   /// pub production: u32
   /// ```

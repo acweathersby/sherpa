@@ -213,6 +213,9 @@ pub const LLVM_BASE_STACK_SIZE: usize = 8;
 pub struct LLVMParseContext<T: LLVMCharacterReader + ByteCharacterReader + BaseCharacterReader> {
   pub input_block: InputBlock,
   pub goto_stack_ptr: *mut Goto,
+  pub reader: *mut T,
+  pub get_input_block: fn(&mut T, &mut InputBlock),
+  //pub custom_lex: fn(&mut T, &LLVMParseContext<T>) -> u32,
   pub anchor_offset: u64,
   pub token_offset: u64,
   pub peek_offset: u64,
@@ -221,8 +224,6 @@ pub struct LLVMParseContext<T: LLVMCharacterReader + ByteCharacterReader + BaseC
   pub line_data: u64,
   pub goto_stack_size: u32,
   pub goto_stack_remaining: u32,
-  pub get_byte_block_at_cursor: fn(&mut T, &mut InputBlock),
-  pub reader: *mut T,
   pub production: u32,
   pub state: u32,
   pub in_peek_mode: bool,
@@ -268,19 +269,23 @@ impl<T: LLVMCharacterReader + ByteCharacterReader + BaseCharacterReader> LLVMPar
       production: 0,
       input_block: InputBlock::default(),
       reader: 0 as *mut T,
-      get_byte_block_at_cursor: T::get_byte_block_at_cursor,
+      get_input_block: T::get_byte_block_at_cursor,
       in_peek_mode: false,
       is_active: false,
     }
   }
+
+  fn get_source(&mut self) -> SharedSymbolBuffer {
+    unsafe { (*self.reader).get_source() }
+  }
 }
 
 #[no_mangle]
-pub extern "C" fn sherpa_allocate_stack(num_of_slots: u32) -> *mut Goto {
+pub extern "C" fn sherpa_allocate_stack(byte_size: usize) -> *mut Goto {
   // Each goto slot is 16bytes, so we shift left num_of_slots by 4 to get the bytes size of
   // the stack.
 
-  let layout = Layout::from_size_align((num_of_slots << 4) as usize, 16).unwrap();
+  let layout = Layout::from_size_align(byte_size, 16).unwrap();
 
   unsafe {
     let ptr = alloc(layout) as *mut Goto;
@@ -289,8 +294,8 @@ pub extern "C" fn sherpa_allocate_stack(num_of_slots: u32) -> *mut Goto {
     {
       println!(
         "ALLOCATION OF {} bytes for {} slots at address: {:p}",
-        num_of_slots << 4,
-        num_of_slots,
+        byte_size,
+        byte_size >> 4,
         ptr
       );
     }
@@ -299,15 +304,160 @@ pub extern "C" fn sherpa_allocate_stack(num_of_slots: u32) -> *mut Goto {
   }
 }
 
+pub trait AstSlot: Debug + Clone + Default + Sized {}
+
+/// Only used within an LLVM parser to provide access to AST that are
+/// located in a dynamic array located in the program stack
+#[repr(C)]
+pub struct AstSlotSlice<T: AstSlot> {
+  stack_data: *mut T,
+  stack_size: u32,
+}
+
+impl<T: AstSlot> AstSlotSlice<T> {
+  #[track_caller]
+  fn get_pointer(&self, position: usize) -> *mut T {
+    if position >= (self.stack_size as usize) {
+      panic!(
+        "Could not get AST node at slot ${} from stack with a length of {}",
+        position, self.stack_size
+      );
+    }
+    let slot_size = std::mem::size_of::<T>();
+    // We are using the stack space for these slots,
+    // which we ASSUME grows downward, hence the "higher" slots
+    // are accessed through lower addresses.
+    (self.stack_data as usize - (position * slot_size)) as *mut T
+  }
+
+  /// Assigns the given data to a garbage slot, ignoring any existing value
+  /// the slot may contain. This is only used when shifting token data into
+  /// an "empty" slot through the Shift action.
+  unsafe fn assign_to_garbage(&mut self, position: usize, val: T) {
+    let pointer = self.get_pointer(position);
+    std::mem::forget(std::mem::replace(&mut (*pointer), val));
+  }
+
+  pub fn assign(&mut self, position: usize, val: T) {
+    unsafe {
+      let pointer = self.get_pointer(position);
+      *pointer = val;
+    }
+  }
+
+  /// Removes the value at the given position from the stack and returns it.
+  ///
+  pub fn take(&mut self, position: usize) -> T {
+    unsafe { std::mem::take(&mut (*self.get_pointer(position))) }
+  }
+
+  pub fn clone(&self, position: usize) -> T {
+    unsafe { (*self.get_pointer(position)).clone() }
+  }
+
+  pub fn len(&self) -> usize {
+    self.stack_size as usize
+  }
+
+  pub fn destroy(mut self) {
+    self.to_vec();
+  }
+
+  pub fn to_vec(&mut self) -> Vec<T> {
+    let mut output = vec![];
+    for i in 0..self.stack_size {
+      output.push(self.take(i as usize));
+    }
+    output
+  }
+}
+
+impl<T: AstSlot> Debug for AstSlotSlice<T> {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let mut dbgstr = f.debug_struct("SlotSlice");
+    dbgstr.field("stack_size", &self.stack_size);
+    let slot_size = std::mem::size_of::<T>();
+    dbgstr.field("[slot byte size]", &slot_size);
+    for i in 0..self.stack_size {
+      dbgstr.field(&format!("slot[{}]", i), &(self.clone(i as usize)));
+    }
+
+    dbgstr.finish()
+  }
+}
+
+impl AstSlot for u32 {}
+
+impl<V: AstSlot> AstSlot for (V, Token, Token) {}
+
+pub unsafe fn llvm_map_shift_action<
+  'a,
+  T: LLVMCharacterReader + ByteCharacterReader + BaseCharacterReader + MutCharacterReader,
+  V: AstSlot,
+>(
+  ctx: &mut LLVMParseContext<T>,
+  action: &ParseAction,
+  slots: &mut AstSlotSlice<(V, Token, Token)>,
+) {
+  match *action {
+    ParseAction::Shift {
+      anchor_byte_offset,
+      token_byte_offset,
+      token_byte_length,
+      token_line_offset,
+      token_line_count,
+      ..
+    } => {
+      let mut peek =
+        Token::from_vals(token_byte_offset - anchor_byte_offset, anchor_byte_offset, 0, 0);
+
+      let mut tok =
+        Token::from_vals(token_byte_length, token_byte_offset, token_line_count, token_line_offset);
+
+      peek.set_source(ctx.get_source());
+      tok.set_source(ctx.get_source());
+
+      slots.assign_to_garbage(0, (V::default(), tok, peek))
+    }
+    _ => slots.assign_to_garbage(0, (V::default(), Token::default(), Token::default())),
+  }
+}
+
+pub unsafe fn llvm_map_result_action<
+  'a,
+  T: LLVMCharacterReader + ByteCharacterReader + BaseCharacterReader + MutCharacterReader,
+  V: AstSlot,
+>(
+  ctx: &mut LLVMParseContext<T>,
+  action: &ParseAction,
+  slots: &mut AstSlotSlice<(V, Token, Token)>,
+) -> ParseResult<V> {
+  match *action {
+    ParseAction::Accept { .. } => {
+      ParseResult::Complete(slots.take(0))
+    }
+    ParseAction::EndOfInput { .. } => {
+      ParseResult::NeedMoreInput(slots.to_vec())
+    }
+    ParseAction::Error {last_input, .. } => {
+      let mut last_token = Token::from_parse_token(&last_input);
+      last_token.set_source(ctx.get_source());
+      let vec = slots.to_vec();
+      ParseResult::Error(last_token, vec)
+    }
+    _ => unreachable!("This function should only be called when the parse action is  [Error, Accept, or EndOfInput]"),
+  }
+}
+
 #[no_mangle]
-pub extern "C" fn sherpa_free_stack(ptr: *mut Goto, num_of_slots: u32) {
+pub extern "C" fn sherpa_free_stack(ptr: *mut Goto, byte_size: usize) {
   #[cfg(debug_assertions)]
   {
-    println!("Freeing {} bytes for {} slots at address {:p}", num_of_slots << 4, num_of_slots, ptr);
+    println!("Freeing {} bytes for {} slots at address {:p}", byte_size, byte_size >> 4, ptr);
   }
   // Each goto slot is 16bytes, so we shift left num_of_slots by 4 to get the bytes size of
   // the stack.
-  let layout = Layout::from_size_align((num_of_slots << 4) as usize, 16).unwrap();
+  let layout = Layout::from_size_align(byte_size, 16).unwrap();
 
   unsafe { dealloc(ptr as *mut u8, layout) }
 }
@@ -315,4 +465,12 @@ pub extern "C" fn sherpa_free_stack(ptr: *mut Goto, num_of_slots: u32) {
 #[no_mangle]
 pub extern "C" fn sherpa_get_token_class_from_codepoint(codepoint: u32) -> u32 {
   get_token_class_from_codepoint(codepoint)
+}
+
+#[derive(Debug)]
+#[repr(C, u64)]
+pub enum ParseResult<V> {
+  Complete((V, Token, Token)),
+  Error(Token, Vec<(V, Token, Token)>),
+  NeedMoreInput(Vec<(V, Token, Token)>),
 }

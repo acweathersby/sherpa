@@ -14,7 +14,6 @@ use crate::{
 use inkwell::{
   basic_block::BasicBlock,
   builder::Builder,
-  module::Linkage,
   types::IntType,
   values::{CallableValue, FunctionValue, IntValue, PointerValue},
 };
@@ -54,8 +53,8 @@ impl<'a> LLVMStateData<'a> {
 
     let entry_function = module.module.add_function(
       &Self::generate_name(bc_address),
-      module.fun.TAIL_CALLABLE_PARSE_FUNCTION,
-      Some(Linkage::Private),
+      module.types.TAIL_CALLABLE_PARSE_FUNCTION,
+      None, //Some(Linkage::Private),
     );
 
     entry_function.set_call_conventions(fastCC);
@@ -109,7 +108,6 @@ pub(crate) fn get_state_data<'a>(
   instruction: INSTRUCTION,
   state: &'a BTreeMap<INSTRUCTION, LLVMStateData<'a>>,
 ) -> LLVMStateData<'a> {
-  println!("Getting state {:X}", instruction.get_address());
   *state.get(&instruction).unwrap()
 }
 
@@ -512,19 +510,18 @@ pub(crate) fn construct_instruction_branch<'a>(
           for (index, (address, branch, strings)) in branches.iter().enumerate() {
             let sym = data.get_branch_symbol(branch).unwrap();
 
-            let mut comparison = module.ctx.i8_type().const_int(0, false);
             for string in strings {
-              match sym.byte_length {
+              let comparison = match sym.byte_length {
                 len if len == 1 => {
                   let value = b.build_load(buffer_ptr?, "").into_int_value();
-                  comparison = b.build_int_compare(
+                  b.build_int_compare(
                     inkwell::IntPredicate::EQ,
                     value,
                     value
                       .get_type()
                       .const_int(string_to_byte_num_and_mask(string, sym).0 as u64, false),
                     "",
-                  );
+                  )
                 }
                 len if len <= 8 => {
                   let (byte_string, mask) = string_to_byte_num_and_mask(string, sym);
@@ -534,15 +531,15 @@ pub(crate) fn construct_instruction_branch<'a>(
                   let value = b.build_load(adjusted_byte, "").into_int_value();
                   let masked_value =
                     b.build_and(value, value.get_type().const_int(mask as u64, false), "");
-                  comparison = b.build_int_compare(
+                  b.build_int_compare(
                     inkwell::IntPredicate::EQ,
                     masked_value,
                     value.get_type().const_int(byte_string as u64, false),
                     "",
-                  );
+                  )
                 }
-                _ => {}
-              }
+                _ => unreachable!(),
+              };
 
               let this_block = p.state.generate_block(module, "this_", **address);
 
@@ -716,6 +713,12 @@ fn getBranchTokenData<'a>(
       let string = match sym.guid {
         id if id.is_defined() => {
           vec![g.symbol_strings.get(&id).unwrap().as_str()]
+        }
+        SymbolID::GenericHorizontalTab => {
+          vec!["\t"]
+        }
+        SymbolID::GenericNewLine => {
+          vec!["\n"]
         }
         SymbolID::GenericSpace => {
           vec![" "]

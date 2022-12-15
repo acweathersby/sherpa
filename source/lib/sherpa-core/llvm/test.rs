@@ -10,12 +10,19 @@ use crate::{
 };
 use inkwell::{context::Context, execution_engine::JitFunction};
 use sherpa_runtime::types::{
+  llvm_map_result_action,
+  llvm_map_shift_action,
   sherpa_allocate_stack,
   sherpa_free_stack,
+  AstSlotSlice,
+  BlameColor,
   Goto,
   InputBlock,
   LLVMParseContext,
   ParseAction,
+  ParseContext,
+  ParseResult,
+  Token,
 };
 use std::{fs::File, io::Write};
 
@@ -108,6 +115,17 @@ fn verify_construction_of_init_function() {
   let parse_context = construct_module("test", &context);
 
   unsafe { assert!(construct_init(&parse_context).is_ok()) }
+
+  eprintln!("{}", parse_context.module.to_string());
+}
+
+#[test]
+fn verify_construction_of_ast_builder() {
+  let context = Context::create();
+
+  let parse_context = construct_module("test", &context);
+
+  unsafe { assert!(construct_ast_builder(&parse_context).is_ok()) }
 
   eprintln!("{}", parse_context.module.to_string());
 }
@@ -379,8 +397,8 @@ fn should_produce_extended_block() {
     println!(
       "context:{:p}, fn:{:p} off:{:X}",
       &rt_ctx,
-      &rt_ctx.get_byte_block_at_cursor,
-      (&rt_ctx.get_byte_block_at_cursor as *const _) as usize - (&rt_ctx as *const _) as usize
+      &rt_ctx.get_input_block,
+      (&rt_ctx.get_input_block as *const _) as usize - (&rt_ctx as *const _) as usize
     );
 
     let mut block = InputBlock::default();
@@ -388,8 +406,8 @@ fn should_produce_extended_block() {
     println!(
       "context:{:p}, fn:{:p} off:{:X}",
       &rt_ctx,
-      &rt_ctx.get_byte_block_at_cursor,
-      (&rt_ctx.get_byte_block_at_cursor as *const _) as usize - (&rt_ctx as *const _) as usize
+      &rt_ctx.get_input_block,
+      (&rt_ctx.get_input_block as *const _) as usize - (&rt_ctx as *const _) as usize
     );
 
     println!("context:{:p} block:{:p} token:{}", &rt_ctx, &mut block, &rt_ctx.token_offset);
@@ -786,6 +804,113 @@ fn test_compile_from_bytecode() -> SherpaResult<()> {
     next_fn.call(&mut rt_ctx, &mut action);
 
     assert!(matches!(action, ParseAction::Accept { .. }));
+  };
+
+  SherpaResult::Ok(())
+}
+
+#[test]
+fn test_compile_from_bytecode1() -> SherpaResult<()> {
+  let mut j = Journal::new(None);
+  let g = GrammarStore::from_str(
+    &mut j,
+    "
+  @IGNORE g:sp g:nl
+ 
+  <> test > \\hello P 
+  
+  <> P > \\world \\goodby B
+
+  <> B > \\mango
+  ",
+  )?;
+
+  let ir_states = compile_states(&mut j, 1)?;
+  let ir_states = optimize_ir_states(&mut j, ir_states);
+  let bytecode_output = compile_bytecode(&mut j, ir_states);
+  let ctx = Context::create();
+
+  type ASTSlot = u32;
+  type ASTSlot_ = (ASTSlot, Token, Token);
+
+  type AstBuilder<'a> = unsafe extern "C" fn(
+    *mut LLVMParseContext<TestUTF8StringReader<'static>>,
+    *const fn(u32, &mut AstSlotSlice<ASTSlot_>),
+    unsafe fn(
+      &mut LLVMParseContext<TestUTF8StringReader<'static>>,
+      &ParseAction,
+      &mut AstSlotSlice<(ASTSlot, Token, Token)>,
+    ),
+    unsafe fn(
+      &mut LLVMParseContext<TestUTF8StringReader<'static>>,
+      &ParseAction,
+      &mut AstSlotSlice<(ASTSlot, Token, Token)>,
+    ) -> ParseResult<ASTSlot>,
+  ) -> ParseResult<ASTSlot>;
+
+  let test_functions = [
+    |num: u32, data: &mut AstSlotSlice<ASTSlot_>| {
+      println!("<test> 01 - {}  {:#?}", num, data);
+      let _a = data.take(0);
+      let _b = data.take(1);
+
+      assert_eq!(_b.1.len(), 18, "Expected the token of [P] to be 18 bytes long");
+
+      let final_token = &_a.1 + &_b.1;
+
+      println!("{}", final_token.blame(0, 0, "Completed Parse of [test]", BlameColor::Red));
+
+      data.assign(0, (0, final_token, Token::default()));
+    },
+    |num: u32, data: &mut AstSlotSlice<ASTSlot_>| {
+      println!("<B> 02 - {}  {:#?}", num, data);
+      // Do nothing
+    },
+    |num: u32, data: &mut AstSlotSlice<ASTSlot_>| {
+      println!("<P> 03 - {}  {:#?}", num, data);
+      let (_, _a, _) = data.take(0);
+      data.take(1);
+      let (_, _c, _) = data.take(2);
+      data.assign(0, (0, (&_a + &_c), Token::default()));
+    },
+  ];
+
+  unsafe {
+    let mut module = compile_from_bytecode("test", &g, &ctx, &bytecode_output)?;
+
+    construct_ast_builder(&module)?;
+    setup_exec_engine(&mut module);
+
+    let mut reader = TestUTF8StringReader::new("hello world\ngoodby mango");
+    let mut rt_ctx = LLVMParseContext::new();
+
+    module
+      .exe_engine
+      .as_ref()?
+      .add_global_mapping(&module.fun.allocate_stack, sherpa_allocate_stack as usize);
+
+    module
+      .exe_engine
+      .as_ref()?
+      .add_global_mapping(&module.fun.free_stack, sherpa_free_stack as usize);
+
+    let init_fn = get_parse_function::<Init>(&module, "init")?;
+    let prime_fn = get_parse_function::<Prime>(&module, "prime")?;
+    let ast_builder_fn = get_parse_function::<AstBuilder>(&module, "ast_builder")?;
+    let drop_ = get_parse_function::<Drop>(&module, "drop")?;
+
+    init_fn.call(&mut rt_ctx, &mut reader);
+    prime_fn.call(&mut rt_ctx, 0);
+    let parse_result = ast_builder_fn.call(
+      &mut rt_ctx,
+      test_functions.as_ptr(),
+      llvm_map_shift_action::<TestUTF8StringReader, ASTSlot>,
+      llvm_map_result_action::<TestUTF8StringReader, ASTSlot>,
+    );
+
+    println!("{:#?}", parse_result);
+
+    drop_.call(&mut rt_ctx);
   };
 
   SherpaResult::Ok(())

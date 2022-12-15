@@ -90,6 +90,7 @@ fn shift<T: BaseCharacterReader + MutCharacterReader + MutCharacterReader>(
     token_cp_length: shift.cp_length,
     token_line_count: shift.line_number,
     token_line_offset: shift.line_offset,
+    token_type_info: 0
    }, i + 1)
 }
 

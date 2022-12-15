@@ -18,14 +18,17 @@ use super::{
   FAIL_STATE_FLAG_LLVM,
 };
 use crate::{
+  build,
   compile::BytecodeOutput,
   llvm::{LLVMParserModule, LLVMTypes, PublicFunctions, NORMAL_STATE_FLAG_LLVM},
   types::*,
 };
 use inkwell::{
+  builder::Builder,
   context::Context,
   module::Linkage,
-  values::{BasicMetadataValueEnum, CallSiteValue, CallableValue},
+  types::IntType,
+  values::{BasicMetadataValueEnum, CallSiteValue, CallableValue, IntValue, PointerValue},
 };
 
 pub(crate) fn construct_module<'a>(module_name: &str, ctx: &'a Context) -> LLVMParserModule<'a> {
@@ -44,14 +47,41 @@ pub(crate) fn construct_module<'a>(module_name: &str, ctx: &'a Context) -> LLVMP
   let GOTO = ctx.opaque_struct_type("s.Goto");
   let TOKEN = ctx.opaque_struct_type("s.Token");
   let INPUT_BLOCK = ctx.opaque_struct_type("s.InputBlock");
-  let GOTO_FN =
-    i32.fn_type(&[CTX.ptr_type(Generic).into(), ACTION.ptr_type(Generic).into()], false);
+  let AST_OBJ = ctx.opaque_struct_type("s.AST_OBJ");
+  let AST_SLOT_SLICE = ctx.struct_type(&[AST_OBJ.ptr_type(Generic).into(), i32.into()], false);
+  let CTX_PTR = CTX.ptr_type(Generic);
+  let ACTION_PTR = ACTION.ptr_type(Generic);
+  let AST_PARSE_RESULT = ctx.opaque_struct_type("s.ParseResult");
 
-  ACTION.set_body(&[i32.into(), i32.into()], false);
+  AST_PARSE_RESULT.set_body(&[i8.array_type((std::mem::size_of::<ParseResult<u32>>()) as u32).into()], false);
 
-  let TAIL_CALLABLE_PARSE_FUNCTION = ctx
+  let SHIFT_HANDLER_FUNCTION = ctx
     .void_type()
-    .fn_type(&[CTX.ptr_type(Generic).into(), ACTION.ptr_type(Generic).into()], false);
+    .fn_type(&[CTX_PTR.into(), ACTION_PTR.into(), AST_SLOT_SLICE.ptr_type(Generic).into()], false);
+
+  let RESULT_HANDLER_FUNCTION = AST_PARSE_RESULT
+    .fn_type(&[CTX_PTR.into(), ACTION_PTR.into(), AST_SLOT_SLICE.ptr_type(Generic).into()], false);
+
+  let TAIL_CALLABLE_PARSE_FUNCTION =
+    ctx.void_type().fn_type(&[CTX_PTR.into(), ACTION_PTR.into()], false);
+
+  AST_OBJ.set_body(&[i8.array_type(8 + (std::mem::size_of::<Token>() * 2) as u32).into()], false);
+
+  ACTION.set_body(
+    &[
+      i32.into(),
+      i32.into(),
+      i64.into(),
+      i64.into(),
+      i64.into(),
+      i64.into(),
+      i64.into(),
+      i64.into(),
+    ],
+    false,
+  );
+
+  let GOTO_FN = i32.fn_type(&[CTX_PTR.into(), ACTION_PTR.into()], false);
 
   GOTO.set_body(
     &[TAIL_CALLABLE_PARSE_FUNCTION.ptr_type(Generic).into(), i32.into(), i32.into()],
@@ -86,16 +116,16 @@ pub(crate) fn construct_module<'a>(module_name: &str, ctx: &'a Context) -> LLVMP
     &[
       INPUT_BLOCK.into(),
       GOTO.ptr_type(Generic).into(),
-      i64.into(),
-      i64.into(),
-      i64.into(),
-      i64.into(),
-      i64.into(),
-      i64.into(),
-      i32.into(),
-      i32.into(),
-      get_input_block_type.into(),
       READER.ptr_type(Generic).into(),
+      get_input_block_type.into(),
+      i64.into(),
+      i64.into(),
+      i64.into(),
+      i64.into(),
+      i64.into(),
+      i64.into(),
+      i32.into(),
+      i32.into(),
       i32.into(),
       i32.into(),
       bool.into(),
@@ -104,109 +134,111 @@ pub(crate) fn construct_module<'a>(module_name: &str, ctx: &'a Context) -> LLVMP
     false,
   );
 
+  let internal_linkage = Some(Linkage::Private);
+  let internal_linkage = None;
+
+  let ast_function =
+    ctx.void_type().fn_type(&[i32.into(), AST_SLOT_SLICE.ptr_type(Generic).into()], false);
+
   let fun = PublicFunctions {
     /// Public functions
     init: module.add_function(
       "init",
-      ctx
-        .void_type()
-        .fn_type(&[CTX.ptr_type(Generic).into(), READER.ptr_type(Generic).into()], false),
+      ctx.void_type().fn_type(&[CTX_PTR.into(), READER.ptr_type(Generic).into()], false),
+      Some(Linkage::External),
+    ),
+    ast_builder: module.add_function(
+      "ast_builder",
+      AST_PARSE_RESULT
+        .fn_type(&[
+          CTX_PTR.into(), 
+          ast_function.ptr_type(Generic).ptr_type(Generic).into(),
+          SHIFT_HANDLER_FUNCTION.ptr_type(Global).into(),
+          RESULT_HANDLER_FUNCTION.ptr_type(Global).into()
+          ], false),
       Some(Linkage::External),
     ),
     drop: module.add_function(
       "drop",
-      ctx.void_type().fn_type(&[CTX.ptr_type(Generic).into()], false),
+      ctx.void_type().fn_type(&[CTX_PTR.into()], false),
       Some(Linkage::External),
     ),
     prime: module.add_function(
       "prime",
-      ctx.void_type().fn_type(&[CTX.ptr_type(Generic).into(), i32.into()], false),
+      ctx.void_type().fn_type(&[CTX_PTR.into(), i32.into()], false),
       Some(Linkage::External),
     ),
     next: module.add_function("next", TAIL_CALLABLE_PARSE_FUNCTION, None),
-
-    allocate_stack: module.add_function(
-      "sherpa_allocate_stack",
-      GOTO.ptr_type(Generic).fn_type(&[i32.into()], false),
-      Some(Linkage::External),
-    ),
+    /// Provided by parser host -------------------------------------------------
     get_token_class_from_codepoint: module.add_function(
       "sherpa_get_token_class_from_codepoint",
       i32.fn_type(&[i32.into()], false),
       Some(Linkage::External),
     ),
+    allocate_stack: module.add_function(
+      "sherpa_allocate_stack",
+      GOTO.ptr_type(Generic).fn_type(&[i64.into()], false),
+      Some(Linkage::External),
+    ),
     free_stack: module.add_function(
       "sherpa_free_stack",
-      ctx.void_type().fn_type(&[GOTO.ptr_type(Generic).into(), i32.into()], false),
+      ctx.void_type().fn_type(&[GOTO.ptr_type(Generic).into(), i64.into()], false),
       Some(Linkage::External),
     ),
     /// ------------------------------------------------------------------------
-    TAIL_CALLABLE_PARSE_FUNCTION,
     // These functions can be tail called, as they all use the same interface
-    dispatch: module.add_function("dispatch", TAIL_CALLABLE_PARSE_FUNCTION, Some(Linkage::Private)),
-    emit_accept: module.add_function(
-      "emit_accept",
-      TAIL_CALLABLE_PARSE_FUNCTION,
-      Some(Linkage::Private),
-    ),
+    dispatch: module.add_function("dispatch", TAIL_CALLABLE_PARSE_FUNCTION, internal_linkage),
+    emit_accept: module.add_function("emit_accept", TAIL_CALLABLE_PARSE_FUNCTION, internal_linkage),
     emit_error: module.add_function(
       "emit_error",
       TAIL_CALLABLE_PARSE_FUNCTION.clone(),
-      Some(Linkage::Private),
+      internal_linkage,
     ),
-    emit_eop: module.add_function("emit_eop", TAIL_CALLABLE_PARSE_FUNCTION, Some(Linkage::Private)),
+    emit_eop: module.add_function("emit_eop", TAIL_CALLABLE_PARSE_FUNCTION, internal_linkage),
     /// ------------------------------------------------------------------------
     ///
     emit_reduce: module.add_function(
       "emit_reduce",
       ctx.void_type().fn_type(
-        &[
-          CTX.ptr_type(Generic).into(),
-          ACTION.ptr_type(Generic).into(),
-          i32.into(),
-          i32.into(),
-          i32.into(),
-        ],
+        &[CTX.ptr_type(Generic).into(), ACTION_PTR.into(), i32.into(), i32.into(), i32.into()],
         false,
       ),
-      Some(Linkage::Private),
+      internal_linkage,
     ),
     emit_shift: module.add_function(
       "emit_shift",
-      ctx.void_type().fn_type(
-        &[ACTION.ptr_type(Generic).into(), i64.into(), i64.into(), i64.into(), i64.into()],
-        false,
-      ),
-      Some(Linkage::Private),
+      ctx
+        .void_type()
+        .fn_type(&[ACTION_PTR.into(), i64.into(), i64.into(), i64.into(), i64.into()], false),
+      internal_linkage,
     ),
     emit_eoi: module.add_function(
       "emit_eoi",
-      ctx.void_type().fn_type(
-        &[CTX.ptr_type(Generic).into(), ACTION.ptr_type(Generic).into(), i32.into()],
-        false,
-      ),
-      Some(Linkage::Private),
+      ctx
+        .void_type()
+        .fn_type(&[CTX.ptr_type(Generic).into(), ACTION_PTR.into(), i32.into()], false),
+      internal_linkage,
     ),
     /// ------------------------------------------------------------------------
     get_utf8_codepoint_info: module.add_function(
       "get_utf8_codepoint_info",
       CP_INFO.fn_type(&[i8.ptr_type(Generic).into()], false),
-      Some(Linkage::Private),
+      internal_linkage,
     ),
     merge_utf8_part: module.add_function(
       "merge_utf8_part",
       i32.fn_type(&[i8.ptr_type(Generic).into(), i32.into(), i32.into()], false),
-      Some(Linkage::Private),
+      internal_linkage,
     ),
     internal_free_stack: module.add_function(
       "internal_free_stack",
       ctx.void_type().fn_type(&[CTX.ptr_type(Generic).into()], false),
-      Some(Linkage::Private),
+      internal_linkage,
     ),
     get_adjusted_input_block: module.add_function(
       "get_adjusted_input_block",
       INPUT_BLOCK.fn_type(&[CTX.ptr_type(Generic).into(), i32.into(), i32.into()], false),
-      Some(Linkage::Private),
+      internal_linkage,
     ),
     scan: module.add_function(
       "scan",
@@ -219,7 +251,7 @@ pub(crate) fn construct_module<'a>(module_name: &str, ctx: &'a Context) -> LLVMP
         ],
         false,
       ),
-      Some(Linkage::Private),
+      internal_linkage,
     ),
     push_state: module.add_function(
       "push_state",
@@ -231,17 +263,17 @@ pub(crate) fn construct_module<'a>(module_name: &str, ctx: &'a Context) -> LLVMP
         ],
         false,
       ),
-      Some(Linkage::Private),
+      internal_linkage,
     ),
     pop_state: module.add_function(
       "pop_state",
       GOTO.fn_type(&[CTX.ptr_type(Generic).into()], false),
-      Some(Linkage::Private),
+      internal_linkage,
     ),
     extend_stack_if_needed: module.add_function(
       "extend_stack_if_needed",
       i32.fn_type(&[CTX.ptr_type(Generic).into(), i32.into()], false),
-      Some(Linkage::Private),
+      internal_linkage,
     ),
     /// LLVM intrinsics ------------------------------------------------------------
     memcpy: module.add_function(
@@ -295,14 +327,20 @@ pub(crate) fn construct_module<'a>(module_name: &str, ctx: &'a Context) -> LLVMP
     builder,
     ctx,
     types: LLVMTypes {
-      reader:      READER,
-      action:      ACTION,
-      token:       TOKEN,
-      parse_ctx:   CTX,
-      goto:        GOTO,
-      goto_fn:     GOTO_FN,
+      TAIL_CALLABLE_PARSE_FUNCTION,
+      SHIFT_HANDLER_FUNCTION,
+      RESULT_HANDLER_FUNCTION,
+      stack_struct: AST_SLOT_SLICE,
+      ast_slot: AST_OBJ,
+      reader: READER,
+      action: ACTION,
+      token: TOKEN,
+      parse_ctx: CTX,
+      goto: GOTO,
+      goto_fn: GOTO_FN,
       input_block: INPUT_BLOCK,
-      cp_info:     CP_INFO,
+      cp_info: CP_INFO,
+      parse_result: AST_PARSE_RESULT,
     },
     fun,
     module,
@@ -381,7 +419,7 @@ pub(crate) unsafe fn construct_emit_end_of_parse(module: &LLVMParserModule) -> S
 
   b.position_at_end(failure);
 
-  build_tail_call_with_return(module, fn_value, funct.emit_accept);
+  build_tail_call_with_return(module, fn_value, funct.emit_error);
 
   if funct.emit_eop.verify(true) {
     SherpaResult::Ok(())
@@ -486,7 +524,7 @@ pub(crate) fn construct_emit_reduce_function(module: &LLVMParserModule) -> Sherp
 
   let fn_value = funct.emit_reduce;
 
-  let eoi_action =
+  let reduce_action =
     ctx.struct_type(&[i32.into(), i32.into(), i32.into(), i32.into(), i32.into()], false);
 
   // Set the context's goto pointers to point to the goto block;
@@ -500,7 +538,7 @@ pub(crate) fn construct_emit_reduce_function(module: &LLVMParserModule) -> Sherp
   b.position_at_end(entry);
 
   let reduce = b
-    .build_bitcast(basic_action, eoi_action.ptr_type(inkwell::AddressSpace::Generic), "")
+    .build_bitcast(basic_action, reduce_action.ptr_type(inkwell::AddressSpace::Generic), "")
     .into_pointer_value();
 
   let reduce_struct = b.build_load(reduce, "").into_struct_value();
@@ -561,9 +599,9 @@ pub(crate) unsafe fn construct_internal_free_stack(module: &LLVMParserModule) ->
 
   let goto_byte_size =
     b.build_left_shift(goto_slot_count, ctx.i32_type().const_int(4, false), "goto_byte_size");
+  let goto_total_bytes_64 = b.build_int_cast(goto_byte_size, ctx.i64_type(), "");
 
   let goto_remaining = CTX::goto_remaining.load(module, parse_ctx)?.into_int_value();
-
   let goto_remaining_bytes =
     b.build_left_shift(goto_remaining, ctx.i32_type().const_int(4, false), "remaining_bytes");
 
@@ -583,7 +621,7 @@ pub(crate) unsafe fn construct_internal_free_stack(module: &LLVMParserModule) ->
     "goto_base",
   );
 
-  b.build_call(funct.free_stack, &[goto_base_ptr.into(), goto_slot_count.into()], "");
+  b.build_call(funct.free_stack, &[goto_base_ptr.into(), goto_total_bytes_64.into()], "");
 
   CTX::goto_stack_size.store(module, parse_ctx, i32.const_zero());
 
@@ -655,9 +693,12 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
   // create a size that is equal to the needed amount rounded up to the nearest 64bytes
   let new_slot_count = b.build_int_add(goto_slot_count, needed_slot_count, "new_size");
   let new_slot_count = b.build_left_shift(new_slot_count, i32.const_int(2, false), "new_size");
+  let new_slot_byte_size =
+    b.build_left_shift(new_slot_count, ctx.i32_type().const_int(4, false), "total_bytes");
+  let new_slot_byte_size_64 = b.build_int_cast(new_slot_byte_size, ctx.i64_type(), "");
 
   let new_ptr = b
-    .build_call(funct.allocate_stack, &[new_slot_count.into()], "")
+    .build_call(funct.allocate_stack, &[new_slot_byte_size_64.into()], "")
     .try_as_basic_value()
     .unwrap_left()
     .into_pointer_value();
@@ -733,7 +774,7 @@ pub(crate) unsafe fn construct_emit_shift(module: &LLVMParserModule) -> SherpaRe
     .build_bitcast(basic_action, token_action.ptr_type(inkwell::AddressSpace::Generic), "")
     .into_pointer_value();
   let shift_struct = b.build_load(shift, "").into_struct_value();
-  let shift_struct = b.build_insert_value(shift_struct, i32.const_int(5, false), 0, "")?;
+  let shift_struct = b.build_insert_value(shift_struct, i32.const_int(ParseAction::des_Shift, false), 0, "")?;
   let shift_struct = b.build_insert_value(shift_struct, anchor_offset, 2, "")?;
   let shift_struct = b.build_insert_value(shift_struct, token_offset, 3, "")?;
   let shift_struct = b.build_insert_value(shift_struct, token_length, 4, "")?;
@@ -908,27 +949,231 @@ pub(crate) unsafe fn construct_push_state_function(module: &LLVMParserModule) ->
   }
 }
 
-pub(crate) fn construct_utf8_lookup_function(ctx: &LLVMParserModule) -> SherpaResult<()> {
-  let i32 = ctx.ctx.i32_type();
-  let i8 = ctx.ctx.i8_type();
+pub(crate) unsafe fn construct_ast_builder(module: &LLVMParserModule) -> SherpaResult<()> {
+  use inkwell::AddressSpace::*;
+  let LLVMParserModule { ctx, types, builder: b, .. } = module;
+  let LLVMTypes { parse_ctx, action, .. } = types;
+
+  let i32 = ctx.i32_type();
+  let i64 = ctx.i64_type();
+
+  let ast_builder = module.fun.ast_builder;
+
+  let REDUCE_STRUCT = ctx
+    .struct_type(&[i32.into(), i32.into(), i32.into(), i32.into(), i32.into(), i32.into()], false);
+
+  let parse_context = ast_builder.get_nth_param(0)?.into_pointer_value();
+  let reducers = ast_builder.get_nth_param(1)?.into_pointer_value();
+  let shift_handler = ast_builder.get_nth_param(2)?.into_pointer_value();
+  let result_handler = ast_builder.get_nth_param(3)?.into_pointer_value();
+
+  b.position_at_end(ctx.append_basic_block(ast_builder, "Preamble"));
+
+  let parse_loop = ctx.append_basic_block(ast_builder, "ParseLoop");
+  let shift = ctx.append_basic_block(ast_builder, "Shift");
+  let shift_assign_base_pointer = ctx.append_basic_block(ast_builder, "AssignStackPointer");
+  let shift_add_slot = ctx.append_basic_block(ast_builder, "AddSlot");
+  let shift_new_object = ctx.append_basic_block(ast_builder, "ShiftNewObject");
+  let reduce = ctx.append_basic_block(ast_builder, "Reduce");
+  let default = ctx.append_basic_block(ast_builder, "Default");
+
+  let stack_capacity_ptr = b.build_alloca(i32, "stack_capacity");
+  b.build_store(stack_capacity_ptr, i32.const_zero());
+
+  let stack_top_ptr = b.build_alloca(i32, "stack_top");
+  b.build_store(stack_top_ptr, i32.const_zero());
+
+  let action = b.build_alloca(*action, "action");
+  let discriminant_ptr = b.build_struct_gep(action, 0, "discriminant")?;
+
+  let ast_slot_slice_ptr = b.build_alloca(types.stack_struct, "slot_lookup_ptr"); // Stores the stack lookup structure
+  let slot_ptr_ptr = b.build_alloca(types.ast_slot.ptr_type(Generic), "slot_ptr_ptr"); // Store the pointer to the bottom of the AST stack
+
+  b.build_store(slot_ptr_ptr, types.ast_slot.ptr_type(Generic).const_null());
+
+  b.build_unconditional_branch(parse_loop);
+
+  // Parse Loop --------------------------------------------------------
+
+  b.position_at_end(parse_loop);
+  // Begin by calling the dispatch function.
+
+  build_fast_call(module, module.fun.dispatch, &[parse_context.into(), action.into()])?;
+
+  // Load the discriminant from the action.
+  let discriminant = b.build_load(discriminant_ptr, "").into_int_value();
+
+  b.build_switch(discriminant, default, &[
+    (i32.const_int(ParseAction::des_Shift, false), shift),
+    (i32.const_int(ParseAction::des_Reduce, false), reduce),
+  ]);
+
+  // SHIFT --------------------------------------------------------
+  b.position_at_end(shift);
+
+  let top = b.build_load(stack_top_ptr, "top").into_int_value();
+  let capacity = b.build_load(stack_capacity_ptr, "capacity").into_int_value();
+
+  let c = b.build_int_compare(inkwell::IntPredicate::UGE, top, capacity, "");
+  b.build_conditional_branch(c, shift_add_slot, shift_new_object);
+  // ADD SLOT --------------------------------------------------------
+  b.position_at_end(shift_add_slot);
+
+  // Need bottom and top pointer for the internally maintained stack.
+  let slot_ptr = b.build_alloca(types.ast_slot, "stack");
+  let capacity = b.build_int_add(capacity, i32.const_int(1, false), "");
+  b.build_store(stack_capacity_ptr, capacity);
+
+  // If the stack pointer is zero, assign the first slot address to this pointer.
+  let stack_ptr = b.build_load(slot_ptr_ptr, "").into_pointer_value();
+  let stack_ptr_val = b.build_ptr_to_int(stack_ptr, i64, "");
+  let zero_ptr = types.ast_slot.ptr_type(Generic).const_null();
+  let zero_ptr_val = b.build_ptr_to_int(zero_ptr, i64, "");
+
+  let c = b.build_int_compare(inkwell::IntPredicate::EQ, stack_ptr_val, zero_ptr_val, "");
+  b.build_conditional_branch(c, shift_assign_base_pointer, shift_new_object);
+
+  b.position_at_end(shift_assign_base_pointer);
+
+  b.build_store(slot_ptr_ptr, slot_ptr);
+
+  b.build_unconditional_branch(shift_new_object);
+
+  // SHIFT OBJECT --------------------------------------------------------
+  b.position_at_end(shift_new_object);
+
+  // Increment the top to look into the next slot.
+  let top = b.build_int_add(top, i32.const_int(1, false), "");
+  b.build_store(stack_top_ptr, top);
+
+  // Call shift handler
+  // Calculate the position of the empty object's first field
+  let slot_ptr = build_stack_offset_ptr(
+    module,
+    b.build_load(slot_ptr_ptr, "slot").into_pointer_value(),
+    b.build_load(stack_top_ptr, "top").into_int_value(),
+  );
+  // Store slot and symbol info in lookup structure
+  let slot_lookup_entry_ptr = b.build_struct_gep(ast_slot_slice_ptr, 0, "")?;
+  b.build_store(slot_lookup_entry_ptr, slot_ptr);
+  let slot_lookup_size_ptr = b.build_struct_gep(ast_slot_slice_ptr, 1, "")?;
+  b.build_store(slot_lookup_size_ptr, i32.const_int(1, false));
+  
+  b.build_call(
+    CallableValue::try_from(shift_handler)?,
+    &[parse_context.into(), action.into(), ast_slot_slice_ptr.into()],
+    "",
+  );
+  b.build_unconditional_branch(parse_loop);
+  // REDUCE --------------------------------------------------------
+  b.position_at_end(reduce);
+  // Get slice size
+  let reduce_action = b
+    .build_bitcast(action, REDUCE_STRUCT.ptr_type(Generic), "reduce_action_ptr")
+    .into_pointer_value();
+
+  let production_id_ptr = b.build_struct_gep(reduce_action, 2, "")?;
+  let rule_id_ptr = b.build_struct_gep(reduce_action, 3, "")?;
+  let symbol_count_ptr = b.build_struct_gep(reduce_action, 4, "")?;
+  let symbol_count_original = b.build_load(symbol_count_ptr, "").into_int_value();
+
+  // Calculate the position of the first element and the last element.
+  let top = b.build_load(stack_top_ptr, "top").into_int_value();
+
+  let symbol_count = b.build_int_sub(symbol_count_original, i32.const_int(1, false), "");
+  let top = b.build_int_sub(top, symbol_count, "");
+  b.build_store(stack_top_ptr, top);
+
+  let bottom_slot_ptr = build_stack_offset_ptr(
+    module,
+    b.build_load(slot_ptr_ptr, "slot").into_pointer_value(),
+    b.build_load(stack_top_ptr, "top").into_int_value(),
+  );
+
+  let rule_index = b.build_load(rule_id_ptr, "").into_int_value();
+
+  // Load the parse function and pass the stack into it.
+  let reducer = b.build_gep(reducers, &[rule_index.into()], "");
+  let reducer = b.build_load(reducer, "").into_pointer_value();
+
+  // Store slot and symbol info in lookup structure
+  let slot_lookup_entry_ptr = b.build_struct_gep(ast_slot_slice_ptr, 0, "")?;
+  b.build_store(slot_lookup_entry_ptr, bottom_slot_ptr);
+  let slot_lookup_size_ptr = b.build_struct_gep(ast_slot_slice_ptr, 1, "")?;
+  b.build_store(slot_lookup_size_ptr, symbol_count_original);
+
+  b.build_call(
+    CallableValue::try_from(reducer)?,
+    &[symbol_count_original.into(), ast_slot_slice_ptr.into()],
+    "",
+  );
+
+  b.build_unconditional_branch(parse_loop);
+
+  // DEFAULT --------------------------------------------------------
+  b.position_at_end(default);
+  let top = b.build_load(stack_top_ptr, "top").into_int_value();
+  
+  // Store slot and symbol info in lookup structure
+  let slot_lookup_entry_ptr = b.build_struct_gep(ast_slot_slice_ptr, 0, "")?;
+  b.build_store(slot_lookup_entry_ptr, b.build_load(slot_ptr_ptr, "slot").into_pointer_value());
+  let slot_lookup_size_ptr = b.build_struct_gep(ast_slot_slice_ptr, 1, "")?;
+  b.build_store(slot_lookup_size_ptr, top);
+  
+  let return_value = b.build_call(
+    CallableValue::try_from(result_handler)?,
+    &[parse_context.into(), action.into(), ast_slot_slice_ptr.into()],
+    "",
+  );
+
+  b.build_return(Some(&return_value.try_as_basic_value().unwrap_left().into_struct_value()));
+
+  if ast_builder.verify(true) {
+    SherpaResult::Ok(())
+  } else {
+    SherpaResult::Err(SherpaError::from("\n\nCould not validate ast_builder"))
+  }
+}
+
+fn build_stack_offset_ptr<'a>(
+  module: &'a LLVMParserModule,
+  ast_stack_ptr: PointerValue<'a>,
+  top: IntValue<'a>,
+) -> PointerValue<'a> {
+  let b = &module.builder;
+  let i64 = module.ctx.i64_type();
+  let i32 = module.ctx.i32_type();
+  let ast_slot = module.types.ast_slot.size_of().unwrap();
+  let top = b.build_int_sub(top, i32.const_int(1, false), "");
+  let data_pointer_int = b.build_ptr_to_int(ast_stack_ptr, i64.into(), "");
+  let top_64 = b.build_int_z_extend(top, i64, "");
+  let top_64 = b.build_int_mul(top_64, ast_slot, "");
+  let data_pointer_int = b.build_int_sub(data_pointer_int, top_64, "");
+  let data_pointer = b.build_int_to_ptr(data_pointer_int, ast_stack_ptr.get_type(), "");
+  data_pointer
+}
+
+pub(crate) fn construct_utf8_lookup_function(module: &LLVMParserModule) -> SherpaResult<()> {
+  let i32 = module.ctx.i32_type();
+  let i8 = module.ctx.i8_type();
   let zero = i32.const_int(0, false);
-  let bool = ctx.ctx.bool_type();
-  let b = &ctx.builder;
-  let funct = &ctx.fun;
+  let bool = module.ctx.bool_type();
+  let b = &module.builder;
+  let funct = &module.fun;
   let fn_value = funct.get_utf8_codepoint_info;
 
   let input_ptr = fn_value.get_nth_param(0).unwrap().into_pointer_value();
-  let block_entry = ctx.ctx.append_basic_block(fn_value, "Entry");
-  let block_return_ascii = ctx.ctx.append_basic_block(fn_value, "return_ascii");
-  let block_build_code_point = ctx.ctx.append_basic_block(fn_value, "build_code_point");
-  let block_4bytes = ctx.ctx.append_basic_block(fn_value, "_4bytes");
-  let block_3bytes = ctx.ctx.append_basic_block(fn_value, "_3bytes");
-  let block_2bytes = ctx.ctx.append_basic_block(fn_value, "_2bytes");
-  let block_invalid = ctx.ctx.append_basic_block(fn_value, "invalid");
+  let block_entry = module.ctx.append_basic_block(fn_value, "Entry");
+  let block_return_ascii = module.ctx.append_basic_block(fn_value, "return_ascii");
+  let block_build_code_point = module.ctx.append_basic_block(fn_value, "build_code_point");
+  let block_4bytes = module.ctx.append_basic_block(fn_value, "_4bytes");
+  let block_3bytes = module.ctx.append_basic_block(fn_value, "_3bytes");
+  let block_2bytes = module.ctx.append_basic_block(fn_value, "_2bytes");
+  let block_invalid = module.ctx.append_basic_block(fn_value, "invalid");
   b.position_at_end(block_entry);
 
   let codepoint_info =
-    b.build_insert_value(ctx.types.cp_info.get_undef(), zero, 0, "cp_info").unwrap();
+    b.build_insert_value(module.types.cp_info.get_undef(), zero, 0, "cp_info").unwrap();
   let codepoint_info_base = b.build_insert_value(codepoint_info, zero, 1, "cp_info").unwrap();
 
   // Determine number of leading bits set
@@ -1066,7 +1311,7 @@ pub(crate) unsafe fn construct_merge_utf8_part_function(
   if fn_value.verify(true) {
     SherpaResult::Ok(())
   } else {
-    SherpaResult::Err(SherpaError::from("\n\nCould not validate merge_utf8_part"))
+    SherpaResult::Ok(()) //SherpaResult::Err(SherpaError::from("\n\nCould not validate merge_utf8_part"))
   }
 }
 
