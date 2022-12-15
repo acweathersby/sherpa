@@ -58,7 +58,9 @@ pub fn compile_grammars_into_store(
 
   let results = thread::scope(|s| {
     grammars
-      .chunks(grammars.len().div_ceil(get_num_of_available_threads()))
+      .chunks(
+        (grammars.len() as f64 / get_num_of_available_threads() as f64).ceil().max(1.0) as usize
+      )
       .into_iter()
       .map(|chunk| {
         let mut j = j.transfer();
@@ -1084,7 +1086,7 @@ fn pre_process_production(
     (_, Some(ASTNode::Production_Import_Symbol(_)), ..) => {
       e.push(SherpaError::grammar_err {
         inline_message: "Invalid production definition".to_string(),
-        loc: production_node.Token(),
+        loc: production_node.Token().into(),
         message: format!("Cannot define a production of an imported grammar.\n     note: Try using the `+>` operator to extend an existing production with additional bodies."),
         path: g.id.path.clone(),
       });
@@ -1093,7 +1095,7 @@ fn pre_process_production(
     (prod, _, ..) if prod == Default::default() => {
       e.push(SherpaError::grammar_err {
         inline_message: String::new(),
-        loc: production_node.Token(),
+        loc: production_node.Token().into(),
         message: format!("This is not a valid production"),
         path: g.id.path.clone(),
       });
@@ -1126,7 +1128,7 @@ fn pre_process_production(
           id: prod_id,
           guid_name,
           name: plain_name, // prod.symbol.Token().to_string()
-          loc: production_node.Token(),
+          loc: production_node.Token().into(),
           sym_id: SymbolID::Production(prod_id, g.id.guid),
           ..Default::default()
         },
@@ -1142,7 +1144,7 @@ fn pre_process_production(
           locations: vec![
             SherpaError::grammar_err {
               inline_message: String::new(),
-              loc: node.Token(),
+              loc: node.Token().into(),
               message: format!("Redefinition of {} occurs here.", plain_name),
               path: g.id.path.clone(),
             },
@@ -1202,7 +1204,7 @@ fn get_productions_names(
                   production_name,
                   local_import_grammar_name
               ),
-              loc: node.Token(),
+              loc: node.Token().into(),
               path: g.id.path.clone(),
           });
           None
@@ -1220,7 +1222,7 @@ fn get_productions_names(
       e.push(SherpaError::grammar_err {
         inline_message: String::new(),
         message: "Unexpected node: Unable to resolve production name of this node!".to_string(),
-        loc: node.Token(),
+        loc: node.Token().into(),
         path: g.id.path.clone(),
       });
       None
@@ -1259,7 +1261,7 @@ fn get_grammar_info_from_node<'a>(
               "Unknown Grammar : The local grammar name \u{001b}[31m{}\u{001b}[0m does not match any imported grammar.",
               local_import_grammar_name
             ),
-            loc: node.Token(),path: g.id.path.clone(),
+            loc: node.Token().into(),path: g.id.path.clone(),
           });
           None
         }
@@ -1271,7 +1273,7 @@ fn get_grammar_info_from_node<'a>(
       e.push(SherpaError::grammar_err {
         inline_message: String::new(),
         message: "Unexpected node: Unable to resolve production name of this node!".to_string(),
-        loc: node.Token(),
+        loc: node.Token().into(),
         path: g.id.path.clone(),
       });
 
@@ -1299,7 +1301,9 @@ fn get_production_identifiers(
     Some((guid_name, plain_name)) => {
       let id = ProductionId::from(&guid_name);
 
-      g.production_names.try_insert(id, (plain_name.clone(), guid_name.clone()));
+      if !g.production_names.contains_key(&id) {
+        g.production_names.insert(id, (plain_name.clone(), guid_name.clone()));
+      }
 
       (id, guid_name, plain_name)
     }
@@ -1440,8 +1444,11 @@ pub fn convert_left_recursion_to_right(
 
   // Replace the base production's bodies with B bodies.
   // Add A prime production to the grammar.
-  g.production_names
-    .try_insert(a_prime_prod_id, (a_prime_prod.name.clone(), a_prime_prod.guid_name.clone()));
+
+  if !g.production_names.contains_key(&a_prime_prod_id) {
+    g.production_names
+      .insert(a_prime_prod_id, (a_prime_prod.name.clone(), a_prime_prod.guid_name.clone()));
+  }
   g.productions.insert(a_prime_prod_id, a_prime_prod);
   g.production_bodies.insert(a_prod_id, new_B_rules.iter().map(|b| b.id).collect::<Vec<_>>());
   g.production_bodies.insert(a_prime_prod_id, new_A_rules.iter().map(|b| b.id).collect::<Vec<_>>());

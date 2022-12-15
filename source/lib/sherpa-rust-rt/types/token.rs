@@ -107,9 +107,9 @@ impl fmt::Display for Token {
 
 impl fmt::Debug for Token {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    if self.input.is_some() && self.len < 10 {
+    if self.input.is_some() && self.len < 48 {
       f.write_fmt(format_args!(
-        "Token{{ off:{}, len:{},  line:{}, l_off:{}, val: {} }}",
+        r#"Token{{ off:{}, len:{},  line:{}, l_off:{}, val: "{}" }}"#,
         self.off,
         self.len,
         self.line_num,

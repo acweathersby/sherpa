@@ -3,7 +3,7 @@
 pub mod config;
 pub mod report;
 pub use self::{
-  config::Config,
+  config::{Config, ParseAlgorithm},
   report::{Report, ReportType},
 };
 use crate::{
@@ -214,7 +214,7 @@ impl Journal {
 
 /// Grammar And Symbol Occlusions
 impl Journal {
-  pub fn occlusion_tracking_mode(&self) -> bool {
+  pub(crate) fn occlusion_tracking_mode(&self) -> bool {
     self.scratch_pad.occlusion_tracking
   }
 
@@ -263,7 +263,7 @@ impl Journal {
     self.grammar.iter().cloned().next()
   }
 
-  pub fn add_occlusions(&mut self, occluding_symbols: SymbolSet) {
+  pub(crate) fn add_occlusions(&mut self, occluding_symbols: SymbolSet) {
     for sym_a in &occluding_symbols {
       let table =
         self.scratch_pad.occluding_symbols.entry(*sym_a).or_insert_with(|| BTreeSet::new());
@@ -294,21 +294,7 @@ impl Journal {
     }
   }
 
-  /// The occlusion table maps a symbol to all lower precedent symbols that may occlude it.
-  ///
-  /// The idea here is to add symbols with lower precedence to the occlusion table
-  /// of symbols with higher precedence. For example, given this grammar
-  /// ```
-  /// <> A > \funct \(
-  ///    |   tk:id  \{
-  ///
-  /// <> id > g:id(+)
-  /// ```
-  /// The DefinedSymbol `\funct` has a higher precedence then TokenProduction symbol `tk:id`.
-  /// When using the occlusion table, we force the compiler to consider the symbols as the
-  /// "same", which should then cause it to generate a peek state that uses the following
-  /// symbols [ \( & \{ ] to resolve the conflict.
-  pub fn get_occlusion_table<'b>(&'b self) -> &'b HashMap<SymbolID, SymbolSet> {
+  pub(crate) fn get_occlusion_table<'b>(&'b self) -> &'b HashMap<SymbolID, SymbolSet> {
     match self.occluding_symbols.as_ref() {
       Some(oc) => oc,
       None => &self.scratch_pad.occluding_symbols,

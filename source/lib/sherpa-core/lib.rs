@@ -11,15 +11,13 @@
 #![feature(drain_filter)]
 #![feature(btree_drain_filter)]
 #![feature(try_trait_v2)]
-#![feature(int_roundings)]
-#![feature(map_try_insert)]
 #![allow(bad_style)]
 #![allow(non_snake_case)]
+#![warn(missing_docs)]
 
 mod ascript;
 mod build;
 mod bytecode;
-pub mod debug;
 mod deprecated_runtime;
 mod grammar;
 mod intermediate;
@@ -32,10 +30,14 @@ mod writer;
 #[cfg(test)]
 mod test;
 
-pub use journal::{Config, Journal, Report, ReportType};
+/// Methods for debugging a grammar and it's artifacts.
+pub mod debug;
+
+pub use journal::{Config, Journal, ParseAlgorithm, Report, ReportType};
 
 pub use types::{SherpaError, SherpaResult};
 
+/// Methods compiling a parser from a grammar.
 pub mod compile {
   pub use crate::{
     bytecode::{compile_bytecode, BytecodeOutput},
@@ -54,6 +56,8 @@ pub mod compile {
     },
   };
 }
+
+/// Error objects
 pub mod errors {
   pub use crate::{
     intermediate::errors::*,
@@ -70,7 +74,7 @@ pub mod pipeline {
     BuildPipeline,
     SourceType,
   };
-
+  /// Tasks that can be added to a build pipeline
   pub mod tasks {
     pub use crate::build::{
       ascript::build_ascript_types_and_functions,

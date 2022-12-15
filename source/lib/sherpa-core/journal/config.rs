@@ -34,6 +34,22 @@ pub struct Config {
   /// An extra compile step must be taken to produce the symbol occlusion table.
   ///
   /// Defaults to `false`.
+  ///
+  /// The occlusion table maps a symbol to all lower precedent symbols that may occlude it.
+  ///
+  /// The idea here is to add symbols with lower precedence to the occlusion table
+  /// of symbols with higher precedence. For example, given this grammar
+  /// ```
+  /// <> A > \funct \(
+  ///    |   tk:id  \{
+  ///
+  /// <> id > g:id(+)
+  /// ```
+  /// The DefinedSymbol `\funct` has a higher precedence then TokenProduction symbol `tk:id`.
+  /// When using the occlusion table, we force the compiler to consider the symbols as the
+  /// "same", which should then cause it to generate a peek state that uses the
+  /// symbols `(` and `{` to resolve the conflict.
+  ///
   pub allow_occluding_symbols: bool,
   /// Convert bytecode into a human readable "disassembly" format. This can be
   /// accessed in the journal through `Disassembly` report type. The main note
