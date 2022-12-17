@@ -235,7 +235,7 @@ impl Display for SherpaError {
         message,
         locations.iter().map(|s| format!("{}", s)).collect::<Vec<_>>().join("\n"),
       )),
-     
+
       rt_err { path, production, tok, source } => match path.to_str() {
         Some(path) => f.write_fmt(format_args!(
           "\n[{}:{}]\nUnexpected token [{}]\n{}",

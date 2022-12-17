@@ -5,12 +5,12 @@ use std::{
 
 use crate::{compile::BytecodeOutput, types::*, Journal};
 
-fn header(idx: usize) -> String {
-  format!("{}| ", address_string(idx))
+fn header(bc_address: usize) -> String {
+  format!("{}| ", address_string(bc_address))
 }
 
-fn address_string(idx: usize) -> String {
-  format!("{:0>6X}", idx)
+pub(crate) fn address_string(bc_address: usize) -> String {
+  format!("{:0>6X}", bc_address)
 }
 
 pub(crate) struct BytecodeGrammarLookups {
@@ -270,14 +270,14 @@ fn create_normal_entry(
   token_id: u32,
   input_type: u32,
   idx: usize,
-  goto_idx: usize,
+  bc_address: usize,
   meta: i64,
 ) -> String {
   let token_string = get_input_id(lu, token_id, input_type);
   format!(
     "\n{}---- JUMP TO {} ON {} ( {} ) [{}]",
     header(idx),
-    address_string(goto_idx),
+    address_string(bc_address),
     input_type_to_name(input_type),
     token_string,
     meta

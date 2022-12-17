@@ -7,6 +7,7 @@ use super::Token;
 #[derive(Debug)]
 pub enum SherpaParseError {
   InvalidParse { message: String, inline_message: String, loc: Token, last_production: u32 },
+  None,
 }
 
 impl Display for SherpaParseError {

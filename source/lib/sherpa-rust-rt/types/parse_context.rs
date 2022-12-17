@@ -8,7 +8,7 @@ use std::{
 };
 
 const STACK_32_BIT_SIZE: usize = 128;
-pub struct ParseContext<T: BaseCharacterReader + MutCharacterReader> {
+pub struct ParseContext<T: ByteReader + MutByteReader> {
   pub peek: ParseToken,
   pub anchor: ParseToken,
   pub assert: ParseToken,
@@ -26,7 +26,7 @@ pub struct ParseContext<T: BaseCharacterReader + MutCharacterReader> {
   pub local_state_stack: Vec<u32>,
 }
 
-impl<T: BaseCharacterReader + MutCharacterReader> ParseContext<T> {
+impl<T: ByteReader + MutByteReader> ParseContext<T> {
   pub fn new(reader: &mut T) -> Self {
     let mut ctx = Self {
       peek: ParseToken::default(),
@@ -210,7 +210,7 @@ pub const LLVM_BASE_STACK_SIZE: usize = 8;
 
 #[derive(Clone)]
 #[repr(C)]
-pub struct LLVMParseContext<T: LLVMCharacterReader + ByteCharacterReader + BaseCharacterReader> {
+pub struct LLVMParseContext<T: LLVMByteReader + ByteReader> {
   pub input_block: InputBlock,
   pub goto_stack_ptr: *mut Goto,
   pub reader: *mut T,
@@ -253,7 +253,7 @@ impl<T: LLVMCharacterReader + ByteCharacterReader + BaseCharacterReader> Debug
   }
 }
 
-impl<T: LLVMCharacterReader + ByteCharacterReader + BaseCharacterReader> LLVMParseContext<T> {
+impl<T: LLVMByteReader + ByteReader> LLVMParseContext<T> {
   pub fn new() -> Self {
     Self {
       goto_stack_ptr: 0 as *mut Goto,
@@ -277,6 +277,12 @@ impl<T: LLVMCharacterReader + ByteCharacterReader + BaseCharacterReader> LLVMPar
 
   fn get_source(&mut self) -> SharedSymbolBuffer {
     unsafe { (*self.reader).get_source() }
+  }
+}
+
+impl<T: UTF8Reader + LLVMByteReader + ByteReader> LLVMParseContext<T> {
+  pub fn get_str<'a>(&'a mut self) -> &'a str {
+    unsafe { (*self.reader).get_str() }
   }
 }
 
@@ -306,15 +312,15 @@ pub extern "C" fn sherpa_allocate_stack(byte_size: usize) -> *mut Goto {
 
 pub trait AstSlot: Debug + Clone + Default + Sized {}
 
-/// Only used within an LLVM parser to provide access to AST that are
-/// located in a dynamic array located in the program stack
+/// Used within an LLVM parser to provide access to intermediate AST
+/// data stored on the stack within a dynamically resizable array.
 #[repr(C)]
-pub struct AstSlotSlice<T: AstSlot> {
+pub struct AstSlots<T: AstSlot> {
   stack_data: *mut T,
   stack_size: u32,
 }
 
-impl<T: AstSlot> AstSlotSlice<T> {
+impl<T: AstSlot> AstSlots<T> {
   #[track_caller]
   fn get_pointer(&self, position: usize) -> *mut T {
     if position >= (self.stack_size as usize) {
@@ -336,6 +342,21 @@ impl<T: AstSlot> AstSlotSlice<T> {
   unsafe fn assign_to_garbage(&mut self, position: usize, val: T) {
     let pointer = self.get_pointer(position);
     std::mem::forget(std::mem::replace(&mut (*pointer), val));
+  }
+
+  /// Moves the last slot into the first's slots position,
+  /// and drops the values of all other slots.
+  pub fn drop_all_but_last(&mut self) {
+    if self.len() == 1 {
+      return;
+    }
+
+    let last = self.take(self.len() - 1);
+    self.assign(0, last);
+
+    for index in 1..self.len() {
+      self.take(index);
+    }
   }
 
   pub fn assign(&mut self, position: usize, val: T) {
@@ -372,7 +393,7 @@ impl<T: AstSlot> AstSlotSlice<T> {
   }
 }
 
-impl<T: AstSlot> Debug for AstSlotSlice<T> {
+impl<T: AstSlot> Debug for AstSlots<T> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let mut dbgstr = f.debug_struct("SlotSlice");
     dbgstr.field("stack_size", &self.stack_size);
@@ -388,16 +409,16 @@ impl<T: AstSlot> Debug for AstSlotSlice<T> {
 
 impl AstSlot for u32 {}
 
-impl<V: AstSlot> AstSlot for (V, Token, Token) {}
+impl<V: AstSlot> AstSlot for (V, TokenRange, TokenRange) {}
 
 pub unsafe fn llvm_map_shift_action<
   'a,
-  T: LLVMCharacterReader + ByteCharacterReader + BaseCharacterReader + MutCharacterReader,
+  T: LLVMByteReader + ByteReader + MutByteReader,
   V: AstSlot,
 >(
   ctx: &mut LLVMParseContext<T>,
   action: &ParseAction,
-  slots: &mut AstSlotSlice<(V, Token, Token)>,
+  slots: &mut AstSlots<(V, TokenRange, TokenRange)>,
 ) {
   match *action {
     ParseAction::Shift {
@@ -408,30 +429,34 @@ pub unsafe fn llvm_map_shift_action<
       token_line_count,
       ..
     } => {
-      let mut peek =
-        Token::from_vals(token_byte_offset - anchor_byte_offset, anchor_byte_offset, 0, 0);
+      let peek = TokenRange {
+        len: token_byte_offset - anchor_byte_offset,
+        off: anchor_byte_offset,
+        ..Default::default()
+      };
 
-      let mut tok =
-        Token::from_vals(token_byte_length, token_byte_offset, token_line_count, token_line_offset);
+      let tok = TokenRange {
+        len:      token_byte_length,
+        off:      token_byte_offset,
+        line_num: token_line_count,
+        line_off: token_line_offset,
+      };
 
-      peek.set_source(ctx.get_source());
-      tok.set_source(ctx.get_source());
-
-      slots.assign_to_garbage(0, (V::default(), tok, peek))
+      slots.assign_to_garbage(0, (V::default(), tok, peek));
     }
-    _ => slots.assign_to_garbage(0, (V::default(), Token::default(), Token::default())),
+    _ => slots.assign_to_garbage(0, (V::default(), TokenRange::default(), TokenRange::default())),
   }
 }
 
 pub unsafe fn llvm_map_result_action<
   'a,
-  T: LLVMCharacterReader + ByteCharacterReader + BaseCharacterReader + MutCharacterReader,
-  V: AstSlot,
+  T: LLVMByteReader + ByteReader + MutByteReader,
+  Node: AstSlot,
 >(
   ctx: &mut LLVMParseContext<T>,
   action: &ParseAction,
-  slots: &mut AstSlotSlice<(V, Token, Token)>,
-) -> ParseResult<V> {
+  slots: &mut AstSlots<(Node, TokenRange, TokenRange)>,
+) -> ParseResult<Node> {
   match *action {
     ParseAction::Accept { .. } => {
       ParseResult::Complete(slots.take(0))
@@ -469,8 +494,8 @@ pub extern "C" fn sherpa_get_token_class_from_codepoint(codepoint: u32) -> u32 {
 
 #[derive(Debug)]
 #[repr(C, u64)]
-pub enum ParseResult<V> {
-  Complete((V, Token, Token)),
-  Error(Token, Vec<(V, Token, Token)>),
-  NeedMoreInput(Vec<(V, Token, Token)>),
+pub enum ParseResult<Node> {
+  Complete((Node, TokenRange, TokenRange)),
+  Error(Token, Vec<(Node, TokenRange, TokenRange)>),
+  NeedMoreInput(Vec<(Node, TokenRange, TokenRange)>),
 }

@@ -3,7 +3,7 @@ use crate::types::*;
 /// Yields parser Actions from parsing an input using the
 /// current active grammar bytecode.
 #[inline]
-pub fn dispatch<T: BaseCharacterReader + MutCharacterReader>(
+pub fn dispatch<T: ByteReader + MutByteReader>(
   r: &mut T,
   ctx: &mut ParseContext<T>,
   bc: &[u32],
@@ -54,7 +54,7 @@ pub fn dispatch<T: BaseCharacterReader + MutCharacterReader>(
 /// Produces a parse action that
 /// contains a token that is the
 #[inline]
-fn shift<T: BaseCharacterReader + MutCharacterReader + MutCharacterReader>(
+fn shift<T: ByteReader + MutByteReader + MutByteReader>(
   i: u32,
   instr: INSTRUCTION,
   ctx: &mut ParseContext<T>,
@@ -95,7 +95,7 @@ fn shift<T: BaseCharacterReader + MutCharacterReader + MutCharacterReader>(
 }
 
 #[inline]
-fn reduce<T: BaseCharacterReader + MutCharacterReader>(
+fn reduce<T: ByteReader + MutByteReader>(
   i: u32,
   instr: INSTRUCTION,
   ctx: &mut ParseContext<T>,
@@ -116,7 +116,7 @@ fn reduce<T: BaseCharacterReader + MutCharacterReader>(
 }
 
 #[inline]
-fn goto<T: BaseCharacterReader + MutCharacterReader>(
+fn goto<T: ByteReader + MutByteReader>(
   i: u32,
   instr: INSTRUCTION,
   ctx: &mut ParseContext<T>,
@@ -126,7 +126,7 @@ fn goto<T: BaseCharacterReader + MutCharacterReader>(
 }
 
 #[inline]
-fn eat_crumbs<T: BaseCharacterReader + MutCharacterReader>(
+fn eat_crumbs<T: ByteReader + MutByteReader>(
   i: u32,
   instr: INSTRUCTION,
   ctx: &mut ParseContext<T>,
@@ -153,7 +153,7 @@ fn eat_crumbs<T: BaseCharacterReader + MutCharacterReader>(
 }
 
 #[inline]
-fn set_production<T: BaseCharacterReader + MutCharacterReader>(
+fn set_production<T: ByteReader + MutByteReader>(
   i: u32,
   instr: INSTRUCTION,
   ctx: &mut ParseContext<T>,
@@ -163,7 +163,7 @@ fn set_production<T: BaseCharacterReader + MutCharacterReader>(
 }
 
 #[inline]
-fn set_token_state<T: BaseCharacterReader + MutCharacterReader>(
+fn set_token_state<T: ByteReader + MutByteReader>(
   i: u32,
   instr: INSTRUCTION,
   ctx: &mut ParseContext<T>,
@@ -217,7 +217,7 @@ fn noop(i: u32) -> u32 {
 }
 
 #[inline]
-fn skip_token<T: BaseCharacterReader + MutCharacterReader>(ctx: &mut ParseContext<T>, r: &mut T) {
+fn skip_token<T: ByteReader + MutByteReader>(ctx: &mut ParseContext<T>, r: &mut T) {
   if ctx.in_peek_mode() {
     ctx.peek = ctx.peek.next();
   } else {
@@ -228,7 +228,7 @@ fn skip_token<T: BaseCharacterReader + MutCharacterReader>(ctx: &mut ParseContex
 /// Performs an instruction branch selection based on an embedded,
 /// linear-probing hash table.
 #[inline]
-pub fn hash_jump<T: BaseCharacterReader + MutCharacterReader>(
+pub fn hash_jump<T: ByteReader + MutByteReader>(
   i: u32,
   r: &mut T,
   ctx: &mut ParseContext<T>,
@@ -279,7 +279,7 @@ pub fn hash_jump<T: BaseCharacterReader + MutCharacterReader>(
   }
 }
 #[inline]
-pub fn vector_jump<T: BaseCharacterReader + MutCharacterReader>(
+pub fn vector_jump<T: ByteReader + MutByteReader>(
   i: u32,
   r: &mut T,
   ctx: &mut ParseContext<T>,
@@ -323,7 +323,7 @@ pub fn vector_jump<T: BaseCharacterReader + MutCharacterReader>(
 }
 
 #[inline]
-fn get_token_value<T: BaseCharacterReader + MutCharacterReader>(
+fn get_token_value<T: ByteReader + MutByteReader>(
   lex_type: u32,
   input_type: u32,
   r: &mut T,
@@ -412,7 +412,7 @@ fn get_token_value<T: BaseCharacterReader + MutCharacterReader>(
   }
 }
 
-fn scan_for_improvised_token<T: BaseCharacterReader + MutCharacterReader>(
+fn scan_for_improvised_token<T: ByteReader + MutByteReader>(
   scan_ctx: &mut ParseContext<T>,
   r: &mut T,
 ) {
@@ -448,7 +448,7 @@ fn scan_for_improvised_token<T: BaseCharacterReader + MutCharacterReader>(
   set_token_state(0, INSTRUCTION::default(), scan_ctx);
 }
 
-fn token_scan<T: BaseCharacterReader + MutCharacterReader>(
+fn token_scan<T: ByteReader + MutByteReader>(
   token: ParseToken,
   scan_index: u32,
   ctx: &mut ParseContext<T>,
@@ -547,7 +547,7 @@ fn token_scan<T: BaseCharacterReader + MutCharacterReader>(
 
 /// Start or continue a parse on an input
 #[inline]
-pub fn get_next_action<T: BaseCharacterReader + MutCharacterReader>(
+pub fn get_next_action<T: ByteReader + MutByteReader>(
   r: &mut T,
   ctx: &mut ParseContext<T>,
   bc: &[u32],

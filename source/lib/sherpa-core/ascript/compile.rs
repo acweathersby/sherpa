@@ -91,7 +91,7 @@ fn gather_ascript_info_from_grammar(
     if let Some(rule) = g.clone().rules.get(&rule_id) {
       if let Some(ascript_fn) = &ascript_option_fn {
         match &ascript_fn.ast {
-          ASTNode::AST_Struct(box ast_struct) => {
+          ASTNode::AST_Struct(ast_struct) => {
             let (id, mut sub_errors) = compile_struct_type(ast, ast_struct, rule);
             struct_bodies.push((rule_id, ascript_fn));
             add_production_type(prod_types, &rule, TaggedType {
@@ -442,7 +442,7 @@ fn resolve_structure_properties(ast: &mut AScriptStore, e: &mut Vec<SherpaError>
       let rule = g.get_rule(&rule_id).unwrap();
       for function in &rule.reduce_fn_ids {
         if let ReduceFunctionType::Ascript(ascript) = g.reduce_functions.get(function).unwrap() {
-          if let ASTNode::AST_Struct(box ast_struct) = &ascript.ast {
+          if let ASTNode::AST_Struct(ast_struct) = &ascript.ast {
             e.append(&mut compile_struct_props(ast, &struct_id, ast_struct, &rule).1);
           }
         }

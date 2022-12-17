@@ -115,7 +115,6 @@ pub type ReduceFunctionTable = BTreeMap<ReduceFunctionId, ReduceFunctionType>;
 
 #[derive(Debug, Clone, Default)]
 pub struct GrammarStore {
-  
   pub id: Arc<GrammarRef>,
 
   /// Maps [ProductionId] to a list of [RuleIds](RuleId)

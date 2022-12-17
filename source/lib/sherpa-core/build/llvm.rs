@@ -7,9 +7,18 @@ use inkwell::{
   OptimizationLevel,
 };
 
-use crate::{types::*, writer::code_writer::CodeWriter};
+use crate::{
+  ascript::{self, rust::create_type_initializer_value},
+  grammar::data::{ast::Ascript, ast_node::DummyASTEnum},
+  types::*,
+  writer::code_writer::CodeWriter,
+};
 
-use super::{common::write_rust_entry_functions, pipeline::PipelineTask};
+use super::{
+  ascript::get_ascript_export_data,
+  common::write_rust_entry_functions,
+  pipeline::PipelineTask,
+};
 
 /// Constructs a task that outputs a Rust parse context interface
 /// for the llvm parser.
@@ -34,6 +43,7 @@ pub fn build_llvm_parser_interface<'a>() -> PipelineTask {
             &grammar,
             &parser_name,
             &parser_name,
+            task_ctx.get_ascript(),
           ) {
             Err(err) => Err(vec![SherpaError::from(err)]),
             Ok(_) => Ok(Some(unsafe { String::from_utf8_unchecked(writer.into_output()) })),
@@ -83,7 +93,7 @@ fn _apply_llvm_optimizations(opt: OptimizationLevel, ctx: &crate::llvm::LLVMPars
   // ---------------------------------
   pass_manager.add_gvn_pass();
   pass_manager.add_lower_switch_pass();
-  
+
   pass_manager.add_licm_pass();
   pass_manager.run_on(&ctx.module);
 
@@ -95,11 +105,10 @@ fn _apply_llvm_optimizations(opt: OptimizationLevel, ctx: &crate::llvm::LLVMPars
   pass_manager.add_aggressive_dce_pass();
   pass_manager.run_on(&ctx.module);
 
-
   pass_manager.add_instruction_simplify_pass();
   pass_manager.run_on(&ctx.module);
-//  pass_manager.add_demote_memory_to_register_pass();
-//  pass_manager.run_on(&ctx.module);
+  //  pass_manager.add_demote_memory_to_register_pass();
+  //  pass_manager.run_on(&ctx.module);
 }
 
 fn write_rust_parser<W: Write>(
@@ -108,6 +117,7 @@ fn write_rust_parser<W: Write>(
   g: &GrammarStore,
   grammar_name: &str,
   parser_name: &str,
+  ascript: Option<&ascript::types::AScriptStore>,
 ) -> std::io::Result<()> {
   writer
     .wrt(&format!(
@@ -121,16 +131,23 @@ extern \"C\" {{
     fn next(ctx: *mut u8, action:*mut u8);
     fn prime(ctx: *mut u8, start_point: u32);
     fn drop(ctx: *mut u8);
+    fn ast_parse();
 }}",
       parser_name
     ))?
     .wrtln(&format!(
-      
       r###"
-      
-pub struct Parser<T: BaseCharacterReader + LLVMCharacterReader + ByteCharacterReader + MutCharacterReader + std::fmt::Debug>(LLVMParseContext<T>, T);
+pub trait LLVMReader:
+  ByteReader + LLVMByteReader + MutByteReader + std::fmt::Debug
+  {{}}
 
-impl<T: BaseCharacterReader + LLVMCharacterReader + ByteCharacterReader + MutCharacterReader + std::fmt::Debug> Iterator for Parser<T> {{
+impl<T> LLVMReader for T
+  where T: ByteReader + LLVMByteReader + MutByteReader + std::fmt::Debug 
+  {{}}
+      
+pub struct Parser<T: LLVMReader>(LLVMParseContext<T>, T);
+
+impl<T: LLVMReader> Iterator for Parser<T> {{
     type Item = ParseAction;
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {{
@@ -149,7 +166,7 @@ impl<T: BaseCharacterReader + LLVMCharacterReader + ByteCharacterReader + MutCha
     }}
 }}
 
-impl<T: BaseCharacterReader + LLVMCharacterReader + ByteCharacterReader + MutCharacterReader + std::fmt::Debug> Parser<T> {{
+impl<T: LLVMReader> Parser<T> {{
     /// Create a new parser context to parser the input with 
     /// the grammar `{0}`
     #[inline(always)]
@@ -192,13 +209,91 @@ impl<T: BaseCharacterReader + LLVMCharacterReader + ByteCharacterReader + MutCha
   writer.dedent().wrtln(&format!(
     "}}
 
-impl<T: BaseCharacterReader + LLVMCharacterReader + ByteCharacterReader + MutCharacterReader + std::fmt::Debug> Drop for Parser<T> {{
+impl<T: LLVMReader> Drop for Parser<T> {{
     fn drop(&mut self) {{
         self.destroy_context();
     }}
-}}
-",
+}}",
   ))?;
+
+  if let Some(ascript) = ascript {
+    let export_node_data = get_ascript_export_data(g, ascript);
+
+    writer.wrtln("pub mod ast_compile  {")?.indent();
+    writer.wrtln("use super::*;")?;
+
+    // Create a module that will store convience functions for compiling AST
+    // structures based on on grammar entry points.
+
+    for (ref_, ast_type, ast_type_string, export_name) in &export_node_data {
+      writer
+        .newline()?
+        .wrt(&format!(
+          "
+impl AstSlot for {0} {{}}
+type ASTSlot = ({0}, TokenRange, TokenRange);
+
+#[link(name = \"{1}\", kind = \"static\" )]
+extern \"C\" {{
+  fn ast_parse(
+    ctx: *mut u8,
+    reducers: *const fn(&mut LLVMParseContext<UTF8StringReader>, &mut AstSlots<ASTSlot>),
+    shift_handler: *const u8,
+    result_handler: *const u8,
+  ) -> ParseResult<{0}>;
+}}",
+          ascript.ast_type_name, parser_name
+        ))?
+        .newline()?
+        .wrtln(&format!(
+          "pub fn {0}_from<R>(reader: R)  -> Result<{1}, SherpaParseError> 
+  where R: LLVMReader {{ ",
+          export_name, ast_type_string
+        ))?
+        .indent()
+        .wrtln(&format!(
+          "
+let mut ctx = Parser::new_{0}_parser(reader);
+let reducers_ptr = REDUCE_FUNCTIONS.as_ptr();
+let shifter_ptr = llvm_map_shift_action::<R, {1}> as *const u8;
+let result_ptr = llvm_map_result_action::<R, {1}> as *const u8;
+let ctx_ptr = (&mut ctx.0) as *const LLVMParseContext<R>;
+",
+          export_name, ascript.ast_type_name
+        ))?
+        .wrtln(
+          "match unsafe{ ast_parse(ctx_ptr as *mut u8, reducers_ptr, shifter_ptr, result_ptr) } {",
+        )?
+        .indent()
+        .wrtln("ParseResult::Complete((i0, _, _))  => {")?
+        .indent()
+        .wrtln(&{
+          let (string, ref_) =
+            create_type_initializer_value(ref_.clone(), &ast_type, false, ascript);
+          if let Some(exp) = ref_ {
+            format!("{}\nOk({})", exp.to_init_string(), string)
+              .split("\n")
+              .map(|i| i.trim())
+              .collect::<Vec<_>>()
+              .join("\n")
+          } else {
+            "Ok(i0)".to_string()
+          }
+        })?
+        .dedent()
+        .wrtln("}")?
+        .wrtln(
+          "ParseResult::Error(..) => Err(SherpaParseError::None),
+_ => unreachable!()",
+        )?
+        .dedent()
+        .wrtln("}")?
+        .dedent()
+        .wrtln("}")?
+        .dedent()
+        .wrtln("}")?;
+    }
+  }
 
   Ok(())
 }
@@ -260,9 +355,15 @@ pub fn build_llvm_parser(
         &bytecode,
       ) {
         SherpaResult::Ok(ctx) => {
+          if task_ctx.get_journal().config().enable_ascript {
+            unsafe {
+              crate::llvm::ascript_functions::construct_ast_builder::<(DummyASTEnum)>(&ctx)
+                .unwrap();
+            }
+          }
+
           let opt = OptimizationLevel::Aggressive;
 
-        
           if light_lto {
             if output_llvm_ir_file {
               if let Ok(mut file) = task_ctx.create_file(ll_file_path.clone()) {
@@ -302,7 +403,6 @@ pub fn build_llvm_parser(
               Err(vec![SherpaError::from("test")])
             }
           } else {
-            
             if output_llvm_ir_file {
               if let Ok(mut file) = task_ctx.create_file(ll_file_path.clone()) {
                 file.write_all(ctx.module.to_string().as_bytes()).unwrap();
@@ -318,10 +418,10 @@ pub fn build_llvm_parser(
               .unwrap();
 
             ctx.module.set_triple(&target_triple);
-              
+
             ctx.module.set_data_layout(&target_machine.get_target_data().get_data_layout());
 
-            _apply_llvm_optimizations(opt, &ctx);
+            //_apply_llvm_optimizations(opt, &ctx);
 
             match target_machine.write_to_file(&ctx.module, FileType::Object, &object_path) {
               Ok(_) => {

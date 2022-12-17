@@ -17,8 +17,8 @@ impl<W: Write> CodeWriter<W> {
 
     for section in string.split('\n') {
       if encountered_first {
-        self.output.write(&[b'\n']);
-        self.output.write(indent.as_bytes());
+        self.output.write(&[b'\n'])?;
+        self.output.write(indent.as_bytes())?;
       }
 
       encountered_first = true;
@@ -59,13 +59,13 @@ impl<W: Write> CodeWriter<W> {
 
   /// Chainable shorthand for `write_line`
   pub fn wrtln(&mut self, string: &str) -> Result<&mut Self> {
-    self.write_line(string);
+    self.write_line(string)?;
     Ok(self)
   }
 
   /// Chainable shorthand for `write`
   pub fn wrt(&mut self, string: &str) -> Result<&mut Self> {
-    self.write(string);
+    self.write(string)?;
     Ok(self)
   }
 
@@ -113,7 +113,7 @@ impl<W: Write> CodeWriter<W> {
   }
 
   pub fn into_output(mut self) -> W {
-    self.output.flush();
+    drop(self.output.flush());
 
     self.output
   }

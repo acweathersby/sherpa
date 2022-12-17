@@ -14,8 +14,6 @@ pub const NORMAL_STATE_FLAG_LLVM: u32 = 1;
 
 #[derive(Debug)]
 pub struct LLVMTypes<'a> {
-  pub stack_struct: StructType<'a>,
-  pub ast_slot: StructType<'a>,
   pub reader: StructType<'a>,
   pub parse_ctx: StructType<'a>,
   pub token: StructType<'a>,
@@ -24,12 +22,8 @@ pub struct LLVMTypes<'a> {
   pub action: StructType<'a>,
   pub input_block: StructType<'a>,
   pub cp_info: StructType<'a>,
-  pub parse_result: StructType<'a>,
   /// The form of all functions that can be tail called.
   pub(crate) TAIL_CALLABLE_PARSE_FUNCTION: FunctionType<'a>,
-  /// Called by the AST builder to handle shift actions.
-  pub(crate) SHIFT_HANDLER_FUNCTION: FunctionType<'a>,
-  pub(crate) RESULT_HANDLER_FUNCTION: FunctionType<'a>,
 }
 
 #[derive(Debug)]
@@ -64,7 +58,6 @@ pub struct PublicFunctions<'a> {
   pub(crate) merge_utf8_part: FunctionValue<'a>,
   pub(crate) ctlz_i8: FunctionValue<'a>,
   pub(crate) get_token_class_from_codepoint: FunctionValue<'a>,
-  pub(crate) ast_builder: FunctionValue<'a>,
 }
 
 #[derive(Debug)]

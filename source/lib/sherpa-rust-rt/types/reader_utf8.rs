@@ -6,23 +6,21 @@ pub struct UTF8StringReader<'a> {
   cursor:     usize,
   line_count: usize,
   line_off:   usize,
-  data:       &'a [u8],
+  data:       &'a str,
   word:       u32,
   cp:         u32,
   source:     SharedSymbolBuffer,
 }
 
-impl<'a> LLVMCharacterReader for UTF8StringReader<'a> {}
+impl<'a> LLVMByteReader for UTF8StringReader<'a> {}
 
-impl<'a> ByteCharacterReader for UTF8StringReader<'a> {
-  fn get_bytes(&self) -> &[u8] {
+impl<'a> UTF8Reader for UTF8StringReader<'a> {
+  fn get_str(&self) -> &str {
     self.data
   }
 }
 
-impl<'a> UTF8CharacterReader for UTF8StringReader<'a> {}
-
-impl<'a> MutCharacterReader for UTF8StringReader<'a> {
+impl<'a> MutByteReader for UTF8StringReader<'a> {
   fn next(&mut self, amount: i32) -> u64 {
     Self::next_utf8(self, amount)
   }
@@ -48,7 +46,11 @@ impl<'a> MutCharacterReader for UTF8StringReader<'a> {
   }
 }
 
-impl<'a> BaseCharacterReader for UTF8StringReader<'a> {
+impl<'a> ByteReader for UTF8StringReader<'a> {
+  fn get_bytes(&self) -> &[u8] {
+    self.data.as_bytes()
+  }
+
   #[inline(always)]
   fn len(&self) -> usize {
     self.len
@@ -64,7 +66,7 @@ impl<'a> BaseCharacterReader for UTF8StringReader<'a> {
   }
 
   #[inline(always)]
-  fn dword(&self) -> u32 {
+  fn qword(&self) -> u32 {
     self.word
   }
 
@@ -123,11 +125,11 @@ impl<'a> BaseCharacterReader for UTF8StringReader<'a> {
 
 impl<'a> UTF8StringReader<'a> {
   pub fn from_string(string: &'a str) -> Self {
-    Self::new(string.as_bytes())
+    Self::new(string)
   }
 
   ///
-  pub fn new(data: &'a [u8]) -> UTF8StringReader<'a> {
+  pub fn new(data: &'a str) -> UTF8StringReader<'a> {
     let mut reader = UTF8StringReader {
       data:       data,
       len:        data.len(),
@@ -147,18 +149,12 @@ impl<'a> UTF8StringReader<'a> {
 
 impl<'a> From<&'a str> for UTF8StringReader<'a> {
   fn from(string: &'a str) -> Self {
-    Self::new(&string.as_bytes())
+    Self::new(string)
   }
 }
 
 impl<'a> From<&'a String> for UTF8StringReader<'a> {
   fn from(string: &'a String) -> Self {
-    Self::new(&string.as_bytes())
-  }
-}
-
-impl<'a> From<&'a [u8]> for UTF8StringReader<'a> {
-  fn from(data: &'a [u8]) -> Self {
-    Self::new(data)
+    Self::new(string.as_str())
   }
 }

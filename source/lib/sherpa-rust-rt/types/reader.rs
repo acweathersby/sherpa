@@ -21,7 +21,7 @@ pub type SharedSymbolBuffer = Arc<Vec<u8>>;
 ///   current location of the cursor.
 /// - Both the codepoint offset and byte offset of the last line
 /// encountered in the input.
-pub trait BaseCharacterReader {
+pub trait ByteReader {
   /// Returns true if the cursor has reached the end of
   /// the input stream.
 
@@ -37,7 +37,7 @@ pub trait BaseCharacterReader {
   /// Returns the word at the current cursor position, little
   /// Endian
 
-  fn dword(&self) -> u32;
+  fn qword(&self) -> u32;
 
   /// Returns the byte at the current cursor position.
   fn byte(&self) -> u32;
@@ -119,9 +119,11 @@ pub trait BaseCharacterReader {
 
   /// Returns an optional vector of the input string data.
   fn get_source(&self) -> SharedSymbolBuffer;
+
+  fn get_bytes(&self) -> &[u8];
 }
 
-pub trait MutCharacterReader {
+pub trait MutByteReader {
   fn set_cursor(&mut self, cursor: usize);
   fn set_codepoint(&mut self, code_point: u32);
   fn set_dword(&mut self, dword: u32);
@@ -130,17 +132,8 @@ pub trait MutCharacterReader {
   fn next(&mut self, amount: i32) -> u64;
 }
 
-pub trait ByteCharacterReader {
-  fn get_bytes(&self) -> &[u8];
-}
-
-pub trait UTF8CharacterReader {
-  fn next_utf8<
-    T: BaseCharacterReader + MutCharacterReader + UTF8CharacterReader + ByteCharacterReader,
-  >(
-    self_: &mut T,
-    amount: i32,
-  ) -> u64 {
+pub trait UTF8Reader {
+  fn next_utf8<T: ByteReader + MutByteReader + UTF8Reader>(self_: &mut T, amount: i32) -> u64 {
     self_.set_cursor((self_.cursor() as i32 + amount) as usize);
 
     if self_.at_end() {
@@ -149,7 +142,7 @@ pub trait UTF8CharacterReader {
       0
     } else {
       if amount == 1 {
-        self_.set_dword((self_.dword() >> 8) | ((self_.byte() as u32) << 24));
+        self_.set_dword((self_.qword() >> 8) | ((self_.byte() as u32) << 24));
 
         if self_.get_bytes()[self_.cursor()] == 10 {
           self_.set_line_count(self_.line_count() + 1);
@@ -190,21 +183,20 @@ pub trait UTF8CharacterReader {
         self_.set_dword(dword);
       }
 
-      self_.set_codepoint(get_utf8_code_point_from(self_.dword()));
+      self_.set_codepoint(get_utf8_code_point_from(self_.qword()));
 
       self_.get_type_info()
     }
   }
+
+  fn get_str(&self) -> &str;
 }
 
-pub trait LLVMCharacterReader {
+pub trait LLVMByteReader {
   /// Get a pointer to a sequence of bytes that can be read from the input given
   /// the cursor position. The second tuple values should be the length bytes that
   ///  can be read from the block.
-  fn get_byte_block_at_cursor<T: BaseCharacterReader + ByteCharacterReader>(
-    self_: &mut T,
-    input_block: &mut InputBlock,
-  ) {
+  fn get_byte_block_at_cursor<T: ByteReader>(self_: &mut T, input_block: &mut InputBlock) {
     let cursor = input_block.start;
     let size = ((self_.len() as i64) - (cursor as i64)).max(0) as u32;
 

@@ -1,12 +1,11 @@
 use sherpa_runtime::types::{
-  BaseCharacterReader,
-  ByteCharacterReader,
+  ByteReader,
   InputBlock,
-  LLVMCharacterReader,
-  MutCharacterReader,
+  LLVMByteReader,
+  MutByteReader,
   ParseToken,
   SharedSymbolBuffer,
-  UTF8CharacterReader,
+  UTF8Reader,
 };
 
 #[derive(Debug, Clone)]
@@ -15,16 +14,16 @@ pub struct TestUTF8StringReader<'a> {
   pub cursor:   usize,
   pub line_num: usize,
   pub line_off: usize,
-  pub string:   &'a [u8],
+  pub string:   &'a str,
   pub word:     u32,
   pub cp:       u32,
 }
 
-impl<'a> LLVMCharacterReader for TestUTF8StringReader<'a> {
+impl<'a> LLVMByteReader for TestUTF8StringReader<'a> {
   /// Get a pointer to a sequence of bytes that can be read from the input given
   /// the cursor position. The second tuple values should be the length bytes that
   ///  can be read from the block.
-  fn get_byte_block_at_cursor<T: BaseCharacterReader + ByteCharacterReader>(
+  fn get_byte_block_at_cursor<T: ByteReader + ByteReader>(
     self_: &mut T,
     input_block: &mut InputBlock,
   ) {
@@ -48,15 +47,13 @@ impl<'a> LLVMCharacterReader for TestUTF8StringReader<'a> {
   }
 }
 
-impl<'a> ByteCharacterReader for TestUTF8StringReader<'a> {
-  fn get_bytes(&self) -> &[u8] {
+impl<'a> UTF8Reader for TestUTF8StringReader<'a> {
+  fn get_str(&self) -> &str {
     self.string
   }
 }
 
-impl<'a> UTF8CharacterReader for TestUTF8StringReader<'a> {}
-
-impl<'a> MutCharacterReader for TestUTF8StringReader<'a> {
+impl<'a> MutByteReader for TestUTF8StringReader<'a> {
   fn next(&mut self, amount: i32) -> u64 {
     Self::next_utf8(self, amount)
   }
@@ -82,7 +79,11 @@ impl<'a> MutCharacterReader for TestUTF8StringReader<'a> {
   }
 }
 
-impl<'a> BaseCharacterReader for TestUTF8StringReader<'a> {
+impl<'a> ByteReader for TestUTF8StringReader<'a> {
+  fn get_bytes(&self) -> &[u8] {
+    self.string.as_bytes()
+  }
+
   #[inline(always)]
   fn len(&self) -> usize {
     self.len
@@ -94,7 +95,7 @@ impl<'a> BaseCharacterReader for TestUTF8StringReader<'a> {
   }
 
   #[inline(always)]
-  fn dword(&self) -> u32 {
+  fn qword(&self) -> u32 {
     self.word
   }
 
@@ -160,7 +161,7 @@ impl<'a> TestUTF8StringReader<'a> {
 
   pub fn new(string: &'a str) -> TestUTF8StringReader<'a> {
     let mut reader = TestUTF8StringReader {
-      string:   string.as_bytes(),
+      string:   string,
       len:      string.len(),
       cursor:   0,
       word:     0,

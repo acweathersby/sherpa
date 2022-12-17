@@ -31,11 +31,11 @@ use std::cell::UnsafeCell;
 
 use super::ast_node::HCObj;
 use super::ast_node::HCObjTrait;
-use super::ast_node::ReduceFunction;
+use super::ast_node::ReduceFunction_old;
 
 use crate::types::Token;
 
-type RF = ReduceFunction<ASTNode>;
+type RF = ReduceFunction_old<ASTNode>;
 
 type HCO = HCObj<ASTNode>;
 

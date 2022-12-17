@@ -4,14 +4,14 @@ use crate::{
     error::TokenError,
     recognizer::iterator::{ParseAction, ParseErrorCode, ParseIterator},
   },
-  grammar::data::ast_node::{HCObj, ReduceFunction},
+  grammar::data::ast_node::{HCObj, ReduceFunction_old},
   types::*,
 };
 use std::fmt::Debug;
 #[deprecated]
 pub fn complete<'b, I: ParseIterator<T>, T: 'b + ByteReader, Node: Debug>(
   iterator: &mut I,
-  fns: &'static [ReduceFunction<Node>],
+  fns: &'static [ReduceFunction_old<Node>],
 ) -> Result<HCObj<Node>, SherpaError> {
   let mut tokens: Vec<Token> = Vec::with_capacity(8);
 

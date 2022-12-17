@@ -91,7 +91,7 @@ pub(super) fn construct_inline_LR(
           t.get_node_mut(child_index).proxy_parents.push(parent_index);
         }
         std::collections::hash_map::Entry::Vacant(e) => {
-          // TODO: If we can call into a state then we shall
+          // TODO: If we can call into a state then we should
           match symbol {
             SymbolID::Production(..) => {
               let mut child_node =

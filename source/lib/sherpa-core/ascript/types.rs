@@ -128,6 +128,7 @@ pub enum AScriptTypeVal {
   F32Vec,
   F64Vec,
   Token,
+  TokenRange,
   UnresolvedProduction(ProductionId),
   Undefined,
   /// A generic struct
@@ -192,9 +193,10 @@ impl AScriptTypeVal {
   pub fn is_atom(&self) -> bool {
     use AScriptTypeVal::*;
     match self {
-      Token | Struct(..) | String(..) | Bool(..) | F64(..) | F32(..) | I64(..) | I32(..)
-      | I16(..) | I8(..) | U64(..) | U32(..) | U16(..) | U8(..) | F64Vec | F32Vec | I64Vec
-      | I32Vec | I16Vec | I8Vec | U64Vec | U32Vec | U16Vec | U8Vec | TokenVec | StringVec => true,
+      Token | TokenRange | Struct(..) | String(..) | Bool(..) | F64(..) | F32(..) | I64(..)
+      | I32(..) | I16(..) | I8(..) | U64(..) | U32(..) | U16(..) | U8(..) | F64Vec | F32Vec
+      | I64Vec | I32Vec | I16Vec | I8Vec | U64Vec | U32Vec | U16Vec | U8Vec | TokenVec
+      | StringVec => true,
       GenericStructVec(nodes) => {
         if nodes.len() == 1 {
           match nodes.first() {
@@ -291,6 +293,7 @@ impl AScriptTypeVal {
       StringVec => "Strings".to_string(),
       GenericStructVec(nodes) => format!("Nodes[{:?}]", nodes),
       Undefined => "Undefined".to_string(),
+      TokenRange => "Token".to_string(),
       Token => "Token".to_string(),
       GenericStruct(sub_types) => "Node".to_string(),
       Any => "Any".to_string(),
@@ -348,6 +351,7 @@ impl AScriptTypeVal {
       Token => "TOKEN".to_string(),
       GenericStruct(sub_types) => "Node".to_string(),
       Any => "Any".to_string(),
+      _ => "TOKEN_RANGE".to_string(),
       UnresolvedProduction(id) => match g {
         Some(g) => {
           let name = g.get_production_plain_name(id);
@@ -365,6 +369,7 @@ pub trait AScriptNumericType {
   fn from_f64(val: f64) -> AScriptTypeVal;
   fn string_from_f64(val: f64) -> String;
   fn to_fn_name() -> String;
+  fn from_tok_range_name() -> String;
   fn prim_type_name() -> &'static str;
 }
 
@@ -397,6 +402,11 @@ macro_rules! num_type {
       #[inline(always)]
       fn to_fn_name() -> String {
         "to_".to_string() + stringify!($type)
+      }
+
+      #[inline(always)]
+      fn from_tok_range_name() -> String {
+        format!("parse::<{}>", stringify!($type))
       }
     }
   };
@@ -453,7 +463,8 @@ pub struct AScriptStore {
   pub props: BTreeMap<AScriptPropId, AScriptProp>,
   pub prod_types: ProductionTypesTable,
   pub body_reduce_fn: BTreeMap<RuleId, (AScriptTypeVal, ASTNode)>,
-  pub name: String,
+  /// The type name of the AST Node enum,
+  pub ast_type_name: String,
   pub g: Arc<GrammarStore>,
   // Maps a struct id to a struct type name
   pub struct_lookups: Option<Arc<BTreeMap<AScriptStructId, String>>>,
@@ -466,7 +477,7 @@ impl AScriptStore {
       props: BTreeMap::new(),
       prod_types: BTreeMap::new(),
       body_reduce_fn: BTreeMap::new(),
-      name: "ASTNode".to_string(),
+      ast_type_name: "ASTNode".to_string(),
       struct_lookups: None,
       g: grammar,
     };
@@ -478,12 +489,12 @@ impl AScriptStore {
   }
 
   pub fn type_name(&self) -> String {
-    format!("{}Type", self.name)
+    format!("{}Type", self.ast_type_name)
   }
 
   /// The name for the generic type wrapper
   pub fn gen_name(&self) -> String {
-    format!("Gen{}", self.name)
+    format!("Gen{}", self.ast_type_name)
   }
 
   pub fn get_type_names(&mut self) -> Arc<BTreeMap<AScriptStructId, String>> {
@@ -511,7 +522,7 @@ impl Default for AScriptStore {
       prod_types: BTreeMap::new(),
       body_reduce_fn: BTreeMap::new(),
       struct_lookups: None,
-      name: "ASTNode".to_string(),
+      ast_type_name: "ASTNode".to_string(),
     }
   }
 }
