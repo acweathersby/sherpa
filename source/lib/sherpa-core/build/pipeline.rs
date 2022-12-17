@@ -383,6 +383,7 @@ pub fn compile_llvm_parser(grammar_source_path: &PathBuf, config: Config) -> boo
     .set_source_output_dir(&out_dir)
     .set_build_output_dir(&out_dir)
     .set_source_file_name("%.rs")
+    .add_task(build_bytecode_disassembly())
     .add_task(build_llvm_parser(None, true, true))
     .add_task(build_llvm_parser_interface());
 

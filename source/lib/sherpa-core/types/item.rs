@@ -193,6 +193,11 @@ pub(crate) struct Item {
   off:   u8,
 }
 
+pub(crate) struct SherpaItem<'a> {
+  item:  &'a Item,
+  state: ItemState,
+}
+
 impl Item {
   /// Creates a view of the item useful for debugging
   pub fn debug_string(&self, g: &GrammarStore) -> String {
@@ -550,7 +555,13 @@ pub(crate) struct FollowItemGroups {
 
 impl FollowItemGroups {
   pub fn get_all_items(&self) -> Items {
-    self.uncompleted_items.iter().chain(self.final_completed_items.iter()).map(|t| t.item).collect()
+    self
+      .uncompleted_items
+      .iter()
+      .chain(self.final_completed_items.iter())
+      .chain(self.intermediate_completed_items.iter())
+      .map(|t| t.item)
+      .collect()
   }
 
   pub fn get_uncompleted_items(&self) -> Items {

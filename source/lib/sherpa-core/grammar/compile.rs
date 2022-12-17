@@ -573,11 +573,19 @@ fn finalize_symbols(g: &mut GrammarStore, e: &mut [SherpaError]) {
 
         symbol.bytecode_id = symbol_bytecode_id;
 
-        let (_, production_id, ..) = get_scanner_info_from_defined(&sym_id, g);
+        let production_id = symbol.guid.get_production_id().unwrap_or_default();
 
-        let scanner_production = g.productions.get_mut(&production_id).unwrap();
+        let (_, token_production_id, d, ..) = get_scanner_info_from_defined(&sym_id, g);
+
+        let scanner_production = g.productions.get_mut(&token_production_id).unwrap();
 
         scanner_production.symbol_bytecode_id = symbol_bytecode_id;
+
+        if let Some(original_production) = g.productions.get_mut(&production_id) {
+          original_production.symbol_bytecode_id = symbol_bytecode_id;
+        };
+
+        println!("{} {}", d, symbol_bytecode_id);
 
         symbol_bytecode_id += 1;
       }
@@ -600,9 +608,11 @@ fn finalize_symbols(g: &mut GrammarStore, e: &mut [SherpaError]) {
       }
     }
 
-    prod.symbol_bytecode_id = symbol_bytecode_id;
+    if prod.symbol_bytecode_id == 0 {
+      prod.symbol_bytecode_id = symbol_bytecode_id;
 
-    symbol_bytecode_id += 1;
+      symbol_bytecode_id += 1;
+    }
   }
 }
 

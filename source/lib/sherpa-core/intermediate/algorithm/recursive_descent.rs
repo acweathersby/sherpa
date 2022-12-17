@@ -76,8 +76,10 @@ pub(crate) fn construct_recursive_descent(
     })
     .collect();
 
+  lane_items.print_items(&t.g, "");
+
   t.goto_seeds.append(&mut goto_seeds.to_set());
-  t.accept_items.append(&mut lane_items.clone().to_complete().to_set());
+  t.accept_items.append(&mut lane_items.clone().to_complete().to_origin_only_state().to_set());
 
   let mut root_node = GraphNode::new(&t, SymbolID::Start, None, starts.clone(), NodeType::RDStart);
 

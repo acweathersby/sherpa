@@ -1,9 +1,25 @@
+use sherpa_runtime::types::AstSlots;
+
 use crate::types::Token;
 
-pub type ReduceFunction<T> = fn(args: &mut Vec<HCObj<T>>, tok: Token);
+pub type ReduceFunction<T> = fn(slots: &mut AstSlots<(T, Token, Token)>);
+
+#[deprecated]
+pub type ReduceFunction_old<T> = fn(args: &mut Vec<HCObj<T>>, tok: Token);
+
+/// Used to calculate the max size of a
+/// AST node
+#[repr(C, u32)]
+pub enum DummyASTEnum {
+  None,
+  U64(u64),
+  NODE(Box<u64>),
+  VEC(Vec<u64>),
+  STRING(String),
+  TOKEN(Token),
+}
 
 #[derive(Debug, Clone)]
-
 pub enum HCObj<T: 'static> {
   NONE,
   LAZY(Lazy),

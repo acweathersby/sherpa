@@ -1,9 +1,11 @@
 //! Functions for resolving a set of ambiguous Items.
-use super::{
-  follow::get_follow_items,
-  LR::construct_inline_LR,
+use super::{follow::get_follow_items, LR::construct_inline_LR};
+use crate::{
+  grammar::hash_id_value_u64,
+  intermediate::utils::{hash_group_btreemap, hash_group_vec, symbols_occlude},
+  journal::Journal,
+  types::*,
 };
-use crate::{grammar::hash_id_value_u64, journal::Journal, types::*, intermediate::utils::{hash_group_btreemap, hash_group_vec, symbols_occlude}};
 use std::collections::{BTreeSet, VecDeque};
 use EdgeType::*;
 use NodeType::*;
@@ -20,15 +22,13 @@ pub(crate) fn peek(
 
   t.get_node_mut(root_par_id).set_attribute(NodeAttributes::I_PEEK_ORIGIN);
 
-  // t.get_node_mut(root_par_id).transition_items.clear();
-
   // Split items into groups based on symbol Ids.
   let goals = hash_group_vec(items.clone(), |index, i| {
-     if i.is_out_of_scope() {
+    if i.is_out_of_scope() {
       SymbolID::OutOfScope
     } else if i.completed() || j.config().enable_breadcrumb_parsing || t.is_scanner {
       SymbolID::DistinctGroup(index as u32)
-    } else{
+    } else {
       i.get_symbol(g)
     }
   });
@@ -39,18 +39,16 @@ pub(crate) fn peek(
     .iter()
     .enumerate()
     .flat_map(|(index, vec)| {
-
       let lane = t.increment_lane(1);
-      
-      let item_vec = 
-        vec.iter().into_iter().map(move |i| i.to_state(i.get_state().to_lane(lane).to_origin(
-          if i.is_out_of_scope() {
-            OriginData::OutOfScope(index)
-          }else {
-            OriginData::GoalIndex(index)
-          }
-        )));
-      
+
+      let item_vec = vec.iter().into_iter().map(move |i| {
+        i.to_state(i.get_state().to_lane(lane).to_origin(if i.is_out_of_scope() {
+          OriginData::OutOfScope(index)
+        } else {
+          OriginData::GoalIndex(index)
+        }))
+      });
+
       let slides: ItemSet = item_vec.clone().map(|i| i.to_null()).collect();
 
       t.get_node_mut(root_par_id).goto_items.append(&mut slides.to_vec());
@@ -62,8 +60,8 @@ pub(crate) fn peek(
   // t.get_node_mut(root_par_id).goto_items = initial_items.non_term_item_vec(g);
   // With our items now setup in lanes, we can start disambiguating
   let mut pending_items = VecDeque::from_iter(vec![(root_par_id, 0, initial_items)]);
- 
-  while let Some((par_id, depth, items)) = pending_items.pop_front() {
+
+  while let Some((par_id, peek_depth, items)) = pending_items.pop_front() {
     let mut EXCLUSIVE_COMPLETED = false;
 
     // Sort the items into groups of terminal and completed items.
@@ -73,24 +71,26 @@ pub(crate) fn peek(
 
     // Resolve completed items by getting their follow set.
     if completed_items.len() > 0 {
-
       insert_items_into_node(completed_items.clone(), t, par_id);
 
       let mut maybe_accept = vec![];
       for completed_item in completed_items {
-
         let follow_and_terminal_completed = get_follow_items(t, &completed_item, Some(par_id));
 
         maybe_accept
           .append(&mut Vec::from_linked(follow_and_terminal_completed.final_completed_items));
 
-        insert_items_into_node(Vec::from_linked(follow_and_terminal_completed.intermediate_completed_items), t, par_id);
+        insert_items_into_node(
+          Vec::from_linked(follow_and_terminal_completed.intermediate_completed_items),
+          t,
+          par_id,
+        );
 
-      //  if !completed_item.is_out_of_scope() {
-          closure.append(
-            &mut Vec::from_linked(follow_and_terminal_completed.uncompleted_items)
-              .closure_with_state(g),
-          )
+        //  if !completed_item.is_out_of_scope() {
+        closure.append(
+          &mut Vec::from_linked(follow_and_terminal_completed.uncompleted_items)
+            .closure_with_state(g),
+        )
         //}
       }
       // Items that are truly in the completed position, that is for a completed item
@@ -106,7 +106,6 @@ pub(crate) fn peek(
           // We can skip further processing if in occlusion tracking mode
         }
         0 | (1..) if all_items_are_out_of_scope(&maybe_accept) => {
-     
           let index = create_and_insert_node(
             t,
             SymbolID::EndOfInput,
@@ -120,11 +119,10 @@ pub(crate) fn peek(
           t.leaf_nodes.push(index);
         }
         1 => {
-
           if t.is_scanner {
             let exclusive: Vec<&Item> =
               items.iter().filter(|i| i.get_origin_sym().is_exclusive()).collect();
-              EXCLUSIVE_COMPLETED = exclusive.iter().any(|i| i.get_origin_sym().is_exclusive());
+            EXCLUSIVE_COMPLETED = exclusive.iter().any(|i| i.get_origin_sym().is_exclusive());
 
             #[cfg(debug_assertions)]
             {
@@ -140,7 +138,7 @@ pub(crate) fn peek(
 
           insert_items_into_node(items.clone(), t, par_id);
 
-          if depth == 0 {
+          if peek_depth == 0 {
             t.queue_node(ProcessGroup {
               node_index:   par_id,
               items:        get_goal_items(&items, &goals),
@@ -148,25 +146,23 @@ pub(crate) fn peek(
               depth:        global_depth,
             });
           } else if t.is_scanner || j.config().enable_breadcrumb_parsing {
-
             let node_index = create_and_insert_node(
               t,
               SymbolID::EndOfInput,
               vec![],
-              if t.is_scanner { Complete } else { BreadcrumbEndCompletion},
+              if t.is_scanner { Complete } else { BreadcrumbEndCompletion },
               Default,
               Some(par_id),
               Some(par_id),
               vec![],
             );
 
-            
             let origin = get_goal_origin(&items, &goals);
 
             // Submit these items to be processed.
             t.queue_node(ProcessGroup {
               node_index,
-              items: items.into_iter().map(|i|i.to_origin(origin)).collect(),
+              items: items.into_iter().map(|i| i.to_origin(origin)).collect(),
               discriminant: None,
               depth: global_depth,
             });
@@ -191,13 +187,21 @@ pub(crate) fn peek(
             });
           }
         }
-        (2..) if t.is_scanner  => {
-          resolveConflictingSymbols(t, j, items.into_iter().map(|i| {
-            match i.get_origin() {
-              OriginData::GoalIndex(index) => i.to_origin(goals[index][0].get_origin()),
-              _ => unreachable!()
-            }
-          }).collect(), depth, global_depth, par_id);
+        (2..) if t.is_scanner => {
+          resolveConflictingSymbols(
+            t,
+            j,
+            items
+              .into_iter()
+              .map(|i| match i.get_origin() {
+                OriginData::GoalIndex(index) => i.to_origin(goals[index][0].get_origin()),
+                _ => unreachable!(),
+              })
+              .collect(),
+            peek_depth,
+            global_depth,
+            par_id,
+          );
         }
         2.. => {
           items.print_items(g, "Conflicting items");
@@ -223,13 +227,14 @@ pub(crate) fn peek(
     }
 
     let term_items = closure.term_item_vec(g);
-    
-    insert_items_into_node(term_items.clone(), t, par_id);
 
-    let mut updated_closure = closure.non_term_item_vec(g);
+    insert_items_into_node(convert_origins(&term_items, &goals), t, par_id);
 
-
-    t.get_node_mut(par_id).goto_items.append(&mut updated_closure);
+    if peek_depth > 0 {
+      t.get_node_mut(par_id)
+        .goto_items
+        .append(&mut convert_origins(&closure.non_term_item_vec(g), &goals));
+    }
 
     if EXCLUSIVE_COMPLETED {
       continue;
@@ -248,13 +253,13 @@ pub(crate) fn peek(
       // is ambiguous
 
       // ---[OUT_OF_SCOPE handling]---------------------------------------------------------
-      // Here we isolate out of scope items from our normal parse items. This leads to 
-      // to the transition to out-of-scope ( and thus failed states ) only occurring on 
+      // Here we isolate out of scope items from our normal parse items. This leads to
+      // to the transition to out-of-scope ( and thus failed states ) only occurring on
       // the first level of peek, making our RA algorithm `k=1`, at least when out of
       // scope symbols are concerned. It is feasible to maintain ambiguous states that
       // have a mixture of in-scope and out-of-scope items for more levels of peeking,
-      // allowing for a high `k` value however this not the approach taken ATM. This 
-      // may change in the future. 
+      // allowing for a high `k` value however this not the approach taken ATM. This
+      // may change in the future.
       let items: Items = mixed_items.iter().filter(|i| !i.is_out_of_scope()).cloned().collect();
       // -----------------------------------------------------------------------------------
 
@@ -264,7 +269,7 @@ pub(crate) fn peek(
         1 if j.occlusion_tracking_mode() => {
           // We can skip further processing if in occlusions tracking mode
         }
-        0 |  (1..) if all_items_are_out_of_scope(&mixed_items) => {
+        0 | (1..) if all_items_are_out_of_scope(&mixed_items) => {
           // This symbol belongs to a follow item of the production. In this
           // we simply fail to allow the production to complete using the fall
           // back function
@@ -281,57 +286,71 @@ pub(crate) fn peek(
 
           t.leaf_nodes.push(index);
         }
-        1 if depth == 0 => {
-            // Reprocess the root node (which is always par_id when depth == 0)
-            // with the disambiguated items.
-            t.queue_node(ProcessGroup {
-              node_index:   par_id,
-              items:        get_goal_items(&items, &goals),
-              discriminant: Some((sym, items)),
-              depth:        global_depth,
-            });
+        1 if peek_depth == 0 => {
+          // Reprocess the root node (which is always par_id when depth == 0)
+          // with the disambiguated items.
+          t.queue_node(ProcessGroup {
+            node_index:   par_id,
+            items:        get_goal_items(&items, &goals),
+            discriminant: Some((sym, items)),
+            depth:        global_depth,
+          });
+        }
+        1 if t.is_scanner || j.config().enable_breadcrumb_parsing => {
+          if !j.config().enable_breadcrumb_parsing && t.is_scanner {
+            // Check to see if we can issue a call instead of increment.
+            // For that to work, all items need to be in an initial state,
+            // and the production .
+            if (convert_to_production_call(
+              t,
+              j,
+              par_id,
+              &items,
+              sym,
+              &goals,
+              peek_depth,
+              global_depth,
+            )?) {
+              continue;
+            }
           }
-        1  if t.is_scanner || j.config().enable_breadcrumb_parsing => {
+
           let origin = get_goal_origin(&items, &goals);
-            let items: Items = items.try_increment().into_iter().map(|i|i.to_origin(origin) ).collect();
-            let node_index = create_and_insert_node(
-              t,
-              sym,
-              vec![],
-              if t.is_scanner { Shift } else { BreadcrumbShiftCompletion },
-              Assert,
-              Some(par_id),
-              Some(par_id),
-              items.non_term_item_vec(g),
-            );
-            // Continue processing the now disambiguated items.
-            t.queue_node(ProcessGroup {
-              node_index,
-              items,
-              discriminant: None,
-              depth: global_depth,
-            });
-          } 
+          let items: Items =
+            items.try_increment().into_iter().map(|i| i.to_origin(origin)).collect();
+          let node_index = create_and_insert_node(
+            t,
+            sym,
+            vec![],
+            if t.is_scanner { Shift } else { BreadcrumbShiftCompletion },
+            Assert,
+            Some(par_id),
+            Some(par_id),
+            items.non_term_item_vec(g),
+          );
+          // Continue processing the now disambiguated items.
+          t.queue_node(ProcessGroup { node_index, items, discriminant: None, depth: global_depth });
+        }
         1 => {
-            let goal_items = get_goal_items(&items, &goals);
-            let node_index = create_and_insert_node(
-              t,
-              sym,
-              vec![],
-              PeekTransition,
-              get_edge_type(j,t,depth),
-              Some(par_id),
-              Some(root_par_id),
-              goal_items.non_term_item_vec(g),
-            );
-            // Submit these items to be processed.
-            t.queue_node(ProcessGroup {
-              node_index,
-              items: goal_items.clone(),
-              discriminant: None,
-              depth: global_depth,
-            });
-          }
+          let goal_items = get_goal_items(&items, &goals);
+          let node_index = create_and_insert_node(
+            t,
+            sym,
+            vec![],
+            PeekTransition,
+            get_edge_type(j, t, peek_depth),
+            Some(par_id),
+            Some(root_par_id),
+            goal_items.non_term_item_vec(g),
+          );
+          // Submit these items to be processed.
+          t.queue_node(ProcessGroup {
+            node_index,
+            items: goal_items.clone(),
+            discriminant: None,
+            depth: global_depth,
+          });
+        }
         2.. => {
           // We combine these items into a new node, then prepare their increments
           // for the next round.
@@ -340,7 +359,9 @@ pub(crate) fn peek(
           // The condition in which we can't continue are:
           // - Shift-Reduce conflicts
 
-          if !t.peek_ids.insert(hash_id_value_u64(items.clone().to_zero_state().to_set())) {
+          if !t.is_scanner
+            && !t.peek_ids.insert(hash_id_value_u64(items.clone().to_zero_state().to_set()))
+          {
             // Item set has been repeated
             let goal_items = get_goal_contents(&items, &goals);
             let lr_starts = goal_items.clone().into_iter().flatten().cloned().collect::<Vec<_>>();
@@ -350,12 +371,12 @@ pub(crate) fn peek(
             let root_node = create_node(
               t,
               sym,
-              lr_starts.clone(),
-              get_node_type(j,t),
-              get_edge_type(j,t,depth),
+              convert_origins(&lr_starts, &goals),
+              get_node_type(j, t),
+              get_edge_type(j, t, peek_depth),
               Some(par_id),
               Some(par_id),
-              lr_starts.non_term_item_vec(g),
+              convert_origins(&lr_starts, &goals),
             );
 
             match construct_inline_LR(t, j, root_node) {
@@ -369,7 +390,7 @@ pub(crate) fn peek(
                   sym,
                   lr_starts.clone(),
                   Fork,
-                  get_edge_type(j,t,depth),
+                  get_edge_type(j, t, peek_depth),
                   Some(par_id),
                   Some(par_id),
                   lr_starts.non_term_item_vec(g),
@@ -402,41 +423,22 @@ pub(crate) fn peek(
               }
             }
           } else {
-            if !t.is_scanner && !j.config().enable_breadcrumb_parsing && global_depth == 0 {
+            if !j.config().enable_breadcrumb_parsing && (t.is_scanner || global_depth == 0) {
               // Check to see if we can issue a call instead of increment.
               // For that to work, all items need to be in an initial state,
-              // and the follow items must all have shifted from the same
-              // non-terminal.
-    /*           let mut call_groups = hash_group_btreemap(in_scope_items.clone(), |_, i| {
-                let (items, _) = get_follow_items(t, &i, Some(par_id), 0);
-
-                if items.final_completed_items.is_empty() {
-                  Some(
-                    Vec::from_linked(items.uncompleted_items)
-                      .into_iter()
-                      .map(|i| i.decrement().unwrap().get_symbol(g))
-                      .collect::<BTreeSet<_>>(),
-                  )
-                } else {
-                  None
-                }
-              })
-              .into_iter()
-              .collect::<Vec<_>>();
-              if call_groups.len() == 1 && matches!(&call_groups[0].0, Some(d) if d.len() == 1) {
-                let (syms, items) = call_groups.pop().unwrap();
-
-                let mut node =
-                  GraphNode::new(&t, sym, Some(par_id), items.to_end(), get_node_type(j,t));
-                node.edge_type = get_edge_type(j,t,depth);
-                node.prod_sym = Some(syms.unwrap().into_iter().next().unwrap());
-                node.closure_parent = Some(par_id);
-
-                // End of the line - Let goto handle the reset.
-                // Submit these items to be processed.
-                t.goto_seeds.append(&mut items.to_zero_state().to_set());
+              // and the production .
+              if (convert_to_production_call(
+                t,
+                j,
+                par_id,
+                &items,
+                sym,
+                &goals,
+                peek_depth,
+                global_depth,
+              )?) {
                 continue;
-              } */
+              }
             }
 
             // Pack items into new peek node and submit their increments for
@@ -447,14 +449,14 @@ pub(crate) fn peek(
               t,
               sym,
               vec![],
-              get_node_type(j,t),
-              get_edge_type(j,t,depth),
+              get_node_type(j, t),
+              get_edge_type(j, t, peek_depth),
               Some(par_id),
               Some(par_id),
               incremented_items.non_term_item_vec(g),
             );
 
-            pending_items.push_back((node_index, depth + 1, incremented_items));
+            pending_items.push_back((node_index, peek_depth + 1, incremented_items));
           }
         }
 
@@ -468,31 +470,115 @@ pub(crate) fn peek(
   SherpaResult::Ok(())
 }
 
+fn convert_to_production_call(
+  t: &mut TransitionGraph,
+  j: &Journal,
+  par_id: NodeId,
+  items: &Items,
+  sym: SymbolID,
+  goals: &[Items],
+  depth: usize,
+  global_depth: usize,
+) -> SherpaResult<bool> {
+  let g = &t.g.clone();
+
+  let mut call_groups = hash_group_btreemap(items.clone(), |_, i| {
+    let origin = convert_origin(i, &goals);
+
+    if origin.at_start()
+      && (depth > 0 || !t.accept_items.contains(&origin.to_completed().to_origin_only_state()))
+    {
+      Some(i.get_prod_id(g))
+    } else {
+      None
+    }
+  })
+  .into_iter()
+  .collect::<Vec<_>>();
+
+  match (call_groups.len(), call_groups.pop()) {
+    (1, Some((Some(_), items))) => {
+      let mut continue_items = Items::new();
+
+      for (_, items) in hash_group_btreemap(items.clone(), |_, i| i.get_origin()) {
+        let results =
+          get_follow_items(t, &convert_origin(&items[0], &goals).to_completed(), Some(par_id));
+        continue_items.append(&mut results.get_all_items());
+      }
+
+      let production_sym = continue_items[0].decrement()?.get_symbol(g);
+
+      let node_index = create_and_insert_node(
+        t,
+        sym,
+        items.clone(),
+        NodeType::ProductionCall,
+        get_edge_type(j, t, depth),
+        Some(par_id),
+        Some(par_id),
+        continue_items.non_term_item_vec(g),
+      );
+      t.get_node_mut(node_index).prod_sym = Some(production_sym);
+
+      t.queue_node(ProcessGroup {
+        node_index,
+        items: continue_items.clone(),
+        discriminant: None,
+        depth: global_depth,
+      });
+
+      // End of the line - Let goto handle the reset.
+      // Submit these items to be processed.
+
+      if !t.is_scanner {
+        t.goto_seeds.append(&mut items.to_zero_state().to_set());
+      }
+
+      SherpaResult::Ok(true)
+    }
+    _ => SherpaResult::Ok(false),
+  }
+}
+
+fn convert_origins(pending: &Vec<Item>, goals: &Vec<Items>) -> Vec<Item> {
+  pending.into_iter().map(|item| convert_origin(item, goals)).collect()
+}
+
+fn convert_origin(item: &Item, goals: &[Items]) -> Item {
+  let index = match item.get_origin() {
+    OriginData::GoalIndex(index) | OriginData::OutOfScope(index) => index,
+    _ => {
+      panic!("Should only have items with Goal Indices in this context!")
+    }
+  };
+  item.to_origin(goals[index][0].get_state().get_origin())
+}
+
 fn all_items_are_out_of_scope(terminal_completions: &Vec<Item>) -> bool {
-    terminal_completions.iter().all(|i| i.is_out_of_scope())
+  terminal_completions.iter().all(|i| i.is_out_of_scope())
 }
 
 #[inline]
-fn get_goal_items(items: &Vec<Item>, goals: &Vec<Vec<Item>>) -> Vec<Item> {
-    get_goal_contents(items, goals).into_iter().flatten().cloned().collect()
+fn get_goal_items(items: &Vec<Item>, goals: &[Items]) -> Vec<Item> {
+  get_goal_contents(items, goals).into_iter().flatten().cloned().collect()
 }
 
 #[inline]
-fn get_goal_origin(items: &Vec<Item>, goals: &Vec<Vec<Item>>) -> OriginData {
-    get_goal_contents(items, goals).into_iter().flatten().next().unwrap().get_origin()
+fn get_goal_origin(items: &Vec<Item>, goals: &[Items]) -> OriginData {
+  get_goal_contents(items, goals).into_iter().flatten().next().unwrap().get_origin()
 }
 
 fn get_node_type(j: &Journal, t: &TransitionGraph) -> NodeType {
   if t.is_scanner {
     NodeType::Shift
-  } else if j.config().enable_breadcrumb_parsing  {
+  } else if j.config().enable_breadcrumb_parsing {
     NodeType::BreadcrumbTransition
   } else {
     NodeType::PeekTransition
   }
 }
 
-fn get_edge_type(j:&Journal, t: &TransitionGraph, depth: usize, ) -> EdgeType {
+fn get_edge_type(j: &Journal, t: &TransitionGraph, depth: usize) -> EdgeType {
   if depth > 0 && !t.is_scanner && !j.config().enable_breadcrumb_parsing {
     EdgeType::Peek
   } else {
@@ -518,19 +604,19 @@ fn resolveConflictingSymbols(
           _ => false,
         }
       }));
-      #[cfg(follow_tracking)]{
-
+      #[cfg(follow_tracking)]
+      {
         println!(
           "\nScan Mode: Conflicting items and their symbols:\n{}\n",
           completed_symbol_items
-          .iter()
-          .map(|i| match i.get_origin() {
-            OriginData::Symbol(sym) =>
-            format!("{{ {} => {} }}", i.debug_string(&t.g), sym.to_string(&t.g)),
-            _ => String::new(),
-          })
-          .collect::<Vec<_>>()
-          .join("\n")
+            .iter()
+            .map(|i| match i.get_origin() {
+              OriginData::Symbol(sym) =>
+                format!("{{ {} => {} }}", i.debug_string(&t.g), sym.to_string(&t.g)),
+              _ => String::new(),
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
         );
       }
     }
@@ -648,20 +734,17 @@ fn resolveConflictingSymbols(
   }
 }
 
-fn get_goal_contents<'a>(
-  items: &Items,
-  goals: &'a Vec<Items>,
-) -> Vec<&'a Items> {
+fn get_goal_contents<'a>(items: &Items, goals: &'a [Items]) -> Vec<&'a Items> {
   hash_group_btreemap(items.clone(), |_, i| match i.get_origin() {
-    OriginData::GoalIndex(index) |
-    OriginData::OutOfScope(index) =>index,
-    _  => panic!("Should only have items with Goal Indices in this context!")
+    OriginData::GoalIndex(index) | OriginData::OutOfScope(index) => index,
+    _ => panic!("Should only have items with Goal Indices in this context!"),
   })
-    .into_iter()
-    .map(|(g, _)| {
-      let goal_items = &goals[g];
-      goal_items
-    }).collect()
+  .into_iter()
+  .map(|(g, _)| {
+    let goal_items = &goals[g];
+    goal_items
+  })
+  .collect()
 }
 
 pub(super) fn insert_items_into_node(mut items: Items, t: &mut TransitionGraph, node_id: NodeId) {
@@ -732,7 +815,6 @@ fn merge_occluding_token_groups(
             to_sym.to_string(&t.g),
             from_sym.to_string(&t.g),
             from_group.to_debug_string(&t.g, "\n"),
-            
             groups[j].1.to_debug_string(&t.g, "\n")
           ));
           }
@@ -758,7 +840,7 @@ pub(super) fn create_node(
 
   node.edge_type = edge_type;
   node.closure_parent = closure_parent;
-  node.goto_items = goto_items;
+  node.goto_items = goto_items.non_term_item_vec(&t.g);
 
   node
 }
