@@ -26,5 +26,5 @@ pub fn main() {
 
   messages.iter().for_each(|s| println!("{}", s));
 
-  println!("-- dur: {:?}", duration)
+  eprintln!("-- dur: {:?}", duration)
 }

@@ -152,7 +152,9 @@ impl Journal {
           }
         }
       }
-      LockResult::Err(err) => println!("Unable to acquire a read lock on the global pad:\n{}", err),
+      LockResult::Err(err) => {
+        eprintln!("Unable to acquire a read lock on the global pad:\n{}", err)
+      }
     }
   }
 
@@ -184,9 +186,9 @@ impl Journal {
     self.get_reports(ReportType::Any, |report| {
       let errors = report.errors();
       if errors.len() > 0 {
-        println!("\n{:=<80}\nReport [{}] errors:", "", report.name);
+        eprintln!("\n{:=<80}\nReport [{}] errors:", "", report.name);
         for err in report.errors() {
-          println!("{}", err);
+          eprintln!("{}", err);
         }
       }
     });

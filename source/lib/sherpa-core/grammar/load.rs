@@ -161,7 +161,7 @@ fn test_load_all() {
   );
 
   for err in &errors {
-    println!("{}", err);
+    eprintln!("{}", err);
   }
   assert_eq!(grammars.len(), 2);
   assert_eq!(errors.len(), 0);
@@ -176,7 +176,7 @@ fn test_load_all() {
   );
 
   for err in &errors {
-    println!("{}", err);
+    eprintln!("{}", err);
   }
   assert_eq!(grammars.len(), 1);
   assert_eq!(errors.len(), 1);

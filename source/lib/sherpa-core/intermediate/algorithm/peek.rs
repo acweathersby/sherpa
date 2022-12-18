@@ -606,7 +606,7 @@ fn resolveConflictingSymbols(
       }));
       #[cfg(follow_tracking)]
       {
-        println!(
+        eprintln!(
           "\nScan Mode: Conflicting items and their symbols:\n{}\n",
           completed_symbol_items
             .iter()

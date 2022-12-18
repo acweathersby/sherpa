@@ -337,7 +337,7 @@ pub trait SherpaErrorPrint {
 impl SherpaErrorPrint for Vec<SherpaError> {
   fn debug_print(&self) {
     for error in self {
-      println!("{}", error.to_string());
+      eprintln!("{}", error.to_string());
     }
   }
 

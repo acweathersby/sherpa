@@ -28,7 +28,7 @@ fn temp_test() {
 
   if errors.len() > 0 {
     for error in errors {
-      println!("{}", error);
+      eprintln!("{}", error);
     }
   }
 
@@ -42,7 +42,7 @@ fn temp_test() {
     }
     SherpaResult::Ok((_, Some(errors))) => {
       for err in errors {
-        println!("{}", err);
+        eprintln!("{}", err);
       }
       panic!("Errors occurred while compiling")
     }

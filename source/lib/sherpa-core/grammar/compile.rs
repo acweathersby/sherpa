@@ -138,7 +138,7 @@ fn test_compile_grammars_into_store() {
     }
     SherpaResult::Ok((_, Some(errors))) => {
       for err in errors {
-        println!("{}", err);
+        eprintln!("{}", err);
       }
       panic!("Errors occurred while compiling")
     }
@@ -584,8 +584,6 @@ fn finalize_symbols(g: &mut GrammarStore, e: &mut [SherpaError]) {
         if let Some(original_production) = g.productions.get_mut(&production_id) {
           original_production.symbol_bytecode_id = symbol_bytecode_id;
         };
-
-        println!("{} {}", d, symbol_bytecode_id);
 
         symbol_bytecode_id += 1;
       }

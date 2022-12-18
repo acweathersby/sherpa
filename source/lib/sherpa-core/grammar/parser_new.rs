@@ -39,7 +39,7 @@ mod test_parser_build {
 
       let dissasembly = generate_disassembly(&output, Some(&mut j));
 
-      println!("{}", dissasembly);
+      eprintln!("{}", dissasembly);
 
       if let Ok(mut parser_data_file) = std::fs::File::create(&output_file) {
         parser_data_file.write_all(&dissasembly.as_bytes()).unwrap();

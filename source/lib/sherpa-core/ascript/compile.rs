@@ -836,7 +836,7 @@ pub fn compile_struct_props(
   // struct entry and add props.
 
   if ast.structs.get(&id).unwrap().type_name == "SetProd" {
-    println!(
+    eprintln!(
       "Configuring SetProd:\nbody:{}\ncurr_struct:\n{:#?}\nprops:[\n{}\n]\nast:{:#?}",
       rule.blame_string(&ast.g),
       ast.structs.get(&id),

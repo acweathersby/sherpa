@@ -34,7 +34,7 @@ fn test_pipeline() -> SherpaResult<()> {
 
   for state in states.values_mut() {
     if state.get_ast().is_none() {
-      println!("--FAILED: {:?}", state.compile_ast())
+      eprintln!("--FAILED: {:?}", state.compile_ast())
     }
   }
 

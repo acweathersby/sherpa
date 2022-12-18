@@ -347,7 +347,7 @@ pub fn compile_states(
       SherpaResult::MultipleErrors(errors) => {
         // Same as above
         for error in errors {
-          println!("{}", error);
+          eprintln!("{}", error);
         }
         panic!("Unexpected errors have occurred, cannot continue");
       }

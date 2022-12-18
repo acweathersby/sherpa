@@ -23,7 +23,7 @@ pub(super) fn get_follow_items(
   let g = &grammar;
   let empty = vec![];
   #[cfg(follow_tracking)]
-  println!("\n\n---- Follow start on {} ----", root_completed_item.debug_string(g));
+  eprintln!("\n\n---- Follow start on {} ----", root_completed_item.debug_string(g));
 
   static empty_vec: Vec<Item> = Vec::new();
   // Starting at the top we grab the closure to the nearest
@@ -36,7 +36,7 @@ pub(super) fn get_follow_items(
   )]);
   while let Some((state, linked)) = completed_items.pop_front() {
     #[cfg(follow_tracking)]
-    println!(
+    eprintln!(
       "\nLooking for matches for  {} in {:?} with state {}",
       linked.item.debug_string(g),
       linked.closure_node,
@@ -104,7 +104,7 @@ pub(super) fn get_follow_items(
           if empty_closure.is_empty() =>
         {
           #[cfg(follow_tracking)]
-          println!("no closure for Node [{:?}] - Selecting previous node", current_node);
+          eprintln!("no closure for Node [{:?}] - Selecting previous node", current_node);
           completed_items.push_back((state, LinkedItem {
             item:         completed_item,
             closure_node: Some(prev_node),
@@ -128,7 +128,7 @@ pub(super) fn get_follow_items(
           }
           #[cfg(follow_tracking)]
           {
-            println!("no closure for Node [{:?}] - Should be at root node.", root_node);
+            eprintln!("no closure for Node [{:?}] - Should be at root node.", root_node);
           }
           // This item should match one of the root items when set to completed
           if completed_item == *root_completed_item {
@@ -251,15 +251,17 @@ pub(super) fn get_follow_items(
           // Check to see if we have an accept item
           #[cfg(follow_tracking)]
           {
-            println!("Evaluating potential leaf node ------------------");
-            println!("---- {}", _completed_item.to_state(state).debug_string(&t.g));
+            eprintln!("Evaluating potential leaf node ------------------");
+            eprintln!("---- {}", _completed_item.to_state(state).debug_string(&t.g));
             t.accept_items().print_items(g, "Accepting Items");
           }
-          if t.accept_items().contains(&_completed_item.to_state(state)) {
+
+          if t.accept_items().contains(&_completed_item.to_origin_only_state()) {
             fin_items.insert(LinkedItem { item: completed_item, closure_node: None });
           } else {
-            dbg!(_completed_item, _closure, _prev_node, _current_node);
-            println!("All possible conditions should be covered by the above")
+            eprintln!("All possible conditions should be covered by the above: ");
+            eprintln!("completed_items: {}", _completed_item.debug_string(g));
+            t.accept_items().print_items(g, "Accept Items");
           }
         }
       }
@@ -270,7 +272,7 @@ pub(super) fn get_follow_items(
     Items::from_linked(fin_items.clone()).print_items(g, "Completed Final Items");
     Items::from_linked(intermediate.clone()).print_items(g, "Intermediate Items");
     Items::from_linked(out.clone()).print_items(g, "Uncompleted Items");
-    println!("---- Follow end on {} ----\n\n", root_completed_item.debug_string(g));
+    eprintln!("---- Follow end on {} ----\n\n", root_completed_item.debug_string(g));
   }
 
   FollowItemGroups {

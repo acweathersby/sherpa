@@ -27,7 +27,7 @@ use super::compile_bytecode;
 
     let mut result = compile_production_states(&mut j, prod_id)?;
 
-    println!("{:#?}", result);
+    eprintln!("{:#?}", result);
 
     let ir_state = result.remove(0);
 
@@ -35,7 +35,7 @@ use super::compile_bytecode;
 
     let result = compile_ir_ast(Vec::from(state.as_bytes()));
 
-    println!("{:#?}", result);
+    eprintln!("{:#?}", result);
 
     assert!(result.is_ok());
 
@@ -47,7 +47,7 @@ use super::compile_bytecode;
       "",
     );
 
-    println!("{:#?}", result);
+    eprintln!("{:#?}", result);
 
     SherpaResult::Ok(())
   }
@@ -117,7 +117,7 @@ use super::compile_bytecode;
 
     let output = compile_bytecode(&mut j, results);
 
-    println!(
+    eprintln!(
       "dD: {}",
       debug::generate_disassembly(&output, Some(&mut j))
     );
@@ -149,7 +149,7 @@ use super::compile_bytecode;
     let mut results = optimize_ir_states(&mut j, states);
 
     let output = compile_bytecode(&mut j, results);
-    println!(
+    eprintln!(
       "dD: {}",
       debug::generate_disassembly(&output, Some(&mut j))
     );
@@ -179,9 +179,9 @@ use super::compile_bytecode;
     let result = compile_production_states(&mut j, prod_id)?;
 
     for state in result {
-      println!("{:#?}", state.get_code());
+      eprintln!("{:#?}", state.get_code());
     }
-    // println!(
+    // eprintln!(
     //   "dD: {}",
     //   debug::generate_disassembly(&output, Some(&BytecodeGrammarLookups::new(&g)))
     // );

@@ -272,7 +272,7 @@ pub(crate) fn check_for_left_recursion(symbol_items: &Items, g: &GrammarStore) {
         .intersects(RecursionType::LEFT_DIRECT | RecursionType::LEFT_INDIRECT);
 
       if has_left {
-        println!(
+        eprintln!(
           "[{}] {}",
           production.name,
           production.loc.blame(1, 1, "this production is left recursive", None),

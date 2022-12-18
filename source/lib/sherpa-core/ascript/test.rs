@@ -309,7 +309,7 @@ fn rust_vector_return_types_print_correctly() -> SherpaResult<()> {
 
   super::rust::write(&ascript, &mut writer)?;
 
-  println!("{}", String::from_utf8(writer.into_output())?);
+  eprintln!("{}", String::from_utf8(writer.into_output())?);
 
   Ok(())
 }

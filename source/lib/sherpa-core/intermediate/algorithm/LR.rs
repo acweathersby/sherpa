@@ -121,7 +121,6 @@ pub(super) fn construct_inline_LR(
 
     match end_items.len() {
       2.. => {
-        end_items.print_items(g, "LR End Items");
         // Get the follow for each node.
         let end_items = end_items
           .into_iter()

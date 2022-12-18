@@ -110,8 +110,6 @@ pub fn compile_mod(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
   let grammar = output.join("");
 
-  println!("{}", grammar);
-
   let root_dir = std::env::var("CARGO_MANIFEST_DIR").map(|d| PathBuf::from(&d)).unwrap();
 
   let mut pipeline = BuildPipeline::proc_context(&grammar, &root_dir, Default::default());

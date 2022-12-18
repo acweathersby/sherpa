@@ -107,7 +107,7 @@ impl Report {
     match self.timings.entry(timer_label) {
       std::collections::hash_map::Entry::Occupied(e) => {
         let timing = e.get();
-        println!("{} took {:?}", timer_label, (timing.end - timing.start))
+        eprintln!("{} took {:?}", timer_label, (timing.end - timing.start))
       }
       std::collections::hash_map::Entry::Vacant(_) => {}
     }

@@ -547,7 +547,7 @@ impl TransitionGraph {
   pub fn print_nodes(&self) {
     for node in &self.nodes {
       if !node.is_orphan(self) || node.id.0 == 0 {
-        println!("{}\n", node.debug_string(&self.g));
+        eprintln!("{}\n", node.debug_string(&self.g));
       }
     }
   }

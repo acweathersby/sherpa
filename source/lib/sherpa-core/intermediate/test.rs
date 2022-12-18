@@ -115,7 +115,7 @@ pub fn production_reduction_decisions() -> SherpaResult<()> {
   j.flush_reports();
   j.debug_print_reports(ReportType::ProductionCompile(prod_id));
 
-  println!("{:#?}", result);
+  eprintln!("{:#?}", result);
 
   assert_eq!(result.len(), 11);
   SherpaResult::Ok(())
@@ -130,7 +130,7 @@ pub fn compile_production_states_with_basic_grammar() -> SherpaResult<()> {
 
   let result = compile_production_states(&mut j, prod_id)?;
 
-  println!("{:#?}", result);
+  eprintln!("{:#?}", result);
 
   assert_eq!(result.len(), 7);
   SherpaResult::Ok(())
@@ -145,7 +145,7 @@ pub fn compile_production_states_with_basic_grammar_with_one_optional_token() ->
 
   let result = compile_production_states(&mut j, prod_id)?;
 
-  println!("{:#?}", result);
+  eprintln!("{:#?}", result);
 
   assert_eq!(result.len(), 17);
   SherpaResult::Ok(())
@@ -160,7 +160,7 @@ pub fn compile_production_states_with_basic_grammar_with_left_recursion() -> She
 
   match compile_production_states(&mut j, prod_id) {
     SherpaResult::Ok(result) => {
-      println!("{:#?}", result);
+      eprintln!("{:#?}", result);
 
       j.flush_reports();
       j.debug_print_reports(ReportType::Any);
@@ -189,11 +189,11 @@ pub fn compile_production_states_with_synthesized_scanner_state() -> SherpaResul
     .cloned()
     .collect::<BTreeSet<_>>();
 
-  println!("{:#?}", symbols.iter().map(|s| g.symbol_strings.get(s)).collect::<Vec<_>>());
+  eprintln!("{:#?}", symbols.iter().map(|s| g.symbol_strings.get(s)).collect::<Vec<_>>());
 
   let result = compile_scanner_states(&mut j, symbols)?;
 
-  println!("{:#?}", result);
+  eprintln!("{:#?}", result);
 
   assert_eq!(result.len(), 4);
   SherpaResult::Ok(())
@@ -221,7 +221,7 @@ pub fn generate_production_state_with_scanner_function() -> SherpaResult<()> {
 
   let result = compile_scanner_states(&mut j, BTreeSet::from_iter(vec![*token_production]))?;
 
-  println!("{:#?}", result);
+  eprintln!("{:#?}", result);
 
   assert_eq!(result.len(), 5);
   SherpaResult::Ok(())
@@ -242,7 +242,7 @@ pub fn generate_conflicts() -> SherpaResult<()> {
   let states =
     compile_production_states(&mut j, grammar.get_production_id_by_name("line_comment").unwrap())?;
 
-  println!("{:#?}", states);
+  eprintln!("{:#?}", states);
   // assert_eq!(errors.len(), 1);
   SherpaResult::Ok(())
 }
@@ -266,7 +266,7 @@ pub fn generate_A_state_of_a_merged_grammar_with_extended_production() -> Sherpa
   j.flush_reports();
   j.debug_print_reports(ReportType::Any);
 
-  // println!("{}", report.debug_string());
+  // eprintln!("{}", report.debug_string());
 
   // assert!(report.errors()[0].is(WarnTransitionAmbiguousProduction::friendly_name));
 
@@ -301,7 +301,7 @@ pub fn handle_moderate_scanner_token_combinations() -> SherpaResult<()> {
 
   let result = compile_scanner_states(&mut j, syms)?;
 
-  println!("{:#?}", result);
+  eprintln!("{:#?}", result);
 
   assert_eq!(result.len(), 7);
   SherpaResult::Ok(())
@@ -544,7 +544,7 @@ pub fn generate_annotated_symbol() -> SherpaResult<()> {
   j.flush_reports();
   j.debug_print_reports(ReportType::ProductionCompile(prod_id));
 
-  println!("{:#?}", result);
+  eprintln!("{:#?}", result);
 
   assert_eq!(result.len(), 10);
   SherpaResult::Ok(())
@@ -587,7 +587,7 @@ pub fn generate_production_with_recursion() -> SherpaResult<()> {
   j.flush_reports();
   j.debug_print_reports(ReportType::ProductionCompile(prod_id));
 
-  println!("{:#?}", result);
+  eprintln!("{:#?}", result);
 
   assert_eq!(result.len(), 6);
   SherpaResult::Ok(())
@@ -622,7 +622,7 @@ pub fn generate_scanner_production_with_recursion() -> SherpaResult<()> {
 
   let result = compile_scanner_states(&mut j, symbols.clone())?;
 
-  println!("{:#?}", result);
+  eprintln!("{:#?}", result);
 
   j.flush_reports();
   j.debug_print_reports(ReportType::ScannerCompile(ScannerStateId::new(&symbols)));
@@ -788,7 +788,7 @@ pub fn generate_production_with_recursiond() -> SherpaResult<()> {
   assert_eq!(result.len(), 7);
   // if let Some(prod) = get_production_id_by_name("line", &grammar) {
   //   let result = compile_production_states(&prod, &grammar);
-  //   println!("{:#?}", result);
+  //   eprintln!("{:#?}", result);
   // }
   SherpaResult::Ok(())
 }
@@ -816,12 +816,12 @@ fn test_construct_LR() -> SherpaResult<()> {
   let report = j.report();
   if report.have_errors_of_type(SherpaErrorSeverity::Critical) {
     for error in report.errors() {
-      println!("{}", error);
+      eprintln!("{}", error);
     }
   }
 
   for state in states {
-    println!("{}", state.to_string())
+    eprintln!("{}", state.to_string())
   }
   SherpaResult::Ok(())
 }
@@ -866,7 +866,7 @@ fn test_peek() -> SherpaResult<()> {
     let ReportType::ProductionCompile(prod_id) = report.report_type else {return};
 
     if let Some(note) = report.get_note("RD Graph Nodes") {
-      println!(
+      eprintln!(
         "Production [ {} ] Recursive Descent Graph =>\n{}",
         g.get_production_plain_name(&prod_id),
         note
@@ -874,7 +874,7 @@ fn test_peek() -> SherpaResult<()> {
     }
 
     if let Some(note) = report.get_note("RA Graph Nodes") {
-      println!(
+      eprintln!(
         "Production [ {} ] Recursive Ascent Graph =>\n{}",
         g.get_production_plain_name(&prod_id),
         note
@@ -883,7 +883,7 @@ fn test_peek() -> SherpaResult<()> {
   });
   //  j.get_reports(ReportType::Disassembly, |report| {
   // if let Some(note) = report.get_note("Output") {
-  // println!("{}", note);
+  // eprintln!("{}", note);
   // }
   // });
   SherpaResult::Ok(())
@@ -898,8 +898,8 @@ fn test_peek3() -> SherpaResult<()> {
     enable_breadcrumb_parsing: true,
     ..Default::default()
   }));
-  println!("Item State Size {}", std::mem::size_of::<ItemState>());
-  println!("Item Size {}", std::mem::size_of::<Item>());
+  eprintln!("Item State Size {}", std::mem::size_of::<ItemState>());
+  eprintln!("Item Size {}", std::mem::size_of::<Item>());
   let g = GrammarStore::from_str(
     &mut j,
     r##"
@@ -944,12 +944,12 @@ fn test_peek3() -> SherpaResult<()> {
 // let report = j.report();
 // if report.have_errors_of_type(SherpaErrorSeverity::Critical) {
 // for error in report.errors() {
-// println!("{}", error);
+// eprintln!("{}", error);
 // }
 // }
 //
 // for state in states {
-// println!("{}", state.to_string())
+// eprintln!("{}", state.to_string())
 // }
 //
 // SherpaResult::Ok(())
@@ -977,15 +977,42 @@ fn grammar_with_exclusive_symbols() -> SherpaResult<()> {
   let states = optimize_ir_states(&mut j, states);
 
   for (_, state) in &states {
-    println!("{}", state.get_code());
+    eprintln!("{}", state.get_code());
   }
 
   let bc = compile_bytecode(&mut j, states);
 
-  println!("{}", generate_disassembly(&bc, Some(&mut j)));
+  eprintln!("{}", generate_disassembly(&bc, Some(&mut j)));
 
   j.flush_reports();
   j.debug_print_reports(ReportType::Optimize);
+
+  SherpaResult::Ok(())
+}
+
+#[test]
+fn scientific_numeric_token() -> SherpaResult<()> {
+  let input = r##"
+
+  <> num > tk:number
+
+  <> number > ( \+ | \- )? g:num(+) ( \. g:num(+) )? ( ( \E | \e ) ( \+ | \- )? g:num(+) )?
+
+"##;
+  let mut j = Journal::new(Some(Config { ..Default::default() }));
+
+  let g = GrammarStore::from_str(&mut j, input).unwrap();
+
+  let prod_id = g.get_production_id_by_name("tk:number")?;
+
+  let states = compile_token_production_states(&mut j, prod_id)?;
+
+  for (state) in &states {
+    eprintln!("{}", state.get_code());
+  }
+
+  j.flush_reports();
+  j.debug_print_reports(ReportType::TokenProductionCompile(Default::default()));
 
   SherpaResult::Ok(())
 }
@@ -1008,12 +1035,12 @@ fn raddler() -> SherpaResult<()> {
   let states = optimize_ir_states(&mut j, states);
 
   for (_, state) in &states {
-    println!("{}", state.get_code());
+    eprintln!("{}", state.get_code());
   }
 
   let bc = compile_bytecode(&mut j, states);
 
-  println!("{}", generate_disassembly(&bc, Some(&mut j)));
+  eprintln!("{}", generate_disassembly(&bc, Some(&mut j)));
 
   j.flush_reports();
   j.debug_print_reports(ReportType::ProductionCompile(Default::default()));
