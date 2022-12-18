@@ -22,6 +22,11 @@ pub struct TokenRange {
   pub line_off: u32,
 }
 
+#[test]
+fn token_range_size_is_16() {
+  assert_eq!(std::mem::size_of::<TokenRange>(), 16)
+}
+
 impl PartialOrd for TokenRange {
   fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
     Some(self.cmp(other))

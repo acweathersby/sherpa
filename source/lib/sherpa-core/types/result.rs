@@ -202,7 +202,6 @@ impl<T> FromResidual<SherpaResult<Infallible>> for SherpaResult<T> {
     match residual {
       SherpaResult::Err(err) => SherpaResult::Err(err),
       SherpaResult::MultipleErrors(err) => SherpaResult::MultipleErrors(err),
-      SherpaResult::Err(err) => SherpaResult::Err(err),
       _ => SherpaResult::None,
     }
   }

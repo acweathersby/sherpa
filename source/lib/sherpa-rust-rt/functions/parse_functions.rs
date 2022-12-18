@@ -61,37 +61,38 @@ fn shift<T: ByteReader + MutByteReader + MutByteReader>(
   r: &mut T,
 ) -> (ParseAction, u32) {
   if instr.get_value() & 0x1 == 1 {
-    ctx.assert.byte_length = 0;
-    ctx.assert.cp_length = 0;
+    ctx.assert.0.len = 0;
   }
 
   let mut skip = ctx.anchor;
   let mut shift = ctx.assert;
 
-  let next_token = shift.next();
+  let next_token = next_token(shift);
 
   ctx.assert = next_token;
 
   if ctx.is_scanner() {
-    r.next(shift.byte_length as i32);
+    r.next(shift.0.len as i32);
   } else {
     ctx.anchor = next_token;
   }
 
-  skip.cp_length = shift.cp_offset - skip.cp_offset;
-  skip.byte_length = shift.byte_offset - skip.byte_offset;
+  skip.0.len = shift.0.off - skip.0.off;
 
   (ParseAction::Shift { 
-    anchor_byte_offset:skip.byte_offset,
-    anchor_cp_offset: skip.cp_offset,
-    token_byte_offset:shift.byte_offset,
-    token_cp_offset: shift.cp_offset,
-    token_byte_length:shift.byte_length,
-    token_cp_length: shift.cp_length,
-    token_line_count: shift.line_number,
-    token_line_offset: shift.line_offset,
-    token_type_info: 0
+    anchor_byte_offset:skip.0.off,
+    token_byte_offset:shift.0.off,
+    token_byte_length:shift.0.off,
+    token_line_count: shift.0.line_num,
+    token_line_offset: shift.0.line_off,
    }, i + 1)
+}
+
+fn next_token(shift: (TokenRange, u32)) -> (TokenRange, u32) {
+    let mut next_token = shift.0;
+    next_token.off +=next_token.len;
+    next_token.len = 0;
+    (next_token, shift.1)
 }
 
 #[inline]
@@ -174,10 +175,9 @@ fn set_token_state<T: ByteReader + MutByteReader>(
 
   let assert = ctx.assert;
 
-  anchor.token_type = value;
+  anchor.1 = value;
 
-  anchor.byte_length = assert.byte_offset - anchor.byte_offset;
-  anchor.cp_length = assert.cp_offset - anchor.cp_offset;
+  anchor.0.len = assert.0.off - anchor.0.off;
 
   ctx.anchor = anchor;
 
@@ -219,9 +219,9 @@ fn noop(i: u32) -> u32 {
 #[inline]
 fn skip_token<T: ByteReader + MutByteReader>(ctx: &mut ParseContext<T>, r: &mut T) {
   if ctx.in_peek_mode() {
-    ctx.peek = ctx.peek.next();
+    ctx.peek = next_token(ctx.peek);
   } else {
-    ctx.assert = ctx.assert.next();
+    ctx.assert = next_token(ctx.assert);
   }
 }
 
@@ -341,16 +341,16 @@ fn get_token_value<T: ByteReader + MutByteReader>(
 
             ctx.set_peek_mode_to(true);
 
-            r.set_cursor_to(&basis_token.next());
+            r.set_cursor_to(&next_token(basis_token).0);
 
-            basis_token.next()
+            next_token(basis_token)
         }
         _ /*| LEXER_TYPE::ASSERT*/ => {
             if ctx.in_peek_mode() {
                 
                 ctx.set_peek_mode_to(false);
 
-                r.set_cursor_to(&ctx.assert );
+                r.set_cursor_to(&ctx.assert.0 );
             }
 
             ctx.assert
@@ -359,8 +359,7 @@ fn get_token_value<T: ByteReader + MutByteReader>(
 
   match input_type {
     INPUT_TYPE::T03_CLASS => {
-      active_token.byte_length = r.codepoint_byte_length();
-      active_token.cp_length = r.codepoint_length();
+      active_token.0.len = r.codepoint_byte_length();
 
       if ctx.in_peek_mode() {
         ctx.peek = active_token;
@@ -372,8 +371,7 @@ fn get_token_value<T: ByteReader + MutByteReader>(
     }
 
     INPUT_TYPE::T04_CODEPOINT => {
-      active_token.byte_length = r.codepoint_byte_length();
-      active_token.cp_length = r.codepoint_length();
+      active_token.0.len = r.codepoint_byte_length();
 
       if ctx.in_peek_mode() {
         ctx.peek = active_token;
@@ -385,8 +383,7 @@ fn get_token_value<T: ByteReader + MutByteReader>(
     }
 
     INPUT_TYPE::T05_BYTE => {
-      active_token.byte_length = 1;
-      active_token.cp_length = 1;
+      active_token.0.len = 1;
 
       if ctx.in_peek_mode() {
         ctx.peek = active_token;
@@ -407,7 +404,7 @@ fn get_token_value<T: ByteReader + MutByteReader>(
         ctx.assert = scanned_token;
       }
 
-      scanned_token.token_type as i32
+      scanned_token.1 as i32
     }
   }
 }
@@ -417,8 +414,7 @@ fn scan_for_improvised_token<T: ByteReader + MutByteReader>(
   r: &mut T,
 ) {
   let mut assert = scan_ctx.assert;
-  assert.byte_length = r.codepoint_byte_length();
-  assert.cp_length = 1;
+  assert.0.len = r.codepoint_byte_length();
   let mut byte = r.byte();
   // Scan to next break point and produce an undefined
   // token. If we are already at a break point then just
@@ -428,7 +424,7 @@ fn scan_for_improvised_token<T: ByteReader + MutByteReader>(
     || byte == (b'\r' as u32)
     || byte == (b' ' as u32)
   {
-    assert = assert.next();
+    assert = next_token(assert);
   } else {
     while byte != b'\n' as u32
       && byte != b'\t' as u32
@@ -436,11 +432,10 @@ fn scan_for_improvised_token<T: ByteReader + MutByteReader>(
       && byte != b' ' as u32
       && !r.at_end()
     {
-      r.next(assert.byte_length as i32);
+      r.next(assert.0.len as i32);
       byte = r.byte();
-      assert = assert.next();
-      assert.byte_length = r.codepoint_byte_length();
-      assert.cp_length += 1;
+      assert = next_token(assert);
+      assert.0.len = r.codepoint_byte_length();
     }
   }
   scan_ctx.assert = assert;
@@ -449,13 +444,13 @@ fn scan_for_improvised_token<T: ByteReader + MutByteReader>(
 }
 
 fn token_scan<T: ByteReader + MutByteReader>(
-  token: ParseToken,
+  token: (TokenRange, u32),
   scan_index: u32,
   ctx: &mut ParseContext<T>,
   r: &mut T,
   bc: &[u32],
-) -> ParseToken {
-  if (token.token_type != 0) {
+) -> (TokenRange, u32) {
+  if (token.1 != 0) {
     return token;
   }
 
@@ -472,17 +467,16 @@ fn token_scan<T: ByteReader + MutByteReader>(
         ctx.set_production_to(id - 1);
       }
 
-      return ParseToken {
-        token_type: END_OF_INPUT_TOKEN_ID,
-        ..Default::default()
-      };
+      return (
+        Default::default(), END_OF_INPUT_TOKEN_ID
+      );
     }
   }
 
-  r.set_cursor_to(&token);
+  r.set_cursor_to(&token.0);
 
   if r.at_end() {
-    return ParseToken { token_type: 0, ..token };
+    return (token.0, 0);
   }
   // Initialize Scanner
 
@@ -508,16 +502,16 @@ fn token_scan<T: ByteReader + MutByteReader>(
     let line_data = r.get_line_data();
     let (line_num, line_count) = ((line_data >> 32) as u32, (line_data & 0xFFFF_FFFF) as u32);
 
-    scan_ctx.anchor.line_number = line_num;
-    scan_ctx.anchor.line_offset = line_count;
+    scan_ctx.anchor.0.line_num = line_num;
+    scan_ctx.anchor.0.line_off = line_count;
 
     loop {
       if scan_ctx.get_active_state() < 1 {
-        if scan_ctx.anchor.token_type == 0 {
+        if scan_ctx.anchor.1 == 0 {
           scan_for_improvised_token(&mut scan_ctx, r);
         }
 
-        break ParseAction::ScannerToken(scan_ctx.anchor);
+        break Some(scan_ctx.anchor.into());
       } else {
         let mask_gate = NORMAL_STATE_FLAG << (scan_ctx.in_fail_mode() as u32);
 
@@ -541,7 +535,7 @@ fn token_scan<T: ByteReader + MutByteReader>(
       }
     }
   } {
-    ParseAction::ScannerToken(token) => token,
+    Some(token) => (token),
     _ => panic!("Unusable State"),
   }}
 
@@ -559,12 +553,12 @@ pub fn get_next_action<T: ByteReader + MutByteReader>(
 
   loop {
     if ctx.get_active_state() < 1 {
-      if r.offset_at_end(ctx.assert.byte_offset) {
+      if r.offset_at_end(ctx.assert.0.len) {
         break ParseAction::Accept { production_id: ctx.get_production() };
       } else {
         break ParseAction::Error {
           last_production: ctx.get_production(),
-          last_input:      ctx.assert,
+          last_input:      ctx.assert.0,
         };
       }
     } else {

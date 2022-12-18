@@ -46,7 +46,7 @@ pub fn build_llvm_parser_interface<'a>() -> PipelineTask {
             task_ctx.get_ascript(),
           ) {
             Err(err) => Err(vec![SherpaError::from(err)]),
-            Ok(_) => Ok(Some(unsafe { String::from_utf8_unchecked(writer.into_output()) })),
+            Ok(_) => Ok(Some((20, unsafe { String::from_utf8_unchecked(writer.into_output()) }))),
           }
         }
         _ => Ok(None),
@@ -122,8 +122,6 @@ fn write_rust_parser<W: Write>(
   writer
     .wrt(&format!(
       "
-use sherpa_runtime::types::*;
-use sherpa_runtime::types::ast::*;
 
 #[link(name = \"{}\", kind = \"static\" )]
 extern \"C\" {{
@@ -145,9 +143,9 @@ impl<T> LLVMReader for T
   where T: ByteReader + LLVMByteReader + MutByteReader + std::fmt::Debug 
   {{}}
       
-pub struct Parser<T: LLVMReader>(LLVMParseContext<T>, T);
+pub struct Parser<T: LLVMReader, M>(LLVMParseContext<T, M>, T);
 
-impl<T: LLVMReader> Iterator for Parser<T> {{
+impl<T: LLVMReader, M> Iterator for Parser<T, M> {{
     type Item = ParseAction;
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {{
@@ -156,7 +154,7 @@ impl<T: LLVMReader> Iterator for Parser<T> {{
             if !self.0.is_active {{
                 None
             }} else {{
-                let _ptr = &mut self.0 as *const LLVMParseContext<T>;
+                let _ptr = &mut self.0 as *const LLVMParseContext<T, M>;
                 let mut action = ParseAction::Undefined;
                 let _action = &mut action as *mut ParseAction;
                 next(_ptr as *mut u8, _action as *mut u8);
@@ -166,12 +164,12 @@ impl<T: LLVMReader> Iterator for Parser<T> {{
     }}
 }}
 
-impl<T: LLVMReader> Parser<T> {{
+impl<T: LLVMReader, M> Parser<T, M> {{
     /// Create a new parser context to parser the input with 
     /// the grammar `{0}`
     #[inline(always)]
     fn new(mut reader: T) -> Self {{
-        let mut parser = Self(LLVMParseContext::<T>::new(), reader);
+        let mut parser = Self(LLVMParseContext::<T, M>::new(), reader);
         parser.construct_context();
         parser
     }}
@@ -181,7 +179,7 @@ impl<T: LLVMReader> Parser<T> {{
     #[inline(always)]
     fn set_start_point(&mut self, start_point: u64) -> &mut Self {{
         unsafe {{
-            let _ptr = &mut self.0 as *const LLVMParseContext<T>;
+            let _ptr = &mut self.0 as *const LLVMParseContext<T, M>;
             prime(_ptr as *mut u8, start_point as u32);
         }}
 
@@ -190,14 +188,14 @@ impl<T: LLVMReader> Parser<T> {{
     #[inline(always)]
     fn construct_context(&mut self) {{
         unsafe {{
-            let _ptr = &mut self.0 as *const LLVMParseContext<T>;
+            let _ptr = &mut self.0 as *const LLVMParseContext<T, M>;
             let _rdr = &mut self.1 as *const T;
             init(_ptr as *mut u8, _rdr as *mut u8);
         }}
     }}
     #[inline(always)]
     fn destroy_context(&mut self) {{
-      let _ptr = &mut self.0 as *const LLVMParseContext<T>;
+      let _ptr = &mut self.0 as *const LLVMParseContext<T, M>;
       unsafe {{ drop(_ptr as *mut u8); }}
     }}"###,
       grammar_name
@@ -209,7 +207,7 @@ impl<T: LLVMReader> Parser<T> {{
   writer.dedent().wrtln(&format!(
     "}}
 
-impl<T: LLVMReader> Drop for Parser<T> {{
+impl<T: LLVMReader, M> Drop for Parser<T, M> {{
     fn drop(&mut self) {{
         self.destroy_context();
     }}
@@ -220,7 +218,7 @@ impl<T: LLVMReader> Drop for Parser<T> {{
     let export_node_data = get_ascript_export_data(g, ascript);
 
     writer.wrtln("pub mod ast_compile  {")?.indent();
-    writer.wrtln("use super::*;")?;
+    writer.wrtln("use super::*; ")?;
 
     // Create a module that will store convience functions for compiling AST
     // structures based on on grammar entry points.
@@ -237,27 +235,29 @@ type ASTSlot = ({0}, TokenRange, TokenRange);
 extern \"C\" {{
   fn ast_parse(
     ctx: *mut u8,
-    reducers: *const fn(&mut LLVMParseContext<UTF8StringReader>, &mut AstSlots<ASTSlot>),
+    reducers: *const u8,
     shift_handler: *const u8,
     result_handler: *const u8,
   ) -> ParseResult<{0}>;
-}}",
+}}
+",
           ascript.ast_type_name, parser_name
         ))?
         .newline()?
         .wrtln(&format!(
-          "pub fn {0}_from<R>(reader: R)  -> Result<{1}, SherpaParseError> 
-  where R: LLVMReader {{ ",
+          "pub fn {0}_from(reader: UTF8StringReader)  -> Result<{1}, SherpaParseError> {{ ",
           export_name, ast_type_string
         ))?
         .indent()
         .wrtln(&format!(
           "
+const reduce_functions: ReduceFunctions::<UTF8StringReader, u32> = ReduceFunctions::<UTF8StringReader, u32>::new();
+
 let mut ctx = Parser::new_{0}_parser(reader);
-let reducers_ptr = REDUCE_FUNCTIONS.as_ptr();
-let shifter_ptr = llvm_map_shift_action::<R, {1}> as *const u8;
-let result_ptr = llvm_map_result_action::<R, {1}> as *const u8;
-let ctx_ptr = (&mut ctx.0) as *const LLVMParseContext<R>;
+let reducers_ptr = (&reduce_functions.0).as_ptr() as *const u8;
+let shifter_ptr = llvm_map_shift_action::<UTF8StringReader, u32, {1}> as *const u8;
+let result_ptr = llvm_map_result_action::<UTF8StringReader, u32, {1}> as *const u8;
+let ctx_ptr = (&mut ctx.0) as *const LLVMParseContext<UTF8StringReader, u32>;
 ",
           export_name, ascript.ast_type_name
         ))?
@@ -421,7 +421,7 @@ pub fn build_llvm_parser(
 
             ctx.module.set_data_layout(&target_machine.get_target_data().get_data_layout());
 
-            //_apply_llvm_optimizations(opt, &ctx);
+            _apply_llvm_optimizations(opt, &ctx);
 
             match target_machine.write_to_file(&ctx.module, FileType::Object, &object_path) {
               Ok(_) => {

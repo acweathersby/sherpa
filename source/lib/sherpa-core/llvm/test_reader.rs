@@ -1,10 +1,10 @@
 use sherpa_runtime::types::{
   ByteReader,
-  InputBlock,
+  InputInfo,
   LLVMByteReader,
   MutByteReader,
-  ParseToken,
   SharedSymbolBuffer,
+  TokenRange,
   UTF8Reader,
 };
 
@@ -19,33 +19,7 @@ pub struct TestUTF8StringReader<'a> {
   pub cp:       u32,
 }
 
-impl<'a> LLVMByteReader for TestUTF8StringReader<'a> {
-  /// Get a pointer to a sequence of bytes that can be read from the input given
-  /// the cursor position. The second tuple values should be the length bytes that
-  ///  can be read from the block.
-  fn get_byte_block_at_cursor<T: ByteReader + ByteReader>(
-    self_: &mut T,
-    input_block: &mut InputBlock,
-  ) {
-    let cursor = input_block.start;
-    let size = ((self_.len() as i64) - (cursor as i64)).max(0) as u32;
-
-    if size > 0 {
-      let ptr = ((self_.get_bytes().as_ptr() as usize) + cursor as usize) as *const u8;
-      input_block.block = ptr;
-      input_block.start = cursor;
-      input_block.readable_bytes = size;
-      input_block.end = cursor + size;
-      input_block.is_truncated = false;
-    } else {
-      input_block.block = 0 as *const u8;
-      input_block.start = 0;
-      input_block.end = 0;
-      input_block.readable_bytes = 0;
-      input_block.is_truncated = false;
-    }
-  }
-}
+impl<'a> LLVMByteReader for TestUTF8StringReader<'a> {}
 
 impl<'a> UTF8Reader for TestUTF8StringReader<'a> {
   fn get_str(&self) -> &str {
@@ -137,15 +111,15 @@ impl<'a> ByteReader for TestUTF8StringReader<'a> {
   }
 
   #[inline(always)]
-  fn set_cursor_to(&mut self, token: &ParseToken) -> u64 {
-    let ParseToken { byte_offset, line_number, line_offset, .. } = *token;
+  fn set_cursor_to(&mut self, token: &TokenRange) -> u64 {
+    let TokenRange { len, line_num, line_off, .. } = *token;
 
-    if self.cursor != byte_offset as usize {
-      let diff = byte_offset as i32 - self.cursor as i32;
+    if self.cursor != len as usize {
+      let diff = len as i32 - self.cursor as i32;
 
-      self.line_num = line_number as usize;
+      self.line_num = line_num as usize;
 
-      self.line_off = line_offset as usize;
+      self.line_off = line_off as usize;
 
       self.next(diff)
     } else {

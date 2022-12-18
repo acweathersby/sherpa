@@ -1,9 +1,14 @@
 #[deprecated]
 use std::result;
 
-use crate::deprecated_runtime::buffer::ByteReader;
-use crate::deprecated_runtime::recognizer::stack::KernelStack;
-use crate::types::*;
+use crate::{
+  deprecated_runtime::{
+    buffer::ByteReader,
+    parse_token::ParseToken,
+    recognizer::stack::KernelStack,
+  },
+  types::*,
+};
 
 // Global Constants
 

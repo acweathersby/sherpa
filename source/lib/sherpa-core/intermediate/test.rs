@@ -6,6 +6,7 @@ use crate::{
     compile_production_states,
     compile_scanner_states,
     compile_states,
+    compile_token_production_states,
     optimize_ir_states,
   },
   debug::generate_disassembly,
@@ -1082,3 +1083,53 @@ fn build_production_states(
 //
 // SherpaResult::Ok((j, states))
 // }
+
+#[test]
+fn test_compile_json_parser() -> SherpaResult<()> {
+  let mut j = Journal::new(None);
+  let g = GrammarStore::from_str(
+    &mut j,
+    r##"
+    @IGNORE g:sp g:nl
+
+    @EXPORT json as entry
+    
+    @NAME llvm_language_test
+    
+    <> json > 
+            object                              f:ast { { t_Json, v: $1 } }
+            | 
+            array                               f:ast { { t_Json, v: $1 } }
+    
+    <> array > \[  value(*\, )  \]              f:ast { { t_Array, entries: $2 } }
+    
+    <> object > \{ key_value(*\, ) \}           f:ast { { t_Object, entries: $2 } }
+    
+    <> key_value > string \: value              f:ast { { t_KeyVal, k:$1, v:$3 } }
+    
+    <> value > num | bool | string | null
+    
+    <> null > t:null                            f:ast { { t_Null, v:false } }
+    
+    <> bool > 
+        t:false                                 f:ast { { t_Bool, v:false } }
+        |   
+        t:true                                  f:ast { { t_Bool, v:true } }
+    
+    <> num > tk:number                          f:ast { { t_Number } }
+    
+    <> number > ( \+ | \- )? g:num(+) ( \. g:num(+) )? ( ( \e | \E ) ( \+ | \i ) g:num(+) )?
+    
+    <> string > \" ( g:id | g:sym | g:num | g:sp )(*) \"  f:ast { { t_String } }
+"##,
+  )
+  .unwrap();
+
+  let mut ir_states = compile_states(&mut j, 1)?;
+
+  let ir_states = optimize_ir_states(&mut j, ir_states);
+
+  let bytecode_output = compile_bytecode(&mut j, ir_states);
+
+  SherpaResult::Ok(())
+}

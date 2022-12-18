@@ -20,7 +20,7 @@ use sherpa_runtime::types::{
   BlameColor,
   ByteReader,
   Goto,
-  InputBlock,
+  InputInfo,
   LLVMParseContext,
   ParseAction,
   ParseContext,
@@ -33,14 +33,14 @@ use std::{fs::File, io::Write};
 use super::{standard_functions::*, types::*};
 
 type Init = unsafe extern "C" fn(
-  *mut LLVMParseContext<TestUTF8StringReader<'static>>,
+  *mut LLVMParseContext<TestUTF8StringReader<'static>, u32>,
   *mut TestUTF8StringReader<'static>,
 );
 type PushState =
-  unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>>, u32, usize);
+  unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>, u32>, u32, usize);
 
 type EmitReduce = unsafe extern "C" fn(
-  *mut LLVMParseContext<TestUTF8StringReader<'static>>,
+  *mut LLVMParseContext<TestUTF8StringReader<'static>, u32>,
   *mut ParseAction,
   u32,
   u32,
@@ -48,22 +48,23 @@ type EmitReduce = unsafe extern "C" fn(
 ) -> u32;
 
 type EmitAccept = unsafe extern "C" fn(
-  *mut LLVMParseContext<TestUTF8StringReader<'static>>,
+  *mut LLVMParseContext<TestUTF8StringReader<'static>, u32>,
   *mut ParseAction,
 ) -> u32;
 
 type EmitShift = EmitAccept;
 
 type Next =
-  unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>>, *mut ParseAction);
+  unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>, u32>, *mut ParseAction);
 
-type Prime = unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>>, u32);
+type Prime = unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>, u32>, u32);
 
-type Extend = unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>>, u32);
+type Extend = unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>, u32>, u32);
 
-type Drop = unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>>);
+type Drop = unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>, u32>);
 
-type PopState = unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>>) -> Goto;
+type PopState =
+  unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>, u32>) -> Goto;
 
 unsafe fn get_parse_function<'a, T: inkwell::execution_engine::UnsafeFunctionPointer>(
   ctx: &'a LLVMParserModule,
@@ -196,11 +197,10 @@ fn should_push_new_state() -> SherpaResult<()> {
 
     let stack = std::slice::from_raw_parts(
       {
-        (rt_ctx.goto_stack_ptr as usize
-          - ((rt_ctx.goto_stack_size - rt_ctx.goto_stack_remaining) << 4) as usize)
+        (rt_ctx.goto_stack_ptr as usize - ((rt_ctx.goto_size - rt_ctx.goto_free) << 4) as usize)
           as *mut Goto
       },
-      rt_ctx.goto_stack_size as usize,
+      rt_ctx.goto_size as usize,
     );
 
     eprintln!("{:#?}", rt_ctx);
@@ -212,7 +212,7 @@ fn should_push_new_state() -> SherpaResult<()> {
 
     drop_fn.call(&mut rt_ctx);
 
-    assert_eq!(rt_ctx.goto_stack_size, 0);
+    assert_eq!(rt_ctx.goto_size, 0);
   };
   SherpaResult::Ok(())
 }
@@ -351,7 +351,7 @@ fn should_produce_extended_block() {
         parse_context.types.parse_ctx.ptr_type(Generic).into(),
         context.i32_type().into(),
         context.i32_type().into(),
-        parse_context.types.input_block.ptr_type(Generic).into(),
+        parse_context.types.input_info.ptr_type(Generic).into(),
       ],
       false,
     ),
@@ -386,41 +386,41 @@ fn should_produce_extended_block() {
     let init = get_parse_function::<Init>(&parse_context, "init").unwrap();
 
     type GetInputBlockShim = unsafe extern "C" fn(
-      *mut LLVMParseContext<TestUTF8StringReader<'static>>,
+      *mut LLVMParseContext<TestUTF8StringReader<'static>, u32>,
       u32,
       u32,
-      *mut InputBlock,
+      *mut InputInfo,
     );
 
     let get_ib = get_parse_function::<GetInputBlockShim>(&parse_context, "shim").unwrap();
 
     init.call(&mut rt_ctx, &mut reader);
 
-    rt_ctx.token_offset = (3 << 32) | 3;
+    rt_ctx.token_off = 3;
 
-    println!(
+    eprintln!(
       "context:{:p}, fn:{:p} off:{:X}",
       &rt_ctx,
-      &rt_ctx.get_input_block,
-      (&rt_ctx.get_input_block as *const _) as usize - (&rt_ctx as *const _) as usize
+      &rt_ctx.get_input_info,
+      (&rt_ctx.get_input_info as *const _) as usize - (&rt_ctx as *const _) as usize
     );
 
-    let mut block = InputBlock::default();
+    /*     let mut block = InputInfo::default();
 
-    println!(
+    eprintln!(
       "context:{:p}, fn:{:p} off:{:X}",
       &rt_ctx,
-      &rt_ctx.get_input_block,
-      (&rt_ctx.get_input_block as *const _) as usize - (&rt_ctx as *const _) as usize
+      &rt_ctx.get_input_info,
+      (&rt_ctx.get_input_info as *const _) as usize - (&rt_ctx as *const _) as usize
     );
 
-    println!("context:{:p} block:{:p} token:{}", &rt_ctx, &mut block, &rt_ctx.token_offset);
+    eprintln!("context:{:p} block:{:p} token:{}", &rt_ctx, &mut block, &rt_ctx.token_off);
     get_ib.call(&mut rt_ctx, 3, 2, &mut block);
 
-    eprintln!("{:?} {:?}", rt_ctx.input_block, block);
+    //eprintln!("{:?} {:?}", rt_ctx.input_block, block);
     assert_eq!(*block.block, b't');
     assert_eq!(block.start, 3);
-    assert_eq!(block.end, 4);
+    assert_eq!(block.end, 4); */
   };
 }
 
@@ -489,14 +489,14 @@ fn should_pop_new_state() {
     init_fn.call(&mut rt_ctx, &mut reader);
     push_state_fn.call(&mut rt_ctx, 20, 0x10101010_01010101);
     push_state_fn.call(&mut rt_ctx, 40, 0x10101010_01010101);
-    assert_eq!(rt_ctx.goto_stack_remaining, 6);
+    assert_eq!(rt_ctx.goto_used, 6);
 
     let second = pop_state.call(&mut rt_ctx);
     let first = pop_state.call(&mut rt_ctx);
 
     assert_eq!(second.state, 40);
     assert_eq!(first.state, 20);
-    assert_eq!(rt_ctx.goto_stack_remaining, 8);
+    assert_eq!(rt_ctx.goto_used, 8);
 
     eprintln!("{:#?}", rt_ctx);
   };
@@ -567,11 +567,12 @@ fn should_initialize_context() {
 
     init_fn.call(rt_ctx.as_mut(), &mut reader);
 
-    let root = rt_ctx.as_ref() as *const LLVMParseContext<TestUTF8StringReader<'static>> as usize;
+    let root =
+      rt_ctx.as_ref() as *const LLVMParseContext<TestUTF8StringReader<'static>, u32> as usize;
 
     assert_eq!(rt_ctx.goto_stack_ptr as usize, root);
-    assert_eq!(rt_ctx.goto_stack_remaining as usize, 8);
-    assert_eq!(rt_ctx.goto_stack_size as usize, 8);
+    assert_eq!(rt_ctx.goto_free as usize, 8);
+    assert_eq!(rt_ctx.goto_size as usize, 8);
     assert_eq!(rt_ctx.state, NORMAL_STATE_FLAG_LLVM);
 
     eprintln!("{:?}:{:#?}", root, rt_ctx);
@@ -673,32 +674,32 @@ fn should_extend_stack() -> SherpaResult<()> {
     push_state_fn.call(&mut rt_ctx, 30, 400);
     extend.call(&mut rt_ctx, 10);
 
-    assert_eq!(rt_ctx.goto_stack_size, (18 << 2));
+    assert_eq!(rt_ctx.goto_size, (18 << 2));
 
     push_state_fn.call(&mut rt_ctx, 50, 600);
     push_state_fn.call(&mut rt_ctx, 70, 800);
 
     extend.call(&mut rt_ctx, 200);
 
-    assert_eq!(rt_ctx.goto_stack_size - rt_ctx.goto_stack_remaining, 4);
+    assert_eq!(rt_ctx.goto_size - rt_ctx.goto_free, 4);
 
     for v in 4..(34 << 1) {
       push_state_fn.call(&mut rt_ctx, v, v as usize);
     }
 
-    assert_eq!(rt_ctx.goto_stack_size - rt_ctx.goto_stack_remaining, (34 << 1));
+    assert_eq!(rt_ctx.goto_size - rt_ctx.goto_free, (34 << 1));
 
     let stack = unsafe {
       let ptr = (rt_ctx.goto_stack_ptr as usize)
-        - (((rt_ctx.goto_stack_size as usize) - (rt_ctx.goto_stack_remaining as usize)) << 4);
-      std::slice::from_raw_parts(ptr as *const Goto, rt_ctx.goto_stack_size as usize)
+        - (((rt_ctx.goto_size as usize) - (rt_ctx.goto_free as usize)) << 4);
+      std::slice::from_raw_parts(ptr as *const Goto, rt_ctx.goto_size as usize)
     };
 
     assert_eq!(stack[67].state, 67);
 
     extend.call(&mut rt_ctx, 2);
 
-    assert_eq!(rt_ctx.goto_stack_size, 1088);
+    assert_eq!(rt_ctx.goto_size, 1088);
 
     eprintln!("{:#?}", stack);
   };
@@ -838,22 +839,26 @@ fn test_compile_from_bytecode1() -> SherpaResult<()> {
   type ASTSlot = (ASTNode, TokenRange, TokenRange);
 
   type AstBuilder<'a> = unsafe extern "C" fn(
-    *mut LLVMParseContext<TestUTF8StringReader<'static>>,
-    *const fn(ctx: &mut LLVMParseContext<TestUTF8StringReader<'static>>, &mut AstSlots<ASTSlot>),
+    *mut LLVMParseContext<TestUTF8StringReader<'static>, u32>,
+    *const fn(
+      ctx: &mut LLVMParseContext<TestUTF8StringReader<'static>, u32>,
+      &mut AstSlots<ASTSlot>,
+    ),
     unsafe fn(
-      &mut LLVMParseContext<TestUTF8StringReader<'static>>,
+      &mut LLVMParseContext<TestUTF8StringReader<'static>, u32>,
       &ParseAction,
       &mut AstSlots<(ASTNode, TokenRange, TokenRange)>,
     ),
     unsafe fn(
-      &mut LLVMParseContext<TestUTF8StringReader<'static>>,
+      &mut LLVMParseContext<TestUTF8StringReader<'static>, u32>,
       &ParseAction,
       &mut AstSlots<(ASTNode, TokenRange, TokenRange)>,
     ) -> ParseResult<ASTNode>,
   ) -> ParseResult<ASTNode>;
 
   let test_functions = [
-    |ctx: &mut LLVMParseContext<TestUTF8StringReader<'static>>, slots: &mut AstSlots<ASTSlot>| {
+    |ctx: &mut LLVMParseContext<TestUTF8StringReader<'static>, u32>,
+     slots: &mut AstSlots<ASTSlot>| {
       let _a = slots.take(0);
       let _b = slots.take(1);
 
@@ -861,7 +866,7 @@ fn test_compile_from_bytecode1() -> SherpaResult<()> {
 
       let final_token = _a.1 + _b.1;
 
-      println!(
+      eprintln!(
         "{}",
         final_token.to_token(unsafe { (*ctx.reader).get_source() }).blame(
           0,
@@ -873,12 +878,14 @@ fn test_compile_from_bytecode1() -> SherpaResult<()> {
 
       slots.assign(0, (0, final_token, TokenRange::default()));
     },
-    |ctx: &mut LLVMParseContext<TestUTF8StringReader<'static>>, slots: &mut AstSlots<ASTSlot>| {
-      println!("<B> 02 - {}  {:#?}", 0, slots);
+    |ctx: &mut LLVMParseContext<TestUTF8StringReader<'static>, u32>,
+     slots: &mut AstSlots<ASTSlot>| {
+      eprintln!("<B> 02 - {}  {:#?}", 0, slots);
       // Do nothing
     },
-    |ctx: &mut LLVMParseContext<TestUTF8StringReader<'static>>, slots: &mut AstSlots<ASTSlot>| {
-      println!("<P> 03 - {}  {:#?}", 0, slots);
+    |ctx: &mut LLVMParseContext<TestUTF8StringReader<'static>, u32>,
+     slots: &mut AstSlots<ASTSlot>| {
+      eprintln!("<P> 03 - {}  {:#?}", 0, slots);
       let (_, _a, _) = slots.take(0);
       slots.take(1);
       let (_, _c, _) = slots.take(2);
@@ -889,7 +896,7 @@ fn test_compile_from_bytecode1() -> SherpaResult<()> {
   unsafe {
     let mut module = compile_from_bytecode("test", &g, &ctx, &bytecode_output)?;
 
-    construct_ast_builder::<ASTSlot>(&module)?;
+    construct_ast_builder::<ASTNode>(&module)?;
 
     setup_exec_engine(&mut module);
     let input = "hello world\ngoodby mango";
@@ -916,13 +923,13 @@ fn test_compile_from_bytecode1() -> SherpaResult<()> {
     let parse_result = ast_builder_fn.call(
       &mut rt_ctx,
       test_functions.as_ptr(),
-      llvm_map_shift_action::<TestUTF8StringReader, ASTNode>,
-      llvm_map_result_action::<TestUTF8StringReader, ASTNode>,
+      llvm_map_shift_action::<TestUTF8StringReader, ASTNode, u32>,
+      llvm_map_result_action::<TestUTF8StringReader, ASTNode, u32>,
     );
 
     drop_.call(&mut rt_ctx);
 
-    println!("{:#?}", parse_result);
+    eprintln!("{:#?}", parse_result);
 
     assert!(matches!(parse_result, ParseResult::Complete(..)));
 
@@ -935,7 +942,7 @@ fn test_compile_from_bytecode1() -> SherpaResult<()> {
 }
 
 #[test]
-fn test_compile_from_bytecode2() -> SherpaResult<()> {
+fn test_compile_json_parser() -> SherpaResult<()> {
   use crate::llvm::compile_from_bytecode;
   use inkwell::context::Context;
   let mut j = Journal::new(None);
@@ -982,12 +989,13 @@ fn test_compile_from_bytecode2() -> SherpaResult<()> {
 
   let bytecode_output = compile_bytecode(&mut j, ir_states);
 
-  if let SherpaResult::Ok(mut ctx) =
-    compile_from_bytecode("test", &g, &Context::create(), &bytecode_output)
-  {
-    //eprintln!("{}", ctx.module.to_string());
+  unsafe {
+    let ctx = Context::create();
+
+    let module = compile_from_bytecode("test", &g, &ctx, &bytecode_output)?;
+
+    eprintln!("{}", module.module.to_string());
+
     SherpaResult::Ok(())
-  } else {
-    SherpaResult::None
   }
 }

@@ -1,6 +1,6 @@
 use std::{fs, path::PathBuf, rc::Rc, sync::Arc};
 
-use crate::types::ParseToken;
+use crate::deprecated_runtime::parse_token::ParseToken;
 
 use super::ByteReader;
 

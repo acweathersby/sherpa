@@ -30,7 +30,7 @@ pub fn build_ascript_types_and_functions(source_type: SourceType) -> PipelineTas
             Err(err) => Err(vec![SherpaError::from(err)]),
             _ => match write(ascript, &mut writer) {
               Err(err) => Err(vec![SherpaError::from(err)]),
-              _ => Ok(Some(unsafe { String::from_utf8_unchecked(writer.into_output()) })),
+              _ => Ok(Some((2, unsafe { String::from_utf8_unchecked(writer.into_output()) }))),
             },
           }
         } else {

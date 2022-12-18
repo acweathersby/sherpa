@@ -8,12 +8,12 @@ use inkwell::{
   values::{CallableValue, IntValue, PointerValue},
 };
 
-pub(crate) unsafe fn construct_ast_builder<ASTSlotType: Sized>(
+pub(crate) unsafe fn construct_ast_builder<ASTNode: Sized>(
   module: &LLVMParserModule,
 ) -> SherpaResult<()> {
   use inkwell::AddressSpace::*;
 
-  let slot_size = std::mem::size_of::<(ASTSlotType, TokenRange, TokenRange)>() as u32;
+  let slot_size = std::mem::size_of::<(ASTNode, TokenRange, TokenRange)>() as u32;
 
   let LLVMParserModule { ctx, types, builder: b, .. } = module;
   let LLVMTypes { parse_ctx, action, .. } = types;
@@ -33,12 +33,21 @@ pub(crate) unsafe fn construct_ast_builder<ASTSlotType: Sized>(
 
   ast_slot_stack_slice.set_body(&[ast_slot.ptr_type(Generic).into(), i32.into()], false);
 
-  parse_result.set_body(
-    &[i8.array_type((std::mem::size_of::<ParseResult<ASTSlotType>>()) as u32).into()],
-    false,
-  );
+  parse_result
+    .set_body(&[i8.array_type((std::mem::size_of::<ParseResult<ASTNode>>()) as u32).into()], false);
 
   ast_slot.set_body(&[i8.array_type(slot_size).into()], false);
+
+  let discriminated_action = module
+    .ctx
+    .struct_type(
+      &[i32.into(), i8.array_type((std::mem::size_of::<ParseAction>() - 4) as u32).into()],
+      false,
+    )
+    .ptr_type(Generic);
+
+  let reduce_action = ctx
+    .struct_type(&[i32.into(), i32.into(), i32.into(), i32.into(), i32.into(), i32.into()], false);
 
   // Injected Functions ---------------------------------------------------
 
@@ -72,9 +81,6 @@ pub(crate) unsafe fn construct_ast_builder<ASTSlotType: Sized>(
     Some(Linkage::External),
   );
 
-  let REDUCE_STRUCT = ctx
-    .struct_type(&[i32.into(), i32.into(), i32.into(), i32.into(), i32.into(), i32.into()], false);
-
   let parse_context = ast_builder.get_nth_param(0)?.into_pointer_value();
   let reducers = ast_builder.get_nth_param(1)?.into_pointer_value();
   let shift_handler = ast_builder.get_nth_param(2)?.into_pointer_value();
@@ -97,7 +103,8 @@ pub(crate) unsafe fn construct_ast_builder<ASTSlotType: Sized>(
   b.build_store(stack_top_ptr, i32.const_zero());
 
   let action = b.build_alloca(*action, "action");
-  let discriminant_ptr = b.build_struct_gep(action, 0, "discriminant")?;
+  let discriminated_action = b.build_pointer_cast(action, discriminated_action, "");
+  let discriminant_ptr = b.build_struct_gep(discriminated_action, 0, "discriminant")?;
 
   let ast_slot_slice_ptr = b.build_alloca(ast_slot_stack_slice, "slot_lookup_ptr"); // Stores the stack lookup structure
   let slot_ptr_ptr = b.build_alloca(ast_slot.ptr_type(Generic), "slot_ptr_ptr"); // Store the pointer to the bottom of the AST stack
@@ -183,12 +190,12 @@ pub(crate) unsafe fn construct_ast_builder<ASTSlotType: Sized>(
   b.position_at_end(reduce);
   // Get slice size
   let reduce_action = b
-    .build_bitcast(action, REDUCE_STRUCT.ptr_type(Generic), "reduce_action_ptr")
+    .build_bitcast(action, reduce_action.ptr_type(Generic), "reduce_action_ptr")
     .into_pointer_value();
 
-  let production_id_ptr = b.build_struct_gep(reduce_action, 2, "")?;
-  let rule_id_ptr = b.build_struct_gep(reduce_action, 3, "")?;
-  let symbol_count_ptr = b.build_struct_gep(reduce_action, 4, "")?;
+  let production_id_ptr = b.build_struct_gep(reduce_action, 1, "")?;
+  let rule_id_ptr = b.build_struct_gep(reduce_action, 2, "")?;
+  let symbol_count_ptr = b.build_struct_gep(reduce_action, 3, "")?;
   let symbol_count_original = b.build_load(symbol_count_ptr, "").into_int_value();
 
   // Calculate the position of the first element and the last element.

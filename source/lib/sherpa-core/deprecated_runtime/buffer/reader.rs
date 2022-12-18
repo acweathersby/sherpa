@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
-use crate::types::ParseToken;
 use sherpa_runtime::utf8::*;
+
+use crate::deprecated_runtime::parse_token::ParseToken;
 #[deprecated]
 pub trait ByteReader {
   /// Returns true if the cursor has reached the end of

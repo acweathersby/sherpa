@@ -1,3 +1,5 @@
+use sherpa_runtime::types::{Token, TokenRange};
+
 /// The default token structure used within hc parsers. Differs from
 /// the more general [Token](crate::types::Token) as [ParseToken] can only identify an arbitrary character
 /// sequence, and is disassociated with the original input string that was used
@@ -25,8 +27,8 @@
 /// eprintln!("{}", token.blame(1,1, "test"));
 /// ```
 
+#[deprecated]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
-#[repr(C)]
 pub struct ParseToken {
   // WARNING: DO NOT change the order of these properties
   // without also adjusting the LLVM compiler code that makes use
@@ -67,5 +69,17 @@ impl ParseToken {
       line_offset: self.line_offset,
       ..Default::default()
     }
+  }
+}
+
+impl Into<Token> for ParseToken {
+  fn into(self) -> Token {
+    let tok = TokenRange {
+      len:      self.cp_length,
+      off:      self.cp_offset,
+      line_num: self.line_number,
+      line_off: self.line_offset,
+    };
+    tok.into()
   }
 }

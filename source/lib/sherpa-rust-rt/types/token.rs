@@ -1,4 +1,4 @@
-use super::{parse_token::ParseToken, Range, TokenRange};
+use super::{Range, TokenRange};
 use std::{
   fmt::{self, Write},
   hash::Hash,
@@ -147,19 +147,6 @@ impl Token {
   #[inline(always)]
   pub fn from_vals(len: u32, off: u32, line_num: u32, line_off: u32) -> Token {
     Token { inner: TokenRange { len, off, line_num, line_off }, input: None }
-  }
-
-  #[inline(always)]
-  pub fn from_parse_token(tok: &ParseToken) -> Token {
-    Token {
-      inner: TokenRange {
-        len:      tok.cp_length,
-        off:      tok.cp_offset,
-        line_num: tok.line_number,
-        line_off: tok.line_offset,
-      },
-      input: None,
-    }
   }
 
   #[inline(always)]

@@ -6,6 +6,7 @@ use super::{
   utils::{generate_recursive_descent_items, generate_scanner_symbol_items},
 };
 use crate::{
+  compile::{compile_bytecode, optimize_ir_states, GrammarStore},
   grammar::hash_id_value_u64,
   journal::{config::ParseAlgorithm, Journal},
   types::{IRState, ItemContainer, ProductionId, ScannerStateId, SherpaResult, SymbolSet},

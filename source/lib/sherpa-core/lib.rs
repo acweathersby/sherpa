@@ -81,6 +81,7 @@ pub mod pipeline {
       bytecode::build_bytecode_parser,
       disassembly::build_bytecode_disassembly,
       llvm::{build_llvm_parser, build_llvm_parser_interface},
+      rust_preamble::build_rust_preamble,
     };
   }
 }

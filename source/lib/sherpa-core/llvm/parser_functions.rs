@@ -1,22 +1,15 @@
-use super::{
-  build_fast_call,
-  create_offset_label,
-  fastCC,
-  input_block_indices::{InputBlockPtr, InputBlockSize, InputBlockStart, InputBlockTruncated},
-  CTX_AGGREGATE_INDICES as CTX,
-};
+use super::{build_fast_call, create_offset_label, fastCC, CTX_AGGREGATE_INDICES as CTX};
 use crate::{
   build::table::BranchTableData,
   compile::BytecodeOutput,
   debug::address_string,
+  grammar::data::ast::Generated,
   llvm::{LLVMParserModule, FAIL_STATE_FLAG_LLVM},
   types::*,
 };
 use inkwell::{
   basic_block::BasicBlock,
-  builder::Builder,
   module::Linkage,
-  types::IntType,
   values::{CallableValue, FunctionValue, IntValue, PointerValue},
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -27,12 +20,6 @@ pub(crate) struct FunctionPack<'a> {
   pub(crate) is_scanner: bool,
   pub(crate) state:      LLVMStateData<'a>,
   pub(crate) states:     &'a BTreeMap<INSTRUCTION, LLVMStateData<'a>>,
-  //pub(crate) cache_type_ptr: PointerValue<'a>,
-  //pub(crate) cache_line_ptr: PointerValue<'a>,
-  //pub(crate) cache_anchor_offset_ptr: PointerValue<'a>,
-  //pub(crate) cache_length_ptr: PointerValue<'a>,
-  //pub(crate) cache_offset_ptr: PointerValue<'a>,
-  //pub(crate) cache_peek_offset: PointerValue<'a>,
 }
 
 pub const _FAIL_STATE_FLAG_LLVM: u32 = 2;
@@ -62,7 +49,8 @@ impl<'a> LLVMStateData<'a> {
     let entry_function = module.module.add_function(
       &Self::generate_name(bc_address),
       module.types.TAIL_CALLABLE_PARSE_FUNCTION,
-      None, //Some(Linkage::Private),
+      //None,
+      Some(Linkage::Private),
     );
 
     entry_function.set_call_conventions(fastCC);
@@ -81,11 +69,11 @@ impl<'a> LLVMStateData<'a> {
 
   pub fn generate_block(
     &self,
-    ctx: &'a LLVMParserModule,
+    module: &'a LLVMParserModule,
     base_name: &str,
     block_address: usize,
   ) -> BasicBlock<'a> {
-    ctx.ctx.append_basic_block(
+    module.ctx.append_basic_block(
       self.function,
       &format!("{}_{}_{:X}", self.get_name(), base_name, block_address),
     )
@@ -208,24 +196,10 @@ pub(crate) unsafe fn construct_parse_function<'a>(
     let state = { *states.get(&instruction)? };
 
     let fun = state.function;
-    let parse_ctx = fun.get_nth_param(0).unwrap().into_pointer_value();
 
     let entry_block = module.ctx.append_basic_block(fun, "Entry");
 
     module.builder.position_at_end(entry_block);
-
-    if let Some(ir_state_name) =
-      output.offset_to_state_name.get(&(instruction.get_address() as u32))
-    {
-      if let Some(state) = output.state_data.get(ir_state_name) {
-        if state.get_goto_depth() > 1 {
-          build_fast_call(module, module.fun.extend_stack_if_needed, &[
-            parse_ctx.into(),
-            module.ctx.i32_type().const_int((state.get_goto_depth() + 2) as u64, false).into(),
-          ])?;
-        }
-      }
-    }
 
     let fn_pack = FunctionPack {
       fun: &fun,
@@ -233,12 +207,6 @@ pub(crate) unsafe fn construct_parse_function<'a>(
       is_scanner: state.is_scanner,
       states: &states,
       state: state,
-      // cache_offset_ptr: CTX::token_offset.get_ptr(module, parse_ctx)?,
-      // cache_length_ptr: CTX::token_length.get_ptr(module, parse_ctx)?,
-      // cache_type_ptr: CTX::production.get_ptr(module, parse_ctx)?,
-      // cache_anchor_offset_ptr: CTX::anchor_offset.get_ptr(module, parse_ctx)?,
-      // cache_line_ptr: CTX::line_data.get_ptr(module, parse_ctx)?,
-      // cache_peek_offset: CTX::peek_offset.get_ptr(module, parse_ctx)?,
     };
 
     construct_parse_function_statements(instruction, g, module, &fn_pack)?;
@@ -354,10 +322,10 @@ pub(crate) fn construct_instruction_branch<'a>(
 
     let parse_ctx =
       *state.parse_ctx.get_or_insert_with(|| p.fun.get_nth_param(0).unwrap().into_pointer_value());
-    let cache_offset_ptr = CTX::token_offset.get_ptr(module, parse_ctx)?;
-    let cache_length_ptr = CTX::token_length.get_ptr(module, parse_ctx)?;
-    let cache_line_ptr = CTX::line_data.get_ptr(module, parse_ctx)?;
-    let cache_peek_offset = CTX::peek_offset.get_ptr(module, parse_ctx)?;
+    let cache_offset_ptr = CTX::token_off.get_ptr(module, parse_ctx)?;
+    let cache_length_ptr = CTX::scan_len.get_ptr(module, parse_ctx)?;
+    let cache_line_ptr = CTX::anchor_line_off.get_ptr(module, parse_ctx)?;
+    let cache_peek_offset = CTX::peek_off.get_ptr(module, parse_ctx)?;
 
     let action_pointer = *state
       .action_pointer
@@ -370,12 +338,33 @@ pub(crate) fn construct_instruction_branch<'a>(
       ..
     } = data.data;
 
+    let is_peek = matches!(lexer_type, LEXER_TYPE::PEEK);
+    let is_scanner = p.is_scanner;
+
+    let (input_ptr_ptr, input_size_ptr, input_truncated_ptr) = match (is_peek, is_scanner) {
+      (true, _) => (
+        CTX::peek_ptr.get_ptr(module, parse_ctx)?,
+        CTX::peek_input_len.get_ptr(module, parse_ctx)?,
+        CTX::peek_input_trun.get_ptr(module, parse_ctx)?,
+      ),
+      (_, true) => (
+        CTX::scan_ptr.get_ptr(module, parse_ctx)?,
+        CTX::scan_input_len.get_ptr(module, parse_ctx)?,
+        CTX::scan_input_trun.get_ptr(module, parse_ctx)?,
+      ),
+      _ => (
+        CTX::tok_ptr.get_ptr(module, parse_ctx)?,
+        CTX::tok_input_len.get_ptr(module, parse_ctx)?,
+        CTX::tok_input_trun.get_ptr(module, parse_ctx)?,
+      ),
+    };
+
     let trivial_token_comparisons =
       input_type == INPUT_TYPE::T02_TOKEN && data.has_trivial_comparisons();
 
     // Retrieve the maximum number of bytes that will be read
     // per round within this function.
-    let (max_size, is_goto_branch) = match input_type {
+    let (max_length, is_goto_branch) = match input_type {
       INPUT_TYPE::T02_TOKEN => {
         if trivial_token_comparisons {
           (
@@ -396,14 +385,9 @@ pub(crate) fn construct_instruction_branch<'a>(
 
     // Construct a buffer, if necessary, that will hold up to `max_size` bytes.
     let mut buffer_ptr = None;
-
-    let table_block = p.state.generate_block(module, "_Table", instruction.get_address());
-
-    // Creates blocks for each branch, skip, and default.
-    let default_block = p.state.generate_block(module, "_Table_Default", instruction.get_address());
-
     let branches = &data.branches;
-
+    let table_block = p.state.generate_block(module, "_Table", instruction.get_address());
+    let default_block = p.state.generate_block(module, "_Table_Default", instruction.get_address());
     let mut active_offset = cache_offset_ptr;
     let mut value = i32.const_int(0, false);
 
@@ -422,32 +406,48 @@ pub(crate) fn construct_instruction_branch<'a>(
       } else {
         // Need to increment the peek token by either the previous length of the peek
         // token, or the current length of the assert token.
-        let is_peeking_block =
-          p.state.generate_block(module, "is_peeking", instruction.get_address());
-
-        let not_peeking_block =
-          p.state.generate_block(module, "not_peeking", instruction.get_address());
+        let (continue_peeking, start_peeking) = (
+          p.state.generate_block(module, "continue_peeking", instruction.get_address()),
+          p.state.generate_block(module, "start_peeking", instruction.get_address()),
+        );
 
         let peek_mode = b.build_load(peek_mode_ptr, "").into_int_value();
 
         let comparison =
           b.build_int_compare(inkwell::IntPredicate::EQ, peek_mode, bool.const_int(1, false), "");
 
-        b.build_conditional_branch(comparison, is_peeking_block, not_peeking_block);
+        b.build_conditional_branch(comparison, continue_peeking, start_peeking);
 
-        b.position_at_end(is_peeking_block);
-        let prev_token_len = b.build_load(cache_length_ptr, "").into_int_value();
-        let prev_token_off = b.build_load(cache_peek_offset, "").into_int_value();
-        let new_off = b.build_int_add(prev_token_len, prev_token_off, "");
-        b.build_store(cache_peek_offset, new_off);
-        b.build_unconditional_branch(table_block);
+        b.position_at_end(continue_peeking);
+        {
+          let prev_token_len = b.build_load(cache_length_ptr, "").into_int_value();
+          let prev_token_off = b.build_load(cache_peek_offset, "").into_int_value();
+          let new_off = b.build_int_add(prev_token_len, prev_token_off, "");
 
-        b.position_at_end(not_peeking_block);
-        let prev_token_len = b.build_load(cache_length_ptr, "").into_int_value();
-        let prev_token_off = b.build_load(active_offset, "").into_int_value();
-        let new_off = b.build_int_add(prev_token_len, prev_token_off, "");
-        b.build_store(cache_peek_offset, new_off);
-        b.build_unconditional_branch(table_block);
+          unsafe {
+            let input_ptr = b.build_load(input_ptr_ptr, "").into_pointer_value();
+            let input_ptr = b.build_gep(input_ptr, &[prev_token_len.into()], "");
+            b.build_store(input_ptr_ptr, input_ptr);
+          }
+
+          b.build_store(cache_peek_offset, new_off);
+          b.build_unconditional_branch(table_block);
+        }
+
+        b.position_at_end(start_peeking);
+        {
+          let prev_token_len = b.build_load(cache_length_ptr, "").into_int_value();
+          let prev_token_off = b.build_load(active_offset, "").into_int_value();
+          let new_off = b.build_int_add(prev_token_len, prev_token_off, "");
+
+          unsafe {
+            let input_ptr = CTX::tok_ptr.load(module, parse_ctx)?.into_pointer_value();
+            let input_ptr = b.build_gep(input_ptr, &[prev_token_len.into()], "");
+            b.build_store(input_ptr_ptr, input_ptr);
+          }
+          b.build_store(cache_peek_offset, new_off);
+          b.build_unconditional_branch(table_block);
+        }
 
         active_offset = cache_peek_offset;
       };
@@ -458,19 +458,23 @@ pub(crate) fn construct_instruction_branch<'a>(
       // token values, otherwise we are using scanner functions, and there
       // is no need to access input data.
       if (input_type != INPUT_TYPE::T02_TOKEN) || trivial_token_comparisons {
-        let byte_offset = b.build_load(cache_offset_ptr, "byte_offset").into_int_value();
-        let byte_offset = b.build_int_truncate(byte_offset, i32.into(), "");
+        let byte_offset = b.build_load(active_offset, "byte_offset").into_int_value();
 
-        // Build Input lookup
-        let input_block = write_get_input_ptr_lookup(module, p, max_size, byte_offset)?;
+        check_for_input_acceptability(
+          module,
+          p,
+          input_ptr_ptr,
+          input_size_ptr,
+          input_truncated_ptr,
+          byte_offset,
+          i32.const_int(max_length as u64, false),
+        );
+
+        let input_size = b.build_load(input_size_ptr, "").into_int_value();
 
         // If the block size is less than 1 then jump to default
-        let comparison = b.build_int_compare(
-          inkwell::IntPredicate::EQ,
-          i32.const_int(0, false),
-          input_block.size,
-          "",
-        );
+        let comparison =
+          b.build_int_compare(inkwell::IntPredicate::EQ, i32.const_int(0, false), input_size, "");
 
         let branch_block =
           p.state.generate_block(module, "table_branches", instruction.get_address());
@@ -478,11 +482,7 @@ pub(crate) fn construct_instruction_branch<'a>(
         b.build_conditional_branch(comparison, default_block, branch_block);
         b.position_at_end(branch_block);
 
-        buffer_ptr = Some(input_block.pointer.clone());
-
-        // Prepare a pointer to the token's type for later reuse in the switch block
-        state.input_block = Some(input_block);
-        state.input_buffer = Some(buffer_ptr?.clone().into());
+        buffer_ptr = Some(b.build_load(input_ptr_ptr, "").into_pointer_value());
       }
     }
 
@@ -571,13 +571,7 @@ pub(crate) fn construct_instruction_branch<'a>(
               b.build_conditional_branch(comparison, this_block, next_block);
               b.position_at_end(this_block);
 
-              b.build_store(
-                cache_length_ptr,
-                module
-                  .ctx
-                  .i64_type()
-                  .const_int((sym.byte_length as u64) | ((sym.cp_len as u64) << 32), false),
-              );
+              b.build_store(cache_length_ptr, i32.const_int(sym.cp_len as u64, false));
 
               b.build_unconditional_branch(if branch.is_skipped {
                 blocks.get(&(branch.value, true)).unwrap().1
@@ -592,20 +586,20 @@ pub(crate) fn construct_instruction_branch<'a>(
           build_fast_call(module, module.fun.scan, &[
             (parse_ctx).into(),
             parse_fun_ptr(scanner_address, p, module).into(),
+            b.build_load(input_ptr_ptr.into(), "").into_pointer_value().into(),
+            b.build_load(input_size_ptr.into(), "").into_int_value().into(),
             b.build_load(active_offset, "").into_int_value().into(),
             b.build_load(cache_line_ptr, "").into_int_value().into(),
+            b.build_load(cache_line_ptr, "").into_int_value().into(),
           ])?;
-
-          value = CTX::token_type.load(module, parse_ctx)?.into_int_value();
+          value = CTX::tok_id.load(module, parse_ctx)?.into_int_value();
         }
       }
       INPUT_TYPE::T01_PRODUCTION => {
-        value = CTX::production.load(module, parse_ctx)?.into_int_value();
+        value = CTX::prod_id.load(module, parse_ctx)?.into_int_value();
       }
       INPUT_TYPE::T05_BYTE => {
-        // let tok_len_ptr = b.build_struct_gep(token_ptr, TokLength, "").unwrap();
-        // b.build_store(tok_len_ptr, ctx.ctx.i64_type().const_int((1 << 32) | 1, false));
-        b.build_store(cache_length_ptr, module.ctx.i64_type().const_int((1 << 32) | 1, false));
+        b.build_store(cache_length_ptr, i32.const_int(1, false));
         value = b.build_load(buffer_ptr?, "").into_int_value();
       }
       INPUT_TYPE::T03_CLASS => {
@@ -652,7 +646,19 @@ pub(crate) fn construct_instruction_branch<'a>(
 
     if let Some(skip_block) = skip_block {
       b.position_at_end(skip_block);
-      create_skip_code(b, active_offset, cache_length_ptr, i64, table_block);
+      unsafe {
+        let off = b.build_load(active_offset, "offset").into_int_value();
+        let len = b.build_load(cache_length_ptr, "length").into_int_value();
+        let new_off = b.build_int_add(off, len, "new_offset");
+        b.build_store(active_offset, new_off);
+        b.build_store(cache_length_ptr, i32.const_int(0, false));
+
+        // Increment pointer and offset by len;
+        let input_ptr = b.build_load(input_ptr_ptr, "").into_pointer_value();
+        let input_ptr = b.build_gep(input_ptr, &[len.into()], "");
+        b.build_store(input_ptr_ptr, input_ptr);
+        b.build_unconditional_branch(table_block);
+      }
     }
 
     let default_instruction = instruction.branch_default(&p.output.bytecode);
@@ -763,14 +769,12 @@ fn construct_cp_lu_with_token_len_store<'a>(
     .into_struct_value();
 
   let cp_val = b.build_extract_value(cp_info, 0, "cp_val")?.into_int_value();
-  let cp_len = b.build_extract_value(cp_info, 1, "cp_len")?.into_int_value();
-  let tok_len = b.build_int_z_extend(cp_len, module.ctx.i64_type(), "tok_len");
-  let tok_len = b.build_or(tok_len, module.ctx.i64_type().const_int(1 << 32, false), "tok_len");
+  let cp_byte_len = b.build_extract_value(cp_info, 1, "cp_len")?.into_int_value();
 
   let parse_ctx = pack.fun.get_nth_param(0)?.into_pointer_value();
-  let cache_length_ptr = CTX::token_length.get_ptr(module, parse_ctx)?;
+  let cache_length_ptr = CTX::scan_len.get_ptr(module, parse_ctx)?;
 
-  b.build_store(cache_length_ptr, tok_len);
+  b.build_store(cache_length_ptr, cp_byte_len);
 
   SherpaResult::Ok(cp_val)
 }
@@ -785,54 +789,6 @@ struct InputBlockRef<'a> {
   is_truncated: IntValue<'a>,
 }
 
-fn write_get_input_ptr_lookup<'a>(
-  module: &'a LLVMParserModule,
-  pack: &'a FunctionPack,
-  max_length: usize,
-  byte_offset: IntValue<'a>,
-) -> SherpaResult<InputBlockRef<'a>> {
-  let i32 = module.ctx.i32_type();
-  let b = &module.builder;
-
-  let input_block = build_fast_call(module, module.fun.get_adjusted_input_block, &[
-    pack.fun.get_first_param().unwrap().into_pointer_value().into(),
-    byte_offset.into(),
-    i32.const_int(max_length as u64, false).into(),
-  ])?
-  .try_as_basic_value()
-  .unwrap_left()
-  .into_struct_value();
-
-  SherpaResult::Ok(InputBlockRef {
-    pointer:      b
-      .build_extract_value(input_block, InputBlockPtr, "input_ptr")?
-      .into_pointer_value(),
-    start:        b
-      .build_extract_value(input_block, InputBlockStart, "input_offset")?
-      .into_int_value(),
-    size:         b
-      .build_extract_value(input_block, InputBlockSize, "input_size")?
-      .into_int_value(),
-    is_truncated: b
-      .build_extract_value(input_block, InputBlockTruncated, "input_truncated")?
-      .into_int_value(),
-  })
-}
-
-pub(crate) fn create_skip_code(
-  b: &Builder,
-  byte_offset_ptr: PointerValue,
-  byte_len_ptr: PointerValue,
-  i64: IntType,
-  table_block: BasicBlock,
-) {
-  let off = b.build_load(byte_offset_ptr, "offset").into_int_value();
-  let len = b.build_load(byte_len_ptr, "length").into_int_value();
-  b.build_store(byte_offset_ptr, b.build_int_add(off, len, "new_offset"));
-  b.build_store(byte_len_ptr, i64.const_int(0, false));
-  b.build_unconditional_branch(table_block);
-}
-
 pub(crate) fn construct_instruction_prod(
   instruction: INSTRUCTION,
   ctx: &LLVMParserModule,
@@ -841,7 +797,7 @@ pub(crate) fn construct_instruction_prod(
   let production_id = instruction.get_contents();
   let parse_ctx = pack.fun.get_nth_param(0)?.into_pointer_value();
   let b = &ctx.builder;
-  let production_ptr = b.build_struct_gep(parse_ctx, CTX::production.into(), "")?;
+  let production_ptr = b.build_struct_gep(parse_ctx, CTX::prod_id.into(), "")?;
   b.build_store(production_ptr, ctx.ctx.i32_type().const_int(production_id as u64, false));
 
   SherpaResult::Ok(instruction.next(&pack.output.bytecode))
@@ -853,15 +809,13 @@ fn construct_token(
   pack: &FunctionPack,
 ) -> SherpaResult<INSTRUCTION> {
   let token_value = instruction.get_contents() & 0x00FF_FFFF;
-  let b = &module.builder;
   let parse_ctx = pack.fun.get_nth_param(0)?.into_pointer_value();
-  let cache_offset_ptr = CTX::token_offset.get_ptr(module, parse_ctx)?;
 
-  let prod_type_pointer = b.build_struct_gep(parse_ctx, CTX::production.into(), "")?;
-  b.build_store(prod_type_pointer, module.ctx.i32_type().const_int(token_value as u64, false));
+  let i32 = module.ctx.i32_type();
 
-  let offset_ptr = b.build_struct_gep(parse_ctx, CTX::token_offset.into(), "")?;
-  b.build_store(offset_ptr, b.build_load(cache_offset_ptr, ""));
+  CTX::tok_id.store(module, parse_ctx, i32.const_int(token_value as u64, false))?;
+
+  CTX::scan_anchor_off.store(module, parse_ctx, CTX::scan_off.load(module, parse_ctx)?)?;
 
   SherpaResult::Ok(instruction.next(&pack.output.bytecode))
 }
@@ -926,6 +880,15 @@ pub(crate) fn construct_goto<'a>(
   };
 
   if gotos.len() > 0 {
+    build_fast_call(module, module.fun.extend_stack_if_needed, &[
+      parse_ctx.into(),
+      module
+        .ctx
+        .i32_type()
+        .const_int((2 << gotos.len().checked_ilog2().unwrap_or(0)) as u64, false)
+        .into(),
+    ])?;
+
     let goto_stack_ptr = CTX::goto_stack_ptr.get_ptr(module, parse_ctx)?;
     let mut goto_top = b.build_load(goto_stack_ptr, "").into_pointer_value();
     for goto in &gotos {
@@ -945,11 +908,10 @@ pub(crate) fn construct_goto<'a>(
     b.build_store(goto_stack_ptr, goto_top);
 
     // Decrement goto remaining
-    let goto_remaining_ptr = CTX::goto_remaining.get_ptr(module, parse_ctx)?;
-    let goto_remaining = b.build_load(goto_remaining_ptr, "").into_int_value();
-    let goto_remaining =
-      b.build_int_sub(goto_remaining, i32.const_int(gotos.len() as u64, false), "");
-    b.build_store(goto_remaining_ptr, goto_remaining);
+    let goto_free_ptr = CTX::goto_free.get_ptr(module, parse_ctx)?;
+    let goto_free = b.build_load(goto_free_ptr, "").into_int_value();
+    let goto_free = b.build_int_sub(goto_free, i32.const_int(gotos.len() as u64, false), "");
+    b.build_store(goto_free_ptr, goto_free);
   }
 
   if let Some(last) = last {
@@ -978,7 +940,7 @@ pub(crate) fn construct_reduce(
   build_fast_call(module, module.fun.emit_reduce, &[
     parse_ctx.into(),
     pack.fun.get_nth_param(1)?.into_pointer_value().into(),
-    CTX::production.load(module, parse_ctx)?.into(),
+    CTX::prod_id.load(module, parse_ctx)?.into(),
     module.ctx.i32_type().const_int(rule_id as u64, false).into(),
     module.ctx.i32_type().const_int(symbol_count as u64, false).into(),
   ])?;
@@ -1024,15 +986,14 @@ pub(crate) fn construct_shift(
 ) -> SherpaResult<()> {
   let parse_ctx = pack.fun.get_nth_param(0)?.into_pointer_value();
   let action_ptr = pack.fun.get_nth_param(1)?.into_pointer_value();
-  let cache_offset_ptr = CTX::token_offset.get_ptr(module, parse_ctx)?;
-  let cache_length_ptr = CTX::token_length.get_ptr(module, parse_ctx)?;
-  let cache_anchor_offset_ptr = CTX::anchor_offset.get_ptr(module, parse_ctx)?;
-  let cache_line_ptr = CTX::line_data.get_ptr(module, parse_ctx)?;
+  let cache_offset_ptr = CTX::token_off.get_ptr(module, parse_ctx)?;
+  let cache_anchor_offset_ptr = CTX::anchor_off.get_ptr(module, parse_ctx)?;
+  let cache_line_ptr = CTX::anchor_line_off.get_ptr(module, parse_ctx)?;
 
   write_emit_reentrance(instruction.next(&pack.output.bytecode), module, pack)?;
 
   let offset = module.builder.build_load(cache_offset_ptr, "").into_int_value();
-  let length = module.builder.build_load(cache_length_ptr, "").into_int_value();
+  let length = CTX::scan_len.load(module, parse_ctx)?.into_int_value();
 
   let line = module.builder.build_load(cache_line_ptr, "").into_int_value();
 
@@ -1047,8 +1008,14 @@ pub(crate) fn construct_shift(
   ])?;
 
   let new_offset = module.builder.build_int_add(length, offset, "");
-  CTX::token_offset.store(module, parse_ctx, new_offset)?;
-  CTX::anchor_offset.store(module, parse_ctx, new_offset)?;
+  CTX::token_off.store(module, parse_ctx, new_offset)?;
+  CTX::anchor_off.store(module, parse_ctx, new_offset)?;
+
+  unsafe {
+    let input_ptr = CTX::tok_ptr.load(module, parse_ctx)?.into_pointer_value();
+    let input_ptr = b.build_gep(input_ptr, &[length.into()], "");
+    CTX::tok_ptr.store(module, parse_ctx, input_ptr)?;
+  }
 
   b.build_return(None);
 
@@ -1062,13 +1029,17 @@ pub(crate) fn construct_scanner_shift(
 ) -> SherpaResult<INSTRUCTION> {
   let b = &module.builder;
   let parse_ctx = pack.fun.get_nth_param(0)?.into_pointer_value();
-  let cache_offset_ptr = CTX::token_offset.get_ptr(module, parse_ctx)?;
-  let cache_length_ptr = CTX::token_length.get_ptr(module, parse_ctx)?;
-  let assert_off = b.build_load(cache_offset_ptr, "").into_int_value();
-  let assert_len = b.build_load(cache_length_ptr, "").into_int_value();
-  let assert_off = b.build_int_add(assert_len, assert_off, "");
-  b.build_store(cache_offset_ptr, assert_off);
-  b.build_store(cache_length_ptr, module.ctx.i64_type().const_int(0, false));
+  let length = CTX::scan_len.load(module, parse_ctx)?.into_int_value();
+  let scan_offset_ptr = CTX::scan_off.get_ptr(module, parse_ctx)?;
+  let scan_off = b.build_load(scan_offset_ptr, "").into_int_value();
+
+  b.build_store(scan_offset_ptr, b.build_int_add(length, scan_off, ""));
+
+  unsafe {
+    let input_ptr = CTX::scan_ptr.load(module, parse_ctx)?.into_pointer_value();
+    let input_ptr = b.build_gep(input_ptr, &[length.into()], "");
+    CTX::scan_ptr.store(module, parse_ctx, input_ptr)?;
+  }
 
   SherpaResult::Ok(instruction.next(&pack.output.bytecode))
 }
@@ -1083,7 +1054,6 @@ pub(crate) unsafe fn construct_prime_function(
   states: &BTreeMap<INSTRUCTION, LLVMStateData>,
 ) -> SherpaResult<()> {
   let i32 = module.ctx.i32_type();
-  let i64 = module.ctx.i64_type();
   let bool = module.ctx.bool_type();
   let b = &module.builder;
   let funct = &module.fun;
@@ -1151,118 +1121,96 @@ pub(crate) unsafe fn construct_prime_function(
   }
 }
 
-pub(crate) unsafe fn construct_scan(module: &LLVMParserModule) -> SherpaResult<()> {
+pub(crate) unsafe fn construct_scan<'a>(module: &LLVMParserModule<'a>) -> SherpaResult<()> {
+  // The scan mode reuses the parse context, and pushes a sentinel states
+  // that guard against the scanner context consuming the states of the normal
+  // context. Though not actually implemented in this function, it worth it
+  // to note that the scanner states use the scan_* fields to track progression
+  // of a recognized token, and this data is then used to calculate the length
+  // of the recognized token when a shift action is emitted.
+
   let LLVMParserModule { builder: b, types, ctx, fun: funct, .. } = module;
 
-  let i32 = ctx.i32_type();
-  let i64 = ctx.i64_type();
+  // Build a null function that will be used to break out of the scanner
+  // context dispatch loop
+  let null_fn = {
+    let null_fn = module.module.add_function(
+      "scan_stop",
+      ctx.void_type().fn_type(
+        &[
+          types.parse_ctx.ptr_type(inkwell::AddressSpace::Generic).into(),
+          types.action.ptr_type(inkwell::AddressSpace::Generic).into(),
+        ],
+        false,
+      ),
+      Some(Linkage::Private),
+    );
+
+    null_fn.set_call_conventions(fastCC);
+
+    let entry = ctx.append_basic_block(null_fn, "Entry");
+
+    b.position_at_end(entry);
+    b.build_return(None);
+
+    null_fn
+  };
 
   let fn_value = funct.scan;
-
   //## Set the context's goto pointers to point to the goto block;
   let entry = ctx.append_basic_block(fn_value, "Entry");
-  let success = ctx.append_basic_block(fn_value, "Produce_Scan_Token");
-  let failure = ctx.append_basic_block(fn_value, "Produce_Failed_Token");
 
   //## Extract Params
   let parse_ctx = fn_value.get_nth_param(0)?.into_pointer_value();
   let scanner_parse_function_ptr = fn_value.get_nth_param(1)?.into_pointer_value();
-  let start_offset = fn_value.get_nth_param(2)?.into_int_value();
-  let line_data = fn_value.get_nth_param(3)?.into_int_value();
+  let input_ptr = fn_value.get_nth_param(2)?.into_pointer_value();
+  let input_len = fn_value.get_nth_param(3)?.into_int_value();
+  let offset = fn_value.get_nth_param(4)?.into_int_value();
+  //let line_offset = fn_value.get_nth_param(5)?.into_int_value();
+  //let line_count = fn_value.get_nth_param(6)?.into_int_value();
 
   //## Entry Block
   b.position_at_end(entry);
 
-  let scan_ctx = b.build_alloca(types.parse_ctx, "");
+  // Push the scanner sentinel state and the entry scanner state onto
+  // the goto stack.
 
-  // The scan context inherits its goto stack and current input block
-  // from the main parser context. These instruction copy data from one
-  // context to the other.
-
-  // Character Reader
-  CTX::reader.store(module, scan_ctx, CTX::reader.load(module, parse_ctx)?)?;
-
-  // Goto Stack Data
-  CTX::goto_stack_ptr.store(module, scan_ctx, CTX::goto_stack_ptr.load(module, parse_ctx)?)?;
-  CTX::goto_stack_size.store(module, scan_ctx, CTX::goto_stack_size.load(module, parse_ctx)?)?;
-  CTX::goto_remaining.store(module, scan_ctx, CTX::goto_remaining.load(module, parse_ctx)?)?;
-
-  // Input Block data
-  CTX::input_block.store(module, scan_ctx, CTX::input_block.load(module, parse_ctx)?)?;
-  CTX::get_input_block.store(module, scan_ctx, CTX::get_input_block.load(module, parse_ctx)?)?;
-  CTX::state.store(module, scan_ctx, i32.const_int(NORMAL_STATE_FLAG_LLVM as u64, false))?;
-
-  // Copy input token to the Assert and Anchor token slots of the scan context.
-  CTX::token_offset.store(module, scan_ctx, start_offset)?;
-  CTX::line_data.store(module, scan_ctx, line_data)?;
+  CTX::scan_ptr.store(module, parse_ctx, input_ptr)?;
+  CTX::scan_input_len.store(module, parse_ctx, input_len)?;
+  CTX::scan_input_trun.store(module, parse_ctx, ctx.bool_type().const_zero())?;
+  CTX::scan_off.store(module, parse_ctx, offset)?;
+  CTX::scan_anchor_off.store(module, parse_ctx, offset)?;
 
   build_push_fn_state(
     module,
-    scan_ctx,
-    module.fun.emit_eop.as_global_value().as_pointer_value(),
+    parse_ctx,
+    null_fn.as_global_value().as_pointer_value(),
     (NORMAL_STATE_FLAG_LLVM | FAIL_STATE_FLAG_LLVM),
   );
 
-  build_push_fn_state(module, scan_ctx, scanner_parse_function_ptr, NORMAL_STATE_FLAG_LLVM);
+  build_push_fn_state(module, parse_ctx, scanner_parse_function_ptr, NORMAL_STATE_FLAG_LLVM);
 
   // Reserve enough space on the stack for an Action enum
-  let action = b.build_alloca(types.action.array_type(8), "");
+  let action = b.build_alloca(types.action, "");
 
-  let action = b.build_bitcast(action, types.action.ptr_type(inkwell::AddressSpace::Generic), "");
+  // Dispatch!
+  b.build_call(funct.dispatch, &[parse_ctx.into(), action.into()], "");
 
-  b.build_call(funct.dispatch, &[scan_ctx.into(), action.into()], "");
+  // Convert scan_anchor_off and tok_off / peek_off into a length offset
 
-  // Copy updated data from the scan context back to the main context
-
-  // Goto Stack Data
-  CTX::goto_stack_ptr.store(module, parse_ctx, CTX::goto_stack_ptr.load(module, scan_ctx)?)?;
-  CTX::goto_stack_size.store(module, parse_ctx, CTX::goto_stack_size.load(module, scan_ctx)?)?;
-  CTX::goto_remaining.store(module, parse_ctx, CTX::goto_remaining.load(module, scan_ctx)?)?;
-
-  CTX::input_block.store(module, parse_ctx, CTX::input_block.load(module, scan_ctx)?)?;
-
-  // Produce either a failure token or a success token based on
-  // outcome of the `next` call.
-
-  let action_type = b.build_struct_gep(action.into_pointer_value(), 0, "")?;
-
-  let action_type = b.build_load(action_type, "");
-
-  let comparison = b.build_int_compare(
-    inkwell::IntPredicate::EQ,
-    action_type.into_int_value(),
-    i32.const_int(7, false),
-    "",
-  );
-  b.build_conditional_branch(comparison, success, failure);
-
-  //## Success Block
-  b.position_at_end(success);
-
-  CTX::line_data.store(module, parse_ctx, CTX::line_data.load(module, scan_ctx)?)?;
-
-  CTX::token_length.store(
+  CTX::scan_len.store(
     module,
     parse_ctx,
     b.build_int_sub(
-      CTX::token_offset.load(module, scan_ctx)?.into_int_value(),
-      CTX::token_offset.load(module, parse_ctx)?.into_int_value(),
+      CTX::scan_anchor_off.load(module, parse_ctx)?.into_int_value(),
+      offset.into(),
       "",
     ),
-  )?;
+  );
 
-  CTX::token_type.store(
-    module,
-    parse_ctx,
-    b.build_int_z_extend(CTX::production.load(module, scan_ctx)?.into_int_value(), i64, ""),
-  )?;
-
-  b.build_return(None);
-
-  //## Failure Block
-  b.position_at_end(failure);
-
-  CTX::token_type.store(module, parse_ctx, i64.const_int(0, false))?;
+  // Now the scan_len contains the length of a recognized token
+  // and tok_prod_id contains the id of that recognized token. The calling state
+  // can handle these values from here, so simply return.
 
   b.build_return(None);
 
@@ -1284,7 +1232,6 @@ pub(crate) unsafe fn construct_dispatch_function<'a>(
   let entry_block = ctx.append_basic_block(fn_value, "Entry");
 
   let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
-  let action = fn_value.get_nth_param(1).unwrap().into_pointer_value();
 
   let i32 = ctx.i32_type();
   let zero = i32.const_int(0, false);
@@ -1297,18 +1244,17 @@ pub(crate) unsafe fn construct_dispatch_function<'a>(
   b.build_unconditional_branch(block_dispatch);
 
   b.position_at_end(block_dispatch);
-  let state = b.build_load(CTX::state.get_ptr(c, parse_ctx)?, "state");
 
   let goto_stack_ptr = CTX::goto_stack_ptr.get_ptr(c, parse_ctx)?;
   let goto_top = b.build_load(goto_stack_ptr, "").into_pointer_value();
   let goto_top = b.build_gep(goto_top, &[i32.const_int(1, false).const_neg()], "");
   b.build_store(goto_stack_ptr, goto_top);
 
-  let goto_remaining_ptr = CTX::goto_remaining.get_ptr(c, parse_ctx)?;
-  let goto_remaining = b.build_load(goto_remaining_ptr, "").into_int_value();
-  let goto_remaining = b.build_int_add(goto_remaining, i32.const_int(1, false), "");
+  let goto_free_ptr = CTX::goto_free.get_ptr(c, parse_ctx)?;
+  let goto_free = b.build_load(goto_free_ptr, "").into_int_value();
+  let goto_free = b.build_int_add(goto_free, i32.const_int(1, false), "");
 
-  b.build_store(goto_remaining_ptr, goto_remaining);
+  b.build_store(goto_free_ptr, goto_free);
 
   let goto = b.build_load(goto_top, "").into_struct_value();
 
@@ -1401,6 +1347,61 @@ fn build_push_fn_state<'a>(
     ],
     "",
   );
+
+  SherpaResult::Ok(())
+}
+
+pub(crate) fn check_for_input_acceptability<'a>(
+  module: &'a LLVMParserModule,
+  p: &'a FunctionPack,
+  input_ptr_ptr: PointerValue<'a>,
+  input_len_ptr: PointerValue<'a>,
+  input_truncated_ptr: PointerValue<'a>,
+  input_off: IntValue<'a>,
+  needed_bytes: IntValue<'a>,
+) -> SherpaResult<()> {
+  let LLVMParserModule { builder: b, ctx, fun: funct, .. } = module;
+
+  let parse_ctx = p.fun.get_nth_param(0).unwrap().into_pointer_value();
+  let state = p.state;
+
+  let bool = ctx.bool_type();
+
+  // Set the context's goto pointers to point to the goto block;
+  let attempt_extend = state.generate_block(module, "Attempt_Extend", 0);
+  let truncation_check = state.generate_block(module, "Check_Truncation", 0);
+  let valid_window = state.generate_block(module, "Valid_Window", 0);
+
+  let input_len = b.build_load(input_len_ptr, "len").into_int_value();
+  let requested_end_off = b.build_int_add(input_off, needed_bytes, "end_offset");
+
+  // if the requested_end_cursor_position is > the blocks end position, then try
+  // requesting more input buffer.
+
+  let comparison =
+    b.build_int_compare(inkwell::IntPredicate::UGE, input_len, requested_end_off, "");
+  b.build_conditional_branch(comparison, valid_window, truncation_check);
+
+  b.position_at_end(truncation_check);
+
+  let truncated = b.build_load(input_truncated_ptr, "len").into_int_value();
+  let comparison =
+    b.build_int_compare(inkwell::IntPredicate::EQ, truncated, bool.const_int(1, false), "");
+
+  b.build_conditional_branch(comparison, attempt_extend, valid_window);
+  b.position_at_end(attempt_extend);
+
+  build_fast_call(module, funct.get_adjusted_input_block, &[
+    parse_ctx.into(),
+    input_ptr_ptr.into(),
+    input_len_ptr.into(),
+    input_truncated_ptr.into(),
+    input_off.into(),
+    requested_end_off.into(),
+  ]);
+
+  b.build_unconditional_branch(valid_window);
+  b.position_at_end(valid_window);
 
   SherpaResult::Ok(())
 }

@@ -1,6 +1,7 @@
-use super::InputBlock;
-use crate::{types::parse_token::ParseToken, utf8::*};
+use crate::utf8::*;
 use std::sync::Arc;
+
+use super::TokenRange;
 
 /// A multi-reader, multi-writer view of the underlying parser input
 /// data, used to distribute access to the input string over multiple
@@ -74,7 +75,7 @@ pub trait ByteReader {
 
   /// Resets the cursor back to the position of the token. Returns
   /// the same value as `get_type_info`.
-  fn set_cursor_to(&mut self, token: &ParseToken) -> u64;
+  fn set_cursor_to(&mut self, token: &TokenRange) -> u64;
 
   /// Return a packed u64 containing codepoint info the higher 32 bits,
   /// class in the high 16, codepoint length in the high 8 bits,
@@ -189,30 +190,30 @@ pub trait UTF8Reader {
     }
   }
 
-  fn get_str(&self) -> &str;
+  fn get_str<'a>(&'a self) -> &'a str;
 }
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct InputInfo(*const u8, u32, bool);
 
 pub trait LLVMByteReader {
   /// Get a pointer to a sequence of bytes that can be read from the input given
   /// the cursor position. The second tuple values should be the length bytes that
   ///  can be read from the block.
-  fn get_byte_block_at_cursor<T: ByteReader>(self_: &mut T, input_block: &mut InputBlock) {
-    let cursor = input_block.start;
+  extern "C" fn get_byte_block_at_cursor<T: ByteReader>(
+    self_: &mut T,
+    start_offset: u32,
+    _end_offset: u32,
+  ) -> InputInfo {
+    let cursor = start_offset;
     let size = ((self_.len() as i64) - (cursor as i64)).max(0) as u32;
 
     if size > 0 {
       let ptr = ((self_.get_bytes().as_ptr() as usize) + cursor as usize) as *const u8;
-      input_block.block = ptr;
-      input_block.start = cursor;
-      input_block.readable_bytes = size;
-      input_block.end = cursor + size;
-      input_block.is_truncated = false;
+      InputInfo(ptr, self_.len() as u32, false)
     } else {
-      input_block.block = 0 as *const u8;
-      input_block.start = 0;
-      input_block.end = 0;
-      input_block.readable_bytes = 0;
-      input_block.is_truncated = false;
+      InputInfo(0 as *const u8, 0, false)
     }
   }
 }

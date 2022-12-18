@@ -13,3 +13,5 @@ pub mod pipeline;
 pub mod disassembly;
 
 pub mod ascript;
+
+pub mod rust_preamble;

@@ -116,10 +116,10 @@ pub fn hash_group_btreemap<
   T: Sized,
   R: Hash + Sized + Ord + Eq,
   E: IntoIterator<Item = T> + Extend<T> + Default,
-  Function: Fn(usize, &T) -> R,
+  Function: FnMut(usize, &T) -> R,
 >(
   vector: E,
-  hash_yielder: Function,
+  mut hash_yielder: Function,
 ) -> BTreeMap<R, E> {
   let mut hash_groups = BTreeMap::<R, E>::new();
 

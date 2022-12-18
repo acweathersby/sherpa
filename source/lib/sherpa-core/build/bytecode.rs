@@ -22,7 +22,7 @@ pub fn build_bytecode_parser(source_type: SourceType) -> PipelineTask {
           {
             Err(vec![SherpaError::from(err)])
           } else {
-            Ok(Some(unsafe { String::from_utf8_unchecked(writer.into_output()) }))
+            Ok(Some((20, unsafe { String::from_utf8_unchecked(writer.into_output()) })))
           }
         }
         _ => Err(vec![SherpaError::from(format!(

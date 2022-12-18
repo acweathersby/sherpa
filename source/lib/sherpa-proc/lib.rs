@@ -135,7 +135,7 @@ pub fn compile_mod(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     .run(|errors| {
       process_errors(errors, offsets);
     }) {
-    SherpaResult::Ok((_, artifacts, _)) => artifacts.join("\n").parse().unwrap(),
+    SherpaResult::Ok((_, artifacts, _)) => String::default().parse().unwrap(), //artifacts.join("\n").parse().unwrap(),
     _ => Default::default(),
   }
 }

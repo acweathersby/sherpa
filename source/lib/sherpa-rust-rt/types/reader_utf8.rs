@@ -106,15 +106,15 @@ impl<'a> ByteReader for UTF8StringReader<'a> {
   }
 
   #[inline(always)]
-  fn set_cursor_to(&mut self, token: &ParseToken) -> u64 {
-    let ParseToken { byte_offset, line_number, line_offset, .. } = *token;
+  fn set_cursor_to(&mut self, token: &TokenRange) -> u64 {
+    let TokenRange { off, line_num, line_off, .. } = *token;
 
-    if self.cursor != byte_offset as usize {
-      let diff = byte_offset as i32 - self.cursor as i32;
+    if self.cursor != off as usize {
+      let diff = off as i32 - self.cursor as i32;
 
-      self.line_count = line_number as usize;
+      self.line_count = line_num as usize;
 
-      self.line_off = line_offset as usize;
+      self.line_off = line_off as usize;
 
       self.next(diff)
     } else {

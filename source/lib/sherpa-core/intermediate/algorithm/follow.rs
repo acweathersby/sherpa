@@ -115,8 +115,13 @@ pub(super) fn get_follow_items(
             root_node.usize() == 0,
             "The root node should be the only one that ends up in this branch"
           );
-
-          if t
+          if t.accept_items().contains(&completed_item.to_origin_only_state()) {
+            fin_items.insert(LinkedItem {
+              item:         completed_item.to_origin_only_state(),
+              closure_node: None,
+            });
+          }
+          /* if t
             .get_node(root_node)
             .transition_items
             .contains(&completed_item.to_start().to_origin_only_state())
@@ -125,7 +130,7 @@ pub(super) fn get_follow_items(
               item:         completed_item.to_origin_only_state(),
               closure_node: None,
             });
-          }
+          } */
           #[cfg(follow_tracking)]
           {
             eprintln!("no closure for Node [{:?}] - Should be at root node.", root_node);
@@ -163,7 +168,7 @@ pub(super) fn get_follow_items(
               if seen.insert(item.to_empty_state().to_start()) {
                 #[cfg(follow_tracking)]
                 {
-                  println!("---- {}", item.debug_string(&t.g));
+                  eprintln!("---- {}", item.debug_string(&t.g));
                 }
                 // Preserve the item's original state
                 let original_state = item.get_state();

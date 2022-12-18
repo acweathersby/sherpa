@@ -38,6 +38,7 @@ use crate::{
 };
 use std::{
   collections::{btree_set, BTreeMap, BTreeSet, VecDeque},
+  fmt::format,
   io::{Result, Write},
   vec,
 };
@@ -289,13 +290,14 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
     .collect::<BTreeMap<_, _>>();
 
   let fn_args = format!(
-    "ctx: &mut LLVMParseContext<UTF8StringReader>, slots: &mut AstSlots<({}, TokenRange, TokenRange)>",
+    "ctx: &LLVMParseContext<R, M>, slots: &AstSlots<({}, TokenRange, TokenRange)>",
     ast.ast_type_name
   );
+  let fn_template = format!("<R: LLVMReader + UTF8Reader, M>");
 
   // Build reduce functions -------------------------------------
   w.wrtln(&format!(
-    "\nfn default_fn({}){{
+    "\nfn default_fn{}({}){{
   if slots.len() > 1 {{
     let (_, tok, _) = slots.take(0);
     let last = slots.take(slots.len() - 1);
@@ -305,7 +307,7 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
     slots.assign(0, (last.0, tok + last.1, TokenRange::default()));
   }}
 }}",
-    fn_args
+    fn_template, fn_args
   ))?
   .newline()?;
 
@@ -333,7 +335,13 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
     let fn_name = format!("ast_fn{:0>3}", rule.bytecode_id);
 
     temp_writer
-      .wrtln(&format!("/*\n{}\n*/\nfn {}({}){{", rule.item().rule_string(&g), fn_name, fn_args))?
+      .wrtln(&format!(
+        "/*\n{}\n*/\nfn {}{}({}){{",
+        rule.item().rule_string(&g),
+        fn_name,
+        fn_template,
+        fn_args
+      ))?
       .indent();
 
     if rule.reduce_fn_ids.is_empty() {
@@ -439,7 +447,7 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
                   }
                 ))?,
                 r => {
-                  println!("{}", r.debug_string(None));
+                  eprintln!("{}", r.debug_string(None));
                   temp_writer.write_line(&reference)?
                 }
               };
@@ -469,16 +477,25 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
   // Reduce Function Array -----------------------
 
   w.wrt(&format!(
-    "pub const REDUCE_FUNCTIONS:[fn(&mut LLVMParseContext<UTF8StringReader>, &mut AstSlots<({}, TokenRange, TokenRange)>); {}] = [",
+    "
+struct ReduceFunctions<R: LLVMReader + UTF8Reader, M>(pub [fn(&LLVMParseContext<R, M>, &AstSlots<({0}, TokenRange, TokenRange)>); {1}]);
+impl<R: LLVMReader + UTF8Reader, M> ReduceFunctions<R, M> {{
+  pub const fn new() -> Self {{
+    Self([
+      {2}
+    ])
+  }}
+}}
+",
     ast.ast_type_name,
-    ordered_bodies.len()
+    ordered_bodies.len(),
+    &refs
+      .iter()
+      .map(|r| format!("{}::<R, M>", r))
+      .collect::<Vec<String>>()
+      .join(",\n")
   ))?
-  .indent()
-  .wrt("\n")?;
-
-  w.write(&refs.join(",\n"))?;
-
-  w.dedent().wrtln("];")?.newline()?;
+    .newline()?;
 
   Ok(())
 }

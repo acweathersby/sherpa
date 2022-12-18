@@ -14,28 +14,6 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 /// Attempts to reduce the number of IR states through merging states, and reduce
 /// and reduce bytecode complexity by transforming instructions where appropriate.
 ///
-/// # Example
-/// ```
-/// # use sherpa_core::debug::compile_test_grammar;
-/// # use sherpa_core::intermediate::state::compile_states;
-/// # use sherpa_core::intermediate::optimize::optimize_ir_states;
-///
-/// let g = &compile_test_grammar("<> A > \\h \\e \\l \\l \\o");
-/// let mut states = compile_states(&g, 1);
-///
-/// let unoptimized_state_count = states.len() as f64;
-///
-/// let optimized_state_count = optimize_ir_states(states, &g).len() as f64;
-///
-/// println!(
-///   "pre opt {} post opt {} reduced to {}% size",
-///   unoptimized_state_count,
-///   optimized_state_count,
-///   100.0 * (optimized_state_count  / unoptimized_state_count)
-/// );
-///
-/// assert!(unoptimized_state_count > optimized_state_count);
-/// ```
 pub fn optimize_ir_states(
   j: &mut Journal,
   mut states: BTreeMap<String, Box<IRState>>,

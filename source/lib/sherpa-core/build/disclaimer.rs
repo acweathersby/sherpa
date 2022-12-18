@@ -2,15 +2,10 @@ use crate::util::SHERPA_VERSION;
 
 use super::pipeline::PipelineContext;
 
-pub static DISCLAIMER: fn(
-  file_type: &str,
-  comment_delimiter: &str,
-  ctx: &PipelineContext,
-) -> String = |file_type, comment_delimiter, ctx| {
+pub fn DISCLAIMER(file_type: &str, comment_delimiter: &str, ctx: &PipelineContext) -> String {
   let grammar = ctx.get_journal().grammar().unwrap();
   format!(
-    r##"
-{3} ### `{1}` {2}
+    r##"{3} ### `{1}` {2}
 {3}
 {3} - **GENERATOR**: sherpa {0}
 {3} - **SOURCE**: {4}
@@ -48,4 +43,4 @@ pub static DISCLAIMER: fn(
     comment_delimiter,
     grammar.id.path.to_str().unwrap(),
   )
-};
+}

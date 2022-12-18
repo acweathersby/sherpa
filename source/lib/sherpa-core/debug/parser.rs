@@ -23,7 +23,7 @@ pub fn collect_shifts_and_skips(
         break;
       }
       ParseAction::Error { last_input, .. } => {
-        let mut token = Token::from_parse_token(&last_input);
+        let mut token: Token = last_input.into();
         token.set_source(Arc::new(Vec::from(input.to_string().as_bytes())));
         panic!("{} [{}]:\n{}", "message", token, token.blame(1, 1, "", None));
         break;

@@ -1,7 +1,8 @@
 use std::{rc::Rc, sync::Arc};
 
-use crate::types::ParseToken;
 use sherpa_runtime::utf8::get_utf8_code_point_from;
+
+use crate::deprecated_runtime::parse_token::ParseToken;
 
 use super::ByteReader;
 

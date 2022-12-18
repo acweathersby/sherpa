@@ -6,7 +6,7 @@ pub enum ParseAction {
   Undefined,
   CompleteState,
   FailState,
-  ScannerToken(ParseToken),
+  ScannerToken(TokenRange),
   Fork {
     states_start_offset: u32,
     num_of_states:       u32,
@@ -14,14 +14,10 @@ pub enum ParseAction {
   },
   Shift {
     anchor_byte_offset: u32,
-    anchor_cp_offset:   u32,
     token_byte_offset:  u32,
-    token_cp_offset:    u32,
     token_byte_length:  u32,
-    token_cp_length:    u32,
     token_line_offset:  u32,
     token_line_count:   u32,
-    token_type_info:    u64,
   },
   Reduce {
     production_id: u32,
@@ -33,13 +29,18 @@ pub enum ParseAction {
     // reached_EOF:   bool,
   },
   Error {
-    last_input:      ParseToken,
     last_production: u32,
+    last_input:      TokenRange,
   },
   EndOfInput {
     current_cursor_offset: u32,
   },
   ProductionParseStart,
+}
+
+#[test]
+fn parse_actions_size_is_24() {
+  assert_eq!(std::mem::size_of::<ParseAction>(), 24)
 }
 
 impl Default for ParseAction {

@@ -6,6 +6,7 @@ use crate::{
   util::get_num_of_available_threads,
 };
 use std::{
+  collections::{BTreeMap, BTreeSet},
   fs::{create_dir_all, File},
   io::Write,
   path::PathBuf,
@@ -19,10 +20,12 @@ use super::{
   bytecode::build_bytecode_parser,
   disassembly::build_bytecode_disassembly,
   llvm::{build_llvm_parser, build_llvm_parser_interface},
+  rust_preamble::build_rust_preamble,
 };
 
-pub type TaskFn =
-  Box<dyn Fn(&mut PipelineContext) -> Result<Option<String>, Vec<SherpaError>> + Sync + Send>;
+pub type TaskFn = Box<
+  dyn Fn(&mut PipelineContext) -> Result<Option<(u32, String)>, Vec<SherpaError>> + Sync + Send,
+>;
 
 pub struct PipelineTask {
   pub(crate) fun: TaskFn,
@@ -149,7 +152,7 @@ impl<'a> BuildPipeline<'a> {
   pub fn run<Function: FnOnce(Vec<SherpaError>)>(
     &mut self,
     error_handler: Function,
-  ) -> SherpaResult<(Self, Vec<String>, bool)> {
+  ) -> SherpaResult<(Self, Vec<(u32, String)>, bool)> {
     let mut source_parts = vec![];
     let mut errors = vec![];
 
@@ -241,7 +244,13 @@ impl<'a> BuildPipeline<'a> {
         let source_path = self.build_output_dir.join("./".to_string() + &source_name);
         eprintln!("{:?} {:?}", source_path, self.build_output_dir);
         if let Ok(mut parser_data_file) = std::fs::File::create(&source_path) {
-          let data = source_parts.join("\n");
+          let data = source_parts
+            .iter()
+            .cloned()
+            .collect::<BTreeMap<_, _>>()
+            .into_values()
+            .collect::<Vec<_>>()
+            .join("\n");
           parser_data_file.write_all(&data.as_bytes()).unwrap();
           parser_data_file.flush().unwrap();
         }
@@ -353,6 +362,7 @@ pub fn compile_bytecode_parser(grammar_source_path: &PathBuf, config: Config) ->
     .set_source_output_dir(&out_dir)
     .set_build_output_dir(&out_dir)
     .set_source_file_name("%.rs")
+    .add_task(build_rust_preamble())
     .add_task(build_bytecode_parser(SourceType::Rust))
     .add_task(build_bytecode_disassembly());
 
@@ -383,6 +393,7 @@ pub fn compile_llvm_parser(grammar_source_path: &PathBuf, config: Config) -> boo
     .set_source_output_dir(&out_dir)
     .set_build_output_dir(&out_dir)
     .set_source_file_name("%.rs")
+    .add_task(build_rust_preamble())
     .add_task(build_bytecode_disassembly())
     .add_task(build_llvm_parser(None, true, true))
     .add_task(build_llvm_parser_interface());
