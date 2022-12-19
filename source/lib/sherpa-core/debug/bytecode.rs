@@ -316,7 +316,7 @@ fn get_input_id(lu: Option<&BytecodeGrammarLookups>, token_id: u32, input_type: 
   if let Some(lu) = lu {
     match input_type {
       INPUT_TYPE::T01_PRODUCTION => {
-        let production = &lu.get_prod(token_id).unwrap().guid_name;
+        let production = &lu.get_prod(token_id).unwrap().name;
         format!("{:<3} [{:^1}]", token_id, production)
       }
       INPUT_TYPE::T02_TOKEN => {

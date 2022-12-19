@@ -5,6 +5,7 @@ use crate::types::*;
 use std::{
   convert::Infallible,
   ops::{ControlFlow, FromResidual, Try},
+  panic::Location,
   process::{ExitCode, Termination},
 };
 
@@ -189,8 +190,11 @@ impl<T> FromResidual<Option<Infallible>> for SherpaResult<T> {
   #[track_caller]
   fn from_residual(residual: Option<Infallible>) -> Self {
     match residual {
-      Option::None => SherpaResult::None,
-      Some(e) => SherpaResult::from_residual(residual),
+      Option::None => SherpaResult::Err(SherpaError::from(format!(
+        "Tried to to access the value of an Option::None:\n    {}",
+        Location::caller().to_string(),
+      ))),
+      _ => SherpaResult::from_residual(residual),
     }
   }
 }

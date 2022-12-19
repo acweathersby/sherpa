@@ -1,36 +1,39 @@
 use super::{build_fast_call, create_offset_label, fastCC, CTX_AGGREGATE_INDICES as CTX};
 use crate::{
-  build::table::BranchTableData,
+  build::table::{BranchData, BranchTableData},
   compile::BytecodeOutput,
-  debug::address_string,
-  grammar::data::ast::Generated,
+  debug::{address_string, disassemble_state, BytecodeGrammarLookups},
   llvm::{LLVMParserModule, FAIL_STATE_FLAG_LLVM},
   types::*,
 };
 use inkwell::{
   basic_block::BasicBlock,
   module::Linkage,
-  values::{CallableValue, FunctionValue, IntValue, PointerValue},
+  values::{CallableValue, FunctionValue, IntValue, PointerValue, AnyValue},
 };
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::{
+  collections::{BTreeMap, BTreeSet, VecDeque},
+  sync::Arc,
+};
 
 pub(crate) struct FunctionPack<'a> {
   pub(crate) fun:        &'a FunctionValue<'a>,
   pub(crate) output:     &'a BytecodeOutput,
   pub(crate) is_scanner: bool,
-  pub(crate) state:      LLVMStateData<'a>,
+  pub(crate) state:      &'a LLVMStateData<'a>,
   pub(crate) states:     &'a BTreeMap<INSTRUCTION, LLVMStateData<'a>>,
 }
 
 pub const _FAIL_STATE_FLAG_LLVM: u32 = 2;
 pub const NORMAL_STATE_FLAG_LLVM: u32 = 1;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct LLVMStateData<'a> {
-  pub entry_instruction: INSTRUCTION,
-  pub function_pointer:  PointerValue<'a>,
-  pub function:          FunctionValue<'a>,
-  pub is_scanner:        bool,
+  pub(crate) entry_instruction: INSTRUCTION,
+  pub(crate) function_pointer:  PointerValue<'a>,
+  pub(crate) function:          FunctionValue<'a>,
+  pub(crate) is_scanner:        bool,
+  pub(crate) branch_data:       BTreeMap<INSTRUCTION, BranchTableData>,
 }
 
 impl<'a> LLVMStateData<'a> {
@@ -43,14 +46,14 @@ impl<'a> LLVMStateData<'a> {
     bc_address: usize,
     module: &'a LLVMParserModule,
     is_scanner: bool,
+    internal_linkage: Option<Linkage>,
   ) -> Self {
     let entry_instruction = INSTRUCTION::from(bc, bc_address);
 
     let entry_function = module.module.add_function(
       &Self::generate_name(bc_address),
       module.types.TAIL_CALLABLE_PARSE_FUNCTION,
-      //None,
-      Some(Linkage::Private),
+      internal_linkage,
     );
 
     entry_function.set_call_conventions(fastCC);
@@ -60,6 +63,7 @@ impl<'a> LLVMStateData<'a> {
       function_pointer: entry_function.as_global_value().as_pointer_value(),
       entry_instruction,
       is_scanner,
+      branch_data: BTreeMap::new(),
     }
   }
 
@@ -82,6 +86,7 @@ impl<'a> LLVMStateData<'a> {
 
 #[derive(Default)]
 pub(crate) struct BranchStateCache<'a> {
+  max_length: u32,
   input_buffer: Option<PointerValue<'a>>,
   input_buffer_length_int: Option<IntValue<'a>>,
   parse_ctx: Option<PointerValue<'a>>,
@@ -104,11 +109,11 @@ impl<'a> BranchStateCache<'a> {
 pub(crate) fn get_state_data<'a>(
   instruction: INSTRUCTION,
   state: &'a BTreeMap<INSTRUCTION, LLVMStateData<'a>>,
-) -> LLVMStateData<'a> {
+) -> &LLVMStateData<'a> {
   if !state.contains_key(&instruction) {
     dbg!(instruction);
   }
-  *state.get(&instruction).unwrap()
+  state.get(&instruction).unwrap()
 }
 
 pub(crate) unsafe fn construct_parse_function<'a>(
@@ -117,6 +122,9 @@ pub(crate) unsafe fn construct_parse_function<'a>(
   output: &BytecodeOutput,
 ) -> SherpaResult<()> {
   let start_points = get_start_points(g, output);
+
+  let internal_linkage = Some(Linkage::Private);
+  let internal_linkage = None;
 
   // from the entry states, get a list of all states that can be accessed in
   // the LLVM based parser. Note: this will be different than bytecode states for
@@ -135,9 +143,13 @@ pub(crate) unsafe fn construct_parse_function<'a>(
 
     while let Some((instruction, is_scanner)) = states_queue.pop_front() {
       if seen.insert(instruction) {
-        let state =
-          LLVMStateData::new(&output.bytecode, instruction.get_address(), module, is_scanner);
-        states.insert(state.entry_instruction, state);
+        let mut state = LLVMStateData::new(
+          &output.bytecode,
+          instruction.get_address(),
+          module,
+          is_scanner,
+          internal_linkage,
+        );
         let bc = &output.bytecode;
 
         let mut instructions = VecDeque::from_iter(vec![(instruction)]);
@@ -174,11 +186,14 @@ pub(crate) unsafe fn construct_parse_function<'a>(
                   states_queue.push_front((data.data.scan_state_entry_instruction, true));
                 }
 
-                for (address, _) in data.branches.iter().filter(|b| !b.1.is_skipped) {
-                  states_queue.push_front((INSTRUCTION::from(bc, *address), is_scanner));
+                for (_, BranchData { address, .. }) in
+                  data.branches.iter().filter(|b| !b.1.is_skipped)
+                { 
+                  instructions.push_back(INSTRUCTION::from(bc, *address));
                 }
 
-                states_queue.push_front((instruction.branch_default(bc), is_scanner));
+                instructions.push_back(instruction.branch_default(bc));
+                state.branch_data.insert(instruction, data);
                 break;
               }
               FAIL | PASS => {
@@ -187,13 +202,15 @@ pub(crate) unsafe fn construct_parse_function<'a>(
             }
           }
         }
+
+        states.insert(state.entry_instruction, state);
       }
     }
     states
   };
 
   for instruction in states.keys().copied() {
-    let state = { *states.get(&instruction)? };
+    let state = { states.get(&instruction)? };
 
     let fun = state.function;
 
@@ -212,6 +229,7 @@ pub(crate) unsafe fn construct_parse_function<'a>(
     construct_parse_function_statements(instruction, g, module, &fn_pack)?;
 
     if !fun.verify(true) {
+      fun.print_to_stderr();
       return SherpaResult::Err(SherpaError::from(format!(
         "Could not build parse function {}",
         state.get_name(),
@@ -289,7 +307,7 @@ pub(super) fn construct_parse_function_statements(
           instruction = instruction.next(&output.bytecode);
         }
         VECTOR_BRANCH | HASH_BRANCH => {
-          construct_instruction_branch(instruction, g, module, pack, Default::default())?;
+          construct_instruction_branch(instruction, g, module, pack, true, None)?;
           break;
         }
         FAIL => {
@@ -307,99 +325,141 @@ pub(super) fn construct_parse_function_statements(
   }
 }
 
-pub(crate) fn construct_instruction_branch<'a>(
+#[derive(Clone, Copy)]
+struct Pointers<'a> {
+  line_ptr: PointerValue<'a>,
+  input_ptr_ptr: PointerValue<'a>,
+  input_truncated_ptr: PointerValue<'a>,
+  input_len_ptr: PointerValue<'a>,
+  input_off_ptr: PointerValue<'a>,
+}
+
+fn construct_instruction_branch<'a>(
   instruction: INSTRUCTION,
   g: &GrammarStore,
   module: &'a LLVMParserModule,
   p: &'a FunctionPack,
-  mut state: BranchStateCache<'a>,
+  entry_table: bool,
+  mut ptrs: Option<Pointers<'a>>
 ) -> SherpaResult<()> {
-  if let Some(data) = BranchTableData::from_bytecode(instruction, g, p.output) {
-    let b = &module.builder;
-    let i32 = module.ctx.i32_type();
-    let i64 = module.ctx.i64_type();
-    let bool = module.ctx.bool_type();
+  let b = &module.builder;
+  let i32 = module.ctx.i32_type();
+  let i64 = module.ctx.i64_type();
+  let bool = module.ctx.bool_type();
 
-    let parse_ctx =
-      *state.parse_ctx.get_or_insert_with(|| p.fun.get_nth_param(0).unwrap().into_pointer_value());
-    let cache_offset_ptr = CTX::token_off.get_ptr(module, parse_ctx)?;
-    let cache_length_ptr = CTX::scan_len.get_ptr(module, parse_ctx)?;
-    let cache_line_ptr = CTX::anchor_line_off.get_ptr(module, parse_ctx)?;
-    let cache_peek_offset = CTX::peek_off.get_ptr(module, parse_ctx)?;
+  let parse_ctx = p.fun.get_nth_param(0)?.into_pointer_value();
 
-    let action_pointer = *state
-      .action_pointer
-      .get_or_insert_with(|| p.fun.get_nth_param(1).unwrap().into_pointer_value());
+  let cache_peek_offset = CTX::peek_off.get_ptr(module, parse_ctx)?;
 
-    let TableHeaderData {
-      input_type,
-      lexer_type,
-      scan_state_entry_instruction: scanner_address,
-      ..
-    } = data.data;
+  let table_block = p.state.generate_block(module, "_Table", instruction.get_address());
+  let default_block = p.state.generate_block(module, "_Table_Default", instruction.get_address());
 
-    let is_peek = matches!(lexer_type, LEXER_TYPE::PEEK);
-    let is_scanner = p.is_scanner;
+  // Construct a buffer, if necessary, that will hold up to `max_size` bytes.
+  let mut value = i32.const_int(0, false);
 
-    let (input_ptr_ptr, input_size_ptr, input_truncated_ptr) = match (is_peek, is_scanner) {
-      (true, _) => (
-        CTX::peek_ptr.get_ptr(module, parse_ctx)?,
-        CTX::peek_input_len.get_ptr(module, parse_ctx)?,
-        CTX::peek_input_trun.get_ptr(module, parse_ctx)?,
-      ),
-      (_, true) => (
-        CTX::scan_ptr.get_ptr(module, parse_ctx)?,
-        CTX::scan_input_len.get_ptr(module, parse_ctx)?,
-        CTX::scan_input_trun.get_ptr(module, parse_ctx)?,
-      ),
-      _ => (
-        CTX::tok_ptr.get_ptr(module, parse_ctx)?,
-        CTX::tok_input_len.get_ptr(module, parse_ctx)?,
-        CTX::tok_input_trun.get_ptr(module, parse_ctx)?,
-      ),
-    };
+  let Some(data) = p.state.branch_data.get(&instruction) else {
+    let lu = BytecodeGrammarLookups::new(Arc::new(g.clone()));
 
-    let trivial_token_comparisons =
-      input_type == INPUT_TYPE::T02_TOKEN && data.has_trivial_comparisons();
+    panic!("No table data found for state: \ninstruction:\n{:?} \nbytecode:\n{} \nrecognized_branches:\n{}",
+    instruction,
+    disassemble_state(&p.output.bytecode, instruction.get_address(), Some(&lu)).0,
+    p.state.branch_data.iter().map(|(i,_)| {
+      disassemble_state(&p.output.bytecode, i.get_address(), Some(&lu)).0
+    }).collect::<Vec<_>>().join("\n\n")
+  );
+    
+  };
 
-    // Retrieve the maximum number of bytes that will be read
-    // per round within this function.
-    let (max_length, is_goto_branch) = match input_type {
-      INPUT_TYPE::T02_TOKEN => {
-        if trivial_token_comparisons {
-          (
-            getBranchTokenData(g, &data)
-              .iter()
-              .flat_map(|(_, _, s)| s)
-              .fold(0, |a, s| usize::max(a, s.len())),
-            false,
-          )
-        } else {
-          (0, false)
-        }
+  let representative_state = data;
+  let lexer_type = representative_state.data.lexer_type;
+  let is_peek = matches!(lexer_type, LEXER_TYPE::PEEK);
+  let is_scanner = p.is_scanner;
+
+
+
+  #[cfg(debug_assertions)]
+  {
+    // Some assertion to establish the invariants of branching states.
+
+    // ------------------------------------------------------------------------
+    // branching states that have more than one table are comprised of a combination
+    // BYTE | CLASS | CODEPOINT tables only. That is, the state is a scanner state.
+    assert!(
+      p.state.branch_data.len() == 1 || p.is_scanner,
+      "None scanner branch states should only contain one table."
+    );
+    assert!(
+      !p.is_scanner
+        || !p.state.branch_data.iter().any(|t| matches!(
+          t.1.data.input_type,
+          INPUT_TYPE::T01_PRODUCTION | INPUT_TYPE::T02_TOKEN
+        )),
+      "Scanner states should not contain PRODUCTION or TOKEN tables"
+    );
+    // This also leads to the conclusion that PRODUCTION and TOKEN states have
+    // only one table.
+
+    // ------------------------------------------------------------------------
+    // Peek states only exist outside of scanner states
+    assert!(
+      data.data.lexer_type != LEXER_TYPE::PEEK || !p.is_scanner,
+      "Scanner states should not contain peek tables"
+    );
+  }
+
+  if entry_table {
+
+
+    let max_length = {
+      let mut max_size = 0;
+      for table in p.state.branch_data.values() {
+        // Retrieve the maximum number of bytes that will be read
+        // per round within this function.
+        let data = table.data;
+        max_size = max_size.max(match data.input_type {
+          INPUT_TYPE::T02_TOKEN => {
+            if table.has_trivial_comparisons() {
+              getBranchTokenData(g, table)
+                .iter()
+                .flat_map(|(_, _, s)| s)
+                .fold(0, |a, s| usize::max(a, s.len()))
+            } else {
+              0
+            }
+          }
+          INPUT_TYPE::T05_BYTE => 1,
+          INPUT_TYPE::T03_CLASS | INPUT_TYPE::T04_CODEPOINT => 4,
+          _ => 0,
+        });
       }
-      INPUT_TYPE::T05_BYTE => (1, false),
-      INPUT_TYPE::T03_CLASS | INPUT_TYPE::T04_CODEPOINT => (4, false),
-      _ => (0, true),
+      max_size
     };
 
-    // Construct a buffer, if necessary, that will hold up to `max_size` bytes.
-    let mut buffer_ptr = None;
-    let branches = &data.branches;
-    let table_block = p.state.generate_block(module, "_Table", instruction.get_address());
-    let default_block = p.state.generate_block(module, "_Table_Default", instruction.get_address());
-    let mut active_offset = cache_offset_ptr;
-    let mut value = i32.const_int(0, false);
+    if lexer_type > 0 {
+      let line_ptr = CTX::anchor_line_off.get_ptr(module, parse_ctx)?;
+      let token_len_ptr = CTX::scan_len.get_ptr(module, parse_ctx)?;
+      let (input_ptr_ptr, input_len_ptr, input_truncated_ptr, input_off_ptr) = match (is_peek, is_scanner) {
+        (true, _) => (
+          CTX::peek_ptr.get_ptr(module, parse_ctx)?,
+          CTX::peek_input_len.get_ptr(module, parse_ctx)?,
+          CTX::peek_input_trun.get_ptr(module, parse_ctx)?,
+          CTX::peek_off.get_ptr(module, parse_ctx)?,
+        ),
+        (_, true) => (
+          CTX::scan_ptr.get_ptr(module, parse_ctx)?,
+          CTX::scan_input_len.get_ptr(module, parse_ctx)?,
+          CTX::scan_input_trun.get_ptr(module, parse_ctx)?,
+          CTX::scan_off.get_ptr(module, parse_ctx)?,
+        ),
+        _ => (
+          CTX::tok_ptr.get_ptr(module, parse_ctx)?,
+          CTX::tok_input_len.get_ptr(module, parse_ctx)?,
+          CTX::tok_input_trun.get_ptr(module, parse_ctx)?,
+          CTX::token_off.get_ptr(module, parse_ctx)?,
+        ),
+      };
 
-    // Prepare the input token if we are working with
-    // Token based branch types (TOKEN, BYTE, CODEPOINT, CLASS)
-
-    if is_goto_branch {
-      b.build_unconditional_branch(table_block);
-      b.position_at_end(table_block);
-    } else {
       let peek_mode_ptr = CTX::in_peek_mode.get_ptr(module, parse_ctx)?;
-
       if lexer_type == LEXER_TYPE::ASSERT {
         b.build_store(peek_mode_ptr, bool.const_int(0, false));
         b.build_unconditional_branch(table_block);
@@ -419,9 +479,10 @@ pub(crate) fn construct_instruction_branch<'a>(
         b.build_conditional_branch(comparison, continue_peeking, start_peeking);
 
         b.position_at_end(continue_peeking);
+
         {
-          let prev_token_len = b.build_load(cache_length_ptr, "").into_int_value();
-          let prev_token_off = b.build_load(cache_peek_offset, "").into_int_value();
+          let prev_token_len = b.build_load(token_len_ptr, "").into_int_value();
+          let prev_token_off = b.build_load(input_off_ptr, "").into_int_value();
           let new_off = b.build_int_add(prev_token_len, prev_token_off, "");
 
           unsafe {
@@ -430,14 +491,14 @@ pub(crate) fn construct_instruction_branch<'a>(
             b.build_store(input_ptr_ptr, input_ptr);
           }
 
-          b.build_store(cache_peek_offset, new_off);
+          b.build_store(input_off_ptr, new_off);
           b.build_unconditional_branch(table_block);
         }
 
         b.position_at_end(start_peeking);
         {
-          let prev_token_len = b.build_load(cache_length_ptr, "").into_int_value();
-          let prev_token_off = b.build_load(active_offset, "").into_int_value();
+          let prev_token_len = b.build_load(token_len_ptr, "").into_int_value();
+          let prev_token_off = CTX::token_off.load(module, parse_ctx)?.into_int_value();
           let new_off = b.build_int_add(prev_token_len, prev_token_off, "");
 
           unsafe {
@@ -445,283 +506,266 @@ pub(crate) fn construct_instruction_branch<'a>(
             let input_ptr = b.build_gep(input_ptr, &[prev_token_len.into()], "");
             b.build_store(input_ptr_ptr, input_ptr);
           }
-          b.build_store(cache_peek_offset, new_off);
+          b.build_store(input_off_ptr, new_off);
           b.build_unconditional_branch(table_block);
         }
-
-        active_offset = cache_peek_offset;
       };
-
       b.position_at_end(table_block);
 
-      // Only initialize input buffer if we are directly comparing it's data with
-      // token values, otherwise we are using scanner functions, and there
-      // is no need to access input data.
-      if (input_type != INPUT_TYPE::T02_TOKEN) || trivial_token_comparisons {
-        let byte_offset = b.build_load(active_offset, "byte_offset").into_int_value();
+      ptrs = Some(Pointers { input_off_ptr, input_ptr_ptr, line_ptr, input_len_ptr, input_truncated_ptr });
 
+      if max_length > 0 {
+        // Only initialize input buffer if we are directly comparing it's data with
+        // token values, otherwise we are using scanner functions, and there
+        // is no need to access input data.
+        let byte_offset = b.build_load(input_off_ptr, "byte_offset").into_int_value();
+  
         check_for_input_acceptability(
           module,
           p,
           input_ptr_ptr,
-          input_size_ptr,
+          input_len_ptr,
           input_truncated_ptr,
           byte_offset,
           i32.const_int(max_length as u64, false),
         );
-
-        let input_size = b.build_load(input_size_ptr, "").into_int_value();
-
+  
+        let input_size = b.build_load(input_len_ptr, "").into_int_value();
+  
         // If the block size is less than 1 then jump to default
         let comparison =
           b.build_int_compare(inkwell::IntPredicate::EQ, i32.const_int(0, false), input_size, "");
-
+  
         let branch_block =
           p.state.generate_block(module, "table_branches", instruction.get_address());
-
+  
         b.build_conditional_branch(comparison, default_block, branch_block);
         b.position_at_end(branch_block);
-
-        buffer_ptr = Some(b.build_load(input_ptr_ptr, "").into_pointer_value());
+  
       }
+
+    } else {
+      b.build_unconditional_branch(table_block);
+      b.position_at_end(table_block);
+    };
+
+   
+  } else {
+    b.build_unconditional_branch(table_block);
+    b.position_at_end(table_block);
+  }
+
+  let TableHeaderData { input_type, scan_state_entry_instruction: scanner_address, .. } = data.data;
+
+  let trivial_token_comparisons =
+    input_type == INPUT_TYPE::T02_TOKEN && data.has_trivial_comparisons();
+
+  // Prepare the input token if we are working with
+  // Token based branch types (TOKEN, BYTE, CODEPOINT, CLASS)
+
+  let mut build_switch = true;
+  // Check to see if we need to create a local data buffer.
+
+  let mut blocks = BTreeMap::new();
+  let mut skip_block = None;
+  let mut branch_blocks = BTreeMap::new();
+  let branches = &data.branches;
+
+  for branch in branches.values() {
+    if branch.is_skipped {
+      blocks.entry((branch.value, true)).or_insert_with(|| {
+        (
+          INSTRUCTION::invalid(),
+          *skip_block.get_or_insert_with(|| p.state.generate_block(module, "skip", 0xFFFF_FFFF)),
+        )
+      });
+    } else {
+      blocks.entry((branch.value, false)).or_insert_with(|| {
+        (
+          INSTRUCTION::from(&p.output.bytecode, branch.address),
+          *branch_blocks
+            .entry(branch.address)
+            .or_insert_with(|| p.state.generate_block(module, "branch", branch.address)),
+        )
+      });
     }
+  }
 
-    let mut build_switch = true;
-    // Check to see if we need to create a local data buffer.
+  match input_type {
+    INPUT_TYPE::T02_TOKEN => {
+      if trivial_token_comparisons {
+        build_switch = false;
 
-    let mut blocks = BTreeMap::new();
-    let mut skip_block = None;
+        let branches = getBranchTokenData(g, &data);
 
-    for branch in branches.values() {
-      if branch.is_skipped {
-        blocks.entry((branch.value, true)).or_insert_with(|| {
-          (
-            INSTRUCTION::invalid(),
-            *skip_block.get_or_insert_with(|| p.state.generate_block(module, "skip", 0xFFFF_FFFF)),
-          )
-        });
+
+
+      let buffer_ptr = b.build_load(ptrs?.input_ptr_ptr, "").into_pointer_value();
+
+        // Build a buffer to store the largest need register size, rounded to 4 bytes.
+
+        fn string_to_byte_num_and_mask(string: &str, _: &Symbol) -> (usize, usize) {
+          string.as_bytes().iter().enumerate().fold((0, 0), |(val, mask), (i, v)| {
+            let shift_amount = 8 * i;
+            (val | ((*v as usize) << shift_amount), mask | (0xFF << shift_amount))
+          })
+        }
+
+        for (index, (address, branch, strings)) in branches.iter().enumerate() {
+          let sym = data.get_branch_symbol(branch).unwrap();
+
+          for string in strings {
+            let comparison = match sym.byte_length {
+              len if len == 1 => {
+                let value = b.build_load(buffer_ptr, "").into_int_value();
+                b.build_int_compare(
+                  inkwell::IntPredicate::EQ,
+                  value,
+                  value
+                    .get_type()
+                    .const_int(string_to_byte_num_and_mask(string, sym).0 as u64, false),
+                  "",
+                )
+              }
+              len if len <= 8 => {
+                let (byte_string, mask) = string_to_byte_num_and_mask(string, sym);
+                let adjusted_byte = b
+                  .build_bitcast(buffer_ptr, i64.ptr_type(inkwell::AddressSpace::Generic), "")
+                  .into_pointer_value();
+                let value = b.build_load(adjusted_byte, "").into_int_value();
+                let masked_value =
+                  b.build_and(value, value.get_type().const_int(mask as u64, false), "");
+                b.build_int_compare(
+                  inkwell::IntPredicate::EQ,
+                  masked_value,
+                  value.get_type().const_int(byte_string as u64, false),
+                  "",
+                )
+              }
+              _ => unreachable!(),
+            };
+
+            let this_block = p.state.generate_block(module, "this_", **address);
+
+            let next_block = if index == branches.len() - 1 {
+              default_block
+            } else {
+              p.state.generate_block(module, "next_", **address)
+            };
+
+            b.build_conditional_branch(comparison, this_block, next_block);
+            b.position_at_end(this_block);
+
+            b.build_store(ptrs?.input_len_ptr, i32.const_int(sym.cp_len as u64, false));
+
+            b.build_unconditional_branch(if branch.is_skipped {
+              blocks.get(&(branch.value, true)).unwrap().1
+            } else {
+              blocks.get(&(branch.value, false)).unwrap().1
+            });
+
+            b.position_at_end(next_block);
+          }
+        }
       } else {
-        blocks.entry((branch.value, false)).or_insert_with(|| {
-          (
-            INSTRUCTION::from(&p.output.bytecode, branch.address),
-            p.state.generate_block(module, "branch", branch.address),
-          )
-        });
+        build_fast_call(module, module.fun.scan, &[
+          (parse_ctx).into(),
+          parse_fun_ptr(scanner_address, p).into(),
+          b.build_load(ptrs?.input_ptr_ptr.into(), "").into_pointer_value().into(),
+          b.build_load(ptrs?.input_len_ptr.into(), "").into_int_value().into(),
+          b.build_load(ptrs?.input_off_ptr.into(), "").into_int_value().into(),
+          b.build_load(ptrs?.line_ptr, "").into_int_value().into(),
+          b.build_load(ptrs?.line_ptr, "").into_int_value().into(),
+        ])?;
+        value = CTX::tok_id.load(module, parse_ctx)?.into_int_value();
       }
     }
+    INPUT_TYPE::T01_PRODUCTION => {
+      value = CTX::prod_id.load(module, parse_ctx)?.into_int_value();
+    }
+    INPUT_TYPE::T05_BYTE => {
+      let buffer_ptr = b.build_load(ptrs?.input_ptr_ptr, "").into_pointer_value();
+      let cache_length_ptr = CTX::scan_len.get_ptr(module, parse_ctx)?;
+      b.build_store(cache_length_ptr, i32.const_int(1, false));
+      value = b.build_load(buffer_ptr, "").into_int_value();
+    }
+    INPUT_TYPE::T03_CLASS => {
+      let buffer_ptr= b.build_load(ptrs?.input_ptr_ptr, "").into_pointer_value();
+      let cp_val = construct_cp_lu_with_token_len_store(module, buffer_ptr, p)?;
+      value = build_fast_call(module, module.fun.get_token_class_from_codepoint, &[cp_val.into()])?
+        .try_as_basic_value()
+        .unwrap_left()
+        .into_int_value();
+    }
+    INPUT_TYPE::T04_CODEPOINT => {
+      let buffer_ptr = b.build_load(ptrs?.input_ptr_ptr, "").into_pointer_value();
+      value = construct_cp_lu_with_token_len_store(module, buffer_ptr, p)?;
+    }
+    _ => {}
+  }
 
-    match input_type {
-      INPUT_TYPE::T02_TOKEN => {
-        if trivial_token_comparisons {
-          build_switch = false;
+  if build_switch {
+    // Create Switch statements.
+    let value_type = value.get_type();
+    let mut cases = vec![];
 
-          let branches = getBranchTokenData(g, &data);
-
-          // Build a buffer to store the largest need register size, rounded to 4 bytes.
-
-          fn string_to_byte_num_and_mask(string: &str, _: &Symbol) -> (usize, usize) {
-            string.as_bytes().iter().enumerate().fold((0, 0), |(val, mask), (i, v)| {
-              let shift_amount = 8 * i;
-              (val | ((*v as usize) << shift_amount), mask | (0xFF << shift_amount))
-            })
-          }
-
-          for (index, (address, branch, strings)) in branches.iter().enumerate() {
-            let sym = data.get_branch_symbol(branch).unwrap();
-
-            for string in strings {
-              let comparison = match sym.byte_length {
-                len if len == 1 => {
-                  let value = b.build_load(buffer_ptr?, "").into_int_value();
-                  b.build_int_compare(
-                    inkwell::IntPredicate::EQ,
-                    value,
-                    value
-                      .get_type()
-                      .const_int(string_to_byte_num_and_mask(string, sym).0 as u64, false),
-                    "",
-                  )
-                }
-                len if len <= 8 => {
-                  let (byte_string, mask) = string_to_byte_num_and_mask(string, sym);
-                  let adjusted_byte = b
-                    .build_bitcast(buffer_ptr?, i64.ptr_type(inkwell::AddressSpace::Generic), "")
-                    .into_pointer_value();
-                  let value = b.build_load(adjusted_byte, "").into_int_value();
-                  let masked_value =
-                    b.build_and(value, value.get_type().const_int(mask as u64, false), "");
-                  b.build_int_compare(
-                    inkwell::IntPredicate::EQ,
-                    masked_value,
-                    value.get_type().const_int(byte_string as u64, false),
-                    "",
-                  )
-                }
-                _ => unreachable!(),
-              };
-
-              let this_block = p.state.generate_block(module, "this_", **address);
-
-              let next_block = if index == branches.len() - 1 {
-                default_block
-              } else {
-                p.state.generate_block(module, "next_", **address)
-              };
-
-              b.build_conditional_branch(comparison, this_block, next_block);
-              b.position_at_end(this_block);
-
-              b.build_store(cache_length_ptr, i32.const_int(sym.cp_len as u64, false));
-
-              b.build_unconditional_branch(if branch.is_skipped {
-                blocks.get(&(branch.value, true)).unwrap().1
-              } else {
-                blocks.get(&(branch.value, false)).unwrap().1
-              });
-
-              b.position_at_end(next_block);
-            }
-          }
-        } else {
-          build_fast_call(module, module.fun.scan, &[
-            (parse_ctx).into(),
-            parse_fun_ptr(scanner_address, p, module).into(),
-            b.build_load(input_ptr_ptr.into(), "").into_pointer_value().into(),
-            b.build_load(input_size_ptr.into(), "").into_int_value().into(),
-            b.build_load(active_offset, "").into_int_value().into(),
-            b.build_load(cache_line_ptr, "").into_int_value().into(),
-            b.build_load(cache_line_ptr, "").into_int_value().into(),
-          ])?;
-          value = CTX::tok_id.load(module, parse_ctx)?.into_int_value();
-        }
-      }
-      INPUT_TYPE::T01_PRODUCTION => {
-        value = CTX::prod_id.load(module, parse_ctx)?.into_int_value();
-      }
-      INPUT_TYPE::T05_BYTE => {
-        b.build_store(cache_length_ptr, i32.const_int(1, false));
-        value = b.build_load(buffer_ptr?, "").into_int_value();
-      }
-      INPUT_TYPE::T03_CLASS => {
-        let cp_val = construct_cp_lu_with_token_len_store(module, buffer_ptr?, p)?;
-        value =
-          build_fast_call(module, module.fun.get_token_class_from_codepoint, &[cp_val.into()])?
-            .try_as_basic_value()
-            .unwrap_left()
-            .into_int_value();
-      }
-      INPUT_TYPE::T04_CODEPOINT => {
-        value = construct_cp_lu_with_token_len_store(module, buffer_ptr?, p)?;
-      }
-      _ => {}
+    for ((value, _), (_, block)) in &blocks {
+      cases.push((value_type.const_int(*value as u64, false), *block));
     }
 
-    if build_switch {
-      // Create Switch statements.
-      let value_type = value.get_type();
-      let mut cases = vec![];
+    b.build_switch(value, default_block, &cases);
+  }
 
-      for ((value, _), (_, block)) in &blocks {
-        cases.push((value_type.const_int(*value as u64, false), *block));
-      }
+  // Write branches, ending with the default branch.
 
-      b.build_switch(value, default_block, &cases);
-    }
-
-    // Write branches, ending with the default branch.
-
-    for ((_, is_skipped), (instruction, block)) in &blocks {
-      if !is_skipped {
-        b.position_at_end(*block);
-        match instruction.to_type() {
-          InstructionType::HASH_BRANCH | InstructionType::VECTOR_BRANCH => {
-            construct_instruction_branch(*instruction, g, module, p, state.next())?;
-          }
-          _ => {
-            construct_parse_function_statements(*instruction, g, module, p)?;
-          }
-        }
-      }
-    }
-
-    if let Some(skip_block) = skip_block {
-      b.position_at_end(skip_block);
-      unsafe {
-        let off = b.build_load(active_offset, "offset").into_int_value();
-        let len = b.build_load(cache_length_ptr, "length").into_int_value();
-        let new_off = b.build_int_add(off, len, "new_offset");
-        b.build_store(active_offset, new_off);
-        b.build_store(cache_length_ptr, i32.const_int(0, false));
-
-        // Increment pointer and offset by len;
-        let input_ptr = b.build_load(input_ptr_ptr, "").into_pointer_value();
-        let input_ptr = b.build_gep(input_ptr, &[len.into()], "");
-        b.build_store(input_ptr_ptr, input_ptr);
-        b.build_unconditional_branch(table_block);
-      }
-    }
-
-    let default_instruction = instruction.branch_default(&p.output.bytecode);
-
-    b.position_at_end(default_block);
-    match default_instruction.to_type() {
+  for (address, block) in branch_blocks {
+    b.position_at_end(block);
+    let instruction = INSTRUCTION::from(&p.output.bytecode, address);
+    match instruction.to_type() {
       InstructionType::HASH_BRANCH | InstructionType::VECTOR_BRANCH => {
-        construct_instruction_branch(default_instruction, g, module, p, state)?;
+        construct_instruction_branch(instruction, g, module, p, false, ptrs)?;
       }
       _ => {
-        // Build code that deals with the outcomes that arrive when the
-        // input block does not have enough bytes to fulfill all branches
-        // but the reader could deliver more input.
-        if state.input_buffer.is_some() {
-          let good_size_block =
-            p.state.generate_block(module, "have_sizable_block", default_instruction.get_address());
-
-          let truncated_block =
-            p.state.generate_block(module, "block_is_truncated", default_instruction.get_address());
-
-          let comparison = b.build_int_compare(
-            inkwell::IntPredicate::EQ,
-            state.input_block.as_ref().unwrap().is_truncated,
-            module.ctx.bool_type().const_int(1 as u64, false),
-            "",
-          );
-
-          b.build_conditional_branch(comparison, truncated_block, good_size_block);
-
-          //-- Truncated block
-          b.position_at_end(truncated_block);
-
-          build_fast_call(module, module.fun.push_state, &[
-            parse_ctx.into(),
-            i32.const_int(NORMAL_STATE_FLAG_LLVM as u64, false).into(),
-            p.state.function_pointer.into(),
-          ])?;
-
-          build_fast_call(module, module.fun.emit_eoi, &[
-            parse_ctx.into(),
-            action_pointer.into(),
-            state.input_block.unwrap().start.into(),
-          ])?;
-
-          b.build_return(None);
-
-          //-- Enough bytes present block
-          b.position_at_end(good_size_block);
-        }
-
-        construct_parse_function_statements(default_instruction, g, module, p)?;
+        construct_parse_function_statements(instruction, g, module, p)?;
       }
+    }
+  }
+
+  if let Some(skip_block) = skip_block {
+    b.position_at_end(skip_block);
+    let off = b.build_load(ptrs?.input_off_ptr, "offset").into_int_value();
+    let len = b.build_load(ptrs?.input_len_ptr, "length").into_int_value();
+    let new_off = b.build_int_add(off, len, "new_offset");
+    b.build_store(ptrs?.input_off_ptr, new_off);
+    b.build_store(ptrs?.input_len_ptr, i32.const_int(0, false));
+    
+    // Increment pointer and offset by len;
+    let buffer_ptr = b.build_load(ptrs?.input_ptr_ptr, "").into_pointer_value();
+    b.build_store(ptrs?.input_ptr_ptr, buffer_ptr);
+    b.build_unconditional_branch(table_block);
+  }
+
+  b.position_at_end(default_block);
+  let default_instruction = instruction.branch_default(&p.output.bytecode);
+  match default_instruction.to_type() {
+    InstructionType::HASH_BRANCH | InstructionType::VECTOR_BRANCH => {
+      construct_instruction_branch(default_instruction, g, module, p, false, ptrs)?;
+    }
+    _ => {
+      // Build code that deals with the outcomes that arrive when the
+      // input block does not have enough bytes to fulfill all branches
+      // but the reader could deliver more input.
+      if entry_table {
+        // TODO: Handle case where there is not enough input to handle all matches.
+      }
+      construct_parse_function_statements(default_instruction, g, module, p)?;
     }
   }
 
   SherpaResult::Ok(())
 }
 
-fn parse_fun_ptr<'a>(
-  scanner_address: INSTRUCTION,
-  pack: &'a FunctionPack,
-  ctx: &'a LLVMParserModule,
-) -> PointerValue<'a> {
+fn parse_fun_ptr<'a>(scanner_address: INSTRUCTION, pack: &'a FunctionPack) -> PointerValue<'a> {
   get_state_data(scanner_address, pack.states).function_pointer
 }
 

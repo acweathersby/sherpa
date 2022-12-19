@@ -15,7 +15,11 @@ use crate::{
   journal::Journal,
   types::{GraphNode, TransitionGraph as TPack, *},
 };
-use std::{collections::BTreeSet, rc::Rc, vec};
+use std::{
+  collections::{BTreeSet, VecDeque},
+  rc::Rc,
+  vec,
+};
 
 use super::{create_node, process_node};
 
@@ -32,7 +36,7 @@ pub(crate) fn construct_recursive_ascent(
     (!t.is_scanner).then(|| get_follow_closure(&g, &t.root_prod_ids)).unwrap_or_default(),
   )));
 
-  let goto_seeds = goto_seeds.to_zero_state().to_set();
+  let goto_seeds = goto_seeds.to_empty_state().to_set();
 
   t.accept_items = goto_seeds.clone();
 
@@ -73,7 +77,7 @@ pub(crate) fn construct_recursive_ascent(
       EdgeType::Goto,
       parent_index,
       parent_index,
-      items.term_item_vec(&t.g),
+      items.as_vec().term_items(&t.g),
     );
 
     if have_root_production || (group.len() > 1 && have_end_items) {
@@ -82,17 +86,9 @@ pub(crate) fn construct_recursive_ascent(
 
       if have_root_production {
         unfulfilled_root = None;
-        let mut reducible: Vec<Item> = g
-          .lr_items
-          .get(&production_id)
-          .unwrap_or(&Vec::new())
-          .iter()
-          .filter(|i| !group.iter().any(|g| (*g).to_empty_state() == (**i).to_empty_state()))
-          .map(|i| i.increment().unwrap().to_state(ItemState::OUT_OF_SCOPE))
-          .collect();
-
-        goto_node.transition_items.append(&mut reducible.clone());
-        items.append(&mut reducible);
+        let mut out_of_scope_items = get_out_of_scope(&g, production_id, &group, false);
+        goto_node.transition_items.append(&mut out_of_scope_items.clone());
+        items.append(&mut out_of_scope_items);
       }
       let items = goto_node.transition_items.clone().to_set().to_vec();
       let node_index = t.insert_node(goto_node);
@@ -130,4 +126,40 @@ pub(crate) fn construct_recursive_ascent(
   t.non_trivial_root = unfulfilled_root.is_none();
 
   SherpaResult::Ok(t.clean())
+}
+/// Returns the follow set of the production as out-of-scope items
+pub(crate) fn get_out_of_scope(
+  g: &std::sync::Arc<GrammarStore>,
+  production_id: ProductionId,
+  existing: &BTreeSet<Item>,
+  follow_set: bool,
+) -> Items {
+  let mut seen = BTreeSet::new();
+  let mut productions = VecDeque::from_iter(vec![production_id]);
+  let mut lr_items = BTreeSet::new();
+  let existing = existing.as_set().to_state(ItemState::default());
+
+  while let Some(production_id) = productions.pop_front() {
+    if seen.insert(production_id) {
+      let mut new_items = g
+        .lr_items
+        .get(&production_id)
+        .unwrap_or(&Vec::new())
+        .iter()
+        .filter(|i| !existing.contains(&(**i).to_empty_state()))
+        .map(|i| i.increment().unwrap().to_state(ItemState::OUT_OF_SCOPE))
+        .collect::<BTreeSet<_>>();
+
+      for completed in new_items.as_vec().completed_items() {
+        productions.push_back(completed.get_prod_id(g));
+      }
+
+      lr_items.append(&mut new_items);
+    }
+    if !follow_set {
+      break;
+    }
+  }
+
+  lr_items.to_vec()
 }

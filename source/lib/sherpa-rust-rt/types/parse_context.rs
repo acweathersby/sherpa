@@ -206,7 +206,8 @@ pub struct LLVMParseContext<T: LLVMByteReader + ByteReader, M> {
   pub scan_len:        u32,
   /// Set to the value of a production when a rule is reduced, or
   pub prod_id:         u32,
-  /// Set to the value of a token when one is recognized.
+  /// Set to the value of a token when one is recognized. Also stores the number
+  /// of symbols that are to be reduced.
   pub tok_id:          u32,
   // Line info ------------
   /// The offset of the last line character recognized that proceeds the anchor offset

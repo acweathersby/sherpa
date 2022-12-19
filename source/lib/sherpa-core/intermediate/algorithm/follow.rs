@@ -115,7 +115,7 @@ pub(super) fn get_follow_items(
             root_node.usize() == 0,
             "The root node should be the only one that ends up in this branch"
           );
-          if t.accept_items().contains(&completed_item.to_origin_only_state()) {
+          if t.item_is_goal(completed_item) {
             fin_items.insert(LinkedItem {
               item:         completed_item.to_origin_only_state(),
               closure_node: None,

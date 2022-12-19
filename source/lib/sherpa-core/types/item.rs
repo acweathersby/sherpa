@@ -586,29 +586,40 @@ impl Into<LinkedItemWithGoto> for LinkedItem {
 pub(crate) type Items = Vec<Item>;
 pub(crate) type ItemSet = BTreeSet<Item>;
 
-pub(crate) trait ItemContainer: Clone + IntoIterator<Item = Item> {
-  fn term_item_vec(&self, g: &GrammarStore) -> Items;
-  fn non_term_item_vec(&self, g: &GrammarStore) -> Items;
-  fn completed_item_vec(&self) -> Items;
-
-  fn to_origin_only_state(self) -> Self;
-  fn to_zero_state(self) -> Self;
-  fn to_state(self, state: ItemState) -> Self;
-
-  #[inline(always)]
-  fn term_item_set(&self, g: &GrammarStore) -> ItemSet {
-    self.term_item_vec(g).into_iter().collect()
+pub(crate) trait ItemContainer:
+  Clone + IntoIterator<Item = Item> + FromIterator<Item>
+{
+  fn non_term_items(self, g: &GrammarStore) -> Self {
+    self.into_iter().filter(|i| i.is_nonterm(g)).collect()
   }
 
-  #[inline(always)]
-  fn non_term_item_set(&self, g: &GrammarStore) -> ItemSet {
-    self.non_term_item_vec(g).into_iter().collect()
+  fn term_items(self, g: &GrammarStore) -> Self {
+    self.into_iter().filter(|i| i.is_term(g)).collect()
   }
 
-  #[inline(always)]
-  fn completed_item_set(&self) -> ItemSet {
-    self.completed_item_vec().into_iter().collect()
+  fn incomplete_items(self) -> Self {
+    self.into_iter().filter(|i| !i.completed()).collect()
   }
+
+  fn completed_items(self) -> Self {
+    self.into_iter().filter(|i| i.completed()).collect()
+  }
+
+  fn to_origin_only_state(self) -> Self {
+    self.into_iter().map(|i| i.to_origin_only_state()).collect()
+  }
+
+  fn to_empty_state(self) -> Self {
+    self.into_iter().map(|i| i.to_empty_state()).collect()
+  }
+  fn to_state(self, state: ItemState) -> Self {
+    self.into_iter().map(|i| i.to_state(state)).collect()
+  }
+
+  fn contains_out_of_scope(&self) -> bool {
+    self.as_vec().iter().any(|i| i.is_out_of_scope())
+  }
+
   #[inline(always)]
   fn try_increment(&self) -> Items {
     self.clone().to_vec().into_iter().map(|i| i.try_increment()).collect()
@@ -650,10 +661,25 @@ pub(crate) trait ItemContainer: Clone + IntoIterator<Item = Item> {
 
     output.to_set()
   }
+  /// Merge items from `other` that are not already present in `self`
+  /// Ignores item states.
+  #[inline(always)]
+  fn merge_unique(self, other: Self) -> Self {
+    let mut set = self.as_set();
+    let empty_state_set = self.to_set().to_empty_state();
+
+    for item in other.into_iter() {
+      if !empty_state_set.contains(&item.to_empty_state()) {
+        set.insert(item);
+      }
+    }
+
+    set.into_iter().collect()
+  }
 
   #[inline(always)]
   fn closure_with_state(&self, g: &GrammarStore) -> ItemSet {
-    let vec = self.clone().to_vec();
+    let vec = self.as_vec();
 
     let mut output = vec![];
 
@@ -699,90 +725,22 @@ pub(crate) trait ItemContainer: Clone + IntoIterator<Item = Item> {
     (seen, left_recursive_items)
   }
 
-  fn to_set(self) -> ItemSet;
-  fn to_vec(self) -> Items;
-}
-
-impl ItemContainer for ItemSet {
-  #[inline(always)]
-  fn to_origin_only_state(self) -> Self {
-    self.into_iter().map(|i| i.to_origin_only_state()).collect()
+  fn as_vec(&self) -> Items {
+    self.clone().to_vec()
   }
 
-  #[inline(always)]
-  fn to_zero_state(self) -> Self {
-    self.into_iter().map(|i| i.to_empty_state()).collect()
+  fn as_set(&self) -> ItemSet {
+    self.clone().to_set()
   }
 
-  #[inline(always)]
-  fn to_state(self, state: ItemState) -> Self {
-    self.into_iter().map(|i| i.to_state(state)).collect()
-  }
-
-  #[inline(always)]
-  fn non_term_item_vec(&self, g: &GrammarStore) -> Items {
-    self.iter().filter(|i| i.is_nonterm(g)).cloned().collect()
-  }
-
-  #[inline(always)]
-  fn term_item_vec(&self, g: &GrammarStore) -> Items {
-    self.iter().filter(|i| i.is_term(g)).cloned().collect()
-  }
-
-  #[inline(always)]
-  fn completed_item_vec(&self) -> Items {
-    self.iter().filter(|i| i.completed()).cloned().collect()
-  }
-
-  #[inline(always)]
   fn to_set(self) -> ItemSet {
-    self
+    self.into_iter().collect()
   }
-
-  #[inline(always)]
   fn to_vec(self) -> Items {
     self.into_iter().collect()
   }
 }
 
-impl ItemContainer for Items {
-  #[inline(always)]
-  fn to_origin_only_state(self) -> Self {
-    self.into_iter().map(|i| i.to_origin_only_state()).collect()
-  }
+impl ItemContainer for ItemSet {}
 
-  #[inline(always)]
-  fn to_zero_state(self) -> Self {
-    self.into_iter().map(|i| i.to_empty_state()).collect()
-  }
-
-  #[inline(always)]
-  fn to_state(self, state: ItemState) -> Self {
-    self.into_iter().map(|i| i.to_state(state)).collect()
-  }
-
-  #[inline(always)]
-  fn non_term_item_vec(&self, g: &GrammarStore) -> Items {
-    self.iter().filter(|i| i.is_nonterm(g)).cloned().collect()
-  }
-
-  #[inline(always)]
-  fn term_item_vec(&self, g: &GrammarStore) -> Items {
-    self.iter().filter(|i| i.is_term(g)).cloned().collect()
-  }
-
-  #[inline(always)]
-  fn completed_item_vec(&self) -> Items {
-    self.iter().filter(|i| i.completed()).cloned().collect()
-  }
-
-  #[inline(always)]
-  fn to_set(self) -> ItemSet {
-    self.into_iter().collect()
-  }
-
-  #[inline(always)]
-  fn to_vec(self) -> Items {
-    self
-  }
-}
+impl ItemContainer for Items {}

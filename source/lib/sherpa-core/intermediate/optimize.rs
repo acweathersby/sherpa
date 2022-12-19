@@ -36,7 +36,10 @@ pub fn optimize_ir_states(
 
   loop {
     // Maps a pure goto state id, in which  the state is only comprised of goto actions,
-    // to a list of that stat's actions.
+    // to a list of that state's actions.
+    let mut pure_goto_replacements = BTreeMap::new();
+    // States whose instructions can be inlined within the FIRST goto of a caller
+    // production branch.
     let mut goto_replacements = BTreeMap::new();
     let mut redundant_assert_replacements = BTreeMap::new();
     let mut pass_states = BTreeSet::new();
@@ -67,10 +70,12 @@ pub fn optimize_ir_states(
           (1, ASTNode::Fail(_), _) => {
             fail_states.insert(state.id.clone());
           }
+          (_, ASTNode::Goto(_), Some(ASTNode::Goto(_))) => {
+            pure_goto_replacements.insert(state.id.clone(), state.instructions.clone());
+          }
           (2, ASTNode::SetProd(_), Some(&ASTNode::Reduce(_)))
           | (2, ASTNode::TokenAssign(_), Some(&ASTNode::SetProd(_)))
-          | (1, ASTNode::SetProd(_), _)
-          | (_, ASTNode::Goto(_), Some(ASTNode::Goto(_))) => {
+          | (1, ASTNode::SetProd(_), _) => {
             goto_replacements.insert(state.id.clone(), state.instructions.clone());
           }
           (1, ASTNode::ASSERT(box ASSERT { instructions, ids, .. }), _)
@@ -96,11 +101,6 @@ pub fn optimize_ir_states(
     // GOTO state into the respective reference states.
     for state in states.values_mut() {
       let state_name = state.get_name();
-
-      if goto_replacements.contains_key(&state.name) {
-        continue;
-      }
-
       let is_scanner = state.is_scanner();
 
       // Convert trivial scanner
@@ -129,7 +129,44 @@ pub fn optimize_ir_states(
       }
 
       for (data, branch) in get_branches_mut(state.as_mut()) {
-        // Replace the first goto if it points to a pure goto state.
+        'outerloop: loop {
+          let mut goto_count = 0;
+          for (index, goto) in
+            branch.iter().cloned().enumerate().filter(|(_, i)| is_goto(i)).collect::<Vec<_>>()
+          {
+            if let ASTNode::Goto(box Goto { state, .. }) = &goto {
+              if let ASTNode::HASH_NAME(box HASH_NAME { val, .. }) = &state {
+                match (
+                  goto_count,
+                  goto_replacements.get(val),
+                  pure_goto_replacements.get(val),
+                  fail_states.get(val),
+                ) {
+                  (0, Some(instructions), ..) => {
+                    branch.splice(index..=index, instructions.iter().cloned());
+                    changes = true;
+                    continue 'outerloop;
+                  }
+                  // Replace goto if it points to a pure goto state.
+                  (_, _, Some(instructions), ..) => {
+                    branch.splice(index..=index, instructions.iter().cloned());
+                    changes = true;
+                    continue 'outerloop;
+                  }
+                  (_, _, _, Some(_)) => {
+                    branch.clear();
+                    branch.push(ASTNode::Fail(Fail::new()));
+                    break;
+                  }
+                  _ => {}
+                }
+              }
+            }
+            goto_count += 1;
+          }
+          break;
+        }
+
         match data {
           Some(data) => {
             if let Some((index, goto)) =
@@ -137,17 +174,11 @@ pub fn optimize_ir_states(
             {
               if let ASTNode::Goto(box Goto { state, .. }) = &goto {
                 if let ASTNode::HASH_NAME(box HASH_NAME { val, .. }) = &state {
-                  if let Some(instructions) = goto_replacements.get(val) {
-                    branch.splice(index..=index, instructions.iter().cloned());
-                    changes = true;
-                  } else if let Some((id, instructions)) = redundant_assert_replacements.get(val) {
+                  if let Some((id, instructions)) = redundant_assert_replacements.get(val) {
                     if *id == data.id && !data.peek && !matches!(branch[0], ASTNode::Shift(_)) {
                       branch.splice(index..=index, instructions.iter().cloned());
                       changes = true;
                     }
-                  } else if let Some(_) = fail_states.get(val) {
-                    branch.clear();
-                    branch.push(ASTNode::Fail(Fail::new()));
                   }
                 }
               }
@@ -297,7 +328,7 @@ where
   output
 }
 
-#[derive(Debug, Hash, Clone, PartialEq, Eq)]
+#[derive(Debug, Hash, Copy, Clone, PartialEq, Eq)]
 pub(crate) struct BranchData {
   /// The bytecode id of the discriminator symbol of this branch.
   id:      u32,

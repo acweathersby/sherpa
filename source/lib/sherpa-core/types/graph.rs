@@ -255,7 +255,7 @@ impl GraphNode {
   /// Strips state info from all items and returns the set of
   /// of unique items.
   pub fn get_unique_transition_item_set(&self) -> ItemSet {
-    self.transition_items.clone().to_zero_state().to_set()
+    self.transition_items.clone().to_empty_state().to_set()
   }
 
   /// Returns the closure of this node's items
@@ -412,6 +412,10 @@ impl TransitionGraph {
       g,
       ..Default::default()
     }
+  }
+
+  pub fn item_is_goal(&self, item: Item) -> bool {
+    self.accept_items.contains(&item.to_origin_only_state())
   }
 
   /// Increments the monotonic lane counter by `amount`, and returns

@@ -237,7 +237,7 @@ pub(crate) enum TableType {
 impl BranchTableData {
   pub fn from_bytecode(
     instruction: INSTRUCTION,
-    _: &GrammarStore,
+    g: &GrammarStore,
     output: &BytecodeOutput,
   ) -> Option<Self> {
     let address = instruction.get_address();
@@ -255,7 +255,7 @@ impl BranchTableData {
             let discriminant = (i as u32) + table_meta;
             let address = (*offset_delta as usize) + address;
             let is_skipped = *offset_delta == 0xFFFF_FFFF;
-            (if is_skipped { i } else { address }, BranchData {
+            (discriminant as usize, BranchData {
               value: discriminant,
               address: if is_skipped { 0 } else { address },
               is_skipped,
@@ -271,7 +271,7 @@ impl BranchTableData {
             let offset_delta = (cell >> 11) & 0x7FF;
             let address = (offset_delta as usize) + address;
             let is_skipped = offset_delta == 0x7FF;
-            (if is_skipped { i } else { address }, BranchData {
+            (discriminant as usize, BranchData {
               value: discriminant,
               address: if is_skipped { 0 } else { address },
               is_skipped,
@@ -291,6 +291,9 @@ impl BranchTableData {
             if let Some(symbol) = symbol_lookup.get(&branch.value) {
               symbols.insert(branch.value, symbol.clone());
             } else {
+              dbg!(&g.productions);
+              dbg!(symbol_lookup);
+              dbg!(branch.value);
               panic!("Missing symbol!")
             }
           }

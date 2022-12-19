@@ -48,6 +48,12 @@ impl From<&String> for ProductionId {
   }
 }
 
+impl From<SymbolID> for ProductionId {
+  fn from(sym: SymbolID) -> Self {
+    ProductionId(hash_id_value_u64(sym))
+  }
+}
+
 impl std::fmt::Display for ProductionId {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.write_str(&self.0.to_string())
@@ -57,7 +63,6 @@ impl std::fmt::Display for ProductionId {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
 
 pub struct RuleId(pub u64);
-
 impl RuleId {
   pub fn new(prod_id: &ProductionId, rule_index: usize) -> Self {
     RuleId((prod_id.0 & 0xFFFF_FFFF_FFFF_F000) + rule_index as u64)

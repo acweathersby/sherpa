@@ -9,6 +9,7 @@ use crate::{
 };
 use std::{
   collections::{BTreeMap, BTreeSet, VecDeque},
+  fmt::format,
   vec,
 };
 
@@ -169,7 +170,7 @@ fn create_state(
           EdgeType::Default => {
             for child in children {
               if t.is_scanner && child.node_type == NodeType::Complete {
-                prefix = Some(create_reduction_string(child, &t.g, true));
+                prefix = create_reduction_string(child, &t.g, true).map(|s| format!("{} then", s));
               }
 
               create_branch_wrap(
@@ -182,9 +183,10 @@ fn create_state(
                 postfix.as_ref(),
                 if total_children_count == 1 { EdgeType::Undefined } else { child.edge_type },
               );
-              if t.is_scanner && child.node_type == NodeType::Complete {
-                prefix = Some(create_reduction_string(child, &t.g, true) + " then ");
-              }
+
+              /*        if t.is_scanner && child.node_type == NodeType::Complete {
+                prefix = create_reduction_string(child, &t.g, true).map(|s| format!("{} then", s));
+              } */
             }
           }
           EdgeType::Goto => {
@@ -358,12 +360,16 @@ fn create_branch_wrap(
       ))?;
     }
     EdgeType::Default => {
-      w.write_fmt(format_args!(
-        "default ( {}{}{} )",
+      let string = format!(
+        "{}{}{}",
         prefix.unwrap_or(&empty_string),
         create_child_state(child, node, resolved_states, t),
         postfix.unwrap_or(&empty_string),
-      ))?;
+      );
+
+      if !string.is_empty() {
+        w.write_fmt(format_args!("default ( {} )", string))?;
+      }
     }
     _ => {
       w.write_fmt(format_args!(
@@ -400,9 +406,9 @@ fn create_child_state(
     }
     NodeType::Complete => {
       if !t.is_scanner {
-        create_reduction_string(child, &t.g, false)
+        create_reduction_string(child, &t.g, false).unwrap()
       } else {
-        String::new()
+        " pass".to_string()
       }
     }
     NodeType::Shift => {
@@ -448,7 +454,7 @@ fn create_child_state(
       }
 
       for (_, (items, _)) in lane_items {
-        let completed_items = items.completed_item_vec();
+        let completed_items = items.completed_items();
 
         if !completed_items.is_empty() {
           for item in &completed_items {
@@ -488,16 +494,20 @@ fn create_child_state(
   }
 }
 
-fn create_reduction_string(node: &GraphNode, g: &GrammarStore, is_scanner: bool) -> String {
+fn create_reduction_string(node: &GraphNode, g: &GrammarStore, is_scanner: bool) -> Option<String> {
   match (node.transition_items.first(), is_scanner, node.node_type == NodeType::Pass) {
-    (None, false /* not scanner */, true /* default pass state */) => "pass".to_string(),
+    (None, false /* not scanner */, true /* default pass state */) => Some("pass".to_string()),
     (Some(item), true /* is scanner */, false) => match item.get_origin() {
-      OriginData::Symbol(sym) => create_token_reduction_string(g, sym),
+      OriginData::Symbol(sym) => match g.symbols.get(&sym) {
+        Some(symbol) if symbol.scanner_only => None,
+        None => None,
+        _ => Some(create_token_reduction_string(g, sym)),
+      },
       _ => {
         unreachable!("All items assigned to scanner nodes should have OriginData::Symbol data");
       }
     },
-    (Some(item), false /* not scanner */, false) => create_rule_reduction_string(g, item),
+    (Some(item), false /* not scanner */, false) => Some(create_rule_reduction_string(g, item)),
     _ => panic!("Invalid Leaf Node"),
   }
 }

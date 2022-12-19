@@ -73,7 +73,7 @@ pub(super) fn construct_inline_LR(
 
   while let Some(parent_index) = to_process.pop_front() {
     let mut closure = t.get_node(parent_index).get_closure(g);
-    t.get_node_mut(parent_index).goto_items = closure.non_term_item_vec(g);
+    t.get_node_mut(parent_index).goto_items = closure.as_vec().non_term_items(g);
 
     // let terms = closure.drain_filter(|i| i.is_nonterm(g)).collect::<BTreeSet<_>>();
     let end_items = closure.drain_filter(|i| i.completed()).collect::<BTreeSet<_>>();

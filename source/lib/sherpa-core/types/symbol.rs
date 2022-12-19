@@ -1,7 +1,7 @@
 use sherpa_runtime::types::END_OF_INPUT_TOKEN_ID;
 
 use super::{GrammarId, GrammarRef, GrammarStore, ProductionId, SherpaResult, Token};
-use crate::grammar::uuid::hash_id_value_u64;
+use crate::grammar::{get_scanner_info_from_defined, uuid::hash_id_value_u64};
 use sherpa_runtime::utf8::lookup_table::{
   HORIZONTAL_TAB,
   IDENTIFIER,
@@ -71,7 +71,7 @@ pub enum SymbolID {
 
   /// Represents any terminal production symbol defined through
   /// the production token specifier, `tk:`, as in `tk:<production_name>`.
-  TokenProduction(ProductionId, GrammarId),
+  TokenProduction(ProductionId, GrammarId, ProductionId),
 
   /// Represent the grammar symbol `g:sp`.
   GenericSpace,
@@ -147,13 +147,7 @@ impl SymbolID {
           match g.symbol_strings.iter().find(|(_, string)| string.as_str() == symbol_string) {
             Some((sym_id, _)) => *sym_id,
             _ => match g.get_production_by_name(symbol_string) {
-              SherpaResult::Ok(prod) => {
-                if prod.is_scanner {
-                  Self::TokenProduction(prod.id, g.id.guid)
-                } else {
-                  Self::TokenProduction(prod.id, g.id.guid)
-                }
-              }
+              SherpaResult::Ok(prod) => get_scanner_info_from_defined(&prod.sym_id, g).0,
               _ => SymbolID::Undefined,
             },
           }
@@ -175,8 +169,13 @@ impl SymbolID {
         format!("\\{}", g.symbol_strings.get(self).unwrap())
       }
       Self::Production(prod_id, _) => g.productions.get(prod_id).unwrap().name.to_string(),
-      Self::TokenProduction(prod_id, _) => {
-        format!("tk:{}", g.productions.get(prod_id).unwrap().name)
+      Self::TokenProduction(.., prod_id) => {
+        let name = &g.productions.get(prod_id).unwrap().name;
+        if name.starts_with("tk:") {
+          name.clone()
+        } else {
+          format!("tk:{}", name)
+        }
       }
       Self::Start => "start".to_string(),
       Self::Default => "default".to_string(),
@@ -200,8 +199,8 @@ impl SymbolID {
       | Self::ExclusiveDefinedNumeric(_)
       | Self::ExclusiveDefinedIdentifier(_)
       | Self::ExclusiveDefinedSymbol(_) => "__defined".to_string(),
-      Self::Production(prod_id, _) => "__defined".to_string(),
-      Self::TokenProduction(prod_id, _) => "__defined".to_string(),
+      Self::Production(..) => "__defined".to_string(),
+      Self::TokenProduction(..) => "__defined".to_string(),
       Self::Default => "__default".to_string(),
       Self::Start => "__start".to_string(),
       Self::Recovery => "__rec".to_string(),
@@ -275,14 +274,14 @@ impl SymbolID {
   pub fn get_production_id(&self) -> Option<ProductionId> {
     match self {
       Self::Production(id, _) => Some(*id),
-      Self::TokenProduction(id, _) => Some(*id),
+      Self::TokenProduction(.., id) => Some(*id),
       _ => None,
     }
   }
 
   pub fn get_grammar_id(&self) -> GrammarId {
     match self {
-      Self::Production(_, id) | Self::TokenProduction(_, id) => *id,
+      Self::Production(_, id) | Self::TokenProduction(.., id, _) => *id,
       _ => GrammarId::default(),
     }
   }
@@ -301,7 +300,7 @@ impl SymbolID {
           99999
         }
       }
-      Self::TokenProduction(prod_id, _) => match g {
+      Self::TokenProduction(.., prod_id) => match g {
         Some(g) => g.get_production(prod_id).unwrap().symbol_bytecode_id,
         None => 99999,
       },

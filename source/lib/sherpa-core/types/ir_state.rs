@@ -33,7 +33,7 @@ pub(crate) enum PeekType {
   PeekContinue,
 }
 
-#[derive(Debug, Hash, Clone, PartialEq, Eq)]
+#[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BranchType {
   PRODUCTION,
   TOKEN,

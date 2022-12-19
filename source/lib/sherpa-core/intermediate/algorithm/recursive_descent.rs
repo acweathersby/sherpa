@@ -83,7 +83,7 @@ pub(crate) fn construct_recursive_descent(
 
   root_node.edge_type = EdgeType::Start;
 
-  root_node.goto_items = lane_items.non_term_item_vec(&g);
+  root_node.goto_items = lane_items.as_vec().non_term_items(&g);
 
   let root_index = t.insert_node(root_node);
 
@@ -183,7 +183,7 @@ pub(super) fn create_terminal_node(
     EdgeType::Assert,
     parent_index,
     parent_index,
-    items.non_term_item_vec(&t.g),
+    items.as_vec().non_term_items(&t.g),
   );
 
   t.queue_node(ProcessGroup { node_index, items, discriminant: None, depth: depth });
@@ -242,7 +242,7 @@ pub(super) fn create_completed_node(
         item.get_origin()
       );
     }
-
+    // TODO: Replace with t.accept_items
     let matching_starts = t
       .starts
       .iter()

@@ -2,7 +2,10 @@
 use super::{follow::get_follow_items, LR::construct_inline_LR};
 use crate::{
   grammar::hash_id_value_u64,
-  intermediate::utils::{hash_group_btreemap, hash_group_vec, symbols_occlude},
+  intermediate::{
+    get_out_of_scope,
+    utils::{hash_group_btreemap, hash_group_vec, symbols_occlude},
+  },
   journal::Journal,
   types::*,
 };
@@ -67,7 +70,7 @@ pub(crate) fn peek(
     // Sort the items into groups of terminal and completed items.
     let mut closure = items.closure_with_state(g);
 
-    let completed_items = closure.completed_item_vec();
+    let completed_items = closure.as_vec().completed_items();
 
     // Resolve completed items by getting their follow set.
     if completed_items.len() > 0 {
@@ -119,6 +122,7 @@ pub(crate) fn peek(
           t.leaf_nodes.push(index);
         }
         1 => {
+          let item = convert_origins(&items, &goals)[0];
           if t.is_scanner {
             let exclusive: Vec<&Item> =
               items.iter().filter(|i| i.get_origin_sym().is_exclusive()).collect();
@@ -133,6 +137,18 @@ pub(crate) fn peek(
                   i.debug_string(g), i.get_origin_sym().to_string(g))).collect::<Vec<_>>().join("\n")
               ));
               }
+            }
+          }
+
+          if t.item_is_goal(item) {
+            if t.is_scanner {
+              //dump out of scope items into the outgoing stream.
+              let out_of_scope =
+                get_out_of_scope(g, item.get_prod_id(g), &closure.clone().to_set(), true)
+                  .incomplete_items()
+                  .closure_with_state(g);
+
+              closure = closure.merge_unique(out_of_scope);
             }
           }
 
@@ -226,14 +242,14 @@ pub(crate) fn peek(
       }
     }
 
-    let term_items = closure.term_item_vec(g);
+    let term_items = closure.as_vec().term_items(g);
 
     insert_items_into_node(convert_origins(&term_items, &goals), t, par_id);
 
     if peek_depth > 0 {
       t.get_node_mut(par_id)
         .goto_items
-        .append(&mut convert_origins(&closure.non_term_item_vec(g), &goals));
+        .append(&mut convert_origins(&closure.as_vec().non_term_items(g), &goals));
     }
 
     if EXCLUSIVE_COMPLETED {
@@ -268,6 +284,20 @@ pub(crate) fn peek(
       match peek_groups.len() {
         1 if j.occlusion_tracking_mode() => {
           // We can skip further processing if in occlusions tracking mode
+        }
+        1.. if t.is_scanner && some_items_are_out_of_scope(&mixed_items) => {
+          let index = create_and_insert_node(
+            t,
+            sym,
+            mixed_items,
+            Pass,
+            Assert,
+            Some(par_id),
+            Some(par_id),
+            vec![],
+          );
+
+          t.leaf_nodes.push(index);
         }
         0 | (1..) if all_items_are_out_of_scope(&mixed_items) => {
           // This symbol belongs to a follow item of the production. In this
@@ -326,7 +356,7 @@ pub(crate) fn peek(
             Assert,
             Some(par_id),
             Some(par_id),
-            items.non_term_item_vec(g),
+            items.as_vec().non_term_items(g),
           );
           // Continue processing the now disambiguated items.
           t.queue_node(ProcessGroup { node_index, items, discriminant: None, depth: global_depth });
@@ -341,7 +371,7 @@ pub(crate) fn peek(
             get_edge_type(j, t, peek_depth),
             Some(par_id),
             Some(root_par_id),
-            goal_items.non_term_item_vec(g),
+            goal_items.as_vec().non_term_items(g),
           );
           // Submit these items to be processed.
           t.queue_node(ProcessGroup {
@@ -351,6 +381,7 @@ pub(crate) fn peek(
             depth: global_depth,
           });
         }
+
         2.. => {
           // We combine these items into a new node, then prepare their increments
           // for the next round.
@@ -360,7 +391,7 @@ pub(crate) fn peek(
           // - Shift-Reduce conflicts
 
           if !t.is_scanner
-            && !t.peek_ids.insert(hash_id_value_u64(items.clone().to_zero_state().to_set()))
+            && !t.peek_ids.insert(hash_id_value_u64(items.clone().to_empty_state().to_set()))
           {
             // Item set has been repeated
             let goal_items = get_goal_contents(&items, &goals);
@@ -393,7 +424,7 @@ pub(crate) fn peek(
                   get_edge_type(j, t, peek_depth),
                   Some(par_id),
                   Some(par_id),
-                  lr_starts.non_term_item_vec(g),
+                  lr_starts.as_vec().non_term_items(g),
                 );
 
                 for goal_items in goal_items {
@@ -405,7 +436,7 @@ pub(crate) fn peek(
                     Default,
                     Some(fork_node_index),
                     Some(fork_node_index),
-                    lr_starts.non_term_item_vec(g),
+                    lr_starts.as_vec().non_term_items(g),
                   );
 
                   t.queue_node(ProcessGroup {
@@ -453,13 +484,12 @@ pub(crate) fn peek(
               get_edge_type(j, t, peek_depth),
               Some(par_id),
               Some(par_id),
-              incremented_items.non_term_item_vec(g),
+              incremented_items.as_vec().non_term_items(g),
             );
 
             pending_items.push_back((node_index, peek_depth + 1, incremented_items));
           }
         }
-
         _ => {
           unreachable!("Groups should have at least one lane")
         }
@@ -516,7 +546,7 @@ fn convert_to_production_call(
         get_edge_type(j, t, depth),
         Some(par_id),
         Some(par_id),
-        continue_items.non_term_item_vec(g),
+        continue_items.as_vec().non_term_items(g),
       );
       t.get_node_mut(node_index).prod_sym = Some(production_sym);
 
@@ -531,7 +561,7 @@ fn convert_to_production_call(
       // Submit these items to be processed.
 
       if !t.is_scanner {
-        t.goto_seeds.append(&mut items.to_zero_state().to_set());
+        t.goto_seeds.append(&mut items.to_empty_state().to_set());
       }
 
       SherpaResult::Ok(true)
@@ -545,17 +575,21 @@ fn convert_origins(pending: &Vec<Item>, goals: &Vec<Items>) -> Vec<Item> {
 }
 
 fn convert_origin(item: &Item, goals: &[Items]) -> Item {
-  let index = match item.get_origin() {
-    OriginData::GoalIndex(index) | OriginData::OutOfScope(index) => index,
+  match item.get_origin() {
+    OriginData::GoalIndex(index) => item.to_origin(goals[index][0].get_state().get_origin()),
+    OriginData::OutOfScope(_) => item.to_state(ItemState::OUT_OF_SCOPE),
     _ => {
       panic!("Should only have items with Goal Indices in this context!")
     }
-  };
-  item.to_origin(goals[index][0].get_state().get_origin())
+  }
 }
 
 fn all_items_are_out_of_scope(terminal_completions: &Vec<Item>) -> bool {
   terminal_completions.iter().all(|i| i.is_out_of_scope())
+}
+
+fn some_items_are_out_of_scope(terminal_completions: &Vec<Item>) -> bool {
+  terminal_completions.iter().any(|i| i.is_out_of_scope())
 }
 
 #[inline]
@@ -673,7 +707,7 @@ fn resolveConflictingSymbols(
               groups
                 .iter()
                 .map(|(s, _)| match s {
-                  SymbolID::TokenProduction(prod_id, _) => {
+                  SymbolID::TokenProduction(.., prod_id) => {
                     t.g.get_production(prod_id).unwrap().loc.blame(
                       1,
                       1,
@@ -840,7 +874,7 @@ pub(super) fn create_node(
 
   node.edge_type = edge_type;
   node.closure_parent = closure_parent;
-  node.goto_items = goto_items.non_term_item_vec(&t.g);
+  node.goto_items = goto_items.non_term_items(&t.g);
 
   node
 }

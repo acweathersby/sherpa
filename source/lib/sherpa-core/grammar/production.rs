@@ -1,14 +1,16 @@
 //! Utility functions for the evaluation, interpretation, and
 //! comprehension of productions
 
+use crate::compile::{GrammarId, ProductionId};
+
 /// Used to separate a grammar's uuid name from a production's name
 const GUID_NAME_DELIMITER: &str = "_";
 
 /// Generate a unique scanner production name givin a uuid production
 /// name
 
-pub fn create_scanner_name(uuid_production_name: &String) -> String {
-  format!("scan_tok_{}_", uuid_production_name)
+pub fn create_scanner_name(production_id: ProductionId, grammar_id: GrammarId) -> String {
+  format!("scan_tok_{:X}_{:X}", production_id.0, grammar_id.0)
 }
 
 pub fn create_defined_scanner_name(uuid_production_name: &String) -> String {

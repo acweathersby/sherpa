@@ -28,8 +28,8 @@ pub(crate) fn get_valid_recursive_descent_start_items(
   let mut goto_seeds: BTreeSet<Item> = BTreeSet::new();
   let starts = starts.to_vec();
 
-  for item in starts.term_item_vec(g).iter().chain(starts.non_term_item_vec(g).iter()) {
-    let mut closure = get_closure_cached_with_state(item, g).clone();
+  for item in starts.incomplete_items() {
+    let mut closure = get_closure_cached_with_state(&item, g).clone();
     let mut local_invalid = BTreeSet::new();
 
     for item in &closure {
@@ -75,7 +75,7 @@ pub(crate) fn get_valid_recursive_descent_start_items(
       }
     } else {
       if !output.contains_key(&item.to_empty_state()) {
-        output.insert(item.to_empty_state(), *item);
+        output.insert(item.to_empty_state(), item);
       }
     }
   }
@@ -158,7 +158,7 @@ pub(crate) fn get_symbols_from_items(
           get_production_start_items(&production_id, g).into_iter().collect::<BTreeSet<_>>();
 
         let (mut norm, mut ignore, new_seen) = get_symbols_from_items(
-          production_items.to_zero_state(),
+          production_items.to_empty_state(),
           g,
           Some(seen),
           Default::default(),
@@ -272,6 +272,7 @@ pub(crate) fn check_for_left_recursion(symbol_items: &Items, g: &GrammarStore) {
         .intersects(RecursionType::LEFT_DIRECT | RecursionType::LEFT_INDIRECT);
 
       if has_left {
+        symbol_items.print_items(g, "existing symbols");
         eprintln!(
           "[{}] {}",
           production.name,
