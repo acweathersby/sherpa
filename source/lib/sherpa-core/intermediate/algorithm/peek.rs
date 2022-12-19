@@ -29,7 +29,7 @@ pub(crate) fn peek(
   let goals = hash_group_vec(items.clone(), |index, i| {
     if i.is_out_of_scope() {
       SymbolID::OutOfScope
-    } else if i.completed() || j.config().enable_breadcrumb_parsing || t.is_scanner {
+    } else if i.completed() || j.config().enable_breadcrumb_parsing || t.is_scan() {
       SymbolID::DistinctGroup(index as u32)
     } else {
       i.get_symbol(g)
@@ -123,7 +123,7 @@ pub(crate) fn peek(
         }
         1 => {
           let item = convert_origins(&items, &goals)[0];
-          if t.is_scanner {
+          if t.is_scan() {
             let exclusive: Vec<&Item> =
               items.iter().filter(|i| i.get_origin_sym().is_exclusive()).collect();
             EXCLUSIVE_COMPLETED = exclusive.iter().any(|i| i.get_origin_sym().is_exclusive());
@@ -140,16 +140,14 @@ pub(crate) fn peek(
             }
           }
 
-          if t.item_is_goal(item) {
-            if t.is_scanner {
-              //dump out of scope items into the outgoing stream.
-              let out_of_scope =
-                get_out_of_scope(g, item.get_prod_id(g), &closure.clone().to_set(), true)
-                  .incomplete_items()
-                  .closure_with_state(g);
+          if t.is_scan() && t.item_is_goal(item) {
+            //dump out of scope items into the outgoing stream.
+            let out_of_scope =
+              get_out_of_scope(g, item.get_prod_id(g), &closure.clone().to_set(), true)
+                .incomplete_items()
+                .closure_with_state(g);
 
-              closure = closure.merge_unique(out_of_scope);
-            }
+            closure = closure.merge_unique(out_of_scope);
           }
 
           insert_items_into_node(items.clone(), t, par_id);
@@ -161,12 +159,12 @@ pub(crate) fn peek(
               discriminant: Some((SymbolID::Default, items)),
               depth:        global_depth,
             });
-          } else if t.is_scanner || j.config().enable_breadcrumb_parsing {
+          } else if t.is_scan() || j.config().enable_breadcrumb_parsing {
             let node_index = create_and_insert_node(
               t,
               SymbolID::EndOfInput,
               vec![],
-              if t.is_scanner { Complete } else { BreadcrumbEndCompletion },
+              if t.is_scan() { Complete } else { BreadcrumbEndCompletion },
               Default,
               Some(par_id),
               Some(par_id),
@@ -203,7 +201,7 @@ pub(crate) fn peek(
             });
           }
         }
-        (2..) if t.is_scanner => {
+        (2..) if t.is_scan() => {
           resolveConflictingSymbols(
             t,
             j,
@@ -285,7 +283,7 @@ pub(crate) fn peek(
         1 if j.occlusion_tracking_mode() => {
           // We can skip further processing if in occlusions tracking mode
         }
-        1.. if t.is_scanner && some_items_are_out_of_scope(&mixed_items) => {
+        1.. if t.is_scan() && some_items_are_out_of_scope(&mixed_items) => {
           let index = create_and_insert_node(
             t,
             sym,
@@ -326,8 +324,8 @@ pub(crate) fn peek(
             depth:        global_depth,
           });
         }
-        1 if t.is_scanner || j.config().enable_breadcrumb_parsing => {
-          if !j.config().enable_breadcrumb_parsing && t.is_scanner {
+        1 if t.is_scan() || j.config().enable_breadcrumb_parsing => {
+          if !j.config().enable_breadcrumb_parsing && t.is_scan() {
             // Check to see if we can issue a call instead of increment.
             // For that to work, all items need to be in an initial state,
             // and the production .
@@ -352,7 +350,7 @@ pub(crate) fn peek(
             t,
             sym,
             vec![],
-            if t.is_scanner { Shift } else { BreadcrumbShiftCompletion },
+            if t.is_scan() { Shift } else { BreadcrumbShiftCompletion },
             Assert,
             Some(par_id),
             Some(par_id),
@@ -390,7 +388,7 @@ pub(crate) fn peek(
           // The condition in which we can't continue are:
           // - Shift-Reduce conflicts
 
-          if !t.is_scanner
+          if !t.is_scan()
             && !t.peek_ids.insert(hash_id_value_u64(items.clone().to_empty_state().to_set()))
           {
             // Item set has been repeated
@@ -414,7 +412,7 @@ pub(crate) fn peek(
               SherpaResult::Ok(_) => {
                 // Our grammar is now (RD/RAD + LR)
               }
-              _ if !t.is_scanner => {
+              _ if !t.is_scan() => {
                 // Otherwise, we must use a fork state to handle this situation
                 let fork_node_index = create_and_insert_node(
                   t,
@@ -454,7 +452,7 @@ pub(crate) fn peek(
               }
             }
           } else {
-            if !j.config().enable_breadcrumb_parsing && (t.is_scanner || global_depth == 0) {
+            if !j.config().enable_breadcrumb_parsing && (t.is_scan() || global_depth == 0) {
               // Check to see if we can issue a call instead of increment.
               // For that to work, all items need to be in an initial state,
               // and the production .
@@ -560,7 +558,7 @@ fn convert_to_production_call(
       // End of the line - Let goto handle the reset.
       // Submit these items to be processed.
 
-      if !t.is_scanner {
+      if !t.is_scan() {
         t.goto_seeds.append(&mut items.to_empty_state().to_set());
       }
 
@@ -579,7 +577,7 @@ fn convert_origin(item: &Item, goals: &[Items]) -> Item {
     OriginData::GoalIndex(index) => item.to_origin(goals[index][0].get_state().get_origin()),
     OriginData::OutOfScope(_) => item.to_state(ItemState::OUT_OF_SCOPE),
     _ => {
-      panic!("Should only have items with Goal Indices in this context!")
+      panic!("Should only have items with Goal Indices in this context! {:?}", item)
     }
   }
 }
@@ -603,7 +601,7 @@ fn get_goal_origin(items: &Vec<Item>, goals: &[Items]) -> OriginData {
 }
 
 fn get_node_type(j: &Journal, t: &TransitionGraph) -> NodeType {
-  if t.is_scanner {
+  if t.is_scan() {
     NodeType::Shift
   } else if j.config().enable_breadcrumb_parsing {
     NodeType::BreadcrumbTransition
@@ -613,7 +611,7 @@ fn get_node_type(j: &Journal, t: &TransitionGraph) -> NodeType {
 }
 
 fn get_edge_type(j: &Journal, t: &TransitionGraph, depth: usize) -> EdgeType {
-  if depth > 0 && !t.is_scanner && !j.config().enable_breadcrumb_parsing {
+  if depth > 0 && !t.is_scan() && !j.config().enable_breadcrumb_parsing {
     EdgeType::Peek
   } else {
     EdgeType::Assert
@@ -805,7 +803,7 @@ fn merge_occluding_token_groups(
   // to merge its members into to_groups without
   // going fowl of the borrow checker.
 
-  if !t.is_scanner && !journal.config().allow_occluding_symbols {
+  if !t.is_scan() && !journal.config().allow_occluding_symbols {
     return;
   }
 
@@ -831,7 +829,7 @@ fn merge_occluding_token_groups(
       }
 
       if {
-        if t.is_scanner {
+        if t.is_scan() {
           symbols_occlude(&to_sym, &from_sym, &t.g)
             && ((!from_item.is_out_of_scope()) || (from_sym.is_defined() || to_sym.is_defined()))
         } else {

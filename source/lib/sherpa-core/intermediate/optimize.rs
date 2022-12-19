@@ -75,6 +75,7 @@ pub fn optimize_ir_states(
           }
           (2, ASTNode::SetProd(_), Some(&ASTNode::Reduce(_)))
           | (2, ASTNode::TokenAssign(_), Some(&ASTNode::SetProd(_)))
+          | (2, ASTNode::TokenAssign(_), Some(&ASTNode::Pass(_)))
           | (1, ASTNode::SetProd(_), _) => {
             goto_replacements.insert(state.id.clone(), state.instructions.clone());
           }

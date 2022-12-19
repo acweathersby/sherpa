@@ -187,8 +187,7 @@ fn set_parse_productions(g: &mut GrammarStore) {
   let mut queue = VecDeque::from_iter(productions.iter().cloned());
 
   while let Some(prod_id) = queue.pop_front() {
-    let mut items = get_production_start_items(&prod_id, g);
-    for mut item in items {
+    for mut item in get_production_start_items(&prod_id, g) {
       loop {
         if let SymbolID::Production(prod_id, _) = item.get_symbol(g) {
           if productions.insert(prod_id) {
@@ -619,24 +618,26 @@ fn create_scanner_productions_from_symbols(g: &mut GrammarStore, e: &mut Vec<She
     match &sym_id {
       sym if matches!(sym, SymbolID::GenericSpace) => {
         // Converts the generic symbol `g:sp` into a production that targets the
-        // the defined symbol `b'10'`
-        let (_, scanner_production_id, scanner_name, _) = get_scanner_info_from_defined(&sym_id, g);
+        // the defined symbol `b'32'`
+        let (_, prod_id, name, _) = get_scanner_info_from_defined(&sym_id, g);
 
-        convert_scanner_symbol_to_production(
+        convert_scan_symbol_to_production(
           g,
+          sym_id,
           &[&" ".to_string()],
-          scanner_production_id,
-          scanner_name,
+          prod_id,
+          name,
           Token::empty(),
         );
       }
       sym if matches!(sym, SymbolID::GenericNewLine) => {
         // Converts the generic symbol `g:sp` into a production that targets the
         // the defined symbol `b'10'`
-        let (_, prod_id, name, symbol_string) = get_scanner_info_from_defined(&sym_id, g);
+        let (_, prod_id, name, _) = get_scanner_info_from_defined(&sym_id, g);
 
-        convert_scanner_symbol_to_production(
+        convert_scan_symbol_to_production(
           g,
+          sym_id,
           &[&"\n".to_string()],
           prod_id,
           name,
@@ -685,8 +686,9 @@ fn create_scanner_productions_from_symbols(g: &mut GrammarStore, e: &mut Vec<She
 
         let strings = [symbol_string.as_str()];
 
-        convert_scanner_symbol_to_production(
+        convert_scan_symbol_to_production(
           g,
+          sym_id,
           &strings,
           scanner_production_id,
           scanner_name,
@@ -807,8 +809,9 @@ fn create_scanner_productions_from_symbols(g: &mut GrammarStore, e: &mut Vec<She
 
 /// Converts an array of strings into scanner bodies
 /// for a given scanner production name.
-fn convert_scanner_symbol_to_production(
+fn convert_scan_symbol_to_production(
   g: &mut GrammarStore,
+  sym_id: SymbolID,
   strings: &[&str],
   prod_id: ProductionId,
   name: String,
@@ -839,7 +842,7 @@ fn convert_scanner_symbol_to_production(
         name: name.clone(),
         guid_name: name,
         is_scanner: true,
-        sym_id: SymbolID::TokenProduction(prod_id, g.id.guid, prod_id),
+        sym_id, //: SymbolID::TokenProduction(prod_id, g.id.guid, prod_id),
         ..Default::default()
       },
       bodies,

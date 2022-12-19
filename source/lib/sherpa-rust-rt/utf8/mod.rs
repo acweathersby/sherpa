@@ -27,11 +27,8 @@ pub fn get_token_length_from_code_point(codepoint: u32) -> u32 {
 pub fn get_utf8_code_point_from(word: u32) -> u32 {
   if (word & 0x80000000) > 0 {
     let a = (word >> 24) & 0xFF;
-
     let b = (word >> 16) & 0xFF;
-
     let c = (word >> 8) & 0xFF;
-
     let d = word & 0xFF;
 
     if (word & 0xE0C00000) == 0xC0800000 {

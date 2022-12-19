@@ -30,10 +30,11 @@ pub(crate) fn construct_recursive_ascent(
 ) -> SherpaResult<TPackResults> {
   let g = j.grammar().unwrap();
 
-  let mut t = TPack::new(g.clone(), TransitionMode::RecursiveAscent, false, &vec![], root_ids);
+  let mut t =
+    TPack::new(g.clone(), TransitionMode::RecursiveAscent, ScanType::None, &vec![], root_ids);
   t.increment_lane(1);
   t.goto_scoped_closure = Some(Rc::new(Box::<Vec<Item>>::new(
-    (!t.is_scanner).then(|| get_follow_closure(&g, &t.root_prod_ids)).unwrap_or_default(),
+    (!t.is_scan()).then(|| get_follow_closure(&g, &t.root_prod_ids)).unwrap_or_default(),
   )));
 
   let goto_seeds = goto_seeds.to_empty_state().to_set();

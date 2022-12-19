@@ -94,7 +94,7 @@ fn create_state(
   let mut is_token_assertion = false;
   let mut prefix: Option<String> = None;
   let mut postfix: Option<String> = match node.node_type {
-    NodeType::RAStart | NodeType::RDStart if !t.is_scanner => {
+    NodeType::RAStart | NodeType::RDStart if !t.is_scan() => {
       Some(format!(" then goto state [ {}_goto ]", entry_name))
     }
     _ => None,
@@ -169,8 +169,8 @@ fn create_state(
           }
           EdgeType::Default => {
             for child in children {
-              if t.is_scanner && child.node_type == NodeType::Complete {
-                prefix = create_reduction_string(child, &t.g, true).map(|s| format!("{} then", s));
+              if t.is_scan() && child.node_type == NodeType::Complete {
+                prefix = create_reduction_string(t, child).map(|s| format!("{} then", s));
               }
 
               create_branch_wrap(
@@ -184,7 +184,7 @@ fn create_state(
                 if total_children_count == 1 { EdgeType::Undefined } else { child.edge_type },
               );
 
-              /*        if t.is_scanner && child.node_type == NodeType::Complete {
+              /*        if t.is_scan() && child.node_type == NodeType::Complete {
                 prefix = create_reduction_string(child, &t.g, true).map(|s| format!("{} then", s));
               } */
             }
@@ -255,7 +255,7 @@ fn create_state(
     }
   }
 
-  let (normal_symbols, skip_symbols) = if t.is_scanner || node.node_type == NodeType::RAStart {
+  let (normal_symbols, skip_symbols) = if t.is_scan() || node.node_type == NodeType::RAStart {
     (vec![], vec![])
   } else {
     let (normal_symbol_set, skip_symbols_set, _) = get_symbols_from_items(
@@ -290,7 +290,7 @@ fn create_state(
         NodeType::RAStart => format!("{}_goto", entry_name),
         _ => Default::default(),
       },
-      state_type: if t.is_scanner { IRStateType::Scanner } else { IRStateType::Parser },
+      state_type: if t.is_scan() { IRStateType::Scanner } else { IRStateType::Parser },
       graph_id: node.id,
       normal_symbols,
       skip_symbols,
@@ -316,7 +316,7 @@ fn create_branch_wrap(
 ) -> SherpaResult<()> {
   let sym = child.edge_symbol;
 
-  let (symbol_bytecode_id, assert_class, sym_comment) = if !t.is_scanner {
+  let (symbol_bytecode_id, assert_class, sym_comment) = if !t.is_scan() {
     (sym.bytecode_id(Some(&t.g)), "TOKEN", sym.to_string(&t.g))
   } else {
     let (bc, class) = child.edge_symbol.shift_type(&t.g);
@@ -405,8 +405,8 @@ fn create_child_state(
       }
     }
     NodeType::Complete => {
-      if !t.is_scanner {
-        create_reduction_string(child, &t.g, false).unwrap()
+      if !t.is_scan() {
+        create_reduction_string(t, child).unwrap()
       } else {
         " pass".to_string()
       }
@@ -494,21 +494,25 @@ fn create_child_state(
   }
 }
 
-fn create_reduction_string(node: &GraphNode, g: &GrammarStore, is_scanner: bool) -> Option<String> {
-  match (node.transition_items.first(), is_scanner, node.node_type == NodeType::Pass) {
-    (None, false /* not scanner */, true /* default pass state */) => Some("pass".to_string()),
-    (Some(item), true /* is scanner */, false) => match item.get_origin() {
-      OriginData::Symbol(sym) => match g.symbols.get(&sym) {
-        Some(symbol) if symbol.scanner_only => None,
-        None => None,
-        _ => Some(create_token_reduction_string(g, sym)),
-      },
-      _ => {
-        unreachable!("All items assigned to scanner nodes should have OriginData::Symbol data");
+fn create_reduction_string(t: &TransitionGraph, node: &GraphNode) -> Option<String> {
+  let g = &t.g;
+  match (node.transition_items.first(), t.scan_type, node.node_type == NodeType::Pass) {
+    (Some(item), ScanType::None /* not scanner */, false) => {
+      Some(create_rule_reduction_string(g, item))
+    }
+    (None, ScanType::None /* not scanner */, true /* default pass state */) => {
+      Some("pass".to_string())
+    }
+    (Some(item), ScanType::ScannerEntry, false) => {
+      match (item.get_origin(), t.item_is_goal(*item)) {
+        (OriginData::Symbol(sym), true) => Some(create_token_reduction_string(g, sym)),
+        (OriginData::Symbol(_), false) => None,
+        _ => {
+          unreachable!("All items assigned to scanner nodes should have OriginData::Symbol data");
+        }
       }
-    },
-    (Some(item), false /* not scanner */, false) => Some(create_rule_reduction_string(g, item)),
-    _ => panic!("Invalid Leaf Node"),
+    }
+    _ => None,
   }
 }
 

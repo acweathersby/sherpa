@@ -355,6 +355,19 @@ pub(crate) struct ProcessGroup {
   pub depth:        usize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub(crate) enum ScanType {
+  None = 0,
+  ScannerProduction,
+  ScannerEntry,
+}
+
+impl Default for ScanType {
+  fn default() -> Self {
+    Self::None
+  }
+}
+
 /// Maintains a set of transition nodes and related properties that describe
 /// either a complete or intermediate parse graph.
 ///
@@ -367,7 +380,8 @@ pub(crate) struct TransitionGraph {
   pub goto_seeds: BTreeSet<Item>,
   pub leaf_nodes: Vec<NodeId>,
   pub mode: TransitionMode,
-  pub is_scanner: bool,
+  pub scan_type: ScanType,
+  pub is_scanner_entry: bool,
   pub root_prod_ids: BTreeSet<ProductionId>,
   pub peek_ids: BTreeSet<u64>,
   pub starts: BTreeSet<Item>,
@@ -397,7 +411,7 @@ impl TransitionGraph {
   pub fn new(
     g: Arc<GrammarStore>,
     mode: TransitionMode,
-    is_scanner: bool,
+    scan_type: ScanType,
     starts: &[Item],
     root_prod_ids: BTreeSet<ProductionId>,
   ) -> Self {
@@ -405,13 +419,17 @@ impl TransitionGraph {
       node_pipeline: VecDeque::with_capacity(32),
       empty_cache: VecDeque::with_capacity(16),
       mode,
-      is_scanner,
+      scan_type,
       root_prod_ids,
       starts: BTreeSet::from_iter(starts.iter().map(|i| i.to_start().to_origin_only_state())),
       nodes: Vec::with_capacity(256),
       g,
       ..Default::default()
     }
+  }
+
+  pub fn is_scan(&self) -> bool {
+    !(matches!(self.scan_type, ScanType::None))
   }
 
   pub fn item_is_goal(&self, item: Item) -> bool {
@@ -522,10 +540,11 @@ impl TransitionGraph {
         nodes: self.nodes,
         leaf_nodes: self.leaf_nodes,
         mode: self.mode,
-        is_scanner: self.is_scanner,
+        scan_type: self.scan_type,
         root_prod_ids: self.root_prod_ids,
         closure_links: self.closure_links,
         non_trivial_root: self.non_trivial_root,
+        accept_items: self.accept_items,
         g: self.g,
         ..Default::default()
       },

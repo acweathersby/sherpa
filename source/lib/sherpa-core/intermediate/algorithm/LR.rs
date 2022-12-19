@@ -12,14 +12,14 @@ use std::{
 
 pub(crate) fn construct_LR(
   j: &mut Journal,
-  is_scanner: bool,
+  scan_type: ScanType,
   starts: &Vec<Item>,
 ) -> SherpaResult<TPackResults> {
   let g = j.grammar().unwrap();
 
   let start_productions = BTreeSet::from_iter(starts.iter().map(|i| i.get_prod_id(&g)));
 
-  let mut t = TPack::new(g.clone(), TransitionMode::LR, is_scanner, &starts, start_productions);
+  let mut t = TPack::new(g.clone(), TransitionMode::LR, scan_type, &starts, start_productions);
 
   let mut root_node = GraphNode::new(
     &t,

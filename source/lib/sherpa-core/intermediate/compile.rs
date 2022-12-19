@@ -9,7 +9,15 @@ use crate::{
   compile::{compile_bytecode, optimize_ir_states, GrammarStore},
   grammar::hash_id_value_u64,
   journal::{config::ParseAlgorithm, Journal},
-  types::{IRState, ItemContainer, ProductionId, ScannerStateId, SherpaResult, SymbolSet},
+  types::{
+    IRState,
+    ItemContainer,
+    ProductionId,
+    ScanType,
+    ScannerStateId,
+    SherpaResult,
+    SymbolSet,
+  },
 };
 use std::{
   collections::{BTreeMap, BTreeSet},
@@ -33,7 +41,7 @@ pub(crate) fn compile_production_states_LR(
 
   let items = generate_recursive_descent_items(j, prod_id);
 
-  let t = match construct_LR(j, false, &items) {
+  let t = match construct_LR(j, ScanType::None, &items) {
     SherpaResult::Ok((t, _)) => t,
     SherpaResult::Err(err) => {
       j.report_mut().stop_timer("Graph Compile");
@@ -106,8 +114,11 @@ pub(crate) fn compile_production_states(
 
   let items = generate_recursive_descent_items(j, prod_id);
 
-  let (t, _) =
-    handle_error("Recursive Descent Stopped", construct_recursive_descent(j, false, &items), j)?;
+  let (t, _) = handle_error(
+    "Recursive Descent Stopped",
+    construct_recursive_descent(j, ScanType::None, &items),
+    j,
+  )?;
 
   let mut rd_states = construct_ir(j, &state_name, &t)?;
 
@@ -185,8 +196,11 @@ pub(crate) fn compile_token_production_states(
     })
     .collect();
 
-  let (t, _) =
-    handle_error("Recursive Descent Stopped", construct_recursive_descent(j, true, &items), j)?;
+  let (t, _) = handle_error(
+    "Recursive Descent Stopped",
+    construct_recursive_descent(j, ScanType::ScannerProduction, &items),
+    j,
+  )?;
 
   let rd_states = construct_ir(j, &state_name, &t)?;
 
@@ -228,8 +242,11 @@ pub(crate) fn compile_scanner_states(
 
   let items = generate_scanner_symbol_items(symbols, j);
 
-  let (t, _) =
-    handle_error("Recursive Descent Stopped", construct_recursive_descent(j, true, &items), j)?;
+  let (t, _) = handle_error(
+    "Recursive Descent Stopped",
+    construct_recursive_descent(j, ScanType::ScannerEntry, &items),
+    j,
+  )?;
 
   let rd_states = construct_ir(j, &state_name, &t)?;
 

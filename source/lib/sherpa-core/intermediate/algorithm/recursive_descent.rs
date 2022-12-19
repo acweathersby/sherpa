@@ -42,11 +42,12 @@ use std::{collections::BTreeSet, vec};
 
 pub(crate) fn construct_recursive_descent(
   j: &mut Journal,
-  is_scanner: bool,
+  scan_type: ScanType,
   starts: &Vec<Item>,
 ) -> SherpaResult<TPackResults> {
   let g = j.grammar().unwrap();
   let start_productions = BTreeSet::from_iter(starts.iter().map(|i| i.get_prod_id(&g)));
+  let is_scanner = scan_type != ScanType::None;
 
   let (start_items, goto_seeds) = (!is_scanner)
     .then(|| get_valid_recursive_descent_start_items(starts, &g, &start_productions))
@@ -61,7 +62,7 @@ pub(crate) fn construct_recursive_descent(
   }
 
   let mut t =
-    TPack::new(g.clone(), TransitionMode::RecursiveDescent, is_scanner, &starts, start_productions);
+    TPack::new(g.clone(), TransitionMode::RecursiveDescent, scan_type, &starts, start_productions);
 
   t.increment_lane(1); // Lane 0 is reserved.
 
@@ -77,6 +78,7 @@ pub(crate) fn construct_recursive_descent(
     .collect();
 
   t.goto_seeds.append(&mut goto_seeds.to_set());
+
   t.accept_items.append(&mut lane_items.clone().to_complete().to_origin_only_state().to_set());
 
   let mut root_node = GraphNode::new(&t, SymbolID::Start, None, starts.clone(), NodeType::RDStart);
@@ -231,10 +233,10 @@ pub(super) fn create_completed_node(
     "Only items in the completed position should be passed to this function"
   );
 
-  if t.is_scanner || j.config().enable_breadcrumb_parsing {
+  if t.is_scan() || j.config().enable_breadcrumb_parsing {
     let goal = item.get_origin_sym();
 
-    if t.is_scanner {
+    if t.is_scan() {
       debug_assert!(
         goal != SymbolID::Undefined,
         "All completed scanner items should have OriginData::Symbol data\n the item [\n {} \n] has origin data {:?}",
@@ -306,7 +308,7 @@ pub(super) fn create_completed_node(
     }
   }
 
-  let node_index = if !t.is_scanner
+  let node_index = if !t.is_scan()
     && item.len() == 1
     && t.root_prod_ids.contains(&item.decrement().unwrap().get_production_id_at_sym(&t.g))
   {

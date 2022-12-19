@@ -238,7 +238,7 @@ impl Journal {
 
       self.scratch_pad.occlusion_tracking = true;
 
-      let t = match construct_recursive_descent(self, true, &items) {
+      let t = match construct_recursive_descent(self, ScanType::ScannerEntry, &items) {
         SherpaResult::Ok(_) => {
           self.occluding_symbols = Some(Arc::new(self.scratch_pad.occluding_symbols.clone()));
         }
