@@ -2,9 +2,30 @@ use super::*;
 use crate::utf8::get_token_class_from_codepoint;
 use std::{
   alloc::{alloc, dealloc, Layout},
-  ffi::c_void,
   fmt::Debug,
 };
+
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ParseActionType {
+  None,
+  Error,
+  Reduce,
+  Shift,
+  Accept,
+  Fork,
+  NeedMoreInput,
+}
+impl Into<u32> for ParseActionType {
+  fn into(self) -> u32 {
+    self as u32
+  }
+}
+impl Into<u64> for ParseActionType {
+  fn into(self) -> u64 {
+    self as u64
+  }
+}
 
 const STACK_32_BIT_SIZE: usize = 128;
 pub struct ParseContext<T: ByteReader + MutByteReader> {
@@ -235,12 +256,16 @@ pub struct LLVMParseContext<T: LLVMByteReader + ByteReader, M> {
   pub custom_lex:      fn(&mut T, &mut M, &LLVMParseContext<T, M>) -> (u32, u32, u32),
   /// Tracks whether the context is a fail mode or not.
   pub state:           u32,
+  /// When reducing, stores the the number of of symbols to reduce into one.
+  pub meta_a:          u32,
+  /// When reducing, stores the rule id that is being reduced.
+  pub meta_b:          u32,
   pub is_active:       bool,
 }
 
 #[test]
-fn llvm_context_is_152_bytes() {
-  assert_eq!(std::mem::size_of::<LLVMParseContext<UTF8StringReader, u64>>(), 152)
+fn llvm_context_is_160_bytes() {
+  assert_eq!(std::mem::size_of::<LLVMParseContext<UTF8StringReader, u64>>(), 160)
 }
 
 impl<T: LLVMByteReader + ByteReader, M> Debug for LLVMParseContext<T, M> {
@@ -306,11 +331,13 @@ impl<T: LLVMByteReader + ByteReader, M> LLVMParseContext<T, M> {
       peek_line_num:   0,
       state:           0,
       tok_id:          0,
+      meta_a:          0,
+      meta_b:          0,
+      goto_size:       0,
+      goto_free:       0,
       in_peek_mode:    false,
       is_active:       false,
       goto_stack_ptr:  0 as *mut Goto,
-      goto_size:       0,
-      goto_free:       0,
       get_input_info:  T::get_byte_block_at_cursor,
       reader:          0 as *mut T,
       meta_ctx:        0 as *mut M,
@@ -324,6 +351,16 @@ impl<T: LLVMByteReader + ByteReader, M> LLVMParseContext<T, M> {
 
   fn default_custom_lex(_: &mut T, _: &mut M, _: &Self) -> (u32, u32, u32) {
     (0, 0, 0)
+  }
+
+  pub fn get_shift_data(&self) -> ParseAction {
+    ParseAction::Shift {
+      anchor_byte_offset: self.anchor_off,
+      token_byte_offset:  self.token_off,
+      token_byte_length:  self.scan_len,
+      token_line_offset:  self.tok_line_off,
+      token_line_count:   self.tok_line_num,
+    }
   }
 }
 
@@ -464,11 +501,10 @@ pub unsafe fn llvm_map_shift_action<
   M,
   V: AstSlot,
 >(
-  ctx: &mut LLVMParseContext<T, M>,
-  action: &ParseAction,
+  ctx: &LLVMParseContext<T, M>,
   slots: &mut AstSlots<(V, TokenRange, TokenRange)>,
 ) {
-  match *action {
+  match ctx.get_shift_data() {
     ParseAction::Shift {
       anchor_byte_offset,
       token_byte_offset,
@@ -492,7 +528,7 @@ pub unsafe fn llvm_map_shift_action<
 
       slots.assign_to_garbage(0, (V::default(), tok, peek));
     }
-    _ => slots.assign_to_garbage(0, (V::default(), TokenRange::default(), TokenRange::default())),
+    _ => unreachable!(),
   }
 }
 
@@ -502,21 +538,23 @@ pub unsafe fn llvm_map_result_action<
   M,
   Node: AstSlot,
 >(
-  ctx: &mut LLVMParseContext<T, M>,
-  action: &ParseAction,
+  ctx: &LLVMParseContext<T, M>,
+  action: ParseActionType,
   slots: &mut AstSlots<(Node, TokenRange, TokenRange)>,
 ) -> ParseResult<Node> {
-  match *action {
-    ParseAction::Accept { .. } => {
+  match action {
+    ParseActionType::Accept =>{
       ParseResult::Complete(slots.take(0))
     }
-    ParseAction::EndOfInput { .. } => {
-      ParseResult::NeedMoreInput(slots.to_vec())
-    }
-    ParseAction::Error {last_input, .. } => {
+    ParseActionType::Error => {
       let vec = slots.to_vec();
+      let last_input = vec.last().unwrap().1;
       ParseResult::Error(last_input, vec)
     }
+    ParseActionType::NeedMoreInput => {
+      ParseResult::NeedMoreInput(slots.to_vec())
+    }
+
     _ => unreachable!("This function should only be called when the parse action is  [Error, Accept, or EndOfInput]"),
   }
 }

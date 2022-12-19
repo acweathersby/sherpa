@@ -84,6 +84,10 @@ pub struct Config {
   ///
   /// Defaults to `true`.
   pub opt_remove_gotos_to_pass_states: bool,
+  /// Run optimization passes on LLVM code.
+  ///
+  /// Defaults to `false`.
+  pub opt_llvm: bool,
 
   /// Enable the generation of AScripT AST code.
   ///
@@ -123,6 +127,7 @@ impl Default for Config {
       llvm_ar_path: "llvm-ar-14".to_string(),
       llvm_clang_path: "clang-14".to_string(),
       llvm_light_lto: false,
+      opt_llvm: false,
     }
   }
 }

@@ -25,8 +25,8 @@ struct ScratchPad {
 }
 
 #[derive(Debug)]
-/// A general structure for storing and interacting with data for configuring,
-/// monitoring, and reporting purposes.
+/// A general structure for storing and interacting with data relating to the configuration,
+/// monitoring, and reporting of Sherpa commands and types.
 pub struct Journal {
   /// A fully compiled grammar.
   grammar: Option<Arc<GrammarStore>>,

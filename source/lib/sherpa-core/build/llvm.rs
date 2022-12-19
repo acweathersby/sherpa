@@ -9,7 +9,7 @@ use inkwell::{
 
 use crate::{
   ascript::{self, rust::create_type_initializer_value},
-  grammar::data::{ast::Ascript, ast_node::DummyASTEnum},
+  grammar::data::ast_node::DummyASTEnum,
   types::*,
   writer::code_writer::CodeWriter,
 };
@@ -126,7 +126,7 @@ fn write_rust_parser<W: Write>(
 #[link(name = \"{}\", kind = \"static\" )]
 extern \"C\" {{
     fn init(ctx: *mut u8, reader: *mut u8);
-    fn next(ctx: *mut u8, action:*mut u8);
+    fn next(ctx: *mut u8) -> ParseActionType;
     fn prime(ctx: *mut u8, start_point: u32);
     fn drop(ctx: *mut u8);
     fn ast_parse();
@@ -145,8 +145,10 @@ impl<T> LLVMReader for T
       
 pub struct Parser<T: LLVMReader, M>(LLVMParseContext<T, M>, T);
 
+
 impl<T: LLVMReader, M> Iterator for Parser<T, M> {{
-    type Item = ParseAction;
+    type Item = ParseActionType;
+
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {{
         
@@ -155,14 +157,12 @@ impl<T: LLVMReader, M> Iterator for Parser<T, M> {{
                 None
             }} else {{
                 let _ptr = &mut self.0 as *const LLVMParseContext<T, M>;
-                let mut action = ParseAction::Undefined;
-                let _action = &mut action as *mut ParseAction;
-                next(_ptr as *mut u8, _action as *mut u8);
-                Some(action)
+                Some(next(_ptr as *mut u8))
             }}
         }}
     }}
 }}
+
 
 impl<T: LLVMReader, M> Parser<T, M> {{
     /// Create a new parser context to parser the input with 
@@ -317,7 +317,7 @@ pub fn build_llvm_parser(
   PipelineTask {
     fun: Box::new(move |task_ctx| {
       let output_path = task_ctx.get_build_output_dir();
-      let j = task_ctx.get_journal();
+      let mut j = task_ctx.get_journal();
       let grammar = j.grammar().unwrap();
       let parser_name = grammar.id.name.clone();
 
@@ -348,12 +348,8 @@ pub fn build_llvm_parser(
 
       // Write out llvm module to file
 
-      match crate::llvm::compile_from_bytecode(
-        &parser_name,
-        &grammar,
-        &Context::create(),
-        &bytecode,
-      ) {
+      match crate::llvm::compile_from_bytecode(&parser_name, &mut j, &Context::create(), &bytecode)
+      {
         SherpaResult::Ok(ctx) => {
           if task_ctx.get_journal().config().enable_ascript {
             unsafe {
@@ -418,10 +414,11 @@ pub fn build_llvm_parser(
               .unwrap();
 
             ctx.module.set_triple(&target_triple);
-
             ctx.module.set_data_layout(&target_machine.get_target_data().get_data_layout());
 
-            _apply_llvm_optimizations(opt, &ctx);
+            if j.config().opt_llvm {
+              _apply_llvm_optimizations(opt, &ctx);
+            }
 
             match target_machine.write_to_file(&ctx.module, FileType::Object, &object_path) {
               Ok(_) => {

@@ -5,11 +5,12 @@ use crate::{
   debug::{address_string, disassemble_state, BytecodeGrammarLookups},
   llvm::{LLVMParserModule, FAIL_STATE_FLAG_LLVM},
   types::*,
+  Journal,
 };
 use inkwell::{
   basic_block::BasicBlock,
   module::Linkage,
-  values::{AnyValue, CallableValue, FunctionValue, IntValue, PointerValue},
+  values::{CallableValue, FunctionValue, IntValue, PointerValue},
 };
 use std::{
   collections::{BTreeMap, BTreeSet, VecDeque},
@@ -34,6 +35,7 @@ pub struct LLVMStateData<'a> {
   pub(crate) function:          FunctionValue<'a>,
   pub(crate) is_scanner:        bool,
   pub(crate) branch_data:       BTreeMap<INSTRUCTION, BranchTableData>,
+  pub(crate) entry_block:       BasicBlock<'a>,
 }
 
 impl<'a> LLVMStateData<'a> {
@@ -58,12 +60,15 @@ impl<'a> LLVMStateData<'a> {
 
     entry_function.set_call_conventions(fastCC);
 
+    let entry_block = module.ctx.append_basic_block(entry_function, "Entry");
+
     Self {
       function: entry_function,
       function_pointer: entry_function.as_global_value().as_pointer_value(),
       entry_instruction,
       is_scanner,
       branch_data: BTreeMap::new(),
+      entry_block,
     }
   }
 
@@ -84,28 +89,6 @@ impl<'a> LLVMStateData<'a> {
   }
 }
 
-#[derive(Default)]
-pub(crate) struct BranchStateCache<'a> {
-  max_length: u32,
-  input_buffer: Option<PointerValue<'a>>,
-  input_buffer_length_int: Option<IntValue<'a>>,
-  parse_ctx: Option<PointerValue<'a>>,
-  action_pointer: Option<PointerValue<'a>>,
-  input_block: Option<InputBlockRef<'a>>,
-  input_buffer_length: usize,
-}
-
-impl<'a> BranchStateCache<'a> {
-  pub fn next(&self) -> Self {
-    BranchStateCache {
-      input_buffer: None,
-      input_buffer_length_int: None,
-      input_block: None,
-      ..*self
-    }
-  }
-}
-
 pub(crate) fn get_state_data<'a>(
   instruction: INSTRUCTION,
   state: &'a BTreeMap<INSTRUCTION, LLVMStateData<'a>>,
@@ -117,14 +100,16 @@ pub(crate) fn get_state_data<'a>(
 }
 
 pub(crate) unsafe fn construct_parse_function<'a>(
-  g: &GrammarStore,
+  j: &mut Journal,
   module: &'a LLVMParserModule,
   output: &BytecodeOutput,
 ) -> SherpaResult<()> {
+  let grammar = j.grammar()?;
+  let g = &grammar;
+
   let start_points = get_start_points(g, output);
 
-  let internal_linkage = Some(Linkage::Private);
-  let internal_linkage = None;
+  let linkage = if j.config().opt_llvm { Some(Linkage::Private) } else { None };
 
   // from the entry states, get a list of all states that can be accessed in
   // the LLVM based parser. Note: this will be different than bytecode states for
@@ -148,7 +133,7 @@ pub(crate) unsafe fn construct_parse_function<'a>(
           instruction.get_address(),
           module,
           is_scanner,
-          internal_linkage,
+          linkage,
         );
         let bc = &output.bytecode;
 
@@ -214,9 +199,7 @@ pub(crate) unsafe fn construct_parse_function<'a>(
 
     let fun = state.function;
 
-    let entry_block = module.ctx.append_basic_block(fun, "Entry");
-
-    module.builder.position_at_end(entry_block);
+    module.builder.position_at_end(state.entry_block);
 
     let fn_pack = FunctionPack {
       fun: &fun,
@@ -969,34 +952,11 @@ pub(crate) fn construct_goto<'a>(
   }
 }
 
-pub(crate) fn construct_reduce(
+fn write_reentrance<'a>(
   instruction: INSTRUCTION,
   module: &LLVMParserModule,
   pack: &FunctionPack,
-) -> SherpaResult<()> {
-  let parse_ctx = pack.fun.get_first_param()?.into_pointer_value();
-  let symbol_count = instruction.get_value() >> 16 & 0x0FFF;
-  let rule_id = instruction.get_value() & 0xFFFF;
-
-  write_emit_reentrance(instruction.next(&pack.output.bytecode), module, pack)?;
-
-  build_fast_call(module, module.fun.emit_reduce, &[
-    parse_ctx.into(),
-    pack.fun.get_nth_param(1)?.into_pointer_value().into(),
-    CTX::prod_id.load(module, parse_ctx)?.into(),
-    module.ctx.i32_type().const_int(rule_id as u64, false).into(),
-    module.ctx.i32_type().const_int(symbol_count as u64, false).into(),
-  ])?;
-
-  module.builder.build_return(None);
-
-  SherpaResult::Ok(())
-}
-
-fn write_emit_reentrance<'a>(
-  instruction: INSTRUCTION,
-  module: &LLVMParserModule,
-  pack: &FunctionPack,
+  force_goto: bool,
 ) -> SherpaResult<()> {
   let bytecode = &pack.output.bytecode;
 
@@ -1011,7 +971,7 @@ fn write_emit_reentrance<'a>(
     _ => instruction,
   };
 
-  if !next_instruction.is_PASS() {
+  if !next_instruction.is_PASS() || force_goto {
     build_fast_call(module, module.fun.push_state, &[
       pack.fun.get_first_param().unwrap().into_pointer_value().into(),
       module.ctx.i32_type().const_int(NORMAL_STATE_FLAG_LLVM as u64, false).into(),
@@ -1022,33 +982,59 @@ fn write_emit_reentrance<'a>(
   SherpaResult::Ok(())
 }
 
+pub(crate) fn construct_reduce(
+  instruction: INSTRUCTION,
+  module: &LLVMParserModule,
+  pack: &FunctionPack,
+) -> SherpaResult<()> {
+  let parse_ctx = pack.fun.get_first_param()?.into_pointer_value();
+  let sym_count = instruction.get_value() >> 16 & 0x0FFF;
+  let rule_id = instruction.get_value() & 0xFFFF;
+
+  write_reentrance(instruction.next(&pack.output.bytecode), module, pack, false)?;
+
+  CTX::meta_a.store(module, parse_ctx, module.ctx.i32_type().const_int(sym_count as u64, false))?;
+
+  CTX::meta_b.store(module, parse_ctx, module.ctx.i32_type().const_int(rule_id as u64, false))?;
+
+  module
+    .builder
+    .build_return(Some(&module.ctx.i32_type().const_int(ParseActionType::Reduce.into(), false)));
+
+  SherpaResult::Ok(())
+}
+
 pub(crate) fn construct_shift(
   instruction: INSTRUCTION,
   module: &LLVMParserModule,
   pack: &FunctionPack,
 ) -> SherpaResult<()> {
-  let parse_ctx = pack.fun.get_nth_param(0)?.into_pointer_value();
-  let action_ptr = pack.fun.get_nth_param(1)?.into_pointer_value();
+  let next = instruction.next(&pack.output.bytecode);
+  write_reentrance(next, module, pack, true)?;
+
+  module
+    .builder
+    .build_return(Some(&module.ctx.i32_type().const_int(ParseActionType::Shift.into(), false)));
+
+  let data = get_state_data(next, pack.states);
+
+  let fun = data.function;
+  let b = &module.builder;
+
+  match data.entry_block.get_first_instruction() {
+    Some(instruction) => b.position_before(&instruction),
+    None => b.position_at_end(data.entry_block),
+  }
+
+  let parse_ctx = fun.get_nth_param(0)?.into_pointer_value();
   let cache_offset_ptr = CTX::token_off.get_ptr(module, parse_ctx)?;
   let cache_anchor_offset_ptr = CTX::anchor_off.get_ptr(module, parse_ctx)?;
   let cache_line_ptr = CTX::anchor_line_off.get_ptr(module, parse_ctx)?;
-
-  write_emit_reentrance(instruction.next(&pack.output.bytecode), module, pack)?;
 
   let offset = module.builder.build_load(cache_offset_ptr, "").into_int_value();
   let length = CTX::scan_len.load(module, parse_ctx)?.into_int_value();
 
   let line = module.builder.build_load(cache_line_ptr, "").into_int_value();
-
-  let b = &module.builder;
-
-  build_fast_call(module, module.fun.emit_shift, &[
-    action_ptr.into(),
-    b.build_load(cache_anchor_offset_ptr, "").into_int_value().into(),
-    offset.into(),
-    length.into(),
-    line.into(),
-  ])?;
 
   let new_offset = module.builder.build_int_add(length, offset, "");
   CTX::token_off.store(module, parse_ctx, new_offset)?;
@@ -1059,8 +1045,6 @@ pub(crate) fn construct_shift(
     let input_ptr = b.build_gep(input_ptr, &[length.into()], "");
     CTX::tok_ptr.store(module, parse_ctx, input_ptr)?;
   }
-
-  b.build_return(None);
 
   SherpaResult::Ok(())
 }
@@ -1128,7 +1112,7 @@ pub(crate) unsafe fn construct_prime_function(
   build_push_fn_state(
     module,
     parse_ctx,
-    module.fun.emit_eop.as_global_value().as_pointer_value(),
+    module.fun.handle_eop.as_global_value().as_pointer_value(),
     (NORMAL_STATE_FLAG_LLVM | FAIL_STATE_FLAG_LLVM),
   );
 
@@ -1179,13 +1163,9 @@ pub(crate) unsafe fn construct_scan<'a>(module: &LLVMParserModule<'a>) -> Sherpa
   let null_fn = {
     let null_fn = module.module.add_function(
       "scan_stop",
-      ctx.void_type().fn_type(
-        &[
-          types.parse_ctx.ptr_type(inkwell::AddressSpace::Generic).into(),
-          types.action.ptr_type(inkwell::AddressSpace::Generic).into(),
-        ],
-        false,
-      ),
+      ctx
+        .i32_type()
+        .fn_type(&[types.parse_ctx.ptr_type(inkwell::AddressSpace::Generic).into()], false),
       Some(Linkage::Private),
     );
 
@@ -1194,7 +1174,8 @@ pub(crate) unsafe fn construct_scan<'a>(module: &LLVMParserModule<'a>) -> Sherpa
     let entry = ctx.append_basic_block(null_fn, "Entry");
 
     b.position_at_end(entry);
-    b.build_return(None);
+
+    b.build_return(Some(&ctx.i32_type().const_zero()));
 
     null_fn
   };
@@ -1223,6 +1204,7 @@ pub(crate) unsafe fn construct_scan<'a>(module: &LLVMParserModule<'a>) -> Sherpa
   CTX::scan_input_trun.store(module, parse_ctx, ctx.bool_type().const_zero())?;
   CTX::scan_off.store(module, parse_ctx, offset)?;
   CTX::scan_anchor_off.store(module, parse_ctx, offset)?;
+  CTX::tok_id.store(module, parse_ctx, ctx.i32_type().const_zero())?;
 
   build_push_fn_state(
     module,
@@ -1233,11 +1215,8 @@ pub(crate) unsafe fn construct_scan<'a>(module: &LLVMParserModule<'a>) -> Sherpa
 
   build_push_fn_state(module, parse_ctx, scanner_parse_function_ptr, NORMAL_STATE_FLAG_LLVM);
 
-  // Reserve enough space on the stack for an Action enum
-  let action = b.build_alloca(types.action, "");
-
   // Dispatch!
-  b.build_call(funct.dispatch, &[parse_ctx.into(), action.into()], "");
+  b.build_call(funct.dispatch, &[parse_ctx.into()], "");
 
   // Convert scan_anchor_off and tok_off / peek_off into a length offset
 
@@ -1326,31 +1305,6 @@ pub(crate) unsafe fn construct_dispatch_function<'a>(
   }
 }
 
-pub(crate) unsafe fn construct_next_function<'a>(module: &'a LLVMParserModule) -> SherpaResult<()> {
-  // Insert next instruction near top
-  let c = module;
-  let LLVMParserModule { builder: b, ctx, fun, .. } = module;
-
-  let fn_value = fun.next;
-
-  b.position_at_end(ctx.append_basic_block(fn_value, "Entry"));
-
-  let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
-  let action = fn_value.get_nth_param(1).unwrap().into_pointer_value();
-
-  let call_site = b.build_call(fun.dispatch, &[parse_ctx.into(), action.into()], "");
-  call_site.set_tail_call(false);
-  call_site.set_call_convention(fastCC);
-
-  b.build_return(None);
-
-  if fun.next.verify(true) {
-    SherpaResult::Ok(())
-  } else {
-    SherpaResult::Err(SherpaError::from("Could not build next function"))
-  }
-}
-
 pub fn build_tail_call_with_return<'a, T>(
   module: &'a LLVMParserModule,
   caller_fun: FunctionValue<'a>,
@@ -1361,16 +1315,15 @@ where
 {
   let call_site = module.builder.build_call(
     callee_fun,
-    &[
-      caller_fun.get_nth_param(0)?.into_pointer_value().into(),
-      caller_fun.get_nth_param(1)?.into_pointer_value().into(),
-    ],
+    &[caller_fun.get_nth_param(0)?.into_pointer_value().into()],
     "TAIL_CALL_SITE",
   );
   call_site.set_tail_call(true);
   call_site.set_call_convention(fastCC);
 
-  module.builder.build_return(None);
+  let value = call_site.try_as_basic_value().left()?.into_int_value();
+
+  module.builder.build_return(Some(&value));
 
   SherpaResult::Ok(())
 }

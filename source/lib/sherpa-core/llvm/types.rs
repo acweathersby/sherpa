@@ -19,7 +19,6 @@ pub struct LLVMTypes<'a> {
   pub token: StructType<'a>,
   pub goto: StructType<'a>,
   pub goto_fn: FunctionType<'a>,
-  pub action: StructType<'a>,
   pub input_info: StructType<'a>,
   pub cp_info: StructType<'a>,
   /// The form of all functions that can be tail called.
@@ -34,12 +33,7 @@ pub struct PublicFunctions<'a> {
   pub(crate) init: FunctionValue<'a>,
   pub(crate) pop_state: FunctionValue<'a>,
   pub(crate) push_state: FunctionValue<'a>,
-  pub(crate) emit_accept: FunctionValue<'a>,
-  pub(crate) emit_error: FunctionValue<'a>,
-  pub(crate) emit_eoi: FunctionValue<'a>,
-  pub(crate) emit_eop: FunctionValue<'a>,
-  pub(crate) emit_shift: FunctionValue<'a>,
-  pub(crate) emit_reduce: FunctionValue<'a>,
+  pub(crate) handle_eop: FunctionValue<'a>,
   pub(crate) prime: FunctionValue<'a>,
   pub(crate) scan: FunctionValue<'a>,
   pub(crate) memcpy: FunctionValue<'a>,
@@ -232,6 +226,16 @@ pub enum CTX_AGGREGATE_INDICES {
   /// pub state:           u32,
   /// ```
   state,
+  /// When reducing, stores the the number of of symbols to reduce into one.
+  /// ```rust
+  /// pub meta_a:          u32,
+  /// ```
+  meta_a,
+  /// When reducing, stores the rule id that is being reduced.
+  /// ```rust
+  /// pub meta_b:          u32,
+  /// ```
+  meta_b,
   /// ```rust
   /// pub is_active:       bool,
   /// ```

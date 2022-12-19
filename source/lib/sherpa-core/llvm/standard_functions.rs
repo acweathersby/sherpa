@@ -1,9 +1,7 @@
 use super::{
   fastCC,
   parser_functions::{
-    build_tail_call_with_return,
     construct_dispatch_function,
-    construct_next_function,
     construct_parse_function,
     construct_scan,
   },
@@ -13,7 +11,7 @@ use super::{
 use crate::{
   compile::BytecodeOutput,
   llvm::{LLVMParserModule, LLVMTypes, PublicFunctions, NORMAL_STATE_FLAG_LLVM},
-  types::*,
+  types::*, Journal,
 };
 use inkwell::{
   context::Context,
@@ -21,7 +19,7 @@ use inkwell::{
   values::{BasicMetadataValueEnum, CallSiteValue, CallableValue},
 };
 
-pub(crate) fn construct_module<'a>(module_name: &str, ctx: &'a Context) -> LLVMParserModule<'a> {
+pub(crate) fn construct_module<'a>(j:&mut Journal,  module_name: &str, ctx: &'a Context) -> LLVMParserModule<'a> {
   use inkwell::AddressSpace::*;
   let module = ctx.create_module(module_name);
   let builder = ctx.create_builder();
@@ -32,25 +30,18 @@ pub(crate) fn construct_module<'a>(module_name: &str, ctx: &'a Context) -> LLVMP
   let i32 = ctx.i32_type();
   let CP_INFO = ctx.opaque_struct_type("s.CP_INFO");
   let READER = ctx.opaque_struct_type("s.READER");
-  let ACTION = ctx.opaque_struct_type("s.ACTION");
   let CTX = ctx.opaque_struct_type("s.CTX");
   let GOTO = ctx.opaque_struct_type("s.Goto");
   let TOKEN = ctx.opaque_struct_type("s.Token");
   let INPUT_INFO = ctx.opaque_struct_type("s.InputBlock");
   let CTX_PTR = CTX.ptr_type(Generic);
-  let ACTION_PTR = ACTION.ptr_type(Generic);
+
+  let internal_linkage = if j.config().opt_llvm { Some(Linkage::Private) } else { None };
 
   let TAIL_CALLABLE_PARSE_FUNCTION =
-    ctx.void_type().fn_type(&[CTX_PTR.into(), ACTION_PTR.into()], false);
+    i32.fn_type(&[CTX_PTR.into()], false);
 
-  ACTION.set_body(
-    &[
-      i8.array_type(std::mem::size_of::<ParseAction>() as u32).into()
-    ],
-    false,
-  );
-
-  let GOTO_FN = i32.fn_type(&[CTX_PTR.into(), ACTION_PTR.into()], false);
+  let GOTO_FN = i32.fn_type(&[CTX_PTR.into()], false);
 
   GOTO.set_body(
     &[TAIL_CALLABLE_PARSE_FUNCTION.ptr_type(Generic).into(), i32.into(), i32.into()],
@@ -112,13 +103,12 @@ pub(crate) fn construct_module<'a>(module_name: &str, ctx: &'a Context) -> LLVMP
       bool.ptr_type(Generic).into(),
       bool.ptr_type(Generic).into(),
       i32.into(),
+      i32.into(),
+      i32.into(),
       bool.into(),
     ],
     false,
   );
-
-  let internal_linkage = Some(Linkage::Private);
-//  / let internal_linkage = None;
 
   let fun = PublicFunctions {
     /// Public functions
@@ -157,37 +147,9 @@ pub(crate) fn construct_module<'a>(module_name: &str, ctx: &'a Context) -> LLVMP
     /// ------------------------------------------------------------------------
     // These functions can be tail called, as they all use the same interface
     dispatch: module.add_function("dispatch", TAIL_CALLABLE_PARSE_FUNCTION, internal_linkage),
-    emit_accept: module.add_function("emit_accept", TAIL_CALLABLE_PARSE_FUNCTION, internal_linkage),
-    emit_error: module.add_function(
-      "emit_error",
-      TAIL_CALLABLE_PARSE_FUNCTION.clone(),
-      internal_linkage,
-    ),
-    emit_eop: module.add_function("emit_eop", TAIL_CALLABLE_PARSE_FUNCTION, internal_linkage),
-    /// ------------------------------------------------------------------------
-    ///
-    emit_reduce: module.add_function(
-      "emit_reduce",
-      ctx.void_type().fn_type(
-        &[CTX.ptr_type(Generic).into(), ACTION_PTR.into(), i32.into(), i32.into(), i32.into()],
-        false,
-      ),
-      internal_linkage,
-    ),
-    emit_shift: module.add_function(
-      "emit_shift",
-      ctx
-        .void_type()
-        .fn_type(&[ACTION_PTR.into(), i32.into(), i32.into(), i32.into(), i32.into()], false),
-      internal_linkage,
-    ),
-    emit_eoi: module.add_function(
-      "emit_eoi",
-      ctx
-        .void_type()
-        .fn_type(&[CTX.ptr_type(Generic).into(), ACTION_PTR.into(), i32.into()], false),
-      internal_linkage,
-    ),
+
+    handle_eop: module.add_function("emit_eop", TAIL_CALLABLE_PARSE_FUNCTION, internal_linkage),
+
     /// ------------------------------------------------------------------------
     get_utf8_codepoint_info: module.add_function(
       "get_utf8_codepoint_info",
@@ -289,12 +251,7 @@ pub(crate) fn construct_module<'a>(module_name: &str, ctx: &'a Context) -> LLVMP
   fun.dispatch.set_call_conventions(fastCC);
   fun.internal_free_stack.set_call_conventions(fastCC);
   fun.scan.set_call_conventions(fastCC);
-  fun.emit_accept.set_call_conventions(fastCC);
-  fun.emit_error.set_call_conventions(fastCC);
-  fun.emit_eop.set_call_conventions(fastCC);
-  fun.emit_reduce.set_call_conventions(fastCC);
-  fun.emit_shift.set_call_conventions(fastCC);
-  fun.emit_eoi.set_call_conventions(fastCC);
+  fun.handle_eop.set_call_conventions(fastCC);
   fun.pop_state.set_call_conventions(fastCC);
   fun.push_state.set_call_conventions(fastCC);
   fun.get_utf8_codepoint_info.set_call_conventions(fastCC);
@@ -308,7 +265,6 @@ pub(crate) fn construct_module<'a>(module_name: &str, ctx: &'a Context) -> LLVMP
     types: LLVMTypes {
       TAIL_CALLABLE_PARSE_FUNCTION,
       reader: READER,
-      action: ACTION,
       token: TOKEN,
       parse_ctx: CTX,
       goto: GOTO,
@@ -322,41 +278,7 @@ pub(crate) fn construct_module<'a>(module_name: &str, ctx: &'a Context) -> LLVMP
   }
 }
 
-pub(crate) fn construct_emit_end_of_input(module: &LLVMParserModule) -> SherpaResult<()> {
-  let LLVMParserModule { builder: b, ctx, fun: funct, .. } = module;
 
-  let i32 = ctx.i32_type();
-
-  let fn_value = funct.emit_eoi;
-
-  let eoi_action = ctx.struct_type(&[i32.into(), i32.into(), i32.into()], false);
-
-  // Set the context's goto pointers to point to the goto block;
-  let entry = ctx.append_basic_block(fn_value, "Entry");
-
-  let basic_action = fn_value.get_nth_param(1).unwrap().into_pointer_value();
-  let current_offset = fn_value.get_nth_param(2).unwrap();
-
-  b.position_at_end(entry);
-
-  let eoi = b
-    .build_bitcast(basic_action, eoi_action.ptr_type(inkwell::AddressSpace::Generic), "")
-    .into_pointer_value();
-
-  let eoi_struct = b.build_load(eoi, "").into_struct_value();
-  let eoi_struct = b.build_insert_value(eoi_struct, i32.const_int(9, false), 0, "").unwrap();
-  let eoi_struct = b.build_insert_value(eoi_struct, current_offset, 2, "").unwrap();
-
-  b.build_store(eoi, eoi_struct);
-
-  b.build_return(None);
-
-  if funct.emit_eoi.verify(true) {
-    SherpaResult::Ok(())
-  } else {
-    SherpaResult::Err(SherpaError::from("\n\nCould not build emit_eoi function"))
-  }
-}
 
 pub(crate) unsafe fn construct_emit_end_of_parse(module: &LLVMParserModule) -> SherpaResult<()> {
   let LLVMParserModule { builder: b, ctx, fun: funct, .. } = module;
@@ -364,7 +286,7 @@ pub(crate) unsafe fn construct_emit_end_of_parse(module: &LLVMParserModule) -> S
   let i32 = ctx.i32_type();
   let bool = ctx.bool_type();
 
-  let fn_value = funct.emit_eop;
+  let fn_value = funct.handle_eop;
 
   // Set the context's goto pointers to point to the goto block;
   let entry = ctx.append_basic_block(fn_value, "Entry");
@@ -372,7 +294,6 @@ pub(crate) unsafe fn construct_emit_end_of_parse(module: &LLVMParserModule) -> S
   let failure = ctx.append_basic_block(fn_value, "FailedParse");
 
   let parse_ctx = fn_value.get_nth_param(0)?.into_pointer_value();
-  let basic_action = fn_value.get_nth_param(1)?.into_pointer_value();
 
   b.position_at_end(entry);
 
@@ -389,13 +310,13 @@ pub(crate) unsafe fn construct_emit_end_of_parse(module: &LLVMParserModule) -> S
 
   b.position_at_end(success);
 
-  build_tail_call_with_return(module, fn_value, funct.emit_accept);
+  b.build_return(Some(&module.ctx.i32_type().const_int(ParseActionType::Accept.into(), false)));
 
   b.position_at_end(failure);
 
-  build_tail_call_with_return(module, fn_value, funct.emit_error);
+  b.build_return(Some(&module.ctx.i32_type().const_int(ParseActionType::Error.into(), false)));
 
-  if funct.emit_eop.verify(true) {
+  if funct.handle_eop.verify(true) {
     SherpaResult::Ok(())
   } else {
     SherpaResult::Err(SherpaError::from("\n\nCould not build emit_eop function"))
@@ -445,47 +366,6 @@ pub(crate) unsafe fn construct_get_adjusted_input_block_function(
     SherpaResult::Ok(())
   } else {
     SherpaResult::Err(SherpaError::from("\n\nCould not validate get_adjusted_input_block"))
-  }
-}
-
-pub(crate) fn construct_emit_reduce_function(module: &LLVMParserModule) -> SherpaResult<()> {
-  let LLVMParserModule { builder: b, ctx, fun: funct, .. } = module;
-
-  let i32 = ctx.i32_type();
-
-  let fn_value = funct.emit_reduce;
-
-  let reduce_action =
-    ctx.struct_type(&[i32.into(), i32.into(), i32.into(), i32.into(), i32.into()], false);
-
-  // Set the context's goto pointers to point to the goto block;
-  let entry = ctx.append_basic_block(fn_value, "Entry");
-
-  let basic_action = fn_value.get_nth_param(1).unwrap().into_pointer_value();
-  let production_id = fn_value.get_nth_param(2).unwrap().into_int_value();
-  let rule_id = fn_value.get_nth_param(3).unwrap().into_int_value();
-  let symbol_count = fn_value.get_nth_param(4).unwrap().into_int_value();
-
-  b.position_at_end(entry);
-
-  let reduce = b
-    .build_bitcast(basic_action, reduce_action.ptr_type(inkwell::AddressSpace::Generic), "")
-    .into_pointer_value();
-
-  let reduce_struct = b.build_load(reduce, "").into_struct_value();
-  let reduce_struct = b.build_insert_value(reduce_struct, i32.const_int(6, false), 0, "").unwrap();
-  let reduce_struct = b.build_insert_value(reduce_struct, production_id, 1, "").unwrap();
-  let reduce_struct = b.build_insert_value(reduce_struct, rule_id, 2, "").unwrap();
-  let reduce_struct = b.build_insert_value(reduce_struct, symbol_count, 3, "").unwrap();
-
-  b.build_store(reduce, reduce_struct);
-
-  b.build_return(None);
-
-  if funct.emit_reduce.verify(true) {
-    SherpaResult::Ok(())
-  } else {
-    SherpaResult::Err(SherpaError::from("\n\nCould not validate emit_reduce"))
   }
 }
 
@@ -676,136 +556,6 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
     SherpaResult::Ok(())
   } else {
     SherpaResult::Err(SherpaError::from("\n\nCould not validate extend_stack_if_needed"))
-  }
-}
-
-pub(crate) unsafe fn construct_emit_shift(module: &LLVMParserModule) -> SherpaResult<()> {
-  let LLVMParserModule { builder: b, ctx, fun: funct, .. } = module;
-  let i32 = ctx.i32_type();
-
-  let fn_value = funct.emit_shift;
-
-  // Set the context's goto pointers to point to the goto block;
-  let entry = ctx.append_basic_block(fn_value, "Entry");
-
-  let basic_action = fn_value.get_nth_param(0)?.into_pointer_value();
-  let anchor_offset = fn_value.get_nth_param(1)?.into_int_value();
-  let token_offset = fn_value.get_nth_param(2)?.into_int_value();
-  let token_length = fn_value.get_nth_param(3)?.into_int_value();
-  let token_line_count = fn_value.get_nth_param(4)?.into_int_value();
-  let token_line_off = fn_value.get_nth_param(4)?.into_int_value();
-
-  let token_action = ctx
-    .struct_type(&[i32.into(), i32.into(), i32.into(), i32.into(), i32.into(), i32.into(), i32.into()], false);
-
-  b.position_at_end(entry);
-
-  let shift = b
-    .build_bitcast(basic_action, token_action.ptr_type(inkwell::AddressSpace::Generic), "")
-    .into_pointer_value();
-  let shift_struct = b.build_load(shift, "").into_struct_value();
-  let shift_struct =
-    b.build_insert_value(shift_struct, i32.const_int(ParseAction::des_Shift, false), 0, "")?;
-  let shift_struct = b.build_insert_value(shift_struct, anchor_offset, 1, "")?;
-  let shift_struct = b.build_insert_value(shift_struct, token_offset, 2, "")?;
-  let shift_struct = b.build_insert_value(shift_struct, token_length, 3, "")?;
-  let shift_struct = b.build_insert_value(shift_struct, token_line_count, 4, "")?;
-  let shift_struct = b.build_insert_value(shift_struct, token_line_off, 5, "")?;
-  b.build_store(shift, shift_struct);
-
-  // load the anchor token to be used as the skipped symbols
-  b.build_return(None);
-
-  if funct.emit_shift.verify(true) {
-    SherpaResult::Ok(())
-  } else {
-    SherpaResult::Err(SherpaError::from("\n\nCould not validate emit_shift"))
-  }
-}
-
-pub(crate) unsafe fn construct_emit_accept(module: &LLVMParserModule) -> SherpaResult<()> {
-  let LLVMParserModule { builder: b, ctx: c, fun: funct, .. } = module;
-
-  let i32 = c.i32_type();
-
-  let fn_value = funct.emit_accept;
-
-  let accept_action = c.struct_type(&[i32.into(), i32.into(), i32.into()], false);
-
-  // Set the context's goto pointers to point to the goto block;
-  let entry = c.append_basic_block(fn_value, "Entry");
-
-  let parse_ctx = fn_value.get_nth_param(0)?.into_pointer_value();
-  let basic_action = fn_value.get_nth_param(1)?.into_pointer_value();
-
-  b.position_at_end(entry);
-
-  let production = CTX::tok_id.get_ptr(module, parse_ctx)?;
-  let production = b.build_load(production, "");
-  let accept = b
-    .build_bitcast(basic_action, accept_action.ptr_type(inkwell::AddressSpace::Generic), "")
-    .into_pointer_value();
-
-  let accept_struct = b.build_load(accept, "").into_struct_value();
-  let accept_struct = b.build_insert_value(accept_struct, i32.const_int(7, false), 0, "")?;
-  let accept_struct = b.build_insert_value(accept_struct, production, 2, "")?;
-
-  b.build_store(accept, accept_struct);
-
-  b.build_return(None);
-
-  if funct.emit_accept.verify(true) {
-    SherpaResult::Ok(())
-  } else {
-    SherpaResult::Err(SherpaError::from("\n\nCould not build emit_accept function"))
-  }
-}
-
-pub(crate) unsafe fn construct_emit_error(module: &LLVMParserModule) -> SherpaResult<()> {
-  let LLVMParserModule { builder: b, types, ctx, fun: funct, .. } = module;
-
-  let i32 = ctx.i32_type();
-
-  let fn_value = funct.emit_error;
-
-  let error_action = ctx.struct_type(&[i32.into(), types.token.into(), i32.into()], false);
-
-  // Set the context's goto pointers to point to the goto block;
-  let entry = ctx.append_basic_block(fn_value, "Entry");
-  let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
-  let basic_action = fn_value.get_nth_param(1).unwrap().into_pointer_value();
-
-  b.position_at_end(entry);
-
-  // load the anchor token as the error token
-
-  //let error_token = b.build_struct_gep(parse_ctx, CTX_tok_anchor, "").unwrap();
-  let error_token = types.token.get_undef();
-
-  // load the last production value
-
-  let production = CTX::tok_id.get_ptr(module, parse_ctx)?;
-  let production = b.build_load(production, "");
-
-  // build the ParseAction::Error struct
-
-  let error = b
-    .build_bitcast(basic_action, error_action.ptr_type(inkwell::AddressSpace::Generic), "")
-    .into_pointer_value();
-
-  let error_struct = b.build_load(error, "").into_struct_value();
-  let error_struct = b.build_insert_value(error_struct, i32.const_int(8, false), 0, "").unwrap();
-  let error_struct = b.build_insert_value(error_struct, error_token, 1, "").unwrap();
-  let error_struct = b.build_insert_value(error_struct, production, 2, "").unwrap();
-
-  b.build_store(error, error_struct);
-
-  b.build_return(None);
-
-  if funct.emit_error.verify(true) {
-    SherpaResult::Ok(())
-  } else {
-    SherpaResult::Err(SherpaError::from("\n\nCould not build emit_error function"))
   }
 }
 
@@ -1057,41 +807,60 @@ where
   SherpaResult::Ok(call_site)
 }
 
+
+pub(crate) unsafe fn construct_next_function<'a>(module: &'a LLVMParserModule) -> SherpaResult<()> {
+  let LLVMParserModule { builder: b, ctx, fun, .. } = module;
+
+  let fn_value = fun.next;
+
+  b.position_at_end(ctx.append_basic_block(fn_value, "Entry"));
+
+  let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
+
+  let call_site = b.build_call(fun.dispatch, &[parse_ctx.into()], "");
+  
+  call_site.set_tail_call(false);
+  call_site.set_call_convention(fastCC);
+
+  b.build_return(Some(&call_site.try_as_basic_value().left()?.into_int_value()));
+
+  if fun.next.verify(true) {
+    SherpaResult::Ok(())
+  } else {
+    SherpaResult::Err(SherpaError::from("Could not build next function"))
+  }
+}
+
 /// Compile a LLVM parser module from Hydrocarbon bytecode.
 pub fn compile_from_bytecode<'a>(
   module_name: &str,
-  g: &GrammarStore,
+  j:&mut Journal,
   llvm_context: &'a Context,
   output: &BytecodeOutput,
 ) -> SherpaResult<LLVMParserModule<'a>> {
-  let mut llvm_module = construct_module(module_name, &llvm_context);
-  let module = &mut llvm_module;
+
+  let mut module = construct_module(j, module_name, &llvm_context);
 
   unsafe {
-    construct_init(module)?;
-    construct_emit_accept(module)?;
-    construct_emit_end_of_input(module)?;
-    construct_emit_end_of_parse(module)?;
-    construct_emit_reduce_function(module)?;
-    construct_emit_shift(module)?;
-    construct_dispatch_function(module)?;
-    construct_get_adjusted_input_block_function(module)?;
-    construct_push_state_function(module)?;
-    construct_emit_error(module)?;
-    construct_extend_stack_if_needed(module)?;
-    construct_merge_utf8_part_function(module)?;
-    construct_utf8_lookup_function(module)?;
-    construct_scan(module)?;
-    construct_next_function(module)?;
-    construct_internal_free_stack(module)?;
-    construct_drop(module)?;
-    construct_parse_function(g, module, output)?;
+    construct_init(&mut module)?;
+    construct_emit_end_of_parse(&mut module)?;
+    construct_dispatch_function(&mut module)?;
+    construct_get_adjusted_input_block_function(&mut module)?;
+    construct_push_state_function(&mut module)?;
+    construct_extend_stack_if_needed(&mut module)?;
+    construct_merge_utf8_part_function(&mut module)?;
+    construct_utf8_lookup_function(&mut module)?;
+    construct_scan(&mut module)?;
+    construct_next_function(&mut module)?;
+    construct_internal_free_stack(&mut module)?;
+    construct_drop(&mut module)?;
+    construct_parse_function(j, &mut module, output)?;
   }
 
-  llvm_module.fun.push_state.add_attribute(
+  module.fun.push_state.add_attribute(
     inkwell::attributes::AttributeLoc::Function,
-    llvm_module.ctx.create_string_attribute("alwaysinline", ""),
+    module.ctx.create_string_attribute("alwaysinline", ""),
   );
 
-  SherpaResult::Ok(llvm_module)
+  SherpaResult::Ok(module)
 }

@@ -1,5 +1,5 @@
 use crate::{
-  llvm::{build_fast_call, LLVMParserModule, LLVMTypes},
+  llvm::{build_fast_call, LLVMParserModule, LLVMTypes, CTX_AGGREGATE_INDICES},
   types::*,
 };
 use inkwell::{
@@ -16,11 +16,10 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: Sized>(
   let slot_size = std::mem::size_of::<(ASTNode, TokenRange, TokenRange)>() as u32;
 
   let LLVMParserModule { ctx, types, builder: b, .. } = module;
-  let LLVMTypes { parse_ctx, action, .. } = types;
+  let LLVMTypes { parse_ctx, .. } = types;
   let i8 = ctx.i8_type();
   let i32 = ctx.i32_type();
   let i64 = ctx.i64_type();
-  let ACTION_PTR = action.ptr_type(Generic);
   let CTX_PTR = parse_ctx.ptr_type(Generic);
 
   // Struct types --------------------------------------------------
@@ -38,32 +37,18 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: Sized>(
 
   ast_slot.set_body(&[i8.array_type(slot_size).into()], false);
 
-  let discriminated_action = module
-    .ctx
-    .struct_type(
-      &[i32.into(), i8.array_type((std::mem::size_of::<ParseAction>() - 4) as u32).into()],
-      false,
-    )
-    .ptr_type(Generic);
-
-  let reduce_action = ctx
-    .struct_type(&[i32.into(), i32.into(), i32.into(), i32.into(), i32.into(), i32.into()], false);
-
   // Injected Functions ---------------------------------------------------
 
   let reducer_function = ctx
     .void_type()
     .fn_type(&[CTX_PTR.into(), ast_slot_stack_slice.ptr_type(Generic).into()], false);
 
-  let shift_handler = ctx.void_type().fn_type(
-    &[CTX_PTR.into(), ACTION_PTR.into(), ast_slot_stack_slice.ptr_type(Generic).into()],
-    false,
-  );
+  let shift_handler = ctx
+    .void_type()
+    .fn_type(&[CTX_PTR.into(), ast_slot_stack_slice.ptr_type(Generic).into()], false);
 
-  let result_handler = parse_result.fn_type(
-    &[CTX_PTR.into(), ACTION_PTR.into(), ast_slot_stack_slice.ptr_type(Generic).into()],
-    false,
-  );
+  let result_handler = parse_result
+    .fn_type(&[CTX_PTR.into(), i32.into(), ast_slot_stack_slice.ptr_type(Generic).into()], false);
 
   // Main Function ---------------------------------------------------
 
@@ -81,7 +66,7 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: Sized>(
     Some(Linkage::External),
   );
 
-  let parse_context = ast_builder.get_nth_param(0)?.into_pointer_value();
+  let parse_ctx = ast_builder.get_nth_param(0)?.into_pointer_value();
   let reducers = ast_builder.get_nth_param(1)?.into_pointer_value();
   let shift_handler = ast_builder.get_nth_param(2)?.into_pointer_value();
   let result_handler = ast_builder.get_nth_param(3)?.into_pointer_value();
@@ -102,10 +87,6 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: Sized>(
   let stack_top_ptr = b.build_alloca(i32, "stack_top");
   b.build_store(stack_top_ptr, i32.const_zero());
 
-  let action = b.build_alloca(*action, "action");
-  let discriminated_action = b.build_pointer_cast(action, discriminated_action, "");
-  let discriminant_ptr = b.build_struct_gep(discriminated_action, 0, "discriminant")?;
-
   let ast_slot_slice_ptr = b.build_alloca(ast_slot_stack_slice, "slot_lookup_ptr"); // Stores the stack lookup structure
   let slot_ptr_ptr = b.build_alloca(ast_slot.ptr_type(Generic), "slot_ptr_ptr"); // Store the pointer to the bottom of the AST stack
 
@@ -118,14 +99,14 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: Sized>(
   b.position_at_end(parse_loop);
   // Begin by calling the dispatch function.
 
-  build_fast_call(module, module.fun.dispatch, &[parse_context.into(), action.into()])?;
-
-  // Load the discriminant from the action.
-  let discriminant = b.build_load(discriminant_ptr, "").into_int_value();
+  let discriminant = build_fast_call(module, module.fun.dispatch, &[parse_ctx.into()])?
+    .try_as_basic_value()
+    .left()?
+    .into_int_value();
 
   b.build_switch(discriminant, default, &[
-    (i32.const_int(ParseAction::des_Shift, false), shift),
-    (i32.const_int(ParseAction::des_Reduce, false), reduce),
+    (i32.const_int(ParseActionType::Shift.into(), false), shift),
+    (i32.const_int(ParseActionType::Reduce.into(), false), reduce),
   ]);
 
   // SHIFT --------------------------------------------------------
@@ -182,21 +163,16 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: Sized>(
 
   b.build_call(
     CallableValue::try_from(shift_handler)?,
-    &[parse_context.into(), action.into(), ast_slot_slice_ptr.into()],
+    &[parse_ctx.into(), ast_slot_slice_ptr.into()],
     "",
   );
   b.build_unconditional_branch(parse_loop);
   // REDUCE --------------------------------------------------------
   b.position_at_end(reduce);
   // Get slice size
-  let reduce_action = b
-    .build_bitcast(action, reduce_action.ptr_type(Generic), "reduce_action_ptr")
-    .into_pointer_value();
-
-  let production_id_ptr = b.build_struct_gep(reduce_action, 1, "")?;
-  let rule_id_ptr = b.build_struct_gep(reduce_action, 2, "")?;
-  let symbol_count_ptr = b.build_struct_gep(reduce_action, 3, "")?;
-  let symbol_count_original = b.build_load(symbol_count_ptr, "").into_int_value();
+  let symbol_count_original =
+    CTX_AGGREGATE_INDICES::meta_a.load(module, parse_ctx)?.into_int_value();
+  let rule_index = CTX_AGGREGATE_INDICES::meta_b.load(module, parse_ctx)?.into_int_value();
 
   // Calculate the position of the first element and the last element.
   let top = b.build_load(stack_top_ptr, "top").into_int_value();
@@ -212,8 +188,6 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: Sized>(
     ast_slot,
   );
 
-  let rule_index = b.build_load(rule_id_ptr, "").into_int_value();
-
   // Load the parse function and pass the stack into it.
   let reducer = b.build_gep(reducers, &[rule_index.into()], "");
   let reducer = b.build_load(reducer, "").into_pointer_value();
@@ -226,7 +200,7 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: Sized>(
 
   b.build_call(
     CallableValue::try_from(reducer)?,
-    &[parse_context.into(), ast_slot_slice_ptr.into()],
+    &[parse_ctx.into(), ast_slot_slice_ptr.into()],
     "",
   );
 
@@ -244,7 +218,7 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: Sized>(
 
   let return_value = b.build_call(
     CallableValue::try_from(result_handler)?,
-    &[parse_context.into(), action.into(), ast_slot_slice_ptr.into()],
+    &[parse_ctx.into(), discriminant.into(), ast_slot_slice_ptr.into()],
     "",
   );
 
