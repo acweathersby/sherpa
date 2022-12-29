@@ -306,6 +306,7 @@ pub(crate) unsafe fn construct_emit_end_of_parse(module: &LLVMParserModule) -> S
     i32.const_int(FAIL_STATE_FLAG_LLVM as u64, false).into(),
     "",
   );
+
   b.build_conditional_branch(comparison, success, failure);
 
   b.position_at_end(success);
@@ -818,7 +819,7 @@ pub(crate) unsafe fn construct_next_function<'a>(module: &'a LLVMParserModule) -
   let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
 
   let call_site = b.build_call(fun.dispatch, &[parse_ctx.into()], "");
-  
+
   call_site.set_tail_call(false);
   call_site.set_call_convention(fastCC);
 

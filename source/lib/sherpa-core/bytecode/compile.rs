@@ -352,7 +352,7 @@ fn make_table(
             }
           }
         }
-        Entry::Vacant(mut e) => {
+        Entry::Vacant(e) => {
           let offset = branch_instructions_length;
           let instructions = e.key();
           branch_instructions_length += instructions.len() as u32;

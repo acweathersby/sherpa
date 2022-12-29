@@ -1,4 +1,10 @@
-use super::{build_fast_call, create_offset_label, fastCC, CTX_AGGREGATE_INDICES as CTX};
+use super::{
+  build_fast_call,
+  create_offset_label,
+  fastCC,
+  simd::create_simd_dfa,
+  CTX_AGGREGATE_INDICES as CTX,
+};
 use crate::{
   build::table::{BranchData, BranchTableData},
   compile::BytecodeOutput,
@@ -29,6 +35,9 @@ pub const _FAIL_STATE_FLAG_LLVM: u32 = 2;
 pub const NORMAL_STATE_FLAG_LLVM: u32 = 1;
 
 #[derive(Clone, Debug)]
+pub(crate) struct ScannerData(pub(crate) Vec<(u32, u32)>, pub(crate) Vec<Vec<u32>>);
+
+#[derive(Clone, Debug)]
 pub struct LLVMStateData<'a> {
   pub(crate) entry_instruction: INSTRUCTION,
   pub(crate) function_pointer:  PointerValue<'a>,
@@ -36,6 +45,7 @@ pub struct LLVMStateData<'a> {
   pub(crate) is_scanner:        bool,
   pub(crate) branch_data:       BTreeMap<INSTRUCTION, BranchTableData>,
   pub(crate) entry_block:       BasicBlock<'a>,
+  pub(crate) scanner_simd_data: Option<ScannerData>,
 }
 
 impl<'a> LLVMStateData<'a> {
@@ -69,6 +79,7 @@ impl<'a> LLVMStateData<'a> {
       is_scanner,
       branch_data: BTreeMap::new(),
       entry_block,
+      scanner_simd_data: None,
     }
   }
 
@@ -164,22 +175,32 @@ pub(crate) unsafe fn construct_parse_function<'a>(
                 break;
               }
               VECTOR_BRANCH | HASH_BRANCH => {
-                let data = BranchTableData::from_bytecode(instruction, g, output)?;
+                match is_scanner.then(|| can_simd(instruction, g, output)) {
+                  Some(SherpaResult::Ok(result)) => {
+                    println!("{:?} {:?}", instruction, result);
+                    state.scanner_simd_data = Some(result);
+                    break;
+                  }
+                  _ => {
+                    let data = BranchTableData::from_bytecode(instruction, g, output)?;
 
-                if data.data.input_type == INPUT_TYPE::T02_TOKEN && !data.has_trivial_comparisons()
-                {
-                  states_queue.push_front((data.data.scan_state_entry_instruction, true));
+                    if data.data.input_type == INPUT_TYPE::T02_TOKEN
+                      && !data.has_trivial_comparisons()
+                    {
+                      states_queue.push_front((data.data.scan_state_entry_instruction, true));
+                    }
+
+                    for (_, BranchData { address, .. }) in
+                      data.branches.iter().filter(|b| !b.1.is_skipped)
+                    {
+                      instructions.push_back(INSTRUCTION::from(bc, *address));
+                    }
+
+                    instructions.push_back(instruction.branch_default(bc));
+                    state.branch_data.insert(instruction, data);
+                    break;
+                  }
                 }
-
-                for (_, BranchData { address, .. }) in
-                  data.branches.iter().filter(|b| !b.1.is_skipped)
-                {
-                  instructions.push_back(INSTRUCTION::from(bc, *address));
-                }
-
-                instructions.push_back(instruction.branch_default(bc));
-                state.branch_data.insert(instruction, data);
-                break;
               }
               FAIL | PASS => {
                 break;
@@ -298,7 +319,7 @@ pub(super) fn construct_parse_function_statements(
           break;
         }
         PASS => {
-          construct_instruction_pass(module, pack)?;
+          construct_pass(module, pack)?;
           break;
         }
       }
@@ -331,8 +352,37 @@ fn construct_instruction_branch<'a>(
   let i32 = module.ctx.i32_type();
   let i64 = module.ctx.i64_type();
   let bool = module.ctx.bool_type();
-
   let parse_ctx = p.fun.get_nth_param(0)?.into_pointer_value();
+
+  if p.state.scanner_simd_data.is_some() {
+    println!("{:?}", instruction);
+
+    let success_block = p.state.generate_block(module, "_success", instruction.get_address());
+    let fail_block = p.state.generate_block(module, "_fail", instruction.get_address());
+
+    let fun = create_simd_dfa(
+      &(p.state.get_name().to_string() + "_simd"),
+      module,
+      p.state.scanner_simd_data.as_ref()?,
+    )?;
+
+    b.position_at_end(p.state.entry_block);
+
+    let result =
+      b.build_call(fun, &[parse_ctx.into()], "").try_as_basic_value().left()?.into_int_value();
+
+    let c = b.build_int_compare(inkwell::IntPredicate::EQ, result, i32.const_int(1, false), "");
+
+    b.build_conditional_branch(c, success_block, fail_block);
+
+    b.position_at_end(success_block);
+    construct_pass(module, p);
+
+    b.position_at_end(fail_block);
+    construct_fail(module, p);
+
+    return SherpaResult::Ok(());
+  }
 
   let table_block = p.state.generate_block(module, "_Table", instruction.get_address());
   let default_block = p.state.generate_block(module, "_Table_Default", instruction.get_address());
@@ -712,19 +762,14 @@ fn construct_instruction_branch<'a>(
 
   if let Some(skip_block) = skip_block {
     b.position_at_end(skip_block);
-    let off = b.build_load(ptrs?.input_off_ptr, "offset").into_int_value();
     let len = b.build_load(ptrs?.token_len_ptr, "length").into_int_value();
-    let new_off = b.build_int_add(off, len, "new_offset");
-    b.build_store(ptrs?.input_off_ptr, new_off);
-    b.build_store(ptrs?.token_len_ptr, i32.const_int(0, false));
 
     // Increment pointer and offset by len;
-    unsafe {
-      let input_ptr = b.build_load(ptrs?.input_ptr_ptr, "").into_pointer_value();
-      let input_ptr = b.build_gep(input_ptr, &[len.into()], "");
-      b.build_store(ptrs?.input_ptr_ptr, input_ptr);
-      b.build_unconditional_branch(ptrs?.entry_table_block);
-    }
+
+    increment_input_offset_and_ptr(b, ptrs?.input_ptr_ptr, ptrs?.input_off_ptr, len);
+
+    b.build_store(ptrs?.token_len_ptr, i32.const_int(0, false));
+    b.build_unconditional_branch(ptrs?.entry_table_block);
   }
 
   b.position_at_end(default_block);
@@ -745,6 +790,164 @@ fn construct_instruction_branch<'a>(
   }
 
   SherpaResult::Ok(())
+}
+
+fn can_simd(
+  instruction: INSTRUCTION,
+  g: &GrammarStore,
+  output: &BytecodeOutput,
+) -> SherpaResult<ScannerData> {
+  // Evaluate whether we can use a SIMD operations to construct this state.
+  // The criteria for SIMD rolling are:
+  // - All branches are a mixture of either bytes or classes
+  // -* Branches that goto other states lead back to this state
+  // -
+  let bc = &output.bytecode;
+  let mut state_queue = VecDeque::from_iter(vec![(instruction.get_address(), instruction)]);
+
+  let mut seen_instructions = BTreeSet::new();
+  let mut known_states = BTreeMap::new();
+  let mut symbols_map = BTreeMap::new();
+
+  let mut state_number = 0;
+
+  let mut have_pass = false;
+
+  while let Some((entry, instruction)) = state_queue.pop_front() {
+    use InstructionType::*;
+    if seen_instructions.insert(instruction) {
+      match instruction.to_type() {
+        VECTOR_BRANCH | HASH_BRANCH => {
+          if !known_states.contains_key(&entry) {
+            known_states.insert(entry, state_number);
+            state_number += 1;
+          }
+
+          let BranchTableData { data, branches, .. } =
+            BranchTableData::from_bytecode(instruction, g, output)?;
+
+          for (value, branch) in branches {
+            match data.input_type {
+              INPUT_TYPE::T04_CODEPOINT => return SherpaResult::None,
+              INPUT_TYPE::T05_BYTE | INPUT_TYPE::T03_CLASS => {
+                let mut instruction = INSTRUCTION::from(bc, branch.address);
+                let mut goto = 0;
+                let mut have_shift = false;
+                let mut have_token = false;
+                let mut token_val = 0;
+
+                loop {
+                  match instruction.to_type() {
+                    TOKEN => {
+                      have_token = true;
+                      token_val = instruction.get_token_value();
+                      instruction = instruction.next(bc);
+                    }
+                    SHIFT => {
+                      have_shift = true;
+                      instruction = instruction.next(bc);
+                    }
+                    FAIL => {
+                      break;
+                    }
+                    PASS => {
+                      have_pass = true;
+                      break;
+                    }
+                    GOTO => {
+                      if !have_shift {
+                        return SherpaResult::None;
+                      }
+                      let goto_state = instruction.goto(bc);
+                      goto = goto_state.get_address();
+                      state_queue.push_back((goto, goto_state));
+                      if !instruction.next(bc).is_PASS() {
+                        return SherpaResult::None;
+                      } else {
+                        break;
+                      }
+                    }
+                    _ => {
+                      println!("{:?}", instruction.to_type());
+                      return SherpaResult::None;
+                    }
+                  }
+                }
+
+                // All branches need to shift on token or set the current token.
+                if !have_shift && !have_token {
+                  //return SherpaResult::None;
+                }
+
+                // Accept states should not continue
+
+                symbols_map.entry((data.input_type, value as u32)).or_insert_with(|| vec![]).push((
+                  entry,
+                  goto,
+                  instruction.to_type(),
+                  have_shift,
+                ))
+              }
+              _ => panic!("lexer type should not exist in this context {}", data.input_type),
+            }
+          }
+
+          state_queue.push_back((entry, instruction.branch_default(bc)));
+        }
+        PASS => {}
+        FAIL => {}
+        _ => state_queue.push_back((entry, instruction.next(bc))),
+      }
+    }
+  }
+
+  if !have_pass || symbols_map.len() < 2 || state_number < 2 {
+    SherpaResult::None
+  } else {
+    let column_count = 8;
+
+    let mut states_table = vec![];
+
+    // Add the fail symbol {0} row
+
+    let mut state_table = vec![];
+    for _ in 0..column_count {
+      state_table.push(0);
+    }
+
+    // Add rows for each symbol type
+    states_table.push(state_table);
+
+    for states in symbols_map.values() {
+      // prefill
+      let mut state_table = vec![];
+
+      for _ in 0..column_count {
+        state_table.push(0);
+      }
+
+      let accept = (state_table.len() - 1) as u32;
+
+      for state in states {
+        let s = (*known_states.get(&state.0)? as usize) + 1;
+        let shift = (state.3 as u32) << 4;
+        if state.2 == InstructionType::PASS {
+          state_table[s] = (shift | accept) as u32;
+        } else {
+          state_table[s] = shift | ((*known_states.get(&state.1)? as u32) + 1);
+        }
+      }
+      state_table[accept as usize] = accept;
+
+      states_table.push(state_table);
+    }
+
+    let symbols = symbols_map.keys().cloned().collect::<Vec<_>>();
+
+    println!("{:#?} {:#?}", states_table, symbols);
+
+    SherpaResult::Ok(ScannerData(symbols, states_table))
+  }
 }
 
 fn parse_fun_ptr<'a>(scanner_address: INSTRUCTION, pack: &'a FunctionPack) -> PointerValue<'a> {
@@ -781,6 +984,22 @@ fn getBranchTokenData<'a>(
     })
     .collect::<Vec<_>>();
   branches
+}
+
+pub fn increment_input_offset_and_ptr<'a>(
+  b: &inkwell::builder::Builder,
+  input_ptr_ptr: PointerValue<'a>,
+  off_ptr: PointerValue<'a>,
+  len: IntValue<'a>,
+) {
+  let off = b.build_load(off_ptr, "offset").into_int_value();
+  let new_off = b.build_int_add(off, len, "new_offset");
+  b.build_store(off_ptr, new_off);
+  unsafe {
+    let input_ptr = b.build_load(input_ptr_ptr, "").into_pointer_value();
+    let input_ptr = b.build_gep(input_ptr, &[len.into()], "");
+    b.build_store(input_ptr_ptr, input_ptr);
+  }
 }
 
 fn construct_cp_lu_with_token_len_store<'a>(
@@ -834,7 +1053,7 @@ fn construct_token(
   module: &LLVMParserModule,
   pack: &FunctionPack,
 ) -> SherpaResult<INSTRUCTION> {
-  let token_value = instruction.get_contents() & 0x00FF_FFFF;
+  let token_value = instruction.get_token_value();
   let parse_ctx = pack.fun.get_nth_param(0)?.into_pointer_value();
 
   let i32 = module.ctx.i32_type();
@@ -846,10 +1065,7 @@ fn construct_token(
   SherpaResult::Ok(instruction.next(&pack.output.bytecode))
 }
 
-pub(crate) fn construct_instruction_pass(
-  module: &LLVMParserModule,
-  pack: &FunctionPack,
-) -> SherpaResult<()> {
+pub(crate) fn construct_pass(module: &LLVMParserModule, pack: &FunctionPack) -> SherpaResult<()> {
   let parse_ctx = pack.fun.get_nth_param(0)?.into_pointer_value();
 
   module.builder.build_store(

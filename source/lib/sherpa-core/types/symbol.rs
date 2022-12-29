@@ -1,15 +1,8 @@
-use sherpa_runtime::types::END_OF_INPUT_TOKEN_ID;
+use sherpa_runtime::{types::END_OF_INPUT_TOKEN_ID, utf8::lookup_table::CodePointClass};
 
 use super::{GrammarId, GrammarRef, GrammarStore, ProductionId, SherpaResult, Token};
 use crate::grammar::{get_scanner_info_from_defined, uuid::hash_id_value_u64};
-use sherpa_runtime::utf8::lookup_table::{
-  HORIZONTAL_TAB,
-  IDENTIFIER,
-  NEW_LINE,
-  NUMBER,
-  SPACE,
-  SYMBOL,
-};
+
 use std::{
   collections::{BTreeMap, BTreeSet},
   fmt::Display,
@@ -223,9 +216,9 @@ impl SymbolID {
       | SymbolID::GenericIdentifier
       | SymbolID::GenericNumber
       | SymbolID::GenericSymbol => (self.bytecode_id(Some(g)), "CLASS"),
-      SymbolID::DefinedNumeric(id)
-      | SymbolID::DefinedIdentifier(id)
-      | SymbolID::DefinedSymbol(id) => {
+      SymbolID::DefinedNumeric(..)
+      | SymbolID::DefinedIdentifier(..)
+      | SymbolID::DefinedSymbol(..) => {
         let symbol = g.symbols.get(self).unwrap();
         let id = g.symbol_strings.get(self).unwrap();
         let sym_char = id.as_bytes()[0];
@@ -310,12 +303,12 @@ impl SymbolID {
       },
       Self::Default | Self::Start => 99999,
       Self::EndOfInput => END_OF_INPUT_TOKEN_ID,
-      Self::GenericHorizontalTab => HORIZONTAL_TAB as u32,
-      Self::GenericNewLine => NEW_LINE as u32,
-      Self::GenericSpace => SPACE as u32,
-      Self::GenericIdentifier => IDENTIFIER as u32,
-      Self::GenericNumber => NUMBER as u32,
-      Self::GenericSymbol => SYMBOL as u32,
+      Self::GenericHorizontalTab => CodePointClass::HORIZONTAL_TAB as u32,
+      Self::GenericNewLine => CodePointClass::NEW_LINE as u32,
+      Self::GenericSpace => CodePointClass::SPACE as u32,
+      Self::GenericIdentifier => CodePointClass::IDENTIFIER as u32,
+      Self::GenericNumber => CodePointClass::NUMBER as u32,
+      Self::GenericSymbol => CodePointClass::SYMBOL as u32,
       _ => 0,
     }
   }
@@ -360,7 +353,7 @@ impl Symbol {
   pub const Generics: [&'static Symbol; 6] = [
     &Symbol {
       guid:          SymbolID::GenericSpace,
-      bytecode_id:   SPACE as u32,
+      bytecode_id:   CodePointClass::SPACE as u32,
       cp_len:        1,
       byte_length:   1,
       friendly_name: String::new(),
@@ -370,7 +363,7 @@ impl Symbol {
     },
     &Symbol {
       guid:          SymbolID::GenericHorizontalTab,
-      bytecode_id:   HORIZONTAL_TAB as u32,
+      bytecode_id:   CodePointClass::HORIZONTAL_TAB as u32,
       byte_length:   1,
       cp_len:        1,
       friendly_name: String::new(),
@@ -380,7 +373,7 @@ impl Symbol {
     },
     &Symbol {
       guid:          SymbolID::GenericNewLine,
-      bytecode_id:   NEW_LINE as u32,
+      bytecode_id:   CodePointClass::NEW_LINE as u32,
       byte_length:   1,
       cp_len:        1,
       friendly_name: String::new(),
@@ -390,7 +383,7 @@ impl Symbol {
     },
     &Symbol {
       guid:          SymbolID::GenericIdentifier,
-      bytecode_id:   IDENTIFIER as u32,
+      bytecode_id:   CodePointClass::IDENTIFIER as u32,
       cp_len:        1,
       byte_length:   0,
       friendly_name: String::new(),
@@ -400,7 +393,7 @@ impl Symbol {
     },
     &Symbol {
       guid:          SymbolID::GenericNumber,
-      bytecode_id:   NUMBER as u32,
+      bytecode_id:   CodePointClass::NUMBER as u32,
       cp_len:        1,
       byte_length:   0,
       friendly_name: String::new(),
@@ -410,7 +403,7 @@ impl Symbol {
     },
     &Symbol {
       guid:          SymbolID::GenericSymbol,
-      bytecode_id:   SYMBOL as u32,
+      bytecode_id:   CodePointClass::SYMBOL as u32,
       cp_len:        1,
       byte_length:   0,
       friendly_name: String::new(),

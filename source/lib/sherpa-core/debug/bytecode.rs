@@ -220,7 +220,6 @@ pub(crate) fn generate_table_string(
   } = TableHeaderData::from_bytecode(idx, bc);
 
   let states = bc;
-  let instruction = states[idx];
   let mut strings = vec![];
   let default_offset = states[idx + 3] as usize;
   let mut delta_offsets = BTreeSet::new();

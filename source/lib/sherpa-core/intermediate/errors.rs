@@ -45,7 +45,7 @@ impl WarnTransitionAmbiguousProduction {
     // Get a set of symbols that are present in all closures.
     let common_symbols = smallest
       .iter()
-      .filter_map(|(sym, i)| match closures.iter().all(|c| c.iter().any(|(s, _)| s == sym)) {
+      .filter_map(|(sym, _)| match closures.iter().all(|c| c.iter().any(|(s, _)| s == sym)) {
         true => Some(sym),
         false => None,
       })

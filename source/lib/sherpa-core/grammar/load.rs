@@ -36,7 +36,7 @@ pub(crate) fn load_all(
   absolute_path: &PathBuf,
   number_of_threads: usize,
 ) -> (Vec<(PathBuf, ImportedGrammarReferences, Box<Grammar>)>, Vec<SherpaError>) {
-  let mut pending_grammar_paths =
+  let pending_grammar_paths =
     Mutex::new(VecDeque::<PathBuf>::from_iter(vec![absolute_path.clone()]));
   let claimed_grammar_paths = Mutex::new(HashSet::<PathBuf>::new());
   let work_verifier = Mutex::new(WorkVerifier::new(1));

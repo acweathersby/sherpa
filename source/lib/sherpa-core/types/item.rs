@@ -169,7 +169,6 @@ impl OriginData {
       Symbol(sym_id) => sym_id.to_string(g),
       RuleId(rule_id) => {
         let rule = g.get_rule(rule_id).unwrap();
-        let prod = g.get_production(&rule.prod_id).unwrap();
 
         rule.tok.blame(1, 1, "", BlameColor::Red)
       }

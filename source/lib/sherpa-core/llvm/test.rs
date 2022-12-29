@@ -1,32 +1,38 @@
 use crate::{
   compile::{compile_bytecode, compile_states, optimize_ir_states, GrammarStore},
   debug::{disassemble_state, generate_disassembly},
+  journal,
   llvm::{
     ascript_functions::construct_ast_builder,
     compile_from_bytecode,
-    parser_functions::construct_parse_function,
+    parser_functions::{construct_parse_function, ScannerData},
+    simd::create_simd_dfa,
     test_reader::TestUTF8StringReader,
   },
   Journal,
   SherpaResult,
 };
 use inkwell::{context::Context, execution_engine::JitFunction};
-use sherpa_runtime::types::{
-  llvm_map_result_action,
-  llvm_map_shift_action,
-  sherpa_allocate_stack,
-  sherpa_free_stack,
-  AstSlots,
-  BlameColor,
-  ByteReader,
-  Goto,
-  InputInfo,
-  LLVMParseContext,
-  ParseAction,
-  ParseContext,
-  ParseResult,
-  Token,
-  TokenRange,
+use sherpa_runtime::{
+  types::{
+    llvm_map_result_action,
+    llvm_map_shift_action,
+    sherpa_allocate_stack,
+    sherpa_free_stack,
+    AstSlots,
+    BlameColor,
+    ByteReader,
+    Goto,
+    InputInfo,
+    LLVMParseContext,
+    ParseActionType,
+    ParseContext,
+    ParseResult,
+    Token,
+    TokenRange,
+    INPUT_TYPE,
+  },
+  utf8::lookup_table::CodePointClass,
 };
 use std::{fs::File, io::Write};
 
@@ -39,29 +45,18 @@ type Init = unsafe extern "C" fn(
 type PushState =
   unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>, u32>, u32, usize);
 
-type EmitReduce = unsafe extern "C" fn(
+type Next = unsafe extern "C" fn(
   *mut LLVMParseContext<TestUTF8StringReader<'static>, u32>,
-  *mut ParseAction,
-  u32,
-  u32,
-  u32,
-) -> u32;
-
-type EmitAccept = unsafe extern "C" fn(
-  *mut LLVMParseContext<TestUTF8StringReader<'static>, u32>,
-  *mut ParseAction,
-) -> u32;
-
-type EmitShift = EmitAccept;
-
-type Next =
-  unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>, u32>, *mut ParseAction);
+) -> ParseActionType;
 
 type Prime = unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>, u32>, u32);
 
 type Extend = unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>, u32>, u32);
 
 type Drop = unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>, u32>);
+
+type TailCallFunction =
+  unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>, u32>) -> u32;
 
 type PopState =
   unsafe extern "C" fn(*mut LLVMParseContext<TestUTF8StringReader<'static>, u32>) -> Goto;
@@ -114,32 +109,48 @@ fn build_fast_call_shim<'a>(
 }
 
 #[test]
+fn verify_construction_of_simd_function() {
+  let context = Context::create();
+
+  let module = construct_module(&mut Journal::new(None), "test", &context);
+
+  assert!(create_simd_dfa(
+    "test",
+    &module,
+    &ScannerData(vec![((INPUT_TYPE::T03_CLASS, CodePointClass::IDENTIFIER.into()))], vec![vec![]])
+  )
+  .is_ok());
+
+  eprintln!("{}", module.module.to_string());
+}
+
+#[test]
 fn verify_construction_of_init_function() {
   let context = Context::create();
 
-  let parse_context = construct_module("test", &context);
+  let module = construct_module(&mut Journal::new(None), "test", &context);
 
-  unsafe { assert!(construct_init(&parse_context).is_ok()) }
+  unsafe { assert!(construct_init(&module).is_ok()) }
 
-  eprintln!("{}", parse_context.module.to_string());
+  eprintln!("{}", module.module.to_string());
 }
 
 #[test]
 fn verify_construction_of_ast_builder() {
   let context = Context::create();
 
-  let parse_context = construct_module("test", &context);
+  let module = construct_module(&mut Journal::new(None), "test", &context);
 
-  unsafe { assert!(construct_ast_builder::<u64>(&parse_context).is_ok()) }
+  unsafe { assert!(construct_ast_builder::<u64>(&module).is_ok()) }
 
-  eprintln!("{}", parse_context.module.to_string());
+  eprintln!("{}", module.module.to_string());
 }
 
 #[test]
 fn verify_construction_of_push_state_function() {
   let context = Context::create();
 
-  let parse_context = construct_module("test", &context);
+  let parse_context = construct_module(&mut Journal::new(None), "test", &context);
 
   unsafe { assert!(construct_push_state_function(&parse_context).is_ok()) }
 
@@ -150,7 +161,7 @@ fn verify_construction_of_push_state_function() {
 fn should_push_new_state() -> SherpaResult<()> {
   let context = Context::create();
 
-  let mut module = construct_module("test", &context);
+  let mut module = construct_module(&mut Journal::new(None), "test", &context);
 
   unsafe {
     setup_exec_engine(&mut module);
@@ -218,113 +229,10 @@ fn should_push_new_state() -> SherpaResult<()> {
 }
 
 #[test]
-fn verify_construction_of_emit_accept_function() -> SherpaResult<()> {
-  let context = Context::create();
-
-  let parse_context = construct_module("test", &context);
-
-  unsafe {
-    construct_emit_accept(&parse_context)?;
-  }
-
-  eprintln!("{}", parse_context.module.to_string());
-
-  SherpaResult::Ok(())
-}
-
-#[test]
-fn verify_construction_of_emit_shift_function() {
-  let context = Context::create();
-
-  let parse_context = construct_module("test", &context);
-
-  unsafe { assert!(construct_emit_shift(&parse_context).is_ok()) }
-
-  eprintln!("{}", parse_context.module.to_string());
-}
-
-/* #[test]
-fn should_emit_shift() {
-  let context = Context::create();
-
-  let mut parse_context = construct_context("test", &context);
-
-  unsafe { assert!(construct_emit_shift(&parse_context).is_ok()) }
-
-  unsafe {
-    setup_exec_engine(&mut parse_context);
-    let mut reader = TestUTF8StringReader::new("test");
-    let mut rt_ctx = LLVMParseContext::new();
-    let emit_shift = get_parse_function::<EmitShift>(&parse_context, "emit_shift").unwrap();
-
-    rt_ctx.anchor_token.byte_offset = 5;
-    rt_ctx.anchor_token.byte_length = 0;
-    rt_ctx.assert_token.byte_offset = 10;
-
-    let mut action = ParseAction::Undefined;
-
-    emit_shift.call(&mut rt_ctx, &mut action);
-
-    match action {
-      ParseAction::Shift { skipped_characters, token } => {
-        assert_eq!(skipped_characters.byte_length, 5);
-        assert_eq!(skipped_characters.byte_offset, 5);
-        assert_eq!(token.byte_offset, 10);
-      }
-      _ => panic!("Incorrect ParseAction enum type assigned"),
-    }
-  };
-} */
-
-#[test]
-fn verify_construction_of_emit_reduce_function() {
-  let context = Context::create();
-
-  let parse_context = construct_module("test", &context);
-
-  unsafe { assert!(construct_emit_reduce_function(&parse_context).is_ok()) }
-
-  eprintln!("{}", parse_context.module.to_string());
-}
-
-#[test]
-fn should_emit_reduce() -> SherpaResult<()> {
-  let context = Context::create();
-
-  let mut parse_context = construct_module("test", &context);
-
-  unsafe {
-    setup_exec_engine(&mut parse_context);
-
-    build_fast_call_shim(&parse_context, parse_context.fun.emit_reduce)?;
-
-    construct_emit_reduce_function(&parse_context)?;
-
-    let mut rt_ctx = LLVMParseContext::new();
-    let emit_reduce = get_parse_function::<EmitReduce>(&parse_context, "emit_reduce_shim").unwrap();
-
-    let mut action = ParseAction::Undefined;
-
-    emit_reduce.call(&mut rt_ctx, &mut action, 1, 2, 3);
-
-    match action {
-      ParseAction::Reduce { production_id, rule_id, symbol_count } => {
-        assert_eq!(production_id, 1);
-        assert_eq!(rule_id, 2);
-        assert_eq!(symbol_count, 3);
-      }
-      _ => panic!("Incorrect ParseAction enum type assigned"),
-    }
-  };
-
-  SherpaResult::Ok(())
-}
-
-#[test]
 fn verify_construction_of_get_adjusted_input_block_function() {
   let context = Context::create();
 
-  let parse_context = construct_module("test", &context);
+  let parse_context = construct_module(&mut Journal::new(None), "test", &context);
 
   unsafe { assert!(construct_get_adjusted_input_block_function(&parse_context).is_ok()) }
 
@@ -335,7 +243,7 @@ fn verify_construction_of_get_adjusted_input_block_function() {
 fn should_produce_extended_block() {
   let context = Context::create();
 
-  let mut parse_context = construct_module("test", &context);
+  let mut parse_context = construct_module(&mut Journal::new(None), "test", &context);
 
   unsafe { assert!(construct_init(&parse_context).is_ok()) }
   unsafe { assert!(construct_get_adjusted_input_block_function(&parse_context).is_ok()) }
@@ -436,34 +344,12 @@ fn verify_construction_of_scan_function() {
 } */
 
 #[test]
-fn verify_construction_of_emit_error_function() {
-  let context = Context::create();
-
-  let parse_context = construct_module("test", &context);
-
-  unsafe { assert!(construct_emit_error(&parse_context).is_ok()) }
-
-  eprintln!("{}", parse_context.module.to_string());
-}
-
-#[test]
 fn verify_construction_of_emit_eop_function() {
   let context = Context::create();
 
-  let parse_context = construct_module("test", &context);
+  let parse_context = construct_module(&mut Journal::new(None), "test", &context);
 
   unsafe { assert!(construct_emit_end_of_parse(&parse_context).is_ok()) }
-
-  eprintln!("{}", parse_context.module.to_string());
-}
-
-#[test]
-fn verify_construction_of_emit_end_of_input_function() {
-  let context = Context::create();
-
-  let parse_context = construct_module("test", &context);
-
-  unsafe { assert!(construct_emit_end_of_input(&parse_context).is_ok()) }
 
   eprintln!("{}", parse_context.module.to_string());
 }
@@ -512,50 +398,11 @@ fn verify_construct_of_prime_function() {
   eprintln!("{}", parse_context.module.to_string());
 } */
 
-/* #[test]
-fn should_call_next_and_emit_accept() {
-  let context = Context::create();
-
-  let mut parse_context = construct_context("test", &context);
-
-  unsafe { assert!(construct_init(&parse_context).is_ok()) }
-  unsafe { assert!(construct_push_state_function(&parse_context).is_ok()) }
-  unsafe { assert!(construct_pop_state_function(&parse_context).is_ok()) }
-  unsafe { assert!(construct_next_function(&parse_context).is_ok()) }
-  unsafe { assert!(construct_emit_accept(&parse_context).is_ok()) }
-  unsafe { assert!(construct_emit_end_of_parse(&parse_context).is_ok()) }
-  //unsafe { assert!(construct_prime_function(&parse_context, &vec![], &mut vec![]).is_ok()) }
-
-  unsafe {
-    setup_exec_engine(&mut parse_context);
-    let mut reader = TestUTF8StringReader::new("test");
-    let mut rt_ctx = LLVMParseContext::new();
-    let init_fn = get_parse_function::<Init>(&parse_context, "init").unwrap();
-    let push_state_fn = get_parse_function::<PushState>(&parse_context, "push_state").unwrap();
-    let next = get_parse_function::<Next>(&parse_context, "next").unwrap();
-    let emit_accept = get_parse_function::<EmitAccept>(&parse_context, "emit_accept").unwrap();
-    let prime = get_parse_function::<Prime>(&parse_context, "prime").unwrap();
-
-    init_fn.call(&mut rt_ctx, &mut reader);
-    prime.call(&mut rt_ctx, 0);
-
-    rt_ctx.production = 202020;
-
-    let mut action = ParseAction::Undefined;
-
-    next.call(&mut rt_ctx, &mut action);
-
-    eprintln!("{:#?}", action);
-
-    assert!(matches!(action, ParseAction::Accept { production_id } if production_id == 202020),);
-  };
-} */
-
 #[test]
 fn should_initialize_context() {
   let context = Context::create();
 
-  let mut parse_context = construct_module("test", &context);
+  let mut parse_context = construct_module(&mut Journal::new(None), "test", &context);
 
   unsafe { assert!(construct_init(&parse_context).is_ok()) };
 
@@ -583,7 +430,7 @@ fn should_initialize_context() {
 fn verify_utf8_lookup_functions() {
   let context = Context::create();
 
-  let parse_context = construct_module("test", &context);
+  let parse_context = construct_module(&mut Journal::new(None), "test", &context);
 
   unsafe { assert!(construct_utf8_lookup_function(&parse_context).is_ok()) }
   unsafe { assert!(construct_merge_utf8_part_function(&parse_context).is_ok()) }
@@ -594,7 +441,7 @@ fn verify_utf8_lookup_functions() {
 #[test]
 fn should_yield_correct_CP_values_for_inputs() {
   let context = Context::create();
-  let mut module = construct_module("test", &context);
+  let mut module = construct_module(&mut Journal::new(None), "test", &context);
 
   assert!(construct_utf8_lookup_function(&module).is_ok());
   unsafe { assert!(construct_merge_utf8_part_function(&module).is_ok()) }
@@ -628,7 +475,7 @@ fn should_yield_correct_CP_values_for_inputs() {
 fn verify_construct_extend_stack_if_needed() {
   let context = Context::create();
 
-  let module = construct_module("test", &context);
+  let module = construct_module(&mut Journal::new(None), "test", &context);
 
   unsafe { assert!(construct_extend_stack_if_needed(&module).is_ok()) }
 
@@ -639,7 +486,7 @@ fn verify_construct_extend_stack_if_needed() {
 fn should_extend_stack() -> SherpaResult<()> {
   let context = Context::create();
 
-  let mut module = construct_module("test", &context);
+  let mut module = construct_module(&mut Journal::new(None), "test", &context);
 
   unsafe {
     setup_exec_engine(&mut module);
@@ -724,10 +571,10 @@ fn test_compile_parse_function() -> SherpaResult<()> {
   let bytecode_output = compile_bytecode(&mut j, ir_states);
   let context = Context::create();
 
-  let parse_context = construct_module("test", &context);
+  let parse_context = construct_module(&mut Journal::new(None), "test", &context);
 
   unsafe {
-    construct_parse_function(&g, &parse_context, &bytecode_output)?;
+    construct_parse_function(&mut j, &parse_context, &bytecode_output)?;
   }
 
   eprintln!("{}", parse_context.module.to_string());
@@ -752,10 +599,9 @@ fn test_compile_from_bytecode() -> SherpaResult<()> {
   let bytecode_output = compile_bytecode(&mut j, ir_states);
   let ctx = Context::create();
 
-  let mut ctx = compile_from_bytecode("test", &g, &ctx, &bytecode_output)?;
+  let mut ctx = compile_from_bytecode("test", &mut j, &ctx, &bytecode_output)?;
 
   let mut file = File::create("../test.ll")?;
-
   file.write_all(ctx.module.to_string().as_bytes())?;
 
   unsafe {
@@ -778,37 +624,76 @@ fn test_compile_from_bytecode() -> SherpaResult<()> {
 
     prime_fn.call(&mut rt_ctx, 0);
 
-    let mut action = ParseAction::Undefined;
-
-    next_fn.call(&mut rt_ctx, &mut action);
+    let action = next_fn.call(&mut rt_ctx);
 
     dbg!(action);
 
-    assert!(
-      matches!(action, ParseAction::Shift { token_byte_offset, token_byte_length, .. } if token_byte_offset == 0 && token_byte_length == 5)
-    );
+    assert!(matches!(action, ParseActionType::Shift));
 
-    next_fn.call(&mut rt_ctx, &mut action);
+    let action = next_fn.call(&mut rt_ctx);
 
     dbg!(action);
 
-    assert!(
-      matches!(action, ParseAction::Shift { anchor_byte_offset, token_byte_offset, token_byte_length,..  } if
-        (token_byte_offset == 6 && token_byte_length == 5)
-        &&
-        (token_byte_offset- anchor_byte_offset == 1 && anchor_byte_offset == 5 )
-      )
-    );
+    assert!(matches!(action, ParseActionType::Shift));
 
-    next_fn.call(&mut rt_ctx, &mut action);
+    let action = next_fn.call(&mut rt_ctx);
 
-    assert!(
-      matches!(action, ParseAction::Reduce { production_id, symbol_count, .. } if production_id == 0 && symbol_count == 2)
-    );
+    assert!(matches!(action, ParseActionType::Reduce));
 
-    next_fn.call(&mut rt_ctx, &mut action);
+    let action = next_fn.call(&mut rt_ctx);
 
-    assert!(matches!(action, ParseAction::Accept { .. }));
+    assert!(matches!(action, ParseActionType::Accept));
+  };
+
+  SherpaResult::Ok(())
+}
+
+type ASTNode = u32;
+type ASTSlot = (ASTNode, TokenRange, TokenRange);
+type AstBuilder<'a> = unsafe extern "C" fn(
+  *mut LLVMParseContext<TestUTF8StringReader<'static>, u32>,
+  *const fn(ctx: &mut LLVMParseContext<TestUTF8StringReader<'static>, u32>, &mut AstSlots<ASTSlot>),
+  unsafe fn(
+    &LLVMParseContext<TestUTF8StringReader<'static>, u32>,
+    &mut AstSlots<(ASTNode, TokenRange, TokenRange)>,
+  ),
+  unsafe fn(
+    &LLVMParseContext<TestUTF8StringReader<'static>, u32>,
+    ParseActionType,
+    &mut AstSlots<(ASTNode, TokenRange, TokenRange)>,
+  ) -> ParseResult<ASTNode>,
+) -> ParseResult<ASTNode>;
+
+#[test]
+fn run_simple_state_based_simd_loop() -> SherpaResult<()> {
+  let context = Context::create();
+
+  let mut module = construct_module(&mut Journal::new(None), "test", &context);
+
+  assert!(create_simd_dfa(
+    "simd_function",
+    &module,
+    &ScannerData(vec![(2, 2,), (2, 3,), (2, 4,), (2, 6,), (4, 34,)], vec![
+      vec![0, 0, 0, 0, 0, 0, 0, 0,],
+      vec![0, 18, 18, 0, 0, 0, 0, 7,],
+      vec![0, 18, 18, 0, 0, 0, 0, 7,],
+      vec![0, 18, 18, 0, 0, 0, 0, 7,],
+      vec![0, 18, 18, 0, 0, 0, 0, 7,],
+      vec![0, 0, 7, 0, 0, 0, 0, 7,]
+    ])
+  )
+  .is_ok());
+
+  unsafe {
+    construct_ast_builder::<ASTNode>(&module)?;
+    setup_exec_engine(&mut module);
+    let simd = get_parse_function::<TailCallFunction>(&module, "simd_function")?;
+    let mut input = String::from("☺1111111122224\"");
+    let mut rt_ctx = LLVMParseContext::new();
+    rt_ctx.scan_len = input.len() as u32;
+    rt_ctx.scan_ptr = input.as_mut_ptr();
+    assert_eq!(simd.call(&mut rt_ctx), 0);
+    assert_eq!(rt_ctx.scan_off as usize, input.len() - 1);
   };
 
   SherpaResult::Ok(())
@@ -837,24 +722,6 @@ fn test_compile_from_bytecode1() -> SherpaResult<()> {
 
   type ASTNode = u32;
   type ASTSlot = (ASTNode, TokenRange, TokenRange);
-
-  type AstBuilder<'a> = unsafe extern "C" fn(
-    *mut LLVMParseContext<TestUTF8StringReader<'static>, u32>,
-    *const fn(
-      ctx: &mut LLVMParseContext<TestUTF8StringReader<'static>, u32>,
-      &mut AstSlots<ASTSlot>,
-    ),
-    unsafe fn(
-      &mut LLVMParseContext<TestUTF8StringReader<'static>, u32>,
-      &ParseAction,
-      &mut AstSlots<(ASTNode, TokenRange, TokenRange)>,
-    ),
-    unsafe fn(
-      &mut LLVMParseContext<TestUTF8StringReader<'static>, u32>,
-      &ParseAction,
-      &mut AstSlots<(ASTNode, TokenRange, TokenRange)>,
-    ) -> ParseResult<ASTNode>,
-  ) -> ParseResult<ASTNode>;
 
   let test_functions = [
     |ctx: &mut LLVMParseContext<TestUTF8StringReader<'static>, u32>,
@@ -894,7 +761,7 @@ fn test_compile_from_bytecode1() -> SherpaResult<()> {
   ];
 
   unsafe {
-    let mut module = compile_from_bytecode("test", &g, &ctx, &bytecode_output)?;
+    let mut module = compile_from_bytecode("test", &mut j, &ctx, &bytecode_output)?;
 
     construct_ast_builder::<ASTNode>(&module)?;
 
@@ -902,6 +769,9 @@ fn test_compile_from_bytecode1() -> SherpaResult<()> {
     let input = "hello world\ngoodby mango";
     let mut reader = TestUTF8StringReader::new(input);
     let mut rt_ctx = LLVMParseContext::new();
+
+    let mut file = File::create("../test.ll")?;
+    file.write_all(module.module.to_string().as_bytes())?;
 
     module
       .exe_engine
@@ -951,35 +821,38 @@ fn test_compile_json_parser() -> SherpaResult<()> {
     r##"
     @IGNORE g:sp g:nl
 
-    @EXPORT json as entry
-    
-    @NAME llvm_language_test
-    
-    <> json > 
-            object                              f:ast { { t_Json, v: $1 } }
-            | 
-            array                               f:ast { { t_Json, v: $1 } }
-    
-    <> array > \[  value(*\, )  \]              f:ast { { t_Array, entries: $2 } }
-    
-    <> object > \{ key_value(*\, ) \}           f:ast { { t_Object, entries: $2 } }
-    
-    <> key_value > string \: value              f:ast { { t_KeyVal, k:$1, v:$3 } }
-    
-    <> value > num | bool | string | null
-    
-    <> null > t:null                            f:ast { { t_Null, v:false } }
-    
-    <> bool > 
-        t:false                                 f:ast { { t_Bool, v:false } }
-        |   
-        t:true                                  f:ast { { t_Bool, v:true } }
-    
-    <> num > tk:number                          f:ast { { t_Number } }
-    
-    <> number > ( \+ | \- )? g:num(+) ( \. g:num(+) )? ( ( \e | \E ) ( \+ | \i ) g:num(+) )?
-    
-    <> string > \" ( g:id | g:sym | g:num | g:sp )(*) \"  f:ast { { t_String } }
+@EXPORT json as entry
+
+@NAME llvm_language_test
+
+<> json > 
+        object                              f:ast { { t_Json, v: $1 } }
+        | 
+        array                               f:ast { { t_Json, v: $1 } }
+
+<> array > \[  value(*\, )  \]              f:ast { { t_Array, entries: $2 } }
+
+<> object > \{ key_value(*\, ) \}           f:ast { { t_Object, entries: $2 } }
+
+<> key_value > str \: value              f:ast { { t_KeyVal, k:$1, v:$3 } }
+
+<> value > num | bool | str | null
+
+<> null > t:null                            f:ast { { t_Null, v:false } }
+
+<> bool > 
+    t:false                                 f:ast { { t_Bool, v:false } }
+    |   
+    t:true                                  f:ast { { t_Bool, v:true } }
+
+
+<> str > tk:string                          f:ast { { t_Str } }
+
+<> num > tk:number                          f:ast { { t_Number } }
+
+<> number > ( \+ | \- )? g:num(+) ( \. g:num(+) )? ( ( \e | \E ) ( \+ | \i ) g:num(+) )?
+
+<> string > \" ( g:id | g:sym | g:num | g:sp )(+) \" 
 "##,
   )
   .unwrap();
@@ -992,7 +865,7 @@ fn test_compile_json_parser() -> SherpaResult<()> {
   unsafe {
     let ctx = Context::create();
 
-    let module = compile_from_bytecode("test", &g, &ctx, &bytecode_output)?;
+    let module = compile_from_bytecode("test", &mut j, &ctx, &bytecode_output)?;
 
     eprintln!("{}", module.module.to_string());
 

@@ -83,7 +83,7 @@ pub fn compile_grammars_into_store(
       .collect::<Vec<_>>()
   });
 
-  let (mut grammars, mut errors): (Vec<Arc<GrammarStore>>, Vec<Vec<SherpaError>>) =
+  let (mut grammars, errors): (Vec<Arc<GrammarStore>>, Vec<Vec<SherpaError>>) =
     results.into_iter().flatten().unzip();
 
   let mut errors = errors.into_iter().flatten().collect::<Vec<_>>();
@@ -535,7 +535,7 @@ fn finalize_items(g: &mut GrammarStore, errors: &mut [SherpaError]) {
             entry.insert(vec![item]);
           }
           btree_map::Entry::Occupied(mut entry) => {
-            let mut vec = entry.get_mut();
+            let vec = entry.get_mut();
             if !vec.contains(&item) {
               vec.push(item);
             }

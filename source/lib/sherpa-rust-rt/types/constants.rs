@@ -54,7 +54,7 @@ pub const TOKEN_ASSIGN_FLAG: u32 = 0x04000000;
 
 pub const END_OF_INPUT_TOKEN_ID: u32 = 0x1;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum InstructionType {
   PASS       = 0,
   SHIFT      = 1,
@@ -133,7 +133,13 @@ impl INSTRUCTION {
     }
   }
 
-  /// If this instruction is a GOTO, returns the address of the target state
+  pub fn get_token_value(&self) -> u32 {
+    debug_assert!(self.is_TOKEN());
+
+    self.get_contents() & 0x00FF_FFFF
+  }
+
+  /// If this instruction is a GOTO, returns the first instruction of the target state
   /// Otherwise returns an invalid instruction.
   pub fn goto(&self, bc: &[u32]) -> Self {
     match self.to_type() {

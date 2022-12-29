@@ -1,5 +1,6 @@
 pub mod ascript_functions;
 pub mod parser_functions;
+mod simd;
 pub mod standard_functions;
 mod types;
 

@@ -250,7 +250,7 @@ impl<T> Termination for SherpaResult<T> {
         eprintln!("No Results");
         ExitCode::FAILURE
       }
-      SherpaResult::Ok(val) => ExitCode::SUCCESS,
+      SherpaResult::Ok(_) => ExitCode::SUCCESS,
     }
   }
 }

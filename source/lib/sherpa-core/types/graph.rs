@@ -267,7 +267,7 @@ impl GraphNode {
       .collect::<BTreeSet<_>>()
   }
 
-  pub fn temp(origin: &GraphNode, sym: SymbolID, parent_index: usize, items: Vec<Item>) -> Self {
+  pub fn temp(origin: &GraphNode, sym: SymbolID, items: Vec<Item>) -> Self {
     GraphNode {
       edge_symbol: sym,
       attributes: NodeAttributes::EMPTY,

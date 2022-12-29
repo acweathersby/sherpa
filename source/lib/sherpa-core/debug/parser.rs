@@ -10,7 +10,6 @@ pub fn collect_shifts_and_skips(
   bytecode: Vec<u32>,
 ) -> (UTF8StringReader, ParseContext<UTF8StringReader>, Vec<String>, Vec<String>) {
   let mut reader = UTF8StringReader::from_string(input);
-  let source = reader.get_source();
   let mut state = ParseContext::bytecode_context();
   state.init_normal_state(entry_point);
   let mut shifts = vec![];
@@ -26,7 +25,6 @@ pub fn collect_shifts_and_skips(
         let mut token: Token = last_input.into();
         token.set_source(Arc::new(Vec::from(input.to_string().as_bytes())));
         panic!("{} [{}]:\n{}", "message", token, token.blame(1, 1, "", None));
-        break;
       }
       ParseAction::Fork { .. } => {
         panic!("No implementation of fork resolution is available")
