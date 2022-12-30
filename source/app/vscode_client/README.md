@@ -1,6 +1,5 @@
 <img src="./site/resources/img/test.webp" alt="# Hydrocarbon Toolkit" align=center/>
 
-
 The Hydrocarbon Toolkit is a set of compilers and tools that can 
 used to generate parsers, AST implementations, and diagrams for domain
 specific languages and general purpose languages. 
@@ -73,7 +72,6 @@ Checkout out the documentation
 - [Getting Started: Writing A Grammar](./site/tutorial.creating_a_grammar.index.md)
 - [API](./site/api.index.md)
 - [Parser Architecture](./site/architecture.index.md)
-
 
 ## Existing projects enhanced by Hydrocarbon
 

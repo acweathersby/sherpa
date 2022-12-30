@@ -1,21 +1,33 @@
-@IGNORE g:sp
+@IGNORE g:sp g:nl
 
-@EXPORT statement as entry
+@EXPORT json as entry
 
 @NAME llvm_language_test
 
-<> statement > expression       f:ast { { t_Stmt, v:$1 } }
+<> json > 
+        object                              f:ast { { t_Json, v: $1 } }
+        | 
+        array                               f:ast { { t_Json, v: $1 } }
 
-<> expression > sum             
+<> array > \[  value(*\, )  \]              f:ast { { t_Array, entries: $2 } }
 
-<> sum > mul \+ sum             f:ast { { t_Sum, l:$1, r:$3 } }
-    | mul
+<> object > \{ key_value(*\, ) \}           f:ast { { t_Object, entries: $2 } }
 
-<> mul > term \* expression     f:ast { { t_Mul, l:$1, r:$3 } }
-    | term
+<> key_value > str \: value              f:ast { { t_KeyVal, k:$1, v:$3 } }
 
-<> term > \2                f:ast { { t_Num, v: u16($1) } }
+<> value > num | bool | str | null | array | object
 
-    | \1                    f:ast { { t_Num, v: u16($1) } }
+<> null > t:null                            f:ast { { t_Null } }
 
-    | \( expression \)          f:ast { { t_Paren, v: $2 } }
+<> bool > 
+    t:false                                 f:ast { { t_Bool, v:false } }
+    |   
+    t:true                                  f:ast { { t_Bool, v:true } }
+
+<> str > tk:string                          f:ast { { t_Str } }
+
+<> num > tk:number                          f:ast { { t_Number } }
+
+<> number > ( \+ | \- )? g:num(+) ( \. g:num(+) )? ( ( \e | \E ) ( \+ | \i ) g:num(+) )?
+
+<> string > \" ( g:id | g:sym | g:num | g:sp )(+) \" 

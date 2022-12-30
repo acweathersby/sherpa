@@ -13,7 +13,6 @@ path = "./lib.rs"
 name = "test_basic_grammar_llvm_bin"
 path = "./main.rs"
 
-
 [dev-dependencies]
 criterion = "0.4.0"
 

@@ -13,4 +13,3 @@ clap = { version="4.0.29" }
 [dependencies.sherpa]
 path = "../../lib/sherpa"
 
-

@@ -17,27 +17,26 @@
 <> production_bodies > production_body(+\| )   
 
 <> production_body >  \! ? sym::reference_symbol? entries fn::reduce_function?                      
-            
+
             f:r { { t_Body, c_Production, priority:bool($1), symbols:$3, reference:$2, reduce_function:$4 } }
 
 <> entries > entries body_entry 
-            
+
             f:r { $1 + $2 }
-            
+
         |   body_entry                         
-            
+
             f:r { $1 }
 
         |   sym::empty_symbol                                              
-            
-            f:r { [] }
 
+            f:r { [] }
 
 <> body_entry >  
             sym::annotated_symbol                                        
 
             f:r { [$1] }
-        
+
       |     sym::meta_symbol                                            
 
             f:r { [$1] }

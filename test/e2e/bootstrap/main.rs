@@ -10,10 +10,10 @@ fn main() -> SherpaResult<()> {
   let ast = Grammar::from_str(
     r###"NAME sherpa_mini 
   EXPORT A as dir
-  
+
   <> lazy A > c:id{1} B{3}^test? => $1 
      | B<A> C ( D | tk:sam::R )? => { t_Test, val:$2 }
-  
+
   <T> B > "function"! ."{" ( T )(+) "}" => [ $1 + $2 + $3 ] 
   "###,
   )?;

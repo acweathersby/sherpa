@@ -5,34 +5,40 @@ pub fn main() {
   let mut messages = Vec::<String>::with_capacity(10);
 
   let start = Instant::now();
+  let str_ref = r##"{ "time": [2,2,3,4] } "##;
 
-  let result = Stmt::from_str("2 + 2 * 2 + 2 + 2 * 2 + 2 + 2 * 2 + 2 + 2 * 2");
+  let parser = Parser::<_, u32>::new_entry_parser(UTF8StringReader::from(str_ref));
+
+  for action in parser.into_iter() {
+    //dbg!(action);
+  }
 
   println!("{:?}", start.elapsed());
-  println!("{:?}", result);
 
-  //   let mut a = ParseAction::Undefined;
-  //
-  // for action in Parser::new_entry_parser(UTF8StringReader::from("2 + 2 * 2")) {
-  // match action {
-  // ParseAction::Shift { skipped_characters: skip, token } => {
-  // messages.push(format!("Skip {:? } & Extract token {:?} ", skip, token));
-  // }
-  // ParseAction::Accept { production_id } => {
-  // messages.push(format!("Accept production {}", production_id));
-  // break;
-  // }
-  // _ => {
-  // a = action;
-  // }
-  // }
-  //
-  // let duration = start.elapsed();
-  //
+  let json = Json::from_str(str_ref);
+
+  println!("{:#?}", json);
+
+  let start = Instant::now();
+  return;
+  let mut dur = 0;
+
+  loop {
+    let mut a = ParseAction::Undefined;
+    let result = Json::from_str(str_ref);
+    assert!(result.is_ok());
+    dur += 1;
+    if dur > 100000 {
+      println!("{:?}", result);
+      break;
+    }
+  }
+
+  let duration = start.elapsed();
+
   // messages.iter().for_each(|s| println!("{}", s));
-  //
-  // println!("-- dur: {:?}", duration);
-  //
+
+  println!("-- dur: {:?}", duration);
+
   // println!("{:?}", a);
-  // }
 }

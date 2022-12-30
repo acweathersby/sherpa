@@ -85,7 +85,6 @@ fn configure_matches(matches: &ArgMatches, PWD: &PathBuf) -> (Config, ParserType
 }
 
 fn main() -> SherpaResult<()> {
-  
   let PWD = std::env::current_dir().unwrap();
 
   let matches = command();
@@ -108,8 +107,6 @@ fn main() -> SherpaResult<()> {
         .set_source_output_dir(&out_dir)
         .set_build_output_dir(&out_dir)
         .add_task(build_bytecode_disassembly());
-
-
       match config.source_type {
         _ =>  pipeline.set_source_file_name("%.rs")
       };
@@ -127,8 +124,6 @@ fn main() -> SherpaResult<()> {
       if config.enable_ascript {
         pipeline.add_task(build_ascript_types_and_functions(config.source_type));
       }
-
-
       match  pipeline .run(|errors| {
         for error in &errors {
           eprintln!("{}", error);

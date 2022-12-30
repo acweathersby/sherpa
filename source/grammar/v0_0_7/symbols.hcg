@@ -25,37 +25,37 @@
         terminal_symbol
 
 <> ignore_symbol > 
-        
+
         terminal_symbol
 
 <> annotated_symbol > symbol    
 
     |   symbol reference_symbol
-        
+
         f:r { { t_AnnotatedSymbol, c_Symbol, symbol:$1, reference:$2 } }
 
 <> annotated_production_symbol > production_symbol    
 
     |   production_symbol reference_symbol
-        
+
         f:r { $1 }
 
 <> symbol > 
 
         symbol \?      
-        
+
         f:r { { t_OptionalSymbol, symbol:$1 } }
 
     |   \?- literal_symbol    
 
         f:r { { t_Not_Symbol, c_Symbol, symbol: $2, tok } }
-    
+
     |   \<= terminal_symbol           
-        
+
         f:r { { t_Look_Behind, c_Symbol, symbol: $2, tok } }
 
     |   \?= symbol
-        
+
         f:r { { t_NonCaptureSymbol, c_Symbol, sym:$2 } }
 
     |   terminal_symbol
@@ -65,28 +65,27 @@
     |   production_symbol
 
     |   symbol \(+  terminal_symbol?  \)
-        
+
         f:r { { t_List_Production, c_Symbol, terminal_symbol:$3,  symbols:$1,  tok } }
 
     |   symbol \(* terminal_symbol?  \)
-        
+
         f:r { { t_Optional_List_Production, c_Symbol, terminal_symbol:$3, symbols:$1,  tok } }
 
 <> group_symbol > \( pb::production_bodies \)        
-          
+
         f:r { { t_Group_Production, c_Symbol, bodies:$2,  tok } }  
 
-
 <> production_token_symbol > 
-    
+
     \tk: production_symbol       
-    
+
         f:r { { t_Production_Token , c_Symbol , c_Token, production:$2,  tok } }
 
 <> production_symbol >
 
         local_production_symbol
-    
+
     |   imported_production_symbol
 
 <>  terminal_symbol > 
@@ -108,50 +107,49 @@
 <> reference_symbol_token > \^ identifier
 
 <> EOF_symbol > 
-    
+
     \g:eof
-    
+
         f:r { { t_End_Of_File , c_Symbol , c_Token,  tok } }
 
 <> empty_symbol > 
-    
+
     \$empty
-    
+
         f:r { { t_Empty , c_Symbol ,  tok } }
 
 <> generated_symbol > 
-    
+
     \g: tk:identifier_syms
-    
+
         f:r { { t_Generated , c_Symbol , c_Token, val:str($2),  tok } }
 
 <> literal_symbol > 
-    
+
         \t: tk:defined_symbol
-          
+
         f:r { { t_Exclusive_Literal , c_Symbol , c_Token, val:str($2),  tok } }
-    
+
     |   ( g:sym | g:num )(+\" )
 
         f:r { { t_Literal , c_Symbol , c_Token, val:str($1),  tok } }
 
     |   \\ tk:defined_symbol
-    
+
         f:r { { t_Literal , c_Symbol , c_Token, val:str($2),  tok } }  
-    
 
 <> defined_symbol > ( g:id | g:sym | g:num )(+)
 
 <> local_production_symbol > 
-    
+
     tk:identifier_syms
-        
+
         f:r { { t_Production_Symbol , c_Symbol, name:str($1),   tok } }
 
 <> imported_production_symbol > 
 
     tk:identifier_syms \:: tk:identifier_syms
-        
+
         f:r { { t_Production_Import_Symbol , c_Symbol , module:str($1), name:str($3),  tok } } 
 
 <> annotation_identifier > ( g:sym | g:id | g:num )(+\" ) g:sp? f:r { $1 }
@@ -163,17 +161,17 @@
 <> identifier_syms >  
 
         identifier_syms (RST g:sp g:nl) g:id
-        
+
         f:r { $1 + $2 }
 
     |   identifier_syms (RST g:sp g:nl) \_
 
     |   identifier_syms (RST g:sp g:nl) \-
-        
+
         f:r { $1 + $2 }
 
     |   identifier_syms (RST g:sp g:nl) g:num      
-        
+
         f:r { $1 + $2 }
 
     |   \_ 
@@ -185,7 +183,7 @@
 <> sym_delimiter >  g:sp | g:nl | ?=$eof
 
 <> meta_symbol >   
-        
+
         \(EXC condition_symbol_list \)
 
         f:r { { t_Exclude , c_Symbol , c_Meta, sym: $2, tok } }
@@ -199,5 +197,5 @@
         f:r { { t_Look_Ignore , c_Symbol , c_Meta,   sym: $2, tok } }
 
 <> any_group > \[ t:unordered? annotated_symbol(+) \]
-        
+
     f:r { { t_AnyGroup, c_Symbol, symbols:$3, unordered: bool($2), tok } } 

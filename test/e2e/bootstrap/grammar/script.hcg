@@ -7,7 +7,7 @@
     struct 
 
     | expression
-    
+
     | \{ expression(+\; ) \}
         f:ast { { t_AST_Statements, statements:$2, tok } }
 
@@ -27,77 +27,67 @@
 
     | add
 
-
 <> struct > 
 
     \{ type_identifier^t (\, struct_prop(+\, ) )? \}
         f:ast { { t_AST_Struct, typ:$t, props:$3, tok } }
 
-
 <> struct_prop >  
-    
+
     identifier \: expression
         f:ast { { t_AST_Property, id:str($1), value:$3, tok } }
-    
+
     |  identifier \: struct
         f:ast { { t_AST_Property, id:str($1), value:$3, tok } }
-    
+
     |  identifier
         f:ast { { t_AST_Property, id:str($1), named_reference: str($1), tok } }
-    
+
     | class_identifier
         f:ast { { t_AST_ClassId, value:str($1), tok } }
 
     | token
 
-
 <> type_identifier > 
 
     t:t_ identifier
 
-
 <> class_identifier >
 
     t:c_ identifier
-
 
 <> vector >
 
     \[ expression(*\, ) \]
         f:ast { { t_AST_Vector, initializer: $2, tok  } }
 
-
 <> add > 
-    
+
     add \+ expression
-    
+
         f:ast { { t_AST_Add, left: $1, right: $3, tok } }
 
     | member
 
-
 <> member > 
-    
+
     reference
 
     | reference \. identifier
         f:ast { { t_AST_Member, reference:$1, property:$3 } }
 
-
 <> string_convert > 
-    
+
     t:str convert_initializer?
         f:ast { { t_AST_STRING, value: $2, tok  } }
 
-
 <> bool_convert > 
-    
+
     t:bool convert_initializer?
         f:ast { { t_AST_BOOL,  initializer: $2, tok  } }
 
-
 <> numeric_convert > 
-    
+
     t:u8  convert_initializer?
         f:ast { { t_AST_U8,  initializer: $2, tok  } }
 
@@ -128,7 +118,6 @@
     | t:f64 convert_initializer?
         f:ast { { t_AST_F64, initializer: $2, tok  } }
 
-
 <> convert_initializer > 
 
     t:( init_objects t:)       
@@ -136,9 +125,8 @@
 
 <> init_objects > member | token 
 
-
 <> literal > 
-    
+
     t:true 
         f:ast { { t_AST_BOOL, value: true } }
 
@@ -148,26 +136,21 @@
     | tk:integer
         f:ast { { t_AST_NUMBER, value:f64($1) } }
 
-
-
 <> reference > 
-    
+
     t:$ tk:identifier 
         f:ast { { t_AST_NamedReference, value: str($2), tok } }
 
     | t:$ tk:integer         
         f:ast { { t_AST_IndexReference, value: i64($2), tok } }
 
-
 <> integer > 
-    
-    g:num(+)
 
+    g:num(+)
 
 <> identifier > 
 
     tk:identifier_syms 
-
 
 <> identifier_syms >  
 
@@ -184,7 +167,6 @@
     | \- 
 
     | g:id
-
 
 <> token > 
 

@@ -42,7 +42,6 @@
 
 @IMPORT ./script.hcg as script
 
-
 # For example: The `pre` reference to the preambles.hcg file, and the `prd` reference to `./productions.hcg` 
 # is used in the last production of this grammar file:
 # `<> head > pre::preamble?  prd::productions` 
@@ -68,7 +67,6 @@
 
 @EXPORT script::out as script
 
-
 # Grammar productions are normally defined by using the following syntax:
 # 
 # ` <> <production identifier> > <body symbols>... `
@@ -91,7 +89,6 @@
 
 <> head > pre::preamble?  prd::productions    
 
-
                             f:r { { 
                                 t_Grammar , c_Grammar , c_Version_7, 
                                 preamble: $1, 
@@ -104,6 +101,5 @@
 # JavaScript expression (NOT statements) can be used. A caveat to this is when targeting 
 # Rust or C++, in which case a restricted syntax must be used in order to properly target 
 # those outputs. ( further information can be found in ./functions.hcg )
-
 
 # This annotated grammar definition is continued in ./preambles.hcg

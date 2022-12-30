@@ -11,12 +11,12 @@ mod test {
 
   use sherpa_runtime::types::*;
 
-  use crate::{Parser, Stmt};
+  use crate::{Json, Parser};
 
   #[test]
   pub fn test_build() {
     let n = Instant::now();
-    let ast = Stmt::from_str("1");
+    let ast = Json::from_str("1");
 
     println!("{:?}", n.elapsed());
 

@@ -33,9 +33,8 @@
     | productions ir::grammar_injection
                                                             f:r {  $1+$2 }
 
- 
 <> production > \<> t:lazy?^l \! ?^p sym::annotated_production_symbol^s \>  pb::production_bodies^b
-                                                                        
+
                                                             f:r { {
                                                                 t_Production , c_Production, priority: bool($3), symbol:$s, bodies:$b, LAZY:bool($l), tok
                                                             } }
@@ -45,4 +44,4 @@
                                                             f:r { {
                                                                 t_ProductionMerged , c_Production, symbol:$2, bodies:$4, tok
                                                             } }
-        
+

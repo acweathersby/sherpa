@@ -8,11 +8,10 @@
 
 @EXPORT grammar as grammar
 
-
 <> grammar > 
-        
+
         preamble(*) production(+)
-                                
+
             f:ast {{ t_Grammar, c_Version_1_0, preamble:$1, productions:$2, tok }}
 
 <> preamble >
@@ -24,7 +23,6 @@
         | name_clause
 
         | ignore_clause
-
 
 <> export_clause > 
 
@@ -50,9 +48,8 @@
 
             f:ast { { t_Name, c_Preamble, name: str($2) } }
 
-
 <> production > 
-        
+
         t:<  (template_name)(*\, )^t \> \lazy ?^l sym::priority? ?^p sym::production_symbol^n \> rules^r
 
             f:ast { { t_Production, is_lazy:bool($l), priority:$p, name:str($n), name_sym:$n, rules: $r, template_names:$t, tok } }
@@ -64,16 +61,14 @@
            f:ast { str(tok) } 
 
 <> rules > 
-        
-        rule(+t:| )
 
+        rule(+t:| )
 
 <> rule > 
 
         \! ?^p ( sym::annotated_symbol | any_group )(+)^s ast_definition?^a
 
             f:ast { { t_Rule, is_priority:bool($p), symbols:$s, ast_definition:$a, tok } }
-
 
 <> ast_definition > 
 
@@ -90,15 +85,12 @@
 <> group > 
 
         t:( rules t:)        
-          
-            f:ast { { t_Group_Production, c_Symbol, rules:$2,  tok } }  
 
+            f:ast { { t_Group_Production, c_Symbol, rules:$2,  tok } }  
 
 <> any_group > 
 
         \[ sym::annotated_symbol(+)^s \]
 
             f:ast { { t_AnyGroup, symbols:$s, tok } }
-
-
 

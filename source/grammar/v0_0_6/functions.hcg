@@ -22,7 +22,7 @@
 <> out_of_band_function > 
 
     generic_function_start sym::reference_symbol tk:js_data_block
-                 
+
                                                                     f:r {  { 
                                                                             t_Out_Of_Band,
                                                                             c_Function,  
@@ -77,7 +77,6 @@
                                                                         }
                                                                     }
 
-
 <> js_function_data > js_data ?=}
 
 <> js_data > js_primitive
@@ -98,4 +97,4 @@
 <> generic_function_start > \f:
 
 <> ascript_function_start > \ast:
-    
+
