@@ -5,7 +5,7 @@ use crate::{
 
 use super::*;
 use std::{
-  collections::{binary_heap::Iter, BTreeSet, VecDeque},
+  collections::{BTreeSet, VecDeque},
   fmt::Display,
   vec,
 };
@@ -47,15 +47,6 @@ impl ItemState {
   /// Get the group the item belongs to
   pub fn get_origin(&self) -> OriginData {
     self.origin
-  }
-
-  /// Get the SymbolId in the origin if the origin is
-  /// of type `OriginData::Symbol`. Otherwise returns `SymbolId::Undefined`
-  pub fn get_origin_sym(&self) -> SymbolID {
-    match self.get_origin() {
-      OriginData::Symbol(sym) => sym,
-      _ => SymbolID::Undefined,
-    }
   }
 
   pub fn same_curr_lane(&self, other: &ItemState) -> bool {
@@ -113,10 +104,6 @@ impl ItemState {
     ItemState { origin, ..self.clone() }
   }
 
-  pub fn to_out_of_scope(&self) -> Self {
-    ItemState { origin: OriginData::OutOfScope(0), ..self.clone() }
-  }
-
   pub fn debug_string(&self, g: &GrammarStore) -> String {
     if self.current_lane != self.prev_lane {
       format!("[{}]->[{}] | {}", self.current_lane, self.prev_lane, self.origin.debug_string(g))
@@ -170,7 +157,7 @@ impl OriginData {
       RuleId(rule_id) => {
         let rule = g.get_rule(rule_id).unwrap();
 
-        rule.tok.blame(1, 1, "", BlameColor::Red)
+        rule.tok.blame(1, 1, "", BlameColor::RED)
       }
       GoalIndex(i) => format!("Goal[{}]", i),
       OutOfScope(_) => "Out Of Scope".to_string(),
@@ -190,11 +177,6 @@ pub(crate) struct Item {
   state: ItemState,
   len:   u8,
   off:   u8,
-}
-
-pub(crate) struct SherpaItem<'a> {
-  item:  &'a Item,
-  state: ItemState,
 }
 
 impl Item {
@@ -243,21 +225,13 @@ impl Item {
 
       string += " =>";
 
-      for (index, RuleSymbol { sym_id, .. }) in rule.syms.iter().enumerate() {
+      for (_, RuleSymbol { sym_id, .. }) in rule.syms.iter().enumerate() {
         string += " ";
 
         string += &sym_id.to_string(g)
       }
       string
     }
-  }
-
-  /// Two items belong to the same lane if one of the following
-  /// conditions is met:
-  /// 1. Both Items have states that are in the same lane.
-  /// 2. Either Item is in the root [0] lane.
-  pub fn in_same_lane(&self, other: &Item) -> bool {
-    self.state.in_either_lane(&other.state)
   }
 
   /// Creates a view of the item usefully for error reporting.
@@ -284,10 +258,6 @@ impl Item {
     }
   }
 
-  pub fn id_string(&self) -> String {
-    format!("<{}>:{}-{}-{}", self.state, self.get_rule_id(), self.off, self.len)
-  }
-
   //#[inline(always)]
   pub fn is_null(&self) -> bool {
     self.rule.is_null() && self.len == 0 && self.off == 0
@@ -295,11 +265,6 @@ impl Item {
 
   pub fn is_out_of_scope(&self) -> bool {
     self.state.is_out_of_scope()
-  }
-
-  #[inline(always)]
-  pub fn null(state: ItemState) -> Self {
-    Item { len: 0, rule: RuleId::default(), off: 0, state }
   }
 
   #[inline(always)]
@@ -338,11 +303,6 @@ impl Item {
   #[inline(always)]
   pub fn to_origin(&self, origin: OriginData) -> Self {
     Item { state: self.state.to_origin(origin), ..self.clone() }
-  }
-
-  #[inline(always)]
-  pub fn to_last_sym(self) -> Self {
-    Item { off: if self.len > 0 { self.len - 1 } else { 0 }, ..self.clone() }
   }
 
   #[inline(always)]
@@ -430,11 +390,6 @@ impl Item {
   }
 
   #[inline(always)]
-  pub fn get_offset(&self) -> u32 {
-    self.off as u32
-  }
-
-  #[inline(always)]
   pub fn get_state(&self) -> ItemState {
     self.state
   }
@@ -503,22 +458,8 @@ impl Item {
     g.rules.get(&self.get_rule_id()).unwrap().prod_id
   }
 
-  pub fn get_prod_as_sym_id(&self, g: &GrammarStore) -> SymbolID {
+  pub fn _get_prod_as_sym_id(&self, g: &GrammarStore) -> SymbolID {
     g.get_production(&g.rules.get(&self.get_rule_id()).unwrap().prod_id).unwrap().sym_id
-  }
-
-  pub fn to_hash(&self) -> u64 {
-    ((self.rule.0 & 0xFFFF_FFF0_F000_F000) ^ ((self.off as u64) << 32))
-      | (self.state.current_lane as u64)
-  }
-
-  pub fn print_blame(&self, g: &GrammarStore) {
-    let rule = g.rules.get(&self.rule).unwrap();
-
-    if self.completed() {
-    } else {
-      eprintln!("{}", rule.syms[self.off as usize].tok.blame(1, 1, "", None));
-    }
   }
 }
 
@@ -565,10 +506,6 @@ impl FollowItemGroups {
 
   pub fn get_uncompleted_items(&self) -> Items {
     self.uncompleted_items.iter().map(|t| t.item).collect()
-  }
-
-  pub fn get_completed_items(&self) -> Items {
-    self.final_completed_items.iter().map(|t| t.item).collect()
   }
 }
 

@@ -18,7 +18,7 @@ impl Display for SherpaParseError {
       InvalidParse { message, inline_message, loc, .. } => f.write_fmt(format_args!(
         "{}\n{}",
         message,
-        loc.blame(1, 1, inline_message, BlameColor::Red)
+        loc.blame(1, 1, inline_message, BlameColor::RED)
       )),
       _ => f.write_str("An error occurred"),
     }

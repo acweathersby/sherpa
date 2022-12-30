@@ -3,7 +3,7 @@ use super::*;
 pub type ReduceFunction<T> = fn(slots: &mut AstSlots<(T, Token, Token)>);
 
 #[deprecated]
-pub type ReduceFunction_old<T> = fn(args: &mut Vec<HCObj<T>>, tok: Token);
+pub type ReduceFunctionOld<T> = fn(args: &mut Vec<HCObj<T>>, tok: Token);
 
 /// Names of default AST types
 pub static DEFAULT_AST_TYPE_NAMES: [&str; 27] = [
@@ -249,9 +249,9 @@ impl<T: HCObjTrait> HCObjTrait for HCObj<T> {
 #[derive(Debug, Clone)]
 
 pub struct Lazy {
-  tok:           Token,
-  entry_pointer: u32,
-  bytecode:      &'static [u32],
+  pub tok:           Token,
+  pub entry_pointer: u32,
+  pub bytecode:      &'static [u32],
 }
 
 // impl Lazy<_> {

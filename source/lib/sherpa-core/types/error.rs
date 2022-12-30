@@ -201,7 +201,7 @@ impl Display for SherpaError {
           1,
           1,
           &err.as_ref().unwrap_or(&Box::new(SherpaError::UNDEFINED)).to_string().trim(),
-          BlameColor::Red
+          BlameColor::RED
         )
       )),
       ExtendedError(error) => error.report(f),
@@ -215,7 +215,7 @@ impl Display for SherpaError {
         path.to_str().unwrap(),
         loc.loc_stub(),
         message,
-        loc.blame(1, 1, &inline_message, BlameColor::Red),
+        loc.blame(1, 1, &inline_message, BlameColor::RED),
       )),
 
       grammar_err_no_production_definition {
@@ -227,7 +227,7 @@ impl Display for SherpaError {
         ref_source_path.to_str().unwrap(),
         ref_location.loc_stub(),
         production_name,
-        ref_location.blame(1, 1, "", BlameColor::Red),
+        ref_location.blame(1, 1, "", BlameColor::RED),
       )),
 
       grammar_err_multi_location { message, locations } => f.write_fmt(format_args!(
@@ -242,12 +242,12 @@ impl Display for SherpaError {
           path,
           tok.loc_stub(),
           tok.to_string().replace("\n", ":nl").replace(" ", ":sp"),
-          tok.blame(1, 1, "", BlameColor::Red)
+          tok.blame(1, 1, "", BlameColor::RED)
         )),
         None => f.write_fmt(format_args!(
           "\nUnexpected token [{}]\n{}",
           tok.to_string(),
-          tok.blame(1, 1, "", BlameColor::Red)
+          tok.blame(1, 1, "", BlameColor::RED)
         )),
       },
       Many { message, errors } => f.write_fmt(format_args!(

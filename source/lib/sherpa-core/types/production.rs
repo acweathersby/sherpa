@@ -38,7 +38,7 @@ impl Default for RecursionType {
     RecursionType::NONE
   }
 }
-
+/// TODO: Docs
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
 pub struct ProductionId(pub u64);
 
@@ -89,9 +89,10 @@ impl std::fmt::Display for RuleId {
     f.write_str(&self.0.to_string())
   }
 }
-
+/// TODO: Docs
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct Production {
+  /// TODO: Docs
   pub id: ProductionId,
   /// A globally unique name of this production. This should always be distinct, particularly in cases
   /// were a host grammar imports a donor grammar that
@@ -100,10 +101,15 @@ pub struct Production {
   pub guid_name: String,
   /// The human friendly name of this production
   pub name: String,
+  /// TODO: Docs
   pub number_of_rules: u16,
+  /// TODO: Docs
   pub is_scanner: bool,
+  /// TODO: Docs
   pub is_entry: bool,
+  /// TODO: Docs
   pub recursion_type: RecursionType,
+  /// TODO: Docs
   pub priority: u32,
   /// The token defining the substring in the source
   /// code from which this production was derived.
@@ -191,11 +197,17 @@ impl ReduceFunctionId {
 /// A single rule derived from a production
 #[derive(Debug, Clone, Default)]
 pub struct Rule {
+  /// TODO: Docs
   pub syms: Vec<RuleSymbol>,
+  /// TODO: Docs
   pub len: u16,
+  /// TODO: Docs
   pub prod_id: ProductionId,
+  /// TODO: Docs
   pub id: RuleId,
+  /// TODO: Docs
   pub bytecode_id: u32,
+  /// TODO: Docs
   pub reduce_fn_ids: Vec<ReduceFunctionId>,
   /// A token that covers the definition of this rule.
   pub tok: Token,
@@ -239,8 +251,6 @@ impl Rule {
 
 /// Maps a [ProductionId] to a [Production].
 pub type ProductionTable = std::collections::BTreeMap<ProductionId, Production>;
-
-pub type ProductionEntryNamesTable = std::collections::BTreeMap<String, ProductionId>;
 
 /// Maps [ProductionId] to a vector of [RuleId](RuleId).
 pub type ProductionBodiesTable = std::collections::BTreeMap<ProductionId, Vec<RuleId>>;

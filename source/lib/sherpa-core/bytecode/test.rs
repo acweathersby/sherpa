@@ -16,7 +16,6 @@ use crate::{
 
 use super::compile_bytecode;
 
-
   #[test]
   pub fn test_produce_a_single_ir_ast_from_a_single_state_of_a_trivial_production() -> SherpaResult<()>
   {
@@ -61,11 +60,10 @@ use super::compile_bytecode;
     @NAME test
 
     @IGNORE g:sp 
-    
+
     <> Term  >  Num     f:ast { [ $1 ] }
         | \\( Num \\)   f:ast { [ $2 ] }
-    
-    
+
     <> Num > g:num
 
 ",
@@ -90,24 +88,23 @@ use super::compile_bytecode;
       @IGNORE g:sp
 
       @EXPORT statement as entry
-      
+
       @NAME llvm_language_test
-      
+
       <> statement > expression       f:ast { { t_Stmt, v:$1 } }
 
       <> expression > sum             
-      
+
       <> sum > sum \\+ mul             f:ast { { t_Sum, l:$1, r:$3 } }
           | mul
-      
+
       <> mul > mul \\* term     f:ast { { t_Mul, l:$1, r:$3 } }
           | term
-      
+
       <> term > \\2                f:ast { { t_Num, v: u16($1) } }
-      
+
           | \\( expression \\)          f:ast { { t_Paren, v: $2 } }
-      
-      
+
 ",
     )
     .unwrap();
@@ -134,12 +131,12 @@ use super::compile_bytecode;
       ( t:tested )? 
       ( element_block | t:test )(*) 
       \\>
-      
+
   <> component_identifier > 
       identifier
 
   <> identifier > tk:tok_identifier 
-  
+
   <> tok_identifier > ( g:id ) ( g:id | g:num )(+)
 ",
     )
@@ -195,27 +192,27 @@ use super::compile_bytecode;
       "@NAME wick_element
 
       @IGNORE g:sp g:nl
-      
+
       <> element_block > \\< component_identifier
           ( element_attribute(+)  f:r { { t_Attributes, c_Attribute, attributes: $1 } } )? 
           ( element_attributes | general_data | element_block | general_binding )(*) 
           \\>
-      
+
                                                                       f:ast { { t_Element, id:$2, children: [$3, $4], tok } }
       <> component_identifier > 
           identifier ( \\: identifier )?
                                                                       f:ast { { t_Ident, name:str($1), sub_name:str($2), tok } }
-      
+
       <> element_attributes >g:nl element_attribute(+)               
                                                                       f:ast { { t_Attributes, c_Attribute, attributes: $2 } }
-      
+
       <> element_attribute > \\- identifier attribute_chars g:sp
-      
+
                                                                       f:ast { { t_GeneralAttr, c_Attribute, key:str($2), val1: str($3) } }
-      
+
           | \\- identifier \\: identifier 
                                                                       f:ast { { t_BindingAttr, c_Attribute, key:str($2), val2: str($4) } }
-      
+
           | \\- t:store \\{ local_values? \\} 
                                                                       f:ast { { t_StoreAttr, c_Attribute, children: $4 } }
           | \\- t:local \\{ local_values? \\} 
@@ -224,23 +221,23 @@ use super::compile_bytecode;
                                                                       f:ast { { t_ParamAttr, c_Attribute, children: $4 } }
           | \\- t:model \\{ local_values? \\} 
                                                                       f:ast { { t_ModelAttr, c_Attribute, children: $4 } }
-      
+
       <> general_binding > \\: identifier               
                                                                       f:ast { { t_OutputBinding, val3:str($2) } }
-      
+
       <> local_values > local_value(+)
-      
+
       <> local_value > identifier ( \\` identifier )? ( \\=  g:num f:r{ $2 } )? ( \\, )(*)
-      
+
                                                                       f:ast { { t_Var, c_Attribute, name:str($1), meta:str($2), value:$3 } }
-      
+
       <> attribute_chars > ( g:id | g:num | g:sym  )(+)
                                                                       f:ast { { t_AttributeData, tok } }
       <> general_data > ( g:id | g:num  | g:nl  )(+)
                                                                       f:ast { { t_GeneralData, tok } }
-      
+
       <> identifier > tk:tok_identifier 
-      
+
       <> tok_identifier > ( g:id | g:num )(+)                     ",
     ).unwrap();
 
@@ -252,8 +249,5 @@ use super::compile_bytecode;
 
     SherpaResult::Ok(())
   }
-
-
-
 
   

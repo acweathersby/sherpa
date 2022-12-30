@@ -49,7 +49,7 @@ pub(crate) fn build_byte_code_buffer(states: Vec<&IR_STATE>) -> (Vec<u32>, BTree
     INSTRUCTION::I00_PASS,
   ];
 
-  for ((i, (state, name, is_fail))) in states_iter {
+  for (i, (state, name, is_fail)) in states_iter {
     if is_fail {
       let fail_state = state.fail.as_deref().unwrap();
       let fail_state_address = bc.len();
@@ -66,7 +66,7 @@ pub(crate) fn build_byte_code_buffer(states: Vec<&IR_STATE>) -> (Vec<u32>, BTree
       goto_bookmarks_to_offset[i as usize] = bc.len() as u32;
       bc.push(INSTRUCTION::I02_GOTO | FAIL_STATE_FLAG | fail_state_address as u32);
     } else {
-      if let Some(fail_state) = &state.fail {
+      if let Some(_) = &state.fail {
       } else {
         goto_bookmarks_to_offset[i as usize] = bc.len() as u32;
       }
@@ -210,7 +210,7 @@ fn build_branching_bytecode(
       .cloned()
       .filter_map(|p| if p.mode == "CODEPOINT" { Some(p.as_ref()) } else { None })
       .collect::<Vec<_>>(),
-    INPUT_TYPE::T04_CODEPOINT,
+    InputType::T04_CODEPOINT,
     &String::new(),
     o,
     get_branch_selector,
@@ -224,7 +224,7 @@ fn build_branching_bytecode(
       .cloned()
       .filter_map(|p| if p.mode == "CLASS" { Some(p.as_ref()) } else { None })
       .collect::<Vec<_>>(),
-    INPUT_TYPE::T03_CLASS,
+    InputType::T03_CLASS,
     &String::new(),
     o,
     get_branch_selector,
@@ -238,7 +238,7 @@ fn build_branching_bytecode(
       .cloned()
       .filter_map(|p| if p.mode == "BYTE" { Some(p.as_ref()) } else { None })
       .collect::<Vec<_>>(),
-    INPUT_TYPE::T05_BYTE,
+    InputType::T05_BYTE,
     &String::new(),
     o,
     get_branch_selector,
@@ -252,7 +252,7 @@ fn build_branching_bytecode(
       .cloned()
       .filter_map(|p| if p.mode == "TOKEN" || p.is_skip { Some(p.as_ref()) } else { None })
       .collect::<Vec<_>>(),
-    INPUT_TYPE::T02_TOKEN,
+    InputType::T02_TOKEN,
     scanner_name,
     o,
     get_branch_selector,
@@ -266,7 +266,7 @@ fn build_branching_bytecode(
       .cloned()
       .filter_map(|p| if p.mode == "PRODUCTION" { Some(p.as_ref()) } else { None })
       .collect::<Vec<_>>(),
-    INPUT_TYPE::T01_PRODUCTION,
+    InputType::T01_PRODUCTION,
     &String::new(),
     o,
     get_branch_selector,
@@ -292,9 +292,9 @@ fn make_table(
 
   use INSTRUCTION as I;
 
-  let lexer_type: u32 = if branches[0].is_peek { LEXER_TYPE::PEEK } else { LEXER_TYPE::ASSERT };
+  let lexer_type: u32 = if branches[0].is_peek { LexerType::PEEK } else { LexerType::ASSERT };
 
-  let scanner_pointer = if input_type_key == INPUT_TYPE::T02_TOKEN {
+  let scanner_pointer = if input_type_key == InputType::T02_TOKEN {
     if scanner_name.is_empty() {
       panic!("Scanner name should not be empty! {}", state_name);
     }
@@ -414,7 +414,7 @@ fn make_table(
       // attach it to the probing chain using a signed
       // delta index.
       for (val, offset) in leftover_pairs {
-        let mut pointer = 0;
+        let mut pointer;
         let mut prev_node = (val & mod_mask) as usize;
 
         loop {
@@ -537,7 +537,7 @@ fn build_branchless_bytecode(
           panic!("Invalid state type in goto instruction");
         }
       },
-      ASTNode::ScanUntil(box ScanUntil { ids, SCAN_BACKWARDS }) => {}
+      ASTNode::ScanUntil(box ScanUntil { .. }) => {}
       ASTNode::ForkTo(box ForkTo { states, production_id }) => {
         byte_code.push(I::I06_FORK_TO | ((states.len() << 16) as u32) | (production_id.val as u32));
         for state in states {
@@ -550,11 +550,11 @@ fn build_branchless_bytecode(
           }
         }
       }
-      ASTNode::Skip(box Skip) => {}
+      ASTNode::Skip(_) => {}
       ASTNode::Pass(_) => byte_code.push(I::I00_PASS),
       ASTNode::Fail(_) => byte_code.push(I::I15_FAIL),
-      ASTNode::NotInScope(box NotInScope { ids }) => {}
-      ASTNode::SetScope(box SetScope { scope }) => {}
+      ASTNode::NotInScope(box NotInScope { .. }) => {}
+      ASTNode::SetScope(box SetScope { .. }) => {}
       ASTNode::SetProd(box SetProd { id: ASTNode::Num(box Num { val }) }) => {
         byte_code.push(I::I03_SET_PROD | (*val as u32 & INSTRUCTION_CONTENT_MASK))
       }

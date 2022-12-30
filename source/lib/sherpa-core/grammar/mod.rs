@@ -12,7 +12,7 @@ pub mod production;
 pub mod uuid;
 
 pub(crate) use compile::get_scanner_info_from_defined;
-pub use item::*;
+pub(crate) use item::*;
 pub use production::*;
 pub use uuid::*;
 

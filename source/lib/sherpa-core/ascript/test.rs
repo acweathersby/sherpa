@@ -111,113 +111,113 @@ fn test_parse_errors_when_production_has_differing_return_types2() {
         @EXPORT markdown as md
 
         <> markdown > lines
-        
+
             f:ast { {t_Markdown, lines:$1 } }
-        
+
         <> lines > g:nl? line
-        
+
             f:ast { [$2] }
-            
+
             | lines g:nl line
-            
+
             f:ast { [$1, $3] }
-        
+
             | lines ( g:nl f:ast{ { t_EmptyLine, c_Line } } )
-        
+
             f:ast {  [$1, $2] }
-        
+
         <> line >
-        
+
             header_token content
-        
+
             f:ast { { t_Header, c_Line, length:f64($1), content:$2 } }
-        
+
             | 
-            
+
             tk:spaces? tk:ol_token content
-        
+
             f:ast { { t_OL, c_Line, spaces:str($1), content:$3 } }
-        
+
             |
-        
+
             tk:spaces? tk:ul_token content
-        
+
             f:ast { { t_UL, c_Line, spaces:str($1), content:$3 } }
-        
+
             |
-        
+
             tk:spaces? tk:quote_token content
-        
+
             f:ast { { t_Quote, c_Line, spaces:str($1), content:$3 } }
-        
+
             | 
-        
+
             tk:spaces? content
-        
+
             f:ast { { t_Paragraph, c_Line, spaces:str($1), content:$2 } }
-        
+
             |
-             
+
             tk:code_block_delimiter code_line_text? code_line(*) cb_sentinel
-        
+
             f:ast { { t_CodeBlock, c_Line, syntax:str($2), data:$3 } }
-        
+
         <> ol_token > g:num \\. 
-        
+
         <> spaces > g:sp(+\\\" )
-        
+
         <> header_token > \\% (+)
-        
+
         <> ul_token > \\- 
             | \\+ 
-        
+
         <> quote_token > \\>           
-        
+
         <> code_line >
-        
+
             g:nl code_line_text?
-        
+
             f:ast { { t_Text, c_Content, value: str($2) } }
-        
+
         <> code_block_delimiter > \\```
-        
+
         <> code_block_delimiter_with_nl > g:nl \\```
-        
+
         <> cb_sentinel > tk:code_block_delimiter_with_nl
-        
+
         <[ recover cb_sentinel_1 ] 
-        
+
             shift nothing then set prod to cb_sentinel
         >
-        
+
         <> code_line_text > 
             (   g:num 
             |   g:sp
             |   g:id 
             |   g:sym
             )(+\\\" )
-        
+
         <> code_block_sentinel >
-        
+
             g:nl \\``` 
-        
+
         <> content > ( text | format_symbol )(+) f:ast{ [$1] }
-        
+
         <> text > text_symbol(+\\\" )
             f:ast { { t_Text, c_Content, value: str($1) } }
-        
+
         <> text_symbol > 
                 g:sym
             |   g:sp
             |   tk:word
             |   tk:num
-        
+
         <> word > g:id 
             | word g:id
-        
+
         <> num > g:num
             | num g:num
-        
+
         <> format_symbol > 
             \\` 
             f:ast { { t_InlineCode, c_Content } }
@@ -323,51 +323,45 @@ fn group_productions_get_correct_type_information() {
       @NAME hc_symbol
 
       @IGNORE g:sp g:nl
-      
-      
+
       <> annotated_symbol > 
-              
+
               symbol^s [unordered tk:reference?^r \\? ?^o ]
-      
+
                   f:ast {{ t_AnnotatedSymbol, symbol:$s, is_optional:bool($o), reference:str($r), tok  }}
-              
+
               | symbol
-      
-      
+
       <> symbol > class
-      
-      
+
       <> class >
-      
+
               t:c: ( \\num | \\nl | \\sp | \\id | \\sym | \\any )
-              
+
                   f:ast { { t_Class, c_Symbol , c_Terminal, val:str($2),  tok } }
-      
-      
+
       <> reference > 
-      
+
               t:^ tk:identifier_syms
-      
-      
+
       <> identifier > 
-      
+
               tk:identifier_syms 
-      
-      
+
       <> identifier_syms >  
-      
+
               identifier_syms g:id
-      
+
               | identifier_syms \\_
-      
+
               | identifier_syms \\-
-      
+
               | identifier_syms g:num      
-      
+
               | \\_ 
-      
+
               | \\- 
-      
+
               | g:id
         ",
     ).unwrap();

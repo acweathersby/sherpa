@@ -32,7 +32,8 @@ pub const num_sym_str: &str = "g:num";
 pub const gen_rec_marker_str: &str = "g:rec";
 pub const tab_sym_str: &str = "g:tab";
 pub const eof_str: &str = "$eof";
-
+pub const undefined_symbol_id: u32 = 99999;
+/// TODO: Docs
 #[derive(Debug, PartialEq, PartialOrd, Clone, Copy, Hash, Eq, Ord)]
 pub enum SymbolID {
   /// Represents a defined sequence of characters from the set `0-9`.
@@ -86,6 +87,7 @@ pub enum SymbolID {
 
   /// Represent the grammar symbol `g:rec`.
   Recovery,
+  /// TODO: Docs
   Default,
   /// Represent end of input. This is also used
   /// to represent the `symbol` of items in the completed
@@ -94,11 +96,17 @@ pub enum SymbolID {
   /// Used to differentiate different completed items in the
   /// `peek` module.
   DistinctGroup(u32),
+  /// TODO: Docs
   Undefined,
+  /// TODO: Docs
   UndefinedA,
+  /// TODO: Docs
   UndefinedB,
+  /// TODO: Docs
   UndefinedC,
+  /// TODO: Docs
   UndefinedD,
+  /// TODO: Docs
   Start,
   /// Represents a symbol that does not belong to
   /// a given closure, used to detect and resolve shift
@@ -113,7 +121,9 @@ impl Default for SymbolID {
 }
 
 impl SymbolID {
+  /// TODO: Docs
   pub const DefinedSymbolIndexBasis: u32 = 8;
+  /// TODO: Docs
   pub const Generics: [SymbolID; 6] = [
     SymbolID::GenericSpace,
     SymbolID::GenericHorizontalTab,
@@ -123,6 +133,7 @@ impl SymbolID {
     SymbolID::GenericSymbol,
   ];
 
+  /// TODO: Docs
   pub fn from_string(symbol_string: &str, g: Option<&GrammarStore>) -> Self {
     match symbol_string {
       "default" => Self::Default,
@@ -151,6 +162,7 @@ impl SymbolID {
     }
   }
 
+  /// Returns a human friendly string representation
   pub fn to_string(&self, g: &GrammarStore) -> String {
     match self {
       Self::DefinedNumeric(_)
@@ -184,6 +196,7 @@ impl SymbolID {
     }
   }
 
+  /// TODO: Docs
   pub fn to_default_string(&self) -> String {
     match self {
       Self::DefinedNumeric(_)
@@ -208,7 +221,9 @@ impl SymbolID {
     }
   }
 
-  pub fn shift_type(&self, g: &GrammarStore) -> (u32, &'static str) {
+  /// Returns a tuple indicating the type CLASS of shift that is performed
+  /// on this symbol.
+  pub fn shift_info(&self, g: &GrammarStore) -> (u32, &'static str) {
     match self {
       SymbolID::GenericSpace
       | SymbolID::GenericHorizontalTab
@@ -232,6 +247,7 @@ impl SymbolID {
     }
   }
 
+  /// TODO: Docs
   pub fn is_token_production(&self) -> bool {
     match self {
       Self::TokenProduction(..) => true,
@@ -239,6 +255,7 @@ impl SymbolID {
     }
   }
 
+  /// TODO: Docs
   pub fn is_defined(&self) -> bool {
     match self {
       Self::DefinedNumeric(_)
@@ -251,6 +268,7 @@ impl SymbolID {
     }
   }
 
+  /// TODO: Docs
   pub fn is_exclusive(&self) -> bool {
     match self {
       Self::ExclusiveDefinedNumeric(_)
@@ -260,10 +278,12 @@ impl SymbolID {
     }
   }
 
+  /// TODO: Docs
   pub fn is_production(&self) -> bool {
     self.get_production_id().is_some()
   }
 
+  /// TODO: Docs
   pub fn get_production_id(&self) -> Option<ProductionId> {
     match self {
       Self::Production(id, _) => Some(*id),
@@ -272,6 +292,7 @@ impl SymbolID {
     }
   }
 
+  /// TODO: Docs
   pub fn get_grammar_id(&self) -> GrammarId {
     match self {
       Self::Production(_, id) | Self::TokenProduction(.., id, _) => *id,
@@ -279,6 +300,7 @@ impl SymbolID {
     }
   }
 
+  /// TODO: Docs
   pub fn bytecode_id(&self, g: Option<&GrammarStore>) -> u32 {
     match self {
       Self::DefinedNumeric(_)
@@ -290,25 +312,25 @@ impl SymbolID {
         if let Some(g) = g {
           g.symbols.get(self).unwrap().bytecode_id
         } else {
-          99999
+          undefined_symbol_id
         }
       }
       Self::TokenProduction(.., prod_id) => match g {
         Some(g) => g.get_production(prod_id).unwrap().symbol_bytecode_id,
-        None => 99999,
+        None => undefined_symbol_id,
       },
       Self::Production(prod_id, _) => match g {
         Some(g) => g.get_production(prod_id).unwrap().bytecode_id,
-        None => 99999,
+        None => undefined_symbol_id,
       },
-      Self::Default | Self::Start => 99999,
+      Self::Default | Self::Start => undefined_symbol_id,
       Self::EndOfInput => END_OF_INPUT_TOKEN_ID,
-      Self::GenericHorizontalTab => CodePointClass::HORIZONTAL_TAB as u32,
-      Self::GenericNewLine => CodePointClass::NEW_LINE as u32,
-      Self::GenericSpace => CodePointClass::SPACE as u32,
-      Self::GenericIdentifier => CodePointClass::IDENTIFIER as u32,
-      Self::GenericNumber => CodePointClass::NUMBER as u32,
-      Self::GenericSymbol => CodePointClass::SYMBOL as u32,
+      Self::GenericHorizontalTab => CodePointClass::HorizontalTab as u32,
+      Self::GenericNewLine => CodePointClass::NewLine as u32,
+      Self::GenericSpace => CodePointClass::Space as u32,
+      Self::GenericIdentifier => CodePointClass::Identifier as u32,
+      Self::GenericNumber => CodePointClass::Number as u32,
+      Self::GenericSymbol => CodePointClass::Symbol as u32,
       _ => 0,
     }
   }
@@ -316,9 +338,9 @@ impl SymbolID {
 
 pub type SymbolUUID = SymbolID;
 
+/// TODO: Docs
 #[repr(C, align(64))]
 #[derive(Debug, Clone, Default)]
-
 pub struct Symbol {
   /// The globally unique identifier of this symbol
   /// which encapsulates the set of Symbols that are
@@ -345,15 +367,16 @@ pub struct Symbol {
   pub friendly_name: String,
   /// The first location this symbol was identified
   pub loc:           Token,
-
-  pub g_ref: Option<Arc<GrammarRef>>,
+  /// TODO: Docs
+  pub g_ref:         Option<Arc<GrammarRef>>,
 }
 
 impl Symbol {
+  /// TODO: Docs
   pub const Generics: [&'static Symbol; 6] = [
     &Symbol {
       guid:          SymbolID::GenericSpace,
-      bytecode_id:   CodePointClass::SPACE as u32,
+      bytecode_id:   CodePointClass::Space as u32,
       cp_len:        1,
       byte_length:   1,
       friendly_name: String::new(),
@@ -363,7 +386,7 @@ impl Symbol {
     },
     &Symbol {
       guid:          SymbolID::GenericHorizontalTab,
-      bytecode_id:   CodePointClass::HORIZONTAL_TAB as u32,
+      bytecode_id:   CodePointClass::HorizontalTab as u32,
       byte_length:   1,
       cp_len:        1,
       friendly_name: String::new(),
@@ -373,7 +396,7 @@ impl Symbol {
     },
     &Symbol {
       guid:          SymbolID::GenericNewLine,
-      bytecode_id:   CodePointClass::NEW_LINE as u32,
+      bytecode_id:   CodePointClass::NewLine as u32,
       byte_length:   1,
       cp_len:        1,
       friendly_name: String::new(),
@@ -383,7 +406,7 @@ impl Symbol {
     },
     &Symbol {
       guid:          SymbolID::GenericIdentifier,
-      bytecode_id:   CodePointClass::IDENTIFIER as u32,
+      bytecode_id:   CodePointClass::Identifier as u32,
       cp_len:        1,
       byte_length:   0,
       friendly_name: String::new(),
@@ -393,7 +416,7 @@ impl Symbol {
     },
     &Symbol {
       guid:          SymbolID::GenericNumber,
-      bytecode_id:   CodePointClass::NUMBER as u32,
+      bytecode_id:   CodePointClass::Number as u32,
       cp_len:        1,
       byte_length:   0,
       friendly_name: String::new(),
@@ -403,7 +426,7 @@ impl Symbol {
     },
     &Symbol {
       guid:          SymbolID::GenericSymbol,
-      bytecode_id:   CodePointClass::SYMBOL as u32,
+      bytecode_id:   CodePointClass::Symbol as u32,
       cp_len:        1,
       byte_length:   0,
       friendly_name: String::new(),
@@ -413,6 +436,7 @@ impl Symbol {
     },
   ];
 
+  /// TODO: Docs
   pub fn generics_lu() -> BTreeMap<SymbolID, &'static Symbol> {
     BTreeMap::from_iter(Self::Generics.clone().iter().map(|s| (s.guid, *s)))
   }
@@ -422,14 +446,7 @@ impl Symbol {
 
 pub type SymbolStringTable = BTreeMap<SymbolID, String>;
 
-/// A table that maps a symbol uuid to a production id
-
-pub type ProductionSymbolsTable = BTreeMap<u64, (u32, u32)>;
-
 /// A table that contains defined symbols () keyed by their [SymbolUUID].
 pub type SymbolsTable = BTreeMap<SymbolUUID, Symbol>;
-
-/// A table that contains symbols defined by their class_id
-pub type ExportSymbolsTable = BTreeMap<SymbolID, Symbol>;
 
 pub type SymbolSet = BTreeSet<SymbolID>;

@@ -9,7 +9,6 @@ use crate::{
 };
 use std::{
   collections::{BTreeMap, BTreeSet, VecDeque},
-  fmt::format,
   vec,
 };
 
@@ -319,7 +318,7 @@ fn create_branch_wrap(
   let (symbol_bytecode_id, assert_class, sym_comment) = if !t.is_scan() {
     (sym.bytecode_id(Some(&t.g)), "TOKEN", sym.to_string(&t.g))
   } else {
-    let (bc, class) = child.edge_symbol.shift_type(&t.g);
+    let (bc, class) = child.edge_symbol.shift_info(&t.g);
     (bc, class, sym.to_string(&t.g))
   };
 
@@ -561,7 +560,7 @@ fn create_parent_to_child_map<'a>(
   // edges of our transition graph, converting the relationship
   // child->parent to parent->child
   for child in t.nodes_iter() {
-    if child.has_parent(t) {
+    if child.has_parent() {
       if let Some(parent_id) = child.parent.filter(|i| child.id != *i) {
         if children_tables[parent_id].insert(child.edge_symbol, child).is_some() {
           panic!("Overriding Node");

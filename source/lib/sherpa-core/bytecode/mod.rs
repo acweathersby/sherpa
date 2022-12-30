@@ -1,13 +1,10 @@
 use self::compile::build_byte_code_buffer;
 use crate::{
   compile::get_branches,
-  debug::{self, BytecodeGrammarLookups},
-  grammar::{
-    data::ast::{ASTNode, Goto, IR_STATE},
-    parse::compile_ir_ast,
-  },
+  debug::{self},
+  grammar::data::ast::{ASTNode, IR_STATE},
   journal::{report::ReportType, Journal},
-  types::{GrammarStore, IRState, IRStateType, Symbol, SymbolID},
+  types::{IRState, IRStateType, Symbol},
 };
 use std::collections::BTreeMap;
 
@@ -24,11 +21,14 @@ pub struct BytecodeOutput {
   /// Maps plain state names to the offset within the bytecode
   /// vector.
   pub state_name_to_offset: BTreeMap<String, u32>,
+  /// TODO: DOC
   pub offset_to_state_name: BTreeMap<u32, String>,
+  /// TODO: DOC
   pub bytecode_id_to_symbol_lookup: BTreeMap<u32, Symbol>,
+  /// TODO: DOC
   pub state_data: BTreeMap<String, StateData>,
   /// The intermediate representation states that the bytecode is based on.
-  pub(crate) states: Vec<IR_STATE>,
+  pub(crate) _states: Vec<IR_STATE>,
 }
 
 /// Store metadata for each state present in the bytecode.
@@ -74,7 +74,7 @@ impl StateData {
     self.name.clone()
   }
 }
-
+/// TODO: DOC
 pub fn compile_bytecode<'a>(
   j: &mut Journal,
   mut ir_states: Vec<(String, Box<IRState>)>,
@@ -118,7 +118,7 @@ pub(crate) fn compile_ir_states_into_bytecode<'a>(
 
   BytecodeOutput {
     bytecode,
-    states: ir_ast_states,
+    _states: ir_ast_states,
     offset_to_state_name: state_lookups
       .iter()
       .map(|(a, b)| (*b, a.clone()))

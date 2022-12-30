@@ -49,15 +49,15 @@ impl Default for ParseAction {
   }
 }
 impl ParseAction {
-  pub const des_Accept: u64 = 7;
-  pub const des_CompleteState: u64 = 1;
-  pub const des_EndOfInput: u64 = 9;
-  pub const des_Error: u64 = 8;
-  pub const des_FailState: u64 = 2;
-  pub const des_Fork: u64 = 4;
-  pub const des_ProductionParseStart: u64 = 10;
-  pub const des_Reduce: u64 = 6;
-  pub const des_ScannerToken: u64 = 3;
-  pub const des_Shift: u64 = 5;
-  pub const des_Undefined: u64 = 0;
+  pub const PA_ACCEPT: u64 = 7;
+  pub const PA_COMPLETE_STATE: u64 = 1;
+  pub const PA_END_OF_INPUT: u64 = 9;
+  pub const PA_ERROR: u64 = 8;
+  pub const PA_FAIL_STATE: u64 = 2;
+  pub const PA_FORK: u64 = 4;
+  pub const PA_PRODUCTION_PARSE_START: u64 = 10;
+  pub const PA_REDUCE: u64 = 6;
+  pub const PA_SCANNER_TOKEN: u64 = 3;
+  pub const PA_SHIFT: u64 = 5;
+  pub const PA_UNDEFINED: u64 = 0;
 }

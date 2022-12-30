@@ -31,9 +31,9 @@ pub fn construct_descent_on_basic_grammar() -> SherpaResult<()> {
 
   let items = generate_recursive_descent_items(&mut j, production_id);
 
-  let (result, _) = construct_recursive_descent(&mut j, false, &items)?;
+  let (result, _) = construct_recursive_descent(&mut j, ScanType::None, &items)?;
 
-  assert_eq!(result.get_node_len(), 7);
+  assert_eq!(result._get_node_len(), 7);
 
   assert_eq!(result.leaf_nodes.len(), 1);
   SherpaResult::Ok(())
@@ -72,13 +72,13 @@ pub fn construct_descent_on_scanner_symbol() -> SherpaResult<()> {
     })
     .collect();
 
-  let (result, _) = construct_recursive_descent(&mut j, true, &items)?;
+  let (result, _) = construct_recursive_descent(&mut j, ScanType::ScannerEntry, &items)?;
 
-  result.print_nodes();
+  result._print_nodes();
   j.flush_reports();
   j.debug_print_reports(ReportType::Any);
 
-  assert_eq!(result.get_node_len(), 8);
+  assert_eq!(result._get_node_len(), 8);
 
   assert_eq!(result.leaf_nodes.len(), 2);
   SherpaResult::Ok(())
@@ -348,192 +348,174 @@ pub fn generate_annotated_symbol() -> SherpaResult<()> {
       @NAME ascript
 
       @IGNORE g:sp g:nl
-      
+
       <> body >  
-      
+
           struct 
-          
+
           | expression(+\\, )
               f:ast { { t_AST_Statements, statements:$1, tok } }
-      
+
       <> expression > 
-          
+
           member
-      
+
           | string_convert
-      
+
           | numeric_convert
-      
+
           | bool_convert
-      
+
           | literal
-      
+
           | struct_prop(+\\, ) \\}
               f:ast { { t_AST_Struct, props:$2, tok } }
-      
-      
+
       <> struct_prop >  
-          
+
           identifier \\: expression
               f:ast { { t_AST_Property, id:str($1), value:$3, tok } }
-          
+
           |  identifier \\: struct
               f:ast { { t_AST_Property, id:str($1), value:$3, tok } }
-          
+
           |  identifier
               f:ast { { t_AST_Property, id:str($1), named_reference: str($1), tok } }
-          
+
           | type_identifier
               f:ast { { t_AST_TypeId,  value:str($1), tok } }
-          
+
           | class_identifier
               f:ast { { t_AST_ClassId, value:str($1), tok } }
-      
+
           | token
-      
-      
+
       <> type_identifier > 
-      
+
           t:t_ identifier
-      
-      
+
       <> class_identifier >
-      
+
           t:c_ identifier
-      
-      
+
       <> vector >
-      
+
           \\[ expression(*\\, ) \\]
               f:ast { { t_AST_Vector, initializer: $2, tok  } }
-      
-      
+
       <> add > 
-          
+
           member \\+ expression
-          
+
               f:ast { { t_AST_Add, left: $1, right: $3, tok } }
-      
-      
+
       <> member > 
-          
+
           reference
-      
+
           | reference \\. identifier
               f:ast { { t_AST_Member, reference:$1, property:$3 } }
-      
-      
+
       <> string_convert > 
-          
+
           t:str convert_initializer?
               f:ast { { t_AST_STRING, value: $2, tok  } }
-      
-      
+
       <> bool_convert > 
-          
+
           t:bool convert_initializer?
               f:ast { { t_AST_BOOL,  initializer: $2, tok  } }
-      
-      
+
       <> numeric_convert > 
-          
+
           t:u8  convert_initializer?
               f:ast { { t_AST_U8,  initializer: $2, tok  } }
-      
+
           | t:u16 convert_initializer?
               f:ast { { t_AST_U16, initializer: $2, tok  } }
-      
+
           | t:u32 convert_initializer?
               f:ast { { t_AST_U32, initializer: $2, tok  } }
-      
+
           | t:u64 convert_initializer?
               f:ast { { t_AST_U64, initializer: $2, tok  } }
-      
+
           | t:i8  convert_initializer?
               f:ast { { t_AST_I8,  initializer: $2, tok  } }
-      
+
           | t:i16 convert_initializer?
               f:ast { { t_AST_I16, initializer: $2, tok  } }
-      
+
           | t:i32 convert_initializer?
               f:ast { { t_AST_I32, initializer: $2, tok  } }
-      
+
           | t:i64 convert_initializer?
               f:ast { { t_AST_I64, initializer: $2, tok  } }
-      
+
           | t:f32 convert_initializer?
               f:ast { { t_AST_F32, initializer: $2, tok  } }
-      
+
           | t:f64 convert_initializer?
               f:ast { { t_AST_F64, initializer: $2, tok  } }
-      
-      
+
       <> convert_initializer > 
-      
+
           t:( init_objects t:)       
               f:ast { { t_Init, expression: $2 } }
-      
+
       <> init_objects > member | token 
-      
-      
+
       <> literal > 
-          
+
           t:true 
               f:ast { { t_AST_BOOL, value: true } }
-      
+
           | t:false
               f:ast { { t_AST_BOOL, value: false } }
-      
+
           | tk:integer
               f:ast { { t_AST_NUMBER, value:f64($1) } }
-      
-      
-      
+
       <> reference > 
-          
+
           t:$ tk:identifier 
               f:ast { { t_AST_NamedReference, value: str($2), tok } }
-      
+
           | t:$ tk:integer         
               f:ast { { t_AST_IndexReference, value: i64($2), tok } }
-      
-      
+
       <> integer > 
-          
+
           g:num(+)
-      
-      
+
       <> identifier > 
-      
+
           tk:identifier_syms 
-      
-      
+
       <> identifier_syms >  
-      
+
           identifier_syms g:id
-      
+
           | identifier_syms \\_
-      
+
           | identifier_syms \\-
-      
+
           | identifier_syms g:num      
-      
+
           | \\_ 
-      
+
           | \\- 
-      
+
           | g:id
-      
-      
+
       <> token > 
-      
+
           t:tok 
               f:ast { { t_AST_Token } }
-      
+
           | t:token 
               f:ast { { t_AST_Token } }
-      
-      
+
 ",
   )
   .unwrap();
@@ -560,23 +542,22 @@ pub fn generate_production_with_recursion() -> SherpaResult<()> {
       @IGNORE g:sp
 
       @EXPORT statement as entry
-      
+
       @NAME llvm_language_test
-      
+
       <> statement > expression
-      
+
       <> expression > sum 
-      
+
       <> sum > mul \\+ sum
           | mul
-      
+
       <> mul > term \\* expression
           | term
-      
+
       <> term > g:num
           | \\( expression \\)
-      
-      
+
 ",
   )
   .unwrap();
@@ -603,18 +584,18 @@ pub fn generate_scanner_production_with_recursion() -> SherpaResult<()> {
       @IGNORE g:sp
 
       @EXPORT statement as entry
-      
+
       @NAME llvm_language_test
-      
+
       <> statement > tk:test tk:V
-      
+
       <> test > V test?
           | A test \\t
 
       <> V > V g:num | \\dd
 
       <> A > \\a \\- \\b
-      
+
 ",
   )
   .unwrap();
@@ -642,113 +623,113 @@ pub fn generate_production_with_recursiond() -> SherpaResult<()> {
         @EXPORT markdown as md
 
         <> markdown > lines
-        
+
             f:ast { {t_Markdown, lines:$1 } }
-        
+
         <> lines > g:nl? line
-        
+
             f:ast { [$2] }
-            
+
             | lines g:nl line
-            
+
             f:ast { [$1, $3] }
-        
+
             | lines ( g:nl f:ast{ { t_EmptyLine, c_Line } } )
-        
+
             f:ast {  [$1, $2] }
-        
+
         <> line >
-        
+
             header_token content
-        
+
             f:ast { { t_Header, c_Line, length:f64($1), content:$2 } }
-        
+
             | 
-            
+
             tk:spaces? tk:ol_token content
-        
+
             f:ast { { t_OL, c_Line, spaces:str($1), content:$3 } }
-        
+
             |
-        
+
             tk:spaces? tk:ul_token content
-        
+
             f:ast { { t_UL, c_Line, spaces:str($1), content:$3 } }
-        
+
             |
-        
+
             tk:spaces? tk:quote_token content
-        
+
             f:ast { { t_Quote, c_Line, spaces:str($1), content:$3 } }
-        
+
             | 
-        
+
             tk:spaces? content
-        
+
             f:ast { { t_Paragraph, c_Line, spaces:str($1), content:$2 } }
-        
+
             |
-             
+
             tk:code_block_delimiter code_line_text? code_line(*) cb_sentinel
-        
+
             f:ast { { t_CodeBlock, c_Line, syntax:str($2), data:$3 } }
-        
+
         <> ol_token > g:num \\. 
-        
+
         <> spaces > g:sp(+\\\" )
-        
+
         <> header_token > \\% (+)
-        
+
         <> ul_token > \\- 
             | \\+ 
-        
+
         <> quote_token > \\>           
-        
+
         <> code_line >
-        
+
             g:nl code_line_text?
-        
+
             f:ast { { t_Text, c_Content, value: str($2) } }
-        
+
         <> code_block_delimiter > \\```
-        
+
         <> code_block_delimiter_with_nl > g:nl \\```
-        
+
         <> cb_sentinel > tk:code_block_delimiter_with_nl
-        
+
         <[ recover cb_sentinel_1 ] 
-        
+
             shift nothing then set prod to cb_sentinel
         >
-        
+
         <> code_line_text > 
             (   g:num 
             |   g:sp
             |   g:id 
             |   g:sym
             )(+\\\" )
-        
+
         <> code_block_sentinel >
-        
+
             g:nl \\``` 
-        
+
         <> content > ( text | format_symbol )(+)
-        
+
         <> text > text_symbol(+\\\" )
             f:ast { { t_Text, c_Content, value: str($1) } }
-        
+
         <> text_symbol > 
                 g:sym
             |   g:sp
             |   tk:word
             |   tk:num
-        
+
         <> word > g:id 
             | word g:id
-        
+
         <> num > g:num
             | num g:num
-        
+
         <> format_symbol > 
             \\` 
             f:ast { { t_InlineCode, c_Content } }
@@ -838,13 +819,13 @@ fn test_peek() -> SherpaResult<()> {
     &mut j,
     r##"
     @IGNORE g:sp
-    
+
     <> term >  tk:ident \= value_list
 
     <> value_list > \" formal_value_list(+g:sp) \"
-    
+
     <> formal_value_list > ident
-    
+
     <> ident > g:id(+) 
 
     "##,
@@ -905,14 +886,13 @@ fn test_peek3() -> SherpaResult<()> {
     &mut j,
     r##"
     @IGNORE g:sp
-    
+
     <> term >  \x A \( g:id? \)  f:ast { { t_Function_Definition } }
             |  \x B \;           f:ast { { t_Type_Definition } }
 
     <> A > Adent \x
 
     <> B > Bdent
-
 
     <> Adent > Cdent
 
@@ -1019,6 +999,47 @@ fn scientific_numeric_token() -> SherpaResult<()> {
 }
 
 #[test]
+fn string_token() -> SherpaResult<()> {
+  let input = r##"
+
+  <> str > tk:string
+
+  <> string > \" ( g:id | g:num | g:sym | g:sp )(+) \"
+
+"##;
+  let mut j = Journal::new(Some(Config { ..Default::default() }));
+
+  /*   let g = GrammarStore::from_str(&mut j, input).unwrap();
+
+   //
+
+   let prod_id = g.get_production_id_by_name("scan_tok_C62B306E7774ADEF_3DE072630D545EFC")?;
+
+   let states = compile_token_production_states(&mut j, prod_id)?;
+
+   for (state) in &states {
+     eprintln!("{}", state.get_code());
+   }
+   j.flush_reports();
+   j.debug_print_reports(ReportType::TokenProductionCompile(Default::default()));
+  */
+  let (mut j, states) = build_states(input)?;
+  for (_, state) in &states {
+    eprintln!("{}", state.get_code());
+  }
+  let states = optimize_ir_states(&mut j, states);
+
+  j.flush_reports();
+  //j.debug_print_reports(ReportType::TokenProductionCompile(Default::default()));
+
+  let bc = compile_bytecode(&mut j, states);
+
+  eprintln!("{}", generate_disassembly(&bc, Some(&mut j)));
+
+  SherpaResult::Ok(())
+}
+
+#[test]
 fn raddler() -> SherpaResult<()> {
   let input = r##" 
   @IGNORE g:sp
@@ -1093,43 +1114,54 @@ fn test_compile_json_parser() -> SherpaResult<()> {
     @IGNORE g:sp g:nl
 
     @EXPORT json as entry
-    
+
     @NAME llvm_language_test
-    
+
     <> json > 
             object                              f:ast { { t_Json, v: $1 } }
             | 
             array                               f:ast { { t_Json, v: $1 } }
-    
+
     <> array > \[  value(*\, )  \]              f:ast { { t_Array, entries: $2 } }
-    
-    <> object > \{ key_value(*\, ) \}           f:ast { { t_Object, entries: $2 } }
-    
-    <> key_value > string \: value              f:ast { { t_KeyVal, k:$1, v:$3 } }
-    
-    <> value > num | bool | string | null
-    
+
+    <> object > \{ key_value(*\, ) \}           f:ast { { t_Object, entries: ($2) } }
+
+    <> key_value > str \: value              f:ast { { t_KeyVal, k:$1, v:$3 } }
+
+    <> value > num | bool | str | null
+
     <> null > t:null                            f:ast { { t_Null, v:false } }
-    
+
     <> bool > 
         t:false                                 f:ast { { t_Bool, v:false } }
         |   
         t:true                                  f:ast { { t_Bool, v:true } }
-    
+
     <> num > tk:number                          f:ast { { t_Number } }
-    
+
     <> number > ( \+ | \- )? g:num(+) ( \. g:num(+) )? ( ( \e | \E ) ( \+ | \i ) g:num(+) )?
-    
-    <> string > \" ( g:id | g:sym | g:num | g:sp )(*) \"  f:ast { { t_String } }
+
+    <> str > tk:string f:ast { { t_String } }
+
+    <> string > \" ( g:id | g:sym | g:num | g:sp )(*) \"  
 "##,
   )
   .unwrap();
 
-  let mut ir_states = compile_states(&mut j, 1)?;
+  let mut states = compile_states(&mut j, 1)?;
 
-  let ir_states = optimize_ir_states(&mut j, ir_states);
+  /* for (_, state) in &states {
+    eprintln!("{}", state.get_code());
+  } */
+  //return SherpaResult::Ok(());
 
-  let bytecode_output = compile_bytecode(&mut j, ir_states);
+  let ir_states = optimize_ir_states(&mut j, states);
+
+  j.debug_print_reports(ReportType::ScannerCompile(ScannerStateId::default()));
+
+  let bc = compile_bytecode(&mut j, ir_states);
+
+  eprintln!("{}", generate_disassembly(&bc, Some(&mut j)));
 
   SherpaResult::Ok(())
 }

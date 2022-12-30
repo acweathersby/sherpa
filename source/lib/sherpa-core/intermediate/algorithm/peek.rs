@@ -329,7 +329,7 @@ pub(crate) fn peek(
             // Check to see if we can issue a call instead of increment.
             // For that to work, all items need to be in an initial state,
             // and the production .
-            if (convert_to_production_call(
+            if convert_to_production_call(
               t,
               j,
               par_id,
@@ -338,7 +338,7 @@ pub(crate) fn peek(
               &goals,
               peek_depth,
               global_depth,
-            )?) {
+            )? {
               continue;
             }
           }
@@ -456,7 +456,7 @@ pub(crate) fn peek(
               // Check to see if we can issue a call instead of increment.
               // For that to work, all items need to be in an initial state,
               // and the production .
-              if (convert_to_production_call(
+              if convert_to_production_call(
                 t,
                 j,
                 par_id,
@@ -465,7 +465,7 @@ pub(crate) fn peek(
                 &goals,
                 peek_depth,
                 global_depth,
-              )?) {
+              )? {
                 continue;
               }
             }
@@ -676,7 +676,7 @@ fn resolveConflictingSymbols(
       sym if sym.is_production() => Production,
       _ => Generic,
     });
-    let mut complete_items: Option<&Items> = None;
+    let complete_items: Option<&Items>;
 
     for (priority, groups) in priority_groups {
       match priority {
@@ -710,7 +710,7 @@ fn resolveConflictingSymbols(
                       1,
                       1,
                       &format!("[ {} ] first defined here", s.to_string(&t.g)),
-                      BlameColor::Red,
+                      BlameColor::RED,
                     )
                   }
                   _ => String::new(),

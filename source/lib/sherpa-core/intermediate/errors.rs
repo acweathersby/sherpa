@@ -55,7 +55,7 @@ impl WarnTransitionAmbiguousProduction {
     // or that is of a production whose id is in common_symbols
     closures.iter_mut().for_each(|c| {
       c.drain_filter(|(s, i)| {
-        (!common_symbols.contains(s) || common_symbols.contains(&i.get_prod_as_sym_id(&t.g)))
+        (!common_symbols.contains(s) || common_symbols.contains(&i._get_prod_as_sym_id(&t.g)))
       });
     });
     // At this point we should have isolated the items responsible for the ambiguous parse, provided
@@ -107,7 +107,7 @@ impl ExtendedError for WarnTransitionAmbiguousProduction {
             grammar_ref.path.to_str().unwrap(),
             start_line,
             start_column,
-            tok.blame(1, 1, "conflicts with other productions", BlameColor::Red)
+            tok.blame(1, 1, "conflicts with other productions", BlameColor::RED)
           )
         })
         .collect::<Vec<_>>()

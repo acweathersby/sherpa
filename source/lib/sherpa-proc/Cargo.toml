@@ -3,11 +3,9 @@ name = "sherpa_proc"
 version = "1.0.0-beta1"
 edition = "2021"
 
-
 [lib]
 proc-macro = true
 path = "./lib.rs"
-
 
 [dependencies]
 sherpa_core = { path = "../sherpa-core" }

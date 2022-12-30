@@ -2,7 +2,7 @@
 //! Hydrocarbon bytecode.
 
 use crate::{compile::BytecodeOutput, types::*};
-use std::collections::{btree_map, BTreeMap, VecDeque};
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Copy)]
 struct TableCell<'a> {
@@ -19,14 +19,13 @@ pub(crate) struct BranchTableData {
   /// Stores an offset of the branch that is taken given
   /// a particular symbol, and the symbol that activates
   /// the branch.
-  pub symbols:    BTreeMap<u32, Symbol>,
-  pub data:       TableHeaderData,
+  pub symbols:  BTreeMap<u32, Symbol>,
+  pub data:     TableHeaderData,
   /// All branches defined within the branch table,
   /// keyed by their bytecode address or by the indexed
   /// of the branch's location in the table should the
   /// branch be a skip.
-  pub branches:   BTreeMap<usize, BranchData>,
-  pub table_type: TableType,
+  pub branches: BTreeMap<usize, BranchData>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -38,12 +37,6 @@ pub(crate) struct BranchData {
   pub value:      u32,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum TableType {
-  Hash,
-  Vector,
-}
-
 impl BranchTableData {
   pub fn from_bytecode(
     instruction: INSTRUCTION,
@@ -51,13 +44,13 @@ impl BranchTableData {
     output: &BytecodeOutput,
   ) -> Option<Self> {
     let address = instruction.get_address();
-    if instruction.is_HASH_BRANCH() || instruction.is_VECTOR_BRANCH() {
+    if instruction.is_hash_branch() || instruction.is_vector_branch() {
       let data = TableHeaderData::from_bytecode(address, &output.bytecode);
 
       let TableHeaderData { input_type, table_length, table_meta, .. } = data;
 
       let branches = match instruction.to_type() {
-        InstructionType::VECTOR_BRANCH => output.bytecode
+        InstructionType::VectorBranch => output.bytecode
           [(address + 4)..(address + 4 + table_length as usize)]
           .iter()
           .enumerate()
@@ -72,11 +65,11 @@ impl BranchTableData {
             })
           })
           .collect::<BTreeMap<_, _>>(),
-        InstructionType::HASH_BRANCH => output.bytecode
+        InstructionType::HashBranch => output.bytecode
           [(address + 4)..(address + 4 + table_length as usize)]
           .iter()
           .enumerate()
-          .map(|(i, cell)| {
+          .map(|(_, cell)| {
             let discriminant = cell & 0x7FF;
             let offset_delta = (cell >> 11) & 0x7FF;
             let address = (offset_delta as usize) + address;
@@ -94,7 +87,7 @@ impl BranchTableData {
       let symbol_lookup = &output.bytecode_id_to_symbol_lookup;
 
       let symbols = match input_type {
-        INPUT_TYPE::T02_TOKEN => {
+        InputType::T02_TOKEN => {
           let mut symbols = BTreeMap::new();
 
           for (_, branch) in &branches {
@@ -112,12 +105,7 @@ impl BranchTableData {
         _ => BTreeMap::new(),
       };
 
-      Some(BranchTableData {
-        table_type: if instruction.is_HASH_BRANCH() { TableType::Hash } else { TableType::Vector },
-        symbols,
-        data,
-        branches,
-      })
+      Some(BranchTableData { symbols, data, branches })
     } else {
       None
     }

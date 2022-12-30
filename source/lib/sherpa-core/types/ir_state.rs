@@ -10,6 +10,7 @@ use std::{
 pub struct ScannerStateId(u64);
 
 impl ScannerStateId {
+  /// TODO: Docs
   pub fn new(symbol_set: &SymbolSet) -> Self {
     Self(hash_id_value_u64(symbol_set))
   }
@@ -20,17 +21,10 @@ impl ScannerStateId {
 pub struct StateId(u64);
 
 impl StateId {
-  pub fn new(state_name: &String) -> Self {
+  /// TODO: Docs
+  pub fn _new(state_name: &String) -> Self {
     Self(hash_id_value_u64(state_name))
   }
-}
-
-#[derive(PartialEq, Eq, Clone, Copy)]
-
-pub(crate) enum PeekType {
-  None,
-  PeekStart,
-  PeekContinue,
 }
 
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
@@ -115,10 +109,6 @@ impl IRState {
     self.hash = hash_id_value_u64(self.code.clone());
     self.code = self.code.replace("%%%%", &self.get_name());
     self
-  }
-
-  pub(crate) fn get_type(&self) -> IRStateType {
-    self.state_type
   }
 
   pub fn get_name(&self) -> String {

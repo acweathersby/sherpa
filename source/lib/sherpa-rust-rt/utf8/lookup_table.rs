@@ -4,15 +4,15 @@ pub type CharLUType = [u8; JMPTBLE_BYTE_SIZE];
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub enum CodePointClass {
-  ANY        = 1,
-  SYMBOL     = 2,
-  IDENTIFIER = 3,
-  NUMBER     = 4,
-  NEW_LINE   = 5,
-  SPACE      = 6,
-  HORIZONTAL_TAB = 7,
-  UNICODE_ID_START = 32,
-  UNICODE_ID_CONT = 64,
+  Any        = 1,
+  Symbol     = 2,
+  Identifier = 3,
+  Number     = 4,
+  Space      = 5,
+  NewLine    = 6,
+  HorizontalTab = 7,
+  UnicodeIdStart = 32,
+  UnicodeIdCont = 64,
 }
 
 impl Into<u32> for CodePointClass {
@@ -210,14 +210,14 @@ const fn char_lu_table_init() -> CharLUType {
 
   jump_table = air(
     jump_table,
-    CodePointClass::IDENTIFIER as u8,
+    CodePointClass::Identifier as u8,
     &UNI_ID_START_RANGES,
     UNI_ID_START_RANGES.len(),
   );
 
   jump_table = aii(
     jump_table,
-    CodePointClass::IDENTIFIER as u8,
+    CodePointClass::Identifier as u8,
     &UNI_ID_START_INDICES,
     UNI_ID_START_INDICES.len(),
   );
@@ -225,54 +225,53 @@ const fn char_lu_table_init() -> CharLUType {
   // 4. SPACE
   let t: [usize; 6] = [32, 0xA0, 0x2002, 0x2003, 0x2004, 0x3000];
 
-  jump_table = aii(jump_table, CodePointClass::SPACE as u8, &t, 6);
+  jump_table = aii(jump_table, CodePointClass::Space as u8, &t, 6);
 
   // 4. TAB
   let b: [usize; 1] = [9];
 
-  jump_table = aii(jump_table, HORIZONTAL_TAB as u8, &b, 1);
+  jump_table = aii(jump_table, HorizontalTab as u8, &b, 1);
 
   // 8. CARIAGE RETURN
   let c: [usize; 1] = [13];
 
-  jump_table = aii(jump_table, NEW_LINE as u8, &c, 1);
+  jump_table = aii(jump_table, NewLine as u8, &c, 1);
 
   // 8. LINE FEED
   let d: [usize; 1] = [10];
 
-  jump_table = aii(jump_table, NEW_LINE as u8, &d, 1);
+  jump_table = aii(jump_table, NewLine as u8, &d, 1);
 
   // 16. Number
   let e: [usize; 2] = [48, 57];
 
-  jump_table = air(jump_table, NUMBER as u8, &e, 2);
+  jump_table = air(jump_table, Number as u8, &e, 2);
 
   // Add Unicode Identifier Classes
   let f: [usize; 4] = [65, 90, 97, 122];
 
-  jump_table = air(jump_table, UNICODE_ID_START as u8, &f, 4);
+  jump_table = air(jump_table, UnicodeIdStart as u8, &f, 4);
 
   let mut i = 0;
 
   while i < JMPTBLE_BYTE_SIZE {
     if jump_table[i] == 0 {
-      jump_table[i] = SYMBOL as u8;
+      jump_table[i] = Symbol as u8;
     }
 
     i += 1;
   }
 
   jump_table =
-    air(jump_table, UNICODE_ID_START as u8, &UNI_ID_START_RANGES, UNI_ID_START_RANGES.len());
+    air(jump_table, UnicodeIdStart as u8, &UNI_ID_START_RANGES, UNI_ID_START_RANGES.len());
 
   jump_table =
-    aii(jump_table, UNICODE_ID_START as u8, &UNI_ID_START_INDICES, UNI_ID_START_INDICES.len());
+    aii(jump_table, UnicodeIdStart as u8, &UNI_ID_START_INDICES, UNI_ID_START_INDICES.len());
+
+  jump_table = air(jump_table, UnicodeIdCont as u8, &UNI_ID_CONT_RANGES, UNI_ID_CONT_RANGES.len());
 
   jump_table =
-    air(jump_table, UNICODE_ID_CONT as u8, &UNI_ID_CONT_RANGES, UNI_ID_CONT_RANGES.len());
-
-  jump_table =
-    aii(jump_table, UNICODE_ID_CONT as u8, &UNI_ID_CONT_DISCRETE, UNI_ID_CONT_DISCRETE.len());
+    aii(jump_table, UnicodeIdCont as u8, &UNI_ID_CONT_DISCRETE, UNI_ID_CONT_DISCRETE.len());
 
   jump_table
 }

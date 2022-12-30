@@ -13,6 +13,3 @@ bitmask-enum = "2.0.0"
 inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm14-0"]}
 sherpa_runtime = {path = "../sherpa-rust-rt"}
 
-[dev-dependencies]
-coz = "0.1.3"
-bumpalo = "3.10.0"

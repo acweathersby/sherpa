@@ -36,10 +36,12 @@ pub struct PublicFunctions<'a> {
   pub(crate) handle_eop: FunctionValue<'a>,
   pub(crate) prime: FunctionValue<'a>,
   pub(crate) scan: FunctionValue<'a>,
+  /// LLVM [`memcpy`](https://llvm.org/docs/LangRef.html#llvm-memcpy-intrinsic) intrinsic.
+  /// Copies data of a certain number of bytes from one memory location to another.
   pub(crate) memcpy: FunctionValue<'a>,
-  pub(crate) memset: FunctionValue<'a>,
-  pub(crate) min: FunctionValue<'a>,
-  pub(crate) max: FunctionValue<'a>,
+  /// LLVM [`ctlz`](https://llvm.org/docs/LangRef.html#llvm-ctlz-intrinsic) intrinsic.
+  /// Counts the number of leading zeros.
+  pub(crate) ctlz_i8: FunctionValue<'a>,
   pub(crate) get_adjusted_input_block: FunctionValue<'a>,
   pub(crate) extend_stack_if_needed: FunctionValue<'a>,
   pub(crate) allocate_stack: FunctionValue<'a>,
@@ -48,28 +50,39 @@ pub struct PublicFunctions<'a> {
   /// than 0
   pub(crate) internal_free_stack: FunctionValue<'a>,
   pub(crate) drop: FunctionValue<'a>,
-  pub(crate) get_utf8_codepoint_info: FunctionValue<'a>,
+  /// Helper function to join bytes of a UTF-8 encoded codepoint
   pub(crate) merge_utf8_part: FunctionValue<'a>,
-  pub(crate) ctlz_i8: FunctionValue<'a>,
+  /// Given a pointer to character data, returns the UTF codepoint based on UTF-8 encoding.
+  ///
+  /// ### Function signature:
+  /// ```rust
+  ///
+  /// #[repr(C)]
+  /// struct CodePointInfo {
+  ///   codepoint: u32,
+  ///   byte_length: u32
+  /// }
+  ///
+  /// extern "C" fn get_utf8_codepoint_info( character_data: const * u8 ) -> CodePointInfo;
+  /// ```
+  pub(crate) get_utf8_codepoint_info: FunctionValue<'a>,
+  /// Used to lookup token classes.
+  ///
+  /// ### Function signature
+  /// ```rust
+  /// extern "C" fn get_token_class_from_codepoint( utf8_codepoint: u32 ) -> u32;
+  /// ```
   pub(crate) get_token_class_from_codepoint: FunctionValue<'a>,
 }
 
 #[derive(Debug)]
 pub struct LLVMParserModule<'a> {
-  pub(crate) ctx:        &'a Context,
-  pub(crate) module:     Module<'a>,
-  pub(crate) builder:    Builder<'a>,
-  pub(crate) types:      LLVMTypes<'a>,
-  pub(crate) fun:        PublicFunctions<'a>,
-  pub(crate) exe_engine: Option<ExecutionEngine<'a>>,
-}
-
-pub mod input_block_indices {
-  pub const InputBlockPtr: u32 = 0;
-  pub const InputBlockStart: u32 = 1;
-  pub const InputBlockEnd: u32 = 2;
-  pub const InputBlockSize: u32 = 3;
-  pub const InputBlockTruncated: u32 = 4;
+  pub(crate) ctx:         &'a Context,
+  pub(crate) module:      Module<'a>,
+  pub(crate) builder:     Builder<'a>,
+  pub(crate) types:       LLVMTypes<'a>,
+  pub(crate) fun:         PublicFunctions<'a>,
+  pub(crate) _exe_engine: Option<ExecutionEngine<'a>>,
 }
 
 #[derive(Clone, Copy, Debug)]

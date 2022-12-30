@@ -1,12 +1,11 @@
 use crate::{
   compile::{compile_bytecode, compile_states, optimize_ir_states, GrammarStore},
-  debug::{disassemble_state, generate_disassembly},
   journal,
   llvm::{
     ascript_functions::construct_ast_builder,
     compile_from_bytecode,
-    parser_functions::{construct_parse_function, ScannerData},
-    simd::create_simd_dfa,
+    parser_functions::construct_parse_function,
+    simd::{create_simd_dfa, ScannerData, TokenData},
     test_reader::TestUTF8StringReader,
   },
   Journal,
@@ -19,18 +18,19 @@ use sherpa_runtime::{
     llvm_map_shift_action,
     sherpa_allocate_stack,
     sherpa_free_stack,
+    sherpa_get_token_class_from_codepoint,
     AstSlots,
     BlameColor,
     ByteReader,
     Goto,
     InputInfo,
+    InputType,
     LLVMParseContext,
     ParseActionType,
     ParseContext,
     ParseResult,
     Token,
     TokenRange,
-    INPUT_TYPE,
   },
   utf8::lookup_table::CodePointClass,
 };
@@ -66,7 +66,7 @@ unsafe fn get_parse_function<'a, T: inkwell::execution_engine::UnsafeFunctionPoi
   function_name: &str,
 ) -> Result<JitFunction<'a, T>, ()> {
   let init = ctx
-    .exe_engine
+    ._exe_engine
     .as_ref()
     .unwrap()
     .get_function::<T>(function_name)
@@ -78,8 +78,8 @@ unsafe fn get_parse_function<'a, T: inkwell::execution_engine::UnsafeFunctionPoi
 }
 
 fn setup_exec_engine(ctx: &mut LLVMParserModule) {
-  if ctx.exe_engine.is_none() {
-    ctx.exe_engine =
+  if ctx._exe_engine.is_none() {
+    ctx._exe_engine =
       Some(ctx.module.create_jit_execution_engine(inkwell::OptimizationLevel::Aggressive).unwrap());
   }
 }
@@ -114,11 +114,11 @@ fn verify_construction_of_simd_function() {
 
   let module = construct_module(&mut Journal::new(None), "test", &context);
 
-  assert!(create_simd_dfa(
-    "test",
-    &module,
-    &ScannerData(vec![((INPUT_TYPE::T03_CLASS, CodePointClass::IDENTIFIER.into()))], vec![vec![]])
-  )
+  assert!(create_simd_dfa("test", &module, &ScannerData {
+    symbols:      vec![],
+    states_table: vec![],
+    accept_col:   1,
+  })
   .is_ok());
 
   eprintln!("{}", module.module.to_string());
@@ -167,13 +167,13 @@ fn should_push_new_state() -> SherpaResult<()> {
     setup_exec_engine(&mut module);
 
     module
-      .exe_engine
+      ._exe_engine
       .as_ref()
       .unwrap()
       .add_global_mapping(&module.fun.allocate_stack, sherpa_allocate_stack as usize);
 
     module
-      .exe_engine
+      ._exe_engine
       .as_ref()
       .unwrap()
       .add_global_mapping(&module.fun.free_stack, sherpa_free_stack as usize);
@@ -355,39 +355,6 @@ fn verify_construction_of_emit_eop_function() {
 }
 
 /* #[test]
-fn should_pop_new_state() {
-  let context = Context::create();
-
-  let mut parse_context = construct_context("test", &context);
-
-  unsafe { assert!(construct_init(&parse_context).is_ok()) }
-  unsafe { assert!(construct_push_state_function(&parse_context).is_ok()) }
-  unsafe { assert!(construct_pop_state_function(&parse_context).is_ok()) }
-
-  unsafe {
-    setup_exec_engine(&mut parse_context);
-    let mut reader = TestUTF8StringReader::new("test");
-    let mut rt_ctx = LLVMParseContext::new();
-    let init_fn = get_parse_function::<Init>(&parse_context, "init").unwrap();
-    let push_state_fn = get_parse_function::<PushState>(&parse_context, "push_state").unwrap();
-    let pop_state = get_parse_function::<PopState>(&parse_context, "pop_state").unwrap();
-
-    init_fn.call(&mut rt_ctx, &mut reader);
-    push_state_fn.call(&mut rt_ctx, 20, 0x10101010_01010101);
-    push_state_fn.call(&mut rt_ctx, 40, 0x10101010_01010101);
-    assert_eq!(rt_ctx.goto_used, 6);
-
-    let second = pop_state.call(&mut rt_ctx);
-    let first = pop_state.call(&mut rt_ctx);
-
-    assert_eq!(second.state, 40);
-    assert_eq!(first.state, 20);
-    assert_eq!(rt_ctx.goto_used, 8);
-
-    eprintln!("{:#?}", rt_ctx);
-  };
-} */
-/* #[test]
 fn verify_construct_of_prime_function() {
   let context = Context::create();
 
@@ -503,12 +470,12 @@ fn should_extend_stack() -> SherpaResult<()> {
     construct_internal_free_stack(&module)?;
 
     module
-      .exe_engine
+      ._exe_engine
       .as_ref()?
       .add_global_mapping(&module.fun.allocate_stack, sherpa_allocate_stack as usize);
 
     module
-      .exe_engine
+      ._exe_engine
       .as_ref()?
       .add_global_mapping(&module.fun.free_stack, sherpa_free_stack as usize);
 
@@ -561,7 +528,7 @@ fn test_compile_parse_function() -> SherpaResult<()> {
     &mut j,
     "
   @IGNORE g:sp
- 
+
   <> test > \\hello \\world
   ",
   )
@@ -589,7 +556,7 @@ fn test_compile_from_bytecode() -> SherpaResult<()> {
     &mut j,
     "
   @IGNORE g:sp
- 
+
   <> test > \\hello \\world
   ",
   )?;
@@ -610,11 +577,11 @@ fn test_compile_from_bytecode() -> SherpaResult<()> {
     let mut rt_ctx = LLVMParseContext::new();
 
     ctx
-      .exe_engine
+      ._exe_engine
       .as_ref()?
       .add_global_mapping(&ctx.fun.allocate_stack, sherpa_allocate_stack as usize);
 
-    ctx.exe_engine.as_ref()?.add_global_mapping(&ctx.fun.free_stack, sherpa_free_stack as usize);
+    ctx._exe_engine.as_ref()?.add_global_mapping(&ctx.fun.free_stack, sherpa_free_stack as usize);
 
     let init_fn = get_parse_function::<Init>(&ctx, "init")?;
     let prime_fn = get_parse_function::<Prime>(&ctx, "prime")?;
@@ -669,30 +636,64 @@ fn run_simple_state_based_simd_loop() -> SherpaResult<()> {
   let context = Context::create();
 
   let mut module = construct_module(&mut Journal::new(None), "test", &context);
-
-  assert!(create_simd_dfa(
-    "simd_function",
-    &module,
-    &ScannerData(vec![(2, 2,), (2, 3,), (2, 4,), (2, 6,), (4, 34,)], vec![
-      vec![0, 0, 0, 0, 0, 0, 0, 0,],
-      vec![0, 18, 18, 0, 0, 0, 0, 7,],
-      vec![0, 18, 18, 0, 0, 0, 0, 7,],
-      vec![0, 18, 18, 0, 0, 0, 0, 7,],
-      vec![0, 18, 18, 0, 0, 0, 0, 7,],
-      vec![0, 0, 7, 0, 0, 0, 0, 7,]
-    ])
-  )
-  .is_ok());
-
   unsafe {
-    construct_ast_builder::<ASTNode>(&module)?;
+    assert!(create_simd_dfa("simd_function", &module, &ScannerData {
+      symbols:      vec![
+        TokenData {
+          class:   2,
+          tok_val: CodePointClass::Symbol as u32,
+          val:     CodePointClass::Symbol as u32,
+        },
+        TokenData {
+          class:   2,
+          tok_val: CodePointClass::Identifier as u32,
+          val:     CodePointClass::Identifier as u32,
+        },
+        TokenData {
+          class:   2,
+          tok_val: CodePointClass::Number as u32,
+          val:     CodePointClass::Number as u32,
+        },
+        TokenData {
+          class:   2,
+          tok_val: CodePointClass::Space as u32,
+          val:     CodePointClass::Space as u32,
+        },
+        TokenData { class: 4, tok_val: 7, val: 34 },
+      ],
+      states_table: vec![
+        0, 0, 0, 0, 0, 0, 0, 0, // ---
+        0, 0, 0, 0, 0, 0, 0, 0, // ---
+        0, 18, 18, 0, 0, 0, 0, 7, // ---
+        0, 18, 18, 0, 0, 0, 0, 7, // ---
+        0, 18, 18, 0, 0, 0, 0, 7, // ---
+        0, 18, 18, 0, 0, 0, 0, 7, // ---
+        0, 0, 0, 0, 0, 0, 0, 0, // ---
+        0, 0, 7, 0, 0, 0, 0, 7 // ---
+      ],
+      accept_col:   7,
+    })
+    .is_ok());
+
     setup_exec_engine(&mut module);
+
+    module._exe_engine.as_ref()?.add_global_mapping(
+      &module.fun.get_token_class_from_codepoint,
+      sherpa_get_token_class_from_codepoint as usize,
+    );
+
+    println!("{:X}", sherpa_get_token_class_from_codepoint as usize);
+
+    assert!(construct_utf8_lookup_function(&module).is_ok());
+    assert!(construct_merge_utf8_part_function(&module).is_ok());
+
     let simd = get_parse_function::<TailCallFunction>(&module, "simd_function")?;
-    let mut input = String::from("☺1111111122224\"");
+    let mut input = String::from("☺1111☺1111222245\"");
     let mut rt_ctx = LLVMParseContext::new();
     rt_ctx.scan_len = input.len() as u32;
     rt_ctx.scan_ptr = input.as_mut_ptr();
-    assert_eq!(simd.call(&mut rt_ctx), 0);
+    let result = simd.call(&mut rt_ctx);
+    assert_eq!(result, 0);
     assert_eq!(rt_ctx.scan_off as usize, input.len() - 1);
   };
 
@@ -706,9 +707,9 @@ fn test_compile_from_bytecode1() -> SherpaResult<()> {
     &mut j,
     "
   @IGNORE g:sp g:nl
- 
+
   <> test > \\hello P 
-  
+
   <> P > \\world \\goodby B
 
   <> B > \\mango
@@ -739,7 +740,7 @@ fn test_compile_from_bytecode1() -> SherpaResult<()> {
           0,
           0,
           "Completed Parse of [test]",
-          BlameColor::Red
+          BlameColor::RED
         )
       );
 
@@ -774,12 +775,12 @@ fn test_compile_from_bytecode1() -> SherpaResult<()> {
     file.write_all(module.module.to_string().as_bytes())?;
 
     module
-      .exe_engine
+      ._exe_engine
       .as_ref()?
       .add_global_mapping(&module.fun.allocate_stack, sherpa_allocate_stack as usize);
 
     module
-      .exe_engine
+      ._exe_engine
       .as_ref()?
       .add_global_mapping(&module.fun.free_stack, sherpa_free_stack as usize);
 
@@ -844,7 +845,6 @@ fn test_compile_json_parser() -> SherpaResult<()> {
     t:false                                 f:ast { { t_Bool, v:false } }
     |   
     t:true                                  f:ast { { t_Bool, v:true } }
-
 
 <> str > tk:string                          f:ast { { t_Str } }
 

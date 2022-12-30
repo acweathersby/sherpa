@@ -6,7 +6,7 @@ use crate::{
   util::get_num_of_available_threads,
 };
 use std::{
-  collections::{BTreeMap, BTreeSet},
+  collections::BTreeMap,
   fs::{create_dir_all, File},
   io::Write,
   path::PathBuf,
@@ -38,6 +38,8 @@ pub enum CachedSource {
   Path(PathBuf),
   String(String, PathBuf),
 }
+
+/// TODO:DOC
 
 pub struct BuildPipeline<'a> {
   /// The number of threads that can be used
@@ -103,6 +105,7 @@ impl<'a> BuildPipeline<'a> {
     )
   }
 
+  /// TODO:DOC
   pub fn set_ascript_ast_name(&mut self, name: &str) -> &mut Self {
     self.ascript_name = Some(name.to_string());
 
@@ -130,25 +133,31 @@ impl<'a> BuildPipeline<'a> {
     self
   }
 
+  /// TODO:DOC
   pub fn add_task(&mut self, task: PipelineTask) -> &mut Self {
     self.tasks.push((task, PipelineContext::new(&self)));
     self
   }
+
+  /// TODO:DOC
 
   pub fn set_parser_name(&mut self, parser_name: String) -> &mut Self {
     self.parser_name = parser_name;
     self
   }
 
+  /// TODO:DOC
   pub fn set_grammar_name(&mut self, grammar_name: String) -> &mut Self {
     self.grammar_name = grammar_name;
     self
   }
 
+  /// TODO:DOC
   pub fn get_journal(&self) -> Journal {
     self.journal.transfer()
   }
 
+  /// TODO:DOC
   pub fn run<Function: FnOnce(Vec<SherpaError>)>(
     &mut self,
     error_handler: Function,
@@ -281,7 +290,7 @@ pub struct PipelineContext<'a> {
   source_output_dir: PathBuf,
   build_output_dir:  PathBuf,
   /// This is true if the is built within a proc macro context.
-  is_proc:           bool,
+  _is_proc:          bool,
 }
 
 impl<'a> PipelineContext<'a> {
@@ -291,12 +300,12 @@ impl<'a> PipelineContext<'a> {
       build_output_dir:  pipeline.build_output_dir.clone(),
       pipeline:          None,
       artifact_paths:    vec![],
-      is_proc:           pipeline.proc_context,
+      _is_proc:          pipeline.proc_context,
     }
   }
 
-  pub fn in_proc_context(&self) -> bool {
-    self.is_proc
+  pub fn _in_proc_context(&self) -> bool {
+    self._is_proc
   }
 
   // Ensure output destinations exist.
@@ -411,11 +420,15 @@ pub fn compile_llvm_parser(grammar_source_path: &PathBuf, config: Config) -> boo
     _ => false,
   }
 }
-
+/// TODO: DOC
 #[derive(Debug, Clone, Copy)]
 pub enum SourceType {
+  /// TODO: DOC
   Rust,
+  /// TODO: DOC
   TypeScript,
+  /// TODO: DOC
   Go,
+  /// TODO: DOC
   Cpp,
 }

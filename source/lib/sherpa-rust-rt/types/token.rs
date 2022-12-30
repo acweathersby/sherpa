@@ -1,8 +1,8 @@
 use super::{Range, TokenRange};
 use std::{
-  fmt::{self, Write},
+  fmt::{self},
   hash::Hash,
-  ops::{Add, Sub},
+  ops::Add,
   path::PathBuf,
   sync::Arc,
 };
@@ -16,9 +16,9 @@ pub struct BlameColor {
 
 impl BlameColor {
   /// Sets the color of the highlight to blue
-  pub const Blue: Option<BlameColor> = Some(BlameColor::new("\u{001b}[31m", "\u{001b}[0m"));
+  pub const BLUE: Option<BlameColor> = Some(BlameColor::new("\u{001b}[31m", "\u{001b}[0m"));
   /// Sets the color of the highlight to red
-  pub const Red: Option<BlameColor> = Some(BlameColor::new("\u{001b}[31m", "\u{001b}[0m"));
+  pub const RED: Option<BlameColor> = Some(BlameColor::new("\u{001b}[31m", "\u{001b}[0m"));
 
   pub const fn new(highlight: &'static str, reset: &'static str) -> BlameColor {
     Self { highlight, reset }
@@ -171,17 +171,17 @@ impl Token {
   }
 
   pub fn get_line_char(&mut self) -> usize {
-    if let Some(source) = self.input.clone() {}
+    if let Some(..) = self.input.clone() {}
     0
   }
 
   /// Returns the line number of the token location. This may be
   /// zero if the token is not attached to its source.
   pub fn get_line(&mut self) -> usize {
-    let TokenRange { len, off, line_num, line_off } = self.inner;
+    let TokenRange { off, line_num, .. } = self.inner;
     if line_num == u32::MAX {
       if let Some(source) = self.input.clone() {
-        let mut root = off as usize;
+        let root = off as usize;
         let mut i = 0;
         let mut lines = 0;
 
@@ -206,7 +206,7 @@ impl Token {
 
   #[inline(always)]
   fn get_slice_range(&self, mut start: i32, mut end: i32) -> (usize, usize) {
-    let TokenRange { len, off, line_num, line_off } = self.inner;
+    let TokenRange { len, off, .. } = self.inner;
     use std::cmp::{max, min};
 
     if start < 0 {
@@ -381,7 +381,7 @@ impl Token {
   #[inline(always)]
   fn recalculate_line_offset(&mut self) {
     if let Some(source) = self.input.clone() {
-      let mut prev_line = Self::find_prev_line(&source, (self.inner.off + 1) as i64);
+      let prev_line = Self::find_prev_line(&source, (self.inner.off + 1) as i64);
       self.inner.line_off = prev_line.max(0).min(u32::MAX as i64) as u32;
     }
   }
@@ -456,7 +456,7 @@ impl Token {
           let diff = usize::max(leading_spaces, col_diff);
           let highlight_len = ((utf_string.len() as i64)
             - (diff as i64)
-            - i64::max(0, (next_line as i64 - (self.inner.off + self.inner.len) as i64)))
+            - i64::max(0, next_line as i64 - (self.inner.off + self.inner.len) as i64))
           .max(0) as usize;
 
           let lines_str = format!("{: >4}", line_num);
@@ -465,7 +465,7 @@ impl Token {
             &lines_str,
             utf_string,
             String::from(" ").repeat(4 + 1 + diff)
-              + &if let Some(BlameColor { highlight, reset }) = colors {
+              + &if let Some(BlameColor { highlight, .. }) = colors {
                 " ".to_string()
                   + highlight
                   + &String::from("^").repeat(highlight_len as usize)

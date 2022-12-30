@@ -16,7 +16,7 @@ pub(crate) fn address_string(bc_address: usize) -> String {
 pub(crate) struct BytecodeGrammarLookups {
   g: Arc<GrammarStore>,
   bc_to_prod: BTreeMap<u32, ProductionId>,
-  bc_to_rule: BTreeMap<u32, RuleId>,
+  _bc_to_rule: BTreeMap<u32, RuleId>,
   bc_to_symbol: BTreeMap<u32, SymbolID>,
 }
 
@@ -30,23 +30,15 @@ impl BytecodeGrammarLookups {
     let bc_to_symbol =
       g.symbols.iter().map(|(id, s)| (s.bytecode_id, *id)).collect::<BTreeMap<_, _>>();
 
-    BytecodeGrammarLookups { g, bc_to_prod, bc_to_rule, bc_to_symbol }
+    BytecodeGrammarLookups { g, bc_to_prod, _bc_to_rule: bc_to_rule, bc_to_symbol }
   }
 
   pub fn get_prod(&self, bytecode: u32) -> Option<&Production> {
     self.g.productions.get(self.bc_to_prod.get(&bytecode)?)
   }
 
-  pub fn get_rule(&self, bytecode: u32) -> Option<&Rule> {
-    self.g.rules.get(self.bc_to_rule.get(&bytecode)?)
-  }
-
   pub fn get_sym(&self, bytecode: u32) -> Option<&Symbol> {
     self.g.symbols.get(self.bc_to_symbol.get(&bytecode)?)
-  }
-
-  pub fn get_grammar(&self) -> &GrammarStore {
-    &self.g
   }
 }
 //
@@ -130,7 +122,7 @@ pub(crate) fn disassemble_state(
       INSTRUCTION::I06_FORK_TO => {
         let target_production = instruction & 0xFFFF;
         let num_of_states = (instruction >> 16) & 0xFFFF;
-        let end = (so + 1 + num_of_states as usize);
+        let end = so + 1 + num_of_states as usize;
         let (string, offset) = ds(bc, end, lu);
         let mut state_strings = vec![];
 
@@ -176,7 +168,7 @@ pub(crate) fn disassemble_state(
         so,
         lu,
         "HASH",
-        |states: &[u32], table_entry_offset: usize, state_offset: usize| {
+        |states: &[u32], table_entry_offset: usize, _: usize| {
           (
             (states[table_entry_offset] >> 11 & 0x7FF) as usize,
             (states[table_entry_offset] & 0x7FF),
@@ -249,7 +241,7 @@ pub(crate) fn generate_table_string(
     header(idx),
     table_name,
     input_type_to_name(input_type),
-    lexer_type == LEXER_TYPE::PEEK
+    lexer_type == LexerType::PEEK
   ) + &(if scan_index.get_address() > 0 {
     format!("\n{}SCANNER ADDRESS {}", header(idx + 1), address_string(scan_index.get_address()))
   } else {
@@ -302,11 +294,11 @@ fn create_skip_entry(
 
 fn input_type_to_name(input_type: u32) -> &'static str {
   match input_type {
-    INPUT_TYPE::T01_PRODUCTION => "PRODUCTION",
-    INPUT_TYPE::T02_TOKEN => "TOKEN",
-    INPUT_TYPE::T03_CLASS => "CLASS",
-    INPUT_TYPE::T04_CODEPOINT => "CODEPOINT",
-    INPUT_TYPE::T05_BYTE => "BYTE",
+    InputType::T01_PRODUCTION => "PRODUCTION",
+    InputType::T02_TOKEN => "TOKEN",
+    InputType::T03_CLASS => "CLASS",
+    InputType::T04_CODEPOINT => "CODEPOINT",
+    InputType::T05_BYTE => "BYTE",
     _ => "TOKEN",
   }
 }
@@ -314,20 +306,20 @@ fn input_type_to_name(input_type: u32) -> &'static str {
 fn get_input_id(lu: Option<&BytecodeGrammarLookups>, token_id: u32, input_type: u32) -> String {
   if let Some(lu) = lu {
     match input_type {
-      INPUT_TYPE::T01_PRODUCTION => {
+      InputType::T01_PRODUCTION => {
         let production = &lu.get_prod(token_id).unwrap().name;
         format!("{:<3} [{:^1}]", token_id, production)
       }
-      INPUT_TYPE::T02_TOKEN => {
+      InputType::T02_TOKEN => {
         if let Some(symbol) = lu.get_sym(token_id) {
           format!("{:<3} [{:^1}]", token_id, symbol.friendly_name)
         } else {
           token_id.to_string()
         }
       }
-      INPUT_TYPE::T03_CLASS => token_id.to_string(),
-      INPUT_TYPE::T04_CODEPOINT => token_id.to_string(),
-      INPUT_TYPE::T05_BYTE => {
+      InputType::T03_CLASS => token_id.to_string(),
+      InputType::T04_CODEPOINT => token_id.to_string(),
+      InputType::T05_BYTE => {
         if token_id < 128 {
           format!(
             "{:<3} [{:^3}]",
@@ -347,11 +339,11 @@ fn get_input_id(lu: Option<&BytecodeGrammarLookups>, token_id: u32, input_type: 
     token_id.to_string()
   }
 }
-// Making the Journal reference an optional requirement allows this function to
-// work independent of any grammar that may been input for the bytecode generation.
-// This allows the use of this function in situations where the bytecode is the only
-// thing a user may have access to but they still want to get some insight in to the
-// operations of the state machine.
+/// Making the Journal reference an optional requirement allows this function to
+/// work independent of any grammar that may been input for the bytecode generation.
+/// This allows the use of this function in situations where the bytecode is the only
+/// thing a user may have access to but they still want to get some insight in to the
+/// operations of the state machine.
 pub fn generate_disassembly(output: &BytecodeOutput, j: Option<&mut Journal>) -> String {
   let lu = j.map(|j| BytecodeGrammarLookups::new(j.grammar().unwrap()));
 
@@ -374,19 +366,7 @@ pub fn generate_disassembly(output: &BytecodeOutput, j: Option<&mut Journal>) ->
   states_strings.join("\n")
 }
 
-pub(crate) fn print_bytecode_states(output: &BytecodeOutput, j: Option<&mut Journal>) {
-  eprintln!("{}", generate_disassembly(output, j));
-}
-
-pub(crate) fn print_bytecode_state(
-  idx: usize,
-  output: &BytecodeOutput,
-  lu: Option<&BytecodeGrammarLookups>,
-) {
-  let string = disassemble_state(&output.bytecode, idx, lu).0;
-  eprintln!("{}", string);
-}
-
+#[cfg(test)]
 mod bytecode_debugging_tests {
   use std::collections::HashMap;
 

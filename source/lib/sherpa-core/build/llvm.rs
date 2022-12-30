@@ -59,10 +59,10 @@ pub fn build_llvm_parser_interface<'a>() -> PipelineTask {
 
 pub enum OutputType {
   Rust,
-  Cpp,
-  TypeScript,
-  JavaScript,
-  Java,
+  _Cpp,
+  _TypeScript,
+  _JavaScript,
+  _Java,
 }
 
 fn _apply_llvm_optimizations(opt: OptimizationLevel, ctx: &crate::llvm::LLVMParserModule) {
@@ -353,8 +353,7 @@ pub fn build_llvm_parser(
         SherpaResult::Ok(ctx) => {
           if task_ctx.get_journal().config().enable_ascript {
             unsafe {
-              crate::llvm::ascript_functions::construct_ast_builder::<(DummyASTEnum)>(&ctx)
-                .unwrap();
+              crate::llvm::ascript_functions::construct_ast_builder::<DummyASTEnum>(&ctx).unwrap();
             }
           }
 
@@ -439,7 +438,7 @@ pub fn build_llvm_parser(
             }
           }
         }
-        err => Err(vec![SherpaError::from("Unable to compile llvm bitcode")]),
+        _ => Err(vec![SherpaError::from("Unable to compile llvm bitcode")]),
       }
     }),
     require_ascript: false,

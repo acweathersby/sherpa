@@ -1,12 +1,11 @@
 use super::{
-  construct_LR,
+  _construct_LR,
   construct_recursive_ascent,
   construct_recursive_descent,
   ir::construct_ir,
   utils::{generate_recursive_descent_items, generate_scanner_symbol_items},
 };
 use crate::{
-  compile::{compile_bytecode, optimize_ir_states, GrammarStore},
   grammar::hash_id_value_u64,
   journal::{config::ParseAlgorithm, Journal},
   types::{
@@ -24,7 +23,7 @@ use std::{
   thread,
 };
 
-pub(crate) fn compile_production_states_LR(
+pub(crate) fn _compile_production_states_LR(
   j: &mut Journal,
   prod_id: ProductionId,
 ) -> SherpaResult<Vec<Box<IRState>>> {
@@ -41,7 +40,7 @@ pub(crate) fn compile_production_states_LR(
 
   let items = generate_recursive_descent_items(j, prod_id);
 
-  let t = match construct_LR(j, ScanType::None, &items) {
+  let t = match _construct_LR(j, ScanType::None, &items) {
     SherpaResult::Ok((t, _)) => t,
     SherpaResult::Err(err) => {
       j.report_mut().stop_timer("Graph Compile");
@@ -386,7 +385,7 @@ pub fn compile_states(
           for state in chunk {
             let string = state.to_string();
             if let Err(err) = state.compile_ast() {
-              // panic!("\n{} {}", err, string)
+              eprintln!("\n{} {}", err, string)
             };
           }
         })

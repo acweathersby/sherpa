@@ -230,16 +230,6 @@ pub(crate) fn construct_module<'a>(j:&mut Journal,  module_name: &str, ctx: &'a 
       ),
       None,
     ),
-    memset: module.add_function(
-      "llvm.memset.p0.i32",
-      ctx.void_type().fn_type(
-        &[i8.ptr_type(Generic).into(), i8.into(), i32.into(), ctx.bool_type().into()],
-        false,
-      ),
-      None,
-    ),
-    max: module.add_function("llvm.umax.i32", i32.fn_type(&[i32.into(), i32.into()], false), None),
-    min: module.add_function("llvm.umin.i32", i32.fn_type(&[i32.into(), i32.into()], false), None),
     ctlz_i8: module.add_function(
       "llvm.ctlz.i8",
       i8.fn_type(&[i8.into(), ctx.bool_type().into()], false),
@@ -274,11 +264,9 @@ pub(crate) fn construct_module<'a>(j:&mut Journal,  module_name: &str, ctx: &'a 
     },
     fun,
     module,
-    exe_engine: None,
+    _exe_engine: None,
   }
 }
-
-
 
 pub(crate) unsafe fn construct_emit_end_of_parse(module: &LLVMParserModule) -> SherpaResult<()> {
   let LLVMParserModule { builder: b, ctx, fun: funct, .. } = module;
@@ -761,6 +749,7 @@ pub(crate) fn construct_utf8_lookup_function(module: &LLVMParserModule) -> Sherp
   }
 }
 
+/// Constructs PublicFunctions::merge_utf8_part
 pub(crate) unsafe fn construct_merge_utf8_part_function(
   module: &LLVMParserModule,
 ) -> SherpaResult<()> {
@@ -807,7 +796,6 @@ where
 
   SherpaResult::Ok(call_site)
 }
-
 
 pub(crate) unsafe fn construct_next_function<'a>(module: &'a LLVMParserModule) -> SherpaResult<()> {
   let LLVMParserModule { builder: b, ctx, fun, .. } = module;

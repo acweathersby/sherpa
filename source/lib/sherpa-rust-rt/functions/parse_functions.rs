@@ -10,7 +10,7 @@ pub fn dispatch<T: ByteReader + MutByteReader>(
 ) -> ParseAction {
   use ParseAction::*;
 
-  let mut i = (ctx.get_active_state() & STATE_ADDRESS_MASK);
+  let mut i = ctx.get_active_state() & STATE_ADDRESS_MASK;
 
   loop {
     let instr = INSTRUCTION::from(bc, i as usize);
@@ -20,33 +20,33 @@ pub fn dispatch<T: ByteReader + MutByteReader>(
     use InstructionType::*;
 
     i = match instr.to_type() {
-      SHIFT => {
+      Shift => {
         let (action, i) = shift(i, instr, ctx, r);
         ctx.set_active_state_to(i);
         break action;
       }
-      GOTO => goto(i, instr, ctx),
-      SET_PROD => set_production(i, instr, ctx),
-      REDUCE => {
+      Goto => goto(i, instr, ctx),
+      SetProd => set_production(i, instr, ctx),
+      Reduce => {
         let (action, i) = reduce(i, instr, ctx);
         ctx.set_active_state_to(i);
         break action;
       }
-      TOKEN => set_token_state(i, instr, ctx),
-      FORK_TO => {
+      Token => set_token_state(i, instr, ctx),
+      ForkTo => {
         let (action, i) = fork(i, instr);
         ctx.set_active_state_to(i);
         break action;
       }
-      SCAN => scan(),
-      EAT_CRUMBS => noop(i),
-      VECTOR_BRANCH => vector_jump(i, r, ctx, bc),
-      HASH_BRANCH => hash_jump(i, r, ctx, bc),
-      SET_FAIL_STATE => set_fail(),
-      REPEAT => repeat(),
-      NOOP13 => noop(i),
-      ASSERT_SHIFT => DEFAULT_FAIL_INSTRUCTION_ADDRESS,
-      FAIL => break FailState,
+      Scan => scan(),
+      EatCrumbs => noop(i),
+      VectorBranch => vector_jump(i, r, ctx, bc),
+      HashBranch => hash_jump(i, r, ctx, bc),
+      SetFailState => set_fail(),
+      Repeat => repeat(),
+      Noop13 => noop(i),
+      AssertShift => DEFAULT_FAIL_INSTRUCTION_ADDRESS,
+      Fail => break FailState,
       _ => break CompleteState,
     };
   }
@@ -65,7 +65,7 @@ fn shift<T: ByteReader + MutByteReader + MutByteReader>(
   }
 
   let mut skip = ctx.anchor;
-  let mut shift = ctx.assert;
+  let shift = ctx.assert;
 
   let next_token = next_token(shift);
 
@@ -79,20 +79,23 @@ fn shift<T: ByteReader + MutByteReader + MutByteReader>(
 
   skip.0.len = shift.0.off - skip.0.off;
 
-  (ParseAction::Shift { 
-    anchor_byte_offset:skip.0.off,
-    token_byte_offset:shift.0.off,
-    token_byte_length:shift.0.off,
-    token_line_count: shift.0.line_num,
-    token_line_offset: shift.0.line_off,
-   }, i + 1)
+  (
+    ParseAction::Shift {
+      anchor_byte_offset: skip.0.off,
+      token_byte_offset:  shift.0.off,
+      token_byte_length:  shift.0.off,
+      token_line_count:   shift.0.line_num,
+      token_line_offset:  shift.0.line_off,
+    },
+    i + 1,
+  )
 }
 
 fn next_token(shift: (TokenRange, u32)) -> (TokenRange, u32) {
-    let mut next_token = shift.0;
-    next_token.off +=next_token.len;
-    next_token.len = 0;
-    (next_token, shift.1)
+  let mut next_token = shift.0;
+  next_token.off += next_token.len;
+  next_token.len = 0;
+  (next_token, shift.1)
 }
 
 #[inline]
@@ -108,7 +111,6 @@ fn reduce<T: ByteReader + MutByteReader>(
   (
     if symbol_count == 0x0FFF {
       todo!("Acquire symbol count from symbol accumulator");
-      ParseAction::Reduce { production_id, rule_id, symbol_count: 0 }
     } else {
       ParseAction::Reduce { production_id, rule_id, symbol_count }
     },
@@ -127,29 +129,26 @@ fn goto<T: ByteReader + MutByteReader>(
 }
 
 #[inline]
-fn eat_crumbs<T: ByteReader + MutByteReader>(
+fn _eat_crumbs<T: ByteReader + MutByteReader>(
   i: u32,
   instr: INSTRUCTION,
   ctx: &mut ParseContext<T>,
 ) -> u32 {
   ctx.push_state(instr.get_value());
   // The collapse function takes the current production, retasked
-  // to be a `lane` selector, and compares that against the a 
-  // sentinal value. If the value matches the production, 
+  // to be a `lane` selector, and compares that against the a
+  // sentinal value. If the value matches the production,
   // then one of three things will occur:
   // 1. A shift is issued of length N, which is defined in
   //    the next instruction on the stack.
   // 2. A rule reduction is issued, with rule id and production
-  //    id information stored in the next instruction on the 
-  //    stack. 
-  // 3. A lane merge occurs, and the production value is changed 
+  //    id information stored in the next instruction on the
+  //    stack.
+  // 3. A lane merge occurs, and the production value is changed
   //    to the value of the new lane (which is really an earlier
   //    generation lane).
   // If the lane does not match, we still pop off the next value
   // and let the compiler proceed.
-
-
-
   i + 1
 }
 
@@ -217,7 +216,7 @@ fn noop(i: u32) -> u32 {
 }
 
 #[inline]
-fn skip_token<T: ByteReader + MutByteReader>(ctx: &mut ParseContext<T>, r: &mut T) {
+fn skip_token<T: ByteReader + MutByteReader>(ctx: &mut ParseContext<T>) {
   if ctx.in_peek_mode() {
     ctx.peek = next_token(ctx.peek);
   } else {
@@ -240,9 +239,9 @@ pub fn hash_jump<T: ByteReader + MutByteReader>(
   let TableHeaderData {
     input_type,
     lexer_type,
-    table_length,
     table_meta: modulo_base,
     scan_state_entry_instruction: scan_index,
+    ..
   } = TableHeaderData::from_bytecode(i, bc);
 
   let hash_mask = (1 << modulo_base) - 1;
@@ -250,7 +249,7 @@ pub fn hash_jump<T: ByteReader + MutByteReader>(
 
   loop {
     let input_value = match input_type {
-      INPUT_TYPE::T01_PRODUCTION => ctx.get_production(),
+      InputType::T01_PRODUCTION => ctx.get_production(),
       _ => {
         get_token_value(lexer_type, input_type, r, scan_index.get_address() as u32, ctx, bc) as u32
       }
@@ -265,7 +264,7 @@ pub fn hash_jump<T: ByteReader + MutByteReader>(
 
       if value == input_value {
         if off == 0x7FF {
-          skip_token(ctx, r);
+          skip_token(ctx);
           break;
         } else {
           return i as u32 + off;
@@ -300,7 +299,7 @@ pub fn vector_jump<T: ByteReader + MutByteReader>(
 
   loop {
     let input_value = match input_type {
-      INPUT_TYPE::T01_PRODUCTION => ctx.get_production(),
+      InputType::T01_PRODUCTION => ctx.get_production(),
       _ => {
         get_token_value(lexer_type, input_type, r, scan_index.get_address() as u32, ctx, bc) as u32
       }
@@ -311,7 +310,7 @@ pub fn vector_jump<T: ByteReader + MutByteReader>(
     if value_index < table_length {
       let off = unsafe { *bc.get_unchecked(table_start + value_index as usize) };
       if off == 0xFFFF_FFFF {
-        skip_token(ctx, r);
+        skip_token(ctx);
         continue;
       } else {
         return i as u32 + off;
@@ -332,7 +331,7 @@ fn get_token_value<T: ByteReader + MutByteReader>(
   bc: &[u32],
 ) -> i32 {
   let mut active_token = match lex_type {
-        LEXER_TYPE::PEEK => {
+        LexerType::PEEK => {
             let basis_token = if ctx.in_peek_mode() {
                 ctx.peek
             } else {
@@ -347,7 +346,6 @@ fn get_token_value<T: ByteReader + MutByteReader>(
         }
         _ /*| LEXER_TYPE::ASSERT*/ => {
             if ctx.in_peek_mode() {
-                
                 ctx.set_peek_mode_to(false);
 
                 r.set_cursor_to(&ctx.assert.0 );
@@ -358,7 +356,7 @@ fn get_token_value<T: ByteReader + MutByteReader>(
     };
 
   match input_type {
-    INPUT_TYPE::T03_CLASS => {
+    InputType::T03_CLASS => {
       active_token.0.len = r.codepoint_byte_length();
 
       if ctx.in_peek_mode() {
@@ -370,7 +368,7 @@ fn get_token_value<T: ByteReader + MutByteReader>(
       r.class() as i32
     }
 
-    INPUT_TYPE::T04_CODEPOINT => {
+    InputType::T04_CODEPOINT => {
       active_token.0.len = r.codepoint_byte_length();
 
       if ctx.in_peek_mode() {
@@ -382,7 +380,7 @@ fn get_token_value<T: ByteReader + MutByteReader>(
       r.codepoint() as i32
     }
 
-    INPUT_TYPE::T05_BYTE => {
+    InputType::T05_BYTE => {
       active_token.0.len = 1;
 
       if ctx.in_peek_mode() {
@@ -450,7 +448,7 @@ fn token_scan<T: ByteReader + MutByteReader>(
   r: &mut T,
   bc: &[u32],
 ) -> (TokenRange, u32) {
-  if (token.1 != 0) {
+  if token.1 != 0 {
     return token;
   }
 
@@ -467,9 +465,7 @@ fn token_scan<T: ByteReader + MutByteReader>(
         ctx.set_production_to(id - 1);
       }
 
-      return (
-        Default::default(), END_OF_INPUT_TOKEN_ID
-      );
+      return (Default::default(), END_OF_INPUT_TOKEN_ID);
     }
   }
 
@@ -515,7 +511,7 @@ fn token_scan<T: ByteReader + MutByteReader>(
       } else {
         let mask_gate = NORMAL_STATE_FLAG << (scan_ctx.in_fail_mode() as u32);
 
-        if ((scan_ctx.get_active_state() & mask_gate) != 0) {
+        if (scan_ctx.get_active_state() & mask_gate) != 0 {
           let fail_mode = loop {
             match dispatch(r, &mut scan_ctx, bc) {
               ParseAction::CompleteState => {
@@ -535,9 +531,10 @@ fn token_scan<T: ByteReader + MutByteReader>(
       }
     }
   } {
-    Some(token) => (token),
+    Some(token) => token,
     _ => panic!("Unusable State"),
-  }}
+  }
+}
 
 /// Start or continue a parse on an input
 #[inline]
@@ -564,7 +561,7 @@ pub fn get_next_action<T: ByteReader + MutByteReader>(
     } else {
       let mask_gate = NORMAL_STATE_FLAG << (ctx.in_fail_mode() as u32);
 
-      if (ctx.is_interrupted() || (ctx.get_active_state() & mask_gate) != 0) {
+      if ctx.is_interrupted() || (ctx.get_active_state() & mask_gate) != 0 {
         ctx.set_interrupted_to(true);
 
         match dispatch(r, ctx, bc) {

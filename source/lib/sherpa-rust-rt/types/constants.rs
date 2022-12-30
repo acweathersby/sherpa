@@ -56,22 +56,22 @@ pub const END_OF_INPUT_TOKEN_ID: u32 = 0x1;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum InstructionType {
-  PASS       = 0,
-  SHIFT      = 1,
-  GOTO       = 2,
-  SET_PROD   = 3,
-  REDUCE     = 4,
-  TOKEN      = 5,
-  FORK_TO    = 6,
-  SCAN       = 7,
-  EAT_CRUMBS = 8,
-  VECTOR_BRANCH = 9,
-  HASH_BRANCH = 10,
-  SET_FAIL_STATE = 11,
-  REPEAT     = 12,
-  NOOP13     = 13,
-  ASSERT_SHIFT = 14,
-  FAIL       = 15,
+  Pass       = 0,
+  Shift      = 1,
+  Goto       = 2,
+  SetProd    = 3,
+  Reduce     = 4,
+  Token      = 5,
+  ForkTo     = 6,
+  Scan       = 7,
+  EatCrumbs  = 8,
+  VectorBranch = 9,
+  HashBranch = 10,
+  SetFailState = 11,
+  Repeat     = 12,
+  Noop13     = 13,
+  AssertShift = 14,
+  Fail       = 15,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Default)]
@@ -101,11 +101,11 @@ impl INSTRUCTION {
   pub const I15_FAIL: u32 = 15 << 28;
   pub const I15_FALL_THROUGH: u32 = 15 << 28 | 1;
 
-  pub fn Pass() -> INSTRUCTION {
+  pub fn pass() -> INSTRUCTION {
     INSTRUCTION(0, 1)
   }
 
-  pub fn Fail() -> INSTRUCTION {
+  pub fn fail() -> INSTRUCTION {
     INSTRUCTION(0, 2)
   }
 
@@ -134,7 +134,7 @@ impl INSTRUCTION {
   }
 
   pub fn get_token_value(&self) -> u32 {
-    debug_assert!(self.is_TOKEN());
+    debug_assert!(self.is_token());
 
     self.get_contents() & 0x00FF_FFFF
   }
@@ -143,7 +143,7 @@ impl INSTRUCTION {
   /// Otherwise returns an invalid instruction.
   pub fn goto(&self, bc: &[u32]) -> Self {
     match self.to_type() {
-      InstructionType::GOTO => Self::from(bc, (self.0 & GOTO_STATE_ADDRESS_MASK) as usize),
+      InstructionType::Goto => Self::from(bc, (self.0 & GOTO_STATE_ADDRESS_MASK) as usize),
       _ => Self::invalid(),
     }
   }
@@ -151,7 +151,7 @@ impl INSTRUCTION {
   /// IF this is a branching instruction (HASH or VECTOR), then returns the first instruction
   /// located within the default block. Otherwise returns an invalid instruction
   pub fn branch_default(&self, bc: &[u32]) -> Self {
-    if self.is_HASH_BRANCH() || self.is_VECTOR_BRANCH() {
+    if self.is_hash_branch() || self.is_vector_branch() {
       Self::from(&bc, (bc[self.get_address() + 3] as usize) + self.get_address())
     } else {
       Self::invalid()
@@ -166,67 +166,67 @@ impl INSTRUCTION {
     self.0
   }
 
-  pub fn is_PASS(&self) -> bool {
+  pub fn is_pass(&self) -> bool {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I00_PASS
   }
 
-  pub fn is_SHIFT(&self) -> bool {
+  pub fn is_shift(&self) -> bool {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I01_SHIFT
   }
 
-  pub fn is_GOTO(&self) -> bool {
+  pub fn is_goto(&self) -> bool {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I02_GOTO
   }
 
-  pub fn is_SET_PROD(&self) -> bool {
+  pub fn is_set_prod(&self) -> bool {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I03_SET_PROD
   }
 
-  pub fn is_REDUCE(&self) -> bool {
+  pub fn is_reduce(&self) -> bool {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I04_REDUCE
   }
 
-  pub fn is_TOKEN(&self) -> bool {
+  pub fn is_token(&self) -> bool {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I05_TOKEN
   }
 
-  pub fn is_FORK(&self) -> bool {
+  pub fn is_fork(&self) -> bool {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I06_FORK_TO
   }
 
-  pub fn is_SCAN(&self) -> bool {
+  pub fn is_scan(&self) -> bool {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I07_SCAN
   }
 
-  pub fn is_NOOP8(&self) -> bool {
+  pub fn is_noop_8(&self) -> bool {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I08_EAT_CRUMBS
   }
 
-  pub fn is_VECTOR_BRANCH(&self) -> bool {
+  pub fn is_vector_branch(&self) -> bool {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I09_VECTOR_BRANCH
   }
 
-  pub fn is_HASH_BRANCH(&self) -> bool {
+  pub fn is_hash_branch(&self) -> bool {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I10_HASH_BRANCH
   }
 
-  pub fn is_SET_FAIL_STATE(&self) -> bool {
+  pub fn is_set_fail_state(&self) -> bool {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I11_SET_FAIL_STATE
   }
 
-  pub fn is_REPEAT(&self) -> bool {
+  pub fn is_repeat(&self) -> bool {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I12_REPEAT
   }
 
-  pub fn is_NOOP13(&self) -> bool {
+  pub fn is_noop_13(&self) -> bool {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I13_NOOP
   }
 
-  pub fn is_ASSERT_SHIFT(&self) -> bool {
+  pub fn is_assert_shift(&self) -> bool {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I14_ASSERT_SHIFT
   }
 
-  pub fn is_FAIL(&self) -> bool {
+  pub fn is_fail(&self) -> bool {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I15_FAIL
   }
 
@@ -240,23 +240,23 @@ impl INSTRUCTION {
 
   pub fn to_type(&self) -> InstructionType {
     match self.0 & INSTRUCTION_HEADER_MASK {
-      Self::I00_PASS => InstructionType::PASS,
-      Self::I01_SHIFT => InstructionType::SHIFT,
-      Self::I02_GOTO => InstructionType::GOTO,
-      Self::I03_SET_PROD => InstructionType::SET_PROD,
-      Self::I04_REDUCE => InstructionType::REDUCE,
-      Self::I05_TOKEN => InstructionType::TOKEN,
-      Self::I06_FORK_TO => InstructionType::FORK_TO,
-      Self::I07_SCAN => InstructionType::SCAN,
-      Self::I08_EAT_CRUMBS => InstructionType::EAT_CRUMBS,
-      Self::I09_VECTOR_BRANCH => InstructionType::VECTOR_BRANCH,
-      Self::I10_HASH_BRANCH => InstructionType::HASH_BRANCH,
-      Self::I11_SET_FAIL_STATE => InstructionType::SET_FAIL_STATE,
-      Self::I12_REPEAT => InstructionType::REPEAT,
-      Self::I13_NOOP => InstructionType::NOOP13,
-      Self::I14_ASSERT_SHIFT => InstructionType::ASSERT_SHIFT,
-      Self::I15_FAIL => InstructionType::FAIL,
-      _ => InstructionType::PASS,
+      Self::I00_PASS => InstructionType::Pass,
+      Self::I01_SHIFT => InstructionType::Shift,
+      Self::I02_GOTO => InstructionType::Goto,
+      Self::I03_SET_PROD => InstructionType::SetProd,
+      Self::I04_REDUCE => InstructionType::Reduce,
+      Self::I05_TOKEN => InstructionType::Token,
+      Self::I06_FORK_TO => InstructionType::ForkTo,
+      Self::I07_SCAN => InstructionType::Scan,
+      Self::I08_EAT_CRUMBS => InstructionType::EatCrumbs,
+      Self::I09_VECTOR_BRANCH => InstructionType::VectorBranch,
+      Self::I10_HASH_BRANCH => InstructionType::HashBranch,
+      Self::I11_SET_FAIL_STATE => InstructionType::SetFailState,
+      Self::I12_REPEAT => InstructionType::Repeat,
+      Self::I13_NOOP => InstructionType::Noop13,
+      Self::I14_ASSERT_SHIFT => InstructionType::AssertShift,
+      Self::I15_FAIL => InstructionType::Fail,
+      _ => InstructionType::Pass,
     }
   }
 
@@ -285,9 +285,9 @@ impl INSTRUCTION {
 
 #[non_exhaustive]
 
-pub struct INPUT_TYPE;
+pub struct InputType;
 
-impl INPUT_TYPE {
+impl InputType {
   pub const T01_PRODUCTION: u32 = 0;
   pub const T02_TOKEN: u32 = 1;
   pub const T03_CLASS: u32 = 2;
@@ -296,8 +296,8 @@ impl INPUT_TYPE {
 }
 
 #[non_exhaustive]
-pub struct LEXER_TYPE;
-impl LEXER_TYPE {
+pub struct LexerType;
+impl LexerType {
   pub const ASSERT: u32 = 1;
   pub const PEEK: u32 = 2;
 }

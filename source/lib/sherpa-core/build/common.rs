@@ -1,13 +1,4 @@
-use crate::{
-  ascript::{
-    rust::{ascript_type_to_string, create_type_initializer_value, render_expression},
-    types::AScriptStore,
-  },
-  grammar::data::ast::{ASTNode, AST_NamedReference},
-  types::*,
-  writer::code_writer::CodeWriter,
-  *,
-};
+use crate::{types::*, writer::code_writer::CodeWriter};
 use std::{collections::BTreeMap, io::Write};
 
 pub(crate) fn write_rust_entry_functions_bytecode<W: Write>(

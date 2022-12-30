@@ -883,13 +883,13 @@ pub fn compile_struct_props(
                   };
                   existing.body_ids.insert(rule.id);
                 }
-                (GenericStruct(mut btree_set), Struct(typeB), ..) => {
+                (GenericStruct(mut btree_set), Struct(_), ..) => {
                   btree_set.insert(prop_type);
                   existing.type_val =
                     TaggedType { type_: GenericStruct(btree_set), ..Default::default() };
                   existing.body_ids.insert(rule.id);
                 }
-                (Struct(typeA), GenericStruct(mut btree_set), ..) => {
+                (Struct(_), GenericStruct(mut btree_set), ..) => {
                   btree_set.insert(existing.type_val.clone());
                   existing.type_val =
                     TaggedType { type_: GenericStruct(btree_set), ..Default::default() };
@@ -954,7 +954,7 @@ pub fn compile_struct_props(
       struct_.prop_ids.append(&mut prop_ids);
       struct_.include_token = include_token || struct_.include_token;
     }
-    btree_map::Entry::Vacant(entry) => unreachable!("Struct should be defined at this point"),
+    btree_map::Entry::Vacant(_) => unreachable!("Struct should be defined at this point"),
   }
 
   (AScriptTypeVal::Struct(id.clone()), errors)
@@ -984,7 +984,7 @@ pub fn get_specified_vector_from_generic_vec_values(
         vals
           .iter()
           .flat_map(|n| match n {
-            AScriptTypeVal::Struct(id) => {
+            AScriptTypeVal::Struct(_) => {
               vec![TaggedType { type_: n.clone(), ..Default::default() }]
             }
             AScriptTypeVal::GenericStruct(struct_ids) => struct_ids.iter().cloned().collect(),

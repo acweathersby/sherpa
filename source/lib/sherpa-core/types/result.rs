@@ -12,9 +12,13 @@ use std::{
 /// A result type that uses the [SherpaError] enum type for errors results.
 #[derive(Debug)]
 pub enum SherpaResult<T> {
+  /// TODO: Docs
   Ok(T),
+  /// TODO: Docs
   Err(SherpaError),
+  /// TODO: Docs
   MultipleErrors(Vec<SherpaError>),
+  /// TODO: Docs
   None,
 }
 

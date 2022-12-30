@@ -1,5 +1,5 @@
 use crate::{
-  intermediate::utils::{hash_group_btreemap, hash_group_vec},
+  intermediate::utils::hash_group_btreemap,
   types::{TransitionGraph as TPack, *},
 };
 use std::{
@@ -100,9 +100,7 @@ pub(super) fn get_follow_items(
       // Grab all productions from the closure that match the end item's
       // production.
       match { (completed_item, closure, prev_node, current_node) } {
-        (completed_item, empty_closure, Some(prev_node), current_node)
-          if empty_closure.is_empty() =>
-        {
+        (completed_item, empty_closure, Some(prev_node), _) if empty_closure.is_empty() => {
           #[cfg(follow_tracking)]
           eprintln!("no closure for Node [{:?}] - Selecting previous node", current_node);
           completed_items.push_back((state, LinkedItem {

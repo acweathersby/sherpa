@@ -37,8 +37,7 @@ use crate::{
   writer::code_writer::*,
 };
 use std::{
-  collections::{btree_set, BTreeMap, BTreeSet, VecDeque},
-  fmt::format,
+  collections::{BTreeMap, BTreeSet, VecDeque},
   io::{Result, Write},
   vec,
 };
@@ -321,7 +320,7 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
       unreachable!(
         "\n\nProduction result not been resolved\n[{}] == {}\n\n\n{}\n\n",
         ast.g.get_production_plain_name(&prod_id),
-        rule.tok.blame(1, 1, "", BlameColor::Red),
+        rule.tok.blame(1, 1, "", BlameColor::RED),
         prod_data
           .iter()
           .map(|(p, _)| { p.debug_string(Some(&ast.g)) })
@@ -966,7 +965,7 @@ fn extract_struct_types(types: &BTreeSet<AScriptTypeVal>) -> BTreeSet<TaggedType
   types
     .iter()
     .filter_map(|t| match t {
-      AScriptTypeVal::Struct(id) => Some(TaggedType { type_: t.clone(), ..Default::default() }),
+      AScriptTypeVal::Struct(_) => Some(TaggedType { type_: t.clone(), ..Default::default() }),
       _ => None,
     })
     .collect::<BTreeSet<_>>()

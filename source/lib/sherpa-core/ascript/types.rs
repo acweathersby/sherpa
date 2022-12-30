@@ -295,7 +295,7 @@ impl AScriptTypeVal {
       Undefined => "Undefined".to_string(),
       TokenRange => "Token".to_string(),
       Token => "Token".to_string(),
-      GenericStruct(sub_types) => "Node".to_string(),
+      GenericStruct(_) => "Node".to_string(),
       Any => "Any".to_string(),
       UnresolvedProduction(id) => match g {
         Some(g) => {
@@ -349,9 +349,8 @@ impl AScriptTypeVal {
       GenericStructVec(..) => "NODES".to_string(),
       Undefined => "Undefined".to_string(),
       Token => "TOKEN".to_string(),
-      GenericStruct(sub_types) => "Node".to_string(),
+      GenericStruct(_) => "Node".to_string(),
       Any => "Any".to_string(),
-      _ => "TOKEN_RANGE".to_string(),
       UnresolvedProduction(id) => match g {
         Some(g) => {
           let name = g.get_production_plain_name(id);
@@ -359,6 +358,7 @@ impl AScriptTypeVal {
         }
         None => format!("UnresolvedProduction[{:?}]", id),
       },
+      _ => "TOKEN_RANGE".to_string(),
     }
   }
 }
@@ -490,11 +490,6 @@ impl AScriptStore {
 
   pub fn type_name(&self) -> String {
     format!("{}Type", self.ast_type_name)
-  }
-
-  /// The name for the generic type wrapper
-  pub fn gen_name(&self) -> String {
-    format!("Gen{}", self.ast_type_name)
   }
 
   pub fn get_type_names(&mut self) -> Arc<BTreeMap<AScriptStructId, String>> {

@@ -7,7 +7,7 @@ use std::{collections::BTreeMap, sync::Arc};
 ///
 /// # Example
 /// ```hcg
-/// 
+///
 /// <> A > ... :{ t_TypeA, prop: str } // <- `prop` defined as `str` type
 ///
 /// <> B > ... :{ t_TypeA, prop: u32 } // <- `prop` redefined to `u32` type
@@ -64,10 +64,10 @@ impl ExtendedError for ErrPropRedefinition {
       struct_type,
       existing_prop.type_val.debug_string(None),
       existing_prop.location.path_ref(&existing_prop.grammar_ref.path),
-      existing_prop.location.blame(0, 0, "", BlameColor::Red),
+      existing_prop.location.blame(0, 0, "", BlameColor::RED),
       new_prop.type_val.debug_string(None),
       new_prop.location.path_ref(&new_prop.grammar_ref.path),
-      new_prop.location.blame(0, 0, "", BlameColor::Red)
+      new_prop.location.blame(0, 0, "", BlameColor::RED)
     ))
   }
 
@@ -86,7 +86,7 @@ impl ExtendedError for ErrPropRedefinition {
 /// # Example
 /// ### HC Grammar
 /// ```hcg
-/// 
+///
 /// <> A > \r :{ t_TypeA, prop: str }  // <- This rule produces a struct
 ///      | \t (+)                    // <- This rule produces a Vector of Tokens
 /// ```
@@ -142,9 +142,9 @@ impl ExtendedError for ErrUnionOfScalarsAndVectors {
       format!(
         " -- [{}]\n    Body [{}]\n    reduces to [{}] type:\n\n{}",
         rule.tok.path_ref(&rule.grammar_ref.path),
-        rule.tok.blame(1, 1, "", BlameColor::Red),
+        rule.tok.blame(1, 1, "", BlameColor::RED),
         type_.blame_string(g, type_names),
-        rule.tok.blame(0, 0, "defined here", BlameColor::Blue)
+        rule.tok.blame(0, 0, "defined here", BlameColor::BLUE)
       )
     };
 
@@ -157,7 +157,7 @@ Vector Types:
 {}
 ",
       g.get_production_plain_name(p),
-      g.get_production(p).unwrap().loc.blame(0, 0, "production defined here", BlameColor::Red),
+      g.get_production(p).unwrap().loc.blame(0, 0, "production defined here", BlameColor::RED),
       scalars.iter().map(create_blame_string).collect::<Vec<_>>().join("\n"),
       vectors.iter().map(create_blame_string).collect::<Vec<_>>().join("\n")
     ))
@@ -178,7 +178,7 @@ Vector Types:
 /// # Example
 /// ### HC Grammar
 /// ```hcg
-/// 
+///
 /// <> A > \\r :{ t_TypeA, prop: str }  // <- This rule produces a struct
 ///      | \\t                        // <- This rule produces a Token
 /// ```
@@ -235,7 +235,7 @@ impl ExtendedError for ErrIncompatibleProductionScalerTypes {
         "[{}]\n{}\n{}",
         rule.tok.path_ref(&rule.grammar_ref.path),
         rule.blame_string(g),
-        rule.tok.blame(0, 0, "", BlameColor::Red)
+        rule.tok.blame(0, 0, "", BlameColor::RED)
       )
     };
 
@@ -320,7 +320,7 @@ impl ExtendedError for ErrIncompatibleProductionVectorTypes {
         rule.tok.path_ref(&rule.grammar_ref.path),
         rule.blame_string(g),
         type_.blame_string(g, type_names),
-        rule.tok.blame(0, 0, "defined here", BlameColor::Red)
+        rule.tok.blame(0, 0, "defined here", BlameColor::RED)
       )
     };
 

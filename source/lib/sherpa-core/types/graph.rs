@@ -3,12 +3,11 @@ use super::*;
 use crate::grammar::get_closure_cached_with_state;
 use bitmask_enum::bitmask;
 use std::{
-  collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
+  collections::{BTreeSet, HashMap, VecDeque},
   hash::Hash,
   ops::{Index, IndexMut},
   rc::Rc,
   sync::Arc,
-  vec,
 };
 
 #[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
@@ -86,7 +85,6 @@ pub(crate) enum NodeType {
   RAStart,
   GotoVirtual,
   Goto,
-  TerminalTransition,
   PeekTransition,
   BreadcrumbTransition,
   BreadcrumbEndCompletion,
@@ -240,18 +238,6 @@ impl GraphNode {
     node
   }
 
-  pub fn is_peek_origin(&self) -> bool {
-    self.is(NodeAttributes::I_PEEK_ORIGIN)
-  }
-
-  pub fn is_peek_node(&self) -> bool {
-    self.peek_goal.is_some()
-  }
-
-  pub fn is_peek_goal_node(&self) -> bool {
-    self.peek_origin.is_some() && !self.is_peek_node()
-  }
-
   /// Strips state info from all items and returns the set of
   /// of unique items.
   pub fn get_unique_transition_item_set(&self) -> ItemSet {
@@ -267,25 +253,13 @@ impl GraphNode {
       .collect::<BTreeSet<_>>()
   }
 
-  pub fn temp(origin: &GraphNode, sym: SymbolID, items: Vec<Item>) -> Self {
-    GraphNode {
-      edge_symbol: sym,
-      attributes: NodeAttributes::EMPTY,
-      proxy_parents: vec![],
-      transition_items: items,
-      peek_shifts: -1,
-      id: NodeId::new(origin.id.0 * 100000),
-      ..Default::default()
-    }
+  #[inline(always)]
+  pub fn is_orphan(&self) -> bool {
+    !self.has_parent()
   }
 
   #[inline(always)]
-  pub fn is_orphan(&self, tpack: &TransitionGraph) -> bool {
-    !self.has_parent(tpack)
-  }
-
-  #[inline(always)]
-  pub fn has_parent(&self, tpack: &TransitionGraph) -> bool {
+  pub fn has_parent(&self) -> bool {
     self.parent.is_some() && self.id != NodeId::Invalid
   }
 
@@ -297,11 +271,6 @@ impl GraphNode {
   #[inline(always)]
   pub fn set_attribute(&mut self, transition_type: NodeAttributes) {
     self.attributes |= transition_type
-  }
-
-  #[inline(always)]
-  pub fn unset_type(&mut self, transition_type: NodeAttributes) {
-    self.attributes &= self.attributes ^ transition_type
   }
 
   pub fn debug_string(&self, g: &GrammarStore) -> String {
@@ -381,12 +350,10 @@ pub(crate) struct TransitionGraph {
   pub leaf_nodes: Vec<NodeId>,
   pub mode: TransitionMode,
   pub scan_type: ScanType,
-  pub is_scanner_entry: bool,
   pub root_prod_ids: BTreeSet<ProductionId>,
   pub peek_ids: BTreeSet<u64>,
   pub starts: BTreeSet<Item>,
   pub errors: Vec<SherpaError>,
-  pub events: BTreeMap<u64, NodeId>,
   /// If this Graph defines a goto transition sequence,
   /// then this is true if the root goto state does not simply
   /// resolve to a pass action.
@@ -552,14 +519,14 @@ impl TransitionGraph {
     )
   }
 
-  pub fn get_node_len(&self) -> usize {
+  pub fn _get_node_len(&self) -> usize {
     self.nodes.len()
   }
 
   pub fn write_nodes(&self) -> String {
     let mut string = String::new();
     for node in &self.nodes {
-      if !node.is_orphan(self) || node.id.0 == 0 {
+      if !node.is_orphan() || node.id.0 == 0 {
         string += &format!("\n{}\n", node.debug_string(&self.g));
       }
     }
@@ -567,9 +534,9 @@ impl TransitionGraph {
     string
   }
 
-  pub fn print_nodes(&self) {
+  pub fn _print_nodes(&self) {
     for node in &self.nodes {
-      if !node.is_orphan(self) || node.id.0 == 0 {
+      if !node.is_orphan() || node.id.0 == 0 {
         eprintln!("{}\n", node.debug_string(&self.g));
       }
     }

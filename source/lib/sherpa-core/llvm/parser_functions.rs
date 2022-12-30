@@ -2,14 +2,14 @@ use super::{
   build_fast_call,
   create_offset_label,
   fastCC,
-  simd::create_simd_dfa,
+  simd::{create_simd_dfa, ScannerData},
   CTX_AGGREGATE_INDICES as CTX,
 };
 use crate::{
   build::table::{BranchData, BranchTableData},
   compile::BytecodeOutput,
   debug::{address_string, disassemble_state, BytecodeGrammarLookups},
-  llvm::{LLVMParserModule, FAIL_STATE_FLAG_LLVM},
+  llvm::{simd::can_simd, LLVMParserModule, FAIL_STATE_FLAG_LLVM},
   types::*,
   Journal,
 };
@@ -33,9 +33,6 @@ pub(crate) struct FunctionPack<'a> {
 
 pub const _FAIL_STATE_FLAG_LLVM: u32 = 2;
 pub const NORMAL_STATE_FLAG_LLVM: u32 = 1;
-
-#[derive(Clone, Debug)]
-pub(crate) struct ScannerData(pub(crate) Vec<(u32, u32)>, pub(crate) Vec<Vec<u32>>);
 
 #[derive(Clone, Debug)]
 pub struct LLVMStateData<'a> {
@@ -154,15 +151,15 @@ pub(crate) unsafe fn construct_parse_function<'a>(
           while instruction.is_valid() {
             use InstructionType::*;
             match instruction.to_type() {
-              SET_PROD | TOKEN | FORK_TO | EAT_CRUMBS | NOOP13 | SCAN | REPEAT | ASSERT_SHIFT
-              | SET_FAIL_STATE => {
+              SetProd | Token | ForkTo | EatCrumbs | Noop13 | Scan | Repeat | AssertShift
+              | SetFailState => {
                 instruction = instruction.next(bc);
               }
-              GOTO => {
+              Goto => {
                 states_queue.push_front((instruction.goto(bc), is_scanner));
                 instruction = instruction.next(bc);
               }
-              SHIFT => {
+              Shift => {
                 if !is_scanner {
                   states_queue.push_front((instruction.next(bc), is_scanner)); // Synthetic state
                   break;
@@ -170,11 +167,11 @@ pub(crate) unsafe fn construct_parse_function<'a>(
                   instruction = instruction.next(bc);
                 }
               }
-              REDUCE => {
+              Reduce => {
                 states_queue.push_front((instruction.next(bc), is_scanner)); // Synthetic state
                 break;
               }
-              VECTOR_BRANCH | HASH_BRANCH => {
+              VectorBranch | HashBranch => {
                 match is_scanner.then(|| can_simd(instruction, g, output)) {
                   Some(SherpaResult::Ok(result)) => {
                     println!("{:?} {:?}", instruction, result);
@@ -184,7 +181,7 @@ pub(crate) unsafe fn construct_parse_function<'a>(
                   _ => {
                     let data = BranchTableData::from_bytecode(instruction, g, output)?;
 
-                    if data.data.input_type == INPUT_TYPE::T02_TOKEN
+                    if data.data.input_type == InputType::T02_TOKEN
                       && !data.has_trivial_comparisons()
                     {
                       states_queue.push_front((data.data.scan_state_entry_instruction, true));
@@ -202,7 +199,7 @@ pub(crate) unsafe fn construct_parse_function<'a>(
                   }
                 }
               }
-              FAIL | PASS => {
+              Fail | Pass => {
                 break;
               }
             }
@@ -277,7 +274,7 @@ pub(super) fn construct_parse_function_statements(
     while instruction.is_valid() {
       use InstructionType::*;
       match instruction.to_type() {
-        SHIFT => {
+        Shift => {
           if *is_scanner {
             instruction = construct_scanner_shift(instruction, module, pack)?;
           } else {
@@ -285,7 +282,7 @@ pub(super) fn construct_parse_function_statements(
             break;
           }
         }
-        GOTO => {
+        Goto => {
           let branched;
           (instruction, branched) = construct_goto(instruction, module, pack)?;
 
@@ -293,32 +290,32 @@ pub(super) fn construct_parse_function_statements(
             break;
           }
         }
-        SET_PROD => {
+        SetProd => {
           instruction = construct_instruction_prod(instruction, module, pack)?;
         }
-        REDUCE => {
+        Reduce => {
           construct_reduce(instruction, module, pack)?;
           break;
         }
-        TOKEN => {
+        Token => {
           instruction = construct_token(instruction, module, pack)?;
         }
-        FORK_TO => {
+        ForkTo => {
           // TODO
           break;
         }
-        EAT_CRUMBS | NOOP13 | SCAN | REPEAT | ASSERT_SHIFT | SET_FAIL_STATE => {
+        EatCrumbs | Noop13 | Scan | Repeat | AssertShift | SetFailState => {
           instruction = instruction.next(&output.bytecode);
         }
-        VECTOR_BRANCH | HASH_BRANCH => {
+        VectorBranch | HashBranch => {
           construct_instruction_branch(instruction, g, module, pack, true, None)?;
           break;
         }
-        FAIL => {
+        Fail => {
           construct_fail(module, pack)?;
           break;
         }
-        PASS => {
+        Pass => {
           construct_pass(module, pack)?;
           break;
         }
@@ -331,13 +328,12 @@ pub(super) fn construct_parse_function_statements(
 
 #[derive(Clone, Copy)]
 struct Pointers<'a> {
-  line_ptr: PointerValue<'a>,
-  input_ptr_ptr: PointerValue<'a>,
-  input_truncated_ptr: PointerValue<'a>,
+  line_ptr:           PointerValue<'a>,
+  input_ptr_ptr:      PointerValue<'a>,
   input_byte_len_ptr: PointerValue<'a>,
-  input_off_ptr: PointerValue<'a>,
-  token_len_ptr: PointerValue<'a>,
-  entry_table_block: BasicBlock<'a>,
+  input_off_ptr:      PointerValue<'a>,
+  token_len_ptr:      PointerValue<'a>,
+  entry_table_block:  BasicBlock<'a>,
 }
 
 fn construct_instruction_branch<'a>(
@@ -404,7 +400,7 @@ fn construct_instruction_branch<'a>(
 
   let representative_state = data;
   let lexer_type = representative_state.data.lexer_type;
-  let is_peek = matches!(lexer_type, LEXER_TYPE::PEEK);
+  let is_peek = matches!(lexer_type, LexerType::PEEK);
   let is_scanner = p.is_scanner;
 
   #[cfg(debug_assertions)]
@@ -420,10 +416,11 @@ fn construct_instruction_branch<'a>(
     );
     assert!(
       !p.is_scanner
-        || !p.state.branch_data.iter().any(|t| matches!(
-          t.1.data.input_type,
-          INPUT_TYPE::T01_PRODUCTION | INPUT_TYPE::T02_TOKEN
-        )),
+        || !p
+          .state
+          .branch_data
+          .iter()
+          .any(|t| matches!(t.1.data.input_type, InputType::T01_PRODUCTION | InputType::T02_TOKEN)),
       "Scanner states should not contain PRODUCTION or TOKEN tables"
     );
     // This also leads to the conclusion that PRODUCTION and TOKEN states have
@@ -432,7 +429,7 @@ fn construct_instruction_branch<'a>(
     // ------------------------------------------------------------------------
     // Peek states only exist outside of scanner states
     assert!(
-      data.data.lexer_type != LEXER_TYPE::PEEK || !p.is_scanner,
+      data.data.lexer_type != LexerType::PEEK || !p.is_scanner,
       "Scanner states should not contain peek tables"
     );
   }
@@ -445,7 +442,7 @@ fn construct_instruction_branch<'a>(
         // per round within this function.
         let data = table.data;
         max_size = max_size.max(match data.input_type {
-          INPUT_TYPE::T02_TOKEN => {
+          InputType::T02_TOKEN => {
             if table.has_trivial_comparisons() {
               getBranchTokenData(g, table)
                 .iter()
@@ -455,8 +452,8 @@ fn construct_instruction_branch<'a>(
               0
             }
           }
-          INPUT_TYPE::T05_BYTE => 1,
-          INPUT_TYPE::T03_CLASS | INPUT_TYPE::T04_CODEPOINT => 4,
+          InputType::T05_BYTE => 1,
+          InputType::T03_CLASS | InputType::T04_CODEPOINT => 4,
           _ => 0,
         });
       }
@@ -489,7 +486,7 @@ fn construct_instruction_branch<'a>(
         };
 
       let peek_mode_ptr = CTX::in_peek_mode.get_ptr(module, parse_ctx)?;
-      if lexer_type == LEXER_TYPE::ASSERT {
+      if lexer_type == LexerType::ASSERT {
         b.build_store(peek_mode_ptr, bool.const_int(0, false));
         b.build_unconditional_branch(table_block);
       } else {
@@ -546,7 +543,6 @@ fn construct_instruction_branch<'a>(
         input_ptr_ptr,
         line_ptr,
         input_byte_len_ptr,
-        input_truncated_ptr,
         entry_table_block: table_block,
       });
 
@@ -590,7 +586,7 @@ fn construct_instruction_branch<'a>(
   let TableHeaderData { input_type, scan_state_entry_instruction: scanner_address, .. } = data.data;
 
   let trivial_token_comparisons =
-    input_type == INPUT_TYPE::T02_TOKEN && data.has_trivial_comparisons();
+    input_type == InputType::T02_TOKEN && data.has_trivial_comparisons();
 
   // Prepare the input token if we are working with
   // Token based branch types (TOKEN, BYTE, CODEPOINT, CLASS)
@@ -624,15 +620,15 @@ fn construct_instruction_branch<'a>(
   }
 
   match input_type {
-    INPUT_TYPE::T01_PRODUCTION => {
+    InputType::T01_PRODUCTION => {
       value = CTX::prod_id.load(module, parse_ctx)?.into_int_value();
     }
-    INPUT_TYPE::T05_BYTE => {
+    InputType::T05_BYTE => {
       let buffer_ptr = b.build_load(ptrs?.input_ptr_ptr, "").into_pointer_value();
       b.build_store(ptrs?.token_len_ptr, i32.const_int(1, false));
       value = b.build_load(buffer_ptr, "").into_int_value();
     }
-    INPUT_TYPE::T03_CLASS => {
+    InputType::T03_CLASS => {
       let buffer_ptr = b.build_load(ptrs?.input_ptr_ptr, "").into_pointer_value();
       let cp_val = construct_cp_lu_with_token_len_store(module, buffer_ptr, p)?;
       value = build_fast_call(module, module.fun.get_token_class_from_codepoint, &[cp_val.into()])?
@@ -640,11 +636,11 @@ fn construct_instruction_branch<'a>(
         .unwrap_left()
         .into_int_value();
     }
-    INPUT_TYPE::T04_CODEPOINT => {
+    InputType::T04_CODEPOINT => {
       let buffer_ptr = b.build_load(ptrs?.input_ptr_ptr, "").into_pointer_value();
       value = construct_cp_lu_with_token_len_store(module, buffer_ptr, p)?;
     }
-    INPUT_TYPE::T02_TOKEN => {
+    InputType::T02_TOKEN => {
       if trivial_token_comparisons {
         build_switch = false;
 
@@ -751,7 +747,7 @@ fn construct_instruction_branch<'a>(
     b.position_at_end(block);
     let instruction = INSTRUCTION::from(&p.output.bytecode, address);
     match instruction.to_type() {
-      InstructionType::HASH_BRANCH | InstructionType::VECTOR_BRANCH => {
+      InstructionType::HashBranch | InstructionType::VectorBranch => {
         construct_instruction_branch(instruction, g, module, p, false, ptrs)?;
       }
       _ => {
@@ -775,7 +771,7 @@ fn construct_instruction_branch<'a>(
   b.position_at_end(default_block);
   let default_instruction = instruction.branch_default(&p.output.bytecode);
   match default_instruction.to_type() {
-    InstructionType::HASH_BRANCH | InstructionType::VECTOR_BRANCH => {
+    InstructionType::HashBranch | InstructionType::VectorBranch => {
       construct_instruction_branch(default_instruction, g, module, p, false, ptrs)?;
     }
     _ => {
@@ -790,164 +786,6 @@ fn construct_instruction_branch<'a>(
   }
 
   SherpaResult::Ok(())
-}
-
-fn can_simd(
-  instruction: INSTRUCTION,
-  g: &GrammarStore,
-  output: &BytecodeOutput,
-) -> SherpaResult<ScannerData> {
-  // Evaluate whether we can use a SIMD operations to construct this state.
-  // The criteria for SIMD rolling are:
-  // - All branches are a mixture of either bytes or classes
-  // -* Branches that goto other states lead back to this state
-  // -
-  let bc = &output.bytecode;
-  let mut state_queue = VecDeque::from_iter(vec![(instruction.get_address(), instruction)]);
-
-  let mut seen_instructions = BTreeSet::new();
-  let mut known_states = BTreeMap::new();
-  let mut symbols_map = BTreeMap::new();
-
-  let mut state_number = 0;
-
-  let mut have_pass = false;
-
-  while let Some((entry, instruction)) = state_queue.pop_front() {
-    use InstructionType::*;
-    if seen_instructions.insert(instruction) {
-      match instruction.to_type() {
-        VECTOR_BRANCH | HASH_BRANCH => {
-          if !known_states.contains_key(&entry) {
-            known_states.insert(entry, state_number);
-            state_number += 1;
-          }
-
-          let BranchTableData { data, branches, .. } =
-            BranchTableData::from_bytecode(instruction, g, output)?;
-
-          for (value, branch) in branches {
-            match data.input_type {
-              INPUT_TYPE::T04_CODEPOINT => return SherpaResult::None,
-              INPUT_TYPE::T05_BYTE | INPUT_TYPE::T03_CLASS => {
-                let mut instruction = INSTRUCTION::from(bc, branch.address);
-                let mut goto = 0;
-                let mut have_shift = false;
-                let mut have_token = false;
-                let mut token_val = 0;
-
-                loop {
-                  match instruction.to_type() {
-                    TOKEN => {
-                      have_token = true;
-                      token_val = instruction.get_token_value();
-                      instruction = instruction.next(bc);
-                    }
-                    SHIFT => {
-                      have_shift = true;
-                      instruction = instruction.next(bc);
-                    }
-                    FAIL => {
-                      break;
-                    }
-                    PASS => {
-                      have_pass = true;
-                      break;
-                    }
-                    GOTO => {
-                      if !have_shift {
-                        return SherpaResult::None;
-                      }
-                      let goto_state = instruction.goto(bc);
-                      goto = goto_state.get_address();
-                      state_queue.push_back((goto, goto_state));
-                      if !instruction.next(bc).is_PASS() {
-                        return SherpaResult::None;
-                      } else {
-                        break;
-                      }
-                    }
-                    _ => {
-                      println!("{:?}", instruction.to_type());
-                      return SherpaResult::None;
-                    }
-                  }
-                }
-
-                // All branches need to shift on token or set the current token.
-                if !have_shift && !have_token {
-                  //return SherpaResult::None;
-                }
-
-                // Accept states should not continue
-
-                symbols_map.entry((data.input_type, value as u32)).or_insert_with(|| vec![]).push((
-                  entry,
-                  goto,
-                  instruction.to_type(),
-                  have_shift,
-                ))
-              }
-              _ => panic!("lexer type should not exist in this context {}", data.input_type),
-            }
-          }
-
-          state_queue.push_back((entry, instruction.branch_default(bc)));
-        }
-        PASS => {}
-        FAIL => {}
-        _ => state_queue.push_back((entry, instruction.next(bc))),
-      }
-    }
-  }
-
-  if !have_pass || symbols_map.len() < 2 || state_number < 2 {
-    SherpaResult::None
-  } else {
-    let column_count = 8;
-
-    let mut states_table = vec![];
-
-    // Add the fail symbol {0} row
-
-    let mut state_table = vec![];
-    for _ in 0..column_count {
-      state_table.push(0);
-    }
-
-    // Add rows for each symbol type
-    states_table.push(state_table);
-
-    for states in symbols_map.values() {
-      // prefill
-      let mut state_table = vec![];
-
-      for _ in 0..column_count {
-        state_table.push(0);
-      }
-
-      let accept = (state_table.len() - 1) as u32;
-
-      for state in states {
-        let s = (*known_states.get(&state.0)? as usize) + 1;
-        let shift = (state.3 as u32) << 4;
-        if state.2 == InstructionType::PASS {
-          state_table[s] = (shift | accept) as u32;
-        } else {
-          state_table[s] = shift | ((*known_states.get(&state.1)? as u32) + 1);
-        }
-      }
-      state_table[accept as usize] = accept;
-
-      states_table.push(state_table);
-    }
-
-    let symbols = symbols_map.keys().cloned().collect::<Vec<_>>();
-
-    println!("{:#?} {:#?}", states_table, symbols);
-
-    SherpaResult::Ok(ScannerData(symbols, states_table))
-  }
 }
 
 fn parse_fun_ptr<'a>(scanner_address: INSTRUCTION, pack: &'a FunctionPack) -> PointerValue<'a> {
@@ -1022,16 +860,6 @@ fn construct_cp_lu_with_token_len_store<'a>(
   b.build_store(cache_length_ptr, cp_byte_len);
 
   SherpaResult::Ok(cp_val)
-}
-
-struct InputBlockRef<'a> {
-  pointer:      PointerValue<'a>,
-  /// The number of bytes that can be read
-  /// from this block
-  size:         IntValue<'a>,
-  /// The offset of the block
-  start:        IntValue<'a>,
-  is_truncated: IntValue<'a>,
 }
 
 pub(crate) fn construct_instruction_prod(
@@ -1110,12 +938,12 @@ pub(crate) fn construct_goto<'a>(
   let mut gotos = vec![];
 
   // Extract all gotos from the function.
-  while INSTRUCTION::from(bytecode, address).is_GOTO() {
+  while INSTRUCTION::from(bytecode, address).is_goto() {
     gotos.push(INSTRUCTION::from(bytecode, address));
     address += 1;
   }
 
-  let last = if matches!(gotos.last()?.next(bytecode).to_type(), InstructionType::PASS) {
+  let last = if matches!(gotos.last()?.next(bytecode).to_type(), InstructionType::Pass) {
     gotos.pop()
   } else {
     None
@@ -1179,15 +1007,15 @@ fn write_reentrance<'a>(
   use InstructionType::*;
 
   let next_instruction = match instruction.to_type() {
-    PASS => INSTRUCTION::Pass(),
-    GOTO => match instruction.next(bytecode).to_type() {
-      PASS => instruction.goto(bytecode),
+    Pass => INSTRUCTION::pass(),
+    Goto => match instruction.next(bytecode).to_type() {
+      Pass => instruction.goto(bytecode),
       _ => instruction,
     },
     _ => instruction,
   };
 
-  if !next_instruction.is_PASS() || force_goto {
+  if !next_instruction.is_pass() || force_goto {
     build_fast_call(module, module.fun.push_state, &[
       pack.fun.get_first_param().unwrap().into_pointer_value().into(),
       module.ctx.i32_type().const_int(NORMAL_STATE_FLAG_LLVM as u64, false).into(),
@@ -1244,14 +1072,9 @@ pub(crate) fn construct_shift(
 
   let parse_ctx = fun.get_nth_param(0)?.into_pointer_value();
   let cache_offset_ptr = CTX::token_off.get_ptr(module, parse_ctx)?;
-  let cache_anchor_offset_ptr = CTX::anchor_off.get_ptr(module, parse_ctx)?;
-  let cache_line_ptr = CTX::anchor_line_off.get_ptr(module, parse_ctx)?;
 
   let offset = module.builder.build_load(cache_offset_ptr, "").into_int_value();
   let length = CTX::scan_len.load(module, parse_ctx)?.into_int_value();
-
-  let line = module.builder.build_load(cache_line_ptr, "").into_int_value();
-
   let new_offset = module.builder.build_int_add(length, offset, "");
   CTX::token_off.store(module, parse_ctx, new_offset)?;
   CTX::anchor_off.store(module, parse_ctx, new_offset)?;
@@ -1329,7 +1152,7 @@ pub(crate) unsafe fn construct_prime_function(
     module,
     parse_ctx,
     module.fun.handle_eop.as_global_value().as_pointer_value(),
-    (NORMAL_STATE_FLAG_LLVM | FAIL_STATE_FLAG_LLVM),
+    NORMAL_STATE_FLAG_LLVM | FAIL_STATE_FLAG_LLVM,
   );
 
   if !blocks.is_empty() {
@@ -1426,7 +1249,7 @@ pub(crate) unsafe fn construct_scan<'a>(module: &LLVMParserModule<'a>) -> Sherpa
     module,
     parse_ctx,
     null_fn.as_global_value().as_pointer_value(),
-    (NORMAL_STATE_FLAG_LLVM | FAIL_STATE_FLAG_LLVM),
+    NORMAL_STATE_FLAG_LLVM | FAIL_STATE_FLAG_LLVM,
   );
 
   build_push_fn_state(module, parse_ctx, scanner_parse_function_ptr, NORMAL_STATE_FLAG_LLVM);

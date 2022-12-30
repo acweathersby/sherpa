@@ -115,7 +115,7 @@ pub fn optimize_ir_states(
                 ASTNode::ASSERT(box assert) => match assert.ids[0].clone() {
                   ASTNode::AST_NUMBER(box AST_NUMBER { value, .. }) => {
                     let sym_id = *lookup.get(&(value as u32)).unwrap();
-                    let (id, bc_type) = sym_id.shift_type(&g);
+                    let (id, bc_type) = sym_id.shift_info(&g);
                     assert.mode = bc_type.to_string();
                     assert.ids = vec![ASTNode::AST_NUMBER(AST_NUMBER::new(id as f64))];
                   }

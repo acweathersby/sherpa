@@ -78,6 +78,7 @@ pub struct GrammarRef {
 }
 
 impl GrammarRef {
+  /// TODO
   pub fn new(local_name: String, absolute_path: PathBuf) -> Arc<Self> {
     let guid_name = get_guid_grammar_name(&absolute_path).unwrap();
     Arc::new(GrammarRef {
@@ -115,6 +116,7 @@ pub type ReduceFunctionTable = BTreeMap<ReduceFunctionId, ReduceFunctionType>;
 
 #[derive(Debug, Clone, Default)]
 pub struct GrammarStore {
+  /// TODO: Docs
   pub id: Arc<GrammarRef>,
 
   /// Maps [ProductionId] to a list of [RuleIds](RuleId)
@@ -151,8 +153,8 @@ pub struct GrammarStore {
   pub(crate) closures: HashMap<Item, Vec<Item>>,
 
   pub(crate) item_ignore_symbols: HashMap<Item, Vec<SymbolID>>,
-
-  pub production_ignore_symbols: HashMap<ProductionId, Vec<SymbolID>>,
+  /// TODO: Docs
+  pub production_ignore_symbols:  HashMap<ProductionId, Vec<SymbolID>>,
 
   /// A mapping of [ProductionId]s to export names
   ///
@@ -172,8 +174,8 @@ pub struct GrammarStore {
   pub(crate) lr_items: BTreeMap<ProductionId, Vec<Item>>,
 
   /// All reduce functions defined in the grammar.
-  pub reduce_functions: ReduceFunctionTable,
-
+  pub reduce_functions:  ReduceFunctionTable,
+  /// TODO: Docs
   pub merge_productions: BTreeMap<ProductionId, Vec<Rule>>,
 
   /// All productions that are reachable from the entry productions, including
@@ -182,6 +184,7 @@ pub struct GrammarStore {
 }
 
 impl GrammarStore {
+  /// TODO: Docs
   pub fn from_path(j: &mut Journal, path: PathBuf) -> SherpaResult<Arc<GrammarStore>> {
     match compile_grammar_from_path(j, path, 0) {
       (Some(grammar), _) => {
@@ -189,10 +192,10 @@ impl GrammarStore {
         SherpaResult::Ok(grammar)
       }
       (..) => SherpaResult::None,
-      (None, None) => unreachable!("compile_grammar_from_string should never return (None, None)"),
     }
   }
 
+  /// TODO: Docs
   pub fn from_str_with_base_dir(
     j: &mut Journal,
     string: &str,
@@ -243,6 +246,7 @@ impl GrammarStore {
     }
   }
 
+  /// TODO: Docs
   pub fn from_string(j: &mut Journal, string: String) -> SherpaResult<Arc<GrammarStore>> {
     return Self::from_str(j, string.as_str());
   }

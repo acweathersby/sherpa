@@ -2,7 +2,7 @@ use std::io::Write;
 
 use crate::{
   ascript::{
-    rust::{ascript_type_to_string, create_type_initializer_value, render_expression, write},
+    rust::{ascript_type_to_string, render_expression, write},
     types::*,
   },
   grammar::data::ast::{ASTNode, AST_NamedReference},
@@ -57,7 +57,7 @@ pub fn add_ascript_functions<W: Write>(
   // Create impl for all exported productions that can be mapped to a ascript single
   // AScripT type. For those that map to multiple outputs, create an impl on the main
   // AST enum for named parsers on those types.
-  for (Ref, ast_type, ast_type_string, export_name) in &export_node_data {
+  for (_, ast_type, ast_type_string, export_name) in &export_node_data {
     match ast_type {
       AScriptTypeVal::Struct(id) => {
         let AScriptStruct { type_name, .. } = ascript.structs.get(id).unwrap();

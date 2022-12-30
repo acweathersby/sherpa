@@ -98,7 +98,7 @@ pub fn compile_grammars_into_store(
     merge_grammars(j, &mut grammar, &rest, &mut errors);
 
     if errors.is_empty() {
-      let grammar = finalize_grammar(j, grammar, &mut errors, get_num_of_available_threads());
+      let grammar = finalize_grammar(j, grammar, &mut errors);
 
       if errors.is_empty() {
         SherpaResult::Ok((Some(Arc::new(grammar)), None))
@@ -115,8 +115,7 @@ pub fn compile_grammars_into_store(
 fn finalize_grammar(
   j: &mut Journal,
   mut g: GrammarStore,
-  mut e: &mut Vec<SherpaError>,
-  thread_count: usize,
+  e: &mut Vec<SherpaError>,
 ) -> GrammarStore {
   j.set_active_report(
     &format!("Grammar [{}] Compilation", g.id.name),
@@ -377,7 +376,7 @@ fn merge_grammars(
 fn check_for_missing_productions(g: &GrammarStore, e: &mut Vec<SherpaError>) -> bool {
   let mut have_missing_production = false;
   // Check for missing productions referenced in rule symbols
-  for (id, b) in &g.rules {
+  for (_, b) in &g.rules {
     for sym in &b.syms {
       match sym.sym_id {
         SymbolID::TokenProduction(.., prod_id) | SymbolID::Production(prod_id, _) => {
@@ -478,7 +477,7 @@ fn calculate_recursions_types(
 }
 
 /// Creates item closure caches and creates start and goto item groups.
-fn finalize_items(g: &mut GrammarStore, errors: &mut [SherpaError]) {
+fn finalize_items(g: &mut GrammarStore, _e: &mut [SherpaError]) {
   // Generate the item closure cache
   let start_items =
     g.productions.keys().flat_map(|p| get_production_start_items(p, g)).collect::<Vec<_>>();
@@ -546,7 +545,7 @@ fn finalize_items(g: &mut GrammarStore, errors: &mut [SherpaError]) {
   }
 }
 
-fn finalize_symbols(g: &mut GrammarStore, e: &mut [SherpaError]) {
+fn finalize_symbols(g: &mut GrammarStore, _e: &mut [SherpaError]) {
   let mut symbol_bytecode_id = SymbolID::DefinedSymbolIndexBasis;
 
   // Ensure there is a symbol for every token production
@@ -568,7 +567,7 @@ fn finalize_symbols(g: &mut GrammarStore, e: &mut [SherpaError]) {
 
         let production_id = symbol.guid.get_production_id().unwrap_or_default();
 
-        let (_, token_production_id, d, ..) = get_scanner_info_from_defined(&sym_id, g);
+        let (_, token_production_id, ..) = get_scanner_info_from_defined(&sym_id, g);
 
         let scanner_production = g.productions.get_mut(&token_production_id).unwrap();
 
@@ -743,7 +742,6 @@ fn create_scanner_productions_from_symbols(g: &mut GrammarStore, e: &mut Vec<She
                         | SymbolID::TokenProduction(prod_id, grammar_id, ..) => {
                           scanner_production_queue.push_back((*sym_id, true));
 
-                          let production = g.productions.get(prod_id).unwrap();
                           let scanner_name = create_scanner_name(*prod_id, *grammar_id);
                           let scanner_production_id = ProductionId::from(&scanner_name);
                           let new_symbol_id =
@@ -1522,7 +1520,7 @@ fn create_body_vectors(
     } = get_symbol_details(sym, g, e);
 
     if let Some(mut sym) = sym_atom.to_owned() {
-      let mut generated_symbol = ASTNode::NONE;
+      let generated_symbol;
 
       if is_meta {
         // TODO: Separate meta data symbols into it's own table that
@@ -1937,7 +1935,7 @@ fn process_literal(
   is_exclusive: bool,
   loc: Token,
 ) -> SymbolID {
-  let mut id = get_literal_id(string, is_exclusive);
+  let id = get_literal_id(string, is_exclusive);
 
   if let std::collections::btree_map::Entry::Vacant(e) = g.symbols.entry(id) {
     g.symbol_strings.insert(id, string.to_owned());

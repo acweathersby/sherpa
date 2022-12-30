@@ -1,18 +1,18 @@
-const stack_size: usize = 64;
+const STACK_SIZE: usize = 64;
 
 // ///////////////////////////////////////////
 // KERNEL STATE
 // ///////////////////////////////////////////
 
 pub struct ParseStack {
-  pub state_stack:   [u64; stack_size],
+  pub state_stack:   [u64; STACK_SIZE],
   pub stack_pointer: i32,
 }
 
 impl ParseStack {
   #[inline]
   pub fn new() -> ParseStack {
-    ParseStack { state_stack: [0; stack_size], stack_pointer: 0 }
+    ParseStack { state_stack: [0; STACK_SIZE], stack_pointer: 0 }
   }
 
   #[inline]

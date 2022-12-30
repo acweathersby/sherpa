@@ -10,7 +10,7 @@ use std::{
   vec,
 };
 
-pub(crate) fn construct_LR(
+pub(crate) fn _construct_LR(
   j: &mut Journal,
   scan_type: ScanType,
   starts: &Vec<Item>,
@@ -43,7 +43,7 @@ pub(crate) fn construct_LR(
 /// to sibling nodes.
 pub(super) fn construct_inline_LR(
   t: &mut TPack,
-  j: &mut Journal,
+  _j: &mut Journal,
   root_node: GraphNode,
 ) -> SherpaResult<()> {
   let mut nodes = Vec::<NodeId>::new();
@@ -130,7 +130,7 @@ pub(super) fn construct_inline_LR(
           .map(|i| (i, get_follow_items(t, &i, Some(parent_index))))
           .collect::<Vec<_>>();
 
-        if end_items.iter().all(|(i, items)| {
+        if end_items.iter().all(|(_, items)| {
           items.final_completed_items.is_empty() && !items.uncompleted_items.is_empty()
         }) {
           let symbol_groups = hash_group_btreemap(
@@ -182,7 +182,7 @@ pub(super) fn construct_inline_LR(
                 .map(|(i, _)| "   ".to_string()
                   + &i.blame_string(&g)
                   + "\n"
-                  + &i.get_rule(&g).unwrap().tok.blame(0, 0, "Defined here", BlameColor::Red))
+                  + &i.get_rule(&g).unwrap().tok.blame(0, 0, "Defined here", BlameColor::RED))
                 .collect::<Vec<_>>()
                 .join("\n")
             )

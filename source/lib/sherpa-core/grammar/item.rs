@@ -60,18 +60,3 @@ pub(crate) fn get_closure_cached_with_state<'a>(item: &Item, g: &'a GrammarStore
       .collect()
   }
 }
-
-/// Memoized form of 'get_closure_cached', which adds the Item's
-/// closure to the grammar store if it is not already present.
-#[inline]
-pub(crate) fn get_closure_cached_mut<'a>(item: &Item, g: &'a mut GrammarStore) -> &'a Vec<Item> {
-  let item = &item.to_empty_state();
-
-  if !g.closures.contains_key(item) {
-    let closure = create_closure(&[*item], g);
-
-    g.closures.insert(*item, closure);
-  }
-
-  g.closures.get(item).unwrap()
-}

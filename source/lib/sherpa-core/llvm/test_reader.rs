@@ -1,6 +1,5 @@
 use sherpa_runtime::types::{
   ByteReader,
-  InputInfo,
   LLVMByteReader,
   MutByteReader,
   SharedSymbolBuffer,

@@ -48,7 +48,7 @@ pub struct ParseContext<T: ByteReader + MutByteReader> {
 
 impl<T: ByteReader + MutByteReader> ParseContext<T> {
   pub fn new(reader: &mut T) -> Self {
-    let mut ctx = Self {
+    Self {
       peek: Default::default(),
       anchor: Default::default(),
       assert: Default::default(),
@@ -64,12 +64,11 @@ impl<T: ByteReader + MutByteReader> ParseContext<T> {
       reader,
       in_peek_mode: 0,
       local_state_stack: vec![],
-    };
-    ctx
+    }
   }
 
   pub fn bytecode_context() -> Self {
-    let mut ctx = Self {
+    Self {
       peek: Default::default(),
       anchor: Default::default(),
       assert: Default::default(),
@@ -85,9 +84,7 @@ impl<T: ByteReader + MutByteReader> ParseContext<T> {
       reader: 0 as *mut T,
       local_state_stack: vec![],
       in_peek_mode: 0,
-    };
-
-    ctx
+    }
   }
 
   /// The following methods are used exclusively by the
@@ -176,7 +173,7 @@ impl<T: ByteReader + MutByteReader> ParseContext<T> {
   pub fn init_normal_state(&mut self, entry_point: u32) {
     self.stack_top = 0;
 
-    self.push_state((NORMAL_STATE_FLAG | entry_point));
+    self.push_state(NORMAL_STATE_FLAG | entry_point);
   }
 }
 
@@ -343,10 +340,6 @@ impl<T: LLVMByteReader + ByteReader, M> LLVMParseContext<T, M> {
       meta_ctx:        0 as *mut M,
       custom_lex:      Self::default_custom_lex,
     }
-  }
-
-  fn get_source(&mut self) -> SharedSymbolBuffer {
-    unsafe { (*self.reader).get_source() }
   }
 
   fn default_custom_lex(_: &mut T, _: &mut M, _: &Self) -> (u32, u32, u32) {
@@ -538,7 +531,7 @@ pub unsafe fn llvm_map_result_action<
   M,
   Node: AstSlot,
 >(
-  ctx: &LLVMParseContext<T, M>,
+  _ctx: &LLVMParseContext<T, M>,
   action: ParseActionType,
   slots: &mut AstSlots<(Node, TokenRange, TokenRange)>,
 ) -> ParseResult<Node> {

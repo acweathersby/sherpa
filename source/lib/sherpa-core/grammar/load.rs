@@ -44,7 +44,7 @@ pub(crate) fn load_all(
   let results = thread::scope(|s| {
     [0..get_usable_thread_count(number_of_threads)]
       .into_iter()
-      .map(|i| {
+      .map(|_| {
         let mut j = j.transfer();
         let claimed_grammar_paths = &claimed_grammar_paths;
         let work_verifier = &work_verifier;
@@ -184,7 +184,7 @@ fn test_load_all() {
 
 /// Loads and parses a grammar file, returning the parsed grammar node and a vector of Import nodes.
 pub(crate) fn load_grammar(
-  j: &mut Journal,
+  _j: &mut Journal,
   absolute_path: &PathBuf,
 ) -> SherpaResult<(Box<Grammar>, Vec<Box<Import>>)> {
   match read(absolute_path) {
@@ -242,7 +242,7 @@ pub(crate) fn resolve_grammar_path(
   extension: &[&str],
 ) -> SherpaResult<PathBuf> {
   SherpaResult::Ok(
-    match ((
+    match (
       path.is_file(),
       path.extension().is_some(),
       // Ensure path is is an absolute path
@@ -250,7 +250,7 @@ pub(crate) fn resolve_grammar_path(
         true => (path.to_owned(), false),
         false => (cgd.join(&path), cgd.join(&path).is_file()),
       },
-    )) {
+    ) {
       // Path is relative to the given cgd
       (false, _, (path, true)) => path.canonicalize()?,
       // Attempt to verify the file path with different extensions. First valid
