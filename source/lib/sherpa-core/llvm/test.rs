@@ -5,7 +5,6 @@ use crate::{
     ascript_functions::construct_ast_builder,
     compile_from_bytecode,
     parser_functions::construct_parse_function,
-    simd::{construct_simd_call, construct_simd_function, ScannerData, TokenData},
     test_reader::TestUTF8StringReader,
   },
   Journal,
@@ -106,17 +105,6 @@ fn build_fast_call_shim<'a>(
   };
 
   SherpaResult::Ok(())
-}
-
-#[test]
-fn verify_construction_of_simd_function() {
-  let context = Context::create();
-
-  let mut module = construct_module(&mut Journal::new(None), "test", &context);
-
-  assert!(construct_simd_function(&mut module,).is_ok());
-
-  eprintln!("{}", module.module.to_string());
 }
 
 #[test]
@@ -625,90 +613,6 @@ type AstBuilder<'a> = unsafe extern "C" fn(
     &mut AstSlots<(ASTNode, TokenRange, TokenRange)>,
   ) -> ParseResult<ASTNode>,
 ) -> ParseResult<ASTNode>;
-
-#[test]
-fn run_simple_state_based_simd_loop() -> SherpaResult<()> {
-  let context = Context::create();
-
-  let mut module = construct_module(&mut Journal::new(None), "test", &context);
-  unsafe {
-    construct_simd_function(&mut module);
-
-    let b = &module.builder;
-    let shim = module.module.add_function(
-      "simd_fn",
-      module
-        .ctx
-        .i32_type()
-        .fn_type(&[module.types.parse_ctx.ptr_type(inkwell::AddressSpace::Generic).into()], false),
-      None,
-    );
-    b.position_at_end(module.ctx.append_basic_block(shim, "entry"));
-    b.build_return(Some(&construct_simd_call(
-      &module,
-      &ScannerData {
-        symbols:      vec![
-          TokenData {
-            class:   2,
-            tok_val: CodePointClass::Symbol as u32,
-            val:     CodePointClass::Symbol as u32,
-          },
-          TokenData {
-            class:   2,
-            tok_val: CodePointClass::Identifier as u32,
-            val:     CodePointClass::Identifier as u32,
-          },
-          TokenData {
-            class:   2,
-            tok_val: CodePointClass::Number as u32,
-            val:     CodePointClass::Number as u32,
-          },
-          TokenData {
-            class:   2,
-            tok_val: CodePointClass::Space as u32,
-            val:     CodePointClass::Space as u32,
-          },
-          TokenData { class: 4, tok_val: 7, val: 34 },
-        ],
-        states_table: vec![
-          0, 0, 0, 0, 0, 0, 0, 0, // ---
-          0, 0, 0, 0, 0, 0, 0, 0, // ---
-          0, 18, 18, 0, 0, 0, 0, 7, // ---
-          0, 18, 18, 0, 0, 0, 0, 7, // ---
-          0, 18, 18, 0, 0, 0, 0, 7, // ---
-          0, 18, 18, 0, 0, 0, 0, 7, // ---
-          0, 0, 0, 0, 0, 0, 0, 0, // ---
-          0, 0, 7, 0, 0, 0, 0, 7, // ---
-        ],
-        accept_col:   7,
-      },
-      shim.get_first_param()?.into_pointer_value(),
-    )?));
-
-    setup_exec_engine(&mut module);
-
-    module._exe_engine.as_ref()?.add_global_mapping(
-      &module.fun.get_token_class_from_codepoint,
-      sherpa_get_token_class_from_codepoint as usize,
-    );
-
-    println!("{:X}", sherpa_get_token_class_from_codepoint as usize);
-
-    assert!(construct_utf8_lookup_function(&module).is_ok());
-    assert!(construct_merge_utf8_part_function(&module).is_ok());
-
-    let simd = get_parse_function::<TailCallFunction>(&module, "simd_fn")?;
-    let mut input = String::from("11111\"111222245\"");
-    let mut rt_ctx = LLVMParseContext::new();
-    rt_ctx.scan_len = input.len() as u32;
-    rt_ctx.scan_ptr = input.as_mut_ptr();
-    let result = simd.call(&mut rt_ctx);
-    assert_eq!(result, 0);
-    assert_eq!(rt_ctx.scan_off as usize, input.len() - 1);
-  };
-
-  SherpaResult::Ok(())
-}
 
 #[test]
 fn test_compile_from_bytecode1() -> SherpaResult<()> {

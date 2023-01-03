@@ -6,7 +6,7 @@ use super::{
     construct_scan,
   },
   CTX_AGGREGATE_INDICES as CTX,
-  FAIL_STATE_FLAG_LLVM, simd::construct_simd_function,
+  FAIL_STATE_FLAG_LLVM
 };
 use crate::{
   compile::BytecodeOutput,
@@ -859,7 +859,6 @@ pub fn compile_from_bytecode<'a>(
     construct_internal_free_stack(&mut module)?;
     construct_drop(&mut module)?;
     construct_parse_function(j, &mut module, output)?;
-    construct_simd_function(&mut module)?;
   }
 
   module.fun.push_state.add_attribute(

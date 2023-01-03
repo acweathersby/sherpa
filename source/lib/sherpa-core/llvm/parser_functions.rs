@@ -1,19 +1,9 @@
-use super::{
-  build_fast_call,
-  create_offset_label,
-  fastCC,
-  simd::ScannerData,
-  CTX_AGGREGATE_INDICES as CTX,
-};
+use super::{build_fast_call, create_offset_label, fastCC, CTX_AGGREGATE_INDICES as CTX};
 use crate::{
   build::table::{BranchData, BranchTableData},
   compile::BytecodeOutput,
   debug::{address_string, disassemble_state, BytecodeGrammarLookups},
-  llvm::{
-    simd::{can_simd, construct_simd_call},
-    LLVMParserModule,
-    FAIL_STATE_FLAG_LLVM,
-  },
+  llvm::{LLVMParserModule, FAIL_STATE_FLAG_LLVM},
   types::*,
   Journal,
 };
@@ -46,7 +36,6 @@ pub struct LLVMStateData<'a> {
   pub(crate) is_scanner:        bool,
   pub(crate) branch_data:       BTreeMap<INSTRUCTION, BranchTableData>,
   pub(crate) entry_block:       BasicBlock<'a>,
-  pub(crate) scanner_simd_data: Option<ScannerData>,
 }
 
 impl<'a> LLVMStateData<'a> {
@@ -80,7 +69,6 @@ impl<'a> LLVMStateData<'a> {
       is_scanner,
       branch_data: BTreeMap::new(),
       entry_block,
-      scanner_simd_data: None,
     }
   }
 
@@ -177,32 +165,21 @@ pub(crate) unsafe fn construct_parse_function<'a>(
                 break;
               }
               VectorBranch | HashBranch => {
-                match (is_scanner && j.config().llvm_simd).then(|| can_simd(instruction, g, output))
-                {
-                  Some(SherpaResult::Ok(result)) => {
-                    state.scanner_simd_data = Some(result);
-                    break;
-                  }
-                  _ => {
-                    let data = BranchTableData::from_bytecode(instruction, g, output)?;
+                let data = BranchTableData::from_bytecode(instruction, g, output)?;
 
-                    if data.data.input_type == InputType::T02_TOKEN
-                      && !data.has_trivial_comparisons()
-                    {
-                      states_queue.push_front((data.data.scan_state_entry_instruction, true));
-                    }
-
-                    for (_, BranchData { address, .. }) in
-                      data.branches.iter().filter(|b| !b.1.is_skipped)
-                    {
-                      instructions.push_back(INSTRUCTION::from(bc, *address));
-                    }
-
-                    instructions.push_back(instruction.branch_default(bc));
-                    state.branch_data.insert(instruction, data);
-                    break;
-                  }
+                if data.data.input_type == InputType::T02_TOKEN && !data.has_trivial_comparisons() {
+                  states_queue.push_front((data.data.scan_state_entry_instruction, true));
                 }
+
+                for (_, BranchData { address, .. }) in
+                  data.branches.iter().filter(|b| !b.1.is_skipped)
+                {
+                  instructions.push_back(INSTRUCTION::from(bc, *address));
+                }
+
+                instructions.push_back(instruction.branch_default(bc));
+                state.branch_data.insert(instruction, data);
+                break;
               }
               Fail | Pass => {
                 break;
@@ -354,29 +331,6 @@ fn construct_instruction_branch<'a>(
   let i64 = module.ctx.i64_type();
   let bool = module.ctx.bool_type();
   let parse_ctx = p.fun.get_nth_param(0)?.into_pointer_value();
-
-  if p.state.scanner_simd_data.is_some() {
-    println!("{:?}", instruction);
-
-    let success_block = p.state.generate_block(module, "_success", instruction.get_address());
-    let fail_block = p.state.generate_block(module, "_fail", instruction.get_address());
-
-    b.position_at_end(p.state.entry_block);
-
-    let val = construct_simd_call(module, p.state.scanner_simd_data.as_ref()?, parse_ctx)?;
-
-    let c = b.build_int_compare(inkwell::IntPredicate::EQ, val, i32.const_zero(), "");
-
-    b.build_conditional_branch(c, success_block, fail_block);
-
-    b.position_at_end(success_block);
-    construct_pass(module, p);
-
-    b.position_at_end(fail_block);
-    construct_fail(module, p);
-
-    return SherpaResult::Ok(());
-  }
 
   let table_block = p.state.generate_block(module, "_Table", instruction.get_address());
   let default_block = p.state.generate_block(module, "_Table_Default", instruction.get_address());
