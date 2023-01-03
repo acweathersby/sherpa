@@ -1124,7 +1124,7 @@ fn test_compile_json_parser() -> SherpaResult<()> {
 
     <> array > \[  value(*\, )  \]              f:ast { { t_Array, entries: $2 } }
 
-    <> object > \{ key_value(*\, ) \}           f:ast { { t_Object, entries: ($2) } }
+    <> object > \{ key_value(*\, ) \}           f:ast { { t_Object, entries: $2 } }
 
     <> key_value > str \: value              f:ast { { t_KeyVal, k:$1, v:$3 } }
 

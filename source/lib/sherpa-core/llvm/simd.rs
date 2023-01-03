@@ -7,7 +7,7 @@ use crate::{
   llvm::{parser_functions::increment_input_offset_and_ptr, LLVMParserModule},
   types::*,
 };
-use inkwell::values::{CallableValue, FunctionValue};
+use inkwell::values::{CallableValue, FunctionValue, IntValue, PointerValue};
 use sherpa_runtime::utf8::lookup_table::{
   CodePointClass,
   UNI_ID_CONT_DISCRETE,
@@ -16,49 +16,24 @@ use sherpa_runtime::utf8::lookup_table::{
   UNI_ID_START_RANGES,
 };
 
-pub(crate) fn create_simd_dfa<'a>(
-  fn_name: &str,
+pub(crate) fn construct_simd_call<'a>(
   module: &'a LLVMParserModule,
   data: &ScannerData,
-) -> SherpaResult<FunctionValue<'a>> {
-  // Load the state table globally.
-  // Get a reference to said table.
-  //
-
-  let ScannerData { symbols, states_table: states, accept_col } = data;
+  parse_ctx: PointerValue<'a>,
+) -> SherpaResult<IntValue<'a>> {
   let ctx = module.ctx;
   let i8 = ctx.i8_type();
   let i32 = ctx.i32_type();
   let b = &module.builder;
-  let fun = module.module.add_function(fn_name, module.types.TAIL_CALLABLE_PARSE_FUNCTION, None);
+  let ScannerData { symbols, states_table: states, accept_col } = data;
 
-  let parse_ctx = fun.get_nth_param(0)?.into_pointer_value();
   let states_table_byte_size = states.len();
-  let accept_state = *accept_col as u64;
-  const state_table_byte_size: u64 = 8;
-  const fail_state: u64 = 0;
-  const start_state: u64 = 1;
 
-  // The first column of every row will always be the error row
-  let entry = ctx.append_basic_block(fun, "entry");
-  let loop_start = ctx.append_basic_block(fun, "loop_head");
-  let slow_path = ctx.append_basic_block(fun, "slow_path");
-  let class_lookup = ctx.append_basic_block(fun, "class_lookup");
-  let byte_lookup = ctx.append_basic_block(fun, "byte_lookup");
-  let slow_path_resolve = ctx.append_basic_block(fun, "slow_path_resolve");
-  let fast_path = ctx.append_basic_block(fun, "fast_path");
-  let check_join = ctx.append_basic_block(fun, "check_join");
-  let accept_block = ctx.append_basic_block(fun, "accept");
-  let fail_block = ctx.append_basic_block(fun, "fail");
+  let byte_lu_table = module.module.add_global(i8.array_type(256), None, "byte_table");
 
   // Add some global data.
   let state_table =
     module.module.add_global(i8.array_type(states_table_byte_size as u32), None, "state_table");
-
-  let byte_lu_table = module.module.add_global(i8.array_type(256), None, "byte_table");
-
-  // Initialize the global data
-
   byte_lu_table.set_initializer(
     &i8.const_array(
       (create_char_lookup(symbols).into_iter().map(|v| i8.const_int(v, false)).collect::<Vec<_>>())
@@ -70,10 +45,83 @@ pub(crate) fn create_simd_dfa<'a>(
     (states.iter().map(|v| i8.const_int(*v as u64, false)).collect::<Vec<_>>()).as_slice(),
   ));
 
-  b.position_at_end(entry);
   let state_table_ptr = state_table.as_pointer_value();
   let token_id_ptr = byte_lu_table.as_pointer_value();
+  let accept_state = *accept_col as u64;
+  let empty_array_ptr = i8.const_array(&[]).get_type().ptr_type(inkwell::AddressSpace::Generic);
+  let result = b
+    .build_call(
+      module.fun.simd_token_parse,
+      &[
+        parse_ctx.into(),
+        b.build_pointer_cast(state_table_ptr, empty_array_ptr, "").into(),
+        b.build_pointer_cast(token_id_ptr, empty_array_ptr, "").into(),
+        i32.const_int(accept_state, false).into(),
+      ],
+      "",
+    )
+    .try_as_basic_value()
+    .left()?
+    .into_int_value();
+
+  SherpaResult::Ok(result)
+}
+
+pub(crate) fn construct_simd_function<'a>(module: &'a mut LLVMParserModule) -> SherpaResult<()> {
+  // Load the state table globally.
+  // Get a reference to said table.
+  //
+
+  let ctx = module.ctx;
+  let i8 = ctx.i8_type();
+  let i32 = ctx.i32_type();
+  let i128 = ctx.i128_type();
+  let b = &module.builder;
+  let fun = module.fun.simd_token_parse;
+
+  let length_mask = module.module.add_global(i128, None, "length_mask");
+  let byte_mask = module.module.add_global(i128, None, "byte_mask");
+
+  length_mask.set_initializer(&i128.const_int_from_string(
+    "F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0",
+    inkwell::types::StringRadix::Hexadecimal,
+  )?);
+
+  byte_mask.set_initializer(&i128.const_int_from_string(
+    "000000FF000000FF000000FF000000FF",
+    inkwell::types::StringRadix::Hexadecimal,
+  )?);
+
+  let length_mask_ptr = length_mask.as_pointer_value();
+  let byte_mask_ptr = byte_mask.as_pointer_value();
+
+  let parse_ctx = fun.get_nth_param(0)?.into_pointer_value();
+  let state_table_ptr = fun.get_nth_param(1)?.into_pointer_value();
+  let token_id_ptr = fun.get_nth_param(2)?.into_pointer_value();
+  let accept_state = fun.get_nth_param(3)?.into_int_value();
+  let fail_state = i32.const_zero();
+
+  const state_table_byte_size: u64 = 8;
+  const start_state: u64 = 1;
+
+  // The first column of every row will always be the error row
+  let entry = ctx.append_basic_block(fun, "entry");
+  let loop_start = ctx.append_basic_block(fun, "loop_head");
+  let slow_path = ctx.append_basic_block(fun, "slow_path");
+  let class_lookup = ctx.append_basic_block(fun, "class_lookup");
+  let byte_lookup = ctx.append_basic_block(fun, "byte_lookup");
+  let slow_path_resolve = ctx.append_basic_block(fun, "slow_path_resolve");
+  let fast_path = ctx.append_basic_block(fun, "fast_path");
+  let check_join = ctx.append_basic_block(fun, "check_join");
+  let check_fail = ctx.append_basic_block(fun, "check_fail");
+  let accept_block = ctx.append_basic_block(fun, "accept");
+  let fail_block = ctx.append_basic_block(fun, "fail");
+
+  // Initialize the global data
+
+  b.position_at_end(entry);
   let i8_ptr = i8.ptr_type(inkwell::AddressSpace::Generic);
+  let i128_ptr = i128.ptr_type(inkwell::AddressSpace::Generic);
   let token_value_ptr = b.build_alloca(i32, "val_ptr");
 
   let state_length_val_ptr = b.build_alloca(i32, "state_value_length");
@@ -110,6 +158,8 @@ pub(crate) fn create_simd_dfa<'a>(
           i8_ptr.into(),
           i8_ptr.into(),
           i32.ptr_type(inkwell::AddressSpace::Generic).into(),
+          i128_ptr.into(),
+          i128_ptr.into(),
         ],
         false,
       ),
@@ -130,6 +180,8 @@ pub(crate) fn create_simd_dfa<'a>(
         token_id_ptr.const_cast(i8_ptr).into(),
         state_table_ptr.const_cast(i8_ptr).into(),
         state_length_val_ptr.into(),
+        byte_mask.as_pointer_value().into(),
+        length_mask.as_pointer_value().into(),
       ],
       "test",
     );
@@ -157,7 +209,7 @@ pub(crate) fn create_simd_dfa<'a>(
   //--------------------
   // Fast Path 8 bytes -------------------------------------------------------------
   build_asm_path(
-    ("=r, {r8}, {rbx}, {r12}, {r13}, {r14}, {rax}").to_string(),
+    ("=r, {r8}, {rbx}, {r12}, {r13}, {r14}, {rax}, {r9}, {r10}").to_string(),
     format!(
       r##"
     # Remember:
@@ -167,9 +219,14 @@ pub(crate) fn create_simd_dfa<'a>(
     # $4 - The token LUT
     # $5 - The state LUT
     # $6 - Output 
+    # $7 - 0x000000FF token type mask
+    # $8 - 0xF0 state length mask
 
+    VZEROUPPER
+    
     cmp             r8, 8
     jb              _4bytes
+
 
     VPMOVZXBW       xmm0,  [$3]
     mov             r8,   0x80
@@ -179,22 +236,19 @@ pub(crate) fn create_simd_dfa<'a>(
     jnz             _4bytes         # Jump to slow path if the 
                                     # input contains non-ascii 
                                     # characters
-
-    mov             r8d, 0xf0
-    PINSRB          xmm8, r8d, 0
-    VPBROADCASTB    xmm8, xmm8
-
+    
+    movdqu       xmm8, [$8]
 
     VPMOVZXWD    xmm1, xmm0
     PCMPEQB      xmm3, xmm3
     VPGATHERDD   xmm9, [$4 + xmm1 * 1], xmm3
-    VPSRLD       xmm9, xmm9, 24
+    VPAND        xmm9, xmm9, [$7]
 
     MOVHLPS      xmm1, xmm0
     VPMOVZXWD    xmm1, xmm1
     PCMPEQB      xmm3, xmm3
     VPGATHERDD   xmm10, [$4 + xmm1 * 1], xmm3
-    VPSRLD       xmm10, xmm10, 24
+    VPAND        xmm10, xmm10, [$7]
 
     VPEXTRD      r8d, xmm9, 0
     movq         xmm0,  [$5 + r8 * {0}] 
@@ -262,13 +316,11 @@ _4bytes:
                                   # input contains non-ascii 
                                   # characters
 
-    mov          r11d, 0xf0
-    PINSRB       xmm8, r11d, 0
-    VPBROADCASTB xmm8, xmm8
+    movdqu       xmm8, [$8]
 
     PCMPEQB      xmm4, xmm4
     VPGATHERDD   xmm5, [$4 + xmm0 * 1], xmm4
-    VPSRLD       xmm5, xmm5, 24
+    VPAND        xmm5, xmm5, [$7]
 
     VPEXTRD      r8d, xmm5, 0
     movq         xmm0,  [$5 + r8 * {0}] 
@@ -383,10 +435,13 @@ _end:
 
   let state = b.build_and(state_length_val, i32.const_int(0xF, false), "");
 
-  b.build_switch(state, loop_start, &[
-    (i32.const_int(accept_state, false), accept_block),
-    (i32.const_int(fail_state, false), fail_block),
-  ]);
+  let c = b.build_int_compare(inkwell::IntPredicate::EQ, state, accept_state, "");
+  b.build_conditional_branch(c, accept_block, check_fail);
+
+  b.position_at_end(check_fail);
+
+  let c = b.build_int_compare(inkwell::IntPredicate::NE, state, fail_state, "");
+  b.build_conditional_branch(c, loop_start, fail_block);
 
   b.position_at_end(accept_block);
 
@@ -396,11 +451,11 @@ _end:
 
   b.build_return(Some(&ctx.i32_type().const_int(1, false)));
 
-  if fun.verify(true) {
-    SherpaResult::Ok(fun)
-  } else {
-    SherpaResult::Err(SherpaError::from("\n\nCould not build emit_eop function"))
+  if !fun.verify(true) {
+    return SherpaResult::Err(SherpaError::from("\n\nCould not build emit_eop function"));
   }
+
+  SherpaResult::Ok(())
 }
 
 fn create_char_lookup(symbols: &Vec<TokenData>) -> Vec<u64> {
@@ -440,6 +495,7 @@ fn create_char_lookup(symbols: &Vec<TokenData>) -> Vec<u64> {
       val => unreachable!("No other token types are supported: {:?}", val),
     }
   }
+  println!("{:?}", byte_vec);
   byte_vec
 }
 
@@ -516,8 +572,8 @@ pub(crate) fn can_simd(
   let mut symbols_map = BTreeMap::new();
   let mut byte_to_token_map = BTreeMap::new();
   let mut state_number = 0;
-  let mut token_count = 5; // Offset the token id by the number of
-                           // default symbol classes (5 at this point)
+  let mut token_count = 6; // Offset the token id by the number of
+                           // default symbol classes (6 at this point)
   let mut have_pass = false;
 
   while let Some((entry, instruction)) = state_queue.pop_front() {
@@ -626,8 +682,8 @@ pub(crate) fn can_simd(
     let column_count = 8;
     let accept_col = (column_count - 1) as u8;
 
-    let mut states_table = Vec::with_capacity(column_count * token_count);
-    states_table.resize_with(column_count * token_count, || 0);
+    let mut states_table = Vec::with_capacity(column_count * (token_count + 1));
+    states_table.resize_with(column_count * (token_count + 1), || 0);
 
     for (TokenData { tok_val, .. }, states) in symbols_map {
       let offset = tok_val as usize * column_count;

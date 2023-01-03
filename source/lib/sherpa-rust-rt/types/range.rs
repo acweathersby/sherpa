@@ -1,6 +1,6 @@
 use std::{ops::Add, str::FromStr, sync::Arc};
 
-use super::Token;
+use super::{ByteReader, LLVMParseContext, OldParseContext, Token};
 
 #[derive(Clone)]
 pub struct Range {
@@ -160,6 +160,12 @@ impl TokenRange {
   pub fn to_token(&self, source: Arc<Vec<u8>>) -> Token {
     let mut tok: Token = (*self).into();
     tok.set_source(source);
+    tok
+  }
+
+  pub fn to_token_with_reader(&self, reader: &dyn ByteReader) -> Token {
+    let mut tok: Token = (*self).into();
+    tok.set_source(reader.get_source());
     tok
   }
 }

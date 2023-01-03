@@ -73,6 +73,7 @@ pub struct PublicFunctions<'a> {
   /// extern "C" fn get_token_class_from_codepoint( utf8_codepoint: u32 ) -> u32;
   /// ```
   pub(crate) get_token_class_from_codepoint: FunctionValue<'a>,
+  pub(crate) simd_token_parse: FunctionValue<'a>,
 }
 
 #[derive(Debug)]

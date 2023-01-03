@@ -28,7 +28,7 @@ impl Into<u64> for ParseActionType {
 }
 
 const STACK_32_BIT_SIZE: usize = 128;
-pub struct ParseContext<T: ByteReader + MutByteReader> {
+pub struct OldParseContext<T: ByteReader + MutByteReader> {
   pub peek: (TokenRange, u32),
   pub anchor: (TokenRange, u32),
   pub assert: (TokenRange, u32),
@@ -46,7 +46,7 @@ pub struct ParseContext<T: ByteReader + MutByteReader> {
   pub local_state_stack: Vec<u32>,
 }
 
-impl<T: ByteReader + MutByteReader> ParseContext<T> {
+impl<T: ByteReader + MutByteReader> OldParseContext<T> {
   pub fn new(reader: &mut T) -> Self {
     Self {
       peek: Default::default(),
@@ -360,6 +360,10 @@ impl<T: LLVMByteReader + ByteReader, M> LLVMParseContext<T, M> {
 impl<T: UTF8Reader + LLVMByteReader + ByteReader, M> LLVMParseContext<T, M> {
   pub fn get_str<'a>(&'a self) -> &'a str {
     unsafe { (*self.reader).get_str() }
+  }
+
+  pub fn get_reader(&self) -> &T {
+    unsafe { (&*self.reader) as &T }
   }
 }
 

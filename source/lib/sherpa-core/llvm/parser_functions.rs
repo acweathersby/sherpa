@@ -2,14 +2,18 @@ use super::{
   build_fast_call,
   create_offset_label,
   fastCC,
-  simd::{create_simd_dfa, ScannerData},
+  simd::ScannerData,
   CTX_AGGREGATE_INDICES as CTX,
 };
 use crate::{
   build::table::{BranchData, BranchTableData},
   compile::BytecodeOutput,
   debug::{address_string, disassemble_state, BytecodeGrammarLookups},
-  llvm::{simd::can_simd, LLVMParserModule, FAIL_STATE_FLAG_LLVM},
+  llvm::{
+    simd::{can_simd, construct_simd_call},
+    LLVMParserModule,
+    FAIL_STATE_FLAG_LLVM,
+  },
   types::*,
   Journal,
 };
@@ -128,6 +132,7 @@ pub(crate) unsafe fn construct_parse_function<'a>(
   //   states being created that are jumped to when parsing is resumed.
 
   // Starting with the root states, collect a list of all states that can be reached.
+
   let states = {
     let mut seen = BTreeSet::new();
     let mut states_queue =
@@ -172,9 +177,9 @@ pub(crate) unsafe fn construct_parse_function<'a>(
                 break;
               }
               VectorBranch | HashBranch => {
-                match is_scanner.then(|| can_simd(instruction, g, output)) {
+                match (is_scanner && j.config().llvm_simd).then(|| can_simd(instruction, g, output))
+                {
                   Some(SherpaResult::Ok(result)) => {
-                    println!("{:?} {:?}", instruction, result);
                     state.scanner_simd_data = Some(result);
                     break;
                   }
@@ -356,18 +361,11 @@ fn construct_instruction_branch<'a>(
     let success_block = p.state.generate_block(module, "_success", instruction.get_address());
     let fail_block = p.state.generate_block(module, "_fail", instruction.get_address());
 
-    let fun = create_simd_dfa(
-      &(p.state.get_name().to_string() + "_simd"),
-      module,
-      p.state.scanner_simd_data.as_ref()?,
-    )?;
-
     b.position_at_end(p.state.entry_block);
 
-    let result =
-      b.build_call(fun, &[parse_ctx.into()], "").try_as_basic_value().left()?.into_int_value();
+    let val = construct_simd_call(module, p.state.scanner_simd_data.as_ref()?, parse_ctx)?;
 
-    let c = b.build_int_compare(inkwell::IntPredicate::EQ, result, i32.const_int(1, false), "");
+    let c = b.build_int_compare(inkwell::IntPredicate::EQ, val, i32.const_zero(), "");
 
     b.build_conditional_branch(c, success_block, fail_block);
 

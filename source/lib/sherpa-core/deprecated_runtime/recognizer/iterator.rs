@@ -1,13 +1,10 @@
 #[deprecated]
 use std::result;
 
-use crate::{
-  deprecated_runtime::{
-    buffer::ByteReader,
-    parse_token::ParseToken,
-    recognizer::stack::KernelStack,
-  },
-  types::*,
+use crate::deprecated_runtime::{
+  buffer::ByteReader,
+  parse_token::ParseToken,
+  recognizer::stack::KernelStack,
 };
 
 // Global Constants
@@ -33,6 +30,8 @@ const SKIPPED_SCAN_PROD: u32 = 9009;
 const DEFAULT_PASS_INSTRUCTION: usize = 1;
 
 const NORMAL_STATE_FLAG: u32 = 1 << 26;
+
+const DEFAULT_FAIL_INSTRUCTION_ADDRESS: u32 = 2;
 
 #[derive(Debug, Copy, Clone)]
 #[deprecated]
@@ -739,7 +738,6 @@ trait ParserCoreIterator<R: ByteReader> {
   //*
   fn instruction_executor(&mut self, state_pointer: u32, fail_mode: u32, bytecode: &[u32]) -> u32 {
     let mut index = (state_pointer & STATE_INDEX_MASK) as usize;
-
     loop {
       match bytecode[index] & 0xF0000000 as u32 {
         0x10000000 => {

@@ -110,6 +110,10 @@ pub struct Config {
   ///
   /// Default to `false`
   pub llvm_light_lto:  bool,
+
+  /// Enable SIMD based parsing for targets that support SIMD operations.
+  /// Default to `false`
+  pub llvm_simd: bool,
 }
 
 impl Default for Config {
@@ -127,6 +131,7 @@ impl Default for Config {
       llvm_ar_path: "llvm-ar-14".to_string(),
       llvm_clang_path: "clang-14".to_string(),
       llvm_light_lto: false,
+      llvm_simd: false,
       opt_llvm: false,
     }
   }

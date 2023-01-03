@@ -5,12 +5,90 @@ pub fn main() {
   let mut messages = Vec::<String>::with_capacity(10);
 
   let start = Instant::now();
-  let str_ref = r##"{ "time": [2,2,3,4] } "##;
+  let str_ref = r##"{  "test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test
+  test test test test test test": "mango", "dogo":{ "test": 1234 }, 
+  "test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test
+  test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test 
+  test test test test test test test test test test test test
+  test" : 123 } "##;
 
   let parser = Parser::<_, u32>::new_entry_parser(UTF8StringReader::from(str_ref));
 
   for action in parser.into_iter() {
-    //dbg!(action);
+    dbg!(action);
   }
 
   println!("{:?}", start.elapsed());

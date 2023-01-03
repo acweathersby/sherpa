@@ -5,7 +5,7 @@ use crate::types::*;
 #[inline]
 pub fn dispatch<T: ByteReader + MutByteReader>(
   r: &mut T,
-  ctx: &mut ParseContext<T>,
+  ctx: &mut OldParseContext<T>,
   bc: &[u32],
 ) -> ParseAction {
   use ParseAction::*;
@@ -57,7 +57,7 @@ pub fn dispatch<T: ByteReader + MutByteReader>(
 fn shift<T: ByteReader + MutByteReader + MutByteReader>(
   i: u32,
   instr: INSTRUCTION,
-  ctx: &mut ParseContext<T>,
+  ctx: &mut OldParseContext<T>,
   r: &mut T,
 ) -> (ParseAction, u32) {
   if instr.get_value() & 0x1 == 1 {
@@ -102,7 +102,7 @@ fn next_token(shift: (TokenRange, u32)) -> (TokenRange, u32) {
 fn reduce<T: ByteReader + MutByteReader>(
   i: u32,
   instr: INSTRUCTION,
-  ctx: &mut ParseContext<T>,
+  ctx: &mut OldParseContext<T>,
 ) -> (ParseAction, u32) {
   let symbol_count = instr.get_contents() >> 16 & 0x0FFF;
   let rule_id = instr.get_contents() & 0xFFFF;
@@ -122,7 +122,7 @@ fn reduce<T: ByteReader + MutByteReader>(
 fn goto<T: ByteReader + MutByteReader>(
   i: u32,
   instr: INSTRUCTION,
-  ctx: &mut ParseContext<T>,
+  ctx: &mut OldParseContext<T>,
 ) -> u32 {
   ctx.push_state(instr.get_value());
   i + 1
@@ -132,7 +132,7 @@ fn goto<T: ByteReader + MutByteReader>(
 fn _eat_crumbs<T: ByteReader + MutByteReader>(
   i: u32,
   instr: INSTRUCTION,
-  ctx: &mut ParseContext<T>,
+  ctx: &mut OldParseContext<T>,
 ) -> u32 {
   ctx.push_state(instr.get_value());
   // The collapse function takes the current production, retasked
@@ -156,7 +156,7 @@ fn _eat_crumbs<T: ByteReader + MutByteReader>(
 fn set_production<T: ByteReader + MutByteReader>(
   i: u32,
   instr: INSTRUCTION,
-  ctx: &mut ParseContext<T>,
+  ctx: &mut OldParseContext<T>,
 ) -> u32 {
   ctx.set_production_to(instr.get_contents());
   i + 1
@@ -166,7 +166,7 @@ fn set_production<T: ByteReader + MutByteReader>(
 fn set_token_state<T: ByteReader + MutByteReader>(
   i: u32,
   instr: INSTRUCTION,
-  ctx: &mut ParseContext<T>,
+  ctx: &mut OldParseContext<T>,
 ) -> u32 {
   let value = instr.get_contents() & 0x00FF_FFFF;
 
@@ -216,7 +216,7 @@ fn noop(i: u32) -> u32 {
 }
 
 #[inline]
-fn skip_token<T: ByteReader + MutByteReader>(ctx: &mut ParseContext<T>) {
+fn skip_token<T: ByteReader + MutByteReader>(ctx: &mut OldParseContext<T>) {
   if ctx.in_peek_mode() {
     ctx.peek = next_token(ctx.peek);
   } else {
@@ -230,7 +230,7 @@ fn skip_token<T: ByteReader + MutByteReader>(ctx: &mut ParseContext<T>) {
 pub fn hash_jump<T: ByteReader + MutByteReader>(
   i: u32,
   r: &mut T,
-  ctx: &mut ParseContext<T>,
+  ctx: &mut OldParseContext<T>,
   bc: &[u32],
 ) -> u32 {
   let i = i as usize;
@@ -281,7 +281,7 @@ pub fn hash_jump<T: ByteReader + MutByteReader>(
 pub fn vector_jump<T: ByteReader + MutByteReader>(
   i: u32,
   r: &mut T,
-  ctx: &mut ParseContext<T>,
+  ctx: &mut OldParseContext<T>,
   bc: &[u32],
 ) -> u32 {
   let i = i as usize;
@@ -327,7 +327,7 @@ fn get_token_value<T: ByteReader + MutByteReader>(
   input_type: u32,
   r: &mut T,
   scan_index: u32,
-  ctx: &mut ParseContext<T>,
+  ctx: &mut OldParseContext<T>,
   bc: &[u32],
 ) -> i32 {
   let mut active_token = match lex_type {
@@ -408,7 +408,7 @@ fn get_token_value<T: ByteReader + MutByteReader>(
 }
 
 fn scan_for_improvised_token<T: ByteReader + MutByteReader>(
-  scan_ctx: &mut ParseContext<T>,
+  scan_ctx: &mut OldParseContext<T>,
   r: &mut T,
 ) {
   let mut assert = scan_ctx.assert;
@@ -444,7 +444,7 @@ fn scan_for_improvised_token<T: ByteReader + MutByteReader>(
 fn token_scan<T: ByteReader + MutByteReader>(
   token: (TokenRange, u32),
   scan_index: u32,
-  ctx: &mut ParseContext<T>,
+  ctx: &mut OldParseContext<T>,
   r: &mut T,
   bc: &[u32],
 ) -> (TokenRange, u32) {
@@ -476,7 +476,7 @@ fn token_scan<T: ByteReader + MutByteReader>(
   }
   // Initialize Scanner
 
-  let mut scan_ctx = ParseContext::bytecode_context();
+  let mut scan_ctx = OldParseContext::bytecode_context();
   scan_ctx.make_scanner();
   scan_ctx.init_normal_state(scan_index);
   scan_ctx.anchor = token;
@@ -540,7 +540,7 @@ fn token_scan<T: ByteReader + MutByteReader>(
 #[inline]
 pub fn get_next_action<T: ByteReader + MutByteReader>(
   r: &mut T,
-  ctx: &mut ParseContext<T>,
+  ctx: &mut OldParseContext<T>,
   bc: &[u32],
 ) -> ParseAction {
   if ctx.get_active_state() == 0 {

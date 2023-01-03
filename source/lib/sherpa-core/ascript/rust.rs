@@ -778,6 +778,10 @@ pub fn render_expression(
       _ => {
         let ref_ = render_expression(s, value, b, ref_index, type_slot)?;
         match ref_.ast_type {
+          AScriptTypeVal::TokenRange => Some(ref_.from(
+            "%%.to_token_with_reader(ctx.get_reader()).to_string()".to_string(),
+            AScriptTypeVal::String(None),
+          )),
           AScriptTypeVal::TokenVec => {
             // Merge the last and first token together
             // get the string value from the resulting span of the union
@@ -906,7 +910,7 @@ fn render_body_symbol(
       if types.len() == 1 {
         let _type = types.first().unwrap().clone();
         if Token == _type {
-          Ref::token_range(i, type_slot)
+          Ref::token(i, type_slot)
         } else {
           if let Some(init_string) = match _type {
             F64(..) => Some(format!("i{0}.to_f64()", i)),
@@ -1186,7 +1190,7 @@ impl Ref {
       init_index,
       type_slot,
       body_indices: BTreeSet::new(),
-      init_expression: format!("tok{}", init_index),
+      init_expression: format!("tok{0}.to_token_with_reader(ctx.get_reader())", init_index),
       ast_type: AScriptTypeVal::Token,
       predecessors: None,
       post_init_statements: None,

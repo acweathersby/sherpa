@@ -5,7 +5,7 @@ use crate::{
     ascript_functions::construct_ast_builder,
     compile_from_bytecode,
     parser_functions::construct_parse_function,
-    simd::{create_simd_dfa, ScannerData, TokenData},
+    simd::{construct_simd_call, construct_simd_function, ScannerData, TokenData},
     test_reader::TestUTF8StringReader,
   },
   Journal,
@@ -26,8 +26,8 @@ use sherpa_runtime::{
     InputInfo,
     InputType,
     LLVMParseContext,
+    OldParseContext,
     ParseActionType,
-    ParseContext,
     ParseResult,
     Token,
     TokenRange,
@@ -112,14 +112,9 @@ fn build_fast_call_shim<'a>(
 fn verify_construction_of_simd_function() {
   let context = Context::create();
 
-  let module = construct_module(&mut Journal::new(None), "test", &context);
+  let mut module = construct_module(&mut Journal::new(None), "test", &context);
 
-  assert!(create_simd_dfa("test", &module, &ScannerData {
-    symbols:      vec![],
-    states_table: vec![],
-    accept_col:   1,
-  })
-  .is_ok());
+  assert!(construct_simd_function(&mut module,).is_ok());
 
   eprintln!("{}", module.module.to_string());
 }
@@ -637,43 +632,58 @@ fn run_simple_state_based_simd_loop() -> SherpaResult<()> {
 
   let mut module = construct_module(&mut Journal::new(None), "test", &context);
   unsafe {
-    assert!(create_simd_dfa("simd_function", &module, &ScannerData {
-      symbols:      vec![
-        TokenData {
-          class:   2,
-          tok_val: CodePointClass::Symbol as u32,
-          val:     CodePointClass::Symbol as u32,
-        },
-        TokenData {
-          class:   2,
-          tok_val: CodePointClass::Identifier as u32,
-          val:     CodePointClass::Identifier as u32,
-        },
-        TokenData {
-          class:   2,
-          tok_val: CodePointClass::Number as u32,
-          val:     CodePointClass::Number as u32,
-        },
-        TokenData {
-          class:   2,
-          tok_val: CodePointClass::Space as u32,
-          val:     CodePointClass::Space as u32,
-        },
-        TokenData { class: 4, tok_val: 7, val: 34 },
-      ],
-      states_table: vec![
-        0, 0, 0, 0, 0, 0, 0, 0, // ---
-        0, 0, 0, 0, 0, 0, 0, 0, // ---
-        0, 18, 18, 0, 0, 0, 0, 7, // ---
-        0, 18, 18, 0, 0, 0, 0, 7, // ---
-        0, 18, 18, 0, 0, 0, 0, 7, // ---
-        0, 18, 18, 0, 0, 0, 0, 7, // ---
-        0, 0, 0, 0, 0, 0, 0, 0, // ---
-        0, 0, 7, 0, 0, 0, 0, 7 // ---
-      ],
-      accept_col:   7,
-    })
-    .is_ok());
+    construct_simd_function(&mut module);
+
+    let b = &module.builder;
+    let shim = module.module.add_function(
+      "simd_fn",
+      module
+        .ctx
+        .i32_type()
+        .fn_type(&[module.types.parse_ctx.ptr_type(inkwell::AddressSpace::Generic).into()], false),
+      None,
+    );
+    b.position_at_end(module.ctx.append_basic_block(shim, "entry"));
+    b.build_return(Some(&construct_simd_call(
+      &module,
+      &ScannerData {
+        symbols:      vec![
+          TokenData {
+            class:   2,
+            tok_val: CodePointClass::Symbol as u32,
+            val:     CodePointClass::Symbol as u32,
+          },
+          TokenData {
+            class:   2,
+            tok_val: CodePointClass::Identifier as u32,
+            val:     CodePointClass::Identifier as u32,
+          },
+          TokenData {
+            class:   2,
+            tok_val: CodePointClass::Number as u32,
+            val:     CodePointClass::Number as u32,
+          },
+          TokenData {
+            class:   2,
+            tok_val: CodePointClass::Space as u32,
+            val:     CodePointClass::Space as u32,
+          },
+          TokenData { class: 4, tok_val: 7, val: 34 },
+        ],
+        states_table: vec![
+          0, 0, 0, 0, 0, 0, 0, 0, // ---
+          0, 0, 0, 0, 0, 0, 0, 0, // ---
+          0, 18, 18, 0, 0, 0, 0, 7, // ---
+          0, 18, 18, 0, 0, 0, 0, 7, // ---
+          0, 18, 18, 0, 0, 0, 0, 7, // ---
+          0, 18, 18, 0, 0, 0, 0, 7, // ---
+          0, 0, 0, 0, 0, 0, 0, 0, // ---
+          0, 0, 7, 0, 0, 0, 0, 7, // ---
+        ],
+        accept_col:   7,
+      },
+      shim.get_first_param()?.into_pointer_value(),
+    )?));
 
     setup_exec_engine(&mut module);
 
@@ -687,8 +697,8 @@ fn run_simple_state_based_simd_loop() -> SherpaResult<()> {
     assert!(construct_utf8_lookup_function(&module).is_ok());
     assert!(construct_merge_utf8_part_function(&module).is_ok());
 
-    let simd = get_parse_function::<TailCallFunction>(&module, "simd_function")?;
-    let mut input = String::from("☺1111☺1111222245\"");
+    let simd = get_parse_function::<TailCallFunction>(&module, "simd_fn")?;
+    let mut input = String::from("11111\"111222245\"");
     let mut rt_ctx = LLVMParseContext::new();
     rt_ctx.scan_len = input.len() as u32;
     rt_ctx.scan_ptr = input.as_mut_ptr();

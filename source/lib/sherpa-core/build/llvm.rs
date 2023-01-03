@@ -129,7 +129,6 @@ extern \"C\" {{
     fn next(ctx: *mut u8) -> ParseActionType;
     fn prime(ctx: *mut u8, start_point: u32);
     fn drop(ctx: *mut u8);
-    fn ast_parse();
 }}",
       parser_name
     ))?

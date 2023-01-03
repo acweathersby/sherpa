@@ -1,8 +1,7 @@
 use crate::{
   deprecated_runtime::{
     buffer::ByteReader,
-    error::TokenError,
-    recognizer::iterator::{ParseAction, ParseErrorCode, ParseIterator},
+    recognizer::iterator::{ParseAction, ParseIterator},
   },
   grammar::data::ast_node::{HCObj, ReduceFunction_old},
   types::*,

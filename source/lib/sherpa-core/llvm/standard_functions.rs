@@ -6,7 +6,7 @@ use super::{
     construct_scan,
   },
   CTX_AGGREGATE_INDICES as CTX,
-  FAIL_STATE_FLAG_LLVM,
+  FAIL_STATE_FLAG_LLVM, simd::construct_simd_function,
 };
 use crate::{
   compile::BytecodeOutput,
@@ -111,6 +111,7 @@ pub(crate) fn construct_module<'a>(j:&mut Journal,  module_name: &str, ctx: &'a 
   );
 
   let fun = PublicFunctions {
+
     /// Public functions
     init: module.add_function(
       "init",
@@ -151,6 +152,20 @@ pub(crate) fn construct_module<'a>(j:&mut Journal,  module_name: &str, ctx: &'a 
     handle_eop: module.add_function("emit_eop", TAIL_CALLABLE_PARSE_FUNCTION, internal_linkage),
 
     /// ------------------------------------------------------------------------
+    
+    simd_token_parse:     module.add_function(
+      "simd_token_parse",
+      i32.fn_type(
+        &[
+          CTX_PTR.into(),
+          i8.const_array(&[]).get_type().ptr_type(inkwell::AddressSpace::Generic).into(),
+          i8.const_array(&[]).get_type().ptr_type(inkwell::AddressSpace::Generic).into(),
+          i32.into(),
+        ],
+        false,
+      ),
+      internal_linkage,
+    ),
     get_utf8_codepoint_info: module.add_function(
       "get_utf8_codepoint_info",
       CP_INFO.fn_type(&[i8.ptr_type(Generic).into()], false),
@@ -844,6 +859,7 @@ pub fn compile_from_bytecode<'a>(
     construct_internal_free_stack(&mut module)?;
     construct_drop(&mut module)?;
     construct_parse_function(j, &mut module, output)?;
+    construct_simd_function(&mut module)?;
   }
 
   module.fun.push_state.add_attribute(

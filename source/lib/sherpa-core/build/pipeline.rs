@@ -413,7 +413,7 @@ pub fn compile_llvm_parser(grammar_source_path: &PathBuf, config: Config) -> boo
 
   match pipeline.run(|errors| {
     for error in &errors {
-      eprintln!("{}", error);
+      panic!("{}", error);
     }
   }) {
     SherpaResult::Ok(_) => true,
