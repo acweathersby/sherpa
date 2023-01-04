@@ -218,8 +218,8 @@ pub(crate) fn peek(
           );
         }
         2.. => {
-          items.print_items(g, "Conflicting items");
-          t.accept_items.print_items(g, "GOALS");
+          items.__print_items__(g, "Conflicting items");
+          t.accept_items.__print_items__(g, "GOALS");
           return SherpaResult::Err(SherpaError::grammar_err_multi_location {
             message:   "Could not resolve production. Grammar has ambiguities.".to_string(),
             locations: items

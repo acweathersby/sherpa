@@ -52,8 +52,8 @@ pub struct LLVMParseContext<T: LLVMByteReader + ByteReader, M> {
   pub token_ptr:       *mut u8,
   pub peek_ptr:        *mut u8,
   pub scan_ptr:        *mut u8,
-  pub tok_input_len:   u32,
-  pub peek_input_len:  u32,
+  pub token_len:       u32,
+  pub peek_len:        u32,
   pub scan_input_len:  u32,
   pub tok_input_trun:  bool,
   pub peek_input_trun: bool,
@@ -123,8 +123,8 @@ impl<T: LLVMByteReader + ByteReader, M> Debug for LLVMParseContext<T, M> {
     dbgstr.field("token_ptr", &self.token_ptr);
     dbgstr.field("peek_ptr", &self.peek_ptr);
     dbgstr.field("scan_ptr", &self.scan_ptr);
-    dbgstr.field("tok_input_len", &self.tok_input_len);
-    dbgstr.field("peek_input_len", &self.peek_input_len);
+    dbgstr.field("tok_input_len", &self.token_len);
+    dbgstr.field("peek_input_len", &self.peek_len);
     dbgstr.field("scan_input_len", &self.scan_input_len);
     dbgstr.field("anchor_off", &self.anchor_off);
     dbgstr.field("token_off", &self.token_off);
@@ -162,8 +162,8 @@ impl<T: LLVMByteReader + ByteReader, M> LLVMParseContext<T, M> {
       peek_input_trun: true,
       scan_input_trun: true,
       tok_input_trun:  true,
-      tok_input_len:   0,
-      peek_input_len:  0,
+      token_len:       0,
+      peek_len:        0,
       scan_input_len:  0,
       anchor_off:      0,
       token_off:       0,
@@ -229,16 +229,6 @@ impl<T: LLVMByteReader + ByteReader, M> LLVMParseContext<T, M> {
   #[inline]
   pub fn set_peek_mode_to(&mut self, is_in_peek_mode: bool) {
     self.in_peek_mode = is_in_peek_mode;
-  }
-
-  #[inline]
-  pub fn get_active_state(&mut self) -> u32 {
-    self.state as u32
-  }
-
-  #[inline]
-  pub fn set_active_state_to(&mut self, state: u32) {
-    self.state = state;
   }
 
   #[inline]

@@ -27,7 +27,7 @@ mod types;
 mod util;
 mod writer;
 
-#[cfg(test)]
+//#[cfg(test)]
 mod test;
 
 /// Methods for debugging a grammar and it's artifacts.

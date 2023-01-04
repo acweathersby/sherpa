@@ -11,10 +11,8 @@ use crate::{
     optimize::optimize_ir_states,
   },
   journal::Journal,
-  types::*,
+  types::*, compile::compile_bytecode,
 };
-
-use super::compile_bytecode;
 
   #[test]
   pub fn test_produce_a_single_ir_ast_from_a_single_state_of_a_trivial_production() -> SherpaResult<()>

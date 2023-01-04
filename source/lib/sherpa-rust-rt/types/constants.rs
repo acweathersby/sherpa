@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 // Global Constants
 pub const STATE_ADDRESS_MASK: u32 = (1 << 24) - 1;
 
@@ -74,23 +76,23 @@ pub enum InstructionType {
   Fail       = 15,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 /// Bytecode instruction constants
-pub struct INSTRUCTION(pub u32, usize);
+pub struct Instruction(pub u32, usize);
 
-impl INSTRUCTION {
+impl Instruction {
   pub const I00_PASS: u32 = 0;
   pub const I01_SHIFT: u32 = 1 << 28;
   pub const I02_GOTO: u32 = 2 << 28;
   pub const I03_SET_PROD: u32 = 3 << 28;
   pub const I04_REDUCE: u32 = 4 << 28;
   pub const I05_TOKEN: u32 = 5 << 28;
-  pub const I05_TOKEN_ASSIGN: u32 = INSTRUCTION::I05_TOKEN | TOKEN_ASSIGN_FLAG;
-  pub const I05_TOKEN_ASSIGN_SHIFT: u32 = INSTRUCTION::I05_TOKEN | 0x09000000;
-  pub const I05_TOKEN_LENGTH: u32 = INSTRUCTION::I05_TOKEN | 0x08000000;
+  pub const I05_TOKEN_ASSIGN: u32 = Instruction::I05_TOKEN | TOKEN_ASSIGN_FLAG;
+  pub const I05_TOKEN_ASSIGN_SHIFT: u32 = Instruction::I05_TOKEN | 0x09000000;
+  pub const I05_TOKEN_LENGTH: u32 = Instruction::I05_TOKEN | 0x08000000;
   pub const I06_FORK_TO: u32 = 6 << 28;
   pub const I07_SCAN: u32 = 7 << 28;
-  pub const I07_SCAN_BACK_UNTIL: u32 = INSTRUCTION::I07_SCAN | 0x00100000;
+  pub const I07_SCAN_BACK_UNTIL: u32 = Instruction::I07_SCAN | 0x00100000;
   pub const I08_EAT_CRUMBS: u32 = 8 << 28;
   pub const I09_VECTOR_BRANCH: u32 = 9 << 28;
   pub const I10_HASH_BRANCH: u32 = 10 << 28;
@@ -101,12 +103,12 @@ impl INSTRUCTION {
   pub const I15_FAIL: u32 = 15 << 28;
   pub const I15_FALL_THROUGH: u32 = 15 << 28 | 1;
 
-  pub fn pass() -> INSTRUCTION {
-    INSTRUCTION(0, 1)
+  pub fn pass() -> Instruction {
+    Instruction(0, 1)
   }
 
-  pub fn fail() -> INSTRUCTION {
-    INSTRUCTION(0, 2)
+  pub fn fail() -> Instruction {
+    Instruction(0, 2)
   }
 
   pub fn is_valid(&self) -> bool {
@@ -114,14 +116,14 @@ impl INSTRUCTION {
   }
 
   pub fn invalid() -> Self {
-    INSTRUCTION(0, 0)
+    Instruction(0, 0)
   }
 
   pub fn from(bc: &[u32], address: usize) -> Self {
     if address > bc.len() {
       Self::invalid()
     } else {
-      INSTRUCTION(bc[address], address)
+      Instruction(bc[address], address)
     }
   }
 
@@ -129,7 +131,7 @@ impl INSTRUCTION {
     if self.1 >= bc.len() - 1 {
       Self::invalid()
     } else {
-      INSTRUCTION(bc[self.1 + 1], self.1 + 1)
+      Instruction(bc[self.1 + 1], self.1 + 1)
     }
   }
 
@@ -280,6 +282,13 @@ impl INSTRUCTION {
       Self::I15_FAIL => "I15_FAIL",
       _ => "Undefined",
     }
+  }
+}
+
+impl Debug for Instruction {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let mut debug_struc = f.debug_struct(&format!("Sherpa Instruction [{}]", self.to_str()));
+    debug_struc.finish()
   }
 }
 

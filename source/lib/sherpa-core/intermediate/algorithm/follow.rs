@@ -59,7 +59,7 @@ pub(super) fn get_follow_items(
               .goto_items
               .closure_with_state(&t.g)
               .to_vec()
-              .print_items(&t.g, &format!("\n Closure {:?}", curr_node));
+              .__print_items__(&t.g, &format!("\n Closure {:?}", curr_node));
           }
           (node.goto_items.closure_with_state(&t.g).to_vec().into_iter(), node.closure_parent)
         }
@@ -119,16 +119,6 @@ pub(super) fn get_follow_items(
               closure_node: None,
             });
           }
-          /* if t
-            .get_node(root_node)
-            .transition_items
-            .contains(&completed_item.to_start().to_origin_only_state())
-          {
-            fin_items.insert(LinkedItem {
-              item:         completed_item.to_origin_only_state(),
-              closure_node: None,
-            });
-          } */
           #[cfg(follow_tracking)]
           {
             eprintln!("no closure for Node [{:?}] - Should be at root node.", root_node);
@@ -142,7 +132,7 @@ pub(super) fn get_follow_items(
           let proxy_state = completed_item.get_state();
           #[cfg(follow_tracking)]
           {
-            closure.print_items(g, &format!("Node [{:?}] closure:", current_node));
+            closure.__print_items__(g, &format!("Node [{:?}] closure:", current_node));
           }
           let null_items: Items = closure.drain_filter(|i| i.is_null()).collect();
           if !null_items.is_empty() {
@@ -202,8 +192,8 @@ pub(super) fn get_follow_items(
                   local_closure_lookup
                     .get(&prod)
                     .unwrap_or(&empty)
-                    .print_items(&t.g, "debug gotos");
-                  goto_items.print_items(&t.g, "results");
+                    .__print_items__(&t.g, "debug gotos");
+                  goto_items.__print_items__(&t.g, "results");
                 }
 
                 // Place a null slide into the active state's goto closure.
@@ -256,15 +246,18 @@ pub(super) fn get_follow_items(
           {
             eprintln!("Evaluating potential leaf node ------------------");
             eprintln!("---- {}", _completed_item.to_state(state).debug_string(&t.g));
-            t.accept_items().print_items(g, "Accepting Items");
+            t.accept_items().__print_items__(g, "Accepting Items");
           }
 
-          if t.accept_items().contains(&_completed_item.to_origin_only_state()) {
+          // Remap item to proxy state.
+          let candidate_state = _completed_item.to_state(state).to_origin_only_state();
+
+          if t.accept_items().contains(&candidate_state) {
             fin_items.insert(LinkedItem { item: completed_item, closure_node: None });
           } else {
             eprintln!("All possible conditions should be covered by the above: ");
-            eprintln!("completed_items: {}", _completed_item.debug_string(g));
-            t.accept_items().print_items(g, "Accept Items");
+            eprintln!("completed_items: {} {}", _completed_item.debug_string(g), state);
+            t.accept_items().__print_items__(g, "Accept Items");
           }
         }
       }
@@ -272,9 +265,9 @@ pub(super) fn get_follow_items(
   }
   #[cfg(follow_tracking)]
   {
-    Items::from_linked(fin_items.clone()).print_items(g, "Completed Final Items");
-    Items::from_linked(intermediate.clone()).print_items(g, "Intermediate Items");
-    Items::from_linked(out.clone()).print_items(g, "Uncompleted Items");
+    Items::from_linked(fin_items.clone()).__print_items__(g, "Completed Final Items");
+    Items::from_linked(intermediate.clone()).__print_items__(g, "Intermediate Items");
+    Items::from_linked(out.clone()).__print_items__(g, "Uncompleted Items");
     eprintln!("---- Follow end on {} ----\n\n", root_completed_item.debug_string(g));
   }
 

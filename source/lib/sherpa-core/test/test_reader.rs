@@ -110,11 +110,9 @@ impl<'a> ByteReader for TestUTF8StringReader<'a> {
   }
 
   #[inline(always)]
-  fn set_cursor_to(&mut self, token: &TokenRange) -> u64 {
-    let TokenRange { len, line_num, line_off, .. } = *token;
-
-    if self.cursor != len as usize {
-      let diff = len as i32 - self.cursor as i32;
+  fn set_cursor_to(&mut self, off: u32, line_num: u32, line_off: u32) -> u64 {
+    if self.cursor != off as usize {
+      let diff = off as i32 - self.cursor as i32;
 
       self.line_num = line_num as usize;
 

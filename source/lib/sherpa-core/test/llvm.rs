@@ -5,7 +5,7 @@ use crate::{
     ascript_functions::construct_ast_builder,
     compile_from_bytecode,
     parser_functions::construct_parse_function,
-    test_reader::TestUTF8StringReader,
+    *,
   },
   Journal,
   SherpaResult,
@@ -25,7 +25,6 @@ use sherpa_runtime::{
     InputInfo,
     InputType,
     LLVMParseContext,
-    OldParseContext,
     ParseActionType,
     ParseResult,
     Token,
@@ -35,7 +34,7 @@ use sherpa_runtime::{
 };
 use std::{fs::File, io::Write};
 
-use super::{standard_functions::*, types::*};
+use super::test_reader::TestUTF8StringReader;
 
 type Init = unsafe extern "C" fn(
   *mut LLVMParseContext<TestUTF8StringReader<'static>, u32>,

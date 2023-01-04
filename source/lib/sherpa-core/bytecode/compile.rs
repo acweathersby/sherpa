@@ -41,12 +41,12 @@ pub(crate) fn build_byte_code_buffer(states: Vec<&IR_STATE>) -> (Vec<u32>, BTree
     states_iter.clone().map(|(i, (_, name, _))| (name, i as u32)).collect::<HashMap<_, _>>();
 
   let mut bc = vec![
-    INSTRUCTION::I15_FALL_THROUGH,
-    INSTRUCTION::I00_PASS,
-    INSTRUCTION::I15_FAIL,
-    INSTRUCTION::I08_EAT_CRUMBS,
+    Instruction::I15_FALL_THROUGH,
+    Instruction::I00_PASS,
+    Instruction::I15_FAIL,
+    Instruction::I08_EAT_CRUMBS,
     NORMAL_STATE_FLAG,
-    INSTRUCTION::I00_PASS,
+    Instruction::I00_PASS,
   ];
 
   for (i, (state, name, is_fail)) in states_iter {
@@ -64,7 +64,7 @@ pub(crate) fn build_byte_code_buffer(states: Vec<&IR_STATE>) -> (Vec<u32>, BTree
 
       bc.append(&mut fail_addition);
       goto_bookmarks_to_offset[i as usize] = bc.len() as u32;
-      bc.push(INSTRUCTION::I02_GOTO | FAIL_STATE_FLAG | fail_state_address as u32);
+      bc.push(Instruction::I02_GOTO | FAIL_STATE_FLAG | fail_state_address as u32);
     } else {
       if let Some(_) = &state.fail {
       } else {
@@ -95,7 +95,7 @@ pub(crate) fn build_byte_code_buffer(states: Vec<&IR_STATE>) -> (Vec<u32>, BTree
 
 /// Converts Goto location bookmarks to bytecode offsets.
 fn patch_goto_offsets(bc: &mut Vec<u32>, goto_to_off: &[u32]) {
-  use INSTRUCTION as I;
+  use Instruction as I;
 
   let mut i = 0;
 
@@ -201,7 +201,7 @@ fn build_branching_bytecode(
   let o = if !default_branches.is_empty() {
     build_branchless_bytecode(&default_branches[0].instructions, state_to_bookmark, state_name)
   } else {
-    vec![INSTRUCTION::I15_FAIL]
+    vec![Instruction::I15_FAIL]
   };
 
   let o = make_table(
@@ -290,7 +290,7 @@ fn make_table(
     return default;
   }
 
-  use INSTRUCTION as I;
+  use Instruction as I;
 
   let lexer_type: u32 = if branches[0].is_peek { LexerType::PEEK } else { LexerType::ASSERT };
 
@@ -506,7 +506,7 @@ fn build_branchless_bytecode(
   current_state_name: &str,
 ) -> Vec<u32> {
   let mut byte_code: Vec<u32> = vec![];
-  use INSTRUCTION as I;
+  use Instruction as I;
 
   // reverse gotos so jumps operate correctly in a stack structure.
   let gotos = instructions.iter().filter(|i| matches!(i, ASTNode::Goto(_))).rev();

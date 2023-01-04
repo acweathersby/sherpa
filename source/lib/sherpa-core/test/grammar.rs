@@ -1,9 +1,9 @@
-use super::compile_grammar_from_string;
 use crate::{
   debug::debug_items,
   grammar::{
     compile::{compile_grammars_into_store, convert_left_recursion_to_right},
     compile_grammar_from_path,
+    compile_grammar_from_string,
     get_production_start_items,
     load::load_all,
   },

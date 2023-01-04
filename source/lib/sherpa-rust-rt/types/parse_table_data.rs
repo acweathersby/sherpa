@@ -8,7 +8,7 @@ pub struct TableHeaderData {
   pub table_meta: u32,
   /// The instruction of the scanner state, if this table has
   /// one.
-  pub scan_state_entry_instruction: INSTRUCTION,
+  pub scan_state_entry_instruction: Instruction,
 }
 
 impl TableHeaderData {
@@ -32,9 +32,9 @@ impl TableHeaderData {
       table_length,
       table_meta,
       scan_state_entry_instruction: if scanner_address > 0 {
-        INSTRUCTION::from(bc, scanner_address as usize)
+        Instruction::from(bc, scanner_address as usize)
       } else {
-        INSTRUCTION::invalid()
+        Instruction::invalid()
       },
     }
   }

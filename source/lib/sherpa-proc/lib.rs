@@ -100,6 +100,7 @@ fn insert_data(span: &Span, in_string: String, offset: &mut Offsets, output: &mu
   output.push(string);
 }
 
+/// Test info
 #[proc_macro]
 pub fn compile_mod(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
   // Convert input into a lookup table

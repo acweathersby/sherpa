@@ -2,7 +2,7 @@ use sherpa_runtime::functions::get_next_action;
 
 use crate::types::*;
 use std::sync::Arc;
-/// Todo: Docs
+/// Collects all tokens that where shifted and skipped during parsing.
 pub fn collect_shifts_and_skips(
   input: &str,
   entry_point: u32,
@@ -19,7 +19,10 @@ pub fn collect_shifts_and_skips(
   loop {
     match get_next_action(&mut reader, &mut ctx, &mut stack, &bytecode) {
       ParseAction::Accept { production_id } => {
-        assert_eq!(production_id, target_production_id);
+        assert_eq!(
+          production_id, target_production_id,
+          "Expected the accepted production id to match target_production_id"
+        );
         break;
       }
       ParseAction::Error { last_input, .. } => {
@@ -31,29 +34,14 @@ pub fn collect_shifts_and_skips(
         panic!("No implementation of fork resolution is available")
       }
       ParseAction::Shift { anchor_byte_offset, token_byte_length, token_byte_offset, .. } => {
-        if anchor_byte_offset > 0 {
-          unsafe {
-            skips.push(
-              input
-                .to_string()
-                .get_unchecked(
-                  anchor_byte_offset as usize..(token_byte_offset - anchor_byte_offset) as usize,
-                )
-                .to_owned(),
-            );
-          }
+        if (token_byte_offset - anchor_byte_offset) > 0 {
+          skips.push(input[anchor_byte_offset as usize..(token_byte_offset) as usize].to_string());
         }
 
-        unsafe {
-          shifts.push(
-            input
-              .to_string()
-              .get_unchecked(
-                token_byte_offset as usize..(token_byte_offset + token_byte_length) as usize,
-              )
-              .to_owned(),
-          );
-        }
+        shifts.push(
+          input[token_byte_offset as usize..(token_byte_offset + token_byte_length) as usize]
+            .to_string(),
+        );
       }
       ParseAction::Reduce { .. } => {}
       _ => panic!("Unexpected Action!"),

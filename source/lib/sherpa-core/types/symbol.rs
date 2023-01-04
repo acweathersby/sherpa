@@ -65,6 +65,10 @@ pub enum SymbolID {
 
   /// Represents any terminal production symbol defined through
   /// the production token specifier, `tk:`, as in `tk:<production_name>`.
+  /// - `.0` = The base ProductionID,
+  /// - `.1` = The host GrammarID
+  /// - `.2` = The scanner ProductionID. This production is created
+  ///      when the root grammar is finalized
   TokenProduction(ProductionId, GrammarId, ProductionId),
 
   /// Represent the grammar symbol `g:sp`.

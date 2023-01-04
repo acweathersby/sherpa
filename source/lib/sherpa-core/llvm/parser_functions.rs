@@ -22,7 +22,7 @@ pub(crate) struct FunctionPack<'a> {
   pub(crate) output:     &'a BytecodeOutput,
   pub(crate) is_scanner: bool,
   pub(crate) state:      &'a LLVMStateData<'a>,
-  pub(crate) states:     &'a BTreeMap<INSTRUCTION, LLVMStateData<'a>>,
+  pub(crate) states:     &'a BTreeMap<Instruction, LLVMStateData<'a>>,
 }
 
 pub const _FAIL_STATE_FLAG_LLVM: u32 = 2;
@@ -30,11 +30,11 @@ pub const NORMAL_STATE_FLAG_LLVM: u32 = 1;
 
 #[derive(Clone, Debug)]
 pub struct LLVMStateData<'a> {
-  pub(crate) entry_instruction: INSTRUCTION,
+  pub(crate) entry_instruction: Instruction,
   pub(crate) function_pointer:  PointerValue<'a>,
   pub(crate) function:          FunctionValue<'a>,
   pub(crate) is_scanner:        bool,
-  pub(crate) branch_data:       BTreeMap<INSTRUCTION, BranchTableData>,
+  pub(crate) branch_data:       BTreeMap<Instruction, BranchTableData>,
   pub(crate) entry_block:       BasicBlock<'a>,
 }
 
@@ -50,7 +50,7 @@ impl<'a> LLVMStateData<'a> {
     is_scanner: bool,
     internal_linkage: Option<Linkage>,
   ) -> Self {
-    let entry_instruction = INSTRUCTION::from(bc, bc_address);
+    let entry_instruction = Instruction::from(bc, bc_address);
 
     let entry_function = module.module.add_function(
       &Self::generate_name(bc_address),
@@ -90,8 +90,8 @@ impl<'a> LLVMStateData<'a> {
 }
 
 pub(crate) fn get_state_data<'a>(
-  instruction: INSTRUCTION,
-  state: &'a BTreeMap<INSTRUCTION, LLVMStateData<'a>>,
+  instruction: Instruction,
+  state: &'a BTreeMap<Instruction, LLVMStateData<'a>>,
 ) -> &LLVMStateData<'a> {
   if !state.contains_key(&instruction) {
     dbg!(instruction);
@@ -174,7 +174,7 @@ pub(crate) unsafe fn construct_parse_function<'a>(
                 for (_, BranchData { address, .. }) in
                   data.branches.iter().filter(|b| !b.1.is_skipped)
                 {
-                  instructions.push_back(INSTRUCTION::from(bc, *address));
+                  instructions.push_back(Instruction::from(bc, *address));
                 }
 
                 instructions.push_back(instruction.branch_default(bc));
@@ -226,13 +226,13 @@ pub(crate) unsafe fn construct_parse_function<'a>(
   SherpaResult::Ok(())
 }
 
-fn get_start_points(g: &GrammarStore, output: &BytecodeOutput) -> Vec<(usize, INSTRUCTION)> {
+fn get_start_points(g: &GrammarStore, output: &BytecodeOutput) -> Vec<(usize, Instruction)> {
   let start_points = g
     .get_exported_productions()
     .iter()
     .enumerate()
     .map(|(i, p)| {
-      let instruction = INSTRUCTION::from(
+      let instruction = Instruction::from(
         &output.bytecode,
         *(output.state_name_to_offset.get(p.guid_name).unwrap()) as usize,
       );
@@ -243,7 +243,7 @@ fn get_start_points(g: &GrammarStore, output: &BytecodeOutput) -> Vec<(usize, IN
 }
 
 pub(super) fn construct_parse_function_statements(
-  mut instruction: INSTRUCTION,
+  mut instruction: Instruction,
   g: &GrammarStore,
   module: &LLVMParserModule,
   pack: &FunctionPack,
@@ -319,7 +319,7 @@ struct Pointers<'a> {
 }
 
 fn construct_instruction_branch<'a>(
-  instruction: INSTRUCTION,
+  instruction: Instruction,
   g: &GrammarStore,
   module: &'a LLVMParserModule,
   p: &'a FunctionPack,
@@ -555,14 +555,14 @@ fn construct_instruction_branch<'a>(
     if branch.is_skipped {
       blocks.entry((branch.value, true)).or_insert_with(|| {
         (
-          INSTRUCTION::invalid(),
+          Instruction::invalid(),
           *skip_block.get_or_insert_with(|| p.state.generate_block(module, "skip", 0xFFFF_FFFF)),
         )
       });
     } else {
       blocks.entry((branch.value, false)).or_insert_with(|| {
         (
-          INSTRUCTION::from(&p.output.bytecode, branch.address),
+          Instruction::from(&p.output.bytecode, branch.address),
           *branch_blocks
             .entry(branch.address)
             .or_insert_with(|| p.state.generate_block(module, "branch", branch.address)),
@@ -697,7 +697,7 @@ fn construct_instruction_branch<'a>(
 
   for (address, block) in branch_blocks {
     b.position_at_end(block);
-    let instruction = INSTRUCTION::from(&p.output.bytecode, address);
+    let instruction = Instruction::from(&p.output.bytecode, address);
     match instruction.to_type() {
       InstructionType::HashBranch | InstructionType::VectorBranch => {
         construct_instruction_branch(instruction, g, module, p, false, ptrs)?;
@@ -740,7 +740,7 @@ fn construct_instruction_branch<'a>(
   SherpaResult::Ok(())
 }
 
-fn parse_fun_ptr<'a>(scanner_address: INSTRUCTION, pack: &'a FunctionPack) -> PointerValue<'a> {
+fn parse_fun_ptr<'a>(scanner_address: Instruction, pack: &'a FunctionPack) -> PointerValue<'a> {
   get_state_data(scanner_address, pack.states).function_pointer
 }
 
@@ -815,10 +815,10 @@ fn construct_cp_lu_with_token_len_store<'a>(
 }
 
 pub(crate) fn construct_instruction_prod(
-  instruction: INSTRUCTION,
+  instruction: Instruction,
   ctx: &LLVMParserModule,
   pack: &FunctionPack,
-) -> SherpaResult<INSTRUCTION> {
+) -> SherpaResult<Instruction> {
   let production_id = instruction.get_contents();
   let parse_ctx = pack.fun.get_nth_param(0)?.into_pointer_value();
   let b = &ctx.builder;
@@ -829,17 +829,16 @@ pub(crate) fn construct_instruction_prod(
 }
 
 fn construct_token(
-  instruction: INSTRUCTION,
+  instruction: Instruction,
   module: &LLVMParserModule,
   pack: &FunctionPack,
-) -> SherpaResult<INSTRUCTION> {
+) -> SherpaResult<Instruction> {
   let token_value = instruction.get_token_value();
   let parse_ctx = pack.fun.get_nth_param(0)?.into_pointer_value();
 
   let i32 = module.ctx.i32_type();
 
   CTX::tok_id.store(module, parse_ctx, i32.const_int(token_value as u64, false))?;
-
   CTX::scan_anchor_off.store(module, parse_ctx, CTX::scan_off.load(module, parse_ctx)?)?;
 
   SherpaResult::Ok(instruction.next(&pack.output.bytecode))
@@ -868,11 +867,11 @@ pub(crate) fn construct_fail(module: &LLVMParserModule, pack: &FunctionPack) -> 
 }
 
 pub(crate) fn construct_goto<'a>(
-  instruction: INSTRUCTION,
+  instruction: Instruction,
   module: &'a LLVMParserModule,
   pack: &'a FunctionPack,
-) -> SherpaResult<(INSTRUCTION, bool)> {
-  fn get_goto_state<'a>(last: INSTRUCTION, ctx: &'a LLVMParserModule) -> IntValue<'a> {
+) -> SherpaResult<(Instruction, bool)> {
+  fn get_goto_state<'a>(last: Instruction, ctx: &'a LLVMParserModule) -> IntValue<'a> {
     if (last.get_value() & FAIL_STATE_FLAG) > 0 {
       ctx.ctx.i32_type().const_int(FAIL_STATE_FLAG_LLVM as u64, false)
     } else {
@@ -890,8 +889,8 @@ pub(crate) fn construct_goto<'a>(
   let mut gotos = vec![];
 
   // Extract all gotos from the function.
-  while INSTRUCTION::from(bytecode, address).is_goto() {
-    gotos.push(INSTRUCTION::from(bytecode, address));
+  while Instruction::from(bytecode, address).is_goto() {
+    gotos.push(Instruction::from(bytecode, address));
     address += 1;
   }
 
@@ -949,7 +948,7 @@ pub(crate) fn construct_goto<'a>(
 }
 
 fn write_reentrance<'a>(
-  instruction: INSTRUCTION,
+  instruction: Instruction,
   module: &LLVMParserModule,
   pack: &FunctionPack,
   force_goto: bool,
@@ -959,7 +958,7 @@ fn write_reentrance<'a>(
   use InstructionType::*;
 
   let next_instruction = match instruction.to_type() {
-    Pass => INSTRUCTION::pass(),
+    Pass => Instruction::pass(),
     Goto => match instruction.next(bytecode).to_type() {
       Pass => instruction.goto(bytecode),
       _ => instruction,
@@ -979,7 +978,7 @@ fn write_reentrance<'a>(
 }
 
 pub(crate) fn construct_reduce(
-  instruction: INSTRUCTION,
+  instruction: Instruction,
   module: &LLVMParserModule,
   pack: &FunctionPack,
 ) -> SherpaResult<()> {
@@ -1001,7 +1000,7 @@ pub(crate) fn construct_reduce(
 }
 
 pub(crate) fn construct_shift(
-  instruction: INSTRUCTION,
+  instruction: Instruction,
   module: &LLVMParserModule,
   pack: &FunctionPack,
 ) -> SherpaResult<()> {
@@ -1041,10 +1040,10 @@ pub(crate) fn construct_shift(
 }
 
 pub(crate) fn construct_scanner_shift(
-  instruction: INSTRUCTION,
+  instruction: Instruction,
   module: &LLVMParserModule,
   pack: &FunctionPack,
-) -> SherpaResult<INSTRUCTION> {
+) -> SherpaResult<Instruction> {
   let b = &module.builder;
   let parse_ctx = pack.fun.get_nth_param(0)?.into_pointer_value();
   let length = CTX::scan_len.load(module, parse_ctx)?.into_int_value();
@@ -1068,8 +1067,8 @@ pub(crate) fn construct_scanner_shift(
 /// an entry production id.
 pub(crate) unsafe fn construct_prime_function(
   module: &LLVMParserModule,
-  sp: &Vec<(usize, INSTRUCTION)>,
-  states: &BTreeMap<INSTRUCTION, LLVMStateData>,
+  sp: &Vec<(usize, Instruction)>,
+  states: &BTreeMap<Instruction, LLVMStateData>,
 ) -> SherpaResult<()> {
   let i32 = module.ctx.i32_type();
   let bool = module.ctx.bool_type();

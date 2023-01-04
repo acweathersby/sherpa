@@ -39,7 +39,7 @@ pub(crate) struct BranchData {
 
 impl BranchTableData {
   pub fn from_bytecode(
-    instruction: INSTRUCTION,
+    instruction: Instruction,
     g: &GrammarStore,
     output: &BytecodeOutput,
   ) -> Option<Self> {

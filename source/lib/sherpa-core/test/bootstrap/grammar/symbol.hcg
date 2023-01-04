@@ -1,0 +1,108 @@
+@NAME hc_symbol
+
+@IGNORE g:sp g:nl
+
+<> annotated_symbol > 
+
+        symbol^s [unordered tk:reference?^r \? ?^o  priority?^p ]
+
+            f:ast {{ t_AnnotatedSymbol, prority:$p, symbol:$s, is_optional:bool($o), reference:str($r), tok  }}
+
+        | symbol
+
+<> priority > t:{ tk:priority_num \}  f:ast { { t_Priority, val: u32($2) } }
+        | t:! f:ast { { t_Priority, exclusive: true } }
+
+<> priority_num > g:num(+)
+
+<> symbol >
+
+        terminal
+
+        | non_terminal
+
+        | list
+
+        | terminal_non_terminal
+
+        | class
+
+<> class >
+
+        t:c: ( \num | \nl | \sp | \id | \sym | \any )
+
+            f:ast { { t_Class, c_Symbol , c_Terminal, val:str($2),  tok } }
+
+<> terminal_non_terminal >
+
+        t:tk: non_terminal
+
+             f:ast { { t_Production_Terminal , c_Symbol , c_Terminal, production:$2, tok } }
+
+<> non_terminal > 
+
+        production_symbol
+
+        | import_production_symbol
+
+<> production_symbol > 
+
+        tk:identifier_syms
+
+             f:ast { { t_Production_Symbol , c_Symbol, name:str($1),   tok } }
+
+<> import_production_symbol>
+
+        tk:identifier_syms \:: tk:identifier_syms
+
+             f:ast { { t_Production_Import_Symbol , c_Symbol , module:str($1), name:str($3), tok } } 
+
+<> list >
+
+        symbol \(+  terminal?  \)
+
+            f:ast { { t_List_Production, c_Symbol, terminal_symbol:$3, symbols:$1, tok } }
+
+        | symbol \(* terminal?  \)
+
+            f:ast {{ t_List_Production, c_Symbol, terminal_symbol:$3, symbols:$1, tok, optional:true }}
+
+<> terminal > 
+
+        (g:sym | g:num)(+) g:sp?
+
+        f:ast { { t_Terminal , c_Symbol , c_Terminal, val:str($1),  tok } } 
+
+        | t:" ( g:id | g:sym | g:num | g:sp | escaped )(+) t:"
+
+            f:ast { { t_Terminal , c_Symbol , c_Terminal, val:str($2),  tok } } 
+
+        | t:' ( g:id | g:sym | g:num | g:sp | escaped )(+) t:'
+
+            f:ast { { t_Terminal , c_Symbol , c_Terminal, val:str($2),  tok } }      
+
+<> escaped > \\  ( g:id | g:sym | g:num | g:sp ) 
+
+<> reference > 
+
+        t:^ tk:identifier_syms
+
+<> identifier > 
+
+        tk:identifier_syms 
+
+<> identifier_syms >  
+
+        identifier_syms g:id
+
+        | identifier_syms \_
+
+        | identifier_syms \-
+
+        | identifier_syms g:num      
+
+        | \_ 
+
+        | \- 
+
+        | g:id

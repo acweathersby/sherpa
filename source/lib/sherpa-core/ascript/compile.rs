@@ -466,7 +466,7 @@ fn resolve_structure_properties(ast: &mut AScriptStore, e: &mut Vec<SherpaError>
   }
 }
 
-pub(super) fn verify_property_presence(ast: &mut AScriptStore, struct_id: &AScriptStructId) {
+pub(crate) fn verify_property_presence(ast: &mut AScriptStore, struct_id: &AScriptStructId) {
   let struct_ = ast.structs.get(&struct_id).unwrap();
   for prop_id in &struct_.prop_ids {
     let prop = ast.props.get_mut(&prop_id).unwrap();

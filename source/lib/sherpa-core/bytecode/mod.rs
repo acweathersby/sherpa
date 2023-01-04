@@ -9,8 +9,6 @@ use crate::{
 use std::collections::BTreeMap;
 
 pub mod compile;
-#[cfg(test)]
-mod test;
 
 // mod test;
 #[derive(Debug)]

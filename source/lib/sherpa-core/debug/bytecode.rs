@@ -58,12 +58,12 @@ pub(crate) fn disassemble_state(
   } else {
     let instruction = bc[idx] & INSTRUCTION_CONTENT_MASK;
     match bc[idx] & INSTRUCTION_HEADER_MASK {
-      INSTRUCTION::I00_PASS => (format!("\n{}PASS", dh(so)), so + 1),
-      INSTRUCTION::I01_SHIFT => {
+      Instruction::I00_PASS => (format!("\n{}PASS", dh(so)), so + 1),
+      Instruction::I01_SHIFT => {
         let (string, offset) = ds(bc, so + 1, lu);
         (format!("\n{}SHFT", dh(so)) + &string, offset + 1)
       }
-      INSTRUCTION::I02_GOTO => {
+      Instruction::I02_GOTO => {
         let (string, offset) = ds(bc, so + 1, lu);
         if instruction & FAIL_STATE_FLAG > 0 {
           (
@@ -85,7 +85,7 @@ pub(crate) fn disassemble_state(
           )
         }
       }
-      INSTRUCTION::I03_SET_PROD => {
+      Instruction::I03_SET_PROD => {
         let production_id = instruction & INSTRUCTION_CONTENT_MASK;
         let (string, offset) = ds(bc, so + 1, lu);
 
@@ -96,7 +96,7 @@ pub(crate) fn disassemble_state(
           (format!("\n{}PROD SET TO {}", dh(so), production_id,) + &string, offset)
         }
       }
-      INSTRUCTION::I04_REDUCE => {
+      Instruction::I04_REDUCE => {
         let (string, offset) = ds(bc, so + 1, lu);
         let symbol_count = instruction >> 16 & 0x0FFF;
         let body_id = instruction & 0xFFFF;
@@ -111,7 +111,7 @@ pub(crate) fn disassemble_state(
           )
         }
       }
-      INSTRUCTION::I05_TOKEN => {
+      Instruction::I05_TOKEN => {
         let (string, offset) = ds(bc, so + 1, lu);
         if (instruction & TOKEN_ASSIGN_FLAG) > 0 {
           (format!("\n{}TOKN ASSIGN TO {}", dh(so), instruction & 0x00FF_FFFF) + &string, offset)
@@ -119,7 +119,7 @@ pub(crate) fn disassemble_state(
           (format!("\n{}TOKV", dh(so)) + &string, offset)
         }
       }
-      INSTRUCTION::I06_FORK_TO => {
+      Instruction::I06_FORK_TO => {
         let target_production = instruction & 0xFFFF;
         let num_of_states = (instruction >> 16) & 0xFFFF;
         let end = so + 1 + num_of_states as usize;
@@ -144,12 +144,12 @@ pub(crate) fn disassemble_state(
           offset,
         )
       }
-      INSTRUCTION::I07_SCAN => {
+      Instruction::I07_SCAN => {
         let (string, offset) = ds(bc, so + 1, lu);
         (format!("\n{}SCAN", dh(so)) + &string, offset)
       }
-      INSTRUCTION::I08_EAT_CRUMBS => (format!("\n{}NOOP", dh(so)), so + 1),
-      INSTRUCTION::I09_VECTOR_BRANCH => generate_table_string(
+      Instruction::I08_EAT_CRUMBS => (format!("\n{}NOOP", dh(so)), so + 1),
+      Instruction::I09_VECTOR_BRANCH => generate_table_string(
         bc,
         so,
         lu,
@@ -163,7 +163,7 @@ pub(crate) fn disassemble_state(
           )
         },
       ),
-      INSTRUCTION::I10_HASH_BRANCH => generate_table_string(
+      Instruction::I10_HASH_BRANCH => generate_table_string(
         bc,
         so,
         lu,
@@ -177,17 +177,17 @@ pub(crate) fn disassemble_state(
           )
         },
       ),
-      INSTRUCTION::I11_SET_FAIL_STATE => {
+      Instruction::I11_SET_FAIL_STATE => {
         let (string, offset) = ds(bc, so + 1, lu);
         (format!("\n{}FSET", dh(so)) + &string, offset)
       }
-      INSTRUCTION::I12_REPEAT => {
+      Instruction::I12_REPEAT => {
         let (string, offset) = ds(bc, so + 1, lu);
         (format!("\n{}REPT", dh(so)) + &string, offset)
       }
-      INSTRUCTION::I13_NOOP => (format!("\n{}NOOP", dh(so)), so + 1),
-      INSTRUCTION::I14_ASSERT_SHIFT => (format!("\n{}ASTC", dh(so)), so + 1),
-      INSTRUCTION::I15_FAIL => (format!("\n{}FAIL", dh(so)), so + 1),
+      Instruction::I13_NOOP => (format!("\n{}NOOP", dh(so)), so + 1),
+      Instruction::I14_ASSERT_SHIFT => (format!("\n{}ASTC", dh(so)), so + 1),
+      Instruction::I15_FAIL => (format!("\n{}FAIL", dh(so)), so + 1),
       _ => (format!("\n{}UNDF", dh(so)), so + 1),
     }
   }

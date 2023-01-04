@@ -272,7 +272,7 @@ pub(crate) fn check_for_left_recursion(symbol_items: &Items, g: &GrammarStore) {
         .intersects(RecursionType::LEFT_DIRECT | RecursionType::LEFT_INDIRECT);
 
       if has_left {
-        symbol_items.print_items(g, "existing symbols");
+        symbol_items.__print_items__(g, "existing symbols");
         eprintln!(
           "[{}] {}",
           production.name,

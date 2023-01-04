@@ -243,24 +243,6 @@ fn merge_grammars(
     // Merge production names
     g.production_names.extend(import_grammar.production_names.clone().into_iter());
 
-    /*
-    // Merge symbols
-    for (id, sym) in &import_grammar.symbols {
-      if !g.symbols.contains_key(id) {
-        g.symbols.insert(*id, sym.clone());
-
-        if id.is_defined() {
-          match import_grammar.symbol_strings.get(id) {
-            Some(string) => {
-              g.symbol_strings.insert(*id, string.to_owned());
-            }
-            None => {}
-          }
-        }
-      }
-    }
-    */
-
     // Merge reduce functions
     g.reduce_functions.append(&mut import_grammar.reduce_functions.clone());
 
@@ -278,23 +260,41 @@ fn merge_grammars(
   }
 
   // Merge all referenced foreign productions into the root.
-  let mut symbol_queue = VecDeque::from_iter(g.production_symbols.clone());
+  let mut symbol_queue = VecDeque::from_iter(g.rules.iter().flat_map(|(_, r)| {
+    r.syms.iter().filter_map(|rule_sym| {
+      let sym_id = rule_sym.sym_id;
+      match sym_id {
+        SymbolID::Production(..) => Some((sym_id, rule_sym.tok.clone())),
+        SymbolID::TokenProduction(prod_id, grammar_id, ..) => {
+          // Remap the production token symbol to regular a production symbol and
+          // submit as a merge candidate.
+          Some((SymbolID::Production(prod_id, grammar_id), rule_sym.tok.clone()))
+        }
+        _ => None,
+      }
+    })
+  }));
 
   while let Some((sym, tok)) = symbol_queue.pop_front() {
     let syms_grammar = sym.get_grammar_id();
     match (
       syms_grammar,
       grammar_lu.get(&syms_grammar),
-      sym.get_production_id().map(|prod_id| g.productions.entry(prod_id)),
+      (match sym {
+        SymbolID::Production(prod_id, _) => Some(prod_id),
+        SymbolID::TokenProduction(prod_id, ..) => Some(prod_id),
+        _ => None,
+      })
+      .map(|prod_id| g.productions.entry(prod_id)),
     ) {
       (grammar_id, Some(import_g), Some(std::collections::btree_map::Entry::Vacant(entry)))
         if grammar_id != g.id.guid =>
       {
-        let prod_id = entry.key().clone();
-        match import_g.productions.get(&prod_id) {
+        let imported_prod_id = entry.key().clone();
+        match import_g.productions.get(&imported_prod_id) {
           Some(production) => {
             // Import all bodies referenced by this foreign production
-            let rules = import_g.production_bodies.get(&prod_id).unwrap().clone();
+            let rules = import_g.production_bodies.get(&imported_prod_id).unwrap().clone();
             for rule in rules.iter().map(|b| import_g.rules.get(&b).unwrap()).cloned() {
               // Add every Production symbol to the queue
               symbol_queue.append(
@@ -318,7 +318,7 @@ fn merge_grammars(
 
                     match sym_id {
                       SymbolID::Production(..) => Some((sym_id, rule_sym.tok.clone())),
-                      SymbolID::TokenProduction(.., grammar_id, prod_id) => {
+                      SymbolID::TokenProduction(prod_id, grammar_id, ..) => {
                         // Remap the production token symbol to regular a production symbol and
                         // submit as a merge candidate.
                         Some((SymbolID::Production(prod_id, grammar_id), rule_sym.tok.clone()))
@@ -333,14 +333,14 @@ fn merge_grammars(
             }
 
             // Import the mapping of the foreign production_id to the foreign body_ids
-            g.production_bodies.insert(prod_id, rules);
+            g.production_bodies.insert(imported_prod_id, rules);
 
             // Import the foreign production
             entry.insert(production.clone());
           }
           None => {
             e.push(SherpaError::grammar_err_no_production_definition {
-              prod_name: g.get_production_plain_name(&prod_id).to_string(),
+              prod_name: g.get_production_plain_name(&imported_prod_id).to_string(),
               loc:       tok,
               path:      g.id.path.clone(),
             });
@@ -1869,6 +1869,7 @@ fn get_literal_id(string: &String, exclusive: bool) -> SymbolID {
   }
 }
 
+/// Create a TokenProduction symbol and intern the symbol info.
 fn process_token_production(
   node: &ast::Production_Token,
   g: &mut GrammarStore,
@@ -1877,9 +1878,9 @@ fn process_token_production(
 ) -> Option<SymbolID> {
   match process_production(&node.production, g, tok.clone(), e) {
     Some(SymbolID::Production(prod_id, grammar_id)) => {
-      let new_prod = ProductionId::from(&create_scanner_name(prod_id, grammar_id));
-      let guid = SymbolID::Production(new_prod, grammar_id);
-      let tok_id = SymbolID::TokenProduction(prod_id, grammar_id, new_prod);
+      let scanner_prod_id = ProductionId::from(&create_scanner_name(prod_id, grammar_id));
+      let guid = SymbolID::Production(scanner_prod_id, grammar_id);
+      let tok_id = SymbolID::TokenProduction(prod_id, grammar_id, scanner_prod_id);
 
       g.production_symbols.insert(tok_id, tok.clone());
 
@@ -2179,6 +2180,12 @@ pub fn compile_grammar_from_path(
   let r_name = "General Grammar Compile";
   j.set_active_report(r_name, r_type);
   j.report_mut().start_timer("Grammar Compile Time");
+
+  let Ok(path) = path.canonicalize() else {
+    j.report_mut().add_error(format!("Could not read file:\n\t{:?}", path).into());
+    return (None, None)
+  };
+
   j.report_mut().add_note("Root Grammar Path", path.to_str().unwrap().to_string());
   match load_all(j, &path, thread_count) {
     (_, errors) if !errors.is_empty() => {

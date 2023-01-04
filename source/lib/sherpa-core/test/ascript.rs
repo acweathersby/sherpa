@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use crate::{
   ascript::{
-    compile::{compile_struct_props, compile_struct_type},
+    compile::{compile_struct_props, compile_struct_type, verify_property_presence},
     types::AScriptStore,
   },
   compile::{compile_ascript_ast, compile_grammar_ast},
@@ -11,8 +11,6 @@ use crate::{
   types::*,
   writer::code_writer::StringBuffer,
 };
-
-use super::compile::verify_property_presence;
 
 #[test]
 fn test_temp() {
@@ -30,7 +28,7 @@ fn test_temp() {
 
   let mut writer = StringBuffer::new(vec![]);
 
-  super::rust::write(&ascript, &mut writer).unwrap();
+  crate::ascript::rust::write(&ascript, &mut writer).unwrap();
 
   let out_file =
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../test/e2e/bootstrap/ir.rs");
@@ -60,7 +58,7 @@ fn test_grammar_imported_grammar() {
 
   let mut writer = StringBuffer::new(vec![]);
 
-  super::rust::write(&ascript, &mut writer).unwrap();
+  crate::ascript::rust::write(&ascript, &mut writer).unwrap();
 
   eprintln!("{}", String::from_utf8(writer.into_output()).unwrap());
 }
@@ -97,7 +95,7 @@ fn test_grammar() {
 
   let mut writer = StringBuffer::new(vec![]);
 
-  super::rust::write(&ascript, &mut writer);
+  crate::ascript::rust::write(&ascript, &mut writer);
 
   eprintln!("{}", String::from_utf8(writer.into_output()).unwrap());
 }
@@ -249,7 +247,7 @@ fn test_parse_errors_when_production_has_differing_return_types2() {
 
   let mut writer = StringBuffer::new(vec![]);
 
-  super::rust::write(&ascript, &mut writer);
+  crate::ascript::rust::write(&ascript, &mut writer);
 
   eprintln!("{}", String::from_utf8(writer.into_output()).unwrap());
 }
@@ -284,7 +282,7 @@ fn handles_multipart_arrays() -> SherpaResult<()> {
 
   let mut writer = StringBuffer::new(vec![]);
 
-  super::rust::write(&ascript, &mut writer)?;
+  crate::ascript::rust::write(&ascript, &mut writer)?;
 
   Ok(())
 }
@@ -307,7 +305,7 @@ fn rust_vector_return_types_print_correctly() -> SherpaResult<()> {
 
   let mut writer = StringBuffer::new(vec![]);
 
-  super::rust::write(&ascript, &mut writer)?;
+  crate::ascript::rust::write(&ascript, &mut writer)?;
 
   eprintln!("{}", String::from_utf8(writer.into_output())?);
 
@@ -369,7 +367,7 @@ fn group_productions_get_correct_type_information() {
   let mut ascript = AScriptStore::new(g).unwrap();
   let mut writer = StringBuffer::new(vec![]);
 
-  super::rust::write(&ascript, &mut writer);
+  crate::ascript::rust::write(&ascript, &mut writer);
 }
 
 // pri
@@ -391,7 +389,7 @@ fn test_parse_errors_when_production_has_differing_return_types3() {
 
   let mut writer = StringBuffer::new(vec![]);
 
-  super::rust::write(&ascript, &mut writer);
+  crate::ascript::rust::write(&ascript, &mut writer);
 
   eprintln!("{}", String::from_utf8(writer.into_output()).unwrap());
 }

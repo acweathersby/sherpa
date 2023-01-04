@@ -87,12 +87,6 @@ impl Journal {
     SherpaResult::None
   }
 
-  /// Checks for any new errors that been entered in the scratch
-  /// since the last time this function was called. Returns true
-  pub fn have_new_errors() -> bool {
-    false
-  }
-
   /// Sets the active report to `report_type`, optionally creating a new report of that type
   /// if one does not already exists. Returns the previously set ReportType.
   pub(crate) fn set_active_report(
@@ -138,7 +132,7 @@ impl Journal {
 
   /// Retrieves all reports that match the `report_type` and calls `closure` for each
   /// one, passing in the matched report as a reference.
-  pub fn get_reports<T: Fn(&Report)>(&self, report_type: ReportType, closure: T) {
+  pub fn get_reports<T: FnMut(&Report)>(&self, report_type: ReportType, mut closure: T) {
     for report in self.scratch_pad.reports.values() {
       if report.type_matches(report_type) {
         closure(report);
@@ -182,16 +176,22 @@ impl Journal {
   }
 
   /// Prints all errors that have been generated to console.
-  pub fn debug_error_report(&self) {
+  /// Returns `true` if any errors were reported.
+  pub fn debug_error_report(&self) -> bool {
+    let mut errors_reported = false;
+    let e_ref = &mut errors_reported;
+
     self.get_reports(ReportType::Any, |report| {
       let errors = report.errors();
       if errors.len() > 0 {
+        (*e_ref) = true;
         eprintln!("\n{:=<80}\nReport [{}] errors:", "", report.name);
         for err in report.errors() {
           eprintln!("{}", err);
         }
       }
     });
+    errors_reported
   }
 
   /// Move report data from the local pad to the global pad

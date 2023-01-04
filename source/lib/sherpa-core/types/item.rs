@@ -577,7 +577,7 @@ pub(crate) trait ItemContainer:
   }
 
   #[inline(always)]
-  fn print_items(&self, g: &GrammarStore, comment: &str) {
+  fn __print_items__(&self, g: &GrammarStore, comment: &str) {
     debug_items(comment, self.clone(), g);
   }
 
