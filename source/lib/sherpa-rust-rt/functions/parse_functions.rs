@@ -3,9 +3,10 @@ use crate::types::*;
 /// Yields parser Actions from parsing an input using the
 /// current active grammar bytecode.
 #[inline]
-pub fn dispatch<T: ByteReader + MutByteReader>(
+pub fn dispatch<T: LLVMByteReader + ByteReader + MutByteReader, M>(
   r: &mut T,
-  ctx: &mut OldParseContext<T>,
+  ctx: &mut LLVMParseContext<T, M>,
+  stack: &mut Vec<u32>,
   bc: &[u32],
 ) -> ParseAction {
   use ParseAction::*;
@@ -25,7 +26,7 @@ pub fn dispatch<T: ByteReader + MutByteReader>(
         ctx.set_active_state_to(i);
         break action;
       }
-      Goto => goto(i, instr, ctx),
+      Goto => goto(i, instr, stack),
       SetProd => set_production(i, instr, ctx),
       Reduce => {
         let (action, i) = reduce(i, instr, ctx);
@@ -54,41 +55,35 @@ pub fn dispatch<T: ByteReader + MutByteReader>(
 /// Produces a parse action that
 /// contains a token that is the
 #[inline]
-fn shift<T: ByteReader + MutByteReader + MutByteReader>(
+fn shift<T: LLVMByteReader + ByteReader + MutByteReader, M>(
   i: u32,
   instr: INSTRUCTION,
-  ctx: &mut OldParseContext<T>,
+  ctx: &mut LLVMParseContext<T, M>,
   r: &mut T,
 ) -> (ParseAction, u32) {
   if instr.get_value() & 0x1 == 1 {
-    ctx.assert.0.len = 0;
+    ctx.tok_input_len = 0;
   }
 
-  let mut skip = ctx.anchor;
-  let shift = ctx.assert;
-
-  let next_token = next_token(shift);
-
-  ctx.assert = next_token;
+  let action = ParseAction::Shift {
+    anchor_byte_offset: ctx.anchor_off,
+    token_byte_offset:  ctx.token_off,
+    token_byte_length:  ctx.tok_input_len,
+    token_line_count:   ctx.tok_line_num,
+    token_line_offset:  ctx.tok_line_off,
+  };
 
   if ctx.is_scanner() {
-    r.next(shift.0.len as i32);
+    ctx.scan_off += ctx.tok_input_len;
+    ctx.scan_len = 0;
+    r.set_cursor_to(ctx.scan_off, ctx.peek_line_num, ctx.peek_line_num);
   } else {
-    ctx.anchor = next_token;
+    ctx.anchor_off = ctx.token_off + ctx.tok_input_len;
+    ctx.token_off = ctx.anchor_off;
+    ctx.tok_input_len = 0;
   }
 
-  skip.0.len = shift.0.off - skip.0.off;
-
-  (
-    ParseAction::Shift {
-      anchor_byte_offset: skip.0.off,
-      token_byte_offset:  shift.0.off,
-      token_byte_length:  shift.0.off,
-      token_line_count:   shift.0.line_num,
-      token_line_offset:  shift.0.line_off,
-    },
-    i + 1,
-  )
+  (action, i + 1)
 }
 
 fn next_token(shift: (TokenRange, u32)) -> (TokenRange, u32) {
@@ -99,10 +94,10 @@ fn next_token(shift: (TokenRange, u32)) -> (TokenRange, u32) {
 }
 
 #[inline]
-fn reduce<T: ByteReader + MutByteReader>(
+fn reduce<T: LLVMByteReader + ByteReader + MutByteReader, M>(
   i: u32,
   instr: INSTRUCTION,
-  ctx: &mut OldParseContext<T>,
+  ctx: &mut LLVMParseContext<T, M>,
 ) -> (ParseAction, u32) {
   let symbol_count = instr.get_contents() >> 16 & 0x0FFF;
   let rule_id = instr.get_contents() & 0xFFFF;
@@ -119,22 +114,18 @@ fn reduce<T: ByteReader + MutByteReader>(
 }
 
 #[inline]
-fn goto<T: ByteReader + MutByteReader>(
-  i: u32,
-  instr: INSTRUCTION,
-  ctx: &mut OldParseContext<T>,
-) -> u32 {
-  ctx.push_state(instr.get_value());
+fn goto(i: u32, instr: INSTRUCTION, stack: &mut Vec<u32>) -> u32 {
+  stack.push(instr.get_value());
   i + 1
 }
 
 #[inline]
-fn _eat_crumbs<T: ByteReader + MutByteReader>(
+fn _eat_crumbs<T: LLVMByteReader + ByteReader + MutByteReader, M>(
   i: u32,
   instr: INSTRUCTION,
-  ctx: &mut OldParseContext<T>,
+  stack: &mut Vec<u32>,
 ) -> u32 {
-  ctx.push_state(instr.get_value());
+  stack.push(instr.get_value());
   // The collapse function takes the current production, retasked
   // to be a `lane` selector, and compares that against the a
   // sentinal value. If the value matches the production,
@@ -153,32 +144,24 @@ fn _eat_crumbs<T: ByteReader + MutByteReader>(
 }
 
 #[inline]
-fn set_production<T: ByteReader + MutByteReader>(
+fn set_production<T: LLVMByteReader + ByteReader + MutByteReader, M>(
   i: u32,
   instr: INSTRUCTION,
-  ctx: &mut OldParseContext<T>,
+  ctx: &mut LLVMParseContext<T, M>,
 ) -> u32 {
   ctx.set_production_to(instr.get_contents());
   i + 1
 }
 
 #[inline]
-fn set_token_state<T: ByteReader + MutByteReader>(
+fn set_token_state<T: LLVMByteReader + ByteReader + MutByteReader, M>(
   i: u32,
   instr: INSTRUCTION,
-  ctx: &mut OldParseContext<T>,
+  ctx: &mut LLVMParseContext<T, M>,
 ) -> u32 {
-  let value = instr.get_contents() & 0x00FF_FFFF;
+  ctx.tok_id = instr.get_contents() & 0x00FF_FFFF;
 
-  let mut anchor = ctx.anchor;
-
-  let assert = ctx.assert;
-
-  anchor.1 = value;
-
-  anchor.0.len = assert.0.off - anchor.0.off;
-
-  ctx.anchor = anchor;
+  ctx.scan_anchor_off = ctx.scan_off;
 
   i + 1
 }
@@ -216,21 +199,28 @@ fn noop(i: u32) -> u32 {
 }
 
 #[inline]
-fn skip_token<T: ByteReader + MutByteReader>(ctx: &mut OldParseContext<T>) {
-  if ctx.in_peek_mode() {
-    ctx.peek = next_token(ctx.peek);
+fn skip_token<T: LLVMByteReader + ByteReader + MutByteReader, M>(ctx: &mut LLVMParseContext<T, M>) {
+  if ctx.is_scanner() {
+    ctx.scan_off += ctx.scan_input_len;
+    ctx.scan_input_len = 0;
   } else {
-    ctx.assert = next_token(ctx.assert);
+    if ctx.in_peek_mode() {
+      ctx.peek_off += ctx.peek_input_len;
+      ctx.peek_input_len = 0;
+    } else {
+      ctx.token_off += ctx.tok_input_len;
+      ctx.tok_input_len = 0;
+    }
   }
 }
 
 /// Performs an instruction branch selection based on an embedded,
 /// linear-probing hash table.
 #[inline]
-pub fn hash_jump<T: ByteReader + MutByteReader>(
+pub fn hash_jump<T: LLVMByteReader + ByteReader + MutByteReader, M>(
   i: u32,
   r: &mut T,
-  ctx: &mut OldParseContext<T>,
+  ctx: &mut LLVMParseContext<T, M>,
   bc: &[u32],
 ) -> u32 {
   let i = i as usize;
@@ -278,10 +268,10 @@ pub fn hash_jump<T: ByteReader + MutByteReader>(
   }
 }
 #[inline]
-pub fn vector_jump<T: ByteReader + MutByteReader>(
+pub fn vector_jump<T: LLVMByteReader + ByteReader + MutByteReader, M>(
   i: u32,
   r: &mut T,
-  ctx: &mut OldParseContext<T>,
+  ctx: &mut LLVMParseContext<T, M>,
   bc: &[u32],
 ) -> u32 {
   let i = i as usize;
@@ -322,98 +312,82 @@ pub fn vector_jump<T: ByteReader + MutByteReader>(
 }
 
 #[inline]
-fn get_token_value<T: ByteReader + MutByteReader>(
+fn get_token_value<T: LLVMByteReader + ByteReader + MutByteReader, M>(
   lex_type: u32,
   input_type: u32,
   r: &mut T,
   scan_index: u32,
-  ctx: &mut OldParseContext<T>,
+  ctx: &mut LLVMParseContext<T, M>,
   bc: &[u32],
 ) -> i32 {
-  let mut active_token = match lex_type {
-        LexerType::PEEK => {
-            let basis_token = if ctx.in_peek_mode() {
-                ctx.peek
-            } else {
-                ctx.assert
-            };
-
-            ctx.set_peek_mode_to(true);
-
-            r.set_cursor_to(&next_token(basis_token).0);
-
-            next_token(basis_token)
-        }
-        _ /*| LEXER_TYPE::ASSERT*/ => {
-            if ctx.in_peek_mode() {
-                ctx.set_peek_mode_to(false);
-
-                r.set_cursor_to(&ctx.assert.0 );
-            }
-
-            ctx.assert
-        }
-    };
-
   match input_type {
     InputType::T03_CLASS => {
-      active_token.0.len = r.codepoint_byte_length();
-
-      if ctx.in_peek_mode() {
-        ctx.peek = active_token;
-      } else {
-        ctx.assert = active_token;
-      }
-
+      debug_assert!(ctx.is_scanner());
+      ctx.scan_len = r.codepoint_byte_length();
       r.class() as i32
     }
 
     InputType::T04_CODEPOINT => {
-      active_token.0.len = r.codepoint_byte_length();
-
-      if ctx.in_peek_mode() {
-        ctx.peek = active_token;
-      } else {
-        ctx.assert = active_token;
-      }
-
+      debug_assert!(ctx.is_scanner());
+      ctx.scan_len = r.codepoint_byte_length();
       r.codepoint() as i32
     }
 
     InputType::T05_BYTE => {
-      active_token.0.len = 1;
-
-      if ctx.in_peek_mode() {
-        ctx.peek = active_token;
-      } else {
-        ctx.assert = active_token;
-      }
+      debug_assert!(ctx.is_scanner());
+      ctx.scan_len = 1;
       r.byte() as i32
     }
 
     _ => {
       debug_assert!(!ctx.is_scanner());
 
-      let scanned_token = token_scan(active_token, scan_index, ctx, r, bc);
+      let active_offset = match lex_type {
+        LexerType::PEEK => {
+            let (offset, len) = if ctx.in_peek_mode() {
+                (ctx.peek_off, ctx.peek_input_len)
+            } else {
+              ctx.peek_off = ctx.token_off;
+              (ctx.token_off, ctx.tok_input_len)
+            };
+
+            ctx.peek_off += len;
+
+            ctx.set_peek_mode_to(true);
+
+            r.set_cursor_to(ctx.peek_off, ctx.peek_line_num, ctx.peek_line_off);
+
+            ctx.peek_off
+        }
+        _ /*| LEXER_TYPE::ASSERT*/ => {
+            if ctx.in_peek_mode() {
+                ctx.set_peek_mode_to(false);
+
+                r.set_cursor_to(ctx.token_off, ctx.tok_line_off, ctx.tok_line_num);
+            }
+            ctx.token_off
+        }
+    };
+
+      let token_length = token_scan(active_offset, scan_index, ctx, r, bc);
 
       if ctx.in_peek_mode() {
-        ctx.peek = scanned_token;
+        ctx.peek_input_len = token_length;
       } else {
-        ctx.assert = scanned_token;
+        ctx.tok_input_len = token_length;
       }
 
-      scanned_token.1 as i32
+      ctx.tok_id as i32
     }
   }
 }
 
-fn scan_for_improvised_token<T: ByteReader + MutByteReader>(
-  scan_ctx: &mut OldParseContext<T>,
+fn scan_for_improvised_token<T: LLVMByteReader + ByteReader + MutByteReader, M>(
+  scan_ctx: &mut LLVMParseContext<T, M>,
   r: &mut T,
 ) {
-  let mut assert = scan_ctx.assert;
-  assert.0.len = r.codepoint_byte_length();
   let mut byte = r.byte();
+  let mut off = r.cursor() as u32;
   // Scan to next break point and produce an undefined
   // token. If we are already at a break point then just
   // return the single character token.
@@ -422,7 +396,7 @@ fn scan_for_improvised_token<T: ByteReader + MutByteReader>(
     || byte == (b'\r' as u32)
     || byte == (b' ' as u32)
   {
-    assert = next_token(assert);
+    off += 1;
   } else {
     while byte != b'\n' as u32
       && byte != b'\t' as u32
@@ -430,27 +404,26 @@ fn scan_for_improvised_token<T: ByteReader + MutByteReader>(
       && byte != b' ' as u32
       && !r.at_end()
     {
-      r.next(assert.0.len as i32);
-      byte = r.byte();
-      assert = next_token(assert);
-      assert.0.len = r.codepoint_byte_length();
+      off += r.codepoint_byte_length();
     }
   }
-  scan_ctx.assert = assert;
+
+  scan_ctx.scan_anchor_off = off;
 
   set_token_state(0, INSTRUCTION::default(), scan_ctx);
 }
 
-fn token_scan<T: ByteReader + MutByteReader>(
-  token: (TokenRange, u32),
+fn token_scan<T: LLVMByteReader + ByteReader + MutByteReader, M>(
+  offset: u32,
   scan_index: u32,
-  ctx: &mut OldParseContext<T>,
+  ctx: &mut LLVMParseContext<T, M>,
   r: &mut T,
   bc: &[u32],
-) -> (TokenRange, u32) {
-  if token.1 != 0 {
-    return token;
+) -> u32 {
+  if ctx.tok_id != 0 {
+    return offset;
   }
+  ctx.tok_id = 0;
 
   #[cfg(test)]
   {
@@ -469,51 +442,42 @@ fn token_scan<T: ByteReader + MutByteReader>(
     }
   }
 
-  r.set_cursor_to(&token.0);
+  r.set_cursor_to(offset, 0, 0);
 
   if r.at_end() {
-    return (token.0, 0);
+    return 0;
   }
-  // Initialize Scanner
 
-  let mut scan_ctx = OldParseContext::bytecode_context();
-  scan_ctx.make_scanner();
-  scan_ctx.init_normal_state(scan_index);
-  scan_ctx.anchor = token;
-  scan_ctx.assert = token;
+  // Initialize Scanner
 
   // We are done with the state reference, so we
   // invalidate variable by moving the reference to
   // an unused name to prevent confusion with the
   // `scan_state` variable.
-  let _state = ctx;
+  let mut stack = vec![0, scan_index];
 
   match {
-    if scan_ctx.get_active_state() == 0 {
-      // Decode the next scanner_state.
-      let state = scan_ctx.pop_state();
-      scan_ctx.set_active_state_to(state);
-    }
+    let mut state = stack.pop().unwrap();
 
     let line_data = r.get_line_data();
     let (line_num, line_count) = ((line_data >> 32) as u32, (line_data & 0xFFFF_FFFF) as u32);
 
-    scan_ctx.anchor.0.line_num = line_num;
-    scan_ctx.anchor.0.line_off = line_count;
+    ctx.peek_line_num = line_num;
+    ctx.peek_line_off = line_count;
 
     loop {
-      if scan_ctx.get_active_state() < 1 {
-        if scan_ctx.anchor.1 == 0 {
-          scan_for_improvised_token(&mut scan_ctx, r);
+      if state < 1 {
+        if ctx.tok_id == 0 {
+          scan_for_improvised_token(ctx, r);
         }
 
-        break Some(scan_ctx.anchor.into());
+        break Some(ctx.scan_anchor_off - offset);
       } else {
-        let mask_gate = NORMAL_STATE_FLAG << (scan_ctx.in_fail_mode() as u32);
+        let mask_gate = NORMAL_STATE_FLAG << (ctx.in_fail_mode() as u32);
 
-        if (scan_ctx.get_active_state() & mask_gate) != 0 {
+        if (state & mask_gate) != 0 {
           let fail_mode = loop {
-            match dispatch(r, &mut scan_ctx, bc) {
+            match dispatch(r, ctx, &mut stack, bc) {
               ParseAction::CompleteState => {
                 break false;
               }
@@ -524,10 +488,9 @@ fn token_scan<T: ByteReader + MutByteReader>(
               _ => {}
             }
           };
-          scan_ctx.set_fail_mode_to(fail_mode);
+          ctx.set_fail_mode_to(fail_mode);
         }
-        let state = scan_ctx.pop_state();
-        scan_ctx.set_active_state_to(state);
+        state = stack.pop().unwrap();
       }
     }
   } {
@@ -538,50 +501,46 @@ fn token_scan<T: ByteReader + MutByteReader>(
 
 /// Start or continue a parse on an input
 #[inline]
-pub fn get_next_action<T: ByteReader + MutByteReader>(
+pub fn get_next_action<T: LLVMByteReader + ByteReader + MutByteReader, M>(
   r: &mut T,
-  ctx: &mut OldParseContext<T>,
+  ctx: &mut LLVMParseContext<T, M>,
+  stack: &mut Vec<u32>,
   bc: &[u32],
 ) -> ParseAction {
-  if ctx.get_active_state() == 0 {
-    let state = ctx.pop_state();
-    ctx.set_active_state_to(state);
-  }
+  let mut state = stack.pop().unwrap();
 
   loop {
-    if ctx.get_active_state() < 1 {
-      if r.offset_at_end(ctx.assert.0.len) {
+    if state < 1 {
+      if r.offset_at_end(ctx.token_off) {
         break ParseAction::Accept { production_id: ctx.get_production() };
       } else {
         break ParseAction::Error {
           last_production: ctx.get_production(),
-          last_input:      ctx.assert.0,
+          last_input:      TokenRange {
+            len:      ctx.tok_input_len,
+            off:      ctx.token_off,
+            line_num: ctx.tok_line_num,
+            line_off: ctx.tok_line_off,
+          },
         };
       }
     } else {
       let mask_gate = NORMAL_STATE_FLAG << (ctx.in_fail_mode() as u32);
 
-      if ctx.is_interrupted() || (ctx.get_active_state() & mask_gate) != 0 {
-        ctx.set_interrupted_to(true);
-
-        match dispatch(r, ctx, bc) {
+      if (state & mask_gate) != 0 {
+        match dispatch(r, ctx, stack, bc) {
           ParseAction::CompleteState => {
-            ctx.set_interrupted_to(false);
             ctx.set_fail_mode_to(false);
-            let state = ctx.pop_state();
-            ctx.set_active_state_to(state);
+            state = stack.pop().unwrap();
           }
           ParseAction::FailState => {
-            ctx.set_interrupted_to(false);
             ctx.set_fail_mode_to(true);
-            let state = ctx.pop_state();
-            ctx.set_active_state_to(state);
+            ctx.set_active_state_to(stack.pop().unwrap());
           }
           action => break action,
         }
       } else {
-        let state = ctx.pop_state();
-        ctx.set_active_state_to(state);
+        state = stack.pop().unwrap();
       }
     }
   }

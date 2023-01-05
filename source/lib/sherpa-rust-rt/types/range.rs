@@ -1,6 +1,6 @@
 use std::{ops::Add, str::FromStr, sync::Arc};
 
-use super::{ByteReader, LLVMParseContext, OldParseContext, Token};
+use super::{ByteReader, Token};
 
 #[derive(Clone)]
 pub struct Range {

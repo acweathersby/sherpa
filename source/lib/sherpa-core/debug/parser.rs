@@ -8,15 +8,16 @@ pub fn collect_shifts_and_skips(
   entry_point: u32,
   target_production_id: u32,
   bytecode: Vec<u32>,
-) -> (UTF8StringReader, OldParseContext<UTF8StringReader>, Vec<String>, Vec<String>) {
+) -> (UTF8StringReader, LLVMParseContext<UTF8StringReader, u32>, Vec<String>, Vec<String>) {
+  let mut ctx = LLVMParseContext::new();
   let mut reader = UTF8StringReader::from_string(input);
-  let mut state = OldParseContext::bytecode_context();
-  state.init_normal_state(entry_point);
+
+  let mut stack = vec![0, entry_point | NORMAL_STATE_FLAG];
   let mut shifts = vec![];
   let mut skips = vec![];
 
   loop {
-    match get_next_action(&mut reader, &mut state, &bytecode) {
+    match get_next_action(&mut reader, &mut ctx, &mut stack, &bytecode) {
       ParseAction::Accept { production_id } => {
         assert_eq!(production_id, target_production_id);
         break;
@@ -58,5 +59,5 @@ pub fn collect_shifts_and_skips(
       _ => panic!("Unexpected Action!"),
     }
   }
-  (reader, state, shifts, skips)
+  (reader, ctx, shifts, skips)
 }

@@ -2,14 +2,14 @@ use super::*;
 
 #[derive(Debug, Clone)]
 pub struct UTF8StringReader<'a> {
-  len:        usize,
-  cursor:     usize,
-  line_count: usize,
-  line_off:   usize,
-  data:       &'a str,
-  word:       u32,
-  cp:         u32,
-  source:     SharedSymbolBuffer,
+  len:      usize,
+  cursor:   usize,
+  line_num: usize,
+  line_off: usize,
+  data:     &'a str,
+  word:     u32,
+  cp:       u32,
+  source:   SharedSymbolBuffer,
 }
 
 impl<'a> LLVMByteReader for UTF8StringReader<'a> {}
@@ -38,7 +38,7 @@ impl<'a> MutByteReader for UTF8StringReader<'a> {
   }
 
   fn set_line_count(&mut self, line_count: u32) {
-    self.line_count = line_count as usize;
+    self.line_num = line_count as usize;
   }
 
   fn set_line_offset(&mut self, line_offset: u32) {
@@ -77,7 +77,7 @@ impl<'a> ByteReader for UTF8StringReader<'a> {
 
   #[inline(always)]
   fn line_count(&self) -> u32 {
-    self.line_count as u32
+    self.line_num as u32
   }
 
   #[inline(always)]
@@ -97,7 +97,7 @@ impl<'a> ByteReader for UTF8StringReader<'a> {
 
   #[inline(always)]
   fn get_line_data(&self) -> u64 {
-    ((self.line_count as u64) << 32) | self.line_off as u64
+    ((self.line_num as u64) << 32) | self.line_off as u64
   }
 
   #[inline(always)]
@@ -106,13 +106,11 @@ impl<'a> ByteReader for UTF8StringReader<'a> {
   }
 
   #[inline(always)]
-  fn set_cursor_to(&mut self, token: &TokenRange) -> u64 {
-    let TokenRange { off, line_num, line_off, .. } = *token;
-
+  fn set_cursor_to(&mut self, off: u32, line_num: u32, line_off: u32) -> u64 {
     if self.cursor != off as usize {
       let diff = off as i32 - self.cursor as i32;
 
-      self.line_count = line_num as usize;
+      self.line_num = line_num as usize;
 
       self.line_off = line_off as usize;
 
@@ -131,14 +129,14 @@ impl<'a> UTF8StringReader<'a> {
   ///
   pub fn new(data: &'a str) -> UTF8StringReader<'a> {
     let mut reader = UTF8StringReader {
-      data:       data,
-      len:        data.len(),
-      cursor:     0,
-      word:       0,
-      line_count: 0,
-      line_off:   0,
-      cp:         0,
-      source:     SharedSymbolBuffer::new(Vec::from(data.clone())),
+      data:     data,
+      len:      data.len(),
+      cursor:   0,
+      word:     0,
+      line_num: 0,
+      line_off: 0,
+      cp:       0,
+      source:   SharedSymbolBuffer::new(Vec::from(data.clone())),
     };
 
     Self::next(&mut reader, 0);

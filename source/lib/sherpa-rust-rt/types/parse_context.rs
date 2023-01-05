@@ -16,164 +16,16 @@ pub enum ParseActionType {
   Fork,
   NeedMoreInput,
 }
+
 impl Into<u32> for ParseActionType {
   fn into(self) -> u32 {
     self as u32
   }
 }
+
 impl Into<u64> for ParseActionType {
   fn into(self) -> u64 {
     self as u64
-  }
-}
-
-const STACK_32_BIT_SIZE: usize = 128;
-pub struct OldParseContext<T: ByteReader + MutByteReader> {
-  pub peek: (TokenRange, u32),
-  pub anchor: (TokenRange, u32),
-  pub assert: (TokenRange, u32),
-  pub action_ptr: *mut ParseAction,
-  pub reader: *mut T,
-  pub input_block: usize,
-  pub stack_base: *const u64,
-  pub stack_top: usize,
-  pub stack_size: u32,
-  pub input_block_length: u32,
-  pub input_block_offset: u32,
-  pub production: u32,
-  pub state: u32,
-  pub in_peek_mode: u32,
-  pub local_state_stack: Vec<u32>,
-}
-
-impl<T: ByteReader + MutByteReader> OldParseContext<T> {
-  pub fn new(reader: &mut T) -> Self {
-    Self {
-      peek: Default::default(),
-      anchor: Default::default(),
-      assert: Default::default(),
-      action_ptr: 0 as *mut ParseAction,
-      stack_base: [].as_mut_ptr(),
-      stack_top: 0,
-      state: NORMAL_STATE_FLAG,
-      production: 0,
-      input_block: 0,
-      input_block_length: 0,
-      input_block_offset: 0,
-      stack_size: 0,
-      reader,
-      in_peek_mode: 0,
-      local_state_stack: vec![],
-    }
-  }
-
-  pub fn bytecode_context() -> Self {
-    Self {
-      peek: Default::default(),
-      anchor: Default::default(),
-      assert: Default::default(),
-      action_ptr: 0 as *mut ParseAction,
-      stack_base: [].as_mut_ptr(),
-      stack_top: 0,
-      stack_size: (STACK_32_BIT_SIZE as u32) >> 1,
-      state: 0,
-      production: 0,
-      input_block: 0,
-      input_block_length: 0,
-      input_block_offset: 0,
-      reader: 0 as *mut T,
-      local_state_stack: vec![],
-      in_peek_mode: 0,
-    }
-  }
-
-  /// The following methods are used exclusively by the
-  /// the rust functions in [sherpa::runtime::parser_functions.rs]
-
-  #[inline]
-  pub fn in_fail_mode(&self) -> bool {
-    self.input_block_offset > 0
-  }
-
-  #[inline]
-  pub fn set_fail_mode_to(&mut self, is_in_fail_mode: bool) {
-    self.input_block_offset = if is_in_fail_mode { 1 } else { 0 }
-  }
-
-  #[inline]
-  pub fn in_peek_mode(&self) -> bool {
-    self.in_peek_mode > 0
-  }
-
-  #[inline]
-  pub fn set_peek_mode_to(&mut self, is_in_peek_mode: bool) {
-    self.in_peek_mode = is_in_peek_mode as u32;
-  }
-
-  #[inline]
-  pub fn is_interrupted(&self) -> bool {
-    self.action_ptr as usize > 0
-  }
-
-  #[inline]
-  pub fn set_interrupted_to(&mut self, is_interrupted: bool) {
-    self.action_ptr = is_interrupted as usize as *mut ParseAction
-  }
-
-  /// Used by the bytecode interpreter
-  #[inline]
-  pub fn is_scanner(&self) -> bool {
-    self.input_block > 0
-  }
-
-  /// Used by the bytecode interpreter
-  #[inline]
-  pub fn make_scanner(&mut self) {
-    self.input_block = 1;
-  }
-
-  #[inline]
-  pub fn get_active_state(&mut self) -> u32 {
-    self.state as u32
-  }
-
-  #[inline]
-  pub fn set_active_state_to(&mut self, state: u32) {
-    self.state = state;
-  }
-
-  #[inline]
-  pub fn get_production(&mut self) -> u32 {
-    self.production
-  }
-
-  #[inline]
-  pub fn set_production_to(&mut self, production: u32) {
-    self.production = production;
-  }
-
-  #[inline]
-  pub fn pop_state(&mut self) -> u32 {
-    if self.stack_top > 0 {
-      self.stack_top -= 1;
-      return self.local_state_stack.pop().unwrap();
-    } else {
-      0
-    }
-  }
-
-  #[inline]
-  pub fn push_state(&mut self, state: u32) {
-    self.local_state_stack.push(state);
-
-    self.stack_top += 1;
-  }
-
-  #[inline]
-  pub fn init_normal_state(&mut self, entry_point: u32) {
-    self.stack_top = 0;
-
-    self.push_state(NORMAL_STATE_FLAG | entry_point);
   }
 }
 
@@ -354,6 +206,58 @@ impl<T: LLVMByteReader + ByteReader, M> LLVMParseContext<T, M> {
       token_line_offset:  self.tok_line_off,
       token_line_count:   self.tok_line_num,
     }
+  }
+
+  /// The following methods are used exclusively by the
+  /// the rust functions in [sherpa::runtime::parser_functions.rs]
+
+  #[inline]
+  pub fn in_fail_mode(&self) -> bool {
+    self.state == FAIL_STATE_FLAG
+  }
+
+  #[inline]
+  pub fn set_fail_mode_to(&mut self, is_in_fail_mode: bool) {
+    self.state = if is_in_fail_mode { FAIL_STATE_FLAG } else { NORMAL_STATE_FLAG }
+  }
+
+  #[inline]
+  pub fn in_peek_mode(&self) -> bool {
+    self.in_peek_mode
+  }
+
+  #[inline]
+  pub fn set_peek_mode_to(&mut self, is_in_peek_mode: bool) {
+    self.in_peek_mode = is_in_peek_mode;
+  }
+
+  #[inline]
+  pub fn get_active_state(&mut self) -> u32 {
+    self.state as u32
+  }
+
+  #[inline]
+  pub fn set_active_state_to(&mut self, state: u32) {
+    self.state = state;
+  }
+
+  #[inline]
+  pub fn get_production(&mut self) -> u32 {
+    self.prod_id
+  }
+
+  #[inline]
+  pub fn set_production_to(&mut self, production: u32) {
+    self.prod_id = production;
+  }
+
+  #[inline]
+  pub fn is_scanner(&self) -> bool {
+    self.meta_a > 0
+  }
+
+  pub fn set_is_scanner(&mut self, is_scanner: bool) {
+    self.meta_a = is_scanner as u32;
   }
 }
 

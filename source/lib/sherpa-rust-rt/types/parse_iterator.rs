@@ -1,25 +1,30 @@
 use super::*;
 use crate::functions::get_next_action;
 
-pub trait IteratorParser<T: ByteReader + MutByteReader> {
-  fn get_parts(&mut self) -> (&mut T, &mut OldParseContext<T>, &[u32], &mut bool);
+pub trait IteratorParser<R: LLVMByteReader + ByteReader + MutByteReader, UserCTX> {
+  fn get_parts(
+    &mut self,
+  ) -> (&mut R, &mut LLVMParseContext<R, UserCTX>, &mut Vec<u32>, &[u32], &mut bool);
 }
 
-pub struct ReferenceParseIterator<'a, T: ByteReader + MutByteReader> {
-  ctx:      OldParseContext<T>,
-  reader:   T,
+pub struct ReferenceParseIterator<'a, R: LLVMByteReader + ByteReader + MutByteReader, UserCTX> {
+  ctx:      LLVMParseContext<R, UserCTX>,
+  stack:    Vec<u32>,
+  reader:   R,
   bytecode: &'a [u32],
   active:   bool,
 }
 
-impl<'a, T: ByteReader + MutByteReader + MutByteReader> Iterator for ReferenceParseIterator<'a, T> {
+impl<'a, R: LLVMByteReader + ByteReader + MutByteReader, UserCTX> Iterator
+  for ReferenceParseIterator<'a, R, UserCTX>
+{
   type Item = ParseAction;
 
   fn next(&mut self) -> Option<Self::Item> {
-    let (reader, state, bytecode, active) = self.get_parts();
+    let (reader, ctx, stack, bytecode, active) = self.get_parts();
 
     if *active {
-      let action = get_next_action(reader, state, bytecode);
+      let action = get_next_action(reader, ctx, stack, bytecode);
       match action {
         ParseAction::Error { .. } | ParseAction::Accept { .. } => {
           *active = false;
@@ -33,20 +38,25 @@ impl<'a, T: ByteReader + MutByteReader + MutByteReader> Iterator for ReferencePa
   }
 }
 
-impl<'a, T: ByteReader + MutByteReader> ReferenceParseIterator<'a, T> {
-  pub fn new(reader: T, data: &'a [u32], entry_point: u32) -> Self {
-    let mut state = OldParseContext::bytecode_context();
+impl<'a, R: LLVMByteReader + ByteReader + MutByteReader, UserCTX>
+  ReferenceParseIterator<'a, R, UserCTX>
+{
+  pub fn new(reader: R, data: &'a [u32], entry_point: u32) -> Self {
+    let mut state = LLVMParseContext::new();
 
-    state.init_normal_state(entry_point);
+    let stack = vec![0, entry_point | NORMAL_STATE_FLAG];
 
-    Self { ctx: state, reader, bytecode: data, active: true }
+    Self { ctx: state, reader, bytecode: data, active: true, stack }
   }
 }
+impl<'a, R: LLVMByteReader + ByteReader + MutByteReader, UserCTX> IteratorParser<R, UserCTX>
+  for ReferenceParseIterator<'a, R, UserCTX>
+{
+  fn get_parts(
+    &mut self,
+  ) -> (&mut R, &mut LLVMParseContext<R, UserCTX>, &mut Vec<u32>, &[u32], &mut bool) {
+    let ReferenceParseIterator { reader, ctx, bytecode: data, stack, active, .. } = self;
 
-impl<'a, T: ByteReader + MutByteReader> IteratorParser<T> for ReferenceParseIterator<'a, T> {
-  fn get_parts(&mut self) -> (&mut T, &mut OldParseContext<T>, &[u32], &mut bool) {
-    let ReferenceParseIterator { reader, ctx: state, bytecode: data, active, .. } = self;
-
-    (reader, state, data, active)
+    (reader, ctx, stack, data, active)
   }
 }
