@@ -3,32 +3,33 @@ use sherpa_runtime::functions::get_next_action;
 use crate::types::*;
 use std::sync::Arc;
 /// Collects all tokens that where shifted and skipped during parsing.
-pub fn collect_shifts_and_skips(
+pub fn collect_shifts_and_skips<'a>(
   input: &str,
   entry_point: u32,
   target_production_id: u32,
-  bytecode: Vec<u32>,
-) -> (UTF8StringReader, LLVMParseContext<UTF8StringReader, u32>, Vec<String>, Vec<String>) {
-  let mut ctx = LLVMParseContext::new();
+  bytecode: &[u32],
+) -> SherpaResult<(Vec<String>, Vec<String>)> {
   let mut reader = UTF8StringReader::from_string(input);
+  let mut ctx = ParseContext::<_, u32>::new(&mut reader);
 
   let mut stack = vec![0, entry_point | NORMAL_STATE_FLAG];
   let mut shifts = vec![];
   let mut skips = vec![];
 
   loop {
-    match get_next_action(&mut reader, &mut ctx, &mut stack, &bytecode) {
+    match get_next_action(&mut ctx, &mut stack, bytecode) {
       ParseAction::Accept { production_id } => {
         assert_eq!(
           production_id, target_production_id,
           "Expected the accepted production id to match target_production_id"
         );
-        break;
+        break SherpaResult::Ok((shifts, skips));
       }
       ParseAction::Error { last_input, .. } => {
-        let mut token: Token = last_input.into();
+        let mut token: Token = last_input.to_token_with_reader(ctx.get_reader());
+
         token.set_source(Arc::new(Vec::from(input.to_string().as_bytes())));
-        panic!("{} [{}]:\n{}", "message", token, token.blame(1, 1, "", None));
+        break SherpaResult::Err(token.blame(1, 1, "", None).into());
       }
       ParseAction::Fork { .. } => {
         panic!("No implementation of fork resolution is available")
@@ -47,5 +48,4 @@ pub fn collect_shifts_and_skips(
       _ => panic!("Unexpected Action!"),
     }
   }
-  (reader, ctx, shifts, skips)
 }

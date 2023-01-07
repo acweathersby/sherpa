@@ -14,11 +14,7 @@ use crate::{
   writer::code_writer::CodeWriter,
 };
 
-use super::{
-  ascript::get_ascript_export_data,
-  common::write_rust_entry_functions,
-  pipeline::PipelineTask,
-};
+use super::{ascript::get_ascript_export_data, pipeline::PipelineTask};
 
 /// Constructs a task that outputs a Rust parse context interface
 /// for the llvm parser.
@@ -65,52 +61,6 @@ pub enum OutputType {
   _Java,
 }
 
-fn _apply_llvm_optimizations(opt: OptimizationLevel, ctx: &crate::llvm::LLVMParserModule) {
-  //return;
-  let pass_manager_builder = PassManagerBuilder::create();
-  let pass_manager = PassManager::create(());
-  pass_manager_builder.set_optimization_level(opt);
-  //pass_manager_builder.populate_module_pass_manager(&pass_manager);
-  //*
-
-  pass_manager.add_function_inlining_pass();
-  pass_manager.add_always_inliner_pass();
-  pass_manager.add_partially_inline_lib_calls_pass();
-  pass_manager.add_tail_call_elimination_pass();
-  pass_manager.run_on(&ctx.module);
-
-  pass_manager.add_merge_functions_pass();
-  pass_manager.add_lower_expect_intrinsic_pass();
-  pass_manager.add_jump_threading_pass();
-  pass_manager.add_memcpy_optimize_pass();
-  pass_manager.add_cfg_simplification_pass();
-  pass_manager.run_on(&ctx.module);
-  //------------------------------------------------------------------------
-  pass_manager.add_scalarizer_pass();
-  pass_manager.add_slp_vectorize_pass();
-  pass_manager.add_loop_vectorize_pass();
-  pass_manager.add_merged_load_store_motion_pass();
-  // ---------------------------------
-  pass_manager.add_gvn_pass();
-  pass_manager.add_lower_switch_pass();
-
-  pass_manager.add_licm_pass();
-  pass_manager.run_on(&ctx.module);
-
-  pass_manager.add_function_inlining_pass();
-  pass_manager.run_on(&ctx.module);
-
-  pass_manager.add_global_optimizer_pass();
-  pass_manager.add_global_dce_pass();
-  pass_manager.add_aggressive_dce_pass();
-  pass_manager.run_on(&ctx.module);
-
-  pass_manager.add_instruction_simplify_pass();
-  pass_manager.run_on(&ctx.module);
-  //  pass_manager.add_demote_memory_to_register_pass();
-  //  pass_manager.run_on(&ctx.module);
-}
-
 fn write_rust_parser<W: Write>(
   writer: &mut CodeWriter<W>,
   states: &BTreeMap<String, u32>,
@@ -134,18 +84,18 @@ extern \"C\" {{
     ))?
     .wrtln(&format!(
       r###"
-pub trait LLVMReader:
+pub trait Reader:
   ByteReader + LLVMByteReader + MutByteReader + std::fmt::Debug
   {{}}
 
-impl<T> LLVMReader for T
+impl<T> Reader for T
   where T: ByteReader + LLVMByteReader + MutByteReader + std::fmt::Debug 
   {{}}
       
-pub struct Parser<T: LLVMReader, M>(LLVMParseContext<T, M>, T);
+pub struct Parser<T: Reader, M>(ParseContext<T, M>, T);
 
 
-impl<T: LLVMReader, M> Iterator for Parser<T, M> {{
+impl<T: Reader, M> Iterator for Parser<T, M> {{
     type Item = ParseActionType;
 
     #[inline(always)]
@@ -155,7 +105,7 @@ impl<T: LLVMReader, M> Iterator for Parser<T, M> {{
             if !self.0.is_active {{
                 None
             }} else {{
-                let _ptr = &mut self.0 as *const LLVMParseContext<T, M>;
+                let _ptr = &mut self.0 as *const ParseContext<T, M>;
                 Some(next(_ptr as *mut u8))
             }}
         }}
@@ -163,12 +113,12 @@ impl<T: LLVMReader, M> Iterator for Parser<T, M> {{
 }}
 
 
-impl<T: LLVMReader, M> Parser<T, M> {{
+impl<T: Reader, M> Parser<T, M> {{
     /// Create a new parser context to parser the input with 
     /// the grammar `{0}`
     #[inline(always)]
     fn new(mut reader: T) -> Self {{
-        let mut parser = Self(LLVMParseContext::<T, M>::new(), reader);
+        let mut parser = Self(ParseContext::<T, M>::new_llvm(), reader);
         parser.construct_context();
         parser
     }}
@@ -178,7 +128,7 @@ impl<T: LLVMReader, M> Parser<T, M> {{
     #[inline(always)]
     fn set_start_point(&mut self, start_point: u64) -> &mut Self {{
         unsafe {{
-            let _ptr = &mut self.0 as *const LLVMParseContext<T, M>;
+            let _ptr = &mut self.0 as *const ParseContext<T, M>;
             prime(_ptr as *mut u8, start_point as u32);
         }}
 
@@ -187,47 +137,61 @@ impl<T: LLVMReader, M> Parser<T, M> {{
     #[inline(always)]
     fn construct_context(&mut self) {{
         unsafe {{
-            let _ptr = &mut self.0 as *const LLVMParseContext<T, M>;
+            let _ptr = &mut self.0 as *const ParseContext<T, M>;
             let _rdr = &mut self.1 as *const T;
             init(_ptr as *mut u8, _rdr as *mut u8);
         }}
     }}
     #[inline(always)]
     fn destroy_context(&mut self) {{
-      let _ptr = &mut self.0 as *const LLVMParseContext<T, M>;
+      let _ptr = &mut self.0 as *const ParseContext<T, M>;
       unsafe {{ drop(_ptr as *mut u8); }}
     }}"###,
       grammar_name
     ))?
     .indent();
 
-  write_rust_entry_functions(g, states, writer)?;
+  for (i, ExportedProduction { export_name, production, .. }) in
+    g.get_exported_productions().iter().enumerate()
+  {
+    writer
+      .newline()?
+      .wrtln(&format!("/// `{}`", production.loc.to_string().replace("\n", "\n// ")))?
+      .wrtln(&format!("pub fn new_{}_parser(reader: T) -> Self{{", export_name))?
+      .indent()
+      .wrtln("let mut ctx = Self::new(reader);")?
+      .wrtln(&format!("ctx.set_start_point({});", i))?
+      .wrtln("ctx")?
+      .dedent()
+      .wrtln("}")?
+      .newline()?;
+  }
 
-  writer.dedent().wrtln(&format!(
-    "}}
+  writer.dedent().wrtln(
+    "}
 
-impl<T: LLVMReader, M> Drop for Parser<T, M> {{
-    fn drop(&mut self) {{
+impl<T: Reader, M> Drop for Parser<T, M> {
+    fn drop(&mut self) {
         self.destroy_context();
-    }}
-}}",
-  ))?;
+    }
+}",
+  )?;
 
   if let Some(ascript) = ascript {
     let export_node_data = get_ascript_export_data(g, ascript);
 
-    writer.wrtln("pub mod ast_compile  {")?.indent();
+    writer.wrtln("pub mod ast  {")?.indent();
     writer.wrtln("use super::*; ")?;
 
     // Create a module that will store convience functions for compiling AST
     // structures based on on grammar entry points.
 
-    for (ref_, ast_type, ast_type_string, export_name) in &export_node_data {
+    for (ref_, ast_type, ast_type_string, export_name, _) in &export_node_data {
       writer
         .newline()?
         .wrt(&format!(
           "
-impl AstSlot for {0} {{}}
+impl AstObject for {0} {{}}
 type ASTSlot = ({0}, TokenRange, TokenRange);
 
 #[link(name = \"{1}\", kind = \"static\" )]
@@ -256,7 +220,7 @@ let mut ctx = Parser::new_{0}_parser(reader);
 let reducers_ptr = (&reduce_functions.0).as_ptr() as *const u8;
 let shifter_ptr = llvm_map_shift_action::<UTF8StringReader, u32, {1}> as *const u8;
 let result_ptr = llvm_map_result_action::<UTF8StringReader, u32, {1}> as *const u8;
-let ctx_ptr = (&mut ctx.0) as *const LLVMParseContext<UTF8StringReader, u32>;
+let ctx_ptr = (&mut ctx.0) as *const ParseContext<UTF8StringReader, u32>;
 ",
           export_name, ascript.ast_type_name
         ))?
@@ -415,7 +379,7 @@ pub fn build_llvm_parser(
             ctx.module.set_data_layout(&target_machine.get_target_data().get_data_layout());
 
             if j.config().opt_llvm {
-              _apply_llvm_optimizations(opt, &ctx);
+              apply_llvm_optimizations(opt, &ctx);
             }
 
             match target_machine.write_to_file(&ctx.module, FileType::Object, &object_path) {
@@ -443,4 +407,50 @@ pub fn build_llvm_parser(
     require_ascript: false,
     require_bytecode: true,
   }
+}
+
+fn apply_llvm_optimizations(opt: OptimizationLevel, ctx: &crate::llvm::LLVMParserModule) {
+  //return;
+  let pass_manager_builder = PassManagerBuilder::create();
+  let pass_manager = PassManager::create(());
+  pass_manager_builder.set_optimization_level(opt);
+  //pass_manager_builder.populate_module_pass_manager(&pass_manager);
+  //*
+
+  pass_manager.add_function_inlining_pass();
+  pass_manager.add_always_inliner_pass();
+  pass_manager.add_partially_inline_lib_calls_pass();
+  pass_manager.add_tail_call_elimination_pass();
+  pass_manager.run_on(&ctx.module);
+
+  pass_manager.add_merge_functions_pass();
+  pass_manager.add_lower_expect_intrinsic_pass();
+  pass_manager.add_jump_threading_pass();
+  pass_manager.add_memcpy_optimize_pass();
+  pass_manager.add_cfg_simplification_pass();
+  pass_manager.run_on(&ctx.module);
+  //------------------------------------------------------------------------
+  pass_manager.add_scalarizer_pass();
+  pass_manager.add_slp_vectorize_pass();
+  pass_manager.add_loop_vectorize_pass();
+  pass_manager.add_merged_load_store_motion_pass();
+  // ---------------------------------
+  pass_manager.add_gvn_pass();
+  pass_manager.add_lower_switch_pass();
+
+  pass_manager.add_licm_pass();
+  pass_manager.run_on(&ctx.module);
+
+  pass_manager.add_function_inlining_pass();
+  pass_manager.run_on(&ctx.module);
+
+  pass_manager.add_global_optimizer_pass();
+  pass_manager.add_global_dce_pass();
+  pass_manager.add_aggressive_dce_pass();
+  pass_manager.run_on(&ctx.module);
+
+  pass_manager.add_instruction_simplify_pass();
+  pass_manager.run_on(&ctx.module);
+  //  pass_manager.add_demote_memory_to_register_pass();
+  //  pass_manager.run_on(&ctx.module);
 }

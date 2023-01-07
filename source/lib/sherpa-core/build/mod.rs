@@ -6,8 +6,6 @@ pub mod disclaimer;
 
 pub mod table;
 
-pub mod common;
-
 pub mod pipeline;
 
 pub mod disassembly;

@@ -288,22 +288,20 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
     })
     .collect::<BTreeMap<_, _>>();
 
-  let fn_args = format!(
-    "ctx: &LLVMParseContext<R, M>, slots: &AstSlots<({}, TokenRange, TokenRange)>",
-    ast.ast_type_name
-  );
-  let fn_template = format!("<R: LLVMReader + UTF8Reader, M>");
+  let fn_args =
+    format!("ctx: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<{}>>", ast.ast_type_name);
+  let fn_template = format!("<R: Reader + UTF8Reader, M>");
 
   // Build reduce functions -------------------------------------
   w.wrtln(&format!(
     "\nfn default_fn{}({}){{
   if slots.len() > 1 {{
-    let (_, tok, _) = slots.take(0);
+    let AstSlot (_, tok, _) = slots.take(0);
     let last = slots.take(slots.len() - 1);
     for index in 1..slots.len()-1 {{
       slots.take(index);
     }}
-    slots.assign(0, (last.0, tok + last.1, TokenRange::default()));
+    slots.assign(0, AstSlot (last.0, tok + last.1, TokenRange::default()));
   }}
 }}",
     fn_template, fn_args
@@ -361,18 +359,15 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
 
                 write_slot_extraction(rule, indices, token_indices, &mut temp_writer)?;
 
+                write_node_token(&mut temp_writer, rule)?;
+
                 temp_writer.write_line(&_ref.to_init_string())?;
 
                 temp_writer.write_line(&format!(
-                  "slots.assign(0,({}::{}(Box::new({})), {}, TokenRange::default()))",
+                  "slots.assign(0, AstSlot ({}::{}(Box::new({})), tok, TokenRange::default()))",
                   ast.ast_type_name,
                   ast.structs.get(&struct_type).unwrap().type_name,
                   _ref.get_ref_string(),
-                  if rule.syms.len() > 1 {
-                    format!("tok0 + tok{}", rule.syms.len() - 1)
-                  } else {
-                    "tok0".to_string()
-                  }
                 ))?;
                 break;
               }
@@ -435,7 +430,7 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
                 | AScriptTypeVal::F64Vec
                 | AScriptTypeVal::String(..)
                 | AScriptTypeVal::Token => temp_writer.write_line(&format!(
-                  "slots.assign(0,({}::{}({}), {}, TokenRange::default()))",
+                  "slots.assign(0, AstSlot ({}::{}({}), {}, TokenRange::default()))",
                   ast.ast_type_name,
                   return_type.hcobj_type_name(None),
                   &reference,
@@ -477,8 +472,8 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
 
   w.wrt(&format!(
     "
-struct ReduceFunctions<R: LLVMReader + UTF8Reader, M>(pub [fn(&LLVMParseContext<R, M>, &AstSlots<({0}, TokenRange, TokenRange)>); {1}]);
-impl<R: LLVMReader + UTF8Reader, M> ReduceFunctions<R, M> {{
+struct ReduceFunctions<R: Reader + UTF8Reader, M>(pub [Reducer<R, M, {0}>; {1}]);
+impl<R: Reader + UTF8Reader, M> ReduceFunctions<R, M> {{
   pub const fn new() -> Self {{
     Self([
       {2}
@@ -488,14 +483,22 @@ impl<R: LLVMReader + UTF8Reader, M> ReduceFunctions<R, M> {{
 ",
     ast.ast_type_name,
     ordered_bodies.len(),
-    &refs
-      .iter()
-      .map(|r| format!("{}::<R, M>", r))
-      .collect::<Vec<String>>()
-      .join(",\n")
+    &refs.iter().map(|r| format!("{}::<R, M>", r)).collect::<Vec<String>>().join(",\n")
   ))?
-    .newline()?;
+  .newline()?;
 
+  Ok(())
+}
+
+fn write_node_token(temp_writer: &mut CodeWriter<Vec<u8>>, rule: &&Rule) -> Result<()> {
+  temp_writer.write_line(&format!(
+    "let tok = {};",
+    if rule.syms.len() > 1 {
+      format!("tok0 + tok{}", rule.syms.len() - 1)
+    } else {
+      "tok0".to_string()
+    }
+  ))?;
   Ok(())
 }
 
@@ -515,9 +518,9 @@ fn write_slot_extraction<'a>(
       },
       indices.contains(&i),
     ) {
-      (Some(tok_string), true) => format!("let (i{}, {}, _) = ", i, tok_string),
-      (Some(tok_string), false) => format!("let (_, {}, _) = ", tok_string),
-      (None, true) => format!("let (i{}, ..) = ", i),
+      (Some(tok_string), true) => format!("let AstSlot (i{}, {}, _) = ", i, tok_string),
+      (Some(tok_string), false) => format!("let AstSlot (_, {}, _) = ", tok_string),
+      (None, true) => format!("let AstSlot (i{}, ..) = ", i),
       (None, false) => "".to_string(),
     };
 
@@ -721,7 +724,9 @@ pub fn render_expression(
         None
       }
     }
-    ASTNode::AST_Token(box AST_Token {}) => Some(Ref::token(bump_ref_index(ref_index), type_slot)),
+    ASTNode::AST_Token(box AST_Token {}) => {
+      Some(Ref::node_token(bump_ref_index(ref_index), type_slot))
+    }
     ASTNode::AST_Add(..) => Some(Ref::token_range(bump_ref_index(ref_index), type_slot)),
     ASTNode::AST_Vector(box AST_Vector { initializer, .. }) => {
       let mut results = initializer
@@ -1199,8 +1204,18 @@ impl Ref {
     }
   }
 
-  pub fn get_type(&self) -> AScriptTypeVal {
-    self.ast_type.clone()
+  pub fn node_token(init_index: usize, type_slot: usize) -> Self {
+    Ref {
+      init_index,
+      type_slot,
+      body_indices: BTreeSet::new(),
+      init_expression: format!("tok.to_token_with_reader(ctx.get_reader())"),
+      ast_type: AScriptTypeVal::Token,
+      predecessors: None,
+      post_init_statements: None,
+      is_mutable: false,
+      is_token: false,
+    }
   }
 
   pub fn from(self, init_expression: String, ast_type: AScriptTypeVal) -> Self {
@@ -1215,6 +1230,10 @@ impl Ref {
       is_mutable: false,
       is_token: false,
     }
+  }
+
+  pub fn get_type(&self) -> AScriptTypeVal {
+    self.ast_type.clone()
   }
 
   pub fn make_mutable(&mut self) -> &mut Self {

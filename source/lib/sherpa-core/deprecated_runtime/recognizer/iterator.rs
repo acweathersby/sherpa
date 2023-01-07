@@ -1,6 +1,3 @@
-#[deprecated]
-use std::result;
-
 use crate::deprecated_runtime::{
   buffer::ByteReader,
   parse_token::ParseToken,

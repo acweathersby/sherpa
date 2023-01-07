@@ -80,21 +80,15 @@ impl<'a> BuildPipeline<'a> {
     }
   }
 
-  /// Create a new build pipeline from a string.
-  pub fn proc_context(grammar_source: &str, base_directory: &PathBuf, config: Config) -> Self {
-    let mut self_ = Self::build_pipeline(
-      config,
-      CachedSource::String(grammar_source.to_string(), base_directory.to_owned()),
-    );
-
-    self_.proc_context = true;
-
-    self_
+  /// Prevents source code artifact strings from being written to file
+  pub fn make_proc(mut self) -> Self {
+    self.proc_context = true;
+    self
   }
 
   /// Create a new build pipeline based on a source grammar file.
-  pub fn from_source(source_path: &PathBuf, config: Config) -> Self {
-    Self::build_pipeline(config, CachedSource::Path(source_path.to_owned()))
+  pub fn from_source(source_path: PathBuf, config: Config) -> Self {
+    Self::build_pipeline(config, CachedSource::Path(source_path))
   }
 
   /// Create a new build pipeline based on a source grammar string.
@@ -365,14 +359,14 @@ pub fn compile_bytecode_parser(grammar_source_path: &PathBuf, config: Config) ->
 
   create_dir_all(&out_dir).unwrap();
 
-  let mut pipeline = BuildPipeline::from_source(&grammar_source_path, config.clone());
+  let mut pipeline = BuildPipeline::from_source(grammar_source_path.to_owned(), config.clone());
 
   pipeline
     .set_source_output_dir(&out_dir)
     .set_build_output_dir(&out_dir)
     .set_source_file_name("%.rs")
     .add_task(build_rust_preamble())
-    .add_task(build_bytecode_parser(SourceType::Rust))
+    .add_task(build_bytecode_parser())
     .add_task(build_bytecode_disassembly());
 
   if config.enable_ascript {
@@ -396,7 +390,7 @@ pub fn compile_llvm_parser(grammar_source_path: &PathBuf, config: Config) -> boo
 
   create_dir_all(&out_dir).unwrap();
 
-  let mut pipeline = BuildPipeline::from_source(&grammar_source_path, config.clone());
+  let mut pipeline = BuildPipeline::from_source(grammar_source_path.to_owned(), config.clone());
 
   pipeline
     .set_source_output_dir(&out_dir)

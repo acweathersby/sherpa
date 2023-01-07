@@ -1,5 +1,0 @@
-<> comment > line_comment | block_comment
-
-<> line_comment > \/ \/ ( g:id | g:sp | g:sym | g:num ) g:nl
-
-<> block_comment > \/-  ( g:id | g:sp | g:sym | g:num ) \-/

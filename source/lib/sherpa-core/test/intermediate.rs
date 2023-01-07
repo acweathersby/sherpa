@@ -9,7 +9,7 @@ use crate::{
     compile_token_production_states,
     optimize_ir_states,
   },
-  debug::generate_disassembly,
+  debug::{collect_shifts_and_skips, generate_disassembly},
   errors::SherpaErrorSeverity,
   grammar::get_production_start_items,
   journal::{config::Config, report::ReportType, Journal},
@@ -1162,6 +1162,84 @@ fn test_compile_json_parser() -> SherpaResult<()> {
   let bc = compile_bytecode(&mut j, ir_states);
 
   eprintln!("{}", generate_disassembly(&bc, Some(&mut j)));
+
+  SherpaResult::Ok(())
+}
+
+#[test]
+fn test_escaped_string_token() -> SherpaResult<()> {
+  let mut j = Journal::new(None);
+  let g = GrammarStore::from_str(
+    &mut j,
+    r##"
+<> string > tk:string_tk
+
+<> string_tk > t:" ( g:sym | g:num | g:sp | g:id | escape )(*) t:"
+
+<> escape > t:\  ( g:sym | g:num | g:sp | g:id )
+"##,
+  )
+  .unwrap();
+
+  let states = compile_states(&mut j, 1)?;
+
+  let ir_states = optimize_ir_states(&mut j, states);
+
+  let bc = compile_bytecode(&mut j, ir_states);
+
+  let (.., shifts, _) = collect_shifts_and_skips(
+    r##""""##,
+    *bc.state_name_to_offset.get(g.get_exported_productions()[0].guid_name)?,
+    g.get_exported_productions()[0].production.bytecode_id,
+    &bc.bytecode,
+  )?;
+
+  let (.., shifts, _) = collect_shifts_and_skips(
+    r##""1234""##,
+    *bc.state_name_to_offset.get(g.get_exported_productions()[0].guid_name)?,
+    g.get_exported_productions()[0].production.bytecode_id,
+    &bc.bytecode,
+  )?;
+
+  let (.., shifts, _) = collect_shifts_and_skips(
+    r##""12\"34""##,
+    *bc.state_name_to_offset.get(g.get_exported_productions()[0].guid_name)?,
+    g.get_exported_productions()[0].production.bytecode_id,
+    &bc.bytecode,
+  )?;
+
+  dbg!(shifts);
+
+  SherpaResult::Ok(())
+}
+
+#[test]
+fn test_scientific_number_token() -> SherpaResult<()> {
+  let mut j = Journal::new(None);
+  let g = GrammarStore::from_str(
+    &mut j,
+    r##"
+<> sci_number > tk:number
+
+<> number > ( \+ | \- )? g:num(+) ( t:. g:num(+) )? ( ( \e | \E ) ( \+ | \- )? g:num(+) )?
+"##,
+  )
+  .unwrap();
+
+  let states = compile_states(&mut j, 1)?;
+
+  let ir_states = optimize_ir_states(&mut j, states);
+
+  let bc = compile_bytecode(&mut j, ir_states);
+
+  let (.., shifts, _) = collect_shifts_and_skips(
+    r##"2.3e-22"##,
+    *bc.state_name_to_offset.get(g.get_exported_productions()[0].guid_name)?,
+    g.get_exported_productions()[0].production.bytecode_id,
+    &bc.bytecode,
+  )?;
+
+  dbg!(shifts);
 
   SherpaResult::Ok(())
 }

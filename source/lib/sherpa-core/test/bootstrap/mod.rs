@@ -87,8 +87,8 @@ fn test_compile_of_sherpa_grammar() -> SherpaResult<()> {
     r##" <> test > "test" "##,
     *bc.state_name_to_offset.get(g.get_exported_productions()[0].guid_name)?,
     g.get_exported_productions()[0].production.bytecode_id,
-    bc.bytecode,
-  );
+    &bc.bytecode,
+  )?;
 
   dbg!(shifts);
 

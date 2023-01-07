@@ -1,5 +1,3 @@
-mod ast;
-
 use crate::ast::{ASTNode, REDUCE_FUNCTIONS};
 use sherpa::types::{UTF8StringReader, *};
 use std::{

@@ -232,7 +232,7 @@ pub enum CTX_AGGREGATE_INDICES {
   /// ```
   meta_ctx,
   /// ```rust
-  /// pub custom_lex:      fn(&mut T, &mut M, &LLVMParseContext<T, M>) -> (u32, u32, u32),
+  /// pub custom_lex:      fn(&mut T, &mut M, &ParseContext<T, M>) -> (u32, u32, u32),
   /// ```
   custom_lex,
   /// Tracks whether the context is a fail mode or not.

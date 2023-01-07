@@ -529,7 +529,7 @@ mod test {
 
   #[test]
   pub fn blame_string_places_cursor_in_correct_position() {
-    let mut tok = Token {
+    let tok = Token {
       input: Some(Arc::new("\n start \n\n test \n final ".to_string().as_bytes().to_vec())),
       inner: TokenRange { len: 4, off: 11, line_num: 3, line_off: 9 },
     };
@@ -550,7 +550,7 @@ mod test {
 
   #[test]
   pub fn blame_string_places_cursor_in_correct_position2() {
-    let mut tok = Token {
+    let tok = Token {
       input: Some(Arc::new(" start \n\n test \n final ".to_string().as_bytes().to_vec())),
       inner: TokenRange { len: 5, off: 1, line_num: 0, line_off: 0 },
     };

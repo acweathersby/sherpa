@@ -2,4 +2,4 @@
 
 @IMPORT ./include as include
 
-<> A > \Hello \World
+<> A > \Hello \World include::R Cpp

@@ -3,9 +3,10 @@ pub mod parser {
 
   <> A > alligator
 
-  <> alligator > 1
+  <> alligator > 1 | "test"
 
-    f:ast { { t_Test, tok } }}
+    f:ast { { t_Test, tok } }
+  }
 
   impl Test {
     pub fn my_string(&self) -> String {
@@ -17,7 +18,7 @@ pub mod parser {
 #[cfg(test)]
 mod test {
   use crate::parser::*;
-  use sherpa::types::UTF8StringReader;
+  use sherpa::UTF8StringReader;
 
   #[test]
   fn test_unordered() {
@@ -28,6 +29,6 @@ mod test {
       panic!("Failed to parse input");
     } else {
       node.unwrap().my_string();
-    }
+    }ou
   }
 }

@@ -109,17 +109,7 @@ pub(crate) fn peek(
           // We can skip further processing if in occlusion tracking mode
         }
         0 | (1..) if all_items_are_out_of_scope(&maybe_accept) => {
-          let index = create_and_insert_node(
-            t,
-            SymbolID::EndOfInput,
-            vec![],
-            Fail,
-            Default,
-            Some(par_id),
-            Some(par_id),
-            vec![],
-          );
-          t.leaf_nodes.push(index);
+          create_out_of_scope_node(t, SymbolID::EndOfInput, maybe_accept, par_id, Default);
         }
         1 => {
           let item = convert_origins(&items, &goals)[0];
@@ -298,25 +288,12 @@ pub(crate) fn peek(
           t.leaf_nodes.push(index);
         }
         0 | (1..) if all_items_are_out_of_scope(&mixed_items) => {
-          // This symbol belongs to a follow item of the production. In this
-          // we simply fail to allow the production to complete using the fall
-          // back function
-          let index = create_and_insert_node(
-            t,
-            sym,
-            mixed_items,
-            Fail,
-            Assert,
-            Some(par_id),
-            Some(par_id),
-            vec![],
-          );
-
-          t.leaf_nodes.push(index);
+          create_out_of_scope_node(t, sym, mixed_items, par_id, Assert);
         }
         1 if peek_depth == 0 => {
           // Reprocess the root node (which is always par_id when depth == 0)
           // with the disambiguated items.
+
           t.queue_node(ProcessGroup {
             node_index:   par_id,
             items:        get_goal_items(&items, &goals),
@@ -498,6 +475,29 @@ pub(crate) fn peek(
   SherpaResult::Ok(())
 }
 
+fn create_out_of_scope_node(
+  t: &mut TransitionGraph,
+  sym: SymbolID,
+  mixed_items: Vec<Item>,
+  par_id: NodeId,
+  edge_type: EdgeType,
+) {
+  // This symbol belongs to a follow item of the production. In this
+  // we simply fail to allow the production to complete using the fall
+  // back function
+  let index = create_and_insert_node(
+    t,
+    sym,
+    mixed_items,
+    if t.is_scan() { OutOfScopeComplete } else { Fail },
+    edge_type,
+    Some(par_id),
+    Some(par_id),
+    vec![],
+  );
+  t.leaf_nodes.push(index);
+}
+
 fn convert_to_production_call(
   t: &mut TransitionGraph,
   j: &Journal,
@@ -669,7 +669,8 @@ fn resolveConflictingSymbols(
     use SymbolPriorities::*;
 
     // Map items according to their symbols
-    let symbol_groups = hash_group_btreemap(completed_symbol_items, |_, i| i.get_origin_sym());
+    let symbol_groups =
+      hash_group_btreemap(completed_symbol_items.clone(), |_, i| i.get_origin_sym());
     let priority_groups = hash_group_btreemap(symbol_groups, |_, (sym, _)| match sym {
       sym if sym.is_exclusive() => ExclusiveDefined,
       sym if sym.is_defined() => Defined,
@@ -735,7 +736,7 @@ fn resolveConflictingSymbols(
         if peek_depth == 0 {
           t.queue_node(ProcessGroup {
             node_index:   par_id,
-            items:        completed_items.clone(),
+            items:        completed_items.clone()[0..1].to_vec(),
             discriminant: Some((SymbolID::Default, completed_items.clone())),
             depth:        global_depth,
           });

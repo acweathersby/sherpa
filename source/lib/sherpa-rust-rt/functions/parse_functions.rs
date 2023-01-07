@@ -1,12 +1,11 @@
-use crate::types::*;
+use crate::types::{ast::Reducer, *};
 
 /// Yields parser Actions from parsing an input using the
 /// current active grammar bytecode.
 #[inline]
-pub fn dispatch<T: LLVMByteReader + ByteReader + MutByteReader, M>(
+pub fn dispatch<'a, R: ByteReader + MutByteReader, M>(
   state: u32,
-  r: &mut T,
-  ctx: &mut LLVMParseContext<T, M>,
+  ctx: &mut ParseContext<R, M>,
   stack: &mut Vec<u32>,
   bc: &[u32],
 ) -> (ParseAction, u32) {
@@ -23,7 +22,7 @@ pub fn dispatch<T: LLVMByteReader + ByteReader + MutByteReader, M>(
 
     s = match instr.to_type() {
       Shift => {
-        break shift(s, instr, ctx, r);
+        break shift(s, instr, ctx);
       }
       Goto => goto(s, instr, stack),
       SetProd => set_production(s, instr, ctx),
@@ -36,8 +35,8 @@ pub fn dispatch<T: LLVMByteReader + ByteReader + MutByteReader, M>(
       }
       Scan => scan(),
       EatCrumbs => noop(s),
-      VectorBranch => vector_jump(s, r, ctx, bc),
-      HashBranch => hash_jump(s, r, ctx, bc),
+      VectorBranch => vector_jump(s, ctx, bc),
+      HashBranch => hash_jump(s, ctx, bc),
       SetFailState => set_fail(),
       Repeat => repeat(),
       Noop13 => noop(s),
@@ -50,11 +49,10 @@ pub fn dispatch<T: LLVMByteReader + ByteReader + MutByteReader, M>(
 /// Produces a parse action that
 /// contains a token that is the
 #[inline]
-fn shift<T: LLVMByteReader + ByteReader + MutByteReader, M>(
+fn shift<'a, R: ByteReader + MutByteReader, M>(
   i: u32,
   instr: Instruction,
-  ctx: &mut LLVMParseContext<T, M>,
-  r: &mut T,
+  ctx: &mut ParseContext<R, M>,
 ) -> (ParseAction, u32) {
   if instr.get_value() & 0x1 == 1 {
     ctx.token_len = 0;
@@ -71,7 +69,9 @@ fn shift<T: LLVMByteReader + ByteReader + MutByteReader, M>(
   if ctx.is_scanner() {
     ctx.scan_off += ctx.scan_len;
     ctx.scan_len = 0;
-    r.set_cursor_to(ctx.scan_off, ctx.peek_line_num, ctx.peek_line_num);
+    let scan_off = ctx.scan_off;
+    let peek_line_num = ctx.peek_line_num;
+    ctx.get_reader_mut().set_cursor_to(scan_off, peek_line_num, peek_line_num);
   } else {
     ctx.anchor_off = ctx.token_off + ctx.token_len;
     ctx.token_off = ctx.anchor_off;
@@ -82,18 +82,11 @@ fn shift<T: LLVMByteReader + ByteReader + MutByteReader, M>(
   (action, i + 1)
 }
 
-fn next_token(shift: (TokenRange, u32)) -> (TokenRange, u32) {
-  let mut next_token = shift.0;
-  next_token.off += next_token.len;
-  next_token.len = 0;
-  (next_token, shift.1)
-}
-
 #[inline]
-fn reduce<T: LLVMByteReader + ByteReader + MutByteReader, M>(
+fn reduce<'a, T: 'a + ByteReader + MutByteReader, M>(
   i: u32,
   instr: Instruction,
-  ctx: &mut LLVMParseContext<T, M>,
+  ctx: &mut ParseContext<T, M>,
 ) -> (ParseAction, u32) {
   let symbol_count = instr.get_contents() >> 16 & 0x0FFF;
   let rule_id = instr.get_contents() & 0xFFFF;
@@ -116,7 +109,7 @@ fn goto(i: u32, instr: Instruction, stack: &mut Vec<u32>) -> u32 {
 }
 
 #[inline]
-fn _eat_crumbs<T: LLVMByteReader + ByteReader + MutByteReader, M>(
+fn _eat_crumbs<'a, T: 'a + ByteReader + MutByteReader, R: ByteReader + MutByteReader, M>(
   i: u32,
   instr: Instruction,
   stack: &mut Vec<u32>,
@@ -140,20 +133,20 @@ fn _eat_crumbs<T: LLVMByteReader + ByteReader + MutByteReader, M>(
 }
 
 #[inline]
-fn set_production<T: LLVMByteReader + ByteReader + MutByteReader, M>(
+fn set_production<'a, T: 'a + ByteReader + MutByteReader, M>(
   i: u32,
   instr: Instruction,
-  ctx: &mut LLVMParseContext<T, M>,
+  ctx: &mut ParseContext<T, M>,
 ) -> u32 {
   ctx.set_production_to(instr.get_contents());
   i + 1
 }
 
 #[inline]
-fn set_token_state<T: LLVMByteReader + ByteReader + MutByteReader, M>(
+fn set_token_state<'a, T: 'a + ByteReader + MutByteReader, M>(
   i: u32,
   instr: Instruction,
-  ctx: &mut LLVMParseContext<T, M>,
+  ctx: &mut ParseContext<T, M>,
 ) -> u32 {
   ctx.tok_id = instr.get_contents() & 0x00FF_FFFF;
 
@@ -195,7 +188,7 @@ fn noop(i: u32) -> u32 {
 }
 
 #[inline]
-fn skip_token<T: LLVMByteReader + ByteReader + MutByteReader, M>(ctx: &mut LLVMParseContext<T, M>) {
+fn skip_token<'a, T: 'a + ByteReader + MutByteReader, M>(ctx: &mut ParseContext<T, M>) {
   if ctx.is_scanner() {
     ctx.scan_off += ctx.scan_input_len;
     ctx.scan_input_len = 0;
@@ -214,10 +207,9 @@ fn skip_token<T: LLVMByteReader + ByteReader + MutByteReader, M>(ctx: &mut LLVMP
 /// Performs an instruction branch selection based on an embedded,
 /// linear-probing hash table.
 #[inline]
-pub fn hash_jump<T: LLVMByteReader + ByteReader + MutByteReader, M>(
+pub fn hash_jump<R: ByteReader + MutByteReader, M>(
   i: u32,
-  r: &mut T,
-  ctx: &mut LLVMParseContext<T, M>,
+  ctx: &mut ParseContext<R, M>,
   bc: &[u32],
 ) -> u32 {
   let i = i as usize;
@@ -237,9 +229,7 @@ pub fn hash_jump<T: LLVMByteReader + ByteReader + MutByteReader, M>(
   loop {
     let input_value = match input_type {
       InputType::T01_PRODUCTION => ctx.get_production(),
-      _ => {
-        get_token_value(lexer_type, input_type, r, scan_index.get_address() as u32, ctx, bc) as u32
-      }
+      _ => get_token_value(lexer_type, input_type, scan_index.get_address() as u32, ctx, bc) as u32,
     };
     let mut hash_index = (input_value & hash_mask) as usize;
 
@@ -265,10 +255,9 @@ pub fn hash_jump<T: LLVMByteReader + ByteReader + MutByteReader, M>(
   }
 }
 #[inline]
-pub fn vector_jump<T: LLVMByteReader + ByteReader + MutByteReader, M>(
+pub fn vector_jump<R: ByteReader + MutByteReader, M>(
   i: u32,
-  r: &mut T,
-  ctx: &mut LLVMParseContext<T, M>,
+  ctx: &mut ParseContext<R, M>,
   bc: &[u32],
 ) -> u32 {
   let i = i as usize;
@@ -287,9 +276,7 @@ pub fn vector_jump<T: LLVMByteReader + ByteReader + MutByteReader, M>(
   loop {
     let input_value = match input_type {
       InputType::T01_PRODUCTION => ctx.get_production(),
-      _ => {
-        get_token_value(lexer_type, input_type, r, scan_index.get_address() as u32, ctx, bc) as u32
-      }
+      _ => get_token_value(lexer_type, input_type, scan_index.get_address() as u32, ctx, bc) as u32,
     };
 
     let value_index = (input_value as i32 - value_offset as i32) as u32;
@@ -309,31 +296,32 @@ pub fn vector_jump<T: LLVMByteReader + ByteReader + MutByteReader, M>(
 }
 
 #[inline]
-fn get_token_value<T: LLVMByteReader + ByteReader + MutByteReader, M>(
+fn get_token_value<R: ByteReader + MutByteReader, M>(
   lex_type: u32,
   input_type: u32,
-  r: &mut T,
   scan_index: u32,
-  ctx: &mut LLVMParseContext<T, M>,
+  ctx: &mut ParseContext<R, M>,
   bc: &[u32],
 ) -> i32 {
   match input_type {
     InputType::T03_CLASS => {
       debug_assert!(ctx.is_scanner());
-      ctx.scan_len = r.codepoint_byte_length();
-      r.class() as i32
+      let scan_len = ctx.get_reader().codepoint_byte_length();
+      ctx.scan_len = scan_len;
+      ctx.get_reader().class() as i32
     }
 
     InputType::T04_CODEPOINT => {
       debug_assert!(ctx.is_scanner());
-      ctx.scan_len = r.codepoint_byte_length();
-      r.codepoint() as i32
+      let scan_len = ctx.get_reader().codepoint_byte_length();
+      ctx.scan_len = scan_len;
+      ctx.get_reader().codepoint() as i32
     }
 
     InputType::T05_BYTE => {
       debug_assert!(ctx.is_scanner());
       ctx.scan_len = 1;
-      r.byte() as i32
+      ctx.get_reader().byte() as i32
     }
 
     _ => {
@@ -341,7 +329,7 @@ fn get_token_value<T: LLVMByteReader + ByteReader + MutByteReader, M>(
 
       let active_offset = match lex_type {
         LexerType::PEEK => {
-            let (offset, len) = if ctx.in_peek_mode() {
+            let (_, len) = if ctx.in_peek_mode() {
                 (ctx.peek_off, ctx.peek_len)
             } else {
               ctx.peek_off = ctx.token_off;
@@ -352,7 +340,11 @@ fn get_token_value<T: LLVMByteReader + ByteReader + MutByteReader, M>(
 
             ctx.set_peek_mode_to(true);
 
-            r.set_cursor_to(ctx.peek_off, ctx.peek_line_num, ctx.peek_line_off);
+            let peek_off = ctx.peek_off;
+            let peek_line_num = ctx.peek_line_num;
+            let peek_line_off = ctx.peek_line_off;
+
+            ctx.get_reader_mut().set_cursor_to(peek_off, peek_line_num, peek_line_off);
 
             ctx.peek_off
         }
@@ -360,14 +352,18 @@ fn get_token_value<T: LLVMByteReader + ByteReader + MutByteReader, M>(
             if ctx.in_peek_mode() {
                 ctx.set_peek_mode_to(false);
 
-                r.set_cursor_to(ctx.token_off, ctx.tok_line_off, ctx.tok_line_num);
+                let token_off = ctx.token_off;
+                let tok_line_off = ctx.tok_line_off;
+                let tok_line_num = ctx.tok_line_num;
+
+                ctx.get_reader_mut().set_cursor_to(token_off, tok_line_off, tok_line_num);
             }
             ctx.token_off
         }
     };
 
       if ctx.tok_id == 0 {
-        let token_length = token_scan(active_offset, scan_index, ctx, r, bc);
+        let token_length = token_scan(active_offset, scan_index, ctx, bc);
 
         if ctx.in_peek_mode() {
           ctx.peek_len = token_length;
@@ -381,12 +377,9 @@ fn get_token_value<T: LLVMByteReader + ByteReader + MutByteReader, M>(
   }
 }
 
-fn scan_for_improvised_token<T: LLVMByteReader + ByteReader + MutByteReader, M>(
-  scan_ctx: &mut LLVMParseContext<T, M>,
-  r: &mut T,
-) {
-  let mut byte = r.byte();
-  let mut off = r.cursor() as u32;
+fn scan_for_improvised_token<R: ByteReader + MutByteReader, M>(ctx: &mut ParseContext<R, M>) {
+  let byte = ctx.get_reader().byte();
+  let mut off = ctx.get_reader().cursor() as u32;
   // Scan to next break point and produce an undefined
   // token. If we are already at a break point then just
   // return the single character token.
@@ -397,50 +390,34 @@ fn scan_for_improvised_token<T: LLVMByteReader + ByteReader + MutByteReader, M>(
   {
     off += 1;
   } else {
+    let byte = ctx.get_reader().byte();
     while byte != b'\n' as u32
       && byte != b'\t' as u32
       && byte != b'\r' as u32
       && byte != b' ' as u32
-      && !r.at_end()
+      && !ctx.get_reader().at_end()
     {
-      off += r.codepoint_byte_length();
+      off += ctx.get_reader().codepoint_byte_length();
+      ctx.get_reader_mut().set_cursor_to(off, 0, 0);
     }
   }
 
-  scan_ctx.scan_anchor_off = off;
+  ctx.scan_anchor_off = off;
 
-  set_token_state(0, Instruction::default(), scan_ctx);
+  set_token_state(0, Instruction::default(), ctx);
 }
 
-fn token_scan<T: LLVMByteReader + ByteReader + MutByteReader, M>(
+fn token_scan<R: ByteReader + MutByteReader, M>(
   offset: u32,
   scan_index: u32,
-  ctx: &mut LLVMParseContext<T, M>,
-  r: &mut T,
+  ctx: &mut ParseContext<R, M>,
   bc: &[u32],
 ) -> u32 {
   ctx.tok_id = 0;
 
-  #[cfg(test)]
-  {
-    if scan_index == 0 {
-      // Use a RNG to produce a token that is assigned the value
-      // of state production id, decrementing production_id each time
-      // we hit this function
+  ctx.get_reader_mut().set_cursor_to(offset, 0, 0);
 
-      let id = ctx.get_production();
-
-      if id > 0 {
-        ctx.set_production_to(id - 1);
-      }
-
-      return (Default::default(), END_OF_INPUT_TOKEN_ID);
-    }
-  }
-
-  r.set_cursor_to(offset, 0, 0);
-
-  if r.at_end() {
+  if ctx.get_reader().at_end() {
     return 0;
   }
 
@@ -456,7 +433,7 @@ fn token_scan<T: LLVMByteReader + ByteReader + MutByteReader, M>(
   match {
     let mut state = stack.pop().unwrap();
 
-    let line_data = r.get_line_data();
+    let line_data = ctx.get_reader().get_line_data();
     let (line_num, line_count) = ((line_data >> 32) as u32, (line_data & 0xFFFF_FFFF) as u32);
 
     ctx.peek_line_num = line_num;
@@ -465,7 +442,7 @@ fn token_scan<T: LLVMByteReader + ByteReader + MutByteReader, M>(
     loop {
       if state < 1 {
         if ctx.tok_id == 0 {
-          scan_for_improvised_token(ctx, r);
+          scan_for_improvised_token(ctx);
         }
 
         break Some(ctx.scan_anchor_off - offset);
@@ -474,7 +451,7 @@ fn token_scan<T: LLVMByteReader + ByteReader + MutByteReader, M>(
 
         if (state & mask_gate) != 0 {
           let fail_mode = loop {
-            match dispatch(state, r, ctx, &mut stack, bc) {
+            match dispatch(state, ctx, &mut stack, bc) {
               (ParseAction::CompleteState, _) => {
                 break false;
               }
@@ -501,9 +478,8 @@ fn token_scan<T: LLVMByteReader + ByteReader + MutByteReader, M>(
 
 /// Start or continue a parse on an input
 #[inline]
-pub fn get_next_action<T: LLVMByteReader + ByteReader + MutByteReader, M>(
-  r: &mut T,
-  ctx: &mut LLVMParseContext<T, M>,
+pub fn get_next_action<R: ByteReader + MutByteReader, M>(
+  ctx: &mut ParseContext<R, M>,
   stack: &mut Vec<u32>,
   bc: &[u32],
 ) -> ParseAction {
@@ -511,7 +487,8 @@ pub fn get_next_action<T: LLVMByteReader + ByteReader + MutByteReader, M>(
 
   loop {
     if state < 1 {
-      if r.offset_at_end(ctx.token_off) {
+      let off = ctx.token_off;
+      if ctx.get_reader().offset_at_end(off) {
         break ParseAction::Accept { production_id: ctx.get_production() };
       } else {
         break ParseAction::Error {
@@ -528,7 +505,7 @@ pub fn get_next_action<T: LLVMByteReader + ByteReader + MutByteReader, M>(
       let mask_gate = NORMAL_STATE_FLAG << (ctx.in_fail_mode() as u32);
 
       if (state & mask_gate) != 0 {
-        match dispatch(state, r, ctx, stack, bc) {
+        match dispatch(state, ctx, stack, bc) {
           (ParseAction::CompleteState, _) => {
             ctx.set_fail_mode_to(false);
             state = stack.pop().unwrap();
@@ -543,6 +520,56 @@ pub fn get_next_action<T: LLVMByteReader + ByteReader + MutByteReader, M>(
         }
       } else {
         state = stack.pop().unwrap();
+      }
+    }
+  }
+}
+
+pub fn parse_ast<R: ByteReader + MutByteReader, M, Node: AstObject>(
+  ctx: &mut ParseContext<R, M>,
+  stack: &mut Vec<u32>,
+  bc: &[u32],
+  reducers: &[Reducer<R, M, Node>],
+) -> Result<AstSlot<Node>, SherpaParseError> {
+  let mut ast_stack: Vec<AstSlot<Node>> = vec![];
+  loop {
+    match get_next_action(ctx, stack, bc) {
+      ParseAction::Accept { .. } => {
+        return Ok(ast_stack.pop().unwrap());
+      }
+      ParseAction::Reduce { rule_id, symbol_count, .. } => {
+        let reduce_fn = reducers[rule_id as usize];
+        let len = ast_stack.len();
+        let count = symbol_count as usize;
+        reduce_fn(&ctx, &AstStackSlice::from_slice(&mut ast_stack[(len - count)..len]));
+        ast_stack.resize(len - (count - 1), AstSlot::<Node>::default());
+      }
+      ParseAction::Shift {
+        anchor_byte_offset,
+        token_byte_offset,
+        token_byte_length,
+        token_line_offset,
+        token_line_count,
+      } => {
+        let peek = TokenRange {
+          len: token_byte_offset - anchor_byte_offset,
+          off: anchor_byte_offset,
+          ..Default::default()
+        };
+
+        let tok = TokenRange {
+          len:      token_byte_length,
+          off:      token_byte_offset,
+          line_num: token_line_count,
+          line_off: token_line_offset,
+        };
+        ast_stack.push(AstSlot(Node::default(), tok, peek));
+      }
+      ParseAction::Error { .. } => {
+        return Err(SherpaParseError::None);
+      }
+      _ => {
+        return Err(SherpaParseError::None);
       }
     }
   }

@@ -200,27 +200,25 @@ pub(crate) fn get_symbols_from_items(
 
 pub fn symbols_occlude(symA: &SymbolID, symB: &SymbolID, g: &GrammarStore) -> bool {
   match symA {
-    SymbolID::DefinedSymbol(..) | SymbolID::ExclusiveDefinedSymbol(..) => {
-      match g.symbol_strings.get(symA).map(|s| s.as_str()) {
-        Some("\n") => match symB {
-          SymbolID::GenericNewLine => true,
-          _ => false,
-        },
-        Some("\t") => match symB {
-          SymbolID::GenericHorizontalTab => true,
-          _ => false,
-        },
-        Some(" ") => match symB {
-          SymbolID::GenericSpace => true,
-          _ => false,
-        },
-        Some(_) => match symB {
-          SymbolID::GenericSymbol => g.symbols.get(symA).unwrap().cp_len == 1,
-          _ => false,
-        },
+    SymbolID::DefinedSymbol(..) => match g.symbol_strings.get(symA).map(|s| s.as_str()) {
+      Some("\n") => match symB {
+        SymbolID::GenericNewLine => true,
         _ => false,
-      }
-    }
+      },
+      Some("\t") => match symB {
+        SymbolID::GenericHorizontalTab => true,
+        _ => false,
+      },
+      Some(" ") => match symB {
+        SymbolID::GenericSpace => true,
+        _ => false,
+      },
+      Some(_) => match symB {
+        SymbolID::GenericSymbol => g.symbols.get(symA).unwrap().cp_len == 1,
+        _ => false,
+      },
+      _ => false,
+    },
     SymbolID::DefinedIdentifier(_) | SymbolID::ExclusiveDefinedIdentifier(_) => {
       match g.symbol_strings.get(symA).map(|s| s.as_str()) {
         Some("_") | Some("-") => match symB {

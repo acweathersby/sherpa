@@ -1,100 +1,96 @@
-<img src="./site/resources/img/test.webp" alt="# Hydrocarbon Toolkit" align=center/>
+# Sherpa
 
+Your personal, parsing companion
 
-The Hydrocarbon Toolkit is a set of compilers and tools that can 
-used to generate parsers, AST implementations, and diagrams for domain
-specific languages and general purpose languages. 
+Sherpa is a parser generator written in Rust and LLVM that creates stack based hybrid parsers. It also provides a natural AST specification language that allows both the language specification and its AST structures. It provides flexibility in defining parsers through GRAMMAR, AST, and IR code definitions. It can target LLVM, allowing it to be used in languages other Rust, including C/C++, Typescript/Javascript,  Python, and 
 
-It has build targets for several popular languages including TypeScript, Rust, 
-Go, and C++. 
+## Usage 
 
-Hydrocarbon utilize a unique hybrid parser algorithm to deliver
-parsers capable of handling ambiguous grammars outside the 
-scope of LL and LR based parsers. It's grammars are written in a language agnostic
-syntax that allows separation of language description and parse actions.
+### CLI
 
-### Features
-- Lazy Evaluation / Multi-threaded parsing
-- Automatic AST code generation
-- Modular Grammars
-- Custom Lexers 
-- Multiple Language Targets
-- Arbitrary Parser Entry-points
-- Rich parser diagnostics
-- Native UTF8 support
+Checkout the [README](./source/app/cli/README.md) for command line based operation of Sherpa. 
 
-> Disclaimer: Hydrocarbon is a work-in-progress and not all features may be fully realized. Please be patient as ongoing dev
-> work completes and improves the feature set. As Hydrocarbon is an open source project, may also want to [contribute](./CONTRIBUTING.md)
-> to make the changes you want.
+## What is a Parser Generator
 
-## Usage
+## What is a Hybrid Parser
 
-### Write A Grammar
+Generally, the majority of parser compilers, such as ANTLR, Yacc, & Bison, build parsers that confirm to a single algorithmic parsing principle. For instance, Yacc is a [LALR(1)](https://en.wikipedia.org/wiki/LALR_parser) parser, which means that it is capable of understanding grammars that are LALR(0) and LALR(1), and produces parsers that use a table based algorithm to transition between LALR states. ANTLR4 is a [ALL(*)](https://www.antlr.org/papers/allstar-techreport.pdf) parser, which, though incredibly powerful, is still limited to grammars that do not contain indirect left recursion.
+// TODO - Write the above in terms of types of PARSERS instead of types of ALGORITHMS.
 
-Everything Hydrocarbon can do starts with a grammar definition file. Checkout the [writing a grammar](./site/tutorial.creating_a_grammar.index.md) doc for details on writing a grammar that can suite your needs. 
+Sherpa dispenses with the notion of a specific type of parser, and instead is able to apply different parsing techniques to different parts of a grammar to maximize flexibility in the description of parsable languages. In practice, it builds Recursive Descent parsers when the  grammar is LL, Recursive Descent/Ascent (RAD) parsers when needed, RAD + LR(&ast;) on occasions, RAD(CRUMB) + LR(&ast;) if configured to do so, and can even mix in some Packrat style parsing if one prefers. In addition, Sherpas intermediate representation intermediate parser representation is intentionally designed to be trivial written by hand, allowing more parsing behavior to be defined that falls outside the bounds of any particular algorithm or technique.
 
-### Install Hydrocarbon
+## AScripT
 
-```bash
-$ npm i -g hctoolkit
+Ascript is an AST description language embedded into the Sherpa grammar. 
+
+```sherpa
+<> A > children => { t_RootNode, children }
 ```
 
-### Compile a parser from a grammar
-
 ```bash
-# Compiles a TypeScript parser
-$ hc compile parser <grammar file>
+sherpa build --rust --ast --out ./parser/ ./source_grammar.sg 
 ```
 
-### Compile a parser for a target language including [ASYTrip](./site/api.asytrip.index.md) AST code
+### Rust Proc Macro
 
-```bash
-$ hc compile parser --asytrip --type <rust|go|ts|js|c++> <grammar_filepath>
+### Rust Build
+
+## The Parser
+
+## Mini Tutorial
+
+`A trivial Sherpa IR parser looks something like this:
+```
+state [ parse_A ]
+
+    scanner [ a_Scanner ]
+
+    assert TOKEN [ 1 /* This will be output by the a_Scanner if the input is `a` */  ]  (
+
+        // Places the token onto the top of the token stack. 
+        shift 
+
+        // This
+        reduce 1 symbol to production 1 using reducer :{ t_FoundA, tok  } // This uses the ascript
+                                                                          // processor to build an 
+                                                                          // AST node of type `FoundA`
+    )
+
+state [ a_Scanner ]
+
+    assert BYTE [ a ] ( 
+        shift  
+        set token [ 1 ] // And here is where we find our TOKEN 1
+    )
+````A trivial Sherpa IR parser looks something like this:
+```
+state [ parse_A ]
+
+    scanner [ a_Scanner ]
+
+    assert TOKEN [ 1 /* This will be output by the a_Scanner if the input is `a` */  ]  (
+
+        // Places the token onto the top of the token stack. 
+        shift 
+
+        // This
+        reduce 1 symbol to production 1 using reducer :{ t_FoundA, tok  } // This uses the ascript
+                                                                          // processor to build an 
+                                                                          // AST node of type `FoundA`
+    )
+
+state [ a_Scanner ]
+
+    assert BYTE [ a ] ( 
+        shift  
+        set token [ 1 ] // And here is where we find our TOKEN 1
+    )
 ```
 
-### Render a [bytecode](./site/architecture.bytecode.index.md) disassembly sheet and open in a browser
+ # License 
 
-```bash
-$ hc tools disassemble --browse <grammar_filepath>
-```
+ Unless otherwise stated, the Sherpa source code is licensed under [GNU-GPLv3](./LICENSE.md). 
 
-### Create a fuzz string from a grammar
+ The source code for Sherpa parser run-times are licensed under [GNU-LGPLvs]
 
-```bash
-$ hc tools fuzz <grammar_filepath>
-```
-
-And more: checkout the [CLI reference](./packages/core/hc_root/README.md)
-
-## Want to learn more?
-
-Checkout out the documentation
-
-- [Getting Started: Writing A Grammar](./site/tutorial.creating_a_grammar.index.md)
-- [API](./site/api.index.md)
-- [Parser Architecture](./site/architecture.index.md)
-
-
-## Existing projects enhanced by Hydrocarbon
-
-- Candlelibrary JS
-- Candlelibrary TS
-- CandleLibrary CSS
-
-## Contributing
-
-This project is made with ❤️. The simplest way to give back is by starring and sharing it online.
-
-If the documentation is unclear or has a typo, please click on the page's Edit button (![pencil icon](./site/resources/img/github_pencil.svg)) and suggest a correction.
-
-If you would like to help fix an error or add more information, please check our guidelines. Pull requests are welcome!
-
-- [Contributing](./CONTRIBUTING.md)
-
-- [Code Of Conduct](./CODE_OF_CONDUCT.md)
-
-## Licenses
-
-The toolkit is licensed under [GPL-V3](LICENSE.md).
-
-Compiled parsers, AST code, and target language modules licensed under separate MIT licenses.
+ All source code generated by Sherpa is MIT licensed.

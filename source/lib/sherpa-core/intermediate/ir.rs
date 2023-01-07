@@ -485,6 +485,7 @@ fn create_child_state(
     NodeType::PeekTransition | NodeType::Fork | NodeType::Goto => {
       format!("goto state [ {} ]", state_name,)
     }
+    NodeType::OutOfScopeComplete => "pass".to_string(),
     NodeType::Pass => "pass".to_string(),
     NodeType::Fail => "fail".to_string(),
     _ => {

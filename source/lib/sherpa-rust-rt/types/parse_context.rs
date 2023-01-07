@@ -5,30 +5,6 @@ use std::{
   fmt::Debug,
 };
 
-#[repr(u32)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ParseActionType {
-  None,
-  Error,
-  Reduce,
-  Shift,
-  Accept,
-  Fork,
-  NeedMoreInput,
-}
-
-impl Into<u32> for ParseActionType {
-  fn into(self) -> u32 {
-    self as u32
-  }
-}
-
-impl Into<u64> for ParseActionType {
-  fn into(self) -> u64 {
-    self as u64
-  }
-}
-
 #[derive(Clone, Debug, Copy)]
 #[repr(C)]
 pub struct Goto {
@@ -43,11 +19,12 @@ impl Default for Goto {
   }
 }
 
+type GetBlockFunction<T> = extern "C" fn(&mut T, u32, u32) -> InputInfo;
+
 pub const LLVM_BASE_STACK_SIZE: usize = 8;
 
-#[derive(Clone)]
 #[repr(C)]
-pub struct LLVMParseContext<T: LLVMByteReader + ByteReader, M> {
+pub struct ParseContext<T: ByteReader, M = u32> {
   // Input data ----------
   pub token_ptr:       *mut u8,
   pub peek_ptr:        *mut u8,
@@ -97,12 +74,12 @@ pub struct LLVMParseContext<T: LLVMByteReader + ByteReader, M> {
   pub goto_size:       u32,
   pub goto_free:       u32,
   // Input data ----------
-  pub get_input_info:  extern "C" fn(&mut T, u32, u32) -> InputInfo,
+  pub get_input_info:  GetBlockFunction<T>,
   // Reader --------------
   pub reader:          *mut T,
   // User context --------
   pub meta_ctx:        *mut M,
-  pub custom_lex:      fn(&mut T, &mut M, &LLVMParseContext<T, M>) -> (u32, u32, u32),
+  pub custom_lex:      fn(&mut T, &mut M, &ParseContext<T, M>) -> (u32, u32, u32),
   /// Tracks whether the context is a fail mode or not.
   pub state:           u32,
   /// When reducing, stores the the number of of symbols to reduce into one.
@@ -114,12 +91,12 @@ pub struct LLVMParseContext<T: LLVMByteReader + ByteReader, M> {
 
 #[test]
 fn llvm_context_is_160_bytes() {
-  assert_eq!(std::mem::size_of::<LLVMParseContext<UTF8StringReader, u64>>(), 160)
+  assert_eq!(std::mem::size_of::<ParseContext<UTF8StringReader, u64>>(), 160)
 }
 
-impl<T: LLVMByteReader + ByteReader, M> Debug for LLVMParseContext<T, M> {
+impl<T: LLVMByteReader + ByteReader, M> Debug for ParseContext<T, M> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    let mut dbgstr = f.debug_struct("LLVMParseContext");
+    let mut dbgstr = f.debug_struct("ParseContext");
     dbgstr.field("token_ptr", &self.token_ptr);
     dbgstr.field("peek_ptr", &self.peek_ptr);
     dbgstr.field("scan_ptr", &self.scan_ptr);
@@ -146,15 +123,15 @@ impl<T: LLVMByteReader + ByteReader, M> Debug for LLVMParseContext<T, M> {
     dbgstr.field("goto_size", &self.goto_size);
     dbgstr.field("goto_used", &self.goto_free);
     dbgstr.field("get_input_info", &"FN Pointer".to_string());
-    dbgstr.field("reader", &self.reader);
+    dbgstr.field("reader", &((self.reader) as usize).to_string());
     dbgstr.field("meta_ctx", &self.meta_ctx);
     dbgstr.field("custom_lex", &"FN Pointer".to_string());
     dbgstr.finish()
   }
 }
 
-impl<T: LLVMByteReader + ByteReader, M> LLVMParseContext<T, M> {
-  pub fn new() -> Self {
+impl<T: ByteReader + LLVMByteReader, M> ParseContext<T, M> {
+  pub fn new_llvm() -> Self {
     Self {
       token_ptr:       0 as *mut u8,
       peek_ptr:        0 as *mut u8,
@@ -192,6 +169,52 @@ impl<T: LLVMByteReader + ByteReader, M> LLVMParseContext<T, M> {
       meta_ctx:        0 as *mut M,
       custom_lex:      Self::default_custom_lex,
     }
+  }
+}
+
+impl<T: ByteReader, M> ParseContext<T, M> {
+  pub fn new(reader: &mut T) -> Self {
+    Self {
+      token_ptr:       0 as *mut u8,
+      peek_ptr:        0 as *mut u8,
+      scan_ptr:        0 as *mut u8,
+      peek_input_trun: true,
+      scan_input_trun: true,
+      tok_input_trun:  true,
+      token_len:       0,
+      peek_len:        0,
+      scan_input_len:  0,
+      anchor_off:      0,
+      token_off:       0,
+      peek_off:        0,
+      scan_anchor_off: 0,
+      scan_off:        0,
+      scan_len:        0,
+      prod_id:         0,
+      anchor_line_off: 0,
+      anchor_line_num: 0,
+      tok_line_off:    0,
+      tok_line_num:    0,
+      peek_line_off:   0,
+      peek_line_num:   0,
+      state:           0,
+      tok_id:          0,
+      meta_a:          0,
+      meta_b:          0,
+      goto_size:       0,
+      goto_free:       0,
+      in_peek_mode:    false,
+      is_active:       false,
+      goto_stack_ptr:  0 as *mut Goto,
+      get_input_info:  Self::default_get_input_info,
+      reader:          reader,
+      meta_ctx:        0 as *mut M,
+      custom_lex:      Self::default_custom_lex,
+    }
+  }
+
+  extern "C" fn default_get_input_info(_: &mut T, _: u32, _: u32) -> InputInfo {
+    InputInfo(0 as *const u8, 0, false)
   }
 
   fn default_custom_lex(_: &mut T, _: &mut M, _: &Self) -> (u32, u32, u32) {
@@ -251,13 +274,21 @@ impl<T: LLVMByteReader + ByteReader, M> LLVMParseContext<T, M> {
   }
 }
 
-impl<T: UTF8Reader + LLVMByteReader + ByteReader, M> LLVMParseContext<T, M> {
-  pub fn get_str<'a>(&'a self) -> &'a str {
-    unsafe { (*self.reader).get_str() }
+impl<T: MutByteReader + ByteReader, M> ParseContext<T, M> {
+  pub fn get_reader_mut(&mut self) -> &mut T {
+    unsafe { (&mut *self.reader) as &mut T }
   }
+}
 
+impl<T: ByteReader, M> ParseContext<T, M> {
   pub fn get_reader(&self) -> &T {
     unsafe { (&*self.reader) as &T }
+  }
+}
+
+impl<T: ByteReader + UTF8Reader, M> ParseContext<T, M> {
+  pub fn get_str(&self) -> &str {
+    unsafe { (*self.reader).get_str() }
   }
 }
 
@@ -285,17 +316,24 @@ pub extern "C" fn sherpa_allocate_stack(byte_size: usize) -> *mut Goto {
   }
 }
 
-pub trait AstSlot: Debug + Clone + Default + Sized {}
+pub trait AstObject: Debug + Clone + Default + Sized {}
+
+#[derive(Clone, Debug, Default)]
+#[repr(C)]
+pub struct AstSlot<Ast: AstObject>(pub Ast, pub TokenRange, pub TokenRange);
+
+impl<Ast: AstObject> AstObject for AstSlot<Ast> {}
 
 /// Used within an LLVM parser to provide access to intermediate AST
 /// data stored on the stack within a dynamically resizable array.
 #[repr(C)]
-pub struct AstSlots<T: AstSlot> {
-  stack_data: *mut T,
-  stack_size: u32,
+pub struct AstStackSlice<T: AstObject> {
+  stack_data:         *mut T,
+  stack_size:         u32,
+  decreasing_indices: bool,
 }
 
-impl<T: AstSlot> AstSlots<T> {
+impl<T: AstObject> AstStackSlice<T> {
   #[track_caller]
   fn get_pointer(&self, position: usize) -> *mut T {
     if position >= (self.stack_size as usize) {
@@ -305,10 +343,23 @@ impl<T: AstSlot> AstSlots<T> {
       );
     }
     let slot_size = std::mem::size_of::<T>();
-    // We are using the stack space for these slots,
-    // which we ASSUME grows downward, hence the "higher" slots
-    // are accessed through lower addresses.
-    (self.stack_data as usize - (position * slot_size)) as *mut T
+
+    if self.decreasing_indices {
+      // We are using the stack space for these slots,
+      // which we ASSUME grows downward, hence the "higher" slots
+      // are accessed through lower addresses.
+      (self.stack_data as usize - (position * slot_size)) as *mut T
+    } else {
+      (self.stack_data as usize + (position * slot_size)) as *mut T
+    }
+  }
+
+  pub fn from_slice(slice: &mut [T]) -> Self {
+    Self {
+      stack_data:         &mut slice[0],
+      stack_size:         slice.len() as u32,
+      decreasing_indices: false,
+    }
   }
 
   /// Assigns the given data to a garbage slot, ignoring any existing value
@@ -317,21 +368,6 @@ impl<T: AstSlot> AstSlots<T> {
   unsafe fn assign_to_garbage(&self, position: usize, val: T) {
     let pointer = self.get_pointer(position);
     std::mem::forget(std::mem::replace(&mut (*pointer), val));
-  }
-
-  /// Moves the last slot into the first's slots position,
-  /// and drops the values of all other slots.
-  pub fn drop_all_but_last(&self) {
-    if self.len() == 1 {
-      return;
-    }
-
-    let last = self.take(self.len() - 1);
-    self.assign(0, last);
-
-    for index in 1..self.len() {
-      self.take(index);
-    }
   }
 
   pub fn assign(&self, position: usize, val: T) {
@@ -368,7 +404,7 @@ impl<T: AstSlot> AstSlots<T> {
   }
 }
 
-impl<T: AstSlot> Debug for AstSlots<T> {
+impl<T: AstObject> Debug for AstStackSlice<T> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let mut dbgstr = f.debug_struct("SlotSlice");
     dbgstr.field("stack_size", &self.stack_size);
@@ -381,19 +417,37 @@ impl<T: AstSlot> Debug for AstSlots<T> {
     dbgstr.finish()
   }
 }
+#[test]
+fn test_slots_from_slice() {
+  let mut d = vec![1, 2, 3, 4, 5, 6, 7];
+  let len = d.len();
+  let slots = AstStackSlice::from_slice(&mut d[len - 3..len]);
 
-impl AstSlot for u32 {}
+  assert_eq!(slots.take(0), 5);
+  assert_eq!(slots.take(1), 6);
+  assert_eq!(slots.take(2), 7);
 
-impl<V: AstSlot> AstSlot for (V, TokenRange, TokenRange) {}
+  slots.assign(0, 55);
+
+  drop(slots);
+
+  d.resize(len - 2, Default::default());
+
+  assert_eq!(d.last().cloned(), Some(55));
+}
+
+impl AstObject for u32 {}
+
+impl<V: AstObject> AstObject for (V, TokenRange, TokenRange) {}
 
 pub unsafe fn llvm_map_shift_action<
   'a,
   T: LLVMByteReader + ByteReader + MutByteReader,
   M,
-  V: AstSlot,
+  V: AstObject,
 >(
-  ctx: &LLVMParseContext<T, M>,
-  slots: &mut AstSlots<(V, TokenRange, TokenRange)>,
+  ctx: &ParseContext<T, M>,
+  slots: &mut AstStackSlice<(V, TokenRange, TokenRange)>,
 ) {
   match ctx.get_shift_data() {
     ParseAction::Shift {
@@ -427,11 +481,11 @@ pub unsafe fn llvm_map_result_action<
   'a,
   T: LLVMByteReader + ByteReader + MutByteReader,
   M,
-  Node: AstSlot,
+  Node: AstObject,
 >(
-  _ctx: &LLVMParseContext<T, M>,
+  _ctx: &ParseContext<T, M>,
   action: ParseActionType,
-  slots: &mut AstSlots<(Node, TokenRange, TokenRange)>,
+  slots: &mut AstStackSlice<(Node, TokenRange, TokenRange)>,
 ) -> ParseResult<Node> {
   match action {
     ParseActionType::Accept =>{

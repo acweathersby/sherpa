@@ -22,7 +22,7 @@ impl Default for ParseAlgorithm {
     Self::All
   }
 }
-
+/// General Compiler Configuration
 #[derive(Debug, Clone)]
 pub struct Config {
   /// Combine [ParseAlgorithm] flags to specify what parser algorithms
@@ -74,7 +74,7 @@ pub struct Config {
   pub enable_breadcrumb_parsing: bool,
   /// Inline instructions of branches that have the same signature
   /// and contain no transitive actions (shift, reduce, accept).
-  /// This will decrease parser instructions at the expense of increasing
+  /// This will decrease parser states at the expense of increasing
   /// bytecode size.
   ///
   /// Defaults to `false`.

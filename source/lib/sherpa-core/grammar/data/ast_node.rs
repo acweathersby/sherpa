@@ -1,8 +1,8 @@
-use sherpa_runtime::types::AstSlots;
+use sherpa_runtime::types::AstStackSlice;
 
 use crate::types::Token;
 
-pub type ReduceFunction<T> = fn(slots: &mut AstSlots<(T, Token, Token)>);
+pub type ReduceFunction<T> = fn(slots: &mut AstStackSlice<(T, Token, Token)>);
 
 #[deprecated]
 pub type ReduceFunction_old<T> = fn(args: &mut Vec<HCObj<T>>, tok: Token);

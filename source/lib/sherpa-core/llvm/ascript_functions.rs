@@ -24,13 +24,13 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: Sized>(
 
   // Struct types --------------------------------------------------
 
-  let ast_slot = ctx.opaque_struct_type("s.AstSlot");
+  let ast_slot = ctx.opaque_struct_type("s.AstObject");
   let parse_result = ctx.opaque_struct_type("s.ParseResult");
   let ast_slot_stack_slice = ctx.opaque_struct_type("s.SlotStackSlice");
 
   // Struct Definitions --------------------------------------------------
 
-  ast_slot_stack_slice.set_body(&[ast_slot.ptr_type(Generic).into(), i32.into()], false);
+  ast_slot_stack_slice.set_body(&[ast_slot.ptr_type(Generic).into(), i32.into(), i8.into()], false);
 
   parse_result
     .set_body(&[i8.array_type((std::mem::size_of::<ParseResult<ASTNode>>()) as u32).into()], false);
@@ -88,6 +88,9 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: Sized>(
   b.build_store(stack_top_ptr, i32.const_zero());
 
   let ast_slot_slice_ptr = b.build_alloca(ast_slot_stack_slice, "slot_lookup_ptr"); // Stores the stack lookup structure
+  let slot_direction = b.build_struct_gep(ast_slot_slice_ptr, 2, "")?;
+  b.build_store(slot_direction, i8.const_int(1, false));
+
   let slot_ptr_ptr = b.build_alloca(ast_slot.ptr_type(Generic), "slot_ptr_ptr"); // Store the pointer to the bottom of the AST stack
 
   b.build_store(slot_ptr_ptr, ast_slot.ptr_type(Generic).const_null());
@@ -158,8 +161,8 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: Sized>(
   // Store slot and symbol info in lookup structure
   let slot_lookup_entry_ptr = b.build_struct_gep(ast_slot_slice_ptr, 0, "")?;
   b.build_store(slot_lookup_entry_ptr, slot_ptr);
-  let slot_lookup_size_ptr = b.build_struct_gep(ast_slot_slice_ptr, 1, "")?;
-  b.build_store(slot_lookup_size_ptr, i32.const_int(1, false));
+  let slot_length = b.build_struct_gep(ast_slot_slice_ptr, 1, "")?;
+  b.build_store(slot_length, i32.const_int(1, false));
 
   b.build_call(
     CallableValue::try_from(shift_handler)?,

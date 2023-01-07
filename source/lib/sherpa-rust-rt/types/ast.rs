@@ -1,7 +1,5 @@
 use super::*;
 
-pub type ReduceFunction<T> = fn(slots: &mut AstSlots<(T, Token, Token)>);
-
 #[deprecated]
 pub type ReduceFunctionOld<T> = fn(args: &mut Vec<HCObj<T>>, tok: Token);
 
@@ -261,3 +259,5 @@ pub struct Lazy {
 // let result = completer(reader, self.bytecode, self.entry_pointer,
 // self.functions); }
 // }
+
+pub type Reducer<R, M, Node> = fn(&ParseContext<R, M>, &AstStackSlice<AstSlot<Node>>);

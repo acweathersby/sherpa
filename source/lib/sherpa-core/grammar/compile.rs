@@ -136,6 +136,8 @@ fn finalize_grammar(
 
   finalize_symbols(&mut g, e);
 
+  eprintln!("{:#?}", g.rules.iter().filter(|r| r.1.len == 0).collect::<Vec<_>>());
+
   finalize_items(&mut g, e);
 
   set_parse_productions(&mut g);
@@ -776,6 +778,8 @@ fn create_scanner_productions_from_symbols(g: &mut GrammarStore, e: &mut Vec<She
 
                     let syms: Vec<RuleSymbol> = scanner_symbols.collect();
 
+                    debug_assert_ne!(syms.len(), 0);
+
                     Rule {
                       id: RuleId::new(&scanner_production_id, body_index),
                       len: syms.len() as u16,
@@ -821,8 +825,15 @@ fn convert_scan_symbol_to_production(
       .map(|symbol_string| {
         // Insert into grammar any new defined symbol derived from
         // token productions.
-        let new_body_symbols =
-          create_defined_symbols_from_string(g, symbol_string, origin_location.clone());
+        let new_body_symbols = create_defined_symbols_from_string(
+          g,
+          symbol_string,
+          origin_location.clone(),
+          sym_id.is_exclusive(),
+        );
+
+        debug_assert_ne!(new_body_symbols.len(), 0);
+
         Rule {
           len: new_body_symbols.len() as u16,
           syms: new_body_symbols,
@@ -858,16 +869,17 @@ fn create_defined_symbols_from_string(
   g: &mut GrammarStore,
   symbol_string: &str,
   loc: Token,
+  exclusive: bool,
 ) -> Vec<RuleSymbol> {
   let chars: Vec<char> = symbol_string.chars().collect();
-
+  let last = chars.len() - 1;
   let new_body_symbols: Vec<RuleSymbol> = chars
     .iter()
     .enumerate()
     .map(|(index, byte)| {
       let string = byte.to_string();
 
-      let id = get_literal_id(&string, false);
+      let id = get_literal_id(&string, last == index && exclusive);
 
       g.symbols.entry(id).or_insert_with(|| {
         g.symbol_strings.insert(id, string);
@@ -1427,6 +1439,9 @@ pub fn convert_left_recursion_to_right(
       rule_a.len = rule_a.syms.len() as u16;
       rule_b.len = rule_b.syms.len() as u16;
 
+      debug_assert_ne!(rule_a.len, 0);
+      debug_assert_ne!(rule_b.len, 0);
+
       vec![rule_a, rule_b]
     })
     .collect::<Vec<_>>();
@@ -1447,6 +1462,10 @@ pub fn convert_left_recursion_to_right(
       rule_b.id = RuleId::new(&a_prime_prod_id, i * 2 + 1);
       rule_a.len = rule_a.syms.len() as u16;
       rule_b.len = rule_b.syms.len() as u16;
+
+      debug_assert_ne!(rule_a.len, 0);
+      debug_assert_ne!(rule_b.len, 0);
+
       vec![rule_a, rule_b]
     })
     .collect::<Vec<_>>();
@@ -1824,6 +1843,8 @@ fn pre_process_body(
       for (t, b) in bodies {
         let sym = RuleId::from_syms(&b.iter().map(|s| s.sym_id).collect::<Vec<_>>());
         if !seen.contains(&sym) {
+          debug_assert_ne!(b.len(), 0);
+
           unique_bodies.push(types::Rule {
             syms: b.clone(),
             len: b.len() as u16,

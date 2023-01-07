@@ -14,25 +14,14 @@ use sherpa::{
 fn main() {
   println!("cargo:rerun-if-changed=build.rs");
   println!("cargo:rerun-if-changed=grammar.hcg");
-
   if let Ok(cwd) = std::env::var("CARGO_MANIFEST_DIR").map(|d| PathBuf::from_str(&d).unwrap()) {
     if let Ok(source_path) = cwd.join("./grammar.hcg").canonicalize() {
-      if false {
-        if !compile_bytecode_parser(&source_path, Config {
-          opt_inline_redundant_assertions: true,
-          ..Default::default()
-        }) {
-          panic!("Failed to build grammar.hcg");
-        }
-      } else {
-        if !compile_llvm_parser(&source_path, Config {
-          opt_inline_redundant_assertions: true,
-          opt_llvm: true,
-          ..Default::default()
-        }) {
-          panic!("Failed to build grammar.hcg");
-        }
-      }
+      println!("{}", source_path.to_str().unwrap());
+      println!("cargo:rerun-if-changed={}", source_path.to_str().unwrap());
+      compile_bytecode_parser(&source_path, Config {
+        opt_inline_redundant_assertions: true,
+        ..Default::default()
+      });
     }
   }
 }

@@ -16,11 +16,24 @@ mod test {
   #[test]
   pub fn test_build() {
     let n = Instant::now();
-    let ast = Json::from_str("1");
+    let ast = Json::from_str(r##"{ "" : [233.0, { "test" : "test" }] }"##);
 
     println!("{:?}", n.elapsed());
 
-    println!("{:?}", ast);
+    println!("{:#?}", ast);
+
+    assert!(ast.is_ok());
+  }
+
+  #[test]
+  pub fn test_spirv() {
+    let n = Instant::now();
+    let string = include_str!("./spirv.core.grammar.json");
+    let ast = Json::from_str(string);
+
+    println!("{:?}", n.elapsed());
+
+    //println!("{:?}", ast);
 
     assert!(ast.is_ok());
   }

@@ -95,6 +95,7 @@ pub(crate) enum NodeType {
   Fork,
   Pass,
   Fail,
+  OutOfScopeComplete,
   /// A kludge state to ensure base actions are performed
   /// in each fork.
   ForkBase,

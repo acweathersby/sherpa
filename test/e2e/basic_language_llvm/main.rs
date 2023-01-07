@@ -5,7 +5,7 @@ pub fn main() {
   let mut messages = Vec::<String>::with_capacity(10);
 
   let start = Instant::now();
-  let str_ref = r##"{  "test test test test test 
+  let str_ref = r##"{  "d": ["a", "b", "c"], "test test test test test 
   test test test test test test test test test test test test 
   test test test test test test test test test test test test 
   test test test test test test test test test test test test 

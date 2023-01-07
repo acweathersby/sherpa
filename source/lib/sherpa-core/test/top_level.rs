@@ -47,10 +47,8 @@ fn test_pipeline() -> SherpaResult<()> {
 
   let target_production_id = g.get_production_by_name("start").unwrap().bytecode_id;
 
-  let (reader, _, shifts, skips) =
-    collect_shifts_and_skips("hello    \tworld", entry_point, target_production_id, bytecode);
-
-  assert!(reader.at_end());
+  let (shifts, skips) =
+    collect_shifts_and_skips("hello    \tworld", entry_point, target_production_id, &bytecode)?;
 
   assert_eq!(shifts, ["hello", "world"]);
 

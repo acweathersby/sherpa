@@ -1,8 +1,6 @@
 use crate::utf8::*;
 use std::sync::Arc;
 
-use super::TokenRange;
-
 /// A multi-reader, multi-writer view of the underlying parser input
 /// data, used to distribute access to the input string over multiple
 /// Tokens and SymbolReaders.
@@ -195,7 +193,7 @@ pub trait UTF8Reader {
 
 #[repr(C)]
 #[derive(Debug)]
-pub struct InputInfo(*const u8, u32, bool);
+pub struct InputInfo(pub(crate) *const u8, pub(crate) u32, pub(crate) bool);
 
 pub trait LLVMByteReader {
   /// Get a pointer to a sequence of bytes that can be read from the input given

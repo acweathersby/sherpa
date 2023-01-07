@@ -1,5 +1,29 @@
 use super::*;
 
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ParseActionType {
+  None,
+  Error,
+  Reduce,
+  Shift,
+  Accept,
+  Fork,
+  NeedMoreInput,
+}
+
+impl Into<u32> for ParseActionType {
+  fn into(self) -> u32 {
+    self as u32
+  }
+}
+
+impl Into<u64> for ParseActionType {
+  fn into(self) -> u64 {
+    self as u64
+  }
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(C, u32)]
 pub enum ParseAction {

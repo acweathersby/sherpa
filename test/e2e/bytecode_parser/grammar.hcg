@@ -1,0 +1,7 @@
+@IGNORE g:sp
+
+@EXPORT test as entry
+
+@NAME bytecode_parser
+
+<> test > t:hello t:world  f:ast { { t_Hello_World, val:str(tok) } }

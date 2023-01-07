@@ -57,7 +57,7 @@ pub fn add_ascript_functions<W: Write>(
   // Create impl for all exported productions that can be mapped to a ascript single
   // AScripT type. For those that map to multiple outputs, create an impl on the main
   // AST enum for named parsers on those types.
-  for (_, ast_type, ast_type_string, export_name) in &export_node_data {
+  for (_, ast_type, ast_type_string, export_name, _) in &export_node_data {
     match ast_type {
       AScriptTypeVal::Struct(id) => {
         let AScriptStruct { type_name, .. } = ascript.structs.get(id).unwrap();
@@ -70,13 +70,13 @@ pub fn add_ascript_functions<W: Write>(
 /// Create a [{2}] node from a `String` input.
 pub fn from_string(input: String) -> Result<{1}, SherpaParseError> {{
   let reader = UTF8StringReader::from(&input);
-  ast_compile::{0}_from(reader)
+  ast::{0}_from(reader)
 }}
 
 /// Create a [{2}] node from a `&str` input.
 pub fn from_str(input: &str) -> Result<{1}, SherpaParseError> {{
   let reader = UTF8StringReader::from(input);
-  ast_compile::{0}_from(reader)
+  ast::{0}_from(reader)
 }}",
             export_name, ast_type_string, type_name
           ))?
@@ -93,13 +93,13 @@ pub fn from_str(input: &str) -> Result<{1}, SherpaParseError> {{
 /// Create a [{2}] from a `String` input.
 pub fn parse_string_as_{0}(input: String) -> Result<{1}, SherpaParseError> {{
   let reader = UTF8StringReader::from(&input);
-  ast_compile::{0}_from(reader)
+  ast::{0}_from(reader)
 }}
 
 /// Create a [{2}] from a `&str` input.
 pub fn parse_str_as_{0}(input: &str) -> Result<{1}, SherpaParseError> {{
   let reader = UTF8StringReader::from(input);
-  ast_compile::{0}_from(reader)
+  ast::{0}_from(reader)
 }}",
             export_name,
             ast_type_string,
@@ -116,7 +116,7 @@ pub fn parse_str_as_{0}(input: &str) -> Result<{1}, SherpaParseError> {{
 
   writer.wrtln("pub trait ASTParse<T>  {")?.indent();
 
-  for (_, _, ast_type_string, export_name) in &export_node_data {
+  for (_, _, ast_type_string, export_name, _) in &export_node_data {
     writer.newline()?.wrtln(&format!(
       "fn {}_from(input:T) -> Result<{}, SherpaParseError>;",
       export_name, ast_type_string
@@ -155,11 +155,11 @@ pub fn parse_str_as_{0}(input: &str) -> Result<{1}, SherpaParseError> {{
 pub fn get_ascript_export_data(
   g: &GrammarStore,
   ascript: &AScriptStore,
-) -> Vec<(Option<ascript::rust::Ref>, AScriptTypeVal, String, String)> {
+) -> Vec<(Option<ascript::rust::Ref>, AScriptTypeVal, String, String, String)> {
   let export_node_data = g
     .get_exported_productions()
     .iter()
-    .map(|ExportedProduction { export_name, production, .. }| {
+    .map(|ExportedProduction { export_name, production, guid_name }| {
       let mut ref_index = 0;
       let ref_ = render_expression(
         &ascript,
@@ -188,7 +188,7 @@ pub fn get_ascript_export_data(
       );
       let ast_type = ref_.as_ref().unwrap().get_type();
       let ast_type_string = ascript_type_to_string(&ast_type, ascript);
-      (ref_, ast_type, ast_type_string, export_name.to_string())
+      (ref_, ast_type, ast_type_string, export_name.to_string(), guid_name.to_string())
     })
     .collect::<Vec<_>>();
   export_node_data

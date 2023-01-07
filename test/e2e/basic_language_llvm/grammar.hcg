@@ -26,8 +26,10 @@
 
 <> str > tk:string                          f:ast { { t_Str, v:str($1) } }
 
-<> num > tk:number                          f:ast { { t_Number } }
+<> num > tk:number                          f:ast { { t_Number, v:f64($1) } }
 
-<> number > ( \+ | \- )? g:num(+) ( \. g:num(+) )? ( ( \e | \E ) ( \+ | \i ) g:num(+) )?
+<> number > ( \+ | \- )? g:num(+) ( t:. g:num(+) )? ( ( \e | \E ) ( \+ | \i ) g:num(+) )?
 
-<> string > \" ( g:id | g:sym | g:num | g:sp | g:nl )(+) \"
+<> string > t:" ( g:id | g:sym | g:num | g:sp | g:nl | escaped)(*) t:"
+
+<> escaped > t:\ ( g:id | g:sym | g:num | g:sp | g:nl )

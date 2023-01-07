@@ -235,7 +235,10 @@ impl SymbolID {
       | SymbolID::GenericIdentifier
       | SymbolID::GenericNumber
       | SymbolID::GenericSymbol => (self.bytecode_id(Some(g)), "CLASS"),
-      SymbolID::DefinedNumeric(..)
+      SymbolID::ExclusiveDefinedIdentifier(..)
+      | SymbolID::ExclusiveDefinedNumeric(..)
+      | SymbolID::ExclusiveDefinedSymbol(..)
+      | SymbolID::DefinedNumeric(..)
       | SymbolID::DefinedIdentifier(..)
       | SymbolID::DefinedSymbol(..) => {
         let symbol = g.symbols.get(self).unwrap();
