@@ -1,96 +1,46 @@
 # Sherpa
 
-Your personal, parsing companion
+Sherpa is a parser generator written in Rust and LLVM that generates stack based hybrid parsers. 
 
-Sherpa is a parser generator written in Rust and LLVM that creates stack based hybrid parsers. It also provides a natural AST specification language that allows both the language specification and its AST structures. It provides flexibility in defining parsers through GRAMMAR, AST, and IR code definitions. It can target LLVM, allowing it to be used in languages other Rust, including C/C++, Typescript/Javascript,  Python, and 
+It also provides an AST specification language that allows both the language specification and its AST structures. 
+
+It provides a flexible way to defining parsers through GRAMMAR, AST, and IR code definitions. It can target LLVM, allowing it to be used in languages other Rust, including C/C++, Typescript/Javascript,  Python, and 
 
 ## Usage 
 
+Currently Sherpa is only available as a direct download of the Github Repo . It can be included in existing cargo projects by adding the following to the Cargo.toml file:
+
+```toml
+
+[build-dependencies]
+sherpa = { git="https://github.com/acweathersby/sherpa", branch="release" }
+
+[dependencies]
+sherpa_runtime = { git="https://github.com/acweathersby/sherpa", branch="release" }
+
+```
+> `v1.*.*+` releases of Sherpa will be made available through crates.io
+
 ### CLI
 
-Checkout the [README](./source/app/cli/README.md) for command line based operation of Sherpa. 
-
-## What is a Parser Generator
-
-## What is a Hybrid Parser
-
-Generally, the majority of parser compilers, such as ANTLR, Yacc, & Bison, build parsers that confirm to a single algorithmic parsing principle. For instance, Yacc is a [LALR(1)](https://en.wikipedia.org/wiki/LALR_parser) parser, which means that it is capable of understanding grammars that are LALR(0) and LALR(1), and produces parsers that use a table based algorithm to transition between LALR states. ANTLR4 is a [ALL(*)](https://www.antlr.org/papers/allstar-techreport.pdf) parser, which, though incredibly powerful, is still limited to grammars that do not contain indirect left recursion.
-// TODO - Write the above in terms of types of PARSERS instead of types of ALGORITHMS.
-
-Sherpa dispenses with the notion of a specific type of parser, and instead is able to apply different parsing techniques to different parts of a grammar to maximize flexibility in the description of parsable languages. In practice, it builds Recursive Descent parsers when the  grammar is LL, Recursive Descent/Ascent (RAD) parsers when needed, RAD + LR(&ast;) on occasions, RAD(CRUMB) + LR(&ast;) if configured to do so, and can even mix in some Packrat style parsing if one prefers. In addition, Sherpas intermediate representation intermediate parser representation is intentionally designed to be trivial written by hand, allowing more parsing behavior to be defined that falls outside the bounds of any particular algorithm or technique.
-
-## AScripT
-
-Ascript is an AST description language embedded into the Sherpa grammar. 
-
-```sherpa
-<> A > children => { t_RootNode, children }
-```
+#### Basic usage
 
 ```bash
-sherpa build --rust --ast --out ./parser/ ./source_grammar.sg 
+sherpa build --rust --ast -o ./parser/ ./source_grammar.sg 
 ```
 
-### Rust Proc Macro
+Checkout the [CLI README](./source/app/cli/README.md) for command line based operation of Sherpa. 
 
-### Rust Build
+## Learn More
 
-## The Parser
+- [Using Sherpa](doc/introductory_tutorial.md)
 
-## Mini Tutorial
+- [What is a parser generator](doc/parser_generator.md)
 
-`A trivial Sherpa IR parser looks something like this:
-```
-state [ parse_A ]
+- [Creating AST source code with AScript](doc/ascript.md)
 
-    scanner [ a_Scanner ]
+## License
 
-    assert TOKEN [ 1 /* This will be output by the a_Scanner if the input is `a` */  ]  (
+The source code of Sherpa is licensed under the [GPL-v3](./LICENSE.md) license. 
 
-        // Places the token onto the top of the token stack. 
-        shift 
-
-        // This
-        reduce 1 symbol to production 1 using reducer :{ t_FoundA, tok  } // This uses the ascript
-                                                                          // processor to build an 
-                                                                          // AST node of type `FoundA`
-    )
-
-state [ a_Scanner ]
-
-    assert BYTE [ a ] ( 
-        shift  
-        set token [ 1 ] // And here is where we find our TOKEN 1
-    )
-````A trivial Sherpa IR parser looks something like this:
-```
-state [ parse_A ]
-
-    scanner [ a_Scanner ]
-
-    assert TOKEN [ 1 /* This will be output by the a_Scanner if the input is `a` */  ]  (
-
-        // Places the token onto the top of the token stack. 
-        shift 
-
-        // This
-        reduce 1 symbol to production 1 using reducer :{ t_FoundA, tok  } // This uses the ascript
-                                                                          // processor to build an 
-                                                                          // AST node of type `FoundA`
-    )
-
-state [ a_Scanner ]
-
-    assert BYTE [ a ] ( 
-        shift  
-        set token [ 1 ] // And here is where we find our TOKEN 1
-    )
-```
-
- # License 
-
- Unless otherwise stated, the Sherpa source code is licensed under [GNU-GPLv3](./LICENSE.md). 
-
- The source code for Sherpa parser run-times are licensed under [GNU-LGPLvs]
-
- All source code generated by Sherpa is MIT licensed.
+All artifacts produced by the Sherpa compiler are licensed under the [MIT](./ARTIFACT_LICENSE.md) license.

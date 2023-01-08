@@ -18,8 +18,6 @@ pub fn dispatch<'a, R: ByteReader + MutByteReader, M>(
 
     use InstructionType::*;
 
-    //println!("{:?}", instr);
-
     s = match instr.to_type() {
       Shift => {
         break shift(s, instr, ctx);
