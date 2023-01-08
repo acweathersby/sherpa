@@ -141,6 +141,7 @@ pub(super) fn process_node(
     }
     (None, 1) => {
       insert_items_into_node(items.clone(), t, par_id);
+
       let item = items[0];
       let sym = item.get_symbol(&t.g);
       match sym {
@@ -209,7 +210,7 @@ pub(super) fn create_production_call<'a>(
     EdgeType::Default,
     parent_index,
     parent_index,
-    nonterm_items,
+    items.as_vec().non_term_items(&t.g),
   );
 
   t.get_node_mut(node_index).prod_sym = Some(SymbolID::Production(prod_id, GrammarId(0)));
@@ -272,6 +273,8 @@ pub(super) fn create_completed_node(
       }
 
       let follow_items = scanned_items.get_all_items();
+
+      debug_assert!(follow_items[0] != item);
 
       if !follow_items.is_empty() {
         t.queue_node(ProcessGroup {

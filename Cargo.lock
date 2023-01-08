@@ -582,7 +582,6 @@ version = "1.0.0-beta1"
 dependencies = [
  "sherpa_core",
  "sherpa_runtime",
- "syn",
 ]
 
 [[package]]

@@ -263,6 +263,10 @@ impl Item {
     self.rule.is_null() && self.len == 0 && self.off == 0
   }
 
+  pub fn is_slide(&self) -> bool {
+    self.len == 0 && self.off == 0
+  }
+
   pub fn is_out_of_scope(&self) -> bool {
     self.state.is_out_of_scope()
   }

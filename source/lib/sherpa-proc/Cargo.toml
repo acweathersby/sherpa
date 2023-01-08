@@ -10,5 +10,4 @@ path = "./lib.rs"
 [dependencies]
 sherpa_core = { path = "../sherpa-core" }
 sherpa_runtime = { path = "../sherpa-rust-rt" }
-syn = "1.0.103"
 

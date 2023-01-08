@@ -919,12 +919,17 @@ pub(crate) fn get_scanner_info_from_defined(
     sym if sym.is_defined() => {
       let symbol_string = root.symbol_strings.get(sym_id).unwrap().to_owned();
 
-      let escaped_symbol_string = symbol_string
+      let mut escaped_symbol_string = symbol_string
         .chars()
         .into_iter()
         .map(|c| format!("{:X}", (c as u32)))
         .collect::<Vec<_>>()
         .join("");
+
+      if sym.is_exclusive() {
+        escaped_symbol_string = escaped_symbol_string + "_exc";
+      }
+
       let name = create_defined_scanner_name(&escaped_symbol_string);
       (ProductionId::from(&name), name, symbol_string)
     }

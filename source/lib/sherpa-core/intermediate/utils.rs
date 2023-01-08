@@ -215,9 +215,9 @@ pub fn symbols_occlude(symA: &SymbolID, symB: &SymbolID, g: &GrammarStore) -> bo
       },
       Some(_) => match symB {
         SymbolID::GenericSymbol => g.symbols.get(symA).unwrap().cp_len == 1,
-        _ => false,
+        _ => symA == symB,
       },
-      _ => false,
+      _ => symA == symB,
     },
     SymbolID::DefinedIdentifier(_) | SymbolID::ExclusiveDefinedIdentifier(_) => {
       match g.symbol_strings.get(symA).map(|s| s.as_str()) {
@@ -236,7 +236,7 @@ pub fn symbols_occlude(symA: &SymbolID, symB: &SymbolID, g: &GrammarStore) -> bo
       SymbolID::GenericNumber => g.symbols.get(symA).unwrap().cp_len == 1,
       _ => false,
     },
-    _ => false,
+    symA => *symA == *symB,
   }
 }
 

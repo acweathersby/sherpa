@@ -22,8 +22,14 @@ pub(super) fn get_follow_items(
   let grammar = t.g.clone();
   let g = &grammar;
   let empty = vec![];
+
+  let __print_debug__ = false;
   #[cfg(follow_tracking)]
-  eprintln!("\n\n---- Follow start on {} ----", root_completed_item.debug_string(g));
+  let __print_debug__ = root_completed_item.get_state().get_lane() == 0;
+
+  if __print_debug__ {
+    eprintln!("\n\n---- Follow start on {} ----", root_completed_item.debug_string(g));
+  }
 
   static empty_vec: Vec<Item> = Vec::new();
   // Starting at the top we grab the closure to the nearest
@@ -35,13 +41,14 @@ pub(super) fn get_follow_items(
     (LinkedItem { item: *root_completed_item, closure_node: prev_state_ref }),
   )]);
   while let Some((state, linked)) = completed_items.pop_front() {
-    #[cfg(follow_tracking)]
-    eprintln!(
-      "\nLooking for matches for  {} in {:?} with state {}",
-      linked.item.debug_string(g),
-      linked.closure_node,
-      state.debug_string(g)
-    );
+    if __print_debug__ {
+      eprintln!(
+        "\nLooking for matches for  {} in {:?} with state {}",
+        linked.item.debug_string(g),
+        linked.closure_node,
+        state.debug_string(g)
+      );
+    }
     let completed_item = linked.item.clone();
     let current_node = linked.closure_node;
 
@@ -53,8 +60,7 @@ pub(super) fn get_follow_items(
         }
         LinkedItem { closure_node: Some(curr_node), .. } => {
           let node = t.get_node(curr_node);
-          #[cfg(follow_tracking)]
-          {
+          if __print_debug__ {
             node
               .goto_items
               .closure_with_state(&t.g)
@@ -92,23 +98,27 @@ pub(super) fn get_follow_items(
         });
 
       let goto_items = local_closure_lookup.get(&prod).unwrap_or(&empty).iter().filter(|i| {
-        state.in_either_lane(&i.get_state()) && i.get_production_id_at_sym(&t.g) == prod
+        if __print_debug__ {
+          println!("{} {} s:{}", i.debug_string(g), state, i.get_state().in_either_lane(&state))
+        }
+        i.get_state().in_either_lane(&state)
       });
 
-      let closure: Items = null_items.cloned().chain(goto_items.cloned()).collect();
+      let mut closure: Items = null_items.cloned().chain(goto_items.cloned()).collect();
 
       // Grab all productions from the closure that match the end item's
       // production.
-      match { (completed_item, closure, prev_node, current_node) } {
-        (completed_item, empty_closure, Some(prev_node), _) if empty_closure.is_empty() => {
-          #[cfg(follow_tracking)]
-          eprintln!("no closure for Node [{:?}] - Selecting previous node", current_node);
+      match { (completed_item, closure.is_empty(), prev_node, current_node) } {
+        (completed_item, true, Some(prev_node), _) => {
+          if __print_debug__ {
+            eprintln!("no closure for Node [{:?}] - Selecting previous node", current_node);
+          }
           completed_items.push_back((state, LinkedItem {
             item:         completed_item,
             closure_node: Some(prev_node),
           }));
         }
-        (completed_item, empty_closure, None, Some(root_node)) if empty_closure.is_empty() => {
+        (completed_item, true, None, Some(root_node)) => {
           debug_assert!(
             root_node.usize() == 0,
             "The root node should be the only one that ends up in this branch"
@@ -119,8 +129,7 @@ pub(super) fn get_follow_items(
               closure_node: None,
             });
           }
-          #[cfg(follow_tracking)]
-          {
+          if __print_debug__ {
             eprintln!("no closure for Node [{:?}] - Should be at root node.", root_node);
           }
           // This item should match one of the root items when set to completed
@@ -128,10 +137,9 @@ pub(super) fn get_follow_items(
             fin_items.insert(LinkedItem { item: completed_item, closure_node: None });
           }
         }
-        (completed_item, mut closure, prev_node, Some(current_node)) => {
+        (completed_item, false, prev_node, Some(current_node)) => {
           let proxy_state = completed_item.get_state();
-          #[cfg(follow_tracking)]
-          {
+          if __print_debug__ {
             closure.__print_items__(g, &format!("Node [{:?}] closure:", current_node));
           }
           let null_items: Items = closure.drain_filter(|i| i.is_null()).collect();
@@ -154,8 +162,7 @@ pub(super) fn get_follow_items(
 
             while let Some((proxy_state, item)) = completed_queue.pop_front() {
               if seen.insert(item.to_empty_state().to_start()) {
-                #[cfg(follow_tracking)]
-                {
+                if __print_debug__ {
                   eprintln!("---- {}", item.debug_string(&t.g));
                 }
                 // Preserve the item's original state
@@ -164,7 +171,8 @@ pub(super) fn get_follow_items(
                   // Keep out of scope states in the same lane.
                   state
                 } else {
-                  proxy_state.to_lane_fork(t.increment_lane(1))
+                  let lane = t.increment_lane(1);
+                  proxy_state.to_lane_fork(lane)
                 };
 
                 // Put the completed item into a new lane.
@@ -187,8 +195,7 @@ pub(super) fn get_follow_items(
                   .cloned()
                   .collect();
 
-                #[cfg(follow_tracking)]
-                {
+                if __print_debug__ {
                   local_closure_lookup
                     .get(&prod)
                     .unwrap_or(&empty)
@@ -240,31 +247,29 @@ pub(super) fn get_follow_items(
             }
           }
         }
-        (_completed_item, _closure, _prev_node, _current_node) => {
+        (completed_item, ..) => {
           // Check to see if we have an accept item
-          #[cfg(follow_tracking)]
-          {
+          if __print_debug__ {
             eprintln!("Evaluating potential leaf node ------------------");
-            eprintln!("---- {}", _completed_item.to_state(state).debug_string(&t.g));
+            eprintln!("---- {}", completed_item.to_state(state).debug_string(&t.g));
             t.accept_items().__print_items__(g, "Accepting Items");
           }
 
           // Remap item to proxy state.
-          let candidate_state = _completed_item.to_state(state).to_origin_only_state();
+          let candidate_state = completed_item.to_state(state).to_origin_only_state();
 
           if t.accept_items().contains(&candidate_state) {
             fin_items.insert(LinkedItem { item: completed_item, closure_node: None });
           } else {
             eprintln!("All possible conditions should be covered by the above: ");
-            eprintln!("completed_items: {} {}", _completed_item.debug_string(g), state);
+            eprintln!("completed_items: {} {}", completed_item.debug_string(g), state);
             t.accept_items().__print_items__(g, "Accept Items");
           }
         }
       }
     }
   }
-  #[cfg(follow_tracking)]
-  {
+  if __print_debug__ {
     Items::from_linked(fin_items.clone()).__print_items__(g, "Completed Final Items");
     Items::from_linked(intermediate.clone()).__print_items__(g, "Intermediate Items");
     Items::from_linked(out.clone()).__print_items__(g, "Uncompleted Items");

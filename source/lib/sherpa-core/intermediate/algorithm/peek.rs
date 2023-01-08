@@ -42,21 +42,14 @@ pub(crate) fn peek(
     .iter()
     .enumerate()
     .flat_map(|(index, vec)| {
-      let lane = t.increment_lane(1);
-
       let item_vec = vec.iter().into_iter().map(move |i| {
-        i.to_state(i.get_state().to_lane(lane).to_origin(if i.is_out_of_scope() {
+        i.to_state(i.get_state().to_origin(if i.is_out_of_scope() {
           OriginData::OutOfScope(index)
         } else {
           OriginData::GoalIndex(index)
         }))
       });
-
-      let slides: ItemSet = item_vec.clone().map(|i| i.to_null()).collect();
-
-      t.get_node_mut(root_par_id).goto_items.append(&mut slides.to_vec());
-
-      item_vec
+      item_vec.into_iter().map(|i| i.to_local_state())
     })
     .collect::<Vec<_>>();
 
@@ -230,23 +223,16 @@ pub(crate) fn peek(
       }
     }
 
-    let term_items = closure.as_vec().term_items(g);
-
-    insert_items_into_node(convert_origins(&term_items, &goals), t, par_id);
-
-    if peek_depth > 0 {
-      t.get_node_mut(par_id)
-        .goto_items
-        .append(&mut convert_origins(&closure.as_vec().non_term_items(g), &goals));
-    }
+    insert_items_into_node(convert_origins(&closure.as_vec(), &goals), t, par_id);
 
     if EXCLUSIVE_COMPLETED {
       continue;
     }
 
     // Create groups of terminal items based on their symbols
-    let mut groups =
-      hash_group_btreemap(term_items, |_, i| i.get_symbol(g)).into_iter().collect::<Vec<_>>();
+    let mut groups = hash_group_btreemap(closure.as_vec().term_items(g), |_, i| i.get_symbol(g))
+      .into_iter()
+      .collect::<Vec<_>>();
 
     // Merge groups whose symbols occlude.
     merge_occluding_token_groups(t, j, &mut groups);
@@ -780,10 +766,12 @@ fn get_goal_contents<'a>(items: &Items, goals: &'a [Items]) -> Vec<&'a Items> {
   .collect()
 }
 
-pub(super) fn insert_items_into_node(mut items: Items, t: &mut TransitionGraph, node_id: NodeId) {
+pub(super) fn insert_items_into_node(items: Items, t: &mut TransitionGraph, node_id: NodeId) {
   // par_node.transition_items.append(&mut items.to_origin_only_state());
   // let reduced = par_node.transition_items.clone().to_origin_only_state().to_set().to_vec();
-  t.get_node_mut(node_id).transition_items.append(&mut items);
+  t.get_node_mut(node_id).transition_items.append(&mut items.clone());
+  let mut nonterm_items = items.non_term_items(&t.g);
+  t.get_node_mut(node_id).goto_items.append(&mut nonterm_items);
 }
 
 /// Compares the terminal symbols of node groups and merges those
