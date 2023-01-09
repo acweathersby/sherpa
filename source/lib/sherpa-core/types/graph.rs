@@ -140,23 +140,6 @@ impl std::fmt::Display for EdgeType {
   }
 }
 
-#[bitmask]
-pub(crate) enum NodeAttributes {
-  EMPTY,
-
-  /// Nodes marked as `I_PEEK_ORIGIN` are the root nodes of a
-  /// peek branch.
-  I_PEEK_ORIGIN,
-
-  I_LR,
-}
-
-impl Default for NodeAttributes {
-  fn default() -> Self {
-    NodeAttributes::EMPTY
-  }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Default, Hash)]
 pub(crate) struct GraphNode {
   /// Items that represent the transition edges away from this node. In the resulting
@@ -192,13 +175,12 @@ pub(crate) struct GraphNode {
   pub peek_shifts: i32,
   pub id: NodeId,
 
-  pub attributes: NodeAttributes,
-  pub node_type:  NodeType,
+  pub node_type: NodeType,
 
   /// The type of scan action that is performed while
   /// traversing towards this node.
   pub edge_type: EdgeType,
-  _impl:         u8,
+  _impl: u8,
 }
 
 impl GraphNode {
@@ -220,7 +202,6 @@ impl GraphNode {
   ) -> Self {
     let mut node = GraphNode {
       edge_symbol: sym,
-      attributes: NodeAttributes::EMPTY,
       transition_items: items,
       peek_shifts: -1,
       id: NodeId::Invalid,
@@ -264,16 +245,6 @@ impl GraphNode {
     self.parent.is_some() && self.id != NodeId::Invalid
   }
 
-  #[inline(always)]
-  pub fn is(&self, transition_type: NodeAttributes) -> bool {
-    self.attributes.intersects(transition_type)
-  }
-
-  #[inline(always)]
-  pub fn set_attribute(&mut self, transition_type: NodeAttributes) {
-    self.attributes |= transition_type
-  }
-
   pub fn debug_string(&self, g: &GrammarStore) -> String {
     format!(
       "\n|[{}]--->[{}]{}\n|   sym: {}\n|  edge: {}\n|  node: {}{}\n| items:[\n{}\n]",
@@ -288,7 +259,7 @@ impl GraphNode {
       self.edge_symbol.to_string(g),
       self.edge_type.to_string(),
       self.node_type.to_string(),
-      if self.is(NodeAttributes::I_LR) { " LR" } else { "" },
+      "",
       self
         .transition_items
         .clone()
@@ -319,10 +290,10 @@ pub(crate) type TPackResults = (TransitionGraph, Vec<SherpaError>);
 
 #[derive(Debug, Default)]
 pub(crate) struct ProcessGroup {
-  pub node_index:   NodeId,
-  pub items:        Vec<Item>,
+  pub node_index: NodeId,
+  pub items: Vec<Item>,
   pub discriminant: Option<(SymbolID, Vec<Item>)>,
-  pub depth:        usize,
+  pub depth: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
@@ -372,7 +343,7 @@ pub(crate) struct TransitionGraph {
   closure_links: HashMap<Item, Item>,
 
   pub accept_items: ItemSet,
-  lane_counter:     u32,
+  lane_counter: u32,
 }
 
 impl TransitionGraph {

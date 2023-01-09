@@ -23,8 +23,6 @@ pub(crate) fn peek(
   let grammar = t.g.clone();
   let g = &grammar;
 
-  t.get_node_mut(root_par_id).set_attribute(NodeAttributes::I_PEEK_ORIGIN);
-
   // Split items into groups based on symbol Ids.
   let goals = hash_group_vec(items.clone(), |index, i| {
     if i.is_out_of_scope() {
@@ -137,10 +135,10 @@ pub(crate) fn peek(
 
           if peek_depth == 0 {
             t.queue_node(ProcessGroup {
-              node_index:   par_id,
-              items:        get_goal_items(&items, &goals),
+              node_index: par_id,
+              items: get_goal_items(&items, &goals),
               discriminant: Some((SymbolID::Default, items)),
-              depth:        global_depth,
+              depth: global_depth,
             });
           } else if t.is_scan() || j.config().enable_breadcrumb_parsing {
             let node_index = create_and_insert_node(
@@ -204,7 +202,7 @@ pub(crate) fn peek(
           items.__print_items__(g, "Conflicting items");
           t.accept_items.__print_items__(g, "GOALS");
           return SherpaResult::Err(SherpaError::grammar_err_multi_location {
-            message:   "Could not resolve production. Grammar has ambiguities.".to_string(),
+            message: "Could not resolve production. Grammar has ambiguities.".to_string(),
             locations: items
               .iter()
               .map(|i| SherpaError::grammar_err {
@@ -281,10 +279,10 @@ pub(crate) fn peek(
           // with the disambiguated items.
 
           t.queue_node(ProcessGroup {
-            node_index:   par_id,
-            items:        get_goal_items(&items, &goals),
+            node_index: par_id,
+            items: get_goal_items(&items, &goals),
             discriminant: Some((sym, items)),
-            depth:        global_depth,
+            depth: global_depth,
           });
         }
         1 if t.is_scan() || j.config().enable_breadcrumb_parsing => {
@@ -401,10 +399,10 @@ pub(crate) fn peek(
                   );
 
                   t.queue_node(ProcessGroup {
-                    node_index:   fork_base,
-                    items:        goal_items.clone(),
+                    node_index: fork_base,
+                    items: goal_items.clone(),
                     discriminant: None,
-                    depth:        global_depth,
+                    depth: global_depth,
                   });
                 }
 
@@ -721,10 +719,10 @@ fn resolveConflictingSymbols(
       if let Some(completed_items) = complete_items {
         if peek_depth == 0 {
           t.queue_node(ProcessGroup {
-            node_index:   par_id,
-            items:        completed_items.clone()[0..1].to_vec(),
+            node_index: par_id,
+            items: completed_items.clone()[0..1].to_vec(),
             discriminant: Some((SymbolID::Default, completed_items.clone())),
-            depth:        global_depth,
+            depth: global_depth,
           });
         } else {
           let node_index = create_and_insert_node(

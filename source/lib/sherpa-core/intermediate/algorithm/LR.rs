@@ -3,7 +3,7 @@ use crate::{
   grammar::*,
   intermediate::utils::hash_group_btreemap,
   journal::Journal,
-  types::{GraphNode, NodeAttributes as TST, TransitionGraph as TPack, *},
+  types::{GraphNode, TransitionGraph as TPack, *},
 };
 use std::{
   collections::{BTreeSet, HashMap, VecDeque},
@@ -167,7 +167,7 @@ pub(super) fn construct_inline_LR(
             for (sym, mut items) in symbol_groups {
               let (end_item, _) = items.pop().unwrap();
               let index = create_end_node(t, sym, parent_index, &end_item);
-              t.get_node_mut(index).set_attribute(TST::I_LR);
+              //t.get_node_mut(index).set_attribute(TST::I_LR);
               t.get_node_mut(index).edge_type = EdgeType::Assert;
               leaf_items.push(index);
             }
@@ -197,7 +197,7 @@ pub(super) fn construct_inline_LR(
           parent_index,
           &end_items.into_iter().next().unwrap(),
         );
-        t.get_node_mut(index).set_attribute(TST::I_LR);
+        //t.get_node_mut(index).set_attribute(TST::I_LR);
         t.get_node_mut(index).edge_type = EdgeType::Default;
         leaf_items.push(index);
       }
