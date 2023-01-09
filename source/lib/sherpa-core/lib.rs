@@ -44,7 +44,14 @@ pub mod compile {
     grammar::parse::{compile_ascript_ast, compile_grammar_ast, compile_ir_ast},
     intermediate::{compile::*, optimize::*},
     types::{
-      GrammarId, GrammarRef, GrammarStore, Production, ProductionId, Rule, ScannerStateId, Symbol,
+      GrammarId,
+      GrammarRef,
+      GrammarStore,
+      Production,
+      ProductionId,
+      Rule,
+      ScannerStateId,
+      Symbol,
       SymbolID,
     },
   };
@@ -62,7 +69,10 @@ pub mod errors {
 pub mod pipeline {
 
   pub use crate::build::pipeline::{
-    compile_bytecode_parser, compile_llvm_parser, BuildPipeline, SourceType,
+    compile_bytecode_parser,
+    compile_llvm_parser,
+    BuildPipeline,
+    SourceType,
   };
   /// Tasks that can be added to a build pipeline
   pub mod tasks {

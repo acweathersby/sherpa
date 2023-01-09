@@ -149,36 +149,6 @@ fn finalize_grammar(
   g
 }
 
-#[test]
-fn test_compile_grammars_into_store() {
-  let mut j = Journal::new(None);
-  let (grammars, errors) = load_all(
-    &mut j,
-    &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-      .join("../../../test/grammars/load.hcg")
-      .canonicalize()
-      .unwrap(),
-    10,
-  );
-
-  let result = compile_grammars_into_store(&mut j, grammars);
-
-  assert!(result.is_ok());
-
-  match result {
-    SherpaResult::Ok((Some(grammar), _)) => {
-      dbg!(grammar);
-    }
-    SherpaResult::Ok((_, Some(errors))) => {
-      for err in errors {
-        eprintln!("{}", err);
-      }
-      panic!("Errors occurred while compiling")
-    }
-    _ => {}
-  }
-}
-
 fn set_parse_productions(g: &mut GrammarStore) {
   let mut productions = g
     .get_exported_productions()
@@ -1072,28 +1042,6 @@ pub fn pre_process_grammar<'a>(
   j.report_mut().stop_timer("Compile Time");
 
   (g, e)
-}
-
-#[test]
-fn test_pre_process_grammar() {
-  let mut j = Journal::new(None);
-  let grammar = String::from(
-      "\n@IMPORT ./test/me/out.hcg as bob 
-      <> a > tk:p?^test a(+,) ( \\1234 | t:sp? ( sp | g:sym g:sp ) f:r { basalt } ) \\nto <> b > tk:p p ",
-  );
-
-  if let Ok(grammar) = compile_grammar_ast(Vec::from(grammar.as_bytes())) {
-    let (_, errors) =
-      pre_process_grammar(&mut j, &grammar, &PathBuf::from("/test"), "test", Default::default());
-
-    for error in &errors {
-      eprintln!("{}", error);
-    }
-
-    assert_eq!(errors.len(), 1);
-  } else {
-    panic!("Failed to parse and produce an AST of '<> a > b'");
-  }
 }
 
 fn pre_process_production(

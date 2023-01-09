@@ -1,29 +1,28 @@
 use super::{
   fastCC,
-  parser_functions::{
-    construct_dispatch_function,
-    construct_parse_function,
-    construct_scan,
-  },
+  parser_functions::{construct_dispatch_function, construct_parse_function, construct_scan},
   CTX_AGGREGATE_INDICES as CTX,
-  FAIL_STATE_FLAG_LLVM
+  FAIL_STATE_FLAG_LLVM,
 };
 use crate::{
   compile::BytecodeOutput,
   llvm::{LLVMParserModule, LLVMTypes, PublicFunctions, NORMAL_STATE_FLAG_LLVM},
-  types::*, Journal,
+  types::*,
+  Journal,
 };
 use inkwell::{
   context::Context,
   module::Linkage,
   values::{BasicMetadataValueEnum, CallSiteValue, CallableValue},
 };
-
-pub(crate) fn construct_module<'a>(j:&mut Journal,  module_name: &str, ctx: &'a Context) -> LLVMParserModule<'a> {
+pub(crate) fn construct_module<'a>(
+  j: &mut Journal,
+  module_name: &str,
+  ctx: &'a Context,
+) -> LLVMParserModule<'a> {
   use inkwell::AddressSpace::*;
   let module = ctx.create_module(module_name);
   let builder = ctx.create_builder();
-
   let i8 = ctx.i8_type();
   let bool = ctx.bool_type();
   let i64 = ctx.i64_type();
@@ -35,23 +34,15 @@ pub(crate) fn construct_module<'a>(j:&mut Journal,  module_name: &str, ctx: &'a 
   let TOKEN = ctx.opaque_struct_type("s.Token");
   let INPUT_INFO = ctx.opaque_struct_type("s.InputBlock");
   let CTX_PTR = CTX.ptr_type(Generic);
-
   let internal_linkage = if j.config().opt_llvm { Some(Linkage::Private) } else { None };
-
-  let TAIL_CALLABLE_PARSE_FUNCTION =
-    i32.fn_type(&[CTX_PTR.into()], false);
-
+  let TAIL_CALLABLE_PARSE_FUNCTION = i32.fn_type(&[CTX_PTR.into()], false);
   let GOTO_FN = i32.fn_type(&[CTX_PTR.into()], false);
-
   GOTO.set_body(
     &[TAIL_CALLABLE_PARSE_FUNCTION.ptr_type(Generic).into(), i32.into(), i32.into()],
     false,
   );
-
   CP_INFO.set_body(&[i32.into(), i32.into()], false);
-
   TOKEN.set_body(&[i64.into(), i64.into(), i64.into(), i64.into()], false);
-
   INPUT_INFO.set_body(
     &[
       // Input pointer
@@ -66,7 +57,6 @@ pub(crate) fn construct_module<'a>(j:&mut Journal,  module_name: &str, ctx: &'a 
   let get_input_info_fun = INPUT_INFO
     .fn_type(&[READER.ptr_type(Generic).into(), i32.into(), i32.into()], false)
     .ptr_type(Generic);
-
   CTX.set_body(
     &[
       i8.ptr_type(Generic).into(),
@@ -109,9 +99,7 @@ pub(crate) fn construct_module<'a>(j:&mut Journal,  module_name: &str, ctx: &'a 
     ],
     false,
   );
-
   let fun = PublicFunctions {
-
     /// Public functions
     init: module.add_function(
       "init",
@@ -148,11 +136,8 @@ pub(crate) fn construct_module<'a>(j:&mut Journal,  module_name: &str, ctx: &'a 
     /// ------------------------------------------------------------------------
     // These functions can be tail called, as they all use the same interface
     dispatch: module.add_function("dispatch", TAIL_CALLABLE_PARSE_FUNCTION, internal_linkage),
-
     handle_eop: module.add_function("emit_eop", TAIL_CALLABLE_PARSE_FUNCTION, internal_linkage),
-
     /// ------------------------------------------------------------------------
-    
     simd_token_parse:     module.add_function(
       "simd_token_parse",
       i32.fn_type(
@@ -184,8 +169,8 @@ pub(crate) fn construct_module<'a>(j:&mut Journal,  module_name: &str, ctx: &'a 
     get_adjusted_input_block: module.add_function(
       "get_adjusted_input_block",
       ctx.void_type().fn_type(&[
-        CTX.ptr_type(Generic).into(), 
-        i8.ptr_type(Generic).ptr_type(Generic).into(), 
+        CTX.ptr_type(Generic).into(),
+        i8.ptr_type(Generic).ptr_type(Generic).into(),
         i32.ptr_type(Generic).into(),
         bool.ptr_type(Generic).into(),
         i32.into(),
@@ -251,7 +236,6 @@ pub(crate) fn construct_module<'a>(j:&mut Journal,  module_name: &str, ctx: &'a 
       None,
     ),
   };
-
   // Set all functions that are not part of the public interface to fastCC.
   fun.dispatch.set_call_conventions(fastCC);
   fun.internal_free_stack.set_call_conventions(fastCC);
@@ -263,7 +247,6 @@ pub(crate) fn construct_module<'a>(j:&mut Journal,  module_name: &str, ctx: &'a 
   fun.get_token_class_from_codepoint.set_call_conventions(fastCC);
   fun.get_adjusted_input_block.set_call_conventions(fastCC);
   fun.extend_stack_if_needed.set_call_conventions(fastCC);
-
   LLVMParserModule {
     builder,
     ctx,
@@ -282,70 +265,50 @@ pub(crate) fn construct_module<'a>(j:&mut Journal,  module_name: &str, ctx: &'a 
     _exe_engine: None,
   }
 }
-
 pub(crate) unsafe fn construct_emit_end_of_parse(module: &LLVMParserModule) -> SherpaResult<()> {
   let LLVMParserModule { builder: b, ctx, fun: funct, .. } = module;
-
   let i32 = ctx.i32_type();
   let bool = ctx.bool_type();
-
   let fn_value = funct.handle_eop;
-
   // Set the context's goto pointers to point to the goto block;
   let entry = ctx.append_basic_block(fn_value, "Entry");
   let success = ctx.append_basic_block(fn_value, "SuccessfulParse");
   let failure = ctx.append_basic_block(fn_value, "FailedParse");
-
   let parse_ctx = fn_value.get_nth_param(0)?.into_pointer_value();
-
   b.position_at_end(entry);
-
   // Update the active state to be inactive
   CTX::is_active.store(module, parse_ctx, bool.const_zero())?;
-
   let comparison = b.build_int_compare(
     inkwell::IntPredicate::NE,
     CTX::state.load(module, parse_ctx)?.into_int_value(),
     i32.const_int(FAIL_STATE_FLAG_LLVM as u64, false).into(),
     "",
   );
-
   b.build_conditional_branch(comparison, success, failure);
-
   b.position_at_end(success);
-
   b.build_return(Some(&module.ctx.i32_type().const_int(ParseActionType::Accept.into(), false)));
-
   b.position_at_end(failure);
-
   b.build_return(Some(&module.ctx.i32_type().const_int(ParseActionType::Error.into(), false)));
-
   if funct.handle_eop.verify(true) {
     SherpaResult::Ok(())
   } else {
     SherpaResult::Err(SherpaError::from("\n\nCould not build emit_eop function"))
   }
 }
-
 pub(crate) unsafe fn construct_get_adjusted_input_block_function(
   module: &LLVMParserModule,
 ) -> SherpaResult<()> {
   let LLVMParserModule { builder: b, ctx, fun: funct, .. } = module;
-
   let fn_value = funct.get_adjusted_input_block;
-
   // Set the context's goto pointers to point to the goto block;
   let attempt_extend = ctx.append_basic_block(fn_value, "Attempt_Extend");
-
   let parse_ctx = fn_value.get_nth_param(0)?.into_pointer_value();
   let input_ptr_ptr = fn_value.get_nth_param(1)?.into_pointer_value();
   let input_len_ptr = fn_value.get_nth_param(2)?.into_pointer_value();
   let input_truncated_ptr = fn_value.get_nth_param(3)?.into_pointer_value();
   let input_off = fn_value.get_nth_param(4)?.into_int_value();
   let requested_end_off = fn_value.get_nth_param(5)?.into_int_value();
-
   b.position_at_end(attempt_extend);
-
   let block = b
     .build_call(
       CallableValue::try_from(CTX::get_input_info.load(module, parse_ctx)?.into_pointer_value())?,
@@ -355,145 +318,104 @@ pub(crate) unsafe fn construct_get_adjusted_input_block_function(
     .try_as_basic_value()
     .left()?
     .into_struct_value();
-
   let input_ptr = b.build_extract_value(block, 0, "")?.into_pointer_value();
   let input_len = b.build_extract_value(block, 1, "")?.into_int_value();
   let truncated = b.build_extract_value(block, 2, "")?.into_int_value();
-
   b.build_store(input_ptr_ptr, input_ptr);
   b.build_store(input_len_ptr, input_len);
   b.build_store(input_truncated_ptr, truncated);
-
   b.build_return(None);
-
   if funct.get_adjusted_input_block.verify(true) {
     SherpaResult::Ok(())
   } else {
     SherpaResult::Err(SherpaError::from("\n\nCould not validate get_adjusted_input_block"))
   }
 }
-
 pub(crate) unsafe fn construct_drop(module: &LLVMParserModule) -> SherpaResult<()> {
   let LLVMParserModule { builder: b, ctx, fun: funct, .. } = module;
-
   let fn_value = funct.drop;
-
   let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
-
   b.position_at_end(ctx.append_basic_block(fn_value, "Entry"));
-
   build_fast_call(module, funct.internal_free_stack, &[parse_ctx.into()]);
-
   b.build_return(None);
-
   if funct.drop.verify(true) {
     SherpaResult::Ok(())
   } else {
     SherpaResult::Err(SherpaError::from("\n\nCould not validate drop"))
   }
 }
-
 pub(crate) unsafe fn construct_internal_free_stack(module: &LLVMParserModule) -> SherpaResult<()> {
   let LLVMParserModule { builder: b, ctx, types, fun: funct, .. } = module;
   let i32 = ctx.i32_type();
-
   let fn_value = funct.internal_free_stack;
-
   let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
-
   b.position_at_end(ctx.append_basic_block(fn_value, "Entry"));
   let empty_stack = ctx.append_basic_block(fn_value, "empty_stack");
   let free_stack = ctx.append_basic_block(fn_value, "free_stack");
-
   let goto_slot_count = CTX::goto_size.load(module, parse_ctx)?.into_int_value();
-
   let c = b.build_int_compare(inkwell::IntPredicate::NE, goto_slot_count, i32.const_zero(), "");
-
   b.build_conditional_branch(c, free_stack, empty_stack);
   b.position_at_end(free_stack);
-
   let goto_byte_size =
     b.build_left_shift(goto_slot_count, ctx.i32_type().const_int(4, false), "goto_byte_size");
   let goto_total_bytes_64 = b.build_int_cast(goto_byte_size, ctx.i64_type(), "");
-
   let goto_free = CTX::goto_free.load(module, parse_ctx)?.into_int_value();
   let goto_free_bytes =
     b.build_left_shift(goto_free, ctx.i32_type().const_int(4, false), "remaining_bytes");
-
   let goto_used_bytes = b.build_int_sub(goto_byte_size, goto_free_bytes, "goto_used_bytes");
   let goto_used_bytes_64 = b.build_int_cast(goto_used_bytes, ctx.i64_type(), "");
-
   let goto_top_ptr = CTX::goto_stack_ptr.load(module, parse_ctx)?.into_pointer_value();
   let goto_base_ptr_int = b.build_int_sub(
     b.build_ptr_to_int(goto_top_ptr, ctx.i64_type().into(), ""),
     goto_used_bytes_64,
     "goto_base",
   );
-
   let goto_base_ptr = b.build_int_to_ptr(
     goto_base_ptr_int,
     types.goto.ptr_type(inkwell::AddressSpace::Generic),
     "goto_base",
   );
-
   b.build_call(funct.free_stack, &[goto_base_ptr.into(), goto_total_bytes_64.into()], "");
-
   CTX::goto_size.store(module, parse_ctx, i32.const_zero());
-
   b.build_unconditional_branch(empty_stack);
-
   b.position_at_end(empty_stack);
-
   b.build_return(None);
-
   if funct.internal_free_stack.verify(true) {
     SherpaResult::Ok(())
   } else {
     SherpaResult::Err(SherpaError::from("\n\nCould not validate internal_free_stack"))
   }
 }
-
 pub(crate) unsafe fn construct_extend_stack_if_needed(
   module: &LLVMParserModule,
 ) -> SherpaResult<()> {
   let LLVMParserModule { builder: b, types, ctx, fun: funct, .. } = module;
   let i32 = ctx.i32_type();
-
   let fn_value = funct.extend_stack_if_needed;
   let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
   let needed_slot_count = fn_value.get_nth_param(1).unwrap().into_int_value();
-
   b.position_at_end(ctx.append_basic_block(fn_value, "Entry"));
-
   // Compare the number of needed slots with the number of available slots
   let goto_free = CTX::goto_free.load(module, parse_ctx)?.into_int_value();
-
   let comparison =
     b.build_int_compare(inkwell::IntPredicate::ULT, goto_free, needed_slot_count, "");
-
   let extend_block = ctx.append_basic_block(fn_value, "Extend");
   let update_block = ctx.append_basic_block(fn_value, "UpdateStack");
   let return_block = ctx.append_basic_block(fn_value, "Return");
-
   b.build_conditional_branch(comparison, extend_block, return_block);
-
   // If the difference is less than the amount requested:
   b.position_at_end(extend_block);
   // Create a new stack, copy data from old stack to new one
   // and, if the old stack was not the original stack,
   // delete the old stack.
-
   let goto_slot_count = CTX::goto_size.load(module, parse_ctx)?.into_int_value();
-
   let goto_byte_size =
     b.build_left_shift(goto_slot_count, ctx.i32_type().const_int(4, false), "goto_byte_size");
   let goto_free_bytes =
     b.build_left_shift(goto_free, ctx.i32_type().const_int(4, false), "remaining_bytes");
-
   let goto_used_bytes = b.build_int_sub(goto_byte_size, goto_free_bytes, "goto_used_bytes");
   let goto_used_bytes_64 = b.build_int_cast(goto_used_bytes, ctx.i64_type(), "");
   let goto_top_ptr = CTX::goto_stack_ptr.load(module, parse_ctx)?.into_pointer_value();
-
   let goto_base_ptr_int = b.build_int_sub(
     b.build_ptr_to_int(goto_top_ptr, ctx.i64_type().into(), ""),
     goto_used_bytes_64,
@@ -504,20 +426,17 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
     types.goto.ptr_type(inkwell::AddressSpace::Generic),
     "goto_base",
   );
-
   // create a size that is equal to the needed amount rounded up to the nearest 64bytes
   let new_slot_count = b.build_int_add(goto_slot_count, needed_slot_count, "new_size");
   let new_slot_count = b.build_left_shift(new_slot_count, i32.const_int(2, false), "new_size");
   let new_slot_byte_size =
     b.build_left_shift(new_slot_count, ctx.i32_type().const_int(4, false), "total_bytes");
   let new_slot_byte_size_64 = b.build_int_cast(new_slot_byte_size, ctx.i64_type(), "");
-
   let new_ptr = b
     .build_call(funct.allocate_stack, &[new_slot_byte_size_64.into()], "")
     .try_as_basic_value()
     .unwrap_left()
     .into_pointer_value();
-
   b.build_call(
     funct.memcpy,
     &[
@@ -529,13 +448,9 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
     ],
     "",
   );
-
   build_fast_call(module, funct.internal_free_stack, &[parse_ctx.into()]);
-
   b.build_unconditional_branch(update_block);
-
   b.position_at_end(update_block);
-
   let new_stack_top_ptr = b.build_ptr_to_int(new_ptr, ctx.i64_type(), "new_top");
   let new_stack_top_ptr = b.build_int_add(new_stack_top_ptr, goto_used_bytes_64, "new_top");
   let new_stack_top_ptr = b.build_int_to_ptr(
@@ -543,98 +458,69 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
     types.goto.ptr_type(inkwell::AddressSpace::Generic),
     "new_top",
   );
-
   CTX::goto_stack_ptr.store(module, parse_ctx, new_stack_top_ptr)?;
   CTX::goto_size.store(module, parse_ctx, new_slot_count)?;
-
   let slot_diff = b.build_int_sub(new_slot_count, goto_slot_count, "slot_diff");
   let new_remaining_count = b.build_int_add(slot_diff, goto_free, "remaining");
   CTX::goto_free.store(module, parse_ctx, new_remaining_count);
-
   b.build_unconditional_branch(return_block);
-
   b.position_at_end(return_block);
   b.build_return(Some(&i32.const_int(1, false)));
-
   if funct.extend_stack_if_needed.verify(true) {
     SherpaResult::Ok(())
   } else {
     SherpaResult::Err(SherpaError::from("\n\nCould not validate extend_stack_if_needed"))
   }
 }
-
 pub(crate) unsafe fn construct_init(module: &LLVMParserModule) -> SherpaResult<()> {
   let LLVMParserModule { builder, ctx, fun: funct, .. } = module;
-
   let i32 = ctx.i32_type();
-
   let fn_value = funct.init;
-
   let parse_ctx = fn_value.get_first_param().unwrap().into_pointer_value();
   let reader_ptr = fn_value.get_last_param().unwrap().into_pointer_value();
-
   builder.position_at_end(ctx.append_basic_block(fn_value, "Entry"));
-
   CTX::reader.store(module, parse_ctx, reader_ptr)?;
-
   CTX::goto_size.store(module, parse_ctx, i32.const_int(0, false))?;
-
   CTX::goto_free.store(module, parse_ctx, i32.const_int(0, false))?;
-
   CTX::state.store(module, parse_ctx, i32.const_int(NORMAL_STATE_FLAG_LLVM as u64, false))?;
-
   builder.build_return(None);
-
   if funct.init.verify(true) {
     SherpaResult::Ok(())
   } else {
     SherpaResult::Err(SherpaError::from("\n\nCould not validate init"))
   }
 }
-
 pub(crate) fn create_offset_label(offset: usize) -> String {
   format!("off_{:X}", offset)
 }
-
 pub(crate) unsafe fn construct_push_state_function(module: &LLVMParserModule) -> SherpaResult<()> {
   let LLVMParserModule { builder: b, types, ctx, fun: funct, .. } = module;
-
   let i32 = ctx.i32_type();
-
   let fn_value = funct.push_state;
-
   // Set the context's goto pointers to point to the goto block;
   let entry = ctx.append_basic_block(fn_value, "Entry");
-
   let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
   let goto_state = fn_value.get_nth_param(1).unwrap().into_int_value();
   let goto_pointer = fn_value.get_nth_param(2).unwrap().into_pointer_value();
-
   b.position_at_end(entry);
   let new_goto = b.build_insert_value(types.goto.get_undef(), goto_state, 1, "").unwrap();
   let new_goto = b.build_insert_value(new_goto, goto_pointer, 0, "").unwrap();
-
   let goto_top_ptr = CTX::goto_stack_ptr.get_ptr(module, parse_ctx)?;
   let goto_top = b.build_load(goto_top_ptr, "").into_pointer_value();
   b.build_store(goto_top, new_goto);
-
   let goto_top = b.build_gep(goto_top, &[i32.const_int(1, false)], "");
   b.build_store(goto_top_ptr, goto_top);
-
   let goto_free_ptr = CTX::goto_free.get_ptr(module, parse_ctx)?;
   let goto_free = b.build_load(goto_free_ptr, "").into_int_value();
   let goto_free = b.build_int_sub(goto_free, i32.const_int(1, false), "");
   b.build_store(goto_free_ptr, goto_free);
-
   b.build_return(None);
-
   if funct.push_state.verify(true) {
     SherpaResult::Ok(())
   } else {
     SherpaResult::Err(SherpaError::from("\n\nCould not validate push_state"))
   }
 }
-
 pub(crate) fn construct_utf8_lookup_function(module: &LLVMParserModule) -> SherpaResult<()> {
   let i32 = module.ctx.i32_type();
   let i8 = module.ctx.i8_type();
@@ -643,7 +529,6 @@ pub(crate) fn construct_utf8_lookup_function(module: &LLVMParserModule) -> Sherp
   let b = &module.builder;
   let funct = &module.fun;
   let fn_value = funct.get_utf8_codepoint_info;
-
   let input_ptr = fn_value.get_nth_param(0).unwrap().into_pointer_value();
   let block_entry = module.ctx.append_basic_block(fn_value, "Entry");
   let block_return_ascii = module.ctx.append_basic_block(fn_value, "return_ascii");
@@ -653,13 +538,10 @@ pub(crate) fn construct_utf8_lookup_function(module: &LLVMParserModule) -> Sherp
   let block_2bytes = module.ctx.append_basic_block(fn_value, "_2bytes");
   let block_invalid = module.ctx.append_basic_block(fn_value, "invalid");
   b.position_at_end(block_entry);
-
   let codepoint_info =
     b.build_insert_value(module.types.cp_info.get_undef(), zero, 0, "cp_info").unwrap();
   let codepoint_info_base = b.build_insert_value(codepoint_info, zero, 1, "cp_info").unwrap();
-
   // Determine number of leading bits set
-
   let byte = b.build_load(input_ptr, "header_byte").into_int_value();
   let invert = b.build_xor(byte, i8.const_int(255, false), "inverted_header_byte");
   let bit_count = b
@@ -671,29 +553,22 @@ pub(crate) fn construct_utf8_lookup_function(module: &LLVMParserModule) -> Sherp
     .try_as_basic_value()
     .unwrap_left()
     .into_int_value();
-
   let comparison =
     b.build_int_compare(inkwell::IntPredicate::EQ, bit_count, i8.const_int(0, false), "");
-
   b.build_conditional_branch(comparison, block_return_ascii, block_build_code_point);
-
   // --- Build ASCII Block
   b.position_at_end(block_return_ascii);
   // Insert the codepoint into the CP_INFO struct
   let codepoint_info =
     b.build_insert_value(codepoint_info_base, b.build_int_z_extend(byte, i32, ""), 0, "").unwrap();
-
   // Insert the codepoint byte length into the CP_INFO struct
   let codepoint_info =
     b.build_insert_value(codepoint_info, i32.const_int(1, false), 1, "").unwrap();
-
   b.build_return(Some(&codepoint_info));
-
   // --- Build CodePoint Block
   b.position_at_end(block_build_code_point);
   let off_ptr = b.build_alloca(i32, "offset_ptr");
   let val_ptr = b.build_alloca(i32, "val_ptr");
-
   let mask = b.build_right_shift(i8.const_int(255, false), bit_count, false, "mask");
   let base_val = b.build_and(byte, mask, "base_val");
   let val = b.build_int_z_extend(base_val, i32, "val_A");
@@ -704,7 +579,6 @@ pub(crate) fn construct_utf8_lookup_function(module: &LLVMParserModule) -> Sherp
     (i8.const_int(3, false), block_3bytes),
     (i8.const_int(4, false), block_4bytes),
   ]);
-
   // --- Build 4byte CP  block
   b.position_at_end(block_4bytes);
   let off = b.build_load(off_ptr, "off").into_int_value();
@@ -719,7 +593,6 @@ pub(crate) fn construct_utf8_lookup_function(module: &LLVMParserModule) -> Sherp
   b.build_store(val_ptr, val);
   b.build_store(off_ptr, off);
   b.build_unconditional_branch(block_3bytes);
-
   // --- Build 3byte CP  block
   b.position_at_end(block_3bytes);
   let off = b.build_load(off_ptr, "off").into_int_value();
@@ -734,7 +607,6 @@ pub(crate) fn construct_utf8_lookup_function(module: &LLVMParserModule) -> Sherp
   b.build_store(val_ptr, val);
   b.build_store(off_ptr, off);
   b.build_unconditional_branch(block_2bytes);
-
   // --- Build 2byte CP  block
   b.position_at_end(block_2bytes);
   let off = b.build_load(off_ptr, "off").into_int_value();
@@ -745,59 +617,44 @@ pub(crate) fn construct_utf8_lookup_function(module: &LLVMParserModule) -> Sherp
     .try_as_basic_value()
     .unwrap_left()
     .into_int_value();
-
   let byte_length = b.build_int_z_extend(bit_count, i32, "");
   let codepoint_info = b.build_insert_value(codepoint_info_base, val, 0, "").unwrap();
   let codepoint_info = b.build_insert_value(codepoint_info, byte_length, 1, "").unwrap();
-
   b.build_return(Some(&codepoint_info));
-
   // --- Build Invalid Block
   b.position_at_end(block_invalid);
-
   b.build_return(Some(&codepoint_info_base));
-
   if funct.get_utf8_codepoint_info.verify(true) {
     SherpaResult::Ok(())
   } else {
     SherpaResult::Err(SherpaError::from("\n\nCould not validate get_utf8_codepoint_info"))
   }
 }
-
 /// Constructs PublicFunctions::merge_utf8_part
 pub(crate) unsafe fn construct_merge_utf8_part_function(
   module: &LLVMParserModule,
 ) -> SherpaResult<()> {
   let i32 = module.ctx.i32_type();
-
   let b = &module.builder;
   let funct = &module.fun;
   let fn_value = funct.merge_utf8_part;
-
   let input_ptr = fn_value.get_nth_param(0).unwrap().into_pointer_value();
   let val = fn_value.get_nth_param(1).unwrap().into_int_value();
   let off = fn_value.get_nth_param(2).unwrap().into_int_value();
-
   let block_entry = module.ctx.append_basic_block(fn_value, "Entry");
   b.position_at_end(block_entry);
-
   let byte_ptr = b.build_gep(input_ptr, &[off], "byte_ptr");
   let byte = b.build_load(byte_ptr, "byte").into_int_value();
-
   let dword = b.build_int_z_extend(byte, i32, "dword");
   let dword = b.build_and(dword, i32.const_int(63, false), "dword");
-
   let cp = b.build_or(val, dword, "codepoint");
-
   b.build_return(Some(&cp));
-
   if fn_value.verify(true) {
     SherpaResult::Ok(())
   } else {
     SherpaResult::Err(SherpaError::from("\n\nCould not validate merge_utf8_part"))
   }
 }
-
 pub fn build_fast_call<'a, T>(
   module: &'a LLVMParserModule,
   callee_fun: T,
@@ -808,43 +665,31 @@ where
 {
   let call_site = module.builder.build_call(callee_fun, args, "FAST_CALL_SITE");
   call_site.set_call_convention(fastCC);
-
   SherpaResult::Ok(call_site)
 }
-
 pub(crate) unsafe fn construct_next_function<'a>(module: &'a LLVMParserModule) -> SherpaResult<()> {
   let LLVMParserModule { builder: b, ctx, fun, .. } = module;
-
   let fn_value = fun.next;
-
   b.position_at_end(ctx.append_basic_block(fn_value, "Entry"));
-
   let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
-
   let call_site = b.build_call(fun.dispatch, &[parse_ctx.into()], "");
-
   call_site.set_tail_call(false);
   call_site.set_call_convention(fastCC);
-
   b.build_return(Some(&call_site.try_as_basic_value().left()?.into_int_value()));
-
   if fun.next.verify(true) {
     SherpaResult::Ok(())
   } else {
     SherpaResult::Err(SherpaError::from("Could not build next function"))
   }
 }
-
 /// Compile a LLVM parser module from Hydrocarbon bytecode.
 pub fn compile_from_bytecode<'a>(
   module_name: &str,
-  j:&mut Journal,
+  j: &mut Journal,
   llvm_context: &'a Context,
   output: &BytecodeOutput,
 ) -> SherpaResult<LLVMParserModule<'a>> {
-
   let mut module = construct_module(j, module_name, &llvm_context);
-
   unsafe {
     construct_init(&mut module)?;
     construct_emit_end_of_parse(&mut module)?;
@@ -860,11 +705,9 @@ pub fn compile_from_bytecode<'a>(
     construct_drop(&mut module)?;
     construct_parse_function(j, &mut module, output)?;
   }
-
   module.fun.push_state.add_attribute(
     inkwell::attributes::AttributeLoc::Function,
     module.ctx.create_string_attribute("alwaysinline", ""),
   );
-
   SherpaResult::Ok(module)
 }

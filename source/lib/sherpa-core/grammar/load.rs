@@ -148,40 +148,6 @@ pub(crate) fn load_all(
   (grammars, errors)
 }
 
-#[test]
-fn test_load_all() {
-  let mut j = Journal::new(None);
-  let (grammars, errors) = load_all(
-    &mut j,
-    &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-      .join("../../../test/grammars/load.hcg")
-      .canonicalize()
-      .unwrap(),
-    10,
-  );
-
-  for err in &errors {
-    eprintln!("{}", err);
-  }
-  assert_eq!(grammars.len(), 2);
-  assert_eq!(errors.len(), 0);
-
-  let (grammars, errors) = load_all(
-    &mut j,
-    &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-      .join("../../../test/grammars/invalid_load.hcg")
-      .canonicalize()
-      .unwrap(),
-    10,
-  );
-
-  for err in &errors {
-    eprintln!("{}", err);
-  }
-  assert_eq!(grammars.len(), 1);
-  assert_eq!(errors.len(), 1);
-}
-
 /// Loads and parses a grammar file, returning the parsed grammar node and a vector of Import nodes.
 pub(crate) fn load_grammar(
   _j: &mut Journal,
@@ -204,27 +170,6 @@ pub(crate) fn load_grammar(
     },
     Err(err) => SherpaResult::Err(err.into()),
   }
-}
-
-#[test]
-fn test_load_grammar() {
-  let mut j = Journal::new(None);
-  let result = load_grammar(
-    &mut j,
-    &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../test_grammars/load.hcg"),
-  );
-
-  assert!(result.is_faulty());
-
-  let result = load_grammar(
-    &mut j,
-    &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-      .join("../../../test/grammars/load.hcg")
-      .canonicalize()
-      .unwrap(),
-  );
-
-  assert!(result.is_ok());
 }
 
 /// Resolves and verifies a grammar file path acquired from an `@IMPORT` statement exists.
@@ -269,34 +214,4 @@ pub(crate) fn resolve_grammar_path(
       _ => path.canonicalize()?,
     },
   )
-}
-
-#[test]
-fn test_resolve_cargo_file() {
-  let result = resolve_grammar_path(&Default::default(), &Default::default(), &[]);
-
-  assert!(result.is_faulty());
-
-  let result = resolve_grammar_path(
-    &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml"),
-    &Default::default(),
-    &[],
-  );
-
-  assert!(result.is_ok());
-
-  let result = resolve_grammar_path(
-    &PathBuf::from("./Cargo.toml"),
-    &PathBuf::from(env!("CARGO_MANIFEST_DIR")),
-    &[],
-  );
-
-  assert!(result.is_ok());
-
-  let result =
-    resolve_grammar_path(&PathBuf::from("./Cargo"), &PathBuf::from(env!("CARGO_MANIFEST_DIR")), &[
-      "toml",
-    ]);
-
-  assert!(result.is_ok());
 }

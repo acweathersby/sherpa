@@ -200,7 +200,6 @@ impl GraphNode {
     items: Vec<Item>,
     node_type: NodeType,
   ) -> Self {
-
     let mut node = GraphNode {
       edge_symbol: sym,
       transition_items: items,

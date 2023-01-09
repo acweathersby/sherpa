@@ -7,7 +7,6 @@ pub mod item;
 pub(crate) mod load;
 mod multitask;
 pub mod parse;
-mod parser_new;
 pub mod production;
 pub mod uuid;
 

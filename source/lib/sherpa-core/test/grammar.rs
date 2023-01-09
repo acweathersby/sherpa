@@ -1,18 +1,165 @@
 use crate::{
-  debug::debug_items,
+  compile::{
+    compile_ascript_ast,
+    compile_bytecode,
+    compile_grammar_ast,
+    compile_ir_ast,
+    compile_states,
+    compile_token_production_states,
+    optimize_ir_states,
+  },
+  debug::{debug_items, generate_disassembly},
   grammar::{
-    compile::{compile_grammars_into_store, convert_left_recursion_to_right},
+    compile::{compile_grammars_into_store, convert_left_recursion_to_right, pre_process_grammar},
     compile_grammar_from_path,
     compile_grammar_from_string,
     get_production_start_items,
-    load::load_all,
+    load::{load_all, load_grammar, resolve_grammar_path},
   },
-  journal::{report::ReportType, Journal},
+  journal::{report::ReportType, Journal, *},
   types::{RecursionType, SherpaErrorContainer, *},
   util::get_num_of_available_threads,
 };
 use lazy_static::__Deref;
-use std::{path::PathBuf, sync::Arc};
+use std::{io::Write, path::PathBuf, sync::Arc};
+
+#[test]
+fn test_load_all() {
+  let mut j = Journal::new(None);
+  let (grammars, errors) = load_all(
+    &mut j,
+    &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+      .join("../../../test/grammars/load.hcg")
+      .canonicalize()
+      .unwrap(),
+    10,
+  );
+
+  for err in &errors {
+    eprintln!("{}", err);
+  }
+  assert_eq!(grammars.len(), 2);
+  assert_eq!(errors.len(), 0);
+
+  let (grammars, errors) = load_all(
+    &mut j,
+    &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+      .join("../../../test/grammars/invalid_load.hcg")
+      .canonicalize()
+      .unwrap(),
+    10,
+  );
+
+  for err in &errors {
+    eprintln!("{}", err);
+  }
+  assert_eq!(grammars.len(), 1);
+  assert_eq!(errors.len(), 1);
+}
+
+#[test]
+fn test_load_grammar() {
+  let mut j = Journal::new(None);
+  let result = load_grammar(
+    &mut j,
+    &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../test_grammars/load.hcg"),
+  );
+
+  assert!(result.is_faulty());
+
+  let result = load_grammar(
+    &mut j,
+    &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+      .join("../../../test/grammars/load.hcg")
+      .canonicalize()
+      .unwrap(),
+  );
+
+  assert!(result.is_ok());
+}
+
+#[test]
+fn test_resolve_cargo_file() {
+  let result = resolve_grammar_path(&Default::default(), &Default::default(), &[]);
+
+  assert!(result.is_faulty());
+
+  let result = resolve_grammar_path(
+    &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml"),
+    &Default::default(),
+    &[],
+  );
+
+  assert!(result.is_ok());
+
+  let result = resolve_grammar_path(
+    &PathBuf::from("./Cargo.toml"),
+    &PathBuf::from(env!("CARGO_MANIFEST_DIR")),
+    &[],
+  );
+
+  assert!(result.is_ok());
+
+  let result =
+    resolve_grammar_path(&PathBuf::from("./Cargo"), &PathBuf::from(env!("CARGO_MANIFEST_DIR")), &[
+      "toml",
+    ]);
+
+  assert!(result.is_ok());
+}
+
+#[test]
+fn test_ir_trivial_state() {
+  let input = String::from("state [ A ] \n pass");
+
+  let result = compile_ir_ast(Vec::from(input.as_bytes()));
+
+  assert!(result.is_ok());
+}
+
+#[test]
+
+fn test_ir_trivial_branch_state() {
+  let input = String::from("state [ A ] assert TOKEN [ /* a */ 11 ] ( pass )");
+
+  let result = compile_ir_ast(Vec::from(input.as_bytes()));
+
+  assert!(result.is_ok());
+
+  print!("{:#?}", result.unwrap());
+}
+
+#[test]
+
+fn test_trivial_ascript_struct() {
+  let input = String::from(" { t_Type, t_Class, value: u32 } ");
+
+  let result = compile_ascript_ast(Vec::from(input.as_bytes()));
+
+  print!("{:#?}", result);
+
+  assert!(result.is_ok());
+}
+
+#[test]
+
+fn test_production_minimum() {
+  let input = String::from("\n<> a > b\n");
+
+  let result = compile_grammar_ast(Vec::from(input.as_bytes()));
+
+  assert!(result.is_ok());
+}
+
+#[test]
+
+fn test_production_with_generic_symbol() {
+  let input = String::from("\n<> a > g:sp\n");
+
+  let result = compile_grammar_ast(Vec::from(input.as_bytes()));
+
+  assert!(result.is_ok());
+}
 
 #[test]
 fn temp_test() {
@@ -171,4 +318,214 @@ fn processing_of_any_groups() {
 
     debug_items("A", get_production_start_items(&prod, &g), &g);
   }
+}
+
+#[test]
+fn test_compile_grammars_into_store() {
+  let mut j = Journal::new(None);
+  let (grammars, errors) = load_all(
+    &mut j,
+    &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+      .join("../../../test/grammars/load.hcg")
+      .canonicalize()
+      .unwrap(),
+    10,
+  );
+
+  let result = compile_grammars_into_store(&mut j, grammars);
+
+  assert!(result.is_ok());
+
+  match result {
+    SherpaResult::Ok((Some(grammar), _)) => {
+      dbg!(grammar);
+    }
+    SherpaResult::Ok((_, Some(errors))) => {
+      for err in errors {
+        eprintln!("{}", err);
+      }
+      panic!("Errors occurred while compiling")
+    }
+    _ => {}
+  }
+}
+
+#[test]
+fn test_pre_process_grammar() {
+  let mut j = Journal::new(None);
+  let grammar = String::from(
+      "\n@IMPORT ./test/me/out.hcg as bob 
+      <> a > tk:p?^test a(+,) ( \\1234 | t:sp? ( sp | g:sym g:sp ) f:r { basalt } ) \\nto <> b > tk:p p ",
+  );
+
+  if let Ok(grammar) = compile_grammar_ast(Vec::from(grammar.as_bytes())) {
+    let (_, errors) =
+      pre_process_grammar(&mut j, &grammar, &PathBuf::from("/test"), "test", Default::default());
+
+    for error in &errors {
+      eprintln!("{}", error);
+    }
+
+    assert_eq!(errors.len(), 1);
+  } else {
+    panic!("Failed to parse and produce an AST of '<> a > b'");
+  }
+}
+
+#[test]
+fn build_grammar_parser() -> SherpaResult<()> {
+  let input_file = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    .join("../../../test/e2e/bootstrap/grammar/grammar.hcg")
+    .canonicalize()
+    .unwrap();
+
+  let mut output_file = input_file.clone();
+  output_file.pop();
+  output_file.push("grammar.sherpa.bytecode");
+
+  let mut j = Journal::new(None);
+
+  GrammarStore::from_path(&mut j, input_file).unwrap();
+
+  if let SherpaResult::Ok(states) = compile_states(&mut j, 10) {
+    let pre_opt_length = states.len();
+    //
+    let mut states = optimize_ir_states(&mut j, states);
+    let post_opt_length = states.len();
+    //
+    let output = compile_bytecode(&mut j, states);
+
+    let disassembly = generate_disassembly(&output, Some(&mut j));
+
+    eprintln!("{}", disassembly);
+
+    if let Ok(mut parser_data_file) = std::fs::File::create(&output_file) {
+      parser_data_file.write_all(&disassembly.as_bytes()).unwrap();
+      parser_data_file.flush().unwrap();
+    }
+  } else {
+    j.flush_reports();
+    j.debug_error_report();
+  }
+
+  SherpaResult::Ok(())
+}
+
+#[test]
+
+fn test_compile_test_grammar() {
+  let mut j = Journal::new(None);
+  let g = GrammarStore::from_str(
+    &mut j,
+    "
+        <> A > B 
+        <> B > C
+        <> C > D
+        <> D > E
+        <> E > B A | t:g",
+  )
+  .unwrap();
+
+  assert_eq!(g.id.path.as_os_str().to_str().unwrap(), "/internal/");
+}
+
+#[test]
+fn test_get_default_production() {
+  let mut j = Journal::new(None);
+  let g = GrammarStore::from_str(
+    &mut j,
+    "
+@EXPORT start as test
+
+<> start > \\hello \\and end
+
+<> end > \\goodby
+",
+  )
+  .unwrap();
+
+  let exported_productions = g.get_exported_productions();
+  let first = exported_productions.first().unwrap();
+
+  assert_eq!(first.production.name, "start");
+
+  assert_eq!(first.export_name, "test");
+}
+
+#[test]
+
+fn test_get_production_plain_name() {
+  let mut j = Journal::new(None);
+  let g = GrammarStore::from_str(&mut j, "<>billofolious_tantimum^a>\\o").unwrap();
+
+  let prod = g.get_production_id_by_name("billofolious_tantimum").unwrap();
+
+  assert_eq!(g.get_production_plain_name(&prod), "billofolious_tantimum");
+
+  assert_ne!(g.get_production(&prod).unwrap().guid_name, "billofolious_tantimum");
+}
+
+#[test]
+
+fn test_get_production_by_name() {
+  let mut j = Journal::new(None);
+  let g = GrammarStore::from_str(
+    &mut j,
+    "
+      <> Apple > \\o
+      <> Bad_Cakes > \\b
+      ",
+  )
+  .unwrap();
+
+  assert!(g.get_production_id_by_name("Apple").is_some());
+
+  assert!(g.get_production_id_by_name("Bad_Cakes").is_some());
+
+  assert!(g.get_production_id_by_name("Bandible").is_none());
+}
+
+#[test]
+
+fn test_is_production_recursive() {
+  let mut j = Journal::new(None);
+  let g = GrammarStore::from_str(
+    &mut j,
+    "
+      <> A > B 
+      <> B > C
+      <> C > D
+      <> D > E
+      <> E > B A R | \\e
+      <> R > R A | R B O | \\r
+      <> O > \\o
+      ",
+  )
+  .unwrap();
+
+  let production = g.get_production_id_by_name("A").unwrap();
+
+  assert_eq!(g.get_production_recursion_type(production), RecursionType::RIGHT);
+
+  let production = g.get_production_id_by_name("R").unwrap();
+
+  assert!(g
+    .get_production_recursion_type(production)
+    .contains(RecursionType::LEFT_DIRECT | RecursionType::RIGHT));
+
+  let production = g.get_production_id_by_name("B").unwrap();
+
+  assert!(g
+    .get_production_recursion_type(production)
+    .contains(RecursionType::LEFT_INDIRECT | RecursionType::RIGHT));
+
+  let production = g.get_production_id_by_name("C").unwrap();
+
+  assert!(g
+    .get_production_recursion_type(production)
+    .contains(RecursionType::LEFT_INDIRECT | RecursionType::RIGHT));
+
+  let production = g.get_production_id_by_name("O").unwrap();
+
+  assert_eq!(g.get_production_recursion_type(production), RecursionType::NONE);
 }
