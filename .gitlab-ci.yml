@@ -1,4 +1,4 @@
-image: sherpa-build
+image: ${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/sherpa-build
 
 stages:
   - test
