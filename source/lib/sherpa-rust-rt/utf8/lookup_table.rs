@@ -4,12 +4,12 @@ pub type CharLUType = [u8; JMPTBLE_BYTE_SIZE];
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub enum CodePointClass {
-  Any        = 1,
-  Symbol     = 2,
+  Any = 1,
+  Symbol = 2,
   Identifier = 3,
-  Number     = 4,
-  NewLine    = 5,
-  Space      = 6,
+  Number = 4,
+  NewLine = 5,
+  Space = 6,
   HorizontalTab = 7,
   UnicodeIdStart = 32,
   UnicodeIdCont = 64,

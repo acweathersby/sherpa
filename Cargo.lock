@@ -615,15 +615,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "test-bytecode-parser"
-version = "0.0.0"
-dependencies = [
- "criterion",
- "sherpa",
- "sherpa_runtime",
-]
-
-[[package]]
 name = "test-proc-macro"
 version = "0.0.0"
 dependencies = [

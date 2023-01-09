@@ -15,7 +15,7 @@ use super::SherpaResult;
 #[derive(PartialEq, Eq, Debug, Clone, Copy, Hash, PartialOrd, Ord)]
 pub(crate) struct ItemState {
   current_lane: u32,
-  prev_lane:    u32,
+  prev_lane: u32,
 
   /// An index to the original object that produced this item, be it a production, a symbol,
   /// or undefined
@@ -173,10 +173,10 @@ impl OriginData {
 #[repr(C, align(64))]
 #[derive(PartialEq, Eq, Debug, Clone, Copy, Hash, PartialOrd, Ord)]
 pub(crate) struct Item {
-  rule:  RuleId,
+  rule: RuleId,
   state: ItemState,
-  len:   u8,
-  off:   u8,
+  len: u8,
+  off: u8,
 }
 
 impl Item {
@@ -273,12 +273,7 @@ impl Item {
 
   #[inline(always)]
   pub fn to_null(&self) -> Self {
-    Item {
-      len:   0,
-      rule:  RuleId::default(),
-      off:   0,
-      state: self.state.to_null(),
-    }
+    Item { len: 0, rule: RuleId::default(), off: 0, state: self.state.to_null() }
   }
 
   /// Create an Item from a rule_id and a grammar store. Returns
@@ -339,12 +334,7 @@ impl Item {
 
   pub fn increment(&self) -> Option<Item> {
     if !self.completed() {
-      Some(Item {
-        len:   self.len,
-        off:   self.off + 1,
-        rule:  self.rule,
-        state: self.state,
-      })
+      Some(Item { len: self.len, off: self.off + 1, rule: self.rule, state: self.state })
     } else {
       None
     }
@@ -362,12 +352,7 @@ impl Item {
 
   pub fn decrement(&self) -> Option<Item> {
     if !self.is_start() {
-      Some(Item {
-        len:   self.len,
-        off:   self.off - 1,
-        rule:  self.rule,
-        state: self.state,
-      })
+      Some(Item { len: self.len, off: self.off - 1, rule: self.rule, state: self.state })
     } else {
       None
     }
@@ -470,9 +455,9 @@ impl Item {
 impl From<&Rule> for Item {
   fn from(rule: &Rule) -> Self {
     Item {
-      rule:  rule.id,
-      len:   rule.len as u8,
-      off:   0,
+      rule: rule.id,
+      len: rule.len as u8,
+      off: 0,
       state: ItemState::default(),
     }
   }
@@ -480,15 +465,15 @@ impl From<&Rule> for Item {
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Copy)]
 pub(crate) struct LinkedItem {
-  pub item:         Item,
+  pub item: Item,
   pub closure_node: MaybeNodeId,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct LinkedItemWithGoto {
-  pub item:         Item,
+  pub item: Item,
   pub closure_node: MaybeNodeId,
-  pub goto_items:   Items,
+  pub goto_items: Items,
 }
 
 pub(crate) struct FollowItemGroups {
@@ -516,9 +501,9 @@ impl FollowItemGroups {
 impl Into<LinkedItemWithGoto> for LinkedItem {
   fn into(self) -> LinkedItemWithGoto {
     LinkedItemWithGoto {
-      item:         self.item,
+      item: self.item,
       closure_node: self.closure_node,
-      goto_items:   Default::default(),
+      goto_items: Default::default(),
     }
   }
 }
@@ -543,6 +528,10 @@ pub(crate) trait ItemContainer:
 
   fn completed_items(self) -> Self {
     self.into_iter().filter(|i| i.completed()).collect()
+  }
+
+  fn uncompleted_items(self) -> Self {
+    self.into_iter().filter(|i| !i.completed()).collect()
   }
 
   fn to_origin_only_state(self) -> Self {

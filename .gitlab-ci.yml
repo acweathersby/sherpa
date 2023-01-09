@@ -1,7 +1,17 @@
-image: rust:1.66-buster
+image: rust-lang/rust:nightly
 
 stages:
+  - test
   - build
+
+test_sherpa_packages:
+  stage: test
+
+  rules:
+    - when: always
+
+  script:
+    - cargor
 
 build_sherpa_packages:
   stage: build
