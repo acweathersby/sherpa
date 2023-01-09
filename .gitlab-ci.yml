@@ -11,7 +11,7 @@ test_sherpa_packages:
     - when: always
 
   script:
-    - cargor
+    - cargo test --workspace
 
 build_sherpa_packages:
   stage: build
