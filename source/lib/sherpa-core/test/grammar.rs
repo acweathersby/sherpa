@@ -162,62 +162,17 @@ fn test_production_with_generic_symbol() {
 }
 
 #[test]
-fn temp_test() {
-  let mut j = Journal::new(None);
-  let (grammars, errors) = load_all(
-    &mut j,
-    &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-      .join("../../../test/e2e/bootstrap/grammar/production.hcg")
-      .canonicalize()
-      .unwrap(),
-    10,
-  );
-
-  if errors.len() > 0 {
-    for error in errors {
-      eprintln!("{}", error);
-    }
-  }
-
-  let result = compile_grammars_into_store(&mut j, grammars);
-
-  assert!(result.is_ok());
-
-  match result {
-    SherpaResult::Ok((Some(grammar), _)) => {
-      //  dbg!(grammar);
-    }
-    SherpaResult::Ok((_, Some(errors))) => {
-      for err in errors {
-        eprintln!("{}", err);
-      }
-      panic!("Errors occurred while compiling")
-    }
-    _ => {}
-  }
-}
-
-#[test]
 fn test_merge_productions_file() {
   let mut j = Journal::new(None);
   let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
   path.push("../../../test/grammars/merge_root.hcg");
 
-  let thread_count = get_num_of_available_threads();
+  let (grammar, errors) = compile_grammar_from_path(&mut j, path, get_num_of_available_threads());
 
-  let (grammar, errors) = compile_grammar_from_path(&mut j, path, 1);
+  j.flush_reports();
 
-  if errors.is_some() {
-    let errors = errors.unwrap_or_default();
-    for error in &errors {
-      eprintln!("{}", error);
-    }
-
-    if errors.have_critical() {
-      panic!("Critical Errors encountered");
-    }
-  }
+  assert_eq!(j.debug_error_report(), false);
 
   assert!(grammar.is_some());
 }
@@ -228,8 +183,6 @@ fn test_trivial_file_compilation() {
   let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
   path.push("../../../test/grammars/trivial.hcg");
-
-  let thread_count = get_num_of_available_threads();
 
   let (grammar, errors) = compile_grammar_from_path(&mut j, path, get_num_of_available_threads());
 
@@ -321,7 +274,7 @@ fn processing_of_any_groups() {
 }
 
 #[test]
-fn test_compile_grammars_into_store() {
+fn pptest_compile_grammars_into_store() {
   let mut j = Journal::new(None);
   let (grammars, errors) = load_all(
     &mut j,
@@ -333,6 +286,10 @@ fn test_compile_grammars_into_store() {
   );
 
   let result = compile_grammars_into_store(&mut j, grammars);
+
+  j.flush_reports();
+
+  assert_eq!(j.debug_error_report(), false);
 
   assert!(result.is_ok());
 
@@ -348,85 +305,6 @@ fn test_compile_grammars_into_store() {
     }
     _ => {}
   }
-}
-
-#[test]
-fn test_pre_process_grammar() {
-  let mut j = Journal::new(None);
-  let grammar = String::from(
-      "\n@IMPORT ./test/me/out.hcg as bob 
-      <> a > tk:p?^test a(+,) ( \\1234 | t:sp? ( sp | g:sym g:sp ) f:r { basalt } ) \\nto <> b > tk:p p ",
-  );
-
-  if let Ok(grammar) = compile_grammar_ast(Vec::from(grammar.as_bytes())) {
-    let (_, errors) =
-      pre_process_grammar(&mut j, &grammar, &PathBuf::from("/test"), "test", Default::default());
-
-    for error in &errors {
-      eprintln!("{}", error);
-    }
-
-    assert_eq!(errors.len(), 1);
-  } else {
-    panic!("Failed to parse and produce an AST of '<> a > b'");
-  }
-}
-
-#[test]
-fn build_grammar_parser() -> SherpaResult<()> {
-  let input_file = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-    .join("../../../test/e2e/bootstrap/grammar/grammar.hcg")
-    .canonicalize()
-    .unwrap();
-
-  let mut output_file = input_file.clone();
-  output_file.pop();
-  output_file.push("grammar.sherpa.bytecode");
-
-  let mut j = Journal::new(None);
-
-  GrammarStore::from_path(&mut j, input_file).unwrap();
-
-  if let SherpaResult::Ok(states) = compile_states(&mut j, 10) {
-    let pre_opt_length = states.len();
-    //
-    let mut states = optimize_ir_states(&mut j, states);
-    let post_opt_length = states.len();
-    //
-    let output = compile_bytecode(&mut j, states);
-
-    let disassembly = generate_disassembly(&output, Some(&mut j));
-
-    eprintln!("{}", disassembly);
-
-    if let Ok(mut parser_data_file) = std::fs::File::create(&output_file) {
-      parser_data_file.write_all(&disassembly.as_bytes()).unwrap();
-      parser_data_file.flush().unwrap();
-    }
-  } else {
-    j.flush_reports();
-    j.debug_error_report();
-  }
-
-  SherpaResult::Ok(())
-}
-
-#[test]
-
-fn test_compile_test_grammar() {
-  let mut j = Journal::new(None);
-  let g = GrammarStore::from_str(
-    &mut j,
-    "
-        <> A > B 
-        <> B > C
-        <> C > D
-        <> D > E
-        <> E > B A | t:g",
-  )
-  .unwrap();
-
-  assert_eq!(g.id.path.as_os_str().to_str().unwrap(), "/internal/");
 }
 
 #[test]

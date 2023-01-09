@@ -12,22 +12,20 @@ fn ir_parser_build() -> SherpaResult<()> {
   let g = GrammarStore::from_path(
     &mut j,
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-      .join("../../../test/e2e/bootstrap/grammar/ir_base.hcg")
-      .canonicalize()
-      .unwrap(),
-  )
-  .unwrap();
+      .join("./test/bootstrap/grammar/ir_base.hcg")
+      .canonicalize()?,
+  );
+  j.flush_reports();
+  assert!(!j.debug_error_report());
+  let g = g.unwrap();
 
-  let states = compile_states(&mut j, 10)?;
-  let pre_opt_length = states.len();
+  let states = compile_states(&mut j, 1)?;
 
-  let mut states = optimize_ir_states(&mut j, states);
-  let post_opt_length = states.len();
+  let states = optimize_ir_states(&mut j, states);
 
   compile_bytecode(&mut j, states);
 
-  j.flush_reports();
-  j.debug_print_reports(ReportType::Any);
+  assert!(!j.debug_error_report());
 
   SherpaResult::Ok(())
 }

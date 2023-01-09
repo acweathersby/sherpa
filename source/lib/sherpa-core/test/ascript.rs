@@ -13,37 +13,6 @@ use crate::{
 };
 
 #[test]
-fn test_temp() {
-  use std::{io::Write, path::PathBuf, vec};
-  let mut j = Journal::new(None);
-  let g = GrammarStore::from_path(
-    &mut j,
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-      .join("../../../test/e2e/bootstrap/grammar/ir.hcg")
-      .canonicalize()
-      .unwrap(),
-  )
-  .unwrap();
-  let mut ascript = AScriptStore::new(g).unwrap();
-
-  let mut writer = StringBuffer::new(vec![]);
-
-  crate::ascript::rust::write(&ascript, &mut writer).unwrap();
-
-  let out_file =
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../test/e2e/bootstrap/ir.rs");
-
-  if let Ok(mut parser_data_file) = std::fs::File::create(&out_file) {
-    parser_data_file
-      .write_all(&String::from_utf8(writer.into_output()).unwrap().as_bytes())
-      .unwrap();
-    parser_data_file.flush().unwrap();
-  }
-
-  // eprintln!("{}", String::from_utf8(writer.into_output()).unwrap());
-}
-
-#[test]
 fn test_grammar_imported_grammar() {
   let mut j = Journal::new(None);
   let g = GrammarStore::from_path(

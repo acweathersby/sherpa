@@ -397,13 +397,13 @@ pub fn generate_scanner_production_with_recursion() -> SherpaResult<()> {
 }
 
 #[test]
-fn test_construct_LR() -> SherpaResult<()> {
+fn construct_LR() -> SherpaResult<()> {
   let mut j = Journal::new(None);
   let g = GrammarStore::from_str(
     &mut j,
     " @IGNORE g:sp 
 
-        <> A > X\\c
+        <> A > X \\c
              | Y \\d
 
         <> X > \\x X?

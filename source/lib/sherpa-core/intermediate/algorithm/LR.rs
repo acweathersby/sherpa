@@ -124,7 +124,7 @@ pub(super) fn construct_inline_LR(
         // Get the follow for each node.
         let end_items = end_items
           .into_iter()
-          .map(|i| i.to_origin_only_state())
+          //.map(|i| i.to_origin_only_state())
           .collect::<ItemSet>()
           .into_iter()
           .map(|i| (i, get_follow_items(t, &i, Some(parent_index))))

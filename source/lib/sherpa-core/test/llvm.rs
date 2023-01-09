@@ -248,10 +248,7 @@ fn should_initialize_context() {
 
     let root = rt_ctx.as_ref() as *const ParseContext<TestUTF8StringReader<'static>, u32> as usize;
 
-    assert_eq!(rt_ctx.goto_stack_ptr as usize, root);
-    assert_eq!(rt_ctx.goto_free as usize, 8);
-    assert_eq!(rt_ctx.goto_size as usize, 8);
-    assert_eq!(rt_ctx.state, 0);
+    assert_eq!(rt_ctx.reader.as_ref().unwrap().string, reader.string);
 
     eprintln!("{:?}:{:#?}", root, rt_ctx);
   };

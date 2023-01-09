@@ -353,20 +353,21 @@ pub(crate) fn peek(
             && !t.peek_ids.insert(hash_id_value_u64(items.clone().to_empty_state().to_set()))
           {
             // Item set has been repeated
-            let goal_items = get_goal_contents(&items, &goals);
-            let lr_starts = goal_items.clone().into_iter().flatten().cloned().collect::<Vec<_>>();
+            let lr_starts = get_goal_items(&items, &goals);
+            //let lr_starts = goal_items.clone().into_iter().flatten().cloned().collect::<Vec<_>>();
+
             // We can try to disambiguating using LR parsing:
 
             // create the root node for the start items
             let root_node = create_node(
               t,
               sym,
-              convert_origins(&lr_starts, &goals),
+              lr_starts.clone(),
               get_node_type(j, t),
               get_edge_type(j, t, peek_depth),
               Some(par_id),
               Some(par_id),
-              convert_origins(&lr_starts, &goals),
+              lr_starts.clone().non_term_items(g),
             );
 
             match construct_inline_LR(t, j, root_node) {
@@ -386,7 +387,7 @@ pub(crate) fn peek(
                   lr_starts.as_vec().non_term_items(g),
                 );
 
-                for goal_items in goal_items {
+                for goal_item in lr_starts.iter() {
                   let fork_base = create_and_insert_node(
                     t,
                     sym,
@@ -400,7 +401,7 @@ pub(crate) fn peek(
 
                   t.queue_node(ProcessGroup {
                     node_index:   fork_base,
-                    items:        goal_items.clone(),
+                    items:        vec![*goal_item],
                     discriminant: None,
                     depth:        global_depth,
                   });

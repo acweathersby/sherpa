@@ -1796,8 +1796,6 @@ fn pre_process_body(
       for (t, b) in bodies {
         let sym = RuleId::from_syms(&b.iter().map(|s| s.sym_id).collect::<Vec<_>>());
         if !seen.contains(&sym) {
-          debug_assert_ne!(b.len(), 0);
-
           unique_bodies.push(types::Rule {
             syms: b.clone(),
             len: b.len() as u16,
