@@ -1,0 +1,13 @@
+image: rust:1.66-buster
+
+stages:
+  - build
+
+build_sherpa_packages:
+  stage: build
+
+  rules:
+    - when: always
+
+  script:
+    - echo "Hello World"
