@@ -69,11 +69,7 @@ pub(crate) fn construct_recursive_descent(
   let lane_items: Items = start_items
     .into_iter()
     .map(|item| {
-      if j.config().enable_breadcrumb_parsing || is_scanner {
         item.to_state(item.get_state().to_lane(t.increment_lane(1)).to_curr_lane())
-      } else {
-        item
-      }
     })
     .collect();
 

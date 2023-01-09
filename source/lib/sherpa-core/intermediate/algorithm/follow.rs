@@ -113,8 +113,10 @@ pub(super) fn get_follow_items(
           if __print_debug__ {
             eprintln!("no closure for Node [{:?}] - Selecting previous node", current_node);
           }
-          completed_items
-            .push_back((state, LinkedItem { item: completed_item, closure_node: Some(prev_node) }));
+          completed_items.push_back((state, LinkedItem {
+            item:         completed_item,
+            closure_node: Some(prev_node),
+          }));
         }
         (completed_item, true, None, Some(root_node)) => {
           debug_assert!(
@@ -123,7 +125,7 @@ pub(super) fn get_follow_items(
           );
           if t.item_is_goal(completed_item) {
             fin_items.insert(LinkedItem {
-              item: completed_item.to_origin_only_state(),
+              item:         completed_item.to_origin_only_state(),
               closure_node: None,
             });
           }
@@ -143,10 +145,10 @@ pub(super) fn get_follow_items(
           let null_items: Items = closure.drain_filter(|i| i.is_null()).collect();
           if !null_items.is_empty() {
             for null_item in null_items {
-              completed_items.push_back((
-                null_item.get_state().to_prev_lane(),
-                LinkedItem { item: completed_item, closure_node: Some(current_node) },
-              ));
+              completed_items.push_back((null_item.get_state().to_prev_lane(), LinkedItem {
+                item:         completed_item,
+                closure_node: Some(current_node),
+              }));
             }
           } else {
             let mut uncompleted_items = closure.try_increment();
@@ -223,21 +225,23 @@ pub(super) fn get_follow_items(
                   );
 
                   // Preserve
-                  intermediate
-                    .insert(LinkedItem { item: forked_item, closure_node: Some(current_node) });
+                  intermediate.insert(LinkedItem {
+                    item:         forked_item,
+                    closure_node: Some(current_node),
+                  });
                 } else {
                   // Let the item "fall into" the previous state's closure
-                  completed_items.push_back((
-                    original_state,
-                    LinkedItem { item: forked_item, closure_node: prev_node },
-                  ));
+                  completed_items.push_back((original_state, LinkedItem {
+                    item:         forked_item,
+                    closure_node: prev_node,
+                  }));
                 }
               }
             }
 
             for item in uncompleted_items {
               out.insert(LinkedItem {
-                item: item.to_local_state(),
+                item:         item.to_local_state(),
                 closure_node: Some(current_node),
               });
             }

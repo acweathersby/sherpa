@@ -180,7 +180,7 @@ pub(crate) struct GraphNode {
   /// The type of scan action that is performed while
   /// traversing towards this node.
   pub edge_type: EdgeType,
-  _impl: u8,
+  _impl:         u8,
 }
 
 impl GraphNode {
@@ -200,6 +200,7 @@ impl GraphNode {
     items: Vec<Item>,
     node_type: NodeType,
   ) -> Self {
+
     let mut node = GraphNode {
       edge_symbol: sym,
       transition_items: items,
@@ -290,10 +291,10 @@ pub(crate) type TPackResults = (TransitionGraph, Vec<SherpaError>);
 
 #[derive(Debug, Default)]
 pub(crate) struct ProcessGroup {
-  pub node_index: NodeId,
-  pub items: Vec<Item>,
+  pub node_index:   NodeId,
+  pub items:        Vec<Item>,
   pub discriminant: Option<(SymbolID, Vec<Item>)>,
-  pub depth: usize,
+  pub depth:        usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
@@ -343,7 +344,7 @@ pub(crate) struct TransitionGraph {
   closure_links: HashMap<Item, Item>,
 
   pub accept_items: ItemSet,
-  lane_counter: u32,
+  lane_counter:     u32,
 }
 
 impl TransitionGraph {

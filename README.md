@@ -8,6 +8,10 @@ It provides a flexible way to defining parsers through GRAMMAR, AST, and IR code
 
 ## Usage 
 
+> Sherpa compiler requires an installation of the LLVM library to build native 
+> parsers. Please review the [LLVM parsers guide](./doc/llvm_parser_guide.md) to make sure you're able to build
+> these type of parsers. 
+
 Currently Sherpa is only available as a direct download of the Github Repo . It can be included in existing cargo projects by adding the following to the Cargo.toml file:
 
 ```toml
