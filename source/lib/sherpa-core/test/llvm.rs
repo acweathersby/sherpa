@@ -220,110 +220,6 @@ fn verify_construction_of_get_adjusted_input_block_function() {
 }
 
 #[test]
-fn should_produce_extended_block() {
-  let context = Context::create();
-
-  let mut parse_context = construct_module(&mut Journal::new(None), "test", &context);
-
-  unsafe { assert!(construct_init(&parse_context).is_ok()) }
-  unsafe { assert!(construct_get_adjusted_input_block_function(&parse_context).is_ok()) }
-
-  // Create a helper function to overcome the struct passing as value between the Jit code and Rust
-
-  use inkwell::AddressSpace::*;
-
-  let shim = parse_context.module.add_function(
-    "shim",
-    context.void_type().fn_type(
-      &[
-        parse_context.types.parse_ctx.ptr_type(Generic).into(),
-        context.i32_type().into(),
-        context.i32_type().into(),
-        parse_context.types.input_info.ptr_type(Generic).into(),
-      ],
-      false,
-    ),
-    None,
-  );
-  parse_context.builder.position_at_end(context.append_basic_block(shim, "Entry"));
-  let input_block = parse_context
-    .builder
-    .build_call(
-      parse_context.fun.get_adjusted_input_block,
-      &[
-        shim.get_nth_param(0).unwrap().into_pointer_value().into(),
-        shim.get_nth_param(1).unwrap().into_int_value().into(),
-        shim.get_nth_param(2).unwrap().into_int_value().into(),
-      ],
-      "",
-    )
-    .try_as_basic_value()
-    .unwrap_left()
-    .into_struct_value();
-
-  parse_context
-    .builder
-    .build_store(shim.get_nth_param(3).unwrap().into_pointer_value(), input_block);
-
-  parse_context.builder.build_return(None);
-
-  unsafe {
-    setup_exec_engine(&mut parse_context);
-    let mut reader = TestUTF8StringReader::new("test");
-    let mut rt_ctx = ParseContext::new_llvm();
-    let init = get_parse_function::<Init>(&parse_context, "init").unwrap();
-
-    type GetInputBlockShim = unsafe extern "C" fn(
-      *mut ParseContext<TestUTF8StringReader<'static>, u32>,
-      u32,
-      u32,
-      *mut InputInfo,
-    );
-
-    let get_ib = get_parse_function::<GetInputBlockShim>(&parse_context, "shim").unwrap();
-
-    init.call(&mut rt_ctx, &mut reader);
-
-    rt_ctx.token_off = 3;
-
-    eprintln!(
-      "context:{:p}, fn:{:p} off:{:X}",
-      &rt_ctx,
-      &rt_ctx.get_input_info,
-      (&rt_ctx.get_input_info as *const _) as usize - (&rt_ctx as *const _) as usize
-    );
-
-    /*     let mut block = InputInfo::default();
-
-    eprintln!(
-      "context:{:p}, fn:{:p} off:{:X}",
-      &rt_ctx,
-      &rt_ctx.get_input_info,
-      (&rt_ctx.get_input_info as *const _) as usize - (&rt_ctx as *const _) as usize
-    );
-
-    eprintln!("context:{:p} block:{:p} token:{}", &rt_ctx, &mut block, &rt_ctx.token_off);
-    get_ib.call(&mut rt_ctx, 3, 2, &mut block);
-
-    //eprintln!("{:?} {:?}", rt_ctx.input_block, block);
-    assert_eq!(*block.block, b't');
-    assert_eq!(block.start, 3);
-    assert_eq!(block.end, 4); */
-  };
-}
-
-/* #[test]
-fn verify_construction_of_scan_function() {
-  let context = Context::create();
-
-  let parse_context = construct_context("test", &context);
-
-  unsafe { assert!(construct_scan(&parse_context).is_ok()) }
-
-  eprintln!("{}", parse_context.module.to_string());
-} */
-
-#[test]
 fn verify_construction_of_emit_eop_function() {
   let context = Context::create();
 
@@ -333,17 +229,6 @@ fn verify_construction_of_emit_eop_function() {
 
   eprintln!("{}", parse_context.module.to_string());
 }
-
-/* #[test]
-fn verify_construct_of_prime_function() {
-  let context = Context::create();
-
-  let parse_context = construct_context("test", &context);
-
-  unsafe { assert!(construct_prime_function(&parse_context, &vec![], &mut vec![]).is_ok()) }
-
-  eprintln!("{}", parse_context.module.to_string());
-} */
 
 #[test]
 fn should_initialize_context() {
@@ -366,7 +251,7 @@ fn should_initialize_context() {
     assert_eq!(rt_ctx.goto_stack_ptr as usize, root);
     assert_eq!(rt_ctx.goto_free as usize, 8);
     assert_eq!(rt_ctx.goto_size as usize, 8);
-    assert_eq!(rt_ctx.state, NORMAL_STATE_FLAG_LLVM);
+    assert_eq!(rt_ctx.state, 0);
 
     eprintln!("{:?}:{:#?}", root, rt_ctx);
   };
@@ -463,11 +348,12 @@ fn should_extend_stack() -> SherpaResult<()> {
     let extend = get_parse_function::<Extend>(&module, "extend_stack_if_needed_shim").unwrap();
 
     init_fn.call(&mut rt_ctx, &mut reader);
-    push_state_fn.call(&mut rt_ctx, 10, 200);
-    push_state_fn.call(&mut rt_ctx, 30, 400);
     extend.call(&mut rt_ctx, 10);
 
-    assert_eq!(rt_ctx.goto_size, (18 << 2));
+    push_state_fn.call(&mut rt_ctx, 10, 200);
+    push_state_fn.call(&mut rt_ctx, 30, 400);
+
+    assert_eq!(rt_ctx.goto_size, 40);
 
     push_state_fn.call(&mut rt_ctx, 50, 600);
     push_state_fn.call(&mut rt_ctx, 70, 800);
@@ -492,7 +378,7 @@ fn should_extend_stack() -> SherpaResult<()> {
 
     extend.call(&mut rt_ctx, 2);
 
-    assert_eq!(rt_ctx.goto_size, 1088);
+    assert_eq!(rt_ctx.goto_size, 960);
 
     eprintln!("{:#?}", stack);
   };

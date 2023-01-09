@@ -68,9 +68,7 @@ pub(crate) fn construct_recursive_descent(
 
   let lane_items: Items = start_items
     .into_iter()
-    .map(|item| {
-        item.to_state(item.get_state().to_lane(t.increment_lane(1)).to_curr_lane())
-    })
+    .map(|item| item.to_state(item.get_state().to_lane(t.increment_lane(1)).to_curr_lane()))
     .collect();
 
   t.goto_seeds.append(&mut goto_seeds.to_set());
