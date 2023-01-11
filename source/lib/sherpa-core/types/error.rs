@@ -26,6 +26,13 @@ pub use severity::SherpaErrorSeverity;
 /// error types.
 #[derive(Clone, Debug)]
 pub enum SherpaError {
+  SourceError {
+    loc:        Token,
+    path:       PathBuf,
+    id:         &'static str,
+    msg:        String,
+    inline_msg: String,
+  },
   //---------------------------------------------------------------------------
   // ----------------- Grammar Load Errors ------------------------------------
   //---------------------------------------------------------------------------
@@ -55,12 +62,6 @@ pub enum SherpaError {
   grammar_err_multi_location {
     message:   String,
     locations: Vec<SherpaError>,
-  },
-
-  grammar_err_no_production_definition {
-    prod_name: String,
-    loc:       Token,
-    path:      PathBuf,
   },
   //---------------------------------------------------------------------------
   // ----------------- Runtime Errors -----------------------------------------
@@ -193,6 +194,14 @@ impl From<FromUtf16Error> for SherpaError {
 impl Display for SherpaError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
+      SourceError { msg, id, inline_msg, loc, path } => f.write_fmt(format_args!(
+        "\n{} Error [{}:{}]\n   {}\n{}",
+        id,
+        path.to_str().unwrap(),
+        loc.loc_stub(),
+        msg,
+        loc.blame(1, 1, &inline_msg, BlameColor::RED),
+      )),
       UNDEFINED => f.write_str("\nAn unknown error has occurred "),
       load_err_invalid_grammar_path { .. } => f.write_str("\nLoad_InvalidGrammarPath Error"),
       load_err_invalid_dependency { path, requestor, tok, err } => f.write_fmt(format_args!(
@@ -219,18 +228,6 @@ impl Display for SherpaError {
         loc.loc_stub(),
         message,
         loc.blame(1, 1, &inline_message, BlameColor::RED),
-      )),
-
-      grammar_err_no_production_definition {
-        prod_name: production_name,
-        loc: ref_location,
-        path: ref_source_path,
-      } => f.write_fmt(format_args!(
-        "\n[{}:{}]\nCan't find a definition for production [{}]\n{}",
-        ref_source_path.to_str().unwrap(),
-        ref_location.loc_stub(),
-        production_name,
-        ref_location.blame(1, 1, "", BlameColor::RED),
       )),
 
       grammar_err_multi_location { message, locations } => f.write_fmt(format_args!(

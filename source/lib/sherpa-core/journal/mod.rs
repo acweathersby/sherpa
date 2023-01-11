@@ -46,7 +46,7 @@ pub struct Journal {
   create_time: Instant,
 }
 impl Journal {
-  /// Todo
+  /// Creates a Journal instance.
   pub fn new(config: Option<Config>) -> Journal {
     Self {
       grammar: None,
@@ -113,18 +113,26 @@ impl Journal {
   }
 
   /// Loads a report in an closure for read access. Closure is only called
-  /// if the report can be found
-  pub fn get_report<T: Fn(&Report)>(&self, report_type: ReportType, closure: T) {
+  /// if the report can be found. Returns `true` if any reports where matched
+  pub fn get_report<T: Fn(&Report)>(&self, report_type: ReportType, closure: T) -> bool {
+    let mut have_matches = false;
     match self.scratch_pad.reports.get(&report_type) {
-      Some(report) => closure(report.as_ref()),
+      Some(report) => {
+        have_matches = true;
+        closure(report.as_ref());
+      }
       _ => match self.global_pad.read() {
         LockResult::Ok(global_pad) => match global_pad.reports.get(&report_type) {
-          Some(report) => closure(report.as_ref()),
+          Some(report) => {
+            have_matches = true;
+            closure(report.as_ref());
+          }
           _ => {}
         },
         _ => {}
       },
     }
+    have_matches
   }
 
   /// Retrieves all reports that match the `report_type` and calls `closure` for each

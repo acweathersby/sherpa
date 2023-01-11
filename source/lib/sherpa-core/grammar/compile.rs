@@ -23,6 +23,7 @@ use regex::Regex;
 use std::{
   collections::{btree_map, BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
   ffi::OsStr,
+  fmt::format,
   path::PathBuf,
   sync::Arc,
   thread::{self},
@@ -135,8 +136,6 @@ fn finalize_grammar(
   finalize_productions(&mut g, e);
 
   finalize_symbols(&mut g, e);
-
-  eprintln!("{:#?}", g.rules.iter().filter(|r| r.1.len == 0).collect::<Vec<_>>());
 
   finalize_items(&mut g, e);
 
@@ -311,10 +310,15 @@ fn merge_grammars(
             entry.insert(production.clone());
           }
           None => {
-            e.push(SherpaError::grammar_err_no_production_definition {
-              prod_name: g.get_production_plain_name(&imported_prod_id).to_string(),
-              loc:       tok,
-              path:      g.id.path.clone(),
+            e.push(SherpaError::SourceError {
+              id:         "nonexistent-import",
+              msg:        format!(
+                "Could not locate production in imported grammar {}",
+                import_g.id.path.to_str().unwrap()
+              ),
+              inline_msg: "could not find".to_string(),
+              loc:        tok,
+              path:       g.id.path.clone(),
             });
           }
         }
@@ -354,10 +358,12 @@ fn check_for_missing_productions(g: &GrammarStore, e: &mut Vec<SherpaError>) -> 
         SymbolID::TokenProduction(.., prod_id) | SymbolID::Production(prod_id, _) => {
           if !g.productions.contains_key(&prod_id) {
             have_missing_production = true;
-            e.push(SherpaError::grammar_err_no_production_definition {
-              prod_name: g.get_production_plain_name(&prod_id).to_string(),
-              loc:       sym.tok.clone(),
-              path:      sym.grammar_ref.path.clone(),
+            e.push(SherpaError::SourceError {
+              id:         "missing-production",
+              msg:        format!("Could not find a definition for production"),
+              inline_msg: "could not find".to_string(),
+              loc:        sym.tok.clone(),
+              path:       sym.grammar_ref.path.clone(),
             });
           }
         }
@@ -766,10 +772,12 @@ fn create_scanner_productions_from_symbols(g: &mut GrammarStore, e: &mut Vec<She
           }
           _ => {
             let sym = g.symbols.get(&sym_id).unwrap();
-            e.push(SherpaError::grammar_err_no_production_definition {
-              prod_name: g.get_production_plain_name(&prod_id).to_string(),
-              loc:       sym.loc.clone(),
-              path:      sym.g_ref.clone().unwrap_or(g.id.clone()).path.clone(),
+            e.push(SherpaError::SourceError {
+              id:         "missing-production",
+              msg:        format!("Could not find a definition for production"),
+              inline_msg: "could not find".to_string(),
+              loc:        sym.loc.clone(),
+              path:       sym.g_ref.clone().unwrap_or(g.id.clone()).path.clone(),
             });
           }
         }
