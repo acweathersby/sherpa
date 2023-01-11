@@ -99,7 +99,7 @@ impl ByteReader for FileReader {
     self.codepoint
   }
 
-  fn next(&mut self, amount: u32) {}
+  fn next(&mut self, _: u32) {}
 
   fn cursor(&self) -> u32 {
     self.cursor as u32

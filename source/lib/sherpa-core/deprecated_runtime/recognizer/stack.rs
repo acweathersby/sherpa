@@ -58,10 +58,4 @@ impl KernelStack {
   pub fn read_state(&self) -> u32 {
     (self.state_stack[self.stack_pointer as usize] & 0xFFFF_FFFF) as u32
   }
-
-  pub fn copy_state_stack(&self, dest: &mut KernelStack) {
-    for i in 0..=self.stack_pointer {
-      dest.state_stack[i as usize] = self.state_stack[i as usize];
-    }
-  }
 }
