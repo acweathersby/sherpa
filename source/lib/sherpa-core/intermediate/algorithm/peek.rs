@@ -1,7 +1,6 @@
 //! Functions for resolving a set of ambiguous Items.
 use super::{follow::get_follow_items, LR::construct_inline_LR};
 use crate::{
-  debug,
   grammar::hash_id_value_u64,
   intermediate::{
     get_out_of_scope,

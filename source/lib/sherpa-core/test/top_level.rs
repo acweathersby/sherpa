@@ -75,7 +75,7 @@ fn test_compile_pipeline() {
   pipeline
     .set_source_output_dir(&std::env::temp_dir())
     .add_task(build_ascript_types_and_functions(SourceType::Rust))
-    .run(|e| {});
+    .run(|_| {});
 }
 
 #[test]
@@ -90,7 +90,7 @@ fn test_output_rust_on_trivial_grammar() {
   )
   .unwrap();
 
-  let mut ascript = AScriptStore::new(g).unwrap();
+  let ascript = AScriptStore::new(g).unwrap();
 
   assert_eq!(ascript.structs.len(), 1);
 }

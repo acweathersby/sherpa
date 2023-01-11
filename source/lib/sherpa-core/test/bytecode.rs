@@ -4,9 +4,7 @@ use crate::{
     compile_bytecode,
   },
   debug::{
-    disassemble_state,
     generate_disassembly,
-    BytecodeGrammarLookups,
     {self},
   },
   grammar::parse::compile_ir_ast,
@@ -57,7 +55,7 @@ pub fn test_produce_a_single_ir_ast_from_a_single_state_of_a_trivial_production2
 #[test]
 pub fn temp_test1() -> SherpaResult<()> {
   let mut j = Journal::new(None);
-  let g = GrammarStore::from_str(
+  GrammarStore::from_str(
     &mut j,
     "
   @NAME test
@@ -75,7 +73,7 @@ pub fn temp_test1() -> SherpaResult<()> {
 
   let states = compile_states(&mut j, 1)?;
 
-  let mut results = optimize_ir_states(&mut j, states);
+  let results = optimize_ir_states(&mut j, states);
 
   compile_bytecode(&mut j, results);
 
@@ -85,7 +83,7 @@ pub fn temp_test1() -> SherpaResult<()> {
 #[test]
 pub fn test_production_of_bytecode_for_simple_expression_grammar() -> SherpaResult<()> {
   let mut j = Journal::new(None);
-  let g = GrammarStore::from_str(
+  GrammarStore::from_str(
     &mut j,
     "
     @IGNORE g:sp
@@ -111,9 +109,9 @@ pub fn test_production_of_bytecode_for_simple_expression_grammar() -> SherpaResu
 ",
   )
   .unwrap();
-  let mut states = compile_states(&mut j, 1)?;
+  let states = compile_states(&mut j, 1)?;
 
-  let mut results = optimize_ir_states(&mut j, states);
+  let results = optimize_ir_states(&mut j, states);
 
   let output = compile_bytecode(&mut j, results);
 
@@ -124,7 +122,7 @@ pub fn test_production_of_bytecode_for_simple_expression_grammar() -> SherpaResu
 #[test]
 pub fn generate_production_with_a_recursion() -> SherpaResult<()> {
   let mut j = Journal::new(None);
-  let g = GrammarStore::from_str(
+  GrammarStore::from_str(
     &mut j,
     "    
     <> element_block > \\< component_identifier
@@ -143,7 +141,7 @@ pub fn generate_production_with_a_recursion() -> SherpaResult<()> {
   .unwrap();
 
   let states = compile_states(&mut j, 1)?;
-  let mut results = optimize_ir_states(&mut j, states);
+  let results = optimize_ir_states(&mut j, states);
 
   let output = compile_bytecode(&mut j, results);
   eprintln!("dD: {}", debug::generate_disassembly(&output, Some(&mut j)));
@@ -185,7 +183,7 @@ pub fn production_with_multiple_sub_productions() -> SherpaResult<()> {
 #[test]
 pub fn temp_test() -> SherpaResult<()> {
   let mut j = Journal::new(None);
-  let g = GrammarStore::from_str(&mut j,
+  GrammarStore::from_str(&mut j,
     "@NAME wick_element
 
     @IGNORE g:sp g:nl
@@ -240,7 +238,7 @@ pub fn temp_test() -> SherpaResult<()> {
 
   let states = compile_states(&mut j, 1)?;
 
-  let mut results = optimize_ir_states(&mut j, states);
+  let results = optimize_ir_states(&mut j, states);
 
   compile_bytecode(&mut j, results);
 

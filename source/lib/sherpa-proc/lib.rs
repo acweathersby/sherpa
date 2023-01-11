@@ -7,7 +7,7 @@ use std::{collections::BTreeMap, path::PathBuf};
 
 use sherpa_core::{
   pipeline::{
-    tasks::{self, build_rust_preamble},
+    tasks::{self},
     BuildPipeline,
     SourceType,
   },
@@ -19,15 +19,8 @@ extern crate proc_macro;
 
 #[derive(Debug)]
 enum ParserType {
-  LLVM,
+  _LLVM,
   BYTECODE,
-}
-
-#[derive(Debug)]
-struct GrammarInput {
-  pub parser_type: ParserType,
-  pub grammar:     String,
-  pub span_lookup: BTreeMap<usize, proc_macro::Span>,
 }
 
 fn process_errors(errors: Vec<SherpaError>, offsets: Offsets) {
@@ -35,7 +28,7 @@ fn process_errors(errors: Vec<SherpaError>, offsets: Offsets) {
 
   for err in errors {
     match err {
-      grammar_err { message, inline_message, loc, path } => {
+      grammar_err { message, loc, .. } => {
         let start = loc.get_start();
         let end = loc.get_end();
         match (offsets.spans.get(&start), offsets.spans.get(&end)) {
@@ -185,7 +178,7 @@ pub fn compile_mod(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
   pipeline.add_task(tasks::build_rust_preamble());
 
   match (ParserType::BYTECODE, std::env::var("OUT_DIR").map(|d| PathBuf::from(&d))) {
-    (ParserType::LLVM, Ok(out_dir)) => pipeline
+    (ParserType::_LLVM, Ok(out_dir)) => pipeline
       .set_build_output_dir(&out_dir)
       .add_task(tasks::build_llvm_parser(None, true, false))
       .add_task(tasks::build_llvm_parser_interface()),

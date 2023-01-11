@@ -1,27 +1,19 @@
 use crate::{
-  compile::{
-    compile_ascript_ast,
-    compile_bytecode,
-    compile_grammar_ast,
-    compile_ir_ast,
-    compile_states,
-    compile_token_production_states,
-    optimize_ir_states,
-  },
-  debug::{debug_items, generate_disassembly},
+  debug::debug_items,
   grammar::{
-    compile::{compile_grammars_into_store, convert_left_recursion_to_right, pre_process_grammar},
+    compile::{compile_grammars_into_store, convert_left_recursion_to_right},
     compile_grammar_from_path,
     compile_grammar_from_string,
     get_production_start_items,
     load::{load_all, load_grammar, resolve_grammar_path},
+    parse::{compile_ascript_ast, compile_grammar_ast, compile_ir_ast},
   },
-  journal::{report::ReportType, Journal, *},
-  types::{RecursionType, SherpaErrorContainer, *},
+  journal::Journal,
+  types::{RecursionType, *},
   util::get_num_of_available_threads,
 };
 use lazy_static::__Deref;
-use std::{io::Write, path::PathBuf, sync::Arc};
+use std::path::PathBuf;
 
 #[test]
 fn test_load_all() {
@@ -168,7 +160,7 @@ fn test_merge_productions_file() {
 
   path.push("../../../test/grammars/merge_root.hcg");
 
-  let (grammar, errors) = compile_grammar_from_path(&mut j, path, get_num_of_available_threads());
+  let (grammar, _) = compile_grammar_from_path(&mut j, path, get_num_of_available_threads());
 
   j.flush_reports();
 
@@ -211,8 +203,6 @@ fn conversion_of_left_to_right_recursive() {
 
   path.push("../../../test/grammars/left_recursive_token_production.hcg");
 
-  let thread_count = get_num_of_available_threads();
-
   let (grammar, errors) = compile_grammar_from_path(&mut j, path, get_num_of_available_threads());
 
   assert!(errors.is_none());
@@ -229,7 +219,7 @@ fn conversion_of_left_to_right_recursive() {
 #[test]
 fn left_to_right_recursive_conversion() {
   let mut j = Journal::new(None);
-  if let Some(mut g) = compile_grammar_from_string(
+  if let Some(g) = compile_grammar_from_string(
     &mut j,
     "<> B > tk:A  <> A > A \\t \\y | A \\u | \\CCC | \\R A ",
     &PathBuf::from("/test"),
@@ -242,7 +232,7 @@ fn left_to_right_recursive_conversion() {
 
     let mut g2 = g.deref().clone();
 
-    let (a, a_prime) = convert_left_recursion_to_right(&mut g2, prod);
+    convert_left_recursion_to_right(&mut g2, prod);
 
     assert!(g2.get_production_recursion_type(prod,).contains(RecursionType::RIGHT));
     assert!(!g2.get_production_recursion_type(prod).contains(RecursionType::LEFT_DIRECT));
@@ -264,10 +254,8 @@ fn processing_of_any_groups() {
 
   assert!(grammar.is_some());
 
-  if let Some(mut g) = grammar {
+  if let Some(g) = grammar {
     let prod = g.get_production_id_by_name("A").unwrap();
-
-    // convert_left_to_right(&mut g, prod);
 
     debug_items("A", get_production_start_items(&prod, &g), &g);
   }
@@ -276,7 +264,7 @@ fn processing_of_any_groups() {
 #[test]
 fn pptest_compile_grammars_into_store() {
   let mut j = Journal::new(None);
-  let (grammars, errors) = load_all(
+  let (grammars, _) = load_all(
     &mut j,
     &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
       .join("../../../test/grammars/load.hcg")

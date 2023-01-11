@@ -1,15 +1,11 @@
-use std::{
-  path::{Path, PathBuf},
-  str::FromStr,
-};
+use std::{path::PathBuf, str::FromStr};
 
 use inkwell::context::Context;
 
 use crate::{
-  ascript::{self, types::AScriptStore},
-  build::disassembly,
+  ascript::types::AScriptStore,
   compile::{compile_bytecode, compile_states, optimize_ir_states, GrammarStore},
-  debug::{collect_shifts_and_skips, generate_disassembly},
+  debug::collect_shifts_and_skips,
   llvm::compile_from_bytecode,
   util::get_num_of_available_threads,
   writer::code_writer::StringBuffer,
@@ -61,11 +57,11 @@ fn test_compile_of_sherpa_grammar() -> SherpaResult<()> {
 
   // Build Ascript data
 
-  let mut ascript = AScriptStore::new(g.clone())?;
+  let ascript = AScriptStore::new(g.clone())?;
 
   let mut writer = StringBuffer::new(vec![]);
 
-  crate::ascript::rust::write(&ascript, &mut writer);
+  crate::ascript::rust::write(&ascript, &mut writer)?;
 
   // eprintln!("{}", String::from_utf8(writer.into_output())?);
 
@@ -75,7 +71,7 @@ fn test_compile_of_sherpa_grammar() -> SherpaResult<()> {
 
   let ctx = Context::create();
 
-  let module = compile_from_bytecode("test", &mut j, &ctx, &bc)?;
+  compile_from_bytecode("test", &mut j, &ctx, &bc)?;
 
   if j.debug_error_report() {
     return SherpaResult::None;

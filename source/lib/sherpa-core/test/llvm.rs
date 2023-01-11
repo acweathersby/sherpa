@@ -1,6 +1,5 @@
 use crate::{
   compile::{compile_bytecode, compile_states, optimize_ir_states, GrammarStore},
-  journal,
   llvm::{
     ascript_functions::construct_ast_builder,
     compile_from_bytecode,
@@ -11,26 +10,19 @@ use crate::{
   SherpaResult,
 };
 use inkwell::{context::Context, execution_engine::JitFunction};
-use sherpa_runtime::{
-  types::{
-    llvm_map_result_action,
-    llvm_map_shift_action,
-    sherpa_allocate_stack,
-    sherpa_free_stack,
-    sherpa_get_token_class_from_codepoint,
-    AstStackSlice,
-    BlameColor,
-    ByteReader,
-    Goto,
-    InputInfo,
-    InputType,
-    ParseActionType,
-    ParseContext,
-    ParseResult,
-    Token,
-    TokenRange,
-  },
-  utf8::lookup_table::CodePointClass,
+use sherpa_runtime::types::{
+  llvm_map_result_action,
+  llvm_map_shift_action,
+  sherpa_allocate_stack,
+  sherpa_free_stack,
+  AstStackSlice,
+  BlameColor,
+  ByteReader,
+  Goto,
+  ParseActionType,
+  ParseContext,
+  ParseResult,
+  TokenRange,
 };
 use std::{fs::File, io::Write};
 
@@ -51,11 +43,6 @@ type Prime = unsafe extern "C" fn(*mut ParseContext<TestUTF8StringReader<'static
 type Extend = unsafe extern "C" fn(*mut ParseContext<TestUTF8StringReader<'static>, u32>, u32);
 
 type Drop = unsafe extern "C" fn(*mut ParseContext<TestUTF8StringReader<'static>, u32>);
-
-type TailCallFunction =
-  unsafe extern "C" fn(*mut ParseContext<TestUTF8StringReader<'static>, u32>) -> u32;
-
-type PopState = unsafe extern "C" fn(*mut ParseContext<TestUTF8StringReader<'static>, u32>) -> Goto;
 
 unsafe fn get_parse_function<'a, T: inkwell::execution_engine::UnsafeFunctionPointer>(
   ctx: &'a LLVMParserModule,
@@ -260,7 +247,8 @@ fn verify_utf8_lookup_functions() {
 
   let parse_context = construct_module(&mut Journal::new(None), "test", &context);
 
-  unsafe { assert!(construct_utf8_lookup_function(&parse_context).is_ok()) }
+  assert!(construct_utf8_lookup_function(&parse_context).is_ok());
+
   unsafe { assert!(construct_merge_utf8_part_function(&parse_context).is_ok()) }
 
   eprintln!("{}", parse_context.module.to_string());
@@ -365,7 +353,7 @@ fn should_extend_stack() -> SherpaResult<()> {
 
     assert_eq!(rt_ctx.goto_size - rt_ctx.goto_free, (34 << 1));
 
-    let stack = unsafe {
+    let stack = {
       let ptr = (rt_ctx.goto_stack_ptr as usize)
         - (((rt_ctx.goto_size as usize) - (rt_ctx.goto_free as usize)) << 4);
       std::slice::from_raw_parts(ptr as *const Goto, rt_ctx.goto_size as usize)
@@ -386,7 +374,7 @@ fn should_extend_stack() -> SherpaResult<()> {
 #[test]
 fn test_compile_parse_function() -> SherpaResult<()> {
   let mut j = Journal::new(None);
-  let g = GrammarStore::from_str(
+  GrammarStore::from_str(
     &mut j,
     "
   @IGNORE g:sp
@@ -414,7 +402,7 @@ fn test_compile_parse_function() -> SherpaResult<()> {
 #[test]
 fn test_compile_from_bytecode() -> SherpaResult<()> {
   let mut j = Journal::new(None);
-  let g = GrammarStore::from_str(
+  GrammarStore::from_str(
     &mut j,
     "
   @IGNORE g:sp
@@ -496,7 +484,7 @@ type AstBuilder<'a> = unsafe extern "C" fn(
 #[test]
 fn test_compile_from_bytecode1() -> SherpaResult<()> {
   let mut j = Journal::new(None);
-  let g = GrammarStore::from_str(
+  GrammarStore::from_str(
     &mut j,
     "
   @IGNORE g:sp g:nl
@@ -539,12 +527,12 @@ fn test_compile_from_bytecode1() -> SherpaResult<()> {
 
       slots.assign(0, (0, final_token, TokenRange::default()));
     },
-    |ctx: &mut ParseContext<TestUTF8StringReader<'static>, u32>,
+    |_: &mut ParseContext<TestUTF8StringReader<'static>, u32>,
      slots: &mut AstStackSlice<ASTSlot>| {
       eprintln!("<B> 02 - {}  {:#?}", 0, slots);
       // Do nothing
     },
-    |ctx: &mut ParseContext<TestUTF8StringReader<'static>, u32>,
+    |_: &mut ParseContext<TestUTF8StringReader<'static>, u32>,
      slots: &mut AstStackSlice<ASTSlot>| {
       eprintln!("<P> 03 - {}  {:#?}", 0, slots);
       let (_, _a, _) = slots.take(0);
@@ -610,7 +598,7 @@ fn test_compile_json_parser() -> SherpaResult<()> {
   use crate::llvm::compile_from_bytecode;
   use inkwell::context::Context;
   let mut j = Journal::new(None);
-  let g = GrammarStore::from_str(
+  GrammarStore::from_str(
     &mut j,
     r##"
     @IGNORE g:sp g:nl
@@ -650,18 +638,16 @@ fn test_compile_json_parser() -> SherpaResult<()> {
   )
   .unwrap();
 
-  let mut ir_states = compile_states(&mut j, 1)?;
+  let ir_states = compile_states(&mut j, 1)?;
   let ir_states = optimize_ir_states(&mut j, ir_states);
 
   let bytecode_output = compile_bytecode(&mut j, ir_states);
 
-  unsafe {
-    let ctx = Context::create();
+  let ctx = Context::create();
 
-    let module = compile_from_bytecode("test", &mut j, &ctx, &bytecode_output)?;
+  let module = compile_from_bytecode("test", &mut j, &ctx, &bytecode_output)?;
 
-    eprintln!("{}", module.module.to_string());
+  eprintln!("{}", module.module.to_string());
 
-    SherpaResult::Ok(())
-  }
+  SherpaResult::Ok(())
 }

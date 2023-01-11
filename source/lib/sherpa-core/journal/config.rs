@@ -138,43 +138,43 @@ use crate::build::pipeline::SourceType;
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Language {
   Rust,
-  TypeScript,
-  Cpp,
-  Go,
-  WebAssembly,
-  Java,
+  _TypeScript,
+  _Cpp,
+  _Go,
+  _WebAssembly,
+  _Java,
 }
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Recognizer {
-  Assembly,
+  _Assembly,
   Bytecode,
 }
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Platform {
-  Windows,
+  _Windows,
   Linux,
-  MacOS,
-  Android,
+  _MacOS,
+  _Android,
 }
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Architecture {
   X8664,
-  Arm64,
+  _Arm64,
 }
 
 impl Architecture {
-  pub fn is_compatible(&self, pl: Platform, ot: Language, rt: Recognizer) -> bool {
+  pub fn _is_compatible(&self, pl: Platform, ot: Language, rt: Recognizer) -> bool {
+    use Architecture::*;
     use Language::*;
     use Platform::*;
-    use Recognizer::*;
 
     if matches!(rt, Recognizer::Bytecode) {
       false
     } else {
       match ot {
-        Rust | Cpp | Go => match pl {
-          Windows => matches!(self, X8664),
-          Android => false,
+        Rust | _Cpp | _Go => match pl {
+          _Windows => matches!(self, X8664),
+          _Android => false,
           _ => true,
         },
         _ => false,
@@ -184,9 +184,9 @@ impl Architecture {
 }
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Extension {
-  AVX2,
-  AVX512,
-  SSE,
+  _AVX2,
+  _AVX512,
+  _SSE,
 }
 
 pub struct BuildOptions {
@@ -210,7 +210,7 @@ impl Default for BuildOptions {
 }
 
 impl BuildOptions {
-  pub fn has_extension(&self, ext: Extension) -> bool {
+  pub fn _has_extension(&self, ext: Extension) -> bool {
     self.extensions.contains(&ext)
   }
 }

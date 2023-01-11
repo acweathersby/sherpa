@@ -1,6 +1,6 @@
 use crate::{
-  compile::{compile_bytecode, compile_states, optimize_ir_states, GrammarStore, ScannerStateId},
-  debug::{collect_shifts_and_skips, generate_disassembly},
+  compile::{compile_bytecode, compile_states, optimize_ir_states, GrammarStore},
+  debug::collect_shifts_and_skips,
   Journal,
   SherpaResult,
 };

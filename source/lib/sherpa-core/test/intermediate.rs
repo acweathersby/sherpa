@@ -6,11 +6,9 @@ use crate::{
     compile_production_states,
     compile_scanner_states,
     compile_states,
-    compile_token_production_states,
     optimize_ir_states,
   },
-  debug::{collect_shifts_and_skips, generate_disassembly},
-  errors::SherpaErrorSeverity,
+  debug::generate_disassembly,
   grammar::get_production_start_items,
   journal::{config::Config, report::ReportType, Journal},
   types::*,
@@ -237,14 +235,8 @@ pub fn generate_A_state_of_a_merged_grammar_with_extended_production() -> Sherpa
 
   compile_production_states(&mut j, grammar.get_production_id_by_name("A_list_1").unwrap());
 
-  // assert_eq!(errors.len(), 1);
-
   j.flush_reports();
   j.debug_print_reports(ReportType::Any);
-
-  // eprintln!("{}", report.debug_string());
-
-  // assert!(report.errors()[0].is(WarnTransitionAmbiguousProduction::friendly_name));
 
   SherpaResult::Ok(())
 }
@@ -454,10 +446,8 @@ fn test_peek() -> SherpaResult<()> {
   .unwrap();
 
   let states = compile_states(&mut j, 10)?;
-  let pre_opt_length = states.len();
 
-  let mut states = optimize_ir_states(&mut j, states);
-  let post_opt_length = states.len();
+  let states = optimize_ir_states(&mut j, states);
 
   compile_bytecode(&mut j, states);
 
@@ -574,7 +564,7 @@ fn grammar_with_exclusive_symbols() -> SherpaResult<()> {
 
 fn build_states(input: &str) -> SherpaResult<(Journal, BTreeMap<String, Box<IRState>>)> {
   let mut j = Journal::new(Some(Config { enable_breadcrumb_parsing: false, ..Default::default() }));
-  let g = GrammarStore::from_str(&mut j, input)?;
+  GrammarStore::from_str(&mut j, input)?;
 
   let states = compile_states(&mut j, get_num_of_available_threads())?;
 

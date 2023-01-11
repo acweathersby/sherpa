@@ -3,7 +3,6 @@ use sherpa_runtime::types::{
   LLVMByteReader,
   MutByteReader,
   SharedSymbolBuffer,
-  TokenRange,
   UTF8Reader,
 };
 
@@ -126,10 +125,6 @@ impl<'a> ByteReader for TestUTF8StringReader<'a> {
 }
 
 impl<'a> TestUTF8StringReader<'a> {
-  pub fn from_string(string: &'a str) -> Self {
-    Self::new(string)
-  }
-
   pub fn new(string: &'a str) -> TestUTF8StringReader<'a> {
     let mut reader = TestUTF8StringReader {
       string:   string,

@@ -496,10 +496,6 @@ fn make_table(
   o
 }
 
-fn is_goto(state_name: &str) -> bool {
-  state_name.ends_with("_goto")
-}
-
 fn build_branchless_bytecode(
   instructions: &Vec<ASTNode>,
   state_name_to_bookmark: &HashMap<String, u32>,

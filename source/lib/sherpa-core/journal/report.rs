@@ -16,11 +16,16 @@ pub enum ReportType {
   /// if [GrammarId] is `GrammarId::default`, then matches all grammar
   /// compilation reports
   GrammarCompile(GrammarId),
+  /// TODO
   TokenProductionCompile(ProductionId),
+  /// TODO
   ScannerCompile(ScannerStateId),
+  /// TODO
   OcclusionCompile,
   // The following are implemented in in other packages
+  /// TODO
   AScriptCompile,
+  /// TODO
   ByteCodeCompile,
   /// Matches all report types.
   Any,
@@ -28,10 +33,13 @@ pub enum ReportType {
   AnyProductionCompile,
   /// Matches all IR compiling reports
   IntermediateCompile,
-  // Matches the dissassembly generation report.
+  /// Matches the dissassembly generation report.
   Disassembly,
+  /// TODO
   ProductionCompile(ProductionId),
+  /// TODO
   ProductionCompileLR(ProductionId),
+  /// TODO
   Optimize,
 }
 
@@ -128,7 +136,7 @@ impl Report {
         .map(|(label, body)| format!("---------------\n{}:\n{:?}", label, body))
         .collect::<Vec<_>>()
         .join("\n"),
-      self.errors.iter().map(|(err)| format!("\n{}", err)).collect::<Vec<_>>().join("\n")
+      self.errors.iter().map(|err| format!("\n{}", err)).collect::<Vec<_>>().join("\n")
     )
   }
 

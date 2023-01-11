@@ -18,7 +18,7 @@ use crate::{
 #[test]
 fn test_compile_json_parser() -> SherpaResult<()> {
   let mut j = Journal::new(None);
-  let g = GrammarStore::from_str(
+  GrammarStore::from_str(
     &mut j,
     r##"
     @IGNORE g:sp g:nl
@@ -58,7 +58,7 @@ fn test_compile_json_parser() -> SherpaResult<()> {
   )
   .unwrap();
 
-  let mut states = compile_states(&mut j, 1)?;
+  let states = compile_states(&mut j, 1)?;
 
   /* for (_, state) in &states {
     eprintln!("{}", state.get_code());
@@ -74,21 +74,4 @@ fn test_compile_json_parser() -> SherpaResult<()> {
   eprintln!("{}", generate_disassembly(&bc, Some(&mut j)));
 
   SherpaResult::Ok(())
-}
-
-fn build_production_states(
-  input: &str,
-  production_names: &[&str],
-) -> SherpaResult<(Journal, Vec<Vec<Box<IRState>>>)> {
-  let mut j = Journal::new(Some(Config { enable_breadcrumb_parsing: false, ..Default::default() }));
-  let g = GrammarStore::from_str(&mut j, input)?;
-
-  let mut states = vec![];
-
-  for name in production_names {
-    let prod_id = g.get_production_id_by_name(name)?;
-    states.push(compile_production_states(&mut j, prod_id)?);
-  }
-
-  SherpaResult::Ok((j, states))
 }

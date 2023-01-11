@@ -80,7 +80,7 @@ pub(crate) type MaybeNodeId = Option<NodeId>;
 #[derive(Hash, PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Copy)]
 pub(crate) enum NodeType {
   Undefined,
-  LRStart,
+  _LRStart,
   RDStart,
   RAStart,
   GotoVirtual,
@@ -90,7 +90,7 @@ pub(crate) enum NodeType {
   BreadcrumbEndCompletion,
   BreadcrumbShiftCompletion,
   ProductionCall,
-  Recovery,
+  _Recovery,
   Complete,
   Fork,
   Pass,
@@ -184,15 +184,6 @@ pub(crate) struct GraphNode {
 }
 
 impl GraphNode {
-  /// Return a clone of the first item in the node's items array
-  ///
-  /// # Panics
-  ///
-  /// Panics if the node's items vector is empty
-  pub fn first_item(&self) -> Item {
-    self.transition_items.first().cloned().unwrap()
-  }
-
   pub fn new(
     t_pack: &TransitionGraph,
     sym: SymbolID,
@@ -323,7 +314,6 @@ pub(crate) struct TransitionGraph {
   pub mode: TransitionMode,
   pub scan_type: ScanType,
   pub root_prod_ids: BTreeSet<ProductionId>,
-  pub peek_ids: BTreeSet<u64>,
   pub starts: BTreeSet<Item>,
   pub errors: Vec<SherpaError>,
   /// If this Graph defines a goto transition sequence,

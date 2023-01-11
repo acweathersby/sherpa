@@ -569,8 +569,6 @@ impl<T: ByteReader> ParserCoreIterator<T> for ScannerIterator<T> {
   fn consume(&mut self, index: usize, _: u32, bytecode: &[u32]) -> usize {
     let mut token = self.get_tok(1);
 
-    let anchor = self.get_tok(0);
-
     let instruction = bytecode[index];
 
     if (instruction & 1) != 0 {

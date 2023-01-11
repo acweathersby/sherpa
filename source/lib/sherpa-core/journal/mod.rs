@@ -11,7 +11,7 @@ use crate::{
   types::*,
 };
 use std::{
-  collections::{BTreeMap, BTreeSet, HashMap},
+  collections::{BTreeSet, HashMap},
   fmt::{Debug, Display},
   sync::{Arc, LockResult, RwLock},
   time::Instant,
@@ -39,8 +39,6 @@ pub struct Journal {
 
   occluding_symbols: Option<Arc<HashMap<SymbolID, SymbolSet>>>,
 
-  errors: Vec<SherpaError>,
-
   active_report: Option<Box<Report>>,
 
   report_sink: Report,
@@ -48,6 +46,7 @@ pub struct Journal {
   create_time: Instant,
 }
 impl Journal {
+  /// Todo
   pub fn new(config: Option<Config>) -> Journal {
     Self {
       grammar: None,
@@ -55,21 +54,19 @@ impl Journal {
       global_pad: Arc::new(RwLock::new(Default::default())),
       scratch_pad: Default::default(),
       occluding_symbols: None,
-      errors: Vec::new(),
       active_report: None,
       report_sink: Default::default(),
       create_time: Instant::now(),
     }
   }
 
-  pub fn transfer(&self) -> Self {
+  pub(crate) fn transfer(&self) -> Self {
     Self {
       grammar: self.grammar.clone(),
       config: self.config.clone(),
       global_pad: self.global_pad.clone(),
       scratch_pad: Default::default(),
       occluding_symbols: self.occluding_symbols.clone(),
-      errors: Vec::new(),
       active_report: None,
       report_sink: Default::default(),
       create_time: Instant::now(),
@@ -239,7 +236,7 @@ impl Journal {
 
       self.scratch_pad.occlusion_tracking = true;
 
-      let t = match construct_recursive_descent(self, ScanType::ScannerEntry, &items) {
+      match construct_recursive_descent(self, ScanType::ScannerEntry, &items) {
         SherpaResult::Ok(_) => {
           self.occluding_symbols = Some(Arc::new(self.scratch_pad.occluding_symbols.clone()));
         }

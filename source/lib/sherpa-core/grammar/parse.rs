@@ -5,14 +5,10 @@ use super::data::{
 };
 use crate::{
   deprecated_runtime::{buffer::UTF8StringReader, completer::complete, recognizer::iterator::*},
-  types::{SherpaError, Token},
-};
-use std::{
-  fmt::{Display, Error},
-  sync::PoisonError,
+  types::SherpaError,
 };
 
-pub fn compile_grammar_ast(buffer: Vec<u8>) -> Result<Box<Grammar>, SherpaError> {
+pub(crate) fn compile_grammar_ast(buffer: Vec<u8>) -> Result<Box<Grammar>, SherpaError> {
   let mut iterator: ReferenceIterator<UTF8StringReader> =
     ReferenceIterator::new(UTF8StringReader::new(buffer), EntryPoint_Hc, &BYTECODE);
 
@@ -30,7 +26,7 @@ pub fn compile_grammar_ast(buffer: Vec<u8>) -> Result<Box<Grammar>, SherpaError>
   }
 }
 
-pub fn compile_ir_ast(buffer: Vec<u8>) -> Result<Box<IR_STATE>, SherpaError> {
+pub(crate) fn compile_ir_ast(buffer: Vec<u8>) -> Result<Box<IR_STATE>, SherpaError> {
   let mut iterator: ReferenceIterator<UTF8StringReader> =
     ReferenceIterator::new(UTF8StringReader::new(buffer), EntryPoint_Ir, &BYTECODE);
 
@@ -48,7 +44,7 @@ pub fn compile_ir_ast(buffer: Vec<u8>) -> Result<Box<IR_STATE>, SherpaError> {
   }
 }
 
-pub fn compile_ascript_ast(buffer: Vec<u8>) -> Result<ASTNode, SherpaError> {
+pub(crate) fn compile_ascript_ast(buffer: Vec<u8>) -> Result<ASTNode, SherpaError> {
   let mut iterator: ReferenceIterator<UTF8StringReader> =
     ReferenceIterator::new(UTF8StringReader::new(buffer), EntryPoint_Script, &BYTECODE);
 

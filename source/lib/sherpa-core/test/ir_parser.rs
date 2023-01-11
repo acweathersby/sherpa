@@ -9,7 +9,7 @@ use crate::{
 #[test]
 fn ir_parser_build() -> SherpaResult<()> {
   let mut j = Journal::new(None);
-  let g = GrammarStore::from_path(
+  GrammarStore::from_path(
     &mut j,
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
       .join("./test/bootstrap/grammar/ir_base.hcg")

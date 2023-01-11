@@ -101,7 +101,7 @@ pub trait ExtendedError: Debug + Send + Sync {
   fn severity(&self) -> SherpaErrorSeverity;
 
   /// Create an error report with full access to Journal data.
-  fn rich_report(&self, j: &Journal, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+  fn rich_report(&self, _: &Journal, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.write_str("Empty Error Message")
   }
 
@@ -132,16 +132,19 @@ impl SherpaError {
     }
   }
 
+  /// Todo
   pub fn is_critical(&self) -> bool {
-    matches!(self.get_severity(), Critical)
+    matches!(self.get_severity(), _Critical)
   }
 
+  /// Todo
   pub fn is_hint(&self) -> bool {
-    matches!(self.get_severity(), Hint)
+    matches!(self.get_severity(), _Hint)
   }
 
+  /// Todo
   pub fn is_warning(&self) -> bool {
-    matches!(self.get_severity(), Warning)
+    matches!(self.get_severity(), _Warning)
   }
 }
 
@@ -158,7 +161,7 @@ impl From<std::fmt::Error> for SherpaError {
 }
 
 impl From<()> for SherpaError {
-  fn from(err: ()) -> Self {
+  fn from(_: ()) -> Self {
     UNDEFINED
   }
 }
@@ -236,7 +239,7 @@ impl Display for SherpaError {
         locations.iter().map(|s| format!("{}", s)).collect::<Vec<_>>().join("\n"),
       )),
 
-      rt_err { path, production, tok, source } => match path.to_str() {
+      rt_err { path, tok, .. } => match path.to_str() {
         Some(path) => f.write_fmt(format_args!(
           "\n[{}:{}]\nUnexpected token [{}]\n{}",
           path,
@@ -295,9 +298,9 @@ impl SherpaErrorContainer for Vec<SherpaError> {
     let mut groups = ErrorGroups { ..Default::default() };
     for error in self {
       match error.get_severity() {
-        Critical => groups.critical.push(error.clone()),
-        Warning => groups.warnings.push(error.clone()),
-        Hint => groups.critical.push(error.clone()),
+        _Critical => groups.critical.push(error.clone()),
+        _Warning => groups.warnings.push(error.clone()),
+        _Hint => groups.critical.push(error.clone()),
       }
     }
 

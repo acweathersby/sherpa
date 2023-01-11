@@ -27,7 +27,7 @@ mod types;
 mod util;
 mod writer;
 
-//#[cfg(test)]
+#[cfg(test)]
 mod test;
 
 /// Methods for debugging a grammar and it's artifacts.
@@ -41,7 +41,6 @@ pub use types::{SherpaError, SherpaResult};
 pub mod compile {
   pub use crate::{
     bytecode::{compile_bytecode, BytecodeOutput},
-    grammar::parse::{compile_ascript_ast, compile_grammar_ast, compile_ir_ast},
     intermediate::{compile::*, optimize::*},
     types::{
       GrammarId,
@@ -59,10 +58,7 @@ pub mod compile {
 
 /// Error objects
 pub mod errors {
-  pub use crate::{
-    intermediate::errors::*,
-    types::{SherpaError, SherpaError::*, SherpaErrorSeverity},
-  };
+  pub use crate::types::{SherpaError, SherpaError::*, SherpaErrorSeverity};
 }
 
 /// Create a build pipeline

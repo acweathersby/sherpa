@@ -289,7 +289,7 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
     .collect::<BTreeMap<_, _>>();
 
   let fn_args =
-    format!("ctx: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<{}>>", ast.ast_type_name);
+    format!("_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<{}>>", ast.ast_type_name);
   let fn_template = format!("<R: Reader + UTF8Reader, M>");
 
   // Build reduce functions -------------------------------------
@@ -784,7 +784,7 @@ pub fn render_expression(
         let ref_ = render_expression(s, value, b, ref_index, type_slot)?;
         match ref_.ast_type {
           AScriptTypeVal::TokenRange => Some(ref_.from(
-            "%%.to_token_with_reader(ctx.get_reader()).to_string()".to_string(),
+            "%%.to_token_with_reader(_ctx_.get_reader()).to_string()".to_string(),
             AScriptTypeVal::String(None),
           )),
           AScriptTypeVal::TokenVec => {
@@ -1013,12 +1013,12 @@ fn convert_numeric<T: AScriptNumericType>(
         | AScriptTypeVal::U16(..)
         | AScriptTypeVal::U32(..)
         | AScriptTypeVal::U64(..) => {
-          Some(ref_.from(format!("%% as {};", rust_type), T::from_f64(0.0)))
+          Some(ref_.from(format!("%% as {}", rust_type), T::from_f64(0.0)))
         }
         AScriptTypeVal::TokenRange => {
-          Some(ref_.from(format!("%%.{}(ctx.get_str());", range_conversion_fn), T::from_f64(0.0)))
+          Some(ref_.from(format!("%%.{}(_ctx_.get_str())", range_conversion_fn), T::from_f64(0.0)))
         }
-        _ => Some(ref_.from(format!("%%.{}();", tok_conversion_fn), T::from_f64(0.0))),
+        _ => Some(ref_.from(format!("%%.{}()", tok_conversion_fn), T::from_f64(0.0))),
       }
     }
   }
@@ -1195,7 +1195,7 @@ impl Ref {
       init_index,
       type_slot,
       body_indices: BTreeSet::new(),
-      init_expression: format!("tok{0}.to_token_with_reader(ctx.get_reader())", init_index),
+      init_expression: format!("tok{0}.to_token_with_reader(_ctx_.get_reader())", init_index),
       ast_type: AScriptTypeVal::Token,
       predecessors: None,
       post_init_statements: None,
@@ -1209,7 +1209,7 @@ impl Ref {
       init_index,
       type_slot,
       body_indices: BTreeSet::new(),
-      init_expression: format!("tok.to_token_with_reader(ctx.get_reader())"),
+      init_expression: format!("tok.to_token_with_reader(_ctx_.get_reader())"),
       ast_type: AScriptTypeVal::Token,
       predecessors: None,
       post_init_statements: None,

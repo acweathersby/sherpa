@@ -5,8 +5,10 @@ use crate::{
     compile::{compile_struct_props, compile_struct_type, verify_property_presence},
     types::AScriptStore,
   },
-  compile::{compile_ascript_ast, compile_grammar_ast},
-  grammar::data::ast::{ASTNode, AST_Property, AST_Struct, AST_TypeId, Ascript, Body, Production},
+  grammar::{
+    data::ast::{ASTNode, AST_Property, AST_Struct, AST_TypeId, Ascript, Body, Production},
+    parse::{compile_ascript_ast, compile_grammar_ast},
+  },
   journal::*,
   types::*,
   writer::code_writer::StringBuffer,
@@ -23,7 +25,7 @@ fn test_grammar_imported_grammar() {
       .unwrap(),
   )
   .unwrap();
-  let mut ascript = AScriptStore::new(g).unwrap();
+  let ascript = AScriptStore::new(g).unwrap();
 
   let mut writer = StringBuffer::new(vec![]);
 
@@ -33,7 +35,7 @@ fn test_grammar_imported_grammar() {
 }
 
 #[test]
-fn test_grammar() {
+fn test_grammar() -> SherpaResult<()> {
   let mut j = Journal::new(None);
   let g = GrammarStore::from_str(
     &mut j,
@@ -60,17 +62,19 @@ fn test_grammar() {
 ",
   )
   .unwrap();
-  let mut ascript = AScriptStore::new(g).unwrap();
+  let ascript = AScriptStore::new(g).unwrap();
 
   let mut writer = StringBuffer::new(vec![]);
 
-  crate::ascript::rust::write(&ascript, &mut writer);
+  crate::ascript::rust::write(&ascript, &mut writer)?;
 
   eprintln!("{}", String::from_utf8(writer.into_output()).unwrap());
+
+  SherpaResult::Ok(())
 }
 
 #[test]
-fn test_parse_errors_when_production_has_differing_return_types2() {
+fn test_parse_errors_when_production_has_differing_return_types2() -> SherpaResult<()> {
   let mut j = Journal::new(None);
   let g = GrammarStore::from_str(
     &mut j,
@@ -212,13 +216,15 @@ fn test_parse_errors_when_production_has_differing_return_types2() {
   )
   .unwrap();
 
-  let mut ascript = AScriptStore::new(g).unwrap();
+  let ascript = AScriptStore::new(g).unwrap();
 
   let mut writer = StringBuffer::new(vec![]);
 
-  crate::ascript::rust::write(&ascript, &mut writer);
+  crate::ascript::rust::write(&ascript, &mut writer)?;
 
   eprintln!("{}", String::from_utf8(writer.into_output()).unwrap());
+
+  SherpaResult::Ok(())
 }
 
 #[test]
@@ -282,7 +288,7 @@ fn rust_vector_return_types_print_correctly() -> SherpaResult<()> {
 }
 
 #[test]
-fn group_productions_get_correct_type_information() {
+fn group_productions_get_correct_type_information() -> SherpaResult<()> {
   let mut j = Journal::new(Option::None);
   let g = GrammarStore::from_str(
       &mut j,
@@ -333,16 +339,18 @@ fn group_productions_get_correct_type_information() {
         ",
     ).unwrap();
 
-  let mut ascript = AScriptStore::new(g).unwrap();
+  let ascript = AScriptStore::new(g).unwrap();
   let mut writer = StringBuffer::new(vec![]);
 
-  crate::ascript::rust::write(&ascript, &mut writer);
+  crate::ascript::rust::write(&ascript, &mut writer)?;
+
+  SherpaResult::Ok(())
 }
 
 // pri
 
 #[test]
-fn test_parse_errors_when_production_has_differing_return_types3() {
+fn test_parse_errors_when_production_has_differing_return_types3() -> SherpaResult<()> {
   let mut j = Journal::new(Option::None);
   let g = GrammarStore::from_str(
     &mut j,
@@ -352,15 +360,17 @@ fn test_parse_errors_when_production_has_differing_return_types3() {
   )
   .unwrap();
 
-  let mut ascript = AScriptStore::new(g).unwrap();
+  let ascript = AScriptStore::new(g).unwrap();
 
   eprintln!("{:#?}", ascript);
 
   let mut writer = StringBuffer::new(vec![]);
 
-  crate::ascript::rust::write(&ascript, &mut writer);
+  crate::ascript::rust::write(&ascript, &mut writer)?;
 
   eprintln!("{}", String::from_utf8(writer.into_output()).unwrap());
+
+  SherpaResult::Ok(())
 }
 
 #[test]
