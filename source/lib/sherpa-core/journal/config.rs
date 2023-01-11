@@ -39,7 +39,7 @@ pub struct Config {
   ///
   /// The idea here is to add symbols with lower precedence to the occlusion table
   /// of symbols with higher precedence. For example, given this grammar
-  /// ```
+  /// ```hcg
   /// <> A > \funct \(
   ///    |   tk:id  \{
   ///

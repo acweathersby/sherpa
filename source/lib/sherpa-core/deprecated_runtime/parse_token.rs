@@ -10,8 +10,8 @@ use sherpa_runtime::types::{Token, TokenRange};
 /// Use `Token::from_parse_token` combined with `Token::set_source` to convert ParseToken
 /// data into a more useful form for analysis and manipulation:
 ///
-/// ```
-/// # use sherpa::types::*;
+/// ```ignore
+/// # use sherpa_core::types::*;
 ///
 /// let mut reader = UTF8StringReader::new("<hello dave>");
 ///

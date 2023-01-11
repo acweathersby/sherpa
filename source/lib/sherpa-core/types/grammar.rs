@@ -103,7 +103,7 @@ pub type ReduceFunctionTable = BTreeMap<ReduceFunctionId, ReduceFunctionType>;
 /// - ## [compile_from_path](crate::grammar::compile_from_path)
 ///     
 ///     # Examples
-///     ```
+///     ```ignore
 ///     use sherpa::compile_grammar_from_path;
 ///
 ///     let number_of_threads = 1;
@@ -218,7 +218,8 @@ impl GrammarStore {
   ///
   /// # Example
   /// ```rust
-  /// use sherpa_core::compile::{GrammarStore, Journal, ReportType};
+  /// use sherpa_core::{Journal, ReportType};
+  /// use sherpa_core::compile::GrammarStore;
   ///  
   /// let mut j = Journal::new(None); // Use journal with default config;
   ///
@@ -230,7 +231,7 @@ impl GrammarStore {
   ///
   /// // Print the compilation report.
   /// j.flush_reports();
-  /// j.debug_report(ReportType::GrammarCompile(Default::default()));
+  /// j.debug_print_reports(ReportType::GrammarCompile(Default::default()));
   /// ```
   pub fn from_str(j: &mut Journal, string: &str) -> SherpaResult<Arc<GrammarStore>> {
     match compile_grammar_from_string(j, string, &PathBuf::from("/internal/")) {

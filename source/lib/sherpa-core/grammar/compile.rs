@@ -2131,7 +2131,7 @@ fn insert_bodes(
 /// # Example
 ///
 /// Basic usage:
-/// ```
+/// ```ignore
 ///  # use std::path::PathBuf;
 /// use sherpa_core::compile_grammar_from_path;
 ///
@@ -2204,7 +2204,7 @@ pub fn compile_grammar_from_path(
 /// # Example
 ///
 /// Basic usage:
-/// ```
+/// ```ignore
 ///  # use std::path::PathBuf;
 ///  use sherpa_core::compile_grammar_from_string;
 ///

@@ -1,6 +1,7 @@
 //! Functions for resolving a set of ambiguous Items.
 use super::{follow::get_follow_items, LR::construct_inline_LR};
 use crate::{
+  debug,
   grammar::hash_id_value_u64,
   intermediate::{
     get_out_of_scope,
@@ -22,6 +23,7 @@ pub(crate) fn peek(
 ) -> SherpaResult<()> {
   let grammar = t.g.clone();
   let g = &grammar;
+  let mut peek_ids = BTreeSet::new();
 
   // Split items into groups based on symbol Ids.
   let goals = hash_group_vec(items.clone(), |index, i| {
@@ -56,6 +58,7 @@ pub(crate) fn peek(
   let mut pending_items = VecDeque::from_iter(vec![(root_par_id, 0, initial_items)]);
 
   while let Some((par_id, peek_depth, items)) = pending_items.pop_front() {
+    let mut local_peek_ids = BTreeSet::new();
     let mut EXCLUSIVE_COMPLETED = false;
 
     // Sort the items into groups of terminal and completed items.
@@ -348,10 +351,16 @@ pub(crate) fn peek(
           // TODO: We need to evaluate whether we can continue processing nodes.
           // The condition in which we can't continue are:
           // - Shift-Reduce conflicts
-
-          if !t.is_scan()
-            && !t.peek_ids.insert(hash_id_value_u64(items.clone().to_empty_state().to_set()))
-          {
+          let hash_id = hash_id_value_u64(items.clone().to_empty_state().to_set());
+          local_peek_ids.insert(hash_id);
+          if !t.is_scan() && /* t. */peek_ids.contains(&hash_id) {
+            println!(
+              "{} {} {}",
+              hash_id_value_u64(items.clone().to_empty_state().to_set()),
+              global_depth,
+              peek_depth
+            );
+            items.__print_items__(g, "peeks");
             // Item set has been repeated
             let lr_starts = get_goal_items(&items, &goals);
             //let lr_starts = goal_items.clone().into_iter().flatten().cloned().collect::<Vec<_>>();
@@ -374,7 +383,10 @@ pub(crate) fn peek(
               SherpaResult::Ok(_) => {
                 // Our grammar is now (RD/RAD + LR)
               }
-              _ if !t.is_scan() => {
+              err if !t.is_scan() => {
+                #[cfg(debug_assertions)]
+                eprintln!("{:?}", err);
+
                 // Otherwise, we must use a fork state to handle this situation
                 let fork_node_index = create_and_insert_node(
                   t,
@@ -455,6 +467,8 @@ pub(crate) fn peek(
         }
       }
     }
+
+    peek_ids.append(&mut local_peek_ids);
   }
 
   SherpaResult::Ok(())

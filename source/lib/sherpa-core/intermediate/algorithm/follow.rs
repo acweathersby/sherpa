@@ -25,7 +25,7 @@ pub(super) fn get_follow_items(
 
   let __print_debug__ = false;
   #[cfg(follow_tracking)]
-  let __print_debug__ = root_completed_item.get_state().get_lane() == 0;
+  let __print_debug__ = true;
 
   if __print_debug__ {
     eprintln!("\n\n---- Follow start on {} ----", root_completed_item.debug_string(g));

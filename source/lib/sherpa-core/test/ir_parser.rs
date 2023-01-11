@@ -14,10 +14,9 @@ fn ir_parser_build() -> SherpaResult<()> {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
       .join("./test/bootstrap/grammar/ir_base.hcg")
       .canonicalize()?,
-  );
+  )?;
+
   j.flush_reports();
-  assert!(!j.debug_error_report());
-  let g = g.unwrap();
 
   let states = compile_states(&mut j, 1)?;
 

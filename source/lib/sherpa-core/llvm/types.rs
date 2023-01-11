@@ -55,7 +55,7 @@ pub struct PublicFunctions<'a> {
   /// Given a pointer to character data, returns the UTF codepoint based on UTF-8 encoding.
   ///
   /// ### Function signature:
-  /// ```rust
+  /// ```ignore
   ///
   /// #[repr(C)]
   /// struct CodePointInfo {
@@ -69,7 +69,7 @@ pub struct PublicFunctions<'a> {
   /// Used to lookup token classes.
   ///
   /// ### Function signature
-  /// ```rust
+  /// ```ignore
   /// extern "C" fn get_token_class_from_codepoint( utf8_codepoint: u32 ) -> u32;
   /// ```
   pub(crate) get_token_class_from_codepoint: FunctionValue<'a>,
@@ -89,168 +89,168 @@ pub struct LLVMParserModule<'a> {
 #[derive(Clone, Copy, Debug)]
 pub enum CTX_AGGREGATE_INDICES {
   // Input data ----------
-  /// ```rust
+  /// ```ignore
   /// pub token_ptr:       *mut u8,
   /// ```
   tok_ptr = 0,
-  /// ```rust
+  /// ```ignore
   /// pub peek_ptr:        *mut u8,
   /// ```
   peek_ptr,
-  /// ```rust
+  /// ```ignore
   /// pub scan_ptr:        *mut u8,
   /// ```
   scan_ptr,
-  /// ```rust
+  /// ```ignore
   /// pub tok_input_len:   u32,
   /// ```
   tok_input_len,
-  /// ```rust
+  /// ```ignore
   /// pub peek_input_len:  u32,
   /// ```
   peek_input_len,
-  /// ```rust
+  /// ```ignore
   /// pub scan_input_len:  u32,
   /// ```
   scan_input_len,
-  /// ```rust
+  /// ```ignore
   /// pub tok_input_trun:  bool,
   /// ```
   tok_input_trun,
-  /// ```rust
+  /// ```ignore
   /// pub peek_input_trun: bool,
   /// ```
   peek_input_trun,
-  /// ```rust
+  /// ```ignore
   /// pub scan_input_trun: bool,
   /// ```
   scan_input_trun,
   // Miscellaneous
-  /// ```rust
+  /// ```ignore
   /// pub in_peek_mode:    bool,
   /// ```
   in_peek_mode,
   // Offset info ----------
   /// The start of the portion of characters currently being recognized
-  /// ```rust
+  /// ```ignore
   /// pub anchor_off:      u32,
   /// ```
   anchor_off,
   /// Maintains the start position of a token. The difference between this and the anchor
   /// offset determines the number characters that have been skipped.
-  /// ```rust
+  /// ```ignore
   /// pub token_off:       u32,
   /// ```
   token_off,
   /// Represents the most advanced offset of  peeked characters
-  /// ```rust
+  /// ```ignore
   /// pub peek_off:        u32,
   /// ```
   peek_off,
   /// Maintains the reference to then end of a recognized tokens when in a scan context
-  /// ```rust
+  /// ```ignore
   /// pub scan_anchor_off: u32,
   /// ```
   scan_anchor_off,
   /// Represents the most advanced portion of scanned characters
-  /// ```rust
+  /// ```ignore
   /// pub scan_off:        u32,
   /// ```
   scan_off,
   /// Represents the byte length of the currently recognized symbol
-  /// ```rust
+  /// ```ignore
   /// pub scan_len:        u32,
   /// ```
   scan_len,
   /// Set to the value of a production when a rule is reduced, or
-  /// ```rust
+  /// ```ignore
   /// pub prod_id:  u32,
   /// ```
   prod_id,
   /// Set to the value of a token when one is recognized.
-  /// ```rust
+  /// ```ignore
   /// pub tok_id:  u32,
   /// ```
   tok_id,
   // Line info ------------
   /// The offset of the last line character recognized that proceeds the anchor offset
-  /// ```rust
+  /// ```ignore
   /// pub anchor_line_off: u32,
   /// ```
   anchor_line_off,
   /// The number of line character recognized that proceed the anchor offset
-  /// ```rust
+  /// ```ignore
   /// pub anchor_line_num: u32,
   /// ```
   anchor_line_num,
   /// The offset of the last line character recognized that proceeds the token offset
-  /// ```rust
+  /// ```ignore
   /// pub tok_line_off:    u32,
   /// ```
   tok_line_off,
   /// The number of line character recognized that proceed the token offset
-  /// ```rust
+  /// ```ignore
   /// pub tok_line_num:    u32,
   /// ```
   tok_line_num,
   /// The offset of the last line character recognized that proceeds the peek offset
-  /// ```rust
+  /// ```ignore
   /// pub peek_line_off:   u32,
   /// ```
   peek_line_off,
   /// The number of line character recognized that proceed the peek offset
-  /// ```rust
+  /// ```ignore
   /// pub peek_line_num:   u32,
   /// ```
   peek_line_num,
   // Goto stack data -----
-  /// ```rust
+  /// ```ignore
   /// pub goto_stack_ptr:  *mut Goto,
   /// ```
   goto_stack_ptr,
-  /// ```rust
+  /// ```ignore
   /// pub goto_size:       u32,
   /// ```
   goto_size,
-  /// ```rust
+  /// ```ignore
   /// pub goto_free:       u32,
   /// ```
   goto_free,
   // Input data ----------
-  /// ```rust
+  /// ```ignore
   /// pub get_input_info:  extern "C" fn(&mut T, u32, u32) -> (*const u8, u32, bool),
   /// ```
   get_input_info,
   // Reader --------------
-  /// ```rust
+  /// ```ignore
   /// pub reader:          *mut T,
   /// ```
   reader,
   // User context --------
-  /// ```rust
+  /// ```ignore
   /// pub meta_ctx:        *mut M,
   /// ```
   meta_ctx,
-  /// ```rust
+  /// ```ignore
   /// pub custom_lex:      fn(&mut T, &mut M, &ParseContext<T, M>) -> (u32, u32, u32),
   /// ```
   custom_lex,
   /// Tracks whether the context is a fail mode or not.
-  /// ```rust
+  /// ```ignore
   /// pub state:           u32,
   /// ```
   state,
   /// When reducing, stores the the number of of symbols to reduce into one.
-  /// ```rust
+  /// ```ignore
   /// pub meta_a:          u32,
   /// ```
   meta_a,
   /// When reducing, stores the rule id that is being reduced.
-  /// ```rust
+  /// ```ignore
   /// pub meta_b:          u32,
   /// ```
   meta_b,
-  /// ```rust
+  /// ```ignore
   /// pub is_active:       bool,
   /// ```
   is_active,

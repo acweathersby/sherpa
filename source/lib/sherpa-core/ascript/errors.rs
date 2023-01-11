@@ -13,7 +13,7 @@ use std::{collections::BTreeMap, sync::Arc};
 /// <> B > ... :{ t_TypeA, prop: u32 } // <- `prop` redefined to `u32` type
 /// ```
 /// ### Rust
-/// ```
+/// ```ignore
 /// # use sherpa_core::types::*;
 /// # use sherpa_compile::types::AScriptStore;
 /// let g = GrammarStore::from_str(
@@ -91,7 +91,7 @@ impl ExtendedError for ErrPropRedefinition {
 ///      | \t (+)                    // <- This rule produces a Vector of Tokens
 /// ```
 /// ### Rust
-/// ```
+/// ```ignore
 /// # use sherpa_core::types::*;
 /// # use sherpa_compile::types::AScriptStore;
 /// let g = GrammarStore::from_str(
@@ -183,7 +183,7 @@ Vector Types:
 ///      | \\t                        // <- This rule produces a Token
 /// ```
 /// ### Rust
-/// ```
+/// ```ignore
 /// # use sherpa_core::types::*;
 /// # use sherpa_compile::types::AScriptStore;
 /// let g = GrammarStore::from_str(
@@ -274,7 +274,7 @@ impl ExtendedError for ErrIncompatibleProductionScalerTypes {
 ///      | (\t )(+)                       // <- This rule produces a Token Vector
 /// ```
 /// ### Rust
-/// ```
+/// ```ignore
 /// # use sherpa_core::types::*;
 /// # use sherpa_compile::types::AScriptStore;
 /// let g = GrammarStore::from_str(

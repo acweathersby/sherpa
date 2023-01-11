@@ -106,7 +106,7 @@
 
         f:ast { { t_TokenId, c_IR, c_IR_Instruction, id: $5  } }
 
-    | t:skip`
+    | t:skip
 
         f:ast { { t_Skip, c_IR, c_IR_Instruction  } }
 

@@ -91,8 +91,8 @@ pub enum SymbolID {
 
   /// Represent the grammar symbol `g:rec`.
   Recovery,
-  /// TODO: Docs
   Default,
+  /// TODO: Docs
   /// Represent end of input. This is also used
   /// to represent the `symbol` of items in the completed
   /// position

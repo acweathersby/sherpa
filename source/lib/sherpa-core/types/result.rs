@@ -29,15 +29,16 @@ impl<T> SherpaResult<T> {
   ///
   /// Basic usage:
   /// ```
-  /// # use sherpa_core::debug::SherpaResult;
   ///
-  /// let x = SherpaResult::from(Option::<u32>::None);
+  /// # use sherpa_core::SherpaResult;
+  ///
+  /// let x = SherpaResult::<u32>::None;
   /// assert_eq!(x.is_ok(), false);
   ///
-  /// let x = SherpaResult::from(Option::Some(2222u32));
+  /// let x = SherpaResult::Ok(2222u32);
   /// assert_eq!(x.is_ok(), true);
   ///
-  /// let x = SherpaResult::from(Result::<u32, &str>::Err("Bad Data"));
+  /// let x = SherpaResult::<u32>::Err("Bad Data".into());
   /// assert_eq!(x.is_ok(), false);
   ///
   /// let x: SherpaResult<i32> = SherpaResult::Ok(2);
@@ -54,15 +55,15 @@ impl<T> SherpaResult<T> {
   ///
   /// Basic usage:
   /// ```
-  /// # use sherpa_core::debug::SherpaResult;
+  /// # use sherpa_core::SherpaResult;
   ///
-  /// let x = SherpaResult::from(Option::<u32>::None);
+  /// let x = SherpaResult::<u32>::None;
   /// assert_eq!(x.is_err(), false);
   ///
-  /// let x = SherpaResult::from(Option::Some(2222u32));
+  /// let x = SherpaResult::Ok(2222u32);
   /// assert_eq!(x.is_err(), false);
   ///
-  /// let x = SherpaResult::from(Result::<u32, &str>::Err("Bad Data"));
+  /// let x = SherpaResult::<u32>::Err("Bad Data".into());
   /// assert_eq!(x.is_err(), true);
   ///
   /// let x: SherpaResult<i32> = SherpaResult::Ok(2);
@@ -79,15 +80,15 @@ impl<T> SherpaResult<T> {
   ///
   /// Basic usage:
   /// ```
-  /// # use sherpa_core::debug::SherpaResult;
+  /// # use sherpa_core::SherpaResult;
   ///
-  /// let x = SherpaResult::from(Option::<u32>::None);
+  /// let x = SherpaResult::<u32>::None;
   /// assert_eq!(x.is_none(), true);
   ///
-  /// let x = SherpaResult::from(Option::Some(2222u32));
+  /// let x = SherpaResult::Ok(2222u32);
   /// assert_eq!(x.is_none(), false);
   ///
-  /// let x = SherpaResult::from(Result::<u32, &str>::Err("Bad Data"));
+  /// let x = SherpaResult::<u32>::Err("Bad Data".into());
   /// assert_eq!(x.is_none(), false);
   ///
   /// let x: SherpaResult<i32> = SherpaResult::Ok(2);
@@ -104,15 +105,15 @@ impl<T> SherpaResult<T> {
   ///
   /// Basic usage:
   /// ```
-  /// # use sherpa_core::debug::SherpaResult;
+  /// # use sherpa_core::SherpaResult;
   ///
-  /// let x = SherpaResult::from(Option::<u32>::None);
+  /// let x = SherpaResult::<u32>::None;
   /// assert_eq!(x.is_faulty(), true);
   ///
-  /// let x = SherpaResult::from(Option::Some(2222u32));
+  /// let x = SherpaResult::Ok(2222u32);
   /// assert_eq!(x.is_faulty(), false);
   ///
-  /// let x = SherpaResult::from(Result::<u32, &str>::Err("Bad Data"));
+  /// let x = SherpaResult::<u32>::Err("Bad Data".into());
   /// assert_eq!(x.is_faulty(), true);
   ///
   /// let x: SherpaResult<i32> = SherpaResult::Ok(2);

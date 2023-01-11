@@ -257,19 +257,17 @@ fn create_state(
   let (normal_symbols, skip_symbols) = if t.is_scan() || node.node_type == NodeType::RAStart {
     (vec![], vec![])
   } else {
-    let (normal_symbol_set, skip_symbols_set, _) = get_symbols_from_items(
-      node.get_unique_transition_item_set(),
-      &t.g,
-      None,
-      children
-        .iter()
-        .filter_map(|i| match i.edge_symbol {
-          sym if sym.is_production() => None,
-          SymbolID::EndOfInput => None,
-          sym => Some(sym),
-        })
-        .collect(),
-    );
+    let child_symbols = children
+      .iter()
+      .filter_map(|i| match i.edge_symbol {
+        sym if sym.is_production() => None,
+        SymbolID::EndOfInput | SymbolID::Default => None,
+        sym => Some(sym),
+      })
+      .collect::<BTreeSet<_>>();
+
+    let (normal_symbol_set, skip_symbols_set, _) =
+      get_symbols_from_items(node.get_unique_transition_item_set(), &t.g, None, child_symbols);
 
     if is_token_assertion {
       for symbol_id in &skip_symbols_set {
@@ -564,7 +562,7 @@ fn create_parent_to_child_map<'a>(
     if child.has_parent() {
       if let Some(parent_id) = child.parent.filter(|i| child.id != *i) {
         if children_tables[parent_id].insert(child.edge_symbol, child).is_some() {
-          panic!("Overriding Node");
+          //panic!("Overriding Node");
         }
       }
 

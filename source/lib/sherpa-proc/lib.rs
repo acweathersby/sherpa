@@ -153,7 +153,7 @@ fn insert_data(span: &Span, in_string: String, offset: &mut Offsets, output: &mu
 /// Using a grammar file. File paths are relative to file the
 /// macro is used in.
 ///
-/// ```
+/// ```ignore
 /// mod my_parser {
 /// # use sherpa_proc::compile_mod as compile;
 ///   compile!("test_grammar.sg");

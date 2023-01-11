@@ -9632,7 +9632,7 @@ where
   }
 }
 /**
-```
+```ascript
 {
     t_Grammar,
     c_Grammar,
@@ -9657,7 +9657,7 @@ fn _fn0(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } }
 }
 /**
-```
+```ascript
 {
     t_Grammar,
     c_Grammar,
@@ -9680,7 +9680,7 @@ fn _fn1(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 {
     t_IR_STATE,
     c_IR,
@@ -9716,7 +9716,7 @@ fn _fn2(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } } } } }
 }
 /**
-```
+```ascript
 {
     t_IR_STATE,
     c_IR,
@@ -9751,7 +9751,7 @@ fn _fn3(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } } } } }
 }
 /**
-```
+```ascript
 {
     t_IR_STATE,
     c_IR,
@@ -9784,7 +9784,7 @@ fn _fn4(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } } }
 }
 /**
-```
+```ascript
 {
     t_IR_STATE,
     c_IR,
@@ -9817,7 +9817,7 @@ fn _fn5(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } } }
 }
 /**
-```
+```ascript
 {
     t_IR_STATE,
     c_IR,
@@ -9849,7 +9849,7 @@ fn _fn6(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } } }
 }
 /**
-```
+```ascript
 {
     t_IR_STATE,
     c_IR,
@@ -9881,7 +9881,7 @@ fn _fn7(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } } }
 }
 /**
-```
+```ascript
 {
     t_IR_STATE,
     c_IR,
@@ -9911,7 +9911,7 @@ fn _fn8(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 {
     t_IR_STATE,
     c_IR,
@@ -9940,7 +9940,7 @@ fn _fn9(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 {
     t_ASSERT,
     c_IR,
@@ -9978,7 +9978,7 @@ fn _fn10(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 {
     t_ASSERT,
     c_IR,
@@ -10004,7 +10004,7 @@ fn _fn11(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 {
     t_DEFAULT,
     c_IR,
@@ -10027,7 +10027,7 @@ fn _fn12(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 {
     t_ASSERT,
     c_IR,
@@ -10062,7 +10062,7 @@ fn _fn13(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 { t_Num, val:i64($1) }
 ```*/
 fn _fn14(args: &mut Vec<HCO>, tok: Token) {
@@ -10074,7 +10074,7 @@ fn _fn14(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 { t_Production_Symbol, c_Symbol, name:str($1), tok }
 ```*/
 fn _fn15(args: &mut Vec<HCO>, tok: Token) {
@@ -10089,7 +10089,7 @@ fn _fn15(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 {
     t_Production_Import_Symbol,
     c_Symbol,
@@ -10115,7 +10115,7 @@ fn _fn16(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 {
     t_Reduce,
     c_IR,
@@ -10144,7 +10144,7 @@ fn _fn17(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 {
     t_Reduce,
     c_IR,
@@ -10167,7 +10167,7 @@ fn _fn18(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 { t_TokenAssign, c_IR, c_IR_Instruction, ids:$3 }
 ```*/
 fn _fn19(args: &mut Vec<HCO>, tok: Token) {
@@ -10183,7 +10183,7 @@ fn _fn19(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 { t_SetProd, c_IR, c_IR_Instruction, id:$4 }
 ```*/
 fn _fn20(args: &mut Vec<HCO>, tok: Token) {
@@ -10200,7 +10200,7 @@ fn _fn20(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 {
     t_ForkTo,
     c_IR,
@@ -10231,7 +10231,7 @@ fn _fn21(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } } }
 }
 /**
-```
+```ascript
 {
     t_ScanUntil,
     c_IR,
@@ -10256,7 +10256,7 @@ fn _fn22(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } }
 }
 /**
-```
+```ascript
 { t_TokenId, c_IR, c_IR_Instruction, id:$5 }
 ```*/
 fn _fn23(args: &mut Vec<HCO>, tok: Token) {
@@ -10275,7 +10275,7 @@ fn _fn23(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } }
 }
 /**
-```
+```ascript
 { t_Skip, c_IR, c_IR_Instruction }
 ```*/
 fn _fn24(args: &mut Vec<HCO>, tok: Token) {
@@ -10285,7 +10285,7 @@ fn _fn24(args: &mut Vec<HCO>, tok: Token) {
   args.push(HCO::NODE/*aa99*/(ref_0))
 }
 /**
-```
+```ascript
 { t_Pass, c_IR, c_IR_Instruction }
 ```*/
 fn _fn25(args: &mut Vec<HCO>, tok: Token) {
@@ -10295,7 +10295,7 @@ fn _fn25(args: &mut Vec<HCO>, tok: Token) {
   args.push(HCO::NODE/*aa99*/(ref_0))
 }
 /**
-```
+```ascript
 { t_Fail, c_IR, c_IR_Instruction }
 ```*/
 fn _fn26(args: &mut Vec<HCO>, tok: Token) {
@@ -10305,7 +10305,7 @@ fn _fn26(args: &mut Vec<HCO>, tok: Token) {
   args.push(HCO::NODE/*aa99*/(ref_0))
 }
 /**
-```
+```ascript
 { t_NotInScope, c_IR, c_IR_Instruction, ids:$5 }
 ```*/
 fn _fn27(args: &mut Vec<HCO>, tok: Token) {
@@ -10324,7 +10324,7 @@ fn _fn27(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 { t_SetScope, c_IR, c_IR_Instruction, scope:i64($1) }
 ```*/
 fn _fn28(args: &mut Vec<HCO>, tok: Token) {
@@ -10339,7 +10339,7 @@ fn _fn28(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 { t_Shift, c_IR, c_IR_Instruction, EMPTY:bool($2) }
 ```*/
 fn _fn29(args: &mut Vec<HCO>, tok: Token) {
@@ -10352,7 +10352,7 @@ fn _fn29(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 {
     t_ScanUntil,
     c_IR,
@@ -10375,7 +10375,7 @@ fn _fn30(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 { t_Shift, c_IR, c_IR_Instruction, EMPTY:bool($NULL) }
 ```*/
 fn _fn31(args: &mut Vec<HCO>, tok: Token) {
@@ -10385,7 +10385,7 @@ fn _fn31(args: &mut Vec<HCO>, tok: Token) {
   args.push(HCO::NODE/*aa99*/(ref_0))
 }
 /**
-```
+```ascript
 { t_Ascript, c_Function, ast:$3, tok }
 ```*/
 fn _fn32(args: &mut Vec<HCO>, tok: Token) {
@@ -10403,7 +10403,7 @@ fn _fn32(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 { t_Returned, c_Function, txt:str($3), tok }
 ```*/
 fn _fn33(args: &mut Vec<HCO>, tok: Token) {
@@ -10418,7 +10418,7 @@ fn _fn33(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 { t_Referenced, c_Function, reference:$3, tok }
 ```*/
 fn _fn34(args: &mut Vec<HCO>, tok: Token) {
@@ -10436,7 +10436,7 @@ fn _fn34(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } }
 }
 /**
-```
+```ascript
 { t_AST_Statements, statements:$1, tok }
 ```*/
 fn _fn35(args: &mut Vec<HCO>, tok: Token) {
@@ -10451,7 +10451,7 @@ fn _fn35(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 { t_AST_Struct, props:$2, tok }
 ```*/
 fn _fn36(args: &mut Vec<HCO>, tok: Token) {
@@ -10468,7 +10468,7 @@ fn _fn36(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 { t_AST_Property, id:str($1), value:$3, tok }
 ```*/
 fn _fn37(args: &mut Vec<HCO>, tok: Token) {
@@ -10486,7 +10486,7 @@ fn _fn37(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 { t_AST_TypeId, value:str($1), tok }
 ```*/
 fn _fn38(args: &mut Vec<HCO>, tok: Token) {
@@ -10499,7 +10499,7 @@ fn _fn38(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 { t_AST_ClassId, value:str($1), tok }
 ```*/
 fn _fn39(args: &mut Vec<HCO>, tok: Token) {
@@ -10512,7 +10512,7 @@ fn _fn39(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 { t_AST_Vector, initializer:$2, tok }
 ```*/
 fn _fn40(args: &mut Vec<HCO>, tok: Token) {
@@ -10529,7 +10529,7 @@ fn _fn40(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 { t_AST_Vector, initializer:$NULL, tok }
 ```*/
 fn _fn41(args: &mut Vec<HCO>, tok: Token) {
@@ -10540,7 +10540,7 @@ fn _fn41(args: &mut Vec<HCO>, tok: Token) {
   args.push(HCO::NODE/*aa99*/(ref_0))
 }
 /**
-```
+```ascript
 { t_AST_Member, reference:$1, property:$3 }
 ```*/
 fn _fn42(args: &mut Vec<HCO>, tok: Token) {
@@ -10557,7 +10557,7 @@ fn _fn42(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 { t_AST_NamedReference, value:str($2), tok }
 ```*/
 fn _fn43(args: &mut Vec<HCO>, tok: Token) {
@@ -10571,7 +10571,7 @@ fn _fn43(args: &mut Vec<HCO>, tok: Token) {
   args.push(HCO::NODE/*aa99*/(ref_0))
 }
 /**
-```
+```ascript
 { t_AST_IndexReference, value:f64($2), tok }
 ```*/
 fn _fn44(args: &mut Vec<HCO>, tok: Token) {
@@ -10587,7 +10587,7 @@ fn _fn44(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 { t_AST_STRING, value:$2, tok }
 ```*/
 fn _fn45(args: &mut Vec<HCO>, tok: Token) {
@@ -10603,7 +10603,7 @@ fn _fn45(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 { t_AST_STRING, value:$NULL, tok }
 ```*/
 fn _fn46(args: &mut Vec<HCO>, tok: Token) {
@@ -10613,7 +10613,7 @@ fn _fn46(args: &mut Vec<HCO>, tok: Token) {
   args.push(HCO::NODE/*aa99*/(ref_0))
 }
 /**
-```
+```ascript
 { t_AST_Token }
 ```*/
 fn _fn47(args: &mut Vec<HCO>, tok: Token) {
@@ -10623,7 +10623,7 @@ fn _fn47(args: &mut Vec<HCO>, tok: Token) {
   args.push(HCO::NODE/*aa99*/(ref_0))
 }
 /**
-```
+```ascript
 { t_AST_U8, initializer:$2, tok }
 ```*/
 fn _fn48(args: &mut Vec<HCO>, tok: Token) {
@@ -10639,7 +10639,7 @@ fn _fn48(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 { t_AST_U16, initializer:$2, tok }
 ```*/
 fn _fn49(args: &mut Vec<HCO>, tok: Token) {
@@ -10655,7 +10655,7 @@ fn _fn49(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 { t_AST_U32, initializer:$2, tok }
 ```*/
 fn _fn50(args: &mut Vec<HCO>, tok: Token) {
@@ -10671,7 +10671,7 @@ fn _fn50(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 { t_AST_U64, initializer:$2, tok }
 ```*/
 fn _fn51(args: &mut Vec<HCO>, tok: Token) {
@@ -10687,7 +10687,7 @@ fn _fn51(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 { t_AST_I8, initializer:$2, tok }
 ```*/
 fn _fn52(args: &mut Vec<HCO>, tok: Token) {
@@ -10703,7 +10703,7 @@ fn _fn52(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 { t_AST_I16, initializer:$2, tok }
 ```*/
 fn _fn53(args: &mut Vec<HCO>, tok: Token) {
@@ -10719,7 +10719,7 @@ fn _fn53(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 { t_AST_I32, initializer:$2, tok }
 ```*/
 fn _fn54(args: &mut Vec<HCO>, tok: Token) {
@@ -10735,7 +10735,7 @@ fn _fn54(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 { t_AST_I64, initializer:$2, tok }
 ```*/
 fn _fn55(args: &mut Vec<HCO>, tok: Token) {
@@ -10751,7 +10751,7 @@ fn _fn55(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 { t_AST_F32, initializer:$2, tok }
 ```*/
 fn _fn56(args: &mut Vec<HCO>, tok: Token) {
@@ -10767,7 +10767,7 @@ fn _fn56(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 { t_AST_F64, initializer:$2, tok }
 ```*/
 fn _fn57(args: &mut Vec<HCO>, tok: Token) {
@@ -10783,7 +10783,7 @@ fn _fn57(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 { t_AST_U8, initializer:$NULL, tok }
 ```*/
 fn _fn58(args: &mut Vec<HCO>, tok: Token) {
@@ -10793,7 +10793,7 @@ fn _fn58(args: &mut Vec<HCO>, tok: Token) {
   args.push(HCO::NODE/*aa99*/(ref_0))
 }
 /**
-```
+```ascript
 { t_AST_U16, initializer:$NULL, tok }
 ```*/
 fn _fn59(args: &mut Vec<HCO>, tok: Token) {
@@ -10803,7 +10803,7 @@ fn _fn59(args: &mut Vec<HCO>, tok: Token) {
   args.push(HCO::NODE/*aa99*/(ref_0))
 }
 /**
-```
+```ascript
 { t_AST_U32, initializer:$NULL, tok }
 ```*/
 fn _fn60(args: &mut Vec<HCO>, tok: Token) {
@@ -10813,7 +10813,7 @@ fn _fn60(args: &mut Vec<HCO>, tok: Token) {
   args.push(HCO::NODE/*aa99*/(ref_0))
 }
 /**
-```
+```ascript
 { t_AST_U64, initializer:$NULL, tok }
 ```*/
 fn _fn61(args: &mut Vec<HCO>, tok: Token) {
@@ -10823,7 +10823,7 @@ fn _fn61(args: &mut Vec<HCO>, tok: Token) {
   args.push(HCO::NODE/*aa99*/(ref_0))
 }
 /**
-```
+```ascript
 { t_AST_I8, initializer:$NULL, tok }
 ```*/
 fn _fn62(args: &mut Vec<HCO>, tok: Token) {
@@ -10833,7 +10833,7 @@ fn _fn62(args: &mut Vec<HCO>, tok: Token) {
   args.push(HCO::NODE/*aa99*/(ref_0))
 }
 /**
-```
+```ascript
 { t_AST_I16, initializer:$NULL, tok }
 ```*/
 fn _fn63(args: &mut Vec<HCO>, tok: Token) {
@@ -10843,7 +10843,7 @@ fn _fn63(args: &mut Vec<HCO>, tok: Token) {
   args.push(HCO::NODE/*aa99*/(ref_0))
 }
 /**
-```
+```ascript
 { t_AST_I32, initializer:$NULL, tok }
 ```*/
 fn _fn64(args: &mut Vec<HCO>, tok: Token) {
@@ -10853,7 +10853,7 @@ fn _fn64(args: &mut Vec<HCO>, tok: Token) {
   args.push(HCO::NODE/*aa99*/(ref_0))
 }
 /**
-```
+```ascript
 { t_AST_I64, initializer:$NULL, tok }
 ```*/
 fn _fn65(args: &mut Vec<HCO>, tok: Token) {
@@ -10863,7 +10863,7 @@ fn _fn65(args: &mut Vec<HCO>, tok: Token) {
   args.push(HCO::NODE/*aa99*/(ref_0))
 }
 /**
-```
+```ascript
 { t_AST_F32, initializer:$NULL, tok }
 ```*/
 fn _fn66(args: &mut Vec<HCO>, tok: Token) {
@@ -10873,7 +10873,7 @@ fn _fn66(args: &mut Vec<HCO>, tok: Token) {
   args.push(HCO::NODE/*aa99*/(ref_0))
 }
 /**
-```
+```ascript
 { t_AST_F64, initializer:$NULL, tok }
 ```*/
 fn _fn67(args: &mut Vec<HCO>, tok: Token) {
@@ -10883,7 +10883,7 @@ fn _fn67(args: &mut Vec<HCO>, tok: Token) {
   args.push(HCO::NODE/*aa99*/(ref_0))
 }
 /**
-```
+```ascript
 { t_AST_BOOL, initializer:$2, tok }
 ```*/
 fn _fn68(args: &mut Vec<HCO>, tok: Token) {
@@ -10900,7 +10900,7 @@ fn _fn68(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 { t_AST_BOOL, initializer:$NULL, tok }
 ```*/
 fn _fn69(args: &mut Vec<HCO>, tok: Token) {
@@ -10910,7 +10910,7 @@ fn _fn69(args: &mut Vec<HCO>, tok: Token) {
   args.push(HCO::NODE/*aa99*/(ref_0))
 }
 /**
-```
+```ascript
 { t_AST_BOOL, value:true }
 ```*/
 fn _fn70(args: &mut Vec<HCO>, tok: Token) {
@@ -10921,7 +10921,7 @@ fn _fn70(args: &mut Vec<HCO>, tok: Token) {
   args.push(HCO::NODE/*aa99*/(ref_0))
 }
 /**
-```
+```ascript
 { t_AST_BOOL, value:false }
 ```*/
 fn _fn71(args: &mut Vec<HCO>, tok: Token) {
@@ -10932,7 +10932,7 @@ fn _fn71(args: &mut Vec<HCO>, tok: Token) {
   args.push(HCO::NODE/*aa99*/(ref_0))
 }
 /**
-```
+```ascript
 { t_AST_NUMBER, value:f64($1) }
 ```*/
 fn _fn72(args: &mut Vec<HCO>, tok: Token) {
@@ -10944,7 +10944,7 @@ fn _fn72(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 { t_AST_Add, left:$1, right:$3, tok }
 ```*/
 fn _fn73(args: &mut Vec<HCO>, tok: Token) {
@@ -10963,7 +10963,7 @@ fn _fn73(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } }
 }
 /**
-```
+```ascript
 { t_Reference, c_Symbol, val:str($1) }
 ```*/
 fn _fn74(args: &mut Vec<HCO>, tok: Token) {
@@ -10975,7 +10975,7 @@ fn _fn74(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 { t_Generated, c_Symbol, c_Token, val:str($2), tok }
 ```*/
 fn _fn75(args: &mut Vec<HCO>, tok: Token) {
@@ -10989,7 +10989,7 @@ fn _fn75(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 {
     t_Exclusive_Literal,
     c_Symbol,
@@ -11011,7 +11011,7 @@ fn _fn76(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 { t_Literal, c_Symbol, c_Token, val:str($1), tok }
 ```*/
 fn _fn77(args: &mut Vec<HCO>, tok: Token) {
@@ -11021,7 +11021,7 @@ fn _fn77(args: &mut Vec<HCO>, tok: Token) {
   args.push(HCO::NODE/*aa99*/(ref_0))
 }
 /**
-```
+```ascript
 { t_Literal, c_Symbol, c_Token, val:str($2), tok }
 ```*/
 fn _fn78(args: &mut Vec<HCO>, tok: Token) {
@@ -11035,7 +11035,7 @@ fn _fn78(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 { t_End_Of_File, c_Symbol, c_Token, tok }
 ```*/
 fn _fn79(args: &mut Vec<HCO>, tok: Token) {
@@ -11045,7 +11045,7 @@ fn _fn79(args: &mut Vec<HCO>, tok: Token) {
   args.push(HCO::NODE/*aa99*/(ref_0))
 }
 /**
-```
+```ascript
 { t_Space, c_Meta, c_Format, position:i16(0) }
 ```*/
 fn _fn80(args: &mut Vec<HCO>, tok: Token) {
@@ -11055,7 +11055,7 @@ fn _fn80(args: &mut Vec<HCO>, tok: Token) {
   args.push(HCO::NODE/*aa99*/(ref_0))
 }
 /**
-```
+```ascript
 { t_NewLine, c_Meta, c_Format, position:i16(0) }
 ```*/
 fn _fn81(args: &mut Vec<HCO>, tok: Token) {
@@ -11065,7 +11065,7 @@ fn _fn81(args: &mut Vec<HCO>, tok: Token) {
   args.push(HCO::NODE/*aa99*/(ref_0))
 }
 /**
-```
+```ascript
 { t_IncreaseIndent, c_Meta, c_Format, position:i16(0) }
 ```*/
 fn _fn82(args: &mut Vec<HCO>, tok: Token) {
@@ -11075,7 +11075,7 @@ fn _fn82(args: &mut Vec<HCO>, tok: Token) {
   args.push(HCO::NODE/*aa99*/(ref_0))
 }
 /**
-```
+```ascript
 { t_DecreaseIndent, c_Meta, c_Format, position:i16(0) }
 ```*/
 fn _fn83(args: &mut Vec<HCO>, tok: Token) {
@@ -11085,7 +11085,7 @@ fn _fn83(args: &mut Vec<HCO>, tok: Token) {
   args.push(HCO::NODE/*aa99*/(ref_0))
 }
 /**
-```
+```ascript
 {
     t_Production_Token,
     c_Symbol,
@@ -11107,7 +11107,7 @@ fn _fn84(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 { t_Goto, c_IR, c_IR_Instruction, state:$2 }
 ```*/
 fn _fn85(args: &mut Vec<HCO>, tok: Token) {
@@ -11122,7 +11122,7 @@ fn _fn85(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 {
     t_FailState,
     c_IR,
@@ -11156,7 +11156,7 @@ fn _fn86(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } } } } }
 }
 /**
-```
+```ascript
 {
     t_FailState,
     c_IR,
@@ -11187,7 +11187,7 @@ fn _fn87(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } } }
 }
 /**
-```
+```ascript
 {
     t_FailState,
     c_IR,
@@ -11218,7 +11218,7 @@ fn _fn88(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } } }
 }
 /**
-```
+```ascript
 {
     t_FailState,
     c_IR,
@@ -11246,7 +11246,7 @@ fn _fn89(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 { t_Symbols, c_IR, expected:$3, skipped:$4 }
 ```*/
 fn _fn90(args: &mut Vec<HCO>, tok: Token) {
@@ -11265,7 +11265,7 @@ fn _fn90(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } }
 }
 /**
-```
+```ascript
 { t_Symbols, c_IR, expected:$3, skipped:$NULL }
 ```*/
 fn _fn91(args: &mut Vec<HCO>, tok: Token) {
@@ -11282,7 +11282,7 @@ fn _fn91(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 { t_AnnotatedSymbol, c_Symbol, symbol:$1, reference:$2 }
 ```*/
 fn _fn92(args: &mut Vec<HCO>, tok: Token) {
@@ -11300,7 +11300,7 @@ fn _fn92(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } } }
 }
 /**
-```
+```ascript
 { t_OptionalSymbol, symbol:$1 }
 ```*/
 fn _fn93(args: &mut Vec<HCO>, tok: Token) {
@@ -11315,7 +11315,7 @@ fn _fn93(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 { t_Not_Symbol, c_Symbol, symbol:$2, tok }
 ```*/
 fn _fn94(args: &mut Vec<HCO>, tok: Token) {
@@ -11331,7 +11331,7 @@ fn _fn94(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 { t_Look_Behind, c_Symbol, symbol:$2, tok }
 ```*/
 fn _fn95(args: &mut Vec<HCO>, tok: Token) {
@@ -11347,7 +11347,7 @@ fn _fn95(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 { t_NonCaptureSymbol, c_Symbol, sym:$2 }
 ```*/
 fn _fn96(args: &mut Vec<HCO>, tok: Token) {
@@ -11362,7 +11362,7 @@ fn _fn96(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 {
     t_List_Production,
     c_Symbol,
@@ -11388,7 +11388,7 @@ fn _fn97(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } }
 }
 /**
-```
+```ascript
 {
     t_Optional_List_Production,
     c_Symbol,
@@ -11414,7 +11414,7 @@ fn _fn98(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } }
 }
 /**
-```
+```ascript
 {
     t_List_Production,
     c_Symbol,
@@ -11438,7 +11438,7 @@ fn _fn99(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 {
     t_Optional_List_Production,
     c_Symbol,
@@ -11462,7 +11462,7 @@ fn _fn100(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 { t_Group_Production, c_Symbol, bodies:$2, tok }
 ```*/
 fn _fn101(args: &mut Vec<HCO>, tok: Token) {
@@ -11479,7 +11479,7 @@ fn _fn101(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 {
     t_Body,
     c_Production,
@@ -11513,7 +11513,7 @@ fn _fn102(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 {
     t_Body,
     c_Production,
@@ -11544,7 +11544,7 @@ fn _fn103(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } } } }
 }
 /**
-```
+```ascript
 {
     t_Body,
     c_Production,
@@ -11575,7 +11575,7 @@ fn _fn104(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 {
     t_Body,
     c_Production,
@@ -11607,7 +11607,7 @@ fn _fn105(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 {
     t_Body,
     c_Production,
@@ -11635,7 +11635,7 @@ fn _fn106(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } }
 }
 /**
-```
+```ascript
 {
     t_Body,
     c_Production,
@@ -11664,7 +11664,7 @@ fn _fn107(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } } }
 }
 /**
-```
+```ascript
 {
     t_Body,
     c_Production,
@@ -11693,7 +11693,7 @@ fn _fn108(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 {
     t_Body,
     c_Production,
@@ -11719,7 +11719,7 @@ fn _fn109(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 { t_Exclude, c_Symbol, c_Meta, sym:$2, tok }
 ```*/
 fn _fn110(args: &mut Vec<HCO>, tok: Token) {
@@ -11736,7 +11736,7 @@ fn _fn110(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 { t_Look_Ignore, c_Symbol, c_Meta, sym:$2, tok }
 ```*/
 fn _fn111(args: &mut Vec<HCO>, tok: Token) {
@@ -11753,7 +11753,7 @@ fn _fn111(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 {
     t_AnyGroup,
     c_Symbol,
@@ -11779,7 +11779,7 @@ fn _fn112(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } }
 }
 /**
-```
+```ascript
 {
     t_AnyGroup,
     c_Symbol,
@@ -11803,7 +11803,7 @@ fn _fn113(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 { t_Empty, c_Symbol, tok }
 ```*/
 fn _fn114(args: &mut Vec<HCO>, tok: Token) {
@@ -11813,7 +11813,7 @@ fn _fn114(args: &mut Vec<HCO>, tok: Token) {
   args.push(HCO::NODE/*aa99*/(ref_0))
 }
 /**
-```
+```ascript
 {
     t_Production,
     c_Production,
@@ -11848,7 +11848,7 @@ fn _fn115(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 {
     t_ProductionMerged,
     c_Production,
@@ -11874,7 +11874,7 @@ fn _fn116(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } }
 }
 /**
-```
+```ascript
 {
     t_Production,
     c_Production,
@@ -11907,7 +11907,7 @@ fn _fn117(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 {
     t_Production,
     c_Production,
@@ -11939,7 +11939,7 @@ fn _fn118(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } } }
 }
 /**
-```
+```ascript
 {
     t_Production,
     c_Production,
@@ -11969,7 +11969,7 @@ fn _fn119(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } }
 }
 /**
-```
+```ascript
 { t_Ignore, c_Preamble, symbols:$2 }
 ```*/
 fn _fn120(args: &mut Vec<HCO>, tok: Token) {
@@ -11985,7 +11985,7 @@ fn _fn120(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 { t_Import, c_Preamble, uri:$2, reference:$4, tok }
 ```*/
 fn _fn121(args: &mut Vec<HCO>, tok: Token) {
@@ -12002,7 +12002,7 @@ fn _fn121(args: &mut Vec<HCO>, tok: Token) {
   args.push(HCO::NODE/*aa99*/(ref_0))
 }
 /**
-```
+```ascript
 { t_Export, c_Preamble, production:$2, reference:$4 }
 ```*/
 fn _fn122(args: &mut Vec<HCO>, tok: Token) {
@@ -12021,7 +12021,7 @@ fn _fn122(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } }
 }
 /**
-```
+```ascript
 { t_Name, c_Preamble, name:str($2) }
 ```*/
 fn _fn123(args: &mut Vec<HCO>, tok: Token) {
@@ -12034,7 +12034,7 @@ fn _fn123(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 { t_Out_Of_Band, c_Function, reference:$2, txt:str($3) }
 ```*/
 fn _fn124(args: &mut Vec<HCO>, tok: Token) {
@@ -12055,7 +12055,7 @@ fn _fn124(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } } }
 }
 /**
-```
+```ascript
 {
     t_Out_Of_Band,
     c_Function,
@@ -12083,7 +12083,7 @@ fn _fn125(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 {
     t_Out_Of_Band,
     c_Function,
@@ -12111,7 +12111,7 @@ fn _fn126(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } } }
 }
 /**
-```
+```ascript
 {
     t_Out_Of_Band,
     c_Function,
@@ -12138,7 +12138,7 @@ fn _fn127(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 {
     t_Out_Of_Band,
     c_Function,
@@ -12165,7 +12165,7 @@ fn _fn128(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } } }
 }
 /**
-```
+```ascript
 {
     t_IR_STATE,
     c_IR,
@@ -12204,7 +12204,7 @@ fn _fn129(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } } } } } }
 }
 /**
-```
+```ascript
 {
     t_IR_STATE,
     c_IR,
@@ -12240,7 +12240,7 @@ fn _fn130(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } } } }
 }
 /**
-```
+```ascript
 {
     t_IR_STATE,
     c_IR,
@@ -12276,7 +12276,7 @@ fn _fn131(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } } } }
 }
 /**
-```
+```ascript
 {
     t_IR_STATE,
     c_IR,
@@ -12309,7 +12309,7 @@ fn _fn132(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) } }
 }
 /**
-```
+```ascript
 { t_Repeat, c_IR, c_IR_Instruction }
 ```*/
 fn _fn133(args: &mut Vec<HCO>, tok: Token) {
@@ -12321,7 +12321,7 @@ fn _fn133(args: &mut Vec<HCO>, tok: Token) {
   args.push(HCO::NODE/*aa99*/(ref_0))
 }
 /**
-```
+```ascript
 {
     t_Lazy,
     c_IR,
@@ -12353,7 +12353,7 @@ fn _fn134(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 { t_HASH_NAME, val:str($1) }
 ```*/
 fn _fn135(args: &mut Vec<HCO>, tok: Token) {
@@ -12365,7 +12365,7 @@ fn _fn135(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 { t_FunctionIndexNum, value:f64($1) }
 ```*/
 fn _fn136(args: &mut Vec<HCO>, tok: Token) {
@@ -12377,7 +12377,7 @@ fn _fn136(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 { t_FunctionIndexWildCard }
 ```*/
 fn _fn137(args: &mut Vec<HCO>, tok: Token) {
@@ -12387,7 +12387,7 @@ fn _fn137(args: &mut Vec<HCO>, tok: Token) {
   args.push(HCO::NODE/*aa99*/(ref_0))
 }
 /**
-```
+```ascript
 { t_FunctionIndexId, value:str($1) }
 ```*/
 fn _fn138(args: &mut Vec<HCO>, tok: Token) {
@@ -12401,7 +12401,7 @@ fn _fn138(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(ref_0)) }
 }
 /**
-```
+```ascript
 str($3)
 ```*/
 fn _fn139(args: &mut Vec<HCO>, tok: Token) {
@@ -12415,7 +12415,7 @@ fn _fn139(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 $2
 ```*/
 fn _fn140(args: &mut Vec<HCO>, tok: Token) {
@@ -12427,7 +12427,7 @@ fn _fn140(args: &mut Vec<HCO>, tok: Token) {
                                 args.push(HCO::NODES/*aa22*/(r_0)); }
 }
 /**
-```
+```ascript
 [$1]
 ```*/
 fn _fn141(args: &mut Vec<HCO>, tok: Token) {
@@ -12440,7 +12440,7 @@ fn _fn141(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 $__first__+$__last__
 ```*/
 fn _fn142(args: &mut Vec<HCO>, tok: Token) {
@@ -12455,7 +12455,7 @@ fn _fn142(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 $1+$2
 ```*/
 fn _fn143(args: &mut Vec<HCO>, tok: Token) {
@@ -12467,7 +12467,7 @@ fn _fn143(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 $1+$3+[$4]
 ```*/
 fn _fn144(args: &mut Vec<HCO>, tok: Token) {
@@ -12486,7 +12486,7 @@ ref_0.append(&mut r_1);
                                 args.push(HCO::NODES/*aa22*/(ref_0)); } } }
 }
 /**
-```
+```ascript
 $1+[$2]
 ```*/
 fn _fn145(args: &mut Vec<HCO>, tok: Token) {
@@ -12501,7 +12501,7 @@ ref_0.append(&mut r_1);
                                 args.push(HCO::NODES/*aa22*/(ref_0)); } }
 }
 /**
-```
+```ascript
 [$1]
 ```*/
 fn _fn146(args: &mut Vec<HCO>, tok: Token) {
@@ -12513,7 +12513,7 @@ ref_0.push(/*RR6*/r_0);
                                 args.push(HCO::NODES/*aa22*/(ref_0)); }
 }
 /**
-```
+```ascript
 $1+$3+[$NULL]
 ```*/
 fn _fn147(args: &mut Vec<HCO>, tok: Token) {
@@ -12529,7 +12529,7 @@ ref_0.append(&mut r_0);
                                 args.push(HCO::NODES/*aa22*/(ref_0)); } }
 }
 /**
-```
+```ascript
 $1+[$NULL]
 ```*/
 fn _fn148(args: &mut Vec<HCO>, tok: Token) {
@@ -12541,7 +12541,7 @@ ref_0.append(&mut r_0);
                                 args.push(HCO::NODES/*aa22*/(ref_0)); }
 }
 /**
-```
+```ascript
 $NULL+[$NULL]
 ```*/
 fn _fn149(args: &mut Vec<HCO>, tok: Token) {
@@ -12550,7 +12550,7 @@ fn _fn149(args: &mut Vec<HCO>, tok: Token) {
   args.push(/*RR1*/ HCO::OBJECTS(vec![]));
 }
 /**
-```
+```ascript
 $2
 ```*/
 fn _fn150(args: &mut Vec<HCO>, tok: Token) {
@@ -12562,7 +12562,7 @@ fn _fn150(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(r_0)) }
 }
 /**
-```
+```ascript
 $__first__+$__last__
 ```*/
 fn _fn151(args: &mut Vec<HCO>, tok: Token) {
@@ -12576,7 +12576,7 @@ r_0.push(/*UX2*/r_1);
                                 args.push(HCO::NODES/*aa22*/(r_0)); } }
 }
 /**
-```
+```ascript
 $3
 ```*/
 fn _fn152(args: &mut Vec<HCO>, tok: Token) {
@@ -12589,7 +12589,7 @@ fn _fn152(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(r_0)) }
 }
 /**
-```
+```ascript
 $1+$2
 ```*/
 fn _fn153(args: &mut Vec<HCO>, tok: Token) {
@@ -12602,7 +12602,7 @@ r_0.append(&mut r_1);
                                 args.push(HCO::NODES/*aa22*/(r_0)); } }
 }
 /**
-```
+```ascript
 $1
 ```*/
 fn _fn154(args: &mut Vec<HCO>, tok: Token) {
@@ -12612,7 +12612,7 @@ fn _fn154(args: &mut Vec<HCO>, tok: Token) {
                                 args.push(HCO::NODES/*aa22*/(r_0)); }
 }
 /**
-```
+```ascript
 $__first__+$__last__
 ```*/
 fn _fn155(args: &mut Vec<HCO>, tok: Token) {
@@ -12625,7 +12625,7 @@ r_0.push(/*UX2*/r_1);
                                 args.push(HCO::NODES/*aa22*/(r_0)); } }
 }
 /**
-```
+```ascript
 $1
 ```*/
 fn _fn156(args: &mut Vec<HCO>, tok: Token) {
@@ -12636,7 +12636,7 @@ fn _fn156(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(r_0)) }
 }
 /**
-```
+```ascript
 [$1]
 ```*/
 fn _fn157(args: &mut Vec<HCO>, tok: Token) {
@@ -12647,7 +12647,7 @@ fn _fn157(args: &mut Vec<HCO>, tok: Token) {
   args.push(HCO::TOKENS(ref_0));
 }
 /**
-```
+```ascript
 $__first__+$__last__
 ```*/
 fn _fn158(args: &mut Vec<HCO>, tok: Token) {
@@ -12660,7 +12660,7 @@ fn _fn158(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 $__first__+$__last__
 ```*/
 fn _fn159(args: &mut Vec<HCO>, tok: Token) {
@@ -12675,7 +12675,7 @@ fn _fn159(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 $2
 ```*/
 fn _fn160(args: &mut Vec<HCO>, tok: Token) {
@@ -12686,7 +12686,7 @@ fn _fn160(args: &mut Vec<HCO>, tok: Token) {
  args.push(HCO::NODE/*aa99*/(r_0)) }
 }
 /**
-```
+```ascript
 str($1)
 ```*/
 fn _fn161(args: &mut Vec<HCO>, tok: Token) {
@@ -12697,7 +12697,7 @@ fn _fn161(args: &mut Vec<HCO>, tok: Token) {
   }
 }
 /**
-```
+```ascript
 $2
 ```*/
 fn _fn162(args: &mut Vec<HCO>, tok: Token) {
@@ -12708,7 +12708,7 @@ fn _fn162(args: &mut Vec<HCO>, tok: Token) {
                                 args.push(HCO::NODES/*aa22*/(r_0)); }
 }
 /**
-```
+```ascript
 [$2]
 ```*/
 fn _fn163(args: &mut Vec<HCO>, tok: Token) {
@@ -12721,11 +12721,11 @@ ref_0.push(/*RR6*/r_0);
                                 args.push(HCO::NODES/*aa22*/(ref_0)); }
 }
 /**
-```
+```ascript
 ```*/
 fn _fn164(args: &mut Vec<HCO>, tok: Token) {}
 /**
-```
+```ascript
 ```*/
 fn _fn165(args: &mut Vec<HCO>, tok: Token) {
   let mut i = args.len() - 1;
@@ -12734,7 +12734,7 @@ fn _fn165(args: &mut Vec<HCO>, tok: Token) {
   args.push(v1);
 }
 /**
-```
+```ascript
 ```*/
 fn _fn166(args: &mut Vec<HCO>, tok: Token) {
   let mut i = args.len() - 1;

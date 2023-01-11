@@ -162,6 +162,7 @@ impl Journal {
     self.active_report.as_ref().map(|r| r.as_ref()).unwrap_or(&self.report_sink)
   }
 
+  /// Print reports that match the `discriminant` type.
   pub fn debug_print_reports(&self, discriminant: ReportType) {
     self.get_reports(discriminant, |report| {
       eprintln!(

@@ -1919,7 +1919,7 @@ lazy_static::lazy_static! {
 /**
 Bytecode pointer for the [hc](/home/work/projects/lib_hctoolkit/source/grammar/v07/hcg.hcg) production parser.
 
-```
+```hcg
 <> hydrocarbon > head
 ```
 */
@@ -1928,7 +1928,7 @@ pub const EntryPoint_Hc: u32 = 67121242;
 /**
 Bytecode pointer for the [ir](/home/work/projects/lib_hctoolkit/source/grammar/v07/hcg.hcg) production parser.
 
-```
+```hcg
 <> ir_state__state_ir >
       ir_state__state_declaration ir_state__scanner_declaration ir_state__top_level_instructions ir_state__on_fail ir_state__expected_symbols f:r{ { t_IR_STATE, c_IR, c_IrState, id:$1, scanner: $2, instructions: $3, fail: $4, symbol_meta:$5 } }
     | ir_state__state_declaration ir_state__top_level_instructions ir_state__on_fail ir_state__expected_symbols f:r{ { t_IR_STATE, c_IR, c_IrState, id:$1, scanner: $NULL, instructions: $2, fail: $3, symbol_meta:$4 } }
@@ -1945,7 +1945,7 @@ pub const EntryPoint_Ir: u32 = 67121234;
 /**
 Bytecode pointer for the [script](/home/work/projects/lib_hctoolkit/source/grammar/v07/hcg.hcg) production parser.
 
-```
+```hcg
 <> script__out >
       script__struct
     | script__statements f:r{ { t_AST_Statements, statements:$1, tok } }
@@ -1956,7 +1956,7 @@ pub const EntryPoint_Script: u32 = 67121226;
 /**
 Bytecode pointer for the [sym](/home/work/projects/lib_hctoolkit/source/grammar/v07/hcg.hcg) production parser.
 
-```
+```hcg
 <> symbols__annotated_symbol >
       symbols__symbol
     | symbols__symbol symbols__reference_symbol f:r{ { t_AnnotatedSymbol, c_Symbol, symbol:$1, reference:$2 } }
@@ -1967,7 +1967,7 @@ pub const EntryPoint_Sym: u32 = 67121218;
 /**
 Bytecode pointer for the [prd](/home/work/projects/lib_hctoolkit/source/grammar/v07/hcg.hcg) production parser.
 
-```
+```hcg
 <> productions__production >
       l:<>  t:lazy  l:!  symbols__annotated_production_symbol l:>  production_bodies__production_bodies f:r{ {                                                                t_Production , c_Production, priority: bool($3), symbol:$s, bodies:$b, LAZY:bool($l), tok                                                            } }
     | l:+>  symbols__annotated_production_symbol l:>  production_bodies__production_bodies f:r{ {                                                                t_ProductionMerged , c_Production, symbol:$2, bodies:$4, tok                                                            } }
