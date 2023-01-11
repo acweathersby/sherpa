@@ -24,7 +24,6 @@ use sherpa_runtime::types::{
   ParseResult,
   TokenRange,
 };
-use std::{fs::File, io::Write};
 
 use super::test_reader::TestUTF8StringReader;
 
@@ -418,9 +417,6 @@ fn test_compile_from_bytecode() -> SherpaResult<()> {
 
   let mut ctx = compile_from_bytecode("test", &mut j, &ctx, &bytecode_output)?;
 
-  let mut file = File::create("../test.ll")?;
-  file.write_all(ctx.module.to_string().as_bytes())?;
-
   unsafe {
     setup_exec_engine(&mut ctx);
     let mut reader = TestUTF8StringReader::new("hello world");
@@ -551,9 +547,6 @@ fn test_compile_from_bytecode1() -> SherpaResult<()> {
     let input = "hello world\ngoodby mango";
     let mut reader = TestUTF8StringReader::new(input);
     let mut rt_ctx = ParseContext::new_llvm();
-
-    let mut file = File::create("../test.ll")?;
-    file.write_all(module.module.to_string().as_bytes())?;
 
     module
       ._exe_engine
