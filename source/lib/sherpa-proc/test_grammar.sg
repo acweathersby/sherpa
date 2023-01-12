@@ -1,0 +1,5 @@
+@IGNORE g:sp  
+
+<> helloworld > t:hello t:world
+      
+      f:ast { { t_Hello_World, val:str(tok) } }
