@@ -10,8 +10,8 @@ use std::{
 
 pub(crate) mod severity {
 
-  /// Severity types of SherpaErrors
   #[bitmask_enum::bitmask]
+  /// Severity types of SherpaErrors
   pub enum SherpaErrorSeverity {
     Hint     = 0b100,
     Warning  = 0b10,

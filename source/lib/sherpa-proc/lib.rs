@@ -146,7 +146,7 @@ fn insert_data(span: &Span, in_string: String, offset: &mut Offsets, output: &mu
 /// Using a grammar file. File paths are relative to file the
 /// macro is used in.
 ///
-/// ```ignore
+/// ```
 /// mod my_parser {
 /// # use sherpa_proc::compile_mod as compile;
 ///   compile!("test_grammar.sg");
@@ -161,7 +161,7 @@ pub fn compile_mod(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
   // Convert input into a lookup table
   let mut offsets = Offsets { col: 0, line: 0, pos: 0, spans: Default::default() };
   let mut output = vec![];
-  let root_dir = std::env::var("CARGO_MANIFEST_DIR").map(|d| PathBuf::from(&d)).unwrap();
+  let root_dir = std::env::current_dir().map(|d| PathBuf::from(&d)).unwrap();
 
   let mut pipeline = if let Some((grammar_source_path, source_file_path)) =
     parse_token_stream(input, &mut offsets, &mut output)
