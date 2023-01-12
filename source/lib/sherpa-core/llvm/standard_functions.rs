@@ -15,12 +15,12 @@ use inkwell::{
   module::Linkage,
   values::{BasicMetadataValueEnum, CallSiteValue, CallableValue},
 };
+
 pub(crate) fn construct_module<'a>(
   j: &mut Journal,
   module_name: &str,
   ctx: &'a Context,
 ) -> LLVMParserModule<'a> {
-  use inkwell::AddressSpace::*;
   let module = ctx.create_module(module_name);
   let builder = ctx.create_builder();
   let i8 = ctx.i8_type();
@@ -33,12 +33,12 @@ pub(crate) fn construct_module<'a>(
   let GOTO = ctx.opaque_struct_type("s.Goto");
   let TOKEN = ctx.opaque_struct_type("s.Token");
   let INPUT_INFO = ctx.opaque_struct_type("s.InputBlock");
-  let CTX_PTR = CTX.ptr_type(Generic);
+  let CTX_PTR = CTX.ptr_type(0.into());
   let internal_linkage = if j.config().opt_llvm { Some(Linkage::Private) } else { None };
   let TAIL_CALLABLE_PARSE_FUNCTION = i32.fn_type(&[CTX_PTR.into()], false);
   let GOTO_FN = i32.fn_type(&[CTX_PTR.into()], false);
   GOTO.set_body(
-    &[TAIL_CALLABLE_PARSE_FUNCTION.ptr_type(Generic).into(), i32.into(), i32.into()],
+    &[TAIL_CALLABLE_PARSE_FUNCTION.ptr_type(0.into()).into(), i32.into(), i32.into()],
     false,
   );
   CP_INFO.set_body(&[i32.into(), i32.into()], false);
@@ -46,7 +46,7 @@ pub(crate) fn construct_module<'a>(
   INPUT_INFO.set_body(
     &[
       // Input pointer
-      i8.ptr_type(Generic).into(),
+      i8.ptr_type(0.into()).into(),
       // size
       i32.into(),
       // is truncated
@@ -55,13 +55,13 @@ pub(crate) fn construct_module<'a>(
     false,
   );
   let get_input_info_fun = INPUT_INFO
-    .fn_type(&[READER.ptr_type(Generic).into(), i32.into(), i32.into()], false)
-    .ptr_type(Generic);
+    .fn_type(&[READER.ptr_type(0.into()).into(), i32.into(), i32.into()], false)
+    .ptr_type(0.into());
   CTX.set_body(
     &[
-      i8.ptr_type(Generic).into(),
-      i8.ptr_type(Generic).into(),
-      i8.ptr_type(Generic).into(),
+      i8.ptr_type(0.into()).into(),
+      i8.ptr_type(0.into()).into(),
+      i8.ptr_type(0.into()).into(),
       i32.into(),
       i32.into(),
       i32.into(),
@@ -85,13 +85,13 @@ pub(crate) fn construct_module<'a>(
       i32.into(),
       i32.into(),
       // -----------------------
-      GOTO.ptr_type(Generic).into(),
+      GOTO.ptr_type(0.into()).into(),
       i32.into(),
       i32.into(),
       get_input_info_fun.into(),
-      READER.ptr_type(Generic).into(),
-      bool.ptr_type(Generic).into(),
-      bool.ptr_type(Generic).into(),
+      READER.ptr_type(0.into()).into(),
+      bool.ptr_type(0.into()).into(),
+      bool.ptr_type(0.into()).into(),
       i32.into(),
       i32.into(),
       i32.into(),
@@ -103,7 +103,7 @@ pub(crate) fn construct_module<'a>(
     /// Public functions
     init: module.add_function(
       "init",
-      ctx.void_type().fn_type(&[CTX_PTR.into(), READER.ptr_type(Generic).into()], false),
+      ctx.void_type().fn_type(&[CTX_PTR.into(), READER.ptr_type(0.into()).into()], false),
       Some(Linkage::External),
     ),
     drop: module.add_function(
@@ -125,12 +125,12 @@ pub(crate) fn construct_module<'a>(
     ),
     allocate_stack: module.add_function(
       "sherpa_allocate_stack",
-      GOTO.ptr_type(Generic).fn_type(&[i64.into()], false),
+      GOTO.ptr_type(0.into()).fn_type(&[i64.into()], false),
       Some(Linkage::External),
     ),
     free_stack: module.add_function(
       "sherpa_free_stack",
-      ctx.void_type().fn_type(&[GOTO.ptr_type(Generic).into(), i64.into()], false),
+      ctx.void_type().fn_type(&[GOTO.ptr_type(0.into()).into(), i64.into()], false),
       Some(Linkage::External),
     ),
     /// ------------------------------------------------------------------------
@@ -143,8 +143,8 @@ pub(crate) fn construct_module<'a>(
       i32.fn_type(
         &[
           CTX_PTR.into(),
-          i8.const_array(&[]).get_type().ptr_type(inkwell::AddressSpace::Generic).into(),
-          i8.const_array(&[]).get_type().ptr_type(inkwell::AddressSpace::Generic).into(),
+          i8.const_array(&[]).get_type().ptr_type(0.into()).into(),
+          i8.const_array(&[]).get_type().ptr_type(0.into()).into(),
           i32.into(),
         ],
         false,
@@ -153,26 +153,26 @@ pub(crate) fn construct_module<'a>(
     ),
     get_utf8_codepoint_info: module.add_function(
       "get_utf8_codepoint_info",
-      CP_INFO.fn_type(&[i8.ptr_type(Generic).into()], false),
+      CP_INFO.fn_type(&[i8.ptr_type(0.into()).into()], false),
       internal_linkage,
     ),
     merge_utf8_part: module.add_function(
       "merge_utf8_part",
-      i32.fn_type(&[i8.ptr_type(Generic).into(), i32.into(), i32.into()], false),
+      i32.fn_type(&[i8.ptr_type(0.into()).into(), i32.into(), i32.into()], false),
       internal_linkage,
     ),
     internal_free_stack: module.add_function(
       "internal_free_stack",
-      ctx.void_type().fn_type(&[CTX.ptr_type(Generic).into()], false),
+      ctx.void_type().fn_type(&[CTX.ptr_type(0.into()).into()], false),
       internal_linkage,
     ),
     get_adjusted_input_block: module.add_function(
       "get_adjusted_input_block",
       ctx.void_type().fn_type(&[
-        CTX.ptr_type(Generic).into(),
-        i8.ptr_type(Generic).ptr_type(Generic).into(),
-        i32.ptr_type(Generic).into(),
-        bool.ptr_type(Generic).into(),
+        CTX.ptr_type(0.into()).into(),
+        i8.ptr_type(0.into()).ptr_type(0.into()).into(),
+        i32.ptr_type(0.into()).into(),
+        bool.ptr_type(0.into()).into(),
         i32.into(),
         i32.into()
       ], false),
@@ -182,9 +182,9 @@ pub(crate) fn construct_module<'a>(
       "scan",
       ctx.void_type().fn_type(
         &[
-          CTX.ptr_type(Generic).into(),
-          TAIL_CALLABLE_PARSE_FUNCTION.ptr_type(Generic).into(),
-          i8.ptr_type(Generic).into(),
+          CTX.ptr_type(0.into()).into(),
+          TAIL_CALLABLE_PARSE_FUNCTION.ptr_type(0.into()).into(),
+          i8.ptr_type(0.into()).into(),
           i32.into(),
           i32.into(),
           i32.into(),
@@ -198,9 +198,9 @@ pub(crate) fn construct_module<'a>(
       "push_state",
       ctx.void_type().fn_type(
         &[
-          CTX.ptr_type(Generic).into(),
+          CTX.ptr_type(0.into()).into(),
           i32.into(),
-          TAIL_CALLABLE_PARSE_FUNCTION.ptr_type(Generic).into(),
+          TAIL_CALLABLE_PARSE_FUNCTION.ptr_type(0.into()).into(),
         ],
         false,
       ),
@@ -208,12 +208,12 @@ pub(crate) fn construct_module<'a>(
     ),
     pop_state: module.add_function(
       "pop_state",
-      GOTO.fn_type(&[CTX.ptr_type(Generic).into()], false),
+      GOTO.fn_type(&[CTX.ptr_type(0.into()).into()], false),
       internal_linkage,
     ),
     extend_stack_if_needed: module.add_function(
       "extend_stack_if_needed",
-      i32.fn_type(&[CTX.ptr_type(Generic).into(), i32.into()], false),
+      i32.fn_type(&[CTX.ptr_type(0.into()).into(), i32.into()], false),
       internal_linkage,
     ),
     /// LLVM intrinsics ------------------------------------------------------------
@@ -221,8 +221,8 @@ pub(crate) fn construct_module<'a>(
       "llvm.memcpy.p0i8.p0i8.i32",
       ctx.void_type().fn_type(
         &[
-          i8.ptr_type(Generic).into(),
-          i8.ptr_type(Generic).into(),
+          i8.ptr_type(0.into()).into(),
+          i8.ptr_type(0.into()).into(),
           i32.into(),
           ctx.bool_type().into(),
         ],
@@ -370,11 +370,8 @@ pub(crate) unsafe fn construct_internal_free_stack(module: &LLVMParserModule) ->
     goto_used_bytes_64,
     "goto_base",
   );
-  let goto_base_ptr = b.build_int_to_ptr(
-    goto_base_ptr_int,
-    types.goto.ptr_type(inkwell::AddressSpace::Generic),
-    "goto_base",
-  );
+  let goto_base_ptr =
+    b.build_int_to_ptr(goto_base_ptr_int, types.goto.ptr_type(0.into()), "goto_base");
   b.build_call(funct.free_stack, &[goto_base_ptr.into(), goto_total_bytes_64.into()], "");
   CTX::goto_size.store(module, parse_ctx, i32.const_zero());
   b.build_unconditional_branch(empty_stack);
@@ -421,11 +418,8 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
     goto_used_bytes_64,
     "goto_base",
   );
-  let goto_base_ptr = b.build_int_to_ptr(
-    goto_base_ptr_int,
-    types.goto.ptr_type(inkwell::AddressSpace::Generic),
-    "goto_base",
-  );
+  let goto_base_ptr =
+    b.build_int_to_ptr(goto_base_ptr_int, types.goto.ptr_type(0.into()), "goto_base");
   // create a size that is equal to the needed amount rounded up to the nearest 64bytes
   let new_slot_count = b.build_int_add(goto_slot_count, needed_slot_count, "new_size");
   let new_slot_count = b.build_left_shift(new_slot_count, i32.const_int(2, false), "new_size");
@@ -440,9 +434,8 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
   b.build_call(
     funct.memcpy,
     &[
-      b.build_bitcast(new_ptr, ctx.i8_type().ptr_type(inkwell::AddressSpace::Generic), "").into(),
-      b.build_bitcast(goto_base_ptr, ctx.i8_type().ptr_type(inkwell::AddressSpace::Generic), "")
-        .into(),
+      b.build_bitcast(new_ptr, ctx.i8_type().ptr_type(0.into()), "").into(),
+      b.build_bitcast(goto_base_ptr, ctx.i8_type().ptr_type(0.into()), "").into(),
       goto_used_bytes.into(),
       ctx.bool_type().const_int(0, false).into(),
     ],
@@ -453,11 +446,8 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
   b.position_at_end(update_block);
   let new_stack_top_ptr = b.build_ptr_to_int(new_ptr, ctx.i64_type(), "new_top");
   let new_stack_top_ptr = b.build_int_add(new_stack_top_ptr, goto_used_bytes_64, "new_top");
-  let new_stack_top_ptr = b.build_int_to_ptr(
-    new_stack_top_ptr,
-    types.goto.ptr_type(inkwell::AddressSpace::Generic),
-    "new_top",
-  );
+  let new_stack_top_ptr =
+    b.build_int_to_ptr(new_stack_top_ptr, types.goto.ptr_type(0.into()), "new_top");
   CTX::goto_stack_ptr.store(module, parse_ctx, new_stack_top_ptr)?;
   CTX::goto_size.store(module, parse_ctx, new_slot_count)?;
   let slot_diff = b.build_int_sub(new_slot_count, goto_slot_count, "slot_diff");

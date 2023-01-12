@@ -11,8 +11,6 @@ use inkwell::{
 pub(crate) unsafe fn construct_ast_builder<ASTNode: Sized>(
   module: &LLVMParserModule,
 ) -> SherpaResult<()> {
-  use inkwell::AddressSpace::*;
-
   let slot_size = std::mem::size_of::<(ASTNode, TokenRange, TokenRange)>() as u32;
 
   let LLVMParserModule { ctx, types, builder: b, .. } = module;
@@ -20,7 +18,7 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: Sized>(
   let i8 = ctx.i8_type();
   let i32 = ctx.i32_type();
   let i64 = ctx.i64_type();
-  let CTX_PTR = parse_ctx.ptr_type(Generic);
+  let CTX_PTR = parse_ctx.ptr_type(0.into());
 
   // Struct types --------------------------------------------------
 
@@ -30,7 +28,8 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: Sized>(
 
   // Struct Definitions --------------------------------------------------
 
-  ast_slot_stack_slice.set_body(&[ast_slot.ptr_type(Generic).into(), i32.into(), i8.into()], false);
+  ast_slot_stack_slice
+    .set_body(&[ast_slot.ptr_type(0.into()).into(), i32.into(), i8.into()], false);
 
   parse_result
     .set_body(&[i8.array_type((std::mem::size_of::<ParseResult<ASTNode>>()) as u32).into()], false);
@@ -41,14 +40,14 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: Sized>(
 
   let reducer_function = ctx
     .void_type()
-    .fn_type(&[CTX_PTR.into(), ast_slot_stack_slice.ptr_type(Generic).into()], false);
+    .fn_type(&[CTX_PTR.into(), ast_slot_stack_slice.ptr_type(0.into()).into()], false);
 
   let shift_handler = ctx
     .void_type()
-    .fn_type(&[CTX_PTR.into(), ast_slot_stack_slice.ptr_type(Generic).into()], false);
+    .fn_type(&[CTX_PTR.into(), ast_slot_stack_slice.ptr_type(0.into()).into()], false);
 
   let result_handler = parse_result
-    .fn_type(&[CTX_PTR.into(), i32.into(), ast_slot_stack_slice.ptr_type(Generic).into()], false);
+    .fn_type(&[CTX_PTR.into(), i32.into(), ast_slot_stack_slice.ptr_type(0.into()).into()], false);
 
   // Main Function ---------------------------------------------------
 
@@ -56,10 +55,10 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: Sized>(
     "ast_parse",
     parse_result.fn_type(
       &[
-        parse_ctx.ptr_type(Generic).into(),
-        reducer_function.ptr_type(Generic).ptr_type(Generic).into(),
-        shift_handler.ptr_type(Global).into(),
-        result_handler.ptr_type(Global).into(),
+        parse_ctx.ptr_type(0.into()).into(),
+        reducer_function.ptr_type(0.into()).ptr_type(0.into()).into(),
+        shift_handler.ptr_type(0.into()).into(),
+        result_handler.ptr_type(0.into()).into(),
       ],
       false,
     ),
@@ -91,9 +90,9 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: Sized>(
   let slot_direction = b.build_struct_gep(ast_slot_slice_ptr, 2, "")?;
   b.build_store(slot_direction, i8.const_int(1, false));
 
-  let slot_ptr_ptr = b.build_alloca(ast_slot.ptr_type(Generic), "slot_ptr_ptr"); // Store the pointer to the bottom of the AST stack
+  let slot_ptr_ptr = b.build_alloca(ast_slot.ptr_type(0.into()), "slot_ptr_ptr"); // Store the pointer to the bottom of the AST stack
 
-  b.build_store(slot_ptr_ptr, ast_slot.ptr_type(Generic).const_null());
+  b.build_store(slot_ptr_ptr, ast_slot.ptr_type(0.into()).const_null());
 
   b.build_unconditional_branch(parse_loop);
 
@@ -131,7 +130,7 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: Sized>(
   // If the stack pointer is zero, assign the first slot address to this pointer.
   let stack_ptr = b.build_load(slot_ptr_ptr, "").into_pointer_value();
   let stack_ptr_val = b.build_ptr_to_int(stack_ptr, i64, "");
-  let zero_ptr = ast_slot.ptr_type(Generic).const_null();
+  let zero_ptr = ast_slot.ptr_type(0.into()).const_null();
   let zero_ptr_val = b.build_ptr_to_int(zero_ptr, i64, "");
 
   let c = b.build_int_compare(inkwell::IntPredicate::EQ, stack_ptr_val, zero_ptr_val, "");

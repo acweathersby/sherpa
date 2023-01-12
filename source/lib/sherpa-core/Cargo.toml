@@ -10,6 +10,6 @@ path = "./lib.rs"
 lazy_static = "1.4.0"
 regex = "1.5.6"
 bitmask-enum = "2.0.0"
-inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm14-0"]}
+inkwell = { git = "https://github.com/TheDan64/inkwell", rev="3c5d7706861aac0750b4f0c98d6fcf8a91a2ca0a", features = ["llvm14-0"]}
 sherpa_runtime = {path = "../sherpa-rust-rt"}
 

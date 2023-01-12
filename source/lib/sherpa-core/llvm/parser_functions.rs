@@ -627,9 +627,8 @@ fn construct_instruction_branch<'a>(
               }
               len if len <= 8 => {
                 let (byte_string, mask) = string_to_byte_num_and_mask(string, sym);
-                let adjusted_byte = b
-                  .build_bitcast(buffer_ptr, i64.ptr_type(inkwell::AddressSpace::Generic), "")
-                  .into_pointer_value();
+                let adjusted_byte =
+                  b.build_bitcast(buffer_ptr, i64.ptr_type(0.into()), "").into_pointer_value();
                 let value = b.build_load(adjusted_byte, "").into_int_value();
                 let masked_value =
                   b.build_and(value, value.get_type().const_int(mask as u64, false), "");
@@ -1153,9 +1152,7 @@ pub(crate) unsafe fn construct_scan<'a>(module: &LLVMParserModule<'a>) -> Sherpa
   let null_fn = {
     let null_fn = module.module.add_function(
       "scan_stop",
-      ctx
-        .i32_type()
-        .fn_type(&[types.parse_ctx.ptr_type(inkwell::AddressSpace::Generic).into()], false),
+      ctx.i32_type().fn_type(&[types.parse_ctx.ptr_type(0.into()).into()], false),
       Some(Linkage::Private),
     );
 
