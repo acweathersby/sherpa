@@ -16,6 +16,14 @@ pub fn dispatch<'a, R: ByteReader + MutByteReader, M>(
   loop {
     let instr = Instruction::from(bc, s as usize);
 
+    #[cfg(debug_assertions)]
+    if !ctx.is_scanner() {
+      println!("address [{:0>6X}] {}", s, ctx.get_reader().cursor());
+      if s == 0xC34 {
+        println!("goto time");
+      }
+    }
+
     use InstructionType::*;
 
     s = match instr.to_type() {
@@ -60,15 +68,15 @@ fn shift<'a, R: ByteReader + MutByteReader, M>(
     anchor_byte_offset: ctx.anchor_off,
     token_byte_offset:  ctx.token_off,
     token_byte_length:  ctx.token_len,
-    token_line_count:   ctx.tok_line_num,
-    token_line_offset:  ctx.tok_line_off,
+    token_line_count:   ctx.start_line_num,
+    token_line_offset:  ctx.start_line_off,
   };
 
   if ctx.is_scanner() {
     ctx.scan_off += ctx.scan_len;
     ctx.scan_len = 0;
     let scan_off = ctx.scan_off;
-    let peek_line_num = ctx.peek_line_num;
+    let peek_line_num = ctx.scan_line_num;
     ctx.get_reader_mut().set_cursor_to(scan_off, peek_line_num, peek_line_num);
   } else {
     ctx.anchor_off = ctx.token_off + ctx.token_len;
@@ -335,12 +343,13 @@ fn get_token_value<R: ByteReader + MutByteReader, M>(
             };
 
             ctx.peek_off += len;
+            ctx.tok_id = 0;
 
             ctx.set_peek_mode_to(true);
 
             let peek_off = ctx.peek_off;
-            let peek_line_num = ctx.peek_line_num;
-            let peek_line_off = ctx.peek_line_off;
+            let peek_line_num = ctx.scan_line_num;
+            let peek_line_off = ctx.scan_line_off;
 
             ctx.get_reader_mut().set_cursor_to(peek_off, peek_line_num, peek_line_off);
 
@@ -351,8 +360,9 @@ fn get_token_value<R: ByteReader + MutByteReader, M>(
                 ctx.set_peek_mode_to(false);
 
                 let token_off = ctx.token_off;
-                let tok_line_off = ctx.tok_line_off;
-                let tok_line_num = ctx.tok_line_num;
+                let tok_line_off = ctx.start_line_off;
+                let tok_line_num = ctx.start_line_num;
+                ctx.tok_id = 0;
 
                 ctx.get_reader_mut().set_cursor_to(token_off, tok_line_off, tok_line_num);
             }
@@ -430,19 +440,19 @@ fn token_scan<R: ByteReader + MutByteReader, M>(
 
   match {
     let mut state = stack.pop().unwrap();
+    let ctx_fail_mode = ctx.in_fail_mode();
 
     let line_data = ctx.get_reader().get_line_data();
     let (line_num, line_count) = ((line_data >> 32) as u32, (line_data & 0xFFFF_FFFF) as u32);
 
-    ctx.peek_line_num = line_num;
-    ctx.peek_line_off = line_count;
+    ctx.scan_line_num = line_num;
+    ctx.scan_line_off = line_count;
+    ctx.scan_anchor_off = offset;
+    ctx.scan_off = offset;
 
     loop {
       if state < 1 {
-        if ctx.tok_id == 0 {
-          scan_for_improvised_token(ctx);
-        }
-
+        ctx.set_fail_mode_to(ctx_fail_mode);
         break Some(ctx.scan_anchor_off - offset);
       } else {
         let mask_gate = NORMAL_STATE_FLAG << (ctx.in_fail_mode() as u32);
@@ -494,8 +504,8 @@ pub fn get_next_action<R: ByteReader + MutByteReader, M>(
           last_input:      TokenRange {
             len:      ctx.token_len,
             off:      ctx.token_off,
-            line_num: ctx.tok_line_num,
-            line_off: ctx.tok_line_off,
+            line_num: ctx.start_line_num,
+            line_off: ctx.start_line_off,
           },
         };
       }

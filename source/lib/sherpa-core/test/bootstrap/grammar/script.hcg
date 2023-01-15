@@ -8,7 +8,7 @@
 
     | expression
 
-    | \{ expression(+\; ) \}
+    | \{ expression(*\; ) \}
         f:ast { { t_AST_Statements, statements:$2, tok } }
 
 <> expression > 
@@ -26,6 +26,8 @@
     | token
 
     | add
+
+    | map 
 
 <> struct > 
 
@@ -68,6 +70,12 @@
         f:ast { { t_AST_Add, left: $1, right: $3, tok } }
 
     | member
+
+<> map > 
+
+    t:map \( expression^k , expression^v \)
+
+        f:ast { { t_AST_Map, key: $k, val: $v, tok } }
 
 <> member > 
 
@@ -170,8 +178,9 @@
 
 <> token > 
 
-    t:tok 
-        f:ast { { t_AST_Token } }
+    ( t:tok | t:token ) range?
+        f:ast { { t_AST_Token, range: $2 } }
 
-    | t:token 
-        f:ast { { t_AST_Token } }
+<> range > t:< integer ( ,  integer  )? t:>
+
+        f:ast { { t_Range, start_trim:$2, end_trim:$3  } }

@@ -1,8 +1,17 @@
 //! Functions for constructing and leveraging transition tables from
 //! Hydrocarbon bytecode.
 
+use sherpa_runtime::utf8::lookup_table::CodePointClass;
+
 use crate::{compile::BytecodeOutput, types::*};
 use std::collections::BTreeMap;
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct LineData {
+  pub(crate) num_of_lines: u32,
+  pub(crate) last_offset:  u32,
+  pub(crate) first_offset: u32,
+}
 
 #[derive(Debug, Clone, Copy)]
 struct TableCell<'a> {
@@ -19,7 +28,7 @@ pub(crate) struct BranchTableData {
   /// Stores an offset of the branch that is taken given
   /// a particular symbol, and the symbol that activates
   /// the branch.
-  pub symbols:  BTreeMap<u32, Symbol>,
+  pub symbols:  BTreeMap<u32, (Symbol, Option<String>)>,
   pub data:     TableHeaderData,
   /// All branches defined within the branch table,
   /// keyed by their bytecode address or by the indexed
@@ -35,6 +44,9 @@ pub(crate) struct BranchData {
   /// The value of the branch's key, be it the token type,
   /// production id, byte, class, or codepoint
   pub value:      u32,
+  // The number of line characters in this value and the offset
+  // of the last line character.
+  //pub line_offset: Option<(u32, u32)>,
 }
 
 impl BranchTableData {
@@ -92,7 +104,10 @@ impl BranchTableData {
 
           for (_, branch) in &branches {
             if let Some(symbol) = symbol_lookup.get(&branch.value) {
-              symbols.insert(branch.value, symbol.clone());
+              symbols.insert(
+                branch.value,
+                (symbol.clone(), g.symbol_strings.get(&symbol.guid).cloned()),
+              );
             } else {
               dbg!(&g.productions);
               dbg!(symbol_lookup);
@@ -118,6 +133,55 @@ impl BranchTableData {
     self.branches.iter().all(|(_, b)| self.min_comparison_bytes(b).is_some())
   }
 
+  pub fn get_line_data(&self, branch: &BranchData) -> LineData {
+    match self.data.input_type {
+      InputType::T05_BYTE | InputType::T04_CODEPOINT => {
+        if branch.value == 10 {
+          LineData { first_offset: 0, last_offset: 0, num_of_lines: 1 }
+        } else {
+          Default::default()
+        }
+      }
+      InputType::T03_CLASS => {
+        if branch.value == CodePointClass::NewLine as u32 {
+          LineData { first_offset: 0, last_offset: 0, num_of_lines: 1 }
+        } else {
+          Default::default()
+        }
+      }
+      InputType::T02_TOKEN => {
+        if let Some((symbol, string)) = self.symbols.get(&branch.value) {
+          match symbol.guid {
+            SymbolID::GenericNewLine => {
+              LineData { first_offset: 0, last_offset: 0, num_of_lines: 1 }
+            }
+            SymbolID::DefinedIdentifier(_)
+            | SymbolID::DefinedNumeric(_)
+            | SymbolID::DefinedSymbol(_) => {
+              let mut first_offset = u32::MAX;
+              let mut last_offset = 0;
+              let mut num_of_lines = 0;
+
+              for (off, char) in string.as_ref().unwrap().chars().enumerate() {
+                if char == '\n' {
+                  first_offset = first_offset.min(off as u32);
+                  last_offset = off as u32;
+                  num_of_lines += 1;
+                };
+              }
+
+              LineData { first_offset, last_offset, num_of_lines }
+            }
+            _ => Default::default(),
+          }
+        } else {
+          Default::default()
+        }
+      }
+      _ => Default::default(),
+    }
+  }
+
   /// Return the number of bytes required to compare
   /// the discriminant value with a byte array.
   /// `None` indicates the value is incapable of being directly
@@ -139,7 +203,7 @@ impl BranchTableData {
   }
 
   pub fn get_branch_symbol(&self, branch: &BranchData) -> Option<&Symbol> {
-    if let Some(sym) = self.symbols.get(&branch.value) {
+    if let Some((sym, _)) = self.symbols.get(&branch.value) {
       Some(sym)
     } else {
       None

@@ -129,7 +129,7 @@ U32Vec(Vec<u32>),
 U16Vec(Vec<u16>),
 U8Vec(Vec<u8>),
 TOKEN(Token),
-TOKENS(Vec<TokenRange>),",
+TOKENS(Vec<Token>),",
     ast.ast_type_name
   ))?;
 
@@ -175,7 +175,7 @@ into_vec!(into_u64_vec, u64, U64Vec);
 into_vec!(into_u32_vec, u32, U32Vec);
 into_vec!(into_u16_vec, u16, U16Vec);
 into_vec!(into_u8_vec, u8, U8Vec);
-into_vec!(into_tokens, TokenRange, TOKENS);
+into_vec!(into_tokens, Token, TOKENS);
 to_numeric!(to_i8, i8);
 to_numeric!(to_i16, i16);
 to_numeric!(to_i32, i32);
@@ -296,12 +296,12 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
   w.wrtln(&format!(
     "\nfn default_fn{}({}){{
   if slots.len() > 1 {{
-    let AstSlot (_, tok, _) = slots.take(0);
+    let AstSlot (_, rng, _) = slots.take(0);
     let last = slots.take(slots.len() - 1);
     for index in 1..slots.len()-1 {{
       slots.take(index);
     }}
-    slots.assign(0, AstSlot (last.0, tok + last.1, TokenRange::default()));
+    slots.assign(0, AstSlot (last.0, rng + last.1, TokenRange::default()));
   }}
 }}",
     fn_template, fn_args
@@ -364,7 +364,7 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
                 temp_writer.write_line(&_ref.to_init_string())?;
 
                 temp_writer.write_line(&format!(
-                  "slots.assign(0, AstSlot ({}::{}(Box::new({})), tok, TokenRange::default()))",
+                  "slots.assign(0, AstSlot ({}::{}(Box::new({})), rng, TokenRange::default()))",
                   ast.ast_type_name,
                   ast.structs.get(&struct_type).unwrap().type_name,
                   _ref.get_ref_string(),
@@ -393,6 +393,8 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
               }
 
               write_slot_extraction(rule, refs, tokens, &mut temp_writer)?;
+
+              write_node_token(&mut temp_writer, rule)?;
 
               temp_writer.merge_checkpoint(statement_writer)?;
 
@@ -434,11 +436,7 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
                   ast.ast_type_name,
                   return_type.hcobj_type_name(None),
                   &reference,
-                  if rule.syms.len() > 1 {
-                    format!("tok0 + tok{}", rule.syms.len() - 1)
-                  } else {
-                    "tok0".to_string()
-                  }
+                  "rng".to_string()
                 ))?,
                 r => {
                   eprintln!("{}", r.debug_string(None));
@@ -492,11 +490,11 @@ impl<R: Reader + UTF8Reader, M> ReduceFunctions<R, M> {{
 
 fn write_node_token(temp_writer: &mut CodeWriter<Vec<u8>>, rule: &&Rule) -> Result<()> {
   temp_writer.write_line(&format!(
-    "let tok = {};",
+    "let rng = {};",
     if rule.syms.len() > 1 {
-      format!("tok0 + tok{}", rule.syms.len() - 1)
+      format!("rng0 + rng{}", rule.syms.len() - 1)
     } else {
-      "tok0".to_string()
+      "rng0".to_string()
     }
   ))?;
   Ok(())
@@ -511,15 +509,15 @@ fn write_slot_extraction<'a>(
   Ok(for i in 0..rule.syms.len() {
     let assignment_string = match (
       match (i, used_tokens.contains(&i)) {
-        (0, _) => Some("tok0".to_string()),
-        (i, _) if i == (rule.syms.len() - 1) => Some(format!("tok{}", i)),
-        (i, true) => Some(format!("tok{}", i)),
-        _ => None,
+        (0, _) => Some("rng0".to_string()),
+        (i, _) if i == (rule.syms.len() - 1) => Some(format!("rng{}", i)),
+        (i, true) => Some(format!("rng{}", i)),
+        rng => None,
       },
       indices.contains(&i),
     ) {
-      (Some(tok_string), true) => format!("let AstSlot (i{}, {}, _) = ", i, tok_string),
-      (Some(tok_string), false) => format!("let AstSlot (_, {}, _) = ", tok_string),
+      (Some(range_str), true) => format!("let AstSlot (i{}, {}, _) = ", i, range_str),
+      (Some(range_str), false) => format!("let AstSlot (_, {}, _) = ", range_str),
       (None, true) => format!("let AstSlot (i{}, ..) = ", i),
       (None, false) => "".to_string(),
     };
@@ -575,7 +573,7 @@ fn build_struct_constructor(
   }
 
   if archetype_struct.include_token {
-    writer.wrt(&format!("{}, ", "tok_"))?;
+    writer.wrt(&format!("{}, ", "rng.to_token(_ctx_.get_reader())"))?;
   }
 
   writer.dedent().write_line("\n)")?;
@@ -594,7 +592,7 @@ fn build_struct_constructor(
   Ok(ref_)
 }
 
-pub fn create_type_initializer_value(
+pub(crate) fn create_type_initializer_value(
   ref_: Option<Ref>,
   type_val: &AScriptTypeVal,
   optional: bool,
@@ -701,7 +699,7 @@ fn build_structs<W: Write>(ast: &AScriptStore, o: &mut CodeWriter<W>) -> Result<
   Ok(())
 }
 
-pub fn render_expression(
+pub(crate) fn render_expression(
   ast: &AScriptStore,
   ast_expression: &ASTNode,
   rule: &Rule,
@@ -727,7 +725,7 @@ pub fn render_expression(
     ASTNode::AST_Token(box AST_Token {}) => {
       Some(Ref::node_token(bump_ref_index(ref_index), type_slot))
     }
-    ASTNode::AST_Add(..) => Some(Ref::token_range(bump_ref_index(ref_index), type_slot)),
+    ASTNode::AST_Add(..) => Some(Ref::token(bump_ref_index(ref_index), type_slot)),
     ASTNode::AST_Vector(box AST_Vector { initializer, .. }) => {
       let mut results = initializer
         .iter()
@@ -783,10 +781,9 @@ pub fn render_expression(
       _ => {
         let ref_ = render_expression(s, value, b, ref_index, type_slot)?;
         match ref_.ast_type {
-          AScriptTypeVal::TokenRange => Some(ref_.from(
-            "%%.to_token_with_reader(_ctx_.get_reader()).to_string()".to_string(),
-            AScriptTypeVal::String(None),
-          )),
+          AScriptTypeVal::Struct(..) | AScriptTypeVal::TokenRange => {
+            Some(ref_.to_string(AScriptTypeVal::String(None)))
+          }
           AScriptTypeVal::TokenVec => {
             // Merge the last and first token together
             // get the string value from the resulting span of the union
@@ -959,10 +956,10 @@ fn render_body_symbol(
       } else if production_types_are_structs(&types) {
         Ref::new(i, type_slot, format!("i{0}", i), GenericStruct(extract_struct_types(&types)))
       } else {
-        Ref::token_range(i, type_slot)
+        Ref::token(i, type_slot)
       }
     }
-    _ => Ref::token_range(i, type_slot),
+    _ => Ref::token(i, type_slot),
   };
 
   ref_.add_body_index(i);
@@ -1144,7 +1141,7 @@ fn get_default_value(prop_id: &AScriptPropId, ast: &AScriptStore) -> String {
 }
 
 #[derive(Clone)]
-pub struct Ref {
+pub(crate) struct Ref {
   init_index: usize,
   type_slot: usize,
   body_indices: BTreeSet<usize>,
@@ -1176,13 +1173,13 @@ impl Ref {
     }
   }
 
-  pub fn token_range(init_index: usize, type_slot: usize) -> Self {
+  pub(crate) fn token(init_index: usize, type_slot: usize) -> Self {
     Ref {
       init_index,
       type_slot,
       body_indices: BTreeSet::new(),
-      init_expression: format!("tok{}", init_index),
-      ast_type: AScriptTypeVal::TokenRange,
+      init_expression: format!("rng{0}.to_token(_ctx_.get_reader())", init_index),
+      ast_type: AScriptTypeVal::Token,
       predecessors: None,
       post_init_statements: None,
       is_mutable: false,
@@ -1190,12 +1187,12 @@ impl Ref {
     }
   }
 
-  pub fn token(init_index: usize, type_slot: usize) -> Self {
+  pub(crate) fn node_token(init_index: usize, type_slot: usize) -> Self {
     Ref {
       init_index,
       type_slot,
       body_indices: BTreeSet::new(),
-      init_expression: format!("tok{0}.to_token_with_reader(_ctx_.get_reader())", init_index),
+      init_expression: format!("rng.to_token(_ctx_.get_reader())"),
       ast_type: AScriptTypeVal::Token,
       predecessors: None,
       post_init_statements: None,
@@ -1204,13 +1201,14 @@ impl Ref {
     }
   }
 
-  pub fn node_token(init_index: usize, type_slot: usize) -> Self {
+  pub(crate) fn to_string(self, ast_type: AScriptTypeVal) -> Self {
+    let index = self.get_root_index();
     Ref {
-      init_index,
-      type_slot,
+      init_index: index,
+      type_slot: self.type_slot,
+      init_expression: format!("rng.to_token(_ctx_.get_reader()).to_string()"),
+      ast_type,
       body_indices: BTreeSet::new(),
-      init_expression: format!("tok.to_token_with_reader(_ctx_.get_reader())"),
-      ast_type: AScriptTypeVal::Token,
       predecessors: None,
       post_init_statements: None,
       is_mutable: false,
@@ -1218,7 +1216,7 @@ impl Ref {
     }
   }
 
-  pub fn from(self, init_expression: String, ast_type: AScriptTypeVal) -> Self {
+  pub(crate) fn from(self, init_expression: String, ast_type: AScriptTypeVal) -> Self {
     Ref {
       init_index: self.init_index,
       type_slot: self.type_slot,
@@ -1232,24 +1230,24 @@ impl Ref {
     }
   }
 
-  pub fn get_type(&self) -> AScriptTypeVal {
+  pub(crate) fn get_type(&self) -> AScriptTypeVal {
     self.ast_type.clone()
   }
 
-  pub fn make_mutable(&mut self) -> &mut Self {
+  pub(crate) fn make_mutable(&mut self) -> &mut Self {
     self.is_mutable = true;
     self
   }
 
-  pub fn add_body_index(&mut self, index: usize) {
+  pub(crate) fn add_body_index(&mut self, index: usize) {
     self.body_indices.insert(index);
   }
 
-  pub fn get_ref_string(&self) -> String {
+  pub(crate) fn get_ref_string(&self) -> String {
     format!("ref_{}_{}", self.init_index, self.type_slot)
   }
 
-  pub fn get_indices(&self) -> BTreeSet<usize> {
+  pub(crate) fn get_indices(&self) -> BTreeSet<usize> {
     let mut indices = self.body_indices.clone();
 
     if let Some(predecessors) = &self.predecessors {
@@ -1261,7 +1259,16 @@ impl Ref {
     indices
   }
 
-  pub fn get_tokens(&self) -> BTreeSet<usize> {
+  pub(crate) fn get_root_index(&self) -> usize {
+    if let Some(predecessors) = &self.predecessors {
+      for predecessor in predecessors {
+        return predecessor.get_root_index();
+      }
+    }
+    self.init_index
+  }
+
+  pub(crate) fn get_tokens(&self) -> BTreeSet<usize> {
     let mut set = BTreeSet::new();
 
     if self.is_token {
@@ -1277,13 +1284,13 @@ impl Ref {
     set
   }
 
-  pub fn add_post_init_expression(&mut self, string: String) -> &mut Self {
+  pub(crate) fn add_post_init_expression(&mut self, string: String) -> &mut Self {
     self.post_init_statements.get_or_insert(vec![]).push(string);
 
     self
   }
 
-  pub fn to_init_string(&self) -> String {
+  pub(crate) fn to_init_string(&self) -> String {
     let mut string = String::new();
 
     if let Some(predecessors) = &self.predecessors {
@@ -1308,13 +1315,13 @@ impl Ref {
     string
   }
 
-  pub fn add_predecessor(&mut self, predecessor: Ref) -> &mut Self {
+  pub(crate) fn add_predecessor(&mut self, predecessor: Ref) -> &mut Self {
     self.predecessors.get_or_insert(vec![]).push(Box::new(predecessor));
 
     self
   }
 
-  pub fn add_predecessors(&mut self, predecessors: Vec<Ref>) -> &mut Self {
+  pub(crate) fn add_predecessors(&mut self, predecessors: Vec<Ref>) -> &mut Self {
     let prev = self.predecessors.get_or_insert(vec![]);
 
     for predecessor in predecessors {

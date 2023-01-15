@@ -1,18 +1,18 @@
+use super::{test_reader::TestUTF8StringReader, utils::build_grammar_from_str};
 use crate::{
-  compile::{compile_bytecode, compile_states, optimize_ir_states, GrammarStore},
+  compile::{compile_bytecode, compile_states, optimize_ir_states, BytecodeOutput, GrammarStore},
   llvm::{
     ascript_functions::construct_ast_builder,
-    compile_from_bytecode,
+    compile_module_from_bytecode,
     parser_functions::construct_parse_function,
     *,
   },
+  types::JitParseContext,
   Journal,
   SherpaResult,
 };
 use inkwell::{context::Context, execution_engine::JitFunction};
 use sherpa_runtime::types::{
-  llvm_map_result_action,
-  llvm_map_shift_action,
   sherpa_allocate_stack,
   sherpa_free_stack,
   AstStackSlice,
@@ -25,23 +25,36 @@ use sherpa_runtime::types::{
   TokenRange,
 };
 
-use super::test_reader::TestUTF8StringReader;
+type Init<R = TestUTF8StringReader<'static>, T = u32> =
+  unsafe extern "C" fn(*mut ParseContext<R, T>, *mut R);
+type PushState<R = TestUTF8StringReader<'static>, T = u32> =
+  unsafe extern "C" fn(*mut ParseContext<R, T>, u32, usize);
 
-type Init = unsafe extern "C" fn(
-  *mut ParseContext<TestUTF8StringReader<'static>, u32>,
-  *mut TestUTF8StringReader<'static>,
-);
-type PushState =
-  unsafe extern "C" fn(*mut ParseContext<TestUTF8StringReader<'static>, u32>, u32, usize);
+type Next<R = TestUTF8StringReader<'static>, T = u32> =
+  unsafe extern "C" fn(*mut ParseContext<R, T>) -> ParseActionType;
 
-type Next =
-  unsafe extern "C" fn(*mut ParseContext<TestUTF8StringReader<'static>, u32>) -> ParseActionType;
+type Prime<R = TestUTF8StringReader<'static>, T = u32> =
+  unsafe extern "C" fn(*mut ParseContext<R, T>, u32);
 
-type Prime = unsafe extern "C" fn(*mut ParseContext<TestUTF8StringReader<'static>, u32>, u32);
+type Extend<R = TestUTF8StringReader<'static>, T = u32> =
+  unsafe extern "C" fn(*mut ParseContext<R, T>, u32);
 
-type Extend = unsafe extern "C" fn(*mut ParseContext<TestUTF8StringReader<'static>, u32>, u32);
+type Drop<R = TestUTF8StringReader<'static>, T = u32> =
+  unsafe extern "C" fn(*mut ParseContext<R, T>);
 
-type Drop = unsafe extern "C" fn(*mut ParseContext<TestUTF8StringReader<'static>, u32>);
+type ASTNode = u32;
+type ASTSlot = (ASTNode, TokenRange, TokenRange);
+type AstBuilder<'a, R = TestUTF8StringReader<'static>, M = ASTNode> =
+  unsafe extern "C" fn(
+    *mut ParseContext<R, M>,
+    *const fn(ctx: &mut ParseContext<R, M>, &mut AstStackSlice<(M, TokenRange, TokenRange)>),
+    unsafe fn(&ParseContext<R, M>, &mut AstStackSlice<(M, TokenRange, TokenRange)>),
+    unsafe fn(
+      &ParseContext<R, M>,
+      ParseActionType,
+      &mut AstStackSlice<(M, TokenRange, TokenRange)>,
+    ) -> ParseResult<M>,
+  ) -> ParseResult<M>;
 
 unsafe fn get_parse_function<'a, T: inkwell::execution_engine::UnsafeFunctionPointer>(
   ctx: &'a LLVMParserModule,
@@ -385,15 +398,15 @@ fn test_compile_parse_function() -> SherpaResult<()> {
   let ir_states = compile_states(&mut j, 1)?;
   let ir_states = optimize_ir_states(&mut j, ir_states);
   let bytecode_output = compile_bytecode(&mut j, ir_states);
-  let context = Context::create();
+  let ctx = Context::create();
 
-  let parse_context = construct_module(&mut Journal::new(None), "test", &context);
+  let module = construct_module(&mut Journal::new(None), "test", &ctx);
 
   unsafe {
-    construct_parse_function(&mut j, &parse_context, &bytecode_output)?;
+    construct_parse_function(&mut j, &module, &bytecode_output)?;
   }
 
-  eprintln!("{}", parse_context.module.to_string());
+  eprintln!("{}", module.module.to_string());
 
   SherpaResult::Ok(())
 }
@@ -414,24 +427,27 @@ fn test_compile_from_bytecode() -> SherpaResult<()> {
   let ir_states = optimize_ir_states(&mut j, ir_states);
   let bytecode_output = compile_bytecode(&mut j, ir_states);
   let ctx = Context::create();
-
-  let mut ctx = compile_from_bytecode("test", &mut j, &ctx, &bytecode_output)?;
+  let mut module = construct_module(&mut j, "test", &ctx);
+  compile_module_from_bytecode(&mut module, &mut j, &bytecode_output)?;
 
   unsafe {
-    setup_exec_engine(&mut ctx);
+    setup_exec_engine(&mut module);
     let mut reader = TestUTF8StringReader::new("hello world");
     let mut rt_ctx = ParseContext::new_llvm();
 
-    ctx
+    module
       ._exe_engine
       .as_ref()?
-      .add_global_mapping(&ctx.fun.allocate_stack, sherpa_allocate_stack as usize);
+      .add_global_mapping(&module.fun.allocate_stack, sherpa_allocate_stack as usize);
 
-    ctx._exe_engine.as_ref()?.add_global_mapping(&ctx.fun.free_stack, sherpa_free_stack as usize);
+    module
+      ._exe_engine
+      .as_ref()?
+      .add_global_mapping(&module.fun.free_stack, sherpa_free_stack as usize);
 
-    let init_fn = get_parse_function::<Init>(&ctx, "init")?;
-    let prime_fn = get_parse_function::<Prime>(&ctx, "prime")?;
-    let next_fn = get_parse_function::<Next>(&ctx, "next")?;
+    let init_fn = get_parse_function::<Init>(&module, "init")?;
+    let prime_fn = get_parse_function::<Prime>(&module, "prime")?;
+    let next_fn = get_parse_function::<Next>(&module, "next")?;
 
     init_fn.call(&mut rt_ctx, &mut reader);
 
@@ -461,49 +477,134 @@ fn test_compile_from_bytecode() -> SherpaResult<()> {
   SherpaResult::Ok(())
 }
 
-type ASTNode = u32;
-type ASTSlot = (ASTNode, TokenRange, TokenRange);
-type AstBuilder<'a> = unsafe extern "C" fn(
-  *mut ParseContext<TestUTF8StringReader<'static>, u32>,
-  *const fn(ctx: &mut ParseContext<TestUTF8StringReader<'static>, u32>, &mut AstStackSlice<ASTSlot>),
-  unsafe fn(
-    &ParseContext<TestUTF8StringReader<'static>, u32>,
-    &mut AstStackSlice<(ASTNode, TokenRange, TokenRange)>,
-  ),
-  unsafe fn(
-    &ParseContext<TestUTF8StringReader<'static>, u32>,
-    ParseActionType,
-    &mut AstStackSlice<(ASTNode, TokenRange, TokenRange)>,
-  ) -> ParseResult<ASTNode>,
-) -> ParseResult<ASTNode>;
+#[test]
+fn line_tracking_with_scanner_tokens() -> SherpaResult<()> {
+  let ctx = Context::create();
+  let (mut parser, j) = JitParseContext::<TestUTF8StringReader, u32, u32>::from_grammar_str(
+    r##"
+    @IGNORE g:sp g:nl
+    <> A > tk:B P 
+    
+    <> P > \world \goodby C 
+
+
+    <> C > tk:B
+
+    <> B > t:" (g:id | g:nl)(+) t:"
+
+    "##,
+    &ctx,
+    Default::default(),
+  )?;
+
+  assert!(!j.debug_error_report());
+
+  //parser.print_code();
+
+  let result = parser.build_ast(
+    0,
+    &mut TestUTF8StringReader::new("\"\nh\n\"\nworld\n\n\ngoodby\n\"\nmango\""),
+    &[
+      /*P*/
+      |ctx, slots| {
+        assert_eq!(slots[0].1.to_string_slice(ctx.get_str()), "world");
+        assert_eq!(slots[0].1.line_num, 3, "Line number of `world` should be 3");
+        assert_eq!(slots[0].1.line_off, 5, "Line offset of `world` should be 4");
+      },
+      /*A*/
+      |ctx, slots| {
+        assert_eq!(slots[0].1.to_string_slice(ctx.get_str()), "\"\nh\n\"");
+        assert_eq!(slots[0].1.line_num, 0, "Line number of `\"\\nh\\n\"` should be 0");
+        assert_eq!(slots[0].1.line_off, 0, "Line offset of `\"\\nh\\n\"` should be 0");
+        slots.assign(0, (1010101, Default::default(), Default::default()))
+      },
+      /*C*/
+      |ctx, slots| {
+        assert_eq!(slots[0].1.to_string_slice(ctx.get_str()), "\"\nmango\"");
+        assert_eq!(slots[0].1.line_num, 7, "Line number of `world` should be 7");
+        assert_eq!(slots[0].1.line_off, 20, "Line offset of `world` should be 20");
+      },
+      |_, _| {},
+    ],
+  );
+
+  assert!(matches!(result, ParseResult::Complete((1010101, ..))));
+
+  SherpaResult::Ok(())
+}
+
+#[test]
+fn simple_newline_tracking() -> SherpaResult<()> {
+  let ctx = Context::create();
+  let (mut parser, mut j) = JitParseContext::<TestUTF8StringReader, u32, u32>::from_grammar_str(
+    r##"
+    @IGNORE g:sp g:nl
+    
+    <> test > \hello P 
+    
+    <> P > \world \goodby B
+    
+    <> B > \mango
+    "##,
+    &ctx,
+    Default::default(),
+  )?;
+
+  assert!(!j.debug_error_report());
+
+  let result =
+    parser.build_ast(0, &mut TestUTF8StringReader::new("hello\nworld\n\ngoodby\nmango"), &[
+      /*test*/
+      |ctx, slots| {
+        assert_eq!(slots[0].1.to_string_slice(ctx.get_str()), "hello");
+        assert_eq!(slots[0].1.line_num, 0, "Line number of `hello` should be 0");
+        assert_eq!(slots[0].1.line_off, 0, "Line offset of `hello` should be 0");
+
+        slots.assign(0, (1010101, Default::default(), Default::default()))
+      },
+      /*B*/
+      |ctx, slots| {
+        assert_eq!(slots[0].1.to_string_slice(ctx.get_str()), "mango");
+        assert_eq!(slots[0].1.line_num, 4, "Line number of `mango` should be 4");
+        assert_eq!(slots[0].1.line_off, 19, "Line offset of `mango` should be 19");
+      },
+      /*P*/
+      |ctx, slots| {
+        assert_eq!(slots[0].1.to_string_slice(ctx.get_str()), "world");
+        assert_eq!(slots[0].1.line_num, 1, "Line number of `world` should be 1");
+        assert_eq!(slots[0].1.line_off, 5, "Line offset of `world` should be 5");
+      },
+    ]);
+
+  assert!(matches!(result, ParseResult::Complete((1010101, ..))));
+
+  SherpaResult::Ok(())
+}
 
 #[test]
 fn test_compile_from_bytecode1() -> SherpaResult<()> {
-  let mut j = Journal::new(None);
-  GrammarStore::from_str(
-    &mut j,
-    "
-  @IGNORE g:sp g:nl
-
-  <> test > \\hello P 
-
-  <> P > \\world \\goodby B
-
-  <> B > \\mango
-  ",
-  )?;
-
-  let ir_states = compile_states(&mut j, 1)?;
-  let ir_states = optimize_ir_states(&mut j, ir_states);
-  let bytecode_output = compile_bytecode(&mut j, ir_states);
   let ctx = Context::create();
 
-  type ASTNode = u32;
-  type ASTSlot = (ASTNode, TokenRange, TokenRange);
+  let (mut parser, mut j) = JitParseContext::<TestUTF8StringReader, u32, u32>::from_grammar_str(
+    "
+    @IGNORE g:sp g:nl
+    
+    <> test > \\hello P 
+    
+    <> P > \\world \\goodby B
+    
+    <> B > \\mango
+    ",
+    &ctx,
+    Default::default(),
+  )?;
 
-  let test_functions = [
-    |ctx: &mut ParseContext<TestUTF8StringReader<'static>, u32>,
-     slots: &mut AstStackSlice<ASTSlot>| {
+  assert!(!j.debug_error_report());
+
+  let input = "hello world\ngoodby mango";
+
+  let parse_result = parser.build_ast(0, &mut TestUTF8StringReader::new(input), &[
+    |ctx, slots| {
       let _a = slots.take(0);
       let _b = slots.take(1);
 
@@ -513,7 +614,7 @@ fn test_compile_from_bytecode1() -> SherpaResult<()> {
 
       eprintln!(
         "{}",
-        final_token.to_token(unsafe { (*ctx.reader).get_source() }).blame(
+        final_token.to_token(unsafe { &*ctx.reader }).blame(
           0,
           0,
           "Completed Parse of [test]",
@@ -523,72 +624,32 @@ fn test_compile_from_bytecode1() -> SherpaResult<()> {
 
       slots.assign(0, (0, final_token, TokenRange::default()));
     },
-    |_: &mut ParseContext<TestUTF8StringReader<'static>, u32>,
-     slots: &mut AstStackSlice<ASTSlot>| {
+    |_, slots| {
       eprintln!("<B> 02 - {}  {:#?}", 0, slots);
       // Do nothing
     },
-    |_: &mut ParseContext<TestUTF8StringReader<'static>, u32>,
-     slots: &mut AstStackSlice<ASTSlot>| {
+    |_, slots| {
       eprintln!("<P> 03 - {}  {:#?}", 0, slots);
       let (_, _a, _) = slots.take(0);
       slots.take(1);
       let (_, _c, _) = slots.take(2);
       slots.assign(0, (0, (_a + _c), TokenRange::default()));
     },
-  ];
+  ]);
+  eprintln!("{:#?}", parse_result);
 
-  unsafe {
-    let mut module = compile_from_bytecode("test", &mut j, &ctx, &bytecode_output)?;
+  assert!(matches!(parse_result, ParseResult::Complete(..)));
 
-    construct_ast_builder::<ASTNode>(&module)?;
-
-    setup_exec_engine(&mut module);
-    let input = "hello world\ngoodby mango";
-    let mut reader = TestUTF8StringReader::new(input);
-    let mut rt_ctx = ParseContext::new_llvm();
-
-    module
-      ._exe_engine
-      .as_ref()?
-      .add_global_mapping(&module.fun.allocate_stack, sherpa_allocate_stack as usize);
-
-    module
-      ._exe_engine
-      .as_ref()?
-      .add_global_mapping(&module.fun.free_stack, sherpa_free_stack as usize);
-
-    let init_fn = get_parse_function::<Init>(&module, "init")?;
-    let prime_fn = get_parse_function::<Prime>(&module, "prime")?;
-    let ast_builder_fn = get_parse_function::<AstBuilder>(&module, "ast_parse")?;
-    let drop_ = get_parse_function::<Drop>(&module, "drop")?;
-
-    init_fn.call(&mut rt_ctx, &mut reader);
-    prime_fn.call(&mut rt_ctx, 0);
-    let parse_result = ast_builder_fn.call(
-      &mut rt_ctx,
-      test_functions.as_ptr(),
-      llvm_map_shift_action::<TestUTF8StringReader, ASTNode, u32>,
-      llvm_map_result_action::<TestUTF8StringReader, ASTNode, u32>,
-    );
-
-    drop_.call(&mut rt_ctx);
-
-    eprintln!("{:#?}", parse_result);
-
-    assert!(matches!(parse_result, ParseResult::Complete(..)));
-
-    if let ParseResult::Complete((_, tok, _)) = parse_result {
-      assert_eq!(tok.len(), input.len());
-    }
-  };
+  if let ParseResult::Complete((_, tok, _)) = parse_result {
+    assert_eq!(tok.len(), input.len());
+  }
 
   SherpaResult::Ok(())
 }
 
 #[test]
 fn test_compile_json_parser() -> SherpaResult<()> {
-  use crate::llvm::compile_from_bytecode;
+  use crate::llvm::compile_module_from_bytecode;
   use inkwell::context::Context;
   let mut j = Journal::new(None);
   GrammarStore::from_str(
@@ -638,7 +699,8 @@ fn test_compile_json_parser() -> SherpaResult<()> {
 
   let ctx = Context::create();
 
-  let module = compile_from_bytecode("test", &mut j, &ctx, &bytecode_output)?;
+  let mut module = construct_module(&mut j, "test", &ctx);
+  compile_module_from_bytecode(&mut module, &mut j, &bytecode_output)?;
 
   eprintln!("{}", module.module.to_string());
 

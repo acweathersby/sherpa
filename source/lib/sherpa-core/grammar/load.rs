@@ -95,22 +95,26 @@ pub(crate) fn load_all(
                         pending_grammar_paths.lock().unwrap().push_back(path);
                         work_verifier.lock().unwrap().add_units_of_work(1);
                       }
-                      SherpaResult::Err(err) => {
-                        errors.push(SherpaError::load_err_invalid_dependency {
-                          path: base_path,
-                          requestor: path.to_owned(),
-                          tok,
-                          err: Some(Box::new(err)),
-                        })
-                      }
                       SherpaResult::MultipleErrors(mut new_errors) => {
                         errors.append(&mut new_errors)
                       }
-                      SherpaResult::None => errors.push(SherpaError::load_err_invalid_dependency {
-                        path: base_path,
-                        requestor: path.to_owned(),
-                        tok,
-                        err: None,
+                      SherpaResult::Err(err) => errors.push(SherpaError::SourceError {
+                        loc:        tok,
+                        path:       path.clone(),
+                        id:         "nonexistent-import-source",
+                        msg:        format!(
+                          "Could not load \n\t{}{}\n",
+                          base_path.to_str().unwrap(),
+                          err
+                        ),
+                        inline_msg: "source not found".to_string(),
+                      }),
+                      SherpaResult::None => errors.push(SherpaError::SourceError {
+                        loc:        tok,
+                        path:       path.clone(),
+                        id:         "nonexistent-import-source",
+                        msg:        format!("Could not load {}", base_path.to_str().unwrap()),
+                        inline_msg: "source not found".to_string(),
                       }),
                     }
                   }

@@ -3,6 +3,7 @@ use crate::utf8::get_token_class_from_codepoint;
 use std::{
   alloc::{alloc, dealloc, Layout},
   fmt::Debug,
+  ops::Index,
 };
 
 #[derive(Clone, Debug, Copy)]
@@ -58,17 +59,17 @@ pub struct ParseContext<T: ByteReader, M = u32> {
   pub tok_id:          u32,
   // Line info ------------
   /// The offset of the last line character recognized that proceeds the anchor offset
-  pub anchor_line_off: u32,
+  pub end_line_off:    u32,
   /// The number of line character recognized that proceed the anchor offset
-  pub anchor_line_num: u32,
+  pub end_line_num:    u32,
   /// The offset of the last line character recognized that proceeds the token offset
-  pub tok_line_off:    u32,
+  pub start_line_off:  u32,
   /// The number of line character recognized that proceed the token offset
-  pub tok_line_num:    u32,
+  pub start_line_num:  u32,
   /// The offset of the last line character recognized that proceeds the peek offset
-  pub peek_line_off:   u32,
+  pub scan_line_off:   u32,
   /// The number of line character recognized that proceed the peek offset
-  pub peek_line_num:   u32,
+  pub scan_line_num:   u32,
   // Goto stack data -----
   pub goto_stack_ptr:  *mut Goto,
   pub goto_size:       u32,
@@ -110,12 +111,12 @@ impl<T: LLVMByteReader + ByteReader, M> Debug for ParseContext<T, M> {
     dbgstr.field("scan_off", &self.scan_off);
     dbgstr.field("scan_len", &self.scan_len);
     dbgstr.field("tok_or_prod_id", &self.prod_id);
-    dbgstr.field("anchor_line_off", &self.anchor_line_off);
-    dbgstr.field("anchor_line_num", &self.anchor_line_num);
-    dbgstr.field("tok_line_off", &self.tok_line_off);
-    dbgstr.field("tok_line_num", &self.tok_line_num);
-    dbgstr.field("peek_line_off", &self.peek_line_off);
-    dbgstr.field("peek_line_num", &self.peek_line_num);
+    dbgstr.field("anchor_line_off", &self.end_line_off);
+    dbgstr.field("anchor_line_num", &self.end_line_num);
+    dbgstr.field("tok_line_off", &self.start_line_off);
+    dbgstr.field("tok_line_num", &self.start_line_num);
+    dbgstr.field("peek_line_off", &self.scan_line_off);
+    dbgstr.field("peek_line_num", &self.scan_line_num);
     dbgstr.field("state", &self.state);
     dbgstr.field("in_peek_mode", &self.in_peek_mode);
     dbgstr.field("is_active", &self.is_active);
@@ -149,12 +150,12 @@ impl<T: ByteReader + LLVMByteReader, M> ParseContext<T, M> {
       scan_off:        0,
       scan_len:        0,
       prod_id:         0,
-      anchor_line_off: 0,
-      anchor_line_num: 0,
-      tok_line_off:    0,
-      tok_line_num:    0,
-      peek_line_off:   0,
-      peek_line_num:   0,
+      end_line_off:    0,
+      end_line_num:    0,
+      start_line_off:  0,
+      start_line_num:  0,
+      scan_line_off:   0,
+      scan_line_num:   0,
       state:           0,
       tok_id:          0,
       meta_a:          0,
@@ -191,12 +192,12 @@ impl<T: ByteReader, M> ParseContext<T, M> {
       scan_off:        0,
       scan_len:        0,
       prod_id:         0,
-      anchor_line_off: 0,
-      anchor_line_num: 0,
-      tok_line_off:    0,
-      tok_line_num:    0,
-      peek_line_off:   0,
-      peek_line_num:   0,
+      end_line_off:    0,
+      end_line_num:    0,
+      start_line_off:  0,
+      start_line_num:  0,
+      scan_line_off:   0,
+      scan_line_num:   0,
       state:           0,
       tok_id:          0,
       meta_a:          0,
@@ -226,8 +227,8 @@ impl<T: ByteReader, M> ParseContext<T, M> {
       anchor_byte_offset: self.anchor_off,
       token_byte_offset:  self.token_off,
       token_byte_length:  self.scan_len,
-      token_line_offset:  self.tok_line_off,
-      token_line_count:   self.tok_line_num,
+      token_line_offset:  self.start_line_off,
+      token_line_count:   self.start_line_num,
     }
   }
 
@@ -417,6 +418,19 @@ impl<T: AstObject> Debug for AstStackSlice<T> {
     dbgstr.finish()
   }
 }
+
+impl<T: AstObject> Index<usize> for AstStackSlice<T> {
+  type Output = T;
+
+  fn index(&self, index: usize) -> &Self::Output {
+    if (index > self.len()) {
+      panic!("Index {} out of bounds in an AstStackSlice of len {}", index, self.len());
+    }
+
+    unsafe { &*self.get_pointer(index) }
+  }
+}
+
 #[test]
 fn test_slots_from_slice() {
   let mut d = vec![1, 2, 3, 4, 5, 6, 7];
@@ -442,12 +456,12 @@ impl<V: AstObject> AstObject for (V, TokenRange, TokenRange) {}
 
 pub unsafe fn llvm_map_shift_action<
   'a,
-  T: LLVMByteReader + ByteReader + MutByteReader,
-  M,
-  V: AstObject,
+  R: LLVMByteReader + ByteReader + MutByteReader,
+  ExtCTX,
+  ASTNode: AstObject,
 >(
-  ctx: &ParseContext<T, M>,
-  slots: &mut AstStackSlice<(V, TokenRange, TokenRange)>,
+  ctx: &ParseContext<R, ExtCTX>,
+  slots: &mut AstStackSlice<(ASTNode, TokenRange, TokenRange)>,
 ) {
   match ctx.get_shift_data() {
     ParseAction::Shift {
@@ -471,7 +485,7 @@ pub unsafe fn llvm_map_shift_action<
         line_off: token_line_offset,
       };
 
-      slots.assign_to_garbage(0, (V::default(), tok, peek));
+      slots.assign_to_garbage(0, (ASTNode::default(), tok, peek));
     }
     _ => unreachable!(),
   }
@@ -493,7 +507,7 @@ pub unsafe fn llvm_map_result_action<
     }
     ParseActionType::Error => {
       let vec = slots.to_vec();
-      let last_input = vec.last().unwrap().1;
+      let last_input = vec.last().cloned().unwrap_or_default().1;
       ParseResult::Error(last_input, vec)
     }
     ParseActionType::NeedMoreInput => {

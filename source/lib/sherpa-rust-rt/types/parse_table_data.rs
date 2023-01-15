@@ -1,5 +1,6 @@
 use super::*;
 
+/// Deconstructed bytecode table information.
 #[derive(Debug, Clone, Copy)]
 pub struct TableHeaderData {
   pub input_type: u32,

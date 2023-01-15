@@ -26,28 +26,21 @@ pub use severity::SherpaErrorSeverity;
 /// error types.
 #[derive(Clone, Debug)]
 pub enum SherpaError {
+  /// A general structure for reporting an error that has occurred
+  /// within an external source file.
   SourceError {
+    /// Location of the error within a source file.
     loc:        Token,
+    /// Path to the source file containing the error.
     path:       PathBuf,
+    /// A unique identifier in the form `g:id(+)(\- g:id(+))(*)`
     id:         &'static str,
+    /// The description of the error
     msg:        String,
+    /// An optional inline message that appears inline
+    /// within the error location diagram. Set to an empty string
+    /// to prevents its display.
     inline_msg: String,
-  },
-  //---------------------------------------------------------------------------
-  // ----------------- Grammar Load Errors ------------------------------------
-  //---------------------------------------------------------------------------
-  /// A path specified in one grammar file does map to a valid file
-  load_err_invalid_grammar_path {
-    path: PathBuf,
-    reference_token: Option<Token>,
-  },
-
-  // An imported grammar path referenced in another grammar does not exist
-  load_err_invalid_dependency {
-    requestor: PathBuf,
-    path:      PathBuf,
-    tok:       Token,
-    err:       Option<Box<SherpaError>>,
   },
   //---------------------------------------------------------------------------
   // ----------------- Grammar Compile Errors ---------------------------------Look
@@ -76,7 +69,6 @@ pub enum SherpaError {
   //---------------------------------------------------------------------------
   // ----------------- Ir Error Types -----------------------------------------
   //---------------------------------------------------------------------------
-  ir_err_bad_parse,
   ir_warn_not_parsed,
 
   //---------------------------------------------------------------------------
@@ -195,7 +187,7 @@ impl Display for SherpaError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
       SourceError { msg, id, inline_msg, loc, path } => f.write_fmt(format_args!(
-        "\n{} Error [{}:{}]\n   {}\n{}",
+        "\n{} [{}:{}]\n   {}\n{}",
         id,
         path.to_str().unwrap(),
         loc.loc_stub(),
@@ -203,19 +195,6 @@ impl Display for SherpaError {
         loc.blame(1, 1, &inline_msg, BlameColor::RED),
       )),
       UNDEFINED => f.write_str("\nAn unknown error has occurred "),
-      load_err_invalid_grammar_path { .. } => f.write_str("\nLoad_InvalidGrammarPath Error"),
-      load_err_invalid_dependency { path, requestor, tok, err } => f.write_fmt(format_args!(
-        "\n[{}:{}]\nThe import grammar path [{}] does not exist: \n{}",
-        requestor.to_str().unwrap_or(""),
-        tok.loc_stub(),
-        path.to_str().unwrap_or(""),
-        tok.blame(
-          1,
-          1,
-          &err.as_ref().unwrap_or(&Box::new(SherpaError::UNDEFINED)).to_string().trim(),
-          BlameColor::RED
-        )
-      )),
       ExtendedError(error) => error.report(f),
       IOError(err_string) => f.write_fmt(format_args!("\nIO Error: {}", err_string)),
       Text(err_string) => f.write_str(&err_string),

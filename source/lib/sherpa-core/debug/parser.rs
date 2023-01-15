@@ -26,7 +26,7 @@ pub fn collect_shifts_and_skips<'a>(
         break SherpaResult::Ok((shifts, skips));
       }
       ParseAction::Error { last_input, .. } => {
-        let mut token: Token = last_input.to_token_with_reader(ctx.get_reader());
+        let mut token: Token = last_input.to_token(ctx.get_reader());
 
         token.set_source(Arc::new(Vec::from(input.to_string().as_bytes())));
         break SherpaResult::Err(token.blame(1, 1, "", None).into());

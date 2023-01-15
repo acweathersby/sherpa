@@ -1,3 +1,0 @@
-@IMPORT missing_production_import_B.hcg as imp
-
-<> A > \test imp::B 

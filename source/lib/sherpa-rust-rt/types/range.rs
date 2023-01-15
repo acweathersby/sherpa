@@ -157,13 +157,7 @@ impl TokenRange {
     self.to_string_slice(source).parse::<T>().unwrap_or_default()
   }
 
-  pub fn to_token(&self, source: Arc<Vec<u8>>) -> Token {
-    let mut tok: Token = (*self).into();
-    tok.set_source(source);
-    tok
-  }
-
-  pub fn to_token_with_reader(&self, reader: &dyn ByteReader) -> Token {
+  pub fn to_token(&self, reader: &dyn ByteReader) -> Token {
     let mut tok: Token = (*self).into();
     tok.set_source(reader.get_source());
     tok

@@ -152,7 +152,7 @@ pub fn parse_str_as_{0}(input: &str) -> Result<{1}, SherpaParseError> {{
   Result::Ok(())
 }
 
-pub fn get_ascript_export_data(
+pub(crate) fn get_ascript_export_data(
   g: &GrammarStore,
   ascript: &AScriptStore,
 ) -> Vec<(Option<ascript::rust::Ref>, AScriptTypeVal, String, String, String)> {

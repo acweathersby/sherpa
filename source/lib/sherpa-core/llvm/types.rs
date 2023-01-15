@@ -73,7 +73,6 @@ pub struct PublicFunctions<'a> {
   /// extern "C" fn get_token_class_from_codepoint( utf8_codepoint: u32 ) -> u32;
   /// ```
   pub(crate) get_token_class_from_codepoint: FunctionValue<'a>,
-  pub(crate) simd_token_parse: FunctionValue<'a>,
 }
 
 #[derive(Debug)]
@@ -173,36 +172,38 @@ pub enum CTX_AGGREGATE_INDICES {
   /// ```
   tok_id,
   // Line info ------------
-  /// The offset of the last line character recognized that proceeds the anchor offset
+  /// The offset of the last line character within the token
+  /// This may be the same as `start_line_off` if the token does not contain newlines.
   /// ```ignore
-  /// pub anchor_line_off: u32,
+  /// pub end_line_off: u32,
   /// ```
-  anchor_line_off,
-  /// The number of line character recognized that proceed the anchor offset
+  end_line_off,
+  /// The line number of the last line character within the token.
+  /// This may be the same as `start_line_num` if the token does not contain newlines.
   /// ```ignore
-  /// pub anchor_line_num: u32,
+  /// pub end_line_num: u32,
   /// ```
-  anchor_line_num,
+  end_line_num,
   /// The offset of the last line character recognized that proceeds the token offset
   /// ```ignore
   /// pub tok_line_off:    u32,
   /// ```
-  tok_line_off,
+  start_line_off,
   /// The number of line character recognized that proceed the token offset
   /// ```ignore
   /// pub tok_line_num:    u32,
   /// ```
-  tok_line_num,
-  /// The offset of the last line character recognized that proceeds the peek offset
+  start_line_num,
+  /// The offset of the last line character recognized that proceeds the peek/scanner offset
   /// ```ignore
   /// pub peek_line_off:   u32,
   /// ```
-  peek_line_off,
-  /// The number of line character recognized that proceed the peek offset
+  scan_line_off,
+  /// The number of line character recognized that proceed the peek/scanner offset
   /// ```ignore
   /// pub peek_line_num:   u32,
   /// ```
-  peek_line_num,
+  scan_line_num,
   // Goto stack data -----
   /// ```ignore
   /// pub goto_stack_ptr:  *mut Goto,

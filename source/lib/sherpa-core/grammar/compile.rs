@@ -311,7 +311,7 @@ fn merge_grammars(
           }
           None => {
             e.push(SherpaError::SourceError {
-              id:         "nonexistent-import",
+              id:         "nonexistent-import-production",
               msg:        format!(
                 "Could not locate production in imported grammar {}",
                 import_g.id.path.to_str().unwrap()

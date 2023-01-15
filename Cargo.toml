@@ -1,7 +1,7 @@
 [workspace]
 
 members = [
-    #"source/app/cli",
+    "source/app/cli",
     "source/lib/sherpa",
     "source/lib/sherpa-proc",
     "source/lib/sherpa-core",

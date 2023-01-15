@@ -72,7 +72,7 @@
 
 <> ast_definition > 
 
-        \=> ast::body^ast
+        t:=> ast::body^ast
 
             f:ast {  { t_Ascript, c_Function, ast: $ast, tok }  }
 

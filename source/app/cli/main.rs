@@ -101,12 +101,13 @@ fn main() -> SherpaResult<()> {
         path.canonicalize()?
       };
 
-      let mut pipeline = BuildPipeline::from_source(&path, config.clone());
+      let mut pipeline = BuildPipeline::from_source(path, config.clone());
 
       pipeline
         .set_source_output_dir(&out_dir)
         .set_build_output_dir(&out_dir)
-        .add_task(build_bytecode_disassembly());
+        .add_task(build_rust_preamble());
+
       match config.source_type {
         _ =>  pipeline.set_source_file_name("%.rs")
       };
@@ -117,7 +118,7 @@ fn main() -> SherpaResult<()> {
           .add_task(build_llvm_parser_interface())
         }
         _ => {
-          pipeline.add_task(build_bytecode_parser(config.source_type))
+          pipeline.add_task(build_bytecode_parser())
         }
       };
 
@@ -147,7 +148,7 @@ fn main() -> SherpaResult<()> {
         path.canonicalize()?
       };
 
-      let mut pipeline = BuildPipeline::from_source(&path, config.clone());
+      let mut pipeline = BuildPipeline::from_source(path, config.clone());
 
       pipeline
         .set_source_output_dir(&out_dir)

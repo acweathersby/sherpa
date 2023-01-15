@@ -10,6 +10,7 @@ use inkwell::{
 use crate::{
   ascript::{self, rust::create_type_initializer_value},
   grammar::data::ast_node::DummyASTEnum,
+  llvm::construct_module,
   types::*,
   writer::code_writer::CodeWriter,
 };
@@ -294,8 +295,9 @@ pub fn build_llvm_parser(
 
       Target::initialize_x86(&InitializationConfig::default());
 
-      let target_triple =
-        target_triple.clone().unwrap_or(std::env::var("TARGET").unwrap_or(String::default()));
+      let target_triple = target_triple
+        .clone()
+        .unwrap_or(std::env::var("TARGET").unwrap_or("x86_64-linux-gnu".to_string()));
 
       let ll_file_path = output_path.join(parser_name.clone() + ".ll");
       let bitcode_path = output_path.join("lib".to_string() + &parser_name + ".bc");
@@ -310,13 +312,15 @@ pub fn build_llvm_parser(
       }
 
       // Write out llvm module to file
+      let ctx = Context::create();
+      let mut module = construct_module(&mut j, &parser_name, &ctx);
 
-      match crate::llvm::compile_from_bytecode(&parser_name, &mut j, &Context::create(), &bytecode)
-      {
-        SherpaResult::Ok(ctx) => {
+      match crate::llvm::compile_module_from_bytecode(&mut module, &mut j, &bytecode) {
+        SherpaResult::Ok(()) => {
           if task_ctx.get_journal().config().enable_ascript {
             unsafe {
-              crate::llvm::ascript_functions::construct_ast_builder::<DummyASTEnum>(&ctx).unwrap();
+              crate::llvm::ascript_functions::construct_ast_builder::<DummyASTEnum>(&module)
+                .unwrap();
             }
           }
 
@@ -325,13 +329,13 @@ pub fn build_llvm_parser(
           if light_lto {
             if output_llvm_ir_file {
               if let Ok(mut file) = task_ctx.create_file(ll_file_path.clone()) {
-                file.write_all(ctx.module.to_string().as_bytes()).unwrap();
+                file.write_all(module.module.to_string().as_bytes()).unwrap();
                 file.flush().unwrap();
               }
             }
 
             task_ctx.add_artifact_path(bitcode_path.clone());
-            if ctx.module.write_bitcode_to_path(&bitcode_path) {
+            if module.module.write_bitcode_to_path(&bitcode_path) {
               match Command::new(clang_command.clone())
                 .args(&[
                   "-flto=thin",
@@ -363,7 +367,7 @@ pub fn build_llvm_parser(
           } else {
             if output_llvm_ir_file {
               if let Ok(mut file) = task_ctx.create_file(ll_file_path.clone()) {
-                file.write_all(ctx.module.to_string().as_bytes()).unwrap();
+                file.write_all(module.module.to_string().as_bytes()).unwrap();
                 file.flush().unwrap();
               }
             }
@@ -375,14 +379,14 @@ pub fn build_llvm_parser(
               .create_target_machine(&target_triple, "generic", "", opt, reloc, model)
               .unwrap();
 
-            ctx.module.set_triple(&target_triple);
-            ctx.module.set_data_layout(&target_machine.get_target_data().get_data_layout());
+            module.module.set_triple(&target_triple);
+            module.module.set_data_layout(&target_machine.get_target_data().get_data_layout());
 
             if j.config().opt_llvm {
-              apply_llvm_optimizations(opt, &ctx);
+              apply_llvm_optimizations(opt, &module);
             }
 
-            match target_machine.write_to_file(&ctx.module, FileType::Object, &object_path) {
+            match target_machine.write_to_file(&module.module, FileType::Object, &object_path) {
               Ok(_) => {
                 if !(Command::new(ar_command)
                   .args(&["rc", archive_path.to_str().unwrap(), object_path.to_str().unwrap()])
