@@ -172,9 +172,9 @@ pub(crate) fn construct_module<'a>(
           CTX.ptr_type(0.into()).into(),
           TAIL_CALLABLE_PARSE_FUNCTION.ptr_type(0.into()).into(),
           i8.ptr_type(0.into()).into(),
+          i32.ptr_type(0.into()).into(),
+          bool.ptr_type(0.into()).into(),
           i32.into(),
-          i32.into(),
-          bool.into(),
         ],
         false,
       ),
@@ -285,7 +285,9 @@ pub(crate) unsafe fn construct_get_adjusted_input_block_function(
   module: &LLVMParserModule,
 ) -> SherpaResult<()> {
   let LLVMParserModule { builder: b, ctx, fun: funct, .. } = module;
+
   let fn_value = funct.get_adjusted_input_block;
+
   // Set the context's goto pointers to point to the goto block;
   let attempt_extend = ctx.append_basic_block(fn_value, "Attempt_Extend");
   let parse_ctx = fn_value.get_nth_param(0)?.into_pointer_value();
@@ -294,6 +296,7 @@ pub(crate) unsafe fn construct_get_adjusted_input_block_function(
   let input_truncated_ptr = fn_value.get_nth_param(3)?.into_pointer_value();
   let input_off = fn_value.get_nth_param(4)?.into_int_value();
   let requested_end_off = fn_value.get_nth_param(5)?.into_int_value();
+
   b.position_at_end(attempt_extend);
   let block = b
     .build_call(
@@ -304,6 +307,7 @@ pub(crate) unsafe fn construct_get_adjusted_input_block_function(
     .try_as_basic_value()
     .left()?
     .into_struct_value();
+
   let input_ptr = b.build_extract_value(block, 0, "")?.into_pointer_value();
   let input_len = b.build_extract_value(block, 1, "")?.into_int_value();
   let truncated = b.build_extract_value(block, 2, "")?.into_int_value();

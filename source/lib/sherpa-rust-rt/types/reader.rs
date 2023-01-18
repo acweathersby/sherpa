@@ -211,7 +211,7 @@ pub trait LLVMByteReader {
       let ptr = ((self_.get_bytes().as_ptr() as usize) + cursor as usize) as *const u8;
       InputInfo(ptr, self_.len() as u32, false)
     } else {
-      InputInfo(0 as *const u8, 0, false)
+      InputInfo(0 as *const u8, self_.len() as u32, false)
     }
   }
 }

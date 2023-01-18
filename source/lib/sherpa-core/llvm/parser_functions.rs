@@ -290,7 +290,15 @@ pub(super) fn construct_parse_function_statements(
           instruction = instruction.next(&output.bytecode);
         }
         VectorBranch | HashBranch => {
-          construct_instruction_branch(instruction, g, module, pack, true, None)?;
+          construct_instruction_branch(
+            instruction,
+            g,
+            module,
+            pack,
+            true,
+            None,
+            pack.state.entry_block,
+          )?;
           break;
         }
         Fail => {
@@ -326,6 +334,7 @@ fn construct_instruction_branch<'a>(
   p: &'a FunctionPack,
   entry_table: bool,
   mut ptrs: Option<Pointers<'a>>,
+  mut last_defult_block: BasicBlock<'a>,
 ) -> SherpaResult<()> {
   let b = &m.builder;
   let i32 = m.ctx.i32_type();
@@ -353,6 +362,7 @@ fn construct_instruction_branch<'a>(
 
   let representative_state = data;
   let lexer_type = representative_state.data.lexer_type;
+  let input_type = representative_state.data.input_type;
   let is_peek = matches!(lexer_type, LexerType::PEEK);
   let is_scanner = p.is_scanner;
 
@@ -388,8 +398,10 @@ fn construct_instruction_branch<'a>(
   }
 
   if entry_table {
+    last_defult_block = p.state.generate_block(m, "last_default", instruction.get_address());
+
     let max_length = {
-      let mut max_size = 0;
+      let mut max_size = 1;
       for table in p.state.branch_data.values() {
         // Retrieve the maximum number of bytes that will be read
         // per round within this function.
@@ -488,6 +500,7 @@ fn construct_instruction_branch<'a>(
           b.build_unconditional_branch(table_block);
         }
       };
+
       b.position_at_end(table_block);
 
       ptrs = Some(Pointers {
@@ -500,11 +513,11 @@ fn construct_instruction_branch<'a>(
         entry_table_block: table_block,
       });
 
-      if max_length > 0 {
+      if input_type != InputType::T01_PRODUCTION {
         // Only initialize input buffer if we are directly comparing it's data with values.
         let byte_offset = b.build_load(input_off_ptr, "byte_offset").into_int_value();
 
-        check_for_input_acceptability(
+        let input_available = check_for_input_acceptability(
           m,
           p,
           input_ptr_ptr,
@@ -512,17 +525,19 @@ fn construct_instruction_branch<'a>(
           input_truncated_ptr,
           byte_offset,
           i32.const_int(max_length as u64, false),
-        );
-
-        let input_size = b.build_load(input_byte_len_ptr, "").into_int_value();
+        )?;
 
         // If the block size is less than 1 then jump to default
-        let comparison =
-          b.build_int_compare(inkwell::IntPredicate::EQ, i32.const_int(0, false), input_size, "");
+        let comparison = b.build_int_compare(
+          inkwell::IntPredicate::SGE,
+          input_available,
+          i32.const_int(1, false),
+          "",
+        );
 
         let branch_block = p.state.generate_block(m, "table_branches", instruction.get_address());
 
-        b.build_conditional_branch(comparison, default_block, branch_block);
+        b.build_conditional_branch(comparison, branch_block, last_defult_block);
         b.position_at_end(branch_block);
       }
     } else {
@@ -568,6 +583,8 @@ fn construct_instruction_branch<'a>(
       )
     });
   }
+
+  // Add check for end of input.
 
   match input_type {
     InputType::T01_PRODUCTION => {
@@ -668,9 +685,9 @@ fn construct_instruction_branch<'a>(
           (p_ctx).into(),
           parse_fun_ptr(scanner_address, p).into(),
           b.build_load(ptrs?.input_ptr_ptr.into(), "").into_pointer_value().into(),
-          b.build_load(ptrs?.input_byte_len_ptr.into(), "").into_int_value().into(),
+          ptrs?.input_byte_len_ptr.into(),
+          ptrs?.input_trun.into(),
           b.build_load(ptrs?.input_off_ptr.into(), "").into_int_value().into(),
-          b.build_load(ptrs?.input_trun, "").into_int_value().into(),
         ])?;
         value = CTX::tok_id.load(m, p_ctx)?.into_int_value();
       }
@@ -728,7 +745,7 @@ fn construct_instruction_branch<'a>(
 
       match instruction.to_type() {
         InstructionType::HashBranch | InstructionType::VectorBranch => {
-          construct_instruction_branch(instruction, g, m, p, false, ptrs)?;
+          construct_instruction_branch(instruction, g, m, p, false, ptrs, last_defult_block)?;
         }
         _ => {
           construct_parse_function_statements(instruction, g, m, p)?;
@@ -762,9 +779,13 @@ fn construct_instruction_branch<'a>(
 
   match default_instruction.to_type() {
     InstructionType::HashBranch | InstructionType::VectorBranch => {
-      construct_instruction_branch(default_instruction, g, m, p, false, ptrs)?;
+      construct_instruction_branch(default_instruction, g, m, p, false, ptrs, last_defult_block)?;
     }
     _ => {
+      b.build_unconditional_branch(last_defult_block);
+      b.position_at_end(last_defult_block);
+      // Build the input load structures
+
       // Build code that deals with the outcomes that arrive when the
       // input block does not have enough bytes to fulfill all branches
       // but the reader could deliver more input.
@@ -997,10 +1018,6 @@ fn write_reentrance<'a>(
 
   let next_instruction = match instruction.to_type() {
     Pass => Instruction::pass(),
-    Goto => match instruction.next(bytecode).to_type() {
-      Pass => instruction.goto(bytecode),
-      _ => instruction,
-    },
     _ => instruction,
   };
 
@@ -1058,7 +1075,10 @@ pub(crate) fn construct_shift(
   let b = &module.builder;
 
   match data.entry_block.get_first_instruction() {
-    Some(instruction) => b.position_before(&instruction),
+    Some(instruction) => {
+      println!("{:X}", next.get_address());
+      b.position_before(&instruction)
+    }
     None => b.position_at_end(data.entry_block),
   }
 
@@ -1192,98 +1212,6 @@ pub(crate) unsafe fn construct_prime_function(
   }
 }
 
-pub(crate) unsafe fn construct_scan<'a>(m: &LLVMParserModule<'a>) -> SherpaResult<()> {
-  // The scan mode reuses the parse context, and pushes a sentinel state
-  // that guards against the scanner context consuming the states of the normal
-  // context.
-
-  let LLVMParserModule { builder: b, types, ctx, fun: funct, .. } = m;
-
-  // Build a null function that will be used to break out of the scanner
-  // context dispatch loop
-  let null_fn = {
-    let null_fn = m.module.add_function(
-      "scan_stop",
-      ctx.i32_type().fn_type(&[types.parse_ctx.ptr_type(0.into()).into()], false),
-      Some(Linkage::Private),
-    );
-
-    null_fn.set_call_conventions(fastCC);
-
-    let entry = ctx.append_basic_block(null_fn, "Entry");
-
-    b.position_at_end(entry);
-
-    b.build_return(Some(&ctx.i32_type().const_zero()));
-
-    null_fn
-  };
-
-  let fn_value = funct.scan;
-  //## Set the context's goto pointers to point to the goto block;
-  let entry = ctx.append_basic_block(fn_value, "Entry");
-
-  //## Extract Params
-  let p_ctx = fn_value.get_nth_param(0)?.into_pointer_value();
-  let scanner_parse_function_ptr = fn_value.get_nth_param(1)?.into_pointer_value();
-  let input_ptr = fn_value.get_nth_param(2)?.into_pointer_value();
-  let input_len = fn_value.get_nth_param(3)?.into_int_value();
-  let offset = fn_value.get_nth_param(4)?.into_int_value();
-  let input_trun = fn_value.get_nth_param(5)?.into_int_value();
-
-  //## Entry Block
-  b.position_at_end(entry);
-
-  // Push the scanner sentinel state and the entry scanner state onto
-  // the goto stack.
-
-  CTX::scan_ptr.store(m, p_ctx, input_ptr)?;
-  CTX::scan_input_len.store(m, p_ctx, input_len)?;
-  CTX::scan_input_trun.store(m, p_ctx, input_trun)?;
-  CTX::scan_off.store(m, p_ctx, offset)?;
-  CTX::scan_anchor_off.store(m, p_ctx, offset)?;
-  CTX::tok_id.store(m, p_ctx, ctx.i32_type().const_zero())?;
-  CTX::scan_line_num.store(m, p_ctx, CTX::end_line_num.load(m, p_ctx)?.into_int_value())?;
-  CTX::scan_line_off.store(m, p_ctx, CTX::end_line_off.load(m, p_ctx)?.into_int_value())?;
-
-  let local_state = CTX::state.load(m, p_ctx)?;
-
-  build_push_fn_state(
-    m,
-    p_ctx,
-    null_fn.as_global_value().as_pointer_value(),
-    NORMAL_STATE_FLAG_LLVM | FAIL_STATE_FLAG_LLVM,
-  );
-
-  build_push_fn_state(m, p_ctx, scanner_parse_function_ptr, NORMAL_STATE_FLAG_LLVM);
-
-  // Dispatch!
-  b.build_call(funct.dispatch, &[p_ctx.into()], "");
-
-  // Convert scan_anchor_off and tok_off / peek_off into a length offset
-
-  CTX::scan_len.store(
-    m,
-    p_ctx,
-    b.build_int_sub(CTX::scan_anchor_off.load(m, p_ctx)?.into_int_value(), offset.into(), ""),
-  );
-
-  // Ensure the the local context state is set.
-  CTX::state.store(m, p_ctx, local_state);
-
-  // Now the scan_len contains the length of a recognized token
-  // and tok_prod_id contains the id of that recognized token. The calling state
-  // can handle these values from here, so simply return.
-
-  b.build_return(None);
-
-  if funct.scan.verify(true) {
-    SherpaResult::Ok(())
-  } else {
-    SherpaResult::Err(SherpaError::from("Could not build scan function"))
-  }
-}
-
 pub(crate) unsafe fn construct_dispatch_function<'a>(
   module: &'a LLVMParserModule,
 ) -> SherpaResult<()> {
@@ -1395,14 +1323,17 @@ pub(crate) fn check_for_input_acceptability<'a>(
   input_len_ptr: PointerValue<'a>,
   input_truncated_ptr: PointerValue<'a>,
   input_off: IntValue<'a>,
-  needed_bytes: IntValue<'a>,
-) -> SherpaResult<()> {
+  needed_num_bytes: IntValue<'a>,
+) -> SherpaResult<IntValue<'a>> {
   let LLVMParserModule { builder: b, ctx, fun: funct, .. } = module;
 
   let parse_ctx = p.fun.get_nth_param(0).unwrap().into_pointer_value();
   let state = p.state;
 
   let bool = ctx.bool_type();
+  let i32 = ctx.i32_type();
+
+  let all_good = b.build_alloca(i32, "all_good");
 
   // Set the context's goto pointers to point to the goto block;
   let attempt_extend = state.generate_block(module, "Attempt_Extend", 0);
@@ -1410,13 +1341,14 @@ pub(crate) fn check_for_input_acceptability<'a>(
   let valid_window = state.generate_block(module, "Valid_Window", 0);
 
   let input_len = b.build_load(input_len_ptr, "len").into_int_value();
-  let requested_end_off = b.build_int_add(input_off, needed_bytes, "end_offset");
+  let input_available = b.build_int_sub(input_len, input_off, "");
 
   // if the requested_end_cursor_position is > the blocks end position, then try
   // requesting more input buffer.
+  b.build_store(all_good, input_available);
 
   let comparison =
-    b.build_int_compare(inkwell::IntPredicate::UGE, input_len, requested_end_off, "");
+    b.build_int_compare(inkwell::IntPredicate::SGE, input_available, needed_num_bytes, "");
   b.build_conditional_branch(comparison, valid_window, truncation_check);
 
   b.position_at_end(truncation_check);
@@ -1428,6 +1360,7 @@ pub(crate) fn check_for_input_acceptability<'a>(
   b.build_conditional_branch(comparison, attempt_extend, valid_window);
   b.position_at_end(attempt_extend);
 
+  let requested_end_off = b.build_int_add(input_off, needed_num_bytes, "end_offset");
   build_fast_call(module, funct.get_adjusted_input_block, &[
     parse_ctx.into(),
     input_ptr_ptr.into(),
@@ -1437,8 +1370,106 @@ pub(crate) fn check_for_input_acceptability<'a>(
     requested_end_off.into(),
   ]);
 
+  let input_len = b.build_load(input_len_ptr, "len").into_int_value();
+  let input_available = b.build_int_sub(input_len, input_off, "");
+  b.build_store(all_good, input_available);
+
   b.build_unconditional_branch(valid_window);
   b.position_at_end(valid_window);
 
-  SherpaResult::Ok(())
+  SherpaResult::Ok(b.build_load(all_good, "").into_int_value())
+}
+
+pub(crate) unsafe fn construct_scan<'a>(m: &LLVMParserModule<'a>) -> SherpaResult<()> {
+  // The scan mode reuses the parse context, and pushes a sentinel state
+  // that guards against the scanner context consuming the states of the normal
+  // context.
+
+  let LLVMParserModule { builder: b, types, ctx, fun: funct, .. } = m;
+
+  // Build a null function that will be used to break out of the scanner
+  // context dispatch loop
+  let null_fn = {
+    let null_fn = m.module.add_function(
+      "scan_stop",
+      ctx.i32_type().fn_type(&[types.parse_ctx.ptr_type(0.into()).into()], false),
+      Some(Linkage::Private),
+    );
+
+    null_fn.set_call_conventions(fastCC);
+
+    let entry = ctx.append_basic_block(null_fn, "Entry");
+
+    b.position_at_end(entry);
+
+    b.build_return(Some(&ctx.i32_type().const_zero()));
+
+    null_fn
+  };
+
+  let fn_value = funct.scan;
+  //## Set the context's goto pointers to point to the goto block;
+  let entry = ctx.append_basic_block(fn_value, "Entry");
+
+  //## Extract Params
+  let p_ctx = fn_value.get_nth_param(0)?.into_pointer_value();
+  let scanner_parse_function_ptr = fn_value.get_nth_param(1)?.into_pointer_value();
+  let input_ptr = fn_value.get_nth_param(2)?.into_pointer_value();
+  let input_len_ptr = fn_value.get_nth_param(3)?.into_pointer_value();
+  let input_trun_ptr = fn_value.get_nth_param(4)?.into_pointer_value();
+  let input_offset = fn_value.get_nth_param(5)?.into_int_value();
+
+  //## Entry Block
+  b.position_at_end(entry);
+
+  // Push the scanner sentinel state and the entry scanner state onto
+  // the goto stack.
+
+  CTX::scan_ptr.store(m, p_ctx, input_ptr)?;
+  CTX::scan_input_len.store(m, p_ctx, b.build_load(input_len_ptr, "").into_int_value())?;
+  CTX::scan_input_trun.store(m, p_ctx, b.build_load(input_trun_ptr, "").into_int_value())?;
+  CTX::scan_off.store(m, p_ctx, input_offset)?;
+  CTX::scan_anchor_off.store(m, p_ctx, input_offset)?;
+  CTX::tok_id.store(m, p_ctx, ctx.i32_type().const_zero())?;
+  CTX::scan_line_num.store(m, p_ctx, CTX::end_line_num.load(m, p_ctx)?.into_int_value())?;
+  CTX::scan_line_off.store(m, p_ctx, CTX::end_line_off.load(m, p_ctx)?.into_int_value())?;
+
+  let local_state = CTX::state.load(m, p_ctx)?;
+
+  build_push_fn_state(
+    m,
+    p_ctx,
+    null_fn.as_global_value().as_pointer_value(),
+    NORMAL_STATE_FLAG_LLVM | FAIL_STATE_FLAG_LLVM,
+  );
+
+  build_push_fn_state(m, p_ctx, scanner_parse_function_ptr, NORMAL_STATE_FLAG_LLVM);
+
+  // Dispatch!
+  b.build_call(funct.dispatch, &[p_ctx.into()], "");
+
+  // Convert scan_anchor_off and tok_off / peek_off into a length offset
+
+  CTX::scan_len.store(
+    m,
+    p_ctx,
+    b.build_int_sub(CTX::scan_anchor_off.load(m, p_ctx)?.into_int_value(), input_offset.into(), ""),
+  );
+  //b.build_store(input_len_ptr, CTX::scan_input_len.load(m, p_ctx)?);
+  //b.build_store(input_trun_ptr, CTX::scan_input_trun.load(m, p_ctx)?);
+
+  // Ensure the the local context state is set.
+  CTX::state.store(m, p_ctx, local_state);
+
+  // Now the scan_len contains the length of a recognized token
+  // and tok_prod_id contains the id of that recognized token. The calling state
+  // can handle these values from here, so simply return.
+
+  b.build_return(None);
+
+  if funct.scan.verify(true) {
+    SherpaResult::Ok(())
+  } else {
+    SherpaResult::Err(SherpaError::from("Could not build scan function"))
+  }
 }

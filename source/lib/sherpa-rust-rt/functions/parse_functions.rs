@@ -574,10 +574,20 @@ pub fn parse_ast<R: ByteReader + MutByteReader, M, Node: AstObject>(
         ast_stack.push(AstSlot(Node::default(), tok, peek));
       }
       ParseAction::Error { .. } => {
-        return Err(SherpaParseError::None);
+        return Err(SherpaParseError {
+          inline_message: Default::default(),
+          last_production: 0,
+          loc: Default::default(),
+          message: Default::default(),
+        });
       }
       _ => {
-        return Err(SherpaParseError::None);
+        return Err(SherpaParseError {
+          inline_message: Default::default(),
+          last_production: 0,
+          loc: Default::default(),
+          message: Default::default(),
+        });
       }
     }
   }

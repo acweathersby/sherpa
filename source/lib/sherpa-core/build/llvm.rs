@@ -247,7 +247,12 @@ let ctx_ptr = (&mut ctx.0) as *const ParseContext<UTF8StringReader, u32>;
         .dedent()
         .wrtln("}")?
         .wrtln(
-          "ParseResult::Error(..) => Err(SherpaParseError::None),
+          "ParseResult::Error(..) => Err(SherpaParseError {
+            inline_message: Default::default(),
+            last_production: 0,
+            loc: Default::default(),
+            message: Default::default(),
+          }),
 _ => unreachable!()",
         )?
         .dedent()

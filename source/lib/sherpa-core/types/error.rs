@@ -33,7 +33,7 @@ pub enum SherpaError {
     loc:        Token,
     /// Path to the source file containing the error.
     path:       PathBuf,
-    /// A unique identifier in the form `g:id(+)(\- g:id(+))(*)`
+    /// A unique identifier for this class of error, in the form `g:id(+)(\- g:id(+))(*)`
     id:         &'static str,
     /// The description of the error
     msg:        String,
@@ -180,6 +180,18 @@ impl From<FromUtf8Error> for SherpaError {
 impl From<FromUtf16Error> for SherpaError {
   fn from(err: FromUtf16Error) -> Self {
     Text(err.to_string())
+  }
+}
+
+impl From<SherpaParseError> for SherpaError {
+  fn from(value: SherpaParseError) -> Self {
+    Self::SourceError {
+      loc:        value.loc,
+      path:       Default::default(),
+      id:         "parse-error",
+      msg:        value.message,
+      inline_msg: value.inline_message,
+    }
   }
 }
 
