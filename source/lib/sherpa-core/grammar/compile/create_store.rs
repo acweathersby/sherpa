@@ -286,6 +286,10 @@ fn get_symbol_details<'a>(
         data.is_optional |= p.optional;
         break;
       }
+      ASTNode::Terminal(box t) => {
+        data.is_exclusive |= t.is_exclusive;
+        break;
+      }
       // This symbol types are "real" symbols, in as much
       // as they represent actual parsable entities which are
       // submitted to the bytecode compiler for evaluation
@@ -294,7 +298,6 @@ fn get_symbol_details<'a>(
       | ASTNode::Production_Terminal_Symbol(_)
       | ASTNode::TemplateProductionSymbol(_)
       | ASTNode::Production_Symbol(_)
-      | ASTNode::Terminal(_)
       | ASTNode::Production_Import_Symbol(_) => {
         break;
       }
@@ -501,8 +504,6 @@ fn create_rule_vectors<'a>(
         // `A => a` into `A => a | A => A a`
         // and produce a SymbolId that points to that production.
 
-        static none_: ASTNode = ASTNode::NONE;
-
         match sym {
           ASTNode::List_Production(_) => {
             let (symbol, terminal_symbol, tok) = match sym {
@@ -512,8 +513,13 @@ fn create_rule_vectors<'a>(
               _ => unreachable!(),
             };
 
-            let mut body_a =
-              sherpa::Rule::new(None, false, vec![symbol.clone()], symbol.to_token());
+            let mut body_a = sherpa::Rule {
+              ast_definition: None,
+              syntax_definition: None,
+              is_priority: false,
+              symbols: vec![symbol.clone()],
+              tok: symbol.to_token(),
+            };
 
             let mut body_b = body_a.clone();
             body_b.tok = sym.to_token();
@@ -546,6 +552,10 @@ fn create_rule_vectors<'a>(
               tok.clone(),
             )));
 
+            if let Some(terminal_symbol) = terminal_symbol {
+              body_b.symbols.insert(0, ASTNode::Terminal(terminal_symbol.clone()));
+            }
+
             (*list_index) += 1;
 
             let (prod_sym, mut production) = create_ast_production(
@@ -556,9 +566,7 @@ fn create_rule_vectors<'a>(
 
             // Add the production symbol to the front of the rule
             // to make the production left recursive
-            if let rule = &mut production.rules[0] {
-              rule.symbols.insert(0, prod_sym.clone());
-            }
+            production.rules[0].symbols.insert(0, prod_sym.clone());
 
             productions.push(Box::new(production));
             generated_symbol = prod_sym;
@@ -840,7 +848,7 @@ fn record_symbol(
     }
     ASTNode::Terminal(box terminal) => {
       let string = &terminal.val;
-      let sym_id = get_terminal_id(string, exclusive);
+      let sym_id = get_terminal_id(string, terminal.is_exclusive | exclusive);
 
       if let std::collections::btree_map::Entry::Vacant(e) = g.symbols.entry(sym_id) {
         g.symbol_strings.insert(sym_id, terminal.val.to_owned());

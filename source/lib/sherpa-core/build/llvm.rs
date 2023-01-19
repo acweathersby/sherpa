@@ -259,7 +259,7 @@ _ => unreachable!()",
         .wrtln("}")?;
     }
 
-     writer.dedent().wrtln("}")?;
+    writer.dedent().wrtln("}")?;
   }
 
   Ok(())

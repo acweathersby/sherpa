@@ -75,7 +75,7 @@
 
 <> rule > 
 
-        \! ?^p ( sym::annotated_symbol | any_group )(+)^s [unordered ast_definition?^a syntax_definition?^syn ]
+        \! ?^p ( sym::annotated_symbol | any_group )(+)^s ast_definition?^a syntax_definition?^syn
 
             f:ast { { t_Rule, is_priority:bool($p), symbols:$s, ast_definition:$a, syntax_definition:$syn, tok } }
 
