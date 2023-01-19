@@ -1,5 +1,5 @@
 use super::utils::{build_grammar_from_file, get_test_grammar_path};
-use crate::SherpaError;
+use crate::{types::SherpaErrorSeverity, SherpaError};
 
 /// Error should be generated when an import production is referenced
 /// that doesn't exist in the imported grammar.
@@ -13,15 +13,21 @@ fn missing_import_production() {
   assert!(j.debug_error_report());
 
   assert!(j.get_report(crate::ReportType::GrammarCompile(Default::default()), |r| {
-    let error = &r.errors[0];
+    if r.have_errors_of_type(SherpaErrorSeverity::Critical) {
+      let error = &r.errors[0];
 
-    assert!(matches!(error, SherpaError::SourceError { .. }));
+      assert!(matches!(error, SherpaError::SourceError { .. }));
 
-    let SherpaError::SourceError { id, .. } = error else {
+      let SherpaError::SourceError { id, .. } = error else {
         panic!("Expected a SourceError");
-    };
+      };
 
-    assert_eq!(*id, "nonexistent-import-production");
+      assert_eq!(*id, "nonexistent-import-production");
+
+      true
+    } else {
+      false
+    }
   }));
 }
 
@@ -46,5 +52,7 @@ fn invalid_dependency() {
     };
 
     assert_eq!(*id, "nonexistent-import-source");
+
+    true
   }));
 }

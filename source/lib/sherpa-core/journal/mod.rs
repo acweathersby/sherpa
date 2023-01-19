@@ -112,27 +112,36 @@ impl Journal {
     self.report().report_type
   }
 
-  /// Loads a report in an closure for read access. Closure is only called
-  /// if the report can be found. Returns `true` if any reports where matched
-  pub fn get_report<T: Fn(&Report)>(&self, report_type: ReportType, closure: T) -> bool {
-    let mut have_matches = false;
-    match self.scratch_pad.reports.get(&report_type) {
-      Some(report) => {
-        have_matches = true;
-        closure(report.as_ref());
+  /// Loads one or more reports that match `ReportType` in a closure for read access. If the closure returns `true` then no further
+  /// reports are loaded. Closure is only called if matching reports can be found.
+  ///
+  /// Returns `true` if any reports where matched
+  pub fn get_report<T: Fn(&Report) -> bool>(&self, report_type: ReportType, closure: T) -> bool {
+    let mut matching_reports = false;
+    for report in self.scratch_pad.reports.values() {
+      if report.type_matches(report_type) {
+        matching_reports = true;
+        if closure(report) {
+          return true;
+        }
       }
-      _ => match self.global_pad.read() {
-        LockResult::Ok(global_pad) => match global_pad.reports.get(&report_type) {
-          Some(report) => {
-            have_matches = true;
-            closure(report.as_ref());
-          }
-          _ => {}
-        },
-        _ => {}
-      },
     }
-    have_matches
+    match self.global_pad.read() {
+      LockResult::Ok(global_pad) => {
+        for report in global_pad.reports.values() {
+          if report.type_matches(report_type) {
+            matching_reports = true;
+            if closure(report) {
+              return true;
+            }
+          }
+        }
+      }
+      LockResult::Err(err) => {
+        eprintln!("Unable to acquire a read lock on the global pad:\n{}", err)
+      }
+    }
+    matching_reports
   }
 
   /// Retrieves all reports that match the `report_type` and calls `closure` for each
@@ -198,6 +207,19 @@ impl Journal {
       }
     });
     errors_reported
+  }
+
+  pub fn have_errors_of_type(&self, severity: SherpaErrorSeverity) -> bool {
+    if !self.report().have_errors_of_type(severity) {
+      for (_, report) in
+        self.scratch_pad.reports.iter().chain(self.global_pad.read().unwrap().reports.iter())
+      {
+        if report.have_errors_of_type(severity) {
+          return true;
+        }
+      }
+    }
+    false
   }
 
   /// Move report data from the local pad to the global pad

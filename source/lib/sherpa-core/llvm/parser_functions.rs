@@ -1075,10 +1075,7 @@ pub(crate) fn construct_shift(
   let b = &module.builder;
 
   match data.entry_block.get_first_instruction() {
-    Some(instruction) => {
-      println!("{:X}", next.get_address());
-      b.position_before(&instruction)
-    }
+    Some(instruction) => b.position_before(&instruction),
     None => b.position_at_end(data.entry_block),
   }
 

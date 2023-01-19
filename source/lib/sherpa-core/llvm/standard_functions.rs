@@ -489,6 +489,7 @@ pub(crate) unsafe fn construct_init(module: &LLVMParserModule) -> SherpaResult<(
 pub(crate) fn create_offset_label(offset: usize) -> String {
   format!("off_{:X}", offset)
 }
+
 pub(crate) unsafe fn construct_push_state_function(module: &LLVMParserModule) -> SherpaResult<()> {
   let LLVMParserModule { builder: b, types, ctx, fun: funct, .. } = module;
   let i32 = ctx.i32_type();

@@ -12,7 +12,7 @@ fn ir_parser_build() -> SherpaResult<()> {
   GrammarStore::from_path(
     &mut j,
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-      .join("./test/bootstrap/grammar/ir_base.hcg")
+      .join("../../grammar/v1_0_0_strap/ir_base.hcg")
       .canonicalize()?,
   )?;
 

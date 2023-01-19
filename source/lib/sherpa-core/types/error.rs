@@ -41,6 +41,10 @@ pub enum SherpaError {
     /// within the error location diagram. Set to an empty string
     /// to prevents its display.
     inline_msg: String,
+    /// An optional message that appears after the source diagram.
+    ps_msg:     String,
+    /// The severity of the error.
+    severity:   SherpaErrorSeverity,
   },
   //---------------------------------------------------------------------------
   // ----------------- Grammar Compile Errors ---------------------------------Look
@@ -191,6 +195,8 @@ impl From<SherpaParseError> for SherpaError {
       id:         "parse-error",
       msg:        value.message,
       inline_msg: value.inline_message,
+      ps_msg:     Default::default(),
+      severity:   SherpaErrorSeverity::Critical,
     }
   }
 }
@@ -198,13 +204,14 @@ impl From<SherpaParseError> for SherpaError {
 impl Display for SherpaError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
-      SourceError { msg, id, inline_msg, loc, path } => f.write_fmt(format_args!(
-        "\n{} [{}:{}]\n   {}\n{}",
+      SourceError { msg, id, inline_msg, loc, path, ps_msg, .. } => f.write_fmt(format_args!(
+        "\n{} [{}:{}]\n{}\n\n{}\n\n{}\n",
         id,
         path.to_str().unwrap(),
         loc.loc_stub(),
-        msg,
-        loc.blame(1, 1, &inline_msg, BlameColor::RED),
+        msg.trim(),
+        loc.blame(1, 1, &inline_msg.trim(), BlameColor::RED),
+        ps_msg.trim()
       )),
       UNDEFINED => f.write_str("\nAn unknown error has occurred "),
       ExtendedError(error) => error.report(f),
@@ -212,7 +219,6 @@ impl Display for SherpaError {
       Text(err_string) => f.write_str(&err_string),
       Self::Error(error) => Display::fmt(error, f),
       ir_warn_not_parsed => f.write_str("\nIRNode has not been parsed"),
-      ir_err_bad_parse => f.write_str("\nErrors occurred during while parsing IRNode code"),
       grammar_err { message, inline_message, loc, path } => f.write_fmt(format_args!(
         "\n[{}:{}]\n   {}\n{}",
         path.to_str().unwrap(),

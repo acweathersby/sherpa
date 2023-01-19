@@ -10,7 +10,7 @@
 
 <> grammar > 
 
-        preamble(*) production(+)
+        preamble(*) ( production | append_production )(+)
 
             f:ast {{ t_Grammar, c_Version_1_0, preamble:$1, productions:$2, tok }}
 
@@ -50,9 +50,15 @@
 
 <> production > 
 
-        t:<  (template_name)(*\, )^t \> \lazy ?^l sym::priority? ?^p sym::production_symbol^n \> rules^r
+        t:<  (template_name)(*\, )^t \> \lazy ?^l sym::priority? ?^p sym::non_terminal^n \> rules^r
 
             f:ast { { t_Production, is_lazy:bool($l), priority:$p, name:str($n), name_sym:$n, rules: $r, template_names:$t, tok } }
+
+<> append_production > 
+
+        t:+> ?^l sym::priority? ?^p sym::non_terminal^n \> rules^r
+
+            f:ast { { t_Production, is_append: true, is_lazy:false, priority:$p, name:str($n), name_sym:$n, rules: $r, tok } }
 
 <> template_name >  
 
@@ -90,7 +96,7 @@
 
 <> any_group > 
 
-        \[ sym::annotated_symbol(+)^s \]
+        \[ t:unordered ? sym::annotated_symbol(+)^s \]
 
-            f:ast { { t_AnyGroup, symbols:$s, tok } }
+            f:ast { { t_AnyGroup, unordered: bool($2), symbols:$s, tok } }
 

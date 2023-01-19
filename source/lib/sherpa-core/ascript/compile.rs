@@ -69,7 +69,8 @@ fn gather_ascript_info_from_grammar(
     .filter_map(|(id, rule)| match g.clone().parse_productions.contains(&rule.prod_id) {
       true => {
         for function in &rule.reduce_fn_ids {
-          if let ReduceFunctionType::Ascript(ascript) = g.reduce_functions.get(function).unwrap() {
+          if let ReduceFunctionType::AscriptOld(ascript) = g.reduce_functions.get(function).unwrap()
+          {
             return Some((*id, Some(ascript)));
           }
         }
@@ -441,7 +442,7 @@ fn resolve_structure_properties(ast: &mut AScriptStore, e: &mut Vec<SherpaError>
     for rule_id in bodies {
       let rule = g.get_rule(&rule_id).unwrap();
       for function in &rule.reduce_fn_ids {
-        if let ReduceFunctionType::Ascript(ascript) = g.reduce_functions.get(function).unwrap() {
+        if let ReduceFunctionType::AscriptOld(ascript) = g.reduce_functions.get(function).unwrap() {
           if let ASTNode::AST_Struct(ast_struct) = &ascript.ast {
             e.append(&mut compile_struct_props(ast, &struct_id, ast_struct, &rule).1);
           }

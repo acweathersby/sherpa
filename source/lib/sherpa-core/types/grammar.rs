@@ -1,6 +1,7 @@
 use super::*;
 use crate::{
   grammar::{
+    compile::parser::sherpa,
     compile_grammar_from_path,
     compile_grammar_from_string,
     create_closure,
@@ -42,7 +43,8 @@ pub struct HCGSource {
 #[derive(Debug, Clone)]
 pub enum ReduceFunctionType {
   Generic(Reduce),
-  Ascript(Ascript),
+  AscriptOld(Ascript),
+  Ascript(crate::grammar::compile::parser::sherpa::Ascript),
   Undefined,
 }
 
@@ -50,7 +52,7 @@ impl ReduceFunctionType {
   pub fn new(node: &ASTNode) -> Self {
     match node {
       ASTNode::Reduce(box reduce) => ReduceFunctionType::Generic(reduce.clone()),
-      ASTNode::Ascript(box ascript) => ReduceFunctionType::Ascript(ascript.clone()),
+      ASTNode::Ascript(box ascript) => ReduceFunctionType::AscriptOld(ascript.clone()),
       _ => ReduceFunctionType::Undefined,
     }
   }
@@ -176,7 +178,7 @@ pub struct GrammarStore {
   /// All reduce functions defined in the grammar.
   pub reduce_functions:  ReduceFunctionTable,
   /// TODO: Docs
-  pub merge_productions: BTreeMap<ProductionId, Vec<Rule>>,
+  pub merge_productions: BTreeMap<ProductionId, (String, Vec<Rule>)>,
 
   /// All productions that are reachable from the entry productions, including
   /// the entry productions.

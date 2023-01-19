@@ -189,6 +189,10 @@ impl ReduceFunctionId {
     ReduceFunctionId(hash_id_value_u64(reduce_function.Token().to_string()))
   }
 
+  pub fn from_token(token: Token) -> Self {
+    ReduceFunctionId(hash_id_value_u64(token))
+  }
+
   pub fn is_undefined(&self) -> bool {
     self.0 == 0
   }

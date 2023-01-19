@@ -3,8 +3,13 @@ name = "sherpa_core"
 version = "1.0.0-beta1"
 edition = "2021"
 
+build="./build_link_data.rs"
+
 [lib]
 path = "./lib.rs"
+
+
+
 
 [dependencies]
 lazy_static = "1.4.0"

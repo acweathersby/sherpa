@@ -1,11 +1,7 @@
-use std::{path::PathBuf, str::FromStr};
-
-use inkwell::context::Context;
-
 use crate::{
   ascript::types::AScriptStore,
   compile::{compile_bytecode, compile_states, optimize_ir_states, GrammarStore},
-  debug::{collect_shifts_and_skips, generate_disassembly},
+  debug::collect_shifts_and_skips,
   llvm::{compile_module_from_bytecode, construct_module},
   util::get_num_of_available_threads,
   writer::code_writer::StringBuffer,
@@ -13,18 +9,20 @@ use crate::{
   Journal,
   SherpaResult,
 };
+use inkwell::context::Context;
+use std::{path::PathBuf, str::FromStr};
 
 /// Test component module wide compilation of the sherpa grammar.
 #[test]
 fn test_compile_of_sherpa_grammar() -> SherpaResult<()> {
   let grammar_path = std::env::var("CARGO_MANIFEST_DIR")
-    .map(|val| PathBuf::from_str(&val).unwrap().join("test/bootstrap/"))
+    .map(|val| PathBuf::from_str(&val).unwrap().join("../../grammar/"))
     .unwrap_or_else(|_| {
       std::env::current_dir()
         .unwrap()
         .join(PathBuf::from_str(concat!("./", file!())).unwrap().parent().unwrap())
     })
-    .join("grammar/grammar.hcg");
+    .join("v1_0_0_strap/grammar.hcg");
 
   let mut j = Journal::new(Some(Config { ..Default::default() }));
 

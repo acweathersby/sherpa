@@ -1,6 +1,6 @@
-use super::{test_reader::TestUTF8StringReader, utils::build_grammar_from_str};
+use super::test_reader::TestUTF8StringReader;
 use crate::{
-  compile::{compile_bytecode, compile_states, optimize_ir_states, BytecodeOutput, GrammarStore},
+  compile::{compile_bytecode, compile_states, optimize_ir_states, GrammarStore},
   llvm::{
     ascript_functions::construct_ast_builder,
     compile_module_from_bytecode,
@@ -15,9 +15,7 @@ use inkwell::{context::Context, execution_engine::JitFunction};
 use sherpa_runtime::types::{
   sherpa_allocate_stack,
   sherpa_free_stack,
-  AstStackSlice,
   BlameColor,
-  ByteReader,
   Goto,
   ParseActionType,
   ParseContext,
@@ -41,20 +39,6 @@ type Extend<R = TestUTF8StringReader<'static>, T = u32> =
 
 type Drop<R = TestUTF8StringReader<'static>, T = u32> =
   unsafe extern "C" fn(*mut ParseContext<R, T>);
-
-type ASTNode = u32;
-type ASTSlot = (ASTNode, TokenRange, TokenRange);
-type AstBuilder<'a, R = TestUTF8StringReader<'static>, M = ASTNode> =
-  unsafe extern "C" fn(
-    *mut ParseContext<R, M>,
-    *const fn(ctx: &mut ParseContext<R, M>, &mut AstStackSlice<(M, TokenRange, TokenRange)>),
-    unsafe fn(&ParseContext<R, M>, &mut AstStackSlice<(M, TokenRange, TokenRange)>),
-    unsafe fn(
-      &ParseContext<R, M>,
-      ParseActionType,
-      &mut AstStackSlice<(M, TokenRange, TokenRange)>,
-    ) -> ParseResult<M>,
-  ) -> ParseResult<M>;
 
 unsafe fn get_parse_function<'a, T: inkwell::execution_engine::UnsafeFunctionPointer>(
   ctx: &'a LLVMParserModule,

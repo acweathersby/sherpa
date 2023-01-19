@@ -1,22 +1,48 @@
-//! Functions for Grammar file path resolution and loading,
-//! and initial parse functions
-
 use super::{
-  data::ast::{ASTNode, Grammar, Import},
-  multitask::WorkVerifier,
+  create_store::{get_terminal_id, insert_production, insert_rules},
+  parser::{
+    sherpa::{ASTNode, Grammar},
+    *,
+  },
 };
-use crate::{journal::Journal, types::*};
+use crate::{
+  compile::{GrammarId, GrammarStore, ProductionId, SymbolID},
+  grammar::{
+    create_closure,
+    create_defined_scanner_name,
+    create_scanner_name,
+    data::ast::Import,
+    get_production_start_items,
+    multitask::WorkVerifier,
+  },
+  types::*,
+  util::get_num_of_available_threads,
+  Journal,
+  ReportType,
+  SherpaError,
+};
 use std::{
-  collections::{HashSet, VecDeque},
+  collections::{btree_map, BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
   fs::read,
   num::NonZeroUsize,
   path::{Path, PathBuf},
-  sync::Mutex,
-  thread::{self},
+  sync::{Arc, Mutex},
+  thread,
 };
 
-// TODO: Replace with the new grammar parser
-use super::parse::compile_grammar_ast;
+pub fn grammar_from_string(
+  j: &mut Journal,
+  grammar: &str,
+  source_path: PathBuf,
+) -> Vec<(PathBuf, ImportedGrammarReferences, Box<Grammar>)> {
+  match sherpa::ast::grammar_from(grammar.into()) {
+    Err(err) => {
+      j.report_mut().add_error(err.into());
+      vec![]
+    }
+    Ok(grammar) => vec![(source_path, HashMap::new(), grammar)],
+  }
+}
 
 const allowed_extensions: [&str; 3] = ["hc", "hcg", "grammar"];
 
@@ -31,18 +57,17 @@ pub(crate) fn get_usable_thread_count(requested_count: usize) -> usize {
 /// Loads all grammars that are indirectly or directly referenced from a single filepath.
 /// Returns a vector grammars in no particular order except the first grammar belongs to
 /// the file path
-pub(crate) fn load_all(
+pub(crate) fn load_from_path(
   j: &mut Journal,
-  absolute_path: &PathBuf,
-  number_of_threads: usize,
-) -> (Vec<(PathBuf, ImportedGrammarReferences, Box<Grammar>)>, Vec<SherpaError>) {
+  absolute_path: PathBuf,
+) -> (Vec<(PathBuf, ImportedGrammarReferences, Box<Grammar>)>) {
   let pending_grammar_paths =
     Mutex::new(VecDeque::<PathBuf>::from_iter(vec![absolute_path.clone()]));
   let claimed_grammar_paths = Mutex::new(HashSet::<PathBuf>::new());
   let work_verifier = Mutex::new(WorkVerifier::new(1));
 
   let results = thread::scope(|s| {
-    [0..get_usable_thread_count(number_of_threads)]
+    [0..get_usable_thread_count(get_num_of_available_threads())]
       .into_iter()
       .map(|_| {
         let mut j = j.transfer();
@@ -51,8 +76,6 @@ pub(crate) fn load_all(
         let pending_grammar_paths = &pending_grammar_paths;
         s.spawn(move || {
           let mut grammars = vec![];
-          let mut errors = vec![];
-
           loop {
             match {
               {
@@ -76,11 +99,11 @@ pub(crate) fn load_all(
                 val
               }
             } {
-              Some(path) => match load_grammar(&mut j, &path) {
+              Some(path) => match grammar_from_path(&mut j, &path) {
                 SherpaResult::Ok((grammar, imports)) => {
                   let mut imports_refs: ImportedGrammarReferences = Default::default();
 
-                  for box Import { uri, reference, tok } in imports {
+                  for box sherpa::Import { uri, reference, tok } in imports {
                     let base_path = PathBuf::from(uri);
                     match resolve_grammar_path(
                       &base_path,
@@ -95,23 +118,15 @@ pub(crate) fn load_all(
                         pending_grammar_paths.lock().unwrap().push_back(path);
                         work_verifier.lock().unwrap().add_units_of_work(1);
                       }
-                      SherpaResult::MultipleErrors(mut new_errors) => {
-                        errors.append(&mut new_errors)
+                      SherpaResult::MultipleErrors(new_errors) => {
+                        for error in new_errors {
+                          j.report_mut().add_error(error)
+                        }
                       }
-                      SherpaResult::Err(err) => errors.push(SherpaError::SourceError {
-                        loc:        tok,
-                        path:       path.clone(),
-                        id:         "nonexistent-import-source",
-                        msg:        format!(
-                          "Could not load \n\t{}{}\n",
-                          base_path.to_str().unwrap(),
-                          err
-                        ),
-                        inline_msg: "source not found".to_string(),
-                        severity:   SherpaErrorSeverity::Critical,
-                        ps_msg:     Default::default(),
-                      }),
-                      SherpaResult::None => errors.push(SherpaError::SourceError {
+                      SherpaResult::Err(err) => {
+                        j.report_mut().add_error(err);
+                      }
+                      SherpaResult::None => j.report_mut().add_error(SherpaError::SourceError {
                         loc:        tok,
                         path:       path.clone(),
                         id:         "nonexistent-import-source",
@@ -128,7 +143,7 @@ pub(crate) fn load_all(
                     work_verifier.lock().unwrap().complete_one_unit_of_work();
                   }
                 }
-                SherpaResult::Err(err) => errors.push(err),
+                SherpaResult::Err(err) => j.report_mut().add_error(err),
                 _ => {}
               },
               None => {
@@ -138,7 +153,7 @@ pub(crate) fn load_all(
               }
             }
           }
-          (grammars, errors)
+          (grammars)
         })
       })
       .map(|s| s.join().unwrap())
@@ -146,23 +161,21 @@ pub(crate) fn load_all(
   });
 
   let mut grammars = vec![];
-  let mut errors = vec![];
 
-  for (mut g, mut e) in results {
+  for (mut g) in results {
     grammars.append(&mut g);
-    errors.append(&mut e);
   }
 
-  (grammars, errors)
+  (grammars)
 }
 
 /// Loads and parses a grammar file, returning the parsed grammar node and a vector of Import nodes.
-pub(crate) fn load_grammar(
-  _j: &mut Journal,
+fn grammar_from_path(
+  j: &mut Journal,
   absolute_path: &PathBuf,
-) -> SherpaResult<(Box<Grammar>, Vec<Box<Import>>)> {
-  match read(absolute_path) {
-    Ok(buffer) => match compile_grammar_ast(buffer) {
+) -> SherpaResult<(Box<Grammar>, Vec<Box<sherpa::Import>>)> {
+  match std::fs::read_to_string(absolute_path) {
+    Ok(buffer) => match sherpa::ast::grammar_from(buffer.as_str().into()) {
       Ok(grammar) => {
         let import_paths = grammar
           .preamble
@@ -174,7 +187,10 @@ pub(crate) fn load_grammar(
           .collect();
         SherpaResult::Ok((grammar, import_paths))
       }
-      Err(err) => SherpaResult::Err(err),
+      Err(err) => {
+        j.report_mut().add_error(err.into());
+        SherpaResult::None
+      }
     },
     Err(err) => SherpaResult::Err(err.into()),
   }

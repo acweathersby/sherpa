@@ -38,6 +38,7 @@ use crate::{
 };
 use std::{
   collections::{BTreeMap, BTreeSet, VecDeque},
+  fmt::format,
   io::{Result, Write},
   vec,
 };
@@ -193,7 +194,7 @@ fn into_strings(self) -> Vec<String> {{
   }}
 }}
 
-fn to_string(&self) -> String {{
+pub fn to_string(&self) -> String {{
   match self {{
     &{0}::BOOL(val) => {{
       if val {{
@@ -204,18 +205,18 @@ fn to_string(&self) -> String {{
     }}
     {0}::STRING(string) => string.to_owned(),
     {0}::TOKEN(val) => val.to_string(),
-    _ => String::from(""),
+    _ => self.to_token().to_string(),
   }}
 }}
 
-fn to_token(&self) -> Token {{
+pub fn to_token(&self) -> Token {{
   match self {{
-    {0}::TOKEN(val) => val.clone(),
+    {1}{0}::TOKEN(val) => val.clone(),
     _ => Token::empty(),
   }}
 }}
 
-fn to_bool(&self) -> bool {{
+pub fn to_bool(&self) -> bool {{
   self.to_u8() != 0
 }}
 pub fn is_numeric(&self) -> bool {{
@@ -226,7 +227,15 @@ pub fn is_numeric(&self) -> bool {{
   )
 }}
   "##,
-    ast.ast_type_name
+    ast.ast_type_name,
+    ast
+      .structs
+      .iter()
+      .filter_map(|s| s.1.include_token.then(|| {
+        format!("{0}::{1} (node) => node.tok.clone()\n,", ast.ast_type_name, s.1.type_name)
+      }))
+      .collect::<Vec<_>>()
+      .join("")
   ))?
   .dedent()
   .wrtln("}")?
@@ -348,7 +357,7 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
 
       for function_id in &rule.reduce_fn_ids {
         match g.reduce_functions.get(function_id) {
-          Some(ReduceFunctionType::Ascript(function)) => match &function.ast {
+          Some(ReduceFunctionType::AscriptOld(function)) => match &function.ast {
             ASTNode::AST_Struct(box ast_struct) => {
               if let AScriptTypeVal::Struct(struct_type) = get_struct_type_from_node(ast_struct) {
                 let _ref =
@@ -781,9 +790,9 @@ pub(crate) fn render_expression(
       _ => {
         let ref_ = render_expression(s, value, b, ref_index, type_slot)?;
         match ref_.ast_type {
-          AScriptTypeVal::Struct(..) | AScriptTypeVal::TokenRange => {
-            Some(ref_.to_string(AScriptTypeVal::String(None)))
-          }
+          AScriptTypeVal::Struct(..)
+          | AScriptTypeVal::TokenRange
+          | AScriptTypeVal::GenericStruct(..) => Some(ref_.to_string(AScriptTypeVal::String(None))),
           AScriptTypeVal::TokenVec => {
             // Merge the last and first token together
             // get the string value from the resulting span of the union
@@ -1206,13 +1215,13 @@ impl Ref {
     Ref {
       init_index: index,
       type_slot: self.type_slot,
-      init_expression: format!("rng.to_token(_ctx_.get_reader()).to_string()"),
+      init_expression: format!("rng{0}.to_token(_ctx_.get_reader()).to_string()", index),
       ast_type,
       body_indices: BTreeSet::new(),
       predecessors: None,
       post_init_statements: None,
       is_mutable: false,
-      is_token: false,
+      is_token: true,
     }
   }
 

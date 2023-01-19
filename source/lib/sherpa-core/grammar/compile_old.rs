@@ -218,13 +218,13 @@ fn merge_grammars(
     g.reduce_functions.append(&mut import_grammar.reduce_functions.clone());
 
     // Collect all pending merge productions
-    for (prod_id, rules) in &import_grammar.merge_productions {
+    for (prod_id, (_, rules)) in &import_grammar.merge_productions {
       match merge_productions.entry(*prod_id) {
         btree_map::Entry::Occupied(mut e) => {
-          e.get_mut().append(&mut rules.clone());
+          e.get_mut().1.append(&mut rules.clone());
         }
         btree_map::Entry::Vacant(e) => {
-          e.insert(rules.clone());
+          e.insert((Default::default(), rules.clone()));
         }
       }
     }
@@ -319,6 +319,8 @@ fn merge_grammars(
               inline_msg: "could not find".to_string(),
               loc:        tok,
               path:       g.id.path.clone(),
+              severity:   SherpaErrorSeverity::Critical,
+              ps_msg:     Default::default(),
             });
           }
         }
@@ -329,7 +331,7 @@ fn merge_grammars(
 
   // Extend every production in the grammar that has a merge production
   // entry.
-  for (prod_id, bodies) in merge_productions.into_iter() {
+  for (prod_id, (_, bodies)) in merge_productions.into_iter() {
     match g.productions.contains_key(&prod_id) {
       true => {
         // extend the existing bodies with the new bodies
@@ -364,6 +366,8 @@ fn check_for_missing_productions(g: &GrammarStore, e: &mut Vec<SherpaError>) -> 
               inline_msg: "could not find".to_string(),
               loc:        sym.tok.clone(),
               path:       sym.grammar_ref.path.clone(),
+              severity:   SherpaErrorSeverity::Critical,
+              ps_msg:     Default::default(),
             });
           }
         }
@@ -778,6 +782,8 @@ fn create_scanner_productions_from_symbols(g: &mut GrammarStore, e: &mut Vec<She
               inline_msg: "could not find".to_string(),
               loc:        sym.loc.clone(),
               path:       sym.g_ref.clone().unwrap_or(g.id.clone()).path.clone(),
+              severity:   SherpaErrorSeverity::Critical,
+              ps_msg:     Default::default(),
             });
           }
         }
@@ -841,7 +847,7 @@ fn convert_scan_symbol_to_production(
 /// interning whatever single byte symbol is not already present in the
 /// grammar. TODO: This may also split utf8 symbols into byte sequences.
 ///
-/// Expects `symbols_string_table` and `symbols_table` to be mutable
+/// Expects `symbols_string_table` and `symget_literal_idbols_table` to be mutable
 /// references to the corresponding members in a [GrammarStore]
 fn create_defined_symbols_from_string(
   g: &mut GrammarStore,
@@ -1014,10 +1020,10 @@ pub fn pre_process_grammar<'a>(
 
                 match g.merge_productions.entry(prod_id) {
                   btree_map::Entry::Vacant(e) => {
-                    e.insert(rules);
+                    e.insert((Default::default(), rules));
                   }
                   btree_map::Entry::Occupied(mut e) => {
-                    e.get_mut().append(&mut rules);
+                    e.get_mut().1.append(&mut rules);
                   }
                 };
               }
