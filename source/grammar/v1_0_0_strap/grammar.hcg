@@ -1,12 +1,15 @@
 @IMPORT ./script.hcg as ast
-
 @IMPORT ./symbol.hcg as sym
+@IMPORT ./syntax.hcg as syn
 
 @NAME sherpa
 
 @IGNORE g:sp g:nl
 
 @EXPORT grammar as grammar
+@EXPORT ast::struct as ast_struct
+@EXPORT ast::expression as ast_expression
+
 
 <> grammar > 
 
@@ -50,13 +53,13 @@
 
 <> production > 
 
-        t:<  (template_name)(*\, )^t \> \lazy ?^l sym::priority? ?^p sym::non_terminal^n \> rules^r
+        t:<  (template_name)(*\, )^t \> \lazy ?^l sym::priority?^p sym::non_terminal^n \> rules^r
 
             f:ast { { t_Production, is_lazy:bool($l), priority:$p, name:str($n), name_sym:$n, rules: $r, template_names:$t, tok } }
 
 <> append_production > 
 
-        t:+> ?^l sym::priority? ?^p sym::non_terminal^n \> rules^r
+        t:+> ?^l sym::priority?^p sym::non_terminal^n \> rules^r
 
             f:ast { { t_Production, is_append: true, is_lazy:false, priority:$p, name:str($n), name_sym:$n, rules: $r, tok } }
 
@@ -72,15 +75,20 @@
 
 <> rule > 
 
-        \! ?^p ( sym::annotated_symbol | any_group )(+)^s ast_definition?^a
+        \! ?^p ( sym::annotated_symbol | any_group )(+)^s [unordered ast_definition?^a syntax_definition?^syn ]
 
-            f:ast { { t_Rule, is_priority:bool($p), symbols:$s, ast_definition:$a, tok } }
+            f:ast { { t_Rule, is_priority:bool($p), symbols:$s, ast_definition:$a, syntax_definition:$syn, tok } }
 
 <> ast_definition > 
 
-        t:=> ast::body^ast
+        t::ast ast::body^ast
 
             f:ast {  { t_Ascript, c_Function, ast: $ast, tok }  }
+
+<> syntax_definition > 
+
+        t::syn syn::declaration
+
 
 +> sym::symbol > group
 

@@ -77,7 +77,7 @@ fn compile_grammars(
 }
 
 #[test]
-fn get_grammar_name_from_preamble() -> SherpaResult<()> {
+fn grammar_name_from_preamble() -> SherpaResult<()> {
   let mut j = Journal::new(Some(Config::default()));
 
   let ast = grammar_from_string(
@@ -97,7 +97,7 @@ fn get_grammar_name_from_preamble() -> SherpaResult<()> {
   SherpaResult::Ok(())
 }
 #[test]
-fn get_grammar_name_from_path() -> SherpaResult<()> {
+fn grammar_name_from_path() -> SherpaResult<()> {
   let mut j = Journal::new(Some(Config::default()));
 
   let ast =

@@ -182,31 +182,29 @@ impl<T: Reader, M> Drop for Parser<T, M> {
     let export_node_data = get_ascript_export_data(g, ascript);
 
     writer.wrtln("pub mod ast  {")?.indent();
-    writer.wrtln("use super::*; ")?;
+    writer.wrtln("use super::*; ")?.newline()?.wrt(&format!(
+      "
+impl AstObject for {0} {{}}
+type ASTSlot = ({0}, TokenRange, TokenRange);
+
+#[link(name = \"{1}\", kind = \"static\" )]
+extern \"C\" {{
+fn ast_parse(
+ctx: *mut u8,
+reducers: *const u8,
+shift_handler: *const u8,
+result_handler: *const u8,
+) -> ParseResult<{0}>;
+}}
+",
+      ascript.ast_type_name, parser_name
+    ))?;
 
     // Create a module that will store convience functions for compiling AST
     // structures based on on grammar entry points.
 
     for (ref_, ast_type, ast_type_string, export_name, _) in &export_node_data {
       writer
-        .newline()?
-        .wrt(&format!(
-          "
-impl AstObject for {0} {{}}
-type ASTSlot = ({0}, TokenRange, TokenRange);
-
-#[link(name = \"{1}\", kind = \"static\" )]
-extern \"C\" {{
-  fn ast_parse(
-    ctx: *mut u8,
-    reducers: *const u8,
-    shift_handler: *const u8,
-    result_handler: *const u8,
-  ) -> ParseResult<{0}>;
-}}
-",
-          ascript.ast_type_name, parser_name
-        ))?
         .newline()?
         .wrtln(&format!(
           "pub fn {0}_from(reader: UTF8StringReader)  -> Result<{1}, SherpaParseError> {{ ",
@@ -258,10 +256,10 @@ _ => unreachable!()",
         .dedent()
         .wrtln("}")?
         .dedent()
-        .wrtln("}")?
-        .dedent()
         .wrtln("}")?;
     }
+
+     writer.dedent().wrtln("}")?;
   }
 
   Ok(())
