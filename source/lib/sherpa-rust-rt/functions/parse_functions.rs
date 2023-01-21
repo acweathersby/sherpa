@@ -520,6 +520,7 @@ pub fn get_next_action<R: ByteReader + MutByteReader, M>(
           }
           (ParseAction::FailState, _) => {
             ctx.set_fail_mode_to(true);
+            state = stack.pop().unwrap();
           }
           (action, next_state) => {
             stack.push(next_state | NORMAL_STATE_FLAG);

@@ -1,7 +1,7 @@
 use crate::{
   ascript::types::AScriptStore,
   compile::{compile_bytecode, compile_states, optimize_ir_states, GrammarStore},
-  debug::collect_shifts_and_skips,
+  debug::{collect_shifts_and_skips, generate_disassembly},
   llvm::{compile_module_from_bytecode, construct_module},
   util::get_num_of_available_threads,
   writer::code_writer::StringBuffer,
@@ -18,11 +18,11 @@ fn test_compile_of_sherpa_grammar() -> SherpaResult<()> {
   let grammar_path = std::env::var("CARGO_MANIFEST_DIR")
     .map(|val| PathBuf::from_str(&val).unwrap().join("../../grammar/"))
     .unwrap_or_else(|_| {
-      std::env::current_dir()
-        .unwrap()
-        .join(PathBuf::from_str(concat!("./", file!())).unwrap().parent().unwrap())
+      std::env::current_dir().unwrap().join(PathBuf::from_str("./source/grammar/").unwrap())
     })
     .join("v1_0_0_strap/grammar.hcg");
+
+  dbg!(&grammar_path);
 
   let mut j = Journal::new(Some(Config { ..Default::default() }));
 
@@ -63,7 +63,7 @@ fn test_compile_of_sherpa_grammar() -> SherpaResult<()> {
 
   //eprintln!("{}", String::from_utf8(writer.into_output())?);
 
-  // eprintln!("{}", generate_disassembly(&bc, Some(&mut j)));
+  //eprintln!("{}", generate_disassembly(&bc, Some(&mut j)));
 
   // Build LLVM Data
 
@@ -79,7 +79,7 @@ fn test_compile_of_sherpa_grammar() -> SherpaResult<()> {
   // Perform a parsing pass on some simple input.
 
   let (.., shifts, _) = collect_shifts_and_skips(
-    r##"<> t > "t" => { $2 + $3 + tok<1,2> } <> B > [unordered "d" "b" "c" ] "##,
+    r##"<> t > "t" :ast { $2 + $3 + tok<1,2> } <> B > [unordered "d" "b" "c" ] "##,
     *bc.state_name_to_offset.get(g.get_exported_productions()[0].guid_name)?,
     g.get_exported_productions()[0].production.bytecode_id,
     &bc.bytecode,
