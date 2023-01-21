@@ -1,0 +1,28 @@
+@IMPORT ./script.hcg as ast
+@NAME syntax
+@IGNORE g:sp g:nl
+
+
+<> declaration >  \{ field(+,) \}
+
+    f:ast { { t_Syntax, specs:$2 } }
+
+<> field > ast::reference \: syntax_spec
+
+    f:ast { { t_SyntaxField, reference:$1, spec:$2 } }
+
+<> syntax_spec > [ ast::identifier?  color? ]
+
+    f:ast { { t_SyntaxSpec, id:$1, rgb:$2 } }
+
+<> color > t:rgb \( [unordered red^r green^g blue^b alpha?^a ] \)
+
+    f:ast { { t_RGBA, r:$r, g:$g, b:$b, a:$a } }
+
+<> red > t:r  tk:ast::integer  f:ast { u32($2) }
+
+<> green > t:g  tk:ast::integer  f:ast { u32($2) }
+
+<> blue > t:b  tk:ast::integer  f:ast { u32($2) }
+
+<> alpha > t:a tk:ast::integer  f:ast { u32($2) }
