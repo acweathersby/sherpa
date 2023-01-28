@@ -174,18 +174,6 @@ pub(super) fn construct_inline_LR(
           }
         } else {
           error_cleanup(t, nodes);
-          let error = format!(
-            "Encountered conflicting completed items:\n{}\n",
-            end_items
-              .iter()
-              .map(|(i, _)| "   ".to_string()
-                + &i.blame_string(&g)
-                + "\n"
-                + &i.get_rule(&g).unwrap().tok.blame(0, 0, "Defined here", BlameColor::RED))
-              .collect::<Vec<_>>()
-              .join("\n")
-          );
-          println!("{}", error);
           return SherpaResult::Err(
             format!(
               "Encountered conflicting completed items:\n{}\n",

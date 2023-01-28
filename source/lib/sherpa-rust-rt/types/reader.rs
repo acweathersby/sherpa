@@ -71,6 +71,10 @@ pub trait ByteReader {
     0
   }
 
+  fn get_char(&self) -> char {
+    unsafe { char::from_u32_unchecked(self.codepoint()) }
+  }
+
   /// Resets the cursor back to the position of the token. Returns
   /// the same value as `get_type_info`.
   fn set_cursor_to(&mut self, off: u32, line_num: u32, line_off: u32) -> u64;

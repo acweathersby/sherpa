@@ -77,7 +77,7 @@ impl<T: Reader, UserCTX> Iterator for Parser<T, UserCTX>
         let Parser(ctx, active, stack) = self;
 
         if *active {
-            let action = sherpa_runtime::functions::get_next_action(ctx, stack, &bytecode);
+            let action = sherpa_runtime::functions::get_next_action(ctx, stack, &bytecode, None);
             match action {
                 ParseAction::Error { .. } | ParseAction::Accept { .. } => {
                     *active = false;
@@ -153,7 +153,7 @@ let reduce_functions = ReduceFunctions::new();
 let mut ctx = ParseContext::<UTF8StringReader<'a>, u32>::new(&mut reader);
 let mut stack = vec![0, NORMAL_STATE_FLAG | {} ];
 let AstSlot (i0, tok0, _) = sherpa_runtime::functions::parse_ast(
-  &mut ctx, &mut stack, &bytecode, &reduce_functions.0
+  &mut ctx, &mut stack, &bytecode, &reduce_functions.0, None
 )?;
 {}
 

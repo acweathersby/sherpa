@@ -245,11 +245,11 @@ let ctx_ptr = (&mut ctx.0) as *const ParseContext<UTF8StringReader, u32>;
         .dedent()
         .wrtln("}")?
         .wrtln(
-          "ParseResult::Error(..) => Err(SherpaParseError {
-            inline_message: Default::default(),
+          "ParseResult::Error(err_tok, _) => Err(SherpaParseError {
+            inline_message: \"Token not recognized\".to_string(),
             last_production: 0,
-            loc: Default::default(),
-            message: Default::default(),
+            loc: err_tok.to_token(&ctx.1),
+            message: \"Failed to parse\".to_string(),
           }),
 _ => unreachable!()",
         )?

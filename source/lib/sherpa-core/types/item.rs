@@ -23,8 +23,6 @@ pub(crate) struct ItemState {
 }
 
 impl ItemState {
-  pub const OUT_OF_SCOPE: ItemState = ItemState::new(0x80000, OriginData::OutOfScope(0x80000));
-
   pub const fn default() -> Self {
     ItemState { current_lane: 0, prev_lane: 0, origin: OriginData::Undefined }
   }
@@ -539,6 +537,14 @@ pub(crate) trait ItemContainer:
 
   fn completed_items(self) -> Self {
     self.into_iter().filter(|i| i.completed()).collect()
+  }
+
+  fn inscope_items(self) -> Self {
+    self.into_iter().filter(|i| !i.is_out_of_scope()).collect()
+  }
+
+  fn outscope_items(self) -> Self {
+    self.into_iter().filter(|i| i.is_out_of_scope()).collect()
   }
 
   fn uncompleted_items(self) -> Self {

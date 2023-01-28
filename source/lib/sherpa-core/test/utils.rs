@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{path::PathBuf, str::FromStr, sync::Arc};
 
 use crate::{compile::GrammarStore, Config, Journal, SherpaResult};
 
@@ -37,4 +37,20 @@ pub(super) fn build_grammar_from_str(
   j.flush_reports();
 
   (j, g)
+}
+
+/// Return a path relative to `<sherpa_repo>/source/`
+pub(crate) fn path_from_source(source_path: &str) -> SherpaResult<PathBuf> {
+  let grammar_path = std::env::var("CARGO_MANIFEST_DIR")
+    .map(|val| PathBuf::from_str(&val).unwrap().join("../../"))
+    .unwrap_or_else(|_| {
+      std::env::current_dir().unwrap().join(PathBuf::from_str("./source/").unwrap())
+    })
+    .join(source_path);
+
+  if let Ok(grammar_path) = grammar_path.canonicalize() {
+    SherpaResult::Ok(grammar_path)
+  } else {
+    panic!("File path {} not found in file system", grammar_path.to_str().unwrap());
+  }
 }

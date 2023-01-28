@@ -76,6 +76,7 @@ fn compile_and_run_grammar(grammar: &str, test_inputs: &[(&str, bool)]) -> Sherp
       *bc.state_name_to_offset.get(g.get_exported_productions()[0].guid_name)?,
       g.get_exported_productions()[0].production.bytecode_id,
       &bc.bytecode,
+      None,
     ) {
       SherpaResult::Ok((shifts, _)) => {
         if !should_complete {

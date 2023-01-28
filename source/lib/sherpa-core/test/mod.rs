@@ -21,4 +21,4 @@ mod full_grammars;
 
 mod errors;
 
-mod utils;
+pub(crate) mod utils;

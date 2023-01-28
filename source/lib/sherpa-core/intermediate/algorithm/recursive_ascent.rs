@@ -11,6 +11,7 @@
 //! Note: Since scanner productions are guaranteed to not have left recursion of any kind, there
 //! is no need to run TokenProductions through this process.
 use crate::{
+  grammar::get_production_start_items,
   intermediate::utils::{get_follow_closure, hash_group_btreemap},
   journal::Journal,
   types::{GraphNode, TransitionGraph as TPack, *},
@@ -21,7 +22,7 @@ use std::{
   vec,
 };
 
-use super::{create_node, process_node};
+use super::{create_node, follow::get_production_follow_items, process_node};
 
 pub(crate) fn construct_recursive_ascent(
   j: &mut Journal,
@@ -45,8 +46,11 @@ pub(crate) fn construct_recursive_ascent(
 
   let mut root_node =
     GraphNode::new(&t, SymbolID::Start, None, goto_seeds.clone().to_vec(), NodeType::RAStart);
+
   root_node.edge_type = EdgeType::Start;
+
   let parent_index = Some(t.insert_node(root_node));
+
   let mut unfulfilled_root = Some(*t.root_prod_ids.first().unwrap());
 
   for (production_id, group) in
@@ -61,7 +65,7 @@ pub(crate) fn construct_recursive_ascent(
       .map(|i| {
         let stated_item = if i.completed() {
           have_end_items = true;
-          i.to_state(ItemState::OUT_OF_SCOPE)
+          i.to_state(ItemState::new(lane, OriginData::OutOfScope(lane as usize)))
         } else {
           i.try_increment().to_state(ItemState::new(lane, OriginData::Undefined))
         };
@@ -87,10 +91,11 @@ pub(crate) fn construct_recursive_ascent(
 
       if have_root_production {
         unfulfilled_root = None;
-        let mut out_of_scope_items = get_out_of_scope(&g, production_id, &group, false);
+        let mut out_of_scope_items = get_out_of_scope(&mut t, &g, production_id, &group);
         goto_node.transition_items.append(&mut out_of_scope_items.clone());
         items.append(&mut out_of_scope_items);
       }
+
       let items = goto_node.transition_items.clone().to_set().to_vec();
       let node_index = t.insert_node(goto_node);
 
@@ -130,37 +135,17 @@ pub(crate) fn construct_recursive_ascent(
 }
 /// Returns the follow set of the production as out-of-scope items
 pub(crate) fn get_out_of_scope(
+  t: &mut TPack,
   g: &std::sync::Arc<GrammarStore>,
   production_id: ProductionId,
   existing: &BTreeSet<Item>,
-  follow_set: bool,
 ) -> Items {
-  let mut seen = BTreeSet::new();
-  let mut productions = VecDeque::from_iter(vec![production_id]);
-  let mut lr_items = BTreeSet::new();
-  let existing = existing.as_set().to_state(ItemState::default());
-
-  while let Some(production_id) = productions.pop_front() {
-    if seen.insert(production_id) {
-      let mut new_items = g
-        .lr_items
-        .get(&production_id)
-        .unwrap_or(&Vec::new())
-        .iter()
-        .filter(|i| !existing.contains(&(**i).to_empty_state()))
-        .map(|i| i.increment().unwrap().to_state(ItemState::OUT_OF_SCOPE))
-        .collect::<BTreeSet<_>>();
-
-      for completed in new_items.as_vec().completed_items() {
-        productions.push_back(completed.get_prod_id(g));
-      }
-
-      lr_items.append(&mut new_items);
-    }
-    if !follow_set {
-      break;
-    }
-  }
-
-  lr_items.to_vec()
+  get_production_follow_items(g, production_id, Some(existing))
+    .into_iter()
+    .filter(|i| production_id != i.get_prod_id(g) && production_id != i.get_production_id_at_sym(g))
+    .map(|i| {
+      let lane = t.increment_lane(1);
+      i.to_state(ItemState::new(lane, OriginData::OutOfScope(lane as usize)))
+    })
+    .collect()
 }

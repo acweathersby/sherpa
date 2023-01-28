@@ -163,7 +163,7 @@ impl<'a> BuildPipeline<'a> {
       SherpaResult::Ok(_) => {}
       _ => {
         self.journal.flush_reports();
-        self.journal.debug_print_reports(ReportType::Any);
+        self.journal.debug_error_report();
         return SherpaResult::None;
       }
     }
@@ -183,8 +183,11 @@ impl<'a> BuildPipeline<'a> {
 
     // Build bytecode if needed.
     self.bytecode = if self.tasks.iter().any(|t| t.0.require_bytecode) {
-      let ir_states = compile_states(&mut self.journal, self.threads)?;
-      let ir_states = optimize_ir_states(&mut self.journal, ir_states);
+      let ir_states = compile_states(&mut self.journal, self.threads);
+
+      self.journal.debug_error_report();
+
+      let ir_states = optimize_ir_states(&mut self.journal, ir_states?);
       let bytecode_output = compile_bytecode(&mut self.journal, ir_states);
       Some(bytecode_output)
     } else {
@@ -411,6 +414,14 @@ pub fn compile_llvm_parser(grammar_source_path: &PathBuf, config: Config) -> boo
     }
   }) {
     SherpaResult::Ok(_) => true,
+    SherpaResult::Err(err) => {
+      eprintln!("{}", err);
+      false
+    }
+    SherpaResult::MultipleErrors(err) => {
+      eprintln!("{:?}", err);
+      false
+    }
     _ => false,
   }
 }

@@ -256,7 +256,7 @@ impl<T: ByteReader, M> ParseContext<T, M> {
   }
 
   #[inline]
-  pub fn get_production(&mut self) -> u32 {
+  pub fn get_production(&self) -> u32 {
     self.prod_id
   }
 

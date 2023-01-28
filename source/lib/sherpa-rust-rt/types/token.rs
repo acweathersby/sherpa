@@ -435,7 +435,7 @@ impl Token {
         prev_line -= 1;
       }
 
-      if prev_line > 0 {
+      if prev_line > 0 && line_num > 0 {
         let mut prev_line = prev_line;
         for a in 1..=max_pre {
           if prev_line <= 0 {

@@ -1,5 +1,33 @@
 use crate::types::{ast::Reducer, *};
 
+pub enum DebugEvent<'a, R: ByteReader, M> {
+  ExecuteState {
+    bc:      &'a [u32],
+    offset:  usize,
+    len:     usize,
+    address: usize,
+    ctx:     &'a ParseContext<R, M>,
+  },
+  ExecuteInstruction {
+    bc:          &'a [u32],
+    address:     usize,
+    instruction: Instruction,
+    ctx:         &'a ParseContext<R, M>,
+  },
+  SkipToken {
+    offset: usize,
+    len:    usize,
+    ctx:    &'a ParseContext<R, M>,
+  },
+  ShiftToken {
+    offset: usize,
+    len:    usize,
+    ctx:    &'a ParseContext<R, M>,
+  },
+}
+
+pub type DebugFn<R, M> = dyn Fn(DebugEvent<R, M>);
+
 /// Yields parser Actions from parsing an input using the
 /// current active grammar bytecode.
 #[inline]
@@ -8,41 +36,52 @@ pub fn dispatch<'a, R: ByteReader + MutByteReader, M>(
   ctx: &mut ParseContext<R, M>,
   stack: &mut Vec<u32>,
   bc: &[u32],
+  debug: Option<&DebugFn<R, M>>,
 ) -> (ParseAction, u32) {
   use ParseAction::*;
 
   let mut s = state & STATE_ADDRESS_MASK;
 
+  #[cfg(debug_assertions)]
+  if let Some(debug) = debug {
+    let (offset, len) =
+      if ctx.in_peek_mode { (ctx.peek_off, ctx.peek_len) } else { (ctx.token_off, ctx.token_len) };
+    debug(DebugEvent::ExecuteState {
+      bc,
+      address: s as usize,
+      ctx,
+      offset: offset as usize,
+      len: len as usize,
+    });
+  }
+
   loop {
-    let instr = Instruction::from(bc, s as usize);
+    let instruction = Instruction::from(bc, s as usize);
 
     #[cfg(debug_assertions)]
-    if !ctx.is_scanner() {
-      println!("address [{:0>6X}] {}", s, ctx.get_reader().cursor());
-      if s == 0xC34 {
-        println!("goto time");
-      }
+    if let Some(debug) = debug {
+      debug(DebugEvent::ExecuteInstruction { bc, address: s as usize, instruction, ctx });
     }
 
     use InstructionType::*;
 
-    s = match instr.to_type() {
+    s = match instruction.to_type() {
       Shift => {
-        break shift(s, instr, ctx);
+        break shift(s, instruction, ctx, debug);
       }
-      Goto => goto(s, instr, stack),
-      SetProd => set_production(s, instr, ctx),
+      Goto => goto(s, instruction, stack),
+      SetProd => set_production(s, instruction, ctx),
       Reduce => {
-        break reduce(s, instr, ctx);
+        break reduce(s, instruction, ctx);
       }
-      Token => set_token_state(s, instr, ctx),
+      Token => set_token_state(s, instruction, ctx),
       ForkTo => {
-        break fork(s, instr);
+        break fork(s, instruction);
       }
       Scan => scan(),
       EatCrumbs => noop(s),
-      VectorBranch => vector_jump(s, ctx, bc),
-      HashBranch => hash_jump(s, ctx, bc),
+      VectorBranch => vector_jump(s, ctx, bc, debug),
+      HashBranch => hash_jump(s, ctx, bc, debug),
       SetFailState => set_fail(),
       Repeat => repeat(),
       Noop13 => noop(s),
@@ -59,6 +98,7 @@ fn shift<'a, R: ByteReader + MutByteReader, M>(
   i: u32,
   instr: Instruction,
   ctx: &mut ParseContext<R, M>,
+  debug: Option<&DebugFn<R, M>>,
 ) -> (ParseAction, u32) {
   if instr.get_value() & 0x1 == 1 {
     ctx.token_len = 0;
@@ -77,8 +117,17 @@ fn shift<'a, R: ByteReader + MutByteReader, M>(
     ctx.scan_len = 0;
     let scan_off = ctx.scan_off;
     let peek_line_num = ctx.scan_line_num;
+
     ctx.get_reader_mut().set_cursor_to(scan_off, peek_line_num, peek_line_num);
   } else {
+    #[cfg(debug_assertions)]
+    if let Some(debug) = debug {
+      debug(DebugEvent::ShiftToken {
+        offset: ctx.token_off as usize,
+        len: ctx.token_len as usize,
+        ctx,
+      });
+    }
     ctx.anchor_off = ctx.token_off + ctx.token_len;
     ctx.token_off = ctx.anchor_off;
     ctx.token_len = 0;
@@ -194,15 +243,34 @@ fn noop(i: u32) -> u32 {
 }
 
 #[inline]
-fn skip_token<'a, T: 'a + ByteReader + MutByteReader, M>(ctx: &mut ParseContext<T, M>) {
+fn skip_token<'a, T: 'a + ByteReader + MutByteReader, M>(
+  ctx: &mut ParseContext<T, M>,
+  debug: Option<&DebugFn<T, M>>,
+) {
   if ctx.is_scanner() {
     ctx.scan_off += ctx.scan_input_len;
     ctx.scan_input_len = 0;
   } else {
     if ctx.in_peek_mode() {
+      #[cfg(debug_assertions)]
+      if let Some(debug) = debug {
+        debug(DebugEvent::SkipToken {
+          offset: ctx.peek_off as usize,
+          len: ctx.peek_len as usize,
+          ctx,
+        });
+      }
       ctx.peek_off += ctx.peek_len;
       ctx.peek_len = 0;
     } else {
+      #[cfg(debug_assertions)]
+      if let Some(debug) = debug {
+        debug(DebugEvent::SkipToken {
+          offset: ctx.token_off as usize,
+          len: ctx.token_len as usize,
+          ctx,
+        });
+      }
       ctx.token_off += ctx.token_len;
       ctx.token_len = 0;
     }
@@ -217,6 +285,7 @@ pub fn hash_jump<R: ByteReader + MutByteReader, M>(
   i: u32,
   ctx: &mut ParseContext<R, M>,
   bc: &[u32],
+  debug: Option<&DebugFn<R, M>>,
 ) -> u32 {
   let i = i as usize;
   // Decode data
@@ -235,7 +304,8 @@ pub fn hash_jump<R: ByteReader + MutByteReader, M>(
   loop {
     let input_value = match input_type {
       InputType::T01_PRODUCTION => ctx.get_production(),
-      _ => get_token_value(lexer_type, input_type, scan_index.get_address() as u32, ctx, bc) as u32,
+      _ => get_token_value(lexer_type, input_type, scan_index.get_address() as u32, ctx, bc, debug)
+        as u32,
     };
     let mut hash_index = (input_value & hash_mask) as usize;
 
@@ -247,7 +317,7 @@ pub fn hash_jump<R: ByteReader + MutByteReader, M>(
 
       if value == input_value {
         if off == 0x7FF {
-          skip_token(ctx);
+          skip_token(ctx, debug);
           break;
         } else {
           return i as u32 + off;
@@ -265,6 +335,7 @@ pub fn vector_jump<R: ByteReader + MutByteReader, M>(
   i: u32,
   ctx: &mut ParseContext<R, M>,
   bc: &[u32],
+  debug: Option<&DebugFn<R, M>>,
 ) -> u32 {
   let i = i as usize;
   // Decode data
@@ -282,7 +353,8 @@ pub fn vector_jump<R: ByteReader + MutByteReader, M>(
   loop {
     let input_value = match input_type {
       InputType::T01_PRODUCTION => ctx.get_production(),
-      _ => get_token_value(lexer_type, input_type, scan_index.get_address() as u32, ctx, bc) as u32,
+      _ => get_token_value(lexer_type, input_type, scan_index.get_address() as u32, ctx, bc, debug)
+        as u32,
     };
 
     let value_index = (input_value as i32 - value_offset as i32) as u32;
@@ -290,7 +362,7 @@ pub fn vector_jump<R: ByteReader + MutByteReader, M>(
     if value_index < table_length {
       let off = unsafe { *bc.get_unchecked(table_start + value_index as usize) };
       if off == 0xFFFF_FFFF {
-        skip_token(ctx);
+        skip_token(ctx, debug);
         continue;
       } else {
         return i as u32 + off;
@@ -308,6 +380,7 @@ fn get_token_value<R: ByteReader + MutByteReader, M>(
   scan_index: u32,
   ctx: &mut ParseContext<R, M>,
   bc: &[u32],
+  debug: Option<&DebugFn<R, M>>,
 ) -> i32 {
   match input_type {
     InputType::T03_CLASS => {
@@ -371,7 +444,7 @@ fn get_token_value<R: ByteReader + MutByteReader, M>(
     };
 
       if ctx.tok_id == 0 {
-        let token_length = token_scan(active_offset, scan_index, ctx, bc);
+        let token_length = token_scan(active_offset, scan_index, ctx, bc, debug);
 
         if ctx.in_peek_mode() {
           ctx.peek_len = token_length;
@@ -420,6 +493,7 @@ fn token_scan<R: ByteReader + MutByteReader, M>(
   scan_index: u32,
   ctx: &mut ParseContext<R, M>,
   bc: &[u32],
+  debug: Option<&DebugFn<R, M>>,
 ) -> u32 {
   ctx.tok_id = 0;
 
@@ -459,7 +533,7 @@ fn token_scan<R: ByteReader + MutByteReader, M>(
 
         if (state & mask_gate) != 0 {
           let fail_mode = loop {
-            match dispatch(state, ctx, &mut stack, bc) {
+            match dispatch(state, ctx, &mut stack, bc, debug) {
               (ParseAction::CompleteState, _) => {
                 break false;
               }
@@ -486,10 +560,11 @@ fn token_scan<R: ByteReader + MutByteReader, M>(
 
 /// Start or continue a parse on an input
 #[inline]
-pub fn get_next_action<R: ByteReader + MutByteReader, M>(
-  ctx: &mut ParseContext<R, M>,
+pub fn get_next_action<'a, R: ByteReader + MutByteReader, M>(
+  ctx: &'a mut ParseContext<R, M>,
   stack: &mut Vec<u32>,
   bc: &[u32],
+  debug: Option<&DebugFn<R, M>>,
 ) -> ParseAction {
   let mut state = stack.pop().unwrap();
 
@@ -513,7 +588,7 @@ pub fn get_next_action<R: ByteReader + MutByteReader, M>(
       let mask_gate = NORMAL_STATE_FLAG << (ctx.in_fail_mode() as u32);
 
       if (state & mask_gate) != 0 {
-        match dispatch(state, ctx, stack, bc) {
+        match dispatch(state, ctx, stack, bc, debug) {
           (ParseAction::CompleteState, _) => {
             ctx.set_fail_mode_to(false);
             state = stack.pop().unwrap();
@@ -539,10 +614,11 @@ pub fn parse_ast<R: ByteReader + MutByteReader, M, Node: AstObject>(
   stack: &mut Vec<u32>,
   bc: &[u32],
   reducers: &[Reducer<R, M, Node>],
+  debug: Option<&DebugFn<R, M>>,
 ) -> Result<AstSlot<Node>, SherpaParseError> {
   let mut ast_stack: Vec<AstSlot<Node>> = vec![];
   loop {
-    match get_next_action(ctx, stack, bc) {
+    match get_next_action(ctx, stack, bc, debug) {
       ParseAction::Accept { .. } => {
         return Ok(ast_stack.pop().unwrap());
       }

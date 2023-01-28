@@ -54,8 +54,7 @@ pub fn create_store<'a>(
     match metadata {
       ASTNode::Ignore(box ignore) => {
         for symbol in &ignore.symbols {
-          if let Some(sym_id) = record_symbol(j, &mut g, &ASTNode::Terminal(symbol.clone()), false)
-          {
+          if let Some(sym_id) = record_symbol(j, &mut g, &symbol, false) {
             global_ignore_symbols.push(sym_id);
           }
         }

@@ -169,13 +169,13 @@ impl SymbolID {
   /// Returns a human friendly string representation
   pub fn to_string(&self, g: &GrammarStore) -> String {
     match self {
-      Self::DefinedNumeric(_)
-      | Self::DefinedIdentifier(_)
-      | Self::DefinedSymbol(_)
-      | Self::ExclusiveDefinedNumeric(_)
+      Self::DefinedNumeric(_) | Self::DefinedIdentifier(_) | Self::DefinedSymbol(_) => {
+        format!("'{}'", g.symbol_strings.get(self).unwrap())
+      }
+      Self::ExclusiveDefinedNumeric(_)
       | Self::ExclusiveDefinedIdentifier(_)
       | Self::ExclusiveDefinedSymbol(_) => {
-        format!("\\{}", g.symbol_strings.get(self).unwrap())
+        format!("\"{}\"", g.symbol_strings.get(self).unwrap())
       }
       Self::Production(prod_id, _) => g.productions.get(prod_id).unwrap().name.to_string(),
       Self::TokenProduction(.., prod_id) => {

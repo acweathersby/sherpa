@@ -1,5 +1,8 @@
 //! Functions for resolving a set of ambiguous Items.
-use super::{follow::get_follow_items, LR::construct_inline_LR};
+use super::{
+  follow::{follow_items, get_follow_items},
+  LR::construct_inline_LR,
+};
 use crate::{
   grammar::hash_id_value_u64,
   intermediate::{
@@ -17,7 +20,7 @@ pub(crate) fn peek(
   t: &mut TransitionGraph,
   j: &mut Journal,
   root_par_id: NodeId,
-  items: Items,
+  peek_items: Items,
   global_depth: usize,
 ) -> SherpaResult<()> {
   let grammar = t.g.clone();
@@ -25,9 +28,9 @@ pub(crate) fn peek(
   let mut peek_ids = BTreeSet::new();
 
   // Split items into groups based on symbol Ids.
-  let goals = hash_group_vec(items.clone(), |index, i| {
+  let goals = hash_group_vec(peek_items.clone(), |index, i| {
     if i.is_out_of_scope() {
-      SymbolID::OutOfScope
+      SymbolID::DistinctGroup(index as u32)
     } else if i.completed() || j.config().enable_breadcrumb_parsing || t.is_scan() {
       SymbolID::DistinctGroup(index as u32)
     } else {
@@ -61,8 +64,32 @@ pub(crate) fn peek(
     let mut EXCLUSIVE_COMPLETED = false;
 
     // Sort the items into groups of terminal and completed items.
-    let mut closure = items.closure_with_state(g);
+    let mut closure = if peek_depth == 0 {
+      let in_scope_items = items.clone().inscope_items();
+      let mut in_scope = in_scope_items.closure_with_state(g);
+      let out_scope = items.outscope_items().closure_with_state(g);
 
+      let checked = in_scope.as_set().to_empty_state();
+      let prod_ids = in_scope_items
+        .into_iter()
+        .flat_map(|i| vec![i.get_prod_id(g), i.get_production_id_at_sym(g)])
+        .collect::<Vec<_>>();
+
+      for item in out_scope {
+        if !checked.contains(&item.to_empty_state())
+          && !prod_ids.contains(&item.get_prod_id(g))
+          && (item.is_term(g) || !prod_ids.contains(&item.get_production_id_at_sym(g)))
+        {
+          in_scope.insert(item);
+        }
+      }
+
+      in_scope
+    } else {
+      items.closure_with_state(g)
+    };
+
+    let have_out_of_scope = some_items_are_out_of_scope(&closure.as_vec());
     let completed_items = closure.as_vec().completed_items();
 
     // Resolve completed items by getting their follow set.
@@ -82,12 +109,13 @@ pub(crate) fn peek(
           par_id,
         );
 
-        //  if !completed_item.is_out_of_scope() {
-        closure.append(
-          &mut Vec::from_linked(follow_and_terminal_completed.uncompleted_items)
-            .closure_with_state(g),
-        )
-        //}
+        let uncompleted_items = follow_and_terminal_completed.uncompleted_items;
+
+        if !completed_item.is_out_of_scope() && have_out_of_scope && uncompleted_items.is_empty() {
+          closure.append(&mut follow_items(g, completed_item, None).as_set());
+        }
+
+        closure.append(&mut Vec::from_linked(uncompleted_items).closure_with_state(g))
       }
       // Items that are truly in the completed position, that is for a completed item
       //  `I => ... *` there is no follow item `X => ... * I ...` in the closures of
@@ -126,9 +154,14 @@ pub(crate) fn peek(
           if t.is_scan() && t.item_is_goal(item) {
             //dump out of scope items into the outgoing stream.
             let out_of_scope =
-              get_out_of_scope(g, item.get_prod_id(g), &closure.clone().to_set(), true)
+              get_out_of_scope(t, g, item.get_prod_id(g), &closure.clone().to_set())
                 .incomplete_items()
-                .closure_with_state(g);
+                .closure(g)
+                .to_state(
+                  items[0]
+                    .get_state()
+                    .to_origin(OriginData::OutOfScope(items[0].get_origin_index())),
+                );
 
             closure = closure.merge_unique(out_of_scope);
           }
@@ -238,6 +271,9 @@ pub(crate) fn peek(
     merge_occluding_token_groups(t, j, &mut groups);
 
     for (sym, mixed_items) in groups {
+      if g.symbol_strings.get(&sym).cloned() == Some("<".to_string()) {
+        println!("_------------------------------- ");
+      }
       // detect the number of distinct lanes present in the current group.
       // IF this value is 1, then we have successfully found a peek leaf that
       // is ambiguous
@@ -250,7 +286,23 @@ pub(crate) fn peek(
       // have a mixture of in-scope and out-of-scope items for more levels of peeking,
       // allowing for a high `k` value however this not the approach taken ATM. This
       // may change in the future.
-      let items: Items = mixed_items.iter().filter(|i| !i.is_out_of_scope()).cloned().collect();
+
+      let _some_items_are_out_of_scope = some_items_are_out_of_scope(&mixed_items);
+
+      let items = if peek_depth > 10 {
+        mixed_items.iter().filter(|i| !i.is_out_of_scope()).cloned().collect()
+      } else {
+        if _some_items_are_out_of_scope && peek_depth == 0 {
+          let group = hash_group_vec(mixed_items.clone(), |_, i| i.to_empty_state());
+          if (group.len() == 1) {
+            mixed_items.iter().filter(|i| !i.is_out_of_scope()).cloned().collect()
+          } else {
+            mixed_items.clone()
+          }
+        } else {
+          mixed_items.clone()
+        }
+      };
       // -----------------------------------------------------------------------------------
 
       let peek_groups = hash_group_vec(items.clone(), |_, i| i.get_state().get_origin());
@@ -259,7 +311,7 @@ pub(crate) fn peek(
         1 if j.occlusion_tracking_mode() => {
           // We can skip further processing if in occlusions tracking mode
         }
-        1.. if t.is_scan() && some_items_are_out_of_scope(&mixed_items) => {
+        1.. if t.is_scan() && _some_items_are_out_of_scope => {
           let index = create_and_insert_node(
             t,
             sym,
@@ -274,7 +326,7 @@ pub(crate) fn peek(
           t.leaf_nodes.push(index);
         }
         0 | (1..) if all_items_are_out_of_scope(&mixed_items) => {
-          create_out_of_scope_node(t, sym, mixed_items, par_id, Assert);
+          create_out_of_scope_node(t, sym, mixed_items, par_id, get_edge_type(j, t, peek_depth));
         }
         1 if peek_depth == 0 => {
           // Reprocess the root node (which is always par_id when depth == 0)
@@ -359,7 +411,8 @@ pub(crate) fn peek(
               global_depth,
               peek_depth
             );
-            items.__print_items__(g, "peeks");
+            t.accept_items.__print_items__(g, "starts");
+            items.__print_items__(g, &format!("peeks {}", peek_depth));
             // Item set has been repeated
             let lr_starts = get_goal_items(&items, &goals);
             //let lr_starts = goal_items.clone().into_iter().flatten().cloned().collect::<Vec<_>>();
@@ -383,8 +436,20 @@ pub(crate) fn peek(
                 // Our grammar is now (RD/RAD + LR)
               }
               err if !t.is_scan() => {
-                #[cfg(debug_assertions)]
-                eprintln!("{:?}", err);
+                let mut start_node = par_id;
+                let mut offset = peek_depth as i32;
+
+                /*  while offset >= 2 {
+                  start_node = t.get_node(start_node).parent?;
+                  offset -= 1;
+                } */
+
+                lr_starts.__print_items__(g, "FAILED PEEKS");
+
+                // Trace peeks back to roots.
+
+                //#[cfg(debug_assertions)]
+                //eprintln!("{:?}", err);
 
                 // Otherwise, we must use a fork state to handle this situation
                 let fork_node_index = create_and_insert_node(
@@ -572,20 +637,21 @@ fn convert_origins(pending: &Vec<Item>, goals: &Vec<Items>) -> Vec<Item> {
 
 fn convert_origin(item: &Item, goals: &[Items]) -> Item {
   match item.get_origin() {
-    OriginData::GoalIndex(index) => item.to_origin(goals[index][0].get_state().get_origin()),
-    OriginData::OutOfScope(_) => item.to_state(ItemState::OUT_OF_SCOPE),
+    OriginData::GoalIndex(index) | OriginData::OutOfScope(index) => {
+      item.to_origin(goals[index][0].get_state().get_origin())
+    }
     _ => {
       panic!("Should only have items with Goal Indices in this context! {:?}", item)
     }
   }
 }
 
-fn all_items_are_out_of_scope(terminal_completions: &Vec<Item>) -> bool {
-  terminal_completions.iter().all(|i| i.is_out_of_scope())
+fn all_items_are_out_of_scope(items: &Vec<Item>) -> bool {
+  items.iter().all(|i| i.is_out_of_scope())
 }
 
-fn some_items_are_out_of_scope(terminal_completions: &Vec<Item>) -> bool {
-  terminal_completions.iter().any(|i| i.is_out_of_scope())
+fn some_items_are_out_of_scope(items: &Vec<Item>) -> bool {
+  items.iter().any(|i| i.is_out_of_scope())
 }
 
 #[inline]
