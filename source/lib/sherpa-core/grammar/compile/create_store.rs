@@ -295,7 +295,7 @@ fn get_symbol_details<'a>(
       ASTNode::ClassSymbol(_)
       | ASTNode::AnyGroup(_)
       | ASTNode::Production_Terminal_Symbol(_)
-      | ASTNode::TemplateProductionSymbol(_)
+      //| ASTNode::TemplateProductionSymbol(_)
       | ASTNode::Production_Symbol(_)
       | ASTNode::Production_Import_Symbol(_) => {
         break;

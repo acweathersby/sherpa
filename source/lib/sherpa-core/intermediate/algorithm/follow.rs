@@ -86,14 +86,10 @@ pub(super) fn get_follow_items(
 
       let null_items =
         local_closure_lookup.get(&ProductionId(0)).unwrap_or(&empty).iter().filter(|i| {
-          if i.is_null() {
-            if state.is_null() {
-              i.get_state().get_lanes().0 == state.get_lanes().1
-            } else {
-              i.get_state().same_curr_lane(&state)
-            }
-          } else {
-            false
+          match (i.is_null(), state.is_null()) {
+            (true, true) => i.get_state().get_lanes().0 == state.get_lanes().1,
+            (true, false) => i.get_state().same_curr_lane(&state),
+            _ => false,
           }
         });
 

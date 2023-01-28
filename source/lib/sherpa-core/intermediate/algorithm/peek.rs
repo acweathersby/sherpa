@@ -271,9 +271,6 @@ pub(crate) fn peek(
     merge_occluding_token_groups(t, j, &mut groups);
 
     for (sym, mixed_items) in groups {
-      if g.symbol_strings.get(&sym).cloned() == Some("<".to_string()) {
-        println!("_------------------------------- ");
-      }
       // detect the number of distinct lanes present in the current group.
       // IF this value is 1, then we have successfully found a peek leaf that
       // is ambiguous

@@ -148,3 +148,18 @@ fn missing_append_host_error() -> SherpaResult<()> {
 
   SherpaResult::Ok(())
 }
+
+// Compile v1.0.0 grammar with v1.0.0_strap parser
+#[test]
+fn compile_latest_grammar() -> SherpaResult<()> {
+  let mut j = Journal::new(None);
+  let path = crate::test::utils::path_from_source("grammar/v1_0_0/grammar.sp")?;
+
+  let grammar_data = load_from_path(&mut j, path);
+
+  assert!(!j.debug_error_report());
+
+  dbg!(grammar_data);
+
+  SherpaResult::Ok(())
+}

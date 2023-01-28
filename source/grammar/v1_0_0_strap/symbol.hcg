@@ -4,7 +4,7 @@
 
 <> annotated_symbol > 
 
-        symbol^s [unordered tk:reference?^r \? ?^o  priority?^p ]
+        symbol^s [unordered tk:reference?^r t:? ?^o  priority?^p ]
 
             f:ast {{ t_AnnotatedSymbol, prority:$p, symbol:$s, is_optional:bool($o), reference:str($r), tok  }}
 
@@ -59,11 +59,11 @@
 
 <> list >
 
-        symbol \(+  terminal?  \)
+        symbol t:(+  terminal?  \)
 
             f:ast { { t_List_Production, c_Symbol, terminal_symbol:$3, symbols:$1, tok } }
 
-        | symbol \(* terminal?  \)
+        | symbol t:(* terminal?  \)
 
             f:ast {{ t_List_Production, c_Symbol, terminal_symbol:$3, symbols:$1, tok, optional:true }}
 

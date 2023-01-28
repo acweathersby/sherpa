@@ -1,0 +1,186 @@
+NAME ascript
+
+IGNORE { c:sp c:nl }
+
+<> body >  
+
+    struct 
+
+    | expression
+
+    | "{" expression(*";") '}'
+        :ast { t_AST_Statements, statements:$2, tok }
+
+<> expression > 
+
+    string_convert
+
+    | numeric_convert
+
+    | bool_convert
+
+    | literal
+
+    | vector
+
+    | token
+
+    | add
+
+    | map 
+
+<> struct > 
+
+    "{" type_identifier^t ( "," struct_prop(+",") )? '}'
+        :ast { t_AST_Struct, typ:$t, props:$3, tok }
+
+<> struct_prop >
+
+    identifier ":" expression
+        :ast { t_AST_Property, id:str($1), value:$3, tok }
+
+    |  identifier ":" struct
+        :ast { t_AST_Property, id:str($1), value:$3, tok }
+
+    |  identifier
+        :ast { t_AST_Property, id:str($1), named_reference: str($1), tok }
+
+    | class_identifier
+        :ast { t_AST_ClassId, value:str($1), tok }
+
+    | token
+
+<> type_identifier > 
+
+    "t_" identifier
+
+<> class_identifier >
+
+    "c_" identifier
+
+<> vector >
+
+    "[" expression(*",") "]"
+        :ast { t_AST_Vector, initializer: $2, tok  }
+
+<> add > 
+
+    add "+" expression
+
+        :ast { t_AST_Add, left: $1, right: $3, tok }
+
+    | member
+
+<> map > 
+
+    "map" "(" expression^k , expression^v ')'
+
+        :ast { t_AST_Map, key: $k, val: $v, tok }
+
+<> member > 
+
+    reference
+
+    | reference '.' identifier
+        :ast { t_AST_Member, reference:$1, property:$3 }
+
+<> string_convert > 
+
+    "str" convert_initializer?
+        :ast { t_AST_STRING, value: $2, tok  }
+
+<> bool_convert > 
+
+    "bool" convert_initializer?
+        :ast { t_AST_BOOL,  initializer: $2, tok  }
+
+<> numeric_convert > 
+
+    "u8"  convert_initializer?
+        :ast { t_AST_U8,  initializer: $2, tok  }
+
+    | "u16" convert_initializer?
+        :ast { t_AST_U16, initializer: $2, tok  }
+
+    | "u32" convert_initializer?
+        :ast { t_AST_U32, initializer: $2, tok  }
+
+    | "u64" convert_initializer?
+        :ast { t_AST_U64, initializer: $2, tok  }
+
+    | "i8"  convert_initializer?
+        :ast { t_AST_I8,  initializer: $2, tok  }
+
+    | "i16" convert_initializer?
+        :ast { t_AST_I16, initializer: $2, tok  }
+
+    | "i32" convert_initializer?
+        :ast { t_AST_I32, initializer: $2, tok  }
+
+    | "i64" convert_initializer?
+        :ast { t_AST_I64, initializer: $2, tok  }
+
+    | "f32" convert_initializer?
+        :ast { t_AST_F32, initializer: $2, tok  }
+
+    | "f64" convert_initializer?
+        :ast { t_AST_F64, initializer: $2, tok  }
+
+<> convert_initializer > 
+
+    "(" init_objects ")"       
+        :ast { t_Init, expression: $2 }
+
+<> init_objects > member | token 
+
+<> literal > 
+
+    "true" 
+        :ast { t_AST_BOOL, value: true }
+
+    | "false"
+        :ast { t_AST_BOOL, value: false }
+
+    | tk:integer
+        :ast { t_AST_NUMBER, value:f64($1) }
+
+<> reference > 
+
+    "$" tk:identifier 
+        :ast { t_AST_NamedReference, value: str($2), tok }
+
+    | "$" tk:integer         
+        :ast { t_AST_IndexReference, value: i64($2), tok }
+
+<> integer > 
+
+    c:num(+)
+
+<> identifier > 
+
+    tk:identifier_syms 
+
+<> identifier_syms >  
+
+    identifier_syms c:id
+
+    | identifier_syms '_'
+
+    | identifier_syms '-'
+
+    | identifier_syms c:num
+
+    | '_'
+
+    | '-'
+
+    | c:id
+
+<> token > 
+
+    ( "tk" | "tok" | "token" ) range?
+        :ast { t_AST_Token, range: $2 }
+
+<> range > "<" integer ( ","  integer  )? ">"
+
+        :ast { t_Range, start_trim:$2, end_trim:$3  }

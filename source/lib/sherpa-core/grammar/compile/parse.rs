@@ -44,7 +44,7 @@ pub fn grammar_from_string(
   }
 }
 
-const allowed_extensions: [&str; 3] = ["hc", "hcg", "grammar"];
+const allowed_extensions: [&str; 4] = ["sp", "hc", "hcg", "grammar"];
 
 pub(crate) fn get_usable_thread_count(requested_count: usize) -> usize {
   NonZeroUsize::min(
@@ -74,6 +74,7 @@ pub(crate) fn load_from_path(
         let claimed_grammar_paths = &claimed_grammar_paths;
         let work_verifier = &work_verifier;
         let pending_grammar_paths = &pending_grammar_paths;
+        j.set_active_report("File Load", ReportType::GrammarCompile(Default::default()));
         s.spawn(move || {
           let mut grammars = vec![];
           loop {
@@ -118,19 +119,14 @@ pub(crate) fn load_from_path(
                         pending_grammar_paths.lock().unwrap().push_back(path);
                         work_verifier.lock().unwrap().add_units_of_work(1);
                       }
-                      SherpaResult::MultipleErrors(new_errors) => {
-                        for error in new_errors {
-                          j.report_mut().add_error(error)
-                        }
-                      }
-                      SherpaResult::Err(err) => {
-                        j.report_mut().add_error(err);
-                      }
-                      SherpaResult::None => j.report_mut().add_error(SherpaError::SourceError {
-                        loc:        tok,
+                      _ => j.report_mut().add_error(SherpaError::SourceError {
+                        loc:        tok.clone(),
                         path:       path.clone(),
-                        id:         "nonexistent-import-source",
-                        msg:        format!("Could not load {}", base_path.to_str().unwrap()),
+                        id:         "invalid-import-source",
+                        msg:        format!(
+                          "Could not resolve filepath {}",
+                          base_path.to_str().unwrap()
+                        ),
                         inline_msg: "source not found".to_string(),
                         severity:   SherpaErrorSeverity::Critical,
                         ps_msg:     Default::default(),
@@ -165,6 +161,8 @@ pub(crate) fn load_from_path(
   for (mut g) in results {
     grammars.append(&mut g);
   }
+
+  j.flush_reports();
 
   (grammars)
 }

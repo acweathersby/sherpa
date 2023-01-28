@@ -35,13 +35,13 @@
 
 <> import_clause > 
 
-        t:IMPORT ( g:id | g:sym  )(+) ( t:AS | t:as ) sym::identifier
+        t:IMPORT ( g:id | g:sym  )(+) g:sp ( \AS | \as ) sym::identifier
 
-            f:ast { { t_Import, c_Preamble, uri: str($2), reference:str($4), tok } } 
+            f:ast { { t_Import, c_Preamble, uri: str($2), reference:str($5), tok } } 
 
 <> ignore_clause >
 
-        t:IGNORE t:{  sym::terminal(+) t:}
+        t:IGNORE t:{  ( sym::terminal | sym::class )(+) t:}
 
             f:ast { { t_Ignore, c_Preamble, symbols: $3 } }
 
@@ -59,7 +59,7 @@
 
 <> append_production > 
 
-        t:+> ?^l sym::priority?^p sym::non_terminal^n \> rules^r
+        t:+> ? sym::priority?^p sym::non_terminal^n \> rules^r
 
             f:ast { { t_Production, is_append: true, is_lazy:false, priority:$p, name:str($n), name_sym:$n, rules: $r, tok } }
 
@@ -91,10 +91,6 @@
 
 
 +> sym::symbol > group
-
-+> sym::non_terminal > sym::non_terminal^p t:< sym::production_symbol^t t:>
-
-        f:ast { { t_TemplateProductionSymbol, prod_sym:$p, template_productions:$t } }
 
 <> group > 
 

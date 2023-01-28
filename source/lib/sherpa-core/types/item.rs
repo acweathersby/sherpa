@@ -397,6 +397,14 @@ impl Item {
     self.state.get_origin()
   }
 
+  #[inline(always)]
+  pub fn get_origin_index(&self) -> usize {
+    match self.get_origin() {
+      OriginData::OutOfScope(index) | OriginData::GoalIndex(index) => index,
+      _ => usize::MAX,
+    }
+  }
+
   /// Get the SymbolId in the origin if the origin is
   /// of type `OriginData::Symbol`. Otherwise returns `SymbolId::Undefined`
   #[inline(always)]
