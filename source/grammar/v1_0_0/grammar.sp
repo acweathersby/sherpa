@@ -32,7 +32,7 @@ EXPORT grammar as grammar
 
 <> import_clause > 
 
-        "IMPORT" ( g:id | g:sym  )(+)^test ( "AS" | "as" ) sym::identifier
+        "IMPORT" ( c:id | c:sym  )(+)^test ( "AS" | "as" ) sym::identifier
 
             :ast { t_Import, c_Preamble, uri: str($2), reference:str($4), tok }
 
@@ -50,7 +50,7 @@ EXPORT grammar as grammar
 
 <> production > 
 
-        "<"  (template_name)(*\, )^t \> \lazy?^l sym::priority?^p sym::non_terminal^n \> rules^r
+        "<"  (template_name)(*\, )^t \> "lazy"?^l sym::priority?^p sym::non_terminal^n \> rules^r
 
             :ast { t_Production, is_lazy:bool($l), priority:$p, name:str($n), name_sym:$n, rules: $r, template_names:$t, tok }
 
@@ -58,7 +58,7 @@ EXPORT grammar as grammar
 
         "+>" sym::priority?^p sym::non_terminal^n \> rules^r
 
-            :ast { t_Production, is_append: true, is_lazy:false, priority:$p, name:str($n), name_sym:$n, rules: $r, tok }
+            :ast { t_Production, is_append: true, priority:$p, name:str($n), name_sym:$n, rules: $r, tok }
 
 <> template_name >  
 

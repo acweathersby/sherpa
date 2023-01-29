@@ -49,6 +49,18 @@ impl<T> SherpaResult<T> {
     matches!(self, SherpaResult::Ok(_))
   }
 
+  /// Returns a string representation of the error(s) contained
+  pub fn get_error_string(&self) -> String {
+    match self {
+      SherpaResult::Ok(_) => format!("No Error"),
+      SherpaResult::None => format!("SherpaResult is None"),
+      SherpaResult::MultipleErrors(errors) => {
+        errors.iter().map(|e| e.to_string()).collect::<Vec<_>>().join("\n")
+      }
+      SherpaResult::Err(err) => err.to_string(),
+    }
+  }
+
   /// Returns `true` if the result is `Err`
   ///
   /// # Examples

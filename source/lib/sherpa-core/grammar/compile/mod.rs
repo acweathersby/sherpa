@@ -159,7 +159,13 @@ fn compile_latest_grammar() -> SherpaResult<()> {
 
   assert!(!j.debug_error_report());
 
-  dbg!(grammar_data);
+  compile_grammars(&mut j, &grammar_data);
+
+  j.flush_reports();
+
+  assert!(!j.debug_error_report());
+
+  // dbg!(grammar_data);
 
   SherpaResult::Ok(())
 }
