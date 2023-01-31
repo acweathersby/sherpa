@@ -15,6 +15,7 @@ use crate::{
 };
 use std::{
   collections::{btree_map, BTreeMap, BTreeSet, HashMap, VecDeque},
+  fmt::format,
   sync::Arc,
   thread,
 };
@@ -171,7 +172,7 @@ fn create_scanner_productions_from_symbols(j: &mut Journal, g: &mut GrammarStore
                   sym_id: SymbolID::TokenProduction(*prod_id, *grammar_id, scanner_production_id),
                   ..Default::default()
                 },
-                g.production_bodies
+                g.production_rules
                   .get(prod_id)
                   .unwrap()
                   .iter()
@@ -248,7 +249,7 @@ fn create_scanner_productions_from_symbols(j: &mut Journal, g: &mut GrammarStore
               loc:        sym.loc.clone(),
               path:       sym.g_ref.clone().unwrap_or(g.id.clone()).path.clone(),
               severity:   SherpaErrorSeverity::Critical,
-              ps_msg:     Default::default(),
+              ps_msg:     format!("{prod_id:?}"),
             });
           }
         }
@@ -274,7 +275,7 @@ fn check_for_missing_productions(j: &mut Journal, g: &GrammarStore) -> bool {
               loc:        sym.tok.clone(),
               path:       sym.grammar_ref.path.clone(),
               severity:   SherpaErrorSeverity::Critical,
-              ps_msg:     Default::default(),
+              ps_msg:     "[B]".to_string(),
             });
           }
         }
@@ -556,7 +557,7 @@ pub fn convert_left_recursion_to_right(
   // Remove recursion flag as it no longer applies to this production.
   a_prod.recursion_type = a_prod.recursion_type.xor(RecursionType::LEFT_DIRECT);
 
-  let rule_ids = g.production_bodies.get(&a_prod_id).unwrap().clone();
+  let rule_ids = g.production_rules.get(&a_prod_id).unwrap().clone();
 
   let rules = rule_ids
     .iter()
@@ -654,8 +655,8 @@ pub fn convert_left_recursion_to_right(
       .insert(a_prime_prod_id, (a_prime_prod.name.clone(), a_prime_prod.guid_name.clone()));
   }
   g.productions.insert(a_prime_prod_id, a_prime_prod);
-  g.production_bodies.insert(a_prod_id, new_B_rules.iter().map(|b| b.id).collect::<Vec<_>>());
-  g.production_bodies.insert(a_prime_prod_id, new_A_rules.iter().map(|b| b.id).collect::<Vec<_>>());
+  g.production_rules.insert(a_prod_id, new_B_rules.iter().map(|b| b.id).collect::<Vec<_>>());
+  g.production_rules.insert(a_prime_prod_id, new_A_rules.iter().map(|b| b.id).collect::<Vec<_>>());
 
   for b in new_A_rules {
     let id = b.id;

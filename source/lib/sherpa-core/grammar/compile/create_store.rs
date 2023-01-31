@@ -240,7 +240,7 @@ pub fn insert_rules(
   prod_id: &ProductionId,
   rules: Vec<types::Rule>,
 ) -> Vec<RuleId> {
-  let offset_index = g.production_bodies.get(&prod_id).map_or(0, |b| b.len());
+  let offset_index = g.production_rules.get(&prod_id).map_or(0, |b| b.len());
 
   let body_ids = rules
     .into_iter()
@@ -253,7 +253,7 @@ pub fn insert_rules(
     })
     .collect::<Vec<_>>();
 
-  match g.production_bodies.entry(*prod_id) {
+  match g.production_rules.entry(*prod_id) {
     btree_map::Entry::Vacant(e) => {
       e.insert(body_ids.clone());
     }
@@ -262,7 +262,7 @@ pub fn insert_rules(
     }
   };
 
-  g.production_bodies.get(prod_id).unwrap().to_owned()
+  g.production_rules.get(prod_id).unwrap().to_owned()
 }
 
 struct SymbolData<'a> {

@@ -7,7 +7,7 @@ use std::collections::{BTreeSet, VecDeque};
 /// items, one for each rule belonging to the production.
 #[inline]
 pub(crate) fn get_production_start_items(prod_id: &ProductionId, g: &GrammarStore) -> Vec<Item> {
-  g.production_bodies
+  g.production_rules
     .get(prod_id)
     .unwrap()
     .iter()

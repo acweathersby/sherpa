@@ -122,7 +122,7 @@ pub struct GrammarStore {
   pub id: Arc<GrammarRef>,
 
   /// Maps [ProductionId] to a list of [RuleIds](RuleId)
-  pub production_bodies: ProductionBodiesTable,
+  pub production_rules: ProductionBodiesTable,
 
   /// Maps a [ProductionId] to a [Production].
   pub productions: ProductionTable,

@@ -265,7 +265,7 @@ fn merge_grammars(
         match import_g.productions.get(&imported_prod_id) {
           Some(production) => {
             // Import all bodies referenced by this foreign production
-            let rules = import_g.production_bodies.get(&imported_prod_id).unwrap().clone();
+            let rules = import_g.production_rules.get(&imported_prod_id).unwrap().clone();
             for rule in rules.iter().map(|b| import_g.rules.get(&b).unwrap()).cloned() {
               // Add every Production symbol to the queue
               symbol_queue.append(
@@ -304,7 +304,7 @@ fn merge_grammars(
             }
 
             // Import the mapping of the foreign production_id to the foreign body_ids
-            g.production_bodies.insert(imported_prod_id, rules);
+            g.production_rules.insert(imported_prod_id, rules);
 
             // Import the foreign production
             entry.insert(production.clone());
@@ -706,7 +706,7 @@ fn create_scanner_productions_from_symbols(g: &mut GrammarStore, e: &mut Vec<She
                   sym_id: SymbolID::TokenProduction(*prod_id, *grammar_id, scanner_production_id),
                   ..Default::default()
                 },
-                g.production_bodies
+                g.production_rules
                   .get(prod_id)
                   .unwrap()
                   .iter()
@@ -1347,7 +1347,7 @@ pub fn convert_left_recursion_to_right(
   // Remove recursion flag as it no longer applies to this production.
   a_prod.recursion_type = a_prod.recursion_type.xor(RecursionType::LEFT_DIRECT);
 
-  let rule_ids = g.production_bodies.get(&a_prod_id).unwrap().clone();
+  let rule_ids = g.production_rules.get(&a_prod_id).unwrap().clone();
 
   let rules = rule_ids
     .iter()
@@ -1445,8 +1445,8 @@ pub fn convert_left_recursion_to_right(
       .insert(a_prime_prod_id, (a_prime_prod.name.clone(), a_prime_prod.guid_name.clone()));
   }
   g.productions.insert(a_prime_prod_id, a_prime_prod);
-  g.production_bodies.insert(a_prod_id, new_B_rules.iter().map(|b| b.id).collect::<Vec<_>>());
-  g.production_bodies.insert(a_prime_prod_id, new_A_rules.iter().map(|b| b.id).collect::<Vec<_>>());
+  g.production_rules.insert(a_prod_id, new_B_rules.iter().map(|b| b.id).collect::<Vec<_>>());
+  g.production_rules.insert(a_prime_prod_id, new_A_rules.iter().map(|b| b.id).collect::<Vec<_>>());
 
   for b in new_A_rules {
     let id = b.id;
@@ -2115,7 +2115,7 @@ fn insert_bodes(
   prod_id: &ProductionId,
   bodies: Vec<types::Rule>,
 ) -> Vec<RuleId> {
-  let offset_index = g.production_bodies.get(&prod_id).map_or(0, |b| b.len());
+  let offset_index = g.production_rules.get(&prod_id).map_or(0, |b| b.len());
 
   let body_ids = bodies
     .into_iter()
@@ -2128,7 +2128,7 @@ fn insert_bodes(
     })
     .collect::<Vec<_>>();
 
-  match g.production_bodies.entry(*prod_id) {
+  match g.production_rules.entry(*prod_id) {
     btree_map::Entry::Vacant(e) => {
       e.insert(body_ids.clone());
     }
@@ -2137,7 +2137,7 @@ fn insert_bodes(
     }
   };
 
-  g.production_bodies.get(prod_id).unwrap().to_owned()
+  g.production_rules.get(prod_id).unwrap().to_owned()
 }
 
 /// Loads and compiles a grammar from a source file.

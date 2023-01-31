@@ -90,7 +90,7 @@ pub fn merge_grammars(
         match import_g.productions.get(&imported_prod_id) {
           Some(production) => {
             // Import all bodies referenced by this foreign production
-            let rules = import_g.production_bodies.get(&imported_prod_id).unwrap().clone();
+            let rules = import_g.production_rules.get(&imported_prod_id).unwrap().clone();
             for rule in rules.iter().map(|b| import_g.rules.get(&b).unwrap()).cloned() {
               // Add every Production symbol to the queue
               symbol_queue.append(
@@ -129,7 +129,7 @@ pub fn merge_grammars(
             }
 
             // Import the mapping of the foreign production_id to the foreign body_ids
-            g.production_bodies.insert(imported_prod_id, rules);
+            g.production_rules.insert(imported_prod_id, rules);
 
             // Import the foreign production
             entry.insert(production.clone());

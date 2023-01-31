@@ -60,7 +60,7 @@ pub(crate) fn get_usable_thread_count(requested_count: usize) -> usize {
 pub(crate) fn load_from_path(
   j: &mut Journal,
   absolute_path: PathBuf,
-) -> (Vec<(PathBuf, ImportedGrammarReferences, Box<Grammar>)>) {
+) -> Vec<(PathBuf, ImportedGrammarReferences, Box<Grammar>)> {
   let pending_grammar_paths =
     Mutex::new(VecDeque::<PathBuf>::from_iter(vec![absolute_path.clone()]));
   let claimed_grammar_paths = Mutex::new(HashSet::<PathBuf>::new());
@@ -149,7 +149,7 @@ pub(crate) fn load_from_path(
               }
             }
           }
-          (grammars)
+          grammars
         })
       })
       .map(|s| s.join().unwrap())
@@ -158,13 +158,13 @@ pub(crate) fn load_from_path(
 
   let mut grammars = vec![];
 
-  for (mut g) in results {
+  for mut g in results {
     grammars.append(&mut g);
   }
 
   j.flush_reports();
 
-  (grammars)
+  grammars
 }
 
 /// Loads and parses a grammar file, returning the parsed grammar node and a vector of Import nodes.

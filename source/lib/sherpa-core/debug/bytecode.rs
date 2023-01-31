@@ -45,19 +45,19 @@ impl BytecodeGrammarLookups {
 
 pub(crate) fn disassemble_state(
   bc: &[u32],
-  idx: usize,
+  state_address: usize,
   lu: Option<&BytecodeGrammarLookups>,
 ) -> (String, usize) {
   use disassemble_state as ds;
   use header as dh;
 
-  let so = idx;
+  let so = state_address;
 
-  if idx >= bc.len() {
+  if state_address >= bc.len() {
     ("".to_string(), so)
   } else {
-    let instruction = bc[idx] & INSTRUCTION_CONTENT_MASK;
-    match bc[idx] & INSTRUCTION_HEADER_MASK {
+    let instruction = bc[state_address] & INSTRUCTION_CONTENT_MASK;
+    match bc[state_address] & INSTRUCTION_HEADER_MASK {
       Instruction::I00_PASS => (format!("\n{}PASS", dh(so)), so + 1),
       Instruction::I01_SHIFT => {
         let (string, offset) = ds(bc, so + 1, lu);

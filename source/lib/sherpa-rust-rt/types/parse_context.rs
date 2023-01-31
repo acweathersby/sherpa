@@ -423,7 +423,7 @@ impl<T: AstObject> Index<usize> for AstStackSlice<T> {
   type Output = T;
 
   fn index(&self, index: usize) -> &Self::Output {
-    if (index > self.len()) {
+    if index > self.len() {
       panic!("Index {} out of bounds in an AstStackSlice of len {}", index, self.len());
     }
 
