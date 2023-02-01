@@ -2,6 +2,8 @@
 @IMPORT ./symbol.hcg as sym
 @IMPORT ./syntax.hcg as syn
 
+@IMPORT ./ir.hcg as ir
+
 @NAME sherpa
 
 @IGNORE g:sp g:nl
@@ -9,6 +11,7 @@
 @EXPORT grammar as grammar
 @EXPORT ast::struct as ast_struct
 @EXPORT ast::expression as ast_expression
+@EXPORT ir::state as ir
 
 
 <> grammar > 
@@ -27,6 +30,7 @@
 
         | ignore_clause
 
+
 <> export_clause > 
 
         t:EXPORT sym::non_terminal (( t:AS | t:as ) sym::identifier)?
@@ -41,7 +45,7 @@
 
 <> ignore_clause >
 
-        t:IGNORE t:{  ( sym::terminal | sym::class )(+) t:}
+        t:IGNORE t:{  ( sym::terminal_non_terminal | sym::terminal | sym::class )(+) t:}
 
             f:ast { { t_Ignore, c_Preamble, symbols: $3 } }
 
@@ -75,9 +79,9 @@
 
 <> rule > 
 
-        \! ?^p ( sym::annotated_symbol | any_group )(+)^s ast_definition?^a syntax_definition?^syn
+        \! ?^p ( sym::annotated_symbol | any_group )(+)^s ast_definition?^a syntax_definition?^syn recover_definition?^rec
 
-            f:ast { { t_Rule, is_priority:bool($p), symbols:$s, ast_definition:$a, syntax_definition:$syn, tok } }
+            f:ast { { t_Rule, is_priority:bool($p), symbols:$s, ast_definition:$a, syntax_definition:$syn, recover_definition:$rec, tok } }
 
 <> ast_definition > 
 
@@ -88,6 +92,12 @@
 <> syntax_definition > 
 
         t::syn syn::declaration
+
+<> recover_definition > 
+
+        t::rec \{ ir::state^state \}
+
+            f:ast { {  t_Recovery, c_Function, state:$state, tok } }
 
 
 +> sym::symbol > group

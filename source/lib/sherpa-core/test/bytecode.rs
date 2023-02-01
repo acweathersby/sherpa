@@ -18,41 +18,6 @@ use crate::{
 use std::collections::HashMap;
 
 #[test]
-pub fn test_produce_a_single_ir_ast_from_a_single_state_of_a_trivial_production2(
-) -> SherpaResult<()> {
-  let mut j = Journal::new(None);
-  let g = GrammarStore::from_str(&mut j, "<> A > \\h").unwrap();
-
-  let prod_id = g.get_production_id_by_name("A").unwrap();
-
-  let mut result = compile_production_states(&mut j, prod_id)?;
-
-  eprintln!("{:#?}", result);
-
-  let ir_state = result.remove(0);
-
-  let state = ir_state.get_code();
-
-  let result = compile_ir_ast(Vec::from(state.as_bytes()));
-
-  eprintln!("{:#?}", result);
-
-  assert!(result.is_ok());
-
-  let result = compile_ir_state_to_bytecode(
-    &result.unwrap().instructions,
-    default_get_branch_selector,
-    &HashMap::new(),
-    &ir_state.get_scanner_state_name()?,
-    "",
-  );
-
-  eprintln!("{:#?}", result);
-
-  SherpaResult::Ok(())
-}
-
-#[test]
 pub fn temp_test1() -> SherpaResult<()> {
   let mut j = Journal::new(None);
   GrammarStore::from_str(
@@ -60,7 +25,7 @@ pub fn temp_test1() -> SherpaResult<()> {
     "
   @NAME test
 
-  @IGNORE g:sp 
+  @IGNORE g:sp
 
   <> Term  >  Num     f:ast { [ $1 ] }
       | \\( Num \\)   f:ast { [ $2 ] }

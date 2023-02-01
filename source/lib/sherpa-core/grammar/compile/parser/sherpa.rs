@@ -72,6 +72,19 @@ impl ASTNode {
     ast::ast_expression_from(reader)
   }
 }
+impl IR_STATE {
+  /// Create a [IR_STATE] node from a `String` input.
+  pub fn from_string(input: String) -> Result<Box<IR_STATE>, SherpaParseError> {
+    let reader = UTF8StringReader::from(&input);
+    ast::ir_from(reader)
+  }
+  
+  /// Create a [IR_STATE] node from a `&str` input.
+  pub fn from_str(input: &str) -> Result<Box<IR_STATE>, SherpaParseError> {
+    let reader = UTF8StringReader::from(input);
+    ast::ir_from(reader)
+  }
+}
 
 pub trait ASTParse<T>  {
   
@@ -80,6 +93,8 @@ pub trait ASTParse<T>  {
   fn ast_struct_from(input:T) -> Result<Box<AST_Struct>, SherpaParseError>;
   
   fn ast_expression_from(input:T) -> Result<ASTNode, SherpaParseError>;
+  
+  fn ir_from(input:T) -> Result<Box<IR_STATE>, SherpaParseError>;
 }
 
 
@@ -151,43 +166,65 @@ pub enum ASTNode {
   TOKEN(Token),
   TOKENS(Vec<Token>),
   AST_NamedReference(Box<AST_NamedReference>),
+  Reduce(Box<Reduce>),
+  DEFAULT(Box<DEFAULT>),
+  TokenAssign(Box<TokenAssign>),
   AST_Add(Box<AST_Add>),
   Syntax(Box<Syntax>),
   SyntaxField(Box<SyntaxField>),
+  HASH_NAME(Box<HASH_NAME>),
   List_Production(Box<List_Production>),
   AST_Vector(Box<AST_Vector>),
   Production_Symbol(Box<Production_Symbol>),
   Grammar(Box<Grammar>),
   AST_U64(Box<AST_U64>),
   Priority(Box<Priority>),
+  Pass(Box<Pass>),
+  ASSERT(Box<ASSERT>),
   Import(Box<Import>),
   Init(Box<Init>),
+  SetScope(Box<SetScope>),
+  FailState(Box<FailState>),
   AST_IndexReference(Box<AST_IndexReference>),
+  ScanUntil(Box<ScanUntil>),
   RGBA(Box<RGBA>),
   AST_Member(Box<AST_Member>),
   Production_Import_Symbol(Box<Production_Import_Symbol>),
+  Crumb(Box<Crumb>),
   AST_I32(Box<AST_I32>),
+  Goto(Box<Goto>),
   AST_I8(Box<AST_I8>),
+  SetProd(Box<SetProd>),
   AST_F32(Box<AST_F32>),
+  Symbols(Box<Symbols>),
   AST_Token(Box<AST_Token>),
+  Shift(Box<Shift>),
   Export(Box<Export>),
   Name(Box<Name>),
   AST_BOOL(Box<AST_BOOL>),
   Group_Production(Box<Group_Production>),
+  Fail(Box<Fail>),
   AST_Statements(Box<AST_Statements>),
+  CrumbComplete(Box<CrumbComplete>),
   AST_U8(Box<AST_U8>),
   Production(Box<Production>),
   Ignore(Box<Ignore>),
   AST_STRING(Box<AST_STRING>),
+  Skip(Box<Skip>),
+  Repeat(Box<Repeat>),
   AST_U32(Box<AST_U32>),
   AST_ClassId(Box<AST_ClassId>),
+  IR_STATE(Box<IR_STATE>),
   AST_I64(Box<AST_I64>),
   AST_U16(Box<AST_U16>),
+  Map(Box<Map>),
   ClassSymbol(Box<ClassSymbol>),
+  NotInScope(Box<NotInScope>),
   AST_F64(Box<AST_F64>),
   AST_Map(Box<AST_Map>),
   AnyGroup(Box<AnyGroup>),
   Range(Box<Range>),
+  ForkTo(Box<ForkTo>),
   AST_I16(Box<AST_I16>),
   AST_NUMBER(Box<AST_NUMBER>),
   AST_Struct(Box<AST_Struct>),
@@ -196,8 +233,12 @@ pub enum ASTNode {
   AnnotatedSymbol(Box<AnnotatedSymbol>),
   AST_Property(Box<AST_Property>),
   Ascript(Box<Ascript>),
+  Lazy(Box<Lazy>),
+  Num(Box<Num>),
+  TokenId(Box<TokenId>),
   Production_Terminal_Symbol(Box<Production_Terminal_Symbol>),
   Terminal(Box<Terminal>),
+  Recovery(Box<Recovery>),
 }
 impl ASTNode {
   pub fn as_AST_NamedReference(&self) -> Option<&AST_NamedReference> {
@@ -209,6 +250,42 @@ impl ASTNode {
   pub fn as_AST_NamedReference_mut(&mut self) -> Option<&mut AST_NamedReference> {
     match self {
       Self::AST_NamedReference(val) => Some(val.as_mut()),
+      _ => None
+    }
+  }
+  pub fn as_Reduce(&self) -> Option<&Reduce> {
+    match self {
+      Self::Reduce(val) => Some(val.as_ref()),
+      _ => None
+    }
+  }
+  pub fn as_Reduce_mut(&mut self) -> Option<&mut Reduce> {
+    match self {
+      Self::Reduce(val) => Some(val.as_mut()),
+      _ => None
+    }
+  }
+  pub fn as_DEFAULT(&self) -> Option<&DEFAULT> {
+    match self {
+      Self::DEFAULT(val) => Some(val.as_ref()),
+      _ => None
+    }
+  }
+  pub fn as_DEFAULT_mut(&mut self) -> Option<&mut DEFAULT> {
+    match self {
+      Self::DEFAULT(val) => Some(val.as_mut()),
+      _ => None
+    }
+  }
+  pub fn as_TokenAssign(&self) -> Option<&TokenAssign> {
+    match self {
+      Self::TokenAssign(val) => Some(val.as_ref()),
+      _ => None
+    }
+  }
+  pub fn as_TokenAssign_mut(&mut self) -> Option<&mut TokenAssign> {
+    match self {
+      Self::TokenAssign(val) => Some(val.as_mut()),
       _ => None
     }
   }
@@ -245,6 +322,18 @@ impl ASTNode {
   pub fn as_SyntaxField_mut(&mut self) -> Option<&mut SyntaxField> {
     match self {
       Self::SyntaxField(val) => Some(val.as_mut()),
+      _ => None
+    }
+  }
+  pub fn as_HASH_NAME(&self) -> Option<&HASH_NAME> {
+    match self {
+      Self::HASH_NAME(val) => Some(val.as_ref()),
+      _ => None
+    }
+  }
+  pub fn as_HASH_NAME_mut(&mut self) -> Option<&mut HASH_NAME> {
+    match self {
+      Self::HASH_NAME(val) => Some(val.as_mut()),
       _ => None
     }
   }
@@ -320,6 +409,30 @@ impl ASTNode {
       _ => None
     }
   }
+  pub fn as_Pass(&self) -> Option<&Pass> {
+    match self {
+      Self::Pass(val) => Some(val.as_ref()),
+      _ => None
+    }
+  }
+  pub fn as_Pass_mut(&mut self) -> Option<&mut Pass> {
+    match self {
+      Self::Pass(val) => Some(val.as_mut()),
+      _ => None
+    }
+  }
+  pub fn as_ASSERT(&self) -> Option<&ASSERT> {
+    match self {
+      Self::ASSERT(val) => Some(val.as_ref()),
+      _ => None
+    }
+  }
+  pub fn as_ASSERT_mut(&mut self) -> Option<&mut ASSERT> {
+    match self {
+      Self::ASSERT(val) => Some(val.as_mut()),
+      _ => None
+    }
+  }
   pub fn as_Import(&self) -> Option<&Import> {
     match self {
       Self::Import(val) => Some(val.as_ref()),
@@ -344,6 +457,30 @@ impl ASTNode {
       _ => None
     }
   }
+  pub fn as_SetScope(&self) -> Option<&SetScope> {
+    match self {
+      Self::SetScope(val) => Some(val.as_ref()),
+      _ => None
+    }
+  }
+  pub fn as_SetScope_mut(&mut self) -> Option<&mut SetScope> {
+    match self {
+      Self::SetScope(val) => Some(val.as_mut()),
+      _ => None
+    }
+  }
+  pub fn as_FailState(&self) -> Option<&FailState> {
+    match self {
+      Self::FailState(val) => Some(val.as_ref()),
+      _ => None
+    }
+  }
+  pub fn as_FailState_mut(&mut self) -> Option<&mut FailState> {
+    match self {
+      Self::FailState(val) => Some(val.as_mut()),
+      _ => None
+    }
+  }
   pub fn as_AST_IndexReference(&self) -> Option<&AST_IndexReference> {
     match self {
       Self::AST_IndexReference(val) => Some(val.as_ref()),
@@ -353,6 +490,18 @@ impl ASTNode {
   pub fn as_AST_IndexReference_mut(&mut self) -> Option<&mut AST_IndexReference> {
     match self {
       Self::AST_IndexReference(val) => Some(val.as_mut()),
+      _ => None
+    }
+  }
+  pub fn as_ScanUntil(&self) -> Option<&ScanUntil> {
+    match self {
+      Self::ScanUntil(val) => Some(val.as_ref()),
+      _ => None
+    }
+  }
+  pub fn as_ScanUntil_mut(&mut self) -> Option<&mut ScanUntil> {
+    match self {
+      Self::ScanUntil(val) => Some(val.as_mut()),
       _ => None
     }
   }
@@ -392,6 +541,18 @@ impl ASTNode {
       _ => None
     }
   }
+  pub fn as_Crumb(&self) -> Option<&Crumb> {
+    match self {
+      Self::Crumb(val) => Some(val.as_ref()),
+      _ => None
+    }
+  }
+  pub fn as_Crumb_mut(&mut self) -> Option<&mut Crumb> {
+    match self {
+      Self::Crumb(val) => Some(val.as_mut()),
+      _ => None
+    }
+  }
   pub fn as_AST_I32(&self) -> Option<&AST_I32> {
     match self {
       Self::AST_I32(val) => Some(val.as_ref()),
@@ -401,6 +562,18 @@ impl ASTNode {
   pub fn as_AST_I32_mut(&mut self) -> Option<&mut AST_I32> {
     match self {
       Self::AST_I32(val) => Some(val.as_mut()),
+      _ => None
+    }
+  }
+  pub fn as_Goto(&self) -> Option<&Goto> {
+    match self {
+      Self::Goto(val) => Some(val.as_ref()),
+      _ => None
+    }
+  }
+  pub fn as_Goto_mut(&mut self) -> Option<&mut Goto> {
+    match self {
+      Self::Goto(val) => Some(val.as_mut()),
       _ => None
     }
   }
@@ -416,6 +589,18 @@ impl ASTNode {
       _ => None
     }
   }
+  pub fn as_SetProd(&self) -> Option<&SetProd> {
+    match self {
+      Self::SetProd(val) => Some(val.as_ref()),
+      _ => None
+    }
+  }
+  pub fn as_SetProd_mut(&mut self) -> Option<&mut SetProd> {
+    match self {
+      Self::SetProd(val) => Some(val.as_mut()),
+      _ => None
+    }
+  }
   pub fn as_AST_F32(&self) -> Option<&AST_F32> {
     match self {
       Self::AST_F32(val) => Some(val.as_ref()),
@@ -428,6 +613,18 @@ impl ASTNode {
       _ => None
     }
   }
+  pub fn as_Symbols(&self) -> Option<&Symbols> {
+    match self {
+      Self::Symbols(val) => Some(val.as_ref()),
+      _ => None
+    }
+  }
+  pub fn as_Symbols_mut(&mut self) -> Option<&mut Symbols> {
+    match self {
+      Self::Symbols(val) => Some(val.as_mut()),
+      _ => None
+    }
+  }
   pub fn as_AST_Token(&self) -> Option<&AST_Token> {
     match self {
       Self::AST_Token(val) => Some(val.as_ref()),
@@ -437,6 +634,18 @@ impl ASTNode {
   pub fn as_AST_Token_mut(&mut self) -> Option<&mut AST_Token> {
     match self {
       Self::AST_Token(val) => Some(val.as_mut()),
+      _ => None
+    }
+  }
+  pub fn as_Shift(&self) -> Option<&Shift> {
+    match self {
+      Self::Shift(val) => Some(val.as_ref()),
+      _ => None
+    }
+  }
+  pub fn as_Shift_mut(&mut self) -> Option<&mut Shift> {
+    match self {
+      Self::Shift(val) => Some(val.as_mut()),
       _ => None
     }
   }
@@ -488,6 +697,18 @@ impl ASTNode {
       _ => None
     }
   }
+  pub fn as_Fail(&self) -> Option<&Fail> {
+    match self {
+      Self::Fail(val) => Some(val.as_ref()),
+      _ => None
+    }
+  }
+  pub fn as_Fail_mut(&mut self) -> Option<&mut Fail> {
+    match self {
+      Self::Fail(val) => Some(val.as_mut()),
+      _ => None
+    }
+  }
   pub fn as_AST_Statements(&self) -> Option<&AST_Statements> {
     match self {
       Self::AST_Statements(val) => Some(val.as_ref()),
@@ -497,6 +718,18 @@ impl ASTNode {
   pub fn as_AST_Statements_mut(&mut self) -> Option<&mut AST_Statements> {
     match self {
       Self::AST_Statements(val) => Some(val.as_mut()),
+      _ => None
+    }
+  }
+  pub fn as_CrumbComplete(&self) -> Option<&CrumbComplete> {
+    match self {
+      Self::CrumbComplete(val) => Some(val.as_ref()),
+      _ => None
+    }
+  }
+  pub fn as_CrumbComplete_mut(&mut self) -> Option<&mut CrumbComplete> {
+    match self {
+      Self::CrumbComplete(val) => Some(val.as_mut()),
       _ => None
     }
   }
@@ -548,6 +781,30 @@ impl ASTNode {
       _ => None
     }
   }
+  pub fn as_Skip(&self) -> Option<&Skip> {
+    match self {
+      Self::Skip(val) => Some(val.as_ref()),
+      _ => None
+    }
+  }
+  pub fn as_Skip_mut(&mut self) -> Option<&mut Skip> {
+    match self {
+      Self::Skip(val) => Some(val.as_mut()),
+      _ => None
+    }
+  }
+  pub fn as_Repeat(&self) -> Option<&Repeat> {
+    match self {
+      Self::Repeat(val) => Some(val.as_ref()),
+      _ => None
+    }
+  }
+  pub fn as_Repeat_mut(&mut self) -> Option<&mut Repeat> {
+    match self {
+      Self::Repeat(val) => Some(val.as_mut()),
+      _ => None
+    }
+  }
   pub fn as_AST_U32(&self) -> Option<&AST_U32> {
     match self {
       Self::AST_U32(val) => Some(val.as_ref()),
@@ -569,6 +826,18 @@ impl ASTNode {
   pub fn as_AST_ClassId_mut(&mut self) -> Option<&mut AST_ClassId> {
     match self {
       Self::AST_ClassId(val) => Some(val.as_mut()),
+      _ => None
+    }
+  }
+  pub fn as_IR_STATE(&self) -> Option<&IR_STATE> {
+    match self {
+      Self::IR_STATE(val) => Some(val.as_ref()),
+      _ => None
+    }
+  }
+  pub fn as_IR_STATE_mut(&mut self) -> Option<&mut IR_STATE> {
+    match self {
+      Self::IR_STATE(val) => Some(val.as_mut()),
       _ => None
     }
   }
@@ -596,6 +865,18 @@ impl ASTNode {
       _ => None
     }
   }
+  pub fn as_Map(&self) -> Option<&Map> {
+    match self {
+      Self::Map(val) => Some(val.as_ref()),
+      _ => None
+    }
+  }
+  pub fn as_Map_mut(&mut self) -> Option<&mut Map> {
+    match self {
+      Self::Map(val) => Some(val.as_mut()),
+      _ => None
+    }
+  }
   pub fn as_ClassSymbol(&self) -> Option<&ClassSymbol> {
     match self {
       Self::ClassSymbol(val) => Some(val.as_ref()),
@@ -605,6 +886,18 @@ impl ASTNode {
   pub fn as_ClassSymbol_mut(&mut self) -> Option<&mut ClassSymbol> {
     match self {
       Self::ClassSymbol(val) => Some(val.as_mut()),
+      _ => None
+    }
+  }
+  pub fn as_NotInScope(&self) -> Option<&NotInScope> {
+    match self {
+      Self::NotInScope(val) => Some(val.as_ref()),
+      _ => None
+    }
+  }
+  pub fn as_NotInScope_mut(&mut self) -> Option<&mut NotInScope> {
+    match self {
+      Self::NotInScope(val) => Some(val.as_mut()),
       _ => None
     }
   }
@@ -653,6 +946,18 @@ impl ASTNode {
   pub fn as_Range_mut(&mut self) -> Option<&mut Range> {
     match self {
       Self::Range(val) => Some(val.as_mut()),
+      _ => None
+    }
+  }
+  pub fn as_ForkTo(&self) -> Option<&ForkTo> {
+    match self {
+      Self::ForkTo(val) => Some(val.as_ref()),
+      _ => None
+    }
+  }
+  pub fn as_ForkTo_mut(&mut self) -> Option<&mut ForkTo> {
+    match self {
+      Self::ForkTo(val) => Some(val.as_mut()),
       _ => None
     }
   }
@@ -752,6 +1057,42 @@ impl ASTNode {
       _ => None
     }
   }
+  pub fn as_Lazy(&self) -> Option<&Lazy> {
+    match self {
+      Self::Lazy(val) => Some(val.as_ref()),
+      _ => None
+    }
+  }
+  pub fn as_Lazy_mut(&mut self) -> Option<&mut Lazy> {
+    match self {
+      Self::Lazy(val) => Some(val.as_mut()),
+      _ => None
+    }
+  }
+  pub fn as_Num(&self) -> Option<&Num> {
+    match self {
+      Self::Num(val) => Some(val.as_ref()),
+      _ => None
+    }
+  }
+  pub fn as_Num_mut(&mut self) -> Option<&mut Num> {
+    match self {
+      Self::Num(val) => Some(val.as_mut()),
+      _ => None
+    }
+  }
+  pub fn as_TokenId(&self) -> Option<&TokenId> {
+    match self {
+      Self::TokenId(val) => Some(val.as_ref()),
+      _ => None
+    }
+  }
+  pub fn as_TokenId_mut(&mut self) -> Option<&mut TokenId> {
+    match self {
+      Self::TokenId(val) => Some(val.as_mut()),
+      _ => None
+    }
+  }
   pub fn as_Production_Terminal_Symbol(&self) -> Option<&Production_Terminal_Symbol> {
     match self {
       Self::Production_Terminal_Symbol(val) => Some(val.as_ref()),
@@ -773,6 +1114,18 @@ impl ASTNode {
   pub fn as_Terminal_mut(&mut self) -> Option<&mut Terminal> {
     match self {
       Self::Terminal(val) => Some(val.as_mut()),
+      _ => None
+    }
+  }
+  pub fn as_Recovery(&self) -> Option<&Recovery> {
+    match self {
+      Self::Recovery(val) => Some(val.as_ref()),
+      _ => None
+    }
+  }
+  pub fn as_Recovery_mut(&mut self) -> Option<&mut Recovery> {
+    match self {
+      Self::Recovery(val) => Some(val.as_mut()),
       _ => None
     }
   }
@@ -858,6 +1211,7 @@ impl ASTNode {
   ,ASTNode::Ascript (node) => node.tok.clone()
   ,ASTNode::Production_Terminal_Symbol (node) => node.tok.clone()
   ,ASTNode::Terminal (node) => node.tok.clone()
+  ,ASTNode::Recovery (node) => node.tok.clone()
   ,ASTNode::TOKEN(val) => val.clone(),
       _ => Token::empty(),
     }
@@ -913,43 +1267,65 @@ pub enum ASTNodeType {
   BOOL,
   NONE,
   AST_NamedReference,
+  Reduce,
+  DEFAULT,
+  TokenAssign,
   AST_Add,
   Syntax,
   SyntaxField,
+  HASH_NAME,
   List_Production,
   AST_Vector,
   Production_Symbol,
   Grammar,
   AST_U64,
   Priority,
+  Pass,
+  ASSERT,
   Import,
   Init,
+  SetScope,
+  FailState,
   AST_IndexReference,
+  ScanUntil,
   RGBA,
   AST_Member,
   Production_Import_Symbol,
+  Crumb,
   AST_I32,
+  Goto,
   AST_I8,
+  SetProd,
   AST_F32,
+  Symbols,
   AST_Token,
+  Shift,
   Export,
   Name,
   AST_BOOL,
   Group_Production,
+  Fail,
   AST_Statements,
+  CrumbComplete,
   AST_U8,
   Production,
   Ignore,
   AST_STRING,
+  Skip,
+  Repeat,
   AST_U32,
   AST_ClassId,
+  IR_STATE,
   AST_I64,
   AST_U16,
+  Map,
   ClassSymbol,
+  NotInScope,
   AST_F64,
   AST_Map,
   AnyGroup,
   Range,
+  ForkTo,
   AST_I16,
   AST_NUMBER,
   AST_Struct,
@@ -958,51 +1334,77 @@ pub enum ASTNodeType {
   AnnotatedSymbol,
   AST_Property,
   Ascript,
+  Lazy,
+  Num,
+  TokenId,
   Production_Terminal_Symbol,
   Terminal,
+  Recovery,
 }
 pub trait GetASTNodeType { fn get_type(&self) -> ASTNodeType; }
 impl GetASTNodeType for ASTNode {
   fn get_type(&self) -> ASTNodeType {
     match self{
       ASTNode::AST_NamedReference(..) => ASTNodeType::AST_NamedReference,
+      ASTNode::Reduce(..) => ASTNodeType::Reduce,
+      ASTNode::DEFAULT(..) => ASTNodeType::DEFAULT,
+      ASTNode::TokenAssign(..) => ASTNodeType::TokenAssign,
       ASTNode::AST_Add(..) => ASTNodeType::AST_Add,
       ASTNode::Syntax(..) => ASTNodeType::Syntax,
       ASTNode::SyntaxField(..) => ASTNodeType::SyntaxField,
+      ASTNode::HASH_NAME(..) => ASTNodeType::HASH_NAME,
       ASTNode::List_Production(..) => ASTNodeType::List_Production,
       ASTNode::AST_Vector(..) => ASTNodeType::AST_Vector,
       ASTNode::Production_Symbol(..) => ASTNodeType::Production_Symbol,
       ASTNode::Grammar(..) => ASTNodeType::Grammar,
       ASTNode::AST_U64(..) => ASTNodeType::AST_U64,
       ASTNode::Priority(..) => ASTNodeType::Priority,
+      ASTNode::Pass(..) => ASTNodeType::Pass,
+      ASTNode::ASSERT(..) => ASTNodeType::ASSERT,
       ASTNode::Import(..) => ASTNodeType::Import,
       ASTNode::Init(..) => ASTNodeType::Init,
+      ASTNode::SetScope(..) => ASTNodeType::SetScope,
+      ASTNode::FailState(..) => ASTNodeType::FailState,
       ASTNode::AST_IndexReference(..) => ASTNodeType::AST_IndexReference,
+      ASTNode::ScanUntil(..) => ASTNodeType::ScanUntil,
       ASTNode::RGBA(..) => ASTNodeType::RGBA,
       ASTNode::AST_Member(..) => ASTNodeType::AST_Member,
       ASTNode::Production_Import_Symbol(..) => ASTNodeType::Production_Import_Symbol,
+      ASTNode::Crumb(..) => ASTNodeType::Crumb,
       ASTNode::AST_I32(..) => ASTNodeType::AST_I32,
+      ASTNode::Goto(..) => ASTNodeType::Goto,
       ASTNode::AST_I8(..) => ASTNodeType::AST_I8,
+      ASTNode::SetProd(..) => ASTNodeType::SetProd,
       ASTNode::AST_F32(..) => ASTNodeType::AST_F32,
+      ASTNode::Symbols(..) => ASTNodeType::Symbols,
       ASTNode::AST_Token(..) => ASTNodeType::AST_Token,
+      ASTNode::Shift(..) => ASTNodeType::Shift,
       ASTNode::Export(..) => ASTNodeType::Export,
       ASTNode::Name(..) => ASTNodeType::Name,
       ASTNode::AST_BOOL(..) => ASTNodeType::AST_BOOL,
       ASTNode::Group_Production(..) => ASTNodeType::Group_Production,
+      ASTNode::Fail(..) => ASTNodeType::Fail,
       ASTNode::AST_Statements(..) => ASTNodeType::AST_Statements,
+      ASTNode::CrumbComplete(..) => ASTNodeType::CrumbComplete,
       ASTNode::AST_U8(..) => ASTNodeType::AST_U8,
       ASTNode::Production(..) => ASTNodeType::Production,
       ASTNode::Ignore(..) => ASTNodeType::Ignore,
       ASTNode::AST_STRING(..) => ASTNodeType::AST_STRING,
+      ASTNode::Skip(..) => ASTNodeType::Skip,
+      ASTNode::Repeat(..) => ASTNodeType::Repeat,
       ASTNode::AST_U32(..) => ASTNodeType::AST_U32,
       ASTNode::AST_ClassId(..) => ASTNodeType::AST_ClassId,
+      ASTNode::IR_STATE(..) => ASTNodeType::IR_STATE,
       ASTNode::AST_I64(..) => ASTNodeType::AST_I64,
       ASTNode::AST_U16(..) => ASTNodeType::AST_U16,
+      ASTNode::Map(..) => ASTNodeType::Map,
       ASTNode::ClassSymbol(..) => ASTNodeType::ClassSymbol,
+      ASTNode::NotInScope(..) => ASTNodeType::NotInScope,
       ASTNode::AST_F64(..) => ASTNodeType::AST_F64,
       ASTNode::AST_Map(..) => ASTNodeType::AST_Map,
       ASTNode::AnyGroup(..) => ASTNodeType::AnyGroup,
       ASTNode::Range(..) => ASTNodeType::Range,
+      ASTNode::ForkTo(..) => ASTNodeType::ForkTo,
       ASTNode::AST_I16(..) => ASTNodeType::AST_I16,
       ASTNode::AST_NUMBER(..) => ASTNodeType::AST_NUMBER,
       ASTNode::AST_Struct(..) => ASTNodeType::AST_Struct,
@@ -1011,8 +1413,12 @@ impl GetASTNodeType for ASTNode {
       ASTNode::AnnotatedSymbol(..) => ASTNodeType::AnnotatedSymbol,
       ASTNode::AST_Property(..) => ASTNodeType::AST_Property,
       ASTNode::Ascript(..) => ASTNodeType::Ascript,
+      ASTNode::Lazy(..) => ASTNodeType::Lazy,
+      ASTNode::Num(..) => ASTNodeType::Num,
+      ASTNode::TokenId(..) => ASTNodeType::TokenId,
       ASTNode::Production_Terminal_Symbol(..) => ASTNodeType::Production_Terminal_Symbol,
       ASTNode::Terminal(..) => ASTNodeType::Terminal,
+      ASTNode::Recovery(..) => ASTNodeType::Recovery,
       _ => ASTNodeType::NONE,
     }
   }
@@ -1034,6 +1440,54 @@ impl AST_NamedReference {
     }
   }
   pub fn get_type(&self) -> ASTNodeType { ASTNodeType::AST_NamedReference }
+}
+#[derive(Debug, Clone)]
+pub struct Reduce {
+  pub len: i32,
+  pub rule_id: i32,
+}
+impl Reduce {
+  #[inline]
+  pub fn new (
+    len:i32,
+    rule_id:i32,
+  ) -> Self {
+    Self{
+      len,
+      rule_id,
+    }
+  }
+  pub fn get_type(&self) -> ASTNodeType { ASTNodeType::Reduce }
+}
+#[derive(Debug, Clone)]
+pub struct DEFAULT {
+  pub instructions: Vec<ASTNode>,
+}
+impl DEFAULT {
+  #[inline]
+  pub fn new (
+    instructions:Vec<ASTNode>,
+  ) -> Self {
+    Self{
+      instructions,
+    }
+  }
+  pub fn get_type(&self) -> ASTNodeType { ASTNodeType::DEFAULT }
+}
+#[derive(Debug, Clone)]
+pub struct TokenAssign {
+  pub ids: Vec<Box<Num>>,
+}
+impl TokenAssign {
+  #[inline]
+  pub fn new (
+    ids:Vec<Box<Num>>,
+  ) -> Self {
+    Self{
+      ids,
+    }
+  }
+  pub fn get_type(&self) -> ASTNodeType { ASTNodeType::TokenAssign }
 }
 #[derive(Debug, Clone)]
 pub struct AST_Add {
@@ -1074,13 +1528,13 @@ impl Syntax {
 #[derive(Debug, Clone)]
 pub struct SyntaxField {
   pub reference: ASTNode,
-  pub spec: Token,
+  pub spec: Box<SyntaxSpec>,
 }
 impl SyntaxField {
   #[inline]
   pub fn new (
     reference:ASTNode,
-    spec:Token,
+    spec:Box<SyntaxSpec>,
   ) -> Self {
     Self{
       reference,
@@ -1088,6 +1542,21 @@ impl SyntaxField {
     }
   }
   pub fn get_type(&self) -> ASTNodeType { ASTNodeType::SyntaxField }
+}
+#[derive(Debug, Clone)]
+pub struct HASH_NAME {
+  pub val: String,
+}
+impl HASH_NAME {
+  #[inline]
+  pub fn new (
+    val:String,
+  ) -> Self {
+    Self{
+      val,
+    }
+  }
+  pub fn get_type(&self) -> ASTNodeType { ASTNodeType::HASH_NAME }
 }
 #[derive(Debug, Clone)]
 pub struct List_Production {
@@ -1207,6 +1676,45 @@ impl Priority {
   pub fn get_type(&self) -> ASTNodeType { ASTNodeType::Priority }
 }
 #[derive(Debug, Clone)]
+pub struct Pass {
+}
+impl Pass {
+  #[inline]
+  pub fn new (
+  ) -> Self {
+    Self{
+    }
+  }
+  pub fn get_type(&self) -> ASTNodeType { ASTNodeType::Pass }
+}
+#[derive(Debug, Clone)]
+pub struct ASSERT {
+  pub ids: Box<Num>,
+  pub instructions: Vec<ASTNode>,
+  pub is_peek: bool,
+  pub is_skip: bool,
+  pub mode: String,
+}
+impl ASSERT {
+  #[inline]
+  pub fn new (
+    ids:Box<Num>,
+    instructions:Vec<ASTNode>,
+    is_peek:bool,
+    is_skip:bool,
+    mode:String,
+  ) -> Self {
+    Self{
+      ids,
+      instructions,
+      is_peek,
+      is_skip,
+      mode,
+    }
+  }
+  pub fn get_type(&self) -> ASTNodeType { ASTNodeType::ASSERT }
+}
+#[derive(Debug, Clone)]
 pub struct Import {
   pub reference: String,
   pub uri: String,
@@ -1243,6 +1751,45 @@ impl Init {
   pub fn get_type(&self) -> ASTNodeType { ASTNodeType::Init }
 }
 #[derive(Debug, Clone)]
+pub struct SetScope {
+  pub scope: i64,
+}
+impl SetScope {
+  #[inline]
+  pub fn new (
+    scope:i64,
+  ) -> Self {
+    Self{
+      scope,
+    }
+  }
+  pub fn get_type(&self) -> ASTNodeType { ASTNodeType::SetScope }
+}
+#[derive(Debug, Clone)]
+pub struct FailState {
+  pub fail: Option<Box<FailState>>,
+  pub id: String,
+  pub instructions: Vec<ASTNode>,
+  pub symbol_meta: Option<Box<Symbols>>,
+}
+impl FailState {
+  #[inline]
+  pub fn new (
+    fail:Option<Box<FailState>>,
+    id:String,
+    instructions:Vec<ASTNode>,
+    symbol_meta:Option<Box<Symbols>>,
+  ) -> Self {
+    Self{
+      fail,
+      id,
+      instructions,
+      symbol_meta,
+    }
+  }
+  pub fn get_type(&self) -> ASTNodeType { ASTNodeType::FailState }
+}
+#[derive(Debug, Clone)]
 pub struct AST_IndexReference {
   pub value: i64,
   pub tok: Token,
@@ -1259,6 +1806,24 @@ impl AST_IndexReference {
     }
   }
   pub fn get_type(&self) -> ASTNodeType { ASTNodeType::AST_IndexReference }
+}
+#[derive(Debug, Clone)]
+pub struct ScanUntil {
+  pub SCAN_BACKWARDS: bool,
+  pub ids: Vec<Box<Num>>,
+}
+impl ScanUntil {
+  #[inline]
+  pub fn new (
+    SCAN_BACKWARDS:bool,
+    ids:Vec<Box<Num>>,
+  ) -> Self {
+    Self{
+      SCAN_BACKWARDS,
+      ids,
+    }
+  }
+  pub fn get_type(&self) -> ASTNodeType { ASTNodeType::ScanUntil }
 }
 #[derive(Debug, Clone)]
 pub struct RGBA {
@@ -1324,6 +1889,24 @@ impl Production_Import_Symbol {
   pub fn get_type(&self) -> ASTNodeType { ASTNodeType::Production_Import_Symbol }
 }
 #[derive(Debug, Clone)]
+pub struct Crumb {
+  pub action: ASTNode,
+  pub lane: i32,
+}
+impl Crumb {
+  #[inline]
+  pub fn new (
+    action:ASTNode,
+    lane:i32,
+  ) -> Self {
+    Self{
+      action,
+      lane,
+    }
+  }
+  pub fn get_type(&self) -> ASTNodeType { ASTNodeType::Crumb }
+}
+#[derive(Debug, Clone)]
 pub struct AST_I32 {
   pub initializer: Option<Box<Init>>,
   pub tok: Token,
@@ -1340,6 +1923,21 @@ impl AST_I32 {
     }
   }
   pub fn get_type(&self) -> ASTNodeType { ASTNodeType::AST_I32 }
+}
+#[derive(Debug, Clone)]
+pub struct Goto {
+  pub state: Box<HASH_NAME>,
+}
+impl Goto {
+  #[inline]
+  pub fn new (
+    state:Box<HASH_NAME>,
+  ) -> Self {
+    Self{
+      state,
+    }
+  }
+  pub fn get_type(&self) -> ASTNodeType { ASTNodeType::Goto }
 }
 #[derive(Debug, Clone)]
 pub struct AST_I8 {
@@ -1360,6 +1958,21 @@ impl AST_I8 {
   pub fn get_type(&self) -> ASTNodeType { ASTNodeType::AST_I8 }
 }
 #[derive(Debug, Clone)]
+pub struct SetProd {
+  pub id: Box<Num>,
+}
+impl SetProd {
+  #[inline]
+  pub fn new (
+    id:Box<Num>,
+  ) -> Self {
+    Self{
+      id,
+    }
+  }
+  pub fn get_type(&self) -> ASTNodeType { ASTNodeType::SetProd }
+}
+#[derive(Debug, Clone)]
 pub struct AST_F32 {
   pub initializer: Option<Box<Init>>,
   pub tok: Token,
@@ -1378,6 +1991,24 @@ impl AST_F32 {
   pub fn get_type(&self) -> ASTNodeType { ASTNodeType::AST_F32 }
 }
 #[derive(Debug, Clone)]
+pub struct Symbols {
+  pub expected: Vec<Box<Num>>,
+  pub skipped: Vec<Box<Num>>,
+}
+impl Symbols {
+  #[inline]
+  pub fn new (
+    expected:Vec<Box<Num>>,
+    skipped:Vec<Box<Num>>,
+  ) -> Self {
+    Self{
+      expected,
+      skipped,
+    }
+  }
+  pub fn get_type(&self) -> ASTNodeType { ASTNodeType::Symbols }
+}
+#[derive(Debug, Clone)]
 pub struct AST_Token {
   pub range: Option<Box<Range>>,
 }
@@ -1391,6 +2022,21 @@ impl AST_Token {
     }
   }
   pub fn get_type(&self) -> ASTNodeType { ASTNodeType::AST_Token }
+}
+#[derive(Debug, Clone)]
+pub struct Shift {
+  pub EMPTY: bool,
+}
+impl Shift {
+  #[inline]
+  pub fn new (
+    EMPTY:bool,
+  ) -> Self {
+    Self{
+      EMPTY,
+    }
+  }
+  pub fn get_type(&self) -> ASTNodeType { ASTNodeType::Shift }
 }
 #[derive(Debug, Clone)]
 pub struct Export {
@@ -1465,6 +2111,18 @@ impl Group_Production {
   pub fn get_type(&self) -> ASTNodeType { ASTNodeType::Group_Production }
 }
 #[derive(Debug, Clone)]
+pub struct Fail {
+}
+impl Fail {
+  #[inline]
+  pub fn new (
+  ) -> Self {
+    Self{
+    }
+  }
+  pub fn get_type(&self) -> ASTNodeType { ASTNodeType::Fail }
+}
+#[derive(Debug, Clone)]
 pub struct AST_Statements {
   pub statements: Vec<ASTNode>,
   pub tok: Token,
@@ -1481,6 +2139,21 @@ impl AST_Statements {
     }
   }
   pub fn get_type(&self) -> ASTNodeType { ASTNodeType::AST_Statements }
+}
+#[derive(Debug, Clone)]
+pub struct CrumbComplete {
+  pub lane: i32,
+}
+impl CrumbComplete {
+  #[inline]
+  pub fn new (
+    lane:i32,
+  ) -> Self {
+    Self{
+      lane,
+    }
+  }
+  pub fn get_type(&self) -> ASTNodeType { ASTNodeType::CrumbComplete }
 }
 #[derive(Debug, Clone)]
 pub struct AST_U8 {
@@ -1570,6 +2243,30 @@ impl AST_STRING {
   pub fn get_type(&self) -> ASTNodeType { ASTNodeType::AST_STRING }
 }
 #[derive(Debug, Clone)]
+pub struct Skip {
+}
+impl Skip {
+  #[inline]
+  pub fn new (
+  ) -> Self {
+    Self{
+    }
+  }
+  pub fn get_type(&self) -> ASTNodeType { ASTNodeType::Skip }
+}
+#[derive(Debug, Clone)]
+pub struct Repeat {
+}
+impl Repeat {
+  #[inline]
+  pub fn new (
+  ) -> Self {
+    Self{
+    }
+  }
+  pub fn get_type(&self) -> ASTNodeType { ASTNodeType::Repeat }
+}
+#[derive(Debug, Clone)]
 pub struct AST_U32 {
   pub initializer: Option<Box<Init>>,
   pub tok: Token,
@@ -1604,6 +2301,33 @@ impl AST_ClassId {
     }
   }
   pub fn get_type(&self) -> ASTNodeType { ASTNodeType::AST_ClassId }
+}
+#[derive(Debug, Clone)]
+pub struct IR_STATE {
+  pub fail: Option<Box<FailState>>,
+  pub id: String,
+  pub instructions: Vec<ASTNode>,
+  pub scanner: String,
+  pub symbol_meta: Option<Box<Symbols>>,
+}
+impl IR_STATE {
+  #[inline]
+  pub fn new (
+    fail:Option<Box<FailState>>,
+    id:String,
+    instructions:Vec<ASTNode>,
+    scanner:String,
+    symbol_meta:Option<Box<Symbols>>,
+  ) -> Self {
+    Self{
+      fail,
+      id,
+      instructions,
+      scanner,
+      symbol_meta,
+    }
+  }
+  pub fn get_type(&self) -> ASTNodeType { ASTNodeType::IR_STATE }
 }
 #[derive(Debug, Clone)]
 pub struct AST_I64 {
@@ -1642,6 +2366,21 @@ impl AST_U16 {
   pub fn get_type(&self) -> ASTNodeType { ASTNodeType::AST_U16 }
 }
 #[derive(Debug, Clone)]
+pub struct Map {
+  pub lane: i32,
+}
+impl Map {
+  #[inline]
+  pub fn new (
+    lane:i32,
+  ) -> Self {
+    Self{
+      lane,
+    }
+  }
+  pub fn get_type(&self) -> ASTNodeType { ASTNodeType::Map }
+}
+#[derive(Debug, Clone)]
 pub struct ClassSymbol {
   pub val: String,
   pub tok: Token,
@@ -1658,6 +2397,21 @@ impl ClassSymbol {
     }
   }
   pub fn get_type(&self) -> ASTNodeType { ASTNodeType::ClassSymbol }
+}
+#[derive(Debug, Clone)]
+pub struct NotInScope {
+  pub ids: Vec<Box<Num>>,
+}
+impl NotInScope {
+  #[inline]
+  pub fn new (
+    ids:Vec<Box<Num>>,
+  ) -> Self {
+    Self{
+      ids,
+    }
+  }
+  pub fn get_type(&self) -> ASTNodeType { ASTNodeType::NotInScope }
 }
 #[derive(Debug, Clone)]
 pub struct AST_F64 {
@@ -1738,6 +2492,24 @@ impl Range {
   pub fn get_type(&self) -> ASTNodeType { ASTNodeType::Range }
 }
 #[derive(Debug, Clone)]
+pub struct ForkTo {
+  pub production_id: Box<Num>,
+  pub states: Vec<Box<HASH_NAME>>,
+}
+impl ForkTo {
+  #[inline]
+  pub fn new (
+    production_id:Box<Num>,
+    states:Vec<Box<HASH_NAME>>,
+  ) -> Self {
+    Self{
+      production_id,
+      states,
+    }
+  }
+  pub fn get_type(&self) -> ASTNodeType { ASTNodeType::ForkTo }
+}
+#[derive(Debug, Clone)]
 pub struct AST_I16 {
   pub initializer: Option<Box<Init>>,
   pub tok: Token,
@@ -1813,6 +2585,7 @@ impl SyntaxSpec {
 pub struct Rule {
   pub ast_definition: Option<Box<Ascript>>,
   pub is_priority: bool,
+  pub recover_definition: Option<Box<Recovery>>,
   pub symbols: Vec<ASTNode>,
   pub syntax_definition: Option<Box<Syntax>>,
   pub tok: Token,
@@ -1822,6 +2595,7 @@ impl Rule {
   pub fn new (
     ast_definition:Option<Box<Ascript>>,
     is_priority:bool,
+    recover_definition:Option<Box<Recovery>>,
     symbols:Vec<ASTNode>,
     syntax_definition:Option<Box<Syntax>>,
     tok:Token,
@@ -1829,6 +2603,7 @@ impl Rule {
     Self{
       ast_definition,
       is_priority,
+      recover_definition,
       symbols,
       syntax_definition,
       tok,
@@ -1906,6 +2681,57 @@ impl Ascript {
   pub fn get_type(&self) -> ASTNodeType { ASTNodeType::Ascript }
 }
 #[derive(Debug, Clone)]
+pub struct Lazy {
+  pub cp_end: Vec<Token>,
+  pub cp_start: Vec<Token>,
+  pub state: Box<HASH_NAME>,
+}
+impl Lazy {
+  #[inline]
+  pub fn new (
+    cp_end:Vec<Token>,
+    cp_start:Vec<Token>,
+    state:Box<HASH_NAME>,
+  ) -> Self {
+    Self{
+      cp_end,
+      cp_start,
+      state,
+    }
+  }
+  pub fn get_type(&self) -> ASTNodeType { ASTNodeType::Lazy }
+}
+#[derive(Debug, Clone)]
+pub struct Num {
+  pub val: i64,
+}
+impl Num {
+  #[inline]
+  pub fn new (
+    val:i64,
+  ) -> Self {
+    Self{
+      val,
+    }
+  }
+  pub fn get_type(&self) -> ASTNodeType { ASTNodeType::Num }
+}
+#[derive(Debug, Clone)]
+pub struct TokenId {
+  pub id: Box<Num>,
+}
+impl TokenId {
+  #[inline]
+  pub fn new (
+    id:Box<Num>,
+  ) -> Self {
+    Self{
+      id,
+    }
+  }
+  pub fn get_type(&self) -> ASTNodeType { ASTNodeType::TokenId }
+}
+#[derive(Debug, Clone)]
 pub struct Production_Terminal_Symbol {
   pub production: ASTNode,
   pub tok: Token,
@@ -1943,6 +2769,24 @@ impl Terminal {
     }
   }
   pub fn get_type(&self) -> ASTNodeType { ASTNodeType::Terminal }
+}
+#[derive(Debug, Clone)]
+pub struct Recovery {
+  pub state: Box<IR_STATE>,
+  pub tok: Token,
+}
+impl Recovery {
+  #[inline]
+  pub fn new (
+    state:Box<IR_STATE>,
+    tok:Token,
+  ) -> Self {
+    Self{
+      state,
+      tok,
+    }
+  }
+  pub fn get_type(&self) -> ASTNodeType { ASTNodeType::Recovery }
 }
 
 fn default_fn<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
@@ -2029,9 +2873,24 @@ fn ast_fn005<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
-vector_list_1 => vector_list_1 ',' expression
+scanner_declaration => "scanner" '[' tk:state_hash_token ']'
 */
 fn ast_fn006<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  slots.take(1);
+  let AstSlot (i2, rng2, _) = slots.take(2);
+  let AstSlot (_, rng3, _) = slots.take(3);
+  let rng = rng0 + rng3;
+  
+  let ref_2_0 = rng2.to_token(_ctx_.get_reader());
+  let ref_2_0 = ref_2_0.to_string();
+  slots.assign(0, AstSlot (ASTNode::STRING(ref_2_0), rng, TokenRange::default()))
+}
+
+/*
+vector_list_1 => vector_list_1 ',' expression
+*/
+fn ast_fn007<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, rng2, _) = slots.take(2);
@@ -2046,7 +2905,7 @@ fn ast_fn006<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 vector_list_1 => expression
 */
-fn ast_fn007<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn008<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -2059,7 +2918,7 @@ fn ast_fn007<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 vector => '[' vector_list_1 ']'
 */
-fn ast_fn009<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn010<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, ..) = slots.take(1);
   let AstSlot (_, rng2, _) = slots.take(2);
@@ -2076,7 +2935,7 @@ fn ast_fn009<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 vector => '[' ']'
 */
-fn ast_fn010<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn011<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (_, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -2091,25 +2950,62 @@ fn ast_fn010<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 field => reference ':' syntax_spec
 */
-fn ast_fn011<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn012<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
-  let AstSlot (i1, rng1, _) = slots.take(1);
-  let AstSlot (_, rng2, _) = slots.take(2);
+  slots.take(1);
+  let AstSlot (i2, rng2, _) = slots.take(2);
   let rng = rng0 + rng2;
   
   let ref_0_0 = i0;
-  let ref_1_1 = rng1.to_token(_ctx_.get_reader());
+  let ref_2_1 = i2;
+  let ref_2_1 = if let ASTNode::SyntaxSpec(obj) = ref_2_1
+        { obj }
+        else {panic!("invalid node")};
   let ref_4_0 = SyntaxField::new(
-    ref_0_0, ref_1_1, 
+    ref_0_0, ref_2_1, 
   
   );
   slots.assign(0, AstSlot (ASTNode::SyntaxField(Box::new(ref_4_0)), rng, TokenRange::default()))
 }
 
 /*
+recover_definition => ":rec" '{' state '}'
+*/
+fn ast_fn013<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  slots.take(1);
+  let AstSlot (i2, ..) = slots.take(2);
+  let AstSlot (_, rng3, _) = slots.take(3);
+  let rng = rng0 + rng3;
+  
+  let ref_2_0 = i2;
+  let ref_2_0 = if let ASTNode::IR_STATE(obj) = ref_2_0
+        { obj }
+        else {panic!("invalid node")};
+  let ref_5_0 = Recovery::new(
+    ref_2_0, rng.to_token(_ctx_.get_reader()), 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::Recovery(Box::new(ref_5_0)), rng, TokenRange::default()))
+}
+
+/*
+token_id_list => '[' token_id_list_list_1 ']'
+*/
+fn ast_fn014<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  let AstSlot (i1, ..) = slots.take(1);
+  let AstSlot (_, rng2, _) = slots.take(2);
+  let rng = rng0 + rng2;
+  
+  let ref_1_0 = i1.into_nodes();
+  slots.assign(0, AstSlot (ASTNode::NODES(ref_1_0), rng, TokenRange::default()))
+}
+
+/*
 body => '{' body_list_1 '}'
 */
-fn ast_fn018<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn021<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, ..) = slots.take(1);
   let AstSlot (_, rng2, _) = slots.take(2);
@@ -2126,7 +3022,7 @@ fn ast_fn018<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 body => '{' '}'
 */
-fn ast_fn019<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn022<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (_, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -2141,7 +3037,7 @@ fn ast_fn019<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 reference => "$" tk:identifier
 */
-fn ast_fn020<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn023<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -2158,7 +3054,7 @@ fn ast_fn020<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 reference => "$" tk:integer
 */
-fn ast_fn021<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn024<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -2173,9 +3069,37 @@ fn ast_fn021<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
+instruction_sequence_list_3 => instruction_sequence_list_3 "then" goto_instruction
+*/
+fn ast_fn027<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  slots.take(1);
+  let AstSlot (i2, rng2, _) = slots.take(2);
+  let rng = rng0 + rng2;
+  
+  let ref_2_0 = i2;
+  let mut ref_0_0 = i0.into_nodes();
+  ref_0_0.push(ref_2_0);
+  slots.assign(0, AstSlot (ASTNode::NODES(ref_0_0), rng, TokenRange::default()))
+}
+
+/*
+instruction_sequence_list_3 => goto_instruction
+*/
+fn ast_fn028<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let rng = rng0;
+  
+  let ref_0_0 = i0;
+  let mut ref_2_0 = vec![];
+  ref_2_0.push(ref_0_0);
+  slots.assign(0, AstSlot (ASTNode::NODES(ref_2_0), rng, TokenRange::default()))
+}
+
+/*
 grammar => grammar_list_1 grammar_list_2
 */
-fn ast_fn024<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn029<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -2192,7 +3116,7 @@ fn ast_fn024<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 grammar => grammar_list_2
 */
-fn ast_fn025<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn030<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -2207,7 +3131,7 @@ fn ast_fn025<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 ast_definition => ":ast" body
 */
-fn ast_fn027<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn032<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -2223,7 +3147,7 @@ fn ast_fn027<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 map => "map" '(' expression ',' expression ')'
 */
-fn ast_fn028<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn033<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -2244,7 +3168,7 @@ fn ast_fn028<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 terminal => terminal_list_1 g:sp
 */
-fn ast_fn029<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn034<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (_, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -2261,7 +3185,7 @@ fn ast_fn029<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 terminal => terminal_list_1
 */
-fn ast_fn030<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn035<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -2277,7 +3201,7 @@ fn ast_fn030<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 terminal => """ terminal_list_2 """
 */
-fn ast_fn031<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn036<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, ..) = slots.take(1);
   let AstSlot (_, rng2, _) = slots.take(2);
@@ -2296,7 +3220,7 @@ fn ast_fn031<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 terminal => "'" terminal_list_3 "'"
 */
-fn ast_fn032<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn037<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, ..) = slots.take(1);
   let AstSlot (_, rng2, _) = slots.take(2);
@@ -2312,9 +3236,41 @@ fn ast_fn032<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
+production_id_list => '[' tk:integer ']'
+*/
+fn ast_fn038<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  let AstSlot (i1, rng1, _) = slots.take(1);
+  let AstSlot (_, rng2, _) = slots.take(2);
+  let rng = rng0 + rng2;
+  
+  let ref_1_0 = rng1.to_token(_ctx_.get_reader());
+  let ref_1_0 = ref_1_0.to_i64();
+  let ref_4_0 = Num::new(
+    ref_1_0, 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::Num(Box::new(ref_4_0)), rng, TokenRange::default()))
+}
+
+/*
+ignore_clause_list_1 => ignore_clause_list_1 terminal_non_terminal
+*/
+fn ast_fn043<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let AstSlot (i1, rng1, _) = slots.take(1);
+  let rng = rng0 + rng1;
+  
+  let ref_1_0 = i1;
+  let mut ref_0_0 = i0.into_nodes();
+  ref_0_0.push(ref_1_0);
+  slots.assign(0, AstSlot (ASTNode::NODES(ref_0_0), rng, TokenRange::default()))
+}
+
+/*
 ignore_clause_list_1 => ignore_clause_list_1 terminal
 */
-fn ast_fn037<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn044<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -2328,7 +3284,7 @@ fn ast_fn037<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 ignore_clause_list_1 => ignore_clause_list_1 class
 */
-fn ast_fn038<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn045<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -2340,9 +3296,22 @@ fn ast_fn038<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
+ignore_clause_list_1 => terminal_non_terminal
+*/
+fn ast_fn046<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let rng = rng0;
+  
+  let ref_0_0 = i0;
+  let mut ref_2_0 = vec![];
+  ref_2_0.push(ref_0_0);
+  slots.assign(0, AstSlot (ASTNode::NODES(ref_2_0), rng, TokenRange::default()))
+}
+
+/*
 ignore_clause_list_1 => terminal
 */
-fn ast_fn039<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn047<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -2355,7 +3324,7 @@ fn ast_fn039<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 ignore_clause_list_1 => class
 */
-fn ast_fn040<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn048<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -2366,9 +3335,25 @@ fn ast_fn040<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
+instruction_sequence_group_1 => "then" "repeat" "state"
+*/
+fn ast_fn049<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  slots.take(1);
+  let AstSlot (_, rng2, _) = slots.take(2);
+  let rng = rng0 + rng2;
+  
+  let ref_4_0 = Repeat::new(
+    
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::Repeat(Box::new(ref_4_0)), rng, TokenRange::default()))
+}
+
+/*
 priority => "{" tk:priority_num '}'
 */
-fn ast_fn041<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn050<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let AstSlot (_, rng2, _) = slots.take(2);
@@ -2386,7 +3371,7 @@ fn ast_fn041<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 priority => "!"
 */
-fn ast_fn042<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn051<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -2401,7 +3386,7 @@ fn ast_fn042<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 group => "(" rules ")"
 */
-fn ast_fn043<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn052<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, ..) = slots.take(1);
   let AstSlot (_, rng2, _) = slots.take(2);
@@ -2418,7 +3403,7 @@ fn ast_fn043<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 declaration => '{' declaration_list_1 '}'
 */
-fn ast_fn044<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn053<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, ..) = slots.take(1);
   let AstSlot (_, rng2, _) = slots.take(2);
@@ -2435,7 +3420,7 @@ fn ast_fn044<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 token => "tok" range
 */
-fn ast_fn045<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn054<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -2454,7 +3439,7 @@ fn ast_fn045<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 token => "token" range
 */
-fn ast_fn046<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn055<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -2473,7 +3458,7 @@ fn ast_fn046<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 token => "tok"
 */
-fn ast_fn047<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn056<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -2487,7 +3472,7 @@ fn ast_fn047<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 token => "token"
 */
-fn ast_fn048<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn057<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -2499,9 +3484,52 @@ fn ast_fn048<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
+sequence_instruction_list_1 => sequence_instruction_list_1 state_reference
+*/
+fn ast_fn058<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let AstSlot (i1, rng1, _) = slots.take(1);
+  let rng = rng0 + rng1;
+  
+  let ref_1_0 = i1;
+  let mut ref_0_0 = i0.into_nodes();
+  ref_0_0.push(ref_1_0);
+  slots.assign(0, AstSlot (ASTNode::NODES(ref_0_0), rng, TokenRange::default()))
+}
+
+/*
+sequence_instruction_list_1 => state_reference
+*/
+fn ast_fn059<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let rng = rng0;
+  
+  let ref_0_0 = i0;
+  let mut ref_2_0 = vec![];
+  ref_2_0.push(ref_0_0);
+  slots.assign(0, AstSlot (ASTNode::NODES(ref_2_0), rng, TokenRange::default()))
+}
+
+/*
+instruction_sequence_group_2 => "then" "repeat" "state"
+*/
+fn ast_fn060<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  slots.take(1);
+  let AstSlot (_, rng2, _) = slots.take(2);
+  let rng = rng0 + rng2;
+  
+  let ref_4_0 = Repeat::new(
+    
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::Repeat(Box::new(ref_4_0)), rng, TokenRange::default()))
+}
+
+/*
 convert_initializer => "(" init_objects ")"
 */
-fn ast_fn049<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn061<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, ..) = slots.take(1);
   let AstSlot (_, rng2, _) = slots.take(2);
@@ -2518,7 +3546,7 @@ fn ast_fn049<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 green => "g" tk:integer
 */
-fn ast_fn050<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn062<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -2531,7 +3559,7 @@ fn ast_fn050<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 template_name => identifier
 */
-fn ast_fn051<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn063<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -2543,7 +3571,7 @@ fn ast_fn051<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 terminal_list_2 => terminal_list_2 g:id
 */
-fn ast_fn052<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn064<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -2557,7 +3585,7 @@ fn ast_fn052<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 terminal_list_2 => terminal_list_2 g:sym
 */
-fn ast_fn053<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn065<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -2571,7 +3599,7 @@ fn ast_fn053<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 terminal_list_2 => terminal_list_2 g:num
 */
-fn ast_fn054<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn066<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -2585,7 +3613,7 @@ fn ast_fn054<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 terminal_list_2 => terminal_list_2 g:sp
 */
-fn ast_fn055<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn067<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -2599,7 +3627,7 @@ fn ast_fn055<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 terminal_list_2 => terminal_list_2 escaped
 */
-fn ast_fn056<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn068<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -2613,7 +3641,7 @@ fn ast_fn056<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 terminal_list_2 => g:id
 */
-fn ast_fn057<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn069<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -2626,7 +3654,7 @@ fn ast_fn057<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 terminal_list_2 => g:sym
 */
-fn ast_fn058<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn070<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -2639,7 +3667,7 @@ fn ast_fn058<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 terminal_list_2 => g:num
 */
-fn ast_fn059<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn071<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -2652,7 +3680,7 @@ fn ast_fn059<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 terminal_list_2 => g:sp
 */
-fn ast_fn060<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn072<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -2665,7 +3693,7 @@ fn ast_fn060<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 terminal_list_2 => escaped
 */
-fn ast_fn061<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn073<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -2676,9 +3704,125 @@ fn ast_fn061<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
-rule => '!' rule_list_1 ast_definition syntax_definition
+rule => '!' rule_list_1 ast_definition syntax_definition recover_definition
 */
-fn ast_fn062<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn074<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  let AstSlot (i1, ..) = slots.take(1);
+  let AstSlot (i2, ..) = slots.take(2);
+  let AstSlot (i3, ..) = slots.take(3);
+  let AstSlot (i4, rng4, _) = slots.take(4);
+  let rng = rng0 + rng4;
+  
+  let ref_2_0 = i2;
+  let ref_2_0 = if let ASTNode::Ascript(obj) = ref_2_0
+        { obj }
+        else {panic!("invalid node")};
+  let ref_6_1 = true;
+  let ref_4_2 = i4;
+  let ref_4_2 = if let ASTNode::Recovery(obj) = ref_4_2
+        { obj }
+        else {panic!("invalid node")};
+  let ref_1_3 = i1.into_nodes();
+  let ref_3_4 = i3;
+  let ref_3_4 = if let ASTNode::Syntax(obj) = ref_3_4
+        { obj }
+        else {panic!("invalid node")};
+  let ref_7_0 = Rule::new(
+    Some(ref_2_0), ref_6_1, Some(ref_4_2), ref_1_3, Some(ref_3_4), rng.to_token(_ctx_.get_reader()), 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::Rule(Box::new(ref_7_0)), rng, TokenRange::default()))
+}
+
+/*
+rule => rule_list_1 ast_definition syntax_definition recover_definition
+*/
+fn ast_fn075<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let AstSlot (i1, ..) = slots.take(1);
+  let AstSlot (i2, ..) = slots.take(2);
+  let AstSlot (i3, rng3, _) = slots.take(3);
+  let rng = rng0 + rng3;
+  
+  let ref_1_0 = i1;
+  let ref_1_0 = if let ASTNode::Ascript(obj) = ref_1_0
+        { obj }
+        else {panic!("invalid node")};
+  let ref_5_1 = false;
+  let ref_3_2 = i3;
+  let ref_3_2 = if let ASTNode::Recovery(obj) = ref_3_2
+        { obj }
+        else {panic!("invalid node")};
+  let ref_0_3 = i0.into_nodes();
+  let ref_2_4 = i2;
+  let ref_2_4 = if let ASTNode::Syntax(obj) = ref_2_4
+        { obj }
+        else {panic!("invalid node")};
+  let ref_6_0 = Rule::new(
+    Some(ref_1_0), ref_5_1, Some(ref_3_2), ref_0_3, Some(ref_2_4), rng.to_token(_ctx_.get_reader()), 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::Rule(Box::new(ref_6_0)), rng, TokenRange::default()))
+}
+
+/*
+rule => '!' rule_list_1 syntax_definition recover_definition
+*/
+fn ast_fn076<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  let AstSlot (i1, ..) = slots.take(1);
+  let AstSlot (i2, ..) = slots.take(2);
+  let AstSlot (i3, rng3, _) = slots.take(3);
+  let rng = rng0 + rng3;
+  
+  let ref_5_1 = true;
+  let ref_3_2 = i3;
+  let ref_3_2 = if let ASTNode::Recovery(obj) = ref_3_2
+        { obj }
+        else {panic!("invalid node")};
+  let ref_1_3 = i1.into_nodes();
+  let ref_2_4 = i2;
+  let ref_2_4 = if let ASTNode::Syntax(obj) = ref_2_4
+        { obj }
+        else {panic!("invalid node")};
+  let ref_6_0 = Rule::new(
+    Default::default(), ref_5_1, Some(ref_3_2), ref_1_3, Some(ref_2_4), rng.to_token(_ctx_.get_reader()), 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::Rule(Box::new(ref_6_0)), rng, TokenRange::default()))
+}
+
+/*
+rule => rule_list_1 syntax_definition recover_definition
+*/
+fn ast_fn077<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let AstSlot (i1, ..) = slots.take(1);
+  let AstSlot (i2, rng2, _) = slots.take(2);
+  let rng = rng0 + rng2;
+  
+  let ref_4_1 = false;
+  let ref_2_2 = i2;
+  let ref_2_2 = if let ASTNode::Recovery(obj) = ref_2_2
+        { obj }
+        else {panic!("invalid node")};
+  let ref_0_3 = i0.into_nodes();
+  let ref_1_4 = i1;
+  let ref_1_4 = if let ASTNode::Syntax(obj) = ref_1_4
+        { obj }
+        else {panic!("invalid node")};
+  let ref_5_0 = Rule::new(
+    Default::default(), ref_4_1, Some(ref_2_2), ref_0_3, Some(ref_1_4), rng.to_token(_ctx_.get_reader()), 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::Rule(Box::new(ref_5_0)), rng, TokenRange::default()))
+}
+
+/*
+rule => '!' rule_list_1 ast_definition recover_definition
+*/
+fn ast_fn078<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, ..) = slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -2690,22 +3834,22 @@ fn ast_fn062<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
         { obj }
         else {panic!("invalid node")};
   let ref_5_1 = true;
-  let ref_1_2 = i1.into_nodes();
-  let ref_3_3 = i3;
-  let ref_3_3 = if let ASTNode::Syntax(obj) = ref_3_3
+  let ref_3_2 = i3;
+  let ref_3_2 = if let ASTNode::Recovery(obj) = ref_3_2
         { obj }
         else {panic!("invalid node")};
+  let ref_1_3 = i1.into_nodes();
   let ref_6_0 = Rule::new(
-    Some(ref_2_0), ref_5_1, ref_1_2, Some(ref_3_3), rng.to_token(_ctx_.get_reader()), 
+    Some(ref_2_0), ref_5_1, Some(ref_3_2), ref_1_3, Default::default(), rng.to_token(_ctx_.get_reader()), 
   
   );
   slots.assign(0, AstSlot (ASTNode::Rule(Box::new(ref_6_0)), rng, TokenRange::default()))
 }
 
 /*
-rule => rule_list_1 ast_definition syntax_definition
+rule => rule_list_1 ast_definition recover_definition
 */
-fn ast_fn063<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn079<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, ..) = slots.take(1);
   let AstSlot (i2, rng2, _) = slots.take(2);
@@ -2716,13 +3860,109 @@ fn ast_fn063<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
         { obj }
         else {panic!("invalid node")};
   let ref_4_1 = false;
-  let ref_0_2 = i0.into_nodes();
-  let ref_2_3 = i2;
-  let ref_2_3 = if let ASTNode::Syntax(obj) = ref_2_3
+  let ref_2_2 = i2;
+  let ref_2_2 = if let ASTNode::Recovery(obj) = ref_2_2
+        { obj }
+        else {panic!("invalid node")};
+  let ref_0_3 = i0.into_nodes();
+  let ref_5_0 = Rule::new(
+    Some(ref_1_0), ref_4_1, Some(ref_2_2), ref_0_3, Default::default(), rng.to_token(_ctx_.get_reader()), 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::Rule(Box::new(ref_5_0)), rng, TokenRange::default()))
+}
+
+/*
+rule => '!' rule_list_1 recover_definition
+*/
+fn ast_fn080<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  let AstSlot (i1, ..) = slots.take(1);
+  let AstSlot (i2, rng2, _) = slots.take(2);
+  let rng = rng0 + rng2;
+  
+  let ref_4_1 = true;
+  let ref_2_2 = i2;
+  let ref_2_2 = if let ASTNode::Recovery(obj) = ref_2_2
+        { obj }
+        else {panic!("invalid node")};
+  let ref_1_3 = i1.into_nodes();
+  let ref_5_0 = Rule::new(
+    Default::default(), ref_4_1, Some(ref_2_2), ref_1_3, Default::default(), rng.to_token(_ctx_.get_reader()), 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::Rule(Box::new(ref_5_0)), rng, TokenRange::default()))
+}
+
+/*
+rule => rule_list_1 recover_definition
+*/
+fn ast_fn081<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let AstSlot (i1, rng1, _) = slots.take(1);
+  let rng = rng0 + rng1;
+  
+  let ref_3_1 = false;
+  let ref_1_2 = i1;
+  let ref_1_2 = if let ASTNode::Recovery(obj) = ref_1_2
+        { obj }
+        else {panic!("invalid node")};
+  let ref_0_3 = i0.into_nodes();
+  let ref_4_0 = Rule::new(
+    Default::default(), ref_3_1, Some(ref_1_2), ref_0_3, Default::default(), rng.to_token(_ctx_.get_reader()), 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::Rule(Box::new(ref_4_0)), rng, TokenRange::default()))
+}
+
+/*
+rule => '!' rule_list_1 ast_definition syntax_definition
+*/
+fn ast_fn082<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  let AstSlot (i1, ..) = slots.take(1);
+  let AstSlot (i2, ..) = slots.take(2);
+  let AstSlot (i3, rng3, _) = slots.take(3);
+  let rng = rng0 + rng3;
+  
+  let ref_2_0 = i2;
+  let ref_2_0 = if let ASTNode::Ascript(obj) = ref_2_0
+        { obj }
+        else {panic!("invalid node")};
+  let ref_5_1 = true;
+  let ref_1_3 = i1.into_nodes();
+  let ref_3_4 = i3;
+  let ref_3_4 = if let ASTNode::Syntax(obj) = ref_3_4
+        { obj }
+        else {panic!("invalid node")};
+  let ref_6_0 = Rule::new(
+    Some(ref_2_0), ref_5_1, Default::default(), ref_1_3, Some(ref_3_4), rng.to_token(_ctx_.get_reader()), 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::Rule(Box::new(ref_6_0)), rng, TokenRange::default()))
+}
+
+/*
+rule => rule_list_1 ast_definition syntax_definition
+*/
+fn ast_fn083<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let AstSlot (i1, ..) = slots.take(1);
+  let AstSlot (i2, rng2, _) = slots.take(2);
+  let rng = rng0 + rng2;
+  
+  let ref_1_0 = i1;
+  let ref_1_0 = if let ASTNode::Ascript(obj) = ref_1_0
+        { obj }
+        else {panic!("invalid node")};
+  let ref_4_1 = false;
+  let ref_0_3 = i0.into_nodes();
+  let ref_2_4 = i2;
+  let ref_2_4 = if let ASTNode::Syntax(obj) = ref_2_4
         { obj }
         else {panic!("invalid node")};
   let ref_5_0 = Rule::new(
-    Some(ref_1_0), ref_4_1, ref_0_2, Some(ref_2_3), rng.to_token(_ctx_.get_reader()), 
+    Some(ref_1_0), ref_4_1, Default::default(), ref_0_3, Some(ref_2_4), rng.to_token(_ctx_.get_reader()), 
   
   );
   slots.assign(0, AstSlot (ASTNode::Rule(Box::new(ref_5_0)), rng, TokenRange::default()))
@@ -2731,20 +3971,20 @@ fn ast_fn063<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 rule => '!' rule_list_1 syntax_definition
 */
-fn ast_fn064<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn084<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, ..) = slots.take(1);
   let AstSlot (i2, rng2, _) = slots.take(2);
   let rng = rng0 + rng2;
   
   let ref_4_1 = true;
-  let ref_1_2 = i1.into_nodes();
-  let ref_2_3 = i2;
-  let ref_2_3 = if let ASTNode::Syntax(obj) = ref_2_3
+  let ref_1_3 = i1.into_nodes();
+  let ref_2_4 = i2;
+  let ref_2_4 = if let ASTNode::Syntax(obj) = ref_2_4
         { obj }
         else {panic!("invalid node")};
   let ref_5_0 = Rule::new(
-    Default::default(), ref_4_1, ref_1_2, Some(ref_2_3), rng.to_token(_ctx_.get_reader()), 
+    Default::default(), ref_4_1, Default::default(), ref_1_3, Some(ref_2_4), rng.to_token(_ctx_.get_reader()), 
   
   );
   slots.assign(0, AstSlot (ASTNode::Rule(Box::new(ref_5_0)), rng, TokenRange::default()))
@@ -2753,19 +3993,19 @@ fn ast_fn064<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 rule => rule_list_1 syntax_definition
 */
-fn ast_fn065<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn085<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
   
   let ref_3_1 = false;
-  let ref_0_2 = i0.into_nodes();
-  let ref_1_3 = i1;
-  let ref_1_3 = if let ASTNode::Syntax(obj) = ref_1_3
+  let ref_0_3 = i0.into_nodes();
+  let ref_1_4 = i1;
+  let ref_1_4 = if let ASTNode::Syntax(obj) = ref_1_4
         { obj }
         else {panic!("invalid node")};
   let ref_4_0 = Rule::new(
-    Default::default(), ref_3_1, ref_0_2, Some(ref_1_3), rng.to_token(_ctx_.get_reader()), 
+    Default::default(), ref_3_1, Default::default(), ref_0_3, Some(ref_1_4), rng.to_token(_ctx_.get_reader()), 
   
   );
   slots.assign(0, AstSlot (ASTNode::Rule(Box::new(ref_4_0)), rng, TokenRange::default()))
@@ -2774,7 +4014,7 @@ fn ast_fn065<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 rule => '!' rule_list_1 ast_definition
 */
-fn ast_fn066<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn086<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, ..) = slots.take(1);
   let AstSlot (i2, rng2, _) = slots.take(2);
@@ -2785,9 +4025,9 @@ fn ast_fn066<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
         { obj }
         else {panic!("invalid node")};
   let ref_4_1 = true;
-  let ref_1_2 = i1.into_nodes();
+  let ref_1_3 = i1.into_nodes();
   let ref_5_0 = Rule::new(
-    Some(ref_2_0), ref_4_1, ref_1_2, Default::default(), rng.to_token(_ctx_.get_reader()), 
+    Some(ref_2_0), ref_4_1, Default::default(), ref_1_3, Default::default(), rng.to_token(_ctx_.get_reader()), 
   
   );
   slots.assign(0, AstSlot (ASTNode::Rule(Box::new(ref_5_0)), rng, TokenRange::default()))
@@ -2796,7 +4036,7 @@ fn ast_fn066<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 rule => rule_list_1 ast_definition
 */
-fn ast_fn067<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn087<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -2806,9 +4046,9 @@ fn ast_fn067<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
         { obj }
         else {panic!("invalid node")};
   let ref_3_1 = false;
-  let ref_0_2 = i0.into_nodes();
+  let ref_0_3 = i0.into_nodes();
   let ref_4_0 = Rule::new(
-    Some(ref_1_0), ref_3_1, ref_0_2, Default::default(), rng.to_token(_ctx_.get_reader()), 
+    Some(ref_1_0), ref_3_1, Default::default(), ref_0_3, Default::default(), rng.to_token(_ctx_.get_reader()), 
   
   );
   slots.assign(0, AstSlot (ASTNode::Rule(Box::new(ref_4_0)), rng, TokenRange::default()))
@@ -2817,15 +4057,15 @@ fn ast_fn067<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 rule => '!' rule_list_1
 */
-fn ast_fn068<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn088<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
   
   let ref_3_1 = true;
-  let ref_1_2 = i1.into_nodes();
+  let ref_1_3 = i1.into_nodes();
   let ref_4_0 = Rule::new(
-    Default::default(), ref_3_1, ref_1_2, Default::default(), rng.to_token(_ctx_.get_reader()), 
+    Default::default(), ref_3_1, Default::default(), ref_1_3, Default::default(), rng.to_token(_ctx_.get_reader()), 
   
   );
   slots.assign(0, AstSlot (ASTNode::Rule(Box::new(ref_4_0)), rng, TokenRange::default()))
@@ -2834,14 +4074,14 @@ fn ast_fn068<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 rule => rule_list_1
 */
-fn ast_fn069<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn089<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
   let ref_2_1 = false;
-  let ref_0_2 = i0.into_nodes();
+  let ref_0_3 = i0.into_nodes();
   let ref_3_0 = Rule::new(
-    Default::default(), ref_2_1, ref_0_2, Default::default(), rng.to_token(_ctx_.get_reader()), 
+    Default::default(), ref_2_1, Default::default(), ref_0_3, Default::default(), rng.to_token(_ctx_.get_reader()), 
   
   );
   slots.assign(0, AstSlot (ASTNode::Rule(Box::new(ref_3_0)), rng, TokenRange::default()))
@@ -2850,7 +4090,7 @@ fn ast_fn069<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 grammar_list_2 => grammar_list_2 production
 */
-fn ast_fn070<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn090<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -2864,7 +4104,7 @@ fn ast_fn070<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 grammar_list_2 => grammar_list_2 append_production
 */
-fn ast_fn071<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn091<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -2878,7 +4118,7 @@ fn ast_fn071<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 grammar_list_2 => production
 */
-fn ast_fn072<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn092<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -2891,7 +4131,7 @@ fn ast_fn072<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 grammar_list_2 => append_production
 */
-fn ast_fn073<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn093<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -2904,7 +4144,7 @@ fn ast_fn073<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 bool_convert => "bool" convert_initializer
 */
-fn ast_fn074<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn094<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -2923,7 +4163,7 @@ fn ast_fn074<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 bool_convert => "bool"
 */
-fn ast_fn075<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn095<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -2937,7 +4177,7 @@ fn ast_fn075<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 name_clause => "NAME" identifier
 */
-fn ast_fn076<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn096<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -2952,9 +4192,9 @@ fn ast_fn076<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
-annotated_symbol => symbol tk:reference "?" priority
+annotated_symbol => list tk:reference "?" priority
 */
-fn ast_fn077<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn097<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   slots.take(2);
@@ -2977,9 +4217,9 @@ fn ast_fn077<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
-annotated_symbol => symbol "?" priority
+annotated_symbol => list "?" priority
 */
-fn ast_fn078<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn098<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, rng2, _) = slots.take(2);
@@ -2999,9 +4239,9 @@ fn ast_fn078<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
-annotated_symbol => symbol tk:reference priority
+annotated_symbol => list tk:reference priority
 */
-fn ast_fn079<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn099<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let AstSlot (i2, rng2, _) = slots.take(2);
@@ -3023,9 +4263,9 @@ fn ast_fn079<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
-annotated_symbol => symbol priority
+annotated_symbol => list priority
 */
-fn ast_fn080<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn100<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -3044,9 +4284,9 @@ fn ast_fn080<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
-annotated_symbol => symbol tk:reference "?"
+annotated_symbol => list tk:reference "?"
 */
-fn ast_fn081<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn101<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let AstSlot (_, rng2, _) = slots.take(2);
@@ -3064,9 +4304,9 @@ fn ast_fn081<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
-annotated_symbol => symbol "?"
+annotated_symbol => list "?"
 */
-fn ast_fn082<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn102<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (_, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -3081,9 +4321,9 @@ fn ast_fn082<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
-annotated_symbol => symbol tk:reference
+annotated_symbol => list tk:reference
 */
-fn ast_fn083<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn103<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -3100,9 +4340,9 @@ fn ast_fn083<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
-annotated_symbol => symbol tk:reference priority "?"
+annotated_symbol => list tk:reference priority "?"
 */
-fn ast_fn084<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn104<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -3125,9 +4365,9 @@ fn ast_fn084<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
-annotated_symbol => symbol priority "?"
+annotated_symbol => list priority "?"
 */
-fn ast_fn085<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn105<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, ..) = slots.take(1);
   let AstSlot (_, rng2, _) = slots.take(2);
@@ -3147,9 +4387,9 @@ fn ast_fn085<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
-annotated_symbol => symbol "?" tk:reference priority
+annotated_symbol => list "?" tk:reference priority
 */
-fn ast_fn086<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn106<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, rng2, _) = slots.take(2);
@@ -3172,9 +4412,9 @@ fn ast_fn086<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
-annotated_symbol => symbol "?" tk:reference
+annotated_symbol => list "?" tk:reference
 */
-fn ast_fn087<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn107<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, rng2, _) = slots.take(2);
@@ -3192,9 +4432,9 @@ fn ast_fn087<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
-annotated_symbol => symbol "?" priority tk:reference
+annotated_symbol => list "?" priority tk:reference
 */
-fn ast_fn088<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn108<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -3217,9 +4457,9 @@ fn ast_fn088<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
-annotated_symbol => symbol priority tk:reference
+annotated_symbol => list priority tk:reference
 */
-fn ast_fn089<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn109<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, ..) = slots.take(1);
   let AstSlot (i2, rng2, _) = slots.take(2);
@@ -3241,9 +4481,9 @@ fn ast_fn089<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
-annotated_symbol => symbol priority tk:reference "?"
+annotated_symbol => list priority tk:reference "?"
 */
-fn ast_fn090<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn110<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, ..) = slots.take(1);
   let AstSlot (i2, rng2, _) = slots.take(2);
@@ -3266,9 +4506,9 @@ fn ast_fn090<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
-annotated_symbol => symbol priority "?" tk:reference
+annotated_symbol => list priority "?" tk:reference
 */
-fn ast_fn091<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn111<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, ..) = slots.take(1);
   slots.take(2);
@@ -3291,9 +4531,24 @@ fn ast_fn091<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
+state_declaration => "state" '[' tk:state_hash_token ']'
+*/
+fn ast_fn113<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  slots.take(1);
+  let AstSlot (i2, rng2, _) = slots.take(2);
+  let AstSlot (_, rng3, _) = slots.take(3);
+  let rng = rng0 + rng3;
+  
+  let ref_2_0 = rng2.to_token(_ctx_.get_reader());
+  let ref_2_0 = ref_2_0.to_string();
+  slots.assign(0, AstSlot (ASTNode::STRING(ref_2_0), rng, TokenRange::default()))
+}
+
+/*
 declaration_list_1 => declaration_list_1 ',' field
 */
-fn ast_fn093<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn114<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, rng2, _) = slots.take(2);
@@ -3308,7 +4563,7 @@ fn ast_fn093<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 declaration_list_1 => field
 */
-fn ast_fn094<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn115<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -3321,7 +4576,7 @@ fn ast_fn094<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 struct_list_1 => struct_list_1 ',' struct_prop
 */
-fn ast_fn095<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn116<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, rng2, _) = slots.take(2);
@@ -3336,7 +4591,7 @@ fn ast_fn095<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 struct_list_1 => struct_prop
 */
-fn ast_fn096<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn117<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -3347,9 +4602,28 @@ fn ast_fn096<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
+state_reference => "state" '[' tk:state_hash_token ']'
+*/
+fn ast_fn118<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  slots.take(1);
+  let AstSlot (i2, rng2, _) = slots.take(2);
+  let AstSlot (_, rng3, _) = slots.take(3);
+  let rng = rng0 + rng3;
+  
+  let ref_2_0 = rng2.to_token(_ctx_.get_reader());
+  let ref_2_0 = ref_2_0.to_string();
+  let ref_5_0 = HASH_NAME::new(
+    ref_2_0, 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::HASH_NAME(Box::new(ref_5_0)), rng, TokenRange::default()))
+}
+
+/*
 syntax_spec => identifier color
 */
-fn ast_fn097<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn119<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -3369,7 +4643,7 @@ fn ast_fn097<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 syntax_spec => color
 */
-fn ast_fn098<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn120<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -3387,7 +4661,7 @@ fn ast_fn098<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 syntax_spec => identifier
 */
-fn ast_fn099<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn121<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -3402,7 +4676,7 @@ fn ast_fn099<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 range => "<" integer ',' integer ">"
 */
-fn ast_fn100<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn122<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, ..) = slots.take(1);
   slots.take(2);
@@ -3422,7 +4696,7 @@ fn ast_fn100<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 range => "<" integer ">"
 */
-fn ast_fn101<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn123<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, ..) = slots.take(1);
   let AstSlot (_, rng2, _) = slots.take(2);
@@ -3437,9 +4711,121 @@ fn ast_fn101<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
+on_fail => "on" "fail" state_declaration top_level_instructions on_fail expected_symbols
+*/
+fn ast_fn124<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  slots.take(1);
+  let AstSlot (i2, ..) = slots.take(2);
+  let AstSlot (i3, ..) = slots.take(3);
+  let AstSlot (i4, ..) = slots.take(4);
+  let AstSlot (i5, rng5, _) = slots.take(5);
+  let rng = rng0 + rng5;
+  
+  let ref_4_0 = i4;
+  let ref_4_0 = if let ASTNode::FailState(obj) = ref_4_0
+        { obj }
+        else {panic!("invalid node")};
+  let ref_2_1 = i2.to_string();
+  let ref_3_2 = i3.into_nodes();
+  let ref_5_3 = i5;
+  let ref_5_3 = if let ASTNode::Symbols(obj) = ref_5_3
+        { obj }
+        else {panic!("invalid node")};
+  let ref_7_0 = FailState::new(
+    Some(ref_4_0), ref_2_1, ref_3_2, Some(ref_5_3), 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::FailState(Box::new(ref_7_0)), rng, TokenRange::default()))
+}
+
+/*
+on_fail => "on" "fail" state_declaration top_level_instructions expected_symbols
+*/
+fn ast_fn125<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  slots.take(1);
+  let AstSlot (i2, ..) = slots.take(2);
+  let AstSlot (i3, ..) = slots.take(3);
+  let AstSlot (i4, rng4, _) = slots.take(4);
+  let rng = rng0 + rng4;
+  
+  let ref_2_1 = i2.to_string();
+  let ref_3_2 = i3.into_nodes();
+  let ref_4_3 = i4;
+  let ref_4_3 = if let ASTNode::Symbols(obj) = ref_4_3
+        { obj }
+        else {panic!("invalid node")};
+  let ref_6_0 = FailState::new(
+    Default::default(), ref_2_1, ref_3_2, Some(ref_4_3), 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::FailState(Box::new(ref_6_0)), rng, TokenRange::default()))
+}
+
+/*
+on_fail => "on" "fail" state_declaration top_level_instructions on_fail
+*/
+fn ast_fn126<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  slots.take(1);
+  let AstSlot (i2, ..) = slots.take(2);
+  let AstSlot (i3, ..) = slots.take(3);
+  let AstSlot (i4, rng4, _) = slots.take(4);
+  let rng = rng0 + rng4;
+  
+  let ref_4_0 = i4;
+  let ref_4_0 = if let ASTNode::FailState(obj) = ref_4_0
+        { obj }
+        else {panic!("invalid node")};
+  let ref_2_1 = i2.to_string();
+  let ref_3_2 = i3.into_nodes();
+  let ref_6_0 = FailState::new(
+    Some(ref_4_0), ref_2_1, ref_3_2, Default::default(), 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::FailState(Box::new(ref_6_0)), rng, TokenRange::default()))
+}
+
+/*
+on_fail => "on" "fail" state_declaration top_level_instructions
+*/
+fn ast_fn127<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  slots.take(1);
+  let AstSlot (i2, ..) = slots.take(2);
+  let AstSlot (i3, rng3, _) = slots.take(3);
+  let rng = rng0 + rng3;
+  
+  let ref_2_1 = i2.to_string();
+  let ref_3_2 = i3.into_nodes();
+  let ref_5_0 = FailState::new(
+    Default::default(), ref_2_1, ref_3_2, Default::default(), 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::FailState(Box::new(ref_5_0)), rng, TokenRange::default()))
+}
+
+/*
+token_num => tk:integer
+*/
+fn ast_fn136<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let rng = rng0;
+  
+  let ref_0_0 = rng0.to_token(_ctx_.get_reader());
+  let ref_0_0 = ref_0_0.to_i64();
+  let ref_2_0 = Num::new(
+    ref_0_0, 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::Num(Box::new(ref_2_0)), rng, TokenRange::default()))
+}
+
+/*
 terminal_non_terminal => "tk:" non_terminal
 */
-fn ast_fn110<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn137<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -3455,7 +4841,7 @@ fn ast_fn110<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 export_clause => "EXPORT" non_terminal "AS" identifier
 */
-fn ast_fn111<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn138<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, ..) = slots.take(1);
   slots.take(2);
@@ -3474,7 +4860,7 @@ fn ast_fn111<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 export_clause => "EXPORT" non_terminal "as" identifier
 */
-fn ast_fn112<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn139<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, ..) = slots.take(1);
   slots.take(2);
@@ -3493,7 +4879,7 @@ fn ast_fn112<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 export_clause => "EXPORT" non_terminal
 */
-fn ast_fn113<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn140<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -3509,7 +4895,7 @@ fn ast_fn113<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 struct_prop => identifier ':' expression
 */
-fn ast_fn114<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn141<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, rng2, _) = slots.take(2);
@@ -3528,7 +4914,7 @@ fn ast_fn114<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 struct_prop => identifier ':' struct
 */
-fn ast_fn115<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn142<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, rng2, _) = slots.take(2);
@@ -3547,7 +4933,7 @@ fn ast_fn115<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 struct_prop => identifier
 */
-fn ast_fn116<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn143<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -3565,7 +4951,7 @@ fn ast_fn116<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 struct_prop => class_identifier
 */
-fn ast_fn117<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn144<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -3579,9 +4965,37 @@ fn ast_fn117<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
+instruction_sequence_list_2 => instruction_sequence_list_2 "then" goto_instruction
+*/
+fn ast_fn146<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  slots.take(1);
+  let AstSlot (i2, rng2, _) = slots.take(2);
+  let rng = rng0 + rng2;
+  
+  let ref_2_0 = i2;
+  let mut ref_0_0 = i0.into_nodes();
+  ref_0_0.push(ref_2_0);
+  slots.assign(0, AstSlot (ASTNode::NODES(ref_0_0), rng, TokenRange::default()))
+}
+
+/*
+instruction_sequence_list_2 => goto_instruction
+*/
+fn ast_fn147<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let rng = rng0;
+  
+  let ref_0_0 = i0;
+  let mut ref_2_0 = vec![];
+  ref_2_0.push(ref_0_0);
+  slots.assign(0, AstSlot (ASTNode::NODES(ref_2_0), rng, TokenRange::default()))
+}
+
+/*
 integer_list_1 => integer_list_1 g:num
 */
-fn ast_fn119<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn148<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -3595,7 +5009,7 @@ fn ast_fn119<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 integer_list_1 => g:num
 */
-fn ast_fn120<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn149<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -3608,7 +5022,7 @@ fn ast_fn120<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 list => symbol "(+" terminal ')'
 */
-fn ast_fn121<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn150<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -3630,7 +5044,7 @@ fn ast_fn121<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 list => symbol "(+" ')'
 */
-fn ast_fn122<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn151<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (_, rng2, _) = slots.take(2);
@@ -3647,7 +5061,7 @@ fn ast_fn122<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 list => symbol "(*" terminal ')'
 */
-fn ast_fn123<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn152<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -3670,7 +5084,7 @@ fn ast_fn123<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 list => symbol "(*" ')'
 */
-fn ast_fn124<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn153<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (_, rng2, _) = slots.take(2);
@@ -3688,7 +5102,7 @@ fn ast_fn124<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 color => "rgb" '(' red green blue alpha ')'
 */
-fn ast_fn125<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn155<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -3712,7 +5126,7 @@ fn ast_fn125<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 color => "rgb" '(' red green blue ')'
 */
-fn ast_fn126<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn156<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -3734,7 +5148,7 @@ fn ast_fn126<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 color => "rgb" '(' red green alpha blue ')'
 */
-fn ast_fn127<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn157<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -3758,7 +5172,7 @@ fn ast_fn127<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 color => "rgb" '(' red blue green alpha ')'
 */
-fn ast_fn128<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn158<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -3782,7 +5196,7 @@ fn ast_fn128<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 color => "rgb" '(' red blue green ')'
 */
-fn ast_fn129<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn159<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -3804,7 +5218,7 @@ fn ast_fn129<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 color => "rgb" '(' red blue alpha green ')'
 */
-fn ast_fn130<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn160<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -3828,7 +5242,7 @@ fn ast_fn130<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 color => "rgb" '(' red alpha green blue ')'
 */
-fn ast_fn131<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn161<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -3852,7 +5266,7 @@ fn ast_fn131<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 color => "rgb" '(' red alpha blue green ')'
 */
-fn ast_fn132<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn162<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -3876,7 +5290,7 @@ fn ast_fn132<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 color => "rgb" '(' green red blue alpha ')'
 */
-fn ast_fn133<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn163<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -3900,7 +5314,7 @@ fn ast_fn133<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 color => "rgb" '(' green red blue ')'
 */
-fn ast_fn134<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn164<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -3922,7 +5336,7 @@ fn ast_fn134<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 color => "rgb" '(' green red alpha blue ')'
 */
-fn ast_fn135<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn165<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -3946,7 +5360,7 @@ fn ast_fn135<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 color => "rgb" '(' green blue red alpha ')'
 */
-fn ast_fn136<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn166<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -3970,7 +5384,7 @@ fn ast_fn136<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 color => "rgb" '(' green blue red ')'
 */
-fn ast_fn137<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn167<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -3992,7 +5406,7 @@ fn ast_fn137<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 color => "rgb" '(' green blue alpha red ')'
 */
-fn ast_fn138<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn168<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -4016,7 +5430,7 @@ fn ast_fn138<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 color => "rgb" '(' green alpha red blue ')'
 */
-fn ast_fn139<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn169<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -4040,7 +5454,7 @@ fn ast_fn139<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 color => "rgb" '(' green alpha blue red ')'
 */
-fn ast_fn140<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn170<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -4064,7 +5478,7 @@ fn ast_fn140<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 color => "rgb" '(' blue red green alpha ')'
 */
-fn ast_fn141<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn171<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -4088,7 +5502,7 @@ fn ast_fn141<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 color => "rgb" '(' blue red green ')'
 */
-fn ast_fn142<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn172<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -4110,7 +5524,7 @@ fn ast_fn142<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 color => "rgb" '(' blue red alpha green ')'
 */
-fn ast_fn143<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn173<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -4134,7 +5548,7 @@ fn ast_fn143<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 color => "rgb" '(' blue green red alpha ')'
 */
-fn ast_fn144<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn174<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -4158,7 +5572,7 @@ fn ast_fn144<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 color => "rgb" '(' blue green red ')'
 */
-fn ast_fn145<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn175<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -4180,7 +5594,7 @@ fn ast_fn145<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 color => "rgb" '(' blue green alpha red ')'
 */
-fn ast_fn146<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn176<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -4204,7 +5618,7 @@ fn ast_fn146<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 color => "rgb" '(' blue alpha red green ')'
 */
-fn ast_fn147<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn177<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -4228,7 +5642,7 @@ fn ast_fn147<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 color => "rgb" '(' blue alpha green red ')'
 */
-fn ast_fn148<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn178<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -4252,7 +5666,7 @@ fn ast_fn148<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 color => "rgb" '(' alpha red green blue ')'
 */
-fn ast_fn149<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn179<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -4276,7 +5690,7 @@ fn ast_fn149<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 color => "rgb" '(' alpha red blue green ')'
 */
-fn ast_fn150<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn180<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -4300,7 +5714,7 @@ fn ast_fn150<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 color => "rgb" '(' alpha green red blue ')'
 */
-fn ast_fn151<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn181<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -4324,7 +5738,7 @@ fn ast_fn151<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 color => "rgb" '(' alpha green blue red ')'
 */
-fn ast_fn152<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn182<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -4348,7 +5762,7 @@ fn ast_fn152<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 color => "rgb" '(' alpha blue red green ')'
 */
-fn ast_fn153<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn183<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -4372,7 +5786,7 @@ fn ast_fn153<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 color => "rgb" '(' alpha blue green red ')'
 */
-fn ast_fn154<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn184<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -4396,7 +5810,7 @@ fn ast_fn154<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 rules_list_1 => rules_list_1 "|" rule
 */
-fn ast_fn155<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn185<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, rng2, _) = slots.take(2);
@@ -4411,7 +5825,7 @@ fn ast_fn155<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 rules_list_1 => rule
 */
-fn ast_fn156<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn186<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -4422,9 +5836,46 @@ fn ast_fn156<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
+expected_symbols => 'symbols:' 'expected' token_id_list 'skipped' token_id_list
+*/
+fn ast_fn187<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  slots.take(1);
+  let AstSlot (i2, ..) = slots.take(2);
+  slots.take(3);
+  let AstSlot (i4, rng4, _) = slots.take(4);
+  let rng = rng0 + rng4;
+  
+  let ref_2_0 = i2.into_nodes();
+  let ref_4_1 = i4.into_nodes();
+  let ref_6_0 = Symbols::new(
+    ref_2_0.into_iter().map(|v|match v { ASTNode::Num(node) => node, _ => panic!("could not convert")}).collect::<Vec<_>>(), ref_4_1.into_iter().map(|v|match v { ASTNode::Num(node) => node, _ => panic!("could not convert")}).collect::<Vec<_>>(), 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::Symbols(Box::new(ref_6_0)), rng, TokenRange::default()))
+}
+
+/*
+expected_symbols => 'symbols:' 'expected' token_id_list
+*/
+fn ast_fn188<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  slots.take(1);
+  let AstSlot (i2, rng2, _) = slots.take(2);
+  let rng = rng0 + rng2;
+  
+  let ref_2_0 = i2.into_nodes();
+  let ref_4_0 = Symbols::new(
+    ref_2_0.into_iter().map(|v|match v { ASTNode::Num(node) => node, _ => panic!("could not convert")}).collect::<Vec<_>>(), Default::default(), 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::Symbols(Box::new(ref_4_0)), rng, TokenRange::default()))
+}
+
+/*
 import_clause_list_1 => import_clause_list_1 g:id
 */
-fn ast_fn157<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn189<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -4438,7 +5889,7 @@ fn ast_fn157<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 import_clause_list_1 => import_clause_list_1 g:sym
 */
-fn ast_fn158<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn190<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -4452,7 +5903,7 @@ fn ast_fn158<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 import_clause_list_1 => g:id
 */
-fn ast_fn159<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn191<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -4465,7 +5916,7 @@ fn ast_fn159<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 import_clause_list_1 => g:sym
 */
-fn ast_fn160<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn192<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -4478,7 +5929,7 @@ fn ast_fn160<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 alpha => "a" tk:integer
 */
-fn ast_fn161<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn198<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -4489,9 +5940,396 @@ fn ast_fn161<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
+state => state_declaration scanner_declaration top_level_instructions on_fail expected_symbols
+*/
+fn ast_fn199<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let AstSlot (i1, ..) = slots.take(1);
+  let AstSlot (i2, ..) = slots.take(2);
+  let AstSlot (i3, ..) = slots.take(3);
+  let AstSlot (i4, rng4, _) = slots.take(4);
+  let rng = rng0 + rng4;
+  
+  let ref_3_0 = i3;
+  let ref_3_0 = if let ASTNode::FailState(obj) = ref_3_0
+        { obj }
+        else {panic!("invalid node")};
+  let ref_0_1 = i0.to_string();
+  let ref_2_2 = i2.into_nodes();
+  let ref_1_3 = i1.to_string();
+  let ref_4_4 = i4;
+  let ref_4_4 = if let ASTNode::Symbols(obj) = ref_4_4
+        { obj }
+        else {panic!("invalid node")};
+  let ref_6_0 = IR_STATE::new(
+    Some(ref_3_0), ref_0_1, ref_2_2, ref_1_3, Some(ref_4_4), 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::IR_STATE(Box::new(ref_6_0)), rng, TokenRange::default()))
+}
+
+/*
+state => state_declaration top_level_instructions on_fail expected_symbols
+*/
+fn ast_fn200<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let AstSlot (i1, ..) = slots.take(1);
+  let AstSlot (i2, ..) = slots.take(2);
+  let AstSlot (i3, rng3, _) = slots.take(3);
+  let rng = rng0 + rng3;
+  
+  let ref_2_0 = i2;
+  let ref_2_0 = if let ASTNode::FailState(obj) = ref_2_0
+        { obj }
+        else {panic!("invalid node")};
+  let ref_0_1 = i0.to_string();
+  let ref_1_2 = i1.into_nodes();
+  let ref_3_4 = i3;
+  let ref_3_4 = if let ASTNode::Symbols(obj) = ref_3_4
+        { obj }
+        else {panic!("invalid node")};
+  let ref_5_0 = IR_STATE::new(
+    Some(ref_2_0), ref_0_1, ref_1_2, Default::default(), Some(ref_3_4), 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::IR_STATE(Box::new(ref_5_0)), rng, TokenRange::default()))
+}
+
+/*
+state => state_declaration scanner_declaration top_level_instructions expected_symbols
+*/
+fn ast_fn201<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let AstSlot (i1, ..) = slots.take(1);
+  let AstSlot (i2, ..) = slots.take(2);
+  let AstSlot (i3, rng3, _) = slots.take(3);
+  let rng = rng0 + rng3;
+  
+  let ref_0_1 = i0.to_string();
+  let ref_2_2 = i2.into_nodes();
+  let ref_1_3 = i1.to_string();
+  let ref_3_4 = i3;
+  let ref_3_4 = if let ASTNode::Symbols(obj) = ref_3_4
+        { obj }
+        else {panic!("invalid node")};
+  let ref_5_0 = IR_STATE::new(
+    Default::default(), ref_0_1, ref_2_2, ref_1_3, Some(ref_3_4), 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::IR_STATE(Box::new(ref_5_0)), rng, TokenRange::default()))
+}
+
+/*
+state => state_declaration top_level_instructions expected_symbols
+*/
+fn ast_fn202<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let AstSlot (i1, ..) = slots.take(1);
+  let AstSlot (i2, rng2, _) = slots.take(2);
+  let rng = rng0 + rng2;
+  
+  let ref_0_1 = i0.to_string();
+  let ref_1_2 = i1.into_nodes();
+  let ref_2_4 = i2;
+  let ref_2_4 = if let ASTNode::Symbols(obj) = ref_2_4
+        { obj }
+        else {panic!("invalid node")};
+  let ref_4_0 = IR_STATE::new(
+    Default::default(), ref_0_1, ref_1_2, Default::default(), Some(ref_2_4), 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::IR_STATE(Box::new(ref_4_0)), rng, TokenRange::default()))
+}
+
+/*
+state => state_declaration scanner_declaration top_level_instructions on_fail
+*/
+fn ast_fn203<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let AstSlot (i1, ..) = slots.take(1);
+  let AstSlot (i2, ..) = slots.take(2);
+  let AstSlot (i3, rng3, _) = slots.take(3);
+  let rng = rng0 + rng3;
+  
+  let ref_3_0 = i3;
+  let ref_3_0 = if let ASTNode::FailState(obj) = ref_3_0
+        { obj }
+        else {panic!("invalid node")};
+  let ref_0_1 = i0.to_string();
+  let ref_2_2 = i2.into_nodes();
+  let ref_1_3 = i1.to_string();
+  let ref_5_0 = IR_STATE::new(
+    Some(ref_3_0), ref_0_1, ref_2_2, ref_1_3, Default::default(), 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::IR_STATE(Box::new(ref_5_0)), rng, TokenRange::default()))
+}
+
+/*
+state => state_declaration top_level_instructions on_fail
+*/
+fn ast_fn204<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let AstSlot (i1, ..) = slots.take(1);
+  let AstSlot (i2, rng2, _) = slots.take(2);
+  let rng = rng0 + rng2;
+  
+  let ref_2_0 = i2;
+  let ref_2_0 = if let ASTNode::FailState(obj) = ref_2_0
+        { obj }
+        else {panic!("invalid node")};
+  let ref_0_1 = i0.to_string();
+  let ref_1_2 = i1.into_nodes();
+  let ref_4_0 = IR_STATE::new(
+    Some(ref_2_0), ref_0_1, ref_1_2, Default::default(), Default::default(), 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::IR_STATE(Box::new(ref_4_0)), rng, TokenRange::default()))
+}
+
+/*
+state => state_declaration scanner_declaration top_level_instructions
+*/
+fn ast_fn205<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let AstSlot (i1, ..) = slots.take(1);
+  let AstSlot (i2, rng2, _) = slots.take(2);
+  let rng = rng0 + rng2;
+  
+  let ref_0_1 = i0.to_string();
+  let ref_2_2 = i2.into_nodes();
+  let ref_1_3 = i1.to_string();
+  let ref_4_0 = IR_STATE::new(
+    Default::default(), ref_0_1, ref_2_2, ref_1_3, Default::default(), 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::IR_STATE(Box::new(ref_4_0)), rng, TokenRange::default()))
+}
+
+/*
+state => state_declaration top_level_instructions
+*/
+fn ast_fn206<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let AstSlot (i1, rng1, _) = slots.take(1);
+  let rng = rng0 + rng1;
+  
+  let ref_0_1 = i0.to_string();
+  let ref_1_2 = i1.into_nodes();
+  let ref_3_0 = IR_STATE::new(
+    Default::default(), ref_0_1, ref_1_2, Default::default(), Default::default(), 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::IR_STATE(Box::new(ref_3_0)), rng, TokenRange::default()))
+}
+
+/*
+sequence_instruction => "assign" "token" token_id_list
+*/
+fn ast_fn209<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  slots.take(1);
+  let AstSlot (i2, rng2, _) = slots.take(2);
+  let rng = rng0 + rng2;
+  
+  let ref_2_0 = i2.into_nodes();
+  let ref_4_0 = TokenAssign::new(
+    ref_2_0.into_iter().map(|v|match v { ASTNode::Num(node) => node, _ => panic!("could not convert")}).collect::<Vec<_>>(), 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::TokenAssign(Box::new(ref_4_0)), rng, TokenRange::default()))
+}
+
+/*
+sequence_instruction => "set" "prod" "to" token_num
+*/
+fn ast_fn210<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  slots.take(1);
+  slots.take(2);
+  let AstSlot (i3, rng3, _) = slots.take(3);
+  let rng = rng0 + rng3;
+  
+  let ref_3_0 = i3;
+  let ref_3_0 = if let ASTNode::Num(obj) = ref_3_0
+        { obj }
+        else {panic!("invalid node")};
+  let ref_5_0 = SetProd::new(
+    ref_3_0, 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::SetProd(Box::new(ref_5_0)), rng, TokenRange::default()))
+}
+
+/*
+sequence_instruction => "fork" "to" '(' sequence_instruction_list_1 ')' "to" "complete" "prod" token_num
+*/
+fn ast_fn211<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  slots.take(1);
+  slots.take(2);
+  let AstSlot (i3, ..) = slots.take(3);
+  slots.take(4);
+  slots.take(5);
+  slots.take(6);
+  slots.take(7);
+  let AstSlot (i8, rng8, _) = slots.take(8);
+  let rng = rng0 + rng8;
+  
+  let ref_8_0 = i8;
+  let ref_8_0 = if let ASTNode::Num(obj) = ref_8_0
+        { obj }
+        else {panic!("invalid node")};
+  let ref_3_1 = i3.into_nodes();
+  let ref_10_0 = ForkTo::new(
+    ref_8_0, ref_3_1.into_iter().map(|v|match v { ASTNode::HASH_NAME(node) => node, _ => panic!("could not convert")}).collect::<Vec<_>>(), 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::ForkTo(Box::new(ref_10_0)), rng, TokenRange::default()))
+}
+
+/*
+sequence_instruction => "scan" "back?" "until" token_id_list
+*/
+fn ast_fn212<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  slots.take(1);
+  slots.take(2);
+  let AstSlot (i3, rng3, _) = slots.take(3);
+  let rng = rng0 + rng3;
+  
+  let ref_5_0 = true;
+  let ref_3_1 = i3.into_nodes();
+  let ref_6_0 = ScanUntil::new(
+    ref_5_0, ref_3_1.into_iter().map(|v|match v { ASTNode::Num(node) => node, _ => panic!("could not convert")}).collect::<Vec<_>>(), 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::ScanUntil(Box::new(ref_6_0)), rng, TokenRange::default()))
+}
+
+/*
+sequence_instruction => "set" "token" "id" token_num token_num
+*/
+fn ast_fn213<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  slots.take(1);
+  slots.take(2);
+  slots.take(3);
+  let AstSlot (i4, rng4, _) = slots.take(4);
+  let rng = rng0 + rng4;
+  
+  let ref_4_0 = i4;
+  let ref_4_0 = if let ASTNode::Num(obj) = ref_4_0
+        { obj }
+        else {panic!("invalid node")};
+  let ref_6_0 = TokenId::new(
+    ref_4_0, 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::TokenId(Box::new(ref_6_0)), rng, TokenRange::default()))
+}
+
+/*
+sequence_instruction => "skip"
+*/
+fn ast_fn214<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  let rng = rng0;
+  
+  let ref_2_0 = Skip::new(
+    
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::Skip(Box::new(ref_2_0)), rng, TokenRange::default()))
+}
+
+/*
+sequence_instruction => "pass"
+*/
+fn ast_fn215<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  let rng = rng0;
+  
+  let ref_2_0 = Pass::new(
+    
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::Pass(Box::new(ref_2_0)), rng, TokenRange::default()))
+}
+
+/*
+sequence_instruction => "fail"
+*/
+fn ast_fn216<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  let rng = rng0;
+  
+  let ref_2_0 = Fail::new(
+    
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::Fail(Box::new(ref_2_0)), rng, TokenRange::default()))
+}
+
+/*
+sequence_instruction => "not" "within" "scopes" '[' sequence_instruction_list_2 ']'
+*/
+fn ast_fn217<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  slots.take(1);
+  slots.take(2);
+  slots.take(3);
+  let AstSlot (i4, ..) = slots.take(4);
+  let AstSlot (_, rng5, _) = slots.take(5);
+  let rng = rng0 + rng5;
+  
+  let ref_4_0 = i4.into_nodes();
+  let ref_7_0 = NotInScope::new(
+    ref_4_0.into_iter().map(|v|match v { ASTNode::Num(node) => node, _ => panic!("could not convert")}).collect::<Vec<_>>(), 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::NotInScope(Box::new(ref_7_0)), rng, TokenRange::default()))
+}
+
+/*
+sequence_instruction => "set" "scope" "to" tk:integer
+*/
+fn ast_fn218<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  slots.take(1);
+  slots.take(2);
+  let AstSlot (_, rng3, _) = slots.take(3);
+  let rng = rng0 + rng3;
+  
+  let ref_0_0 = rng0.to_token(_ctx_.get_reader());
+  let ref_0_0 = ref_0_0.to_i64();
+  let ref_5_0 = SetScope::new(
+    ref_0_0, 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::SetScope(Box::new(ref_5_0)), rng, TokenRange::default()))
+}
+
+/*
+sequence_instruction => "shift" "nothing?"
+*/
+fn ast_fn219<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  let AstSlot (_, rng1, _) = slots.take(1);
+  let rng = rng0 + rng1;
+  
+  let ref_3_0 = true;
+  let ref_4_0 = Shift::new(
+    ref_3_0, 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::Shift(Box::new(ref_4_0)), rng, TokenRange::default()))
+}
+
+/*
 numeric_convert => "u8" convert_initializer
 */
-fn ast_fn162<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn220<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -4510,7 +6348,7 @@ fn ast_fn162<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 numeric_convert => "u8"
 */
-fn ast_fn163<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn221<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -4524,7 +6362,7 @@ fn ast_fn163<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 numeric_convert => "u16" convert_initializer
 */
-fn ast_fn164<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn222<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -4543,7 +6381,7 @@ fn ast_fn164<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 numeric_convert => "u16"
 */
-fn ast_fn165<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn223<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -4557,7 +6395,7 @@ fn ast_fn165<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 numeric_convert => "u32" convert_initializer
 */
-fn ast_fn166<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn224<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -4576,7 +6414,7 @@ fn ast_fn166<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 numeric_convert => "u32"
 */
-fn ast_fn167<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn225<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -4590,7 +6428,7 @@ fn ast_fn167<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 numeric_convert => "u64" convert_initializer
 */
-fn ast_fn168<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn226<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -4609,7 +6447,7 @@ fn ast_fn168<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 numeric_convert => "u64"
 */
-fn ast_fn169<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn227<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -4623,7 +6461,7 @@ fn ast_fn169<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 numeric_convert => "i8" convert_initializer
 */
-fn ast_fn170<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn228<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -4642,7 +6480,7 @@ fn ast_fn170<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 numeric_convert => "i8"
 */
-fn ast_fn171<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn229<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -4656,7 +6494,7 @@ fn ast_fn171<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 numeric_convert => "i16" convert_initializer
 */
-fn ast_fn172<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn230<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -4675,7 +6513,7 @@ fn ast_fn172<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 numeric_convert => "i16"
 */
-fn ast_fn173<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn231<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -4689,7 +6527,7 @@ fn ast_fn173<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 numeric_convert => "i32" convert_initializer
 */
-fn ast_fn174<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn232<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -4708,7 +6546,7 @@ fn ast_fn174<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 numeric_convert => "i32"
 */
-fn ast_fn175<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn233<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -4722,7 +6560,7 @@ fn ast_fn175<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 numeric_convert => "i64" convert_initializer
 */
-fn ast_fn176<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn234<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -4741,7 +6579,7 @@ fn ast_fn176<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 numeric_convert => "i64"
 */
-fn ast_fn177<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn235<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -4755,7 +6593,7 @@ fn ast_fn177<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 numeric_convert => "f32" convert_initializer
 */
-fn ast_fn178<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn236<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -4774,7 +6612,7 @@ fn ast_fn178<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 numeric_convert => "f32"
 */
-fn ast_fn179<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn237<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -4788,7 +6626,7 @@ fn ast_fn179<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 numeric_convert => "f64" convert_initializer
 */
-fn ast_fn180<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn238<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -4807,7 +6645,7 @@ fn ast_fn180<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 numeric_convert => "f64"
 */
-fn ast_fn181<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn239<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -4821,7 +6659,7 @@ fn ast_fn181<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 red => "r" tk:integer
 */
-fn ast_fn182<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn240<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -4832,9 +6670,36 @@ fn ast_fn182<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
+sequence_instruction_list_2 => sequence_instruction_list_2 token_num
+*/
+fn ast_fn241<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let AstSlot (i1, rng1, _) = slots.take(1);
+  let rng = rng0 + rng1;
+  
+  let ref_1_0 = i1;
+  let mut ref_0_0 = i0.into_nodes();
+  ref_0_0.push(ref_1_0);
+  slots.assign(0, AstSlot (ASTNode::NODES(ref_0_0), rng, TokenRange::default()))
+}
+
+/*
+sequence_instruction_list_2 => token_num
+*/
+fn ast_fn242<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let rng = rng0;
+  
+  let ref_0_0 = i0;
+  let mut ref_2_0 = vec![];
+  ref_2_0.push(ref_0_0);
+  slots.assign(0, AstSlot (ASTNode::NODES(ref_2_0), rng, TokenRange::default()))
+}
+
+/*
 import_production_symbol => tk:identifier_syms '::' tk:identifier_syms
 */
-fn ast_fn186<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn246<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, rng2, _) = slots.take(2);
@@ -4852,9 +6717,94 @@ fn ast_fn186<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
+breadcrumb => "crumb" '[' tk:integer '|' breadcrumb_action ']'
+*/
+fn ast_fn247<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  slots.take(1);
+  let AstSlot (i2, rng2, _) = slots.take(2);
+  slots.take(3);
+  let AstSlot (i4, ..) = slots.take(4);
+  let AstSlot (_, rng5, _) = slots.take(5);
+  let rng = rng0 + rng5;
+  
+  let ref_4_0 = i4;
+  let ref_2_1 = rng2.to_token(_ctx_.get_reader());
+  let ref_2_1 = ref_2_1.to_i32();
+  let ref_7_0 = Crumb::new(
+    ref_4_0, ref_2_1, 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::Crumb(Box::new(ref_7_0)), rng, TokenRange::default()))
+}
+
+/*
+breadcrumb => "crumb" "complete" '[' tk:integer ']'
+*/
+fn ast_fn248<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  slots.take(1);
+  slots.take(2);
+  let AstSlot (i3, rng3, _) = slots.take(3);
+  let AstSlot (_, rng4, _) = slots.take(4);
+  let rng = rng0 + rng4;
+  
+  let ref_3_0 = rng3.to_token(_ctx_.get_reader());
+  let ref_3_0 = ref_3_0.to_i32();
+  let ref_6_0 = CrumbComplete::new(
+    ref_3_0, 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::CrumbComplete(Box::new(ref_6_0)), rng, TokenRange::default()))
+}
+
+/*
+reduce_instruction => "reduce" tk:integer "symbols" "with" "rule" tk:integer
+*/
+fn ast_fn249<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  let AstSlot (i1, rng1, _) = slots.take(1);
+  slots.take(2);
+  slots.take(3);
+  slots.take(4);
+  let AstSlot (i5, rng5, _) = slots.take(5);
+  let rng = rng0 + rng5;
+  
+  let ref_1_0 = rng1.to_token(_ctx_.get_reader());
+  let ref_1_0 = ref_1_0.to_i32();
+  let ref_5_1 = rng5.to_token(_ctx_.get_reader());
+  let ref_5_1 = ref_5_1.to_i32();
+  let ref_7_0 = Reduce::new(
+    ref_1_0, ref_5_1, 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::Reduce(Box::new(ref_7_0)), rng, TokenRange::default()))
+}
+
+/*
+reduce_instruction => "reduce" tk:integer tk:integer
+*/
+fn ast_fn250<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  let AstSlot (i1, rng1, _) = slots.take(1);
+  let AstSlot (i2, rng2, _) = slots.take(2);
+  let rng = rng0 + rng2;
+  
+  let ref_1_0 = rng1.to_token(_ctx_.get_reader());
+  let ref_1_0 = ref_1_0.to_i32();
+  let ref_2_1 = rng2.to_token(_ctx_.get_reader());
+  let ref_2_1 = ref_2_1.to_i32();
+  let ref_4_0 = Reduce::new(
+    ref_1_0, ref_2_1, 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::Reduce(Box::new(ref_4_0)), rng, TokenRange::default()))
+}
+
+/*
 struct => '{' type_identifier ',' struct_list_1 '}'
 */
-fn ast_fn187<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn251<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   slots.take(2);
@@ -4874,7 +6824,7 @@ fn ast_fn187<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 struct => '{' type_identifier '}'
 */
-fn ast_fn188<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn252<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let AstSlot (_, rng2, _) = slots.take(2);
@@ -4891,7 +6841,7 @@ fn ast_fn188<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 class => "c:" 'num'
 */
-fn ast_fn189<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn253<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -4908,7 +6858,7 @@ fn ast_fn189<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 class => "c:" 'nl'
 */
-fn ast_fn190<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn254<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -4925,7 +6875,7 @@ fn ast_fn190<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 class => "c:" 'sp'
 */
-fn ast_fn191<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn255<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -4942,7 +6892,7 @@ fn ast_fn191<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 class => "c:" 'id'
 */
-fn ast_fn192<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn256<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -4959,7 +6909,7 @@ fn ast_fn192<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 class => "c:" 'sym'
 */
-fn ast_fn193<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn257<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -4976,7 +6926,7 @@ fn ast_fn193<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 class => "c:" 'any'
 */
-fn ast_fn194<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn258<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -4993,7 +6943,7 @@ fn ast_fn194<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 production => "<" production_list_1 '>' 'lazy' priority non_terminal '>' rules
 */
-fn ast_fn196<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn260<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, ..) = slots.take(1);
   slots.take(2);
@@ -5023,7 +6973,7 @@ fn ast_fn196<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 production => "<" '>' 'lazy' priority non_terminal '>' rules
 */
-fn ast_fn197<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn261<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   slots.take(2);
@@ -5051,7 +7001,7 @@ fn ast_fn197<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 production => "<" production_list_1 '>' priority non_terminal '>' rules
 */
-fn ast_fn198<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn262<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, ..) = slots.take(1);
   slots.take(2);
@@ -5080,7 +7030,7 @@ fn ast_fn198<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 production => "<" '>' priority non_terminal '>' rules
 */
-fn ast_fn199<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn263<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -5107,7 +7057,7 @@ fn ast_fn199<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 production => "<" production_list_1 '>' 'lazy' non_terminal '>' rules
 */
-fn ast_fn200<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn264<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, ..) = slots.take(1);
   slots.take(2);
@@ -5132,7 +7082,7 @@ fn ast_fn200<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 production => "<" '>' 'lazy' non_terminal '>' rules
 */
-fn ast_fn201<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn265<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   slots.take(2);
@@ -5155,7 +7105,7 @@ fn ast_fn201<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 production => "<" production_list_1 '>' non_terminal '>' rules
 */
-fn ast_fn202<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn266<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, ..) = slots.take(1);
   slots.take(2);
@@ -5179,7 +7129,7 @@ fn ast_fn202<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 production => "<" '>' non_terminal '>' rules
 */
-fn ast_fn203<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn267<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, rng2, _) = slots.take(2);
@@ -5201,7 +7151,7 @@ fn ast_fn203<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 terminal_list_3 => terminal_list_3 g:id
 */
-fn ast_fn204<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn268<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -5215,7 +7165,7 @@ fn ast_fn204<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 terminal_list_3 => terminal_list_3 g:sym
 */
-fn ast_fn205<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn269<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -5229,7 +7179,7 @@ fn ast_fn205<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 terminal_list_3 => terminal_list_3 g:num
 */
-fn ast_fn206<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn270<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -5243,7 +7193,7 @@ fn ast_fn206<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 terminal_list_3 => terminal_list_3 g:sp
 */
-fn ast_fn207<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn271<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -5257,7 +7207,7 @@ fn ast_fn207<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 terminal_list_3 => terminal_list_3 escaped
 */
-fn ast_fn208<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn272<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -5271,7 +7221,7 @@ fn ast_fn208<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 terminal_list_3 => g:id
 */
-fn ast_fn209<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn273<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -5284,7 +7234,7 @@ fn ast_fn209<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 terminal_list_3 => g:sym
 */
-fn ast_fn210<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn274<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -5297,7 +7247,7 @@ fn ast_fn210<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 terminal_list_3 => g:num
 */
-fn ast_fn211<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn275<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -5310,7 +7260,7 @@ fn ast_fn211<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 terminal_list_3 => g:sp
 */
-fn ast_fn212<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn276<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -5323,7 +7273,7 @@ fn ast_fn212<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 terminal_list_3 => escaped
 */
-fn ast_fn213<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn277<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -5336,7 +7286,7 @@ fn ast_fn213<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 ignore_clause => "IGNORE" "{" ignore_clause_list_1 "}"
 */
-fn ast_fn214<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn278<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -5354,7 +7304,7 @@ fn ast_fn214<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 production_symbol => tk:identifier_syms
 */
-fn ast_fn215<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn279<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -5370,7 +7320,7 @@ fn ast_fn215<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 any_group => '[' "unordered" any_group_list_1 ']'
 */
-fn ast_fn216<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn280<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, ..) = slots.take(2);
@@ -5389,7 +7339,7 @@ fn ast_fn216<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 any_group => '[' any_group_list_1 ']'
 */
-fn ast_fn217<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn281<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, ..) = slots.take(1);
   let AstSlot (_, rng2, _) = slots.take(2);
@@ -5405,9 +7355,198 @@ fn ast_fn217<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
+instruction_sequence => instruction_sequence_list_1 "then" instruction_sequence_list_2 instruction_sequence_group_2
+*/
+fn ast_fn282<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  slots.take(1);
+  let AstSlot (i2, ..) = slots.take(2);
+  let AstSlot (i3, rng3, _) = slots.take(3);
+  let rng = rng0 + rng3;
+  
+  let mut ref_2_0 = i2.into_nodes();
+  let ref_3_0 = i3;
+  let mut ref_0_0 = i0.into_nodes();
+  ref_0_0.append(&mut ref_2_0);
+  ref_0_0.push(ref_3_0);
+  slots.assign(0, AstSlot (ASTNode::NODES(ref_0_0), rng, TokenRange::default()))
+}
+
+/*
+instruction_sequence => instruction_sequence_list_1 instruction_sequence_group_2
+*/
+fn ast_fn283<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let AstSlot (i1, rng1, _) = slots.take(1);
+  let rng = rng0 + rng1;
+  
+  let ref_1_0 = i1;
+  let mut ref_0_0 = i0.into_nodes();
+  ref_0_0.push(ref_1_0);
+  slots.assign(0, AstSlot (ASTNode::NODES(ref_0_0), rng, TokenRange::default()))
+}
+
+/*
+instruction_sequence => instruction_sequence_list_1 "then" instruction_sequence_list_2
+*/
+fn ast_fn284<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  slots.take(1);
+  let AstSlot (i2, rng2, _) = slots.take(2);
+  let rng = rng0 + rng2;
+  
+  let mut ref_2_0 = i2.into_nodes();
+  let mut ref_0_0 = i0.into_nodes();
+  ref_0_0.append(&mut ref_2_0);
+  slots.assign(0, AstSlot (ASTNode::NODES(ref_0_0), rng, TokenRange::default()))
+}
+
+/*
+instruction_sequence => instruction_sequence_list_1
+*/
+fn ast_fn285<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let rng = rng0;
+  
+  let ref_0_0 = i0.into_nodes();
+  slots.assign(0, AstSlot (ASTNode::NODES(ref_0_0), rng, TokenRange::default()))
+}
+
+/*
+instruction_sequence => instruction_sequence_list_3 instruction_sequence_group_1
+*/
+fn ast_fn286<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let AstSlot (i1, rng1, _) = slots.take(1);
+  let rng = rng0 + rng1;
+  
+  let ref_1_0 = i1;
+  let mut ref_0_0 = i0.into_nodes();
+  ref_0_0.push(ref_1_0);
+  slots.assign(0, AstSlot (ASTNode::NODES(ref_0_0), rng, TokenRange::default()))
+}
+
+/*
+instruction_sequence => instruction_sequence_list_3
+*/
+fn ast_fn287<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let rng = rng0;
+  
+  let ref_0_0 = i0.into_nodes();
+  slots.assign(0, AstSlot (ASTNode::NODES(ref_0_0), rng, TokenRange::default()))
+}
+
+/*
+instruction_sequence => instruction_sequence_group_0
+*/
+fn ast_fn288<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let rng = rng0;
+  
+  let ref_0_0 = i0;
+  let mut ref_2_0 = vec![];
+  ref_2_0.push(ref_0_0);
+  slots.assign(0, AstSlot (ASTNode::NODES(ref_2_0), rng, TokenRange::default()))
+}
+
+/*
+assertion_instruction => "assert" "peek?" assert_class production_id_list '(' instruction_sequence ')'
+*/
+fn ast_fn289<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  slots.take(1);
+  let AstSlot (i2, rng2, _) = slots.take(2);
+  let AstSlot (i3, ..) = slots.take(3);
+  slots.take(4);
+  let AstSlot (i5, ..) = slots.take(5);
+  let AstSlot (_, rng6, _) = slots.take(6);
+  let rng = rng0 + rng6;
+  
+  let ref_3_0 = i3;
+  let ref_3_0 = if let ASTNode::Num(obj) = ref_3_0
+        { obj }
+        else {panic!("invalid node")};
+  let ref_5_1 = i5.into_nodes();
+  let ref_8_2 = true;
+  let ref_2_4 = rng2.to_token(_ctx_.get_reader());
+  let ref_2_4 = ref_2_4.to_string();
+  let ref_9_0 = ASSERT::new(
+    ref_3_0, ref_5_1, ref_8_2, false, ref_2_4, 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::ASSERT(Box::new(ref_9_0)), rng, TokenRange::default()))
+}
+
+/*
+assertion_instruction => "skip" production_id_list
+*/
+fn ast_fn290<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  let AstSlot (i1, rng1, _) = slots.take(1);
+  let rng = rng0 + rng1;
+  
+  let ref_1_0 = i1;
+  let ref_1_0 = if let ASTNode::Num(obj) = ref_1_0
+        { obj }
+        else {panic!("invalid node")};
+  let ref_3_3 = true;
+  let ref_4_0 = ASSERT::new(
+    ref_1_0, Vec::new(), false, ref_3_3, String::new(), 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::ASSERT(Box::new(ref_4_0)), rng, TokenRange::default()))
+}
+
+/*
+assertion_instruction => "default" '(' instruction_sequence ')'
+*/
+fn ast_fn291<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  slots.take(1);
+  let AstSlot (i2, ..) = slots.take(2);
+  let AstSlot (_, rng3, _) = slots.take(3);
+  let rng = rng0 + rng3;
+  
+  let ref_2_0 = i2.into_nodes();
+  let ref_5_0 = DEFAULT::new(
+    ref_2_0, 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::DEFAULT(Box::new(ref_5_0)), rng, TokenRange::default()))
+}
+
+/*
+token_id_list_list_1 => token_id_list_list_1 token_num
+*/
+fn ast_fn292<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let AstSlot (i1, rng1, _) = slots.take(1);
+  let rng = rng0 + rng1;
+  
+  let ref_1_0 = i1;
+  let mut ref_0_0 = i0.into_nodes();
+  ref_0_0.push(ref_1_0);
+  slots.assign(0, AstSlot (ASTNode::NODES(ref_0_0), rng, TokenRange::default()))
+}
+
+/*
+token_id_list_list_1 => token_num
+*/
+fn ast_fn293<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let rng = rng0;
+  
+  let ref_0_0 = i0;
+  let mut ref_2_0 = vec![];
+  ref_2_0.push(ref_0_0);
+  slots.assign(0, AstSlot (ASTNode::NODES(ref_2_0), rng, TokenRange::default()))
+}
+
+/*
 string_convert => "str" convert_initializer
 */
-fn ast_fn218<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn294<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -5426,7 +7565,7 @@ fn ast_fn218<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 string_convert => "str"
 */
-fn ast_fn219<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn295<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -5440,7 +7579,7 @@ fn ast_fn219<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 append_production => "+>" priority non_terminal '>' rules
 */
-fn ast_fn220<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn296<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, ..) = slots.take(1);
   let AstSlot (i2, rng2, _) = slots.take(2);
@@ -5467,7 +7606,7 @@ fn ast_fn220<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 append_production => priority non_terminal '>' rules
 */
-fn ast_fn221<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn297<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   slots.take(2);
@@ -5493,7 +7632,7 @@ fn ast_fn221<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 append_production => "+>" non_terminal '>' rules
 */
-fn ast_fn222<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn298<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   slots.take(2);
@@ -5515,7 +7654,7 @@ fn ast_fn222<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 append_production => non_terminal '>' rules
 */
-fn ast_fn223<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn299<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, rng2, _) = slots.take(2);
@@ -5534,9 +7673,82 @@ fn ast_fn223<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
+instruction_sequence_group_0_list_1 => instruction_sequence_group_0_list_1 g:num
+*/
+fn ast_fn300<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let AstSlot (i1, rng1, _) = slots.take(1);
+  let rng = rng0 + rng1;
+  
+  let ref_1_0 = rng1.to_token(_ctx_.get_reader());
+  let mut ref_0_0 = i0.into_tokens();
+  ref_0_0.push(ref_1_0);
+  slots.assign(0, AstSlot (ASTNode::TOKENS(ref_0_0), rng, TokenRange::default()))
+}
+
+/*
+instruction_sequence_group_0_list_1 => g:num
+*/
+fn ast_fn301<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let rng = rng0;
+  
+  let ref_0_0 = rng0.to_token(_ctx_.get_reader());
+  let mut ref_2_0 = vec![];
+  ref_2_0.push(ref_0_0);
+  slots.assign(0, AstSlot (ASTNode::TOKENS(ref_2_0), rng, TokenRange::default()))
+}
+
+/*
+instruction_sequence_group_0_list_2 => instruction_sequence_group_0_list_2 g:num
+*/
+fn ast_fn302<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let AstSlot (i1, rng1, _) = slots.take(1);
+  let rng = rng0 + rng1;
+  
+  let ref_1_0 = rng1.to_token(_ctx_.get_reader());
+  let mut ref_0_0 = i0.into_tokens();
+  ref_0_0.push(ref_1_0);
+  slots.assign(0, AstSlot (ASTNode::TOKENS(ref_0_0), rng, TokenRange::default()))
+}
+
+/*
+instruction_sequence_group_0_list_2 => g:num
+*/
+fn ast_fn303<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let rng = rng0;
+  
+  let ref_0_0 = rng0.to_token(_ctx_.get_reader());
+  let mut ref_2_0 = vec![];
+  ref_2_0.push(ref_0_0);
+  slots.assign(0, AstSlot (ASTNode::TOKENS(ref_2_0), rng, TokenRange::default()))
+}
+
+/*
+goto_instruction => "goto" state_reference
+*/
+fn ast_fn304<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  let AstSlot (i1, rng1, _) = slots.take(1);
+  let rng = rng0 + rng1;
+  
+  let ref_1_0 = i1;
+  let ref_1_0 = if let ASTNode::HASH_NAME(obj) = ref_1_0
+        { obj }
+        else {panic!("invalid node")};
+  let ref_3_0 = Goto::new(
+    ref_1_0, 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::Goto(Box::new(ref_3_0)), rng, TokenRange::default()))
+}
+
+/*
 production_list_1 => production_list_1 ',' template_name
 */
-fn ast_fn224<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn305<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, rng2, _) = slots.take(2);
@@ -5551,7 +7763,7 @@ fn ast_fn224<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 production_list_1 => template_name
 */
-fn ast_fn225<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn306<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -5564,7 +7776,7 @@ fn ast_fn225<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 grammar_list_1 => grammar_list_1 preamble
 */
-fn ast_fn226<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn307<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -5578,7 +7790,7 @@ fn ast_fn226<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 grammar_list_1 => preamble
 */
-fn ast_fn227<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn308<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -5591,7 +7803,7 @@ fn ast_fn227<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 literal => "true"
 */
-fn ast_fn228<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn309<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -5606,7 +7818,7 @@ fn ast_fn228<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 literal => "false"
 */
-fn ast_fn229<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn310<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -5621,7 +7833,7 @@ fn ast_fn229<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 literal => tk:integer
 */
-fn ast_fn230<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn311<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -5635,9 +7847,37 @@ fn ast_fn230<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
+instruction_sequence_list_1 => instruction_sequence_list_1 "then" sequence_instruction
+*/
+fn ast_fn312<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  slots.take(1);
+  let AstSlot (i2, rng2, _) = slots.take(2);
+  let rng = rng0 + rng2;
+  
+  let ref_2_0 = i2;
+  let mut ref_0_0 = i0.into_nodes();
+  ref_0_0.push(ref_2_0);
+  slots.assign(0, AstSlot (ASTNode::NODES(ref_0_0), rng, TokenRange::default()))
+}
+
+/*
+instruction_sequence_list_1 => sequence_instruction
+*/
+fn ast_fn313<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let rng = rng0;
+  
+  let ref_0_0 = i0;
+  let mut ref_2_0 = vec![];
+  ref_2_0.push(ref_0_0);
+  slots.assign(0, AstSlot (ASTNode::NODES(ref_2_0), rng, TokenRange::default()))
+}
+
+/*
 rule_list_1 => rule_list_1 annotated_symbol
 */
-fn ast_fn237<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn319<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -5651,7 +7891,7 @@ fn ast_fn237<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 rule_list_1 => rule_list_1 any_group
 */
-fn ast_fn238<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn320<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -5665,7 +7905,7 @@ fn ast_fn238<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 rule_list_1 => annotated_symbol
 */
-fn ast_fn239<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn321<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -5678,7 +7918,7 @@ fn ast_fn239<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 rule_list_1 => any_group
 */
-fn ast_fn240<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn322<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -5691,7 +7931,7 @@ fn ast_fn240<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 body_list_1 => body_list_1 ';' expression
 */
-fn ast_fn241<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn323<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, rng2, _) = slots.take(2);
@@ -5706,7 +7946,7 @@ fn ast_fn241<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 body_list_1 => expression
 */
-fn ast_fn242<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn324<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -5717,9 +7957,40 @@ fn ast_fn242<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 }
 
 /*
+breadcrumb_action => "map" tk:integer
+*/
+fn ast_fn330<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  let AstSlot (i1, rng1, _) = slots.take(1);
+  let rng = rng0 + rng1;
+  
+  let ref_1_0 = rng1.to_token(_ctx_.get_reader());
+  let ref_1_0 = ref_1_0.to_i32();
+  let ref_3_0 = Map::new(
+    ref_1_0, 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::Map(Box::new(ref_3_0)), rng, TokenRange::default()))
+}
+
+/*
+breadcrumb_action => "shift"
+*/
+fn ast_fn332<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  let rng = rng0;
+  
+  let ref_2_0 = Shift::new(
+    false, 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::Shift(Box::new(ref_2_0)), rng, TokenRange::default()))
+}
+
+/*
 any_group_list_1 => any_group_list_1 annotated_symbol
 */
-fn ast_fn246<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn333<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -5733,7 +8004,60 @@ fn ast_fn246<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 any_group_list_1 => annotated_symbol
 */
-fn ast_fn247<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn334<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let rng = rng0;
+  
+  let ref_0_0 = i0;
+  let mut ref_2_0 = vec![];
+  ref_2_0.push(ref_0_0);
+  slots.assign(0, AstSlot (ASTNode::NODES(ref_2_0), rng, TokenRange::default()))
+}
+
+/*
+instruction_sequence_group_0 => "lazy" '(' instruction_sequence_group_0_list_1 ':' instruction_sequence_group_0_list_2 ')' state_reference
+*/
+fn ast_fn335<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (_, rng0, _) = slots.take(0);
+  slots.take(1);
+  let AstSlot (i2, ..) = slots.take(2);
+  slots.take(3);
+  let AstSlot (i4, ..) = slots.take(4);
+  slots.take(5);
+  let AstSlot (i6, rng6, _) = slots.take(6);
+  let rng = rng0 + rng6;
+  
+  let ref_4_0 = i4.into_tokens();
+  let ref_2_1 = i2.into_tokens();
+  let ref_6_2 = i6;
+  let ref_6_2 = if let ASTNode::HASH_NAME(obj) = ref_6_2
+        { obj }
+        else {panic!("invalid node")};
+  let ref_8_0 = Lazy::new(
+    ref_4_0, ref_2_1, ref_6_2, 
+  
+  );
+  slots.assign(0, AstSlot (ASTNode::Lazy(Box::new(ref_8_0)), rng, TokenRange::default()))
+}
+
+/*
+top_level_instructions_list_1 => top_level_instructions_list_1 assertion_instruction
+*/
+fn ast_fn336<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+  let AstSlot (i0, rng0, _) = slots.take(0);
+  let AstSlot (i1, rng1, _) = slots.take(1);
+  let rng = rng0 + rng1;
+  
+  let ref_1_0 = i1;
+  let mut ref_0_0 = i0.into_nodes();
+  ref_0_0.push(ref_1_0);
+  slots.assign(0, AstSlot (ASTNode::NODES(ref_0_0), rng, TokenRange::default()))
+}
+
+/*
+top_level_instructions_list_1 => assertion_instruction
+*/
+fn ast_fn337<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   let rng = rng0;
   
@@ -5746,7 +8070,7 @@ fn ast_fn247<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 member => reference '.' identifier
 */
-fn ast_fn249<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn339<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (i0, rng0, _) = slots.take(0);
   slots.take(1);
   let AstSlot (i2, rng2, _) = slots.take(2);
@@ -5764,7 +8088,7 @@ fn ast_fn249<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 blue => "b" tk:integer
 */
-fn ast_fn250<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn340<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, rng1, _) = slots.take(1);
   let rng = rng0 + rng1;
@@ -5777,7 +8101,7 @@ fn ast_fn250<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 import_clause => "IMPORT" import_clause_list_1 g:sp 'AS' identifier
 */
-fn ast_fn251<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn341<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, ..) = slots.take(1);
   slots.take(2);
@@ -5799,7 +8123,7 @@ fn ast_fn251<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
 /*
 import_clause => "IMPORT" import_clause_list_1 g:sp 'as' identifier
 */
-fn ast_fn252<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
+fn ast_fn342<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<ASTNode>>){
   let AstSlot (_, rng0, _) = slots.take(0);
   let AstSlot (i1, ..) = slots.take(1);
   slots.take(2);
@@ -5818,7 +8142,7 @@ fn ast_fn252<R: Reader + UTF8Reader, M>(_ctx_: &ParseContext<R, M>, slots: &AstS
   slots.assign(0, AstSlot (ASTNode::Import(Box::new(ref_6_0)), rng, TokenRange::default()))
 }
 
-struct ReduceFunctions<R: Reader + UTF8Reader, M>(pub [Reducer<R, M, ASTNode>; 253]);
+struct ReduceFunctions<R: Reader + UTF8Reader, M>(pub [Reducer<R, M, ASTNode>; 343]);
 impl<R: Reader + UTF8Reader, M> ReduceFunctions<R, M> {
   pub const fn new() -> Self {
     Self([
@@ -5830,41 +8154,41 @@ impl<R: Reader + UTF8Reader, M> ReduceFunctions<R, M> {
 /* 5 */ ast_fn005::<R, M>,
 /* 6 */ ast_fn006::<R, M>,
 /* 7 */ ast_fn007::<R, M>,
-/* 8 1 */ default_fn::<R, M>,
-/* 9 */ ast_fn009::<R, M>,
+/* 8 */ ast_fn008::<R, M>,
+/* 9 1 */ default_fn::<R, M>,
 /* 10 */ ast_fn010::<R, M>,
 /* 11 */ ast_fn011::<R, M>,
-/* 12 1 */ default_fn::<R, M>,
-/* 13 1 */ default_fn::<R, M>,
-/* 14 1 */ default_fn::<R, M>,
+/* 12 */ ast_fn012::<R, M>,
+/* 13 */ ast_fn013::<R, M>,
+/* 14 */ ast_fn014::<R, M>,
 /* 15 1 */ default_fn::<R, M>,
 /* 16 1 */ default_fn::<R, M>,
 /* 17 1 */ default_fn::<R, M>,
-/* 18 */ ast_fn018::<R, M>,
-/* 19 */ ast_fn019::<R, M>,
-/* 20 */ ast_fn020::<R, M>,
+/* 18 1 */ default_fn::<R, M>,
+/* 19 1 */ default_fn::<R, M>,
+/* 20 1 */ default_fn::<R, M>,
 /* 21 */ ast_fn021::<R, M>,
-/* 22 1 */ default_fn::<R, M>,
-/* 23 1 */ default_fn::<R, M>,
+/* 22 */ ast_fn022::<R, M>,
+/* 23 */ ast_fn023::<R, M>,
 /* 24 */ ast_fn024::<R, M>,
-/* 25 */ ast_fn025::<R, M>,
+/* 25 1 */ default_fn::<R, M>,
 /* 26 1 */ default_fn::<R, M>,
 /* 27 */ ast_fn027::<R, M>,
 /* 28 */ ast_fn028::<R, M>,
 /* 29 */ ast_fn029::<R, M>,
 /* 30 */ ast_fn030::<R, M>,
-/* 31 */ ast_fn031::<R, M>,
+/* 31 1 */ default_fn::<R, M>,
 /* 32 */ ast_fn032::<R, M>,
-/* 33 1 */ default_fn::<R, M>,
-/* 34 1 */ default_fn::<R, M>,
-/* 35 1 */ default_fn::<R, M>,
-/* 36 1 */ default_fn::<R, M>,
+/* 33 */ ast_fn033::<R, M>,
+/* 34 */ ast_fn034::<R, M>,
+/* 35 */ ast_fn035::<R, M>,
+/* 36 */ ast_fn036::<R, M>,
 /* 37 */ ast_fn037::<R, M>,
 /* 38 */ ast_fn038::<R, M>,
-/* 39 */ ast_fn039::<R, M>,
-/* 40 */ ast_fn040::<R, M>,
-/* 41 */ ast_fn041::<R, M>,
-/* 42 */ ast_fn042::<R, M>,
+/* 39 1 */ default_fn::<R, M>,
+/* 40 1 */ default_fn::<R, M>,
+/* 41 1 */ default_fn::<R, M>,
+/* 42 1 */ default_fn::<R, M>,
 /* 43 */ ast_fn043::<R, M>,
 /* 44 */ ast_fn044::<R, M>,
 /* 45 */ ast_fn045::<R, M>,
@@ -5914,7 +8238,7 @@ impl<R: Reader + UTF8Reader, M> ReduceFunctions<R, M> {
 /* 89 */ ast_fn089::<R, M>,
 /* 90 */ ast_fn090::<R, M>,
 /* 91 */ ast_fn091::<R, M>,
-/* 92 1 */ default_fn::<R, M>,
+/* 92 */ ast_fn092::<R, M>,
 /* 93 */ ast_fn093::<R, M>,
 /* 94 */ ast_fn094::<R, M>,
 /* 95 */ ast_fn095::<R, M>,
@@ -5924,23 +8248,23 @@ impl<R: Reader + UTF8Reader, M> ReduceFunctions<R, M> {
 /* 99 */ ast_fn099::<R, M>,
 /* 100 */ ast_fn100::<R, M>,
 /* 101 */ ast_fn101::<R, M>,
-/* 102 1 */ default_fn::<R, M>,
-/* 103 1 */ default_fn::<R, M>,
-/* 104 1 */ default_fn::<R, M>,
-/* 105 1 */ default_fn::<R, M>,
-/* 106 1 */ default_fn::<R, M>,
-/* 107 1 */ default_fn::<R, M>,
-/* 108 1 */ default_fn::<R, M>,
-/* 109 1 */ default_fn::<R, M>,
+/* 102 */ ast_fn102::<R, M>,
+/* 103 */ ast_fn103::<R, M>,
+/* 104 */ ast_fn104::<R, M>,
+/* 105 */ ast_fn105::<R, M>,
+/* 106 */ ast_fn106::<R, M>,
+/* 107 */ ast_fn107::<R, M>,
+/* 108 */ ast_fn108::<R, M>,
+/* 109 */ ast_fn109::<R, M>,
 /* 110 */ ast_fn110::<R, M>,
 /* 111 */ ast_fn111::<R, M>,
-/* 112 */ ast_fn112::<R, M>,
+/* 112 1 */ default_fn::<R, M>,
 /* 113 */ ast_fn113::<R, M>,
 /* 114 */ ast_fn114::<R, M>,
 /* 115 */ ast_fn115::<R, M>,
 /* 116 */ ast_fn116::<R, M>,
 /* 117 */ ast_fn117::<R, M>,
-/* 118 1 */ default_fn::<R, M>,
+/* 118 */ ast_fn118::<R, M>,
 /* 119 */ ast_fn119::<R, M>,
 /* 120 */ ast_fn120::<R, M>,
 /* 121 */ ast_fn121::<R, M>,
@@ -5950,14 +8274,14 @@ impl<R: Reader + UTF8Reader, M> ReduceFunctions<R, M> {
 /* 125 */ ast_fn125::<R, M>,
 /* 126 */ ast_fn126::<R, M>,
 /* 127 */ ast_fn127::<R, M>,
-/* 128 */ ast_fn128::<R, M>,
-/* 129 */ ast_fn129::<R, M>,
-/* 130 */ ast_fn130::<R, M>,
-/* 131 */ ast_fn131::<R, M>,
-/* 132 */ ast_fn132::<R, M>,
-/* 133 */ ast_fn133::<R, M>,
-/* 134 */ ast_fn134::<R, M>,
-/* 135 */ ast_fn135::<R, M>,
+/* 128 1 */ default_fn::<R, M>,
+/* 129 1 */ default_fn::<R, M>,
+/* 130 1 */ default_fn::<R, M>,
+/* 131 1 */ default_fn::<R, M>,
+/* 132 1 */ default_fn::<R, M>,
+/* 133 1 */ default_fn::<R, M>,
+/* 134 1 */ default_fn::<R, M>,
+/* 135 1 */ default_fn::<R, M>,
 /* 136 */ ast_fn136::<R, M>,
 /* 137 */ ast_fn137::<R, M>,
 /* 138 */ ast_fn138::<R, M>,
@@ -5967,7 +8291,7 @@ impl<R: Reader + UTF8Reader, M> ReduceFunctions<R, M> {
 /* 142 */ ast_fn142::<R, M>,
 /* 143 */ ast_fn143::<R, M>,
 /* 144 */ ast_fn144::<R, M>,
-/* 145 */ ast_fn145::<R, M>,
+/* 145 1 */ default_fn::<R, M>,
 /* 146 */ ast_fn146::<R, M>,
 /* 147 */ ast_fn147::<R, M>,
 /* 148 */ ast_fn148::<R, M>,
@@ -5976,7 +8300,7 @@ impl<R: Reader + UTF8Reader, M> ReduceFunctions<R, M> {
 /* 151 */ ast_fn151::<R, M>,
 /* 152 */ ast_fn152::<R, M>,
 /* 153 */ ast_fn153::<R, M>,
-/* 154 */ ast_fn154::<R, M>,
+/* 154 1 */ default_fn::<R, M>,
 /* 155 */ ast_fn155::<R, M>,
 /* 156 */ ast_fn156::<R, M>,
 /* 157 */ ast_fn157::<R, M>,
@@ -6005,9 +8329,9 @@ impl<R: Reader + UTF8Reader, M> ReduceFunctions<R, M> {
 /* 180 */ ast_fn180::<R, M>,
 /* 181 */ ast_fn181::<R, M>,
 /* 182 */ ast_fn182::<R, M>,
-/* 183 1 */ default_fn::<R, M>,
-/* 184 1 */ default_fn::<R, M>,
-/* 185 1 */ default_fn::<R, M>,
+/* 183 */ ast_fn183::<R, M>,
+/* 184 */ ast_fn184::<R, M>,
+/* 185 */ ast_fn185::<R, M>,
 /* 186 */ ast_fn186::<R, M>,
 /* 187 */ ast_fn187::<R, M>,
 /* 188 */ ast_fn188::<R, M>,
@@ -6015,11 +8339,11 @@ impl<R: Reader + UTF8Reader, M> ReduceFunctions<R, M> {
 /* 190 */ ast_fn190::<R, M>,
 /* 191 */ ast_fn191::<R, M>,
 /* 192 */ ast_fn192::<R, M>,
-/* 193 */ ast_fn193::<R, M>,
-/* 194 */ ast_fn194::<R, M>,
+/* 193 1 */ default_fn::<R, M>,
+/* 194 1 */ default_fn::<R, M>,
 /* 195 1 */ default_fn::<R, M>,
-/* 196 */ ast_fn196::<R, M>,
-/* 197 */ ast_fn197::<R, M>,
+/* 196 1 */ default_fn::<R, M>,
+/* 197 1 */ default_fn::<R, M>,
 /* 198 */ ast_fn198::<R, M>,
 /* 199 */ ast_fn199::<R, M>,
 /* 200 */ ast_fn200::<R, M>,
@@ -6029,8 +8353,8 @@ impl<R: Reader + UTF8Reader, M> ReduceFunctions<R, M> {
 /* 204 */ ast_fn204::<R, M>,
 /* 205 */ ast_fn205::<R, M>,
 /* 206 */ ast_fn206::<R, M>,
-/* 207 */ ast_fn207::<R, M>,
-/* 208 */ ast_fn208::<R, M>,
+/* 207 1 */ default_fn::<R, M>,
+/* 208 1 */ default_fn::<R, M>,
 /* 209 */ ast_fn209::<R, M>,
 /* 210 */ ast_fn210::<R, M>,
 /* 211 */ ast_fn211::<R, M>,
@@ -6053,12 +8377,12 @@ impl<R: Reader + UTF8Reader, M> ReduceFunctions<R, M> {
 /* 228 */ ast_fn228::<R, M>,
 /* 229 */ ast_fn229::<R, M>,
 /* 230 */ ast_fn230::<R, M>,
-/* 231 1 */ default_fn::<R, M>,
-/* 232 1 */ default_fn::<R, M>,
-/* 233 1 */ default_fn::<R, M>,
-/* 234 1 */ default_fn::<R, M>,
-/* 235 1 */ default_fn::<R, M>,
-/* 236 1 */ default_fn::<R, M>,
+/* 231 */ ast_fn231::<R, M>,
+/* 232 */ ast_fn232::<R, M>,
+/* 233 */ ast_fn233::<R, M>,
+/* 234 */ ast_fn234::<R, M>,
+/* 235 */ ast_fn235::<R, M>,
+/* 236 */ ast_fn236::<R, M>,
 /* 237 */ ast_fn237::<R, M>,
 /* 238 */ ast_fn238::<R, M>,
 /* 239 */ ast_fn239::<R, M>,
@@ -6070,11 +8394,101 @@ impl<R: Reader + UTF8Reader, M> ReduceFunctions<R, M> {
 /* 245 1 */ default_fn::<R, M>,
 /* 246 */ ast_fn246::<R, M>,
 /* 247 */ ast_fn247::<R, M>,
-/* 248 1 */ default_fn::<R, M>,
+/* 248 */ ast_fn248::<R, M>,
 /* 249 */ ast_fn249::<R, M>,
 /* 250 */ ast_fn250::<R, M>,
 /* 251 */ ast_fn251::<R, M>,
-/* 252 */ ast_fn252::<R, M>
+/* 252 */ ast_fn252::<R, M>,
+/* 253 */ ast_fn253::<R, M>,
+/* 254 */ ast_fn254::<R, M>,
+/* 255 */ ast_fn255::<R, M>,
+/* 256 */ ast_fn256::<R, M>,
+/* 257 */ ast_fn257::<R, M>,
+/* 258 */ ast_fn258::<R, M>,
+/* 259 1 */ default_fn::<R, M>,
+/* 260 */ ast_fn260::<R, M>,
+/* 261 */ ast_fn261::<R, M>,
+/* 262 */ ast_fn262::<R, M>,
+/* 263 */ ast_fn263::<R, M>,
+/* 264 */ ast_fn264::<R, M>,
+/* 265 */ ast_fn265::<R, M>,
+/* 266 */ ast_fn266::<R, M>,
+/* 267 */ ast_fn267::<R, M>,
+/* 268 */ ast_fn268::<R, M>,
+/* 269 */ ast_fn269::<R, M>,
+/* 270 */ ast_fn270::<R, M>,
+/* 271 */ ast_fn271::<R, M>,
+/* 272 */ ast_fn272::<R, M>,
+/* 273 */ ast_fn273::<R, M>,
+/* 274 */ ast_fn274::<R, M>,
+/* 275 */ ast_fn275::<R, M>,
+/* 276 */ ast_fn276::<R, M>,
+/* 277 */ ast_fn277::<R, M>,
+/* 278 */ ast_fn278::<R, M>,
+/* 279 */ ast_fn279::<R, M>,
+/* 280 */ ast_fn280::<R, M>,
+/* 281 */ ast_fn281::<R, M>,
+/* 282 */ ast_fn282::<R, M>,
+/* 283 */ ast_fn283::<R, M>,
+/* 284 */ ast_fn284::<R, M>,
+/* 285 */ ast_fn285::<R, M>,
+/* 286 */ ast_fn286::<R, M>,
+/* 287 */ ast_fn287::<R, M>,
+/* 288 */ ast_fn288::<R, M>,
+/* 289 */ ast_fn289::<R, M>,
+/* 290 */ ast_fn290::<R, M>,
+/* 291 */ ast_fn291::<R, M>,
+/* 292 */ ast_fn292::<R, M>,
+/* 293 */ ast_fn293::<R, M>,
+/* 294 */ ast_fn294::<R, M>,
+/* 295 */ ast_fn295::<R, M>,
+/* 296 */ ast_fn296::<R, M>,
+/* 297 */ ast_fn297::<R, M>,
+/* 298 */ ast_fn298::<R, M>,
+/* 299 */ ast_fn299::<R, M>,
+/* 300 */ ast_fn300::<R, M>,
+/* 301 */ ast_fn301::<R, M>,
+/* 302 */ ast_fn302::<R, M>,
+/* 303 */ ast_fn303::<R, M>,
+/* 304 */ ast_fn304::<R, M>,
+/* 305 */ ast_fn305::<R, M>,
+/* 306 */ ast_fn306::<R, M>,
+/* 307 */ ast_fn307::<R, M>,
+/* 308 */ ast_fn308::<R, M>,
+/* 309 */ ast_fn309::<R, M>,
+/* 310 */ ast_fn310::<R, M>,
+/* 311 */ ast_fn311::<R, M>,
+/* 312 */ ast_fn312::<R, M>,
+/* 313 */ ast_fn313::<R, M>,
+/* 314 1 */ default_fn::<R, M>,
+/* 315 1 */ default_fn::<R, M>,
+/* 316 1 */ default_fn::<R, M>,
+/* 317 1 */ default_fn::<R, M>,
+/* 318 1 */ default_fn::<R, M>,
+/* 319 */ ast_fn319::<R, M>,
+/* 320 */ ast_fn320::<R, M>,
+/* 321 */ ast_fn321::<R, M>,
+/* 322 */ ast_fn322::<R, M>,
+/* 323 */ ast_fn323::<R, M>,
+/* 324 */ ast_fn324::<R, M>,
+/* 325 1 */ default_fn::<R, M>,
+/* 326 1 */ default_fn::<R, M>,
+/* 327 1 */ default_fn::<R, M>,
+/* 328 1 */ default_fn::<R, M>,
+/* 329 1 */ default_fn::<R, M>,
+/* 330 */ ast_fn330::<R, M>,
+/* 331 1 */ default_fn::<R, M>,
+/* 332 */ ast_fn332::<R, M>,
+/* 333 */ ast_fn333::<R, M>,
+/* 334 */ ast_fn334::<R, M>,
+/* 335 */ ast_fn335::<R, M>,
+/* 336 */ ast_fn336::<R, M>,
+/* 337 */ ast_fn337::<R, M>,
+/* 338 1 */ default_fn::<R, M>,
+/* 339 */ ast_fn339::<R, M>,
+/* 340 */ ast_fn340::<R, M>,
+/* 341 */ ast_fn341::<R, M>,
+/* 342 */ ast_fn342::<R, M>
     ])
   }
 }
@@ -6200,6 +8614,18 @@ impl<T: Reader, M> Parser<T, M> {
     ctx
   }
   
+  
+  /// `<> state > 
+  // 
+  //         state_declaration scanner_declaration? top_level_instructions on_fail? expected_symbols?   
+  // 
+  //             f:ast { { t_IR_STATE, c_IR, c_IrState, id:$1, scanner: $2, instructions: $3, fail: $4, symbol_meta:$5 } }`
+  pub fn new_ir_parser(reader: T) -> Self{
+    let mut ctx = Self::new(reader);
+    ctx.set_start_point(3);
+    ctx
+  }
+  
 }
 
 impl<T: Reader, M> Drop for Parser<T, M> {
@@ -6296,6 +8722,35 @@ pub mod ast  {
       ParseResult::Complete((i0, _, _))  => {
         
         let ref_0_0 = i0;
+        Ok(ref_0_0)
+      }
+      ParseResult::Error(err_tok, _) => Err(SherpaParseError {
+                  inline_message: "Token not recognized".to_string(),
+                  last_production: 0,
+                  loc: err_tok.to_token(&ctx.1),
+                  message: "Failed to parse".to_string(),
+                }),
+      _ => unreachable!()
+    }
+  }
+  
+  pub fn ir_from(reader: UTF8StringReader)  -> Result<Box<IR_STATE>, SherpaParseError> { 
+    
+    const reduce_functions: ReduceFunctions::<UTF8StringReader, u32> = ReduceFunctions::<UTF8StringReader, u32>::new();
+    
+    let mut ctx = Parser::new_ir_parser(reader);
+    let reducers_ptr = (&reduce_functions.0).as_ptr() as *const u8;
+    let shifter_ptr = llvm_map_shift_action::<UTF8StringReader, u32, ASTNode> as *const u8;
+    let result_ptr = llvm_map_result_action::<UTF8StringReader, u32, ASTNode> as *const u8;
+    let ctx_ptr = (&mut ctx.0) as *const ParseContext<UTF8StringReader, u32>;
+    
+    match unsafe{ ast_parse(ctx_ptr as *mut u8, reducers_ptr, shifter_ptr, result_ptr) } {
+      ParseResult::Complete((i0, _, _))  => {
+        
+        let ref_0_0 = i0;
+        let ref_0_0 = if let ASTNode::IR_STATE(obj) = ref_0_0
+        { obj }
+        else {panic!("invalid node")};
         Ok(ref_0_0)
       }
       ParseResult::Error(err_tok, _) => Err(SherpaParseError {

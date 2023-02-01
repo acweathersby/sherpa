@@ -836,27 +836,6 @@ pub fn compile_struct_props(
   // append new properties to it. otherwise we create a new
   // struct entry and add props.
 
-  if ast.structs.get(&id).unwrap().type_name == "SetProd" {
-    eprintln!(
-      "Configuring SetProd:\nbody:{}\ncurr_struct:\n{:#?}\nprops:[\n{}\n]\nast:{:#?}",
-      rule.blame_string(&ast.g),
-      ast.structs.get(&id),
-      ast
-        .structs
-        .get(&id)
-        .and_then(|s| Some(
-          s.prop_ids
-            .iter()
-            .map(|i| format!("{:#?}", ast.props.get(i)))
-            .collect::<Vec<_>>()
-            .join("\n")
-        ))
-        .unwrap_or_default(),
-      ast_struct
-    );
-    print!("");
-  }
-
   let mut prop_ids = BTreeSet::new();
   let mut include_token = false;
 

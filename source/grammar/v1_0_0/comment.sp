@@ -1,5 +1,5 @@
-<> comment > line_comment | block_comment
+<> comment > line | block
 
-<> line_comment > "//" ( c:id | c:sp | c:sym | c:num ) c:nl
+<> line > "//" ( c:id | c:sp | c:sym | c:num )(*) c:nl
 
-<> block_comment > "/*"  ( c:id | c:sp | c:sym | c:num ) "*/"
+<> block > "/*"  ( c:id | c:sp | c:sym | c:num | c:nl )(*) "*/"

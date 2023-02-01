@@ -208,6 +208,10 @@ pub(crate) fn compile_token_production_states(
   #[cfg(debug_assertions)]
   {
     j.report_mut().add_note("RD Graph Nodes", t.write_nodes());
+    j.report_mut().add_note(
+      "RD States",
+      rd_states.iter().map(|s| s.get_code()).collect::<Vec<String>>().join("\n\n"),
+    );
   }
 
   addIRStateNote(j, &rd_states);
@@ -254,6 +258,10 @@ pub(crate) fn compile_scanner_states(
   #[cfg(debug_assertions)]
   {
     j.report_mut().add_note("RD Graph Nodes", t.write_nodes());
+    j.report_mut().add_note(
+      "RD States",
+      rd_states.iter().map(|s| s.get_code()).collect::<Vec<String>>().join("\n\n"),
+    );
   }
 
   addIRStateNote(j, &rd_states);

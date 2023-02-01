@@ -9,7 +9,7 @@
 
 <> field > ast::reference \: syntax_spec
 
-    f:ast { { t_SyntaxField, reference:$1, spec:$2 } }
+    f:ast { { t_SyntaxField, reference:$1, spec:$3 } }
 
 <> syntax_spec > [ ast::identifier?  color? ]
 

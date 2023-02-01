@@ -195,6 +195,39 @@ pub fn compile_production_states_with_synthesized_scanner_state() -> SherpaResul
 }
 
 #[test]
+pub fn generate_block_comment() -> SherpaResult<()> {
+  let mut j = Journal::new(None);
+  let grammar = GrammarStore::from_str(
+    &mut j,
+    r#"
+<> A > tk:comment
+
+<> comment > tk:block  | tk:line  | g:sym
+   
+<> block > \&&  (  g:sym  )(*) t:%>
+
+<> line > \&/  ( g:sym  )(*) g:nl
+
+"#,
+  );
+
+  j.flush_reports();
+  j.debug_error_report();
+
+  let grammar = grammar?;
+
+  let token_production = grammar.get_production_by_name("tk:comment")?;
+
+  let result = compile_scanner_states(&mut j, BTreeSet::from_iter(vec![token_production.sym_id]))?;
+  j.flush_reports();
+  //j.debug_print_reports(ReportType::Any);
+  eprintln!("{:#?}", result);
+
+  assert_eq!(result.len(), 9);
+  SherpaResult::Ok(())
+}
+
+#[test]
 pub fn generate_production_state_with_scanner_function() -> SherpaResult<()> {
   let mut j = Journal::new(None);
   let grammar = GrammarStore::from_str(
@@ -255,7 +288,7 @@ pub fn handle_moderate_scanner_token_combinations() -> SherpaResult<()> {
 
     |   id_syms \\_
 
-    |   \\_ 
+    |   \\ _ 
 
     |   g:id
 ",

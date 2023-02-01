@@ -4,13 +4,13 @@
 
 @IGNORE g:sp g:nl
 
-@EXPORT state_ir as state
+@EXPORT state as state
 
 @EXPORT ir as ir
 
-<> ir > state_ir(+)
+<> ir > state(+)
 
-<> state_ir > 
+<> state > 
 
         state_declaration scanner_declaration? top_level_instructions on_fail? expected_symbols?   
 
@@ -48,13 +48,13 @@
 
         f:ast{ [ $1, $2, $3] }
 
-    |   goto_instruction(* t:then ) ( t:then t:repeat t:state f:ast{ { t_Repeat, c_IR, c_IR_Instruction } } )? 
+    |   goto_instruction(+ t:then ) ( t:then t:repeat t:state f:ast{ { t_Repeat, c_IR, c_IR_Instruction } } )? 
 
         f:ast{ [$1, $2 ] }
 
-    |   ( t:lazy \( g:num(+) g:num(+) \) state_reference 
+    |   ( t:lazy \( g:num(+) \: g:num(+) \) state_reference 
 
-            f:ast { { t_Lazy, c_IR, c_IR_Instruction, cp_start:$3, cp_end:$4, state: $6 } } )                                       
+            f:ast { { t_Lazy, c_IR, c_IR_Instruction, cp_start:$3, cp_end:$5, state: $7 } } )                                       
 
         f:ast { [$1] }
 

@@ -28,6 +28,8 @@ pub(super) fn construct_ir(
 
   let mut nodes_pipeline = VecDeque::from_iter(t.leaf_nodes.iter().cloned());
 
+  let mut rebuilds = BTreeSet::new();
+
   'outer: while let Some(node_id) = nodes_pipeline.pop_front() {
     let node = t.get_node(node_id);
 
@@ -39,6 +41,8 @@ pub(super) fn construct_ir(
 
       let children_lookup = &children_lut[node_id];
 
+      let mut need_rebuild = false;
+
       // Ensure dependencies are met.
       for (_, child) in children_lookup {
         if child.id != node_id {
@@ -46,6 +50,10 @@ pub(super) fn construct_ir(
             // Push dependency to back on to the queue, which will cause this node
             // be pushed back into the queue after its children are processed
             continue 'outer;
+          } else if child.id < node_id {
+            need_rebuild = true;
+            rebuilds.insert(node_id);
+            //We'll need a rebuild
           }
         }
       }
@@ -62,6 +70,9 @@ pub(super) fn construct_ir(
       let states = create_state(entry_name, t, j, node, &children, &output)?;
 
       for state in states {
+        if need_rebuild {
+          println!("state {:?}", state.get_graph_id());
+        }
         output.insert(state.get_graph_id(), state);
       }
     }
@@ -74,10 +85,24 @@ pub(super) fn construct_ir(
     }
   }
 
+  // Rebuild nodes that have cycles to update
+  for rebuild in rebuilds {
+    let node = t.get_node(rebuild);
+    let children_lookup = &children_lut[rebuild];
+    let children = children_lookup.values().map(|v| *v).collect::<Vec<_>>();
+
+    for mut new_state in create_state(entry_name, t, j, node, &children, &output)? {
+      if new_state.get_graph_id() == rebuild {
+        let mut existings_state = output.get_mut(&new_state.get_graph_id())?;
+        existings_state.code = new_state.code;
+      }
+    }
+  }
+
   let mut hash_filter = BTreeSet::<u64>::new();
 
   SherpaResult::Ok(
-    output.into_values().filter(|s| hash_filter.insert(s.get_hash())).collect::<Vec<_>>(),
+    output.into_values().rev().filter(|s| hash_filter.insert(s.get_hash())).collect::<Vec<_>>(),
   )
 }
 
@@ -169,7 +194,7 @@ fn create_state(
           EdgeType::Default => {
             for child in children {
               if t.is_scan() && child.node_type == NodeType::Complete {
-                prefix = create_reduction_string(t, child).map(|s| format!("{} then", s));
+                prefix = create_reduction_string(t, child).map(|s| format!("{} then ", s));
               }
 
               create_branch_wrap(
@@ -184,7 +209,7 @@ fn create_state(
               );
 
               /*        if t.is_scan() && child.node_type == NodeType::Complete {
-                prefix = create_reduction_string(child, &t.g, true).map(|s| format!("{} then", s));
+                prefix = create_reduction_string(child, &t.g, true).map(|s| format!("{} then ", s));
               } */
             }
           }
@@ -387,7 +412,7 @@ fn create_child_state(
   resolved_states: &BTreeMap<NodeId, Box<IRState>>,
   t: &TransitionGraph,
 ) -> String {
-  let state_name = get_node_state_name(child, node, resolved_states);
+  let state_name = get_node_state_name(t, child, node, resolved_states);
 
   match child.node_type {
     NodeType::ProductionCall => {
@@ -536,7 +561,8 @@ fn create_rule_reduction_string_new(g: &GrammarStore, item: &Item) -> String {
   )
 }
 
-fn get_node_state_name(
+fn get_node_state_name<'a>(
+  t: &'a TransitionGraph,
   child: &GraphNode,
   node: &GraphNode,
   resolved_states: &BTreeMap<NodeId, Box<IRState>>,
@@ -544,7 +570,16 @@ fn get_node_state_name(
   let state_name = (child.id != node.id)
     .then(|| match resolved_states.get(&child.id) {
       Some(child_state) => child_state.get_name(),
-      _ => String::from(format!("LEAF_STATE{}", child.id)),
+      _ => {
+        /*        println!(
+          "Unable to identifier the ir state for {:?} from {:?}\n{}\n{}",
+          child.id,
+          node.id,
+          t.get_node(child.id).debug_string(&t.g),
+          t.get_node(node.id).debug_string(&t.g)
+        ); */
+        String::from(format!("LEAF_STATE{}", child.id))
+      }
     })
     .unwrap_or(String::from("%%%%"));
   state_name

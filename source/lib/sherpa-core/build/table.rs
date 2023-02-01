@@ -130,7 +130,7 @@ impl BranchTableData {
   /// symbol bitwise expressions. This implies that the tokens are all fixed
   /// length strings.
   pub fn has_trivial_comparisons(&self) -> bool {
-    self.branches.iter().all(|(_, b)| self.min_comparison_bytes(b).is_some())
+    self.branches.iter().all(|(_, b)| matches!(self.comparison_bytes(b), Some(val) if val <= 8))
   }
 
   pub fn get_line_data(&self, branch: &BranchData) -> LineData {
@@ -186,7 +186,7 @@ impl BranchTableData {
   /// the discriminant value with a byte array.
   /// `None` indicates the value is incapable of being directly
   /// compared with a byte array.
-  pub fn min_comparison_bytes(&self, branch: &BranchData) -> Option<u32> {
+  pub fn comparison_bytes(&self, branch: &BranchData) -> Option<u32> {
     if let Some(symbol) = self.get_branch_symbol(branch) {
       match symbol.guid {
         SymbolID::GenericHorizontalTab

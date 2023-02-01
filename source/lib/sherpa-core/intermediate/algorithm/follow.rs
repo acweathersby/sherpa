@@ -156,6 +156,10 @@ pub(super) fn get_follow_items(
             let mut seen = ItemSet::new();
             let mut completed_queue = VecDeque::from_iter(completed);
 
+            for un in &uncompleted_items {
+              t.get_node_mut(prev_state_ref.unwrap()).goto_items.push(*un);
+            }
+
             while let Some((proxy_state, item)) = completed_queue.pop_front() {
               if seen.insert(item.to_empty_state().to_start()) {
                 if __print_debug__ {
@@ -200,7 +204,7 @@ pub(super) fn get_follow_items(
                 }
 
                 // Place a null slide into the active state's goto closure.
-                t.get_node_mut(current_node).goto_items.push(forked_item.to_null());
+                t.get_node_mut(prev_state_ref.unwrap()).goto_items.push(forked_item.to_null());
 
                 if goto_items.len() > 0 {
                   let incremented = goto_items.into_iter().map(|i| i.try_increment());

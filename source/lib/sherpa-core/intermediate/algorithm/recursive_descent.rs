@@ -268,9 +268,8 @@ pub(super) fn create_completed_node(
 
       let follow_items = scanned_items.get_all_items();
 
-      debug_assert!(follow_items[0] != item);
-
       if !follow_items.is_empty() {
+        debug_assert!(follow_items[0] != item);
         t.queue_node(ProcessGroup {
           node_index:   parent_index,
           items:        follow_items,
@@ -280,8 +279,10 @@ pub(super) fn create_completed_node(
         return;
       } else {
         panic!(
-          "Should have something else to reduce to! [\n{}\n]\n\n",
-          scanned_items.get_all_items().to_debug_string(&t.g, "\n")
+          "Should have something else to reduce to from [{}]! [\n{}\n]\n\n{}",
+          item.debug_string(&t.g),
+          scanned_items.get_all_items().to_debug_string(&t.g, "\n"),
+          t.write_nodes()
         );
       }
     } else {

@@ -316,6 +316,7 @@ pub(crate) struct TransitionGraph {
   pub root_prod_ids: BTreeSet<ProductionId>,
   pub starts: BTreeSet<Item>,
   pub errors: Vec<SherpaError>,
+  pub loops: HashMap<BTreeSet<Item>, NodeId>,
   /// If this Graph defines a goto transition sequence,
   /// then this is true if the root goto state does not simply
   /// resolve to a pass action.

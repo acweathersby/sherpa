@@ -3,10 +3,17 @@ NAME sherpa
 IMPORT ./ascript as ast 
 IMPORT ./symbol as sym
 IMPORT ./syntax as syn
+IMPORT ./ir as ir
+IMPORT ./comment as cmt
 
-IGNORE { c:sp c:nl }
+IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
 EXPORT grammar as grammar
+EXPORT ast::struct as ast_struct
+EXPORT ast::expression as ast_expression
+EXPORT ir::state as ir
+
+
 
 <> grammar > 
 
@@ -38,7 +45,7 @@ EXPORT grammar as grammar
 
 <> ignore_clause >
 
-        "IGNORE" "{"  ( sym::terminal | sym::class )(+) "}"
+        "IGNORE" "{"  ( sym::terminal_non_terminal | sym::terminal | sym::class )(+) "}"
 
             :ast { t_Ignore, c_Preamble, symbols: $3 }
 
@@ -50,13 +57,13 @@ EXPORT grammar as grammar
 
 <> production > 
 
-        "<"  (template_name)(*\, )^t \> "lazy"?^l sym::priority?^p sym::non_terminal^n \> rules^r
+        "<"  (template_name)(*",")^t ">" "lazy"?^l sym::priority?^p sym::non_terminal^n">" rules^r
 
             :ast { t_Production, is_lazy:bool($l), priority:$p, name:str($n), name_sym:$n, rules: $r, template_names:$t, tok }
 
 <> append_production > 
 
-        "+>" sym::priority?^p sym::non_terminal^n \> rules^r
+        "+>" sym::priority?^p sym::non_terminal^n ">" rules^r
 
             :ast { t_Production, is_append: true, priority:$p, name:str($n), name_sym:$n, rules: $r, tok }
 
@@ -72,7 +79,7 @@ EXPORT grammar as grammar
 
 <> rule > 
 
-        \!?^p ( sym::annotated_symbol | any_group )(+)^s ast_definition?^a
+        "!"?^p ( sym::annotated_symbol | any_group )(+)^s ast_definition?^a
 
             :ast { t_Rule, is_priority:bool($p), symbols:$s, ast_definition:$a, tok }
 
@@ -87,6 +94,12 @@ EXPORT grammar as grammar
         ":syn" syn::declaration^syn
 
             :ast  { t_Syntax, c_Function, syn:$syn, tok }
+
+<> recover_definition > 
+
+        ":rec" "{" ir::state^state "}"
+
+            :ast  { t_Recovery, c_Function, state, tok }
 
 
 
@@ -105,7 +118,7 @@ EXPORT grammar as grammar
 
 <> any_group > 
 
-        \[ "unordered"? sym::annotated_symbol(+)^s \]
+        "[" "unordered"? sym::annotated_symbol(+)^s ']'
 
             :ast { t_AnyGroup, unordered: bool($2), symbols:$s, tok }
 

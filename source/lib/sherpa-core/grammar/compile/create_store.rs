@@ -23,7 +23,7 @@ use crate::{
 use regex::Regex;
 use sherpa_runtime::types::Token;
 use std::{
-  collections::{btree_map, HashSet, VecDeque},
+  collections::{btree_map, HashMap, HashSet, VecDeque},
   path::PathBuf,
   sync::Arc,
 };
@@ -111,7 +111,11 @@ pub fn create_store<'a>(
     process_production_node(j, &mut g, &node, &mut post_process_productions);
   }
 
-  j.report_mut().start_timer("Initial Prep");
+  // Add ignore symbols to productions
+  g.production_ignore_symbols =
+    g.productions.keys().map(|k| (*k, global_ignore_symbols.clone())).collect::<HashMap<_, _>>();
+
+  j.report_mut().stop_timer("Initial Prep");
 
   Arc::new(g)
 }
@@ -165,7 +169,7 @@ fn process_production_node<'a>(
       let bodies = prod
         .rules
         .iter()
-        .flat_map(|rule| match (process_rule(j, g, &prod, rule, &mut list_index)) {
+        .flat_map(|rule| match process_rule(j, g, &prod, rule, &mut list_index) {
           SherpaResult::Ok((new_rules, productions)) => {
             for prod in productions {
               post_process_productions.push_back(prod);
@@ -532,6 +536,7 @@ fn create_rule_vectors<'a>(
             let mut body_a = sherpa::Rule {
               ast_definition: None,
               syntax_definition: None,
+              recover_definition: None,
               is_priority: false,
               symbols: vec![symbol.clone()],
               tok: symbol.to_token(),
@@ -799,7 +804,7 @@ fn get_grammar_info_from_node<'a>(
             path:       g.id.path.clone(),
             id:         "unexpected-node",
             msg:        format!(
-              "Unknown Grammar : The local grammar name \u{001b}[31m{}\u{001b}[0m does not match any imported grammar.",
+              "Unknown Grammar : The imported grammar reference \u{001b}[31m{}\u{001b}[0m does not match any imported grammar.",
               local_import_grammar_name
             ),
             inline_msg: Default::default(),
@@ -903,6 +908,7 @@ fn get_productions_names(
 lazy_static::lazy_static! {
   static ref identifier_re: Regex = Regex::new(r"[\w_-][\w\d_-]*$").unwrap();
   static ref number_re: Regex = Regex::new(r"\d+$").unwrap();
+  static ref escaped: Regex = Regex::new(r"\\([^$])").unwrap();
 }
 
 /// Returns an appropriate SymbolID::Defined* based on the input
@@ -932,11 +938,12 @@ fn record_symbol(
       record_symbol(j, g, &annotated.symbol, annotated.prority.is_some())
     }
     ASTNode::Terminal(box terminal) => {
-      let string = &terminal.val;
-      let sym_id = get_terminal_id(string, terminal.is_exclusive | exclusive);
+      let old = &terminal.val;
+      let string = escaped.replace_all(old, "$1").to_string();
+      let sym_id = get_terminal_id(&string, terminal.is_exclusive | exclusive);
 
       if let std::collections::btree_map::Entry::Vacant(e) = g.symbols.entry(sym_id) {
-        g.symbol_strings.insert(sym_id, terminal.val.to_owned());
+        g.symbol_strings.insert(sym_id, string.clone());
 
         let byte_length = string.bytes().len() as u32;
         let code_point_length = string.chars().count() as u32;

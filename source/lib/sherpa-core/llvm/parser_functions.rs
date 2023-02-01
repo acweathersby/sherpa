@@ -655,7 +655,10 @@ fn construct_instruction_branch<'a>(
                   "",
                 )
               }
-              _ => unreachable!(),
+              len => unreachable!(
+                "interned string {string} has a length of {len}: {}",
+                sym.friendly_name
+              ),
             };
 
             let this_block = p.state.generate_block(m, "this_", **address);

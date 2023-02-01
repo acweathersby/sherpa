@@ -115,7 +115,7 @@ pub(crate) fn peek(
           closure.append(&mut follow_items(g, completed_item, None).as_set());
         }
 
-        closure.append(&mut Vec::from_linked(uncompleted_items).closure_with_state(g))
+        closure.append(&mut Vec::from_linked(uncompleted_items).closure_with_state(g));
       }
       // Items that are truly in the completed position, that is for a completed item
       //  `I => ... *` there is no follow item `X => ... * I ...` in the closures of
@@ -383,6 +383,7 @@ pub(crate) fn peek(
             Some(root_par_id),
             goal_items.as_vec().non_term_items(g),
           );
+
           // Submit these items to be processed.
           t.queue_node(ProcessGroup {
             node_index,
@@ -509,18 +510,28 @@ pub(crate) fn peek(
             // a new peek round
             let incremented_items = items.try_increment();
 
-            let node_index = create_and_insert_node(
-              t,
-              sym,
-              vec![],
-              get_node_type(j, t),
-              get_edge_type(j, t, peek_depth),
-              Some(par_id),
-              Some(par_id),
-              incremented_items.as_vec().non_term_items(g),
-            );
+            let id = items.clone().to_empty_state().to_set();
 
-            pending_items.push_back((node_index, peek_depth + 1, incremented_items));
+            if t.loops.contains_key(&id) {
+              let node_id = *t.loops.get(&id)?;
+              t.leaf_nodes.push(node_id);
+              t.get_node_mut(node_id).proxy_parents.push(par_id);
+            } else {
+              let node_index = create_and_insert_node(
+                t,
+                sym,
+                vec![],
+                get_node_type(j, t),
+                get_edge_type(j, t, peek_depth),
+                Some(par_id),
+                Some(par_id),
+                incremented_items.as_vec().non_term_items(g),
+              );
+
+              t.loops.insert(id, node_index);
+
+              pending_items.push_back((node_index, peek_depth + 1, incremented_items));
+            }
           }
         }
         _ => {

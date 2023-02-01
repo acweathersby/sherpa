@@ -4,24 +4,34 @@
 
 <> annotated_symbol > 
 
-        symbol^s [unordered tk:reference?^r t:? ?^o  priority?^p ]
+        list^s [unordered tk:reference?^r t:? ?^o  priority?^p ]
 
             f:ast {{ t_AnnotatedSymbol, prority:$p, symbol:$s, is_optional:bool($o), reference:str($r), tok  }}
 
-        | symbol
+        | list
 
 <> priority > t:{ tk:priority_num \}  f:ast { { t_Priority, val: u32($2) } }
         | t:! f:ast { { t_Priority, exclusive: true } }
 
 <> priority_num > g:num(+)
 
+<> list >
+
+        symbol t:(+  terminal?  \)
+
+            f:ast { { t_List_Production, c_Symbol, terminal_symbol:$3, symbols:$1, tok } }
+
+        | symbol t:(* terminal?  \)
+
+            f:ast {{ t_List_Production, c_Symbol, terminal_symbol:$3, symbols:$1, tok, optional:true }}
+        
+        | symbol
+
 <> symbol >
 
         terminal
 
         | non_terminal
-
-        | list
 
         | terminal_non_terminal
 
@@ -57,15 +67,7 @@
 
              f:ast { { t_Production_Import_Symbol , c_Symbol , module:str($1), name:str($3), tok } } 
 
-<> list >
 
-        symbol t:(+  terminal?  \)
-
-            f:ast { { t_List_Production, c_Symbol, terminal_symbol:$3, symbols:$1, tok } }
-
-        | symbol t:(* terminal?  \)
-
-            f:ast {{ t_List_Production, c_Symbol, terminal_symbol:$3, symbols:$1, tok, optional:true }}
 
 <> terminal > 
 

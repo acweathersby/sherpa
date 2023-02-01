@@ -1,25 +1,25 @@
-IGNORE c:sp c:nl
+IGNORE { c:sp c:nl }
 
-EXPORT state_ir as state
+EXPORT state as state
 EXPORT ir as ir
 
-<> ir > state_ir(+)
+<> ir > state(+)
 
-<> state_ir > 
+<> state > 
 
-        state_declaration scanner_declaration? top_level_instructions on_fail? expected_symbols?   
+        state_declaration scanner_declaration? top_level_instructions on_fail? expected_symbols?
 
             :ast { t_IR_STATE, c_IR, c_IrState, id:$1, scanner: $2, instructions: $3, fail: $4, symbol_meta:$5 }
 
 <> state_declaration > 
 
-        "state" '['  tk:state_hash_token ']'     
+        "state" '['  tk:state_hash_token ']'
 
             :ast str($3)
 
 <> scanner_declaration > 
 
-        "scanner" '['  tk:state_hash_token ']'     
+        "scanner" '['  tk:state_hash_token ']'
 
             :ast str($3)
 
@@ -33,7 +33,7 @@ EXPORT ir as ir
 
         assertion_instruction(+) 
 
-    |   instruction_sequence                             
+    |   instruction_sequence
 
 <> instruction_sequence > 
 
@@ -43,19 +43,22 @@ EXPORT ir as ir
 
         :ast [ $1, $2, $3]
 
-    |   goto_instruction(* "then" ) ( "then" "repeat" "state" :ast { t_Repeat, c_IR, c_IR_Instruction } )? 
+    |   goto_instruction(+ "then" ) ( "then" "repeat" "state" :ast { t_Repeat, c_IR, c_IR_Instruction } )? 
 
         :ast [$1, $2 ]
 
-    |   ( "lazy" '(' c:num(+) c:num(+) ')' state_reference 
+    |   ( 
+        
+        "lazy" '(' c:num(+) \: c:num(+) ')' state_reference 
 
-            :ast { t_Lazy, c_IR, c_IR_Instruction, cp_start:$3, cp_end:$4, state: $6 } )                                       
+            :ast { t_Lazy, c_IR, c_IR_Instruction, cp_start:$3, cp_end:$5, state: $7 } 
+        )
 
         :ast [$1]
 
 <> assertion_instruction >
 
-        "assert" "peek"? assert_class production_id_list '(' instruction_sequence ')'                     
+        "assert" "peek"? assert_class production_id_list '(' instruction_sequence ')'
 
             :ast { t_ASSERT, c_IR, c_IR_Instruction, is_peek: bool($2), c_IR_Branch, mode:str($3), ids: $4, instructions: $6}
 

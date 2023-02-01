@@ -67,6 +67,10 @@ impl ItemState {
     ItemState { origin: OriginData::Null, ..self.clone() }
   }
 
+  pub fn null() -> Self {
+    ItemState { origin: OriginData::Null, current_lane: 0, prev_lane: 0 }
+  }
+
   pub fn is_null(&self) -> bool {
     self.origin == OriginData::Null
   }
@@ -273,6 +277,11 @@ impl Item {
       off:   0,
       state: self.state.to_null(),
     }
+  }
+
+  #[inline(always)]
+  pub fn null() -> Self {
+    Item { len: 0, rule: RuleId::default(), off: 0, state: ItemState::null() }
   }
 
   /// Create an Item from a rule_id and a grammar store. Returns
@@ -537,6 +546,10 @@ pub(crate) trait ItemContainer:
 
   fn term_items(self, g: &GrammarStore) -> Self {
     self.into_iter().filter(|i| i.is_term(g)).collect()
+  }
+
+  fn null_items(self) -> Self {
+    self.into_iter().filter(|i| i.is_null()).collect()
   }
 
   fn incomplete_items(self) -> Self {

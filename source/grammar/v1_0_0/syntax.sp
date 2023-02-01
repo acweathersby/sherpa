@@ -10,7 +10,7 @@ IMPORT ./ascript as ast
 
 <> field > ast::reference ':' syntax_spec
 
-    :ast { t_SyntaxField, reference:$1, spec:$2 }
+    :ast { t_SyntaxField, reference:$1, spec:$3 }
 
 <> syntax_spec > [ ast::identifier?  color? ]
 

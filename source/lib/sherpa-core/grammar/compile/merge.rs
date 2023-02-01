@@ -56,20 +56,7 @@ pub fn merge_grammars(
   }
 
   // Merge all referenced foreign productions into the root.
-  let mut symbol_queue = VecDeque::from_iter(g.rules.iter().flat_map(|(_, r)| {
-    r.syms.iter().filter_map(|rule_sym| {
-      let sym_id = rule_sym.sym_id;
-      match sym_id {
-        SymbolID::Production(..) => Some((sym_id, rule_sym.tok.clone())),
-        SymbolID::TokenProduction(prod_id, grammar_id, ..) => {
-          // Remap the production token symbol to regular a production symbol and
-          // submit as a merge candidate.
-          Some((SymbolID::Production(prod_id, grammar_id), rule_sym.tok.clone()))
-        }
-        _ => None,
-      }
-    })
-  }));
+  let mut symbol_queue = create_symbol_queue(g);
 
   while let Some((sym, tok)) = symbol_queue.pop_front() {
     let syms_grammar = sym.get_grammar_id();
@@ -191,4 +178,36 @@ expression, e.g: `<> {0} > symA ... symN`
   }
 
   j.report_mut().stop_timer("Merge");
+}
+
+fn create_symbol_queue(g: &mut GrammarStore) -> VecDeque<(SymbolID, sherpa_runtime::types::Token)> {
+  let mut symbol_queue = VecDeque::from_iter(g.rules.iter().flat_map(|(_, r)| {
+    r.syms.iter().filter_map(|rule_sym| {
+      let sym_id = rule_sym.sym_id;
+      match sym_id {
+        SymbolID::Production(..) => Some((sym_id, rule_sym.tok.clone())),
+        SymbolID::TokenProduction(prod_id, grammar_id, ..) => {
+          // Remap the production token symbol to regular a production symbol and
+          // submit as a merge candidate.
+          Some((SymbolID::Production(prod_id, grammar_id), rule_sym.tok.clone()))
+        }
+        _ => None,
+      }
+    })
+  }));
+
+  // Merge ignored terminal non terminal symbols
+  for (_, syms) in &g.production_ignore_symbols {
+    for sym_id in syms {
+      match sym_id {
+        SymbolID::TokenProduction(prod_id, grammar_id, ..) => {
+          // Remap the production token symbol to regular a production symbol and
+          // submit as a merge candidate.
+          symbol_queue.push_back((SymbolID::Production(*prod_id, *grammar_id), Default::default()));
+        }
+        _ => {}
+      }
+    }
+  }
+  symbol_queue
 }
