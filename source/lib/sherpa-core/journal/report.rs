@@ -66,14 +66,17 @@ impl Report {
     }
   }
 
+  /// Returns `true` if the report contains any error with the matching severity
   pub fn have_errors_of_type(&self, severity: SherpaErrorSeverity) -> bool {
     self.error_level.intersects(severity)
   }
 
+  /// Returns the report's type
   pub fn get_type(&self) -> ReportType {
     self.report_type.clone()
   }
 
+  /// Returns a reference to the report's errors.
   pub fn errors(&self) -> &Vec<SherpaError> {
     &self.errors
   }
@@ -97,7 +100,7 @@ impl Report {
   }
 
   pub(crate) fn start_timer(&mut self, timer_label: &'static str) {
-    self.timings.insert(timer_label, Timing::new(timer_label));
+    self.timings.insert(timer_label, Timing::new());
   }
 
   pub(crate) fn stop_timer(&mut self, timer_label: &'static str) {

@@ -1,38 +1,34 @@
 use crate::{
-  bytecode::{
-    compile::{build_byte_code_buffer, compile_ir_state_to_bytecode},
-    compile_bytecode,
-  },
+  bytecode::{compile::build_byte_code_buffer, compile_bytecode},
   debug::{
     generate_disassembly,
     {self},
   },
-  grammar::parse::compile_ir_ast,
+  grammar::compile::compile_ir_ast,
   intermediate::{
     compile::{compile_production_states, compile_states},
     optimize::optimize_ir_states,
   },
   journal::Journal,
-  types::{GrammarStore, SherpaResult, *},
+  types::{GrammarStore, SherpaResult},
 };
-use std::collections::HashMap;
 
 #[test]
 pub fn temp_test1() -> SherpaResult<()> {
   let mut j = Journal::new(None);
   GrammarStore::from_str(
     &mut j,
-    "
-  @NAME test
+    r#"
+  NAME test
 
-  @IGNORE g:sp
+  IGNORE { c:sp }
 
-  <> Term  >  Num     f:ast { [ $1 ] }
-      | \\( Num \\)   f:ast { [ $2 ] }
+  <> Term  >  Num     :ast [ $1 ]
+      | "(" Num ")"   :ast [ $2 ]
 
-  <> Num > g:num
+  <> Num > c:num
 
-",
+"#,
   )
   .unwrap();
 
@@ -50,28 +46,25 @@ pub fn test_production_of_bytecode_for_simple_expression_grammar() -> SherpaResu
   let mut j = Journal::new(None);
   GrammarStore::from_str(
     &mut j,
-    "
-    @IGNORE g:sp
+    r##"
+IGNORE { c:sp }
+EXPORT statement as entry
+NAME llvm_language_test
 
-    @EXPORT statement as entry
+<> statement > expression :ast { t_Stmt, v:$1 }
 
-    @NAME llvm_language_test
+<> expression > sum             
 
-    <> statement > expression       f:ast { { t_Stmt, v:$1 } }
+<> sum > sum "+" mul      :ast { t_Sum, l:$1, r:$3 }
+    | mul
 
-    <> expression > sum             
+<> mul > mul "*" term     :ast { t_Mul, l:$1, r:$3 }
+    | term
 
-    <> sum > sum \\+ mul             f:ast { { t_Sum, l:$1, r:$3 } }
-        | mul
+<> term > "2"             :ast { t_Num, v: u16($1) }
 
-    <> mul > mul \\* term     f:ast { { t_Mul, l:$1, r:$3 } }
-        | term
-
-    <> term > \\2                f:ast { { t_Num, v: u16($1) } }
-
-        | \\( expression \\)          f:ast { { t_Paren, v: $2 } }
-
-",
+    | "(" expression ")"  :ast { t_Paren, v: $2 }
+"##,
   )
   .unwrap();
   let states = compile_states(&mut j, 1)?;
@@ -90,22 +83,31 @@ pub fn generate_production_with_a_recursion() -> SherpaResult<()> {
   GrammarStore::from_str(
     &mut j,
     "    
-    <> element_block > \\< component_identifier
-    ( t:tested )? 
-    ( element_block | t:test )(*) 
-    \\>
+    <> element_block > '<' component_identifier
+    ( 'tested' )? 
+    ( element_block | 'test' )(*) 
+    '>'
 
 <> component_identifier > 
     identifier
 
 <> identifier > tk:tok_identifier 
 
-<> tok_identifier > ( g:id ) ( g:id | g:num )(+)
+<> tok_identifier > ( c:id ) ( c:id | c:num )(+)
 ",
   )
   .unwrap();
 
   let states = compile_states(&mut j, 1)?;
+
+  j.flush_reports();
+
+  assert!(!j.debug_error_report());
+
+  for (_, state) in &states {
+    println!("{}", state.get_code());
+  }
+
   let results = optimize_ir_states(&mut j, states);
 
   let output = compile_bytecode(&mut j, results);
@@ -119,15 +121,15 @@ pub fn production_with_multiple_sub_productions() -> SherpaResult<()> {
   let mut j = Journal::new(None);
   let g = GrammarStore::from_str(
     &mut j,
-    "    
-<> test > t:d A | B | C | D
-<> A > t:a id
-<> B > t:b id
-<> C > t:c id
-<> D > t:d id
+    r##"    
+<> test > "d" A | B | C | D
+<> A > "a" id
+<> B > "b" id
+<> C > "c" id
+<> D > "d" id
 
-<> id > g:id
-",
+<> id > c:id
+"##,
   )
   .unwrap();
 
@@ -136,12 +138,8 @@ pub fn production_with_multiple_sub_productions() -> SherpaResult<()> {
   let result = compile_production_states(&mut j, prod_id)?;
 
   for state in result {
-    eprintln!("{:#?}", state.get_code());
+    eprintln!("{}", state.get_code());
   }
-  // eprintln!(
-  //   "dD: {}",
-  //   debug::generate_disassembly(&output, Some(&BytecodeGrammarLookups::new(&g)))
-  // );
 
   SherpaResult::Ok(())
 }
@@ -149,56 +147,58 @@ pub fn production_with_multiple_sub_productions() -> SherpaResult<()> {
 pub fn temp_test() -> SherpaResult<()> {
   let mut j = Journal::new(None);
   GrammarStore::from_str(&mut j,
-    "@NAME wick_element
+    r#"
+NAME wick_element
 
-    @IGNORE g:sp g:nl
+IGNORE { c:sp c:nl }
 
-    <> element_block > \\< component_identifier
-        ( element_attribute(+)  f:r { { t_Attributes, c_Attribute, attributes: $1 } } )? 
-        ( element_attributes | general_data | element_block | general_binding )(*) 
-        \\>
+<> element_block > '<' component_identifier
+    ( element_attribute(+)  :ast { t_Attributes, c_Attribute, attributes: $1 } )? 
+    ( element_attributes | general_data | element_block | general_binding )(*) 
+    '>'
 
-                                                                    f:ast { { t_Element, id:$2, children: [$3, $4], tok } }
-    <> component_identifier > 
-        identifier ( \\: identifier )?
-                                                                    f:ast { { t_Ident, name:str($1), sub_name:str($2), tok } }
+                                                                :ast { t_Element, id:$2, children: [$3, $4], tok }
+<> component_identifier > 
+    identifier ( ':' identifier )?
+                                                                :ast { t_Ident, name:str($1), sub_name:str($2), tok }
 
-    <> element_attributes >g:nl element_attribute(+)               
-                                                                    f:ast { { t_Attributes, c_Attribute, attributes: $2 } }
+<> element_attributes >c:nl element_attribute(+)               
+                                                                :ast { t_Attributes, c_Attribute, attributes: $2 }
 
-    <> element_attribute > \\- identifier attribute_chars g:sp
+<> element_attribute > '-' identifier attribute_chars c:sp
 
-                                                                    f:ast { { t_GeneralAttr, c_Attribute, key:str($2), val1: str($3) } }
+                                                                :ast { t_GeneralAttr, c_Attribute, key:str($2), val1: str($3) }
 
-        | \\- identifier \\: identifier 
-                                                                    f:ast { { t_BindingAttr, c_Attribute, key:str($2), val2: str($4) } }
+    | '-' identifier ':' identifier 
+                                                                :ast { t_BindingAttr, c_Attribute, key:str($2), val2: str($4) }
 
-        | \\- t:store \\{ local_values? \\} 
-                                                                    f:ast { { t_StoreAttr, c_Attribute, children: $4 } }
-        | \\- t:local \\{ local_values? \\} 
-                                                                    f:ast { { t_LocalAttr, c_Attribute, children: $4 } }
-        | \\- t:param \\{ local_values? \\} 
-                                                                    f:ast { { t_ParamAttr, c_Attribute, children: $4 } }
-        | \\- t:model \\{ local_values? \\} 
-                                                                    f:ast { { t_ModelAttr, c_Attribute, children: $4 } }
+    | '-' "store" '{' local_values? '}' 
+                                                                :ast { t_StoreAttr, c_Attribute, children: $4 }
+    | '-' "local" '{' local_values? '}' 
+                                                                :ast { t_LocalAttr, c_Attribute, children: $4 }
+    | '-' "param" '{' local_values? '}' 
+                                                                :ast { t_ParamAttr, c_Attribute, children: $4 }
+    | '-' "model" '{' local_values? '}' 
+                                                                :ast { t_ModelAttr, c_Attribute, children: $4 }
 
-    <> general_binding > \\: identifier               
-                                                                    f:ast { { t_OutputBinding, val3:str($2) } }
+<> general_binding > ':' identifier               
+                                                                :ast { t_OutputBinding, val3:str($2) }
 
-    <> local_values > local_value(+)
+<> local_values > local_value(+)
 
-    <> local_value > identifier ( \\` identifier )? ( \\=  g:num f:r{ $2 } )? ( \\, )(*)
+<> local_value > identifier ( '`' identifier )? ( '='  c:num )? ( ',' )(*)
 
-                                                                    f:ast { { t_Var, c_Attribute, name:str($1), meta:str($2), value:$3 } }
+                                                                :ast { t_Var, c_Attribute, name:str($1), meta:str($2), value:$3 }
 
-    <> attribute_chars > ( g:id | g:num | g:sym  )(+)
-                                                                    f:ast { { t_AttributeData, tok } }
-    <> general_data > ( g:id | g:num  | g:nl  )(+)
-                                                                    f:ast { { t_GeneralData, tok } }
+<> attribute_chars > ( c:id | c:num | c:sym  )(+)
+                                                                :ast { t_AttributeData, tok }
+<> general_data > ( c:id | c:num  | c:nl  )(+)
+                                                                :ast { t_GeneralData, tok }
 
-    <> identifier > tk:tok_identifier 
+<> identifier > tk:tok_identifier 
 
-    <> tok_identifier > ( g:id | g:num )(+)                     ",
+<> tok_identifier > ( c:id | c:num )(+)
+"#,
   ).unwrap();
 
   let states = compile_states(&mut j, 1)?;
@@ -214,7 +214,7 @@ pub fn temp_test() -> SherpaResult<()> {
 pub fn test_produce_a_single_ir_ast_from_a_single_state_of_a_trivial_production() -> SherpaResult<()>
 {
   let mut j = Journal::new(None);
-  let g = GrammarStore::from_str(&mut j, "<> A > \\h ? \\e ? \\l \\l \\o").unwrap();
+  let g = GrammarStore::from_str(&mut j, "<> A > 'h'? 'e'? 'l' 'l' 'o'").unwrap();
 
   let prod_id = g.get_production_id_by_name("A").unwrap();
 
@@ -230,9 +230,9 @@ pub fn test_produce_a_single_ir_ast_from_a_single_state_of_a_trivial_production(
     .into_iter()
     .map(|s| {
       let string = s.get_code();
-      let result = compile_ir_ast(Vec::from(string.as_bytes()));
+      let result = compile_ir_ast(&string);
       assert!(result.is_ok());
-      *result.unwrap()
+      result.unwrap()
     })
     .collect::<Vec<_>>();
 

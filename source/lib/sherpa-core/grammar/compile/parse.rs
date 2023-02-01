@@ -1,20 +1,9 @@
-use super::{
-  create_store::{get_terminal_id, insert_production, insert_rules},
-  parser::{
-    sherpa::{ASTNode, Grammar},
-    *,
-  },
+use super::parser::{
+  sherpa::{ASTNode, Grammar},
+  *,
 };
 use crate::{
-  compile::{GrammarId, GrammarStore, ProductionId, SymbolID},
-  grammar::{
-    create_closure,
-    create_defined_scanner_name,
-    create_scanner_name,
-    data::ast::Import,
-    get_production_start_items,
-    multitask::WorkVerifier,
-  },
+  grammar::multitask::WorkVerifier,
   types::*,
   util::get_num_of_available_threads,
   Journal,
@@ -22,15 +11,14 @@ use crate::{
   SherpaError,
 };
 use std::{
-  collections::{btree_map, BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
-  fs::read,
+  collections::{HashMap, HashSet, VecDeque},
   num::NonZeroUsize,
   path::{Path, PathBuf},
-  sync::{Arc, Mutex},
+  sync::Mutex,
   thread,
 };
 
-pub fn grammar_from_string(
+pub fn load_from_string(
   j: &mut Journal,
   grammar: &str,
   source_path: PathBuf,
@@ -44,7 +32,7 @@ pub fn grammar_from_string(
   }
 }
 
-const allowed_extensions: [&str; 4] = ["sp", "hc", "hcg", "grammar"];
+const allowed_extensions: [&str; 1] = ["sg"];
 
 pub(crate) fn get_usable_thread_count(requested_count: usize) -> usize {
   NonZeroUsize::min(
@@ -172,6 +160,7 @@ fn grammar_from_path(
   j: &mut Journal,
   absolute_path: &PathBuf,
 ) -> SherpaResult<(Box<Grammar>, Vec<Box<sherpa::Import>>)> {
+  j.set_active_report("Grammar Parse", crate::ReportType::GrammarCompile(absolute_path.into()));
   match std::fs::read_to_string(absolute_path) {
     Ok(buffer) => match sherpa::ast::grammar_from(buffer.as_str().into()) {
       Ok(grammar) => {
@@ -186,7 +175,7 @@ fn grammar_from_path(
         SherpaResult::Ok((grammar, import_paths))
       }
       Err(err) => {
-        j.report_mut().add_error(err.into());
+        j.report_mut().add_error(SherpaError::from_parse_error(err, absolute_path.clone()));
         SherpaResult::None
       }
     },

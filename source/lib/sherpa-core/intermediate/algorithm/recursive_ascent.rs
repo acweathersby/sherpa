@@ -11,16 +11,11 @@
 //! Note: Since scanner productions are guaranteed to not have left recursion of any kind, there
 //! is no need to run TokenProductions through this process.
 use crate::{
-  grammar::get_production_start_items,
   intermediate::utils::{get_follow_closure, hash_group_btreemap},
   journal::Journal,
   types::{GraphNode, TransitionGraph as TPack, *},
 };
-use std::{
-  collections::{BTreeSet, VecDeque},
-  rc::Rc,
-  vec,
-};
+use std::{collections::BTreeSet, rc::Rc, vec};
 
 use super::{create_node, follow::get_production_follow_items, process_node};
 

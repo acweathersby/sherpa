@@ -2,12 +2,15 @@ use core::panic;
 use std::path::PathBuf;
 
 use clap::{arg, value_parser, ArgMatches, Command};
-use sherpa::{*, pipeline::{SourceType, BuildPipeline, tasks::*}};
+use sherpa::{
+  pipeline::{tasks::*, BuildPipeline, SourceType},
+  *,
+};
 
 #[derive(Clone, Debug)]
 enum ParserType {
   LLVM,
-  Bytecode
+  Bytecode,
 }
 
 pub fn command() -> ArgMatches {
@@ -27,7 +30,7 @@ pub fn command() -> ArgMatches {
                 .help("Path(s) to source grammar files")
                 .required(true)
                 .value_parser(value_parser!(PathBuf))
-        ) 
+        )
     )
     .subcommand(
       Command::new("build")
@@ -62,22 +65,29 @@ pub fn command() -> ArgMatches {
                 .help("Path(s) to source grammar files")
                 .required(true)
                 .value_parser(value_parser!(PathBuf))
-        ) 
+        )
     )
     .get_matches()
 }
 
 fn configure_matches(matches: &ArgMatches, PWD: &PathBuf) -> (Config, ParserType, PathBuf) {
   let mut config = Config::default();
-  config.source_type = match matches.get_one::<String>("lang").map(|s| s.as_str()) {
-
+  config.source_type = match matches
+    .contains_id("lang")
+    .then(|| matches.get_one::<String>("lang").map(|s| s.as_str()))
+    .flatten()
+  {
     Some("ts") | Some("typescript") => panic!("Source type [TypeScript] not yet supported"),
-    _ => SourceType::Rust
+    _ => SourceType::Rust,
   };
 
   config.enable_ascript = matches.contains_id("ast");
 
-  let parser_type = matches.get_one::<ParserType>("type").cloned().unwrap_or(ParserType::Bytecode);
+  let parser_type = matches
+    .contains_id("type")
+    .then(|| matches.get_one::<ParserType>("type").cloned())
+    .flatten()
+    .unwrap_or(ParserType::Bytecode);
 
   let out_dir = matches.get_one::<PathBuf>("out").unwrap_or(PWD);
 
@@ -90,16 +100,11 @@ fn main() -> SherpaResult<()> {
   let matches = command();
 
   if let Some(matches) = matches.subcommand_matches("build") {
-
     let (config, parser_type, out_dir) = configure_matches(matches, &PWD);
 
     for path in matches.get_many::<PathBuf>("INPUTS").unwrap_or_default() {
-
-      let path = if !path.is_absolute() {
-        PWD.join(path).canonicalize()?
-      } else {
-        path.canonicalize()?
-      };
+      let path =
+        if !path.is_absolute() { PWD.join(path).canonicalize()? } else { path.canonicalize()? };
 
       let mut pipeline = BuildPipeline::from_source(path, config.clone());
 
@@ -109,23 +114,20 @@ fn main() -> SherpaResult<()> {
         .add_task(build_rust_preamble());
 
       match config.source_type {
-        _ =>  pipeline.set_source_file_name("%.rs")
+        _ => pipeline.set_source_file_name("%.rs"),
       };
 
-      match parser_type{
-        ParserType::LLVM => {
-          pipeline .add_task(build_llvm_parser(None, true, false))
-          .add_task(build_llvm_parser_interface())
-        }
-        _ => {
-          pipeline.add_task(build_bytecode_parser())
-        }
+      match parser_type {
+        ParserType::LLVM => pipeline
+          .add_task(build_llvm_parser(None, true, false))
+          .add_task(build_llvm_parser_interface()),
+        _ => pipeline.add_task(build_bytecode_parser()),
       };
 
       if config.enable_ascript {
         pipeline.add_task(build_ascript_types_and_functions(config.source_type));
       }
-      match  pipeline .run(|errors| {
+      match pipeline.run(|errors| {
         for error in &errors {
           eprintln!("{}", error);
         }
@@ -136,26 +138,21 @@ fn main() -> SherpaResult<()> {
     }
 
     SherpaResult::Ok(())
-  } else if let Some(matches) = matches.subcommand_matches("disassemble") { 
-
-    let (config, _, out_dir) = configure_matches(matches, &PWD);
+  } else if let Some(matches) = matches.subcommand_matches("disassemble") {
+    let out_dir = matches.get_one::<PathBuf>("out").unwrap_or(&PWD);
 
     for path in matches.get_many::<PathBuf>("INPUTS").unwrap_or_default() {
+      let path =
+        if !path.is_absolute() { PWD.join(path).canonicalize()? } else { path.canonicalize()? };
 
-      let path = if !path.is_absolute() {
-        PWD.join(path).canonicalize()?
-      } else {
-        path.canonicalize()?
-      };
-
-      let mut pipeline = BuildPipeline::from_source(path, config.clone());
+      let mut pipeline = BuildPipeline::from_source(path, Default::default());
 
       pipeline
         .set_source_output_dir(&out_dir)
         .set_build_output_dir(&out_dir)
         .add_task(build_bytecode_disassembly());
 
-      match  pipeline .run(|errors| {
+      match pipeline.run(|errors| {
         for error in &errors {
           eprintln!("{}", error);
         }
@@ -165,7 +162,7 @@ fn main() -> SherpaResult<()> {
       };
     }
     SherpaResult::Ok(())
-  }else {
+  } else {
     SherpaResult::Err(SherpaError::from("Command Not Recognized"))
   }
 }

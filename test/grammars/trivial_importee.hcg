@@ -1,5 +1,0 @@
-@IMPORT ./trivial_importee_two.hcg as two
-
-<> hello > \hello world tk:two::test
-
-<> world > \world

@@ -4,10 +4,10 @@
 
 use crate::{
   grammar::{
+    compile::finalize::get_scanner_info_from_defined,
     get_closure_cached,
     get_closure_cached_with_state,
     get_production_start_items,
-    get_scanner_info_from_defined,
   },
   journal::Journal,
   types::{Item, ProductionId, RecursionType, SymbolID, *},

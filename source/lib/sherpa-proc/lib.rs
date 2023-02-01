@@ -122,11 +122,11 @@ fn insert_data(span: &Span, in_string: String, offset: &mut Offsets, output: &mu
 /// mod my_parser {
 /// # use sherpa_proc::compile_mod as compile;
 ///   compile! {
-///     @IGNORE g:sp  
+///     IGNORE { c:sp }
 ///
-///     <> helloworld > t:hello t:world
+///     <> helloworld > "hello" "world"
 ///           
-///           f:ast { { t_Hello_World, val:str(tok) } }
+///           :ast { t_Hello_World, val:str(tok) }
 ///   }
 /// }
 ///

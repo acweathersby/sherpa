@@ -5,7 +5,7 @@
 //! that are comprised only of GOTO statements, folding these
 //! into the respective states that reference them.
 use crate::{
-  grammar::data::ast::{ASTNode, Fail, Goto, Num, ASSERT, AST_NUMBER, DEFAULT, HASH_NAME},
+  grammar::compile::parser::sherpa::{self, *},
   journal::{Journal, ReportType},
   types::{BranchType, ExportedProduction, GrammarStore, IRState},
 };
@@ -89,7 +89,7 @@ pub fn optimize_ir_states(
             } =>
           {
             redundant_assert_replacements
-              .insert(state.id.clone(), (get_branch_id(&ids), instructions.clone()));
+              .insert(state.id.clone(), (ids.val as u32, instructions.clone()));
           }
           _ => {}
         }
@@ -103,6 +103,7 @@ pub fn optimize_ir_states(
     for state in states.values_mut() {
       let state_name = state.get_name();
       let is_scanner = state.is_scanner();
+      let code = state.get_code();
 
       // Convert trivial scanner
       if !is_scanner {
@@ -112,18 +113,20 @@ pub fn optimize_ir_states(
 
             for instruction in &mut state.ast.as_mut().unwrap().instructions {
               match instruction {
-                ASTNode::ASSERT(box assert) => match assert.ids[0].clone() {
-                  ASTNode::AST_NUMBER(box AST_NUMBER { value, .. }) => {
-                    let sym_id = *lookup.get(&(value as u32)).unwrap();
-                    let (id, bc_type) = sym_id.shift_info(&g);
-                    assert.mode = bc_type.to_string();
-                    assert.ids = vec![ASTNode::AST_NUMBER(AST_NUMBER::new(id as f64))];
-                  }
-                  _ => {}
-                },
+                ASTNode::ASSERT(box assert) => {
+                  println!("-- {:?} \n{} {:#?}", assert, code, lookup);
+                  let sym_id = *lookup.get(&(assert.ids.val as u32)).unwrap();
+                  let (id, bc_type) = sym_id.shift_info(&g);
+                  assert.mode = bc_type.to_string();
+                  assert.ids.val = id as i64;
+                }
                 _ => {}
               }
             }
+            // Now we're just direct accessing the raw binary data so we remove the
+            // reliance on scanner states and symbols
+            state.normal_symbols.clear();
+            state.skip_symbols.clear();
             non_scanner_states.insert(state.get_name());
           }
         }
@@ -135,32 +138,31 @@ pub fn optimize_ir_states(
           for (index, goto) in
             branch.iter().cloned().enumerate().filter(|(_, i)| is_goto(i)).collect::<Vec<_>>()
           {
-            if let ASTNode::Goto(box Goto { state, .. }) = &goto {
-              if let ASTNode::HASH_NAME(box HASH_NAME { val, .. }) = &state {
-                match (
-                  goto_count,
-                  goto_replacements.get(val),
-                  pure_goto_replacements.get(val),
-                  fail_states.get(val),
-                ) {
-                  (0, Some(instructions), ..) => {
-                    branch.splice(index..=index, instructions.iter().cloned());
-                    changes = true;
-                    continue 'outerloop;
-                  }
-                  // Replace goto if it points to a pure goto state.
-                  (_, _, Some(instructions), ..) => {
-                    branch.splice(index..=index, instructions.iter().cloned());
-                    changes = true;
-                    continue 'outerloop;
-                  }
-                  (_, _, _, Some(_)) => {
-                    branch.clear();
-                    branch.push(ASTNode::Fail(Fail::new()));
-                    break;
-                  }
-                  _ => {}
+            if let ASTNode::Goto(box sherpa::Goto { state, .. }) = &goto {
+              let val = &state.val;
+              match (
+                goto_count,
+                goto_replacements.get(val),
+                pure_goto_replacements.get(val),
+                fail_states.get(val),
+              ) {
+                (0, Some(instructions), ..) => {
+                  branch.splice(index..=index, instructions.iter().cloned());
+                  changes = true;
+                  continue 'outerloop;
                 }
+                // Replace goto if it points to a pure goto state.
+                (_, _, Some(instructions), ..) => {
+                  branch.splice(index..=index, instructions.iter().cloned());
+                  changes = true;
+                  continue 'outerloop;
+                }
+                (_, _, _, Some(_)) => {
+                  branch.clear();
+                  branch.push(ASTNode::Fail(Box::new(sherpa::Fail::new())));
+                  break;
+                }
+                _ => {}
               }
             }
             goto_count += 1;
@@ -173,13 +175,11 @@ pub fn optimize_ir_states(
             if let Some((index, goto)) =
               branch.iter().cloned().enumerate().find(|(_, i)| is_goto(i))
             {
-              if let ASTNode::Goto(box Goto { state, .. }) = &goto {
-                if let ASTNode::HASH_NAME(box HASH_NAME { val, .. }) = &state {
-                  if let Some((id, instructions)) = redundant_assert_replacements.get(val) {
-                    if *id == data.id && !data.peek && !matches!(branch[0], ASTNode::Shift(_)) {
-                      branch.splice(index..=index, instructions.iter().cloned());
-                      changes = true;
-                    }
+              if let ASTNode::Goto(box sherpa::Goto { state, .. }) = &goto {
+                if let Some((id, instructions)) = redundant_assert_replacements.get(&state.val) {
+                  if *id == data.id && !data.peek && !matches!(branch[0], ASTNode::Shift(_)) {
+                    branch.splice(index..=index, instructions.iter().cloned());
+                    changes = true;
                   }
                 }
               }
@@ -193,14 +193,14 @@ pub fn optimize_ir_states(
                 // in the first branch.
 
                 match branch.first() {
-                  Some(ASTNode::Goto(box Goto { state: goto_state, .. })) => {
-                    if let ASTNode::HASH_NAME(box HASH_NAME { val, .. }) = &goto_state {
-                      // Grab the other branch. Make sure it's not a circular reference.
-                      if *val != state_name {
-                        if let Some(instructions) = branch_references.get(&(val.clone(), data)) {
-                          branch.splice(0..=0, instructions.iter().cloned());
-                          changes = true;
-                        }
+                  Some(ASTNode::Goto(box sherpa::Goto { state: goto_state, .. })) => {
+                    // Grab the other branch. Make sure it's not a circular reference.
+                    if goto_state.val != state_name {
+                      if let Some(instructions) =
+                        branch_references.get(&(goto_state.val.clone(), data))
+                      {
+                        branch.splice(0..=0, instructions.iter().cloned());
+                        changes = true;
                       }
                     }
                   }
@@ -215,12 +215,10 @@ pub fn optimize_ir_states(
         if remove_gotos_to_pass_states {
           // Remove the last goto if it points to a pass state
           if let Some(goto) = branch.last() {
-            if let ASTNode::Goto(box Goto { state, .. }) = &goto {
-              if let ASTNode::HASH_NAME(box HASH_NAME { val, .. }) = &state {
-                if pass_states.contains(val) {
-                  branch.remove(branch.len() - 1);
-                  changes = true;
-                }
+            if let ASTNode::Goto(box sherpa::Goto { state, .. }) = &goto {
+              if pass_states.contains(&state.val) {
+                branch.remove(branch.len() - 1);
+                changes = true;
               }
             }
           }
@@ -298,11 +296,9 @@ where
 
       for (_, branch) in get_branches(state) {
         for goto in branch.iter().filter(|i| is_goto(*i)) {
-          if let ASTNode::Goto(box Goto { state, .. }) = &goto {
-            if let ASTNode::HASH_NAME(box HASH_NAME { val, .. }) = &state {
-              if references.insert(val.clone()) {
-                trace_queue.push_back(val.clone());
-              }
+          if let ASTNode::Goto(box sherpa::Goto { state, .. }) = &goto {
+            if references.insert(state.val.clone()) {
+              trace_queue.push_back(state.val.clone());
             }
           }
         }
@@ -355,7 +351,7 @@ pub(crate) fn get_branches<'a>(state: &'a IRState) -> Vec<(Option<BranchData>, &
         .map(|i| match i {
           ASTNode::ASSERT(box ASSERT { ids, instructions, is_peek, mode, .. }) => (
             Some(BranchData {
-              id:      get_branch_id(ids),
+              id:      ids.val as u32,
               peek:    *is_peek,
               default: false,
               id_type: BranchType::from(mode.clone()),
@@ -394,7 +390,7 @@ fn get_branches_mut<'a>(state: &'a mut IRState) -> Vec<(Option<BranchData>, &'a 
         .map(|i| match i {
           ASTNode::ASSERT(box ASSERT { ids, instructions, is_peek, mode, .. }) => (
             Some(BranchData {
-              id:      get_branch_id(ids),
+              id:      ids.val as u32,
               peek:    *is_peek,
               default: false,
               id_type: BranchType::from(mode.clone()),
@@ -418,13 +414,6 @@ fn get_branches_mut<'a>(state: &'a mut IRState) -> Vec<(Option<BranchData>, &'a 
     }
   } else {
     vec![]
-  }
-}
-
-fn get_branch_id(ids: &Vec<ASTNode>) -> u32 {
-  match ids[0] {
-    ASTNode::Num(box Num { val, .. }) => val as u32,
-    _ => unreachable!("Expect only one numeric value per branch"),
   }
 }
 

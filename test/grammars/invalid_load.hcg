@@ -1,5 +1,0 @@
-@NAME test
-
-@IMPORT ./does_not_exist as include
-
-<> A > \Hello \World

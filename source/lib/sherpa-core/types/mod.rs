@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 mod constants;
 mod error;
 mod grammar;

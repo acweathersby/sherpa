@@ -1,0 +1,3 @@
+IMPORT ./trivial_importee.sg as importee
+
+<> hello > importee::hello

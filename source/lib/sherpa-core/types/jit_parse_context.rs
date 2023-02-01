@@ -1,6 +1,6 @@
+#![allow(unused)]
 use crate::{
   compile::{compile_bytecode, compile_states, optimize_ir_states, BytecodeOutput},
-  debug::generate_disassembly,
   llvm::{ascript_functions::construct_ast_builder, compile_module_from_bytecode, *},
   Config,
   Journal,

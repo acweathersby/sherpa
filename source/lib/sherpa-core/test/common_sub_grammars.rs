@@ -11,9 +11,9 @@ fn escaped_string() -> SherpaResult<()> {
     r##"
         <> string > tk:string_tk
         
-        <> string_tk > \" ( g:sym | g:num | g:sp | g:id | escape )(*) t:"
+        <> string_tk > '"' ( c:sym | c:num | c:sp | c:id | escape )(*) "\""
         
-        <> escape > t:\  ( g:sym | g:num | g:sp | g:id )
+        <> escape > "\\"  ( c:sym | c:num | c:sp | c:id )
         "##,
     &[(r##""""##, true), (r##""1234""##, true), (r##""12\"34""##, true)],
   )
@@ -25,7 +25,7 @@ fn scientific_number() -> SherpaResult<()> {
     r##"
     <> sci_number > tk:number
     
-    <> number > ( \+ | \- )? g:num(+) ( t:. g:num(+) )? ( ( \e | \E ) ( \+ | \- )? g:num(+) )?
+    <> number > ( '+' | '-' )? c:num(+) ( '.' c:num(+) )? ( ( 'e' | 'E' ) ( '+' | '-' )? c:num(+) )?
     "##,
     &[(r##"2.3e-22"##, true), (r##"0.3e-22"##, true)],
   )
@@ -35,17 +35,17 @@ fn scientific_number() -> SherpaResult<()> {
 fn json_object_with_specialized_key() -> SherpaResult<()> {
   compile_and_run_grammar(
     r##"
-    @IGNORE g:sp g:nl
+IGNORE { c:sp c:nl }
+
+<> json > '{'  value(*,) '}'
+
+<> value > tk:string ':' tk:string
+
+    | "\"test\"" ':' c:num
+
+<> string > '"' ( c:sym | c:num | c:sp | c:id | escape )(*) "\""
     
-    <> json > \{  value(*,) \}
-
-    <> value > tk:string \: tk:string
-
-        | t:"test" \: g:num
-
-    <> string > \" ( g:sym | g:num | g:sp | g:id | escape )(*) t:"
-        
-    <> escape > t:\  ( g:sym | g:num | g:sp | g:id )
+<> escape > "\\"  ( c:sym | c:num | c:sp | c:id )
     "##,
     &[
       (r##"{ "test" : 2  }"##, true),
@@ -58,7 +58,12 @@ fn json_object_with_specialized_key() -> SherpaResult<()> {
 
 fn compile_and_run_grammar(grammar: &str, test_inputs: &[(&str, bool)]) -> SherpaResult<()> {
   let mut j = Journal::new(None);
-  let g = GrammarStore::from_str(&mut j, grammar).unwrap();
+
+  let g = GrammarStore::from_str(&mut j, grammar);
+
+  assert!(!j.debug_error_report());
+
+  let g = g?;
 
   let states = compile_states(&mut j, 1)?;
 

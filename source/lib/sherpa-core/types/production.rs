@@ -3,10 +3,7 @@ use std::sync::Arc;
 use bitmask_enum::bitmask;
 
 use crate::{
-  grammar::{
-    data::ast::{ASTNode, ASTNodeTraits},
-    hash_id_value_u64,
-  },
+  grammar::{compile::parser::sherpa::ASTNode, hash_id_value_u64},
   types::*,
 };
 
@@ -186,7 +183,7 @@ pub struct ReduceFunctionId(u64);
 
 impl ReduceFunctionId {
   pub fn new(reduce_function: &ASTNode) -> Self {
-    ReduceFunctionId(hash_id_value_u64(reduce_function.Token().to_string()))
+    ReduceFunctionId(hash_id_value_u64(reduce_function.to_string()))
   }
 
   pub fn from_token(token: Token) -> Self {

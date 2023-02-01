@@ -1,12 +1,11 @@
 @IMPORT ./script.hcg as ast
 @IMPORT ./symbol.hcg as sym
 @IMPORT ./syntax.hcg as syn
-
 @IMPORT ./ir.hcg as ir
 
 @NAME sherpa
 
-@IGNORE g:sp g:nl
+@IGNORE g:sp g:nl 
 
 @EXPORT grammar as grammar
 @EXPORT ast::struct as ast_struct

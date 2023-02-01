@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use super::test_reader::TestUTF8StringReader;
 use crate::{
   compile::{compile_bytecode, compile_states, optimize_ir_states, GrammarStore},
@@ -15,8 +17,13 @@ use inkwell::{context::Context, execution_engine::JitFunction};
 use sherpa_runtime::types::{
   sherpa_allocate_stack,
   sherpa_free_stack,
+  AstObject,
+  AstStackSlice,
   BlameColor,
+  ByteReader,
   Goto,
+  LLVMByteReader,
+  MutByteReader,
   ParseActionType,
   ParseContext,
   ParseResult,
@@ -373,9 +380,9 @@ fn test_compile_parse_function() -> SherpaResult<()> {
   GrammarStore::from_str(
     &mut j,
     "
-  @IGNORE g:sp
+IGNORE { c:sp }
 
-  <> test > \\hello \\world
+<> test > 'hello' 'world'
   ",
   )
   .unwrap();
@@ -401,9 +408,9 @@ fn test_compile_from_bytecode() -> SherpaResult<()> {
   GrammarStore::from_str(
     &mut j,
     "
-  @IGNORE g:sp
+IGNORE { c:sp }
 
-  <> test > \\hello \\world
+<> test > 'hello' 'world'
   ",
   )?;
 
@@ -466,17 +473,15 @@ fn line_tracking_with_scanner_tokens() -> SherpaResult<()> {
   let ctx = Context::create();
   let (mut parser, j) = JitParseContext::<TestUTF8StringReader, u32, u32>::from_grammar_str(
     r##"
-    @IGNORE g:sp g:nl
-    <> A > tk:B P 
-    
-    <> P > \world \goodby C 
+IGNORE { c:sp c:nl }
+<> A > tk:B P 
 
+<> P > 'world' 'goodby' C 
 
-    <> C > tk:B
+<> C > tk:B
 
-    <> B > t:" (g:id | g:nl)(+) t:"
-
-    "##,
+<> B > "\"" (c:id | c:nl)(+) "\""
+"##,
     &ctx,
     Default::default(),
   )?;
@@ -488,28 +493,27 @@ fn line_tracking_with_scanner_tokens() -> SherpaResult<()> {
   let result = parser.build_ast(
     0,
     &mut TestUTF8StringReader::new("\"\nh\n\"\nworld\n\n\ngoodby\n\"\nmango\""),
-    &[
+    &map_reduce_function(&j.grammar().unwrap(), vec![
       /*P*/
-      |ctx, slots| {
+      ("P", 0, |ctx, slots| {
         assert_eq!(slots[0].1.to_string_slice(ctx.get_str()), "world");
         assert_eq!(slots[0].1.line_num, 3, "Line number of `world` should be 3");
         assert_eq!(slots[0].1.line_off, 5, "Line offset of `world` should be 4");
-      },
-      /*A*/
-      |ctx, slots| {
+      }),
+      ("A", 0 /*A*/, |ctx, slots| {
         assert_eq!(slots[0].1.to_string_slice(ctx.get_str()), "\"\nh\n\"");
         assert_eq!(slots[0].1.line_num, 0, "Line number of `\"\\nh\\n\"` should be 0");
         assert_eq!(slots[0].1.line_off, 0, "Line offset of `\"\\nh\\n\"` should be 0");
         slots.assign(0, (1010101, Default::default(), Default::default()))
-      },
+      }),
       /*C*/
-      |ctx, slots| {
+      ("C", 0, |ctx, slots| {
         assert_eq!(slots[0].1.to_string_slice(ctx.get_str()), "\"\nmango\"");
         assert_eq!(slots[0].1.line_num, 7, "Line number of `world` should be 7");
         assert_eq!(slots[0].1.line_off, 20, "Line offset of `world` should be 20");
-      },
-      |_, _| {},
-    ],
+      }),
+      ("B", 0, |_, _| {}),
+    ]),
   );
 
   assert!(matches!(result, ParseResult::Complete((1010101, ..))));
@@ -520,15 +524,15 @@ fn line_tracking_with_scanner_tokens() -> SherpaResult<()> {
 #[test]
 fn simple_newline_tracking() -> SherpaResult<()> {
   let ctx = Context::create();
-  let (mut parser, mut j) = JitParseContext::<TestUTF8StringReader, u32, u32>::from_grammar_str(
+  let (mut parser, j) = JitParseContext::<TestUTF8StringReader, u32, u32>::from_grammar_str(
     r##"
-    @IGNORE g:sp g:nl
-    
-    <> test > \hello P 
-    
-    <> P > \world \goodby B
-    
-    <> B > \mango
+IGNORE { c:sp c:nl }
+
+<> test > 'hello' P 
+
+<> P > 'world' 'goodby' B
+
+<> B > 'mango'
     "##,
     &ctx,
     Default::default(),
@@ -536,29 +540,29 @@ fn simple_newline_tracking() -> SherpaResult<()> {
 
   assert!(!j.debug_error_report());
 
-  let result =
-    parser.build_ast(0, &mut TestUTF8StringReader::new("hello\nworld\n\ngoodby\nmango"), &[
-      /*test*/
-      |ctx, slots| {
+  let result = parser.build_ast(
+    0,
+    &mut TestUTF8StringReader::new("hello\nworld\n\ngoodby\nmango"),
+    &map_reduce_function(&j.grammar().unwrap(), vec![
+      ("test", 0, |ctx, slots| {
         assert_eq!(slots[0].1.to_string_slice(ctx.get_str()), "hello");
         assert_eq!(slots[0].1.line_num, 0, "Line number of `hello` should be 0");
         assert_eq!(slots[0].1.line_off, 0, "Line offset of `hello` should be 0");
 
         slots.assign(0, (1010101, Default::default(), Default::default()))
-      },
-      /*B*/
-      |ctx, slots| {
+      }),
+      ("B", 0, |ctx, slots| {
         assert_eq!(slots[0].1.to_string_slice(ctx.get_str()), "mango");
         assert_eq!(slots[0].1.line_num, 4, "Line number of `mango` should be 4");
         assert_eq!(slots[0].1.line_off, 19, "Line offset of `mango` should be 19");
-      },
-      /*P*/
-      |ctx, slots| {
+      }),
+      ("P", 0, |ctx, slots| {
         assert_eq!(slots[0].1.to_string_slice(ctx.get_str()), "world");
         assert_eq!(slots[0].1.line_num, 1, "Line number of `world` should be 1");
         assert_eq!(slots[0].1.line_off, 5, "Line offset of `world` should be 5");
-      },
-    ]);
+      }),
+    ]),
+  );
 
   assert!(matches!(result, ParseResult::Complete((1010101, ..))));
 
@@ -569,15 +573,15 @@ fn simple_newline_tracking() -> SherpaResult<()> {
 fn test_compile_from_bytecode1() -> SherpaResult<()> {
   let ctx = Context::create();
 
-  let (mut parser, mut j) = JitParseContext::<TestUTF8StringReader, u32, u32>::from_grammar_str(
+  let (mut parser, j) = JitParseContext::<TestUTF8StringReader, u32, u32>::from_grammar_str(
     "
-    @IGNORE g:sp g:nl
-    
-    <> test > \\hello P 
-    
-    <> P > \\world \\goodby B
-    
-    <> B > \\mango
+IGNORE { c:sp c:nl }
+
+<> test > 'hello' P 
+
+<> P > 'world' 'goodby' B
+
+<> B > 'mango'
     ",
     &ctx,
     Default::default(),
@@ -585,41 +589,48 @@ fn test_compile_from_bytecode1() -> SherpaResult<()> {
 
   assert!(!j.debug_error_report());
 
+  let g = j.grammar()?;
+
   let input = "hello world\ngoodby mango";
 
-  let parse_result = parser.build_ast(0, &mut TestUTF8StringReader::new(input), &[
-    |ctx, slots| {
-      let _a = slots.take(0);
-      let _b = slots.take(1);
+  let parse_result = parser.build_ast(
+    0,
+    &mut TestUTF8StringReader::new(input),
+    &map_reduce_function(&g, vec![
+      ("test", 0, |ctx, slots| {
+        let _a = slots.take(0);
+        let _b = slots.take(1);
 
-      assert_eq!(_b.1.len(), 18, "Expected the token of [P] to be 18 bytes long");
+        assert_eq!(_b.1.len(), 18, "Expected the token of [P] to be 18 bytes long");
 
-      let final_token = _a.1 + _b.1;
+        let final_token = _a.1 + _b.1;
 
-      eprintln!(
-        "{}",
-        final_token.to_token(unsafe { &*ctx.reader }).blame(
-          0,
-          0,
-          "Completed Parse of [test]",
-          BlameColor::RED
-        )
-      );
+        eprintln!(
+          "{}",
+          final_token.to_token(unsafe { &*ctx.reader }).blame(
+            0,
+            0,
+            "Completed Parse of [test]",
+            BlameColor::RED
+          )
+        );
 
-      slots.assign(0, (0, final_token, TokenRange::default()));
-    },
-    |_, slots| {
-      eprintln!("<B> 02 - {}  {:#?}", 0, slots);
-      // Do nothing
-    },
-    |_, slots| {
-      eprintln!("<P> 03 - {}  {:#?}", 0, slots);
-      let (_, _a, _) = slots.take(0);
-      slots.take(1);
-      let (_, _c, _) = slots.take(2);
-      slots.assign(0, (0, (_a + _c), TokenRange::default()));
-    },
-  ]);
+        slots.assign(0, (0, final_token, TokenRange::default()));
+      }),
+      ("B", 0, |_, slots| {
+        eprintln!("<B> 02 - {}  {:#?}", 0, slots);
+        // Do nothing
+      }),
+      ("P", 0, |_, slots| {
+        eprintln!("<P> 03 - {}  {:#?}", 0, slots);
+        let (_, _a, _) = slots.take(0);
+        slots.take(1);
+        let (_, _c, _) = slots.take(2);
+        slots.assign(0, (0, (_a + _c), TokenRange::default()));
+      }),
+    ]),
+  );
+
   eprintln!("{:#?}", parse_result);
 
   assert!(matches!(parse_result, ParseResult::Complete(..)));
@@ -631,6 +642,36 @@ fn test_compile_from_bytecode1() -> SherpaResult<()> {
   SherpaResult::Ok(())
 }
 
+// Sorts reduce functions according to their respective
+// rules. This assumes the number of rules in the array
+// matches the number of rules in the parser.
+fn map_reduce_function<'a, R, ExtCTX, ASTNode>(
+  g: &GrammarStore,
+  fns: Vec<(
+    &str,
+    usize,
+    fn(&mut ParseContext<R, ExtCTX>, &mut AstStackSlice<(ASTNode, TokenRange, TokenRange)>),
+  )>,
+) -> Vec<fn(&mut ParseContext<R, ExtCTX>, &mut AstStackSlice<(ASTNode, TokenRange, TokenRange)>)>
+where
+  R: ByteReader + LLVMByteReader + MutByteReader,
+  ASTNode: AstObject,
+{
+  fns
+    .into_iter()
+    .map(|(name, rule_number, b)| {
+      let prod = g.get_production_by_name(name).unwrap();
+      let rule_id = g.production_rules.get(&prod.id).unwrap()[rule_number];
+      let rule = g.get_rule(&rule_id).unwrap();
+      {
+        (rule.bytecode_id, b)
+      }
+    })
+    .collect::<BTreeMap<_, _>>()
+    .into_values()
+    .collect::<Vec<_>>()
+}
+
 #[test]
 fn test_compile_json_parser() -> SherpaResult<()> {
   use crate::llvm::compile_module_from_bytecode;
@@ -639,42 +680,41 @@ fn test_compile_json_parser() -> SherpaResult<()> {
   GrammarStore::from_str(
     &mut j,
     r##"
-    @IGNORE g:sp g:nl
-
-@EXPORT json as entry
-
-@NAME llvm_language_test
+IGNORE { c:sp c:nl }
+EXPORT json as entry
+NAME llvm_language_test
 
 <> json > 
-        object                              f:ast { { t_Json, v: $1 } }
+        object                              :ast { t_Json, v: $1 }
         | 
-        array                               f:ast { { t_Json, v: $1 } }
+        array                               :ast { t_Json, v: $1 }
 
-<> array > \[  value(*\, )  \]              f:ast { { t_Array, entries: $2 } }
+<> array > '['  value(*",")  ']'              :ast { t_Array, entries: $2 }
 
-<> object > \{ key_value(*\, ) \}           f:ast { { t_Object, entries: $2 } }
+<> object > '{' key_value(*",") '}'           :ast { t_Object, entries: $2 }
 
-<> key_value > str \: value              f:ast { { t_KeyVal, k:$1, v:$3 } }
+<> key_value > str ':' value              :ast { t_KeyVal, k:$1, v:$3 }
 
 <> value > num | bool | str | null
 
-<> null > t:null                            f:ast { { t_Null, v:false } }
+<> null > "null"                            :ast { t_Null, v:false }
 
 <> bool > 
-    t:false                                 f:ast { { t_Bool, v:false } }
+    "false"                                 :ast { t_Bool, v:false }
     |   
-    t:true                                  f:ast { { t_Bool, v:true } }
+    "true"                                  :ast { t_Bool, v:true }
 
-<> str > tk:string                          f:ast { { t_Str } }
+<> str > tk:string                          :ast { t_Str }
 
-<> num > tk:number                          f:ast { { t_Number } }
+<> num > tk:number                          :ast { t_Number }
 
-<> number > ( \+ | \- )? g:num(+) ( \. g:num(+) )? ( ( \e | \E ) ( \+ | \i ) g:num(+) )?
+<> number > ( '+' | '-' )? c:num(+) ( '.' c:num(+) )? ( ( 'e' | 'E' ) ( '+' | 'i' ) c:num(+) )?
 
-<> string > \" ( g:id | g:sym | g:num | g:sp )(+) \" 
+<> string > '"' ( c:id | c:sym | c:num | c:sp )(+) "\""
 "##,
-  )
-  .unwrap();
+  );
+
+  assert!(!j.debug_error_report());
 
   let ir_states = compile_states(&mut j, 1)?;
   let ir_states = optimize_ir_states(&mut j, ir_states);

@@ -1,13 +1,7 @@
 use crate::{
   ascript::types::AScriptStore,
   compile::{compile_bytecode, compile_states, optimize_ir_states, GrammarStore},
-  debug::{
-    collect_shifts_and_skips,
-    disassemble_state,
-    generate_disassembly,
-    BytecodeGrammarLookups,
-  },
-  grammar::compile::parser::sherpa::Grammar,
+  debug::collect_shifts_and_skips,
   llvm::{compile_module_from_bytecode, construct_module},
   test::utils::path_from_source,
   util::get_num_of_available_threads,
@@ -17,15 +11,11 @@ use crate::{
   SherpaResult,
 };
 use inkwell::context::Context;
-use sherpa_runtime::{
-  functions::DebugEvent,
-  types::{ByteReader, UTF8Reader},
-};
 
 #[test]
 fn test_compile_of_sherpa_grammar_bytecode() -> SherpaResult<()> {
   let mut j = Journal::new(None);
-  let grammar_path = path_from_source("grammar/v1_0_0_strap/grammar.hcg")?;
+  let grammar_path = path_from_source("grammar/v1_0_0/grammar.sg")?;
 
   let SherpaResult::Ok(g) = GrammarStore::from_path(&mut j, grammar_path) else {
     j.flush_reports();
@@ -55,7 +45,6 @@ fn test_compile_of_sherpa_grammar_bytecode() -> SherpaResult<()> {
 
   let bc = compile_bytecode(&mut j, ir_states);
 
-  /// eprintln!("{}", generate_disassembly(&bc, Some(&mut j)));
   if j.debug_error_report() {
     return SherpaResult::None;
   }
@@ -65,8 +54,6 @@ fn test_compile_of_sherpa_grammar_bytecode() -> SherpaResult<()> {
   let entry_point = *bc.state_name_to_offset.get(entry_state_name).unwrap();
 
   let target_production_id = g.get_production_by_name("grammar").unwrap().bytecode_id;
-
-  let lu = BytecodeGrammarLookups::new(g.clone());
 
   let (shifts, skips) = collect_shifts_and_skips(
     r#"
@@ -189,7 +176,7 @@ fn test_compile_of_sherpa_grammar_bytecode() -> SherpaResult<()> {
 /// Test component module wide compilation of the sherpa grammar.
 #[test]
 fn test_compile_of_sherpa_grammar_llvm() -> SherpaResult<()> {
-  let grammar_path = path_from_source("grammar/v1_0_0_strap/grammar.hcg")?;
+  let grammar_path = path_from_source("grammar/v1_0_0/grammar.sg")?;
 
   dbg!(&grammar_path);
 

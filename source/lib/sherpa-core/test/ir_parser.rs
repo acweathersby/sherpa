@@ -11,9 +11,7 @@ fn ir_parser_build() -> SherpaResult<()> {
   let mut j = Journal::new(None);
   GrammarStore::from_path(
     &mut j,
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-      .join("../../grammar/v1_0_0_strap/ir.hcg")
-      .canonicalize()?,
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammar/v1_0_0/ir.sg").canonicalize()?,
   )?;
 
   j.flush_reports();

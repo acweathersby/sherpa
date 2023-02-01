@@ -17,25 +17,7 @@ pub(super) fn build_grammar_from_file(
   config: Config,
 ) -> (Journal, SherpaResult<Arc<GrammarStore>>) {
   let mut j = Journal::new(Some(config));
-
   let g = GrammarStore::from_path(&mut j, input);
-
-  j.flush_reports();
-
-  (j, g)
-}
-
-/// Creates and compiles a Journal and GrammarStore from a file path and configuration object.
-pub(super) fn build_grammar_from_str(
-  input: &str,
-  config: Config,
-) -> (Journal, SherpaResult<Arc<GrammarStore>>) {
-  let mut j = Journal::new(Some(config));
-
-  let g = GrammarStore::from_str(&mut j, input);
-
-  j.flush_reports();
-
   (j, g)
 }
 

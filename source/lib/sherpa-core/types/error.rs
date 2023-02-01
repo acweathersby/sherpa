@@ -113,10 +113,24 @@ impl From<Arc<dyn ExtendedError>> for SherpaError {
 }
 
 impl SherpaError {
+  /// Return the Errors severity
   pub fn get_severity(&self) -> SherpaErrorSeverity {
     match self {
       ExtendedError(err) => err.severity(),
       _ => SherpaErrorSeverity::Critical,
+    }
+  }
+
+  /// Convert SherpaParseError into SherpaError
+  pub fn from_parse_error(err: SherpaParseError, path: PathBuf) -> SherpaError {
+    Self::SourceError {
+      loc: err.loc,
+      path,
+      id: "parse-error",
+      msg: err.message,
+      inline_msg: err.inline_message,
+      ps_msg: Default::default(),
+      severity: SherpaErrorSeverity::Critical,
     }
   }
 
@@ -188,16 +202,8 @@ impl From<FromUtf16Error> for SherpaError {
 }
 
 impl From<SherpaParseError> for SherpaError {
-  fn from(value: SherpaParseError) -> Self {
-    Self::SourceError {
-      loc:        value.loc,
-      path:       Default::default(),
-      id:         "parse-error",
-      msg:        value.message,
-      inline_msg: value.inline_message,
-      ps_msg:     Default::default(),
-      severity:   SherpaErrorSeverity::Critical,
-    }
+  fn from(err: SherpaParseError) -> Self {
+    Self::from_parse_error(err, Default::default())
   }
 }
 

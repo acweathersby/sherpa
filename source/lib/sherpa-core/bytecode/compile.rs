@@ -1,6 +1,6 @@
 #![warn(clippy::borrowed_box)]
 use crate::{
-  grammar::data::ast::{
+  grammar::compile::parser::sherpa::{
     ASTNode,
     ForkTo,
     Goto,
@@ -13,7 +13,6 @@ use crate::{
     Shift,
     TokenAssign,
     ASSERT,
-    HASH_NAME,
     IR_STATE,
   },
   types::*,
@@ -311,12 +310,7 @@ fn make_table(
   let mut val_offset_map = branches
     .iter()
     .enumerate()
-    .flat_map(|(i, assert)| {
-      assert.ids.iter().filter_map(move |node| match node {
-        ASTNode::Num(box Num { val }) => Some((*val as u32, i as u32)),
-        _ => None,
-      })
-    })
+    .map(|(i, assert)| (assert.ids.val as u32, i as u32))
     .collect::<BTreeMap<_, _>>();
 
   let max_span = {
@@ -335,22 +329,16 @@ fn make_table(
 
   for branch in branches {
     if branch.is_skip {
-      for id in &branch.ids {
-        if let ASTNode::Num(box Num { val }) = id {
-          val_offset_map.insert(*val as u32, 0xFFFF_FFFF);
-        }
-      }
+      let id = &branch.ids;
+      val_offset_map.insert(id.val as u32, 0xFFFF_FFFF);
     } else {
       let instructions =
         build_branchless_bytecode(&branch.instructions, state_to_bookmark, state_name);
       match existing_instructions.entry(instructions) {
         Entry::Occupied(e) => {
           let offset = e.get();
-          for id in &branch.ids {
-            if let ASTNode::Num(box Num { val }) = id {
-              val_offset_map.insert(*val as u32, *offset as u32);
-            }
-          }
+          let id = &branch.ids;
+          val_offset_map.insert(id.val as u32, *offset as u32);
         }
         Entry::Vacant(e) => {
           let offset = branch_instructions_length;
@@ -358,11 +346,8 @@ fn make_table(
           branch_instructions_length += instructions.len() as u32;
           branch_instructions.push(instructions.clone());
           e.insert(offset);
-          for id in &branch.ids {
-            if let ASTNode::Num(box Num { val }) = id {
-              val_offset_map.insert(*val as u32, offset as u32);
-            }
-          }
+          let id = &branch.ids;
+          val_offset_map.insert(id.val as u32, offset as u32);
         }
       }
     }
@@ -511,39 +496,28 @@ fn build_branchless_bytecode(
   for instruction in non_gotos.chain(gotos) {
     match instruction {
       ASTNode::TokenAssign(box TokenAssign { ids }) => {
-        if let ASTNode::Num(id) = &ids[0] {
-          byte_code.push(I::I05_TOKEN_ASSIGN | ((id.val as u32) & 0x00FF_FFFF))
-        }
+        byte_code.push(I::I05_TOKEN_ASSIGN | ((ids[0].val as u32) & 0x00FF_FFFF))
       }
       ASTNode::Shift(box Shift { EMPTY }) => byte_code.push(I::I01_SHIFT | *EMPTY as u32),
-      ASTNode::Goto(box Goto { state }) => match state {
-        ASTNode::HASH_NAME(box HASH_NAME { val }) => {
-          let state_pointer_val = match (val == current_state_name)
-            .then_some(state_name_to_bookmark.get(&(val.to_string() + "_internal")))
-          {
-            Some(Some(v)) => *v,
-            _ => match state_name_to_bookmark.get(val) {
-              Some(v) => *v,
-              None => 0,
-            },
-          };
-          byte_code.push(I::I02_GOTO | NORMAL_STATE_FLAG | state_pointer_val);
-        }
-        _ => {
-          panic!("Invalid state type in goto instruction");
-        }
-      },
+      ASTNode::Goto(box Goto { state }) => {
+        let state_pointer_val = match (state.val == current_state_name)
+          .then_some(state_name_to_bookmark.get(&(state.val.to_string() + "_internal")))
+        {
+          Some(Some(v)) => *v,
+          _ => match state_name_to_bookmark.get(&state.val) {
+            Some(v) => *v,
+            None => 0,
+          },
+        };
+        byte_code.push(I::I02_GOTO | NORMAL_STATE_FLAG | state_pointer_val);
+      }
       ASTNode::ScanUntil(box ScanUntil { .. }) => {}
       ASTNode::ForkTo(box ForkTo { states, production_id }) => {
         byte_code.push(I::I06_FORK_TO | ((states.len() << 16) as u32) | (production_id.val as u32));
         for state in states {
-          if let ASTNode::HASH_NAME(box HASH_NAME { val }) = state {
-            let state_pointer_val =
-              if let Some(v) = state_name_to_bookmark.get(val) { *v } else { 0 };
-            byte_code.push(I::I02_GOTO | NORMAL_STATE_FLAG | state_pointer_val);
-          } else {
-            panic!("Invalid state type in goto instruction");
-          }
+          let state_pointer_val =
+            if let Some(v) = state_name_to_bookmark.get(&state.val) { *v } else { 0 };
+          byte_code.push(I::I02_GOTO | NORMAL_STATE_FLAG | state_pointer_val);
         }
       }
       ASTNode::Skip(_) => {}
@@ -551,10 +525,10 @@ fn build_branchless_bytecode(
       ASTNode::Fail(_) => byte_code.push(I::I15_FAIL),
       ASTNode::NotInScope(box NotInScope { .. }) => {}
       ASTNode::SetScope(box SetScope { .. }) => {}
-      ASTNode::SetProd(box SetProd { id: ASTNode::Num(box Num { val }) }) => {
+      ASTNode::SetProd(box SetProd { id: box Num { val } }) => {
         byte_code.push(I::I03_SET_PROD | (*val as u32 & INSTRUCTION_CONTENT_MASK))
       }
-      ASTNode::Reduce(box Reduce { body_id: rule_id, len, .. }) => byte_code.push(
+      ASTNode::Reduce(box Reduce { rule_id, len, .. }) => byte_code.push(
         I::I04_REDUCE
           | if *len as u32 == IR_REDUCE_NUMERIC_LEN_ID {
             0xFFFF0000 & INSTRUCTION_CONTENT_MASK

@@ -1,5 +1,3 @@
-use sherpa_runtime::types::ast::DEFAULT_AST_TYPE_NAMES;
-
 use super::{
   compile::{
     get_indexed_body_ref,
@@ -12,13 +10,14 @@ use super::{
   types::*,
 };
 use crate::{
-  grammar::data::ast::{
+  grammar::compile::parser::sherpa::{
     ASTNode,
     AST_IndexReference,
     AST_NamedReference,
     AST_Struct,
     AST_Token,
     AST_Vector,
+    Init,
     AST_BOOL,
     AST_F32,
     AST_F64,
@@ -36,9 +35,9 @@ use crate::{
   types::*,
   writer::code_writer::*,
 };
+use sherpa_runtime::types::ast::DEFAULT_AST_TYPE_NAMES;
 use std::{
   collections::{BTreeMap, BTreeSet, VecDeque},
-  fmt::format,
   io::{Result, Write},
   vec,
 };
@@ -357,7 +356,7 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
 
       for function_id in &rule.reduce_fn_ids {
         match g.reduce_functions.get(function_id) {
-          Some(ReduceFunctionType::AscriptOld(function)) => match &function.ast {
+          Some(ReduceFunctionType::Ascript(function)) => match &function.ast {
             ASTNode::AST_Struct(box ast_struct) => {
               if let AScriptTypeVal::Struct(struct_type) = get_struct_type_from_node(ast_struct) {
                 let _ref =
@@ -521,7 +520,7 @@ fn write_slot_extraction<'a>(
         (0, _) => Some("rng0".to_string()),
         (i, _) if i == (rule.syms.len() - 1) => Some(format!("rng{}", i)),
         (i, true) => Some(format!("rng{}", i)),
-        rng => None,
+        _ => None,
       },
       indices.contains(&i),
     ) {
@@ -564,7 +563,12 @@ fn build_struct_constructor(
   for (_, val_ref) in archetype_struct.prop_ids.iter().enumerate().map(|(i, prop_id)| {
     let struct_prop_ref = if let Some(ast_prop) = ast_struct_props.get(&prop_id.name) {
       let property = ast.props.get(prop_id).unwrap();
-      let ref_ = render_expression(ast, &ast_prop.value, rule, ref_index, i + type_slot * 100);
+
+      let Some(value) = &ast_prop.value else {
+        panic!(" Prop has no value! {}", ast_prop.tok.blame(1, 1, "", None));
+      };
+
+      let ref_ = render_expression(ast, value, rule, ref_index, i + type_slot * 100);
       let (string, ref_) =
         create_type_initializer_value(ref_, &(&property.type_val).into(), property.optional, ast);
       if let Some(ref_) = ref_ {
@@ -731,7 +735,7 @@ pub(crate) fn render_expression(
         None
       }
     }
-    ASTNode::AST_Token(box AST_Token {}) => {
+    ASTNode::AST_Token(box AST_Token { .. }) => {
       Some(Ref::node_token(bump_ref_index(ref_index), type_slot))
     }
     ASTNode::AST_Add(..) => Some(Ref::token(bump_ref_index(ref_index), type_slot)),
@@ -781,39 +785,51 @@ pub(crate) fn render_expression(
       }
     }
     ASTNode::AST_STRING(box AST_STRING { value, .. }) => match value {
-      ASTNode::AST_NUMBER(box AST_NUMBER { value, .. }) => Some(Ref::new(
+      None => Some(Ref::new(
         bump_ref_index(ref_index),
         type_slot,
-        format!("\"{}\".to_string()", value),
-        AScriptTypeVal::String(Some(value.to_string())),
+        "String::new()".to_string(),
+        AScriptTypeVal::String(None),
       )),
-      _ => {
-        let ref_ = render_expression(s, value, b, ref_index, type_slot)?;
-        match ref_.ast_type {
-          AScriptTypeVal::Struct(..)
-          | AScriptTypeVal::TokenRange
-          | AScriptTypeVal::GenericStruct(..) => Some(ref_.to_string(AScriptTypeVal::String(None))),
-          AScriptTypeVal::TokenVec => {
-            // Merge the last and first token together
-            // get the string value from the resulting span of the union
-            Some(ref_.from(
-              "(%%.first().unwrap() + %%.last().unwrap()).to_string()".to_string(),
-              AScriptTypeVal::String(None),
-            ))
+      Some(box init) => {
+        match &init.expression {
+          ASTNode::AST_NUMBER(box AST_NUMBER { value, .. }) => Some(Ref::new(
+            bump_ref_index(ref_index),
+            type_slot,
+            format!("\"{}\".to_string()", value),
+            AScriptTypeVal::String(Some(value.to_string())),
+          )),
+          expr => {
+            let ref_ = render_expression(s, expr, b, ref_index, type_slot)?;
+            match ref_.ast_type {
+              AScriptTypeVal::Struct(..)
+              | AScriptTypeVal::TokenRange
+              | AScriptTypeVal::GenericStruct(..) => {
+                Some(ref_.to_string(AScriptTypeVal::String(None)))
+              }
+              AScriptTypeVal::TokenVec => {
+                // Merge the last and first token together
+                // get the string value from the resulting span of the union
+                Some(ref_.from(
+                  "(%%.first().unwrap() + %%.last().unwrap()).to_string()".to_string(),
+                  AScriptTypeVal::String(None),
+                ))
+              }
+              AScriptTypeVal::String(..) => Some(ref_),
+              _ => Some(ref_.from("%%.to_string()".to_string(), AScriptTypeVal::String(None))),
+            }
           }
-          AScriptTypeVal::String(..) => Some(ref_),
-          _ => Some(ref_.from("%%.to_string()".to_string(), AScriptTypeVal::String(None))),
         }
       }
     },
     ASTNode::AST_BOOL(box AST_BOOL { value, initializer, .. }) => match initializer {
-      ASTNode::NONE => Some(Ref::new(
+      None => Some(Ref::new(
         bump_ref_index(ref_index),
         type_slot,
         format!("{}", value),
         AScriptTypeVal::Bool(Some(*value)),
       )),
-      ast => match render_expression(s, ast, rule, ref_index, type_slot) {
+      Some(box init) => match render_expression(s, &init.expression, rule, ref_index, type_slot) {
         Some(_) => Some(Ref::new(
           bump_ref_index(ref_index),
           type_slot,
@@ -987,7 +1003,7 @@ fn extract_struct_types(types: &BTreeSet<AScriptTypeVal>) -> BTreeSet<TaggedType
 }
 
 fn convert_numeric<T: AScriptNumericType>(
-  init: &ASTNode,
+  init: &Option<Box<Init>>,
   rule: &Rule,
   ast: &AScriptStore,
   ref_index: &mut usize,
@@ -998,35 +1014,38 @@ fn convert_numeric<T: AScriptNumericType>(
   let range_conversion_fn = T::from_tok_range_name();
 
   match init {
-    ASTNode::AST_NUMBER(box AST_NUMBER { value, .. }) => Some(Ref::new(
-      bump_ref_index(ref_index),
-      type_slot,
-      format!("{}{}", T::string_from_f64(*value), rust_type,),
-      T::from_f64(*value),
-    )),
-    _ => {
-      let ref_ = render_expression(ast, init, rule, ref_index, type_slot)?;
+    None => None,
+    Some(init) => match &init.expression {
+      ASTNode::AST_NUMBER(box AST_NUMBER { value, .. }) => Some(Ref::new(
+        bump_ref_index(ref_index),
+        type_slot,
+        format!("{}{}", T::string_from_f64(*value), rust_type,),
+        T::from_f64(*value),
+      )),
+      expr => {
+        let ref_ = render_expression(ast, expr, rule, ref_index, type_slot)?;
 
-      match ref_.ast_type {
-        AScriptTypeVal::F64(..)
-        | AScriptTypeVal::F32(..)
-        | AScriptTypeVal::Bool(..)
-        | AScriptTypeVal::I8(..)
-        | AScriptTypeVal::I16(..)
-        | AScriptTypeVal::I32(..)
-        | AScriptTypeVal::I64(..)
-        | AScriptTypeVal::U8(..)
-        | AScriptTypeVal::U16(..)
-        | AScriptTypeVal::U32(..)
-        | AScriptTypeVal::U64(..) => {
-          Some(ref_.from(format!("%% as {}", rust_type), T::from_f64(0.0)))
+        match ref_.ast_type {
+          AScriptTypeVal::F64(..)
+          | AScriptTypeVal::F32(..)
+          | AScriptTypeVal::Bool(..)
+          | AScriptTypeVal::I8(..)
+          | AScriptTypeVal::I16(..)
+          | AScriptTypeVal::I32(..)
+          | AScriptTypeVal::I64(..)
+          | AScriptTypeVal::U8(..)
+          | AScriptTypeVal::U16(..)
+          | AScriptTypeVal::U32(..)
+          | AScriptTypeVal::U64(..) => {
+            Some(ref_.from(format!("%% as {}", rust_type), T::from_f64(0.0)))
+          }
+          AScriptTypeVal::TokenRange => Some(
+            ref_.from(format!("%%.{}(_ctx_.get_str())", range_conversion_fn), T::from_f64(0.0)),
+          ),
+          _ => Some(ref_.from(format!("%%.{}()", tok_conversion_fn), T::from_f64(0.0))),
         }
-        AScriptTypeVal::TokenRange => {
-          Some(ref_.from(format!("%%.{}(_ctx_.get_str())", range_conversion_fn), T::from_f64(0.0)))
-        }
-        _ => Some(ref_.from(format!("%%.{}()", tok_conversion_fn), T::from_f64(0.0))),
       }
-    }
+    },
   }
 }
 

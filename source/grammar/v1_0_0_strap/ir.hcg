@@ -2,6 +2,8 @@
 
 # version 1.0.0
 
+@IMPORT ./comment.hcg as cmt
+
 @IGNORE g:sp g:nl
 
 @EXPORT state as state
@@ -36,13 +38,13 @@
 
 <> top_level_instructions > 
 
-        assertion_instruction(+) 
+        assertion_instruction(+)
 
-    |   instruction_sequence                             
+    |   instruction_sequence
 
 <> instruction_sequence > 
 
-        sequence_instruction(+ t:then ) 
+        (sequence_instruction)(+ t:then )
         ( t:then goto_instruction(+ t:then ) )? 
         ( t:then t:repeat t:state f:ast{ { t_Repeat, c_IR, c_IR_Instruction } } )? 
 
@@ -60,7 +62,7 @@
 
 <> assertion_instruction >
 
-        t:assert t:peek? assert_class production_id_list \( instruction_sequence \)                     
+        t:assert t:peek ? assert_class production_id_list \( instruction_sequence \)                     
 
             f:ast { { t_ASSERT, c_IR, c_IR_Instruction, is_peek: bool($2), c_IR_Branch, mode:str($3), ids: $4, instructions: $6} }
 
@@ -98,7 +100,7 @@
 
         f:ast { { t_ForkTo, c_IR, c_IR_Instruction, states: $4, production_id: $9   } }
 
-    | t:scan t:back? t:until token_id_list
+    | \scan t:back ? t:until token_id_list
 
         f:ast { { t_ScanUntil, c_IR, c_IR_Instruction, ids: $4, SCAN_BACKWARDS:bool($2) } }
 
@@ -126,7 +128,7 @@
 
         f:ast { { t_SetScope, c_IR, c_IR_Instruction, scope:i64($1) } }
 
-    | t:shift t:nothing?
+    | t:shift 
 
         f:ast { { t_Shift, c_IR, c_IR_Instruction, EMPTY:bool($2) } }
 
@@ -153,10 +155,6 @@
         f:ast { { t_Map, lane: i32($2) } }
 
     | reduce_instruction
-
-    | t:shift
-
-        f:ast { { t_Shift } }
 
 <> on_fail > 
 

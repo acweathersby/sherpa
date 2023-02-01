@@ -231,11 +231,11 @@ pub enum CTX_AGGREGATE_INDICES {
   /// ```ignore
   /// pub meta_ctx:        *mut M,
   /// ```
-  meta_ctx,
+  _meta_ctx,
   /// ```ignore
   /// pub custom_lex:      fn(&mut T, &mut M, &ParseContext<T, M>) -> (u32, u32, u32),
   /// ```
-  custom_lex,
+  _custom_lex,
   /// Tracks whether the context is a fail mode or not.
   /// ```ignore
   /// pub state:           u32,

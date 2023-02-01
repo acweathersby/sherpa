@@ -6,11 +6,11 @@ use crate::{types::SherpaErrorSeverity, SherpaError};
 #[test]
 fn missing_import_production() {
   let (j, _) = build_grammar_from_file(
-    get_test_grammar_path("errors/nonexistent_import_production/A.hcg"),
+    get_test_grammar_path("errors/nonexistent_import_production/A.sg"),
     Default::default(),
   );
 
-  assert!(j.debug_error_report());
+  assert!(j.debug_error_report(), "Expected to see errors");
 
   assert!(j.get_report(crate::ReportType::GrammarCompile(Default::default()), |r| {
     if r.have_errors_of_type(SherpaErrorSeverity::Critical) {
@@ -35,14 +35,12 @@ fn missing_import_production() {
 /// grammar cannot be found.
 #[test]
 fn invalid_dependency() {
-  let (j, _) = build_grammar_from_file(
-    get_test_grammar_path("errors/nonexistent_import_source/A.hcg"),
-    Default::default(),
-  );
+  let path = get_test_grammar_path("errors/nonexistent_import_source/A.sg");
+  let (j, _) = build_grammar_from_file(path.clone(), Default::default());
 
-  assert!(j.debug_error_report());
+  assert!(j.debug_error_report(), "Expected to see errors");
 
-  assert!(j.get_report(crate::ReportType::GrammarCompile(Default::default()), |r| {
+  assert!(j.get_report(crate::ReportType::GrammarCompile((&path).into()), |r| {
     let error = &r.errors[0];
 
     assert!(matches!(error, SherpaError::SourceError { .. }));
@@ -51,7 +49,7 @@ fn invalid_dependency() {
         panic!("Expected a SourceError");
     };
 
-    assert_eq!(*id, "nonexistent-import-source");
+    assert_eq!(*id, "invalid-import-source");
 
     true
   }));

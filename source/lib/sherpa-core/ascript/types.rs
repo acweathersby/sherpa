@@ -1,6 +1,6 @@
 use super::compile::compile_ascript_store;
 use crate::{
-  grammar::{data::ast::ASTNode, hash_id_value_u64},
+  grammar::{compile::parser::sherpa::ASTNode, hash_id_value_u64},
   types::*,
 };
 use std::{

@@ -5,7 +5,7 @@ use crate::{
     rust::{ascript_type_to_string, render_expression, write},
     types::*,
   },
-  grammar::data::ast::{ASTNode, AST_NamedReference},
+  grammar::compile::parser::sherpa::{ASTNode, AST_NamedReference},
   pipeline::SourceType,
   types::*,
   writer::code_writer::CodeWriter,
@@ -165,7 +165,7 @@ pub(crate) fn get_ascript_export_data(
         &ascript,
         &ASTNode::AST_NamedReference(Box::new(AST_NamedReference {
           tok:   Token::default(),
-          value: "first".to_string(),
+          value: "--first--".to_string(),
         })),
         &Rule {
           syms: vec![RuleSymbol {

@@ -1,11 +1,12 @@
 use super::*;
 use crate::{
   grammar::{
-    compile::parser::sherpa,
-    compile_grammar_from_path,
-    compile_grammar_from_string,
+    compile::{
+      compile_grammars,
+      parse::{load_from_path, load_from_string},
+      parser::sherpa::{self, ASTNode, Ascript, Reduce},
+    },
     create_closure,
-    data::ast::{ASTNode, Ascript, Reduce},
     get_closure_cached,
     get_guid_grammar_name,
     get_production_start_items,
@@ -29,6 +30,12 @@ pub struct GrammarId(pub u64);
 impl Display for GrammarId {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.write_str(&self.0.to_string())
+  }
+}
+
+impl From<&PathBuf> for GrammarId {
+  fn from(value: &PathBuf) -> Self {
+    GrammarId(hash_id_value_u64(&get_guid_grammar_name(value)))
   }
 }
 
@@ -82,9 +89,9 @@ pub struct GrammarRef {
 impl GrammarRef {
   /// TODO
   pub fn new(local_name: String, absolute_path: PathBuf) -> Arc<Self> {
-    let guid_name = get_guid_grammar_name(&absolute_path).unwrap();
+    let guid_name = get_guid_grammar_name(&absolute_path);
     Arc::new(GrammarRef {
-      guid: GrammarId(hash_id_value_u64(&guid_name)),
+      guid: (&absolute_path).into(),
       guid_name,
       name: local_name,
       path: absolute_path,
@@ -180,40 +187,65 @@ pub struct GrammarStore {
   /// TODO: Docs
   pub merge_productions: BTreeMap<ProductionId, (String, Vec<Rule>)>,
 
-  /// All productions that are reachable from the entry productions, including
-  /// the entry productions.
+  /// All productions that are either entry productions or are reachable from the entry productions
   pub parse_productions: BTreeSet<ProductionId>,
 }
 
 impl GrammarStore {
-  /// TODO: Docs
-  pub fn from_path(j: &mut Journal, path: PathBuf) -> SherpaResult<Arc<GrammarStore>> {
-    match compile_grammar_from_path(j, path, 0) {
-      (Some(grammar), _) => {
-        j.set_grammar(grammar.clone());
-        SherpaResult::Ok(grammar)
-      }
-      (..) => SherpaResult::None,
+  fn compile_grammars(
+    j: &mut Journal,
+    grammars: Vec<(PathBuf, HashMap<String, Arc<GrammarRef>>, Box<sherpa::Grammar>)>,
+  ) -> SherpaResult<Arc<GrammarStore>> {
+    j.flush_reports();
+
+    if j.have_errors_of_type(SherpaErrorSeverity::Critical) {
+      return SherpaResult::None;
     }
+
+    compile_grammars(j, &grammars);
+
+    j.flush_reports();
+
+    if j.have_errors_of_type(SherpaErrorSeverity::Critical) {
+      return SherpaResult::None;
+    }
+
+    SherpaResult::Ok(j.grammar()?)
   }
 
-  /// TODO: Docs
+  /// Create a GrammarStore from a Grammar file loaded from the filesystem.
+  /// This will load any references within the grammar and compile all grammar
+  /// definitions into a single GrammarStore.
+  ///
+  /// Any errors generated during the parsing or compilation of the grammars
+  /// will be recorded in the Journal.
+  pub fn from_path(j: &mut Journal, path: PathBuf) -> SherpaResult<Arc<GrammarStore>> {
+    j.set_active_report(
+      "Entry Grammar Parse",
+      crate::ReportType::GrammarCompile(Default::default()),
+    );
+    let grammars = load_from_path(j, path);
+    Self::compile_grammars(j, grammars)
+  }
+
+  /// Create a GrammarStore from a Grammar defined in a string as if it were
+  /// a file located in the folder defined by `base_dir`.
+  /// This will load any references within the grammar and compile all grammar
+  /// definitions into a single GrammarStore.
+  ///
+  /// Any errors generated during the parsing or compilation of the grammars
+  /// will be recorded in the Journal.
   pub fn from_str_with_base_dir(
     j: &mut Journal,
     string: &str,
     base_dir: &PathBuf,
   ) -> SherpaResult<Arc<GrammarStore>> {
-    match compile_grammar_from_string(j, string, base_dir) {
-      (Some(grammar), _) => {
-        j.set_grammar(grammar.clone());
-        SherpaResult::Ok(grammar)
-      }
-      (_, Some(errors)) => SherpaResult::Err(SherpaError::Many {
-        message: "Unable to compile Grammar".to_string(),
-        errors,
-      }),
-      (None, None) => unreachable!("compile_grammar_from_string should never return (None, None)"),
-    }
+    j.set_active_report(
+      "Entry Grammar Parse",
+      crate::ReportType::GrammarCompile(Default::default()),
+    );
+    let grammars = load_from_string(j, string, base_dir.to_owned());
+    Self::compile_grammars(j, grammars)
   }
 
   /// Compile a GrammarStore from a grammar source `str`.
@@ -227,7 +259,7 @@ impl GrammarStore {
   ///
   /// let g = GrammarStore::from_str(&mut j,
   /// r###"
-  /// <> A > \hello \world
+  /// <> A > "hello" "world"
   /// "###
   /// );
   ///
@@ -236,20 +268,15 @@ impl GrammarStore {
   /// j.debug_print_reports(ReportType::GrammarCompile(Default::default()));
   /// ```
   pub fn from_str(j: &mut Journal, string: &str) -> SherpaResult<Arc<GrammarStore>> {
-    match compile_grammar_from_string(j, string, &PathBuf::from("/internal/")) {
-      (Some(grammar), _) => {
-        j.set_grammar(grammar.clone());
-        SherpaResult::Ok(grammar)
-      }
-      (_, Some(errors)) => SherpaResult::Err(SherpaError::Many {
-        message: "Unable to compile Grammar".to_string(),
-        errors,
-      }),
-      (None, None) => unreachable!("compile_grammar_from_string should never return (None, None)"),
-    }
+    j.set_active_report(
+      "Entry Grammar Parse",
+      crate::ReportType::GrammarCompile(Default::default()),
+    );
+    let grammars = load_from_string(j, string, Default::default());
+    Self::compile_grammars(j, grammars)
   }
 
-  /// TODO: Docs
+  /// Same as `Self::from_str` except with a `String` type.
   pub fn from_string(j: &mut Journal, string: String) -> SherpaResult<Arc<GrammarStore>> {
     return Self::from_str(j, string.as_str());
   }

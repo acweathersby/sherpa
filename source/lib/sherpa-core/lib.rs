@@ -18,7 +18,6 @@
 mod ascript;
 mod build;
 mod bytecode;
-mod deprecated_runtime;
 mod grammar;
 mod intermediate;
 mod journal;

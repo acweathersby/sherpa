@@ -41,19 +41,17 @@ pub(super) fn construct_ir(
 
       let children_lookup = &children_lut[node_id];
 
-      let mut need_rebuild = false;
-
       // Ensure dependencies are met.
       for (_, child) in children_lookup {
         if child.id != node_id {
-          if !output.contains_key(&child.id) && !leaf_node_set.contains(&child.id) {
+          if child.id < node_id {
+            rebuilds.insert(node_id);
+            //We'll need a rebuild after we generate a base state
+          } else if !output.contains_key(&child.id) && !leaf_node_set.contains(&child.id) {
             // Push dependency to back on to the queue, which will cause this node
             // be pushed back into the queue after its children are processed
+            nodes_pipeline.push_back(node_id);
             continue 'outer;
-          } else if child.id < node_id {
-            need_rebuild = true;
-            rebuilds.insert(node_id);
-            //We'll need a rebuild
           }
         }
       }
@@ -70,9 +68,6 @@ pub(super) fn construct_ir(
       let states = create_state(entry_name, t, j, node, &children, &output)?;
 
       for state in states {
-        if need_rebuild {
-          println!("state {:?}", state.get_graph_id());
-        }
         output.insert(state.get_graph_id(), state);
       }
     }
@@ -84,6 +79,8 @@ pub(super) fn construct_ir(
       }
     }
   }
+  let mut hash_filter = BTreeSet::<u64>::new();
+  let mut out = vec![];
 
   // Rebuild nodes that have cycles to update
   for rebuild in rebuilds {
@@ -91,19 +88,24 @@ pub(super) fn construct_ir(
     let children_lookup = &children_lut[rebuild];
     let children = children_lookup.values().map(|v| *v).collect::<Vec<_>>();
 
-    for mut new_state in create_state(entry_name, t, j, node, &children, &output)? {
+    for new_state in create_state(entry_name, t, j, node, &children, &output)? {
       if new_state.get_graph_id() == rebuild {
-        let mut existings_state = output.get_mut(&new_state.get_graph_id())?;
-        existings_state.code = new_state.code;
+        let mut existings_state = output.remove(&new_state.get_graph_id())?;
+        if hash_filter.insert(existings_state.get_hash()) {
+          existings_state.code = new_state.code;
+          out.push(existings_state);
+        }
       }
     }
   }
 
-  let mut hash_filter = BTreeSet::<u64>::new();
+  for (_, state) in output {
+    if hash_filter.insert(state.get_hash()) {
+      out.push(state)
+    }
+  }
 
-  SherpaResult::Ok(
-    output.into_values().rev().filter(|s| hash_filter.insert(s.get_hash())).collect::<Vec<_>>(),
-  )
+  SherpaResult::Ok(out)
 }
 
 fn create_state(
@@ -303,23 +305,23 @@ fn create_state(
     (normal_symbol_set.into_iter().collect(), skip_symbols_set.into_iter().collect())
   };
 
-  output.push(Box::new(
-    IRState {
-      comment: Default::default(),
-      code: unsafe { String::from_utf8_unchecked(w.into_output()) },
-      name: match node.node_type {
-        NodeType::RDStart => entry_name.to_string(),
-        NodeType::RAStart => format!("{}_goto", entry_name),
-        _ => Default::default(),
-      },
-      state_type: if t.is_scan() { IRStateType::Scanner } else { IRStateType::Parser },
-      graph_id: node.id,
-      normal_symbols,
-      skip_symbols,
-      ..Default::default()
-    }
-    .into_hashed(),
-  ));
+  let state = IRState {
+    comment: Default::default(),
+    code: unsafe { String::from_utf8_unchecked(w.into_output()) },
+    name: match node.node_type {
+      NodeType::RDStart => entry_name.to_string(),
+      NodeType::RAStart => format!("{}_goto", entry_name),
+      _ => Default::default(),
+    },
+    state_type: if t.is_scan() { IRStateType::Scanner } else { IRStateType::Parser },
+    graph_id: node.id,
+    normal_symbols,
+    skip_symbols,
+    ..Default::default()
+  }
+  .into_hashed();
+
+  output.push(Box::new(state));
 
   SherpaResult::Ok(output)
 }
@@ -412,7 +414,7 @@ fn create_child_state(
   resolved_states: &BTreeMap<NodeId, Box<IRState>>,
   t: &TransitionGraph,
 ) -> String {
-  let state_name = get_node_state_name(t, child, node, resolved_states);
+  let state_name = get_node_state_name(child, node, resolved_states);
 
   match child.node_type {
     NodeType::ProductionCall => {
@@ -547,7 +549,7 @@ fn create_rule_reduction_string(g: &GrammarStore, item: &Item) -> String {
   let rule = g.rules.get(&item.get_rule_id()).unwrap();
   let production = g.productions.get(&rule.prod_id).unwrap();
   format!(
-    "set prod to {} then reduce {} symbols to body {}",
+    "set prod to {} then reduce {} symbols with rule {}",
     production.bytecode_id, rule.len, rule.bytecode_id,
   )
 }
@@ -562,7 +564,6 @@ fn create_rule_reduction_string_new(g: &GrammarStore, item: &Item) -> String {
 }
 
 fn get_node_state_name<'a>(
-  t: &'a TransitionGraph,
   child: &GraphNode,
   node: &GraphNode,
   resolved_states: &BTreeMap<NodeId, Box<IRState>>,
@@ -570,16 +571,7 @@ fn get_node_state_name<'a>(
   let state_name = (child.id != node.id)
     .then(|| match resolved_states.get(&child.id) {
       Some(child_state) => child_state.get_name(),
-      _ => {
-        /*        println!(
-          "Unable to identifier the ir state for {:?} from {:?}\n{}\n{}",
-          child.id,
-          node.id,
-          t.get_node(child.id).debug_string(&t.g),
-          t.get_node(node.id).debug_string(&t.g)
-        ); */
-        String::from(format!("LEAF_STATE{}", child.id))
-      }
+      _ => String::from(format!("LEAF_STATE{}", child.id)),
     })
     .unwrap_or(String::from("%%%%"));
   state_name
@@ -612,6 +604,7 @@ fn create_parent_to_child_map<'a>(
 }
 
 #[inline]
-fn escaped_comment(comment_body: String) -> String {
-  format!(" /* {} */", comment_body.replace("\n", "\\n").replace("*", "&ast;"))
+fn escaped_comment(_comment_body: String) -> String {
+  return Default::default();
+  //TODO: Add comments format!(" /* {} */", comment_body.replace("\n", "\\n").replace("*", "&ast;"))
 }

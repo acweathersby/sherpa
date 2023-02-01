@@ -192,6 +192,23 @@ pub trait UTF8Reader {
     }
   }
 
+  fn get_next_breaking_pos(&self, off: usize) -> usize {
+    let string = self.get_str().as_bytes();
+    let len = string.len();
+    if len <= off {
+      return len;
+    } else {
+      let mut pos = off;
+      while pos < len && (string[pos] as char == '\n' || string[pos] as char == ' ') {
+        pos += 1;
+      }
+      while pos < len && !(string[pos] as char == '\n' || string[pos] as char == ' ') {
+        pos += 1;
+      }
+      pos
+    }
+  }
+
   fn get_str<'a>(&'a self) -> &'a str;
 }
 

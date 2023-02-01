@@ -1,5 +1,8 @@
 use super::*;
-use crate::grammar::{data::ast::IR_STATE, hash_id_value_u64, parse::compile_ir_ast};
+use crate::grammar::{
+  compile::{compile_ir_ast, parser::sherpa::IR_STATE},
+  hash_id_value_u64,
+};
 use std::{
   collections::BTreeSet,
   fmt::{Debug, Display},
@@ -172,18 +175,16 @@ impl IRState {
     self.graph_id
   }
 
-  pub fn compile_ast(&mut self) -> Result<&mut IR_STATE, &mut SherpaError> {
-    match self.ast {
-      Ok(_) => self.ast.as_mut(),
+  pub fn compile_ast(&mut self) -> SherpaResult<&mut IR_STATE> {
+    match &self.ast {
+      Ok(ast) => SherpaResult::Ok(self.ast.as_mut().unwrap()),
       Err(SherpaError::ir_warn_not_parsed) => {
-        let string = self.get_code();
-        self.ast = match compile_ir_ast(Vec::from(string.as_bytes())) {
-          Ok(ast) => Ok(*ast),
-          Err(err) => Err(err),
-        };
-        self.ast.as_mut()
+        let code = self.get_code();
+        let ast = compile_ir_ast(&code)?;
+        self.ast = Ok(ast);
+        self.compile_ast()
       }
-      _ => self.ast.as_mut(),
+      _ => SherpaResult::None,
     }
   }
 

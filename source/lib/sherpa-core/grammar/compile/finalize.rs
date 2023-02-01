@@ -1,6 +1,6 @@
 use super::create_store::{get_terminal_id, insert_production, insert_rules};
 use crate::{
-  compile::{GrammarId, GrammarStore, ProductionId, SymbolID},
+  compile::{GrammarStore, ProductionId, SymbolID},
   grammar::{
     create_closure,
     create_defined_scanner_name,
@@ -14,9 +14,7 @@ use crate::{
   SherpaError,
 };
 use std::{
-  collections::{btree_map, BTreeMap, BTreeSet, HashMap, VecDeque},
-  fmt::format,
-  sync::Arc,
+  collections::{btree_map, BTreeSet, VecDeque},
   thread,
 };
 
@@ -288,7 +286,7 @@ fn check_for_missing_productions(j: &mut Journal, g: &GrammarStore) -> bool {
 
 /// Calculates recursion types of productions, converts direct left recursive scanner productions
 /// to right recursive.
-fn finalize_productions(j: &mut Journal, g: &mut GrammarStore) {
+fn finalize_productions(_j: &mut Journal, g: &mut GrammarStore) {
   let production_ids = g.productions.keys().cloned().collect::<Vec<_>>();
 
   let conversion_candidate = calculate_recursions_types(production_ids, g);
@@ -301,7 +299,7 @@ fn finalize_productions(j: &mut Journal, g: &mut GrammarStore) {
   calculate_recursions_types(conversion_candidate, g);
 }
 
-fn finalize_symbols(j: &mut Journal, g: &mut GrammarStore) {
+fn finalize_symbols(_j: &mut Journal, g: &mut GrammarStore) {
   let mut symbol_bytecode_id = SymbolID::DefinedSymbolIndexBasis;
 
   // Ensure there is a symbol for every token production
@@ -363,7 +361,7 @@ fn finalize_symbols(j: &mut Journal, g: &mut GrammarStore) {
 }
 
 /// Creates item closure caches and creates start and goto item groups.
-fn finalize_items(j: &mut Journal, g: &mut GrammarStore) {
+fn finalize_items(_j: &mut Journal, g: &mut GrammarStore) {
   // Generate the item closure cache
   let start_items =
     g.productions.keys().flat_map(|p| get_production_start_items(p, g)).collect::<Vec<_>>();
@@ -464,7 +462,7 @@ fn set_parse_productions(g: &mut GrammarStore) {
 }
 
 /// Adds bytecode identifiers to relevant objects.
-fn finalize_bytecode_metadata(j: &mut Journal, g: &mut GrammarStore) {
+fn finalize_bytecode_metadata(_j: &mut Journal, g: &mut GrammarStore) {
   let GrammarStore { parse_productions, productions, rules: bodies, .. } = g;
 
   for (index, rule) in

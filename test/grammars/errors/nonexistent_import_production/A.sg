@@ -1,0 +1,3 @@
+IMPORT B.sg as imp
+
+<> A > 'test' imp::B 

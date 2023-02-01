@@ -1,7 +1,7 @@
 use sherpa_runtime::{types::END_OF_INPUT_TOKEN_ID, utf8::lookup_table::CodePointClass};
 
 use super::{GrammarId, GrammarRef, GrammarStore, ProductionId, SherpaResult, Token};
-use crate::grammar::{get_scanner_info_from_defined, uuid::hash_id_value_u64};
+use crate::grammar::{compile::finalize::get_scanner_info_from_defined, uuid::hash_id_value_u64};
 
 use std::{
   collections::{BTreeMap, BTreeSet},
@@ -91,6 +91,7 @@ pub enum SymbolID {
 
   /// Represent the grammar symbol `g:rec`.
   Recovery,
+  /// Default symbol used when no other symbol type fits.
   Default,
   /// TODO: Docs
   /// Represent end of input. This is also used

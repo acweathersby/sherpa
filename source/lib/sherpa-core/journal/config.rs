@@ -1,5 +1,6 @@
 use bitmask_enum::bitmask;
 
+/// Parsing algorithms support by Sherpa
 #[bitmask]
 pub enum ParseAlgorithm {
   /// Allow the use of LR states to resolve conflicts when building regular parsers

@@ -221,7 +221,6 @@ fn process_production_node<'a>(
       });
       ProductionId::default()
     }
-    _ => ProductionId::default(),
   }
 }
 
@@ -548,7 +547,7 @@ fn create_rule_vectors<'a>(
             body_a.ast_definition = Some(Box::new(sherpa::Ascript::new(
               ASTNode::AST_Vector(Box::new(sherpa::AST_Vector::new(
                 vec![ASTNode::AST_NamedReference(Box::new(sherpa::AST_NamedReference {
-                  value: "&first".to_string(),
+                  value: "--first--".to_string(),
                   tok:   tok.clone(),
                 }))],
                 tok.clone(),
@@ -560,11 +559,11 @@ fn create_rule_vectors<'a>(
               ASTNode::AST_Vector(Box::new(sherpa::AST_Vector::new(
                 vec![
                   ASTNode::AST_NamedReference(Box::new(sherpa::AST_NamedReference {
-                    value: "&first".to_string(),
+                    value: "--first--".to_string(),
                     tok:   tok.clone(),
                   })),
                   ASTNode::AST_NamedReference(Box::new(sherpa::AST_NamedReference {
-                    value: "&last".to_string(),
+                    value: "--last--".to_string(),
                     tok:   tok.clone(),
                   })),
                 ],
@@ -802,7 +801,7 @@ fn get_grammar_info_from_node<'a>(
           j.report_mut().add_error(SherpaError::SourceError {
             loc:        node.to_token(),
             path:       g.id.path.clone(),
-            id:         "unexpected-node",
+            id:         "nonexistent-import-source",
             msg:        format!(
               "Unknown Grammar : The imported grammar reference \u{001b}[31m{}\u{001b}[0m does not match any imported grammar.",
               local_import_grammar_name
@@ -872,16 +871,18 @@ fn get_productions_names(
 
       match g.imports.get(local_import_grammar_name) {
         None => {
-          j.report_mut().add_error(SherpaError::grammar_err {
-            inline_message: String::new(),
-            message: format!(
-                "Unable to resolve production: The production \u{001b}[31m{}\u{001b}[0m cannot be found in the imported grammar \u{001b}[31m{}\u{001b}[0m.", 
-                production_name,
-                local_import_grammar_name
+          j.report_mut().add_error(SherpaError::SourceError {
+            loc:        name_sym.to_token().into(),
+            path:       g.id.path.clone(),
+            id:         "nonexistent-import-production",
+            msg:        format!(
+              "The production {} cannot be found in the imported grammar {}.",
+              production_name, local_import_grammar_name
             ),
-            loc: name_sym.to_token().into(),
-            path: g.id.path.clone(),
-        });
+            inline_msg: "Could not locate this production".to_string(),
+            ps_msg:     Default::default(),
+            severity:   SherpaErrorSeverity::Critical,
+          });
           None
         }
         Some(g_ref) => Some((

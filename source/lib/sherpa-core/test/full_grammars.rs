@@ -12,39 +12,37 @@ fn test_compile_json_parser() -> SherpaResult<()> {
   GrammarStore::from_str(
     &mut j,
     r##"
-    @IGNORE g:sp g:nl
+IGNORE { c:sp c:nl }
+EXPORT json as entry
+NAME llvm_language_test
 
-    @EXPORT json as entry
+<> json > 
+        object                              :ast { t_Json, v: $1 }
+        | 
+        array                               :ast { t_Json, v: $1 }
 
-    @NAME llvm_language_test
+<> array > '['  value(*',' )  ']'              :ast { t_Array, entries: $2 }
 
-    <> json > 
-            object                              f:ast { { t_Json, v: $1 } }
-            | 
-            array                               f:ast { { t_Json, v: $1 } }
+<> object > '{' key_value(*',' ) '}'           :ast { t_Object, entries: $2 }
 
-    <> array > \[  value(*\, )  \]              f:ast { { t_Array, entries: $2 } }
+<> key_value > str ':' value              :ast { t_KeyVal, k:$1, v:$3 }
 
-    <> object > \{ key_value(*\, ) \}           f:ast { { t_Object, entries: $2 } }
+<> value > num | bool | str | null
 
-    <> key_value > str \: value              f:ast { { t_KeyVal, k:$1, v:$3 } }
+<> null > "null"                            :ast { t_Null, v:false }
 
-    <> value > num | bool | str | null
+<> bool > 
+    "false"                                 :ast { t_Bool, v:false }
+    |   
+    "true"                                  :ast { t_Bool, v:true }
 
-    <> null > t:null                            f:ast { { t_Null, v:false } }
+<> num > tk:number                          :ast { t_Number }
 
-    <> bool > 
-        t:false                                 f:ast { { t_Bool, v:false } }
-        |   
-        t:true                                  f:ast { { t_Bool, v:true } }
+<> number > ( '+' | '-' )? c:num(+) ( '.' c:num(+) )? ( ( 'e' | 'E' ) ( '+' | 'i' ) c:num(+) )?
 
-    <> num > tk:number                          f:ast { { t_Number } }
+<> str > tk:string :ast { t_String }
 
-    <> number > ( \+ | \- )? g:num(+) ( \. g:num(+) )? ( ( \e | \E ) ( \+ | \i ) g:num(+) )?
-
-    <> str > tk:string f:ast { { t_String } }
-
-    <> string > \" ( g:id | g:sym | g:num | g:sp )(*) t:"  
+<> string > '"' ( c:id | c:sym | c:num | c:sp )(*) "\""
 "##,
   )
   .unwrap();

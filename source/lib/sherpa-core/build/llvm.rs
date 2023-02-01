@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, io::Write, process::Command};
+use std::{io::Write, process::Command};
 
 use inkwell::{
   context::Context,
@@ -9,7 +9,7 @@ use inkwell::{
 
 use crate::{
   ascript::{self, rust::create_type_initializer_value},
-  grammar::data::ast_node::DummyASTEnum,
+  grammar::compile::DummyASTEnum,
   llvm::construct_module,
   types::*,
   writer::code_writer::CodeWriter,
@@ -25,10 +25,6 @@ pub fn build_llvm_parser_interface<'a>() -> PipelineTask {
       let grammar = task_ctx.get_journal().grammar().unwrap();
       let parser_name = grammar.id.name.clone();
 
-      let Some(bytecode) = task_ctx.get_bytecode() else {
-        return Err(vec![SherpaError::from("Cannot compile LLVM Parser Interface: Bytecode is not available")]);
-      };
-
       let output_type = OutputType::Rust;
 
       match output_type {
@@ -36,7 +32,6 @@ pub fn build_llvm_parser_interface<'a>() -> PipelineTask {
           let mut writer = CodeWriter::new(vec![]);
           match write_rust_parser(
             &mut writer,
-            &bytecode.state_name_to_offset,
             &grammar,
             &parser_name,
             &parser_name,
@@ -64,7 +59,6 @@ pub enum OutputType {
 
 fn write_rust_parser<W: Write>(
   writer: &mut CodeWriter<W>,
-  states: &BTreeMap<String, u32>,
   g: &GrammarStore,
   grammar_name: &str,
   parser_name: &str,

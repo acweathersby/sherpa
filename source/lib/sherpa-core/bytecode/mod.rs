@@ -2,9 +2,10 @@ use self::compile::build_byte_code_buffer;
 use crate::{
   compile::get_branches,
   debug::{self},
-  grammar::data::ast::{ASTNode, IR_STATE},
+  grammar::compile::parser::sherpa::{ASTNode, IR_STATE},
   journal::{report::ReportType, Journal},
   types::{IRState, IRStateType, Symbol},
+  SherpaResult,
 };
 use std::collections::BTreeMap;
 
@@ -80,9 +81,12 @@ pub fn compile_bytecode<'a>(
   let ir_ast_states = ir_states
     .iter_mut()
     .map(|(_, s)| match s.compile_ast() {
-      Ok(ast) => (*ast).clone(),
-      Err(err) => {
+      SherpaResult::Ok(ast) => (*ast).clone(),
+      SherpaResult::Err(err) => {
         panic!("\n{}", err);
+      }
+      _ => {
+        panic!("Could not parse");
       }
     })
     .collect::<Vec<_>>();

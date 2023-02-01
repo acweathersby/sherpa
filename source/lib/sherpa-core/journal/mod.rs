@@ -209,6 +209,7 @@ impl Journal {
     errors_reported
   }
 
+  /// Returns true if any error in any report has a matching `severity`
   pub fn have_errors_of_type(&self, severity: SherpaErrorSeverity) -> bool {
     if !self.report().have_errors_of_type(severity) {
       for (_, report) in
@@ -289,6 +290,7 @@ impl Journal {
     }
   }
 
+  /// Return an optional Arc ref to the Journal's underlying grammar.
   pub fn grammar<'b>(&'b self) -> Option<Arc<GrammarStore>> {
     self.grammar.iter().cloned().next()
   }
@@ -346,7 +348,6 @@ impl Drop for Journal {
 
 #[derive(Clone, Copy)]
 pub(super) struct Timing {
-  label:  &'static str,
   start:  Instant,
   end:    Instant,
   active: bool,
@@ -354,8 +355,8 @@ pub(super) struct Timing {
 
 impl Timing {
   #[inline(always)]
-  pub fn new(label: &'static str) -> Self {
-    Timing { label, start: Instant::now(), end: Instant::now(), active: true }
+  pub fn new() -> Self {
+    Timing { start: Instant::now(), end: Instant::now(), active: true }
   }
 
   #[inline(always)]

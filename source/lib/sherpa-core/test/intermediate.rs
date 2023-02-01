@@ -23,7 +23,7 @@ use std::{
 #[test]
 pub fn construct_descent_on_basic_grammar() -> SherpaResult<()> {
   let mut j = Journal::new(None);
-  let g = GrammarStore::from_str(&mut j, "<> A > \\h \\e \\l \\l \\o").unwrap();
+  let g = GrammarStore::from_str(&mut j, "<> A > 'h' 'e' 'l' 'l' 'o'").unwrap();
 
   let production_id = g.get_production_id_by_name("A").unwrap();
 
@@ -34,6 +34,7 @@ pub fn construct_descent_on_basic_grammar() -> SherpaResult<()> {
   assert_eq!(result._get_node_len(), 7);
 
   assert_eq!(result.leaf_nodes.len(), 1);
+
   SherpaResult::Ok(())
 }
 
@@ -47,9 +48,9 @@ pub fn construct_descent_on_scanner_symbol() -> SherpaResult<()> {
 
 <> B > C | D
 
-<> C > \\a D \\c
+<> C > 'a' D 'c'
 
-<> D > \\a \\b
+<> D > 'a' 'b'
 ",
   )?;
 
@@ -85,19 +86,19 @@ pub fn production_reduction_decisions() -> SherpaResult<()> {
     &mut j,
     "
 <> A > B | C | R 
-     | \\g
+     | 'g'
 
-<> C > \\c c
+<> C > 'c' c
 
-<> c >  \\a | \\b 
+<> c >  'a' | 'b' 
 
-<> B > C \\d
-     | \\a \\c
+<> B > C 'd'
+     | 'a' 'c'
 
-<> R > G \\o 
-    | C \\x
+<> R > G 'o' 
+    | C 'x'
 
-<> G > \\xx
+<> G > 'xx'
 
   ",
   )
@@ -119,7 +120,7 @@ pub fn production_reduction_decisions() -> SherpaResult<()> {
 #[test]
 pub fn compile_production_states_with_basic_grammar() -> SherpaResult<()> {
   let mut j = Journal::new(None);
-  let g = GrammarStore::from_str(&mut j, "<> A > \\h \\e \\l \\l \\o").unwrap();
+  let g = GrammarStore::from_str(&mut j, "<> A > 'h' 'e' 'l' 'l' 'o'").unwrap();
 
   let prod_id = g.get_production_id_by_name("A").unwrap();
 
@@ -134,7 +135,7 @@ pub fn compile_production_states_with_basic_grammar() -> SherpaResult<()> {
 #[test]
 pub fn compile_production_states_with_basic_grammar_with_one_optional_token() -> SherpaResult<()> {
   let mut j = Journal::new(None);
-  let g = GrammarStore::from_str(&mut j, "<> A > \\h ? \\e ? \\l \\l \\o").unwrap();
+  let g = GrammarStore::from_str(&mut j, "<> A > 'h'? 'e'? 'l' 'l' 'o'").unwrap();
 
   let prod_id = g.get_production_id_by_name("A").unwrap();
 
@@ -149,7 +150,7 @@ pub fn compile_production_states_with_basic_grammar_with_one_optional_token() ->
 #[test]
 pub fn compile_production_states_with_basic_grammar_with_left_recursion() -> SherpaResult<()> {
   let mut j = Journal::new(None);
-  let g = GrammarStore::from_str(&mut j, "<> A > A \\1 | \\2 ").unwrap();
+  let g = GrammarStore::from_str(&mut j, "<> A > A '1' | '2' ").unwrap();
 
   let prod_id = g.get_production_id_by_name("A").unwrap();
 
@@ -175,7 +176,7 @@ pub fn compile_production_states_with_basic_grammar_with_left_recursion() -> She
 #[test]
 pub fn compile_production_states_with_synthesized_scanner_state() -> SherpaResult<()> {
   let mut j = Journal::new(None);
-  let g = GrammarStore::from_str(&mut j, "<> A > \\1 | \\2 | \\3 ").unwrap();
+  let g = GrammarStore::from_str(&mut j, "<> A > '1' | '2' | '3' ").unwrap();
 
   let symbols = g
     .symbols
@@ -202,11 +203,11 @@ pub fn generate_block_comment() -> SherpaResult<()> {
     r#"
 <> A > tk:comment
 
-<> comment > tk:block  | tk:line  | g:sym
+<> comment > tk:block  | tk:line  | c:sym
    
-<> block > \&&  (  g:sym  )(*) t:%>
+<> block > '&&'  (  c:sym  )(*) "%>"
 
-<> line > \&/  ( g:sym  )(*) g:nl
+<> line > '&/'  ( c:sym  )(*) c:nl
 
 "#,
   );
@@ -223,7 +224,7 @@ pub fn generate_block_comment() -> SherpaResult<()> {
   //j.debug_print_reports(ReportType::Any);
   eprintln!("{:#?}", result);
 
-  assert_eq!(result.len(), 9);
+  assert_eq!(result.len(), 11);
   SherpaResult::Ok(())
 }
 
@@ -237,9 +238,9 @@ pub fn generate_production_state_with_scanner_function() -> SherpaResult<()> {
 
 <> B > C | D
 
-<> C > \\a D \\c
+<> C > 'a' D 'c'
 
-<> D > \\a \\b
+<> D > 'a' 'b'
 ",
   )
   .unwrap();
@@ -260,7 +261,7 @@ pub fn generate_A_state_of_a_merged_grammar_with_extended_production() -> Sherpa
   let grammar = GrammarStore::from_path(
     &mut j,
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-      .join("../../../test/grammars/merge_conflict_host.hcg")
+      .join("../../../test/grammars/merge_conflict_host.sg")
       .canonicalize()
       .unwrap(),
   )
@@ -280,17 +281,17 @@ pub fn handle_moderate_scanner_token_combinations() -> SherpaResult<()> {
   let g = GrammarStore::from_str(
     &mut j,
     "
-<> A > \\C | tk:id_syms
+<> A > 'C' | tk:id_syms
 
 <> id_syms >  
 
-    id_syms g:id
+    id_syms c:id
 
-    |   id_syms \\_
+    |   id_syms '_'
 
-    |   \\ _ 
+    |   '_'
 
-    |   g:id
+    |   c:id
 ",
   )
   .unwrap();
@@ -316,9 +317,9 @@ pub fn generate_production_with_ambiguity() -> SherpaResult<()> {
     "
 <> A > B | C
 
-<> B > \\a \\b \\c (*)
+<> B > 'a' 'b' 'c' (*)
 
-<> C > \\a \\b \\c (*)
+<> C > 'a' 'b' 'c' (*)
 ",
   )
   .unwrap();
@@ -344,24 +345,24 @@ pub fn generate_production_with_recursion() -> SherpaResult<()> {
   let g = GrammarStore::from_str(
     &mut j,
     "
-      @IGNORE g:sp
+IGNORE { c:sp }
 
-      @EXPORT statement as entry
+EXPORT statement as entry
 
-      @NAME llvm_language_test
+NAME llvm_language_test
 
-      <> statement > expression
+<> statement > expression
 
-      <> expression > sum 
+<> expression > sum 
 
-      <> sum > mul \\+ sum
-          | mul
+<> sum > mul '+' sum
+    | mul
 
-      <> mul > term \\* expression
-          | term
+<> mul > term '*' expression
+    | term
 
-      <> term > g:num
-          | \\( expression \\)
+<> term > c:num
+    | '(' expression ')'
 
 ",
   )
@@ -386,20 +387,20 @@ pub fn generate_scanner_production_with_recursion() -> SherpaResult<()> {
   let g = GrammarStore::from_str(
     &mut j,
     "
-      @IGNORE g:sp
+IGNORE { c:sp }
 
-      @EXPORT statement as entry
+EXPORT statement as entry
 
-      @NAME llvm_language_test
+NAME llvm_language_test
 
-      <> statement > tk:test tk:V
+<> statement > tk:test tk:V
 
-      <> test > V test?
-          | A test \\t
+<> test > V test?
+    | A test 't'
 
-      <> V > V g:num | \\dd
+<> V > V c:num | 'dd'
 
-      <> A > \\a \\- \\b
+<> A > 'a' '-' 'b'
 
 ",
   )
@@ -426,14 +427,15 @@ fn construct_LR() -> SherpaResult<()> {
   let mut j = Journal::new(None);
   let g = GrammarStore::from_str(
     &mut j,
-    " @IGNORE g:sp 
+    " 
+IGNORE { c:sp } 
 
-        <> A > X \\c
-             | Y \\d
+<> A > X 'c'
+      | Y 'd'
 
-        <> X > \\x X?
+<> X > 'x' X?
 
-        <> Y > \\x Y?
+<> Y > 'x' Y?
       ",
   )?;
 
@@ -464,19 +466,21 @@ fn test_peek() -> SherpaResult<()> {
   let g = GrammarStore::from_str(
     &mut j,
     r##"
-    @IGNORE g:sp
+IGNORE { c:sp }
 
-    <> term >  tk:ident \= value_list
+<> term >  tk:ident '=' value_list
 
-    <> value_list > \" formal_value_list(+g:sp) \"
+<> value_list > '"' formal_value_list(+" ") '"'
 
-    <> formal_value_list > ident
+<> formal_value_list > ident
 
-    <> ident > g:id(+) 
+<> ident > c:id(+) 
+"##,
+  );
 
-    "##,
-  )
-  .unwrap();
+  assert!(!j.debug_error_report());
+
+  let g = g?;
 
   let states = compile_states(&mut j, 10)?;
 
@@ -529,22 +533,21 @@ fn test_peek3() -> SherpaResult<()> {
   let g = GrammarStore::from_str(
     &mut j,
     r##"
-    @IGNORE g:sp
+IGNORE { c:sp }
 
-    <> term >  \x A \( g:id? \)  f:ast { { t_Function_Definition } }
-            |  \x B \;           f:ast { { t_Type_Definition } }
+<> term >  'x' A '(' c:id? ')'  :ast { t_Function_Definition }
+        |  'x' B ';'           :ast { t_Type_Definition }
 
-    <> A > Adent \x
+<> A > Adent 'x'
 
-    <> B > Bdent
+<> B > Bdent
 
-    <> Adent > Cdent
+<> Adent > Cdent
 
-    <> Cdent > g:id
+<> Cdent > c:id
 
-    <> Bdent > g:id
-
-    "##,
+<> Bdent > c:id
+"##,
   )
   .unwrap();
 
@@ -562,17 +565,17 @@ fn test_peek3() -> SherpaResult<()> {
 #[test]
 fn grammar_with_exclusive_symbols() -> SherpaResult<()> {
   let input = r##" 
-  @IGNORE g:sp
+IGNORE { c:sp } 
 
-  <> A >   B t:d
-       |   B t:g
+<> A >   B "d"
+      |   B "g"
 
-  <> B >   C t:r
-       |   D t:x
+<> B >   C "r"
+      |   D "x"
 
-  <> C > t:c t:g
+<> C > "c" "g"
 
-  <> D > t:d t:g
+<> D > "d" "g"
   "##;
 
   "d g g";

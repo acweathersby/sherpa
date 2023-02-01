@@ -392,9 +392,12 @@ pub fn compile_states(
         s.spawn(|| {
           for state in chunk {
             let string = state.to_string();
-            if let Err(err) = state.compile_ast() {
-              eprintln!("\n{} {}", err, string)
-            };
+            match state.compile_ast() {
+              SherpaResult::Err(err) => {
+                eprintln!("\n{} {}", err, string)
+              }
+              _ => {}
+            }
           }
         })
       })

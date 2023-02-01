@@ -291,7 +291,7 @@ pub(crate) fn peek(
       } else {
         if _some_items_are_out_of_scope && peek_depth == 0 {
           let group = hash_group_vec(mixed_items.clone(), |_, i| i.to_empty_state());
-          if (group.len() == 1) {
+          if group.len() == 1 {
             mixed_items.iter().filter(|i| !i.is_out_of_scope()).cloned().collect()
           } else {
             mixed_items.clone()
@@ -433,21 +433,10 @@ pub(crate) fn peek(
               SherpaResult::Ok(_) => {
                 // Our grammar is now (RD/RAD + LR)
               }
-              err if !t.is_scan() => {
-                let mut start_node = par_id;
-                let mut offset = peek_depth as i32;
-
-                /*  while offset >= 2 {
-                  start_node = t.get_node(start_node).parent?;
-                  offset -= 1;
-                } */
-
+              _ if !t.is_scan() => {
                 lr_starts.__print_items__(g, "FAILED PEEKS");
 
                 // Trace peeks back to roots.
-
-                //#[cfg(debug_assertions)]
-                //eprintln!("{:?}", err);
 
                 // Otherwise, we must use a fork state to handle this situation
                 let fork_node_index = create_and_insert_node(
@@ -514,7 +503,6 @@ pub(crate) fn peek(
 
             if t.loops.contains_key(&id) {
               let node_id = *t.loops.get(&id)?;
-              t.leaf_nodes.push(node_id);
               t.get_node_mut(node_id).proxy_parents.push(par_id);
             } else {
               let node_index = create_and_insert_node(

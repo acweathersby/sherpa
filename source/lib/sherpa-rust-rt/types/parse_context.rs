@@ -303,16 +303,6 @@ pub extern "C" fn sherpa_allocate_stack(byte_size: usize) -> *mut Goto {
   unsafe {
     let ptr = alloc(layout) as *mut Goto;
 
-    #[cfg(debug_assertions)]
-    {
-      eprintln!(
-        "ALLOCATION OF {} bytes for {} slots at address: {:p}",
-        byte_size,
-        byte_size >> 4,
-        ptr
-      );
-    }
-
     ptr
   }
 }
@@ -379,7 +369,7 @@ impl<T: AstObject> AstStackSlice<T> {
   }
 
   /// Removes the value at the given position from the stack and returns it.
-  ///
+  #[track_caller]
   pub fn take(&self, position: usize) -> T {
     unsafe { std::mem::take(&mut (*self.get_pointer(position))) }
   }
@@ -520,10 +510,6 @@ pub unsafe fn llvm_map_result_action<
 
 #[no_mangle]
 pub extern "C" fn sherpa_free_stack(ptr: *mut Goto, byte_size: usize) {
-  #[cfg(debug_assertions)]
-  {
-    eprintln!("Freeing {} bytes for {} slots at address {:p}", byte_size, byte_size >> 4, ptr);
-  }
   // Each goto slot is 16bytes, so we shift left num_of_slots by 4 to get the bytes size of
   // the stack.
   let layout = Layout::from_size_align(byte_size, 16).unwrap();

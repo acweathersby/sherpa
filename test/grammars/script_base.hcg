@@ -1,5 +1,0 @@
-@IMPORT ./script_child as ast
-
-<> A > \hello ^hello g:sp \world ^world
-                                f:ast { { t_Main, hello:$hello, world:$world } }
-   | ast::B

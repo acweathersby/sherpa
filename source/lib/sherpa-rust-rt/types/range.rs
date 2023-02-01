@@ -1,4 +1,4 @@
-use std::{ops::Add, str::FromStr, sync::Arc};
+use std::{ops::Add, str::FromStr};
 
 use super::{ByteReader, Token};
 

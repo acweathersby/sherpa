@@ -39,7 +39,7 @@
 
 <> class >
 
-        t:c: ( \num | \nl | \sp | \id | \sym | \any )
+        t:c: ( \num | \nl | \sp | \id | \sym | \any | \tab | \htab )
 
             f:ast { { t_ClassSymbol, c_Symbol , c_Terminal, val:str($2),  tok } }
 

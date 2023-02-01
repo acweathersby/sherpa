@@ -458,7 +458,7 @@ fn get_token_value<R: ByteReader + MutByteReader, M>(
   }
 }
 
-fn scan_for_improvised_token<R: ByteReader + MutByteReader, M>(ctx: &mut ParseContext<R, M>) {
+fn _scan_for_improvised_token<R: ByteReader + MutByteReader, M>(ctx: &mut ParseContext<R, M>) {
   let byte = ctx.get_reader().byte();
   let mut off = ctx.get_reader().cursor() as u32;
   // Scan to next break point and produce an undefined

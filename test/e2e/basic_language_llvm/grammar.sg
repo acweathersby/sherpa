@@ -1,0 +1,33 @@
+IGNORE { c:sp c:nl }
+EXPORT json as entry
+NAME llvm_language_test
+
+<> json > 
+        object                                  :ast { t_Json, v: $1 }
+        | 
+        array                                   :ast { t_Json, v: $1 }
+
+<> array > '['  value(*',')  ']'                :ast { t_Array, entries: $2 }
+
+<> object > '{' key_value(*',') '}'             :ast { t_Object, entries: $2 }
+
+<> key_value > str ':' value                    :ast { t_KeyVal, k:$1, v:$3 }
+
+<> value > num | bool | str | null | array | object
+
+<> null > "null"                                :ast { t_Null }
+
+<> bool > 
+    "false"                                     :ast { t_Bool, v:false }
+    |   
+    "true"                                      :ast { t_Bool, v:true }
+
+<> str > tk:string                              :ast { t_Str, v:str($1) }
+
+<> num > tk:number                              :ast { t_Number, v:f64($1) }
+
+<> number > ( '+' | '-' )? c:num(+) ( "." c:num(+) )? ( ( 'e' | 'E' ) ( '+' | 'i' ) c:num(+) )?
+
+<> string > "\"" ( c:id | c:sym | c:num | c:sp | c:nl | escaped )(*) "\""
+
+<> escaped > "\\" ( c:id | c:sym | c:num | c:sp | c:nl )

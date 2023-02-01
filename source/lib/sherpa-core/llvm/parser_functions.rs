@@ -127,18 +127,18 @@ pub(crate) unsafe fn construct_parse_function<'a>(
       VecDeque::from_iter(start_points.iter().map(|(_, instr)| (*instr, false)));
     let mut states = BTreeMap::new();
 
-    while let Some((instruction, is_scanner)) = states_queue.pop_front() {
-      if seen.insert(instruction) {
+    while let Some((state_instruction, is_scanner)) = states_queue.pop_front() {
+      if seen.insert(state_instruction) {
         let mut state = LLVMStateData::new(
           &output.bytecode,
-          instruction.get_address(),
+          state_instruction.get_address(),
           module,
           is_scanner,
           linkage,
         );
         let bc = &output.bytecode;
 
-        let mut instructions = VecDeque::from_iter(vec![(instruction)]);
+        let mut instructions = VecDeque::from_iter(vec![(state_instruction)]);
 
         while let Some(mut instruction) = instructions.pop_back() {
           while instruction.is_valid() {
@@ -318,7 +318,7 @@ pub(super) fn construct_parse_function_statements(
 
 #[derive(Clone, Copy)]
 struct Pointers<'a> {
-  line_ptr:           PointerValue<'a>,
+  _line_ptr:          PointerValue<'a>,
   input_ptr_ptr:      PointerValue<'a>,
   input_byte_len_ptr: PointerValue<'a>,
   input_off_ptr:      PointerValue<'a>,
@@ -384,7 +384,9 @@ fn construct_instruction_branch<'a>(
           .branch_data
           .iter()
           .any(|t| matches!(t.1.data.input_type, InputType::T01_PRODUCTION | InputType::T02_TOKEN)),
-      "Scanner states should not contain PRODUCTION or TOKEN tables"
+      "Scanner states should not contain PRODUCTION or TOKEN tables [{}] \n {}",
+      p.is_scanner,
+      disassemble_state(&p.output.bytecode, instruction.get_address(), None).0,
     );
     // This also leads to the conclusion that PRODUCTION and TOKEN states have
     // only one table.
@@ -508,7 +510,7 @@ fn construct_instruction_branch<'a>(
         input_off_ptr,
         input_ptr_ptr,
         input_trun: input_truncated_ptr,
-        line_ptr,
+        _line_ptr: line_ptr,
         input_byte_len_ptr,
         entry_table_block: table_block,
       });
@@ -1015,8 +1017,6 @@ fn write_reentrance<'a>(
   pack: &FunctionPack,
   force_goto: bool,
 ) -> SherpaResult<()> {
-  let bytecode = &pack.output.bytecode;
-
   use InstructionType::*;
 
   let next_instruction = match instruction.to_type() {

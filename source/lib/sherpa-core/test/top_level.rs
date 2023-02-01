@@ -23,12 +23,15 @@ fn test_pipeline() -> SherpaResult<()> {
   let g = GrammarStore::from_str(
     &mut j,
     "
-@IGNORE g:sp g:tab
+IGNORE { c:sp c:tab }
 
-<> start > \\hello \\world 
+<> start > 'hello' 'world' 
 ",
-  )
-  .unwrap();
+  );
+
+  assert!(!j.debug_error_report());
+
+  let g = g?;
 
   let mut states = compile_states(&mut j, threads)?;
 
@@ -70,8 +73,8 @@ fn test_pipeline() -> SherpaResult<()> {
 fn test_compile_pipeline() {
   let mut pipeline = BuildPipeline::from_string(
     "
-    <> A >\\1 f:ast { { t_Banana, c_Mobius, value:u32($1), string:str($1), useful:true } } 
-    | \\a \\b A f:ast { { t_Banana, value: u32($1), dd:u32($3), tok, useful:false } }
+<> A > '1' :ast { t_Banana, c_Mobius, value:u32($1), string:str($1), useful:true }
+| 'a' 'b' A :ast { t_Banana, value: u32($1), dd:u32($3), tok, useful:false }
     ",
     &PathBuf::from("/tmp"),
     Default::default(),
@@ -89,8 +92,8 @@ fn test_output_rust_on_trivial_grammar() {
   let g = GrammarStore::from_str(
     &mut j,
     "
-        <> A >\\1 f:ast { { t_Banana, c_Mobius, value:u32($1), string:str($1), useful:true } } 
-        | \\a \\b A f:ast { { t_Banana, value: u32($1), dd:u32($3), tok, useful:false } }
+<> A > '1' :ast { t_Banana, c_Mobius, value:u32($1), string:str($1), useful:true }
+| 'a' 'b' A :ast { t_Banana, value: u32($1), dd:u32($3), tok, useful:false }
         ",
   )
   .unwrap();

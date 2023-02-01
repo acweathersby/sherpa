@@ -1,5 +1,0 @@
-@NAME test
-
-@IMPORT ./include as include
-
-<> A > \Hello \World include::B
