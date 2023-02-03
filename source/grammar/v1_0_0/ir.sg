@@ -96,7 +96,7 @@ EXPORT ir as ir
 
         :ast { t_ForkTo, c_IR, c_IR_Instruction, states: $4, production_id: $9   }
 
-    | "scan" "back"? "until" token_id_list
+    | 'scan' "back"? "until" token_id_list
 
         :ast { t_ScanUntil, c_IR, c_IR_Instruction, ids: $4, SCAN_BACKWARDS:bool($2) }
 

@@ -1,4 +1,6 @@
 use super::types::{
+  ascript_first_node_id,
+  ascript_last_node_id,
   AScriptPropId,
   AScriptStore,
   AScriptStruct,
@@ -52,29 +54,22 @@ pub(crate) fn compile_ascript_store(ast: &mut AScriptStore) -> Vec<SherpaError> 
 }
 
 fn gather_ascript_info_from_grammar(
-  ast: &mut AScriptStore,
+  store: &mut AScriptStore,
   e: &mut Vec<SherpaError>,
   prod_types: &mut ProductionTypesTable,
 ) {
   // Separate all bodies into a list of  of tuple of RuleId's and
   // Ascript reference nodes.
 
-  let g = ast.g.clone();
+  let g = store.g.clone();
 
-  let normal_parse_bodies: Vec<(RuleId, Option<&Ascript>)> = ast
-    .g
+  let normal_parse_bodies = g
     .rules
     .iter()
-    .filter_map(|(id, rule)| match g.clone().parse_productions.contains(&rule.prod_id) {
-      true => {
-        for function in &rule.reduce_fn_ids {
-          if let ReduceFunctionType::Ascript(ascript) = g.reduce_functions.get(function).unwrap() {
-            return Some((*id, Some(ascript)));
-          }
-        }
-        Some((*id, None))
-      }
-      false => None,
+    .filter_map(|(id, rule)| {
+      g.parse_productions
+        .contains(&rule.prod_id)
+        .then(|| rule.ast_definition.as_ref().map(|ast| (*id, Some(ast))).unwrap_or((*id, None)))
     })
     .collect::<Vec<_>>();
 
@@ -91,7 +86,7 @@ fn gather_ascript_info_from_grammar(
       if let Some(ascript_fn) = &ascript_option_fn {
         match &ascript_fn.ast {
           ASTNode::AST_Struct(ast_struct) => {
-            let id = compile_struct_type(ast, ast_struct, rule);
+            let id = compile_struct_type(store, ast_struct, rule);
             struct_bodies.push((rule_id, ascript_fn));
             add_production_type(prod_types, &rule, TaggedType {
               type_:        AScriptTypeVal::Struct(id),
@@ -101,7 +96,7 @@ fn gather_ascript_info_from_grammar(
           }
           ASTNode::AST_Statements(ast_stmts) => {
             let (sub_types, mut sub_errors) =
-              compile_expression_type(ast, ast_stmts.statements.last().unwrap(), rule);
+              compile_expression_type(store, ast_stmts.statements.last().unwrap(), rule);
 
             for sub_type in sub_types {
               add_production_type(prod_types, &rule, sub_type);
@@ -110,7 +105,7 @@ fn gather_ascript_info_from_grammar(
             e.append(&mut sub_errors);
           }
           ast_expr => {
-            let (sub_types, mut sub_errors) = compile_expression_type(ast, ast_expr, rule);
+            let (sub_types, mut sub_errors) = compile_expression_type(store, ast_expr, rule);
 
             for sub_type in sub_types {
               add_production_type(prod_types, &rule, sub_type);
@@ -443,36 +438,40 @@ fn resolve_production_reduce_types(
   }
 }
 
-fn resolve_structure_properties(ast: &mut AScriptStore, e: &mut Vec<SherpaError>) {
-  let g = ast.g.clone();
+fn resolve_structure_properties(store: &mut AScriptStore, e: &mut Vec<SherpaError>) {
+  let g = store.g.clone();
 
-  for struct_id in ast.structs.keys().cloned().collect::<Vec<_>>() {
-    let bodies = ast.structs.get(&struct_id).unwrap().body_ids.clone();
-    for rule_id in bodies {
+  for struct_id in store.structs.keys().cloned().collect::<Vec<_>>() {
+    let rules = store.structs.get(&struct_id).unwrap().rule_ids.clone();
+    for rule_id in rules {
       let rule = g.get_rule(&rule_id).unwrap();
-      for function in &rule.reduce_fn_ids {
-        if let ReduceFunctionType::Ascript(ascript) = g.reduce_functions.get(function).unwrap() {
-          if let ASTNode::AST_Struct(ast_struct) = &ascript.ast {
-            e.append(&mut compile_struct_props(ast, &struct_id, ast_struct, &rule).1);
-          }
+      match &rule.ast_definition {
+        Some(Ascript { ast: ASTNode::AST_Struct(ast_struct), .. }) => {
+          e.append(&mut compile_struct_props(store, &struct_id, ast_struct, &rule).1);
         }
+        _ => {}
       }
     }
-
-    verify_property_presence(ast, &struct_id);
+    verify_property_presence(store, &struct_id);
   }
 
   // Ensure each property entry has a resolved data type.
-  for prop_id in ast.props.keys().cloned().collect::<Vec<_>>() {
-    let type_val = ast.props.get(&prop_id).unwrap().type_val.clone();
+  for prop_id in store.props.keys().cloned().collect::<Vec<_>>() {
+    let type_val = store.props.get(&prop_id).unwrap().type_val.clone();
 
-    debug_assert!(
-      get_resolved_type(ast, &type_val.clone().into()) == type_val.type_.clone(),
-      "Assumption Failed: All prop types are resolved at this point"
-    );
+    /* debug_assert!(
+          get_resolved_type(ast, &type_val.clone().into()) == type_val.type_.clone(),
+          "Assumption Failed: All prop types are resolved at this point\n
+    resolved value:\n    {:?}
+    existing value:\n    {:?}\n",
+          get_resolved_type(ast, &type_val.clone().into()),
+          type_val.type_,
+        ); */
 
-    // ast.props.get_mut(&prop_id).unwrap().type_val =
-    //  TaggedType { type_: get_resolved_type(ast, &type_val.into()), ..Default::default() };
+    store.props.get_mut(&prop_id).unwrap().type_val = TaggedType {
+      type_: get_resolved_type(store, &type_val.into()),
+      ..Default::default()
+    };
   }
 }
 
@@ -480,7 +479,7 @@ pub(crate) fn verify_property_presence(ast: &mut AScriptStore, struct_id: &AScri
   let struct_ = ast.structs.get(&struct_id).unwrap();
   for prop_id in &struct_.prop_ids {
     let prop = ast.props.get_mut(&prop_id).unwrap();
-    if prop.body_ids.len() != struct_.body_ids.len() {
+    if prop.body_ids.len() != struct_.rule_ids.len() {
       prop.optional = true;
     }
   }
@@ -532,7 +531,7 @@ pub fn get_resolved_type(ascript: &AScriptStore, base_type: &AScriptTypeVal) -> 
 }
 
 pub fn get_resolved_vec_contents(
-  ast: &AScriptStore,
+  store: &AScriptStore,
   base_type: &AScriptTypeVal,
 ) -> Vec<AScriptTypeVal> {
   use AScriptTypeVal::*;
@@ -550,11 +549,13 @@ pub fn get_resolved_vec_contents(
     U8Vec => vec![U8(None)],
     GenericStructVec(types) => types.iter().map(|t| t.into()).collect(),
     GenericVec(Some(types)) => {
-      types.iter().flat_map(|t| get_resolved_vec_contents(ast, &t.into())).collect()
+      types.iter().flat_map(|t| get_resolved_vec_contents(store, &t.into())).collect()
     }
     TokenVec => vec![Token],
     StringVec => vec![String(None)],
-    UnresolvedProduction(_) => get_resolved_vec_contents(ast, &get_resolved_type(ast, base_type)),
+    UnresolvedProduction(_) => {
+      get_resolved_vec_contents(store, &get_resolved_type(store, base_type))
+    }
     none_vec_type => {
       vec![none_vec_type.clone()]
     }
@@ -562,7 +563,7 @@ pub fn get_resolved_vec_contents(
 }
 
 pub fn compile_expression_type(
-  ast: &mut AScriptStore,
+  store: &mut AScriptStore,
   ast_expression: &ASTNode,
   rule: &Rule,
 ) -> (Vec<TaggedType>, Vec<SherpaError>) {
@@ -571,7 +572,7 @@ pub fn compile_expression_type(
 
   let types = match ast_expression {
     ASTNode::AST_Struct(ast_struct) => {
-      let struct_type = compile_struct_type(ast, ast_struct, rule);
+      let struct_type = compile_struct_type(store, ast_struct, rule);
 
       vec![TaggedType {
         symbol_index: 9999,
@@ -585,7 +586,7 @@ pub fn compile_expression_type(
       type_:        Token,
     }],
     ASTNode::AST_Add(box AST_Add { left, .. }) => {
-      let (sub_types, mut sub_errors) = compile_expression_type(ast, left, rule);
+      let (sub_types, mut sub_errors) = compile_expression_type(store, left, rule);
       errors.append(&mut sub_errors);
       sub_types
     }
@@ -593,7 +594,7 @@ pub fn compile_expression_type(
       let mut types = BTreeSet::new();
 
       for node in initializer {
-        let (sub_types, mut sub_errors) = compile_expression_type(ast, node, rule);
+        let (sub_types, mut sub_errors) = compile_expression_type(store, node, rule);
 
         for sub_type in sub_types {
           match (&sub_type).into() {
@@ -700,7 +701,7 @@ pub fn compile_expression_type(
     ASTNode::AST_NamedReference(_) | ASTNode::AST_IndexReference(_) => {
       match get_body_symbol_reference(rule, ast_expression) {
         Some((_, sym_ref)) => match sym_ref.sym_id {
-          SymbolID::Production(id, ..) => match ast.prod_types.get(&id) {
+          SymbolID::Production(id, ..) => match store.prod_types.get(&id) {
             Some(types) => types
               .keys()
               .map(|t| TaggedType {
@@ -741,7 +742,7 @@ pub fn compile_expression_type(
 /// Compiles a struct type from a production rule and
 /// ascript struct node.
 pub fn compile_struct_type(
-  ast: &mut AScriptStore,
+  store: &mut AScriptStore,
   ast_struct: &AST_Struct,
   rule: &Rule,
 ) -> AScriptStructId {
@@ -756,7 +757,7 @@ pub fn compile_struct_type(
       // We don't care about the actual value at this point.
       ASTNode::AST_Property(box prop) => {
         if let Some(value) = &prop.value {
-          compile_expression_type(ast, value, rule);
+          compile_expression_type(store, value, rule);
         } else {
           panic!("Prop has no value {}", prop.tok.blame(1, 1, "", None))
         }
@@ -770,10 +771,10 @@ pub fn compile_struct_type(
 
   let id = AScriptStructId::new(&type_name);
 
-  match ast.structs.entry(id.clone()) {
+  match store.structs.entry(id.clone()) {
     btree_map::Entry::Occupied(mut entry) => {
       let struct_ = entry.get_mut();
-      struct_.body_ids.insert(rule.id);
+      struct_.rule_ids.insert(rule.id);
       struct_.definition_locations.insert(ast_struct.tok.clone());
       struct_.include_token = struct_.include_token.max(include_token);
     }
@@ -781,7 +782,7 @@ pub fn compile_struct_type(
       entry.insert(AScriptStruct {
         id,
         type_name,
-        body_ids: BTreeSet::from_iter(vec![rule.id]),
+        rule_ids: BTreeSet::from_iter(vec![rule.id]),
         definition_locations: BTreeSet::from_iter(vec![ast_struct.tok.clone()]),
         prop_ids: BTreeSet::new(),
         include_token,
@@ -794,10 +795,11 @@ pub fn compile_struct_type(
 
 /// Completes the compilation of struct type by defining the properties
 /// of a struct.
+#[track_caller]
 pub fn compile_struct_props(
-  ast: &mut AScriptStore,
+  store: &mut AScriptStore,
   id: &AScriptStructId,
-  ast_struct: &AST_Struct,
+  ast: &AST_Struct,
   rule: &Rule,
 ) -> (AScriptTypeVal, Vec<SherpaError>) {
   let mut errors = vec![];
@@ -809,7 +811,7 @@ pub fn compile_struct_props(
   let mut prop_ids = BTreeSet::new();
   let mut include_token = false;
 
-  for prop in &ast_struct.props {
+  for prop in &ast.props {
     match prop {
       ASTNode::AST_Token(..) => include_token = true,
       ASTNode::AST_Property(box prop) => {
@@ -822,8 +824,14 @@ pub fn compile_struct_props(
           panic!("Prop has no value! {}", prop.tok.blame(1, 1, "", None));
         };
 
-        for prop_type in compile_expression_type(ast, value, rule).0 {
-          match ast.props.get_mut(&prop_id) {
+        for mut prop_type in compile_expression_type(store, value, rule).0 {
+          if prop_type.type_.is_vec() {
+            prop_type.type_ = get_specified_vector_from_generic_vec_values(
+              &prop_type.type_.get_subtypes().into_iter().collect(),
+            )
+          }
+
+          match store.props.get_mut(&prop_id) {
             Some(existing) => {
               use AScriptTypeVal::*;
               match ((&existing.type_val).into(), (&prop_type).into()) {
@@ -871,7 +879,7 @@ pub fn compile_struct_props(
                 }
                 _ => {
                   errors.push(ErrPropRedefinition::new(
-                    ast.structs.get(id).unwrap().type_name.clone(),
+                    store.structs.get(id).unwrap().type_name.clone(),
                     name.clone(),
                     existing.clone(),
                     AScriptProp {
@@ -885,7 +893,7 @@ pub fn compile_struct_props(
               }
             }
             _ => {
-              ast.props.insert(prop_id.clone(), AScriptProp {
+              store.props.insert(prop_id.clone(), AScriptProp {
                 type_val: prop_type.into(),
                 body_ids: BTreeSet::from_iter(vec![rule.id]),
                 location: prop.tok.clone(),
@@ -900,11 +908,11 @@ pub fn compile_struct_props(
     }
   }
 
-  match ast.structs.entry(id.clone()) {
+  match store.structs.entry(id.clone()) {
     btree_map::Entry::Occupied(mut entry) => {
       let struct_ = entry.get_mut();
-      struct_.body_ids.insert(rule.id);
-      struct_.definition_locations.insert(ast_struct.tok.clone());
+      struct_.rule_ids.insert(rule.id);
+      struct_.definition_locations.insert(ast.tok.clone());
       struct_.prop_ids.append(&mut prop_ids);
       struct_.include_token = include_token || struct_.include_token;
     }
@@ -915,10 +923,10 @@ pub fn compile_struct_props(
 }
 
 pub fn get_production_types(
-  ast: &AScriptStore,
+  store: &AScriptStore,
   prod_id: &ProductionId,
 ) -> BTreeSet<AScriptTypeVal> {
-  ast.prod_types.get(prod_id).unwrap().keys().map(|t| t.into()).collect::<BTreeSet<_>>()
+  store.prod_types.get(prod_id).unwrap().keys().map(|t| t.into()).collect::<BTreeSet<_>>()
 }
 
 /// Returns a specified vector type from a generic vector
@@ -1054,9 +1062,9 @@ pub fn get_body_symbol_reference<'a>(
 }
 
 pub fn get_named_body_ref<'a>(rule: &'a Rule, val: &str) -> Option<(usize, &'a RuleSymbol)> {
-  if val == "--first--" {
+  if val == ascript_first_node_id {
     Some((0, rule.syms.first().unwrap()))
-  } else if val == "--last--" {
+  } else if val == ascript_last_node_id {
     Some((rule.syms.len() - 1, rule.syms.last().unwrap()))
   } else {
     rule.syms.iter().enumerate().filter(|(_, s)| s.annotation == *val).last()

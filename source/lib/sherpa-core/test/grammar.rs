@@ -519,8 +519,6 @@ pub fn generate_block_comment() -> SherpaResult<()> {
 
   let grammar = j.grammar()?;
 
-  let token_production = grammar.get_production_by_name("tk:block")?;
-
   let result = compile_scanner_states(
     &mut j,
     BTreeSet::from_iter(vec![
@@ -582,7 +580,7 @@ fn compile_latest_grammar() -> SherpaResult<()> {
     target_production_id,
     &bc.bytecode,
     Some(&move |event| match event {
-      DebugEvent::ExecuteInstruction { bc, address, instruction, ctx } => {
+      DebugEvent::ExecuteInstruction { ctx, .. } => {
         if true || !ctx.is_scanner() {
           return;
           /*      println!(

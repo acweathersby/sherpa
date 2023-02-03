@@ -3,7 +3,10 @@ use std::sync::Arc;
 use bitmask_enum::bitmask;
 
 use crate::{
-  grammar::{compile::parser::sherpa::ASTNode, hash_id_value_u64},
+  grammar::{
+    compile::parser::sherpa::{ASTNode, Ascript},
+    hash_id_value_u64,
+  },
   types::*,
 };
 
@@ -209,7 +212,7 @@ pub struct Rule {
   /// TODO: Docs
   pub bytecode_id: u32,
   /// TODO: Docs
-  pub reduce_fn_ids: Vec<ReduceFunctionId>,
+  pub ast_definition: Option<Ascript>,
   /// A token that covers the definition of this rule.
   pub tok: Token,
   /// A reference to the identifiers of the owning grammar.

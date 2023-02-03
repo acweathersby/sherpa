@@ -39,9 +39,9 @@ EXPORT ir::state as ir
 
 <> import_clause > 
 
-        "IMPORT" ( c:id | c:sym  )(+)^test ( "AS" | "as" ) sym::identifier
+        "IMPORT" ( c:id | c:sym  )(+) c:sp ( "AS" | "as" ) sym::identifier
 
-            :ast { t_Import, c_Preamble, uri: str($2), reference:str($4), tok }
+            :ast { t_Import, c_Preamble, uri: str($2), reference:str($5), tok }
 
 <> ignore_clause >
 
@@ -80,8 +80,17 @@ EXPORT ir::state as ir
 <> rule > 
 
         "!"?^p ( sym::annotated_symbol | any_group )(+)^s ast_definition?^a
+        syntax_definition?^syn recover_definition?^rec
 
-            :ast { t_Rule, is_priority:bool($p), symbols:$s, ast_definition:$a, tok }
+              :ast {
+                t_Rule,
+                is_priority:bool($p),
+                symbols:$s,
+                ast_definition:$a,
+                syntax_definition:$syn,
+                recover_definition:$rec, tok
+              }
+
 
 <> ast_definition > 
 
@@ -93,22 +102,14 @@ EXPORT ir::state as ir
 
         ":syn" syn::declaration^syn
 
-            :ast  { t_Syntax, c_Function, syn:$syn, tok }
-
 <> recover_definition > 
 
         ":rec" "{" ir::state^state "}"
 
-            :ast  { t_Recovery, c_Function, state, tok }
-
+            :ast  { t_Recovery, c_Function, state:$state, tok }
 
 
 +> sym::symbol > group
-
-+> sym::non_terminal > sym::non_terminal^p "<" sym::production_symbol^t ">"
-
-        :ast { t_TemplateProductionSymbol, prod_sym:$p, template_productions:$t }
-
 
 <> group > 
 

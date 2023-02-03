@@ -39,9 +39,6 @@ pub fn merge_grammars(
     // Merge production names
     g.production_names.extend(import_grammar.production_names.clone().into_iter());
 
-    // Merge reduce functions
-    g.reduce_functions.append(&mut import_grammar.reduce_functions.clone());
-
     // Collect all pending merge productions
     for (prod_id, merge) in &import_grammar.merge_productions {
       match merge_productions.entry(*prod_id) {

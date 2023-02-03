@@ -70,7 +70,7 @@ pub fn command() -> ArgMatches {
     .get_matches()
 }
 
-fn configure_matches(matches: &ArgMatches, PWD: &PathBuf) -> (Config, ParserType, PathBuf) {
+fn configure_matches(matches: &ArgMatches, pwd: &PathBuf) -> (Config, ParserType, PathBuf) {
   let mut config = Config::default();
   config.source_type = match matches
     .contains_id("lang")
@@ -89,22 +89,22 @@ fn configure_matches(matches: &ArgMatches, PWD: &PathBuf) -> (Config, ParserType
     .flatten()
     .unwrap_or(ParserType::Bytecode);
 
-  let out_dir = matches.get_one::<PathBuf>("out").unwrap_or(PWD);
+  let out_dir = matches.get_one::<PathBuf>("out").unwrap_or(pwd);
 
   (config, parser_type, out_dir.clone())
 }
 
 fn main() -> SherpaResult<()> {
-  let PWD = std::env::current_dir().unwrap();
+  let pwd = std::env::current_dir().unwrap();
 
   let matches = command();
 
   if let Some(matches) = matches.subcommand_matches("build") {
-    let (config, parser_type, out_dir) = configure_matches(matches, &PWD);
+    let (config, parser_type, out_dir) = configure_matches(matches, &pwd);
 
     for path in matches.get_many::<PathBuf>("INPUTS").unwrap_or_default() {
       let path =
-        if !path.is_absolute() { PWD.join(path).canonicalize()? } else { path.canonicalize()? };
+        if !path.is_absolute() { pwd.join(path).canonicalize()? } else { path.canonicalize()? };
 
       let mut pipeline = BuildPipeline::from_source(path, config.clone());
 
@@ -139,11 +139,11 @@ fn main() -> SherpaResult<()> {
 
     SherpaResult::Ok(())
   } else if let Some(matches) = matches.subcommand_matches("disassemble") {
-    let out_dir = matches.get_one::<PathBuf>("out").unwrap_or(&PWD);
+    let out_dir = matches.get_one::<PathBuf>("out").unwrap_or(&pwd);
 
     for path in matches.get_many::<PathBuf>("INPUTS").unwrap_or_default() {
       let path =
-        if !path.is_absolute() { PWD.join(path).canonicalize()? } else { path.canonicalize()? };
+        if !path.is_absolute() { pwd.join(path).canonicalize()? } else { path.canonicalize()? };
 
       let mut pipeline = BuildPipeline::from_source(path, Default::default());
 

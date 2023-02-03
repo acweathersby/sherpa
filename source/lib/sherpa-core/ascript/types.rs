@@ -11,6 +11,9 @@ use std::{
   sync::Arc,
 };
 
+pub(crate) const ascript_first_node_id: &'static str = "--first--";
+pub(crate) const ascript_last_node_id: &'static str = "--last--";
+
 #[derive(Hash, Debug, PartialEq, Eq, Clone, PartialOrd, Ord, Copy)]
 pub struct AScriptStructId(u64);
 
@@ -167,6 +170,33 @@ impl AScriptTypeVal {
         | GenericStructVec(_)
         | GenericVec(_)
     )
+  }
+
+  pub fn get_subtypes(&self) -> Vec<AScriptTypeVal> {
+    if self.is_vec() {
+      use AScriptTypeVal::*;
+      match self {
+        TokenVec => vec![AScriptTypeVal::Token],
+        U8Vec => vec![AScriptTypeVal::U8(None)],
+        U16Vec => vec![AScriptTypeVal::U16(None)],
+        U32Vec => vec![AScriptTypeVal::U32(None)],
+        U64Vec => vec![AScriptTypeVal::U64(None)],
+        I8Vec => vec![AScriptTypeVal::I8(None)],
+        I16Vec => vec![AScriptTypeVal::I16(None)],
+        I32Vec => vec![AScriptTypeVal::I32(None)],
+        I64Vec => vec![AScriptTypeVal::I64(None)],
+        F32Vec => vec![AScriptTypeVal::F32(None)],
+        F64Vec => vec![AScriptTypeVal::F64(None)],
+        StringVec => vec![AScriptTypeVal::String(None)],
+        GenericVec(Some(vals)) | GenericStructVec(vals) => {
+          vals.iter().map(|t| &t.type_).cloned().collect()
+        }
+        GenericVec(_) => vec![],
+        _ => unreachable!(),
+      }
+    } else {
+      vec![self.clone()]
+    }
   }
 
   pub fn is_same_type(&self, other: &Self) -> bool {
@@ -449,7 +479,7 @@ pub struct AScriptStruct {
   pub type_name: String,
   pub prop_ids: BTreeSet<AScriptPropId>,
   /// Tracks the number of times this struct has been defined
-  pub body_ids: BTreeSet<RuleId>,
+  pub rule_ids: BTreeSet<RuleId>,
   pub definition_locations: BTreeSet<Token>,
   pub include_token: bool,
 }
@@ -461,6 +491,7 @@ pub struct AScriptStore {
   /// Store of unique AScriptStructs
   pub structs: BTreeMap<AScriptStructId, AScriptStruct>,
   pub props: BTreeMap<AScriptPropId, AScriptProp>,
+  // Stores the resolved AST types of all parse productions.
   pub prod_types: ProductionTypesTable,
   pub body_reduce_fn: BTreeMap<RuleId, (AScriptTypeVal, ASTNode)>,
   /// The type name of the AST Node enum,

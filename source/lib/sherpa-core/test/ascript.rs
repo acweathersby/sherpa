@@ -1,7 +1,7 @@
 use crate::{
   ascript::{
     compile::{compile_struct_props, compile_struct_type, verify_property_presence},
-    types::AScriptStore,
+    types::{AScriptStore, AScriptTypeVal, TaggedType},
   },
   grammar::compile::{
     compile_ascript_struct,
@@ -25,7 +25,14 @@ fn test_grammar_imported_grammar() {
       .unwrap(),
   )
   .unwrap();
-  let ascript = AScriptStore::new(g).unwrap();
+  let ascript = AScriptStore::new(g.clone()).unwrap();
+
+  assert_eq!(ascript.prod_types.len(), g.parse_productions.len());
+
+  assert!(ascript
+    .prod_types
+    .iter()
+    .all(|p| { p.1.iter().all(|t| !matches!(t.0.type_, AScriptTypeVal::Undefined)) }));
 
   let mut writer = StringBuffer::new(vec![]);
 
@@ -46,7 +53,7 @@ NAME llvm_language_test
 
 <> statement > expression    :ast { t_Stmt, v:$1 }
 
-<> expression > sum             
+<> expression > sum          
 
 <> sum > mul '+' sum         :ast { t_Sum, l:$1, r:$3 }
     | mul
@@ -54,9 +61,11 @@ NAME llvm_language_test
 <> mul > term '*' expression :ast { t_Mul, l:$1, r:$3 }
     | term
 
-<> term > '2'                :ast { t_Num, v: u16($1) }
+<> term > num                :ast { t_Num, v:$1 }
 
     | '(' expression ')'     :ast { t_Paren, v: $2 }
+
+<> num > c:num '.' c:num     :ast [$1, $3]
 ",
   )
   .unwrap();
@@ -67,6 +76,32 @@ NAME llvm_language_test
   crate::ascript::rust::write(&ascript, &mut writer)?;
 
   eprintln!("{}", String::from_utf8(writer.into_output()).unwrap());
+
+  SherpaResult::Ok(())
+}
+
+#[test]
+fn test_add_hoc_vector_prop_merged_with_vector_production() -> SherpaResult<()> {
+  let mut j = Journal::new(None);
+  let g = GrammarStore::from_str(
+    &mut j,
+    "
+<> statement > adhoc        :ast { t_Expr, v:[$1] }
+    | '{' adhoc(+) '}'      :ast { t_Expr, v:$2 }
+
+<> adhoc > 'test'           :ast tok
+",
+  );
+
+  assert!(!j.debug_error_report(), "Should not have grammar errors");
+
+  let ascript = AScriptStore::new(g?)?;
+
+  let mut writer = StringBuffer::new(vec![]);
+
+  crate::ascript::rust::write(&ascript, &mut writer)?;
+
+  eprintln!("{}", String::from_utf8(writer.into_output())?);
 
   SherpaResult::Ok(())
 }

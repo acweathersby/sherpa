@@ -1,13 +1,7 @@
 use std::{path::PathBuf, str::FromStr};
 
 use sherpa::{
-  pipeline::{
-    compile_bytecode_parser,
-    compile_llvm_parser,
-    tasks::{self, build_bytecode_disassembly},
-    BuildPipeline,
-    SourceType,
-  },
+  pipeline::{compile_bytecode_parser, compile_llvm_parser},
   Config,
 };
 

@@ -180,10 +180,7 @@ pub struct GrammarStore {
   pub exports: Vec<(ProductionId, String)>,
 
   /// All items in the grammar that are `B => . A b` for some production `A`.
-  pub(crate) lr_items: BTreeMap<ProductionId, Vec<Item>>,
-
-  /// All reduce functions defined in the grammar.
-  pub reduce_functions:  ReduceFunctionTable,
+  pub(crate) lr_items:   BTreeMap<ProductionId, Vec<Item>>,
   /// TODO: Docs
   pub merge_productions: BTreeMap<ProductionId, (String, Vec<Rule>)>,
 

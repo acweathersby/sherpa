@@ -284,12 +284,12 @@ fn build_types_utils<W: Write>(w: &mut CodeWriter<W>, ast: &AScriptStore) -> Res
 
 fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Result<()> {
   let g = ast.g.clone();
-  let ordered_bodies = g
+  let ordered_rules = g
     .rules
     .iter()
-    .filter_map(|(_, b)| {
-      if g.parse_productions.contains(&b.prod_id) {
-        Some((b.bytecode_id, b))
+    .filter_map(|(_, rule)| {
+      if g.parse_productions.contains(&rule.prod_id) {
+        Some((rule.bytecode_id, rule))
       } else {
         None
       }
@@ -318,7 +318,7 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
 
   let mut refs = vec![];
 
-  for (id, rule) in &ordered_bodies {
+  for (id, rule) in &ordered_rules {
     let prod_id = rule.prod_id;
     let prod_data = ast.prod_types.get(&prod_id).unwrap();
 
@@ -349,116 +349,178 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
       ))?
       .indent();
 
-    if rule.reduce_fn_ids.is_empty() {
+    if rule.ast_definition.is_none() {
       noop = 1;
     } else {
       let mut ref_index = rule.syms.len();
 
-      for function_id in &rule.reduce_fn_ids {
-        match g.reduce_functions.get(function_id) {
-          Some(ReduceFunctionType::Ascript(function)) => match &function.ast {
-            ASTNode::AST_Struct(box ast_struct) => {
-              if let AScriptTypeVal::Struct(struct_type) = get_struct_type_from_node(ast_struct) {
-                let _ref =
-                  build_struct_constructor(ast, rule, &struct_type, ast_struct, &mut ref_index, 0)?;
+      match rule.ast_definition.as_ref().map(|n| &n.ast) {
+        Some(ASTNode::AST_Struct(box ast_struct)) => {
+          if let AScriptTypeVal::Struct(struct_type) = get_struct_type_from_node(ast_struct) {
+            let _ref =
+              build_struct_constructor(ast, rule, &struct_type, ast_struct, &mut ref_index, 0)?;
 
-                let indices = _ref.get_indices();
-                let token_indices = _ref.get_tokens();
+            let indices = _ref.get_indices();
+            let token_indices = _ref.get_tokens();
 
-                write_slot_extraction(rule, indices, token_indices, &mut temp_writer)?;
+            write_slot_extraction(rule, indices, token_indices, &mut temp_writer)?;
 
-                write_node_token(&mut temp_writer, rule)?;
+            write_node_token(&mut temp_writer, rule)?;
 
-                temp_writer.write_line(&_ref.to_init_string())?;
+            temp_writer.write_line(&_ref.to_init_string())?;
 
-                temp_writer.write_line(&format!(
-                  "slots.assign(0, AstSlot ({}::{}(Box::new({})), rng, TokenRange::default()))",
-                  ast.ast_type_name,
-                  ast.structs.get(&struct_type).unwrap().type_name,
-                  _ref.get_ref_string(),
-                ))?;
-                break;
-              }
-            }
-            ASTNode::AST_Statements(box statements) => {
-              let mut reference = String::new();
-              let mut return_type = AScriptTypeVal::Undefined;
-              let mut refs = BTreeSet::new();
-              let mut tokens = BTreeSet::new();
-              let mut statement_writer = temp_writer.checkpoint();
-
-              for (i, statement) in statements.statements.iter().enumerate() {
-                match render_expression(ast, statement, rule, &mut ref_index, i) {
-                  Some(_ref) => {
-                    refs.append(&mut _ref.get_indices());
-                    tokens.append(&mut _ref.get_tokens());
-                    return_type = _ref.ast_type.clone();
-                    reference = _ref.get_ref_string();
-                    statement_writer.write_line(&_ref.to_init_string())?;
-                  }
-                  None => {}
-                }
-              }
-
-              write_slot_extraction(rule, refs, tokens, &mut temp_writer)?;
-
-              write_node_token(&mut temp_writer, rule)?;
-
-              temp_writer.merge_checkpoint(statement_writer)?;
-
-              let return_type = match return_type {
-                AScriptTypeVal::Undefined | AScriptTypeVal::GenericVec(None) => {
-                  prod_data.iter().next().unwrap().0.into()
-                }
-                r => r,
-              };
-
-              match return_type {
-                AScriptTypeVal::GenericStructVec(..)
-                | AScriptTypeVal::TokenVec
-                | AScriptTypeVal::StringVec
-                | AScriptTypeVal::Bool(..)
-                | AScriptTypeVal::F32(..)
-                | AScriptTypeVal::F64(..)
-                | AScriptTypeVal::U64(..)
-                | AScriptTypeVal::U32(..)
-                | AScriptTypeVal::U16(..)
-                | AScriptTypeVal::U8(..)
-                | AScriptTypeVal::I64(..)
-                | AScriptTypeVal::I32(..)
-                | AScriptTypeVal::I16(..)
-                | AScriptTypeVal::I8(..)
-                | AScriptTypeVal::U8Vec
-                | AScriptTypeVal::U16Vec
-                | AScriptTypeVal::U32Vec
-                | AScriptTypeVal::U64Vec
-                | AScriptTypeVal::I8Vec
-                | AScriptTypeVal::I16Vec
-                | AScriptTypeVal::I32Vec
-                | AScriptTypeVal::I64Vec
-                | AScriptTypeVal::F32Vec
-                | AScriptTypeVal::F64Vec
-                | AScriptTypeVal::String(..)
-                | AScriptTypeVal::Token => temp_writer.write_line(&format!(
-                  "slots.assign(0, AstSlot ({}::{}({}), {}, TokenRange::default()))",
-                  ast.ast_type_name,
-                  return_type.hcobj_type_name(None),
-                  &reference,
-                  "rng".to_string()
-                ))?,
-                r => {
-                  eprintln!("{}", r.debug_string(None));
-                  temp_writer.write_line(&reference)?
-                }
-              };
-            }
-            _ => {
-              noop = 2;
-            }
-          },
-          _ => {
-            noop = 3;
+            temp_writer.write_line(&format!(
+              "slots.assign(0, AstSlot ({}::{}(Box::new({})), rng, TokenRange::default()))",
+              ast.ast_type_name,
+              ast.structs.get(&struct_type).unwrap().type_name,
+              _ref.get_ref_string(),
+            ))?;
           }
+        }
+        Some(ASTNode::AST_Statements(box statements)) => {
+          let mut reference = String::new();
+          let mut return_type = AScriptTypeVal::Undefined;
+          let mut refs = BTreeSet::new();
+          let mut tokens = BTreeSet::new();
+          let mut statement_writer = temp_writer.checkpoint();
+
+          for (i, statement) in statements.statements.iter().enumerate() {
+            match render_expression(ast, statement, rule, &mut ref_index, i) {
+              Some(_ref) => {
+                refs.append(&mut _ref.get_indices());
+                tokens.append(&mut _ref.get_tokens());
+                return_type = _ref.ast_type.clone();
+                reference = _ref.get_ref_string();
+                statement_writer.write_line(&_ref.to_init_string())?;
+              }
+              None => {}
+            }
+          }
+
+          write_slot_extraction(rule, refs, tokens, &mut temp_writer)?;
+
+          write_node_token(&mut temp_writer, rule)?;
+
+          temp_writer.merge_checkpoint(statement_writer)?;
+
+          let return_type = match return_type {
+            AScriptTypeVal::Undefined | AScriptTypeVal::GenericVec(None) => {
+              prod_data.iter().next().unwrap().0.into()
+            }
+            r => r,
+          };
+
+          match return_type {
+            AScriptTypeVal::GenericStructVec(..)
+            | AScriptTypeVal::TokenVec
+            | AScriptTypeVal::StringVec
+            | AScriptTypeVal::Bool(..)
+            | AScriptTypeVal::F32(..)
+            | AScriptTypeVal::F64(..)
+            | AScriptTypeVal::U64(..)
+            | AScriptTypeVal::U32(..)
+            | AScriptTypeVal::U16(..)
+            | AScriptTypeVal::U8(..)
+            | AScriptTypeVal::I64(..)
+            | AScriptTypeVal::I32(..)
+            | AScriptTypeVal::I16(..)
+            | AScriptTypeVal::I8(..)
+            | AScriptTypeVal::U8Vec
+            | AScriptTypeVal::U16Vec
+            | AScriptTypeVal::U32Vec
+            | AScriptTypeVal::U64Vec
+            | AScriptTypeVal::I8Vec
+            | AScriptTypeVal::I16Vec
+            | AScriptTypeVal::I32Vec
+            | AScriptTypeVal::I64Vec
+            | AScriptTypeVal::F32Vec
+            | AScriptTypeVal::F64Vec
+            | AScriptTypeVal::String(..)
+            | AScriptTypeVal::Token => temp_writer.write_line(&format!(
+              "slots.assign(0, AstSlot ({}::{}({}), {}, TokenRange::default()))",
+              ast.ast_type_name,
+              return_type.hcobj_type_name(None),
+              &reference,
+              "rng".to_string()
+            ))?,
+            r => {
+              eprintln!("{}", r.debug_string(None));
+              temp_writer.write_line(&reference)?
+            }
+          };
+        }
+        Some(statement) => {
+          let mut reference = String::new();
+          let mut return_type = AScriptTypeVal::Undefined;
+          let mut refs = BTreeSet::new();
+          let mut tokens = BTreeSet::new();
+          let mut statement_writer = temp_writer.checkpoint();
+
+          match render_expression(ast, statement, rule, &mut ref_index, 0) {
+            Some(_ref) => {
+              refs.append(&mut _ref.get_indices());
+              tokens.append(&mut _ref.get_tokens());
+              return_type = _ref.ast_type.clone();
+              reference = _ref.get_ref_string();
+              statement_writer.write_line(&_ref.to_init_string())?;
+            }
+            None => {}
+          }
+
+          write_slot_extraction(rule, refs, tokens, &mut temp_writer)?;
+
+          write_node_token(&mut temp_writer, rule)?;
+
+          temp_writer.merge_checkpoint(statement_writer)?;
+
+          let return_type = match return_type {
+            AScriptTypeVal::Undefined | AScriptTypeVal::GenericVec(None) => {
+              prod_data.iter().next().unwrap().0.into()
+            }
+            r => r,
+          };
+
+          match return_type {
+            AScriptTypeVal::GenericStructVec(..)
+            | AScriptTypeVal::TokenVec
+            | AScriptTypeVal::StringVec
+            | AScriptTypeVal::Bool(..)
+            | AScriptTypeVal::F32(..)
+            | AScriptTypeVal::F64(..)
+            | AScriptTypeVal::U64(..)
+            | AScriptTypeVal::U32(..)
+            | AScriptTypeVal::U16(..)
+            | AScriptTypeVal::U8(..)
+            | AScriptTypeVal::I64(..)
+            | AScriptTypeVal::I32(..)
+            | AScriptTypeVal::I16(..)
+            | AScriptTypeVal::I8(..)
+            | AScriptTypeVal::U8Vec
+            | AScriptTypeVal::U16Vec
+            | AScriptTypeVal::U32Vec
+            | AScriptTypeVal::U64Vec
+            | AScriptTypeVal::I8Vec
+            | AScriptTypeVal::I16Vec
+            | AScriptTypeVal::I32Vec
+            | AScriptTypeVal::I64Vec
+            | AScriptTypeVal::F32Vec
+            | AScriptTypeVal::F64Vec
+            | AScriptTypeVal::String(..)
+            | AScriptTypeVal::Token => temp_writer.write_line(&format!(
+              "slots.assign(0, AstSlot ({}::{}({}), {}, TokenRange::default()))",
+              ast.ast_type_name,
+              return_type.hcobj_type_name(None),
+              &reference,
+              "rng".to_string()
+            ))?,
+            r => {
+              eprintln!("{}", r.debug_string(None));
+              temp_writer.write_line(&reference)?
+            }
+          };
+        }
+        _ => {
+          noop = 2;
         }
       }
     }
@@ -488,7 +550,7 @@ impl<R: Reader + UTF8Reader, M> ReduceFunctions<R, M> {{
 }}
 ",
     ast.ast_type_name,
-    ordered_bodies.len(),
+    ordered_rules.len(),
     &refs.iter().map(|r| format!("{}::<R, M>", r)).collect::<Vec<String>>().join(",\n")
   ))?
   .newline()?;
@@ -914,7 +976,7 @@ fn node_to_struct(ref_: Ref, ast: &AScriptStore) -> Ref {
         format!(
           "if let {}::{}(obj) = %%
       {{ obj }}
-      else {{panic!(\"invalid node\")}}",
+      else {{unsafe {{ panic!(\"invalid node {{:?}}\", %%) }}}}",
           ast.ast_type_name, struct_name
         ),
         Struct(struct_type.into()),

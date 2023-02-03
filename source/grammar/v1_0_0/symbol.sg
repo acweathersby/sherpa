@@ -39,7 +39,7 @@ IGNORE { c:sp c:nl }
 
 <> class >
 
-        "c:" ( 'num' | 'nl' | 'sp' | 'id' | 'sym' | 'any' )
+        "c:" ( 'num' | 'nl' | 'sp' | 'id' | 'sym' | 'any' | 'tab' | 'htab' )
 
             :ast { t_ClassSymbol, c_Symbol , c_Terminal, val:str($2),  tok }
 

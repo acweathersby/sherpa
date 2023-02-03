@@ -7,6 +7,7 @@ IGNORE { c:sp c:nl }
     struct 
 
     | expression
+        :ast { t_AST_Statements, statements:[$1], tok }
 
     | "{" expression(*";") '}'
         :ast { t_AST_Statements, statements:$2, tok }

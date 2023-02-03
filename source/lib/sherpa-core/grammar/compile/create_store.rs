@@ -3,6 +3,7 @@ use super::parser::{
   *,
 };
 use crate::{
+  ascript::types::{ascript_first_node_id, ascript_last_node_id},
   compile::{GrammarRef, GrammarStore, ProductionId, Symbol, SymbolID},
   grammar::{compile::parser::sherpa::Export, create_production_guid_name, create_scanner_name},
   types::{
@@ -20,6 +21,7 @@ use crate::{
   SherpaError,
   SherpaResult,
 };
+use lazy_static::__Deref;
 use regex::Regex;
 use sherpa_runtime::types::Token;
 use std::{
@@ -297,8 +299,16 @@ fn get_symbol_details<'a>(
   loop {
     match sym {
       ASTNode::AnnotatedSymbol(annotated) => {
-        // Removes the dangling `^`, as in `^annotation_name`
-        data.annotation = annotated.reference.clone();
+        if annotated.reference.len() > 0 {
+
+          debug_assert_eq!(
+            &annotated.reference[0..1], "^",
+            "Annotation values are no longer prefixed with \"^\". The following line needs to be changed to:
+            data.annotation = annotated.reference.clone(); 
+            This assert can be removed after the change is made.");
+
+            data.annotation = annotated.reference[1..].to_string();
+          }
         data.is_exclusive = annotated.prority.is_some();
         data.is_optional |= annotated.is_optional;
         sym = &annotated.symbol;
@@ -532,7 +542,7 @@ fn create_rule_vectors<'a>(
               _ => unreachable!(),
             };
 
-            let mut body_a = sherpa::Rule {
+            let mut rule_a = sherpa::Rule {
               ast_definition: None,
               syntax_definition: None,
               recover_definition: None,
@@ -541,13 +551,13 @@ fn create_rule_vectors<'a>(
               tok: symbol.to_token(),
             };
 
-            let mut body_b = body_a.clone();
-            body_b.tok = sym.to_token();
+            let mut rule_b = rule_a.clone();
+            rule_b.tok = sym.to_token();
 
-            body_a.ast_definition = Some(Box::new(sherpa::Ascript::new(
+            rule_a.ast_definition = Some(Box::new(sherpa::Ascript::new(
               ASTNode::AST_Vector(Box::new(sherpa::AST_Vector::new(
                 vec![ASTNode::AST_NamedReference(Box::new(sherpa::AST_NamedReference {
-                  value: "--first--".to_string(),
+                  value: ascript_first_node_id.to_string(),
                   tok:   tok.clone(),
                 }))],
                 tok.clone(),
@@ -555,15 +565,15 @@ fn create_rule_vectors<'a>(
               tok.clone(),
             )));
 
-            body_b.ast_definition = Some(Box::new(sherpa::Ascript::new(
+            rule_b.ast_definition = Some(Box::new(sherpa::Ascript::new(
               ASTNode::AST_Vector(Box::new(sherpa::AST_Vector::new(
                 vec![
                   ASTNode::AST_NamedReference(Box::new(sherpa::AST_NamedReference {
-                    value: "--first--".to_string(),
+                    value: ascript_first_node_id.to_string(),
                     tok:   tok.clone(),
                   })),
                   ASTNode::AST_NamedReference(Box::new(sherpa::AST_NamedReference {
-                    value: "--last--".to_string(),
+                    value: ascript_last_node_id.to_string(),
                     tok:   tok.clone(),
                   })),
                 ],
@@ -573,14 +583,14 @@ fn create_rule_vectors<'a>(
             )));
 
             if let Some(terminal_symbol) = terminal_symbol {
-              body_b.symbols.insert(0, ASTNode::Terminal(terminal_symbol.clone()));
+              rule_b.symbols.insert(0, ASTNode::Terminal(terminal_symbol.clone()));
             }
 
             (*list_index) += 1;
 
             let (prod_sym, mut production) = create_ast_production(
               &(production_name.to_owned() + "_list_" + &(*list_index).to_string()),
-              &[Box::new(body_b), Box::new(body_a)],
+              &[Box::new(rule_b), Box::new(rule_a)],
               tok,
             );
 
@@ -681,19 +691,6 @@ fn process_rule<'a>(
         list_index,
       )?;
 
-      let reduce_fn_ids = match &rule.ast_definition {
-        Some(ascript_definition) => {
-          let reduce_id = ReduceFunctionId::from_token(ascript_definition.tok.clone());
-
-          g.reduce_functions
-            .entry(reduce_id)
-            .or_insert_with(|| ReduceFunctionType::Ascript(*ascript_definition.clone()));
-
-          vec![reduce_id]
-        }
-        _ => vec![],
-      };
-
       let mut unique_bodies = vec![];
       let mut seen = HashSet::new();
 
@@ -704,7 +701,7 @@ fn process_rule<'a>(
             syms: b.clone(),
             len: b.len() as u16,
             prod_id: get_production_identifiers(j, g, production).0,
-            reduce_fn_ids: reduce_fn_ids.clone(),
+            ast_definition: rule.ast_definition.as_ref().map(|d| d.deref().clone()),
             tok: t.clone(),
             grammar_ref: g.id.clone(),
             ..Default::default()

@@ -179,7 +179,7 @@ pub(crate) fn get_ascript_export_data(
           prod_id: production.id,
           id: RuleId(0),
           bytecode_id: 0,
-          reduce_fn_ids: vec![],
+          ast_definition: None,
           grammar_ref: g.id.clone(),
           tok: Token::default(),
         },
