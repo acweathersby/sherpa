@@ -101,7 +101,7 @@ impl Add<u32> for TokenRange {
 }
 
 impl TokenRange {
-  pub fn from_range(start: TokenRange, end: TokenRange) -> TokenRange {
+  pub fn from_range(start: TokenRange, end: TokenRange) -> Self {
     TokenRange {
       len:      end.off - start.off + end.len,
       off:      start.off,
@@ -111,7 +111,7 @@ impl TokenRange {
   }
 
   #[inline(always)]
-  pub const fn empty() -> TokenRange {
+  pub const fn empty() -> Self {
     TokenRange { len: 0, off: 0, line_num: u32::MAX - 1, line_off: 0 }
   }
 
@@ -130,6 +130,18 @@ impl TokenRange {
     Self {
       len:      length as u32,
       off:      self.off,
+      line_num: self.line_num,
+      line_off: self.line_off,
+    }
+  }
+
+  pub fn trim(&self, start_trim: u32, end_trim: u32) -> Self {
+    let new_len = (self.len as i32 - start_trim as i32 - end_trim as i32).max(0);
+    let new_off = (self.off + start_trim).min(self.off + self.len);
+
+    Self {
+      len:      new_len as u32,
+      off:      new_off,
       line_num: self.line_num,
       line_off: self.line_off,
     }

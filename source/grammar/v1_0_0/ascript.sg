@@ -182,6 +182,6 @@ IGNORE { c:sp c:nl }
     ( "tk" | "tok" | "token" ) range?
         :ast { t_AST_Token, range: $2 }
 
-<> range > "<" integer ( ","  integer  )? ">"
+<> range > "<" tk:integer ( ","  tk:integer  )? ">"
 
-        :ast { t_Range, start_trim:$2, end_trim:$3  }
+        :ast { t_Range, start_trim:i32($2), end_trim:i32($3) }

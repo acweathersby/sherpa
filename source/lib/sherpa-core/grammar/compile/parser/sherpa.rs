@@ -1,6 +1,3 @@
-#![allow(dead_code)]
-#![allow(unused)]
-#![allow(non_snake_case)]
 /// ### `sherpa` Rust Parser
 ///
 /// - **GENERATOR**: sherpa 1.0.0-beta1
@@ -1404,7 +1401,7 @@ impl Default for ASTNode {
   }
 }
 
-#[derive(Eq, PartialEq, Clone, Copy, Debug)]
+#[derive(Eq, PartialEq, Clone, Copy, Debug, Hash)]
 pub enum ASTNodeType {
   Undefined,
   NODES,
@@ -2503,12 +2500,12 @@ impl AnyGroup {
 }
 #[derive(Debug, Clone)]
 pub struct Range {
-  pub end_trim:   Vec<Token>,
-  pub start_trim: Vec<Token>,
+  pub end_trim:   i32,
+  pub start_trim: i32,
 }
 impl Range {
   #[inline]
-  pub fn new(end_trim: Vec<Token>, start_trim: Vec<Token>) -> Self {
+  pub fn new(end_trim: i32, start_trim: i32) -> Self {
     Self { end_trim, start_trim }
   }
 
@@ -5208,7 +5205,7 @@ fn ast_fn139<R: Reader + UTF8Reader, M>(
 /*
 annotated_symbol => list tk:reference "?" priority
 */
-fn ast_fn141<R: Reader + UTF8Reader, M>(
+fn ast_fn140<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5237,7 +5234,7 @@ fn ast_fn141<R: Reader + UTF8Reader, M>(
 /*
 annotated_symbol => list "?" priority
 */
-fn ast_fn142<R: Reader + UTF8Reader, M>(
+fn ast_fn141<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5263,7 +5260,7 @@ fn ast_fn142<R: Reader + UTF8Reader, M>(
 /*
 annotated_symbol => list tk:reference priority
 */
-fn ast_fn143<R: Reader + UTF8Reader, M>(
+fn ast_fn142<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5291,7 +5288,7 @@ fn ast_fn143<R: Reader + UTF8Reader, M>(
 /*
 annotated_symbol => list priority
 */
-fn ast_fn144<R: Reader + UTF8Reader, M>(
+fn ast_fn143<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5316,7 +5313,7 @@ fn ast_fn144<R: Reader + UTF8Reader, M>(
 /*
 annotated_symbol => list tk:reference "?"
 */
-fn ast_fn145<R: Reader + UTF8Reader, M>(
+fn ast_fn144<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5342,7 +5339,7 @@ fn ast_fn145<R: Reader + UTF8Reader, M>(
 /*
 annotated_symbol => list "?"
 */
-fn ast_fn146<R: Reader + UTF8Reader, M>(
+fn ast_fn145<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5365,7 +5362,7 @@ fn ast_fn146<R: Reader + UTF8Reader, M>(
 /*
 annotated_symbol => list tk:reference
 */
-fn ast_fn147<R: Reader + UTF8Reader, M>(
+fn ast_fn146<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5390,7 +5387,7 @@ fn ast_fn147<R: Reader + UTF8Reader, M>(
 /*
 annotated_symbol => list tk:reference priority "?"
 */
-fn ast_fn148<R: Reader + UTF8Reader, M>(
+fn ast_fn147<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5419,7 +5416,7 @@ fn ast_fn148<R: Reader + UTF8Reader, M>(
 /*
 annotated_symbol => list priority "?"
 */
-fn ast_fn149<R: Reader + UTF8Reader, M>(
+fn ast_fn148<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5445,7 +5442,7 @@ fn ast_fn149<R: Reader + UTF8Reader, M>(
 /*
 annotated_symbol => list "?" tk:reference priority
 */
-fn ast_fn150<R: Reader + UTF8Reader, M>(
+fn ast_fn149<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5474,7 +5471,7 @@ fn ast_fn150<R: Reader + UTF8Reader, M>(
 /*
 annotated_symbol => list "?" tk:reference
 */
-fn ast_fn151<R: Reader + UTF8Reader, M>(
+fn ast_fn150<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5500,7 +5497,7 @@ fn ast_fn151<R: Reader + UTF8Reader, M>(
 /*
 annotated_symbol => list "?" priority tk:reference
 */
-fn ast_fn152<R: Reader + UTF8Reader, M>(
+fn ast_fn151<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5529,7 +5526,7 @@ fn ast_fn152<R: Reader + UTF8Reader, M>(
 /*
 annotated_symbol => list priority tk:reference
 */
-fn ast_fn153<R: Reader + UTF8Reader, M>(
+fn ast_fn152<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5557,7 +5554,7 @@ fn ast_fn153<R: Reader + UTF8Reader, M>(
 /*
 annotated_symbol => list priority tk:reference "?"
 */
-fn ast_fn154<R: Reader + UTF8Reader, M>(
+fn ast_fn153<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5586,7 +5583,7 @@ fn ast_fn154<R: Reader + UTF8Reader, M>(
 /*
 annotated_symbol => list priority "?" tk:reference
 */
-fn ast_fn155<R: Reader + UTF8Reader, M>(
+fn ast_fn154<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5615,7 +5612,7 @@ fn ast_fn155<R: Reader + UTF8Reader, M>(
 /*
 instruction_sequence_group_0 => "lazy" '(' instruction_sequence_group_0_list_1 ':' instruction_sequence_group_0_list_2 ')' state_reference
 */
-fn ast_fn157<R: Reader + UTF8Reader, M>(
+fn ast_fn156<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5639,7 +5636,7 @@ fn ast_fn157<R: Reader + UTF8Reader, M>(
 /*
 token => "tk" range
 */
-fn ast_fn158<R: Reader + UTF8Reader, M>(
+fn ast_fn157<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5656,7 +5653,7 @@ fn ast_fn158<R: Reader + UTF8Reader, M>(
 /*
 token => "tok" range
 */
-fn ast_fn159<R: Reader + UTF8Reader, M>(
+fn ast_fn158<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5673,7 +5670,7 @@ fn ast_fn159<R: Reader + UTF8Reader, M>(
 /*
 token => "token" range
 */
-fn ast_fn160<R: Reader + UTF8Reader, M>(
+fn ast_fn159<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5690,7 +5687,7 @@ fn ast_fn160<R: Reader + UTF8Reader, M>(
 /*
 token => "tk"
 */
-fn ast_fn161<R: Reader + UTF8Reader, M>(
+fn ast_fn160<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5704,7 +5701,7 @@ fn ast_fn161<R: Reader + UTF8Reader, M>(
 /*
 token => "tok"
 */
-fn ast_fn162<R: Reader + UTF8Reader, M>(
+fn ast_fn161<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5718,7 +5715,7 @@ fn ast_fn162<R: Reader + UTF8Reader, M>(
 /*
 token => "token"
 */
-fn ast_fn163<R: Reader + UTF8Reader, M>(
+fn ast_fn162<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5732,7 +5729,7 @@ fn ast_fn163<R: Reader + UTF8Reader, M>(
 /*
 class => "c:" 'num'
 */
-fn ast_fn164<R: Reader + UTF8Reader, M>(
+fn ast_fn163<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5749,7 +5746,7 @@ fn ast_fn164<R: Reader + UTF8Reader, M>(
 /*
 class => "c:" 'nl'
 */
-fn ast_fn165<R: Reader + UTF8Reader, M>(
+fn ast_fn164<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5766,7 +5763,7 @@ fn ast_fn165<R: Reader + UTF8Reader, M>(
 /*
 class => "c:" 'sp'
 */
-fn ast_fn166<R: Reader + UTF8Reader, M>(
+fn ast_fn165<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5783,7 +5780,7 @@ fn ast_fn166<R: Reader + UTF8Reader, M>(
 /*
 class => "c:" 'id'
 */
-fn ast_fn167<R: Reader + UTF8Reader, M>(
+fn ast_fn166<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5800,7 +5797,7 @@ fn ast_fn167<R: Reader + UTF8Reader, M>(
 /*
 class => "c:" 'sym'
 */
-fn ast_fn168<R: Reader + UTF8Reader, M>(
+fn ast_fn167<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5817,7 +5814,7 @@ fn ast_fn168<R: Reader + UTF8Reader, M>(
 /*
 class => "c:" 'any'
 */
-fn ast_fn169<R: Reader + UTF8Reader, M>(
+fn ast_fn168<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5834,7 +5831,7 @@ fn ast_fn169<R: Reader + UTF8Reader, M>(
 /*
 class => "c:" 'tab'
 */
-fn ast_fn170<R: Reader + UTF8Reader, M>(
+fn ast_fn169<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5851,7 +5848,7 @@ fn ast_fn170<R: Reader + UTF8Reader, M>(
 /*
 class => "c:" 'htab'
 */
-fn ast_fn171<R: Reader + UTF8Reader, M>(
+fn ast_fn170<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5866,38 +5863,41 @@ fn ast_fn171<R: Reader + UTF8Reader, M>(
 }
 
 /*
-range => "<" integer "," integer ">"
+range => "<" tk:integer "," tk:integer ">"
+*/
+fn ast_fn171<R: Reader + UTF8Reader, M>(
+  _ctx_: &ParseContext<R, M>,
+  slots: &AstStackSlice<AstSlot<ASTNode>>,
+) {
+  let AstSlot(_, rng0, _) = slots.take(0);
+  let AstSlot(i1, rng1, _) = slots.take(1);
+  slots.take(2);
+  let AstSlot(i3, rng3, _) = slots.take(3);
+  let AstSlot(_, rng4, _) = slots.take(4);
+  let rng = rng0 + rng4;
+
+  let ref_3_0 = rng3.to_token(_ctx_.get_reader());
+  let ref_3_0 = ref_3_0.to_i32();
+  let ref_1_1 = rng1.to_token(_ctx_.get_reader());
+  let ref_1_1 = ref_1_1.to_i32();
+  let ref_6_0 = Range::new(ref_3_0, ref_1_1);
+  slots.assign(0, AstSlot(ASTNode::Range(Box::new(ref_6_0)), rng, TokenRange::default()))
+}
+
+/*
+range => "<" tk:integer ">"
 */
 fn ast_fn172<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
   let AstSlot(_, rng0, _) = slots.take(0);
-  let AstSlot(i1, ..) = slots.take(1);
-  slots.take(2);
-  let AstSlot(i3, ..) = slots.take(3);
-  let AstSlot(_, rng4, _) = slots.take(4);
-  let rng = rng0 + rng4;
-
-  let ref_3_0 = i3.into_tokens();
-  let ref_1_1 = i1.into_tokens();
-  let ref_6_0 = Range::new(ref_3_0, ref_1_1);
-  slots.assign(0, AstSlot(ASTNode::Range(Box::new(ref_6_0)), rng, TokenRange::default()))
-}
-
-/*
-range => "<" integer ">"
-*/
-fn ast_fn173<R: Reader + UTF8Reader, M>(
-  _ctx_: &ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
-) {
-  let AstSlot(_, rng0, _) = slots.take(0);
-  let AstSlot(i1, ..) = slots.take(1);
+  let AstSlot(i1, rng1, _) = slots.take(1);
   let AstSlot(_, rng2, _) = slots.take(2);
   let rng = rng0 + rng2;
 
-  let ref_1_1 = i1.into_tokens();
+  let ref_1_1 = rng1.to_token(_ctx_.get_reader());
+  let ref_1_1 = ref_1_1.to_i32();
   let ref_4_0 = Range::new(Default::default(), ref_1_1);
   slots.assign(0, AstSlot(ASTNode::Range(Box::new(ref_4_0)), rng, TokenRange::default()))
 }
@@ -5905,7 +5905,7 @@ fn ast_fn173<R: Reader + UTF8Reader, M>(
 /*
 scanner_declaration => "scanner" '[' tk:state_hash_token ']'
 */
-fn ast_fn174<R: Reader + UTF8Reader, M>(
+fn ast_fn173<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5923,7 +5923,7 @@ fn ast_fn174<R: Reader + UTF8Reader, M>(
 /*
 goto_instruction => "goto" state_reference
 */
-fn ast_fn175<R: Reader + UTF8Reader, M>(
+fn ast_fn174<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5940,7 +5940,7 @@ fn ast_fn175<R: Reader + UTF8Reader, M>(
 /*
 assertion_instruction => "assert" "peek" assert_class production_id_list '(' instruction_sequence ')'
 */
-fn ast_fn181<R: Reader + UTF8Reader, M>(
+fn ast_fn180<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5966,7 +5966,7 @@ fn ast_fn181<R: Reader + UTF8Reader, M>(
 /*
 assertion_instruction => "assert" assert_class production_id_list '(' instruction_sequence ')'
 */
-fn ast_fn182<R: Reader + UTF8Reader, M>(
+fn ast_fn181<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -5991,7 +5991,7 @@ fn ast_fn182<R: Reader + UTF8Reader, M>(
 /*
 assertion_instruction => "skip" production_id_list
 */
-fn ast_fn183<R: Reader + UTF8Reader, M>(
+fn ast_fn182<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6009,7 +6009,7 @@ fn ast_fn183<R: Reader + UTF8Reader, M>(
 /*
 assertion_instruction => "default" '(' instruction_sequence ')'
 */
-fn ast_fn184<R: Reader + UTF8Reader, M>(
+fn ast_fn183<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6027,7 +6027,7 @@ fn ast_fn184<R: Reader + UTF8Reader, M>(
 /*
 sequence_instruction_list_2 => sequence_instruction_list_2 token_num
 */
-fn ast_fn185<R: Reader + UTF8Reader, M>(
+fn ast_fn184<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6044,7 +6044,7 @@ fn ast_fn185<R: Reader + UTF8Reader, M>(
 /*
 sequence_instruction_list_2 => token_num
 */
-fn ast_fn186<R: Reader + UTF8Reader, M>(
+fn ast_fn185<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6060,7 +6060,7 @@ fn ast_fn186<R: Reader + UTF8Reader, M>(
 /*
 terminal => terminal_list_1 g:sp
 */
-fn ast_fn187<R: Reader + UTF8Reader, M>(
+fn ast_fn186<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6077,7 +6077,7 @@ fn ast_fn187<R: Reader + UTF8Reader, M>(
 /*
 terminal => terminal_list_1
 */
-fn ast_fn188<R: Reader + UTF8Reader, M>(
+fn ast_fn187<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6093,7 +6093,7 @@ fn ast_fn188<R: Reader + UTF8Reader, M>(
 /*
 terminal => """ terminal_list_2 """
 */
-fn ast_fn189<R: Reader + UTF8Reader, M>(
+fn ast_fn188<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6112,7 +6112,7 @@ fn ast_fn189<R: Reader + UTF8Reader, M>(
 /*
 terminal => "'" terminal_list_3 "'"
 */
-fn ast_fn190<R: Reader + UTF8Reader, M>(
+fn ast_fn189<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6130,7 +6130,7 @@ fn ast_fn190<R: Reader + UTF8Reader, M>(
 /*
 recover_definition => ":rec" "{" state "}"
 */
-fn ast_fn191<R: Reader + UTF8Reader, M>(
+fn ast_fn190<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6149,7 +6149,7 @@ fn ast_fn191<R: Reader + UTF8Reader, M>(
 /*
 rule => "!" rule_list_1 ast_definition syntax_definition recover_definition
 */
-fn ast_fn192<R: Reader + UTF8Reader, M>(
+fn ast_fn191<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6182,7 +6182,7 @@ fn ast_fn192<R: Reader + UTF8Reader, M>(
 /*
 rule => rule_list_1 ast_definition syntax_definition recover_definition
 */
-fn ast_fn193<R: Reader + UTF8Reader, M>(
+fn ast_fn192<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6214,7 +6214,7 @@ fn ast_fn193<R: Reader + UTF8Reader, M>(
 /*
 rule => "!" rule_list_1 syntax_definition recover_definition
 */
-fn ast_fn194<R: Reader + UTF8Reader, M>(
+fn ast_fn193<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6244,7 +6244,7 @@ fn ast_fn194<R: Reader + UTF8Reader, M>(
 /*
 rule => rule_list_1 syntax_definition recover_definition
 */
-fn ast_fn195<R: Reader + UTF8Reader, M>(
+fn ast_fn194<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6273,7 +6273,7 @@ fn ast_fn195<R: Reader + UTF8Reader, M>(
 /*
 rule => "!" rule_list_1 ast_definition recover_definition
 */
-fn ast_fn196<R: Reader + UTF8Reader, M>(
+fn ast_fn195<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6303,7 +6303,7 @@ fn ast_fn196<R: Reader + UTF8Reader, M>(
 /*
 rule => rule_list_1 ast_definition recover_definition
 */
-fn ast_fn197<R: Reader + UTF8Reader, M>(
+fn ast_fn196<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6332,7 +6332,7 @@ fn ast_fn197<R: Reader + UTF8Reader, M>(
 /*
 rule => "!" rule_list_1 recover_definition
 */
-fn ast_fn198<R: Reader + UTF8Reader, M>(
+fn ast_fn197<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6359,7 +6359,7 @@ fn ast_fn198<R: Reader + UTF8Reader, M>(
 /*
 rule => rule_list_1 recover_definition
 */
-fn ast_fn199<R: Reader + UTF8Reader, M>(
+fn ast_fn198<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6385,7 +6385,7 @@ fn ast_fn199<R: Reader + UTF8Reader, M>(
 /*
 rule => "!" rule_list_1 ast_definition syntax_definition
 */
-fn ast_fn200<R: Reader + UTF8Reader, M>(
+fn ast_fn199<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6415,7 +6415,7 @@ fn ast_fn200<R: Reader + UTF8Reader, M>(
 /*
 rule => rule_list_1 ast_definition syntax_definition
 */
-fn ast_fn201<R: Reader + UTF8Reader, M>(
+fn ast_fn200<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6444,7 +6444,7 @@ fn ast_fn201<R: Reader + UTF8Reader, M>(
 /*
 rule => "!" rule_list_1 syntax_definition
 */
-fn ast_fn202<R: Reader + UTF8Reader, M>(
+fn ast_fn201<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6471,7 +6471,7 @@ fn ast_fn202<R: Reader + UTF8Reader, M>(
 /*
 rule => rule_list_1 syntax_definition
 */
-fn ast_fn203<R: Reader + UTF8Reader, M>(
+fn ast_fn202<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6497,7 +6497,7 @@ fn ast_fn203<R: Reader + UTF8Reader, M>(
 /*
 rule => "!" rule_list_1 ast_definition
 */
-fn ast_fn204<R: Reader + UTF8Reader, M>(
+fn ast_fn203<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6524,7 +6524,7 @@ fn ast_fn204<R: Reader + UTF8Reader, M>(
 /*
 rule => rule_list_1 ast_definition
 */
-fn ast_fn205<R: Reader + UTF8Reader, M>(
+fn ast_fn204<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6550,7 +6550,7 @@ fn ast_fn205<R: Reader + UTF8Reader, M>(
 /*
 rule => "!" rule_list_1
 */
-fn ast_fn206<R: Reader + UTF8Reader, M>(
+fn ast_fn205<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6574,7 +6574,7 @@ fn ast_fn206<R: Reader + UTF8Reader, M>(
 /*
 rule => rule_list_1
 */
-fn ast_fn207<R: Reader + UTF8Reader, M>(
+fn ast_fn206<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6597,7 +6597,7 @@ fn ast_fn207<R: Reader + UTF8Reader, M>(
 /*
 state_declaration => "state" '[' tk:state_hash_token ']'
 */
-fn ast_fn208<R: Reader + UTF8Reader, M>(
+fn ast_fn207<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6615,7 +6615,7 @@ fn ast_fn208<R: Reader + UTF8Reader, M>(
 /*
 instruction_sequence_group_0_list_1 => instruction_sequence_group_0_list_1 g:num
 */
-fn ast_fn209<R: Reader + UTF8Reader, M>(
+fn ast_fn208<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6632,7 +6632,7 @@ fn ast_fn209<R: Reader + UTF8Reader, M>(
 /*
 instruction_sequence_group_0_list_1 => g:num
 */
-fn ast_fn210<R: Reader + UTF8Reader, M>(
+fn ast_fn209<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6648,7 +6648,7 @@ fn ast_fn210<R: Reader + UTF8Reader, M>(
 /*
 field => reference ':' syntax_spec
 */
-fn ast_fn211<R: Reader + UTF8Reader, M>(
+fn ast_fn210<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6667,7 +6667,7 @@ fn ast_fn211<R: Reader + UTF8Reader, M>(
 /*
 grammar_list_2 => grammar_list_2 production
 */
-fn ast_fn212<R: Reader + UTF8Reader, M>(
+fn ast_fn211<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6684,7 +6684,7 @@ fn ast_fn212<R: Reader + UTF8Reader, M>(
 /*
 grammar_list_2 => grammar_list_2 append_production
 */
-fn ast_fn213<R: Reader + UTF8Reader, M>(
+fn ast_fn212<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6701,7 +6701,7 @@ fn ast_fn213<R: Reader + UTF8Reader, M>(
 /*
 grammar_list_2 => production
 */
-fn ast_fn214<R: Reader + UTF8Reader, M>(
+fn ast_fn213<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6717,7 +6717,7 @@ fn ast_fn214<R: Reader + UTF8Reader, M>(
 /*
 grammar_list_2 => append_production
 */
-fn ast_fn215<R: Reader + UTF8Reader, M>(
+fn ast_fn214<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6733,7 +6733,7 @@ fn ast_fn215<R: Reader + UTF8Reader, M>(
 /*
 body => expression
 */
-fn ast_fn217<R: Reader + UTF8Reader, M>(
+fn ast_fn216<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6750,7 +6750,7 @@ fn ast_fn217<R: Reader + UTF8Reader, M>(
 /*
 body => "{" body_list_1 '}'
 */
-fn ast_fn218<R: Reader + UTF8Reader, M>(
+fn ast_fn217<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6767,7 +6767,7 @@ fn ast_fn218<R: Reader + UTF8Reader, M>(
 /*
 body => "{" '}'
 */
-fn ast_fn219<R: Reader + UTF8Reader, M>(
+fn ast_fn218<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6782,7 +6782,7 @@ fn ast_fn219<R: Reader + UTF8Reader, M>(
 /*
 map => "map" "(" expression ',' expression ')'
 */
-fn ast_fn225<R: Reader + UTF8Reader, M>(
+fn ast_fn224<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6803,7 +6803,7 @@ fn ast_fn225<R: Reader + UTF8Reader, M>(
 /*
 reduce_instruction => "reduce" tk:integer "symbols" "with" "rule" tk:integer
 */
-fn ast_fn226<R: Reader + UTF8Reader, M>(
+fn ast_fn225<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6826,7 +6826,7 @@ fn ast_fn226<R: Reader + UTF8Reader, M>(
 /*
 reduce_instruction => "reduce" tk:integer tk:integer
 */
-fn ast_fn227<R: Reader + UTF8Reader, M>(
+fn ast_fn226<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6846,7 +6846,7 @@ fn ast_fn227<R: Reader + UTF8Reader, M>(
 /*
 token_id_list_list_1 => token_id_list_list_1 token_num
 */
-fn ast_fn228<R: Reader + UTF8Reader, M>(
+fn ast_fn227<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6863,7 +6863,7 @@ fn ast_fn228<R: Reader + UTF8Reader, M>(
 /*
 token_id_list_list_1 => token_num
 */
-fn ast_fn229<R: Reader + UTF8Reader, M>(
+fn ast_fn228<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6879,7 +6879,7 @@ fn ast_fn229<R: Reader + UTF8Reader, M>(
 /*
 state => state_declaration scanner_declaration top_level_instructions on_fail expected_symbols
 */
-fn ast_fn230<R: Reader + UTF8Reader, M>(
+fn ast_fn229<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6904,7 +6904,7 @@ fn ast_fn230<R: Reader + UTF8Reader, M>(
 /*
 state => state_declaration top_level_instructions on_fail expected_symbols
 */
-fn ast_fn231<R: Reader + UTF8Reader, M>(
+fn ast_fn230<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6927,7 +6927,7 @@ fn ast_fn231<R: Reader + UTF8Reader, M>(
 /*
 state => state_declaration scanner_declaration top_level_instructions expected_symbols
 */
-fn ast_fn232<R: Reader + UTF8Reader, M>(
+fn ast_fn231<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6949,7 +6949,7 @@ fn ast_fn232<R: Reader + UTF8Reader, M>(
 /*
 state => state_declaration top_level_instructions expected_symbols
 */
-fn ast_fn233<R: Reader + UTF8Reader, M>(
+fn ast_fn232<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6970,7 +6970,7 @@ fn ast_fn233<R: Reader + UTF8Reader, M>(
 /*
 state => state_declaration scanner_declaration top_level_instructions on_fail
 */
-fn ast_fn234<R: Reader + UTF8Reader, M>(
+fn ast_fn233<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -6992,7 +6992,7 @@ fn ast_fn234<R: Reader + UTF8Reader, M>(
 /*
 state => state_declaration top_level_instructions on_fail
 */
-fn ast_fn235<R: Reader + UTF8Reader, M>(
+fn ast_fn234<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7013,7 +7013,7 @@ fn ast_fn235<R: Reader + UTF8Reader, M>(
 /*
 state => state_declaration scanner_declaration top_level_instructions
 */
-fn ast_fn236<R: Reader + UTF8Reader, M>(
+fn ast_fn235<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7032,7 +7032,7 @@ fn ast_fn236<R: Reader + UTF8Reader, M>(
 /*
 state => state_declaration top_level_instructions
 */
-fn ast_fn237<R: Reader + UTF8Reader, M>(
+fn ast_fn236<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7050,7 +7050,7 @@ fn ast_fn237<R: Reader + UTF8Reader, M>(
 /*
 production_symbol => tk:identifier_syms
 */
-fn ast_fn238<R: Reader + UTF8Reader, M>(
+fn ast_fn237<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7067,7 +7067,7 @@ fn ast_fn238<R: Reader + UTF8Reader, M>(
 /*
 on_fail => "on" "fail" state_declaration top_level_instructions on_fail expected_symbols
 */
-fn ast_fn239<R: Reader + UTF8Reader, M>(
+fn ast_fn238<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7092,7 +7092,7 @@ fn ast_fn239<R: Reader + UTF8Reader, M>(
 /*
 on_fail => "on" "fail" state_declaration top_level_instructions expected_symbols
 */
-fn ast_fn240<R: Reader + UTF8Reader, M>(
+fn ast_fn239<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7114,7 +7114,7 @@ fn ast_fn240<R: Reader + UTF8Reader, M>(
 /*
 on_fail => "on" "fail" state_declaration top_level_instructions on_fail
 */
-fn ast_fn241<R: Reader + UTF8Reader, M>(
+fn ast_fn240<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7136,7 +7136,7 @@ fn ast_fn241<R: Reader + UTF8Reader, M>(
 /*
 on_fail => "on" "fail" state_declaration top_level_instructions
 */
-fn ast_fn242<R: Reader + UTF8Reader, M>(
+fn ast_fn241<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7155,7 +7155,7 @@ fn ast_fn242<R: Reader + UTF8Reader, M>(
 /*
 instruction_sequence => instruction_sequence_list_1 "then" instruction_sequence_list_2 instruction_sequence_group_2
 */
-fn ast_fn243<R: Reader + UTF8Reader, M>(
+fn ast_fn242<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7176,7 +7176,7 @@ fn ast_fn243<R: Reader + UTF8Reader, M>(
 /*
 instruction_sequence => instruction_sequence_list_1 instruction_sequence_group_2
 */
-fn ast_fn244<R: Reader + UTF8Reader, M>(
+fn ast_fn243<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7193,7 +7193,7 @@ fn ast_fn244<R: Reader + UTF8Reader, M>(
 /*
 instruction_sequence => instruction_sequence_list_1 "then" instruction_sequence_list_2
 */
-fn ast_fn245<R: Reader + UTF8Reader, M>(
+fn ast_fn244<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7211,7 +7211,7 @@ fn ast_fn245<R: Reader + UTF8Reader, M>(
 /*
 instruction_sequence => instruction_sequence_list_1
 */
-fn ast_fn246<R: Reader + UTF8Reader, M>(
+fn ast_fn245<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7225,7 +7225,7 @@ fn ast_fn246<R: Reader + UTF8Reader, M>(
 /*
 instruction_sequence => instruction_sequence_list_3 instruction_sequence_group_1
 */
-fn ast_fn247<R: Reader + UTF8Reader, M>(
+fn ast_fn246<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7242,7 +7242,7 @@ fn ast_fn247<R: Reader + UTF8Reader, M>(
 /*
 instruction_sequence => instruction_sequence_list_3
 */
-fn ast_fn248<R: Reader + UTF8Reader, M>(
+fn ast_fn247<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7256,7 +7256,7 @@ fn ast_fn248<R: Reader + UTF8Reader, M>(
 /*
 instruction_sequence => instruction_sequence_group_0
 */
-fn ast_fn249<R: Reader + UTF8Reader, M>(
+fn ast_fn248<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7272,7 +7272,7 @@ fn ast_fn249<R: Reader + UTF8Reader, M>(
 /*
 grammar => grammar_list_1 grammar_list_2
 */
-fn ast_fn250<R: Reader + UTF8Reader, M>(
+fn ast_fn249<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7299,7 +7299,7 @@ fn ast_fn250<R: Reader + UTF8Reader, M>(
 /*
 grammar => grammar_list_2
 */
-fn ast_fn251<R: Reader + UTF8Reader, M>(
+fn ast_fn250<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7324,7 +7324,7 @@ fn ast_fn251<R: Reader + UTF8Reader, M>(
 /*
 top_level_instructions_list_1 => top_level_instructions_list_1 assertion_instruction
 */
-fn ast_fn252<R: Reader + UTF8Reader, M>(
+fn ast_fn251<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7341,7 +7341,7 @@ fn ast_fn252<R: Reader + UTF8Reader, M>(
 /*
 top_level_instructions_list_1 => assertion_instruction
 */
-fn ast_fn253<R: Reader + UTF8Reader, M>(
+fn ast_fn252<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7355,42 +7355,9 @@ fn ast_fn253<R: Reader + UTF8Reader, M>(
 }
 
 /*
-integer_list_1 => integer_list_1 g:num
-*/
-fn ast_fn255<R: Reader + UTF8Reader, M>(
-  _ctx_: &ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
-) {
-  let AstSlot(i0, rng0, _) = slots.take(0);
-  let AstSlot(i1, rng1, _) = slots.take(1);
-  let rng = rng0 + rng1;
-
-  let ref_1_0 = rng1.to_token(_ctx_.get_reader());
-  let mut ref_0_0 = i0.into_tokens();
-  ref_0_0.push(ref_1_0);
-  slots.assign(0, AstSlot(ASTNode::TOKENS(ref_0_0), rng, TokenRange::default()))
-}
-
-/*
-integer_list_1 => g:num
-*/
-fn ast_fn256<R: Reader + UTF8Reader, M>(
-  _ctx_: &ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
-) {
-  let AstSlot(i0, rng0, _) = slots.take(0);
-  let rng = rng0;
-
-  let ref_0_0 = rng0.to_token(_ctx_.get_reader());
-  let mut ref_2_0 = vec![];
-  ref_2_0.push(ref_0_0);
-  slots.assign(0, AstSlot(ASTNode::TOKENS(ref_2_0), rng, TokenRange::default()))
-}
-
-/*
 declaration_list_1 => declaration_list_1 ',' field
 */
-fn ast_fn257<R: Reader + UTF8Reader, M>(
+fn ast_fn254<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7408,7 +7375,7 @@ fn ast_fn257<R: Reader + UTF8Reader, M>(
 /*
 declaration_list_1 => field
 */
-fn ast_fn258<R: Reader + UTF8Reader, M>(
+fn ast_fn255<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7424,7 +7391,7 @@ fn ast_fn258<R: Reader + UTF8Reader, M>(
 /*
 sequence_instruction_list_1 => sequence_instruction_list_1 state_reference
 */
-fn ast_fn259<R: Reader + UTF8Reader, M>(
+fn ast_fn256<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7441,7 +7408,7 @@ fn ast_fn259<R: Reader + UTF8Reader, M>(
 /*
 sequence_instruction_list_1 => state_reference
 */
-fn ast_fn260<R: Reader + UTF8Reader, M>(
+fn ast_fn257<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7457,7 +7424,7 @@ fn ast_fn260<R: Reader + UTF8Reader, M>(
 /*
 declaration => '{' declaration_list_1 '}'
 */
-fn ast_fn261<R: Reader + UTF8Reader, M>(
+fn ast_fn258<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7482,7 +7449,7 @@ fn ast_fn261<R: Reader + UTF8Reader, M>(
 /*
 production => "<" production_list_1 ">" "lazy" priority non_terminal ">" rules
 */
-fn ast_fn264<R: Reader + UTF8Reader, M>(
+fn ast_fn261<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7525,7 +7492,7 @@ fn ast_fn264<R: Reader + UTF8Reader, M>(
 /*
 production => "<" ">" "lazy" priority non_terminal ">" rules
 */
-fn ast_fn265<R: Reader + UTF8Reader, M>(
+fn ast_fn262<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7566,7 +7533,7 @@ fn ast_fn265<R: Reader + UTF8Reader, M>(
 /*
 production => "<" production_list_1 ">" priority non_terminal ">" rules
 */
-fn ast_fn266<R: Reader + UTF8Reader, M>(
+fn ast_fn263<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7608,7 +7575,7 @@ fn ast_fn266<R: Reader + UTF8Reader, M>(
 /*
 production => "<" ">" priority non_terminal ">" rules
 */
-fn ast_fn267<R: Reader + UTF8Reader, M>(
+fn ast_fn264<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7648,7 +7615,7 @@ fn ast_fn267<R: Reader + UTF8Reader, M>(
 /*
 production => "<" production_list_1 ">" "lazy" non_terminal ">" rules
 */
-fn ast_fn268<R: Reader + UTF8Reader, M>(
+fn ast_fn265<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7688,7 +7655,7 @@ fn ast_fn268<R: Reader + UTF8Reader, M>(
 /*
 production => "<" ">" "lazy" non_terminal ">" rules
 */
-fn ast_fn269<R: Reader + UTF8Reader, M>(
+fn ast_fn266<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7726,7 +7693,7 @@ fn ast_fn269<R: Reader + UTF8Reader, M>(
 /*
 production => "<" production_list_1 ">" non_terminal ">" rules
 */
-fn ast_fn270<R: Reader + UTF8Reader, M>(
+fn ast_fn267<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7765,7 +7732,7 @@ fn ast_fn270<R: Reader + UTF8Reader, M>(
 /*
 production => "<" ">" non_terminal ">" rules
 */
-fn ast_fn271<R: Reader + UTF8Reader, M>(
+fn ast_fn268<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7802,7 +7769,7 @@ fn ast_fn271<R: Reader + UTF8Reader, M>(
 /*
 struct_list_1 => struct_list_1 "," struct_prop
 */
-fn ast_fn273<R: Reader + UTF8Reader, M>(
+fn ast_fn270<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7820,7 +7787,7 @@ fn ast_fn273<R: Reader + UTF8Reader, M>(
 /*
 struct_list_1 => struct_prop
 */
-fn ast_fn274<R: Reader + UTF8Reader, M>(
+fn ast_fn271<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7836,7 +7803,7 @@ fn ast_fn274<R: Reader + UTF8Reader, M>(
 /*
 template_name => identifier
 */
-fn ast_fn275<R: Reader + UTF8Reader, M>(
+fn ast_fn272<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7851,7 +7818,7 @@ fn ast_fn275<R: Reader + UTF8Reader, M>(
 /*
 grammar_list_1 => grammar_list_1 preamble
 */
-fn ast_fn276<R: Reader + UTF8Reader, M>(
+fn ast_fn273<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7868,7 +7835,7 @@ fn ast_fn276<R: Reader + UTF8Reader, M>(
 /*
 grammar_list_1 => preamble
 */
-fn ast_fn277<R: Reader + UTF8Reader, M>(
+fn ast_fn274<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7884,7 +7851,7 @@ fn ast_fn277<R: Reader + UTF8Reader, M>(
 /*
 any_group_list_1 => any_group_list_1 annotated_symbol
 */
-fn ast_fn278<R: Reader + UTF8Reader, M>(
+fn ast_fn275<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7901,7 +7868,7 @@ fn ast_fn278<R: Reader + UTF8Reader, M>(
 /*
 any_group_list_1 => annotated_symbol
 */
-fn ast_fn279<R: Reader + UTF8Reader, M>(
+fn ast_fn276<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7917,7 +7884,7 @@ fn ast_fn279<R: Reader + UTF8Reader, M>(
 /*
 import_clause_list_1 => import_clause_list_1 g:id
 */
-fn ast_fn280<R: Reader + UTF8Reader, M>(
+fn ast_fn277<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7934,7 +7901,7 @@ fn ast_fn280<R: Reader + UTF8Reader, M>(
 /*
 import_clause_list_1 => import_clause_list_1 g:sym
 */
-fn ast_fn281<R: Reader + UTF8Reader, M>(
+fn ast_fn278<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7951,7 +7918,7 @@ fn ast_fn281<R: Reader + UTF8Reader, M>(
 /*
 import_clause_list_1 => g:id
 */
-fn ast_fn282<R: Reader + UTF8Reader, M>(
+fn ast_fn279<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7967,7 +7934,7 @@ fn ast_fn282<R: Reader + UTF8Reader, M>(
 /*
 import_clause_list_1 => g:sym
 */
-fn ast_fn283<R: Reader + UTF8Reader, M>(
+fn ast_fn280<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7983,7 +7950,7 @@ fn ast_fn283<R: Reader + UTF8Reader, M>(
 /*
 green => "g" tk:integer
 */
-fn ast_fn288<R: Reader + UTF8Reader, M>(
+fn ast_fn285<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -7999,7 +7966,7 @@ fn ast_fn288<R: Reader + UTF8Reader, M>(
 /*
 vector_list_1 => vector_list_1 "," expression
 */
-fn ast_fn289<R: Reader + UTF8Reader, M>(
+fn ast_fn286<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8017,7 +7984,7 @@ fn ast_fn289<R: Reader + UTF8Reader, M>(
 /*
 vector_list_1 => expression
 */
-fn ast_fn290<R: Reader + UTF8Reader, M>(
+fn ast_fn287<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8033,7 +8000,7 @@ fn ast_fn290<R: Reader + UTF8Reader, M>(
 /*
 instruction_sequence_group_1 => "then" "repeat" "state"
 */
-fn ast_fn291<R: Reader + UTF8Reader, M>(
+fn ast_fn288<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8049,7 +8016,7 @@ fn ast_fn291<R: Reader + UTF8Reader, M>(
 /*
 blue => "b" tk:integer
 */
-fn ast_fn292<R: Reader + UTF8Reader, M>(
+fn ast_fn289<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8065,7 +8032,7 @@ fn ast_fn292<R: Reader + UTF8Reader, M>(
 /*
 literal => "true"
 */
-fn ast_fn300<R: Reader + UTF8Reader, M>(
+fn ast_fn297<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8080,7 +8047,7 @@ fn ast_fn300<R: Reader + UTF8Reader, M>(
 /*
 literal => "false"
 */
-fn ast_fn301<R: Reader + UTF8Reader, M>(
+fn ast_fn298<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8095,7 +8062,7 @@ fn ast_fn301<R: Reader + UTF8Reader, M>(
 /*
 literal => tk:integer
 */
-fn ast_fn302<R: Reader + UTF8Reader, M>(
+fn ast_fn299<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8111,7 +8078,7 @@ fn ast_fn302<R: Reader + UTF8Reader, M>(
 /*
 member => reference '.' identifier
 */
-fn ast_fn304<R: Reader + UTF8Reader, M>(
+fn ast_fn301<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8129,7 +8096,7 @@ fn ast_fn304<R: Reader + UTF8Reader, M>(
 /*
 terminal_list_2 => terminal_list_2 g:id
 */
-fn ast_fn305<R: Reader + UTF8Reader, M>(
+fn ast_fn302<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8146,7 +8113,7 @@ fn ast_fn305<R: Reader + UTF8Reader, M>(
 /*
 terminal_list_2 => terminal_list_2 g:sym
 */
-fn ast_fn306<R: Reader + UTF8Reader, M>(
+fn ast_fn303<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8163,7 +8130,7 @@ fn ast_fn306<R: Reader + UTF8Reader, M>(
 /*
 terminal_list_2 => terminal_list_2 g:num
 */
-fn ast_fn307<R: Reader + UTF8Reader, M>(
+fn ast_fn304<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8180,7 +8147,7 @@ fn ast_fn307<R: Reader + UTF8Reader, M>(
 /*
 terminal_list_2 => terminal_list_2 g:sp
 */
-fn ast_fn308<R: Reader + UTF8Reader, M>(
+fn ast_fn305<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8197,7 +8164,7 @@ fn ast_fn308<R: Reader + UTF8Reader, M>(
 /*
 terminal_list_2 => terminal_list_2 escaped
 */
-fn ast_fn309<R: Reader + UTF8Reader, M>(
+fn ast_fn306<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8214,7 +8181,7 @@ fn ast_fn309<R: Reader + UTF8Reader, M>(
 /*
 terminal_list_2 => g:id
 */
-fn ast_fn310<R: Reader + UTF8Reader, M>(
+fn ast_fn307<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8230,7 +8197,7 @@ fn ast_fn310<R: Reader + UTF8Reader, M>(
 /*
 terminal_list_2 => g:sym
 */
-fn ast_fn311<R: Reader + UTF8Reader, M>(
+fn ast_fn308<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8246,7 +8213,7 @@ fn ast_fn311<R: Reader + UTF8Reader, M>(
 /*
 terminal_list_2 => g:num
 */
-fn ast_fn312<R: Reader + UTF8Reader, M>(
+fn ast_fn309<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8262,7 +8229,7 @@ fn ast_fn312<R: Reader + UTF8Reader, M>(
 /*
 terminal_list_2 => g:sp
 */
-fn ast_fn313<R: Reader + UTF8Reader, M>(
+fn ast_fn310<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8278,7 +8245,7 @@ fn ast_fn313<R: Reader + UTF8Reader, M>(
 /*
 terminal_list_2 => escaped
 */
-fn ast_fn314<R: Reader + UTF8Reader, M>(
+fn ast_fn311<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8294,7 +8261,7 @@ fn ast_fn314<R: Reader + UTF8Reader, M>(
 /*
 import_clause => "IMPORT" import_clause_list_1 g:sp "AS" identifier
 */
-fn ast_fn315<R: Reader + UTF8Reader, M>(
+fn ast_fn312<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8316,7 +8283,7 @@ fn ast_fn315<R: Reader + UTF8Reader, M>(
 /*
 import_clause => "IMPORT" import_clause_list_1 g:sp "as" identifier
 */
-fn ast_fn316<R: Reader + UTF8Reader, M>(
+fn ast_fn313<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8338,7 +8305,7 @@ fn ast_fn316<R: Reader + UTF8Reader, M>(
 /*
 string_convert => "str" convert_initializer
 */
-fn ast_fn317<R: Reader + UTF8Reader, M>(
+fn ast_fn314<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8355,7 +8322,7 @@ fn ast_fn317<R: Reader + UTF8Reader, M>(
 /*
 string_convert => "str"
 */
-fn ast_fn318<R: Reader + UTF8Reader, M>(
+fn ast_fn315<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8369,7 +8336,7 @@ fn ast_fn318<R: Reader + UTF8Reader, M>(
 /*
 syntax_spec => identifier color
 */
-fn ast_fn319<R: Reader + UTF8Reader, M>(
+fn ast_fn316<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8387,7 +8354,7 @@ fn ast_fn319<R: Reader + UTF8Reader, M>(
 /*
 syntax_spec => color
 */
-fn ast_fn320<R: Reader + UTF8Reader, M>(
+fn ast_fn317<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8403,7 +8370,7 @@ fn ast_fn320<R: Reader + UTF8Reader, M>(
 /*
 syntax_spec => identifier
 */
-fn ast_fn321<R: Reader + UTF8Reader, M>(
+fn ast_fn318<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8418,7 +8385,7 @@ fn ast_fn321<R: Reader + UTF8Reader, M>(
 /*
 list => symbol "(+" terminal ')'
 */
-fn ast_fn322<R: Reader + UTF8Reader, M>(
+fn ast_fn319<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8439,7 +8406,7 @@ fn ast_fn322<R: Reader + UTF8Reader, M>(
 /*
 list => symbol "(+" ')'
 */
-fn ast_fn323<R: Reader + UTF8Reader, M>(
+fn ast_fn320<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8457,7 +8424,7 @@ fn ast_fn323<R: Reader + UTF8Reader, M>(
 /*
 list => symbol "(*" terminal ')'
 */
-fn ast_fn324<R: Reader + UTF8Reader, M>(
+fn ast_fn321<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8479,7 +8446,7 @@ fn ast_fn324<R: Reader + UTF8Reader, M>(
 /*
 list => symbol "(*" ')'
 */
-fn ast_fn325<R: Reader + UTF8Reader, M>(
+fn ast_fn322<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8498,7 +8465,7 @@ fn ast_fn325<R: Reader + UTF8Reader, M>(
 /*
 import_production_symbol => tk:identifier_syms '::' tk:identifier_syms
 */
-fn ast_fn329<R: Reader + UTF8Reader, M>(
+fn ast_fn326<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8521,7 +8488,7 @@ fn ast_fn329<R: Reader + UTF8Reader, M>(
 /*
 bool_convert => "bool" convert_initializer
 */
-fn ast_fn330<R: Reader + UTF8Reader, M>(
+fn ast_fn327<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8538,7 +8505,7 @@ fn ast_fn330<R: Reader + UTF8Reader, M>(
 /*
 bool_convert => "bool"
 */
-fn ast_fn331<R: Reader + UTF8Reader, M>(
+fn ast_fn328<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8552,7 +8519,7 @@ fn ast_fn331<R: Reader + UTF8Reader, M>(
 /*
 ignore_clause_list_1 => ignore_clause_list_1 terminal_non_terminal
 */
-fn ast_fn332<R: Reader + UTF8Reader, M>(
+fn ast_fn329<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8569,7 +8536,7 @@ fn ast_fn332<R: Reader + UTF8Reader, M>(
 /*
 ignore_clause_list_1 => ignore_clause_list_1 terminal
 */
-fn ast_fn333<R: Reader + UTF8Reader, M>(
+fn ast_fn330<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8586,7 +8553,7 @@ fn ast_fn333<R: Reader + UTF8Reader, M>(
 /*
 ignore_clause_list_1 => ignore_clause_list_1 class
 */
-fn ast_fn334<R: Reader + UTF8Reader, M>(
+fn ast_fn331<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8603,7 +8570,7 @@ fn ast_fn334<R: Reader + UTF8Reader, M>(
 /*
 ignore_clause_list_1 => terminal_non_terminal
 */
-fn ast_fn335<R: Reader + UTF8Reader, M>(
+fn ast_fn332<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8619,7 +8586,7 @@ fn ast_fn335<R: Reader + UTF8Reader, M>(
 /*
 ignore_clause_list_1 => terminal
 */
-fn ast_fn336<R: Reader + UTF8Reader, M>(
+fn ast_fn333<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8635,7 +8602,7 @@ fn ast_fn336<R: Reader + UTF8Reader, M>(
 /*
 ignore_clause_list_1 => class
 */
-fn ast_fn337<R: Reader + UTF8Reader, M>(
+fn ast_fn334<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8651,7 +8618,7 @@ fn ast_fn337<R: Reader + UTF8Reader, M>(
 /*
 terminal_list_3 => terminal_list_3 g:id
 */
-fn ast_fn338<R: Reader + UTF8Reader, M>(
+fn ast_fn335<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8668,7 +8635,7 @@ fn ast_fn338<R: Reader + UTF8Reader, M>(
 /*
 terminal_list_3 => terminal_list_3 g:sym
 */
-fn ast_fn339<R: Reader + UTF8Reader, M>(
+fn ast_fn336<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8685,7 +8652,7 @@ fn ast_fn339<R: Reader + UTF8Reader, M>(
 /*
 terminal_list_3 => terminal_list_3 g:num
 */
-fn ast_fn340<R: Reader + UTF8Reader, M>(
+fn ast_fn337<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8702,7 +8669,7 @@ fn ast_fn340<R: Reader + UTF8Reader, M>(
 /*
 terminal_list_3 => terminal_list_3 g:sp
 */
-fn ast_fn341<R: Reader + UTF8Reader, M>(
+fn ast_fn338<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8719,7 +8686,7 @@ fn ast_fn341<R: Reader + UTF8Reader, M>(
 /*
 terminal_list_3 => terminal_list_3 escaped
 */
-fn ast_fn342<R: Reader + UTF8Reader, M>(
+fn ast_fn339<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8736,7 +8703,7 @@ fn ast_fn342<R: Reader + UTF8Reader, M>(
 /*
 terminal_list_3 => g:id
 */
-fn ast_fn343<R: Reader + UTF8Reader, M>(
+fn ast_fn340<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8752,7 +8719,7 @@ fn ast_fn343<R: Reader + UTF8Reader, M>(
 /*
 terminal_list_3 => g:sym
 */
-fn ast_fn344<R: Reader + UTF8Reader, M>(
+fn ast_fn341<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8768,7 +8735,7 @@ fn ast_fn344<R: Reader + UTF8Reader, M>(
 /*
 terminal_list_3 => g:num
 */
-fn ast_fn345<R: Reader + UTF8Reader, M>(
+fn ast_fn342<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8784,7 +8751,7 @@ fn ast_fn345<R: Reader + UTF8Reader, M>(
 /*
 terminal_list_3 => g:sp
 */
-fn ast_fn346<R: Reader + UTF8Reader, M>(
+fn ast_fn343<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8800,7 +8767,7 @@ fn ast_fn346<R: Reader + UTF8Reader, M>(
 /*
 terminal_list_3 => escaped
 */
-fn ast_fn347<R: Reader + UTF8Reader, M>(
+fn ast_fn344<R: Reader + UTF8Reader, M>(
   _ctx_: &ParseContext<R, M>,
   slots: &AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -8813,7 +8780,7 @@ fn ast_fn347<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::TOKENS(ref_2_0), rng, TokenRange::default()))
 }
 
-struct ReduceFunctions<R: Reader + UTF8Reader, M>(pub [Reducer<R, M, ASTNode>; 348]);
+struct ReduceFunctions<R: Reader + UTF8Reader, M>(pub [Reducer<R, M, ASTNode>; 345]);
 impl<R: Reader + UTF8Reader, M> ReduceFunctions<R, M> {
   pub const fn new() -> Self {
     Self([
@@ -8957,7 +8924,7 @@ impl<R: Reader + UTF8Reader, M> ReduceFunctions<R, M> {
       /* 137 */ ast_fn137::<R, M>,
       /* 138 */ ast_fn138::<R, M>,
       /* 139 */ ast_fn139::<R, M>,
-      /* 140 1 */ default_fn::<R, M>,
+      /* 140 */ ast_fn140::<R, M>,
       /* 141 */ ast_fn141::<R, M>,
       /* 142 */ ast_fn142::<R, M>,
       /* 143 */ ast_fn143::<R, M>,
@@ -8972,8 +8939,8 @@ impl<R: Reader + UTF8Reader, M> ReduceFunctions<R, M> {
       /* 152 */ ast_fn152::<R, M>,
       /* 153 */ ast_fn153::<R, M>,
       /* 154 */ ast_fn154::<R, M>,
-      /* 155 */ ast_fn155::<R, M>,
-      /* 156 1 */ default_fn::<R, M>,
+      /* 155 1 */ default_fn::<R, M>,
+      /* 156 */ ast_fn156::<R, M>,
       /* 157 */ ast_fn157::<R, M>,
       /* 158 */ ast_fn158::<R, M>,
       /* 159 */ ast_fn159::<R, M>,
@@ -8992,12 +8959,12 @@ impl<R: Reader + UTF8Reader, M> ReduceFunctions<R, M> {
       /* 172 */ ast_fn172::<R, M>,
       /* 173 */ ast_fn173::<R, M>,
       /* 174 */ ast_fn174::<R, M>,
-      /* 175 */ ast_fn175::<R, M>,
+      /* 175 1 */ default_fn::<R, M>,
       /* 176 1 */ default_fn::<R, M>,
       /* 177 1 */ default_fn::<R, M>,
       /* 178 1 */ default_fn::<R, M>,
       /* 179 1 */ default_fn::<R, M>,
-      /* 180 1 */ default_fn::<R, M>,
+      /* 180 */ ast_fn180::<R, M>,
       /* 181 */ ast_fn181::<R, M>,
       /* 182 */ ast_fn182::<R, M>,
       /* 183 */ ast_fn183::<R, M>,
@@ -9032,16 +8999,16 @@ impl<R: Reader + UTF8Reader, M> ReduceFunctions<R, M> {
       /* 212 */ ast_fn212::<R, M>,
       /* 213 */ ast_fn213::<R, M>,
       /* 214 */ ast_fn214::<R, M>,
-      /* 215 */ ast_fn215::<R, M>,
-      /* 216 1 */ default_fn::<R, M>,
+      /* 215 1 */ default_fn::<R, M>,
+      /* 216 */ ast_fn216::<R, M>,
       /* 217 */ ast_fn217::<R, M>,
       /* 218 */ ast_fn218::<R, M>,
-      /* 219 */ ast_fn219::<R, M>,
+      /* 219 1 */ default_fn::<R, M>,
       /* 220 1 */ default_fn::<R, M>,
       /* 221 1 */ default_fn::<R, M>,
       /* 222 1 */ default_fn::<R, M>,
       /* 223 1 */ default_fn::<R, M>,
-      /* 224 1 */ default_fn::<R, M>,
+      /* 224 */ ast_fn224::<R, M>,
       /* 225 */ ast_fn225::<R, M>,
       /* 226 */ ast_fn226::<R, M>,
       /* 227 */ ast_fn227::<R, M>,
@@ -9070,26 +9037,26 @@ impl<R: Reader + UTF8Reader, M> ReduceFunctions<R, M> {
       /* 250 */ ast_fn250::<R, M>,
       /* 251 */ ast_fn251::<R, M>,
       /* 252 */ ast_fn252::<R, M>,
-      /* 253 */ ast_fn253::<R, M>,
-      /* 254 1 */ default_fn::<R, M>,
+      /* 253 1 */ default_fn::<R, M>,
+      /* 254 */ ast_fn254::<R, M>,
       /* 255 */ ast_fn255::<R, M>,
       /* 256 */ ast_fn256::<R, M>,
       /* 257 */ ast_fn257::<R, M>,
       /* 258 */ ast_fn258::<R, M>,
-      /* 259 */ ast_fn259::<R, M>,
-      /* 260 */ ast_fn260::<R, M>,
+      /* 259 1 */ default_fn::<R, M>,
+      /* 260 1 */ default_fn::<R, M>,
       /* 261 */ ast_fn261::<R, M>,
-      /* 262 1 */ default_fn::<R, M>,
-      /* 263 1 */ default_fn::<R, M>,
+      /* 262 */ ast_fn262::<R, M>,
+      /* 263 */ ast_fn263::<R, M>,
       /* 264 */ ast_fn264::<R, M>,
       /* 265 */ ast_fn265::<R, M>,
       /* 266 */ ast_fn266::<R, M>,
       /* 267 */ ast_fn267::<R, M>,
       /* 268 */ ast_fn268::<R, M>,
-      /* 269 */ ast_fn269::<R, M>,
+      /* 269 1 */ default_fn::<R, M>,
       /* 270 */ ast_fn270::<R, M>,
       /* 271 */ ast_fn271::<R, M>,
-      /* 272 1 */ default_fn::<R, M>,
+      /* 272 */ ast_fn272::<R, M>,
       /* 273 */ ast_fn273::<R, M>,
       /* 274 */ ast_fn274::<R, M>,
       /* 275 */ ast_fn275::<R, M>,
@@ -9098,29 +9065,29 @@ impl<R: Reader + UTF8Reader, M> ReduceFunctions<R, M> {
       /* 278 */ ast_fn278::<R, M>,
       /* 279 */ ast_fn279::<R, M>,
       /* 280 */ ast_fn280::<R, M>,
-      /* 281 */ ast_fn281::<R, M>,
-      /* 282 */ ast_fn282::<R, M>,
-      /* 283 */ ast_fn283::<R, M>,
+      /* 281 1 */ default_fn::<R, M>,
+      /* 282 1 */ default_fn::<R, M>,
+      /* 283 1 */ default_fn::<R, M>,
       /* 284 1 */ default_fn::<R, M>,
-      /* 285 1 */ default_fn::<R, M>,
-      /* 286 1 */ default_fn::<R, M>,
-      /* 287 1 */ default_fn::<R, M>,
+      /* 285 */ ast_fn285::<R, M>,
+      /* 286 */ ast_fn286::<R, M>,
+      /* 287 */ ast_fn287::<R, M>,
       /* 288 */ ast_fn288::<R, M>,
       /* 289 */ ast_fn289::<R, M>,
-      /* 290 */ ast_fn290::<R, M>,
-      /* 291 */ ast_fn291::<R, M>,
-      /* 292 */ ast_fn292::<R, M>,
+      /* 290 1 */ default_fn::<R, M>,
+      /* 291 1 */ default_fn::<R, M>,
+      /* 292 1 */ default_fn::<R, M>,
       /* 293 1 */ default_fn::<R, M>,
       /* 294 1 */ default_fn::<R, M>,
       /* 295 1 */ default_fn::<R, M>,
       /* 296 1 */ default_fn::<R, M>,
-      /* 297 1 */ default_fn::<R, M>,
-      /* 298 1 */ default_fn::<R, M>,
-      /* 299 1 */ default_fn::<R, M>,
-      /* 300 */ ast_fn300::<R, M>,
+      /* 297 */ ast_fn297::<R, M>,
+      /* 298 */ ast_fn298::<R, M>,
+      /* 299 */ ast_fn299::<R, M>,
+      /* 300 1 */ default_fn::<R, M>,
       /* 301 */ ast_fn301::<R, M>,
       /* 302 */ ast_fn302::<R, M>,
-      /* 303 1 */ default_fn::<R, M>,
+      /* 303 */ ast_fn303::<R, M>,
       /* 304 */ ast_fn304::<R, M>,
       /* 305 */ ast_fn305::<R, M>,
       /* 306 */ ast_fn306::<R, M>,
@@ -9140,12 +9107,12 @@ impl<R: Reader + UTF8Reader, M> ReduceFunctions<R, M> {
       /* 320 */ ast_fn320::<R, M>,
       /* 321 */ ast_fn321::<R, M>,
       /* 322 */ ast_fn322::<R, M>,
-      /* 323 */ ast_fn323::<R, M>,
-      /* 324 */ ast_fn324::<R, M>,
-      /* 325 */ ast_fn325::<R, M>,
-      /* 326 1 */ default_fn::<R, M>,
-      /* 327 1 */ default_fn::<R, M>,
-      /* 328 1 */ default_fn::<R, M>,
+      /* 323 1 */ default_fn::<R, M>,
+      /* 324 1 */ default_fn::<R, M>,
+      /* 325 1 */ default_fn::<R, M>,
+      /* 326 */ ast_fn326::<R, M>,
+      /* 327 */ ast_fn327::<R, M>,
+      /* 328 */ ast_fn328::<R, M>,
       /* 329 */ ast_fn329::<R, M>,
       /* 330 */ ast_fn330::<R, M>,
       /* 331 */ ast_fn331::<R, M>,
@@ -9162,9 +9129,6 @@ impl<R: Reader + UTF8Reader, M> ReduceFunctions<R, M> {
       /* 342 */ ast_fn342::<R, M>,
       /* 343 */ ast_fn343::<R, M>,
       /* 344 */ ast_fn344::<R, M>,
-      /* 345 */ ast_fn345::<R, M>,
-      /* 346 */ ast_fn346::<R, M>,
-      /* 347 */ ast_fn347::<R, M>,
     ])
   }
 }

@@ -224,8 +224,7 @@ pub fn is_numeric(&self) -> bool {{
     self,
     F64(_) | F32(_)| I64(_)| I32(_)| I16(_)| I8(_)| U64(_)| U32(_)| U16(_)| U8(_)
   )
-}}
-  "##,
+}}"##,
     ast.ast_type_name,
     ast
       .structs
@@ -254,7 +253,7 @@ impl Default for {0} {{
 
 fn build_types_utils<W: Write>(w: &mut CodeWriter<W>, ast: &AScriptStore) -> Result<()> {
   w.wrtln(&format!(
-    "#[derive(Eq, PartialEq, Clone, Copy, Debug)]\npub enum {}Type {{",
+    "#[derive(Eq, PartialEq, Clone, Copy, Debug, Hash)]\npub enum {}Type {{",
     ast.ast_type_name
   ))?
   .indent()
