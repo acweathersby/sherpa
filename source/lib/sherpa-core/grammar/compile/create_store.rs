@@ -555,28 +555,34 @@ fn create_rule_vectors<'a>(
             rule_b.tok = sym.to_token();
 
             rule_a.ast_definition = Some(Box::new(sherpa::Ascript::new(
-              ASTNode::AST_Vector(Box::new(sherpa::AST_Vector::new(
-                vec![ASTNode::AST_NamedReference(Box::new(sherpa::AST_NamedReference {
-                  value: ascript_first_node_id.to_string(),
-                  tok:   tok.clone(),
-                }))],
+              ASTNode::AST_Statements(Box::new(sherpa::AST_Statements::new(
+                vec![ASTNode::AST_Vector(Box::new(sherpa::AST_Vector::new(
+                  vec![ASTNode::AST_NamedReference(Box::new(sherpa::AST_NamedReference {
+                    value: ascript_first_node_id.to_string(),
+                    tok:   tok.clone(),
+                  }))],
+                  tok.clone(),
+                )))],
                 tok.clone(),
               ))),
               tok.clone(),
             )));
 
             rule_b.ast_definition = Some(Box::new(sherpa::Ascript::new(
-              ASTNode::AST_Vector(Box::new(sherpa::AST_Vector::new(
-                vec![
-                  ASTNode::AST_NamedReference(Box::new(sherpa::AST_NamedReference {
-                    value: ascript_first_node_id.to_string(),
-                    tok:   tok.clone(),
-                  })),
-                  ASTNode::AST_NamedReference(Box::new(sherpa::AST_NamedReference {
-                    value: ascript_last_node_id.to_string(),
-                    tok:   tok.clone(),
-                  })),
-                ],
+              ASTNode::AST_Statements(Box::new(sherpa::AST_Statements::new(
+                vec![ASTNode::AST_Vector(Box::new(sherpa::AST_Vector::new(
+                  vec![
+                    ASTNode::AST_NamedReference(Box::new(sherpa::AST_NamedReference {
+                      value: ascript_first_node_id.to_string(),
+                      tok:   tok.clone(),
+                    })),
+                    ASTNode::AST_NamedReference(Box::new(sherpa::AST_NamedReference {
+                      value: ascript_last_node_id.to_string(),
+                      tok:   tok.clone(),
+                    })),
+                  ],
+                  tok.clone(),
+                )))],
                 tok.clone(),
               ))),
               tok.clone(),

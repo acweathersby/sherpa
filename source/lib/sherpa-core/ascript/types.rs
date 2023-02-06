@@ -7,14 +7,14 @@ use std::{
   collections::{BTreeMap, BTreeSet, HashMap},
   fmt::Debug,
   hash::Hash,
-  mem::discriminant,
+  mem::{discriminant, Discriminant},
   sync::Arc,
 };
 
 pub(crate) const ascript_first_node_id: &'static str = "--first--";
 pub(crate) const ascript_last_node_id: &'static str = "--last--";
 
-#[derive(Hash, Debug, PartialEq, Eq, Clone, PartialOrd, Ord, Copy)]
+#[derive(Hash, Debug, PartialEq, Eq, Clone, PartialOrd, Ord, Copy, Default)]
 pub struct AScriptStructId(u64);
 
 impl AScriptStructId {
@@ -136,6 +136,12 @@ pub enum AScriptTypeVal {
   Undefined,
   /// A generic struct
   Any,
+}
+
+impl AScriptTypeVal {
+  pub fn get_discriminant(&self) -> Discriminant<AScriptTypeVal> {
+    std::mem::discriminant(self)
+  }
 }
 
 impl Default for AScriptTypeVal {

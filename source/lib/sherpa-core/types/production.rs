@@ -209,7 +209,8 @@ pub struct Rule {
   pub prod_id: ProductionId,
   /// TODO: Docs
   pub id: RuleId,
-  /// TODO: Docs
+  /// The ordered index of this rule IF this rule is
+  /// a normal parse rule reachable from the root rules.
   pub bytecode_id: u32,
   /// TODO: Docs
   pub ast_definition: Option<Ascript>,

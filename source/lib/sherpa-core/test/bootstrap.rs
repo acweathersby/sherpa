@@ -1,5 +1,5 @@
 use crate::{
-  ascript::types::AScriptStore,
+  ascript::{rust_2, types::AScriptStore},
   compile::{compile_bytecode, compile_states, optimize_ir_states, GrammarStore},
   debug::collect_shifts_and_skips,
   llvm::{compile_module_from_bytecode, construct_module},
@@ -215,7 +215,7 @@ fn test_compile_of_sherpa_grammar_llvm() -> SherpaResult<()> {
 
   let mut writer = StringBuffer::new(vec![]);
 
-  crate::ascript::rust::write(&ascript, &mut writer)?;
+  let writer = rust_2::build_rust(&ascript, writer)?;
 
   //eprintln!("{}", String::from_utf8(writer.into_output())?);
 

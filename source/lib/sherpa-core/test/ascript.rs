@@ -1,21 +1,35 @@
 use crate::{
   ascript::{
-    compile::{compile_struct_props, compile_struct_type, verify_property_presence},
+    compile::{
+      compile_struct_props,
+      compile_struct_type,
+      get_indexed_body_ref,
+      get_production_types,
+      get_specified_vector_from_generic_vec_values,
+      production_types_are_structs,
+      verify_property_presence,
+    },
+    output_base::{ASTExprHandler, AscriptTypeHandler, AscriptWriter, AscriptWriterUtils, Ref},
+    rust_2::build_rust,
     types::{AScriptStore, AScriptTypeVal, TaggedType},
   },
   grammar::compile::{
     compile_ascript_struct,
     compile_grammar_ast,
-    parser::sherpa::{self, ASTNode},
+    parser::sherpa::{self, ASTNode, AST_IndexReference, AST_Vector},
   },
   journal::*,
   types::*,
-  writer::code_writer::StringBuffer,
+  writer::code_writer::{CodeWriter, StringBuffer},
 };
-use std::path::PathBuf;
+use std::{
+  collections::{BTreeSet, VecDeque},
+  fmt::format,
+  path::PathBuf,
+};
 
 #[test]
-fn test_grammar_imported_grammar() {
+fn test_grammar_imported_grammar() -> SherpaResult<()> {
   let mut j = Journal::new(None);
   let g = GrammarStore::from_path(
     &mut j,
@@ -25,20 +39,20 @@ fn test_grammar_imported_grammar() {
       .unwrap(),
   )
   .unwrap();
-  let ascript = AScriptStore::new(g.clone()).unwrap();
+  let store = AScriptStore::new(g.clone()).unwrap();
 
-  assert_eq!(ascript.prod_types.len(), g.parse_productions.len());
+  assert_eq!(store.prod_types.len(), g.parse_productions.len());
 
-  assert!(ascript
+  assert!(store
     .prod_types
     .iter()
     .all(|p| { p.1.iter().all(|t| !matches!(t.0.type_, AScriptTypeVal::Undefined)) }));
 
-  let mut writer = StringBuffer::new(vec![]);
-
-  crate::ascript::rust::write(&ascript, &mut writer).unwrap();
+  let writer = build_rust(&store, CodeWriter::new(vec![]))?;
 
   eprintln!("{}", String::from_utf8(writer.into_output()).unwrap());
+
+  SherpaResult::Ok(())
 }
 
 #[test]
@@ -53,7 +67,7 @@ NAME llvm_language_test
 
 <> statement > expression    :ast { t_Stmt, v:$1 }
 
-<> expression > sum          
+<> expression > sum num
 
 <> sum > mul '+' sum         :ast { t_Sum, l:$1, r:$3 }
     | mul
@@ -69,11 +83,9 @@ NAME llvm_language_test
 ",
   )
   .unwrap();
-  let ascript = AScriptStore::new(g).unwrap();
+  let store = AScriptStore::new(g).unwrap();
 
-  let mut writer = StringBuffer::new(vec![]);
-
-  crate::ascript::rust::write(&ascript, &mut writer)?;
+  let writer = build_rust(&store, CodeWriter::new(vec![]))?;
 
   eprintln!("{}", String::from_utf8(writer.into_output()).unwrap());
 
@@ -95,11 +107,11 @@ fn test_add_hoc_vector_prop_merged_with_vector_production() -> SherpaResult<()> 
 
   assert!(!j.debug_error_report(), "Should not have grammar errors");
 
-  let ascript = AScriptStore::new(g?)?;
+  let store = AScriptStore::new(g?)?;
 
   let mut writer = StringBuffer::new(vec![]);
 
-  crate::ascript::rust::write(&ascript, &mut writer)?;
+  let writer = build_rust(&store, CodeWriter::new(vec![]))?;
 
   eprintln!("{}", String::from_utf8(writer.into_output())?);
 
@@ -132,11 +144,11 @@ fn handles_multipart_arrays() -> SherpaResult<()> {
   )
   .unwrap();
 
-  let ascript = AScriptStore::new(g)?;
+  let store = AScriptStore::new(g)?;
 
   let mut writer = StringBuffer::new(vec![]);
 
-  crate::ascript::rust::write(&ascript, &mut writer)?;
+  let writer = build_rust(&store, CodeWriter::new(vec![]))?;
 
   Ok(())
 }
@@ -155,11 +167,11 @@ fn rust_vector_return_types_print_correctly() -> SherpaResult<()> {
   )
   .unwrap();
 
-  let ascript = AScriptStore::new(g)?;
+  let store = AScriptStore::new(g)?;
 
   let mut writer = StringBuffer::new(vec![]);
 
-  crate::ascript::rust::write(&ascript, &mut writer)?;
+  let writer = build_rust(&store, CodeWriter::new(vec![]))?;
 
   eprintln!("{}", String::from_utf8(writer.into_output())?);
 
@@ -219,10 +231,12 @@ IGNORE { c:sp c:nl }
   )
   .unwrap();
 
-  let ascript = AScriptStore::new(g).unwrap();
+  let store = AScriptStore::new(g).unwrap();
   let mut writer = StringBuffer::new(vec![]);
 
-  crate::ascript::rust::write(&ascript, &mut writer)?;
+  let writer = build_rust(&store, CodeWriter::new(vec![]))?;
+
+  eprintln!("{}", String::from_utf8(writer.into_output())?);
 
   SherpaResult::Ok(())
 }
@@ -235,13 +249,13 @@ fn test_parse_errors_when_production_has_differing_return_types3() -> SherpaResu
 
   let g = GrammarStore::from_str(&mut j, "<> B > c:id(+)").unwrap();
 
-  let ascript = AScriptStore::new(g).unwrap();
+  let store = AScriptStore::new(g).unwrap();
 
-  eprintln!("{:#?}", ascript);
+  eprintln!("{:#?}", store);
 
   let mut writer = StringBuffer::new(vec![]);
 
-  crate::ascript::rust::write(&ascript, &mut writer)?;
+  let writer = build_rust(&store, CodeWriter::new(vec![]))?;
 
   eprintln!("{}", String::from_utf8(writer.into_output()).unwrap());
 
@@ -384,6 +398,33 @@ fn test_ASTs_are_defined_for_ascript_return_functions() -> SherpaResult<()> {
   } else {
     panic!("AScripT expression not found.")
   }
+
+  SherpaResult::Ok(())
+}
+
+#[test]
+fn test_rust_render() -> SherpaResult<()> {
+  let mut j = Journal::new(None);
+  let g = GrammarStore::from_str(
+    &mut j,
+    "
+<> statement > adhoc        :ast { t_Expr, v:[$1], t:str(tok<1,1>) }
+    | '{' adhoc(+) '}'      :ast { t_Expr, v:$2 }
+
+<> adhoc > 'test'           :ast tok
+",
+  );
+  assert!(!j.debug_error_report(), "Should not have grammar errors");
+
+  let store = AScriptStore::new(g?)?;
+
+  let writer = build_rust(&store, CodeWriter::new(vec![]))?;
+
+  println!("{}", String::from_utf8(writer.into_output())?);
+
+  /*   let writer = build_c(&store, CodeWriter::new(vec![]))?;
+
+  println!("{}", String::from_utf8(writer.into_output())?); */
 
   SherpaResult::Ok(())
 }

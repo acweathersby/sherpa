@@ -2,7 +2,8 @@ use std::io::Write;
 
 use crate::{
   ascript::{
-    rust::{ascript_type_to_string, render_expression, write},
+    rust::{ascript_type_to_string, render_expression},
+    rust_2,
     types::*,
   },
   grammar::compile::parser::sherpa::{ASTNode, AST_NamedReference},
@@ -28,9 +29,13 @@ pub fn build_ascript_types_and_functions(source_type: SourceType) -> PipelineTas
             &mut writer,
           ) {
             Err(err) => Err(vec![SherpaError::from(err)]),
-            _ => match write(ascript, &mut writer) {
-              Err(err) => Err(vec![SherpaError::from(err)]),
-              _ => Ok(Some((2, unsafe { String::from_utf8_unchecked(writer.into_output()) }))),
+            _ => match rust_2::build_rust(ascript, writer) {
+              SherpaResult::Err(err) => Err(vec![SherpaError::from(err)]),
+              SherpaResult::MultipleErrors(err) => Err(err.into_iter().collect()),
+              SherpaResult::None => Err(vec![SherpaError::from("Could not build rust")]),
+              SherpaResult::Ok(writer) => {
+                Ok(Some((2, unsafe { String::from_utf8_unchecked(writer.into_output()) })))
+              }
             },
           }
         } else {

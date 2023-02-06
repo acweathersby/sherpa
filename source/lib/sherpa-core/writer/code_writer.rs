@@ -9,6 +9,22 @@ pub struct CodeWriter<W: Write> {
 
 pub type StringBuffer = CodeWriter<Vec<u8>>;
 
+impl<W: Write + Clone> CodeWriter<W> {
+  pub fn get_data(&self) -> W {
+    self.output.clone()
+  }
+}
+
+impl<W: Write> CodeWriter<W> {
+  pub fn checkpoint<B: Write + Default>(&self) -> CodeWriter<B> {
+    CodeWriter {
+      output:        B::default(),
+      indent:        self.indent,
+      indent_spaces: self.indent_spaces,
+    }
+  }
+}
+
 impl<W: Write> CodeWriter<W> {
   fn internal_write(&mut self, string: &str) -> Result<()> {
     let indent = " ".repeat(self.indent * self.indent_spaces);
@@ -96,14 +112,6 @@ impl<W: Write> CodeWriter<W> {
 
   pub fn write(&mut self, string: &str) -> Result<()> {
     self.internal_write(string)
-  }
-
-  pub fn checkpoint(&self) -> StringBuffer {
-    let mut string_buffer = Self::default();
-
-    string_buffer.indent = self.indent;
-
-    string_buffer
   }
 
   pub fn merge_checkpoint(&mut self, checkpoint: StringBuffer) -> Result<usize> {
