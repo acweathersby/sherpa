@@ -175,6 +175,13 @@ impl Token {
     0
   }
 
+  pub fn trim(&self, trim_head: u32, trim_tail: u32) -> Token {
+    Token {
+      inner: self.inner.trim(trim_head, trim_tail),
+      input: self.input.clone(),
+    }
+  }
+
   /// Returns the line number of the token location. This may be
   /// zero if the token is not attached to its source.
   pub fn get_line(&mut self) -> usize {

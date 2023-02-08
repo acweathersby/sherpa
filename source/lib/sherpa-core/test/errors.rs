@@ -54,3 +54,26 @@ fn invalid_dependency() {
     true
   }));
 }
+
+/// Missing production definition is reported
+#[test]
+fn missing_production_definition() {
+  let path = get_test_grammar_path("errors/missing_production_definition.sg");
+  let (j, _) = build_grammar_from_file(path.clone(), Default::default());
+
+  assert!(j.debug_error_report(), "Expected to see errors");
+
+  assert!(j.get_report(crate::ReportType::GrammarCompile((&path).into()), |r| {
+    let error = &r.errors[0];
+
+    assert!(matches!(error, SherpaError::SourceError { .. }));
+
+    let SherpaError::SourceError { id, .. } = error else {
+        panic!("Expected a SourceError");
+    };
+
+    assert_eq!(*id, "missing-production-definition");
+
+    true
+  }));
+}

@@ -56,10 +56,13 @@ fn create_scanner_productions_from_symbols(j: &mut Journal, g: &mut GrammarStore
   // Start iterating over known token production references, and add
   // new productions as we encounter them.
   let mut scanner_production_queue = VecDeque::from_iter(
-    g.symbols.keys().chain(SymbolID::Generics.iter()).cloned().map(|s| (s, false)),
+    g.symbols
+      .iter()
+      .map(|(id, sym)| (*id, sym.g_ref.as_ref().unwrap().clone(), sym.loc.clone(), false))
+      .chain(SymbolID::Generics.iter().map(|id| (*id, g.id.clone(), Token::new(), false))),
   );
 
-  while let Some((sym_id, scanner_only)) = scanner_production_queue.pop_front() {
+  while let Some((sym_id, g_ref, tok, scanner_only)) = scanner_production_queue.pop_front() {
     match &sym_id {
       sym if matches!(sym, SymbolID::GenericSpace) => {
         // Converts the generic symbol `g:sp` into a production that targets the
@@ -186,7 +189,12 @@ fn create_scanner_productions_from_symbols(j: &mut Journal, g: &mut GrammarStore
                         // and submit this production for conversion into a scanner production.
                         SymbolID::Production(prod_id, grammar_id)
                         | SymbolID::TokenProduction(prod_id, grammar_id, ..) => {
-                          scanner_production_queue.push_back((*sym_id, true));
+                          scanner_production_queue.push_back((
+                            *sym_id,
+                            sym.grammar_ref.clone(),
+                            sym.tok.clone(),
+                            true,
+                          ));
 
                           let scanner_name = create_scanner_name(*prod_id, *grammar_id);
                           let scanner_production_id = ProductionId::from(&scanner_name);
@@ -202,14 +210,19 @@ fn create_scanner_productions_from_symbols(j: &mut Journal, g: &mut GrammarStore
                             ..Default::default()
                           }]
                         }
-                        sym if sym.is_defined() => {
+                        sym_id if sym_id.is_defined() => {
                           let (new_symbol_id, ..) = get_scanner_info_from_defined(sym_id, g);
 
-                          scanner_production_queue.push_back((*sym_id, true));
+                          scanner_production_queue.push_back((
+                            *sym_id,
+                            sym.grammar_ref.clone(),
+                            sym.tok.clone(),
+                            true,
+                          ));
 
                           vec![RuleSymbol {
                             consumable: true,
-                            exclusive: sym.is_exclusive(),
+                            exclusive: sym_id.is_exclusive(),
                             scanner_length: 1,
                             sym_id: new_symbol_id,
                             grammar_ref: g.id.clone(),
@@ -239,13 +252,12 @@ fn create_scanner_productions_from_symbols(j: &mut Journal, g: &mut GrammarStore
             }
           }
           _ => {
-            let sym = g.symbols.get(&sym_id).unwrap();
             j.report_mut().add_error(SherpaError::SourceError {
-              id:         "missing-production",
+              id:         "missing-production-definition",
               msg:        format!("Could not find a definition for production"),
               inline_msg: "could not find".to_string(),
-              loc:        sym.loc.clone(),
-              path:       sym.g_ref.clone().unwrap_or(g.id.clone()).path.clone(),
+              loc:        tok,
+              path:       g_ref.path.clone(),
               severity:   SherpaErrorSeverity::Critical,
               ps_msg:     format!("{prod_id:?}"),
             });
