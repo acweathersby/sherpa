@@ -24,13 +24,13 @@ impl Display for StringId {
   }
 }
 
-pub const space_sym_str: &str = "g:sp";
-pub const nl_sym_str: &str = "g:nl";
-pub const symbol_sym_str: &str = "g:sym";
-pub const id_sym_str: &str = "g:id";
-pub const num_sym_str: &str = "g:num";
-pub const gen_rec_marker_str: &str = "g:rec";
-pub const tab_sym_str: &str = "g:tab";
+pub const space_sym_str: &str = "c:sp";
+pub const nl_sym_str: &str = "c:nl";
+pub const symbol_sym_str: &str = "c:sym";
+pub const id_sym_str: &str = "c:id";
+pub const num_sym_str: &str = "c:num";
+pub const gen_rec_marker_str: &str = "c:rec";
+pub const tab_sym_str: &str = "c:tab";
 pub const eof_str: &str = "$eof";
 pub const undefined_symbol_id: u32 = 99999;
 /// TODO: Docs
@@ -71,25 +71,25 @@ pub enum SymbolID {
   ///      when the root grammar is finalized
   TokenProduction(ProductionId, GrammarId, ProductionId),
 
-  /// Represent the grammar symbol `g:sp`.
+  /// Represent the grammar symbol `c:sp`.
   GenericSpace,
 
-  /// Represent the grammar symbol `g:tab`.
+  /// Represent the grammar symbol `c:tab`.
   GenericHorizontalTab,
 
-  /// Represent the grammar symbol `g:nl`.
+  /// Represent the grammar symbol `c:nl`.
   GenericNewLine,
 
-  /// Represent the grammar symbol `g:id`.
+  /// Represent the grammar symbol `c:id`.
   GenericIdentifier,
 
-  /// Represent the grammar symbol `g:num`.
+  /// Represent the grammar symbol `c:num`.
   GenericNumber,
 
-  /// Represent the grammar symbol `g:sym`.
+  /// Represent the grammar symbol `c:sym`.
   GenericSymbol,
 
-  /// Represent the grammar symbol `g:rec`.
+  /// Represent the grammar symbol `c:rec`.
   Recovery,
   /// Default symbol used when no other symbol type fits.
   Default,
@@ -168,7 +168,7 @@ impl SymbolID {
   }
 
   /// Returns a human friendly string representation
-  pub fn to_string(&self, g: &GrammarStore) -> String {
+  pub fn debug_string(&self, g: &GrammarStore) -> String {
     match self {
       Self::DefinedNumeric(_) | Self::DefinedIdentifier(_) | Self::DefinedSymbol(_) => {
         format!("'{}'", g.symbol_strings.get(self).unwrap())
@@ -197,6 +197,9 @@ impl SymbolID {
       Self::GenericIdentifier => id_sym_str.to_string(),
       Self::GenericNumber => num_sym_str.to_string(),
       Self::GenericSymbol => symbol_sym_str.to_string(),
+      Self::Undefined | Self::UndefinedA | Self::UndefinedB | Self::UndefinedC => {
+        "[undefined]".to_string()
+      }
       _ => "[??]".to_string(),
     }
   }
@@ -259,6 +262,19 @@ impl SymbolID {
   pub fn is_token_production(&self) -> bool {
     match self {
       Self::TokenProduction(..) => true,
+      _ => false,
+    }
+  }
+
+  /// TODO: Docs
+  pub fn is_generic(&self) -> bool {
+    match self {
+      Self::GenericHorizontalTab
+      | Self::GenericIdentifier
+      | Self::GenericNewLine
+      | Self::GenericNumber
+      | Self::GenericSymbol
+      | Self::GenericSpace => true,
       _ => false,
     }
   }
@@ -357,7 +373,7 @@ pub struct Symbol {
   pub guid:          SymbolUUID,
   /// The unique identifier of the class of this symbol
   /// which either identifies symbol's generic class id
-  /// i.e (g:sp , g:nl, g:tab, g:id ...) or by the unique
+  /// i.e (c:sp , c:nl, c:tab, c:id ...) or by the unique
   /// or the explicit character sequence this symbol represents.
   pub bytecode_id:   u32,
   /// The length in bytes of the character sequence

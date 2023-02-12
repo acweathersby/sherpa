@@ -9,6 +9,7 @@ use crate::{
   journal::{Journal, ReportType},
   types::{BranchType, ExportedProduction, GrammarStore, IRState},
 };
+use core::panic;
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 
 /// Attempts to reduce the number of IR states through merging states, and reduce
@@ -76,6 +77,7 @@ pub fn optimize_ir_states(
           (2, ASTNode::SetProd(_), Some(&ASTNode::Reduce(_)))
           | (2, ASTNode::TokenAssign(_), Some(&ASTNode::SetProd(_)))
           | (2, ASTNode::TokenAssign(_), Some(&ASTNode::Pass(_)))
+          | (1, ASTNode::TokenAssign(_), _)
           | (1, ASTNode::SetProd(_), _) => {
             goto_replacements.insert(state.id.clone(), state.instructions.clone());
           }
@@ -106,31 +108,12 @@ pub fn optimize_ir_states(
       let code = state.get_code();
 
       // Convert trivial scanner
-      if !is_scanner {
-        if let Some(symbols) = state.get_scanner_symbol_set() {
-          if all_symbols_are_a_single_codepoint(&symbols, g) {
-            let lookup = map_bytecode_id_to_sym_id(symbols, g);
+      replace_trivial_scanner(state, g, &mut non_scanner_states);
 
-            for instruction in &mut state.ast.as_mut().unwrap().instructions {
-              match instruction {
-                ASTNode::ASSERT(box assert) => {
-                  println!("-- {:?} \n{} {:#?}", assert, code, lookup);
-                  let sym_id = *lookup.get(&(assert.ids.val as u32)).unwrap();
-                  let (id, bc_type) = sym_id.shift_info(&g);
-                  assert.mode = bc_type.to_string();
-                  assert.ids.val = id as i64;
-                }
-                _ => {}
-              }
-            }
-            // Now we're just direct accessing the raw binary data so we remove the
-            // reliance on scanner states and symbols
-            state.normal_symbols.clear();
-            state.skip_symbols.clear();
-            non_scanner_states.insert(state.get_name());
-          }
-        }
-      }
+      // Removes branch states that are identical to the defualt branch
+
+      // Lower default only branch state into a branchless state.
+      refactor_default_only(state, &mut changes);
 
       for (data, branch) in get_branches_mut(state.as_mut()) {
         'outerloop: loop {
@@ -255,6 +238,50 @@ pub fn optimize_ir_states(
   }
 
   result
+}
+
+fn replace_trivial_scanner(
+  state: &mut Box<IRState>,
+  g: &std::sync::Arc<GrammarStore>,
+  non_scanner_states: &mut BTreeSet<String>,
+) {
+  if !state.is_scanner() {
+    if let Some(symbols) = state.get_scanner_symbol_set() {
+      if all_symbols_are_a_single_codepoint(&symbols, g) {
+        let lookup = map_bytecode_id_to_sym_id(symbols, g);
+
+        for instruction in &mut state.ast.as_mut().unwrap().instructions {
+          match instruction {
+            ASTNode::ASSERT(box ASSERT { ids, instructions, is_peek, is_skip, mode }) => {
+              let sym_id = *lookup.get(&(ids.val as u32)).unwrap();
+              let (id, bc_type) = sym_id.shift_info(&g);
+              *mode = bc_type.to_string();
+              ids.val = id as i64;
+            }
+            _ => {}
+          }
+        }
+        // Now we're just direct accessing the raw binary data so we remove the
+        // reliance on scanner states and symbols
+
+        state.normal_symbols.clear();
+        state.skip_symbols.clear();
+        non_scanner_states.insert(state.get_name());
+      }
+    }
+  }
+}
+
+fn refactor_default_only(state: &mut Box<IRState>, changes: &mut bool) {
+  if let Ok(state) = &mut state.ast {
+    if matches!(state.instructions[0], ASTNode::DEFAULT(_)) && state.instructions.len() == 1 {
+      match state.instructions[0].clone() {
+        ASTNode::DEFAULT(box DEFAULT { instructions, .. }) => state.instructions = instructions,
+        _ => unreachable!("Expected only ASSERT and DEFAULT nodes in instruction vector."),
+      }
+      *changes = true;
+    }
+  }
 }
 
 /// Remove unreferenced states, when tracking linkage from the root entry states,
@@ -424,7 +451,7 @@ fn map_bytecode_id_to_sym_id(
   symbols
     .into_iter()
     .map(|s| {
-      let sym = g.symbols.get(&s).unwrap();
+      let sym = g.get_symbol(&s).unwrap();
       (sym.bytecode_id, s)
     })
     .collect::<BTreeMap<_, _>>()
@@ -434,7 +461,7 @@ fn all_symbols_are_a_single_codepoint(
   symbols: &BTreeSet<crate::types::SymbolID>,
   g: &GrammarStore,
 ) -> bool {
-  symbols.iter().all(|s| match g.symbols.get(s) {
+  symbols.iter().all(|s| match g.get_symbol(s) {
     Some(sym) => sym.cp_len == 1,
     None => false,
   })

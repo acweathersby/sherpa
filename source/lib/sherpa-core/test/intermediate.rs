@@ -8,9 +8,10 @@ use crate::{
     compile_states,
     optimize_ir_states,
   },
-  debug::generate_disassembly,
+  debug::{collect_shifts_and_skips, generate_disassembly},
   grammar::get_production_start_items,
   journal::{config::Config, report::ReportType, Journal},
+  test::utils::debug_print_states,
   types::*,
   util::get_num_of_available_threads,
 };
@@ -19,6 +20,8 @@ use std::{
   iter::FromIterator,
   path::PathBuf,
 };
+
+use super::utils::{test_runner, TestConfig};
 
 #[test]
 pub fn construct_descent_on_basic_grammar() -> SherpaResult<()> {
@@ -443,6 +446,10 @@ IGNORE { c:sp }
 
   let states = compile_production_states(&mut j, prod_id)?;
 
+  j.flush_reports();
+
+  j.debug_print_reports(ReportType::ProductionCompile(Default::default()));
+
   let report = j.report();
   if report.have_errors_of_type(SherpaErrorSeverity::Critical) {
     for error in report.errors() {
@@ -567,15 +574,12 @@ fn grammar_with_exclusive_symbols() -> SherpaResult<()> {
   let input = r##" 
 IGNORE { c:sp } 
 
-<> A >   B "d"
-      |   B "g"
+<> A >   X 'c'
+  | Y 'd'
 
-<> B >   C "r"
-      |   D "x"
+<> X > 'x' X?
 
-<> C > "c" "g"
-
-<> D > "d" "g"
+<> Y > 'x' Y?
   "##;
 
   "d g g";
@@ -605,4 +609,94 @@ fn build_states(input: &str) -> SherpaResult<(Journal, BTreeMap<String, Box<IRSt
   let states = compile_states(&mut j, get_num_of_available_threads())?;
 
   SherpaResult::Ok((j, states))
+}
+
+const test_grammar: &'static str = r##"
+IGNORE { c:sp c:nl }
+EXPORT json as entry
+NAME llvm_language_test
+
+<> json > 
+        object                              :ast { t_Json, v: $1 }
+        | 
+        array                               :ast { t_Json, v: $1 }
+
+<> array > '['  value(*',' )  ']'              :ast { t_Array, entries: $2 }
+
+<> object > '{' key_value(*',' ) '}'           :ast { t_Object, entries: $2 }
+
+<> key_value > str ':' value              :ast { t_KeyVal, k:$1, v:$3 }
+
+<> value > num | bool | str | null
+
+<> null > "null"                            :ast { t_Null, v:false }
+
+<> bool > 
+    "false"                                 :ast { t_Bool, v:false }
+    |   
+    "true"                                  :ast { t_Bool, v:true }
+
+<> num > tk:number                          :ast { t_Number }
+
+<> number > ( '+' | '-' )? c:num(+) ( '.' c:num(+) )? ( ( 'e' | 'E' ) ( '+' | 'i' ) c:num(+) )?
+
+<> str > tk:string :ast { t_String }
+
+<> string > '"' ( c:id | c:sym | c:num | c:sp )(*) "\""
+"##;
+
+const test_parser_string: &'static str = "{ \"dumb\" : \"luck\" }";
+
+const test_entry_point: &'static str = "json";
+
+#[test]
+fn test_algorithm_1() -> SherpaResult<()> {
+  let mut j = Journal::new(None);
+  let g = GrammarStore::from_str(&mut j, test_grammar);
+
+  assert!(!j.debug_error_report());
+
+  let g = g?;
+
+  let states = compile_states(&mut j, 1)?;
+
+  j.flush_reports();
+
+  debug_assert!(!j.debug_error_report());
+
+  let states = optimize_ir_states(&mut j, states);
+  let bc = compile_bytecode(&mut j, states.into_iter().collect());
+
+  eprintln!("{}", generate_disassembly(&bc, Some(&mut j)));
+
+  let entry_point =
+    *bc.state_name_to_offset.get(&g.get_production_by_name(test_entry_point)?.guid_name)?;
+  let target_production_id = g.get_production_by_name(test_entry_point)?.bytecode_id;
+  let results = collect_shifts_and_skips(
+    test_parser_string,
+    entry_point,
+    target_production_id,
+    &bc.bytecode,
+    Some(debug_print_states(g)),
+  );
+
+  dbg!(results);
+
+  SherpaResult::Ok(())
+}
+
+#[test]
+fn test_algorithm_2() -> SherpaResult<()> {
+  test_runner(test_parser_string, test_entry_point, None, TestConfig {
+    print_states: false,
+    print_disassembly: true,
+    print_llvm_ir: false,
+    bytecode_parse: false,
+    build_llvm: true,
+    llvm_parse: true,
+    grammar_string: Some(test_grammar),
+    bytecode_parse_reporter: Some(&|g| Some(debug_print_states(g))),
+    ..Default::default()
+  })?;
+  SherpaResult::Ok(())
 }

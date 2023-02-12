@@ -46,6 +46,25 @@ pub enum SherpaError {
     /// The severity of the error.
     severity:   SherpaErrorSeverity,
   },
+  /// A general structure for reporting an error that has occurred
+  /// within an external source file.
+  SourcesError {
+    /// A vector of source tuples, comprised of the source
+    /// token, the path to source file that generated the token,
+    /// and an inline string message which can be an empty string:
+    /// An optional inline message that appears inline
+    /// within the error location diagram. Set to an empty string
+    /// to prevents its display.
+    sources:  Vec<(Token, PathBuf, String)>,
+    /// A unique identifier for this class of error, in the form `g:id(+)(\- g:id(+))(*)`
+    id:       &'static str,
+    /// The description of the error
+    msg:      String,
+    /// An optional message that appears after the source diagram.
+    ps_msg:   String,
+    /// The severity of the error.
+    severity: SherpaErrorSeverity,
+  },
   //---------------------------------------------------------------------------
   // ----------------- Grammar Compile Errors ---------------------------------Look
   //---------------------------------------------------------------------------
@@ -217,6 +236,22 @@ impl Display for SherpaError {
         loc.loc_stub(),
         msg.trim(),
         loc.blame(1, 1, &inline_msg.trim(), BlameColor::RED),
+        ps_msg.trim()
+      )),
+      SourcesError { msg, id, sources, ps_msg, .. } => f.write_fmt(format_args!(
+        "\n{}\n{}\n{}\n\n{}\n",
+        id,
+        msg.trim(),
+        sources
+          .iter()
+          .map(|(tok, path, inline_message)| format!(
+            "-- in [{}:{}]\n    {}",
+            path.to_str().unwrap(),
+            tok.loc_stub(),
+            tok.blame(1, 1, inline_message, BlameColor::RED).replace("\n", "\n    ")
+          ))
+          .collect::<Vec<_>>()
+          .join("\n"),
         ps_msg.trim()
       )),
       UNDEFINED => f.write_str("\nAn unknown error has occurred "),

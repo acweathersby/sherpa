@@ -1,6 +1,6 @@
 //! Utility functions for the evaluation, interpretation, and
 //! comprehension of items
-use crate::types::{GrammarStore, Item, ProductionId, SymbolID};
+use crate::types::{item_2::Item as Item2, GrammarStore, Item, ProductionId, SymbolID};
 use std::collections::{BTreeSet, VecDeque};
 
 /// Retrieve the initial items of a production. Returns vector of
@@ -12,6 +12,16 @@ pub(crate) fn get_production_start_items(prod_id: &ProductionId, g: &GrammarStor
     .unwrap()
     .iter()
     .map(|id| Item::from_rule(id, g).unwrap())
+    .collect()
+}
+
+#[inline]
+pub(crate) fn get_production_start_items2(prod_id: &ProductionId, g: &GrammarStore) -> Vec<Item2> {
+  g.production_rules
+    .get(prod_id)
+    .unwrap()
+    .iter()
+    .map(|id| Item2::from(g.get_rule(id).unwrap()))
     .collect()
 }
 

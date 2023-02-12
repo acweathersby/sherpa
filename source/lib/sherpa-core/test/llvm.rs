@@ -9,7 +9,7 @@ use crate::{
     parser_functions::construct_parse_function,
     *,
   },
-  types::JitParseContext,
+  types::JitParser,
   Journal,
   SherpaResult,
 };
@@ -471,7 +471,7 @@ IGNORE { c:sp }
 #[test]
 fn line_tracking_with_scanner_tokens() -> SherpaResult<()> {
   let ctx = Context::create();
-  let (mut parser, j) = JitParseContext::<TestUTF8StringReader, u32, u32>::from_grammar_str(
+  let (mut parser, j) = JitParser::<TestUTF8StringReader, u32, u32>::from_grammar_str(
     r##"
 IGNORE { c:sp c:nl }
 <> A > tk:B P 
@@ -524,7 +524,7 @@ IGNORE { c:sp c:nl }
 #[test]
 fn simple_newline_tracking() -> SherpaResult<()> {
   let ctx = Context::create();
-  let (mut parser, j) = JitParseContext::<TestUTF8StringReader, u32, u32>::from_grammar_str(
+  let (mut parser, j) = JitParser::<TestUTF8StringReader, u32, u32>::from_grammar_str(
     r##"
 IGNORE { c:sp c:nl }
 
@@ -573,7 +573,7 @@ IGNORE { c:sp c:nl }
 fn test_compile_from_bytecode1() -> SherpaResult<()> {
   let ctx = Context::create();
 
-  let (mut parser, j) = JitParseContext::<TestUTF8StringReader, u32, u32>::from_grammar_str(
+  let (mut parser, j) = JitParser::<TestUTF8StringReader, u32, u32>::from_grammar_str(
     "
 IGNORE { c:sp c:nl }
 

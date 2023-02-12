@@ -112,7 +112,7 @@ pub fn hash_group_vec<
 }
 
 #[inline]
-pub fn hash_group_btreemap<
+pub fn  hash_group_btreemap<
   T: Sized,
   R: Hash + Sized + Ord + Eq,
   E: IntoIterator<Item = T> + Extend<T> + Default,

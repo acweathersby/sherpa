@@ -66,7 +66,7 @@ pub enum InstructionType {
   Token      = 5,
   ForkTo     = 6,
   Scan       = 7,
-  EatCrumbs  = 8,
+  Pop        = 8,
   VectorBranch = 9,
   HashBranch = 10,
   SetFailState = 11,
@@ -93,7 +93,7 @@ impl Instruction {
   pub const I06_FORK_TO: u32 = 6 << 28;
   pub const I07_SCAN: u32 = 7 << 28;
   pub const I07_SCAN_BACK_UNTIL: u32 = Instruction::I07_SCAN | 0x00100000;
-  pub const I08_EAT_CRUMBS: u32 = 8 << 28;
+  pub const I08_POP: u32 = 8 << 28;
   pub const I09_VECTOR_BRANCH: u32 = 9 << 28;
   pub const I10_HASH_BRANCH: u32 = 10 << 28;
   pub const I11_SET_FAIL_STATE: u32 = 11 << 28;
@@ -200,8 +200,8 @@ impl Instruction {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I07_SCAN
   }
 
-  pub fn is_noop_8(&self) -> bool {
-    (self.0 & INSTRUCTION_HEADER_MASK) == Self::I08_EAT_CRUMBS
+  pub fn is_pop(&self) -> bool {
+    (self.0 & INSTRUCTION_HEADER_MASK) == Self::I08_POP
   }
 
   pub fn is_vector_branch(&self) -> bool {
@@ -250,7 +250,7 @@ impl Instruction {
       Self::I05_TOKEN => InstructionType::Token,
       Self::I06_FORK_TO => InstructionType::ForkTo,
       Self::I07_SCAN => InstructionType::Scan,
-      Self::I08_EAT_CRUMBS => InstructionType::EatCrumbs,
+      Self::I08_POP => InstructionType::Pop,
       Self::I09_VECTOR_BRANCH => InstructionType::VectorBranch,
       Self::I10_HASH_BRANCH => InstructionType::HashBranch,
       Self::I11_SET_FAIL_STATE => InstructionType::SetFailState,
@@ -272,7 +272,7 @@ impl Instruction {
       Self::I05_TOKEN => "I05_TOKEN",
       Self::I06_FORK_TO => "I06_FORK_TO",
       Self::I07_SCAN => "I07_SCAN",
-      Self::I08_EAT_CRUMBS => "I08_NOOP",
+      Self::I08_POP => "I08_POP",
       Self::I09_VECTOR_BRANCH => "I09_VECTOR_BRANCH",
       Self::I10_HASH_BRANCH => "I10_HASH_BRANCH",
       Self::I11_SET_FAIL_STATE => "I11_SET_FAIL_STATE",

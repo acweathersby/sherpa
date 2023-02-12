@@ -62,9 +62,9 @@ EXPORT ir as ir
 
             :ast { t_ASSERT, c_IR, c_IR_Instruction, is_peek: bool($2), c_IR_Branch, mode:str($3), ids: $4, instructions: $6}
 
-        | "skip" production_id_list
+        | "skip" assert_class production_id_list
 
-            :ast { t_ASSERT, c_IR, c_IR_Instruction, c_IR_Branch, ids: $2, is_skip: true }
+            :ast { t_ASSERT, c_IR, c_IR_Instruction, c_IR_Branch, mode:str($2), ids: $3, is_skip: true }
 
         | "default"  '(' instruction_sequence ')'                     
 
@@ -104,9 +104,9 @@ EXPORT ir as ir
 
         :ast { t_TokenId, c_IR, c_IR_Instruction, id: $5  }
 
-    | "skip"
+    | "pop"
 
-        :ast { t_Skip, c_IR, c_IR_Instruction  }
+        :ast { t_Pop, c_IR, c_IR_Instruction  }
 
     | "pass"
 

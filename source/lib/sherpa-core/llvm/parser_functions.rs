@@ -144,7 +144,7 @@ pub(crate) unsafe fn construct_parse_function<'a>(
           while instruction.is_valid() {
             use InstructionType::*;
             match instruction.to_type() {
-              SetProd | Token | ForkTo | EatCrumbs | Noop13 | Scan | Repeat | AssertShift
+              SetProd | Token | ForkTo | Pop | Noop13 | Scan | Repeat | AssertShift
               | SetFailState => {
                 instruction = instruction.next(bc);
               }
@@ -286,7 +286,11 @@ pub(super) fn construct_parse_function_statements(
           // TODO
           break;
         }
-        EatCrumbs | Noop13 | Scan | Repeat | AssertShift | SetFailState => {
+        Pop => {
+          unsafe { construct_pop(module, pack)? };
+          break;
+        }
+        Noop13 | Scan | Repeat | AssertShift | SetFailState => {
           instruction = instruction.next(&output.bytecode);
         }
         VectorBranch | HashBranch => {
@@ -324,6 +328,8 @@ struct Pointers<'a> {
   input_off_ptr:      PointerValue<'a>,
   input_trun:         PointerValue<'a>,
   token_len_ptr:      PointerValue<'a>,
+  /// Should be the FIRST table block within
+  /// a single state.
   entry_table_block:  BasicBlock<'a>,
 }
 
@@ -373,10 +379,10 @@ fn construct_instruction_branch<'a>(
     // ------------------------------------------------------------------------
     // branching states that have more than one table are comprised of a combination
     // BYTE | CLASS | CODEPOINT tables only. That is, the state is a scanner state.
-    assert!(
+    /* assert!(
       p.state.branch_data.len() == 1 || p.is_scanner,
       "None scanner branch states should only contain one table."
-    );
+    ); */
     assert!(
       !p.is_scanner
         || !p
@@ -1035,6 +1041,31 @@ fn write_reentrance<'a>(
   SherpaResult::Ok(())
 }
 
+/// Pops the top goto off of the goto stack
+pub(crate) unsafe fn construct_pop(
+  module: &LLVMParserModule,
+  pack: &FunctionPack,
+) -> SherpaResult<()> {
+  let c = module;
+  let LLVMParserModule { builder: b, ctx, fun, .. } = module;
+
+  let parse_ctx = pack.fun.get_first_param()?.into_pointer_value();
+
+  let i32 = ctx.i32_type();
+
+  let goto_stack_ptr = CTX::goto_stack_ptr.get_ptr(c, parse_ctx)?;
+  let goto_top = b.build_load(goto_stack_ptr, "").into_pointer_value();
+  let goto_top = b.build_gep(goto_top, &[i32.const_int(1, false).const_neg()], "");
+  b.build_store(goto_stack_ptr, goto_top);
+
+  let goto_free_ptr = CTX::goto_free.get_ptr(c, parse_ctx)?;
+  let goto_free = b.build_load(goto_free_ptr, "").into_int_value();
+  let goto_free = b.build_int_add(goto_free, i32.const_int(1, false), "");
+  b.build_store(goto_free_ptr, goto_free);
+
+  construct_pass(module, pack)
+}
+
 pub(crate) fn construct_reduce(
   instruction: Instruction,
   module: &LLVMParserModule,
@@ -1244,7 +1275,6 @@ pub(crate) unsafe fn construct_dispatch_function<'a>(
   let goto_free_ptr = CTX::goto_free.get_ptr(c, parse_ctx)?;
   let goto_free = b.build_load(goto_free_ptr, "").into_int_value();
   let goto_free = b.build_int_add(goto_free, i32.const_int(1, false), "");
-
   b.build_store(goto_free_ptr, goto_free);
 
   let goto = b.build_load(goto_top, "").into_struct_value();

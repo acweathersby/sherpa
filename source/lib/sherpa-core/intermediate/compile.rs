@@ -237,7 +237,7 @@ pub(crate) fn compile_scanner_states(
     "Symbol Info",
     format!(
       "This scanner handles the symbols: \n[ {} ]",
-      symbols.iter().map(|s| { s.to_string(&grammar) }).collect::<Vec<_>>().join(" ")
+      symbols.iter().map(|s| { s.debug_string(&grammar) }).collect::<Vec<_>>().join(" ")
     ),
   );
 

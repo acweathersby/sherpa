@@ -8,7 +8,7 @@ pub fn collect_shifts_and_skips<'a>(
   entry_point: u32,
   target_production_id: u32,
   bytecode: &[u32],
-  debug: Option<&DebugFn<UTF8StringReader<'a>, u32>>,
+  debug: Option<DebugFn<UTF8StringReader<'a>, u32>>,
 ) -> SherpaResult<(Vec<String>, Vec<String>)> {
   let mut reader = UTF8StringReader::from_string(input);
   let mut ctx = ParseContext::<_, u32>::new(&mut reader);
@@ -18,7 +18,7 @@ pub fn collect_shifts_and_skips<'a>(
   let mut skips = vec![];
 
   loop {
-    match get_next_action(&mut ctx, &mut stack, bytecode, debug) {
+    match get_next_action(&mut ctx, &mut stack, bytecode, &debug) {
       ParseAction::Accept { production_id } => {
         assert_eq!(
           production_id, target_production_id,

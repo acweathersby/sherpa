@@ -247,7 +247,7 @@ impl GraphNode {
         .map(|i| format!("\n|[{}]--->[{}]", i.to_string(), self.id))
         .collect::<Vec<_>>()
         .join(""),
-      self.edge_symbol.to_string(g),
+      self.edge_symbol.debug_string(g),
       self.edge_type.to_string(),
       self.node_type.to_string(),
       "",

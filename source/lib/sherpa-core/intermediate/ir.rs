@@ -298,7 +298,7 @@ fn create_state(
 
     if is_token_assertion {
       for symbol_id in &skip_symbols_set {
-        w.write_fmt(format_args!("\nskip [ {} ]", symbol_id.bytecode_id(Some(&t.g)),))?;
+        w.write_fmt(format_args!("\nskip TOKEN [ {} ]", symbol_id.bytecode_id(Some(&t.g)),))?;
       }
     }
 
@@ -340,12 +340,7 @@ fn create_branch_wrap(
 ) -> SherpaResult<()> {
   let sym = child.edge_symbol;
 
-  let (symbol_bytecode_id, assert_class, sym_comment) = if !t.is_scan() {
-    (sym.bytecode_id(Some(&t.g)), "TOKEN", sym.to_string(&t.g))
-  } else {
-    let (bc, class) = child.edge_symbol.shift_info(&t.g);
-    (bc, class, sym.to_string(&t.g))
-  };
+  let (symbol_bytecode_id, assert_class, sym_comment) = get_assert_class(t, sym, child);
 
   let postfix = postfix.filter(|_| !matches!(child.node_type, NodeType::Fail | NodeType::Pass));
 
@@ -406,6 +401,20 @@ fn create_branch_wrap(
   }
 
   SherpaResult::Ok(())
+}
+
+fn get_assert_class(
+  t: &TransitionGraph,
+  sym: SymbolID,
+  child: &GraphNode,
+) -> (u32, &'static str, String) {
+  let (symbol_bytecode_id, assert_class, sym_comment) = if !t.is_scan() {
+    (sym.bytecode_id(Some(&t.g)), "TOKEN", sym.debug_string(&t.g))
+  } else {
+    let (bc, class) = child.edge_symbol.shift_info(&t.g);
+    (bc, class, sym.debug_string(&t.g))
+  };
+  (symbol_bytecode_id, assert_class, sym_comment)
 }
 
 fn create_child_state(
@@ -542,7 +551,7 @@ fn create_reduction_string(t: &TransitionGraph, node: &GraphNode) -> Option<Stri
 }
 
 fn create_token_reduction_string(g: &GrammarStore, sym: SymbolID) -> String {
-  format!("assign token [ {}{} ]", sym.bytecode_id(Some(g)), escaped_comment(sym.to_string(g)))
+  format!("assign token [ {}{} ]", sym.bytecode_id(Some(g)), escaped_comment(sym.debug_string(g)))
 }
 
 fn create_rule_reduction_string(g: &GrammarStore, item: &Item) -> String {

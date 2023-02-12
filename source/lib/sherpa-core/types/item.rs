@@ -51,6 +51,10 @@ impl ItemState {
     self.current_lane == other.current_lane
   }
 
+  pub fn is_multi_lane(&self) -> bool {
+    self.current_lane != self.prev_lane
+  }
+
   pub fn in_either_lane(&self, other: &ItemState) -> bool {
     match (self.current_lane, self.prev_lane, other.current_lane) {
       (a, b, c) if a == c || b == c => true,
@@ -139,7 +143,7 @@ impl OriginData {
   pub fn debug_string(&self, g: &GrammarStore) -> String {
     use OriginData::*;
     match self {
-      Symbol(sym_id) => sym_id.to_string(g),
+      Symbol(sym_id) => sym_id.debug_string(g),
       RuleId(rule_id) => {
         let rule = g.get_rule(rule_id).unwrap();
         let prod = g.get_production(&rule.prod_id).unwrap();
@@ -155,7 +159,7 @@ impl OriginData {
   pub fn blame_string(&self, g: &GrammarStore) -> String {
     use OriginData::*;
     match self {
-      Symbol(sym_id) => sym_id.to_string(g),
+      Symbol(sym_id) => sym_id.debug_string(g),
       RuleId(rule_id) => {
         let rule = g.get_rule(rule_id).unwrap();
 
@@ -175,10 +179,21 @@ impl OriginData {
 #[repr(C, align(64))]
 #[derive(PartialEq, Eq, Debug, Clone, Copy, Hash, PartialOrd, Ord)]
 pub(crate) struct Item {
-  rule:  RuleId,
-  state: ItemState,
-  len:   u8,
-  off:   u8,
+  pub rule:  RuleId,
+  pub state: ItemState,
+  pub len:   u8,
+  pub off:   u8,
+}
+
+impl Default for Item {
+  fn default() -> Self {
+    Self {
+      len:   0,
+      off:   0,
+      state: ItemState { current_lane: 0, prev_lane: 0, origin: OriginData::Null },
+      rule:  RuleId(0),
+    }
+  }
 }
 
 impl Item {
@@ -204,7 +219,7 @@ impl Item {
 
         string += " ";
 
-        string += &sym_id.to_string(g)
+        string += &sym_id.debug_string(g)
       }
 
       if self.completed() {
@@ -230,7 +245,7 @@ impl Item {
       for (_, RuleSymbol { sym_id, .. }) in rule.syms.iter().enumerate() {
         string += " ";
 
-        string += &sym_id.to_string(g)
+        string += &sym_id.debug_string(g)
       }
       string
     }
@@ -253,7 +268,7 @@ impl Item {
       for RuleSymbol { sym_id, .. } in rule.syms.iter() {
         string += " ";
 
-        string += &sym_id.to_string(g)
+        string += &sym_id.debug_string(g)
       }
 
       string
@@ -384,6 +399,10 @@ impl Item {
     self.rule
   }
 
+  pub fn get_offset(&self) -> u8 {
+    self.off
+  }
+
   pub fn get_rule<'a>(&self, g: &'a GrammarStore) -> SherpaResult<&'a Rule> {
     g.get_rule(&self.get_rule_id())
   }
@@ -493,6 +512,7 @@ impl From<&Rule> for Item {
 pub(crate) struct LinkedItem {
   pub item:         Item,
   pub closure_node: MaybeNodeId,
+  pub depth:        usize,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -517,6 +537,36 @@ impl FollowItemGroups {
       .chain(self.intermediate_completed_items.iter())
       .map(|t| t.item)
       .collect()
+  }
+
+  pub fn __print_debug__(&self, g: &GrammarStore) {
+    for item in self
+      .uncompleted_items
+      .iter()
+      .chain(self.final_completed_items.iter())
+      .chain(self.intermediate_completed_items.iter())
+    {
+      println!("d:{} :: {}", item.depth, item.item.debug_string(g))
+    }
+  }
+
+  pub fn get_all_items_up_to_depth(&self) -> Items {
+    let mut lowest = usize::MAX;
+    let l = &mut lowest;
+
+    let r = self
+      .uncompleted_items
+      .iter()
+      .chain(self.final_completed_items.iter())
+      .chain(self.intermediate_completed_items.iter())
+      .map(|i| {
+        lowest = lowest.min(i.depth);
+
+        i
+      })
+      .collect::<Vec<_>>();
+
+    r.into_iter().filter(|i| i.depth == lowest).map(|t| t.item).collect()
   }
 
   pub fn get_uncompleted_items(&self) -> Items {
@@ -590,6 +640,16 @@ pub(crate) trait ItemContainer:
   #[inline(always)]
   fn try_increment(&self) -> Items {
     self.clone().to_vec().into_iter().map(|i| i.try_increment()).collect()
+  }
+
+  #[inline(always)]
+  fn try_decrement(&self) -> Items {
+    self
+      .clone()
+      .to_vec()
+      .into_iter()
+      .map(|i| if i.off > 0 { i.decrement().unwrap() } else { i })
+      .collect()
   }
 
   #[inline(always)]

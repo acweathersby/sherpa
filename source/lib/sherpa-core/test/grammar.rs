@@ -579,7 +579,7 @@ fn compile_latest_grammar() -> SherpaResult<()> {
     entry_point,
     target_production_id,
     &bc.bytecode,
-    Some(&move |event| match event {
+    Some(Box::new(move |event| match event {
       DebugEvent::ExecuteInstruction { ctx, .. } => {
         if true || !ctx.is_scanner() {
           return;
@@ -592,7 +592,7 @@ fn compile_latest_grammar() -> SherpaResult<()> {
         }
       }
       _ => {}
-    }),
+    })),
   )?;
 
   dbg!(shifts, skips);

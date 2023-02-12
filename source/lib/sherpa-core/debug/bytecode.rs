@@ -22,8 +22,12 @@ pub(crate) struct BytecodeGrammarLookups {
 
 impl BytecodeGrammarLookups {
   pub fn new(g: Arc<GrammarStore>) -> Self {
-    let bc_to_prod =
-      g.productions.iter().map(|(id, p)| (p.bytecode_id, *id)).collect::<BTreeMap<_, _>>();
+    let bc_to_prod = g
+      .productions
+      .iter()
+      .filter(|(_, p)| !p.is_scanner)
+      .map(|(id, p)| (p.bytecode_id, *id))
+      .collect::<BTreeMap<_, _>>();
 
     let bc_to_rule = g.rules.iter().map(|(id, r)| (r.bytecode_id, *id)).collect::<BTreeMap<_, _>>();
 
@@ -148,7 +152,7 @@ pub(crate) fn disassemble_state(
         let (string, offset) = ds(bc, so + 1, lu);
         (format!("\n{}SCAN", dh(so)) + &string, offset)
       }
-      Instruction::I08_EAT_CRUMBS => (format!("\n{}NOOP", dh(so)), so + 1),
+      Instruction::I08_POP => (format!("\n{}POP", dh(so)), so + 1),
       Instruction::I09_VECTOR_BRANCH => generate_table_string(
         bc,
         so,

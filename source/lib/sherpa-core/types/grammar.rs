@@ -1,4 +1,4 @@
-use super::*;
+use super::{item_2::Item as Item2, *};
 use crate::{
   grammar::{
     compile::{
@@ -10,6 +10,7 @@ use crate::{
     get_closure_cached,
     get_guid_grammar_name,
     get_production_start_items,
+    get_production_start_items2,
     hash_id_value_u64,
   },
   journal::Journal,
@@ -278,6 +279,15 @@ impl GrammarStore {
     return Self::from_str(j, string.as_str());
   }
 
+  /// Returns a reference to a Symbol given a SymbolId
+  pub fn get_symbol(&self, sym_id: &SymbolID) -> Option<&Symbol> {
+    match sym_id {
+      sym if sym.is_defined() => self.symbols.get(sym),
+      sym if sym.is_generic() => Some(*Symbol::generics_lu().get(sym).unwrap()),
+      _ => None,
+    }
+  }
+
   /// Returns the [Rule] that's mapped to [`rule_id`](RuleId)
   /// within the grammar
   pub fn get_rule(&self, rule_id: &RuleId) -> SherpaResult<&Rule> {
@@ -400,9 +410,14 @@ impl GrammarStore {
         }
       }
     }
-
     recurse_type
   }
 
-  // pub fn map_symbols<, OutputType>
+  //
+  pub(crate) fn get_production_start_items_from_name(&self, name: &str) -> Vec<Item2> {
+    match self.get_production_id_by_name(name) {
+      Some(prod_id) => get_production_start_items2(&prod_id, self),
+      None => vec![],
+    }
+  }
 }

@@ -347,7 +347,7 @@ fn finalize_symbols(_j: &mut Journal, g: &mut GrammarStore) {
       }
     }
 
-    g.symbols.get_mut(&sym_id).unwrap().friendly_name = sym_id.to_string(g);
+    g.symbols.get_mut(&sym_id).unwrap().friendly_name = sym_id.debug_string(g);
   }
   for prod in g.productions.values_mut() {
     if prod.sym_id.is_token_production() && !g.symbols.contains_key(&prod.sym_id) {

@@ -37,10 +37,16 @@ pub(super) fn get_follow_items(
 
   // Stores the end item [1] and its immediate closure item [0]
   let mut completed_items = VecDeque::from_iter(vec![(
+    0,
     root_completed_item.get_state(),
-    (LinkedItem { item: *root_completed_item, closure_node: prev_state_ref }),
+    (LinkedItem {
+      depth:        0,
+      item:         *root_completed_item,
+      closure_node: prev_state_ref,
+    }),
   )]);
-  while let Some((state, linked)) = completed_items.pop_front() {
+
+  while let Some((depth, state, linked)) = completed_items.pop_front() {
     if __print_debug__ {
       eprintln!(
         "\nLooking for matches for  {} in {:?} with state {}",
@@ -109,8 +115,9 @@ pub(super) fn get_follow_items(
           if __print_debug__ {
             eprintln!("no closure for Node [{:?}] - Selecting previous node", current_node);
           }
-          completed_items.push_back((state, LinkedItem {
-            item:         completed_item,
+          completed_items.push_back((depth, state, LinkedItem {
+            depth,
+            item: completed_item,
             closure_node: Some(prev_node),
           }));
         }
@@ -121,7 +128,8 @@ pub(super) fn get_follow_items(
           );
           if t.item_is_goal(completed_item) {
             fin_items.insert(LinkedItem {
-              item:         completed_item.to_origin_only_state(),
+              depth,
+              item: completed_item.to_origin_only_state(),
               closure_node: None,
             });
           }
@@ -130,7 +138,7 @@ pub(super) fn get_follow_items(
           }
           // This item should match one of the root items when set to completed
           if completed_item == *root_completed_item {
-            fin_items.insert(LinkedItem { item: completed_item, closure_node: None });
+            fin_items.insert(LinkedItem { depth, item: completed_item, closure_node: None });
           }
         }
         (completed_item, false, prev_node, Some(current_node)) => {
@@ -141,26 +149,35 @@ pub(super) fn get_follow_items(
           let null_items: Items = closure.drain_filter(|i| i.is_null()).collect();
           if !null_items.is_empty() {
             for null_item in null_items {
-              completed_items.push_back((null_item.get_state().to_prev_lane(), LinkedItem {
-                item:         completed_item,
-                closure_node: Some(current_node),
-              }));
+              completed_items.push_back((
+                depth,
+                null_item.get_state().to_prev_lane(),
+                LinkedItem { depth, item: completed_item, closure_node: Some(current_node) },
+              ));
             }
           } else {
             let mut uncompleted_items = closure.try_increment();
             let completed = uncompleted_items
               .drain_filter(|i| i.completed())
-              .map(|i| (proxy_state, i))
+              .map(|i| (depth, proxy_state, i))
               .collect::<Vec<_>>();
-            let mut uncompleted_items = uncompleted_items.to_state(proxy_state);
+            let uncompleted_items = uncompleted_items.to_state(proxy_state);
             let mut seen = ItemSet::new();
             let mut completed_queue = VecDeque::from_iter(completed);
 
             for un in &uncompleted_items {
               t.get_node_mut(prev_state_ref.unwrap()).goto_items.push(*un);
+              out.insert(LinkedItem {
+                depth,
+                item: un.to_local_state(),
+                closure_node: Some(current_node),
+              });
             }
 
-            while let Some((proxy_state, item)) = completed_queue.pop_front() {
+            while let Some((depth, proxy_state, item)) = completed_queue.pop_front() {
+              if (g.get_production_plain_name(t.root_prod_ids.first().unwrap()) == "expression") {
+                println!("{depth} {}", item.debug_string(g));
+              }
               if seen.insert(item.to_empty_state().to_start()) {
                 if __print_debug__ {
                   eprintln!("---- {}", item.debug_string(&t.g));
@@ -213,37 +230,34 @@ pub(super) fn get_follow_items(
                     &mut incremented
                       .clone()
                       .filter(|i| i.completed())
-                      .map(|i| (fork_state, i))
+                      .map(|i| (depth + 1, fork_state, i))
                       .collect(),
                   );
 
-                  uncompleted_items.append(
-                    &mut incremented
-                      .filter(|i| !i.completed())
-                      .map(|i| i.to_state(fork_state))
-                      .collect(),
-                  );
+                  for item in incremented.filter(|i| !i.completed()).map(|i| i.to_state(fork_state))
+                  {
+                    out.insert(LinkedItem {
+                      depth:        depth + 1,
+                      item:         item.to_local_state(),
+                      closure_node: Some(current_node),
+                    });
+                  }
 
                   // Preserve
                   intermediate.insert(LinkedItem {
-                    item:         forked_item,
+                    depth,
+                    item: forked_item,
                     closure_node: Some(current_node),
                   });
                 } else {
                   // Let the item "fall into" the previous state's closure
-                  completed_items.push_back((original_state, LinkedItem {
-                    item:         forked_item,
+                  completed_items.push_back((depth, original_state, LinkedItem {
+                    depth,
+                    item: forked_item,
                     closure_node: prev_node,
                   }));
                 }
               }
-            }
-
-            for item in uncompleted_items {
-              out.insert(LinkedItem {
-                item:         item.to_local_state(),
-                closure_node: Some(current_node),
-              });
             }
           }
         }
@@ -259,7 +273,7 @@ pub(super) fn get_follow_items(
           let candidate_state = completed_item.to_state(state).to_origin_only_state();
 
           if t.accept_items().contains(&candidate_state) {
-            fin_items.insert(LinkedItem { item: completed_item, closure_node: None });
+            fin_items.insert(LinkedItem { depth, item: completed_item, closure_node: None });
           } else {
             eprintln!("All possible conditions should be covered by the above: ");
             eprintln!("completed_items: {} {}", completed_item.debug_string(g), state);

@@ -43,7 +43,7 @@ pub(crate) fn build_byte_code_buffer(states: Vec<&IR_STATE>) -> (Vec<u32>, BTree
     Instruction::I15_FALL_THROUGH,
     Instruction::I00_PASS,
     Instruction::I15_FAIL,
-    Instruction::I08_EAT_CRUMBS,
+    Instruction::I08_POP,
     NORMAL_STATE_FLAG,
     Instruction::I00_PASS,
   ];
@@ -249,7 +249,7 @@ fn build_branching_bytecode(
     &branches
       .iter()
       .cloned()
-      .filter_map(|p| if p.mode == "TOKEN" || p.is_skip { Some(p.as_ref()) } else { None })
+      .filter_map(|p| if p.mode == "TOKEN" { Some(p.as_ref()) } else { None })
       .collect::<Vec<_>>(),
     InputType::T02_TOKEN,
     scanner_name,
@@ -520,7 +520,7 @@ fn build_branchless_bytecode(
           byte_code.push(I::I02_GOTO | NORMAL_STATE_FLAG | state_pointer_val);
         }
       }
-      ASTNode::Skip(_) => {}
+      ASTNode::Pop(_) => byte_code.push(I::I08_POP),
       ASTNode::Pass(_) => byte_code.push(I::I00_PASS),
       ASTNode::Fail(_) => byte_code.push(I::I15_FAIL),
       ASTNode::NotInScope(box NotInScope { .. }) => {}
@@ -543,7 +543,7 @@ fn build_branchless_bytecode(
   }
 
   if let Some(last) = byte_code.last() {
-    if *last != I::I00_PASS && *last != I::I15_FAIL {
+    if !matches!(*last, I::I00_PASS | I::I15_FAIL | I::I08_POP) {
       byte_code.push(I::I00_PASS);
     }
   }

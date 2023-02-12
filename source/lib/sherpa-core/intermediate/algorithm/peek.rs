@@ -145,7 +145,7 @@ pub(crate) fn peek(
                 j.report_mut().add_note("Exclusive short-circuit", format!(
                   "Short circuiting completion of other items due to one or more exclusive symbols being completed: [\n{}\n]",
                   exclusive.iter().map(|i| format!("    {{ {} => {} }}", 
-                  i.debug_string(g), i.get_origin_sym().to_string(g))).collect::<Vec<_>>().join("\n")
+                  i.debug_string(g), i.get_origin_sym().debug_string(g))).collect::<Vec<_>>().join("\n")
               ));
               }
             }
@@ -234,6 +234,17 @@ pub(crate) fn peek(
           );
         }
         2.. => {
+          // If all but one item is an intermediate and
+          // all items reduce into the non-intermediate item
+          // then we can issue a series of reductions down to
+          // that last item.
+
+          t.starts.__print_items__(g, "starts");
+          peek_items.__print_items__(g, "Test");
+          t._print_nodes();
+          for (index, goal) in goals.iter().enumerate() {
+            goal.__print_items__(g, &format!("Goal [{index}]"));
+          }
           items.__print_items__(g, "Conflicting items");
           t.accept_items.__print_items__(g, "GOALS");
           return SherpaResult::Err(SherpaError::grammar_err_multi_location {
@@ -252,6 +263,7 @@ pub(crate) fn peek(
               .collect(),
           });
         }
+
         _ => {}
       }
     }
@@ -586,11 +598,22 @@ fn convert_to_production_call(
   match (call_groups.len(), call_groups.pop()) {
     (1, Some((Some(_), items))) => {
       let mut continue_items = Items::new();
+      let mut all_items = Items::new();
 
       for (_, items) in hash_group_btreemap(items.clone(), |_, i| i.get_origin()) {
         let results =
           get_follow_items(t, &convert_origin(&items[0], &goals).to_completed(), Some(par_id));
-        continue_items.append(&mut results.get_all_items());
+
+        continue_items.append(&mut results.get_all_items_up_to_depth());
+        all_items.append(&mut &mut results.get_all_items());
+      }
+
+      if (g.get_production_plain_name(t.root_prod_ids.first().unwrap()) == "expression") {
+        items.__print_items__(g, "No Depth++");
+        continue_items.__print_items__(g, "No Depth++");
+        for (i, gd) in goals.iter().enumerate() {
+          gd.__print_items__(g, &format!(" goal {i}"))
+        }
       }
 
       let production_sym = continue_items[0].decrement()?.get_symbol(g);
@@ -618,7 +641,8 @@ fn convert_to_production_call(
       // Submit these items to be processed.
 
       if !t.is_scan() {
-        t.goto_seeds.append(&mut items.non_term_items(g).to_empty_state().to_set());
+        t.goto_seeds
+          .append(&mut all_items.completed_items().to_empty_state().try_decrement().to_set());
       }
 
       SherpaResult::Ok(true)
@@ -770,7 +794,7 @@ fn resolveConflictingSymbols(
                     t.g.get_production(prod_id).unwrap().loc.blame(
                       1,
                       1,
-                      &format!("[ {} ] first defined here", s.to_string(&t.g)),
+                      &format!("[ {} ] first defined here", s.debug_string(&t.g)),
                       BlameColor::RED,
                     )
                   }
@@ -907,8 +931,8 @@ fn merge_occluding_token_groups(
             journal.report_mut().add_note("Symbol Group Merge", 
             format!(
             "\nDue to the ambiguous symbols [{} ≈ {}] the peek group [\n\n{}\n\n] will be merged into [\n\n{}\n\n]\n",
-            to_sym.to_string(&t.g),
-            from_sym.to_string(&t.g),
+            to_sym.debug_string(&t.g),
+            from_sym.debug_string(&t.g),
             from_group.to_debug_string(&t.g, "\n"),
             groups[j].1.to_debug_string(&t.g, "\n")
           ));

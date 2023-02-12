@@ -1,7 +1,12 @@
 use crate::{
   ascript::{rust_2, types::AScriptStore},
   compile::{compile_bytecode, compile_states, optimize_ir_states, GrammarStore},
-  debug::collect_shifts_and_skips,
+  debug::{
+    collect_shifts_and_skips,
+    disassemble_state,
+    generate_disassembly,
+    BytecodeGrammarLookups,
+  },
   llvm::{compile_module_from_bytecode, construct_module},
   test::utils::path_from_source,
   util::get_num_of_available_threads,
@@ -11,6 +16,7 @@ use crate::{
   SherpaResult,
 };
 use inkwell::context::Context;
+use sherpa_runtime::functions::DebugEvent;
 
 #[test]
 fn test_compile_of_sherpa_grammar_bytecode() -> SherpaResult<()> {
@@ -197,6 +203,10 @@ fn test_compile_of_sherpa_grammar_llvm() -> SherpaResult<()> {
     return SherpaResult::None;
   }
 
+  j.debug_print_reports(crate::ReportType::ProductionCompile(
+    g.get_production_id_by_name("expression").unwrap(),
+  ));
+
   let ir_states = optimize_ir_states(&mut j, states);
 
   if j.debug_error_report() {
@@ -219,7 +229,7 @@ fn test_compile_of_sherpa_grammar_llvm() -> SherpaResult<()> {
 
   //eprintln!("{}", String::from_utf8(writer.into_output())?);
 
-  //eprintln!("{}", generate_disassembly(&bc, Some(&mut j)));
+  eprintln!("{}", generate_disassembly(&bc, Some(&mut j)));
 
   // Build LLVM Data
 
@@ -232,6 +242,8 @@ fn test_compile_of_sherpa_grammar_llvm() -> SherpaResult<()> {
     return SherpaResult::None;
   }
 
+  let g_lu = BytecodeGrammarLookups::new(g.clone());
+
   // Perform a parsing pass on some simple input.
 
   let (.., shifts, _) = collect_shifts_and_skips(
@@ -239,7 +251,19 @@ fn test_compile_of_sherpa_grammar_llvm() -> SherpaResult<()> {
     *bc.state_name_to_offset.get(g.get_exported_productions()[0].guid_name)?,
     g.get_exported_productions()[0].production.bytecode_id,
     &bc.bytecode,
-    None,
+    Some(Box::new(move |event| match event {
+      DebugEvent::ExecuteState { bc, offset, len, address, ctx } => {
+        if !ctx.is_scanner() {
+          println!(
+            "{}, {:0>6X} \n{}",
+            &ctx.get_str()[offset..],
+            address,
+            disassemble_state(bc, address, Some(&g_lu)).0
+          );
+        }
+      }
+      _ => {}
+    })),
   )?;
 
   dbg!(shifts);

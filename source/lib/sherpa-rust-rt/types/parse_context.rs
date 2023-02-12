@@ -1,9 +1,10 @@
 use super::*;
-use crate::utf8::get_token_class_from_codepoint;
+use crate::{functions::*, utf8::get_token_class_from_codepoint};
 use std::{
   alloc::{alloc, dealloc, Layout},
   fmt::Debug,
   ops::Index,
+  sync::Arc,
 };
 
 #[derive(Clone, Debug, Copy)]
@@ -528,4 +529,179 @@ pub enum ParseResult<Node> {
   Complete((Node, TokenRange, TokenRange)),
   Error(TokenRange, Vec<(Node, TokenRange, TokenRange)>),
   NeedMoreInput(Vec<(Node, TokenRange, TokenRange)>),
+}
+
+pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
+  /// Returns the byte length of activee token
+  fn get_token_length(&self) -> u32;
+
+  /// Returns the byte offset the head of the activee token
+  fn get_token_offset(&self) -> u32;
+
+  /// Returns the 0 indexed line number active token
+  fn get_token_line_number(&self) -> u32;
+
+  /// Returns the offset the newline character preoceeding
+  /// the active token
+  fn get_token_line_offset(&self) -> u32;
+
+  /// Returns the production id of the most recently reduced symbols
+  fn get_production_id(&self) -> u32;
+
+  /// Parse input up to the next required parse action and return
+  /// its value.
+  fn get_next_action(&mut self, debug: &Option<DebugFn<R, M>>) -> ParseAction;
+
+  /// Returns a reference to the internal Reader
+  fn get_reader(&self) -> &R;
+
+  /// Returns a reference to the input string
+  fn get_input(&self) -> &str;
+
+  fn init_parser(&mut self, entry_point: u32);
+
+  fn collect_shifts_and_skips(
+    &mut self,
+    entry_point: u32,
+    target_production_id: u32,
+    debug: &Option<DebugFn<R, M>>,
+  ) -> Result<(Vec<String>, Vec<String>), SherpaParseError> {
+    self.init_parser(entry_point);
+
+    let mut shifts = vec![];
+    let mut skips = vec![];
+    loop {
+      match self.get_next_action(debug) {
+        ParseAction::Accept { production_id } => {
+          assert_eq!(
+            production_id, target_production_id,
+            "Expected the accepted production id to match target_production_id"
+          );
+          break Ok((shifts, skips));
+        }
+        ParseAction::Error { last_input, .. } => {
+          let mut token: Token = last_input.to_token(self.get_reader());
+
+          token.set_source(Arc::new(Vec::from(self.get_input().to_string().as_bytes())));
+          break Err(SherpaParseError {
+            message: "unable to recognize input".to_string(),
+            inline_message: "".to_string(),
+            loc: token,
+            last_production: self.get_production_id(),
+          });
+        }
+        ParseAction::Fork { .. } => {
+          panic!("No implementation of fork resolution is available")
+        }
+        ParseAction::Shift { anchor_byte_offset, token_byte_length, token_byte_offset, .. } => {
+          if (token_byte_offset - anchor_byte_offset) > 0 {
+            skips.push(
+              self.get_input()[anchor_byte_offset as usize..(token_byte_offset) as usize]
+                .to_string(),
+            );
+          }
+
+          shifts.push(
+            self.get_input()
+              [token_byte_offset as usize..(token_byte_offset + token_byte_length) as usize]
+              .to_string(),
+          );
+        }
+        ParseAction::Reduce { .. } => {}
+        _ => panic!("Unexpected Action!"),
+      }
+    }
+  }
+}
+
+pub struct ByteCodeParser<'a, R: ByteReader + MutByteReader, M> {
+  ctx:   ParseContext<R, M>,
+  stack: Vec<u32>,
+  bc:    &'a [u32],
+}
+
+impl<'a, R: ByteReader + MutByteReader, M> ByteCodeParser<'a, R, M> {
+  pub fn new(reader: &'a mut R, bc: &'a [u32]) -> Self {
+    ByteCodeParser { ctx: ParseContext::<R, M>::new(reader), stack: vec![], bc }
+  }
+}
+
+impl<'a, R: ByteReader + MutByteReader, M> SherpaParser<R, M> for ByteCodeParser<'a, R, M> {
+  fn get_token_length(&self) -> u32 {
+    self.ctx.token_len
+  }
+
+  fn get_token_offset(&self) -> u32 {
+    self.ctx.token_off
+  }
+
+  fn get_token_line_number(&self) -> u32 {
+    self.ctx.start_line_num
+  }
+
+  fn get_token_line_offset(&self) -> u32 {
+    self.ctx.start_line_off
+  }
+
+  fn get_production_id(&self) -> u32 {
+    self.ctx.prod_id
+  }
+
+  fn get_reader(&self) -> &R {
+    self.ctx.get_reader()
+  }
+
+  fn get_input(&self) -> &str {
+    unsafe { std::str::from_utf8_unchecked(self.get_reader().get_bytes()) }
+  }
+
+  fn init_parser(&mut self, entry_point: u32) {
+    self.stack = vec![0, entry_point | NORMAL_STATE_FLAG];
+  }
+
+  fn get_next_action(&mut self, debug: &Option<DebugFn<R, M>>) -> ParseAction {
+    let ByteCodeParser { ctx, stack, bc } = self;
+
+    let mut state = stack.pop().unwrap();
+
+    loop {
+      if state < 1 {
+        let off = ctx.token_off;
+        if ctx.get_reader().offset_at_end(off) {
+          break ParseAction::Accept { production_id: ctx.get_production() };
+        } else {
+          break ParseAction::Error {
+            last_production: ctx.get_production(),
+            last_input:      TokenRange {
+              len:      ctx.token_len,
+              off:      ctx.token_off,
+              line_num: ctx.start_line_num,
+              line_off: ctx.start_line_off,
+            },
+          };
+        }
+      } else {
+        let mask_gate = NORMAL_STATE_FLAG << (ctx.in_fail_mode() as u32);
+
+        if (state & mask_gate) != 0 {
+          match dispatch(state, ctx, stack, bc, debug) {
+            (ParseAction::CompleteState, _) => {
+              ctx.set_fail_mode_to(false);
+              state = stack.pop().unwrap();
+            }
+            (ParseAction::FailState, _) => {
+              ctx.set_fail_mode_to(true);
+              state = stack.pop().unwrap();
+            }
+            (action, next_state) => {
+              stack.push(next_state | NORMAL_STATE_FLAG);
+              break action;
+            }
+          }
+        } else {
+          state = stack.pop().unwrap();
+        }
+      }
+    }
+  }
 }

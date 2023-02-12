@@ -19,6 +19,8 @@ use std::{collections::BTreeSet, rc::Rc, vec};
 
 use super::{create_node, follow::get_production_follow_items, process_node};
 
+
+
 pub(crate) fn construct_recursive_ascent(
   j: &mut Journal,
   goto_seeds: BTreeSet<Item>,

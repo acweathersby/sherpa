@@ -110,7 +110,6 @@ impl IRState {
 
   pub fn into_hashed(mut self) -> Self {
     self.hash = hash_id_value_u64(self.code.clone());
-    self.code = self.code.replace("%%%%", &self.get_name());
     self
   }
 
@@ -132,7 +131,12 @@ impl IRState {
   }
 
   pub fn get_code(&self) -> String {
-    format!("{}{}\n{}\n", self.get_state_header(), self.get_scanner_header(), self.code,)
+    format!(
+      "{}{}\n{}\n",
+      self.get_state_header(),
+      self.get_scanner_header(),
+      self.code.replace("%%%%", &self.get_name())
+    )
   }
 
   pub fn get_comment(&self) -> &String {
@@ -219,10 +223,11 @@ impl IRState {
 impl Debug for IRState {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
-      "{}\\*\n {} \n*\\\n{}\n\n\n",
+      "{}{}/*\n {} \n*/\n{}\n\n\n",
       self.get_state_header(),
+      self.get_scanner_header(),
       self.comment,
-      self.code,
+      self.code.replace("%%%%", &self.get_name()),
     ))
   }
 }
@@ -230,10 +235,11 @@ impl Debug for IRState {
 impl Display for IRState {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
-      "{}\\*\n {} \n*\\\n{}\n\n\n",
+      "{}{}/*\n {} \n*/\n{}\n\n\n",
       self.get_state_header(),
+      self.get_scanner_header(),
       self.comment,
-      self.code,
+      self.code.replace("%%%%", &self.get_name()),
     ))
   }
 }
