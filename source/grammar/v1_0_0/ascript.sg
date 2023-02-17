@@ -129,7 +129,7 @@ IGNORE { c:sp c:nl }
 
 <> convert_initializer > 
 
-    "(" init_objects ")"       
+    '(' init_objects ")"       
         :ast { t_Init, expression: $2 }
 
 <> init_objects > member | token 
@@ -179,7 +179,7 @@ IGNORE { c:sp c:nl }
 
 <> token > 
 
-    ( "tk" | "tok" | "token" ) range?
+    ( "tk" | 'tok' | "token" ) range?
         :ast { t_AST_Token, range: $2 }
 
 <> range > "<" tk:integer ( ","  tk:integer  )? ">"

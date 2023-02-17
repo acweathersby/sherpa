@@ -3,7 +3,15 @@ use std::{io::Write, process::Command};
 use inkwell::{
   context::Context,
   passes::{PassManager, PassManagerBuilder},
-  targets::{CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetTriple},
+  targets::{
+    CodeModel,
+    FileType,
+    InitializationConfig,
+    RelocMode,
+    Target,
+    TargetMachine,
+    TargetTriple,
+  },
   OptimizationLevel,
 };
 
@@ -45,7 +53,8 @@ pub fn build_llvm_parser_interface<'a>() -> PipelineTask {
       }
     }),
     require_ascript: false,
-    require_bytecode: true,
+    require_bytecode: false,
+    require_states: true,
   }
 }
 
@@ -286,53 +295,66 @@ pub fn build_llvm_parser(
       let clang_command = j.config().llvm_clang_path.clone();
       let ar_command = j.config().llvm_ar_path.clone();
 
-      let Some(bytecode) = task_ctx.get_bytecode() else {
-        return Err(vec![SherpaError::from("Cannot compile LLVM parse: Bytecode is not available")]);
+      let Some(states) = task_ctx.get_states() else {
+        return Err(vec![SherpaError::from("Cannot compile LLVM parse: Parse states are not available")]);
       };
-
-      Target::initialize_x86(&InitializationConfig::default());
-
-      let target_triple = target_triple
-        .clone()
-        .unwrap_or(std::env::var("TARGET").unwrap_or("x86_64-linux-gnu".to_string()));
 
       let ll_file_path = output_path.join(parser_name.clone() + ".ll");
       let bitcode_path = output_path.join("lib".to_string() + &parser_name + ".bc");
       let object_path = output_path.join("lib".to_string() + &parser_name + ".o");
       let archive_path = output_path.join(format!("./lib{}.a", &parser_name));
 
-      let target_triple = TargetTriple::create(&target_triple);
-
       if output_cargo_build_commands {
         println!("cargo:rustc-link-search=native={}", output_path.to_str().unwrap());
         println!("cargo:rustc-link-lib=static={}", parser_name);
       }
 
-      // Write out llvm module to file
       let ctx = Context::create();
-      let mut module = construct_module(&mut j, &parser_name, &ctx);
 
-      match crate::llvm::compile_module_from_bytecode(&mut module, &mut j, &bytecode) {
+      // Setup Target Machine -------------------------------------------------------------------
+      Target::initialize_x86(&InitializationConfig::default());
+      let target_triple = if let Some(target_triple) = &target_triple {
+        TargetTriple::create(target_triple)
+      } else if let Ok(target_triple) = std::env::var("TARGET") {
+        TargetTriple::create(&target_triple)
+      } else {
+        TargetMachine::get_default_triple()
+      };
+      let reloc = RelocMode::PIC;
+      let model = CodeModel::Small;
+      let target = Target::from_triple(&target_triple).unwrap();
+      let opt = OptimizationLevel::Aggressive;
+      let target_machine =
+        target.create_target_machine(&target_triple, "generic", "", opt, reloc, model).unwrap();
+
+      let target_data = target_machine.get_target_data();
+
+      // Setup module ---------------------------------------------------------------------------
+      let module = ctx.create_module(&parser_name);
+      module.set_triple(&target_triple);
+      module.set_data_layout(&target_data.get_data_layout());
+
+      let mut llvm_mod = construct_module(&mut j, &ctx, &target_data, module);
+
+      match crate::llvm::compile_llvm_module_from_parse_states(&mut j, &mut llvm_mod, states) {
         SherpaResult::Ok(()) => {
           if task_ctx.get_journal().config().enable_ascript {
             unsafe {
-              crate::llvm::ascript_functions::construct_ast_builder::<DummyASTEnum>(&module)
+              crate::llvm::ascript_functions::construct_ast_builder::<DummyASTEnum>(&llvm_mod)
                 .unwrap();
             }
           }
 
-          let opt = OptimizationLevel::Aggressive;
-
           if light_lto {
             if output_llvm_ir_file {
               if let Ok(mut file) = task_ctx.create_file(ll_file_path.clone()) {
-                file.write_all(module.module.to_string().as_bytes()).unwrap();
+                file.write_all(llvm_mod.module.to_string().as_bytes()).unwrap();
                 file.flush().unwrap();
               }
             }
 
             task_ctx.add_artifact_path(bitcode_path.clone());
-            if module.module.write_bitcode_to_path(&bitcode_path) {
+            if llvm_mod.module.write_bitcode_to_path(&bitcode_path) {
               match Command::new(clang_command.clone())
                 .args(&[
                   "-flto=thin",
@@ -364,26 +386,16 @@ pub fn build_llvm_parser(
           } else {
             if output_llvm_ir_file {
               if let Ok(mut file) = task_ctx.create_file(ll_file_path.clone()) {
-                file.write_all(module.module.to_string().as_bytes()).unwrap();
+                file.write_all(llvm_mod.module.to_string().as_bytes()).unwrap();
                 file.flush().unwrap();
               }
             }
 
-            let reloc = RelocMode::PIC;
-            let model = CodeModel::Small;
-            let target = Target::from_triple(&target_triple).unwrap();
-            let target_machine = target
-              .create_target_machine(&target_triple, "generic", "", opt, reloc, model)
-              .unwrap();
-
-            module.module.set_triple(&target_triple);
-            module.module.set_data_layout(&target_machine.get_target_data().get_data_layout());
-
             if j.config().opt_llvm {
-              apply_llvm_optimizations(opt, &module);
+              apply_llvm_optimizations(opt, &llvm_mod);
             }
 
-            match target_machine.write_to_file(&module.module, FileType::Object, &object_path) {
+            match target_machine.write_to_file(&llvm_mod.module, FileType::Object, &object_path) {
               Ok(_) => {
                 if !(Command::new(ar_command)
                   .args(&["rc", archive_path.to_str().unwrap(), object_path.to_str().unwrap()])
@@ -406,7 +418,8 @@ pub fn build_llvm_parser(
       }
     }),
     require_ascript: false,
-    require_bytecode: true,
+    require_bytecode: false,
+    require_states: true,
   }
 }
 

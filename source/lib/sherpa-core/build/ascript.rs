@@ -31,7 +31,6 @@ pub fn build_ascript_types_and_functions(source_type: SourceType) -> PipelineTas
             Err(err) => Err(vec![SherpaError::from(err)]),
             _ => match rust_2::build_rust(ascript, writer) {
               SherpaResult::Err(err) => Err(vec![SherpaError::from(err)]),
-              SherpaResult::MultipleErrors(err) => Err(err.into_iter().collect()),
               SherpaResult::None => Err(vec![SherpaError::from("Could not build rust")]),
               SherpaResult::Ok(writer) => {
                 Ok(Some((2, unsafe { String::from_utf8_unchecked(writer.into_output()) })))
@@ -48,7 +47,7 @@ pub fn build_ascript_types_and_functions(source_type: SourceType) -> PipelineTas
       ))]),
     }),
     require_ascript: true,
-    require_bytecode: false,
+    ..Default::default()
   }
 }
 
@@ -183,10 +182,11 @@ pub(crate) fn get_ascript_export_data(
           len: 1,
           prod_id: production.id,
           id: RuleId(0),
-          bytecode_id: 0,
+          bytecode_id: None,
           ast_definition: None,
           grammar_ref: g.id.clone(),
           tok: Token::default(),
+          ..Default::default()
         },
         &mut ref_index,
         0,

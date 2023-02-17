@@ -1,9 +1,14 @@
-use super::*;
-use crate::{functions::*, utf8::get_token_class_from_codepoint};
+use super::{
+  ast::{AstObject, AstStackSlice},
+  *,
+};
+use crate::{
+  bytecode_parser::{dispatch, DebugEvent, DebugFn},
+  utf8::get_token_class_from_codepoint,
+};
 use std::{
   alloc::{alloc, dealloc, Layout},
   fmt::Debug,
-  ops::Index,
   sync::Arc,
 };
 
@@ -21,216 +26,110 @@ impl Default for Goto {
   }
 }
 
-type GetBlockFunction<T> = extern "C" fn(&mut T, u32, u32) -> InputInfo;
-
-pub const LLVM_BASE_STACK_SIZE: usize = 8;
+type GetBlockFunction<T> = extern "C" fn(
+  self_: &mut T,
+  &mut *const u8,
+  &mut *const u8,
+  &mut *const u8,
+  &mut *const u8,
+  &mut *const u8,
+);
 
 #[repr(C)]
 pub struct ParseContext<T: ByteReader, M = u32> {
   // Input data ----------
-  pub token_ptr:       *mut u8,
-  pub peek_ptr:        *mut u8,
-  pub scan_ptr:        *mut u8,
-  pub token_len:       u32,
-  pub peek_len:        u32,
-  pub scan_input_len:  u32,
-  pub tok_input_trun:  bool,
-  pub peek_input_trun: bool,
-  pub scan_input_trun: bool,
-  // Miscellaneous
-  pub in_peek_mode:    bool,
-  // Offset info ----------
-  /// The start of the portion of characters currently being recognized
-  pub anchor_off:      u32,
-  /// Maintains the start position of a token. The difference between this and the anchor
-  /// offset determines the number characters that have been skipped.
-  pub token_off:       u32,
-  /// Represents the most advanced offset of  peeked characters
-  pub peek_off:        u32,
-  /// Maintains the reference to then end of a recognized tokens when in a scan context
-  pub scan_anchor_off: u32,
-  /// Represents the most advanced portion of scanned characters
-  pub scan_off:        u32,
-  /// Represents the byte length of the currently recognized symbol
-  pub scan_len:        u32,
+  /// The head of the input block
+  pub begin_ptr: usize,
+  /// The the end of the last shifted token
+  pub anchor_ptr: usize,
+  /// The the start of the evaluated token, which may be
+  /// the same as base_ptr unless we are using peek shifts.
+  pub base_ptr: usize,
+  /// The the start of the evaluated token, which may be
+  /// the same as base_ptr unless we are using peek shifts.
+  pub head_ptr: usize,
+  /// The start of all unevaluated characters
+  pub tail_ptr: usize,
+  /// The end of the input block
+  pub end_ptr: usize,
+  /// The number of characters that comprize the current
+  /// token. This should be 0 if the tok_id is also
+  pub tok_len: usize,
+  /// The number of characters that can be read
+  /// from the input block.
+  pub chars_remaining_len: usize,
+  // Goto stack data -----
+  pub goto_stack_ptr: *mut Goto,
+  pub goto_size: u32,
+  pub goto_free: u32,
+  // Parse objects ----------------
+  pub get_input_info: GetBlockFunction<T>,
+  pub reader: *mut T,
+  // User context --------
+  pub meta_ctx: *mut M,
+  pub custom_lex: fn(&mut T, &mut M, &ParseContext<T, M>) -> (u32, u32, u32),
+  // Line info ------------
+  /// The offset of the last line character recognized that proceeds the anchor
+  pub start_line_off: u32,
+  /// The offset of the last line character recognized that proceeds the chkp
+  pub chkp_line_off: u32,
+  /// The offset of the last line character recognized that proceeds the tail
+  pub end_line_off: u32,
+  /// The number of line character recognized that proceed the anchor
+  pub start_line_num: u32,
+  /// The number of line character recognized that proceed the chkp
+  pub chkp_line_num: u32,
+  /// The number of line character recognized that proceed the tail
+  pub end_line_num: u32,
+  // Parser State ----------
+  /// When reducing, stores the the number of of symbols to reduce.
+  pub sym_len: u32,
+  /// Tracks whether the context is a fail mode or not.
+  pub state: u32,
   /// Set to the value of a production when a rule is reduced, or
-  pub prod_id:         u32,
+  pub prod_id: u32,
   /// Set to the value of a token when one is recognized. Also stores the number
   /// of symbols that are to be reduced.
-  pub tok_id:          u32,
-  // Line info ------------
-  /// The offset of the last line character recognized that proceeds the anchor offset
-  pub end_line_off:    u32,
-  /// The number of line character recognized that proceed the anchor offset
-  pub end_line_num:    u32,
-  /// The offset of the last line character recognized that proceeds the token offset
-  pub start_line_off:  u32,
-  /// The number of line character recognized that proceed the token offset
-  pub start_line_num:  u32,
-  /// The offset of the last line character recognized that proceeds the peek offset
-  pub scan_line_off:   u32,
-  /// The number of line character recognized that proceed the peek offset
-  pub scan_line_num:   u32,
-  // Goto stack data -----
-  pub goto_stack_ptr:  *mut Goto,
-  pub goto_size:       u32,
-  pub goto_free:       u32,
-  // Input data ----------
-  pub get_input_info:  GetBlockFunction<T>,
-  // Reader --------------
-  pub reader:          *mut T,
-  // User context --------
-  pub meta_ctx:        *mut M,
-  pub custom_lex:      fn(&mut T, &mut M, &ParseContext<T, M>) -> (u32, u32, u32),
-  /// Tracks whether the context is a fail mode or not.
-  pub state:           u32,
-  /// When reducing, stores the the number of of symbols to reduce into one.
-  pub meta_a:          u32,
+  pub tok_id: u32,
   /// When reducing, stores the rule id that is being reduced.
-  pub meta_b:          u32,
-  pub is_active:       bool,
-}
-
-#[test]
-fn llvm_context_is_160_bytes() {
-  assert_eq!(std::mem::size_of::<ParseContext<UTF8StringReader, u64>>(), 160)
-}
-
-impl<T: LLVMByteReader + ByteReader, M> Debug for ParseContext<T, M> {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    let mut dbgstr = f.debug_struct("ParseContext");
-    dbgstr.field("token_ptr", &self.token_ptr);
-    dbgstr.field("peek_ptr", &self.peek_ptr);
-    dbgstr.field("scan_ptr", &self.scan_ptr);
-    dbgstr.field("tok_input_len", &self.token_len);
-    dbgstr.field("peek_input_len", &self.peek_len);
-    dbgstr.field("scan_input_len", &self.scan_input_len);
-    dbgstr.field("anchor_off", &self.anchor_off);
-    dbgstr.field("token_off", &self.token_off);
-    dbgstr.field("peek_off", &self.peek_off);
-    dbgstr.field("scan_anchor_off", &self.scan_anchor_off);
-    dbgstr.field("scan_off", &self.scan_off);
-    dbgstr.field("scan_len", &self.scan_len);
-    dbgstr.field("tok_or_prod_id", &self.prod_id);
-    dbgstr.field("anchor_line_off", &self.end_line_off);
-    dbgstr.field("anchor_line_num", &self.end_line_num);
-    dbgstr.field("tok_line_off", &self.start_line_off);
-    dbgstr.field("tok_line_num", &self.start_line_num);
-    dbgstr.field("peek_line_off", &self.scan_line_off);
-    dbgstr.field("peek_line_num", &self.scan_line_num);
-    dbgstr.field("state", &self.state);
-    dbgstr.field("in_peek_mode", &self.in_peek_mode);
-    dbgstr.field("is_active", &self.is_active);
-    dbgstr.field("goto_stack_ptr", &self.goto_stack_ptr);
-    dbgstr.field("goto_size", &self.goto_size);
-    dbgstr.field("goto_used", &self.goto_free);
-    dbgstr.field("get_input_info", &"FN Pointer".to_string());
-    dbgstr.field("reader", &((self.reader) as usize).to_string());
-    dbgstr.field("meta_ctx", &self.meta_ctx);
-    dbgstr.field("custom_lex", &"FN Pointer".to_string());
-    dbgstr.finish()
-  }
-}
-
-impl<T: ByteReader + LLVMByteReader, M> ParseContext<T, M> {
-  pub fn new_llvm() -> Self {
-    Self {
-      token_ptr:       0 as *mut u8,
-      peek_ptr:        0 as *mut u8,
-      scan_ptr:        0 as *mut u8,
-      peek_input_trun: true,
-      scan_input_trun: true,
-      tok_input_trun:  true,
-      token_len:       0,
-      peek_len:        0,
-      scan_input_len:  0,
-      anchor_off:      0,
-      token_off:       0,
-      peek_off:        0,
-      scan_anchor_off: 0,
-      scan_off:        0,
-      scan_len:        0,
-      prod_id:         0,
-      end_line_off:    0,
-      end_line_num:    0,
-      start_line_off:  0,
-      start_line_num:  0,
-      scan_line_off:   0,
-      scan_line_num:   0,
-      state:           0,
-      tok_id:          0,
-      meta_a:          0,
-      meta_b:          0,
-      goto_size:       0,
-      goto_free:       0,
-      in_peek_mode:    false,
-      is_active:       false,
-      goto_stack_ptr:  0 as *mut Goto,
-      get_input_info:  T::get_byte_block_at_cursor,
-      reader:          0 as *mut T,
-      meta_ctx:        0 as *mut M,
-      custom_lex:      Self::default_custom_lex,
-    }
-  }
+  pub rule_id: u32,
+  pub line_incr: u8,
+  pub is_active: bool,
+  // Miscellaneous
+  pub in_peek_mode: bool,
 }
 
 impl<T: ByteReader, M> ParseContext<T, M> {
-  pub fn new(reader: &mut T) -> Self {
-    Self {
-      token_ptr:       0 as *mut u8,
-      peek_ptr:        0 as *mut u8,
-      scan_ptr:        0 as *mut u8,
-      peek_input_trun: true,
-      scan_input_trun: true,
-      tok_input_trun:  true,
-      token_len:       0,
-      peek_len:        0,
-      scan_input_len:  0,
-      anchor_off:      0,
-      token_off:       0,
-      peek_off:        0,
-      scan_anchor_off: 0,
-      scan_off:        0,
-      scan_len:        0,
-      prod_id:         0,
-      end_line_off:    0,
-      end_line_num:    0,
-      start_line_off:  0,
-      start_line_num:  0,
-      scan_line_off:   0,
-      scan_line_num:   0,
-      state:           0,
-      tok_id:          0,
-      meta_a:          0,
-      meta_b:          0,
-      goto_size:       0,
-      goto_free:       0,
-      in_peek_mode:    false,
-      is_active:       false,
-      goto_stack_ptr:  0 as *mut Goto,
-      get_input_info:  Self::default_get_input_info,
-      reader:          reader,
-      meta_ctx:        0 as *mut M,
-      custom_lex:      Self::default_custom_lex,
-    }
+  pub fn reset(&mut self) {
+    self.anchor_ptr = 0;
+    self.tail_ptr = 0;
+    self.tok_len = 0;
+    self.head_ptr = 0;
+    self.base_ptr = 0;
+    self.end_ptr = 0;
+    self.begin_ptr = 0;
+    self.chars_remaining_len = 0;
+    self.goto_size = 0;
+    self.goto_free = 0;
+    self.start_line_num = 0;
+    self.chkp_line_num = 0;
+    self.end_line_num = 0;
+    self.state = 0;
+    self.is_active = true;
+    self.in_peek_mode = false;
+    self.goto_stack_ptr = 0 as usize as *mut Goto;
   }
 
-  extern "C" fn default_get_input_info(_: &mut T, _: u32, _: u32) -> InputInfo {
-    InputInfo(0 as *const u8, 0, false)
+  pub fn set_meta(&mut self, meta: *mut M) {
+    self.meta_ctx = meta;
   }
 
-  fn default_custom_lex(_: &mut T, _: &mut M, _: &Self) -> (u32, u32, u32) {
-    (0, 0, 0)
+  pub unsafe fn get_meta_mut(&mut self) -> &mut M {
+    &mut *self.meta_ctx
   }
 
-  pub fn get_shift_data(&self) -> ParseAction {
-    ParseAction::Shift {
-      anchor_byte_offset: self.anchor_off,
-      token_byte_offset:  self.token_off,
-      token_byte_length:  self.scan_len,
-      token_line_offset:  self.start_line_off,
-      token_line_count:   self.start_line_num,
-    }
+  pub unsafe fn get_meta(&self) -> &M {
+    &*self.meta_ctx
   }
 
   /// The following methods are used exclusively by the
@@ -268,11 +167,165 @@ impl<T: ByteReader, M> ParseContext<T, M> {
 
   #[inline]
   pub fn is_scanner(&self) -> bool {
-    self.meta_a > 0
+    self.rule_id > 0
   }
 
   pub fn set_is_scanner(&mut self, is_scanner: bool) {
-    self.meta_a = is_scanner as u32;
+    self.rule_id = is_scanner as u32;
+  }
+
+  pub fn get_curr_line_num(&self) -> u32 {
+    self.start_line_num
+  }
+
+  pub fn get_curr_line_offset(&self) -> u32 {
+    self.start_line_off
+  }
+
+  pub fn get_anchor_offset(&self) -> u32 {
+    (self.anchor_ptr - self.begin_ptr) as u32
+  }
+
+  pub fn get_token_length(&self) -> u32 {
+    (self.tok_len) as u32
+  }
+
+  pub fn get_token_offset(&self) -> u32 {
+    println!("{} {}", self.begin_ptr, self.head_ptr);
+    (self.head_ptr - self.begin_ptr) as u32
+  }
+
+  pub fn get_token_line_number(&self) -> u32 {
+    self.start_line_num
+  }
+
+  pub fn get_token_line_offset(&self) -> u32 {
+    self.start_line_off
+  }
+
+  pub fn get_production_id(&self) -> u32 {
+    self.prod_id
+  }
+
+  /// Returns shift data from current context state.
+  pub fn get_shift_data(&self) -> ParseAction {
+    ParseAction::Shift {
+      anchor_byte_offset: self.get_anchor_offset(),
+      token_byte_offset:  self.get_token_offset(),
+      token_byte_length:  self.get_token_length(),
+      token_line_offset:  self.get_curr_line_offset(),
+      token_line_count:   self.get_curr_line_num(),
+    }
+  }
+}
+
+impl<T: ByteReader, M> Default for ParseContext<T, M> {
+  fn default() -> Self {
+    Self {
+      anchor_ptr: 0,
+      tail_ptr: 0,
+      tok_len: 0,
+      head_ptr: 0,
+      chars_remaining_len: 0,
+      base_ptr: 0,
+      end_ptr: 0,
+      prod_id: 0,
+      begin_ptr: 0,
+      end_line_num: 0,
+      start_line_num: 0,
+      chkp_line_num: 0,
+      chkp_line_off: 0,
+      end_line_off: 0,
+      start_line_off: 0,
+      state: 0,
+      tok_id: 0,
+      sym_len: 0,
+      rule_id: 0,
+      goto_size: 0,
+      goto_free: 0,
+      line_incr: 0,
+      in_peek_mode: false,
+      is_active: false,
+      goto_stack_ptr: 0 as *mut Goto,
+      meta_ctx: 0 as *mut M,
+      custom_lex: Self::default_custom_lex,
+      get_input_info: Self::default_get_input_info,
+      reader: 0 as *mut T,
+    }
+  }
+}
+
+impl<T: ByteReader + LLVMByteReader, M> Debug for ParseContext<T, M> {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let mut dbgstr = f.debug_struct("ParseContext");
+    dbgstr.field("anchor_ptr", &self.anchor_ptr);
+    dbgstr.field("tail_ptr", &self.tail_ptr);
+    dbgstr.field("tok_len", &self.tok_len);
+    dbgstr.field("head_ptr", &self.head_ptr);
+    dbgstr.field("input_block_len", &self.chars_remaining_len);
+    dbgstr.field("base_ptr", &self.base_ptr);
+    dbgstr.field("end_ptr", &self.end_ptr);
+    dbgstr.field("prod_id", &self.prod_id);
+    dbgstr.field("begin_ptr", &self.begin_ptr);
+    dbgstr.field("end_line_num", &self.end_line_num);
+    dbgstr.field("start_line_num", &self.start_line_num);
+    dbgstr.field("chkp_line_num", &self.chkp_line_num);
+    dbgstr.field("chkp_line_off", &self.chkp_line_off);
+    dbgstr.field("end_line_off", &self.end_line_off);
+    dbgstr.field("start_line_off", &self.start_line_off);
+    dbgstr.field("state", &self.state);
+    dbgstr.field("tok_id", &self.tok_id);
+    dbgstr.field("sym_len", &self.sym_len);
+    dbgstr.field("rule_id", &self.rule_id);
+    dbgstr.field("goto_size", &self.goto_size);
+    dbgstr.field("goto_free", &self.goto_free);
+    dbgstr.field("line_incr", &self.line_incr);
+    dbgstr.field("state", &self.state);
+    dbgstr.field("in_peek_mode", &self.in_peek_mode);
+    dbgstr.field("is_active", &self.is_active);
+    dbgstr.field("goto_stack_ptr", &self.goto_stack_ptr);
+    dbgstr.field("goto_size", &self.goto_size);
+    dbgstr.field("goto_used", &self.goto_free);
+    dbgstr.field("get_input_info", &"FN Pointer".to_string());
+    dbgstr.field("reader", &((self.reader) as usize).to_string());
+    dbgstr.field("meta_ctx", &self.meta_ctx);
+    dbgstr.field("custom_lex", &"FN Pointer".to_string());
+    dbgstr.finish()
+  }
+}
+
+impl<T: ByteReader + LLVMByteReader, M> ParseContext<T, M> {
+  pub fn new_llvm() -> Self {
+    Self {
+      get_input_info: T::get_byte_block_at_cursor,
+      custom_lex: Self::default_custom_lex,
+      ..Default::default()
+    }
+  }
+}
+
+impl<T: ByteReader, M> ParseContext<T, M> {
+  pub fn new_bytecode(reader: &mut T) -> Self {
+    Self {
+      custom_lex: Self::default_custom_lex,
+      get_input_info: Self::default_get_input_info,
+      reader: reader,
+      ..Default::default()
+    }
+  }
+
+  extern "C" fn default_get_input_info(
+    _: &mut T,
+    _: &mut *const u8,
+    _: &mut *const u8,
+    _: &mut *const u8,
+    _: &mut *const u8,
+    _: &mut *const u8,
+  ) {
+  }
+
+  fn default_custom_lex(_: &mut T, _: &mut M, _: &Self) -> (u32, u32, u32) {
+    (0, 0, 0)
   }
 }
 
@@ -294,158 +347,7 @@ impl<T: ByteReader + UTF8Reader, M> ParseContext<T, M> {
   }
 }
 
-#[no_mangle]
-pub extern "C" fn sherpa_allocate_stack(byte_size: usize) -> *mut Goto {
-  // Each goto slot is 16bytes, so we shift left num_of_slots by 4 to get the bytes size of
-  // the stack.
-
-  let layout = Layout::from_size_align(byte_size, 16).unwrap();
-
-  unsafe {
-    let ptr = alloc(layout) as *mut Goto;
-
-    ptr
-  }
-}
-
-pub trait AstObject: Debug + Clone + Default + Sized {}
-
-#[derive(Clone, Debug, Default)]
-#[repr(C)]
-pub struct AstSlot<Ast: AstObject>(pub Ast, pub TokenRange, pub TokenRange);
-
-impl<Ast: AstObject> AstObject for AstSlot<Ast> {}
-
-/// Used within an LLVM parser to provide access to intermediate AST
-/// data stored on the stack within a dynamically resizable array.
-#[repr(C)]
-pub struct AstStackSlice<T: AstObject> {
-  stack_data:         *mut T,
-  stack_size:         u32,
-  decreasing_indices: bool,
-}
-
-impl<T: AstObject> AstStackSlice<T> {
-  #[track_caller]
-  fn get_pointer(&self, position: usize) -> *mut T {
-    if position >= (self.stack_size as usize) {
-      panic!(
-        "Could not get AST node at slot ${} from stack with a length of {}",
-        position, self.stack_size
-      );
-    }
-    let slot_size = std::mem::size_of::<T>();
-
-    if self.decreasing_indices {
-      // We are using the stack space for these slots,
-      // which we ASSUME grows downward, hence the "higher" slots
-      // are accessed through lower addresses.
-      (self.stack_data as usize - (position * slot_size)) as *mut T
-    } else {
-      (self.stack_data as usize + (position * slot_size)) as *mut T
-    }
-  }
-
-  pub fn from_slice(slice: &mut [T]) -> Self {
-    Self {
-      stack_data:         &mut slice[0],
-      stack_size:         slice.len() as u32,
-      decreasing_indices: false,
-    }
-  }
-
-  /// Assigns the given data to a garbage slot, ignoring any existing value
-  /// the slot may contain. This is only used when shifting token data into
-  /// an "empty" slot through the Shift action.
-  unsafe fn assign_to_garbage(&self, position: usize, val: T) {
-    let pointer = self.get_pointer(position);
-    std::mem::forget(std::mem::replace(&mut (*pointer), val));
-  }
-
-  pub fn assign(&self, position: usize, val: T) {
-    unsafe {
-      let pointer = self.get_pointer(position);
-      *pointer = val;
-    }
-  }
-
-  /// Removes the value at the given position from the stack and returns it.
-  #[track_caller]
-  pub fn take(&self, position: usize) -> T {
-    unsafe { std::mem::take(&mut (*self.get_pointer(position))) }
-  }
-
-  pub fn clone(&self, position: usize) -> T {
-    unsafe { (*self.get_pointer(position)).clone() }
-  }
-
-  pub fn len(&self) -> usize {
-    self.stack_size as usize
-  }
-
-  pub fn destroy(self) {
-    self.to_vec();
-  }
-
-  pub fn to_vec(&self) -> Vec<T> {
-    let mut output = vec![];
-    for i in 0..self.stack_size {
-      output.push(self.take(i as usize));
-    }
-    output
-  }
-}
-
-impl<T: AstObject> Debug for AstStackSlice<T> {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    let mut dbgstr = f.debug_struct("SlotSlice");
-    dbgstr.field("stack_size", &self.stack_size);
-    let slot_size = std::mem::size_of::<T>();
-    dbgstr.field("[slot byte size]", &slot_size);
-    for i in 0..self.stack_size {
-      dbgstr.field(&format!("slot[{}]", i), &(self.clone(i as usize)));
-    }
-
-    dbgstr.finish()
-  }
-}
-
-impl<T: AstObject> Index<usize> for AstStackSlice<T> {
-  type Output = T;
-
-  fn index(&self, index: usize) -> &Self::Output {
-    if index > self.len() {
-      panic!("Index {} out of bounds in an AstStackSlice of len {}", index, self.len());
-    }
-
-    unsafe { &*self.get_pointer(index) }
-  }
-}
-
-#[test]
-fn test_slots_from_slice() {
-  let mut d = vec![1, 2, 3, 4, 5, 6, 7];
-  let len = d.len();
-  let slots = AstStackSlice::from_slice(&mut d[len - 3..len]);
-
-  assert_eq!(slots.take(0), 5);
-  assert_eq!(slots.take(1), 6);
-  assert_eq!(slots.take(2), 7);
-
-  slots.assign(0, 55);
-
-  drop(slots);
-
-  d.resize(len - 2, Default::default());
-
-  assert_eq!(d.last().cloned(), Some(55));
-}
-
-impl AstObject for u32 {}
-
-impl<V: AstObject> AstObject for (V, TokenRange, TokenRange) {}
-
-pub unsafe fn llvm_map_shift_action<
+pub unsafe fn llvm_map_shift_action_2<
   'a,
   R: LLVMByteReader + ByteReader + MutByteReader,
   ExtCTX,
@@ -482,7 +384,7 @@ pub unsafe fn llvm_map_shift_action<
   }
 }
 
-pub unsafe fn llvm_map_result_action<
+pub unsafe fn llvm_map_result_action_2<
   'a,
   T: LLVMByteReader + ByteReader + MutByteReader,
   M,
@@ -509,26 +411,28 @@ pub unsafe fn llvm_map_result_action<
   }
 }
 
-#[no_mangle]
-pub extern "C" fn sherpa_free_stack(ptr: *mut Goto, byte_size: usize) {
-  // Each goto slot is 16bytes, so we shift left num_of_slots by 4 to get the bytes size of
-  // the stack.
-  let layout = Layout::from_size_align(byte_size, 16).unwrap();
-
-  unsafe { dealloc(ptr as *mut u8, layout) }
-}
-
-#[no_mangle]
-pub extern "C" fn sherpa_get_token_class_from_codepoint(codepoint: u32) -> u32 {
-  get_token_class_from_codepoint(codepoint)
-}
-
 #[derive(Debug)]
 #[repr(C, u64)]
 pub enum ParseResult<Node> {
   Complete((Node, TokenRange, TokenRange)),
   Error(TokenRange, Vec<(Node, TokenRange, TokenRange)>),
   NeedMoreInput(Vec<(Node, TokenRange, TokenRange)>),
+}
+
+pub enum ShiftsAndSkipsResult {
+  Accepted {
+    shifts: Vec<String>,
+    skips:  Vec<String>,
+  },
+
+  IncorrectProduction {
+    shifts: Vec<String>,
+    skips: Vec<String>,
+    expected_prod_id: u32,
+    actual_prod_id: u32,
+  },
+
+  FailedParse(SherpaParseError),
 }
 
 pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
@@ -550,7 +454,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
 
   /// Parse input up to the next required parse action and return
   /// its value.
-  fn get_next_action(&mut self, debug: &Option<DebugFn<R, M>>) -> ParseAction;
+  fn get_next_action(&mut self, debug: &mut Option<DebugFn>) -> ParseAction;
 
   /// Returns a reference to the internal Reader
   fn get_reader(&self) -> &R;
@@ -564,8 +468,8 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
     &mut self,
     entry_point: u32,
     target_production_id: u32,
-    debug: &Option<DebugFn<R, M>>,
-  ) -> Result<(Vec<String>, Vec<String>), SherpaParseError> {
+    debug: &mut Option<DebugFn>,
+  ) -> ShiftsAndSkipsResult {
     self.init_parser(entry_point);
 
     let mut shifts = vec![];
@@ -573,18 +477,31 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
     loop {
       match self.get_next_action(debug) {
         ParseAction::Accept { production_id } => {
-          assert_eq!(
-            production_id, target_production_id,
-            "Expected the accepted production id to match target_production_id"
-          );
-          break Ok((shifts, skips));
+          #[cfg(debug_assertions)]
+          if let Some(debug) = debug {
+            debug(&DebugEvent::Complete { production_id });
+          }
+          break if production_id != target_production_id {
+            ShiftsAndSkipsResult::IncorrectProduction {
+              shifts,
+              skips,
+              expected_prod_id: target_production_id,
+              actual_prod_id: production_id,
+            }
+          } else {
+            ShiftsAndSkipsResult::Accepted { shifts, skips }
+          };
         }
         ParseAction::Error { last_input, .. } => {
+          #[cfg(debug_assertions)]
+          if let Some(debug) = debug {
+            debug(&DebugEvent::Failure {});
+          }
           let mut token: Token = last_input.to_token(self.get_reader());
 
           token.set_source(Arc::new(Vec::from(self.get_input().to_string().as_bytes())));
-          break Err(SherpaParseError {
-            message: "unable to recognize input".to_string(),
+          break ShiftsAndSkipsResult::FailedParse(SherpaParseError {
+            message: "Could not recognize the following input:".to_string(),
             inline_message: "".to_string(),
             loc: token,
             last_production: self.get_production_id(),
@@ -599,15 +516,31 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
               self.get_input()[anchor_byte_offset as usize..(token_byte_offset) as usize]
                 .to_string(),
             );
+            #[cfg(debug_assertions)]
+            if let Some(debug) = debug {
+              debug(&DebugEvent::SkipToken {
+                offset_start: anchor_byte_offset as usize,
+                offset_end:   token_byte_offset as usize,
+                string:       self.get_input(),
+              });
+            }
           }
+          let offset_start = token_byte_offset as usize;
+          let offset_end = (token_byte_offset + token_byte_length) as usize;
 
-          shifts.push(
-            self.get_input()
-              [token_byte_offset as usize..(token_byte_offset + token_byte_length) as usize]
-              .to_string(),
-          );
+          #[cfg(debug_assertions)]
+          if let Some(debug) = debug {
+            debug(&DebugEvent::ShiftToken { offset_start, offset_end, string: self.get_input() });
+          }
+          shifts.push(self.get_input()[offset_start..offset_end].to_string());
         }
-        ParseAction::Reduce { .. } => {}
+        ParseAction::Reduce { rule_id, .. } =>
+        {
+          #[cfg(debug_assertions)]
+          if let Some(debug) = debug {
+            debug(&DebugEvent::Reduce { rule_id });
+          }
+        }
         _ => panic!("Unexpected Action!"),
       }
     }
@@ -622,17 +555,19 @@ pub struct ByteCodeParser<'a, R: ByteReader + MutByteReader, M> {
 
 impl<'a, R: ByteReader + MutByteReader, M> ByteCodeParser<'a, R, M> {
   pub fn new(reader: &'a mut R, bc: &'a [u32]) -> Self {
-    ByteCodeParser { ctx: ParseContext::<R, M>::new(reader), stack: vec![], bc }
+    ByteCodeParser { ctx: ParseContext::<R, M>::new_bytecode(reader), stack: vec![], bc }
   }
 }
 
-impl<'a, R: ByteReader + MutByteReader, M> SherpaParser<R, M> for ByteCodeParser<'a, R, M> {
+impl<'a, R: ByteReader + MutByteReader + UTF8Reader, M> SherpaParser<R, M>
+  for ByteCodeParser<'a, R, M>
+{
   fn get_token_length(&self) -> u32 {
-    self.ctx.token_len
+    self.ctx.get_token_length()
   }
 
   fn get_token_offset(&self) -> u32 {
-    self.ctx.token_off
+    self.ctx.get_token_offset()
   }
 
   fn get_token_line_number(&self) -> u32 {
@@ -659,22 +594,22 @@ impl<'a, R: ByteReader + MutByteReader, M> SherpaParser<R, M> for ByteCodeParser
     self.stack = vec![0, entry_point | NORMAL_STATE_FLAG];
   }
 
-  fn get_next_action(&mut self, debug: &Option<DebugFn<R, M>>) -> ParseAction {
+  fn get_next_action(&mut self, debug: &mut Option<DebugFn>) -> ParseAction {
     let ByteCodeParser { ctx, stack, bc } = self;
 
     let mut state = stack.pop().unwrap();
 
     loop {
       if state < 1 {
-        let off = ctx.token_off;
-        if ctx.get_reader().offset_at_end(off) {
+        let off = ctx.get_token_offset();
+        if ctx.get_reader().offset_at_end(off as usize) {
           break ParseAction::Accept { production_id: ctx.get_production() };
         } else {
           break ParseAction::Error {
             last_production: ctx.get_production(),
             last_input:      TokenRange {
-              len:      ctx.token_len,
-              off:      ctx.token_off,
+              len:      (ctx.tail_ptr - ctx.head_ptr) as u32,
+              off:      off,
               line_num: ctx.start_line_num,
               line_off: ctx.start_line_off,
             },
@@ -703,5 +638,33 @@ impl<'a, R: ByteReader + MutByteReader, M> SherpaParser<R, M> for ByteCodeParser
         }
       }
     }
+  }
+}
+
+#[no_mangle]
+pub extern "C" fn sherpa_free_stack(ptr: *mut Goto, byte_size: usize) {
+  // Each goto slot is 16bytes, so we shift left num_of_slots by 4 to get the bytes size of
+  // the stack.
+  let layout = Layout::from_size_align(byte_size, 16).unwrap();
+
+  unsafe { dealloc(ptr as *mut u8, layout) }
+}
+
+#[no_mangle]
+pub extern "C" fn sherpa_get_token_class_from_codepoint(codepoint: u32) -> u32 {
+  get_token_class_from_codepoint(codepoint)
+}
+
+#[no_mangle]
+pub extern "C" fn sherpa_allocate_stack(byte_size: usize) -> *mut Goto {
+  // Each goto slot is 16bytes, so we shift left num_of_slots by 4 to get the bytes size of
+  // the stack.
+
+  let layout = Layout::from_size_align(byte_size, 16).unwrap();
+
+  unsafe {
+    let ptr = alloc(layout) as *mut Goto;
+
+    ptr
   }
 }

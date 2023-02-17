@@ -2,10 +2,12 @@ use super::*;
 use crate::grammar::{
   compile::{compile_ir_ast, parser::sherpa::IR_STATE},
   hash_id_value_u64,
+  hash_values,
 };
 use std::{
   collections::BTreeSet,
   fmt::{Debug, Display},
+  hash::Hash,
 };
 
 #[derive(Debug, PartialEq, PartialOrd, Clone, Copy, Hash, Eq, Ord, Default)]
@@ -16,6 +18,22 @@ impl ScannerStateId {
   /// TODO: Docs
   pub fn new(symbol_set: &SymbolSet) -> Self {
     Self(hash_id_value_u64(symbol_set))
+  }
+
+  /// Create a state id from a set of symbol strings seperated by `~~`
+  pub fn from_string(name: &str, g: &GrammarStore) -> Self {
+    let symbols =
+      name.split("~~").map(|s| SymbolID::from_string(s, Some(g))).collect::<SymbolSet>();
+    println!(
+      "{:?} : {}",
+      ScannerStateId::new(&symbols),
+      symbols
+        .iter()
+        .map(|s| { format!("{:?}{}", s, s.debug_string(g)) })
+        .collect::<Vec<_>>()
+        .join("  ")
+    );
+    Self::new(&symbols)
   }
 }
 
@@ -75,19 +93,20 @@ impl Default for IRStateType {
   }
 }
 
-pub struct IRState {
+#[derive(Clone)]
+pub struct ParseState {
+  /// The intermediate representation parse state code as written in ir.rs
   pub(crate) code: String,
   pub(crate) name: String,
   pub(crate) comment: String,
   pub(crate) hash: u64,
-  pub(crate) graph_id: NodeId,
   pub(crate) normal_symbols: Vec<SymbolID>,
   pub(crate) skip_symbols: Vec<SymbolID>,
-  pub(crate) ast: Result<IR_STATE, SherpaError>,
+  pub(crate) ast: SherpaResult<IR_STATE>,
   pub(crate) state_type: IRStateType,
 }
 
-impl Default for IRState {
+impl Default for ParseState {
   fn default() -> Self {
     Self {
       state_type: IRStateType::default(),
@@ -95,21 +114,30 @@ impl Default for IRState {
       code: String::default(),
       name: String::default(),
       hash: u64::default(),
-      graph_id: NodeId::default(),
       normal_symbols: Vec::default(),
       skip_symbols: Vec::default(),
-      ast: Err(SherpaError::ir_warn_not_parsed),
+      ast: SherpaResult::None,
     }
   }
 }
 
-impl IRState {
+impl ParseState {
   pub fn get_state_name_from_hash(hash: u64) -> String {
     format!("s{:02x}", hash)
   }
 
   pub fn into_hashed(mut self) -> Self {
-    self.hash = hash_id_value_u64(self.code.clone());
+    self.hash = hash_values(&[
+      &|h| {
+        self.code.hash(h);
+      },
+      &|h| {
+        &self.normal_symbols.hash(h);
+      },
+      &|h| {
+        &self.skip_symbols.hash(h);
+      },
+    ]);
     self
   }
 
@@ -137,6 +165,10 @@ impl IRState {
       self.get_scanner_header(),
       self.code.replace("%%%%", &self.get_name())
     )
+  }
+
+  pub fn get_code_body(&self) -> String {
+    format!("{}\n{}\n", self.get_scanner_header(), self.code.replace("%%%%", &self.get_name()))
   }
 
   pub fn get_comment(&self) -> &String {
@@ -175,26 +207,23 @@ impl IRState {
     self.get_scanner_symbol_set().map(|symbols| format!("scan_{:02X}", hash_id_value_u64(&symbols)))
   }
 
-  pub(crate) fn get_graph_id(&self) -> NodeId {
-    self.graph_id
+  pub fn compile_ast(&self) -> SherpaResult<IR_STATE> {
+    let code = self.get_code();
+    compile_ir_ast(&code)
   }
 
-  pub fn compile_ast(&mut self) -> SherpaResult<&mut IR_STATE> {
-    match &self.ast {
-      Ok(ast) => SherpaResult::Ok(self.ast.as_mut().unwrap()),
-      Err(SherpaError::ir_warn_not_parsed) => {
-        let code = self.get_code();
-        let ast = compile_ir_ast(&code)?;
-        self.ast = Ok(ast);
-        self.compile_ast()
-      }
-      _ => SherpaResult::None,
+  pub fn get_cached_ast(&mut self) -> SherpaResult<&mut IR_STATE> {
+    if self.ast.is_none() {
+      self.ast = self.compile_ast();
+      self.get_cached_ast()
+    } else {
+      self.ast.as_mut()
     }
   }
 
   pub fn get_ast_mut(&mut self) -> Option<&mut IR_STATE> {
     if self.ast.is_ok() {
-      Some(self.ast.as_mut().ok().unwrap())
+      Some(self.ast.as_mut().unwrap())
     } else {
       None
     }
@@ -202,7 +231,7 @@ impl IRState {
 
   pub fn get_ast(&self) -> Option<&IR_STATE> {
     if self.ast.is_ok() {
-      Some(self.ast.as_ref().ok().unwrap())
+      Some(self.ast.as_ref().unwrap())
     } else {
       None
     }
@@ -220,7 +249,7 @@ impl IRState {
   }
 }
 
-impl Debug for IRState {
+impl Debug for ParseState {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
       "{}{}/*\n {} \n*/\n{}\n\n\n",
@@ -232,7 +261,7 @@ impl Debug for IRState {
   }
 }
 
-impl Display for IRState {
+impl Display for ParseState {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
       "{}{}/*\n {} \n*/\n{}\n\n\n",

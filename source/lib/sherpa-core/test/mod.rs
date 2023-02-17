@@ -9,13 +9,11 @@ mod llvm;
 
 mod bytecode;
 
-mod intermediate;
+mod parsing;
 
 mod test_reader;
 
 mod common_sub_grammars;
-
-mod ir_parser;
 
 mod full_grammars;
 

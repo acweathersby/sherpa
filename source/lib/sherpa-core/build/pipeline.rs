@@ -1,7 +1,8 @@
 use crate::{
   ascript::types::AScriptStore,
-  compile::{compile_bytecode, compile_states, optimize_ir_states, BytecodeOutput},
+  bytecode::{compile_bytecode, BytecodeOutput},
   journal::*,
+  parser::{compile_parse_states, optimize_parse_states},
   types::*,
   util::get_num_of_available_threads,
 };
@@ -31,6 +32,24 @@ pub struct PipelineTask {
   pub(crate) fun: TaskFn,
   pub(crate) require_ascript: bool,
   pub(crate) require_bytecode: bool,
+  pub(crate) require_states: bool,
+}
+
+impl Default for PipelineTask {
+  fn default() -> Self {
+    Self {
+      fun: Box::new(Self::_default_tsk_fun),
+      require_ascript: false,
+      require_bytecode: false,
+      require_states: false,
+    }
+  }
+}
+
+impl PipelineTask {
+  fn _default_tsk_fun(_: &mut PipelineContext) -> Result<Option<(u32, String)>, Vec<SherpaError>> {
+    Err(vec![])
+  }
 }
 
 #[derive(Debug, Clone)]
@@ -48,6 +67,7 @@ pub struct BuildPipeline<'a> {
   ascript_name: Option<String>,
   ascript: Option<AScriptStore>,
   bytecode: Option<BytecodeOutput>,
+  states: Option<Vec<(String, Box<ParseState>)>>,
   source_output_dir: PathBuf,
   build_output_dir: PathBuf,
   tasks: Vec<(PipelineTask, PipelineContext<'a>)>,
@@ -70,6 +90,7 @@ impl<'a> BuildPipeline<'a> {
       ascript_name: None,
       journal: Journal::new(config),
       ascript: None,
+      states: None,
       bytecode: None,
       cached_source,
       source_output_dir: PathBuf::new(),
@@ -169,27 +190,33 @@ impl<'a> BuildPipeline<'a> {
     }
 
     self.ascript = if self.tasks.iter().any(|t| t.0.require_ascript) && self.ascript.is_none() {
-      match AScriptStore::new(self.journal.grammar().unwrap()) {
-        SherpaResult::MultipleErrors(mut e) => {
-          errors.append(&mut e);
-          None
-        }
+      match AScriptStore::new(&mut self.journal) {
         SherpaResult::Ok(ascript) => Some(ascript),
-        _ => unreachable!("Should not generate other invalid types"),
+        _ => {
+          self.journal.flush_reports();
+          self.journal.debug_error_report();
+          return SherpaResult::None;
+        }
       }
     } else {
       self.ascript.take()
     };
 
     // Build bytecode if needed.
-    self.bytecode = if self.tasks.iter().any(|t| t.0.require_bytecode) {
-      let ir_states = compile_states(&mut self.journal, self.threads);
-
+    self.states = if self.tasks.iter().any(|t| t.0.require_states || t.0.require_bytecode) {
+      let parse_states = compile_parse_states(&mut self.journal, self.threads);
       self.journal.debug_error_report();
+      Some(optimize_parse_states(&mut self.journal, parse_states?))
+    } else {
+      None
+    };
 
-      let ir_states = optimize_ir_states(&mut self.journal, ir_states?);
-      let bytecode_output = compile_bytecode(&mut self.journal, ir_states);
-      Some(bytecode_output)
+    self.bytecode = if self.tasks.iter().any(|t| t.0.require_bytecode) {
+      if let Some(parse_states) = &self.states {
+        Some(compile_bytecode(&mut self.journal, parse_states))
+      } else {
+        None
+      }
     } else {
       None
     };
@@ -353,6 +380,10 @@ impl<'a> PipelineContext<'a> {
   pub fn get_bytecode(&self) -> Option<&BytecodeOutput> {
     self.pipeline.unwrap().bytecode.as_ref()
   }
+
+  pub fn get_states(&self) -> Option<&Vec<(String, Box<ParseState>)>> {
+    self.pipeline.unwrap().states.as_ref()
+  }
 }
 
 /// Convenience function for building a bytecode based parser. Use this in
@@ -416,10 +447,6 @@ pub fn compile_llvm_parser(grammar_source_path: &PathBuf, config: Config) -> boo
     SherpaResult::Ok(_) => true,
     SherpaResult::Err(err) => {
       eprintln!("{}", err);
-      false
-    }
-    SherpaResult::MultipleErrors(err) => {
-      eprintln!("{:?}", err);
       false
     }
     _ => false,

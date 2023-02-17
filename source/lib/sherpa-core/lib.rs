@@ -19,9 +19,9 @@ mod ascript;
 mod build;
 mod bytecode;
 mod grammar;
-mod intermediate;
 mod journal;
 mod llvm;
+mod parser;
 mod types;
 mod util;
 mod writer;
@@ -32,26 +32,22 @@ mod test;
 /// Methods for debugging a grammar and it's artifacts.
 pub mod debug;
 
-pub use journal::{Config, Journal, ParseAlgorithm, Report, ReportType};
+pub use journal::{Config, Journal, Report, ReportType};
 
 pub use types::{SherpaError, SherpaResult};
 
 /// Methods compiling a parser from a grammar.
 pub mod compile {
-  pub use crate::{
-    bytecode::{compile_bytecode, BytecodeOutput},
-    intermediate::{compile::*, optimize::*},
-    types::{
-      GrammarId,
-      GrammarRef,
-      GrammarStore,
-      Production,
-      ProductionId,
-      Rule,
-      ScannerStateId,
-      Symbol,
-      SymbolID,
-    },
+  pub use crate::types::{
+    GrammarId,
+    GrammarRef,
+    GrammarStore,
+    Production,
+    ProductionId,
+    Rule,
+    ScannerStateId,
+    Symbol,
+    SymbolID,
   };
 }
 

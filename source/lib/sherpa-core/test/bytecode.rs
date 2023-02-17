@@ -1,17 +1,12 @@
 use crate::{
-  bytecode::{compile::build_byte_code_buffer, compile_bytecode},
-  debug::{
-    generate_disassembly,
-    {self},
-  },
-  grammar::compile::compile_ir_ast,
-  intermediate::{
-    compile::{compile_production_states, compile_states},
-    optimize::optimize_ir_states,
-  },
+  bytecode::compile_bytecode,
+  debug::{self},
   journal::Journal,
+  parser::{compile_parse_states, optimize_parse_states},
   types::{GrammarStore, SherpaResult},
 };
+
+use super::utils::{console_debugger, test_runner, TestConfig};
 
 #[test]
 pub fn temp_test1() -> SherpaResult<()> {
@@ -32,11 +27,11 @@ pub fn temp_test1() -> SherpaResult<()> {
   )
   .unwrap();
 
-  let states = compile_states(&mut j, 1)?;
+  let states = compile_parse_states(&mut j, 1)?;
 
-  let results = optimize_ir_states(&mut j, states);
+  let results = optimize_parse_states(&mut j, states);
 
-  compile_bytecode(&mut j, results);
+  compile_bytecode(&mut j, &results);
 
   SherpaResult::Ok(())
 }
@@ -67,13 +62,13 @@ NAME llvm_language_test
 "##,
   )
   .unwrap();
-  let states = compile_states(&mut j, 1)?;
+  let states = compile_parse_states(&mut j, 1)?;
 
-  let results = optimize_ir_states(&mut j, states);
+  let results = optimize_parse_states(&mut j, states);
 
-  let output = compile_bytecode(&mut j, results);
+  let output = compile_bytecode(&mut j, &results);
 
-  eprintln!("dD: {}", debug::generate_disassembly(&output, Some(&mut j)));
+  println!("dD: {}", debug::generate_disassembly(&output, &mut j));
   SherpaResult::Ok(())
 }
 
@@ -98,7 +93,7 @@ pub fn generate_production_with_a_recursion() -> SherpaResult<()> {
   )
   .unwrap();
 
-  let states = compile_states(&mut j, 1)?;
+  let states = compile_parse_states(&mut j, 1)?;
 
   j.flush_reports();
 
@@ -108,46 +103,17 @@ pub fn generate_production_with_a_recursion() -> SherpaResult<()> {
     println!("{}", state.get_code());
   }
 
-  let results = optimize_ir_states(&mut j, states);
+  let results = optimize_parse_states(&mut j, states);
 
-  let output = compile_bytecode(&mut j, results);
-  eprintln!("dD: {}", debug::generate_disassembly(&output, Some(&mut j)));
-
-  SherpaResult::Ok(())
-}
-
-#[test]
-pub fn production_with_multiple_sub_productions() -> SherpaResult<()> {
-  let mut j = Journal::new(None);
-  let g = GrammarStore::from_str(
-    &mut j,
-    r##"    
-<> test > "d" A | B | C | D
-<> A > "a" id
-<> B > "b" id
-<> C > "c" id
-<> D > "d" id
-
-<> id > c:id
-"##,
-  )
-  .unwrap();
-
-  let prod_id = g.get_production_id_by_name("test").unwrap();
-
-  let result = compile_production_states(&mut j, prod_id)?;
-
-  for state in result {
-    eprintln!("{}", state.get_code());
-  }
+  let output = compile_bytecode(&mut j, &results);
+  println!("dD: {}", debug::generate_disassembly(&output, &mut j));
 
   SherpaResult::Ok(())
 }
+
 #[test]
 pub fn temp_test() -> SherpaResult<()> {
-  let mut j = Journal::new(None);
-  GrammarStore::from_str(&mut j,
-    r#"
+  let input = r#"
 NAME wick_element
 
 IGNORE { c:sp c:nl }
@@ -155,7 +121,7 @@ IGNORE { c:sp c:nl }
 <> element_block > '<' component_identifier
     ( element_attribute(+)  :ast { t_Attributes, c_Attribute, attributes: $1 } )? 
     ( element_attributes | general_data | element_block | general_binding )(*) 
-    '>'
+    ">"
 
                                                                 :ast { t_Element, id:$2, children: [$3, $4], tok }
 <> component_identifier > 
@@ -198,49 +164,19 @@ IGNORE { c:sp c:nl }
 <> identifier > tk:tok_identifier 
 
 <> tok_identifier > ( c:id | c:num )(+)
-"#,
-  ).unwrap();
+"#;
 
-  let states = compile_states(&mut j, 1)?;
-
-  let results = optimize_ir_states(&mut j, states);
-
-  compile_bytecode(&mut j, results);
-
-  SherpaResult::Ok(())
-}
-
-#[test]
-pub fn test_produce_a_single_ir_ast_from_a_single_state_of_a_trivial_production() -> SherpaResult<()>
-{
-  let mut j = Journal::new(None);
-  let g = GrammarStore::from_str(&mut j, "<> A > 'h'? 'e'? 'l' 'l' 'o'").unwrap();
-
-  let prod_id = g.get_production_id_by_name("A").unwrap();
-
-  let states = compile_states(&mut j, 1)?;
-
-  let results = optimize_ir_states(&mut j, states);
-
-  let output = compile_bytecode(&mut j, results);
-
-  let result = compile_production_states(&mut j, prod_id)?;
-
-  let states = result
-    .into_iter()
-    .map(|s| {
-      let string = s.get_code();
-      let result = compile_ir_ast(&string);
-      assert!(result.is_ok());
-      result.unwrap()
-    })
-    .collect::<Vec<_>>();
-
-  let state_refs = states.iter().collect::<Vec<_>>();
-
-  let _ = build_byte_code_buffer(state_refs);
-
-  eprintln!("{}", generate_disassembly(&output, Some(&mut j)));
+  test_runner(
+    &[("element_block", "<i -test : soLongMySwanSong - store { test } <i>>", true).into()],
+    None,
+    TestConfig {
+      grammar_string: Some(input),
+      bytecode_parse: true,
+      debugger_handler: Some(&|g| console_debugger(g, Default::default())),
+      print_parse_reports: &["local_values_list_1"],
+      ..Default::default()
+    },
+  )?;
 
   SherpaResult::Ok(())
 }

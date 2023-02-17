@@ -2,7 +2,7 @@
 #![feature(proc_macro_internals)]
 #![feature(proc_macro_diagnostic)]
 #![feature(proc_macro_span_shrink)]
-use proc_macro::{Diagnostic, Span, TokenStream, TokenTree};
+use proc_macro::{Span, TokenStream, TokenTree};
 use std::{collections::BTreeMap, path::PathBuf};
 
 use sherpa_core::{
@@ -23,12 +23,12 @@ enum ParserType {
   BYTECODE,
 }
 
-fn process_errors(errors: Vec<SherpaError>, offsets: Offsets) {
-  use SherpaError::*;
+fn process_errors(errors: Vec<SherpaError>, _offsets: Offsets) {
+  //use SherpaError::*;
 
   for err in errors {
     match err {
-      grammar_err { message, loc, .. } => {
+      /*      grammar_err { message, loc, .. } => {
         let start = loc.get_start();
         let end = loc.get_end();
         match (offsets.spans.get(&start), offsets.spans.get(&end)) {
@@ -43,7 +43,7 @@ fn process_errors(errors: Vec<SherpaError>, offsets: Offsets) {
           }
           _ => panic!("no dice"),
         }
-      }
+      } */
       _ => panic!("{}", err),
     }
   }

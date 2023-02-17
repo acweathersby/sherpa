@@ -4,13 +4,10 @@ use crate::{
     ASTNode,
     ForkTo,
     Goto,
-    NotInScope,
     Num,
     Reduce,
-    ScanUntil,
     SetProd,
-    SetScope,
-    Shift,
+    ShiftToken,
     TokenAssign,
     ASSERT,
     IR_STATE,
@@ -291,7 +288,7 @@ fn make_table(
 
   use Instruction as I;
 
-  let lexer_type: u32 = if branches[0].is_peek { LexerType::PEEK } else { LexerType::ASSERT };
+  let lexer_type: u32 = LexerType::ASSERT;
 
   let scanner_pointer = if input_type_key == InputType::T02_TOKEN {
     if scanner_name.is_empty() {
@@ -328,27 +325,22 @@ fn make_table(
   let mut existing_instructions = HashMap::<Vec<u32>, u32>::new();
 
   for branch in branches {
-    if branch.is_skip {
-      let id = &branch.ids;
-      val_offset_map.insert(id.val as u32, 0xFFFF_FFFF);
-    } else {
-      let instructions =
-        build_branchless_bytecode(&branch.instructions, state_to_bookmark, state_name);
-      match existing_instructions.entry(instructions) {
-        Entry::Occupied(e) => {
-          let offset = e.get();
-          let id = &branch.ids;
-          val_offset_map.insert(id.val as u32, *offset as u32);
-        }
-        Entry::Vacant(e) => {
-          let offset = branch_instructions_length;
-          let instructions = e.key();
-          branch_instructions_length += instructions.len() as u32;
-          branch_instructions.push(instructions.clone());
-          e.insert(offset);
-          let id = &branch.ids;
-          val_offset_map.insert(id.val as u32, offset as u32);
-        }
+    let instructions =
+      build_branchless_bytecode(&branch.instructions, state_to_bookmark, state_name);
+    match existing_instructions.entry(instructions) {
+      Entry::Occupied(e) => {
+        let offset = e.get();
+        let id = &branch.ids;
+        val_offset_map.insert(id.val as u32, *offset as u32);
+      }
+      Entry::Vacant(e) => {
+        let offset = branch_instructions_length;
+        let instructions = e.key();
+        branch_instructions_length += instructions.len() as u32;
+        branch_instructions.push(instructions.clone());
+        e.insert(offset);
+        let id = &branch.ids;
+        val_offset_map.insert(id.val as u32, offset as u32);
       }
     }
   }
@@ -498,7 +490,11 @@ fn build_branchless_bytecode(
       ASTNode::TokenAssign(box TokenAssign { ids }) => {
         byte_code.push(I::I05_TOKEN_ASSIGN | ((ids[0].val as u32) & 0x00FF_FFFF))
       }
-      ASTNode::Shift(box Shift { EMPTY }) => byte_code.push(I::I01_SHIFT | *EMPTY as u32),
+      ASTNode::ShiftScanner(..) => byte_code.push(I::I13_SHIFT_SCANNER),
+      ASTNode::ShiftScanToken(_) => byte_code.push(I::I01_SHIFT_TOKEN | 1),
+      ASTNode::ShiftToken(box ShiftToken { EMPTY }) => {
+        byte_code.push(I::I01_SHIFT_TOKEN | *EMPTY as u32)
+      }
       ASTNode::Goto(box Goto { state }) => {
         let state_pointer_val = match (state.val == current_state_name)
           .then_some(state_name_to_bookmark.get(&(state.val.to_string() + "_internal")))
@@ -511,7 +507,6 @@ fn build_branchless_bytecode(
         };
         byte_code.push(I::I02_GOTO | NORMAL_STATE_FLAG | state_pointer_val);
       }
-      ASTNode::ScanUntil(box ScanUntil { .. }) => {}
       ASTNode::ForkTo(box ForkTo { states, production_id }) => {
         byte_code.push(I::I06_FORK_TO | ((states.len() << 16) as u32) | (production_id.val as u32));
         for state in states {
@@ -520,11 +515,14 @@ fn build_branchless_bytecode(
           byte_code.push(I::I02_GOTO | NORMAL_STATE_FLAG | state_pointer_val);
         }
       }
+      ASTNode::PeekScanToken(_) => byte_code.push(I::I14_PEEK_TOKEN | 1),
+      ASTNode::PeekToken(_) => byte_code.push(I::I14_PEEK_TOKEN),
+      ASTNode::PeekReset(_) => byte_code.push(I::I07_PEEK_RESET),
+      ASTNode::Skip(_) => byte_code.push(I::I12_SKIP),
+      ASTNode::SkipScanToken(_) => byte_code.push(I::I12_SKIP | 1),
       ASTNode::Pop(_) => byte_code.push(I::I08_POP),
       ASTNode::Pass(_) => byte_code.push(I::I00_PASS),
       ASTNode::Fail(_) => byte_code.push(I::I15_FAIL),
-      ASTNode::NotInScope(box NotInScope { .. }) => {}
-      ASTNode::SetScope(box SetScope { .. }) => {}
       ASTNode::SetProd(box SetProd { id: box Num { val } }) => {
         byte_code.push(I::I03_SET_PROD | (*val as u32 & INSTRUCTION_CONTENT_MASK))
       }
@@ -543,7 +541,7 @@ fn build_branchless_bytecode(
   }
 
   if let Some(last) = byte_code.last() {
-    if !matches!(*last, I::I00_PASS | I::I15_FAIL | I::I08_POP) {
+    if !matches!(*last, I::I00_PASS | I::I15_FAIL | I::I08_POP | I::I12_SKIP) {
       byte_code.push(I::I00_PASS);
     }
   }

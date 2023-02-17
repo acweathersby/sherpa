@@ -1,20 +1,31 @@
 #![allow(unused)]
+use std::sync::Arc;
+
 use crate::{
-  compile::{compile_bytecode, compile_states, optimize_ir_states, BytecodeOutput},
-  llvm::{ascript_functions::construct_ast_builder, compile_module_from_bytecode, *},
+  build::{
+    bytecode::{self, build_bytecode_parser},
+    disassembly,
+  },
+  bytecode::compile_bytecode,
+  debug::generate_disassembly,
+  llvm::{ascript_functions::construct_ast_builder, compile_llvm_module_from_parse_states, *},
+  parser::{compile_parse_states, optimize_parse_states},
+  util::get_num_of_available_threads,
   Config,
   Journal,
   SherpaResult,
 };
-use inkwell::{context::Context, execution_engine::JitFunction};
+use inkwell::{
+  context::Context,
+  execution_engine::{ExecutionEngine, JitFunction},
+};
 use sherpa_runtime::types::{
-  llvm_map_result_action,
-  llvm_map_shift_action,
+  ast::{AstObject, AstStackSlice},
+  llvm_map_result_action_2,
+  llvm_map_shift_action_2,
   sherpa_allocate_stack,
   sherpa_free_stack,
   sherpa_get_token_class_from_codepoint,
-  AstObject,
-  AstStackSlice,
   ByteReader,
   LLVMByteReader,
   MutByteReader,
@@ -26,7 +37,7 @@ use sherpa_runtime::types::{
   TokenRange,
 };
 
-use super::GrammarStore;
+use super::{GrammarStore, ParseState};
 
 type Init<R, ExtCTX> = unsafe extern "C" fn(*mut ParseContext<R, ExtCTX>, *mut R);
 type Prime<R, ExtCTX> = unsafe extern "C" fn(*mut ParseContext<R, ExtCTX>, u32);
@@ -59,7 +70,10 @@ where
   prime_fn:   JitFunction<'a, Prime<R, ExtCTX>>,
   ast_build:  JitFunction<'a, AstBuilder<'a, R, ExtCTX, ASTNode>>,
   drop_fn:    JitFunction<'a, Drop<R, ExtCTX>>,
+  engine:     ExecutionEngine<'a>,
   sherpa_ctx: ParseContext<R, ExtCTX>,
+  j:          Journal,
+  states:     Vec<(String, Box<ParseState>)>,
 }
 
 impl<'a, R, ExtCTX, ASTNode> JitParser<'a, R, ExtCTX, ASTNode>
@@ -67,56 +81,85 @@ where
   R: ByteReader + LLVMByteReader,
   ASTNode: AstObject,
 {
-  pub(crate) fn new(j: &mut Journal, bc: &BytecodeOutput, ctx: &'a Context) -> SherpaResult<Self> {
-    let mut module = construct_module(j, "", ctx);
-
+  pub(crate) fn new(
+    j: &mut Journal,
+    states: Vec<(String, Box<ParseState>)>,
+    ctx: &'a Context,
+  ) -> SherpaResult<Self> {
     unsafe {
-      Self::setup_exec_engine(&mut module);
+      let module = ctx.create_module("JIT_PARSER");
+      let engine = module.create_jit_execution_engine(inkwell::OptimizationLevel::None).unwrap();
+      let target_data = engine.get_target_data();
 
-      let engine = module._exe_engine.as_ref()?;
+      let mut llvm_mod = construct_module(j, ctx, &target_data, module);
 
-      engine.add_global_mapping(&module.fun.allocate_stack, sherpa_allocate_stack as usize);
-      engine.add_global_mapping(&module.fun.free_stack, sherpa_free_stack as usize);
+      engine.add_global_mapping(&llvm_mod.fun.allocate_stack, sherpa_allocate_stack as usize);
+      engine.add_global_mapping(&llvm_mod.fun.free_stack, sherpa_free_stack as usize);
       engine.add_global_mapping(
-        &module.fun.get_token_class_from_codepoint,
+        &llvm_mod.fun.get_token_class_from_codepoint,
         sherpa_get_token_class_from_codepoint as usize,
       );
 
-      compile_module_from_bytecode(&module, j, bc)?;
-      construct_ast_builder::<ASTNode>(&module)?;
+      compile_llvm_module_from_parse_states(j, &llvm_mod, &states)?;
 
-      let prime_fn = engine.get_function("prime").unwrap();
-      let init_fn = engine.get_function("init").unwrap();
+      construct_ast_builder::<ASTNode>(&llvm_mod)?;
+
+      let init_fn = engine.get_function("init");
+      let init_fn = init_fn.unwrap();
+      let drop_fn = engine.get_function("drop").unwrap();
       let next_fn = engine.get_function("next").unwrap();
       let ast_build = engine.get_function("ast_parse").unwrap();
-      let drop_fn = engine.get_function("drop").unwrap();
+      let prime_fn = engine.get_function("prime").unwrap();
 
       SherpaResult::Ok(Self {
         reader: (0 as usize) as *mut R,
         init_fn,
         prime_fn,
+        engine,
         ast_build,
         drop_fn,
         next_fn,
-        module,
+        module: llvm_mod,
         sherpa_ctx: ParseContext::<R, ExtCTX>::new_llvm(),
+        j: j.transfer(),
+        states: states,
       })
     }
   }
 
-  pub(crate) fn set_reader(&mut self, reader: &'a mut R) {
-    self.reader = reader;
+  pub(crate) fn get_ctx_mut(&mut self) -> &mut ParseContext<R, ExtCTX> {
+    &mut self.sherpa_ctx
   }
 
-  fn setup_exec_engine(ctx: &mut LLVMParserModule) {
-    if ctx._exe_engine.is_none() {
-      ctx._exe_engine =
-        Some(ctx.module.create_jit_execution_engine(inkwell::OptimizationLevel::None).unwrap());
-    }
+  pub(crate) fn get_ctx(&self) -> &ParseContext<R, ExtCTX> {
+    &self.sherpa_ctx
+  }
+
+  pub(crate) fn grammar(&self) -> Arc<GrammarStore> {
+    self.j.grammar().unwrap()
+  }
+
+  pub(crate) fn set_reader(&mut self, reader: &mut R) {
+    self.reader = reader;
   }
 
   pub(crate) fn next(&mut self) -> ParseActionType {
     unsafe { self.next_fn.call(&mut self.sherpa_ctx) }
+  }
+}
+
+impl<'a, R, ExtCTX, ASTNode> From<(Option<Config>, &'a str, &'a Context)>
+  for SherpaResult<JitParser<'a, R, ExtCTX, ASTNode>>
+where
+  R: ByteReader + LLVMByteReader,
+  ASTNode: AstObject,
+{
+  fn from((config, string, context): (Option<Config>, &'a str, &'a Context)) -> Self {
+    let mut j = Journal::new(config);
+    GrammarStore::from_str(&mut j, string)?;
+    let states = compile_parse_states(&mut j, get_num_of_available_threads())?;
+    let states = optimize_parse_states(&mut j, states);
+    JitParser::new(&mut j, states, &context)
   }
 }
 
@@ -125,25 +168,9 @@ where
   R: ByteReader + LLVMByteReader + MutByteReader,
   ASTNode: AstObject,
 {
-  pub(crate) fn from_grammar_str(
-    grammar_source: &str,
-    ctx: &'a Context,
-    config: Config,
-  ) -> SherpaResult<(Self, Journal)> {
-    let mut j = Journal::new(Some(config));
-
-    GrammarStore::from_str(&mut j, grammar_source)?;
-
-    let ir_states = compile_states(&mut j, 1)?;
-    let ir_states = optimize_ir_states(&mut j, ir_states);
-    let bytecode_output = compile_bytecode(&mut j, ir_states);
-
-    j.flush_reports();
-
-    SherpaResult::Ok((Self::new(&mut j, &bytecode_output, &ctx)?, j))
-  }
-
   pub(crate) fn init(&mut self) {
+    self.sherpa_ctx.reset();
+
     unsafe {
       let Self { sherpa_ctx, reader, .. } = self;
       self.init_fn.call(sherpa_ctx, *reader);
@@ -158,7 +185,21 @@ where
 
   /// Prints the LLVM code to std::err.
   pub(crate) fn print_code(&self) {
-    eprintln!("{}", self.module.module.to_string())
+    println!("{}", self.module.module.print_to_string().to_string());
+  }
+
+  /// Prints intermediate representation of the parser states. If optmization
+  /// has occurred then the states may not represent the actual parser.
+  pub(crate) fn print_states(&mut self) {
+    for (_, state) in &self.states {
+      println!("{}", state.to_string())
+    }
+  }
+
+  /// Prints the equivalent bytecode parser dissasembly to to stderr.
+  pub(crate) fn print_dissasembly(&mut self) {
+    let bytecode_output = compile_bytecode(&mut self.j, &self.states);
+    println!("{}", &generate_disassembly(&bytecode_output, &mut self.j));
   }
 
   pub(crate) fn build_ast(
@@ -171,14 +212,16 @@ where
     )],
   ) -> ParseResult<ASTNode> {
     unsafe {
+      self.sherpa_ctx.reset();
+      self.set_reader(reader);
       self.init();
       self.prime(entry_index);
 
       self.ast_build.call(
         &mut self.sherpa_ctx,
         functions.as_ptr(),
-        llvm_map_shift_action::<R, ExtCTX, ASTNode>,
-        llvm_map_result_action::<R, ExtCTX, ASTNode>,
+        llvm_map_shift_action_2::<R, ExtCTX, ASTNode>,
+        llvm_map_result_action_2::<R, ExtCTX, ASTNode>,
       )
     }
   }
@@ -201,19 +244,19 @@ impl<'a, R: ByteReader + LLVMByteReader + MutByteReader, M> SherpaParser<R, M>
   for JitParser<'a, R, M>
 {
   fn get_token_length(&self) -> u32 {
-    self.sherpa_ctx.token_len
+    self.sherpa_ctx.get_token_length()
   }
 
   fn get_token_offset(&self) -> u32 {
-    self.sherpa_ctx.token_off
+    self.sherpa_ctx.get_token_offset()
   }
 
   fn get_token_line_number(&self) -> u32 {
-    self.sherpa_ctx.start_line_num
+    self.sherpa_ctx.get_token_line_number()
   }
 
   fn get_token_line_offset(&self) -> u32 {
-    self.sherpa_ctx.start_line_off
+    self.sherpa_ctx.get_token_line_offset()
   }
 
   fn get_production_id(&self) -> u32 {
@@ -235,20 +278,20 @@ impl<'a, R: ByteReader + LLVMByteReader + MutByteReader, M> SherpaParser<R, M>
 
   fn get_next_action(
     &mut self,
-    debug: &Option<sherpa_runtime::functions::DebugFn<R, M>>,
+    debug: &mut Option<sherpa_runtime::bytecode_parser::DebugFn>,
   ) -> ParseAction {
     match self.next() {
       ParseActionType::Shift => ParseAction::Shift {
-        anchor_byte_offset: self.sherpa_ctx.anchor_off,
-        token_byte_offset:  self.sherpa_ctx.token_off,
-        token_byte_length:  self.sherpa_ctx.token_len,
-        token_line_offset:  self.sherpa_ctx.start_line_off,
-        token_line_count:   self.sherpa_ctx.start_line_num,
+        anchor_byte_offset: (self.sherpa_ctx.anchor_ptr - self.sherpa_ctx.begin_ptr) as u32,
+        token_byte_offset:  self.get_token_offset(),
+        token_byte_length:  self.get_token_length(),
+        token_line_offset:  self.get_token_line_offset(),
+        token_line_count:   self.get_token_line_number(),
       },
       ParseActionType::Reduce => ParseAction::Reduce {
         production_id: self.sherpa_ctx.prod_id,
-        rule_id:       self.sherpa_ctx.meta_a,
-        symbol_count:  self.sherpa_ctx.meta_b,
+        rule_id:       self.sherpa_ctx.rule_id,
+        symbol_count:  self.sherpa_ctx.sym_len,
       },
       ParseActionType::Accept => ParseAction::Accept { production_id: self.sherpa_ctx.prod_id },
       ParseActionType::Error => ParseAction::Error {

@@ -384,7 +384,7 @@ pub fn build_rust<W: Write>(
     },
   });
   u.add_type_handler(AScriptTypeVal::Struct(Default::default()), AscriptTypeHandler {
-    default: &|s, a, optional| match optional {
+    default: &|_, _, optional| match optional {
       true => "None".into(),
       _ => "[NO OPTIONAL]".into(),
     },
@@ -486,7 +486,7 @@ pub fn build_rust<W: Write>(
     },
   });
   u.add_ast_handler(sherpa::ASTNodeType::AST_Token, ASTExprHandler {
-    expr: &|u, ast, rule, ref_index, type_slot| {
+    expr: &|u, ast, _, ref_index, type_slot| {
       if let ASTNode::AST_Token(box AST_Token { range, .. }) = ast {
         let ref_ = Ref::node_token(u, u.bump_ref_index(ref_index), type_slot);
         if let Some(box Range { start_trim, end_trim }) = range {
@@ -537,7 +537,7 @@ pub fn build_rust<W: Write>(
     AScriptTypeVal::GenericStructVec(Default::default()),
     AscriptPropHandler {
       expr: &|u, ref_, prop_type_, _|
-        match (ref_) {
+        match ref_ {
         Some(ref_) => match prop_type_ {
             AScriptTypeVal::GenericStructVec(structs_ids) if structs_ids.len() == 1 => {
                 (format!(

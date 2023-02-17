@@ -1,36 +1,16 @@
-use bitmask_enum::bitmask;
-
-/// Parsing algorithms support by Sherpa
-#[bitmask]
-pub enum ParseAlgorithm {
-  /// Allow the use of LR states to resolve conflicts when building regular parsers
-  LR_Resolution = 0b1,
-  /// Allow the use of recursive ascent states to resolve left recursion
-  RecursiveAscent = 0b10,
-  /// Resort to creating Fork states when there are ambiguities.
-  /// If this is not enabled, ambiguous grammar will fail to compile.
-  Fork = 0b100,
-  /// Allow the use of LR states to resolve
-  /// conflicts when building token parsers
-  Token_LR_Resolution = 0b1000,
-  /// Use all methods available to resolve
-  /// conflicts
-  All  = 0b1111,
+#[derive(Debug, Default, Clone, Copy)]
+pub struct DebugConfig {
+  /// Allow further processing of the parse states when
+  /// parse states with the same name but different contents
+  /// are encourntered
+  pub allow_parse_state_name_collisions: bool,
 }
 
-impl Default for ParseAlgorithm {
-  fn default() -> Self {
-    Self::All
-  }
-}
 /// General Compiler Configuration
 #[derive(Debug, Clone)]
 pub struct Config {
-  /// Combine [ParseAlgorithm] flags to specify what parser algorithms
-  /// are available to the compiler.
+  /// > !NOT IMPLEMENTED!
   ///
-  /// Defaults to [ParseAlgorithm::All]
-  pub enabled_algorithms: ParseAlgorithm,
   /// The Parser will produce peek productions for symbols that occlude.
   /// An extra compile step must be taken to produce the symbol occlusion table.
   ///
@@ -51,7 +31,7 @@ pub struct Config {
   /// "same", which should then cause it to generate a peek state that uses the
   /// symbols `(` and `{` to resolve the conflict.
   ///
-  pub allow_occluding_symbols: bool,
+  pub allow_occluding_tokens: bool,
   /// Convert bytecode into a human readable "disassembly" format. This can be
   /// accessed in the journal through `Disassembly` report type. The main note
   /// in that report is labeled "Output", which will contain the
@@ -111,13 +91,14 @@ pub struct Config {
   ///
   /// Default to `false`
   pub llvm_light_lto:  bool,
+  /// Configurations when running in debug mode.
+  pub debug:           DebugConfig,
 }
 
 impl Default for Config {
   fn default() -> Self {
     Self {
-      enabled_algorithms: ParseAlgorithm::All,
-      allow_occluding_symbols: false,
+      allow_occluding_tokens: false,
       build_disassembly: false,
       debug_add_ir_states_note: false,
       enable_breadcrumb_parsing: false,
@@ -129,6 +110,7 @@ impl Default for Config {
       llvm_clang_path: "clang-14".to_string(),
       llvm_light_lto: false,
       opt_llvm: false,
+      debug: Default::default(),
     }
   }
 }

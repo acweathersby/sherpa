@@ -336,7 +336,7 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
 
     let mut temp_writer = w.checkpoint();
     let mut noop = 0;
-    let fn_name = format!("ast_fn{:0>3}", rule.bytecode_id);
+    let fn_name = format!("ast_fn{:0>3}", rule.bytecode_id.unwrap());
 
     temp_writer
       .wrtln(&format!(
@@ -443,7 +443,7 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
               "rng".to_string()
             ))?,
             r => {
-              eprintln!("{}", r.debug_string(None));
+              println!("{}", r.debug_string(None));
               temp_writer.write_line(&reference)?
             }
           };
@@ -513,7 +513,7 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
               "rng".to_string()
             ))?,
             r => {
-              eprintln!("{}", r.debug_string(None));
+              println!("{}", r.debug_string(None));
               temp_writer.write_line(&reference)?
             }
           };
@@ -529,9 +529,9 @@ fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Resul
 
     if noop == 0 {
       w.merge_checkpoint(temp_writer)?;
-      refs.push(format!("/* {} */ {}", id, fn_name));
+      refs.push(format!("/* {id:?} */ {fn_name}"));
     } else {
-      refs.push(format!("/* {} {} */ default_fn", id, noop));
+      refs.push(format!("/* {id:?} {noop} */ default_fn"));
     }
   }
 

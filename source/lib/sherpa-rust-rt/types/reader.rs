@@ -29,8 +29,8 @@ pub trait ByteReader {
   }
 
   #[inline(always)]
-  fn offset_at_end(&self, offset: u32) -> bool {
-    self.len() <= offset as usize
+  fn offset_at_end(&self, offset: usize) -> bool {
+    self.len() <= offset
   }
 
   /// Returns the word at the current cursor position, little
@@ -77,7 +77,7 @@ pub trait ByteReader {
 
   /// Resets the cursor back to the position of the token. Returns
   /// the same value as `get_type_info`.
-  fn set_cursor_to(&mut self, off: u32, line_num: u32, line_off: u32) -> u64;
+  fn set_cursor_to(&mut self, off: usize, line_num: u32, line_off: u32) -> u64;
 
   /// Return a packed u64 containing codepoint info the higher 32 bits,
   /// class in the high 16, codepoint length in the high 8 bits,
@@ -214,13 +214,13 @@ pub trait UTF8Reader {
 
 #[repr(C)]
 #[derive(Debug)]
-pub struct InputInfo(pub(crate) *const u8, pub(crate) u32, pub(crate) bool);
+pub struct InputInfo(pub *const u8, pub u32, pub bool);
 
 pub trait LLVMByteReader {
   /// Get a pointer to a sequence of bytes that can be read from the input given
   /// the cursor position. The second tuple values should be the length bytes that
   ///  can be read from the block.
-  extern "C" fn get_byte_block_at_cursor<T: ByteReader>(
+  extern "C" fn get_byte_block_at_cursor_old<T: ByteReader>(
     self_: &mut T,
     start_offset: u32,
     _end_offset: u32,
@@ -233,6 +233,42 @@ pub trait LLVMByteReader {
       InputInfo(ptr, self_.len() as u32, false)
     } else {
       InputInfo(0 as *const u8, self_.len() as u32, false)
+    }
+  }
+
+  extern "C" fn get_byte_block_at_cursor<T: ByteReader>(
+    self_: &mut T,
+    beg_ptr: &mut *const u8,
+    anchor_ptr: &mut *const u8,
+    head_ptr: &mut *const u8,
+    tail_ptr: &mut *const u8,
+    end_ptr: &mut *const u8,
+  ) {
+    let anchor_offset = (*tail_ptr as usize) - (*beg_ptr as usize);
+    let head_delta = (*head_ptr as usize) - anchor_offset;
+    let tail_delta = (*tail_ptr as usize) - anchor_offset;
+    let needed = *end_ptr as usize;
+
+    let size = ((self_.len() as i64) - ((anchor_offset + tail_delta + needed as usize) as i64))
+      .max(0) as u32;
+
+    if size > 0 {
+      let beg = self_.get_bytes().as_ptr();
+      let anchor = beg as usize + anchor_offset;
+      let head = (anchor + head_delta) as *const u8;
+      let tail = (anchor + tail_delta) as *const u8;
+      let end = (beg as usize + self_.len()) as *const u8;
+      (*beg_ptr) = beg;
+      (*anchor_ptr) = anchor as *const u8;
+      (*head_ptr) = head;
+      (*tail_ptr) = tail;
+      (*end_ptr) = end;
+    } else {
+      (*beg_ptr) = 0 as *const u8;
+      (*anchor_ptr) = 0 as *const u8;
+      (*head_ptr) = 0 as *const u8;
+      (*tail_ptr) = 0 as *const u8;
+      (*end_ptr) = 0 as *const u8;
     }
   }
 }

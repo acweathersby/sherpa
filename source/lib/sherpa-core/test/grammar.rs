@@ -1,6 +1,4 @@
 use crate::{
-  compile::{compile_bytecode, compile_scanner_states, compile_states, optimize_ir_states},
-  debug::{collect_shifts_and_skips, debug_items, generate_disassembly},
   grammar::{
     compile::{
       compile_ascript_struct,
@@ -8,17 +6,18 @@ use crate::{
       compile_grammars,
       compile_ir_ast,
       finalize::convert_left_recursion_to_right,
-      parse::{load_from_path, load_from_string, resolve_grammar_path},
+      parse::{load_from_string, resolve_grammar_path},
     },
     get_production_start_items,
   },
   journal::Journal,
-  types::{RecursionType, *},
-  util::get_num_of_available_threads,
+  test::utils::{test_runner, TestConfig},
+  types::*,
 };
 use lazy_static::__Deref;
-use sherpa_runtime::functions::DebugEvent;
-use std::{collections::BTreeSet, path::PathBuf};
+use std::path::PathBuf;
+
+use super::utils::{console_debugger, PrintConfig, TestInput};
 
 #[test]
 fn test_load_all() {
@@ -97,9 +96,8 @@ fn test_ir_trivial_state() {
 
 #[test]
 fn test_ir_goto_state() {
-  let result = compile_ir_ast(
-    "state [ A ] shift then goto state [ test ] then goto state [ test ] then repeat state",
-  );
+  let result =
+    compile_ir_ast("state [ A ] shift-scanner then goto state [ test ] then goto state [ test ]");
 
   print!("{:#?}", result);
 
@@ -109,7 +107,7 @@ fn test_ir_goto_state() {
 #[test]
 
 fn test_ir_trivial_branch_state() {
-  let result = compile_ir_ast("state [ A ] assert peek TOKEN [ 1 ] ( pass )");
+  let result = compile_ir_ast("state [ A ] assert TOKEN [ 1 ] ( peek-token then pass )");
 
   print!("{:#?}", result);
 
@@ -195,9 +193,7 @@ fn conversion_of_left_to_right_recursive() -> SherpaResult<()> {
 
   let left_recursive_prod = g.get_production_by_name("tk:left_recursive").unwrap();
 
-  assert!(!left_recursive_prod
-    .recursion_type
-    .contains(RecursionType::LEFT_INDIRECT | RecursionType::LEFT_DIRECT));
+  assert!(!left_recursive_prod.recursion_type.is_left());
 
   SherpaResult::Ok(())
 }
@@ -214,14 +210,14 @@ fn left_to_right_recursive_conversion() -> SherpaResult<()> {
 
   let prod = g.get_production_id_by_name("A").unwrap();
 
-  assert!(g.get_production_recursion_type(prod).contains(RecursionType::LEFT_DIRECT));
+  assert!(g.get_production_recursion_type(prod).is_direct_left());
 
   let mut g2 = g.deref().clone();
 
   convert_left_recursion_to_right(&mut g2, prod);
 
-  assert!(g2.get_production_recursion_type(prod,).contains(RecursionType::RIGHT));
-  assert!(!g2.get_production_recursion_type(prod).contains(RecursionType::LEFT_DIRECT));
+  assert!(g2.get_production_recursion_type(prod,).is_right());
+  assert!(!g2.get_production_recursion_type(prod).is_direct_left());
 
   SherpaResult::Ok(())
 }
@@ -233,7 +229,7 @@ fn processing_of_any_groups() -> SherpaResult<()> {
   assert!(!j.debug_error_report());
   let g = g?;
   let prod = g.get_production_id_by_name("A").unwrap();
-  debug_items("A", get_production_start_items(&prod, &g), &g);
+  format!("A \n {}", get_production_start_items(&prod, &g).to_debug_string(&g, "\n"));
   SherpaResult::Ok(())
 }
 
@@ -341,29 +337,32 @@ fn test_is_production_recursive() {
 
   let production = g.get_production_id_by_name("A").unwrap();
 
-  assert_eq!(g.get_production_recursion_type(production), RecursionType::RIGHT);
+  assert!(g.get_production_recursion_type(production).is_right());
 
   let production = g.get_production_id_by_name("R").unwrap();
 
-  assert!(g
-    .get_production_recursion_type(production)
-    .contains(RecursionType::LEFT_DIRECT | RecursionType::RIGHT));
+  assert!(
+    g.get_production_recursion_type(production).is_right()
+      && g.get_production_recursion_type(production).is_direct_left()
+  );
 
   let production = g.get_production_id_by_name("B").unwrap();
 
-  assert!(g
-    .get_production_recursion_type(production)
-    .contains(RecursionType::LEFT_INDIRECT | RecursionType::RIGHT));
+  assert!(
+    g.get_production_recursion_type(production).is_right()
+      && g.get_production_recursion_type(production).is_indirect_left()
+  );
 
   let production = g.get_production_id_by_name("C").unwrap();
 
-  assert!(g
-    .get_production_recursion_type(production)
-    .contains(RecursionType::LEFT_INDIRECT | RecursionType::RIGHT));
+  assert!(
+    g.get_production_recursion_type(production).is_right()
+      && g.get_production_recursion_type(production).is_indirect_left()
+  );
 
   let production = g.get_production_id_by_name("O").unwrap();
 
-  assert_eq!(g.get_production_recursion_type(production), RecursionType::NONE);
+  assert!(g.get_production_recursion_type(production).is_not_recursive());
 }
 
 #[test]
@@ -446,7 +445,7 @@ fn missing_append_host_error() -> SherpaResult<()> {
   assert!(j.debug_error_report());
 
   assert!(j.get_report(crate::ReportType::GrammarCompile(Default::default()), |r| {
-    let error = &r.errors[0];
+    let error = &r.errors()[0];
 
     assert!(matches!(error, SherpaError::SourceError { .. }));
 
@@ -491,111 +490,30 @@ fn compile_grammar_with_syntax_definitions() -> SherpaResult<()> {
   SherpaResult::Ok(())
 }
 
-#[test]
-pub fn generate_block_comment() -> SherpaResult<()> {
-  let mut j = Journal::new(None);
-  let grammar_data = load_from_string(
-    &mut j,
-    r#"
-<> A > tk:comment
-
-<> comment > tk:block  | tk:line  | c:sym 
-   
-<> block > "/*"  ( c:sym )(*) "*/"
-
-<> line > "//"  ( c:sym )(*) c:nl
-
-"#,
-    "/test_path.test".into(),
-  );
-
-  j.flush_reports();
-  j.debug_error_report();
-
-  compile_grammars(&mut j, &grammar_data);
-
-  j.flush_reports();
-  j.debug_error_report();
-
-  let grammar = j.grammar()?;
-
-  let result = compile_scanner_states(
-    &mut j,
-    BTreeSet::from_iter(vec![
-      grammar.get_production_by_name("tk:block")?.sym_id,
-      grammar.get_production_by_name("tk:line")?.sym_id,
-      SymbolID::from_string("g:sym", Some(&grammar)),
-    ]),
-  )?;
-  j.flush_reports();
-  // j.debug_print_reports(ReportType::ScannerCompile(Default::default()));
-  eprintln!("{:#?}", result);
-
-  assert_eq!(result.len(), 13);
-  SherpaResult::Ok(())
-}
-
 // Compile v1.0.0 grammar with v1.0.0_strap parser
 #[test]
-fn compile_latest_grammar() -> SherpaResult<()> {
-  let mut j = Journal::new(None);
-  let path = crate::test::utils::path_from_source("grammar/v1_0_0/grammar.sg")?;
-
-  let grammar_data = load_from_path(&mut j, path);
-  assert!(!j.debug_error_report());
-
-  compile_grammars(&mut j, &grammar_data);
-
-  j.flush_reports();
-  assert!(!j.debug_error_report());
-
-  let states = compile_states(&mut j, get_num_of_available_threads());
-
-  //j.debug_print_reports(crate::ReportType::ScannerCompile(ScannerStateId::default()));
-
-  j.flush_reports();
-  assert!(!j.debug_error_report());
-
-  let states = optimize_ir_states(&mut j, states?);
-
-  let bc = compile_bytecode(&mut j, states);
-
-  println!("{}", generate_disassembly(&bc, Some(&mut j)));
-
-  j.flush_reports();
-  assert!(!j.debug_error_report());
-
-  let entry_state_name = j.grammar()?.get_production_by_name("grammar").unwrap().guid_name.clone();
-  let target_production_id = j.grammar()?.get_production_by_name("grammar").unwrap().bytecode_id;
-  let entry_point = *bc.state_name_to_offset.get(&entry_state_name).unwrap();
-  //let grammar_pack = BytecodeGrammarLookups::new(j.grammar()?);
-  let (shifts, skips) = collect_shifts_and_skips(
-    r#"
-    /* test */
-    // This is a comment
-      <>grammar>
-        "Hello" 'World'
-"#,
-    entry_point,
-    target_production_id,
-    &bc.bytecode,
-    Some(Box::new(move |event| match event {
-      DebugEvent::ExecuteInstruction { ctx, .. } => {
-        if true || !ctx.is_scanner() {
-          return;
-          /*      println!(
-            "[{} : {}] {}",
-            ctx.get_reader().get_char(),
-            ctx.get_reader().cursor(),
-            disassemble_state(bc, address, Some(&grammar_pack)).0
-          ) */
-        }
-      }
-      _ => {}
-    })),
-  )?;
-
-  dbg!(shifts, skips);
-
-  SherpaResult::Ok(())
+fn compile_latest_grammar() -> SherpaResult<Journal> {
+  test_runner(
+    &[TestInput {
+      entry_name:     "grammar",
+      input:          r#"
+      /* test */
+      // This is a comment
+        <>grammar>
+          "Hello" 'World'
+    "#,
+      should_succeed: true,
+    }],
+    None,
+    TestConfig {
+      print_states: true,
+      print_disassembly: true,
+      bytecode_parse: true,
+      grammar_path: Some(crate::test::utils::path_from_source("grammar/v1_0_0/grammar.sg")?),
+      debugger_handler: Some(&|g| {
+        console_debugger(g, PrintConfig { display_input_data: true, ..Default::default() })
+      }),
+      ..Default::default()
+    },
+  )
 }

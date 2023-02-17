@@ -7,7 +7,7 @@ use crate::{
     create_scanner_name,
     get_production_start_items,
   },
-  types::*,
+  types::{item::Item, *},
   util::get_num_of_available_threads,
   Journal,
   ReportType,
@@ -203,7 +203,7 @@ fn create_scanner_productions_from_symbols(j: &mut Journal, g: &mut GrammarStore
 
                           vec![RuleSymbol {
                             consumable: true,
-                            exclusive: sym.exclusive,
+                            precedence: sym.precedence,
                             scanner_length: 1,
                             sym_id: new_symbol_id,
                             grammar_ref: g.id.clone(),
@@ -222,7 +222,7 @@ fn create_scanner_productions_from_symbols(j: &mut Journal, g: &mut GrammarStore
 
                           vec![RuleSymbol {
                             consumable: true,
-                            exclusive: sym_id.is_exclusive(),
+                            precedence: sym_id.is_exclusive().into(),
                             scanner_length: 1,
                             sym_id: new_symbol_id,
                             grammar_ref: g.id.clone(),
@@ -279,7 +279,7 @@ fn check_for_missing_productions(j: &mut Journal, g: &GrammarStore) -> bool {
           if !g.productions.contains_key(&prod_id) {
             have_missing_production = true;
             j.report_mut().add_error(SherpaError::SourceError {
-              id:         "missing-production",
+              id:         "missing-production-definition",
               msg:        format!("Could not find a definition for production"),
               inline_msg: "could not find".to_string(),
               loc:        sym.tok.clone(),
@@ -319,9 +319,9 @@ fn finalize_symbols(_j: &mut Journal, g: &mut GrammarStore) {
   for sym_id in &SymbolID::Generics {
     let (_, production_id, ..) = get_scanner_info_from_defined(sym_id, g);
 
-    let scanner_id = sym_id.bytecode_id(Some(g));
+    let scanner_id = sym_id.bytecode_id(g);
 
-    g.productions.get_mut(&production_id).unwrap().symbol_bytecode_id = scanner_id;
+    g.productions.get_mut(&production_id).unwrap().symbol_bytecode_id = Some(scanner_id);
   }
 
   for sym_id in g.symbols.keys().cloned().collect::<Vec<_>>() {
@@ -331,16 +331,18 @@ fn finalize_symbols(_j: &mut Journal, g: &mut GrammarStore) {
 
         symbol.bytecode_id = symbol_bytecode_id;
 
+        g.bytecode_token_lookup.insert(symbol_bytecode_id, sym_id);
+
         let production_id = symbol.guid.get_production_id().unwrap_or_default();
 
         let (_, token_production_id, ..) = get_scanner_info_from_defined(&sym_id, g);
 
         let scanner_production = g.productions.get_mut(&token_production_id).unwrap();
 
-        scanner_production.symbol_bytecode_id = symbol_bytecode_id;
+        scanner_production.symbol_bytecode_id = Some(symbol_bytecode_id);
 
         if let Some(original_production) = g.productions.get_mut(&production_id) {
-          original_production.symbol_bytecode_id = symbol_bytecode_id;
+          original_production.symbol_bytecode_id = Some(symbol_bytecode_id);
         };
 
         symbol_bytecode_id += 1;
@@ -364,8 +366,8 @@ fn finalize_symbols(_j: &mut Journal, g: &mut GrammarStore) {
       }
     }
 
-    if prod.symbol_bytecode_id == 0 {
-      prod.symbol_bytecode_id = symbol_bytecode_id;
+    if prod.symbol_bytecode_id.is_none() {
+      prod.symbol_bytecode_id = Some(symbol_bytecode_id);
 
       symbol_bytecode_id += 1;
     }
@@ -390,9 +392,8 @@ fn finalize_items(_j: &mut Journal, g: &mut GrammarStore) {
           let mut pending_items = VecDeque::<Item>::from_iter(work.iter().cloned());
 
           while let Some(item) = pending_items.pop_front() {
-            let item = item.to_empty_state();
-
-            if !item.completed() {
+            let item = item.to_absolute();
+            if !item.is_completed() {
               let peek_symbols =
                 if let Some(peek_symbols) = g.production_ignore_symbols.get(&item.get_prod_id(g)) {
                   peek_symbols.clone()
@@ -417,8 +418,8 @@ fn finalize_items(_j: &mut Journal, g: &mut GrammarStore) {
       .flat_map(move |s| s.join().unwrap())
       .collect::<Vec<_>>()
   }) {
-    g.item_ignore_symbols.insert(item.to_empty_state(), peek_symbols);
-    g.closures.insert(item.to_empty_state(), closure);
+    g.item_ignore_symbols.insert(item.to_absolute(), peek_symbols);
+    g.closures.insert(item.to_absolute(), closure);
   }
 
   for closure in g.closures.values().cloned() {
@@ -480,13 +481,15 @@ fn finalize_bytecode_metadata(_j: &mut Journal, g: &mut GrammarStore) {
   for (index, rule) in
     bodies.values_mut().filter(|b| parse_productions.contains(&b.prod_id)).enumerate()
   {
-    rule.bytecode_id = index as u32;
+    rule.bytecode_id = Some(index as u32);
+    g.bytecode_rule_lookup.insert(index as u32, rule.id);
   }
 
   for (index, prod_id) in parse_productions.iter().enumerate() {
     match productions.get_mut(prod_id) {
       Some(production) => {
-        production.bytecode_id = index as u32;
+        production.bytecode_id = Some(index as u32);
+        g.bytecode_production_lookup.insert(index as u32, *prod_id);
       }
       _ => {}
     }
@@ -527,7 +530,7 @@ pub(crate) fn get_scanner_info_from_defined(
       (*tok_prod_id, create_scanner_name(*prod_id, *grammar_id), symbol_string)
     }
     sym => {
-      let symbol_string = sym.to_default_string();
+      let symbol_string = sym.to_scanner_string();
       (ProductionId::from(&symbol_string), symbol_string.clone(), symbol_string)
     }
   };
@@ -560,12 +563,12 @@ pub fn convert_left_recursion_to_right(
   let a_token = a_prod.loc.clone();
 
   // Ensure the production is left recursive.
-  if !a_prod.recursion_type.contains(RecursionType::LEFT_DIRECT) {
+  if !a_prod.recursion_type.is_direct_left() {
     panic!("Production is not left direct recursive.");
   }
 
   // Remove recursion flag as it no longer applies to this production.
-  a_prod.recursion_type = a_prod.recursion_type.xor(RecursionType::LEFT_DIRECT);
+  a_prod.recursion_type = a_prod.recursion_type - RecursionType::LEFT_DIRECT;
 
   let rule_ids = g.production_rules.get(&a_prod_id).unwrap().clone();
 
@@ -718,7 +721,7 @@ fn calculate_recursions_types(
 
     production.recursion_type = recursion_type;
 
-    if production.is_scanner && production.recursion_type.contains(RecursionType::LEFT_DIRECT) {
+    if production.is_scanner && production.recursion_type.is_direct_left() {
       conversion_candidates.push(production.id);
     }
   }
@@ -744,14 +747,15 @@ fn insert_token_production(
   g.symbols
     .entry(tok_id)
     .or_insert_with(|| Symbol {
-      byte_length:   0,
-      cp_len:        0,
-      bytecode_id:   0,
-      guid:          tok_id,
-      scanner_only:  true,
-      friendly_name: tok_id.to_default_string(),
-      loc:           prod.loc.clone(),
-      g_ref:         Some(g.id.clone()),
+      byte_length: 0,
+      cp_len: 0,
+      bytecode_id: 0,
+      guid: tok_id,
+      scanner_only: true,
+      friendly_name: tok_id.to_scanner_string(),
+      loc: prod.loc.clone(),
+      g_ref: Some(g.id.clone()),
+      ..Default::default()
     })
     .scanner_only &= scanner_only;
 
@@ -790,6 +794,7 @@ fn convert_scan_symbol_to_production(
           syms: new_body_symbols,
           prod_id,
           tok: origin_location.clone(),
+          is_exclusive: sym_id.is_exclusive(),
           ..Default::default()
         }
       })
@@ -820,28 +825,26 @@ fn create_defined_symbols_from_string(
   g: &mut GrammarStore,
   symbol_string: &str,
   loc: Token,
-  exclusive: bool,
+  is_exclusive: bool,
 ) -> Vec<RuleSymbol> {
   let chars: Vec<char> = symbol_string.chars().collect();
-  let last = chars.len() - 1;
-  let new_body_symbols: Vec<RuleSymbol> = chars
+  chars
     .iter()
     .enumerate()
     .map(|(index, byte)| {
       let string = byte.to_string();
 
-      let id = get_terminal_id(&string, last == index && exclusive);
+      let id = get_terminal_id(&string, false);
 
       g.symbols.entry(id).or_insert_with(|| {
         g.symbol_strings.insert(id, string);
-
         Symbol {
           byte_length:   byte.len_utf8() as u32,
           cp_len:        1,
           bytecode_id:   0,
           guid:          id,
           scanner_only:  true,
-          friendly_name: id.to_default_string(),
+          friendly_name: id.to_scanner_string(),
           loc:           loc.clone(),
           g_ref:         Some(g.id.clone()),
         }
@@ -853,10 +856,9 @@ fn create_defined_symbols_from_string(
         scanner_length: chars.len() as u32,
         sym_id: id,
         grammar_ref: g.id.clone(),
+        precedence: is_exclusive.into(),
         ..Default::default()
       }
     })
-    .collect();
-
-  new_body_symbols
+    .collect()
 }

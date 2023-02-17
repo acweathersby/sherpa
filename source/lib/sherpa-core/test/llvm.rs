@@ -1,24 +1,22 @@
-use std::collections::BTreeMap;
-
 use super::test_reader::TestUTF8StringReader;
 use crate::{
-  compile::{compile_bytecode, compile_states, optimize_ir_states, GrammarStore},
-  llvm::{
-    ascript_functions::construct_ast_builder,
-    compile_module_from_bytecode,
-    parser_functions::construct_parse_function,
-    *,
-  },
+  compile::GrammarStore,
+  llvm::{ascript_functions::construct_ast_builder, parse_functions::compile_states, *},
+  parser::{compile_parse_states, optimize_parse_states},
   types::JitParser,
   Journal,
   SherpaResult,
 };
-use inkwell::{context::Context, execution_engine::JitFunction};
+use inkwell::{
+  context::Context,
+  execution_engine::{ExecutionEngine, JitFunction},
+  targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine},
+  OptimizationLevel,
+};
 use sherpa_runtime::types::{
+  ast::{AstObject, AstStackSlice},
   sherpa_allocate_stack,
   sherpa_free_stack,
-  AstObject,
-  AstStackSlice,
   BlameColor,
   ByteReader,
   Goto,
@@ -29,6 +27,7 @@ use sherpa_runtime::types::{
   ParseResult,
   TokenRange,
 };
+use std::collections::BTreeMap;
 
 type Init<R = TestUTF8StringReader<'static>, T = u32> =
   unsafe extern "C" fn(*mut ParseContext<R, T>, *mut R);
@@ -48,26 +47,14 @@ type Drop<R = TestUTF8StringReader<'static>, T = u32> =
   unsafe extern "C" fn(*mut ParseContext<R, T>);
 
 unsafe fn get_parse_function<'a, T: inkwell::execution_engine::UnsafeFunctionPointer>(
-  ctx: &'a LLVMParserModule,
+  engine: &'a ExecutionEngine,
   function_name: &str,
 ) -> Result<JitFunction<'a, T>, ()> {
-  let init = ctx
-    ._exe_engine
-    .as_ref()
-    .unwrap()
-    .get_function::<T>(function_name)
-    .ok()
-    .ok_or("Failed To Compile")
-    .unwrap();
-
-  Ok(init)
+  Ok(engine.get_function::<T>(function_name).ok().ok_or("Failed To Compile").unwrap())
 }
 
-fn setup_exec_engine(ctx: &mut LLVMParserModule) {
-  if ctx._exe_engine.is_none() {
-    ctx._exe_engine =
-      Some(ctx.module.create_jit_execution_engine(inkwell::OptimizationLevel::Aggressive).unwrap());
-  }
+fn setup_exec_engine<'a>(ctx: &'a LLVMParserModule) -> ExecutionEngine<'a> {
+  ctx.module.create_jit_execution_engine(inkwell::OptimizationLevel::Aggressive).unwrap()
 }
 
 fn build_fast_call_shim<'a>(
@@ -75,13 +62,13 @@ fn build_fast_call_shim<'a>(
   fun: inkwell::values::FunctionValue<'a>,
 ) -> SherpaResult<()> {
   let name = fun.get_name().to_str().unwrap();
-  let builder = &module.builder;
+  let builder = &module.b;
   let shim = module.module.add_function(&format!("{}_shim", name), fun.get_type(), None);
   shim.set_call_conventions(7);
   builder.position_at_end(module.ctx.append_basic_block(shim, "Entry"));
 
   let result = build_fast_call(
-    module,
+    &module.b,
     fun,
     &shim.get_params().into_iter().map(|i| i.into()).collect::<Vec<_>>(),
   )?;
@@ -95,58 +82,79 @@ fn build_fast_call_shim<'a>(
 }
 
 #[test]
-fn verify_construction_of_init_function() {
+fn verify_construction_of_init_function() -> SherpaResult<()> {
   let context = Context::create();
-
-  let module = construct_module(&mut Journal::new(None), "test", &context);
+  let target_machine = crate_target_test_machine()?;
+  let target_data = target_machine.get_target_data();
+  let module = construct_module(
+    &mut Journal::new(None),
+    &context,
+    &target_data,
+    context.create_module("test"),
+  );
 
   unsafe { assert!(construct_init(&module).is_ok()) }
 
-  eprintln!("{}", module.module.to_string());
+  println!("{}", module.module.to_string());
+
+  SherpaResult::Ok(())
 }
 
 #[test]
-fn verify_construction_of_ast_builder() {
+fn verify_construction_of_ast_builder() -> SherpaResult<()> {
   let context = Context::create();
-
-  let module = construct_module(&mut Journal::new(None), "test", &context);
+  let target_machine = crate_target_test_machine()?;
+  let target_data = target_machine.get_target_data();
+  let module = construct_module(
+    &mut Journal::new(None),
+    &context,
+    &target_data,
+    context.create_module("test"),
+  );
 
   unsafe { assert!(construct_ast_builder::<u64>(&module).is_ok()) }
 
-  eprintln!("{}", module.module.to_string());
+  println!("{}", module.module.to_string());
+
+  SherpaResult::Ok(())
 }
 
 #[test]
-fn verify_construction_of_push_state_function() {
+fn verify_construction_of_push_state_function() -> SherpaResult<()> {
   let context = Context::create();
+  let target_machine = crate_target_test_machine()?;
+  let target_data = target_machine.get_target_data();
+  let module = construct_module(
+    &mut Journal::new(None),
+    &context,
+    &target_data,
+    context.create_module("test"),
+  );
 
-  let parse_context = construct_module(&mut Journal::new(None), "test", &context);
+  unsafe { assert!(construct_push_state_function(&module).is_ok()) }
 
-  unsafe { assert!(construct_push_state_function(&parse_context).is_ok()) }
+  println!("{}", module.module.to_string());
 
-  eprintln!("{}", parse_context.module.to_string());
+  SherpaResult::Ok(())
 }
 
 #[test]
 fn should_push_new_state() -> SherpaResult<()> {
   let context = Context::create();
-
-  let mut module = construct_module(&mut Journal::new(None), "test", &context);
+  let target_machine = crate_target_test_machine()?;
+  let target_data = target_machine.get_target_data();
+  let module = construct_module(
+    &mut Journal::new(None),
+    &context,
+    &target_data,
+    context.create_module("test"),
+  );
 
   unsafe {
-    setup_exec_engine(&mut module);
+    let jit_engine = setup_exec_engine(&module);
 
-    module
-      ._exe_engine
-      .as_ref()
-      .unwrap()
-      .add_global_mapping(&module.fun.allocate_stack, sherpa_allocate_stack as usize);
-
-    module
-      ._exe_engine
-      .as_ref()
-      .unwrap()
-      .add_global_mapping(&module.fun.free_stack, sherpa_free_stack as usize);
+    jit_engine.add_global_mapping(&module.fun.allocate_stack, sherpa_allocate_stack as usize);
+    jit_engine.add_global_mapping(&module.fun.free_stack, sherpa_free_stack as usize);
 
     construct_init(&module)?;
     construct_push_state_function(&module)?;
@@ -161,14 +169,14 @@ fn should_push_new_state() -> SherpaResult<()> {
 
     let mut rt_ctx = ParseContext::new_llvm();
 
-    let push_state_fn = get_parse_function::<PushState>(&module, "push_state_shim").unwrap();
+    let push_state_fn = get_parse_function::<PushState>(&jit_engine, "push_state_shim").unwrap();
 
-    let init_fn = get_parse_function::<Init>(&module, "init").unwrap();
+    let init_fn = get_parse_function::<Init>(&jit_engine, "init").unwrap();
 
     let extend_stack_if_needed =
-      get_parse_function::<Extend>(&module, "extend_stack_if_needed_shim").unwrap();
+      get_parse_function::<Extend>(&jit_engine, "extend_stack_if_needed_shim").unwrap();
 
-    let drop_fn = get_parse_function::<Drop>(&module, "drop").unwrap();
+    let drop_fn = get_parse_function::<Drop>(&jit_engine, "drop").unwrap();
 
     init_fn.call(&mut rt_ctx, &mut reader);
     extend_stack_if_needed.call(&mut rt_ctx, 8);
@@ -184,7 +192,7 @@ fn should_push_new_state() -> SherpaResult<()> {
       rt_ctx.goto_size as usize,
     );
 
-    eprintln!("{:#?}", rt_ctx);
+    println!("{:#?}", rt_ctx);
     assert_eq!(stack[0].goto_fn as usize, 0x10101010_01010101);
     assert_eq!(stack[0].state, NORMAL_STATE_FLAG_LLVM);
 
@@ -195,44 +203,67 @@ fn should_push_new_state() -> SherpaResult<()> {
 
     assert_eq!(rt_ctx.goto_size, 0);
   };
+
   SherpaResult::Ok(())
 }
 
 #[test]
-fn verify_construction_of_get_adjusted_input_block_function() {
+fn verify_construction_of_get_adjusted_input_block_function() -> SherpaResult<()> {
   let context = Context::create();
+  let target_machine = crate_target_test_machine()?;
+  let target_data = target_machine.get_target_data();
+  let module = construct_module(
+    &mut Journal::new(None),
+    &context,
+    &target_data,
+    context.create_module("test"),
+  );
 
-  let parse_context = construct_module(&mut Journal::new(None), "test", &context);
+  unsafe { assert!(construct_get_adjusted_input_block_function(&module).is_ok()) }
 
-  unsafe { assert!(construct_get_adjusted_input_block_function(&parse_context).is_ok()) }
+  println!("{}", module.module.to_string());
 
-  eprintln!("{}", parse_context.module.to_string());
+  SherpaResult::Ok(())
 }
 
 #[test]
-fn verify_construction_of_emit_eop_function() {
+fn verify_construction_of_emit_eop_function() -> SherpaResult<()> {
   let context = Context::create();
+  let target_machine = crate_target_test_machine()?;
+  let target_data = target_machine.get_target_data();
+  let module = construct_module(
+    &mut Journal::new(None),
+    &context,
+    &target_data,
+    context.create_module("test"),
+  );
 
-  let parse_context = construct_module(&mut Journal::new(None), "test", &context);
+  unsafe { assert!(construct_emit_end_of_parse(&module).is_ok()) }
 
-  unsafe { assert!(construct_emit_end_of_parse(&parse_context).is_ok()) }
+  println!("{}", module.module.to_string());
 
-  eprintln!("{}", parse_context.module.to_string());
+  SherpaResult::Ok(())
 }
 
 #[test]
-fn should_initialize_context() {
+fn should_initialize_context() -> SherpaResult<()> {
   let context = Context::create();
+  let target_machine = crate_target_test_machine()?;
+  let target_data = target_machine.get_target_data();
+  let module = construct_module(
+    &mut Journal::new(None),
+    &context,
+    &target_data,
+    context.create_module("test"),
+  );
 
-  let mut parse_context = construct_module(&mut Journal::new(None), "test", &context);
-
-  unsafe { assert!(construct_init(&parse_context).is_ok()) };
+  unsafe { assert!(construct_init(&module).is_ok()) };
 
   unsafe {
-    setup_exec_engine(&mut parse_context);
+    let jit_engine = setup_exec_engine(&module);
     let mut reader = TestUTF8StringReader::new("test");
     let mut rt_ctx = Box::new(ParseContext::new_llvm());
-    let init_fn = get_parse_function::<Init>(&parse_context, "init").unwrap();
+    let init_fn = get_parse_function::<Init>(&jit_engine, "init").unwrap();
 
     init_fn.call(rt_ctx.as_mut(), &mut reader);
 
@@ -240,27 +271,43 @@ fn should_initialize_context() {
 
     assert_eq!(rt_ctx.reader.as_ref().unwrap().string, reader.string);
 
-    eprintln!("{:?}:{:#?}", root, rt_ctx);
+    println!("{:?}:{:#?}", root, rt_ctx);
   };
+  SherpaResult::Ok(())
 }
 
 #[test]
-fn verify_utf8_lookup_functions() {
+fn verify_utf8_lookup_functions() -> SherpaResult<()> {
   let context = Context::create();
+  let target_machine = crate_target_test_machine()?;
+  let target_data = target_machine.get_target_data();
+  let module = construct_module(
+    &mut Journal::new(None),
+    &context,
+    &target_data,
+    context.create_module("test"),
+  );
 
-  let parse_context = construct_module(&mut Journal::new(None), "test", &context);
+  assert!(construct_utf8_lookup_function(&module).is_ok());
 
-  assert!(construct_utf8_lookup_function(&parse_context).is_ok());
+  unsafe { assert!(construct_merge_utf8_part_function(&module).is_ok()) }
 
-  unsafe { assert!(construct_merge_utf8_part_function(&parse_context).is_ok()) }
+  println!("{}", module.module.to_string());
 
-  eprintln!("{}", parse_context.module.to_string());
+  SherpaResult::Ok(())
 }
 
 #[test]
-fn should_yield_correct_CP_values_for_inputs() {
+fn should_yield_correct_CP_values_for_inputs() -> SherpaResult<()> {
   let context = Context::create();
-  let mut module = construct_module(&mut Journal::new(None), "test", &context);
+  let target_machine = crate_target_test_machine()?;
+  let target_data = target_machine.get_target_data();
+  let module = construct_module(
+    &mut Journal::new(None),
+    &context,
+    &target_data,
+    context.create_module("test"),
+  );
 
   assert!(construct_utf8_lookup_function(&module).is_ok());
   unsafe { assert!(construct_merge_utf8_part_function(&module).is_ok()) }
@@ -277,10 +324,10 @@ fn should_yield_correct_CP_values_for_inputs() {
 
     build_fast_call_shim(&module, module.fun.get_utf8_codepoint_info);
 
-    setup_exec_engine(&mut module);
+    let jit_engine = setup_exec_engine(&module);
 
     let get_code_point =
-      get_parse_function::<GetUtf8CP>(&module, "get_utf8_codepoint_info_shim").unwrap();
+      get_parse_function::<GetUtf8CP>(&jit_engine, "get_utf8_codepoint_info_shim").unwrap();
 
     dbg!(get_code_point.call(" ".as_ptr()));
     assert_eq!(get_code_point.call(" ".as_ptr()).val, 32);
@@ -288,27 +335,43 @@ fn should_yield_correct_CP_values_for_inputs() {
     assert_eq!(get_code_point.call("☺".as_ptr()).val, 0x263A);
     // assert_eq!(get_code_point.call("☺".as_ptr()).len, 3);
   };
+
+  SherpaResult::Ok(())
 }
 
 #[test]
-fn verify_construct_extend_stack_if_needed() {
+fn verify_construct_extend_stack_if_needed() -> SherpaResult<()> {
   let context = Context::create();
-
-  let module = construct_module(&mut Journal::new(None), "test", &context);
+  let target_machine = crate_target_test_machine()?;
+  let target_data = target_machine.get_target_data();
+  let module = construct_module(
+    &mut Journal::new(None),
+    &context,
+    &target_data,
+    context.create_module("test"),
+  );
 
   unsafe { assert!(construct_extend_stack_if_needed(&module).is_ok()) }
 
-  eprintln!("{}", module.module.to_string());
+  println!("{}", module.module.to_string());
+
+  SherpaResult::Ok(())
 }
 
 #[test]
 fn should_extend_stack() -> SherpaResult<()> {
   let context = Context::create();
-
-  let mut module = construct_module(&mut Journal::new(None), "test", &context);
+  let target_machine = crate_target_test_machine()?;
+  let target_data = target_machine.get_target_data();
+  let module = construct_module(
+    &mut Journal::new(None),
+    &context,
+    &target_data,
+    context.create_module("test"),
+  );
 
   unsafe {
-    setup_exec_engine(&mut module);
+    let jit_engine = setup_exec_engine(&module);
 
     build_fast_call_shim(&module, module.fun.push_state);
     build_fast_call_shim(&module, module.fun.extend_stack_if_needed);
@@ -321,19 +384,13 @@ fn should_extend_stack() -> SherpaResult<()> {
     construct_extend_stack_if_needed(&module)?;
     construct_internal_free_stack(&module)?;
 
-    module
-      ._exe_engine
-      .as_ref()?
-      .add_global_mapping(&module.fun.allocate_stack, sherpa_allocate_stack as usize);
+    jit_engine.add_global_mapping(&module.fun.allocate_stack, sherpa_allocate_stack as usize);
 
-    module
-      ._exe_engine
-      .as_ref()?
-      .add_global_mapping(&module.fun.free_stack, sherpa_free_stack as usize);
+    jit_engine.add_global_mapping(&module.fun.free_stack, sherpa_free_stack as usize);
 
-    let init_fn = get_parse_function::<Init>(&module, "init").unwrap();
-    let push_state_fn = get_parse_function::<PushState>(&module, "push_state_shim").unwrap();
-    let extend = get_parse_function::<Extend>(&module, "extend_stack_if_needed_shim").unwrap();
+    let init_fn = get_parse_function::<Init>(&jit_engine, "init").unwrap();
+    let push_state_fn = get_parse_function::<PushState>(&jit_engine, "push_state_shim").unwrap();
+    let extend = get_parse_function::<Extend>(&jit_engine, "extend_stack_if_needed_shim").unwrap();
 
     init_fn.call(&mut rt_ctx, &mut reader);
     extend.call(&mut rt_ctx, 10);
@@ -368,7 +425,7 @@ fn should_extend_stack() -> SherpaResult<()> {
 
     assert_eq!(rt_ctx.goto_size, 960);
 
-    eprintln!("{:#?}", stack);
+    println!("{:#?}", stack);
   };
 
   SherpaResult::Ok(())
@@ -386,18 +443,21 @@ IGNORE { c:sp }
   ",
   )
   .unwrap();
-  let ir_states = compile_states(&mut j, 1)?;
-  let ir_states = optimize_ir_states(&mut j, ir_states);
-  let bytecode_output = compile_bytecode(&mut j, ir_states);
-  let ctx = Context::create();
+  let ir_states = compile_parse_states(&mut j, 1)?;
+  let ir_states = optimize_parse_states(&mut j, ir_states);
+  let context = Context::create();
+  let target_machine = crate_target_test_machine()?;
+  let target_data = target_machine.get_target_data();
+  let module = construct_module(
+    &mut Journal::new(None),
+    &context,
+    &target_data,
+    context.create_module("test"),
+  );
 
-  let module = construct_module(&mut Journal::new(None), "test", &ctx);
+  compile_states(&mut j, &module, &ir_states)?;
 
-  unsafe {
-    construct_parse_function(&mut j, &module, &bytecode_output)?;
-  }
-
-  eprintln!("{}", module.module.to_string());
+  println!("{}", module.module.to_string());
 
   SherpaResult::Ok(())
 }
@@ -414,31 +474,32 @@ IGNORE { c:sp }
   ",
   )?;
 
-  let ir_states = compile_states(&mut j, 1)?;
-  let ir_states = optimize_ir_states(&mut j, ir_states);
-  let bytecode_output = compile_bytecode(&mut j, ir_states);
-  let ctx = Context::create();
-  let mut module = construct_module(&mut j, "test", &ctx);
-  compile_module_from_bytecode(&mut module, &mut j, &bytecode_output)?;
+  let states = compile_parse_states(&mut j, 1)?;
+  let states = optimize_parse_states(&mut j, states);
+  let context = Context::create();
+  let target_machine = crate_target_test_machine()?;
+  let target_data = target_machine.get_target_data();
+  let module = construct_module(
+    &mut Journal::new(None),
+    &context,
+    &target_data,
+    context.create_module("test"),
+  );
+
+  compile_llvm_module_from_parse_states(&mut j, &module, &states)?;
 
   unsafe {
-    setup_exec_engine(&mut module);
+    let jit_engine = setup_exec_engine(&module);
     let mut reader = TestUTF8StringReader::new("hello world");
     let mut rt_ctx = ParseContext::new_llvm();
 
-    module
-      ._exe_engine
-      .as_ref()?
-      .add_global_mapping(&module.fun.allocate_stack, sherpa_allocate_stack as usize);
+    jit_engine.add_global_mapping(&module.fun.allocate_stack, sherpa_allocate_stack as usize);
 
-    module
-      ._exe_engine
-      .as_ref()?
-      .add_global_mapping(&module.fun.free_stack, sherpa_free_stack as usize);
+    jit_engine.add_global_mapping(&module.fun.free_stack, sherpa_free_stack as usize);
 
-    let init_fn = get_parse_function::<Init>(&module, "init")?;
-    let prime_fn = get_parse_function::<Prime>(&module, "prime")?;
-    let next_fn = get_parse_function::<Next>(&module, "next")?;
+    let init_fn = get_parse_function::<Init>(&jit_engine, "init")?;
+    let prime_fn = get_parse_function::<Prime>(&jit_engine, "prime")?;
+    let next_fn = get_parse_function::<Next>(&jit_engine, "next")?;
 
     init_fn.call(&mut rt_ctx, &mut reader);
 
@@ -471,7 +532,9 @@ IGNORE { c:sp }
 #[test]
 fn line_tracking_with_scanner_tokens() -> SherpaResult<()> {
   let ctx = Context::create();
-  let (mut parser, j) = JitParser::<TestUTF8StringReader, u32, u32>::from_grammar_str(
+
+  let jit: SherpaResult<JitParser<TestUTF8StringReader, u32, u32>> = ((
+    None,
     r##"
 IGNORE { c:sp c:nl }
 <> A > tk:B P 
@@ -483,24 +546,35 @@ IGNORE { c:sp c:nl }
 <> B > "\"" (c:id | c:nl)(+) "\""
 "##,
     &ctx,
-    Default::default(),
-  )?;
+  ))
+    .into();
 
-  assert!(!j.debug_error_report());
+  let mut jit = jit?;
+  jit.print_states();
+  jit.print_dissasembly();
+  jit.print_code();
 
-  //parser.print_code();
+  let mut reduced = 0;
 
-  let result = parser.build_ast(
+  jit.get_ctx_mut().set_meta(&mut reduced);
+
+  let result = jit.build_ast(
     0,
     &mut TestUTF8StringReader::new("\"\nh\n\"\nworld\n\n\ngoodby\n\"\nmango\""),
-    &map_reduce_function(&j.grammar().unwrap(), vec![
+    &map_reduce_function(&jit.grammar(), vec![
       /*P*/
       ("P", 0, |ctx, slots| {
+        let counter = unsafe { ctx.get_meta_mut() };
+        *counter += 1;
+        println!("Reduced P");
         assert_eq!(slots[0].1.to_string_slice(ctx.get_str()), "world");
         assert_eq!(slots[0].1.line_num, 3, "Line number of `world` should be 3");
         assert_eq!(slots[0].1.line_off, 5, "Line offset of `world` should be 4");
       }),
       ("A", 0 /*A*/, |ctx, slots| {
+        let counter = unsafe { ctx.get_meta_mut() };
+        *counter += 1;
+        println!("Reduced A");
         assert_eq!(slots[0].1.to_string_slice(ctx.get_str()), "\"\nh\n\"");
         assert_eq!(slots[0].1.line_num, 0, "Line number of `\"\\nh\\n\"` should be 0");
         assert_eq!(slots[0].1.line_off, 0, "Line offset of `\"\\nh\\n\"` should be 0");
@@ -508,6 +582,9 @@ IGNORE { c:sp c:nl }
       }),
       /*C*/
       ("C", 0, |ctx, slots| {
+        let counter = unsafe { ctx.get_meta_mut() };
+        *counter += 1;
+        println!("Reduced C");
         assert_eq!(slots[0].1.to_string_slice(ctx.get_str()), "\"\nmango\"");
         assert_eq!(slots[0].1.line_num, 7, "Line number of `world` should be 7");
         assert_eq!(slots[0].1.line_off, 20, "Line offset of `world` should be 20");
@@ -515,6 +592,8 @@ IGNORE { c:sp c:nl }
       ("B", 0, |_, _| {}),
     ]),
   );
+
+  assert_eq!(unsafe { *jit.get_ctx().get_meta() }, 3, "Number of reduced productions should be 3");
 
   assert!(matches!(result, ParseResult::Complete((1010101, ..))));
 
@@ -524,26 +603,27 @@ IGNORE { c:sp c:nl }
 #[test]
 fn simple_newline_tracking() -> SherpaResult<()> {
   let ctx = Context::create();
-  let (mut parser, j) = JitParser::<TestUTF8StringReader, u32, u32>::from_grammar_str(
+
+  let jit: SherpaResult<JitParser<TestUTF8StringReader, u32, u32>> = ((
+    None,
     r##"
-IGNORE { c:sp c:nl }
-
-<> test > 'hello' P 
-
-<> P > 'world' 'goodby' B
-
-<> B > 'mango'
-    "##,
+    IGNORE { c:sp c:nl }
+    
+    <> test > 'hello' P 
+    
+    <> P > 'world' 'goodby' B
+    
+    <> B > 'mango'
+        "##,
     &ctx,
-    Default::default(),
-  )?;
+  ))
+    .into();
+  let mut jit = jit?;
 
-  assert!(!j.debug_error_report());
-
-  let result = parser.build_ast(
+  let result = jit.build_ast(
     0,
     &mut TestUTF8StringReader::new("hello\nworld\n\ngoodby\nmango"),
-    &map_reduce_function(&j.grammar().unwrap(), vec![
+    &map_reduce_function(&jit.grammar(), vec![
       ("test", 0, |ctx, slots| {
         assert_eq!(slots[0].1.to_string_slice(ctx.get_str()), "hello");
         assert_eq!(slots[0].1.line_num, 0, "Line number of `hello` should be 0");
@@ -573,7 +653,8 @@ IGNORE { c:sp c:nl }
 fn test_compile_from_bytecode1() -> SherpaResult<()> {
   let ctx = Context::create();
 
-  let (mut parser, j) = JitParser::<TestUTF8StringReader, u32, u32>::from_grammar_str(
+  let jit: SherpaResult<JitParser<TestUTF8StringReader, u32, u32>> = ((
+    None,
     "
 IGNORE { c:sp c:nl }
 
@@ -584,16 +665,15 @@ IGNORE { c:sp c:nl }
 <> B > 'mango'
     ",
     &ctx,
-    Default::default(),
-  )?;
+  ))
+    .into();
+  let mut jit = jit?;
 
-  assert!(!j.debug_error_report());
-
-  let g = j.grammar()?;
+  let g = &(jit.grammar());
 
   let input = "hello world\ngoodby mango";
 
-  let parse_result = parser.build_ast(
+  let parse_result = jit.build_ast(
     0,
     &mut TestUTF8StringReader::new(input),
     &map_reduce_function(&g, vec![
@@ -605,7 +685,7 @@ IGNORE { c:sp c:nl }
 
         let final_token = _a.1 + _b.1;
 
-        eprintln!(
+        println!(
           "{}",
           final_token.to_token(unsafe { &*ctx.reader }).blame(
             0,
@@ -618,11 +698,11 @@ IGNORE { c:sp c:nl }
         slots.assign(0, (0, final_token, TokenRange::default()));
       }),
       ("B", 0, |_, slots| {
-        eprintln!("<B> 02 - {}  {:#?}", 0, slots);
+        println!("<B> 02 - {}  {:#?}", 0, slots);
         // Do nothing
       }),
       ("P", 0, |_, slots| {
-        eprintln!("<P> 03 - {}  {:#?}", 0, slots);
+        println!("<P> 03 - {}  {:#?}", 0, slots);
         let (_, _a, _) = slots.take(0);
         slots.take(1);
         let (_, _c, _) = slots.take(2);
@@ -631,7 +711,7 @@ IGNORE { c:sp c:nl }
     ]),
   );
 
-  eprintln!("{:#?}", parse_result);
+  println!("{:#?}", parse_result);
 
   assert!(matches!(parse_result, ParseResult::Complete(..)));
 
@@ -659,12 +739,14 @@ where
 {
   fns
     .into_iter()
-    .map(|(name, rule_number, b)| {
+    .filter_map(|(name, rule_number, b)| {
       let prod = g.get_production_by_name(name).unwrap();
       let rule_id = g.production_rules.get(&prod.id).unwrap()[rule_number];
       let rule = g.get_rule(&rule_id).unwrap();
-      {
-        (rule.bytecode_id, b)
+      if let Some(bc_id) = rule.bytecode_id {
+        Some((bc_id, b))
+      } else {
+        None
       }
     })
     .collect::<BTreeMap<_, _>>()
@@ -674,7 +756,7 @@ where
 
 #[test]
 fn test_compile_json_parser() -> SherpaResult<()> {
-  use crate::llvm::compile_module_from_bytecode;
+  use crate::llvm::compile_llvm_module_from_parse_states;
   use inkwell::context::Context;
   let mut j = Journal::new(None);
   GrammarStore::from_str(
@@ -716,17 +798,35 @@ NAME llvm_language_test
 
   assert!(!j.debug_error_report());
 
-  let ir_states = compile_states(&mut j, 1)?;
-  let ir_states = optimize_ir_states(&mut j, ir_states);
-
-  let bytecode_output = compile_bytecode(&mut j, ir_states);
+  let ir_states = compile_parse_states(&mut j, 1)?;
+  let ir_states = optimize_parse_states(&mut j, ir_states);
 
   let ctx = Context::create();
 
-  let mut module = construct_module(&mut j, "test", &ctx);
-  compile_module_from_bytecode(&mut module, &mut j, &bytecode_output)?;
+  let target_machine = crate_target_test_machine()?;
+  let target_data = target_machine.get_target_data();
 
-  eprintln!("{}", module.module.to_string());
+  let module = construct_module(&mut j, &ctx, &target_data, ctx.create_module("test"));
+  compile_llvm_module_from_parse_states(&mut j, &module, &ir_states)?;
+
+  println!("{}", module.module.to_string());
 
   SherpaResult::Ok(())
+}
+
+fn crate_target_test_machine() -> SherpaResult<TargetMachine> {
+  Target::initialize_native(&InitializationConfig::default())?;
+  let native_triple = TargetMachine::get_default_triple();
+  let target = Target::from_triple(&native_triple).unwrap();
+  let reloc = RelocMode::PIC;
+  let model = CodeModel::Small;
+  let opt = OptimizationLevel::None;
+  SherpaResult::Ok(target.create_target_machine(
+    &native_triple,
+    "generic",
+    "",
+    opt,
+    reloc,
+    model,
+  )?)
 }

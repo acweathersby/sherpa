@@ -32,7 +32,8 @@ pub const num_sym_str: &str = "c:num";
 pub const gen_rec_marker_str: &str = "c:rec";
 pub const tab_sym_str: &str = "c:tab";
 pub const eof_str: &str = "$eof";
-pub const undefined_symbol_id: u32 = 99999;
+pub const undefined_symbol_id: u32 = 0xF0000000;
+pub const DEFAULT_SYM_ID: u32 = 0xF0DEFA17;
 /// TODO: Docs
 #[derive(Debug, PartialEq, PartialOrd, Clone, Copy, Hash, Eq, Ord)]
 pub enum SymbolID {
@@ -117,6 +118,10 @@ pub enum SymbolID {
   /// a given closure, used to detect and resolve shift
   /// conflicts within nested productions.
   OutOfScope,
+  /// A virtual symbol positioned at the end ExclusiveDefined* rules
+  /// to allow shortcircuit completion of such tokens when encountered
+  /// in the construction of parse graphs.
+  ExclusiveEnd,
 }
 
 impl Default for SymbolID {
@@ -156,7 +161,7 @@ impl SymbolID {
           match g.symbol_strings.iter().find(|(_, string)| string.as_str() == symbol_string) {
             Some((sym_id, _)) => *sym_id,
             _ => match g.get_production_by_name(symbol_string) {
-              SherpaResult::Ok(prod) => get_scanner_info_from_defined(&prod.sym_id, g).0,
+              SherpaResult::Ok(prod) => prod.sym_id,
               _ => SymbolID::Undefined,
             },
           }
@@ -187,64 +192,62 @@ impl SymbolID {
           format!("tk:{}", name)
         }
       }
-      Self::Start => "start".to_string(),
-      Self::Default => "default".to_string(),
-      Self::Recovery => gen_rec_marker_str.to_string(),
-      Self::EndOfInput => eof_str.to_string(),
-      Self::GenericHorizontalTab => tab_sym_str.to_string(),
-      Self::GenericNewLine => nl_sym_str.to_string(),
-      Self::GenericSpace => space_sym_str.to_string(),
-      Self::GenericIdentifier => id_sym_str.to_string(),
-      Self::GenericNumber => num_sym_str.to_string(),
-      Self::GenericSymbol => symbol_sym_str.to_string(),
+      Self::Start => "start".into(),
+      Self::Default => "default".into(),
+      Self::ExclusiveEnd => "⦻".into(),
+      Self::Recovery => gen_rec_marker_str.into(),
+      Self::EndOfInput => eof_str.into(),
+      Self::GenericHorizontalTab => tab_sym_str.into(),
+      Self::GenericNewLine => nl_sym_str.into(),
+      Self::GenericSpace => space_sym_str.into(),
+      Self::GenericIdentifier => id_sym_str.into(),
+      Self::GenericNumber => num_sym_str.into(),
+      Self::GenericSymbol => symbol_sym_str.into(),
       Self::Undefined | Self::UndefinedA | Self::UndefinedB | Self::UndefinedC => {
-        "[undefined]".to_string()
+        "[undefined]".into()
       }
-      _ => "[??]".to_string(),
+      _ => "[??]".into(),
     }
   }
 
   /// TODO: Docs
-  pub fn to_default_string(&self) -> String {
+  pub fn to_scanner_string(&self) -> String {
     match self {
       Self::DefinedNumeric(_)
       | Self::DefinedIdentifier(_)
       | Self::DefinedSymbol(_)
       | Self::ExclusiveDefinedNumeric(_)
       | Self::ExclusiveDefinedIdentifier(_)
-      | Self::ExclusiveDefinedSymbol(_) => "__defined".to_string(),
-      Self::Production(..) => "__defined".to_string(),
-      Self::TokenProduction(..) => "__defined".to_string(),
-      Self::Default => "__default".to_string(),
-      Self::Start => "__start".to_string(),
-      Self::Recovery => "__rec".to_string(),
-      Self::EndOfInput => "__eof".to_string(),
-      Self::GenericHorizontalTab => "__tab".to_string(),
-      Self::GenericNewLine => "__nl".to_string(),
-      Self::GenericSpace => "__sp".to_string(),
-      Self::GenericIdentifier => "__id".to_string(),
-      Self::GenericNumber => "__num".to_string(),
-      Self::GenericSymbol => "__sym".to_string(),
-      _ => "__undefined".to_string(),
+      | Self::ExclusiveDefinedSymbol(_) => "__defined".into(),
+      Self::Production(..) => "__defined".into(),
+      Self::TokenProduction(..) => "__defined".into(),
+      Self::Default => "__default".into(),
+      Self::Start => "__start".into(),
+      Self::Recovery => "__rec".into(),
+      Self::EndOfInput => "__eof".into(),
+      Self::GenericHorizontalTab => "__tab".into(),
+      Self::GenericNewLine => "__nl".into(),
+      Self::GenericSpace => "__sp".into(),
+      Self::GenericIdentifier => "__id".into(),
+      Self::GenericNumber => "__num".into(),
+      Self::GenericSymbol => "__sym".into(),
+      _ => "__undefined".into(),
     }
   }
 
   /// Returns a tuple indicating the type CLASS of shift that is performed
   /// on this symbol.
   pub fn shift_info(&self, g: &GrammarStore) -> (u32, &'static str) {
+    use SymbolID::*;
     match self {
-      SymbolID::GenericSpace
-      | SymbolID::GenericHorizontalTab
-      | SymbolID::GenericNewLine
-      | SymbolID::GenericIdentifier
-      | SymbolID::GenericNumber
-      | SymbolID::GenericSymbol => (self.bytecode_id(Some(g)), "CLASS"),
-      SymbolID::ExclusiveDefinedIdentifier(..)
-      | SymbolID::ExclusiveDefinedNumeric(..)
-      | SymbolID::ExclusiveDefinedSymbol(..)
-      | SymbolID::DefinedNumeric(..)
-      | SymbolID::DefinedIdentifier(..)
-      | SymbolID::DefinedSymbol(..) => {
+      GenericSpace | GenericHorizontalTab | GenericNewLine | GenericIdentifier | GenericNumber
+      | GenericSymbol => (self.bytecode_id(g), "CLASS"),
+      ExclusiveDefinedIdentifier(..)
+      | ExclusiveDefinedNumeric(..)
+      | ExclusiveDefinedSymbol(..)
+      | DefinedNumeric(..)
+      | DefinedIdentifier(..)
+      | DefinedSymbol(..) => {
         let symbol = g.symbols.get(self).unwrap();
         let id = g.symbol_strings.get(self).unwrap();
         let sym_char = id.as_bytes()[0];
@@ -254,6 +257,7 @@ impl SymbolID {
           (sym_char as u32, "BYTE")
         }
       }
+      Default | EndOfInput | ExclusiveEnd => (DEFAULT_SYM_ID, "CLASS"),
       _ => (0, "BYTE"),
     }
   }
@@ -295,7 +299,8 @@ impl SymbolID {
   /// TODO: Docs
   pub fn is_exclusive(&self) -> bool {
     match self {
-      Self::ExclusiveDefinedNumeric(_)
+      Self::ExclusiveEnd
+      | Self::ExclusiveDefinedNumeric(_)
       | Self::ExclusiveDefinedIdentifier(_)
       | Self::ExclusiveDefinedSymbol(_) => true,
       _ => false,
@@ -325,30 +330,22 @@ impl SymbolID {
   }
 
   /// TODO: Docs
-  pub fn bytecode_id(&self, g: Option<&GrammarStore>) -> u32 {
+  pub fn bytecode_id(&self, g: &GrammarStore) -> u32 {
     match self {
       Self::DefinedNumeric(_)
       | Self::DefinedIdentifier(_)
       | Self::DefinedSymbol(_)
       | Self::ExclusiveDefinedNumeric(_)
       | Self::ExclusiveDefinedIdentifier(_)
-      | Self::ExclusiveDefinedSymbol(_) => {
-        if let Some(g) = g {
-          g.symbols.get(self).unwrap().bytecode_id
-        } else {
-          undefined_symbol_id
-        }
+      | Self::ExclusiveDefinedSymbol(_) => g.symbols.get(self).unwrap().bytecode_id,
+      Self::TokenProduction(.., prod_id) => {
+        g.get_production(prod_id).unwrap().symbol_bytecode_id.unwrap_or(undefined_symbol_id)
       }
-      Self::TokenProduction(.., prod_id) => match g {
-        Some(g) => g.get_production(prod_id).unwrap().symbol_bytecode_id,
-        None => undefined_symbol_id,
-      },
-      Self::Production(prod_id, _) => match g {
-        Some(g) => g.get_production(prod_id).unwrap().bytecode_id,
-        None => undefined_symbol_id,
-      },
-      Self::Default | Self::Start => undefined_symbol_id,
-      Self::EndOfInput => END_OF_INPUT_TOKEN_ID,
+      Self::Production(prod_id, _) => {
+        g.get_production(prod_id).unwrap().bytecode_id.unwrap_or(undefined_symbol_id)
+      }
+      Self::Start => undefined_symbol_id,
+      Self::ExclusiveEnd | Self::EndOfInput | Self::Default => DEFAULT_SYM_ID,
       Self::GenericHorizontalTab => CodePointClass::HorizontalTab as u32,
       Self::GenericNewLine => CodePointClass::NewLine as u32,
       Self::GenericSpace => CodePointClass::Space as u32,

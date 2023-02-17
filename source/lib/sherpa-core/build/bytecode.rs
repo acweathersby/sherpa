@@ -1,6 +1,6 @@
 use crate::{
   ascript::{self, rust::create_type_initializer_value},
-  compile::BytecodeOutput,
+  bytecode::BytecodeOutput,
   types::*,
   writer::code_writer::CodeWriter,
 };
@@ -28,8 +28,8 @@ pub fn build_bytecode_parser() -> PipelineTask {
         Ok(Some((20, unsafe { String::from_utf8_unchecked(writer.into_output()) })))
       }
     }),
-    require_ascript: false,
     require_bytecode: true,
+    ..Default::default()
   }
 }
 
@@ -42,7 +42,7 @@ fn write_parser_file<W: Write>(
   let BytecodeOutput { bytecode, state_name_to_offset: state_lookups, .. } = bytecode_output;
 
   if let Err(err) = write_rust_parser_file(writer, &state_lookups, g, &bytecode, ascript) {
-    eprintln!("{}", err);
+    println!("{}", err);
   }
 
   Ok(())

@@ -26,11 +26,11 @@ pub fn build_bytecode_disassembly() -> PipelineTask {
 
         writer.write(&DISCLAIMER("Parser Data", "//!", task_ctx)).unwrap();
 
-        writer.write(&generate_disassembly(bytecode, Some(&mut j))).unwrap();
+        writer.write(&generate_disassembly(bytecode, &mut j)).unwrap();
       }
       Ok(None)
     }),
-    require_ascript: false,
     require_bytecode: true,
+    ..Default::default()
   }
 }

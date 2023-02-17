@@ -7,9 +7,9 @@ EXPORT ir as ir
 
 <> state > 
 
-        state_declaration scanner_declaration? top_level_instructions on_fail? expected_symbols?
+        "except-handle"? state_declaration scanner_declaration? top_level_instructions on_fail? expected_symbols?
 
-            :ast { t_IR_STATE, c_IR, c_IrState, id:$1, scanner: $2, instructions: $3, fail: $4, symbol_meta:$5 }
+            :ast { t_IR_STATE, c_IR, c_IrState, id:$2, scanner: $3, instructions: $4, is_except_handler:bool($1), fail: $5, symbol_meta:$6 }
 
 <> state_declaration > 
 
@@ -58,13 +58,9 @@ EXPORT ir as ir
 
 <> assertion_instruction >
 
-        "assert" "peek"? assert_class production_id_list '(' instruction_sequence ')'
+        "assert" assert_class production_id_list '(' instruction_sequence ')'
 
-            :ast { t_ASSERT, c_IR, c_IR_Instruction, is_peek: bool($2), c_IR_Branch, mode:str($3), ids: $4, instructions: $6}
-
-        | "skip" assert_class production_id_list
-
-            :ast { t_ASSERT, c_IR, c_IR_Instruction, c_IR_Branch, mode:str($2), ids: $3, is_skip: true }
+            :ast { t_ASSERT, c_IR, c_IR_Instruction, c_IR_Branch, mode:str($2), ids: $3, instructions: $5 }
 
         | "default"  '(' instruction_sequence ')'                     
 
@@ -96,10 +92,6 @@ EXPORT ir as ir
 
         :ast { t_ForkTo, c_IR, c_IR_Instruction, states: $4, production_id: $9   }
 
-    | 'scan' "back"? "until" token_id_list
-
-        :ast { t_ScanUntil, c_IR, c_IR_Instruction, ids: $4, SCAN_BACKWARDS:bool($2) }
-
     | "set" "token" "id" token_num token_num
 
         :ast { t_TokenId, c_IR, c_IR_Instruction, id: $5  }
@@ -112,21 +104,45 @@ EXPORT ir as ir
 
         :ast { t_Pass, c_IR, c_IR_Instruction  }
 
+    | "skip"
+
+        :ast { t_Skip, c_IR, c_IR_Instruction }
+
+    | "skip-scan-token"
+
+        :ast { t_SkipScanToken, c_IR, c_IR_Instruction, is_peek:bool }
+
     | "fail"
 
         :ast { t_Fail, c_IR, c_IR_Instruction }
 
-    | "not" "within" "scopes" '[' ( token_num )(+) ']'
+    | "peek-token"
 
-        :ast { t_NotInScope, c_IR, c_IR_Instruction, ids:$5 }
+        :ast { t_PeekToken, c_IR, c_IR_Instruction }
 
-    | "set" "scope" "to" tk:integer
+    | "peek-scan-token"
 
-        :ast { t_SetScope, c_IR, c_IR_Instruction, scope:i64($1) }
+        :ast { t_PeekScanToken, c_IR, c_IR_Instruction }
 
-    | "shift" "nothing"?
+    | "peek-skip"
 
-        :ast { t_Shift, c_IR, c_IR_Instruction, EMPTY:bool($2) }
+        :ast { t_Skip, c_IR, c_IR_Instruction, is_peek:true }
+
+    | "peek-reset"
+
+        :ast { t_PeekReset, c_IR, c_IR_Instruction }
+
+    | "shift-token" "nothing"?
+
+        :ast { t_ShiftToken, c_IR, c_IR_Instruction, EMPTY:bool($2) }
+
+    | "shift-scanner"
+
+        :ast { t_ShiftScanner, c_IR, c_IR_Instruction }
+
+    | "shift-scan-token"
+
+        :ast { t_ShiftScanToken, c_IR, c_IR_Instruction }
 
 <> reduce_instruction > 
 

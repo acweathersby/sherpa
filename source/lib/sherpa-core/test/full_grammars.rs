@@ -1,6 +1,8 @@
 use crate::{
-  compile::{compile_bytecode, compile_states, optimize_ir_states, GrammarStore, ScannerStateId},
+  bytecode::compile_bytecode,
+  compile::{GrammarStore, ScannerStateId},
   debug::generate_disassembly,
+  parser::{compile_parse_states, optimize_parse_states},
   Journal,
   ReportType,
   SherpaResult,
@@ -47,20 +49,15 @@ NAME llvm_language_test
   )
   .unwrap();
 
-  let states = compile_states(&mut j, 1)?;
+  let states = compile_parse_states(&mut j, 1)?;
 
-  /* for (_, state) in &states {
-    eprintln!("{}", state.get_code());
-  } */
-  //return SherpaResult::Ok(());
-
-  let ir_states = optimize_ir_states(&mut j, states);
+  let ir_states = optimize_parse_states(&mut j, states);
 
   j.debug_print_reports(ReportType::ScannerCompile(ScannerStateId::default()));
 
-  let bc = compile_bytecode(&mut j, ir_states);
+  let bc = compile_bytecode(&mut j, &ir_states);
 
-  eprintln!("{}", generate_disassembly(&bc, Some(&mut j)));
+  println!("{}", generate_disassembly(&bc, &mut j));
 
   SherpaResult::Ok(())
 }

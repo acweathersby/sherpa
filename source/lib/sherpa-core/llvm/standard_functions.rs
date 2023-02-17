@@ -1,32 +1,36 @@
 use super::{
   fastCC,
-  parser_functions::{construct_dispatch_function, construct_parse_function, construct_scan},
+  parse_functions::compile_states,
   CTX_AGGREGATE_INDICES as CTX,
   FAIL_STATE_FLAG_LLVM,
 };
 use crate::{
-  compile::BytecodeOutput,
   llvm::{LLVMParserModule, LLVMTypes, PublicFunctions, NORMAL_STATE_FLAG_LLVM},
   types::*,
   Journal,
 };
 use inkwell::{
+  builder::Builder,
   context::Context,
-  module::Linkage,
-  values::{BasicMetadataValueEnum, CallSiteValue, CallableValue},
+  module::{Linkage, Module},
+  targets::TargetData,
+  values::{AnyValue, BasicMetadataValueEnum, CallSiteValue, CallableValue, FunctionValue},
 };
 
 pub(crate) fn construct_module<'a>(
   j: &mut Journal,
-  module_name: &str,
   ctx: &'a Context,
+  target_data: &TargetData,
+  module: Module<'a>,
 ) -> LLVMParserModule<'a> {
-  let module = ctx.create_module(module_name);
   let builder = ctx.create_builder();
   let i8 = ctx.i8_type();
+  let i8_ptr = i8.ptr_type(0.into()).into();
+  let i8_ptr_ptr = i8.ptr_type(0.into()).ptr_type(0.into()).into();
   let bool = ctx.bool_type();
   let i64 = ctx.i64_type();
   let i32 = ctx.i32_type();
+  let ptr_int = ctx.ptr_sized_int_type(target_data, None);
   let CP_INFO = ctx.opaque_struct_type("s.CP_INFO");
   let READER = ctx.opaque_struct_type("s.READER");
   let CTX = ctx.opaque_struct_type("s.CTX");
@@ -37,12 +41,16 @@ pub(crate) fn construct_module<'a>(
   let internal_linkage = if j.config().opt_llvm { Some(Linkage::Private) } else { None };
   let TAIL_CALLABLE_PARSE_FUNCTION = i32.fn_type(&[CTX_PTR.into()], false);
   let GOTO_FN = i32.fn_type(&[CTX_PTR.into()], false);
+
   GOTO.set_body(
     &[TAIL_CALLABLE_PARSE_FUNCTION.ptr_type(0.into()).into(), i32.into(), i32.into()],
     false,
   );
+
   CP_INFO.set_body(&[i32.into(), i32.into()], false);
+
   TOKEN.set_body(&[i64.into(), i64.into(), i64.into(), i64.into()], false);
+
   INPUT_INFO.set_body(
     &[
       // Input pointer
@@ -55,46 +63,54 @@ pub(crate) fn construct_module<'a>(
     false,
   );
   let get_input_info_fun = INPUT_INFO
-    .fn_type(&[READER.ptr_type(0.into()).into(), i32.into(), i32.into()], false)
+    .fn_type(
+      &[
+        READER.ptr_type(0.into()).into(),
+        i8_ptr_ptr,
+        i8_ptr_ptr,
+        i8_ptr_ptr,
+        i8_ptr_ptr,
+        i8_ptr_ptr,
+      ],
+      false,
+    )
     .ptr_type(0.into());
   CTX.set_body(
     &[
-      i8.ptr_type(0.into()).into(),
-      i8.ptr_type(0.into()).into(),
-      i8.ptr_type(0.into()).into(),
-      i32.into(),
-      i32.into(),
-      i32.into(),
-      bool.into(),
-      bool.into(),
-      bool.into(),
-      bool.into(),
-      // -----------------------
-      i32.into(),
-      i32.into(),
-      i32.into(),
-      i32.into(),
-      i32.into(),
-      i32.into(),
-      i32.into(),
-      i32.into(),
-      i32.into(),
-      i32.into(),
-      i32.into(),
-      i32.into(),
-      i32.into(),
-      i32.into(),
-      // -----------------------
+      // Input data ----------
+      i8_ptr,
+      i8_ptr,
+      i8_ptr,
+      i8_ptr,
+      i8_ptr,
+      i8_ptr,
+      ptr_int.into(),
+      ptr_int.into(),
+      // Goto stack data -----
       GOTO.ptr_type(0.into()).into(),
       i32.into(),
       i32.into(),
+      // Parse objects ----------------
       get_input_info_fun.into(),
       READER.ptr_type(0.into()).into(),
+      // User context --------
       bool.ptr_type(0.into()).into(),
       bool.ptr_type(0.into()).into(),
+      // Line info ------------
       i32.into(),
       i32.into(),
       i32.into(),
+      i32.into(),
+      i32.into(),
+      i32.into(),
+      i32.into(),
+      // Parser State ----------
+      i32.into(),
+      i32.into(),
+      i32.into(),
+      i32.into(),
+      i8.into(),
+      bool.into(),
       bool.into(),
     ],
     false,
@@ -135,7 +151,8 @@ pub(crate) fn construct_module<'a>(
     ),
     /// ------------------------------------------------------------------------
     // These functions can be tail called, as they all use the same interface
-    dispatch: module.add_function("dispatch", TAIL_CALLABLE_PARSE_FUNCTION, internal_linkage),
+    dispatch: module.add_function("dispatch_normal", TAIL_CALLABLE_PARSE_FUNCTION, internal_linkage),
+    dispatch_unwind: module.add_function("dispatch_unwind", TAIL_CALLABLE_PARSE_FUNCTION, internal_linkage),
     handle_eop: module.add_function("emit_eop", TAIL_CALLABLE_PARSE_FUNCTION, internal_linkage),
 
     get_utf8_codepoint_info: module.add_function(
@@ -157,27 +174,8 @@ pub(crate) fn construct_module<'a>(
       "get_adjusted_input_block",
       ctx.void_type().fn_type(&[
         CTX.ptr_type(0.into()).into(),
-        i8.ptr_type(0.into()).ptr_type(0.into()).into(),
-        i32.ptr_type(0.into()).into(),
-        bool.ptr_type(0.into()).into(),
-        i32.into(),
-        i32.into()
+        i64.into(),
       ], false),
-      internal_linkage,
-    ),
-    scan: module.add_function(
-      "scan",
-      ctx.void_type().fn_type(
-        &[
-          CTX.ptr_type(0.into()).into(),
-          TAIL_CALLABLE_PARSE_FUNCTION.ptr_type(0.into()).into(),
-          i8.ptr_type(0.into()).into(),
-          i32.ptr_type(0.into()).into(),
-          bool.ptr_type(0.into()).into(),
-          i32.into(),
-        ],
-        false,
-      ),
       internal_linkage,
     ),
     push_state: module.add_function(
@@ -224,8 +222,8 @@ pub(crate) fn construct_module<'a>(
   };
   // Set all functions that are not part of the public interface to fastCC.
   fun.dispatch.set_call_conventions(fastCC);
+  fun.dispatch_unwind.set_call_conventions(fastCC);
   fun.internal_free_stack.set_call_conventions(fastCC);
-  fun.scan.set_call_conventions(fastCC);
   fun.handle_eop.set_call_conventions(fastCC);
   fun.pop_state.set_call_conventions(fastCC);
   fun.push_state.set_call_conventions(fastCC);
@@ -234,7 +232,7 @@ pub(crate) fn construct_module<'a>(
   fun.get_adjusted_input_block.set_call_conventions(fastCC);
   fun.extend_stack_if_needed.set_call_conventions(fastCC);
   LLVMParserModule {
-    builder,
+    b: builder,
     ctx,
     types: LLVMTypes {
       TAIL_CALLABLE_PARSE_FUNCTION,
@@ -248,11 +246,15 @@ pub(crate) fn construct_module<'a>(
     },
     fun,
     module,
-    _exe_engine: None,
+    i64: ctx.i64_type(),
+    i32: ctx.i32_type(),
+    i8: ctx.i8_type(),
+    bool: ctx.bool_type(),
+    iptr: ctx.ptr_sized_int_type(target_data, None),
   }
 }
 pub(crate) unsafe fn construct_emit_end_of_parse(module: &LLVMParserModule) -> SherpaResult<()> {
-  let LLVMParserModule { builder: b, ctx, fun: funct, .. } = module;
+  let LLVMParserModule { b, ctx, fun: funct, .. } = module;
   let i32 = ctx.i32_type();
   let bool = ctx.bool_type();
   let fn_value = funct.handle_eop;
@@ -263,10 +265,10 @@ pub(crate) unsafe fn construct_emit_end_of_parse(module: &LLVMParserModule) -> S
   let parse_ctx = fn_value.get_nth_param(0)?.into_pointer_value();
   b.position_at_end(entry);
   // Update the active state to be inactive
-  CTX::is_active.store(module, parse_ctx, bool.const_zero())?;
+  CTX::is_active.store(b, parse_ctx, bool.const_zero())?;
   let comparison = b.build_int_compare(
     inkwell::IntPredicate::NE,
-    CTX::state.load(module, parse_ctx)?.into_int_value(),
+    CTX::state.load(b, parse_ctx)?.into_int_value(),
     i32.const_int(FAIL_STATE_FLAG_LLVM as u64, false).into(),
     "",
   );
@@ -282,51 +284,56 @@ pub(crate) unsafe fn construct_emit_end_of_parse(module: &LLVMParserModule) -> S
   }
 }
 pub(crate) unsafe fn construct_get_adjusted_input_block_function(
-  module: &LLVMParserModule,
+  m: &LLVMParserModule,
 ) -> SherpaResult<()> {
-  let LLVMParserModule { builder: b, ctx, fun: funct, .. } = module;
-
+  let LLVMParserModule { b, ctx, fun: funct, iptr, .. } = m;
+  let i8 = ctx.i8_type();
   let fn_value = funct.get_adjusted_input_block;
 
   // Set the context's goto pointers to point to the goto block;
-  let attempt_extend = ctx.append_basic_block(fn_value, "Attempt_Extend");
-  let parse_ctx = fn_value.get_nth_param(0)?.into_pointer_value();
-  let input_ptr_ptr = fn_value.get_nth_param(1)?.into_pointer_value();
-  let input_len_ptr = fn_value.get_nth_param(2)?.into_pointer_value();
-  let input_truncated_ptr = fn_value.get_nth_param(3)?.into_pointer_value();
-  let input_off = fn_value.get_nth_param(4)?.into_int_value();
-  let requested_end_off = fn_value.get_nth_param(5)?.into_int_value();
+  let entry_block = ctx.append_basic_block(fn_value, "entry");
 
-  b.position_at_end(attempt_extend);
-  let block = b
-    .build_call(
-      CallableValue::try_from(CTX::get_input_info.load(module, parse_ctx)?.into_pointer_value())?,
-      &[CTX::reader.load(module, parse_ctx)?.into(), input_off.into(), requested_end_off.into()],
-      "",
-    )
-    .try_as_basic_value()
-    .left()?
-    .into_struct_value();
+  b.position_at_end(entry_block);
+  let p_ctx = fn_value.get_nth_param(0)?.into_pointer_value();
+  let needed = fn_value.get_nth_param(1)?.into_int_value();
+  CTX::end_ptr.store(b, p_ctx, b.build_int_to_ptr(needed, i8.ptr_type(0.into()), ""));
 
-  let input_ptr = b.build_extract_value(block, 0, "")?.into_pointer_value();
-  let input_len = b.build_extract_value(block, 1, "")?.into_int_value();
-  let truncated = b.build_extract_value(block, 2, "")?.into_int_value();
-  b.build_store(input_ptr_ptr, input_ptr);
-  b.build_store(input_len_ptr, input_len);
-  b.build_store(input_truncated_ptr, truncated);
+  let beg_ptr = CTX::beg_ptr.get_ptr(b, p_ctx)?;
+  let anchor_ptr = CTX::anchor_ptr.get_ptr(b, p_ctx)?;
+  let head_ptr = CTX::head_ptr.get_ptr(b, p_ctx)?;
+  let tail_ptr = CTX::tail_ptr.get_ptr(b, p_ctx)?;
+  let end_ptr = CTX::end_ptr.get_ptr(b, p_ctx)?;
+
+  b.build_call(
+    CallableValue::try_from(CTX::get_input_info.load(b, p_ctx)?.into_pointer_value())?,
+    &[
+      CTX::reader.load(b, p_ctx)?.into(),
+      beg_ptr.into(),
+      anchor_ptr.into(),
+      head_ptr.into(),
+      tail_ptr.into(),
+      end_ptr.into(),
+    ],
+    "",
+  )
+  .try_as_basic_value()
+  .left()?
+  .into_struct_value();
+
+  let tail_int = b.build_ptr_to_int(CTX::tail_ptr.load(b, p_ctx)?.into_pointer_value(), *iptr, "");
+  let end_int = b.build_ptr_to_int(CTX::end_ptr.load(b, p_ctx)?.into_pointer_value(), *iptr, "");
+  CTX::chars_remaining_len.store(b, p_ctx, b.build_int_sub(end_int, tail_int, ""))?;
+
   b.build_return(None);
-  if funct.get_adjusted_input_block.verify(true) {
-    SherpaResult::Ok(())
-  } else {
-    SherpaResult::Err(SherpaError::from("\n\nCould not validate get_adjusted_input_block"))
-  }
+
+  validate(fn_value)
 }
 pub(crate) unsafe fn construct_drop(module: &LLVMParserModule) -> SherpaResult<()> {
-  let LLVMParserModule { builder: b, ctx, fun: funct, .. } = module;
+  let LLVMParserModule { b, ctx, fun: funct, .. } = module;
   let fn_value = funct.drop;
   let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
   b.position_at_end(ctx.append_basic_block(fn_value, "Entry"));
-  build_fast_call(module, funct.internal_free_stack, &[parse_ctx.into()]);
+  build_fast_call(b, funct.internal_free_stack, &[parse_ctx.into()]);
   b.build_return(None);
   if funct.drop.verify(true) {
     SherpaResult::Ok(())
@@ -335,26 +342,26 @@ pub(crate) unsafe fn construct_drop(module: &LLVMParserModule) -> SherpaResult<(
   }
 }
 pub(crate) unsafe fn construct_internal_free_stack(module: &LLVMParserModule) -> SherpaResult<()> {
-  let LLVMParserModule { builder: b, ctx, types, fun: funct, .. } = module;
+  let LLVMParserModule { b, ctx, types, fun: funct, .. } = module;
   let i32 = ctx.i32_type();
   let fn_value = funct.internal_free_stack;
   let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
   b.position_at_end(ctx.append_basic_block(fn_value, "Entry"));
   let empty_stack = ctx.append_basic_block(fn_value, "empty_stack");
   let free_stack = ctx.append_basic_block(fn_value, "free_stack");
-  let goto_slot_count = CTX::goto_size.load(module, parse_ctx)?.into_int_value();
+  let goto_slot_count = CTX::goto_size.load(b, parse_ctx)?.into_int_value();
   let c = b.build_int_compare(inkwell::IntPredicate::NE, goto_slot_count, i32.const_zero(), "");
   b.build_conditional_branch(c, free_stack, empty_stack);
   b.position_at_end(free_stack);
   let goto_byte_size =
     b.build_left_shift(goto_slot_count, ctx.i32_type().const_int(4, false), "goto_byte_size");
   let goto_total_bytes_64 = b.build_int_cast(goto_byte_size, ctx.i64_type(), "");
-  let goto_free = CTX::goto_free.load(module, parse_ctx)?.into_int_value();
+  let goto_free = CTX::goto_free.load(b, parse_ctx)?.into_int_value();
   let goto_free_bytes =
     b.build_left_shift(goto_free, ctx.i32_type().const_int(4, false), "remaining_bytes");
   let goto_used_bytes = b.build_int_sub(goto_byte_size, goto_free_bytes, "goto_used_bytes");
   let goto_used_bytes_64 = b.build_int_cast(goto_used_bytes, ctx.i64_type(), "");
-  let goto_top_ptr = CTX::goto_stack_ptr.load(module, parse_ctx)?.into_pointer_value();
+  let goto_top_ptr = CTX::goto_stack_ptr.load(b, parse_ctx)?.into_pointer_value();
   let goto_base_ptr_int = b.build_int_sub(
     b.build_ptr_to_int(goto_top_ptr, ctx.i64_type().into(), ""),
     goto_used_bytes_64,
@@ -363,20 +370,17 @@ pub(crate) unsafe fn construct_internal_free_stack(module: &LLVMParserModule) ->
   let goto_base_ptr =
     b.build_int_to_ptr(goto_base_ptr_int, types.goto.ptr_type(0.into()), "goto_base");
   b.build_call(funct.free_stack, &[goto_base_ptr.into(), goto_total_bytes_64.into()], "");
-  CTX::goto_size.store(module, parse_ctx, i32.const_zero());
+  CTX::goto_size.store(b, parse_ctx, i32.const_zero());
   b.build_unconditional_branch(empty_stack);
   b.position_at_end(empty_stack);
   b.build_return(None);
-  if funct.internal_free_stack.verify(true) {
-    SherpaResult::Ok(())
-  } else {
-    SherpaResult::Err(SherpaError::from("\n\nCould not validate internal_free_stack"))
-  }
+
+  validate(fn_value)
 }
 pub(crate) unsafe fn construct_extend_stack_if_needed(
   module: &LLVMParserModule,
 ) -> SherpaResult<()> {
-  let LLVMParserModule { builder: b, types, ctx, fun: funct, .. } = module;
+  let LLVMParserModule { b, types, ctx, fun: funct, .. } = module;
   let i32 = ctx.i32_type();
 
   let fn_value = funct.extend_stack_if_needed;
@@ -386,7 +390,7 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
   b.position_at_end(ctx.append_basic_block(fn_value, "Entry"));
 
   // Compare the number of needed slots with the number of available slots
-  let goto_free = CTX::goto_free.load(module, parse_ctx)?.into_int_value();
+  let goto_free = CTX::goto_free.load(b, parse_ctx)?.into_int_value();
   let comparison =
     b.build_int_compare(inkwell::IntPredicate::ULT, goto_free, needed_slot_count, "");
 
@@ -401,7 +405,7 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
   // Create a new stack, copy data from old stack to new one
   // and, if the old stack was not the original stack,
   // delete the old stack.
-  let goto_slot_count = CTX::goto_size.load(module, parse_ctx)?.into_int_value();
+  let goto_slot_count = CTX::goto_size.load(b, parse_ctx)?.into_int_value();
   let goto_byte_size =
     b.build_left_shift(goto_slot_count, ctx.i32_type().const_int(4, false), "goto_byte_size");
 
@@ -410,7 +414,7 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
 
   let goto_used_bytes = b.build_int_sub(goto_byte_size, goto_free_bytes, "goto_used_bytes");
   let goto_used_bytes_64 = b.build_int_cast(goto_used_bytes, ctx.i64_type(), "");
-  let goto_top_ptr = CTX::goto_stack_ptr.load(module, parse_ctx)?.into_pointer_value();
+  let goto_top_ptr = CTX::goto_stack_ptr.load(b, parse_ctx)?.into_pointer_value();
   let goto_base_ptr_int = b.build_int_sub(
     b.build_ptr_to_int(goto_top_ptr, ctx.i64_type().into(), ""),
     goto_used_bytes_64,
@@ -444,7 +448,7 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
     "",
   );
 
-  build_fast_call(module, funct.internal_free_stack, &[parse_ctx.into()]);
+  build_fast_call(b, funct.internal_free_stack, &[parse_ctx.into()]);
   b.build_unconditional_branch(update_block);
   b.position_at_end(update_block);
 
@@ -452,46 +456,36 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
   let new_stack_top_ptr = b.build_int_add(new_stack_top_ptr, goto_used_bytes_64, "new_top");
   let new_stack_top_ptr =
     b.build_int_to_ptr(new_stack_top_ptr, types.goto.ptr_type(0.into()), "new_top");
-  CTX::goto_stack_ptr.store(module, parse_ctx, new_stack_top_ptr)?;
-  CTX::goto_size.store(module, parse_ctx, new_slot_count)?;
+  CTX::goto_stack_ptr.store(b, parse_ctx, new_stack_top_ptr)?;
+  CTX::goto_size.store(b, parse_ctx, new_slot_count)?;
 
   let slot_diff = b.build_int_sub(new_slot_count, goto_slot_count, "slot_diff");
   let new_remaining_count = b.build_int_add(slot_diff, goto_free, "remaining");
-  CTX::goto_free.store(module, parse_ctx, new_remaining_count);
+  CTX::goto_free.store(b, parse_ctx, new_remaining_count);
   b.build_unconditional_branch(return_block);
   b.position_at_end(return_block);
   b.build_return(Some(&i32.const_int(1, false)));
 
-  if funct.extend_stack_if_needed.verify(true) {
-    SherpaResult::Ok(())
-  } else {
-    SherpaResult::Err(SherpaError::from("\n\nCould not validate extend_stack_if_needed"))
-  }
+  validate(fn_value)
 }
 pub(crate) unsafe fn construct_init(module: &LLVMParserModule) -> SherpaResult<()> {
-  let LLVMParserModule { builder, ctx, fun: funct, .. } = module;
+  let LLVMParserModule { b, ctx, fun: funct, .. } = module;
   let i32 = ctx.i32_type();
   let fn_value = funct.init;
   let parse_ctx = fn_value.get_first_param().unwrap().into_pointer_value();
   let reader_ptr = fn_value.get_last_param().unwrap().into_pointer_value();
-  builder.position_at_end(ctx.append_basic_block(fn_value, "Entry"));
-  CTX::reader.store(module, parse_ctx, reader_ptr)?;
-  CTX::goto_size.store(module, parse_ctx, i32.const_int(0, false))?;
-  CTX::goto_free.store(module, parse_ctx, i32.const_int(0, false))?;
-  CTX::state.store(module, parse_ctx, i32.const_int(NORMAL_STATE_FLAG_LLVM as u64, false))?;
-  builder.build_return(None);
-  if funct.init.verify(true) {
-    SherpaResult::Ok(())
-  } else {
-    SherpaResult::Err(SherpaError::from("\n\nCould not validate init"))
-  }
-}
-pub(crate) fn create_offset_label(offset: usize) -> String {
-  format!("off_{:X}", offset)
+  b.position_at_end(ctx.append_basic_block(fn_value, "Entry"));
+  CTX::reader.store(b, parse_ctx, reader_ptr)?;
+  CTX::goto_size.store(b, parse_ctx, i32.const_int(0, false))?;
+  CTX::goto_free.store(b, parse_ctx, i32.const_int(0, false))?;
+  CTX::state.store(b, parse_ctx, i32.const_int(NORMAL_STATE_FLAG_LLVM as u64, false))?;
+  b.build_return(None);
+
+  validate(fn_value)
 }
 
 pub(crate) unsafe fn construct_push_state_function(module: &LLVMParserModule) -> SherpaResult<()> {
-  let LLVMParserModule { builder: b, types, ctx, fun: funct, .. } = module;
+  let LLVMParserModule { b, types, ctx, fun: funct, .. } = module;
   let i32 = ctx.i32_type();
   let fn_value = funct.push_state;
   // Set the context's goto pointers to point to the goto block;
@@ -502,28 +496,25 @@ pub(crate) unsafe fn construct_push_state_function(module: &LLVMParserModule) ->
   b.position_at_end(entry);
   let new_goto = b.build_insert_value(types.goto.get_undef(), goto_state, 1, "").unwrap();
   let new_goto = b.build_insert_value(new_goto, goto_pointer, 0, "").unwrap();
-  let goto_top_ptr = CTX::goto_stack_ptr.get_ptr(module, parse_ctx)?;
+  let goto_top_ptr = CTX::goto_stack_ptr.get_ptr(b, parse_ctx)?;
   let goto_top = b.build_load(goto_top_ptr, "").into_pointer_value();
   b.build_store(goto_top, new_goto);
   let goto_top = b.build_gep(goto_top, &[i32.const_int(1, false)], "");
   b.build_store(goto_top_ptr, goto_top);
-  let goto_free_ptr = CTX::goto_free.get_ptr(module, parse_ctx)?;
+  let goto_free_ptr = CTX::goto_free.get_ptr(b, parse_ctx)?;
   let goto_free = b.build_load(goto_free_ptr, "").into_int_value();
   let goto_free = b.build_int_sub(goto_free, i32.const_int(1, false), "");
   b.build_store(goto_free_ptr, goto_free);
   b.build_return(None);
-  if funct.push_state.verify(true) {
-    SherpaResult::Ok(())
-  } else {
-    SherpaResult::Err(SherpaError::from("\n\nCould not validate push_state"))
-  }
+
+  validate(fn_value)
 }
 pub(crate) fn construct_utf8_lookup_function(module: &LLVMParserModule) -> SherpaResult<()> {
   let i32 = module.ctx.i32_type();
   let i8 = module.ctx.i8_type();
   let zero = i32.const_int(0, false);
   let bool = module.ctx.bool_type();
-  let b = &module.builder;
+  let b = &module.b;
   let funct = &module.fun;
   let fn_value = funct.get_utf8_codepoint_info;
   let input_ptr = fn_value.get_nth_param(0).unwrap().into_pointer_value();
@@ -624,18 +615,15 @@ pub(crate) fn construct_utf8_lookup_function(module: &LLVMParserModule) -> Sherp
   // --- Build Invalid Block
   b.position_at_end(block_invalid);
   b.build_return(Some(&codepoint_info_base));
-  if funct.get_utf8_codepoint_info.verify(true) {
-    SherpaResult::Ok(())
-  } else {
-    SherpaResult::Err(SherpaError::from("\n\nCould not validate get_utf8_codepoint_info"))
-  }
+
+  validate(fn_value)
 }
 /// Constructs PublicFunctions::merge_utf8_part
 pub(crate) unsafe fn construct_merge_utf8_part_function(
   module: &LLVMParserModule,
 ) -> SherpaResult<()> {
   let i32 = module.ctx.i32_type();
-  let b = &module.builder;
+  let b = &module.b;
   let funct = &module.fun;
   let fn_value = funct.merge_utf8_part;
   let input_ptr = fn_value.get_nth_param(0).unwrap().into_pointer_value();
@@ -651,26 +639,11 @@ pub(crate) unsafe fn construct_merge_utf8_part_function(
   let cp = b.build_or(val, dword, "codepoint");
 
   b.build_return(Some(&cp));
-  if fn_value.verify(true) {
-    SherpaResult::Ok(())
-  } else {
-    SherpaResult::Err(SherpaError::from("\n\nCould not validate merge_utf8_part"))
-  }
-}
-pub fn build_fast_call<'a, T>(
-  module: &'a LLVMParserModule,
-  callee_fun: T,
-  args: &[BasicMetadataValueEnum<'a>],
-) -> SherpaResult<CallSiteValue<'a>>
-where
-  T: Into<CallableValue<'a>>,
-{
-  let call_site = module.builder.build_call(callee_fun, args, "FAST_CALL_SITE");
-  call_site.set_call_convention(fastCC);
-  SherpaResult::Ok(call_site)
+
+  validate(fn_value)
 }
 pub(crate) unsafe fn construct_next_function<'a>(module: &'a LLVMParserModule) -> SherpaResult<()> {
-  let LLVMParserModule { builder: b, ctx, fun, .. } = module;
+  let LLVMParserModule { b, ctx, fun, .. } = module;
   let fn_value = fun.next;
   b.position_at_end(ctx.append_basic_block(fn_value, "Entry"));
   let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
@@ -678,36 +651,162 @@ pub(crate) unsafe fn construct_next_function<'a>(module: &'a LLVMParserModule) -
   call_site.set_tail_call(false);
   call_site.set_call_convention(fastCC);
   b.build_return(Some(&call_site.try_as_basic_value().left()?.into_int_value()));
-  if fun.next.verify(true) {
-    SherpaResult::Ok(())
-  } else {
-    SherpaResult::Err(SherpaError::from("Could not build next function"))
+
+  validate(fn_value)
+}
+pub(crate) unsafe fn construct_dispatch_functions<'a>(m: &'a LLVMParserModule) -> SherpaResult<()> {
+  let LLVMParserModule { b, ctx, fun, .. } = m;
+  let i32 = ctx.i32_type();
+  // Nomal Dispatch
+  {
+    let fn_value = fun.dispatch;
+    let entry_block = ctx.append_basic_block(fn_value, "entry");
+    let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
+    // Insert next instruction near top
+
+    // Set the context's goto pointers to point to the goto block;
+
+    b.position_at_end(entry_block);
+
+    let goto_stack_ptr = CTX::goto_stack_ptr.get_ptr(b, parse_ctx)?;
+    let goto_top = b.build_load(goto_stack_ptr, "").into_pointer_value();
+    let goto_top = b.build_gep(goto_top, &[i32.const_int(1, false).const_neg()], "");
+    b.build_store(goto_stack_ptr, goto_top);
+
+    let goto_free_ptr = CTX::goto_free.get_ptr(b, parse_ctx)?;
+    let goto_free = b.build_load(goto_free_ptr, "").into_int_value();
+    let goto_free = b.build_int_add(goto_free, i32.const_int(1, false), "");
+    b.build_store(goto_free_ptr, goto_free);
+
+    let goto = b.build_load(goto_top, "").into_struct_value();
+
+    let parse_function =
+      CallableValue::try_from(b.build_extract_value(goto, 0, "").unwrap().into_pointer_value())
+        .unwrap();
+
+    build_tail_call_with_return(&m.b, fn_value, parse_function);
+
+    validate(fn_value)?;
+  }
+
+  // Unwind Dispatch
+  {
+    // Insert next instruction near top
+    let fn_value = fun.dispatch_unwind;
+    let entry_block = ctx.append_basic_block(fn_value, "entry");
+    let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
+
+    let i32 = ctx.i32_type();
+    let zero = i32.const_int(0, false);
+
+    // Set the context's goto pointers to point to the goto block;
+    let block_dispatch = ctx.append_basic_block(fn_value, "dispatch");
+    let block_is_fail_state = ctx.append_basic_block(fn_value, "is_fail_state");
+
+    b.position_at_end(entry_block);
+    b.build_unconditional_branch(block_dispatch);
+    b.position_at_end(block_dispatch);
+
+    let goto_stack_ptr = CTX::goto_stack_ptr.get_ptr(b, parse_ctx)?;
+    let goto_top = b.build_load(goto_stack_ptr, "").into_pointer_value();
+    let goto_top = b.build_gep(goto_top, &[i32.const_int(1, false).const_neg()], "");
+    b.build_store(goto_stack_ptr, goto_top);
+
+    let goto_free_ptr = CTX::goto_free.get_ptr(b, parse_ctx)?;
+    let goto_free = b.build_load(goto_free_ptr, "").into_int_value();
+    let goto_free = b.build_int_add(goto_free, i32.const_int(1, false), "");
+    b.build_store(goto_free_ptr, goto_free);
+
+    let goto = b.build_load(goto_top, "").into_struct_value();
+    let goto_state = b.build_extract_value(goto, 1, "")?;
+
+    let masked_state = b.build_and(
+      i32.const_int(FAIL_STATE_FLAG_LLVM as u64, false),
+      goto_state.into_int_value(),
+      "",
+    );
+
+    let condition = b.build_int_compare(inkwell::IntPredicate::NE, masked_state, zero, "");
+    b.build_conditional_branch(condition, block_is_fail_state, block_dispatch);
+    b.position_at_end(block_is_fail_state);
+    let parse_function =
+      CallableValue::try_from(b.build_extract_value(goto, 0, "").unwrap().into_pointer_value())
+        .unwrap();
+    build_tail_call_with_return(&m.b, fn_value, parse_function);
+
+    validate(fn_value)
   }
 }
+
+pub fn build_fast_call<'a, T>(
+  builder: &Builder<'a>,
+  callee_fun: T,
+  args: &[BasicMetadataValueEnum<'a>],
+) -> SherpaResult<CallSiteValue<'a>>
+where
+  T: Into<CallableValue<'a>>,
+{
+  let call_site = builder.build_call(callee_fun, args, "FAST_CALL_SITE");
+  call_site.set_call_convention(fastCC);
+  SherpaResult::Ok(call_site)
+}
+
+pub fn build_tail_call_with_return<'a, T>(
+  builder: &Builder<'a>,
+  caller_fun: FunctionValue<'a>,
+  callee_fun: T,
+) -> SherpaResult<()>
+where
+  T: Into<CallableValue<'a>>,
+{
+  let call_site = builder.build_call(
+    callee_fun,
+    &[caller_fun.get_nth_param(0)?.into_pointer_value().into()],
+    "TAIL_CALL_SITE",
+  );
+  call_site.set_tail_call(true);
+  call_site.set_call_convention(fastCC);
+
+  let value = call_site.try_as_basic_value().left()?.into_int_value();
+
+  builder.build_return(Some(&value));
+
+  SherpaResult::Ok(())
+}
 /// Compile a LLVM parser module from Sherpa bytecode.
-pub fn compile_module_from_bytecode<'a>(
-  module: &LLVMParserModule<'a>,
+pub fn compile_llvm_module_from_parse_states<'a>(
   j: &mut Journal,
-  output: &BytecodeOutput,
+  module: &LLVMParserModule<'a>,
+  states: &Vec<(String, Box<ParseState>)>,
 ) -> SherpaResult<()> {
   unsafe {
     construct_init(module)?;
     construct_emit_end_of_parse(module)?;
-    construct_dispatch_function(module)?;
+    construct_dispatch_functions(module)?;
     construct_get_adjusted_input_block_function(module)?;
     construct_push_state_function(module)?;
     construct_extend_stack_if_needed(module)?;
     construct_merge_utf8_part_function(module)?;
     construct_utf8_lookup_function(module)?;
-    construct_scan(module)?;
     construct_next_function(module)?;
     construct_internal_free_stack(module)?;
     construct_drop(module)?;
-    construct_parse_function(j, module, output)?;
+    compile_states(j, module, states)?;
   }
   module.fun.push_state.add_attribute(
     inkwell::attributes::AttributeLoc::Function,
     module.ctx.create_string_attribute("alwaysinline", ""),
   );
   SherpaResult::Ok(())
+}
+pub fn validate(func: FunctionValue) -> SherpaResult<()> {
+  if func.verify(true) {
+    SherpaResult::Ok(())
+  } else {
+    SherpaResult::Err(SherpaError::from(format!(
+      "\n\nCould not validate {} \n{}",
+      func.get_name().to_str().unwrap(),
+      func.print_to_string().to_str().unwrap()
+    )))
+  }
 }

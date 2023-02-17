@@ -60,6 +60,7 @@ pub enum ParseAction {
     current_cursor_offset: u32,
   },
   ProductionParseStart,
+  None,
 }
 
 #[test]

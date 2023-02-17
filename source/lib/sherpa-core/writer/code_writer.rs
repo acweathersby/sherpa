@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use std::io::{Result, Write};
 
 /// Chainable writer for formatted source code
@@ -46,6 +48,7 @@ impl<W: Write> CodeWriter<W> {
     Ok(())
   }
 
+  /// Sets the number of spaces to use for indentation
   pub fn indent_spaces(&mut self, count: usize) {
     self.indent_spaces = count;
   }

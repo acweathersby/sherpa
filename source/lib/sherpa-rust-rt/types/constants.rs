@@ -59,20 +59,20 @@ pub const END_OF_INPUT_TOKEN_ID: u32 = 0x1;
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum InstructionType {
   Pass       = 0,
-  Shift      = 1,
+  ShiftToken = 1,
   Goto       = 2,
   SetProd    = 3,
   Reduce     = 4,
   Token      = 5,
   ForkTo     = 6,
-  Scan       = 7,
+  ResetPeek  = 7,
   Pop        = 8,
   VectorBranch = 9,
   HashBranch = 10,
   SetFailState = 11,
-  Repeat     = 12,
-  Noop13     = 13,
-  AssertShift = 14,
+  Skip       = 12,
+  ShiftScanner = 13,
+  PeekToken  = 14,
   Fail       = 15,
 }
 
@@ -82,7 +82,7 @@ pub struct Instruction(pub u32, usize);
 
 impl Instruction {
   pub const I00_PASS: u32 = 0;
-  pub const I01_SHIFT: u32 = 1 << 28;
+  pub const I01_SHIFT_TOKEN: u32 = 1 << 28;
   pub const I02_GOTO: u32 = 2 << 28;
   pub const I03_SET_PROD: u32 = 3 << 28;
   pub const I04_REDUCE: u32 = 4 << 28;
@@ -91,15 +91,14 @@ impl Instruction {
   pub const I05_TOKEN_ASSIGN_SHIFT: u32 = Instruction::I05_TOKEN | 0x09000000;
   pub const I05_TOKEN_LENGTH: u32 = Instruction::I05_TOKEN | 0x08000000;
   pub const I06_FORK_TO: u32 = 6 << 28;
-  pub const I07_SCAN: u32 = 7 << 28;
-  pub const I07_SCAN_BACK_UNTIL: u32 = Instruction::I07_SCAN | 0x00100000;
+  pub const I07_PEEK_RESET: u32 = 7 << 28;
   pub const I08_POP: u32 = 8 << 28;
   pub const I09_VECTOR_BRANCH: u32 = 9 << 28;
   pub const I10_HASH_BRANCH: u32 = 10 << 28;
-  pub const I11_SET_FAIL_STATE: u32 = 11 << 28;
-  pub const I12_REPEAT: u32 = 12 << 28;
-  pub const I13_NOOP: u32 = 13 << 28;
-  pub const I14_ASSERT_SHIFT: u32 = 14 << 28;
+  pub const I11_SET_CATCH_STATE: u32 = 11 << 28;
+  pub const I12_SKIP: u32 = 12 << 28;
+  pub const I13_SHIFT_SCANNER: u32 = 13 << 28;
+  pub const I14_PEEK_TOKEN: u32 = 14 << 28;
   pub const I15_FAIL: u32 = 15 << 28;
   pub const I15_FALL_THROUGH: u32 = 15 << 28 | 1;
 
@@ -172,8 +171,8 @@ impl Instruction {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I00_PASS
   }
 
-  pub fn is_shift(&self) -> bool {
-    (self.0 & INSTRUCTION_HEADER_MASK) == Self::I01_SHIFT
+  pub fn is_token_shift(&self) -> bool {
+    (self.0 & INSTRUCTION_HEADER_MASK) == Self::I01_SHIFT_TOKEN
   }
 
   pub fn is_goto(&self) -> bool {
@@ -196,8 +195,8 @@ impl Instruction {
     (self.0 & INSTRUCTION_HEADER_MASK) == Self::I06_FORK_TO
   }
 
-  pub fn is_scan(&self) -> bool {
-    (self.0 & INSTRUCTION_HEADER_MASK) == Self::I07_SCAN
+  pub fn is_reset_peek(&self) -> bool {
+    (self.0 & INSTRUCTION_HEADER_MASK) == Self::I07_PEEK_RESET
   }
 
   pub fn is_pop(&self) -> bool {
@@ -213,19 +212,19 @@ impl Instruction {
   }
 
   pub fn is_set_fail_state(&self) -> bool {
-    (self.0 & INSTRUCTION_HEADER_MASK) == Self::I11_SET_FAIL_STATE
+    (self.0 & INSTRUCTION_HEADER_MASK) == Self::I11_SET_CATCH_STATE
   }
 
-  pub fn is_repeat(&self) -> bool {
-    (self.0 & INSTRUCTION_HEADER_MASK) == Self::I12_REPEAT
+  pub fn is_skip(&self) -> bool {
+    (self.0 & INSTRUCTION_HEADER_MASK) == Self::I12_SKIP
   }
 
-  pub fn is_noop_13(&self) -> bool {
-    (self.0 & INSTRUCTION_HEADER_MASK) == Self::I13_NOOP
+  pub fn is_scanner_shift(&self) -> bool {
+    (self.0 & INSTRUCTION_HEADER_MASK) == Self::I13_SHIFT_SCANNER
   }
 
   pub fn is_assert_shift(&self) -> bool {
-    (self.0 & INSTRUCTION_HEADER_MASK) == Self::I14_ASSERT_SHIFT
+    (self.0 & INSTRUCTION_HEADER_MASK) == Self::I14_PEEK_TOKEN
   }
 
   pub fn is_fail(&self) -> bool {
@@ -243,20 +242,20 @@ impl Instruction {
   pub fn to_type(&self) -> InstructionType {
     match self.0 & INSTRUCTION_HEADER_MASK {
       Self::I00_PASS => InstructionType::Pass,
-      Self::I01_SHIFT => InstructionType::Shift,
+      Self::I01_SHIFT_TOKEN => InstructionType::ShiftToken,
       Self::I02_GOTO => InstructionType::Goto,
       Self::I03_SET_PROD => InstructionType::SetProd,
       Self::I04_REDUCE => InstructionType::Reduce,
       Self::I05_TOKEN => InstructionType::Token,
       Self::I06_FORK_TO => InstructionType::ForkTo,
-      Self::I07_SCAN => InstructionType::Scan,
+      Self::I07_PEEK_RESET => InstructionType::ResetPeek,
       Self::I08_POP => InstructionType::Pop,
       Self::I09_VECTOR_BRANCH => InstructionType::VectorBranch,
       Self::I10_HASH_BRANCH => InstructionType::HashBranch,
-      Self::I11_SET_FAIL_STATE => InstructionType::SetFailState,
-      Self::I12_REPEAT => InstructionType::Repeat,
-      Self::I13_NOOP => InstructionType::Noop13,
-      Self::I14_ASSERT_SHIFT => InstructionType::AssertShift,
+      Self::I11_SET_CATCH_STATE => InstructionType::SetFailState,
+      Self::I12_SKIP => InstructionType::Skip,
+      Self::I13_SHIFT_SCANNER => InstructionType::ShiftScanner,
+      Self::I14_PEEK_TOKEN => InstructionType::PeekToken,
       Self::I15_FAIL => InstructionType::Fail,
       _ => InstructionType::Pass,
     }
@@ -265,20 +264,20 @@ impl Instruction {
   pub fn to_str(&self) -> &str {
     match self.0 & INSTRUCTION_HEADER_MASK {
       Self::I00_PASS => "I00_PASS",
-      Self::I01_SHIFT => "I01_SHIFT",
+      Self::I01_SHIFT_TOKEN => "I01_SHIFT",
       Self::I02_GOTO => "I02_GOTO",
       Self::I03_SET_PROD => "I03_SET_PROD",
       Self::I04_REDUCE => "I04_REDUCE",
       Self::I05_TOKEN => "I05_TOKEN",
       Self::I06_FORK_TO => "I06_FORK_TO",
-      Self::I07_SCAN => "I07_SCAN",
+      Self::I07_PEEK_RESET => "I07_SCAN",
       Self::I08_POP => "I08_POP",
       Self::I09_VECTOR_BRANCH => "I09_VECTOR_BRANCH",
       Self::I10_HASH_BRANCH => "I10_HASH_BRANCH",
-      Self::I11_SET_FAIL_STATE => "I11_SET_FAIL_STATE",
-      Self::I12_REPEAT => "I12_REPEAT",
-      Self::I13_NOOP => "I13_NOOP",
-      Self::I14_ASSERT_SHIFT => "I14_ASSERT_SHIFT",
+      Self::I11_SET_CATCH_STATE => "I11_SET_FAIL_STATE",
+      Self::I12_SKIP => "I12_REPEAT",
+      Self::I13_SHIFT_SCANNER => "I13_SHIFT_SCANNER",
+      Self::I14_PEEK_TOKEN => "I14_ASSERT_SHIFT",
       Self::I15_FAIL => "I15_FAIL",
       _ => "Undefined",
     }
@@ -302,6 +301,17 @@ impl InputType {
   pub const T03_CLASS: u32 = 2;
   pub const T04_CODEPOINT: u32 = 3;
   pub const T05_BYTE: u32 = 4;
+
+  pub fn to_string(val: u32) -> &'static str {
+    match val {
+      Self::T01_PRODUCTION => "PRODUCTION",
+      Self::T02_TOKEN => "TOKEN",
+      Self::T03_CLASS => "CLASS",
+      Self::T04_CODEPOINT => "CODEPOINT",
+      Self::T05_BYTE => "BYTE",
+      _ => "",
+    }
+  }
 }
 
 #[non_exhaustive]

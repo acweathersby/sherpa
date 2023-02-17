@@ -3,13 +3,10 @@
 pub mod config;
 pub mod report;
 pub use self::{
-  config::{Config, ParseAlgorithm},
+  config::Config,
   report::{Report, ReportType},
 };
-use crate::{
-  intermediate::{construct_recursive_descent, utils::generate_scanner_symbol_items},
-  types::*,
-};
+use crate::types::*;
 use std::{
   collections::{BTreeSet, HashMap},
   fmt::{Debug, Display},
@@ -19,7 +16,7 @@ use std::{
 
 #[derive(Default, Debug)]
 struct ScratchPad {
-  pub occluding_symbols: HashMap<SymbolID, SymbolSet>,
+  pub _occluding_symbols: HashMap<SymbolID, SymbolSet>,
   pub occlusion_tracking: bool,
   pub reports: HashMap<ReportType, Box<Report>>,
 }
@@ -45,6 +42,7 @@ pub struct Journal {
 
   create_time: Instant,
 }
+
 impl Journal {
   /// Creates a Journal instance.
   pub fn new(config: Option<Config>) -> Journal {
@@ -55,11 +53,13 @@ impl Journal {
       scratch_pad: Default::default(),
       occluding_symbols: None,
       active_report: None,
-      report_sink: Default::default(),
+      report_sink: Report::create_sink(),
       create_time: Instant::now(),
     }
   }
 
+  /// Clone the journal, maintaining a link to the global
+  /// pad to upload reports to.
   pub(crate) fn transfer(&self) -> Self {
     Self {
       grammar: self.grammar.clone(),
@@ -68,7 +68,7 @@ impl Journal {
       scratch_pad: Default::default(),
       occluding_symbols: self.occluding_symbols.clone(),
       active_report: None,
-      report_sink: Default::default(),
+      report_sink: Report::create_sink(),
       create_time: Instant::now(),
     }
   }
@@ -166,20 +166,32 @@ impl Journal {
     }
   }
 
+  #[track_caller]
   /// Get a mutable reference to the active report.
   pub(crate) fn report_mut(&mut self) -> &mut Report {
-    self.active_report.as_mut().map(|r| r.as_mut()).unwrap_or(&mut self.report_sink)
+    self.active_report.as_mut().map(|r| r.as_mut()).unwrap_or_else(|| {
+      dbg!("Using mutable report sink!");
+      &mut self.report_sink
+    })
   }
 
+  #[track_caller]
   /// Get a immutable reference to the active report.
   pub fn report(&self) -> &Report {
-    self.active_report.as_ref().map(|r| r.as_ref()).unwrap_or(&self.report_sink)
+    self.active_report.as_ref().map(|r| r.as_ref()).unwrap_or_else(|| {
+      eprintln!("Using report sink!");
+      &self.report_sink
+    })
   }
 
-  /// Print reports that match the `discriminant` type.
-  pub fn debug_print_reports(&self, discriminant: ReportType) {
-    self.get_reports(discriminant, |report| {
-      eprintln!(
+  /// Print reports that match the `discriminant` type. Returns
+  /// true if any reports were printed;
+  pub fn debug_print_reports(&self, discriminant: ReportType) -> bool {
+    let mut printed = false;
+    let printed_mut = &mut printed;
+    self.get_reports(discriminant, move |report| {
+      (*printed_mut) |= true;
+      println!(
         "\n{:=<80}\nReport [{}] at {:?}:\n{}\n{:=<80}",
         "",
         report.name,
@@ -188,6 +200,27 @@ impl Journal {
         ""
       )
     });
+
+    printed
+  }
+
+  /// Returns an array of all reports that contain errors, or None
+  /// if there are no matching reports.
+  pub fn get_faulty_reports(&self) -> Option<Vec<Report>> {
+    let mut faulty_reports = Vec::new();
+    let fr_ref = &mut faulty_reports;
+
+    self.get_reports(ReportType::Any, move |report| {
+      if report.have_errors_of_type(SherpaErrorSeverity::Critical) {
+        fr_ref.push(report.clone());
+      }
+    });
+
+    if faulty_reports.is_empty() {
+      None
+    } else {
+      Some(faulty_reports)
+    }
   }
 
   /// Prints all errors that have been generated to console.
@@ -197,14 +230,7 @@ impl Journal {
     let e_ref = &mut errors_reported;
 
     self.get_reports(ReportType::Any, |report| {
-      let errors = report.errors();
-      if errors.len() > 0 {
-        (*e_ref) = true;
-        eprintln!("\n{:=<80}\nReport [{}] errors:", "", report.name);
-        for err in report.errors() {
-          eprintln!("{}", err);
-        }
-      }
+      (*e_ref) |= report.debug_error();
     });
     errors_reported
   }
@@ -251,7 +277,9 @@ impl Journal {
 
   pub(crate) fn set_grammar(&mut self, grammar: Arc<GrammarStore>) {
     self.grammar = Some(grammar.clone());
-    if self.config.allow_occluding_symbols {
+    if self.config.allow_occluding_tokens {
+      unimplemented!("Occluding Tokens is not enabled.")
+      /*
       self.set_active_report("Occlusion Compilation", ReportType::OcclusionCompile);
 
       self.report_mut().start_timer("Symbol Occlusion");
@@ -286,7 +314,7 @@ impl Journal {
 
       self.report_mut().report_duration("Symbol Occlusion");
 
-      self.flush_reports();
+      self.flush_reports(); */
     }
   }
 
@@ -295,10 +323,10 @@ impl Journal {
     self.grammar.iter().cloned().next()
   }
 
-  pub(crate) fn add_occlusions(&mut self, occluding_symbols: SymbolSet) {
+  pub(crate) fn _add_occlusions(&mut self, occluding_symbols: SymbolSet) {
     for sym_a in &occluding_symbols {
       let table =
-        self.scratch_pad.occluding_symbols.entry(*sym_a).or_insert_with(|| BTreeSet::new());
+        self.scratch_pad._occluding_symbols.entry(*sym_a).or_insert_with(|| BTreeSet::new());
 
       for sym_b in &occluding_symbols {
         if sym_a == sym_b {
@@ -326,11 +354,17 @@ impl Journal {
     }
   }
 
-  pub(crate) fn get_occlusion_table<'b>(&'b self) -> &'b HashMap<SymbolID, SymbolSet> {
+  pub(crate) fn _get_occlusion_table<'b>(&'b self) -> &'b HashMap<SymbolID, SymbolSet> {
     match self.occluding_symbols.as_ref() {
       Some(oc) => oc,
-      None => &self.scratch_pad.occluding_symbols,
+      None => &self.scratch_pad._occluding_symbols,
     }
+  }
+}
+
+impl Display for Journal {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.write_str("Sherpa Journal")
   }
 }
 
@@ -346,34 +380,30 @@ impl Drop for Journal {
   }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) struct Timing {
-  start:  Instant,
-  end:    Instant,
-  active: bool,
+  start: Instant,
+  end:   Option<Instant>,
 }
 
 impl Timing {
   #[inline(always)]
   pub fn new() -> Self {
-    Timing { start: Instant::now(), end: Instant::now(), active: true }
+    Timing { start: Instant::now(), end: None }
   }
 
-  #[inline(always)]
-  pub fn stop(&mut self) {
-    self.end = Instant::now();
-    self.active = false;
-  }
-
-  #[inline(always)]
-  pub fn is_active(&self) -> bool {
-    self.active
+  pub fn set_end(&mut self, instant: Instant) {
+    self.end.get_or_insert(instant);
   }
 }
 
 impl Debug for Timing {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    f.write_fmt(format_args!("{:?}", (self.end - self.start)))
+    if let Some(end) = self.end {
+      f.write_fmt(format_args!("{:?}", (end - self.start)))
+    } else {
+      f.write_fmt(format_args!("Started {:?} ago", (Instant::now() - self.start)))
+    }
   }
 }
 

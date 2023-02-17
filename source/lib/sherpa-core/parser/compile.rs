@@ -1,50 +1,56 @@
 use std::{
-  collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
+  collections::{btree_map, BTreeMap, BTreeSet, HashSet},
   thread,
 };
 
 use crate::{
   grammar::{
     compile::finalize::get_scanner_info_from_defined,
-    get_production_start_items2,
+    get_production_start_items,
     hash_id_value_u64,
   },
-  types::{item_2::Item, *},
+  types::{
+    graph::{GraphMode, Origin},
+    item::Item,
+    *,
+  },
   Journal,
 };
 
 use super::{graph, ir};
 
-fn addIRStateNote(j: &mut Journal, rd_states: &Vec<Box<IRState>>) {
-  j.report_mut()
-    .add_note("IRStates", rd_states.iter().map(|s| s.to_string()).collect::<Vec<_>>().join("\n"))
+fn addIRStateNote(j: &mut Journal, rd_states: &Vec<Box<ParseState>>) {
+  let mut seen = HashSet::new();
+  j.report_mut().add_note(
+    "IRStates",
+    rd_states
+      .iter()
+      .filter_map(|s| match seen.insert(s.get_name()) {
+        true => Some(s.to_string()),
+        _ => None,
+      })
+      .collect::<Vec<_>>()
+      .join("\n"),
+  )
 }
 
 pub(crate) fn compile_ir_states(
   j: &mut Journal,
   entry_name: &str,
   items: Vec<Item>,
-  is_scanner: bool,
-) -> SherpaResult<Vec<Box<IRState>>> {
-  let g = &(j.grammar()?);
-
+  graph_mode: GraphMode,
+) -> SherpaResult<Vec<Box<ParseState>>> {
   j.report_mut().start_timer("Compile");
   j.report_mut().start_timer("Graph States");
 
-  let SherpaResult::Ok(graph) = graph::create(j, items, is_scanner) else {
-    j.report_mut().stop_timer("Graph States");
-    j.report_mut().stop_timer("Compile");
-    return SherpaResult::None
-  };
+  let graph = graph::create(j, items, graph_mode)?;
+
   j.report_mut().stop_timer("Graph States");
-  j.report_mut().add_note("Graph States", graph.__debug_string__(g));
+  j.report_mut().add_note("Graph States", graph.__debug_string__());
 
   j.report_mut().start_timer("Ir States");
-  let SherpaResult::Ok(states) = ir::convert_graph_to_ir(j, &graph, entry_name, is_scanner) else {
-    j.report_mut().stop_timer("Ir States");
-    j.report_mut().stop_timer("Compile");
-    return SherpaResult::None
-  };
+
+  let states = ir::convert_graph_to_ir(j, &graph, entry_name)?;
 
   j.report_mut().stop_timer("Ir States");
   j.report_mut().stop_timer("Compile");
@@ -57,27 +63,37 @@ pub(crate) fn compile_ir_states(
 pub(crate) fn construct_production_states(
   j: &mut Journal,
   prod_id: ProductionId,
-) -> SherpaResult<Vec<Box<IRState>>> {
+) -> SherpaResult<Vec<Box<ParseState>>> {
   let g = &(j.grammar()?);
   j.set_active_report(
     &format!("Production [{}] IR Compilation", g.get_production_plain_name(&prod_id)),
     crate::journal::report::ReportType::ProductionCompile(prod_id),
   );
 
-  compile_ir_states(
-    j,
-    g.get_production_guid_name(&prod_id),
-    get_production_start_items2(&prod_id, g)
-      .into_iter()
-      .map(|i| i.to_origin(graph_2::Origin::ProdGoal(prod_id)))
-      .collect(),
-    false,
-  )
+  let prod = g.productions.get(&prod_id)?;
+
+  if prod.bytecode_id.is_none() {
+    j.report_mut().add_note(
+      "unreferenced-production",
+      format!("Production [{}] is not used a parser production", prod.name),
+    );
+    SherpaResult::Ok(Default::default())
+  } else {
+    compile_ir_states(
+      j,
+      g.get_production_guid_name(&prod_id),
+      get_production_start_items(&prod_id, g)
+        .into_iter()
+        .map(|i| i.to_origin(Origin::ProdGoal(prod_id)))
+        .collect(),
+      GraphMode::SherpaClimber,
+    )
+  }
 }
 pub(crate) fn construct_token_production_state(
   j: &mut Journal,
   prod_id: ProductionId,
-) -> SherpaResult<Vec<Box<IRState>>> {
+) -> SherpaResult<Vec<Box<ParseState>>> {
   let g = &(j.grammar()?);
   j.set_active_report(
     &format!("Token Production [{}] IR Compilation", g.get_production_plain_name(&prod_id)),
@@ -87,18 +103,18 @@ pub(crate) fn construct_token_production_state(
   compile_ir_states(
     j,
     g.get_production_guid_name(&prod_id),
-    get_production_start_items2(&prod_id, g)
+    get_production_start_items(&prod_id, g)
       .into_iter()
-      .map(|i| i.to_origin(graph_2::Origin::ProdGoal(prod_id)))
+      .map(|i| i.to_origin(Origin::ProdGoal(prod_id)))
       .collect(),
-    true,
+    GraphMode::Scanner,
   )
 }
 
 pub(crate) fn construct_scanner_states(
   j: &mut Journal,
   symbols: SymbolSet,
-) -> SherpaResult<Vec<Box<IRState>>> {
+) -> SherpaResult<Vec<Box<ParseState>>> {
   let g = &(j.grammar()?);
 
   let state_name = format!("scan_{:02X}", hash_id_value_u64(&symbols));
@@ -120,40 +136,55 @@ pub(crate) fn construct_scanner_states(
     .iter()
     .flat_map(|s| {
       let (_, prod_id, ..) = get_scanner_info_from_defined(s, &g);
-      get_production_start_items2(&prod_id, &g)
+      get_production_start_items(&prod_id, &g)
         .iter()
-        .map(|i| i.to_origin(graph_2::Origin::SymGoal(*s)))
+        .map(|i| i.to_origin(Origin::SymGoal(*s)))
         .collect::<Vec<_>>()
     })
     .collect();
-
-  #[cfg(debug_assertions)]
-  {
-    //check_for_left_recursion(&items, g)
-  }
-
-  compile_ir_states(j, &state_name, items, true)
+  compile_ir_states(j, &state_name, items, GraphMode::Scanner)
 }
 
+#[inline]
+#[track_caller]
+fn insert_states<T: Iterator<Item = Box<ParseState>>>(
+  j: &mut Journal,
+  states: T,
+  deduped_states: &mut BTreeMap<String, Box<ParseState>>,
+) {
+  for state in states {
+    match deduped_states.entry(state.get_name()) {
+      btree_map::Entry::Occupied(e) => {
+        #[cfg(debug_assertions)]
+        {
+          if e.get().code != state.code {
+            let (old_str, new_str) = (e.get().to_string(), state.to_string());
+            if j.config().debug.allow_parse_state_name_collisions {
+              eprintln!("Expected [\n{old_str}\n] to equal [\n{new_str}\n]");
+            } else {
+              panic!("Expected [\n{old_str}\n] to equal [\n{new_str}\n]");
+            }
+          }
+        }
+      }
+      btree_map::Entry::Vacant(e) => {
+        e.insert(state);
+      }
+    }
+  }
+}
 fn compile_slice_of_states(
   j: &mut Journal,
-  deduped_states: &mut BTreeMap<String, Box<IRState>>,
+  deduped_states: &mut BTreeMap<String, Box<ParseState>>,
   slice: &[(ProductionId, bool)],
 ) -> SherpaResult<()> {
   let mut scanner_names = BTreeSet::new();
   let mut have_errors = false;
 
-  #[inline]
-  fn insert_states(states: Vec<Box<IRState>>, deduped_states: &mut BTreeMap<String, Box<IRState>>) {
-    for state in states {
-      deduped_states.entry(state.get_name()).or_insert(state);
-    }
-  }
-
   for (prod_id, is_scanner) in slice {
     if *is_scanner {
       if let SherpaResult::Ok(states) = construct_token_production_state(j, *prod_id) {
-        insert_states(states, deduped_states);
+        insert_states(j, states.into_iter(), deduped_states);
       } else {
         have_errors = true;
       }
@@ -165,13 +196,13 @@ fn compile_slice_of_states(
               if let SherpaResult::Ok(states) =
                 construct_scanner_states(j, state.get_scanner_symbol_set()?)
               {
-                insert_states(states, deduped_states);
+                insert_states(j, states.into_iter(), deduped_states);
               } else {
                 have_errors = true;
               }
             }
           }
-          insert_states(vec![state], deduped_states);
+          insert_states(j, vec![state].into_iter(), deduped_states);
         }
       } else {
         have_errors = true;
@@ -187,10 +218,10 @@ fn compile_slice_of_states(
 }
 
 /// Compiles IRStates from all production and scanner symbol sets within the grammar.
-pub fn compile_states(
+pub fn compile_parse_states(
   j: &mut Journal,
   num_of_threads: usize,
-) -> SherpaResult<BTreeMap<String, Box<IRState>>> {
+) -> SherpaResult<BTreeMap<String, Box<ParseState>>> {
   let g = j.grammar()?;
 
   let mut deduped_states = BTreeMap::new();
@@ -213,12 +244,15 @@ pub fn compile_states(
       })
       .collect::<Vec<_>>()
       .into_iter()
-      .map(|s| s.join().unwrap())
+      .map(|s| match s.join() {
+        Result::Ok(result) => result,
+        Err(err) => panic!("Error encountered in thread]\n {:?}", err),
+      })
       .collect::<Vec<_>>()
   }) {
     match states {
-      SherpaResult::Ok(mut states) => {
-        deduped_states.append(&mut states);
+      SherpaResult::Ok(states) => {
+        insert_states(j, states.into_values(), &mut deduped_states);
       }
       SherpaResult::Err(err) => {
         // All captured errors in the compilation process are rolled
@@ -227,13 +261,6 @@ pub fn compile_states(
         // behavior (unwrapping a None option, etc), so we do a hard
         // panic to report these incidences.
         panic!("An unexpected error has occurred:\n{}", err);
-      }
-      SherpaResult::MultipleErrors(errors) => {
-        // Same as above
-        for error in errors {
-          eprintln!("{}", error);
-        }
-        panic!("Unexpected errors have occurred, cannot continue");
       }
       _ => {
         // Reports in the Journal contain the errors.
@@ -250,10 +277,9 @@ pub fn compile_states(
       .map(|chunk| {
         s.spawn(|| {
           for state in chunk {
-            let string = state.to_string();
-            match state.compile_ast() {
+            match state.get_cached_ast() {
               SherpaResult::Err(err) => {
-                eprintln!("\n{} {}", err, string)
+                eprintln!("\n{} {}", err, state.to_string())
               }
               _ => {}
             }

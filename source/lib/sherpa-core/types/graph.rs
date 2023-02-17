@@ -1,507 +1,634 @@
-//! # Transition Graph Types
-use super::*;
-use crate::grammar::get_closure_cached_with_state;
-use bitmask_enum::bitmask;
+use super::{
+  item::{Item, ItemContainer, ItemContainerIter, ItemType},
+  GrammarStore,
+  ItemSet,
+  Items,
+  ProductionId,
+  RuleId,
+  Symbol,
+  SymbolID,
+};
+use crate::grammar::{
+  compile::parser::sherpa::Grammar,
+  get_production_start_items,
+  hash_id_value_u64,
+};
 use std::{
-  collections::{BTreeSet, HashMap, VecDeque},
-  hash::Hash,
+  collections::{
+    binary_heap::Iter,
+    hash_map::DefaultHasher,
+    BTreeMap,
+    BTreeSet,
+    HashMap,
+    VecDeque,
+  },
+  hash::{Hash, Hasher},
   ops::{Index, IndexMut},
-  rc::Rc,
   sync::Arc,
 };
 
-#[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
-pub(crate) struct NodeId(u32);
+/// Indicates the State type that generated
+/// the item
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum Origin {
+  None,
+  ProdGoal(ProductionId),
+  SymGoal(SymbolID),
+  Peek(u16, StateId),
+  // Out of scope item that was generated from the
+  // completion of a token production.
+  ScanCompleteOOS,
+  /// Generated when the a goal production is completed.
+  /// Goal productions are determined by the
+  /// root state (`StateId(0)`) kernel items
+  GoalCompleteOOS,
+}
 
-impl NodeId {
-  const GOTO_VIRTUAL_CLASS: u32 = 4000000000u32;
-  pub const Invalid: Self = Self(u32::MAX);
+impl Default for Origin {
+  fn default() -> Self {
+    Self::None
+  }
+}
 
-  pub(crate) fn new(index: u32) -> Self {
-    Self(index)
+impl Origin {
+  pub fn debug_string(&self, g: &GrammarStore) -> String {
+    match self {
+      Origin::ProdGoal(prod_id) => {
+        let prod = g.get_production(&prod_id).unwrap();
+        format!("ProdGoal[ {} {:?} ]", prod.name, prod.bytecode_id)
+      }
+      Origin::SymGoal(sym_id) => {
+        format!("SymGoal[ {} {:?} ]", sym_id.debug_string(g), sym_id.bytecode_id(g))
+      }
+      _ => format!("{:?}", self),
+    }
+  }
+
+  pub fn is_none(&self) -> bool {
+    matches!(self, Origin::None)
+  }
+
+  pub fn is_out_of_scope(&self) -> bool {
+    matches!(self, Origin::GoalCompleteOOS | Origin::ScanCompleteOOS)
+  }
+
+  pub fn get_symbol(&self) -> SymbolID {
+    match self {
+      Origin::SymGoal(sym_id) => *sym_id,
+      _ => SymbolID::Undefined,
+    }
+  }
+}
+
+// Transtion Type ----------------------------------------------------
+
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
+pub(crate) enum StateType {
+  Undefined,
+  Start,
+  Shift,
+  KernelGoto,
+  GotoLoop,
+  GotoPass,
+  Peek,
+  PeekEnd,
+  Complete,
+  Follow,
+  AssignAndFollow(SymbolID),
+  Reduce(RuleId),
+  AssignToken(SymbolID),
+  /// Calls made on items within a state's closure but
+  /// are not kernel items.
+  InternalCall(ProductionId),
+  /// Calls made on kernel items
+  KernelCall(ProductionId),
+  /// Creates a leaf state that has a single `pop` instruction,
+  /// with the intent of removing a goto floor state.
+  ProductionCompleteOOS,
+  /// Creates a leaf state that has a single `pass` instruction.
+  ScannerCompleteOOS,
+  FirstMatch,
+  LongestMatch,
+  ShortestMatch,
+}
+
+impl Default for StateType {
+  fn default() -> Self {
+    Self::Undefined
+  }
+}
+
+impl StateType {
+  pub fn is_out_of_scope(&self) -> bool {
+    use StateType::*;
+    matches!(self, ProductionCompleteOOS | ScannerCompleteOOS)
+  }
+
+  pub fn is_goto(&self) -> bool {
+    use StateType::*;
+    matches!(self, GotoLoop | GotoPass | KernelGoto)
+  }
+
+  fn debug_string(&self, g: &GrammarStore) -> String {
+    match self {
+      Self::KernelCall(prod_id) => format!("KernelCall({})", g.get_production_plain_name(prod_id)),
+      Self::InternalCall(prod_id) => {
+        format!("InternalCall({})", g.get_production_plain_name(prod_id))
+      }
+      Self::AssignAndFollow(sym_id) => {
+        format!("AssignAndFollow({})", sym_id.debug_string(g))
+      }
+      Self::AssignToken(sym_id) => {
+        format!("AssignToken({})", sym_id.debug_string(g))
+      }
+      Self::Reduce(rule_id) => {
+        format!("Reduce({})", g.get_production_plain_name(&g.rules.get(rule_id).unwrap().prod_id))
+      }
+      _ => format!("{:?}", self),
+    }
+  }
+}
+pub(crate) const OutScopeIndex: u32 = 0xFEEDDEED;
+
+// State -------------------------------------------------------------
+
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(crate) struct State {
+  id: StateId,
+  term_symbol: SymbolID,
+  t_type: StateType,
+  parent: StateId,
+  predecessors: BTreeSet<StateId>,
+  kernel_items: BTreeSet<Item>,
+  peek_resolve_items: BTreeMap<u16, Items>,
+  non_terminals: BTreeSet<Item>,
+  reduce_item: Option<Item>,
+  leaf_state: bool,
+}
+
+impl Hash for State {
+  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    self.t_type.hash(state);
+
+    self.term_symbol.hash(state);
+
+    for item in &self.kernel_items {
+      item.rule_id.hash(state);
+      item.off.hash(state);
+      item.origin.hash(state);
+    }
+
+    for item in &self.peek_resolve_items.values().flatten().collect::<BTreeSet<_>>() {
+      item.rule_id.hash(state);
+      item.off.hash(state);
+    }
+
+    if let Some(item) = self.reduce_item {
+      item.rule_id.hash(state);
+      item.off.hash(state);
+    }
+  }
+}
+
+impl State {
+  pub(crate) fn get_hash(&self) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    self.hash(&mut hasher);
+    hasher.finish()
+  }
+
+  pub(crate) fn set_reduce_item(&mut self, item: Item) {
+    debug_assert!(item.is_completed());
+    self.reduce_item = Some(item);
+  }
+
+  pub(crate) fn set_transition_type(&mut self, transition_type: StateType) {
+    self.t_type = transition_type;
+  }
+
+  /// Set a group of items that a peek item will resolve to.
+  pub(crate) fn set_peek_resolve_items(&mut self, peek_origin: u16, items: Items) {
+    self.peek_resolve_items.insert(peek_origin, items);
+  }
+
+  pub(crate) fn get_resolve_items(&self, peek_origin: u16) -> Items {
+    self.peek_resolve_items.get(&peek_origin).unwrap().clone()
+  }
+
+  pub(crate) fn get_nonterminal_items(&self) -> Items {
+    self.non_terminals.iter().to_vec()
+  }
+
+  pub(crate) fn get_kernel_items_vec(&self) -> Items {
+    self.kernel_items.iter().to_vec()
+  }
+
+  pub(crate) fn get_kernel_items_ref(&self) -> &ItemSet {
+    &self.kernel_items
+  }
+
+  pub(crate) fn get_kernel_items(&self) -> ItemSet {
+    self.kernel_items.clone()
+  }
+
+  pub(crate) fn get_predecessors(&self) -> &BTreeSet<StateId> {
+    &self.predecessors
+  }
+
+  pub(crate) fn get_id(&self) -> StateId {
+    self.id
+  }
+
+  pub(crate) fn is_leaf_state(&self) -> bool {
+    self.leaf_state
+  }
+
+  pub(crate) fn set_non_terminals(&mut self, non_terms: &BTreeSet<Item>) {
+    self.non_terminals = non_terms.clone();
+  }
+
+  pub(crate) fn get_type(&self) -> StateType {
+    self.t_type
+  }
+
+  pub(crate) fn num_of_kernel_items(&self) -> usize {
+    self.kernel_items.len()
+  }
+
+  pub(crate) fn get_closure(&self, g: &GrammarStore, is_scanner: bool) -> BTreeSet<Item> {
+    let origin_state = self.id;
+    get_closure(self.kernel_items.iter(), g, origin_state, is_scanner)
+  }
+
+  pub(crate) fn get_root_closure(&self, g: &GrammarStore, is_scanner: bool) -> BTreeSet<Item> {
+    let mut closure = self.get_closure(g, is_scanner);
+    if self.id.is_root() {
+      let mut signatures = closure.iter().map(|i| (i.rule_id, i.off)).collect::<BTreeSet<_>>();
+      // Incorporate items that are out of scope within this closure.
+      let mut queue = VecDeque::from_iter(self.kernel_items.iter().map(|i| i.get_prod_id(g)));
+      let mut seen = BTreeSet::new();
+      while let Some(prod_id) = queue.pop_front() {
+        if seen.insert(prod_id) {
+          if let Some(lr_items) = g.lr_items.get(&prod_id) {
+            for item in lr_items {
+              if signatures.insert((item.get_rule_id(), item.off)) {
+                if item.increment().unwrap().is_completed() {
+                  queue.push_back(item.get_prod_id(g));
+                }
+
+                closure.insert(item.to_origin_state(self.id).to_oos_index());
+              }
+            }
+          }
+        }
+      }
+    }
+    closure
+  }
+
+  /// Returns true if the the call of the production leads to infinite loop due to left recursion.
+  pub(crate) fn conflicting_production_call(
+    &self,
+    prod_id: ProductionId,
+    g: &GrammarStore,
+    is_scanner: bool,
+  ) -> bool {
+    if self.id.is_root() {
+      let prod_ids = self.kernel_items.iter().map(|i| i.get_prod_id(g)).collect::<BTreeSet<_>>();
+
+      get_closure(get_production_start_items(&prod_id, g).iter(), g, self.id, is_scanner)
+        .into_iter()
+        .any(|i| {
+          prod_ids.contains(&i.get_production_id_at_sym(g)) || prod_ids.contains(&i.get_prod_id(g))
+        })
+    } else {
+      false
+    }
+  }
+
+  pub(crate) fn add_kernel_items<T: ItemContainer>(&mut self, kernel_items: T) {
+    let mut kernel_items =
+      kernel_items.into_iter().map(|mut i| i.to_origin_state(self.id)).collect();
+
+    self.kernel_items.append(&mut kernel_items);
+  }
+
+  pub(crate) fn set_kernel_items(&mut self, kernel_items: Items) {
+    let kernel_items = kernel_items
+      .into_iter()
+      .map(|mut i| {
+        if i.origin_state.is_invalid() {
+          i.origin_state = self.id;
+        }
+        i
+      })
+      .collect();
+    self.kernel_items = kernel_items;
+  }
+
+  pub(crate) fn get_parent(&self) -> StateId {
+    self.parent
+  }
+
+  pub(crate) fn get_reduce_item(&self) -> Option<Item> {
+    self.reduce_item
+  }
+
+  pub(crate) fn get_symbol(&self) -> SymbolID {
+    self.term_symbol
+  }
+
+  pub(crate) fn debug_string(&self, g: &GrammarStore) -> String {
+    let mut string = String::new();
+    string += &format!("\n\nSTATE -- [{:}] sea-- ", self.id.0);
+
+    if self.predecessors.len() > 0 {
+      string += &format!(
+        r##" preds [{}]"##,
+        self.predecessors.iter().map(|p| p.0.to_string()).collect::<Vec<_>>().join(" ")
+      );
+    }
+
+    string += &format!(
+      "\n\n Type {:?}; Sym: [{} : {:X}]",
+      self.t_type.debug_string(g),
+      self.term_symbol.debug_string(g),
+      self.term_symbol.bytecode_id(g)
+    );
+
+    for (index, items) in &self.peek_resolve_items {
+      string += &format!("\n  Peek Resolve: {}", index);
+      for item in items {
+        string += &format!("\n   - {}", item.debug_string(g));
+      }
+    }
+
+    if !self.non_terminals.is_empty() {
+      string += "\n-- non-terms:";
+      for (item) in &self.non_terminals {
+        string += &format!("\n   - {}", item.debug_string(g));
+      }
+    }
+
+    if let Some(item) = &self.reduce_item {
+      string += &format!("\n  Reduce:");
+      string += &format!("\n   - {}", item.debug_string(g));
+    }
+
+    string += "\n";
+
+    for item in &self.kernel_items {
+      string += &format!("\n    {}", item.debug_string(g));
+    }
+    string
+  }
+}
+
+pub(crate) fn get_closure<'a, T: ItemContainerIter<'a>>(
+  items: T,
+  g: &GrammarStore,
+  origin_state: StateId,
+  is_scanner: bool,
+) -> BTreeSet<Item> {
+  let mut out = BTreeSet::new();
+  let mut queue = VecDeque::from_iter(items.cloned());
+  while let Some(kernel_item) = queue.pop_front() {
+    match kernel_item.get_type(g) {
+      ItemType::ExclusiveCompleted(..) | ItemType::Completed(_) | ItemType::Terminal(_) => {
+        out.insert(kernel_item);
+      }
+      ItemType::TokenProduction(prod_id, sym) => {
+        if out.insert(kernel_item) && is_scanner {
+          for item_in in get_production_start_items(&prod_id, g) {
+            queue.push_back(item_in.align(&kernel_item).to_origin_state(origin_state));
+          }
+        }
+      }
+      ItemType::NonTerminal(prod_id) => {
+        if out.insert(kernel_item) {
+          for item_in in get_production_start_items(&prod_id, g) {
+            queue.push_back(item_in.align(&kernel_item).to_origin_state(origin_state));
+          }
+        }
+      }
+    }
+  }
+  out
+}
+
+// Graph -------------------------------------------------------------
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+pub(crate) enum GraphState {
+  Normal,
+  Peek,
+  LongestMatch,
+  ShortestMatch,
+  FirstMatch,
+  //BreadCrumb,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum GraphMode {
+  /// Classic Recursive Descent Ascent with unlimited lookahead.
+  SherpaClimber,
+  // Scanner mode for creating tokens, analagous to regular expressions.
+  Scanner,
+}
+
+pub(crate) struct Graph {
+  state_map:      HashMap<u64, StateId>,
+  states:         Vec<State>,
+  leaf_states:    BTreeSet<StateId>,
+  pending_states: VecDeque<(GraphState, StateId)>,
+  mode:           GraphMode,
+  pub grammar:    Arc<GrammarStore>,
+}
+
+impl Graph {
+  pub(crate) fn new(grammar: Arc<GrammarStore>, mode: GraphMode) -> Self {
+    Self {
+      mode,
+      state_map: Default::default(),
+      states: Default::default(),
+      leaf_states: Default::default(),
+      pending_states: Default::default(),
+      grammar,
+    }
+  }
+
+  pub fn is_scan(&self) -> bool {
+    matches!(self.mode, GraphMode::Scanner)
+  }
+
+  pub(crate) fn create_state(
+    &mut self,
+    symbol: SymbolID,
+    t_type: StateType,
+    parent: Option<StateId>,
+    kernel_items: Items,
+  ) -> StateId {
+    let id = StateId(self.states.len());
+
+    let mut state = match parent {
+      Some(parent) => State {
+        id,
+        term_symbol: symbol,
+        t_type,
+        parent,
+        predecessors: BTreeSet::from_iter(vec![parent]),
+        ..Default::default()
+      },
+      None => State { id, term_symbol: symbol, t_type, ..Default::default() },
+    };
+
+    state.set_kernel_items(if self.states.is_empty() {
+      /// Automatically setup lanes a goal values.
+      kernel_items
+        .into_iter()
+        .enumerate()
+        .map(|(i, mut item)| {
+          item.goal_index = i as u32;
+          //item.origin = Origin::ProdGoal(i as u16);
+          item
+        })
+        .collect()
+    } else {
+      kernel_items
+    });
+
+    self.states.push(state);
+
+    id
+  }
+
+  pub(crate) fn __debug_print__(&self) {
+    let string = self.__debug_string__();
+    println!(
+      "\n\n\n--------------------------------------------------------
+      Leaf States -- [ {} ]",
+      self.leaf_states.iter().map(|s| s.0.to_string()).collect::<Vec<_>>().join(" ")
+    );
+    println!("{string}");
+  }
+
+  pub(crate) fn __debug_string__(&self) -> String {
+    let mut string = String::new();
+    let g = &self.grammar;
+
+    for state in &self.states {
+      let is_leaf_state = self.leaf_states.contains(&state.get_id());
+      if is_leaf_state {
+        string += "\nLEAF STATE ----------------------------------";
+        string += &state.debug_string(g);
+        string += "\n---------------------------------------------";
+      } else {
+        string += &state.debug_string(g);
+      }
+    }
+    string
+  }
+
+  pub(crate) fn add_leaf_state(&mut self, state: StateId) {
+    self.leaf_states.insert(state);
+    self[state].leaf_state = true;
+  }
+
+  pub(crate) fn get_leaf_states(&self) -> Vec<&State> {
+    self.leaf_states.iter().map(|s| &self[*s]).collect()
+  }
+
+  pub(crate) fn enqueue_pending_state(
+    &mut self,
+    graph_state: GraphState,
+    state: StateId,
+  ) -> Option<StateId> {
+    let hash_id = hash_id_value_u64(&self[state]);
+
+    if let Some(original_state) = self.state_map.get(&hash_id).cloned() {
+      let parent = self[state].parent;
+      self[original_state].predecessors.insert(parent);
+      if state.0 == self.states.len() - 1 {
+        drop(self.states.pop());
+      }
+      None
+    } else {
+      self.state_map.insert(hash_id, state);
+      self.pending_states.push_back((graph_state, state));
+      Some(state)
+    }
+  }
+
+  pub(crate) fn dequeue_pending_state(&mut self) -> Option<(GraphState, StateId)> {
+    self.pending_states.pop_front()
+  }
+
+  pub(crate) fn goal_items(&self) -> &ItemSet {
+    &self.states[0].kernel_items
+  }
+
+  pub(crate) fn item_is_goal(&self, item: Item) -> bool {
+    if !item.is_completed() {
+      return false;
+    }
+
+    self.states[0].kernel_items.iter().any(|i| i.rule_id == item.rule_id)
+  }
+}
+
+impl Index<usize> for Graph {
+  type Output = State;
+
+  fn index(&self, index: usize) -> &Self::Output {
+    &self.states[index]
+  }
+}
+
+impl Index<StateId> for Graph {
+  type Output = State;
+
+  fn index(&self, index: StateId) -> &Self::Output {
+    &self.states[index.0]
+  }
+}
+
+impl IndexMut<StateId> for Graph {
+  fn index_mut(&mut self, index: StateId) -> &mut Self::Output {
+    &mut self.states[index.0]
+  }
+}
+
+// STATE ID -------------------------------------------------------------
+
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct StateId(pub usize);
+
+impl Default for StateId {
+  fn default() -> Self {
+    Self(usize::MAX)
+  }
+}
+
+impl StateId {
+  pub fn is_invalid(&self) -> bool {
+    self.0 == usize::MAX
   }
 
   pub fn is_root(&self) -> bool {
     self.0 == 0
   }
 
-  pub fn usize(&self) -> usize {
-    self.0 as usize
+  pub fn to_post_reduce(&self) -> Self {
+    Self(self.0 + (usize::MAX >> 2))
   }
 
-  pub fn to_goto_id(&self) -> Self {
-    Self(self.0 | Self::GOTO_VIRTUAL_CLASS)
-  }
-}
-
-impl Default for NodeId {
-  fn default() -> Self {
-    Self::Invalid
+  pub fn to_goto(&self) -> Self {
+    Self(self.0 + (usize::MAX >> 1))
   }
 }
 
-impl From<NodeId> for u32 {
-  fn from(value: NodeId) -> Self {
-    value.0
-  }
-}
-
-impl From<NodeId> for usize {
-  fn from(value: NodeId) -> Self {
-    value.0 as usize
-  }
-}
-
-impl std::fmt::Display for NodeId {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    std::fmt::Debug::fmt(&self.0, f)
-  }
-}
-
-impl<T: Sized> Index<NodeId> for Vec<T> {
-  type Output = T;
-
-  #[inline(always)]
-  fn index(&self, index: NodeId) -> &Self::Output {
-    &self[index.0 as usize]
-  }
-}
-
-impl<T: Sized> IndexMut<NodeId> for Vec<T> {
-  #[inline(always)]
-  fn index_mut(&mut self, index: NodeId) -> &mut Self::Output {
-    &mut self[index.0 as usize]
-  }
-}
-
-pub(crate) type MaybeNodeId = Option<NodeId>;
-
-/// TODO: Isolate and build goto states.
-#[derive(Hash, PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Copy)]
-pub(crate) enum NodeType {
-  Undefined,
-  _LRStart,
-  RDStart,
-  RAStart,
-  GotoVirtual,
-  Goto,
-  PeekTransition,
-  BreadcrumbTransition,
-  BreadcrumbEndCompletion,
-  BreadcrumbShiftCompletion,
-  ProductionCall,
-  _Recovery,
-  Complete,
-  Fork,
-  Pass,
-  Fail,
-  OutOfScopeComplete,
-  /// A kludge state to ensure base actions are performed
-  /// in each fork.
-  ForkBase,
-  Shift,
-}
-
-impl Default for NodeType {
-  fn default() -> Self {
-    Self::Undefined
-  }
-}
-
-impl std::fmt::Display for NodeType {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    std::fmt::Debug::fmt(self, f)
-  }
-}
-
-/// TODO: Isolate and build goto states.
-#[derive(Hash, PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Copy)]
-pub(crate) enum EdgeType {
-  Undefined,
-  // The order of `Goto` is important.
-  Goto,
-  // DO NOT reposition properties below this comment to above.
-  Default,
-  // DO NOT reposition properties below this comment to above.
-  Assert,
-  Peek,
-  Start,
-}
-
-impl Default for EdgeType {
-  fn default() -> Self {
-    Self::Undefined
-  }
-}
-
-impl std::fmt::Display for EdgeType {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    std::fmt::Debug::fmt(self, f)
-  }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Default, Hash)]
-pub(crate) struct GraphNode {
-  /// Items that represent the transition edges away from this node. In the resulting
-  /// graph, any child node of this node should have an edge_symbol that matches one
-  /// of the symbols in the closure of the parent's `transition_items`
-  pub transition_items: Vec<Item>,
-  /// Non-term items that are used to resolve GOTO
-  /// and follow.
-  pub goto_items: Vec<Item>,
-  // pub output_items: Option<SymbolID>,
-  /// The symbols that labels the edge that
-  /// connects the previous state to this state.
-  pub edge_symbol: SymbolID,
-  pub prod_sym: Option<SymbolID>,
-  pub parent: MaybeNodeId,
-  /// This is set if this node is a member of a peek branch.
-  /// Represents the state which normal parsing will return to
-  /// when resolved leaves of the peek branch are reached.
-  pub peek_goal: MaybeNodeId,
-  /// The peek branch origin
-  pub peek_origin: MaybeNodeId,
-  /// The parent node whose closure
-  /// produced the items belonging to this node.
-  pub closure_parent: MaybeNodeId,
-  pub proxy_parents: Vec<NodeId>,
-  /// The number of symbol shifts that have occurred prior to
-  /// reaching this node.
-  pub shifts: u32,
-  /// If this node is part of a disambiguating sequence, then
-  /// this represents the positive number of shifts since the start of
-  /// disambiguating that have occurred prior to reaching this node.
-  /// Otherwise, this value is less than 0.
-  pub peek_shifts: i32,
-  pub id: NodeId,
-
-  pub node_type: NodeType,
-
-  /// The type of scan action that is performed while
-  /// traversing towards this node.
-  pub edge_type: EdgeType,
-  _impl:         u8,
-}
-
-impl GraphNode {
-  pub fn new(
-    t_pack: &TransitionGraph,
-    sym: SymbolID,
-    parent_index: MaybeNodeId,
-    items: Vec<Item>,
-    node_type: NodeType,
-  ) -> Self {
-    let mut node = GraphNode {
-      edge_symbol: sym,
-      transition_items: items,
-      peek_shifts: -1,
-      id: NodeId::Invalid,
-      node_type,
-      ..Default::default()
-    };
-
-    if let Some(parent_index) = parent_index {
-      let parent = &t_pack.nodes[parent_index];
-      node.parent = Some(parent_index);
-      node.shifts = parent.shifts + 1;
-      node.peek_goal = parent.peek_goal;
-      node.peek_origin = parent.peek_origin;
-    }
-
-    node
-  }
-
-  /// Strips state info from all items and returns the set of
-  /// of unique items.
-  pub fn get_unique_transition_item_set(&self) -> ItemSet {
-    self.transition_items.clone().to_empty_state().to_set()
-  }
-
-  /// Returns the closure of this node's items
-  pub fn get_closure<'a>(&self, g: &'a GrammarStore) -> BTreeSet<Item> {
-    self
-      .transition_items
-      .iter()
-      .flat_map(|i| get_closure_cached_with_state(i, &g))
-      .collect::<BTreeSet<_>>()
-  }
-
-  #[inline(always)]
-  pub fn is_orphan(&self) -> bool {
-    !self.has_parent()
-  }
-
-  #[inline(always)]
-  pub fn has_parent(&self) -> bool {
-    self.parent.is_some() && self.id != NodeId::Invalid
-  }
-
-  pub fn debug_string(&self, g: &GrammarStore) -> String {
-    format!(
-      "\n|[{}]--->[{}]{}\n|   sym: {}\n|  edge: {}\n|  node: {}{}\n| items:[\n{}\n]",
-      self.id,
-      self.parent.map(|i| i.to_string()).unwrap_or(String::from("")),
-      self
-        .proxy_parents
-        .iter()
-        .map(|i| format!("\n|[{}]--->[{}]", i.to_string(), self.id))
-        .collect::<Vec<_>>()
-        .join(""),
-      self.edge_symbol.debug_string(g),
-      self.edge_type.to_string(),
-      self.node_type.to_string(),
-      "",
-      self
-        .transition_items
-        .clone()
-        //.to_origin_only_state()
-        .to_set()
-        .iter()
-        .map(|i| "   ".to_string() + &i.debug_string(g))
-        .collect::<Vec<_>>()
-        .join("\n")
-    )
-  }
-}
-
-#[derive(PartialEq, Eq, Debug, Clone, Copy)]
-pub(crate) enum TransitionMode {
-  RecursiveDescent,
-  RecursiveAscent,
-  LR,
-}
-
-impl Default for TransitionMode {
-  fn default() -> Self {
-    TransitionMode::RecursiveDescent
-  }
-}
-
-pub(crate) type TPackResults = (TransitionGraph, Vec<SherpaError>);
-
-#[derive(Debug, Default)]
-pub(crate) struct ProcessGroup {
-  pub node_index:   NodeId,
-  pub items:        Vec<Item>,
-  pub discriminant: Option<(SymbolID, Vec<Item>)>,
-  pub depth:        usize,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub(crate) enum ScanType {
-  None = 0,
-  ScannerProduction,
-  ScannerEntry,
-}
-
-impl Default for ScanType {
-  fn default() -> Self {
-    Self::None
-  }
-}
-
-/// Maintains a set of transition nodes and related properties that describe
-/// either a complete or intermediate parse graph.
-///
-/// Note: Since transition functions can create Recursive Ascent as well as
-/// Recursive Descent style graphs, the resulting graph may contain cycles.
-#[derive(Debug, Default)]
-pub(crate) struct TransitionGraph {
-  pub goto_scoped_closure: Option<Rc<Box<Vec<Item>>>>,
-  pub out_of_scope_closure: Option<Vec<Item>>,
-  pub goto_seeds: BTreeSet<Item>,
-  pub leaf_nodes: Vec<NodeId>,
-  pub mode: TransitionMode,
-  pub scan_type: ScanType,
-  pub root_prod_ids: BTreeSet<ProductionId>,
-  pub starts: BTreeSet<Item>,
-  pub errors: Vec<SherpaError>,
-  pub loops: HashMap<BTreeSet<Item>, NodeId>,
-  /// If this Graph defines a goto transition sequence,
-  /// then this is true if the root goto state does not simply
-  /// resolve to a pass action.
-  pub non_trivial_root: bool,
-  pub g: Arc<GrammarStore>,
-  //
-  nodes: Vec<GraphNode>,
-  node_pipeline: VecDeque<ProcessGroup>,
-  /// Internal pipeline to drive transition tree
-  /// creation.
-  /// Stores indices of pruned node slots that can be reused
-  empty_cache: VecDeque<NodeId>,
-  /// For a givin item, points to an originating
-  /// item that can used to look up it's own closure
-  closure_links: HashMap<Item, Item>,
-
-  pub accept_items: ItemSet,
-  lane_counter:     u32,
-}
-
-impl TransitionGraph {
-  pub fn new(
-    g: Arc<GrammarStore>,
-    mode: TransitionMode,
-    scan_type: ScanType,
-    starts: &[Item],
-    root_prod_ids: BTreeSet<ProductionId>,
-  ) -> Self {
-    TransitionGraph {
-      node_pipeline: VecDeque::with_capacity(32),
-      empty_cache: VecDeque::with_capacity(16),
-      mode,
-      scan_type,
-      root_prod_ids,
-      starts: BTreeSet::from_iter(starts.iter().map(|i| i.to_start().to_origin_only_state())),
-      nodes: Vec::with_capacity(256),
-      g,
-      ..Default::default()
-    }
-  }
-
-  pub fn is_scan(&self) -> bool {
-    !(matches!(self.scan_type, ScanType::None))
-  }
-
-  pub fn item_is_goal(&self, item: Item) -> bool {
-    self.accept_items.contains(&item.to_origin_only_state())
-  }
-
-  /// Increments the monotonic lane counter by `amount`, and returns
-  /// the previous value of the counter.
-  pub fn increment_lane(&mut self, amount: u32) -> u32 {
-    let prev_val = self.lane_counter;
-    self.lane_counter += amount;
-    prev_val
-  }
-
-  /// If this is the root node, then this is the set of all
-  /// transition items coerced into completed Items. Origin
-  /// and lane info is stripped from these items. Other wise
-  /// the set is empty.
-  pub fn accept_items(&self) -> &ItemSet {
-    &self.accept_items
-  }
-
-  pub fn queue_node(&mut self, process_group: ProcessGroup) {
-    self.node_pipeline.push_back(process_group)
-  }
-
-  pub fn get_first_prod_id(&self) -> Option<ProductionId> {
-    self.root_prod_ids.first().cloned()
-  }
-
-  #[inline(always)]
-  pub fn get_next_queued(&mut self) -> Option<ProcessGroup> {
-    self.node_pipeline.pop_front()
-  }
-
-  pub fn insert_node(&mut self, mut node: GraphNode) -> NodeId {
-    if let Some(slot_index) = self.empty_cache.pop_front() {
-      node.id = slot_index;
-
-      self.nodes[slot_index] = node;
-
-      slot_index
-    } else {
-      let id = NodeId::new(self.nodes.len() as u32);
-
-      node.id = id;
-
-      self.nodes.push(node);
-
-      id
-    }
-  }
-
-  /// Removes the edge between this node and its parent, rendering
-  /// it orphaned and available for destruction / reuse
-  pub fn drop_node(&mut self, node_index: &NodeId) -> MaybeNodeId {
-    let parent;
-
-    {
-      let node = self.get_node_mut(*node_index);
-
-      parent = node.parent;
-
-      node.parent = None;
-      node.peek_goal = None;
-      node.peek_origin = None;
-      node.id = NodeId::Invalid;
-      node.transition_items.clear();
-    }
-
-    if *node_index != NodeId::Invalid {
-      self.empty_cache.push_back(*node_index);
-    }
-
-    parent
-  }
-
-  #[inline(always)]
-  pub fn get_node(&self, node_index: NodeId) -> &GraphNode {
-    debug_assert!(
-      self.nodes[node_index].id != NodeId::Invalid,
-      "Invalid access of a deleted node at index {}",
-      node_index
-    );
-
-    &self.nodes[node_index]
-  }
-
-  #[inline(always)]
-  pub fn get_node_mut(&mut self, node_index: NodeId) -> &mut GraphNode {
-    debug_assert!(
-      self.nodes[node_index].id != NodeId::Invalid,
-      "Invalid access of a deleted node at index {}",
-      node_index
-    );
-
-    &mut self.nodes[node_index]
-  }
-
-  pub fn nodes_iter(&self) -> core::slice::Iter<GraphNode> {
-    self.nodes.iter()
-  }
-
-  pub fn clean(self) -> TPackResults {
-    (
-      TransitionGraph {
-        goto_seeds: self.goto_seeds,
-        nodes: self.nodes,
-        leaf_nodes: self.leaf_nodes,
-        mode: self.mode,
-        scan_type: self.scan_type,
-        root_prod_ids: self.root_prod_ids,
-        closure_links: self.closure_links,
-        non_trivial_root: self.non_trivial_root,
-        accept_items: self.accept_items,
-        g: self.g,
-        ..Default::default()
-      },
-      self.errors,
-    )
-  }
-
-  pub fn _get_node_len(&self) -> usize {
-    self.nodes.len()
-  }
-
-  pub fn write_nodes(&self) -> String {
-    let mut string = String::new();
-    for node in &self.nodes {
-      if !node.is_orphan() || node.id.0 == 0 {
-        string += &format!("\n{}\n", node.debug_string(&self.g));
-      }
-    }
-
-    string
-  }
-
-  pub fn _print_nodes(&self) {
-    for node in &self.nodes {
-      if !node.is_orphan() || node.id.0 == 0 {
-        eprintln!("{}\n", node.debug_string(&self.g));
-      }
-    }
+impl PartialEq<usize> for State {
+  fn eq(&self, other: &usize) -> bool {
+    self.id.0 == *other
   }
 }

@@ -4,25 +4,46 @@
 use crate::types::*;
 use std::{
   convert::Infallible,
+  fmt::Display,
   ops::{ControlFlow, FromResidual, Try},
   panic::Location,
   process::{ExitCode, Termination},
 };
 
 /// A result type that uses the [SherpaError] enum type for errors results.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum SherpaResult<T> {
   /// The resolved value.
   Ok(T),
   /// An error that occured
   Err(SherpaError),
-  /// All errors that have occured
-  MultipleErrors(Vec<SherpaError>),
   /// Could no resolve value
   None,
 }
 
 impl<T> SherpaResult<T> {
+  /// Return a SherpaResult containing a mutable reference
+  /// to the original stored object, or a faulty result if
+  /// the original SherpaResult is faulty
+  pub fn as_mut(&mut self) -> SherpaResult<&mut T> {
+    match self {
+      Self::Ok(val) => SherpaResult::Ok(val),
+      Self::None => SherpaResult::None,
+      Self::Err(err) => SherpaResult::Err(err.clone()),
+    }
+  }
+
+  /// Return a SherpaResult containing a reference
+  /// to the original stored object, or a faulty result if
+  /// the original SherpaResult is faulty
+  pub fn as_ref(&self) -> SherpaResult<&T> {
+    match self {
+      Self::Ok(val) => SherpaResult::Ok(val),
+      Self::None => SherpaResult::None,
+      Self::Err(err) => SherpaResult::Err(err.clone()),
+    }
+  }
+
   /// Returns `true` if the result is `Ok`
   ///
   /// # Examples
@@ -54,9 +75,6 @@ impl<T> SherpaResult<T> {
     match self {
       SherpaResult::Ok(_) => format!("No Error"),
       SherpaResult::None => format!("SherpaResult is None"),
-      SherpaResult::MultipleErrors(errors) => {
-        errors.iter().map(|e| e.to_string()).collect::<Vec<_>>().join("\n")
-      }
       SherpaResult::Err(err) => err.to_string(),
     }
   }
@@ -83,7 +101,7 @@ impl<T> SherpaResult<T> {
   /// ```
   #[inline]
   pub fn is_err(&self) -> bool {
-    matches!(self, SherpaResult::Err(_) | SherpaResult::MultipleErrors(_))
+    matches!(self, SherpaResult::Err(_))
   }
 
   /// Returns `true` if the result is `None`
@@ -150,12 +168,28 @@ impl<T> SherpaResult<T> {
       SherpaResult::Err(err) => {
         panic!("called `SherpaResult::unwrap()` on an `Err` value: \n {}", err)
       }
-      SherpaResult::MultipleErrors(errors) => {
-        panic!(
-          "called `SherpaResult::unwrap()` on an `MultipleErrors` value: \n {:#?}",
-          errors.debug_print()
-        )
+    }
+  }
+}
+
+impl<T: Display> Display for SherpaResult<T>
+where
+  T: Display,
+{
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self {
+      SherpaResult::Ok(obj) => {
+        f.write_str("SherpaResult::Ok{\n")?;
+        obj.fmt(f)?;
+        f.write_str("\n}")
       }
+      SherpaResult::Err(err) => {
+        f.write_str("SherpaResult::Err{\n")?;
+        err.fmt(f)?;
+        f.write_str("\n}")
+      }
+
+      SherpaResult::None => f.write_str("SherpaResult::None"),
     }
   }
 }
@@ -194,10 +228,7 @@ impl<T> FromResidual<SherpaResult<Infallible>> for Result<T, SherpaError> {
   fn from_residual(residual: SherpaResult<Infallible>) -> Self {
     match residual {
       SherpaResult::Err(err) => Err(err),
-      SherpaResult::MultipleErrors(errors) => {
-        Err(SherpaError::Many { message: Default::default(), errors: errors })
-      }
-      _ => Err(SherpaError::UNDEFINED),
+      _ => Err("UNDEFINED ERROR".into()),
     }
   }
 }
@@ -222,7 +253,6 @@ impl<T> FromResidual<SherpaResult<Infallible>> for SherpaResult<T> {
   fn from_residual(residual: SherpaResult<Infallible>) -> Self {
     match residual {
       SherpaResult::Err(err) => SherpaResult::Err(err),
-      SherpaResult::MultipleErrors(err) => SherpaResult::MultipleErrors(err),
       _ => SherpaResult::None,
     }
   }
@@ -244,7 +274,6 @@ impl<T> Try for SherpaResult<T> {
     match self {
       SherpaResult::Ok(v) => ControlFlow::Continue(v),
       SherpaResult::Err(e) => ControlFlow::Break(SherpaResult::Err(e)),
-      SherpaResult::MultipleErrors(e) => ControlFlow::Break(SherpaResult::MultipleErrors(e)),
       SherpaResult::None => ControlFlow::Break(SherpaResult::None),
     }
   }
@@ -255,16 +284,12 @@ impl<T> Termination for SherpaResult<T> {
   #[track_caller]
   fn report(self) -> std::process::ExitCode {
     match self {
-      SherpaResult::MultipleErrors(errors) => {
-        errors.stderr_print();
-        ExitCode::FAILURE
-      }
       SherpaResult::Err(error) => {
-        eprintln!("{}", error);
+        println!("{}", error);
         ExitCode::FAILURE
       }
       SherpaResult::None => {
-        eprintln!("No Results");
+        println!("No Results");
         ExitCode::FAILURE
       }
       SherpaResult::Ok(_) => ExitCode::SUCCESS,

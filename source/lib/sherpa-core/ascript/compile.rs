@@ -12,10 +12,10 @@ use super::types::{
 use crate::{
   ascript::{
     errors::{
-      ErrIncompatibleProductionScalerTypes,
-      ErrIncompatibleProductionVectorTypes,
-      ErrPropRedefinition,
-      ErrUnionOfScalarsAndVectors,
+      add_incompatible_production_scalar_types_error,
+      add_incompatible_production_types_error,
+      add_incompatible_production_vector_types_error,
+      add_prop_redefinition_error,
     },
     types::AScriptProp,
   },
@@ -29,33 +29,28 @@ use crate::{
     Ascript,
   },
   types::*,
+  Journal,
 };
 use std::{
   collections::{btree_map, hash_map::Entry, BTreeSet, HashMap, VecDeque},
   vec,
 };
 
-pub(crate) fn compile_ascript_store(ast: &mut AScriptStore) -> Vec<SherpaError> {
-  let mut e = vec![];
+pub(crate) fn compile_ascript_store(j: &mut Journal, ast: &mut AScriptStore) {
   let mut temp_production_types = ProductionTypesTable::new();
 
-  gather_ascript_info_from_grammar(ast, &mut e, &mut temp_production_types);
+  gather_ascript_info_from_grammar(j, ast, &mut temp_production_types);
 
-  resolve_production_reduce_types(ast, &mut e, temp_production_types);
+  resolve_production_reduce_types(j, ast, temp_production_types);
 
-  match e.have_critical() {
-    true => e,
-    _ => {
-      resolve_structure_properties(ast, &mut e);
-
-      e
-    }
+  if !j.report().have_errors_of_type(SherpaErrorSeverity::Critical) {
+    resolve_structure_properties(j, ast);
   }
 }
 
 fn gather_ascript_info_from_grammar(
+  j: &mut Journal,
   store: &mut AScriptStore,
-  e: &mut Vec<SherpaError>,
   prod_types: &mut ProductionTypesTable,
 ) {
   // Separate all bodies into a list of  of tuple of RuleId's and
@@ -86,7 +81,7 @@ fn gather_ascript_info_from_grammar(
       if let Some(ascript_fn) = &ascript_option_fn {
         match &ascript_fn.ast {
           ASTNode::AST_Struct(ast_struct) => {
-            let id = compile_struct_type(store, ast_struct, rule);
+            let id = compile_struct_type(j, store, ast_struct, rule);
             struct_bodies.push((rule_id, ascript_fn));
             add_production_type(prod_types, &rule, TaggedType {
               type_:        AScriptTypeVal::Struct(id),
@@ -95,23 +90,16 @@ fn gather_ascript_info_from_grammar(
             });
           }
           ASTNode::AST_Statements(ast_stmts) => {
-            let (sub_types, mut sub_errors) =
-              compile_expression_type(store, ast_stmts.statements.last().unwrap(), rule);
-
-            for sub_type in sub_types {
+            for sub_type in
+              compile_expression_type(j, store, ast_stmts.statements.last().unwrap(), rule)
+            {
               add_production_type(prod_types, &rule, sub_type);
             }
-
-            e.append(&mut sub_errors);
           }
           ast_expr => {
-            let (sub_types, mut sub_errors) = compile_expression_type(store, ast_expr, rule);
-
-            for sub_type in sub_types {
+            for sub_type in compile_expression_type(j, store, ast_expr, rule) {
               add_production_type(prod_types, &rule, sub_type);
             }
-
-            e.append(&mut sub_errors);
           }
         }
       } else {
@@ -150,8 +138,8 @@ fn add_production_type(
 }
 
 fn resolve_production_reduce_types(
+  j: &mut Journal,
   ast: &mut AScriptStore,
-  e: &mut Vec<SherpaError>,
   mut prod_types: ProductionTypesTable,
 ) {
   let mut pending_prods = VecDeque::from_iter(ast.g.parse_productions.iter().cloned().rev());
@@ -250,13 +238,13 @@ fn resolve_production_reduce_types(
             prime
           }
           (a, b) => {
-            e.push(ErrIncompatibleProductionScalerTypes::new(
-              prod_id,
-              ast.g.clone(),
+            add_incompatible_production_scalar_types_error(
+              j,
+              ast,
+              &prod_id,
               (a.clone(), prime_body_ids.iter().cloned().collect()),
               (b.clone(), body_ids.iter().cloned().collect()),
-              ast.get_type_names(),
-            ));
+            );
             prime
           }
         }
@@ -383,9 +371,10 @@ fn resolve_production_reduce_types(
     );
     match (!vector_types.is_empty(), !scalar_types.is_empty()) {
       (true, true) => {
-        e.push(ErrUnionOfScalarsAndVectors::new(
-          ast.g.clone(),
-          prod_id,
+        add_incompatible_production_types_error(
+          j,
+          ast,
+          &prod_id,
           scalar_types
             .iter()
             .flat_map(|(type_, bodies)| {
@@ -398,8 +387,7 @@ fn resolve_production_reduce_types(
               bodies.iter().map(|b| ((*type_).into(), *b)).collect::<Vec<_>>()
             })
             .collect(),
-          ast.get_type_names(),
-        ));
+        );
       }
       (true, false) => {
         debug_assert!(
@@ -413,12 +401,7 @@ fn resolve_production_reduce_types(
               &_types.iter().map(|v| v.into()).collect(),
             );
             if resolved_vector_type.is_undefined() {
-              e.push(ErrIncompatibleProductionVectorTypes::new(
-                prod_id,
-                ast.g.clone(),
-                _types.iter().cloned().collect(),
-                ast.get_type_names(),
-              ));
+              add_incompatible_production_vector_types_error(j, ast, &prod_id, _types);
             } else {
               ast.prod_types.insert(
                 prod_id,
@@ -438,7 +421,7 @@ fn resolve_production_reduce_types(
   }
 }
 
-fn resolve_structure_properties(store: &mut AScriptStore, e: &mut Vec<SherpaError>) {
+fn resolve_structure_properties(j: &mut Journal, store: &mut AScriptStore) {
   let g = store.g.clone();
 
   for struct_id in store.structs.keys().cloned().collect::<Vec<_>>() {
@@ -447,7 +430,7 @@ fn resolve_structure_properties(store: &mut AScriptStore, e: &mut Vec<SherpaErro
       let rule = g.get_rule(&rule_id).unwrap();
       match &rule.ast_definition {
         Some(Ascript { ast: ASTNode::AST_Struct(ast_struct), .. }) => {
-          e.append(&mut compile_struct_props(store, &struct_id, ast_struct, &rule).1);
+          compile_struct_props(j, store, &struct_id, ast_struct, &rule);
         }
         _ => {}
       }
@@ -563,16 +546,16 @@ pub fn get_resolved_vec_contents(
 }
 
 pub fn compile_expression_type(
+  j: &mut Journal,
   store: &mut AScriptStore,
   ast_expression: &ASTNode,
   rule: &Rule,
-) -> (Vec<TaggedType>, Vec<SherpaError>) {
+) -> Vec<TaggedType> {
   use AScriptTypeVal::*;
-  let mut errors = vec![];
 
   let types = match ast_expression {
     ASTNode::AST_Struct(ast_struct) => {
-      let struct_type = compile_struct_type(store, ast_struct, rule);
+      let struct_type = compile_struct_type(j, store, ast_struct, rule);
 
       vec![TaggedType {
         symbol_index: 9999,
@@ -585,18 +568,12 @@ pub fn compile_expression_type(
       tag:          rule.id,
       type_:        Token,
     }],
-    ASTNode::AST_Add(box AST_Add { left, .. }) => {
-      let (sub_types, mut sub_errors) = compile_expression_type(store, left, rule);
-      errors.append(&mut sub_errors);
-      sub_types
-    }
+    ASTNode::AST_Add(box AST_Add { left, .. }) => compile_expression_type(j, store, left, rule),
     ASTNode::AST_Vector(box AST_Vector { initializer, .. }) => {
       let mut types = BTreeSet::new();
 
       for node in initializer {
-        let (sub_types, mut sub_errors) = compile_expression_type(store, node, rule);
-
-        for sub_type in sub_types {
+        for sub_type in compile_expression_type(j, store, node, rule) {
           match (&sub_type).into() {
             GenericVec(sub_types) => match sub_types {
               Some(mut sub_type) => {
@@ -611,8 +588,6 @@ pub fn compile_expression_type(
             }
           }
         }
-
-        errors.append(&mut sub_errors);
       }
       if types.is_empty() {
         vec![TaggedType {
@@ -736,12 +711,13 @@ pub fn compile_expression_type(
     }],
   };
 
-  (types, errors)
+  types
 }
 
 /// Compiles a struct type from a production rule and
 /// ascript struct node.
 pub fn compile_struct_type(
+  j: &mut Journal,
   store: &mut AScriptStore,
   ast_struct: &AST_Struct,
   rule: &Rule,
@@ -757,7 +733,7 @@ pub fn compile_struct_type(
       // We don't care about the actual value at this point.
       ASTNode::AST_Property(box prop) => {
         if let Some(value) = &prop.value {
-          compile_expression_type(store, value, rule);
+          compile_expression_type(j, store, value, rule);
         } else {
           panic!("Prop has no value {}", prop.tok.blame(1, 1, "", None))
         }
@@ -797,13 +773,12 @@ pub fn compile_struct_type(
 /// of a struct.
 #[track_caller]
 pub fn compile_struct_props(
+  j: &mut Journal,
   store: &mut AScriptStore,
   id: &AScriptStructId,
   ast: &AST_Struct,
   rule: &Rule,
-) -> (AScriptTypeVal, Vec<SherpaError>) {
-  let mut errors = vec![];
-
+) -> AScriptTypeVal {
   // Check to see if this struct is already defined. If so, we'll
   // append new properties to it. otherwise we create a new
   // struct entry and add props.
@@ -824,7 +799,7 @@ pub fn compile_struct_props(
           panic!("Prop has no value! {}", prop.tok.blame(1, 1, "", None));
         };
 
-        for mut prop_type in compile_expression_type(store, value, rule).0 {
+        for mut prop_type in compile_expression_type(j, store, value, rule) {
           if prop_type.type_.is_vec() {
             prop_type.type_ = get_specified_vector_from_generic_vec_values(
               &prop_type.type_.get_subtypes().into_iter().collect(),
@@ -878,7 +853,8 @@ pub fn compile_struct_props(
                   existing.body_ids.insert(rule.id);
                 }
                 _ => {
-                  errors.push(ErrPropRedefinition::new(
+                  add_prop_redefinition_error(
+                    j,
                     store.structs.get(id).unwrap().type_name.clone(),
                     name.clone(),
                     existing.clone(),
@@ -888,7 +864,7 @@ pub fn compile_struct_props(
                       grammar_ref: rule.grammar_ref.clone(),
                       ..Default::default()
                     },
-                  ));
+                  );
                 }
               }
             }
@@ -919,7 +895,7 @@ pub fn compile_struct_props(
     btree_map::Entry::Vacant(_) => unreachable!("Struct should be defined at this point"),
   }
 
-  (AScriptTypeVal::Struct(id.clone()), errors)
+  AScriptTypeVal::Struct(id.clone())
 }
 
 pub fn get_production_types(

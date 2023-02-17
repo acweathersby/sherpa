@@ -6,16 +6,7 @@ use crate::{
   ascript::types::{ascript_first_node_id, ascript_last_node_id},
   compile::{GrammarRef, GrammarStore, ProductionId, Symbol, SymbolID},
   grammar::{compile::parser::sherpa::Export, create_production_guid_name, create_scanner_name},
-  types::{
-    self,
-    ImportedGrammarReferences,
-    ReduceFunctionId,
-    ReduceFunctionType,
-    RuleId,
-    RuleSymbol,
-    SherpaErrorSeverity,
-    StringId,
-  },
+  types::{self, ImportedGrammarReferences, RuleId, RuleSymbol, SherpaErrorSeverity, StringId},
   Journal,
   ReportType,
   SherpaError,
@@ -23,7 +14,7 @@ use crate::{
 };
 use lazy_static::__Deref;
 use regex::Regex;
-use sherpa_runtime::types::Token;
+use sherpa_runtime::types::{BlameColor, Token};
 use std::{
   collections::{btree_map, HashMap, HashSet, VecDeque},
   path::PathBuf,
@@ -148,20 +139,27 @@ fn process_production_node<'a>(
   let (prod_id, guid_name, plain_name) = get_production_identifiers(j, g, prod_node);
   match (prod_id, &prod_node.name_sym, prod_node, g.productions.get(&prod_id)) {
     (_, ASTNode::Production_Import_Symbol(_), ..) => {
-      j.report_mut().add_error(SherpaError::grammar_err {
-        inline_message: "Invalid production definition".to_string(),
-        loc: prod_node.tok.clone(),
-        message: format!("Cannot define a production of an imported grammar.\n     note: Try using the `+>` operator to extend an existing production with additional bodies."),
-        path: g.id.path.clone(),
-      });
+      j.report_mut().add_error(
+        SherpaError::SourceError {
+          loc:        prod_node.tok.clone(),
+          path:       g.id.path.clone(),
+          id:         "invalid-production",
+          msg:        "Cannot define a production of an imported grammar.".into(),
+          inline_msg: "".into(),
+          ps_msg:     "note: Try using the `+>` operator to extend an existing production with additional bodies.".into(),
+          severity:   SherpaErrorSeverity::Critical,
+        });
       prod_id
     }
     (prod, _, ..) if prod == Default::default() => {
-      j.report_mut().add_error(SherpaError::grammar_err {
-        inline_message: String::new(),
-        loc: prod_node.tok.clone(),
-        message: format!("This is not a valid production"),
-        path: g.id.path.clone(),
+      j.report_mut().add_error(SherpaError::SourceError {
+        loc:        prod_node.tok.clone(),
+        path:       g.id.path.clone(),
+        id:         "invalid-production",
+        msg:        "This is not a valid production.".into(),
+        inline_msg: "".into(),
+        ps_msg:     "".into(),
+        severity:   SherpaErrorSeverity::Critical,
       });
       prod_id
     }
@@ -202,24 +200,23 @@ fn process_production_node<'a>(
       prod_id
     }
     (_, _, prod, Some(existing_production)) => {
-      j.report_mut().add_error({
-        SherpaError::grammar_err_multi_location {
-          message:   format!("production {} already exists!", plain_name),
-          locations: vec![
-            SherpaError::grammar_err {
-              inline_message: String::new(),
-              loc: prod.tok.clone(),
-              message: format!("Redefinition of {} occurs here.", plain_name),
-              path: g.id.path.clone(),
-            },
-            SherpaError::grammar_err {
-              inline_message: String::new(),
-              loc: existing_production.loc.clone(),
-              message: format!("production {} first defined here.", plain_name),
-              path: g.id.path.clone(),
-            },
-          ],
-        }
+      j.report_mut().add_error(SherpaError::SourcesError {
+        id:       "production-redefinition",
+        sources:  vec![
+          (
+            prod.tok.clone(),
+            g.id.path.clone(),
+            format!("Redefinition of {} occurs here.", plain_name),
+          ),
+          (
+            existing_production.loc.clone(),
+            g.id.path.clone(),
+            format!("{} first defined here.", plain_name),
+          ),
+        ],
+        msg:      format!("Redefinition of {} is not allowed", plain_name),
+        ps_msg:   Default::default(),
+        severity: SherpaErrorSeverity::Critical,
       });
       ProductionId::default()
     }
@@ -338,12 +335,9 @@ fn get_symbol_details<'a>(
         break;
       }
       _ => {
-        j.report_mut().add_error(SherpaError::grammar_err {
-          inline_message: format!("Unexpected ASTNode {:?}", sym),
-          message: "[INTERNAL ERROR]".to_string(),
-          loc: sym.to_token(),
-          path: g.id.path.clone(),
-        });
+        j.report_mut().add_error(
+          SherpaError::SourceError { loc: sym.to_token(), path: g.id.path.clone(), id: "unknown-symbol-node", msg: "[INTERNAL ERROR]".into(), inline_msg: format!("Unexpected ASTNode {:?}", sym), ps_msg: "".into(), severity: SherpaErrorSeverity::Critical }
+         );
         break;
       }
     }
@@ -459,74 +453,68 @@ fn create_rule_vectors<'a>(
         // Except, if there are no functions within the production
         // bodies we can simply lower bodies of the group production
         // into the host production.
-        if let ASTNode::Group_Production(group) = sym {
-          // All bodies are plain without annotations or functions
-          if annotation.is_empty() && !some_rules_have_ast_definitions(&group.rules) {
-            // For each rule in the group clone the existing rule lists and
-            // process each list independently, inserting the new symbols
-            // into the existing bodies. We must make sure the indices are
-            // preserved since only the last symbol in each rule can be bound
-            // to the index of the group production symbol.
+        let ASTNode::Group_Production(group) = sym else {
+          unreachable!("Sym should be an ASTNode::Group_Production");
+        };
+        // All bodies are plain without annotations or functions
+        if annotation.is_empty() && !some_rules_have_ast_definitions(&group.rules) {
+          // For each rule in the group clone the existing rule lists and
+          // process each list independently, inserting the new symbols
+          // into the existing bodies. We must make sure the indices are
+          // preserved since only the last symbol in each rule can be bound
+          // to the index of the group production symbol.
 
-            let mut pending_bodies = vec![];
+          let mut pending_bodies = vec![];
 
-            for rule in &group.rules {
-              let (mut new_bodies, mut new_productions) = create_rule_vectors(
-                j,
-                g,
-                &rule.tok,
-                &rule.symbols.iter().map(|s| (9999, s)).collect(),
-                production_name,
-                list_index,
-              )?;
-              // The last symbol in each of these new bodies is set
-              // with the original symbol id
+          for rule in &group.rules {
+            let (mut new_bodies, mut new_productions) = create_rule_vectors(
+              j,
+              g,
+              &rule.tok,
+              &rule.symbols.iter().map(|s| (9999, s)).collect(),
+              production_name,
+              list_index,
+            )?;
+            // The last symbol in each of these new bodies is set
+            // with the original symbol id
 
-              for r in &mut new_bodies {
-                if r.1.is_empty() {
-                  dbg!(&rule.symbols);
-                }
-                r.1.last_mut()?.original_index = *index as u32;
+            for r in &mut new_bodies {
+              if r.1.is_empty() {
+                dbg!(&rule.symbols);
               }
-
-              pending_bodies.append(&mut new_bodies);
-              productions.append(&mut new_productions);
+              r.1.last_mut()?.original_index = *index as u32;
             }
 
-            let mut new_bodies = vec![];
-
-            for pending_body in pending_bodies {
-              for rule in &mut rules[original_bodies.clone()] {
-                let mut new_body = rule.clone();
-                new_body.1.extend(pending_body.1.iter().cloned());
-                new_bodies.push(new_body)
-              }
-            }
-
-            rules.splice(original_bodies, new_bodies);
-
-            // We do not to process the existing symbol as it is
-            // now replaced with its component rule symbols,
-            // so we'll skip the rest of the loop
-            continue;
-          } else {
-            let (prod_sym, production) = create_ast_production(
-              &(production_name.to_owned() + "_group_" + &index.to_string()),
-              &group.rules,
-              group.tok.clone(),
-            );
-
-            productions.push(Box::new(production));
-            generated_symbol = prod_sym;
-            sym = &generated_symbol;
+            pending_bodies.append(&mut new_bodies);
+            productions.append(&mut new_productions);
           }
+
+          let mut new_bodies = vec![];
+
+          for pending_body in pending_bodies {
+            for rule in &mut rules[original_bodies.clone()] {
+              let mut new_body = rule.clone();
+              new_body.1.extend(pending_body.1.iter().cloned());
+              new_bodies.push(new_body)
+            }
+          }
+
+          rules.splice(original_bodies, new_bodies);
+
+          // We do not to process the existing symbol as it is
+          // now replaced with its component rule symbols,
+          // so we'll skip the rest of the loop
+          continue;
         } else {
-          j.report_mut().add_error(SherpaError::grammar_err {
-            inline_message: String::new(),
-            message: "I don't know what to do with this.".to_string(),
-            loc: sym.to_token(),
-            path: g.id.path.clone(),
-          });
+          let (prod_sym, production) = create_ast_production(
+            &(production_name.to_owned() + "_group_" + &index.to_string()),
+            &group.rules,
+            group.tok.clone(),
+          );
+
+          productions.push(Box::new(production));
+          generated_symbol = prod_sym;
+          sym = &generated_symbol;
         }
       } else if is_list {
         // Create a new production that turns
@@ -608,14 +596,10 @@ fn create_rule_vectors<'a>(
             generated_symbol = prod_sym;
             sym = &generated_symbol;
           }
-          _ => {
-            j.report_mut().add_error(SherpaError::grammar_err {
-              inline_message: String::new(),
-              message: "I don't know what to do with this.".to_string(),
-              loc: sym.to_token(),
-              path: g.id.path.clone(),
-            });
-          }
+          _ => unreachable!(
+            "I don't know what to do with this. \n{}",
+            sym.to_token().blame(1, 1, "", BlameColor::RED)
+          ),
         }
       }
 
@@ -626,7 +610,7 @@ fn create_rule_vectors<'a>(
             sym_id: id,
             annotation: annotation.clone(),
             consumable: !is_shift_nothing,
-            exclusive: is_exclusive,
+            precedence: is_exclusive as u32,
             tok: sym.to_token(),
             grammar_ref: g.id.clone(),
             ..Default::default()
@@ -898,11 +882,14 @@ fn get_productions_names(
       Some((create_production_guid_name(&g.id.guid_name, &prod_sym.name), prod_sym.name.clone()))
     }
     _ => {
-      j.report_mut().add_error(SherpaError::grammar_err {
-        inline_message: String::new(),
-        message: "Unexpected node: Unable to resolve production name of this node!".to_string(),
-        loc: name_sym.to_token().into(),
-        path: g.id.path.clone(),
+      j.report_mut().add_error(SherpaError::SourceError {
+        loc:        name_sym.to_token(),
+        path:       g.id.path.clone(),
+        id:         "unresolved-production-symbol",
+        msg:        "Unexpected node: Unable to resolve production name of this node!".into(),
+        inline_msg: "".into(),
+        ps_msg:     "".into(),
+        severity:   SherpaErrorSeverity::Critical,
       });
       None
     }

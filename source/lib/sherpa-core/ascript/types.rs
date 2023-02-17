@@ -2,6 +2,7 @@ use super::compile::compile_ascript_store;
 use crate::{
   grammar::{compile::parser::sherpa::ASTNode, hash_id_value_u64},
   types::*,
+  Journal,
 };
 use std::{
   collections::{BTreeMap, BTreeSet, HashMap},
@@ -508,7 +509,7 @@ pub struct AScriptStore {
 }
 
 impl AScriptStore {
-  pub fn new(grammar: Arc<GrammarStore>) -> SherpaResult<Self> {
+  pub fn new(j: &mut Journal) -> SherpaResult<Self> {
     let mut new_self = AScriptStore {
       structs: BTreeMap::new(),
       props: BTreeMap::new(),
@@ -516,12 +517,17 @@ impl AScriptStore {
       body_reduce_fn: BTreeMap::new(),
       ast_type_name: "ASTNode".to_string(),
       struct_lookups: None,
-      g: grammar,
+      g: j.grammar()?,
     };
 
-    match compile_ascript_store(&mut new_self) {
-      errors if errors.have_errors() => SherpaResult::MultipleErrors(errors),
-      _ => SherpaResult::Ok(new_self),
+    j.set_active_report("Ascript Store Compile", crate::ReportType::AScriptCompile);
+
+    compile_ascript_store(j, &mut new_self);
+
+    if j.report().have_errors_of_type(SherpaErrorSeverity::Critical) {
+      SherpaResult::Err(j.report().into())
+    } else {
+      SherpaResult::Ok(new_self)
     }
   }
 

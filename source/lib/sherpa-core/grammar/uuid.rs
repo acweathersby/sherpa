@@ -6,6 +6,14 @@ use std::{
   path::PathBuf,
 };
 
+pub fn hash_values(values: &[&dyn Fn(&mut DefaultHasher)]) -> u64 {
+  let mut s = DefaultHasher::new();
+  for value_getter in values {
+    value_getter(&mut s);
+  }
+  s.finish()
+}
+
 pub fn hash_id_value_u64<T: Hash>(t: T) -> u64 {
   let mut s = DefaultHasher::new();
 

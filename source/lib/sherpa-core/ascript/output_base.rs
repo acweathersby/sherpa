@@ -283,7 +283,6 @@ impl<'a> AscriptWriterUtils<'a> {
                   if let Some(ref_) = ref_ {
                     predecessors.push(ref_);
                   }
-                  println!("----- {string}");
 
                   string
                 }
@@ -480,7 +479,7 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
         match (i, used_tokens.contains(&i)) {
           (0, _) => Some((self.utils.get_token_name)(tk_i)),
           (i, _) if i == (rule.syms.len() - 1) => Some((self.utils.get_token_name)(tk_i)),
-          (i, true) => Some((self.utils.get_token_name)(tk_i)),
+          (_, true) => Some((self.utils.get_token_name)(tk_i)),
           _ => None,
         },
         indices.contains(&i).then(|| format!("i{i}")),
@@ -540,7 +539,7 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
 
     let mut reduce_functions_map = Vec::new();
 
-    for (id, rule) in &ordered_rules {
+    for (bc_id, rule) in &ordered_rules {
       let prod_id = rule.prod_id;
       let prod_data = store.prod_types.get(&prod_id).unwrap();
 
@@ -561,7 +560,7 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
       }
 
       let mut w = self.checkpoint::<Vec<u8>>();
-      let fn_name = format!("reducer_{:0>3}", id);
+      let fn_name = format!("reducer_{:0>3}", bc_id.unwrap());
 
       match w.method(
         &format!("{}", preamble.replace("%%", &fn_name)),
@@ -674,12 +673,6 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
   }
 }
 
-impl<'a> AscriptWriter<'a, Vec<u8>> {
-  pub fn debug_print(self) {
-    println!("{}", String::from_utf8(self.writer.get_data()).unwrap());
-  }
-}
-
 // Writing stages.
 // Pramble data -
 //  - Base type info
@@ -782,10 +775,6 @@ impl Ref {
       is_mutable: false,
       is_token: false,
     }
-  }
-
-  pub(crate) fn get_type(&self) -> AScriptTypeVal {
-    self.ast_type.clone()
   }
 
   pub(crate) fn make_mutable(&mut self) -> &mut Self {

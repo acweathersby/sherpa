@@ -1,5 +1,5 @@
 use super::utils::{build_grammar_from_file, get_test_grammar_path};
-use crate::{types::SherpaErrorSeverity, SherpaError};
+use crate::{compile::GrammarStore, types::SherpaErrorSeverity, Journal, SherpaError};
 
 /// Error should be generated when an import production is referenced
 /// that doesn't exist in the imported grammar.
@@ -14,7 +14,7 @@ fn missing_import_production() {
 
   assert!(j.get_report(crate::ReportType::GrammarCompile(Default::default()), |r| {
     if r.have_errors_of_type(SherpaErrorSeverity::Critical) {
-      let error = &r.errors[0];
+      let error = &r.errors()[0];
 
       assert!(matches!(error, SherpaError::SourceError { .. }));
 
@@ -36,12 +36,15 @@ fn missing_import_production() {
 #[test]
 fn invalid_dependency() {
   let path = get_test_grammar_path("errors/nonexistent_import_source/A.sg");
-  let (j, _) = build_grammar_from_file(path.clone(), Default::default());
+  let mut j = Journal::new(None);
+  GrammarStore::from_path(&mut j, path.clone());
+
+  j.flush_reports();
 
   assert!(j.debug_error_report(), "Expected to see errors");
 
   assert!(j.get_report(crate::ReportType::GrammarCompile((&path).into()), |r| {
-    let error = &r.errors[0];
+    let error = &r.errors()[0];
 
     assert!(matches!(error, SherpaError::SourceError { .. }));
 
@@ -64,7 +67,7 @@ fn missing_production_definition() {
   assert!(j.debug_error_report(), "Expected to see errors");
 
   assert!(j.get_report(crate::ReportType::GrammarCompile((&path).into()), |r| {
-    let error = &r.errors[0];
+    let error = &r.errors()[0];
 
     assert!(matches!(error, SherpaError::SourceError { .. }));
 

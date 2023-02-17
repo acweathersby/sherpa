@@ -1,6 +1,11 @@
 use super::Timing;
-use crate::types::*;
-use std::{collections::HashMap, time::Instant};
+use crate::{grammar::hash_id_value_u64, types::*};
+use std::{
+  collections::{BTreeMap, HashMap},
+  fmt::{Debug, Display},
+  hash::Hash,
+  time::Instant,
+};
 
 /// Selection classes for different report types, used to filter reports results.
 ///
@@ -51,24 +56,40 @@ pub struct Report {
   /// At table mapping a report note label to a
   /// note body.
   pub(crate) notes:       Vec<(&'static str, String)>,
-  pub(crate) errors:      Vec<SherpaError>,
+  pub(crate) _errors:     BTreeMap<u64, SherpaError>,
   pub(crate) timings:     HashMap<&'static str, Timing>,
   pub(crate) create_time: Instant,
   pub(crate) error_level: SherpaErrorSeverity,
+  pub(super) is_sink:     bool,
+}
+
+impl Hash for Report {
+  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    self.name.hash(state);
+    self.report_type.hash(state);
+    self.notes.hash(state);
+    self._errors.hash(state);
+    self.create_time.hash(state);
+    self.error_level.hash(state);
+  }
 }
 
 impl Report {
-  pub(crate) fn stop_all_timers(&mut self) {
-    for (_, timer) in &mut self.timings {
-      if timer.is_active() {
-        timer.stop();
-      }
+  ///
+  pub fn display_errors(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    for (_, error) in &self._errors {
+      Display::fmt(&error, f)?;
     }
+    std::fmt::Result::Ok(())
+  }
+
+  pub(super) fn create_sink() -> Self {
+    Self { is_sink: true, ..Default::default() }
   }
 
   /// Returns `true` if the report contains any error with the matching severity
   pub fn have_errors_of_type(&self, severity: SherpaErrorSeverity) -> bool {
-    self.error_level.intersects(severity)
+    self.error_level == severity
   }
 
   /// Returns the report's type
@@ -77,8 +98,40 @@ impl Report {
   }
 
   /// Returns a reference to the report's errors.
-  pub fn errors(&self) -> &Vec<SherpaError> {
-    &self.errors
+  pub fn errors(&self) -> Vec<&SherpaError> {
+    self._errors.values().collect()
+  }
+
+  /// Returns the `return_val` in `SherpaResult::Ok()` if there are no errors in the report,
+  /// otherwise returns a `SherpResult::Err(SherpaError::Report)` type result.
+  #[track_caller]
+  pub fn ok_or_convert_to_error<T>(&mut self, return_val: T) -> SherpaResult<T> {
+    match (self._errors.len() == 0, self.is_sink) {
+      (true, false) => SherpaResult::Ok(return_val),
+      (false, false) => {
+        let instant = Instant::now();
+        for timer in self.timings.values_mut() {
+          timer.set_end(instant)
+        }
+        SherpaResult::Err((&*self).into())
+      }
+      (_, true) => SherpaResult::Err("Invalid attempt to evaluate a report sink".into()),
+    }
+  }
+
+  /// Prints all errors to stdout and returns `true`
+  /// if any errors were printed.
+  pub fn debug_error(&self) -> bool {
+    let errors = self.errors();
+    if errors.len() > 0 {
+      println!("\n{:=<80}\nReport [{}] errors:", "", self.name);
+      for err in self.errors() {
+        println!("{}", err);
+      }
+      true
+    } else {
+      false
+    }
   }
 
   /// Get contents of the first note whose name matches `note_name`
@@ -91,8 +144,11 @@ impl Report {
   }
 
   pub(crate) fn add_error(&mut self, error: SherpaError) {
-    self.error_level |= error.get_severity();
-    self.errors.push(error);
+    self.error_level = error.get_severity().max(self.error_level);
+    let id = hash_id_value_u64(&error);
+    if !self._errors.contains_key(&id) {
+      self._errors.insert(id, error);
+    }
   }
 
   pub(crate) fn add_note(&mut self, note_name: &'static str, note: String) {
@@ -108,17 +164,7 @@ impl Report {
 
     match self.timings.entry(timer_label) {
       std::collections::hash_map::Entry::Occupied(mut e) => {
-        e.get_mut().end = instant;
-      }
-      std::collections::hash_map::Entry::Vacant(_) => {}
-    }
-  }
-
-  pub(crate) fn report_duration(&mut self, timer_label: &'static str) {
-    match self.timings.entry(timer_label) {
-      std::collections::hash_map::Entry::Occupied(e) => {
-        let timing = e.get();
-        eprintln!("{} took {:?}", timer_label, (timing.end - timing.start))
+        e.get_mut().set_end(instant);
       }
       std::collections::hash_map::Entry::Vacant(_) => {}
     }
@@ -139,7 +185,7 @@ impl Report {
         .map(|(label, body)| format!("---------------\n{}:\n{:?}", label, body))
         .collect::<Vec<_>>()
         .join("\n"),
-      self.errors.iter().map(|err| format!("\n{}", err)).collect::<Vec<_>>().join("\n")
+      self._errors.values().map(|err| format!("\n{}", err)).collect::<Vec<_>>().join("\n")
     )
   }
 
@@ -180,11 +226,12 @@ impl Default for Report {
     Self {
       report_type: ReportType::Sink,
       notes:       Default::default(),
-      errors:      Default::default(),
+      _errors:     Default::default(),
       timings:     Default::default(),
       create_time: Instant::now(),
       name:        Default::default(),
       error_level: SherpaErrorSeverity::None,
+      is_sink:     false,
     }
   }
 }

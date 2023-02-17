@@ -1,6 +1,7 @@
-use std::sync::Arc;
-
-use bitmask_enum::bitmask;
+use std::{
+  ops::{Add, Sub},
+  sync::Arc,
+};
 
 use crate::{
   grammar::{
@@ -10,14 +11,56 @@ use crate::{
   types::*,
 };
 
-use super::{GrammarRef, Item};
+use super::GrammarRef;
 
-#[bitmask]
-pub enum RecursionType {
-  NONE  = 0,
-  LEFT_DIRECT = 1,
-  LEFT_INDIRECT = 2,
-  RIGHT = 4,
+#[derive(Debug, Hash, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct RecursionType(u8);
+
+impl RecursionType {
+  pub const LEFT_DIRECT: RecursionType = Self(1);
+  pub const LEFT_INDIRECT: RecursionType = Self(2);
+  pub const NONE: RecursionType = Self(0);
+  pub const RIGHT: RecursionType = Self(4);
+
+  pub fn is_direct_left(&self) -> bool {
+    (self.0 & (Self::LEFT_DIRECT.0)) > 0
+  }
+
+  pub fn is_indirect_left(&self) -> bool {
+    (self.0 & (Self::LEFT_INDIRECT.0)) > 0
+  }
+
+  pub fn is_left(&self) -> bool {
+    self.is_direct_left() || self.is_indirect_left()
+  }
+
+  pub fn is_right(&self) -> bool {
+    (self.0 & Self::RIGHT.0) > 0
+  }
+
+  pub fn is_recursive(&self) -> bool {
+    self.0 != 0
+  }
+
+  pub fn is_not_recursive(&self) -> bool {
+    self.0 == 0
+  }
+}
+
+impl Add<RecursionType> for RecursionType {
+  type Output = RecursionType;
+
+  fn add(self, rhs: RecursionType) -> Self::Output {
+    RecursionType(self.0 | rhs.0)
+  }
+}
+
+impl Sub<RecursionType> for RecursionType {
+  type Output = RecursionType;
+
+  fn sub(self, rhs: RecursionType) -> Self::Output {
+    RecursionType(self.0 & !rhs.0)
+  }
 }
 
 /// A convenient wrapper around information used to construct parser entry points
@@ -116,12 +159,12 @@ pub struct Production {
   pub loc: Token,
   /// An integer value used by bytecode
   /// to refer to this production
-  pub bytecode_id: u32,
+  pub bytecode_id: Option<u32>,
   /// If this is a scanner production,
   /// then this is a non-zero integer value
   /// that mirrors the TokenProduction or Defined* symbol
   /// bytecode_id that this production produces.
-  pub symbol_bytecode_id: u32,
+  pub symbol_bytecode_id: Option<u32>,
   /// The symbol of this production
   pub sym_id: SymbolID,
 }
@@ -157,7 +200,7 @@ pub struct RuleSymbol {
   pub scanner_index: u32,
 
   /// Always captures, regardless of other symbols
-  pub exclusive: bool,
+  pub precedence: u32,
 
   pub tok: Token,
 
@@ -174,7 +217,7 @@ impl Default for RuleSymbol {
       consumable: Default::default(),
       scanner_length: Default::default(),
       scanner_index: Default::default(),
-      exclusive: Default::default(),
+      precedence: Default::default(),
       tok: Default::default(),
       grammar_ref: Arc::new(Default::default()),
     }
@@ -201,7 +244,7 @@ impl ReduceFunctionId {
 /// A single rule derived from a production
 #[derive(Debug, Clone, Default)]
 pub struct Rule {
-  /// TODO: Docs
+  /// A list of RuleSymbols
   pub syms: Vec<RuleSymbol>,
   /// TODO: Docs
   pub len: u16,
@@ -210,14 +253,17 @@ pub struct Rule {
   /// TODO: Docs
   pub id: RuleId,
   /// The ordered index of this rule IF this rule is
-  /// a normal parse rule reachable from the root rules.
-  pub bytecode_id: u32,
+  /// a normal parse rule reachable from any of the start rules.
+  /// Otherwise this value is u32::MAX
+  pub bytecode_id: Option<u32>,
   /// TODO: Docs
   pub ast_definition: Option<Ascript>,
   /// A token that covers the definition of this rule.
   pub tok: Token,
   /// A reference to the identifiers of the owning grammar.
   pub grammar_ref: Arc<GrammarRef>,
+  /// TODO: Docs
+  pub is_exclusive: bool,
 }
 
 impl PartialEq for Rule {

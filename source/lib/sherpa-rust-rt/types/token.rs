@@ -367,12 +367,13 @@ impl Token {
   }
 
   #[inline(always)]
-  fn find_next_line(source: &[u8], mut line: i64) -> i64 {
-    line += 1;
-    while (line as usize) < source.len() && source[line as usize] as char != '\n' {
-      line += 1;
+  fn find_next_line(source: &[u8], line: i64) -> i64 {
+    let mut i = line;
+    let len = source.len() as i64;
+    while i < len && (i < 0 || source[i as usize] as char != '\n' || i == line) {
+      i += 1;
     }
-    line
+    i as i64
   }
 
   #[inline(always)]
@@ -455,10 +456,16 @@ impl Token {
       }
 
       loop {
+        let max_size = source.len() as i64;
         next_line = Self::find_next_line(&source, prev_line);
-        if let Ok(utf_string) =
-          String::from_utf8(Vec::from(&source[(prev_line + 1) as usize..next_line as usize]))
-        {
+
+        if prev_line >= max_size {
+          break;
+        }
+
+        if let Ok(utf_string) = String::from_utf8(Vec::from(
+          &source[(prev_line + 1).min(max_size) as usize..next_line.min(max_size) as usize],
+        )) {
           let leading_spaces = utf_string.len() - utf_string.trim_start().len();
           let diff = usize::max(leading_spaces, col_diff);
           let highlight_len = ((utf_string.len() as i64)

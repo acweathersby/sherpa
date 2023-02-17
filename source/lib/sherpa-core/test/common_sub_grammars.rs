@@ -1,9 +1,5 @@
-use crate::{
-  compile::{compile_bytecode, compile_states, optimize_ir_states, GrammarStore},
-  debug::collect_shifts_and_skips,
-  Journal,
-  SherpaResult,
-};
+use super::utils::TestConfig;
+use crate::{journal::config::DebugConfig, test::utils::test_runner, Config, SherpaResult};
 
 #[test]
 fn escaped_string() -> SherpaResult<()> {
@@ -11,11 +7,15 @@ fn escaped_string() -> SherpaResult<()> {
     r##"
         <> string > tk:string_tk
         
-        <> string_tk > '"' ( c:sym | c:num | c:sp | c:id | escape )(*) "\""
+        <> string_tk > '"' ( c:sym | c:num | c:sp | c:id | escape )(*) '\"'
         
         <> escape > "\\"  ( c:sym | c:num | c:sp | c:id )
         "##,
-    &[(r##""""##, true), (r##""1234""##, true), (r##""12\"34""##, true)],
+    &[
+      ("string", r##""""##, true),
+      ("string", r##""1234""##, true),
+      ("string", r##""12\"34""##, true),
+    ],
   )
 }
 
@@ -27,7 +27,7 @@ fn scientific_number() -> SherpaResult<()> {
     
     <> number > ( '+' | '-' )? c:num(+) ( '.' c:num(+) )? ( ( 'e' | 'E' ) ( '+' | '-' )? c:num(+) )?
     "##,
-    &[(r##"2.3e-22"##, true), (r##"0.3e-22"##, true)],
+    &[("sci_number", r##"2.3e-22"##, true), ("sci_number", r##"0.3e-22"##, true)],
   )
 }
 
@@ -41,65 +41,59 @@ IGNORE { c:sp c:nl }
 
 <> value > tk:string ':' tk:string
 
-    | "\"test\"" ':' c:num
+    | '\"test\"' ':' c:num
 
-<> string > '"' ( c:sym | c:num | c:sp | c:id | escape )(*) "\""
+<> string > '"' ( c:sym | c:num | c:sp | c:id | escape )(*) '\"'
     
 <> escape > "\\"  ( c:sym | c:num | c:sp | c:id )
     "##,
     &[
-      (r##"{ "test" : 2  }"##, true),
-      (r##"{ "tester" : "mango"  }"##, true),
-      (r##"{ "tester" : 2  }"##, false),
-      (r##"{ "test" : "mango"  }"##, false),
+      ("json", r##"{ "test" : 2  }"##, true),
+      ("json", r##"{ "tester" : "mango"  }"##, true),
+      ("json", r##"{ "tester" : 2  }"##, false),
+      ("json", r##"{ "test" : "mango"  }"##, false),
     ],
   )
 }
 
-fn compile_and_run_grammar(grammar: &str, test_inputs: &[(&str, bool)]) -> SherpaResult<()> {
-  let mut j = Journal::new(None);
+#[test]
+pub fn cpp_comment_blocks() -> SherpaResult<()> {
+  compile_and_run_grammar(
+    r#"
+<> A > tk:comment
 
-  let g = GrammarStore::from_str(&mut j, grammar);
+<> comment > tk:block  | tk:line  | c:id(+)
+   
+<> block > "/*"  ( c:sym | c:id | c:sp )(*) "*/"
 
-  assert!(!j.debug_error_report());
+<> line > "//"  ( c:sym | c:id | c:sp )(*) c:nl?
 
-  let g = g?;
+"#,
+    &[
+      ("A", r##"//test"##, true),
+      ("A", r##"//\n"##, true),
+      ("A", r##"/* triangle */"##, true),
+      ("A", r##"walker"##, true),
+    ],
+  )
+}
 
-  let states = compile_states(&mut j, 1)?;
-
-  //j.debug_print_reports(crate::ReportType::ScannerCompile(ScannerStateId::default()));
-
-  let ir_states = optimize_ir_states(&mut j, states);
-
-  let bc = compile_bytecode(&mut j, ir_states);
-
-  // eprintln!("{}", generate_disassembly(&bc, Some(&mut j)));
-
-  for (input, should_complete) in test_inputs {
-    match collect_shifts_and_skips(
-      input,
-      *bc.state_name_to_offset.get(g.get_exported_productions()[0].guid_name)?,
-      g.get_exported_productions()[0].production.bytecode_id,
-      &bc.bytecode,
-      None,
-    ) {
-      SherpaResult::Ok((shifts, _)) => {
-        if !should_complete {
-          return SherpaResult::Err(
-            format!("The input [ {} ] should have failed to parse", input).into(),
-          );
-        }
-        dbg!(shifts);
-      }
-      _ => {
-        if *should_complete {
-          return SherpaResult::Err(
-            format!("The input [{}] should have been parsed", input).into(),
-          );
-        }
-      }
-    };
-  }
+fn compile_and_run_grammar(
+  grammar: &'static str,
+  test_inputs: &[(&str, &str, bool)],
+) -> SherpaResult<()> {
+  test_runner(
+    &test_inputs.iter().map(|a| a.into()).collect::<Vec<_>>(),
+    Some(Config {
+      debug: DebugConfig { allow_parse_state_name_collisions: true },
+      ..Default::default()
+    }),
+    TestConfig {
+      bytecode_parse: true,
+      grammar_string: Some(grammar),
+      ..Default::default()
+    },
+  )?;
 
   SherpaResult::Ok(())
 }

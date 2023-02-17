@@ -1,9 +1,5 @@
-use std::{
-  collections::{BTreeMap, BTreeSet},
-  sync::Arc,
-};
-
-use crate::{compile::BytecodeOutput, types::*, Journal};
+use crate::{bytecode::BytecodeOutput, types::*, Journal};
+use std::collections::BTreeSet;
 
 fn header(bc_address: usize) -> String {
   format!("{}| ", address_string(bc_address))
@@ -12,45 +8,10 @@ fn header(bc_address: usize) -> String {
 pub(crate) fn address_string(bc_address: usize) -> String {
   format!("{:0>6X}", bc_address)
 }
-
-pub(crate) struct BytecodeGrammarLookups {
-  g: Arc<GrammarStore>,
-  bc_to_prod: BTreeMap<u32, ProductionId>,
-  _bc_to_rule: BTreeMap<u32, RuleId>,
-  bc_to_symbol: BTreeMap<u32, SymbolID>,
-}
-
-impl BytecodeGrammarLookups {
-  pub fn new(g: Arc<GrammarStore>) -> Self {
-    let bc_to_prod = g
-      .productions
-      .iter()
-      .filter(|(_, p)| !p.is_scanner)
-      .map(|(id, p)| (p.bytecode_id, *id))
-      .collect::<BTreeMap<_, _>>();
-
-    let bc_to_rule = g.rules.iter().map(|(id, r)| (r.bytecode_id, *id)).collect::<BTreeMap<_, _>>();
-
-    let bc_to_symbol =
-      g.symbols.iter().map(|(id, s)| (s.bytecode_id, *id)).collect::<BTreeMap<_, _>>();
-
-    BytecodeGrammarLookups { g, bc_to_prod, _bc_to_rule: bc_to_rule, bc_to_symbol }
-  }
-
-  pub fn get_prod(&self, bytecode: u32) -> Option<&Production> {
-    self.g.productions.get(self.bc_to_prod.get(&bytecode)?)
-  }
-
-  pub fn get_sym(&self, bytecode: u32) -> Option<&Symbol> {
-    self.g.symbols.get(self.bc_to_symbol.get(&bytecode)?)
-  }
-}
-//
-
 pub(crate) fn disassemble_state(
   bc: &[u32],
   state_address: usize,
-  lu: Option<&BytecodeGrammarLookups>,
+  lu: Option<&GrammarStore>,
 ) -> (String, usize) {
   use disassemble_state as ds;
   use header as dh;
@@ -63,9 +24,13 @@ pub(crate) fn disassemble_state(
     let instruction = bc[state_address] & INSTRUCTION_CONTENT_MASK;
     match bc[state_address] & INSTRUCTION_HEADER_MASK {
       Instruction::I00_PASS => (format!("\n{}PASS", dh(so)), so + 1),
-      Instruction::I01_SHIFT => {
+      Instruction::I01_SHIFT_TOKEN => {
         let (string, offset) = ds(bc, so + 1, lu);
-        (format!("\n{}SHFT", dh(so)) + &string, offset + 1)
+        if instruction & 1 == 0 {
+          (format!("\n{}SHFT", dh(so)) + &string, offset + 1)
+        } else {
+          (format!("\n{}SHFT-SCAN", dh(so)) + &string, offset)
+        }
       }
       Instruction::I02_GOTO => {
         let (string, offset) = ds(bc, so + 1, lu);
@@ -94,7 +59,7 @@ pub(crate) fn disassemble_state(
         let (string, offset) = ds(bc, so + 1, lu);
 
         if let Some(lu) = lu {
-          let name = &lu.get_prod(production_id).unwrap().guid_name;
+          let name = &lu.get_production_by_bytecode_id(production_id).unwrap().guid_name;
           (format!("\n{}PROD SET TO {}     // {}", dh(so), production_id, name,) + &string, offset)
         } else {
           (format!("\n{}PROD SET TO {}", dh(so), production_id,) + &string, offset)
@@ -148,9 +113,9 @@ pub(crate) fn disassemble_state(
           offset,
         )
       }
-      Instruction::I07_SCAN => {
+      Instruction::I07_PEEK_RESET => {
         let (string, offset) = ds(bc, so + 1, lu);
-        (format!("\n{}SCAN", dh(so)) + &string, offset)
+        (format!("\n{}PKRST", dh(so)) + &string, offset)
       }
       Instruction::I08_POP => (format!("\n{}POP", dh(so)), so + 1),
       Instruction::I09_VECTOR_BRANCH => generate_table_string(
@@ -181,16 +146,30 @@ pub(crate) fn disassemble_state(
           )
         },
       ),
-      Instruction::I11_SET_FAIL_STATE => {
+      Instruction::I11_SET_CATCH_STATE => {
         let (string, offset) = ds(bc, so + 1, lu);
         (format!("\n{}FSET", dh(so)) + &string, offset)
       }
-      Instruction::I12_REPEAT => {
+      Instruction::I12_SKIP => {
         let (string, offset) = ds(bc, so + 1, lu);
-        (format!("\n{}REPT", dh(so)) + &string, offset)
+        if instruction & 1 == 0 {
+          (format!("\n{}SKIP", dh(so)) + &string, offset)
+        } else {
+          (format!("\n{}SKIP-CHAR", dh(so)) + &string, offset)
+        }
       }
-      Instruction::I13_NOOP => (format!("\n{}NOOP", dh(so)), so + 1),
-      Instruction::I14_ASSERT_SHIFT => (format!("\n{}ASTC", dh(so)), so + 1),
+      Instruction::I13_SHIFT_SCANNER => {
+        let (string, offset) = ds(bc, so + 1, lu);
+        (format!("\n{}SHFS", dh(so)) + &string, offset)
+      }
+      Instruction::I14_PEEK_TOKEN => {
+        let (string, offset) = ds(bc, so + 1, lu);
+        if instruction & 1 == 0 {
+          (format!("\n{}PEEK", dh(so)) + &string, offset)
+        } else {
+          (format!("\n{}PEEK-TOK", dh(so)) + &string, offset)
+        }
+      }
       Instruction::I15_FAIL => (format!("\n{}FAIL", dh(so)), so + 1),
       _ => (format!("\n{}UNDF", dh(so)), so + 1),
     }
@@ -203,7 +182,7 @@ type GetOffsetTokenIdPair =
 pub(crate) fn generate_table_string(
   bc: &[u32],
   idx: usize,
-  lu: Option<&BytecodeGrammarLookups>,
+  lu: Option<&GrammarStore>,
   table_name: &str,
   get_offset_token_id_pair: GetOffsetTokenIdPair,
 ) -> (String, usize) {
@@ -261,7 +240,7 @@ fn create_failure_entry(entry_offset: usize, goto_offset: usize) -> String {
   format!("\n{}---- JUMP TO {} ON FAIL", header(entry_offset), address_string(goto_offset))
 }
 fn create_normal_entry(
-  lu: Option<&BytecodeGrammarLookups>,
+  lu: Option<&GrammarStore>,
   token_id: u32,
   input_type: u32,
   idx: usize,
@@ -280,7 +259,7 @@ fn create_normal_entry(
 }
 
 fn create_skip_entry(
-  lu: Option<&BytecodeGrammarLookups>,
+  lu: Option<&GrammarStore>,
   token_id: u32,
   input_type: u32,
   idx: usize,
@@ -307,16 +286,16 @@ fn input_type_to_name(input_type: u32) -> &'static str {
   }
 }
 
-fn get_input_id(lu: Option<&BytecodeGrammarLookups>, token_id: u32, input_type: u32) -> String {
-  if let Some(lu) = lu {
+fn get_input_id(g: Option<&GrammarStore>, token_id: u32, input_type: u32) -> String {
+  if let Some(g) = g {
     match input_type {
       InputType::T01_PRODUCTION => {
-        let production = &lu.get_prod(token_id).unwrap().name;
+        let production = &g.get_production_by_bytecode_id(token_id).unwrap().name;
         format!("{:<3} [{:^1}]", token_id, production)
       }
       InputType::T02_TOKEN => {
-        if let Some(symbol) = lu.get_sym(token_id) {
-          format!("{:<3} [{:^1}]", token_id, symbol.friendly_name)
+        if let SherpaResult::Ok(sym_id) = g.get_symbol_id_by_bytecode_id(token_id) {
+          format!("{:<3} [{:^1}]", token_id, sym_id.debug_string(g))
         } else {
           token_id.to_string()
         }
@@ -348,8 +327,8 @@ fn get_input_id(lu: Option<&BytecodeGrammarLookups>, token_id: u32, input_type: 
 /// This allows the use of this function in situations where the bytecode is the only
 /// thing a user may have access to but they still want to get some insight in to the
 /// operations of the state machine.
-pub fn generate_disassembly(output: &BytecodeOutput, j: Option<&mut Journal>) -> String {
-  let lu = j.map(|j| BytecodeGrammarLookups::new(j.grammar().unwrap()));
+pub fn generate_disassembly(output: &BytecodeOutput, j: &mut Journal) -> String {
+  let g = j.grammar().unwrap();
 
   let mut states_strings = vec![];
   let mut offset: usize = 0;
@@ -361,7 +340,7 @@ pub fn generate_disassembly(output: &BytecodeOutput, j: Option<&mut Journal>) ->
         .push(output.offset_to_state_name.get(&(offset as u32)).cloned().unwrap_or_default())
     }
 
-    let (string, next) = disassemble_state(&output.bytecode, offset, lu.as_ref());
+    let (string, next) = disassemble_state(&output.bytecode, offset, Some(&g));
 
     offset = next;
     states_strings.push(string);

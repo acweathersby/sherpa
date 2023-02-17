@@ -106,8 +106,8 @@ impl<'a> ByteReader for UTF8StringReader<'a> {
   }
 
   #[inline(always)]
-  fn set_cursor_to(&mut self, off: u32, line_num: u32, line_off: u32) -> u64 {
-    if self.cursor != off as usize {
+  fn set_cursor_to(&mut self, off: usize, line_num: u32, line_off: u32) -> u64 {
+    if self.cursor != off {
       let diff = off as i32 - self.cursor as i32;
 
       self.line_num = line_num as usize;

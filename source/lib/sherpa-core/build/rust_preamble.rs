@@ -15,7 +15,6 @@ use sherpa_runtime::types::{{ast::*, *}};
         ),
       )))
     }),
-    require_ascript: true,
-    require_bytecode: false,
+    ..Default::default()
   }
 }

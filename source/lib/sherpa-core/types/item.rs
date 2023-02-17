@@ -1,177 +1,20 @@
-use crate::{
-  debug::debug_items,
-  grammar::{get_closure_cached, get_closure_cached_with_state, get_production_start_items},
+use super::{
+  graph::{Origin, OutScopeIndex, State, StateId},
+  *,
 };
-
-use super::*;
+use crate::grammar::{get_closure_cached, get_production_start_items};
 use std::{
-  collections::{BTreeSet, VecDeque},
-  fmt::Display,
+  collections::{
+    btree_set::{self},
+    BTreeSet,
+    VecDeque,
+  },
+  fmt::{format, Display},
+  io::Chain,
+  iter::Filter,
+  slice,
   vec,
 };
-
-use super::SherpaResult;
-
-#[derive(PartialEq, Eq, Debug, Clone, Copy, Hash, PartialOrd, Ord)]
-pub(crate) struct ItemState {
-  current_lane: u32,
-  prev_lane:    u32,
-
-  /// An index to the original object that produced this item, be it a production, a symbol,
-  /// or undefined
-  origin: OriginData,
-}
-
-impl ItemState {
-  pub const fn default() -> Self {
-    ItemState { current_lane: 0, prev_lane: 0, origin: OriginData::Undefined }
-  }
-
-  /// Create a new [Item]
-  pub const fn new(lane: u32, origin: OriginData) -> Self {
-    ItemState { prev_lane: lane, current_lane: lane, origin }
-  }
-
-  /// Get the current lane of the state
-  pub fn get_lane(&self) -> u32 {
-    self.current_lane
-  }
-
-  /// Get the current and previous lane of the state
-  pub fn get_lanes(&self) -> (u32, u32) {
-    (self.current_lane, self.prev_lane)
-  }
-
-  /// Get the group the item belongs to
-  pub fn get_origin(&self) -> OriginData {
-    self.origin
-  }
-
-  pub fn same_curr_lane(&self, other: &ItemState) -> bool {
-    self.current_lane == other.current_lane
-  }
-
-  pub fn is_multi_lane(&self) -> bool {
-    self.current_lane != self.prev_lane
-  }
-
-  pub fn in_either_lane(&self, other: &ItemState) -> bool {
-    match (self.current_lane, self.prev_lane, other.current_lane) {
-      (a, b, c) if a == c || b == c => true,
-      (_, 0, _) | (0, ..) => true,
-      _ => false,
-    }
-  }
-
-  pub fn is_out_of_scope(&self) -> bool {
-    matches!(self.origin, OriginData::OutOfScope(_))
-  }
-
-  pub fn to_null(&self) -> Self {
-    ItemState { origin: OriginData::Null, ..self.clone() }
-  }
-
-  pub fn null() -> Self {
-    ItemState { origin: OriginData::Null, current_lane: 0, prev_lane: 0 }
-  }
-
-  pub fn is_null(&self) -> bool {
-    self.origin == OriginData::Null
-  }
-
-  /// Makes the `prev_lane` also the `curr_lane`
-  pub fn to_prev_lane(&self) -> Self {
-    ItemState { current_lane: self.prev_lane, ..self.clone() }
-  }
-
-  /// Makes the `curr_lane` also the `prev_lane`
-  pub fn to_curr_lane(&self) -> Self {
-    ItemState { prev_lane: self.current_lane, ..self.clone() }
-  }
-
-  /// Create a new Item with the given lane
-  pub fn to_lane(&self, lane: u32) -> Self {
-    ItemState { current_lane: lane, ..self.clone() }
-  }
-
-  /// Shifts the current into the previous lane slot, and
-  /// inserts `curr_lane` in its place.
-  pub fn to_lane_fork(&self, curr_lane: u32) -> Self {
-    Self { current_lane: curr_lane, prev_lane: self.current_lane, ..self.clone() }
-  }
-
-  /// Create a new Item with the given group
-  pub fn to_lanes(&self, curr_lane: u32, prev_lane: u32) -> Self {
-    ItemState { current_lane: curr_lane, prev_lane, ..self.clone() }
-  }
-
-  /// Create a new Item with the given group
-  pub fn to_origin(&self, origin: OriginData) -> Self {
-    ItemState { origin, ..self.clone() }
-  }
-
-  pub fn debug_string(&self, g: &GrammarStore) -> String {
-    if self.current_lane != self.prev_lane {
-      format!("[{}]->[{}] | {}", self.current_lane, self.prev_lane, self.origin.debug_string(g))
-    } else {
-      format!("[{}] | {}", self.current_lane, self.origin.debug_string(g))
-    }
-  }
-}
-
-impl Display for ItemState {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    if self.current_lane != self.prev_lane {
-      f.write_fmt(format_args!("[{}]->[{}] | {:?}", self.current_lane, self.prev_lane, self.origin))
-    } else {
-      f.write_fmt(format_args!("[{}] | {:?}", self.current_lane, self.origin))
-    }
-  }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub(crate) enum OriginData {
-  Undefined,
-  OutOfScope(usize),
-  Null,
-  Symbol(SymbolID),
-  GoalIndex(usize),
-  RuleId(RuleId),
-}
-
-impl OriginData {
-  pub fn debug_string(&self, g: &GrammarStore) -> String {
-    use OriginData::*;
-    match self {
-      Symbol(sym_id) => sym_id.debug_string(g),
-      RuleId(rule_id) => {
-        let rule = g.get_rule(rule_id).unwrap();
-        let prod = g.get_production(&rule.prod_id).unwrap();
-        format!("{}[{}]", prod.name, rule.bytecode_id)
-      }
-      GoalIndex(i) => format!("Goal[{}]", i),
-      OutOfScope(_) => "Out Of Scope".to_string(),
-      Undefined => "*".to_string(),
-      Null => "null".to_string(),
-    }
-  }
-
-  pub fn blame_string(&self, g: &GrammarStore) -> String {
-    use OriginData::*;
-    match self {
-      Symbol(sym_id) => sym_id.debug_string(g),
-      RuleId(rule_id) => {
-        let rule = g.get_rule(rule_id).unwrap();
-
-        rule.tok.blame(1, 1, "", BlameColor::RED)
-      }
-      GoalIndex(i) => format!("Goal[{}]", i),
-      OutOfScope(_) => "Out Of Scope".to_string(),
-      Undefined => "*".to_string(),
-      Null => "null".to_string(),
-    }
-  }
-}
 
 /// Represents a specific point in a parse sequence
 /// defined by a rule and a positional offset that
@@ -179,34 +22,58 @@ impl OriginData {
 #[repr(C, align(64))]
 #[derive(PartialEq, Eq, Debug, Clone, Copy, Hash, PartialOrd, Ord)]
 pub(crate) struct Item {
-  pub rule:  RuleId,
-  pub state: ItemState,
-  pub len:   u8,
-  pub off:   u8,
+  pub(crate) rule_id:      RuleId,
+  pub(crate) len:          u8,
+  pub(crate) off:          u8,
+  pub(crate) is_exclusive: u8,
+  pub(crate) goal_index:   u32,
+  pub(crate) origin:       Origin,
+  pub(crate) origin_state: StateId,
+}
+
+pub(crate) enum ItemType {
+  Terminal(SymbolID),
+  NonTerminal(ProductionId),
+  TokenProduction(ProductionId, SymbolID),
+  Completed(ProductionId),
+  ExclusiveCompleted(ProductionId, u8),
 }
 
 impl Default for Item {
   fn default() -> Self {
     Self {
-      len:   0,
-      off:   0,
-      state: ItemState { current_lane: 0, prev_lane: 0, origin: OriginData::Null },
-      rule:  RuleId(0),
+      len:          0,
+      off:          0,
+      goal_index:   0,
+      is_exclusive: 0,
+      origin:       Default::default(),
+      origin_state: Default::default(),
+      rule_id:      RuleId(0),
     }
   }
 }
 
 impl Item {
+  #[inline(always)]
+  pub fn new_null() -> Self {
+    Item { len: 0, rule_id: RuleId::default(), off: 0, ..Default::default() }
+  }
+
   /// Creates a view of the item useful for debugging
   pub fn debug_string(&self, g: &GrammarStore) -> String {
     if self.is_null() {
-      format!("{} null", self.state)
+      format!("null")
     } else {
-      let rule = g.rules.get(&self.rule).unwrap();
+      let rule = g.rules.get(&self.rule_id).unwrap();
 
-      let mut string = String::new();
-
-      string += &format!("<{}> ", self.state.debug_string(g));
+      let mut string = self.origin.is_none().then_some(String::new()).unwrap_or_else(|| {
+        format!(
+          "<[{}-{:?}]  [{:X}] ",
+          self.origin.debug_string(g),
+          self.origin_state,
+          self.goal_index
+        )
+      });
 
       string += &g.productions.get(&rule.prod_id).unwrap().name;
 
@@ -222,19 +89,24 @@ impl Item {
         string += &sym_id.debug_string(g)
       }
 
-      if self.completed() {
+      if self.is_completed() {
         string += " •";
       }
-      string
+
+      if self.is_exclusive > 0 {
+        string += &format!(" ⦻[{}]", self.is_exclusive);
+      }
+
+      string.replace("\n", "\\n")
     }
   }
 
   /// Creates a view of the rule
   pub fn rule_string(&self, g: &GrammarStore) -> String {
     if self.is_null() {
-      format!("{} null", self.state)
+      format!("null")
     } else {
-      let rule = g.rules.get(&self.rule).unwrap();
+      let rule = g.rules.get(&self.rule_id).unwrap();
 
       let mut string = String::new();
 
@@ -251,13 +123,109 @@ impl Item {
     }
   }
 
+  #[inline(always)]
+  pub fn is_null(&self) -> bool {
+    self.rule_id.is_null() && self.len == 0 && self.off == 0
+  }
+
+  pub fn is_out_of_scope(&self) -> bool {
+    self.goal_index == OutScopeIndex || self.origin.is_out_of_scope()
+  }
+
+  #[inline(always)]
+  pub fn to_null(&self) -> Self {
+    Item { ..Default::default() }
+  }
+
+  ///
+  #[inline(always)]
+  pub fn to_absolute(&self) -> Self {
+    Item {
+      goal_index: Default::default(),
+      origin: Default::default(),
+      origin_state: Default::default(),
+      ..self.clone()
+    }
+  }
+
+  #[inline(always)]
+  pub fn is_completed(&self) -> bool {
+    self.off >= self.len
+  }
+
+  #[inline(always)]
+  pub fn at_start(&self) -> bool {
+    self.off == 0
+  }
+
+  pub fn is_left_recursive(&self, g: &GrammarStore) -> bool {
+    let symA = self.get_prod_id(g);
+    let symB = self.get_production_id_at_sym(g);
+
+    symA == symB && self.is_start()
+  }
+
+  #[inline(always)]
+  pub fn to_start(&self) -> Item {
+    Item { off: 0, ..self.clone() }
+  }
+
+  #[inline(always)]
+  pub fn to_complete(&self) -> Item {
+    Item { off: self.len, ..self.clone() }
+  }
+
+  pub fn increment(&self) -> Option<Item> {
+    if !self.is_completed() {
+      Some(Item {
+        len: self.len,
+        off: self.off + 1,
+        rule_id: self.rule_id,
+        ..self.clone()
+      })
+    } else {
+      None
+    }
+  }
+
+  /// Increments the Item if it is not in the completed position,
+  /// otherwise returns the Item as is.
+  pub fn try_increment(&self) -> Item {
+    if !self.is_completed() {
+      self.increment().unwrap()
+    } else {
+      self.clone()
+    }
+  }
+
+  pub fn decrement(&self) -> Option<Item> {
+    if !self.is_start() {
+      Some(Item {
+        len: self.len,
+        off: self.off - 1,
+        rule_id: self.rule_id,
+        ..Default::default()
+      })
+    } else {
+      None
+    }
+  }
+
+  pub fn get_precedence(&self, g: &GrammarStore) -> u32 {
+    if self.is_completed() {
+      self.is_exclusive as u32
+    } else {
+      self.get_rule(g).unwrap().syms[self.off as usize].precedence
+    }
+  }
+
   /// Creates a view of the item usefully for error reporting.
   /// > Note: The item's position signifier `•` is not rendered.
   pub fn blame_string(&self, g: &GrammarStore) -> String {
     if self.is_null() {
-      format!("{} null", self.state)
+      format!("{:?} null", self.origin)
     } else {
-      let rule = g.rules.get(&self.rule).unwrap();
+      let rule = g.rules.get(&self.rule_id).unwrap();
 
       let mut string = String::new();
 
@@ -275,132 +243,12 @@ impl Item {
     }
   }
 
-  //#[inline(always)]
-  pub fn is_null(&self) -> bool {
-    self.rule.is_null() && self.len == 0 && self.off == 0
-  }
-
-  pub fn is_out_of_scope(&self) -> bool {
-    self.state.is_out_of_scope()
-  }
-
-  #[inline(always)]
-  pub fn to_null(&self) -> Self {
-    Item {
-      len:   0,
-      rule:  RuleId::default(),
-      off:   0,
-      state: self.state.to_null(),
-    }
-  }
-
-  #[inline(always)]
-  pub fn null() -> Self {
-    Item { len: 0, rule: RuleId::default(), off: 0, state: ItemState::null() }
-  }
-
-  /// Create an Item from a rule_id and a grammar store. Returns
-  /// None if the rule_id does not match a stored rule in the
-  /// grammar. Sets the items origin to OriginData::RuleID
-
-  pub fn from_rule(rule_id: &RuleId, g: &GrammarStore) -> Option<Self> {
-    g.rules.get(rule_id).map(|rule| Item::from(rule).to_origin(OriginData::RuleId(rule.id)))
-  }
-
-  #[inline(always)]
-  pub fn completed(&self) -> bool {
-    self.off >= self.len
-  }
-
-  #[inline(always)]
-  pub fn at_start(&self) -> bool {
-    self.off == 0
-  }
-
-  #[inline(always)]
-  pub fn to_state(&self, state: ItemState) -> Item {
-    Item { state, ..self.clone() }
-  }
-
-  #[inline(always)]
-  pub fn to_origin(&self, origin: OriginData) -> Self {
-    Item { state: self.state.to_origin(origin), ..self.clone() }
-  }
-
-  #[inline(always)]
-  pub fn to_start(&self) -> Item {
-    Item { off: 0, ..self.clone() }
-  }
-
-  #[inline(always)]
-  pub fn to_completed(&self) -> Item {
-    Item { off: self.len, ..self.clone() }
-  }
-
-  #[inline(always)]
-  pub fn to_origin_only_state(&self) -> Item {
-    Item { state: self.state.to_lanes(0, 0), ..self.clone() }
-  }
-
-  #[inline(always)]
-  pub fn to_empty_state(&self) -> Item {
-    Item { state: ItemState::default(), ..self.clone() }
-  }
-
-  #[inline(always)]
-  pub fn to_local_state(&self) -> Item {
-    Self {
-      state: self.state.to_lanes(self.state.current_lane, self.state.current_lane),
-      ..self.clone()
-    }
-  }
-
-  pub fn increment(&self) -> Option<Item> {
-    if !self.completed() {
-      Some(Item {
-        len:   self.len,
-        off:   self.off + 1,
-        rule:  self.rule,
-        state: self.state,
-      })
-    } else {
-      None
-    }
-  }
-
-  /// Increments the Item if it is not in the completed position,
-  /// otherwise returns the Item as is.
-  pub fn try_increment(&self) -> Item {
-    if !self.completed() {
-      self.increment().unwrap()
-    } else {
-      self.clone()
-    }
-  }
-
-  pub fn decrement(&self) -> Option<Item> {
-    if !self.is_start() {
-      Some(Item {
-        len:   self.len,
-        off:   self.off - 1,
-        rule:  self.rule,
-        state: self.state,
-      })
-    } else {
-      None
-    }
-  }
-
   pub fn is_start(&self) -> bool {
     self.off == 0
   }
 
   pub fn get_rule_id(&self) -> RuleId {
-    self.rule
-  }
-
-  pub fn get_offset(&self) -> u8 {
-    self.off
+    self.rule_id
   }
 
   pub fn get_rule<'a>(&self, g: &'a GrammarStore) -> SherpaResult<&'a Rule> {
@@ -409,37 +257,9 @@ impl Item {
 
   #[inline(always)]
   pub fn get_rule_ref<'a>(&self, g: &'a GrammarStore) -> SherpaResult<&'a RuleSymbol> {
-    match (self.completed(), self.get_rule(&g)) {
+    match (self.is_completed(), self.get_rule(&g)) {
       (false, SherpaResult::Ok(rule)) => SherpaResult::Ok(&rule.syms[self.off as usize]),
       _ => SherpaResult::None,
-    }
-  }
-
-  #[inline(always)]
-  pub fn get_state(&self) -> ItemState {
-    self.state
-  }
-
-  #[inline(always)]
-  pub fn get_origin(&self) -> OriginData {
-    self.state.get_origin()
-  }
-
-  #[inline(always)]
-  pub fn get_origin_index(&self) -> usize {
-    match self.get_origin() {
-      OriginData::OutOfScope(index) | OriginData::GoalIndex(index) => index,
-      _ => usize::MAX,
-    }
-  }
-
-  /// Get the SymbolId in the origin if the origin is
-  /// of type `OriginData::Symbol`. Otherwise returns `SymbolId::Undefined`
-  #[inline(always)]
-  pub fn get_origin_sym(&self) -> SymbolID {
-    match self.get_origin() {
-      OriginData::Symbol(sym) => sym,
-      _ => SymbolID::Undefined,
     }
   }
 
@@ -453,10 +273,10 @@ impl Item {
   pub fn get_symbol(&self, g: &GrammarStore) -> SymbolID {
     if self.is_null() {
       SymbolID::Undefined
-    } else if self.completed() {
+    } else if self.is_completed() {
       SymbolID::EndOfInput
     } else {
-      match g.rules.get(&self.rule) {
+      match g.rules.get(&self.rule_id) {
         Some(rule) => rule.syms[self.off as usize].sym_id,
         _ => SymbolID::Undefined,
       }
@@ -472,8 +292,24 @@ impl Item {
     }
   }
 
+  pub fn to_oos_index(&self) -> Self {
+    Self { goal_index: OutScopeIndex, ..self.clone() }
+  }
+
+  pub fn to_goal_index(&self, goal_index: u32) -> Self {
+    Self { goal_index, ..self.clone() }
+  }
+
+  pub fn to_origin_state(&self, origin_state: StateId) -> Self {
+    Self { origin_state, ..self.clone() }
+  }
+
+  pub fn to_origin(&self, origin: Origin) -> Self {
+    Self { origin, ..self.clone() }
+  }
+
   pub fn is_term(&self, g: &GrammarStore) -> bool {
-    if self.completed() {
+    if self.is_completed() {
       false
     } else {
       !matches!(self.get_symbol(g), SymbolID::Production(_, _))
@@ -481,7 +317,7 @@ impl Item {
   }
 
   pub fn is_nonterm(&self, g: &GrammarStore) -> bool {
-    if self.completed() {
+    if self.is_completed() {
       false
     } else {
       !self.is_term(g)
@@ -495,91 +331,40 @@ impl Item {
   pub fn _get_prod_as_sym_id(&self, g: &GrammarStore) -> SymbolID {
     g.get_production(&g.rules.get(&self.get_rule_id()).unwrap().prod_id).unwrap().sym_id
   }
+
+  pub fn get_type(&self, g: &GrammarStore) -> ItemType {
+    if self.is_completed() {
+      match self.is_exclusive {
+        0 => ItemType::Completed(self.get_prod_id(g)),
+        val => ItemType::ExclusiveCompleted(self.get_prod_id(g), val),
+      }
+    } else {
+      let sym = self.get_symbol(g);
+      match sym {
+        SymbolID::Production(prod_id, _) => ItemType::NonTerminal(prod_id),
+        SymbolID::TokenProduction(.., prod_id) => ItemType::TokenProduction(prod_id, sym),
+        sym => ItemType::Terminal(sym),
+      }
+    }
+  }
+
+  pub fn align(&self, other: &Self) -> Self {
+    Self {
+      goal_index: other.goal_index,
+      origin: other.origin,
+      origin_state: other.origin_state,
+      ..self.clone()
+    }
+  }
 }
 
 impl From<&Rule> for Item {
   fn from(rule: &Rule) -> Self {
     Item {
-      rule:  rule.id,
-      len:   rule.len as u8,
-      off:   0,
-      state: ItemState::default(),
-    }
-  }
-}
-
-#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Copy)]
-pub(crate) struct LinkedItem {
-  pub item:         Item,
-  pub closure_node: MaybeNodeId,
-  pub depth:        usize,
-}
-
-#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct LinkedItemWithGoto {
-  pub item:         Item,
-  pub closure_node: MaybeNodeId,
-  pub goto_items:   Items,
-}
-
-pub(crate) struct FollowItemGroups {
-  pub uncompleted_items: Vec<LinkedItem>,
-  pub intermediate_completed_items: Vec<LinkedItem>,
-  pub final_completed_items: Vec<LinkedItem>,
-}
-
-impl FollowItemGroups {
-  pub fn get_all_items(&self) -> Items {
-    self
-      .uncompleted_items
-      .iter()
-      .chain(self.final_completed_items.iter())
-      .chain(self.intermediate_completed_items.iter())
-      .map(|t| t.item)
-      .collect()
-  }
-
-  pub fn __print_debug__(&self, g: &GrammarStore) {
-    for item in self
-      .uncompleted_items
-      .iter()
-      .chain(self.final_completed_items.iter())
-      .chain(self.intermediate_completed_items.iter())
-    {
-      println!("d:{} :: {}", item.depth, item.item.debug_string(g))
-    }
-  }
-
-  pub fn get_all_items_up_to_depth(&self) -> Items {
-    let mut lowest = usize::MAX;
-    let l = &mut lowest;
-
-    let r = self
-      .uncompleted_items
-      .iter()
-      .chain(self.final_completed_items.iter())
-      .chain(self.intermediate_completed_items.iter())
-      .map(|i| {
-        lowest = lowest.min(i.depth);
-
-        i
-      })
-      .collect::<Vec<_>>();
-
-    r.into_iter().filter(|i| i.depth == lowest).map(|t| t.item).collect()
-  }
-
-  pub fn get_uncompleted_items(&self) -> Items {
-    self.uncompleted_items.iter().map(|t| t.item).collect()
-  }
-}
-
-impl Into<LinkedItemWithGoto> for LinkedItem {
-  fn into(self) -> LinkedItemWithGoto {
-    LinkedItemWithGoto {
-      item:         self.item,
-      closure_node: self.closure_node,
-      goto_items:   Default::default(),
+      rule_id: rule.id,
+      len: rule.len as u8,
+      is_exclusive: rule.is_exclusive as u8,
+      ..Default::default()
     }
   }
 }
@@ -587,6 +372,58 @@ impl Into<LinkedItemWithGoto> for LinkedItem {
 pub(crate) type Items = Vec<Item>;
 pub(crate) type ItemSet = BTreeSet<Item>;
 
+impl<'a> ItemContainerIter<'a> for btree_set::Iter<'a, Item> {}
+impl<'a> ItemContainerIter<'a> for slice::Iter<'a, Item> {}
+pub(crate) trait ItemContainerIter<'a>: Iterator<Item = &'a Item> + Sized {
+  fn contains_out_of_scope(&mut self) -> bool {
+    self.any(|i| i.is_out_of_scope())
+  }
+
+  fn all_are_out_of_scope(&mut self) -> bool {
+    self.all(|i| i.origin.is_out_of_scope())
+  }
+
+  fn to_set(&mut self) -> ItemSet {
+    self.cloned().collect()
+  }
+
+  fn to_vec(&mut self) -> Items {
+    self.cloned().collect()
+  }
+
+  fn all_items_are_from_same_peek_origin(&mut self) -> bool {
+    let origin_set = self.map(|i| i.origin).collect::<BTreeSet<_>>();
+    match (origin_set.len(), origin_set.first()) {
+      (1, Some(Origin::Peek(..))) => true,
+      _ => false,
+    }
+  }
+
+  fn peek_is_resolved(&mut self) -> bool {
+    self.all_items_are_from_same_peek_origin()
+  }
+
+  fn follow_items_are_the_same(&mut self) -> bool {
+    self.map(|i| i.to_absolute()).collect::<BTreeSet<_>>().len() == 1
+  }
+
+  fn to_production_id_set(&mut self, g: &GrammarStore) -> BTreeSet<ProductionId> {
+    self.map(|i| i.get_prod_id(g)).collect()
+  }
+
+  /// Returns the Production of the non-terminal symbol in each item. For items
+  /// whose symbol is a terminal or are complete, the Defualt production id is used.
+  fn to_prod_sym_id_set(&mut self, g: &GrammarStore) -> BTreeSet<ProductionId> {
+    self.map(|i| i.get_production_id_at_sym(g)).collect()
+  }
+
+  fn intersects(&mut self, set: &ItemSet) -> bool {
+    self.any(|i| set.contains(i))
+  }
+}
+
+impl ItemContainer for ItemSet {}
+impl ItemContainer for Items {}
 pub(crate) trait ItemContainer:
   Clone + IntoIterator<Item = Item> + FromIterator<Item>
 {
@@ -603,11 +440,15 @@ pub(crate) trait ItemContainer:
   }
 
   fn incomplete_items(self) -> Self {
-    self.into_iter().filter(|i| !i.completed()).collect()
+    self.into_iter().filter(|i| !i.is_completed()).collect()
+  }
+
+  fn to_production_ids(&self, g: &GrammarStore) -> BTreeSet<ProductionId> {
+    self.clone().into_iter().map(|i| i.get_prod_id(g)).collect()
   }
 
   fn completed_items(self) -> Self {
-    self.into_iter().filter(|i| i.completed()).collect()
+    self.into_iter().filter(|i| i.is_completed()).collect()
   }
 
   fn inscope_items(self) -> Self {
@@ -619,22 +460,11 @@ pub(crate) trait ItemContainer:
   }
 
   fn uncompleted_items(self) -> Self {
-    self.into_iter().filter(|i| !i.completed()).collect()
+    self.into_iter().filter(|i| !i.is_completed()).collect()
   }
 
-  fn to_origin_only_state(self) -> Self {
-    self.into_iter().map(|i| i.to_origin_only_state()).collect()
-  }
-
-  fn to_empty_state(self) -> Self {
-    self.into_iter().map(|i| i.to_empty_state()).collect()
-  }
-  fn to_state(self, state: ItemState) -> Self {
-    self.into_iter().map(|i| i.to_state(state)).collect()
-  }
-
-  fn contains_out_of_scope(&self) -> bool {
-    self.as_vec().iter().any(|i| i.is_out_of_scope())
+  fn to_absolute(self) -> Self {
+    self.into_iter().map(|i| i.to_absolute()).collect()
   }
 
   #[inline(always)]
@@ -653,111 +483,12 @@ pub(crate) trait ItemContainer:
   }
 
   #[inline(always)]
-  fn to_complete(&self) -> Items {
-    self.clone().to_vec().into_iter().map(|i| i.to_completed()).collect()
-  }
-
-  #[inline(always)]
-  fn from_linked<T: IntoIterator<Item = LinkedItem>>(linked: T) -> Items {
-    linked.into_iter().map(|i| i.item).collect()
-  }
-
-  #[inline(always)]
-  fn from_linked_goto(linked: &Vec<LinkedItemWithGoto>) -> Items {
-    linked.iter().map(|i| i.item).collect()
-  }
-
-  #[inline(always)]
   fn __print_items__(&self, g: &GrammarStore, comment: &str) {
     debug_items(comment, self.clone(), g);
   }
 
   fn to_debug_string(&self, g: &GrammarStore, sep: &str) -> String {
     self.clone().to_vec().iter().map(|i| i.debug_string(g)).collect::<Vec<_>>().join(sep)
-  }
-
-  #[inline(always)]
-  fn closure(&self, g: &GrammarStore) -> ItemSet {
-    let vec = self.clone().to_vec();
-
-    let mut output = vec![];
-
-    for item in vec {
-      output.append(&mut get_closure_cached(&item, g).clone())
-    }
-
-    output.to_set()
-  }
-  /// Merge items from `other` that are not already present in `self`
-  /// Ignores item states.
-  #[inline(always)]
-  fn merge_unique(self, other: Self) -> Self {
-    let mut set = self.as_set();
-    let empty_state_set = self.to_set().to_empty_state();
-
-    for item in other.into_iter() {
-      if !empty_state_set.contains(&item.to_empty_state()) {
-        set.insert(item);
-      }
-    }
-
-    set.into_iter().collect()
-  }
-
-  #[inline(always)]
-  fn closure_with_state(&self, g: &GrammarStore) -> ItemSet {
-    let vec = self.as_vec();
-
-    let mut output = vec![];
-
-    for item in vec {
-      if item.is_null() {
-        output.push(item)
-      } else {
-        output.append(&mut get_closure_cached_with_state(&item, g))
-      }
-    }
-
-    output.to_set()
-  }
-  /// Does not enter the closure of Productions that are present
-  /// in prod_id. If it detects items the have any member of `prod_ids`
-  /// as the initial symbol, it discards those items.
-  #[inline(always)]
-  fn rd_closure_with_state(
-    &self,
-    g: &GrammarStore,
-    prod_ids: &BTreeSet<ProductionId>,
-  ) -> (ItemSet, ItemSet) {
-    let mut seen = BTreeSet::<Item>::new();
-    let mut left_recursive_items = BTreeSet::<Item>::new();
-    let items = self.clone().to_vec();
-
-    let mut queue = VecDeque::<Item>::from_iter(items.iter().cloned());
-
-    while let Some(item) = queue.pop_front() {
-      if prod_ids.contains(&item.get_production_id_at_sym(g)) {
-        left_recursive_items.insert(item);
-        continue;
-      }
-      if seen.insert(item) {
-        if let SymbolID::Production(prod_id, _) = &item.get_symbol(g) {
-          for i in get_production_start_items(prod_id, g) {
-            queue.push_back(i.to_state(item.get_state()));
-          }
-        }
-      }
-    }
-
-    (seen, left_recursive_items)
-  }
-
-  fn as_vec(&self) -> Items {
-    self.clone().to_vec()
-  }
-
-  fn as_set(&self) -> ItemSet {
-    self.clone().to_set()
   }
 
   fn to_set(self) -> ItemSet {
@@ -768,6 +499,51 @@ pub(crate) trait ItemContainer:
   }
 }
 
-impl ItemContainer for ItemSet {}
+fn debug_items<T: IntoIterator<Item = Item>>(comment: &str, items: T, g: &GrammarStore) {
+  println!("{} --> ", comment);
 
-impl ItemContainer for Items {}
+  for item in items {
+    println!("    {}", item.debug_string(g));
+  }
+}
+
+#[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+pub(crate) struct FollowPair {
+  pub completed: Item,
+  pub follow:    Item,
+}
+
+impl From<(Item, Item)> for FollowPair {
+  fn from((completed, follow): (Item, Item)) -> Self {
+    Self { completed, follow }
+  }
+}
+
+impl<'a> FollowPairContainerIter<'a> for btree_set::Iter<'a, FollowPair> {}
+impl<'a> FollowPairContainerIter<'a> for slice::Iter<'a, FollowPair> {}
+pub(crate) trait FollowPairContainerIter<'a>:
+  Iterator<Item = &'a FollowPair> + Sized
+{
+  fn to_completed_set(&mut self) -> BTreeSet<Item> {
+    self.map(|i| i.completed).collect()
+  }
+
+  fn to_completed_vec(&mut self) -> Vec<Item> {
+    self.map(|i| i.completed).collect()
+  }
+
+  fn to_follow_set(&mut self) -> BTreeSet<Item> {
+    self.map(|i| i.follow).collect()
+  }
+
+  fn to_follow_vec(&mut self) -> Vec<Item> {
+    self.map(|i| i.follow).collect()
+  }
+}
+
+pub(crate) struct CompletedItemArtifacts {
+  pub follow_pairs: BTreeSet<FollowPair>,
+  pub oos_pairs:    BTreeSet<FollowPair>,
+  pub follow_items: ItemSet,
+  pub default_only: ItemSet,
+}

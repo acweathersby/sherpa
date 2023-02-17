@@ -1,10 +1,9 @@
 use inkwell::{
   builder::Builder,
   context::Context,
-  execution_engine::ExecutionEngine,
   module::Module,
-  types::{FunctionType, StructType},
-  values::{BasicValue, BasicValueEnum, FunctionValue, PointerValue},
+  types::{FunctionType, IntType, StructType},
+  values::{BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue},
 };
 
 use crate::SherpaResult;
@@ -30,12 +29,12 @@ pub struct PublicFunctions<'a> {
   /// Called within a parse loop to get the next parse action.
   pub(crate) next: FunctionValue<'a>,
   pub(crate) dispatch: FunctionValue<'a>,
+  pub(crate) dispatch_unwind: FunctionValue<'a>,
   pub(crate) init: FunctionValue<'a>,
   pub(crate) pop_state: FunctionValue<'a>,
   pub(crate) push_state: FunctionValue<'a>,
   pub(crate) handle_eop: FunctionValue<'a>,
   pub(crate) prime: FunctionValue<'a>,
-  pub(crate) scan: FunctionValue<'a>,
   /// LLVM [`memcpy`](https://llvm.org/docs/LangRef.html#llvm-memcpy-intrinsic) intrinsic.
   /// Copies data of a certain number of bytes from one memory location to another.
   pub(crate) memcpy: FunctionValue<'a>,
@@ -77,133 +76,54 @@ pub struct PublicFunctions<'a> {
 
 #[derive(Debug)]
 pub struct LLVMParserModule<'a> {
-  pub(crate) ctx:         &'a Context,
-  pub(crate) module:      Module<'a>,
-  pub(crate) builder:     Builder<'a>,
-  pub(crate) types:       LLVMTypes<'a>,
-  pub(crate) fun:         PublicFunctions<'a>,
-  pub(crate) _exe_engine: Option<ExecutionEngine<'a>>,
+  pub(crate) ctx:    &'a Context,
+  pub(crate) module: Module<'a>,
+  pub(crate) b:      Builder<'a>,
+  pub(crate) types:  LLVMTypes<'a>,
+  pub(crate) fun:    PublicFunctions<'a>,
+  pub(crate) iptr:   IntType<'a>,
+  pub(crate) i64:    IntType<'a>,
+  pub(crate) i32:    IntType<'a>,
+  pub(crate) i8:     IntType<'a>,
+  pub(crate) bool:   IntType<'a>,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub enum CTX_AGGREGATE_INDICES {
+  /// Input data --------------------
+  /// ```ignore
+  /// pub end_ptr:        *mut u8,
+  /// ```
+  beg_ptr = 0,
   // Input data ----------
   /// ```ignore
   /// pub token_ptr:       *mut u8,
   /// ```
-  tok_ptr = 0,
+  anchor_ptr,
   /// ```ignore
-  /// pub peek_ptr:        *mut u8,
+  /// pub base_ptr:        *mut u8,
   /// ```
-  peek_ptr,
+  base_ptr,
+  /// ```ignore
+  /// pub head_ptr:        *mut u8,
+  /// ```
+  head_ptr,
   /// ```ignore
   /// pub scan_ptr:        *mut u8,
   /// ```
-  scan_ptr,
+  tail_ptr,
   /// ```ignore
-  /// pub tok_input_len:   u32,
+  /// pub end_ptr:        *mut u8,
   /// ```
-  tok_input_len,
+  end_ptr,
   /// ```ignore
-  /// pub peek_input_len:  u32,
+  /// pub tok_len:       usize,
   /// ```
-  peek_input_len,
+  tok_len,
   /// ```ignore
-  /// pub scan_input_len:  u32,
+  /// pub chars_remaining_len:       usize,
   /// ```
-  scan_input_len,
-  /// ```ignore
-  /// pub tok_input_trun:  bool,
-  /// ```
-  tok_input_trun,
-  /// ```ignore
-  /// pub peek_input_trun: bool,
-  /// ```
-  peek_input_trun,
-  /// ```ignore
-  /// pub scan_input_trun: bool,
-  /// ```
-  scan_input_trun,
-  // Miscellaneous
-  /// ```ignore
-  /// pub in_peek_mode:    bool,
-  /// ```
-  in_peek_mode,
-  // Offset info ----------
-  /// The start of the portion of characters currently being recognized
-  /// ```ignore
-  /// pub anchor_off:      u32,
-  /// ```
-  anchor_off,
-  /// Maintains the start position of a token. The difference between this and the anchor
-  /// offset determines the number characters that have been skipped.
-  /// ```ignore
-  /// pub token_off:       u32,
-  /// ```
-  token_off,
-  /// Represents the most advanced offset of  peeked characters
-  /// ```ignore
-  /// pub peek_off:        u32,
-  /// ```
-  peek_off,
-  /// Maintains the reference to then end of a recognized tokens when in a scan context
-  /// ```ignore
-  /// pub scan_anchor_off: u32,
-  /// ```
-  scan_anchor_off,
-  /// Represents the most advanced portion of scanned characters
-  /// ```ignore
-  /// pub scan_off:        u32,
-  /// ```
-  scan_off,
-  /// Represents the byte length of the currently recognized symbol
-  /// ```ignore
-  /// pub scan_len:        u32,
-  /// ```
-  scan_len,
-  /// Set to the value of a production when a rule is reduced, or
-  /// ```ignore
-  /// pub prod_id:  u32,
-  /// ```
-  prod_id,
-  /// Set to the value of a token when one is recognized.
-  /// ```ignore
-  /// pub tok_id:  u32,
-  /// ```
-  tok_id,
-  // Line info ------------
-  /// The offset of the last line character within the token
-  /// This may be the same as `start_line_off` if the token does not contain newlines.
-  /// ```ignore
-  /// pub end_line_off: u32,
-  /// ```
-  end_line_off,
-  /// The line number of the last line character within the token.
-  /// This may be the same as `start_line_num` if the token does not contain newlines.
-  /// ```ignore
-  /// pub end_line_num: u32,
-  /// ```
-  end_line_num,
-  /// The offset of the last line character recognized that proceeds the token offset
-  /// ```ignore
-  /// pub tok_line_off:    u32,
-  /// ```
-  start_line_off,
-  /// The number of line character recognized that proceed the token offset
-  /// ```ignore
-  /// pub tok_line_num:    u32,
-  /// ```
-  start_line_num,
-  /// The offset of the last line character recognized that proceeds the peek/scanner offset
-  /// ```ignore
-  /// pub peek_line_off:   u32,
-  /// ```
-  scan_line_off,
-  /// The number of line character recognized that proceed the peek/scanner offset
-  /// ```ignore
-  /// pub peek_line_num:   u32,
-  /// ```
-  scan_line_num,
+  chars_remaining_len,
   // Goto stack data -----
   /// ```ignore
   /// pub goto_stack_ptr:  *mut Goto,
@@ -227,6 +147,7 @@ pub enum CTX_AGGREGATE_INDICES {
   /// pub reader:          *mut T,
   /// ```
   reader,
+
   // User context --------
   /// ```ignore
   /// pub meta_ctx:        *mut M,
@@ -236,25 +157,76 @@ pub enum CTX_AGGREGATE_INDICES {
   /// pub custom_lex:      fn(&mut T, &mut M, &ParseContext<T, M>) -> (u32, u32, u32),
   /// ```
   _custom_lex,
+  // Line info ------------
+  /// The offset of the last line character recognized that proceeds the anchor
+  /// ```ignore
+  /// pub start_line_ptr: usize,
+  /// ```
+  start_line_off,
+  /// The offset of the last line character recognized that proceeds the chkp
+  /// ```ignore
+  /// pub chkp_line_ptr:  usize,
+  /// ```
+  chkp_line_off,
+  /// The offset of the last line character recognized that proceeds the tail
+  /// ```ignore
+  /// pub end_line_ptr:   usize,
+  /// ```
+  end_line_off,
+  /// The number of line character recognized that proceed the anchor
+  /// ```ignore
+  /// pub start_line_num: u32,
+  /// ```
+  start_line_num,
+  /// The number of line character recognized that proceed the chkp
+  /// ```ignore
+  /// pub chkp_line_num:  u32,
+  /// ```
+  chkp_line_num,
+  /// The number of line character recognized that proceed the tail
+  /// ```ignore
+  /// pub end_line_num:   u32,
+  /// ```
+  end_line_num,
+  // Parser State ----------
+  /// When reducing, stores the the number of of symbols to reduce into one.
+  /// ```ignore
+  /// pub meta_a:          u32,
+  /// ```
+  symbol_len,
   /// Tracks whether the context is a fail mode or not.
   /// ```ignore
   /// pub state:           u32,
   /// ```
   state,
-  /// When reducing, stores the the number of of symbols to reduce into one.
+  /// Set to the value of a production when a rule is reduced, or
   /// ```ignore
-  /// pub meta_a:          u32,
+  /// pub prod_id:  u32,
   /// ```
-  meta_a,
+  prod_id,
+  /// Set to the value of a token when one is recognized.
+  /// ```ignore
+  /// pub tok_id:  u32,
+  /// ```
+  tok_id,
   /// When reducing, stores the rule id that is being reduced.
   /// ```ignore
   /// pub meta_b:          u32,
   /// ```
-  meta_b,
+  rule_id,
+  /// ```ignore
+  /// pub line_incr:       u8,
+  /// ```
+  line_incr,
   /// ```ignore
   /// pub is_active:       bool,
   /// ```
   is_active,
+  // Miscellaneous
+  /// ```ignore
+  /// pub in_peek_mode:    bool,
+  /// ```
+  _in_peek_mode,
 }
 
 impl Into<u32> for CTX_AGGREGATE_INDICES {
@@ -266,37 +238,43 @@ impl Into<u32> for CTX_AGGREGATE_INDICES {
 impl CTX_AGGREGATE_INDICES {
   pub fn get_ptr<'a>(
     &self,
-    module: &'a LLVMParserModule,
+    b: &Builder<'a>,
     parse_ctx: PointerValue<'a>,
   ) -> SherpaResult<PointerValue<'a>> {
-    SherpaResult::Ok(module.builder.build_struct_gep(
-      parse_ctx,
-      (*self).into(),
-      &format!("{:?}_ptr", self),
-    )?)
+    SherpaResult::Ok(b.build_struct_gep(parse_ctx, (*self).into(), &format!("{:?}_ptr", self))?)
   }
 
   pub fn load<'a>(
     &self,
-    module: &'a LLVMParserModule,
+    b: &Builder<'a>,
     parse_ctx: PointerValue<'a>,
   ) -> SherpaResult<BasicValueEnum<'a>> {
-    let val =
-      module.builder.build_load(self.get_ptr(module, parse_ctx)?, &format!("{:?}_val", self));
+    let val = b.build_load(self.get_ptr(b, parse_ctx)?, &format!("{:?}_val", self));
 
     SherpaResult::Ok(val)
   }
 
+  pub fn load_ptr_as_int<'a>(
+    &self,
+    b: &Builder<'a>,
+    parse_ctx: PointerValue<'a>,
+    int: IntType<'a>,
+  ) -> SherpaResult<IntValue<'a>> {
+    let val =
+      b.build_load(self.get_ptr(b, parse_ctx)?, &format!("{:?}_val", self)).into_pointer_value();
+    SherpaResult::Ok(b.build_ptr_to_int(val, int, &format!("{:?}_val", self)).into())
+  }
+
   pub fn store<'a, V>(
     &self,
-    module: &'a LLVMParserModule,
+    b: &Builder<'a>,
     parse_ctx: PointerValue<'a>,
     value: V,
   ) -> SherpaResult<()>
   where
     V: BasicValue<'a>,
   {
-    module.builder.build_store(self.get_ptr(module, parse_ctx)?, value);
+    b.build_store(self.get_ptr(b, parse_ctx)?, value);
 
     SherpaResult::Ok(())
   }

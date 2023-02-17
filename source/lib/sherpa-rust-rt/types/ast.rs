@@ -1,4 +1,5 @@
 use super::*;
+use std::{fmt::Debug, ops::Index};
 
 #[deprecated]
 pub type ReduceFunctionOld<T> = fn(args: &mut Vec<HCObj<T>>, tok: Token);
@@ -261,3 +262,204 @@ pub struct Lazy {
 // }
 
 pub type Reducer<R, M, Node> = fn(&ParseContext<R, M>, &AstStackSlice<AstSlot<Node>>);
+
+pub trait AstObject: Debug + Clone + Default + Sized {}
+
+#[derive(Clone, Debug, Default)]
+#[repr(C)]
+pub struct AstSlot<Ast: AstObject>(pub Ast, pub TokenRange, pub TokenRange);
+
+impl<Ast: AstObject> AstObject for AstSlot<Ast> {}
+
+/// Used within an LLVM parser to provide access to intermediate AST
+/// data stored on the stack within a dynamically resizable array.
+#[repr(C)]
+pub struct AstStackSlice<T: AstObject> {
+  stack_data:         *mut T,
+  stack_size:         u32,
+  decreasing_indices: bool,
+}
+
+impl<T: AstObject> AstStackSlice<T> {
+  #[track_caller]
+  fn get_pointer(&self, position: usize) -> *mut T {
+    if position >= (self.stack_size as usize) {
+      panic!(
+        "Could not get AST node at slot ${} from stack with a length of {}",
+        position, self.stack_size
+      );
+    }
+    let slot_size = std::mem::size_of::<T>();
+
+    if self.decreasing_indices {
+      // We are using the stack space for these slots,
+      // which we ASSUME grows downward, hence the "higher" slots
+      // are accessed through lower addresses.
+      (self.stack_data as usize - (position * slot_size)) as *mut T
+    } else {
+      (self.stack_data as usize + (position * slot_size)) as *mut T
+    }
+  }
+
+  pub fn from_slice(slice: &mut [T]) -> Self {
+    Self {
+      stack_data:         &mut slice[0],
+      stack_size:         slice.len() as u32,
+      decreasing_indices: false,
+    }
+  }
+
+  /// Assigns the given data to a garbage slot, ignoring any existing value
+  /// the slot may contain. This is only used when shifting token data into
+  /// an "empty" slot through the Shift action.
+  pub unsafe fn assign_to_garbage(&self, position: usize, val: T) {
+    let pointer = self.get_pointer(position);
+    std::mem::forget(std::mem::replace(&mut (*pointer), val));
+  }
+
+  pub fn assign(&self, position: usize, val: T) {
+    unsafe {
+      let pointer = self.get_pointer(position);
+      *pointer = val;
+    }
+  }
+
+  /// Removes the value at the given position from the stack and returns it.
+  #[track_caller]
+  pub fn take(&self, position: usize) -> T {
+    unsafe { std::mem::take(&mut (*self.get_pointer(position))) }
+  }
+
+  pub fn clone(&self, position: usize) -> T {
+    unsafe { (*self.get_pointer(position)).clone() }
+  }
+
+  pub fn len(&self) -> usize {
+    self.stack_size as usize
+  }
+
+  pub fn destroy(self) {
+    self.to_vec();
+  }
+
+  pub fn to_vec(&self) -> Vec<T> {
+    let mut output = vec![];
+    for i in 0..self.stack_size {
+      output.push(self.take(i as usize));
+    }
+    output
+  }
+}
+
+impl<T: AstObject> Debug for AstStackSlice<T> {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let mut dbgstr = f.debug_struct("SlotSlice");
+    dbgstr.field("stack_size", &self.stack_size);
+    let slot_size = std::mem::size_of::<T>();
+    dbgstr.field("[slot byte size]", &slot_size);
+    for i in 0..self.stack_size {
+      dbgstr.field(&format!("slot[{}]", i), &(self.clone(i as usize)));
+    }
+
+    dbgstr.finish()
+  }
+}
+
+impl<T: AstObject> Index<usize> for AstStackSlice<T> {
+  type Output = T;
+
+  fn index(&self, index: usize) -> &Self::Output {
+    if index > self.len() {
+      panic!("Index {} out of bounds in an AstStackSlice of len {}", index, self.len());
+    }
+
+    unsafe { &*self.get_pointer(index) }
+  }
+}
+
+#[test]
+fn test_slots_from_slice() {
+  let mut d = vec![1, 2, 3, 4, 5, 6, 7];
+  let len = d.len();
+  let slots = AstStackSlice::from_slice(&mut d[len - 3..len]);
+
+  assert_eq!(slots.take(0), 5);
+  assert_eq!(slots.take(1), 6);
+  assert_eq!(slots.take(2), 7);
+
+  slots.assign(0, 55);
+
+  drop(slots);
+
+  d.resize(len - 2, Default::default());
+
+  assert_eq!(d.last().cloned(), Some(55));
+}
+
+impl AstObject for u32 {}
+
+impl<V: AstObject> AstObject for (V, TokenRange, TokenRange) {}
+
+pub unsafe fn llvm_map_shift_action<
+  'a,
+  R: LLVMByteReader + ByteReader + MutByteReader,
+  ExtCTX,
+  ASTNode: AstObject,
+>(
+  ctx: &ParseContext<R, ExtCTX>,
+  slots: &mut AstStackSlice<(ASTNode, TokenRange, TokenRange)>,
+) {
+  match ctx.get_shift_data() {
+    ParseAction::Shift {
+      anchor_byte_offset,
+      token_byte_offset,
+      token_byte_length,
+      token_line_offset,
+      token_line_count,
+      ..
+    } => {
+      let peek = TokenRange {
+        len: token_byte_offset - anchor_byte_offset,
+        off: anchor_byte_offset,
+        ..Default::default()
+      };
+
+      let tok = TokenRange {
+        len:      token_byte_length,
+        off:      token_byte_offset,
+        line_num: token_line_count,
+        line_off: token_line_offset,
+      };
+
+      slots.assign_to_garbage(0, (ASTNode::default(), tok, peek));
+    }
+    _ => unreachable!(),
+  }
+}
+
+pub unsafe fn llvm_map_result_action<
+  'a,
+  T: LLVMByteReader + ByteReader + MutByteReader,
+  M,
+  Node: AstObject,
+>(
+  _ctx: &ParseContext<T, M>,
+  action: ParseActionType,
+  slots: &mut AstStackSlice<(Node, TokenRange, TokenRange)>,
+) -> ParseResult<Node> {
+  match action {
+    ParseActionType::Accept =>{
+      ParseResult::Complete(slots.take(0))
+    }
+    ParseActionType::Error => {
+      let vec = slots.to_vec();
+      let last_input = vec.last().cloned().unwrap_or_default().1;
+      ParseResult::Error(last_input, vec)
+    }
+    ParseActionType::NeedMoreInput => {
+      ParseResult::NeedMoreInput(slots.to_vec())
+    }
+
+    _ => unreachable!("This function should only be called when the parse action is  [Error, Accept, or EndOfInput]"),
+  }
+}

@@ -1,11 +1,10 @@
 use self::compile::build_byte_code_buffer;
 use crate::{
-  compile::get_branches,
   debug::{self},
   grammar::compile::parser::sherpa::{ASTNode, IR_STATE},
   journal::{report::ReportType, Journal},
-  types::{IRState, IRStateType, Symbol},
-  SherpaResult,
+  parser::get_branches,
+  types::{IRStateType, ParseState, Symbol},
 };
 use std::collections::BTreeMap;
 
@@ -40,7 +39,7 @@ pub struct StateData {
 }
 
 impl StateData {
-  pub(crate) fn from_ir_state(state: &IRState) -> Self {
+  pub(crate) fn from_ir_state(state: &ParseState) -> Self {
     let mut max_gotos = 0;
 
     for (_, instr) in get_branches(state) {
@@ -73,19 +72,16 @@ impl StateData {
     self.name.clone()
   }
 }
-/// TODO: DOC
-pub fn compile_bytecode<'a>(
+/// Compile bytecode data and artifacts from the a set of parse states
+pub(crate) fn compile_bytecode<'a>(
   j: &mut Journal,
-  mut ir_states: Vec<(String, Box<IRState>)>,
+  ir_states: &Vec<(String, Box<ParseState>)>,
 ) -> BytecodeOutput {
   let ir_ast_states = ir_states
-    .iter_mut()
-    .map(|(_, s)| match s.compile_ast() {
-      SherpaResult::Ok(ast) => (*ast).clone(),
-      SherpaResult::Err(err) => {
-        panic!("\n{}", err);
-      }
-      _ => {
+    .iter()
+    .map(|(_, s)| match s.get_ast() {
+      Some(ast) => (*ast).clone(),
+      None => {
         panic!("Could not parse");
       }
     })
@@ -99,7 +95,7 @@ pub fn compile_bytecode<'a>(
 
     j.report_mut().start_timer("Build Time");
 
-    let disassembly = debug::generate_disassembly(&bytecode, Some(j));
+    let disassembly = debug::generate_disassembly(&bytecode, j);
 
     j.report_mut().stop_timer("Build Time");
 
@@ -111,7 +107,7 @@ pub fn compile_bytecode<'a>(
 
 pub(crate) fn compile_ir_states_into_bytecode<'a>(
   j: &mut Journal,
-  ir_states: Vec<(String, Box<IRState>)>,
+  ir_states: &Vec<(String, Box<ParseState>)>,
   ir_ast_states: Vec<IR_STATE>,
 ) -> BytecodeOutput {
   let state_refs = ir_ast_states.iter().collect::<Vec<_>>();

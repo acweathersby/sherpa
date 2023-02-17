@@ -13,7 +13,7 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: Sized>(
 ) -> SherpaResult<()> {
   let slot_size = std::mem::size_of::<(ASTNode, TokenRange, TokenRange)>() as u32;
 
-  let LLVMParserModule { ctx, types, builder: b, .. } = module;
+  let LLVMParserModule { ctx, types, b, .. } = module;
   let LLVMTypes { parse_ctx, .. } = types;
   let i8 = ctx.i8_type();
   let i32 = ctx.i32_type();
@@ -101,7 +101,7 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: Sized>(
   b.position_at_end(parse_loop);
   // Begin by calling the dispatch function.
 
-  let discriminant = build_fast_call(module, module.fun.dispatch, &[parse_ctx.into()])?
+  let discriminant = build_fast_call(b, module.fun.dispatch, &[parse_ctx.into()])?
     .try_as_basic_value()
     .left()?
     .into_int_value();
@@ -173,8 +173,8 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: Sized>(
   b.position_at_end(reduce);
   // Get slice size
   let symbol_count_original =
-    CTX_AGGREGATE_INDICES::meta_a.load(module, parse_ctx)?.into_int_value();
-  let rule_index = CTX_AGGREGATE_INDICES::meta_b.load(module, parse_ctx)?.into_int_value();
+    CTX_AGGREGATE_INDICES::symbol_len.load(b, parse_ctx)?.into_int_value();
+  let rule_index = CTX_AGGREGATE_INDICES::rule_id.load(b, parse_ctx)?.into_int_value();
 
   // Calculate the position of the first element and the last element.
   let top = b.build_load(stack_top_ptr, "top").into_int_value();
@@ -239,7 +239,7 @@ fn build_stack_offset_ptr<'a>(
   top: IntValue<'a>,
   ast_slot: StructType<'a>,
 ) -> PointerValue<'a> {
-  let b = &module.builder;
+  let b = &module.b;
   let i64 = module.ctx.i64_type();
   let i32 = module.ctx.i32_type();
   let ast_slot_size = ast_slot.size_of().unwrap();
