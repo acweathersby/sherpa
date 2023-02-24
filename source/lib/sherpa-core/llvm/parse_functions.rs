@@ -166,12 +166,12 @@ pub(crate) fn compile_state<'a>(
       last_block = branch_block;
       b.position_at_end(branch_block);
 
-      let tail_ptr_cache = CTX::tail_ptr.load(b, p_ctx)?.into_pointer_value();
+      let scan_ptr_cache = CTX::scan_ptr.load(b, p_ctx)?.into_pointer_value();
 
       if let Some(byte_branches) = groups.get("BYTE") {
         let (mut cases, branches) = deconstruct_branches("byte_", byte_branches, m, s_fun, i8)?;
 
-        let value = b.build_load(tail_ptr_cache, "").into_int_value();
+        let value = b.build_load(scan_ptr_cache, "").into_int_value();
 
         CTX::symbol_len.store(b, p_ctx, u32_1)?;
 
@@ -199,7 +199,7 @@ pub(crate) fn compile_state<'a>(
       }
 
       if groups.keys().any(|k| matches!(k.as_str(), "CODEPOINT" | "CLASS")) {
-        let (cp_val, tok_len) = construct_cp_lu_with_token_len_store(m, tail_ptr_cache)?;
+        let (cp_val, tok_len) = construct_cp_lu_with_token_len_store(m, scan_ptr_cache)?;
 
         CTX::symbol_len.store(b, p_ctx, tok_len)?;
 
@@ -290,7 +290,7 @@ fn create_line_increment<'a>(
   b.position_at_end(block);
 
   let beg = b.build_ptr_to_int(CTX::beg_ptr.load(b, p)?.into_pointer_value(), i64, "");
-  let tail = b.build_ptr_to_int(CTX::tail_ptr.load(b, p)?.into_pointer_value(), i64, "");
+  let tail = b.build_ptr_to_int(CTX::scan_ptr.load(b, p)?.into_pointer_value(), i64, "");
   let val = b.build_int_sub(tail, beg, "");
   let val = b.build_int_truncate(val, i32, "");
   CTX::end_line_off.store(b, p, val)?;
@@ -505,10 +505,10 @@ pub(crate) fn construct_update_tail<'a>(
 ) -> SherpaResult<()> {
   let LLVMParserModule { b, i32, i8, .. } = m;
 
-  let tail_ptr_cache = CTX::tail_ptr.load(b, p_ctx)?.into_pointer_value();
+  let scan_ptr_cache = CTX::scan_ptr.load(b, p_ctx)?.into_pointer_value();
 
-  CTX::tail_ptr.store(b, p_ctx, unsafe {
-    b.build_gep(tail_ptr_cache, &[CTX::symbol_len.load(b, p_ctx)?.into_int_value()], "")
+  CTX::scan_ptr.store(b, p_ctx, unsafe {
+    b.build_gep(scan_ptr_cache, &[CTX::symbol_len.load(b, p_ctx)?.into_int_value()], "")
   });
 
   // Increment line number;
@@ -610,7 +610,7 @@ pub(crate) fn construct_peek_reset<'a>(
 ) -> SherpaResult<()> {
   let offset = CTX::base_ptr.load(b, p_ctx)?.into_pointer_value();
   CTX::head_ptr.store(b, p_ctx, offset);
-  CTX::tail_ptr.store(b, p_ctx, offset);
+  CTX::scan_ptr.store(b, p_ctx, offset);
   CTX::tok_id.store(b, p_ctx, i32.const_zero());
   SherpaResult::Ok(())
 }
@@ -618,20 +618,20 @@ pub(crate) fn construct_peek_reset<'a>(
 pub(crate) fn construct_peek<'a>(m: &'a LLVMParserModule, p_ctx: PointerValue) -> SherpaResult<()> {
   let LLVMParserModule { b, i32, .. } = m;
   let offset = construct_get_tok_offset(m, p_ctx)?;
-  CTX::tail_ptr.store(b, p_ctx, offset);
+  CTX::scan_ptr.store(b, p_ctx, offset);
   CTX::head_ptr.store(b, p_ctx, offset);
   CTX::tok_id.store(b, p_ctx, i32.const_zero());
   SherpaResult::Ok(())
 }
 
 /// Update the remaining chars value by calculating its
-/// value using tail_ptr and end_ptr
+/// value using scan_ptr and end_ptr
 pub(crate) fn construct_update_remaining(
   sp: &LLVMParserModule,
   p_ctx: PointerValue,
 ) -> SherpaResult<()> {
   let LLVMParserModule { b, iptr, .. } = sp;
-  let tail_int = b.build_ptr_to_int(CTX::tail_ptr.load(b, p_ctx)?.into_pointer_value(), *iptr, "");
+  let tail_int = b.build_ptr_to_int(CTX::scan_ptr.load(b, p_ctx)?.into_pointer_value(), *iptr, "");
   let end_int = b.build_ptr_to_int(CTX::end_ptr.load(b, p_ctx)?.into_pointer_value(), *iptr, "");
   CTX::chars_remaining_len.store(b, p_ctx, b.build_int_sub(end_int, tail_int, ""))?;
   SherpaResult::Ok(())
@@ -658,7 +658,7 @@ pub(crate) fn construct_skip<'a>(
   let offset = construct_get_tok_offset(sp, p_ctx)?;
 
   let LLVMParserModule { b, i32, .. } = sp;
-  CTX::tail_ptr.store(b, p_ctx, offset);
+  CTX::scan_ptr.store(b, p_ctx, offset);
   CTX::tok_id.store(b, p_ctx, i32.const_zero());
   CTX::head_ptr.store(b, p_ctx, offset);
 
@@ -709,7 +709,7 @@ pub(crate) fn construct_token_shift<'a>(
   CTX::start_line_off.store(b, p_ctx, CTX::chkp_line_off.load(b, p_ctx)?.into_int_value())?;
 
   let offset = construct_get_tok_offset(m, p_ctx)?;
-  CTX::tail_ptr.store(b, p_ctx, offset);
+  CTX::scan_ptr.store(b, p_ctx, offset);
   CTX::anchor_ptr.store(b, p_ctx, offset);
   CTX::head_ptr.store(b, p_ctx, offset);
   CTX::base_ptr.store(b, p_ctx, offset);
@@ -728,7 +728,7 @@ fn construct_assign_token_id(
   }
 
   let len = b.build_int_sub(
-    CTX::tail_ptr.load_ptr_as_int(b, p_ctx, *iptr)?,
+    CTX::scan_ptr.load_ptr_as_int(b, p_ctx, *iptr)?,
     CTX::head_ptr.load_ptr_as_int(b, p_ctx, *iptr)?,
     "",
   );

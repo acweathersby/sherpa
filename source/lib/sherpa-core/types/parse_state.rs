@@ -20,7 +20,7 @@ impl ScannerStateId {
     Self(hash_id_value_u64(symbol_set))
   }
 
-  /// Create a state id from a set of symbol strings seperated by `~~`
+  /// Create a state id from a set of symbol strings separated by `~~`
   pub fn from_string(name: &str, g: &GrammarStore) -> Self {
     let symbols =
       name.split("~~").map(|s| SymbolID::from_string(s, Some(g))).collect::<SymbolSet>();

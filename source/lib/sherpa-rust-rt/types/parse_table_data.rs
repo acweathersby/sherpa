@@ -1,42 +1,63 @@
-use super::*;
+use super::{
+  bytecode::{ByteCodeIterator, Instruction},
+  *,
+};
 
 /// Deconstructed bytecode table information.
 #[derive(Debug, Clone, Copy)]
-pub struct TableHeaderData {
+pub struct TableHeaderData<'a> {
   pub input_type: u32,
-  pub lexer_type: u32,
   pub table_length: u32,
   pub table_meta: u32,
   /// The instruction of the scanner state, if this table has
   /// one.
-  pub scan_state_entry_instruction: Instruction,
+  pub scan_block_instruction: bytecode::Instruction<'a>,
+  /// The absolute address of start of the instruction data.
+  ///
+  pub default_block: bytecode::Instruction<'a>,
+  /// The absolute address of start of the table data.
+  ///
+  /// For both Hash and Vector tables, the table data section is
+  /// a [\[u32; table_length\]] buffer.
+  pub table_start: usize,
+  /// A ByteCodeIterator positioned at the absolute address of the table data
+  /// section.
+  pub table_start_iter: ByteCodeIterator<'a>,
+  /// The absolute address of the first instruction block following the
+  /// table data.
+  pub parse_block_address: usize,
 }
 
-impl TableHeaderData {
-  #[inline(always)]
-  pub fn from_bytecode(offset: usize, bc: &[u32]) -> Self {
-    let i = offset;
+impl<'a> From<Instruction<'a>> for TableHeaderData<'a> {
+  #[track_caller]
+  fn from(i: Instruction<'a>) -> Self {
+    debug_assert!(matches!(
+      i.get_opcode(),
+      bytecode::Opcode::HashBranch | bytecode::Opcode::VectorBranch
+    ));
 
-    let (first, scanner_address, third) = unsafe {
-      let v = bc.get_unchecked(i..i + 3);
-      (v[0], v[1], v[2])
-    };
-
-    let input_type = (first >> 22) & 0x7;
-    let lexer_type = (first >> 26) & 0x3;
-    let table_length = (third >> 16) & 0xFFFF;
-    let table_meta = third & 0xFFFF;
+    let mut iter = i.iter();
+    let input_type = iter.next_u8().unwrap() as u32;
+    let default_delta = iter.next_u32_le().unwrap();
+    let scan_address = iter.next_u32_le().unwrap() as u32;
+    let table_length = iter.next_u32_le().unwrap();
+    let table_meta = iter.next_u32_le().unwrap();
+    let table_start = i.address() + 18;
+    let table_start_iter = (i.bytecode(), table_start as usize).into();
 
     Self {
       input_type,
-      lexer_type,
       table_length,
       table_meta,
-      scan_state_entry_instruction: if scanner_address > 0 {
-        Instruction::from(bc, scanner_address as usize)
+      table_start,
+      table_start_iter,
+      parse_block_address: table_start + (table_length * 4) as usize,
+      scan_block_instruction: if scan_address > 0 {
+        (i.bytecode(), scan_address as usize).into()
       } else {
-        Instruction::invalid()
+        (i.bytecode(), 0).into()
       },
+      default_block: (i.bytecode(), i.address() + default_delta as usize).into(),
     }
   }
 }

@@ -1,8 +1,8 @@
 #![warn(clippy::borrowed_box)]
+
 use crate::{
   grammar::compile::parser::sherpa::{
     ASTNode,
-    ForkTo,
     Goto,
     Num,
     Reduce,
@@ -14,12 +14,13 @@ use crate::{
   },
   types::*,
 };
+use sherpa_runtime::types::bytecode::{insert_op, Opcode, Opcode as Op, *};
 use std::{
   collections::{hash_map::Entry, BTreeMap, HashMap, VecDeque},
   vec,
 };
 
-pub(crate) fn build_byte_code_buffer(states: Vec<&IR_STATE>) -> (Vec<u32>, BTreeMap<String, u32>) {
+pub(crate) fn build_byte_code_buffer(states: Vec<&IR_STATE>) -> (Vec<u8>, BTreeMap<String, u32>) {
   let states_iter = states
     .iter()
     .flat_map(|s| {
@@ -37,12 +38,14 @@ pub(crate) fn build_byte_code_buffer(states: Vec<&IR_STATE>) -> (Vec<u32>, BTree
     states_iter.clone().map(|(i, (_, name, _))| (name, i as u32)).collect::<HashMap<_, _>>();
 
   let mut bc = vec![
-    Instruction::I15_FALL_THROUGH,
-    Instruction::I00_PASS,
-    Instruction::I15_FAIL,
-    Instruction::I08_POP,
-    NORMAL_STATE_FLAG,
-    Instruction::I00_PASS,
+    0,
+    ('S' as u8) | 0x80,
+    ('H' as u8) | 0x80,
+    ('E' as u8) | 0x80,
+    ('R' as u8) | 0x80,
+    ('P' as u8) | 0x80,
+    ('A' as u8) | 0x80,
+    Op::Fail as u8,
   ];
 
   for (i, (state, name, is_fail)) in states_iter {
@@ -60,7 +63,9 @@ pub(crate) fn build_byte_code_buffer(states: Vec<&IR_STATE>) -> (Vec<u32>, BTree
 
       bc.append(&mut fail_addition);
       goto_bookmarks_to_offset[i as usize] = bc.len() as u32;
-      bc.push(Instruction::I02_GOTO | FAIL_STATE_FLAG | fail_state_address as u32);
+      insert_op(&mut bc, Op::PushGoto);
+      insert_u8(&mut bc, FAIL_STATE_FLAG as u8);
+      insert_u32_le(&mut bc, fail_state_address as u32);
     } else {
       if let Some(_) = &state.fail {
       } else {
@@ -79,7 +84,7 @@ pub(crate) fn build_byte_code_buffer(states: Vec<&IR_STATE>) -> (Vec<u32>, BTree
     }
   }
 
-  patch_goto_offsets(&mut bc, &goto_bookmarks_to_offset);
+  remap_goto_addresses(&mut bc, &goto_bookmarks_to_offset);
 
   let state_name_to_offset = state_name_to_bookmark
     .into_iter()
@@ -89,38 +94,40 @@ pub(crate) fn build_byte_code_buffer(states: Vec<&IR_STATE>) -> (Vec<u32>, BTree
   (bc, state_name_to_offset)
 }
 
-/// Converts Goto location bookmarks to bytecode offsets.
-fn patch_goto_offsets(bc: &mut Vec<u32>, goto_to_off: &[u32]) {
-  use Instruction as I;
-
-  let mut i = 0;
+/// Converts Goto location bookmarks to bytecode addresses.
+fn remap_goto_addresses(bc: &mut Vec<u8>, _goto_to_off: &[u32]) {
+  let mut i = "SHERPA".len();
 
   while i < bc.len() {
     let instruction = bc[i];
-    i += match instruction & 0xF000_0000 {
-      I::I02_GOTO => {
-        let bc_i = instruction & STATE_ADDRESS_MASK;
-        let state_header = instruction & (!STATE_ADDRESS_MASK);
-        if (state_header & FAIL_STATE_FLAG) == 0 {
-          bc[i] = state_header | goto_to_off[bc_i as usize];
-        }
-        1
-      }
-      I::I06_FORK_TO => 1,
-      I::I09_VECTOR_BRANCH | I::I10_HASH_BRANCH => {
-        let table_length = bc[i + 2] >> 16 & 0xFFFF;
+    let op = instruction.into();
+    i += match op {
+      Op::HashBranch | Op::VectorBranch => {
+        let i: Instruction = (bc.as_slice(), i).into();
+        let TableHeaderData {
+          scan_block_instruction: scanner_address, parse_block_address, ..
+        } = i.into();
+        let default_delta = parse_block_address - i.address();
 
-        let pointer = bc[i + 1];
-
-        if pointer != 0 {
-          bc[i + 1] = goto_to_off[pointer as usize];
+        if scanner_address.address() != 0 {
+          set_goto_address(bc, _goto_to_off, i.address() + 6);
         }
 
-        table_length as usize + 4
+        default_delta
       }
-      _ => 1,
+      Op::Goto | Op::PushGoto | Op::PushExceptionHandler => {
+        set_goto_address(bc, _goto_to_off, i + 2);
+        op.len()
+      }
+      op => op.len(),
     }
   }
+}
+
+fn set_goto_address(bc: &mut Vec<u8>, _goto_to_off: &[u32], offset: usize) {
+  let mut iter: ByteCodeIterator = (bc.as_slice(), offset).into();
+  let val = iter.next_u32_le().unwrap();
+  set_u32_le(bc, offset, _goto_to_off[val as usize]);
 }
 
 pub fn compile_ir_state_to_bytecode(
@@ -129,7 +136,7 @@ pub fn compile_ir_state_to_bytecode(
   state_to_bookmark: &HashMap<String, u32>,
   scanner_name: &str,
   state_name: &str,
-) -> Vec<u32> {
+) -> Vec<u8> {
   // Determine if we are dealing with a branch state or a single line
   // state. Branch states will always have more than one assert
   // statement.
@@ -172,7 +179,7 @@ fn build_branching_bytecode(
   scanner_name: &str,
   state_to_bookmark: &HashMap<String, u32>,
   state_name: &str,
-) -> Vec<u32> {
+) -> Vec<u8> {
   let branches = instr
     .iter()
     .filter_map(|n| match n {
@@ -197,7 +204,7 @@ fn build_branching_bytecode(
   let o = if !default_branches.is_empty() {
     build_branchless_bytecode(&default_branches[0].instructions, state_to_bookmark, state_name)
   } else {
-    vec![Instruction::I15_FAIL]
+    vec![Opcode::Fail as u8]
   };
 
   let o = make_table(
@@ -277,20 +284,16 @@ fn make_table(
   branches: &[&ASSERT],
   input_type_key: u32,
   scanner_name: &str,
-  mut default: Vec<u32>,
+  mut default: Vec<u8>,
   get_branch_selector: GetBranchSelector,
   state_to_bookmark: &HashMap<String, u32>,
   state_name: &str,
-) -> Vec<u32> {
+) -> Vec<u8> {
   if branches.is_empty() {
     return default;
   }
 
-  use Instruction as I;
-
-  let lexer_type: u32 = LexerType::ASSERT;
-
-  let scanner_pointer = if input_type_key == InputType::T02_TOKEN {
+  let scanner_address = if input_type_key == InputType::T02_TOKEN {
     if scanner_name.is_empty() {
       panic!("Scanner name should not be empty! {}", state_name);
     }
@@ -322,7 +325,7 @@ fn make_table(
 
   let mut branch_instructions = vec![];
   let mut branch_instructions_length = 0;
-  let mut existing_instructions = HashMap::<Vec<u32>, u32>::new();
+  let mut existing_instructions = HashMap::<Vec<u8>, u32>::new();
 
   for branch in branches {
     let instructions =
@@ -346,6 +349,7 @@ fn make_table(
   }
 
   let mut o = vec![];
+  let bc = &mut o;
 
   match get_branch_selector(
     &val_offset_map.keys().cloned().collect::<Vec<_>>(),
@@ -355,14 +359,14 @@ fn make_table(
     BranchSelector::Hash => {
       let offset_lookup_table_length = val_offset_map.len() as u32;
 
-      let instruction_field_start = 4 + offset_lookup_table_length;
+      let instruction_field_start = 18 + offset_lookup_table_length * 4;
 
       let default_offset = branch_instructions_length + instruction_field_start;
 
       let mut pending_pairs = val_offset_map
         .clone()
         .into_iter()
-        .map(|(k, v)| (k, if v == 0xFFFF_FFFF { 0x7FF } else { v + instruction_field_start }))
+        .map(|(k, v)| (k, v + instruction_field_start))
         .collect::<VecDeque<_>>();
 
       let mod_base = f64::log2(val_offset_map.len() as f64) as u32;
@@ -413,54 +417,40 @@ fn make_table(
               | (hash_entries[prev_node] & ((1 << 22) - 1));
             // Add data for the new node.
             hash_entries[i] = ((val) & 0x7FF) | ((offset & 0x7FF) << 11) | (512 << 22);
-
             break;
           }
         }
       }
-
-      // First word header
-      o.push(I::I10_HASH_BRANCH | (input_type_key << 22) | (lexer_type << 26));
-
-      // Second word header
-      o.push(scanner_pointer);
-
-      // Third word header
-      o.push((offset_lookup_table_length << 16) | mod_base);
-
-      o.push(default_offset);
-
-      o.append(&mut hash_entries);
+      insert_op(bc, Op::HashBranch); // 1
+      insert_u8(bc, input_type_key as u8); // 2
+      insert_u32_le(bc, default_offset); // 6
+      insert_u32_le(bc, scanner_address); // 10
+      insert_u32_le(bc, offset_lookup_table_length); // 14
+      insert_u32_le(bc, mod_base); // 18
+      for instruction in hash_entries {
+        insert_u32_le(bc, instruction)
+      }
     }
     BranchSelector::Vector => {
       let mut values = val_offset_map.keys().peekable();
       let (start, end) = (**values.peek().unwrap(), *values.last().unwrap());
       let value_offset = start;
       let offset_lookup_table_length = val_offset_map.len() as u32;
-      let instruction_field_start = 4 + offset_lookup_table_length;
+      let instruction_field_start = 18 + offset_lookup_table_length * 4;
       let default_offset = branch_instructions_length + instruction_field_start;
 
-      // First word header
-      o.push(I::I09_VECTOR_BRANCH | (input_type_key << 22) | (lexer_type << 26));
-
-      // Second word header
-      o.push(scanner_pointer);
-
-      // Third word header
-      o.push((offset_lookup_table_length << 16) | value_offset);
-
-      // Default Location
-      o.push(default_offset);
+      insert_op(bc, Op::VectorBranch);
+      insert_u8(bc, input_type_key as u8);
+      insert_u32_le(bc, default_offset);
+      insert_u32_le(bc, scanner_address);
+      insert_u32_le(bc, offset_lookup_table_length);
+      insert_u32_le(bc, value_offset);
 
       for branch in start..=end {
         if let Some(offset) = val_offset_map.get(&branch) {
-          if *offset == 0xFFFF_FFFF {
-            o.push(*offset);
-          } else {
-            o.push(*offset + instruction_field_start);
-          }
+          insert_u32_le(bc, *offset + instruction_field_start);
         } else {
-          o.push(default_offset)
+          insert_u32_le(bc, default_offset);
         }
       }
     }
@@ -477,24 +467,23 @@ fn build_branchless_bytecode(
   instructions: &Vec<ASTNode>,
   state_name_to_bookmark: &HashMap<String, u32>,
   current_state_name: &str,
-) -> Vec<u32> {
-  let mut byte_code: Vec<u32> = vec![];
-  use Instruction as I;
+) -> Vec<u8> {
+  let mut byte_code: Vec<u8> = vec![];
+  let bc = &mut byte_code;
 
   // reverse gotos so jumps operate correctly in a stack structure.
   let gotos = instructions.iter().filter(|i| matches!(i, ASTNode::Goto(_))).rev();
   let non_gotos = instructions.iter().filter(|i| !matches!(i, ASTNode::Goto(_)));
-
+  let mut active_prod = 0;
   for instruction in non_gotos.chain(gotos) {
     match instruction {
       ASTNode::TokenAssign(box TokenAssign { ids }) => {
-        byte_code.push(I::I05_TOKEN_ASSIGN | ((ids[0].val as u32) & 0x00FF_FFFF))
+        insert_op(bc, Op::AssignToken);
+        insert_u32_le(bc, ids[0].val as u32);
       }
-      ASTNode::ShiftScanner(..) => byte_code.push(I::I13_SHIFT_SCANNER),
-      ASTNode::ShiftScanToken(_) => byte_code.push(I::I01_SHIFT_TOKEN | 1),
-      ASTNode::ShiftToken(box ShiftToken { EMPTY }) => {
-        byte_code.push(I::I01_SHIFT_TOKEN | *EMPTY as u32)
-      }
+      ASTNode::ShiftScanner(..) => insert_op(bc, Op::ScanShift),
+      ASTNode::ShiftScanToken(_) => insert_op(bc, Op::ShiftTokenScanless),
+      ASTNode::ShiftToken(box ShiftToken { .. }) => insert_op(bc, Op::ShiftToken),
       ASTNode::Goto(box Goto { state }) => {
         let state_pointer_val = match (state.val == current_state_name)
           .then_some(state_name_to_bookmark.get(&(state.val.to_string() + "_internal")))
@@ -502,47 +491,48 @@ fn build_branchless_bytecode(
           Some(Some(v)) => *v,
           _ => match state_name_to_bookmark.get(&state.val) {
             Some(v) => *v,
-            None => 0,
+            None => panic!("State is undefined"),
           },
         };
-        byte_code.push(I::I02_GOTO | NORMAL_STATE_FLAG | state_pointer_val);
+        insert_op(bc, Op::PushGoto);
+        insert_u8(bc, NORMAL_STATE_FLAG as u8);
+        insert_u32_le(bc, state_pointer_val);
       }
-      ASTNode::ForkTo(box ForkTo { states, production_id }) => {
-        byte_code.push(I::I06_FORK_TO | ((states.len() << 16) as u32) | (production_id.val as u32));
-        for state in states {
-          let state_pointer_val =
-            if let Some(v) = state_name_to_bookmark.get(&state.val) { *v } else { 0 };
-          byte_code.push(I::I02_GOTO | NORMAL_STATE_FLAG | state_pointer_val);
-        }
-      }
-      ASTNode::PeekScanToken(_) => byte_code.push(I::I14_PEEK_TOKEN | 1),
-      ASTNode::PeekToken(_) => byte_code.push(I::I14_PEEK_TOKEN),
-      ASTNode::PeekReset(_) => byte_code.push(I::I07_PEEK_RESET),
-      ASTNode::Skip(_) => byte_code.push(I::I12_SKIP),
-      ASTNode::SkipScanToken(_) => byte_code.push(I::I12_SKIP | 1),
-      ASTNode::Pop(_) => byte_code.push(I::I08_POP),
-      ASTNode::Pass(_) => byte_code.push(I::I00_PASS),
-      ASTNode::Fail(_) => byte_code.push(I::I15_FAIL),
+      ASTNode::PeekScanToken(_) => insert_op(bc, Op::PeekTokenScanless),
+      ASTNode::PeekToken(_) => insert_op(bc, Op::PeekToken),
+      ASTNode::PeekReset(_) => insert_op(bc, Op::PeekReset),
+      ASTNode::Skip(_) => insert_op(bc, Op::SkipToken),
+      ASTNode::SkipScanToken(_) => insert_op(bc, Op::SkipTokenScanless),
+      ASTNode::Pop(_) => insert_op(bc, Op::PopGoto),
+      ASTNode::Pass(_) => insert_op(bc, Op::Pass),
+      ASTNode::Fail(_) => insert_op(bc, Op::Fail),
+      // TODO: Remove this kludge when production is set by the reduce ast type
       ASTNode::SetProd(box SetProd { id: box Num { val } }) => {
-        byte_code.push(I::I03_SET_PROD | (*val as u32 & INSTRUCTION_CONTENT_MASK))
+        active_prod = *val as u32;
       }
-      ASTNode::Reduce(box Reduce { rule_id, len, .. }) => byte_code.push(
-        I::I04_REDUCE
-          | if *len as u32 == IR_REDUCE_NUMERIC_LEN_ID {
-            0xFFFF0000 & INSTRUCTION_CONTENT_MASK
-          } else {
-            (*len as u32) << 16
-          }
-          | (*rule_id as u32),
-      ),
+      ASTNode::Reduce(box Reduce { rule_id, len, .. }) => {
+        insert_op(bc, Op::Reduce);
+        insert_u32_le(bc, active_prod);
+        insert_u32_le(bc, *rule_id as u32);
+        insert_u16_le(bc, *len as u16);
+      }
 
       _ => {}
     }
   }
 
-  if let Some(last) = byte_code.last() {
-    if !matches!(*last, I::I00_PASS | I::I15_FAIL | I::I08_POP | I::I12_SKIP) {
-      byte_code.push(I::I00_PASS);
+  if let Some(last) = bc.last() {
+    // Ensure the last op in this block is a sentinel type.
+    match (*last).into() {
+      Op::Pass
+      | Op::Accept
+      | Op::Fail
+      | Op::Goto
+      | Op::SkipPeekToken
+      | Op::SkipToken
+      | Op::SkipTokenScanless
+      | Op::SkipPeekTokenScanless => {}
+      _ => insert_op(bc, Op::Pass),
     }
   }
 

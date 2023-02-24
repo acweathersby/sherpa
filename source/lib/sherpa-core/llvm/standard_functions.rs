@@ -301,7 +301,7 @@ pub(crate) unsafe fn construct_get_adjusted_input_block_function(
   let beg_ptr = CTX::beg_ptr.get_ptr(b, p_ctx)?;
   let anchor_ptr = CTX::anchor_ptr.get_ptr(b, p_ctx)?;
   let head_ptr = CTX::head_ptr.get_ptr(b, p_ctx)?;
-  let tail_ptr = CTX::tail_ptr.get_ptr(b, p_ctx)?;
+  let scan_ptr = CTX::scan_ptr.get_ptr(b, p_ctx)?;
   let end_ptr = CTX::end_ptr.get_ptr(b, p_ctx)?;
 
   b.build_call(
@@ -311,7 +311,7 @@ pub(crate) unsafe fn construct_get_adjusted_input_block_function(
       beg_ptr.into(),
       anchor_ptr.into(),
       head_ptr.into(),
-      tail_ptr.into(),
+      scan_ptr.into(),
       end_ptr.into(),
     ],
     "",
@@ -320,7 +320,7 @@ pub(crate) unsafe fn construct_get_adjusted_input_block_function(
   .left()?
   .into_struct_value();
 
-  let tail_int = b.build_ptr_to_int(CTX::tail_ptr.load(b, p_ctx)?.into_pointer_value(), *iptr, "");
+  let tail_int = b.build_ptr_to_int(CTX::scan_ptr.load(b, p_ctx)?.into_pointer_value(), *iptr, "");
   let end_int = b.build_ptr_to_int(CTX::end_ptr.load(b, p_ctx)?.into_pointer_value(), *iptr, "");
   CTX::chars_remaining_len.store(b, p_ctx, b.build_int_sub(end_int, tail_int, ""))?;
 

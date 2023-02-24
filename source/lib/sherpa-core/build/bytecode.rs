@@ -52,7 +52,7 @@ fn write_rust_parser_file<W: Write>(
   writer: &mut CodeWriter<W>,
   state_lookups: &BTreeMap<String, u32>,
   g: &GrammarStore,
-  bc: &Vec<u32>,
+  bc: &Vec<u8>,
   ascript: Option<&ascript::types::AScriptStore>,
 ) -> std::io::Result<()> {
   writer
@@ -117,7 +117,7 @@ impl<T: Reader, UserCTX> Parser<T, UserCTX>
   }
   writer.dedent().wrtln("}")?;
 
-  writer.wrtln(&format!("pub static bytecode: [u32; {}] = [", bc.len()))?.indent();
+  writer.wrtln(&format!("pub static bytecode: [u8; {}] = [", bc.len()))?.indent();
 
   for chunk in bc.chunks(9) {
     writer.insert_newline()?;
@@ -136,7 +136,7 @@ impl<T: Reader, UserCTX> Parser<T, UserCTX>
     writer.wrtln(&format!("type Node = {};", ascript.ast_type_name))?;
     writer.wrtln("impl AstObject for Node {}\n")?;
 
-    // Create a module that will store convience functions for compiling AST
+    // Create a module that will store convenience functions for compiling AST
     // structures based on on grammar entry points.
 
     for (ref_, ast_type, ast_type_string, export_name, guid_name) in &export_node_data {

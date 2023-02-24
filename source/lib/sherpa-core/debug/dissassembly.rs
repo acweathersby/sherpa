@@ -1,244 +1,300 @@
 use crate::{bytecode::BytecodeOutput, types::*, Journal};
+use sherpa_runtime::types::bytecode::Instruction;
 use std::collections::BTreeSet;
 
-fn header(bc_address: usize) -> String {
-  format!("{}| ", address_string(bc_address))
+fn header<'a>(address: usize) -> String {
+  format!("{}| ", address_string(address))
 }
 
 pub(crate) fn address_string(bc_address: usize) -> String {
   format!("{:0>6X}", bc_address)
 }
-pub(crate) fn disassemble_state(
-  bc: &[u32],
-  state_address: usize,
-  lu: Option<&GrammarStore>,
-) -> (String, usize) {
-  use disassemble_state as ds;
+pub(crate) fn disassemble_parse_block<'a>(
+  i: Option<Instruction<'a>>,
+  g: Option<&GrammarStore>,
+  bc: Option<&BytecodeOutput>,
+) -> (String, Option<Instruction<'a>>) {
+  use disassemble_parse_block as ds;
   use header as dh;
 
-  let so = state_address;
+  let Some(i) = i  else {
+    return ("".to_string(), None)
+  };
 
-  if state_address >= bc.len() {
-    ("".to_string(), so)
+  use bytecode::Opcode::*;
+
+  if !i.is_valid() {
+    ("".to_string(), None)
   } else {
-    let instruction = bc[state_address] & INSTRUCTION_CONTENT_MASK;
-    match bc[state_address] & INSTRUCTION_HEADER_MASK {
-      Instruction::I00_PASS => (format!("\n{}PASS", dh(so)), so + 1),
-      Instruction::I01_SHIFT_TOKEN => {
-        let (string, offset) = ds(bc, so + 1, lu);
-        if instruction & 1 == 0 {
-          (format!("\n{}SHFT", dh(so)) + &string, offset + 1)
-        } else {
-          (format!("\n{}SHFT-SCAN", dh(so)) + &string, offset)
-        }
-      }
-      Instruction::I02_GOTO => {
-        let (string, offset) = ds(bc, so + 1, lu);
-        if instruction & FAIL_STATE_FLAG > 0 {
+    match i.get_opcode() {
+      VectorBranch | HashBranch => generate_table_string(i, g, bc),
+      Goto => {
+        let mut iter = i.iter();
+        let _state_mode = iter.next_u8().unwrap();
+        let address = iter.next_u32_le().unwrap() as usize;
+        if let Some(bc) = bc {
           (
             format!(
-              "\n{}RCVR {}",
-              dh(so),
-              address_string((bc[so] & GOTO_STATE_ADDRESS_MASK) as usize)
-            ) + &string,
-            offset,
+              "\n{}GOTO {} [ {} ]",
+              dh(i.address()),
+              address_string(address),
+              get_state_name_from_address(bc, address),
+            ),
+            i.next(),
+          )
+        } else {
+          (format!("\n{}GOTO {}", dh(i.address()), address_string(address)), i.next())
+        }
+      }
+      PopGoto => {
+        let (string, i_last) = ds(i.next(), g, bc);
+        (format!("\n{}POP{string}", dh(i.address())), i_last)
+      }
+      PushGoto => {
+        let (string, i_last) = ds(i.next(), g, bc);
+        let mut iter = i.iter();
+        let _state_mode = iter.next_u8().unwrap();
+        let address = iter.next_u32_le().unwrap() as usize;
+        if let Some(bc) = bc {
+          (
+            format!(
+              "\n{}PUSH {} [ {} ]{string}",
+              dh(i.address()),
+              address_string(address),
+              get_state_name_from_address(bc, address),
+            ),
+            i_last,
+          )
+        } else {
+          (format!("\n{}PUSH {}{string}", dh(i.address()), address_string(address)), i_last)
+        }
+      }
+      PushExceptionHandler => {
+        let (string, i_last) = ds(i.next(), g, bc);
+        let mut iter = i.iter();
+        let _state_mode = iter.next_u8().unwrap();
+        let address = iter.next_u32_le().unwrap() as usize;
+        if let Some(bc) = bc {
+          (
+            format!(
+              "\n{}PUSH-CATCH {} [ {} ]{string}",
+              dh(i.address()),
+              address_string(address),
+              get_state_name_from_address(bc, address),
+            ),
+            i_last,
+          )
+        } else {
+          (format!("\n{}PUSH-CATCH {}{string}", dh(i.address()), address_string(address)), i_last)
+        }
+      }
+      Reduce => {
+        let (string, i_last) = ds(i.next(), g, bc);
+        let mut iter = i.iter();
+        let prod_id = iter.next_u32_le().unwrap();
+        let rule_id = iter.next_u32_le().unwrap();
+        let symbol_count = iter.next_u16_le().unwrap() as u32;
+
+        let pluralized = if symbol_count == 1 { "SYMBOL" } else { "SYMBOLS" };
+
+        if let Some(lu) = g {
+          let name = &lu.get_production_by_bytecode_id(prod_id).unwrap().name;
+          (
+            format!(
+              "\n{}REDUCE-RULE {} TO [ {} ] ( {} {} ){string} ",
+              dh(i.address()),
+              rule_id,
+              name,
+              symbol_count,
+              pluralized,
+            ),
+            i_last,
           )
         } else {
           (
             format!(
-              "\n{}PUSH {}",
-              dh(so),
-              address_string((bc[so] & GOTO_STATE_ADDRESS_MASK) as usize)
-            ) + &string,
-            offset,
+              "\n{}REDUCE-RULE {} TO [ {} ] ( {} {} ){string} ",
+              dh(i.address()),
+              rule_id,
+              prod_id,
+              symbol_count,
+              pluralized,
+            ),
+            i_last,
           )
         }
       }
-      Instruction::I03_SET_PROD => {
-        let production_id = instruction & INSTRUCTION_CONTENT_MASK;
-        let (string, offset) = ds(bc, so + 1, lu);
+      AssignToken => {
+        let (string, i_last) = ds(i.next(), g, bc);
+        let mut iter = i.iter();
+        let tok_id = iter.next_u32_le().unwrap();
 
-        if let Some(lu) = lu {
-          let name = &lu.get_production_by_bytecode_id(production_id).unwrap().guid_name;
-          (format!("\n{}PROD SET TO {}     // {}", dh(so), production_id, name,) + &string, offset)
+        if let Some(lu) = g {
+          let tok_name = lu
+            .bytecode_token_lookup
+            .get(&tok_id)
+            .map(|s| s.debug_string(&lu))
+            .unwrap_or(tok_id.to_string());
+
+          (format!("\n{}ASSIGN-TK [{} = {}]{string}", dh(i.address()), tok_id, tok_name), i_last)
         } else {
-          (format!("\n{}PROD SET TO {}", dh(so), production_id,) + &string, offset)
+          (format!("\n{}ASSIGN-TK [{}]{string}", dh(i.address()), tok_id), i_last)
         }
       }
-      Instruction::I04_REDUCE => {
-        let (string, offset) = ds(bc, so + 1, lu);
-        let symbol_count = instruction >> 16 & 0x0FFF;
-        let body_id = instruction & 0xFFFF;
-
-        if symbol_count == 0xFFF {
-          (format!("\n{}REDU accumulated symbols to {}", dh(so), body_id) + &string, offset)
-        } else {
-          let pluralized = if symbol_count == 1 { "SYMBOL" } else { "SYMBOLS" };
-          (
-            format!("\n{}REDU {} {} TO {}", dh(so), symbol_count, pluralized, body_id) + &string,
-            offset,
-          )
-        }
-      }
-      Instruction::I05_TOKEN => {
-        let (string, offset) = ds(bc, so + 1, lu);
-        if (instruction & TOKEN_ASSIGN_FLAG) > 0 {
-          (format!("\n{}TOKN ASSIGN TO {}", dh(so), instruction & 0x00FF_FFFF) + &string, offset)
-        } else {
-          (format!("\n{}TOKV", dh(so)) + &string, offset)
-        }
-      }
-      Instruction::I06_FORK_TO => {
-        let target_production = instruction & 0xFFFF;
-        let num_of_states = (instruction >> 16) & 0xFFFF;
-        let end = so + 1 + num_of_states as usize;
-        let (string, offset) = ds(bc, end, lu);
-        let mut state_strings = vec![];
-
-        for offset in (so + 1)..end {
-          state_strings.push(format!(
-            "{} -- FORK TO {}",
-            dh(offset),
-            address_string((bc[offset] & GOTO_STATE_ADDRESS_MASK) as usize,),
-          ));
-        }
-
+      NoOp => {
+        let (string, i_last) = ds(i.next(), g, bc);
         (
           format!(
-            "\n{}FORK TO COMPLETE {}\n{}",
-            dh(so),
-            target_production,
-            state_strings.join("\n"),
-          ) + &string,
-          offset,
+            "\n{}NOOP [ASCII: {} 0x{:X}]{string}",
+            dh(i.address()),
+            char::from_u32((i.bytecode()[i.address()] & 127) as u32).unwrap(),
+            i.bytecode()[i.address()]
+          ),
+          i_last,
         )
       }
-      Instruction::I07_PEEK_RESET => {
-        let (string, offset) = ds(bc, so + 1, lu);
-        (format!("\n{}PKRST", dh(so)) + &string, offset)
+      ScanShift => {
+        let (string, i_last) = ds(i.next(), g, bc);
+        (format!("\n{}SCAN-SHFT{string}", dh(i.address())), i_last)
       }
-      Instruction::I08_POP => (format!("\n{}POP", dh(so)), so + 1),
-      Instruction::I09_VECTOR_BRANCH => generate_table_string(
-        bc,
-        so,
-        lu,
-        "VECT",
-        |states: &[u32], table_entry_offset: usize, state_offset: usize| {
-          (
-            states[table_entry_offset] as usize,
-            (table_entry_offset - (4 + state_offset)) as u32 + (states[state_offset + 2] & 0xFFFF),
-            states[table_entry_offset] == 0xFFFF_FFFF,
-            0,
-          )
-        },
-      ),
-      Instruction::I10_HASH_BRANCH => generate_table_string(
-        bc,
-        so,
-        lu,
-        "HASH",
-        |states: &[u32], table_entry_offset: usize, _: usize| {
-          (
-            (states[table_entry_offset] >> 11 & 0x7FF) as usize,
-            (states[table_entry_offset] & 0x7FF),
-            (states[table_entry_offset] >> 11 & 0x7FF) == 0x7FF,
-            ((states[table_entry_offset] >> 22) & 0x3FF) as i64 - 512,
-          )
-        },
-      ),
-      Instruction::I11_SET_CATCH_STATE => {
-        let (string, offset) = ds(bc, so + 1, lu);
-        (format!("\n{}FSET", dh(so)) + &string, offset)
+      ShiftToken => {
+        let (string, i_last) = ds(i.next(), g, bc);
+        (format!("\n{}SHFT-TK{string}", dh(i.address())), i_last)
       }
-      Instruction::I12_SKIP => {
-        let (string, offset) = ds(bc, so + 1, lu);
-        if instruction & 1 == 0 {
-          (format!("\n{}SKIP", dh(so)) + &string, offset)
-        } else {
-          (format!("\n{}SKIP-CHAR", dh(so)) + &string, offset)
-        }
+      ShiftTokenScanless => {
+        let (string, i_last) = ds(i.next(), g, bc);
+        (format!("\n{}SHFT-TK-NO-SCAN{string}", dh(i.address())), i_last)
       }
-      Instruction::I13_SHIFT_SCANNER => {
-        let (string, offset) = ds(bc, so + 1, lu);
-        (format!("\n{}SHFS", dh(so)) + &string, offset)
+      PeekToken => {
+        let (string, i_last) = ds(i.next(), g, bc);
+        (format!("\n{}SHFT-PEEK-TK{string}", dh(i.address())), i_last)
       }
-      Instruction::I14_PEEK_TOKEN => {
-        let (string, offset) = ds(bc, so + 1, lu);
-        if instruction & 1 == 0 {
-          (format!("\n{}PEEK", dh(so)) + &string, offset)
-        } else {
-          (format!("\n{}PEEK-TOK", dh(so)) + &string, offset)
-        }
+      PeekTokenScanless => {
+        let (string, i_last) = ds(i.next(), g, bc);
+        (format!("\n{}SHFT-PEEK-TK-NO-SCAN{string}", dh(i.address())), i_last)
       }
-      Instruction::I15_FAIL => (format!("\n{}FAIL", dh(so)), so + 1),
-      _ => (format!("\n{}UNDF", dh(so)), so + 1),
+      SkipToken => {
+        let (string, i_last) = ds(i.next(), g, bc);
+        (format!("\n{}SKIP{string}", dh(i.address())), i_last)
+      }
+      SkipTokenScanless => {
+        let (string, i_last) = ds(i.next(), g, bc);
+        (format!("\n{}SKIP-NO-SCAN{string}", dh(i.address())), i_last)
+      }
+      SkipPeekToken => {
+        let (string, i_last) = ds(i.next(), g, bc);
+        (format!("\n{}SKIP-PEEK{string}", dh(i.address())), i_last)
+      }
+      SkipPeekTokenScanless => {
+        let (string, i_last) = ds(i.next(), g, bc);
+        (format!("\n{}SKIP-PEEK-NO-SCAN{string}", dh(i.address())), i_last)
+      }
+      PeekReset => {
+        let (string, i_last) = ds(i.next(), g, bc);
+        (format!("\n{}PEEK-RESET{string}", dh(i.address())), i_last)
+      }
+      Fail => (format!("\n{}FAIL", dh(i.address())), i.next()),
+      Pass => (format!("\n{}PASS", dh(i.address())), i.next()),
+      Accept => (format!("\n{}ACCEPT", dh(i.address())), i.next()),
     }
   }
 }
 
-type GetOffsetTokenIdPair =
-  fn(states: &[u32], table_entry_offset: usize, state_offset: usize) -> (usize, u32, bool, i64);
-
-pub(crate) fn generate_table_string(
-  bc: &[u32],
-  idx: usize,
+pub(crate) fn generate_table_string<'a>(
+  i: Instruction<'a>,
   lu: Option<&GrammarStore>,
-  table_name: &str,
-  get_offset_token_id_pair: GetOffsetTokenIdPair,
-) -> (String, usize) {
+  bc: Option<&BytecodeOutput>,
+) -> (String, Option<Instruction<'a>>) {
   let TableHeaderData {
     input_type,
-    lexer_type,
     table_length,
     table_meta,
-    scan_state_entry_instruction: scan_index,
-  } = TableHeaderData::from_bytecode(idx, bc);
+    scan_block_instruction: scan_index,
+    default_block,
+    table_start,
+    mut table_start_iter,
+    ..
+  } = i.into();
+  let table_name =
+    matches!(i.get_opcode(), bytecode::Opcode::HashBranch).then_some("HASH").unwrap_or("VECT");
 
-  let states = bc;
   let mut strings = vec![];
-  let default_offset = states[idx + 3] as usize;
   let mut delta_offsets = BTreeSet::new();
 
-  for entry_offset in (4 + idx)..(idx + 4 + table_length as usize) {
-    let (delta_offset, token_id, IS_SKIP, meta) =
-      get_offset_token_id_pair(states, entry_offset, idx);
-    let goto_offset = delta_offset + idx;
-    if delta_offset == default_offset {
-      strings.push(create_failure_entry(entry_offset, goto_offset));
-    } else if IS_SKIP {
-      strings.push(create_skip_entry(lu, token_id, input_type, entry_offset, meta));
+  let states = (0..table_length)
+    .into_iter()
+    .map(|_| table_start_iter.next_u32_le().unwrap())
+    .collect::<Vec<_>>();
+
+  for entry_offset in 0..table_length as usize {
+    let entry = states[entry_offset];
+    let (val_id, address_offset, meta) = match i.get_opcode() {
+      bytecode::Opcode::VectorBranch => {
+        let val_id = table_meta + entry_offset as u32;
+        let address_offset = entry as usize;
+        (val_id, address_offset, 0)
+      }
+      bytecode::Opcode::HashBranch => {
+        let val_id = (entry & 0x7FF) as u32;
+        let address_offset = ((entry >> 11) & 0x7FF) as usize;
+        let meta = ((entry >> 22) & 0x3FF) as i64 - 512;
+        (val_id, address_offset, meta)
+      }
+      _ => unreachable!(),
+    };
+    let address = i.address() + address_offset;
+
+    if address == default_block.address() {
+      strings.push(create_failure_entry(entry_offset, default_block.address()));
     } else {
-      delta_offsets.insert(delta_offset);
-      strings.push(create_normal_entry(lu, token_id, input_type, entry_offset, goto_offset, meta));
+      delta_offsets.insert(address);
+      strings.push(create_normal_entry(
+        lu,
+        val_id,
+        input_type,
+        entry_offset * 4 + table_start,
+        address,
+        meta,
+      ));
     }
   }
+  strings.push(create_default_entry(default_block.address()));
 
-  for delta_offset in delta_offsets {
-    strings.push(disassemble_state(bc, idx + delta_offset, lu).0);
+  for address in delta_offsets {
+    strings.push(disassemble_parse_block(Some((i.bytecode(), address).into()), lu, bc).0);
   }
+  let (default_string, offset) = disassemble_parse_block(Some(default_block), lu, bc);
 
-  let (default_string, offset) = disassemble_state(bc, idx + default_offset, lu);
-
-  let string = format!(
-    "\n{}{} JUMP | TYPE {} | PEEK {}",
-    header(idx),
+  let mut string = format!(
+    "\n{}{} JUMP \n{: >7} TYPE {} ",
+    header(i.address()),
     table_name,
+    "",
     input_type_to_name(input_type),
-    lexer_type == LexerType::PEEK
-  ) + &(if scan_index.get_address() > 0 {
-    format!("\n{}SCANNER ADDRESS {}", header(idx + 1), address_string(scan_index.get_address()))
+  );
+
+  string += &(if scan_index.address() > 0 {
+    format!("\n{: >7} SCANNER ADDRESS {}", "", address_string(scan_index.address()))
   } else {
-    format!("\n{}NO SCANNER", header(idx + 1))
-  }) + &format!("\n{}LENGTH: {} META: {}", header(idx + 2), table_length, table_meta)
-    + &create_failure_entry(idx + 3, idx + default_offset)
-    + &strings.join("")
-    + &default_string;
+    format!("\n{: >7} NO SCANNER", "")
+  });
+
+  string += &format!("\n{: >7} LENGTH: {} META: {}", "", table_length, table_meta);
+
+  string += &strings.join("");
+
+  string += &default_string;
+
   (string, offset)
 }
 
 fn create_failure_entry(entry_offset: usize, goto_offset: usize) -> String {
   format!("\n{}---- JUMP TO {} ON FAIL", header(entry_offset), address_string(goto_offset))
 }
+fn create_default_entry(goto_offset: usize) -> String {
+  format!("\nDEFAULT ---- JUMP TO {} ON FAIL", address_string(goto_offset))
+}
+
 fn create_normal_entry(
   lu: Option<&GrammarStore>,
   token_id: u32,
@@ -249,26 +305,9 @@ fn create_normal_entry(
 ) -> String {
   let token_string = get_input_id(lu, token_id, input_type);
   format!(
-    "\n{}---- JUMP TO {} ON {} ( {} ) [{}]",
+    "\n{: >6}---- JUMP TO {} ON {} ( {} ) [{}]",
     header(idx),
     address_string(bc_address),
-    input_type_to_name(input_type),
-    token_string,
-    meta
-  )
-}
-
-fn create_skip_entry(
-  lu: Option<&GrammarStore>,
-  token_id: u32,
-  input_type: u32,
-  idx: usize,
-  meta: i64,
-) -> String {
-  let token_string = get_input_id(lu, token_id, input_type);
-  format!(
-    "\n{}---- SKIP ON {} ( {} ) [ {} ]",
-    header(idx),
     input_type_to_name(input_type),
     token_string,
     meta
@@ -329,22 +368,27 @@ fn get_input_id(g: Option<&GrammarStore>, token_id: u32, input_type: u32) -> Str
 /// operations of the state machine.
 pub fn generate_disassembly(output: &BytecodeOutput, j: &mut Journal) -> String {
   let g = j.grammar().unwrap();
-
+  let bc = output.bytecode.as_slice();
   let mut states_strings = vec![];
-  let mut offset: usize = 0;
+  let i: Instruction = (bc, 0).into();
+  let mut next = Some(i);
 
-  while offset < output.bytecode.len() {
-    if offset >= FIRST_STATE_ADDRESS as usize {
+  while let Some(i) = next {
+    if i.address() >= FIRST_PARSE_BLOCK_ADDRESS as usize {
       states_strings.push("\n".to_string());
-      states_strings
-        .push(output.offset_to_state_name.get(&(offset as u32)).cloned().unwrap_or_default())
+      states_strings.push(get_state_name_from_address(output, i.address()))
     }
 
-    let (string, next) = disassemble_state(&output.bytecode, offset, Some(&g));
+    let (string, n) = disassemble_parse_block(next, Some(&g), Some(output));
 
-    offset = next;
     states_strings.push(string);
+
+    next = n;
   }
 
   states_strings.join("\n")
+}
+
+fn get_state_name_from_address(output: &BytecodeOutput, address: usize) -> String {
+  output.offset_to_state_name.get(&(address as u32)).cloned().unwrap_or_default()
 }

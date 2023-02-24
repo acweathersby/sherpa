@@ -2,7 +2,7 @@ use crate::{
   ascript::{rust_2, types::AScriptStore},
   bytecode::compile_bytecode,
   compile::GrammarStore,
-  debug::{disassemble_state, generate_disassembly},
+  debug::{disassemble_parse_block, generate_disassembly},
   journal::{config::Config, Journal},
   parser::{compile_parse_states, optimize_parse_states},
   types::*,
@@ -409,7 +409,7 @@ Stack:\n    {}\n
 
         let items = stack.drain((stack.len() - item.len as usize)..);
         let symbols = items.collect::<Vec<_>>();
-        stack.push(format!("{prod_name} <{}>", symbols.join(",")));
+        stack.push(format!("({prod_name}: {})", symbols.join(",")));
         println!(
           "
 [REDUCE] ----------------------------------------------------------------------
@@ -477,7 +477,9 @@ Symbol Length: {}
         end - start
       )
     }
-    DebugEvent::CodePointValue { input_value, start, end, string } if display_input_data => {
+    DebugEvent::CodePointValue { input_value, start, end, string }
+      if display_input_data && display_scanner_output =>
+    {
       println!(
         "
 [CodePoint Input]------------------------------------------------------------------------
@@ -490,7 +492,9 @@ Symbol Length: {}
         end - start
       )
     }
-    DebugEvent::ClassValue { input_value, start, end, string } if display_input_data => {
+    DebugEvent::ClassValue { input_value, start, end, string }
+      if display_input_data && display_scanner_output =>
+    {
       println!(
         "
 [Class Input]------------------------------------------------------------------------
@@ -503,7 +507,7 @@ Symbol Length: {}
         end - start
       )
     }
-    DebugEvent::GotoValue { production_id } if display_input_data => {
+    DebugEvent::GotoValue { production_id } if display_input_data && display_scanner_output => {
       println!(
         "
 [GOTO Input]-------------------------------------------------------------------
@@ -516,12 +520,11 @@ Symbol Length: {}
       )
     }
     DebugEvent::ExecuteInstruction {
-      bc,
+      instruction,
       string,
       sym_len,
-      address,
       is_scanner,
-      tail_ptr,
+      scan_ptr,
       tok_id,
       tok_len,
       anchor_ptr,
@@ -530,34 +533,37 @@ Symbol Length: {}
       head_ptr,
       ..
     } => {
-      let active_ptr = if *is_scanner { tail_ptr } else { head_ptr };
+      let active_ptr = if *is_scanner { scan_ptr } else { head_ptr };
       if !is_scanner || display_scanner_output {
-        let instruction = Instruction::from(bc, *address);
-        if !(instruction.is_vector_branch() || instruction.is_hash_branch()) {
+        if !matches!(
+          instruction.get_opcode(),
+          bytecode::Opcode::VectorBranch | bytecode::Opcode::HashBranch
+        ) {
           return;
         }
         println!(
           "
 [Instruction]------------------------------------------------------------------
 
-  address:{address:0>6X}; tok_len: {} sym_len: {}; tok_id: {};  
+  address:{:0>6X}; tok_len: {} sym_len: {}; tok_id: {};  
   anchor: {}; base: {}; head: {}; tail: {};  end: {}; 
 
   ║{: <74}║
 
 {}
 -------------------------------------------------------------------------------",
+          instruction.address(),
           tok_len,
           sym_len,
           tok_id,
           anchor_ptr,
           base_ptr,
           head_ptr,
-          tail_ptr,
+          scan_ptr,
           end_ptr,
           &string[(*active_ptr)..(active_ptr + input_window_size).min(string.len())]
             .replace("\n", "\\n"),
-          disassemble_state(bc, *address, Some(&g)).0
+          disassemble_parse_block(Some(*instruction), Some(&g), None).0
         );
         println!("");
       }

@@ -284,7 +284,7 @@ pub fn inner_goto_loops() -> SherpaResult<Journal> {
   test_runner(&[], None, TestConfig {
     optimize: false,
     print_states: false,
-    print_disassembly: false,
+    print_disassembly: true,
     print_parse_reports: &["B"],
     grammar_string: Some(input),
     ..Default::default()

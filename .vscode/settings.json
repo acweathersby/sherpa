@@ -1,10 +1,11 @@
 {
     "lldb.displayFormat": "auto",
-    "lldb.showDisassembly": "auto",
     "lldb.dereferencePointers": true,
     "lldb.consoleMode": "commands",
     "cSpell.words": [
+        "chkp",
         "codepoints",
+        "Scanless",
         "unoptimized"
     ]
 }

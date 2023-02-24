@@ -15,7 +15,7 @@ pub mod compile;
 /// An opaque store of Sherpa parser bytecode and related metadata.
 pub struct BytecodeOutput {
   /// The bytecode.
-  pub bytecode: Vec<u32>,
+  pub bytecode: Vec<u8>,
   /// Maps plain state names to the offset within the bytecode
   /// vector.
   pub state_name_to_offset: BTreeMap<String, u32>,

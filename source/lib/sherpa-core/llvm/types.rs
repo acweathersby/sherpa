@@ -111,7 +111,7 @@ pub enum CTX_AGGREGATE_INDICES {
   /// ```ignore
   /// pub scan_ptr:        *mut u8,
   /// ```
-  tail_ptr,
+  scan_ptr,
   /// ```ignore
   /// pub end_ptr:        *mut u8,
   /// ```

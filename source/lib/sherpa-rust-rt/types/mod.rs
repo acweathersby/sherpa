@@ -1,4 +1,5 @@
 pub mod ast;
+pub mod bytecode;
 mod constants;
 mod error;
 mod parse_action;

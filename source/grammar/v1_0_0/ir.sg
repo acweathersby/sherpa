@@ -78,23 +78,9 @@ EXPORT ir as ir
 
         reduce_instruction
 
-    |   breadcrumb
-
     |   "assign" "token" token_id_list
 
         :ast { t_TokenAssign, c_IR, c_IR_Instruction, ids: $3 }
-
-    | "set" "prod" "to" token_num
-
-        :ast { t_SetProd, c_IR, c_IR_Instruction, id: $4  }
-
-    | "fork" "to" '(' state_reference(+) ')' "to" "complete" "prod" token_num
-
-        :ast { t_ForkTo, c_IR, c_IR_Instruction, states: $4, production_id: $9   }
-
-    | "set" "token" "id" token_num token_num
-
-        :ast { t_TokenId, c_IR, c_IR_Instruction, id: $5  }
 
     | "pop"
 
@@ -104,73 +90,60 @@ EXPORT ir as ir
 
         :ast { t_Pass, c_IR, c_IR_Instruction  }
 
-    | "skip"
+    | "token-skip"
 
         :ast { t_Skip, c_IR, c_IR_Instruction }
 
-    | "skip-scan-token"
+    | "token-skip-scanless"
 
-        :ast { t_SkipScanToken, c_IR, c_IR_Instruction, is_peek:bool }
+        :ast { t_ScanlessSkip, c_IR, c_IR_Instruction }
 
     | "fail"
 
         :ast { t_Fail, c_IR, c_IR_Instruction }
 
-    | "peek-token"
+    | "peek-shift"
 
-        :ast { t_PeekToken, c_IR, c_IR_Instruction }
+        :ast { t_Peek, c_IR, c_IR_Instruction }
 
-    | "peek-scan-token"
+    | "peek-shift-scanless"
 
-        :ast { t_PeekScanToken, c_IR, c_IR_Instruction }
+        :ast { t_ScanlessPeek, c_IR, c_IR_Instruction }
 
     | "peek-skip"
 
-        :ast { t_Skip, c_IR, c_IR_Instruction, is_peek:true }
+        :ast { t_PeekSkip, c_IR, c_IR_Instruction }
+
+    | "peek-skip-scanless"
+
+        :ast { t_ScanlessPeekSkip, c_IR, c_IR_Instruction }
 
     | "peek-reset"
 
         :ast { t_PeekReset, c_IR, c_IR_Instruction }
 
-    | "shift-token" "nothing"?
+    | "token-shift" "nothing"?
 
         :ast { t_ShiftToken, c_IR, c_IR_Instruction, EMPTY:bool($2) }
 
-    | "shift-scanner"
+    | "token-shift-scanless"
 
-        :ast { t_ShiftScanner, c_IR, c_IR_Instruction }
+        :ast { t_ScanlessTokenShift, c_IR, c_IR_Instruction }
 
-    | "shift-scan-token"
+    | "scan-shift"
 
-        :ast { t_ShiftScanToken, c_IR, c_IR_Instruction }
+        :ast { t_ScanShift, c_IR, c_IR_Instruction }
+
+    | "accept" 
+
+        :ast { t_Accept }
 
 <> reduce_instruction > 
 
-    "reduce" tk:integer ( "symbols" "with" "rule" )? tk:integer
+    "reduce" tk:integer ( "symbols" "with" "rule" )? tk:integer "to"? tk:integer
 
-        :ast { t_Reduce, c_IR, c_IR_Instruction, len: i32($2), rule_id: i32($4) }
+        :ast { t_Reduce, c_IR, c_IR_Instruction, len: i32($2), rule_id: i32($4), prod_id: i32($4) }
 
-<> breadcrumb > 
-
-    "crumb" '[' tk:integer '|' breadcrumb_action ']'
-
-        :ast { t_Crumb, lane:i32($3), action: $5 }
-
-    | "crumb" "complete" '[' tk:integer ']' 
-
-        :ast { t_CrumbComplete, lane: i32($4)  }
-
-<> breadcrumb_action >
-
-    "map" tk:integer
-
-        :ast { t_Map, lane: i32($2) }
-
-    | reduce_instruction
-
-    | "shift"
-
-        :ast { t_Shift }
 
 <> on_fail > 
 

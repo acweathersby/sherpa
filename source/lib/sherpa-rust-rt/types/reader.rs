@@ -241,12 +241,12 @@ pub trait LLVMByteReader {
     beg_ptr: &mut *const u8,
     anchor_ptr: &mut *const u8,
     head_ptr: &mut *const u8,
-    tail_ptr: &mut *const u8,
+    scan_ptr: &mut *const u8,
     end_ptr: &mut *const u8,
   ) {
-    let anchor_offset = (*tail_ptr as usize) - (*beg_ptr as usize);
+    let anchor_offset = (*scan_ptr as usize) - (*beg_ptr as usize);
     let head_delta = (*head_ptr as usize) - anchor_offset;
-    let tail_delta = (*tail_ptr as usize) - anchor_offset;
+    let tail_delta = (*scan_ptr as usize) - anchor_offset;
     let needed = *end_ptr as usize;
 
     let size = ((self_.len() as i64) - ((anchor_offset + tail_delta + needed as usize) as i64))
@@ -261,13 +261,13 @@ pub trait LLVMByteReader {
       (*beg_ptr) = beg;
       (*anchor_ptr) = anchor as *const u8;
       (*head_ptr) = head;
-      (*tail_ptr) = tail;
+      (*scan_ptr) = tail;
       (*end_ptr) = end;
     } else {
       (*beg_ptr) = 0 as *const u8;
       (*anchor_ptr) = 0 as *const u8;
       (*head_ptr) = 0 as *const u8;
-      (*tail_ptr) = 0 as *const u8;
+      (*scan_ptr) = 0 as *const u8;
       (*end_ptr) = 0 as *const u8;
     }
   }

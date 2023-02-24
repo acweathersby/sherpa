@@ -3,7 +3,7 @@ use super::{
   *,
 };
 use crate::{
-  bytecode_parser::{dispatch, DebugEvent, DebugFn},
+  bytecode_parser::{get_next_action, DebugEvent, DebugFn},
   utf8::get_token_class_from_codepoint,
 };
 use std::{
@@ -49,11 +49,11 @@ pub struct ParseContext<T: ByteReader, M = u32> {
   /// the same as base_ptr unless we are using peek shifts.
   pub head_ptr: usize,
   /// The start of all unevaluated characters
-  pub tail_ptr: usize,
+  pub scan_ptr: usize,
   /// The end of the input block
   pub end_ptr: usize,
   /// The number of characters that comprize the current
-  /// token. This should be 0 if the tok_id is also
+  /// token. This should be 0 if the tok_id is also 0
   pub tok_len: usize,
   /// The number of characters that can be read
   /// from the input block.
@@ -102,7 +102,7 @@ pub struct ParseContext<T: ByteReader, M = u32> {
 impl<T: ByteReader, M> ParseContext<T, M> {
   pub fn reset(&mut self) {
     self.anchor_ptr = 0;
-    self.tail_ptr = 0;
+    self.scan_ptr = 0;
     self.tok_len = 0;
     self.head_ptr = 0;
     self.base_ptr = 0;
@@ -223,7 +223,7 @@ impl<T: ByteReader, M> Default for ParseContext<T, M> {
   fn default() -> Self {
     Self {
       anchor_ptr: 0,
-      tail_ptr: 0,
+      scan_ptr: 0,
       tok_len: 0,
       head_ptr: 0,
       chars_remaining_len: 0,
@@ -259,7 +259,7 @@ impl<T: ByteReader + LLVMByteReader, M> Debug for ParseContext<T, M> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let mut dbgstr = f.debug_struct("ParseContext");
     dbgstr.field("anchor_ptr", &self.anchor_ptr);
-    dbgstr.field("tail_ptr", &self.tail_ptr);
+    dbgstr.field("scan_ptr", &self.scan_ptr);
     dbgstr.field("tok_len", &self.tok_len);
     dbgstr.field("head_ptr", &self.head_ptr);
     dbgstr.field("input_block_len", &self.chars_remaining_len);
@@ -436,16 +436,16 @@ pub enum ShiftsAndSkipsResult {
 }
 
 pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
-  /// Returns the byte length of activee token
+  /// Returns the byte length of active token
   fn get_token_length(&self) -> u32;
 
-  /// Returns the byte offset the head of the activee token
+  /// Returns the byte offset the head of the active token
   fn get_token_offset(&self) -> u32;
 
   /// Returns the 0 indexed line number active token
   fn get_token_line_number(&self) -> u32;
 
-  /// Returns the offset the newline character preoceeding
+  /// Returns the offset the newline character proceeding
   /// the active token
   fn get_token_line_offset(&self) -> u32;
 
@@ -550,11 +550,11 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
 pub struct ByteCodeParser<'a, R: ByteReader + MutByteReader, M> {
   ctx:   ParseContext<R, M>,
   stack: Vec<u32>,
-  bc:    &'a [u32],
+  bc:    &'a [u8],
 }
 
 impl<'a, R: ByteReader + MutByteReader, M> ByteCodeParser<'a, R, M> {
-  pub fn new(reader: &'a mut R, bc: &'a [u32]) -> Self {
+  pub fn new(reader: &'a mut R, bc: &'a [u8]) -> Self {
     ByteCodeParser { ctx: ParseContext::<R, M>::new_bytecode(reader), stack: vec![], bc }
   }
 }
@@ -591,53 +591,12 @@ impl<'a, R: ByteReader + MutByteReader + UTF8Reader, M> SherpaParser<R, M>
   }
 
   fn init_parser(&mut self, entry_point: u32) {
-    self.stack = vec![0, entry_point | NORMAL_STATE_FLAG];
+    self.stack = vec![0, 0, NORMAL_STATE_FLAG, entry_point];
   }
 
   fn get_next_action(&mut self, debug: &mut Option<DebugFn>) -> ParseAction {
     let ByteCodeParser { ctx, stack, bc } = self;
-
-    let mut state = stack.pop().unwrap();
-
-    loop {
-      if state < 1 {
-        let off = ctx.get_token_offset();
-        if ctx.get_reader().offset_at_end(off as usize) {
-          break ParseAction::Accept { production_id: ctx.get_production() };
-        } else {
-          break ParseAction::Error {
-            last_production: ctx.get_production(),
-            last_input:      TokenRange {
-              len:      (ctx.tail_ptr - ctx.head_ptr) as u32,
-              off:      off,
-              line_num: ctx.start_line_num,
-              line_off: ctx.start_line_off,
-            },
-          };
-        }
-      } else {
-        let mask_gate = NORMAL_STATE_FLAG << (ctx.in_fail_mode() as u32);
-
-        if (state & mask_gate) != 0 {
-          match dispatch(state, ctx, stack, bc, debug) {
-            (ParseAction::CompleteState, _) => {
-              ctx.set_fail_mode_to(false);
-              state = stack.pop().unwrap();
-            }
-            (ParseAction::FailState, _) => {
-              ctx.set_fail_mode_to(true);
-              state = stack.pop().unwrap();
-            }
-            (action, next_state) => {
-              stack.push(next_state | NORMAL_STATE_FLAG);
-              break action;
-            }
-          }
-        } else {
-          state = stack.pop().unwrap();
-        }
-      }
-    }
+    get_next_action(ctx, stack, bc, debug)
   }
 }
 
