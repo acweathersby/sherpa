@@ -7,7 +7,7 @@ use super::{
   NORMAL_STATE_FLAG_LLVM,
 };
 use crate::{
-  grammar::compile::parser::sherpa::{self, *},
+  grammar::compile::parser::sherpa::{Goto, *},
   llvm::{LLVMParserModule, FAIL_STATE_FLAG_LLVM},
   parser::{hash_group_btreemap, hash_group_vec},
   types::*,
@@ -19,7 +19,7 @@ use inkwell::{
   types::IntType,
   values::{FunctionValue, IntValue, PointerValue},
 };
-use sherpa_runtime::utf8::lookup_table::CodePointClass;
+use sherpa_runtime::{types::bytecode::Opcode, utf8::lookup_table::CodePointClass};
 use std::{
   collections::{hash_map::DefaultHasher, BTreeMap},
   hash::{Hash, Hasher},
@@ -90,7 +90,7 @@ pub(crate) fn compile_state<'a>(
 
   b.position_at_end(entry_block);
 
-  if state.is_except_handler {
+  if state.except_handler {
     // Add a check to make sure the context is in fail mode.
     let normal_mode = ctx.append_basic_block(s_fun, "is_normal_mode");
 
@@ -100,7 +100,7 @@ pub(crate) fn compile_state<'a>(
     b.build_conditional_branch(c, loop_head, normal_mode);
 
     b.position_at_end(normal_mode);
-    construct_pass(m, p_ctx, s_fun)?;
+    pass(m, p_ctx, s_fun)?;
   } else {
     b.build_unconditional_branch(loop_head);
   }
@@ -173,7 +173,7 @@ pub(crate) fn compile_state<'a>(
 
         let value = b.build_load(scan_ptr_cache, "").into_int_value();
 
-        CTX::symbol_len.store(b, p_ctx, u32_1)?;
+        CTX::sym_len.store(b, p_ctx, u32_1)?;
 
         // if one of the cases is the val `[\n] == 10` then we want to
         // increment the line data. We do this by creating a new block
@@ -201,7 +201,7 @@ pub(crate) fn compile_state<'a>(
       if groups.keys().any(|k| matches!(k.as_str(), "CODEPOINT" | "CLASS")) {
         let (cp_val, tok_len) = construct_cp_lu_with_token_len_store(m, scan_ptr_cache)?;
 
-        CTX::symbol_len.store(b, p_ctx, tok_len)?;
+        CTX::sym_len.store(b, p_ctx, tok_len)?;
 
         if let Some(cp_branches) = groups.get("CODEPOINT") {
           let (cases, branches) = deconstruct_branches("codepoint_", cp_branches, m, s_fun, i32)?;
@@ -265,7 +265,7 @@ pub(crate) fn compile_state<'a>(
       let DEFAULT { instructions: i } = default_branches[0].as_DEFAULT()?;
       compile_brancheless_instructions(j, m, &i, p_ctx, s_fun, loop_head, s_lu, state_name)?;
     } else {
-      construct_fail(m, p_ctx, s_fun)?;
+      fail(m, p_ctx, s_fun)?;
     }
   } else {
     let i = &state.instructions;
@@ -361,92 +361,93 @@ pub(crate) fn compile_brancheless_instructions<'a>(
   // reverse gotos so jumps operate correctly in a stack structure.
 
   let mut resolved_end = false;
+  let mut goto_encountered = 0;
+  let goto_count = instructions.iter().filter(|i| i.get_type() == ASTNodeType::PushGoto).count();
   let pass_last = matches!(instructions.last()?.get_type(), ASTNodeType::Pass);
 
-  for (i, instruction) in instructions.iter().filter(|i| !matches!(i, ASTNode::Goto(_))).enumerate()
-  {
+  for (i, instruction) in instructions.iter().enumerate() {
     let is_last = i == instructions.len() - 1;
     let no_reenter = is_last && pass_last;
     match instruction {
-      ASTNode::Fail(_) => {
-        construct_fail(m, p_ctx, state_fun)?;
+      ASTNode::Pass(_) => {
+        pass(m, p_ctx, state_fun)?;
         resolved_end = true;
         break;
       }
 
-      ASTNode::ForkTo(box ForkTo { .. }) => {
-        unimplemented!("Fork not implemented");
-      }
-
-      ASTNode::Pass(_) => {
-        construct_pass(m, p_ctx, state_fun)?;
+      ASTNode::Fail(_) => {
+        fail(m, p_ctx, state_fun)?;
         resolved_end = true;
         break;
       }
 
       ASTNode::Pop(_) => {
-        construct_pop(m, p_ctx, state_fun)?;
+        pop_goto(m, p_ctx, state_fun)?;
         resolved_end = true;
         break;
       }
 
-      ASTNode::SetProd(box SetProd { id: box Num { val } }) => {
-        construct_set_prod(j, m, state_fun, p_ctx, *val as u64)?
-      }
-
-      ASTNode::PeekReset(_) => {
-        construct_peek_reset(m, p_ctx)?;
-        construct_update_remaining(m, p_ctx)?;
-      }
-
-      ASTNode::PeekScanToken(_) => {
-        construct_update_tail(m, p_ctx)?;
-        construct_assign_token_id(m, p_ctx, 0)?;
-        construct_increment_remaining(m, p_ctx)?;
-        construct_peek(m, p_ctx)?;
-      }
-
-      ASTNode::PeekToken(_) => {
-        construct_peek(m, p_ctx)?;
-        construct_update_remaining(m, p_ctx)?;
-      }
-
-      ASTNode::Skip(box Skip { is_peek }) => {
-        construct_skip(m, p_ctx, *is_peek)?;
-        construct_update_remaining(m, p_ctx)?;
-        construct_jump_to_table_start(m, start_block);
+      ASTNode::Goto(g) => {
+        goto(g, m, state_fun, &state_lu)?;
         resolved_end = true;
         break;
       }
 
-      ASTNode::SkipScanToken(box SkipScanToken { is_peek }) => {
-        construct_update_tail(m, p_ctx)?;
-        construct_increment_remaining(m, p_ctx)?;
-        construct_assign_token_id(m, p_ctx, 0);
-        construct_skip(m, p_ctx, *is_peek)?;
-        construct_jump_to_table_start(m, start_block);
-        resolved_end = true;
-        break;
+      ASTNode::PushGoto(pg) => {
+        if goto_encountered == 0 {
+          extend_stack(goto_count, m, p_ctx)?;
+        }
+        goto_encountered += 1;
+        if goto_encountered == goto_count {
+          update_goto_remaining(goto_count, m, p_ctx)?;
+        }
+
+        push_goto(&pg, m, p_ctx, &state_lu)?;
       }
 
       ASTNode::TokenAssign(box TokenAssign { ids }) => {
         construct_assign_token_id(m, p_ctx, ids[0].val as u64)?;
+        transfer_end_line_to_chkp_line(m, p_ctx)?;
       }
 
-      ASTNode::ShiftScanner(..) => {
-        construct_update_tail(m, p_ctx)?;
-        construct_increment_remaining(m, p_ctx)?;
-      }
-
-      ASTNode::ShiftScanToken(_) => {
-        construct_update_tail(m, p_ctx)?;
-        construct_increment_remaining(m, p_ctx)?;
-        construct_assign_token_id(m, p_ctx, 0)?;
-        if let Some((s, p)) = construct_token_shift(j, m, p_ctx)? {
+      ASTNode::Reduce(r) => {
+        if let Some((s, p)) = reduce(r, j, m, p_ctx, no_reenter, state_name)? {
           state_lu.insert(s.get_name().to_str().unwrap().to_string(), s);
           state_fun = s;
           p_ctx = p;
         }
+      }
+
+      ASTNode::ScanShift(..) => {
+        incr_scan_ptr_by_sym_len(m, p_ctx)?;
+        update_end_line_num(m, p_ctx)?;
+        decr_chars_remaining_by_sym_len(m, p_ctx)?;
+      }
+
+      ASTNode::PeekReset(_) => {
+        peek_reset(m, p_ctx)?;
+        calculate_chars_remaining_by_diff_of_end_and_scan(m, p_ctx)?;
+      }
+
+      ASTNode::PeekToken(_) => {
+        peek_token(m, p_ctx)?;
+        calculate_chars_remaining_by_diff_of_end_and_scan(m, p_ctx)?;
+      }
+
+      ASTNode::SkipPeekToken(_) => {
+        skip_token(m, p_ctx, true)?;
+        calculate_chars_remaining_by_diff_of_end_and_scan(m, p_ctx)?;
+        construct_jump_to_table_start(m, start_block);
+        resolved_end = true;
+        break;
+      }
+
+      ASTNode::SkipToken(_) => {
+        skip_token(m, p_ctx, false)?;
+        calculate_chars_remaining_by_diff_of_end_and_scan(m, p_ctx)?;
+        construct_jump_to_table_start(m, start_block);
+        resolved_end = true;
+        break;
       }
 
       ASTNode::ShiftToken(box ShiftToken { .. }) => {
@@ -455,15 +456,56 @@ pub(crate) fn compile_brancheless_instructions<'a>(
           state_fun = s;
           p_ctx = p;
         }
-        construct_update_remaining(m, p_ctx);
+        calculate_chars_remaining_by_diff_of_end_and_scan(m, p_ctx);
       }
 
-      ASTNode::Reduce(box Reduce { rule_id, len, .. }) => {
-        let mut hasher = DefaultHasher::new();
-        instructions[i..].hash(&mut hasher);
-        if let Some((s, p)) =
-          construct_reduce(j, m, p_ctx, *len as u64, *rule_id as u64, no_reenter, state_name)?
-        {
+      ASTNode::PeekTokenScanless(_) => {
+        decr_chars_remaining_by_sym_len(m, p_ctx)?;
+        incr_scan_ptr_by_sym_len(m, p_ctx)?;
+        construct_assign_token_id(m, p_ctx, 0)?;
+
+        transfer_end_line_to_chkp_line(m, p_ctx)?;
+
+        peek_token(m, p_ctx)?;
+      }
+
+      ASTNode::SkipPeekTokenScanless(_) => {
+        decr_chars_remaining_by_sym_len(m, p_ctx)?;
+        incr_scan_ptr_by_sym_len(m, p_ctx)?;
+        construct_assign_token_id(m, p_ctx, 0)?;
+
+        //update_end_line_num(m, p_ctx)?;
+        //transfer_end_line_to_chkp_line(m, p_ctx)?;
+
+        skip_token(m, p_ctx, true)?;
+        construct_jump_to_table_start(m, start_block);
+        resolved_end = true;
+        break;
+      }
+
+      ASTNode::SkipTokenScanless(_) => {
+        decr_chars_remaining_by_sym_len(m, p_ctx)?;
+        incr_scan_ptr_by_sym_len(m, p_ctx)?;
+        construct_assign_token_id(m, p_ctx, 0)?;
+
+        update_end_line_num(m, p_ctx)?;
+        transfer_end_line_to_chkp_line(m, p_ctx)?;
+
+        skip_token(m, p_ctx, false)?;
+        construct_jump_to_table_start(m, start_block);
+        resolved_end = true;
+        break;
+      }
+
+      ASTNode::ShiftTokenScanless(_) => {
+        decr_chars_remaining_by_sym_len(m, p_ctx)?;
+        incr_scan_ptr_by_sym_len(m, p_ctx)?;
+        construct_assign_token_id(m, p_ctx, 0)?;
+
+        update_end_line_num(m, p_ctx)?;
+        transfer_end_line_to_chkp_line(m, p_ctx)?;
+
+        if let Some((s, p)) = construct_token_shift(j, m, p_ctx)? {
           state_lu.insert(s.get_name().to_str().unwrap().to_string(), s);
           state_fun = s;
           p_ctx = p;
@@ -473,25 +515,72 @@ pub(crate) fn compile_brancheless_instructions<'a>(
     }
   }
 
-  let gotos = instructions
-    .iter()
-    .filter_map(|i| match i {
-      ASTNode::Goto(goto) => Some(goto),
-      _ => None,
-    })
-    .rev()
-    .collect::<Vec<_>>();
-
-  let resolved_end = if !gotos.is_empty() {
-    construct_goto(gotos, m, p_ctx, state_fun, state_lu);
-    true
-  } else {
-    resolved_end
-  };
-
   if !resolved_end {
-    construct_pass(m, p_ctx, state_fun);
+    pass(m, p_ctx, state_fun);
   }
+
+  SherpaResult::Ok(())
+}
+
+pub(crate) fn push_goto<'a>(
+  PushGoto { state }: &PushGoto,
+  LLVMParserModule { b, ctx, i32, types, .. }: &LLVMParserModule,
+  p_ctx: PointerValue,
+  state_lu: &BTreeMap<String, FunctionValue>,
+) -> SherpaResult<()> {
+  let goto_stack_ptr = CTX::goto_stack_ptr.get_ptr(b, p_ctx)?;
+  let mut goto_top = b.build_load(goto_stack_ptr, "").into_pointer_value();
+
+  // Create new goto struct
+  let goto_fn = (*state_lu.get(&state.val)?).as_global_value().as_pointer_value();
+  let goto_state = ctx.i32_type().const_int(NORMAL_STATE_FLAG_LLVM as u64, false);
+  let new_goto = b.build_insert_value(types.goto.get_undef(), goto_state, 1, "")?;
+  let new_goto = b.build_insert_value(new_goto, goto_fn, 0, "")?;
+
+  // Store in the current slot
+  b.build_store(goto_top, new_goto);
+
+  // Increment the slot
+  goto_top = unsafe { b.build_gep(goto_top, &[i32.const_int(1, false)], "") };
+
+  // Store the top slot pointer
+  b.build_store(goto_stack_ptr, goto_top);
+
+  SherpaResult::Ok(())
+}
+
+/// Subtracts `goto_slots_consumed` from the `goto_free` counter.
+fn update_goto_remaining<'a>(
+  goto_slots_consumed: usize,
+  LLVMParserModule { b, i32, .. }: &LLVMParserModule,
+  p_ctx: PointerValue,
+) -> SherpaResult<()> {
+  // Decrement goto remaining
+  let goto_free_ptr = CTX::goto_free.get_ptr(b, p_ctx)?;
+  let goto_free = b.build_load(goto_free_ptr, "").into_int_value();
+  let goto_free = b.build_int_sub(goto_free, i32.const_int(goto_slots_consumed as u64, false), "");
+  b.build_store(goto_free_ptr, goto_free);
+  SherpaResult::Ok(())
+}
+
+pub(crate) fn goto<'a>(
+  Goto { state }: &Goto,
+  LLVMParserModule { b, .. }: &LLVMParserModule,
+  state_fun: FunctionValue<'a>,
+  state_lu: &BTreeMap<String, FunctionValue>,
+) -> SherpaResult<()> {
+  build_tail_call_with_return(b, state_fun, *state_lu.get(&state.val)?)
+}
+
+pub(crate) fn extend_stack<'a>(
+  len: usize,
+  LLVMParserModule { b, fun, i32, .. }: &LLVMParserModule,
+  p_ctx: PointerValue,
+) -> SherpaResult<()> {
+  build_fast_call(b, fun.extend_stack_if_needed, &[
+    p_ctx.into(),
+    i32.const_int((2 << len.checked_ilog2().unwrap_or(0)) as u64, false).into(),
+  ])?;
 
   SherpaResult::Ok(())
 }
@@ -499,21 +588,37 @@ pub(crate) fn compile_brancheless_instructions<'a>(
 fn construct_jump_to_table_start(m: &LLVMParserModule, start_block: BasicBlock) {
   m.b.build_unconditional_branch(start_block);
 }
-pub(crate) fn construct_update_tail<'a>(
-  m: &'a LLVMParserModule,
+
+/// Extends the `scan_ptr` by `sym_len`
+///
+/// Normally used by scanner to move the `scan_ptr` head forward.
+///
+/// Also used by scanless states to position `scan_ptr` in preparation
+/// to calculate to `tok_len` value, which is ultimately used to move
+/// the `head_ptr` ( and possibly the `base_ptr`) forward to the end of
+/// the token, and also to issue a `Shift` event with a sized
+/// token.
+///
+fn incr_scan_ptr_by_sym_len<'a>(
+  LLVMParserModule { b, .. }: &'a LLVMParserModule,
   p_ctx: PointerValue<'a>,
 ) -> SherpaResult<()> {
-  let LLVMParserModule { b, i32, i8, .. } = m;
-
   let scan_ptr_cache = CTX::scan_ptr.load(b, p_ctx)?.into_pointer_value();
 
   CTX::scan_ptr.store(b, p_ctx, unsafe {
-    b.build_gep(scan_ptr_cache, &[CTX::symbol_len.load(b, p_ctx)?.into_int_value()], "")
+    b.build_gep(scan_ptr_cache, &[CTX::sym_len.load(b, p_ctx)?.into_int_value()], "")
   });
 
+  SherpaResult::Ok(())
+}
+
+/// Update the `end_line*`  values by incrementing by the `line_incr` and `l`
+fn update_end_line_num<'a>(
+  LLVMParserModule { b, i32, i8, .. }: &'a LLVMParserModule,
+  p_ctx: PointerValue<'a>,
+) -> SherpaResult<()> {
   // Increment line number;
   let val = CTX::line_incr.load(b, p_ctx)?.into_int_value();
-
   CTX::line_incr.store(b, p_ctx, i8.const_zero())?;
 
   let new_val = b.build_int_add(
@@ -526,11 +631,12 @@ pub(crate) fn construct_update_tail<'a>(
   SherpaResult::Ok(())
 }
 
-pub(crate) fn construct_pop<'a>(
+pub(crate) fn pop_goto<'a>(
   m: &'a LLVMParserModule,
   p_ctx: PointerValue<'a>,
   state_fun: FunctionValue<'a>,
 ) -> SherpaResult<()> {
+  const __HINT__: Opcode = Opcode::PopGoto;
   let LLVMParserModule { b, i32, .. } = m;
 
   let goto_stack_ptr = CTX::goto_stack_ptr.get_ptr(b, p_ctx)?;
@@ -543,22 +649,24 @@ pub(crate) fn construct_pop<'a>(
   let goto_free = b.build_int_add(goto_free, i32.const_int(1, false), "");
   b.build_store(goto_free_ptr, goto_free);
 
-  construct_pass(m, p_ctx, state_fun)
+  pass(m, p_ctx, state_fun)
 }
 
-pub(crate) fn construct_reduce<'a>(
+pub(crate) fn reduce<'a>(
+  Reduce { rule_id, prod_id, len, .. }: &Reduce,
   j: &mut Journal,
   m: &'a LLVMParserModule,
   p_ctx: PointerValue<'a>,
-  sym_count: u64,
-  rule_id: u64,
   no_reenter: bool,
   state_name: &str,
 ) -> SherpaResult<Option<(FunctionValue<'a>, PointerValue<'a>)>> {
+  const __HINT__: Opcode = Opcode::Reduce;
+
   let LLVMParserModule { b, ctx, fun, i32, .. } = m;
 
-  CTX::symbol_len.store(b, p_ctx, i32.const_int(sym_count, false))?;
-  CTX::rule_id.store(b, p_ctx, i32.const_int(rule_id, false))?;
+  CTX::sym_len.store(b, p_ctx, i32.const_int(*len as u64, false))?;
+  CTX::rule_id.store(b, p_ctx, i32.const_int(*rule_id as u64, false))?;
+  CTX::prod_id.store(b, p_ctx, i32.const_int(*prod_id as u64, false))?;
 
   let f = if !no_reenter {
     let f = create_parse_function(j, m, &format!("reduce_{state_name}"));
@@ -583,50 +691,36 @@ pub(crate) fn construct_reduce<'a>(
   SherpaResult::Ok(f)
 }
 
-pub(crate) fn construct_set_prod<'a>(
-  j: &mut Journal,
-  LLVMParserModule { ctx, b, i32, .. }: &'a LLVMParserModule,
-  func: FunctionValue<'a>,
-  p_ctx: PointerValue,
-  production_id: u64,
-) -> SherpaResult<()> {
-  let block = ctx.append_basic_block(
-    func,
-    &format!(
-      "set_production_to_{}",
-      j.grammar()?.get_production_by_bytecode_id(production_id as u32)?.name
-    ),
-  );
-  b.build_unconditional_branch(block);
-  b.position_at_end(block);
-
-  CTX::prod_id.store(b, p_ctx, i32.const_int(production_id, false))?;
-  SherpaResult::Ok(())
-}
-
-pub(crate) fn construct_peek_reset<'a>(
-  LLVMParserModule { b, i32, .. }: &'a LLVMParserModule,
+/// Resets peek side-effects by assigning `base_ptr` to `head_ptr` and `scan_ptr`. Also
+pub(crate) fn peek_reset<'a>(
+  LLVMParserModule { b, i32, iptr, .. }: &'a LLVMParserModule,
   p_ctx: PointerValue,
 ) -> SherpaResult<()> {
+  const __HINT__: Opcode = Opcode::PeekReset;
   let offset = CTX::base_ptr.load(b, p_ctx)?.into_pointer_value();
   CTX::head_ptr.store(b, p_ctx, offset);
   CTX::scan_ptr.store(b, p_ctx, offset);
   CTX::tok_id.store(b, p_ctx, i32.const_zero());
+  CTX::tok_len.store(b, p_ctx, iptr.const_zero());
+  CTX::sym_len.store(b, p_ctx, i32.const_zero());
   SherpaResult::Ok(())
 }
-
-pub(crate) fn construct_peek<'a>(m: &'a LLVMParserModule, p_ctx: PointerValue) -> SherpaResult<()> {
-  let LLVMParserModule { b, i32, .. } = m;
-  let offset = construct_get_tok_offset(m, p_ctx)?;
+/// Assigns the value head_ptr + tok_len to head_ptr and scan_ptr.
+/// Also sets the values of tok_len and tok_id to 0.
+pub(crate) fn peek_token<'a>(m: &'a LLVMParserModule, p_ctx: PointerValue) -> SherpaResult<()> {
+  const __HINT__: Opcode = Opcode::PeekToken;
+  let LLVMParserModule { b, i32, iptr, .. } = m;
+  let offset = get_offset_to_end_of_token(m, p_ctx)?;
   CTX::scan_ptr.store(b, p_ctx, offset);
   CTX::head_ptr.store(b, p_ctx, offset);
   CTX::tok_id.store(b, p_ctx, i32.const_zero());
+  CTX::tok_len.store(b, p_ctx, iptr.const_zero());
   SherpaResult::Ok(())
 }
 
 /// Update the remaining chars value by calculating its
 /// value using scan_ptr and end_ptr
-pub(crate) fn construct_update_remaining(
+pub(crate) fn calculate_chars_remaining_by_diff_of_end_and_scan(
   sp: &LLVMParserModule,
   p_ctx: PointerValue,
 ) -> SherpaResult<()> {
@@ -637,30 +731,31 @@ pub(crate) fn construct_update_remaining(
   SherpaResult::Ok(())
 }
 /// Update the remaining chars value by incrementing it by
-/// the value of symbol_len
-pub(crate) fn construct_increment_remaining(
+/// the value of `sym_len`
+pub(crate) fn decr_chars_remaining_by_sym_len(
   LLVMParserModule { b, iptr, .. }: &LLVMParserModule,
   p_ctx: PointerValue,
 ) -> SherpaResult<()> {
-  let sym_len = CTX::symbol_len.load(b, p_ctx)?.into_int_value();
+  let sym_len = CTX::sym_len.load(b, p_ctx)?.into_int_value();
   let sym_len = b.build_int_cast(sym_len, *iptr, "");
   let char_remaining = CTX::chars_remaining_len.load(b, p_ctx)?.into_int_value();
   CTX::chars_remaining_len.store(b, p_ctx, b.build_int_add(char_remaining, sym_len, ""))?;
-
   SherpaResult::Ok(())
 }
 
-pub(crate) fn construct_skip<'a>(
+/// Assigns `head_ptr + tok_len` to head_ptr, scan_ptr, and base_ptr.
+/// Also assign 0  to `tok_id`
+pub(crate) fn skip_token<'a>(
   sp: &LLVMParserModule,
   p_ctx: PointerValue,
   is_peek: bool,
 ) -> SherpaResult<()> {
-  let offset = construct_get_tok_offset(sp, p_ctx)?;
-
+  const __HINT__: Opcode = Opcode::SkipToken;
+  let offset = get_offset_to_end_of_token(sp, p_ctx)?;
   let LLVMParserModule { b, i32, .. } = sp;
   CTX::scan_ptr.store(b, p_ctx, offset);
-  CTX::tok_id.store(b, p_ctx, i32.const_zero());
   CTX::head_ptr.store(b, p_ctx, offset);
+  CTX::tok_id.store(b, p_ctx, i32.const_zero());
 
   if !is_peek {
     CTX::base_ptr.store(b, p_ctx, offset);
@@ -670,7 +765,10 @@ pub(crate) fn construct_skip<'a>(
   SherpaResult::Ok(())
 }
 
-pub(crate) fn construct_get_tok_offset<'a>(
+/// Calculates an offset to the end of the current token.
+/// `offset_ptr = head_ptr + tok_len`. This also sets the
+/// `tok_len` to 0.
+pub(crate) fn get_offset_to_end_of_token<'a>(
   sp: &'a LLVMParserModule,
   p_ctx: PointerValue<'a>,
 ) -> SherpaResult<PointerValue<'a>> {
@@ -708,7 +806,7 @@ pub(crate) fn construct_token_shift<'a>(
   CTX::start_line_num.store(b, p_ctx, CTX::chkp_line_num.load(b, p_ctx)?.into_int_value())?;
   CTX::start_line_off.store(b, p_ctx, CTX::chkp_line_off.load(b, p_ctx)?.into_int_value())?;
 
-  let offset = construct_get_tok_offset(m, p_ctx)?;
+  let offset = get_offset_to_end_of_token(m, p_ctx)?;
   CTX::scan_ptr.store(b, p_ctx, offset);
   CTX::anchor_ptr.store(b, p_ctx, offset);
   CTX::head_ptr.store(b, p_ctx, offset);
@@ -718,6 +816,8 @@ pub(crate) fn construct_token_shift<'a>(
   SherpaResult::Ok(Some((fun, p_ctx)))
 }
 
+/// Transfers the difference between `scan_ptr` and `head_ptr` to `tok_len`.
+/// If `token_value` is not 0, then assigns it's value to `tok_id`.
 fn construct_assign_token_id(
   LLVMParserModule { b, iptr, i32, .. }: &LLVMParserModule,
   p_ctx: PointerValue,
@@ -734,12 +834,21 @@ fn construct_assign_token_id(
   );
   CTX::tok_len.store(b, p_ctx, len)?;
 
+  SherpaResult::Ok(())
+}
+
+/// Transfers the `end_line*` values to the `chkp_line*` variables.
+fn transfer_end_line_to_chkp_line(
+  LLVMParserModule { b, .. }: &LLVMParserModule,
+  p_ctx: PointerValue,
+) -> SherpaResult<()> {
   CTX::chkp_line_num.store(b, p_ctx, CTX::end_line_num.load(b, p_ctx)?.into_int_value())?;
   CTX::chkp_line_off.store(b, p_ctx, CTX::end_line_off.load(b, p_ctx)?.into_int_value())?;
   SherpaResult::Ok(())
 }
 
-pub(crate) fn construct_pass<'a>(
+/// Builds a tail call return to the `dispatch` function.
+pub(crate) fn pass<'a>(
   LLVMParserModule { b, fun, i32, .. }: &LLVMParserModule,
   p_ctx: PointerValue,
   state_fun: FunctionValue,
@@ -748,67 +857,17 @@ pub(crate) fn construct_pass<'a>(
   build_tail_call_with_return(b, state_fun, fun.dispatch)
 }
 
-pub(crate) fn construct_fail<'a>(
+/// Resets any peek side-effects and builds a tail call return to the `dispatch_unwind` function.
+///
+pub(crate) fn fail<'a>(
   m: &'a LLVMParserModule,
   p_ctx: PointerValue,
   state_fun: FunctionValue<'a>,
 ) -> SherpaResult<()> {
   let LLVMParserModule { b, fun, i32, .. } = m;
-
-  construct_peek_reset(m, p_ctx);
-
+  peek_reset(m, p_ctx);
   b.build_store(CTX::state.get_ptr(b, p_ctx)?, i32.const_int(FAIL_STATE_FLAG_LLVM as u64, false));
-
   build_tail_call_with_return(b, state_fun, fun.dispatch_unwind)
-}
-
-pub(crate) fn construct_goto<'a>(
-  mut gotos: Vec<&Box<sherpa::Goto>>,
-  LLVMParserModule { b, fun, ctx, i32, types, .. }: &LLVMParserModule,
-  p_ctx: PointerValue,
-  state_fun: FunctionValue<'a>,
-  state_lu: &BTreeMap<String, FunctionValue>,
-) -> SherpaResult<()> {
-  let last = gotos.pop();
-
-  if gotos.len() > 0 {
-    build_fast_call(b, fun.extend_stack_if_needed, &[
-      p_ctx.into(),
-      i32.const_int((2 << gotos.len().checked_ilog2().unwrap_or(0)) as u64, false).into(),
-    ])?;
-
-    let goto_stack_ptr = CTX::goto_stack_ptr.get_ptr(b, p_ctx)?;
-    let mut goto_top = b.build_load(goto_stack_ptr, "").into_pointer_value();
-
-    for box sherpa::Goto { state } in &gotos {
-      // Create new goto struct
-      let goto_fn = (*state_lu.get(&state.val)?).as_global_value().as_pointer_value();
-      let goto_state = ctx.i32_type().const_int(NORMAL_STATE_FLAG_LLVM as u64, false);
-      let new_goto = b.build_insert_value(types.goto.get_undef(), goto_state, 1, "")?;
-      let new_goto = b.build_insert_value(new_goto, goto_fn, 0, "")?;
-
-      // Store in the current slot
-      b.build_store(goto_top, new_goto);
-
-      // Increment the slot
-      goto_top = unsafe { b.build_gep(goto_top, &[i32.const_int(1, false)], "") };
-    }
-
-    // Store the top slot
-    b.build_store(goto_stack_ptr, goto_top);
-
-    // Decrement goto remaining
-    let goto_free_ptr = CTX::goto_free.get_ptr(b, p_ctx)?;
-    let goto_free = b.build_load(goto_free_ptr, "").into_int_value();
-    let goto_free = b.build_int_sub(goto_free, i32.const_int(gotos.len() as u64, false), "");
-    b.build_store(goto_free_ptr, goto_free);
-  }
-
-  if let Some(box sherpa::Goto { state }) = last {
-    build_tail_call_with_return(b, state_fun, *state_lu.get(&state.val)?);
-  }
-
-  SherpaResult::Ok(())
 }
 
 fn construct_cp_lu_with_token_len_store<'a>(
@@ -847,7 +906,7 @@ pub(crate) fn check_for_input_acceptability<'a>(
 
   b.position_at_end(try_extend);
   build_fast_call(b, fun.get_adjusted_input_block, &[p_ctx.into(), needed_num_bytes.into()]);
-  construct_update_remaining(m, p_ctx);
+  calculate_chars_remaining_by_diff_of_end_and_scan(m, p_ctx);
 
   let input_available = CTX::chars_remaining_len.load(b, p_ctx)?.into_int_value();
   let input_available = b.build_int_cast(input_available, i64, "");
@@ -902,6 +961,9 @@ pub(crate) fn construct_scan<'a>(
   // Ensure the the local context state is reset.
   CTX::state.store(b, p_ctx, local_state);
 
+  // Reset scanner back to head
+  CTX::scan_ptr.store(b, p_ctx, CTX::head_ptr.load(b, p_ctx)?.into_pointer_value());
+
   SherpaResult::Ok(())
 }
 
@@ -936,7 +998,8 @@ pub(crate) fn construct_prime_function(
   let fn_value = funct.prime;
 
   let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
-  let selector = fn_value.get_nth_param(1).unwrap().into_int_value(); // Set the context's goto pointers to point to the goto block;
+  // Set the context's goto pointers to point to the goto block;
+  let selector = fn_value.get_nth_param(1).unwrap().into_int_value();
 
   b.position_at_end(sp.ctx.append_basic_block(fn_value, "entry"));
 

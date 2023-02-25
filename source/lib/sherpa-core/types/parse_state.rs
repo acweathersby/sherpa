@@ -48,7 +48,7 @@ impl StateId {
   }
 }
 
-#[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Hash, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum BranchType {
   PRODUCTION,
   TOKEN,
@@ -58,9 +58,9 @@ pub(crate) enum BranchType {
   UNKNOWN,
 }
 
-impl From<String> for BranchType {
-  fn from(value: String) -> Self {
-    match value.as_str() {
+impl From<&str> for BranchType {
+  fn from(value: &str) -> Self {
+    match value {
       "PRODUCTION" => Self::PRODUCTION,
       "TOKEN" => Self::TOKEN,
       "BYTE" => Self::BYTE,

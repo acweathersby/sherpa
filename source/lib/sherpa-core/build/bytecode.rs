@@ -55,59 +55,28 @@ fn write_rust_parser_file<W: Write>(
   bc: &Vec<u8>,
   ascript: Option<&ascript::types::AScriptStore>,
 ) -> std::io::Result<()> {
-  writer
-    .wrt(
-      "
-
-pub trait Reader: ByteReader + MutByteReader + std::fmt::Debug {}
+  writer.wrt(
+    "
+pub trait Reader: ByteReader + MutByteReader + UTF8Reader + std::fmt::Debug {}
 
 impl<T> Reader for T
-  where T: ByteReader + MutByteReader + std::fmt::Debug 
+  where T: ByteReader + MutByteReader + UTF8Reader + std::fmt::Debug 
   {}
 
-pub struct Parser<T: Reader, UserCTX>(ParseContext<T, UserCTX>, bool, Vec<u32>);
-
-impl<T: Reader, UserCTX> Iterator for Parser<T, UserCTX>
-{
-    type Item = ParseAction;
-
-    #[inline(always)]
-    fn next(&mut self) -> Option<Self::Item>
-    {
-        let Parser(ctx, active, stack) = self;
-
-        if *active {
-            let action = sherpa_runtime::functions::get_next_action(ctx, stack, &bytecode, None);
-            match action {
-                ParseAction::Error { .. } | ParseAction::Accept { .. } => {
-                    *active = false;
-                    Some(action)
-                }
-                action => Some(action),
-            }
-        } else {
-            None
-        }
-    }
-}
-
-impl<T: Reader, UserCTX> Parser<T, UserCTX>
-{
-    #[inline(always)]
-    fn new(reader: &mut T, entry_point:u32) -> Self
-    {
-        Self(ParseContext::<T, UserCTX>::new(reader), true, vec![0, entry_point | NORMAL_STATE_FLAG])
-    }
-    ",
-    )?
-    .indent();
+pub type Parser<'a, T: Reader, UserCTX> = ByteCodeParser<'a, T, UserCTX>;",
+  )?;
 
   for ExportedProduction { export_name, guid_name, production } in g.get_exported_productions() {
     if let Some(bytecode_offset) = state_lookups.get(guid_name) {
       writer
-        .wrt(&format!("pub fn new_{}_parser(reader: &mut T) -> Self{{", export_name))?
+        .wrt(&format!(
+          "pub fn new_{}_parser<'a, T: Reader, UserCTX> (reader: &'a mut T) -> Parser<'a, T, UserCTX>{{",
+          export_name
+        ))?
         .indent()
-        .wrtln(&format!("Self::new(reader, {})", bytecode_offset))?
+        .wrtln(&format!("let mut parser = Parser::new(reader, &bytecode);"))?
+        .wrtln(&format!("parser.init_parser({});", bytecode_offset))?
+        .wrtln(&format!("parser"))?
         .dedent()
         .wrtln("}")?
         .newline()?;
@@ -115,7 +84,6 @@ impl<T: Reader, UserCTX> Parser<T, UserCTX>
       println!("Unable to get bytecode offset for production {} ", production.name,);
     }
   }
-  writer.dedent().wrtln("}")?;
 
   writer.wrtln(&format!("pub static bytecode: [u8; {}] = [", bc.len()))?.indent();
 
@@ -143,33 +111,40 @@ impl<T: Reader, UserCTX> Parser<T, UserCTX>
       writer
         .newline()?
         .wrtln(&format!(
-          "pub fn {0}_from<'a>(mut reader: UTF8StringReader<'a>)  -> Result<{1}, SherpaParseError> {{ ",
+          "pub fn {0}_from<'a>(mut reader: UTF8StringReader)  -> Result<{1}, SherpaParseError> {{ ",
           export_name, ast_type_string
         ))?
         .indent()
         .wrtln(&format!(
           "
-let reduce_functions = ReduceFunctions::new();
-let mut ctx = ParseContext::<UTF8StringReader<'a>, u32>::new(&mut reader);
-let mut stack = vec![0, NORMAL_STATE_FLAG | {} ];
-let AstSlot (i0, tok0, _) = sherpa_runtime::functions::parse_ast(
-  &mut ctx, &mut stack, &bytecode, &reduce_functions.0, None
-)?;
+let reduce_functions = ReduceFunctions::<_, u32>::new();
+
+let mut parser = Parser::new(&mut reader, &bytecode);
+
+parser.init_parser({});
+
+let AstSlot (i0, tok0, _) = parser.parse_ast(&reduce_functions.0, &mut None)?;
+
+dbg!(&i0);
+
 {}
 
-", state_lookups.get(guid_name).unwrap(), &{
-  let (string, ref_) =
-    create_type_initializer_value(ref_.clone(), &ast_type, false, ascript);
-  if let Some(exp) = ref_ {
-    format!("{}\nOk({})", exp.to_init_string(), string)
-      .split("\n")
-      .map(|i| i.trim())
-      .collect::<Vec<_>>()
-      .join("\n")
-  } else {
-    "Ok(i0)".to_string()
-  }
-}))?
+",
+          state_lookups.get(guid_name).unwrap(),
+          &{
+            let (string, ref_) =
+              create_type_initializer_value(ref_.clone(), &ast_type, false, ascript);
+            if let Some(exp) = ref_ {
+              format!("{}\nOk({})", exp.to_init_string(), string)
+                .split("\n")
+                .map(|i| i.trim())
+                .collect::<Vec<_>>()
+                .join("\n")
+            } else {
+              "Ok(i0)".to_string()
+            }
+          }
+        ))?
         .dedent()
         .wrtln("}")?;
     }

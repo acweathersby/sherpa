@@ -13,19 +13,19 @@ use inkwell::{
   targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine},
   OptimizationLevel,
 };
-use sherpa_runtime::types::{
-  ast::{AstObject, AstStackSlice},
-  sherpa_allocate_stack,
-  sherpa_free_stack,
-  BlameColor,
-  ByteReader,
-  Goto,
-  LLVMByteReader,
-  MutByteReader,
-  ParseActionType,
-  ParseContext,
-  ParseResult,
-  TokenRange,
+use sherpa_runtime::{
+  llvm_parser::{sherpa_allocate_stack, sherpa_free_stack, LLVMByteReader},
+  types::{
+    ast::{AstObject, AstStackSlice},
+    BlameColor,
+    ByteReader,
+    Goto,
+    MutByteReader,
+    ParseActionType,
+    ParseContext,
+    ParseResult,
+    TokenRange,
+  },
 };
 use std::collections::BTreeMap;
 
@@ -551,7 +551,7 @@ IGNORE { c:sp c:nl }
 
   let mut jit = jit?;
   jit.print_states();
-  jit.print_dissasembly();
+  jit.print_disassembly();
   jit.print_code();
 
   let mut reduced = 0;
@@ -619,6 +619,8 @@ fn simple_newline_tracking() -> SherpaResult<()> {
   ))
     .into();
   let mut jit = jit?;
+
+  jit.print_disassembly();
 
   let result = jit.build_ast(
     0,

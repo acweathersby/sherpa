@@ -1,5 +1,5 @@
 use crate::{bytecode::BytecodeOutput, types::*, Journal};
-use sherpa_runtime::types::bytecode::Instruction;
+use sherpa_runtime::types::bytecode::{InputType, Instruction, FIRST_PARSE_BLOCK_ADDRESS};
 use std::collections::BTreeSet;
 
 fn header<'a>(address: usize) -> String {
@@ -181,11 +181,11 @@ pub(crate) fn disassemble_parse_block<'a>(
         let (string, i_last) = ds(i.next(), g, bc);
         (format!("\n{}SKIP-NO-SCAN{string}", dh(i.address())), i_last)
       }
-      SkipPeekToken => {
+      PeekSkipToken => {
         let (string, i_last) = ds(i.next(), g, bc);
         (format!("\n{}SKIP-PEEK{string}", dh(i.address())), i_last)
       }
-      SkipPeekTokenScanless => {
+      PeekSkipTokenScanless => {
         let (string, i_last) = ds(i.next(), g, bc);
         (format!("\n{}SKIP-PEEK-NO-SCAN{string}", dh(i.address())), i_last)
       }

@@ -97,7 +97,7 @@ fn test_ir_trivial_state() {
 #[test]
 fn test_ir_goto_state() {
   let result =
-    compile_ir_ast("state [ A ] shift-scanner then goto state [ test ] then goto state [ test ]");
+    compile_ir_ast("state [ A ] scan-shift then push state [ test ] then goto state [ test ]");
 
   print!("{:#?}", result);
 

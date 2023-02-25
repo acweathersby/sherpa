@@ -7,9 +7,9 @@ EXPORT ir as ir
 
 <> state > 
 
-        "except-handle"? state_declaration scanner_declaration? top_level_instructions on_fail? expected_symbols?
+        state_declaration  scanner_declaration? "excepts"? top_level_instructions expected_symbols?
 
-            :ast { t_IR_STATE, c_IR, c_IrState, id:$2, scanner: $3, instructions: $4, is_except_handler:bool($1), fail: $5, symbol_meta:$6 }
+            :ast { t_IR_STATE, c_IR, c_IrState, id:$1, scanner: $2, except_handler: bool($3), instructions: $4, symbol_meta:$5 }
 
 <> state_declaration > 
 
@@ -37,24 +37,20 @@ EXPORT ir as ir
 
 <> instruction_sequence > 
 
-        sequence_instruction(+ "then" ) 
-        ( "then" goto_instruction(+ "then" ) )? 
-        ( "then" "repeat" "state" :ast { t_Repeat, c_IR, c_IR_Instruction } )? 
+        goto_instruction
 
-        :ast [ $1, $2, $3]
+        :ast [ $1 ]
 
-    |   goto_instruction(+ "then" ) ( "then" "repeat" "state" :ast { t_Repeat, c_IR, c_IR_Instruction } )? 
+    |    except_handler?
+        sequence_instruction(+ "then" )
+        ( "then" push_goto_instruction(+ "then" ) )? 
+        ( "then" goto_instruction )?
+
+        :ast [ $1, $2, $3, $4 ]
+
+    |   push_goto_instruction(+ "then" ) ( "then" goto_instruction )? 
 
         :ast [$1, $2 ]
-
-    |   ( 
-        
-        "lazy" '(' c:num(+) \: c:num(+) ')' state_reference 
-
-            :ast { t_Lazy, c_IR, c_IR_Instruction, cp_start:$3, cp_end:$5, state: $7 } 
-        )
-
-        :ast [$1]
 
 <> assertion_instruction >
 
@@ -62,17 +58,30 @@ EXPORT ir as ir
 
             :ast { t_ASSERT, c_IR, c_IR_Instruction, c_IR_Branch, mode:str($2), ids: $3, instructions: $5 }
 
-        | "default"  '(' instruction_sequence ')'                     
+        | "default"  '(' instruction_sequence ')'
 
             :ast { t_DEFAULT, c_IR, c_IR_Instruction, c_IR_Branch, instructions: $3}
 
-<> assert_class > 'PRODUCTION' | 'TOKEN'  | 'BYTE' | 'CODEPOINT' | 'CLASS' 
+<> assert_class > 'PRODUCTION' | 'TOKEN'  | 'BYTE' | 'CODEPOINT' | 'CLASS'
+
 
 <> goto_instruction > 
 
     "goto" state_reference
 
         :ast { t_Goto, c_IR, c_IR_Instruction, state: $2 }
+
+<> push_goto_instruction > 
+
+    "push" state_reference
+
+        :ast { t_PushGoto, c_IR, c_IR_Instruction, state: $2 }
+
+<> except_handler > 
+
+    "push-catch" state_reference "then"
+
+        :ast { t_PushExceptHandler, c_IR, c_IR_Instruction, state: $2 }
 
 <> sequence_instruction >
 
@@ -90,45 +99,45 @@ EXPORT ir as ir
 
         :ast { t_Pass, c_IR, c_IR_Instruction  }
 
-    | "token-skip"
+    | "skip-token"
 
-        :ast { t_Skip, c_IR, c_IR_Instruction }
+        :ast { t_SkipToken, c_IR, c_IR_Instruction }
 
-    | "token-skip-scanless"
+    | "skip-token-scanless"
 
-        :ast { t_ScanlessSkip, c_IR, c_IR_Instruction }
+        :ast { t_SkipTokenScanless, c_IR, c_IR_Instruction }
 
     | "fail"
 
         :ast { t_Fail, c_IR, c_IR_Instruction }
 
-    | "peek-shift"
+    | "peek-token"
 
-        :ast { t_Peek, c_IR, c_IR_Instruction }
+        :ast { t_PeekToken, c_IR, c_IR_Instruction }
 
-    | "peek-shift-scanless"
+    | "peek-token-scanless"
 
-        :ast { t_ScanlessPeek, c_IR, c_IR_Instruction }
+        :ast { t_PeekTokenScanless, c_IR, c_IR_Instruction }
 
     | "peek-skip"
 
-        :ast { t_PeekSkip, c_IR, c_IR_Instruction }
+        :ast { t_SkipPeekToken, c_IR, c_IR_Instruction }
 
     | "peek-skip-scanless"
 
-        :ast { t_ScanlessPeekSkip, c_IR, c_IR_Instruction }
+        :ast { t_SkipPeekTokenScanless, c_IR, c_IR_Instruction }
 
     | "peek-reset"
 
         :ast { t_PeekReset, c_IR, c_IR_Instruction }
 
-    | "token-shift" "nothing"?
+    | "shift-token" "nothing"?
 
         :ast { t_ShiftToken, c_IR, c_IR_Instruction, EMPTY:bool($2) }
 
-    | "token-shift-scanless"
+    | "shift-token-scanless"
 
-        :ast { t_ScanlessTokenShift, c_IR, c_IR_Instruction }
+        :ast { t_ShiftTokenScanless, c_IR, c_IR_Instruction }
 
     | "scan-shift"
 
@@ -140,16 +149,9 @@ EXPORT ir as ir
 
 <> reduce_instruction > 
 
-    "reduce" tk:integer ( "symbols" "with" "rule" )? tk:integer "to"? tk:integer
+    "reduce" tk:integer ( "symbols" "to" )? tk:integer ( "with" "rule" )? tk:integer 
 
-        :ast { t_Reduce, c_IR, c_IR_Instruction, len: i32($2), rule_id: i32($4), prod_id: i32($4) }
-
-
-<> on_fail > 
-
-    "on" "fail" state_declaration top_level_instructions on_fail? expected_symbols?
-
-        :ast { t_FailState, c_IR, c_IR_State, id:$3, instructions: $4, symbol_meta: $6, fail: $5 }
+        :ast { t_Reduce, c_IR, c_IR_Instruction, len: i32($2), rule_id: i32($6), prod_id: i32($4) }
 
 <> expected_symbols > 
 

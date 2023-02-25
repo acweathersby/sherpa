@@ -144,7 +144,7 @@ fn convert_state_to_ir(
         }
         StateType::GotoLoop => {
           w.write_fmt(format_args!(
-            "\n assert PRODUCTION [ {bc_id} ] ( goto state [ {state_name} ] then goto state [ %%%% ] )"
+            "\n assert PRODUCTION [ {bc_id} ] ( push state [ %%%% ] then goto state [ {state_name} ] )"
           ))?;
         }
         StateType::GotoPass => {
@@ -198,28 +198,21 @@ fn convert_state_to_ir(
       .into_iter()
       .rev()
     {
-      let mut body_string = String::new();
+      let mut body_string = vec![];
 
       if match s_type {
-        StateType::KernelCall(prod_id) | StateType::InternalCall(prod_id) => {
-          body_string += &format!(" goto state [ {} ] then", g.get_production(&prod_id)?.guid_name);
-          true
-        }
         StateType::Shift => {
-          if is_scanner {
-            body_string += " shift-scanner then";
-          } else {
-            body_string += " shift-token then";
-          }
+          body_string.push(is_scanner.then_some("scan-shift").unwrap_or("shift-token").into());
           true
         }
         StateType::PeekEnd => {
           debug_assert!(!is_scanner, "Peek states should not be present in graph");
+          body_string.push("peek-reset".into());
           true
         }
         StateType::Peek => {
           debug_assert!(!is_scanner, "Peek states should not be present in graph");
-          body_string += " peek-token then";
+          body_string.push("peek-token".into());
           true
         }
         StateType::ProductionCompleteOOS => {
@@ -227,7 +220,7 @@ fn convert_state_to_ir(
             !is_scanner,
             "ProductionCompleteOOS states should only exist in normal parse graphs"
           );
-          body_string += " pop";
+          body_string.push("pop".into());
           false
         }
         StateType::ScannerCompleteOOS => {
@@ -235,12 +228,11 @@ fn convert_state_to_ir(
             is_scanner,
             "ScannerCompleteOOS states should only exist in scanner parse graphs"
           );
-          body_string += " pass";
+          body_string.push("pass".into());
           false
         }
         StateType::Reduce(rule_id) => {
-          body_string += " ";
-          body_string += &create_rule_reduction(g, rule_id);
+          body_string.push(create_rule_reduction(g, rule_id));
           false
         }
         StateType::AssignAndFollow(sym_id) | StateType::AssignToken(sym_id) => {
@@ -252,32 +244,45 @@ fn convert_state_to_ir(
             sym_id.debug_string(g)
           );
           if matches!(s_type, StateType::AssignAndFollow(..)) {
-            body_string += &format!(" assign token [ {bytecode_id} ]");
-            body_string += " then";
+            body_string.push(format!("assign token [ {bytecode_id} ]"));
             true
           } else {
-            body_string += &format!("assign token [ {bytecode_id} ]");
+            body_string.push(format!("assign token [ {bytecode_id} ]"));
             false
           }
         }
         StateType::Follow => true,
         StateType::Complete => {
-          body_string += " pass";
+          body_string.push("pass".into());
           false
         }
         _ => true,
       } {
-        body_string +=
-          &format!(" goto state [ {} ]", get_state_hash_name(successor, state, resolved_states));
-
         match (&goto_state, s_type) {
           // Kernal calls can bypass gotos.
           (_, StateType::KernelCall(..)) => {}
           (Some(gt), _) => {
             let name = get_resolved_name(state_id.to_goto(), gt, resolved_states);
-            body_string += &format!(" then goto state [ {name} ]");
+            body_string.push(format!("push state [ {name} ]"));
           }
           _ => {}
+        }
+
+        match s_type {
+          //Ensure production calls are immediately called before any other gotos.
+          StateType::KernelCall(prod_id) | StateType::InternalCall(prod_id) => {
+            body_string.push(format!(
+              "push state [ {} ]",
+              get_state_hash_name(successor, state, resolved_states)
+            ));
+            body_string.push(format!("goto state [ {} ]", g.get_production(&prod_id)?.guid_name));
+          }
+          _ => {
+            body_string.push(format!(
+              "goto state [ {} ]",
+              get_state_hash_name(successor, state, resolved_states)
+            ));
+          }
         }
       }
 
@@ -296,18 +301,21 @@ fn convert_state_to_ir(
 
     if hash_groups.len() == 1 && hash_groups[0].contains_key(&DEFAULT_SYM_ID) {
       let (_, body_string) = hash_groups[0].get(&DEFAULT_SYM_ID)?;
+      let body_string = body_string.join(" then ");
       w.write_fmt(format_args!("\n{body_string}"))?;
     } else {
       for (bc_id, (assert_type, body_string)) in branches {
+        let body_string = body_string.join(" then ");
+
         if bc_id == DEFAULT_SYM_ID {
-          w.write_fmt(format_args!("\ndefault ({body_string} )"))?;
+          w.write_fmt(format_args!("\ndefault ( {body_string} )"))?;
         } else {
           if !is_scanner {
             is_token_assertion = true;
           }
 
           let head_string = format!("assert {assert_type} [ {bc_id} ]");
-          w.write_fmt(format_args!("\n{head_string} ({body_string} )"))?;
+          w.write_fmt(format_args!("\n{head_string} ( {body_string} )"))?;
         }
       }
     }
@@ -390,7 +398,7 @@ fn create_rule_reduction(g: &std::sync::Arc<GrammarStore>, rule_id: RuleId) -> S
   let production = g.productions.get(&rule.prod_id).unwrap();
   match (production.bytecode_id, rule.bytecode_id) {
     (Some(prod_bc_id), Some(rule_bc_id)) => {
-      format!("set prod to {prod_bc_id} then reduce {} symbols with rule {rule_bc_id}", rule.len)
+      format!("reduce {} symbols to {prod_bc_id} with rule {rule_bc_id}", rule.len)
     }
     (None, _) => {
       unreachable!("Expected production {} to be assigned a production id", production.name)
@@ -447,7 +455,7 @@ fn create_ir_state(
         w.write_fmt(format_args!(
           "\nassert TOKEN [ {} ] ( {} )",
           symbol_id.bytecode_id(&g),
-          if state.get_type() == StateType::Peek { "peek-skip" } else { "skip" }
+          if state.get_type() == StateType::Peek { "peek-skip" } else { "skip-token" }
         ))?;
       }
     }

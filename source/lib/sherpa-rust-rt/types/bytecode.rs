@@ -34,8 +34,8 @@ pub enum Opcode {
   ///
   /// This is a single byte instruction.
   ShiftToken,
-  /// Same as `TokenShift`, but assigns `sym_len` to `tok_len` before
-  /// executing the `TokenShift` instructions.
+  /// Same as `ShiftToken`, but assigns `sym_len` to `tok_len` before
+  /// executing the `ShiftToken` instructions.
   ///
   /// This also causes a `Shift` event to be emitted, pausing the parser until it is
   /// resumed through a call to `next`.
@@ -66,13 +66,13 @@ pub enum Opcode {
   /// instruction of the current arse block.
   ///
   /// This is a single byte instruction.
-  SkipPeekToken,
-  /// Same as `SkipPeekToken`, but assigns `sym_len` to `tok_len` before
-  /// executing the `SkipPeekToken` instructions.
+  PeekSkipToken,
+  /// Same as `PeekSkipToken`, but assigns `sym_len` to `tok_len` before
+  /// executing the `PeekSkipToken` instructions.
   ///
   /// This is a single byte instruction.
-  SkipPeekTokenScanless,
-  /// Assigns the value of `base_ptr` to `scan_ptr`, `head_ptr`, `chkp_ptr`. Also sets
+  PeekSkipTokenScanless,
+  /// Assigns the value of `base_ptr` to `scan_ptr` and `head_ptr`. Also sets
   /// `tok_len`, `sym_len`, and `tok_id` to `0`.
   ///
   /// This is a single byte instruction.
@@ -203,8 +203,8 @@ impl From<u8> for Opcode {
       PeekTokenScanless,
       SkipToken,
       SkipTokenScanless,
-      SkipPeekToken,
-      SkipPeekTokenScanless,
+      PeekSkipToken,
+      PeekSkipTokenScanless,
       PeekReset,
       Accept,
       PopGoto,
@@ -478,4 +478,73 @@ pub fn set_u32_le(bc: &mut Vec<u8>, offset: usize, val: u32) {
   bc[offset + 1] = (val >> 8 & 0xFF) as u8;
   bc[offset + 2] = (val >> 16 & 0xFF) as u8;
   bc[offset + 3] = (val >> 24 & 0xFF) as u8;
+}
+
+// Bit mask for bytecode states that are active during failure
+// recovery mode
+pub const FAIL_STATE_FLAG: u32 = 1 << 1;
+
+/// Bit mask for bytecode states that are active during normal parse
+/// mode
+pub const NORMAL_STATE_FLAG: u32 = 1 << 0;
+
+/// The offset of the first state within any HC bytecode buffer.
+pub const FIRST_PARSE_BLOCK_ADDRESS: u32 = 8;
+
+pub const TOKEN_ASSIGN_FLAG: u32 = 0x04000000;
+
+pub const END_OF_INPUT_TOKEN_ID: u32 = 0x1;
+
+#[non_exhaustive]
+
+pub struct InputType;
+
+impl InputType {
+  pub const T01_PRODUCTION: u32 = 0;
+  pub const T02_TOKEN: u32 = 1;
+  pub const T03_CLASS: u32 = 2;
+  pub const T04_CODEPOINT: u32 = 3;
+  pub const T05_BYTE: u32 = 4;
+
+  pub fn to_string(val: u32) -> &'static str {
+    match val {
+      Self::T01_PRODUCTION => "PRODUCTION",
+      Self::T02_TOKEN => "TOKEN",
+      Self::T03_CLASS => "CLASS",
+      Self::T04_CODEPOINT => "CODEPOINT",
+      Self::T05_BYTE => "BYTE",
+      _ => "",
+    }
+  }
+}
+
+pub enum BranchSelector {
+  Hash,
+  Vector,
+}
+
+/// values - The set of keys used to select a branch to jump to.
+/// branches - An vector of branch bytecode vectors.
+pub type GetBranchSelector =
+  fn(values: &[u32], max_span: u32, branches: &[Vec<u8>]) -> BranchSelector;
+
+pub fn default_get_branch_selector(
+  values: &[u32],
+  max_span: u32,
+  branches: &[Vec<u8>],
+) -> BranchSelector {
+  // Hash table limitations:
+  // Max supported item value: 2046 with skip set to 2048
+  // Max number of values: 1024 (maximum jump span)
+  // Max instruction offset from table header 2042
+
+  let total_instruction_length = branches.iter().map(|b| b.len()).sum::<usize>();
+
+  let has_unsupported_value = values.iter().cloned().any(|v| v > 2046);
+
+  if (max_span < 2) || total_instruction_length > 2042 || has_unsupported_value {
+    BranchSelector::Vector
+  } else {
+    BranchSelector::Hash
+  }
 }

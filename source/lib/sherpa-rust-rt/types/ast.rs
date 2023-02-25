@@ -1,3 +1,5 @@
+use crate::llvm_parser::LLVMByteReader;
+
 use super::*;
 use std::{fmt::Debug, ops::Index};
 
@@ -434,32 +436,5 @@ pub unsafe fn llvm_map_shift_action<
       slots.assign_to_garbage(0, (ASTNode::default(), tok, peek));
     }
     _ => unreachable!(),
-  }
-}
-
-pub unsafe fn llvm_map_result_action<
-  'a,
-  T: LLVMByteReader + ByteReader + MutByteReader,
-  M,
-  Node: AstObject,
->(
-  _ctx: &ParseContext<T, M>,
-  action: ParseActionType,
-  slots: &mut AstStackSlice<(Node, TokenRange, TokenRange)>,
-) -> ParseResult<Node> {
-  match action {
-    ParseActionType::Accept =>{
-      ParseResult::Complete(slots.take(0))
-    }
-    ParseActionType::Error => {
-      let vec = slots.to_vec();
-      let last_input = vec.last().cloned().unwrap_or_default().1;
-      ParseResult::Error(last_input, vec)
-    }
-    ParseActionType::NeedMoreInput => {
-      ParseResult::NeedMoreInput(slots.to_vec())
-    }
-
-    _ => unreachable!("This function should only be called when the parse action is  [Error, Accept, or EndOfInput]"),
   }
 }

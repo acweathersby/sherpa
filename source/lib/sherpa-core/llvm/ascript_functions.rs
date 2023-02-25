@@ -172,8 +172,7 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: Sized>(
   // REDUCE --------------------------------------------------------
   b.position_at_end(reduce);
   // Get slice size
-  let symbol_count_original =
-    CTX_AGGREGATE_INDICES::symbol_len.load(b, parse_ctx)?.into_int_value();
+  let symbol_count_original = CTX_AGGREGATE_INDICES::sym_len.load(b, parse_ctx)?.into_int_value();
   let rule_index = CTX_AGGREGATE_INDICES::rule_id.load(b, parse_ctx)?.into_int_value();
 
   // Calculate the position of the first element and the last element.

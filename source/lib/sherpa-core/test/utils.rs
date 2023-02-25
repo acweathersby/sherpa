@@ -68,7 +68,7 @@ pub struct TestConfig<'a> {
   pub assert_clean_reports: bool,
   pub print_disassembly: bool,
   /// Prints the parse report for the givin productions
-  pub print_parse_reports: &'static [&'static str],
+  pub print_parser_states_compile_reports: &'static [&'static str],
   /// If `grammar_string` is assigned a value, then this is treated
   /// as a base dir path for file imports declared in the grammar.
   ///
@@ -89,7 +89,7 @@ impl<'a> Default for TestConfig<'a> {
       llvm_parse: false,
       bytecode_parse: false,
       build_llvm: false,
-      build_bytecode: false,
+      build_bytecode: true,
       print_states: false,
       build_ascript: false,
       print_llvm_ir: false,
@@ -102,7 +102,7 @@ impl<'a> Default for TestConfig<'a> {
       journal: None,
       grammar_string: None,
       debugger_handler: None,
-      print_parse_reports: &[],
+      print_parser_states_compile_reports: &[],
       num_of_threads: get_num_of_available_threads(),
     }
   }
@@ -156,7 +156,7 @@ pub fn test_runner<'a>(
     bytecode_parse,
     llvm_parse,
     num_of_threads,
-    print_parse_reports: report_parse_states,
+    print_parser_states_compile_reports: report_parse_states,
     build_parse_states,
   } = test_cfg;
 
@@ -250,7 +250,7 @@ Cannot create a GrammarStore without one of these values present. "
       let mut debugger = debugger_handler.and_then(|s| s(g.clone()));
       let result =
         parser.collect_shifts_and_skips(entry_point, target_production_id, &mut debugger);
-      resolve_shifts_and_skips(result, should_parse, input, &g)?;
+      resolve_shifts_and_skips(result, should_parse, input, &g, "BYTECODE")?;
     }
   }
 
@@ -281,7 +281,7 @@ Cannot create a GrammarStore without one of these values present. "
         let result =
           jit_parser.collect_shifts_and_skips(entry_point, target_production_id, &mut debugger);
 
-        resolve_shifts_and_skips(result, should_parse, input, &g)?;
+        resolve_shifts_and_skips(result, should_parse, input, &g, "LLVM-JIT")?;
       }
     }
   }
@@ -294,12 +294,13 @@ fn resolve_shifts_and_skips(
   should_parse: &bool,
   input: &str,
   g: &Arc<GrammarStore>,
+  parse_type: &str,
 ) -> SherpaResult<()> {
   match result {
     ShiftsAndSkipsResult::Accepted { shifts, .. } => {
       if !should_parse {
         return SherpaResult::Err(
-          format!("The input [ {} ] should have failed to parse", input).into(),
+          format!("[{parse_type}] The input [ {} ] should have failed to parse", input).into(),
         );
       }
       dbg!(shifts);
@@ -307,7 +308,7 @@ fn resolve_shifts_and_skips(
     ShiftsAndSkipsResult::IncorrectProduction { expected_prod_id, actual_prod_id, .. } => {
       return SherpaResult::Err(
         format!(
-          "The resulting production [{}] does not match expected production [{}]",
+          "[{parse_type}] The resulting production [{}] does not match expected production [{}]",
           g.get_production_plain_name(g.bytecode_production_lookup.get(&actual_prod_id)?),
           g.get_production_plain_name(g.bytecode_production_lookup.get(&expected_prod_id)?)
         )
@@ -317,7 +318,7 @@ fn resolve_shifts_and_skips(
     ShiftsAndSkipsResult::FailedParse(err) => {
       if *should_parse {
         return SherpaResult::Err(
-          format!("The input [{}] should have been parsed\n {}", input, err).into(),
+          format!("[{parse_type}] The input [{}] should have been parsed\n {}", input, err).into(),
         );
       }
     }
@@ -337,8 +338,6 @@ fn print_parse_state_reports(report_parse_states: &[&str], j: &mut Journal) {
       }
       // Try building a symbol name
       let scanner_id = ScannerStateId::from_string(name, g);
-
-      dbg!(scanner_id);
 
       printed |= j.debug_print_reports(crate::ReportType::ScannerCompile(scanner_id));
 

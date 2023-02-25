@@ -173,7 +173,7 @@ IGNORE { c:sp c:nl }
       grammar_string: Some(input),
       bytecode_parse: true,
       debugger_handler: Some(&|g| console_debugger(g, Default::default())),
-      print_parse_reports: &["local_values_list_1"],
+      print_parser_states_compile_reports: &["local_values_list_1"],
       ..Default::default()
     },
   )?;

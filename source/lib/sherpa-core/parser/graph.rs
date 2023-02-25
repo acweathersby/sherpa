@@ -365,11 +365,6 @@ fn handle_completed_groups(
           }
           0 => {
             //There are lookahead(k=1) style states available, so we don't need to generate a default state.
-            #[cfg(debug_assertions)]
-            println!(
-              "There are lookaheads available to resolve these items. \n {}",
-              cmpl.to_debug_string(g, "\n")
-            );
           }
           _ => unreachable!(),
         };
@@ -1061,8 +1056,6 @@ fn handle_completed_item(
 
       let goals = get_goal_items_from_completed(completed_items, graph);
 
-      let g = &(j.grammar()?);
-
       let is_continue = !follow.is_empty();
       let is_goal = !goals.is_empty();
 
@@ -1078,14 +1071,6 @@ fn handle_completed_item(
         follow.clone(),
       );
       graph[state].set_reduce_item(completed_item);
-
-      if !is_goal && !is_continue {
-        println!("-------------------------------------------");
-        let (follow, completed) = get_follow(j, graph, completed_item)?;
-        follow.__print_items__(g, "FOLLOW");
-        completed.__print_items__(g, "Completed");
-        unreachable!("State should be continue, goal, or both: {}", graph[state].debug_string(g));
-      }
 
       if is_continue {
         if let Some(state) = graph.enqueue_pending_state(graph_state, state) {

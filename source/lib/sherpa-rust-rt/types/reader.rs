@@ -41,7 +41,7 @@ pub trait ByteReader {
   /// Returns the byte at the current cursor position.
   fn byte(&self) -> u32;
 
-  /// Returns the length of the source input. If this unknown
+  /// Returns the length of the source input. If this is unknown
   /// then returns 0
 
   fn len(&self) -> usize {
@@ -210,65 +210,4 @@ pub trait UTF8Reader {
   }
 
   fn get_str<'a>(&'a self) -> &'a str;
-}
-
-#[repr(C)]
-#[derive(Debug)]
-pub struct InputInfo(pub *const u8, pub u32, pub bool);
-
-pub trait LLVMByteReader {
-  /// Get a pointer to a sequence of bytes that can be read from the input given
-  /// the cursor position. The second tuple values should be the length bytes that
-  ///  can be read from the block.
-  extern "C" fn get_byte_block_at_cursor_old<T: ByteReader>(
-    self_: &mut T,
-    start_offset: u32,
-    _end_offset: u32,
-  ) -> InputInfo {
-    let cursor = start_offset;
-    let size = ((self_.len() as i64) - (cursor as i64)).max(0) as u32;
-
-    if size > 0 {
-      let ptr = ((self_.get_bytes().as_ptr() as usize) + cursor as usize) as *const u8;
-      InputInfo(ptr, self_.len() as u32, false)
-    } else {
-      InputInfo(0 as *const u8, self_.len() as u32, false)
-    }
-  }
-
-  extern "C" fn get_byte_block_at_cursor<T: ByteReader>(
-    self_: &mut T,
-    beg_ptr: &mut *const u8,
-    anchor_ptr: &mut *const u8,
-    head_ptr: &mut *const u8,
-    scan_ptr: &mut *const u8,
-    end_ptr: &mut *const u8,
-  ) {
-    let anchor_offset = (*scan_ptr as usize) - (*beg_ptr as usize);
-    let head_delta = (*head_ptr as usize) - anchor_offset;
-    let tail_delta = (*scan_ptr as usize) - anchor_offset;
-    let needed = *end_ptr as usize;
-
-    let size = ((self_.len() as i64) - ((anchor_offset + tail_delta + needed as usize) as i64))
-      .max(0) as u32;
-
-    if size > 0 {
-      let beg = self_.get_bytes().as_ptr();
-      let anchor = beg as usize + anchor_offset;
-      let head = (anchor + head_delta) as *const u8;
-      let tail = (anchor + tail_delta) as *const u8;
-      let end = (beg as usize + self_.len()) as *const u8;
-      (*beg_ptr) = beg;
-      (*anchor_ptr) = anchor as *const u8;
-      (*head_ptr) = head;
-      (*scan_ptr) = tail;
-      (*end_ptr) = end;
-    } else {
-      (*beg_ptr) = 0 as *const u8;
-      (*anchor_ptr) = 0 as *const u8;
-      (*head_ptr) = 0 as *const u8;
-      (*scan_ptr) = 0 as *const u8;
-      (*end_ptr) = 0 as *const u8;
-    }
-  }
 }

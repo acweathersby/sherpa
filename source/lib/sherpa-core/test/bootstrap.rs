@@ -6,17 +6,45 @@ use crate::{
 
 use super::utils::{console_debugger, PrintConfig, TestInput};
 
+/// Test component module wide compilation of the sherpa grammar.
 #[test]
-fn compile_and_parse_sherpa_grammar_with_bytecode_parser() -> SherpaResult<()> {
+fn compile_sherpa_grammar_and_parse_simple_grammar_expression() -> SherpaResult<Journal> {
+  test_runner(
+    &[TestInput {
+      entry_name:     "grammar",
+      input:          r##"<> t > "t" :ast { $2 + $3 + tok<1,2> } <> B > [unordered "d" "b" "c" ]"##,
+      should_succeed: true,
+    }],
+    None,
+    TestConfig {
+      grammar_path: Some(path_from_source("grammar/v1_0_0/grammar.sg")?),
+      llvm_parse: true,
+      bytecode_parse: true,
+      debugger_handler: Some(&|g| console_debugger(g, Default::default())),
+      ..Default::default()
+    },
+  )
+}
+
+#[test]
+fn compile_sherpa_grammar_and_parse_root_sherpa_grammar_file() -> SherpaResult<()> {
   let input = r#"
   NAME sherpa
 
-  IMPORT ./script.hcg as ast 
-  IMPORT ./symbol.hcg as sym
+  IMPORT ./ascript as ast 
+  IMPORT ./symbol as sym
+  IMPORT ./syntax as syn
+  IMPORT ./ir as ir
+  IMPORT ./comment as cmt
   
-  IGNORE { c:sp c:nl }
+  IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
   
   EXPORT grammar as grammar
+  EXPORT ast::struct as ast_struct
+  EXPORT ast::expression as ast_expression
+  EXPORT ir::state as ir
+  
+  
   
   <> grammar > 
   
@@ -42,13 +70,13 @@ fn compile_and_parse_sherpa_grammar_with_bytecode_parser() -> SherpaResult<()> {
   
   <> import_clause > 
   
-          "IMPORT" ( c:id | c:sym  )(+)^test ( "AS" | "as" ) sym::identifier
+          "IMPORT" ( c:id | c:sym  )(+) c:sp ( "AS" | "as" ) sym::identifier
   
-              :ast { t_Import, c_Preamble, uri: str($2), reference:str($4), tok }
+              :ast { t_Import, c_Preamble, uri: str($2), reference:str($5), tok }
   
   <> ignore_clause >
   
-          "IGNORE" "{"  ( sym::terminal | sym::class )(+) "}"
+          "IGNORE" "{"  ( sym::terminal_non_terminal | sym::terminal | sym::class )(+) "}"
   
               :ast { t_Ignore, c_Preamble, symbols: $3 }
   
@@ -60,15 +88,15 @@ fn compile_and_parse_sherpa_grammar_with_bytecode_parser() -> SherpaResult<()> {
   
   <> production > 
   
-          "<"  (template_name)(*\, )^t \> \lazy?^l sym::priority?^p sym::non_terminal^n \> rules^r
+          "<"  (template_name)(*",")^t ">" "lazy"?^l sym::priority?^p sym::non_terminal^n">" rules^r
   
               :ast { t_Production, is_lazy:bool($l), priority:$p, name:str($n), name_sym:$n, rules: $r, template_names:$t, tok }
   
   <> append_production > 
   
-          "+>" sym::priority?^p sym::non_terminal^n \> rules^r
+          "+>" sym::priority?^p sym::non_terminal^n ">" rules^r
   
-              :ast { t_Production, is_append: true, is_lazy:false, priority:$p, name:str($n), name_sym:$n, rules: $r, tok }
+              :ast { t_Production, is_append: true, priority:$p, name:str($n), name_sym:$n, rules: $r, tok }
   
   <> template_name >  
   
@@ -82,9 +110,18 @@ fn compile_and_parse_sherpa_grammar_with_bytecode_parser() -> SherpaResult<()> {
   
   <> rule > 
   
-          \!?^p ( sym::annotated_symbol | any_group )(+)^s ast_definition?^a
+          "!"?^p ( sym::annotated_symbol | any_group )(+)^s ast_definition?^a
+          syntax_definition?^syn recover_definition?^rec
   
-              :ast { t_Rule, is_priority:bool($p), symbols:$s, ast_definition:$a, tok }
+                :ast {
+                  t_Rule,
+                  is_priority:bool($p),
+                  symbols:$s,
+                  ast_definition:$a,
+                  syntax_definition:$syn,
+                  recover_definition:$rec, tok
+                }
+  
   
   <> ast_definition > 
   
@@ -92,23 +129,28 @@ fn compile_and_parse_sherpa_grammar_with_bytecode_parser() -> SherpaResult<()> {
   
               :ast  { t_Ascript, c_Function, ast:$ast, tok }
   
+  <> syntax_definition > 
+  
+          ":syn" syn::declaration^syn
+  
+  <> recover_definition > 
+  
+          ":rec" "{" ir::state^state "}"
+  
+              :ast  { t_Recovery, c_Function, state:$state, tok }
+  
   
   +> sym::symbol > group
   
-  +> sym::non_terminal > sym::non_terminal^p "<" sym::production_symbol^t ">"
-  
-          :ast { t_TemplateProductionSymbol, prod_sym:$p, template_productions:$t }
-  
-  
   <> group > 
   
-          "(" rules ")"{1}
+          "(" rules ")"{1}      
   
               :ast { t_Group_Production, c_Symbol, rules:$2,  tok }
   
   <> any_group > 
   
-          \[ "unordered"? sym::annotated_symbol(+)^s \]
+          "[" "unordered"? sym::annotated_symbol(+)^s ']'
   
               :ast { t_AnyGroup, unordered: bool($2), symbols:$s, tok }
   
@@ -120,6 +162,7 @@ fn compile_and_parse_sherpa_grammar_with_bytecode_parser() -> SherpaResult<()> {
     TestConfig {
       grammar_path: Some(path_from_source("grammar/v1_0_0/grammar.sg")?),
       bytecode_parse: true,
+      llvm_parse: true,
       //optimize: false,
       debugger_handler: Some(&|g| {
         console_debugger(g, PrintConfig {
@@ -133,24 +176,4 @@ fn compile_and_parse_sherpa_grammar_with_bytecode_parser() -> SherpaResult<()> {
   )?;
 
   SherpaResult::Ok(())
-}
-
-/// Test component module wide compilation of the sherpa grammar.
-#[test]
-fn compile_and_parse_sherpa_grammar_with_llvm_jit_parser() -> SherpaResult<Journal> {
-  test_runner(
-    &[TestInput {
-      entry_name:     "grammar",
-      input:          r##"<> t > "t" :ast { $2 + $3 + tok<1,2> } <> B > [unordered "d" "b" "c" ] "##,
-      should_succeed: true,
-    }],
-    None,
-    TestConfig {
-      grammar_path: Some(path_from_source("grammar/v1_0_0/grammar.sg")?),
-      //llvm_parse: true,
-      bytecode_parse: true,
-      debugger_handler: Some(&|g| console_debugger(g, Default::default())),
-      ..Default::default()
-    },
-  )
 }

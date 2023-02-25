@@ -320,9 +320,9 @@ pub(crate) unsafe fn construct_get_adjusted_input_block_function(
   .left()?
   .into_struct_value();
 
-  let tail_int = b.build_ptr_to_int(CTX::scan_ptr.load(b, p_ctx)?.into_pointer_value(), *iptr, "");
+  let scan_int = b.build_ptr_to_int(CTX::scan_ptr.load(b, p_ctx)?.into_pointer_value(), *iptr, "");
   let end_int = b.build_ptr_to_int(CTX::end_ptr.load(b, p_ctx)?.into_pointer_value(), *iptr, "");
-  CTX::chars_remaining_len.store(b, p_ctx, b.build_int_sub(end_int, tail_int, ""))?;
+  CTX::chars_remaining_len.store(b, p_ctx, b.build_int_sub(end_int, scan_int, ""))?;
 
   b.build_return(None);
 

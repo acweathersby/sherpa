@@ -12,8 +12,6 @@ pub struct UTF8StringReader<'a> {
   source:   SharedSymbolBuffer,
 }
 
-impl<'a> LLVMByteReader for UTF8StringReader<'a> {}
-
 impl<'a> UTF8Reader for UTF8StringReader<'a> {
   fn get_str(&self) -> &str {
     self.data

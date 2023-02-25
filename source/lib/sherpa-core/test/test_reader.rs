@@ -1,9 +1,6 @@
-use sherpa_runtime::types::{
-  ByteReader,
-  LLVMByteReader,
-  MutByteReader,
-  SharedSymbolBuffer,
-  UTF8Reader,
+use sherpa_runtime::{
+  llvm_parser::LLVMByteReader,
+  types::{ByteReader, MutByteReader, SharedSymbolBuffer, UTF8Reader},
 };
 
 #[derive(Debug, Clone)]

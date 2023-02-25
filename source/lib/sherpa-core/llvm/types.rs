@@ -193,7 +193,7 @@ pub enum CTX_AGGREGATE_INDICES {
   /// ```ignore
   /// pub meta_a:          u32,
   /// ```
-  symbol_len,
+  sym_len,
   /// Tracks whether the context is a fail mode or not.
   /// ```ignore
   /// pub state:           u32,

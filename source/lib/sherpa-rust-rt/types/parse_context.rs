@@ -1,16 +1,10 @@
 use super::{
-  ast::{AstObject, AstStackSlice},
+  ast::{AstObject, AstSlot, AstStackSlice, Reducer},
+  bytecode::{FAIL_STATE_FLAG, NORMAL_STATE_FLAG},
   *,
 };
-use crate::{
-  bytecode_parser::{get_next_action, DebugEvent, DebugFn},
-  utf8::get_token_class_from_codepoint,
-};
-use std::{
-  alloc::{alloc, dealloc, Layout},
-  fmt::Debug,
-  sync::Arc,
-};
+use crate::bytecode_parser::{get_next_action, DebugEvent, DebugFn};
+use std::{fmt::Debug, sync::Arc};
 
 #[derive(Clone, Debug, Copy)]
 #[repr(C)]
@@ -191,7 +185,6 @@ impl<T: ByteReader, M> ParseContext<T, M> {
   }
 
   pub fn get_token_offset(&self) -> u32 {
-    println!("{} {}", self.begin_ptr, self.head_ptr);
     (self.head_ptr - self.begin_ptr) as u32
   }
 
@@ -255,55 +248,6 @@ impl<T: ByteReader, M> Default for ParseContext<T, M> {
   }
 }
 
-impl<T: ByteReader + LLVMByteReader, M> Debug for ParseContext<T, M> {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    let mut dbgstr = f.debug_struct("ParseContext");
-    dbgstr.field("anchor_ptr", &self.anchor_ptr);
-    dbgstr.field("scan_ptr", &self.scan_ptr);
-    dbgstr.field("tok_len", &self.tok_len);
-    dbgstr.field("head_ptr", &self.head_ptr);
-    dbgstr.field("input_block_len", &self.chars_remaining_len);
-    dbgstr.field("base_ptr", &self.base_ptr);
-    dbgstr.field("end_ptr", &self.end_ptr);
-    dbgstr.field("prod_id", &self.prod_id);
-    dbgstr.field("begin_ptr", &self.begin_ptr);
-    dbgstr.field("end_line_num", &self.end_line_num);
-    dbgstr.field("start_line_num", &self.start_line_num);
-    dbgstr.field("chkp_line_num", &self.chkp_line_num);
-    dbgstr.field("chkp_line_off", &self.chkp_line_off);
-    dbgstr.field("end_line_off", &self.end_line_off);
-    dbgstr.field("start_line_off", &self.start_line_off);
-    dbgstr.field("state", &self.state);
-    dbgstr.field("tok_id", &self.tok_id);
-    dbgstr.field("sym_len", &self.sym_len);
-    dbgstr.field("rule_id", &self.rule_id);
-    dbgstr.field("goto_size", &self.goto_size);
-    dbgstr.field("goto_free", &self.goto_free);
-    dbgstr.field("line_incr", &self.line_incr);
-    dbgstr.field("state", &self.state);
-    dbgstr.field("in_peek_mode", &self.in_peek_mode);
-    dbgstr.field("is_active", &self.is_active);
-    dbgstr.field("goto_stack_ptr", &self.goto_stack_ptr);
-    dbgstr.field("goto_size", &self.goto_size);
-    dbgstr.field("goto_used", &self.goto_free);
-    dbgstr.field("get_input_info", &"FN Pointer".to_string());
-    dbgstr.field("reader", &((self.reader) as usize).to_string());
-    dbgstr.field("meta_ctx", &self.meta_ctx);
-    dbgstr.field("custom_lex", &"FN Pointer".to_string());
-    dbgstr.finish()
-  }
-}
-
-impl<T: ByteReader + LLVMByteReader, M> ParseContext<T, M> {
-  pub fn new_llvm() -> Self {
-    Self {
-      get_input_info: T::get_byte_block_at_cursor,
-      custom_lex: Self::default_custom_lex,
-      ..Default::default()
-    }
-  }
-}
-
 impl<T: ByteReader, M> ParseContext<T, M> {
   pub fn new_bytecode(reader: &mut T) -> Self {
     Self {
@@ -324,7 +268,7 @@ impl<T: ByteReader, M> ParseContext<T, M> {
   ) {
   }
 
-  fn default_custom_lex(_: &mut T, _: &mut M, _: &Self) -> (u32, u32, u32) {
+  pub(crate) fn default_custom_lex(_: &mut T, _: &mut M, _: &Self) -> (u32, u32, u32) {
     (0, 0, 0)
   }
 }
@@ -344,70 +288,6 @@ impl<T: ByteReader, M> ParseContext<T, M> {
 impl<T: ByteReader + UTF8Reader, M> ParseContext<T, M> {
   pub fn get_str(&self) -> &str {
     unsafe { (*self.reader).get_str() }
-  }
-}
-
-pub unsafe fn llvm_map_shift_action_2<
-  'a,
-  R: LLVMByteReader + ByteReader + MutByteReader,
-  ExtCTX,
-  ASTNode: AstObject,
->(
-  ctx: &ParseContext<R, ExtCTX>,
-  slots: &mut AstStackSlice<(ASTNode, TokenRange, TokenRange)>,
-) {
-  match ctx.get_shift_data() {
-    ParseAction::Shift {
-      anchor_byte_offset,
-      token_byte_offset,
-      token_byte_length,
-      token_line_offset,
-      token_line_count,
-      ..
-    } => {
-      let peek = TokenRange {
-        len: token_byte_offset - anchor_byte_offset,
-        off: anchor_byte_offset,
-        ..Default::default()
-      };
-
-      let tok = TokenRange {
-        len:      token_byte_length,
-        off:      token_byte_offset,
-        line_num: token_line_count,
-        line_off: token_line_offset,
-      };
-
-      slots.assign_to_garbage(0, (ASTNode::default(), tok, peek));
-    }
-    _ => unreachable!(),
-  }
-}
-
-pub unsafe fn llvm_map_result_action_2<
-  'a,
-  T: LLVMByteReader + ByteReader + MutByteReader,
-  M,
-  Node: AstObject,
->(
-  _ctx: &ParseContext<T, M>,
-  action: ParseActionType,
-  slots: &mut AstStackSlice<(Node, TokenRange, TokenRange)>,
-) -> ParseResult<Node> {
-  match action {
-    ParseActionType::Accept =>{
-      ParseResult::Complete(slots.take(0))
-    }
-    ParseActionType::Error => {
-      let vec = slots.to_vec();
-      let last_input = vec.last().cloned().unwrap_or_default().1;
-      ParseResult::Error(last_input, vec)
-    }
-    ParseActionType::NeedMoreInput => {
-      ParseResult::NeedMoreInput(slots.to_vec())
-    }
-
-    _ => unreachable!("This function should only be called when the parse action is  [Error, Accept, or EndOfInput]"),
   }
 }
 
@@ -436,10 +316,15 @@ pub enum ShiftsAndSkipsResult {
 }
 
 pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
+  /// Returns true of the `head_ptr` is positioned at the end of the input.
+  ///
+  /// That is `head_ptr - beg_ptr == input.len()`
+  fn head_at_end(&self) -> bool;
+
   /// Returns the byte length of active token
   fn get_token_length(&self) -> u32;
 
-  /// Returns the byte offset the head of the active token
+  /// Returns the byte offset of the head of the active token
   fn get_token_offset(&self) -> u32;
 
   /// Returns the 0 indexed line number active token
@@ -464,6 +349,70 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
 
   fn init_parser(&mut self, entry_point: u32);
 
+  fn get_ctx(&self) -> &ParseContext<R, M>;
+
+  fn parse_ast<Node: AstObject>(
+    &mut self,
+    reducers: &[Reducer<R, M, Node>],
+    debug: &mut Option<DebugFn>,
+  ) -> Result<AstSlot<Node>, SherpaParseError> {
+    let mut ast_stack: Vec<AstSlot<Node>> = vec![];
+    loop {
+      match self.get_next_action(debug) {
+        ParseAction::Accept { .. } => {
+          return Ok(ast_stack.pop().unwrap());
+        }
+        ParseAction::Reduce { rule_id, symbol_count, .. } => {
+          let reduce_fn = reducers[rule_id as usize];
+          let len = ast_stack.len();
+          let count = symbol_count as usize;
+          reduce_fn(
+            &self.get_ctx(),
+            &AstStackSlice::from_slice(&mut ast_stack[(len - count)..len]),
+          );
+          ast_stack.resize(len - (count - 1), AstSlot::<Node>::default());
+        }
+        ParseAction::Shift {
+          anchor_byte_offset,
+          token_byte_offset,
+          token_byte_length,
+          token_line_offset,
+          token_line_count,
+        } => {
+          let peek = TokenRange {
+            len: token_byte_offset - anchor_byte_offset,
+            off: anchor_byte_offset,
+            ..Default::default()
+          };
+
+          let tok = TokenRange {
+            len:      token_byte_length,
+            off:      token_byte_offset,
+            line_num: token_line_count,
+            line_off: token_line_offset,
+          };
+          ast_stack.push(AstSlot(Node::default(), tok, peek));
+        }
+        ParseAction::Error { .. } => {
+          return Err(SherpaParseError {
+            inline_message: Default::default(),
+            last_production: 0,
+            loc: Default::default(),
+            message: Default::default(),
+          });
+        }
+        _ => {
+          return Err(SherpaParseError {
+            inline_message: Default::default(),
+            last_production: 0,
+            loc: Default::default(),
+            message: Default::default(),
+          });
+        }
+      }
+    }
+  }
+
   fn collect_shifts_and_skips(
     &mut self,
     entry_point: u32,
@@ -477,6 +426,15 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
     loop {
       match self.get_next_action(debug) {
         ParseAction::Accept { production_id } => {
+          if !self.head_at_end() {
+            break ShiftsAndSkipsResult::FailedParse(SherpaParseError {
+              message: "Parser completed without reaching the end of input:".to_string(),
+              inline_message: "".to_string(),
+              loc: Token::new(),
+              last_production: self.get_production_id(),
+            });
+          }
+
           #[cfg(debug_assertions)]
           if let Some(debug) = debug {
             debug(&DebugEvent::Complete { production_id });
@@ -562,6 +520,14 @@ impl<'a, R: ByteReader + MutByteReader, M> ByteCodeParser<'a, R, M> {
 impl<'a, R: ByteReader + MutByteReader + UTF8Reader, M> SherpaParser<R, M>
   for ByteCodeParser<'a, R, M>
 {
+  fn get_ctx(&self) -> &ParseContext<R, M> {
+    &self.ctx
+  }
+
+  fn head_at_end(&self) -> bool {
+    self.ctx.head_ptr == self.get_reader().len()
+  }
+
   fn get_token_length(&self) -> u32 {
     self.ctx.get_token_length()
   }
@@ -597,33 +563,5 @@ impl<'a, R: ByteReader + MutByteReader + UTF8Reader, M> SherpaParser<R, M>
   fn get_next_action(&mut self, debug: &mut Option<DebugFn>) -> ParseAction {
     let ByteCodeParser { ctx, stack, bc } = self;
     get_next_action(ctx, stack, bc, debug)
-  }
-}
-
-#[no_mangle]
-pub extern "C" fn sherpa_free_stack(ptr: *mut Goto, byte_size: usize) {
-  // Each goto slot is 16bytes, so we shift left num_of_slots by 4 to get the bytes size of
-  // the stack.
-  let layout = Layout::from_size_align(byte_size, 16).unwrap();
-
-  unsafe { dealloc(ptr as *mut u8, layout) }
-}
-
-#[no_mangle]
-pub extern "C" fn sherpa_get_token_class_from_codepoint(codepoint: u32) -> u32 {
-  get_token_class_from_codepoint(codepoint)
-}
-
-#[no_mangle]
-pub extern "C" fn sherpa_allocate_stack(byte_size: usize) -> *mut Goto {
-  // Each goto slot is 16bytes, so we shift left num_of_slots by 4 to get the bytes size of
-  // the stack.
-
-  let layout = Layout::from_size_align(byte_size, 16).unwrap();
-
-  unsafe {
-    let ptr = alloc(layout) as *mut Goto;
-
-    ptr
   }
 }

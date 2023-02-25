@@ -1,17 +1,17 @@
-use sherpa_runtime::types::{
-  ast::{AstObject, AstSlot, AstStackSlice},
-  ByteReader,
-  InputInfo,
-  LLVMByteReader,
-  MutByteReader,
-  ParseAction,
-  ParseActionType,
-  ParseResult,
-  TokenRange,
-  UTF8Reader,
-  UTF8StringReader,
-  FAIL_STATE_FLAG,
-  NORMAL_STATE_FLAG,
+use sherpa_runtime::{
+  llvm_parser::{InputInfo, LLVMByteReader},
+  types::{
+    ast::{AstObject, AstSlot, AstStackSlice},
+    bytecode::{FAIL_STATE_FLAG, NORMAL_STATE_FLAG},
+    ByteReader,
+    MutByteReader,
+    ParseAction,
+    ParseActionType,
+    ParseResult,
+    TokenRange,
+    UTF8Reader,
+    UTF8StringReader,
+  },
 };
 use std::fmt::Debug;
 

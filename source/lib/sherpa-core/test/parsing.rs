@@ -1,6 +1,6 @@
 use super::utils::{console_debugger, test_runner, TestConfig};
 #[cfg(test)]
-use crate::journal::{config::Config, Journal};
+use crate::journal::Journal;
 use crate::{
   bytecode::compile_bytecode,
   parser::{compile_parse_states, optimize_parse_states},
@@ -13,9 +13,9 @@ use std::path::PathBuf;
 pub fn construct_descent_on_basic_grammar() -> SherpaResult<Journal> {
   let input = "<> A > 'h' 'e' 'l' 'l' 'o'";
 
-  test_runner(&[], None, TestConfig {
-    print_states: true,
-    print_disassembly: true,
+  test_runner(&[("A", "hello", true).into()], None, TestConfig {
+    bytecode_parse: true,
+    llvm_parse: true,
     grammar_string: Some(input),
     ..Default::default()
   })
@@ -32,11 +32,54 @@ pub fn construct_descent_on_scanner_symbol() -> SherpaResult<Journal> {
 
 <> D > 'a' 'b'
 ";
+  test_runner(&[], None, TestConfig { grammar_string: Some(input), ..Default::default() })
+}
 
-  test_runner(&[], None, TestConfig {
-    print_states: true,
-    print_disassembly: true,
-    grammar_string: Some(input),
+#[test]
+fn construct_recursive_ascent() -> SherpaResult<Journal> {
+  test_runner(
+    &[("A", "xxxxd", true).into(), ("A", "xxxxc", true).into(), ("A", "xxxxf", false).into()],
+    None,
+    TestConfig {
+      grammar_string: Some(
+        " 
+      IGNORE { c:sp } 
+      
+      <> A > X 'c'
+           | Y 'd'
+      
+      <> X > 'x' X?
+      
+      <> Y > 'x' Y?
+            ",
+      ),
+      bytecode_parse: true,
+      llvm_parse: true,
+      //debugger_handler: Some(&|g| console_debugger(g, Default::default())),
+      ..Default::default()
+    },
+  )
+}
+
+#[test]
+fn test_trivial_peek() -> SherpaResult<Journal> {
+  test_runner(&[("Term", "xxxxd =  \" test test test \"", true).into()], None, TestConfig {
+    grammar_string: Some(
+      r#" 
+      IGNORE { c:sp } 
+      
+      <> Term > Ident "=" Value
+
+      <> Value > '\"' Ident(+' ') ' '? '\"'
+
+      <> Ident > tk:ident
+
+      <> ident > c:id(+)
+      "#,
+    ),
+    bytecode_parse: true,
+    llvm_parse: true,
+    debugger_handler: Some(&|g| console_debugger(g, Default::default())),
     ..Default::default()
   })
 }
@@ -61,12 +104,7 @@ pub fn production_reduction_decisions() -> SherpaResult<Journal> {
 
   ";
 
-  test_runner(&[], None, TestConfig {
-    print_states: true,
-    print_disassembly: true,
-    grammar_string: Some(input),
-    ..Default::default()
-  })
+  test_runner(&[], None, TestConfig { grammar_string: Some(input), ..Default::default() })
 }
 
 #[test]
@@ -100,34 +138,37 @@ pub fn compile_production_states_with_basic_grammar_with_one_optional_token(
 ) -> SherpaResult<Journal> {
   let input = "<> A > 'h'? 'e'? 'l' 'l' 'o'";
 
-  test_runner(&[], None, TestConfig {
-    print_states: true,
-    print_disassembly: true,
-    grammar_string: Some(input),
-    ..Default::default()
-  })
+  test_runner(&[], None, TestConfig { grammar_string: Some(input), ..Default::default() })
 }
 
 #[test]
 pub fn compile_production_states_with_basic_grammar_with_left_recursion() -> SherpaResult<Journal> {
   let input = "<> A > A '1' | '2' ";
 
-  test_runner(&[], None, TestConfig {
-    print_states: true,
-    print_disassembly: true,
-    grammar_string: Some(input),
-    ..Default::default()
-  })
+  test_runner(&[], None, TestConfig { grammar_string: Some(input), ..Default::default() })
 }
 
 #[test]
 pub fn compile_production_states_with_synthesized_scanner_state() -> SherpaResult<Journal> {
   let input = "<> A > '1' | '2' | '3' ";
 
-  test_runner(&[], None, TestConfig {
-    print_states: true,
-    print_disassembly: true,
-    grammar_string: Some(input),
+  test_runner(&[], None, TestConfig { grammar_string: Some(input), ..Default::default() })
+}
+
+#[test]
+pub fn basic_math_expressions() -> SherpaResult<Journal> {
+  test_runner(&[("P", "1*2^2+3", true).into()], None, TestConfig {
+    grammar_string: Some(
+      r#"
+    <> P > S 
+    <> S > S "+" M  | M
+    <> M > M "*" E  | E
+    <> E > T | T ^ T
+    <> T > c:num
+    "#,
+    ),
+    llvm_parse: true,
+    bytecode_parse: true,
     ..Default::default()
   })
 }
@@ -145,12 +186,7 @@ pub fn generate_block_comment() -> SherpaResult<Journal> {
 
 "#;
 
-  test_runner(&[], None, TestConfig {
-    print_states: true,
-    print_disassembly: true,
-    grammar_string: Some(input),
-    ..Default::default()
-  })
+  test_runner(&[], None, TestConfig { grammar_string: Some(input), ..Default::default() })
 }
 
 #[test]
@@ -165,12 +201,7 @@ pub fn generate_production_state_with_scanner_function() -> SherpaResult<Journal
 <> D > 'a' 'b'
 ";
 
-  test_runner(&[], None, TestConfig {
-    print_states: true,
-    print_disassembly: true,
-    grammar_string: Some(input),
-    ..Default::default()
-  })
+  test_runner(&[], None, TestConfig { grammar_string: Some(input), ..Default::default() })
 }
 
 #[test]
@@ -192,42 +223,39 @@ pub fn reports_grammar_with_conflicts_caused_by_an_import_merge() -> SherpaResul
 
 #[test]
 pub fn handle_moderate_scanner_token_combinations() -> SherpaResult<Journal> {
-  let input = "
-<> A > 'C' | tk:id_syms
-
-<> id_syms >  
-
-    id_syms c:id
-
-    |   id_syms '_'
-
-    |   '_'
-
-    |   c:id
-";
-
   test_runner(&[], None, TestConfig {
-    print_states: true,
-    print_disassembly: true,
-    grammar_string: Some(input),
+    grammar_string: Some(
+      "
+    <> A > 'C' | tk:id_syms 
+    
+    <> id_syms >  
+    
+        id_syms c:id
+    
+        |   id_syms '_'
+    
+        |   '_'
+    
+        |   c:id
+
+    ",
+    ),
     ..Default::default()
   })
 }
 
 #[test]
 pub fn generate_production_with_ambiguity() -> SherpaResult<()> {
-  let input = "
-<> A > B | C
-
-<> B > 'a' 'b' 'c' (*)
-
-<> C > 'a' 'b' 'c' (*)
-";
-
   let result = test_runner(&[], None, TestConfig {
-    print_states: true,
-    print_disassembly: true,
-    grammar_string: Some(input),
+    grammar_string: Some(
+      "
+      <> A > B | C
+      
+      <> B > 'a' 'b' 'c' (*)
+      
+      <> C > 'a' 'b' 'c' (*)
+      ",
+    ),
     num_of_threads: 1,
     ..Default::default()
   });
@@ -245,7 +273,6 @@ pub fn intermediate_exclusive_symbols() -> SherpaResult<Journal> {
     &[("R", "test", true).into(), ("R", "tester", true).into(), ("R", "testing", false).into()],
     None,
     TestConfig {
-      bytecode_parse: true,
       grammar_string: Some(
         r##"
 
@@ -255,6 +282,8 @@ pub fn intermediate_exclusive_symbols() -> SherpaResult<Journal> {
       
       "##,
       ),
+      bytecode_parse: true,
+      llvm_parse: true,
       ..Default::default()
     },
   )
@@ -262,209 +291,178 @@ pub fn intermediate_exclusive_symbols() -> SherpaResult<Journal> {
 
 #[test]
 pub fn inner_goto_loops() -> SherpaResult<Journal> {
-  let input = r##"
-
-
-<> A > B "r"
-
-<> B > "entry" ( C | D ) "e"?
-
-<> C > C c:id
-   | E
-   | "one"
-
-<> D > D "two"
-     | "three"
-     | E "four"
-
-<> E > "a" "b" "c"
-
-"##;
-
   test_runner(&[], None, TestConfig {
-    optimize: false,
-    print_states: false,
-    print_disassembly: true,
-    print_parse_reports: &["B"],
-    grammar_string: Some(input),
+    grammar_string: Some(
+      r##"
+
+
+    <> A > B "r"
+    
+    <> B > "entry" ( C | D ) "e"?
+    
+    <> C > C c:id
+       | E
+       | "one"
+    
+    <> D > D "two"
+         | "three"
+         | E "four"
+    
+    <> E > "a" "b" "c"
+    
+    "##,
+    ),
+    print_parser_states_compile_reports: &["B"],
     ..Default::default()
   })
 }
 
 #[test]
 pub fn generate_production_with_recursion() -> SherpaResult<Journal> {
-  let input = "
-IGNORE { c:sp }
-
-EXPORT statement as entry
-
-NAME llvm_language_test
-
-<> statement > expression
-
-<> expression > sum 
-
-<> sum > mul '+' sum
-    | mul
-
-<> mul > term '*' expression
-    | term
-
-<> term > c:num
-    | '(' expression ')'
-
-";
-
   test_runner(&[], None, TestConfig {
-    print_states: true,
-    print_disassembly: true,
-    grammar_string: Some(input),
+    grammar_string: Some(
+      "
+  IGNORE { c:sp }
+  
+  EXPORT statement as entry
+  
+  NAME llvm_language_test
+  
+  <> statement > expression
+  
+  <> expression > sum 
+  
+  <> sum > mul '+' sum
+      | mul
+  
+  <> mul > term '*' expression
+      | term
+  
+  <> term > c:num
+      | '(' expression ')'
+  
+  ",
+    ),
     ..Default::default()
   })
 }
 
 #[test]
 pub fn generate_scanner_production_with_recursion() -> SherpaResult<Journal> {
-  let input = "
-IGNORE { c:sp }
-
-EXPORT statement as entry
-
-NAME llvm_language_test
-
-<> statement > tk:test tk:V
-
-<> test > V test?
-    | A test 't'
-
-<> V > V c:num | 'dd'
-
-<> A > 'a' '-' 'b'
-
-";
-
   test_runner(&[], None, TestConfig {
-    print_states: true,
-    print_disassembly: true,
-    grammar_string: Some(input),
+    grammar_string: Some(
+      "
+  IGNORE { c:sp }
+  
+  EXPORT statement as entry
+  
+  NAME llvm_language_test
+  
+  <> statement > tk:test tk:V
+  
+  <> test > V test?
+      | A test 't'
+  
+  <> V > V c:num | 'dd'
+  
+  <> A > 'a' '-' 'b'
+  
+  ",
+    ),
     ..Default::default()
   })
 }
 
 #[test]
-fn construct_LR() -> SherpaResult<Journal> {
-  let input = " 
-IGNORE { c:sp } 
+pub fn merge_non_transitive_branches() -> SherpaResult<Journal> {
+  test_runner(&[("A", "doggo ranger ready doggo ranger test", true).into()], None, TestConfig {
+    grammar_string: Some(
+      r##"
+  IGNORE { c:sp }
+    
+  <> A > B "test"
 
-<> A > X 'c'
-      | Y 'd'
+  <> B > C "ready" C 
 
-<> X > 'x' X?
+  <> C > D "ranger"
 
-<> Y > 'x' Y?
-      ";
+  <> D > "doggo"
 
-  test_runner(
-    &[("A", "xxxxd", true).into(), ("A", "xxxxc", true).into(), ("A", "xxxxf", false).into()],
-    None,
-    TestConfig {
-      grammar_string: Some(input),
-      debugger_handler: Some(&|g| console_debugger(g, Default::default())),
-      bytecode_parse: true,
-      llvm_parse: true,
-      ..Default::default()
-    },
-  )
+  "##,
+    ),
+    bytecode_parse: true,
+    llvm_parse: true,
+    //debugger_handler: Some(&|g| console_debugger(g, Default::default())),
+    ..Default::default()
+  })
 }
 
 #[test]
 fn test_peek() -> SherpaResult<Journal> {
-  let input = r##"
-IGNORE { c:sp }
-
-<> term >  tk:ident '=' value_list
-
-<> value_list > '"' formal_value_list(+" ") '"'
-
-<> formal_value_list > ident
-
-<> ident > c:id(+) 
-"##;
-
   test_runner(&[], None, TestConfig {
-    print_states: true,
-    print_disassembly: true,
-    grammar_string: Some(input),
+    grammar_string: Some(
+      r##"
+  IGNORE { c:sp }
+  
+  <> term >  tk:ident '=' value_list
+  
+  <> value_list > '"' formal_value_list(+" ") '"'
+  
+  <> formal_value_list > ident
+  
+  <> ident > c:id(+) 
+  "##,
+    ),
     ..Default::default()
   })
 }
 
 #[test]
 fn test_peek3() -> SherpaResult<Journal> {
-  let input = r##"
-IGNORE { c:sp }
-
-<> term >  'x' A '(' c:id? ')'  :ast { t_Function_Definition }
-        |  'x' B ';'           :ast { t_Type_Definition }
-
-<> A > Adent 'x'
-
-<> B > Bdent
-
-<> Adent > Cdent
-
-<> Cdent > c:id
-
-<> Bdent > c:id
-"##;
-  test_runner(
-    &[TestInput {
-      entry_name:     "term",
-      input:          "x x x ( c )",
-      should_succeed: true,
-    }],
-    Some(Config {
-      build_disassembly: true,
-      debug_add_ir_states_note: true,
-      enable_breadcrumb_parsing: true,
-      ..Default::default()
-    }),
-    TestConfig {
-      optimize: true,
-      print_states: true,
-      print_disassembly: true,
-      bytecode_parse: true,
-      llvm_parse: true,
-      grammar_string: Some(input),
-
-      ..Default::default()
-    },
-  )
+  test_runner(&[("term", "x x x ( c )", true).into()], None, TestConfig {
+    grammar_string: Some(
+      r##"
+      IGNORE { c:sp }
+      
+      <> term >  'x' A '(' c:id? ')'  :ast { t_Function_Definition }
+              |  'x' B ';'           :ast { t_Type_Definition }
+      
+      <> A > Adent 'x'
+      
+      <> B > Bdent
+      
+      <> Adent > Cdent
+      
+      <> Cdent > c:id
+      
+      <> Bdent > c:id
+      "##,
+    ),
+    bytecode_parse: true,
+    llvm_parse: true,
+    ..Default::default()
+  })
 }
 
 #[test]
 fn grammar_with_exclusive_symbols() -> SherpaResult<Journal> {
-  let input = r##" 
-IGNORE { c:sp } 
-
-<> A >   X 'c'
-  | Y 'd'
-
-<> X > 'x' X?
-
-<> Y > 'x' Y?
-  "##;
-
-  test_runner(
-    &[TestInput { entry_name: "A", input: "x x x c", should_succeed: true }],
-    None,
-    TestConfig {
-      bytecode_parse: true,
-      llvm_parse: true,
-      grammar_string: Some(input),
-      ..Default::default()
-    },
-  )
+  test_runner(&[("A", "x x x c", true).into()], None, TestConfig {
+    grammar_string: Some(
+      r##" 
+      IGNORE { c:sp } 
+      
+      <> A >   X 'c'
+        | Y 'd'
+      
+      <> X > 'x' X?
+      
+      <> Y > 'x' Y?
+        "##,
+    ),
+    bytecode_parse: true,
+    llvm_parse: true,
+    ..Default::default()
+  })
 }
 
 const test_grammar: &'static str = r##"
@@ -481,20 +479,13 @@ NAME llvm_language_test
 
 #[test]
 fn test_parsing_with_trivial_peek() -> SherpaResult<Journal> {
-  test_runner(
-    &[TestInput {
-      entry_name:     "A",
-      input:          "a disaster ranger",
-      should_succeed: true,
-    }],
-    None,
-    TestConfig {
-      llvm_parse: true,
-      grammar_string: Some(test_grammar),
-      debugger_handler: Some(&|g| console_debugger(g, Default::default())),
-      ..Default::default()
-    },
-  )
+  test_runner(&[("A", "a disaster ranger", true).into()], None, TestConfig {
+    grammar_string: Some(test_grammar),
+    bytecode_parse: true,
+    llvm_parse: true,
+    //debugger_handler: Some(&|g| console_debugger(g, Default::default())),debugger_handler: Some(&|g| console_debugger(g, Default::default())),
+    ..Default::default()
+  })
 }
 
 #[test]
@@ -520,28 +511,23 @@ fn ir_parser_build() -> SherpaResult<()> {
 
 #[test]
 pub fn reduction_on_root_production() -> SherpaResult<()> {
-  let input = r#"
-NAME wick_element
-
-IGNORE { c:sp c:nl }
-
-<> A > '<' (B | A )(+) '>'
-
-<> B > c:id 
-"#;
-
-  test_runner(
-    &[TestInput { entry_name: "A", input: "<<<d>>>", should_succeed: true }],
-    None,
-    TestConfig {
-      grammar_string: Some(input),
-      bytecode_parse: true,
-      //bytecode_parse_reporter: Some(&|g| debug_print_states2(g)),
-      print_parse_reports: &["A_list_1"],
-      print_disassembly: true,
-      ..Default::default()
-    },
-  )?;
+  test_runner(&[("A", "<<<d>>>", true).into()], None, TestConfig {
+    grammar_string: Some(
+      r#"
+      NAME wick_element
+      
+      IGNORE { c:sp c:nl }
+      
+      <> A > '<' (B | A )(+) '>'
+      
+      <> B > c:id 
+      "#,
+    ),
+    bytecode_parse: true,
+    llvm_parse: true,
+    //debugger_handler: Some(&|g| console_debugger(g, Default::default())),
+    ..Default::default()
+  })?;
 
   SherpaResult::Ok(())
 }

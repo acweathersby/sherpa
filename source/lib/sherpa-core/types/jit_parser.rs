@@ -19,22 +19,26 @@ use inkwell::{
   context::Context,
   execution_engine::{ExecutionEngine, JitFunction},
 };
-use sherpa_runtime::types::{
-  ast::{AstObject, AstStackSlice},
-  llvm_map_result_action_2,
-  llvm_map_shift_action_2,
-  sherpa_allocate_stack,
-  sherpa_free_stack,
-  sherpa_get_token_class_from_codepoint,
-  ByteReader,
-  LLVMByteReader,
-  MutByteReader,
-  ParseAction,
-  ParseActionType,
-  ParseContext,
-  ParseResult,
-  SherpaParser,
-  TokenRange,
+use sherpa_runtime::{
+  llvm_parser::{
+    llvm_map_result_action_2,
+    llvm_map_shift_action_2,
+    sherpa_allocate_stack,
+    sherpa_free_stack,
+    sherpa_get_token_class_from_codepoint,
+    LLVMByteReader,
+  },
+  types::{
+    ast::{AstObject, AstStackSlice},
+    ByteReader,
+    MutByteReader,
+    ParseAction,
+    ParseActionType,
+    ParseContext,
+    ParseResult,
+    SherpaParser,
+    TokenRange,
+  },
 };
 
 use super::{GrammarStore, ParseState};
@@ -63,17 +67,17 @@ where
   R: ByteReader,
   ASTNode: AstObject,
 {
-  reader:     *mut R,
-  module:     LLVMParserModule<'a>,
-  init_fn:    JitFunction<'a, Init<R, ExtCTX>>,
-  next_fn:    JitFunction<'a, Next<R, ExtCTX>>,
-  prime_fn:   JitFunction<'a, Prime<R, ExtCTX>>,
-  ast_build:  JitFunction<'a, AstBuilder<'a, R, ExtCTX, ASTNode>>,
-  drop_fn:    JitFunction<'a, Drop<R, ExtCTX>>,
-  engine:     ExecutionEngine<'a>,
-  sherpa_ctx: ParseContext<R, ExtCTX>,
-  j:          Journal,
-  states:     Vec<(String, Box<ParseState>)>,
+  reader:    *mut R,
+  module:    LLVMParserModule<'a>,
+  init_fn:   JitFunction<'a, Init<R, ExtCTX>>,
+  next_fn:   JitFunction<'a, Next<R, ExtCTX>>,
+  prime_fn:  JitFunction<'a, Prime<R, ExtCTX>>,
+  ast_build: JitFunction<'a, AstBuilder<'a, R, ExtCTX, ASTNode>>,
+  drop_fn:   JitFunction<'a, Drop<R, ExtCTX>>,
+  engine:    ExecutionEngine<'a>,
+  ctx:       ParseContext<R, ExtCTX>,
+  j:         Journal,
+  states:    Vec<(String, Box<ParseState>)>,
 }
 
 impl<'a, R, ExtCTX, ASTNode> JitParser<'a, R, ExtCTX, ASTNode>
@@ -120,7 +124,7 @@ where
         drop_fn,
         next_fn,
         module: llvm_mod,
-        sherpa_ctx: ParseContext::<R, ExtCTX>::new_llvm(),
+        ctx: ParseContext::<R, ExtCTX>::new_llvm(),
         j: j.transfer(),
         states: states,
       })
@@ -128,11 +132,11 @@ where
   }
 
   pub(crate) fn get_ctx_mut(&mut self) -> &mut ParseContext<R, ExtCTX> {
-    &mut self.sherpa_ctx
+    &mut self.ctx
   }
 
   pub(crate) fn get_ctx(&self) -> &ParseContext<R, ExtCTX> {
-    &self.sherpa_ctx
+    &self.ctx
   }
 
   pub(crate) fn grammar(&self) -> Arc<GrammarStore> {
@@ -144,7 +148,7 @@ where
   }
 
   pub(crate) fn next(&mut self) -> ParseActionType {
-    unsafe { self.next_fn.call(&mut self.sherpa_ctx) }
+    unsafe { self.next_fn.call(&mut self.ctx) }
   }
 }
 
@@ -169,17 +173,17 @@ where
   ASTNode: AstObject,
 {
   pub(crate) fn init(&mut self) {
-    self.sherpa_ctx.reset();
+    self.ctx.reset();
 
     unsafe {
-      let Self { sherpa_ctx, reader, .. } = self;
+      let Self { ctx: sherpa_ctx, reader, .. } = self;
       self.init_fn.call(sherpa_ctx, *reader);
     }
   }
 
   pub(crate) fn prime(&mut self, entry_index: u32) {
     unsafe {
-      self.prime_fn.call(&mut self.sherpa_ctx, entry_index);
+      self.prime_fn.call(&mut self.ctx, entry_index);
     }
   }
 
@@ -197,7 +201,7 @@ where
   }
 
   /// Prints the equivalent bytecode parser dissasembly to to stderr.
-  pub(crate) fn print_dissasembly(&mut self) {
+  pub(crate) fn print_disassembly(&mut self) {
     let bytecode_output = compile_bytecode(&mut self.j, &self.states);
     println!("{}", &generate_disassembly(&bytecode_output, &mut self.j));
   }
@@ -212,13 +216,13 @@ where
     )],
   ) -> ParseResult<ASTNode> {
     unsafe {
-      self.sherpa_ctx.reset();
+      self.ctx.reset();
       self.set_reader(reader);
       self.init();
       self.prime(entry_index);
 
       self.ast_build.call(
-        &mut self.sherpa_ctx,
+        &mut self.ctx,
         functions.as_ptr(),
         llvm_map_shift_action_2::<R, ExtCTX, ASTNode>,
         llvm_map_result_action_2::<R, ExtCTX, ASTNode>,
@@ -235,7 +239,7 @@ where
   fn drop(&mut self) {
     unsafe {
       let drop_fn = self.drop_fn.clone();
-      drop_fn.call(&mut self.sherpa_ctx);
+      drop_fn.call(&mut self.ctx);
     }
   }
 }
@@ -243,28 +247,36 @@ where
 impl<'a, R: ByteReader + LLVMByteReader + MutByteReader, M> SherpaParser<R, M>
   for JitParser<'a, R, M>
 {
+  fn get_ctx(&self) -> &ParseContext<R, M> {
+    &self.ctx
+  }
+
+  fn head_at_end(&self) -> bool {
+    (self.ctx.head_ptr - self.ctx.begin_ptr) == self.get_reader().len()
+  }
+
   fn get_token_length(&self) -> u32 {
-    self.sherpa_ctx.get_token_length()
+    self.ctx.get_token_length()
   }
 
   fn get_token_offset(&self) -> u32 {
-    self.sherpa_ctx.get_token_offset()
+    self.ctx.get_token_offset()
   }
 
   fn get_token_line_number(&self) -> u32 {
-    self.sherpa_ctx.get_token_line_number()
+    self.ctx.get_token_line_number()
   }
 
   fn get_token_line_offset(&self) -> u32 {
-    self.sherpa_ctx.get_token_line_offset()
+    self.ctx.get_token_line_offset()
   }
 
   fn get_production_id(&self) -> u32 {
-    self.sherpa_ctx.prod_id
+    self.ctx.prod_id
   }
 
   fn get_reader(&self) -> &R {
-    self.sherpa_ctx.get_reader()
+    self.ctx.get_reader()
   }
 
   fn get_input(&self) -> &str {
@@ -282,20 +294,20 @@ impl<'a, R: ByteReader + LLVMByteReader + MutByteReader, M> SherpaParser<R, M>
   ) -> ParseAction {
     match self.next() {
       ParseActionType::Shift => ParseAction::Shift {
-        anchor_byte_offset: (self.sherpa_ctx.anchor_ptr - self.sherpa_ctx.begin_ptr) as u32,
+        anchor_byte_offset: (self.ctx.anchor_ptr - self.ctx.begin_ptr) as u32,
         token_byte_offset:  self.get_token_offset(),
         token_byte_length:  self.get_token_length(),
         token_line_offset:  self.get_token_line_offset(),
         token_line_count:   self.get_token_line_number(),
       },
       ParseActionType::Reduce => ParseAction::Reduce {
-        production_id: self.sherpa_ctx.prod_id,
-        rule_id:       self.sherpa_ctx.rule_id,
-        symbol_count:  self.sherpa_ctx.sym_len,
+        production_id: self.ctx.prod_id,
+        rule_id:       self.ctx.rule_id,
+        symbol_count:  self.ctx.sym_len,
       },
-      ParseActionType::Accept => ParseAction::Accept { production_id: self.sherpa_ctx.prod_id },
+      ParseActionType::Accept => ParseAction::Accept { production_id: self.ctx.prod_id },
       ParseActionType::Error => ParseAction::Error {
-        last_production: self.sherpa_ctx.prod_id,
+        last_production: self.ctx.prod_id,
         last_input:      TokenRange {
           len:      self.get_token_length(),
           off:      self.get_token_offset(),

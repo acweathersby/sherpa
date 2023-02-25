@@ -1,6 +1,5 @@
 use crate::types::{
-  ast::{AstObject, AstSlot, Reducer},
-  bytecode::{ByteCodeIterator, Instruction, Opcode},
+  bytecode::{ByteCodeIterator, InputType, Instruction, Opcode, NORMAL_STATE_FLAG},
   *,
 };
 
@@ -99,8 +98,8 @@ pub fn dispatch<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
       ScanShift => scan_shift(i, ctx),
       SkipToken => skip_token(block_base, ctx),
       SkipTokenScanless => skip_token_scanless(block_base, ctx),
-      SkipPeekToken => skip_peek_token(block_base, ctx),
-      SkipPeekTokenScanless => skip_peek_token_scanless(block_base, ctx),
+      PeekSkipToken => peek_skip_token(block_base, ctx),
+      PeekSkipTokenScanless => peek_skip_token_scanless(block_base, ctx),
       PeekToken => peek_token(i, ctx),
       PeekTokenScanless => peek_token_scanless(i, ctx),
       PeekReset => peek_reset(i, ctx),
@@ -283,25 +282,25 @@ fn skip_token_scanless<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Read
   skip_token(base_instruction, ctx)
 }
 
-/// Performs the [Opcode::SkipPeekToken] operation
+/// Performs the [Opcode::PeekSkipToken] operation
 #[inline]
-fn skip_peek_token<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
+fn peek_skip_token<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
   base_instruction: Instruction<'a>,
   ctx: &mut ParseContext<R, M>,
 ) -> (ParseAction, Option<Instruction<'a>>) {
-  const __HINT__: Opcode = Opcode::SkipPeekToken;
+  const __HINT__: Opcode = Opcode::PeekSkipToken;
   __skip_token_core__(base_instruction, ctx)
 }
 
-/// Performs the [Opcode::SkipPeekTokenScanless] operation
+/// Performs the [Opcode::PeekSkipTokenScanless] operation
 #[inline]
-fn skip_peek_token_scanless<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
+fn peek_skip_token_scanless<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
   base_instruction: Instruction<'a>,
   ctx: &mut ParseContext<R, M>,
 ) -> (ParseAction, Option<Instruction<'a>>) {
-  const __HINT__: Opcode = Opcode::SkipPeekTokenScanless;
+  const __HINT__: Opcode = Opcode::PeekSkipTokenScanless;
   ctx.tok_len = ctx.sym_len as usize;
-  skip_peek_token(base_instruction, ctx)
+  peek_skip_token(base_instruction, ctx)
 }
 
 /// Performs the [Opcode::Reduce] operation
@@ -401,13 +400,14 @@ fn peek_reset<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
   i: Instruction<'a>,
   ctx: &mut ParseContext<R, M>,
 ) -> (ParseAction, Option<Instruction<'a>>) {
+  const __HINT__: Opcode = Opcode::PeekReset;
   let offset = ctx.base_ptr;
   ctx.head_ptr = offset;
   ctx.scan_ptr = offset;
   ctx.tok_id = 0;
   ctx.tok_len = 0;
   ctx.sym_len = 0;
-  ctx.in_peek_mode = false;
+  ctx.get_reader_mut().set_cursor_to(offset, 0, 0);
   (ParseAction::None, i.next())
 }
 
@@ -473,16 +473,16 @@ fn emit_debug_value<R: ByteReader + MutByteReader + UTF8Reader, M>(
     match input_type {
       InputType::T01_PRODUCTION => debug(&DebugEvent::GotoValue { production_id: input_value }),
       InputType::T05_BYTE => {
-        debug(&DebugEvent::ClassValue { input_value, start, end, string: ctx.get_str() })
+        debug(&DebugEvent::ByteValue { input_value, start, end, string: ctx.get_str() })
       }
       InputType::T03_CLASS => {
         debug(&DebugEvent::ClassValue { input_value, start, end, string: ctx.get_str() })
       }
       InputType::T02_TOKEN => {
-        debug(&DebugEvent::CodePointValue { input_value, start, end, string: ctx.get_str() })
+        debug(&DebugEvent::TokenValue { input_value, start, end, string: ctx.get_str() })
       }
       InputType::T04_CODEPOINT => {
-        debug(&DebugEvent::ByteValue { input_value, start, end, string: ctx.get_str() })
+        debug(&DebugEvent::CodePointValue { input_value, start, end, string: ctx.get_str() })
       }
       _ => unreachable!(),
     };
@@ -690,67 +690,6 @@ pub fn get_next_action<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
       } else {
         address = stack.pop().unwrap();
         state = stack.pop().unwrap();
-      }
-    }
-  }
-}
-
-pub fn parse_ast<R: ByteReader + MutByteReader + UTF8Reader, M, Node: AstObject>(
-  ctx: &mut ParseContext<R, M>,
-  stack: &mut Vec<u32>,
-  bc: &[u8],
-  reducers: &[Reducer<R, M, Node>],
-  debug: &mut Option<DebugFn>,
-) -> Result<AstSlot<Node>, SherpaParseError> {
-  let mut ast_stack: Vec<AstSlot<Node>> = vec![];
-  loop {
-    match get_next_action(ctx, stack, bc, debug) {
-      ParseAction::Accept { .. } => {
-        return Ok(ast_stack.pop().unwrap());
-      }
-      ParseAction::Reduce { rule_id, symbol_count, .. } => {
-        let _reduce_fn = reducers[rule_id as usize];
-        let len = ast_stack.len();
-        let count = symbol_count as usize;
-        // reduce_fn(&ctx, &AstStackSlice::from_slice(&mut ast_stack[(len - count)..len]));
-        ast_stack.resize(len - (count - 1), AstSlot::<Node>::default());
-      }
-      ParseAction::Shift {
-        anchor_byte_offset,
-        token_byte_offset,
-        token_byte_length,
-        token_line_offset,
-        token_line_count,
-      } => {
-        let peek = TokenRange {
-          len: token_byte_offset - anchor_byte_offset,
-          off: anchor_byte_offset,
-          ..Default::default()
-        };
-
-        let tok = TokenRange {
-          len:      token_byte_length,
-          off:      token_byte_offset,
-          line_num: token_line_count,
-          line_off: token_line_offset,
-        };
-        ast_stack.push(AstSlot(Node::default(), tok, peek));
-      }
-      ParseAction::Error { .. } => {
-        return Err(SherpaParseError {
-          inline_message: Default::default(),
-          last_production: 0,
-          loc: Default::default(),
-          message: Default::default(),
-        });
-      }
-      _ => {
-        return Err(SherpaParseError {
-          inline_message: Default::default(),
-          last_production: 0,
-          loc: Default::default(),
-          message: Default::default(),
-        });
       }
     }
   }

@@ -2,11 +2,9 @@
 
 use crate::{
   grammar::compile::parser::sherpa::{
+    self,
     ASTNode,
-    Goto,
-    Num,
     Reduce,
-    SetProd,
     ShiftToken,
     TokenAssign,
     ASSERT,
@@ -21,16 +19,7 @@ use std::{
 };
 
 pub(crate) fn build_byte_code_buffer(states: Vec<&IR_STATE>) -> (Vec<u8>, BTreeMap<String, u32>) {
-  let states_iter = states
-    .iter()
-    .flat_map(|s| {
-      if s.fail.is_some() {
-        vec![(s, s.id.clone(), true), (s, s.id.clone() + "_internal", false)]
-      } else {
-        vec![(s, s.id.clone(), false)]
-      }
-    })
-    .enumerate();
+  let states_iter = states.iter().flat_map(|s| vec![(s, s.id.clone(), false)]).enumerate();
 
   let mut goto_bookmarks_to_offset = states_iter.clone().map(|_| 0).collect::<Vec<_>>();
 
@@ -48,40 +37,17 @@ pub(crate) fn build_byte_code_buffer(states: Vec<&IR_STATE>) -> (Vec<u8>, BTreeM
     Op::Fail as u8,
   ];
 
-  for (i, (state, name, is_fail)) in states_iter {
-    if is_fail {
-      let fail_state = state.fail.as_deref().unwrap();
-      let fail_state_address = bc.len();
-
-      let mut fail_addition = compile_ir_state_to_bytecode(
-        &fail_state.instructions,
-        default_get_branch_selector,
-        &state_name_to_bookmark,
-        &state.scanner,
-        &name,
-      );
-
-      bc.append(&mut fail_addition);
-      goto_bookmarks_to_offset[i as usize] = bc.len() as u32;
-      insert_op(&mut bc, Op::PushGoto);
-      insert_u8(&mut bc, FAIL_STATE_FLAG as u8);
-      insert_u32_le(&mut bc, fail_state_address as u32);
-    } else {
-      if let Some(_) = &state.fail {
-      } else {
-        goto_bookmarks_to_offset[i as usize] = bc.len() as u32;
-      }
-
-      let mut addition = compile_ir_state_to_bytecode(
-        &state.instructions,
-        default_get_branch_selector,
-        &state_name_to_bookmark,
-        &state.scanner,
-        &state.id,
-      );
-      goto_bookmarks_to_offset[i as usize] = bc.len() as u32;
-      bc.append(&mut addition);
-    }
+  for (i, (state, ..)) in states_iter {
+    goto_bookmarks_to_offset[i as usize] = bc.len() as u32;
+    let mut addition = compile_ir_state_to_bytecode(
+      &state.instructions,
+      default_get_branch_selector,
+      &state_name_to_bookmark,
+      &state.scanner,
+      &state.id,
+    );
+    goto_bookmarks_to_offset[i as usize] = bc.len() as u32;
+    bc.append(&mut addition);
   }
 
   remap_goto_addresses(&mut bc, &goto_bookmarks_to_offset);
@@ -472,19 +438,30 @@ fn build_branchless_bytecode(
   let bc = &mut byte_code;
 
   // reverse gotos so jumps operate correctly in a stack structure.
-  let gotos = instructions.iter().filter(|i| matches!(i, ASTNode::Goto(_))).rev();
-  let non_gotos = instructions.iter().filter(|i| !matches!(i, ASTNode::Goto(_)));
-  let mut active_prod = 0;
-  for instruction in non_gotos.chain(gotos) {
+  for instruction in instructions.iter() {
     match instruction {
       ASTNode::TokenAssign(box TokenAssign { ids }) => {
         insert_op(bc, Op::AssignToken);
         insert_u32_le(bc, ids[0].val as u32);
       }
-      ASTNode::ShiftScanner(..) => insert_op(bc, Op::ScanShift),
-      ASTNode::ShiftScanToken(_) => insert_op(bc, Op::ShiftTokenScanless),
+      ASTNode::ScanShift(..) => insert_op(bc, Op::ScanShift),
+      ASTNode::ShiftTokenScanless(_) => insert_op(bc, Op::ShiftTokenScanless),
       ASTNode::ShiftToken(box ShiftToken { .. }) => insert_op(bc, Op::ShiftToken),
-      ASTNode::Goto(box Goto { state }) => {
+      ASTNode::Goto(box sherpa::Goto { state }) => {
+        let state_pointer_val = match (state.val == current_state_name)
+          .then_some(state_name_to_bookmark.get(&(state.val.to_string() + "_internal")))
+        {
+          Some(Some(v)) => *v,
+          _ => match state_name_to_bookmark.get(&state.val) {
+            Some(v) => *v,
+            None => panic!("State [{}] is undefined", state.val),
+          },
+        };
+        insert_op(bc, Op::Goto);
+        insert_u8(bc, NORMAL_STATE_FLAG as u8);
+        insert_u32_le(bc, state_pointer_val);
+      }
+      ASTNode::PushGoto(box sherpa::PushGoto { state }) => {
         let state_pointer_val = match (state.val == current_state_name)
           .then_some(state_name_to_bookmark.get(&(state.val.to_string() + "_internal")))
         {
@@ -498,21 +475,17 @@ fn build_branchless_bytecode(
         insert_u8(bc, NORMAL_STATE_FLAG as u8);
         insert_u32_le(bc, state_pointer_val);
       }
-      ASTNode::PeekScanToken(_) => insert_op(bc, Op::PeekTokenScanless),
-      ASTNode::PeekToken(_) => insert_op(bc, Op::PeekToken),
       ASTNode::PeekReset(_) => insert_op(bc, Op::PeekReset),
-      ASTNode::Skip(_) => insert_op(bc, Op::SkipToken),
-      ASTNode::SkipScanToken(_) => insert_op(bc, Op::SkipTokenScanless),
+      ASTNode::PeekToken(_) => insert_op(bc, Op::PeekToken),
+      ASTNode::PeekTokenScanless(_) => insert_op(bc, Op::PeekTokenScanless),
+      ASTNode::SkipToken(_) => insert_op(bc, Op::SkipToken),
+      ASTNode::SkipTokenScanless(_) => insert_op(bc, Op::SkipTokenScanless),
       ASTNode::Pop(_) => insert_op(bc, Op::PopGoto),
       ASTNode::Pass(_) => insert_op(bc, Op::Pass),
       ASTNode::Fail(_) => insert_op(bc, Op::Fail),
-      // TODO: Remove this kludge when production is set by the reduce ast type
-      ASTNode::SetProd(box SetProd { id: box Num { val } }) => {
-        active_prod = *val as u32;
-      }
-      ASTNode::Reduce(box Reduce { rule_id, len, .. }) => {
+      ASTNode::Reduce(box Reduce { rule_id, len, prod_id, .. }) => {
         insert_op(bc, Op::Reduce);
-        insert_u32_le(bc, active_prod);
+        insert_u32_le(bc, *prod_id as u32);
         insert_u32_le(bc, *rule_id as u32);
         insert_u16_le(bc, *len as u16);
       }
@@ -528,10 +501,10 @@ fn build_branchless_bytecode(
       | Op::Accept
       | Op::Fail
       | Op::Goto
-      | Op::SkipPeekToken
+      | Op::PeekSkipToken
       | Op::SkipToken
       | Op::SkipTokenScanless
-      | Op::SkipPeekTokenScanless => {}
+      | Op::PeekSkipTokenScanless => {}
       _ => insert_op(bc, Op::Pass),
     }
   }

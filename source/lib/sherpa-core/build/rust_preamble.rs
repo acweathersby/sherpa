@@ -10,6 +10,7 @@ pub fn build_rust_preamble() -> PipelineTask {
           "{}
 
 use sherpa_runtime::types::{{ast::*, *}};
+use sherpa_runtime::llvm_parser::*;
 ",
           disclaimer::DISCLAIMER("Rust Parser", "///", task_ctx)
         ),

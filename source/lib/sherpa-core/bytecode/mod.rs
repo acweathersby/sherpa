@@ -44,7 +44,7 @@ impl StateData {
 
     for (_, instr) in get_branches(state) {
       max_gotos =
-        max_gotos.max(instr.iter().fold(0, |a, i| a + (matches!(i, ASTNode::Goto(..)) as u32)));
+        max_gotos.max(instr.iter().fold(0, |a, i| a + (matches!(i, ASTNode::PushGoto(..)) as u32)));
     }
 
     Self {

@@ -1,4 +1,4 @@
-use sherpa_runtime::{types::END_OF_INPUT_TOKEN_ID, utf8::lookup_table::CodePointClass};
+use sherpa_runtime::utf8::lookup_table::CodePointClass;
 
 use super::{GrammarId, GrammarRef, GrammarStore, ProductionId, SherpaResult, Token};
 use crate::grammar::{compile::finalize::get_scanner_info_from_defined, uuid::hash_id_value_u64};
