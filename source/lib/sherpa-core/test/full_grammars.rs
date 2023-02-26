@@ -55,7 +55,7 @@ NAME llvm_language_test
 
   j.debug_print_reports(ReportType::ScannerCompile(ScannerStateId::default()));
 
-  let bc = compile_bytecode(&mut j, &ir_states);
+  let bc = compile_bytecode(&mut j, &ir_states)?;
 
   println!("{}", generate_disassembly(&bc, &mut j));
 

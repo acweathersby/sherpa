@@ -1,3 +1,4 @@
+#![allow(unused)]
 use sherpa_runtime::{
   llvm_parser::LLVMByteReader,
   types::{ast::*, *},

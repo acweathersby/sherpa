@@ -5,6 +5,7 @@ use crate::{
   journal::{report::ReportType, Journal},
   parser::get_branches,
   types::{IRStateType, ParseState, Symbol},
+  SherpaResult,
 };
 use std::collections::BTreeMap;
 
@@ -75,9 +76,9 @@ impl StateData {
 /// Compile bytecode data and artifacts from the a set of parse states
 pub(crate) fn compile_bytecode<'a>(
   j: &mut Journal,
-  ir_states: &Vec<(String, Box<ParseState>)>,
-) -> BytecodeOutput {
-  let ir_ast_states = ir_states
+  states: &Vec<(String, Box<ParseState>)>,
+) -> SherpaResult<BytecodeOutput> {
+  let ir_ast_states = states
     .iter()
     .map(|(_, s)| match s.get_ast() {
       Some(ast) => (*ast).clone(),
@@ -87,10 +88,10 @@ pub(crate) fn compile_bytecode<'a>(
     })
     .collect::<Vec<_>>();
 
-  let bytecode = compile_ir_states_into_bytecode(j, ir_states, ir_ast_states);
+  let bytecode = compile_ir_states_into_bytecode(j, states, ir_ast_states);
 
   if j.config().build_disassembly {
-    let grammar = j.grammar().unwrap();
+    let grammar = j.grammar()?;
     j.set_active_report(&format!("[{}] Disassembly", &grammar.id.name), ReportType::Disassembly);
 
     j.report_mut().start_timer("Build Time");
@@ -102,7 +103,7 @@ pub(crate) fn compile_bytecode<'a>(
     j.report_mut().add_note("Output", disassembly);
   }
 
-  bytecode
+  SherpaResult::Ok(bytecode)
 }
 
 pub(crate) fn compile_ir_states_into_bytecode<'a>(

@@ -19,4 +19,6 @@ mod full_grammars;
 
 mod errors;
 
-pub(crate) mod utils;
+mod build;
+
+pub(self) mod utils;

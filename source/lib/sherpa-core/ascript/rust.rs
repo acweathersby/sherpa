@@ -1,23 +1,51 @@
 use super::{
-  compile::{
-    get_indexed_body_ref,
-    get_named_body_ref,
-    get_production_types,
-    get_specified_vector_from_generic_vec_values,
-    get_struct_type_from_node,
-    production_types_are_structs,
-  },
-  types::*,
+  compile::get_named_body_ref,
+  output_base::{get_ascript_export_data, AscriptPropHandler},
+  types::{AScriptNumericType, AScriptStruct},
 };
 use crate::{
+  ascript::{
+    compile::{
+      get_indexed_body_ref,
+      get_production_types,
+      get_specified_vector_from_generic_vec_values,
+      get_struct_type_from_node,
+      production_types_are_structs,
+    },
+    output_base::{
+      ASTExprHandler,
+      AscriptTypeHandler,
+      AscriptWriter,
+      AscriptWriterUtils,
+      Ref,
+      StructProp,
+      TokenCreationType,
+    },
+    types::{
+      AScriptStore,
+      AScriptTypeVal,
+      AScriptTypeValF32,
+      AScriptTypeValF64,
+      AScriptTypeValI16,
+      AScriptTypeValI32,
+      AScriptTypeValI64,
+      AScriptTypeValI8,
+      AScriptTypeValU16,
+      AScriptTypeValU32,
+      AScriptTypeValU64,
+      AScriptTypeValU8,
+      TaggedType,
+    },
+  },
   grammar::compile::parser::sherpa::{
+    self,
     ASTNode,
     AST_IndexReference,
     AST_NamedReference,
-    AST_Struct,
     AST_Token,
     AST_Vector,
     Init,
+    Range,
     AST_BOOL,
     AST_F32,
     AST_F64,
@@ -33,31 +61,19 @@ use crate::{
     AST_U8,
   },
   types::*,
-  writer::code_writer::*,
 };
+
 use sherpa_runtime::types::ast::DEFAULT_AST_TYPE_NAMES;
 use std::{
   collections::{BTreeMap, BTreeSet, VecDeque},
-  io::{Result, Write},
-  vec,
+  io::Write,
 };
 
-pub fn write<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Result<()> {
-  w.indent_spaces(2);
-
-  build_astnode_enum(w, ast)?;
-
-  build_types_utils(w, ast)?;
-
-  build_structs(ast, w)?;
-
-  build_functions(ast, w)?;
-
-  Ok(())
-}
-
-fn build_astnode_enum<W: Write>(w: &mut CodeWriter<W>, ast: &AScriptStore) -> Result<()> {
-  w.wrtln(&format!(
+pub(crate) fn write_rust_ast<W: Write>(mut w: AscriptWriter<W>) -> SherpaResult<AscriptWriter<W>> {
+  let node_type = &w.store.ast_type_name;
+  // --------------------------------------------------------------------------
+  // Macros
+  w.stmt(format!(
     r##"
 macro_rules! into_vec {{
   ($fn_name:ident, $out_type: ty, $type:ident) => {{
@@ -96,74 +112,74 @@ macro_rules! to_numeric {{
     }}
   }};
 }}"##,
-    ast.ast_type_name
+    node_type
   ))?;
 
-  w.wrtln(&format!("#[derive(Debug, Clone)]\n#[repr(C, u32)]\npub enum {} {{", ast.ast_type_name))?
-    .indent();
-  // Dump all the base types into this enum
-  w.write_line(&format!(
-    "NONE,
-NODES(Vec<{}>),
-STRING(String),
-STRINGS(Vec<String>),
-F64(f64),
-F32(f32),
-I64(i64),
-I32(i32),
-I16(i16),
-I8(i8),
-U64(u64),
-U32(u32),
-U16(u16),
-U8(u8),
-BOOL(bool),
-F32Vec(Vec<f32>),
-F64Vec(Vec<f64>),
-I64Vec(Vec<i64>),
-I32Vec(Vec<i32>),
-I16Vec(Vec<i16>),
-I8Vec(Vec<i8>),
-U64Vec(Vec<u64>),
-U32Vec(Vec<u32>),
-U16Vec(Vec<u16>),
-U8Vec(Vec<u8>),
-TOKEN(Token),
-TOKENS(Vec<Token>),",
-    ast.ast_type_name
-  ))?;
+  // --------------------------------------------------------------------------
+  // ASTNode Enum
+  w.block(
+    &format!("#[derive(Debug, Clone)]\n#[repr(C, u32)]\npub enum {}", node_type),
+    "{",
+    "}",
+    &|w| {
+      let structs: Vec<_> =
+        w.store.structs.values().map(|s| format!("{0}(Box<{0}>)", s.type_name)).collect();
+      w.list(
+        ",",
+        vec![
+          "NONE",
+          format!("NODES(Vec<{}>)", node_type).as_str(),
+          "STRING(String)",
+          "STRINGS(Vec<String>)",
+          "F64(f64)",
+          "F32(f32)",
+          "I64(i64)",
+          "I32(i32)",
+          "I16(i16)",
+          "I8(i8)",
+          "U64(u64)",
+          "U32(u32)",
+          "U16(u16)",
+          "U8(u8)",
+          "BOOL(bool)",
+          "F32Vec(Vec<f32>)",
+          "F64Vec(Vec<f64>)",
+          "I64Vec(Vec<i64>)",
+          "I32Vec(Vec<i32>)",
+          "I16Vec(Vec<i16>)",
+          "I8Vec(Vec<i8>)",
+          "U64Vec(Vec<u64>)",
+          "U32Vec(Vec<u32>)",
+          "U16Vec(Vec<u16>)",
+          "U8Vec(Vec<u8>)",
+          "TOKEN(Token)",
+          "TOKENS(Vec<Token>)",
+        ]
+        .into_iter()
+        .chain(structs.iter().map(|s| s.as_str()))
+        .collect::<Vec<_>>(),
+      )
+    },
+  )?;
 
-  for _struct in ast.structs.values() {
-    w.write_line(&format!("{0}(Box<{0}>),", _struct.type_name))?;
-  }
+  // --------------------------------------------------------------------------
+  // ASTNodeType Enum
+  w.block(
+    &format!("#[derive(Eq, PartialEq, Clone, Copy, Debug, Hash)]\npub enum {node_type}Type"),
+    "{",
+    "}",
+    &|w| {
+      w.list(",", DEFAULT_AST_TYPE_NAMES.to_vec());
+      // Write Struct Types
+      w.write_struct_data(&|w, s| w.stmt(format!("{},", s.name)))
+    },
+  );
 
-  w.dedent().wrtln("}")?;
-
-  w.wrtln(&format!("impl {} {{", ast.ast_type_name))?.indent();
-  for _struct in ast.structs.values() {
-    w.wrtln(&format!("pub fn as_{0}(&self) -> Option<&{0}> {{", _struct.type_name))?
-      .indent()
-      .wrtln("match self {")?
-      .indent()
-      .wrtln(&format!("Self::{}(val) => Some(val.as_ref()),", _struct.type_name))?
-      .wrtln("_ => None")?
-      .dedent()
-      .wrtln("}")?
-      .dedent()
-      .wrtln("}")?;
-    w.wrtln(&format!("pub fn as_{0}_mut(&mut self) -> Option<&mut {0}> {{", _struct.type_name))?
-      .indent()
-      .wrtln("match self {")?
-      .indent()
-      .wrtln(&format!("Self::{}(val) => Some(val.as_mut()),", _struct.type_name))?
-      .wrtln("_ => None")?
-      .dedent()
-      .wrtln("}")?
-      .dedent()
-      .wrtln("}")?;
-  }
-  w.wrtln(&format!(
-    r##"
+  // --------------------------------------------------------------------------
+  // AstType Implementation
+  w.block(&format!("impl {node_type}"), "{", "}", &|w| {
+    w.stmt(
+      format!("
 into_vec!(into_nodes, {0}, NODES);
 into_vec!(into_f64_vec, f64, F64Vec);
 into_vec!(into_f32_vec, f32, F32Vec);
@@ -185,807 +201,992 @@ to_numeric!(to_u16, u16);
 to_numeric!(to_u32, u32);
 to_numeric!(to_u64, u64);
 to_numeric!(to_f32, f32);
-to_numeric!(to_f64, f64);
-fn into_strings(self) -> Vec<String> {{
-  match self {{
-    {0}::STRINGS(strings) => strings,
-    _ => Default::default(),
-  }}
-}}
-
-pub fn to_string(&self) -> String {{
-  match self {{
-    &{0}::BOOL(val) => {{
-      if val {{
-        String::from("true")
-      }} else {{
-        String::from("false")
-      }}
-    }}
-    {0}::STRING(string) => string.to_owned(),
-    {0}::TOKEN(val) => val.to_string(),
-    _ => self.to_token().to_string(),
-  }}
-}}
-
-pub fn to_token(&self) -> Token {{
-  match self {{
-    {1}{0}::TOKEN(val) => val.clone(),
-    _ => Token::empty(),
-  }}
-}}
-
-pub fn to_bool(&self) -> bool {{
-  self.to_u8() != 0
-}}
-pub fn is_numeric(&self) -> bool {{
-  use {0}::*;
-  matches!(
-    self,
-    F64(_) | F32(_)| I64(_)| I32(_)| I16(_)| I8(_)| U64(_)| U32(_)| U16(_)| U8(_)
-  )
-}}"##,
-    ast.ast_type_name,
-    ast
-      .structs
-      .iter()
-      .filter_map(|s| s.1.include_token.then(|| {
-        format!("{0}::{1} (node) => node.tok.clone()\n,", ast.ast_type_name, s.1.type_name)
-      }))
-      .collect::<Vec<_>>()
-      .join("")
-  ))?
-  .dedent()
-  .wrtln("}")?
-  .wrtln(&format!(
-    "
-impl Default for {0} {{
-  fn default() -> Self {{
-    Self::NONE
-  }}
-}}
-  ",
-    ast.ast_type_name
-  ))?;
-
-  Ok(())
-}
-
-fn build_types_utils<W: Write>(w: &mut CodeWriter<W>, ast: &AScriptStore) -> Result<()> {
-  w.wrtln(&format!(
-    "#[derive(Eq, PartialEq, Clone, Copy, Debug, Hash)]\npub enum {}Type {{",
-    ast.ast_type_name
-  ))?
-  .indent()
-  .write_line("Undefined,")?;
-  for name in DEFAULT_AST_TYPE_NAMES {
-    w.wrtln(name)?.wrt(",")?;
-  }
-  for AScriptStruct { type_name, .. } in ast.structs.values() {
-    w.wrtln(type_name)?.wrt(",")?;
-  }
-  w.dedent().wrtln("}")?;
-  w.wrtln(&format!("pub trait Get{0} {{ fn get_type(&self) -> {0}; }}", ast.type_name()))?;
-  w.wrtln(&format!("impl Get{0} for {1} {{", ast.type_name(), ast.ast_type_name))?.indent();
-  w.wrtln(&format!("fn get_type(&self) -> {} {{", ast.type_name()))?.indent();
-  w.wrtln("match self{")?.indent();
-  for AScriptStruct { type_name, .. } in ast.structs.values() {
-    w.wrtln(&format!("{0}::{2}(..) => {1}::{2}", ast.ast_type_name, ast.type_name(), type_name))?
-      .wrt(",")?;
-  }
-  /*   for name in DEFAULT_AST_TYPE_NAMES {
-    w.write_line(&format!("{0}::{2}(..) => {1}::{2},", ast.ast_type_name, ast.type_name(), name))?;
-  } */
-  w.write_line(&format!("_ => {}::NONE,", ast.type_name()))?;
-  w.dedent().wrtln("}")?.dedent().wrtln("}")?.dedent().wrtln("}")?;
-  Ok(())
-}
-
-fn build_functions<W: Write>(ast: &AScriptStore, w: &mut CodeWriter<W>) -> Result<()> {
-  let g = ast.g.clone();
-  let ordered_rules = g
-    .rules
-    .iter()
-    .filter_map(|(_, rule)| {
-      if g.parse_productions.contains(&rule.prod_id) {
-        Some((rule.bytecode_id, rule))
-      } else {
-        None
-      }
-    })
-    .collect::<BTreeMap<_, _>>();
-
-  let fn_args =
-    format!("_ctx_: &ParseContext<R, M>, slots: &AstStackSlice<AstSlot<{}>>", ast.ast_type_name);
-  let fn_template = format!("<R: Reader + UTF8Reader, M>");
-
-  // Build reduce functions -------------------------------------
-  w.wrtln(&format!(
-    "\nfn default_fn{}({}){{
-  if slots.len() > 1 {{
-    let AstSlot (_, rng, _) = slots.take(0);
-    let last = slots.take(slots.len() - 1);
-    for index in 1..slots.len()-1 {{
-      slots.take(index);
-    }}
-    slots.assign(0, AstSlot (last.0, rng + last.1, TokenRange::default()));
-  }}
-}}",
-    fn_template, fn_args
-  ))?
-  .newline()?;
-
-  let mut refs = vec![];
-
-  for (id, rule) in &ordered_rules {
-    let prod_id = rule.prod_id;
-    let prod_data = ast.prod_types.get(&prod_id).unwrap();
-
-    if prod_data.len() != 1 {
-      unreachable!(
-        "\n\nProduction result not been resolved\n[{}] == {}\n\n\n{}\n\n",
-        ast.g.get_production_plain_name(&prod_id),
-        rule.tok.blame(1, 1, "", BlameColor::RED),
-        prod_data
-          .iter()
-          .map(|(p, _)| { p.debug_string(Some(&ast.g)) })
-          .collect::<Vec<_>>()
-          .join("\n")
-      )
-    };
-
-    let mut temp_writer = w.checkpoint();
-    let mut noop = 0;
-    let fn_name = format!("ast_fn{:0>3}", rule.bytecode_id.unwrap());
-
-    temp_writer
-      .wrtln(&format!(
-        "/*\n{}\n*/\nfn {}{}({}){{",
-        rule.item().rule_string(&g),
-        fn_name,
-        fn_template,
-        fn_args
-      ))?
-      .indent();
-
-    if rule.ast_definition.is_none() {
-      noop = 1;
-    } else {
-      let mut ref_index = rule.syms.len();
-
-      match rule.ast_definition.as_ref().map(|n| &n.ast) {
-        Some(ASTNode::AST_Struct(box ast_struct)) => {
-          if let AScriptTypeVal::Struct(struct_type) = get_struct_type_from_node(ast_struct) {
-            let _ref =
-              build_struct_constructor(ast, rule, &struct_type, ast_struct, &mut ref_index, 0)?;
-
-            let indices = _ref.get_indices();
-            let token_indices = _ref.get_tokens();
-
-            write_slot_extraction(rule, indices, token_indices, &mut temp_writer)?;
-
-            write_node_token(&mut temp_writer, rule)?;
-
-            temp_writer.write_line(&_ref.to_init_string())?;
-
-            temp_writer.write_line(&format!(
-              "slots.assign(0, AstSlot ({}::{}(Box::new({})), rng, TokenRange::default()))",
-              ast.ast_type_name,
-              ast.structs.get(&struct_type).unwrap().type_name,
-              _ref.get_ref_string(),
-            ))?;
-          }
-        }
-        Some(ASTNode::AST_Statements(box statements)) => {
-          let mut reference = String::new();
-          let mut return_type = AScriptTypeVal::Undefined;
-          let mut refs = BTreeSet::new();
-          let mut tokens = BTreeSet::new();
-          let mut statement_writer = temp_writer.checkpoint();
-
-          for (i, statement) in statements.statements.iter().enumerate() {
-            match render_expression(ast, statement, rule, &mut ref_index, i) {
-              Some(_ref) => {
-                refs.append(&mut _ref.get_indices());
-                tokens.append(&mut _ref.get_tokens());
-                return_type = _ref.ast_type.clone();
-                reference = _ref.get_ref_string();
-                statement_writer.write_line(&_ref.to_init_string())?;
-              }
-              None => {}
-            }
-          }
-
-          write_slot_extraction(rule, refs, tokens, &mut temp_writer)?;
-
-          write_node_token(&mut temp_writer, rule)?;
-
-          temp_writer.merge_checkpoint(statement_writer)?;
-
-          let return_type = match return_type {
-            AScriptTypeVal::Undefined | AScriptTypeVal::GenericVec(None) => {
-              prod_data.iter().next().unwrap().0.into()
-            }
-            r => r,
-          };
-
-          match return_type {
-            AScriptTypeVal::GenericStructVec(..)
-            | AScriptTypeVal::TokenVec
-            | AScriptTypeVal::StringVec
-            | AScriptTypeVal::Bool(..)
-            | AScriptTypeVal::F32(..)
-            | AScriptTypeVal::F64(..)
-            | AScriptTypeVal::U64(..)
-            | AScriptTypeVal::U32(..)
-            | AScriptTypeVal::U16(..)
-            | AScriptTypeVal::U8(..)
-            | AScriptTypeVal::I64(..)
-            | AScriptTypeVal::I32(..)
-            | AScriptTypeVal::I16(..)
-            | AScriptTypeVal::I8(..)
-            | AScriptTypeVal::U8Vec
-            | AScriptTypeVal::U16Vec
-            | AScriptTypeVal::U32Vec
-            | AScriptTypeVal::U64Vec
-            | AScriptTypeVal::I8Vec
-            | AScriptTypeVal::I16Vec
-            | AScriptTypeVal::I32Vec
-            | AScriptTypeVal::I64Vec
-            | AScriptTypeVal::F32Vec
-            | AScriptTypeVal::F64Vec
-            | AScriptTypeVal::String(..)
-            | AScriptTypeVal::Token => temp_writer.write_line(&format!(
-              "slots.assign(0, AstSlot ({}::{}({}), {}, TokenRange::default()))",
-              ast.ast_type_name,
-              return_type.hcobj_type_name(None),
-              &reference,
-              "rng".to_string()
-            ))?,
-            r => {
-              println!("{}", r.debug_string(None));
-              temp_writer.write_line(&reference)?
-            }
-          };
-        }
-        Some(statement) => {
-          let mut reference = String::new();
-          let mut return_type = AScriptTypeVal::Undefined;
-          let mut refs = BTreeSet::new();
-          let mut tokens = BTreeSet::new();
-          let mut statement_writer = temp_writer.checkpoint();
-
-          match render_expression(ast, statement, rule, &mut ref_index, 0) {
-            Some(_ref) => {
-              refs.append(&mut _ref.get_indices());
-              tokens.append(&mut _ref.get_tokens());
-              return_type = _ref.ast_type.clone();
-              reference = _ref.get_ref_string();
-              statement_writer.write_line(&_ref.to_init_string())?;
-            }
-            None => {}
-          }
-
-          write_slot_extraction(rule, refs, tokens, &mut temp_writer)?;
-
-          write_node_token(&mut temp_writer, rule)?;
-
-          temp_writer.merge_checkpoint(statement_writer)?;
-
-          let return_type = match return_type {
-            AScriptTypeVal::Undefined | AScriptTypeVal::GenericVec(None) => {
-              prod_data.iter().next().unwrap().0.into()
-            }
-            r => r,
-          };
-
-          match return_type {
-            AScriptTypeVal::GenericStructVec(..)
-            | AScriptTypeVal::TokenVec
-            | AScriptTypeVal::StringVec
-            | AScriptTypeVal::Bool(..)
-            | AScriptTypeVal::F32(..)
-            | AScriptTypeVal::F64(..)
-            | AScriptTypeVal::U64(..)
-            | AScriptTypeVal::U32(..)
-            | AScriptTypeVal::U16(..)
-            | AScriptTypeVal::U8(..)
-            | AScriptTypeVal::I64(..)
-            | AScriptTypeVal::I32(..)
-            | AScriptTypeVal::I16(..)
-            | AScriptTypeVal::I8(..)
-            | AScriptTypeVal::U8Vec
-            | AScriptTypeVal::U16Vec
-            | AScriptTypeVal::U32Vec
-            | AScriptTypeVal::U64Vec
-            | AScriptTypeVal::I8Vec
-            | AScriptTypeVal::I16Vec
-            | AScriptTypeVal::I32Vec
-            | AScriptTypeVal::I64Vec
-            | AScriptTypeVal::F32Vec
-            | AScriptTypeVal::F64Vec
-            | AScriptTypeVal::String(..)
-            | AScriptTypeVal::Token => temp_writer.write_line(&format!(
-              "slots.assign(0, AstSlot ({}::{}({}), {}, TokenRange::default()))",
-              ast.ast_type_name,
-              return_type.hcobj_type_name(None),
-              &reference,
-              "rng".to_string()
-            ))?,
-            r => {
-              println!("{}", r.debug_string(None));
-              temp_writer.write_line(&reference)?
-            }
-          };
-        }
-        _ => {
-          noop = 2;
-        }
-      }
-    }
-
-    temp_writer.dedent().wrtln("}")?;
-    temp_writer.newline()?;
-
-    if noop == 0 {
-      w.merge_checkpoint(temp_writer)?;
-      refs.push(format!("/* {id:?} */ {fn_name}"));
-    } else {
-      refs.push(format!("/* {id:?} {noop} */ default_fn"));
-    }
-  }
-
-  // Reduce Function Array -----------------------
-
-  w.wrt(&format!(
-    "
-struct ReduceFunctions<R: Reader + UTF8Reader, M>(pub [Reducer<R, M, {0}>; {1}]);
-impl<R: Reader + UTF8Reader, M> ReduceFunctions<R, M> {{
-  pub const fn new() -> Self {{
-    Self([
-      {2}
-    ])
-  }}
-}}
-",
-    ast.ast_type_name,
-    ordered_rules.len(),
-    &refs.iter().map(|r| format!("{}::<R, M>", r)).collect::<Vec<String>>().join(",\n")
-  ))?
-  .newline()?;
-
-  Ok(())
-}
-
-fn write_node_token(temp_writer: &mut CodeWriter<Vec<u8>>, rule: &&Rule) -> Result<()> {
-  temp_writer.write_line(&format!(
-    "let rng = {};",
-    if rule.syms.len() > 1 {
-      format!("rng0 + rng{}", rule.syms.len() - 1)
-    } else {
-      "rng0".to_string()
-    }
-  ))?;
-  Ok(())
-}
-
-fn write_slot_extraction<'a>(
-  rule: &Rule,
-  indices: BTreeSet<usize>,
-  used_tokens: BTreeSet<usize>,
-  temp_writer: &'a mut CodeWriter<Vec<u8>>,
-) -> Result<()> {
-  Ok(for i in 0..rule.syms.len() {
-    let assignment_string = match (
-      match (i, used_tokens.contains(&i)) {
-        (0, _) => Some("rng0".to_string()),
-        (i, _) if i == (rule.syms.len() - 1) => Some(format!("rng{}", i)),
-        (i, true) => Some(format!("rng{}", i)),
-        _ => None,
+to_numeric!(to_f64, f64);", w.store.ast_type_name)
+    );
+    w.method(
+      "pub fn is_numeric",
+      "(",
+      ")",
+      ",",
+      &|_| vec!["&self".into()],
+      "-> bool",
+      "{",
+      "}",
+      &mut |w| {
+        w.stmt(format!("use {node_type}::*;").into())?;
+        w.stmt(
+          "matches!(self, F64(_) | F32(_)| I64(_)| I32(_)| I16(_)| I8(_)| U64(_)| U32(_)| U16(_)| U8(_))"
+          .into(),
+        )
       },
-      indices.contains(&i),
-    ) {
-      (Some(range_str), true) => format!("let AstSlot (i{}, {}, _) = ", i, range_str),
-      (Some(range_str), false) => format!("let AstSlot (_, {}, _) = ", range_str),
-      (None, true) => format!("let AstSlot (i{}, ..) = ", i),
-      (None, false) => "".to_string(),
-    };
+    );
 
-    temp_writer.wrtln(&(assignment_string + &format!("slots.take({0});", i)))?;
-  })
-}
+    w.method(
+      "pub fn to_bool",
+      "(",
+      ")",
+      ",",
+      &|_| vec!["&self".into()],
+      "-> bool",
+      "{",
+      "}",
+      &mut |w| {
+        w.stmt("self.to_u8() != 0".into())
+      },
+    );
 
-fn build_struct_constructor(
-  ast: &AScriptStore,
-  rule: &Rule,
-  struct_type: &AScriptStructId,
-  ast_struct: &AST_Struct,
-  ref_index: &mut usize,
-  type_slot: usize,
-) -> Result<Ref> {
-  let archetype_struct = ast.structs.get(struct_type).unwrap();
-  let mut writer = StringBuffer::default();
-  let ast_struct_props = ast_struct
-    .props
-    .iter()
-    .filter_map(|p| {
-      if let ASTNode::AST_Property(prop) = p {
-        Some((prop.id.clone(), prop))
-      } else {
-        None
-      }
+    w.method(
+      "pub fn into_strings",
+      "(",
+      ")",
+      ",",
+      &|_| vec!["self".into()],
+      "-> Vec<String>",
+      "{",
+      "}",
+      &mut |w| {
+        w.block("match self", "{", "}", &|w| {
+          w.list(",", vec![
+            format!("{}::STRINGS(strings) => strings", w.store.ast_type_name),
+            "_ => Default::default()".into(),
+          ])
+        })
+      },
+    );
+
+    w.method(
+      "pub fn to_string",
+      "(",
+      ")",
+      ",",
+      &|_| vec!["&self".into()],
+      "-> String",
+      "{",
+      "}",
+      &mut |w| {
+        w.block("match self", "{", "}", &|w| {
+          w.list(",", vec![
+            format!("{}::BOOL(val) => val.to_string()", w.store.ast_type_name),
+            format!("{}::STRING(string) => string.to_owned()", w.store.ast_type_name),
+            format!("{}::TOKEN(val) => val.to_string()", w.store.ast_type_name),
+            "_ => self.to_token().to_string()".into(),
+          ])
+        })
+      },
+    );
+
+    w.method(
+      "pub fn to_token",
+      "(",
+      ")",
+      ",",
+      &|_| vec!["&self".into()],
+      "-> Token",
+      "{",
+      "}",
+      &mut |w| {
+        w.block("match self", "{", "}", &|w| {
+          w.write_struct_data(&|w, s| {
+            if s.tokenized {
+              w.stmt(format!("{}::{}(node) => node.tok.clone(),", w.store.ast_type_name, s.name))?;
+            }
+            SherpaResult::Ok(())
+          });
+          w.list(",", vec![
+            format!("{}::TOKEN(val) => val.to_owned()", w.store.ast_type_name),
+            "_ => Token::empty()".into(),
+          ])
+        })
+      },
+    )
+  })?;
+
+  // --------------------------------------------------------------------------
+  // Get NodeType trait
+  w.block(&format!("pub trait Get{node_type}Type"), "{", "}", &|w| {
+    w.stmt(format!("fn get_type(&self) -> {node_type}Type;"))
+  });
+
+  // --------------------------------------------------------------------------
+  // Get NodeType trait implementation
+  w.block(&format!("impl Get{node_type}Type for {node_type}"), "{", "}", &|w| {
+    let extended_type = node_type.clone() + "Type";
+    w.method(
+      "fn get_type",
+      "(",
+      ")",
+      ",",
+      &|_| vec!["&self".into()],
+      &format!("-> {extended_type}"),
+      "{",
+      "}",
+      &mut |w| {
+        w.block("match self", "{", "}", &|w| {
+          w.write_struct_data(&|w, s| {
+            w.stmt(format!("{node_type}::{0}(..) => {extended_type}::{0},", s.name))
+          });
+          w.stmt(format!("_ => {extended_type}::NONE,"))
+        })
+      },
+    )
+  })?;
+
+  // --------------------------------------------------------------------------
+  // Default trait implementation
+  w.block(&format!("impl Default for {node_type}"), "{", "}", &|w| {
+    w.method("fn default", "(", ")", ",", &|_| vec![], "-> Self", "{", "}", &mut |w| {
+      w.stmt(format!("{}::NONE", w.store.ast_type_name))
     })
-    .collect::<BTreeMap<_, _>>();
+  });
 
-  writer.wrt(&format!("{0}::new(", archetype_struct.type_name))?.indent().wrt("\n")?;
+  // --------------------------------------------------------------------------
+  // Hash Trait implementation
+  w.block(&format!("impl Hash for {node_type}"), "{", "}", &|w| {
+    w.method(
+      "fn hash<H: std::hash::Hasher>",
+      "(",
+      ")",
+      ",",
+      &|_| vec!["&self".into(), "hasher: &mut H".into()],
+      "",
+      "{",
+      "}",
+      &mut |w| {
+        w.stmt("use ASTNode::*;".into())?;
+        w.block("match self", "{", "}", &|w| {
+          let structs =
+            w.store.structs.values().map(|s| format!("{}(node) => node.hash(hasher)", s.type_name));
+          w.list(
+            ",",
+            vec![
+              "NONE => {}",
+              "F32(val) => val.to_le_bytes().hash(hasher)",
+              "F64(val) => val.to_le_bytes().hash(hasher)",
+              "U8(val) => val.hash(hasher)",
+              "U16(val) => val.hash(hasher)",
+              "U32(val) => val.hash(hasher)",
+              "U64(val) => val.hash(hasher)",
+              "I8(val) => val.hash(hasher)",
+              "I32(val) => val.hash(hasher)",
+              "I16(val) => val.hash(hasher)",
+              "I64(val) => val.hash(hasher)",
+              "BOOL(val) => val.hash(hasher)",
+              "I8Vec(val) => val.hash(hasher)",
+              "I16Vec(val) => val.hash(hasher)",
+              "I32Vec(val) => val.hash(hasher)",
+              "I64Vec(val) => val.hash(hasher)",
+              "U8Vec(val) => val.hash(hasher)",
+              "U16Vec(val) => val.hash(hasher)",
+              "U32Vec(val) => val.hash(hasher)",
+              "U64Vec(val) => val.hash(hasher)",
+              "STRING(string) => string.hash(hasher)",
+              "STRINGS(strings) => strings.hash(hasher)",
+            ]
+            .into_iter()
+            .map(|s| s.into())
+            .chain(structs)
+            .collect::<Vec<_>>(),
+          );
+          w.block("TOKEN(tk) =>", "{", "}", &|w| {
+            w.stmt(
+              "tk.to_string().replace(\" \", \"\").replace(\"\\n\", \"\").hash(hasher);".into(),
+            )
+          })?;
+          w.block("TOKENS(tks) =>", "{", "}", &|w| {
+            w.block("for tk in tks", "{", "}", &|w| {
+              w.stmt(
+                "tk.to_string().replace(\" \", \"\").replace(\"\\n\", \"\").hash(hasher);".into(),
+              )
+            })
+          })?;
+          w.block("NODES(nodes) =>", "{", "}", &|w| {
+            w.block("for node in nodes", "{", "}", &|w| w.stmt("node.hash(hasher);".into()))
+          })?;
+          w.block("F32Vec(vals) =>", "{", "}", &|w| {
+            w.block("for v in vals", "{", "}", &|w| w.stmt("v.to_le_bytes().hash(hasher);".into()))
+          })?;
+          w.block("F64Vec(vals) =>", "{", "}", &|w| {
+            w.block("for v in vals", "{", "}", &|w| w.stmt("v.to_le_bytes().hash(hasher);".into()))
+          })
+        })
+      },
+    )
+  })?;
 
-  let mut predecessors = vec![];
+  // --------------------------------------------------------------------------
+  // Struct Types
+  w.write_struct_data(&|w, s| {
+    let struct_name = s.name.clone();
+    let ast_type_name = w.store.ast_type_name.clone();
 
-  for (_, val_ref) in archetype_struct.prop_ids.iter().enumerate().map(|(i, prop_id)| {
-    let struct_prop_ref = if let Some(ast_prop) = ast_struct_props.get(&prop_id.name) {
-      let property = ast.props.get(prop_id).unwrap();
+    // Struct declaration
+    w.block(&format!("#[derive(Debug, Clone)]\npub struct {}", s.name), "{", "}", &|w| {
+      let prop_declarations = s.props.iter().map(|p| match (p.optional, p.type_.into()) {
+        (true, AScriptTypeVal::Struct(..) | AScriptTypeVal::GenericStruct(..)) => {
+          format!("pub {}: Option<{}>", p.name, p.type_string)
+        }
+        (true, _) => format!("pub {}: {}", p.name, p.type_string),
+        _ => format!("pub {}: {}", p.name, p.type_string),
+      });
+      w.list(
+        ", ",
+        prop_declarations
+          .chain(
+            vec![s.tokenized].into_iter().filter_map(|v| v.then_some(format!("pub tok: Token"))),
+          )
+          .collect(),
+      );
+      SherpaResult::Ok(())
+    });
 
-      let Some(value) = &ast_prop.value else {
-        panic!(" Prop has no value! {}", ast_prop.tok.blame(1, 1, "", None));
-      };
+    // Struct implementation
+    w.block(&format!("impl {}", s.name), "{", "}", &|w| {
+      w.method(
+        "pub fn new",
+        "(",
+        ")",
+        ", ",
+        &|_| {
+          s.props
+            .iter()
+            .map(|p| match (p.optional, p.type_.into()) {
+              (true, AScriptTypeVal::Struct(..) | AScriptTypeVal::GenericStruct(..)) => {
+                format!("{}: Option<{}>", p.name, p.type_string)
+              }
+              (true, _) => format!("{}: {}", p.name, p.type_string),
+              _ => format!("{}: {}", p.name, p.type_string),
+            })
+            .chain(vec![s.tokenized].into_iter().filter_map(|v| v.then_some(format!("tok: Token"))))
+            .collect()
+        },
+        "-> Self",
+        "{",
+        "}",
+        &mut |w| {
+          w.block("Self", "{", "}", &|w| {
+            w.list(
+              ",",
+              s.props
+                .iter()
+                .map(|p| p.name.clone())
+                .chain(vec![s.tokenized].into_iter().filter_map(|v| v.then_some(format!("tok"))))
+                .collect(),
+            );
+            SherpaResult::Ok(())
+          })?;
+          SherpaResult::Ok(())
+        },
+      );
 
-      let ref_ = render_expression(ast, value, rule, ref_index, i + type_slot * 100);
-      let (string, ref_) =
-        create_type_initializer_value(ref_, &(&property.type_val).into(), property.optional, ast);
-      if let Some(ref_) = ref_ {
-        predecessors.push(ref_);
-      }
+      w.method(
+        "pub fn get_type",
+        "(",
+        ")",
+        ",",
+        &|_| vec!["self".to_string()],
+        &format!("-> {ast_type_name}Type"),
+        "{",
+        "}",
+        &mut |w| {
+          w.stmt(format!("{ast_type_name}Type::{struct_name}"))?;
+          SherpaResult::Ok(())
+        },
+      );
+      SherpaResult::Ok(())
+    });
 
-      string
-    } else {
-      get_default_value(prop_id, ast)
-    };
+    // Struct type implementation
+    w.block(&format!("impl {}", w.store.ast_type_name), "{", "}", &|w| {
+      w.method(
+        &format!("#[track_caller]\npub fn to_{struct_name}"),
+        "(",
+        ")",
+        ", ",
+        &|_| vec!["self".into()],
+        &format!("-> Box::<{struct_name}>"),
+        "{",
+        "}",
+        &mut |w| {
+          w.block("match self", "{", "}", &mut |w| {
+            w.stmt(format!("Self::{0}(val) => val,", s.name));
+            w.stmt(format!(
+              "_ => panic!(\"Type {{:?}} cannot be converted to {struct_name}\", self.get_type())"
+            ));
+            SherpaResult::Ok(())
+          });
+          SherpaResult::Ok(())
+        },
+      )?;
+      w.method(
+        &format!("pub fn as_{struct_name}"),
+        "(",
+        ")",
+        ", ",
+        &|_| vec!["&self".into()],
+        &format!("-> Option<&{struct_name}>"),
+        "{",
+        "}",
+        &mut |w| {
+          w.block("match self", "{", "}", &mut |w| {
+            w.stmt(format!("Self::{0}(val) => Some(val.as_ref()),", s.name))?;
+            w.stmt(format!("_ => None"))?;
+            SherpaResult::Ok(())
+          });
+          SherpaResult::Ok(())
+        },
+      )?;
+      w.method(
+        &format!("pub fn as_{struct_name}_mut"),
+        "(",
+        ")",
+        ",",
+        &|_| vec!["&mut self".into()],
+        &format!("-> Option<&mut {struct_name}>"),
+        "{",
+        "}",
+        &mut |w| {
+          w.block("match self", "{", "}", &mut |w| {
+            w.stmt(format!("Self::{struct_name}(val) => Some(val.as_mut()),"))?;
+            w.stmt(format!("_ => None"))?;
+            SherpaResult::Ok(())
+          });
+          SherpaResult::Ok(())
+        },
+      )?;
+      SherpaResult::Ok(())
+    });
 
-    (prop_id.name.clone(), struct_prop_ref)
-  }) {
-    writer.wrt(&format!("{}, ", val_ref))?;
-  }
+    // Struct hash implementation
+    w.block(&format!("impl Hash for {struct_name}"), "{", "}", &|w| {
+      w.method(
+        &format!("fn hash<H: std::hash::Hasher>"),
+        "(",
+        ")",
+        ",",
+        &|_| vec!["&self".into(), "hasher: &mut H".into()],
+        "",
+        "{",
+        "}",
+        &mut |w| {
+          for StructProp { name, type_, .. } in &s.props {
+            use AScriptTypeVal::*;
+            match (*type_).into() {
+              F64(..) | F32(..) => {
+                w.stmt(format!("self.{name}.to_le_bytes().hash(hasher);"))?;
+              }
+              F64Vec | F32Vec => {
+                w.block(&format!("for val in &self.{name}"), "{", "}", &|w| {
+                  w.stmt(format!("val.to_le_bytes().hash(hasher);"))?;
+                  SherpaResult::Ok(())
+                })?;
+              }
+              GenericStruct(..) | Struct(..) | Bool(..) | StringVec | U8Vec | I8Vec
+              | String(..) | U64Vec | I64Vec | U32Vec | I32Vec | U16Vec | I16Vec | U64(..)
+              | I64(..) | U32(..) | I32(..) | U16(..) | I16(..) | U8(..) | I8(..) => {
+                w.stmt(format!("self.{name}.hash(hasher);"))?;
+              }
+              GenericStructVec(..) => {
+                w.block(&format!("for val in &self.{name}"), "{", "}", &|w| {
+                  w.stmt(format!("val.hash(hasher);"))?;
+                  SherpaResult::Ok(())
+                })?;
+              }
+              TokenVec => {
+                w.block(&format!("for val in &self.{name}"), "{", "}", &|w| {
+                  w.stmt(format!(
+                    "val.to_string().replace(\" \", \"\").replace(\"\\n\", \"\").hash(hasher);"
+                  ))?;
+                  SherpaResult::Ok(())
+                })?;
+              }
+              Token => {
+                w.stmt(format!(
+            "self.{name}.to_string().replace(\" \", \"\").replace(\"\\n\", \"\").hash(hasher);"
+          ))?;
+              }
+              _ => unreachable!(),
+            }
+          }
+          SherpaResult::Ok(())
+        },
+      );
+      SherpaResult::Ok(())
+    });
 
-  if archetype_struct.include_token {
-    writer.wrt(&format!("{}, ", "rng.to_token(_ctx_.get_reader())"))?;
-  }
+    SherpaResult::Ok(())
+  });
 
-  writer.dedent().write_line("\n)")?;
-
-  (*ref_index) += 1;
-
-  let mut ref_ = Ref::new(
-    *ref_index,
-    type_slot,
-    String::from_utf8(writer.into_output()).unwrap(),
-    AScriptTypeVal::Struct(*struct_type),
+  // --------------------------------------------------------------------------
+  // Reduce Functions
+  w.write_reduce_functions(
+    "fn %% <R: Reader + UTF8Reader, M>",
+    "(",
+    ")",
+    ",",
+    &|w| {
+      vec![
+        "_ctx_: &ParseContext<R, M>".to_string(),
+        format!("slots: &AstStackSlice<AstSlot<{}>>", w.store.ast_type_name),
+      ]
+    },
+    "",
+    "{",
+    "}",
+    &|w, reduce_functions_map| {
+      w.block("struct ReduceFunctions<R: Reader + UTF8Reader, M>", "(", ");", &|w| {
+        w.stmt(format!(
+          "pub [Reducer<R, M, {0}>; {1}]",
+          w.utils.store.ast_type_name,
+          reduce_functions_map.len()
+        ));
+        SherpaResult::Ok(())
+      })?;
+      w.block("impl<R: Reader + UTF8Reader, M> ReduceFunctions<R, M>", "{", "}", &|w| {
+        w.method("pub const fn new", "(", ")", ",", &|_| vec![], "-> Self", "{", "}", &mut |w| {
+          w.block("Self", "([", "])", &|w| {
+            w.list(",", reduce_functions_map.iter().map(|f| format!("{f}::<R, M>")).collect());
+            SherpaResult::Ok(())
+          });
+          SherpaResult::Ok(())
+        });
+        SherpaResult::Ok(())
+      })?;
+      SherpaResult::Ok(())
+    },
   );
 
-  ref_.add_predecessors(predecessors);
-
-  Ok(ref_)
+  SherpaResult::Ok(w)
 }
 
-pub(crate) fn create_type_initializer_value(
-  ref_: Option<Ref>,
-  type_val: &AScriptTypeVal,
-  optional: bool,
-  ast: &AScriptStore,
-) -> (String, Option<Ref>) {
-  match ref_ {
-    Some(ref_) => {
-      let mut string = match type_val {
-        AScriptTypeVal::GenericStructVec(structs_ids) if structs_ids.len() == 1 => {
-          format!(
-                "{}.into_iter().map(|v|match v {{ {}::{}(node) => node, _ => panic!(\"could not convert\")}}).collect::<Vec<_>>()",
-                ref_.get_ref_string(),
-                ast.ast_type_name,
-                ast.structs.get(&structs_ids.first().unwrap().into()).unwrap().type_name
-              )
+pub(crate) fn create_rust_writer_utils(store: &AScriptStore) -> AscriptWriterUtils {
+  let mut u = AscriptWriterUtils {
+    store,
+    // General Assignment
+    assignment_writer: &|_, _, name, value, mutable| {
+      if mutable {
+        format!("let mut {name} = {value};")
+      } else {
+        format!("let {name} = {value};")
+      }
+    },
+    // Slot Assignment
+    slot_assign: &|utils, type_, ref_| match type_ {
+      AScriptTypeVal::GenericStructVec(..)
+      | AScriptTypeVal::TokenVec
+      | AScriptTypeVal::StringVec
+      | AScriptTypeVal::Bool(..)
+      | AScriptTypeVal::F32(..)
+      | AScriptTypeVal::F64(..)
+      | AScriptTypeVal::U64(..)
+      | AScriptTypeVal::U32(..)
+      | AScriptTypeVal::U16(..)
+      | AScriptTypeVal::U8(..)
+      | AScriptTypeVal::I64(..)
+      | AScriptTypeVal::I32(..)
+      | AScriptTypeVal::I16(..)
+      | AScriptTypeVal::I8(..)
+      | AScriptTypeVal::U8Vec
+      | AScriptTypeVal::U16Vec
+      | AScriptTypeVal::U32Vec
+      | AScriptTypeVal::U64Vec
+      | AScriptTypeVal::I8Vec
+      | AScriptTypeVal::I16Vec
+      | AScriptTypeVal::I32Vec
+      | AScriptTypeVal::I64Vec
+      | AScriptTypeVal::F32Vec
+      | AScriptTypeVal::F64Vec
+      | AScriptTypeVal::String(..)
+      | AScriptTypeVal::Token => format!(
+        "slots.assign(0, AstSlot({}::{}({}), {}, TokenRange::default()));",
+        utils.store.ast_type_name,
+        type_.hcobj_type_name(None),
+        &ref_,
+        (utils.get_token_name)(0)
+      ),
+      AScriptTypeVal::Struct(struct_id) => {
+        let struct_name = utils.store.structs.get(struct_id).unwrap();
+        format!(
+          "slots.assign(0, AstSlot({}::{}(Box::new({})), {}, TokenRange::default()));",
+          utils.store.ast_type_name,
+          struct_name.type_name,
+          ref_,
+          (utils.get_token_name)(0)
+        )
+      }
+      AScriptTypeVal::Any => format!(
+        "slots.assign(0, AstSlot({}, {}, TokenRange::default()));",
+        &ref_,
+        (utils.get_token_name)(0)
+      ),
+      _ => "INVALID_ASSIGNMENT".to_string(),
+    },
+    token_concat: &|first, last| format!("{first} + {last}"),
+    // Slot Extraction
+    slot_extract: &|token, node, index| match (node, token) {
+      (Some(n), Some(t)) => format!("let AstSlot ({n}, {t}, _) = slots.take({});", index),
+      (None, Some(t)) => format!("let AstSlot (_, {t}, _) = slots.take({});", index),
+      (Some(n), None) => format!("let AstSlot ({n}, _, _) = slots.take({});", index),
+      _ => format!("slots.take({});", index),
+    },
+    // Token Creation from Token Range
+    create_token: &|tok_name, token_type| match token_type {
+      TokenCreationType::String => format!("{tok_name}.to_token(_ctx_.get_reader()).to_string()"),
+      TokenCreationType::Token => format!("{tok_name}.to_token(_ctx_.get_reader())"),
+    },
+
+    get_token_name: &|i| match i {
+      0 => "__rule_rng__".into(),
+      _ => format!("__tok_rng_{i}"),
+    },
+    struct_construction: &|u, w, node_name, prop_assignments, tokenized| {
+      w.write(&format!("{node_name}::new("))?;
+      let mut entries: Vec<String> =
+        prop_assignments.iter().map(|(_, val, _)| val.to_string()).collect();
+      if tokenized {
+        entries.push((u.get_token_name)(0) + ".to_token(_ctx_.get_reader())")
+      }
+      if entries.len() > 0 {
+        w.increase_indent();
+        for entry in entries {
+          w.write_line(&format!("{entry},"))?;
         }
-        _ => ref_.get_ref_string(),
-      };
-
-      let ref_ = match type_val {
-        AScriptTypeVal::Struct(..) => node_to_struct(ref_, ast),
-        _ => ref_,
-      };
-
-      if optional
-        && matches!(type_val, AScriptTypeVal::Struct(..) | AScriptTypeVal::GenericStruct(..))
-      {
-        string = format!("Some({})", string);
+        w.decrease_indent();
+        w.write_line(")")?;
+      } else {
+        w.write(")")?;
       }
 
-      (string, Some(ref_))
-    }
-    None => ("Default::default()".to_string(), None),
-  }
-}
-
-fn build_structs<W: Write>(ast: &AScriptStore, o: &mut CodeWriter<W>) -> Result<()> {
-  // Build structs
-  for (_, AScriptStruct { include_token, prop_ids: properties, type_name, .. }) in &ast.structs {
-    let mut properties = properties
-      .iter()
-      .map(|p| {
-        let AScriptProp { type_val, optional, .. } = ast.props.get(p).unwrap();
-        (p.name.clone(), ascript_type_to_string(&type_val.into(), ast), type_val.into(), *optional)
-      })
-      .collect::<Vec<_>>();
-
-    if *include_token {
-      properties.push(("tok".to_string(), "Token".to_string(), AScriptTypeVal::Token, false));
-    }
-
-    o.wrtln(&format!("#[derive(Debug, Clone)]\npub struct {} {{", type_name))?.indent();
-
-    for (name, type_string, type_val, optional) in &properties {
-      match optional {
-        true => match type_val {
-          AScriptTypeVal::Struct(..) | AScriptTypeVal::GenericStruct(..) => {
-            o.write_line(&format!("pub {}: Option<{}>,", name, type_string))?
-          }
-          _ => o.write_line(&format!("pub {}: {},", name, type_string))?,
+      SherpaResult::Ok(())
+    },
+    handlers: Default::default(),
+  };
+  u.add_type_handler(AScriptTypeVal::TokenVec, AscriptTypeHandler {
+    default: &|_, _, _| "Vec::new()".into(),
+    name:    &|_, _, _| "Vec<Token>".into(),
+  });
+  u.add_type_handler(AScriptTypeVal::Token, AscriptTypeHandler {
+    default: &|_, _, _| "Defualt::defualt()".into(),
+    name:    &|_, _, _| "Token".into(),
+  });
+  u.add_type_handler(AScriptTypeVal::Bool(None), AscriptTypeHandler {
+    default: &|_, _, _| "false".into(),
+    name:    &|_, _, _| "bool".into(),
+  });
+  u.add_ast_handler(sherpa::ASTNodeType::AST_BOOL, ASTExprHandler {
+    expr: &|u, ast, r, ref_index, type_slot| match ast {
+      ASTNode::AST_BOOL(box AST_BOOL { value, initializer, .. }) => match initializer {
+        None => Some(Ref::new(
+          u.bump_ref_index(ref_index),
+          type_slot,
+          format!("{}", value),
+          AScriptTypeVal::Bool(Some(*value)),
+        )),
+        Some(box init) => match u.ast_expr_to_ref(&init.expression, r, ref_index, type_slot) {
+          Some(_) => Some(Ref::new(
+            u.bump_ref_index(ref_index),
+            type_slot,
+            "true".to_string(),
+            AScriptTypeVal::Bool(Some(true)),
+          )),
+          None => Some(Ref::new(
+            u.bump_ref_index(ref_index),
+            type_slot,
+            "false".to_string(),
+            AScriptTypeVal::Bool(Some(false)),
+          )),
         },
-        false => o.write_line(&format!("pub {}: {},", name, type_string))?,
-      };
-    }
-
-    o.dedent().wrtln("}")?;
-
-    // Create the Nodes Member functions
-
-    o.wrtln(&format!("impl {} {{", type_name))?.indent();
-
-    // NODE::new
-
-    o.wrtln("#[inline]\npub fn new (")?.indent();
-
-    for (name, type_string, type_val, optional) in &properties {
-      match optional {
-        true => match type_val {
-          AScriptTypeVal::Struct(..) | AScriptTypeVal::GenericStruct(..) => {
-            o.write_line(&format!("{}:Option<{}>,", name, type_string))?
+      },
+      _ => None,
+    },
+  });
+  u.add_type_handler(AScriptTypeVal::String(None), AscriptTypeHandler {
+    default: &|_, _, _| "Default::default()".into(),
+    name:    &|_, _, _| "String".into(),
+  });
+  u.add_ast_handler(sherpa::ASTNodeType::AST_STRING, ASTExprHandler {
+    expr: &|u, ast, r, ref_index, type_slot| match ast {
+      ASTNode::AST_STRING(box AST_STRING { value, .. }) => {
+        match value {
+          None => Some(Ref::new(
+            u.bump_ref_index(ref_index),
+            type_slot,
+            "String::new()".to_string(),
+            AScriptTypeVal::String(None),
+          )),
+          Some(box init) => {
+            match &init.expression {
+              ASTNode::AST_NUMBER(box AST_NUMBER { value, .. }) => Some(Ref::new(
+                u.bump_ref_index(ref_index),
+                type_slot,
+                format!("\"{}\".to_string()", value),
+                AScriptTypeVal::String(Some(value.to_string())),
+              )),
+              expr => {
+                let ref_ = u.ast_expr_to_ref(expr, r, ref_index, type_slot)?;
+                match ref_.ast_type {
+                  AScriptTypeVal::Struct(..)
+                  | AScriptTypeVal::TokenRange
+                  | AScriptTypeVal::GenericStruct(..) => {
+                    Some(ref_.to_string(u, AScriptTypeVal::String(None)))
+                  }
+                  AScriptTypeVal::TokenVec => {
+                    // Merge the last and first token together
+                    // get the string value from the resulting span of the union
+                    Some(ref_.from(
+                      "(%%.first().unwrap() + %%.last().unwrap()).to_string()".to_string(),
+                      AScriptTypeVal::String(None),
+                    ))
+                  }
+                  AScriptTypeVal::String(..) => Some(ref_),
+                  _ => Some(ref_.from("%%.to_string()".to_string(), AScriptTypeVal::String(None))),
+                }
+              }
+            }
           }
-          _ => o.write_line(&format!("{}:{},", name, type_string))?,
-        },
-        false => o.write_line(&format!("{}:{},", name, type_string))?,
-      };
-    }
-    o.dedent().wrtln(") -> Self {")?.indent().wrtln("Self{")?.indent();
-
-    for (name, ..) in &properties {
-      o.write_line(&format!("{},", name))?;
-    }
-
-    o.dedent().wrtln("}")?.dedent().wrtln("}")?;
-
-    // NODE::get_type
-    o.write_line(&format!(
-      "pub fn get_type(&self) -> {0}Type {{ {0}Type::{1} }}",
-      ast.ast_type_name, type_name
-    ))?;
-
-    o.dedent().wrtln("}")?;
-  }
-
-  Ok(())
-}
-
-pub(crate) fn render_expression(
-  ast: &AScriptStore,
-  ast_expression: &ASTNode,
-  rule: &Rule,
-  ref_index: &mut usize,
-  type_slot: usize,
-) -> Option<Ref> {
-  let (b, s) = (rule, ast);
-
-  match ast_expression {
-    ASTNode::AST_Struct(ast_struct) => {
-      if let AScriptTypeVal::Struct(struct_type) = get_struct_type_from_node(ast_struct) {
-        if let Ok(_ref) =
-          build_struct_constructor(ast, rule, &struct_type, ast_struct, ref_index, type_slot)
-        {
-          Some(_ref)
+        }
+      }
+      _ => None,
+    },
+  });
+  u.add_type_handler(AScriptTypeVal::I8(None), AscriptTypeHandler {
+    default: &|_, _, _| "0".into(),
+    name:    &|_, _, _| "i8".into(),
+  });
+  u.add_ast_handler(sherpa::ASTNodeType::AST_I8, ASTExprHandler {
+    expr: &|u, ast, r, ref_index, type_slot| match ast {
+      ASTNode::AST_I8(box AST_I8 { initializer, .. }) => {
+        convert_numeric::<AScriptTypeValI8>(u, initializer, r, ref_index, type_slot)
+      }
+      _ => None,
+    },
+  });
+  u.add_type_handler(AScriptTypeVal::I16(None), AscriptTypeHandler {
+    default: &|_, _, _| "0".into(),
+    name:    &|_, _, _| "i16".into(),
+  });
+  u.add_ast_handler(sherpa::ASTNodeType::AST_I16, ASTExprHandler {
+    expr: &|u, ast, r, ref_index, type_slot| match ast {
+      ASTNode::AST_I16(box AST_I16 { initializer, .. }) => {
+        convert_numeric::<AScriptTypeValI16>(u, initializer, r, ref_index, type_slot)
+      }
+      _ => None,
+    },
+  });
+  u.add_type_handler(AScriptTypeVal::I32(None), AscriptTypeHandler {
+    default: &|_, _, _| "0".into(),
+    name:    &|_, _, _| "i32".into(),
+  });
+  u.add_ast_handler(sherpa::ASTNodeType::AST_I32, ASTExprHandler {
+    expr: &|u, ast, r, ref_index, type_slot| match ast {
+      ASTNode::AST_I32(box AST_I32 { initializer, .. }) => {
+        convert_numeric::<AScriptTypeValI32>(u, initializer, r, ref_index, type_slot)
+      }
+      _ => None,
+    },
+  });
+  u.add_type_handler(AScriptTypeVal::I64(None), AscriptTypeHandler {
+    default: &|_, _, _| "0".into(),
+    name:    &|_, _, _| "i64".into(),
+  });
+  u.add_ast_handler(sherpa::ASTNodeType::AST_I64, ASTExprHandler {
+    expr: &|u, ast, r, ref_index, type_slot| match ast {
+      ASTNode::AST_I64(box AST_I64 { initializer, .. }) => {
+        convert_numeric::<AScriptTypeValI64>(u, initializer, r, ref_index, type_slot)
+      }
+      _ => None,
+    },
+  });
+  u.add_type_handler(AScriptTypeVal::U8(None), AscriptTypeHandler {
+    default: &|_, _, _| "0".into(),
+    name:    &|_, _, _| "u8".into(),
+  });
+  u.add_ast_handler(sherpa::ASTNodeType::AST_U8, ASTExprHandler {
+    expr: &|u, ast, r, ref_index, type_slot| match ast {
+      ASTNode::AST_U8(box AST_U8 { initializer, .. }) => {
+        convert_numeric::<AScriptTypeValU8>(u, initializer, r, ref_index, type_slot)
+      }
+      _ => None,
+    },
+  });
+  u.add_type_handler(AScriptTypeVal::U16(None), AscriptTypeHandler {
+    default: &|_, _, _| "0".into(),
+    name:    &|_, _, _| "u16".into(),
+  });
+  u.add_ast_handler(sherpa::ASTNodeType::AST_U16, ASTExprHandler {
+    expr: &|u, ast, r, ref_index, type_slot| match ast {
+      ASTNode::AST_U16(box AST_U16 { initializer, .. }) => {
+        convert_numeric::<AScriptTypeValU16>(u, initializer, r, ref_index, type_slot)
+      }
+      _ => None,
+    },
+  });
+  u.add_type_handler(AScriptTypeVal::U32(None), AscriptTypeHandler {
+    default: &|_, _, _| "0".into(),
+    name:    &|_, _, _| "u32".into(),
+  });
+  u.add_ast_handler(sherpa::ASTNodeType::AST_U32, ASTExprHandler {
+    expr: &|u, ast, r, ref_index, type_slot| match ast {
+      ASTNode::AST_U32(box AST_U32 { initializer, .. }) => {
+        convert_numeric::<AScriptTypeValU32>(u, initializer, r, ref_index, type_slot)
+      }
+      _ => None,
+    },
+  });
+  u.add_type_handler(AScriptTypeVal::U64(None), AscriptTypeHandler {
+    default: &|_, _, _| "0".into(),
+    name:    &|_, _, _| "u64".into(),
+  });
+  u.add_ast_handler(sherpa::ASTNodeType::AST_U64, ASTExprHandler {
+    expr: &|u, ast, r, ref_index, type_slot| match ast {
+      ASTNode::AST_U64(box AST_U64 { initializer, .. }) => {
+        convert_numeric::<AScriptTypeValU64>(u, initializer, r, ref_index, type_slot)
+      }
+      _ => None,
+    },
+  });
+  u.add_type_handler(AScriptTypeVal::F32(None), AscriptTypeHandler {
+    default: &|_, _, _| "0".into(),
+    name:    &|_, _, _| "f32".into(),
+  });
+  u.add_ast_handler(sherpa::ASTNodeType::AST_F32, ASTExprHandler {
+    expr: &|u, ast, r, ref_index, type_slot| match ast {
+      ASTNode::AST_F32(box AST_F32 { initializer, .. }) => {
+        convert_numeric::<AScriptTypeValF32>(u, initializer, r, ref_index, type_slot)
+      }
+      _ => None,
+    },
+  });
+  u.add_type_handler(AScriptTypeVal::F64(None), AscriptTypeHandler {
+    default: &|_, _, _| "0".into(),
+    name:    &|_, _, _| "f64".into(),
+  });
+  u.add_ast_handler(sherpa::ASTNodeType::AST_F64, ASTExprHandler {
+    expr: &|u, ast, r, ref_index, type_slot| match ast {
+      ASTNode::AST_F64(box AST_F64 { initializer, .. }) => {
+        convert_numeric::<AScriptTypeValF64>(u, initializer, r, ref_index, type_slot)
+      }
+      _ => None,
+    },
+  });
+  u.add_type_handler(AScriptTypeVal::Struct(Default::default()), AscriptTypeHandler {
+    default: &|_, _, optional| match optional {
+      true => "None".into(),
+      _ => "[NO OPTIONAL]".into(),
+    },
+    name:    &|s, a, optional| match a {
+      AScriptTypeVal::Struct(struct_id) => {
+        let name = &s.structs.get(&struct_id).unwrap().type_name;
+        match optional {
+          true => format!("Option<Box<{name}>>"),
+          _ => format!("Box<{name}>"),
+        }
+      }
+      _ => Default::default(),
+    },
+  });
+  u.add_type_handler(AScriptTypeVal::GenericStruct(Default::default()), AscriptTypeHandler {
+    default: &|s, _, optional| match optional {
+      true => "None".into(),
+      false => format!("{}::NONE", s.ast_type_name),
+    },
+    name:    &|s, _, optional| match optional {
+      true => format!("Option<{}>", s.ast_type_name),
+      false => format!("{}", s.ast_type_name),
+    },
+  });
+  u.add_type_handler(AScriptTypeVal::GenericStructVec(Default::default()), AscriptTypeHandler {
+    default: &|_, _, _| format!("vec![]"),
+    name:    &|u, val, _| match &val {
+      AScriptTypeVal::GenericStructVec(vec) => match vec.len() {
+        1 => {
+          format!("Vec<Box<{}>>", u.structs.get(&vec.first().unwrap().into()).unwrap().type_name)
+        }
+        _ => format!("Vec<{}>", u.ast_type_name),
+      },
+      _ => "[GenericStructVec]".into(),
+    },
+  });
+  u.add_ast_handler(sherpa::ASTNodeType::AST_Struct, ASTExprHandler {
+    expr: &|u, ast, r, ref_index, type_slot| match ast {
+      ASTNode::AST_Struct(ast_struct) => {
+        if let AScriptTypeVal::Struct(struct_type) = get_struct_type_from_node(ast_struct) {
+          match u.build_struct_constructor(r, &struct_type, ast_struct, ref_index, type_slot) {
+            SherpaResult::Ok(_ref) => Some(_ref),
+            _ => None,
+          }
         } else {
           None
         }
+      }
+      _ => None,
+    },
+  });
+  u.add_ast_handler(sherpa::ASTNodeType::AST_Vector, ASTExprHandler {
+    expr: &|utils, ast, rule, ref_index, type_slot| {
+      if let ASTNode::AST_Vector(box AST_Vector { initializer, .. }) = ast {
+        let mut results = initializer
+          .iter()
+          .filter_map(|n| utils.ast_expr_to_ref(n, rule, ref_index, type_slot))
+          .collect::<VecDeque<_>>();
+
+        if results.is_empty() {
+          Some(Ref::new(
+            utils.bump_ref_index(ref_index),
+            type_slot,
+            "vec![];".to_string(),
+            AScriptTypeVal::GenericVec(None),
+          ))
+        } else {
+          let types = results.iter().map(|t| t.ast_type.clone()).collect::<BTreeSet<_>>();
+
+          let mut vector_ref = if results[0].ast_type.is_vec() {
+            results.pop_front().unwrap()
+          } else {
+            Ref::new(
+              utils.bump_ref_index(ref_index),
+              type_slot,
+              "vec![]".to_string(),
+              get_specified_vector_from_generic_vec_values(&types),
+            )
+          };
+
+          for mut _ref in results {
+            if _ref.ast_type.is_vec() {
+              _ref.make_mutable();
+              let val_ref = _ref.get_ref_name();
+              vector_ref.add_post_init_stmt(format!("%%.append(&mut {});", val_ref)).make_mutable()
+            } else {
+              let val_ref = _ref.get_ref_name();
+              vector_ref.add_post_init_stmt(format!("%%.push({});", val_ref)).make_mutable()
+            };
+
+            vector_ref.add_predecessor(_ref);
+          }
+
+          Some(vector_ref)
+        }
       } else {
         None
       }
-    }
-    ASTNode::AST_Token(box AST_Token { .. }) => {
-      Some(Ref::node_token(bump_ref_index(ref_index), type_slot))
-    }
-    ASTNode::AST_Add(..) => Some(Ref::token(bump_ref_index(ref_index), type_slot)),
-    ASTNode::AST_Vector(box AST_Vector { initializer, .. }) => {
-      let mut results = initializer
-        .iter()
-        .filter_map(|n| render_expression(ast, n, rule, ref_index, type_slot))
-        .collect::<VecDeque<_>>();
-
-      if results.is_empty() {
-        Some(Ref::new(
-          bump_ref_index(ref_index),
-          type_slot,
-          "vec![];".to_string(),
-          AScriptTypeVal::GenericVec(None),
-        ))
-      } else {
-        let types = results.iter().map(|t| t.ast_type.clone()).collect::<BTreeSet<_>>();
-
-        let mut vector_ref = if results[0].ast_type.is_vec() {
-          results.pop_front().unwrap()
-        } else {
-          Ref::new(
-            bump_ref_index(ref_index),
+    },
+  });
+  u.add_ast_handler(sherpa::ASTNodeType::AST_Token, ASTExprHandler {
+    expr: &|u, ast, _, ref_index, type_slot| {
+      if let ASTNode::AST_Token(box AST_Token { range, .. }) = ast {
+        let ref_ = Ref::node_token(u, u.bump_ref_index(ref_index), type_slot);
+        if let Some(box Range { start_trim, end_trim }) = range {
+          let mut trimed_ref = Ref::new(
+            *ref_index,
             type_slot,
-            "vec![]".to_string(),
-            get_specified_vector_from_generic_vec_values(&types),
-          )
+            format!("%%.trim({start_trim}, {end_trim})"),
+            AScriptTypeVal::TokenRange,
+          );
+          trimed_ref.add_predecessor(ref_);
+          Some(trimed_ref)
+        } else {
+          Some(ref_)
+        }
+      } else {
+        None
+      }
+    },
+  });
+  u.add_ast_handler(sherpa::ASTNodeType::AST_IndexReference, ASTExprHandler {
+    expr: &|u, ast, rule, _, type_slot| {
+      if let ASTNode::AST_IndexReference(box AST_IndexReference { value, .. }) = ast {
+        match get_indexed_body_ref(rule, value) {
+          Some((index, sym_id)) => render_body_symbol(u, sym_id, u.store, index, type_slot),
+          None => None,
+        }
+      } else {
+        None
+      }
+    },
+  });
+  u.add_ast_handler(sherpa::ASTNodeType::AST_NamedReference, ASTExprHandler {
+    expr: &|u, ast, rule, _, type_slot| {
+      if let ASTNode::AST_NamedReference(box AST_NamedReference { value, .. }) = ast {
+        match get_named_body_ref(rule, value) {
+          Some((index, sym_id)) => render_body_symbol(u, sym_id, u.store, index, type_slot),
+          None => None,
+        }
+      } else {
+        None
+      }
+    },
+  });
+
+  // Convert Vec<AstNode> to Vec<<Specific Node>> when the Generic Structs Vecs
+  // only have one type.
+  u.add_prop_handler(
+    AScriptTypeVal::GenericStructVec(Default::default()),
+    AscriptPropHandler {
+      expr: &|u, ref_, prop_type_, _|
+        match ref_ {
+        Some(ref_) => match prop_type_ {
+            AScriptTypeVal::GenericStructVec(structs_ids) if structs_ids.len() == 1 => {
+                (format!(
+                      "{}.into_iter().map(|v|match v {{ {}::{}(node) => node, _ => panic!(\"could not convert\")}}).collect::<Vec<_>>()",
+                      ref_.get_ref_name(),
+                      u.store.ast_type_name,
+                      u.store.structs.get(&structs_ids.first().unwrap().into()).unwrap().type_name
+                    ), Some(ref_))
+              }
+              _ => (ref_.get_ref_name(), Some(ref_)),
+        }
+        None => ("Default::default()".into(), Default::default()),
+      }
+    },
+      );
+  fn handle_struct_props(
+    utils: &AscriptWriterUtils,
+    ref_: Option<Ref>,
+    prop_type_: &AScriptTypeVal,
+    optional: bool,
+  ) -> (String, Option<Ref>) {
+    let store = utils.store;
+    use AScriptTypeVal::*;
+    match ref_ {
+      Some(ref_) => {
+        let ref_string = ref_.get_ref_name();
+        let out_ref_ = if let Struct(..) = prop_type_ {
+          match ref_.ast_type.clone() {
+            Struct(struct_type) => {
+              let struct_name = store.structs.get(&struct_type).unwrap().type_name.clone();
+              ref_.from(format!("%%.to_{struct_name}()"), Struct(struct_type))
+            }
+            GenericStruct(struct_types) if struct_types.len() == 1 => {
+              let struct_type = struct_types.first().unwrap();
+              let struct_name = store.structs.get(&(struct_type.into())).unwrap().type_name.clone();
+              ref_.from(format!("%%.to_{struct_name}()"), Struct(struct_type.into()))
+            }
+            _ => ref_,
+          }
+        } else {
+          ref_.clone()
         };
 
-        for mut _ref in results {
-          if _ref.ast_type.is_vec() {
-            _ref.make_mutable();
-            let val_ref = _ref.get_ref_string();
-            vector_ref
-              .add_post_init_expression(format!("%%.append(&mut {})", val_ref))
-              .make_mutable()
-          } else {
-            let val_ref = _ref.get_ref_string();
-            vector_ref.add_post_init_expression(format!("%%.push({})", val_ref)).make_mutable()
-          };
-
-          vector_ref.add_predecessor(_ref);
-        }
-
-        Some(vector_ref)
-      }
-    }
-    ASTNode::AST_STRING(box AST_STRING { value, .. }) => match value {
-      None => Some(Ref::new(
-        bump_ref_index(ref_index),
-        type_slot,
-        "String::new()".to_string(),
-        AScriptTypeVal::String(None),
-      )),
-      Some(box init) => {
-        match &init.expression {
-          ASTNode::AST_NUMBER(box AST_NUMBER { value, .. }) => Some(Ref::new(
-            bump_ref_index(ref_index),
-            type_slot,
-            format!("\"{}\".to_string()", value),
-            AScriptTypeVal::String(Some(value.to_string())),
-          )),
-          expr => {
-            let ref_ = render_expression(s, expr, b, ref_index, type_slot)?;
-            match ref_.ast_type {
-              AScriptTypeVal::Struct(..)
-              | AScriptTypeVal::TokenRange
-              | AScriptTypeVal::GenericStruct(..) => {
-                Some(ref_.to_string(AScriptTypeVal::String(None)))
-              }
-              AScriptTypeVal::TokenVec => {
-                // Merge the last and first token together
-                // get the string value from the resulting span of the union
-                Some(ref_.from(
-                  "(%%.first().unwrap() + %%.last().unwrap()).to_string()".to_string(),
-                  AScriptTypeVal::String(None),
-                ))
-              }
-              AScriptTypeVal::String(..) => Some(ref_),
-              _ => Some(ref_.from("%%.to_string()".to_string(), AScriptTypeVal::String(None))),
-            }
-          }
+        match optional {
+          true => (format!("Some({})", ref_string), Some(out_ref_)),
+          false => (ref_string, Some(out_ref_)),
         }
       }
-    },
-    ASTNode::AST_BOOL(box AST_BOOL { value, initializer, .. }) => match initializer {
-      None => Some(Ref::new(
-        bump_ref_index(ref_index),
-        type_slot,
-        format!("{}", value),
-        AScriptTypeVal::Bool(Some(*value)),
-      )),
-      Some(box init) => match render_expression(s, &init.expression, rule, ref_index, type_slot) {
-        Some(_) => Some(Ref::new(
-          bump_ref_index(ref_index),
-          type_slot,
-          "true".to_string(),
-          AScriptTypeVal::Bool(Some(true)),
-        )),
-        None => Some(Ref::new(
-          bump_ref_index(ref_index),
-          type_slot,
-          "false".to_string(),
-          AScriptTypeVal::Bool(Some(false)),
-        )),
-      },
-    },
-    ASTNode::AST_U64(box AST_U64 { initializer, .. }) => {
-      convert_numeric::<AScriptTypeValU64>(initializer, b, s, ref_index, type_slot)
+      None => ("Default::default()".into(), Default::default()),
     }
-    ASTNode::AST_U32(box AST_U32 { initializer, .. }) => {
-      convert_numeric::<AScriptTypeValU32>(initializer, b, s, ref_index, type_slot)
-    }
-    ASTNode::AST_U16(box AST_U16 { initializer, .. }) => {
-      convert_numeric::<AScriptTypeValU16>(initializer, b, s, ref_index, type_slot)
-    }
-    ASTNode::AST_U8(box AST_U8 { initializer, .. }) => {
-      convert_numeric::<AScriptTypeValU8>(initializer, b, s, ref_index, type_slot)
-    }
-    ASTNode::AST_I64(box AST_I64 { initializer, .. }) => {
-      convert_numeric::<AScriptTypeValI64>(initializer, b, s, ref_index, type_slot)
-    }
-    ASTNode::AST_I32(box AST_I32 { initializer, .. }) => {
-      convert_numeric::<AScriptTypeValI32>(initializer, b, s, ref_index, type_slot)
-    }
-    ASTNode::AST_I16(box AST_I16 { initializer, .. }) => {
-      convert_numeric::<AScriptTypeValI16>(initializer, b, s, ref_index, type_slot)
-    }
-    ASTNode::AST_I8(box AST_I8 { initializer, .. }) => {
-      convert_numeric::<AScriptTypeValI8>(initializer, b, s, ref_index, type_slot)
-    }
-    ASTNode::AST_F32(box AST_F32 { initializer, .. }) => {
-      convert_numeric::<AScriptTypeValF32>(initializer, b, s, ref_index, type_slot)
-    }
-    ASTNode::AST_F64(box AST_F64 { initializer, .. }) => {
-      convert_numeric::<AScriptTypeValF64>(initializer, b, s, ref_index, type_slot)
-    }
-    ASTNode::AST_NUMBER(..) => None,
-    ASTNode::AST_Member(..) => None,
-    ASTNode::AST_NamedReference(box AST_NamedReference { value, .. }) => {
-      match get_named_body_ref(rule, value) {
-        Some((index, sym_id)) => render_body_symbol(sym_id, ast, index, type_slot),
-        None => None,
-      }
-    }
-    ASTNode::AST_IndexReference(box AST_IndexReference { value, .. }) => {
-      match get_indexed_body_ref(rule, value) {
-        Some((index, sym_id)) => render_body_symbol(sym_id, ast, index, type_slot),
-        None => None,
-      }
-    }
-    _ => None,
   }
-}
 
-fn node_to_struct(ref_: Ref, ast: &AScriptStore) -> Ref {
-  use AScriptTypeVal::*;
-  match ref_.ast_type.clone() {
-    Struct(struct_type) => {
-      let struct_name = ast.structs.get(&struct_type).unwrap().type_name.clone();
-      ref_.from(
-        format!(
-          "if let {}::{}(obj) = %%
-      {{ obj }}
-      else {{panic!(\"invalid node\")}}",
-          ast.ast_type_name, struct_name
-        ),
-        Struct(struct_type),
-      )
-    }
-    GenericStruct(struct_types) if struct_types.len() == 1 => {
-      let struct_type = struct_types.first().unwrap();
-      let struct_name = ast.structs.get(&(struct_type.into())).unwrap().type_name.clone();
-      ref_.from(
-        format!(
-          "if let {}::{}(obj) = %%
-      {{ obj }}
-      else {{unsafe {{ panic!(\"invalid node {{:?}}\", %%) }}}}",
-          ast.ast_type_name, struct_name
-        ),
-        Struct(struct_type.into()),
-      )
-    }
-    _ => ref_,
-  }
+  u.add_prop_handler(AScriptTypeVal::Struct(Default::default()), AscriptPropHandler {
+    expr: &handle_struct_props,
+  });
+
+  u.add_prop_handler(AScriptTypeVal::GenericStruct(Default::default()), AscriptPropHandler {
+    expr: &handle_struct_props,
+  });
+  u
 }
 
 fn render_body_symbol(
+  utils: &AscriptWriterUtils,
   sym: &RuleSymbol,
   ast: &AScriptStore,
   i: usize,
@@ -998,7 +1199,7 @@ fn render_body_symbol(
       if types.len() == 1 {
         let _type = types.first().unwrap().clone();
         if Token == _type {
-          Ref::token(i, type_slot)
+          Ref::token(utils, i, type_slot)
         } else {
           if let Some(init_string) = match _type {
             F64(..) => Some(format!("i{0}.to_f64()", i)),
@@ -1042,10 +1243,10 @@ fn render_body_symbol(
       } else if production_types_are_structs(&types) {
         Ref::new(i, type_slot, format!("i{0}", i), GenericStruct(extract_struct_types(&types)))
       } else {
-        Ref::token(i, type_slot)
+        Ref::token(utils, i, type_slot)
       }
     }
-    _ => Ref::token(i, type_slot),
+    _ => Ref::token(utils, i, type_slot),
   };
 
   ref_.add_body_index(i);
@@ -1064,9 +1265,9 @@ fn extract_struct_types(types: &BTreeSet<AScriptTypeVal>) -> BTreeSet<TaggedType
 }
 
 fn convert_numeric<T: AScriptNumericType>(
+  utils: &AscriptWriterUtils,
   init: &Option<Box<Init>>,
   rule: &Rule,
-  ast: &AScriptStore,
   ref_index: &mut usize,
   type_slot: usize,
 ) -> Option<Ref> {
@@ -1078,13 +1279,13 @@ fn convert_numeric<T: AScriptNumericType>(
     None => None,
     Some(init) => match &init.expression {
       ASTNode::AST_NUMBER(box AST_NUMBER { value, .. }) => Some(Ref::new(
-        bump_ref_index(ref_index),
+        utils.bump_ref_index(ref_index),
         type_slot,
         format!("{}{}", T::string_from_f64(*value), rust_type,),
         T::from_f64(*value),
       )),
       expr => {
-        let ref_ = render_expression(ast, expr, rule, ref_index, type_slot)?;
+        let ref_ = utils.ast_expr_to_ref(expr, rule, ref_index, type_slot)?;
 
         match ref_.ast_type {
           AScriptTypeVal::F64(..)
@@ -1110,313 +1311,405 @@ fn convert_numeric<T: AScriptNumericType>(
   }
 }
 
-fn bump_ref_index(ref_index: &mut usize) -> usize {
-  *ref_index += 1;
-  *ref_index
+pub(crate) fn add_ascript_functions_for_rust<W: Write>(
+  w: &mut AscriptWriter<W>,
+  g: &GrammarStore,
+) -> Result<(), std::io::Error> {
+  let export_node_data = get_ascript_export_data(g, &w.utils);
+
+  // Create impl for all exported productions that can be mapped to a ascript single
+  // AScripT type. For those that map to multiple outputs, create an impl on the main
+  // AST enum for named parsers on those types.
+  for (_, ast_type, ast_type_string, export_name, _) in &export_node_data {
+    let type_name = match ast_type {
+      AScriptTypeVal::Struct(id) => {
+        let AScriptStruct { type_name, .. } = w.store.structs.get(id).unwrap();
+        type_name.clone()
+      }
+      _ => ast_type.debug_string(Some(g)),
+    };
+
+    w.block(&format!("impl {type_name}"), "{", "}", &|w| {
+      w.stmt(format!("/// Create a [{type_name}] node from a `String` input."));
+      w.method(
+        "pub fn from_string",
+        "(",
+        ")",
+        ", ",
+        &|_| vec!["input: String".into()],
+        &format!("-> Result<{ast_type_string}, SherpaParseError>"),
+        "{",
+        "}",
+        &mut |w| {
+          w.stmt("let reader = UTF8StringReader::from(&input);".into())?;
+          w.stmt(format!("ast::{export_name}_from(reader)"))
+        },
+      )
+    });
+
+    w.block(&format!("impl {type_name}"), "{", "}", &|w| {
+      w.stmt(format!("/// Create a [{type_name}] node from a `String` input."));
+      w.method(
+        "pub fn from_str",
+        "(",
+        ")",
+        ", ",
+        &|_| vec!["input: &str".into()],
+        &format!("-> Result<{ast_type_string}, SherpaParseError>"),
+        "{",
+        "}",
+        &mut |w| {
+          w.stmt("let reader = UTF8StringReader::from(input);".into())?;
+          w.stmt(format!("ast::{export_name}_from(reader)"))
+        },
+      )
+    });
+  }
+
+  w.block("pub trait ASTParse<T>", "{", "}", &|w| {
+    for (_, _, ast_type_string, export_name, _) in &export_node_data {
+      w.stmt(format!(
+        "fn {export_name}_from(input:T) -> Result<{ast_type_string}, SherpaParseError>;",
+      ));
+    }
+    SherpaResult::Ok(())
+  });
+
+  Result::Ok(())
 }
 
-pub fn ascript_type_to_string(ast_type: &AScriptTypeVal, ast: &AScriptStore) -> String {
-  use AScriptTypeVal::*;
-  match ast_type {
-    GenericVec(types) => format!("Vec<{:?}>", types),
-    Struct(id) => format!("Box<{}>", ast.structs.get(id).unwrap().type_name),
-    String(..) => "String".to_string(),
-    Bool(..) => "bool".to_string(),
-    F64(..) => "f64".to_string(),
-    F32(..) => "f32".to_string(),
-    I64(..) => "i64".to_string(),
-    I32(..) => "i32".to_string(),
-    I16(..) => "i16".to_string(),
-    I8(..) => "i8".to_string(),
-    U64(..) => "u64".to_string(),
-    U32(..) => "u32".to_string(),
-    U16(..) => "u16".to_string(),
-    U8(..) => "u8".to_string(),
-    Undefined => "Undefined".to_string(),
-    Token => "Token".to_string(),
-    UnresolvedProduction(prod_id) => {
-      let production_types = get_production_types(ast, prod_id);
-      if production_types.len() > 1 {
-        if production_types_are_structs(&production_types) {
-          ast.ast_type_name.clone()
-        } else {
-          format!("{}::None", ast.ast_type_name)
-        }
-      } else {
-        ascript_type_to_string(&production_types.first().unwrap(), ast)
-      }
-    }
-    F64Vec => "Vec<f64>".to_string(),
-    F32Vec => "Vec<f32>".to_string(),
-    I64Vec => "Vec<i64>".to_string(),
-    I32Vec => "Vec<i32>".to_string(),
-    I16Vec => "Vec<i16>".to_string(),
-    I8Vec => "Vec<i8>".to_string(),
-    U64Vec => "Vec<u64>".to_string(),
-    U32Vec => "Vec<u32>".to_string(),
-    U16Vec => "Vec<u16>".to_string(),
-    U8Vec => "Vec<u8>".to_string(),
-    TokenVec => "Vec<Token>".to_string(),
-    StringVec => "Vec<String>".to_string(),
-    GenericStruct(struct_ids) => {
-      if struct_ids.len() > 1 {
-        ast.ast_type_name.clone()
-      } else {
-        format!("Box<{}>", ast.structs.get(&struct_ids.first().unwrap().into()).unwrap().type_name)
-      }
-    }
-    GenericStructVec(struct_ids) => {
-      if struct_ids.len() > 1 {
-        format!("Vec<{}>", ast.ast_type_name)
-      } else {
-        format!(
-          "Vec<Box<{}>>",
-          ast.structs.get(&struct_ids.first().unwrap().into()).unwrap().type_name
+pub(crate) fn write_rust_bytecode_parser_file<'a, W: Write>(
+  mut w: AscriptWriter<'a, W>,
+  state_lookups: &BTreeMap<String, u32>,
+  bc: &Vec<u8>,
+) -> SherpaResult<AscriptWriter<'a, W>> {
+  let g = &(w.store.g.clone());
+  let ast_type_name = w.store.ast_type_name.clone();
+  w.stmt(
+    "pub trait Reader: ByteReader + MutByteReader + UTF8Reader + std::fmt::Debug {}
+
+impl<T: ByteReader + MutByteReader + UTF8Reader + std::fmt::Debug> Reader for T {}
+
+pub type Parser<'a, T: Reader, UserCTX> = ByteCodeParser<'a, T, UserCTX>;"
+      .into(),
+  )
+  .unwrap();
+
+  for ExportedProduction { export_name, production, .. } in g.get_exported_productions() {
+    let bytecode_offset = state_lookups.get(&g.get_entry_name_from_prod_id(&production.id)?)?;
+    w.method(
+      &format!("pub fn new_{export_name}_parser<'a, T: Reader, UserCTX>"),
+      "(",
+      ")",
+      ", ",
+      &|_| vec!["reader: &'a mut T".into()],
+      "-> Parser<'a, T, UserCTX>",
+      "{",
+      "}",
+      &mut |w| {
+        w.stmt(format!("let mut parser = Parser::new(reader, &bytecode);"))?;
+        w.stmt(format!("parser.init_parser({bytecode_offset});"))?;
+        w.stmt(format!("parser"))
+      },
+    )
+    .unwrap();
+  }
+
+  w.block(&format!("pub static bytecode: [u8; {}] = ", bc.len()), "[", "];", &|w| {
+    w.list(", ", bc.iter().map(|i| format!("0x{i:X}")).collect());
+    SherpaResult::Ok(())
+  })
+  .unwrap();
+
+  if !w.store.is_dummy {
+    let export_node_data = get_ascript_export_data(g, w.utils);
+
+    w.block("pub mod ast", "{", "}", &|w| {
+
+      w.stmt(format!("impl AstObject for {ast_type_name} {{}}"))?;
+      w.stmt(format!("type ASTSlot = ({ast_type_name}, TokenRange, TokenRange);"))?;
+      w.stmt("use super::*; ".into()).unwrap();
+      w.stmt(format!("type Node = {};", w.store.ast_type_name)).unwrap();
+
+      // Create a module that will store convenience functions for compiling AST
+      // structures based on on grammar entry points.
+      for (ref_, type_, ast_type_string, export_name, guid_name) in &export_node_data {
+        w.method(
+          &format!("pub fn {export_name}_from<'a>"),
+          "(",
+          ")",
+          ", ",
+          &|_| vec!["mut reader: UTF8StringReader".into()],
+          &format!("-> Result<{ast_type_string}, SherpaParseError>"),
+          "{",
+          "}",
+          &mut |w| {
+            w.stmt(format!("let reduce_functions = ReduceFunctions::<_, u32>::new();"))?;
+            w.stmt(format!("let mut parser = Parser::new(&mut reader, &bytecode);"))?;
+            w.stmt(format!("parser.init_parser({});", state_lookups.get(guid_name).unwrap()))?;
+
+            w.stmt(
+              "let AstSlot (i0, __rule_rng__, _) = parser.parse_ast(&reduce_functions.0, &mut None)?;"
+                .into(),
+            )?;
+            if ref_.is_some() {
+              let (ref_name, ref_) =
+                w.utils.create_type_initializer_value(ref_.clone(), type_, false);
+
+              if let Some(ref_) = ref_ {
+                w.stmt(ref_.to_init_string(w.utils))?;
+                w.stmt(format!("Ok({ref_name})"))
+              } else {
+                w.stmt("Ok(i0)".to_string())
+              }
+            } else {
+              w.stmt("Ok(i0)".to_string())
+            }
+          },
         )
+        .unwrap();
       }
-    }
-    _ => {
-      panic!("Could not resolve compiled ascript type {:?}", ast_type)
-    }
+      SherpaResult::Ok(())
+    });
   }
+
+  SherpaResult::Ok(w)
 }
 
-fn get_default_value_(ast_type: &AScriptTypeVal, ast: &AScriptStore) -> String {
-  use AScriptTypeVal::*;
-  match ast_type {
-    GenericVec(..) => "vec![]".to_string(),
-    Struct(..) => "None".to_string(),
-    GenericStruct(..) => "None".to_string(),
-    String(..) => "String::new()".to_string(),
-    Bool(..) => "false".to_string(),
-    F64(..) => "0f64".to_string(),
-    F32(..) => "0f32".to_string(),
-    I64(..) => "0i64".to_string(),
-    I32(..) => "0i32".to_string(),
-    I16(..) => "0i16".to_string(),
-    I8(..) => "0i8".to_string(),
-    U64(..) => "0u64".to_string(),
-    U32(..) => "0u32".to_string(),
-    U16(..) => "0u16".to_string(),
-    U8(..) => "0u8".to_string(),
-    Undefined => "None".to_string(),
-    Token => "Token::new()".to_string(),
-    UnresolvedProduction(prod_id) => {
-      let production_types = get_production_types(ast, prod_id);
-      if production_types.len() > 1 {
-        if production_types_are_structs(&production_types) {
-          ast.ast_type_name.clone()
-        } else {
-          "HCObj::None".to_string()
-        }
-      } else {
-        get_default_value_(&production_types.first().unwrap(), ast)
+pub(crate) fn write_rust_llvm_parser_file<'a, W: Write>(
+  mut w: AscriptWriter<'a, W>,
+  grammar_name: &str,
+  parser_name: &str,
+) -> SherpaResult<AscriptWriter<'a, W>> {
+  let g = &(w.store.g.clone());
+  w.stmt(format!(
+    r###"
+#[link(name = "{parser_name}", kind ="static" )]
+extern "C" {{
+  fn init(ctx: *mut u8, reader: *mut u8);
+  fn next(ctx: *mut u8) -> ParseActionType;
+  fn prime(ctx: *mut u8, start_point: u32);
+  fn drop(ctx: *mut u8);
+}}
+pub trait Reader: ByteReader + LLVMByteReader + MutByteReader + std::fmt::Debug {{}}
+impl<T:ByteReader + LLVMByteReader + MutByteReader + std::fmt::Debug > Reader for T {{}}
+
+      
+pub struct Parser<T: Reader, M>(ParseContext<T, M>, T);
+"###
+  ))?;
+
+  w.block("impl<T: Reader, M> Parser<T, M>", "{", "}", &|w| {
+    w.stmt(format!(
+      "/// Create a new parser context to parser the input with 
+    /// the grammar `{grammar_name}"
+    ))?;
+    w.stmt("#[inline(always)]".into())?;
+    w.method(
+      "fn new",
+      "(",
+      ")",
+      ", ",
+      &|_| vec!["mut reader: T".into()],
+      "-> Self",
+      "{",
+      "}",
+      &mut |w| {
+        w.stmt("let mut parser = Self(ParseContext::<T, M>::new_llvm(), reader);".into())?;
+        w.stmt("parser.construct_context();".into())?;
+        w.stmt("parser".into())
+      },
+    )?;
+    w.stmt(
+      "/// Initialize the parser to recognize the given starting production
+      /// within the input. This method is chainable."
+        .into(),
+    )?;
+    w.stmt("#[inline(always)]".into())?;
+    w.method(
+      "fn set_start_point",
+      "(",
+      ")",
+      ", ",
+      &|_| vec!["&mut self".into(), "start_point: u64".into()],
+      "-> &mut Self",
+      "{",
+      "}",
+      &mut |w| {
+        w.block("unsafe", "{", "}", &|w| {
+          w.stmt("let _ptr = &mut self.0 as *const ParseContext<T, M>;".into())?;
+          w.stmt("prime(_ptr as *mut u8, start_point as u32);".into())
+        })?;
+        w.stmt("self".into())
+      },
+    )?;
+    w.stmt("#[inline(always)]".into())?;
+    w.method(
+      "fn construct_context",
+      "(",
+      ")",
+      ", ",
+      &|_| vec!["&mut self".into()],
+      "",
+      "{",
+      "}",
+      &mut |w| {
+        w.block("unsafe", "{", "}", &|w| {
+          w.stmt("let _ptr = &mut self.0 as *const ParseContext<T, M>;".into())?;
+          w.stmt("let _rdr = &mut self.1 as *const T;".into())?;
+          w.stmt("init(_ptr as *mut u8, _rdr as *mut u8);".into())
+        })
+      },
+    )?;
+    w.stmt("#[inline(always)]".into())?;
+    w.method(
+      "fn destroy_context",
+      "(",
+      ")",
+      ", ",
+      &|_| vec!["&mut self".into()],
+      "",
+      "{",
+      "}",
+      &mut |w| {
+        w.stmt("let _ptr = &mut self.0 as *const ParseContext<T, M>;".into())?;
+        w.block("unsafe", "{", "}", &|w| w.stmt("drop(_ptr as *mut u8);".into()))
+      },
+    )?;
+
+    for (i, ExportedProduction { export_name, .. }) in
+      g.get_exported_productions().iter().enumerate()
+    {
+      w.method(
+        &format!("pub fn new_{export_name}_parser"),
+        "(",
+        ")",
+        ", ",
+        &|_| vec!["reader: T".into()],
+        "-> Self",
+        "{",
+        "}",
+        &mut |w| {
+          w.stmt(format!("let mut ctx = Self::new(reader);"))?;
+          w.stmt(format!("ctx.set_start_point({i});"))?;
+          w.stmt(format!("ctx"))
+        },
+      )?;
+    }
+    SherpaResult::Ok(())
+  })?;
+
+  w.block("impl<T: Reader, M> Iterator for Parser<T, M> ", "{", "}", &|w| {
+    w.stmt("type Item = ParseActionType;".into());
+    w.stmt("#[inline(always)]".into());
+    w.method(
+      "fn next",
+      "(",
+      ")",
+      ", ",
+      &|_| vec!["&mut self".into()],
+      "-> Option<Self::Item>",
+      "{",
+      "}",
+      &mut |w| {
+        w.block("unsafe", "{", "}", &|w| {
+          w.block("if !self.0.is_active", "{", "}", &|w| w.stmt("None".into()))?;
+          w.block("else", "{", "}", &|w| {
+            w.stmt("let _ptr = &mut self.0 as *const ParseContext<T, M>;".into())?;
+            w.stmt("Some(next(_ptr as *mut u8))".into())
+          })
+        })
+      },
+    )
+  })?;
+
+  w.block("impl<T: Reader, M> Drop for Parser<T, M> ", "{", "}", &|w| {
+    w.method("fn drop", "(", ")", ", ", &|_| vec!["&mut self".into()], "", "{", "}", &mut |w| {
+      w.block("unsafe", "{", "}", &|w| w.stmt("self.destroy_context();".into()))
+    })
+  })?;
+
+  if !w.store.is_dummy {
+    let export_node_data = get_ascript_export_data(g, w.utils);
+    let ast_type_name = w.store.ast_type_name.clone();
+
+    w.block("pub mod ast", "{", "}", &|w| {
+      w.stmt("use super::*; ".into()).unwrap();
+      w.stmt(format!(
+        r##"
+impl AstObject for {ast_type_name} {{}}
+type ASTSlot = ({ast_type_name}, TokenRange, TokenRange);
+
+#[link(name = "{parser_name}", kind = "static")]
+extern "C" {{
+  fn ast_parse(
+  ctx: *mut u8,
+  reducers: *const u8,
+  shift_handler: *const u8,
+  result_handler: *const u8,
+  ) -> ParseResult<{ast_type_name}>;
+}}"##))?;
+
+      w.stmt(format!("type Node = {};", w.store.ast_type_name)).unwrap();
+
+      // Create a module that will store convenience functions for compiling AST
+      // structures based on on grammar entry points.
+      for (ref_, type_, ast_type_string, export_name, ..) in &export_node_data {
+        w.method(
+          &format!("pub fn {export_name}_from<'a>"),
+          "(",
+          ")",
+          ", ",
+          &|_| vec!["reader: UTF8StringReader".into()],
+          &format!("-> Result<{ast_type_string}, SherpaParseError>"),
+          "{",
+          "}",
+          &mut |w| {
+            w.stmt(format!("const reduce_functions: ReduceFunctions::<UTF8StringReader, u32> = ReduceFunctions::<UTF8StringReader, u32>::new();"))?;
+            w.stmt(format!("let mut ctx = Parser::new_{export_name}_parser(reader);"))?;
+            w.stmt(format!("let reducers_ptr = (&reduce_functions.0).as_ptr() as *const u8;"))?;
+            w.stmt(format!("let shifter_ptr = llvm_map_shift_action::<UTF8StringReader, u32, {ast_type_name}> as *const u8;"))?;
+            w.stmt(format!("let result_ptr = llvm_map_result_action::<UTF8StringReader, u32, {ast_type_name}> as *const u8;"))?;
+            w.stmt(format!("let ctx_ptr = (&mut ctx.0) as *const ParseContext<UTF8StringReader, u32>;"))?;
+
+            w.block("match unsafe{ ast_parse(ctx_ptr as *mut u8, reducers_ptr, shifter_ptr, result_ptr) }", "{", "}", &|w|{
+              w.block("ParseResult::Complete((i0, _, _))  =>", "{", "}", &|w|{
+                if ref_.is_some() {
+                  let (ref_name, ref_) =
+                    w.utils.create_type_initializer_value(ref_.clone(), type_, false);
+                  if let Some(ref_) = ref_ {
+                    w.stmt(ref_.to_init_string(w.utils))?;
+                    w.stmt(format!("Ok({ref_name})"))
+                  } else {
+                    w.stmt("Ok(i0)".to_string())
+                  }
+                } else {
+                  w.stmt("Ok(i0)".to_string())
+                }
+              })?;
+              w.block("ParseResult::Error(err_tok, _) =>", "{", "}", &|w|{
+                w.block("Err", "(", ")", &|w| {
+                  w.block("SherpaParseError", "{", "}", &|w| {
+                    w.list(",", vec![
+                      "inline_message: \"Token not recognized\".to_string()",
+                      "last_production: 0",
+                      "loc: err_tok.to_token(&ctx.1)",
+                      "message: \"Failed to parse\".to_string()",
+                    ])
+                  })
+                })
+              })?;
+              w.stmt("_ => unreachable!()".into())
+            })
+          },
+        )?;
       }
-    }
-    F64Vec | F32Vec | U64Vec | I64Vec | U32Vec | I32Vec | U16Vec | I16Vec | U8Vec | I8Vec
-    | GenericStructVec(..) | StringVec | TokenVec => "Vec::new()".to_string(),
-    _ => {
-      panic!("Could not resolve compiled ascript type {:?}", ast_type)
-    }
-  }
-}
+      SherpaResult::Ok(())
+    });
 
-fn get_default_value(prop_id: &AScriptPropId, ast: &AScriptStore) -> String {
-  if let Some(prop) = ast.props.get(prop_id) {
-    get_default_value_(&(&prop.type_val).into(), ast)
-  } else {
-    "None".to_string()
-  }
-}
-
-#[derive(Clone)]
-pub(crate) struct Ref {
-  init_index: usize,
-  type_slot: usize,
-  body_indices: BTreeSet<usize>,
-  init_expression: String,
-  ast_type: AScriptTypeVal,
-  predecessors: Option<Vec<Box<Ref>>>,
-  post_init_statements: Option<Vec<String>>,
-  is_mutable: bool,
-  is_token: bool,
-}
-
-impl Ref {
-  pub fn new(
-    init_index: usize,
-    type_slot: usize,
-    init_expression: String,
-    ast_type: AScriptTypeVal,
-  ) -> Self {
-    Ref {
-      init_index,
-      type_slot,
-      body_indices: BTreeSet::from_iter(vec![init_index]),
-      init_expression,
-      ast_type,
-      predecessors: None,
-      post_init_statements: None,
-      is_mutable: false,
-      is_token: false,
-    }
+    // Create a module that will store convince functions for compiling AST
+    // structures based on on grammar entry points.
   }
 
-  pub(crate) fn token(init_index: usize, type_slot: usize) -> Self {
-    Ref {
-      init_index,
-      type_slot,
-      body_indices: BTreeSet::new(),
-      init_expression: format!("rng{0}.to_token(_ctx_.get_reader())", init_index),
-      ast_type: AScriptTypeVal::Token,
-      predecessors: None,
-      post_init_statements: None,
-      is_mutable: false,
-      is_token: true,
-    }
-  }
-
-  pub(crate) fn node_token(init_index: usize, type_slot: usize) -> Self {
-    Ref {
-      init_index,
-      type_slot,
-      body_indices: BTreeSet::new(),
-      init_expression: format!("rng.to_token(_ctx_.get_reader())"),
-      ast_type: AScriptTypeVal::Token,
-      predecessors: None,
-      post_init_statements: None,
-      is_mutable: false,
-      is_token: false,
-    }
-  }
-
-  pub(crate) fn to_string(self, ast_type: AScriptTypeVal) -> Self {
-    let index = self.get_root_index();
-    Ref {
-      init_index: index,
-      type_slot: self.type_slot,
-      init_expression: format!("rng{0}.to_token(_ctx_.get_reader()).to_string()", index),
-      ast_type,
-      body_indices: BTreeSet::new(),
-      predecessors: None,
-      post_init_statements: None,
-      is_mutable: false,
-      is_token: true,
-    }
-  }
-
-  pub(crate) fn from(self, init_expression: String, ast_type: AScriptTypeVal) -> Self {
-    Ref {
-      init_index: self.init_index,
-      type_slot: self.type_slot,
-      init_expression,
-      ast_type,
-      body_indices: BTreeSet::new(),
-      predecessors: Some(vec![Box::new(self)]),
-      post_init_statements: None,
-      is_mutable: false,
-      is_token: false,
-    }
-  }
-
-  pub(crate) fn get_type(&self) -> AScriptTypeVal {
-    self.ast_type.clone()
-  }
-
-  pub(crate) fn make_mutable(&mut self) -> &mut Self {
-    self.is_mutable = true;
-    self
-  }
-
-  pub(crate) fn add_body_index(&mut self, index: usize) {
-    self.body_indices.insert(index);
-  }
-
-  pub(crate) fn get_ref_string(&self) -> String {
-    format!("ref_{}_{}", self.init_index, self.type_slot)
-  }
-
-  pub(crate) fn get_indices(&self) -> BTreeSet<usize> {
-    let mut indices = self.body_indices.clone();
-
-    if let Some(predecessors) = &self.predecessors {
-      for predecessor in predecessors {
-        indices.append(&mut predecessor.get_indices())
-      }
-    }
-
-    indices
-  }
-
-  pub(crate) fn get_root_index(&self) -> usize {
-    if let Some(predecessors) = &self.predecessors {
-      for predecessor in predecessors {
-        return predecessor.get_root_index();
-      }
-    }
-    self.init_index
-  }
-
-  pub(crate) fn get_tokens(&self) -> BTreeSet<usize> {
-    let mut set = BTreeSet::new();
-
-    if self.is_token {
-      set.insert(self.init_index);
-    }
-
-    if let Some(predecessors) = &self.predecessors {
-      for predecessor in predecessors {
-        set.append(&mut predecessor.get_tokens());
-      }
-    }
-
-    set
-  }
-
-  pub(crate) fn add_post_init_expression(&mut self, string: String) -> &mut Self {
-    self.post_init_statements.get_or_insert(vec![]).push(string);
-
-    self
-  }
-
-  pub(crate) fn to_init_string(&self) -> String {
-    let mut string = String::new();
-
-    if let Some(predecessors) = &self.predecessors {
-      for predecessor in predecessors {
-        string = string + &predecessor.to_init_string()
-      }
-    }
-
-    let ref_string = self.get_ref_string();
-
-    string += &format!(
-      "\nlet{}{} = {};",
-      if self.is_mutable { " mut " } else { " " },
-      ref_string,
-      self.init_expression.replace("%%", &ref_string)
-    );
-
-    if let Some(statements) = &self.post_init_statements {
-      string = string + "\n" + &statements.join(";\n").replace("%%", &ref_string) + ";";
-    }
-
-    string
-  }
-
-  pub(crate) fn add_predecessor(&mut self, predecessor: Ref) -> &mut Self {
-    self.predecessors.get_or_insert(vec![]).push(Box::new(predecessor));
-
-    self
-  }
-
-  pub(crate) fn add_predecessors(&mut self, predecessors: Vec<Ref>) -> &mut Self {
-    let prev = self.predecessors.get_or_insert(vec![]);
-
-    for predecessor in predecessors {
-      prev.push(Box::new(predecessor))
-    }
-
-    self
-  }
+  SherpaResult::Ok(w)
 }

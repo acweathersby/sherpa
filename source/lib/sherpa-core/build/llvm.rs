@@ -1,5 +1,3 @@
-use std::{io::Write, process::Command};
-
 use inkwell::{
   context::Context,
   passes::{PassManager, PassManagerBuilder},
@@ -14,39 +12,47 @@ use inkwell::{
   },
   OptimizationLevel,
 };
+use std::{io::Write, process::Command};
 
 use crate::{
-  ascript::{self, rust::create_type_initializer_value},
+  ascript::{
+    output_base::AscriptWriter,
+    rust::{create_rust_writer_utils, write_rust_llvm_parser_file},
+    types::AScriptStore,
+  },
   grammar::compile::DummyASTEnum,
   llvm::construct_module,
   types::*,
   writer::code_writer::CodeWriter,
 };
 
-use super::{ascript::get_ascript_export_data, pipeline::PipelineTask};
+use super::pipeline::PipelineTask;
 
 /// Constructs a task that outputs a Rust parse context interface
 /// for the llvm parser.
 pub fn build_llvm_parser_interface<'a>() -> PipelineTask {
   PipelineTask {
     fun: Box::new(move |task_ctx| {
-      let grammar = task_ctx.get_journal().grammar().unwrap();
+      let mut j = task_ctx.get_journal();
+      let grammar = j.grammar().unwrap();
       let parser_name = grammar.id.name.clone();
+
+      let dummy = AScriptStore::dummy(&mut j).unwrap();
+      let store = if let Some(store) = task_ctx.get_ascript() { store } else { &dummy };
 
       let output_type = OutputType::Rust;
 
       match output_type {
         OutputType::Rust => {
-          let mut writer = CodeWriter::new(vec![]);
-          match write_rust_parser(
-            &mut writer,
-            &grammar,
-            &parser_name,
-            &parser_name,
-            task_ctx.get_ascript(),
-          ) {
-            Err(err) => Err(vec![SherpaError::from(err)]),
-            Ok(_) => Ok(Some((20, unsafe { String::from_utf8_unchecked(writer.into_output()) }))),
+          let writer = CodeWriter::new(vec![]);
+          let utils = create_rust_writer_utils(store);
+          let w = AscriptWriter::new(&utils, writer);
+          match write_rust_llvm_parser_file(w, &parser_name, &parser_name) {
+            SherpaResult::Err(err) => Err(vec![SherpaError::from(err)]),
+            SherpaResult::Ok(w) => {
+              Ok(Some((20, unsafe { String::from_utf8_unchecked(w.into_writer().into_output()) })))
+            }
+            _ => unreachable!(),
           }
         }
         _ => Ok(None),
@@ -64,208 +70,6 @@ pub enum OutputType {
   _TypeScript,
   _JavaScript,
   _Java,
-}
-
-fn write_rust_parser<W: Write>(
-  writer: &mut CodeWriter<W>,
-  g: &GrammarStore,
-  grammar_name: &str,
-  parser_name: &str,
-  ascript: Option<&ascript::types::AScriptStore>,
-) -> std::io::Result<()> {
-  writer
-    .wrt(&format!(
-      "
-
-#[link(name = \"{}\", kind = \"static\" )]
-extern \"C\" {{
-    fn init(ctx: *mut u8, reader: *mut u8);
-    fn next(ctx: *mut u8) -> ParseActionType;
-    fn prime(ctx: *mut u8, start_point: u32);
-    fn drop(ctx: *mut u8);
-}}",
-      parser_name
-    ))?
-    .wrtln(&format!(
-      r###"
-pub trait Reader:
-  ByteReader + LLVMByteReader + MutByteReader + std::fmt::Debug
-  {{}}
-
-impl<T> Reader for T
-  where T: ByteReader + LLVMByteReader + MutByteReader + std::fmt::Debug 
-  {{}}
-      
-pub struct Parser<T: Reader, M>(ParseContext<T, M>, T);
-
-
-impl<T: Reader, M> Iterator for Parser<T, M> {{
-    type Item = ParseActionType;
-
-    #[inline(always)]
-    fn next(&mut self) -> Option<Self::Item> {{
-        
-        unsafe {{
-            if !self.0.is_active {{
-                None
-            }} else {{
-                let _ptr = &mut self.0 as *const ParseContext<T, M>;
-                Some(next(_ptr as *mut u8))
-            }}
-        }}
-    }}
-}}
-
-
-impl<T: Reader, M> Parser<T, M> {{
-    /// Create a new parser context to parser the input with 
-    /// the grammar `{0}`
-    #[inline(always)]
-    fn new(mut reader: T) -> Self {{
-        let mut parser = Self(ParseContext::<T, M>::new_llvm(), reader);
-        parser.construct_context();
-        parser
-    }}
-    
-    /// Initialize the parser to recognize the given starting production
-    /// within the input. This method is chainable.
-    #[inline(always)]
-    fn set_start_point(&mut self, start_point: u64) -> &mut Self {{
-        unsafe {{
-            let _ptr = &mut self.0 as *const ParseContext<T, M>;
-            prime(_ptr as *mut u8, start_point as u32);
-        }}
-
-        self
-    }}
-    #[inline(always)]
-    fn construct_context(&mut self) {{
-        unsafe {{
-            let _ptr = &mut self.0 as *const ParseContext<T, M>;
-            let _rdr = &mut self.1 as *const T;
-            init(_ptr as *mut u8, _rdr as *mut u8);
-        }}
-    }}
-    #[inline(always)]
-    fn destroy_context(&mut self) {{
-      let _ptr = &mut self.0 as *const ParseContext<T, M>;
-      unsafe {{ drop(_ptr as *mut u8); }}
-    }}"###,
-      grammar_name
-    ))?
-    .indent();
-
-  for (i, ExportedProduction { export_name, production, .. }) in
-    g.get_exported_productions().iter().enumerate()
-  {
-    writer
-      .newline()?
-      .wrtln(&format!("/// `{}`", production.loc.to_string().replace("\n", "\n// ")))?
-      .wrtln(&format!("pub fn new_{}_parser(reader: T) -> Self{{", export_name))?
-      .indent()
-      .wrtln("let mut ctx = Self::new(reader);")?
-      .wrtln(&format!("ctx.set_start_point({});", i))?
-      .wrtln("ctx")?
-      .dedent()
-      .wrtln("}")?
-      .newline()?;
-  }
-
-  writer.dedent().wrtln(
-    "}
-
-impl<T: Reader, M> Drop for Parser<T, M> {
-    fn drop(&mut self) {
-        self.destroy_context();
-    }
-}",
-  )?;
-
-  if let Some(ascript) = ascript {
-    let export_node_data = get_ascript_export_data(g, ascript);
-
-    writer.wrtln("pub mod ast  {")?.indent();
-    writer.wrtln("use super::*; ")?.newline()?.wrt(&format!(
-      "
-impl AstObject for {0} {{}}
-type ASTSlot = ({0}, TokenRange, TokenRange);
-
-#[link(name = \"{1}\", kind = \"static\" )]
-extern \"C\" {{
-fn ast_parse(
-ctx: *mut u8,
-reducers: *const u8,
-shift_handler: *const u8,
-result_handler: *const u8,
-) -> ParseResult<{0}>;
-}}
-",
-      ascript.ast_type_name, parser_name
-    ))?;
-
-    // Create a module that will store convience functions for compiling AST
-    // structures based on on grammar entry points.
-
-    for (ref_, ast_type, ast_type_string, export_name, _) in &export_node_data {
-      writer
-        .newline()?
-        .wrtln(&format!(
-          "pub fn {0}_from(reader: UTF8StringReader)  -> Result<{1}, SherpaParseError> {{ ",
-          export_name, ast_type_string
-        ))?
-        .indent()
-        .wrtln(&format!(
-          "
-const reduce_functions: ReduceFunctions::<UTF8StringReader, u32> = ReduceFunctions::<UTF8StringReader, u32>::new();
-
-let mut ctx = Parser::new_{0}_parser(reader);
-let reducers_ptr = (&reduce_functions.0).as_ptr() as *const u8;
-let shifter_ptr = llvm_map_shift_action::<UTF8StringReader, u32, {1}> as *const u8;
-let result_ptr = llvm_map_result_action::<UTF8StringReader, u32, {1}> as *const u8;
-let ctx_ptr = (&mut ctx.0) as *const ParseContext<UTF8StringReader, u32>;
-",
-          export_name, ascript.ast_type_name
-        ))?
-        .wrtln(
-          "match unsafe{ ast_parse(ctx_ptr as *mut u8, reducers_ptr, shifter_ptr, result_ptr) } {",
-        )?
-        .indent()
-        .wrtln("ParseResult::Complete((i0, _, _))  => {")?
-        .indent()
-        .wrtln(&{
-          let (string, ref_) =
-            create_type_initializer_value(ref_.clone(), &ast_type, false, ascript);
-          if let Some(exp) = ref_ {
-            format!("{}\nOk({})", exp.to_init_string(), string)
-              .split("\n")
-              .map(|i| i.trim())
-              .collect::<Vec<_>>()
-              .join("\n")
-          } else {
-            "Ok(i0)".to_string()
-          }
-        })?
-        .dedent()
-        .wrtln("}")?
-        .wrtln(
-          "ParseResult::Error(err_tok, _) => Err(SherpaParseError {
-            inline_message: \"Token not recognized\".to_string(),
-            last_production: 0,
-            loc: err_tok.to_token(&ctx.1),
-            message: \"Failed to parse\".to_string(),
-          }),
-_ => unreachable!()",
-        )?
-        .dedent()
-        .wrtln("}")?
-        .dedent()
-        .wrtln("}")?;
-    }
-
-    writer.dedent().wrtln("}")?;
-  }
-
-  Ok(())
 }
 
 /// Build artifacts for a LLVM based parser.

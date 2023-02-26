@@ -213,7 +213,7 @@ impl<'a> BuildPipeline<'a> {
 
     self.bytecode = if self.tasks.iter().any(|t| t.0.require_bytecode) {
       if let Some(parse_states) = &self.states {
-        Some(compile_bytecode(&mut self.journal, parse_states))
+        Some(compile_bytecode(&mut self.journal, parse_states).unwrap())
       } else {
         None
       }

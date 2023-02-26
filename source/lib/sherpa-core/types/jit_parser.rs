@@ -191,7 +191,7 @@ where
     println!("{}", self.module.module.print_to_string().to_string());
   }
 
-  /// Prints intermediate representation of the parser states. If optmization
+  /// Prints intermediate representation of the parser states. If optimization
   /// has occurred then the states may not represent the actual parser.
   pub(crate) fn print_states(&mut self) {
     for (_, state) in &self.states {
@@ -199,9 +199,9 @@ where
     }
   }
 
-  /// Prints the equivalent bytecode parser dissasembly to to stderr.
+  /// Prints the equivalent bytecode parser disassembly to to stderr.
   pub(crate) fn print_disassembly(&mut self) {
-    let bytecode_output = compile_bytecode(&mut self.j, &self.states);
+    let bytecode_output = compile_bytecode(&mut self.j, &self.states).unwrap();
     println!("{}", &generate_disassembly(&bytecode_output, &mut self.j));
   }
 

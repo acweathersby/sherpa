@@ -1,7 +1,8 @@
 use crate::{
   ascript::{
     compile::{compile_struct_props, compile_struct_type, verify_property_presence},
-    rust_2::build_rust,
+    output_base::AscriptWriter,
+    rust::{create_rust_writer_utils, write_rust_ast},
     types::{AScriptStore, AScriptTypeVal},
   },
   grammar::compile::{
@@ -36,9 +37,11 @@ fn test_grammar_imported_grammar() -> SherpaResult<()> {
     .iter()
     .all(|p| { p.1.iter().all(|t| !matches!(t.0.type_, AScriptTypeVal::Undefined)) }));
 
-  let writer = build_rust(&store, CodeWriter::new(vec![]))?;
+  let u = create_rust_writer_utils(&store);
+  let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
+  let writer = write_rust_ast(w)?;
 
-  println!("{}", String::from_utf8(writer.into_output()).unwrap());
+  println!("{}", String::from_utf8(writer.into_writer().into_output()).unwrap());
 
   SherpaResult::Ok(())
 }
@@ -73,9 +76,11 @@ NAME llvm_language_test
 
   let store = AScriptStore::new(&mut j)?;
 
-  let writer = build_rust(&store, CodeWriter::new(vec![]))?;
+  let u = create_rust_writer_utils(&store);
+  let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
+  let writer = write_rust_ast(w)?;
 
-  println!("{}", String::from_utf8(writer.into_output()).unwrap());
+  println!("{}", String::from_utf8(writer.into_writer().into_output()).unwrap());
 
   SherpaResult::Ok(())
 }
@@ -97,9 +102,11 @@ fn test_add_hoc_vector_prop_merged_with_vector_production() -> SherpaResult<()> 
 
   let store = AScriptStore::new(&mut j)?;
 
-  let writer = build_rust(&store, CodeWriter::new(vec![]))?;
+  let u = create_rust_writer_utils(&store);
+  let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
+  let writer = write_rust_ast(w)?;
 
-  println!("{}", String::from_utf8(writer.into_output())?);
+  println!("{}", String::from_utf8(writer.into_writer().into_output())?);
 
   SherpaResult::Ok(())
 }
@@ -132,7 +139,9 @@ fn handles_multipart_arrays() -> SherpaResult<()> {
 
   let store = AScriptStore::new(&mut j)?;
 
-  build_rust(&store, CodeWriter::new(vec![]))?;
+  let u = create_rust_writer_utils(&store);
+  let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
+  write_rust_ast(w)?;
 
   Ok(())
 }
@@ -153,9 +162,11 @@ fn rust_vector_return_types_print_correctly() -> SherpaResult<()> {
 
   let store = AScriptStore::new(&mut j)?;
 
-  let writer = build_rust(&store, CodeWriter::new(vec![]))?;
+  let u = create_rust_writer_utils(&store);
+  let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
+  let writer = write_rust_ast(w)?;
 
-  println!("{}", String::from_utf8(writer.into_output())?);
+  println!("{}", String::from_utf8(writer.into_writer().into_output())?);
 
   Ok(())
 }
@@ -215,9 +226,11 @@ IGNORE { c:sp c:nl }
 
   let store = AScriptStore::new(&mut j)?;
 
-  let writer = build_rust(&store, CodeWriter::new(vec![]))?;
+  let u = create_rust_writer_utils(&store);
+  let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
+  let writer = write_rust_ast(w)?;
 
-  println!("{}", String::from_utf8(writer.into_output())?);
+  println!("{}", String::from_utf8(writer.into_writer().into_output())?);
 
   SherpaResult::Ok(())
 }
@@ -234,9 +247,11 @@ fn test_parse_errors_when_production_has_differing_return_types3() -> SherpaResu
 
   println!("{:#?}", store);
 
-  let writer = build_rust(&store, CodeWriter::new(vec![]))?;
+  let u = create_rust_writer_utils(&store);
+  let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
+  let writer = write_rust_ast(w)?;
 
-  println!("{}", String::from_utf8(writer.into_output()).unwrap());
+  println!("{}", String::from_utf8(writer.into_writer().into_output()).unwrap());
 
   SherpaResult::Ok(())
 }
@@ -396,13 +411,15 @@ fn test_rust_render() -> SherpaResult<()> {
 
   let store = AScriptStore::new(&mut j)?;
 
-  let writer = build_rust(&store, CodeWriter::new(vec![]))?;
+  let u = create_rust_writer_utils(&store);
+  let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
+  let writer = write_rust_ast(w)?;
 
-  println!("{}", String::from_utf8(writer.into_output())?);
+  println!("{}", String::from_utf8(writer.into_writer().into_output())?);
 
   /*   let writer = build_c(&store, CodeWriter::new(vec![]))?;
 
-  println!("{}", String::from_utf8(writer.into_output())?); */
+  println!("{}", String::from_utf8(writer.into_writer().into_output())?); */
 
   SherpaResult::Ok(())
 }

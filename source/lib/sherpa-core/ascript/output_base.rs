@@ -1,6 +1,12 @@
 use super::{compile::get_struct_type_from_node, types::*};
 use crate::{
-  grammar::compile::parser::sherpa::{ASTNode, ASTNodeType, AST_Struct, GetASTNodeType},
+  grammar::compile::parser::sherpa::{
+    ASTNode,
+    ASTNodeType,
+    AST_NamedReference,
+    AST_Struct,
+    GetASTNodeType,
+  },
   types::*,
   writer::code_writer::*,
 };
@@ -109,49 +115,37 @@ pub(crate) struct StructData<'a> {
   pub tokenized: bool,
 }
 
-pub(crate) struct AscriptWriterUtils<'a> {
+#[derive(Default)]
+pub(crate) struct Handlers<'a> {
   type_handlers: HashMap<Discriminant<AScriptTypeVal>, AscriptTypeHandler<'a>>,
   prop_handlers: HashMap<Discriminant<AScriptTypeVal>, AscriptPropHandler<'a>>,
   expr_handlers: HashMap<ASTNodeType, ASTExprHandler<'a>>,
+}
+
+pub(crate) struct AscriptWriterUtils<'a> {
+  /// Internal use. Assign to `Default::default()`
+  pub handlers: Handlers<'a>,
+  /// General Assignment
   pub assignment_writer: &'a AssignmentWriter<'a>,
   pub slot_assign: &'a SlotAssign<'a>,
   pub token_concat: &'a TokenConcat,
+  /// Slot Extraction:
+  ///
+  /// Expression to extract and assign either the node value or token from a
+  /// parse slot, or both.
+  ///
   pub slot_extract: &'a SlotExtract,
   pub create_token: &'a CreateToken,
+  /// Name used for token variables
   pub get_token_name: &'a GetTokenName,
   pub struct_construction: &'a StructConstructorExpr,
   pub store: &'a AScriptStore,
 }
 
 impl<'a> AscriptWriterUtils<'a> {
-  pub fn new(
-    store: &'a AScriptStore,
-    assignment_writer: &'a AssignmentWriter<'a>,
-    slot_assign: &'a SlotAssign<'a>,
-    token_concat: &'a TokenConcat,
-    slot_extract: &'a SlotExtract,
-    create_token: &'a CreateToken,
-    get_token_name: &'a GetTokenName,
-    struct_construction: &'a StructConstructorExpr,
-  ) -> Self {
-    Self {
-      store,
-      prop_handlers: Default::default(),
-      type_handlers: Default::default(),
-      expr_handlers: Default::default(),
-      slot_assign,
-      token_concat,
-      slot_extract,
-      create_token,
-      assignment_writer,
-      struct_construction,
-      get_token_name,
-    }
-  }
-
   #[track_caller]
   pub fn add_type_handler(&mut self, type_: AScriptTypeVal, handler: AscriptTypeHandler<'a>) {
-    match self.type_handlers.entry(type_.get_discriminant()) {
+    match self.handlers.type_handlers.entry(type_.get_discriminant()) {
       hash_map::Entry::Occupied(_) => {
         panic!("Type handler already registered for [{}]", type_.debug_string(None))
       }
@@ -163,7 +157,7 @@ impl<'a> AscriptWriterUtils<'a> {
 
   #[track_caller]
   pub fn add_ast_handler(&mut self, type_: ASTNodeType, handler: ASTExprHandler<'a>) {
-    match self.expr_handlers.entry(type_) {
+    match self.handlers.expr_handlers.entry(type_) {
       hash_map::Entry::Occupied(_) => {
         panic!("Type handler already registered for [{:?}]", type_)
       }
@@ -175,7 +169,7 @@ impl<'a> AscriptWriterUtils<'a> {
 
   #[track_caller]
   pub fn add_prop_handler(&mut self, type_: AScriptTypeVal, handler: AscriptPropHandler<'a>) {
-    match self.prop_handlers.entry(type_.get_discriminant()) {
+    match self.handlers.prop_handlers.entry(type_.get_discriminant()) {
       hash_map::Entry::Occupied(_) => {
         panic!("Prop handler already registered for [{:?}]", type_)
       }
@@ -193,7 +187,7 @@ impl<'a> AscriptWriterUtils<'a> {
 
   pub fn ascript_type_to_string(&self, type_: &AScriptTypeVal, optional: bool) -> String {
     let discriminant = type_.get_discriminant();
-    if let Some(type_handler) = self.type_handlers.get(&discriminant) {
+    if let Some(type_handler) = self.handlers.type_handlers.get(&discriminant) {
       (*type_handler.name)(self.store, type_, optional)
     } else {
       format!("[UNHANDLED {}]", type_.debug_string(None))
@@ -202,7 +196,7 @@ impl<'a> AscriptWriterUtils<'a> {
 
   pub fn ascript_type_to_default_string(&self, type_: &AScriptTypeVal, optional: bool) -> String {
     let discriminant = type_.get_discriminant();
-    if let Some(type_handler) = self.type_handlers.get(&discriminant) {
+    if let Some(type_handler) = self.handlers.type_handlers.get(&discriminant) {
       (*type_handler.default)(self.store, type_, optional)
     } else {
       format!("[UNHANDLED {}]", type_.debug_string(None))
@@ -219,14 +213,14 @@ impl<'a> AscriptWriterUtils<'a> {
   where
     Self: Sized,
   {
-    if let Some(expr_handler) = self.expr_handlers.get(&ast.get_type()) {
+    if let Some(expr_handler) = self.handlers.expr_handlers.get(&ast.get_type()) {
       (*expr_handler.expr)(self, ast, rule, ref_index, type_slot)
     } else {
       panic!("{}", SherpaError::SourceError {
         loc:        ast.to_token(),
         path:       rule.grammar_ref.path.clone(),
         id:         "ascript-writer-utils-unhandled-ast-node",
-        msg:        format!("An unhandled ast node has been encounterd"),
+        msg:        format!("An unhandled ast node has been encountered"),
         inline_msg: format!("Node type [{:?}] lacks an ASTExprHandler", ast.get_type()),
         ps_msg:     "Add an ASTExprHandler for this type using AscriptWriterUtils::add_ast_handler"
           .into(),
@@ -306,7 +300,7 @@ impl<'a> AscriptWriterUtils<'a> {
       &mut writer,
       archetype_struct.type_name.clone(),
       prop_assignments,
-      archetype_struct.include_token,
+      archetype_struct.tokenized,
     );
 
     (*ref_index) += 1;
@@ -325,15 +319,15 @@ impl<'a> AscriptWriterUtils<'a> {
 
   /// Used to convert a value into an appropriate form to assign as
   /// a struct's  value.
-  fn create_type_initializer_value(
+  pub fn create_type_initializer_value(
     &self,
     ref_: Option<Ref>,
     type_val: &AScriptTypeVal,
     optional: bool,
   ) -> (String, Option<Ref>) {
-    match self.prop_handlers.get(&type_val.get_discriminant()) {
+    match self.handlers.prop_handlers.get(&type_val.get_discriminant()) {
       Some(AscriptPropHandler { expr }) => (*expr)(&self, ref_, type_val, optional),
-      _ => (ref_.clone().map(|ref_| ref_.get_ref_string()).unwrap_or_default(), ref_),
+      _ => (ref_.clone().map(|ref_| ref_.get_ref_name()).unwrap_or_default(), ref_),
     }
   }
 }
@@ -346,12 +340,8 @@ pub(crate) struct AscriptWriter<'a, W: Write> {
 
 impl<'a, W: Write> AscriptWriter<'a, W> {
   /// Writes a multiline block structure to the output.
-  pub fn new(
-    store: &'a AScriptStore,
-    utils: &'a AscriptWriterUtils,
-    writer: CodeWriter<W>,
-  ) -> Self {
-    Self { store, writer, utils }
+  pub fn new(utils: &'a AscriptWriterUtils, writer: CodeWriter<W>) -> Self {
+    Self { store: utils.store, writer, utils }
   }
 
   fn get_struct_data(&self) -> BTreeMap<AScriptStructId, StructData<'a>> {
@@ -362,7 +352,7 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
       .map(|s| {
         (s.id, StructData {
           name:      s.type_name.clone(),
-          tokenized: s.include_token,
+          tokenized: s.tokenized,
           props:     s
             .prop_ids
             .iter()
@@ -382,21 +372,21 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
 
   pub fn block(
     &mut self,
-    block_header: Option<String>,
+    block_header: &str,
     open_delim: &str,
     closing_delim: &str,
-    content_writer: &dyn Fn(&mut Self),
+    content_writer: &dyn Fn(&mut Self) -> SherpaResult<()>,
   ) -> SherpaResult<()> {
     self.writer.write_line("\n")?;
 
-    if let Some(block_header) = block_header {
+    if !block_header.is_empty() {
       self.writer.write(&block_header)?;
     }
 
     self.writer.write(open_delim)?;
     self.writer.increase_indent();
 
-    content_writer(self);
+    content_writer(self)?;
 
     self.writer.decrease_indent();
     self.writer.write_line(closing_delim)?;
@@ -458,10 +448,10 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
 
   pub fn write_struct_data<'b: 'a>(
     &mut self,
-    struct_write_script: &dyn Fn(&mut Self, &StructData),
+    struct_write_script: &dyn Fn(&mut Self, &StructData) -> SherpaResult<()>,
   ) -> SherpaResult<()> {
     for (_, struct_data) in self.get_struct_data() {
-      struct_write_script(self, &struct_data);
+      struct_write_script(self, &struct_data)?;
     }
 
     SherpaResult::Ok(())
@@ -608,7 +598,7 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
                   w.writer.wrtln(&(w.utils.slot_assign)(
                     w.utils,
                     &AScriptTypeVal::Struct(struct_type),
-                    _ref.get_ref_string(),
+                    _ref.get_ref_name(),
                   ))?;
                 }
                 SherpaResult::Ok(())
@@ -626,7 +616,7 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
                       refs.append(&mut _ref.get_indices());
                       tokens.append(&mut _ref.get_tokens());
                       return_type = _ref.ast_type.clone();
-                      reference = _ref.get_ref_string();
+                      reference = _ref.get_ref_name();
                       stmt.writer.write_line(&_ref.to_init_string(w.utils))?;
                     }
                     _ => panic!("Could not resolve: {statement:?}"),
@@ -763,6 +753,10 @@ impl Ref {
     }
   }
 
+  pub(crate) fn get_type(&self) -> AScriptTypeVal {
+    self.ast_type.clone()
+  }
+
   pub(crate) fn from(self, init_expression: String, ast_type: AScriptTypeVal) -> Self {
     Ref {
       init_index: self.init_index,
@@ -786,7 +780,7 @@ impl Ref {
     self.body_indices.insert(index);
   }
 
-  pub(crate) fn get_ref_string(&self) -> String {
+  pub(crate) fn get_ref_name(&self) -> String {
     format!("ref_{}_{}", self.init_index, self.type_slot)
   }
 
@@ -832,7 +826,9 @@ impl Ref {
     self
   }
 
-  fn to_init_string(&self, utils: &AscriptWriterUtils) -> String {
+  /// Convert the ref into a string of statements that convert original
+  /// type into it current form.
+  pub(crate) fn to_init_string(&self, utils: &AscriptWriterUtils) -> String {
     let mut strings = Vec::new();
 
     if let Some(predecessors) = &self.predecessors {
@@ -841,7 +837,7 @@ impl Ref {
       }
     }
 
-    let ref_string = self.get_ref_string();
+    let ref_string = self.get_ref_name();
 
     strings.push((utils.assignment_writer)(
       utils,
@@ -873,4 +869,46 @@ impl Ref {
 
     self
   }
+}
+
+pub(crate) fn get_ascript_export_data(
+  g: &GrammarStore,
+  utils: &AscriptWriterUtils,
+) -> Vec<(Option<Ref>, AScriptTypeVal, String, String, String)> {
+  let export_node_data = g
+    .get_exported_productions()
+    .iter()
+    .map(|ExportedProduction { export_name, production, guid_name }| {
+      let mut ref_index = 0;
+      let ref_ = utils.ast_expr_to_ref(
+        &ASTNode::AST_NamedReference(Box::new(AST_NamedReference {
+          tok:   Token::default(),
+          value: "--first--".to_string(),
+        })),
+        &Rule {
+          syms: vec![RuleSymbol {
+            scanner_index: 1,
+            scanner_length: 1,
+            sym_id: SymbolID::Production(production.id, GrammarId(0)),
+            grammar_ref: g.id.clone(),
+            ..Default::default()
+          }],
+          len: 1,
+          prod_id: production.id,
+          id: RuleId(0),
+          bytecode_id: None,
+          ast_definition: None,
+          grammar_ref: g.id.clone(),
+          tok: Token::default(),
+          ..Default::default()
+        },
+        &mut ref_index,
+        0,
+      );
+      let ast_type = ref_.as_ref().unwrap().get_type();
+      let ast_type_string = utils.ascript_type_to_string(&ast_type, false);
+      (ref_, ast_type, ast_type_string, export_name.to_string(), guid_name.to_string())
+    })
+    .collect::<Vec<_>>();
+  export_node_data
 }

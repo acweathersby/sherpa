@@ -1,5 +1,9 @@
 use crate::{
-  ascript::{rust_2, types::AScriptStore},
+  ascript::{
+    output_base::AscriptWriter,
+    rust::{create_rust_writer_utils, write_rust_ast},
+    types::AScriptStore,
+  },
   bytecode::compile_bytecode,
   compile::GrammarStore,
   debug::{disassemble_parse_block, generate_disassembly},
@@ -7,7 +11,7 @@ use crate::{
   parser::{compile_parse_states, optimize_parse_states},
   types::*,
   util::get_num_of_available_threads,
-  writer::code_writer::StringBuffer,
+  writer::code_writer::CodeWriter,
   SherpaResult,
 };
 use inkwell::context::Context;
@@ -194,12 +198,15 @@ Cannot create a GrammarStore without one of these values present. "
   let g = g?;
 
   if build_ascript {
-    let writer = rust_2::build_rust(&AScriptStore::new(&mut j)?, StringBuffer::new(vec![]))?;
+    let store = AScriptStore::new(&mut j)?;
+    let u = create_rust_writer_utils(&store);
+    let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
+    let w = write_rust_ast(w)?;
 
     assert_reports(assert_clean_reports, &mut j)?;
 
     if print_ascript {
-      println!("{}", String::from_utf8(writer.into_output())?);
+      println!("{}", String::from_utf8(w.into_writer().into_output())?);
     }
   }
 
@@ -228,7 +235,7 @@ Cannot create a GrammarStore without one of these values present. "
     return SherpaResult::Ok(j);
   }
 
-  let bc = compile_bytecode(&mut j, &states);
+  let bc = compile_bytecode(&mut j, &states)?;
 
   if print_disassembly {
     println!("{}", generate_disassembly(&bc, &mut j));

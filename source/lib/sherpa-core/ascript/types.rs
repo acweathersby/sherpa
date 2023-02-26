@@ -488,7 +488,10 @@ pub struct AScriptStruct {
   /// Tracks the number of times this struct has been defined
   pub rule_ids: BTreeSet<RuleId>,
   pub definition_locations: BTreeSet<Token>,
-  pub include_token: bool,
+  /// When true a `tok` property is present in the struct
+  /// that has a [sherpa_runtime::type::Token] value comprised of the characters
+  /// of this struct's reduced rule.
+  pub tokenized: bool,
 }
 
 pub type ProductionTypesTable = BTreeMap<ProductionId, HashMap<TaggedType, BTreeSet<RuleId>>>;
@@ -506,19 +509,26 @@ pub struct AScriptStore {
   pub g: Arc<GrammarStore>,
   // Maps a struct id to a struct type name
   pub struct_lookups: Option<Arc<BTreeMap<AScriptStructId, String>>>,
+  // True if this store is a standing for actual ascript data.
+  pub is_dummy: bool,
 }
 
 impl AScriptStore {
-  pub fn new(j: &mut Journal) -> SherpaResult<Self> {
-    let mut new_self = AScriptStore {
-      structs: BTreeMap::new(),
-      props: BTreeMap::new(),
-      prod_types: BTreeMap::new(),
-      body_reduce_fn: BTreeMap::new(),
-      ast_type_name: "ASTNode".to_string(),
-      struct_lookups: None,
+  pub fn dummy(j: &mut Journal) -> SherpaResult<Self> {
+    SherpaResult::Ok(AScriptStore {
+      structs: Default::default(),
+      props: Default::default(),
+      prod_types: Default::default(),
+      body_reduce_fn: Default::default(),
+      ast_type_name: Default::default(),
       g: j.grammar()?,
-    };
+      struct_lookups: Default::default(),
+      is_dummy: Default::default(),
+    })
+  }
+
+  pub fn new(j: &mut Journal) -> SherpaResult<Self> {
+    let mut new_self = AScriptStore { g: j.grammar()?, is_dummy: false, ..Default::default() };
 
     j.set_active_report("Ascript Store Compile", crate::ReportType::AScriptCompile);
 
@@ -529,10 +539,6 @@ impl AScriptStore {
     } else {
       SherpaResult::Ok(new_self)
     }
-  }
-
-  pub fn type_name(&self) -> String {
-    format!("{}Type", self.ast_type_name)
   }
 
   pub fn get_type_names(&mut self) -> Arc<BTreeMap<AScriptStructId, String>> {
@@ -561,6 +567,7 @@ impl Default for AScriptStore {
       body_reduce_fn: BTreeMap::new(),
       struct_lookups: None,
       ast_type_name: "ASTNode".to_string(),
+      is_dummy: true,
     }
   }
 }

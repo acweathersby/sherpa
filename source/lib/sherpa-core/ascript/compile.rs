@@ -752,7 +752,7 @@ pub fn compile_struct_type(
       let struct_ = entry.get_mut();
       struct_.rule_ids.insert(rule.id);
       struct_.definition_locations.insert(ast_struct.tok.clone());
-      struct_.include_token = struct_.include_token.max(include_token);
+      struct_.tokenized = struct_.tokenized.max(include_token);
     }
     btree_map::Entry::Vacant(entry) => {
       entry.insert(AScriptStruct {
@@ -761,7 +761,7 @@ pub fn compile_struct_type(
         rule_ids: BTreeSet::from_iter(vec![rule.id]),
         definition_locations: BTreeSet::from_iter(vec![ast_struct.tok.clone()]),
         prop_ids: BTreeSet::new(),
-        include_token,
+        tokenized: include_token,
       });
     }
   }
@@ -890,7 +890,7 @@ pub fn compile_struct_props(
       struct_.rule_ids.insert(rule.id);
       struct_.definition_locations.insert(ast.tok.clone());
       struct_.prop_ids.append(&mut prop_ids);
-      struct_.include_token = include_token || struct_.include_token;
+      struct_.tokenized = include_token || struct_.tokenized;
     }
     btree_map::Entry::Vacant(_) => unreachable!("Struct should be defined at this point"),
   }

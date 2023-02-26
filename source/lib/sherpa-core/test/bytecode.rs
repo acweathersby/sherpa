@@ -66,7 +66,7 @@ NAME llvm_language_test
 
   let results = optimize_parse_states(&mut j, states);
 
-  let output = compile_bytecode(&mut j, &results);
+  let output = compile_bytecode(&mut j, &results)?;
 
   println!("dD: {}", debug::generate_disassembly(&output, &mut j));
   SherpaResult::Ok(())
@@ -105,7 +105,7 @@ pub fn generate_production_with_a_recursion() -> SherpaResult<()> {
 
   let results = optimize_parse_states(&mut j, states);
 
-  let output = compile_bytecode(&mut j, &results);
+  let output = compile_bytecode(&mut j, &results)?;
   println!("dD: {}", debug::generate_disassembly(&output, &mut j));
 
   SherpaResult::Ok(())
