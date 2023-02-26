@@ -105,6 +105,9 @@ pub(crate) enum StateType {
   /// Creates a leaf state that has a single `pop` instruction,
   /// with the intent of removing a goto floor state.
   ProductionCompleteOOS,
+  /// Creates a leaf state that has a single `pop` instruction,
+  /// with the intent of removing a goto floor state.
+  PeekProductionCompleteOOS,
   /// Creates a leaf state that has a single `pass` instruction.
   ScannerCompleteOOS,
   FirstMatch,
@@ -121,7 +124,7 @@ impl Default for StateType {
 impl StateType {
   pub fn is_out_of_scope(&self) -> bool {
     use StateType::*;
-    matches!(self, ProductionCompleteOOS | ScannerCompleteOOS)
+    matches!(self, ProductionCompleteOOS | ScannerCompleteOOS | PeekProductionCompleteOOS)
   }
 
   pub fn is_goto(&self) -> bool {

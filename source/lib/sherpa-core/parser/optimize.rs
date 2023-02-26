@@ -5,6 +5,7 @@
 //! that are comprised only of PushGoto statements, folding these
 //! into the respective states that reference them.
 use crate::{
+  compile::SymbolID,
   grammar::{
     compile::parser::sherpa::{self, *},
     hash_id_value_u64,
@@ -38,7 +39,8 @@ pub fn optimize_parse_states(
   let merge_non_transitive_branches = true;
 
   // Preform rounds -------------------------------------
-  let entry_states: BTreeSet<String> = get_entry_states(g);
+  let entry_states: BTreeSet<String> = get_entry_state_names(g);
+
   let mut non_scanner_states = BTreeSet::new();
 
   loop {
@@ -304,13 +306,14 @@ fn is_transitive(instructions: &Vec<ASTNode>) -> bool {
     matches!(
       n.get_type(),
       ScanShift
-        | ShiftToken
-        | ShiftTokenScanless
         | PeekToken
-        | SkipPeekTokenScanless
-        | SkipPeekToken
-        | SkipTokenScanless
+        | ShiftToken
         | SkipToken
+        | SkipPeekToken
+        | PeekTokenScanless
+        | ShiftTokenScanless
+        | SkipTokenScanless
+        | SkipPeekTokenScanless
         | PeekReset
         | Pop
     )
@@ -569,6 +572,7 @@ fn map_bytecode_id_to_sym_id(
 ) -> BTreeMap<u32, crate::types::SymbolID> {
   symbols
     .into_iter()
+    .chain(vec![SymbolID::EndOfInput].into_iter())
     .map(|s| {
       let sym = g.get_symbol(&s).unwrap();
       (sym.bytecode_id, s)
@@ -581,7 +585,7 @@ fn all_symbols_are_a_single_codepoint(
   g: &GrammarStore,
 ) -> bool {
   symbols.iter().all(|s| match g.get_symbol(s) {
-    Some(sym) => sym.cp_len == 1,
+    Some(sym) => sym.cp_len <= 1,
     None => false,
   })
 }
@@ -590,9 +594,9 @@ fn is_state_reference(i: &ASTNode) -> bool {
   matches!(i, ASTNode::PushGoto(..) | ASTNode::Goto(..) | ASTNode::PushExceptHandler(..))
 }
 
-fn get_entry_states(g: &GrammarStore) -> BTreeSet<String> {
+pub fn get_entry_state_names(g: &GrammarStore) -> BTreeSet<String> {
   g.get_exported_productions()
     .iter()
-    .map(|ExportedProduction { guid_name, .. }| guid_name.to_string())
+    .map(|ExportedProduction { guid_name, .. }| guid_name.to_string() + "_enter")
     .collect()
 }

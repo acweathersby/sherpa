@@ -85,6 +85,59 @@ fn test_trivial_peek() -> SherpaResult<Journal> {
 }
 
 #[test]
+fn temp_test1() -> SherpaResult<Journal> {
+  test_runner(
+    &[(
+      "script",
+      r##"
+
+DECLARE AS {
+    aaa
+    aaa
+}
+
+DECLARE BS {
+   aaa
+   aaa
+   aaa
+}
+
+DECLARE CS {
+   aaa
+}
+
+  
+  "##,
+      true,
+    )
+      .into()],
+    None,
+    TestConfig {
+      grammar_string: Some(
+        r#" 
+      IGNORE { c:sp c:nl } 
+      
+      <> script > block(+)
+
+      <> block > "DECLARE" tk:name "{" declare_content(+) "}"
+
+      <> declare_content > execute_content(+)
+
+      <> execute_content > "aaa"(+)
+
+      <> name > c:id(+)
+
+      "#,
+      ),
+      bytecode_parse: true,
+      llvm_parse: true,
+      debugger_handler: Some(&|g| console_debugger(g, Default::default())),
+      ..Default::default()
+    },
+  )
+}
+
+#[test]
 pub fn production_reduction_decisions() -> SherpaResult<Journal> {
   let input = "
 <> A > B | C | R 

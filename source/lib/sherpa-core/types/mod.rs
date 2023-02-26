@@ -1,6 +1,5 @@
 #![allow(unused)]
 
-mod constants;
 mod error;
 mod grammar;
 pub(crate) mod graph;
@@ -11,7 +10,6 @@ mod production;
 mod result;
 mod symbol;
 
-pub use constants::*;
 pub use error::*;
 pub use grammar::*;
 pub use item::*;

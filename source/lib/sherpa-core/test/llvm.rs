@@ -10,11 +10,17 @@ use crate::{
 use inkwell::{
   context::Context,
   execution_engine::{ExecutionEngine, JitFunction},
+  module::Module,
   targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine},
   OptimizationLevel,
 };
 use sherpa_runtime::{
-  llvm_parser::{sherpa_allocate_stack, sherpa_free_stack, LLVMByteReader},
+  llvm_parser::{
+    sherpa_allocate_stack,
+    sherpa_free_stack,
+    sherpa_get_token_class_from_codepoint,
+    LLVMByteReader,
+  },
   types::{
     ast::{AstObject, AstStackSlice},
     BlameColor,
@@ -53,8 +59,8 @@ unsafe fn get_parse_function<'a, T: inkwell::execution_engine::UnsafeFunctionPoi
   Ok(engine.get_function::<T>(function_name).ok().ok_or("Failed To Compile").unwrap())
 }
 
-fn setup_exec_engine<'a>(ctx: &'a LLVMParserModule) -> ExecutionEngine<'a> {
-  ctx.module.create_jit_execution_engine(inkwell::OptimizationLevel::Aggressive).unwrap()
+fn setup_exec_engine<'a>(module: &Module<'a>) -> ExecutionEngine<'a> {
+  module.create_jit_execution_engine(inkwell::OptimizationLevel::Aggressive).unwrap()
 }
 
 fn build_fast_call_shim<'a>(
@@ -143,15 +149,11 @@ fn should_push_new_state() -> SherpaResult<()> {
   let context = Context::create();
   let target_machine = crate_target_test_machine()?;
   let target_data = target_machine.get_target_data();
-  let module = construct_module(
-    &mut Journal::new(None),
-    &context,
-    &target_data,
-    context.create_module("test"),
-  );
+  let module = context.create_module("test");
 
   unsafe {
     let jit_engine = setup_exec_engine(&module);
+    let module = construct_module(&mut Journal::new(None), &context, &target_data, module);
 
     jit_engine.add_global_mapping(&module.fun.allocate_stack, sherpa_allocate_stack as usize);
     jit_engine.add_global_mapping(&module.fun.free_stack, sherpa_free_stack as usize);
@@ -260,7 +262,7 @@ fn should_initialize_context() -> SherpaResult<()> {
   unsafe { assert!(construct_init(&module).is_ok()) };
 
   unsafe {
-    let jit_engine = setup_exec_engine(&module);
+    let jit_engine = setup_exec_engine(&module.module);
     let mut reader = TestUTF8StringReader::new("test");
     let mut rt_ctx = Box::new(ParseContext::new_llvm());
     let init_fn = get_parse_function::<Init>(&jit_engine, "init").unwrap();
@@ -324,7 +326,7 @@ fn should_yield_correct_CP_values_for_inputs() -> SherpaResult<()> {
 
     build_fast_call_shim(&module, module.fun.get_utf8_codepoint_info);
 
-    let jit_engine = setup_exec_engine(&module);
+    let jit_engine = setup_exec_engine(&module.module);
 
     let get_code_point =
       get_parse_function::<GetUtf8CP>(&jit_engine, "get_utf8_codepoint_info_shim").unwrap();
@@ -371,7 +373,7 @@ fn should_extend_stack() -> SherpaResult<()> {
   );
 
   unsafe {
-    let jit_engine = setup_exec_engine(&module);
+    let jit_engine = setup_exec_engine(&module.module);
 
     build_fast_call_shim(&module, module.fun.push_state);
     build_fast_call_shim(&module, module.fun.extend_stack_if_needed);
@@ -385,7 +387,6 @@ fn should_extend_stack() -> SherpaResult<()> {
     construct_internal_free_stack(&module)?;
 
     jit_engine.add_global_mapping(&module.fun.allocate_stack, sherpa_allocate_stack as usize);
-
     jit_engine.add_global_mapping(&module.fun.free_stack, sherpa_free_stack as usize);
 
     let init_fn = get_parse_function::<Init>(&jit_engine, "init").unwrap();
@@ -477,29 +478,28 @@ IGNORE { c:sp }
   let states = compile_parse_states(&mut j, 1)?;
   let states = optimize_parse_states(&mut j, states);
   let context = Context::create();
-  let target_machine = crate_target_test_machine()?;
-  let target_data = target_machine.get_target_data();
-  let module = construct_module(
-    &mut Journal::new(None),
-    &context,
-    &target_data,
-    context.create_module("test"),
-  );
-
-  compile_llvm_module_from_parse_states(&mut j, &module, &states)?;
+  let module = context.create_module("test");
 
   unsafe {
-    let jit_engine = setup_exec_engine(&module);
+    let engine = setup_exec_engine(&module);
+    let target_data = engine.get_target_data();
+    let module = construct_module(&mut Journal::new(None), &context, &target_data, module);
+
+    engine.add_global_mapping(&module.fun.allocate_stack, sherpa_allocate_stack as usize);
+    engine.add_global_mapping(&module.fun.free_stack, sherpa_free_stack as usize);
+    engine.add_global_mapping(
+      &module.fun.get_token_class_from_codepoint,
+      sherpa_get_token_class_from_codepoint as usize,
+    );
+
+    compile_llvm_module_from_parse_states(&mut j, &module, &states)?;
+
+    let init_fn = get_parse_function::<Init>(&engine, "init")?;
+    let prime_fn = get_parse_function::<Prime>(&engine, "prime")?;
+    let next_fn = get_parse_function::<Next>(&engine, "next")?;
     let mut reader = TestUTF8StringReader::new("hello world");
+
     let mut rt_ctx = ParseContext::new_llvm();
-
-    jit_engine.add_global_mapping(&module.fun.allocate_stack, sherpa_allocate_stack as usize);
-
-    jit_engine.add_global_mapping(&module.fun.free_stack, sherpa_free_stack as usize);
-
-    let init_fn = get_parse_function::<Init>(&jit_engine, "init")?;
-    let prime_fn = get_parse_function::<Prime>(&jit_engine, "prime")?;
-    let next_fn = get_parse_function::<Next>(&jit_engine, "next")?;
 
     init_fn.call(&mut rt_ctx, &mut reader);
 

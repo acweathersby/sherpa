@@ -154,7 +154,7 @@ fn convert_state_to_ir(
       }
     }
 
-    Some(Box::new(create_ir_state(j, graph, w, state, false)?))
+    Some(Box::new(create_ir_state(j, graph, w, state, false, false)?))
   } else {
     None
   };
@@ -320,7 +320,14 @@ fn convert_state_to_ir(
       }
     }
 
-    Some(Box::new(create_ir_state(j, graph, w, state, is_token_assertion)?))
+    Some(Box::new(create_ir_state(
+      j,
+      graph,
+      w,
+      state,
+      is_token_assertion,
+      successors.iter().any(|s| matches! {s.get_type(), StateType::Peek | StateType::PeekEnd}),
+    )?))
   } else {
     None
   };
@@ -359,7 +366,7 @@ fn convert_state_to_ir(
 
       out.push((state_id.to_post_reduce(), base_state));
     }
-    let mut ir_state = create_ir_state(j, graph, w, state, false)?;
+    let mut ir_state = create_ir_state(j, graph, w, state, false, false)?;
     if state_id.is_root() {
       ir_state.name = entry_name.to_string();
     }
@@ -436,12 +443,13 @@ fn get_state_hash_name<'a>(
   state_name
 }
 
-fn create_ir_state(
+pub(super) fn create_ir_state(
   j: &mut Journal,
   graph: &Graph,
   mut w: CodeWriter<Vec<u8>>,
   state: &State,
   is_token_assertion: bool,
+  is_peek: bool,
 ) -> SherpaResult<ParseState> {
   let g = &(j.grammar()?);
 
@@ -455,7 +463,7 @@ fn create_ir_state(
         w.write_fmt(format_args!(
           "\nassert TOKEN [ {} ] ( {} )",
           symbol_id.bytecode_id(&g),
-          if state.get_type() == StateType::Peek { "peek-skip" } else { "skip-token" }
+          if is_peek { "peek-skip" } else { "skip-token" }
         ))?;
       }
     }
@@ -464,11 +472,7 @@ fn create_ir_state(
   };
 
   let ir_state = ParseState {
-    comment: format!(
-      "{}",
-      state.debug_string(g),
-      //  successors.iter().map(|s| s.debug_string(g)).collect::<Vec<_>>().join("\n\n")
-    ),
+    comment: format!("{}", state.debug_string(g),),
     code: unsafe { String::from_utf8_unchecked(w.into_output()) },
     name: Default::default(),
     state_type: graph.is_scan().then_some(IRStateType::Scanner).unwrap_or(IRStateType::Parser),

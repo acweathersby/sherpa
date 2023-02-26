@@ -478,6 +478,8 @@ fn build_branchless_bytecode(
       ASTNode::PeekReset(_) => insert_op(bc, Op::PeekReset),
       ASTNode::PeekToken(_) => insert_op(bc, Op::PeekToken),
       ASTNode::PeekTokenScanless(_) => insert_op(bc, Op::PeekTokenScanless),
+      ASTNode::SkipPeekToken(_) => insert_op(bc, Op::PeekSkipToken),
+      ASTNode::SkipPeekTokenScanless(_) => insert_op(bc, Op::PeekSkipTokenScanless),
       ASTNode::SkipToken(_) => insert_op(bc, Op::SkipToken),
       ASTNode::SkipTokenScanless(_) => insert_op(bc, Op::SkipTokenScanless),
       ASTNode::Pop(_) => insert_op(bc, Op::PopGoto),

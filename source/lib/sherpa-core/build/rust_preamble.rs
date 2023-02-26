@@ -8,7 +8,10 @@ pub fn build_rust_preamble() -> PipelineTask {
         0,
         format!(
           "{}
-
+use std::{{
+  collections::hash_map::DefaultHasher,
+  hash::{{Hash, Hasher}},
+}};
 use sherpa_runtime::types::{{ast::*, *}};
 use sherpa_runtime::llvm_parser::*;
 ",

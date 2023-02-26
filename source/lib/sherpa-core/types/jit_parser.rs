@@ -108,8 +108,7 @@ where
 
       construct_ast_builder::<ASTNode>(&llvm_mod)?;
 
-      let init_fn = engine.get_function("init");
-      let init_fn = init_fn.unwrap();
+      let init_fn = engine.get_function("init").unwrap();
       let drop_fn = engine.get_function("drop").unwrap();
       let next_fn = engine.get_function("next").unwrap();
       let ast_build = engine.get_function("ast_parse").unwrap();
@@ -252,7 +251,7 @@ impl<'a, R: ByteReader + LLVMByteReader + MutByteReader, M> SherpaParser<R, M>
   }
 
   fn head_at_end(&self) -> bool {
-    (self.ctx.head_ptr - self.ctx.begin_ptr) == self.get_reader().len()
+    (self.ctx.anchor_ptr - self.ctx.begin_ptr) == self.get_reader().len()
   }
 
   fn get_token_length(&self) -> u32 {

@@ -90,6 +90,7 @@ pub(crate) fn construct_production_states(
     )
   }
 }
+
 pub(crate) fn construct_token_production_state(
   j: &mut Journal,
   prod_id: ProductionId,
@@ -231,6 +232,9 @@ pub fn compile_parse_states(
     .chunks((productions_ids.len() / (num_of_threads).max(1)).max(1))
     .collect::<Vec<_>>();
 
+  let entry_state = create_entry_wrapper_states(j)?;
+  insert_states(j, entry_state.into_iter(), &mut deduped_states);
+
   for states in thread::scope(|s| {
     work_chunks
       .into_iter()
@@ -291,4 +295,62 @@ pub fn compile_parse_states(
   });
 
   SherpaResult::Ok(deduped_states)
+}
+
+fn create_entry_wrapper_states(j: &mut Journal) -> SherpaResult<Vec<Box<ParseState>>> {
+  let mut states = vec![];
+
+  let g = &(j.grammar()?);
+
+  for ExportedProduction { guid_name: name, production, .. } in &g.get_exported_productions() {
+    let entry_name = &g.get_entry_name_from_prod_id(&production.id)?;
+    let skip_symbols: Vec<SymbolID> =
+      g.production_ignore_symbols.get(&production.id).unwrap().iter().cloned().collect();
+
+    if skip_symbols.len() > 0 {
+      let state_entry = ParseState {
+        comment: "".into(),
+        code: format!(r#"push state [ {name}_exit ] then goto state [ {name} ]"#),
+        name: entry_name.clone(),
+        state_type: IRStateType::Parser,
+        ..Default::default()
+      };
+
+      let scanner_symbols = BTreeSet::from_iter(skip_symbols.iter().cloned());
+
+      let state_exit = ParseState {
+        comment: "".into(),
+        code: format!(
+          "default ( accept )\nassert TOKEN [ {} ] ( accept ){}",
+          SymbolID::EndOfInput.bytecode_id(g),
+          skip_symbols
+            .iter()
+            .map(|s| format!("\nassert TOKEN [ {} ] ( skip-token )", s.bytecode_id(g)))
+            .collect::<Vec<_>>()
+            .join("")
+        ),
+        name: format!("{name}_exit"),
+        state_type: IRStateType::Parser,
+        skip_symbols,
+        ..Default::default()
+      };
+
+      states.append(&mut construct_scanner_states(j, scanner_symbols)?);
+
+      states.push(Box::new(state_exit));
+      states.push(Box::new(state_entry));
+    } else {
+      let state_entry = ParseState {
+        comment: "".into(),
+        code: format!(r#"goto state [ {name} ]"#),
+        name: entry_name.clone(),
+        state_type: IRStateType::Parser,
+        ..Default::default()
+      };
+
+      states.push(Box::new(state_entry));
+    }
+  }
+
+  SherpaResult::Ok(states)
 }

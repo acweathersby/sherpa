@@ -333,6 +333,28 @@ impl GrammarStore {
     }
   }
 
+  /// Returns GUID entry name for a an entry production, or panics if the
+  /// production is not an entry production
+  pub fn get_entry_name_from_prod_id(&self, prod_id: &ProductionId) -> SherpaResult<String> {
+    if let Some(prod) = self.productions.get(prod_id) {
+      if prod.is_entry {
+        SherpaResult::Ok(prod.guid_name.clone() + "_enter")
+      } else {
+        SherpaResult::Err(SherpaError::SourceError {
+          loc:        prod.loc.clone(),
+          path:       self.id.path.clone(),
+          id:         "invalid-entry-production",
+          msg:        format!("Production {} is not an exported production.", prod.name),
+          inline_msg: "".into(),
+          ps_msg:     "".into(),
+          severity:   SherpaErrorSeverity::Critical,
+        })
+      }
+    } else {
+      SherpaResult::Err(format!("Could not find entry name for production {:?}", prod_id).into())
+    }
+  }
+
   /// Retrieve the globally unique name of a [Production](Production).
   pub fn get_production_guid_name(&self, prod_id: &ProductionId) -> &str {
     if let Some(prod) = self.productions.get(prod_id) {

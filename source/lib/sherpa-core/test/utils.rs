@@ -243,7 +243,7 @@ Cannot create a GrammarStore without one of these values present. "
       let SherpaResult::Ok(prod) = g.get_production_by_name(entry_name) else {
     return SherpaResult::Err(format!("could not locate production [{}]", entry_name).into())
   };
-      let entry_point = *bc.state_name_to_offset.get(&prod.guid_name)?;
+      let entry_point = *bc.state_name_to_offset.get(&g.get_entry_name_from_prod_id(&prod.id)?)?;
       let target_production_id = prod.bytecode_id?;
       let mut reader = UTF8StringReader::from_string(input);
       let mut parser = ByteCodeParser::<_, u32>::new(&mut reader, &bc.bytecode);
@@ -363,6 +363,7 @@ fn assert_reports(assert_clean_reports: bool, j: &mut Journal) -> SherpaResult<(
 pub struct PrintConfig {
   pub display_scanner_output: bool,
   pub display_input_data:     bool,
+  pub display_instruction:    bool,
   pub input_window_size:      usize,
 }
 
@@ -371,6 +372,7 @@ impl Default for PrintConfig {
     Self {
       display_scanner_output: false,
       display_input_data:     true,
+      display_instruction:    false,
       input_window_size:      74,
     }
   }
@@ -378,7 +380,12 @@ impl Default for PrintConfig {
 
 pub fn console_debugger<'a>(
   g: Arc<GrammarStore>,
-  PrintConfig { display_scanner_output, display_input_data, input_window_size }: PrintConfig,
+  PrintConfig {
+    display_scanner_output,
+    display_input_data,
+    input_window_size,
+    display_instruction,
+  }: PrintConfig,
 ) -> Option<Box<dyn FnMut(&DebugEvent)>> {
   let mut stack = vec![];
   Some(Box::new(move |event| match event {
@@ -518,6 +525,17 @@ Symbol Length: {}
         production_id
       )
     }
+    DebugEvent::ExecuteState { base_instruction, .. } => {
+      println!(
+        "
+[State]------------------------------------------------------------------
+
+{}
+-------------------------------------------------------------------------------",
+        disassemble_parse_block(Some(*base_instruction), Some(&g), None).0
+      );
+      println!("");
+    }
     DebugEvent::ExecuteInstruction {
       instruction,
       string,
@@ -531,7 +549,7 @@ Symbol Length: {}
       end_ptr,
       head_ptr,
       ..
-    } => {
+    } if display_instruction => {
       let active_ptr = if *is_scanner { scan_ptr } else { head_ptr };
       if !is_scanner || display_scanner_output {
         if !matches!(

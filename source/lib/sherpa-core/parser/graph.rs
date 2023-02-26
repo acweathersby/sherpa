@@ -447,7 +447,6 @@ fn handle_completed_groups(
 
       if combined.iter().all_items_are_from_same_peek_origin() {
         resolve_peek(graph, combined.iter(), sym, par);
-      } else if false {
       } else {
         todo!(
           "Roll the follow states into the group and resubmit to incomplete handler function.\nincomplete:\n{}\ncomplete:\n{}\nfollow:\n{}\n \n {}",
@@ -458,9 +457,6 @@ fn handle_completed_groups(
 
         );
       }
-      //let follow = items.iter().map(|(_, i)| *i).collect::<BTreeSet<_>>();
-      //_group.append(&mut follow);
-      //groups.insert(sym, _group);
     }
     (len, collide, graph_state) => {
       unimplemented!(
@@ -753,7 +749,7 @@ fn handle_goto(
           let CompletedItemArtifacts {
             follow_pairs: mut fp,
             mut oos_pairs,
-            default_only: defualt,
+            default_only: default,
             ..
           } = get_completed_item_artifacts(j, graph, parent, completed.iter())?;
 
@@ -766,8 +762,8 @@ fn handle_goto(
             let graph_state = GraphState::Normal;
             let sym = SymbolID::Default;
             let groups = &mut Default::default();
-
-            handle_completed_groups(j, graph, groups, s, graph_state, sym, c_p, &defualt)?;
+            let s = graph.create_state(sym, StateType::PeekEnd, Some(s), vec![]);
+            handle_completed_groups(j, graph, groups, s, graph_state, sym, c_p, &default)?;
           }
         } else {
           let state =

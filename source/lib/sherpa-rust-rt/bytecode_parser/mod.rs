@@ -80,14 +80,14 @@ pub fn dispatch<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
 ) -> (ParseAction, Option<Instruction<'a>>) {
   use ParseAction::*;
 
-  let block_base: Instruction = (bc, base_address).into();
+  let mut block_base: Instruction = (bc, base_address).into();
 
   #[cfg(debug_assertions)]
   if let Some(debug) = debug.as_mut() {
     debug(&DebugEvent::ExecuteState { base_instruction: block_base });
   }
 
-  let mut i: Instruction = block_base;
+  let mut i: Instruction = block_base.clone();
 
   loop {
     use Opcode::*;
@@ -104,7 +104,15 @@ pub fn dispatch<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
       PeekTokenScanless => peek_token_scanless(i, ctx),
       PeekReset => peek_reset(i, ctx),
       Reduce => reduce(i, ctx),
-      Goto => goto(i),
+      Goto => {
+        let (parse_action, Some(new_state)) = goto(i) else { unreachable!()};
+        block_base = new_state;
+        #[cfg(debug_assertions)]
+        if let Some(debug) = debug.as_mut() {
+          debug(&DebugEvent::ExecuteState { base_instruction: block_base });
+        }
+        (parse_action, Some(new_state))
+      }
       PushGoto => push_goto(i, stack),
       PushExceptionHandler => push_exception_handler(i, stack),
       PopGoto => pop_goto(i, stack),
@@ -650,20 +658,7 @@ pub fn get_next_action<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
 
   loop {
     if state < 1 {
-      let off = ctx.get_token_offset();
-      if ctx.get_reader().offset_at_end(off as usize) {
-        break ParseAction::Accept { production_id: ctx.get_production() };
-      } else {
-        break ParseAction::Error {
-          last_production: ctx.get_production(),
-          last_input:      TokenRange {
-            len:      (ctx.scan_ptr - ctx.head_ptr) as u32,
-            off:      off,
-            line_num: ctx.start_line_num,
-            line_off: ctx.start_line_off,
-          },
-        };
-      }
+      break ParseAction::Accept { production_id: ctx.get_production() };
     } else {
       let mask_gate = NORMAL_STATE_FLAG << (ctx.in_fail_mode() as u32);
 

@@ -131,16 +131,17 @@ impl Default for SymbolID {
 }
 
 impl SymbolID {
+  /// The start number by which user defined symbols ids will increment from.
+  pub const DefinedSymbolIndexBasis: u32 = 16;
   /// TODO: Docs
-  pub const DefinedSymbolIndexBasis: u32 = 8;
-  /// TODO: Docs
-  pub const Generics: [SymbolID; 6] = [
+  pub const Generics: [SymbolID; 7] = [
     SymbolID::GenericSpace,
     SymbolID::GenericHorizontalTab,
     SymbolID::GenericNewLine,
     SymbolID::GenericIdentifier,
     SymbolID::GenericNumber,
     SymbolID::GenericSymbol,
+    SymbolID::EndOfInput,
   ];
 
   /// TODO: Docs
@@ -241,7 +242,7 @@ impl SymbolID {
     use SymbolID::*;
     match self {
       GenericSpace | GenericHorizontalTab | GenericNewLine | GenericIdentifier | GenericNumber
-      | GenericSymbol => (self.bytecode_id(g), "CLASS"),
+      | GenericSymbol | EndOfInput => (self.bytecode_id(g), "CLASS"),
       ExclusiveDefinedIdentifier(..)
       | ExclusiveDefinedNumeric(..)
       | ExclusiveDefinedSymbol(..)
@@ -257,7 +258,7 @@ impl SymbolID {
           (sym_char as u32, "BYTE")
         }
       }
-      Default | EndOfInput | ExclusiveEnd => (DEFAULT_SYM_ID, "CLASS"),
+      Default | ExclusiveEnd => (DEFAULT_SYM_ID, "CLASS"),
       _ => (0, "BYTE"),
     }
   }
@@ -278,7 +279,8 @@ impl SymbolID {
       | Self::GenericNewLine
       | Self::GenericNumber
       | Self::GenericSymbol
-      | Self::GenericSpace => true,
+      | Self::GenericSpace
+      | Self::EndOfInput => true,
       _ => false,
     }
   }
@@ -345,13 +347,14 @@ impl SymbolID {
         g.get_production(prod_id).unwrap().bytecode_id.unwrap_or(undefined_symbol_id)
       }
       Self::Start => undefined_symbol_id,
-      Self::ExclusiveEnd | Self::EndOfInput | Self::Default => DEFAULT_SYM_ID,
+      Self::ExclusiveEnd | Self::Default => DEFAULT_SYM_ID,
       Self::GenericHorizontalTab => CodePointClass::HorizontalTab as u32,
       Self::GenericNewLine => CodePointClass::NewLine as u32,
       Self::GenericSpace => CodePointClass::Space as u32,
       Self::GenericIdentifier => CodePointClass::Identifier as u32,
       Self::GenericNumber => CodePointClass::Number as u32,
       Self::GenericSymbol => CodePointClass::Symbol as u32,
+      Self::EndOfInput => CodePointClass::EndOfInput as u32,
       _ => 0,
     }
   }
@@ -394,7 +397,17 @@ pub struct Symbol {
 
 impl Symbol {
   /// TODO: Docs
-  pub const Generics: [&'static Symbol; 6] = [
+  pub const Generics: [&'static Symbol; 7] = [
+    &Symbol {
+      guid:          SymbolID::EndOfInput,
+      bytecode_id:   CodePointClass::EndOfInput as u32,
+      cp_len:        0,
+      byte_length:   0,
+      friendly_name: String::new(),
+      loc:           Token::empty(),
+      scanner_only:  false,
+      g_ref:         None,
+    },
     &Symbol {
       guid:          SymbolID::GenericSpace,
       bytecode_id:   CodePointClass::Space as u32,

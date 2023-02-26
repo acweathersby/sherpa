@@ -463,9 +463,6 @@ pub(crate) fn compile_brancheless_instructions<'a>(
         decr_chars_remaining_by_sym_len(m, p_ctx)?;
         incr_scan_ptr_by_sym_len(m, p_ctx)?;
         construct_assign_token_id(m, p_ctx, 0)?;
-
-        transfer_end_line_to_chkp_line(m, p_ctx)?;
-
         peek_token(m, p_ctx)?;
       }
 
@@ -1008,7 +1005,7 @@ pub(crate) fn construct_prime_function(
     .iter()
     .filter_map(|p| match p.production.bytecode_id {
       Some(bc_id) => {
-        let name = &p.guid_name.to_string();
+        let name = &g.get_entry_name_from_prod_id(&p.production.id).unwrap();
         let fun = state_lu.get(name).unwrap();
         let block = sp.ctx.append_basic_block(fn_value, &format!("prime_{}", name));
         Some((bc_id, block, fun))
@@ -1057,9 +1054,5 @@ pub(crate) fn construct_prime_function(
     b.build_return(None);
   }
 
-  if funct.prime.verify(true) {
-    SherpaResult::Ok(())
-  } else {
-    SherpaResult::Err(SherpaError::from("Could not build prime function"))
-  }
+  validate(fn_value)
 }
