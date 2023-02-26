@@ -3242,7 +3242,7 @@ impl Hash for Rule {
 #[derive(Debug, Clone)]
 pub struct AnnotatedSymbol {
   pub is_optional: bool,
-  pub prority:     Option<Box<Priority>>,
+  pub priority:    Option<Box<Priority>>,
   pub reference:   String,
   pub symbol:      ASTNode,
   pub tok:         Token,
@@ -3251,12 +3251,12 @@ impl AnnotatedSymbol {
   #[inline]
   pub fn new(
     is_optional: bool,
-    prority: Option<Box<Priority>>,
+    priority: Option<Box<Priority>>,
     reference: String,
     symbol: ASTNode,
     tok: Token,
   ) -> Self {
-    Self { is_optional, prority, reference, symbol, tok }
+    Self { is_optional, priority, reference, symbol, tok }
   }
 
   pub fn get_type(&self) -> ASTNodeType {
@@ -3267,7 +3267,7 @@ impl Hash for AnnotatedSymbol {
   fn hash<H: std::hash::Hasher>(&self, hasher: &mut H) {
     self.get_type().hash(hasher);
     self.is_optional.hash(hasher);
-    self.prority.hash(hasher);
+    self.priority.hash(hasher);
     self.reference.hash(hasher);
     self.symbol.hash(hasher);
     self.tok.to_string().replace(" ", "").replace("\n", "").hash(hasher);

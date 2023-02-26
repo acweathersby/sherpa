@@ -278,7 +278,7 @@ Cannot create a GrammarStore without one of these values present. "
         let SherpaResult::Ok(prod) = g.get_production_by_name(entry_name) else {
         return SherpaResult::Err(format!("could not locate production [{}]", entry_name).into())
       };
-        let entry_point = *bc.state_name_to_offset.get(&prod.guid_name)?;
+        let entry_point = prod.export_id? as u32;
         let target_production_id = prod.bytecode_id?;
         let mut r = TestUTF8StringReader::new(input);
         let mut debugger = debugger_handler.and_then(|s| s(g.clone()));

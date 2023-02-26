@@ -6,7 +6,7 @@ IGNORE { c:sp c:nl }
 
         list^s [unordered tk:reference?^r "?" ?^o  priority?^p ]
 
-            :ast { t_AnnotatedSymbol, prority:$p, symbol:$s, is_optional:bool($o), reference:str($r), tok  }
+            :ast { t_AnnotatedSymbol, priority:$p, symbol:$s, is_optional:bool($o), reference:str($r), tok  }
 
         | list
 

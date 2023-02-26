@@ -82,7 +82,7 @@ type StructConstructorExpr = dyn Fn(
 /// ```
 type TokenConcat = dyn Fn(String, String) -> String;
 
-type GetTokenName = dyn Fn(usize) -> String;
+type GetName = dyn Fn(usize) -> String;
 
 /// Slot Extraction:
 ///
@@ -137,8 +137,10 @@ pub(crate) struct AscriptWriterUtils<'a> {
   pub slot_extract: &'a SlotExtract,
   pub create_token: &'a CreateToken,
   /// Name used for token variables
-  pub get_token_name: &'a GetTokenName,
+  pub get_token_name: &'a GetName,
+  pub get_slot_obj_name: &'a GetName,
   pub struct_construction: &'a StructConstructorExpr,
+
   pub store: &'a AScriptStore,
 }
 
@@ -305,7 +307,7 @@ impl<'a> AscriptWriterUtils<'a> {
 
     (*ref_index) += 1;
 
-    let mut ref_ = Ref::new(
+    let mut ref_ = Ref::ast_obj(
       *ref_index,
       type_slot,
       String::from_utf8(writer.into_output()).unwrap(),
@@ -460,22 +462,22 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
   fn write_slot_extraction(
     &mut self,
     rule: &Rule,
-    indices: BTreeSet<usize>,
-    used_tokens: BTreeSet<usize>,
+    obj_indices: BTreeSet<usize>,
+    token_indices: BTreeSet<usize>,
   ) -> SherpaResult<()> {
-    for i in 0..rule.syms.len() {
-      let tk_i = i + 1;
+    for slot_index in 0..rule.syms.len() {
+      let ref_index = slot_index + 1;
       let (n, t) = (
-        match (i, used_tokens.contains(&i)) {
-          (0, _) => Some((self.utils.get_token_name)(tk_i)),
-          (i, _) if i == (rule.syms.len() - 1) => Some((self.utils.get_token_name)(tk_i)),
-          (_, true) => Some((self.utils.get_token_name)(tk_i)),
+        match (slot_index, token_indices.contains(&slot_index)) {
+          (0, _) => Some((self.utils.get_token_name)(ref_index)),
+          (i, _) if i == (rule.syms.len() - 1) => Some((self.utils.get_token_name)(ref_index)),
+          (_, true) => Some((self.utils.get_token_name)(ref_index)),
           _ => None,
         },
-        indices.contains(&i).then(|| format!("i{i}")),
+        obj_indices.contains(&slot_index).then(|| (&self.utils.get_slot_obj_name)(ref_index)),
       );
 
-      self.writer.wrtln(&(self.utils.slot_extract)(n, t, i))?;
+      self.writer.wrtln(&(self.utils.slot_extract)(n, t, slot_index))?;
     }
     SherpaResult::Ok(())
   }
@@ -564,6 +566,7 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
         &mut move |w| -> SherpaResult<()> {
           if rule.ast_definition.is_none() {
             let last_index = rule.syms.len() - 1;
+            let last_index_name = (&w.utils.get_slot_obj_name)(last_index + 1);
             w.write_slot_extraction(
               rule,
               BTreeSet::from_iter(vec![last_index]),
@@ -573,7 +576,7 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
             w.writer.wrtln(&(w.utils.slot_assign)(
               w.utils,
               &AScriptTypeVal::Any,
-              format!("i{last_index}").into(),
+              last_index_name,
             ))?;
             SherpaResult::Ok(())
           } else {
@@ -589,10 +592,10 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
                     0,
                   )?;
 
-                  let indices = _ref.get_indices();
-                  let token_indices = _ref.get_tokens();
+                  let obj_indices = _ref.get_ast_obj_indices();
+                  let token_indices = _ref.get_token_indices();
 
-                  w.write_slot_extraction(rule, indices, token_indices)?;
+                  w.write_slot_extraction(rule, obj_indices, token_indices)?;
                   w.write_node_token(rule)?;
                   w.writer.write_line(&_ref.to_init_string(w.utils))?;
                   w.writer.wrtln(&(w.utils.slot_assign)(
@@ -613,8 +616,8 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
                 for (i, statement) in statements.statements.iter().enumerate() {
                   match stmt.utils.ast_expr_to_ref(statement, rule, &mut ref_index, i) {
                     Some(_ref) => {
-                      refs.append(&mut _ref.get_indices());
-                      tokens.append(&mut _ref.get_tokens());
+                      refs.append(&mut _ref.get_ast_obj_indices());
+                      tokens.append(&mut _ref.get_token_indices());
                       return_type = _ref.ast_type.clone();
                       reference = _ref.get_ref_name();
                       stmt.writer.write_line(&_ref.to_init_string(w.utils))?;
@@ -667,89 +670,88 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
 // Pramble data -
 //  - Base type info
 
+#[derive(Clone, Copy)]
+pub(crate) enum RefIndex {
+  Tok(usize),
+  Obj(usize),
+}
+
 #[derive(Clone)]
 pub(crate) struct Ref {
-  init_index: usize,
+  slot_type: RefIndex,
   type_slot: usize,
-  body_indices: BTreeSet<usize>,
   init_expression: String,
   pub ast_type: AScriptTypeVal,
   predecessors: Option<Vec<Box<Ref>>>,
   post_init_statements: Option<Vec<String>>,
   is_mutable: bool,
-  is_token: bool,
 }
 
 impl Ref {
-  pub fn new(
-    init_index: usize,
+  pub fn ast_obj(
+    slot_index: usize,
     type_slot: usize,
     init_expression: String,
     ast_type: AScriptTypeVal,
   ) -> Self {
     Ref {
-      init_index,
+      slot_type: RefIndex::Obj(slot_index),
       type_slot,
-      body_indices: BTreeSet::from_iter(vec![init_index]),
       init_expression,
       ast_type,
       predecessors: None,
       post_init_statements: None,
       is_mutable: false,
-      is_token: false,
     }
   }
 
-  pub(crate) fn token(utils: &AscriptWriterUtils, init_index: usize, type_slot: usize) -> Self {
+  pub(crate) fn token(utils: &AscriptWriterUtils, slot_index: usize, type_slot: usize) -> Self {
     Ref {
-      init_index,
+      slot_type: RefIndex::Tok(slot_index),
       type_slot,
-      body_indices: BTreeSet::new(),
       init_expression: (utils.create_token)(
-        (utils.get_token_name)(init_index),
+        (utils.get_token_name)(slot_index + 1),
         TokenCreationType::Token,
       ),
       ast_type: AScriptTypeVal::Token,
       predecessors: None,
       post_init_statements: None,
       is_mutable: false,
-      is_token: true,
     }
   }
 
   pub(crate) fn node_token(
     utils: &AscriptWriterUtils,
-    init_index: usize,
+    slot_index: usize,
     type_slot: usize,
   ) -> Self {
     Ref {
-      init_index,
+      slot_type: RefIndex::Tok(slot_index),
       type_slot,
-      body_indices: BTreeSet::new(),
       init_expression: (utils.create_token)((utils.get_token_name)(0), TokenCreationType::Token),
       ast_type: AScriptTypeVal::Token,
       predecessors: None,
       post_init_statements: None,
       is_mutable: false,
-      is_token: false,
     }
   }
 
   pub(crate) fn to_string(self, utils: &AscriptWriterUtils, ast_type: AScriptTypeVal) -> Self {
-    let index = self.get_root_index();
+    let i = match self.get_root_slot_index() {
+      RefIndex::Obj(i) | RefIndex::Tok(i) => i,
+    };
+
     Ref {
-      init_index: index,
+      slot_type: RefIndex::Tok(i),
       type_slot: self.type_slot,
       init_expression: (utils.create_token)(
-        (utils.get_token_name)(index),
+        (utils.get_token_name)(i + 1),
         TokenCreationType::String,
       ),
       ast_type,
-      body_indices: BTreeSet::new(),
       predecessors: None,
       post_init_statements: None,
       is_mutable: false,
-      is_token: true,
     }
   }
 
@@ -759,15 +761,13 @@ impl Ref {
 
   pub(crate) fn from(self, init_expression: String, ast_type: AScriptTypeVal) -> Self {
     Ref {
-      init_index: self.init_index,
+      slot_type: self.slot_type,
       type_slot: self.type_slot,
       init_expression,
       ast_type,
-      body_indices: BTreeSet::new(),
       predecessors: Some(vec![Box::new(self)]),
       post_init_statements: None,
       is_mutable: false,
-      is_token: false,
     }
   }
 
@@ -776,45 +776,47 @@ impl Ref {
     self
   }
 
-  pub(crate) fn add_body_index(&mut self, index: usize) {
-    self.body_indices.insert(index);
-  }
-
   pub(crate) fn get_ref_name(&self) -> String {
-    format!("ref_{}_{}", self.init_index, self.type_slot)
+    match self.slot_type {
+      RefIndex::Obj(i) => format!("obj_{i}_{}", self.type_slot),
+      RefIndex::Tok(i) => format!("tok_{i}_{}", self.type_slot),
+    }
   }
 
-  pub(crate) fn get_indices(&self) -> BTreeSet<usize> {
-    let mut indices = self.body_indices.clone();
-
+  pub(crate) fn get_root_slot_index(&self) -> RefIndex {
     if let Some(predecessors) = &self.predecessors {
       for predecessor in predecessors {
-        indices.append(&mut predecessor.get_indices())
+        return predecessor.get_root_slot_index();
       }
     }
-
-    indices
+    self.slot_type
   }
 
-  pub(crate) fn get_root_index(&self) -> usize {
-    if let Some(predecessors) = &self.predecessors {
-      for predecessor in predecessors {
-        return predecessor.get_root_index();
-      }
-    }
-    self.init_index
-  }
-
-  pub(crate) fn get_tokens(&self) -> BTreeSet<usize> {
+  pub(crate) fn get_ast_obj_indices(&self) -> BTreeSet<usize> {
     let mut set = BTreeSet::new();
 
-    if self.is_token {
-      set.insert(self.init_index);
+    if let RefIndex::Obj(index) = self.slot_type {
+      set.insert(index);
     }
-
     if let Some(predecessors) = &self.predecessors {
       for predecessor in predecessors {
-        set.append(&mut predecessor.get_tokens());
+        set.append(&mut predecessor.get_ast_obj_indices());
+      }
+    }
+
+    set
+  }
+
+  pub(crate) fn get_token_indices(&self) -> BTreeSet<usize> {
+    let mut set = BTreeSet::new();
+
+    if let RefIndex::Tok(index) = self.slot_type {
+      set.insert(index);
+    } else {
+      if let Some(predecessors) = &self.predecessors {
+        for predecessor in predecessors {
+          set.append(&mut predecessor.get_token_indices());
+        }
       }
     }
 
@@ -878,7 +880,7 @@ pub(crate) fn get_ascript_export_data(
   let export_node_data = g
     .get_exported_productions()
     .iter()
-    .map(|ExportedProduction { export_name, production, guid_name }| {
+    .map(|ExportedProduction { export_name, production, guid_name, .. }| {
       let mut ref_index = 0;
       let ref_ = utils.ast_expr_to_ref(
         &ASTNode::AST_NamedReference(Box::new(AST_NamedReference {

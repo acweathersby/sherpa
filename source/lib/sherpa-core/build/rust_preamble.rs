@@ -7,11 +7,9 @@ pub fn build_rust_preamble() -> PipelineTask {
       Ok(Some((
         0,
         format!(
-          "{}
-use std::{{
-  collections::hash_map::DefaultHasher,
-  hash::{{Hash, Hasher}},
-}};
+          "#![allow(unused)]
+{}
+use std::hash::Hash;
 use sherpa_runtime::types::{{ast::*, *}};
 use sherpa_runtime::llvm_parser::*;
 ",

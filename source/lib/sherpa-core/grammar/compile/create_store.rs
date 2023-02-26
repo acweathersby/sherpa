@@ -306,7 +306,7 @@ fn get_symbol_details<'a>(
 
             data.annotation = annotated.reference[1..].to_string();
           }
-        data.is_exclusive = annotated.prority.is_some();
+        data.is_exclusive = annotated.priority.is_some();
         data.is_optional |= annotated.is_optional;
         sym = &annotated.symbol;
       }
@@ -926,7 +926,7 @@ fn record_symbol(
 ) -> Option<SymbolID> {
   match sym_node {
     ASTNode::AnnotatedSymbol(box annotated) => {
-      record_symbol(j, g, &annotated.symbol, annotated.prority.is_some())
+      record_symbol(j, g, &annotated.symbol, annotated.priority.is_some())
     }
     ASTNode::Terminal(box terminal) => {
       let old = &terminal.val;

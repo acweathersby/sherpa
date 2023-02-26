@@ -1031,7 +1031,7 @@ pub fn get_body_symbol_reference<'a>(
       get_named_body_ref(rule, value)
     }
     ASTNode::AST_IndexReference(box AST_IndexReference { value, .. }) => {
-      get_indexed_body_ref(rule, value)
+      get_indexed_body_ref(rule, *value as usize)
     }
     _ => None,
   }
@@ -1047,8 +1047,16 @@ pub fn get_named_body_ref<'a>(rule: &'a Rule, val: &str) -> Option<(usize, &'a R
   }
 }
 
-pub fn get_indexed_body_ref<'a>(rule: &'a Rule, i: &i64) -> Option<(usize, &'a RuleSymbol)> {
-  rule.syms.iter().enumerate().filter(|(_, s)| s.original_index == (*i - 1) as u32).last()
+/// Takes an index value from [1..n], where n is the number of symbols in the rule,
+/// and matches it to a symbol within the givin rule, returning the matching symbol
+/// and its original index.
+///
+/// The returned index will be in the range [0..n)
+///
+/// Returns `None` if the index is greater then the number of symbols.  
+///
+pub fn get_indexed_body_ref<'a>(rule: &'a Rule, i: usize) -> Option<(usize, &'a RuleSymbol)> {
+  rule.syms.iter().enumerate().filter(|(_, s)| s.original_index == (i - 1) as u32).last()
 }
 
 pub fn get_struct_name_from_node(ast_struct: &AST_Struct) -> String {

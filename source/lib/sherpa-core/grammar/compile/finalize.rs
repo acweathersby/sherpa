@@ -43,20 +43,20 @@ pub fn finalize_grammar(j: &mut Journal, mut g: GrammarStore) -> GrammarStore {
 
   finalize_items(j, &mut g);
 
+  declare_exported_productions(&mut g);
+
   set_parse_productions(&mut g);
 
   finalize_bytecode_metadata(j, &mut g);
-
-  mark_entry_productions(&mut g);
 
   j.report_mut().stop_timer("Finalize");
 
   g
 }
 
-fn mark_entry_productions(g: &mut GrammarStore) {
-  for (p, _) in g.exports.clone().iter() {
-    g.productions.get_mut(&p).unwrap().is_entry = true;
+fn declare_exported_productions(g: &mut GrammarStore) {
+  for (export_id, (p, _)) in g.exports.clone().iter().enumerate() {
+    g.productions.get_mut(&p).unwrap().export_id = Some(export_id);
   }
 }
 

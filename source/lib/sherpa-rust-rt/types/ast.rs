@@ -1,5 +1,3 @@
-use crate::llvm_parser::LLVMByteReader;
-
 use super::*;
 use std::{fmt::Debug, ops::Index};
 
@@ -326,7 +324,7 @@ impl<T: AstObject> AstStackSlice<T> {
     }
   }
 
-  /// Removes the value at the given position from the stack and returns it.
+  /// Removes the value at the given position from the slot and returns it.
   #[track_caller]
   pub fn take(&self, position: usize) -> T {
     unsafe { std::mem::take(&mut (*self.get_pointer(position))) }
@@ -396,45 +394,4 @@ fn test_slots_from_slice() {
   d.resize(len - 2, Default::default());
 
   assert_eq!(d.last().cloned(), Some(55));
-}
-
-impl AstObject for u32 {}
-
-impl<V: AstObject> AstObject for (V, TokenRange, TokenRange) {}
-
-pub unsafe fn llvm_map_shift_action<
-  'a,
-  R: LLVMByteReader + ByteReader + MutByteReader,
-  ExtCTX,
-  ASTNode: AstObject,
->(
-  ctx: &ParseContext<R, ExtCTX>,
-  slots: &mut AstStackSlice<(ASTNode, TokenRange, TokenRange)>,
-) {
-  match ctx.get_shift_data() {
-    ParseAction::Shift {
-      anchor_byte_offset,
-      token_byte_offset,
-      token_byte_length,
-      token_line_offset,
-      token_line_count,
-      ..
-    } => {
-      let peek = TokenRange {
-        len: token_byte_offset - anchor_byte_offset,
-        off: anchor_byte_offset,
-        ..Default::default()
-      };
-
-      let tok = TokenRange {
-        len:      token_byte_length,
-        off:      token_byte_offset,
-        line_num: token_line_count,
-        line_off: token_line_offset,
-      };
-
-      slots.assign_to_garbage(0, (ASTNode::default(), tok, peek));
-    }
-    _ => unreachable!(),
-  }
 }

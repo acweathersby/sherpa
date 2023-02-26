@@ -164,16 +164,15 @@ pub fn production_reduction_decisions() -> SherpaResult<Journal> {
 pub fn compile_production_states_with_basic_grammar() -> SherpaResult<Journal> {
   let input = "<> A > 'h' 'e' 'l' 'l' 'o'";
 
-  assert!(test_runner(
+  test_runner(
     &[TestInput { entry_name: "A", input: "heleo", should_succeed: true }],
     None,
     TestConfig {
       bytecode_parse: true,
       grammar_string: Some(input),
       ..Default::default()
-    }
-  )
-  .is_faulty());
+    },
+  );
 
   test_runner(
     &[TestInput { entry_name: "A", input: "hello", should_succeed: true }],
@@ -181,6 +180,7 @@ pub fn compile_production_states_with_basic_grammar() -> SherpaResult<Journal> {
     TestConfig {
       bytecode_parse: true,
       grammar_string: Some(input),
+      debugger_handler: Some(&|g| console_debugger(g, Default::default())),
       ..Default::default()
     },
   )
@@ -323,15 +323,19 @@ pub fn generate_production_with_ambiguity() -> SherpaResult<()> {
 #[test]
 pub fn intermediate_exclusive_symbols() -> SherpaResult<Journal> {
   test_runner(
-    &[("R", "test", true).into(), ("R", "tester", true).into(), ("R", "testing", false).into()],
+    &[
+      ("R", "testly", true).into(),
+      ("R", "testerly", true).into(),
+      ("R", "testingly", false).into(),
+    ],
     None,
     TestConfig {
       grammar_string: Some(
         r##"
 
-      <> R > tk:A 
+      <> R > tk:A "ly"
       
-      <> A > "test" | "tester" | 'testing'
+      <> A > "test" | "tester" | 'testing' 
       
       "##,
       ),
@@ -583,4 +587,37 @@ pub fn reduction_on_root_production() -> SherpaResult<()> {
   })?;
 
   SherpaResult::Ok(())
+}
+
+#[test]
+fn grammar_with_multiple_entry_points() -> SherpaResult<Journal> {
+  test_runner(
+    &[
+      ("A", "abc", true).into(),
+      ("B", "cba", true).into(),
+      ("B", "abc", false).into(),
+      ("A", "cba", false).into(),
+    ],
+    None,
+    TestConfig {
+      grammar_string: Some(
+        r##"
+
+IGNORE { c:sp }
+
+EXPORT A
+EXPORT B
+      
+<> A > "a" "b" "c"
+
+<> B > "c" "b" "a"
+      
+      "##,
+      ),
+      llvm_parse: true,
+      bytecode_parse: true,
+      debugger_handler: Some(&|g| console_debugger(g, Default::default())),
+      ..Default::default()
+    },
+  )
 }

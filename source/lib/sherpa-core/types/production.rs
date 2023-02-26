@@ -74,6 +74,8 @@ pub struct ExportedProduction<'a> {
   pub guid_name:   &'a str,
   /// The exported production.
   pub production:  &'a Production,
+  /// A index identifier for this exported production
+  pub export_id:   usize,
 }
 
 impl Default for RecursionType {
@@ -149,7 +151,7 @@ pub struct Production {
   /// TODO: Docs
   pub is_scanner: bool,
   /// TODO: Docs
-  pub is_entry: bool,
+  pub export_id: Option<usize>,
   /// TODO: Docs
   pub recursion_type: RecursionType,
   /// TODO: Docs

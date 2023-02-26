@@ -484,6 +484,7 @@ fn build_branchless_bytecode(
       ASTNode::SkipTokenScanless(_) => insert_op(bc, Op::SkipTokenScanless),
       ASTNode::Pop(_) => insert_op(bc, Op::PopGoto),
       ASTNode::Pass(_) => insert_op(bc, Op::Pass),
+      ASTNode::Accept(_) => insert_op(bc, Op::Accept),
       ASTNode::Fail(_) => insert_op(bc, Op::Fail),
       ASTNode::Reduce(box Reduce { rule_id, len, prod_id, .. }) => {
         insert_op(bc, Op::Reduce);

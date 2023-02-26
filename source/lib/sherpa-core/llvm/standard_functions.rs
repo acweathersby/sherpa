@@ -14,7 +14,14 @@ use inkwell::{
   context::Context,
   module::{Linkage, Module},
   targets::TargetData,
-  values::{AnyValue, BasicMetadataValueEnum, CallSiteValue, CallableValue, FunctionValue},
+  values::{
+    AnyValue,
+    BasicMetadataValueEnum,
+    CallSiteValue,
+    CallableValue,
+    FunctionValue,
+    PointerValue,
+  },
 };
 
 pub(crate) fn construct_module<'a>(
@@ -66,6 +73,7 @@ pub(crate) fn construct_module<'a>(
     .fn_type(
       &[
         READER.ptr_type(0.into()).into(),
+        i8_ptr_ptr,
         i8_ptr_ptr,
         i8_ptr_ptr,
         i8_ptr_ptr,
@@ -192,7 +200,7 @@ pub(crate) fn construct_module<'a>(
     ),
     pop_state: module.add_function(
       "pop_state",
-      GOTO.fn_type(&[CTX.ptr_type(0.into()).into()], false),
+      TAIL_CALLABLE_PARSE_FUNCTION,
       internal_linkage,
     ),
     extend_stack_if_needed: module.add_function(
@@ -300,6 +308,7 @@ pub(crate) unsafe fn construct_get_adjusted_input_block_function(
 
   let beg_ptr = CTX::beg_ptr.get_ptr(b, p_ctx)?;
   let anchor_ptr = CTX::anchor_ptr.get_ptr(b, p_ctx)?;
+  let base_ptr = CTX::base_ptr.get_ptr(b, p_ctx)?;
   let head_ptr = CTX::head_ptr.get_ptr(b, p_ctx)?;
   let scan_ptr = CTX::scan_ptr.get_ptr(b, p_ctx)?;
   let end_ptr = CTX::end_ptr.get_ptr(b, p_ctx)?;
@@ -310,6 +319,7 @@ pub(crate) unsafe fn construct_get_adjusted_input_block_function(
       CTX::reader.load(b, p_ctx)?.into(),
       beg_ptr.into(),
       anchor_ptr.into(),
+      base_ptr.into(),
       head_ptr.into(),
       scan_ptr.into(),
       end_ptr.into(),
@@ -484,7 +494,42 @@ pub(crate) unsafe fn construct_init(module: &LLVMParserModule) -> SherpaResult<(
   validate(fn_value)
 }
 
-pub(crate) unsafe fn construct_push_state_function(module: &LLVMParserModule) -> SherpaResult<()> {
+pub(crate) unsafe fn construct_pop_function(module: &LLVMParserModule) -> SherpaResult<()> {
+  let LLVMParserModule { b, ctx, fun: funct, .. } = module;
+  let fn_value = funct.pop_state;
+  // Set the context's goto pointers to point to the goto block;
+  let entry_block = ctx.append_basic_block(fn_value, "Entry");
+  let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
+
+  b.position_at_end(entry_block);
+
+  add_goto_pop_instructions(module, parse_ctx)?;
+
+  build_tail_call_with_return(b, fn_value, funct.dispatch)?;
+
+  validate(fn_value)
+}
+
+pub(crate) fn add_goto_pop_instructions<'a>(
+  module: &'a LLVMParserModule,
+  parse_ctx: PointerValue<'a>,
+) -> SherpaResult<()> {
+  let LLVMParserModule { b, i32, .. } = module;
+
+  let goto_stack_ptr = CTX::goto_stack_ptr.get_ptr(b, parse_ctx)?;
+  let goto_top = b.build_load(goto_stack_ptr, "").into_pointer_value();
+  let goto_top = unsafe { b.build_gep(goto_top, &[i32.const_int(1, false).const_neg()], "") };
+  b.build_store(goto_stack_ptr, goto_top);
+
+  let goto_free_ptr = CTX::goto_free.get_ptr(b, parse_ctx)?;
+  let goto_free = b.build_load(goto_free_ptr, "").into_int_value();
+  let goto_free = b.build_int_add(goto_free, i32.const_int(1, false), "");
+  b.build_store(goto_free_ptr, goto_free);
+
+  SherpaResult::Ok(())
+}
+
+pub(crate) fn construct_push_state_function(module: &LLVMParserModule) -> SherpaResult<()> {
   let LLVMParserModule { b, types, ctx, fun: funct, .. } = module;
   let i32 = ctx.i32_type();
   let fn_value = funct.push_state;
@@ -493,18 +538,31 @@ pub(crate) unsafe fn construct_push_state_function(module: &LLVMParserModule) ->
   let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
   let goto_state = fn_value.get_nth_param(1).unwrap().into_int_value();
   let goto_pointer = fn_value.get_nth_param(2).unwrap().into_pointer_value();
+
   b.position_at_end(entry);
+
+  let goto_stack_ptr = CTX::goto_stack_ptr.get_ptr(b, parse_ctx)?;
+  let goto_top = b.build_load(goto_stack_ptr, "").into_pointer_value();
+
+  // Create new goto struct
   let new_goto = b.build_insert_value(types.goto.get_undef(), goto_state, 1, "").unwrap();
   let new_goto = b.build_insert_value(new_goto, goto_pointer, 0, "").unwrap();
-  let goto_top_ptr = CTX::goto_stack_ptr.get_ptr(b, parse_ctx)?;
-  let goto_top = b.build_load(goto_top_ptr, "").into_pointer_value();
+
+  // Store in the current slot
   b.build_store(goto_top, new_goto);
-  let goto_top = b.build_gep(goto_top, &[i32.const_int(1, false)], "");
-  b.build_store(goto_top_ptr, goto_top);
+
+  // Increment the slot
+  let goto_top = unsafe { b.build_gep(goto_top, &[i32.const_int(1, false)], "") };
+
+  // Store the top slot pointer
+  b.build_store(goto_stack_ptr, goto_top);
+
   let goto_free_ptr = CTX::goto_free.get_ptr(b, parse_ctx)?;
   let goto_free = b.build_load(goto_free_ptr, "").into_int_value();
   let goto_free = b.build_int_sub(goto_free, i32.const_int(1, false), "");
+
   b.build_store(goto_free_ptr, goto_free);
+
   b.build_return(None);
 
   validate(fn_value)
@@ -783,6 +841,7 @@ pub fn compile_llvm_module_from_parse_states<'a>(
     construct_init(module)?;
     construct_emit_end_of_parse(module)?;
     construct_dispatch_functions(module)?;
+    construct_pop_function(module)?;
     construct_get_adjusted_input_block_function(module)?;
     construct_push_state_function(module)?;
     construct_extend_stack_if_needed(module)?;

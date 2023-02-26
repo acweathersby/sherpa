@@ -121,7 +121,7 @@ pub fn dispatch<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
       HashBranch => hash_branch(i, ctx, debug),
       Fail => (FailState, Option::None),
       Pass => (CompleteState, Option::None),
-      Accept => (CompleteState, Option::None),
+      Accept => (ParseAction::Accept { production_id: ctx.prod_id }, Option::None),
       NoOp => (None, i.next()),
     } {
       (None, Option::None) => {
@@ -658,7 +658,16 @@ pub fn get_next_action<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
 
   loop {
     if state < 1 {
-      break ParseAction::Accept { production_id: ctx.get_production() };
+      //Accept never encountered.
+      break ParseAction::Error {
+        last_production: ctx.prod_id,
+        last_input:      TokenRange {
+          len:      ctx.tok_len as u32,
+          off:      ctx.head_ptr as u32,
+          line_num: 0,
+          line_off: 0,
+        },
+      };
     } else {
       let mask_gate = NORMAL_STATE_FLAG << (ctx.in_fail_mode() as u32);
 

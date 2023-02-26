@@ -137,7 +137,7 @@ fn verify_construction_of_push_state_function() -> SherpaResult<()> {
     context.create_module("test"),
   );
 
-  unsafe { assert!(construct_push_state_function(&module).is_ok()) }
+  assert!(construct_push_state_function(&module).is_ok());
 
   println!("{}", module.module.to_string());
 

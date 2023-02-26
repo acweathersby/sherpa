@@ -74,42 +74,52 @@ pub trait LLVMByteReader {
     self_: &mut T,
     beg_ptr: &mut *const u8,
     anchor_ptr: &mut *const u8,
+    base_ptr: &mut *const u8,
     head_ptr: &mut *const u8,
     scan_ptr: &mut *const u8,
-    end_ptr: &mut *const u8,
+    end_ptr_and_needed: &mut *const u8,
   ) {
-    let anchor_offset = (*scan_ptr as usize) - (*beg_ptr as usize);
-    let head_delta = (*head_ptr as usize) - anchor_offset;
-    let tail_delta = (*scan_ptr as usize) - anchor_offset;
-    let needed = *end_ptr as usize;
+    let anchor_offset = (*anchor_ptr as usize) - (*beg_ptr as usize);
+    let head_delta = (*head_ptr as usize) - (*anchor_ptr as usize);
+    let scan_delta = (*scan_ptr as usize) - (*anchor_ptr as usize);
+    let base_delta = (*base_ptr as usize) - (*anchor_ptr as usize);
+    let needed = *end_ptr_and_needed as usize;
 
-    let size = ((self_.len() as i64) - ((anchor_offset + tail_delta + needed as usize) as i64))
+    let size = ((self_.len() as i64) - ((anchor_offset + scan_delta + needed as usize) as i64))
       .max(0) as u32;
 
     if size > 0 {
       let beg = self_.get_bytes().as_ptr();
       let anchor = beg as usize + anchor_offset;
       let head = (anchor + head_delta) as *const u8;
-      let tail = (anchor + tail_delta) as *const u8;
+      let scan = (anchor + scan_delta) as *const u8;
+      let base = (anchor + base_delta) as *const u8;
       let end = (beg as usize + self_.len()) as *const u8;
       (*beg_ptr) = beg;
       (*anchor_ptr) = anchor as *const u8;
+      (*base_ptr) = base;
       (*head_ptr) = head;
-      (*scan_ptr) = tail;
-      (*end_ptr) = end;
+      (*scan_ptr) = scan;
+      (*end_ptr_and_needed) = end;
     } else {
       let beg = self_.get_bytes().as_ptr();
       let anchor = beg as usize + anchor_offset;
       let head = (anchor + head_delta) as *const u8;
+      let base = (anchor + base_delta) as *const u8;
       let end = (beg as usize + self_.len()) as *const u8;
       (*beg_ptr) = beg;
       (*anchor_ptr) = anchor as *const u8;
+      (*base_ptr) = base;
       (*head_ptr) = head;
       (*scan_ptr) = end;
-      (*end_ptr) = end;
+      (*end_ptr_and_needed) = end;
     }
   }
 }
+
+impl AstObject for u32 {}
+
+impl<V: AstObject> AstObject for (V, TokenRange, TokenRange) {}
 
 pub unsafe fn llvm_map_result_action<
   'a,
@@ -248,5 +258,42 @@ pub unsafe fn llvm_map_result_action_2<
     }
 
     _ => unreachable!("This function should only be called when the parse action is  [Error, Accept, or EndOfInput]"),
+  }
+}
+
+pub unsafe fn llvm_map_shift_action<
+  'a,
+  R: LLVMByteReader + ByteReader + MutByteReader,
+  ExtCTX,
+  ASTNode: AstObject,
+>(
+  ctx: &ParseContext<R, ExtCTX>,
+  slots: &mut AstStackSlice<(ASTNode, TokenRange, TokenRange)>,
+) {
+  match ctx.get_shift_data() {
+    ParseAction::Shift {
+      anchor_byte_offset,
+      token_byte_offset,
+      token_byte_length,
+      token_line_offset,
+      token_line_count,
+      ..
+    } => {
+      let peek = TokenRange {
+        len: token_byte_offset - anchor_byte_offset,
+        off: anchor_byte_offset,
+        ..Default::default()
+      };
+
+      let tok = TokenRange {
+        len:      token_byte_length,
+        off:      token_byte_offset,
+        line_num: token_line_count,
+        line_off: token_line_offset,
+      };
+
+      slots.assign_to_garbage(0, (ASTNode::default(), tok, peek));
+    }
+    _ => unreachable!(),
   }
 }

@@ -353,6 +353,7 @@ to_numeric!(to_f64, f64);", w.store.ast_type_name)
       "}",
       &mut |w| {
         w.stmt("use ASTNode::*;".into())?;
+        w.stmt("self.get_type().hash(hasher);".into())?;
         w.block("match self", "{", "}", &|w| {
           let structs =
             w.store.structs.values().map(|s| format!("{}(node) => node.hash(hasher)", s.type_name));
@@ -421,13 +422,10 @@ to_numeric!(to_f64, f64);", w.store.ast_type_name)
 
     // Struct declaration
     w.block(&format!("#[derive(Debug, Clone)]\npub struct {}", s.name), "{", "}", &|w| {
-      let prop_declarations = s.props.iter().map(|p| match (p.optional, p.type_.into()) {
-        (true, AScriptTypeVal::Struct(..) | AScriptTypeVal::GenericStruct(..)) => {
-          format!("pub {}: Option<{}>", p.name, p.type_string)
-        }
-        (true, _) => format!("pub {}: {}", p.name, p.type_string),
-        _ => format!("pub {}: {}", p.name, p.type_string),
-      });
+      let prop_declarations = s
+        .props
+        .iter()
+        .map(|StructProp { name, type_string, .. }| format!("pub {name}: {type_string}"));
       w.list(
         ", ",
         prop_declarations
@@ -451,7 +449,7 @@ to_numeric!(to_f64, f64);", w.store.ast_type_name)
             .iter()
             .map(|p| match (p.optional, p.type_.into()) {
               (true, AScriptTypeVal::Struct(..) | AScriptTypeVal::GenericStruct(..)) => {
-                format!("{}: Option<{}>", p.name, p.type_string)
+                format!("{}: {}", p.name, p.type_string)
               }
               (true, _) => format!("{}: {}", p.name, p.type_string),
               _ => format!("{}: {}", p.name, p.type_string),
@@ -738,6 +736,7 @@ pub(crate) fn create_rust_writer_utils(store: &AScriptStore) -> AscriptWriterUti
       0 => "__rule_rng__".into(),
       _ => format!("__tok_rng_{i}"),
     },
+    get_slot_obj_name: &|i| format!("obj{i}"),
     struct_construction: &|u, w, node_name, prop_assignments, tokenized| {
       w.write(&format!("{node_name}::new("))?;
       let mut entries: Vec<String> =
@@ -760,213 +759,121 @@ pub(crate) fn create_rust_writer_utils(store: &AScriptStore) -> AscriptWriterUti
     },
     handlers: Default::default(),
   };
-  u.add_type_handler(AScriptTypeVal::TokenVec, AscriptTypeHandler {
-    default: &|_, _, _| "Vec::new()".into(),
-    name:    &|_, _, _| "Vec<Token>".into(),
-  });
-  u.add_type_handler(AScriptTypeVal::Token, AscriptTypeHandler {
-    default: &|_, _, _| "Defualt::defualt()".into(),
-    name:    &|_, _, _| "Token".into(),
-  });
-  u.add_type_handler(AScriptTypeVal::Bool(None), AscriptTypeHandler {
-    default: &|_, _, _| "false".into(),
-    name:    &|_, _, _| "bool".into(),
-  });
-  u.add_ast_handler(sherpa::ASTNodeType::AST_BOOL, ASTExprHandler {
-    expr: &|u, ast, r, ref_index, type_slot| match ast {
-      ASTNode::AST_BOOL(box AST_BOOL { value, initializer, .. }) => match initializer {
-        None => Some(Ref::new(
-          u.bump_ref_index(ref_index),
-          type_slot,
-          format!("{}", value),
-          AScriptTypeVal::Bool(Some(*value)),
-        )),
-        Some(box init) => match u.ast_expr_to_ref(&init.expression, r, ref_index, type_slot) {
-          Some(_) => Some(Ref::new(
-            u.bump_ref_index(ref_index),
-            type_slot,
-            "true".to_string(),
-            AScriptTypeVal::Bool(Some(true)),
-          )),
-          None => Some(Ref::new(
-            u.bump_ref_index(ref_index),
-            type_slot,
-            "false".to_string(),
-            AScriptTypeVal::Bool(Some(false)),
-          )),
-        },
-      },
-      _ => None,
-    },
-  });
+
   u.add_type_handler(AScriptTypeVal::String(None), AscriptTypeHandler {
     default: &|_, _, _| "Default::default()".into(),
     name:    &|_, _, _| "String".into(),
   });
-  u.add_ast_handler(sherpa::ASTNodeType::AST_STRING, ASTExprHandler {
-    expr: &|u, ast, r, ref_index, type_slot| match ast {
-      ASTNode::AST_STRING(box AST_STRING { value, .. }) => {
-        match value {
-          None => Some(Ref::new(
-            u.bump_ref_index(ref_index),
-            type_slot,
-            "String::new()".to_string(),
-            AScriptTypeVal::String(None),
-          )),
-          Some(box init) => {
-            match &init.expression {
-              ASTNode::AST_NUMBER(box AST_NUMBER { value, .. }) => Some(Ref::new(
-                u.bump_ref_index(ref_index),
-                type_slot,
-                format!("\"{}\".to_string()", value),
-                AScriptTypeVal::String(Some(value.to_string())),
-              )),
-              expr => {
-                let ref_ = u.ast_expr_to_ref(expr, r, ref_index, type_slot)?;
-                match ref_.ast_type {
-                  AScriptTypeVal::Struct(..)
-                  | AScriptTypeVal::TokenRange
-                  | AScriptTypeVal::GenericStruct(..) => {
-                    Some(ref_.to_string(u, AScriptTypeVal::String(None)))
-                  }
-                  AScriptTypeVal::TokenVec => {
-                    // Merge the last and first token together
-                    // get the string value from the resulting span of the union
-                    Some(ref_.from(
-                      "(%%.first().unwrap() + %%.last().unwrap()).to_string()".to_string(),
-                      AScriptTypeVal::String(None),
-                    ))
-                  }
-                  AScriptTypeVal::String(..) => Some(ref_),
-                  _ => Some(ref_.from("%%.to_string()".to_string(), AScriptTypeVal::String(None))),
-                }
-              }
-            }
-          }
-        }
-      }
-      _ => None,
-    },
+
+  u.add_type_handler(AScriptTypeVal::StringVec, AscriptTypeHandler {
+    default: &|_, _, _| "Default::default()".into(),
+    name:    &|_, _, _| "Vec<String>".into(),
+  });
+
+  u.add_type_handler(AScriptTypeVal::F64Vec, AscriptTypeHandler {
+    default: &|_, _, _| "Default::default()".into(),
+    name:    &|_, _, _| "Vec<f64>".into(),
+  });
+
+  u.add_type_handler(AScriptTypeVal::F32Vec, AscriptTypeHandler {
+    default: &|_, _, _| "Default::default()".into(),
+    name:    &|_, _, _| "Vec<f32>".into(),
+  });
+
+  u.add_type_handler(AScriptTypeVal::U8Vec, AscriptTypeHandler {
+    default: &|_, _, _| "Default::default()".into(),
+    name:    &|_, _, _| "Vec<u8>".into(),
+  });
+
+  u.add_type_handler(AScriptTypeVal::U16Vec, AscriptTypeHandler {
+    default: &|_, _, _| "Default::default()".into(),
+    name:    &|_, _, _| "Vec<u16>".into(),
+  });
+
+  u.add_type_handler(AScriptTypeVal::U32Vec, AscriptTypeHandler {
+    default: &|_, _, _| "Default::default()".into(),
+    name:    &|_, _, _| "Vec<u32>".into(),
+  });
+
+  u.add_type_handler(AScriptTypeVal::U64Vec, AscriptTypeHandler {
+    default: &|_, _, _| "Default::default()".into(),
+    name:    &|_, _, _| "Vec<u64>".into(),
+  });
+
+  u.add_type_handler(AScriptTypeVal::I8Vec, AscriptTypeHandler {
+    default: &|_, _, _| "Default::default()".into(),
+    name:    &|_, _, _| "Vec<i8>".into(),
+  });
+
+  u.add_type_handler(AScriptTypeVal::I16Vec, AscriptTypeHandler {
+    default: &|_, _, _| "Default::default()".into(),
+    name:    &|_, _, _| "Vec<i16>".into(),
+  });
+
+  u.add_type_handler(AScriptTypeVal::I32Vec, AscriptTypeHandler {
+    default: &|_, _, _| "Default::default()".into(),
+    name:    &|_, _, _| "Vec<i32>".into(),
+  });
+
+  u.add_type_handler(AScriptTypeVal::I64Vec, AscriptTypeHandler {
+    default: &|_, _, _| "Default::default()".into(),
+    name:    &|_, _, _| "Vec<i64>".into(),
+  });
+
+  u.add_type_handler(AScriptTypeVal::TokenVec, AscriptTypeHandler {
+    default: &|_, _, _| "Vec::new()".into(),
+    name:    &|_, _, _| "Vec<Token>".into(),
+  });
+
+  u.add_type_handler(AScriptTypeVal::Token, AscriptTypeHandler {
+    default: &|_, _, _| "Default::default()".into(),
+    name:    &|_, _, _| "Token".into(),
+  });
+
+  u.add_type_handler(AScriptTypeVal::Bool(None), AscriptTypeHandler {
+    default: &|_, _, _| "false".into(),
+    name:    &|_, _, _| "bool".into(),
+  });
+
+  u.add_type_handler(AScriptTypeVal::I16(None), AscriptTypeHandler {
+    default: &|_, _, _| "0".into(),
+    name:    &|_, _, _| "i16".into(),
   });
   u.add_type_handler(AScriptTypeVal::I8(None), AscriptTypeHandler {
     default: &|_, _, _| "0".into(),
     name:    &|_, _, _| "i8".into(),
   });
-  u.add_ast_handler(sherpa::ASTNodeType::AST_I8, ASTExprHandler {
-    expr: &|u, ast, r, ref_index, type_slot| match ast {
-      ASTNode::AST_I8(box AST_I8 { initializer, .. }) => {
-        convert_numeric::<AScriptTypeValI8>(u, initializer, r, ref_index, type_slot)
-      }
-      _ => None,
-    },
-  });
-  u.add_type_handler(AScriptTypeVal::I16(None), AscriptTypeHandler {
-    default: &|_, _, _| "0".into(),
-    name:    &|_, _, _| "i16".into(),
-  });
-  u.add_ast_handler(sherpa::ASTNodeType::AST_I16, ASTExprHandler {
-    expr: &|u, ast, r, ref_index, type_slot| match ast {
-      ASTNode::AST_I16(box AST_I16 { initializer, .. }) => {
-        convert_numeric::<AScriptTypeValI16>(u, initializer, r, ref_index, type_slot)
-      }
-      _ => None,
-    },
-  });
   u.add_type_handler(AScriptTypeVal::I32(None), AscriptTypeHandler {
     default: &|_, _, _| "0".into(),
     name:    &|_, _, _| "i32".into(),
-  });
-  u.add_ast_handler(sherpa::ASTNodeType::AST_I32, ASTExprHandler {
-    expr: &|u, ast, r, ref_index, type_slot| match ast {
-      ASTNode::AST_I32(box AST_I32 { initializer, .. }) => {
-        convert_numeric::<AScriptTypeValI32>(u, initializer, r, ref_index, type_slot)
-      }
-      _ => None,
-    },
   });
   u.add_type_handler(AScriptTypeVal::I64(None), AscriptTypeHandler {
     default: &|_, _, _| "0".into(),
     name:    &|_, _, _| "i64".into(),
   });
-  u.add_ast_handler(sherpa::ASTNodeType::AST_I64, ASTExprHandler {
-    expr: &|u, ast, r, ref_index, type_slot| match ast {
-      ASTNode::AST_I64(box AST_I64 { initializer, .. }) => {
-        convert_numeric::<AScriptTypeValI64>(u, initializer, r, ref_index, type_slot)
-      }
-      _ => None,
-    },
-  });
   u.add_type_handler(AScriptTypeVal::U8(None), AscriptTypeHandler {
     default: &|_, _, _| "0".into(),
     name:    &|_, _, _| "u8".into(),
-  });
-  u.add_ast_handler(sherpa::ASTNodeType::AST_U8, ASTExprHandler {
-    expr: &|u, ast, r, ref_index, type_slot| match ast {
-      ASTNode::AST_U8(box AST_U8 { initializer, .. }) => {
-        convert_numeric::<AScriptTypeValU8>(u, initializer, r, ref_index, type_slot)
-      }
-      _ => None,
-    },
   });
   u.add_type_handler(AScriptTypeVal::U16(None), AscriptTypeHandler {
     default: &|_, _, _| "0".into(),
     name:    &|_, _, _| "u16".into(),
   });
-  u.add_ast_handler(sherpa::ASTNodeType::AST_U16, ASTExprHandler {
-    expr: &|u, ast, r, ref_index, type_slot| match ast {
-      ASTNode::AST_U16(box AST_U16 { initializer, .. }) => {
-        convert_numeric::<AScriptTypeValU16>(u, initializer, r, ref_index, type_slot)
-      }
-      _ => None,
-    },
-  });
   u.add_type_handler(AScriptTypeVal::U32(None), AscriptTypeHandler {
     default: &|_, _, _| "0".into(),
     name:    &|_, _, _| "u32".into(),
-  });
-  u.add_ast_handler(sherpa::ASTNodeType::AST_U32, ASTExprHandler {
-    expr: &|u, ast, r, ref_index, type_slot| match ast {
-      ASTNode::AST_U32(box AST_U32 { initializer, .. }) => {
-        convert_numeric::<AScriptTypeValU32>(u, initializer, r, ref_index, type_slot)
-      }
-      _ => None,
-    },
   });
   u.add_type_handler(AScriptTypeVal::U64(None), AscriptTypeHandler {
     default: &|_, _, _| "0".into(),
     name:    &|_, _, _| "u64".into(),
   });
-  u.add_ast_handler(sherpa::ASTNodeType::AST_U64, ASTExprHandler {
-    expr: &|u, ast, r, ref_index, type_slot| match ast {
-      ASTNode::AST_U64(box AST_U64 { initializer, .. }) => {
-        convert_numeric::<AScriptTypeValU64>(u, initializer, r, ref_index, type_slot)
-      }
-      _ => None,
-    },
-  });
   u.add_type_handler(AScriptTypeVal::F32(None), AscriptTypeHandler {
     default: &|_, _, _| "0".into(),
     name:    &|_, _, _| "f32".into(),
   });
-  u.add_ast_handler(sherpa::ASTNodeType::AST_F32, ASTExprHandler {
-    expr: &|u, ast, r, ref_index, type_slot| match ast {
-      ASTNode::AST_F32(box AST_F32 { initializer, .. }) => {
-        convert_numeric::<AScriptTypeValF32>(u, initializer, r, ref_index, type_slot)
-      }
-      _ => None,
-    },
-  });
   u.add_type_handler(AScriptTypeVal::F64(None), AscriptTypeHandler {
     default: &|_, _, _| "0".into(),
     name:    &|_, _, _| "f64".into(),
-  });
-  u.add_ast_handler(sherpa::ASTNodeType::AST_F64, ASTExprHandler {
-    expr: &|u, ast, r, ref_index, type_slot| match ast {
-      ASTNode::AST_F64(box AST_F64 { initializer, .. }) => {
-        convert_numeric::<AScriptTypeValF64>(u, initializer, r, ref_index, type_slot)
-      }
-      _ => None,
-    },
   });
   u.add_type_handler(AScriptTypeVal::Struct(Default::default()), AscriptTypeHandler {
     default: &|_, _, optional| match optional {
@@ -1006,6 +913,163 @@ pub(crate) fn create_rust_writer_utils(store: &AScriptStore) -> AscriptWriterUti
       _ => "[GenericStructVec]".into(),
     },
   });
+
+  u.add_ast_handler(sherpa::ASTNodeType::AST_BOOL, ASTExprHandler {
+    expr: &|u, ast, r, ref_index, type_slot| match ast {
+      ASTNode::AST_BOOL(box AST_BOOL { value, initializer, .. }) => match initializer {
+        None => Some(Ref::ast_obj(
+          u.bump_ref_index(ref_index),
+          type_slot,
+          format!("{}", value),
+          AScriptTypeVal::Bool(Some(*value)),
+        )),
+        Some(box init) => match u.ast_expr_to_ref(&init.expression, r, ref_index, type_slot) {
+          Some(_) => Some(Ref::ast_obj(
+            u.bump_ref_index(ref_index),
+            type_slot,
+            "true".to_string(),
+            AScriptTypeVal::Bool(Some(true)),
+          )),
+          None => Some(Ref::ast_obj(
+            u.bump_ref_index(ref_index),
+            type_slot,
+            "false".to_string(),
+            AScriptTypeVal::Bool(Some(false)),
+          )),
+        },
+      },
+      _ => None,
+    },
+  });
+
+  u.add_ast_handler(sherpa::ASTNodeType::AST_STRING, ASTExprHandler {
+    expr: &|u, ast, r, ref_index, type_slot| match ast {
+      ASTNode::AST_STRING(box AST_STRING { value, .. }) => {
+        match value {
+          None => Some(Ref::ast_obj(
+            u.bump_ref_index(ref_index),
+            type_slot,
+            "String::new()".to_string(),
+            AScriptTypeVal::String(None),
+          )),
+          Some(box init) => {
+            match &init.expression {
+              ASTNode::AST_NUMBER(box AST_NUMBER { value, .. }) => Some(Ref::ast_obj(
+                u.bump_ref_index(ref_index),
+                type_slot,
+                format!("\"{}\".to_string()", value),
+                AScriptTypeVal::String(Some(value.to_string())),
+              )),
+              expr => {
+                let ref_ = u.ast_expr_to_ref(expr, r, ref_index, type_slot)?;
+                match ref_.ast_type {
+                  AScriptTypeVal::Struct(..)
+                  | AScriptTypeVal::TokenRange
+                  | AScriptTypeVal::GenericStruct(..) => {
+                    Some(ref_.to_string(u, AScriptTypeVal::String(None)))
+                  }
+                  AScriptTypeVal::TokenVec => {
+                    // Merge the last and first token together
+                    // get the string value from the resulting span of the union
+                    Some(ref_.from(
+                      "(%%.first().unwrap() + %%.last().unwrap()).to_string()".to_string(),
+                      AScriptTypeVal::String(None),
+                    ))
+                  }
+                  AScriptTypeVal::String(..) => Some(ref_),
+                  _ => Some(ref_.from("%%.to_string()".to_string(), AScriptTypeVal::String(None))),
+                }
+              }
+            }
+          }
+        }
+      }
+      _ => None,
+    },
+  });
+
+  u.add_ast_handler(sherpa::ASTNodeType::AST_I8, ASTExprHandler {
+    expr: &|u, ast, r, ref_index, type_slot| match ast {
+      ASTNode::AST_I8(box AST_I8 { initializer, .. }) => {
+        convert_numeric::<AScriptTypeValI8>(u, initializer, r, ref_index, type_slot)
+      }
+      _ => None,
+    },
+  });
+
+  u.add_ast_handler(sherpa::ASTNodeType::AST_I16, ASTExprHandler {
+    expr: &|u, ast, r, ref_index, type_slot| match ast {
+      ASTNode::AST_I16(box AST_I16 { initializer, .. }) => {
+        convert_numeric::<AScriptTypeValI16>(u, initializer, r, ref_index, type_slot)
+      }
+      _ => None,
+    },
+  });
+
+  u.add_ast_handler(sherpa::ASTNodeType::AST_I32, ASTExprHandler {
+    expr: &|u, ast, r, ref_index, type_slot| match ast {
+      ASTNode::AST_I32(box AST_I32 { initializer, .. }) => {
+        convert_numeric::<AScriptTypeValI32>(u, initializer, r, ref_index, type_slot)
+      }
+      _ => None,
+    },
+  });
+  u.add_ast_handler(sherpa::ASTNodeType::AST_I64, ASTExprHandler {
+    expr: &|u, ast, r, ref_index, type_slot| match ast {
+      ASTNode::AST_I64(box AST_I64 { initializer, .. }) => {
+        convert_numeric::<AScriptTypeValI64>(u, initializer, r, ref_index, type_slot)
+      }
+      _ => None,
+    },
+  });
+  u.add_ast_handler(sherpa::ASTNodeType::AST_U8, ASTExprHandler {
+    expr: &|u, ast, r, ref_index, type_slot| match ast {
+      ASTNode::AST_U8(box AST_U8 { initializer, .. }) => {
+        convert_numeric::<AScriptTypeValU8>(u, initializer, r, ref_index, type_slot)
+      }
+      _ => None,
+    },
+  });
+  u.add_ast_handler(sherpa::ASTNodeType::AST_U16, ASTExprHandler {
+    expr: &|u, ast, r, ref_index, type_slot| match ast {
+      ASTNode::AST_U16(box AST_U16 { initializer, .. }) => {
+        convert_numeric::<AScriptTypeValU16>(u, initializer, r, ref_index, type_slot)
+      }
+      _ => None,
+    },
+  });
+  u.add_ast_handler(sherpa::ASTNodeType::AST_U32, ASTExprHandler {
+    expr: &|u, ast, r, ref_index, type_slot| match ast {
+      ASTNode::AST_U32(box AST_U32 { initializer, .. }) => {
+        convert_numeric::<AScriptTypeValU32>(u, initializer, r, ref_index, type_slot)
+      }
+      _ => None,
+    },
+  });
+  u.add_ast_handler(sherpa::ASTNodeType::AST_U64, ASTExprHandler {
+    expr: &|u, ast, r, ref_index, type_slot| match ast {
+      ASTNode::AST_U64(box AST_U64 { initializer, .. }) => {
+        convert_numeric::<AScriptTypeValU64>(u, initializer, r, ref_index, type_slot)
+      }
+      _ => None,
+    },
+  });
+  u.add_ast_handler(sherpa::ASTNodeType::AST_F32, ASTExprHandler {
+    expr: &|u, ast, r, ref_index, type_slot| match ast {
+      ASTNode::AST_F32(box AST_F32 { initializer, .. }) => {
+        convert_numeric::<AScriptTypeValF32>(u, initializer, r, ref_index, type_slot)
+      }
+      _ => None,
+    },
+  });
+  u.add_ast_handler(sherpa::ASTNodeType::AST_F64, ASTExprHandler {
+    expr: &|u, ast, r, ref_index, type_slot| match ast {
+      ASTNode::AST_F64(box AST_F64 { initializer, .. }) => {
+        convert_numeric::<AScriptTypeValF64>(u, initializer, r, ref_index, type_slot)
+      }
+      _ => None,
+    },
+  });
   u.add_ast_handler(sherpa::ASTNodeType::AST_Struct, ASTExprHandler {
     expr: &|u, ast, r, ref_index, type_slot| match ast {
       ASTNode::AST_Struct(ast_struct) => {
@@ -1030,7 +1094,7 @@ pub(crate) fn create_rust_writer_utils(store: &AScriptStore) -> AscriptWriterUti
           .collect::<VecDeque<_>>();
 
         if results.is_empty() {
-          Some(Ref::new(
+          Some(Ref::ast_obj(
             utils.bump_ref_index(ref_index),
             type_slot,
             "vec![];".to_string(),
@@ -1042,7 +1106,7 @@ pub(crate) fn create_rust_writer_utils(store: &AScriptStore) -> AscriptWriterUti
           let mut vector_ref = if results[0].ast_type.is_vec() {
             results.pop_front().unwrap()
           } else {
-            Ref::new(
+            Ref::ast_obj(
               utils.bump_ref_index(ref_index),
               type_slot,
               "vec![]".to_string(),
@@ -1075,7 +1139,7 @@ pub(crate) fn create_rust_writer_utils(store: &AScriptStore) -> AscriptWriterUti
       if let ASTNode::AST_Token(box AST_Token { range, .. }) = ast {
         let ref_ = Ref::node_token(u, u.bump_ref_index(ref_index), type_slot);
         if let Some(box Range { start_trim, end_trim }) = range {
-          let mut trimed_ref = Ref::new(
+          let mut trimed_ref = Ref::ast_obj(
             *ref_index,
             type_slot,
             format!("%%.trim({start_trim}, {end_trim})"),
@@ -1094,7 +1158,7 @@ pub(crate) fn create_rust_writer_utils(store: &AScriptStore) -> AscriptWriterUti
   u.add_ast_handler(sherpa::ASTNodeType::AST_IndexReference, ASTExprHandler {
     expr: &|u, ast, rule, _, type_slot| {
       if let ASTNode::AST_IndexReference(box AST_IndexReference { value, .. }) = ast {
-        match get_indexed_body_ref(rule, value) {
+        match get_indexed_body_ref(rule, *value as usize) {
           Some((index, sym_id)) => render_body_symbol(u, sym_id, u.store, index, type_slot),
           None => None,
         }
@@ -1189,50 +1253,52 @@ fn render_body_symbol(
   utils: &AscriptWriterUtils,
   sym: &RuleSymbol,
   ast: &AScriptStore,
-  i: usize,
+  slot_index: usize,
   type_slot: usize,
 ) -> Option<Ref> {
   use AScriptTypeVal::*;
-  let mut ref_ = match &sym.sym_id {
+  let ref_index = slot_index + 1;
+  let ref_ = match &sym.sym_id {
     SymbolID::Production(prod_id, ..) => {
       let types = get_production_types(ast, prod_id);
+      let ref_name = (&utils.get_slot_obj_name)(ref_index);
       if types.len() == 1 {
         let _type = types.first().unwrap().clone();
         if Token == _type {
-          Ref::token(utils, i, type_slot)
+          Ref::token(utils, slot_index, type_slot)
         } else {
           if let Some(init_string) = match _type {
-            F64(..) => Some(format!("i{0}.to_f64()", i)),
-            F32(..) => Some(format!("i{0}.to_f32()", i)),
-            U64(..) => Some(format!("i{0}.to_u64()", i)),
-            I64(..) => Some(format!("i{0}.to_i64()", i)),
-            U32(..) => Some(format!("i{0}.to_u32()", i)),
-            I32(..) => Some(format!("i{0}.to_i32()", i)),
-            U16(..) => Some(format!("i{0}.to_u16()", i)),
-            I16(..) => Some(format!("i{0}.to_i16()", i)),
-            U8(..) => Some(format!("i{0}.to_u8()", i)),
-            I8(..) => Some(format!("i{0}.to_i8()", i)),
-            String(..) => Some(format!("i{0}.to_string()", i)),
-            GenericStructVec(..) => Some(format!("i{0}.into_nodes()", i)),
-            StringVec => Some(format!("i{0}.into_strings()", i)),
-            TokenVec => Some(format!("i{0}.into_tokens()", i)),
-            F64Vec => Some(format!("i{0}.into_f64_vec()", i)),
-            F32Vec => Some(format!("i{0}.into_f32_vec()", i)),
-            U64Vec => Some(format!("i{0}.into_u64_vec()", i)),
-            I64Vec => Some(format!("i{0}.into_i64_vec()", i)),
-            U32Vec => Some(format!("i{0}.into_u32_vec()", i)),
-            I32Vec => Some(format!("i{0}.into_i32_vec()", i)),
-            U16Vec => Some(format!("i{0}.into_u16_vec()", i)),
-            I16Vec => Some(format!("i{0}.into_i16_vec()", i)),
-            U8Vec => Some(format!("i{0}.into_u8_vec()", i)),
-            I8Vec => Some(format!("i{0}.into_i8_vec()", i)),
-            GenericStruct(..) => Some(format!("i{0}", i)),
-            Struct(..) => Some(format!("i{0}", i)),
+            F64(..) => Some(format!("{ref_name}.to_f64()")),
+            F32(..) => Some(format!("{ref_name}.to_f32()")),
+            U64(..) => Some(format!("{ref_name}.to_u64()")),
+            I64(..) => Some(format!("{ref_name}.to_i64()")),
+            U32(..) => Some(format!("{ref_name}.to_u32()")),
+            I32(..) => Some(format!("{ref_name}.to_i32()")),
+            U16(..) => Some(format!("{ref_name}.to_u16()")),
+            I16(..) => Some(format!("{ref_name}.to_i16()")),
+            U8(..) => Some(format!("{ref_name}.to_u8()")),
+            I8(..) => Some(format!("{ref_name}.to_i8()")),
+            String(..) => Some(format!("{ref_name}.to_string()")),
+            GenericStructVec(..) => Some(format!("{ref_name}.into_nodes()")),
+            StringVec => Some(format!("{ref_name}.into_strings()")),
+            TokenVec => Some(format!("{ref_name}.into_tokens()")),
+            F64Vec => Some(format!("{ref_name}.into_f64_vec()")),
+            F32Vec => Some(format!("{ref_name}.into_f32_vec()")),
+            U64Vec => Some(format!("{ref_name}.into_u64_vec()")),
+            I64Vec => Some(format!("{ref_name}.into_i64_vec()")),
+            U32Vec => Some(format!("{ref_name}.into_u32_vec()")),
+            I32Vec => Some(format!("{ref_name}.into_i32_vec()")),
+            U16Vec => Some(format!("{ref_name}.into_u16_vec()")),
+            I16Vec => Some(format!("{ref_name}.into_i16_vec()")),
+            U8Vec => Some(format!("{ref_name}.into_u8_vec()")),
+            I8Vec => Some(format!("{ref_name}.into_i8_vec()")),
+            GenericStruct(..) => Some(format!("{ref_name}")),
+            Struct(..) => Some(format!("{ref_name}")),
             _ => None,
           } {
-            Ref::new(i, type_slot, init_string, _type)
+            Ref::ast_obj(slot_index, type_slot, init_string, _type)
           } else {
-            Ref::new(i, type_slot, "".to_string(), match _type.to_owned() {
+            Ref::ast_obj(slot_index, type_slot, "".to_string(), match _type.to_owned() {
               GenericVec(types) => get_specified_vector_from_generic_vec_values(
                 &types.unwrap().iter().map(|t| t.into()).collect(),
               ),
@@ -1241,15 +1307,13 @@ fn render_body_symbol(
           }
         }
       } else if production_types_are_structs(&types) {
-        Ref::new(i, type_slot, format!("i{0}", i), GenericStruct(extract_struct_types(&types)))
+        Ref::ast_obj(ref_index, type_slot, ref_name, GenericStruct(extract_struct_types(&types)))
       } else {
-        Ref::token(utils, i, type_slot)
+        Ref::token(utils, slot_index, type_slot)
       }
     }
-    _ => Ref::token(utils, i, type_slot),
+    _ => Ref::token(utils, slot_index, type_slot),
   };
-
-  ref_.add_body_index(i);
 
   Some(ref_)
 }
@@ -1278,7 +1342,7 @@ fn convert_numeric<T: AScriptNumericType>(
   match init {
     None => None,
     Some(init) => match &init.expression {
-      ASTNode::AST_NUMBER(box AST_NUMBER { value, .. }) => Some(Ref::new(
+      ASTNode::AST_NUMBER(box AST_NUMBER { value, .. }) => Some(Ref::ast_obj(
         utils.bump_ref_index(ref_index),
         type_slot,
         format!("{}{}", T::string_from_f64(*value), rust_type,),
@@ -1326,7 +1390,7 @@ pub(crate) fn add_ascript_functions_for_rust<W: Write>(
         let AScriptStruct { type_name, .. } = w.store.structs.get(id).unwrap();
         type_name.clone()
       }
-      _ => ast_type.debug_string(Some(g)),
+      _ => continue,
     };
 
     w.block(&format!("impl {type_name}"), "{", "}", &|w| {
@@ -1449,13 +1513,12 @@ pub type Parser<'a, T: Reader, UserCTX> = ByteCodeParser<'a, T, UserCTX>;"
             w.stmt(format!("parser.init_parser({});", state_lookups.get(guid_name).unwrap()))?;
 
             w.stmt(
-              "let AstSlot (i0, __rule_rng__, _) = parser.parse_ast(&reduce_functions.0, &mut None)?;"
-                .into(),
+              format!("let AstSlot ({}, __rule_rng__, _) = parser.parse_ast(&reduce_functions.0, &mut None)?;"
+              ,(&w.utils.get_slot_obj_name)(1)),
             )?;
             if ref_.is_some() {
               let (ref_name, ref_) =
                 w.utils.create_type_initializer_value(ref_.clone(), type_, false);
-
               if let Some(ref_) = ref_ {
                 w.stmt(ref_.to_init_string(w.utils))?;
                 w.stmt(format!("Ok({ref_name})"))
@@ -1577,9 +1640,7 @@ pub struct Parser<T: Reader, M>(ParseContext<T, M>, T);
       },
     )?;
 
-    for (i, ExportedProduction { export_name, .. }) in
-      g.get_exported_productions().iter().enumerate()
-    {
+    for ExportedProduction { export_name, export_id, .. } in g.get_exported_productions().iter() {
       w.method(
         &format!("pub fn new_{export_name}_parser"),
         "(",
@@ -1591,7 +1652,7 @@ pub struct Parser<T: Reader, M>(ParseContext<T, M>, T);
         "}",
         &mut |w| {
           w.stmt(format!("let mut ctx = Self::new(reader);"))?;
-          w.stmt(format!("ctx.set_start_point({i});"))?;
+          w.stmt(format!("ctx.set_start_point({export_id});"))?;
           w.stmt(format!("ctx"))
         },
       )?;
@@ -1650,8 +1711,6 @@ extern "C" {{
   ) -> ParseResult<{ast_type_name}>;
 }}"##))?;
 
-      w.stmt(format!("type Node = {};", w.store.ast_type_name)).unwrap();
-
       // Create a module that will store convenience functions for compiling AST
       // structures based on on grammar entry points.
       for (ref_, type_, ast_type_string, export_name, ..) in &export_node_data {
@@ -1673,7 +1732,7 @@ extern "C" {{
             w.stmt(format!("let ctx_ptr = (&mut ctx.0) as *const ParseContext<UTF8StringReader, u32>;"))?;
 
             w.block("match unsafe{ ast_parse(ctx_ptr as *mut u8, reducers_ptr, shifter_ptr, result_ptr) }", "{", "}", &|w|{
-              w.block("ParseResult::Complete((i0, _, _))  =>", "{", "}", &|w|{
+              w.block(&format!("ParseResult::Complete(({}, _, _))  =>", (&w.utils.get_slot_obj_name)(1)), "{", "}", &|w|{
                 if ref_.is_some() {
                   let (ref_name, ref_) =
                     w.utils.create_type_initializer_value(ref_.clone(), type_, false);

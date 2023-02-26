@@ -31,6 +31,10 @@ pub struct PublicFunctions<'a> {
   pub(crate) dispatch: FunctionValue<'a>,
   pub(crate) dispatch_unwind: FunctionValue<'a>,
   pub(crate) init: FunctionValue<'a>,
+  /// Removes the top most goto from the stack. This serves as a function
+  /// that can be pushed to the goto stack to act as sentinel that prevents
+  /// the calling of the next goto. This can can be used to prevent states
+  /// such `catch` from being called during normal parse behavior.
   pub(crate) pop_state: FunctionValue<'a>,
   pub(crate) push_state: FunctionValue<'a>,
   pub(crate) handle_eop: FunctionValue<'a>,

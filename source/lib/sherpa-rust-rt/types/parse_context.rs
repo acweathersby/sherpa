@@ -27,6 +27,7 @@ type GetBlockFunction<T> = extern "C" fn(
   &mut *const u8,
   &mut *const u8,
   &mut *const u8,
+  &mut *const u8,
 );
 
 #[repr(C)]
@@ -265,6 +266,7 @@ impl<T: ByteReader, M> ParseContext<T, M> {
     _: &mut *const u8,
     _: &mut *const u8,
     _: &mut *const u8,
+    _: &mut *const u8,
   ) {
   }
 
@@ -426,15 +428,6 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
     loop {
       match self.get_next_action(debug) {
         ParseAction::Accept { production_id } => {
-          if !self.head_at_end() {
-            break ShiftsAndSkipsResult::FailedParse(SherpaParseError {
-              message: "Parser completed without reaching the end of input:".to_string(),
-              inline_message: "".to_string(),
-              loc: Token::new(),
-              last_production: self.get_production_id(),
-            });
-          }
-
           #[cfg(debug_assertions)]
           if let Some(debug) = debug {
             debug(&DebugEvent::Complete { production_id });
