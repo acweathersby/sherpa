@@ -1,3 +1,5 @@
+use sherpa_runtime::types::Token;
+
 use super::create_store::insert_rules;
 use crate::{
   compile::{GrammarId, GrammarStore, SymbolID},
@@ -192,6 +194,11 @@ fn create_symbol_queue(g: &mut GrammarStore) -> VecDeque<(SymbolID, sherpa_runti
       }
     })
   }));
+
+  // Merge productions from exports
+  for (prod_id, gram_id, _) in &g.exports {
+    symbol_queue.push_back((SymbolID::Production(*prod_id, *gram_id), Token::default()))
+  }
 
   // Merge ignored terminal non terminal symbols
   for (_, syms) in &g.production_ignore_symbols {

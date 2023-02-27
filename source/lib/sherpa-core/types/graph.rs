@@ -22,6 +22,7 @@ use std::{
     HashMap,
     VecDeque,
   },
+  fmt::format,
   hash::{Hash, Hasher},
   ops::{Index, IndexMut},
   sync::Arc,
@@ -134,7 +135,9 @@ impl StateType {
 
   fn debug_string(&self, g: &GrammarStore) -> String {
     match self {
-      Self::KernelCall(prod_id) => format!("KernelCall({})", g.get_production_plain_name(prod_id)),
+      Self::KernelCall(prod_id) => {
+        format!("KernelCall({})", g.get_production_plain_name(prod_id))
+      }
       Self::InternalCall(prod_id) => {
         format!("InternalCall({})", g.get_production_plain_name(prod_id))
       }
@@ -371,7 +374,7 @@ impl State {
 
   pub(crate) fn debug_string(&self, g: &GrammarStore) -> String {
     let mut string = String::new();
-    string += &format!("\n\nSTATE -- [{:}] sea-- ", self.id.0);
+    string += &format!("\n\nSTATE -- [{:}] --", self.id.0);
 
     if self.predecessors.len() > 0 {
       string += &format!(
@@ -468,12 +471,13 @@ pub enum GraphMode {
 }
 
 pub(crate) struct Graph {
-  state_map:      HashMap<u64, StateId>,
-  states:         Vec<State>,
-  leaf_states:    BTreeSet<StateId>,
+  state_map: HashMap<u64, StateId>,
+  states: Vec<State>,
+  leaf_states: BTreeSet<StateId>,
   pending_states: VecDeque<(GraphState, StateId)>,
-  mode:           GraphMode,
-  pub grammar:    Arc<GrammarStore>,
+  mode: GraphMode,
+  state_name_prefix: String,
+  pub grammar: Arc<GrammarStore>,
 }
 
 impl Graph {
@@ -484,12 +488,27 @@ impl Graph {
       states: Default::default(),
       leaf_states: Default::default(),
       pending_states: Default::default(),
+      state_name_prefix: Default::default(),
       grammar,
     }
   }
 
   pub fn is_scan(&self) -> bool {
     matches!(self.mode, GraphMode::Scanner)
+  }
+
+  pub(crate) fn set_prefix(&mut self, append_string: &str) {
+    let mut hasher = DefaultHasher::new();
+    self.goal_items().hash(&mut hasher);
+    self.state_name_prefix = format!(
+      "s{:0>16X}{}_{append_string}",
+      hasher.finish(),
+      self.is_scan().then_some("_scan").unwrap_or_default()
+    );
+  }
+
+  pub(crate) fn get_prefix(&self) -> &str {
+    &self.state_name_prefix
   }
 
   pub(crate) fn create_state(

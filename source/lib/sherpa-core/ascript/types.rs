@@ -279,7 +279,9 @@ impl AScriptTypeVal {
           .collect::<Vec<_>>()
           .join(", ")
       ),
-      Struct(id) => format!("Struct<{}>", struct_types.get(id).cloned().unwrap_or_default()),
+      Struct(id) => {
+        format!("Struct<{}>", struct_types.get(id).cloned().unwrap_or_default())
+      }
       _ => self.debug_string(Some(g)),
     }
   }

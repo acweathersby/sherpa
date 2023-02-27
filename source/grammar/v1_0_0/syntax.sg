@@ -4,7 +4,7 @@ IGNORE { c:sp c:nl }
 
 IMPORT ./ascript as ast
 
-<> declaration >  '{' field(+,) '}'
+<> declaration >  '{' field(+",") '}'
 
     :ast { t_Syntax, specs:$2 }
 

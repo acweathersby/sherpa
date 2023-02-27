@@ -546,6 +546,7 @@ impl<'a, R: ByteReader + MutByteReader + UTF8Reader, M> SherpaParser<R, M>
 
   fn init_parser(&mut self, entry_point: u32) {
     self.stack = vec![0, 0, NORMAL_STATE_FLAG, entry_point];
+    self.ctx.end_ptr = self.get_reader().len();
   }
 
   fn get_next_action(&mut self, debug: &mut Option<DebugFn>) -> ParseAction {

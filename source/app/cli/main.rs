@@ -77,7 +77,9 @@ fn configure_matches(matches: &ArgMatches, pwd: &PathBuf) -> (Config, ParserType
     .then(|| matches.get_one::<String>("lang").map(|s| s.as_str()))
     .flatten()
   {
-    Some("ts") | Some("typescript") => panic!("Source type [TypeScript] not yet supported"),
+    Some("ts") | Some("typescript") => {
+      panic!("Source type [TypeScript] not yet supported")
+    }
     _ => SourceType::Rust,
   };
 

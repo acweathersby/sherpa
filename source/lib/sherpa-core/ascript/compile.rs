@@ -103,7 +103,7 @@ fn gather_ascript_info_from_grammar(
           }
         }
       } else {
-        match rule.last_symbol_id() {
+        match rule.last_real_sym().unwrap().sym_id {
           SymbolID::Production(id, ..) => add_production_type(prod_types, &rule, TaggedType {
             type_:        AScriptTypeVal::UnresolvedProduction(id),
             tag:          rule_id,
@@ -564,7 +564,7 @@ pub fn compile_expression_type(
       }]
     }
     ASTNode::AST_Token(..) => vec![TaggedType {
-      symbol_index: rule.syms.len() as u32,
+      symbol_index: rule.get_real_len() as u32,
       tag:          rule.id,
       type_:        Token,
     }],
@@ -591,85 +591,85 @@ pub fn compile_expression_type(
       }
       if types.is_empty() {
         vec![TaggedType {
-          symbol_index: rule.syms.len() as u32,
+          symbol_index: rule.get_real_len() as u32,
           tag:          rule.id,
           type_:        GenericVec(None),
         }]
       } else {
         vec![TaggedType {
-          symbol_index: rule.syms.len() as u32,
+          symbol_index: rule.get_real_len() as u32,
           tag:          rule.id,
           type_:        GenericVec(Some(types)),
         }]
       }
     }
     ASTNode::AST_STRING(..) => vec![TaggedType {
-      symbol_index: rule.syms.len() as u32,
+      symbol_index: rule.get_real_len() as u32,
       tag:          rule.id,
       type_:        String(None),
     }],
     ASTNode::AST_BOOL(..) => vec![TaggedType {
-      symbol_index: rule.syms.len() as u32,
+      symbol_index: rule.get_real_len() as u32,
       tag:          rule.id,
       type_:        Bool(None),
     }],
     ASTNode::AST_U8(..) => vec![TaggedType {
-      symbol_index: rule.syms.len() as u32,
+      symbol_index: rule.get_real_len() as u32,
       tag:          rule.id,
       type_:        U8(None),
     }],
     ASTNode::AST_U16(..) => vec![TaggedType {
-      symbol_index: rule.syms.len() as u32,
+      symbol_index: rule.get_real_len() as u32,
       tag:          rule.id,
       type_:        U16(None),
     }],
     ASTNode::AST_U32(..) => vec![TaggedType {
-      symbol_index: rule.syms.len() as u32,
+      symbol_index: rule.get_real_len() as u32,
       tag:          rule.id,
       type_:        U32(None),
     }],
     ASTNode::AST_U64(..) => vec![TaggedType {
-      symbol_index: rule.syms.len() as u32,
+      symbol_index: rule.get_real_len() as u32,
       tag:          rule.id,
       type_:        U64(None),
     }],
     ASTNode::AST_I8(..) => vec![TaggedType {
-      symbol_index: rule.syms.len() as u32,
+      symbol_index: rule.get_real_len() as u32,
       tag:          rule.id,
       type_:        I8(None),
     }],
     ASTNode::AST_I16(..) => vec![TaggedType {
-      symbol_index: rule.syms.len() as u32,
+      symbol_index: rule.get_real_len() as u32,
       tag:          rule.id,
       type_:        I16(None),
     }],
     ASTNode::AST_I32(..) => vec![TaggedType {
-      symbol_index: rule.syms.len() as u32,
+      symbol_index: rule.get_real_len() as u32,
       tag:          rule.id,
       type_:        I32(None),
     }],
     ASTNode::AST_I64(..) => vec![TaggedType {
-      symbol_index: rule.syms.len() as u32,
+      symbol_index: rule.get_real_len() as u32,
       tag:          rule.id,
       type_:        I64(None),
     }],
     ASTNode::AST_F32(..) => vec![TaggedType {
-      symbol_index: rule.syms.len() as u32,
+      symbol_index: rule.get_real_len() as u32,
       tag:          rule.id,
       type_:        F32(None),
     }],
     ASTNode::AST_F64(..) => vec![TaggedType {
-      symbol_index: rule.syms.len() as u32,
+      symbol_index: rule.get_real_len() as u32,
       tag:          rule.id,
       type_:        F64(None),
     }],
     ASTNode::AST_NUMBER(..) => vec![TaggedType {
-      symbol_index: rule.syms.len() as u32,
+      symbol_index: rule.get_real_len() as u32,
       tag:          rule.id,
       type_:        F64(None),
     }],
     ASTNode::AST_Member(..) => vec![TaggedType {
-      symbol_index: rule.syms.len() as u32,
+      symbol_index: rule.get_real_len() as u32,
       tag:          rule.id,
       type_:        Undefined,
     }],
@@ -698,14 +698,14 @@ pub fn compile_expression_type(
           }],
         },
         None => vec![TaggedType {
-          symbol_index: rule.syms.len() as u32,
+          symbol_index: rule.get_real_len() as u32,
           tag:          rule.id,
           type_:        Undefined,
         }],
       }
     }
     _ => vec![TaggedType {
-      symbol_index: rule.syms.len() as u32,
+      symbol_index: rule.get_real_len() as u32,
       tag:          rule.id,
       type_:        Undefined,
     }],
@@ -892,7 +892,9 @@ pub fn compile_struct_props(
       struct_.prop_ids.append(&mut prop_ids);
       struct_.tokenized = include_token || struct_.tokenized;
     }
-    btree_map::Entry::Vacant(_) => unreachable!("Struct should be defined at this point"),
+    btree_map::Entry::Vacant(_) => {
+      unreachable!("Struct should be defined at this point")
+    }
   }
 
   AScriptTypeVal::Struct(id.clone())
@@ -1039,11 +1041,11 @@ pub fn get_body_symbol_reference<'a>(
 
 pub fn get_named_body_ref<'a>(rule: &'a Rule, val: &str) -> Option<(usize, &'a RuleSymbol)> {
   if val == ascript_first_node_id {
-    Some((0, rule.syms.first().unwrap()))
+    Some((0, rule.first_real_sym()?))
   } else if val == ascript_last_node_id {
-    Some((rule.syms.len() - 1, rule.syms.last().unwrap()))
+    Some((rule.get_real_len() - 1, rule.last_real_sym()?))
   } else {
-    rule.syms.iter().enumerate().filter(|(_, s)| s.annotation == *val).last()
+    rule.real_syms().into_iter().enumerate().filter(|(_, s)| s.annotation == *val).last()
   }
 }
 
@@ -1056,7 +1058,12 @@ pub fn get_named_body_ref<'a>(rule: &'a Rule, val: &str) -> Option<(usize, &'a R
 /// Returns `None` if the index is greater then the number of symbols.  
 ///
 pub fn get_indexed_body_ref<'a>(rule: &'a Rule, i: usize) -> Option<(usize, &'a RuleSymbol)> {
-  rule.syms.iter().enumerate().filter(|(_, s)| s.original_index == (i - 1) as u32).last()
+  rule
+    .real_syms()
+    .into_iter()
+    .enumerate()
+    .filter(|(_, s)| s.original_index == (i - 1) as u32)
+    .last()
 }
 
 pub fn get_struct_name_from_node(ast_struct: &AST_Struct) -> String {

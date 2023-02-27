@@ -1,6 +1,6 @@
 //! Convenient types for working with bytecode parser data.
 
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
 /// The current set of instruction opcodes
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -495,26 +495,61 @@ pub const TOKEN_ASSIGN_FLAG: u32 = 0x04000000;
 
 pub const END_OF_INPUT_TOKEN_ID: u32 = 0x1;
 
-#[non_exhaustive]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[repr(u32)]
+pub enum InputType {
+  Production = 0,
+  Token,
+  Class,
+  Codepoint,
+  Byte,
+  EndOfFile,
+}
 
-pub struct InputType;
-
-impl InputType {
-  pub const T01_PRODUCTION: u32 = 0;
-  pub const T02_TOKEN: u32 = 1;
-  pub const T03_CLASS: u32 = 2;
-  pub const T04_CODEPOINT: u32 = 3;
-  pub const T05_BYTE: u32 = 4;
-
-  pub fn to_string(val: u32) -> &'static str {
-    match val {
-      Self::T01_PRODUCTION => "PRODUCTION",
-      Self::T02_TOKEN => "TOKEN",
-      Self::T03_CLASS => "CLASS",
-      Self::T04_CODEPOINT => "CODEPOINT",
-      Self::T05_BYTE => "BYTE",
-      _ => "",
+impl Display for InputType {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self {
+      Self::Production => f.write_str("PRODUCTION"),
+      Self::Token => f.write_str("TOKEN"),
+      Self::Class => f.write_str("CLASS"),
+      Self::Codepoint => f.write_str("CODEPOINT"),
+      Self::Byte => f.write_str("BYTE"),
+      Self::EndOfFile => f.write_str("EOF"),
     }
+  }
+}
+
+impl From<u32> for InputType {
+  fn from(value: u32) -> Self {
+    match value {
+      0 => Self::Production,
+      1 => Self::Token,
+      2 => Self::Class,
+      3 => Self::Codepoint,
+      4 => Self::Byte,
+      5 => Self::EndOfFile,
+      _ => unreachable!(),
+    }
+  }
+}
+
+impl From<&str> for InputType {
+  fn from(value: &str) -> Self {
+    match value {
+      "PRODUCTION" => Self::Production,
+      "TOKEN" => Self::Token,
+      "CLASS" => Self::Class,
+      "CODEPOINT" => Self::Codepoint,
+      "BYTE" => Self::Byte,
+      "EOF" => Self::EndOfFile,
+      _ => unreachable!(),
+    }
+  }
+}
+
+impl From<String> for InputType {
+  fn from(value: String) -> Self {
+    Self::from(value.as_str())
   }
 }
 

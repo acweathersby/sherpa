@@ -2,9 +2,9 @@ NAME ascript
 
 IGNORE { c:sp c:nl }
 
-<> body >  
+<> body >
 
-    struct 
+    struct
 
     | expression
         :ast { t_AST_Statements, statements:[$1], tok }
@@ -74,7 +74,7 @@ IGNORE { c:sp c:nl }
 
 <> map > 
 
-    "map" "(" expression^k , expression^v ')'
+    "map" "(" expression^k ',' expression^v ')'
 
         :ast { t_AST_Map, key: $k, val: $v, tok }
 

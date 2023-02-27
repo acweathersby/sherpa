@@ -423,3 +423,35 @@ fn test_rust_render() -> SherpaResult<()> {
 
   SherpaResult::Ok(())
 }
+
+#[test]
+fn eof_symbols_should_not_contribute_anything_to_ast() -> SherpaResult<()> {
+  let mut j = Journal::new(None);
+  GrammarStore::from_str(
+    &mut j,
+    "
+    <> A > B $ 
+
+    <> B > \"2\" :ast u32($1)
+    
+    ",
+  );
+  assert!(!j.debug_error_report(), "Should not have grammar errors");
+
+  let store = AScriptStore::new(&mut j)?;
+
+  let u = create_rust_writer_utils(&store);
+  let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
+  let writer = write_rust_ast(w)?;
+
+  println!("{}", String::from_utf8(writer.into_writer().into_output())?);
+
+  let g = &j.grammar()?;
+
+  let t: AScriptTypeVal =
+    store.prod_types.get(&g.get_production_id_by_name("A")?)?.iter().next()?.0.into();
+
+  assert!(matches!(t, AScriptTypeVal::U32(_)), "{:?} should be a u32 type", t);
+
+  SherpaResult::Ok(())
+}

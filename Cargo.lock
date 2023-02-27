@@ -667,8 +667,6 @@ name = "sherpa_core"
 version = "1.0.0-beta1"
 dependencies = [
  "inkwell",
- "lazy_static",
- "regex",
  "sherpa_runtime",
 ]
 

@@ -46,6 +46,18 @@ fn compile_sherpa_grammar_and_parse_trivial_grammar_expression() -> SherpaResult
   )
 }
 
+/// Test declared symbol type evaluator
+#[test]
+fn compile_sherpa_grammar_and_run_type_eval() -> SherpaResult<Journal> {
+  test_runner(&[("type_eval", r##"123456577"##, true).into()], None, TestConfig {
+    grammar_path: Some(path_from_source("grammar/v1_0_0/grammar.sg")?),
+    llvm_parse: true,
+    bytecode_parse: true,
+    debugger_handler: Some(&|g| console_debugger(g, Default::default())),
+    ..Default::default()
+  })
+}
+
 /// Test component module wide compilation of the sherpa grammar.
 #[test]
 fn compile_ir_state() -> SherpaResult<Journal> {

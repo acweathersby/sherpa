@@ -1,12 +1,12 @@
 use super::{
-  bytecode::{ByteCodeIterator, Instruction},
+  bytecode::{ByteCodeIterator, InputType, Instruction},
   *,
 };
 
 /// Deconstructed bytecode table information.
 #[derive(Debug, Clone, Copy)]
 pub struct TableHeaderData<'a> {
-  pub input_type: u32,
+  pub input_type: InputType,
   pub table_length: u32,
   pub table_meta: u32,
   /// The instruction of the scanner state, if this table has
@@ -46,7 +46,7 @@ impl<'a> From<Instruction<'a>> for TableHeaderData<'a> {
     let table_start_iter = (i.bytecode(), table_start as usize).into();
 
     Self {
-      input_type,
+      input_type: input_type.into(),
       table_length,
       table_meta,
       table_start,

@@ -1,3 +1,4 @@
+use super::utils::{console_debugger, PrintConfig};
 use crate::{
   grammar::{
     compile::{
@@ -7,6 +8,7 @@ use crate::{
       compile_ir_ast,
       finalize::convert_left_recursion_to_right,
       parse::{load_from_string, resolve_grammar_path},
+      parser::sherpa::{self, ASTNodeType, GetASTNodeType},
     },
     get_production_start_items,
   },
@@ -14,10 +16,7 @@ use crate::{
   test::utils::{test_runner, TestConfig},
   types::*,
 };
-use lazy_static::__Deref;
 use std::path::PathBuf;
-
-use super::utils::{console_debugger, PrintConfig, TestInput};
 
 #[test]
 fn test_load_all() {
@@ -212,7 +211,7 @@ fn left_to_right_recursive_conversion() -> SherpaResult<()> {
 
   assert!(g.get_production_recursion_type(prod).is_direct_left());
 
-  let mut g2 = g.deref().clone();
+  let mut g2 = g.as_ref().clone();
 
   convert_left_recursion_to_right(&mut g2, prod);
 
@@ -490,30 +489,98 @@ fn compile_grammar_with_syntax_definitions() -> SherpaResult<()> {
   SherpaResult::Ok(())
 }
 
-// Compile v1.0.0 grammar with v1.0.0_strap parser
 #[test]
-fn compile_latest_grammar() -> SherpaResult<Journal> {
+fn calculate_defined_type() -> SherpaResult<Journal> {
   test_runner(
-    &[TestInput {
-      entry_name:     "grammar",
-      input:          r#"
-      /* test */
-      // This is a comment
-        <>grammar>
-          "Hello" 'World'
-    "#,
-      should_succeed: true,
-    }],
+    &[
+      ("type", r#"ident"#, true).into(),
+      ("type", r#"483829"#, true).into(),
+      ("type", r#"\v"#, true).into(),
+      ("type", r#"\%"#, true).into(),
+      ("type", r#"a"#, true).into(),
+      ("type", r#"a "#, false).into(),
+      ("type", r#"c:"#, false).into(),
+    ],
     None,
     TestConfig {
-      print_states: true,
-      print_disassembly: true,
       bytecode_parse: true,
-      grammar_path: Some(crate::test::utils::path_from_source("grammar/v1_0_0/grammar.sg")?),
+      llvm_parse: true,
+      grammar_string: Some(
+        r##"
+<> type > id $ | num $ | esc $
+
+<> id > tk:identifier  :ast { t_DEFINED_TYPE_IDENT }
+
+<> num > tk:number     :ast { t_DEFINED_TYPE_NUM }
+
+<> esc > tk:escaped    :ast { t_DEFINED_TYPE_ESCAPE }
+
+<> identifier > "_"(+) ( c:id | c:num )  id_rest(*)
+              | c:id id_rest(*)
+
+<> id_rest > c:id | c:num | '-' | '_'
+
+<> number > c:num(+)
+
+<> escaped > "\\" ( c:num | c:id | c:sym | c:nl | c:sp )
+      
+      
+"##,
+      ),
       debugger_handler: Some(&|g| {
-        console_debugger(g, PrintConfig { display_input_data: true, ..Default::default() })
+        console_debugger(g, PrintConfig {
+          display_input_data: false,
+          display_instruction: false,
+          display_scanner_output: false,
+          display_state: false,
+          ..Default::default()
+        })
       }),
       ..Default::default()
     },
   )
+}
+
+#[test]
+fn group_declare_strings() -> SherpaResult<()> {
+  assert_eq!(sherpa::ast::type_eval_from("a".into())?.get_type(), ASTNodeType::DEFINED_TYPE_IDENT);
+  assert_eq!(
+    sherpa::ast::type_eval_from("walkies".into())?.get_type(),
+    ASTNodeType::DEFINED_TYPE_IDENT
+  );
+  assert_eq!(
+    sherpa::ast::type_eval_from("november_falls".into())?.get_type(),
+    ASTNodeType::DEFINED_TYPE_IDENT
+  );
+  assert_eq!(
+    sherpa::ast::type_eval_from("string".into())?.get_type(),
+    ASTNodeType::DEFINED_TYPE_IDENT
+  );
+  assert_eq!(
+    sherpa::ast::type_eval_from("8456456234".into())?.get_type(),
+    ASTNodeType::DEFINED_TYPE_NUM
+  );
+  assert_eq!(
+    sherpa::ast::type_eval_from("126943".into())?.get_type(),
+    ASTNodeType::DEFINED_TYPE_NUM
+  );
+  assert_eq!(sherpa::ast::type_eval_from("12".into())?.get_type(), ASTNodeType::DEFINED_TYPE_NUM);
+
+  SherpaResult::Ok(())
+}
+
+#[test]
+fn escaped() -> SherpaResult<()> {
+  assert_eq!(
+    sherpa::ast::escaped_from(r#"@vbas_231sd\d3\edd452sd\df\ds#23\g\ f\fd\45"#.into())?.join(""),
+    "@vbas_231sdd3edd452sddfds#23g ffd45"
+  );
+
+  assert_eq!(sherpa::ast::escaped_from(r#"abc"#.into())?.join(""), "abc");
+
+  assert_eq!(sherpa::ast::escaped_from(r#"\a\b\c"#.into())?.join(""), "abc");
+
+  assert_eq!(sherpa::ast::escaped_from(r#"\\\\\\"#.into())?.join(""), r#"\\\"#);
+
+  SherpaResult::Ok(())
 }

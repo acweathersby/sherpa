@@ -64,6 +64,7 @@ pub enum DebugEvent<'a> {
     production_id: u32,
   },
   Failure {},
+  EndOfFile,
 }
 
 pub type DebugFn = Box<dyn FnMut(&DebugEvent)>;
@@ -441,10 +442,7 @@ pub fn hash_branch<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
   let hash_mask = (1 << modulo_base) - 1;
 
   loop {
-    let input_value = match input_type {
-      InputType::T01_PRODUCTION => ctx.get_production(),
-      _ => get_token_value(input_type, scan_block_instruction, ctx, debug) as u32,
-    };
+    let input_value = get_input_value(input_type, scan_block_instruction, ctx, debug);
 
     #[cfg(debug_assertions)]
     emit_debug_value(ctx, debug, input_type, input_value);
@@ -469,33 +467,6 @@ pub fn hash_branch<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
   }
 }
 
-fn emit_debug_value<R: ByteReader + MutByteReader + UTF8Reader, M>(
-  ctx: &mut ParseContext<R, M>,
-  debug: &mut Option<Box<dyn FnMut(&DebugEvent)>>,
-  input_type: u32,
-  input_value: u32,
-) {
-  let start = ctx.head_ptr;
-  let end = ctx.head_ptr + ctx.tok_len;
-  if let Some(debug) = debug {
-    match input_type {
-      InputType::T01_PRODUCTION => debug(&DebugEvent::GotoValue { production_id: input_value }),
-      InputType::T05_BYTE => {
-        debug(&DebugEvent::ByteValue { input_value, start, end, string: ctx.get_str() })
-      }
-      InputType::T03_CLASS => {
-        debug(&DebugEvent::ClassValue { input_value, start, end, string: ctx.get_str() })
-      }
-      InputType::T02_TOKEN => {
-        debug(&DebugEvent::TokenValue { input_value, start, end, string: ctx.get_str() })
-      }
-      InputType::T04_CODEPOINT => {
-        debug(&DebugEvent::CodePointValue { input_value, start, end, string: ctx.get_str() })
-      }
-      _ => unreachable!(),
-    };
-  }
-}
 #[inline]
 pub fn vector_branch<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
   i: Instruction<'a>,
@@ -514,10 +485,7 @@ pub fn vector_branch<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
     ..
   } = i.into();
 
-  let input_value = match input_type {
-    InputType::T01_PRODUCTION => ctx.get_production(),
-    _ => get_token_value(input_type, scan_block_instruction, ctx, debug) as u32,
-  };
+  let input_value = get_input_value(input_type, scan_block_instruction, ctx, debug);
 
   #[cfg(debug_assertions)]
   emit_debug_value(ctx, debug, input_type, input_value);
@@ -534,26 +502,26 @@ pub fn vector_branch<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
 }
 
 #[inline]
-fn get_token_value<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
-  input_type: u32,
+fn get_input_value<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
+  input_type: InputType,
   scan_index: Instruction<'a>,
   ctx: &mut ParseContext<R, M>,
   debug: &mut Option<DebugFn>,
-) -> i32 {
+) -> u32 {
   match input_type {
-    InputType::T03_CLASS => {
+    InputType::Production => ctx.get_production() as u32,
+    InputType::EndOfFile => (ctx.scan_ptr >= ctx.end_ptr) as u32,
+    InputType::Class => {
       let scan_len = ctx.get_reader().codepoint_byte_length();
       ctx.sym_len = scan_len;
-      ctx.get_reader().class() as i32
+      ctx.get_reader().class() as u32
     }
-
-    InputType::T04_CODEPOINT => {
+    InputType::Codepoint => {
       let scan_len = ctx.get_reader().codepoint_byte_length();
       ctx.sym_len = scan_len;
-      ctx.get_reader().codepoint() as i32
+      ctx.get_reader().codepoint() as u32
     }
-
-    InputType::T05_BYTE => {
+    InputType::Byte => {
       let byte = ctx.get_reader().byte();
 
       if byte > 0 {
@@ -561,15 +529,43 @@ fn get_token_value<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
       } else {
         ctx.sym_len = 0;
       }
-      byte as i32
+      byte as u32
     }
-    _ => {
+    InputType::Token => {
       debug_assert!(!ctx.is_scanner());
 
       token_scan(scan_index, ctx, debug);
 
-      ctx.tok_id as i32
+      ctx.tok_id as u32
     }
+  }
+}
+
+fn emit_debug_value<R: ByteReader + MutByteReader + UTF8Reader, M>(
+  ctx: &mut ParseContext<R, M>,
+  debug: &mut Option<Box<dyn FnMut(&DebugEvent)>>,
+  input_type: InputType,
+  input_value: u32,
+) {
+  let start = ctx.head_ptr;
+  let end = ctx.head_ptr + ctx.tok_len;
+  if let Some(debug) = debug {
+    match input_type {
+      InputType::Production => debug(&DebugEvent::GotoValue { production_id: input_value }),
+      InputType::Byte => {
+        debug(&DebugEvent::ByteValue { input_value, start, end, string: ctx.get_str() })
+      }
+      InputType::Class => {
+        debug(&DebugEvent::ClassValue { input_value, start, end, string: ctx.get_str() })
+      }
+      InputType::Token => {
+        debug(&DebugEvent::TokenValue { input_value, start, end, string: ctx.get_str() })
+      }
+      InputType::Codepoint => {
+        debug(&DebugEvent::CodePointValue { input_value, start, end, string: ctx.get_str() })
+      }
+      InputType::EndOfFile => debug(&DebugEvent::EndOfFile),
+    };
   }
 }
 
@@ -582,10 +578,6 @@ fn token_scan<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
   ctx.scan_ptr = ctx.head_ptr;
   let offset = ctx.scan_ptr;
   ctx.get_reader_mut().set_cursor_to(offset, 0, 0);
-
-  if ctx.get_reader().at_end() {
-    return;
-  }
 
   // Initialize Scanner
 

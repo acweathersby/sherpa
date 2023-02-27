@@ -177,11 +177,14 @@ pub struct GrammarStore {
   /// If no export names are declared in the root grammar, then this will contain
   /// the id of the first production declared in the root grammar, assigned to the
   /// name `default`.
-  pub exports: Vec<(ProductionId, String)>,
+  pub exports: Vec<(ProductionId, GrammarId, String)>,
 
   /// All items in the grammar that are `B => . A b` for some production `A`.
-  pub(crate) lr_items:   BTreeMap<ProductionId, Vec<Item>>,
-  /// TODO: Docs
+  pub(crate) lr_items: BTreeMap<ProductionId, Vec<Item>>,
+
+  /// Production definitions that use the merge symbol `+>`. These extend the rules of the
+  /// target production if such a production exists, or cause a `production-not-found` error
+  /// to be emitted if the target cannot be found.
   pub merge_productions: BTreeMap<ProductionId, (String, Vec<Rule>)>,
 
   /// All productions that are either entry productions or are reachable from the entry productions
@@ -315,7 +318,7 @@ impl GrammarStore {
     self
       .exports
       .iter()
-      .map(|(id, name)| {
+      .map(|(id, _, name)| {
         let production = self.productions.get(id).unwrap();
         ExportedProduction {
           export_name: name,
@@ -411,6 +414,30 @@ impl GrammarStore {
     }
 
     SherpaResult::None
+  }
+
+  /// Returns the ProductionID of a production whose name or export name matches `name`.
+  ///
+  /// The matching production must be an exported production  (as it is when declared in
+  /// an `EXPORT` statement), or the first production of the grammar that does not have any
+  /// export declarations.
+  pub fn get_entry_prod_id_from_name(&self, name: &str) -> Option<ProductionId> {
+    // See if name is an export name
+    for (prod_id, _, export_name) in &self.exports {
+      if export_name == name {
+        return Some(*prod_id);
+      }
+    }
+
+    if let Some(prod) = self
+      .get_production_id_by_name(name)
+      .and_then(|prod_id| self.get_production(&prod_id).to_option())
+      .filter(|p| p.export_id.is_some())
+    {
+      Some(prod.id)
+    } else {
+      None
+    }
   }
 
   /// Retrieves first the production_id of the first production

@@ -216,7 +216,7 @@ pub fn basic_math_expressions() -> SherpaResult<Journal> {
     <> P > S 
     <> S > S "+" M  | M
     <> M > M "*" E  | E
-    <> E > T | T ^ T
+    <> E > T | T "^" T
     <> T > c:num
     "#,
     ),
@@ -540,7 +540,6 @@ fn test_parsing_with_trivial_peek() -> SherpaResult<Journal> {
     grammar_string: Some(test_grammar),
     bytecode_parse: true,
     llvm_parse: true,
-    //debugger_handler: Some(&|g| console_debugger(g, Default::default())),debugger_handler: Some(&|g| console_debugger(g, Default::default())),
     ..Default::default()
   })
 }
@@ -617,6 +616,36 @@ EXPORT B
       llvm_parse: true,
       bytecode_parse: true,
       debugger_handler: Some(&|g| console_debugger(g, Default::default())),
+      ..Default::default()
+    },
+  )
+}
+
+#[test]
+fn handles_grammars_that_utilize_eof_symbol() -> SherpaResult<Journal> {
+  test_runner(
+    &[
+      ("A", "abc ", false).into(),
+      ("A", "abc", true).into(),
+      ("B", "cba", true).into(),
+      ("B", "cba ", true).into(),
+    ],
+    None,
+    TestConfig {
+      grammar_string: Some(
+        r##"
+
+EXPORT A
+EXPORT B
+      
+<> A > "a" "b" "c" $
+
+<> B > "c" "b" "a"
+      
+      "##,
+      ),
+      bytecode_parse: true,
+      llvm_parse: true,
       ..Default::default()
     },
   )

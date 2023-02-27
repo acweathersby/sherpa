@@ -465,12 +465,12 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
     obj_indices: BTreeSet<usize>,
     token_indices: BTreeSet<usize>,
   ) -> SherpaResult<()> {
-    for slot_index in 0..rule.syms.len() {
+    for slot_index in 0..rule.get_real_len() {
       let ref_index = slot_index + 1;
       let (n, t) = (
         match (slot_index, token_indices.contains(&slot_index)) {
           (0, _) => Some((self.utils.get_token_name)(ref_index)),
-          (i, _) if i == (rule.syms.len() - 1) => Some((self.utils.get_token_name)(ref_index)),
+          (i, _) if i == (rule.get_real_len() - 1) => Some((self.utils.get_token_name)(ref_index)),
           (_, true) => Some((self.utils.get_token_name)(ref_index)),
           _ => None,
         },
@@ -488,10 +488,10 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
       self.utils,
       &type_,
       (self.utils.get_token_name)(0),
-      if rule.syms.len() > 1 {
+      if rule.get_real_len() > 1 {
         (self.utils.token_concat)(
           (self.utils.get_token_name)(1),
-          (self.utils.get_token_name)(rule.syms.len()),
+          (self.utils.get_token_name)(rule.get_real_len()),
         )
       } else {
         (self.utils.get_token_name)(1)
@@ -565,7 +565,7 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
         closing_delim,
         &mut move |w| -> SherpaResult<()> {
           if rule.ast_definition.is_none() {
-            let last_index = rule.syms.len() - 1;
+            let last_index = rule.get_real_len() - 1;
             let last_index_name = (&w.utils.get_slot_obj_name)(last_index + 1);
             w.write_slot_extraction(
               rule,
@@ -580,7 +580,7 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
             ))?;
             SherpaResult::Ok(())
           } else {
-            let mut ref_index = rule.syms.len();
+            let mut ref_index = rule.get_real_len();
             match rule.ast_definition.as_ref().map(|n| &n.ast) {
               Some(ASTNode::AST_Struct(box ast_struct)) => {
                 if let AScriptTypeVal::Struct(struct_type) = get_struct_type_from_node(ast_struct) {

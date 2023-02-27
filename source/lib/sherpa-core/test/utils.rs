@@ -246,8 +246,8 @@ Cannot create a GrammarStore without one of these values present. "
   }
 
   if run_bytecode_parser {
-    for TestInput { input, entry_name, should_succeed: should_parse } in parse_inputs {
-      let SherpaResult::Ok(prod) = g.get_production_by_name(entry_name) else {
+    for TestInput { input, entry_name, should_succeed } in parse_inputs {
+      let Some(prod) = g.get_entry_prod_id_from_name(entry_name)?.into_prod(&g) else {
     return SherpaResult::Err(format!("could not locate production [{}]", entry_name).into())
   };
       let entry_point = *bc.state_name_to_offset.get(&g.get_entry_name_from_prod_id(&prod.id)?)?;
@@ -257,7 +257,7 @@ Cannot create a GrammarStore without one of these values present. "
       let mut debugger = debugger_handler.and_then(|s| s(g.clone()));
       let result =
         parser.collect_shifts_and_skips(entry_point, target_production_id, &mut debugger);
-      resolve_shifts_and_skips(result, should_parse, input, &g, "BYTECODE")?;
+      resolve_shifts_and_skips(result, should_succeed, input, &g, "BYTECODE")?;
     }
   }
 
@@ -274,8 +274,8 @@ Cannot create a GrammarStore without one of these values present. "
     }
 
     if run_llvm_parser {
-      for TestInput { input, entry_name, should_succeed: should_parse } in parse_inputs {
-        let SherpaResult::Ok(prod) = g.get_production_by_name(entry_name) else {
+      for TestInput { input, entry_name, should_succeed } in parse_inputs {
+        let Some(prod) = g.get_entry_prod_id_from_name(entry_name)?.into_prod(&g) else {
         return SherpaResult::Err(format!("could not locate production [{}]", entry_name).into())
       };
         let entry_point = prod.export_id? as u32;
@@ -288,7 +288,7 @@ Cannot create a GrammarStore without one of these values present. "
         let result =
           jit_parser.collect_shifts_and_skips(entry_point, target_production_id, &mut debugger);
 
-        resolve_shifts_and_skips(result, should_parse, input, &g, "LLVM-JIT")?;
+        resolve_shifts_and_skips(result, should_succeed, input, &g, "LLVM-JIT")?;
       }
     }
   }
@@ -371,6 +371,7 @@ pub struct PrintConfig {
   pub display_scanner_output: bool,
   pub display_input_data:     bool,
   pub display_instruction:    bool,
+  pub display_state:          bool,
   pub input_window_size:      usize,
 }
 
@@ -380,6 +381,7 @@ impl Default for PrintConfig {
       display_scanner_output: false,
       display_input_data:     true,
       display_instruction:    false,
+      display_state:          true,
       input_window_size:      74,
     }
   }
@@ -392,6 +394,7 @@ pub fn console_debugger<'a>(
     display_input_data,
     input_window_size,
     display_instruction,
+    display_state,
   }: PrintConfig,
 ) -> Option<Box<dyn FnMut(&DebugEvent)>> {
   let mut stack = vec![];
@@ -420,7 +423,7 @@ Stack:\n    {}\n
         let item: Item = rule.into();
         let prod_name = g.get_production_plain_name(&item.get_prod_id(&g));
 
-        let items = stack.drain((stack.len() - item.len as usize)..);
+        let items = stack.drain((stack.len() - rule.get_real_len() as usize)..);
         let symbols = items.collect::<Vec<_>>();
         stack.push(format!("({prod_name}: {})", symbols.join(",")));
         println!(
@@ -532,7 +535,7 @@ Symbol Length: {}
         production_id
       )
     }
-    DebugEvent::ExecuteState { base_instruction, .. } => {
+    DebugEvent::ExecuteState { base_instruction, .. } if display_state => {
       println!(
         "
 [State]------------------------------------------------------------------

@@ -144,12 +144,14 @@ pub(crate) fn compile_state<'a>(
       last_block = default_block;
     }
 
-    if groups.keys().any(|k| matches!(k.as_str(), "BYTE" | "CODEPOINT" | "CLASS")) {
+    if groups.keys().any(|k| matches!(k.as_str(), "BYTE" | "CODEPOINT" | "CLASS" | "EOF")) {
       // If the block size is less than 1 then jump to default
       let active_block = last_block;
-      let branch_block = ctx.append_basic_block(s_fun, "table_branches");
-      last_block = branch_block;
-      b.position_at_end(branch_block);
+      let symbol_branches_start = ctx.append_basic_block(s_fun, "table_branches");
+
+      last_block = symbol_branches_start;
+
+      b.position_at_end(symbol_branches_start);
 
       let scan_ptr_cache = CTX::scan_ptr.load(b, p_ctx)?.into_pointer_value();
 
@@ -232,13 +234,40 @@ pub(crate) fn compile_state<'a>(
         }
       }
 
+      let last_block = if let Some(eof_branches) = groups.get("EOF") {
+        b.position_at_end(last_block);
+        let eof_start = last_block;
+
+        // Assert that the head is in the end-of file position
+        let chars = get_chars_remaining(m, p_ctx)?;
+        let default_block = ctx.append_basic_block(s_fun, "default");
+        let eof_block = ctx.append_basic_block(s_fun, "eof");
+
+        let c =
+          b.build_int_compare(inkwell::IntPredicate::EQ, chars, m.iptr.const_int(0, false), "");
+        b.build_conditional_branch(c, eof_block, default_block);
+        b.position_at_end(eof_block);
+
+        match eof_branches[0] {
+          ASTNode::ASSERT(box ASSERT { instructions: i, .. }) => {
+            compile_branchless_instructions(j, m, &i, p_ctx, s_fun, loop_head, s_lu, state_name)?
+          }
+          _ => unreachable!(),
+        };
+
+        last_block = default_block;
+        eof_start
+      } else {
+        last_block
+      };
+
       b.position_at_end(active_block);
       check_for_input_acceptability(
         m,
         s_fun,
         p_ctx,
         i64.const_int(1, false),
-        branch_block,
+        symbol_branches_start,
         last_block,
       )?;
     }
@@ -750,7 +779,8 @@ pub(crate) fn peek_token<'a>(m: &'a LLVMParserModule, p_ctx: PointerValue) -> Sh
   SherpaResult::Ok(())
 }
 
-/// Return the difference between the `scan_ptr` and `end_ptr`
+/// Return the difference between the `scan_ptr` and `end_ptr`.
+/// Value type is `iptr`
 pub(crate) fn get_chars_remaining<'a>(
   sp: &'a LLVMParserModule,
   p_ctx: PointerValue<'a>,

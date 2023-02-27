@@ -179,7 +179,7 @@ fn build_branching_bytecode(
       .cloned()
       .filter_map(|p| if p.mode == "CODEPOINT" { Some(p.as_ref()) } else { None })
       .collect::<Vec<_>>(),
-    InputType::T04_CODEPOINT,
+    InputType::Codepoint,
     &String::new(),
     o,
     get_branch_selector,
@@ -193,7 +193,7 @@ fn build_branching_bytecode(
       .cloned()
       .filter_map(|p| if p.mode == "CLASS" { Some(p.as_ref()) } else { None })
       .collect::<Vec<_>>(),
-    InputType::T03_CLASS,
+    InputType::Class,
     &String::new(),
     o,
     get_branch_selector,
@@ -207,7 +207,7 @@ fn build_branching_bytecode(
       .cloned()
       .filter_map(|p| if p.mode == "BYTE" { Some(p.as_ref()) } else { None })
       .collect::<Vec<_>>(),
-    InputType::T05_BYTE,
+    InputType::Byte,
     &String::new(),
     o,
     get_branch_selector,
@@ -221,7 +221,7 @@ fn build_branching_bytecode(
       .cloned()
       .filter_map(|p| if p.mode == "TOKEN" { Some(p.as_ref()) } else { None })
       .collect::<Vec<_>>(),
-    InputType::T02_TOKEN,
+    InputType::Token,
     scanner_name,
     o,
     get_branch_selector,
@@ -235,7 +235,21 @@ fn build_branching_bytecode(
       .cloned()
       .filter_map(|p| if p.mode == "PRODUCTION" { Some(p.as_ref()) } else { None })
       .collect::<Vec<_>>(),
-    InputType::T01_PRODUCTION,
+    InputType::Production,
+    &String::new(),
+    o,
+    get_branch_selector,
+    state_to_bookmark,
+    state_name,
+  );
+
+  let o = make_table(
+    &branches
+      .iter()
+      .cloned()
+      .filter_map(|p| if p.mode == "EOF" { Some(p.as_ref()) } else { None })
+      .collect::<Vec<_>>(),
+    InputType::EndOfFile,
     &String::new(),
     o,
     get_branch_selector,
@@ -248,7 +262,7 @@ fn build_branching_bytecode(
 
 fn make_table(
   branches: &[&ASSERT],
-  input_type_key: u32,
+  input_type_key: InputType,
   scanner_name: &str,
   mut default: Vec<u8>,
   get_branch_selector: GetBranchSelector,
@@ -259,7 +273,7 @@ fn make_table(
     return default;
   }
 
-  let scanner_address = if input_type_key == InputType::T02_TOKEN {
+  let scanner_address = if input_type_key == InputType::Token {
     if scanner_name.is_empty() {
       panic!("Scanner name should not be empty! {}", state_name);
     }

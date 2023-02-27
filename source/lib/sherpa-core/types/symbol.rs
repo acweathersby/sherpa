@@ -1,4 +1,4 @@
-use sherpa_runtime::utf8::lookup_table::CodePointClass;
+use sherpa_runtime::{types::bytecode::InputType, utf8::lookup_table::CodePointClass};
 
 use super::{GrammarId, GrammarRef, GrammarStore, ProductionId, SherpaResult, Token};
 use crate::grammar::{compile::finalize::get_scanner_info_from_defined, uuid::hash_id_value_u64};
@@ -94,11 +94,9 @@ pub enum SymbolID {
   Recovery,
   /// Default symbol used when no other symbol type fits.
   Default,
-  /// TODO: Docs
-  /// Represent end of input. This is also used
-  /// to represent the `symbol` of items in the completed
-  /// position
-  EndOfInput,
+  /// Represent end of input. Once encountered the parser can
+  /// no longer peek or shift new tokens.
+  EndOfFile,
   /// Used to differentiate different completed items in the
   /// `peek` module.
   DistinctGroup(u32),
@@ -141,7 +139,7 @@ impl SymbolID {
     SymbolID::GenericIdentifier,
     SymbolID::GenericNumber,
     SymbolID::GenericSymbol,
-    SymbolID::EndOfInput,
+    SymbolID::EndOfFile,
   ];
 
   /// TODO: Docs
@@ -150,7 +148,7 @@ impl SymbolID {
       "default" => Self::Default,
       "[??]" => Self::Undefined,
       gen_rec_marker_str => Self::Recovery,
-      eof_str => Self::EndOfInput,
+      eof_str => Self::EndOfFile,
       tab_sym_str => Self::GenericHorizontalTab,
       nl_sym_str => Self::GenericNewLine,
       space_sym_str => Self::GenericSpace,
@@ -197,7 +195,7 @@ impl SymbolID {
       Self::Default => "default".into(),
       Self::ExclusiveEnd => "⦻".into(),
       Self::Recovery => gen_rec_marker_str.into(),
-      Self::EndOfInput => eof_str.into(),
+      Self::EndOfFile => eof_str.into(),
       Self::GenericHorizontalTab => tab_sym_str.into(),
       Self::GenericNewLine => nl_sym_str.into(),
       Self::GenericSpace => space_sym_str.into(),
@@ -225,7 +223,7 @@ impl SymbolID {
       Self::Default => "__default".into(),
       Self::Start => "__start".into(),
       Self::Recovery => "__rec".into(),
-      Self::EndOfInput => "__eof".into(),
+      Self::EndOfFile => "__eof".into(),
       Self::GenericHorizontalTab => "__tab".into(),
       Self::GenericNewLine => "__nl".into(),
       Self::GenericSpace => "__sp".into(),
@@ -238,11 +236,12 @@ impl SymbolID {
 
   /// Returns a tuple indicating the type CLASS of shift that is performed
   /// on this symbol.
-  pub fn shift_info(&self, g: &GrammarStore) -> (u32, &'static str) {
+  pub fn shift_info(&self, g: &GrammarStore) -> (u32, InputType) {
     use SymbolID::*;
     match self {
+      EndOfFile => (self.bytecode_id(g), InputType::EndOfFile),
       GenericSpace | GenericHorizontalTab | GenericNewLine | GenericIdentifier | GenericNumber
-      | GenericSymbol | EndOfInput => (self.bytecode_id(g), "CLASS"),
+      | GenericSymbol => (self.bytecode_id(g), InputType::Class),
       ExclusiveDefinedIdentifier(..)
       | ExclusiveDefinedNumeric(..)
       | ExclusiveDefinedSymbol(..)
@@ -253,13 +252,13 @@ impl SymbolID {
         let id = g.symbol_strings.get(self).unwrap();
         let sym_char = id.as_bytes()[0];
         if symbol.byte_length > 1 || sym_char > 128 {
-          (symbol.bytecode_id, "CODEPOINT")
+          (symbol.bytecode_id, InputType::Codepoint)
         } else {
-          (sym_char as u32, "BYTE")
+          (sym_char as u32, InputType::Byte)
         }
       }
-      Default | ExclusiveEnd => (DEFAULT_SYM_ID, "CLASS"),
-      _ => (0, "BYTE"),
+      Default | ExclusiveEnd => (DEFAULT_SYM_ID, InputType::Class),
+      _ => (0, InputType::Byte),
     }
   }
 
@@ -280,7 +279,7 @@ impl SymbolID {
       | Self::GenericNumber
       | Self::GenericSymbol
       | Self::GenericSpace
-      | Self::EndOfInput => true,
+      | Self::EndOfFile => true,
       _ => false,
     }
   }
@@ -305,6 +304,14 @@ impl SymbolID {
       | Self::ExclusiveDefinedNumeric(_)
       | Self::ExclusiveDefinedIdentifier(_)
       | Self::ExclusiveDefinedSymbol(_) => true,
+      _ => false,
+    }
+  }
+
+  /// TODO: Docs
+  pub fn is_default(&self) -> bool {
+    match self {
+      Self::Default => true,
       _ => false,
     }
   }
@@ -354,8 +361,9 @@ impl SymbolID {
       Self::GenericIdentifier => CodePointClass::Identifier as u32,
       Self::GenericNumber => CodePointClass::Number as u32,
       Self::GenericSymbol => CodePointClass::Symbol as u32,
-      Self::EndOfInput => CodePointClass::EndOfInput as u32,
-      _ => 0,
+      Self::EndOfFile => CodePointClass::EndOfInput as u32,
+      Self::Default => 0,
+      _ => undefined_symbol_id,
     }
   }
 }
@@ -399,7 +407,7 @@ impl Symbol {
   /// TODO: Docs
   pub const Generics: [&'static Symbol; 7] = [
     &Symbol {
-      guid:          SymbolID::EndOfInput,
+      guid:          SymbolID::EndOfFile,
       bytecode_id:   CodePointClass::EndOfInput as u32,
       cp_len:        0,
       byte_length:   0,

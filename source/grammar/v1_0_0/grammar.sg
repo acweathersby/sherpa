@@ -5,6 +5,7 @@ IMPORT ./symbol as sym
 IMPORT ./syntax as syn
 IMPORT ./ir as ir
 IMPORT ./comment as cmt
+IMPORT ./defined_type_eval as dt
 
 IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
@@ -12,6 +13,8 @@ EXPORT grammar as grammar
 EXPORT ast::struct as ast_struct
 EXPORT ast::expression as ast_expression
 EXPORT ir::state as ir
+EXPORT dt::def_type as type_eval
+EXPORT dt::escaped_string as escaped
 
 
 
@@ -79,7 +82,7 @@ EXPORT ir::state as ir
 
 <> rule > 
 
-        "!"?^p ( sym::annotated_symbol | any_group )(+)^s ast_definition?^a
+        "!"?^p (( sym::annotated_symbol | any_group )(+)^s sym::end_of_input?^eoi :ast [$s, $eoi])^s ast_definition?^a
         syntax_definition?^syn recover_definition?^rec
 
               :ast {

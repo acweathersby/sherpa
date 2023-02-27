@@ -85,7 +85,8 @@ pub trait LLVMByteReader {
     let base_delta = (*base_ptr as usize) - (*anchor_ptr as usize);
     let needed = *end_ptr_and_needed as usize;
 
-    let size = ((self_.len() as i64) - ((anchor_offset + scan_delta + needed as usize) as i64))
+    let size = (((self_.len() as i64) + 1)
+      - ((anchor_offset + scan_delta + needed as usize) as i64))
       .max(0) as u32;
 
     if size > 0 {

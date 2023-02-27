@@ -1,4 +1,4 @@
-use super::utils::TestConfig;
+use super::utils::{console_debugger, TestConfig};
 use crate::{journal::config::DebugConfig, test::utils::test_runner, Config, SherpaResult};
 
 #[test]
@@ -7,7 +7,7 @@ fn escaped_string() -> SherpaResult<()> {
     r##"
         <> string > tk:string_tk
         
-        <> string_tk > '"' ( c:sym | c:num | c:sp | c:id | escape )(*) '\"'
+        <> string_tk > '"' ( c:sym | c:num | c:sp | c:id | escape )(*) "\""
         
         <> escape > "\\"  ( c:sym | c:num | c:sp | c:id )
         "##,
@@ -37,11 +37,11 @@ fn json_object_with_specialized_key() -> SherpaResult<()> {
     r##"
 IGNORE { c:sp c:nl }
 
-<> json > '{'  value(*,) '}'
+<> json > '{'  value(*',') '}'
 
 <> value > tk:string ':' tk:string
 
-    | '\"test\"' ':' c:num
+    | '"test"' ':' c:num
 
 <> string > '"' ( c:sym | c:num | c:sp | c:id | escape )(*) '\"'
     
@@ -89,8 +89,11 @@ fn compile_and_run_grammar(
       ..Default::default()
     }),
     TestConfig {
+      optimize: true,
+      llvm_parse: true,
       bytecode_parse: true,
       grammar_string: Some(grammar),
+      debugger_handler: Some(&|g| console_debugger(g, Default::default())),
       ..Default::default()
     },
   )?;

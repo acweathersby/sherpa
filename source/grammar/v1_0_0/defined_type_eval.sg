@@ -1,0 +1,18 @@
+<> def_type > id $ | num $ 
+
+<> id > tk:identifier  :ast { t_DEFINED_TYPE_IDENT }
+
+<> num > tk:number     :ast { t_DEFINED_TYPE_NUM }
+
+<> identifier > "_"(+) ( c:id | c:num )  id_rest(*)
+              | c:id id_rest(*)
+
+<> id_rest > c:id | c:num | '-' | '_'
+
+<> number > c:num(+)
+
+<> escaped_string > ( escaped_vals :ast str($1) | escaped )(+)
+
+<> escaped_vals > c:num | c:id | c:sym | c:nl | c:sp
+
+<> escaped > "\\" ( c:num | c:id | c:sym | c:nl | c:sp ) :ast str($2)

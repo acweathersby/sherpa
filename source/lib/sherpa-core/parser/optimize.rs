@@ -17,10 +17,14 @@ use crate::{
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 
 use super::hash_group_btreemap;
+/// TODO join all LEAF states (non-branching states that do not have gotos - including push and push exception handler),
+/// then replace all state with gotos with the leaf merged leaf states.
+
+/// Then merge all states that have identical bodies and merge.
 
 /// Attempts to reduce the number of IR states through merging states, and reduce
 /// and reduce bytecode complexity by transforming instructions where appropriate.
-///
+
 pub fn optimize_parse_states(
   j: &mut Journal,
   mut states: BTreeMap<String, Box<ParseState>>,
@@ -45,7 +49,8 @@ pub fn optimize_parse_states(
 
   loop {
     // Find states with identical bodies
-    merge_identical_states(&mut states);
+
+    let mut changes = merge_identical_states(&mut states);
     // Maps a pure PushGoto state id, in which  the state is only comprised of PushGoto actions,
     // to a list of that state's actions.
     let mut pure_goto_replacements = BTreeMap::new();
@@ -102,8 +107,6 @@ pub fn optimize_parse_states(
         }
       }
     }
-
-    let mut changes = false;
 
     // For each state, try to lower any state that is a pure
     // PushGoto state into the respective reference states.
@@ -238,7 +241,8 @@ fn branch_has_terminal_end_node(branch: &mut Vec<ASTNode>) -> bool {
   )
 }
 
-fn merge_identical_states(states: &mut BTreeMap<String, Box<ParseState>>) {
+fn merge_identical_states(states: &mut BTreeMap<String, Box<ParseState>>) -> bool {
+  let mut change = false;
   let merge_candidates =
     hash_group_btreemap(states.values().cloned().collect::<Vec<_>>(), |_, s| {
       hash_id_value_u64(&s.get_ast().unwrap().instructions)
@@ -261,10 +265,10 @@ fn merge_identical_states(states: &mut BTreeMap<String, Box<ParseState>>) {
         // println!("{}", state.to_string());
         merge_maps.insert(state.get_name(), root_name.clone());
       }
-    } else {
-      let state = candidates.pop().unwrap();
-      merge_maps.insert(state.get_name(), state.get_name());
-    }
+    } /* else {
+        let state = candidates.pop().unwrap();
+        merge_maps.insert(state.get_name(), state.get_name());
+      } */
   }
 
   // Update gotos based on merge maps
@@ -282,7 +286,10 @@ fn merge_identical_states(states: &mut BTreeMap<String, Box<ParseState>>) {
                 "State [{}] does not exist",
                 state.val
               );
-              state.val = name.clone();
+              if state.val != *name {
+                change = true;
+                state.val = name.clone();
+              }
             }
           }
           _ => unreachable!(),
@@ -290,6 +297,8 @@ fn merge_identical_states(states: &mut BTreeMap<String, Box<ParseState>>) {
       }
     }
   }
+
+  change
 }
 
 // Transitive actions perform a major operation that significantly changes the
@@ -572,7 +581,7 @@ fn map_bytecode_id_to_sym_id(
 ) -> BTreeMap<u32, crate::types::SymbolID> {
   symbols
     .into_iter()
-    .chain(vec![SymbolID::EndOfInput].into_iter())
+    .chain(vec![SymbolID::EndOfFile].into_iter())
     .map(|s| {
       let sym = g.get_symbol(&s).unwrap();
       (sym.bytecode_id, s)

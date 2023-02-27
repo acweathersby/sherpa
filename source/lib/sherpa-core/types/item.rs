@@ -274,7 +274,7 @@ impl Item {
     if self.is_null() {
       SymbolID::Undefined
     } else if self.is_completed() {
-      SymbolID::EndOfInput
+      SymbolID::EndOfFile
     } else {
       match g.rules.get(&self.rule_id) {
         Some(rule) => rule.syms[self.off as usize].sym_id,

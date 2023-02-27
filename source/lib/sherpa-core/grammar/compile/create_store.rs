@@ -1,25 +1,35 @@
 use super::parser::{
-  sherpa::{ASTNode, Grammar, Name},
+  sherpa::{
+    ASTNode,
+    GetASTNodeType,
+    Grammar,
+    Name,
+    Production_Import_Symbol,
+    Production_Terminal_Symbol,
+  },
   *,
 };
 use crate::{
   ascript::types::{ascript_first_node_id, ascript_last_node_id},
   compile::{GrammarRef, GrammarStore, ProductionId, Symbol, SymbolID},
-  grammar::{compile::parser::sherpa::Export, create_production_guid_name, create_scanner_name},
+  grammar::{
+    compile::parser::sherpa::{ASTNodeType, Export},
+    create_production_guid_name,
+    create_scanner_name,
+  },
   types::{self, ImportedGrammarReferences, RuleId, RuleSymbol, SherpaErrorSeverity, StringId},
   Journal,
   ReportType,
   SherpaError,
   SherpaResult,
 };
-use lazy_static::__Deref;
-use regex::Regex;
 use sherpa_runtime::types::{BlameColor, Token};
 use std::{
   collections::{btree_map, HashMap, HashSet, VecDeque},
   path::PathBuf,
   sync::Arc,
 };
+use types::GrammarId;
 
 /// Runs an initial configuration of a GrammarStore from data contained in
 /// a parsed source grammar AST.
@@ -56,7 +66,12 @@ pub fn create_store<'a>(
       }
       ASTNode::Export(box Export { production, reference }) => {
         let id = get_prod_id(j, &mut g, production);
-        g.exports.push((id, reference.to_string()));
+
+        g.exports.push((
+          id,
+          get_grammar_id_from_production_symbol_node(production, &g),
+          reference.to_string(),
+        ));
       }
       _ => {}
     }
@@ -70,7 +85,7 @@ pub fn create_store<'a>(
         let p = process_production_node(j, &mut g, prod, &mut post_process_productions);
         // Add the default export production if exports have not yet been defined.
         if p != ProductionId::default() && g.exports.is_empty() {
-          g.exports.push((p, "default".to_string()));
+          g.exports.push((p, g.id.guid, "default".to_string()));
         }
       }
       true => {
@@ -111,6 +126,24 @@ pub fn create_store<'a>(
   j.report_mut().stop_timer("Initial Prep");
 
   Arc::new(g)
+}
+/// Returns the originating GrammarId for for a node that is either
+/// a `Production_Import_Symbol`, `Production_Symbol`, or a `Production_Terminal_Symbol`.
+fn get_grammar_id_from_production_symbol_node(production: &ASTNode, g: &GrammarStore) -> GrammarId {
+  let grammar_id = match production {
+    ASTNode::Production_Import_Symbol(box Production_Import_Symbol { module, .. }) => {
+      g.imports.get(module).unwrap().guid
+    }
+    ASTNode::Production_Symbol(_) => g.id.guid,
+    ASTNode::Production_Terminal_Symbol(box Production_Terminal_Symbol { production, .. }) => {
+      get_grammar_id_from_production_symbol_node(production, g)
+    }
+    _ => unreachable!(
+      "Unexpected non-production symbol found\n{}",
+      production.to_token().blame(1, 1, "", None)
+    ),
+  };
+  grammar_id
 }
 
 fn create_unexpected_rule_error<R>(
@@ -274,6 +307,7 @@ struct SymbolData<'a> {
   pub is_optional:      bool,
   pub is_shift_nothing: bool,
   pub is_exclusive:     bool,
+  pub is_eof:           bool,
   pub sym_atom:         Option<&'a ASTNode>,
 }
 
@@ -290,6 +324,7 @@ fn get_symbol_details<'a>(
     is_optional:      false,
     is_shift_nothing: false,
     is_exclusive:     false,
+    is_eof:           false,
     sym_atom:         None,
   };
 
@@ -323,6 +358,10 @@ fn get_symbol_details<'a>(
         data.is_exclusive |= t.is_exclusive;
         break;
       }
+      ASTNode::EOFSymbol(_) => {
+        data.is_eof = true;
+        break;
+      }
       // This symbol types are "real" symbols, in as much
       // as they represent actual parsable entities which are
       // submitted to the bytecode compiler for evaluation
@@ -335,9 +374,7 @@ fn get_symbol_details<'a>(
         break;
       }
       _ => {
-        j.report_mut().add_error(
-          SherpaError::SourceError { loc: sym.to_token(), path: g.id.path.clone(), id: "unknown-symbol-node", msg: "[INTERNAL ERROR]".into(), inline_msg: format!("Unexpected ASTNode {:?}", sym), ps_msg: "".into(), severity: SherpaErrorSeverity::Critical }
-         );
+        add_unexpected_symbol_error(j, g,sym, "function get_symbol_details");
         break;
       }
     }
@@ -346,6 +383,21 @@ fn get_symbol_details<'a>(
   data.sym_atom = Some(sym);
 
   data
+}
+
+/// Call this function anywhere a ASTNode type is not expected
+fn add_unexpected_symbol_error(j: &mut Journal, g: &GrammarStore, sym: &ASTNode, hint: &str) {
+  j.report_mut().add_error(SherpaError::SourceError {
+    loc:        sym.to_token(),
+    path:       g.id.path.clone(),
+    id:         "unknown-symbol-node",
+    msg:        "[INTERNAL ERROR]".into(),
+    inline_msg: format!("Unexpected ASTNode\n{: >20?}", sym),
+    ps_msg:     format!(
+      "This is an internal error that needs to be fixed by the Sherpa maintainers.\n{hint}"
+    ),
+    severity:   SherpaErrorSeverity::Critical,
+  });
 }
 
 fn create_rule_vectors<'a>(
@@ -370,6 +422,7 @@ fn create_rule_vectors<'a>(
       is_shift_nothing,
       is_exclusive,
       sym_atom,
+      is_eof,
     } = get_symbol_details(j, g, sym);
 
     if let Some(mut sym) = sym_atom.to_owned() {
@@ -606,7 +659,7 @@ fn create_rule_vectors<'a>(
       if let Some(id) = record_symbol(j, g, sym, is_exclusive) {
         for (_, vec) in &mut rules[original_bodies] {
           vec.push(RuleSymbol {
-            original_index: *index as u32,
+            original_index: if is_eof { u32::MAX } else { *index as u32 },
             sym_id: id,
             annotation: annotation.clone(),
             consumable: !is_shift_nothing,
@@ -691,7 +744,7 @@ fn process_rule<'a>(
             syms: b.clone(),
             len: b.len() as u16,
             prod_id: get_production_identifiers(j, g, production).0,
-            ast_definition: rule.ast_definition.as_ref().map(|d| d.deref().clone()),
+            ast_definition: rule.ast_definition.as_ref().map(|d| d.as_ref().clone()),
             tok: t.clone(),
             grammar_ref: g.id.clone(),
             ..Default::default()
@@ -804,15 +857,7 @@ fn get_grammar_info_from_node<'a>(
     }
     Some(ASTNode::Production_Symbol(_)) => Some(g.id.clone()),
     _ => {
-      j.report_mut().add_error(SherpaError::SourceError {
-        loc:        node.to_token(),
-        path:       g.id.path.clone(),
-        id:         "unexpected-node",
-        msg:        " Unable to resolve production name of this node".to_string(),
-        inline_msg: Default::default(),
-        ps_msg:     Default::default(),
-        severity:   SherpaErrorSeverity::Critical,
-      });
+      add_unexpected_symbol_error(j, g, node, "in-function get_grammar_info_from_node");
       None
     }
   }
@@ -896,23 +941,26 @@ fn get_productions_names(
   }
 }
 
-lazy_static::lazy_static! {
-  static ref identifier_re: Regex = Regex::new(r"[\w_-][\w\d_-]*$").unwrap();
-  static ref number_re: Regex = Regex::new(r"\d+$").unwrap();
-  static ref escaped: Regex = Regex::new(r"\\([^$])").unwrap();
-}
-
 /// Returns an appropriate SymbolID::Defined* based on the input
 /// string
 #[inline]
 pub fn get_terminal_id(string: &String, exclusive: bool) -> SymbolID {
-  match (exclusive, number_re.is_match(string), identifier_re.is_match(string)) {
-    (true, true, false) => SymbolID::ExclusiveDefinedNumeric(StringId::from(string)),
-    (false, true, false) => SymbolID::DefinedNumeric(StringId::from(string)),
-    (true, false, true) => SymbolID::ExclusiveDefinedIdentifier(StringId::from(string)),
-    (false, false, true) => SymbolID::DefinedIdentifier(StringId::from(string)),
-    (true, ..) => SymbolID::ExclusiveDefinedSymbol(StringId::from(string)),
-    (false, ..) => SymbolID::DefinedSymbol(StringId::from(string)),
+  use ASTNodeType::*;
+  use SymbolID::*;
+  if let Ok(node) = sherpa::ast::type_eval_from(string.into()) {
+    match (node.get_type(), exclusive) {
+      (DEFINED_TYPE_IDENT, true) => ExclusiveDefinedIdentifier(StringId::from(string)),
+      (DEFINED_TYPE_IDENT, false) => DefinedIdentifier(StringId::from(string)),
+      (DEFINED_TYPE_NUM, true) => ExclusiveDefinedNumeric(StringId::from(string)),
+      (DEFINED_TYPE_NUM, false) => DefinedNumeric(StringId::from(string)),
+      (_, true) => ExclusiveDefinedSymbol(StringId::from(string)),
+      (_, false) => DefinedSymbol(StringId::from(string)),
+    }
+  } else {
+    match exclusive {
+      true => ExclusiveDefinedSymbol(StringId::from(string)),
+      false => DefinedSymbol(StringId::from(string)),
+    }
   }
 }
 
@@ -930,7 +978,7 @@ fn record_symbol(
     }
     ASTNode::Terminal(box terminal) => {
       let old = &terminal.val;
-      let string = escaped.replace_all(old, "$1").to_string();
+      let string = sherpa::ast::escaped_from(old.into()).unwrap().join("");
       let sym_id = get_terminal_id(&string, terminal.is_exclusive | exclusive);
 
       if let std::collections::btree_map::Entry::Vacant(e) = g.symbols.entry(sym_id) {
@@ -955,6 +1003,7 @@ fn record_symbol(
     ASTNode::Production_Symbol(_) | ASTNode::Production_Import_Symbol(_) => {
       process_production(j, g, sym_node)
     }
+    ASTNode::EOFSymbol(_) => Some(SymbolID::EndOfFile),
     ASTNode::ClassSymbol(gen) => match gen.val.as_str() {
       "sp" => Some(SymbolID::GenericSpace),
       "tab" => Some(SymbolID::GenericHorizontalTab),
@@ -966,15 +1015,12 @@ fn record_symbol(
     },
     ASTNode::Production_Terminal_Symbol(token_prod) => process_token_production(j, g, token_prod),
     _ => {
-      j.report_mut().add_error(SherpaError::SourceError {
-        loc:        sym_node.to_token(),
-        path:       g.id.path.clone(),
-        id:         "unexpected-node",
-        msg:        "Unexpected ASTNode while attempting to record symbol".to_string(),
-        inline_msg: Default::default(),
-        ps_msg:     format!("{sym_node:#?}"),
-        severity:   SherpaErrorSeverity::Critical,
-      });
+      add_unexpected_symbol_error(
+        j,
+        g,
+        sym_node,
+        "Unexpected ASTNode while attempting to record symbol\nfunction record_symbol",
+      );
       None
     }
   }

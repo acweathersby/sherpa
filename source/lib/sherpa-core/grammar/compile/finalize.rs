@@ -55,7 +55,7 @@ pub fn finalize_grammar(j: &mut Journal, mut g: GrammarStore) -> GrammarStore {
 }
 
 fn declare_exported_productions(g: &mut GrammarStore) {
-  for (export_id, (p, _)) in g.exports.clone().iter().enumerate() {
+  for (export_id, (p, ..)) in g.exports.clone().iter().enumerate() {
     g.productions.get_mut(&p).unwrap().export_id = Some(export_id);
   }
 }

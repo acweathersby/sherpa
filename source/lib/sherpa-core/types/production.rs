@@ -63,6 +63,11 @@ impl Sub<RecursionType> for RecursionType {
   }
 }
 
+impl Default for RecursionType {
+  fn default() -> Self {
+    RecursionType::NONE
+  }
+}
 /// A convenient wrapper around information used to construct parser entry points
 /// based on [productions](Production).
 pub struct ExportedProduction<'a> {
@@ -78,14 +83,16 @@ pub struct ExportedProduction<'a> {
   pub export_id:   usize,
 }
 
-impl Default for RecursionType {
-  fn default() -> Self {
-    RecursionType::NONE
-  }
-}
-/// TODO: Docs
+/// A unique identifier type used for all productions in a grammar.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
 pub struct ProductionId(pub u64);
+
+impl ProductionId {
+  /// Retrieve the production this id represents.
+  pub fn into_prod(self, g: &GrammarStore) -> Option<&Production> {
+    g.get_production(&self).to_option()
+  }
+}
 
 impl From<&String> for ProductionId {
   fn from(string: &String) -> Self {
@@ -296,9 +303,38 @@ impl Rule {
     self.item().blame_string(g)
   }
 
-  /// Returns the last [SymbolID] of the rule.
-  pub fn last_symbol_id(&self) -> SymbolID {
-    self.syms.last().map(|i| i.sym_id).unwrap()
+  /// Returns the number symbols in the rule when ignoring
+  /// the `$` (EndOfFile) symbol.
+  pub fn get_real_len(&self) -> usize {
+    if self.syms.is_empty() {
+      0
+    } else {
+      self
+        .syms
+        .last()
+        .map(|r| r.sym_id == SymbolID::EndOfFile)
+        .map(|t| t.then_some(self.len - 1).unwrap_or(self.len))
+        .unwrap()
+        .into()
+    }
+  }
+
+  /// Returns the number symbols in the rule when ignoring
+  /// the `$` (EndOfFile) symbol.
+  pub fn last_real_sym(&self) -> Option<&RuleSymbol> {
+    self.syms.iter().filter(|s| s.sym_id != SymbolID::EndOfFile).last()
+  }
+
+  /// Returns the number symbols in the rule when ignoring
+  /// the `$` (EndOfFile) symbol.
+  pub fn first_real_sym(&self) -> Option<&RuleSymbol> {
+    self.syms.iter().filter(|s| s.sym_id != SymbolID::EndOfFile).next()
+  }
+
+  /// Returns a vector of the Rules "real" symbols, that is symbols
+  /// that are not EndOfFile
+  pub fn real_syms(&self) -> Vec<&RuleSymbol> {
+    self.syms.iter().filter(|s| s.sym_id != SymbolID::EndOfFile).collect()
   }
 }
 

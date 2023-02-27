@@ -270,7 +270,7 @@ pub(crate) fn generate_table_string<'a>(
     header(i.address()),
     table_name,
     "",
-    input_type_to_name(input_type),
+    InputType::from(input_type).to_string(),
   );
 
   string += &(if scan_index.address() > 0 {
@@ -298,7 +298,7 @@ fn create_default_entry(goto_offset: usize) -> String {
 fn create_normal_entry(
   lu: Option<&GrammarStore>,
   token_id: u32,
-  input_type: u32,
+  input_type: InputType,
   idx: usize,
   bc_address: usize,
   meta: i64,
@@ -308,40 +308,30 @@ fn create_normal_entry(
     "\n{: >6}---- JUMP TO {} ON {} ( {} ) [{}]",
     header(idx),
     address_string(bc_address),
-    input_type_to_name(input_type),
+    InputType::from(input_type).to_string(),
     token_string,
     meta
   )
 }
 
-fn input_type_to_name(input_type: u32) -> &'static str {
-  match input_type {
-    InputType::T01_PRODUCTION => "PRODUCTION",
-    InputType::T02_TOKEN => "TOKEN",
-    InputType::T03_CLASS => "CLASS",
-    InputType::T04_CODEPOINT => "CODEPOINT",
-    InputType::T05_BYTE => "BYTE",
-    _ => "TOKEN",
-  }
-}
-
-fn get_input_id(g: Option<&GrammarStore>, token_id: u32, input_type: u32) -> String {
+fn get_input_id(g: Option<&GrammarStore>, token_id: u32, input_type: InputType) -> String {
   if let Some(g) = g {
     match input_type {
-      InputType::T01_PRODUCTION => {
+      InputType::Production => {
         let production = &g.get_production_by_bytecode_id(token_id).unwrap().name;
         format!("{:<3} [{:^1}]", token_id, production)
       }
-      InputType::T02_TOKEN => {
+      InputType::Token => {
         if let SherpaResult::Ok(sym_id) = g.get_symbol_id_by_bytecode_id(token_id) {
           format!("{:<3} [{:^1}]", token_id, sym_id.debug_string(g))
         } else {
           token_id.to_string()
         }
       }
-      InputType::T03_CLASS => token_id.to_string(),
-      InputType::T04_CODEPOINT => token_id.to_string(),
-      InputType::T05_BYTE => {
+      InputType::EndOfFile => token_id.to_string(),
+      InputType::Class => token_id.to_string(),
+      InputType::Codepoint => token_id.to_string(),
+      InputType::Byte => {
         if token_id < 128 {
           format!(
             "{:<3} [{:^3}]",
@@ -355,7 +345,6 @@ fn get_input_id(g: Option<&GrammarStore>, token_id: u32, input_type: u32) -> Str
           token_id.to_string()
         }
       }
-      _ => token_id.to_string(),
     }
   } else {
     token_id.to_string()

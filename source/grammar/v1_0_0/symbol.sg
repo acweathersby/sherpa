@@ -70,11 +70,7 @@ IGNORE { c:sp c:nl }
 
 <> terminal > 
 
-        ( c:sym | c:num )(+) c:sp?
-
-        :ast { t_Terminal , c_Symbol , c_Terminal, val:str($1), tok } 
-
-        | "\"" ( c:id | c:sym | c:num | c:sp | escaped )(+) "\""
+        "\"" ( c:id | c:sym | c:num | c:sp | escaped )(+) "\""
 
             :ast { t_Terminal , c_Symbol , c_Terminal, val:str($2), tok, is_exclusive:true } 
 
@@ -108,3 +104,6 @@ IGNORE { c:sp c:nl }
         | '-'
 
         | c:id
+
+
+<> end_of_input > "$" :ast { t_EOFSymbol, c_Symbol , c_Terminal, tok }

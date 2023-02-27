@@ -602,7 +602,7 @@ to_numeric!(to_f64, f64);", w.store.ast_type_name)
             "self.{name}.to_string().replace(\" \", \"\").replace(\"\\n\", \"\").hash(hasher);"
           ))?;
               }
-              _ => unreachable!(),
+              _ => unreachable!("Did not expect [{:?}] in this context", type_),
             }
           }
           SherpaResult::Ok(())
@@ -721,15 +721,25 @@ pub(crate) fn create_rust_writer_utils(store: &AScriptStore) -> AscriptWriterUti
     token_concat: &|first, last| format!("{first} + {last}"),
     // Slot Extraction
     slot_extract: &|token, node, index| match (node, token) {
-      (Some(n), Some(t)) => format!("let AstSlot ({n}, {t}, _) = slots.take({});", index),
-      (None, Some(t)) => format!("let AstSlot (_, {t}, _) = slots.take({});", index),
-      (Some(n), None) => format!("let AstSlot ({n}, _, _) = slots.take({});", index),
+      (Some(n), Some(t)) => {
+        format!("let AstSlot ({n}, {t}, _) = slots.take({});", index)
+      }
+      (None, Some(t)) => {
+        format!("let AstSlot (_, {t}, _) = slots.take({});", index)
+      }
+      (Some(n), None) => {
+        format!("let AstSlot ({n}, _, _) = slots.take({});", index)
+      }
       _ => format!("slots.take({});", index),
     },
     // Token Creation from Token Range
     create_token: &|tok_name, token_type| match token_type {
-      TokenCreationType::String => format!("{tok_name}.to_token(_ctx_.get_reader()).to_string()"),
-      TokenCreationType::Token => format!("{tok_name}.to_token(_ctx_.get_reader())"),
+      TokenCreationType::String => {
+        format!("{tok_name}.to_token(_ctx_.get_reader()).to_string()")
+      }
+      TokenCreationType::Token => {
+        format!("{tok_name}.to_token(_ctx_.get_reader())")
+      }
     },
 
     get_token_name: &|i| match i {

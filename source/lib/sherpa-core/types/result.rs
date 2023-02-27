@@ -164,10 +164,22 @@ impl<T> SherpaResult<T> {
   pub fn unwrap(self) -> T {
     match self {
       SherpaResult::Ok(val) => val,
-      SherpaResult::None => panic!("called `SherpaResult::unwrap()` on an `None` value"),
+      SherpaResult::None => {
+        panic!("called `SherpaResult::unwrap()` on an `None` value")
+      }
       SherpaResult::Err(err) => {
         panic!("called `SherpaResult::unwrap()` on an `Err` value: \n {}", err)
       }
+    }
+  }
+
+  /// Convert the SherpaResult into an Option, discarding any
+  /// errors if the result is a SherpaResult::Err type.
+  pub fn to_option(self) -> Option<T> {
+    match self {
+      SherpaResult::Ok(val) => Some(val),
+      SherpaResult::None => None,
+      SherpaResult::Err(err) => None,
     }
   }
 }

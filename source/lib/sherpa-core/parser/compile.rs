@@ -42,16 +42,19 @@ pub(crate) fn compile_ir_states(
   entry_name: &str,
   items: Vec<Item>,
   graph_mode: GraphMode,
+  compile_origin_id: &str,
 ) -> SherpaResult<Vec<Box<ParseState>>> {
   j.report_mut().start_timer("Compile");
   j.report_mut().start_timer("Graph States");
 
-  let graph = graph::create(j, items, graph_mode)?;
+  let mut graph = graph::create(j, items, graph_mode)?;
 
   j.report_mut().stop_timer("Graph States");
 
   #[cfg(debug_assertions)]
   j.report_mut().add_note("Graph States", graph.__debug_string__());
+
+  graph.set_prefix(compile_origin_id);
 
   j.report_mut().start_timer("Ir States");
 
@@ -92,6 +95,7 @@ pub(crate) fn construct_production_states(
         .map(|i| i.to_origin(Origin::ProdGoal(prod_id)))
         .collect(),
       GraphMode::SherpaClimber,
+      "prod",
     )
   }
 }
@@ -114,6 +118,7 @@ pub(crate) fn construct_token_production_state(
       .map(|i| i.to_origin(Origin::ProdGoal(prod_id)))
       .collect(),
     GraphMode::Scanner,
+    "token",
   )
 }
 
@@ -148,7 +153,7 @@ pub(crate) fn construct_scanner_states(
         .collect::<Vec<_>>()
     })
     .collect();
-  compile_ir_states(j, &state_name, items, GraphMode::Scanner)
+  compile_ir_states(j, &state_name, items, GraphMode::Scanner, "sym")
 }
 
 #[inline]
@@ -328,7 +333,7 @@ fn create_entry_wrapper_states(j: &mut Journal) -> SherpaResult<Vec<Box<ParseSta
         comment: "".into(),
         code: format!(
           "default ( accept )\nassert TOKEN [ {} ] ( accept ){}",
-          SymbolID::EndOfInput.bytecode_id(g),
+          SymbolID::EndOfFile.bytecode_id(g),
           skip_symbols
             .iter()
             .map(|s| format!("\nassert TOKEN [ {} ] ( skip-token )", s.bytecode_id(g)))
