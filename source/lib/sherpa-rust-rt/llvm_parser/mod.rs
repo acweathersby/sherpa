@@ -124,7 +124,6 @@ impl<T: ByteReader + LLVMByteReader, M> Debug for ParseContext<T, M> {
     dbgstr.field("scan_ptr", &self.scan_ptr);
     dbgstr.field("tok_len", &self.tok_len);
     dbgstr.field("head_ptr", &self.head_ptr);
-    dbgstr.field("input_block_len", &self.chars_remaining_len);
     dbgstr.field("base_ptr", &self.base_ptr);
     dbgstr.field("end_ptr", &self.end_ptr);
     dbgstr.field("prod_id", &self.prod_id);

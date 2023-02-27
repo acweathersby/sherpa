@@ -34,64 +34,61 @@ type GetBlockFunction<T> = extern "C" fn(
 pub struct ParseContext<T: ByteReader, M = u32> {
   // Input data ----------
   /// The head of the input block
-  pub begin_ptr: usize,
+  pub begin_ptr:      usize,
   /// The the end of the last shifted token
-  pub anchor_ptr: usize,
+  pub anchor_ptr:     usize,
   /// The the start of the evaluated token, which may be
   /// the same as base_ptr unless we are using peek shifts.
-  pub base_ptr: usize,
+  pub base_ptr:       usize,
   /// The the start of the evaluated token, which may be
   /// the same as base_ptr unless we are using peek shifts.
-  pub head_ptr: usize,
+  pub head_ptr:       usize,
   /// The start of all unevaluated characters
-  pub scan_ptr: usize,
+  pub scan_ptr:       usize,
   /// The end of the input block
-  pub end_ptr: usize,
+  pub end_ptr:        usize,
   /// The number of characters that comprize the current
   /// token. This should be 0 if the tok_id is also 0
-  pub tok_len: usize,
-  /// The number of characters that can be read
-  /// from the input block.
-  pub chars_remaining_len: usize,
+  pub tok_len:        usize,
   // Goto stack data -----
   pub goto_stack_ptr: *mut Goto,
-  pub goto_size: u32,
-  pub goto_free: u32,
+  pub goto_size:      u32,
+  pub goto_free:      u32,
   // Parse objects ----------------
   pub get_input_info: GetBlockFunction<T>,
-  pub reader: *mut T,
+  pub reader:         *mut T,
   // User context --------
-  pub meta_ctx: *mut M,
-  pub custom_lex: fn(&mut T, &mut M, &ParseContext<T, M>) -> (u32, u32, u32),
+  pub meta_ctx:       *mut M,
+  pub custom_lex:     fn(&mut T, &mut M, &ParseContext<T, M>) -> (u32, u32, u32),
   // Line info ------------
   /// The offset of the last line character recognized that proceeds the anchor
   pub start_line_off: u32,
   /// The offset of the last line character recognized that proceeds the chkp
-  pub chkp_line_off: u32,
+  pub chkp_line_off:  u32,
   /// The offset of the last line character recognized that proceeds the tail
-  pub end_line_off: u32,
+  pub end_line_off:   u32,
   /// The number of line character recognized that proceed the anchor
   pub start_line_num: u32,
   /// The number of line character recognized that proceed the chkp
-  pub chkp_line_num: u32,
+  pub chkp_line_num:  u32,
   /// The number of line character recognized that proceed the tail
-  pub end_line_num: u32,
+  pub end_line_num:   u32,
   // Parser State ----------
   /// When reducing, stores the the number of of symbols to reduce.
-  pub sym_len: u32,
+  pub sym_len:        u32,
   /// Tracks whether the context is a fail mode or not.
-  pub state: u32,
+  pub state:          u32,
   /// Set to the value of a production when a rule is reduced, or
-  pub prod_id: u32,
+  pub prod_id:        u32,
   /// Set to the value of a token when one is recognized. Also stores the number
   /// of symbols that are to be reduced.
-  pub tok_id: u32,
+  pub tok_id:         u32,
   /// When reducing, stores the rule id that is being reduced.
-  pub rule_id: u32,
-  pub line_incr: u8,
-  pub is_active: bool,
+  pub rule_id:        u32,
+  pub line_incr:      u8,
+  pub is_active:      bool,
   // Miscellaneous
-  pub in_peek_mode: bool,
+  pub in_peek_mode:   bool,
 }
 
 impl<T: ByteReader, M> ParseContext<T, M> {
@@ -103,7 +100,6 @@ impl<T: ByteReader, M> ParseContext<T, M> {
     self.base_ptr = 0;
     self.end_ptr = 0;
     self.begin_ptr = 0;
-    self.chars_remaining_len = 0;
     self.goto_size = 0;
     self.goto_free = 0;
     self.start_line_num = 0;
@@ -216,35 +212,34 @@ impl<T: ByteReader, M> ParseContext<T, M> {
 impl<T: ByteReader, M> Default for ParseContext<T, M> {
   fn default() -> Self {
     Self {
-      anchor_ptr: 0,
-      scan_ptr: 0,
-      tok_len: 0,
-      head_ptr: 0,
-      chars_remaining_len: 0,
-      base_ptr: 0,
-      end_ptr: 0,
-      prod_id: 0,
-      begin_ptr: 0,
-      end_line_num: 0,
+      anchor_ptr:     0,
+      scan_ptr:       0,
+      tok_len:        0,
+      head_ptr:       0,
+      base_ptr:       0,
+      end_ptr:        0,
+      prod_id:        0,
+      begin_ptr:      0,
+      end_line_num:   0,
       start_line_num: 0,
-      chkp_line_num: 0,
-      chkp_line_off: 0,
-      end_line_off: 0,
+      chkp_line_num:  0,
+      chkp_line_off:  0,
+      end_line_off:   0,
       start_line_off: 0,
-      state: 0,
-      tok_id: 0,
-      sym_len: 0,
-      rule_id: 0,
-      goto_size: 0,
-      goto_free: 0,
-      line_incr: 0,
-      in_peek_mode: false,
-      is_active: false,
+      state:          0,
+      tok_id:         0,
+      sym_len:        0,
+      rule_id:        0,
+      goto_size:      0,
+      goto_free:      0,
+      line_incr:      0,
+      in_peek_mode:   false,
+      is_active:      false,
       goto_stack_ptr: 0 as *mut Goto,
-      meta_ctx: 0 as *mut M,
-      custom_lex: Self::default_custom_lex,
+      meta_ctx:       0 as *mut M,
+      custom_lex:     Self::default_custom_lex,
       get_input_info: Self::default_get_input_info,
-      reader: 0 as *mut T,
+      reader:         0 as *mut T,
     }
   }
 }

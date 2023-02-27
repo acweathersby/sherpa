@@ -1,4 +1,4 @@
-#![allow(unused)]
+
 /// ### `sherpa` Rust Parser
 ///
 /// - **GENERATOR**: sherpa 1.0.0-beta1

@@ -124,10 +124,6 @@ pub enum CTX_AGGREGATE_INDICES {
   /// pub tok_len:       usize,
   /// ```
   tok_len,
-  /// ```ignore
-  /// pub chars_remaining_len:       usize,
-  /// ```
-  chars_remaining_len,
   // Goto stack data -----
   /// ```ignore
   /// pub goto_stack_ptr:  *mut Goto,
