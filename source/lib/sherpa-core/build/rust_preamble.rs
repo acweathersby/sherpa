@@ -7,7 +7,7 @@ pub fn build_rust_preamble() -> PipelineTask {
       Ok(Some((
         0,
         format!(
-          "#![allow(unused)]
+          "
 {}
 use std::hash::Hash;
 use sherpa_runtime::types::{{ast::*, *}};

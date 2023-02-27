@@ -417,17 +417,15 @@ pub(crate) fn compile_branchless_instructions<'a>(
 
       ASTNode::PeekReset(_) => {
         peek_reset(m, p_ctx)?;
-        calculate_chars_remaining_by_diff_of_end_and_scan(m, p_ctx)?;
       }
 
       ASTNode::PeekToken(_) => {
         peek_token(m, p_ctx)?;
-        calculate_chars_remaining_by_diff_of_end_and_scan(m, p_ctx)?;
       }
 
       ASTNode::SkipPeekToken(_) => {
         skip_token(m, p_ctx, true)?;
-        calculate_chars_remaining_by_diff_of_end_and_scan(m, p_ctx)?;
+
         construct_jump_to_table_start(m, start_block);
         resolved_end = true;
         break;
@@ -435,7 +433,7 @@ pub(crate) fn compile_branchless_instructions<'a>(
 
       ASTNode::SkipToken(_) => {
         skip_token(m, p_ctx, false)?;
-        calculate_chars_remaining_by_diff_of_end_and_scan(m, p_ctx)?;
+
         construct_jump_to_table_start(m, start_block);
         resolved_end = true;
         break;
@@ -447,24 +445,20 @@ pub(crate) fn compile_branchless_instructions<'a>(
           state_fun = s;
           p_ctx = p;
         }
-        calculate_chars_remaining_by_diff_of_end_and_scan(m, p_ctx);
       }
 
       ASTNode::ScanShift(..) => {
-        decr_chars_remaining_by_sym_len(m, p_ctx)?;
         incr_scan_ptr_by_sym_len(m, p_ctx)?;
         update_end_line_num(m, p_ctx)?;
       }
 
       ASTNode::PeekTokenScanless(_) => {
-        decr_chars_remaining_by_sym_len(m, p_ctx)?;
         incr_scan_ptr_by_sym_len(m, p_ctx)?;
         construct_assign_token_id(m, p_ctx, 0)?;
         peek_token(m, p_ctx)?;
       }
 
       ASTNode::SkipPeekTokenScanless(_) => {
-        decr_chars_remaining_by_sym_len(m, p_ctx)?;
         incr_scan_ptr_by_sym_len(m, p_ctx)?;
         construct_assign_token_id(m, p_ctx, 0)?;
 
@@ -478,7 +472,6 @@ pub(crate) fn compile_branchless_instructions<'a>(
       }
 
       ASTNode::SkipTokenScanless(_) => {
-        decr_chars_remaining_by_sym_len(m, p_ctx)?;
         incr_scan_ptr_by_sym_len(m, p_ctx)?;
         construct_assign_token_id(m, p_ctx, 0)?;
 
@@ -492,7 +485,6 @@ pub(crate) fn compile_branchless_instructions<'a>(
       }
 
       ASTNode::ShiftTokenScanless(_) => {
-        decr_chars_remaining_by_sym_len(m, p_ctx)?;
         incr_scan_ptr_by_sym_len(m, p_ctx)?;
         construct_assign_token_id(m, p_ctx, 0)?;
 
@@ -742,29 +734,15 @@ pub(crate) fn peek_token<'a>(m: &'a LLVMParserModule, p_ctx: PointerValue) -> Sh
   SherpaResult::Ok(())
 }
 
-/// Update the remaining chars value by calculating its
-/// value using scan_ptr and end_ptr
-pub(crate) fn calculate_chars_remaining_by_diff_of_end_and_scan(
-  sp: &LLVMParserModule,
-  p_ctx: PointerValue,
-) -> SherpaResult<()> {
+/// Return the difference between the `scan_ptr` and `end_ptr`
+pub(crate) fn get_chars_remaining<'a>(
+  sp: &'a LLVMParserModule,
+  p_ctx: PointerValue<'a>,
+) -> SherpaResult<IntValue<'a>> {
   let LLVMParserModule { b, iptr, .. } = sp;
   let scan_int = b.build_ptr_to_int(CTX::scan_ptr.load(b, p_ctx)?.into_pointer_value(), *iptr, "");
   let end_int = b.build_ptr_to_int(CTX::end_ptr.load(b, p_ctx)?.into_pointer_value(), *iptr, "");
-  CTX::chars_remaining_len.store(b, p_ctx, b.build_int_sub(end_int, scan_int, ""))?;
-  SherpaResult::Ok(())
-}
-/// Update the remaining chars value by decrementing it by
-/// the value of `sym_len`
-pub(crate) fn decr_chars_remaining_by_sym_len(
-  LLVMParserModule { b, iptr, .. }: &LLVMParserModule,
-  p_ctx: PointerValue,
-) -> SherpaResult<()> {
-  let sym_len = CTX::sym_len.load(b, p_ctx)?.into_int_value();
-  let sym_len = b.build_int_cast(sym_len, *iptr, "");
-  let char_remaining = CTX::chars_remaining_len.load(b, p_ctx)?.into_int_value();
-  CTX::chars_remaining_len.store(b, p_ctx, b.build_int_sub(char_remaining, sym_len, ""))?;
-  SherpaResult::Ok(())
+  SherpaResult::Ok(b.build_int_sub(end_int, scan_int, "").into())
 }
 
 /// Assigns `head_ptr + tok_len` to head_ptr, scan_ptr, and base_ptr.
@@ -916,7 +894,7 @@ fn construct_cp_lu_with_token_len_store<'a>(
 }
 
 pub(crate) fn check_for_input_acceptability<'a>(
-  m: &LLVMParserModule,
+  m: &'a LLVMParserModule,
   state_fun: FunctionValue<'a>,
   p_ctx: PointerValue<'a>,
   needed_num_bytes: IntValue<'a>,
@@ -929,16 +907,15 @@ pub(crate) fn check_for_input_acceptability<'a>(
   // Set the context's goto pointers to point to the goto block;
   let try_extend = ctx.append_basic_block(state_fun, "attempt_extend");
 
-  let input_available = CTX::chars_remaining_len.load(b, p_ctx)?.into_int_value();
+  let input_available = get_chars_remaining(m, p_ctx)?;
   let input_available = b.build_int_cast(input_available, i64, "");
   let c = b.build_int_compare(inkwell::IntPredicate::SGE, input_available, needed_num_bytes, "");
   b.build_conditional_branch(c, valid_input, try_extend);
 
   b.position_at_end(try_extend);
   build_fast_call(b, fun.get_adjusted_input_block, &[p_ctx.into(), needed_num_bytes.into()]);
-  calculate_chars_remaining_by_diff_of_end_and_scan(m, p_ctx);
 
-  let input_available = CTX::chars_remaining_len.load(b, p_ctx)?.into_int_value();
+  let input_available = get_chars_remaining(m, p_ctx)?;
   let input_available = b.build_int_cast(input_available, i64, "");
   let c = b.build_int_compare(inkwell::IntPredicate::SGE, input_available, needed_num_bytes, "");
 
@@ -993,7 +970,6 @@ pub(crate) fn construct_scan<'a>(
 
   // Reset scanner back to head
   CTX::scan_ptr.store(b, p_ctx, CTX::head_ptr.load(b, p_ctx)?.into_pointer_value());
-  calculate_chars_remaining_by_diff_of_end_and_scan(sp, p_ctx)?;
 
   SherpaResult::Ok(())
 }

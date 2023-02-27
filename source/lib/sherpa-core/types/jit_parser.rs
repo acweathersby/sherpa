@@ -21,8 +21,8 @@ use inkwell::{
 };
 use sherpa_runtime::{
   llvm_parser::{
-    llvm_map_result_action_2,
-    llvm_map_shift_action_2,
+    llvm_map_result_action,
+    llvm_map_shift_action,
     sherpa_allocate_stack,
     sherpa_free_stack,
     sherpa_get_token_class_from_codepoint,
@@ -223,8 +223,8 @@ where
       self.ast_build.call(
         &mut self.ctx,
         functions.as_ptr(),
-        llvm_map_shift_action_2::<R, ExtCTX, ASTNode>,
-        llvm_map_result_action_2::<R, ExtCTX, ASTNode>,
+        llvm_map_shift_action::<R, ExtCTX, ASTNode>,
+        llvm_map_result_action::<R, ExtCTX, ASTNode>,
       )
     }
   }

@@ -117,37 +117,6 @@ pub trait LLVMByteReader {
   }
 }
 
-impl AstObject for u32 {}
-
-impl<V: AstObject> AstObject for (V, TokenRange, TokenRange) {}
-
-pub unsafe fn llvm_map_result_action<
-  'a,
-  T: LLVMByteReader + ByteReader + MutByteReader,
-  M,
-  Node: AstObject,
->(
-  _ctx: &ParseContext<T, M>,
-  action: ParseActionType,
-  slots: &mut AstStackSlice<(Node, TokenRange, TokenRange)>,
-) -> ParseResult<Node> {
-  match action {
-    ParseActionType::Accept =>{
-      ParseResult::Complete(slots.take(0))
-    }
-    ParseActionType::Error => {
-      let vec = slots.to_vec();
-      let last_input = vec.last().cloned().unwrap_or_default().1;
-      ParseResult::Error(last_input, vec)
-    }
-    ParseActionType::NeedMoreInput => {
-      ParseResult::NeedMoreInput(slots.to_vec())
-    }
-
-    _ => unreachable!("This function should only be called when the parse action is  [Error, Accept, or EndOfInput]"),
-  }
-}
-
 impl<T: ByteReader + LLVMByteReader, M> Debug for ParseContext<T, M> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let mut dbgstr = f.debug_struct("ParseContext");
@@ -197,44 +166,12 @@ impl<T: ByteReader + LLVMByteReader, M> ParseContext<T, M> {
     }
   }
 }
-pub unsafe fn llvm_map_shift_action_2<
-  'a,
-  R: LLVMByteReader + ByteReader + MutByteReader,
-  ExtCTX,
-  ASTNode: AstObject,
->(
-  ctx: &ParseContext<R, ExtCTX>,
-  slots: &mut AstStackSlice<(ASTNode, TokenRange, TokenRange)>,
-) {
-  match ctx.get_shift_data() {
-    ParseAction::Shift {
-      anchor_byte_offset,
-      token_byte_offset,
-      token_byte_length,
-      token_line_offset,
-      token_line_count,
-      ..
-    } => {
-      let peek = TokenRange {
-        len: token_byte_offset - anchor_byte_offset,
-        off: anchor_byte_offset,
-        ..Default::default()
-      };
 
-      let tok = TokenRange {
-        len:      token_byte_length,
-        off:      token_byte_offset,
-        line_num: token_line_count,
-        line_off: token_line_offset,
-      };
+impl AstObject for u32 {}
 
-      slots.assign_to_garbage(0, (ASTNode::default(), tok, peek));
-    }
-    _ => unreachable!(),
-  }
-}
+impl<V: AstObject> AstObject for (V, TokenRange, TokenRange) {}
 
-pub unsafe fn llvm_map_result_action_2<
+pub unsafe fn llvm_map_result_action<
   'a,
   T: LLVMByteReader + ByteReader + MutByteReader,
   M,
