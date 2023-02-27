@@ -386,7 +386,7 @@ pub(crate) fn compile_branchless_instructions<'a>(
 
       ASTNode::PushGoto(pg) => {
         if goto_encountered == 0 {
-          extend_stack(goto_count, m, p_ctx)?;
+          ensure_space_on_goto_stack(goto_count, m, p_ctx, state_fun)?;
         }
         goto_encountered += 1;
         if goto_encountered == goto_count {
@@ -397,7 +397,7 @@ pub(crate) fn compile_branchless_instructions<'a>(
       }
 
       ASTNode::PushExceptHandler(except) => {
-        extend_stack(2, m, p_ctx)?;
+        ensure_space_on_goto_stack(2, m, p_ctx, state_fun)?;
         update_goto_remaining(2, m, p_ctx)?;
         push_except(&except, m, p_ctx, &state_lu)?;
       }
@@ -425,7 +425,6 @@ pub(crate) fn compile_branchless_instructions<'a>(
 
       ASTNode::SkipPeekToken(_) => {
         skip_token(m, p_ctx, true)?;
-
         construct_jump_to_table_start(m, start_block);
         resolved_end = true;
         break;
@@ -433,7 +432,6 @@ pub(crate) fn compile_branchless_instructions<'a>(
 
       ASTNode::SkipToken(_) => {
         skip_token(m, p_ctx, false)?;
-
         construct_jump_to_table_start(m, start_block);
         resolved_end = true;
         break;
@@ -597,19 +595,37 @@ pub(crate) fn goto<'a>(
   build_tail_call_with_return(b, state_fun, *state_lu.get(&state.val)?)
 }
 
-pub(crate) fn extend_stack<'a>(
-  len: usize,
-  LLVMParserModule { b, fun, i32, .. }: &LLVMParserModule,
+pub(crate) fn ensure_space_on_goto_stack<'a>(
+  needed_slot_count: usize,
+  LLVMParserModule { b, fun, ctx, i32, .. }: &LLVMParserModule,
   p_ctx: PointerValue,
+  state_fn: FunctionValue,
 ) -> SherpaResult<()> {
-  build_fast_call(b, fun.extend_stack_if_needed, &[
+  // Compare the number of needed slots with the number of available slots
+  let goto_free = CTX::goto_free.load(b, p_ctx)?.into_int_value();
+
+  let needed_slots = i32.const_int(needed_slot_count as u64, false);
+  let comparison = b.build_int_compare(inkwell::IntPredicate::UGE, goto_free, needed_slots, "");
+
+  let extend_block = ctx.append_basic_block(state_fn, "Extend");
+  let ready_block = ctx.append_basic_block(state_fn, "Return");
+
+  b.build_conditional_branch(comparison, ready_block, extend_block);
+
+  b.position_at_end(extend_block);
+
+  build_fast_call(b, fun.extend_stack, &[
     p_ctx.into(),
-    i32.const_int((2 << len.checked_ilog2().unwrap_or(0)) as u64, false).into(),
+    i32.const_int((2 << needed_slot_count.checked_ilog2().unwrap_or(0)) as u64, false).into(),
   ])?;
+
+  b.build_unconditional_branch(ready_block);
+  b.position_at_end(ready_block);
 
   SherpaResult::Ok(())
 }
 
+/// Causes the execution to jump back to the beginning of the `loop_start` block.
 fn construct_jump_to_table_start(m: &LLVMParserModule, start_block: BasicBlock) {
   m.b.build_unconditional_branch(start_block);
 }
@@ -1021,10 +1037,7 @@ pub(crate) fn construct_prime_function(
     })
     .collect::<Vec<_>>();
 
-  build_fast_call(b, funct.extend_stack_if_needed, &[
-    parse_ctx.into(),
-    i32.const_int(8, false).into(),
-  ]);
+  build_fast_call(b, funct.extend_stack, &[parse_ctx.into(), i32.const_int(8, false).into()]);
 
   CTX::is_active.store(b, parse_ctx, bool.const_int(1, false))?;
 

@@ -1,6 +1,6 @@
 use super::{
   fastCC,
-  parse_functions::compile_states,
+  parse_functions::{compile_states, ensure_space_on_goto_stack},
   CTX_AGGREGATE_INDICES as CTX,
   FAIL_STATE_FLAG_LLVM,
 };
@@ -203,8 +203,8 @@ pub(crate) fn construct_module<'a>(
       TAIL_CALLABLE_PARSE_FUNCTION,
       internal_linkage,
     ),
-    extend_stack_if_needed: module.add_function(
-      "extend_stack_if_needed",
+    extend_stack: module.add_function(
+      "extend_stack",
       i32.fn_type(&[CTX.ptr_type(0.into()).into(), i32.into()], false),
       internal_linkage,
     ),
@@ -238,7 +238,7 @@ pub(crate) fn construct_module<'a>(
   fun.get_utf8_codepoint_info.set_call_conventions(fastCC);
   fun.get_token_class_from_codepoint.set_call_conventions(fastCC);
   fun.get_adjusted_input_block.set_call_conventions(fastCC);
-  fun.extend_stack_if_needed.set_call_conventions(fastCC);
+  fun.extend_stack.set_call_conventions(fastCC);
   LLVMParserModule {
     b: builder,
     ctx,
@@ -387,13 +387,11 @@ pub(crate) unsafe fn construct_internal_free_stack(module: &LLVMParserModule) ->
 
   validate(fn_value)
 }
-pub(crate) unsafe fn construct_extend_stack_if_needed(
-  module: &LLVMParserModule,
-) -> SherpaResult<()> {
+pub(crate) unsafe fn construct_extend_stack(module: &LLVMParserModule) -> SherpaResult<()> {
   let LLVMParserModule { b, types, ctx, fun: funct, .. } = module;
   let i32 = ctx.i32_type();
 
-  let fn_value = funct.extend_stack_if_needed;
+  let fn_value = funct.extend_stack;
   let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
   let needed_slot_count = fn_value.get_nth_param(1).unwrap().into_int_value();
 
@@ -401,16 +399,6 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
 
   // Compare the number of needed slots with the number of available slots
   let goto_free = CTX::goto_free.load(b, parse_ctx)?.into_int_value();
-  let comparison =
-    b.build_int_compare(inkwell::IntPredicate::ULT, goto_free, needed_slot_count, "");
-
-  let extend_block = ctx.append_basic_block(fn_value, "Extend");
-  let update_block = ctx.append_basic_block(fn_value, "UpdateStack");
-  let return_block = ctx.append_basic_block(fn_value, "Return");
-  b.build_conditional_branch(comparison, extend_block, return_block);
-
-  // If the difference is less than the amount requested:
-  b.position_at_end(extend_block);
 
   // Create a new stack, copy data from old stack to new one
   // and, if the old stack was not the original stack,
@@ -447,6 +435,8 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
     .unwrap_left()
     .into_pointer_value();
 
+  // Copy the old stack to the new stack.
+
   b.build_call(
     funct.memcpy,
     &[
@@ -457,10 +447,10 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
     ],
     "",
   );
-
+  // Free the old stack
   build_fast_call(b, funct.internal_free_stack, &[parse_ctx.into()]);
-  b.build_unconditional_branch(update_block);
-  b.position_at_end(update_block);
+
+  // Update parse context values for the goto stack.
 
   let new_stack_top_ptr = b.build_ptr_to_int(new_ptr, ctx.i64_type(), "new_top");
   let new_stack_top_ptr = b.build_int_add(new_stack_top_ptr, goto_used_bytes_64, "new_top");
@@ -472,8 +462,7 @@ pub(crate) unsafe fn construct_extend_stack_if_needed(
   let slot_diff = b.build_int_sub(new_slot_count, goto_slot_count, "slot_diff");
   let new_remaining_count = b.build_int_add(slot_diff, goto_free, "remaining");
   CTX::goto_free.store(b, parse_ctx, new_remaining_count);
-  b.build_unconditional_branch(return_block);
-  b.position_at_end(return_block);
+
   b.build_return(Some(&i32.const_int(1, false)));
 
   validate(fn_value)
@@ -540,6 +529,8 @@ pub(crate) fn construct_push_state_function(module: &LLVMParserModule) -> Sherpa
   let goto_pointer = fn_value.get_nth_param(2).unwrap().into_pointer_value();
 
   b.position_at_end(entry);
+
+  ensure_space_on_goto_stack(1, module, parse_ctx, fn_value);
 
   let goto_stack_ptr = CTX::goto_stack_ptr.get_ptr(b, parse_ctx)?;
   let goto_top = b.build_load(goto_stack_ptr, "").into_pointer_value();
@@ -844,7 +835,7 @@ pub fn compile_llvm_module_from_parse_states<'a>(
     construct_pop_function(module)?;
     construct_get_adjusted_input_block_function(module)?;
     construct_push_state_function(module)?;
-    construct_extend_stack_if_needed(module)?;
+    construct_extend_stack(module)?;
     construct_merge_utf8_part_function(module)?;
     construct_utf8_lookup_function(module)?;
     construct_next_function(module)?;

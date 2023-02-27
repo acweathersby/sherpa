@@ -46,7 +46,7 @@ pub struct PublicFunctions<'a> {
   /// Counts the number of leading zeros.
   pub(crate) ctlz_i8: FunctionValue<'a>,
   pub(crate) get_adjusted_input_block: FunctionValue<'a>,
-  pub(crate) extend_stack_if_needed: FunctionValue<'a>,
+  pub(crate) extend_stack: FunctionValue<'a>,
   pub(crate) allocate_stack: FunctionValue<'a>,
   pub(crate) free_stack: FunctionValue<'a>,
   /// An internal function to free the goto stack if it's size is greater

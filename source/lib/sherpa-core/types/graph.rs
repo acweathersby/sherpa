@@ -167,6 +167,7 @@ pub(crate) struct State {
   non_terminals: BTreeSet<Item>,
   reduce_item: Option<Item>,
   leaf_state: bool,
+  closure: Option<ItemSet>,
 }
 
 impl Hash for State {
@@ -259,34 +260,46 @@ impl State {
   }
 
   pub(crate) fn get_closure(&self, g: &GrammarStore, is_scanner: bool) -> BTreeSet<Item> {
-    let origin_state = self.id;
-    get_closure(self.kernel_items.iter(), g, origin_state, is_scanner)
+    if self.id.is_root() {
+      self.closure.as_ref().unwrap().clone().inscope_items()
+    } else {
+      self.closure.as_ref().unwrap().clone()
+    }
   }
 
   pub(crate) fn get_root_closure(&self, g: &GrammarStore, is_scanner: bool) -> BTreeSet<Item> {
-    let mut closure = self.get_closure(g, is_scanner);
-    if self.id.is_root() {
-      let mut signatures = closure.iter().map(|i| (i.rule_id, i.off)).collect::<BTreeSet<_>>();
-      // Incorporate items that are out of scope within this closure.
-      let mut queue = VecDeque::from_iter(self.kernel_items.iter().map(|i| i.get_prod_id(g)));
-      let mut seen = BTreeSet::new();
-      while let Some(prod_id) = queue.pop_front() {
-        if seen.insert(prod_id) {
-          if let Some(lr_items) = g.lr_items.get(&prod_id) {
-            for item in lr_items {
-              if signatures.insert((item.get_rule_id(), item.off)) {
-                if item.increment().unwrap().is_completed() {
-                  queue.push_back(item.get_prod_id(g));
-                }
+    self.closure.as_ref().unwrap().clone()
+  }
 
-                closure.insert(item.to_origin_state(self.id).to_oos_index());
+  fn compute_closure(&mut self, g: &GrammarStore, is_scanner: bool) {
+    if self.kernel_items.len() > 0 {
+      let origin_state = self.id;
+      let mut closure = get_closure(self.kernel_items.iter(), g, origin_state, is_scanner);
+
+      if origin_state.is_root() {
+        let mut signatures = closure.iter().map(|i| (i.rule_id, i.off)).collect::<BTreeSet<_>>();
+        // Incorporate items that are out of scope within this closure.
+        let mut queue = VecDeque::from_iter(self.kernel_items.iter().map(|i| i.get_prod_id(g)));
+        let mut seen = BTreeSet::new();
+        while let Some(prod_id) = queue.pop_front() {
+          if seen.insert(prod_id) {
+            if let Some(lr_items) = g.lr_items.get(&prod_id) {
+              for item in lr_items {
+                if signatures.insert((item.get_rule_id(), item.off)) {
+                  if item.increment().unwrap().is_completed() {
+                    queue.push_back(item.get_prod_id(g));
+                  }
+
+                  closure.insert(item.to_origin_state(origin_state).to_oos_index());
+                }
               }
             }
           }
         }
       }
+
+      self.closure = Some(closure);
     }
-    closure
   }
 
   /// Returns true if the the call of the production leads to infinite loop due to left recursion.
@@ -309,14 +322,26 @@ impl State {
     }
   }
 
-  pub(crate) fn add_kernel_items<T: ItemContainer>(&mut self, kernel_items: T) {
+  pub(crate) fn add_kernel_items<T: ItemContainer>(
+    &mut self,
+    g: &GrammarStore,
+    kernel_items: T,
+    is_scanner: bool,
+  ) {
     let mut kernel_items =
       kernel_items.into_iter().map(|mut i| i.to_origin_state(self.id)).collect();
 
     self.kernel_items.append(&mut kernel_items);
+
+    self.compute_closure(g, is_scanner);
   }
 
-  pub(crate) fn set_kernel_items(&mut self, kernel_items: Items) {
+  pub(crate) fn set_kernel_items(
+    &mut self,
+    g: &GrammarStore,
+    kernel_items: Items,
+    is_scanner: bool,
+  ) {
     let kernel_items = kernel_items
       .into_iter()
       .map(|mut i| {
@@ -326,7 +351,10 @@ impl State {
         i
       })
       .collect();
+
     self.kernel_items = kernel_items;
+
+    self.compute_closure(g, is_scanner);
   }
 
   pub(crate) fn get_parent(&self) -> StateId {
@@ -472,6 +500,8 @@ impl Graph {
     kernel_items: Items,
   ) -> StateId {
     let id = StateId(self.states.len());
+    let is_scan = self.is_scan();
+    let g = &(self.grammar.clone());
 
     let mut state = match parent {
       Some(parent) => State {
@@ -485,20 +515,24 @@ impl Graph {
       None => State { id, term_symbol: symbol, t_type, ..Default::default() },
     };
 
-    state.set_kernel_items(if self.states.is_empty() {
-      /// Automatically setup lanes a goal values.
-      kernel_items
-        .into_iter()
-        .enumerate()
-        .map(|(i, mut item)| {
-          item.goal_index = i as u32;
-          //item.origin = Origin::ProdGoal(i as u16);
-          item
-        })
-        .collect()
-    } else {
-      kernel_items
-    });
+    state.set_kernel_items(
+      g,
+      if self.states.is_empty() {
+        /// Automatically setup lanes a goal values.
+        kernel_items
+          .into_iter()
+          .enumerate()
+          .map(|(i, mut item)| {
+            item.goal_index = i as u32;
+            //item.origin = Origin::ProdGoal(i as u16);
+            item
+          })
+          .collect()
+      } else {
+        kernel_items
+      },
+      is_scan,
+    );
 
     self.states.push(state);
 

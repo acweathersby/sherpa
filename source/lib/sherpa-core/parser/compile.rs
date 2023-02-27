@@ -20,18 +20,21 @@ use crate::{
 use super::{graph, ir};
 
 fn addIRStateNote(j: &mut Journal, rd_states: &Vec<Box<ParseState>>) {
-  let mut seen = HashSet::new();
-  j.report_mut().add_note(
-    "IRStates",
-    rd_states
-      .iter()
-      .filter_map(|s| match seen.insert(s.get_name()) {
-        true => Some(s.to_string()),
-        _ => None,
-      })
-      .collect::<Vec<_>>()
-      .join("\n"),
-  )
+  #[cfg(debug_assertions)]
+  {
+    let mut seen = HashSet::new();
+    j.report_mut().add_note(
+      "IRStates",
+      rd_states
+        .iter()
+        .filter_map(|s| match seen.insert(s.get_name()) {
+          true => Some(s.to_string()),
+          _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("\n"),
+    )
+  }
 }
 
 pub(crate) fn compile_ir_states(
@@ -46,6 +49,8 @@ pub(crate) fn compile_ir_states(
   let graph = graph::create(j, items, graph_mode)?;
 
   j.report_mut().stop_timer("Graph States");
+
+  #[cfg(debug_assertions)]
   j.report_mut().add_note("Graph States", graph.__debug_string__());
 
   j.report_mut().start_timer("Ir States");

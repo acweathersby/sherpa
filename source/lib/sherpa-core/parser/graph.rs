@@ -252,7 +252,7 @@ fn handle_completed_items(
       get_completed_item_artifacts(j, graph, par, completed.iter())?;
 
     if graph.is_scan() {
-      graph[par].add_kernel_items(follow_items);
+      graph[par].add_kernel_items(g, follow_items, is_scan);
     }
 
     if is_scan
@@ -848,6 +848,7 @@ fn create_peek<'a, T: ItemContainerIter<'a>>(
   transition_type: StateType,
 ) -> Option<StateId> {
   let g = &(graph.grammar.clone());
+  let is_scan = graph.is_scan();
   let mut kernel_items = vec![];
   let mut resolve_items = vec![];
   let mut index = 0;
@@ -897,12 +898,11 @@ fn create_peek<'a, T: ItemContainerIter<'a>>(
   );
 
   graph[state].set_peek_resolve_items(index, resolve_items);
-  graph[state].set_kernel_items(if need_increment {
-    kernel_items.try_increment()
-  } else {
-    kernel_items
-  });
-
+  graph[state].set_kernel_items(
+    g,
+    if need_increment { kernel_items.try_increment() } else { kernel_items },
+    is_scan,
+  );
   graph.enqueue_pending_state(GraphState::Peek, state)
 }
 

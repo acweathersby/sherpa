@@ -160,12 +160,12 @@ fn should_push_new_state() -> SherpaResult<()> {
 
     construct_init(&module)?;
     construct_push_state_function(&module)?;
-    construct_extend_stack_if_needed(&module)?;
+    construct_extend_stack(&module)?;
     construct_internal_free_stack(&module)?;
     construct_drop(&module)?;
 
     build_fast_call_shim(&module, module.fun.push_state)?;
-    build_fast_call_shim(&module, module.fun.extend_stack_if_needed)?;
+    build_fast_call_shim(&module, module.fun.extend_stack)?;
 
     let mut reader = TestUTF8StringReader::new("test");
 
@@ -175,13 +175,12 @@ fn should_push_new_state() -> SherpaResult<()> {
 
     let init_fn = get_parse_function::<Init>(&jit_engine, "init").unwrap();
 
-    let extend_stack_if_needed =
-      get_parse_function::<Extend>(&jit_engine, "extend_stack_if_needed_shim").unwrap();
+    let extend_stack = get_parse_function::<Extend>(&jit_engine, "extend_stack_shim").unwrap();
 
     let drop_fn = get_parse_function::<Drop>(&jit_engine, "drop").unwrap();
 
     init_fn.call(&mut rt_ctx, &mut reader);
-    extend_stack_if_needed.call(&mut rt_ctx, 8);
+    extend_stack.call(&mut rt_ctx, 8);
 
     push_state_fn.call(&mut rt_ctx, NORMAL_STATE_FLAG_LLVM, 0x10101010_01010101);
     push_state_fn.call(&mut rt_ctx, NORMAL_STATE_FLAG_LLVM, 0x01010101_10101010);
@@ -342,7 +341,7 @@ fn should_yield_correct_CP_values_for_inputs() -> SherpaResult<()> {
 }
 
 #[test]
-fn verify_construct_extend_stack_if_needed() -> SherpaResult<()> {
+fn verify_construct_extend_stack() -> SherpaResult<()> {
   let context = Context::create();
   let target_machine = crate_target_test_machine()?;
   let target_data = target_machine.get_target_data();
@@ -353,7 +352,7 @@ fn verify_construct_extend_stack_if_needed() -> SherpaResult<()> {
     context.create_module("test"),
   );
 
-  unsafe { assert!(construct_extend_stack_if_needed(&module).is_ok()) }
+  unsafe { assert!(construct_extend_stack(&module).is_ok()) }
 
   println!("{}", module.module.to_string());
 
@@ -376,14 +375,14 @@ fn should_extend_stack() -> SherpaResult<()> {
     let jit_engine = setup_exec_engine(&module.module);
 
     build_fast_call_shim(&module, module.fun.push_state);
-    build_fast_call_shim(&module, module.fun.extend_stack_if_needed);
+    build_fast_call_shim(&module, module.fun.extend_stack);
 
     let mut reader = TestUTF8StringReader::new("test");
     let mut rt_ctx = ParseContext::new_llvm();
 
     construct_init(&module)?;
     construct_push_state_function(&module)?;
-    construct_extend_stack_if_needed(&module)?;
+    construct_extend_stack(&module)?;
     construct_internal_free_stack(&module)?;
 
     jit_engine.add_global_mapping(&module.fun.allocate_stack, sherpa_allocate_stack as usize);
@@ -391,7 +390,7 @@ fn should_extend_stack() -> SherpaResult<()> {
 
     let init_fn = get_parse_function::<Init>(&jit_engine, "init").unwrap();
     let push_state_fn = get_parse_function::<PushState>(&jit_engine, "push_state_shim").unwrap();
-    let extend = get_parse_function::<Extend>(&jit_engine, "extend_stack_if_needed_shim").unwrap();
+    let extend = get_parse_function::<Extend>(&jit_engine, "extend_stack_shim").unwrap();
 
     init_fn.call(&mut rt_ctx, &mut reader);
     extend.call(&mut rt_ctx, 10);
@@ -422,7 +421,7 @@ fn should_extend_stack() -> SherpaResult<()> {
 
     assert_eq!(stack[67].state, 67);
 
-    extend.call(&mut rt_ctx, 2);
+    // extend.call(&mut rt_ctx, 2);
 
     assert_eq!(rt_ctx.goto_size, 960);
 
