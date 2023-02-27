@@ -293,7 +293,7 @@ pub(crate) unsafe fn construct_emit_end_of_parse(module: &LLVMParserModule) -> S
 pub(crate) unsafe fn construct_get_adjusted_input_block_function(
   m: &LLVMParserModule,
 ) -> SherpaResult<()> {
-  let LLVMParserModule { b, ctx, fun: funct, iptr, .. } = m;
+  let LLVMParserModule { b, ctx, fun: funct, .. } = m;
   let i8 = ctx.i8_type();
   let fn_value = funct.get_adjusted_input_block;
 
@@ -328,9 +328,6 @@ pub(crate) unsafe fn construct_get_adjusted_input_block_function(
   .try_as_basic_value()
   .left()?
   .into_struct_value();
-
-  let scan_int = b.build_ptr_to_int(CTX::scan_ptr.load(b, p_ctx)?.into_pointer_value(), *iptr, "");
-  let end_int = b.build_ptr_to_int(CTX::end_ptr.load(b, p_ctx)?.into_pointer_value(), *iptr, "");
 
   b.build_return(None);
 
@@ -704,7 +701,7 @@ pub(crate) unsafe fn construct_next_function<'a>(module: &'a LLVMParserModule) -
 pub(crate) unsafe fn construct_dispatch_functions<'a>(m: &'a LLVMParserModule) -> SherpaResult<()> {
   let LLVMParserModule { b, ctx, fun, .. } = m;
   let i32 = ctx.i32_type();
-  // Nomal Dispatch
+  // Normal Dispatch
   {
     let fn_value = fun.dispatch;
     let entry_block = ctx.append_basic_block(fn_value, "entry");

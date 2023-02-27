@@ -7,11 +7,12 @@ use inkwell::{
   types::StructType,
   values::{CallableValue, IntValue, PointerValue},
 };
+use sherpa_runtime::types::ast::{AstObject, AstSlot};
 
-pub(crate) unsafe fn construct_ast_builder<ASTNode: Sized>(
+pub(crate) unsafe fn construct_ast_builder<ASTNode: AstObject>(
   module: &LLVMParserModule,
 ) -> SherpaResult<()> {
-  let slot_size = std::mem::size_of::<(ASTNode, TokenRange, TokenRange)>() as u32;
+  let slot_size = std::mem::size_of::<AstSlot<ASTNode>>() as u32;
 
   let LLVMParserModule { ctx, types, b, .. } = module;
   let LLVMTypes { parse_ctx, .. } = types;

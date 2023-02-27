@@ -353,7 +353,6 @@ to_numeric!(to_f64, f64);", w.store.ast_type_name)
       "}",
       &mut |w| {
         w.stmt("use ASTNode::*;".into())?;
-        w.stmt("self.get_type().hash(hasher);".into())?;
         w.block("match self", "{", "}", &|w| {
           let structs =
             w.store.structs.values().map(|s| format!("{}(node) => node.hash(hasher)", s.type_name));
@@ -481,7 +480,7 @@ to_numeric!(to_f64, f64);", w.store.ast_type_name)
         "(",
         ")",
         ",",
-        &|_| vec!["self".to_string()],
+        &|_| vec!["&self".to_string()],
         &format!("-> {ast_type_name}Type"),
         "{",
         "}",
@@ -566,6 +565,7 @@ to_numeric!(to_f64, f64);", w.store.ast_type_name)
         "{",
         "}",
         &mut |w| {
+          w.stmt("self.get_type().hash(hasher);".into())?;
           for StructProp { name, type_, .. } in &s.props {
             use AScriptTypeVal::*;
             match (*type_).into() {
@@ -1732,7 +1732,7 @@ extern "C" {{
             w.stmt(format!("let ctx_ptr = (&mut ctx.0) as *const ParseContext<UTF8StringReader, u32>;"))?;
 
             w.block("match unsafe{ ast_parse(ctx_ptr as *mut u8, reducers_ptr, shifter_ptr, result_ptr) }", "{", "}", &|w|{
-              w.block(&format!("ParseResult::Complete(({}, _, _))  =>", (&w.utils.get_slot_obj_name)(1)), "{", "}", &|w|{
+              w.block(&format!("ParseResult::Complete(AstSlot({}, _, _))  =>", (&w.utils.get_slot_obj_name)(1)), "{", "}", &|w|{
                 if ref_.is_some() {
                   let (ref_name, ref_) =
                     w.utils.create_type_initializer_value(ref_.clone(), type_, false);

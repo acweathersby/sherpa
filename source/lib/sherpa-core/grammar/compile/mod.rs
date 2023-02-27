@@ -3,6 +3,8 @@ pub mod finalize;
 pub mod merge;
 pub mod parse;
 pub mod parser;
+use sherpa_runtime::types::ast::AstObject;
+
 use self::{
   finalize::finalize_grammar,
   merge::merge_grammars,
@@ -18,6 +20,7 @@ use std::{path::PathBuf, sync::Arc};
 
 /// Used to calculate the max size of a
 /// AST node
+#[derive(Debug, Clone)]
 #[repr(C, u32)]
 pub(crate) enum DummyASTEnum {
   _None,
@@ -27,6 +30,14 @@ pub(crate) enum DummyASTEnum {
   _STRING(String),
   _TOKEN(Token),
 }
+
+impl Default for DummyASTEnum {
+  fn default() -> Self {
+    DummyASTEnum::_None
+  }
+}
+
+impl AstObject for DummyASTEnum {}
 
 pub(crate) fn compile_ir_ast(buffer: &str) -> SherpaResult<sherpa::IR_STATE> {
   SherpaResult::Ok(*(sherpa::ast::ir_from(buffer.into())?))

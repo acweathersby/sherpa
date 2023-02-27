@@ -1,6 +1,6 @@
 use crate::{
   types::{
-    ast::{AstObject, AstStackSlice},
+    ast::{AstObject, AstSlot, AstStackSlice},
     ByteReader,
     Goto,
     MutByteReader,
@@ -178,7 +178,7 @@ pub unsafe fn llvm_map_result_action<
 >(
   _ctx: &ParseContext<T, M>,
   action: ParseActionType,
-  slots: &mut AstStackSlice<(Node, TokenRange, TokenRange)>,
+  slots: &mut AstStackSlice<AstSlot<Node>>,
 ) -> ParseResult<Node> {
   match action {
     ParseActionType::Accept =>{
@@ -204,7 +204,7 @@ pub unsafe fn llvm_map_shift_action<
   ASTNode: AstObject,
 >(
   ctx: &ParseContext<R, ExtCTX>,
-  slots: &mut AstStackSlice<(ASTNode, TokenRange, TokenRange)>,
+  slots: &mut AstStackSlice<AstSlot<ASTNode>>,
 ) {
   match ctx.get_shift_data() {
     ParseAction::Shift {
@@ -228,7 +228,7 @@ pub unsafe fn llvm_map_shift_action<
         line_off: token_line_offset,
       };
 
-      slots.assign_to_garbage(0, (ASTNode::default(), tok, peek));
+      slots.assign_to_garbage(0, AstSlot(ASTNode::default(), tok, peek));
     }
     _ => unreachable!(),
   }

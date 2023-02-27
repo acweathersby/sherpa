@@ -290,10 +290,10 @@ impl<T: ByteReader + UTF8Reader, M> ParseContext<T, M> {
 
 #[derive(Debug)]
 #[repr(C, u64)]
-pub enum ParseResult<Node> {
-  Complete((Node, TokenRange, TokenRange)),
-  Error(TokenRange, Vec<(Node, TokenRange, TokenRange)>),
-  NeedMoreInput(Vec<(Node, TokenRange, TokenRange)>),
+pub enum ParseResult<Node: AstObject> {
+  Complete(AstSlot<Node>),
+  Error(TokenRange, Vec<AstSlot<Node>>),
+  NeedMoreInput(Vec<AstSlot<Node>>),
 }
 
 pub enum ShiftsAndSkipsResult {

@@ -29,7 +29,7 @@ use sherpa_runtime::{
     LLVMByteReader,
   },
   types::{
-    ast::{AstObject, AstStackSlice},
+    ast::{AstObject, AstSlot, AstStackSlice},
     ByteReader,
     MutByteReader,
     ParseAction,
@@ -50,15 +50,12 @@ type Next<R, ExtCTX> = unsafe extern "C" fn(*mut ParseContext<R, ExtCTX>) -> Par
 
 type AstBuilder<'a, R, ExtCTX, ASTNode> = unsafe extern "C" fn(
   *mut ParseContext<R, ExtCTX>,
-  *const fn(
-    ctx: &mut ParseContext<R, ExtCTX>,
-    &mut AstStackSlice<(ASTNode, TokenRange, TokenRange)>,
-  ),
-  unsafe fn(&ParseContext<R, ExtCTX>, &mut AstStackSlice<(ASTNode, TokenRange, TokenRange)>),
+  *const fn(ctx: &mut ParseContext<R, ExtCTX>, &mut AstStackSlice<AstSlot<ASTNode>>),
+  unsafe fn(&ParseContext<R, ExtCTX>, &mut AstStackSlice<AstSlot<ASTNode>>),
   unsafe fn(
     &ParseContext<R, ExtCTX>,
     ParseActionType,
-    &mut AstStackSlice<(ASTNode, TokenRange, TokenRange)>,
+    &mut AstStackSlice<AstSlot<ASTNode>>,
   ) -> ParseResult<ASTNode>,
 ) -> ParseResult<ASTNode>;
 
@@ -209,10 +206,7 @@ where
     &mut self,
     entry_index: u32,
     reader: &mut R,
-    functions: &[fn(
-      &mut ParseContext<R, ExtCTX>,
-      &mut AstStackSlice<(ASTNode, TokenRange, TokenRange)>,
-    )],
+    functions: &[fn(&mut ParseContext<R, ExtCTX>, &mut AstStackSlice<AstSlot<ASTNode>>)],
   ) -> ParseResult<ASTNode> {
     unsafe {
       self.ctx.reset();

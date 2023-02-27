@@ -22,7 +22,7 @@ use sherpa_runtime::{
     LLVMByteReader,
   },
   types::{
-    ast::{AstObject, AstStackSlice},
+    ast::{AstObject, AstSlot, AstStackSlice},
     BlameColor,
     ByteReader,
     Goto,
@@ -118,7 +118,7 @@ fn verify_construction_of_ast_builder() -> SherpaResult<()> {
     context.create_module("test"),
   );
 
-  unsafe { assert!(construct_ast_builder::<u64>(&module).is_ok()) }
+  unsafe { assert!(construct_ast_builder::<u32>(&module).is_ok()) }
 
   println!("{}", module.module.to_string());
 
@@ -577,7 +577,7 @@ IGNORE { c:sp c:nl }
         assert_eq!(slots[0].1.to_string_slice(ctx.get_str()), "\"\nh\n\"");
         assert_eq!(slots[0].1.line_num, 0, "Line number of `\"\\nh\\n\"` should be 0");
         assert_eq!(slots[0].1.line_off, 0, "Line offset of `\"\\nh\\n\"` should be 0");
-        slots.assign(0, (1010101, Default::default(), Default::default()))
+        slots.assign(0, AstSlot(1010101, Default::default(), Default::default()))
       }),
       /*C*/
       ("C", 0, |ctx, slots| {
@@ -594,7 +594,7 @@ IGNORE { c:sp c:nl }
 
   assert_eq!(unsafe { *jit.get_ctx().get_meta() }, 3, "Number of reduced productions should be 3");
 
-  assert!(matches!(result, ParseResult::Complete((1010101, ..))));
+  assert!(matches!(result, ParseResult::Complete(AstSlot(1010101, ..))));
 
   SherpaResult::Ok(())
 }
@@ -630,7 +630,7 @@ fn simple_newline_tracking() -> SherpaResult<()> {
         assert_eq!(slots[0].1.line_num, 0, "Line number of `hello` should be 0");
         assert_eq!(slots[0].1.line_off, 0, "Line offset of `hello` should be 0");
 
-        slots.assign(0, (1010101, Default::default(), Default::default()))
+        slots.assign(0, AstSlot(1010101, Default::default(), Default::default()))
       }),
       ("B", 0, |ctx, slots| {
         assert_eq!(slots[0].1.to_string_slice(ctx.get_str()), "mango");
@@ -645,7 +645,7 @@ fn simple_newline_tracking() -> SherpaResult<()> {
     ]),
   );
 
-  assert!(matches!(result, ParseResult::Complete((1010101, ..))));
+  assert!(matches!(result, ParseResult::Complete(AstSlot(1010101, ..))));
 
   SherpaResult::Ok(())
 }
@@ -696,7 +696,7 @@ IGNORE { c:sp c:nl }
           )
         );
 
-        slots.assign(0, (0, final_token, TokenRange::default()));
+        slots.assign(0, AstSlot(0, final_token, TokenRange::default()));
       }),
       ("B", 0, |_, slots| {
         println!("<B> 02 - {}  {:#?}", 0, slots);
@@ -704,10 +704,10 @@ IGNORE { c:sp c:nl }
       }),
       ("P", 0, |_, slots| {
         println!("<P> 03 - {}  {:#?}", 0, slots);
-        let (_, _a, _) = slots.take(0);
+        let AstSlot(_, _a, _) = slots.take(0);
         slots.take(1);
-        let (_, _c, _) = slots.take(2);
-        slots.assign(0, (0, (_a + _c), TokenRange::default()));
+        let AstSlot(_, _c, _) = slots.take(2);
+        slots.assign(0, AstSlot(0, _a + _c, TokenRange::default()));
       }),
     ]),
   );
@@ -716,7 +716,7 @@ IGNORE { c:sp c:nl }
 
   assert!(matches!(parse_result, ParseResult::Complete(..)));
 
-  if let ParseResult::Complete((_, tok, _)) = parse_result {
+  if let ParseResult::Complete(AstSlot(_, tok, _)) = parse_result {
     assert_eq!(tok.len(), input.len());
   }
 
@@ -728,12 +728,8 @@ IGNORE { c:sp c:nl }
 // matches the number of rules in the parser.
 fn map_reduce_function<'a, R, ExtCTX, ASTNode>(
   g: &GrammarStore,
-  fns: Vec<(
-    &str,
-    usize,
-    fn(&mut ParseContext<R, ExtCTX>, &mut AstStackSlice<(ASTNode, TokenRange, TokenRange)>),
-  )>,
-) -> Vec<fn(&mut ParseContext<R, ExtCTX>, &mut AstStackSlice<(ASTNode, TokenRange, TokenRange)>)>
+  fns: Vec<(&str, usize, fn(&mut ParseContext<R, ExtCTX>, &mut AstStackSlice<AstSlot<ASTNode>>))>,
+) -> Vec<fn(&mut ParseContext<R, ExtCTX>, &mut AstStackSlice<AstSlot<ASTNode>>)>
 where
   R: ByteReader + LLVMByteReader + MutByteReader,
   ASTNode: AstObject,
