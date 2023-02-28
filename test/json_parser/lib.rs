@@ -1,8 +1,8 @@
-pub mod llvm_language_test_parser {
-  include!(concat!(env!("OUT_DIR"), "/llvm_language_test.rs"));
+pub mod json_parser {
+  include!(concat!(env!("OUT_DIR"), "/json.rs"));
 }
 
-pub use llvm_language_test_parser::*;
+pub use json_parser::*;
 
 #[cfg(test)]
 mod test {
@@ -24,13 +24,13 @@ mod test {
 
   #[test]
   pub fn test_spirv() {
-    let n = Instant::now();
     let string = include_str!("./spirv.core.grammar.json");
+    let n = Instant::now();
     let ast = Json::from_str(string);
 
     println!("{:?}", n.elapsed());
 
-    //  println!("{:?}", ast);
+    println!("{:#?}", ast);
 
     assert!(ast.is_ok());
   }

@@ -1,6 +1,6 @@
 IGNORE { c:sp c:nl }
 EXPORT json as entry
-NAME llvm_language_test
+NAME json
 
 <> json > 
         object                                  :ast { t_Json, v: $1 }

@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
+use json_test_parser::*;
 use sherpa_runtime::types::{ParseAction, ParseActionType, SherpaParseError, UTF8StringReader};
 use std::time::Instant;
-use test_basic_language_llvm::*;
 
 pub fn json_ast_build(input: &str) -> Result<Box<Json>, SherpaParseError> {
   Json::from_str(input)

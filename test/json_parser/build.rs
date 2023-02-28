@@ -7,16 +7,16 @@ use sherpa::{
 
 fn main() {
   println!("cargo:rerun-if-changed=build.rs");
-  println!("cargo:rerun-if-changed=grammar.sg");
+  println!("cargo:rerun-if-changed=json.sg");
 
   if let Ok(cwd) = std::env::var("CARGO_MANIFEST_DIR").map(|d| PathBuf::from_str(&d).unwrap()) {
-    if let Ok(source_path) = cwd.join("./grammar.sg").canonicalize() {
+    if let Ok(source_path) = cwd.join("./json.sg").canonicalize() {
       if false {
         if !compile_bytecode_parser(&source_path, Config {
           opt_inline_redundant_assertions: true,
           ..Default::default()
         }) {
-          panic!("Failed to build grammar.sg");
+          panic!("Failed to build json.sg");
         }
       } else {
         if !compile_llvm_parser(&source_path, Config {
@@ -24,7 +24,7 @@ fn main() {
           opt_llvm: true,
           ..Default::default()
         }) {
-          panic!("Failed to build grammar.sg");
+          panic!("Failed to build json.sg");
         }
       }
     }

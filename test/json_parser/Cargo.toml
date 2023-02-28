@@ -1,26 +1,26 @@
 [package]
-name = "test-basic-language-llvm"
+name = "json-test-parser"
 version = "0.0.0"
 edition = "2021"
 
 build = "./build.rs"
 
 [lib]
-name = "test_basic_language_llvm"
+name = "json_test_parser"
 path = "./lib.rs"
 
 [[bin]]
-name = "test_basic_language_llvm_bin"
+name = "json_test_parser_bin"
 path = "./main.rs"
 
 [dev-dependencies]
 criterion = "0.4.0"
 
 [build-dependencies.sherpa]
-path = "../../../source/lib/sherpa"
+path = "../../source/lib/sherpa"
 
 [dependencies.sherpa_runtime]
-path = "../../../source/lib/sherpa-rust-rt"
+path = "../../source/lib/sherpa-rust-rt"
 
 [profile.release]
 opt-level = 3              # Use slightly better optimizations.
