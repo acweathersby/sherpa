@@ -207,30 +207,27 @@ pub unsafe fn llvm_map_shift_action<
   ctx: &ParseContext<R, ExtCTX>,
   slots: &mut AstStackSlice<AstSlot<ASTNode>>,
 ) {
-  match ctx.get_shift_data() {
-    ParseAction::Shift {
-      anchor_byte_offset,
-      token_byte_offset,
-      token_byte_length,
-      token_line_offset,
-      token_line_count,
-      ..
-    } => {
-      let peek = TokenRange {
-        len: token_byte_offset - anchor_byte_offset,
-        off: anchor_byte_offset,
-        ..Default::default()
-      };
+  let ParseAction::Shift {
+    anchor_byte_offset,
+    token_byte_offset,
+    token_byte_length,
+    token_line_offset,
+    token_line_count,
+    ..
+  } = ctx.get_shift_data() else {unreachable!()};
 
-      let tok = TokenRange {
-        len:      token_byte_length,
-        off:      token_byte_offset,
-        line_num: token_line_count,
-        line_off: token_line_offset,
-      };
+  let peek = TokenRange {
+    len: token_byte_offset - anchor_byte_offset,
+    off: anchor_byte_offset,
+    ..Default::default()
+  };
 
-      slots.assign_to_garbage(0, AstSlot(ASTNode::default(), tok, peek));
-    }
-    _ => unreachable!(),
-  }
+  let tok = TokenRange {
+    len:      token_byte_length,
+    off:      token_byte_offset,
+    line_num: token_line_count,
+    line_off: token_line_offset,
+  };
+
+  slots.assign_to_garbage(0, AstSlot(ASTNode::default(), tok, peek));
 }
