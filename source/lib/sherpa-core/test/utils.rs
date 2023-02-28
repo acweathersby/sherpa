@@ -15,7 +15,7 @@ use crate::{
   SherpaResult,
 };
 use inkwell::context::Context;
-use sherpa_runtime::bytecode_parser::DebugEvent;
+use sherpa_runtime::bytecode_parser::{ByteCodeParser, DebugEvent};
 use std::{path::PathBuf, str::FromStr, sync::Arc};
 
 use super::test_reader::TestUTF8StringReader;

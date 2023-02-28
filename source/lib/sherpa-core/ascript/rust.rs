@@ -493,7 +493,7 @@ to_numeric!(to_f64, f64);", w.store.ast_type_name)
     });
 
     // Struct type implementation
-    w.block(&format!("impl {}", w.store.ast_type_name), "{", "}", &|w| {
+    w.block(&format!("impl {ast_type_name}"), "{", "}", &|w| {
       w.method(
         &format!("#[track_caller]\npub fn to_{struct_name}"),
         "(",
@@ -617,38 +617,51 @@ to_numeric!(to_f64, f64);", w.store.ast_type_name)
   // --------------------------------------------------------------------------
   // Reduce Functions
   w.write_reduce_functions(
-    "fn %% <R: Reader + UTF8Reader, M>",
+    "fn %% <R: Reader + UTF8Reader, M, const UP: bool>",
     "(",
     ")",
     ",",
     &|w| {
       vec![
         "_ctx_: *mut ParseContext<R, M>".to_string(),
-        format!("slots: &AstStackSlice<AstSlot<{}>>", w.store.ast_type_name),
+        format!("slots: &AstStackSlice<AstSlot<{}>, UP>", w.store.ast_type_name),
       ]
     },
     "",
     "{",
     "}",
     &|w, reduce_functions_map| {
-      w.block("struct ReduceFunctions<R: Reader + UTF8Reader, M>", "(", ");", &|w| {
-        w.stmt(format!(
-          "pub [Reducer<R, M, {0}>; {1}]",
-          w.utils.store.ast_type_name,
-          reduce_functions_map.len()
-        ));
-        SherpaResult::Ok(())
-      })?;
-      w.block("impl<R: Reader + UTF8Reader, M> ReduceFunctions<R, M>", "{", "}", &|w| {
-        w.method("pub const fn new", "(", ")", ",", &|_| vec![], "-> Self", "{", "}", &mut |w| {
-          w.block("Self", "([", "])", &|w| {
-            w.list(",", reduce_functions_map.iter().map(|f| format!("{f}::<R, M>")).collect());
+      w.block(
+        "struct ReduceFunctions<R: Reader + UTF8Reader, M, const UP: bool>",
+        "(",
+        ");",
+        &|w| {
+          w.stmt(format!(
+            "pub [Reducer<R, M, {0}, UP>; {1}]",
+            w.utils.store.ast_type_name,
+            reduce_functions_map.len()
+          ));
+          SherpaResult::Ok(())
+        },
+      )?;
+      w.block(
+        "impl<R: Reader + UTF8Reader, M, const UP: bool> ReduceFunctions<R, M, UP>",
+        "{",
+        "}",
+        &|w| {
+          w.method("pub const fn new", "(", ")", ",", &|_| vec![], "-> Self", "{", "}", &mut |w| {
+            w.block("Self", "([", "])", &|w| {
+              w.list(
+                ",",
+                reduce_functions_map.iter().map(|f| format!("{f}::<R, M, UP>")).collect(),
+              );
+              SherpaResult::Ok(())
+            });
             SherpaResult::Ok(())
           });
           SherpaResult::Ok(())
-        });
-        SherpaResult::Ok(())
-      })?;
+        },
+      )?;
       SherpaResult::Ok(())
     },
   );
@@ -1466,11 +1479,12 @@ pub(crate) fn write_rust_bytecode_parser_file<'a, W: Write>(
   let g = &(w.store.g.clone());
   let ast_type_name = w.store.ast_type_name.clone();
   w.stmt(
-    "pub trait Reader: ByteReader + MutByteReader + UTF8Reader + std::fmt::Debug {}
+    "    
+pub trait Reader: ByteReader + MutByteReader + UTF8Reader + std::fmt::Debug {}
 
 impl<T: ByteReader + MutByteReader + UTF8Reader + std::fmt::Debug> Reader for T {}
 
-pub type Parser<'a, T: Reader, UserCTX> = ByteCodeParser<'a, T, UserCTX>;"
+pub type Parser<'a, T: Reader, UserCTX> = sherpa_runtime::bytecode_parser::ByteCodeParser<'a, T, UserCTX>;"
       .into(),
   )
   .unwrap();
@@ -1524,7 +1538,7 @@ pub type Parser<'a, T: Reader, UserCTX> = ByteCodeParser<'a, T, UserCTX>;"
           "{",
           "}",
           &mut |w| {
-            w.stmt(format!("let reduce_functions = ReduceFunctions::<_, u32>::new();"))?;
+            w.stmt(format!("let reduce_functions = ReduceFunctions::<_, u32, true>::new();"))?;
             w.stmt(format!("let mut parser = Parser::new(&mut reader, &bytecode);"))?;
             w.stmt(format!("parser.init_parser({});", state_lookups.get(guid_name).unwrap()))?;
 
@@ -1563,6 +1577,8 @@ pub(crate) fn write_rust_llvm_parser_file<'a, W: Write>(
   let g = &(w.store.g.clone());
   w.stmt(format!(
     r###"
+const UPWARD_STACK: bool = false;
+
 #[link(name = "{parser_name}", kind ="static" )]
 extern "C" {{
   fn init(ctx: *mut u8, reader: *mut u8);
@@ -1740,7 +1756,7 @@ extern "C" {{
           "{",
           "}",
           &mut |w| {
-            w.stmt(format!("const reduce_functions: ReduceFunctions::<UTF8StringReader, u32> = ReduceFunctions::<UTF8StringReader, u32>::new();"))?;
+            w.stmt(format!("const reduce_functions: ReduceFunctions::<UTF8StringReader, u32, false> = ReduceFunctions::<UTF8StringReader, u32, false>::new();"))?;
             w.stmt(format!("let mut ctx = Parser::new_{export_name}_parser(reader);"))?;
             w.stmt(format!("let reducers_ptr = (&reduce_functions.0).as_ptr() as *const u8;"))?;
             w.stmt(format!("let shifter_ptr = llvm_map_shift_action::<UTF8StringReader, u32, {ast_type_name}> as *const u8;"))?;

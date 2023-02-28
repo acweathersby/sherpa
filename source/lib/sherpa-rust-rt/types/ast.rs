@@ -261,7 +261,8 @@ pub struct Lazy {
 // self.functions); }
 // }
 
-pub type Reducer<R, M, Node> = fn(*mut ParseContext<R, M>, &AstStackSlice<AstSlot<Node>>);
+pub type Reducer<R, M, Node, const UPWARD_STACK: bool = false> =
+  fn(*mut ParseContext<R, M>, &AstStackSlice<AstSlot<Node>, UPWARD_STACK>);
 
 pub trait AstObject: Debug + Clone + Default + Sized {}
 
@@ -271,27 +272,27 @@ pub struct AstSlot<Ast: AstObject>(pub Ast, pub TokenRange, pub TokenRange);
 
 impl<Ast: AstObject> AstObject for AstSlot<Ast> {}
 
-/// Used within an LLVM parser to provide access to intermediate AST
+/// Used within an LLVM parser to provide access to This intermediate AST
 /// data stored on the stack within a dynamically resizable array.
 #[repr(C)]
-pub struct AstStackSlice<T: AstObject> {
+pub struct AstStackSlice<T: AstObject, const STACK_GROWS_UPWARD: bool = false> {
   stack_data:         *mut T,
   stack_size:         u32,
-  decreasing_indices: bool,
+  stack_grows_upward: bool,
 }
 
-impl<T: AstObject> AstStackSlice<T> {
-  #[track_caller]
+impl<T: AstObject, const STACK_GROWS_UPWARD: bool> AstStackSlice<T, STACK_GROWS_UPWARD> {
   fn get_pointer(&self, position: usize) -> *mut T {
+    #[cfg(debug_assertions)]
     if position >= (self.stack_size as usize) {
       panic!(
         "Could not get AST node at slot ${} from stack with a length of {}",
         position, self.stack_size
       );
     }
-    let slot_size = std::mem::size_of::<T>();
+    let slot_size: usize = std::mem::size_of::<T>();
 
-    if self.decreasing_indices {
+    if !STACK_GROWS_UPWARD {
       // We are using the stack space for these slots,
       // which we ASSUME grows downward, hence the "higher" slots
       // are accessed through lower addresses.
@@ -305,45 +306,47 @@ impl<T: AstObject> AstStackSlice<T> {
     Self {
       stack_data:         &mut slice[0],
       stack_size:         slice.len() as u32,
-      decreasing_indices: false,
+      stack_grows_upward: STACK_GROWS_UPWARD,
     }
   }
 
   /// Assigns the given data to a garbage slot, ignoring any existing value
   /// the slot may contain. This is only used when shifting token data into
   /// an "empty" slot through the Shift action.
+  #[inline(always)]
   pub unsafe fn assign_to_garbage(&self, position: usize, val: T) {
-    let pointer = self.get_pointer(position);
-    std::mem::forget(std::mem::replace(&mut (*pointer), val));
+    std::mem::forget(std::mem::replace(&mut (*self.get_pointer(position)), val));
   }
 
   #[inline(always)]
   pub fn assign(&self, position: usize, val: T) {
     unsafe {
-      let pointer = self.get_pointer(position);
-      *pointer = val;
+      *self.get_pointer(position) = val;
     }
   }
 
   /// Removes the value at the given position from the slot and returns it.
-  #[track_caller]
   #[inline(always)]
   pub fn take(&self, position: usize) -> T {
     unsafe { std::mem::take(&mut (*self.get_pointer(position))) }
   }
 
+  #[inline(always)]
   pub fn clone(&self, position: usize) -> T {
     unsafe { (*self.get_pointer(position)).clone() }
   }
 
+  #[inline(always)]
   pub fn len(&self) -> usize {
     self.stack_size as usize
   }
 
+  #[inline(always)]
   pub fn destroy(self) {
     self.to_vec();
   }
 
+  #[inline(always)]
   pub fn to_vec(&self) -> Vec<T> {
     let mut output = vec![];
     for i in 0..self.stack_size {
@@ -353,7 +356,7 @@ impl<T: AstObject> AstStackSlice<T> {
   }
 }
 
-impl<T: AstObject> Debug for AstStackSlice<T> {
+impl<T: AstObject, const STACK_GROWS_UPWARD: bool> Debug for AstStackSlice<T, STACK_GROWS_UPWARD> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let mut dbgstr = f.debug_struct("SlotSlice");
     dbgstr.field("stack_size", &self.stack_size);
@@ -367,10 +370,14 @@ impl<T: AstObject> Debug for AstStackSlice<T> {
   }
 }
 
-impl<T: AstObject> Index<usize> for AstStackSlice<T> {
+impl<T: AstObject, const STACK_GROWS_UPWARD: bool> Index<usize>
+  for AstStackSlice<T, STACK_GROWS_UPWARD>
+{
   type Output = T;
 
+  #[inline(always)]
   fn index(&self, index: usize) -> &Self::Output {
+    #[cfg(debug_assertions)]
     if index > self.len() {
       panic!("Index {} out of bounds in an AstStackSlice of len {}", index, self.len());
     }
@@ -383,7 +390,7 @@ impl<T: AstObject> Index<usize> for AstStackSlice<T> {
 fn test_slots_from_slice() {
   let mut d = vec![1, 2, 3, 4, 5, 6, 7];
   let len = d.len();
-  let slots = AstStackSlice::from_slice(&mut d[len - 3..len]);
+  let slots = AstStackSlice::<_, true>::from_slice(&mut d[len - 3..len]);
 
   assert_eq!(slots.take(0), 5);
   assert_eq!(slots.take(1), 6);

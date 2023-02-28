@@ -3,7 +3,7 @@ use super::{
   bytecode::{FAIL_STATE_FLAG, NORMAL_STATE_FLAG},
   *,
 };
-use crate::bytecode_parser::{get_next_action, DebugEvent, DebugFn};
+use crate::bytecode_parser::{DebugEvent, DebugFn};
 use std::{fmt::Debug, sync::Arc};
 
 #[derive(Clone, Debug, Copy)]
@@ -361,7 +361,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
 
   fn parse_ast<Node: AstObject>(
     &mut self,
-    reducers: &[Reducer<R, M, Node>],
+    reducers: &[Reducer<R, M, Node, true>],
     debug: &mut Option<DebugFn>,
   ) -> Result<AstSlot<Node>, SherpaParseError> {
     let mut ast_stack: Vec<AstSlot<Node>> = vec![];
@@ -501,77 +501,5 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
         _ => panic!("Unexpected Action!"),
       }
     }
-  }
-}
-
-pub struct ByteCodeParser<'a, R: ByteReader + MutByteReader, M> {
-  ctx:   ParseContext<R, M>,
-  stack: Vec<u32>,
-  bc:    &'a [u8],
-}
-
-impl<'a, R: ByteReader + MutByteReader, M> ByteCodeParser<'a, R, M> {
-  pub fn new(reader: &'a mut R, bc: &'a [u8]) -> Self {
-    ByteCodeParser { ctx: ParseContext::<R, M>::new_bytecode(reader), stack: vec![], bc }
-  }
-}
-
-impl<'a, R: ByteReader + MutByteReader + UTF8Reader, M> SherpaParser<R, M>
-  for ByteCodeParser<'a, R, M>
-{
-  fn get_ctx(&self) -> &ParseContext<R, M> {
-    &self.ctx
-  }
-
-  fn get_ctx_mut(&mut self) -> &mut ParseContext<R, M> {
-    &mut self.ctx
-  }
-
-  fn head_at_end(&self) -> bool {
-    self.ctx.head_ptr == self.get_reader().len()
-  }
-
-  fn get_token_length(&self) -> u32 {
-    self.ctx.get_token_length()
-  }
-
-  fn get_token_offset(&self) -> u32 {
-    self.ctx.get_token_offset()
-  }
-
-  fn get_token_line_number(&self) -> u32 {
-    self.ctx.start_line_num
-  }
-
-  fn get_token_line_offset(&self) -> u32 {
-    self.ctx.start_line_off
-  }
-
-  fn get_production_id(&self) -> u32 {
-    self.ctx.prod_id
-  }
-
-  fn get_reader(&self) -> &R {
-    self.ctx.get_reader()
-  }
-
-  fn get_reader_mut(&mut self) -> &mut R {
-    self.ctx.get_reader_mut()
-  }
-
-  fn get_input(&self) -> &str {
-    unsafe { std::str::from_utf8_unchecked(self.get_reader().get_bytes()) }
-  }
-
-  fn init_parser(&mut self, entry_point: u32) {
-    self.stack = vec![0, 0, NORMAL_STATE_FLAG, entry_point];
-    self.ctx.end_ptr = self.get_reader().len();
-    self.get_reader_mut().set_cursor(0);
-    self.get_reader_mut().next(0);
-  }
-
-  fn get_next_action(&mut self, debug: &mut Option<DebugFn>) -> ParseAction {
-    let ByteCodeParser { ctx, stack, bc } = self;
-    get_next_action(ctx, stack, bc, debug)
   }
 }

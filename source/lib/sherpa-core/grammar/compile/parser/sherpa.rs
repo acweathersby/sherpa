@@ -4422,9 +4422,9 @@ impl Hash for Recovery {
   }
 }
 
-fn reducer_000<R: Reader + UTF8Reader, M>(
+fn reducer_000<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -4445,9 +4445,9 @@ fn reducer_000<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::AST_U8(Box::new(obj_3_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_001<R: Reader + UTF8Reader, M>(
+fn reducer_001<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -4465,9 +4465,9 @@ fn reducer_001<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::AST_U8(Box::new(obj_2_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_002<R: Reader + UTF8Reader, M>(
+fn reducer_002<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -4489,9 +4489,9 @@ fn reducer_002<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::AST_U16(Box::new(obj_3_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_003<R: Reader + UTF8Reader, M>(
+fn reducer_003<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -4510,9 +4510,9 @@ fn reducer_003<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::AST_U16(Box::new(obj_2_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_004<R: Reader + UTF8Reader, M>(
+fn reducer_004<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -4534,9 +4534,9 @@ fn reducer_004<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::AST_U32(Box::new(obj_3_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_005<R: Reader + UTF8Reader, M>(
+fn reducer_005<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -4555,9 +4555,9 @@ fn reducer_005<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::AST_U32(Box::new(obj_2_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_006<R: Reader + UTF8Reader, M>(
+fn reducer_006<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -4579,9 +4579,9 @@ fn reducer_006<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::AST_U64(Box::new(obj_3_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_007<R: Reader + UTF8Reader, M>(
+fn reducer_007<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -4600,9 +4600,9 @@ fn reducer_007<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::AST_U64(Box::new(obj_2_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_008<R: Reader + UTF8Reader, M>(
+fn reducer_008<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -4623,9 +4623,9 @@ fn reducer_008<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::AST_I8(Box::new(obj_3_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_009<R: Reader + UTF8Reader, M>(
+fn reducer_009<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -4643,9 +4643,9 @@ fn reducer_009<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::AST_I8(Box::new(obj_2_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_010<R: Reader + UTF8Reader, M>(
+fn reducer_010<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -4667,9 +4667,9 @@ fn reducer_010<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::AST_I16(Box::new(obj_3_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_011<R: Reader + UTF8Reader, M>(
+fn reducer_011<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -4688,9 +4688,9 @@ fn reducer_011<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::AST_I16(Box::new(obj_2_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_012<R: Reader + UTF8Reader, M>(
+fn reducer_012<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -4712,9 +4712,9 @@ fn reducer_012<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::AST_I32(Box::new(obj_3_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_013<R: Reader + UTF8Reader, M>(
+fn reducer_013<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -4733,9 +4733,9 @@ fn reducer_013<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::AST_I32(Box::new(obj_2_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_014<R: Reader + UTF8Reader, M>(
+fn reducer_014<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -4757,9 +4757,9 @@ fn reducer_014<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::AST_I64(Box::new(obj_3_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_015<R: Reader + UTF8Reader, M>(
+fn reducer_015<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -4778,9 +4778,9 @@ fn reducer_015<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::AST_I64(Box::new(obj_2_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_016<R: Reader + UTF8Reader, M>(
+fn reducer_016<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -4802,9 +4802,9 @@ fn reducer_016<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::AST_F32(Box::new(obj_3_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_017<R: Reader + UTF8Reader, M>(
+fn reducer_017<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -4823,9 +4823,9 @@ fn reducer_017<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::AST_F32(Box::new(obj_2_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_018<R: Reader + UTF8Reader, M>(
+fn reducer_018<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -4847,9 +4847,9 @@ fn reducer_018<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::AST_F64(Box::new(obj_3_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_019<R: Reader + UTF8Reader, M>(
+fn reducer_019<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -4868,9 +4868,9 @@ fn reducer_019<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::AST_F64(Box::new(obj_2_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_020<R: Reader + UTF8Reader, M>(
+fn reducer_020<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -4880,9 +4880,9 @@ fn reducer_020<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::U32(tok_1_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_021<R: Reader + UTF8Reader, M>(
+fn reducer_021<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -4895,9 +4895,9 @@ fn reducer_021<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::HASH_NAME(Box::new(obj_5_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_022<R: Reader + UTF8Reader, M>(
+fn reducer_022<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -4922,9 +4922,9 @@ fn reducer_022<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::AnyGroup(Box::new(obj_6_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_023<R: Reader + UTF8Reader, M>(
+fn reducer_023<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -4948,54 +4948,54 @@ fn reducer_023<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::AnyGroup(Box::new(obj_5_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_024<R: Reader + UTF8Reader, M>(
+fn reducer_024<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_025<R: Reader + UTF8Reader, M>(
+fn reducer_025<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_026<R: Reader + UTF8Reader, M>(
+fn reducer_026<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_027<R: Reader + UTF8Reader, M>(
+fn reducer_027<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_028<R: Reader + UTF8Reader, M>(
+fn reducer_028<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_029<R: Reader + UTF8Reader, M>(
+fn reducer_029<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -5016,9 +5016,9 @@ fn reducer_029<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::Ascript(Box::new(obj_3_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_030<R: Reader + UTF8Reader, M>(
+fn reducer_030<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -5046,9 +5046,9 @@ fn reducer_030<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_031<R: Reader + UTF8Reader, M>(
+fn reducer_031<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -5076,9 +5076,9 @@ fn reducer_031<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_032<R: Reader + UTF8Reader, M>(
+fn reducer_032<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -5105,9 +5105,9 @@ fn reducer_032<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_033<R: Reader + UTF8Reader, M>(
+fn reducer_033<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -5130,18 +5130,18 @@ fn reducer_033<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_034<R: Reader + UTF8Reader, M>(
+fn reducer_034<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_035<R: Reader + UTF8Reader, M>(
+fn reducer_035<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -5154,9 +5154,9 @@ fn reducer_035<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Export(Box::new(obj_5_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_036<R: Reader + UTF8Reader, M>(
+fn reducer_036<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -5169,9 +5169,9 @@ fn reducer_036<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Export(Box::new(obj_5_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_037<R: Reader + UTF8Reader, M>(
+fn reducer_037<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -5181,18 +5181,18 @@ fn reducer_037<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Export(Box::new(obj_3_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_038<R: Reader + UTF8Reader, M>(
+fn reducer_038<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_039<R: Reader + UTF8Reader, M>(
+fn reducer_039<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -5204,9 +5204,9 @@ fn reducer_039<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::STRINGS(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_040<R: Reader + UTF8Reader, M>(
+fn reducer_040<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -5216,27 +5216,27 @@ fn reducer_040<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::STRINGS(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_041<R: Reader + UTF8Reader, M>(
+fn reducer_041<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_042<R: Reader + UTF8Reader, M>(
+fn reducer_042<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_043<R: Reader + UTF8Reader, M>(
+fn reducer_043<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -5264,9 +5264,9 @@ fn reducer_043<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_044<R: Reader + UTF8Reader, M>(
+fn reducer_044<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -5291,9 +5291,9 @@ fn reducer_044<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_045<R: Reader + UTF8Reader, M>(
+fn reducer_045<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -5323,9 +5323,9 @@ fn reducer_045<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::Symbols(Box::new(obj_6_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_046<R: Reader + UTF8Reader, M>(
+fn reducer_046<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -5346,9 +5346,9 @@ fn reducer_046<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::Symbols(Box::new(obj_4_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_047<R: Reader + UTF8Reader, M>(
+fn reducer_047<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -5358,9 +5358,9 @@ fn reducer_047<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::U32(tok_1_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_048<R: Reader + UTF8Reader, M>(
+fn reducer_048<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -5387,9 +5387,9 @@ fn reducer_048<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_049<R: Reader + UTF8Reader, M>(
+fn reducer_049<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -5400,9 +5400,9 @@ fn reducer_049<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_050<R: Reader + UTF8Reader, M>(
+fn reducer_050<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -5410,9 +5410,9 @@ fn reducer_050<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_051<R: Reader + UTF8Reader, M>(
+fn reducer_051<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -5424,9 +5424,9 @@ fn reducer_051<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Ignore(Box::new(obj_5_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_052<R: Reader + UTF8Reader, M>(
+fn reducer_052<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -5436,18 +5436,18 @@ fn reducer_052<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Num(Box::new(obj_2_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_053<R: Reader + UTF8Reader, M>(
+fn reducer_053<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_054<R: Reader + UTF8Reader, M>(
+fn reducer_054<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -5469,9 +5469,9 @@ fn reducer_054<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_055<R: Reader + UTF8Reader, M>(
+fn reducer_055<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -5479,9 +5479,9 @@ fn reducer_055<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Pop(Box::new(obj_2_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_056<R: Reader + UTF8Reader, M>(
+fn reducer_056<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -5489,9 +5489,9 @@ fn reducer_056<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Pass(Box::new(obj_2_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_057<R: Reader + UTF8Reader, M>(
+fn reducer_057<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -5500,9 +5500,9 @@ fn reducer_057<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::SkipToken(Box::new(obj_2_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_058<R: Reader + UTF8Reader, M>(
+fn reducer_058<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -5513,9 +5513,9 @@ fn reducer_058<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_059<R: Reader + UTF8Reader, M>(
+fn reducer_059<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -5523,9 +5523,9 @@ fn reducer_059<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Fail(Box::new(obj_2_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_060<R: Reader + UTF8Reader, M>(
+fn reducer_060<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -5534,9 +5534,9 @@ fn reducer_060<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::PeekToken(Box::new(obj_2_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_061<R: Reader + UTF8Reader, M>(
+fn reducer_061<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -5547,9 +5547,9 @@ fn reducer_061<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_062<R: Reader + UTF8Reader, M>(
+fn reducer_062<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -5560,9 +5560,9 @@ fn reducer_062<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_063<R: Reader + UTF8Reader, M>(
+fn reducer_063<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -5573,9 +5573,9 @@ fn reducer_063<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_064<R: Reader + UTF8Reader, M>(
+fn reducer_064<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -5584,9 +5584,9 @@ fn reducer_064<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::PeekReset(Box::new(obj_2_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_065<R: Reader + UTF8Reader, M>(
+fn reducer_065<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -5599,9 +5599,9 @@ fn reducer_065<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_066<R: Reader + UTF8Reader, M>(
+fn reducer_066<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -5613,9 +5613,9 @@ fn reducer_066<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_067<R: Reader + UTF8Reader, M>(
+fn reducer_067<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -5626,9 +5626,9 @@ fn reducer_067<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_068<R: Reader + UTF8Reader, M>(
+fn reducer_068<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -5637,9 +5637,9 @@ fn reducer_068<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::ScanShift(Box::new(obj_2_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_069<R: Reader + UTF8Reader, M>(
+fn reducer_069<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -5647,9 +5647,9 @@ fn reducer_069<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Accept(Box::new(obj_2_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_070<R: Reader + UTF8Reader, M>(
+fn reducer_070<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -5660,81 +5660,81 @@ fn reducer_070<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Init(Box::new(obj_4_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_071<R: Reader + UTF8Reader, M>(
+fn reducer_071<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_072<R: Reader + UTF8Reader, M>(
+fn reducer_072<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_073<R: Reader + UTF8Reader, M>(
+fn reducer_073<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_074<R: Reader + UTF8Reader, M>(
+fn reducer_074<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_075<R: Reader + UTF8Reader, M>(
+fn reducer_075<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_076<R: Reader + UTF8Reader, M>(
+fn reducer_076<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_077<R: Reader + UTF8Reader, M>(
+fn reducer_077<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_078<R: Reader + UTF8Reader, M>(
+fn reducer_078<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_079<R: Reader + UTF8Reader, M>(
+fn reducer_079<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -5745,9 +5745,9 @@ fn reducer_079<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::TOKENS(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_080<R: Reader + UTF8Reader, M>(
+fn reducer_080<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -5758,9 +5758,9 @@ fn reducer_080<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::TOKENS(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_081<R: Reader + UTF8Reader, M>(
+fn reducer_081<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -5771,9 +5771,9 @@ fn reducer_081<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::TOKENS(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_082<R: Reader + UTF8Reader, M>(
+fn reducer_082<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -5784,9 +5784,9 @@ fn reducer_082<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::TOKENS(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_083<R: Reader + UTF8Reader, M>(
+fn reducer_083<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -5797,9 +5797,9 @@ fn reducer_083<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::TOKENS(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_084<R: Reader + UTF8Reader, M>(
+fn reducer_084<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -5809,9 +5809,9 @@ fn reducer_084<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::TOKENS(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_085<R: Reader + UTF8Reader, M>(
+fn reducer_085<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -5821,9 +5821,9 @@ fn reducer_085<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::TOKENS(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_086<R: Reader + UTF8Reader, M>(
+fn reducer_086<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -5833,9 +5833,9 @@ fn reducer_086<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::TOKENS(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_087<R: Reader + UTF8Reader, M>(
+fn reducer_087<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -5845,9 +5845,9 @@ fn reducer_087<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::TOKENS(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_088<R: Reader + UTF8Reader, M>(
+fn reducer_088<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -5857,9 +5857,9 @@ fn reducer_088<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::TOKENS(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_089<R: Reader + UTF8Reader, M>(
+fn reducer_089<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -5871,9 +5871,9 @@ fn reducer_089<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_090<R: Reader + UTF8Reader, M>(
+fn reducer_090<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -5883,9 +5883,9 @@ fn reducer_090<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_091<R: Reader + UTF8Reader, M>(
+fn reducer_091<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -5897,9 +5897,9 @@ fn reducer_091<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_092<R: Reader + UTF8Reader, M>(
+fn reducer_092<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -5909,9 +5909,9 @@ fn reducer_092<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_093<R: Reader + UTF8Reader, M>(
+fn reducer_093<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -5934,9 +5934,9 @@ fn reducer_093<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_094<R: Reader + UTF8Reader, M>(
+fn reducer_094<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -5960,9 +5960,9 @@ fn reducer_094<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_095<R: Reader + UTF8Reader, M>(
+fn reducer_095<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -5970,9 +5970,9 @@ fn reducer_095<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(obj2, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_096<R: Reader + UTF8Reader, M>(
+fn reducer_096<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -5996,18 +5996,18 @@ fn reducer_096<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::AST_Add(Box::new(obj_4_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_097<R: Reader + UTF8Reader, M>(
+fn reducer_097<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_098<R: Reader + UTF8Reader, M>(
+fn reducer_098<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -6025,9 +6025,9 @@ fn reducer_098<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::RGBA(Box::new(obj_8_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_099<R: Reader + UTF8Reader, M>(
+fn reducer_099<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -6043,9 +6043,9 @@ fn reducer_099<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::RGBA(Box::new(obj_7_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_100<R: Reader + UTF8Reader, M>(
+fn reducer_100<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -6063,9 +6063,9 @@ fn reducer_100<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::RGBA(Box::new(obj_8_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_101<R: Reader + UTF8Reader, M>(
+fn reducer_101<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -6083,9 +6083,9 @@ fn reducer_101<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::RGBA(Box::new(obj_8_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_102<R: Reader + UTF8Reader, M>(
+fn reducer_102<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -6101,9 +6101,9 @@ fn reducer_102<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::RGBA(Box::new(obj_7_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_103<R: Reader + UTF8Reader, M>(
+fn reducer_103<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -6121,9 +6121,9 @@ fn reducer_103<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::RGBA(Box::new(obj_8_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_104<R: Reader + UTF8Reader, M>(
+fn reducer_104<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -6141,9 +6141,9 @@ fn reducer_104<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::RGBA(Box::new(obj_8_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_105<R: Reader + UTF8Reader, M>(
+fn reducer_105<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -6161,9 +6161,9 @@ fn reducer_105<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::RGBA(Box::new(obj_8_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_106<R: Reader + UTF8Reader, M>(
+fn reducer_106<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -6181,9 +6181,9 @@ fn reducer_106<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::RGBA(Box::new(obj_8_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_107<R: Reader + UTF8Reader, M>(
+fn reducer_107<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -6199,9 +6199,9 @@ fn reducer_107<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::RGBA(Box::new(obj_7_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_108<R: Reader + UTF8Reader, M>(
+fn reducer_108<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -6219,9 +6219,9 @@ fn reducer_108<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::RGBA(Box::new(obj_8_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_109<R: Reader + UTF8Reader, M>(
+fn reducer_109<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -6239,9 +6239,9 @@ fn reducer_109<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::RGBA(Box::new(obj_8_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_110<R: Reader + UTF8Reader, M>(
+fn reducer_110<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -6257,9 +6257,9 @@ fn reducer_110<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::RGBA(Box::new(obj_7_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_111<R: Reader + UTF8Reader, M>(
+fn reducer_111<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -6277,9 +6277,9 @@ fn reducer_111<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::RGBA(Box::new(obj_8_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_112<R: Reader + UTF8Reader, M>(
+fn reducer_112<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -6297,9 +6297,9 @@ fn reducer_112<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::RGBA(Box::new(obj_8_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_113<R: Reader + UTF8Reader, M>(
+fn reducer_113<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -6317,9 +6317,9 @@ fn reducer_113<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::RGBA(Box::new(obj_8_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_114<R: Reader + UTF8Reader, M>(
+fn reducer_114<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -6337,9 +6337,9 @@ fn reducer_114<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::RGBA(Box::new(obj_8_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_115<R: Reader + UTF8Reader, M>(
+fn reducer_115<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -6355,9 +6355,9 @@ fn reducer_115<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::RGBA(Box::new(obj_7_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_116<R: Reader + UTF8Reader, M>(
+fn reducer_116<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -6375,9 +6375,9 @@ fn reducer_116<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::RGBA(Box::new(obj_8_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_117<R: Reader + UTF8Reader, M>(
+fn reducer_117<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -6395,9 +6395,9 @@ fn reducer_117<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::RGBA(Box::new(obj_8_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_118<R: Reader + UTF8Reader, M>(
+fn reducer_118<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -6413,9 +6413,9 @@ fn reducer_118<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::RGBA(Box::new(obj_7_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_119<R: Reader + UTF8Reader, M>(
+fn reducer_119<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -6433,9 +6433,9 @@ fn reducer_119<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::RGBA(Box::new(obj_8_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_120<R: Reader + UTF8Reader, M>(
+fn reducer_120<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -6453,9 +6453,9 @@ fn reducer_120<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::RGBA(Box::new(obj_8_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_121<R: Reader + UTF8Reader, M>(
+fn reducer_121<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -6473,9 +6473,9 @@ fn reducer_121<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::RGBA(Box::new(obj_8_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_122<R: Reader + UTF8Reader, M>(
+fn reducer_122<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -6493,9 +6493,9 @@ fn reducer_122<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::RGBA(Box::new(obj_8_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_123<R: Reader + UTF8Reader, M>(
+fn reducer_123<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -6513,9 +6513,9 @@ fn reducer_123<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::RGBA(Box::new(obj_8_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_124<R: Reader + UTF8Reader, M>(
+fn reducer_124<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -6533,9 +6533,9 @@ fn reducer_124<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::RGBA(Box::new(obj_8_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_125<R: Reader + UTF8Reader, M>(
+fn reducer_125<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -6553,9 +6553,9 @@ fn reducer_125<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::RGBA(Box::new(obj_8_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_126<R: Reader + UTF8Reader, M>(
+fn reducer_126<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -6573,9 +6573,9 @@ fn reducer_126<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::RGBA(Box::new(obj_8_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_127<R: Reader + UTF8Reader, M>(
+fn reducer_127<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -6593,9 +6593,9 @@ fn reducer_127<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::RGBA(Box::new(obj_8_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_128<R: Reader + UTF8Reader, M>(
+fn reducer_128<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -6607,9 +6607,9 @@ fn reducer_128<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Num(Box::new(obj_4_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_129<R: Reader + UTF8Reader, M>(
+fn reducer_129<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -6652,9 +6652,9 @@ fn reducer_129<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_130<R: Reader + UTF8Reader, M>(
+fn reducer_130<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -6694,9 +6694,9 @@ fn reducer_130<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_131<R: Reader + UTF8Reader, M>(
+fn reducer_131<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -6707,9 +6707,9 @@ fn reducer_131<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Name(Box::new(obj_3_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_132<R: Reader + UTF8Reader, M>(
+fn reducer_132<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -6721,9 +6721,9 @@ fn reducer_132<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_133<R: Reader + UTF8Reader, M>(
+fn reducer_133<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -6733,9 +6733,9 @@ fn reducer_133<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_134<R: Reader + UTF8Reader, M>(
+fn reducer_134<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -6747,9 +6747,9 @@ fn reducer_134<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_135<R: Reader + UTF8Reader, M>(
+fn reducer_135<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -6759,9 +6759,9 @@ fn reducer_135<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_136<R: Reader + UTF8Reader, M>(
+fn reducer_136<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -6774,9 +6774,9 @@ fn reducer_136<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::Priority(Box::new(obj_4_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_137<R: Reader + UTF8Reader, M>(
+fn reducer_137<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -6786,9 +6786,9 @@ fn reducer_137<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::Priority(Box::new(obj_3_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_138<R: Reader + UTF8Reader, M>(
+fn reducer_138<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -6800,9 +6800,9 @@ fn reducer_138<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_139<R: Reader + UTF8Reader, M>(
+fn reducer_139<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -6812,9 +6812,9 @@ fn reducer_139<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_140<R: Reader + UTF8Reader, M>(
+fn reducer_140<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -6824,9 +6824,9 @@ fn reducer_140<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_1_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_141<R: Reader + UTF8Reader, M>(
+fn reducer_141<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -6856,9 +6856,9 @@ fn reducer_141<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_142<R: Reader + UTF8Reader, M>(
+fn reducer_142<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -6867,18 +6867,18 @@ fn reducer_142<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::STRING(tok_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_143<R: Reader + UTF8Reader, M>(
+fn reducer_143<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_144<R: Reader + UTF8Reader, M>(
+fn reducer_144<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -6902,9 +6902,9 @@ fn reducer_144<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_145<R: Reader + UTF8Reader, M>(
+fn reducer_145<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -6926,9 +6926,9 @@ fn reducer_145<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_146<R: Reader + UTF8Reader, M>(
+fn reducer_146<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -6939,9 +6939,9 @@ fn reducer_146<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_147<R: Reader + UTF8Reader, M>(
+fn reducer_147<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -6952,9 +6952,9 @@ fn reducer_147<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_148<R: Reader + UTF8Reader, M>(
+fn reducer_148<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -6964,9 +6964,9 @@ fn reducer_148<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_149<R: Reader + UTF8Reader, M>(
+fn reducer_149<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -6976,9 +6976,9 @@ fn reducer_149<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_150<R: Reader + UTF8Reader, M>(
+fn reducer_150<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -7010,9 +7010,9 @@ fn reducer_150<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_151<R: Reader + UTF8Reader, M>(
+fn reducer_151<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -7042,9 +7042,9 @@ fn reducer_151<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_152<R: Reader + UTF8Reader, M>(
+fn reducer_152<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -7075,9 +7075,9 @@ fn reducer_152<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_153<R: Reader + UTF8Reader, M>(
+fn reducer_153<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -7106,9 +7106,9 @@ fn reducer_153<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_154<R: Reader + UTF8Reader, M>(
+fn reducer_154<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -7137,9 +7137,9 @@ fn reducer_154<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_155<R: Reader + UTF8Reader, M>(
+fn reducer_155<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -7166,9 +7166,9 @@ fn reducer_155<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_156<R: Reader + UTF8Reader, M>(
+fn reducer_156<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -7196,9 +7196,9 @@ fn reducer_156<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_157<R: Reader + UTF8Reader, M>(
+fn reducer_157<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -7230,9 +7230,9 @@ fn reducer_157<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_158<R: Reader + UTF8Reader, M>(
+fn reducer_158<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -7262,9 +7262,9 @@ fn reducer_158<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_159<R: Reader + UTF8Reader, M>(
+fn reducer_159<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -7296,9 +7296,9 @@ fn reducer_159<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_160<R: Reader + UTF8Reader, M>(
+fn reducer_160<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -7327,9 +7327,9 @@ fn reducer_160<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_161<R: Reader + UTF8Reader, M>(
+fn reducer_161<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -7361,9 +7361,9 @@ fn reducer_161<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_162<R: Reader + UTF8Reader, M>(
+fn reducer_162<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -7394,9 +7394,9 @@ fn reducer_162<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_163<R: Reader + UTF8Reader, M>(
+fn reducer_163<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -7428,9 +7428,9 @@ fn reducer_163<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_164<R: Reader + UTF8Reader, M>(
+fn reducer_164<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -7462,18 +7462,18 @@ fn reducer_164<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_165<R: Reader + UTF8Reader, M>(
+fn reducer_165<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_166<R: Reader + UTF8Reader, M>(
+fn reducer_166<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -7485,9 +7485,9 @@ fn reducer_166<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::AST_Token(Box::new(obj_3_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_167<R: Reader + UTF8Reader, M>(
+fn reducer_167<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -7499,9 +7499,9 @@ fn reducer_167<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::AST_Token(Box::new(obj_3_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_168<R: Reader + UTF8Reader, M>(
+fn reducer_168<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -7513,9 +7513,9 @@ fn reducer_168<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::AST_Token(Box::new(obj_3_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_169<R: Reader + UTF8Reader, M>(
+fn reducer_169<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -7524,9 +7524,9 @@ fn reducer_169<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::AST_Token(Box::new(obj_2_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_170<R: Reader + UTF8Reader, M>(
+fn reducer_170<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -7535,9 +7535,9 @@ fn reducer_170<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::AST_Token(Box::new(obj_2_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_171<R: Reader + UTF8Reader, M>(
+fn reducer_171<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -7546,9 +7546,9 @@ fn reducer_171<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::AST_Token(Box::new(obj_2_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_172<R: Reader + UTF8Reader, M>(
+fn reducer_172<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -7563,9 +7563,9 @@ fn reducer_172<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_173<R: Reader + UTF8Reader, M>(
+fn reducer_173<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -7588,9 +7588,9 @@ fn reducer_173<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_174<R: Reader + UTF8Reader, M>(
+fn reducer_174<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -7613,9 +7613,9 @@ fn reducer_174<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_175<R: Reader + UTF8Reader, M>(
+fn reducer_175<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -7638,9 +7638,9 @@ fn reducer_175<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_176<R: Reader + UTF8Reader, M>(
+fn reducer_176<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -7663,9 +7663,9 @@ fn reducer_176<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_177<R: Reader + UTF8Reader, M>(
+fn reducer_177<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -7688,9 +7688,9 @@ fn reducer_177<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_178<R: Reader + UTF8Reader, M>(
+fn reducer_178<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -7713,9 +7713,9 @@ fn reducer_178<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_179<R: Reader + UTF8Reader, M>(
+fn reducer_179<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -7738,9 +7738,9 @@ fn reducer_179<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_180<R: Reader + UTF8Reader, M>(
+fn reducer_180<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -7763,9 +7763,9 @@ fn reducer_180<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_181<R: Reader + UTF8Reader, M>(
+fn reducer_181<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -7781,9 +7781,9 @@ fn reducer_181<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Range(Box::new(obj_6_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_182<R: Reader + UTF8Reader, M>(
+fn reducer_182<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -7795,9 +7795,9 @@ fn reducer_182<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Range(Box::new(obj_4_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_183<R: Reader + UTF8Reader, M>(
+fn reducer_183<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -7808,9 +7808,9 @@ fn reducer_183<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::STRING(tok_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_184<R: Reader + UTF8Reader, M>(
+fn reducer_184<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -7821,54 +7821,54 @@ fn reducer_184<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Goto(Box::new(obj_3_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_185<R: Reader + UTF8Reader, M>(
+fn reducer_185<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_186<R: Reader + UTF8Reader, M>(
+fn reducer_186<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_187<R: Reader + UTF8Reader, M>(
+fn reducer_187<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_188<R: Reader + UTF8Reader, M>(
+fn reducer_188<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_189<R: Reader + UTF8Reader, M>(
+fn reducer_189<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_190<R: Reader + UTF8Reader, M>(
+fn reducer_190<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -7886,9 +7886,9 @@ fn reducer_190<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::ASSERT(Box::new(obj_7_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_191<R: Reader + UTF8Reader, M>(
+fn reducer_191<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -7901,9 +7901,9 @@ fn reducer_191<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::DEFAULT(Box::new(obj_5_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_192<R: Reader + UTF8Reader, M>(
+fn reducer_192<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -7914,9 +7914,9 @@ fn reducer_192<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_193<R: Reader + UTF8Reader, M>(
+fn reducer_193<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -7941,9 +7941,9 @@ fn reducer_193<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::Terminal(Box::new(obj_5_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_194<R: Reader + UTF8Reader, M>(
+fn reducer_194<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -7967,9 +7967,9 @@ fn reducer_194<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::Terminal(Box::new(obj_4_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_195<R: Reader + UTF8Reader, M>(
+fn reducer_195<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -7993,9 +7993,9 @@ fn reducer_195<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::Recovery(Box::new(obj_5_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_196<R: Reader + UTF8Reader, M>(
+fn reducer_196<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -8029,9 +8029,9 @@ fn reducer_196<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Rule(Box::new(obj_7_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_197<R: Reader + UTF8Reader, M>(
+fn reducer_197<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -8064,9 +8064,9 @@ fn reducer_197<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Rule(Box::new(obj_6_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_198<R: Reader + UTF8Reader, M>(
+fn reducer_198<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -8097,9 +8097,9 @@ fn reducer_198<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Rule(Box::new(obj_6_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_199<R: Reader + UTF8Reader, M>(
+fn reducer_199<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -8129,9 +8129,9 @@ fn reducer_199<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Rule(Box::new(obj_5_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_200<R: Reader + UTF8Reader, M>(
+fn reducer_200<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -8162,9 +8162,9 @@ fn reducer_200<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Rule(Box::new(obj_6_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_201<R: Reader + UTF8Reader, M>(
+fn reducer_201<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -8194,9 +8194,9 @@ fn reducer_201<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Rule(Box::new(obj_5_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_202<R: Reader + UTF8Reader, M>(
+fn reducer_202<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -8224,9 +8224,9 @@ fn reducer_202<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Rule(Box::new(obj_5_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_203<R: Reader + UTF8Reader, M>(
+fn reducer_203<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -8253,9 +8253,9 @@ fn reducer_203<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Rule(Box::new(obj_4_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_204<R: Reader + UTF8Reader, M>(
+fn reducer_204<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -8286,9 +8286,9 @@ fn reducer_204<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Rule(Box::new(obj_6_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_205<R: Reader + UTF8Reader, M>(
+fn reducer_205<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -8318,9 +8318,9 @@ fn reducer_205<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Rule(Box::new(obj_5_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_206<R: Reader + UTF8Reader, M>(
+fn reducer_206<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -8348,9 +8348,9 @@ fn reducer_206<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Rule(Box::new(obj_5_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_207<R: Reader + UTF8Reader, M>(
+fn reducer_207<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -8377,9 +8377,9 @@ fn reducer_207<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Rule(Box::new(obj_4_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_208<R: Reader + UTF8Reader, M>(
+fn reducer_208<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -8407,9 +8407,9 @@ fn reducer_208<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Rule(Box::new(obj_5_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_209<R: Reader + UTF8Reader, M>(
+fn reducer_209<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -8436,9 +8436,9 @@ fn reducer_209<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Rule(Box::new(obj_4_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_210<R: Reader + UTF8Reader, M>(
+fn reducer_210<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -8463,9 +8463,9 @@ fn reducer_210<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Rule(Box::new(obj_4_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_211<R: Reader + UTF8Reader, M>(
+fn reducer_211<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -8489,9 +8489,9 @@ fn reducer_211<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Rule(Box::new(obj_3_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_212<R: Reader + UTF8Reader, M>(
+fn reducer_212<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -8502,9 +8502,9 @@ fn reducer_212<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::STRING(tok_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_213<R: Reader + UTF8Reader, M>(
+fn reducer_213<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -8520,9 +8520,9 @@ fn reducer_213<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_214<R: Reader + UTF8Reader, M>(
+fn reducer_214<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -8533,9 +8533,9 @@ fn reducer_214<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_215<R: Reader + UTF8Reader, M>(
+fn reducer_215<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -8546,9 +8546,9 @@ fn reducer_215<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_216<R: Reader + UTF8Reader, M>(
+fn reducer_216<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -8558,9 +8558,9 @@ fn reducer_216<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_217<R: Reader + UTF8Reader, M>(
+fn reducer_217<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -8570,18 +8570,18 @@ fn reducer_217<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_218<R: Reader + UTF8Reader, M>(
+fn reducer_218<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_219<R: Reader + UTF8Reader, M>(
+fn reducer_219<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -8605,9 +8605,9 @@ fn reducer_219<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_220<R: Reader + UTF8Reader, M>(
+fn reducer_220<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -8631,9 +8631,9 @@ fn reducer_220<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_221<R: Reader + UTF8Reader, M>(
+fn reducer_221<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -8655,54 +8655,54 @@ fn reducer_221<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_222<R: Reader + UTF8Reader, M>(
+fn reducer_222<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_223<R: Reader + UTF8Reader, M>(
+fn reducer_223<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_224<R: Reader + UTF8Reader, M>(
+fn reducer_224<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_225<R: Reader + UTF8Reader, M>(
+fn reducer_225<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_226<R: Reader + UTF8Reader, M>(
+fn reducer_226<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_227<R: Reader + UTF8Reader, M>(
+fn reducer_227<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -8729,9 +8729,9 @@ fn reducer_227<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::AST_Map(Box::new(obj_7_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_228<R: Reader + UTF8Reader, M>(
+fn reducer_228<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -8752,9 +8752,9 @@ fn reducer_228<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Reduce(Box::new(obj_9_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_229<R: Reader + UTF8Reader, M>(
+fn reducer_229<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -8773,9 +8773,9 @@ fn reducer_229<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Reduce(Box::new(obj_7_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_230<R: Reader + UTF8Reader, M>(
+fn reducer_230<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -8794,9 +8794,9 @@ fn reducer_230<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Reduce(Box::new(obj_7_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_231<R: Reader + UTF8Reader, M>(
+fn reducer_231<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -8813,9 +8813,9 @@ fn reducer_231<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Reduce(Box::new(obj_5_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_232<R: Reader + UTF8Reader, M>(
+fn reducer_232<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -8826,9 +8826,9 @@ fn reducer_232<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_233<R: Reader + UTF8Reader, M>(
+fn reducer_233<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -8838,9 +8838,9 @@ fn reducer_233<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_234<R: Reader + UTF8Reader, M>(
+fn reducer_234<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -8859,9 +8859,9 @@ fn reducer_234<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::IR_STATE(Box::new(obj_7_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_235<R: Reader + UTF8Reader, M>(
+fn reducer_235<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -8878,9 +8878,9 @@ fn reducer_235<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::IR_STATE(Box::new(obj_6_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_236<R: Reader + UTF8Reader, M>(
+fn reducer_236<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -8898,9 +8898,9 @@ fn reducer_236<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::IR_STATE(Box::new(obj_6_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_237<R: Reader + UTF8Reader, M>(
+fn reducer_237<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -8916,9 +8916,9 @@ fn reducer_237<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::IR_STATE(Box::new(obj_5_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_238<R: Reader + UTF8Reader, M>(
+fn reducer_238<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -8934,9 +8934,9 @@ fn reducer_238<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::IR_STATE(Box::new(obj_6_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_239<R: Reader + UTF8Reader, M>(
+fn reducer_239<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -8950,9 +8950,9 @@ fn reducer_239<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::IR_STATE(Box::new(obj_5_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_240<R: Reader + UTF8Reader, M>(
+fn reducer_240<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -8967,9 +8967,9 @@ fn reducer_240<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::IR_STATE(Box::new(obj_5_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_241<R: Reader + UTF8Reader, M>(
+fn reducer_241<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -8982,9 +8982,9 @@ fn reducer_241<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::IR_STATE(Box::new(obj_4_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_242<R: Reader + UTF8Reader, M>(
+fn reducer_242<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -9006,9 +9006,9 @@ fn reducer_242<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_243<R: Reader + UTF8Reader, M>(
+fn reducer_243<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -9018,9 +9018,9 @@ fn reducer_243<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_244<R: Reader + UTF8Reader, M>(
+fn reducer_244<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -9041,9 +9041,9 @@ fn reducer_244<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_7_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_245<R: Reader + UTF8Reader, M>(
+fn reducer_245<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -9059,9 +9059,9 @@ fn reducer_245<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_246<R: Reader + UTF8Reader, M>(
+fn reducer_246<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -9078,9 +9078,9 @@ fn reducer_246<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_5_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_247<R: Reader + UTF8Reader, M>(
+fn reducer_247<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -9092,9 +9092,9 @@ fn reducer_247<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_248<R: Reader + UTF8Reader, M>(
+fn reducer_248<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -9111,9 +9111,9 @@ fn reducer_248<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_5_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_249<R: Reader + UTF8Reader, M>(
+fn reducer_249<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -9125,9 +9125,9 @@ fn reducer_249<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_250<R: Reader + UTF8Reader, M>(
+fn reducer_250<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -9140,9 +9140,9 @@ fn reducer_250<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_3_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_251<R: Reader + UTF8Reader, M>(
+fn reducer_251<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -9150,9 +9150,9 @@ fn reducer_251<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_252<R: Reader + UTF8Reader, M>(
+fn reducer_252<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -9164,9 +9164,9 @@ fn reducer_252<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_253<R: Reader + UTF8Reader, M>(
+fn reducer_253<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -9174,9 +9174,9 @@ fn reducer_253<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_254<R: Reader + UTF8Reader, M>(
+fn reducer_254<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -9205,9 +9205,9 @@ fn reducer_254<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::Grammar(Box::new(obj_3_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_255<R: Reader + UTF8Reader, M>(
+fn reducer_255<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -9234,9 +9234,9 @@ fn reducer_255<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::Grammar(Box::new(obj_2_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_256<R: Reader + UTF8Reader, M>(
+fn reducer_256<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -9247,9 +9247,9 @@ fn reducer_256<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_257<R: Reader + UTF8Reader, M>(
+fn reducer_257<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -9259,9 +9259,9 @@ fn reducer_257<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_258<R: Reader + UTF8Reader, M>(
+fn reducer_258<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -9272,9 +9272,9 @@ fn reducer_258<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::STRINGS(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_259<R: Reader + UTF8Reader, M>(
+fn reducer_259<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -9284,9 +9284,9 @@ fn reducer_259<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::STRINGS(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_260<R: Reader + UTF8Reader, M>(
+fn reducer_260<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -9294,9 +9294,9 @@ fn reducer_260<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(obj2, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_261<R: Reader + UTF8Reader, M>(
+fn reducer_261<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -9308,9 +9308,9 @@ fn reducer_261<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_262<R: Reader + UTF8Reader, M>(
+fn reducer_262<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -9320,9 +9320,9 @@ fn reducer_262<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_263<R: Reader + UTF8Reader, M>(
+fn reducer_263<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -9341,27 +9341,27 @@ fn reducer_263<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Syntax(Box::new(obj_4_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_264<R: Reader + UTF8Reader, M>(
+fn reducer_264<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_265<R: Reader + UTF8Reader, M>(
+fn reducer_265<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_266<R: Reader + UTF8Reader, M>(
+fn reducer_266<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -9408,9 +9408,9 @@ fn reducer_266<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_267<R: Reader + UTF8Reader, M>(
+fn reducer_267<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -9455,9 +9455,9 @@ fn reducer_267<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_268<R: Reader + UTF8Reader, M>(
+fn reducer_268<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -9503,9 +9503,9 @@ fn reducer_268<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_269<R: Reader + UTF8Reader, M>(
+fn reducer_269<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -9549,9 +9549,9 @@ fn reducer_269<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_270<R: Reader + UTF8Reader, M>(
+fn reducer_270<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -9595,9 +9595,9 @@ fn reducer_270<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_271<R: Reader + UTF8Reader, M>(
+fn reducer_271<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -9639,9 +9639,9 @@ fn reducer_271<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_272<R: Reader + UTF8Reader, M>(
+fn reducer_272<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -9684,9 +9684,9 @@ fn reducer_272<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_273<R: Reader + UTF8Reader, M>(
+fn reducer_273<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -9727,18 +9727,18 @@ fn reducer_273<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_274<R: Reader + UTF8Reader, M>(
+fn reducer_274<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_275<R: Reader + UTF8Reader, M>(
+fn reducer_275<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -9750,9 +9750,9 @@ fn reducer_275<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_276<R: Reader + UTF8Reader, M>(
+fn reducer_276<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -9762,27 +9762,27 @@ fn reducer_276<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_277<R: Reader + UTF8Reader, M>(
+fn reducer_277<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_278<R: Reader + UTF8Reader, M>(
+fn reducer_278<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_279<R: Reader + UTF8Reader, M>(
+fn reducer_279<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -9794,9 +9794,9 @@ fn reducer_279<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::PushGoto(Box::new(obj_3_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_280<R: Reader + UTF8Reader, M>(
+fn reducer_280<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -9805,9 +9805,9 @@ fn reducer_280<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::STRING(tok_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_281<R: Reader + UTF8Reader, M>(
+fn reducer_281<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -9818,9 +9818,9 @@ fn reducer_281<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_282<R: Reader + UTF8Reader, M>(
+fn reducer_282<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -9830,9 +9830,9 @@ fn reducer_282<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_283<R: Reader + UTF8Reader, M>(
+fn reducer_283<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -9841,9 +9841,9 @@ fn reducer_283<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::STRING(tok_1_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_284<R: Reader + UTF8Reader, M>(
+fn reducer_284<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -9852,9 +9852,9 @@ fn reducer_284<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::STRING(tok_1_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_285<R: Reader + UTF8Reader, M>(
+fn reducer_285<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -9863,9 +9863,9 @@ fn reducer_285<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::STRING(tok_1_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_286<R: Reader + UTF8Reader, M>(
+fn reducer_286<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -9874,9 +9874,9 @@ fn reducer_286<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::STRING(tok_1_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_287<R: Reader + UTF8Reader, M>(
+fn reducer_287<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -9885,9 +9885,9 @@ fn reducer_287<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::STRING(tok_1_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_288<R: Reader + UTF8Reader, M>(
+fn reducer_288<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -9898,9 +9898,9 @@ fn reducer_288<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_289<R: Reader + UTF8Reader, M>(
+fn reducer_289<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -9910,9 +9910,9 @@ fn reducer_289<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_290<R: Reader + UTF8Reader, M>(
+fn reducer_290<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -9923,9 +9923,9 @@ fn reducer_290<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::TOKENS(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_291<R: Reader + UTF8Reader, M>(
+fn reducer_291<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -9936,9 +9936,9 @@ fn reducer_291<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::TOKENS(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_292<R: Reader + UTF8Reader, M>(
+fn reducer_292<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -9948,9 +9948,9 @@ fn reducer_292<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::TOKENS(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_293<R: Reader + UTF8Reader, M>(
+fn reducer_293<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -9960,9 +9960,9 @@ fn reducer_293<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::TOKENS(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_294<R: Reader + UTF8Reader, M>(
+fn reducer_294<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -9970,9 +9970,9 @@ fn reducer_294<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(obj2, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_295<R: Reader + UTF8Reader, M>(
+fn reducer_295<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -9980,9 +9980,9 @@ fn reducer_295<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(obj2, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_296<R: Reader + UTF8Reader, M>(
+fn reducer_296<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -9990,9 +9990,9 @@ fn reducer_296<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(obj2, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_297<R: Reader + UTF8Reader, M>(
+fn reducer_297<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -10000,9 +10000,9 @@ fn reducer_297<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(obj2, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_298<R: Reader + UTF8Reader, M>(
+fn reducer_298<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -10012,9 +10012,9 @@ fn reducer_298<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::U32(tok_1_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_299<R: Reader + UTF8Reader, M>(
+fn reducer_299<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -10026,9 +10026,9 @@ fn reducer_299<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_300<R: Reader + UTF8Reader, M>(
+fn reducer_300<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -10038,9 +10038,9 @@ fn reducer_300<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_301<R: Reader + UTF8Reader, M>(
+fn reducer_301<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -10050,9 +10050,9 @@ fn reducer_301<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::U32(tok_1_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_302<R: Reader + UTF8Reader, M>(
+fn reducer_302<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -10060,72 +10060,72 @@ fn reducer_302<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(obj2, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_303<R: Reader + UTF8Reader, M>(
+fn reducer_303<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_304<R: Reader + UTF8Reader, M>(
+fn reducer_304<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_305<R: Reader + UTF8Reader, M>(
+fn reducer_305<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_306<R: Reader + UTF8Reader, M>(
+fn reducer_306<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_307<R: Reader + UTF8Reader, M>(
+fn reducer_307<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_308<R: Reader + UTF8Reader, M>(
+fn reducer_308<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_309<R: Reader + UTF8Reader, M>(
+fn reducer_309<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_310<R: Reader + UTF8Reader, M>(
+fn reducer_310<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -10146,9 +10146,9 @@ fn reducer_310<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::AST_BOOL(Box::new(obj_3_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_311<R: Reader + UTF8Reader, M>(
+fn reducer_311<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -10169,9 +10169,9 @@ fn reducer_311<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::AST_BOOL(Box::new(obj_3_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_312<R: Reader + UTF8Reader, M>(
+fn reducer_312<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -10184,18 +10184,18 @@ fn reducer_312<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_313<R: Reader + UTF8Reader, M>(
+fn reducer_313<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_314<R: Reader + UTF8Reader, M>(
+fn reducer_314<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -10210,9 +10210,9 @@ fn reducer_314<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_315<R: Reader + UTF8Reader, M>(
+fn reducer_315<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -10223,9 +10223,9 @@ fn reducer_315<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::TOKENS(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_316<R: Reader + UTF8Reader, M>(
+fn reducer_316<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -10236,9 +10236,9 @@ fn reducer_316<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::TOKENS(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_317<R: Reader + UTF8Reader, M>(
+fn reducer_317<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -10249,9 +10249,9 @@ fn reducer_317<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::TOKENS(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_318<R: Reader + UTF8Reader, M>(
+fn reducer_318<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -10262,9 +10262,9 @@ fn reducer_318<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::TOKENS(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_319<R: Reader + UTF8Reader, M>(
+fn reducer_319<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
@@ -10275,9 +10275,9 @@ fn reducer_319<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::TOKENS(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_320<R: Reader + UTF8Reader, M>(
+fn reducer_320<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -10287,9 +10287,9 @@ fn reducer_320<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::TOKENS(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_321<R: Reader + UTF8Reader, M>(
+fn reducer_321<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -10299,9 +10299,9 @@ fn reducer_321<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::TOKENS(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_322<R: Reader + UTF8Reader, M>(
+fn reducer_322<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -10311,9 +10311,9 @@ fn reducer_322<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::TOKENS(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_323<R: Reader + UTF8Reader, M>(
+fn reducer_323<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -10323,9 +10323,9 @@ fn reducer_323<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::TOKENS(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_324<R: Reader + UTF8Reader, M>(
+fn reducer_324<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -10335,9 +10335,9 @@ fn reducer_324<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::TOKENS(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_325<R: Reader + UTF8Reader, M>(
+fn reducer_325<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -10364,9 +10364,9 @@ fn reducer_325<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Import(Box::new(obj_6_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_326<R: Reader + UTF8Reader, M>(
+fn reducer_326<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, ..) = slots.take(1);
@@ -10393,9 +10393,9 @@ fn reducer_326<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::Import(Box::new(obj_6_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_327<R: Reader + UTF8Reader, M>(
+fn reducer_327<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -10413,9 +10413,9 @@ fn reducer_327<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::EOFSymbol(Box::new(obj_2_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_328<R: Reader + UTF8Reader, M>(
+fn reducer_328<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -10439,9 +10439,9 @@ fn reducer_328<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_329<R: Reader + UTF8Reader, M>(
+fn reducer_329<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -10462,9 +10462,9 @@ fn reducer_329<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_330<R: Reader + UTF8Reader, M>(
+fn reducer_330<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -10473,18 +10473,18 @@ fn reducer_330<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::STRING(tok_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_331<R: Reader + UTF8Reader, M>(
+fn reducer_331<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_332<R: Reader + UTF8Reader, M>(
+fn reducer_332<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -10499,9 +10499,9 @@ fn reducer_332<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_333<R: Reader + UTF8Reader, M>(
+fn reducer_333<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -10514,9 +10514,9 @@ fn reducer_333<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_334<R: Reader + UTF8Reader, M>(
+fn reducer_334<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -10528,9 +10528,9 @@ fn reducer_334<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_335<R: Reader + UTF8Reader, M>(
+fn reducer_335<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -10559,9 +10559,9 @@ fn reducer_335<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_336<R: Reader + UTF8Reader, M>(
+fn reducer_336<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -10587,9 +10587,9 @@ fn reducer_336<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_337<R: Reader + UTF8Reader, M>(
+fn reducer_337<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -10619,9 +10619,9 @@ fn reducer_337<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_338<R: Reader + UTF8Reader, M>(
+fn reducer_338<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -10648,36 +10648,36 @@ fn reducer_338<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_339<R: Reader + UTF8Reader, M>(
+fn reducer_339<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_340<R: Reader + UTF8Reader, M>(
+fn reducer_340<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_341<R: Reader + UTF8Reader, M>(
+fn reducer_341<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
   slots.assign(0, AstSlot(obj1, __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_342<R: Reader + UTF8Reader, M>(
+fn reducer_342<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   slots.take(1);
@@ -10707,9 +10707,9 @@ fn reducer_342<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_343<R: Reader + UTF8Reader, M>(
+fn reducer_343<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -10732,9 +10732,9 @@ fn reducer_343<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::AST_BOOL(Box::new(obj_3_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_344<R: Reader + UTF8Reader, M>(
+fn reducer_344<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -10754,9 +10754,9 @@ fn reducer_344<R: Reader + UTF8Reader, M>(
     .assign(0, AstSlot(ASTNode::AST_BOOL(Box::new(obj_2_0)), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_345<R: Reader + UTF8Reader, M>(
+fn reducer_345<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -10767,9 +10767,9 @@ fn reducer_345<R: Reader + UTF8Reader, M>(
   );
 }
 
-fn reducer_346<R: Reader + UTF8Reader, M>(
+fn reducer_346<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -10780,9 +10780,9 @@ fn reducer_346<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_347<R: Reader + UTF8Reader, M>(
+fn reducer_347<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -10793,9 +10793,9 @@ fn reducer_347<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_348<R: Reader + UTF8Reader, M>(
+fn reducer_348<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let AstSlot(obj2, __tok_rng_2, _) = slots.take(1);
@@ -10806,9 +10806,9 @@ fn reducer_348<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_0_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_349<R: Reader + UTF8Reader, M>(
+fn reducer_349<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -10818,9 +10818,9 @@ fn reducer_349<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_350<R: Reader + UTF8Reader, M>(
+fn reducer_350<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -10830,9 +10830,9 @@ fn reducer_350<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-fn reducer_351<R: Reader + UTF8Reader, M>(
+fn reducer_351<R: Reader + UTF8Reader, M, const UP: bool>(
   _ctx_: *mut ParseContext<R, M>,
-  slots: &AstStackSlice<AstSlot<ASTNode>>,
+  slots: &AstStackSlice<AstSlot<ASTNode>, UP>,
 ) {
   let AstSlot(obj1, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
@@ -10842,363 +10842,365 @@ fn reducer_351<R: Reader + UTF8Reader, M>(
   slots.assign(0, AstSlot(ASTNode::NODES(obj_2_0), __rule_rng__, TokenRange::default()));
 }
 
-struct ReduceFunctions<R: Reader + UTF8Reader, M>(pub [Reducer<R, M, ASTNode>; 352]);
+struct ReduceFunctions<R: Reader + UTF8Reader, M, const UP: bool>(
+  pub [Reducer<R, M, ASTNode, UP>; 352],
+);
 
-impl<R: Reader + UTF8Reader, M> ReduceFunctions<R, M> {
+impl<R: Reader + UTF8Reader, M, const UP: bool> ReduceFunctions<R, M, UP> {
   pub const fn new() -> Self {
     Self([
-      reducer_000::<R, M>,
-      reducer_001::<R, M>,
-      reducer_002::<R, M>,
-      reducer_003::<R, M>,
-      reducer_004::<R, M>,
-      reducer_005::<R, M>,
-      reducer_006::<R, M>,
-      reducer_007::<R, M>,
-      reducer_008::<R, M>,
-      reducer_009::<R, M>,
-      reducer_010::<R, M>,
-      reducer_011::<R, M>,
-      reducer_012::<R, M>,
-      reducer_013::<R, M>,
-      reducer_014::<R, M>,
-      reducer_015::<R, M>,
-      reducer_016::<R, M>,
-      reducer_017::<R, M>,
-      reducer_018::<R, M>,
-      reducer_019::<R, M>,
-      reducer_020::<R, M>,
-      reducer_021::<R, M>,
-      reducer_022::<R, M>,
-      reducer_023::<R, M>,
-      reducer_024::<R, M>,
-      reducer_025::<R, M>,
-      reducer_026::<R, M>,
-      reducer_027::<R, M>,
-      reducer_028::<R, M>,
-      reducer_029::<R, M>,
-      reducer_030::<R, M>,
-      reducer_031::<R, M>,
-      reducer_032::<R, M>,
-      reducer_033::<R, M>,
-      reducer_034::<R, M>,
-      reducer_035::<R, M>,
-      reducer_036::<R, M>,
-      reducer_037::<R, M>,
-      reducer_038::<R, M>,
-      reducer_039::<R, M>,
-      reducer_040::<R, M>,
-      reducer_041::<R, M>,
-      reducer_042::<R, M>,
-      reducer_043::<R, M>,
-      reducer_044::<R, M>,
-      reducer_045::<R, M>,
-      reducer_046::<R, M>,
-      reducer_047::<R, M>,
-      reducer_048::<R, M>,
-      reducer_049::<R, M>,
-      reducer_050::<R, M>,
-      reducer_051::<R, M>,
-      reducer_052::<R, M>,
-      reducer_053::<R, M>,
-      reducer_054::<R, M>,
-      reducer_055::<R, M>,
-      reducer_056::<R, M>,
-      reducer_057::<R, M>,
-      reducer_058::<R, M>,
-      reducer_059::<R, M>,
-      reducer_060::<R, M>,
-      reducer_061::<R, M>,
-      reducer_062::<R, M>,
-      reducer_063::<R, M>,
-      reducer_064::<R, M>,
-      reducer_065::<R, M>,
-      reducer_066::<R, M>,
-      reducer_067::<R, M>,
-      reducer_068::<R, M>,
-      reducer_069::<R, M>,
-      reducer_070::<R, M>,
-      reducer_071::<R, M>,
-      reducer_072::<R, M>,
-      reducer_073::<R, M>,
-      reducer_074::<R, M>,
-      reducer_075::<R, M>,
-      reducer_076::<R, M>,
-      reducer_077::<R, M>,
-      reducer_078::<R, M>,
-      reducer_079::<R, M>,
-      reducer_080::<R, M>,
-      reducer_081::<R, M>,
-      reducer_082::<R, M>,
-      reducer_083::<R, M>,
-      reducer_084::<R, M>,
-      reducer_085::<R, M>,
-      reducer_086::<R, M>,
-      reducer_087::<R, M>,
-      reducer_088::<R, M>,
-      reducer_089::<R, M>,
-      reducer_090::<R, M>,
-      reducer_091::<R, M>,
-      reducer_092::<R, M>,
-      reducer_093::<R, M>,
-      reducer_094::<R, M>,
-      reducer_095::<R, M>,
-      reducer_096::<R, M>,
-      reducer_097::<R, M>,
-      reducer_098::<R, M>,
-      reducer_099::<R, M>,
-      reducer_100::<R, M>,
-      reducer_101::<R, M>,
-      reducer_102::<R, M>,
-      reducer_103::<R, M>,
-      reducer_104::<R, M>,
-      reducer_105::<R, M>,
-      reducer_106::<R, M>,
-      reducer_107::<R, M>,
-      reducer_108::<R, M>,
-      reducer_109::<R, M>,
-      reducer_110::<R, M>,
-      reducer_111::<R, M>,
-      reducer_112::<R, M>,
-      reducer_113::<R, M>,
-      reducer_114::<R, M>,
-      reducer_115::<R, M>,
-      reducer_116::<R, M>,
-      reducer_117::<R, M>,
-      reducer_118::<R, M>,
-      reducer_119::<R, M>,
-      reducer_120::<R, M>,
-      reducer_121::<R, M>,
-      reducer_122::<R, M>,
-      reducer_123::<R, M>,
-      reducer_124::<R, M>,
-      reducer_125::<R, M>,
-      reducer_126::<R, M>,
-      reducer_127::<R, M>,
-      reducer_128::<R, M>,
-      reducer_129::<R, M>,
-      reducer_130::<R, M>,
-      reducer_131::<R, M>,
-      reducer_132::<R, M>,
-      reducer_133::<R, M>,
-      reducer_134::<R, M>,
-      reducer_135::<R, M>,
-      reducer_136::<R, M>,
-      reducer_137::<R, M>,
-      reducer_138::<R, M>,
-      reducer_139::<R, M>,
-      reducer_140::<R, M>,
-      reducer_141::<R, M>,
-      reducer_142::<R, M>,
-      reducer_143::<R, M>,
-      reducer_144::<R, M>,
-      reducer_145::<R, M>,
-      reducer_146::<R, M>,
-      reducer_147::<R, M>,
-      reducer_148::<R, M>,
-      reducer_149::<R, M>,
-      reducer_150::<R, M>,
-      reducer_151::<R, M>,
-      reducer_152::<R, M>,
-      reducer_153::<R, M>,
-      reducer_154::<R, M>,
-      reducer_155::<R, M>,
-      reducer_156::<R, M>,
-      reducer_157::<R, M>,
-      reducer_158::<R, M>,
-      reducer_159::<R, M>,
-      reducer_160::<R, M>,
-      reducer_161::<R, M>,
-      reducer_162::<R, M>,
-      reducer_163::<R, M>,
-      reducer_164::<R, M>,
-      reducer_165::<R, M>,
-      reducer_166::<R, M>,
-      reducer_167::<R, M>,
-      reducer_168::<R, M>,
-      reducer_169::<R, M>,
-      reducer_170::<R, M>,
-      reducer_171::<R, M>,
-      reducer_172::<R, M>,
-      reducer_173::<R, M>,
-      reducer_174::<R, M>,
-      reducer_175::<R, M>,
-      reducer_176::<R, M>,
-      reducer_177::<R, M>,
-      reducer_178::<R, M>,
-      reducer_179::<R, M>,
-      reducer_180::<R, M>,
-      reducer_181::<R, M>,
-      reducer_182::<R, M>,
-      reducer_183::<R, M>,
-      reducer_184::<R, M>,
-      reducer_185::<R, M>,
-      reducer_186::<R, M>,
-      reducer_187::<R, M>,
-      reducer_188::<R, M>,
-      reducer_189::<R, M>,
-      reducer_190::<R, M>,
-      reducer_191::<R, M>,
-      reducer_192::<R, M>,
-      reducer_193::<R, M>,
-      reducer_194::<R, M>,
-      reducer_195::<R, M>,
-      reducer_196::<R, M>,
-      reducer_197::<R, M>,
-      reducer_198::<R, M>,
-      reducer_199::<R, M>,
-      reducer_200::<R, M>,
-      reducer_201::<R, M>,
-      reducer_202::<R, M>,
-      reducer_203::<R, M>,
-      reducer_204::<R, M>,
-      reducer_205::<R, M>,
-      reducer_206::<R, M>,
-      reducer_207::<R, M>,
-      reducer_208::<R, M>,
-      reducer_209::<R, M>,
-      reducer_210::<R, M>,
-      reducer_211::<R, M>,
-      reducer_212::<R, M>,
-      reducer_213::<R, M>,
-      reducer_214::<R, M>,
-      reducer_215::<R, M>,
-      reducer_216::<R, M>,
-      reducer_217::<R, M>,
-      reducer_218::<R, M>,
-      reducer_219::<R, M>,
-      reducer_220::<R, M>,
-      reducer_221::<R, M>,
-      reducer_222::<R, M>,
-      reducer_223::<R, M>,
-      reducer_224::<R, M>,
-      reducer_225::<R, M>,
-      reducer_226::<R, M>,
-      reducer_227::<R, M>,
-      reducer_228::<R, M>,
-      reducer_229::<R, M>,
-      reducer_230::<R, M>,
-      reducer_231::<R, M>,
-      reducer_232::<R, M>,
-      reducer_233::<R, M>,
-      reducer_234::<R, M>,
-      reducer_235::<R, M>,
-      reducer_236::<R, M>,
-      reducer_237::<R, M>,
-      reducer_238::<R, M>,
-      reducer_239::<R, M>,
-      reducer_240::<R, M>,
-      reducer_241::<R, M>,
-      reducer_242::<R, M>,
-      reducer_243::<R, M>,
-      reducer_244::<R, M>,
-      reducer_245::<R, M>,
-      reducer_246::<R, M>,
-      reducer_247::<R, M>,
-      reducer_248::<R, M>,
-      reducer_249::<R, M>,
-      reducer_250::<R, M>,
-      reducer_251::<R, M>,
-      reducer_252::<R, M>,
-      reducer_253::<R, M>,
-      reducer_254::<R, M>,
-      reducer_255::<R, M>,
-      reducer_256::<R, M>,
-      reducer_257::<R, M>,
-      reducer_258::<R, M>,
-      reducer_259::<R, M>,
-      reducer_260::<R, M>,
-      reducer_261::<R, M>,
-      reducer_262::<R, M>,
-      reducer_263::<R, M>,
-      reducer_264::<R, M>,
-      reducer_265::<R, M>,
-      reducer_266::<R, M>,
-      reducer_267::<R, M>,
-      reducer_268::<R, M>,
-      reducer_269::<R, M>,
-      reducer_270::<R, M>,
-      reducer_271::<R, M>,
-      reducer_272::<R, M>,
-      reducer_273::<R, M>,
-      reducer_274::<R, M>,
-      reducer_275::<R, M>,
-      reducer_276::<R, M>,
-      reducer_277::<R, M>,
-      reducer_278::<R, M>,
-      reducer_279::<R, M>,
-      reducer_280::<R, M>,
-      reducer_281::<R, M>,
-      reducer_282::<R, M>,
-      reducer_283::<R, M>,
-      reducer_284::<R, M>,
-      reducer_285::<R, M>,
-      reducer_286::<R, M>,
-      reducer_287::<R, M>,
-      reducer_288::<R, M>,
-      reducer_289::<R, M>,
-      reducer_290::<R, M>,
-      reducer_291::<R, M>,
-      reducer_292::<R, M>,
-      reducer_293::<R, M>,
-      reducer_294::<R, M>,
-      reducer_295::<R, M>,
-      reducer_296::<R, M>,
-      reducer_297::<R, M>,
-      reducer_298::<R, M>,
-      reducer_299::<R, M>,
-      reducer_300::<R, M>,
-      reducer_301::<R, M>,
-      reducer_302::<R, M>,
-      reducer_303::<R, M>,
-      reducer_304::<R, M>,
-      reducer_305::<R, M>,
-      reducer_306::<R, M>,
-      reducer_307::<R, M>,
-      reducer_308::<R, M>,
-      reducer_309::<R, M>,
-      reducer_310::<R, M>,
-      reducer_311::<R, M>,
-      reducer_312::<R, M>,
-      reducer_313::<R, M>,
-      reducer_314::<R, M>,
-      reducer_315::<R, M>,
-      reducer_316::<R, M>,
-      reducer_317::<R, M>,
-      reducer_318::<R, M>,
-      reducer_319::<R, M>,
-      reducer_320::<R, M>,
-      reducer_321::<R, M>,
-      reducer_322::<R, M>,
-      reducer_323::<R, M>,
-      reducer_324::<R, M>,
-      reducer_325::<R, M>,
-      reducer_326::<R, M>,
-      reducer_327::<R, M>,
-      reducer_328::<R, M>,
-      reducer_329::<R, M>,
-      reducer_330::<R, M>,
-      reducer_331::<R, M>,
-      reducer_332::<R, M>,
-      reducer_333::<R, M>,
-      reducer_334::<R, M>,
-      reducer_335::<R, M>,
-      reducer_336::<R, M>,
-      reducer_337::<R, M>,
-      reducer_338::<R, M>,
-      reducer_339::<R, M>,
-      reducer_340::<R, M>,
-      reducer_341::<R, M>,
-      reducer_342::<R, M>,
-      reducer_343::<R, M>,
-      reducer_344::<R, M>,
-      reducer_345::<R, M>,
-      reducer_346::<R, M>,
-      reducer_347::<R, M>,
-      reducer_348::<R, M>,
-      reducer_349::<R, M>,
-      reducer_350::<R, M>,
-      reducer_351::<R, M>,
+      reducer_000::<R, M, UP>,
+      reducer_001::<R, M, UP>,
+      reducer_002::<R, M, UP>,
+      reducer_003::<R, M, UP>,
+      reducer_004::<R, M, UP>,
+      reducer_005::<R, M, UP>,
+      reducer_006::<R, M, UP>,
+      reducer_007::<R, M, UP>,
+      reducer_008::<R, M, UP>,
+      reducer_009::<R, M, UP>,
+      reducer_010::<R, M, UP>,
+      reducer_011::<R, M, UP>,
+      reducer_012::<R, M, UP>,
+      reducer_013::<R, M, UP>,
+      reducer_014::<R, M, UP>,
+      reducer_015::<R, M, UP>,
+      reducer_016::<R, M, UP>,
+      reducer_017::<R, M, UP>,
+      reducer_018::<R, M, UP>,
+      reducer_019::<R, M, UP>,
+      reducer_020::<R, M, UP>,
+      reducer_021::<R, M, UP>,
+      reducer_022::<R, M, UP>,
+      reducer_023::<R, M, UP>,
+      reducer_024::<R, M, UP>,
+      reducer_025::<R, M, UP>,
+      reducer_026::<R, M, UP>,
+      reducer_027::<R, M, UP>,
+      reducer_028::<R, M, UP>,
+      reducer_029::<R, M, UP>,
+      reducer_030::<R, M, UP>,
+      reducer_031::<R, M, UP>,
+      reducer_032::<R, M, UP>,
+      reducer_033::<R, M, UP>,
+      reducer_034::<R, M, UP>,
+      reducer_035::<R, M, UP>,
+      reducer_036::<R, M, UP>,
+      reducer_037::<R, M, UP>,
+      reducer_038::<R, M, UP>,
+      reducer_039::<R, M, UP>,
+      reducer_040::<R, M, UP>,
+      reducer_041::<R, M, UP>,
+      reducer_042::<R, M, UP>,
+      reducer_043::<R, M, UP>,
+      reducer_044::<R, M, UP>,
+      reducer_045::<R, M, UP>,
+      reducer_046::<R, M, UP>,
+      reducer_047::<R, M, UP>,
+      reducer_048::<R, M, UP>,
+      reducer_049::<R, M, UP>,
+      reducer_050::<R, M, UP>,
+      reducer_051::<R, M, UP>,
+      reducer_052::<R, M, UP>,
+      reducer_053::<R, M, UP>,
+      reducer_054::<R, M, UP>,
+      reducer_055::<R, M, UP>,
+      reducer_056::<R, M, UP>,
+      reducer_057::<R, M, UP>,
+      reducer_058::<R, M, UP>,
+      reducer_059::<R, M, UP>,
+      reducer_060::<R, M, UP>,
+      reducer_061::<R, M, UP>,
+      reducer_062::<R, M, UP>,
+      reducer_063::<R, M, UP>,
+      reducer_064::<R, M, UP>,
+      reducer_065::<R, M, UP>,
+      reducer_066::<R, M, UP>,
+      reducer_067::<R, M, UP>,
+      reducer_068::<R, M, UP>,
+      reducer_069::<R, M, UP>,
+      reducer_070::<R, M, UP>,
+      reducer_071::<R, M, UP>,
+      reducer_072::<R, M, UP>,
+      reducer_073::<R, M, UP>,
+      reducer_074::<R, M, UP>,
+      reducer_075::<R, M, UP>,
+      reducer_076::<R, M, UP>,
+      reducer_077::<R, M, UP>,
+      reducer_078::<R, M, UP>,
+      reducer_079::<R, M, UP>,
+      reducer_080::<R, M, UP>,
+      reducer_081::<R, M, UP>,
+      reducer_082::<R, M, UP>,
+      reducer_083::<R, M, UP>,
+      reducer_084::<R, M, UP>,
+      reducer_085::<R, M, UP>,
+      reducer_086::<R, M, UP>,
+      reducer_087::<R, M, UP>,
+      reducer_088::<R, M, UP>,
+      reducer_089::<R, M, UP>,
+      reducer_090::<R, M, UP>,
+      reducer_091::<R, M, UP>,
+      reducer_092::<R, M, UP>,
+      reducer_093::<R, M, UP>,
+      reducer_094::<R, M, UP>,
+      reducer_095::<R, M, UP>,
+      reducer_096::<R, M, UP>,
+      reducer_097::<R, M, UP>,
+      reducer_098::<R, M, UP>,
+      reducer_099::<R, M, UP>,
+      reducer_100::<R, M, UP>,
+      reducer_101::<R, M, UP>,
+      reducer_102::<R, M, UP>,
+      reducer_103::<R, M, UP>,
+      reducer_104::<R, M, UP>,
+      reducer_105::<R, M, UP>,
+      reducer_106::<R, M, UP>,
+      reducer_107::<R, M, UP>,
+      reducer_108::<R, M, UP>,
+      reducer_109::<R, M, UP>,
+      reducer_110::<R, M, UP>,
+      reducer_111::<R, M, UP>,
+      reducer_112::<R, M, UP>,
+      reducer_113::<R, M, UP>,
+      reducer_114::<R, M, UP>,
+      reducer_115::<R, M, UP>,
+      reducer_116::<R, M, UP>,
+      reducer_117::<R, M, UP>,
+      reducer_118::<R, M, UP>,
+      reducer_119::<R, M, UP>,
+      reducer_120::<R, M, UP>,
+      reducer_121::<R, M, UP>,
+      reducer_122::<R, M, UP>,
+      reducer_123::<R, M, UP>,
+      reducer_124::<R, M, UP>,
+      reducer_125::<R, M, UP>,
+      reducer_126::<R, M, UP>,
+      reducer_127::<R, M, UP>,
+      reducer_128::<R, M, UP>,
+      reducer_129::<R, M, UP>,
+      reducer_130::<R, M, UP>,
+      reducer_131::<R, M, UP>,
+      reducer_132::<R, M, UP>,
+      reducer_133::<R, M, UP>,
+      reducer_134::<R, M, UP>,
+      reducer_135::<R, M, UP>,
+      reducer_136::<R, M, UP>,
+      reducer_137::<R, M, UP>,
+      reducer_138::<R, M, UP>,
+      reducer_139::<R, M, UP>,
+      reducer_140::<R, M, UP>,
+      reducer_141::<R, M, UP>,
+      reducer_142::<R, M, UP>,
+      reducer_143::<R, M, UP>,
+      reducer_144::<R, M, UP>,
+      reducer_145::<R, M, UP>,
+      reducer_146::<R, M, UP>,
+      reducer_147::<R, M, UP>,
+      reducer_148::<R, M, UP>,
+      reducer_149::<R, M, UP>,
+      reducer_150::<R, M, UP>,
+      reducer_151::<R, M, UP>,
+      reducer_152::<R, M, UP>,
+      reducer_153::<R, M, UP>,
+      reducer_154::<R, M, UP>,
+      reducer_155::<R, M, UP>,
+      reducer_156::<R, M, UP>,
+      reducer_157::<R, M, UP>,
+      reducer_158::<R, M, UP>,
+      reducer_159::<R, M, UP>,
+      reducer_160::<R, M, UP>,
+      reducer_161::<R, M, UP>,
+      reducer_162::<R, M, UP>,
+      reducer_163::<R, M, UP>,
+      reducer_164::<R, M, UP>,
+      reducer_165::<R, M, UP>,
+      reducer_166::<R, M, UP>,
+      reducer_167::<R, M, UP>,
+      reducer_168::<R, M, UP>,
+      reducer_169::<R, M, UP>,
+      reducer_170::<R, M, UP>,
+      reducer_171::<R, M, UP>,
+      reducer_172::<R, M, UP>,
+      reducer_173::<R, M, UP>,
+      reducer_174::<R, M, UP>,
+      reducer_175::<R, M, UP>,
+      reducer_176::<R, M, UP>,
+      reducer_177::<R, M, UP>,
+      reducer_178::<R, M, UP>,
+      reducer_179::<R, M, UP>,
+      reducer_180::<R, M, UP>,
+      reducer_181::<R, M, UP>,
+      reducer_182::<R, M, UP>,
+      reducer_183::<R, M, UP>,
+      reducer_184::<R, M, UP>,
+      reducer_185::<R, M, UP>,
+      reducer_186::<R, M, UP>,
+      reducer_187::<R, M, UP>,
+      reducer_188::<R, M, UP>,
+      reducer_189::<R, M, UP>,
+      reducer_190::<R, M, UP>,
+      reducer_191::<R, M, UP>,
+      reducer_192::<R, M, UP>,
+      reducer_193::<R, M, UP>,
+      reducer_194::<R, M, UP>,
+      reducer_195::<R, M, UP>,
+      reducer_196::<R, M, UP>,
+      reducer_197::<R, M, UP>,
+      reducer_198::<R, M, UP>,
+      reducer_199::<R, M, UP>,
+      reducer_200::<R, M, UP>,
+      reducer_201::<R, M, UP>,
+      reducer_202::<R, M, UP>,
+      reducer_203::<R, M, UP>,
+      reducer_204::<R, M, UP>,
+      reducer_205::<R, M, UP>,
+      reducer_206::<R, M, UP>,
+      reducer_207::<R, M, UP>,
+      reducer_208::<R, M, UP>,
+      reducer_209::<R, M, UP>,
+      reducer_210::<R, M, UP>,
+      reducer_211::<R, M, UP>,
+      reducer_212::<R, M, UP>,
+      reducer_213::<R, M, UP>,
+      reducer_214::<R, M, UP>,
+      reducer_215::<R, M, UP>,
+      reducer_216::<R, M, UP>,
+      reducer_217::<R, M, UP>,
+      reducer_218::<R, M, UP>,
+      reducer_219::<R, M, UP>,
+      reducer_220::<R, M, UP>,
+      reducer_221::<R, M, UP>,
+      reducer_222::<R, M, UP>,
+      reducer_223::<R, M, UP>,
+      reducer_224::<R, M, UP>,
+      reducer_225::<R, M, UP>,
+      reducer_226::<R, M, UP>,
+      reducer_227::<R, M, UP>,
+      reducer_228::<R, M, UP>,
+      reducer_229::<R, M, UP>,
+      reducer_230::<R, M, UP>,
+      reducer_231::<R, M, UP>,
+      reducer_232::<R, M, UP>,
+      reducer_233::<R, M, UP>,
+      reducer_234::<R, M, UP>,
+      reducer_235::<R, M, UP>,
+      reducer_236::<R, M, UP>,
+      reducer_237::<R, M, UP>,
+      reducer_238::<R, M, UP>,
+      reducer_239::<R, M, UP>,
+      reducer_240::<R, M, UP>,
+      reducer_241::<R, M, UP>,
+      reducer_242::<R, M, UP>,
+      reducer_243::<R, M, UP>,
+      reducer_244::<R, M, UP>,
+      reducer_245::<R, M, UP>,
+      reducer_246::<R, M, UP>,
+      reducer_247::<R, M, UP>,
+      reducer_248::<R, M, UP>,
+      reducer_249::<R, M, UP>,
+      reducer_250::<R, M, UP>,
+      reducer_251::<R, M, UP>,
+      reducer_252::<R, M, UP>,
+      reducer_253::<R, M, UP>,
+      reducer_254::<R, M, UP>,
+      reducer_255::<R, M, UP>,
+      reducer_256::<R, M, UP>,
+      reducer_257::<R, M, UP>,
+      reducer_258::<R, M, UP>,
+      reducer_259::<R, M, UP>,
+      reducer_260::<R, M, UP>,
+      reducer_261::<R, M, UP>,
+      reducer_262::<R, M, UP>,
+      reducer_263::<R, M, UP>,
+      reducer_264::<R, M, UP>,
+      reducer_265::<R, M, UP>,
+      reducer_266::<R, M, UP>,
+      reducer_267::<R, M, UP>,
+      reducer_268::<R, M, UP>,
+      reducer_269::<R, M, UP>,
+      reducer_270::<R, M, UP>,
+      reducer_271::<R, M, UP>,
+      reducer_272::<R, M, UP>,
+      reducer_273::<R, M, UP>,
+      reducer_274::<R, M, UP>,
+      reducer_275::<R, M, UP>,
+      reducer_276::<R, M, UP>,
+      reducer_277::<R, M, UP>,
+      reducer_278::<R, M, UP>,
+      reducer_279::<R, M, UP>,
+      reducer_280::<R, M, UP>,
+      reducer_281::<R, M, UP>,
+      reducer_282::<R, M, UP>,
+      reducer_283::<R, M, UP>,
+      reducer_284::<R, M, UP>,
+      reducer_285::<R, M, UP>,
+      reducer_286::<R, M, UP>,
+      reducer_287::<R, M, UP>,
+      reducer_288::<R, M, UP>,
+      reducer_289::<R, M, UP>,
+      reducer_290::<R, M, UP>,
+      reducer_291::<R, M, UP>,
+      reducer_292::<R, M, UP>,
+      reducer_293::<R, M, UP>,
+      reducer_294::<R, M, UP>,
+      reducer_295::<R, M, UP>,
+      reducer_296::<R, M, UP>,
+      reducer_297::<R, M, UP>,
+      reducer_298::<R, M, UP>,
+      reducer_299::<R, M, UP>,
+      reducer_300::<R, M, UP>,
+      reducer_301::<R, M, UP>,
+      reducer_302::<R, M, UP>,
+      reducer_303::<R, M, UP>,
+      reducer_304::<R, M, UP>,
+      reducer_305::<R, M, UP>,
+      reducer_306::<R, M, UP>,
+      reducer_307::<R, M, UP>,
+      reducer_308::<R, M, UP>,
+      reducer_309::<R, M, UP>,
+      reducer_310::<R, M, UP>,
+      reducer_311::<R, M, UP>,
+      reducer_312::<R, M, UP>,
+      reducer_313::<R, M, UP>,
+      reducer_314::<R, M, UP>,
+      reducer_315::<R, M, UP>,
+      reducer_316::<R, M, UP>,
+      reducer_317::<R, M, UP>,
+      reducer_318::<R, M, UP>,
+      reducer_319::<R, M, UP>,
+      reducer_320::<R, M, UP>,
+      reducer_321::<R, M, UP>,
+      reducer_322::<R, M, UP>,
+      reducer_323::<R, M, UP>,
+      reducer_324::<R, M, UP>,
+      reducer_325::<R, M, UP>,
+      reducer_326::<R, M, UP>,
+      reducer_327::<R, M, UP>,
+      reducer_328::<R, M, UP>,
+      reducer_329::<R, M, UP>,
+      reducer_330::<R, M, UP>,
+      reducer_331::<R, M, UP>,
+      reducer_332::<R, M, UP>,
+      reducer_333::<R, M, UP>,
+      reducer_334::<R, M, UP>,
+      reducer_335::<R, M, UP>,
+      reducer_336::<R, M, UP>,
+      reducer_337::<R, M, UP>,
+      reducer_338::<R, M, UP>,
+      reducer_339::<R, M, UP>,
+      reducer_340::<R, M, UP>,
+      reducer_341::<R, M, UP>,
+      reducer_342::<R, M, UP>,
+      reducer_343::<R, M, UP>,
+      reducer_344::<R, M, UP>,
+      reducer_345::<R, M, UP>,
+      reducer_346::<R, M, UP>,
+      reducer_347::<R, M, UP>,
+      reducer_348::<R, M, UP>,
+      reducer_349::<R, M, UP>,
+      reducer_350::<R, M, UP>,
+      reducer_351::<R, M, UP>,
     ])
   }
 }
@@ -11337,8 +11339,8 @@ pub mod ast {
   }
 
   pub fn grammar_from<'a>(reader: UTF8StringReader) -> Result<Box<Grammar>, SherpaParseError> {
-    const reduce_functions: ReduceFunctions<UTF8StringReader, u32> =
-      ReduceFunctions::<UTF8StringReader, u32>::new();
+    const reduce_functions: ReduceFunctions<UTF8StringReader, u32, false> =
+      ReduceFunctions::<UTF8StringReader, u32, false>::new();
     let mut ctx = Parser::new_grammar_parser(reader);
     let reducers_ptr = (&reduce_functions.0).as_ptr() as *const u8;
     let shifter_ptr = llvm_map_shift_action::<UTF8StringReader, u32, ASTNode> as *const u8;
@@ -11365,8 +11367,8 @@ pub mod ast {
   pub fn ast_struct_from<'a>(
     reader: UTF8StringReader,
   ) -> Result<Box<AST_Struct>, SherpaParseError> {
-    const reduce_functions: ReduceFunctions<UTF8StringReader, u32> =
-      ReduceFunctions::<UTF8StringReader, u32>::new();
+    const reduce_functions: ReduceFunctions<UTF8StringReader, u32, false> =
+      ReduceFunctions::<UTF8StringReader, u32, false>::new();
     let mut ctx = Parser::new_ast_struct_parser(reader);
     let reducers_ptr = (&reduce_functions.0).as_ptr() as *const u8;
     let shifter_ptr = llvm_map_shift_action::<UTF8StringReader, u32, ASTNode> as *const u8;
@@ -11391,8 +11393,8 @@ pub mod ast {
   }
 
   pub fn ast_expression_from<'a>(reader: UTF8StringReader) -> Result<ASTNode, SherpaParseError> {
-    const reduce_functions: ReduceFunctions<UTF8StringReader, u32> =
-      ReduceFunctions::<UTF8StringReader, u32>::new();
+    const reduce_functions: ReduceFunctions<UTF8StringReader, u32, false> =
+      ReduceFunctions::<UTF8StringReader, u32, false>::new();
     let mut ctx = Parser::new_ast_expression_parser(reader);
     let reducers_ptr = (&reduce_functions.0).as_ptr() as *const u8;
     let shifter_ptr = llvm_map_shift_action::<UTF8StringReader, u32, ASTNode> as *const u8;
@@ -11416,8 +11418,8 @@ pub mod ast {
   }
 
   pub fn ir_from<'a>(reader: UTF8StringReader) -> Result<Box<IR_STATE>, SherpaParseError> {
-    const reduce_functions: ReduceFunctions<UTF8StringReader, u32> =
-      ReduceFunctions::<UTF8StringReader, u32>::new();
+    const reduce_functions: ReduceFunctions<UTF8StringReader, u32, false> =
+      ReduceFunctions::<UTF8StringReader, u32, false>::new();
     let mut ctx = Parser::new_ir_parser(reader);
     let reducers_ptr = (&reduce_functions.0).as_ptr() as *const u8;
     let shifter_ptr = llvm_map_shift_action::<UTF8StringReader, u32, ASTNode> as *const u8;
@@ -11442,8 +11444,8 @@ pub mod ast {
   }
 
   pub fn type_eval_from<'a>(reader: UTF8StringReader) -> Result<ASTNode, SherpaParseError> {
-    const reduce_functions: ReduceFunctions<UTF8StringReader, u32> =
-      ReduceFunctions::<UTF8StringReader, u32>::new();
+    const reduce_functions: ReduceFunctions<UTF8StringReader, u32, false> =
+      ReduceFunctions::<UTF8StringReader, u32, false>::new();
     let mut ctx = Parser::new_type_eval_parser(reader);
     let reducers_ptr = (&reduce_functions.0).as_ptr() as *const u8;
     let shifter_ptr = llvm_map_shift_action::<UTF8StringReader, u32, ASTNode> as *const u8;
@@ -11467,8 +11469,8 @@ pub mod ast {
   }
 
   pub fn escaped_from<'a>(reader: UTF8StringReader) -> Result<Vec<String>, SherpaParseError> {
-    const reduce_functions: ReduceFunctions<UTF8StringReader, u32> =
-      ReduceFunctions::<UTF8StringReader, u32>::new();
+    const reduce_functions: ReduceFunctions<UTF8StringReader, u32, false> =
+      ReduceFunctions::<UTF8StringReader, u32, false>::new();
     let mut ctx = Parser::new_escaped_parser(reader);
     let reducers_ptr = (&reduce_functions.0).as_ptr() as *const u8;
     let shifter_ptr = llvm_map_shift_action::<UTF8StringReader, u32, ASTNode> as *const u8;
