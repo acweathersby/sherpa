@@ -623,7 +623,7 @@ to_numeric!(to_f64, f64);", w.store.ast_type_name)
     ",",
     &|w| {
       vec![
-        "_ctx_: &ParseContext<R, M>".to_string(),
+        "_ctx_: *mut ParseContext<R, M>".to_string(),
         format!("slots: &AstStackSlice<AstSlot<{}>>", w.store.ast_type_name),
       ]
     },
@@ -735,10 +735,10 @@ pub(crate) fn create_rust_writer_utils(store: &AScriptStore) -> AscriptWriterUti
     // Token Creation from Token Range
     create_token: &|tok_name, token_type| match token_type {
       TokenCreationType::String => {
-        format!("{tok_name}.to_token(_ctx_.get_reader()).to_string()")
+        format!("{tok_name}.to_token(unsafe{{&mut*_ctx_}}.get_reader_mut()).to_string()")
       }
       TokenCreationType::Token => {
-        format!("{tok_name}.to_token(_ctx_.get_reader())")
+        format!("{tok_name}.to_token(unsafe{{&mut*_ctx_}}.get_reader_mut())")
       }
     },
 
@@ -752,7 +752,7 @@ pub(crate) fn create_rust_writer_utils(store: &AScriptStore) -> AscriptWriterUti
       let mut entries: Vec<String> =
         prop_assignments.iter().map(|(_, val, _)| val.to_string()).collect();
       if tokenized {
-        entries.push((u.get_token_name)(0) + ".to_token(_ctx_.get_reader())")
+        entries.push((u.get_token_name)(0) + ".to_token(unsafe{{&mut*_ctx_}}.get_reader_mut())")
       }
       if entries.len() > 0 {
         w.increase_indent();
@@ -1380,9 +1380,10 @@ fn convert_numeric<T: AScriptNumericType>(
           | AScriptTypeVal::U64(..) => {
             Some(ref_.from(format!("%% as {}", rust_type), T::from_f64(0.0)))
           }
-          AScriptTypeVal::TokenRange => Some(
-            ref_.from(format!("%%.{}(_ctx_.get_str())", range_conversion_fn), T::from_f64(0.0)),
-          ),
+          AScriptTypeVal::TokenRange => Some(ref_.from(
+            format!("%%.{}(unsafe{{&*_ctx_}}.get_str())", range_conversion_fn),
+            T::from_f64(0.0),
+          )),
           _ => Some(ref_.from(format!("%%.{}()", tok_conversion_fn), T::from_f64(0.0))),
         }
       }
@@ -1767,7 +1768,7 @@ extern "C" {{
                     w.list(",", vec![
                       "inline_message: \"Token not recognized\".to_string()",
                       "last_production: 0",
-                      "loc: err_tok.to_token(&ctx.1)",
+                      "loc: err_tok.to_token(&mut ctx.1)",
                       "message: \"Failed to parse\".to_string()",
                     ])
                   })

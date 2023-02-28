@@ -244,6 +244,10 @@ impl<'a, R: ByteReader + LLVMByteReader + MutByteReader, M> SherpaParser<R, M>
     &self.ctx
   }
 
+  fn get_ctx_mut(&mut self) -> &mut ParseContext<R, M> {
+    &mut self.ctx
+  }
+
   fn head_at_end(&self) -> bool {
     (self.ctx.anchor_ptr - self.ctx.begin_ptr) == self.get_reader().len()
   }
@@ -270,6 +274,10 @@ impl<'a, R: ByteReader + LLVMByteReader + MutByteReader, M> SherpaParser<R, M>
 
   fn get_reader(&self) -> &R {
     self.ctx.get_reader()
+  }
+
+  fn get_reader_mut(&mut self) -> &mut R {
+    unsafe { &mut *self.reader }
   }
 
   fn get_input(&self) -> &str {

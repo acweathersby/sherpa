@@ -89,7 +89,7 @@ impl<'a> ByteReader for TestUTF8StringReader<'a> {
   }
 
   #[inline(always)]
-  fn get_source(&self) -> SharedSymbolBuffer {
+  fn get_source(&mut self) -> SharedSymbolBuffer {
     let vec = self.string.clone();
 
     SharedSymbolBuffer::new(Vec::from(vec))

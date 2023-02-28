@@ -198,6 +198,7 @@ impl<T: ByteReader, M> ParseContext<T, M> {
   }
 
   /// Returns shift data from current context state.
+  #[inline(always)]
   pub fn get_shift_data(&self) -> ParseAction {
     ParseAction::Shift {
       anchor_byte_offset: self.get_anchor_offset(),
@@ -271,18 +272,21 @@ impl<T: ByteReader, M> ParseContext<T, M> {
 }
 
 impl<T: MutByteReader + ByteReader, M> ParseContext<T, M> {
+  #[inline(always)]
   pub fn get_reader_mut(&mut self) -> &mut T {
     unsafe { (&mut *self.reader) as &mut T }
   }
 }
 
 impl<T: ByteReader, M> ParseContext<T, M> {
+  #[inline(always)]
   pub fn get_reader(&self) -> &T {
     unsafe { (&*self.reader) as &T }
   }
 }
 
 impl<T: ByteReader + UTF8Reader, M> ParseContext<T, M> {
+  #[inline(always)]
   pub fn get_str(&self) -> &str {
     unsafe { (*self.reader).get_str() }
   }
@@ -341,12 +345,19 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
   /// Returns a reference to the internal Reader
   fn get_reader(&self) -> &R;
 
+  /// Returns a mutable reference to the internal Reader
+  fn get_reader_mut(&mut self) -> &mut R;
+
   /// Returns a reference to the input string
   fn get_input(&self) -> &str;
 
   fn init_parser(&mut self, entry_point: u32);
 
+  // Returns a reference to the ParseContext
   fn get_ctx(&self) -> &ParseContext<R, M>;
+
+  // Returns a mutable reference to the ParseContext
+  fn get_ctx_mut(&mut self) -> &mut ParseContext<R, M>;
 
   fn parse_ast<Node: AstObject>(
     &mut self,
@@ -364,7 +375,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
           let len = ast_stack.len();
           let count = symbol_count as usize;
           reduce_fn(
-            &self.get_ctx(),
+            self.get_ctx_mut(),
             &AstStackSlice::from_slice(&mut ast_stack[(len - count)..len]),
           );
           ast_stack.resize(len - (count - 1), AstSlot::<Node>::default());
@@ -443,7 +454,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
           if let Some(debug) = debug {
             debug(&DebugEvent::Failure {});
           }
-          let mut token: Token = last_input.to_token(self.get_reader());
+          let mut token: Token = last_input.to_token(self.get_reader_mut());
 
           token.set_source(Arc::new(Vec::from(self.get_input().to_string().as_bytes())));
           break ShiftsAndSkipsResult::FailedParse(SherpaParseError {
@@ -512,6 +523,10 @@ impl<'a, R: ByteReader + MutByteReader + UTF8Reader, M> SherpaParser<R, M>
     &self.ctx
   }
 
+  fn get_ctx_mut(&mut self) -> &mut ParseContext<R, M> {
+    &mut self.ctx
+  }
+
   fn head_at_end(&self) -> bool {
     self.ctx.head_ptr == self.get_reader().len()
   }
@@ -540,6 +555,10 @@ impl<'a, R: ByteReader + MutByteReader + UTF8Reader, M> SherpaParser<R, M>
     self.ctx.get_reader()
   }
 
+  fn get_reader_mut(&mut self) -> &mut R {
+    self.ctx.get_reader_mut()
+  }
+
   fn get_input(&self) -> &str {
     unsafe { std::str::from_utf8_unchecked(self.get_reader().get_bytes()) }
   }
@@ -547,6 +566,8 @@ impl<'a, R: ByteReader + MutByteReader + UTF8Reader, M> SherpaParser<R, M>
   fn init_parser(&mut self, entry_point: u32) {
     self.stack = vec![0, 0, NORMAL_STATE_FLAG, entry_point];
     self.ctx.end_ptr = self.get_reader().len();
+    self.get_reader_mut().set_cursor(0);
+    self.get_reader_mut().next(0);
   }
 
   fn get_next_action(&mut self, debug: &mut Option<DebugFn>) -> ParseAction {

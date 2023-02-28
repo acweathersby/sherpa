@@ -157,7 +157,7 @@ impl TokenRange {
     }
   }
 
-  pub fn to_string_slice<'a>(&self, source: &'a str) -> &'a str {
+  pub fn to_slice<'a>(&self, source: &'a str) -> &'a str {
     if (self.off + self.len) as usize > source.len() {
       &source[0..0]
     } else {
@@ -166,10 +166,10 @@ impl TokenRange {
   }
 
   pub fn parse<T: FromStr + Default>(&self, source: &str) -> T {
-    self.to_string_slice(source).parse::<T>().unwrap_or_default()
+    self.to_slice(source).parse::<T>().unwrap_or_default()
   }
 
-  pub fn to_token(&self, reader: &dyn ByteReader) -> Token {
+  pub fn to_token(&self, reader: &mut dyn ByteReader) -> Token {
     let mut tok: Token = (*self).into();
     tok.set_source(reader.get_source());
     tok

@@ -566,7 +566,7 @@ IGNORE { c:sp c:nl }
         let counter = unsafe { ctx.get_meta_mut() };
         *counter += 1;
         println!("Reduced P");
-        assert_eq!(slots[0].1.to_string_slice(ctx.get_str()), "world");
+        assert_eq!(slots[0].1.to_slice(ctx.get_str()), "world");
         assert_eq!(slots[0].1.line_num, 3, "Line number of `world` should be 3");
         assert_eq!(slots[0].1.line_off, 5, "Line offset of `world` should be 4");
       }),
@@ -574,7 +574,7 @@ IGNORE { c:sp c:nl }
         let counter = unsafe { ctx.get_meta_mut() };
         *counter += 1;
         println!("Reduced A");
-        assert_eq!(slots[0].1.to_string_slice(ctx.get_str()), "\"\nh\n\"");
+        assert_eq!(slots[0].1.to_slice(ctx.get_str()), "\"\nh\n\"");
         assert_eq!(slots[0].1.line_num, 0, "Line number of `\"\\nh\\n\"` should be 0");
         assert_eq!(slots[0].1.line_off, 0, "Line offset of `\"\\nh\\n\"` should be 0");
         slots.assign(0, AstSlot(1010101, Default::default(), Default::default()))
@@ -584,7 +584,7 @@ IGNORE { c:sp c:nl }
         let counter = unsafe { ctx.get_meta_mut() };
         *counter += 1;
         println!("Reduced C");
-        assert_eq!(slots[0].1.to_string_slice(ctx.get_str()), "\"\nmango\"");
+        assert_eq!(slots[0].1.to_slice(ctx.get_str()), "\"\nmango\"");
         assert_eq!(slots[0].1.line_num, 7, "Line number of `world` should be 7");
         assert_eq!(slots[0].1.line_off, 20, "Line offset of `world` should be 20");
       }),
@@ -626,19 +626,19 @@ fn simple_newline_tracking() -> SherpaResult<()> {
     &mut TestUTF8StringReader::new("hello\nworld\n\ngoodby\nmango"),
     &map_reduce_function(&jit.grammar(), vec![
       ("test", 0, |ctx, slots| {
-        assert_eq!(slots[0].1.to_string_slice(ctx.get_str()), "hello");
+        assert_eq!(slots[0].1.to_slice(ctx.get_str()), "hello");
         assert_eq!(slots[0].1.line_num, 0, "Line number of `hello` should be 0");
         assert_eq!(slots[0].1.line_off, 0, "Line offset of `hello` should be 0");
 
         slots.assign(0, AstSlot(1010101, Default::default(), Default::default()))
       }),
       ("B", 0, |ctx, slots| {
-        assert_eq!(slots[0].1.to_string_slice(ctx.get_str()), "mango");
+        assert_eq!(slots[0].1.to_slice(ctx.get_str()), "mango");
         assert_eq!(slots[0].1.line_num, 4, "Line number of `mango` should be 4");
         assert_eq!(slots[0].1.line_off, 19, "Line offset of `mango` should be 19");
       }),
       ("P", 0, |ctx, slots| {
-        assert_eq!(slots[0].1.to_string_slice(ctx.get_str()), "world");
+        assert_eq!(slots[0].1.to_slice(ctx.get_str()), "world");
         assert_eq!(slots[0].1.line_num, 1, "Line number of `world` should be 1");
         assert_eq!(slots[0].1.line_off, 5, "Line offset of `world` should be 5");
       }),
@@ -688,7 +688,7 @@ IGNORE { c:sp c:nl }
 
         println!(
           "{}",
-          final_token.to_token(unsafe { &*ctx.reader }).blame(
+          final_token.to_token(unsafe { &mut *ctx.reader }).blame(
             0,
             0,
             "Completed Parse of [test]",

@@ -9,7 +9,7 @@ pub struct UTF8StringReader<'a> {
   data:     &'a str,
   word:     u32,
   cp:       u32,
-  source:   SharedSymbolBuffer,
+  source:   Option<SharedSymbolBuffer>,
 }
 
 impl<'a> UTF8Reader for UTF8StringReader<'a> {
@@ -89,8 +89,8 @@ impl<'a> ByteReader for UTF8StringReader<'a> {
   }
 
   #[inline(always)]
-  fn get_source(&self) -> SharedSymbolBuffer {
-    self.source.clone()
+  fn get_source(&mut self) -> SharedSymbolBuffer {
+    self.source.get_or_insert(SharedSymbolBuffer::new(Vec::from(self.data.clone()))).clone()
   }
 
   #[inline(always)]
@@ -126,7 +126,7 @@ impl<'a> UTF8StringReader<'a> {
 
   ///
   pub fn new(data: &'a str) -> UTF8StringReader<'a> {
-    let mut reader = UTF8StringReader {
+    UTF8StringReader {
       data:     data,
       len:      data.len(),
       cursor:   0,
@@ -134,12 +134,8 @@ impl<'a> UTF8StringReader<'a> {
       line_num: 0,
       line_off: 0,
       cp:       0,
-      source:   SharedSymbolBuffer::new(Vec::from(data.clone())),
-    };
-
-    Self::next(&mut reader, 0);
-
-    reader
+      source:   None,
+    }
   }
 }
 

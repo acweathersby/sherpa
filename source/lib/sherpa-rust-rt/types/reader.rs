@@ -121,7 +121,7 @@ pub trait ByteReader {
   fn cursor(&self) -> usize;
 
   /// Returns an optional vector of the input string data.
-  fn get_source(&self) -> SharedSymbolBuffer;
+  fn get_source(&mut self) -> SharedSymbolBuffer;
 
   fn get_bytes(&self) -> &[u8];
 }

@@ -261,7 +261,7 @@ pub struct Lazy {
 // self.functions); }
 // }
 
-pub type Reducer<R, M, Node> = fn(&ParseContext<R, M>, &AstStackSlice<AstSlot<Node>>);
+pub type Reducer<R, M, Node> = fn(*mut ParseContext<R, M>, &AstStackSlice<AstSlot<Node>>);
 
 pub trait AstObject: Debug + Clone + Default + Sized {}
 
