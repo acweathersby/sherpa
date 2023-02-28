@@ -543,8 +543,8 @@ pub(crate) fn add_goto_slot(
 ) -> SherpaResult<()> {
   let goto_state = ctx.i32_type().const_int(goto_state_val, false);
 
-  let goto_stack_ptr = CTX::goto_stack_ptr.get_ptr(b, p_ctx)?;
-  let goto_top = b.build_load(goto_stack_ptr, "").into_pointer_value();
+  // Get the top slot ptr ptr;
+  let goto_top = CTX::goto_stack_ptr.load(b, p_ctx)?.into_pointer_value();
 
   // Create new goto struct
   let new_goto = b.build_insert_value(types.goto.get_undef(), goto_state, 1, "")?;
@@ -557,7 +557,7 @@ pub(crate) fn add_goto_slot(
   let goto_top = unsafe { b.build_gep(goto_top, &[i32.const_int(1, false)], "") };
 
   // Store the top slot pointer
-  b.build_store(goto_stack_ptr, goto_top);
+  CTX::goto_stack_ptr.store(b, p_ctx, goto_top)?;
 
   SherpaResult::Ok(())
 }
@@ -821,12 +821,12 @@ pub(crate) fn get_offset_to_end_of_token<'a>(
   p_ctx: PointerValue<'a>,
 ) -> SherpaResult<PointerValue<'a>> {
   let LLVMParserModule { b, i8, iptr, .. } = sp;
-  let offset = CTX::head_ptr.load(b, p_ctx)?.into_pointer_value();
+  let head_ptr = CTX::head_ptr.load(b, p_ctx)?.into_pointer_value();
   let tok_len = CTX::tok_len.load(b, p_ctx)?.into_int_value();
-  let offset = b.build_ptr_to_int(offset, *iptr, "");
+  let offset = b.build_ptr_to_int(head_ptr, *iptr, "");
   let offset = b.build_int_add(offset, tok_len, "");
-  CTX::tok_len.store(b, p_ctx, iptr.const_zero())?;
   let offset = b.build_int_to_ptr(offset, i8.ptr_type(0.into()), "");
+  CTX::tok_len.store(b, p_ctx, iptr.const_zero())?;
   SherpaResult::Ok(offset)
 }
 
@@ -880,6 +880,7 @@ fn construct_assign_token_id(
     CTX::head_ptr.load_ptr_as_int(b, p_ctx, *iptr)?,
     "",
   );
+
   CTX::tok_len.store(b, p_ctx, len)?;
 
   SherpaResult::Ok(())
@@ -947,23 +948,37 @@ pub(crate) fn check_for_input_acceptability<'a>(
   valid_input: BasicBlock<'a>,
   invalid_input: BasicBlock<'a>,
 ) -> SherpaResult<()> {
-  let LLVMParserModule { b, fun, ctx, .. } = m;
+  let LLVMParserModule { b, fun, ctx, bool, .. } = m;
   let i64 = ctx.i64_type();
 
   // Set the context's goto pointers to point to the goto block;
   let try_extend = ctx.append_basic_block(state_fun, "attempt_extend");
+  let check_if_eof = ctx.append_basic_block(state_fun, "check_if_eof");
 
   let input_available = get_chars_remaining(m, p_ctx)?;
   let input_available = b.build_int_cast(input_available, i64, "");
   let c = b.build_int_compare(inkwell::IntPredicate::SGE, input_available, needed_num_bytes, "");
-  b.build_conditional_branch(c, valid_input, try_extend);
+  b.build_conditional_branch(c, valid_input, check_if_eof);
 
+  // Check to see if the EOF flag is set -------------------------------------------------
+  b.position_at_end(check_if_eof);
+  let input_complete = CTX::block_is_eoi.load(b, p_ctx)?.into_int_value();
+  let c =
+    b.build_int_compare(inkwell::IntPredicate::EQ, input_complete, bool.const_int(1, false), "");
+  b.build_conditional_branch(c, invalid_input, try_extend);
+
+  // Try to get another block of input data ----------------------------------------------
   b.position_at_end(try_extend);
   build_fast_call(b, fun.get_adjusted_input_block, &[p_ctx.into(), needed_num_bytes.into()]);
 
   let input_available = get_chars_remaining(m, p_ctx)?;
   let input_available = b.build_int_cast(input_available, i64, "");
   let c = b.build_int_compare(inkwell::IntPredicate::SGE, input_available, needed_num_bytes, "");
+
+  // TODO:
+  // If input is bad then return a NEEDED_INPUT event, after pushing the current state to the stack.
+  // This should pause the parser until some external signal indicates more data is available and
+  // parsing can be resumed.
 
   b.build_conditional_branch(c, valid_input, invalid_input);
 
@@ -995,19 +1010,21 @@ pub(crate) fn construct_scan<'a>(
   b.build_unconditional_branch(block);
   b.position_at_end(block);
 
-  build_push_fn_state(
+  ensure_space_on_goto_stack(2, sp, p_ctx, state_fn)?;
+  add_goto_slot(
     sp,
     p_ctx,
     null_fn.as_global_value().as_pointer_value(),
-    NORMAL_STATE_FLAG_LLVM | FAIL_STATE_FLAG_LLVM,
-  );
-
-  build_push_fn_state(
+    (NORMAL_STATE_FLAG_LLVM | FAIL_STATE_FLAG_LLVM) as u64,
+  )?;
+  add_goto_slot(
     sp,
     p_ctx,
     scan_fn.as_global_value().as_pointer_value(),
-    NORMAL_STATE_FLAG_LLVM,
-  );
+    (NORMAL_STATE_FLAG_LLVM | FAIL_STATE_FLAG_LLVM) as u64,
+  )?;
+  update_goto_remaining(2, sp, p_ctx)?;
+
   // Dispatch!
   b.build_call(fun.dispatch, &[p_ctx.into()], "");
 
@@ -1042,6 +1059,7 @@ fn build_push_fn_state<'a>(
 /// an entry production id.
 pub(crate) fn construct_prime_function(
   j: &mut Journal,
+
   sp: &LLVMParserModule,
   state_lu: &BTreeMap<String, FunctionValue>,
 ) -> SherpaResult<()> {

@@ -18,7 +18,6 @@ pub struct LLVMTypes<'a> {
   pub token: StructType<'a>,
   pub goto: StructType<'a>,
   pub goto_fn: FunctionType<'a>,
-  pub input_info: StructType<'a>,
   pub cp_info: StructType<'a>,
   /// The form of all functions that can be tail called.
   pub(crate) TAIL_CALLABLE_PARSE_FUNCTION: FunctionType<'a>,
@@ -227,6 +226,10 @@ pub enum CTX_AGGREGATE_INDICES {
   /// pub in_peek_mode:    bool,
   /// ```
   _in_peek_mode,
+  /// ```ignore
+  /// pub block_is_eoi:    bool,
+  /// ```
+  block_is_eoi,
 }
 
 impl Into<u32> for CTX_AGGREGATE_INDICES {

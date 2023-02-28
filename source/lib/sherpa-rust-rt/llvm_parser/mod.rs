@@ -78,7 +78,7 @@ pub trait LLVMByteReader {
     head_ptr: &mut *const u8,
     scan_ptr: &mut *const u8,
     end_ptr_and_needed: &mut *const u8,
-  ) {
+  ) -> bool {
     let anchor_offset = (*anchor_ptr as usize) - (*beg_ptr as usize);
     let head_delta = (*head_ptr as usize) - (*anchor_ptr as usize);
     let scan_delta = (*scan_ptr as usize) - (*anchor_ptr as usize);
@@ -115,6 +115,8 @@ pub trait LLVMByteReader {
       (*scan_ptr) = end;
       (*end_ptr_and_needed) = end;
     }
+
+    true
   }
 }
 

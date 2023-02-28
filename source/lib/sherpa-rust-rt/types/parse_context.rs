@@ -20,6 +20,17 @@ impl Default for Goto {
   }
 }
 
+/// This function should set up a new input block,
+/// Respecting the the relative offsets of the parsing pointers.
+/// All pointer offsets should be relative to the anchor pointer
+/// which should at least point into some valid input data.
+///
+/// If the tail pointer is positioned at the end of the input stream
+/// then this should return true, false otherwise.
+///
+/// If there is not enough input to fulfill the request, but there
+/// will be after some external event occurs, then the tail pointer
+/// should be set to usize::Max and `false` returned.
 type GetBlockFunction<T> = extern "C" fn(
   self_: &mut T,
   &mut *const u8,
@@ -28,7 +39,7 @@ type GetBlockFunction<T> = extern "C" fn(
   &mut *const u8,
   &mut *const u8,
   &mut *const u8,
-);
+) -> bool;
 
 #[repr(C)]
 pub struct ParseContext<T: ByteReader, M = u32> {
@@ -87,8 +98,11 @@ pub struct ParseContext<T: ByteReader, M = u32> {
   pub rule_id:        u32,
   pub line_incr:      u8,
   pub is_active:      bool,
-  // Miscellaneous
+  // Miscellaneous ---------
   pub in_peek_mode:   bool,
+  /// True if the last block requested input block represent data up to
+  /// and including the end of input.
+  pub block_is_eoi:   bool,
 }
 
 impl<T: ByteReader, M> ParseContext<T, M> {
@@ -109,6 +123,7 @@ impl<T: ByteReader, M> ParseContext<T, M> {
     self.is_active = true;
     self.in_peek_mode = false;
     self.goto_stack_ptr = 0 as usize as *mut Goto;
+    self.block_is_eoi = false;
   }
 
   pub fn set_meta(&mut self, meta: *mut M) {
@@ -241,6 +256,7 @@ impl<T: ByteReader, M> Default for ParseContext<T, M> {
       custom_lex:     Self::default_custom_lex,
       get_input_info: Self::default_get_input_info,
       reader:         0 as *mut T,
+      block_is_eoi:   false,
     }
   }
 }
@@ -263,7 +279,8 @@ impl<T: ByteReader, M> ParseContext<T, M> {
     _: &mut *const u8,
     _: &mut *const u8,
     _: &mut *const u8,
-  ) {
+  ) -> bool {
+    false
   }
 
   pub(crate) fn default_custom_lex(_: &mut T, _: &mut M, _: &Self) -> (u32, u32, u32) {

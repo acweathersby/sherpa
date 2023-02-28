@@ -43,7 +43,6 @@ pub(crate) fn construct_module<'a>(
   let CTX = ctx.opaque_struct_type("s.CTX");
   let GOTO = ctx.opaque_struct_type("s.Goto");
   let TOKEN = ctx.opaque_struct_type("s.Token");
-  let INPUT_INFO = ctx.opaque_struct_type("s.InputBlock");
   let CTX_PTR = CTX.ptr_type(0.into());
   let internal_linkage = if j.config().opt_llvm { Some(Linkage::Private) } else { None };
   let TAIL_CALLABLE_PARSE_FUNCTION = i32.fn_type(&[CTX_PTR.into()], false);
@@ -58,18 +57,8 @@ pub(crate) fn construct_module<'a>(
 
   TOKEN.set_body(&[i64.into(), i64.into(), i64.into(), i64.into()], false);
 
-  INPUT_INFO.set_body(
-    &[
-      // Input pointer
-      i8.ptr_type(0.into()).into(),
-      // size
-      i32.into(),
-      // is truncated
-      ctx.bool_type().into(),
-    ],
-    false,
-  );
-  let get_input_info_fun = INPUT_INFO
+  let get_input_info_fun = ctx
+    .bool_type()
     .fn_type(
       &[
         READER.ptr_type(0.into()).into(),
@@ -83,6 +72,9 @@ pub(crate) fn construct_module<'a>(
       false,
     )
     .ptr_type(0.into());
+
+  // Refer to notes in [CTX_AGGREGATE_INDICES] and
+  // [ParserContext] for property details.
   CTX.set_body(
     &[
       // Input data ----------
@@ -117,6 +109,7 @@ pub(crate) fn construct_module<'a>(
       i32.into(),
       i32.into(),
       i8.into(),
+      bool.into(),
       bool.into(),
       bool.into(),
     ],
@@ -248,7 +241,6 @@ pub(crate) fn construct_module<'a>(
       parse_ctx: CTX,
       goto: GOTO,
       goto_fn: GOTO_FN,
-      input_info: INPUT_INFO,
       cp_info: CP_INFO,
     },
     fun,
@@ -312,22 +304,25 @@ pub(crate) unsafe fn construct_get_adjusted_input_block_function(
   let scan_ptr = CTX::scan_ptr.get_ptr(b, p_ctx)?;
   let end_ptr = CTX::end_ptr.get_ptr(b, p_ctx)?;
 
-  b.build_call(
-    CallableValue::try_from(CTX::get_input_info.load(b, p_ctx)?.into_pointer_value())?,
-    &[
-      CTX::reader.load(b, p_ctx)?.into(),
-      beg_ptr.into(),
-      anchor_ptr.into(),
-      base_ptr.into(),
-      head_ptr.into(),
-      scan_ptr.into(),
-      end_ptr.into(),
-    ],
-    "",
-  )
-  .try_as_basic_value()
-  .left()?
-  .into_struct_value();
+  let input_complete = b
+    .build_call(
+      CallableValue::try_from(CTX::get_input_info.load(b, p_ctx)?.into_pointer_value())?,
+      &[
+        CTX::reader.load(b, p_ctx)?.into(),
+        beg_ptr.into(),
+        anchor_ptr.into(),
+        base_ptr.into(),
+        head_ptr.into(),
+        scan_ptr.into(),
+        end_ptr.into(),
+      ],
+      "",
+    )
+    .try_as_basic_value()
+    .left()?
+    .into_int_value();
+
+  CTX::block_is_eoi.store(b, p_ctx, input_complete);
 
   b.build_return(None);
 

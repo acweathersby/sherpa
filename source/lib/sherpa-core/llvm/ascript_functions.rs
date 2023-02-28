@@ -88,8 +88,10 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: AstObject>(
   b.build_store(stack_top_ptr, i32.const_zero());
 
   let ast_slot_slice_ptr = b.build_alloca(ast_slot_stack_slice, "slot_lookup_ptr"); // Stores the stack lookup structure
-  let slot_direction = b.build_struct_gep(ast_slot_slice_ptr, 2, "")?;
-  b.build_store(slot_direction, i8.const_int(1, false)); // Directory of slot is decreasing
+
+  // UNUSED PROPERTY --------------------------------------------------------------------
+  // - let slot_direction = b.build_struct_gep(ast_slot_slice_ptr, 2, "")?;
+  // - b.build_store(slot_direction, i8.const_int(1, false)); // Directory of slot is decreasing
 
   let slot_ptr_ptr = b.build_alloca(ast_slot.ptr_type(0.into()), "slot_ptr_ptr"); // Store the pointer to the bottom of the AST stack
 
