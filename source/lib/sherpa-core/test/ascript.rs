@@ -462,7 +462,7 @@ fn convert_str_to_numeric() -> SherpaResult<()> {
   GrammarStore::from_str(
     &mut j,
     "
-    <> A > \"1234\" :ast { t_R, tok } 
+    <> A > \"1234\" :ast { t_R, d:str($1) } 
     
     <> B > \"1234\" :ast str($1)
 

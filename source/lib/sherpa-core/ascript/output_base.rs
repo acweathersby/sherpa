@@ -748,6 +748,14 @@ impl SlotRef {
     }
   }
 
+  pub(crate) fn to_range(self, utils: &AscriptWriterUtils) -> Self {
+    let i = match self.get_root_slot_index() {
+      RefIndex::Obj(i) | RefIndex::Tok(i) => i,
+    };
+
+    Self::range(utils, i, self.type_slot)
+  }
+
   pub(crate) fn to_string(self, utils: &AscriptWriterUtils) -> Self {
     let i = match self.get_root_slot_index() {
       RefIndex::Obj(i) | RefIndex::Tok(i) => i,
@@ -790,11 +798,11 @@ impl SlotRef {
     self.ast_type.clone()
   }
 
-  pub(crate) fn from(self, init_expression: String, ast_type: AScriptTypeVal) -> Self {
+  pub(crate) fn to(self, conversion_expr: String, ast_type: AScriptTypeVal) -> Self {
     SlotRef {
       slot_type: self.slot_type,
       type_slot: self.type_slot,
-      init_expression,
+      init_expression: conversion_expr,
       ast_type,
       predecessors: Some(vec![Box::new(self)]),
       post_init_statements: None,

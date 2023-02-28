@@ -988,17 +988,20 @@ pub(crate) fn create_rust_writer_utils(store: &AScriptStore) -> AscriptWriterUti
                 match ref_.ast_type {
                   AScriptTypeVal::Struct(..)
                   | AScriptTypeVal::TokenRange
-                  | AScriptTypeVal::GenericStruct(..) => Some(ref_.to_string(u)),
+                  | AScriptTypeVal::GenericStruct(..) => Some(ref_.to_range(u).to(
+                    "%%.to_slice(unsafe{&*_ctx_}.get_str()).to_string()".to_string(),
+                    AScriptTypeVal::String(None),
+                  )),
                   AScriptTypeVal::TokenVec => {
                     // Merge the last and first token together
                     // get the string value from the resulting span of the union
-                    Some(ref_.from(
+                    Some(ref_.to(
                       "(%%.first().unwrap() + %%.last().unwrap()).to_string()".to_string(),
                       AScriptTypeVal::String(None),
                     ))
                   }
                   AScriptTypeVal::String(..) => Some(ref_),
-                  _ => Some(ref_.from("%%.to_string()".to_string(), AScriptTypeVal::String(None))),
+                  _ => Some(ref_.to("%%.to_string()".to_string(), AScriptTypeVal::String(None))),
                 }
               }
             }
@@ -1240,12 +1243,12 @@ pub(crate) fn create_rust_writer_utils(store: &AScriptStore) -> AscriptWriterUti
           match ref_.ast_type.clone() {
             Struct(struct_type) => {
               let struct_name = store.structs.get(&struct_type).unwrap().type_name.clone();
-              ref_.from(format!("%%.to_{struct_name}()"), Struct(struct_type))
+              ref_.to(format!("%%.to_{struct_name}()"), Struct(struct_type))
             }
             GenericStruct(struct_types) if struct_types.len() == 1 => {
               let struct_type = struct_types.first().unwrap();
               let struct_name = store.structs.get(&(struct_type.into())).unwrap().type_name.clone();
-              ref_.from(format!("%%.to_{struct_name}()"), Struct(struct_type.into()))
+              ref_.to(format!("%%.to_{struct_name}()"), Struct(struct_type.into()))
             }
             _ => ref_,
           }
@@ -1391,13 +1394,13 @@ fn convert_numeric<T: AScriptNumericType>(
           | AScriptTypeVal::U16(..)
           | AScriptTypeVal::U32(..)
           | AScriptTypeVal::U64(..) => {
-            Some(ref_.from(format!("%% as {}", rust_type), T::from_f64(0.0)))
+            Some(ref_.to(format!("%% as {}", rust_type), T::from_f64(0.0)))
           }
-          AScriptTypeVal::TokenRange => Some(ref_.from(
+          AScriptTypeVal::TokenRange => Some(ref_.to(
             format!("%%.{}(unsafe{{&*_ctx_}}.get_str())", range_conversion_fn),
             T::from_f64(0.0),
           )),
-          _ => Some(ref_.from(format!("%%.{}()", tok_conversion_fn), T::from_f64(0.0))),
+          _ => Some(ref_.to(format!("%%.{}()", tok_conversion_fn), T::from_f64(0.0))),
         }
       }
     },
@@ -1577,8 +1580,6 @@ pub(crate) fn write_rust_llvm_parser_file<'a, W: Write>(
   let g = &(w.store.g.clone());
   w.stmt(format!(
     r###"
-const UPWARD_STACK: bool = false;
-
 #[link(name = "{parser_name}", kind ="static" )]
 extern "C" {{
   fn init(ctx: *mut u8, reader: *mut u8);
