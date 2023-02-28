@@ -317,6 +317,7 @@ impl<T: AstObject> AstStackSlice<T> {
     std::mem::forget(std::mem::replace(&mut (*pointer), val));
   }
 
+  #[inline(always)]
   pub fn assign(&self, position: usize, val: T) {
     unsafe {
       let pointer = self.get_pointer(position);
@@ -326,6 +327,7 @@ impl<T: AstObject> AstStackSlice<T> {
 
   /// Removes the value at the given position from the slot and returns it.
   #[track_caller]
+  #[inline(always)]
   pub fn take(&self, position: usize) -> T {
     unsafe { std::mem::take(&mut (*self.get_pointer(position))) }
   }
