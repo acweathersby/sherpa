@@ -35,11 +35,11 @@ pub(crate) struct ASTExprHandler<'a> {
   ///      type_slot: usize,
   ///) -> Option<Ref>
   /// ```
-  pub expr: &'a dyn Fn(&AscriptWriterUtils, &ASTNode, &Rule, &mut usize, usize) -> Option<Ref>,
+  pub expr: &'a dyn Fn(&AscriptWriterUtils, &ASTNode, &Rule, &mut usize, usize) -> Option<SlotRef>,
 }
 
 pub(crate) type PropHandlerFn =
-  dyn Fn(&AscriptWriterUtils, Option<Ref>, &AScriptTypeVal, bool) -> (String, Option<Ref>);
+  dyn Fn(&AscriptWriterUtils, Option<SlotRef>, &AScriptTypeVal, bool) -> (String, Option<SlotRef>);
 
 pub(crate) struct AscriptPropHandler<'a> {
   /// ```no_compile
@@ -211,7 +211,7 @@ impl<'a> AscriptWriterUtils<'a> {
     rule: &Rule,
     ref_index: &mut usize,
     type_slot: usize,
-  ) -> Option<Ref>
+  ) -> Option<SlotRef>
   where
     Self: Sized,
   {
@@ -238,7 +238,7 @@ impl<'a> AscriptWriterUtils<'a> {
     ast_struct: &AST_Struct,
     ref_index: &mut usize,
     type_slot: usize,
-  ) -> SherpaResult<Ref> {
+  ) -> SherpaResult<SlotRef> {
     let store = self.store;
     let archetype_struct = store.structs.get(struct_type).unwrap();
     let ast_struct_props = ast_struct
@@ -307,7 +307,7 @@ impl<'a> AscriptWriterUtils<'a> {
 
     (*ref_index) += 1;
 
-    let mut ref_ = Ref::ast_obj(
+    let mut ref_ = SlotRef::ast_obj(
       *ref_index,
       type_slot,
       String::from_utf8(writer.into_output()).unwrap(),
@@ -323,10 +323,10 @@ impl<'a> AscriptWriterUtils<'a> {
   /// a struct's  value.
   pub fn create_type_initializer_value(
     &self,
-    ref_: Option<Ref>,
+    ref_: Option<SlotRef>,
     type_val: &AScriptTypeVal,
     optional: bool,
-  ) -> (String, Option<Ref>) {
+  ) -> (String, Option<SlotRef>) {
     match self.handlers.prop_handlers.get(&type_val.get_discriminant()) {
       Some(AscriptPropHandler { expr }) => (*expr)(&self, ref_, type_val, optional),
       _ => (ref_.clone().map(|ref_| ref_.get_ref_name()).unwrap_or_default(), ref_),
@@ -677,24 +677,24 @@ pub(crate) enum RefIndex {
 }
 
 #[derive(Clone)]
-pub(crate) struct Ref {
+pub(crate) struct SlotRef {
   slot_type: RefIndex,
   type_slot: usize,
   init_expression: String,
   pub ast_type: AScriptTypeVal,
-  predecessors: Option<Vec<Box<Ref>>>,
+  predecessors: Option<Vec<Box<SlotRef>>>,
   post_init_statements: Option<Vec<String>>,
   is_mutable: bool,
 }
 
-impl Ref {
+impl SlotRef {
   pub fn ast_obj(
     slot_index: usize,
     type_slot: usize,
     init_expression: String,
     ast_type: AScriptTypeVal,
   ) -> Self {
-    Ref {
+    SlotRef {
       slot_type: RefIndex::Obj(slot_index),
       type_slot,
       init_expression,
@@ -706,7 +706,7 @@ impl Ref {
   }
 
   pub(crate) fn token(utils: &AscriptWriterUtils, slot_index: usize, type_slot: usize) -> Self {
-    Ref {
+    SlotRef {
       slot_type: RefIndex::Tok(slot_index),
       type_slot,
       init_expression: (utils.create_token)(
@@ -720,12 +720,24 @@ impl Ref {
     }
   }
 
+  pub(crate) fn range(utils: &AscriptWriterUtils, slot_index: usize, type_slot: usize) -> Self {
+    SlotRef {
+      slot_type: RefIndex::Tok(slot_index),
+      type_slot,
+      init_expression: (utils.get_token_name)(slot_index + 1),
+      ast_type: AScriptTypeVal::TokenRange,
+      predecessors: None,
+      post_init_statements: None,
+      is_mutable: false,
+    }
+  }
+
   pub(crate) fn node_token(
     utils: &AscriptWriterUtils,
     slot_index: usize,
     type_slot: usize,
   ) -> Self {
-    Ref {
+    SlotRef {
       slot_type: RefIndex::Tok(slot_index),
       type_slot,
       init_expression: (utils.create_token)((utils.get_token_name)(0), TokenCreationType::Token),
@@ -736,19 +748,38 @@ impl Ref {
     }
   }
 
-  pub(crate) fn to_string(self, utils: &AscriptWriterUtils, ast_type: AScriptTypeVal) -> Self {
+  pub(crate) fn to_string(self, utils: &AscriptWriterUtils) -> Self {
     let i = match self.get_root_slot_index() {
       RefIndex::Obj(i) | RefIndex::Tok(i) => i,
     };
 
-    Ref {
+    SlotRef {
       slot_type: RefIndex::Tok(i),
       type_slot: self.type_slot,
       init_expression: (utils.create_token)(
         (utils.get_token_name)(i + 1),
         TokenCreationType::String,
       ),
-      ast_type,
+      ast_type: AScriptTypeVal::String(None),
+      predecessors: None,
+      post_init_statements: None,
+      is_mutable: false,
+    }
+  }
+
+  pub(crate) fn to_token(self, utils: &AscriptWriterUtils) -> Self {
+    let i = match self.get_root_slot_index() {
+      RefIndex::Obj(i) | RefIndex::Tok(i) => i,
+    };
+
+    SlotRef {
+      slot_type: RefIndex::Tok(i),
+      type_slot: self.type_slot,
+      init_expression: (utils.create_token)(
+        (utils.get_token_name)(i + 1),
+        TokenCreationType::Token,
+      ),
+      ast_type: AScriptTypeVal::Token,
       predecessors: None,
       post_init_statements: None,
       is_mutable: false,
@@ -760,7 +791,7 @@ impl Ref {
   }
 
   pub(crate) fn from(self, init_expression: String, ast_type: AScriptTypeVal) -> Self {
-    Ref {
+    SlotRef {
       slot_type: self.slot_type,
       type_slot: self.type_slot,
       init_expression,
@@ -771,9 +802,23 @@ impl Ref {
     }
   }
 
+  /// Unsure the slot type is a ASTNode object, that is, if the current type is
+  /// a `TokenRange` convert it into a `Token`
+  pub(crate) fn ensure_ast_obj(self, utils: &AscriptWriterUtils) -> Self {
+    if self.is(AScriptTypeVal::TokenRange) {
+      self.to_token(utils)
+    } else {
+      self
+    }
+  }
+
   pub(crate) fn make_mutable(&mut self) -> &mut Self {
     self.is_mutable = true;
     self
+  }
+
+  pub(crate) fn is(&self, type_: AScriptTypeVal) -> bool {
+    self.ast_type == type_
   }
 
   pub(crate) fn get_ref_name(&self) -> String {
@@ -856,13 +901,13 @@ impl Ref {
     strings.join("\n").replace("%%", &ref_string)
   }
 
-  pub(crate) fn add_predecessor(&mut self, predecessor: Ref) -> &mut Self {
+  pub(crate) fn add_predecessor(&mut self, predecessor: SlotRef) -> &mut Self {
     self.predecessors.get_or_insert(vec![]).push(Box::new(predecessor));
 
     self
   }
 
-  pub(crate) fn add_predecessors(&mut self, predecessors: Vec<Ref>) -> &mut Self {
+  pub(crate) fn add_predecessors(&mut self, predecessors: Vec<SlotRef>) -> &mut Self {
     let prev = self.predecessors.get_or_insert(vec![]);
 
     for predecessor in predecessors {
@@ -876,7 +921,7 @@ impl Ref {
 pub(crate) fn get_ascript_export_data(
   g: &GrammarStore,
   utils: &AscriptWriterUtils,
-) -> Vec<(Option<Ref>, AScriptTypeVal, String, String, String)> {
+) -> Vec<(Option<SlotRef>, AScriptTypeVal, String, String, String)> {
   let export_node_data = g
     .get_exported_productions()
     .iter()

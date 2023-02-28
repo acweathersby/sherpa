@@ -17,7 +17,7 @@ use crate::{
       AscriptTypeHandler,
       AscriptWriter,
       AscriptWriterUtils,
-      Ref,
+      SlotRef,
       StructProp,
       TokenCreationType,
     },
@@ -927,20 +927,20 @@ pub(crate) fn create_rust_writer_utils(store: &AScriptStore) -> AscriptWriterUti
   u.add_ast_handler(sherpa::ASTNodeType::AST_BOOL, ASTExprHandler {
     expr: &|u, ast, r, ref_index, type_slot| match ast {
       ASTNode::AST_BOOL(box AST_BOOL { value, initializer, .. }) => match initializer {
-        None => Some(Ref::ast_obj(
+        None => Some(SlotRef::ast_obj(
           u.bump_ref_index(ref_index),
           type_slot,
           format!("{}", value),
           AScriptTypeVal::Bool(Some(*value)),
         )),
         Some(box init) => match u.ast_expr_to_ref(&init.expression, r, ref_index, type_slot) {
-          Some(_) => Some(Ref::ast_obj(
+          Some(_) => Some(SlotRef::ast_obj(
             u.bump_ref_index(ref_index),
             type_slot,
             "true".to_string(),
             AScriptTypeVal::Bool(Some(true)),
           )),
-          None => Some(Ref::ast_obj(
+          None => Some(SlotRef::ast_obj(
             u.bump_ref_index(ref_index),
             type_slot,
             "false".to_string(),
@@ -956,7 +956,7 @@ pub(crate) fn create_rust_writer_utils(store: &AScriptStore) -> AscriptWriterUti
     expr: &|u, ast, r, ref_index, type_slot| match ast {
       ASTNode::AST_STRING(box AST_STRING { value, .. }) => {
         match value {
-          None => Some(Ref::ast_obj(
+          None => Some(SlotRef::ast_obj(
             u.bump_ref_index(ref_index),
             type_slot,
             "String::new()".to_string(),
@@ -964,7 +964,7 @@ pub(crate) fn create_rust_writer_utils(store: &AScriptStore) -> AscriptWriterUti
           )),
           Some(box init) => {
             match &init.expression {
-              ASTNode::AST_NUMBER(box AST_NUMBER { value, .. }) => Some(Ref::ast_obj(
+              ASTNode::AST_NUMBER(box AST_NUMBER { value, .. }) => Some(SlotRef::ast_obj(
                 u.bump_ref_index(ref_index),
                 type_slot,
                 format!("\"{}\".to_string()", value),
@@ -975,9 +975,7 @@ pub(crate) fn create_rust_writer_utils(store: &AScriptStore) -> AscriptWriterUti
                 match ref_.ast_type {
                   AScriptTypeVal::Struct(..)
                   | AScriptTypeVal::TokenRange
-                  | AScriptTypeVal::GenericStruct(..) => {
-                    Some(ref_.to_string(u, AScriptTypeVal::String(None)))
-                  }
+                  | AScriptTypeVal::GenericStruct(..) => Some(ref_.to_string(u)),
                   AScriptTypeVal::TokenVec => {
                     // Merge the last and first token together
                     // get the string value from the resulting span of the union
@@ -1104,7 +1102,7 @@ pub(crate) fn create_rust_writer_utils(store: &AScriptStore) -> AscriptWriterUti
           .collect::<VecDeque<_>>();
 
         if results.is_empty() {
-          Some(Ref::ast_obj(
+          Some(SlotRef::ast_obj(
             utils.bump_ref_index(ref_index),
             type_slot,
             "vec![];".to_string(),
@@ -1116,7 +1114,7 @@ pub(crate) fn create_rust_writer_utils(store: &AScriptStore) -> AscriptWriterUti
           let mut vector_ref = if results[0].ast_type.is_vec() {
             results.pop_front().unwrap()
           } else {
-            Ref::ast_obj(
+            SlotRef::ast_obj(
               utils.bump_ref_index(ref_index),
               type_slot,
               "vec![]".to_string(),
@@ -1125,6 +1123,8 @@ pub(crate) fn create_rust_writer_utils(store: &AScriptStore) -> AscriptWriterUti
           };
 
           for mut _ref in results {
+            let mut _ref = _ref.ensure_ast_obj(utils);
+
             if _ref.ast_type.is_vec() {
               _ref.make_mutable();
               let val_ref = _ref.get_ref_name();
@@ -1147,9 +1147,9 @@ pub(crate) fn create_rust_writer_utils(store: &AScriptStore) -> AscriptWriterUti
   u.add_ast_handler(sherpa::ASTNodeType::AST_Token, ASTExprHandler {
     expr: &|u, ast, _, ref_index, type_slot| {
       if let ASTNode::AST_Token(box AST_Token { range, .. }) = ast {
-        let ref_ = Ref::node_token(u, u.bump_ref_index(ref_index), type_slot);
+        let ref_ = SlotRef::node_token(u, u.bump_ref_index(ref_index), type_slot);
         if let Some(box Range { start_trim, end_trim }) = range {
-          let mut trimed_ref = Ref::ast_obj(
+          let mut trimed_ref = SlotRef::ast_obj(
             *ref_index,
             type_slot,
             format!("%%.trim({start_trim}, {end_trim})"),
@@ -1214,10 +1214,10 @@ pub(crate) fn create_rust_writer_utils(store: &AScriptStore) -> AscriptWriterUti
       );
   fn handle_struct_props(
     utils: &AscriptWriterUtils,
-    ref_: Option<Ref>,
+    ref_: Option<SlotRef>,
     prop_type_: &AScriptTypeVal,
     optional: bool,
-  ) -> (String, Option<Ref>) {
+  ) -> (String, Option<SlotRef>) {
     let store = utils.store;
     use AScriptTypeVal::*;
     match ref_ {
@@ -1265,7 +1265,7 @@ fn render_body_symbol(
   ast: &AScriptStore,
   slot_index: usize,
   type_slot: usize,
-) -> Option<Ref> {
+) -> Option<SlotRef> {
   use AScriptTypeVal::*;
   let ref_index = slot_index + 1;
   let ref_ = match &sym.sym_id {
@@ -1275,7 +1275,7 @@ fn render_body_symbol(
       if types.len() == 1 {
         let _type = types.first().unwrap().clone();
         if Token == _type {
-          Ref::token(utils, slot_index, type_slot)
+          SlotRef::token(utils, slot_index, type_slot)
         } else {
           if let Some(init_string) = match _type {
             F64(..) => Some(format!("{ref_name}.to_f64()")),
@@ -1306,9 +1306,9 @@ fn render_body_symbol(
             Struct(..) => Some(format!("{ref_name}")),
             _ => None,
           } {
-            Ref::ast_obj(slot_index, type_slot, init_string, _type)
+            SlotRef::ast_obj(slot_index, type_slot, init_string, _type)
           } else {
-            Ref::ast_obj(slot_index, type_slot, "".to_string(), match _type.to_owned() {
+            SlotRef::ast_obj(slot_index, type_slot, "".to_string(), match _type.to_owned() {
               GenericVec(types) => get_specified_vector_from_generic_vec_values(
                 &types.unwrap().iter().map(|t| t.into()).collect(),
               ),
@@ -1317,12 +1317,17 @@ fn render_body_symbol(
           }
         }
       } else if production_types_are_structs(&types) {
-        Ref::ast_obj(ref_index, type_slot, ref_name, GenericStruct(extract_struct_types(&types)))
+        SlotRef::ast_obj(
+          ref_index,
+          type_slot,
+          ref_name,
+          GenericStruct(extract_struct_types(&types)),
+        )
       } else {
-        Ref::token(utils, slot_index, type_slot)
+        SlotRef::token(utils, slot_index, type_slot)
       }
     }
-    _ => Ref::token(utils, slot_index, type_slot),
+    _ => SlotRef::range(utils, slot_index, type_slot),
   };
 
   Some(ref_)
@@ -1344,7 +1349,7 @@ fn convert_numeric<T: AScriptNumericType>(
   rule: &Rule,
   ref_index: &mut usize,
   type_slot: usize,
-) -> Option<Ref> {
+) -> Option<SlotRef> {
   let rust_type = T::prim_type_name();
   let tok_conversion_fn = T::to_fn_name();
   let range_conversion_fn = T::from_tok_range_name();
@@ -1352,7 +1357,7 @@ fn convert_numeric<T: AScriptNumericType>(
   match init {
     None => None,
     Some(init) => match &init.expression {
-      ASTNode::AST_NUMBER(box AST_NUMBER { value, .. }) => Some(Ref::ast_obj(
+      ASTNode::AST_NUMBER(box AST_NUMBER { value, .. }) => Some(SlotRef::ast_obj(
         utils.bump_ref_index(ref_index),
         type_slot,
         format!("{}{}", T::string_from_f64(*value), rust_type,),

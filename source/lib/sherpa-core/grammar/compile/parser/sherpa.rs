@@ -4675,8 +4675,8 @@ fn reducer_020<R: Reader + UTF8Reader, M>(
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_2;
-  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader());
-  let tok_1_0 = tok_1_0.to_u32();
+  let tok_1_0 = __tok_rng_2;
+  let tok_1_0 = tok_1_0.parse::<u32>(_ctx_.get_str());
   slots.assign(0, AstSlot(ASTNode::U32(tok_1_0), __rule_rng__, TokenRange::default()));
 }
 
@@ -4689,8 +4689,7 @@ fn reducer_021<R: Reader + UTF8Reader, M>(
   let AstSlot(_, __tok_rng_3, _) = slots.take(2);
   let AstSlot(_, __tok_rng_4, _) = slots.take(3);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_4;
-  let tok_2_0 = __tok_rng_3.to_token(_ctx_.get_reader());
-  let tok_2_0 = tok_2_0.to_string();
+  let tok_2_0 = __tok_rng_3.to_token(_ctx_.get_reader()).to_string();
   let obj_5_0 = HASH_NAME::new(tok_2_0);
   slots
     .assign(0, AstSlot(ASTNode::HASH_NAME(Box::new(obj_5_0)), __rule_rng__, TokenRange::default()));
@@ -5065,8 +5064,8 @@ fn reducer_047<R: Reader + UTF8Reader, M>(
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_2;
-  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader());
-  let tok_1_0 = tok_1_0.to_u32();
+  let tok_1_0 = __tok_rng_2;
+  let tok_1_0 = tok_1_0.parse::<u32>(_ctx_.get_str());
   slots.assign(0, AstSlot(ASTNode::U32(tok_1_0), __rule_rng__, TokenRange::default()));
 }
 
@@ -5132,8 +5131,8 @@ fn reducer_052<R: Reader + UTF8Reader, M>(
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
-  let tok_0_0 = __tok_rng_1.to_token(_ctx_.get_reader());
-  let tok_0_0 = tok_0_0.to_i64();
+  let tok_0_0 = __tok_rng_1;
+  let tok_0_0 = tok_0_0.parse::<i64>(_ctx_.get_str());
   let obj_2_0 = Num::new(tok_0_0);
   slots.assign(0, AstSlot(ASTNode::Num(Box::new(obj_2_0)), __rule_rng__, TokenRange::default()));
 }
@@ -5618,8 +5617,7 @@ fn reducer_093<R: Reader + UTF8Reader, M>(
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_2;
-  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader());
-  let tok_1_0 = tok_1_0.to_string();
+  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader()).to_string();
   let obj_3_0 = AST_NamedReference::new(tok_1_0, __rule_rng__.to_token(_ctx_.get_reader()));
   slots.assign(
     0,
@@ -5634,8 +5632,8 @@ fn reducer_094<R: Reader + UTF8Reader, M>(
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_2;
-  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader());
-  let tok_1_0 = tok_1_0.to_i64();
+  let tok_1_0 = __tok_rng_2;
+  let tok_1_0 = tok_1_0.parse::<i64>(_ctx_.get_str());
   let obj_3_0 = AST_IndexReference::new(tok_1_0, __rule_rng__.to_token(_ctx_.get_reader()));
   slots.assign(
     0,
@@ -6273,8 +6271,8 @@ fn reducer_128<R: Reader + UTF8Reader, M>(
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
   let AstSlot(_, __tok_rng_3, _) = slots.take(2);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_3;
-  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader());
-  let tok_1_0 = tok_1_0.to_i64();
+  let tok_1_0 = __tok_rng_2;
+  let tok_1_0 = tok_1_0.parse::<i64>(_ctx_.get_str());
   let obj_4_0 = Num::new(tok_1_0);
   slots.assign(0, AstSlot(ASTNode::Num(Box::new(obj_4_0)), __rule_rng__, TokenRange::default()));
 }
@@ -6425,8 +6423,8 @@ fn reducer_136<R: Reader + UTF8Reader, M>(
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
   let AstSlot(_, __tok_rng_3, _) = slots.take(2);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_3;
-  let tok_1_1 = __tok_rng_2.to_token(_ctx_.get_reader());
-  let tok_1_1 = tok_1_1.to_u32();
+  let tok_1_1 = __tok_rng_2;
+  let tok_1_1 = tok_1_1.parse::<u32>(_ctx_.get_str());
   let obj_4_0 = Priority::new(false, tok_1_1);
   slots
     .assign(0, AstSlot(ASTNode::Priority(Box::new(obj_4_0)), __rule_rng__, TokenRange::default()));
@@ -6619,8 +6617,7 @@ fn reducer_150<R: Reader + UTF8Reader, M>(
   let obj_5_0 = true;
   let obj_3_1 = obj4;
   let obj_3_1 = obj_3_1.to_Priority();
-  let tok_1_2 = __tok_rng_2.to_token(_ctx_.get_reader());
-  let tok_1_2 = tok_1_2.to_string();
+  let tok_1_2 = __tok_rng_2.to_token(_ctx_.get_reader()).to_string();
   let obj_0_3 = obj1;
   let obj_6_0 = AnnotatedSymbol::new(
     obj_5_0,
@@ -6671,8 +6668,7 @@ fn reducer_152<R: Reader + UTF8Reader, M>(
   let obj_4_0 = false;
   let obj_2_1 = obj3;
   let obj_2_1 = obj_2_1.to_Priority();
-  let tok_1_2 = __tok_rng_2.to_token(_ctx_.get_reader());
-  let tok_1_2 = tok_1_2.to_string();
+  let tok_1_2 = __tok_rng_2.to_token(_ctx_.get_reader()).to_string();
   let obj_0_3 = obj1;
   let obj_5_0 = AnnotatedSymbol::new(
     obj_4_0,
@@ -6720,8 +6716,7 @@ fn reducer_154<R: Reader + UTF8Reader, M>(
   let AstSlot(_, __tok_rng_3, _) = slots.take(2);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_3;
   let obj_4_0 = true;
-  let tok_1_2 = __tok_rng_2.to_token(_ctx_.get_reader());
-  let tok_1_2 = tok_1_2.to_string();
+  let tok_1_2 = __tok_rng_2.to_token(_ctx_.get_reader()).to_string();
   let obj_0_3 = obj1;
   let obj_5_0 = AnnotatedSymbol::new(
     obj_4_0,
@@ -6766,8 +6761,7 @@ fn reducer_156<R: Reader + UTF8Reader, M>(
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_2;
   let obj_3_0 = false;
-  let tok_1_2 = __tok_rng_2.to_token(_ctx_.get_reader());
-  let tok_1_2 = tok_1_2.to_string();
+  let tok_1_2 = __tok_rng_2.to_token(_ctx_.get_reader()).to_string();
   let obj_0_3 = obj1;
   let obj_4_0 = AnnotatedSymbol::new(
     obj_3_0,
@@ -6794,8 +6788,7 @@ fn reducer_157<R: Reader + UTF8Reader, M>(
   let obj_5_0 = true;
   let obj_2_1 = obj3;
   let obj_2_1 = obj_2_1.to_Priority();
-  let tok_1_2 = __tok_rng_2.to_token(_ctx_.get_reader());
-  let tok_1_2 = tok_1_2.to_string();
+  let tok_1_2 = __tok_rng_2.to_token(_ctx_.get_reader()).to_string();
   let obj_0_3 = obj1;
   let obj_6_0 = AnnotatedSymbol::new(
     obj_5_0,
@@ -6847,8 +6840,7 @@ fn reducer_159<R: Reader + UTF8Reader, M>(
   let obj_5_0 = true;
   let obj_3_1 = obj4;
   let obj_3_1 = obj_3_1.to_Priority();
-  let tok_2_2 = __tok_rng_3.to_token(_ctx_.get_reader());
-  let tok_2_2 = tok_2_2.to_string();
+  let tok_2_2 = __tok_rng_3.to_token(_ctx_.get_reader()).to_string();
   let obj_0_3 = obj1;
   let obj_6_0 = AnnotatedSymbol::new(
     obj_5_0,
@@ -6872,8 +6864,7 @@ fn reducer_160<R: Reader + UTF8Reader, M>(
   let AstSlot(_, __tok_rng_3, _) = slots.take(2);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_3;
   let obj_4_0 = true;
-  let tok_2_2 = __tok_rng_3.to_token(_ctx_.get_reader());
-  let tok_2_2 = tok_2_2.to_string();
+  let tok_2_2 = __tok_rng_3.to_token(_ctx_.get_reader()).to_string();
   let obj_0_3 = obj1;
   let obj_5_0 = AnnotatedSymbol::new(
     obj_4_0,
@@ -6900,8 +6891,7 @@ fn reducer_161<R: Reader + UTF8Reader, M>(
   let obj_5_0 = true;
   let obj_2_1 = obj3;
   let obj_2_1 = obj_2_1.to_Priority();
-  let tok_3_2 = __tok_rng_4.to_token(_ctx_.get_reader());
-  let tok_3_2 = tok_3_2.to_string();
+  let tok_3_2 = __tok_rng_4.to_token(_ctx_.get_reader()).to_string();
   let obj_0_3 = obj1;
   let obj_6_0 = AnnotatedSymbol::new(
     obj_5_0,
@@ -6927,8 +6917,7 @@ fn reducer_162<R: Reader + UTF8Reader, M>(
   let obj_4_0 = false;
   let obj_1_1 = obj2;
   let obj_1_1 = obj_1_1.to_Priority();
-  let tok_2_2 = __tok_rng_3.to_token(_ctx_.get_reader());
-  let tok_2_2 = tok_2_2.to_string();
+  let tok_2_2 = __tok_rng_3.to_token(_ctx_.get_reader()).to_string();
   let obj_0_3 = obj1;
   let obj_5_0 = AnnotatedSymbol::new(
     obj_4_0,
@@ -6955,8 +6944,7 @@ fn reducer_163<R: Reader + UTF8Reader, M>(
   let obj_5_0 = true;
   let obj_1_1 = obj2;
   let obj_1_1 = obj_1_1.to_Priority();
-  let tok_2_2 = __tok_rng_3.to_token(_ctx_.get_reader());
-  let tok_2_2 = tok_2_2.to_string();
+  let tok_2_2 = __tok_rng_3.to_token(_ctx_.get_reader()).to_string();
   let obj_0_3 = obj1;
   let obj_6_0 = AnnotatedSymbol::new(
     obj_5_0,
@@ -6983,8 +6971,7 @@ fn reducer_164<R: Reader + UTF8Reader, M>(
   let obj_5_0 = true;
   let obj_1_1 = obj2;
   let obj_1_1 = obj_1_1.to_Priority();
-  let tok_3_2 = __tok_rng_4.to_token(_ctx_.get_reader());
-  let tok_3_2 = tok_3_2.to_string();
+  let tok_3_2 = __tok_rng_4.to_token(_ctx_.get_reader()).to_string();
   let obj_0_3 = obj1;
   let obj_6_0 = AnnotatedSymbol::new(
     obj_5_0,
@@ -7107,8 +7094,7 @@ fn reducer_173<R: Reader + UTF8Reader, M>(
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_2;
-  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader());
-  let tok_1_0 = tok_1_0.to_string();
+  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader()).to_string();
   let obj_3_0 = ClassSymbol::new(tok_1_0, __rule_rng__.to_token(_ctx_.get_reader()));
   slots.assign(
     0,
@@ -7123,8 +7109,7 @@ fn reducer_174<R: Reader + UTF8Reader, M>(
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_2;
-  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader());
-  let tok_1_0 = tok_1_0.to_string();
+  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader()).to_string();
   let obj_3_0 = ClassSymbol::new(tok_1_0, __rule_rng__.to_token(_ctx_.get_reader()));
   slots.assign(
     0,
@@ -7139,8 +7124,7 @@ fn reducer_175<R: Reader + UTF8Reader, M>(
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_2;
-  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader());
-  let tok_1_0 = tok_1_0.to_string();
+  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader()).to_string();
   let obj_3_0 = ClassSymbol::new(tok_1_0, __rule_rng__.to_token(_ctx_.get_reader()));
   slots.assign(
     0,
@@ -7155,8 +7139,7 @@ fn reducer_176<R: Reader + UTF8Reader, M>(
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_2;
-  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader());
-  let tok_1_0 = tok_1_0.to_string();
+  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader()).to_string();
   let obj_3_0 = ClassSymbol::new(tok_1_0, __rule_rng__.to_token(_ctx_.get_reader()));
   slots.assign(
     0,
@@ -7171,8 +7154,7 @@ fn reducer_177<R: Reader + UTF8Reader, M>(
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_2;
-  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader());
-  let tok_1_0 = tok_1_0.to_string();
+  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader()).to_string();
   let obj_3_0 = ClassSymbol::new(tok_1_0, __rule_rng__.to_token(_ctx_.get_reader()));
   slots.assign(
     0,
@@ -7187,8 +7169,7 @@ fn reducer_178<R: Reader + UTF8Reader, M>(
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_2;
-  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader());
-  let tok_1_0 = tok_1_0.to_string();
+  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader()).to_string();
   let obj_3_0 = ClassSymbol::new(tok_1_0, __rule_rng__.to_token(_ctx_.get_reader()));
   slots.assign(
     0,
@@ -7203,8 +7184,7 @@ fn reducer_179<R: Reader + UTF8Reader, M>(
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_2;
-  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader());
-  let tok_1_0 = tok_1_0.to_string();
+  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader()).to_string();
   let obj_3_0 = ClassSymbol::new(tok_1_0, __rule_rng__.to_token(_ctx_.get_reader()));
   slots.assign(
     0,
@@ -7219,8 +7199,7 @@ fn reducer_180<R: Reader + UTF8Reader, M>(
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_2;
-  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader());
-  let tok_1_0 = tok_1_0.to_string();
+  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader()).to_string();
   let obj_3_0 = ClassSymbol::new(tok_1_0, __rule_rng__.to_token(_ctx_.get_reader()));
   slots.assign(
     0,
@@ -7238,10 +7217,10 @@ fn reducer_181<R: Reader + UTF8Reader, M>(
   let AstSlot(_, __tok_rng_4, _) = slots.take(3);
   let AstSlot(_, __tok_rng_5, _) = slots.take(4);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_5;
-  let tok_3_0 = __tok_rng_4.to_token(_ctx_.get_reader());
-  let tok_3_0 = tok_3_0.to_i32();
-  let tok_1_1 = __tok_rng_2.to_token(_ctx_.get_reader());
-  let tok_1_1 = tok_1_1.to_i32();
+  let tok_3_0 = __tok_rng_4;
+  let tok_3_0 = tok_3_0.parse::<i32>(_ctx_.get_str());
+  let tok_1_1 = __tok_rng_2;
+  let tok_1_1 = tok_1_1.parse::<i32>(_ctx_.get_str());
   let obj_6_0 = Range::new(tok_3_0, tok_1_1);
   slots.assign(0, AstSlot(ASTNode::Range(Box::new(obj_6_0)), __rule_rng__, TokenRange::default()));
 }
@@ -7254,8 +7233,8 @@ fn reducer_182<R: Reader + UTF8Reader, M>(
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
   let AstSlot(_, __tok_rng_3, _) = slots.take(2);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_3;
-  let tok_1_1 = __tok_rng_2.to_token(_ctx_.get_reader());
-  let tok_1_1 = tok_1_1.to_i32();
+  let tok_1_1 = __tok_rng_2;
+  let tok_1_1 = tok_1_1.parse::<i32>(_ctx_.get_str());
   let obj_4_0 = Range::new(0, tok_1_1);
   slots.assign(0, AstSlot(ASTNode::Range(Box::new(obj_4_0)), __rule_rng__, TokenRange::default()));
 }
@@ -7269,8 +7248,7 @@ fn reducer_183<R: Reader + UTF8Reader, M>(
   let AstSlot(_, __tok_rng_3, _) = slots.take(2);
   let AstSlot(_, __tok_rng_4, _) = slots.take(3);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_4;
-  let tok_2_0 = __tok_rng_3.to_token(_ctx_.get_reader());
-  let tok_2_0 = tok_2_0.to_string();
+  let tok_2_0 = __tok_rng_3.to_token(_ctx_.get_reader()).to_string();
   slots.assign(0, AstSlot(ASTNode::STRING(tok_2_0), __rule_rng__, TokenRange::default()));
 }
 
@@ -7808,8 +7786,7 @@ fn reducer_212<R: Reader + UTF8Reader, M>(
   let AstSlot(_, __tok_rng_3, _) = slots.take(2);
   let AstSlot(_, __tok_rng_4, _) = slots.take(3);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_4;
-  let tok_2_0 = __tok_rng_3.to_token(_ctx_.get_reader());
-  let tok_2_0 = tok_2_0.to_string();
+  let tok_2_0 = __tok_rng_3.to_token(_ctx_.get_reader()).to_string();
   slots.assign(0, AstSlot(ASTNode::STRING(tok_2_0), __rule_rng__, TokenRange::default()));
 }
 
@@ -8012,12 +7989,12 @@ fn reducer_228<R: Reader + UTF8Reader, M>(
   slots.take(6);
   let AstSlot(_, __tok_rng_8, _) = slots.take(7);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_8;
-  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader());
-  let tok_1_0 = tok_1_0.to_i32();
-  let tok_4_1 = __tok_rng_5.to_token(_ctx_.get_reader());
-  let tok_4_1 = tok_4_1.to_i32();
-  let tok_7_2 = __tok_rng_8.to_token(_ctx_.get_reader());
-  let tok_7_2 = tok_7_2.to_i32();
+  let tok_1_0 = __tok_rng_2;
+  let tok_1_0 = tok_1_0.parse::<i32>(_ctx_.get_str());
+  let tok_4_1 = __tok_rng_5;
+  let tok_4_1 = tok_4_1.parse::<i32>(_ctx_.get_str());
+  let tok_7_2 = __tok_rng_8;
+  let tok_7_2 = tok_7_2.parse::<i32>(_ctx_.get_str());
   let obj_9_0 = Reduce::new(tok_1_0, tok_4_1, tok_7_2);
   slots.assign(0, AstSlot(ASTNode::Reduce(Box::new(obj_9_0)), __rule_rng__, TokenRange::default()));
 }
@@ -8033,12 +8010,12 @@ fn reducer_229<R: Reader + UTF8Reader, M>(
   slots.take(4);
   let AstSlot(_, __tok_rng_6, _) = slots.take(5);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_6;
-  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader());
-  let tok_1_0 = tok_1_0.to_i32();
-  let tok_2_1 = __tok_rng_3.to_token(_ctx_.get_reader());
-  let tok_2_1 = tok_2_1.to_i32();
-  let tok_5_2 = __tok_rng_6.to_token(_ctx_.get_reader());
-  let tok_5_2 = tok_5_2.to_i32();
+  let tok_1_0 = __tok_rng_2;
+  let tok_1_0 = tok_1_0.parse::<i32>(_ctx_.get_str());
+  let tok_2_1 = __tok_rng_3;
+  let tok_2_1 = tok_2_1.parse::<i32>(_ctx_.get_str());
+  let tok_5_2 = __tok_rng_6;
+  let tok_5_2 = tok_5_2.parse::<i32>(_ctx_.get_str());
   let obj_7_0 = Reduce::new(tok_1_0, tok_2_1, tok_5_2);
   slots.assign(0, AstSlot(ASTNode::Reduce(Box::new(obj_7_0)), __rule_rng__, TokenRange::default()));
 }
@@ -8054,12 +8031,12 @@ fn reducer_230<R: Reader + UTF8Reader, M>(
   let AstSlot(_, __tok_rng_5, _) = slots.take(4);
   let AstSlot(_, __tok_rng_6, _) = slots.take(5);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_6;
-  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader());
-  let tok_1_0 = tok_1_0.to_i32();
-  let tok_4_1 = __tok_rng_5.to_token(_ctx_.get_reader());
-  let tok_4_1 = tok_4_1.to_i32();
-  let tok_5_2 = __tok_rng_6.to_token(_ctx_.get_reader());
-  let tok_5_2 = tok_5_2.to_i32();
+  let tok_1_0 = __tok_rng_2;
+  let tok_1_0 = tok_1_0.parse::<i32>(_ctx_.get_str());
+  let tok_4_1 = __tok_rng_5;
+  let tok_4_1 = tok_4_1.parse::<i32>(_ctx_.get_str());
+  let tok_5_2 = __tok_rng_6;
+  let tok_5_2 = tok_5_2.parse::<i32>(_ctx_.get_str());
   let obj_7_0 = Reduce::new(tok_1_0, tok_4_1, tok_5_2);
   slots.assign(0, AstSlot(ASTNode::Reduce(Box::new(obj_7_0)), __rule_rng__, TokenRange::default()));
 }
@@ -8073,12 +8050,12 @@ fn reducer_231<R: Reader + UTF8Reader, M>(
   let AstSlot(_, __tok_rng_3, _) = slots.take(2);
   let AstSlot(_, __tok_rng_4, _) = slots.take(3);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_4;
-  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader());
-  let tok_1_0 = tok_1_0.to_i32();
-  let tok_2_1 = __tok_rng_3.to_token(_ctx_.get_reader());
-  let tok_2_1 = tok_2_1.to_i32();
-  let tok_3_2 = __tok_rng_4.to_token(_ctx_.get_reader());
-  let tok_3_2 = tok_3_2.to_i32();
+  let tok_1_0 = __tok_rng_2;
+  let tok_1_0 = tok_1_0.parse::<i32>(_ctx_.get_str());
+  let tok_2_1 = __tok_rng_3;
+  let tok_2_1 = tok_2_1.parse::<i32>(_ctx_.get_str());
+  let tok_3_2 = __tok_rng_4;
+  let tok_3_2 = tok_3_2.parse::<i32>(_ctx_.get_str());
   let obj_5_0 = Reduce::new(tok_1_0, tok_2_1, tok_3_2);
   slots.assign(0, AstSlot(ASTNode::Reduce(Box::new(obj_5_0)), __rule_rng__, TokenRange::default()));
 }
@@ -8258,8 +8235,7 @@ fn reducer_242<R: Reader + UTF8Reader, M>(
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
-  let tok_0_0 = __tok_rng_1.to_token(_ctx_.get_reader());
-  let tok_0_0 = tok_0_0.to_string();
+  let tok_0_0 = __tok_rng_1.to_token(_ctx_.get_reader()).to_string();
   let obj_2_0 = Production_Symbol::new(tok_0_0, __rule_rng__.to_token(_ctx_.get_reader()));
   slots.assign(
     0,
@@ -9028,8 +9004,7 @@ fn reducer_283<R: Reader + UTF8Reader, M>(
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_2;
-  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader());
-  let tok_1_0 = tok_1_0.to_string();
+  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader()).to_string();
   slots.assign(0, AstSlot(ASTNode::STRING(tok_1_0), __rule_rng__, TokenRange::default()));
 }
 
@@ -9040,8 +9015,7 @@ fn reducer_284<R: Reader + UTF8Reader, M>(
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_2;
-  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader());
-  let tok_1_0 = tok_1_0.to_string();
+  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader()).to_string();
   slots.assign(0, AstSlot(ASTNode::STRING(tok_1_0), __rule_rng__, TokenRange::default()));
 }
 
@@ -9052,8 +9026,7 @@ fn reducer_285<R: Reader + UTF8Reader, M>(
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_2;
-  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader());
-  let tok_1_0 = tok_1_0.to_string();
+  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader()).to_string();
   slots.assign(0, AstSlot(ASTNode::STRING(tok_1_0), __rule_rng__, TokenRange::default()));
 }
 
@@ -9064,8 +9037,7 @@ fn reducer_286<R: Reader + UTF8Reader, M>(
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_2;
-  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader());
-  let tok_1_0 = tok_1_0.to_string();
+  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader()).to_string();
   slots.assign(0, AstSlot(ASTNode::STRING(tok_1_0), __rule_rng__, TokenRange::default()));
 }
 
@@ -9076,8 +9048,7 @@ fn reducer_287<R: Reader + UTF8Reader, M>(
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_2;
-  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader());
-  let tok_1_0 = tok_1_0.to_string();
+  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader()).to_string();
   slots.assign(0, AstSlot(ASTNode::STRING(tok_1_0), __rule_rng__, TokenRange::default()));
 }
 
@@ -9203,8 +9174,8 @@ fn reducer_298<R: Reader + UTF8Reader, M>(
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_2;
-  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader());
-  let tok_1_0 = tok_1_0.to_u32();
+  let tok_1_0 = __tok_rng_2;
+  let tok_1_0 = tok_1_0.parse::<u32>(_ctx_.get_str());
   slots.assign(0, AstSlot(ASTNode::U32(tok_1_0), __rule_rng__, TokenRange::default()));
 }
 
@@ -9241,8 +9212,8 @@ fn reducer_301<R: Reader + UTF8Reader, M>(
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let AstSlot(_, __tok_rng_2, _) = slots.take(1);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_2;
-  let tok_1_0 = __tok_rng_2.to_token(_ctx_.get_reader());
-  let tok_1_0 = tok_1_0.to_u32();
+  let tok_1_0 = __tok_rng_2;
+  let tok_1_0 = tok_1_0.parse::<u32>(_ctx_.get_str());
   slots.assign(0, AstSlot(ASTNode::U32(tok_1_0), __rule_rng__, TokenRange::default()));
 }
 
@@ -9349,8 +9320,8 @@ fn reducer_312<R: Reader + UTF8Reader, M>(
 ) {
   let AstSlot(_, __tok_rng_1, _) = slots.take(0);
   let __rule_rng__ = __tok_rng_1;
-  let tok_0_0 = __tok_rng_1.to_token(_ctx_.get_reader());
-  let tok_0_0 = tok_0_0.to_f64();
+  let tok_0_0 = __tok_rng_1;
+  let tok_0_0 = tok_0_0.parse::<f64>(_ctx_.get_str());
   let obj_2_0 = AST_NUMBER::new(tok_0_0);
   slots.assign(
     0,
@@ -9766,10 +9737,8 @@ fn reducer_342<R: Reader + UTF8Reader, M>(
   slots.take(1);
   let AstSlot(_, __tok_rng_3, _) = slots.take(2);
   let __rule_rng__ = __tok_rng_1 + __tok_rng_3;
-  let tok_0_0 = __tok_rng_1.to_token(_ctx_.get_reader());
-  let tok_0_0 = tok_0_0.to_string();
-  let tok_2_1 = __tok_rng_3.to_token(_ctx_.get_reader());
-  let tok_2_1 = tok_2_1.to_string();
+  let tok_0_0 = __tok_rng_1.to_token(_ctx_.get_reader()).to_string();
+  let tok_2_1 = __tok_rng_3.to_token(_ctx_.get_reader()).to_string();
   let obj_4_0 =
     Production_Import_Symbol::new(tok_0_0, tok_2_1, __rule_rng__.to_token(_ctx_.get_reader()));
   slots.assign(

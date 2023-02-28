@@ -455,3 +455,29 @@ fn eof_symbols_should_not_contribute_anything_to_ast() -> SherpaResult<()> {
 
   SherpaResult::Ok(())
 }
+
+#[test]
+fn convert_str_to_numeric() -> SherpaResult<()> {
+  let mut j = Journal::new(None);
+  GrammarStore::from_str(
+    &mut j,
+    "
+    <> A > \"1234\" :ast { t_R, tok } 
+    
+    <> B > \"1234\" :ast str($1)
+
+    <> C > c:id(+)
+    ",
+  );
+  assert!(!j.debug_error_report(), "Should not have grammar errors");
+
+  let store = AScriptStore::new(&mut j)?;
+
+  let u = create_rust_writer_utils(&store);
+  let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
+  let writer = write_rust_ast(w)?;
+
+  println!("{}", String::from_utf8(writer.into_writer().into_output())?);
+
+  SherpaResult::Ok(())
+}
