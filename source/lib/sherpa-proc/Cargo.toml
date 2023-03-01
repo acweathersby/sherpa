@@ -8,6 +8,6 @@ proc-macro = true
 path = "./lib.rs"
 
 [dependencies]
-sherpa_core = { path = "../sherpa-core" }
+sherpa_core = { path = "../sherpa-core", features = ["llvm"]  }
 sherpa_runtime = { path = "../sherpa-rust-rt" }
 

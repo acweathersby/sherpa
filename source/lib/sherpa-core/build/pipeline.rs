@@ -20,7 +20,6 @@ use super::{
   ascript::build_ascript_types_and_functions,
   bytecode::build_bytecode_parser,
   disassembly::build_bytecode_disassembly,
-  llvm::{build_llvm_parser, build_llvm_parser_interface},
   rust_preamble::build_rust_preamble,
 };
 
@@ -416,7 +415,7 @@ pub fn compile_bytecode_parser(grammar_source_path: &PathBuf, config: Config) ->
     _ => false,
   }
 }
-
+#[cfg(feature = "llvm")]
 /// Convenience function for building a llvm machine code parser. Use this in
 /// build scripts to output a parser source file to `{OUT_DIR}/{grammar_name}.rs`.
 pub fn compile_llvm_parser(grammar_source_path: &PathBuf, config: Config) -> bool {
@@ -432,8 +431,8 @@ pub fn compile_llvm_parser(grammar_source_path: &PathBuf, config: Config) -> boo
     .set_source_file_name("%.rs")
     .add_task(build_rust_preamble())
     .add_task(build_bytecode_disassembly())
-    .add_task(build_llvm_parser(None, true, true))
-    .add_task(build_llvm_parser_interface());
+    .add_task(super::llvm::build_llvm_parser(None, true, true))
+    .add_task(super::llvm::build_llvm_parser_interface());
 
   if config.enable_ascript {
     pipeline.add_task(build_ascript_types_and_functions(SourceType::Rust));

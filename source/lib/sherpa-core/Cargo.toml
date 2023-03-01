@@ -8,11 +8,11 @@ build="./build_link_data.rs"
 [lib]
 path = "./lib.rs"
 
-
-
-
 [dependencies]
-inkwell = { git = "https://github.com/TheDan64/inkwell", rev="3c5d7706861aac0750b4f0c98d6fcf8a91a2ca0a", features = ["llvm14-0"]}
+inkwell = { git = "https://github.com/TheDan64/inkwell", rev="3c5d7706861aac0750b4f0c98d6fcf8a91a2ca0a", features = ["llvm14-0"], optional=true}
 sherpa_runtime = {path = "../sherpa-rust-rt"}
 
 
+[features]
+# Enables the use of the LLVM build pipeline
+llvm = ["dep:inkwell"]

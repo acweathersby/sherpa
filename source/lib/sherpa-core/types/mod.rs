@@ -4,6 +4,7 @@ mod error;
 mod grammar;
 pub(crate) mod graph;
 pub(crate) mod item;
+#[cfg(feature = "llvm")]
 mod jit_parser;
 mod parse_state;
 mod production;
@@ -13,6 +14,7 @@ mod symbol;
 pub use error::*;
 pub use grammar::*;
 pub use item::*;
+#[cfg(feature = "llvm")]
 pub(crate) use jit_parser::*;
 pub use parse_state::*;
 pub use production::*;

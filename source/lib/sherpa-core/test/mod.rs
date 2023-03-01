@@ -4,7 +4,7 @@ mod top_level;
 mod bootstrap;
 
 mod grammar;
-
+#[cfg(feature = "llvm")]
 mod llvm;
 
 mod bytecode;

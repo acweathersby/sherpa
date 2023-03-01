@@ -7,7 +7,7 @@ use crate::{
   bytecode::compile_bytecode,
   parser::{compile_parse_states, optimize_parse_states},
   test::{test_reader::TestUTF8StringReader, utils::TestInput},
-  types::{GrammarStore, JitParser, SherpaResult},
+  types::{GrammarStore, SherpaResult},
   util::get_num_of_available_threads,
 };
 use std::path::PathBuf;
@@ -653,7 +653,7 @@ EXPORT B
     },
   )
 }
-
+#[cfg(feature = "llvm")]
 #[test]
 pub fn tracks_line_numbers() -> SherpaResult<()> {
   let mut j = Journal::new(None);
@@ -670,7 +670,7 @@ pub fn tracks_line_numbers() -> SherpaResult<()> {
   let states = compile_parse_states(&mut j, get_num_of_available_threads())?;
   let opt_states = optimize_parse_states(&mut j, states);
   let ctx = inkwell::context::Context::create();
-  let mut parser = JitParser::<_, u32, u32>::new(&mut j, opt_states, &ctx)?;
+  let mut parser = crate::types::JitParser::<_, u32, u32>::new(&mut j, opt_states, &ctx)?;
   let mut r = TestUTF8StringReader::new("A\n  A\n  A A\n    A\n   \n   \n  A");
   parser.set_reader(&mut r);
 

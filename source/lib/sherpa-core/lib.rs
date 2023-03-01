@@ -59,19 +59,17 @@ pub mod errors {
 /// Create a build pipeline
 pub mod pipeline {
 
-  pub use crate::build::pipeline::{
-    compile_bytecode_parser,
-    compile_llvm_parser,
-    BuildPipeline,
-    SourceType,
-  };
+  #[cfg(feature = "llvm")]
+  pub use crate::build::pipeline::{compile_bytecode_parser, compile_llvm_parser};
+  pub use crate::build::pipeline::{BuildPipeline, SourceType};
   /// Tasks that can be added to a build pipeline
   pub mod tasks {
+    #[cfg(feature = "llvm")]
+    pub use crate::build::llvm::{build_llvm_parser, build_llvm_parser_interface};
     pub use crate::build::{
       ascript::build_ascript_types_and_functions,
       bytecode::build_bytecode_parser,
       disassembly::build_bytecode_disassembly,
-      llvm::{build_llvm_parser, build_llvm_parser_interface},
       rust_preamble::build_rust_preamble,
     };
   }

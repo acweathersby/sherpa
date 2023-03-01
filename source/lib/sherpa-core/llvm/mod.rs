@@ -1,3 +1,4 @@
+#![cfg(feature = "llvm")]
 pub mod ascript_functions;
 //pub mod parser_functions;
 pub mod parse_functions;

@@ -14,7 +14,6 @@ use crate::{
   writer::code_writer::CodeWriter,
   SherpaResult,
 };
-use inkwell::context::Context;
 use sherpa_runtime::bytecode_parser::{ByteCodeParser, DebugEvent};
 use std::{path::PathBuf, str::FromStr, sync::Arc};
 
@@ -260,8 +259,9 @@ Cannot create a GrammarStore without one of these values present. "
       resolve_shifts_and_skips(result, should_succeed, input, &g, "BYTECODE")?;
     }
   }
-
+  #[cfg(feature = "llvm")]
   if build_llvm_parser {
+    use inkwell::context::Context;
     let ctx = Context::create();
     let mut jit_parser = JitParser::<_, u32, u32>::new(&mut j, states, &ctx)?;
     if assert_clean_reports {
