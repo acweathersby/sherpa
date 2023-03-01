@@ -2,7 +2,7 @@ use std::{ops::Add, str::FromStr};
 
 use super::{ByteReader, Token};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Range {
   /// The line number at which the range starts
   pub start_line:   u32,
@@ -67,12 +67,7 @@ impl Add for TokenRange {
 
 impl Into<Range> for TokenRange {
   fn into(self) -> Range {
-    Range {
-      end_column:   self.off - self.line_off + 1 + self.len,
-      start_column: self.off - self.line_off + 1,
-      end_line:     self.line_num + 1,
-      start_line:   self.line_num + 1,
-    }
+    self.get_range()
   }
 }
 
@@ -150,8 +145,8 @@ impl TokenRange {
   #[inline(always)]
   pub fn get_range(&self) -> Range {
     Range {
-      end_column:   self.off - self.line_off + 1 + self.len,
-      start_column: self.off - self.line_off + 1,
+      end_column:   (self.off - self.line_off).max(1) + self.len,
+      start_column: (self.off - self.line_off).max(1),
       end_line:     self.line_num + 1,
       start_line:   self.line_num + 1,
     }

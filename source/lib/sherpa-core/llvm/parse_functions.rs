@@ -304,11 +304,11 @@ fn create_line_increment<'a>(
   b.position_at_end(block);
 
   let beg = b.build_ptr_to_int(CTX::beg_ptr.load(b, p)?.into_pointer_value(), i64, "");
-  let tail = b.build_ptr_to_int(CTX::scan_ptr.load(b, p)?.into_pointer_value(), i64, "");
-  let val = b.build_int_sub(tail, beg, "");
+  let scan = b.build_ptr_to_int(CTX::scan_ptr.load(b, p)?.into_pointer_value(), i64, "");
+  let val = b.build_int_sub(scan, beg, "");
   let val = b.build_int_truncate(val, i32, "");
   CTX::end_line_off.store(b, p, val)?;
-  CTX::line_incr.store(b, p, increment_amount)?;
+  CTX::line_num_incr.store(b, p, increment_amount)?;
 
   b.build_unconditional_branch(i.2);
   (i.2) = block;
@@ -446,6 +446,7 @@ pub(crate) fn compile_branchless_instructions<'a>(
 
       ASTNode::PeekReset(_) => {
         peek_reset(m, p_ctx)?;
+        transfer_start_line_to_end_line(m, p_ctx)?;
       }
 
       ASTNode::PeekToken(_) => {
@@ -461,6 +462,8 @@ pub(crate) fn compile_branchless_instructions<'a>(
 
       ASTNode::SkipToken(_) => {
         skip_token(m, p_ctx, false)?;
+        transfer_chkp_line_to_start_line(m, p_ctx)?;
+        transfer_start_line_to_end_line(m, p_ctx)?;
         construct_jump_to_table_start(m, start_block);
         resolved_end = true;
         break;
@@ -472,16 +475,19 @@ pub(crate) fn compile_branchless_instructions<'a>(
           state_fun = s;
           p_ctx = p;
         }
+        transfer_chkp_line_to_start_line(m, p_ctx)?;
+        transfer_start_line_to_end_line(m, p_ctx)?;
       }
 
       ASTNode::ScanShift(..) => {
         incr_scan_ptr_by_sym_len(m, p_ctx)?;
-        update_end_line_num(m, p_ctx)?;
+        update_end_line_data(m, p_ctx)?;
       }
 
       ASTNode::PeekTokenScanless(_) => {
         incr_scan_ptr_by_sym_len(m, p_ctx)?;
         construct_assign_token_id(m, p_ctx, 0)?;
+
         peek_token(m, p_ctx)?;
       }
 
@@ -489,11 +495,9 @@ pub(crate) fn compile_branchless_instructions<'a>(
         incr_scan_ptr_by_sym_len(m, p_ctx)?;
         construct_assign_token_id(m, p_ctx, 0)?;
 
-        //update_end_line_num(m, p_ctx)?;
-        //transfer_end_line_to_chkp_line(m, p_ctx)?;
-
         skip_token(m, p_ctx, true)?;
         construct_jump_to_table_start(m, start_block);
+
         resolved_end = true;
         break;
       }
@@ -502,10 +506,12 @@ pub(crate) fn compile_branchless_instructions<'a>(
         incr_scan_ptr_by_sym_len(m, p_ctx)?;
         construct_assign_token_id(m, p_ctx, 0)?;
 
-        update_end_line_num(m, p_ctx)?;
+        update_end_line_data(m, p_ctx)?;
         transfer_end_line_to_chkp_line(m, p_ctx)?;
+        transfer_end_line_to_start_line(m, p_ctx)?;
 
         skip_token(m, p_ctx, false)?;
+
         construct_jump_to_table_start(m, start_block);
         resolved_end = true;
         break;
@@ -515,7 +521,7 @@ pub(crate) fn compile_branchless_instructions<'a>(
         incr_scan_ptr_by_sym_len(m, p_ctx)?;
         construct_assign_token_id(m, p_ctx, 0)?;
 
-        update_end_line_num(m, p_ctx)?;
+        update_end_line_data(m, p_ctx)?;
         transfer_end_line_to_chkp_line(m, p_ctx)?;
 
         if let Some((s, p)) = construct_token_shift(j, m, p_ctx)? {
@@ -523,6 +529,7 @@ pub(crate) fn compile_branchless_instructions<'a>(
           state_fun = s;
           p_ctx = p;
         }
+        transfer_chkp_line_to_start_line(m, p_ctx)?;
       }
       _ => {}
     }
@@ -683,13 +690,13 @@ fn incr_scan_ptr_by_sym_len<'a>(
 }
 
 /// Update the `end_line*`  values by incrementing by the `line_incr` and `l`
-fn update_end_line_num<'a>(
+fn update_end_line_data<'a>(
   LLVMParserModule { b, i32, i8, .. }: &'a LLVMParserModule,
   p_ctx: PointerValue<'a>,
 ) -> SherpaResult<()> {
   // Increment line number;
-  let val = CTX::line_incr.load(b, p_ctx)?.into_int_value();
-  CTX::line_incr.store(b, p_ctx, i8.const_zero())?;
+  let val = CTX::line_num_incr.load(b, p_ctx)?.into_int_value();
+  CTX::line_num_incr.store(b, p_ctx, i8.const_zero())?;
 
   let new_val = b.build_int_add(
     CTX::end_line_num.load(b, p_ctx)?.into_int_value(),
@@ -752,9 +759,48 @@ pub(crate) fn reduce<'a>(
   SherpaResult::Ok(f)
 }
 
+/// Transfers the `end_line*` values to the `chkp_line*` variables.
+fn transfer_end_line_to_chkp_line(
+  LLVMParserModule { b, .. }: &LLVMParserModule,
+  p_ctx: PointerValue,
+) -> SherpaResult<()> {
+  CTX::chkp_line_num.store(b, p_ctx, CTX::end_line_num.load(b, p_ctx)?.into_int_value())?;
+  CTX::chkp_line_off.store(b, p_ctx, CTX::end_line_off.load(b, p_ctx)?.into_int_value())?;
+  SherpaResult::Ok(())
+}
+
+pub(crate) fn transfer_chkp_line_to_start_line<'a>(
+  LLVMParserModule { b, .. }: &'a LLVMParserModule,
+  p_ctx: PointerValue,
+) -> SherpaResult<()> {
+  CTX::start_line_num.store(b, p_ctx, CTX::chkp_line_num.load(b, p_ctx)?.into_int_value())?;
+  CTX::start_line_off.store(b, p_ctx, CTX::chkp_line_off.load(b, p_ctx)?.into_int_value())?;
+  SherpaResult::Ok(())
+}
+
+/// Assigns start line trackers to  tail trackers
+pub(crate) fn transfer_start_line_to_end_line<'a>(
+  LLVMParserModule { b, .. }: &'a LLVMParserModule,
+  p_ctx: PointerValue,
+) -> SherpaResult<()> {
+  CTX::end_line_num.store(b, p_ctx, CTX::start_line_num.load(b, p_ctx)?.into_int_value())?;
+  CTX::end_line_off.store(b, p_ctx, CTX::start_line_off.load(b, p_ctx)?.into_int_value())?;
+  SherpaResult::Ok(())
+}
+
+/// Assigns start line trackers to  tail trackers
+pub(crate) fn transfer_end_line_to_start_line<'a>(
+  LLVMParserModule { b, .. }: &'a LLVMParserModule,
+  p_ctx: PointerValue,
+) -> SherpaResult<()> {
+  CTX::start_line_num.store(b, p_ctx, CTX::end_line_num.load(b, p_ctx)?.into_int_value())?;
+  CTX::start_line_off.store(b, p_ctx, CTX::end_line_off.load(b, p_ctx)?.into_int_value())?;
+  SherpaResult::Ok(())
+}
+
 /// Resets peek side-effects by assigning `base_ptr` to `head_ptr` and `scan_ptr`. Also
 pub(crate) fn peek_reset<'a>(
-  LLVMParserModule { b, i32, iptr, .. }: &'a LLVMParserModule,
+  LLVMParserModule { b, i32, i8, iptr, .. }: &'a LLVMParserModule,
   p_ctx: PointerValue,
 ) -> SherpaResult<()> {
   const __HINT__: Opcode = Opcode::PeekReset;
@@ -764,6 +810,7 @@ pub(crate) fn peek_reset<'a>(
   CTX::tok_id.store(b, p_ctx, i32.const_zero());
   CTX::tok_len.store(b, p_ctx, iptr.const_zero());
   CTX::sym_len.store(b, p_ctx, i32.const_zero());
+  CTX::line_num_incr.store(b, p_ctx, i8.const_zero());
   SherpaResult::Ok(())
 }
 /// Assigns the value head_ptr + tok_len to head_ptr and scan_ptr.
@@ -807,8 +854,6 @@ pub(crate) fn skip_token<'a>(
 
   if !is_peek {
     CTX::base_ptr.store(b, p_ctx, offset);
-    CTX::start_line_num.store(b, p_ctx, CTX::chkp_line_num.load(b, p_ctx)?.into_int_value())?;
-    CTX::start_line_off.store(b, p_ctx, CTX::chkp_line_off.load(b, p_ctx)?.into_int_value())?;
   }
   SherpaResult::Ok(())
 }
@@ -851,9 +896,6 @@ pub(crate) fn construct_token_shift<'a>(
 
   let p_ctx = fun.get_first_param()?.into_pointer_value();
 
-  CTX::start_line_num.store(b, p_ctx, CTX::chkp_line_num.load(b, p_ctx)?.into_int_value())?;
-  CTX::start_line_off.store(b, p_ctx, CTX::chkp_line_off.load(b, p_ctx)?.into_int_value())?;
-
   let offset = get_offset_to_end_of_token(m, p_ctx)?;
   CTX::scan_ptr.store(b, p_ctx, offset);
   CTX::anchor_ptr.store(b, p_ctx, offset);
@@ -886,16 +928,6 @@ fn construct_assign_token_id(
   SherpaResult::Ok(())
 }
 
-/// Transfers the `end_line*` values to the `chkp_line*` variables.
-fn transfer_end_line_to_chkp_line(
-  LLVMParserModule { b, .. }: &LLVMParserModule,
-  p_ctx: PointerValue,
-) -> SherpaResult<()> {
-  CTX::chkp_line_num.store(b, p_ctx, CTX::end_line_num.load(b, p_ctx)?.into_int_value())?;
-  CTX::chkp_line_off.store(b, p_ctx, CTX::end_line_off.load(b, p_ctx)?.into_int_value())?;
-  SherpaResult::Ok(())
-}
-
 /// Builds a tail call return to the `dispatch` function.
 pub(crate) fn pass<'a>(
   LLVMParserModule { b, fun, i32, .. }: &LLVMParserModule,
@@ -920,7 +952,8 @@ pub(crate) fn fail<'a>(
   state_fun: FunctionValue<'a>,
 ) -> SherpaResult<()> {
   let LLVMParserModule { b, fun, i32, .. } = m;
-  peek_reset(m, p_ctx);
+  peek_reset(m, p_ctx)?;
+  transfer_start_line_to_end_line(m, p_ctx)?;
   b.build_store(CTX::state.get_ptr(b, p_ctx)?, i32.const_int(FAIL_STATE_FLAG_LLVM as u64, false));
   build_tail_call_with_return(b, state_fun, fun.dispatch_unwind)
 }

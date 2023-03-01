@@ -216,7 +216,7 @@ pub enum CTX_AGGREGATE_INDICES {
   /// ```ignore
   /// pub line_incr:       u8,
   /// ```
-  line_incr,
+  line_num_incr,
   /// ```ignore
   /// pub is_active:       bool,
   /// ```

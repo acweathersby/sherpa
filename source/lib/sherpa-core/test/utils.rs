@@ -263,7 +263,7 @@ Cannot create a GrammarStore without one of these values present. "
 
   if build_llvm_parser {
     let ctx = Context::create();
-    let mut jit_parser = JitParser::<TestUTF8StringReader, u32, u32>::new(&mut j, states, &ctx)?;
+    let mut jit_parser = JitParser::<_, u32, u32>::new(&mut j, states, &ctx)?;
     if assert_clean_reports {
       j.flush_reports();
       assert!(!j.debug_error_report());

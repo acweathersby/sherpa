@@ -1,11 +1,14 @@
+use sherpa_runtime::types::{ParseAction, SherpaParser};
+
 use super::utils::{console_debugger, test_runner, TestConfig};
 #[cfg(test)]
 use crate::journal::Journal;
 use crate::{
   bytecode::compile_bytecode,
   parser::{compile_parse_states, optimize_parse_states},
-  test::utils::TestInput,
-  types::{GrammarStore, SherpaResult},
+  test::{test_reader::TestUTF8StringReader, utils::TestInput},
+  types::{GrammarStore, JitParser, SherpaResult},
+  util::get_num_of_available_threads,
 };
 use std::path::PathBuf;
 
@@ -649,4 +652,49 @@ EXPORT B
       ..Default::default()
     },
   )
+}
+
+#[test]
+pub fn tracks_line_numbers() -> SherpaResult<()> {
+  let mut j = Journal::new(None);
+  GrammarStore::from_str(
+    &mut j,
+    "
+    IGNORE { c:sp c:nl }
+
+    <> A > \"A\"(+)
+    ",
+  );
+  assert!(!j.debug_error_report(), "Should not have grammar errors");
+
+  let states = compile_parse_states(&mut j, get_num_of_available_threads())?;
+  let opt_states = optimize_parse_states(&mut j, states);
+  let ctx = inkwell::context::Context::create();
+  let mut parser = JitParser::<_, u32, u32>::new(&mut j, opt_states, &ctx)?;
+  let mut r = TestUTF8StringReader::new("A\n  A\n  A A\n    A\n   \n   \n  A");
+  parser.set_reader(&mut r);
+
+  parser.init_parser(0);
+
+  let mut tok_count: usize = 0;
+
+  let line_counts = [(0, 0), (1, 1), (2, 5), (2, 5), (3, 11), (6, 25)];
+  loop {
+    match parser.get_next_action(&mut None) {
+      ParseAction::Shift { token_line_count, token_line_offset, .. } => {
+        dbg!((token_line_count, token_line_offset));
+        assert_eq!((token_line_count, token_line_offset), line_counts[tok_count]);
+        tok_count += 1;
+      }
+      ParseAction::Accept { .. } => {
+        break;
+      }
+      ParseAction::Error { .. } => panic!("Should not have failed to parse"),
+      _ => {}
+    }
+  }
+
+  assert_eq!(tok_count, line_counts.len());
+
+  SherpaResult::Ok(())
 }

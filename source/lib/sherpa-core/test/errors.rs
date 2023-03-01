@@ -18,11 +18,13 @@ fn missing_import_production() {
 
       assert!(matches!(error, SherpaError::SourceError { .. }));
 
-      let SherpaError::SourceError { id, .. } = error else {
+      let SherpaError::SourceError { id, loc, .. } = error else {
         panic!("Expected a SourceError");
       };
 
       assert_eq!(*id, "nonexistent-import-production");
+      assert_eq!(loc.get_range().start_line, 3);
+      assert_eq!(loc.get_range().start_column, 15);
 
       true
     } else {
@@ -48,11 +50,13 @@ fn invalid_dependency() {
 
     assert!(matches!(error, SherpaError::SourceError { .. }));
 
-    let SherpaError::SourceError { id, .. } = error else {
+    let SherpaError::SourceError { id, loc, .. } = error else {
         panic!("Expected a SourceError");
     };
 
     assert_eq!(*id, "invalid-import-source");
+    assert_eq!(loc.get_range().start_line, 1);
+    assert_eq!(loc.get_range().start_column, 1);
 
     true
   }));

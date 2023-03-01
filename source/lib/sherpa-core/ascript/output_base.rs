@@ -756,25 +756,6 @@ impl SlotRef {
     Self::range(utils, i, self.type_slot)
   }
 
-  pub(crate) fn to_string(self, utils: &AscriptWriterUtils) -> Self {
-    let i = match self.get_root_slot_index() {
-      RefIndex::Obj(i) | RefIndex::Tok(i) => i,
-    };
-
-    SlotRef {
-      slot_type: RefIndex::Tok(i),
-      type_slot: self.type_slot,
-      init_expression: (utils.create_token)(
-        (utils.get_token_name)(i + 1),
-        TokenCreationType::String,
-      ),
-      ast_type: AScriptTypeVal::String(None),
-      predecessors: None,
-      post_init_statements: None,
-      is_mutable: false,
-    }
-  }
-
   pub(crate) fn to_token(self, utils: &AscriptWriterUtils) -> Self {
     let i = match self.get_root_slot_index() {
       RefIndex::Obj(i) | RefIndex::Tok(i) => i,

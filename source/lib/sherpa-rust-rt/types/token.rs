@@ -282,7 +282,7 @@ impl Token {
   ///
   /// let path = PathBuf::from_str("/my/temp/file.txt").unwrap();
   ///
-  /// assert_eq!(tok.path_ref(&path), "/my/temp/file.txt:10:10")
+  /// assert_eq!(tok.path_ref(&path), "/my/temp/file.txt:10:9")
   /// ```
   #[inline(always)]
   pub fn path_ref(&self, path: &PathBuf) -> String {
@@ -295,6 +295,11 @@ impl Token {
   #[inline(always)]
   pub fn get_range(&self) -> Range {
     self.inner.into()
+  }
+
+  #[inline(always)]
+  pub fn get_tok_range(&self) -> TokenRange {
+    self.inner
   }
 
   #[inline(always)]
