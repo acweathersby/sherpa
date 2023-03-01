@@ -1,8 +1,10 @@
 # Build artifacts
 /target
 
-# Binary artifacts
-/bin
+# Binary directories
+**/bin
+**/target
+**/pkg
 
 # Debugging artifacts
 /sandbox
@@ -10,4 +12,5 @@
 # Package Manager Directories
 **/node_modules
 
-*.sherpa*
+# Temporary notes
+*notes.md
