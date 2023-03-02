@@ -6,6 +6,7 @@ members = [
     "source/lib/sherpa-proc",
     "source/lib/sherpa-core",
     "source/lib/sherpa-rust-rt",
+    "source/lib/sherpa-wasm",
     "test/json_parser",
     "test/e2e/proc_macro"
 ]
