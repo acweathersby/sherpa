@@ -12,5 +12,8 @@
 # Package Manager Directories
 **/node_modules
 
+# Hogo theme directories
+**/themes
+
 # Temporary notes
 *notes.md
