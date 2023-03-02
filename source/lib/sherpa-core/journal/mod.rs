@@ -11,8 +11,10 @@ use std::{
   collections::{BTreeSet, HashMap},
   fmt::{Debug, Display},
   sync::{Arc, LockResult, RwLock},
-  time::Instant,
 };
+
+#[cfg(not(feature = "wasm-target"))]
+use std::time::Instant;
 
 #[derive(Default, Debug)]
 struct ScratchPad {
@@ -40,6 +42,7 @@ pub struct Journal {
 
   report_sink: Report,
 
+  #[cfg(not(feature = "wasm-target"))]
   create_time: Instant,
 }
 
@@ -54,6 +57,7 @@ impl Journal {
       occluding_symbols: None,
       active_report: None,
       report_sink: Report::create_sink(),
+      #[cfg(not(feature = "wasm-target"))]
       create_time: Instant::now(),
     }
   }
@@ -69,6 +73,7 @@ impl Journal {
       occluding_symbols: self.occluding_symbols.clone(),
       active_report: None,
       report_sink: Report::create_sink(),
+      #[cfg(not(feature = "wasm-target"))]
       create_time: Instant::now(),
     }
   }
@@ -190,18 +195,29 @@ impl Journal {
   /// true if any reports were printed;
   pub fn debug_print_reports(&self, discriminant: ReportType) -> bool {
     let mut printed = false;
-    let printed_mut = &mut printed;
-    self.get_reports(discriminant, move |report| {
-      (*printed_mut) |= true;
-      println!(
-        "\n{:=<80}\nReport [{}] at {:?}:\n{}\n{:=<80}",
-        "",
-        report.name,
-        (report.create_time.duration_since(self.create_time)),
-        report.debug_string(),
-        ""
-      )
-    });
+    #[cfg(not(feature = "wasm-target"))]
+    {
+      let printed_mut = &mut printed;
+      self.get_reports(discriminant, move |report| {
+        (*printed_mut) |= true;
+        println!(
+          "\n{:=<80}\nReport [{}] at {:?}:\n{}\n{:=<80}",
+          "",
+          report.name,
+          (report.create_time.duration_since(self.create_time)),
+          report.debug_string(),
+          ""
+        )
+      });
+    }
+    #[cfg(feature = "wasm-target")]
+    {
+      let printed_mut = &mut printed;
+      self.get_reports(discriminant, move |report| {
+        (*printed_mut) |= true;
+        println!("\n{:=<80}\nReport [{}] \n{}\n{:=<80}", "", report.name, report.debug_string(), "")
+      })
+    }
 
     printed
   }
@@ -222,6 +238,24 @@ impl Journal {
       None
     } else {
       Some(faulty_reports)
+    }
+  }
+
+  /// Prints all errors that have been generated to console.
+  /// Returns `true` if any errors were reported.
+  pub fn string_error_report(&self) -> Option<String> {
+    let mut strings = vec![];
+
+    self.get_reports(ReportType::Any, |report| {
+      if let Some(string) = report.debug_error_string() {
+        strings.push(string)
+      }
+    });
+
+    if strings.is_empty() {
+      None
+    } else {
+      Some(strings.join("\n"))
     }
   }
 
@@ -382,12 +416,14 @@ impl Drop for Journal {
   }
 }
 
+#[cfg(not(feature = "wasm-target"))]
 #[derive(Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) struct Timing {
   start: Instant,
   end:   Option<Instant>,
 }
 
+#[cfg(not(feature = "wasm-target"))]
 impl Timing {
   #[inline(always)]
   pub fn new() -> Self {
@@ -399,6 +435,7 @@ impl Timing {
   }
 }
 
+#[cfg(not(feature = "wasm-target"))]
 impl Debug for Timing {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     if let Some(end) = self.end {
@@ -409,6 +446,7 @@ impl Debug for Timing {
   }
 }
 
+#[cfg(not(feature = "wasm-target"))]
 impl Display for Timing {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     Debug::fmt(&self, f)

@@ -58,7 +58,7 @@ fn construct_recursive_ascent() -> SherpaResult<Journal> {
       ),
       bytecode_parse: true,
       llvm_parse: true,
-      //debugger_handler: Some(&|g| console_debugger(g, Default::default())),
+      //  debugger_handler: Some(&|g| console_debugger(g, Default::default())),
       ..Default::default()
     },
   )
@@ -653,7 +653,7 @@ EXPORT B
     },
   )
 }
-#[cfg(feature = "llvm")]
+#[cfg(all(feature = "llvm", not(feature = "wasm-target")))]
 #[test]
 pub fn tracks_line_numbers() -> SherpaResult<()> {
   let mut j = Journal::new(None);
@@ -695,6 +695,94 @@ pub fn tracks_line_numbers() -> SherpaResult<()> {
   }
 
   assert_eq!(tok_count, line_counts.len());
+
+  SherpaResult::Ok(())
+}
+
+#[test]
+pub fn lalrpop() -> SherpaResult<()> {
+  test_runner(
+    &[(
+      "Top",
+      "
+use std::test::me;
+
+grammar;
+
+pub Term: i32 = {
+  <n:Num> => n,
+  \"(\" <t:Term> \")\" => t,
+};",
+      true,
+    )
+      .into()],
+    None,
+    TestConfig {
+      print_disassembly: true,
+      bytecode_parse: true,
+      grammar_path: Some(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+          .join("../../grammar/lalrpop/lalrpop.sg")
+          .canonicalize()
+          .unwrap(),
+      ),
+      debugger_handler: Some(&|g| {
+        console_debugger(g, super::utils::PrintConfig {
+          display_scanner_output: false,
+          display_input_data: false,
+          display_instruction: false,
+          display_state: false,
+          ..Default::default()
+        })
+      }),
+      ..Default::default()
+    },
+  )?;
+
+  SherpaResult::Ok(())
+}
+
+#[test]
+pub fn lr2() -> SherpaResult<()> {
+  test_runner(
+    &[(
+      "state",
+      r##"
+
+parser test: 
+  match {
+    (1|2) { 
+      match : BYTE (2|6) { pass }
+    }
+    { fail }
+}
+
+"##,
+      true,
+    )
+      .into()],
+    None,
+    TestConfig {
+      print_disassembly: true,
+      bytecode_parse: true,
+      grammar_path: Some(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+          .join("../../grammar/v2_0_0/ir.sg")
+          .canonicalize()
+          .unwrap(),
+      ),
+      debugger_handler: Some(&|g| {
+        console_debugger(g, super::utils::PrintConfig {
+          display_scanner_output: false,
+          display_input_data: false,
+          display_instruction: false,
+          display_state: false,
+          ..Default::default()
+        })
+      }),
+      ..Default::default()
+    },
+  )?;
 
   SherpaResult::Ok(())
 }

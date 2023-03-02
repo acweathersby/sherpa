@@ -2,6 +2,7 @@
 name = "sherpa_core"
 version = "1.0.0-beta1"
 edition = "2021"
+authors = ["Anthony Weathersby <acweathersby.codes@gmail.com>"]
 
 build="./build_link_data.rs"
 
@@ -14,5 +15,16 @@ sherpa_runtime = {path = "../sherpa-rust-rt"}
 
 
 [features]
+
 # Enables the use of the LLVM build pipeline
 llvm = ["dep:inkwell"]
+
+# Uses the binary parser instead of the bytecode parser. This parser needs
+# have been built for the current platform before it can be used.
+sherpa-binary-parser = []
+
+# Disable portions of the code base that incompatable with a wasm target
+wasm-target = []
+
+# Disables multi-threading code
+single-thread = []

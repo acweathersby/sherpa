@@ -47,6 +47,8 @@ pub fn optimize_parse_states(
 
   let mut non_scanner_states = BTreeSet::new();
 
+  // Join cyclic states.
+
   loop {
     // Find states with identical bodies
 
@@ -390,6 +392,19 @@ fn lower_allpass_branch_state(state: &mut Box<ParseState>, changes: &mut bool) {
     }) && state.instructions.iter().any(|s| s.get_type() == ASTNodeType::DEFAULT)
     {
       state.instructions = vec![ASTNode::Pass(Box::new(Pass::new()))];
+      *changes = true;
+    }
+  }
+}
+
+fn remove_default_shadows(state: &mut Box<ParseState>, changes: &mut bool) {
+  
+  if let SherpaResult::Ok(state) = &mut state.ast {
+    if matches!(state.instructions[0], ASTNode::DEFAULT(_)) && state.instructions.len() == 1 {
+      match state.instructions[0].clone() {
+        ASTNode::DEFAULT(box DEFAULT { instructions, .. }) => state.instructions = instructions,
+        _ => unreachable!("Expected only ASSERT and DEFAULT nodes in instruction vector."),
+      }
       *changes = true;
     }
   }

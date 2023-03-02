@@ -1,7 +1,4 @@
-use std::{
-  collections::{btree_map, BTreeMap, BTreeSet, HashSet},
-  thread,
-};
+use std::collections::{btree_map, BTreeMap, BTreeSet, HashSet};
 
 use crate::{
   grammar::{
@@ -228,85 +225,6 @@ fn compile_slice_of_states(
   }
 }
 
-/// Compiles IRStates from all production and scanner symbol sets within the grammar.
-pub fn compile_parse_states(
-  j: &mut Journal,
-  num_of_threads: usize,
-) -> SherpaResult<BTreeMap<String, Box<ParseState>>> {
-  let g = j.grammar()?;
-
-  let mut deduped_states = BTreeMap::new();
-  let productions_ids = g.productions.iter().map(|(id, p)| (*id, p.is_scanner)).collect::<Vec<_>>();
-
-  let work_chunks = productions_ids
-    .chunks((productions_ids.len() / (num_of_threads).max(1)).max(1))
-    .collect::<Vec<_>>();
-
-  let entry_state = create_entry_wrapper_states(j)?;
-  insert_states(j, entry_state.into_iter(), &mut deduped_states);
-
-  for states in thread::scope(|s| {
-    work_chunks
-      .into_iter()
-      .map(|productions| {
-        let mut j = j.transfer();
-        s.spawn(move || -> SherpaResult<_> {
-          let mut deduped_states = BTreeMap::new();
-          compile_slice_of_states(&mut j, &mut deduped_states, productions)?;
-          SherpaResult::Ok(deduped_states)
-        })
-      })
-      .collect::<Vec<_>>()
-      .into_iter()
-      .map(|s| match s.join() {
-        Result::Ok(result) => result,
-        Err(err) => panic!("Error encountered in thread]\n {:?}", err),
-      })
-      .collect::<Vec<_>>()
-  }) {
-    match states {
-      SherpaResult::Ok(states) => {
-        insert_states(j, states.into_values(), &mut deduped_states);
-      }
-      SherpaResult::Err(err) => {
-        // All captured errors in the compilation process are rolled
-        // into reports and a SherpaResult::None is returned in its place.
-        // Any other type of error is something due to unaccounted
-        // behavior (unwrapping a None option, etc), so we do a hard
-        // panic to report these incidences.
-        panic!("An unexpected error has occurred:\n{}", err);
-      }
-      _ => {
-        // Reports in the Journal contain the errors.
-        return SherpaResult::None;
-      }
-    }
-  }
-
-  let size = deduped_states.len();
-  let mut chunks = deduped_states.values_mut().collect::<Vec<_>>();
-  thread::scope(|s| {
-    chunks
-      .chunks_mut((size / (num_of_threads.max(1))).max(1))
-      .map(|chunk| {
-        s.spawn(|| {
-          for state in chunk {
-            match state.get_cached_ast() {
-              SherpaResult::Err(err) => {
-                eprintln!("\n{} {}", err, state.to_string())
-              }
-              _ => {}
-            }
-          }
-        })
-      })
-      .map(move |s| s.join().unwrap())
-      .for_each(drop);
-  });
-
-  SherpaResult::Ok(deduped_states)
-}
-
 fn create_entry_wrapper_states(j: &mut Journal) -> SherpaResult<Vec<Box<ParseState>>> {
   let mut states = vec![];
 
@@ -363,4 +281,101 @@ fn create_entry_wrapper_states(j: &mut Journal) -> SherpaResult<Vec<Box<ParseSta
   }
 
   SherpaResult::Ok(states)
+}
+
+/// Compiles IRStates from all production and scanner symbol sets within the grammar.
+pub fn compile_parse_states(
+  j: &mut Journal,
+  num_of_threads: usize,
+) -> SherpaResult<BTreeMap<String, Box<ParseState>>> {
+  let g = j.grammar()?;
+
+  let mut deduped_states = BTreeMap::new();
+  let productions_ids = g.productions.iter().map(|(id, p)| (*id, p.is_scanner)).collect::<Vec<_>>();
+
+  let entry_state = create_entry_wrapper_states(j)?;
+
+  insert_states(j, entry_state.into_iter(), &mut deduped_states);
+
+  #[cfg(not(any(feature = "wasm-target", feature = "single-thread")))]
+  {
+    let work_chunks = productions_ids
+      .chunks((productions_ids.len() / (num_of_threads).max(1)).max(1))
+      .collect::<Vec<_>>();
+    for states in std::thread::scope(|s| {
+      work_chunks
+        .into_iter()
+        .map(|productions| {
+          let mut j = j.transfer();
+          s.spawn(move || -> SherpaResult<_> {
+            let mut deduped_states = BTreeMap::new();
+            compile_slice_of_states(&mut j, &mut deduped_states, productions)?;
+            SherpaResult::Ok(deduped_states)
+          })
+        })
+        .collect::<Vec<_>>()
+        .into_iter()
+        .map(|s| match s.join() {
+          Result::Ok(result) => result,
+          Err(err) => panic!("Error encountered in thread]\n {:?}", err),
+        })
+        .collect::<Vec<_>>()
+    }) {
+      match states {
+        SherpaResult::Ok(states) => {
+          insert_states(j, states.into_values(), &mut deduped_states);
+        }
+        SherpaResult::Err(err) => {
+          // All captured errors in the compilation process are rolled
+          // into reports and a SherpaResult::None is returned in its place.
+          // Any other type of error is something due to unaccounted
+          // behavior (unwrapping a None option, etc), so we do a hard
+          // panic to report these incidences.
+          panic!("An unexpected error has occurred:\n{}", err);
+        }
+        _ => {
+          // Reports in the Journal contain the errors.
+          return SherpaResult::None;
+        }
+      }
+    }
+
+    let size = deduped_states.len();
+    let mut chunks = deduped_states.values_mut().collect::<Vec<_>>();
+    std::thread::scope(|s| {
+      chunks
+        .chunks_mut((size / (num_of_threads.max(1))).max(1))
+        .map(|chunk| {
+          s.spawn(|| {
+            for state in chunk {
+              match state.get_cached_ast() {
+                SherpaResult::Err(err) => {
+                  eprintln!("\n{} {}", err, state.to_string())
+                }
+                _ => {}
+              }
+            }
+          })
+        })
+        .map(move |s| s.join().unwrap())
+        .for_each(drop);
+    });
+  }
+
+  #[cfg(any(feature = "wasm-target", feature = "single-thread"))]
+  {
+    compile_slice_of_states(j, &mut deduped_states, &productions_ids)?;
+
+    #[cfg(any(feature = "wasm-target", feature = "single-thread"))]
+    for state in deduped_states.values_mut() {
+      match state.get_cached_ast() {
+        SherpaResult::Err(err) => {
+          eprintln!("\n{} {}", err, state.to_string())
+        }
+        _ => {}
+      }
+    }
+  }
+
+  SherpaResult::Ok(deduped_states)
 }

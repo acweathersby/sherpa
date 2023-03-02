@@ -16,6 +16,7 @@
 #![warn(missing_docs)]
 
 mod ascript;
+#[cfg(not(feature = "wasm-target"))]
 mod build;
 mod bytecode;
 mod grammar;
@@ -26,7 +27,7 @@ mod types;
 mod util;
 mod writer;
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "wasm-target")))]
 mod test;
 
 /// Methods for debugging a grammar and it's artifacts.
@@ -38,16 +39,20 @@ pub use types::{SherpaError, SherpaResult};
 
 /// Methods compiling a parser from a grammar.
 pub mod compile {
-  pub use crate::types::{
-    GrammarId,
-    GrammarRef,
-    GrammarStore,
-    Production,
-    ProductionId,
-    Rule,
-    ScannerStateId,
-    Symbol,
-    SymbolID,
+  pub use crate::{
+    bytecode::compile_bytecode,
+    parser::{compile_parse_states, optimize_parse_states},
+    types::{
+      GrammarId,
+      GrammarRef,
+      GrammarStore,
+      Production,
+      ProductionId,
+      Rule,
+      ScannerStateId,
+      Symbol,
+      SymbolID,
+    },
   };
 }
 
@@ -56,6 +61,7 @@ pub mod errors {
   pub use crate::types::{SherpaError, SherpaError::*, SherpaErrorSeverity};
 }
 
+#[cfg(not(feature = "wasm-target"))]
 /// Create a build pipeline
 pub mod pipeline {
 

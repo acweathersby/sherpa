@@ -3,7 +3,7 @@ use super::parser::{
   *,
 };
 use crate::{
-  grammar::multitask::WorkVerifier,
+  grammar::{self, multitask::WorkVerifier},
   types::*,
   util::get_num_of_available_threads,
   Journal,
@@ -54,104 +54,116 @@ pub(crate) fn load_from_path(
   let claimed_grammar_paths = Mutex::new(HashSet::<PathBuf>::new());
   let work_verifier = Mutex::new(WorkVerifier::new(1));
 
-  let results = thread::scope(|s| {
-    [0..get_usable_thread_count(get_num_of_available_threads())]
-      .into_iter()
-      .map(|_| {
-        let mut j = j.transfer();
-        let claimed_grammar_paths = &claimed_grammar_paths;
-        let work_verifier = &work_verifier;
-        let pending_grammar_paths = &pending_grammar_paths;
-        j.set_active_report("File Load", ReportType::GrammarCompile(Default::default()));
-        s.spawn(move || {
-          let mut grammars = vec![];
-          loop {
-            match {
-              {
-                let val = pending_grammar_paths
-                  .lock()
-                  .unwrap()
-                  .pop_front()
-                  .and_then(|path| {
-                    claimed_grammar_paths.lock().as_mut().map_or(None, |d| {
-                      let mut work_verifier = work_verifier.lock().unwrap();
-                      if d.insert(path.clone()) {
-                        work_verifier.start_one_unit_of_work();
-                        Some(path)
-                      } else {
-                        work_verifier.skip_one_unit_of_work();
-                        None
-                      }
-                    })
-                  })
-                  .clone();
-                val
-              }
-            } {
-              Some(path) => match grammar_from_path(&mut j, &path) {
-                SherpaResult::Ok((grammar, imports)) => {
-                  let mut imports_refs: ImportedGrammarReferences = Default::default();
-
-                  for box sherpa::Import { uri, reference, tok } in imports {
-                    let base_path = PathBuf::from(uri);
-                    match resolve_grammar_path(
-                      &base_path,
-                      &path.parent().unwrap_or(Path::new("")).to_path_buf(),
-                      &allowed_extensions,
-                    ) {
-                      SherpaResult::Ok(path) => {
-                        imports_refs.insert(
-                          reference.to_string(),
-                          GrammarRef::new(reference.to_string(), path.clone()),
-                        );
-                        pending_grammar_paths.lock().unwrap().push_back(path);
-                        work_verifier.lock().unwrap().add_units_of_work(1);
-                      }
-                      _ => j.report_mut().add_error(SherpaError::SourceError {
-                        loc:        tok.clone(),
-                        path:       path.clone(),
-                        id:         "invalid-import-source",
-                        msg:        format!(
-                          "Could not resolve filepath {}",
-                          base_path.to_str().unwrap()
-                        ),
-                        inline_msg: "source not found".to_string(),
-                        severity:   SherpaErrorSeverity::Critical,
-                        ps_msg:     Default::default(),
-                      }),
-                    }
-                  }
-
-                  grammars.push((path, imports_refs, grammar));
-                  {
-                    work_verifier.lock().unwrap().complete_one_unit_of_work();
-                  }
-                }
-                SherpaResult::Err(err) => j.report_mut().add_error(err),
-                _ => {}
-              },
-              None => {
-                if work_verifier.lock().unwrap().is_complete() {
-                  break;
-                }
-              }
-            }
-          }
-          grammars
+  #[cfg(not(any(feature = "wasm-target", feature = "single-thread")))]
+  let grammars = {
+    let results = thread::scope(|s| {
+      [0..get_usable_thread_count(get_num_of_available_threads())]
+        .into_iter()
+        .map(|_| {
+          let mut j = j.transfer();
+          let claimed_grammar_paths = &claimed_grammar_paths;
+          let work_verifier = &work_verifier;
+          let pending_grammar_paths = &pending_grammar_paths;
+          j.set_active_report("File Load", ReportType::GrammarCompile(Default::default()));
+          s.spawn(move || {
+            parse_grammar(pending_grammar_paths, claimed_grammar_paths, work_verifier, &mut j)
+          })
         })
-      })
-      .map(|s| s.join().unwrap())
-      .collect::<Vec<_>>()
-  });
+        .map(|s| s.join().unwrap())
+        .collect::<Vec<_>>()
+    });
 
-  let mut grammars = vec![];
+    let mut grammars = vec![];
 
-  for mut g in results {
-    grammars.append(&mut g);
-  }
+    for mut g in results {
+      grammars.append(g);
+    }
+  };
+
+  #[cfg(any(feature = "wasm-target", feature = "single-thread"))]
+  let grammars = parse_grammar(j, &pending_grammar_paths, &claimed_grammar_paths, &work_verifier);
 
   j.flush_reports();
 
+  grammars
+}
+
+fn parse_grammar(
+  j: &mut Journal,
+  pending_grammar_paths: &Mutex<VecDeque<PathBuf>>,
+  claimed_grammar_paths: &Mutex<HashSet<PathBuf>>,
+  work_verifier: &Mutex<WorkVerifier>,
+) -> Vec<(PathBuf, HashMap<String, std::sync::Arc<GrammarRef>>, Box<Grammar>)> {
+  let mut grammars = vec![];
+  loop {
+    match {
+      {
+        let val = pending_grammar_paths
+          .lock()
+          .unwrap()
+          .pop_front()
+          .and_then(|path| {
+            claimed_grammar_paths.lock().as_mut().map_or(None, |d| {
+              let mut work_verifier = work_verifier.lock().unwrap();
+              if d.insert(path.clone()) {
+                work_verifier.start_one_unit_of_work();
+                Some(path)
+              } else {
+                work_verifier.skip_one_unit_of_work();
+                None
+              }
+            })
+          })
+          .clone();
+        val
+      }
+    } {
+      Some(path) => match grammar_from_path(j, &path) {
+        SherpaResult::Ok((grammar, imports)) => {
+          let mut imports_refs: ImportedGrammarReferences = Default::default();
+
+          for box sherpa::Import { uri, reference, tok } in imports {
+            let base_path = PathBuf::from(uri);
+            match resolve_grammar_path(
+              &base_path,
+              &path.parent().unwrap_or(Path::new("")).to_path_buf(),
+              &allowed_extensions,
+            ) {
+              SherpaResult::Ok(path) => {
+                imports_refs.insert(
+                  reference.to_string(),
+                  GrammarRef::new(reference.to_string(), path.clone()),
+                );
+                pending_grammar_paths.lock().unwrap().push_back(path);
+                work_verifier.lock().unwrap().add_units_of_work(1);
+              }
+              _ => j.report_mut().add_error(SherpaError::SourceError {
+                loc:        tok.clone(),
+                path:       path.clone(),
+                id:         "invalid-import-source",
+                msg:        format!("Could not resolve filepath {}", base_path.to_str().unwrap()),
+                inline_msg: "source not found".to_string(),
+                severity:   SherpaErrorSeverity::Critical,
+                ps_msg:     Default::default(),
+              }),
+            }
+          }
+
+          grammars.push((path, imports_refs, grammar));
+          {
+            work_verifier.lock().unwrap().complete_one_unit_of_work();
+          }
+        }
+        SherpaResult::Err(err) => j.report_mut().add_error(err),
+        _ => {}
+      },
+      None => {
+        if work_verifier.lock().unwrap().is_complete() {
+          break;
+        }
+      }
+    }
+  }
   grammars
 }
 

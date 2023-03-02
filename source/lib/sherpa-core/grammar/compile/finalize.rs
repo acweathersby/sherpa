@@ -8,15 +8,11 @@ use crate::{
     get_production_start_items,
   },
   types::{item::Item, *},
-  util::get_num_of_available_threads,
   Journal,
   ReportType,
   SherpaError,
 };
-use std::{
-  collections::{btree_map, BTreeSet, VecDeque},
-  thread,
-};
+use std::collections::{btree_map, BTreeSet, VecDeque};
 
 /// Create scanner productions and data caches, and converts ids to tokens.
 pub fn finalize_grammar(j: &mut Journal, mut g: GrammarStore) -> GrammarStore {
@@ -388,44 +384,27 @@ fn finalize_items(_j: &mut Journal, g: &mut GrammarStore) {
   let start_items =
     g.productions.keys().flat_map(|p| get_production_start_items(p, g)).collect::<Vec<_>>();
 
-  let start_items_chunks = start_items.chunks(get_num_of_available_threads()).collect::<Vec<_>>();
-
-  for (item, closure, peek_symbols) in thread::scope(|s| {
-    start_items_chunks
-      .iter()
-      .map(|work| {
-        s.spawn(|| {
-          let mut results = vec![];
-
-          let mut pending_items = VecDeque::<Item>::from_iter(work.iter().cloned());
-
-          while let Some(item) = pending_items.pop_front() {
-            let item = item.to_absolute();
-            if !item.is_completed() {
-              let peek_symbols =
-                if let Some(peek_symbols) = g.production_ignore_symbols.get(&item.get_prod_id(g)) {
-                  peek_symbols.clone()
-                } else {
-                  vec![]
-                };
-
-              results.push((item, create_closure(&[item], g), peek_symbols));
-
-              pending_items.push_back(item.increment().unwrap());
-            } else {
-              results.push((item, vec![item], vec![]))
-            }
-          }
-
-          results
-        })
+  for (item, closure, peek_symbols) in {
+    #[cfg(not(any(feature = "wasm-target", feature = "single-thread")))]
+    {
+      use crate::util::get_num_of_available_threads;
+      use std::thread;
+      let start_items_chunks =
+        start_items.chunks(get_num_of_available_threads()).collect::<Vec<_>>();
+      thread::scope(|s| {
+        start_items_chunks
+          .iter()
+          .map(|work| s.spawn(|| finalize_item(*work, g)))
+          // Collect now to actually generate the threads
+          .collect::<Vec<_>>()
+          .into_iter()
+          .flat_map(move |s| s.join().unwrap())
+          .collect::<Vec<_>>()
       })
-      // Collect now to actually generate the threads
-      .collect::<Vec<_>>()
-      .into_iter()
-      .flat_map(move |s| s.join().unwrap())
-      .collect::<Vec<_>>()
-  }) {
+    }
+    #[cfg(any(feature = "wasm-target", feature = "single-thread"))]
+    finalize_item(&start_items, g)
+  } {
     g.item_ignore_symbols.insert(item.to_absolute(), peek_symbols);
     g.closures.insert(item.to_absolute(), closure);
   }
@@ -448,6 +427,32 @@ fn finalize_items(_j: &mut Journal, g: &mut GrammarStore) {
       }
     }
   }
+}
+
+fn finalize_item(items: &[Item], g: &GrammarStore) -> Vec<(Item, Vec<Item>, Vec<SymbolID>)> {
+  let mut results = vec![];
+
+  let mut pending_items = VecDeque::<Item>::from_iter(items.iter().cloned());
+
+  while let Some(item) = pending_items.pop_front() {
+    let item = item.to_absolute();
+    if !item.is_completed() {
+      let peek_symbols =
+        if let Some(peek_symbols) = g.production_ignore_symbols.get(&item.get_prod_id(g)) {
+          peek_symbols.clone()
+        } else {
+          vec![]
+        };
+
+      results.push((item, create_closure(&[item], g), peek_symbols));
+
+      pending_items.push_back(item.increment().unwrap());
+    } else {
+      results.push((item, vec![item], vec![]))
+    }
+  }
+
+  results
 }
 
 fn set_parse_productions(g: &mut GrammarStore) {
@@ -708,28 +713,43 @@ fn calculate_recursions_types(
 ) -> Vec<ProductionId> {
   let mut conversion_candidates = vec![];
 
-  let production_id_chunks = production_ids
-    .chunks(get_num_of_available_threads())
-    .filter(|s| !s.is_empty())
-    .collect::<Vec<_>>();
-
-  for (production_id, recursion_type) in thread::scope(|s| {
-    production_id_chunks
-      .iter()
-      .map(|work| {
-        s.spawn(|| {
-          work
-            .iter()
-            .map(|production_id| (*production_id, g.get_production_recursion_type(*production_id)))
-            .collect::<Vec<_>>()
-        })
+  for (production_id, recursion_type) in {
+    #[cfg(not(any(feature = "wasm-target", feature = "single-thread")))]
+    {
+      use crate::util::get_num_of_available_threads;
+      use std::thread;
+      let production_id_chunks = production_ids
+        .chunks(get_num_of_available_threads())
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>();
+      thread::scope(|s| {
+        production_id_chunks
+          .iter()
+          .map(|work| {
+            s.spawn(|| {
+              work
+                .iter()
+                .map(|production_id| {
+                  (*production_id, g.get_production_recursion_type(*production_id))
+                })
+                .collect::<Vec<_>>()
+            })
+          })
+          // Collect now to actually generate the threads
+          .collect::<Vec<_>>()
+          .into_iter()
+          .flat_map(move |s| s.join().unwrap())
+          .collect::<Vec<_>>()
       })
-      // Collect now to actually generate the threads
-      .collect::<Vec<_>>()
-      .into_iter()
-      .flat_map(move |s| s.join().unwrap())
-      .collect::<Vec<_>>()
-  }) {
+    }
+    #[cfg(any(feature = "wasm-target", feature = "single-thread"))]
+    {
+      production_ids
+        .iter()
+        .map(|production_id| (*production_id, g.get_production_recursion_type(*production_id)))
+        .collect::<Vec<_>>()
+    }
+  } {
     let production = g.productions.get_mut(&production_id).unwrap();
 
     production.recursion_type = recursion_type;

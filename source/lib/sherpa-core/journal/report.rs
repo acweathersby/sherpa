@@ -1,4 +1,6 @@
+#[cfg(not(feature = "wasm-target"))]
 use super::Timing;
+
 use crate::{grammar::hash_id_value_u64, types::*};
 use std::{
   collections::{BTreeMap, HashMap},
@@ -57,7 +59,11 @@ pub struct Report {
   /// note body.
   pub(crate) notes:       Vec<(&'static str, String)>,
   pub(crate) _errors:     BTreeMap<u64, SherpaError>,
-  pub(crate) timings:     HashMap<&'static str, Timing>,
+
+  #[cfg(not(feature = "wasm-target"))]
+  pub(crate) timings: HashMap<&'static str, Timing>,
+
+  #[cfg(not(feature = "wasm-target"))]
   pub(crate) create_time: Instant,
   pub(crate) error_level: SherpaErrorSeverity,
   pub(super) is_sink:     bool,
@@ -69,6 +75,8 @@ impl Hash for Report {
     self.report_type.hash(state);
     self.notes.hash(state);
     self._errors.hash(state);
+
+    #[cfg(not(feature = "wasm-target"))]
     self.create_time.hash(state);
     self.error_level.hash(state);
   }
@@ -109,9 +117,12 @@ impl Report {
     match (self._errors.len() == 0, self.is_sink) {
       (true, false) => SherpaResult::Ok(return_val),
       (false, false) => {
-        let instant = Instant::now();
-        for timer in self.timings.values_mut() {
-          timer.set_end(instant)
+        #[cfg(not(feature = "wasm-target"))]
+        {
+          let instant = Instant::now();
+          for timer in self.timings.values_mut() {
+            timer.set_end(instant)
+          }
         }
         SherpaResult::Err((&*self).into())
       }
@@ -131,6 +142,22 @@ impl Report {
       true
     } else {
       false
+    }
+  }
+
+  /// Get a string of all errors encountered in the report
+  pub fn debug_error_string(&self) -> Option<String> {
+    let errors = self.errors();
+    if errors.len() > 0 {
+      let mut string = vec![format!("\n{:=<80}\nReport [{}] errors:", "", self.name)];
+
+      for err in self.errors() {
+        string.push(err.to_string());
+      }
+
+      Some(string.join("\n"))
+    } else {
+      None
     }
   }
 
@@ -156,21 +183,35 @@ impl Report {
   }
 
   pub(crate) fn start_timer(&mut self, timer_label: &'static str) {
+    #[cfg(not(feature = "wasm-target"))]
     self.timings.insert(timer_label, Timing::new());
   }
 
   pub(crate) fn stop_timer(&mut self, timer_label: &'static str) {
-    let instant = Instant::now();
+    #[cfg(not(feature = "wasm-target"))]
+    {
+      let instant = Instant::now();
 
-    match self.timings.entry(timer_label) {
-      std::collections::hash_map::Entry::Occupied(mut e) => {
-        e.get_mut().set_end(instant);
+      match self.timings.entry(timer_label) {
+        std::collections::hash_map::Entry::Occupied(mut e) => {
+          e.get_mut().set_end(instant);
+        }
+        std::collections::hash_map::Entry::Vacant(_) => {}
       }
-      std::collections::hash_map::Entry::Vacant(_) => {}
     }
   }
 
   pub(crate) fn debug_string(&self) -> String {
+    #[cfg(feature = "wasm-target")]
+    let timings = "";
+    #[cfg(not(feature = "wasm-target"))]
+    let timings = self
+      .timings
+      .iter()
+      .map(|(label, body)| format!("---------------\n{}:\n{:?}", label, body))
+      .collect::<Vec<_>>()
+      .join("\n");
+
     format!(
       "Notes:\n{}\nTimings:\n{}\nErrors:\n{}",
       self
@@ -179,12 +220,7 @@ impl Report {
         .map(|(label, body)| format!("---------------\n{}:\n{}", label, body))
         .collect::<Vec<_>>()
         .join("\n"),
-      self
-        .timings
-        .iter()
-        .map(|(label, body)| format!("---------------\n{}:\n{:?}", label, body))
-        .collect::<Vec<_>>()
-        .join("\n"),
+      timings,
       self._errors.values().map(|err| format!("\n{}", err)).collect::<Vec<_>>().join("\n")
     )
   }
@@ -225,13 +261,15 @@ impl Default for Report {
   fn default() -> Self {
     Self {
       report_type: ReportType::Sink,
-      notes:       Default::default(),
-      _errors:     Default::default(),
-      timings:     Default::default(),
+      notes: Default::default(),
+      _errors: Default::default(),
+      #[cfg(not(feature = "wasm-target"))]
+      timings: Default::default(),
+      #[cfg(not(feature = "wasm-target"))]
       create_time: Instant::now(),
-      name:        Default::default(),
+      name: Default::default(),
       error_level: SherpaErrorSeverity::None,
-      is_sink:     false,
+      is_sink: false,
     }
   }
 }

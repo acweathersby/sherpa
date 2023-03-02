@@ -74,7 +74,7 @@ impl StateData {
   }
 }
 /// Compile bytecode data and artifacts from the a set of parse states
-pub(crate) fn compile_bytecode<'a>(
+pub fn compile_bytecode<'a>(
   j: &mut Journal,
   states: &Vec<(String, Box<ParseState>)>,
 ) -> SherpaResult<BytecodeOutput> {

@@ -99,6 +99,7 @@ type SlotExtract = dyn Fn(Option<String>, Option<String>, usize) -> String;
 type CreateToken = dyn Fn(String, TokenCreationType) -> String;
 
 pub(crate) enum TokenCreationType {
+  #[allow(unused)]
   String,
   Token,
 }

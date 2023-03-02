@@ -10,12 +10,7 @@ use self::{
   merge::merge_grammars,
   parser::sherpa::{self},
 };
-use crate::{
-  grammar::compile::create_store::create_store,
-  types::*,
-  util::get_num_of_available_threads,
-  Journal,
-};
+use crate::{grammar::compile::create_store::create_store, types::*, Journal};
 use std::{path::PathBuf, sync::Arc};
 
 /// Used to calculate the max size of a
@@ -61,35 +56,48 @@ pub(crate) fn compile_grammars(
     j.report_mut().add_error("No grammars were generated.".into());
     SherpaResult::None
   } else {
-    let results = std::thread::scope(|s| {
-      grammars
-        .chunks(
-          (grammars.len() as f64 / get_num_of_available_threads() as f64).ceil().max(1.0) as usize
-        )
-        .into_iter()
-        .map(|chunk| {
-          let mut j = j.transfer();
-          s.spawn(move || {
-            chunk
-              .iter()
-              .map(|(absolute_path, import_refs, grammar)| {
-                let grammar =
-                  create_store(&mut j, &grammar, absolute_path.clone(), import_refs.clone());
-                grammar
-              })
-              .collect::<Vec<_>>()
+    #[cfg(not(any(feature = "wasm-target", feature = "single-thread")))]
+    let results = {
+      use crate::util::get_num_of_available_threads;
+      std::thread::scope(|s| {
+        grammars
+          .chunks((grammars.len() as f64 / get_num_of_available_threads() as f64).ceil().max(1.0)
+            as usize)
+          .into_iter()
+          .map(|chunk| {
+            let mut j = j.transfer();
+            s.spawn(move || {
+              chunk
+                .iter()
+                .map(|(absolute_path, import_refs, grammar)| {
+                  let grammar =
+                    create_store(&mut j, &grammar, absolute_path.clone(), import_refs.clone());
+                  grammar
+                })
+                .collect::<Vec<_>>()
+            })
           })
-        })
-        .map(|s| s.join().unwrap())
-        .collect::<Vec<_>>()
-    });
+          .map(|s| s.join().unwrap())
+          .collect::<Vec<_>>()
+          .flatten()
+      })
+    };
+    #[cfg(any(feature = "wasm-target", feature = "single-thread"))]
+    let results = grammars
+      .into_iter()
+      .map(|(absolute_path, import_refs, grammar)| {
+        let grammar = create_store(j, &grammar, absolute_path.clone(), import_refs.clone());
+        grammar
+      })
+      .collect::<Vec<_>>();
+
     j.flush_reports();
 
     if j.have_errors_of_type(SherpaErrorSeverity::Critical) {
       return SherpaResult::None;
     }
 
-    let mut grammars: Vec<Arc<GrammarStore>> = results.into_iter().flatten().collect();
+    let mut grammars: Vec<Arc<GrammarStore>> = results.into_iter().collect();
 
     let rest = grammars.drain(1..).collect::<Vec<_>>();
 

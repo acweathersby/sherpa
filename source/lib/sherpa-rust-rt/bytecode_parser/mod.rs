@@ -122,7 +122,10 @@ pub fn dispatch<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
       HashBranch => hash_branch(i, ctx, debug),
       Fail => (FailState, Option::None),
       Pass => (CompleteState, Option::None),
-      Accept => (ParseAction::Accept { production_id: ctx.prod_id }, Option::None),
+      Accept => {
+        println!("Accepted!");
+        (ParseAction::Accept { production_id: ctx.prod_id }, Option::None)
+      }
       NoOp => (None, i.next()),
     } {
       (None, Option::None) => {

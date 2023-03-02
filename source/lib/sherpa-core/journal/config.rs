@@ -73,8 +73,8 @@ pub struct Config {
   /// Enable the generation of AScripT AST code.
   ///
   /// Defaults to `true`
-  pub enable_ascript: bool,
-
+  pub enable_ascript:  bool,
+  #[cfg(not(feature = "wasm-target"))]
   /// The language type of non-LLVM outputs
   ///
   /// Defaults to [SourceType::Rust]
@@ -105,6 +105,7 @@ impl Default for Config {
       opt_inline_redundant_assertions: false,
       opt_remove_gotos_to_pass_states: true,
       enable_ascript: true,
+      #[cfg(not(feature = "wasm-target"))]
       source_type: SourceType::Rust,
       llvm_ar_path: "llvm-ar-14".to_string(),
       llvm_clang_path: "clang-14".to_string(),
@@ -115,9 +116,10 @@ impl Default for Config {
   }
 }
 
+#[cfg(not(feature = "wasm-target"))]
+use crate::build::pipeline::SourceType;
 use std::collections::BTreeSet;
 
-use crate::build::pipeline::SourceType;
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Language {
   Rust,

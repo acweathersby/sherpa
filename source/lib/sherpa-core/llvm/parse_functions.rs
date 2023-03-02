@@ -838,6 +838,21 @@ pub(crate) fn get_chars_remaining<'a>(
   SherpaResult::Ok(b.build_int_sub(end_int, scan_int, "").into())
 }
 
+pub(crate) fn scan_is_less_than_end<'a>(
+  sp: &'a LLVMParserModule,
+  p_ctx: PointerValue<'a>,
+) -> SherpaResult<IntValue<'a>> {
+  let LLVMParserModule { b, iptr, .. } = sp;
+  let scan_int = b.build_ptr_to_int(CTX::scan_ptr.load(b, p_ctx)?.into_pointer_value(), *iptr, "");
+  let end_int = b.build_ptr_to_int(CTX::end_ptr.load(b, p_ctx)?.into_pointer_value(), *iptr, "");
+  SherpaResult::Ok(b.build_int_compare(
+    inkwell::IntPredicate::ULT,
+    scan_int,
+    end_int,
+    "scan_is_less_than_end",
+  ))
+}
+
 /// Assigns `head_ptr + tok_len` to head_ptr, scan_ptr, and base_ptr.
 /// Also assign 0  to `tok_id`
 pub(crate) fn skip_token<'a>(
@@ -988,9 +1003,7 @@ pub(crate) fn check_for_input_acceptability<'a>(
   let try_extend = ctx.append_basic_block(state_fun, "attempt_extend");
   let check_if_eof = ctx.append_basic_block(state_fun, "check_if_eof");
 
-  let input_available = get_chars_remaining(m, p_ctx)?;
-  let input_available = b.build_int_cast(input_available, i64, "");
-  let c = b.build_int_compare(inkwell::IntPredicate::SGE, input_available, needed_num_bytes, "");
+  let c = scan_is_less_than_end(m, p_ctx)?;
   b.build_conditional_branch(c, valid_input, check_if_eof);
 
   // Check to see if the EOF flag is set -------------------------------------------------

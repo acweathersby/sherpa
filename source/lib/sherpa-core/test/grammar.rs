@@ -19,6 +19,13 @@ use crate::{
 use std::path::PathBuf;
 
 #[test]
+fn test_production_minimum() {
+  let result = compile_grammar_ast("\n<> a > b\n");
+
+  assert!(result.is_ok());
+}
+
+#[test]
 fn test_load_all() {
   let mut j = Journal::new(None);
 
@@ -119,14 +126,6 @@ fn test_trivial_ascript_struct() {
   let result = compile_ascript_struct(" { t_Type, t_Class, value: u32 } ");
 
   print!("{:#?}", result);
-
-  assert!(result.is_ok());
-}
-
-#[test]
-
-fn test_production_minimum() {
-  let result = compile_grammar_ast("\n<> a > b\n");
 
   assert!(result.is_ok());
 }

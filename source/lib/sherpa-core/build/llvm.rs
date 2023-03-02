@@ -195,9 +195,9 @@ pub fn build_llvm_parser(
               }
             }
 
-            if j.config().opt_llvm {
-              apply_llvm_optimizations(opt, &llvm_mod);
-            }
+            //if j.config().opt_llvm {
+            apply_llvm_optimizations(opt, &llvm_mod);
+            //}
 
             match target_machine.write_to_file(&llvm_mod.module, FileType::Object, &object_path) {
               Ok(_) => {
@@ -264,11 +264,10 @@ fn apply_llvm_optimizations(opt: OptimizationLevel, ctx: &crate::llvm::LLVMParse
 
   pass_manager.add_global_optimizer_pass();
   pass_manager.add_global_dce_pass();
+  pass_manager.add_instruction_simplify_pass();
   pass_manager.add_aggressive_dce_pass();
   pass_manager.run_on(&ctx.module);
 
-  pass_manager.add_instruction_simplify_pass();
-  pass_manager.run_on(&ctx.module);
   //  pass_manager.add_demote_memory_to_register_pass();
   //  pass_manager.run_on(&ctx.module);
 }

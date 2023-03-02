@@ -220,7 +220,6 @@ fn compile_sherpa_grammar_and_parse_root_sherpa_grammar_file() -> SherpaResult<(
       grammar_path: Some(path_from_source("grammar/v1_0_0/grammar.sg")?),
       bytecode_parse: true,
       llvm_parse: true,
-      //optimize: false,
       debugger_handler: Some(&|g| {
         console_debugger(g, PrintConfig {
           display_input_data: true,

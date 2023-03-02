@@ -1531,6 +1531,8 @@ pub type Parser<'a, T: Reader, UserCTX> = sherpa_runtime::bytecode_parser::ByteC
       // Create a module that will store convenience functions for compiling AST
       // structures based on on grammar entry points.
       for (ref_, type_, ast_type_string, export_name, guid_name) in &export_node_data {
+        let prod = &g.get_production_id_by_name(guid_name)?;
+        let state_name = g.get_entry_name_from_prod_id(&prod)?;
         w.method(
           &format!("pub fn {export_name}_from<'a>"),
           "(",
@@ -1543,7 +1545,7 @@ pub type Parser<'a, T: Reader, UserCTX> = sherpa_runtime::bytecode_parser::ByteC
           &mut |w| {
             w.stmt(format!("let reduce_functions = ReduceFunctions::<_, u32, true>::new();"))?;
             w.stmt(format!("let mut parser = Parser::new(&mut reader, &bytecode);"))?;
-            w.stmt(format!("parser.init_parser({});", state_lookups.get(guid_name).unwrap()))?;
+            w.stmt(format!("parser.init_parser({});", state_lookups.get(&state_name).unwrap()))?;
 
             w.stmt(
               format!("let AstSlot ({}, __rule_rng__, _) = parser.parse_ast(&reduce_functions.0, &mut None)?;"

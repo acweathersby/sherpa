@@ -1,10 +1,12 @@
+
 mod ascript;
+
 mod top_level;
 
 mod bootstrap;
 
 mod grammar;
-#[cfg(feature = "llvm")]
+#[cfg(all(feature = "llvm", not(feature = "wasm-target")))]
 mod llvm;
 
 mod bytecode;
