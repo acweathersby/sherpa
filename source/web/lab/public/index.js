@@ -1,11 +1,7 @@
 // src/sherpa/sherpa_wasm.js
 var wasm;
-var heap = new Array(128).fill(void 0);
-heap.push(void 0, null, true, false);
-function getObject(idx) {
-  return heap[idx];
-}
-var WASM_VECTOR_LEN = 0;
+var cachedTextDecoder = new TextDecoder("utf-8", { ignoreBOM: true, fatal: true });
+cachedTextDecoder.decode();
 var cachedUint8Memory0 = null;
 function getUint8Memory0() {
   if (cachedUint8Memory0 === null || cachedUint8Memory0.byteLength === 0) {
@@ -13,6 +9,26 @@ function getUint8Memory0() {
   }
   return cachedUint8Memory0;
 }
+function getStringFromWasm0(ptr, len) {
+  return cachedTextDecoder.decode(getUint8Memory0().subarray(ptr, ptr + len));
+}
+var heap = new Array(128).fill(void 0);
+heap.push(void 0, null, true, false);
+var heap_next = heap.length;
+function addHeapObject(obj) {
+  if (heap_next === heap.length)
+    heap.push(heap.length + 1);
+  const idx = heap_next;
+  heap_next = heap[idx];
+  if (typeof heap_next !== "number")
+    throw new Error("corrupt heap");
+  heap[idx] = obj;
+  return idx;
+}
+function getObject(idx) {
+  return heap[idx];
+}
+var WASM_VECTOR_LEN = 0;
 var cachedTextEncoder = new TextEncoder("utf-8");
 var encodeString = typeof cachedTextEncoder.encodeInto === "function" ? function(arg, view) {
   return cachedTextEncoder.encodeInto(arg, view);
@@ -68,22 +84,6 @@ function getInt32Memory0() {
   }
   return cachedInt32Memory0;
 }
-function _assertBoolean(n) {
-  if (typeof n !== "boolean") {
-    throw new Error("expected a boolean argument");
-  }
-}
-var heap_next = heap.length;
-function addHeapObject(obj) {
-  if (heap_next === heap.length)
-    heap.push(heap.length + 1);
-  const idx = heap_next;
-  heap_next = heap[idx];
-  if (typeof heap_next !== "number")
-    throw new Error("corrupt heap");
-  heap[idx] = obj;
-  return idx;
-}
 function dropObject(idx) {
   if (idx < 132)
     return;
@@ -95,49 +95,102 @@ function takeObject(idx) {
   dropObject(idx);
   return ret;
 }
-var cachedTextDecoder = new TextDecoder("utf-8", { ignoreBOM: true, fatal: true });
-cachedTextDecoder.decode();
-function getStringFromWasm0(ptr, len) {
-  return cachedTextDecoder.decode(getUint8Memory0().subarray(ptr, ptr + len));
-}
-function parse_input(grammar) {
+function compile_grammar(grammar) {
   try {
     const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-    wasm.parse_input(retptr, addHeapObject(grammar));
+    wasm.compile_grammar(retptr, addHeapObject(grammar));
     var r0 = getInt32Memory0()[retptr / 4 + 0];
     var r1 = getInt32Memory0()[retptr / 4 + 1];
-    if (r1) {
-      throw takeObject(r0);
+    var r2 = getInt32Memory0()[retptr / 4 + 2];
+    if (r2) {
+      throw takeObject(r1);
     }
+    return JournalWrap.__wrap(r0);
   } finally {
     wasm.__wbindgen_add_to_stack_pointer(16);
   }
 }
-function logError(f, args) {
-  try {
-    return f.apply(this, args);
-  } catch (e) {
-    let error = function() {
-      try {
-        return e instanceof Error ? `${e.message}
-
-Stack:
-${e.stack}` : e.toString();
-      } catch (_) {
-        return "<failed to stringify thrown value>";
+function _assertNum(n) {
+  if (typeof n !== "number")
+    throw new Error("expected a number argument");
+}
+function _assertBoolean(n) {
+  if (typeof n !== "boolean") {
+    throw new Error("expected a boolean argument");
+  }
+}
+var JournalWrap = class {
+  constructor() {
+    throw new Error("cannot invoke `new` directly");
+  }
+  static __wrap(ptr) {
+    const obj = Object.create(JournalWrap.prototype);
+    obj.ptr = ptr;
+    return obj;
+  }
+  __destroy_into_raw() {
+    const ptr = this.ptr;
+    this.ptr = 0;
+    return ptr;
+  }
+  free() {
+    const ptr = this.__destroy_into_raw();
+    wasm.__wbg_journalwrap_free(ptr);
+  }
+  /**
+  * Returns `true` if the internal Grammar
+  * is free of critical errors.
+  * @returns {boolean}
+  */
+  is_valid() {
+    if (this.ptr == 0)
+      throw new Error("Attempt to use a moved value");
+    _assertNum(this.ptr);
+    const ret = wasm.journalwrap_is_valid(this.ptr);
+    return ret !== 0;
+  }
+  /**
+  * @param {boolean} optimize
+  */
+  compile_states(optimize) {
+    if (this.ptr == 0)
+      throw new Error("Attempt to use a moved value");
+    _assertNum(this.ptr);
+    _assertBoolean(optimize);
+    wasm.journalwrap_compile_states(this.ptr, optimize);
+  }
+  /**
+  * @param {boolean} optimize
+  */
+  compile_bytecode(optimize) {
+    if (this.ptr == 0)
+      throw new Error("Attempt to use a moved value");
+    _assertNum(this.ptr);
+    _assertBoolean(optimize);
+    wasm.journalwrap_compile_bytecode(this.ptr, optimize);
+  }
+  /**
+  * @returns {any}
+  */
+  generate_disassembly() {
+    try {
+      if (this.ptr == 0)
+        throw new Error("Attempt to use a moved value");
+      const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+      _assertNum(this.ptr);
+      wasm.journalwrap_generate_disassembly(retptr, this.ptr);
+      var r0 = getInt32Memory0()[retptr / 4 + 0];
+      var r1 = getInt32Memory0()[retptr / 4 + 1];
+      var r2 = getInt32Memory0()[retptr / 4 + 2];
+      if (r2) {
+        throw takeObject(r1);
       }
-    }();
-    console.error("wasm-bindgen: imported JS function that was not marked as `catch` threw an error:", error);
-    throw e;
+      return takeObject(r0);
+    } finally {
+      wasm.__wbindgen_add_to_stack_pointer(16);
+    }
   }
-}
-function handleError(f, args) {
-  try {
-    return f.apply(this, args);
-  } catch (e) {
-    wasm.__wbindgen_exn_store(addHeapObject(e));
-  }
-}
+};
 async function load(module, imports) {
   if (typeof Response === "function" && module instanceof Response) {
     if (typeof WebAssembly.instantiateStreaming === "function") {
@@ -165,6 +218,14 @@ async function load(module, imports) {
 function getImports() {
   const imports = {};
   imports.wbg = {};
+  imports.wbg.__wbindgen_error_new = function(arg0, arg1) {
+    const ret = new Error(getStringFromWasm0(arg0, arg1));
+    return addHeapObject(ret);
+  };
+  imports.wbg.__wbindgen_string_new = function(arg0, arg1) {
+    const ret = getStringFromWasm0(arg0, arg1);
+    return addHeapObject(ret);
+  };
   imports.wbg.__wbindgen_string_get = function(arg0, arg1) {
     const obj = getObject(arg1);
     const ret = typeof obj === "string" ? obj : void 0;
@@ -172,81 +233,6 @@ function getImports() {
     var len0 = WASM_VECTOR_LEN;
     getInt32Memory0()[arg0 / 4 + 1] = len0;
     getInt32Memory0()[arg0 / 4 + 0] = ptr0;
-  };
-  imports.wbg.__wbg_instanceof_Window_e266f02eee43b570 = function() {
-    return logError(function(arg0) {
-      let result;
-      try {
-        result = getObject(arg0) instanceof Window;
-      } catch {
-        result = false;
-      }
-      const ret = result;
-      _assertBoolean(ret);
-      return ret;
-    }, arguments);
-  };
-  imports.wbg.__wbg_document_950215a728589a2d = function() {
-    return logError(function(arg0) {
-      const ret = getObject(arg0).document;
-      return isLikeNone(ret) ? 0 : addHeapObject(ret);
-    }, arguments);
-  };
-  imports.wbg.__wbg_querySelector_32b9d7ebb2df951d = function() {
-    return handleError(function(arg0, arg1, arg2) {
-      const ret = getObject(arg0).querySelector(getStringFromWasm0(arg1, arg2));
-      return isLikeNone(ret) ? 0 : addHeapObject(ret);
-    }, arguments);
-  };
-  imports.wbg.__wbg_settextContent_19dc6a6146112f16 = function() {
-    return logError(function(arg0, arg1, arg2) {
-      getObject(arg0).textContent = arg1 === 0 ? void 0 : getStringFromWasm0(arg1, arg2);
-    }, arguments);
-  };
-  imports.wbg.__wbg_newnoargs_2b8b6bd7753c76ba = function() {
-    return logError(function(arg0, arg1) {
-      const ret = new Function(getStringFromWasm0(arg0, arg1));
-      return addHeapObject(ret);
-    }, arguments);
-  };
-  imports.wbg.__wbg_call_95d1ea488d03e4e8 = function() {
-    return handleError(function(arg0, arg1) {
-      const ret = getObject(arg0).call(getObject(arg1));
-      return addHeapObject(ret);
-    }, arguments);
-  };
-  imports.wbg.__wbg_globalThis_87cbb8506fecf3a9 = function() {
-    return handleError(function() {
-      const ret = globalThis.globalThis;
-      return addHeapObject(ret);
-    }, arguments);
-  };
-  imports.wbg.__wbg_self_e7c1f827057f6584 = function() {
-    return handleError(function() {
-      const ret = self.self;
-      return addHeapObject(ret);
-    }, arguments);
-  };
-  imports.wbg.__wbg_window_a09ec664e14b1b81 = function() {
-    return handleError(function() {
-      const ret = window.window;
-      return addHeapObject(ret);
-    }, arguments);
-  };
-  imports.wbg.__wbg_global_c85a9259e621f3db = function() {
-    return handleError(function() {
-      const ret = global.global;
-      return addHeapObject(ret);
-    }, arguments);
-  };
-  imports.wbg.__wbindgen_is_undefined = function(arg0) {
-    const ret = getObject(arg0) === void 0;
-    _assertBoolean(ret);
-    return ret;
-  };
-  imports.wbg.__wbindgen_object_clone_ref = function(arg0) {
-    const ret = getObject(arg0);
-    return addHeapObject(ret);
   };
   imports.wbg.__wbindgen_object_drop_ref = function(arg0) {
     takeObject(arg0);
@@ -18486,11 +18472,11 @@ function completionTooltip(stateField) {
 }
 function scrollIntoView2(container, element) {
   let parent = container.getBoundingClientRect();
-  let self2 = element.getBoundingClientRect();
-  if (self2.top < parent.top)
-    container.scrollTop -= parent.top - self2.top;
-  else if (self2.bottom > parent.bottom)
-    container.scrollTop += self2.bottom - parent.bottom;
+  let self = element.getBoundingClientRect();
+  if (self.top < parent.top)
+    container.scrollTop -= parent.top - self.top;
+  else if (self.bottom > parent.bottom)
+    container.scrollTop += self.bottom - parent.bottom;
 }
 function score(option) {
   return (option.boost || 0) * 100 + (option.apply ? 10 : 0) + (option.info ? 5 : 0) + (option.type ? 1 : 0);
@@ -19898,37 +19884,117 @@ var basicSetup = /* @__PURE__ */ (() => [
   ])
 ])();
 
+// src/logger.ts
+function log(...args) {
+  console.log(...args);
+}
+
 // src/index.ts
 async function src_default({
   codemirror_grammar_host,
-  codemirror_syntax_host
+  codemirror_syntax_host,
+  disassembly_output
 }) {
-  await sherpa_wasm_default();
-  console.log("Sherpa WASM Runtime initialized");
-  let guard = false;
-  function parse(input) {
-    if (guard)
-      return;
-    guard = true;
-    parse_input(input);
-    guard = false;
+  try {
+    await sherpa_wasm_default();
+    log("Sherpa WASM Runtime initialized");
+  } catch {
+    alert("Sherpa Failed to Load");
   }
-  new EditorView({
+  const grammar_sys = new GrammarInterface();
+  const grammar_editor = new EditorView({
     doc: "<> A > 'B'",
-    extensions: [basicSetup, EditorView.updateListener.of((e) => {
-      if (e.focusChanged && !e.view.hasFocus) {
-        parse(e.state.doc.toString());
-      }
-    })],
+    extensions: [
+      basicSetup,
+      ((PENDING_BUILD, g) => EditorView.updateListener.of((e) => {
+        PENDING_BUILD |= +e.docChanged;
+        if (e.focusChanged && !e.view.hasFocus && PENDING_BUILD) {
+          PENDING_BUILD = 0;
+          g.parse(e.state.doc.toString());
+        }
+      }))(1, grammar_sys)
+    ],
     parent: codemirror_grammar_host
   });
-  new EditorView({
+  grammar_sys.on("valid-build", (g) => {
+    g.build_states();
+  });
+  grammar_sys.on("bytecode-ready", (g) => {
+    disassembly_output.innerHTML = g.disassembly;
+  });
+  const source_editor = new EditorView({
     doc: "B",
     extensions: [basicSetup],
     parent: codemirror_syntax_host
   });
 }
-console.log("hello world");
+var GrammarInterface = class {
+  constructor() {
+    this.parse_guard = false;
+    this.active_grammar = null;
+    this.event_listener = /* @__PURE__ */ new Map();
+  }
+  async parse(grammar) {
+    return this.write_guard(
+      () => {
+        this.active_grammar = compile_grammar(grammar);
+        let VALID = this.active_grammar.is_valid();
+        log(`Compiled grammar is ${VALID ? "valid!" : "not valid!"}`);
+        this.parse_guard = false;
+        if (VALID) {
+          this.signal("valid-build");
+        } else {
+          this.signal("invalid-build");
+        }
+      }
+    );
+  }
+  async build_states() {
+    return this.write_guard(
+      () => {
+        this.active_grammar?.compile_states(true);
+        log(`Compiled grammar states`);
+        this.active_grammar?.compile_bytecode(true);
+        log(`Compiled grammar bytecode`);
+        this.parse_guard = false;
+        this.signal("states-ready");
+        this.signal("bytecode-ready");
+      }
+    );
+  }
+  on(event, listener) {
+    if (!this.event_listener.has(event)) {
+      this.event_listener.set(event, []);
+    }
+    this.event_listener.get(event)?.push(listener);
+  }
+  get disassembly() {
+    return this.active_grammar?.generate_disassembly() ?? "";
+  }
+  async write_guard(guarded_fn) {
+    if (this.parse_guard) {
+      this.signal("parser-busy");
+      return this;
+    }
+    ;
+    this.parse_guard = true;
+    try {
+      await guarded_fn();
+    } catch (err) {
+      console.log(err);
+    } finally {
+      this.parse_guard = false;
+      this.signal("parser-ready");
+      return this;
+    }
+  }
+  signal(event) {
+    this.event_listener.get(event)?.forEach((l) => l(this));
+  }
+  parse_guard = false;
+  active_grammar = null;
+  event_listener;
+};
 export {
   src_default as default
 };

@@ -6,8 +6,10 @@
   "version": "1.0.0-beta1",
   "files": [
     "sherpa_wasm_bg.wasm",
-    "sherpa_wasm.js"
+    "sherpa_wasm.js",
+    "sherpa_wasm.d.ts"
   ],
   "module": "sherpa_wasm.js",
+  "types": "sherpa_wasm.d.ts",
   "sideEffects": false
 }

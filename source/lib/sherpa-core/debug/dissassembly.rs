@@ -350,12 +350,8 @@ fn get_input_id(g: Option<&GrammarStore>, token_id: u32, input_type: InputType) 
     token_id.to_string()
   }
 }
-/// Making the Journal reference an optional requirement allows this function to
-/// work independent of any grammar that may been input for the bytecode generation.
-/// This allows the use of this function in situations where the bytecode is the only
-/// thing a user may have access to but they still want to get some insight in to the
-/// operations of the state machine.
-pub fn generate_disassembly(output: &BytecodeOutput, j: &mut Journal) -> String {
+/// Returns a "disassembly"  representation of a bytecode parser's opcodes.
+pub fn generate_disassembly(output: &BytecodeOutput, j: &Journal) -> String {
   let g = j.grammar().unwrap();
   let bc = output.bytecode.as_slice();
   let mut states_strings = vec![];

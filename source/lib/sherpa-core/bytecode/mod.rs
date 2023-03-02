@@ -73,7 +73,7 @@ impl StateData {
     self.name.clone()
   }
 }
-/// Compile bytecode data and artifacts from the a set of parse states
+/// Compile bytecode data and artifacts from a Vec of state name String and ParseState pairs.
 pub fn compile_bytecode<'a>(
   j: &mut Journal,
   states: &Vec<(String, Box<ParseState>)>,

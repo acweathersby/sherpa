@@ -17,14 +17,9 @@ use crate::{
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 
 use super::hash_group_btreemap;
-/// TODO join all LEAF states (non-branching states that do not have gotos - including push and push exception handler),
-/// then replace all state with gotos with the leaf merged leaf states.
-
-/// Then merge all states that have identical bodies and merge.
 
 /// Attempts to reduce the number of IR states through merging states, and reduce
 /// and reduce bytecode complexity by transforming instructions where appropriate.
-
 pub fn optimize_parse_states(
   j: &mut Journal,
   mut states: BTreeMap<String, Box<ParseState>>,
@@ -398,7 +393,6 @@ fn lower_allpass_branch_state(state: &mut Box<ParseState>, changes: &mut bool) {
 }
 
 fn remove_default_shadows(state: &mut Box<ParseState>, changes: &mut bool) {
-  
   if let SherpaResult::Ok(state) = &mut state.ast {
     if matches!(state.instructions[0], ASTNode::DEFAULT(_)) && state.instructions.len() == 1 {
       match state.instructions[0].clone() {

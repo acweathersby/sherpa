@@ -16,8 +16,9 @@ mkdir -p $SHERPA_LIB_DIR
 pushd $PWD/source/lib/sherpa-wasm
 
 # Build the wasm library
-wasm-pack build --dev --no-typescript --target web
- 
+wasm-pack build --dev --target web
+# wasm-pack build --no-typescript --target web
+
 # Move the wasm data to out die
 mkdir -p $SHERPA_LAB_SRC_DIR
 mkdir -p $SHERPA_LAB_PUB_DIR

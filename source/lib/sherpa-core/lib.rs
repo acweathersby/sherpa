@@ -40,12 +40,13 @@ pub use types::{SherpaError, SherpaResult};
 /// Methods compiling a parser from a grammar.
 pub mod compile {
   pub use crate::{
-    bytecode::compile_bytecode,
+    bytecode::{compile_bytecode, BytecodeOutput},
     parser::{compile_parse_states, optimize_parse_states},
     types::{
       GrammarId,
       GrammarRef,
       GrammarStore,
+      ParseState,
       Production,
       ProductionId,
       Rule,
