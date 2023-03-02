@@ -1,0 +1,21 @@
+{
+	"compilerOptions": {
+		"allowJs": true,
+		"alwaysStrict": true,
+		"checkJs": true,
+		"esModuleInterop": true,
+		"moduleResolution": "node",
+		"skipLibCheck": false,
+		"sourceMap": true,
+		"strict": true,
+		"target": "ESNext",
+		"outDir": "./public/",
+		"lib": [
+			"ES2020",
+			"DOM"
+		],
+	},
+	"include": [
+		"./src/**/*"
+	]
+}

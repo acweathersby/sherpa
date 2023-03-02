@@ -1,0 +1,13 @@
+{
+  "name": "sherpa-wasm",
+  "collaborators": [
+    "Anthony Weathersby <acweathersby.codes@gmail.com>"
+  ],
+  "version": "1.0.0-beta1",
+  "files": [
+    "sherpa_wasm_bg.wasm",
+    "sherpa_wasm.js"
+  ],
+  "module": "sherpa_wasm.js",
+  "sideEffects": false
+}

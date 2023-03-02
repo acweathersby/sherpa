@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <link type="text/css" rel="stylesheet" href="./index.css" />
+</head>
+
+<body id="lab">
+    <main>
+        <header>
+            <h1> Sherpa Lab </h1>
+            <label>
+                <input type="checkbox">
+                Auto Build
+            </label>
+
+            <label>
+                <input type="checkbox">
+                Optimize
+            </label>
+
+
+
+            <div class="buttons">
+                <button>Fuzz </button>
+                <button>Save 💾</button>
+                <button>Restore</button>
+                <button>Docs 📄</button>
+            </div>
+
+        </header>
+
+        <div id="studio">
+            <div id="input-area">
+                <div id="grammar-input">
+                    <div class="input-area-label">
+                        <h5>grammar</h5>
+                        <button>Build </button>
+                    </div>
+                </div>
+                <div id="syntax-input">
+
+                    <div class="input-area-label">
+                        <h5>grammar</h5>
+                        <button>Parse </button>
+                    </div>
+                </div>
+            </div>
+            <div id="output-area">
+                <code><pre id="output1"></pre></code>
+            </div>
+        </div>
+    </main>
+    <script type="module">
+        import engine from "./index.js";
+
+        engine({
+            codemirror_grammar_host: document.getElementById("grammar-input"),
+            codemirror_syntax_host: document.getElementById("syntax-input")
+        });
+    </script>
+</body>
+
+</html>
