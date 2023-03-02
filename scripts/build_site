@@ -1,0 +1,36 @@
+#! /usr/bin/zsh
+
+# Move to project root
+pushd .
+pushd ${0:a:h}/..
+
+# CONFIGURE DIRECTORIES
+ROOT_DIR=$PWD
+SHERPA_LIB_DIR=$SITE_OUT_DIR/src/sherpa
+TARGET_DIR=$ROOT_DIR/target
+SHERPA_LAB_SRC_DIR=$ROOT_DIR/source/web/lab/src/sherpa
+SHERPA_LAB_PUB_DIR=$ROOT_DIR/source/web/lab/public
+mkdir -p $SHERPA_LIB_DIR
+
+# Navigate to sherpa-wasm
+pushd $PWD/source/lib/sherpa-wasm
+
+# Build the wasm library
+wasm-pack build --dev --no-typescript --target web
+ 
+# Move the wasm data to out die
+mkdir -p $SHERPA_LAB_SRC_DIR
+mkdir -p $SHERPA_LAB_PUB_DIR
+cp ./pkg/* $SHERPA_LAB_SRC_DIR
+cp $SHERPA_LAB_SRC_DIR/sherpa_wasm_bg.wasm $SHERPA_LAB_PUB_DIR/
+# Copy the WASM module to public folder
+#cargo build --package sherpa-wasm --target=wasm32-unknown-unknown
+
+# Move the wasm data to out die
+# cp $TARGET_DIR/wasm32-unknown-unknown/debug/sherpa_wasm.wasm $SHERPA_LIB_DIR
+
+
+# Move to root
+popd 
+# Move to to script folder
+popd
