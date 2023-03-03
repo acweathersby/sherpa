@@ -258,7 +258,7 @@ fn create_scanner_productions_from_symbols(j: &mut Journal, g: &mut GrammarStore
           _ => {
             j.report_mut().add_error(SherpaError::SourceError {
               id:         "missing-production-definition",
-              msg:        format!("Could not find a definition for production"),
+              msg:        format!("Could not find a definition for this production."),
               inline_msg: "could not find".to_string(),
               loc:        tok,
               path:       g_ref.path.clone(),
@@ -284,7 +284,7 @@ fn check_for_missing_productions(j: &mut Journal, g: &GrammarStore) -> bool {
             have_missing_production = true;
             j.report_mut().add_error(SherpaError::SourceError {
               id:         "missing-production-definition",
-              msg:        format!("Could not find a definition for production"),
+              msg:        format!("Could not find a definition for this production."),
               inline_msg: "could not find".to_string(),
               loc:        sym.tok.clone(),
               path:       sym.grammar_ref.path.clone(),

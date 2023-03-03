@@ -12,7 +12,7 @@ pub(crate) mod severity {
   /// Severity types of SherpaErrors
   #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
   pub enum SherpaErrorSeverity {
-    /// No error at all
+    /// No error at all 
     None,
     /// A hint that can be communicated to the user to improve some
     /// aspect of the grammar or parser.
@@ -33,7 +33,7 @@ pub use severity::SherpaErrorSeverity;
 #[derive(Clone, Debug, Hash)]
 pub enum SherpaError {
   /// A general structure for reporting an error that has occurred
-  /// within an external source file.
+  /// within a source file.
   SourceError {
     /// Location of the error within a source file.
     loc:        Token,
