@@ -43,7 +43,7 @@ build_doc_site:
   stage: build-site
   image: debian:bullseye-slim
   rules:
-    - when: always
+    - when: on_success
   script:
     - apt-get update
     - apt-get install -y hugo
@@ -62,7 +62,7 @@ build_lab_site:
   needs:
     - build_wasm
   rules:
-    - when: always
+    - when: on_success
   script:
     - cp ./source/web/sherpa-wasm/pkg/* ./source/web/lab/src/
     - cp ./source/web/lab/src/sherpa_wasm_bg.wasm ./source/web/lab/public
@@ -83,7 +83,7 @@ deploy_site_local:
     - build_lab_site
     - build_doc_site
   rules:
-    - when: always
+    - when: on_success
   script:
     - mkdir public
     - cp -rf source/web/doc/public/* ./public
@@ -99,6 +99,6 @@ test_sherpa:
   needs:
     - "build_core"
   rules:
-    - when: always
+    - when: on_success
   script:
     - ./scripts/run_tests
