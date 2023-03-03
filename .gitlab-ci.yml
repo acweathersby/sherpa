@@ -27,6 +27,7 @@ build_wasm:
   rules:
     - when: always
   script:
+    - curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
     - ./scripts/build_wasm
   artifacts:
     untracked: false
@@ -41,6 +42,7 @@ build_doc_site:
   rules:
     - when: always
   script:
+    - apt-get update
     - apt-get install -y hugo
     - cd ./source/web/doc
     - hugo
@@ -55,7 +57,7 @@ build_lab_site:
   stage: build-site
   image: node:19
   needs:
-    - "build_wasm"
+    - build_wasm
   rules:
     - when: always
   script:
@@ -74,8 +76,8 @@ deploy_site_local:
   stage: deploy-site
   image: alpine
   needs:
-    - "build_lab_site"
-    - "build_doc_site"
+    - build_lab_site
+    - build_doc_site
   rules:
     - when: always
   script:

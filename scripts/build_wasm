@@ -15,10 +15,12 @@ pushd ${0:a:h}/..
 pushd $SHERPA_WASM_DIR
 
 # Build the wasm library
-if [[ "$1"="dev" ]]
-then
+if [[ "$1" == "dev" ]]
+then    
+    echo "BULDING DEV"
     wasm-pack build --dev --target web
 else 
+    echo "BULDING RELEASE"
     wasm-pack build --target web
 fi
 
