@@ -1,5 +1,8 @@
 image: $CI_REGISTRY/anthony/sherpa/sherpa-build:latest
 
+variables:
+  GIT_DEPTH: 10
+
 stages:
   - build
   - test
@@ -27,7 +30,7 @@ build_wasm:
   rules:
     - when: always
   script:
-    - curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+    - "curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh"
     - ./scripts/build_wasm
   artifacts:
     untracked: false
@@ -63,6 +66,7 @@ build_lab_site:
   script:
     - cp ./source/web/sherpa-wasm/pkg/* ./source/web/lab/src/
     - cp ./source/web/lab/src/sherpa_wasm_bg.wasm ./source/web/lab/public
+    - cd ./source/web/lab/
     - npm install
     - npm build
   artifacts:
