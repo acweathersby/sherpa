@@ -1,0 +1,34 @@
+#! /usr/bin/zsh
+
+# Move to project root
+pushd .
+pushd ${0:a:h}/..
+
+##########################
+# Setup environment variables
+# this should always be sourced from the root directory
+. ./scripts/env_vars
+##########################
+
+##########################
+## SHERPA WASM
+pushd $SHERPA_WASM_DIR
+
+# Build the wasm library
+if [[ "$1"="dev" ]]
+then
+    wasm-pack build --dev --target web
+else 
+    wasm-pack build --target web
+fi
+
+# Move the wasm data to out lab directory
+
+cp ./pkg/* $SHERPA_LAB_SRC_DIR
+cp $SHERPA_LAB_SRC_DIR/sherpa_wasm_bg.wasm $SHERPA_LAB_PUB_DIR/
+
+popd
+##########################
+
+pushd
+pushd

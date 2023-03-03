@@ -1,0 +1,15 @@
+##########################
+# CONFIGURE DIRECTORY VARS
+ROOT_DIR=$PWD
+
+SHERPA_WASM_DIR=$ROOT_DIR/source/web/sherpa-wasm
+
+SHERPA_LAB_DIR=$ROOT_DIR/source/web/lab
+SHERPA_LAB_SRC_DIR=$SHERPA_LAB_DIR/src/sherpa
+SHERPA_LAB_PUB_DIR=$SHERPA_LAB_DIR/public
+SHERPA_DOC_DIR=$ROOT_DIR/source/web/doc
+SHERPA_DOC_PUB_DIR=$SHERPA_DOC_DIR/public
+
+WEB_FOLDER=$ROOT_DIR/public
+
+##########################

@@ -13,11 +13,9 @@ pushd ${0:a:h}/..
 
 ##########################
 # Setup directories 
-echo "CLEANING PUBLIC FOLDER"
+echo "CLEAR_PUBLIC_FOLDER"
 
-mkdir -p $WEB_FOLDER
-
-rm -rf $WEB_FOLDER/*
+rm -rf $WEB_FOLDER
 ##########################
 
 
@@ -31,8 +29,8 @@ rm -rf $SHERPA_DOC_PUB_DIR
 # build files
 hugo
 
-# Copy public folder to public/lab
-cp -fr $SHERPA_DOC_PUB_DIR/* $WEB_FOLDER
+# link the public folder to repo public
+ln -s $SHERPA_DOC_PUB_DIR $WEB_FOLDER
 
 popd
 ##########################
@@ -40,7 +38,7 @@ popd
 
 ##########################
 ## SHERPA WASM
-$ROOT_DIR/scripts/build_wasm
+$ROOT_DIR/scripts/build_wasm dev
 ##########################
 
 
@@ -51,10 +49,25 @@ pushd $SHERPA_LAB_DIR
 # build files
 npm run build
 
-# Copy public folder to public/lab
-cp -fr $SHERPA_LAB_PUB_DIR $WEB_FOLDER/lab
+# remove the old lab folder
+rm $WEB_FOLDER/lab
+
+# link public folder to public/lab
+ln -s $SHERPA_LAB_PUB_DIR $WEB_FOLDER/lab
 
 popd
 ##########################
 
+
+##########################
+## Startup dev environment
+pushd $WEB_FOLDER
+
+live-server
+
+popd
+##########################
+
+popd
+popd
 echo "DONE"
