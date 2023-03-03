@@ -68,7 +68,7 @@ build_lab_site:
     - cp ./source/web/lab/src/sherpa_wasm_bg.wasm ./source/web/lab/public
     - cd ./source/web/lab/
     - npm install
-    - npm build
+    - npm run build
   artifacts:
     untracked: false
     when: on_success
