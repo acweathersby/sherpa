@@ -7,5 +7,6 @@
         "codepoints",
         "Scanless",
         "unoptimized"
-    ]
+    ],
+    "lldb.showDisassembly": "auto"
 }

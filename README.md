@@ -1,10 +1,24 @@
 # Sherpa
 
-Sherpa is a parser generator written in Rust and LLVM that generates stack based hybrid parsers. 
+Sherpa is new type of parse generator that is 
 
-It also provides an AST specification language that allows both the language specification and its AST structures. 
+What sherpa is:
 
-It provides a flexible way to defining parsers through GRAMMAR, AST, and IR code definitions. It can target LLVM, allowing it to be used in languages other Rust, including C/C++, Typescript/Javascript,  Python, and 
+- No Lexer
+Sherpa dispenses with the notion of a separate lexer process by allowing arbitrary matching on three low level classes of data: bytes, UTF8 codepoints, UTF character classes. 
+
+- Algorithm Agnostic
+- Low Level
+
+
+Sherpa is parse algorithm agnostic. At its core is a parser programming language that is design simplify the creation
+of parsers that can handle a large number of grammatical constructs. It is able to describe (G)LL, (G)LR, Recursive Descent,
+Recursive Ascent, Pratt, and Peg parser, to name few common ones. Not only that, the language design allows arbitrary mixing
+of these algorithms. 
+
+Sherpa also provides a general AST  AST specification language that allows both the language specification and its AST structures. 
+
+It provides a flexible way to defining parsers through language grammar, AST specifications, and IR code definitions. It can target LLVM, allowing it to be used in languages other Rust (eventually including Python, C++, and Js). 
 
 ## Usage 
 

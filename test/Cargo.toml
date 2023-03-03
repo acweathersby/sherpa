@@ -1,7 +1,7 @@
 [workspace]
 
 members = [
-    "./e2e",
+    "./e2e/proc_macro",
     "./json_parser",
 ]
 

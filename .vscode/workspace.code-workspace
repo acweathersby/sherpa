@@ -1,12 +1,40 @@
 {
 	"folders": [
 		{
-			"path": "../"
+			"path": "../source/lib",
+			"name": "Library Sources"
+		},
+		{
+			"path": "../source/app/cli",
+			"name": "CLI Source"
+		},
+		{
+			"path": "../source/web",
+			"name": "Web Sources"
+		},
+		{
+			"path": "../scripts",
+			"name": "Scripts"
+		},
+		{
+			"path": "../releases",
+			"name": "Releases"
+		},
+		{
+			"path": "../public",
+			"name": "Web Public"
+		},
+		{
+			"path": "../test",
+			"name": "Tests"
+		},
+		{
+			"path": ".."
 		}
 	],
 	"settings": {
 		"lldb.displayFormat": "auto",
-		"lldb.showDisassembly": "auto",
+		"lldb.showDisassembly": "always",
 		"lldb.dereferencePointers": true,
 		"lldb.consoleMode": "commands"
 	},

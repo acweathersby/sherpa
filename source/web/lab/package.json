@@ -3,7 +3,7 @@
     "private": true,
     "version": "0.0.0",
     "scripts": {
-        "build": "npx esbuild src/index.ts --bundle --outdir=public --format=esm",
+        "build": "npx esbuild src/index.ts --bundle --outdir=public --format=esm --minify",
         "watch": "npx esbuild src/index.ts --bundle --outdir=public --format=esm --watch"
     },
     "dependencies": {

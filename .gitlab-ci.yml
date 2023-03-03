@@ -1,24 +1,98 @@
 image: $CI_REGISTRY/anthony/sherpa/sherpa-build:latest
 
 stages:
-  - test
   - build
+  - test
+  - build-site
+  - deploy-site
 
-test_sherpa_packages:
-  stage: test
-
+build_core:
+  stage: build
+  image: $CI_REGISTRY/anthony/sherpa/sherpa-build:latest
   rules:
     - when: always
-
   script:
     - ./scripts/bootstrap_binary
-    - ./scripts/run_tests
+  artifacts:
+    untracked: false
+    when: on_success
+    expire_in: "7 days"
+    paths:
+      - "source/lib/sherpa-core/lib/"
+      - "source/lib/sherpa-core/grammar/compile/parser/sherpa.rs"
 
-build_sherpa_packages:
+build_wasm:
   stage: build
-
+  image: $CI_REGISTRY/anthony/sherpa/sherpa-build:latest
   rules:
     - when: always
-
   script:
-    - echo "Hello World"
+    - ./scripts/build_wasm
+  artifacts:
+    untracked: false
+    when: on_success
+    expire_in: "7 days"
+    paths:
+      - "source/web/sherpa-wasm/pkg"
+
+build_doc_site:
+  stage: build-site
+  image: debian:bullseye-slim
+  rules:
+    - when: always
+  script:
+    - apt-get install -y hugo
+    - cd ./source/web/doc
+    - hugo
+  artifacts:
+    untracked: false
+    when: on_success
+    expire_in: "7 days"
+    paths:
+      - "source/web/doc/public"
+
+build_lab_site:
+  stage: build-site
+  image: node:19
+  needs:
+    - "build_wasm"
+  rules:
+    - when: always
+  script:
+    - cp ./source/web/sherpa-wasm/pkg/* ./source/web/lab/src/
+    - cp ./source/web/lab/src/sherpa_wasm_bg.wasm ./source/web/lab/public
+    - npm install
+    - npm build
+  artifacts:
+    untracked: false
+    when: on_success
+    expire_in: "7 days"
+    paths:
+      - "source/web/lab/public"
+
+deploy_site_local:
+  stage: deploy-site
+  image: alpine
+  needs:
+    - "build_lab_site"
+    - "build_doc_site"
+  rules:
+    - when: always
+  script:
+    - mkdir public
+    - cp -rf source/web/doc/public/* ./public
+    - mkdir -p public/lab
+    - cp -rf source/web/lab/public/* ./public/lab
+  artifacts:
+    paths:
+      - public
+
+test_sherpa:
+  stage: test
+  image: $CI_REGISTRY/anthony/sherpa/sherpa-build:latest
+  needs:
+    - "build_core"
+  rules:
+    - when: always
+  script:
+    - ./scripts/run_tests
