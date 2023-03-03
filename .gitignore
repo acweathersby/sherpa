@@ -5,6 +5,7 @@
 **/bin
 **/target
 **/pkg
+source/web/lab/src/sherpa/
 
 # Debugging artifacts
 /sandbox
@@ -19,3 +20,10 @@
 
 # Temporary notes
 *notes.md
+
+# public site folders
+**/public/
+!./source/web/lab/public
+
+# folders tagged with --ignore--
+**/*--ignore--*/
