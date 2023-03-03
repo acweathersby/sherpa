@@ -64,8 +64,9 @@ build_lab_site:
   rules:
     - when: on_success
   script:
-    - cp ./source/web/sherpa-wasm/pkg/* ./source/web/lab/src/
-    - cp ./source/web/lab/src/sherpa_wasm_bg.wasm ./source/web/lab/public
+    - mkdir -p ./source/web/lab/src/sherpa
+    - cp ./source/web/sherpa-wasm/pkg/* ./source/web/lab/src/sherpa
+    - cp ./source/web/lab/src/sherpa/sherpa_wasm_bg.wasm ./source/web/lab/public
     - cd ./source/web/lab/
     - npm install
     - npm run build
