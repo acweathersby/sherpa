@@ -33,11 +33,11 @@ console_error_panic_hook = { version = "0.1.6", optional = true }
 wasm-bindgen-test = "0.3.34"
 
 [dependencies.sherpa_core]
-path = "../sherpa-core"
+path = "../../lib/sherpa-core"
 features = ["wasm-target" ]
 
 [dependencies.sherpa_runtime]
-path = "../sherpa-rust-rt"
+path = "../../lib/sherpa-rust-rt"
 
 [profile.release]
 # Tell `rustc` to optimize for small code size.

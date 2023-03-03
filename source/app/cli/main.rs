@@ -2,9 +2,22 @@ use core::panic;
 use std::path::PathBuf;
 
 use clap::{arg, value_parser, ArgMatches, Command};
-use sherpa::{
-  pipeline::{tasks::*, BuildPipeline, SourceType},
-  *,
+use sherpa_core::{
+  pipeline::{
+    tasks::{
+      build_ascript_types_and_functions,
+      build_bytecode_disassembly,
+      build_bytecode_parser,
+      build_llvm_parser,
+      build_llvm_parser_interface,
+      build_rust_preamble,
+    },
+    SourceType,
+    *,
+  },
+  Config,
+  SherpaError,
+  SherpaResult,
 };
 
 #[derive(Clone, Debug)]
@@ -56,7 +69,11 @@ pub fn command() -> ArgMatches {
           .default_value("rust")
         )
         .arg(
-          arg!( -o --out <OUTPUT_PATH> "The path to the directory which the parser files will be written to.\n    Defaults to the CWD" )
+        arg!( -o --out <OUTPUT_PATH> "The path to the directory which the parser files will be written to.\n  Defaults to the CWD" )
+          .required(false)
+          .value_parser(value_parser!(PathBuf))
+        ).arg(
+          arg!( --libout <LIB_OUTPUT_PATH> "The path to the directory which library will be written to.\n  Defaults to the OUTPUT_PATH" )
           .required(false)
           .value_parser(value_parser!(PathBuf))
         )
@@ -70,7 +87,10 @@ pub fn command() -> ArgMatches {
     .get_matches()
 }
 
-fn configure_matches(matches: &ArgMatches, pwd: &PathBuf) -> (Config, ParserType, PathBuf) {
+fn configure_matches(
+  matches: &ArgMatches,
+  pwd: &PathBuf,
+) -> (Config, ParserType, PathBuf, PathBuf) {
   let mut config = Config::default();
   config.source_type = match matches
     .contains_id("lang")
@@ -93,7 +113,9 @@ fn configure_matches(matches: &ArgMatches, pwd: &PathBuf) -> (Config, ParserType
 
   let out_dir = matches.get_one::<PathBuf>("out").unwrap_or(pwd);
 
-  (config, parser_type, out_dir.clone())
+  let lib_out_dir = matches.get_one::<PathBuf>("libout").unwrap_or(out_dir);
+
+  (config, parser_type, out_dir.clone(), lib_out_dir.clone())
 }
 
 fn main() -> SherpaResult<()> {
@@ -102,7 +124,7 @@ fn main() -> SherpaResult<()> {
   let matches = command();
 
   if let Some(matches) = matches.subcommand_matches("build") {
-    let (config, parser_type, out_dir) = configure_matches(matches, &pwd);
+    let (config, parser_type, out_dir, lib_out_dir) = configure_matches(matches, &pwd);
 
     for path in matches.get_many::<PathBuf>("INPUTS").unwrap_or_default() {
       let path =
@@ -112,7 +134,7 @@ fn main() -> SherpaResult<()> {
 
       pipeline
         .set_source_output_dir(&out_dir)
-        .set_build_output_dir(&out_dir)
+        .set_build_output_dir(&lib_out_dir)
         .add_task(build_rust_preamble());
 
       match config.source_type {

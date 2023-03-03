@@ -66,7 +66,7 @@ pub(crate) fn load_from_path(
           let pending_grammar_paths = &pending_grammar_paths;
           j.set_active_report("File Load", ReportType::GrammarCompile(Default::default()));
           s.spawn(move || {
-            parse_grammar(pending_grammar_paths, claimed_grammar_paths, work_verifier, &mut j)
+            parse_grammar(&mut j, pending_grammar_paths, claimed_grammar_paths, work_verifier)
           })
         })
         .map(|s| s.join().unwrap())
@@ -76,8 +76,10 @@ pub(crate) fn load_from_path(
     let mut grammars = vec![];
 
     for mut g in results {
-      grammars.append(g);
+      grammars.append(&mut g);
     }
+
+    grammars
   };
 
   #[cfg(any(feature = "wasm-target", feature = "single-thread"))]

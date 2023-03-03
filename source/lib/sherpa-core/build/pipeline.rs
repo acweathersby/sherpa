@@ -273,8 +273,8 @@ impl<'a> BuildPipeline<'a> {
       if let Some(source_name) = self.source_name.as_ref() {
         let source_name =
           source_name.to_string().replace("%", &self.journal.grammar().unwrap().id.name);
-        let source_path = self.build_output_dir.join("./".to_string() + &source_name);
-        eprintln!("{:?} {:?}", source_path, self.build_output_dir);
+        let source_path = self.source_output_dir.join("./".to_string() + &source_name);
+        eprintln!("{:?} {:?}", source_path, self.source_output_dir);
         if let Ok(mut parser_data_file) = std::fs::File::create(&source_path) {
           let data = source_parts
             .iter()

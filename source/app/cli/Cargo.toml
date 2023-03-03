@@ -10,6 +10,7 @@ path = "./main.rs"
 [dependencies]
 clap = { version="4.0.29" }
 
-[dependencies.sherpa]
-path = "../../lib/sherpa"
+[dependencies.sherpa_core]
+path = "../../lib/sherpa-core"
+features = [ "llvm" ]
 

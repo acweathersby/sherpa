@@ -1,7 +1,11 @@
 // src/sherpa/sherpa_wasm.js
 var wasm;
-var cachedTextDecoder = new TextDecoder("utf-8", { ignoreBOM: true, fatal: true });
-cachedTextDecoder.decode();
+var heap = new Array(128).fill(void 0);
+heap.push(void 0, null, true, false);
+function getObject(idx) {
+  return heap[idx];
+}
+var WASM_VECTOR_LEN = 0;
 var cachedUint8Memory0 = null;
 function getUint8Memory0() {
   if (cachedUint8Memory0 === null || cachedUint8Memory0.byteLength === 0) {
@@ -9,26 +13,6 @@ function getUint8Memory0() {
   }
   return cachedUint8Memory0;
 }
-function getStringFromWasm0(ptr, len) {
-  return cachedTextDecoder.decode(getUint8Memory0().subarray(ptr, ptr + len));
-}
-var heap = new Array(128).fill(void 0);
-heap.push(void 0, null, true, false);
-var heap_next = heap.length;
-function addHeapObject(obj) {
-  if (heap_next === heap.length)
-    heap.push(heap.length + 1);
-  const idx = heap_next;
-  heap_next = heap[idx];
-  if (typeof heap_next !== "number")
-    throw new Error("corrupt heap");
-  heap[idx] = obj;
-  return idx;
-}
-function getObject(idx) {
-  return heap[idx];
-}
-var WASM_VECTOR_LEN = 0;
 var cachedTextEncoder = new TextEncoder("utf-8");
 var encodeString = typeof cachedTextEncoder.encodeInto === "function" ? function(arg, view) {
   return cachedTextEncoder.encodeInto(arg, view);
@@ -41,8 +25,6 @@ var encodeString = typeof cachedTextEncoder.encodeInto === "function" ? function
   };
 };
 function passStringToWasm0(arg, malloc, realloc) {
-  if (typeof arg !== "string")
-    throw new Error("expected a string argument");
   if (realloc === void 0) {
     const buf = cachedTextEncoder.encode(arg);
     const ptr2 = malloc(buf.length);
@@ -67,8 +49,6 @@ function passStringToWasm0(arg, malloc, realloc) {
     ptr = realloc(ptr, len, len = offset + arg.length * 3);
     const view = getUint8Memory0().subarray(ptr + offset, ptr + len);
     const ret = encodeString(arg, view);
-    if (ret.read !== arg.length)
-      throw new Error("failed to pass whole string");
     offset += ret.written;
   }
   WASM_VECTOR_LEN = offset;
@@ -83,6 +63,20 @@ function getInt32Memory0() {
     cachedInt32Memory0 = new Int32Array(wasm.memory.buffer);
   }
   return cachedInt32Memory0;
+}
+var cachedTextDecoder = new TextDecoder("utf-8", { ignoreBOM: true, fatal: true });
+cachedTextDecoder.decode();
+function getStringFromWasm0(ptr, len) {
+  return cachedTextDecoder.decode(getUint8Memory0().subarray(ptr, ptr + len));
+}
+var heap_next = heap.length;
+function addHeapObject(obj) {
+  if (heap_next === heap.length)
+    heap.push(heap.length + 1);
+  const idx = heap_next;
+  heap_next = heap[idx];
+  heap[idx] = obj;
+  return idx;
 }
 function dropObject(idx) {
   if (idx < 132)
@@ -110,19 +104,7 @@ function compile_grammar(grammar) {
     wasm.__wbindgen_add_to_stack_pointer(16);
   }
 }
-function _assertNum(n) {
-  if (typeof n !== "number")
-    throw new Error("expected a number argument");
-}
-function _assertBoolean(n) {
-  if (typeof n !== "boolean") {
-    throw new Error("expected a boolean argument");
-  }
-}
 var JournalWrap = class {
-  constructor() {
-    throw new Error("cannot invoke `new` directly");
-  }
   static __wrap(ptr) {
     const obj = Object.create(JournalWrap.prototype);
     obj.ptr = ptr;
@@ -143,30 +125,45 @@ var JournalWrap = class {
   * @returns {boolean}
   */
   is_valid() {
-    if (this.ptr == 0)
-      throw new Error("Attempt to use a moved value");
-    _assertNum(this.ptr);
     const ret = wasm.journalwrap_is_valid(this.ptr);
     return ret !== 0;
+  }
+  /**
+  * Returns all grammar errors that were generated when parsing
+  * the input.
+  * @returns {string}
+  */
+  get_grammar_errors() {
+    try {
+      const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+      wasm.journalwrap_get_grammar_errors(retptr, this.ptr);
+      var r0 = getInt32Memory0()[retptr / 4 + 0];
+      var r1 = getInt32Memory0()[retptr / 4 + 1];
+      var r2 = getInt32Memory0()[retptr / 4 + 2];
+      var r3 = getInt32Memory0()[retptr / 4 + 3];
+      var ptr0 = r0;
+      var len0 = r1;
+      if (r3) {
+        ptr0 = 0;
+        len0 = 0;
+        throw takeObject(r2);
+      }
+      return getStringFromWasm0(ptr0, len0);
+    } finally {
+      wasm.__wbindgen_add_to_stack_pointer(16);
+      wasm.__wbindgen_free(ptr0, len0);
+    }
   }
   /**
   * @param {boolean} optimize
   */
   compile_states(optimize) {
-    if (this.ptr == 0)
-      throw new Error("Attempt to use a moved value");
-    _assertNum(this.ptr);
-    _assertBoolean(optimize);
     wasm.journalwrap_compile_states(this.ptr, optimize);
   }
   /**
   * @param {boolean} optimize
   */
   compile_bytecode(optimize) {
-    if (this.ptr == 0)
-      throw new Error("Attempt to use a moved value");
-    _assertNum(this.ptr);
-    _assertBoolean(optimize);
     wasm.journalwrap_compile_bytecode(this.ptr, optimize);
   }
   /**
@@ -174,10 +171,7 @@ var JournalWrap = class {
   */
   generate_disassembly() {
     try {
-      if (this.ptr == 0)
-        throw new Error("Attempt to use a moved value");
       const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-      _assertNum(this.ptr);
       wasm.journalwrap_generate_disassembly(retptr, this.ptr);
       var r0 = getInt32Memory0()[retptr / 4 + 0];
       var r1 = getInt32Memory0()[retptr / 4 + 1];
@@ -218,14 +212,6 @@ async function load(module, imports) {
 function getImports() {
   const imports = {};
   imports.wbg = {};
-  imports.wbg.__wbindgen_error_new = function(arg0, arg1) {
-    const ret = new Error(getStringFromWasm0(arg0, arg1));
-    return addHeapObject(ret);
-  };
-  imports.wbg.__wbindgen_string_new = function(arg0, arg1) {
-    const ret = getStringFromWasm0(arg0, arg1);
-    return addHeapObject(ret);
-  };
   imports.wbg.__wbindgen_string_get = function(arg0, arg1) {
     const obj = getObject(arg1);
     const ret = typeof obj === "string" ? obj : void 0;
@@ -234,8 +220,16 @@ function getImports() {
     getInt32Memory0()[arg0 / 4 + 1] = len0;
     getInt32Memory0()[arg0 / 4 + 0] = ptr0;
   };
+  imports.wbg.__wbindgen_error_new = function(arg0, arg1) {
+    const ret = new Error(getStringFromWasm0(arg0, arg1));
+    return addHeapObject(ret);
+  };
   imports.wbg.__wbindgen_object_drop_ref = function(arg0) {
     takeObject(arg0);
+  };
+  imports.wbg.__wbindgen_string_new = function(arg0, arg1) {
+    const ret = getStringFromWasm0(arg0, arg1);
+    return addHeapObject(ret);
   };
   imports.wbg.__wbindgen_throw = function(arg0, arg1) {
     throw new Error(getStringFromWasm0(arg0, arg1));
@@ -19323,7 +19317,7 @@ var completionKeymap = [
 ];
 var completionKeymapExt = /* @__PURE__ */ Prec.highest(/* @__PURE__ */ keymap.computeN([completionConfig], (state) => state.facet(completionConfig).defaultKeymap ? [completionKeymap] : []));
 
-// node_modules/codemirror/node_modules/@codemirror/lint/dist/index.js
+// node_modules/@codemirror/lint/dist/index.js
 var SelectedDiagnostic = class {
   constructor(from, to, diagnostic) {
     this.from = from;
@@ -19537,6 +19531,9 @@ var lintConfig = /* @__PURE__ */ Facet.define({
   },
   enables: lintPlugin
 });
+function linter(source, config2 = {}) {
+  return lintConfig.of({ source, config: config2 });
+}
 function assignKeys(actions) {
   let assigned = [];
   if (actions)
@@ -19895,6 +19892,7 @@ async function src_default({
   codemirror_syntax_host,
   disassembly_output
 }) {
+  const default_grammar = "<> A > 'B'";
   try {
     await sherpa_wasm_default();
     log("Sherpa WASM Runtime initialized");
@@ -19902,45 +19900,97 @@ async function src_default({
     alert("Sherpa Failed to Load");
   }
   const grammar_sys = new GrammarInterface();
+  let PENDING_LINT_CHANGES = false;
   const grammar_editor = new EditorView({
-    doc: "<> A > 'B'",
+    doc: default_grammar,
     extensions: [
       basicSetup,
-      ((PENDING_BUILD, g) => EditorView.updateListener.of((e) => {
-        PENDING_BUILD |= +e.docChanged;
-        if (e.focusChanged && !e.view.hasFocus && PENDING_BUILD) {
-          PENDING_BUILD = 0;
-          g.parse(e.state.doc.toString());
+      setupGrammarLinting(grammar_sys, (v) => {
+        for (const t2 of v.transactions) {
+          if (t2.isUserEvent("grammar.built")) {
+            return true;
+          }
         }
-      }))(1, grammar_sys)
+        return false;
+      }),
+      setupAutoBuild(grammar_sys)
     ],
     parent: codemirror_grammar_host
   });
   grammar_sys.on("valid-build", (g) => {
     g.build_states();
+    grammar_editor.dispatch({ userEvent: "grammar.built" });
+  });
+  grammar_sys.on("invalid-build", (g) => {
+    g.build_states();
+    PENDING_LINT_CHANGES = true;
+    grammar_editor.dispatch({ userEvent: "grammar.built" });
   });
   grammar_sys.on("bytecode-ready", (g) => {
     disassembly_output.innerHTML = g.disassembly;
   });
+  grammar_sys.parse(default_grammar);
   const source_editor = new EditorView({
     doc: "B",
     extensions: [basicSetup],
     parent: codemirror_syntax_host
   });
 }
+function setupGrammarLinting(g, trigger) {
+  return linter((v) => {
+    let diagnostics = [];
+    if (g.HAVE_GRAMMAR && !g.BUILDING && !g.VALID_GRAMMAR) {
+      for (const error of g.get_grammar_errors()) {
+        diagnostics.push({
+          from: error.start,
+          to: error.end,
+          severity: "error",
+          message: error.msg
+        });
+      }
+    }
+    return diagnostics;
+  }, {
+    needsRefresh: trigger,
+    delay: 100
+  });
+}
+function setupAutoBuild(g) {
+  let TRIGGER = 0;
+  return EditorView.updateListener.of((e) => {
+    if (e.docChanged == false || e.transactions.some((t2) => t2.isUserEvent("grammar"))) {
+      return;
+    }
+    if (TRIGGER != 0) {
+      clearTimeout(TRIGGER);
+      TRIGGER = 0;
+    }
+    g.invalidate();
+    let string2 = e.state.doc.toString();
+    TRIGGER = setTimeout(() => g.parse(string2), 500);
+  });
+}
 var GrammarInterface = class {
   constructor() {
-    this.parse_guard = false;
+    this.WRITE_ACTIVE = false;
     this.active_grammar = null;
     this.event_listener = /* @__PURE__ */ new Map();
+  }
+  get_grammar_errors() {
+    if (this.WRITE_ACTIVE) {
+      return [];
+    } else {
+      return JSON.parse(this.active_grammar?.get_grammar_errors() ?? "[]");
+    }
   }
   async parse(grammar) {
     return this.write_guard(
       () => {
+        this.invalidate();
         this.active_grammar = compile_grammar(grammar);
         let VALID = this.active_grammar.is_valid();
         log(`Compiled grammar is ${VALID ? "valid!" : "not valid!"}`);
-        this.parse_guard = false;
+        this.WRITE_ACTIVE = false;
         if (VALID) {
           this.signal("valid-build");
         } else {
@@ -19952,15 +20002,23 @@ var GrammarInterface = class {
   async build_states() {
     return this.write_guard(
       () => {
-        this.active_grammar?.compile_states(true);
-        log(`Compiled grammar states`);
-        this.active_grammar?.compile_bytecode(true);
-        log(`Compiled grammar bytecode`);
-        this.parse_guard = false;
-        this.signal("states-ready");
-        this.signal("bytecode-ready");
+        if (this.active_grammar) {
+          this.active_grammar?.compile_states(true);
+          log(`Compiled grammar states`);
+          this.active_grammar?.compile_bytecode(true);
+          log(`Compiled grammar bytecode`);
+          this.WRITE_ACTIVE = false;
+          this.signal("states-ready");
+          this.signal("bytecode-ready");
+        }
       }
     );
+  }
+  invalidate() {
+    if (this.active_grammar) {
+      this.active_grammar.free();
+      this.active_grammar = null;
+    }
   }
   on(event, listener) {
     if (!this.event_listener.has(event)) {
@@ -19971,19 +20029,28 @@ var GrammarInterface = class {
   get disassembly() {
     return this.active_grammar?.generate_disassembly() ?? "";
   }
+  get HAVE_GRAMMAR() {
+    return this.active_grammar != null;
+  }
+  get VALID_GRAMMAR() {
+    return this.active_grammar?.is_valid() ?? true;
+  }
+  get BUILDING() {
+    return this.WRITE_ACTIVE;
+  }
   async write_guard(guarded_fn) {
-    if (this.parse_guard) {
+    if (this.WRITE_ACTIVE) {
       this.signal("parser-busy");
       return this;
     }
     ;
-    this.parse_guard = true;
+    this.WRITE_ACTIVE = true;
     try {
       await guarded_fn();
     } catch (err) {
       console.log(err);
     } finally {
-      this.parse_guard = false;
+      this.WRITE_ACTIVE = false;
       this.signal("parser-ready");
       return this;
     }
@@ -19991,7 +20058,7 @@ var GrammarInterface = class {
   signal(event) {
     this.event_listener.get(event)?.forEach((l) => l(this));
   }
-  parse_guard = false;
+  WRITE_ACTIVE = false;
   active_grammar = null;
   event_listener;
 };

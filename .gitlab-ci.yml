@@ -11,7 +11,8 @@ test_sherpa_packages:
     - when: always
 
   script:
-    - cargo test --workspace
+    - ./scripts/bootstrap_binary
+    - ./scripts/run_tests
 
 build_sherpa_packages:
   stage: build

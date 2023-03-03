@@ -7,10 +7,12 @@ use sherpa_core::{
     GrammarStore,
   },
   debug,
+  errors,
   Journal,
+  SherpaError,
   SherpaResult,
 };
-use sherpa_runtime::types::bytecode;
+use sherpa_runtime::types::{bytecode, SherpaParseError};
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{prelude::*, JsCast};
 
@@ -35,6 +37,7 @@ pub fn compile_grammar(grammar: JsValue) -> Result<JournalWrap, JsError> {
     Some(grammar_source) => {
       let mut j = Journal::new(None);
       GrammarStore::from_str(&mut j, &grammar_source);
+      j.flush_reports();
       let valid_grammar =
         !j.have_errors_of_type(sherpa_core::errors::SherpaErrorSeverity::Critical);
       Ok(JournalWrap {
@@ -67,6 +70,19 @@ impl JournalWrap {
   /// is free of critical errors.
   pub fn is_valid(&self) -> bool {
     self.valid_grammar
+  }
+
+  /// Returns all grammar errors that were generated when parsing
+  /// the input.
+  pub fn get_grammar_errors(&mut self) -> Result<String, JsError> {
+    let mut errors = vec![];
+    self._internal_.flush_reports();
+    self._internal_.get_reports(sherpa_core::ReportType::GrammarCompile(Default::default()), |r| {
+      let mut e = r.errors().iter().filter_map(|e| e.convert_to_js_err()).collect::<Vec<_>>();
+      errors.append(&mut e)
+    });
+
+    Ok(format!("[{}]", errors.join(",")))
   }
 
   pub fn compile_states(&mut self, optimize: bool) {
@@ -119,6 +135,24 @@ impl JournalWrap {
         Ok(output.into())
       }
       None => Ok("Bytecode is not built or not valid".into()),
+    }
+  }
+}
+
+trait JSONError {
+  fn convert_to_js_err(&self) -> Option<String>;
+}
+
+impl JSONError for SherpaError {
+  fn convert_to_js_err(&self) -> Option<String> {
+    match self {
+      SherpaError::SourceError { loc, id, msg, .. } => Some(format!(
+        r#"{{ "type" : "{id}", "msg": "{}", "start": {}, "end": {} }}"#,
+        msg.replace("\"", "\\\"").replace("\n", "\\n"),
+        loc.get_tok_range().start_offset(),
+        loc.get_tok_range().end_offset()
+      )),
+      _ => None,
     }
   }
 }

@@ -19,6 +19,7 @@ button {
     padding: 5px 10px;
     border-radius: 20px;
     color: rgb(107, 107, 107);
+    transition: all 150ms;
 }
 
 button:hover {
@@ -146,4 +147,13 @@ header h1 span {
     line-height: 1em;
     font-size: 1.2em;
     color: #cecece;
+}
+
+.button-icon {
+    font-size: 1.3em;
+}
+
+#documents-frame {
+    width: 100%;
+    height: 50%;
 }

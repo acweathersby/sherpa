@@ -1,0 +1,11 @@
+[workspace]
+
+members = [
+    "./e2e",
+    "./json_parser",
+]
+
+resolver = "2"
+
+[profile.dev]
+debug = 1

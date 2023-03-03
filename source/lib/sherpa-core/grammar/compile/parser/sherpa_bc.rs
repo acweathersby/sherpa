@@ -10049,7 +10049,7 @@ pub trait Reader: ByteReader + MutByteReader + UTF8Reader + std::fmt::Debug {}
 
 impl<T: ByteReader + MutByteReader + UTF8Reader + std::fmt::Debug> Reader for T {}
 
-pub type Parser<'a, T: Reader, UserCTX> = sherpa_runtime::bytecode_parser::ByteCodeParser<'a, T, UserCTX>;
+pub type Parser<'a, T, UserCTX> = sherpa_runtime::bytecode_parser::ByteCodeParser<'a, T, UserCTX>;
 
 pub fn new_grammar_parser<'a, T: Reader, UserCTX> (reader: &'a mut T)-> Parser<'a, T, UserCTX> {
   let mut parser = Parser::new(reader, &bytecode);

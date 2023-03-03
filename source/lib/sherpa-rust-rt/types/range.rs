@@ -169,4 +169,18 @@ impl TokenRange {
     tok.set_source(reader.get_source());
     tok
   }
+
+  /// The start byte offset of this token range. Equivalent
+  /// to `self.off`. Positioned before the
+  /// first character in the range.
+  pub fn start_offset(&self) -> usize {
+    self.off as usize
+  }
+
+  /// The end byte offset of this token range. Equivalent
+  /// to `self.off + self.len`. Positioned after the
+  /// last character in the range.
+  pub fn end_offset(&self) -> usize {
+    (self.off + self.len) as usize
+  }
 }

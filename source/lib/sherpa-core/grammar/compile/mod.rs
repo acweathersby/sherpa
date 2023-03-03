@@ -79,6 +79,7 @@ pub(crate) fn compile_grammars(
           })
           .map(|s| s.join().unwrap())
           .collect::<Vec<_>>()
+          .into_iter()
           .flatten()
       })
     };

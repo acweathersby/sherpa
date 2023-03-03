@@ -1,0 +1,35 @@
+IGNORE { c:nl c:sp }
+
+<> state > "parser" state_id ":" statement 
+
+<> statement > [ 
+    transitive_statement? 
+    non_branch_statement(*) 
+    ( match | goto_sequence | terminal_statement )? 
+]
+
+<> transitive_statement > "peek" | "shift" | "skip" | "pop-goto" | "scan"
+
+<> terminal_statement > "fail" | "pass" | "accept"
+
+<> non_branch_statement > "reduce" | "assign" | "push-val" | "pop-val" | "assert"
+
+<> goto_sequence > [ goto_push(*) goto? ]
+
+<> goto_push > "push-goto" state_id
+
+<> goto > "goto" state_id
+
+<> match > "match" ( ":" tk:id )? ( int_match | "{" match_branch(+) "}" )
+
+<> match_branch > int_match | default_match | hint
+
+<> int_match > "(" ( c:num )(+"|") ")" "{" statement "}"
+<> default_match > "default"? "{" statement "}"
+<> hint > "fail-hint" "{" tk:string "}"
+
+<> state_id > tk:id
+
+<> id > "_"(*) c:id ( c:id | "_" | c:num )(*)
+
+<> string > "\"\" ( c:id | c:num | c:nl | c:sym | c:sp | "\\" ( c:id | c:num | c:nl | c:sym | c:sp ) ) "\"\"

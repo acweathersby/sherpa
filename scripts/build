@@ -1,0 +1,6 @@
+# Build the sherpa release for linux
+cargo build --release --bin sherpa --features "llvm,sherpa-binary-parser"
+
+# Output the build to the releases folder.
+mkdir -p releases/linux_bin
+mv ./target/release/sherpa ./releases/linux_bin/sherpa_x86_64
