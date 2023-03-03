@@ -6,6 +6,7 @@
 **/target
 **/pkg
 source/web/lab/src/sherpa/
+source/lib/sherpa-core/lib/
 
 # Debugging artifacts
 /sandbox
@@ -24,6 +25,8 @@ source/web/lab/src/sherpa/
 # public site folders
 **/public/
 !./source/web/lab/public
+source/web/lab/public/index.js
 
 # folders tagged with --ignore--
 **/*--ignore--*/
+
