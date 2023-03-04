@@ -1,1 +1,6 @@
-<link rel="stylesheet" href="/css/style.css">
+{{ $main_style := resources.Get "css/main.sass" | resources.ToCSS | minify -}}
+<link rel="stylesheet" type="text/css" href="{{ $main_style.RelPermalink }}">
+{{- if eq .Layout "lab" -}}
+{{ $lab := resources.Get "css/lab.sass" | resources.ToCSS | minify -}}
+<link rel="stylesheet" type="text/css" href="{{ $lab.RelPermalink }}">
+{{- end }}

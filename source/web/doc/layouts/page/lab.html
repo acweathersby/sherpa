@@ -1,10 +1,11 @@
 <!doctype html>
 <html lang="{{ .Site.Params.languageTag | default " en-US" }}">
+
 {{ partial "head/head.html" . }}
 
 
 <body class="{{ .Scratch.Get "class" }}">
-
+ 
     <script>
         document.body.style.opacity = 0;
         window.addEventListener("load", e => {
