@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="{{ .Site.Params.languageTag | default " en-US" }}">
+{{ partial "head/head.html" . }}
+
+
+<body class="{{ .Scratch.Get "class" }}">
+
+    <script>
+        document.body.style.opacity = 0;
+        window.addEventListener("load", e => {
+            document.body.style.opacity = 1;
+        });
+        window.addEventListener("beforeunload", () => {
+            document.body.style.opacity = 0;
+        });
+    </script>
+
+    {{ partial "header/header.html" . }}
+
+    <main>
+        <div id="studio">
+            <div id="input-area">
+                <div id="grammar-input">
+                    <div class="input-area-label">
+                        <h5>grammar</h5>
+                        <button>Build </button>
+                    </div>
+                </div>
+                <div id="syntax-input">
+
+                    <div class="input-area-label">
+                        <h5>source code</h5>
+                        <button>Parse </button>
+                    </div>
+                </div>
+            </div>
+            <div id="output-area">
+                <iframe id="documents-frame" class="frame" src="/docs/"></iframe>
+                <code><pre id="output"></pre></code>
+            </div>
+        </div>
+    </main>
+
+    {{ $labScript := resources.Get "js/lab/index.ts" | js.Build (dict "target" "esnext" "format" "esm")  | minify -}}
+    <script type="module">
+        import engine from "{{ $labScript.RelPermalink | safeJS }}";
+        engine({
+            codemirror_grammar_host: document.getElementById("grammar-input"),
+            codemirror_syntax_host: document.getElementById("syntax-input"),
+            disassembly_output: document.getElementById("output"),
+        });
+    </script>
+</body>
+
+</html>

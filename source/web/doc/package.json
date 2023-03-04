@@ -2,10 +2,6 @@
     "name": "sherpa-lab",
     "private": true,
     "version": "0.0.0",
-    "scripts": {
-        "build": "npx esbuild src/index.ts --bundle --outdir=public --format=esm --minify",
-        "watch": "npx esbuild src/index.ts --bundle --outdir=public --format=esm --watch"
-    },
     "dependencies": {
         "@codemirror/lint": "^6.2.0",
         "codemirror": "^6.0.1"

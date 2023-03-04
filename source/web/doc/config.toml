@@ -2,3 +2,18 @@ baseURL = "http://example.org/"
 languageCode = "en-us"
 title = "Sherpa"
 relativeURLs = true
+
+[module]
+  [module.hugoVersion]
+    extended = true
+    min = "0.80.0"
+    max = ""
+  [[module.mounts]]
+    source = "assets"
+    target = "assets"
+  [[module.mounts]]
+    source = "static"
+    target = "static"
+  [[module.mounts]]
+    source = "layouts"
+    target = "layouts"

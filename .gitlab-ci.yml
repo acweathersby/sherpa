@@ -39,15 +39,21 @@ build_wasm:
     paths:
       - "source/web/sherpa-wasm/pkg"
 
-build_doc_site:
+build_site:
   stage: build-site
-  image: debian:bullseye-slim
+  image: node:19-slim
+  needs: []
   rules:
     - when: on_success
   script:
     - apt-get update
     - apt-get install -y hugo
+    - mkdir -p ./source/web/doc/asset/js/sherpa
+    - mkdir -p ./source/web/doc/static/js/lab
+    - cp ./source/web/sherpa-wasm/pkg/* ./source/web/doc/assets/js/sherpa
+    - mv ./source/web/doc/assets/js/sherpa/sherpa_wasm_bg.wasm ./source/web/doc/static/js/lab
     - cd ./source/web/doc
+    - npm install
     - hugo
   artifacts:
     untracked: false
@@ -56,40 +62,16 @@ build_doc_site:
     paths:
       - "source/web/doc/public"
 
-build_lab_site:
-  stage: build-site
-  image: node:19
-  needs:
-    - build_wasm
-  rules:
-    - when: on_success
-  script:
-    - mkdir -p ./source/web/lab/src/sherpa
-    - cp ./source/web/sherpa-wasm/pkg/* ./source/web/lab/src/sherpa
-    - cp ./source/web/lab/src/sherpa/sherpa_wasm_bg.wasm ./source/web/lab/public
-    - cd ./source/web/lab/
-    - npm install
-    - npm run build
-  artifacts:
-    untracked: false
-    when: on_success
-    expire_in: "7 days"
-    paths:
-      - "source/web/lab/public"
-
 deploy_site_local:
   stage: deploy-site
   image: alpine
   needs:
-    - build_lab_site
-    - build_doc_site
+    - build_site
   rules:
     - when: on_success
   script:
     - mkdir public
     - cp -rf source/web/doc/public/* ./public
-    - mkdir -p public/lab
-    - cp -rf source/web/lab/public/* ./public/lab
   artifacts:
     paths:
       - public

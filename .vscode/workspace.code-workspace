@@ -29,6 +29,10 @@
 			"name": "Tests"
 		},
 		{
+			"path": "../source/grammar",
+			"name": "Grammars"
+		},
+		{
 			"path": ".."
 		}
 	],

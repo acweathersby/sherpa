@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="{{ .Site.Params.languageTag | default " en-US" }}">
+{{ partial "head/head.html" . }}
+{{ .Scratch.Set "class" .Type }}
+{{ if eq .Kind "home" }}
+{{ .Scratch.Add "class" " home" -}}
+{{ else if eq .Kind "page" -}}
+{{ .Scratch.Add "class" " single" -}}
+{{ end -}}
+
+
+<body class="{{ .Scratch.Get "class" }}">
+
+    <script>
+        document.body.style.opacity = 0;
+        window.addEventListener("load", e => {
+            document.body.style.opacity = 1;
+        });
+        window.addEventListener("beforeunload", () => {
+            document.body.style.opacity = 0;
+        });
+    </script>
+
+    {{ partial "header/header.html" . }}
+    <content>
+        {{ block "main" . }}{{ end }}
+    </content>
+</body>
+
+</html>

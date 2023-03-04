@@ -61,11 +61,7 @@ popd
 
 ##########################
 ## Startup dev environment
-pushd $WEB_FOLDER
-
-live-server
-
-popd
+./scripts/run_dev_server
 ##########################
 
 popd

@@ -2,14 +2,7 @@ use super::parser::{
   sherpa::{ASTNode, Grammar},
   *,
 };
-use crate::{
-  grammar::{self, multitask::WorkVerifier},
-  types::*,
-  util::get_num_of_available_threads,
-  Journal,
-  ReportType,
-  SherpaError,
-};
+use crate::{grammar::multitask::WorkVerifier, types::*, Journal, ReportType, SherpaError};
 use std::{
   collections::{HashMap, HashSet, VecDeque},
   num::NonZeroUsize,
@@ -32,8 +25,7 @@ pub fn load_from_string(
   }
 }
 
-const allowed_extensions: [&str; 1] = ["sg"];
-
+#[cfg(not(any(feature = "wasm-target", feature = "single-thread")))]
 pub(crate) fn get_usable_thread_count(requested_count: usize) -> usize {
   NonZeroUsize::min(
     NonZeroUsize::new(usize::max(1, requested_count)).unwrap(),
@@ -41,6 +33,8 @@ pub(crate) fn get_usable_thread_count(requested_count: usize) -> usize {
   )
   .get()
 }
+
+const allowed_extensions: [&str; 1] = ["sg"];
 
 /// Loads all grammars that are indirectly or directly referenced from a single filepath.
 /// Returns a vector grammars in no particular order except the first grammar belongs to
@@ -56,7 +50,8 @@ pub(crate) fn load_from_path(
 
   #[cfg(not(any(feature = "wasm-target", feature = "single-thread")))]
   let grammars = {
-    let results = thread::scope(|s| {
+    use crate::util::get_num_of_available_threads;
+    let results = std::thread::scope(|s| {
       [0..get_usable_thread_count(get_num_of_available_threads())]
         .into_iter()
         .map(|_| {

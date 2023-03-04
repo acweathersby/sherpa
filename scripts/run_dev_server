@@ -1,0 +1,25 @@
+#! /usr/bin/zsh
+
+# Move to project root
+pushd .
+pushd ${0:a:h}/..
+
+##########################
+# Setup environment variables
+# this should always be sourced from the root directory
+. ./scripts/env_vars
+##########################
+
+
+##########################
+## Startup dev environment
+pushd $WEB_FOLDER
+
+live-server
+
+popd
+##########################
+
+popd
+popd
+echo "DONE"

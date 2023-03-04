@@ -1,7 +1,7 @@
-import init_sherpa, { compile_grammar, JournalWrap } from "./sherpa/sherpa_wasm.js";
+import init_sherpa, { compile_grammar, JournalWrap } from "js/sherpa/sherpa_wasm.js";
 import { basicSetup, EditorView, } from 'codemirror';
 import { linter, Diagnostic } from "@codemirror/lint";
-import { log } from './logger.js';
+import { log } from 'js/lab/logger';
 import { ViewUpdate } from '@codemirror/view';
 import { AnnotationType, Transaction } from '@codemirror/state';
 

@@ -1,0 +1,15 @@
+<header>
+    <h1>
+        sherpa
+        {{ if isset .Params "islab"  }}
+        <span>LAB</span>
+        {{end}}
+    </h1>
+    {{ if eq .Kind "home" }}
+    <a href="/docs"><button> docs </button></a>
+    <a href="/lab"><button> lab </button></a>
+    {{ with $.Site.Data.resource_locations }}
+    <a href="{{  .github_repo_url }}"><button> github </button></a>
+    {{end}}
+    {{end}}
+</header>
