@@ -1487,7 +1487,7 @@ pub trait Reader: ByteReader + MutByteReader + UTF8Reader + std::fmt::Debug {}
 
 impl<T: ByteReader + MutByteReader + UTF8Reader + std::fmt::Debug> Reader for T {}
 
-pub type Parser<'a, T: Reader, UserCTX> = sherpa_runtime::bytecode_parser::ByteCodeParser<'a, T, UserCTX>;"
+pub type Parser<'a, T, UserCTX> = sherpa_runtime::bytecode_parser::ByteCodeParser<'a, T, UserCTX>;"
       .into(),
   )
   .unwrap();
@@ -1513,7 +1513,13 @@ pub type Parser<'a, T: Reader, UserCTX> = sherpa_runtime::bytecode_parser::ByteC
   }
 
   w.block(&format!("pub static bytecode: [u8; {}] = ", bc.len()), "[", "];", &|w| {
-    w.list(", ", bc.iter().map(|i| format!("0x{i:X}")).collect());
+    w.list(
+      ", ",
+      bc.chunks(60)
+        .into_iter()
+        .map(|i| i.into_iter().map(|i| format!("0x{i:0>2X}")).collect::<Vec<_>>().join(","))
+        .collect(),
+    );
     SherpaResult::Ok(())
   })
   .unwrap();

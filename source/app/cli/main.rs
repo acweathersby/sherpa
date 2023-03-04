@@ -76,6 +76,10 @@ pub fn command() -> ArgMatches {
           arg!( --libout <LIB_OUTPUT_PATH> "The path to the directory which library will be written to.\n  Defaults to the OUTPUT_PATH" )
           .required(false)
           .value_parser(value_parser!(PathBuf))
+        ).arg(
+          arg!( -n --name <NAME> "Alternate name to use for output files." )
+          .required(false)
+          .value_parser(value_parser!(String))
         )
         .arg(
             arg!(<INPUTS>)
@@ -126,6 +130,8 @@ fn main() -> SherpaResult<()> {
   if let Some(matches) = matches.subcommand_matches("build") {
     let (config, parser_type, out_dir, lib_out_dir) = configure_matches(matches, &pwd);
 
+    let name = matches.get_one::<String>("name").cloned().unwrap_or("%".to_string());
+
     for path in matches.get_many::<PathBuf>("INPUTS").unwrap_or_default() {
       let path =
         if !path.is_absolute() { pwd.join(path).canonicalize()? } else { path.canonicalize()? };
@@ -138,7 +144,7 @@ fn main() -> SherpaResult<()> {
         .add_task(build_rust_preamble());
 
       match config.source_type {
-        _ => pipeline.set_source_file_name("%.rs"),
+        _ => pipeline.set_source_file_name(&format!("{name}.rs")),
       };
 
       match parser_type {
