@@ -8,8 +8,4 @@ So if you're looking for a fast, reliable way to parse data, give Sherpa a try. 
 draft: false
 ---
 
-# Sherpa
-
-## The All You Need Parser Compiler
-
 

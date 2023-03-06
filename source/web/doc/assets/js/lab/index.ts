@@ -4,6 +4,11 @@ import { linter, Diagnostic } from "@codemirror/lint";
 import { log } from 'js/lab/logger';
 import { ViewUpdate } from '@codemirror/view';
 import { AnnotationType, Transaction } from '@codemirror/state';
+import { ScrollHandler } from "../controls/scroll";
+import docs_handler from './docs_handler';
+
+
+export { docs_handler, ScrollHandler };
 
 export default async function (
     {
@@ -16,7 +21,7 @@ export default async function (
         disassembly_output: Element;
     }
 ) {
-    const default_grammar = "<> A > 'B'";
+    const default_grammar = get_grammar();
 
     try {
         await init_sherpa();
@@ -26,8 +31,6 @@ export default async function (
     }
 
     const grammar_sys = new GrammarInterface();
-
-    let PENDING_LINT_CHANGES = false;
 
     const grammar_editor = new EditorView({
         doc: default_grammar,
@@ -52,7 +55,6 @@ export default async function (
 
     grammar_sys.on("invalid-build", (g) => {
         g.build_states();
-        PENDING_LINT_CHANGES = true;
         grammar_editor.dispatch({ userEvent: "grammar.built" });
     });
 
@@ -106,7 +108,7 @@ function setupAutoBuild(g: GrammarInterface) {
 
         let string = e.state.doc.toString();
 
-        TRIGGER = setTimeout(() => g.parse(string), 500);
+        TRIGGER = setTimeout(() => g.parse(string), 100);
     });
 }
 
@@ -234,4 +236,11 @@ class GrammarInterface {
     private active_grammar: JournalWrap | null = null;
 
     private event_listener: Map<string, ((g: GrammarInterface) => void)[]>;
+}
+
+
+function get_grammar() {
+    // Check for url encoded grammar
+    let sessionText = sessionStorage.getItem("lab-data");
+    return sessionText || "<> A > 'B'";
 }

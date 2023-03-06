@@ -13,9 +13,10 @@ pushd ${0:a:h}/..
 
 ##########################
 ## Startup dev environment
-pushd $WEB_FOLDER
-
-live-server
+pushd $SHERPA_WEB_SOURCE_DIR
+echo $PWD
+hugo version
+hugo server
 
 popd
 ##########################

@@ -15,24 +15,7 @@ pushd ${0:a:h}/..
 # Setup directories 
 echo "CLEAR_PUBLIC_FOLDER"
 
-rm -rf $WEB_FOLDER
-##########################
-
-
-##########################
-## SHERPA DOC
-pushd $SHERPA_DOC_DIR
-
-# remove old public dir
-rm -rf $SHERPA_DOC_PUB_DIR
-
-# build files
-hugo
-
-# link the public folder to repo public
-ln -s $SHERPA_DOC_PUB_DIR $WEB_FOLDER
-
-popd
+rm -rf $PUBLIC_WEB_FOLDER
 ##########################
 
 
@@ -43,21 +26,20 @@ $ROOT_DIR/scripts/build_wasm dev
 
 
 ##########################
-## SHERPA LAB
-pushd $SHERPA_LAB_DIR
+## SHERPA DOC
+pushd $SHERPA_WEB_SOURCE_DIR
+
+# remove old public dir
+rm -rf $SHERPA_DOC_PUB_DIR
 
 # build files
-npm run build
+hugo
 
-# remove the old lab folder
-rm $WEB_FOLDER/lab
-
-# link public folder to public/lab
-ln -s $SHERPA_LAB_PUB_DIR $WEB_FOLDER/lab
+# link the public folder to repo public
+ln -s $SHERPA_DOC_PUB_DIR $PUBLIC_WEB_FOLDER
 
 popd
 ##########################
-
 
 ##########################
 ## Startup dev environment

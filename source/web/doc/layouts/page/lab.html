@@ -1,55 +1,92 @@
+{{- $labScript := resources.Get "js/lab/index.ts" | js.Build (dict "target" "esnext" "format" "esm")  | minify -}}
 <!doctype html>
 <html lang="{{ .Site.Params.languageTag | default " en-US" }}">
-
 {{ partial "head/head.html" . }}
 
-
-<body class="{{ .Scratch.Get "class" }}">
- 
-    <script>
-        document.body.style.opacity = 0;
-        window.addEventListener("load", e => {
-            document.body.style.opacity = 1;
-        });
-        window.addEventListener("beforeunload", () => {
-            document.body.style.opacity = 0;
-        });
-    </script>
-
+<body class="lab">
+    {{ partial "scripts/soft_load.html" . }}
+    {{ .Scratch.Set "headerSubtext" "lab" }}
     {{ partial "header/header.html" . }}
-
-    <main>
-        <div id="studio">
-            <div id="input-area">
-                <div id="grammar-input">
+    <main id="studio">
+        <div id="shadow-backer"></div>
+        <div id="left-column">
+            <div class="panel-host">
+                <div class="tabs-header">
+                    <div id="tab-grammar" class="tab active"> Grammar </div>
+                    <div id="tab-parser" class="tab"> Parser Data </div>
+                </div>
+                <div id="panel-grammar" class="panel active">
                     <div class="input-area-label">
-                        <h5>grammar</h5>
-                        <button>Build </button>
                     </div>
                 </div>
-                <div id="syntax-input">
-
+                <div id="panel-parser" class="panel">
                     <div class="input-area-label">
-                        <h5>source code</h5>
-                        <button>Parse </button>
                     </div>
                 </div>
             </div>
-            <div id="output-area">
+            <div id="documents-host" class="loading">
                 <iframe id="documents-frame" class="frame" src="/docs/"></iframe>
-                <code><pre id="output"></pre></code>
+            </div>
+        </div>
+        <div id="right-column">
+            <div class="panel-host">
+                <div class="tabs-header">
+                    <div id="tab-bytecode" class="tab active"> Bytecode </div>
+                    <div id="tab-ast" class="tab"> AST </div>
+                    <div id="tab-cst" class="tab"> CST </div>
+                    <div id="tab-debugger" class="tab"> Debugger </div>
+                </div>
+                <div id="panel-bytecode" class="panel active">
+                    <code><pre id="output"></pre></code>
+                </div>
+                <div id="panel-ast" class="panel">
+                    <h1> AST </h1>
+                </div>
+                <div id="panel-cst" class="panel">
+                    <h1> cst </h1>
+                </div>
+                <div id="panel-debugger" class="panel">
+                    <h1> debugger </h1>
+                </div>
             </div>
         </div>
     </main>
 
-    {{ $labScript := resources.Get "js/lab/index.ts" | js.Build (dict "target" "esnext" "format" "esm")  | minify -}}
     <script type="module">
-        import engine from "{{ $labScript.RelPermalink | safeJS }}";
+        import engine, { docs_handler, ScrollHandler } from "..{{ $labScript.RelPermalink }}";
+        // Connect docs handler to iframe manage interaction between
+        // docs and lab.
+        docs_handler(document.getElementById("documents-frame"), document.getElementById("documents-host"));
+        new ScrollHandler(document.getElementById("output"), document.getElementById("panel-bytecode"));
+
         engine({
-            codemirror_grammar_host: document.getElementById("grammar-input"),
-            codemirror_syntax_host: document.getElementById("syntax-input"),
+            codemirror_grammar_host: document.getElementById("panel-grammar"),
+            codemirror_syntax_host: document.getElementById("panel-parser"),
             disassembly_output: document.getElementById("output"),
         });
+    </script>
+    <script>
+        for (const input_host of Array.from(document.getElementsByClassName("panel-host"))) {
+            let panels = Array.from(input_host.getElementsByClassName("panel"));
+            let tabs = Array.from(input_host.getElementsByClassName("tab"));
+
+            let pairs = panels.map(p => {
+                let id_matcher = p.id.replace("panel-", "");
+                let tab = tabs.filter(t => t.id.replace("tab-", "") == id_matcher).pop();
+                return { panel: p, tab };
+            });
+
+            for (const { panel, tab } of pairs) {
+                if (panel && tab) {
+                    tab.addEventListener("pointerdown", () => {
+                        panels.forEach(p => p.classList.remove("active"));
+                        tabs.forEach(p => p.classList.remove("active"));
+                        tab.classList.add("active");
+                        panel.classList.add("active");
+                    });
+                }
+            }
+        }
     </script>
 </body>
 

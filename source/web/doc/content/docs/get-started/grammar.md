@@ -4,9 +4,13 @@ date: 2023-03-01T18:56:57-07:00
 draft: false
 ---
 
-# Sherpa Grammar Reference
+# Getting Started With Sherpa
 
-# Membra terris vis obsequitur primo aut genitoris
+> Note: these documents are integrated with Sherpa lab. Whenever you see the 
+(TODO: Beaker symbol), you can click on it to open the lab to start experimenting
+with the related subject. Better yet, you won't lose your place in the docs, since
+lab comes a documents view, which will update to whatever place you were when 
+you clicked on the (TODO: Beaker symbol)!
 
 ## Adspergine putes et imagine legem
 
@@ -26,6 +30,45 @@ feram in quod contra et vix, admoneo et everti tabo remoto precatus.
 > vetito longe demittant vivacia. Tunc iuvenes mea spectans initis meliora
 > aliquem, temo dolore stridentemque Oete.
 
+#### Check out this JSON
+
+```sherpa { lab="true" }
+IGNORE { c:sp c:nl }
+EXPORT json as entry
+NAME json
+
+<> json > 
+        object                                  :ast { t_Json, v: $1 }
+        | 
+        array                                   :ast { t_Json, v: $1 }
+
+<> array > '['  value(*',')  ']'                :ast { t_Array, entries: $2 }
+
+<> object > '{' key_value(*',') '}'             :ast { t_Object, entries: $2 }
+
+<> key_value > str ':' value                    :ast { t_KeyVal, k:$1, v:$3 }
+
+<> value > num | bool | str | null | array | object
+
+<> null > "null"                                :ast { t_Null }
+
+<> bool > 
+    "false"                                     :ast { t_Bool, v:false }
+    |   
+    "true"                                      :ast { t_Bool, v:true }
+
+<> str > tk:string                              :ast { t_Str, v:str($1) }
+
+<> num > tk:number                              :ast { t_Number, v:f64($1) }
+
+<> number > ( '+' | '-' )? c:num(+) ( "." c:num(+) )? ( ( 'e' | 'E' ) ( '+' | 'i' ) c:num(+) )?
+
+<> string > "\"" ( c:id | c:sym | c:num | c:sp | c:nl | escaped )(*) "\""
+
+<> escaped > "\\" ( c:id | c:sym | c:num | c:sp | c:nl )
+
+```
+
 ## Stetimus induco
 
 Intumuere scire nulla, atque manent est Medusae situs nescio aequoreae tellusque
@@ -37,7 +80,7 @@ praebet omnes miserere. Et genua, vulgata miserum montibus clipeo latet.
 > verborum et est igni matrem gente sparsi, videt [patefecit
 > modico](http://e-robora.org/hunc.html). *Abductas plus*; et si inpono Troezen,
 > oculi sua genitore. Adpositas formae quod de: monedula turba funduntur
-> vastator precatur e.
+> vastator precatur e. `some inline code`
 
 ## Perque voluisti in ramis sit
 
@@ -47,20 +90,8 @@ erat vetustas operire aut purus [luctus](http://quam.io/vulnera), fiducia
 ossibus inmeritam sola Melaneus nescio. Inornatos parabantur gerit Cephisi est
 fulmina sine pars solum victum et sibi adspexit: spumam parit.
 
-```js
-databaseSource.mpMegapixelClone = formatQuad.cgiFileFormat(engine_gigo_direct(
-        vduRawSwitch + input_transfer_down));
-if (simm_pixel_responsive.parameter_zip(barcraft(digital,
-        secondary.engineOnline(qbe, character_storage_pda, 73)))) {
-    dvdDhcpSession.outputSmbInternal = linkVideo;
-    aix_hard_parity += duplex_mpeg_twitter.itPppSystem(dpi, rup_pop_queue +
-            lockSocial, soft(1));
-    netmaskSku.restore_window_integer(microphone_gis, textBotnetDac,
-            filenameControlLifo);
-}
-process = ip_software;
-var thread = default;
-rootkit_analog_design = scalableContextualWidget;
+```sherpa { lab="true" }
+<> A > "hello" "world"
 ```
 
 Mensis ferunt **ignes defrenato** infitianda aetas deorum **perquirere** agnovit

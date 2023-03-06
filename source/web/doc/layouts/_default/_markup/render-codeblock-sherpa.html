@@ -1,0 +1,9 @@
+{{ if isset .Attributes "lab" -}}
+{{ $id := slicestr (md5 .Inner) 0 16 }}
+<a onclick="sessionStorage.setItem('lab-data', document.getElementById('{{$id}}').innerText)"
+    href="{{ relURL "/lab"}}#page:..{{ .Page.RelPermalink  }}#{{$id}}"><i class="icon-beaker"></i>
+    Run in Lab </a>
+<pre id="{{$id}}">{{ .Inner }}</pre>
+{{ else -}}
+<pre>NONLAB CODE</pre>
+{{end -}}

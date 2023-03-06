@@ -1,10 +1,10 @@
 <header>
-    <h1>
-        sherpa
-        {{ if isset .Params "islab"  }}
-        <span>LAB</span>
-        {{end}}
-    </h1>
+    <a href="{{ relURL "/" }}">
+        <img id="header-logo" src="{{ relURL "/img/sherpa_logo_hori_full_color.svg"}}" />
+    </a>
+    {{ with .Scratch.Get "headerSubtext" }}
+    <div id="page-category"><span id="page-category-name">{{ . }} </span></div>
+    {{ end }}
     {{ if eq .Kind "home" }}
     <a href="/docs"><button> docs </button></a>
     <a href="/lab"><button> lab </button></a>
