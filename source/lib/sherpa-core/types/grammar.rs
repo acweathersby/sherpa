@@ -87,7 +87,7 @@ pub struct GrammarRef {
 }
 
 impl GrammarRef {
-  /// TODO
+  /// Creates a new GrammarRef
   pub fn new(local_name: String, absolute_path: PathBuf) -> Arc<Self> {
     let guid_name = get_guid_grammar_name(&absolute_path);
     Arc::new(GrammarRef {

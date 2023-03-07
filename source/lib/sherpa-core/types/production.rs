@@ -176,6 +176,7 @@ pub struct Production {
   pub symbol_bytecode_id: Option<u32>,
   /// The symbol of this production
   pub sym_id: SymbolID,
+  pub _ref: Arc<GrammarRef>,
 }
 
 /// A wrapper around a symbol that includes unique information

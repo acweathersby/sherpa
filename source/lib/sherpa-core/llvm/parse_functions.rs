@@ -461,10 +461,10 @@ pub(crate) fn compile_branchless_instructions<'a>(
       }
 
       ASTNode::SkipToken(_) => {
-        skip_token(m, p_ctx, false)?;
         transfer_chkp_line_to_start_line(m, p_ctx)?;
         transfer_start_line_to_end_line(m, p_ctx)?;
-        construct_jump_to_table_start(m, start_block);
+        skip_token2(j, m, p_ctx, state_fun)?;
+        //construct_jump_to_table_start(m, start_block);
         resolved_end = true;
         break;
       }
@@ -510,9 +510,9 @@ pub(crate) fn compile_branchless_instructions<'a>(
         transfer_end_line_to_chkp_line(m, p_ctx)?;
         transfer_end_line_to_start_line(m, p_ctx)?;
 
-        skip_token(m, p_ctx, false)?;
+        skip_token2(j, m, p_ctx, state_fun)?;
 
-        construct_jump_to_table_start(m, start_block);
+        //construct_jump_to_table_start(m, start_block);
         resolved_end = true;
         break;
       }
@@ -890,6 +890,40 @@ pub(crate) fn get_offset_to_end_of_token<'a>(
   SherpaResult::Ok(offset)
 }
 
+/// Assigns `head_ptr + tok_len` to head_ptr, scan_ptr, and base_ptr.
+/// Also assign 0  to `tok_id`
+pub(crate) fn skip_token2<'a>(
+  j: &mut Journal,
+  m: &LLVMParserModule,
+  p_ctx: PointerValue,
+  state_fun: FunctionValue<'a>,
+) -> SherpaResult<()> {
+  const __HINT__: Opcode = Opcode::SkipToken;
+  let LLVMParserModule { b, i32, .. } = m;
+
+  let skip_fun = create_parse_function(j, m, "skip");
+
+  build_fast_call(b, m.fun.push_state, &[
+    p_ctx.into(),
+    m.ctx.i32_type().const_int(NORMAL_STATE_FLAG_LLVM as u64, false).into(),
+    skip_fun.as_global_value().as_pointer_value().into(),
+  ])?;
+
+  b.build_return(Some(&m.ctx.i32_type().const_int(ParseActionType::Skip.into(), false)));
+
+  b.position_at_end(m.ctx.append_basic_block(skip_fun, "entry"));
+  let p_ctx = skip_fun.get_first_param()?.into_pointer_value();
+
+  let offset = get_offset_to_end_of_token(m, p_ctx)?;
+  CTX::scan_ptr.store(b, p_ctx, offset);
+  CTX::head_ptr.store(b, p_ctx, offset);
+  CTX::tok_id.store(b, p_ctx, i32.const_zero());
+
+  build_tail_call_with_return(b, skip_fun, state_fun)?;
+
+  validate(skip_fun)
+}
+
 pub(crate) fn construct_token_shift<'a>(
   j: &mut Journal,
   m: &'a LLVMParserModule,
@@ -913,7 +947,6 @@ pub(crate) fn construct_token_shift<'a>(
 
   let offset = get_offset_to_end_of_token(m, p_ctx)?;
   CTX::scan_ptr.store(b, p_ctx, offset);
-  CTX::anchor_ptr.store(b, p_ctx, offset);
   CTX::head_ptr.store(b, p_ctx, offset);
   CTX::base_ptr.store(b, p_ctx, offset);
   CTX::tok_id.store(b, p_ctx, i32.const_zero());

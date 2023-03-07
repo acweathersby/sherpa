@@ -37,28 +37,31 @@ use crate::{
       TaggedType,
     },
   },
-  grammar::compile::parser::sherpa::{
+  grammar::{
     self,
-    ASTNode,
-    AST_IndexReference,
-    AST_NamedReference,
-    AST_Token,
-    AST_Vector,
-    Init,
-    Range,
-    AST_BOOL,
-    AST_F32,
-    AST_F64,
-    AST_I16,
-    AST_I32,
-    AST_I64,
-    AST_I8,
-    AST_NUMBER,
-    AST_STRING,
-    AST_U16,
-    AST_U32,
-    AST_U64,
-    AST_U8,
+    compile::parser::sherpa::{
+      self,
+      ASTNode,
+      AST_IndexReference,
+      AST_NamedReference,
+      AST_Token,
+      AST_Vector,
+      Init,
+      Range,
+      AST_BOOL,
+      AST_F32,
+      AST_F64,
+      AST_I16,
+      AST_I32,
+      AST_I64,
+      AST_I8,
+      AST_NUMBER,
+      AST_STRING,
+      AST_U16,
+      AST_U32,
+      AST_U64,
+      AST_U8,
+    },
   },
   types::*,
 };
@@ -1492,6 +1495,41 @@ pub type Parser<'a, T, UserCTX> = sherpa_runtime::bytecode_parser::ByteCodeParse
   )
   .unwrap();
 
+  w.block("pub mod meta", "{", "}", &|w| {
+    w.block(
+      &format!("pub const production_names: [&'static str;{}] = ", g.parse_productions.len()),
+      "[",
+      "];",
+      &|w| {
+        w.list(
+          ",",
+          g.parse_productions
+            .iter()
+            .filter_map(|prod_id| {
+              let prod = g.productions.get(prod_id).unwrap();
+              prod.bytecode_id.map(|id| (id, format!("\"{}::{}\"", prod._ref.name, prod.name)))
+            })
+            .collect::<BTreeMap<_, _>>()
+            .into_values()
+            .collect(),
+        )
+      },
+    )?;
+
+    let symbol_string = g
+      .symbols
+      .iter()
+      .map(|(sym_id, sym)| {
+        (sym.bytecode_id, format!("r####\"{}\"####", sym_id.debug_string(g)))
+      })
+      .collect::<BTreeMap<_, _>>();
+
+    let len = symbol_string.len();
+
+    w.block(&format!("pub const symbol_string: [&'static str;{len}] = ",), "[", "];", &move |w| {
+      w.list(",", symbol_string.values().collect())
+    })
+  })?;
   for ExportedProduction { export_name, production, .. } in g.get_exported_productions() {
     let bytecode_offset = state_lookups.get(&g.get_entry_name_from_prod_id(&production.id)?)?;
     w.method(
@@ -1512,6 +1550,7 @@ pub type Parser<'a, T, UserCTX> = sherpa_runtime::bytecode_parser::ByteCodeParse
     .unwrap();
   }
 
+  /// Export
   w.block(&format!("pub static bytecode: [u8; {}] = ", bc.len()), "[", "];", &|w| {
     w.list(
       ", ",

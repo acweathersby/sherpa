@@ -26,7 +26,6 @@ pub fn get_guid_grammar_name(uri: &PathBuf) -> String {
   match uri.file_stem() {
     Some(name) => {
       let file_name = String::from(name.to_str().unwrap());
-
       format!("{}_{:05X}", file_name, hash_id_value_u64(&uri))
     }
     None => "undefined".to_string(),

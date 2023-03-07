@@ -17,8 +17,6 @@ use crate::{
 use sherpa_runtime::bytecode_parser::{ByteCodeParser, DebugEvent};
 use std::{path::PathBuf, str::FromStr, sync::Arc};
 
-use super::test_reader::TestUTF8StringReader;
-
 #[cfg(test)]
 /// Return the full filepath of a grammar stored in
 /// ./tests/grammars/
@@ -261,7 +259,9 @@ Cannot create a GrammarStore without one of these values present. "
   }
   #[cfg(feature = "llvm")]
   if build_llvm_parser {
+    use super::test_reader::TestUTF8StringReader;
     use inkwell::context::Context;
+
     let ctx = Context::create();
     let mut jit_parser = JitParser::<_, u32, u32>::new(&mut j, states, &ctx)?;
     if assert_clean_reports {

@@ -256,6 +256,10 @@ impl<'a, R: ByteReader + LLVMByteReader + MutByteReader, M> SherpaParser<R, M>
     self.ctx.get_token_length()
   }
 
+  fn get_token_id(&self) -> u32 {
+    self.ctx.tok_id
+  }
+
   fn get_token_offset(&self) -> u32 {
     self.ctx.get_token_offset()
   }
@@ -295,11 +299,18 @@ impl<'a, R: ByteReader + LLVMByteReader + MutByteReader, M> SherpaParser<R, M>
   ) -> ParseAction {
     match self.next() {
       ParseActionType::Shift => ParseAction::Shift {
-        anchor_byte_offset: (self.ctx.anchor_ptr - self.ctx.begin_ptr) as u32,
-        token_byte_offset:  self.get_token_offset(),
-        token_byte_length:  self.get_token_length(),
-        token_line_offset:  self.get_token_line_offset(),
-        token_line_count:   self.get_token_line_number(),
+        token_byte_offset: self.get_token_offset(),
+        token_byte_length: self.get_token_length(),
+        token_line_offset: self.get_token_line_offset(),
+        token_line_count:  self.get_token_line_number(),
+        token_id:          self.get_token_length(),
+      },
+      ParseActionType::Skip => ParseAction::Skip {
+        token_byte_offset: self.get_token_offset(),
+        token_byte_length: self.get_token_length(),
+        token_line_offset: self.get_token_line_offset(),
+        token_line_count:  self.get_token_line_number(),
+        token_id:          self.get_token_length(),
       },
       ParseActionType::Reduce => ParseAction::Reduce {
         production_id: self.ctx.prod_id,

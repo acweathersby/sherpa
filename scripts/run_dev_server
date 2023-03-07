@@ -16,7 +16,7 @@ pushd ${0:a:h}/..
 pushd $SHERPA_WEB_SOURCE_DIR
 echo $PWD
 hugo version
-hugo server
+hugo server --disableFastRender
 
 popd
 ##########################

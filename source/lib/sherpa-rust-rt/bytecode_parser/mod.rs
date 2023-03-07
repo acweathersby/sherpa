@@ -178,11 +178,11 @@ fn shift_token<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
   const __HINT__: Opcode = Opcode::ShiftToken;
 
   let action = ParseAction::Shift {
-    anchor_byte_offset: ctx.anchor_ptr as u32,
-    token_byte_offset:  ctx.head_ptr as u32,
-    token_byte_length:  ctx.tok_len as u32,
-    token_line_count:   ctx.start_line_num,
-    token_line_offset:  ctx.start_line_off,
+    token_byte_offset: ctx.head_ptr as u32,
+    token_byte_length: ctx.tok_len as u32,
+    token_line_count:  ctx.start_line_num,
+    token_line_offset: ctx.start_line_off,
+    token_id:          ctx.tok_id,
   };
 
   let new_offset = ctx.head_ptr + ctx.tok_len;
@@ -260,13 +260,25 @@ fn __skip_token_core__<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Read
   base_instruction: Instruction<'a>,
   ctx: &mut ParseContext<R, M>,
 ) -> (ParseAction, Option<Instruction<'a>>) {
+  let original_offset = ctx.head_ptr;
   let offset = ctx.head_ptr + ctx.tok_len as usize;
+  let tok_len = ctx.tok_len;
+  let token_id = ctx.tok_id;
   ctx.scan_ptr = offset;
   ctx.head_ptr = offset;
   ctx.tok_id = 0;
   ctx.get_reader_mut().set_cursor_to(offset, 0, 0);
 
-  (ParseAction::None, Some(base_instruction))
+  (
+    ParseAction::Skip {
+      token_byte_offset: original_offset as u32,
+      token_byte_length: tok_len as u32,
+      token_line_offset: 0,
+      token_line_count:  0,
+      token_id:          token_id as u32,
+    },
+    Some(base_instruction),
+  )
 }
 /// Performs the [Opcode::SkipToken] operation
 #[inline]
@@ -298,7 +310,8 @@ fn peek_skip_token<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, 
   ctx: &mut ParseContext<R, M>,
 ) -> (ParseAction, Option<Instruction<'a>>) {
   const __HINT__: Opcode = Opcode::PeekSkipToken;
-  __skip_token_core__(base_instruction, ctx)
+  __skip_token_core__(base_instruction, ctx);
+  (ParseAction::None, Some(base_instruction))
 }
 
 /// Performs the [Opcode::PeekSkipTokenScanless] operation
@@ -698,7 +711,7 @@ pub struct ByteCodeParser<'a, R: ByteReader + MutByteReader, M> {
 }
 
 impl<'a, R: ByteReader + MutByteReader, M> ByteCodeParser<'a, R, M> {
-  pub fn new(reader: &'a mut R, bc: &'a [u8]) -> Self {
+  pub fn new(reader: &mut R, bc: &'a [u8]) -> Self {
     ByteCodeParser { ctx: ParseContext::<R, M>::new_bytecode(reader), stack: vec![], bc }
   }
 }
@@ -720,6 +733,10 @@ impl<'a, R: ByteReader + MutByteReader + UTF8Reader, M> SherpaParser<R, M>
 
   fn get_token_length(&self) -> u32 {
     self.ctx.get_token_length()
+  }
+
+  fn get_token_id(&self) -> u32 {
+    self.ctx.tok_id
   }
 
   fn get_token_offset(&self) -> u32 {
@@ -753,6 +770,10 @@ impl<'a, R: ByteReader + MutByteReader + UTF8Reader, M> SherpaParser<R, M>
   fn init_parser(&mut self, entry_point: u32) {
     self.stack = vec![0, 0, NORMAL_STATE_FLAG, entry_point];
     self.ctx.end_ptr = self.get_reader().len();
+    self.ctx.anchor_ptr = 0;
+    self.ctx.base_ptr = 0;
+    self.ctx.head_ptr = 0;
+    self.ctx.scan_ptr = 0;
     self.get_reader_mut().set_cursor(0);
     self.get_reader_mut().next(0);
   }

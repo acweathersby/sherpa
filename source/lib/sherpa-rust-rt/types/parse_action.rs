@@ -9,6 +9,7 @@ pub enum ParseActionType {
   Shift,
   Accept,
   Fork,
+  Skip,
   NeedMoreInput,
 }
 
@@ -37,11 +38,18 @@ pub enum ParseAction {
     target_production:   u32,
   },
   Shift {
-    anchor_byte_offset: u32,
-    token_byte_offset:  u32,
-    token_byte_length:  u32,
-    token_line_offset:  u32,
-    token_line_count:   u32,
+    token_byte_offset: u32,
+    token_byte_length: u32,
+    token_line_offset: u32,
+    token_line_count:  u32,
+    token_id:          u32,
+  },
+  Skip {
+    token_byte_offset: u32,
+    token_byte_length: u32,
+    token_line_offset: u32,
+    token_line_count:  u32,
+    token_id:          u32,
   },
   Reduce {
     production_id: u32,

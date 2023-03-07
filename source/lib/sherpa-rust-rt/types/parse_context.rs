@@ -1,10 +1,11 @@
 use super::{
   ast::{AstObject, AstSlot, AstStackSlice, Reducer},
   bytecode::{FAIL_STATE_FLAG, NORMAL_STATE_FLAG},
+  cst,
   *,
 };
 use crate::bytecode_parser::{DebugEvent, DebugFn};
-use std::{fmt::Debug, sync::Arc};
+use std::{borrow::BorrowMut, cell::Ref, fmt::Debug, rc::*, sync::Arc};
 
 #[derive(Clone, Debug, Copy)]
 #[repr(C)]
@@ -216,11 +217,23 @@ impl<T: ByteReader, M> ParseContext<T, M> {
   #[inline(always)]
   pub fn get_shift_data(&self) -> ParseAction {
     ParseAction::Shift {
-      anchor_byte_offset: self.get_anchor_offset(),
-      token_byte_offset:  self.get_token_offset(),
-      token_byte_length:  self.get_token_length(),
-      token_line_offset:  self.get_curr_line_offset(),
-      token_line_count:   self.get_curr_line_num(),
+      token_byte_offset: self.get_token_offset(),
+      token_byte_length: self.get_token_length(),
+      token_line_offset: self.get_curr_line_offset(),
+      token_line_count:  self.get_curr_line_num(),
+      token_id:          self.tok_id,
+    }
+  }
+
+  /// Returns shift data from current context state.
+  #[inline(always)]
+  pub fn get_peek_data(&self) -> ParseAction {
+    ParseAction::Skip {
+      token_byte_offset: self.get_token_offset(),
+      token_byte_length: self.get_token_length(),
+      token_line_offset: self.get_curr_line_offset(),
+      token_line_count:  self.get_curr_line_num(),
+      token_id:          self.tok_id,
     }
   }
 }
@@ -342,6 +355,9 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
   /// Returns the byte length of active token
   fn get_token_length(&self) -> u32;
 
+  /// Returns the id of the active token
+  fn get_token_id(&self) -> u32;
+
   /// Returns the byte offset of the head of the active token
   fn get_token_offset(&self) -> u32;
 
@@ -376,6 +392,8 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
   // Returns a mutable reference to the ParseContext
   fn get_ctx_mut(&mut self) -> &mut ParseContext<R, M>;
 
+  fn parse_cst() {}
+
   fn parse_ast<Node: AstObject>(
     &mut self,
     reducers: &[Reducer<R, M, Node, true>],
@@ -397,26 +415,27 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
           );
           ast_stack.resize(len - (count - 1), AstSlot::<Node>::default());
         }
-        ParseAction::Shift {
-          anchor_byte_offset,
+        ParseAction::Skip {
           token_byte_offset,
           token_byte_length,
           token_line_offset,
           token_line_count,
+          token_id,
+        } => {}
+        ParseAction::Shift {
+          token_byte_offset,
+          token_byte_length,
+          token_line_offset,
+          token_line_count,
+          token_id,
         } => {
-          let peek = TokenRange {
-            len: token_byte_offset - anchor_byte_offset,
-            off: anchor_byte_offset,
-            ..Default::default()
-          };
-
           let tok = TokenRange {
             len:      token_byte_length,
             off:      token_byte_offset,
             line_num: token_line_count,
             line_off: token_line_offset,
           };
-          ast_stack.push(AstSlot(Node::default(), tok, peek));
+          ast_stack.push(AstSlot(Node::default(), tok, Default::default()));
         }
         ParseAction::Error { .. } => {
           return Err(SherpaParseError {
@@ -448,6 +467,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
 
     let mut shifts = vec![];
     let mut skips = vec![];
+
     loop {
       match self.get_next_action(debug) {
         ParseAction::Accept { production_id } => {
@@ -484,21 +504,20 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
         ParseAction::Fork { .. } => {
           panic!("No implementation of fork resolution is available")
         }
-        ParseAction::Shift { anchor_byte_offset, token_byte_length, token_byte_offset, .. } => {
-          if (token_byte_offset - anchor_byte_offset) > 0 {
-            skips.push(
-              self.get_input()[anchor_byte_offset as usize..(token_byte_offset) as usize]
-                .to_string(),
-            );
-            #[cfg(debug_assertions)]
-            if let Some(debug) = debug {
-              debug(&DebugEvent::SkipToken {
-                offset_start: anchor_byte_offset as usize,
-                offset_end:   token_byte_offset as usize,
-                string:       self.get_input(),
-              });
-            }
-          }
+        ParseAction::Skip {
+          token_byte_offset,
+          token_byte_length,
+          token_line_offset,
+          token_line_count,
+          token_id,
+        } => {
+          skips.push(
+            self.get_input()
+              [token_byte_offset as usize..(token_byte_offset + token_byte_length) as usize]
+              .to_string(),
+          );
+        }
+        ParseAction::Shift { token_byte_length, token_byte_offset, token_id, .. } => {
           let offset_start = token_byte_offset as usize;
           let offset_end = (token_byte_offset + token_byte_length) as usize;
 
@@ -508,8 +527,120 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
           }
           shifts.push(self.get_input()[offset_start..offset_end].to_string());
         }
-        ParseAction::Reduce { rule_id, .. } =>
+        ParseAction::Reduce { rule_id, production_id, symbol_count } =>
         {
+          #[cfg(debug_assertions)]
+          if let Some(debug) = debug {
+            debug(&DebugEvent::Reduce { rule_id });
+          }
+        }
+        _ => panic!("Unexpected Action!"),
+      }
+    }
+  }
+
+  fn create_cst(
+    &mut self,
+    entry_point: u32,
+    target_production_id: u32,
+    debug: &mut Option<DebugFn>,
+  ) -> Option<Rc<cst::CST>> {
+    self.init_parser(entry_point);
+
+    let mut cst: Vec<(u32, Rc<cst::CST>)> = vec![];
+    let mut skipped = vec![];
+    let mut len = 0;
+
+    loop {
+      match self.get_next_action(debug) {
+        ParseAction::Accept { production_id } => {
+          #[cfg(debug_assertions)]
+          if let Some(debug) = debug {
+            debug(&DebugEvent::Complete { production_id });
+          }
+          dbg!(&cst);
+
+          break if cst.len() > 1 {
+            eprint!(
+              "Parser did not resolve CST. This is probably to to the 
+originating grammar not supporting error recovery. Unable to provide a viable
+Concrete Syntax Tree structure."
+            );
+            None
+          } else if production_id != target_production_id {
+            None
+          } else {
+            cst.pop().map(|c| c.1)
+          };
+        }
+        ParseAction::Error { last_input, .. } => {
+          #[cfg(debug_assertions)]
+          if let Some(debug) = debug {
+            debug(&DebugEvent::Failure {});
+          }
+          let mut token: Token = last_input.to_token(self.get_reader_mut());
+          token.set_source(Arc::new(Vec::from(self.get_input().to_string().as_bytes())));
+          break None;
+        }
+        ParseAction::Fork { .. } => {
+          panic!("No implementation of fork resolution is available")
+        }
+        ParseAction::Skip {
+          token_byte_offset,
+          token_byte_length,
+          token_line_offset,
+          token_line_count,
+          token_id,
+        } => {
+          let skip = cst::Skipped { byte_len: token_byte_length, token_id };
+          len += token_byte_length;
+          skipped.push(skip);
+        }
+        ParseAction::Shift { token_byte_length, token_byte_offset, token_id, .. } => {
+          let token = Rc::new(cst::CST::Terminal {
+            byte_len: token_byte_length,
+            token_id,
+            leading_skipped: skipped.clone(),
+          });
+
+          skipped.clear();
+          cst.push((len + token_byte_length, token));
+          len = 0;
+
+          #[cfg(debug_assertions)]
+          if let Some(debug) = debug {
+            let offset_start = token_byte_offset as usize;
+            let offset_end = (token_byte_offset + token_byte_length) as usize;
+            debug(&DebugEvent::ShiftToken { offset_start, offset_end, string: self.get_input() });
+          }
+        }
+        ParseAction::Reduce { rule_id, production_id, symbol_count } => {
+          let mut children = vec![];
+          let mut len = 0;
+          for child in cst.drain((cst.len() - symbol_count as usize)..) {
+            len += child.0;
+            children.push(child);
+          }
+
+          if children.len() == 1 {
+            match children.pop() {
+              Some((len, mut child)) => match Rc::get_mut(&mut child) {
+                Some(cst::CST::NonTerm { prod_id, .. }) => {
+                  prod_id.push((production_id as u16, rule_id as u16));
+                  cst.push((len, child));
+                  continue;
+                }
+
+                _ => children.push((len, child)),
+              },
+              _ => unreachable!(),
+            }
+          }
+
+          let non_term =
+            cst::CST::NonTerm { prod_id: vec![(production_id as u16, rule_id as u16)], children };
+          cst.push((len, Rc::new(non_term)));
+
           #[cfg(debug_assertions)]
           if let Some(debug) = debug {
             debug(&DebugEvent::Reduce { rule_id });

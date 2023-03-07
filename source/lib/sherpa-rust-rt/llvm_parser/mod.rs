@@ -210,19 +210,12 @@ pub unsafe fn llvm_map_shift_action<
   slots: &mut AstStackSlice<AstSlot<ASTNode>>,
 ) {
   let ParseAction::Shift {
-    anchor_byte_offset,
     token_byte_offset,
     token_byte_length,
     token_line_offset,
     token_line_count,
     ..
   } = ctx.get_shift_data() else {unreachable!()};
-
-  let peek = TokenRange {
-    len: token_byte_offset - anchor_byte_offset,
-    off: anchor_byte_offset,
-    ..Default::default()
-  };
 
   let tok = TokenRange {
     len:      token_byte_length,
@@ -231,5 +224,5 @@ pub unsafe fn llvm_map_shift_action<
     line_off: token_line_offset,
   };
 
-  slots.assign_to_garbage(0, AstSlot(ASTNode::default(), tok, peek));
+  slots.assign_to_garbage(0, AstSlot(ASTNode::default(), tok, Default::default()));
 }

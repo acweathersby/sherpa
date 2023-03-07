@@ -41,6 +41,7 @@ pub use types::{SherpaError, SherpaResult};
 pub mod compile {
   pub use crate::{
     bytecode::{compile_bytecode, BytecodeOutput},
+    grammar::compile::parser::sherpa_bc::{bytecode, meta},
     parser::{compile_parse_states, optimize_parse_states},
     types::{
       GrammarId,

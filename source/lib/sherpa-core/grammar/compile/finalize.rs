@@ -114,6 +114,7 @@ fn create_scanner_productions_from_symbols(j: &mut Journal, g: &mut GrammarStore
               name,
               is_scanner: true,
               sym_id: SymbolID::Production(prod_id, g.id.guid),
+              _ref: g.id.clone(),
               ..Default::default()
             },
             vec![Rule {
@@ -175,6 +176,7 @@ fn create_scanner_productions_from_symbols(j: &mut Journal, g: &mut GrammarStore
                   loc: production.loc.clone(),
                   is_scanner: true,
                   sym_id: SymbolID::TokenProduction(*prod_id, *grammar_id, scanner_production_id),
+                  _ref: g.id.clone(),
                   ..Default::default()
                 },
                 g.production_rules
@@ -621,6 +623,7 @@ pub fn convert_left_recursion_to_right(
     } else {
       SymbolID::Production(a_prime_prod_id, g.id.guid)
     },
+    _ref: g.id.clone(),
     ..Default::default()
   };
 
@@ -841,6 +844,7 @@ fn convert_scan_symbol_to_production(
         guid_name: name,
         is_scanner: true,
         sym_id, //: SymbolID::TokenProduction(prod_id, g.id.guid, prod_id),
+        _ref: g.id.clone(),
         ..Default::default()
       },
       bodies,

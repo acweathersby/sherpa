@@ -225,6 +225,7 @@ fn process_production_node<'a>(
           name: plain_name, // prod.symbol.Token().to_string()
           loc: prod_node.tok.clone(),
           sym_id: SymbolID::Production(prod_id, g.id.guid),
+          _ref: g.id.clone(),
           ..Default::default()
         },
         bodies,
