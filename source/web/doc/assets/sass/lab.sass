@@ -1,7 +1,7 @@
 $border-color: #707070
 $tab-header-col: #4d4c4c
-$active-panel-col: #1297cc
-$hover-panel-col: #1d86af
+$active-panel-col: #16718D
+$hover-panel-col: #0e5b72
 $tab-height: 40px
 
 %studio-top-border
@@ -19,7 +19,6 @@ main
 
 #studio
     position: fixed
-    border-top: 1px solid $border-color
     display: flex
     flex-direction: row
     height: 100vh
@@ -32,7 +31,6 @@ main
     margin: 0
 
 #left-column
-    @extend %studio-top-border
     margin-top: 40px
     position: relative
     display: flex
@@ -41,7 +39,6 @@ main
     z-index: 220
 
 #right-column
-    @extend %studio-top-border
     margin-top: 40px
     width: 50%
     overflow: hidden
@@ -51,21 +48,21 @@ main
         height: 100%
 
     .tab:hover
-        background-color: #cc6d00
+        background-color: #ca4d31
 
     .tab.active
-        background-color: #db7500
+        background-color: #ED5E3F
 
     .panel
         background-color: #494949
         color: white
         height: 100%
-        border-color: #db7500
+        border-color: #ED5E3F
 
 #shadow-backer
     position: absolute
     width: 100%
-    top: 41px
+    top: 40px
     height: $tab-height
     background-color: red
     box-shadow: inset 0px 5px 5px #00000018
@@ -93,7 +90,7 @@ main
 
     .tab:hover
         background-color: $hover-panel-col
-        color: white
+        color: #dbdbdb
         cursor: pointer
         border: none
 
@@ -132,6 +129,20 @@ main
     top: 0
     bottom: 0
     outline: none
+
+    .syn-prod
+        color: #9f9f9f
+
+    .syn-term
+        color: #008cc3
+
+    .syn-prod-id
+        color: rgb(72, 77, 85)
+        font-weight: 800
+
+    .syn-class
+        color: #e27923
+        font-weight: 800
 
 .cm-focused
     outline: none !important

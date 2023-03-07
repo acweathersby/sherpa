@@ -186,7 +186,6 @@ export class ScrollHandler {
         this.HANDLE_MOVE = true;
     }
     handle_wheel(e: WheelEvent) {
-        console.log("AAAAAAAAAAas");
         this.set_handle_pos_diff(Math.sign(e.deltaY) * 50 * this.scroll_box_ratio);
     }
 

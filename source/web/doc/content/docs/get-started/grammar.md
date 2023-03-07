@@ -6,6 +6,12 @@ draft: false
 
 # Getting Started With Sherpa
 
+Well, no time like the present to get started! Check this out,
+```sherpa { lab="true" lab-tut="true" }
+<> A > "hello" "world"
+```
+> Cool huh, you'll notice we are now in the Sherpa "lab".
+
 > Note: these documents are integrated with Sherpa lab. Whenever you see the 
 (TODO: Beaker symbol), you can click on it to open the lab to start experimenting
 with the related subject. Better yet, you won't lose your place in the docs, since
@@ -20,6 +26,8 @@ ambagum artificem et gelidum Graias Opem Sigea. Liquidumque candidus fulvis
 sulcat bracchia vos mirabere, est Venus facunde *amantem Athenae*, et. Hausit
 **Interea mutant adspicit** tamen.
 
+### This
+
 Utroque pueri sacra facit, ut sunt desolatas rumpere *condidit*. Elegit miserae
 quid orbem, formidabile volant iaculum Phoebi festa. Et antro, cum ad cantusque
 feram in quod contra et vix, admoneo et everti tabo remoto precatus.
@@ -29,6 +37,22 @@ feram in quod contra et vix, admoneo et everti tabo remoto precatus.
 > positae nec non contigerant et et annum *vulnus* recepto, ab inexperrectus
 > vetito longe demittant vivacia. Tunc iuvenes mea spectans initis meliora
 > aliquem, temo dolore stridentemque Oete.
+
+Sherpa is perfectly at home creating LR based parsers. For example, this grammar
+is inherently LR:
+```sherpa { lab="true" }
+IGNORE { c:sp } 
+
+<> A >   X 'c'
+| Y 'd'
+
+<> X > 'x' X?
+
+<> Y > 'x' Y?
+```
+
+> Inlab YOu'll notice XYZ
+
 
 #### Check out this JSON
 

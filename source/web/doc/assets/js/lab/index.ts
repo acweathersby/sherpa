@@ -2,11 +2,12 @@ import init_sherpa, { compile_grammar, JournalWrap } from "js/sherpa/sherpa_wasm
 import { basicSetup, EditorView, } from 'codemirror';
 import { linter, Diagnostic } from "@codemirror/lint";
 import { log } from 'js/lab/logger';
-import { ViewUpdate } from '@codemirror/view';
+import { ViewUpdate, } from '@codemirror/view';
+
 import { AnnotationType, Transaction } from '@codemirror/state';
 import { ScrollHandler } from "../controls/scroll";
 import docs_handler from './docs_handler';
-
+import { sherpaLang } from './sherpa_lang';
 
 export { docs_handler, ScrollHandler };
 
@@ -34,16 +35,18 @@ export default async function (
 
     const grammar_editor = new EditorView({
         doc: default_grammar,
+
         extensions: [basicSetup,
-            setupGrammarLinting(grammar_sys, (v): boolean => {
-                for (const t of v.transactions) {
-                    if (t.isUserEvent("grammar.built")) {
-                        return true;
+            sherpaLang(),
+            /*     setupGrammarLinting(grammar_sys, (v): boolean => {
+                    for (const t of v.transactions) {
+                        if (t.isUserEvent("grammar.built")) {
+                            return true;
+                        }
                     }
-                }
-                return false;
-            }),
-            setupAutoBuild(grammar_sys)
+                    return false;
+                }),
+                setupAutoBuild(grammar_sys) */
         ],
         parent: codemirror_grammar_host
     });
