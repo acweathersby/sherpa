@@ -530,7 +530,7 @@ impl Token {
 
       string
     } else {
-      "[Token Source Not Valid]".to_string()
+      format!("[Token Source Not Valid]\n{:?}", self)
     }
   }
 }

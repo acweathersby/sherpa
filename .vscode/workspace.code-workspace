@@ -40,7 +40,16 @@
 		"lldb.displayFormat": "auto",
 		"lldb.showDisassembly": "always",
 		"lldb.dereferencePointers": true,
-		"lldb.consoleMode": "commands"
+		"lldb.consoleMode": "commands",
+		"files.exclude": {
+			"**/.git": true,
+			"**/.svn": true,
+			"**/.hg": true,
+			"**/CVS": true,
+			"**/.DS_Store": true,
+			"**/Thumbs.db": true,
+			"**/target/**": true
+		}
 	},
 	"launch": {
 		"version": "0.2.0",

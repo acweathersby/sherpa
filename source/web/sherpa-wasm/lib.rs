@@ -228,6 +228,60 @@ impl JSGrammarParser {
     }
   }
 }
+#[wasm_bindgen]
+pub fn get_codemirror_parse_tree(input: String) -> JsValue {
+  let mut reader = StringReader::StringReader::new(input);
+  let mut bytecode_parser =
+    ByteCodeParser::<'static, _, u32>::new(&mut reader, &sherpa_core::compile::bytecode);
+  bytecode_parser.init_parser(60);
+
+  let mut output = vec![];
+  let mut acc_stack: Vec<u32> = vec![];
+
+  const LAST_TOKEN_INDEX: usize = sherpa_core::compile::meta::production_names.len();
+  loop {
+    match bytecode_parser.get_next_action(&mut None) {
+      ParseAction::Accept { .. } => {
+        break;
+      }
+      ParseAction::EndOfInput { .. } => {
+        break;
+      }
+      ParseAction::Error { .. } => {
+        break;
+      }
+      ParseAction::Shift { token_byte_offset, token_byte_length, .. } => {
+        output.push(LAST_TOKEN_INDEX as u32);
+        output.push(token_byte_offset);
+        output.push(token_byte_offset + token_byte_length);
+        output.push(4);
+        acc_stack.push(1);
+      }
+      ParseAction::Skip { .. } => {}
+      ParseAction::Reduce { production_id, symbol_count, .. } => {
+        let len = acc_stack.len();
+        let mut total_nodes = 0;
+        for size in acc_stack.drain(len - symbol_count as usize..) {
+          total_nodes += size;
+        }
+        acc_stack.push(total_nodes + 1);
+        let adjust_size = total_nodes as usize * 4;
+        let start_offset = output[output.len() - adjust_size + 1];
+        let end_offset = output[output.len() - 2];
+        output.push(production_id);
+        output.push(start_offset);
+        output.push(end_offset);
+        output.push(adjust_size as u32 + 4);
+      }
+      action => panic!("Unexpected Action! {:?}", action),
+    }
+  }
+
+  serde_wasm_bindgen::to_value(&ParseTree(output)).unwrap()
+}
+
+#[derive(Serialize, Deserialize)]
+struct ParseTree(Vec<u32>);
 
 #[derive(Serialize, Deserialize)]
 struct ProdNames(Vec<String>);

@@ -195,7 +195,6 @@ pub unsafe fn llvm_map_result_action<
     ParseActionType::NeedMoreInput => {
       ParseResult::NeedMoreInput(slots.to_vec())
     }
-
     _ => unreachable!("This function should only be called when the parse action is  [Error, Accept, or EndOfInput]"),
   }
 }
