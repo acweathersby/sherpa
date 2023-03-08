@@ -39,22 +39,36 @@ build_wasm:
     paths:
       - "source/web/sherpa-wasm/pkg"
 
-build_site:
+build_site_node:
   stage: build-site
   image: node:19-slim
+  needs: []
+  rules:
+    - when: always
+  script:
+    - cd ./source/web/doc
+    - npm install
+  artifacts:
+    untracked: false
+    when: on_success
+    expire_in: "15 min"
+    paths:
+      - "source/web/doc/node_modules"
+
+build_site_hugo:
+  stage: build-site
+  image: klakegg/hugo:0.107.0-ext-alpine-ci
   needs:
+    - build_site_node
     - build_wasm
   rules:
     - when: on_success
   script:
-    - apt-get update
-    - apt-get install -y hugo
     - mkdir -p ./source/web/doc/assets/js/sherpa
     - mkdir -p ./source/web/doc/static/js/lab
     - cp ./source/web/sherpa-wasm/pkg/* ./source/web/doc/assets/js/sherpa
     - mv ./source/web/doc/assets/js/sherpa/sherpa_wasm_bg.wasm ./source/web/doc/static/js/lab
     - cd ./source/web/doc
-    - npm install
     - hugo
   artifacts:
     untracked: false
@@ -68,7 +82,7 @@ pages:
   image: alpine
   environment: production
   needs:
-    - build_site
+    - build_site_hugo
   rules:
     - when: on_success
   script:
