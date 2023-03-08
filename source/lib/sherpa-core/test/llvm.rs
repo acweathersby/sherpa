@@ -514,6 +514,12 @@ IGNORE { c:sp }
 
     dbg!(action);
 
+    assert!(matches!(action, ParseActionType::Skip));
+
+    let action = next_fn.call(&mut rt_ctx);
+
+    dbg!(action);
+
     assert!(matches!(action, ParseActionType::Shift));
 
     let action = next_fn.call(&mut rt_ctx);

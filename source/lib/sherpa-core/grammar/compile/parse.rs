@@ -2,7 +2,9 @@ use super::parser::{
   sherpa::{ASTNode, Grammar},
   *,
 };
+#[allow(unused)]
 use crate::{grammar::multitask::WorkVerifier, types::*, Journal, ReportType, SherpaError};
+#[allow(unused)]
 use std::{
   collections::{HashMap, HashSet, VecDeque},
   num::NonZeroUsize,

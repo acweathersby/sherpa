@@ -127,7 +127,7 @@ pub fn build_llvm_parser(
       let reloc = RelocMode::PIC;
       let model = CodeModel::Small;
       let target = Target::from_triple(&target_triple).unwrap();
-      let opt = OptimizationLevel::Aggressive;
+      let opt = OptimizationLevel::Less;
       let target_machine =
         target.create_target_machine(&target_triple, "generic", "", opt, reloc, model).unwrap();
 
@@ -149,7 +149,7 @@ pub fn build_llvm_parser(
             }
           }
 
-          if light_lto {
+          if false && light_lto {
             if output_llvm_ir_file {
               if let Ok(mut file) = task_ctx.create_file(ll_file_path.clone()) {
                 file.write_all(llvm_mod.module.to_string().as_bytes()).unwrap();
@@ -158,15 +158,9 @@ pub fn build_llvm_parser(
             }
 
             task_ctx.add_artifact_path(bitcode_path.clone());
-            if llvm_mod.module.write_bitcode_to_path(&bitcode_path) {
+            if false && llvm_mod.module.write_bitcode_to_path(&bitcode_path) {
               match Command::new(clang_command.clone())
-                .args(&[
-                  "-flto=thin",
-                  "-c",
-                  "-o",
-                  object_path.to_str().unwrap(),
-                  bitcode_path.to_str().unwrap(),
-                ])
+                .args(&["-c", "-o", object_path.to_str().unwrap(), bitcode_path.to_str().unwrap()])
                 .status()
               {
                 Ok(_) => {
@@ -228,45 +222,78 @@ pub fn build_llvm_parser(
 }
 
 fn apply_llvm_optimizations(opt: OptimizationLevel, ctx: &crate::llvm::LLVMParserModule) {
+  println!("Applying optimizations1");
   //return;
   let pass_manager_builder = PassManagerBuilder::create();
-  let pass_manager = PassManager::create(());
+
   pass_manager_builder.set_optimization_level(opt);
+  pass_manager_builder.set_size_level(1);
   //pass_manager_builder.populate_module_pass_manager(&pass_manager);
   //*
-
-  pass_manager.add_function_inlining_pass();
+  // ---------------------------------
+  let pass_manager = PassManager::create(());
+  pass_manager.add_global_dce_pass();
+  pass_manager.add_strip_symbol_pass();
+  pass_manager.add_argument_promotion_pass();
+  while pass_manager.run_on(&ctx.module) {
+    println!("1");
+    break;
+  }
+  let pass_manager = PassManager::create(());
+  pass_manager.add_reassociate_pass();
+  while pass_manager.run_on(&ctx.module) {
+    println!("1a");
+    break;
+  }
+  // ---------------------------------
+  let pass_manager = PassManager::create(());
   pass_manager.add_always_inliner_pass();
   pass_manager.add_partially_inline_lib_calls_pass();
   pass_manager.add_tail_call_elimination_pass();
-  pass_manager.run_on(&ctx.module);
-
+  while pass_manager.run_on(&ctx.module) {
+    println!("2");
+  }
+  // ---------------------------------
+  let pass_manager = PassManager::create(());
   pass_manager.add_merge_functions_pass();
   pass_manager.add_lower_expect_intrinsic_pass();
-  pass_manager.add_jump_threading_pass();
   pass_manager.add_memcpy_optimize_pass();
-  pass_manager.add_cfg_simplification_pass();
-  pass_manager.run_on(&ctx.module);
-  //------------------------------------------------------------------------
-  pass_manager.add_scalarizer_pass();
-  pass_manager.add_slp_vectorize_pass();
+  while pass_manager.run_on(&ctx.module) {
+    println!("3");
+    break;
+  }
+  // ---------------------------------
+  let pass_manager = PassManager::create(());
+  ////pass_manager.add_slp_vectorize_pass();
   pass_manager.add_loop_vectorize_pass();
   pass_manager.add_merged_load_store_motion_pass();
-  // ---------------------------------
-  pass_manager.add_gvn_pass();
   pass_manager.add_lower_switch_pass();
-
   pass_manager.add_licm_pass();
-  pass_manager.run_on(&ctx.module);
-
-  pass_manager.add_function_inlining_pass();
-  pass_manager.run_on(&ctx.module);
-
-  pass_manager.add_global_optimizer_pass();
-  pass_manager.add_global_dce_pass();
+  while pass_manager.run_on(&ctx.module) {
+    println!("4");
+  }
+  let pass_manager = PassManager::create(());
+  pass_manager.add_gvn_pass();
+  while pass_manager.run_on(&ctx.module) {
+    println!("5");
+  }
+  let pass_manager = PassManager::create(());
+  pass_manager.add_promote_memory_to_register_pass();
   pass_manager.add_instruction_simplify_pass();
+  while pass_manager.run_on(&ctx.module) {
+    println!("5a");
+  }
+  // ---------------------------------
+  let pass_manager = PassManager::create(());
+  pass_manager.add_dead_store_elimination_pass();
+  pass_manager.add_dead_arg_elimination_pass();
+  pass_manager.add_cfg_simplification_pass();
   pass_manager.add_aggressive_dce_pass();
-  pass_manager.run_on(&ctx.module);
+  pass_manager.add_global_dce_pass();
+  pass_manager.add_bit_tracking_dce_pass();
+  while pass_manager.run_on(&ctx.module) {
+    println!("6");
+  }
 
   //  pass_manager.add_demote_memory_to_register_pass();
   //  pass_manager.run_on(&ctx.module);

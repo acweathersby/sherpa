@@ -169,14 +169,18 @@ pub struct Production {
   /// An integer value used by bytecode
   /// to refer to this production
   pub bytecode_id: Option<u32>,
+
   /// If this is a scanner production,
   /// then this is a non-zero integer value
   /// that mirrors the TokenProduction or Defined* symbol
   /// bytecode_id that this production produces.
   pub symbol_bytecode_id: Option<u32>,
+
   /// The symbol of this production
   pub sym_id: SymbolID,
-  pub _ref: Arc<GrammarRef>,
+
+  /// A reference to the identifiers of the owning grammar.
+  pub grammar_ref: Arc<GrammarRef>,
 }
 
 /// A wrapper around a symbol that includes unique information

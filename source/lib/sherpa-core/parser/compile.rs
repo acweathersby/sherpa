@@ -286,7 +286,7 @@ fn create_entry_wrapper_states(j: &mut Journal) -> SherpaResult<Vec<Box<ParseSta
 /// Compiles IRStates from all production and scanner symbol sets within the grammar.
 pub fn compile_parse_states(
   j: &mut Journal,
-  num_of_threads: usize,
+  #[allow(unused)] num_of_threads: usize,
 ) -> SherpaResult<BTreeMap<String, Box<ParseState>>> {
   let g = j.grammar()?;
 

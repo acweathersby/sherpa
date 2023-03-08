@@ -39,9 +39,10 @@ pub use types::{SherpaError, SherpaResult};
 
 /// Methods compiling a parser from a grammar.
 pub mod compile {
+  #[cfg(feature = "wasm-target")]
+  pub use crate::grammar::compile::parser::sherpa_bc::{bytecode, meta};
   pub use crate::{
     bytecode::{compile_bytecode, BytecodeOutput},
-    grammar::compile::parser::sherpa_bc::{bytecode, meta},
     parser::{compile_parse_states, optimize_parse_states},
     types::{
       GrammarId,

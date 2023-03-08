@@ -94,6 +94,7 @@ impl Default for IRStateType {
 }
 
 #[derive(Clone)]
+/// Wrapper for the intermediate parser language code and AST
 pub struct ParseState {
   /// The intermediate representation parse state code as written in ir.rs
   pub(crate) code: String,

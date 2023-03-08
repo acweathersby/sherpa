@@ -1507,7 +1507,9 @@ pub type Parser<'a, T, UserCTX> = sherpa_runtime::bytecode_parser::ByteCodeParse
             .iter()
             .filter_map(|prod_id| {
               let prod = g.productions.get(prod_id).unwrap();
-              prod.bytecode_id.map(|id| (id, format!("\"{}::{}\"", prod._ref.name, prod.name)))
+              prod
+                .bytecode_id
+                .map(|id| (id, format!("\"{}::{}\"", prod.grammar_ref.name, prod.name)))
             })
             .collect::<BTreeMap<_, _>>()
             .into_values()
@@ -1519,9 +1521,7 @@ pub type Parser<'a, T, UserCTX> = sherpa_runtime::bytecode_parser::ByteCodeParse
     let symbol_string = g
       .symbols
       .iter()
-      .map(|(sym_id, sym)| {
-        (sym.bytecode_id, format!("r####\"{}\"####", sym_id.debug_string(g)))
-      })
+      .map(|(sym_id, sym)| (sym.bytecode_id, format!("r####\"{}\"####", sym_id.debug_string(g))))
       .collect::<BTreeMap<_, _>>();
 
     let len = symbol_string.len();

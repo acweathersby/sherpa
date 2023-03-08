@@ -64,6 +64,7 @@ impl Journal {
 
   /// Clone the journal, maintaining a link to the global
   /// pad to upload reports to.
+  #[allow(unused)]
   pub(crate) fn transfer(&self) -> Self {
     Self {
       grammar: self.grammar.clone(),

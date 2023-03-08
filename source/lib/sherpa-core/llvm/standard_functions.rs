@@ -1,6 +1,11 @@
 use super::{
   fastCC,
-  parse_functions::{compile_states, ensure_space_on_goto_stack},
+  parse_functions::{
+    compile_states,
+    construct_shift_post_emit,
+    construct_shift_pre_emit,
+    ensure_space_on_goto_stack,
+  },
   CTX_AGGREGATE_INDICES as CTX,
   FAIL_STATE_FLAG_LLVM,
 };
@@ -37,6 +42,7 @@ pub(crate) fn construct_module<'a>(
   let bool = ctx.bool_type();
   let i64 = ctx.i64_type();
   let i32 = ctx.i32_type();
+  let void = ctx.void_type();
   let ptr_int = ctx.ptr_sized_int_type(target_data, None);
   let CP_INFO = ctx.opaque_struct_type("s.CP_INFO");
   let READER = ctx.opaque_struct_type("s.READER");
@@ -45,13 +51,11 @@ pub(crate) fn construct_module<'a>(
   let TOKEN = ctx.opaque_struct_type("s.Token");
   let CTX_PTR = CTX.ptr_type(0.into());
   let internal_linkage = if j.config().opt_llvm { Some(Linkage::Private) } else { None };
-  let TAIL_CALLABLE_PARSE_FUNCTION = i32.fn_type(&[CTX_PTR.into()], false);
+  let GOTO_STACK_SPEC_FUNCTION = i32.fn_type(&[CTX_PTR.into()], false);
   let GOTO_FN = i32.fn_type(&[CTX_PTR.into()], false);
 
-  GOTO.set_body(
-    &[TAIL_CALLABLE_PARSE_FUNCTION.ptr_type(0.into()).into(), i32.into(), i32.into()],
-    false,
-  );
+  GOTO
+    .set_body(&[GOTO_STACK_SPEC_FUNCTION.ptr_type(0.into()).into(), i32.into(), i32.into()], false);
 
   CP_INFO.set_body(&[i32.into(), i32.into()], false);
 
@@ -119,20 +123,20 @@ pub(crate) fn construct_module<'a>(
     /// Public functions
     init: module.add_function(
       "init",
-      ctx.void_type().fn_type(&[CTX_PTR.into(), READER.ptr_type(0.into()).into()], false),
+      void.fn_type(&[CTX_PTR.into(), READER.ptr_type(0.into()).into()], false),
       Some(Linkage::External),
     ),
     drop: module.add_function(
       "drop",
-      ctx.void_type().fn_type(&[CTX_PTR.into()], false),
+      void.fn_type(&[CTX_PTR.into()], false),
       Some(Linkage::External),
     ),
     prime: module.add_function(
       "prime",
-      ctx.void_type().fn_type(&[CTX_PTR.into(), i32.into()], false),
+      void.fn_type(&[CTX_PTR.into(), i32.into()], false),
       Some(Linkage::External),
     ),
-    next: module.add_function("next", TAIL_CALLABLE_PARSE_FUNCTION, None),
+    next: module.add_function("next", GOTO_STACK_SPEC_FUNCTION, None),
     /// Provided by parser host -------------------------------------------------
     get_token_class_from_codepoint: module.add_function(
       "sherpa_get_token_class_from_codepoint",
@@ -146,14 +150,14 @@ pub(crate) fn construct_module<'a>(
     ),
     free_stack: module.add_function(
       "sherpa_free_stack",
-      ctx.void_type().fn_type(&[GOTO.ptr_type(0.into()).into(), i64.into()], false),
+      void.fn_type(&[GOTO.ptr_type(0.into()).into(), i64.into()], false),
       Some(Linkage::External),
     ),
     /// ------------------------------------------------------------------------
     // These functions can be tail called, as they all use the same interface
-    dispatch: module.add_function("dispatch_normal", TAIL_CALLABLE_PARSE_FUNCTION, internal_linkage),
-    dispatch_unwind: module.add_function("dispatch_unwind", TAIL_CALLABLE_PARSE_FUNCTION, internal_linkage),
-    handle_eop: module.add_function("emit_eop", TAIL_CALLABLE_PARSE_FUNCTION, internal_linkage),
+    dispatch: module.add_function("dispatch_normal", GOTO_STACK_SPEC_FUNCTION, internal_linkage),
+    dispatch_unwind: module.add_function("dispatch_unwind", GOTO_STACK_SPEC_FUNCTION, internal_linkage),
+    handle_eop: module.add_function("emit_eop", GOTO_STACK_SPEC_FUNCTION, internal_linkage),
 
     get_utf8_codepoint_info: module.add_function(
       "get_utf8_codepoint_info",
@@ -167,24 +171,24 @@ pub(crate) fn construct_module<'a>(
     ),
     internal_free_stack: module.add_function(
       "internal_free_stack",
-      ctx.void_type().fn_type(&[CTX.ptr_type(0.into()).into()], false),
+      void.fn_type(&[CTX_PTR.into()], false),
       internal_linkage,
     ),
     get_adjusted_input_block: module.add_function(
       "get_adjusted_input_block",
-      ctx.void_type().fn_type(&[
-        CTX.ptr_type(0.into()).into(),
+      void.fn_type(&[
+        CTX_PTR.into(),
         i64.into(),
       ], false),
       internal_linkage,
     ),
     push_state: module.add_function(
       "push_state",
-      ctx.void_type().fn_type(
+      void.fn_type(
         &[
-          CTX.ptr_type(0.into()).into(),
+          CTX_PTR.into(),
           i32.into(),
-          TAIL_CALLABLE_PARSE_FUNCTION.ptr_type(0.into()).into(),
+          GOTO_STACK_SPEC_FUNCTION.ptr_type(0.into()).into(),
         ],
         false,
       ),
@@ -192,12 +196,28 @@ pub(crate) fn construct_module<'a>(
     ),
     pop_state: module.add_function(
       "pop_state",
-      TAIL_CALLABLE_PARSE_FUNCTION,
+      GOTO_STACK_SPEC_FUNCTION,
       internal_linkage,
     ),
     extend_stack: module.add_function(
       "extend_stack",
-      i32.fn_type(&[CTX.ptr_type(0.into()).into(), i32.into()], false),
+      i32.fn_type(&[CTX_PTR.into(), i32.into()], false),
+      internal_linkage,
+    ),
+    pre_shift_emit: module.add_function(
+      "pre_shift_emit",
+      void.fn_type(
+        &[
+          CTX_PTR.into(),
+          GOTO_STACK_SPEC_FUNCTION.ptr_type(0.into()).into(),
+        ],
+        false,
+      ),
+      internal_linkage,
+    ),
+    post_shift_emit: module.add_function(
+      "post_shift_emit",
+      GOTO_STACK_SPEC_FUNCTION,
       internal_linkage,
     ),
     /// LLVM intrinsics ------------------------------------------------------------
@@ -221,6 +241,8 @@ pub(crate) fn construct_module<'a>(
     ),
   };
   // Set all functions that are not part of the public interface to fastCC.
+  fun.post_shift_emit.set_call_conventions(fastCC);
+  fun.pre_shift_emit.set_call_conventions(fastCC);
   fun.dispatch.set_call_conventions(fastCC);
   fun.dispatch_unwind.set_call_conventions(fastCC);
   fun.internal_free_stack.set_call_conventions(fastCC);
@@ -235,7 +257,7 @@ pub(crate) fn construct_module<'a>(
     b: builder,
     ctx,
     types: LLVMTypes {
-      TAIL_CALLABLE_PARSE_FUNCTION,
+      TAIL_CALLABLE_PARSE_FUNCTION: GOTO_STACK_SPEC_FUNCTION,
       reader: READER,
       token: TOKEN,
       parse_ctx: CTX,
@@ -694,8 +716,7 @@ pub(crate) unsafe fn construct_next_function<'a>(module: &'a LLVMParserModule) -
   validate(fn_value)
 }
 pub(crate) unsafe fn construct_dispatch_functions<'a>(m: &'a LLVMParserModule) -> SherpaResult<()> {
-  let LLVMParserModule { b, ctx, fun, .. } = m;
-  let i32 = ctx.i32_type();
+  let LLVMParserModule { b, ctx, fun, i32, .. } = m;
   // Normal Dispatch
   {
     let fn_value = fun.dispatch;
@@ -735,7 +756,6 @@ pub(crate) unsafe fn construct_dispatch_functions<'a>(m: &'a LLVMParserModule) -
     let entry_block = ctx.append_basic_block(fn_value, "entry");
     let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
 
-    let i32 = ctx.i32_type();
     let zero = i32.const_int(0, false);
 
     // Set the context's goto pointers to point to the goto block;
@@ -792,15 +812,15 @@ where
 
 pub fn build_tail_call_with_return<'a, T>(
   builder: &Builder<'a>,
-  caller_fun: FunctionValue<'a>,
-  callee_fun: T,
+  source_fun: FunctionValue<'a>,
+  destination_fun: T,
 ) -> SherpaResult<()>
 where
   T: Into<CallableValue<'a>>,
 {
   let call_site = builder.build_call(
-    callee_fun,
-    &[caller_fun.get_nth_param(0)?.into_pointer_value().into()],
+    destination_fun,
+    &[source_fun.get_nth_param(0)?.into_pointer_value().into()],
     "TAIL_CALL_SITE",
   );
   call_site.set_tail_call(true);
@@ -831,6 +851,8 @@ pub fn compile_llvm_module_from_parse_states<'a>(
     construct_next_function(module)?;
     construct_internal_free_stack(module)?;
     construct_drop(module)?;
+    construct_shift_pre_emit(module);
+    construct_shift_post_emit(module);
     compile_states(j, module, states)?;
   }
   module.fun.push_state.add_attribute(

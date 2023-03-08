@@ -128,7 +128,7 @@ impl<'a> From<(&'a str, &'a str, bool)> for TestInput<'a> {
 }
 
 /// Runs an input grammar through a series of stages determined by
-/// the TestConfig, and reports failure points when they occure.
+/// the TestConfig, and reports failure points when they occur.
 ///
 /// # Arguments
 ///

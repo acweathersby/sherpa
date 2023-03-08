@@ -53,13 +53,13 @@ pub(crate) fn compile_states<'a>(
 fn create_scanner_stop_fn<'a>(m: &'a LLVMParserModule) -> FunctionValue<'a> {
   let null_fn = m.module.add_function(
     "scan_stop",
-    m.ctx.i32_type().fn_type(&[m.types.parse_ctx.ptr_type(0.into()).into()], false),
+    m.i32.fn_type(&[m.types.parse_ctx.ptr_type(0.into()).into()], false),
     Some(Linkage::Private),
   );
   null_fn.set_call_conventions(fastCC);
   let entry = m.ctx.append_basic_block(null_fn, "Entry");
   m.b.position_at_end(entry);
-  m.b.build_return(Some(&m.ctx.i32_type().const_zero()));
+  m.b.build_return(Some(&m.i32.const_zero()));
 
   null_fn
 }
@@ -311,7 +311,7 @@ fn create_line_increment<'a>(
   CTX::line_num_incr.store(b, p, increment_amount)?;
 
   b.build_unconditional_branch(i.2);
-  (i.2) = block;
+  i.2 = block;
 
   SherpaResult::Ok(())
 }
@@ -905,11 +905,11 @@ pub(crate) fn skip_token2<'a>(
 
   build_fast_call(b, m.fun.push_state, &[
     p_ctx.into(),
-    m.ctx.i32_type().const_int(NORMAL_STATE_FLAG_LLVM as u64, false).into(),
+    m.i32.const_int(NORMAL_STATE_FLAG_LLVM as u64, false).into(),
     skip_fun.as_global_value().as_pointer_value().into(),
   ])?;
 
-  b.build_return(Some(&m.ctx.i32_type().const_int(ParseActionType::Skip.into(), false)));
+  b.build_return(Some(&m.i32.const_int(ParseActionType::Skip.into(), false)));
 
   b.position_at_end(m.ctx.append_basic_block(skip_fun, "entry"));
   let p_ctx = skip_fun.get_first_param()?.into_pointer_value();
@@ -929,21 +929,58 @@ pub(crate) fn construct_token_shift<'a>(
   m: &'a LLVMParserModule,
   p_ctx: PointerValue<'a>,
 ) -> SherpaResult<Option<(FunctionValue<'a>, PointerValue<'a>)>> {
-  let LLVMParserModule { b, i32, .. } = m;
+  let LLVMParserModule { b, i32, fun, .. } = m;
 
-  let fun = create_parse_function(j, m, "shift");
+  let post_shift = create_parse_function(j, m, "post-shift");
 
-  build_fast_call(b, m.fun.push_state, &[
+  build_fast_call(b, fun.pre_shift_emit, &[
     p_ctx.into(),
-    m.ctx.i32_type().const_int(NORMAL_STATE_FLAG_LLVM as u64, false).into(),
-    fun.as_global_value().as_pointer_value().into(),
+    post_shift.as_global_value().as_pointer_value().into(),
   ])?;
 
-  b.build_return(Some(&m.ctx.i32_type().const_int(ParseActionType::Shift.into(), false)));
+  b.build_return(Some(&i32.const_int(ParseActionType::Shift.into(), false)));
 
-  b.position_at_end(m.ctx.append_basic_block(fun, "entry"));
+  b.position_at_end(m.ctx.append_basic_block(post_shift, "entry"));
+  let p_ctx = post_shift.get_first_param()?.into_pointer_value();
 
-  let p_ctx = fun.get_first_param()?.into_pointer_value();
+  SherpaResult::Ok(Some((post_shift, p_ctx)))
+}
+
+/// Dispatched after a shift event, that is this should be pushed onto the goto stack
+/// before emitting a shift event.
+pub(crate) fn construct_shift_pre_emit<'a>(m: &'a LLVMParserModule) -> SherpaResult<()> {
+  let LLVMParserModule { b, fun, .. } = m;
+  let fn_value = fun.pre_shift_emit;
+
+  b.position_at_end(m.ctx.append_basic_block(fn_value, "entry"));
+
+  let p_ctx = fn_value.get_first_param()?.into_pointer_value();
+  let goto_fn = fn_value.get_last_param()?.into_pointer_value();
+
+  ensure_space_on_goto_stack(2, m, p_ctx, fn_value)?;
+  add_goto_slot(m, p_ctx, goto_fn.into(), NORMAL_STATE_FLAG_LLVM as u64);
+  add_goto_slot(
+    m,
+    p_ctx,
+    fun.post_shift_emit.as_global_value().as_pointer_value().into(),
+    NORMAL_STATE_FLAG_LLVM as u64,
+  );
+  update_goto_remaining(2, m, p_ctx)?;
+
+  b.build_return(None);
+
+  validate(fn_value)
+}
+
+/// Dispatched after a shift event, that is this should be pushed onto the goto stack
+/// before emitting a shift event.
+pub(crate) fn construct_shift_post_emit<'a>(m: &'a LLVMParserModule) -> SherpaResult<()> {
+  let LLVMParserModule { b, i32, fun, .. } = m;
+  let fn_value = fun.post_shift_emit;
+
+  b.position_at_end(m.ctx.append_basic_block(fn_value, "entry"));
+
+  let p_ctx = fn_value.get_first_param()?.into_pointer_value();
 
   let offset = get_offset_to_end_of_token(m, p_ctx)?;
   CTX::scan_ptr.store(b, p_ctx, offset);
@@ -951,7 +988,9 @@ pub(crate) fn construct_token_shift<'a>(
   CTX::base_ptr.store(b, p_ctx, offset);
   CTX::tok_id.store(b, p_ctx, i32.const_zero());
 
-  SherpaResult::Ok(Some((fun, p_ctx)))
+  build_tail_call_with_return(b, fn_value, fun.dispatch)?;
+
+  validate(fn_value)
 }
 
 /// Transfers the difference between `scan_ptr` and `head_ptr` to `tok_len`.

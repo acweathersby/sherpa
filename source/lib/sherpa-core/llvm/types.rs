@@ -37,6 +37,11 @@ pub struct PublicFunctions<'a> {
   pub(crate) pop_state: FunctionValue<'a>,
   pub(crate) push_state: FunctionValue<'a>,
   pub(crate) handle_eop: FunctionValue<'a>,
+
+  /// Update the context following the emission of a Shift action.
+  pub(crate) post_shift_emit: FunctionValue<'a>,
+  /// Update configure the parser before emitting a a Shift action.
+  pub(crate) pre_shift_emit: FunctionValue<'a>,
   pub(crate) prime: FunctionValue<'a>,
   /// LLVM [`memcpy`](https://llvm.org/docs/LangRef.html#llvm-memcpy-intrinsic) intrinsic.
   /// Copies data of a certain number of bytes from one memory location to another.

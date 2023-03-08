@@ -75,6 +75,7 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: AstObject>(
 
   let parse_loop = ctx.append_basic_block(ast_builder, "ParseLoop");
   let shift = ctx.append_basic_block(ast_builder, "Shift");
+  let skip = ctx.append_basic_block(ast_builder, "Skip");
   let shift_assign_base_pointer = ctx.append_basic_block(ast_builder, "AssignStackPointer");
   let shift_add_slot = ctx.append_basic_block(ast_builder, "AddSlot");
   let shift_new_object = ctx.append_basic_block(ast_builder, "ShiftNewObject");
@@ -110,9 +111,15 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: AstObject>(
     .into_int_value();
 
   b.build_switch(discriminant, default, &[
+    (i32.const_int(ParseActionType::Skip.into(), false), skip),
     (i32.const_int(ParseActionType::Shift.into(), false), shift),
     (i32.const_int(ParseActionType::Reduce.into(), false), reduce),
   ]);
+
+  // Skip --------------------------------------------------------
+  b.position_at_end(skip);
+  //Ignoring skip actions for the time being.
+  b.build_unconditional_branch(parse_loop);
 
   // SHIFT --------------------------------------------------------
   b.position_at_end(shift);

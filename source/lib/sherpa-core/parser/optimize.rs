@@ -120,8 +120,8 @@ pub fn optimize_parse_states(
       // Lower to pass when all branches are a pass state and default is present
       lower_allpass_branch_state(state, &mut changes);
 
-      // Removes all branches whose body is identical to the default branch's.
-      // TODO
+      // Removes all branches whose bodies are identical to the default branch's.
+      remove_default_shadows(state, &mut changes);
 
       for (data, branch) in get_branches_mut(state.as_mut()) {
         if let Some(ASTNode::Goto(box sherpa::Goto { state })) = branch.last() {
@@ -394,13 +394,38 @@ fn lower_allpass_branch_state(state: &mut Box<ParseState>, changes: &mut bool) {
 
 fn remove_default_shadows(state: &mut Box<ParseState>, changes: &mut bool) {
   if let SherpaResult::Ok(state) = &mut state.ast {
-    if matches!(state.instructions[0], ASTNode::DEFAULT(_)) && state.instructions.len() == 1 {
-      match state.instructions[0].clone() {
-        ASTNode::DEFAULT(box DEFAULT { instructions, .. }) => state.instructions = instructions,
-        _ => unreachable!("Expected only ASSERT and DEFAULT nodes in instruction vector."),
-      }
-      *changes = true;
+    // Ensure homogeneity amongst branch types.
+    let Some(default) = state.instructions.iter().filter(|s| matches!(s.get_type(), ASTNodeType::DEFAULT) ).last() else {return;};
+
+    // Ensure homogeneity
+    if state
+      .instructions
+      .iter()
+      .filter_map(|s| match s {
+        ASTNode::ASSERT(box ASSERT { mode, .. }) => Some(mode.to_string()),
+        ASTNode::DEFAULT(..) => None,
+        _ => unreachable!("All states that have a default branch should only contain additional assert branches. Found {:?}", s.get_type())
+      })
+      .collect::<BTreeSet<_>>()
+      .len()
+      != 1
+    {
+      return;
     }
+
+    let default_id = hash_id_value_u64(&default.as_DEFAULT().unwrap().instructions);
+    let old_len = state.instructions.len();
+    let new_set = state.instructions.clone().into_iter().filter(|s| match s {
+      ASTNode::DEFAULT(..) => true,
+      ASTNode::ASSERT(box ASSERT { instructions, .. }) => {
+        default_id != hash_id_value_u64(instructions)
+      }
+      _ => unreachable!("All states that have a default branch should only contain additional assert branches. Found {:?}", s.get_type())
+    });
+
+    state.instructions = new_set.collect();
+
+    *changes |= old_len > state.instructions.len();
   }
 }
 

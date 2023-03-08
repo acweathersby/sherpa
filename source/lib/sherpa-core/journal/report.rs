@@ -1,7 +1,8 @@
 #[cfg(not(feature = "wasm-target"))]
 use super::Timing;
-
+#[allow(unused)]
 use crate::{grammar::hash_id_value_u64, types::*};
+#[allow(unused)]
 use std::{
   collections::{BTreeMap, HashMap},
   fmt::{Debug, Display},
@@ -182,11 +183,13 @@ impl Report {
     self.notes.push((note_name, note));
   }
 
+  #[allow(unused)]
   pub(crate) fn start_timer(&mut self, timer_label: &'static str) {
     #[cfg(not(feature = "wasm-target"))]
     self.timings.insert(timer_label, Timing::new());
   }
 
+  #[allow(unused)]
   pub(crate) fn stop_timer(&mut self, timer_label: &'static str) {
     #[cfg(not(feature = "wasm-target"))]
     {

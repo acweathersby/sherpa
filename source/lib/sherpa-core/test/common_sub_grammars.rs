@@ -90,6 +90,7 @@ fn compile_and_run_grammar(
     }),
     TestConfig {
       optimize: true,
+      print_disassembly: true,
       llvm_parse: true,
       bytecode_parse: true,
       grammar_string: Some(grammar),
