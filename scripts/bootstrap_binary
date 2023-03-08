@@ -14,6 +14,7 @@ SHERPA_CLI_DIR=$ROOT_DIR/source/app/cli
 pushd $SHERPA_CLI_DIR
 
 cargo run \
+    --release \
     --bin sherpa \
     -Z package-features \
     --features "sherpa_core/llvm" \

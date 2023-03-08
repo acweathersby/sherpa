@@ -1,9 +1,10 @@
 #! /usr/bin/zsh
 
-# The default parser for sherpa is the bytecode parse, which is not ideal
-# for performance demanding builds. This script uses the base bytecode sherpa
-# configuration to build a binary parser library that can then replace the 
-# default bytecode parser.
+# This script is used to rebuild the base sherpa bytecode parser
+# This should only every need to be done if:
+# 1. The sherpa grammar is extended or modified
+# 2. New features are added to bytecode parsers that need to 
+#    be incorporated in the sherpa grammar parser.
 
 pushd ${0:a:h}/..
 
@@ -15,6 +16,7 @@ pushd $SHERPA_CLI_DIR
 
 cargo run \
     --bin sherpa \
+    --release \
     -Z package-features \
     --features "sherpa_core/llvm" \
     -- build -t bytecode\
