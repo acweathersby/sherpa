@@ -1,14 +1,12 @@
-$border-color: #707070
+$border-color: #e4e4e4
 $tab-header-col: #4d4c4c
 $active-panel-col: #16718D
 $hover-panel-col: #0e5b72
+
 $tab-height: 40px
 
-%studio-top-border
-    border-top: 1px solid $border-color
-
-%panel-top-border
-    border-top: 2px solid $active-panel-col
+%tabs-bottom-border
+    border-bottom: 1px solid $active-panel-col
 
 main
     position: absolute
@@ -17,97 +15,118 @@ main
 .hidden
     display: none
 
-#studio
+#lab
     position: fixed
     display: flex
     flex-direction: row
-    height: 100vh
-    width: 100vw
-    top: 0
+    top: 40px
     left: 0
     bottom: 0
     right: 0
     padding: 0
     margin: 0
+    transition: opacity 100ms
+
+body.loading #lab
+    opacity: 0
+
+body.unloading #lab
+    opacity: 0
+
+#documents-host
+    position: relative
+    width: 0%
+    overflow: hidden
+    border-top: 1px solid $border-color
+    transition: width 100ms
+
+    &.loading
+        transition: none
+
+    &.active
+        width: 30%
+        display: block
+
+    #documents-frame
+        height: 100%
+        width: 100%
+        z-index: 1000000000
+        transition: opacity 500ms
+
+    &.loading #documents-frame
+        opacity: 0
 
 #left-column
-    margin-top: 40px
+    display: inline-flex
     position: relative
-    display: flex
     flex-direction: column
     width: 50%
     z-index: 220
 
+    .tabs-header
+        padding-left: 40px
+
 #right-column
-    margin-top: 40px
     width: 50%
-    overflow: hidden
-    display: flex
+    display: inline-flex
     flex-direction: column
     .panel-host
         height: 100%
 
     .tab:hover
-        background-color: #ca4d31
+        color: #ca4d31
 
     .tab.active
-        background-color: #ED5E3F
+        color: #ED5E3F
 
     .panel
-        background-color: #494949
-        color: white
         height: 100%
+        border-left: 1px solid $border-color
+
+    .tabs-header
         border-color: #ED5E3F
 
 #shadow-backer
     position: absolute
     width: 100%
-    top: 40px
     height: $tab-height
-    background-color: red
-    box-shadow: inset 0px 5px 5px #00000018
-    background-color: $tab-header-col
+    border-top: 1px solid $border-color
 
 .tabs-header
+    @extend %tabs-bottom-border
     top: 0
     height: $tab-height
-
     display: flex
     flex-direction: row
     font-weight: 400
     font-family: arial
-    font-size: 0.9em
+    font-size: 0.88em
     line-height: 3.2em
-    //background-color: $tab-header-col
-    //border-top: 1px solid #0000005d
 
     .tab
         width: 120px
         box-sizing: border-box
-        color: #c5c5c5
+        color: #777777
         padding: 5px 10px
         text-transform: lowercase
 
     .tab:hover
-        background-color: $hover-panel-col
-        color: #dbdbdb
+        color: $hover-panel-col
         cursor: pointer
         border: none
 
     .tab.active
-        background-color: $active-panel-col
-        color: white
+        color: $active-panel-col
         border: none
 
 .panel-host
     position: relative
     display: grid
     flex-direction: column
-    min-height: 50%
+    min-height: 100%
     grid-template-rows: $tab-height auto
 
     .panel
-        @extend %panel-top-border
         box-sizing: content-box
         position: relative
         width: 100%
@@ -121,31 +140,6 @@ main
     position: relative
     width: 100%
     height: 50%
-
-.cm-editor
-    position: absolute !important
-    left: 0
-    right: 0
-    top: 0
-    bottom: 0
-    outline: none
-
-    .syn-prod
-        color: #9f9f9f
-
-    .syn-term
-        color: #008cc3
-
-    .syn-prod-id
-        color: rgb(72, 77, 85)
-        font-weight: 800
-
-    .syn-class
-        color: #e27923
-        font-weight: 800
-
-.cm-focused
-    outline: none !important
 
 .input-area-label
     padding: 0 10px
@@ -192,8 +186,8 @@ pre
     top: 0px
     bottom: 0px
     right: 0
-    transition: opacity 150ms
     z-index: 10000
+    transition: opacity 150ms
 
     .scroll-handle
         top: 0
@@ -202,7 +196,7 @@ pre
         width: 1%
         left: 50%
         border-radius: 7px
-        background: #666666
+        background: #7390a3
         transition: left 100ms, width 100ms
 
     &:hover .scroll-handle
@@ -215,7 +209,6 @@ pre
         border-radius: 1.5px
         left: 4px
         position: absolute
-        background: #ff005c
 
     .scroll-begin
         top: 0
@@ -223,22 +216,7 @@ pre
     .scroll-end
         bottom: 0
 
-#documents-host
-    position: relative
-    width: 100%
-    height: 50%
-    box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.219)
-    border-radius: 0 20px 0 0
-    overflow: hidden
-
-    .scroll
-        top: 20px
-
-    #documents-frame
-        width: 100%
-        height: 100%
-        z-index: 1000000000
-        transition: opacity 200ms
-
-    &.loading #documents-frame
+    &.no-scroll
         opacity: 0
+
+@import "./codemirror"

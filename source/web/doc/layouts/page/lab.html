@@ -7,27 +7,24 @@
     {{ partial "scripts/soft_load.html" . }}
     {{ .Scratch.Set "headerSubtext" "lab" }}
     {{ partial "header/header.html" . }}
-    <main id="studio">
+    <main id="lab">
         <div id="shadow-backer"></div>
+        <div id="documents-host" class="loading">
+            <iframe id="documents-frame" class="frame"></iframe>
+        </div>
         <div id="left-column">
             <div class="panel-host">
                 <div class="tabs-header">
                     <div id="tab-grammar" class="tab active"> Grammar </div>
                     <div id="tab-parser" class="tab"> Parser Data </div>
                 </div>
-                <div id="panel-grammar" class="panel active">
-                    <div class="input-area-label">
-                    </div>
+                <div id="panel-grammar" class="panel active codemirror-host">
                 </div>
-                <div id="panel-parser" class="panel">
-                    <div class="input-area-label">
-                    </div>
+                <div id="panel-parser" class="panel codemirror-host">
                 </div>
-            </div>
-            <div id="documents-host" class="loading">
-                <iframe id="documents-frame" class="frame"></iframe>
             </div>
         </div>
+
         <div id="right-column">
             <div class="panel-host">
                 <div class="tabs-header">
@@ -45,9 +42,6 @@
                 <div id="panel-cst" class="panel">
                     <h1> cst </h1>
                 </div>
-                <div id="panel-debugger" class="panel">
-                    <h1> debugger </h1>
-                </div>
             </div>
         </div>
     </main>
@@ -63,9 +57,14 @@
             codemirror_grammar_host: document.getElementById("panel-grammar"),
             codemirror_syntax_host: document.getElementById("panel-parser"),
             disassembly_output: document.getElementById("output"),
+        }).then(() => {
+            for (const scroller of Array.from(document.getElementsByClassName("cm-scroller"))) {
+
+                new ScrollHandler(scroller, scroller.parentElement);
+            }
         });
-    </script>
-    <script>
+
+
         for (const input_host of Array.from(document.getElementsByClassName("panel-host"))) {
             let panels = Array.from(input_host.getElementsByClassName("panel"));
             let tabs = Array.from(input_host.getElementsByClassName("tab"));

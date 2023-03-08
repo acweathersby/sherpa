@@ -11,13 +11,14 @@ function getTop(ele: HTMLElement | null) {
 
 
 export class ScrollHandler {
-    private ele: HTMLElement;
+    private ele?: HTMLElement;
     private handle: HTMLDivElement;
     private scroll_host: HTMLElement;
     private scroll: HTMLDivElement;
     private scroll_end: HTMLDivElement;
     private scroll_beg: HTMLDivElement;
     private resize_obs: ResizeObserver;
+    private mutate_obs: MutationObserver;
     private curr_height: number;
     private target_height: number;
     private target_pos: number;
@@ -35,7 +36,6 @@ export class ScrollHandler {
 
 
     constructor(ele: HTMLElement, scroll_host: HTMLElement = ele) {
-        this.ele = ele;
 
         this.scroll_host = scroll_host;
 
@@ -63,6 +63,10 @@ export class ScrollHandler {
         this.scroll_host.appendChild(this.scroll);
 
         this.resize_obs = new ResizeObserver(this.handle_resize.bind(this));
+        this.mutate_obs = new MutationObserver(this.handle_resize.bind(this));
+
+        this.resize_obs.observe(scroll_host);
+        //window.addEventListener("resize", this.handle_resize.bind(this));
 
         this.bound_handle_wheel = this.handle_wheel.bind(this);
         this.bound_handle_scroll = this.handle_scroll.bind(this);
@@ -77,6 +81,7 @@ export class ScrollHandler {
         this.HANDLE_MOVE = false;
         this.grab_diff = 0;
 
+
         this.set_target(ele);
     }
 
@@ -86,9 +91,15 @@ export class ScrollHandler {
             this.ele.removeEventListener("wheel", this.bound_handle_wheel);
             this.ele.removeEventListener("scroll", this.bound_handle_scroll);
             this.resize_obs.unobserve(this.ele);
+            this.mutate_obs.disconnect();
         }
 
         this.resize_obs.observe(target);
+        this.mutate_obs.observe(target, {
+            subtree: true,
+            attributes: true,
+            childList: true
+        });
 
         for (const ele of Array.from(target.children))
             this.resize_obs.observe(ele);
@@ -102,19 +113,29 @@ export class ScrollHandler {
     }
 
     handle_resize() {
-        const clientHeight = this.ele.clientHeight;
-        this.scroll_amount = this.ele.scrollHeight - clientHeight;
-        this.scroll_box_ratio = clientHeight / this.ele.scrollHeight;
-        this.target_height = (this.scroll_box_ratio * this.scroll.clientHeight);
-        this.target_pos = ((this.ele.scrollTop / this.scroll_amount) * (this.scroll.clientHeight - this.target_height));
-        this.sb_distance = (this.scroll.clientHeight - this.target_height);
-        this.handle_pos_adjust();
-        this.handle_height_adjust();
-        this.handle_scrolled();
+        if (this.ele) {
+
+            const clientHeight = this.ele.clientHeight;
+            this.scroll_amount = this.ele.scrollHeight - clientHeight;
+            this.scroll_box_ratio = clientHeight / this.ele.scrollHeight;
+            this.target_height = (this.scroll_box_ratio * this.scroll.clientHeight);
+            this.target_pos = ((this.ele.scrollTop / this.scroll_amount) * (this.scroll.clientHeight - this.target_height));
+            this.sb_distance = (this.scroll.clientHeight - this.target_height);
+
+            if (this.sb_distance < 1) {
+                this.scroll.classList.add("no-scroll");
+            } else {
+                this.scroll.classList.remove("no-scroll");
+            }
+
+            this.handle_pos_adjust();
+            this.handle_height_adjust();
+            this.handle_scrolled();
+        }
     }
 
     handle_height_adjust() {
-        if (this.curr_height != this.target_height) {
+        if (this.curr_height != this.target_height && this.ele) {
             const diff = (this.target_height - this.curr_height) * 0.5;
 
             if (Math.abs(diff) > 0.01) {
@@ -151,11 +172,13 @@ export class ScrollHandler {
         this.set_handle_pos(this.target_pos + diff);
     }
     set_handle_pos(pos: number) {
-        this.target_pos = Math.max(Math.min(pos, this.sb_distance), 0);
-        this.handle_pos_adjust();
-        this.handle_scrolled();
-        const ratio = this.target_pos / this.sb_distance;
-        this.ele.scrollTop = this.scroll_amount * ratio;
+        if (this.ele) {
+            this.target_pos = Math.max(Math.min(pos, this.sb_distance), 0);
+            this.handle_pos_adjust();
+            this.handle_scrolled();
+            const ratio = this.target_pos / this.sb_distance;
+            this.ele.scrollTop = this.scroll_amount * ratio;
+        }
     }
 
     handle_scrolled() {
@@ -163,13 +186,18 @@ export class ScrollHandler {
     }
 
     handle_scroll(e: Event) {
-        this.handle_resize;
+        if (this.HANDLE_MOVE) return;
+        this.handle_resize();
     }
 
     handle_move(e: PointerEvent) {
         if (this.HANDLE_MOVE) {
             const y = (e.clientY - getTop(this.scroll)) + this.grab_diff;
             this.set_handle_pos(y);
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            e.stopPropagation();
+            return false;
         }
     }
 

@@ -19,6 +19,8 @@ export default function (docs_iframe: HTMLIFrameElement, docs_host: HTMLIFrameEl
 
         if (hash.slice(0, 6) == "#page:") {
             docs_iframe.src = hash.slice(6).replace("/\%2f/g", "/");
+            docs_host.classList.add("loading");
+            docs_host.classList.add("active");
         }
 
         log("Configuring docs integration");
@@ -27,7 +29,7 @@ export default function (docs_iframe: HTMLIFrameElement, docs_host: HTMLIFrameEl
             let docs_doc = docs_iframe.contentDocument;
             if (docs_doc) {
                 let html_element = docs_doc.documentElement;
-                docs_doc.body.classList.add("lab_iframe");
+                docs_doc.body.classList.add("lab-iframe");
                 html_element.style.overflow = "hidden";
 
                 handler.set_target(html_element);

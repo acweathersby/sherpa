@@ -58,6 +58,7 @@ body.docs main
         max-width: 720px
         flex-shrink: 1
         z-index: 0
+        transition: opacity 200ms
 
     p
         color: rgb(39, 39, 39)
@@ -125,3 +126,29 @@ body.docs main
 
         content
             padding: 0 30px
+
+body.lab-iframe.docs
+
+    header
+        display: none
+
+    main
+        margin-top: 40px
+
+        .docs-nav
+            display: none
+
+        .doc-nav
+            display: none
+
+        h1
+            font-size: 2em
+
+        h2
+            font-size: 1.8em
+
+        content
+            padding: 0 15px 0 10px
+
+body.loading content, body.unloading content
+    opacity: 0

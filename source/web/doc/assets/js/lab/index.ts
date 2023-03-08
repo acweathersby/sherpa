@@ -38,6 +38,7 @@ export default async function (
 
         extensions: [basicSetup,
             sherpaLang(),
+            EditorView.editorAttributes.of({ class: "Codemirror" }),
             /*     setupGrammarLinting(grammar_sys, (v): boolean => {
                     for (const t of v.transactions) {
                         if (t.isUserEvent("grammar.built")) {

@@ -222,6 +222,9 @@ impl ParseState {
     }
   }
 
+  /// Return the AST root object if it is already compiled,
+  /// otherwise attempts to compile and return the AST object.
+  /// If an error is encountered during compilation, None is returned.
   pub fn get_ast_mut(&mut self) -> Option<&mut IR_STATE> {
     if self.ast.is_ok() {
       Some(self.ast.as_mut().unwrap())
@@ -230,6 +233,8 @@ impl ParseState {
     }
   }
 
+  /// Return the AST root object if it is already compiled,
+  /// otherwise returns `None`
   pub fn get_ast(&self) -> Option<&IR_STATE> {
     if self.ast.is_ok() {
       Some(self.ast.as_ref().unwrap())
