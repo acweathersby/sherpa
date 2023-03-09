@@ -66,7 +66,6 @@ export class ScrollHandler {
         this.mutate_obs = new MutationObserver(this.handle_resize.bind(this));
 
         this.resize_obs.observe(scroll_host);
-        //window.addEventListener("resize", this.handle_resize.bind(this));
 
         this.bound_handle_wheel = this.handle_wheel.bind(this);
         this.bound_handle_scroll = this.handle_scroll.bind(this);

@@ -9,7 +9,7 @@
     <a href="/docs"><button> docs </button></a>
     <a href="/lab"><button> lab </button></a>
     {{ with $.Site.Data.resource_locations }}
-    <a href="{{  .github_repo_url }}"><button> github </button></a>
+    <a href="{{  .github_repo_url }}"><img src="{{ relURL "/img/github-mark.svg"}}"></a>
     {{end}}
     {{end}}
 </header>
