@@ -42,7 +42,7 @@ EXPORT dt::escaped_string as escaped
 
 <> import_clause > 
 
-        "IMPORT" ( c:id | c:sym  )(+) c:sp ( "AS" | "as" ) sym::identifier
+        "IMPORT" ( c:id | c:sym | c:num  )(+) c:sp ( "AS" | "as" ) sym::identifier
 
             :ast { t_Import, c_Preamble, uri: str($2), reference:str($5), tok }
 
