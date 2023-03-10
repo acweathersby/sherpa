@@ -60,7 +60,16 @@ pub(crate) fn convert_graph_to_ir(
 
     let successors = links.get(&state.get_id()).unwrap_or(&empty_hash);
 
-    for (id, ir_state) in convert_state_to_ir(j, graph, state, successors, &output, entry_name)? {
+    let goto_name = if let Some(goto) = state.get_goto_state() {
+      let goto_pair = convert_goto_state_to_ir(j, graph, &goto, successors)?;
+      let out = Some(goto_pair.1.name.clone());
+      output.insert(goto_pair.0, goto_pair.1);
+      out
+    } else {
+      None
+    };
+
+    for (id, ir_state) in convert_state_to_ir(j, graph, state, successors, entry_name, goto_name)? {
       match output.entry(id) {
         Entry::Occupied(e) => {
           debug_assert_eq!(e.get().code, ir_state.code)
@@ -81,20 +90,73 @@ pub(crate) fn convert_graph_to_ir(
   j.report_mut().ok_or_convert_to_error(output.into_values().collect())
 }
 
+#[derive(PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum S_TYPE {
+  GOTO_SUCCESSORS,
+  SYMBOL_SUCCESSORS,
+}
+
+fn convert_goto_state_to_ir(
+  j: &mut Journal,
+  graph: &Graph,
+  state: &State,
+  successors: &HashSet<&State>,
+) -> SherpaResult<(StateId, Box<ParseState>)> {
+  let g = &(j.grammar()?);
+
+  let successors = successors.iter().filter(|s| {
+    matches!(s.get_type(), StateType::GotoPass | StateType::GotoLoop | StateType::KernelGoto)
+  });
+
+  let mut w = CodeWriter::new(vec![]);
+  w.increase_indent();
+  for (bc_id, (_prod_name, state_name, transition_type)) in successors
+    .into_iter()
+    .map(|s| {
+      if let SymbolID::Production(prod_id, _) = s.get_symbol() {
+        let prod = g.get_production(&prod_id).unwrap();
+        (prod.bytecode_id.unwrap(), (&prod.name, create_ir_state_name(graph, s), s.get_type()))
+      } else {
+        panic!("Invalid production type: {}", s.get_symbol().debug_string(g))
+      }
+    })
+    .collect::<BTreeMap<_, _>>()
+  {
+    match transition_type {
+      StateType::KernelGoto => {
+        w.write_fmt(format_args!(
+          "\n assert PRODUCTION [ {bc_id} ] ( goto state [ {state_name} ] )"
+        ))?;
+      }
+      StateType::GotoLoop => {
+        w.write_fmt(format_args!(
+            "\n assert PRODUCTION [ {bc_id} ] ( push state [ %%%% ] then goto state [ {state_name} ] )"
+          ))?;
+      }
+      StateType::GotoPass => {
+        w.write_fmt(format_args!("\n assert PRODUCTION [ {bc_id} ] ( pass )"))?;
+      }
+      _ => unreachable!(),
+    }
+  }
+
+  let mut goto = Box::new(create_ir_state(j, graph, w, state, false, false)?);
+
+  goto.name = format!("{}", create_ir_state_name(graph, state));
+
+  SherpaResult::Ok((state.get_id(), goto))
+}
+
 fn convert_state_to_ir(
   j: &mut Journal,
   graph: &Graph,
   state: &State,
   successors: &HashSet<&State>,
-  resolved_states: &BTreeMap<StateId, Box<ParseState>>,
   entry_name: &str,
+  goto_state_id: Option<String>,
 ) -> SherpaResult<Vec<(StateId, Box<ParseState>)>> {
   let is_scanner = graph.is_scan();
-  #[derive(PartialEq, Eq, PartialOrd, Ord, Hash)]
-  enum S_TYPE {
-    GOTO_SUCCESSORS,
-    SYMBOL_SUCCESSORS,
-  }
+
   let g = &(j.grammar()?);
   let state_id = state.get_id();
 
@@ -102,45 +164,6 @@ fn convert_state_to_ir(
     StateType::GotoPass | StateType::GotoLoop | StateType::KernelGoto => S_TYPE::GOTO_SUCCESSORS,
     _ => S_TYPE::SYMBOL_SUCCESSORS,
   });
-
-  let goto_state = if let Some(successors) = successor_groups.get(&S_TYPE::GOTO_SUCCESSORS) {
-    let mut w = CodeWriter::new(vec![]);
-    w.increase_indent();
-    for (bc_id, (_prod_name, state_name, transition_type)) in successors
-      .into_iter()
-      .map(|s| {
-        if let SymbolID::Production(prod_id, _) = s.get_symbol() {
-          let prod = g.get_production(&prod_id).unwrap();
-          (prod.bytecode_id.unwrap(), (&prod.name, create_ir_state_name(graph, s), s.get_type()))
-        } else {
-          panic!("Invalid production type: {}", s.get_symbol().debug_string(g))
-        }
-      })
-      .collect::<BTreeMap<_, _>>()
-    {
-      match transition_type {
-        StateType::KernelGoto => {
-          w.write_fmt(format_args!(
-            "\n assert PRODUCTION [ {bc_id} ] ( goto state [ {state_name} ] )"
-          ))?;
-        }
-        StateType::GotoLoop => {
-          w.write_fmt(format_args!(
-            "\n assert PRODUCTION [ {bc_id} ] ( push state [ %%%% ] then goto state [ {state_name} ] )"
-          ))?;
-        }
-        StateType::GotoPass => {
-          w.write_fmt(format_args!("\n assert PRODUCTION [ {bc_id} ] ( pass )"))?;
-        }
-        _ => unreachable!(),
-      }
-    }
-    let mut goto = Box::new(create_ir_state(j, graph, w, state, false, false)?);
-    goto.name = format!("{}_goto", create_ir_state_name(graph, state));
-    Some(goto)
-  } else {
-    None
-  };
 
   let base_state = if let Some(successors) = successor_groups.get(&S_TYPE::SYMBOL_SUCCESSORS) {
     #[cfg(debug_assertions)]
@@ -259,13 +282,10 @@ fn convert_state_to_ir(
         }
         _ => true,
       } {
-        match (&goto_state, s_type) {
+        match (&goto_state_id, s_type) {
           // Kernal calls can bypass gotos.
           (_, StateType::KernelCall(..)) => {}
-          (Some(gt), _) => {
-            let name = get_resolved_name(state_id.to_goto(), gt, resolved_states);
-            body_string.push(format!("push state [ {name} ]"));
-          }
+          (Some(gt), _) => body_string.push(format!("push state [ {gt} ]")),
           _ => {}
         }
 
@@ -378,10 +398,6 @@ fn convert_state_to_ir(
     out.push((state_id, base_state));
   }
 
-  if let Some(goto_state) = goto_state {
-    out.push((state_id.to_goto(), goto_state));
-  }
-
   debug_assert!(
     !out.is_empty()
       || matches!(
@@ -429,7 +445,7 @@ fn get_resolved_name(
 }
 
 pub(super) fn create_ir_state_name(graph: &Graph, state: &State) -> String {
-  format!("{}_{}", graph.get_prefix(), state.get_id().0,)
+  format!("{}_{:0>6X}", graph.is_scan().then_some("scanner").unwrap_or("parser"), state.get_hash(),)
 }
 
 pub(super) fn create_ir_state(
@@ -461,11 +477,7 @@ pub(super) fn create_ir_state(
   };
 
   let ir_state = ParseState {
-    comment: format!(
-      "{} {}",
-      graph.goal_items().iter().map(|i| i.debug_string(g)).collect::<Vec<_>>().join("\n"),
-      state.debug_string(g),
-    ),
+    comment: format!("{}", state.debug_string(g),),
     code: unsafe { String::from_utf8_unchecked(w.into_output()) },
     name: create_ir_state_name(graph, state),
     state_type: graph.is_scan().then_some(IRStateType::Scanner).unwrap_or(IRStateType::Parser),

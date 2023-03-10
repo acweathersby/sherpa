@@ -33,7 +33,7 @@ pub const gen_rec_marker_str: &str = "c:rec";
 pub const tab_sym_str: &str = "c:tab";
 pub const eof_str: &str = "$eof";
 pub const undefined_symbol_id: u32 = 0xF0000000;
-pub const DEFAULT_SYM_ID: u32 = 0xF0DEFA17;
+pub const DEFAULT_SYM_ID: u32 = 0xFDEFA017;
 /// TODO: Docs
 #[derive(Debug, PartialEq, PartialOrd, Clone, Copy, Hash, Eq, Ord)]
 pub enum SymbolID {

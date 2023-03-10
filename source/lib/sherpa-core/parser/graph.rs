@@ -1,4 +1,5 @@
 use crate::{
+  grammar::hash_id_value_u64,
   parser::utils::{hash_group_btreemap, symbols_occlude},
   types::{
     graph::{StateId, *},
@@ -409,7 +410,7 @@ fn handle_completed_groups(
     }
     (_, None, GraphState::Peek) => {
       if cmpl.iter().follow_items_are_the_same() {
-        // Items are likely a product of a reduce-shift conflict. We'll favore the shift
+        // Items are likely a product of a reduce-shift conflict. We'll favor the shift
         // action as long as there is only one shift, otherwise we have a shift-shift conflict.
         // Grabbing the original items.
         let kernel_items = follow_pairs
@@ -711,11 +712,13 @@ fn handle_goto(
         j.report_mut().add_note("goto-seeds", out_items.to_debug_string(g, "\n\n"));
         j.report_mut().add_note("goto-results", used_non_terms.to_debug_string(g, "\n\n"));
       }
+
       graph[parent].set_non_terminals(&used_non_terms);
 
-      let goto_groups = hash_group_btreemap(used_non_terms, |_, t| t.get_production_id_at_sym(g));
+      let used_goto_groups =
+        hash_group_btreemap(used_non_terms, |_, t| t.get_production_id_at_sym(g));
 
-      for (prod_id, items) in &goto_groups {
+      for (prod_id, items) in &used_goto_groups {
         let sym_id = g.get_production(&prod_id)?.sym_id;
 
         let transition_type = items
@@ -725,7 +728,7 @@ fn handle_goto(
             let recursive = p == i.get_production_id_at_sym(g);
             recursive
               .then_some(i.at_start())
-              .unwrap_or(!kernel_base.contains(i) && goto_groups.contains_key(&p))
+              .unwrap_or(!kernel_base.contains(i) && used_goto_groups.contains_key(&p))
           })
           .then_some(StateType::GotoLoop)
           .unwrap_or(StateType::KernelGoto);
@@ -758,11 +761,12 @@ fn handle_goto(
           if let Some(s) =
             create_peek(graph, sym_id, parent, incomplete.iter(), fp, false, transition_type)
           {
-            let c_p = completed.into_iter().map(|i| (i, i).into()).collect();
+            let c_p = completed.clone().into_iter().map(|i| (i, i).into()).collect();
             let graph_state = GraphState::Normal;
             let sym = SymbolID::Default;
             let groups = &mut Default::default();
-            let s = graph.create_state(sym, StateType::PeekEnd, Some(s), vec![]);
+            let s = graph.create_state(sym, StateType::PeekEnd, Some(s), completed);
+
             handle_completed_groups(j, graph, groups, s, graph_state, sym, c_p, &default)?;
           }
         } else {
@@ -851,7 +855,6 @@ fn create_peek<'a, T: ItemContainerIter<'a>>(
   let is_scan = graph.is_scan();
   let mut kernel_items = vec![];
   let mut resolve_items = vec![];
-  let mut index = 0;
   let mut incomplete_items = incomplete_items.to_vec();
 
   let existing_prod_ids = incomplete_items.to_production_ids(g);
@@ -875,14 +878,16 @@ fn create_peek<'a, T: ItemContainerIter<'a>>(
       .collect();
 
     if !follow.is_empty() {
+      let index = hash_id_value_u64(&follow);
       for follow in follow {
         kernel_items.push(follow.to_origin(Origin::Peek(index, state)));
       }
       graph[state].set_peek_resolve_items(index, items.iter().to_completed_set().to_vec());
-      index += 1;
     }
   }
 
+  let index = hash_id_value_u64(&incomplete_items);
+  
   kernel_items.append(
     &mut incomplete_items.iter().map(|i| i.to_origin(Origin::Peek(index, state))).collect(),
   );

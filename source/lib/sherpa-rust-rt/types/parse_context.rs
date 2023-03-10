@@ -437,11 +437,28 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
           };
           ast_stack.push(AstSlot(Node::default(), tok, Default::default()));
         }
-        ParseAction::Error { .. } => {
+        ParseAction::Error { last_input, last_production } => {
+          let string = self.get_reader().get_bytes();
+
+          let mut start = last_input.off as usize;
+          while start < string.len() && string[start] == 32 {
+            start += 1;
+          }
+          let mut end = start;
+          while end < string.len() && string[end] != 32 && string[end] != 10 {
+            end += 1;
+          }
+
           return Err(SherpaParseError {
-            inline_message: Default::default(),
+            inline_message: "Failed parse input".into(),
             last_production: 0,
-            loc: Default::default(),
+            loc: TokenRange {
+              line_num: last_input.line_num,
+              line_off: last_input.line_off,
+              len:      (end - start) as u32,
+              off:      start as u32,
+            }
+            .to_token(self.get_reader_mut()),
             message: Default::default(),
           });
         }

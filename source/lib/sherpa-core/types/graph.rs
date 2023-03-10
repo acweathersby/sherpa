@@ -35,7 +35,7 @@ pub(crate) enum Origin {
   None,
   ProdGoal(ProductionId),
   SymGoal(SymbolID),
-  Peek(u16, StateId),
+  Peek(u64, StateId),
   // Out of scope item that was generated from the
   // completion of a token production.
   ScanCompleteOOS,
@@ -166,7 +166,7 @@ pub(crate) struct State {
   parent: StateId,
   predecessors: BTreeSet<StateId>,
   kernel_items: BTreeSet<Item>,
-  peek_resolve_items: BTreeMap<u16, Items>,
+  peek_resolve_items: BTreeMap<u64, Items>,
   non_terminals: BTreeSet<Item>,
   reduce_item: Option<Item>,
   leaf_state: bool,
@@ -182,7 +182,22 @@ impl Hash for State {
     for item in &self.kernel_items {
       item.rule_id.hash(state);
       item.off.hash(state);
+
+      match item.origin {
+        Origin::Peek(hash_id, _) => hash_id.hash(state),
+        other => other.hash(state),
+      }
+    }
+
+    for item in &self.non_terminals {
+      item.rule_id.hash(state);
+      item.off.hash(state);
       item.origin.hash(state);
+
+      match item.origin {
+        Origin::Peek(hash_id, _) => hash_id.hash(state),
+        other => other.hash(state),
+      }
     }
 
     for item in &self.peek_resolve_items.values().flatten().collect::<BTreeSet<_>>() {
@@ -198,6 +213,21 @@ impl Hash for State {
 }
 
 impl State {
+  pub(crate) fn get_goto_state(&self) -> Option<Self> {
+    if self.non_terminals.len() > 0 {
+      Some(Self {
+        term_symbol: self.term_symbol,
+        id: self.id.to_goto(),
+        t_type: StateType::KernelGoto,
+        kernel_items: self.non_terminals.clone(),
+        non_terminals: self.kernel_items.clone(),
+        ..Default::default()
+      })
+    } else {
+      None
+    }
+  }
+
   pub(crate) fn get_hash(&self) -> u64 {
     let mut hasher = DefaultHasher::new();
     self.hash(&mut hasher);
@@ -214,12 +244,12 @@ impl State {
   }
 
   /// Set a group of items that a peek item will resolve to.
-  pub(crate) fn set_peek_resolve_items(&mut self, peek_origin: u16, items: Items) {
-    self.peek_resolve_items.insert(peek_origin, items);
+  pub(crate) fn set_peek_resolve_items(&mut self, peek_origin_key: u64, items: Items) {
+    self.peek_resolve_items.insert(peek_origin_key, items);
   }
 
-  pub(crate) fn get_resolve_items(&self, peek_origin: u16) -> Items {
-    self.peek_resolve_items.get(&peek_origin).unwrap().clone()
+  pub(crate) fn get_resolve_items(&self, peek_origin_key: u64) -> Items {
+    self.peek_resolve_items.get(&peek_origin_key).unwrap().clone()
   }
 
   pub(crate) fn get_nonterminal_items(&self) -> Items {
@@ -501,7 +531,7 @@ impl Graph {
     let mut hasher = DefaultHasher::new();
     self.goal_items().hash(&mut hasher);
     self.state_name_prefix = format!(
-      "s{:0>16X}{}_{append_string}",
+      "s{:0>16X}{}_",
       hasher.finish(),
       self.is_scan().then_some("_scan").unwrap_or_default()
     );
