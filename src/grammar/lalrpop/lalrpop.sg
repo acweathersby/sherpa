@@ -1,0 +1,218 @@
+IGNORE { c:sp c:nl }
+
+<> Top > Grammar | Pattern | MatchMapping | TypeRef | GrammarWhereClauses
+
+<> Grammar >
+    ShebangAttribute(*)
+    Use(*)
+    Annotation(*)
+    "grammar"
+    GrammarTypeParameters?
+    GrammarParameters?
+    GrammarWhereClauses?
+    ";"
+    GrammarItem(*)
+
+<> GrammarTypeParameters > "<" TypeParameter(+",") ">"
+
+<> TypeParameter > Lifetime | Id
+
+<> GrammarWhereClauses > "where" GrammarWhereClause(+",")
+
+<> GrammarWhereClause > 
+    Lifetime ":" Lifetime(+"+")
+    | ForAll? TypeRef ":" TypeBounds
+
+
+<> ForAll > "for" "<" TypeParameter(+",") ">"
+
+<> TypeBounds > TypeBound(+"+")
+
+<> TypeBound > Lifetime 
+    | ForAll Path "(" TypeRef(+",") ")" ("->" TypeRef )?
+    | ForAll Path  ("<" TypeBoundParameter(+",") ">")?
+
+<> TypeBoundParameter >
+    Lifetime
+    | TypeRef
+    | Id "=" TypeRef
+
+<> GrammarParameters > "(" GrammarParameter(+",") ")"
+
+<> GrammarParameter > Id ":" TypeRef
+
+<> GrammarItem >
+    Use
+    | MatchToken
+    | ExternToken
+    | Nonterminal
+
+<> Use > "use" Path ";"
+
+<> Visibility >
+    "pub" "(" Path ")"
+    | "pub" "(" "in" Path ")"
+    | "pub"
+    
+
+<> Nonterminal > 
+    Annotation(*) Visibility? NonterminalName (":" TypeRef)? "=" Alternatives
+
+<> AnnotationArg > "(" Id "=" StringLiteral ")"
+
+<> Annotation >
+    "#" "[" Id AnnotationArg? "]"
+
+<> NonterminalName >
+    MacroId "<" NotMacroId(+",") ">"
+    | NotMacroId
+    | "Escape"
+
+<> Alternatives > 
+    Alternative ";"
+    | "{" Alternative(+",") "}" ";"?
+
+<> Alternative > 
+    Annotation(*) Symbol(+) ("if" Condition )? Action?
+    | ("if" Condition )? Action 
+
+<> Action > "=>@L" | "=>@R" | "=>" | "=>?"
+
+<> Condition> NotMacroId CondOp StringLiteral
+
+<> CondOp > "=="  | "!="  | "~~"  | "!~" 
+
+<> ExprSymbol > Symbol(*)
+
+<> Symbol > 
+    "<" "mut"? Id ":" Symbol0 ">"
+    | "<" Symbol0 ">"
+    | Symbol0
+
+<> Symbol0 > Symbol1 | Symbol0 RepeatOp 
+
+<> RepeatOp >
+    "+"
+    | "*"
+    | "?"
+
+<> Symbol1 > SymbolKind1
+
+<> SymbolKind1 > 
+    MacroId "<" Symbol(+",") ">"
+
+    | QuotedTerminal
+
+    | Id
+
+    | Escape
+
+    | "(" ExprSymbol ")"
+
+    | "@L"
+
+    | "@R"
+
+    | "!"
+
+<> TypeRef >
+
+    "(" TypeRef(+",") ")"
+    
+    | "[" TypeRef "]" 
+
+    | "#" Symbol "#"
+
+    | "&" Lifetime? "mut"? TypeRef
+    
+    | Path "<" TypeRefOrLifetime(+",") ">"
+
+    | Path
+
+    | "dyn" Path "<" TypeRefOrLifetime(+",") ">"
+
+    | "dyn" Path
+
+    | "dyn" ForAll Path "("  TypeRef(+",") ")" ("->" TypeRef)?
+
+<> TypeRefOrLifetime >  TypeRef | Lifetime
+
+<> Path > "::"? (Id "::")(*) Id
+
+<> ExternToken > 
+    "extern" "{" AssociatedType(*) EnumToken AssociatedType(*) "}"
+    | "extern" "{" AssociatedType(*) "}"
+
+<> MatchToken >  MatchTokenInt
+
+<> MatchTokenInt > 
+    MatchTokenInt "else" "{" MatchContents "}"
+    | "match" "{" MatchContents "}"
+
+<> MatchContents > MatchItem(+",")
+
+<> MatchItem > "_" | MatchSymbol "=>"?
+
+<> MatchSymbol > QuotedLiteral
+
+<> MatchMapping > Terminal | "{" "}"
+
+<> EnumToken > "enum" TypeRef "{" Conversion(+",") "}"
+
+<> AssociatedType >  "type" Id "=" TypeRef ";"
+
+<> Conversion > Terminal "=>"
+
+<> Pattern > PatternKind
+
+<> PatternKind > Path "(" Pattern(+",") ")"
+
+    | Path "{" ( FieldPattern ",")(*) FieldPattern? "}"
+
+    | Path "{" ( FieldPattern ",")(*) ".." "}"
+
+    | "_" 
+
+    | ".."
+
+    | "<" TypeRef ">"
+
+    | "(" Pattern(+",") ")"
+
+    | tk:CharLiteral
+
+    | StringConstant
+
+<> FieldPattern > Id  ":" 
+
+<> NotMacroId > Id
+
+<> Escape > "Escape"
+
+<> Terminal > QuotedTerminal | "Id"
+
+<> QuotedTerminal > QuotedLiteral
+
+<> QuotedLiteral > tk:StringLiteral | tk:RegexLiteral
+
+<> StringLiteral > "\"" (c:sp | c:nl | c:id | c:sym | c:num )(*) "\""
+
+<> StringConstant > "\"" (c:sp | c:nl | c:id | c:sym | c:num )(*) "\""
+
+<> CharLiteral > "'" (c:sp | c:nl | c:id | c:sym | c:num ) "'"
+
+<> RegexLiteral > "r\"" (c:sp | c:nl | c:id | c:sym | c:num )(*) "\"" 
+
+<> ShebangAttribute > "#![...]"
+
+<> Lifetime > tk:lifetime
+
+<> lifetime > "'" id
+
+<> Id > tk:id
+
+<> id > c:id ( c:id | "_" | c:num )(*)
+
+<> MacroId > tk:macro_id
+
+<> macro_id > "r:" c:id ( c:id | "_" | c:num )(*)

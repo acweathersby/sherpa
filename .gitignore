@@ -5,9 +5,9 @@
 **/bin
 **/target
 **/pkg
-source/web/lab/src/sherpa/
-source/lib/sherpa-core/lib/
-source/lib/sherpa-core/grammar/compile/parser/sherpa.rs
+src/web/lab/src/sherpa/
+src/lib/sherpa-core/lib/
+src/lib/sherpa-core/grammar/compile/parser/sherpa.rs
 
 # Debugging artifacts
 /sandbox
@@ -25,8 +25,8 @@ source/lib/sherpa-core/grammar/compile/parser/sherpa.rs
 
 # public site folders
 **/public/
-!./source/web/lab/public
-source/web/lab/public/index.js
+!./src/web/lab/public
+src/web/lab/public/index.js
 
 # folders tagged with --ignore--
 **/*--ignore--*/

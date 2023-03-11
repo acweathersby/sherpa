@@ -8,8 +8,8 @@
 pushd ${0:a:h}/..
 
 ROOT_DIR=$PWD
-SHERPA_LIBRARY_DIR=$ROOT_DIR/source/lib
-SHERPA_CLI_DIR=$ROOT_DIR/source/app/cli
+SHERPA_LIBRARY_DIR=$ROOT_DIR/src/lib
+SHERPA_CLI_DIR=$ROOT_DIR/src/app/cli
 
 pushd $SHERPA_LIBRARY_DIR
 

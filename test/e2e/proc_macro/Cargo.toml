@@ -11,4 +11,4 @@ path = "./main.rs"
 path = "./lib.rs"
 
 [dependencies.sherpa]
-path = "../../../source/lib/sherpa"
+path = "../../../src/lib/sherpa"

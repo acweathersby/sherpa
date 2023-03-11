@@ -21,8 +21,8 @@ build_core:
     when: on_success
     expire_in: "7 days"
     paths:
-      - "source/lib/sherpa-core/lib/"
-      - "source/lib/sherpa-core/grammar/compile/parser/sherpa.rs"
+      - "src/lib/sherpa-core/lib/"
+      - "src/lib/sherpa-core/grammar/compile/parser/sherpa.rs"
 
 build_wasm:
   stage: build
@@ -37,7 +37,7 @@ build_wasm:
     when: on_success
     expire_in: "7 days"
     paths:
-      - "source/web/sherpa-wasm/pkg"
+      - "src/web/sherpa-wasm/pkg"
 
 build_site_node:
   stage: build-site
@@ -46,14 +46,14 @@ build_site_node:
   rules:
     - when: always
   script:
-    - cd ./source/web/doc
+    - cd ./src/web/doc
     - npm install
   artifacts:
     untracked: false
     when: on_success
     expire_in: "15 min"
     paths:
-      - "source/web/doc/node_modules"
+      - "src/web/doc/node_modules"
 
 build_site_hugo:
   stage: build-site
@@ -64,18 +64,18 @@ build_site_hugo:
   rules:
     - when: on_success
   script:
-    - mkdir -p ./source/web/doc/assets/js/sherpa
-    - mkdir -p ./source/web/doc/static/js/lab
-    - cp ./source/web/sherpa-wasm/pkg/* ./source/web/doc/assets/js/sherpa
-    - mv ./source/web/doc/assets/js/sherpa/sherpa_wasm_bg.wasm ./source/web/doc/static/js/lab
-    - cd ./source/web/doc
+    - mkdir -p ./src/web/doc/assets/js/sherpa
+    - mkdir -p ./src/web/doc/static/js/lab
+    - cp ./src/web/sherpa-wasm/pkg/* ./src/web/doc/assets/js/sherpa
+    - mv ./src/web/doc/assets/js/sherpa/sherpa_wasm_bg.wasm ./src/web/doc/static/js/lab
+    - cd ./src/web/doc
     - hugo
   artifacts:
     untracked: false
     when: on_success
     expire_in: "7 days"
     paths:
-      - "source/web/doc/public"
+      - "src/web/doc/public"
 
 pages:
   stage: deploy
@@ -87,7 +87,7 @@ pages:
     - when: on_success
   script:
     - mkdir public
-    - cp -rf source/web/doc/public/* ./public
+    - cp -rf src/web/doc/public/* ./public
   artifacts:
     paths:
       - public
