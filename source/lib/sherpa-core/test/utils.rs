@@ -213,11 +213,11 @@ Cannot create a GrammarStore without one of these values present. "
 
   let states = compile_parse_states(&mut j, num_of_threads);
 
+  print_parse_state_reports(report_parse_states, &mut j);
+
   assert_reports(assert_clean_reports, &mut j)?;
 
   let states = states?;
-
-  print_parse_state_reports(report_parse_states, &mut j);
 
   let states =
     if optimize { optimize_parse_states(&mut j, states) } else { states.into_iter().collect() };
@@ -334,6 +334,7 @@ fn resolve_shifts_and_skips(
 }
 
 fn print_parse_state_reports(report_parse_states: &[&str], j: &mut Journal) {
+  j.flush_reports();
   let g = &(j.grammar().unwrap());
   if !report_parse_states.is_empty() {
     j.flush_reports();

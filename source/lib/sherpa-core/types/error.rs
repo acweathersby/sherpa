@@ -12,7 +12,7 @@ pub(crate) mod severity {
   /// Severity types of SherpaErrors
   #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
   pub enum SherpaErrorSeverity {
-    /// No error at all 
+    /// No error at all
     None,
     /// A hint that can be communicated to the user to improve some
     /// aspect of the grammar or parser.
@@ -43,7 +43,7 @@ pub enum SherpaError {
     id:         &'static str,
     /// The description of the error
     msg:        String,
-    /// An optional inline message that appears inline
+    /// An optional message that appears inline
     /// within the error location diagram. Set to an empty string
     /// to prevents its display.
     inline_msg: String,

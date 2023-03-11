@@ -1,4 +1,8 @@
-use super::create_store::{get_terminal_id, insert_production, insert_rules};
+use super::{
+  errors::add_missing_production_definition_error,
+  load::get_terminal_id,
+  utils::{insert_production, insert_rules},
+};
 use crate::{
   compile::{GrammarStore, ProductionId, SymbolID},
   grammar::{
@@ -10,12 +14,11 @@ use crate::{
   types::{item::Item, *},
   Journal,
   ReportType,
-  SherpaError,
 };
 use std::collections::{btree_map, BTreeSet, VecDeque};
 
 /// Create scanner productions and data caches, and converts ids to tokens.
-pub fn finalize_grammar(j: &mut Journal, mut g: GrammarStore) -> GrammarStore {
+pub fn finalize_grammar(j: &mut Journal, g: &mut GrammarStore) {
   j.set_active_report(
     &format!("Grammar [{}] Compilation", g.id.name),
     ReportType::GrammarCompile(g.id.guid),
@@ -23,31 +26,23 @@ pub fn finalize_grammar(j: &mut Journal, mut g: GrammarStore) -> GrammarStore {
 
   j.report_mut().start_timer("Finalize");
 
-  create_scanner_productions_from_symbols(j, &mut g);
+  create_scanner_productions_from_symbols(j, g);
 
-  if check_for_missing_productions(j, &g)
-    || j.report_mut().have_errors_of_type(SherpaErrorSeverity::Critical)
-  {
-    return g;
+  if !have_missing_productions(j, g) {
+    finalize_productions(j, g);
+
+    finalize_symbols(j, g);
+
+    finalize_items(j, g);
+
+    declare_exported_productions(g);
+
+    set_parse_productions(g);
+
+    finalize_bytecode_metadata(j, g);
   }
 
-  check_for_missing_productions(j, &g);
-
-  finalize_productions(j, &mut g);
-
-  finalize_symbols(j, &mut g);
-
-  finalize_items(j, &mut g);
-
-  declare_exported_productions(&mut g);
-
-  set_parse_productions(&mut g);
-
-  finalize_bytecode_metadata(j, &mut g);
-
   j.report_mut().stop_timer("Finalize");
-
-  g
 }
 
 fn declare_exported_productions(g: &mut GrammarStore) {
@@ -253,15 +248,7 @@ fn create_scanner_productions_from_symbols(j: &mut Journal, g: &mut GrammarStore
             }
           }
           _ => {
-            j.report_mut().add_error(SherpaError::SourceError {
-              id:         "missing-production-definition",
-              msg:        format!("Could not find a definition for this production."),
-              inline_msg: "could not find".to_string(),
-              loc:        tok,
-              path:       g_ref.path.clone(),
-              severity:   SherpaErrorSeverity::Critical,
-              ps_msg:     format!("{prod_id:?}"),
-            });
+            add_missing_production_definition_error(j, tok, &g_ref);
           }
         }
       }
@@ -270,7 +257,7 @@ fn create_scanner_productions_from_symbols(j: &mut Journal, g: &mut GrammarStore
   }
 }
 
-fn check_for_missing_productions(j: &mut Journal, g: &GrammarStore) -> bool {
+fn have_missing_productions(j: &mut Journal, g: &GrammarStore) -> bool {
   let mut have_missing_production = false;
   // Check for missing productions referenced in rule symbols
   for (_, b) in &g.rules {
@@ -279,15 +266,7 @@ fn check_for_missing_productions(j: &mut Journal, g: &GrammarStore) -> bool {
         SymbolID::TokenProduction(.., prod_id) | SymbolID::Production(prod_id, _) => {
           if !g.productions.contains_key(&prod_id) {
             have_missing_production = true;
-            j.report_mut().add_error(SherpaError::SourceError {
-              id:         "missing-production-definition",
-              msg:        format!("Could not find a definition for this production."),
-              inline_msg: "could not find".to_string(),
-              loc:        sym.tok.clone(),
-              path:       sym.g_id.path.clone(),
-              severity:   SherpaErrorSeverity::Critical,
-              ps_msg:     "[B]".to_string(),
-            });
+            add_missing_production_definition_error(j, sym.tok.clone(), &sym.g_id);
           }
         }
         _ => {}
@@ -322,36 +301,24 @@ fn finalize_symbols(_j: &mut Journal, g: &mut GrammarStore) {
 
     let scanner_id = sym_id.bytecode_id(g);
 
-    g.productions.get_mut(&production_id).unwrap().symbol_bytecode_id = Some(scanner_id);
+    match g.productions.get_mut(&production_id) {
+      Some(prod) => prod.symbol_bytecode_id = Some(scanner_id),
+      None => {
+        #[cfg(debug_assertions)]
+        {
+          eprintln!("Missing production {}", production_id);
+        }
+      }
+    }
   }
 
   for sym_id in g.symbols.keys().cloned().collect::<Vec<_>>() {
-    if !g.symbols.get(&sym_id).unwrap().scanner_only {
-      if matches!(sym_id, SymbolID::TokenProduction(..)) || sym_id.is_defined() {
-        let symbol = g.symbols.get_mut(&sym_id).unwrap();
-
-        symbol.bytecode_id = symbol_bytecode_id;
-
-        g.bytecode_token_lookup.insert(symbol_bytecode_id, sym_id);
-
-        let production_id = symbol.guid.get_production_id().unwrap_or_default();
-
-        let (_, token_production_id, ..) = get_scanner_info_from_defined(&sym_id, g);
-
-        let scanner_production = g.productions.get_mut(&token_production_id).unwrap();
-
-        scanner_production.symbol_bytecode_id = Some(symbol_bytecode_id);
-
-        if let Some(original_production) = g.productions.get_mut(&production_id) {
-          original_production.symbol_bytecode_id = Some(symbol_bytecode_id);
-        };
-
-        symbol_bytecode_id += 1;
-      }
-    }
-
-    g.symbols.get_mut(&sym_id).unwrap().friendly_name = sym_id.debug_string(g);
+    // Errors resulting from missing objects can be ignored
+    // as they will have already been logged in the Journal
+    // report.
+    finalize_symbol(g, sym_id, &mut symbol_bytecode_id);
   }
+
   for prod in g.productions.values_mut() {
     if prod.sym_id.is_token_production() && !g.symbols.contains_key(&prod.sym_id) {
       #[cfg(debug_assertions)]
@@ -375,6 +342,40 @@ fn finalize_symbols(_j: &mut Journal, g: &mut GrammarStore) {
   }
 }
 
+fn finalize_symbol(
+  g: &mut GrammarStore,
+  sym_id: SymbolID,
+  symbol_bytecode_id: &mut u32,
+) -> SherpaResult<()> {
+  if !g.symbols.get(&sym_id)?.scanner_only {
+    if matches!(sym_id, SymbolID::TokenProduction(..)) || sym_id.is_defined() {
+      let symbol = g.symbols.get_mut(&sym_id)?;
+
+      symbol.bytecode_id = *symbol_bytecode_id;
+
+      g.bytecode_token_lookup.insert(*symbol_bytecode_id, sym_id);
+
+      let production_id = symbol.guid.get_production_id().unwrap_or_default();
+
+      let (_, token_production_id, ..) = get_scanner_info_from_defined(&sym_id, g);
+
+      let scanner_production = g.productions.get_mut(&token_production_id)?;
+
+      scanner_production.symbol_bytecode_id = Some(*symbol_bytecode_id);
+
+      if let Some(original_production) = g.productions.get_mut(&production_id) {
+        original_production.symbol_bytecode_id = Some(*symbol_bytecode_id);
+      };
+
+      *symbol_bytecode_id += 1;
+    }
+  }
+
+  g.symbols.get_mut(&sym_id)?.friendly_name = sym_id.debug_string(g);
+
+  SherpaResult::Ok(())
+}
+
 /// Creates item closure caches and creates start and goto item groups.
 fn finalize_items(_j: &mut Journal, g: &mut GrammarStore) {
   // Generate the item closure cache
@@ -382,7 +383,7 @@ fn finalize_items(_j: &mut Journal, g: &mut GrammarStore) {
     g.productions.keys().flat_map(|p| get_production_start_items(p, g)).collect::<Vec<_>>();
 
   for (item, closure, peek_symbols) in {
-    #[cfg(not(any(feature = "wasm-target", feature = "single-thread")))]
+    #[cfg(feature = "multithread")]
     {
       use crate::util::get_num_of_available_threads;
       use std::thread;
@@ -399,7 +400,8 @@ fn finalize_items(_j: &mut Journal, g: &mut GrammarStore) {
           .collect::<Vec<_>>()
       })
     }
-    #[cfg(any(feature = "wasm-target", feature = "single-thread"))]
+
+    #[cfg(not(feature = "multithread"))]
     finalize_item(&start_items, g)
   } {
     g.item_ignore_symbols.insert(item.to_absolute(), peek_symbols);
@@ -433,6 +435,7 @@ fn finalize_item(items: &[Item], g: &GrammarStore) -> Vec<(Item, Vec<Item>, Vec<
 
   while let Some(item) = pending_items.pop_front() {
     let item = item.to_absolute();
+
     if !item.is_completed() {
       let peek_symbols =
         if let Some(peek_symbols) = g.production_ignore_symbols.get(&item.get_prod_id(g)) {
@@ -560,7 +563,7 @@ pub const prime_symbol: &'static str = "_prime";
 ///  This uses the following process to convert an immediate recursive production
 ///  to one the is right recursive:
 ///
-/// With `A -> A r | b | ...` Take `B[ A->b, ... ]` `A'[ A-> A r ... ]`
+/// With `A -> A r | b | ...` Take `B'[ A->b, ... ]` `A'[ A-> A r ... ]`
 ///
 /// Replace bodies of `A` with `B'` after `B[ A->b A' ?]` giving `A -> b A' | b | ...`
 ///
@@ -708,7 +711,7 @@ fn calculate_recursions_types(
   let mut conversion_candidates = vec![];
 
   for (production_id, recursion_type) in {
-    #[cfg(not(any(feature = "wasm-target", feature = "single-thread")))]
+    #[cfg(feature = "multithread")]
     {
       use crate::util::get_num_of_available_threads;
       use std::thread;
@@ -736,7 +739,7 @@ fn calculate_recursions_types(
           .collect::<Vec<_>>()
       })
     }
-    #[cfg(any(feature = "wasm-target", feature = "single-thread"))]
+    #[cfg(not(feature = "multithread"))]
     {
       production_ids
         .iter()
@@ -857,8 +860,7 @@ fn create_defined_symbols_from_string(
   let chars: Vec<char> = symbol_string.chars().collect();
   chars
     .iter()
-    .enumerate()
-    .map(|(index, byte)| {
+    .map(|byte| {
       let string = byte.to_string();
 
       let id = get_terminal_id(&string, false);

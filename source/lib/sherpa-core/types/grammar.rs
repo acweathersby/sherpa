@@ -103,8 +103,7 @@ pub type ImportedGrammarReferences = HashMap<String, Arc<GrammarRef>>;
 
 pub type ReduceFunctionTable = BTreeMap<ReduceFunctionId, ReduceFunctionType>;
 
-/// Houses data essential to the compilation and analysis of Hydrocarbon
-/// grammar source code.
+/// Houses AST and other essential data for the compilation and analysis of a Sherpa grammar.
 ///
 /// # Instantiation
 ///

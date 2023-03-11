@@ -157,7 +157,8 @@ pub struct Production {
   pub number_of_rules: u16,
   /// TODO: Docs
   pub is_scanner: bool,
-  /// TODO: Docs
+  /// A numerical id indicating this production is exported
+  /// as a parser entry point.
   pub export_id: Option<usize>,
   /// TODO: Docs
   pub recursion_type: RecursionType,
@@ -180,7 +181,7 @@ pub struct Production {
   pub sym_id: SymbolID,
 
   /// A reference to the identifiers of the owning grammar.
-  pub grammar_ref: Arc<GrammarRef>,
+  pub g_id: Arc<GrammarRef>,
 }
 
 /// A wrapper around a symbol that includes unique information
@@ -201,25 +202,14 @@ pub struct RuleSymbol {
   /// If false, this symbol does not produce shift actions.
   pub consumable: bool,
 
-  /// The number of related symbols that comprise
-  /// a scanned token. For use by scanner code.
-  /// If this symbol does not exist in scanner space then it is
-  /// set to 0
-  pub scanner_length: u32,
-
-  /// The zero-based sequence index of this symbol in relation
-  /// to other related symbols that comprise a scanned token.
-  /// If this symbol does not exist in scanner space then it is
-  /// set to 0
-  pub scanner_index: u32,
-
-  /// Always captures, regardless of other symbols
+  /// Symbols with higher precedence will take priority over symbols of
+  /// lower precedence.
   pub precedence: u32,
 
   pub tok: Token,
 
   /// A reference to the identifiers of the owning grammar.
-  pub grammar_ref: Arc<GrammarRef>,
+  pub g_id: Arc<GrammarRef>,
 }
 
 impl Default for RuleSymbol {
@@ -229,11 +219,9 @@ impl Default for RuleSymbol {
       original_index: Default::default(),
       annotation: Default::default(),
       consumable: Default::default(),
-      scanner_length: Default::default(),
-      scanner_index: Default::default(),
       precedence: Default::default(),
       tok: Default::default(),
-      grammar_ref: Arc::new(Default::default()),
+      g_id: Arc::new(Default::default()),
     }
   }
 }
@@ -261,8 +249,6 @@ pub struct Rule {
   /// A list of RuleSymbols
   pub syms: Vec<RuleSymbol>,
   /// TODO: Docs
-  pub len: u16,
-  /// TODO: Docs
   pub prod_id: ProductionId,
   /// TODO: Docs
   pub id: RuleId,
@@ -275,7 +261,7 @@ pub struct Rule {
   /// A token that covers the definition of this rule.
   pub tok: Token,
   /// A reference to the identifiers of the owning grammar.
-  pub grammar_ref: Arc<GrammarRef>,
+  pub g_id: Arc<GrammarRef>,
   /// TODO: Docs
   pub is_exclusive: bool,
 }
@@ -308,6 +294,10 @@ impl Rule {
     self.item().blame_string(g)
   }
 
+  pub fn len(&self) -> usize {
+    self.syms.len()
+  }
+
   /// Returns the number symbols in the rule when ignoring
   /// the `$` (EndOfFile) symbol.
   pub fn get_real_len(&self) -> usize {
@@ -318,7 +308,7 @@ impl Rule {
         .syms
         .last()
         .map(|r| r.sym_id == SymbolID::EndOfFile)
-        .map(|t| t.then_some(self.len - 1).unwrap_or(self.len))
+        .map(|t| t.then_some(self.len() - 1).unwrap_or(self.len()))
         .unwrap()
         .into()
     }

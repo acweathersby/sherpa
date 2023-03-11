@@ -989,6 +989,10 @@ pub(crate) fn create_rust_writer_utils(store: &AScriptStore) -> AscriptWriterUti
               expr => {
                 let ref_ = u.ast_expr_to_ref(expr, r, ref_index, type_slot)?;
                 match ref_.ast_type {
+                  AScriptTypeVal::AdjustedTokenRange => Some(ref_.to(
+                    "%%.to_slice(unsafe{&*_ctx_}.get_str()).to_string()".to_string(),
+                    AScriptTypeVal::String(None),
+                  )),
                   AScriptTypeVal::Struct(..)
                   | AScriptTypeVal::TokenRange
                   | AScriptTypeVal::GenericStruct(..) => Some(ref_.to_range(u).to(
@@ -1164,17 +1168,12 @@ pub(crate) fn create_rust_writer_utils(store: &AScriptStore) -> AscriptWriterUti
     },
   });
   u.add_ast_handler(sherpa::ASTNodeType::AST_Token, ASTExprHandler {
-    expr: &|u, ast, _, ref_index, type_slot| {
+    expr: &|u, ast, _, _, type_slot| {
       if let ASTNode::AST_Token(box AST_Token { range, .. }) = ast {
-        let ref_ = SlotRef::node_token(u, u.bump_ref_index(ref_index), type_slot);
+        let ref_ = SlotRef::node_range(u, type_slot);
         if let Some(box Range { start_trim, end_trim }) = range {
-          let mut trimed_ref = SlotRef::ast_obj(
-            *ref_index,
-            type_slot,
-            format!("%%.trim({start_trim}, {end_trim})"),
-            AScriptTypeVal::TokenRange,
-          );
-          trimed_ref.add_predecessor(ref_);
+          let trimed_ref = ref_
+            .to(format!("%%.trim({start_trim}, {end_trim})"), AScriptTypeVal::AdjustedTokenRange);
           Some(trimed_ref)
         } else {
           Some(ref_)
@@ -1199,7 +1198,7 @@ pub(crate) fn create_rust_writer_utils(store: &AScriptStore) -> AscriptWriterUti
   u.add_ast_handler(sherpa::ASTNodeType::AST_NamedReference, ASTExprHandler {
     expr: &|u, ast, rule, _, type_slot| {
       if let ASTNode::AST_NamedReference(box AST_NamedReference { value, .. }) = ast {
-        match get_named_body_ref(rule, value) {
+        match get_named_body_ref(&u.store.g, rule, value) {
           Some((index, sym_id)) => render_body_symbol(u, sym_id, u.store, index, type_slot),
           None => None,
         }
@@ -1507,9 +1506,7 @@ pub type Parser<'a, T, UserCTX> = sherpa_runtime::bytecode_parser::ByteCodeParse
             .iter()
             .filter_map(|prod_id| {
               let prod = g.productions.get(prod_id).unwrap();
-              prod
-                .bytecode_id
-                .map(|id| (id, format!("\"{}::{}\"", prod.grammar_ref.name, prod.name)))
+              prod.bytecode_id.map(|id| (id, format!("\"{}::{}\"", prod.g_id.name, prod.name)))
             })
             .collect::<BTreeMap<_, _>>()
             .into_values()
@@ -1556,7 +1553,7 @@ pub type Parser<'a, T, UserCTX> = sherpa_runtime::bytecode_parser::ByteCodeParse
       ", ",
       bc.chunks(60)
         .into_iter()
-        .map(|i| i.into_iter().map(|i| format!("0x{i:0>2X}")).collect::<Vec<_>>().join(","))
+        .map(|i| i.into_iter().map(|i| format!("{i}")).collect::<Vec<_>>().join(","))
         .collect(),
     );
     SherpaResult::Ok(())

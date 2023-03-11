@@ -362,7 +362,7 @@ impl From<&Rule> for Item {
   fn from(rule: &Rule) -> Self {
     Item {
       rule_id: rule.id,
-      len: rule.len as u8,
+      len: rule.len() as u8,
       is_exclusive: rule.is_exclusive as u8,
       ..Default::default()
     }

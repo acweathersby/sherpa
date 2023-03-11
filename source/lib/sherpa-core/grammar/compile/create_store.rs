@@ -225,7 +225,7 @@ fn process_production_node<'a>(
           name: plain_name, // prod.symbol.Token().to_string()
           loc: prod_node.tok.clone(),
           sym_id: SymbolID::Production(prod_id, g.id.guid),
-          grammar_ref: g.id.clone(),
+          g_id: g.id.clone(),
           ..Default::default()
         },
         bodies,
@@ -666,7 +666,7 @@ fn create_rule_vectors<'a>(
             consumable: !is_shift_nothing,
             precedence: is_exclusive as u32,
             tok: sym.to_token(),
-            grammar_ref: g.id.clone(),
+            g_id: g.id.clone(),
             ..Default::default()
           });
         }
@@ -742,12 +742,11 @@ fn process_rule<'a>(
         let sym = RuleId::from_syms(&b.iter().map(|s| s.sym_id).collect::<Vec<_>>());
         if !seen.contains(&sym) {
           unique_bodies.push(types::Rule {
-            syms: b.clone(),
-            len: b.len() as u16,
+            syms: b,
             prod_id: get_production_identifiers(j, g, production).0,
             ast_definition: rule.ast_definition.as_ref().map(|d| d.as_ref().clone()),
             tok: t.clone(),
-            grammar_ref: g.id.clone(),
+            g_id: g.id.clone(),
             ..Default::default()
           });
           seen.insert(sym);

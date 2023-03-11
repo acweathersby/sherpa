@@ -16,6 +16,7 @@ use crate::{
       add_incompatible_production_types_error,
       add_incompatible_production_vector_types_error,
       add_prop_redefinition_error,
+      add_unmatched_prop_error,
     },
     types::AScriptProp,
   },
@@ -107,12 +108,12 @@ fn gather_ascript_info_from_grammar(
           SymbolID::Production(id, ..) => add_production_type(prod_types, &rule, TaggedType {
             type_:        AScriptTypeVal::UnresolvedProduction(id),
             tag:          rule_id,
-            symbol_index: (rule.len - 1) as u32,
+            symbol_index: (rule.len() - 1) as u32,
           }),
           _ => add_production_type(prod_types, &rule, TaggedType {
             type_:        AScriptTypeVal::Token,
             tag:          rule_id,
-            symbol_index: (rule.len - 1) as u32,
+            symbol_index: (rule.len() - 1) as u32,
           }),
         };
       }
@@ -342,7 +343,7 @@ fn resolve_production_reduce_types(
       prod_types.insert(prod_id, new_map);
     } else {
       // Only when the production is fully resolved do
-      // we add the the types to the ast store.
+      // we add the the types to the ast store.resolve_structure_properties
       ast.prod_types.insert(prod_id, new_map);
     }
   }
@@ -435,21 +436,19 @@ fn resolve_structure_properties(j: &mut Journal, store: &mut AScriptStore) {
         _ => {}
       }
     }
-    verify_property_presence(store, &struct_id);
+
+    if !j.report().have_errors_of_type(SherpaErrorSeverity::Critical) {
+      verify_property_presence(store, &struct_id);
+    }
+  }
+
+  if j.report().have_errors_of_type(SherpaErrorSeverity::Critical) {
+    return;
   }
 
   // Ensure each property entry has a resolved data type.
   for prop_id in store.props.keys().cloned().collect::<Vec<_>>() {
     let type_val = store.props.get(&prop_id).unwrap().type_val.clone();
-
-    /* debug_assert!(
-          get_resolved_type(ast, &type_val.clone().into()) == type_val.type_.clone(),
-          "Assumption Failed: All prop types are resolved at this point\n
-    resolved value:\n    {:?}
-    existing value:\n    {:?}\n",
-          get_resolved_type(ast, &type_val.clone().into()),
-          type_val.type_,
-        ); */
 
     store.props.get_mut(&prop_id).unwrap().type_val = TaggedType {
       type_: get_resolved_type(store, &type_val.into()),
@@ -674,35 +673,8 @@ pub fn compile_expression_type(
       type_:        Undefined,
     }],
     ASTNode::AST_NamedReference(_) | ASTNode::AST_IndexReference(_) => {
-      match get_body_symbol_reference(rule, ast_expression) {
-        Some((_, sym_ref)) => match sym_ref.sym_id {
-          SymbolID::Production(id, ..) => match store.prod_types.get(&id) {
-            Some(types) => types
-              .keys()
-              .map(|t| TaggedType {
-                symbol_index: sym_ref.original_index,
-                tag:          rule.id,
-                type_:        t.type_.clone(),
-              })
-              .collect(),
-            None => vec![TaggedType {
-              symbol_index: sym_ref.original_index,
-              tag:          rule.id,
-              type_:        UnresolvedProduction(id),
-            }],
-          },
-          _ => vec![TaggedType {
-            symbol_index: sym_ref.original_index,
-            tag:          rule.id,
-            type_:        Token,
-          }],
-        },
-        None => vec![TaggedType {
-          symbol_index: rule.get_real_len() as u32,
-          tag:          rule.id,
-          type_:        Undefined,
-        }],
-      }
+      let ref_result = get_body_symbol_reference(&j.grammar().unwrap(), rule, ast_expression);
+      convert_ref_result(ref_result, store, rule)
     }
     _ => vec![TaggedType {
       symbol_index: rule.get_real_len() as u32,
@@ -712,6 +684,47 @@ pub fn compile_expression_type(
   };
 
   types
+}
+
+/// A rule symbols and it's offset based on a reference value
+/// e.g `$name` or `$3`
+type RefResult<'a> = Option<(usize, &'a RuleSymbol)>;
+
+fn convert_ref_result(
+  ref_result: RefResult,
+  store: &mut AScriptStore,
+  rule: &Rule,
+) -> Vec<TaggedType> {
+  use AScriptTypeVal::*;
+  match ref_result {
+    Some((_, sym_ref)) => match sym_ref.sym_id {
+      SymbolID::Production(id, ..) => match store.prod_types.get(&id) {
+        Some(types) => types
+          .keys()
+          .map(|t| TaggedType {
+            symbol_index: sym_ref.original_index,
+            tag:          rule.id,
+            type_:        t.type_.clone(),
+          })
+          .collect(),
+        None => vec![TaggedType {
+          symbol_index: sym_ref.original_index,
+          tag:          rule.id,
+          type_:        UnresolvedProduction(id),
+        }],
+      },
+      _ => vec![TaggedType {
+        symbol_index: sym_ref.original_index,
+        tag:          rule.id,
+        type_:        Token,
+      }],
+    },
+    None => vec![TaggedType {
+      symbol_index: rule.get_real_len() as u32,
+      tag:          rule.id,
+      type_:        Undefined,
+    }],
+  }
 }
 
 /// Compiles a struct type from a production rule and
@@ -734,8 +747,6 @@ pub fn compile_struct_type(
       ASTNode::AST_Property(box prop) => {
         if let Some(value) = &prop.value {
           compile_expression_type(j, store, value, rule);
-        } else {
-          panic!("Prop has no value {}", prop.tok.blame(1, 1, "", None))
         }
       }
       _ => {}
@@ -795,11 +806,14 @@ pub fn compile_struct_props(
 
         prop_ids.insert(prop_id.clone());
 
-        let Some(value) = &prop.value else {
-          panic!("Prop has no value! {}", prop.tok.blame(1, 1, "", None));
-        };
-
-        for mut prop_type in compile_expression_type(j, store, value, rule) {
+        for mut prop_type in match &prop.value {
+          Some(value) => compile_expression_type(j, store, value, rule),
+          _ => convert_ref_result(
+            get_named_body_ref(&j.grammar().unwrap(), rule, prop.id.as_str()),
+            store,
+            rule,
+          ),
+        } {
           if prop_type.type_.is_vec() {
             prop_type.type_ = get_specified_vector_from_generic_vec_values(
               &prop_type.type_.get_subtypes().into_iter().collect(),
@@ -842,7 +856,7 @@ pub fn compile_struct_props(
                   existing.body_ids.insert(rule.id);
                   existing.type_val = prop_type.to_owned();
                   existing.location = prop.tok.clone();
-                  existing.grammar_ref = rule.grammar_ref.clone();
+                  existing.grammar_ref = rule.g_id.clone();
                   existing.optional = true;
                 }
                 (_, Undefined) => {
@@ -861,7 +875,7 @@ pub fn compile_struct_props(
                     AScriptProp {
                       type_val: prop_type.into(),
                       location: prop.tok.clone(),
-                      grammar_ref: rule.grammar_ref.clone(),
+                      grammar_ref: rule.g_id.clone(),
                       ..Default::default()
                     },
                   );
@@ -873,7 +887,7 @@ pub fn compile_struct_props(
                 type_val: prop_type.into(),
                 body_ids: BTreeSet::from_iter(vec![rule.id]),
                 location: prop.tok.clone(),
-                grammar_ref: rule.grammar_ref.clone(),
+                grammar_ref: rule.g_id.clone(),
                 ..Default::default()
               });
             }
@@ -1025,12 +1039,13 @@ pub fn get_specified_vector_from_generic_vec_values(
 }
 
 pub fn get_body_symbol_reference<'a>(
+  g: &GrammarStore,
   rule: &'a Rule,
   reference: &ASTNode,
-) -> Option<(usize, &'a RuleSymbol)> {
+) -> RefResult<'a> {
   match reference {
     ASTNode::AST_NamedReference(box AST_NamedReference { value, .. }) => {
-      get_named_body_ref(rule, value)
+      get_named_body_ref(g, rule, value)
     }
     ASTNode::AST_IndexReference(box AST_IndexReference { value, .. }) => {
       get_indexed_body_ref(rule, *value as usize)
@@ -1039,13 +1054,24 @@ pub fn get_body_symbol_reference<'a>(
   }
 }
 
-pub fn get_named_body_ref<'a>(rule: &'a Rule, val: &str) -> Option<(usize, &'a RuleSymbol)> {
+pub fn get_named_body_ref<'a>(g: &GrammarStore, rule: &'a Rule, val: &str) -> RefResult<'a> {
   if val == ascript_first_node_id {
     Some((0, rule.first_real_sym()?))
   } else if val == ascript_last_node_id {
     Some((rule.get_real_len() - 1, rule.last_real_sym()?))
   } else {
-    rule.real_syms().into_iter().enumerate().filter(|(_, s)| s.annotation == *val).last()
+    match rule.real_syms().into_iter().enumerate().filter(|(_, s)| s.annotation == *val).last() {
+      Some(result) => Some(result),
+      _ => rule
+        .real_syms()
+        .into_iter()
+        .enumerate()
+        .filter(|(_, s)| s.sym_id.is_production())
+        .filter(|(_, s)| {
+          g.get_production_plain_name(&s.sym_id.get_production_id().unwrap_or_default()) == val
+        })
+        .last(),
+    }
   }
 }
 
@@ -1057,7 +1083,7 @@ pub fn get_named_body_ref<'a>(rule: &'a Rule, val: &str) -> Option<(usize, &'a R
 ///
 /// Returns `None` if the index is greater then the number of symbols.  
 ///
-pub fn get_indexed_body_ref<'a>(rule: &'a Rule, i: usize) -> Option<(usize, &'a RuleSymbol)> {
+pub fn get_indexed_body_ref<'a>(rule: &'a Rule, i: usize) -> RefResult<'a> {
   rule
     .real_syms()
     .into_iter()

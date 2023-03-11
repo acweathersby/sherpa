@@ -1,0 +1,152 @@
+NAME sherpa
+
+IMPORT ./ir as ir
+IMPORT ./symbol as sym
+IMPORT ./token as tok
+IMPORT ../v1_0_0/ascript as ast 
+IMPORT ../v1_0_0/syntax as syn
+IMPORT ../v1_0_0/comment as cmt
+IMPORT ../v1_0_0/defined_type_eval as dt
+
+IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
+
+EXPORT grammar as grammar
+EXPORT ast::struct as ast_struct
+EXPORT ast::expression as ast_expression
+EXPORT ir::state as ir
+EXPORT dt::def_type as type_eval
+EXPORT dt::escaped_string as escaped
+
+
+<> grammar > 
+
+    preamble(*) ( cf_production | pratt_production | peg_production | append_production | ir::state )(+)
+
+        :ast { t_Grammar, c_Version_2_0, preamble:$1, productions:$2, tok }
+
+
+<> preamble >
+
+    export_clause 
+
+    | import_clause
+
+    | name_clause
+
+    | ignore_clause
+
+
+<> export_clause > 
+
+    "EXPORT" sym::non_terminal (( "AS" | "as" ) tok::id)?
+
+        :ast { t_Export, c_Preamble, production:$2, reference:str($3) } 
+
+
+<> import_clause > 
+
+    "IMPORT" ( c:id | c:sym  )(+) c:sp ( "AS" | "as" ) tok::id
+
+        :ast { t_Import, c_Preamble, uri: str($2), reference:str($5), tok }
+
+<> ignore_clause >
+
+    "IGNORE" "{"  sym::terminal(+) "}"
+
+        :ast { t_Ignore, c_Preamble, symbols: $3 }
+
+
+<> name_clause >
+
+    "NAME" tok::id
+
+        :ast { t_Name, c_Preamble, name: str($2) }
+
+
+<> cf_production > 
+
+    "<>" sym::production_symbol^n ">" rules^r
+
+        :ast { t_CFProduction, name_sym:$n, rules: $r, tok }
+
+
+<> peg_production > 
+
+    ":>" sym::production_symbol^n">" rules^r
+
+        :ast { t_PegProduction, name_sym:$n, rules: $r, tok }
+
+
+<> pratt_production > 
+
+    "#>" sym::production_symbol^n">" rules^r
+
+        :ast { t_PrattProduction, name_sym:$n, rules: $r, tok }
+
+
+<> append_production > 
+
+    "+>" sym::non_terminal^n ">" rules^r
+
+        :ast { t_AppendProduction,  name_sym:$n, rules: $r, tok }
+
+<> rules >  rule(+"|")
+
+
+<> pratt_rule > sym::annotated_symbol(+)^s ast_definition?^a
+
+    :ast { t_PrattRule, symbols:$s, ast:$a }
+
+
+<> rule > 
+
+    "!"?^p (( sym::annotated_symbol | any_group )(+)^s sym::end_of_input?^eoi :ast [$s, $eoi])^s ast_definition?^a
+    syntax_definition?^syn recover_definition?^rec
+
+            :ast {
+            t_Rule,
+            symbols:$s,
+            ast:$a,
+            syntax_definition:$syn,
+            recover_definition:$rec, tok
+            }
+
+
+<> ast_definition > 
+
+        ":ast" ast::body^ast
+
+            :ast  { t_Ascript, c_Function, ast:$ast, tok }
+
+
+<> syntax_definition > 
+
+        ":syn" syn::declaration^syn
+
+
+<> recover_definition > 
+
+        ":rec" "{" ir::state^state "}"
+
+            :ast  { t_Recovery, c_Function, state:$state, tok }
+
+
++> sym::non_terminal >
+
+    "(" rules ")"{1}      
+
+        :ast { t_Group_Production, c_Symbol, rules:$2,  tok }
+
+
++> sym::terminal >
+
+    "tk:(" rules ")"{1}      
+
+        :ast { t_Token_Group_Production, c_Symbol, rules:$2,  tok }
+
+
+<> any_group > 
+
+    "[" "unordered"? sym::annotated_symbol(+)^s ']'
+
+        :ast { t_AnyGroup, unordered: bool($2), symbols:$s, tok }

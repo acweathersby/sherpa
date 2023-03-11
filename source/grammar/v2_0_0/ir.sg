@@ -1,35 +1,111 @@
 IGNORE { c:nl c:sp }
 
-<> state > "parser" state_id ":" statement 
+NAME ir
+
+IMPORT ./symbol as sym
+IMPORT ./token as tok
+
+<> state > sym::production_symbol^id "=>" statement
+
+    :ast { t_State, id, statement, tok }
 
 <> statement > [ 
-    transitive_statement? 
-    non_branch_statement(*) 
-    ( match | goto_sequence | terminal_statement )? 
+    transitive_statement?^transitive 
+    non_branch_statement(*)^non_branch
+    ( match | goto_sequence | terminal_statement )?^branch
 ]
 
-<> transitive_statement > "peek" | "shift" | "skip" | "pop-goto" | "scan"
+     :ast { t_Statement, transitive, non_branch, branch }
 
-<> terminal_statement > "fail" | "pass" | "accept"
 
-<> non_branch_statement > "reduce" | "assign" | "push-val" | "pop-val" | "assert"
+<> transitive_statement >
 
-<> goto_sequence > [ goto_push(*) goto? ]
+    "peek"          :ast { t_Peek }
 
-<> goto_push > "push-goto" state_id
+    | "shift"       :ast { t_Shift }
 
-<> goto > "goto" state_id
+    | "skip"        :ast { t_Skip }
 
-<> match > "match" ( ":" tk:id )? ( int_match | "{" match_branch(+) "}" )
+    | "pop-goto"    :ast { t_Pop }
 
-<> match_branch > int_match | default_match | hint
+    | "scan"        :ast { t_Scan }
 
-<> int_match > "(" ( c:num )(+"|") ")" "{" statement "}"
+
+<> terminal_statement >
+
+    "fail"          :ast { t_Fail }
+
+    | "pass"        :ast { t_Pass }
+
+    | "accept"      :ast { t_Accept }
+
+
+<> non_branch_statement > 
+
+    "reduce"        :ast { t_Reduce  }
+
+    | "assign"      :ast { t_Assign  }
+
+    | "set"         :ast { t_SetVal  }
+
+    | "assert"      :ast { t_Assert  }
+
+
+<> goto_sequence > goto_push(*) goto
+
+    :ast { t_Gotos, pushes: $1, goto:$2  }
+
+
+<> goto_push > "push-goto" sym::non_terminal
+
+
+<> goto > "goto" sym::non_terminal
+
+
+<> match > generic_match_block | production_match_block | terminal_match_block
+
+<> generic_match_block >
+
+    "match" ":" tok::id^id ( int_match :ast [$1] | "{" (int_match | default_match | hint)(+) "}" :ast $2  )^m
+
+        :ast { t_Match, mode: str($id), matches:$m }
+
+
+<> production_match_block >
+
+    "match" ":" "PRODUCTION" ( non_terminal_match :ast [$1] | "{" ( non_terminal_match | hint | default_match )(+) "}" :ast $2 )
+
+        :ast { t_Match, mode: str($3), matches:$m }
+
+
+<> terminal_match_block >
+
+    "match" ":" "TERMINAL" ( terminal_match :ast [$1] | "{" ( terminal_match | hint | default_match )(+) "}" :ast $2 )
+
+        :ast { t_Match, mode: str($3), matches:$m }
+
+
+<> non_terminal_match > "(" sym::non_terminal^sym ")" "{" statement "}"
+
+    :ast { t_NonTermMatch, sym, statement }
+
+
+<> terminal_match > "(" sym::terminal^sym ")" "{" statement "}"
+
+    :ast { t_TermMatch, sym, statement }
+
+
+<> int_match > "(" ( c:num :ast u64($1) )(+"|")^vals ")" "{" statement "}"
+
+    :ast { t_TermMatch, vals, statement }
+
+
 <> default_match > "default"? "{" statement "}"
-<> hint > "fail-hint" "{" tk:string "}"
 
-<> state_id > tk:id
+    :ast { t_DefaultMatch, statement }
 
-<> id > "_"(*) c:id ( c:id | "_" | c:num )(*)
 
-<> string > "\"\" ( c:id | c:num | c:nl | c:sym | c:sp | "\\" ( c:id | c:num | c:nl | c:sym | c:sp ) ) "\"\"
+<> hint > "fail-hint" "{" tok::string^message "}"
+
+    :ast { t_FailHint, message: str($message) }
+

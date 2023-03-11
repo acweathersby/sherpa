@@ -1,0 +1,13 @@
+NAME token
+
+<> string > tk:string_tok
+
+<> quote > tk:quote_tok
+
+<> id > tk:id_tok
+
+<> id_tok > ( "-" | "_" | c:id ) ( c:id | "_" | "-" | c:num )(*)
+
+<> string_tok > "\"" ( c:id | c:num | c:nl | c:sym | c:sp | "\\" ( c:id | c:num | c:nl | c:sym | c:sp ) )(+) "\""
+
+<> quote_tok > "\'" ( c:id | c:num | c:nl | c:sym | c:sp | "\\" ( c:id | c:num | c:nl | c:sym | c:sp ) )(+) "\'"

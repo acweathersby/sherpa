@@ -221,7 +221,7 @@ impl<'a> AscriptWriterUtils<'a> {
     } else {
       panic!("{}", SherpaError::SourceError {
         loc:        ast.to_token(),
-        path:       rule.grammar_ref.path.clone(),
+        path:       rule.g_id.path.clone(),
         id:         "ascript-writer-utils-unhandled-ast-node",
         msg:        format!("An unhandled ast node has been encountered"),
         inline_msg: format!("Node type [{:?}] lacks an ASTExprHandler", ast.get_type()),
@@ -266,8 +266,15 @@ impl<'a> AscriptWriterUtils<'a> {
           Some(prop) => {
             if let Some(ast_prop) = ast_struct_props.get(&prop_id.name) {
               let property = store.props.get(prop_id).unwrap();
-              let Some(value) = &ast_prop.value else {
-                panic!(" Prop has no value! {}", ast_prop.tok.blame(1, 1, "", None));
+
+              let ref_val = ASTNode::AST_NamedReference(Box::new(AST_NamedReference {
+                value: ast_prop.id.clone(),
+                tok:   ast_prop.tok.clone(),
+              }));
+
+              let value = match &ast_prop.value {
+                Some(value) => value,
+                _ => &ref_val,
               };
 
               match self.ast_expr_to_ref(value, rule, ref_index, i + type_slot * 100) {
@@ -668,7 +675,7 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
 }
 
 // Writing stages.
-// Pramble data -
+// Preamble data -
 //  - Base type info
 
 #[derive(Clone, Copy)]
@@ -733,16 +740,24 @@ impl SlotRef {
     }
   }
 
-  pub(crate) fn node_token(
-    utils: &AscriptWriterUtils,
-    slot_index: usize,
-    type_slot: usize,
-  ) -> Self {
+  pub(crate) fn node_token(utils: &AscriptWriterUtils, type_slot: usize) -> Self {
     SlotRef {
-      slot_type: RefIndex::Tok(slot_index),
+      slot_type: RefIndex::Tok(0),
       type_slot,
       init_expression: (utils.create_token)((utils.get_token_name)(0), TokenCreationType::Token),
       ast_type: AScriptTypeVal::Token,
+      predecessors: None,
+      post_init_statements: None,
+      is_mutable: false,
+    }
+  }
+
+  pub(crate) fn node_range(utils: &AscriptWriterUtils, type_slot: usize) -> Self {
+    SlotRef {
+      slot_type: RefIndex::Tok(0),
+      type_slot,
+      init_expression: (utils.get_token_name)(0),
+      ast_type: AScriptTypeVal::TokenRange,
       predecessors: None,
       post_init_statements: None,
       is_mutable: false,
@@ -924,18 +939,15 @@ pub(crate) fn get_ascript_export_data(
         })),
         &Rule {
           syms: vec![RuleSymbol {
-            scanner_index: 1,
-            scanner_length: 1,
             sym_id: SymbolID::Production(production.id, GrammarId(0)),
-            grammar_ref: g.id.clone(),
+            g_id: g.id.clone(),
             ..Default::default()
           }],
-          len: 1,
           prod_id: production.id,
           id: RuleId(0),
           bytecode_id: None,
           ast_definition: None,
-          grammar_ref: g.id.clone(),
+          g_id: g.id.clone(),
           tok: Token::default(),
           ..Default::default()
         },

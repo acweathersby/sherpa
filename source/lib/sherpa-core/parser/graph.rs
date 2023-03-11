@@ -887,7 +887,7 @@ fn create_peek<'a, T: ItemContainerIter<'a>>(
   }
 
   let index = hash_id_value_u64(&incomplete_items);
-  
+
   kernel_items.append(
     &mut incomplete_items.iter().map(|i| i.to_origin(Origin::Peek(index, state))).collect(),
   );
@@ -1133,7 +1133,7 @@ fn create_reduce_reduce_error(
       .into_iter()
       .map(|i| {
         let rule = i.get_rule(g).unwrap();
-        (rule.tok.clone(), rule.grammar_ref.path.clone(), "Found Here".into())
+        (rule.tok.clone(), rule.g_id.path.clone(), "Found Here".into())
       })
       .collect(),
   });

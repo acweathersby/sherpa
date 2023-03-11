@@ -225,13 +225,18 @@ fn apply_llvm_optimizations(opt: OptimizationLevel, ctx: &crate::llvm::LLVMParse
   println!("Applying optimizations1");
   //return;
   let pass_manager_builder = PassManagerBuilder::create();
-
+  let pass_manager = PassManager::create(());
   pass_manager_builder.set_optimization_level(opt);
   pass_manager_builder.set_size_level(1);
-  //pass_manager_builder.populate_module_pass_manager(&pass_manager);
+  pass_manager_builder.populate_module_pass_manager(&pass_manager);
+
+  while pass_manager.run_on(&ctx.module) {
+    println!("1");
+    break;
+  }
+  return;
   //*
   // ---------------------------------
-  let pass_manager = PassManager::create(());
   pass_manager.add_global_dce_pass();
   pass_manager.add_strip_symbol_pass();
   pass_manager.add_argument_promotion_pass();

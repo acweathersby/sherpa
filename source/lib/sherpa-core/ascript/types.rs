@@ -133,6 +133,7 @@ pub enum AScriptTypeVal {
   F64Vec,
   Token,
   TokenRange,
+  AdjustedTokenRange,
   UnresolvedProduction(ProductionId),
   Undefined,
   /// A generic struct
@@ -230,10 +231,10 @@ impl AScriptTypeVal {
   pub fn is_atom(&self) -> bool {
     use AScriptTypeVal::*;
     match self {
-      Token | TokenRange | Struct(..) | String(..) | Bool(..) | F64(..) | F32(..) | I64(..)
-      | I32(..) | I16(..) | I8(..) | U64(..) | U32(..) | U16(..) | U8(..) | F64Vec | F32Vec
-      | I64Vec | I32Vec | I16Vec | I8Vec | U64Vec | U32Vec | U16Vec | U8Vec | TokenVec
-      | StringVec => true,
+      Token | TokenRange | AdjustedTokenRange | Struct(..) | String(..) | Bool(..) | F64(..)
+      | F32(..) | I64(..) | I32(..) | I16(..) | I8(..) | U64(..) | U32(..) | U16(..) | U8(..)
+      | F64Vec | F32Vec | I64Vec | I32Vec | I16Vec | I8Vec | U64Vec | U32Vec | U16Vec | U8Vec
+      | TokenVec | StringVec => true,
       GenericStructVec(nodes) => {
         if nodes.len() == 1 {
           match nodes.first() {
@@ -333,6 +334,7 @@ impl AScriptTypeVal {
       GenericStructVec(nodes) => format!("Nodes[{:?}]", nodes),
       Undefined => "Undefined".to_string(),
       TokenRange => "Token".to_string(),
+      AdjustedTokenRange => "Token".to_string(),
       Token => "Token".to_string(),
       GenericStruct(_) => "Node".to_string(),
       Any => "Any".to_string(),

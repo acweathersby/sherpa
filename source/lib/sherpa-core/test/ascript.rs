@@ -481,3 +481,54 @@ fn convert_str_to_numeric() -> SherpaResult<()> {
 
   SherpaResult::Ok(())
 }
+
+#[test]
+fn token_range_slice() -> SherpaResult<()> {
+  let mut j = Journal::new(None);
+  GrammarStore::from_str(
+    &mut j,
+    "
+    <> A > \"1234\" :ast { t_R, d:str(tok<1,2>) } 
+    
+    ",
+  );
+  assert!(!j.debug_error_report(), "Should not have grammar errors");
+
+  let store = AScriptStore::new(&mut j)?;
+
+  let u = create_rust_writer_utils(&store);
+  let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
+  let writer = write_rust_ast(w)?;
+
+  println!("{}", String::from_utf8(writer.into_writer().into_output())?);
+
+  SherpaResult::Ok(())
+}
+
+#[test]
+fn reference_nonterminal_and_reference_names_when_using_valueless_props() -> SherpaResult<()> {
+  let mut j = Journal::new(None);
+  GrammarStore::from_str(
+    &mut j,
+    "
+    <> A > R \"1234\"^num :ast { t_A, num }
+
+    <> R > A :ast { t_R, A } 
+    ",
+  );
+  assert!(!j.debug_error_report(), "Should not have grammar errors");
+
+  let store = AScriptStore::new(&mut j)?;
+
+  j.flush_reports();
+
+  assert!(!j.debug_error_report(), "Should not have ascript errors errors");
+
+  let u = create_rust_writer_utils(&store);
+  let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
+  let writer = write_rust_ast(w)?;
+
+  println!("{}", String::from_utf8(writer.into_writer().into_output())?);
+
+  SherpaResult::Ok(())
+}

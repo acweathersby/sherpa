@@ -26,5 +26,5 @@ sherpa-binary-parser = []
 # Disable portions of the code base that incompatable with a wasm target
 wasm-target = []
 
-# Disables multi-threading code
-single-thread = []
+# Enable multi-threading code
+multithread = []

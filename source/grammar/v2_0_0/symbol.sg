@@ -1,0 +1,86 @@
+NAME sherpa_symbol
+
+IGNORE { c:sp c:nl }
+
+IMPORT ./token as tok
+
+
+<> annotated_symbol > 
+
+    list^s [unordered tk:reference?^r "?" ?^o  precedence?^p ]
+
+        :ast { t_AnnotatedSymbol, precedence:$p, symbol:$s, is_optional:bool($o), reference:str($r), tok  }
+
+    | list
+
+
+<> precedence > "{" tk:precedence_num '}' :ast { t_Precedence, val: u32($2) }
+
+<> precedence_num > c:num(+)
+
+
+<> list >
+
+    symbol "(+" ( token | class )? ')'
+
+            :ast { t_List_Production, c_Symbol, terminal_symbol:$3, symbol:$1, tok }
+
+    | symbol "(*" ( token | class )? ')'
+
+            :ast { t_List_Production, c_Symbol, terminal_symbol:$3, symbol:$1, tok, optional:true }
+
+    | symbol
+
+
+<> symbol > non_terminal | terminal
+
+
+<> non_terminal > production_symbol | import_production_symbol
+
+
+<> production_symbol > 
+
+    tok::id
+
+            :ast { t_Production_Symbol , c_Symbol, name:str($1), tok}
+
+
+<> import_production_symbol>
+
+    tok::id '::' tok::id
+
+        :ast { t_Production_Import_Symbol , c_Symbol , module:str($1), name:str($3), tok}
+
+
+<> terminal > token | token_non_terminal | class
+
+
+<> class >
+
+    "c:" ( 'num' | 'nl' | 'sp' | 'id' | 'sym' | 'any' | 'tab' | 'htab' )
+
+        :ast { t_ClassSymbol, c_Symbol , val:str($2),  tok }
+
+
+<> token_non_terminal >
+
+    "tk:" non_terminal
+
+        :ast { t_Production_Terminal_Symbol , c_Symbol , production:$2, tok }
+
+
+<> token >
+
+    tok::string
+
+        :ast { t_TerminalToken, c_Symbol , val:str(tok<1,1>), tok, is_exclusive:true } 
+
+    |  tok::quote
+
+        :ast { t_TerminalToken , c_Symbol , val:str(tok<1,1>), tok }
+
+
+<> reference > "^" tok::id
+
+
+<> end_of_input > "$" :ast { t_EOFSymbol, c_Symbol , tok }

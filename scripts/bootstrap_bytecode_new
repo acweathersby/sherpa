@@ -1,0 +1,38 @@
+#! /usr/bin/zsh
+
+# This script is used to rebuild the base sherpa bytecode parser
+# This should only every need to be done if:
+# 1. The sherpa grammar is extended or modified
+# 2. New features are added to bytecode parsers that need to 
+#    be incorporated in the sherpa grammar parser.
+
+pushd ${0:a:h}/..
+
+ROOT_DIR=$PWD
+SHERPA_LIBRARY_DIR=$ROOT_DIR/source/lib/sherpa-core/lib
+SHERPA_CLI_DIR=$ROOT_DIR/source/app/cli
+
+pushd $SHERPA_CLI_DIR
+
+cargo +nightly run \
+    --bin sherpa \
+    --release \
+    --features "sherpa_core/llvm" \
+    -- build -t bytecode\
+     -a \
+     --name sherpa_bc \
+     -l rust \
+     --libout $ROOT_DIR/source/lib/sherpa-core/lib/ \
+     -o $ROOT_DIR/source/lib/sherpa-core/grammar/new/parser/ \
+      $ROOT_DIR/source/grammar/v2_0_0/grammar.sg
+
+
+exit 0
+
+./target/release/sherpa build -t bytecode\
+     -a \
+     --name sherpa_bc \
+     -l rust \
+     --libout $ROOT_DIR/source/lib/sherpa-core/lib/ \
+     -o $ROOT_DIR/source/lib/sherpa-core/grammar/new/parser/ \
+      $ROOT_DIR/source/grammar/v2_0_0/grammar.sg

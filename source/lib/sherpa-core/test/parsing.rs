@@ -5,10 +5,12 @@ use super::utils::{console_debugger, test_runner, TestConfig};
 use crate::journal::Journal;
 use crate::{
   bytecode::compile_bytecode,
+  journal::config::DebugConfig,
   parser::{compile_parse_states, optimize_parse_states},
   test::{test_reader::TestUTF8StringReader, utils::TestInput},
   types::{GrammarStore, SherpaResult},
   util::get_num_of_available_threads,
+  Config,
 };
 use std::path::PathBuf;
 
@@ -703,36 +705,45 @@ pub fn tracks_line_numbers() -> SherpaResult<()> {
 pub fn lr2() -> SherpaResult<()> {
   test_runner(
     &[(
-      "state",
+      "grammar",
       r##"
 
-parser test: 
-  match {
+<> test > c:id test test 'test'
+
+test => 
+  match : CLASS {
     (1|2) { 
-      match : BYTE (2|6) { pass }
+      match : PRODUCTION ( sym::grammar ) { goto test }
     }
     { fail }
+    fail-hint { "Let this be a lesson to you all. Don't mess with philips!" }
 }
 
 "##,
       true,
     )
       .into()],
-    None,
+    Some(Config {
+      debug: DebugConfig { allow_parse_state_name_collisions: false, ..Default::default() },
+      ..Default::default()
+    }),
     TestConfig {
-      print_disassembly: true,
+      //print_states: true,
+      //print_disassembly: false,
       bytecode_parse: true,
+      optimize: false,
+      print_parser_states_compile_reports: &["grammar"],
       grammar_path: Some(
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-          .join("../../grammar/v2_0_0/ir.sg")
+          .join("../../grammar/v2_0_0/grammar.sg")
           .canonicalize()
           .unwrap(),
       ),
       debugger_handler: Some(&|g| {
         console_debugger(g, super::utils::PrintConfig {
-          display_scanner_output: false,
+          display_scanner_output: true,
           display_input_data: false,
-          display_instruction: false,
+          display_instruction: true,
           display_state: false,
           ..Default::default()
         })

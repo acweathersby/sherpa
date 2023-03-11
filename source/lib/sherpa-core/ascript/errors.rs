@@ -1,5 +1,9 @@
 use super::types::{AScriptProp, AScriptStore, AScriptTypeVal, TaggedType};
-use crate::{types::*, Journal};
+use crate::{
+  grammar::compile::parser::sherpa::{ASTNode, AST_Property},
+  types::*,
+  Journal,
+};
 use std::collections::BTreeSet;
 
 /// This error occurs when multiple definitions of the same Struct
@@ -96,7 +100,7 @@ pub(crate) fn add_incompatible_production_scalar_types_error(
         let rule = g.get_rule(&r).unwrap();
         (
           rule.tok.clone(),
-          rule.grammar_ref.path.clone(),
+          rule.g_id.path.clone(),
           format!("Rule produces type [{}]", type_a.blame_string(g, &type_names)),
         )
       })
@@ -104,7 +108,7 @@ pub(crate) fn add_incompatible_production_scalar_types_error(
         let rule = g.get_rule(&r).unwrap();
         (
           rule.tok.clone(),
-          rule.grammar_ref.path.clone(),
+          rule.g_id.path.clone(),
           format!("Rule produces type [{}]", type_b.blame_string(g, &type_names)),
         )
       }))
@@ -160,7 +164,7 @@ pub(crate) fn add_incompatible_production_vector_types_error(
         let type_: AScriptTypeVal = t.into();
         (
           rule.tok.clone(),
-          rule.grammar_ref.path.clone(),
+          rule.g_id.path.clone(),
           format!("rule produces vector type {}", type_.blame_string(g, &type_names)),
         )
       })
@@ -215,7 +219,7 @@ pub(crate) fn add_incompatible_production_types_error(
         let rule = g.get_rule(&r).unwrap();
         (
           rule.tok.clone(),
-          rule.grammar_ref.path.clone(),
+          rule.g_id.path.clone(),
           format!("Rule reduces to scalar type {}", t.blame_string(g, &type_names)),
         )
       })
@@ -223,7 +227,7 @@ pub(crate) fn add_incompatible_production_types_error(
         let rule = g.get_rule(&r).unwrap();
         (
           rule.tok.clone(),
-          rule.grammar_ref.path.clone(),
+          rule.g_id.path.clone(),
           format!("Rule reduces to vector type {}", t.blame_string(g, &type_names)),
         )
       }))
@@ -234,5 +238,28 @@ pub(crate) fn add_incompatible_production_types_error(
     ),
     ps_msg:   "".into(),
     severity: SherpaErrorSeverity::Critical,
+  });
+}
+
+/// This error occurs when a values prop's id does not match any reference
+/// names or non-terminals in the respective rule.
+///
+pub(crate) fn add_unmatched_prop_error(j: &mut Journal, rule: &Rule, prop: &AST_Property) {
+  j.report_mut().add_error(SherpaError::SourceError {
+    id:         "unmatched-valueless-prop",
+    path:       rule.g_id.path.clone(),
+    inline_msg: Default::default(),
+    loc:        prop.tok.clone(),
+    msg:        format!("This property does nor resolve to a symbol within it's associated rule",),
+    ps_msg:     format!(
+      "{}",
+      rule.tok.blame(
+        0,
+        0,
+        "\nThis prop should reference either a non-terminal or symbol reference within this rule",
+        BlameColor::RED,
+      )
+    ),
+    severity:   SherpaErrorSeverity::Critical,
   });
 }
