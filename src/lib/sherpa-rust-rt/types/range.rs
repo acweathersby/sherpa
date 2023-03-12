@@ -89,7 +89,6 @@ impl Add<u32> for TokenRange {
   type Output = TokenRange;
 
   /// Extends the size of token by `rhs`
-  #[inline(always)]
   fn add(self, rhs: u32) -> Self::Output {
     TokenRange { len: self.len + rhs, ..self }
   }
@@ -131,7 +130,8 @@ impl TokenRange {
   }
 
   pub fn trim(&self, start_trim: u32, end_trim: u32) -> Self {
-    let new_len = (self.len as i32 - start_trim as i32 - end_trim as i32).max(0);
+    let new_len =
+      (self.len as i32 - start_trim as i32 - end_trim as i32).max(0);
     let new_off = (self.off + start_trim).min(self.off + self.len);
 
     Self {

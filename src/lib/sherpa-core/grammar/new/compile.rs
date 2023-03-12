@@ -164,14 +164,10 @@ fn load_runner(
 #[test]
 fn load_grammar_from_str() -> SherpaResult<()> {
   let grammar_source = r#"
-
-  IMPORT ../test as sym
   
-  <> A > C "hello" "," "World" B "!"
+  <> A > "hello" "," "World" pratt_test "!"
 
-  +> sym::D > "goodby"
-
-  pratt_test catches =!> pass
+  pratt_test catches => pass
   
   "#;
 

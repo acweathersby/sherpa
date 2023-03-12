@@ -2,7 +2,6 @@
 use super::{
   parser::{
     ast::escaped_from,
-    sherpa_bc::GetASTNodeType,
     ASTNode,
     AST_NamedReference,
     AST_Statements,
@@ -25,7 +24,10 @@ use crate::{
   grammar::{
     create_scanner_name,
     new::{
-      errors::{add_invalid_import_source_error, add_production_redefinition_error},
+      errors::{
+        add_invalid_import_source_error,
+        add_production_redefinition_error,
+      },
       parser::ast::type_eval_from,
       utils::{
         create_production_guid_name,
@@ -34,13 +36,34 @@ use crate::{
       },
     },
   },
-  types::{self, ImportedGrammarReferences, RuleId, RuleSymbol, StringId},
+  types::{
+    self,
+    ImportedGrammarReferences,
+    ProductionType,
+    RuleId,
+    RuleSymbol,
+    StringId,
+  },
   Journal,
   SherpaResult,
 };
 use sherpa_runtime::types::Token;
 use std::{collections::HashMap, path::PathBuf, rc::Rc, sync::Arc};
 use types::SymbolID;
+
+impl From<&ASTNode> for ProductionType {
+  fn from(value: &ASTNode) -> Self {
+    use super::parser::{ASTNodeType::*, GetASTNodeType};
+    use ProductionType::*;
+    match value.get_type() {
+      CFProduction => ContextFree,
+      PrattProduction => Pratt,
+      PegProduction => Peg,
+      State => ParseState,
+      _ => Invalid,
+    }
+  }
+}
 
 /// Loads grammar and creates initial store. Also
 /// extracts imports
@@ -96,7 +119,11 @@ pub(super) fn load(
   SherpaResult::Ok(())
 }
 
-fn extract_exports_and_ignore(grammar: &Grammar, j: &mut Journal, store: &mut GrammarStore) {
+fn extract_exports_and_ignore(
+  grammar: &Grammar,
+  j: &mut Journal,
+  store: &mut GrammarStore,
+) {
   let mut global_ignore_symbols = vec![];
 
   for amble in &grammar.preamble {
@@ -154,7 +181,7 @@ pub(super) fn extract_imports(
 ) -> (ImportedGrammarReferences) {
   debug_assert!(source_dir.is_dir());
 
-  use super::parser::sherpa_bc::*;
+  use super::parser::*;
   const allowed_extensions: [&str; 3] = ["sg", "sherpa", "hcg"];
 
   grammar
@@ -167,10 +194,12 @@ pub(super) fn extract_imports(
     .filter_map(|import| {
       let Import { reference, uri, tok } = import;
       let import_path = PathBuf::from(uri);
-      match resolve_grammar_path(&import_path, &source_dir, &allowed_extensions) {
-        SherpaResult::Ok(path) => {
-          Some((reference.clone(), GrammarRef::new(reference.to_string(), path.clone())))
-        }
+      match resolve_grammar_path(&import_path, &source_dir, &allowed_extensions)
+      {
+        SherpaResult::Ok(path) => Some((
+          reference.clone(),
+          GrammarRef::new(reference.to_string(), path.clone()),
+        )),
         _ => {
           add_invalid_import_source_error(j, import, &import_path, &source_dir);
           None
@@ -191,33 +220,13 @@ pub(super) fn build_store(
   source_dir: &PathBuf,
 ) -> Box<GrammarStore> {
   Box::new(GrammarStore {
-    id: GrammarRef::new(get_grammar_name(grammar, &source_dir), source_dir.clone()),
+    id: GrammarRef::new(
+      get_grammar_name(grammar, &source_dir),
+      source_dir.clone(),
+    ),
     imports: extract_imports(j, grammar, source_dir),
     ..Default::default()
   })
-}
-
-#[derive(Clone, Copy, PartialEq, PartialOrd, Debug)]
-pub enum ProductionType {
-  Invalid,
-  Pratt,
-  Peg,
-  ContextFree,
-  ParseState,
-}
-
-impl From<&ASTNode> for ProductionType {
-  fn from(value: &ASTNode) -> Self {
-    use super::parser::ASTNodeType::*;
-    use ProductionType::*;
-    match value.get_type() {
-      CFProduction => ContextFree,
-      PrattProduction => Pratt,
-      PegProduction => Peg,
-      State => ParseState,
-      _ => Invalid,
-    }
-  }
 }
 
 /// Returns a mapping of all productions and their initial rules.
@@ -232,7 +241,7 @@ fn extract_prods<'a>(
 ) {
   let g_id = store.id.clone();
 
-  use super::parser::sherpa_bc::*;
+  use super::parser::*;
 
   let mut rules_to_process = vec![];
   let mut custom_parse_state = vec![];
@@ -240,7 +249,11 @@ fn extract_prods<'a>(
 
   for item in grammar.productions.iter() {
     if let Some((plain_name, loc, rules)) = match item {
-      ASTNode::PrattProduction(box PrattProduction { name_sym, rules, tok })
+      ASTNode::PrattProduction(box PrattProduction {
+        name_sym,
+        rules,
+        tok,
+      })
       | ASTNode::CFProduction(box CFProduction { name_sym, rules, tok })
       | ASTNode::PegProduction(box PegProduction { name_sym, rules, tok }) => {
         Some((&name_sym.name, tok.clone(), Some(rules)))
@@ -251,10 +264,18 @@ fn extract_prods<'a>(
       }
       ASTNode::AppendProduction(append_production) => {
         let AppendProduction { name_sym, .. } = append_production.as_ref();
-        if let Some((guid_name, _)) = get_productions_names_from_ast_node(j, store, name_sym) {
-          let local_import_grammar_name = &name_sym.as_Production_Import_Symbol().unwrap().module;
-          let id = store.imports.get(local_import_grammar_name).unwrap().clone();
-          append_productions.push((ProductionId::from(&guid_name), id, append_production.as_ref()))
+        if let Some((guid_name, _)) =
+          get_productions_names_from_ast_node(j, store, name_sym)
+        {
+          let local_import_grammar_name =
+            &name_sym.as_Production_Import_Symbol().unwrap().module;
+          let id =
+            store.imports.get(local_import_grammar_name).unwrap().clone();
+          append_productions.push((
+            ProductionId::from(&guid_name),
+            id,
+            append_production.as_ref(),
+          ))
         }
         None
       }
@@ -263,7 +284,11 @@ fn extract_prods<'a>(
       if let Some(id) = insert_production(j, store, plain_name, loc) {
         if let Some(rules) = rules {
           for rule in rules {
-            rules_to_process.push((id, ProductionType::from(item), rule.as_ref()));
+            rules_to_process.push((
+              id,
+              ProductionType::from(item),
+              rule.as_ref(),
+            ));
           }
         }
       }
@@ -347,7 +372,7 @@ fn process_rule(
 
     is_optional.then(|| rules.append(&mut rules.clone()));
     match sym {
-      ASTNode::AnyGroup(group) => {
+      ASTNode::NotEmptySet(set) => {
         // Ensure all permutations of optional members leave
         // a set containing at least one symbol.
 
@@ -370,17 +395,27 @@ fn process_rule(
           }
         }
 
-        let indices = group.symbols.iter().enumerate().map(|(i, _)| i).collect();
+        let indices = set.symbols.iter().enumerate().map(|(i, _)| i).collect();
 
-        let candidate_symbols =
-          group.symbols.iter().enumerate().map(|(i, s)| (i + index, s)).collect::<Vec<_>>();
+        let candidate_symbols = set
+          .symbols
+          .iter()
+          .enumerate()
+          .map(|(i, s)| (i + index, s))
+          .collect::<Vec<_>>();
 
-        for permutation in
-          if group.unordered { get_index_permutations(indices) } else { vec![indices] }
-        {
-          let symbols = permutation.iter().map(|i| candidate_symbols[*i]).collect::<Vec<_>>();
-          pending_rules
-            .append(&mut process_rule(j, store, prod_id, &symbols, list_index, token, &None)?);
+        for permutation in if set.unordered {
+          get_index_permutations(indices)
+        } else {
+          vec![indices]
+        } {
+          let symbols = permutation
+            .iter()
+            .map(|i| candidate_symbols[*i])
+            .collect::<Vec<_>>();
+          pending_rules.append(&mut process_rule(
+            j, store, prod_id, &symbols, list_index, token, &None,
+          )?);
         }
 
         let mut new_bodies = vec![];
@@ -397,9 +432,11 @@ fn process_rule(
 
         continue;
       }
-      ASTNode::Group_Production(group) => {
+      ASTNode::GroupProduction(group) => {
         // All bodies are plain without annotations or functions
-        if annotation.is_empty() && !some_rules_have_ast_definitions(&group.rules) {
+        if annotation.is_empty()
+          && !some_rules_have_ast_definitions(&group.rules)
+        {
           // For each rule in the group clone the existing rule lists and
           // process each list independently, inserting the new symbols
           // into the existing bodies. We must make sure the indices are
@@ -446,9 +483,12 @@ fn process_rule(
           continue;
         } else {
           let group_prod_name =
-            &(store.productions.get(&prod_id)?.name.to_owned() + "_group_" + &index.to_string());
+            &(store.productions.get(&prod_id)?.name.to_owned()
+              + "_group_"
+              + &index.to_string());
 
-          let id = insert_production(j, store, group_prod_name, group.tok.clone())?;
+          let id =
+            insert_production(j, store, group_prod_name, group.tok.clone())?;
 
           for rule in &group.rules {
             for mut rule in process_rule(
@@ -465,9 +505,16 @@ fn process_rule(
           }
         }
       }
-      ASTNode::List_Production(box List_Production { symbol, terminal_symbol, tok, .. }) => {
+      ASTNode::List_Production(box List_Production {
+        symbol,
+        terminal_symbol,
+        tok,
+        ..
+      }) => {
         let list_prod_name =
-          &(store.productions.get(&prod_id)?.name.to_owned() + "_list_" + &index.to_string());
+          &(store.productions.get(&prod_id)?.name.to_owned()
+            + "_list_"
+            + &index.to_string());
 
         let id = insert_production(j, store, list_prod_name, tok.clone())?;
 
@@ -507,16 +554,23 @@ fn process_rule(
 
         let mut rule_syms = vec![symbol.clone()];
 
-        for rule in
-          process_rule(j, store, id, &vec![(9999, symbol)], list_index, &sym.to_token(), &ast_a)?
-        {
+        for rule in process_rule(
+          j,
+          store,
+          id,
+          &vec![(9999, symbol)],
+          list_index,
+          &sym.to_token(),
+          &ast_a,
+        )? {
           insert_rule(rule, store, prod_id);
         }
 
-        let prod_sym = ASTNode::Production_Symbol(Box::new(Production_Symbol::new(
-          store.get_production(&id)?.name.clone(),
-          token.clone(),
-        )));
+        let prod_sym =
+          ASTNode::Production_Symbol(Box::new(Production_Symbol::new(
+            store.get_production(&id)?.name.clone(),
+            token.clone(),
+          )));
         rule_syms.insert(0, prod_sym.clone());
         if let Some(terminal_symbol) = terminal_symbol {
           rule_syms.insert(0, terminal_symbol.clone());
@@ -567,8 +621,13 @@ fn map_symbols_to_unindexed(ast_syms: &Vec<ASTNode>) -> Vec<(usize, &ASTNode)> {
   ast_syms.iter().map(|s| (9999, s)).collect::<Vec<_>>()
 }
 
-fn insert_rule(mut rule: types::Rule, store: &mut GrammarStore, prod_id: ProductionId) {
-  let id = RuleId::from_syms(&rule.syms.iter().map(|s| s.sym_id).collect::<Vec<_>>());
+fn insert_rule(
+  mut rule: types::Rule,
+  store: &mut GrammarStore,
+  prod_id: ProductionId,
+) {
+  let id =
+    RuleId::from_syms(&rule.syms.iter().map(|s| s.sym_id).collect::<Vec<_>>());
   rule.id = id;
   store.production_rules.entry(prod_id).or_default().push(id);
   store.rules.insert(id, rule);
@@ -578,8 +637,11 @@ fn some_rules_have_ast_definitions(rules: &[Box<Rule>]) -> bool {
   rules.iter().any(|rule| rule.ast.is_some())
 }
 
-fn get_grammar_name(ast: &super::parser::Grammar, source_path: &PathBuf) -> String {
-  use super::parser::sherpa_bc::*;
+fn get_grammar_name(
+  ast: &super::parser::Grammar,
+  source_path: &PathBuf,
+) -> String {
+  use super::parser::*;
   let name = ast
     .preamble
     .iter()
@@ -588,7 +650,9 @@ fn get_grammar_name(ast: &super::parser::Grammar, source_path: &PathBuf) -> Stri
       _ => None,
     })
     .next()
-    .or_else(|| -> Option<String> { Some(source_path.file_stem()?.to_str()?.to_string()) })
+    .or_else(|| -> Option<String> {
+      Some(source_path.file_stem()?.to_str()?.to_string())
+    })
     .unwrap_or_else(|| "unnamed".to_string());
   name
 }
@@ -597,7 +661,7 @@ fn get_grammar_name(ast: &super::parser::Grammar, source_path: &PathBuf) -> Stri
 /// string
 #[inline]
 pub fn get_terminal_id(string: &String, exclusive: bool) -> SymbolID {
-  use super::parser::ASTNodeType::*;
+  use super::parser::{ASTNodeType::*, GetASTNodeType};
   use SymbolID::*;
   if let Ok(node) = type_eval_from(string.into()) {
     match node.get_type() {
@@ -632,7 +696,9 @@ fn record_symbol(
 
       let sym_id = get_terminal_id(&string, terminal.is_exclusive | exclusive);
 
-      if let std::collections::btree_map::Entry::Vacant(e) = g.symbols.entry(sym_id) {
+      if let std::collections::btree_map::Entry::Vacant(e) =
+        g.symbols.entry(sym_id)
+      {
         g.symbol_strings.insert(sym_id, string.clone());
 
         let byte_length = string.bytes().len() as u32;
@@ -664,7 +730,9 @@ fn record_symbol(
       "sym" => Some(SymbolID::GenericSymbol),
       _ => Some(SymbolID::Undefined),
     },
-    ASTNode::Production_Terminal_Symbol(token_prod) => process_token_production(j, g, token_prod),
+    ASTNode::Production_Terminal_Symbol(token_prod) => {
+      process_token_production(j, g, token_prod)
+    }
     _ => unreachable!(),
   }
 }
@@ -701,9 +769,11 @@ fn process_token_production(
   let tok = &node.tok;
   match process_production_symbol(j, g, &node.production) {
     Some(SymbolID::Production(prod_id, grammar_id)) => {
-      let scanner_prod_id = ProductionId::from(&create_scanner_name(prod_id, grammar_id));
+      let scanner_prod_id =
+        ProductionId::from(&create_scanner_name(prod_id, grammar_id));
       let guid = SymbolID::Production(scanner_prod_id, grammar_id);
-      let tok_id = SymbolID::TokenProduction(prod_id, grammar_id, scanner_prod_id);
+      let tok_id =
+        SymbolID::TokenProduction(prod_id, grammar_id, scanner_prod_id);
 
       g.production_symbols.insert(tok_id, tok.clone());
 
@@ -722,7 +792,8 @@ fn process_token_production(
 }
 
 /// Returns the ProductionId  of a production symbol.
-/// Returns an empty ProductionId if the node cannot be resolved to a production symbol.
+/// Returns an empty ProductionId if the node cannot be resolved to a production
+/// symbol.
 ///
 /// ASTNodes that can be resolved to a production symbol:
 /// - [ASTNode::Production_Import_Symbol]
@@ -730,12 +801,17 @@ fn process_token_production(
 /// - [ASTNode::Production]
 /// - [ASTNode::Production_Terminal_Symbol]
 #[inline]
-fn get_prod_id(j: &mut Journal, g: &mut GrammarStore, production: &ASTNode) -> ProductionId {
+fn get_prod_id(
+  j: &mut Journal,
+  g: &mut GrammarStore,
+  production: &ASTNode,
+) -> ProductionId {
   get_prod_id_from_node(j, g, production).0
 }
 
-/// Returns the ProductionId, guid name String, and the normal name String of a production symbol.
-/// Returns default values if the node cannot be resolved to a production symbol.
+/// Returns the ProductionId, guid name String, and the normal name String of a
+/// production symbol. Returns default values if the node cannot be resolved to
+/// a production symbol.
 ///
 /// ASTNodes that can be resolved to a production symbol:
 /// - [ASTNode::Production_Import_Symbol]
@@ -777,7 +853,10 @@ mod test {
   #[test]
   fn extract_imports() -> SherpaResult<()> {
     let mut j = Journal::new(None);
-    j.set_active_report("test", crate::ReportType::GrammarCompile(Default::default()));
+    j.set_active_report(
+      "test",
+      crate::ReportType::GrammarCompile(Default::default()),
+    );
     let grammar = super::parse_grammar(
       " 
     IMPORT ../load.sg as name
@@ -801,7 +880,10 @@ mod test {
   #[test]
   fn extract_productions() -> SherpaResult<()> {
     let mut j = Journal::new(None);
-    j.set_active_report("test", crate::ReportType::GrammarCompile(Default::default()));
+    j.set_active_report(
+      "test",
+      crate::ReportType::GrammarCompile(Default::default()),
+    );
 
     let grammar = super::parse_grammar("  <> test > c:id | \"test\"")?;
 
@@ -820,9 +902,13 @@ mod test {
   #[test]
   fn production_redefinition_error() -> SherpaResult<()> {
     let mut j = Journal::new(None);
-    j.set_active_report("test", crate::ReportType::GrammarCompile(Default::default()));
+    j.set_active_report(
+      "test",
+      crate::ReportType::GrammarCompile(Default::default()),
+    );
 
-    let grammar = super::parse_grammar("  <> test > c:id  #> test > c:id | c:sym ")?;
+    let grammar =
+      super::parse_grammar("  <> test > c:id  #> test > c:id | c:sym ")?;
 
     let dir = PathBuf::from("/");
 
@@ -840,7 +926,10 @@ mod test {
   #[test]
   fn production_redefinition_error_with_parse_state() -> SherpaResult<()> {
     let mut j = Journal::new(None);
-    j.set_active_report("test", crate::ReportType::GrammarCompile(Default::default()));
+    j.set_active_report(
+      "test",
+      crate::ReportType::GrammarCompile(Default::default()),
+    );
 
     let grammar = super::parse_grammar("  <> test > c:id  test => pass ")?;
 
@@ -860,7 +949,10 @@ mod test {
   #[test]
   fn processes_rules() -> SherpaResult<()> {
     let mut j = Journal::new(None);
-    j.set_active_report("test", crate::ReportType::GrammarCompile(Default::default()));
+    j.set_active_report(
+      "test",
+      crate::ReportType::GrammarCompile(Default::default()),
+    );
     let grammar = super::parse_grammar(
       r##"
 <> test > ( c:id | "object" ) :ast u32(tok)
@@ -869,7 +961,8 @@ mod test {
 
     let dir = PathBuf::from("/");
     let mut store = super::build_store(&mut j, &grammar, &dir);
-    let (pending_rules, ..) = super::extract_prods(&mut j, &mut store, &grammar);
+    let (pending_rules, ..) =
+      super::extract_prods(&mut j, &mut store, &grammar);
     j.flush_reports();
 
     assert!(!j.debug_error_report());

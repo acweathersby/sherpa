@@ -13,9 +13,23 @@ use crate::{
 
 use super::GrammarRef;
 
+#[derive(Clone, Copy, PartialEq, PartialOrd, Debug, Eq, Hash)]
+pub enum ProductionType {
+  Invalid,
+  Pratt,
+  Peg,
+  ContextFree,
+  ParseState,
+}
+
+impl Default for ProductionType {
+  fn default() -> Self {
+    ProductionType::Invalid
+  }
+}
+
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RecursionType(u8);
-
 impl RecursionType {
   pub const LEFT_DIRECT: RecursionType = Self(1);
   pub const LEFT_INDIRECT: RecursionType = Self(2);
@@ -68,8 +82,8 @@ impl Default for RecursionType {
     RecursionType::NONE
   }
 }
-/// A convenient wrapper around information used to construct parser entry points
-/// based on [productions](Production).
+/// A convenient wrapper around information used to construct parser entry
+/// points based on [productions](Production).
 pub struct ExportedProduction<'a> {
   /// The name assigned to the production within the
   /// export clause of a grammar.
@@ -144,11 +158,12 @@ impl std::fmt::Display for RuleId {
 /// TODO: Docs
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct Production {
+  pub type_: ProductionType,
   /// TODO: Docs
   pub id: ProductionId,
-  /// A globally unique name of this production. This should always be distinct, particularly in cases
-  /// were a host grammar imports a donor grammar that
-  /// defines productions with the same name as those
+  /// A globally unique name of this production. This should always be
+  /// distinct, particularly in cases were a host grammar imports a donor
+  /// grammar that defines productions with the same name as those
   /// in the host.
   pub guid_name: String,
   /// The human friendly name of this production
@@ -162,24 +177,19 @@ pub struct Production {
   pub export_id: Option<usize>,
   /// TODO: Docs
   pub recursion_type: RecursionType,
-  /// TODO: Docs
-  pub priority: u32,
   /// The token defining the substring in the source
   /// code from which this production was derived.
   pub loc: Token,
   /// An integer value used by bytecode
   /// to refer to this production
   pub bytecode_id: Option<u32>,
-
   /// If this is a scanner production,
   /// then this is a non-zero integer value
   /// that mirrors the TokenProduction or Defined* symbol
   /// bytecode_id that this production produces.
   pub symbol_bytecode_id: Option<u32>,
-
   /// The symbol of this production
   pub sym_id: SymbolID,
-
   /// A reference to the identifiers of the owning grammar.
   pub g_id: Arc<GrammarRef>,
 }
@@ -294,6 +304,7 @@ impl Rule {
     self.item().blame_string(g)
   }
 
+  /// Returns the number of symbols in this rule.
   pub fn len(&self) -> usize {
     self.syms.len()
   }
@@ -337,6 +348,7 @@ impl Rule {
 pub type ProductionTable = std::collections::BTreeMap<ProductionId, Production>;
 
 /// Maps [ProductionId] to a vector of [RuleId](RuleId).
-pub type ProductionBodiesTable = std::collections::BTreeMap<ProductionId, Vec<RuleId>>;
+pub type ProductionBodiesTable =
+  std::collections::BTreeMap<ProductionId, Vec<RuleId>>;
 
 pub type RuleTable = std::collections::BTreeMap<RuleId, Rule>;

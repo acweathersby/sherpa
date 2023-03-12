@@ -1,13 +1,20 @@
-IGNORE { c:nl c:sp }
-
 NAME ir
 
 IMPORT ./symbol as sym
 IMPORT ./token as tok
+IMPORT ../v1_0_0/comment as cmt
 
-<> state > sym::production_symbol^id "catches"?^c "=>" statement
+IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
-    :ast { t_State, catches:bool($c),  id, statement, tok }
+<> state > 
+
+    sym::production_symbol^id "=>" statement
+
+        :ast { t_State, id, statement, tok }
+
+    | sym::production_symbol^id "=!>" statement
+
+        :ast { t_State, catches:true, id, statement, tok }
 
 <> statement > [ 
     transitive_statement?^transitive 
@@ -26,7 +33,7 @@ IMPORT ./token as tok
 
     | "skip"        :ast { t_Skip }
 
-    | "pop-goto"    :ast { t_Pop }
+    | "pop"         :ast { t_Pop }
 
     | "scan"        :ast { t_Scan }
 
@@ -42,13 +49,21 @@ IMPORT ./token as tok
 
 <> non_branch_statement > 
 
-    "reduce"        :ast { t_Reduce  }
+    "reduce" tok::int ( "symbols" "to" )? tok::int ( "with" "rule" )? tok::int
+        
+        :ast { t_Reduce, len: u32($2), rule_id: u32($6), prod_id: u32($4) }
 
-    | "assign"      :ast { t_Assign  }
+    | "set-tok" tok::int
 
-    | "set"         :ast { t_SetVal  }
+        :ast { t_SetTokenId, id: u32($2) }
 
-    | "assert"      :ast { t_Assert  }
+    | "set" tok::id tok::int
+    
+        :ast { t_SetVal, id: str($2), val:u32($3)  }
+
+    | "assert"      
+    
+        :ast { t_Assert  }
 
 
 <> goto_sequence > goto_push(*) goto
@@ -56,11 +71,13 @@ IMPORT ./token as tok
     :ast { t_Gotos, pushes: $1, goto:$2  }
 
 
-<> goto_push > "push-goto" sym::non_terminal
+<> goto_push > "push" sym::non_terminal
 
+    :ast { t_Push, prod: $2 }
 
 <> goto > "goto" sym::non_terminal
 
+    :ast { t_Goto, prod: $2 }
 
 <> match > generic_match_block | production_match_block | terminal_match_block
 
@@ -73,14 +90,14 @@ IMPORT ./token as tok
 
 <> production_match_block >
 
-    "match" ":" "PRODUCTION" ( non_terminal_match :ast [$1] | "{" ( non_terminal_match | hint | default_match )(+) "}" :ast $2 )
+    "match" ":" "PRODUCTION" ( non_terminal_match :ast [$1] | "{" ( non_terminal_match | hint | default_match )(+) "}" :ast $2 )^m
 
         :ast { t_Match, mode: str($3), matches:$m }
 
 
 <> terminal_match_block >
 
-    "match" ":" "TERMINAL" ( terminal_match :ast [$1] | "{" ( terminal_match | hint | default_match )(+) "}" :ast $2 )
+    "match" ":" "TERMINAL" ( terminal_match :ast [$1] | "{" ( terminal_match | hint | default_match )(+) "}" :ast $2 )^m
 
         :ast { t_Match, mode: str($3), matches:$m }
 

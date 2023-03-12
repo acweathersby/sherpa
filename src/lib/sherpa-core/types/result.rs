@@ -11,7 +11,8 @@ use std::{
 };
 
 /// A result type that uses the [SherpaError] enum type for errors results.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub enum SherpaResult<T> {
   /// The resolved value.
   Ok(T),
@@ -50,7 +51,7 @@ impl<T> SherpaResult<T> {
   ///
   /// Basic usage:
   /// ```
-  ///
+  /// 
   /// # use sherpa_core::SherpaResult;
   ///
   /// let x = SherpaResult::<u32>::None;

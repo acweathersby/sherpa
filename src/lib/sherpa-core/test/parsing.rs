@@ -710,7 +710,7 @@ pub fn lr2() -> SherpaResult<()> {
 
 <> test > c:id test test 'test'
 
-test => 
+test =!> 
   match : CLASS {
     (1|2) { 
       match : PRODUCTION ( sym::grammar ) { goto test }

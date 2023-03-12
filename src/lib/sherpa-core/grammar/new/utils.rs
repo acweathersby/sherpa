@@ -182,7 +182,7 @@ pub fn get_symbol_details<'a>(mut sym: &'a ASTNode) -> SymbolData<'a> {
         data.is_optional |= annotated.is_optional;
         sym = &annotated.symbol;
       }
-      ASTNode::Group_Production(_) => {
+      ASTNode::GroupProduction(_) => {
         data.is_group = true;
         break;
       }
@@ -203,7 +203,7 @@ pub fn get_symbol_details<'a>(mut sym: &'a ASTNode) -> SymbolData<'a> {
       // as they represent actual parsable entities which are
       // submitted to the bytecode compiler for evaluation
       ASTNode::ClassSymbol(_)
-      | ASTNode::AnyGroup(_)
+      | ASTNode::NotEmptySet(_)
       | ASTNode::Production_Terminal_Symbol(_)
       //| ASTNode::TemplateProductionSymbol(_)
       | ASTNode::Production_Symbol(_)

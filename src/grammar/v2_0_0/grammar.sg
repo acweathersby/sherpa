@@ -3,8 +3,7 @@ NAME sherpa
 IMPORT ./ir as ir
 IMPORT ./symbol as sym
 IMPORT ./token as tok
-IMPORT ../v1_0_0/ascript as ast 
-IMPORT ../v1_0_0/syntax as syn
+IMPORT ./ascript as ast
 IMPORT ../v1_0_0/comment as cmt
 IMPORT ../v1_0_0/defined_type_eval as dt
 
@@ -18,7 +17,7 @@ EXPORT dt::def_type as type_eval
 EXPORT dt::escaped_string as escaped
 
 
-<> grammar > 
+<> grammar >
 
     preamble(*) ( cf_production | pratt_production | peg_production | append_production | ir::state )(+)
 
@@ -27,7 +26,7 @@ EXPORT dt::escaped_string as escaped
 
 <> preamble >
 
-    export_clause 
+    export_clause
 
     | import_clause
 
@@ -36,31 +35,31 @@ EXPORT dt::escaped_string as escaped
     | ignore_clause
 
 
-<> export_clause > 
+<> export_clause >
 
     "EXPORT" sym::non_terminal (( "AS" | "as" ) tok::id)?
 
-        :ast { t_Export, c_Preamble, production:$2, reference:str($3) } 
+        :ast { t_Export, production:$2, reference:str($3) } 
 
 
-<> import_clause > 
+<> import_clause >
 
-    "IMPORT" ( c:id | c:sym  )(+) c:sp ( "AS" | "as" ) tok::id
+    "IMPORT" ( c:id | c:sym )(+) c:sp ( "AS" | "as" ) tok::id
 
-        :ast { t_Import, c_Preamble, uri: str($2), reference:str($5), tok }
+        :ast { t_Import, uri: str($2), reference:str($5), tok }
 
 <> ignore_clause >
 
     "IGNORE" "{"  sym::terminal(+) "}"
 
-        :ast { t_Ignore, c_Preamble, symbols: $3 }
+        :ast { t_Ignore, symbols: $3 }
 
 
 <> name_clause >
 
     "NAME" tok::id
 
-        :ast { t_Name, c_Preamble, name: str($2) }
+        :ast { t_Name, name: str($2) }
 
 
 <> cf_production > 
@@ -70,21 +69,21 @@ EXPORT dt::escaped_string as escaped
         :ast { t_CFProduction, name_sym:$n, rules: $r, tok }
 
 
-<> peg_production > 
+<> peg_production >
 
-    ":>" sym::production_symbol^n">" rules^r
+    ":>" sym::production_symbol^n ">" rules^r
 
         :ast { t_PegProduction, name_sym:$n, rules: $r, tok }
 
 
-<> pratt_production > 
+<> pratt_production >
 
-    "#>" sym::production_symbol^n">" rules^r
+    "#>" sym::production_symbol^n ">" rules^r
 
         :ast { t_PrattProduction, name_sym:$n, rules: $r, tok }
 
 
-<> append_production > 
+<> append_production >
 
     "+>" sym::non_terminal^n ">" rules^r
 
@@ -98,55 +97,38 @@ EXPORT dt::escaped_string as escaped
     :ast { t_PrattRule, symbols:$s, ast:$a }
 
 
-<> rule > 
+<> rule >
 
-    "!"?^p (( sym::annotated_symbol | any_group )(+)^s sym::end_of_input?^eoi :ast [$s, $eoi])^s ast_definition?^a
-    syntax_definition?^syn recover_definition?^rec
+    (( sym::annotated_symbol | not_empty )(+)^s sym::end_of_input?^eoi :ast [$s, $eoi])^s 
+    
+    ast_definition?^a
 
-            :ast {
-            t_Rule,
-            symbols:$s,
-            ast:$a,
-            syntax_definition:$syn,
-            recover_definition:$rec, tok
-            }
+        :ast { t_Rule, symbols:$s, ast:$a, tok }
 
 
-<> ast_definition > 
+<> ast_definition >
 
         ":ast" ast::body^ast
 
-            :ast  { t_Ascript, c_Function, ast:$ast, tok }
-
-
-<> syntax_definition > 
-
-        ":syn" syn::declaration^syn
-
-
-<> recover_definition > 
-
-        ":rec" "{" ir::state^state "}"
-
-            :ast  { t_Recovery, c_Function, state:$state, tok }
+            :ast  { t_Ascript, ast:$ast, tok }
 
 
 +> sym::non_terminal >
 
-    "(" rules ")"{1}      
+    "(" rules ")"{1}
 
-        :ast { t_Group_Production, c_Symbol, rules:$2,  tok }
+        :ast { t_GroupProduction, rules:$2,  tok }
 
 
 +> sym::terminal >
 
-    "tk:(" rules ")"{1}      
+    "tk:(" rules ")"{1}
 
-        :ast { t_Token_Group_Production, c_Symbol, rules:$2,  tok }
+        :ast { t_TokenGroupProduction, rules:$2,  tok }
 
 
-<> any_group > 
+<> not_empty >
 
-    "[" "unordered"? sym::annotated_symbol(+)^s ']'
+    "[" sym::annotated_symbol(+)^s ']' "!"?^o
 
-        :ast { t_AnyGroup, unordered: bool($2), symbols:$s, tok }
+        :ast { t_NotEmptySet, unordered: bool($o), symbols:$s, tok }

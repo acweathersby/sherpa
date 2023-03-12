@@ -56,17 +56,28 @@ fn declare_exported_productions(g: &mut GrammarStore) {
   }
 }
 
-fn create_scanner_productions_from_symbols(j: &mut Journal, g: &mut GrammarStore) {
+fn create_scanner_productions_from_symbols(
+  j: &mut Journal,
+  g: &mut GrammarStore,
+) {
   // Start iterating over known token production references, and add
   // new productions as we encounter them.
   let mut scanner_production_queue = VecDeque::from_iter(
     g.symbols
       .iter()
-      .map(|(id, sym)| (*id, sym.g_ref.as_ref().unwrap().clone(), sym.loc.clone(), false))
-      .chain(SymbolID::Generics.iter().map(|id| (*id, g.id.clone(), Token::new(), false))),
+      .map(|(id, sym)| {
+        (*id, sym.g_ref.as_ref().unwrap().clone(), sym.loc.clone(), false)
+      })
+      .chain(
+        SymbolID::Generics
+          .iter()
+          .map(|id| (*id, g.id.clone(), Token::new(), false)),
+      ),
   );
 
-  while let Some((sym_id, g_ref, tok, scanner_only)) = scanner_production_queue.pop_front() {
+  while let Some((sym_id, g_ref, tok, scanner_only)) =
+    scanner_production_queue.pop_front()
+  {
     match &sym_id {
       sym if matches!(sym, SymbolID::GenericSpace) => {
         // Converts the generic symbol `g:sp` into a production that targets the
@@ -97,8 +108,8 @@ fn create_scanner_productions_from_symbols(j: &mut Journal, g: &mut GrammarStore
         );
       }
       sym if SymbolID::Generics.contains(sym) => {
-        // Converts a generic symbol into a scanner production if such a production
-        // does not yet exist in the grammar.
+        // Converts a generic symbol into a scanner production if such a
+        // production does not yet exist in the grammar.
 
         let (_, prod_id, name, _) = get_scanner_info_from_defined(&sym_id, g);
 
@@ -173,7 +184,11 @@ fn create_scanner_productions_from_symbols(j: &mut Journal, g: &mut GrammarStore
                   },
                   loc: production.loc.clone(),
                   is_scanner: true,
-                  sym_id: SymbolID::TokenProduction(*prod_id, *grammar_id, scanner_production_id),
+                  sym_id: SymbolID::TokenProduction(
+                    *prod_id,
+                    *grammar_id,
+                    scanner_production_id,
+                  ),
                   g_id: g.id.clone(),
                   ..Default::default()
                 },
@@ -185,55 +200,68 @@ fn create_scanner_productions_from_symbols(j: &mut Journal, g: &mut GrammarStore
                   .map(|(body_index, rule_id)| {
                     let natural_body = g.rules.get(rule_id).unwrap();
 
-                    let scanner_symbols = natural_body.syms.iter().flat_map(|sym| {
-                      let sym_id = &sym.sym_id;
-                      match sym_id {
-                        // For any production or token production symbol encountered, create
-                        // a new symbol that references the equivalent scanner production name,
-                        // and submit this production for conversion into a scanner production.
-                        SymbolID::Production(prod_id, grammar_id)
-                        | SymbolID::TokenProduction(prod_id, grammar_id, ..) => {
-                          scanner_production_queue.push_back((
-                            *sym_id,
-                            sym.g_id.clone(),
-                            sym.tok.clone(),
-                            true,
-                          ));
+                    let scanner_symbols =
+                      natural_body.syms.iter().flat_map(|sym| {
+                        let sym_id = &sym.sym_id;
+                        match sym_id {
+                          // For any production or token production symbol
+                          // encountered, create a new
+                          // symbol that references the equivalent scanner
+                          // production name,
+                          // and submit this production for conversion into a
+                          // scanner production.
+                          SymbolID::Production(prod_id, grammar_id)
+                          | SymbolID::TokenProduction(
+                            prod_id,
+                            grammar_id,
+                            ..,
+                          ) => {
+                            scanner_production_queue.push_back((
+                              *sym_id,
+                              sym.g_id.clone(),
+                              sym.tok.clone(),
+                              true,
+                            ));
 
-                          let scanner_name = create_scanner_name(*prod_id, *grammar_id);
-                          let scanner_production_id = ProductionId::from(&scanner_name);
-                          let new_symbol_id =
-                            SymbolID::Production(scanner_production_id, *grammar_id);
+                            let scanner_name =
+                              create_scanner_name(*prod_id, *grammar_id);
+                            let scanner_production_id =
+                              ProductionId::from(&scanner_name);
+                            let new_symbol_id = SymbolID::Production(
+                              scanner_production_id,
+                              *grammar_id,
+                            );
 
-                          vec![RuleSymbol {
-                            consumable: true,
-                            precedence: sym.precedence,
-                            sym_id: new_symbol_id,
-                            g_id: g.id.clone(),
-                            ..Default::default()
-                          }]
+                            vec![RuleSymbol {
+                              consumable: true,
+                              precedence: sym.precedence,
+                              sym_id: new_symbol_id,
+                              g_id: g.id.clone(),
+                              ..Default::default()
+                            }]
+                          }
+                          sym_id if sym_id.is_defined() => {
+                            let (new_symbol_id, ..) =
+                              get_scanner_info_from_defined(sym_id, g);
+
+                            scanner_production_queue.push_back((
+                              *sym_id,
+                              sym.g_id.clone(),
+                              sym.tok.clone(),
+                              true,
+                            ));
+
+                            vec![RuleSymbol {
+                              consumable: true,
+                              precedence: sym_id.is_exclusive().into(),
+                              sym_id: new_symbol_id,
+                              g_id: g.id.clone(),
+                              ..Default::default()
+                            }]
+                          }
+                          _ => vec![sym.clone()],
                         }
-                        sym_id if sym_id.is_defined() => {
-                          let (new_symbol_id, ..) = get_scanner_info_from_defined(sym_id, g);
-
-                          scanner_production_queue.push_back((
-                            *sym_id,
-                            sym.g_id.clone(),
-                            sym.tok.clone(),
-                            true,
-                          ));
-
-                          vec![RuleSymbol {
-                            consumable: true,
-                            precedence: sym_id.is_exclusive().into(),
-                            sym_id: new_symbol_id,
-                            g_id: g.id.clone(),
-                            ..Default::default()
-                          }]
-                        }
-                        _ => vec![sym.clone()],
-                      }
-                    });
+                      });
 
                     let syms: Vec<RuleSymbol> = scanner_symbols.collect();
 
@@ -255,7 +283,9 @@ fn create_scanner_productions_from_symbols(j: &mut Journal, g: &mut GrammarStore
           _ => {
             j.report_mut().add_error(SherpaError::SourceError {
               id:         "missing-production-definition",
-              msg:        format!("Could not find a definition for this production."),
+              msg:        format!(
+                "Could not find a definition for this production."
+              ),
               inline_msg: "could not find".to_string(),
               loc:        tok,
               path:       g_ref.path.clone(),
@@ -276,12 +306,15 @@ fn check_for_missing_productions(j: &mut Journal, g: &GrammarStore) -> bool {
   for (_, b) in &g.rules {
     for sym in &b.syms {
       match sym.sym_id {
-        SymbolID::TokenProduction(.., prod_id) | SymbolID::Production(prod_id, _) => {
+        SymbolID::TokenProduction(.., prod_id)
+        | SymbolID::Production(prod_id, _) => {
           if !g.productions.contains_key(&prod_id) {
             have_missing_production = true;
             j.report_mut().add_error(SherpaError::SourceError {
               id:         "missing-production-definition",
-              msg:        format!("Could not find a definition for this production."),
+              msg:        format!(
+                "Could not find a definition for this production."
+              ),
               inline_msg: "could not find".to_string(),
               loc:        sym.tok.clone(),
               path:       sym.g_id.path.clone(),
@@ -297,8 +330,8 @@ fn check_for_missing_productions(j: &mut Journal, g: &GrammarStore) -> bool {
   have_missing_production
 }
 
-/// Calculates recursion types of productions, converts direct left recursive scanner productions
-/// to right recursive.
+/// Calculates recursion types of productions, converts direct left recursive
+/// scanner productions to right recursive.
 fn finalize_productions(_j: &mut Journal, g: &mut GrammarStore) {
   let production_ids = g.productions.keys().cloned().collect::<Vec<_>>();
 
@@ -322,12 +355,14 @@ fn finalize_symbols(_j: &mut Journal, g: &mut GrammarStore) {
 
     let scanner_id = sym_id.bytecode_id(g);
 
-    g.productions.get_mut(&production_id).unwrap().symbol_bytecode_id = Some(scanner_id);
+    g.productions.get_mut(&production_id).unwrap().symbol_bytecode_id =
+      Some(scanner_id);
   }
 
   for sym_id in g.symbols.keys().cloned().collect::<Vec<_>>() {
     if !g.symbols.get(&sym_id).unwrap().scanner_only {
-      if matches!(sym_id, SymbolID::TokenProduction(..)) || sym_id.is_defined() {
+      if matches!(sym_id, SymbolID::TokenProduction(..)) || sym_id.is_defined()
+      {
         let symbol = g.symbols.get_mut(&sym_id).unwrap();
 
         symbol.bytecode_id = symbol_bytecode_id;
@@ -336,13 +371,16 @@ fn finalize_symbols(_j: &mut Journal, g: &mut GrammarStore) {
 
         let production_id = symbol.guid.get_production_id().unwrap_or_default();
 
-        let (_, token_production_id, ..) = get_scanner_info_from_defined(&sym_id, g);
+        let (_, token_production_id, ..) =
+          get_scanner_info_from_defined(&sym_id, g);
 
-        let scanner_production = g.productions.get_mut(&token_production_id).unwrap();
+        let scanner_production =
+          g.productions.get_mut(&token_production_id).unwrap();
 
         scanner_production.symbol_bytecode_id = Some(symbol_bytecode_id);
 
-        if let Some(original_production) = g.productions.get_mut(&production_id) {
+        if let Some(original_production) = g.productions.get_mut(&production_id)
+        {
           original_production.symbol_bytecode_id = Some(symbol_bytecode_id);
         };
 
@@ -353,13 +391,16 @@ fn finalize_symbols(_j: &mut Journal, g: &mut GrammarStore) {
     g.symbols.get_mut(&sym_id).unwrap().friendly_name = sym_id.debug_string(g);
   }
   for prod in g.productions.values_mut() {
-    if prod.sym_id.is_token_production() && !g.symbols.contains_key(&prod.sym_id) {
+    if prod.sym_id.is_token_production()
+      && !g.symbols.contains_key(&prod.sym_id)
+    {
       #[cfg(debug_assertions)]
       {
         debug_assert!(
           prod.id
             == match prod.sym_id {
-              SymbolID::Production(prod_id, _) | SymbolID::TokenProduction(.., prod_id) => prod_id,
+              SymbolID::Production(prod_id, _)
+              | SymbolID::TokenProduction(.., prod_id) => prod_id,
               _ => ProductionId(0),
             },
           "TokenSymbols prod id does not match production's id",
@@ -378,8 +419,11 @@ fn finalize_symbols(_j: &mut Journal, g: &mut GrammarStore) {
 /// Creates item closure caches and creates start and goto item groups.
 fn finalize_items(_j: &mut Journal, g: &mut GrammarStore) {
   // Generate the item closure cache
-  let start_items =
-    g.productions.keys().flat_map(|p| get_production_start_items(p, g)).collect::<Vec<_>>();
+  let start_items = g
+    .productions
+    .keys()
+    .flat_map(|p| get_production_start_items(p, g))
+    .collect::<Vec<_>>();
 
   for (item, closure, peek_symbols) in {
     #[cfg(not(any(feature = "wasm-target", feature = "single-thread")))]
@@ -426,7 +470,10 @@ fn finalize_items(_j: &mut Journal, g: &mut GrammarStore) {
   }
 }
 
-fn finalize_item(items: &[Item], g: &GrammarStore) -> Vec<(Item, Vec<Item>, Vec<SymbolID>)> {
+fn finalize_item(
+  items: &[Item],
+  g: &GrammarStore,
+) -> Vec<(Item, Vec<Item>, Vec<SymbolID>)> {
   let mut results = vec![];
 
   let mut pending_items = VecDeque::<Item>::from_iter(items.iter().cloned());
@@ -434,12 +481,13 @@ fn finalize_item(items: &[Item], g: &GrammarStore) -> Vec<(Item, Vec<Item>, Vec<
   while let Some(item) = pending_items.pop_front() {
     let item = item.to_absolute();
     if !item.is_completed() {
-      let peek_symbols =
-        if let Some(peek_symbols) = g.production_ignore_symbols.get(&item.get_prod_id(g)) {
-          peek_symbols.clone()
-        } else {
-          vec![]
-        };
+      let peek_symbols = if let Some(peek_symbols) =
+        g.production_ignore_symbols.get(&item.get_prod_id(g))
+      {
+        peek_symbols.clone()
+      } else {
+        vec![]
+      };
 
       results.push((item, create_closure(&[item], g), peek_symbols));
 
@@ -488,8 +536,10 @@ fn set_parse_productions(g: &mut GrammarStore) {
 fn finalize_bytecode_metadata(_j: &mut Journal, g: &mut GrammarStore) {
   let GrammarStore { parse_productions, productions, rules: bodies, .. } = g;
 
-  for (index, rule) in
-    bodies.values_mut().filter(|b| parse_productions.contains(&b.prod_id)).enumerate()
+  for (index, rule) in bodies
+    .values_mut()
+    .filter(|b| parse_productions.contains(&b.prod_id))
+    .enumerate()
   {
     rule.bytecode_id = Some(index as u32);
     g.bytecode_rule_lookup.insert(index as u32, rule.id);
@@ -506,7 +556,6 @@ fn finalize_bytecode_metadata(_j: &mut Journal, g: &mut GrammarStore) {
   }
 }
 
-#[inline]
 pub(crate) fn get_scanner_info_from_defined(
   sym_id: &SymbolID,
   root: &GrammarStore,
@@ -530,13 +579,15 @@ pub(crate) fn get_scanner_info_from_defined(
       (ProductionId::from(&name), name, symbol_string)
     }
     SymbolID::Production(prod_id, grammar_id) => {
-      let symbol_string = root.productions.get(prod_id).unwrap().guid_name.clone();
+      let symbol_string =
+        root.productions.get(prod_id).unwrap().guid_name.clone();
       let scanner_name = create_scanner_name(*prod_id, *grammar_id);
       let tok_prod = ProductionId::from(&scanner_name);
       (tok_prod, scanner_name, symbol_string)
     }
     SymbolID::TokenProduction(prod_id, grammar_id, tok_prod_id) => {
-      let symbol_string = root.productions.get(prod_id).unwrap().guid_name.clone();
+      let symbol_string =
+        root.productions.get(prod_id).unwrap().guid_name.clone();
       (*tok_prod_id, create_scanner_name(*prod_id, *grammar_id), symbol_string)
     }
     sym => {
@@ -555,14 +606,16 @@ pub(crate) fn get_scanner_info_from_defined(
 /// right recursive conversion.
 pub const prime_symbol: &'static str = "_prime";
 
-/// Convert a direct left recursive production into a right recursive production.
+/// Convert a direct left recursive production into a right recursive
+/// production.
 ///
-///  This uses the following process to convert an immediate recursive production
-///  to one the is right recursive:
+///  This uses the following process to convert an immediate recursive
+/// production  to one the is right recursive:
 ///
 /// With `A -> A r | b | ...` Take `B[ A->b, ... ]` `A'[ A-> A r ... ]`
 ///
-/// Replace bodies of `A` with `B'` after `B[ A->b A' ?]` giving `A -> b A' | b | ...`
+/// Replace bodies of `A` with `B'` after `B[ A->b A' ?]` giving `A -> b A' | b
+/// | ...`
 ///
 /// Then form `A'` after `A' [ A-> r A' ? ... ]` giving `A' -> r A' | r | ...`
 ///
@@ -597,11 +650,15 @@ pub fn convert_left_recursion_to_right(
     })
     .collect::<Vec<_>>();
 
-  let left_rules =
-    rules.iter().filter_map(|(i, b)| if *b { Some(i) } else { None }).collect::<Vec<_>>();
+  let left_rules = rules
+    .iter()
+    .filter_map(|(i, b)| if *b { Some(i) } else { None })
+    .collect::<Vec<_>>();
 
-  let non_rules =
-    rules.iter().filter_map(|(i, b)| if *b { None } else { Some(i) }).collect::<Vec<_>>();
+  let non_rules = rules
+    .iter()
+    .filter_map(|(i, b)| if *b { None } else { Some(i) })
+    .collect::<Vec<_>>();
 
   let a_prime_prod_name = format!("{}{}", a_prod.name, prime_symbol);
   let a_prime_prod_guid_name = format!("{}{}", a_prod.guid_name, prime_symbol);
@@ -676,12 +733,18 @@ pub fn convert_left_recursion_to_right(
   // Add A prime production to the grammar.
 
   if !g.production_names.contains_key(&a_prime_prod_id) {
-    g.production_names
-      .insert(a_prime_prod_id, (a_prime_prod.name.clone(), a_prime_prod.guid_name.clone()));
+    g.production_names.insert(
+      a_prime_prod_id,
+      (a_prime_prod.name.clone(), a_prime_prod.guid_name.clone()),
+    );
   }
   g.productions.insert(a_prime_prod_id, a_prime_prod);
-  g.production_rules.insert(a_prod_id, new_B_rules.iter().map(|b| b.id).collect::<Vec<_>>());
-  g.production_rules.insert(a_prime_prod_id, new_A_rules.iter().map(|b| b.id).collect::<Vec<_>>());
+  g.production_rules
+    .insert(a_prod_id, new_B_rules.iter().map(|b| b.id).collect::<Vec<_>>());
+  g.production_rules.insert(
+    a_prime_prod_id,
+    new_A_rules.iter().map(|b| b.id).collect::<Vec<_>>(),
+  );
 
   for b in new_A_rules {
     let id = b.id;
@@ -696,11 +759,12 @@ pub fn convert_left_recursion_to_right(
   (a_prod_id, a_prime_prod_id)
 }
 
-/// Calculates and assigns the recursion type for each ProductionId in the vector.
+/// Calculates and assigns the recursion type for each ProductionId in the
+/// vector.
 ///
-/// Additionally, a vector of ProductionIds of scanner productions that are [RecursionType::LEFT_DIRECT]  
-/// is returned, with the assumption that these productions will be converted to
-/// [RecursionType::RIGHT].
+/// Additionally, a vector of ProductionIds of scanner productions that are
+/// [RecursionType::LEFT_DIRECT] is returned, with the assumption that these
+/// productions will be converted to [RecursionType::RIGHT].
 fn calculate_recursions_types(
   production_ids: Vec<ProductionId>,
   g: &mut GrammarStore,
@@ -724,7 +788,10 @@ fn calculate_recursions_types(
               work
                 .iter()
                 .map(|production_id| {
-                  (*production_id, g.get_production_recursion_type(*production_id))
+                  (
+                    *production_id,
+                    g.get_production_recursion_type(*production_id),
+                  )
                 })
                 .collect::<Vec<_>>()
             })
@@ -740,7 +807,9 @@ fn calculate_recursions_types(
     {
       production_ids
         .iter()
-        .map(|production_id| (*production_id, g.get_production_recursion_type(*production_id)))
+        .map(|production_id| {
+          (*production_id, g.get_production_recursion_type(*production_id))
+        })
         .collect::<Vec<_>>()
     }
   } {
@@ -756,7 +825,6 @@ fn calculate_recursions_types(
   conversion_candidates
 }
 
-#[inline]
 fn insert_token_production(
   g: &mut GrammarStore,
   mut prod: Production,

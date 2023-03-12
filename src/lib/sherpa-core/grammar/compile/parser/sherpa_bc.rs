@@ -715,7 +715,6 @@ impl AST_NamedReference{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_AST_NamedReference (self)-> Box::<AST_NamedReference> {
     
     match self{
@@ -774,7 +773,6 @@ impl Reduce{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_Reduce (self)-> Box::<Reduce> {
     
     match self{
@@ -829,7 +827,6 @@ impl PeekToken{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_PeekToken (self)-> Box::<PeekToken> {
     
     match self{
@@ -883,7 +880,6 @@ impl EOFSymbol{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_EOFSymbol (self)-> Box::<EOFSymbol> {
     
     match self{
@@ -937,7 +933,6 @@ impl DEFAULT{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_DEFAULT (self)-> Box::<DEFAULT> {
     
     match self{
@@ -995,7 +990,6 @@ impl PushGoto{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_PushGoto (self)-> Box::<PushGoto> {
     
     match self{
@@ -1050,7 +1044,6 @@ impl TokenAssign{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_TokenAssign (self)-> Box::<TokenAssign> {
     
     match self{
@@ -1106,7 +1099,6 @@ impl SkipToken{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_SkipToken (self)-> Box::<SkipToken> {
     
     match self{
@@ -1164,7 +1156,6 @@ impl AST_Add{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_AST_Add (self)-> Box::<AST_Add> {
     
     match self{
@@ -1218,7 +1209,6 @@ impl ScanShift{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_ScanShift (self)-> Box::<ScanShift> {
     
     match self{
@@ -1272,7 +1262,6 @@ impl ShiftToken{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_ShiftToken (self)-> Box::<ShiftToken> {
     
     match self{
@@ -1327,7 +1316,6 @@ impl Syntax{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_Syntax (self)-> Box::<Syntax> {
     
     match self{
@@ -1387,7 +1375,6 @@ impl SyntaxField{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_SyntaxField (self)-> Box::<SyntaxField> {
     
     match self{
@@ -1443,7 +1430,6 @@ impl HASH_NAME{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_HASH_NAME (self)-> Box::<HASH_NAME> {
     
     match self{
@@ -1504,7 +1490,6 @@ impl List_Production{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_List_Production (self)-> Box::<List_Production> {
     
     match self{
@@ -1559,7 +1544,6 @@ impl PeekReset{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_PeekReset (self)-> Box::<PeekReset> {
     
     match self{
@@ -1611,7 +1595,6 @@ impl Pop{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_Pop (self)-> Box::<Pop> {
     
     match self{
@@ -1667,7 +1650,6 @@ impl AST_Vector{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_AST_Vector (self)-> Box::<AST_Vector> {
     
     match self{
@@ -1727,7 +1709,6 @@ impl Production_Symbol{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_Production_Symbol (self)-> Box::<Production_Symbol> {
     
     match self{
@@ -1780,7 +1761,6 @@ impl SkipTokenScanless{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_SkipTokenScanless (self)-> Box::<SkipTokenScanless> {
     
     match self{
@@ -1838,7 +1818,6 @@ impl Grammar{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_Grammar (self)-> Box::<Grammar> {
     
     match self{
@@ -1902,7 +1881,6 @@ impl AST_U64{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_AST_U64 (self)-> Box::<AST_U64> {
     
     match self{
@@ -1955,7 +1933,6 @@ impl DEFINED_TYPE_IDENT{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_DEFINED_TYPE_IDENT (self)-> Box::<DEFINED_TYPE_IDENT> {
     
     match self{
@@ -2011,7 +1988,6 @@ impl Priority{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_Priority (self)-> Box::<Priority> {
     
     match self{
@@ -2065,7 +2041,6 @@ impl Pass{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_Pass (self)-> Box::<Pass> {
     
     match self{
@@ -2123,7 +2098,6 @@ impl ASSERT{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_ASSERT (self)-> Box::<ASSERT> {
     
     match self{
@@ -2187,7 +2161,6 @@ impl Import{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_Import (self)-> Box::<Import> {
     
     match self{
@@ -2243,7 +2216,6 @@ impl Init{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_Init (self)-> Box::<Init> {
     
     match self{
@@ -2300,7 +2272,6 @@ impl AST_IndexReference{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_AST_IndexReference (self)-> Box::<AST_IndexReference> {
     
     match self{
@@ -2361,7 +2332,6 @@ impl RGBA{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_RGBA (self)-> Box::<RGBA> {
     
     match self{
@@ -2421,7 +2391,6 @@ impl AST_Member{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_AST_Member (self)-> Box::<AST_Member> {
     
     match self{
@@ -2481,7 +2450,6 @@ impl Production_Import_Symbol{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_Production_Import_Symbol (self)-> Box::<Production_Import_Symbol> {
     
     match self{
@@ -2539,7 +2507,6 @@ impl AST_I32{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_AST_I32 (self)-> Box::<AST_I32> {
     
     match self{
@@ -2594,7 +2561,6 @@ impl Goto{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_Goto (self)-> Box::<Goto> {
     
     match self{
@@ -2647,7 +2613,6 @@ impl SkipPeekToken{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_SkipPeekToken (self)-> Box::<SkipPeekToken> {
     
     match self{
@@ -2703,7 +2668,6 @@ impl AST_I8{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_AST_I8 (self)-> Box::<AST_I8> {
     
     match self{
@@ -2760,7 +2724,6 @@ impl AST_F32{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_AST_F32 (self)-> Box::<AST_F32> {
     
     match self{
@@ -2817,7 +2780,6 @@ impl Symbols{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_Symbols (self)-> Box::<Symbols> {
     
     match self{
@@ -2879,7 +2841,6 @@ impl AST_Token{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_AST_Token (self)-> Box::<AST_Token> {
     
     match self{
@@ -2936,7 +2897,6 @@ impl Export{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_Export (self)-> Box::<Export> {
     
     match self{
@@ -2992,7 +2952,6 @@ impl Name{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_Name (self)-> Box::<Name> {
     
     match self{
@@ -3051,7 +3010,6 @@ impl AST_BOOL{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_AST_BOOL (self)-> Box::<AST_BOOL> {
     
     match self{
@@ -3109,7 +3067,6 @@ impl Group_Production{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_Group_Production (self)-> Box::<Group_Production> {
     
     match self{
@@ -3165,7 +3122,6 @@ impl Fail{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_Fail (self)-> Box::<Fail> {
     
     match self{
@@ -3221,7 +3177,6 @@ impl AST_Statements{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_AST_Statements (self)-> Box::<AST_Statements> {
     
     match self{
@@ -3281,7 +3236,6 @@ impl AST_U8{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_AST_U8 (self)-> Box::<AST_U8> {
     
     match self{
@@ -3350,7 +3304,6 @@ impl Production{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_Production (self)-> Box::<Production> {
     
     match self{
@@ -3412,7 +3365,6 @@ impl ShiftTokenScanless{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_ShiftTokenScanless (self)-> Box::<ShiftTokenScanless> {
     
     match self{
@@ -3466,7 +3418,6 @@ impl PushExceptHandler{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_PushExceptHandler (self)-> Box::<PushExceptHandler> {
     
     match self{
@@ -3521,7 +3472,6 @@ impl Ignore{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_Ignore (self)-> Box::<Ignore> {
     
     match self{
@@ -3581,7 +3531,6 @@ impl AST_STRING{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_AST_STRING (self)-> Box::<AST_STRING> {
     
     match self{
@@ -3638,7 +3587,6 @@ impl AST_U32{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_AST_U32 (self)-> Box::<AST_U32> {
     
     match self{
@@ -3695,7 +3643,6 @@ impl AST_ClassId{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_AST_ClassId (self)-> Box::<AST_ClassId> {
     
     match self{
@@ -3758,7 +3705,6 @@ impl IR_STATE{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_IR_STATE (self)-> Box::<IR_STATE> {
     
     match self{
@@ -3822,7 +3768,6 @@ impl AST_I64{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_AST_I64 (self)-> Box::<AST_I64> {
     
     match self{
@@ -3875,7 +3820,6 @@ impl PeekTokenScanless{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_PeekTokenScanless (self)-> Box::<PeekTokenScanless> {
     
     match self{
@@ -3931,7 +3875,6 @@ impl AST_U16{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_AST_U16 (self)-> Box::<AST_U16> {
     
     match self{
@@ -3984,7 +3927,6 @@ impl SkipPeekTokenScanless{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_SkipPeekTokenScanless (self)-> Box::<SkipPeekTokenScanless> {
     
     match self{
@@ -4036,7 +3978,6 @@ impl Accept{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_Accept (self)-> Box::<Accept> {
     
     match self{
@@ -4092,7 +4033,6 @@ impl ClassSymbol{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_ClassSymbol (self)-> Box::<ClassSymbol> {
     
     match self{
@@ -4149,7 +4089,6 @@ impl AST_F64{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_AST_F64 (self)-> Box::<AST_F64> {
     
     match self{
@@ -4208,7 +4147,6 @@ impl AST_Map{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_AST_Map (self)-> Box::<AST_Map> {
     
     match self{
@@ -4268,7 +4206,6 @@ impl AnyGroup{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_AnyGroup (self)-> Box::<AnyGroup> {
     
     match self{
@@ -4329,7 +4266,6 @@ impl Range{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_Range (self)-> Box::<Range> {
     
     match self{
@@ -4387,7 +4323,6 @@ impl AST_I16{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_AST_I16 (self)-> Box::<AST_I16> {
     
     match self{
@@ -4442,7 +4377,6 @@ impl AST_NUMBER{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_AST_NUMBER (self)-> Box::<AST_NUMBER> {
     
     match self{
@@ -4501,7 +4435,6 @@ impl AST_Struct{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_AST_Struct (self)-> Box::<AST_Struct> {
     
     match self{
@@ -4558,7 +4491,6 @@ impl DEFINED_TYPE_NUM{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_DEFINED_TYPE_NUM (self)-> Box::<DEFINED_TYPE_NUM> {
     
     match self{
@@ -4614,7 +4546,6 @@ impl SyntaxSpec{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_SyntaxSpec (self)-> Box::<SyntaxSpec> {
     
     match self{
@@ -4680,7 +4611,6 @@ impl Rule{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_Rule (self)-> Box::<Rule> {
     
     match self{
@@ -4750,7 +4680,6 @@ impl AnnotatedSymbol{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_AnnotatedSymbol (self)-> Box::<AnnotatedSymbol> {
     
     match self{
@@ -4814,7 +4743,6 @@ impl AST_Property{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_AST_Property (self)-> Box::<AST_Property> {
     
     match self{
@@ -4873,7 +4801,6 @@ impl Ascript{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_Ascript (self)-> Box::<Ascript> {
     
     match self{
@@ -4928,7 +4855,6 @@ impl Num{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_Num (self)-> Box::<Num> {
     
     match self{
@@ -4985,7 +4911,6 @@ impl Production_Terminal_Symbol{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_Production_Terminal_Symbol (self)-> Box::<Production_Terminal_Symbol> {
     
     match self{
@@ -5044,7 +4969,6 @@ impl Terminal{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_Terminal (self)-> Box::<Terminal> {
     
     match self{
@@ -5102,7 +5026,6 @@ impl Recovery{
 
 impl ASTNode{
   
-  #[track_caller]
   pub fn to_Recovery (self)-> Box::<Recovery> {
     
     match self{
