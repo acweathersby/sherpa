@@ -66,14 +66,15 @@ impl Item {
     } else {
       let rule = g.rules.get(&self.rule_id).unwrap();
 
-      let mut string = self.origin.is_none().then_some(String::new()).unwrap_or_else(|| {
-        format!(
-          "<[{}-{:?}]  [{:X}] ",
-          self.origin.debug_string(g),
-          self.origin_state,
-          self.goal_index
-        )
-      });
+      let mut string =
+        self.origin.is_none().then_some(String::new()).unwrap_or_else(|| {
+          format!(
+            "<[{}-{:?}]  [{:X}] ",
+            self.origin.debug_string(g),
+            self.origin_state,
+            self.goal_index
+          )
+        });
 
       string += &g.productions.get(&rule.prod_id).unwrap().name;
 
@@ -256,9 +257,14 @@ impl Item {
   }
 
   #[inline(always)]
-  pub fn get_rule_ref<'a>(&self, g: &'a GrammarStore) -> SherpaResult<&'a RuleSymbol> {
+  pub fn get_rule_ref<'a>(
+    &self,
+    g: &'a GrammarStore,
+  ) -> SherpaResult<&'a RuleSymbol> {
     match (self.is_completed(), self.get_rule(&g)) {
-      (false, SherpaResult::Ok(rule)) => SherpaResult::Ok(&rule.syms[self.off as usize]),
+      (false, SherpaResult::Ok(rule)) => {
+        SherpaResult::Ok(&rule.syms[self.off as usize])
+      }
       _ => SherpaResult::None,
     }
   }
@@ -284,7 +290,8 @@ impl Item {
   }
 
   /// If the symbol at this item's position is a non-term, then the ProductionId
-  /// for that symbol is returned. Otherwise an invalid ProductionId is returned.
+  /// for that symbol is returned. Otherwise an invalid ProductionId is
+  /// returned.
   pub fn get_production_id_at_sym(&self, g: &GrammarStore) -> ProductionId {
     match self.get_symbol(g) {
       SymbolID::Production(prod, _) => prod,
@@ -329,7 +336,9 @@ impl Item {
   }
 
   pub fn _get_prod_as_sym_id(&self, g: &GrammarStore) -> SymbolID {
-    g.get_production(&g.rules.get(&self.get_rule_id()).unwrap().prod_id).unwrap().sym_id
+    g.get_production(&g.rules.get(&self.get_rule_id()).unwrap().prod_id)
+      .unwrap()
+      .sym_id
   }
 
   pub fn get_type(&self, g: &GrammarStore) -> ItemType {
@@ -342,7 +351,9 @@ impl Item {
       let sym = self.get_symbol(g);
       match sym {
         SymbolID::Production(prod_id, _) => ItemType::NonTerminal(prod_id),
-        SymbolID::TokenProduction(.., prod_id) => ItemType::TokenProduction(prod_id, sym),
+        SymbolID::TokenProduction(.., prod_id) => {
+          ItemType::TokenProduction(prod_id, sym)
+        }
         sym => ItemType::Terminal(sym),
       }
     }
@@ -374,7 +385,9 @@ pub(crate) type ItemSet = BTreeSet<Item>;
 
 impl<'a> ItemContainerIter<'a> for btree_set::Iter<'a, Item> {}
 impl<'a> ItemContainerIter<'a> for slice::Iter<'a, Item> {}
-pub(crate) trait ItemContainerIter<'a>: Iterator<Item = &'a Item> + Sized {
+pub(crate) trait ItemContainerIter<'a>:
+  Iterator<Item = &'a Item> + Sized
+{
   fn contains_out_of_scope(&mut self) -> bool {
     self.any(|i| i.is_out_of_scope())
   }
@@ -407,12 +420,16 @@ pub(crate) trait ItemContainerIter<'a>: Iterator<Item = &'a Item> + Sized {
     self.map(|i| i.to_absolute()).collect::<BTreeSet<_>>().len() == 1
   }
 
-  fn to_production_id_set(&mut self, g: &GrammarStore) -> BTreeSet<ProductionId> {
+  fn to_production_id_set(
+    &mut self,
+    g: &GrammarStore,
+  ) -> BTreeSet<ProductionId> {
     self.map(|i| i.get_prod_id(g)).collect()
   }
 
   /// Returns the Production of the non-terminal symbol in each item. For items
-  /// whose symbol is a terminal or are complete, the Defualt production id is used.
+  /// whose symbol is a terminal or are complete, the Defualt production id is
+  /// used.
   fn to_prod_sym_id_set(&mut self, g: &GrammarStore) -> BTreeSet<ProductionId> {
     self.map(|i| i.get_production_id_at_sym(g)).collect()
   }
@@ -488,7 +505,13 @@ pub(crate) trait ItemContainer:
   }
 
   fn to_debug_string(&self, g: &GrammarStore, sep: &str) -> String {
-    self.clone().to_vec().iter().map(|i| i.debug_string(g)).collect::<Vec<_>>().join(sep)
+    self
+      .clone()
+      .to_vec()
+      .iter()
+      .map(|i| i.debug_string(g))
+      .collect::<Vec<_>>()
+      .join(sep)
   }
 
   fn to_set(self) -> ItemSet {
@@ -499,7 +522,11 @@ pub(crate) trait ItemContainer:
   }
 }
 
-fn debug_items<T: IntoIterator<Item = Item>>(comment: &str, items: T, g: &GrammarStore) {
+fn debug_items<T: IntoIterator<Item = Item>>(
+  comment: &str,
+  items: T,
+  g: &GrammarStore,
+) {
   println!("{} --> ", comment);
 
   for item in items {

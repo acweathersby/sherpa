@@ -102,7 +102,8 @@ impl<'a> ByteReader for TestUTF8StringReader<'a> {
 
   #[inline(always)]
   fn get_length_data(&self) -> u64 {
-    ((self.codepoint_byte_length() as u64) << 32) | self.codepoint_length() as u64
+    ((self.codepoint_byte_length() as u64) << 32)
+      | self.codepoint_length() as u64
   }
 
   #[inline(always)]

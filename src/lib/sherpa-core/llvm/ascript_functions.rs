@@ -29,26 +29,40 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: AstObject>(
 
   // Struct Definitions --------------------------------------------------
 
-  ast_slot_stack_slice
-    .set_body(&[ast_slot.ptr_type(0.into()).into(), i32.into(), i8.into()], false);
+  ast_slot_stack_slice.set_body(
+    &[ast_slot.ptr_type(0.into()).into(), i32.into(), i8.into()],
+    false,
+  );
 
-  parse_result
-    .set_body(&[i8.array_type((std::mem::size_of::<ParseResult<ASTNode>>()) as u32).into()], false);
+  parse_result.set_body(
+    &[i8
+      .array_type((std::mem::size_of::<ParseResult<ASTNode>>()) as u32)
+      .into()],
+    false,
+  );
 
   ast_slot.set_body(&[i8.array_type(slot_size).into()], false);
 
   // Injected Functions ---------------------------------------------------
 
-  let reducer_function = ctx
-    .void_type()
-    .fn_type(&[CTX_PTR.into(), ast_slot_stack_slice.ptr_type(0.into()).into()], false);
+  let reducer_function = ctx.void_type().fn_type(
+    &[CTX_PTR.into(), ast_slot_stack_slice.ptr_type(0.into()).into()],
+    false,
+  );
 
-  let shift_handler = ctx
-    .void_type()
-    .fn_type(&[CTX_PTR.into(), ast_slot_stack_slice.ptr_type(0.into()).into()], false);
+  let shift_handler = ctx.void_type().fn_type(
+    &[CTX_PTR.into(), ast_slot_stack_slice.ptr_type(0.into()).into()],
+    false,
+  );
 
-  let result_handler = parse_result
-    .fn_type(&[CTX_PTR.into(), i32.into(), ast_slot_stack_slice.ptr_type(0.into()).into()], false);
+  let result_handler = parse_result.fn_type(
+    &[
+      CTX_PTR.into(),
+      i32.into(),
+      ast_slot_stack_slice.ptr_type(0.into()).into(),
+    ],
+    false,
+  );
 
   // Main Function ---------------------------------------------------
 
@@ -76,7 +90,8 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: AstObject>(
   let parse_loop = ctx.append_basic_block(ast_builder, "ParseLoop");
   let shift = ctx.append_basic_block(ast_builder, "Shift");
   let skip = ctx.append_basic_block(ast_builder, "Skip");
-  let shift_assign_base_pointer = ctx.append_basic_block(ast_builder, "AssignStackPointer");
+  let shift_assign_base_pointer =
+    ctx.append_basic_block(ast_builder, "AssignStackPointer");
   let shift_add_slot = ctx.append_basic_block(ast_builder, "AddSlot");
   let shift_new_object = ctx.append_basic_block(ast_builder, "ShiftNewObject");
   let reduce = ctx.append_basic_block(ast_builder, "Reduce");
@@ -88,13 +103,17 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: AstObject>(
   let stack_top_ptr = b.build_alloca(i32, "stack_top");
   b.build_store(stack_top_ptr, i32.const_zero());
 
-  let ast_slot_slice_ptr = b.build_alloca(ast_slot_stack_slice, "slot_lookup_ptr"); // Stores the stack lookup structure
+  let ast_slot_slice_ptr =
+    b.build_alloca(ast_slot_stack_slice, "slot_lookup_ptr"); // Stores the stack lookup structure
 
-  // UNUSED PROPERTY --------------------------------------------------------------------
+  // UNUSED PROPERTY
+  // --------------------------------------------------------------------
   // - let slot_direction = b.build_struct_gep(ast_slot_slice_ptr, 2, "")?;
-  // - b.build_store(slot_direction, i8.const_int(1, false)); // Directory of slot is decreasing
+  // - b.build_store(slot_direction, i8.const_int(1, false)); // Directory of
+  //   slot is decreasing
 
-  let slot_ptr_ptr = b.build_alloca(ast_slot.ptr_type(0.into()), "slot_ptr_ptr"); // Store the pointer to the bottom of the AST stack
+  let slot_ptr_ptr =
+    b.build_alloca(ast_slot.ptr_type(0.into()), "slot_ptr_ptr"); // Store the pointer to the bottom of the AST stack
 
   b.build_store(slot_ptr_ptr, ast_slot.ptr_type(0.into()).const_null());
 
@@ -105,10 +124,11 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: AstObject>(
   b.position_at_end(parse_loop);
   // Begin by calling the dispatch function.
 
-  let discriminant = build_fast_call(b, module.fun.dispatch, &[parse_ctx.into()])?
-    .try_as_basic_value()
-    .left()?
-    .into_int_value();
+  let discriminant =
+    build_fast_call(b, module.fun.dispatch, &[parse_ctx.into()])?
+      .try_as_basic_value()
+      .left()?
+      .into_int_value();
 
   b.build_switch(discriminant, default, &[
     (i32.const_int(ParseActionType::Skip.into(), false), skip),
@@ -137,13 +157,19 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: AstObject>(
   let capacity = b.build_int_add(capacity, i32.const_int(1, false), "");
   b.build_store(stack_capacity_ptr, capacity);
 
-  // If the stack pointer is zero, assign the first slot address to this pointer.
+  // If the stack pointer is zero, assign the first slot address to this
+  // pointer.
   let stack_ptr = b.build_load(slot_ptr_ptr, "").into_pointer_value();
   let stack_ptr_val = b.build_ptr_to_int(stack_ptr, i64, "");
   let zero_ptr = ast_slot.ptr_type(0.into()).const_null();
   let zero_ptr_val = b.build_ptr_to_int(zero_ptr, i64, "");
 
-  let c = b.build_int_compare(inkwell::IntPredicate::EQ, stack_ptr_val, zero_ptr_val, "");
+  let c = b.build_int_compare(
+    inkwell::IntPredicate::EQ,
+    stack_ptr_val,
+    zero_ptr_val,
+    "",
+  );
   b.build_conditional_branch(c, shift_assign_base_pointer, shift_new_object);
 
   b.position_at_end(shift_assign_base_pointer);
@@ -182,13 +208,16 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: AstObject>(
   // REDUCE --------------------------------------------------------
   b.position_at_end(reduce);
   // Get slice size
-  let symbol_count_original = CTX_AGGREGATE_INDICES::sym_len.load(b, parse_ctx)?.into_int_value();
-  let rule_index = CTX_AGGREGATE_INDICES::rule_id.load(b, parse_ctx)?.into_int_value();
+  let symbol_count_original =
+    CTX_AGGREGATE_INDICES::sym_len.load(b, parse_ctx)?.into_int_value();
+  let rule_index =
+    CTX_AGGREGATE_INDICES::rule_id.load(b, parse_ctx)?.into_int_value();
 
   // Calculate the position of the first element and the last element.
   let top = b.build_load(stack_top_ptr, "top").into_int_value();
 
-  let symbol_count = b.build_int_sub(symbol_count_original, i32.const_int(1, false), "");
+  let symbol_count =
+    b.build_int_sub(symbol_count_original, i32.const_int(1, false), "");
   let top = b.build_int_sub(top, symbol_count, "");
   b.build_store(stack_top_ptr, top);
 
@@ -223,7 +252,10 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: AstObject>(
 
   // Store slot and symbol info in lookup structure
   let slot_lookup_entry_ptr = b.build_struct_gep(ast_slot_slice_ptr, 0, "")?;
-  b.build_store(slot_lookup_entry_ptr, b.build_load(slot_ptr_ptr, "slot").into_pointer_value());
+  b.build_store(
+    slot_lookup_entry_ptr,
+    b.build_load(slot_ptr_ptr, "slot").into_pointer_value(),
+  );
   let slot_lookup_size_ptr = b.build_struct_gep(ast_slot_slice_ptr, 1, "")?;
   b.build_store(slot_lookup_size_ptr, top);
 
@@ -233,7 +265,9 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: AstObject>(
     "",
   );
 
-  b.build_return(Some(&return_value.try_as_basic_value().unwrap_left().into_struct_value()));
+  b.build_return(Some(
+    &return_value.try_as_basic_value().unwrap_left().into_struct_value(),
+  ));
 
   if ast_builder.verify(true) {
     SherpaResult::Ok(())
@@ -257,6 +291,7 @@ fn build_stack_offset_ptr<'a>(
   let top_64 = b.build_int_z_extend(top, i64, "");
   let top_64 = b.build_int_mul(top_64, ast_slot_size, "");
   let data_pointer_int = b.build_int_sub(data_pointer_int, top_64, "");
-  let data_pointer = b.build_int_to_ptr(data_pointer_int, ast_stack_ptr.get_type(), "");
+  let data_pointer =
+    b.build_int_to_ptr(data_pointer_int, ast_stack_ptr.get_type(), "");
   data_pointer
 }

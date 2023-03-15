@@ -1,13 +1,13 @@
-#![allow(unused)]
 use super::{
   errors::add_invalid_import_source_error,
   parser::{self as ast, ast::escaped_from, ASTNode, Grammar, Rule},
-  string::{CachedString, SherpaString, StringStore},
+  string::{CachedString, IString, StringStore},
   types::{
     self,
     ASTToken,
     Array,
     CustomState,
+    GrammarHeader,
     GrammarId,
     GrammarIdentity,
     Map,
@@ -63,62 +63,112 @@ impl<'b> ProductionData<'b> {
   }
 }
 
-/// Temporary structure to host grammar data during
+/// Intermediate structure to host grammar data during
 /// construction.
-pub(super) struct GrammarData<'a> {
-  source_id: GrammarId,
-  imports:   Map<SherpaString, GrammarIdentity>,
-  grammar:   &'a Grammar,
+pub(super) struct GrammarData {
+  pub name:      IString,
+  pub source_id: GrammarId,
+  pub imports:   Map<IString, GrammarIdentity>,
+  pub exports:   Array<ProductionId>,
+  pub grammar:   Box<Grammar>,
 }
 
-/// Parse string data and do an initial preparation of the grammar store.
-pub(super) fn parse_grammar(string_data: &str) -> SherpaResult<Box<Grammar>> {
+pub(super) fn convert_grammar_data_to_header(
+  import_id: GrammarIdentity,
+  g_data: GrammarData,
+) -> Box<GrammarHeader> {
+  let mut identity = import_id;
+  identity.name = g_data.name;
+  Box::new(GrammarHeader {
+    identity,
+    pub_prods: g_data.exports,
+    imports: g_data.imports.values().map(|v| v.guid).collect(),
+  })
+}
+
+/// Parse grammar string and create a Grammar AST.
+pub(crate) fn parse_grammar(string_data: &str) -> SherpaResult<Box<Grammar>> {
   SherpaResult::Ok(Grammar::from_str(string_data)?)
 }
 
-/// Parse string data and do an initial preparation of the grammar store.
-pub(super) fn create_grammar_data<'a>(
+/// Do an initial preparation of the grammar data.
+pub(super) fn create_grammar_data(
   j: &mut Journal,
-  grammar: &'a Grammar,
+  grammar: Box<Grammar>,
   grammar_path: &PathBuf,
   string_store: &StringStore,
-) -> SherpaResult<GrammarData<'a>> {
-  const allowed_extensions: [&str; 3] = ["sg", "sherpa", "hcg"];
+) -> SherpaResult<GrammarData> {
+  const exts: [&str; 3] = ["sg", "sherpa", "hcg"];
 
   let source_dir = grammar_path.parent()?.to_owned();
+  let mut imports = Map::default();
+  let mut exports = Array::default();
+  let mut name =
+    grammar_path.file_name().and_then(|d| d.to_str()).unwrap_or("default");
 
-  let imports = grammar
-    .preamble
-    .iter()
-    .filter_map(|preamble| match preamble {
-      ASTNode::Import(box import) => Some(import),
-      _ => None,
-    })
-    .filter_map(|import| {
-      let ast::Import { reference, uri, tok } = import;
-      let import_path = PathBuf::from(uri);
-      match resolve_grammar_path(&import_path, &source_dir, &allowed_extensions)
-      {
-        SherpaResult::Ok(path) => {
-          Some((reference.intern(string_store), GrammarIdentity {
-            guid: (&path).into(),
-            path: path.intern(string_store),
-            ..Default::default()
-          }))
-        }
-        _ => {
-          add_invalid_import_source_error(j, import, &import_path, &source_dir);
-          None
+  for preamble in &grammar.preamble {
+    match preamble {
+      ASTNode::Import(import) => {
+        let box ast::Import { reference, uri, tok } = import;
+        let path = PathBuf::from(uri);
+
+        match resolve_grammar_path(&path, &source_dir, &exts) {
+          SherpaResult::Ok(path) => {
+            imports.insert(
+              reference.intern(string_store),
+              GrammarIdentity::from_path(&path, string_store),
+            );
+          }
+          _ => {
+            add_invalid_import_source_error(j, import, &path, &source_dir);
+          }
         }
       }
-    })
-    .collect();
+      ASTNode::Export(export) => {
+        // Saving exports to a temporary store until we are able extract import
+        // information from the preambles, since some exported symbols may
+        // be Production_Import_Symbol types.
+        exports.push(export.clone());
+      }
+      ASTNode::Ignore(_) => {}
+      ASTNode::Name(name_ast) => {
+        name = name_ast.name.as_str();
+      }
+      _ => {
+        #[allow(unreachable_code)]
+        {
+          #[cfg(debug_assertions)]
+          unreachable!("Unrecognized node: {:?}", preamble.get_type());
+          unreachable!()
+        }
+      }
+    }
+  }
 
-  SherpaResult::Ok(GrammarData {
+  let mut g_data = GrammarData {
+    name: name.intern(string_store),
     source_id: grammar_path.into(),
-    imports,
     grammar,
-  })
+    imports,
+    exports: Default::default(),
+  };
+
+  // Once we have g_data, and more importantly g_data.imports, we can convert
+  // our exports into ProductionIds.
+  if exports.is_empty() != true {
+    for export in exports {
+      let prod_id =
+        get_production_id_from_ast_node(&g_data, &export.production)?;
+      g_data.exports.push(prod_id);
+    }
+  } else {
+    // Use the fist declared production as the default entry
+    let prod = &g_data.grammar.productions[0];
+    let prod_id = get_production_id_from_ast_node(&g_data, &prod)?;
+    g_data.exports.push(prod_id);
+  }
+
+  SherpaResult::Ok(g_data)
 }
 
 pub(super) fn extract_productions<'a>(
@@ -180,15 +230,69 @@ pub(super) fn extract_productions<'a>(
   SherpaResult::Ok((productions, parse_states))
 }
 
-fn process_parse_state<'a>(
+pub(super) fn process_parse_state<'a>(
   mut parse_state: Box<CustomState>,
   g_data: &GrammarData,
   s_store: &StringStore,
 ) -> SherpaResult<Box<CustomState>> {
+  // Extract symbol information from the state.
+
+  let CustomState { id, g_id, state, symbols, .. } = parse_state.as_mut();
+  {
+    let ast::Statement { branch, non_branch, transitive } =
+      state.statement.as_ref();
+
+    if let Some(branch) = &branch {
+      match branch {
+        ASTNode::TerminalMatches(term_matches) => {
+          for match_ in &term_matches.matches {
+            match match_ {
+              ASTNode::TermMatch(term_match) => {
+                record_symbol(
+                  &term_match.sym,
+                  0,
+                  &mut ProductionData {
+                    root_prod_id: *id,
+                    syms:         symbols,
+                    sub_prods:    &mut Default::default(),
+                    rules:        &mut Default::default(),
+                    asts:         &mut Default::default(),
+                  },
+                  g_data,
+                  s_store,
+                )?;
+              }
+              _ => {
+                // Default
+                // Hint
+              }
+            }
+          }
+        }
+        ASTNode::ProductionMatches(prod_matches) => {}
+        ASTNode::Matches(ast_match) => match ast_match.mode.as_str() {
+          "TERMINAL" => {}
+          _ => {
+            /*
+             * PRODUCTION
+             * TERMINAL
+             */
+          }
+        },
+        _ => {
+          // ASTNode::Gotos
+          // ASTNode::Pass
+          // ASTNode::Fail
+          // ASTNode::Accept
+        }
+      }
+    }
+  }
+
   SherpaResult::Ok(parse_state)
 }
 
-fn process_prod<'a>(
+pub(super) fn process_prod<'a>(
   (mut production, prod_ast): (Box<Production>, &'a ASTNode),
   g_data: &GrammarData,
   s_store: &StringStore,
@@ -551,15 +655,62 @@ fn record_symbol(
   SherpaResult::Ok(id)
 }
 
+/// Returns `(None, Some(&Production_Import_Symbol))` or
+/// `(Some(&Production_Symbol), None)`from a valid production like node.
+///
+/// Valid Node:
+/// - [ASTNode::Production_Import_Symbol]
+/// - [ASTNode::Production_Symbol]
+/// - [ASTNode::Production_Terminal_Symbol]
+/// - [ASTNode::State]
+/// - [ASTNode::PrattProduction]
+/// - [ASTNode::PegProduction]
+/// - [ASTNode::CFProduction]
+fn get_production_symbol<'a>(
+  g_data: &GrammarData,
+  node: &'a ASTNode,
+) -> (
+  Option<&'a ast::Production_Symbol>,
+  Option<&'a ast::Production_Import_Symbol>,
+) {
+  match node {
+    ASTNode::Production_Import_Symbol(prod_import) => {
+      (None, Some(prod_import.as_ref()))
+    }
+    ASTNode::Production_Symbol(prod_sym) => (Some(prod_sym.as_ref()), None),
+    ASTNode::Production_Terminal_Symbol(prod_tok) => {
+      get_production_symbol(g_data, &prod_tok.production)
+    }
+    ASTNode::State(box ast::State { id, .. })
+    | ASTNode::PrattProduction(box ast::PrattProduction {
+      name_sym: id, ..
+    })
+    | ASTNode::PegProduction(box ast::PegProduction { name_sym: id, .. })
+    | ASTNode::CFProduction(box ast::CFProduction { name_sym: id, .. }) => {
+      (Some(id.as_ref()), None)
+    }
+    _ => unreachable!(),
+  }
+}
+/// Return the `ProductionId` from a valid production like node.
+///
+/// Valid Node:
+/// - [ASTNode::Production_Import_Symbol]
+/// - [ASTNode::Production_Symbol]
+/// - [ASTNode::Production_Terminal_Symbol]
+/// - [ASTNode::State]
+/// - [ASTNode::PrattProduction]
+/// - [ASTNode::PegProduction]
+/// - [ASTNode::CFProduction]
 fn get_production_id_from_ast_node(
   g_data: &GrammarData,
   node: &ASTNode,
 ) -> Option<ProductionId> {
-  match node {
-    ASTNode::Production_Symbol(prod) => {
+  match get_production_symbol(g_data, node) {
+    (Some(prod), None) => {
       Some(ProductionId::from((g_data.source_id, prod.name.as_str())))
     }
-    ASTNode::Production_Import_Symbol(prod) => {
+    (None, Some(prod)) => {
       let ref_name = prod.module.proxy();
 
       match g_data.imports.get(&ref_name) {
@@ -569,7 +720,14 @@ fn get_production_id_from_ast_node(
         _ => None,
       }
     }
-    _ => unreachable!(),
+    _ => {
+      #[allow(unreachable_code)]
+      {
+        #[cfg(debug_assertions)]
+        unreachable!("Unrecognized node: {:?}", node.get_type());
+        unreachable!()
+      }
+    }
   }
 }
 
@@ -607,7 +765,7 @@ mod test {
       r##"  <> test-sweet-home-alabama > c:id{3} | ("test"{2} "2" :ast $1 ) :ast $1 "##,
     )?;
 
-    let g_data = super::create_grammar_data(&mut j, &g, &path, &s_store)?;
+    let g_data = super::create_grammar_data(&mut j, g, &path, &s_store)?;
 
     let (mut prods, ..) =
       super::extract_productions(&mut j, &g_data, &s_store)?;
@@ -627,12 +785,16 @@ mod test {
     let (mut j, g, path, s_store) = create_test_data(
       r##" 
       
-      test-sweet-home-alabama =!> match: TERMINAL ( "test" ) { pass }
+      test-sweet-home-alabama =!> match: TERMINAL {
+          ( "test" ) { reduce 2 symbols to data :ast { t_Test } then pass }
+          ( "failed" ) { fail }
+          ( "accepted in kind" ) { accept }
+      }
       
        "##,
     )?;
 
-    let g_data = super::create_grammar_data(&mut j, &g, &path, &s_store)?;
+    let g_data = super::create_grammar_data(&mut j, g, &path, &s_store)?;
 
     let (mut productions, mut parse_states) =
       super::extract_productions(&mut j, &g_data, &s_store)?;
@@ -645,7 +807,7 @@ mod test {
 
     dbg!(&parse_state, &s_store);
 
-    assert_eq!(parse_state.symbols.len(), 1);
+    assert_eq!(parse_state.symbols.len(), 3);
 
     SherpaResult::Ok(())
   }

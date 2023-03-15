@@ -37,13 +37,20 @@ pub fn construct_descent_on_scanner_symbol() -> SherpaResult<Journal> {
 
 <> D > 'a' 'b'
 ";
-  test_runner(&[], None, TestConfig { grammar_string: Some(input), ..Default::default() })
+  test_runner(&[], None, TestConfig {
+    grammar_string: Some(input),
+    ..Default::default()
+  })
 }
 
 #[test]
 fn construct_recursive_ascent() -> SherpaResult<Journal> {
   test_runner(
-    &[("A", "xxxxd", true).into(), ("A", "xxxxc", true).into(), ("A", "xxxxf", false).into()],
+    &[
+      ("A", "xxxxd", true).into(),
+      ("A", "xxxxc", true).into(),
+      ("A", "xxxxf", false).into(),
+    ],
     None,
     TestConfig {
       grammar_string: Some(
@@ -68,9 +75,12 @@ fn construct_recursive_ascent() -> SherpaResult<Journal> {
 
 #[test]
 fn test_trivial_peek() -> SherpaResult<Journal> {
-  test_runner(&[("Term", "xxxxd =  \" test test test \"", true).into()], None, TestConfig {
-    grammar_string: Some(
-      r#" 
+  test_runner(
+    &[("Term", "xxxxd =  \" test test test \"", true).into()],
+    None,
+    TestConfig {
+      grammar_string: Some(
+        r#" 
       IGNORE { c:sp } 
       
       <> Term > Ident "=" Value
@@ -81,12 +91,13 @@ fn test_trivial_peek() -> SherpaResult<Journal> {
 
       <> ident > c:id(+)
       "#,
-    ),
-    bytecode_parse: true,
-    llvm_parse: true,
-    debugger_handler: Some(&|g| console_debugger(g, Default::default())),
-    ..Default::default()
-  })
+      ),
+      bytecode_parse: true,
+      llvm_parse: true,
+      debugger_handler: Some(&|g| console_debugger(g, Default::default())),
+      ..Default::default()
+    },
+  )
 }
 
 #[test]
@@ -162,7 +173,10 @@ pub fn production_reduction_decisions() -> SherpaResult<Journal> {
 
   ";
 
-  test_runner(&[], None, TestConfig { grammar_string: Some(input), ..Default::default() })
+  test_runner(&[], None, TestConfig {
+    grammar_string: Some(input),
+    ..Default::default()
+  })
 }
 
 #[test]
@@ -170,7 +184,11 @@ pub fn compile_production_states_with_basic_grammar() -> SherpaResult<Journal> {
   let input = "<> A > 'h' 'e' 'l' 'l' 'o'";
 
   test_runner(
-    &[TestInput { entry_name: "A", input: "heleo", should_succeed: true }],
+    &[TestInput {
+      entry_name:     "A",
+      input:          "heleo",
+      should_succeed: true,
+    }],
     None,
     TestConfig {
       bytecode_parse: true,
@@ -180,7 +198,11 @@ pub fn compile_production_states_with_basic_grammar() -> SherpaResult<Journal> {
   );
 
   test_runner(
-    &[TestInput { entry_name: "A", input: "hello", should_succeed: true }],
+    &[TestInput {
+      entry_name:     "A",
+      input:          "hello",
+      should_succeed: true,
+    }],
     None,
     TestConfig {
       bytecode_parse: true,
@@ -196,21 +218,32 @@ pub fn compile_production_states_with_basic_grammar_with_one_optional_token(
 ) -> SherpaResult<Journal> {
   let input = "<> A > 'h'? 'e'? 'l' 'l' 'o'";
 
-  test_runner(&[], None, TestConfig { grammar_string: Some(input), ..Default::default() })
+  test_runner(&[], None, TestConfig {
+    grammar_string: Some(input),
+    ..Default::default()
+  })
 }
 
 #[test]
-pub fn compile_production_states_with_basic_grammar_with_left_recursion() -> SherpaResult<Journal> {
+pub fn compile_production_states_with_basic_grammar_with_left_recursion(
+) -> SherpaResult<Journal> {
   let input = "<> A > A '1' | '2' ";
 
-  test_runner(&[], None, TestConfig { grammar_string: Some(input), ..Default::default() })
+  test_runner(&[], None, TestConfig {
+    grammar_string: Some(input),
+    ..Default::default()
+  })
 }
 
 #[test]
-pub fn compile_production_states_with_synthesized_scanner_state() -> SherpaResult<Journal> {
+pub fn compile_production_states_with_synthesized_scanner_state(
+) -> SherpaResult<Journal> {
   let input = "<> A > '1' | '2' | '3' ";
 
-  test_runner(&[], None, TestConfig { grammar_string: Some(input), ..Default::default() })
+  test_runner(&[], None, TestConfig {
+    grammar_string: Some(input),
+    ..Default::default()
+  })
 }
 
 #[test]
@@ -244,11 +277,15 @@ pub fn generate_block_comment() -> SherpaResult<Journal> {
 
 "#;
 
-  test_runner(&[], None, TestConfig { grammar_string: Some(input), ..Default::default() })
+  test_runner(&[], None, TestConfig {
+    grammar_string: Some(input),
+    ..Default::default()
+  })
 }
 
 #[test]
-pub fn generate_production_state_with_scanner_function() -> SherpaResult<Journal> {
+pub fn generate_production_state_with_scanner_function() -> SherpaResult<Journal>
+{
   let input = "
 <> A > tk:B
 
@@ -259,11 +296,15 @@ pub fn generate_production_state_with_scanner_function() -> SherpaResult<Journal
 <> D > 'a' 'b'
 ";
 
-  test_runner(&[], None, TestConfig { grammar_string: Some(input), ..Default::default() })
+  test_runner(&[], None, TestConfig {
+    grammar_string: Some(input),
+    ..Default::default()
+  })
 }
 
 #[test]
-pub fn reports_grammar_with_conflicts_caused_by_an_import_merge() -> SherpaResult<()> {
+pub fn reports_grammar_with_conflicts_caused_by_an_import_merge(
+) -> SherpaResult<()> {
   assert!(test_runner(&[], None, TestConfig {
     build_parse_states: true,
     grammar_path: Some(
@@ -437,9 +478,12 @@ pub fn generate_scanner_production_with_recursion() -> SherpaResult<Journal> {
 
 #[test]
 pub fn merge_non_transitive_branches() -> SherpaResult<Journal> {
-  test_runner(&[("A", "doggo ranger ready doggo ranger test", true).into()], None, TestConfig {
-    grammar_string: Some(
-      r##"
+  test_runner(
+    &[("A", "doggo ranger ready doggo ranger test", true).into()],
+    None,
+    TestConfig {
+      grammar_string: Some(
+        r##"
   IGNORE { c:sp }
     
   <> A > B "test"
@@ -451,12 +495,13 @@ pub fn merge_non_transitive_branches() -> SherpaResult<Journal> {
   <> D > "doggo"
 
   "##,
-    ),
-    bytecode_parse: true,
-    llvm_parse: true,
-    //debugger_handler: Some(&|g| console_debugger(g, Default::default())),
-    ..Default::default()
-  })
+      ),
+      bytecode_parse: true,
+      llvm_parse: true,
+      //debugger_handler: Some(&|g| console_debugger(g, Default::default())),
+      ..Default::default()
+    },
+  )
 }
 
 #[test]
@@ -554,7 +599,9 @@ fn ir_parser_build() -> SherpaResult<()> {
   let mut j = Journal::new(None);
   GrammarStore::from_path(
     &mut j,
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammar/v1_0_0/ir.sg").canonicalize()?,
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+      .join("../../grammar/v1_0_0/ir.sg")
+      .canonicalize()?,
   )?;
 
   j.flush_reports();
@@ -672,7 +719,8 @@ pub fn tracks_line_numbers() -> SherpaResult<()> {
   let states = compile_parse_states(&mut j, get_num_of_available_threads())?;
   let opt_states = optimize_parse_states(&mut j, states);
   let ctx = inkwell::context::Context::create();
-  let mut parser = crate::types::JitParser::<_, u32, u32>::new(&mut j, opt_states, &ctx)?;
+  let mut parser =
+    crate::types::JitParser::<_, u32, u32>::new(&mut j, opt_states, &ctx)?;
   let mut r = TestUTF8StringReader::new("A\n  A\n  A A\n    A\n   \n   \n  A");
   parser.set_reader(&mut r);
 
@@ -685,7 +733,10 @@ pub fn tracks_line_numbers() -> SherpaResult<()> {
     match parser.get_next_action(&mut None) {
       ParseAction::Shift { token_line_count, token_line_offset, .. } => {
         dbg!((token_line_count, token_line_offset));
-        assert_eq!((token_line_count, token_line_offset), line_counts[tok_count]);
+        assert_eq!(
+          (token_line_count, token_line_offset),
+          line_counts[tok_count]
+        );
         tok_count += 1;
       }
       ParseAction::Accept { .. } => {
@@ -724,7 +775,10 @@ test =!>
     )
       .into()],
     Some(Config {
-      debug: DebugConfig { allow_parse_state_name_collisions: false, ..Default::default() },
+      debug: DebugConfig {
+        allow_parse_state_name_collisions: false,
+        ..Default::default()
+      },
       ..Default::default()
     }),
     TestConfig {

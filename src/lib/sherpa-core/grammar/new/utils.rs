@@ -21,15 +21,16 @@ use std::{collections::btree_map, path::PathBuf, sync::Arc};
 pub type ProductionGUIDName = String;
 pub type ProductionName = String;
 
-/// Resolves and verifies a grammar file path acquired from an `@IMPORT` statement exists.
+/// Resolves and verifies a grammar file path acquired from an `@IMPORT`
+/// statement exists.
 ///
 /// If the file path does not have an extension, attempts are made to assert
-/// the existence of the file path when appended with one of the following extension types
-/// appended to it: `.hc`, `.hcg` `.grammar`.
+/// the existence of the file path when appended with one of the following
+/// extension types appended to it: `.hc`, `.hcg` `.grammar`.
 ///
-/// Additionally, if the given file path is relative, then it is appended to the parent dir
-/// path of the current grammar, whose path is provided by the `cgd`, current grammar dir,
-/// argument.
+/// Additionally, if the given file path is relative, then it is appended to the
+/// parent dir path of the current grammar, whose path is provided by the `cgd`,
+/// current grammar dir, argument.
 pub(crate) fn resolve_grammar_path(
   path: &PathBuf,
   cgd: &PathBuf,
@@ -57,7 +58,10 @@ pub(crate) fn resolve_grammar_path(
           path.canonicalize().ok()
         })
         .next()
-        .ok_or(format!("Tried to load file with these extension {:?}", extension))?,
+        .ok_or(format!(
+          "Tried to load file with these extension {:?}",
+          extension
+        ))?,
 
       // Default
       _ => path.canonicalize()?,
@@ -65,8 +69,8 @@ pub(crate) fn resolve_grammar_path(
   )
 }
 
-/// Return the `Production_Import_Symbol` or `Production_Symbol` from a valid node tree.
-/// Accepts
+/// Return the `Production_Import_Symbol` or `Production_Symbol` from a valid
+/// node tree. Accepts
 /// - [ASTNode::Production_Import_Symbol]
 /// - [ASTNode::Production_Symbol]
 /// - [ASTNode::Production_Terminal_Symbol]
@@ -79,13 +83,19 @@ fn get_production_symbol<'a>(
   g: &'a GrammarStore,
 ) -> (Option<&'a Production_Symbol>, Option<&'a Production_Import_Symbol>) {
   match node {
-    ASTNode::Production_Import_Symbol(prod_import) => (None, Some(prod_import.as_ref())),
+    ASTNode::Production_Import_Symbol(prod_import) => {
+      (None, Some(prod_import.as_ref()))
+    }
     ASTNode::Production_Symbol(prod_sym) => (Some(prod_sym.as_ref()), None),
-    ASTNode::Production_Terminal_Symbol(prod_tok) => get_production_symbol(&prod_tok.production, g),
+    ASTNode::Production_Terminal_Symbol(prod_tok) => {
+      get_production_symbol(&prod_tok.production, g)
+    }
     ASTNode::State(box State { id, .. })
     | ASTNode::PrattProduction(box PrattProduction { name_sym: id, .. })
     | ASTNode::PegProduction(box PegProduction { name_sym: id, .. })
-    | ASTNode::CFProduction(box CFProduction { name_sym: id, .. }) => (Some(id.as_ref()), None),
+    | ASTNode::CFProduction(box CFProduction { name_sym: id, .. }) => {
+      (Some(id.as_ref()), None)
+    }
     _ => unreachable!(),
   }
 }
@@ -103,7 +113,9 @@ pub fn get_productions_names_from_ast_node(
 ) -> Option<(ProductionGUIDName, ProductionName)> {
   use super::parser::GetASTNodeType;
   match get_production_symbol(name_sym, g) {
-    (Some(prod_sym), None) => get_production_names_from_production_symbol(g, prod_sym),
+    (Some(prod_sym), None) => {
+      get_production_names_from_production_symbol(g, prod_sym)
+    }
     (None, Some(prod_imp_sym)) => {
       let production_name = &prod_imp_sym.name;
       let local_import_grammar_name = &prod_imp_sym.module;
@@ -119,7 +131,10 @@ pub fn get_productions_names_from_ast_node(
         )),
       }
     }
-    _ => unreachable!("Node cannot be resolved to a production name [{:?}]", name_sym.get_type()),
+    _ => unreachable!(
+      "Node cannot be resolved to a production name [{:?}]",
+      name_sym.get_type()
+    ),
   }
 }
 
@@ -127,14 +142,20 @@ pub fn get_production_names_from_production_symbol(
   g: &GrammarStore,
   prod_sym: &Production_Symbol,
 ) -> Option<(ProductionGUIDName, ProductionName)> {
-  Some((create_production_guid_name(&g.id.guid_name, &prod_sym.name), prod_sym.name.clone()))
+  Some((
+    create_production_guid_name(&g.id.guid_name, &prod_sym.name),
+    prod_sym.name.clone(),
+  ))
 }
 
 /// Generate a UUID name using the grammars uuid_name and the
 /// productions name (omitting local import name portion of a
 /// production)
 
-pub fn create_production_guid_name(grammar_uuid_name: &str, production_name: &str) -> String {
+pub fn create_production_guid_name(
+  grammar_uuid_name: &str,
+  production_name: &str,
+) -> String {
   grammar_uuid_name.to_owned() + GUID_NAME_DELIMITER + production_name
 }
 
@@ -250,7 +271,11 @@ pub fn get_grammar_info_from_symbol<'a>(
   }
 }
 
-pub fn insert_rules(g: &mut GrammarStore, prod_id: &ProductionId, rules: Vec<Rule>) -> Vec<RuleId> {
+pub fn insert_rules(
+  g: &mut GrammarStore,
+  prod_id: &ProductionId,
+  rules: Vec<Rule>,
+) -> Vec<RuleId> {
   let offset_index = g.production_rules.get(&prod_id).map_or(0, |b| b.len());
 
   let body_ids = rules
@@ -276,7 +301,11 @@ pub fn insert_rules(g: &mut GrammarStore, prod_id: &ProductionId, rules: Vec<Rul
   g.production_rules.get(prod_id).unwrap().to_owned()
 }
 
-pub fn insert_production(g: &mut GrammarStore, mut prod: types::Production, bodies: Vec<Rule>) {
+pub fn insert_production(
+  g: &mut GrammarStore,
+  mut prod: types::Production,
+  bodies: Vec<Rule>,
+) {
   let prod_id = prod.id;
 
   prod.number_of_rules = insert_rules(g, &prod_id, bodies).len() as u16;
@@ -287,7 +316,10 @@ pub fn insert_production(g: &mut GrammarStore, mut prod: types::Production, bodi
 /// Generate a unique scanner production name givin a uuid production
 /// name
 
-pub fn create_scanner_name(production_id: ProductionId, grammar_id: GrammarId) -> String {
+pub fn create_scanner_name(
+  production_id: ProductionId,
+  grammar_id: GrammarId,
+) -> String {
   format!("scan_tok_{:X}_{:X}", production_id.0, grammar_id.0)
 }
 

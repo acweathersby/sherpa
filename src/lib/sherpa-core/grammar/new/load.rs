@@ -885,7 +885,9 @@ mod test {
       crate::ReportType::GrammarCompile(Default::default()),
     );
 
-    let grammar = super::parse_grammar("  <> test > c:id | \"test\"")?;
+    let grammar = super::parse_grammar(r#"  <> test > c:id | "\\" "test""#)?;
+
+    dbg!(&grammar);
 
     let dir = PathBuf::from("/");
 

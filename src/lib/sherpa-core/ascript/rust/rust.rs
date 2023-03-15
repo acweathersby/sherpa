@@ -1711,7 +1711,7 @@ pub type Parser<'a, T, UserCTX> = sherpa_runtime::bytecode_parser::ByteCodeParse
     .unwrap();
   }
 
-  /// Export
+  // Export
   w.block(
     &format!("pub static bytecode: [u8; {}] = ", bc.len()),
     "[",

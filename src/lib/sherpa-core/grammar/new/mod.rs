@@ -1,4 +1,5 @@
 pub mod compile;
+pub mod compile_parser;
 pub mod errors;
 pub mod finalize;
 pub mod load;

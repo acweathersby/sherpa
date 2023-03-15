@@ -71,7 +71,10 @@ pub(crate) fn construct_production_states(
 ) -> SherpaResult<Vec<Box<ParseState>>> {
   let g = &(j.grammar()?);
   j.set_active_report(
-    &format!("Production [{}] IR Compilation", g.get_production_plain_name(&prod_id)),
+    &format!(
+      "Production [{}] IR Compilation",
+      g.get_production_plain_name(&prod_id)
+    ),
     crate::journal::report::ReportType::ProductionCompile(prod_id),
   );
 
@@ -103,7 +106,10 @@ pub(crate) fn construct_token_production_state(
 ) -> SherpaResult<Vec<Box<ParseState>>> {
   let g = &(j.grammar()?);
   j.set_active_report(
-    &format!("Token Production [{}] IR Compilation", g.get_production_plain_name(&prod_id)),
+    &format!(
+      "Token Production [{}] IR Compilation",
+      g.get_production_plain_name(&prod_id)
+    ),
     crate::journal::report::ReportType::TokenProductionCompile(prod_id),
   );
 
@@ -129,14 +135,20 @@ pub(crate) fn construct_scanner_states(
 
   j.set_active_report(
     &format!("Scanner [{}] IR Compilation", state_name),
-    crate::journal::report::ReportType::ScannerCompile(ScannerStateId::new(&symbols)),
+    crate::journal::report::ReportType::ScannerCompile(ScannerStateId::new(
+      &symbols,
+    )),
   );
 
   j.report_mut().add_note(
     "Symbol Info",
     format!(
       "This scanner handles the symbols: \n[ {} ]",
-      symbols.iter().map(|s| { s.debug_string(g) }).collect::<Vec<_>>().join(" ")
+      symbols
+        .iter()
+        .map(|s| { s.debug_string(g) })
+        .collect::<Vec<_>>()
+        .join(" ")
     ),
   );
 
@@ -191,13 +203,16 @@ fn compile_slice_of_states(
 
   for (prod_id, is_scanner) in slice {
     if *is_scanner {
-      if let SherpaResult::Ok(states) = construct_token_production_state(j, *prod_id) {
+      if let SherpaResult::Ok(states) =
+        construct_token_production_state(j, *prod_id)
+      {
         insert_states(j, states.into_iter(), deduped_states);
       } else {
         have_errors = true;
       }
     } else {
-      if let SherpaResult::Ok(states) = construct_production_states(j, *prod_id) {
+      if let SherpaResult::Ok(states) = construct_production_states(j, *prod_id)
+      {
         for state in states {
           if let Some(name) = state.get_scanner_state_name() {
             if scanner_names.insert(name.clone()) {
@@ -225,15 +240,24 @@ fn compile_slice_of_states(
   }
 }
 
-fn create_entry_wrapper_states(j: &mut Journal) -> SherpaResult<Vec<Box<ParseState>>> {
+fn create_entry_wrapper_states(
+  j: &mut Journal,
+) -> SherpaResult<Vec<Box<ParseState>>> {
   let mut states = vec![];
 
   let g = &(j.grammar()?);
 
-  for ExportedProduction { guid_name: name, production, .. } in &g.get_exported_productions() {
+  for ExportedProduction { guid_name: name, production, .. } in
+    &g.get_exported_productions()
+  {
     let entry_name = &g.get_entry_name_from_prod_id(&production.id)?;
-    let skip_symbols: Vec<SymbolID> =
-      g.production_ignore_symbols.get(&production.id).unwrap().iter().cloned().collect();
+    let skip_symbols: Vec<SymbolID> = g
+      .production_ignore_symbols
+      .get(&production.id)
+      .unwrap()
+      .iter()
+      .cloned()
+      .collect();
 
     let state_entry = ParseState {
       comment: "".into(),
@@ -254,7 +278,10 @@ fn create_entry_wrapper_states(j: &mut Journal) -> SherpaResult<Vec<Box<ParseSta
           SymbolID::EndOfFile.bytecode_id(g),
           skip_symbols
             .iter()
-            .map(|s| format!("\nassert TOKEN [ {} ] ( skip-token )", s.bytecode_id(g)))
+            .map(|s| format!(
+              "\nassert TOKEN [ {} ] ( skip-token )",
+              s.bytecode_id(g)
+            ))
             .collect::<Vec<_>>()
             .join("")
         ),
@@ -283,7 +310,8 @@ fn create_entry_wrapper_states(j: &mut Journal) -> SherpaResult<Vec<Box<ParseSta
   SherpaResult::Ok(states)
 }
 
-/// Compiles IRStates from all production and scanner symbol sets within the grammar.
+/// Compiles IRStates from all production and scanner symbol sets within the
+/// grammar.
 pub fn compile_parse_states(
   j: &mut Journal,
   #[allow(unused)] num_of_threads: usize,
@@ -291,7 +319,8 @@ pub fn compile_parse_states(
   let g = j.grammar()?;
 
   let mut deduped_states = BTreeMap::new();
-  let productions_ids = g.productions.iter().map(|(id, p)| (*id, p.is_scanner)).collect::<Vec<_>>();
+  let productions_ids =
+    g.productions.iter().map(|(id, p)| (*id, p.is_scanner)).collect::<Vec<_>>();
 
   let entry_state = create_entry_wrapper_states(j)?;
 

@@ -15,9 +15,10 @@ pub fn build_bytecode_disassembly() -> PipelineTask {
 
       let mut j = task_ctx.get_journal();
 
-      if let Ok(parser_data_file) = task_ctx
-        .create_file(output_path.join(format!("./{}.sherpa.dasm", j.grammar().unwrap().id.name)))
-      {
+      if let Ok(parser_data_file) = task_ctx.create_file(
+        output_path
+          .join(format!("./{}.sherpa.dasm", j.grammar().unwrap().id.name)),
+      ) {
         let Some(bytecode) = task_ctx.get_bytecode() else {
           return Err(vec![SherpaError::from("Cannot disassemble Bytecode: Bytecode is not available")]);
         };

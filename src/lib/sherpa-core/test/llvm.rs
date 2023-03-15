@@ -1,7 +1,11 @@
 use super::test_reader::TestUTF8StringReader;
 use crate::{
   compile::GrammarStore,
-  llvm::{ascript_functions::construct_ast_builder, parse_functions::compile_states, *},
+  llvm::{
+    ascript_functions::construct_ast_builder,
+    parse_functions::compile_states,
+    *,
+  },
   parser::{compile_parse_states, optimize_parse_states},
   types::JitParser,
   Journal,
@@ -11,7 +15,13 @@ use inkwell::{
   context::Context,
   execution_engine::{ExecutionEngine, JitFunction},
   module::Module,
-  targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine},
+  targets::{
+    CodeModel,
+    InitializationConfig,
+    RelocMode,
+    Target,
+    TargetMachine,
+  },
   OptimizationLevel,
 };
 use sherpa_runtime::{
@@ -52,15 +62,26 @@ type Extend<R = TestUTF8StringReader<'static>, T = u32> =
 type Drop<R = TestUTF8StringReader<'static>, T = u32> =
   unsafe extern "C" fn(*mut ParseContext<R, T>);
 
-unsafe fn get_parse_function<'a, T: inkwell::execution_engine::UnsafeFunctionPointer>(
+unsafe fn get_parse_function<
+  'a,
+  T: inkwell::execution_engine::UnsafeFunctionPointer,
+>(
   engine: &'a ExecutionEngine,
   function_name: &str,
 ) -> Result<JitFunction<'a, T>, ()> {
-  Ok(engine.get_function::<T>(function_name).ok().ok_or("Failed To Compile").unwrap())
+  Ok(
+    engine
+      .get_function::<T>(function_name)
+      .ok()
+      .ok_or("Failed To Compile")
+      .unwrap(),
+  )
 }
 
 fn setup_exec_engine<'a>(module: &Module<'a>) -> ExecutionEngine<'a> {
-  module.create_jit_execution_engine(inkwell::OptimizationLevel::Aggressive).unwrap()
+  module
+    .create_jit_execution_engine(inkwell::OptimizationLevel::Aggressive)
+    .unwrap()
 }
 
 fn build_fast_call_shim<'a>(
@@ -69,7 +90,8 @@ fn build_fast_call_shim<'a>(
 ) -> SherpaResult<()> {
   let name = fun.get_name().to_str().unwrap();
   let builder = &module.b;
-  let shim = module.module.add_function(&format!("{}_shim", name), fun.get_type(), None);
+  let shim =
+    module.module.add_function(&format!("{}_shim", name), fun.get_type(), None);
   shim.set_call_conventions(7);
   builder.position_at_end(module.ctx.append_basic_block(shim, "Entry"));
 
@@ -153,10 +175,15 @@ fn should_push_new_state() -> SherpaResult<()> {
 
   unsafe {
     let jit_engine = setup_exec_engine(&module);
-    let module = construct_module(&mut Journal::new(None), &context, &target_data, module);
+    let module =
+      construct_module(&mut Journal::new(None), &context, &target_data, module);
 
-    jit_engine.add_global_mapping(&module.fun.allocate_stack, sherpa_allocate_stack as usize);
-    jit_engine.add_global_mapping(&module.fun.free_stack, sherpa_free_stack as usize);
+    jit_engine.add_global_mapping(
+      &module.fun.allocate_stack,
+      sherpa_allocate_stack as usize,
+    );
+    jit_engine
+      .add_global_mapping(&module.fun.free_stack, sherpa_free_stack as usize);
 
     construct_init(&module)?;
     construct_push_state_function(&module)?;
@@ -171,23 +198,34 @@ fn should_push_new_state() -> SherpaResult<()> {
 
     let mut rt_ctx = ParseContext::new_llvm();
 
-    let push_state_fn = get_parse_function::<PushState>(&jit_engine, "push_state_shim").unwrap();
+    let push_state_fn =
+      get_parse_function::<PushState>(&jit_engine, "push_state_shim").unwrap();
 
     let init_fn = get_parse_function::<Init>(&jit_engine, "init").unwrap();
 
-    let extend_stack = get_parse_function::<Extend>(&jit_engine, "extend_stack_shim").unwrap();
+    let extend_stack =
+      get_parse_function::<Extend>(&jit_engine, "extend_stack_shim").unwrap();
 
     let drop_fn = get_parse_function::<Drop>(&jit_engine, "drop").unwrap();
 
     init_fn.call(&mut rt_ctx, &mut reader);
     extend_stack.call(&mut rt_ctx, 8);
 
-    push_state_fn.call(&mut rt_ctx, NORMAL_STATE_FLAG_LLVM, 0x10101010_01010101);
-    push_state_fn.call(&mut rt_ctx, NORMAL_STATE_FLAG_LLVM, 0x01010101_10101010);
+    push_state_fn.call(
+      &mut rt_ctx,
+      NORMAL_STATE_FLAG_LLVM,
+      0x10101010_01010101,
+    );
+    push_state_fn.call(
+      &mut rt_ctx,
+      NORMAL_STATE_FLAG_LLVM,
+      0x01010101_10101010,
+    );
 
     let stack = std::slice::from_raw_parts(
       {
-        (rt_ctx.goto_stack_ptr as usize - ((rt_ctx.goto_size - rt_ctx.goto_free) << 4) as usize)
+        (rt_ctx.goto_stack_ptr as usize
+          - ((rt_ctx.goto_size - rt_ctx.goto_free) << 4) as usize)
           as *mut Goto
       },
       rt_ctx.goto_size as usize,
@@ -209,7 +247,8 @@ fn should_push_new_state() -> SherpaResult<()> {
 }
 
 #[test]
-fn verify_construction_of_get_adjusted_input_block_function() -> SherpaResult<()> {
+fn verify_construction_of_get_adjusted_input_block_function() -> SherpaResult<()>
+{
   let context = Context::create();
   let target_machine = crate_target_test_machine()?;
   let target_data = target_machine.get_target_data();
@@ -220,7 +259,9 @@ fn verify_construction_of_get_adjusted_input_block_function() -> SherpaResult<()
     context.create_module("test"),
   );
 
-  unsafe { assert!(construct_get_adjusted_input_block_function(&module).is_ok()) }
+  unsafe {
+    assert!(construct_get_adjusted_input_block_function(&module).is_ok())
+  }
 
   println!("{}", module.module.to_string());
 
@@ -268,7 +309,9 @@ fn should_initialize_context() -> SherpaResult<()> {
 
     init_fn.call(rt_ctx.as_mut(), &mut reader);
 
-    let root = rt_ctx.as_ref() as *const ParseContext<TestUTF8StringReader<'static>, u32> as usize;
+    let root = rt_ctx.as_ref()
+      as *const ParseContext<TestUTF8StringReader<'static>, u32>
+      as usize;
 
     assert_eq!(rt_ctx.reader.as_ref().unwrap().string, reader.string);
 
@@ -327,8 +370,11 @@ fn should_yield_correct_CP_values_for_inputs() -> SherpaResult<()> {
 
     let jit_engine = setup_exec_engine(&module.module);
 
-    let get_code_point =
-      get_parse_function::<GetUtf8CP>(&jit_engine, "get_utf8_codepoint_info_shim").unwrap();
+    let get_code_point = get_parse_function::<GetUtf8CP>(
+      &jit_engine,
+      "get_utf8_codepoint_info_shim",
+    )
+    .unwrap();
 
     dbg!(get_code_point.call(" ".as_ptr()));
     assert_eq!(get_code_point.call(" ".as_ptr()).val, 32);
@@ -385,12 +431,18 @@ fn should_extend_stack() -> SherpaResult<()> {
     construct_extend_stack(&module)?;
     construct_internal_free_stack(&module)?;
 
-    jit_engine.add_global_mapping(&module.fun.allocate_stack, sherpa_allocate_stack as usize);
-    jit_engine.add_global_mapping(&module.fun.free_stack, sherpa_free_stack as usize);
+    jit_engine.add_global_mapping(
+      &module.fun.allocate_stack,
+      sherpa_allocate_stack as usize,
+    );
+    jit_engine
+      .add_global_mapping(&module.fun.free_stack, sherpa_free_stack as usize);
 
     let init_fn = get_parse_function::<Init>(&jit_engine, "init").unwrap();
-    let push_state_fn = get_parse_function::<PushState>(&jit_engine, "push_state_shim").unwrap();
-    let extend = get_parse_function::<Extend>(&jit_engine, "extend_stack_shim").unwrap();
+    let push_state_fn =
+      get_parse_function::<PushState>(&jit_engine, "push_state_shim").unwrap();
+    let extend =
+      get_parse_function::<Extend>(&jit_engine, "extend_stack_shim").unwrap();
 
     init_fn.call(&mut rt_ctx, &mut reader);
     extend.call(&mut rt_ctx, 10);
@@ -482,10 +534,15 @@ IGNORE { c:sp }
   unsafe {
     let engine = setup_exec_engine(&module);
     let target_data = engine.get_target_data();
-    let module = construct_module(&mut Journal::new(None), &context, &target_data, module);
+    let module =
+      construct_module(&mut Journal::new(None), &context, &target_data, module);
 
-    engine.add_global_mapping(&module.fun.allocate_stack, sherpa_allocate_stack as usize);
-    engine.add_global_mapping(&module.fun.free_stack, sherpa_free_stack as usize);
+    engine.add_global_mapping(
+      &module.fun.allocate_stack,
+      sherpa_allocate_stack as usize,
+    );
+    engine
+      .add_global_mapping(&module.fun.free_stack, sherpa_free_stack as usize);
     engine.add_global_mapping(
       &module.fun.get_token_class_from_codepoint,
       sherpa_get_token_class_from_codepoint as usize,
@@ -567,38 +624,61 @@ IGNORE { c:sp c:nl }
     0,
     &mut TestUTF8StringReader::new("\"\nh\n\"\nworld\n\n\ngoodby\n\"\nmango\""),
     &map_reduce_function(&jit.grammar(), vec![
-      /*P*/
+      /* P */
       ("P", 0, |ctx, slots| {
         let counter = unsafe { ctx.get_meta_mut() };
         *counter += 1;
         println!("Reduced P");
         assert_eq!(slots[0].1.to_slice(ctx.get_str()), "world");
-        assert_eq!(slots[0].1.line_num, 3, "Line number of `world` should be 3");
-        assert_eq!(slots[0].1.line_off, 5, "Line offset of `world` should be 4");
+        assert_eq!(
+          slots[0].1.line_num, 3,
+          "Line number of `world` should be 3"
+        );
+        assert_eq!(
+          slots[0].1.line_off, 5,
+          "Line offset of `world` should be 4"
+        );
       }),
-      ("A", 0 /*A*/, |ctx, slots| {
+      ("A", 0 /* A */, |ctx, slots| {
         let counter = unsafe { ctx.get_meta_mut() };
         *counter += 1;
         println!("Reduced A");
         assert_eq!(slots[0].1.to_slice(ctx.get_str()), "\"\nh\n\"");
-        assert_eq!(slots[0].1.line_num, 0, "Line number of `\"\\nh\\n\"` should be 0");
-        assert_eq!(slots[0].1.line_off, 0, "Line offset of `\"\\nh\\n\"` should be 0");
-        slots.assign(0, AstSlot(1010101, Default::default(), Default::default()))
+        assert_eq!(
+          slots[0].1.line_num, 0,
+          "Line number of `\"\\nh\\n\"` should be 0"
+        );
+        assert_eq!(
+          slots[0].1.line_off, 0,
+          "Line offset of `\"\\nh\\n\"` should be 0"
+        );
+        slots
+          .assign(0, AstSlot(1010101, Default::default(), Default::default()))
       }),
-      /*C*/
+      /* C */
       ("C", 0, |ctx, slots| {
         let counter = unsafe { ctx.get_meta_mut() };
         *counter += 1;
         println!("Reduced C");
         assert_eq!(slots[0].1.to_slice(ctx.get_str()), "\"\nmango\"");
-        assert_eq!(slots[0].1.line_num, 7, "Line number of `world` should be 7");
-        assert_eq!(slots[0].1.line_off, 20, "Line offset of `world` should be 20");
+        assert_eq!(
+          slots[0].1.line_num, 7,
+          "Line number of `world` should be 7"
+        );
+        assert_eq!(
+          slots[0].1.line_off, 20,
+          "Line offset of `world` should be 20"
+        );
       }),
       ("B", 0, |_, _| {}),
     ]),
   );
 
-  assert_eq!(unsafe { *jit.get_ctx().get_meta() }, 3, "Number of reduced productions should be 3");
+  assert_eq!(
+    unsafe { *jit.get_ctx().get_meta() },
+    3,
+    "Number of reduced productions should be 3"
+  );
 
   assert!(matches!(result, ParseResult::Complete(AstSlot(1010101, ..))));
 
@@ -633,20 +713,39 @@ fn simple_newline_tracking() -> SherpaResult<()> {
     &map_reduce_function(&jit.grammar(), vec![
       ("test", 0, |ctx, slots| {
         assert_eq!(slots[0].1.to_slice(ctx.get_str()), "hello");
-        assert_eq!(slots[0].1.line_num, 0, "Line number of `hello` should be 0");
-        assert_eq!(slots[0].1.line_off, 0, "Line offset of `hello` should be 0");
+        assert_eq!(
+          slots[0].1.line_num, 0,
+          "Line number of `hello` should be 0"
+        );
+        assert_eq!(
+          slots[0].1.line_off, 0,
+          "Line offset of `hello` should be 0"
+        );
 
-        slots.assign(0, AstSlot(1010101, Default::default(), Default::default()))
+        slots
+          .assign(0, AstSlot(1010101, Default::default(), Default::default()))
       }),
       ("B", 0, |ctx, slots| {
         assert_eq!(slots[0].1.to_slice(ctx.get_str()), "mango");
-        assert_eq!(slots[0].1.line_num, 4, "Line number of `mango` should be 4");
-        assert_eq!(slots[0].1.line_off, 19, "Line offset of `mango` should be 19");
+        assert_eq!(
+          slots[0].1.line_num, 4,
+          "Line number of `mango` should be 4"
+        );
+        assert_eq!(
+          slots[0].1.line_off, 19,
+          "Line offset of `mango` should be 19"
+        );
       }),
       ("P", 0, |ctx, slots| {
         assert_eq!(slots[0].1.to_slice(ctx.get_str()), "world");
-        assert_eq!(slots[0].1.line_num, 1, "Line number of `world` should be 1");
-        assert_eq!(slots[0].1.line_off, 5, "Line offset of `world` should be 5");
+        assert_eq!(
+          slots[0].1.line_num, 1,
+          "Line number of `world` should be 1"
+        );
+        assert_eq!(
+          slots[0].1.line_off, 5,
+          "Line offset of `world` should be 5"
+        );
       }),
     ]),
   );
@@ -688,7 +787,11 @@ IGNORE { c:sp c:nl }
         let _a = slots.take(0);
         let _b = slots.take(1);
 
-        assert_eq!(_b.1.len(), 18, "Expected the token of [P] to be 18 bytes long");
+        assert_eq!(
+          _b.1.len(),
+          18,
+          "Expected the token of [P] to be 18 bytes long"
+        );
 
         let final_token = _a.1 + _b.1;
 
@@ -734,7 +837,11 @@ IGNORE { c:sp c:nl }
 // matches the number of rules in the parser.
 fn map_reduce_function<'a, R, ExtCTX, ASTNode>(
   g: &GrammarStore,
-  fns: Vec<(&str, usize, fn(&mut ParseContext<R, ExtCTX>, &mut AstStackSlice<AstSlot<ASTNode>>))>,
+  fns: Vec<(
+    &str,
+    usize,
+    fn(&mut ParseContext<R, ExtCTX>, &mut AstStackSlice<AstSlot<ASTNode>>),
+  )>,
 ) -> Vec<fn(&mut ParseContext<R, ExtCTX>, &mut AstStackSlice<AstSlot<ASTNode>>)>
 where
   R: ByteReader + LLVMByteReader + MutByteReader,
@@ -809,7 +916,8 @@ NAME llvm_language_test
   let target_machine = crate_target_test_machine()?;
   let target_data = target_machine.get_target_data();
 
-  let module = construct_module(&mut j, &ctx, &target_data, ctx.create_module("test"));
+  let module =
+    construct_module(&mut j, &ctx, &target_data, ctx.create_module("test"));
   compile_llvm_module_from_parse_states(&mut j, &module, &ir_states)?;
 
   println!("{}", module.module.to_string());

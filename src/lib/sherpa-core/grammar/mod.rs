@@ -1,3 +1,4 @@
+#![allow(unused)]
 //! Functions for constructing a
 //! [GrammarStore](crate::types::GrammarStore) from various types of
 //! grammar source files.

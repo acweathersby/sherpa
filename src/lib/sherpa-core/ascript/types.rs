@@ -231,9 +231,10 @@ impl AScriptTypeVal {
   pub fn is_atom(&self) -> bool {
     use AScriptTypeVal::*;
     match self {
-      Token | TokenRange | AdjustedTokenRange | Struct(..) | String(..) | Bool(..) | F64(..)
-      | F32(..) | I64(..) | I32(..) | I16(..) | I8(..) | U64(..) | U32(..) | U16(..) | U8(..)
-      | F64Vec | F32Vec | I64Vec | I32Vec | I16Vec | I8Vec | U64Vec | U32Vec | U16Vec | U8Vec
+      Token | TokenRange | AdjustedTokenRange | Struct(..) | String(..)
+      | Bool(..) | F64(..) | F32(..) | I64(..) | I32(..) | I16(..) | I8(..)
+      | U64(..) | U32(..) | U16(..) | U8(..) | F64Vec | F32Vec | I64Vec
+      | I32Vec | I16Vec | I8Vec | U64Vec | U32Vec | U16Vec | U8Vec
       | TokenVec | StringVec => true,
       GenericStructVec(nodes) => {
         if nodes.len() == 1 {
@@ -245,7 +246,11 @@ impl AScriptTypeVal {
           false
         }
       }
-      Undefined | GenericVec(..) | GenericStruct(..) | Any | UnresolvedProduction(..) => false,
+      Undefined
+      | GenericVec(..)
+      | GenericStruct(..)
+      | Any
+      | UnresolvedProduction(..) => false,
     }
   }
 
@@ -484,7 +489,7 @@ pub struct AScriptProp {
   pub optional:    bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AScriptStruct {
   pub id: AScriptStructId,
   pub type_name: String,
@@ -493,14 +498,15 @@ pub struct AScriptStruct {
   pub rule_ids: BTreeSet<RuleId>,
   pub definition_locations: BTreeSet<Token>,
   /// When true a `tok` property is present in the struct
-  /// that has a [sherpa_runtime::type::Token] value comprised of the characters
-  /// of this struct's reduced rule.
+  /// that has a [sherpa_runtime::type::Token] value comprised of the
+  /// characters of this struct's reduced rule.
   pub tokenized: bool,
 }
 
-pub type ProductionTypesTable = BTreeMap<ProductionId, HashMap<TaggedType, BTreeSet<RuleId>>>;
+pub type ProductionTypesTable =
+  BTreeMap<ProductionId, HashMap<TaggedType, BTreeSet<RuleId>>>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AScriptStore {
   /// Store of unique AScriptStructs
   pub structs: BTreeMap<AScriptStructId, AScriptStruct>,
@@ -532,9 +538,13 @@ impl AScriptStore {
   }
 
   pub fn new(j: &mut Journal) -> SherpaResult<Self> {
-    let mut new_self = AScriptStore { g: j.grammar()?, is_dummy: false, ..Default::default() };
+    let mut new_self =
+      AScriptStore { g: j.grammar()?, is_dummy: false, ..Default::default() };
 
-    j.set_active_report("Ascript Store Compile", crate::ReportType::AScriptCompile);
+    j.set_active_report(
+      "Ascript Store Compile",
+      crate::ReportType::AScriptCompile,
+    );
 
     compile_ascript_store(j, &mut new_self);
 

@@ -1,6 +1,10 @@
 use crate::{
   ascript::{
-    compile::{compile_struct_props, compile_struct_type, verify_property_presence},
+    compile::{
+      compile_struct_props,
+      compile_struct_type,
+      verify_property_presence,
+    },
     output_base::AscriptWriter,
     rust::{create_rust_writer_utils, write_rust_ast},
     types::{AScriptStore, AScriptTypeVal},
@@ -32,16 +36,18 @@ fn test_grammar_imported_grammar() -> SherpaResult<()> {
 
   assert_eq!(store.prod_types.len(), g.parse_productions.len());
 
-  assert!(store
-    .prod_types
-    .iter()
-    .all(|p| { p.1.iter().all(|t| !matches!(t.0.type_, AScriptTypeVal::Undefined)) }));
+  assert!(store.prod_types.iter().all(|p| {
+    p.1.iter().all(|t| !matches!(t.0.type_, AScriptTypeVal::Undefined))
+  }));
 
   let u = create_rust_writer_utils(&store);
   let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
   let writer = write_rust_ast(w)?;
 
-  println!("{}", String::from_utf8(writer.into_writer().into_output()).unwrap());
+  println!(
+    "{}",
+    String::from_utf8(writer.into_writer().into_output()).unwrap()
+  );
 
   SherpaResult::Ok(())
 }
@@ -80,13 +86,17 @@ NAME llvm_language_test
   let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
   let writer = write_rust_ast(w)?;
 
-  println!("{}", String::from_utf8(writer.into_writer().into_output()).unwrap());
+  println!(
+    "{}",
+    String::from_utf8(writer.into_writer().into_output()).unwrap()
+  );
 
   SherpaResult::Ok(())
 }
 
 #[test]
-fn test_add_hoc_vector_prop_merged_with_vector_production() -> SherpaResult<()> {
+fn test_add_hoc_vector_prop_merged_with_vector_production() -> SherpaResult<()>
+{
   let mut j = Journal::new(None);
   GrammarStore::from_str(
     &mut j,
@@ -238,7 +248,8 @@ IGNORE { c:sp c:nl }
 // pri
 
 #[test]
-fn test_parse_errors_when_production_has_differing_return_types3() -> SherpaResult<()> {
+fn test_parse_errors_when_production_has_differing_return_types3(
+) -> SherpaResult<()> {
   let mut j = Journal::new(Option::None);
 
   GrammarStore::from_str(&mut j, "<> B > c:id(+)").unwrap();
@@ -251,7 +262,10 @@ fn test_parse_errors_when_production_has_differing_return_types3() -> SherpaResu
   let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
   let writer = write_rust_ast(w)?;
 
-  println!("{}", String::from_utf8(writer.into_writer().into_output()).unwrap());
+  println!(
+    "{}",
+    String::from_utf8(writer.into_writer().into_output()).unwrap()
+  );
 
   SherpaResult::Ok(())
 }
@@ -370,12 +384,16 @@ fn test_ASTs_are_defined_for_ascript_return_functions() -> SherpaResult<()> {
   let box sherpa::Rule { ast_definition, .. } = &rules[0];
 
   if let Some(box sherpa::Ascript { ast, .. }) = &ast_definition {
-    if let ASTNode::AST_Struct(box sherpa::AST_Struct { typ, props, .. }) = ast {
+    if let ASTNode::AST_Struct(box sherpa::AST_Struct { typ, props, .. }) = ast
+    {
       assert_eq!(props.len(), 1);
 
       assert_eq!(typ.to_string(), "t_Test");
 
-      if let ASTNode::AST_Property(box sherpa::AST_Property { id, value, .. }) = &props[0] {
+      if let ASTNode::AST_Property(box sherpa::AST_Property {
+        id, value, ..
+      }) = &props[0]
+      {
         assert_eq!(id, "val");
 
         if let Some(ASTNode::AST_STRING(..)) = value {
@@ -448,8 +466,13 @@ fn eof_symbols_should_not_contribute_anything_to_ast() -> SherpaResult<()> {
 
   let g = &j.grammar()?;
 
-  let t: AScriptTypeVal =
-    store.prod_types.get(&g.get_production_id_by_name("A")?)?.iter().next()?.0.into();
+  let t: AScriptTypeVal = store
+    .prod_types
+    .get(&g.get_production_id_by_name("A")?)?
+    .iter()
+    .next()?
+    .0
+    .into();
 
   assert!(matches!(t, AScriptTypeVal::U32(_)), "{:?} should be a u32 type", t);
 
@@ -506,7 +529,8 @@ fn token_range_slice() -> SherpaResult<()> {
 }
 
 #[test]
-fn reference_nonterminal_and_reference_names_when_using_valueless_props() -> SherpaResult<()> {
+fn reference_nonterminal_and_reference_names_when_using_valueless_props(
+) -> SherpaResult<()> {
   let mut j = Journal::new(None);
   GrammarStore::from_str(
     &mut j,

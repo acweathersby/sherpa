@@ -19,7 +19,10 @@ use inkwell::{
   types::IntType,
   values::{FunctionValue, IntValue, PointerValue},
 };
-use sherpa_runtime::{types::bytecode::Opcode, utf8::lookup_table::CodePointClass};
+use sherpa_runtime::{
+  types::bytecode::Opcode,
+  utf8::lookup_table::CodePointClass,
+};
 use std::{
   collections::{hash_map::DefaultHasher, BTreeMap},
   hash::{Hash, Hasher},
@@ -70,7 +73,11 @@ fn create_parse_function<'a>(
   name: &str,
 ) -> FunctionValue<'a> {
   let linkage = if j.config().opt_llvm { Some(Linkage::Private) } else { None };
-  module.module.add_function(&name, module.types.TAIL_CALLABLE_PARSE_FUNCTION, linkage)
+  module.module.add_function(
+    &name,
+    module.types.TAIL_CALLABLE_PARSE_FUNCTION,
+    linkage,
+  )
 }
 
 pub(crate) fn compile_state<'a>(
@@ -94,22 +101,33 @@ pub(crate) fn compile_state<'a>(
 
   let mut last_block = loop_head;
 
-  if matches!(state.instructions[0].get_type(), ASTNodeType::ASSERT | ASTNodeType::DEFAULT) {
+  if matches!(
+    state.instructions[0].get_type(),
+    ASTNodeType::ASSERT | ASTNodeType::DEFAULT
+  ) {
     // split instructions into groups
-    let groups =
-      hash_group_btreemap(state.instructions.iter().collect::<Vec<_>>(), |_, i| match i {
+    let groups = hash_group_btreemap(
+      state.instructions.iter().collect::<Vec<_>>(),
+      |_, i| match i {
         ASTNode::ASSERT(box ASSERT { mode, .. }) => mode.clone(),
         ASTNode::DEFAULT(_) => "DEFAULT".into(),
         _ => unreachable!(),
-      });
+      },
+    );
 
     if let Some(production_branches) = groups.get("PRODUCTION") {
       debug_assert!(groups.len() == 1 || groups.contains_key("DEFAULT"));
 
-      let (cases, branches) =
-        deconstruct_branches("production_", production_branches, m, s_fun, i32)?;
+      let (cases, branches) = deconstruct_branches(
+        "production_",
+        production_branches,
+        m,
+        s_fun,
+        i32,
+      )?;
 
-      let default_block = ctx.append_basic_block(s_fun, &format!("production_default"));
+      let default_block =
+        ctx.append_basic_block(s_fun, &format!("production_default"));
       b.build_switch(
         CTX::prod_id.load(b, p_ctx)?.into_int_value(),
         default_block,
@@ -118,7 +136,9 @@ pub(crate) fn compile_state<'a>(
 
       for (block, i) in branches {
         b.position_at_end(block);
-        compile_branchless_instructions(j, m, i, p_ctx, s_fun, loop_head, s_lu, state_name)?;
+        compile_branchless_instructions(
+          j, m, i, p_ctx, s_fun, loop_head, s_lu, state_name,
+        )?;
       }
 
       b.position_at_end(default_block);
@@ -126,28 +146,36 @@ pub(crate) fn compile_state<'a>(
     }
 
     if let Some(token_branches) = groups.get("TOKEN") {
-      let (cases, branches) = deconstruct_branches("token_", token_branches, m, s_fun, i32)?;
+      let (cases, branches) =
+        deconstruct_branches("token_", token_branches, m, s_fun, i32)?;
 
       construct_scan(m, p_ctx, s_fun, *s_lu.get(&state.scanner)?, scan_stop)?;
 
       let value = CTX::tok_id.load(b, p_ctx)?.into_int_value();
 
-      let default_block = ctx.append_basic_block(s_fun, &format!("token_default"));
+      let default_block =
+        ctx.append_basic_block(s_fun, &format!("token_default"));
       b.build_switch(value, default_block, &convert_to_case_entry(cases));
 
       for (block, i) in branches {
         b.position_at_end(block);
-        compile_branchless_instructions(j, m, i, p_ctx, s_fun, loop_head, s_lu, state_name)?;
+        compile_branchless_instructions(
+          j, m, i, p_ctx, s_fun, loop_head, s_lu, state_name,
+        )?;
       }
 
       b.position_at_end(default_block);
       last_block = default_block;
     }
 
-    if groups.keys().any(|k| matches!(k.as_str(), "BYTE" | "CODEPOINT" | "CLASS" | "EOF")) {
+    if groups
+      .keys()
+      .any(|k| matches!(k.as_str(), "BYTE" | "CODEPOINT" | "CLASS" | "EOF"))
+    {
       // If the block size is less than 1 then jump to default
       let active_block = last_block;
-      let symbol_branches_start = ctx.append_basic_block(s_fun, "table_branches");
+      let symbol_branches_start =
+        ctx.append_basic_block(s_fun, "table_branches");
 
       last_block = symbol_branches_start;
 
@@ -156,7 +184,8 @@ pub(crate) fn compile_state<'a>(
       let scan_ptr_cache = CTX::scan_ptr.load(b, p_ctx)?.into_pointer_value();
 
       if let Some(byte_branches) = groups.get("BYTE") {
-        let (mut cases, branches) = deconstruct_branches("byte_", byte_branches, m, s_fun, i8)?;
+        let (mut cases, branches) =
+          deconstruct_branches("byte_", byte_branches, m, s_fun, i8)?;
 
         let value = b.build_load(scan_ptr_cache, "").into_int_value();
 
@@ -173,12 +202,15 @@ pub(crate) fn compile_state<'a>(
 
         for (block, i) in branches {
           b.position_at_end(block);
-          compile_branchless_instructions(j, m, i, p_ctx, s_fun, loop_head, s_lu, state_name)?;
+          compile_branchless_instructions(
+            j, m, i, p_ctx, s_fun, loop_head, s_lu, state_name,
+          )?;
         }
 
         b.position_at_end(last_block);
 
-        let default_block = ctx.append_basic_block(s_fun, &format!("byte_default"));
+        let default_block =
+          ctx.append_basic_block(s_fun, &format!("byte_default"));
         b.build_switch(value, default_block, &convert_to_case_entry(cases));
 
         b.position_at_end(default_block);
@@ -186,20 +218,25 @@ pub(crate) fn compile_state<'a>(
       }
 
       if groups.keys().any(|k| matches!(k.as_str(), "CODEPOINT" | "CLASS")) {
-        let (cp_val, tok_len) = construct_cp_lu_with_token_len_store(m, scan_ptr_cache)?;
+        let (cp_val, tok_len) =
+          construct_cp_lu_with_token_len_store(m, scan_ptr_cache)?;
 
         CTX::sym_len.store(b, p_ctx, tok_len)?;
 
         if let Some(cp_branches) = groups.get("CODEPOINT") {
-          let (cases, branches) = deconstruct_branches("codepoint_", cp_branches, m, s_fun, i32)?;
+          let (cases, branches) =
+            deconstruct_branches("codepoint_", cp_branches, m, s_fun, i32)?;
 
-          let default_block = ctx.append_basic_block(s_fun, &format!("codepoint_default"));
+          let default_block =
+            ctx.append_basic_block(s_fun, &format!("codepoint_default"));
 
           b.build_switch(cp_val, default_block, &convert_to_case_entry(cases));
 
           for (block, i) in branches {
             b.position_at_end(block);
-            compile_branchless_instructions(j, m, i, p_ctx, s_fun, loop_head, s_lu, state_name)?;
+            compile_branchless_instructions(
+              j, m, i, p_ctx, s_fun, loop_head, s_lu, state_name,
+            )?;
           }
 
           b.position_at_end(default_block);
@@ -210,23 +247,32 @@ pub(crate) fn compile_state<'a>(
           let (mut cases, branches) =
             deconstruct_branches("class_", class_branches, m, s_fun, i32)?;
 
-          cases.iter_mut().filter(|(i, ..)| *i == CodePointClass::NewLine as i64).for_each(|i| {
-            create_line_increment(m, s_fun, p_ctx, i8.const_int(1, false), i);
-          });
+          cases
+            .iter_mut()
+            .filter(|(i, ..)| *i == CodePointClass::NewLine as i64)
+            .for_each(|i| {
+              create_line_increment(m, s_fun, p_ctx, i8.const_int(1, false), i);
+            });
 
           for (block, i) in branches {
             b.position_at_end(block);
-            compile_branchless_instructions(j, m, i, p_ctx, s_fun, loop_head, s_lu, state_name)?;
+            compile_branchless_instructions(
+              j, m, i, p_ctx, s_fun, loop_head, s_lu, state_name,
+            )?;
           }
 
           b.position_at_end(last_block);
 
-          let cp_val = build_fast_call(b, m.fun.get_token_class_from_codepoint, &[cp_val.into()])?
+          let cp_val =
+            build_fast_call(b, m.fun.get_token_class_from_codepoint, &[
+              cp_val.into(),
+            ])?
             .try_as_basic_value()
             .unwrap_left()
             .into_int_value();
 
-          let default_block = ctx.append_basic_block(s_fun, &format!("class_default"));
+          let default_block =
+            ctx.append_basic_block(s_fun, &format!("class_default"));
           b.build_switch(cp_val, default_block, &convert_to_case_entry(cases));
 
           b.position_at_end(default_block);
@@ -243,14 +289,20 @@ pub(crate) fn compile_state<'a>(
         let default_block = ctx.append_basic_block(s_fun, "default");
         let eof_block = ctx.append_basic_block(s_fun, "eof");
 
-        let c =
-          b.build_int_compare(inkwell::IntPredicate::EQ, chars, m.iptr.const_int(0, false), "");
+        let c = b.build_int_compare(
+          inkwell::IntPredicate::EQ,
+          chars,
+          m.iptr.const_int(0, false),
+          "",
+        );
         b.build_conditional_branch(c, eof_block, default_block);
         b.position_at_end(eof_block);
 
         match eof_branches[0] {
           ASTNode::ASSERT(box ASSERT { instructions: i, .. }) => {
-            compile_branchless_instructions(j, m, &i, p_ctx, s_fun, loop_head, s_lu, state_name)?
+            compile_branchless_instructions(
+              j, m, &i, p_ctx, s_fun, loop_head, s_lu, state_name,
+            )?
           }
           _ => unreachable!(),
         };
@@ -277,13 +329,17 @@ pub(crate) fn compile_state<'a>(
     if let Some(default_branches) = groups.get("DEFAULT") {
       debug_assert!(default_branches.len() == 1);
       let DEFAULT { instructions: i } = default_branches[0].as_DEFAULT()?;
-      compile_branchless_instructions(j, m, &i, p_ctx, s_fun, loop_head, s_lu, state_name)?;
+      compile_branchless_instructions(
+        j, m, &i, p_ctx, s_fun, loop_head, s_lu, state_name,
+      )?;
     } else {
       fail(m, p_ctx, s_fun)?;
     }
   } else {
     let i = &state.instructions;
-    compile_branchless_instructions(j, m, i, p_ctx, s_fun, loop_head, s_lu, state_name)?;
+    compile_branchless_instructions(
+      j, m, i, p_ctx, s_fun, loop_head, s_lu, state_name,
+    )?;
   }
 
   SherpaResult::Ok(())
@@ -303,8 +359,10 @@ fn create_line_increment<'a>(
   let block = ctx.append_basic_block(state_fun, "increment_line_data");
   b.position_at_end(block);
 
-  let beg = b.build_ptr_to_int(CTX::beg_ptr.load(b, p)?.into_pointer_value(), i64, "");
-  let scan = b.build_ptr_to_int(CTX::scan_ptr.load(b, p)?.into_pointer_value(), i64, "");
+  let beg =
+    b.build_ptr_to_int(CTX::beg_ptr.load(b, p)?.into_pointer_value(), i64, "");
+  let scan =
+    b.build_ptr_to_int(CTX::scan_ptr.load(b, p)?.into_pointer_value(), i64, "");
   let val = b.build_int_sub(scan, beg, "");
   let val = b.build_int_truncate(val, i32, "");
   CTX::end_line_off.store(b, p, val)?;
@@ -335,29 +393,33 @@ fn deconstruct_branches<'llvm, 'grammar>(
   let (cases, branches): (
     Vec<Vec<(i64, IntValue<'llvm>, BasicBlock<'llvm>)>>,
     Vec<(BasicBlock<'llvm>, &'grammar Vec<ASTNode>)>,
-  ) =
-    hash_group_vec(branches.iter().map(|b| b.as_ASSERT().unwrap()).collect::<Vec<_>>(), |_, b| {
+  ) = hash_group_vec(
+    branches.iter().map(|b| b.as_ASSERT().unwrap()).collect::<Vec<_>>(),
+    |_, b| {
       let mut hasher = DefaultHasher::new();
       b.instructions.hash(&mut hasher);
       hasher.finish()
-    })
-    .iter()
-    .map(|i| {
-      let assert = i[0];
-      let block = m.ctx.append_basic_block(
-        func,
-        &format!(
-          "{branch_prefix}{}",
-          i.iter().map(|i| i.ids.val.to_string()).collect::<Vec<_>>().join("_")
-        ),
-      );
-      let cases = i
-        .iter()
-        .map(|i| (i.ids.val, val_type.const_int(i.ids.val as u64, false).into(), block))
-        .collect::<Vec<_>>();
-      (cases, (block, &assert.instructions))
-    })
-    .unzip();
+    },
+  )
+  .iter()
+  .map(|i| {
+    let assert = i[0];
+    let block = m.ctx.append_basic_block(
+      func,
+      &format!(
+        "{branch_prefix}{}",
+        i.iter().map(|i| i.ids.val.to_string()).collect::<Vec<_>>().join("_")
+      ),
+    );
+    let cases = i
+      .iter()
+      .map(|i| {
+        (i.ids.val, val_type.const_int(i.ids.val as u64, false).into(), block)
+      })
+      .collect::<Vec<_>>();
+    (cases, (block, &assert.instructions))
+  })
+  .unzip();
 
   SherpaResult::Ok((cases.into_iter().flatten().collect(), branches))
 }
@@ -376,7 +438,10 @@ pub(crate) fn compile_branchless_instructions<'a>(
 
   let mut resolved_end = false;
   let mut goto_encountered = 0;
-  let goto_count = instructions.iter().filter(|i| i.get_type() == ASTNodeType::PushGoto).count();
+  let goto_count = instructions
+    .iter()
+    .filter(|i| i.get_type() == ASTNodeType::PushGoto)
+    .count();
   let pass_last = matches!(instructions.last()?.get_type(), ASTNodeType::Pass);
 
   for (i, instruction) in instructions.iter().enumerate() {
@@ -554,14 +619,16 @@ pub(crate) fn add_goto_slot(
   let goto_top = CTX::goto_stack_ptr.load(b, p_ctx)?.into_pointer_value();
 
   // Create new goto struct
-  let new_goto = b.build_insert_value(types.goto.get_undef(), goto_state, 1, "")?;
+  let new_goto =
+    b.build_insert_value(types.goto.get_undef(), goto_state, 1, "")?;
   let new_goto = b.build_insert_value(new_goto, goto_fn, 0, "")?;
 
   // Store in the current slot
   b.build_store(goto_top, new_goto);
 
   // Increment the slot
-  let goto_top = unsafe { b.build_gep(goto_top, &[i32.const_int(1, false)], "") };
+  let goto_top =
+    unsafe { b.build_gep(goto_top, &[i32.const_int(1, false)], "") };
 
   // Store the top slot pointer
   CTX::goto_stack_ptr.store(b, p_ctx, goto_top)?;
@@ -617,7 +684,11 @@ fn update_goto_remaining<'a>(
   // Decrement goto remaining
   let goto_free_ptr = CTX::goto_free.get_ptr(b, p_ctx)?;
   let goto_free = b.build_load(goto_free_ptr, "").into_int_value();
-  let goto_free = b.build_int_sub(goto_free, i32.const_int(goto_slots_consumed as u64, false), "");
+  let goto_free = b.build_int_sub(
+    goto_free,
+    i32.const_int(goto_slots_consumed as u64, false),
+    "",
+  );
   b.build_store(goto_free_ptr, goto_free);
   SherpaResult::Ok(())
 }
@@ -641,7 +712,12 @@ pub(crate) fn ensure_space_on_goto_stack<'a>(
   let goto_free = CTX::goto_free.load(b, p_ctx)?.into_int_value();
 
   let needed_slots = i32.const_int(needed_slot_count as u64, false);
-  let comparison = b.build_int_compare(inkwell::IntPredicate::UGE, goto_free, needed_slots, "");
+  let comparison = b.build_int_compare(
+    inkwell::IntPredicate::UGE,
+    goto_free,
+    needed_slots,
+    "",
+  );
 
   let extend_block = ctx.append_basic_block(state_fn, "Extend");
   let ready_block = ctx.append_basic_block(state_fn, "Return");
@@ -652,7 +728,12 @@ pub(crate) fn ensure_space_on_goto_stack<'a>(
 
   build_fast_call(b, fun.extend_stack, &[
     p_ctx.into(),
-    i32.const_int((2 << needed_slot_count.checked_ilog2().unwrap_or(0)) as u64, false).into(),
+    i32
+      .const_int(
+        (2 << needed_slot_count.checked_ilog2().unwrap_or(0)) as u64,
+        false,
+      )
+      .into(),
   ])?;
 
   b.build_unconditional_branch(ready_block);
@@ -661,8 +742,12 @@ pub(crate) fn ensure_space_on_goto_stack<'a>(
   SherpaResult::Ok(())
 }
 
-/// Causes the execution to jump back to the beginning of the `loop_start` block.
-fn construct_jump_to_table_start(m: &LLVMParserModule, start_block: BasicBlock) {
+/// Causes the execution to jump back to the beginning of the `loop_start`
+/// block.
+fn construct_jump_to_table_start(
+  m: &LLVMParserModule,
+  start_block: BasicBlock,
+) {
   m.b.build_unconditional_branch(start_block);
 }
 
@@ -675,7 +760,6 @@ fn construct_jump_to_table_start(m: &LLVMParserModule, start_block: BasicBlock) 
 /// the `head_ptr` ( and possibly the `base_ptr`) forward to the end of
 /// the token, and also to issue a `Shift` event with a sized
 /// token.
-///
 fn incr_scan_ptr_by_sym_len<'a>(
   LLVMParserModule { b, .. }: &'a LLVMParserModule,
   p_ctx: PointerValue<'a>,
@@ -683,7 +767,11 @@ fn incr_scan_ptr_by_sym_len<'a>(
   let scan_ptr_cache = CTX::scan_ptr.load(b, p_ctx)?.into_pointer_value();
 
   CTX::scan_ptr.store(b, p_ctx, unsafe {
-    b.build_gep(scan_ptr_cache, &[CTX::sym_len.load(b, p_ctx)?.into_int_value()], "")
+    b.build_gep(
+      scan_ptr_cache,
+      &[CTX::sym_len.load(b, p_ctx)?.into_int_value()],
+      "",
+    )
   });
 
   SherpaResult::Ok(())
@@ -764,8 +852,16 @@ fn transfer_end_line_to_chkp_line(
   LLVMParserModule { b, .. }: &LLVMParserModule,
   p_ctx: PointerValue,
 ) -> SherpaResult<()> {
-  CTX::chkp_line_num.store(b, p_ctx, CTX::end_line_num.load(b, p_ctx)?.into_int_value())?;
-  CTX::chkp_line_off.store(b, p_ctx, CTX::end_line_off.load(b, p_ctx)?.into_int_value())?;
+  CTX::chkp_line_num.store(
+    b,
+    p_ctx,
+    CTX::end_line_num.load(b, p_ctx)?.into_int_value(),
+  )?;
+  CTX::chkp_line_off.store(
+    b,
+    p_ctx,
+    CTX::end_line_off.load(b, p_ctx)?.into_int_value(),
+  )?;
   SherpaResult::Ok(())
 }
 
@@ -773,8 +869,16 @@ pub(crate) fn transfer_chkp_line_to_start_line<'a>(
   LLVMParserModule { b, .. }: &'a LLVMParserModule,
   p_ctx: PointerValue,
 ) -> SherpaResult<()> {
-  CTX::start_line_num.store(b, p_ctx, CTX::chkp_line_num.load(b, p_ctx)?.into_int_value())?;
-  CTX::start_line_off.store(b, p_ctx, CTX::chkp_line_off.load(b, p_ctx)?.into_int_value())?;
+  CTX::start_line_num.store(
+    b,
+    p_ctx,
+    CTX::chkp_line_num.load(b, p_ctx)?.into_int_value(),
+  )?;
+  CTX::start_line_off.store(
+    b,
+    p_ctx,
+    CTX::chkp_line_off.load(b, p_ctx)?.into_int_value(),
+  )?;
   SherpaResult::Ok(())
 }
 
@@ -783,8 +887,16 @@ pub(crate) fn transfer_start_line_to_end_line<'a>(
   LLVMParserModule { b, .. }: &'a LLVMParserModule,
   p_ctx: PointerValue,
 ) -> SherpaResult<()> {
-  CTX::end_line_num.store(b, p_ctx, CTX::start_line_num.load(b, p_ctx)?.into_int_value())?;
-  CTX::end_line_off.store(b, p_ctx, CTX::start_line_off.load(b, p_ctx)?.into_int_value())?;
+  CTX::end_line_num.store(
+    b,
+    p_ctx,
+    CTX::start_line_num.load(b, p_ctx)?.into_int_value(),
+  )?;
+  CTX::end_line_off.store(
+    b,
+    p_ctx,
+    CTX::start_line_off.load(b, p_ctx)?.into_int_value(),
+  )?;
   SherpaResult::Ok(())
 }
 
@@ -793,12 +905,21 @@ pub(crate) fn transfer_end_line_to_start_line<'a>(
   LLVMParserModule { b, .. }: &'a LLVMParserModule,
   p_ctx: PointerValue,
 ) -> SherpaResult<()> {
-  CTX::start_line_num.store(b, p_ctx, CTX::end_line_num.load(b, p_ctx)?.into_int_value())?;
-  CTX::start_line_off.store(b, p_ctx, CTX::end_line_off.load(b, p_ctx)?.into_int_value())?;
+  CTX::start_line_num.store(
+    b,
+    p_ctx,
+    CTX::end_line_num.load(b, p_ctx)?.into_int_value(),
+  )?;
+  CTX::start_line_off.store(
+    b,
+    p_ctx,
+    CTX::end_line_off.load(b, p_ctx)?.into_int_value(),
+  )?;
   SherpaResult::Ok(())
 }
 
-/// Resets peek side-effects by assigning `base_ptr` to `head_ptr` and `scan_ptr`. Also
+/// Resets peek side-effects by assigning `base_ptr` to `head_ptr` and
+/// `scan_ptr`. Also
 pub(crate) fn peek_reset<'a>(
   LLVMParserModule { b, i32, i8, iptr, .. }: &'a LLVMParserModule,
   p_ctx: PointerValue,
@@ -815,7 +936,10 @@ pub(crate) fn peek_reset<'a>(
 }
 /// Assigns the value head_ptr + tok_len to head_ptr and scan_ptr.
 /// Also sets the values of tok_len and tok_id to 0.
-pub(crate) fn peek_token<'a>(m: &'a LLVMParserModule, p_ctx: PointerValue) -> SherpaResult<()> {
+pub(crate) fn peek_token<'a>(
+  m: &'a LLVMParserModule,
+  p_ctx: PointerValue,
+) -> SherpaResult<()> {
   const __HINT__: Opcode = Opcode::PeekToken;
   let LLVMParserModule { b, i32, iptr, .. } = m;
   let offset = get_offset_to_end_of_token(m, p_ctx)?;
@@ -833,8 +957,16 @@ pub(crate) fn get_chars_remaining<'a>(
   p_ctx: PointerValue<'a>,
 ) -> SherpaResult<IntValue<'a>> {
   let LLVMParserModule { b, iptr, .. } = sp;
-  let scan_int = b.build_ptr_to_int(CTX::scan_ptr.load(b, p_ctx)?.into_pointer_value(), *iptr, "");
-  let end_int = b.build_ptr_to_int(CTX::end_ptr.load(b, p_ctx)?.into_pointer_value(), *iptr, "");
+  let scan_int = b.build_ptr_to_int(
+    CTX::scan_ptr.load(b, p_ctx)?.into_pointer_value(),
+    *iptr,
+    "",
+  );
+  let end_int = b.build_ptr_to_int(
+    CTX::end_ptr.load(b, p_ctx)?.into_pointer_value(),
+    *iptr,
+    "",
+  );
   SherpaResult::Ok(b.build_int_sub(end_int, scan_int, "").into())
 }
 
@@ -843,8 +975,16 @@ pub(crate) fn scan_is_less_than_end<'a>(
   p_ctx: PointerValue<'a>,
 ) -> SherpaResult<IntValue<'a>> {
   let LLVMParserModule { b, iptr, .. } = sp;
-  let scan_int = b.build_ptr_to_int(CTX::scan_ptr.load(b, p_ctx)?.into_pointer_value(), *iptr, "");
-  let end_int = b.build_ptr_to_int(CTX::end_ptr.load(b, p_ctx)?.into_pointer_value(), *iptr, "");
+  let scan_int = b.build_ptr_to_int(
+    CTX::scan_ptr.load(b, p_ctx)?.into_pointer_value(),
+    *iptr,
+    "",
+  );
+  let end_int = b.build_ptr_to_int(
+    CTX::end_ptr.load(b, p_ctx)?.into_pointer_value(),
+    *iptr,
+    "",
+  );
   SherpaResult::Ok(b.build_int_compare(
     inkwell::IntPredicate::ULT,
     scan_int,
@@ -946,9 +1086,11 @@ pub(crate) fn construct_token_shift<'a>(
   SherpaResult::Ok(Some((post_shift, p_ctx)))
 }
 
-/// Dispatched after a shift event, that is this should be pushed onto the goto stack
-/// before emitting a shift event.
-pub(crate) fn construct_shift_pre_emit<'a>(m: &'a LLVMParserModule) -> SherpaResult<()> {
+/// Dispatched after a shift event, that is this should be pushed onto the goto
+/// stack before emitting a shift event.
+pub(crate) fn construct_shift_pre_emit<'a>(
+  m: &'a LLVMParserModule,
+) -> SherpaResult<()> {
   let LLVMParserModule { b, fun, .. } = m;
   let fn_value = fun.pre_shift_emit;
 
@@ -972,9 +1114,11 @@ pub(crate) fn construct_shift_pre_emit<'a>(m: &'a LLVMParserModule) -> SherpaRes
   validate(fn_value)
 }
 
-/// Dispatched after a shift event, that is this should be pushed onto the goto stack
-/// before emitting a shift event.
-pub(crate) fn construct_shift_post_emit<'a>(m: &'a LLVMParserModule) -> SherpaResult<()> {
+/// Dispatched after a shift event, that is this should be pushed onto the goto
+/// stack before emitting a shift event.
+pub(crate) fn construct_shift_post_emit<'a>(
+  m: &'a LLVMParserModule,
+) -> SherpaResult<()> {
   let LLVMParserModule { b, i32, fun, .. } = m;
   let fn_value = fun.post_shift_emit;
 
@@ -1021,18 +1165,23 @@ pub(crate) fn pass<'a>(
   p_ctx: PointerValue,
   state_fun: FunctionValue,
 ) -> SherpaResult<()> {
-  b.build_store(CTX::state.get_ptr(b, p_ctx)?, i32.const_int(NORMAL_STATE_FLAG_LLVM as u64, false));
+  b.build_store(
+    CTX::state.get_ptr(b, p_ctx)?,
+    i32.const_int(NORMAL_STATE_FLAG_LLVM as u64, false),
+  );
   build_tail_call_with_return(b, state_fun, fun.dispatch)
 }
 
 /// Builds a normal return with the Accept event.
-pub(crate) fn accept<'a>(LLVMParserModule { b, i32, .. }: &LLVMParserModule) -> SherpaResult<()> {
+pub(crate) fn accept<'a>(
+  LLVMParserModule { b, i32, .. }: &LLVMParserModule,
+) -> SherpaResult<()> {
   b.build_return(Some(&i32.const_int(ParseActionType::Accept.into(), false)));
   SherpaResult::Ok(())
 }
 
-/// Resets any peek side-effects and builds a tail call return to the `dispatch_unwind` function.
-///
+/// Resets any peek side-effects and builds a tail call return to the
+/// `dispatch_unwind` function.
 pub(crate) fn fail<'a>(
   m: &'a LLVMParserModule,
   p_ctx: PointerValue,
@@ -1041,7 +1190,10 @@ pub(crate) fn fail<'a>(
   let LLVMParserModule { b, fun, i32, .. } = m;
   peek_reset(m, p_ctx)?;
   transfer_start_line_to_end_line(m, p_ctx)?;
-  b.build_store(CTX::state.get_ptr(b, p_ctx)?, i32.const_int(FAIL_STATE_FLAG_LLVM as u64, false));
+  b.build_store(
+    CTX::state.get_ptr(b, p_ctx)?,
+    i32.const_int(FAIL_STATE_FLAG_LLVM as u64, false),
+  );
   build_tail_call_with_return(b, state_fun, fun.dispatch_unwind)
 }
 
@@ -1049,13 +1201,15 @@ fn construct_cp_lu_with_token_len_store<'a>(
   LLVMParserModule { b, fun, .. }: &'a LLVMParserModule,
   buffer: PointerValue<'a>,
 ) -> SherpaResult<(IntValue<'a>, IntValue<'a>)> {
-  let cp_info = build_fast_call(b, fun.get_utf8_codepoint_info, &[buffer.into()])?
-    .try_as_basic_value()
-    .unwrap_left()
-    .into_struct_value();
+  let cp_info =
+    build_fast_call(b, fun.get_utf8_codepoint_info, &[buffer.into()])?
+      .try_as_basic_value()
+      .unwrap_left()
+      .into_struct_value();
 
   let cp_val = b.build_extract_value(cp_info, 0, "cp_val")?.into_int_value();
-  let cp_byte_len = b.build_extract_value(cp_info, 1, "cp_len")?.into_int_value();
+  let cp_byte_len =
+    b.build_extract_value(cp_info, 1, "cp_len")?.into_int_value();
 
   SherpaResult::Ok((cp_val, cp_byte_len))
 }
@@ -1078,25 +1232,39 @@ pub(crate) fn check_for_input_acceptability<'a>(
   let c = scan_is_less_than_end(m, p_ctx)?;
   b.build_conditional_branch(c, valid_input, check_if_eof);
 
-  // Check to see if the EOF flag is set -------------------------------------------------
+  // Check to see if the EOF flag is set
+  // -------------------------------------------------
   b.position_at_end(check_if_eof);
   let input_complete = CTX::block_is_eoi.load(b, p_ctx)?.into_int_value();
-  let c =
-    b.build_int_compare(inkwell::IntPredicate::EQ, input_complete, bool.const_int(1, false), "");
+  let c = b.build_int_compare(
+    inkwell::IntPredicate::EQ,
+    input_complete,
+    bool.const_int(1, false),
+    "",
+  );
   b.build_conditional_branch(c, invalid_input, try_extend);
 
-  // Try to get another block of input data ----------------------------------------------
+  // Try to get another block of input data
+  // ----------------------------------------------
   b.position_at_end(try_extend);
-  build_fast_call(b, fun.get_adjusted_input_block, &[p_ctx.into(), needed_num_bytes.into()]);
+  build_fast_call(b, fun.get_adjusted_input_block, &[
+    p_ctx.into(),
+    needed_num_bytes.into(),
+  ]);
 
   let input_available = get_chars_remaining(m, p_ctx)?;
   let input_available = b.build_int_cast(input_available, i64, "");
-  let c = b.build_int_compare(inkwell::IntPredicate::SGE, input_available, needed_num_bytes, "");
+  let c = b.build_int_compare(
+    inkwell::IntPredicate::SGE,
+    input_available,
+    needed_num_bytes,
+    "",
+  );
 
   // TODO:
-  // If input is bad then return a NEEDED_INPUT event, after pushing the current state to the stack.
-  // This should pause the parser until some external signal indicates more data is available and
-  // parsing can be resumed.
+  // If input is bad then return a NEEDED_INPUT event, after pushing the current
+  // state to the stack. This should pause the parser until some external
+  // signal indicates more data is available and parsing can be resumed.
 
   b.build_conditional_branch(c, valid_input, invalid_input);
 
@@ -1150,7 +1318,11 @@ pub(crate) fn construct_scan<'a>(
   CTX::state.store(b, p_ctx, local_state);
 
   // Reset scanner back to head
-  CTX::scan_ptr.store(b, p_ctx, CTX::head_ptr.load(b, p_ctx)?.into_pointer_value());
+  CTX::scan_ptr.store(
+    b,
+    p_ctx,
+    CTX::head_ptr.load(b, p_ctx)?.into_pointer_value(),
+  );
 
   SherpaResult::Ok(())
 }
@@ -1164,17 +1336,21 @@ fn build_push_fn_state<'a>(
   let LLVMParserModule { b, fun, i32, .. } = sp;
   b.build_call(
     fun.push_state,
-    &[parse_ctx.into(), i32.const_int(state_mask as u64, false).into(), function_ptr.into()],
+    &[
+      parse_ctx.into(),
+      i32.const_int(state_mask as u64, false).into(),
+      function_ptr.into(),
+    ],
     "",
   );
 
   SherpaResult::Ok(())
 }
 
-/// The prime function's purpose is fist create a base goto state that emits a failure
-/// to prevent stack underflow when descending to the bottom of the goto stack, and also
-/// insert the first GOTO entry that will initiate the parser to start parsing based on
-/// an entry production id.
+/// The prime function's purpose is fist create a base goto state that emits a
+/// failure to prevent stack underflow when descending to the bottom of the goto
+/// stack, and also insert the first GOTO entry that will initiate the parser to
+/// start parsing based on an entry production id.
 pub(crate) fn construct_prime_function(
   j: &mut Journal,
 
@@ -1198,16 +1374,21 @@ pub(crate) fn construct_prime_function(
     .filter_map(|p| {
       let name = &g.get_entry_name_from_prod_id(&p.production.id).unwrap();
       let fun = state_lu.get(name).unwrap();
-      let block = sp.ctx.append_basic_block(fn_value, &format!("prime_{}", name));
+      let block =
+        sp.ctx.append_basic_block(fn_value, &format!("prime_{}", name));
       Some((p.export_id, block, fun))
     })
     .collect::<Vec<_>>();
 
-  build_fast_call(b, funct.extend_stack, &[parse_ctx.into(), i32.const_int(8, false).into()]);
+  build_fast_call(b, funct.extend_stack, &[
+    parse_ctx.into(),
+    i32.const_int(8, false).into(),
+  ]);
 
   CTX::is_active.store(b, parse_ctx, bool.const_int(1, false))?;
 
-  // Push the End-Of-Parse goto onto the stack. This will prevent underflow of the stack
+  // Push the End-Of-Parse goto onto the stack. This will prevent underflow of
+  // the stack
   build_push_fn_state(
     sp,
     parse_ctx,
@@ -1219,7 +1400,10 @@ pub(crate) fn construct_prime_function(
     b.build_switch(
       selector,
       options[0].1.into(),
-      &options.iter().map(|b| (i32.const_int(b.0 as u64, false), b.1)).collect::<Vec<_>>(),
+      &options
+        .iter()
+        .map(|b| (i32.const_int(b.0 as u64, false), b.1))
+        .collect::<Vec<_>>(),
     );
 
     for (_, block, fn_ptr) in &options {

@@ -38,7 +38,8 @@ pub fn build_llvm_parser_interface<'a>() -> PipelineTask {
       let parser_name = grammar.id.name.clone();
 
       let dummy = AScriptStore::dummy(&mut j).unwrap();
-      let store = if let Some(store) = task_ctx.get_ascript() { store } else { &dummy };
+      let store =
+        if let Some(store) = task_ctx.get_ascript() { store } else { &dummy };
 
       let output_type = OutputType::Rust;
 
@@ -49,9 +50,9 @@ pub fn build_llvm_parser_interface<'a>() -> PipelineTask {
           let w = AscriptWriter::new(&utils, writer);
           match write_rust_llvm_parser_file(w, &parser_name, &parser_name) {
             SherpaResult::Err(err) => Err(vec![SherpaError::from(err)]),
-            SherpaResult::Ok(w) => {
-              Ok(Some((20, unsafe { String::from_utf8_unchecked(w.into_writer().into_output()) })))
-            }
+            SherpaResult::Ok(w) => Ok(Some((20, unsafe {
+              String::from_utf8_unchecked(w.into_writer().into_output())
+            }))),
             _ => unreachable!(),
           }
         }
@@ -77,12 +78,14 @@ pub enum OutputType {
 /// # Args
 /// `target_triple` - A LLVM compatible target triple
 ///
-/// `clang_command` - The name of the clang executable that can be called from a terminal
+/// `clang_command` - The name of the clang executable that can be called from a
+/// terminal
 ///
-/// `output_cargo_build_commands` - Set to true to output build commands that inform the rust compiler of the link
-/// targets.
+/// `output_cargo_build_commands` - Set to true to output build commands that
+/// inform the rust compiler of the link targets.
 ///
-/// `output_llvm_ir_file` - Output a purely decorational version of the LLVM code in intermediate representational form.
+/// `output_llvm_ir_file` - Output a purely decorational version of the LLVM
+/// code in intermediate representational form.
 pub fn build_llvm_parser(
   target_triple: Option<String>,
   output_cargo_build_commands: bool,
@@ -104,18 +107,24 @@ pub fn build_llvm_parser(
       };
 
       let ll_file_path = output_path.join(parser_name.clone() + ".ll");
-      let bitcode_path = output_path.join("lib".to_string() + &parser_name + ".bc");
-      let object_path = output_path.join("lib".to_string() + &parser_name + ".o");
+      let bitcode_path =
+        output_path.join("lib".to_string() + &parser_name + ".bc");
+      let object_path =
+        output_path.join("lib".to_string() + &parser_name + ".o");
       let archive_path = output_path.join(format!("./lib{}.a", &parser_name));
 
       if output_cargo_build_commands {
-        println!("cargo:rustc-link-search=native={}", output_path.to_str().unwrap());
+        println!(
+          "cargo:rustc-link-search=native={}",
+          output_path.to_str().unwrap()
+        );
         println!("cargo:rustc-link-lib=static={}", parser_name);
       }
 
       let ctx = Context::create();
 
-      // Setup Target Machine -------------------------------------------------------------------
+      // Setup Target Machine
+      // -------------------------------------------------------------------
       Target::initialize_x86(&InitializationConfig::default());
       let target_triple = if let Some(target_triple) = &target_triple {
         TargetTriple::create(target_triple)
@@ -128,24 +137,32 @@ pub fn build_llvm_parser(
       let model = CodeModel::Small;
       let target = Target::from_triple(&target_triple).unwrap();
       let opt = OptimizationLevel::Less;
-      let target_machine =
-        target.create_target_machine(&target_triple, "generic", "", opt, reloc, model).unwrap();
+      let target_machine = target
+        .create_target_machine(&target_triple, "generic", "", opt, reloc, model)
+        .unwrap();
 
       let target_data = target_machine.get_target_data();
 
-      // Setup module ---------------------------------------------------------------------------
+      // Setup module
+      // ---------------------------------------------------------------------------
       let module = ctx.create_module(&parser_name);
       module.set_triple(&target_triple);
       module.set_data_layout(&target_data.get_data_layout());
 
       let mut llvm_mod = construct_module(&mut j, &ctx, &target_data, module);
 
-      match crate::llvm::compile_llvm_module_from_parse_states(&mut j, &mut llvm_mod, states) {
+      match crate::llvm::compile_llvm_module_from_parse_states(
+        &mut j,
+        &mut llvm_mod,
+        states,
+      ) {
         SherpaResult::Ok(()) => {
           if task_ctx.get_journal().config().enable_ascript {
             unsafe {
-              crate::llvm::ascript_functions::construct_ast_builder::<DummyASTEnum>(&llvm_mod)
-                .unwrap();
+              crate::llvm::ascript_functions::construct_ast_builder::<
+                DummyASTEnum,
+              >(&llvm_mod)
+              .unwrap();
             }
           }
 
@@ -160,18 +177,29 @@ pub fn build_llvm_parser(
             task_ctx.add_artifact_path(bitcode_path.clone());
             if false && llvm_mod.module.write_bitcode_to_path(&bitcode_path) {
               match Command::new(clang_command.clone())
-                .args(&["-c", "-o", object_path.to_str().unwrap(), bitcode_path.to_str().unwrap()])
+                .args(&[
+                  "-c",
+                  "-o",
+                  object_path.to_str().unwrap(),
+                  bitcode_path.to_str().unwrap(),
+                ])
                 .status()
               {
                 Ok(_) => {
                   task_ctx.add_artifact_path(object_path.clone());
                   if !(Command::new(ar_command)
-                    .args(&["rc", archive_path.to_str().unwrap(), object_path.to_str().unwrap()])
+                    .args(&[
+                      "rc",
+                      archive_path.to_str().unwrap(),
+                      object_path.to_str().unwrap(),
+                    ])
                     .status()
                     .unwrap()
                     .success())
                   {
-                    Err(vec![SherpaError::from("Unable to compile llvm bitcode")])
+                    Err(vec![SherpaError::from(
+                      "Unable to compile llvm bitcode",
+                    )])
                   } else {
                     Ok(None)
                   }
@@ -193,10 +221,18 @@ pub fn build_llvm_parser(
             apply_llvm_optimizations(opt, &llvm_mod);
             //}
 
-            match target_machine.write_to_file(&llvm_mod.module, FileType::Object, &object_path) {
+            match target_machine.write_to_file(
+              &llvm_mod.module,
+              FileType::Object,
+              &object_path,
+            ) {
               Ok(_) => {
                 if !(Command::new(ar_command)
-                  .args(&["rc", archive_path.to_str().unwrap(), object_path.to_str().unwrap()])
+                  .args(&[
+                    "rc",
+                    archive_path.to_str().unwrap(),
+                    object_path.to_str().unwrap(),
+                  ])
                   .status()
                   .unwrap()
                   .success())
@@ -221,7 +257,10 @@ pub fn build_llvm_parser(
   }
 }
 
-fn apply_llvm_optimizations(opt: OptimizationLevel, ctx: &crate::llvm::LLVMParserModule) {
+fn apply_llvm_optimizations(
+  opt: OptimizationLevel,
+  ctx: &crate::llvm::LLVMParserModule,
+) {
   println!("Applying optimizations1");
   //return;
   let pass_manager_builder = PassManagerBuilder::create();

@@ -420,19 +420,13 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
           );
           ast_stack.resize(len - (count - 1), AstSlot::<Node>::default());
         }
-        ParseAction::Skip {
-          token_byte_offset,
-          token_byte_length,
-          token_line_offset,
-          token_line_count,
-          token_id,
-        } => {}
+        ParseAction::Skip { .. } => {}
         ParseAction::Shift {
           token_byte_offset,
           token_byte_length,
           token_line_offset,
           token_line_count,
-          token_id,
+          ..
         } => {
           let tok = TokenRange {
             len:      token_byte_length,
@@ -442,7 +436,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
           };
           ast_stack.push(AstSlot(Node::default(), tok, Default::default()));
         }
-        ParseAction::Error { last_input, last_production } => {
+        ParseAction::Error { last_input, .. } => {
           let string = self.get_reader().get_bytes();
 
           let mut start = last_input.off as usize;
@@ -528,25 +522,14 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
         ParseAction::Fork { .. } => {
           panic!("No implementation of fork resolution is available")
         }
-        ParseAction::Skip {
-          token_byte_offset,
-          token_byte_length,
-          token_line_offset,
-          token_line_count,
-          token_id,
-        } => {
+        ParseAction::Skip { token_byte_offset, token_byte_length, .. } => {
           skips.push(
             self.get_input()[token_byte_offset as usize
               ..(token_byte_offset + token_byte_length) as usize]
               .to_string(),
           );
         }
-        ParseAction::Shift {
-          token_byte_length,
-          token_byte_offset,
-          token_id,
-          ..
-        } => {
+        ParseAction::Shift { token_byte_length, token_byte_offset, .. } => {
           let offset_start = token_byte_offset as usize;
           let offset_end = (token_byte_offset + token_byte_length) as usize;
 
@@ -620,13 +603,7 @@ Concrete Syntax Tree structure."
         ParseAction::Fork { .. } => {
           panic!("No implementation of fork resolution is available")
         }
-        ParseAction::Skip {
-          token_byte_offset,
-          token_byte_length,
-          token_line_offset,
-          token_line_count,
-          token_id,
-        } => {
+        ParseAction::Skip { token_byte_length, token_id, .. } => {
           let skip = cst::Skipped { byte_len: token_byte_length, token_id };
           len += token_byte_length;
           skipped.push(skip);

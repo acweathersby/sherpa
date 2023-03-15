@@ -59,7 +59,11 @@ impl Origin {
         format!("ProdGoal[ {} {:?} ]", prod.name, prod.bytecode_id)
       }
       Origin::SymGoal(sym_id) => {
-        format!("SymGoal[ {} {:?} ]", sym_id.debug_string(g), sym_id.bytecode_id(g))
+        format!(
+          "SymGoal[ {} {:?} ]",
+          sym_id.debug_string(g),
+          sym_id.bytecode_id(g)
+        )
       }
       _ => format!("{:?}", self),
     }
@@ -125,7 +129,10 @@ impl Default for StateType {
 impl StateType {
   pub fn is_out_of_scope(&self) -> bool {
     use StateType::*;
-    matches!(self, ProductionCompleteOOS | ScannerCompleteOOS | PeekProductionCompleteOOS)
+    matches!(
+      self,
+      ProductionCompleteOOS | ScannerCompleteOOS | PeekProductionCompleteOOS
+    )
   }
 
   pub fn is_goto(&self) -> bool {
@@ -148,7 +155,10 @@ impl StateType {
         format!("AssignToken({})", sym_id.debug_string(g))
       }
       Self::Reduce(rule_id) => {
-        format!("Reduce({})", g.get_production_plain_name(&g.rules.get(rule_id).unwrap().prod_id))
+        format!(
+          "Reduce({})",
+          g.get_production_plain_name(&g.rules.get(rule_id).unwrap().prod_id)
+        )
       }
       _ => format!("{:?}", self),
     }
@@ -200,7 +210,9 @@ impl Hash for State {
       }
     }
 
-    for item in &self.peek_resolve_items.values().flatten().collect::<BTreeSet<_>>() {
+    for item in
+      &self.peek_resolve_items.values().flatten().collect::<BTreeSet<_>>()
+    {
       item.rule_id.hash(state);
       item.off.hash(state);
     }
@@ -244,7 +256,11 @@ impl State {
   }
 
   /// Set a group of items that a peek item will resolve to.
-  pub(crate) fn set_peek_resolve_items(&mut self, peek_origin_key: u64, items: Items) {
+  pub(crate) fn set_peek_resolve_items(
+    &mut self,
+    peek_origin_key: u64,
+    items: Items,
+  ) {
     self.peek_resolve_items.insert(peek_origin_key, items);
   }
 
@@ -292,7 +308,11 @@ impl State {
     self.kernel_items.len()
   }
 
-  pub(crate) fn get_closure(&self, g: &GrammarStore, is_scanner: bool) -> BTreeSet<Item> {
+  pub(crate) fn get_closure(
+    &self,
+    g: &GrammarStore,
+    is_scanner: bool,
+  ) -> BTreeSet<Item> {
     if self.id.is_root() {
       self.closure.as_ref().unwrap().clone().inscope_items()
     } else {
@@ -300,19 +320,27 @@ impl State {
     }
   }
 
-  pub(crate) fn get_root_closure(&self, g: &GrammarStore, is_scanner: bool) -> BTreeSet<Item> {
+  pub(crate) fn get_root_closure(
+    &self,
+    g: &GrammarStore,
+    is_scanner: bool,
+  ) -> BTreeSet<Item> {
     self.closure.as_ref().unwrap().clone()
   }
 
   fn compute_closure(&mut self, g: &GrammarStore, is_scanner: bool) {
     if self.kernel_items.len() > 0 {
       let origin_state = self.id;
-      let mut closure = get_closure(self.kernel_items.iter(), g, origin_state, is_scanner);
+      let mut closure =
+        get_closure(self.kernel_items.iter(), g, origin_state, is_scanner);
 
       if origin_state.is_root() {
-        let mut signatures = closure.iter().map(|i| (i.rule_id, i.off)).collect::<BTreeSet<_>>();
+        let mut signatures =
+          closure.iter().map(|i| (i.rule_id, i.off)).collect::<BTreeSet<_>>();
         // Incorporate items that are out of scope within this closure.
-        let mut queue = VecDeque::from_iter(self.kernel_items.iter().map(|i| i.get_prod_id(g)));
+        let mut queue = VecDeque::from_iter(
+          self.kernel_items.iter().map(|i| i.get_prod_id(g)),
+        );
         let mut seen = BTreeSet::new();
         while let Some(prod_id) = queue.pop_front() {
           if seen.insert(prod_id) {
@@ -323,7 +351,8 @@ impl State {
                     queue.push_back(item.get_prod_id(g));
                   }
 
-                  closure.insert(item.to_origin_state(origin_state).to_oos_index());
+                  closure
+                    .insert(item.to_origin_state(origin_state).to_oos_index());
                 }
               }
             }
@@ -335,7 +364,8 @@ impl State {
     }
   }
 
-  /// Returns true if the the call of the production leads to infinite loop due to left recursion.
+  /// Returns true if the the call of the production leads to infinite loop due
+  /// to left recursion.
   pub(crate) fn conflicting_production_call(
     &self,
     prod_id: ProductionId,
@@ -343,13 +373,23 @@ impl State {
     is_scanner: bool,
   ) -> bool {
     if self.id.is_root() {
-      let prod_ids = self.kernel_items.iter().map(|i| i.get_prod_id(g)).collect::<BTreeSet<_>>();
+      let prod_ids = self
+        .kernel_items
+        .iter()
+        .map(|i| i.get_prod_id(g))
+        .collect::<BTreeSet<_>>();
 
-      get_closure(get_production_start_items(&prod_id, g).iter(), g, self.id, is_scanner)
-        .into_iter()
-        .any(|i| {
-          prod_ids.contains(&i.get_production_id_at_sym(g)) || prod_ids.contains(&i.get_prod_id(g))
-        })
+      get_closure(
+        get_production_start_items(&prod_id, g).iter(),
+        g,
+        self.id,
+        is_scanner,
+      )
+      .into_iter()
+      .any(|i| {
+        prod_ids.contains(&i.get_production_id_at_sym(g))
+          || prod_ids.contains(&i.get_prod_id(g))
+      })
     } else {
       false
     }
@@ -361,8 +401,10 @@ impl State {
     kernel_items: T,
     is_scanner: bool,
   ) {
-    let mut kernel_items =
-      kernel_items.into_iter().map(|mut i| i.to_origin_state(self.id)).collect();
+    let mut kernel_items = kernel_items
+      .into_iter()
+      .map(|mut i| i.to_origin_state(self.id))
+      .collect();
 
     self.kernel_items.append(&mut kernel_items);
 
@@ -409,7 +451,12 @@ impl State {
     if self.predecessors.len() > 0 {
       string += &format!(
         r##" preds [{}]"##,
-        self.predecessors.iter().map(|p| p.0.to_string()).collect::<Vec<_>>().join(" ")
+        self
+          .predecessors
+          .iter()
+          .map(|p| p.0.to_string())
+          .collect::<Vec<_>>()
+          .join(" ")
       );
     }
 
@@ -458,20 +505,26 @@ pub(crate) fn get_closure<'a, T: ItemContainerIter<'a>>(
   let mut queue = VecDeque::from_iter(items.cloned());
   while let Some(kernel_item) = queue.pop_front() {
     match kernel_item.get_type(g) {
-      ItemType::ExclusiveCompleted(..) | ItemType::Completed(_) | ItemType::Terminal(_) => {
+      ItemType::ExclusiveCompleted(..)
+      | ItemType::Completed(_)
+      | ItemType::Terminal(_) => {
         out.insert(kernel_item);
       }
       ItemType::TokenProduction(prod_id, sym) => {
         if out.insert(kernel_item) && is_scanner {
           for item_in in get_production_start_items(&prod_id, g) {
-            queue.push_back(item_in.align(&kernel_item).to_origin_state(origin_state));
+            queue.push_back(
+              item_in.align(&kernel_item).to_origin_state(origin_state),
+            );
           }
         }
       }
       ItemType::NonTerminal(prod_id) => {
         if out.insert(kernel_item) {
           for item_in in get_production_start_items(&prod_id, g) {
-            queue.push_back(item_in.align(&kernel_item).to_origin_state(origin_state));
+            queue.push_back(
+              item_in.align(&kernel_item).to_origin_state(origin_state),
+            );
           }
         }
       }
@@ -593,7 +646,12 @@ impl Graph {
     println!(
       "\n\n\n--------------------------------------------------------
       Leaf States -- [ {} ]",
-      self.leaf_states.iter().map(|s| s.0.to_string()).collect::<Vec<_>>().join(" ")
+      self
+        .leaf_states
+        .iter()
+        .map(|s| s.0.to_string())
+        .collect::<Vec<_>>()
+        .join(" ")
     );
     println!("{string}");
   }
@@ -645,7 +703,9 @@ impl Graph {
     }
   }
 
-  pub(crate) fn dequeue_pending_state(&mut self) -> Option<(GraphState, StateId)> {
+  pub(crate) fn dequeue_pending_state(
+    &mut self,
+  ) -> Option<(GraphState, StateId)> {
     self.pending_states.pop_front()
   }
 

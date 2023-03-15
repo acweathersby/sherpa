@@ -17,7 +17,14 @@ use crate::{
     create_production_guid_name,
     create_scanner_name,
   },
-  types::{self, ImportedGrammarReferences, RuleId, RuleSymbol, SherpaErrorSeverity, StringId},
+  types::{
+    self,
+    ImportedGrammarReferences,
+    RuleId,
+    RuleSymbol,
+    SherpaErrorSeverity,
+    StringId,
+  },
   Journal,
   ReportType,
   SherpaError,
@@ -40,7 +47,10 @@ pub fn create_store<'a>(
   imports: ImportedGrammarReferences,
 ) -> Arc<GrammarStore> {
   let mut g = GrammarStore {
-    id: GrammarRef::new(get_grammar_name(ast, &source_path), source_path.clone()),
+    id: GrammarRef::new(
+      get_grammar_name(ast, &source_path),
+      source_path.clone(),
+    ),
     imports,
     ..Default::default()
   };
@@ -77,13 +87,20 @@ pub fn create_store<'a>(
     }
   }
 
-  let mut post_process_productions: VecDeque<Box<sherpa::Production>> = VecDeque::new();
+  let mut post_process_productions: VecDeque<Box<sherpa::Production>> =
+    VecDeque::new();
 
   for prod in &ast.productions {
     match prod.is_append {
       false => {
-        let p = process_production_node(j, &mut g, prod, &mut post_process_productions);
-        // Add the default export production if exports have not yet been defined.
+        let p = process_production_node(
+          j,
+          &mut g,
+          prod,
+          &mut post_process_productions,
+        );
+        // Add the default export production if exports have not yet been
+        // defined.
         if p != ProductionId::default() && g.exports.is_empty() {
           g.exports.push((p, g.id.guid, "default".to_string()));
         }
@@ -120,24 +137,33 @@ pub fn create_store<'a>(
   }
 
   // Add ignore symbols to productions
-  g.production_ignore_symbols =
-    g.productions.keys().map(|k| (*k, global_ignore_symbols.clone())).collect::<HashMap<_, _>>();
+  g.production_ignore_symbols = g
+    .productions
+    .keys()
+    .map(|k| (*k, global_ignore_symbols.clone()))
+    .collect::<HashMap<_, _>>();
 
   j.report_mut().stop_timer("Initial Prep");
 
   Arc::new(g)
 }
 /// Returns the originating GrammarId for for a node that is either
-/// a `Production_Import_Symbol`, `Production_Symbol`, or a `Production_Terminal_Symbol`.
-fn get_grammar_id_from_production_symbol_node(production: &ASTNode, g: &GrammarStore) -> GrammarId {
+/// a `Production_Import_Symbol`, `Production_Symbol`, or a
+/// `Production_Terminal_Symbol`.
+fn get_grammar_id_from_production_symbol_node(
+  production: &ASTNode,
+  g: &GrammarStore,
+) -> GrammarId {
   let grammar_id = match production {
-    ASTNode::Production_Import_Symbol(box Production_Import_Symbol { module, .. }) => {
-      g.imports.get(module).unwrap().guid
-    }
+    ASTNode::Production_Import_Symbol(box Production_Import_Symbol {
+      module,
+      ..
+    }) => g.imports.get(module).unwrap().guid,
     ASTNode::Production_Symbol(_) => g.id.guid,
-    ASTNode::Production_Terminal_Symbol(box Production_Terminal_Symbol { production, .. }) => {
-      get_grammar_id_from_production_symbol_node(production, g)
-    }
+    ASTNode::Production_Terminal_Symbol(box Production_Terminal_Symbol {
+      production,
+      ..
+    }) => get_grammar_id_from_production_symbol_node(production, g),
     _ => unreachable!(
       "Unexpected non-production symbol found\n{}",
       production.to_token().blame(1, 1, "", None)
@@ -169,7 +195,8 @@ fn process_production_node<'a>(
   prod_node: &sherpa::Production,
   post_process_productions: &mut VecDeque<Box<sherpa::Production>>,
 ) -> ProductionId {
-  let (prod_id, guid_name, plain_name) = get_production_identifiers(j, g, prod_node);
+  let (prod_id, guid_name, plain_name) =
+    get_production_identifiers(j, g, prod_node);
   match (prod_id, &prod_node.name_sym, prod_node, g.productions.get(&prod_id)) {
     (_, ASTNode::Production_Import_Symbol(_), ..) => {
       j.report_mut().add_error(
@@ -202,17 +229,19 @@ fn process_production_node<'a>(
       let bodies = prod
         .rules
         .iter()
-        .flat_map(|rule| match process_rule(j, g, &prod, rule, &mut list_index) {
-          SherpaResult::Ok((new_rules, productions)) => {
-            for prod in productions {
-              post_process_productions.push_back(prod);
-            }
+        .flat_map(|rule| {
+          match process_rule(j, g, &prod, rule, &mut list_index) {
+            SherpaResult::Ok((new_rules, productions)) => {
+              for prod in productions {
+                post_process_productions.push_back(prod);
+              }
 
-            new_rules
-          }
-          err => {
-            create_unexpected_rule_error(j, rule, &g, err);
-            vec![]
+              new_rules
+            }
+            err => {
+              create_unexpected_rule_error(j, rule, &g, err);
+              vec![]
+            }
           }
         })
         .collect();
@@ -387,7 +416,12 @@ fn get_symbol_details<'a>(
 }
 
 /// Call this function anywhere a ASTNode type is not expected
-fn add_unexpected_symbol_error(j: &mut Journal, g: &GrammarStore, sym: &ASTNode, hint: &str) {
+fn add_unexpected_symbol_error(
+  j: &mut Journal,
+  g: &GrammarStore,
+  sym: &ASTNode,
+  hint: &str,
+) {
   j.report_mut().add_error(SherpaError::SourceError {
     loc:        sym.to_token(),
     path:       g.id.path.clone(),
@@ -408,7 +442,8 @@ fn create_rule_vectors<'a>(
   symbols: &Vec<(usize, &ASTNode)>,
   production_name: &String,
   list_index: &mut u32,
-) -> SherpaResult<(Vec<(Token, Vec<RuleSymbol>)>, Vec<Box<sherpa::Production>>)> {
+) -> SherpaResult<(Vec<(Token, Vec<RuleSymbol>)>, Vec<Box<sherpa::Production>>)>
+{
   let mut rules = vec![(token.clone(), vec![])];
   let mut productions: Vec<Box<sherpa::Production>> = vec![];
 
@@ -445,7 +480,9 @@ fn create_rule_vectors<'a>(
 
         let mut pending_rules = vec![];
 
-        fn get_index_permutations(indice_candidates: Vec<usize>) -> Vec<Vec<usize>> {
+        fn get_index_permutations(
+          indice_candidates: Vec<usize>,
+        ) -> Vec<Vec<usize>> {
           if indice_candidates.len() > 1 {
             let mut out = vec![];
             for (i, candidate) in indice_candidates.iter().enumerate() {
@@ -462,18 +499,34 @@ fn create_rule_vectors<'a>(
           }
         }
 
-        let indices = group.symbols.iter().enumerate().map(|(i, _)| i).collect();
+        let indices =
+          group.symbols.iter().enumerate().map(|(i, _)| i).collect();
 
-        let candidate_symbols =
-          group.symbols.iter().enumerate().map(|(i, s)| (i + index, s)).collect::<Vec<_>>();
+        let candidate_symbols = group
+          .symbols
+          .iter()
+          .enumerate()
+          .map(|(i, s)| (i + index, s))
+          .collect::<Vec<_>>();
 
-        for permutation in
-          if group.unordered { get_index_permutations(indices) } else { vec![indices] }
-        {
-          let symbols = permutation.iter().map(|i| candidate_symbols[*i]).collect::<Vec<_>>();
+        for permutation in if group.unordered {
+          get_index_permutations(indices)
+        } else {
+          vec![indices]
+        } {
+          let symbols = permutation
+            .iter()
+            .map(|i| candidate_symbols[*i])
+            .collect::<Vec<_>>();
 
-          let (mut new_bodies, mut new_productions) =
-            create_rule_vectors(j, g, token, &symbols, production_name, list_index)?;
+          let (mut new_bodies, mut new_productions) = create_rule_vectors(
+            j,
+            g,
+            token,
+            &symbols,
+            production_name,
+            list_index,
+          )?;
 
           pending_rules.append(&mut new_bodies);
 
@@ -511,7 +564,9 @@ fn create_rule_vectors<'a>(
           unreachable!("Sym should be an ASTNode::Group_Production");
         };
         // All bodies are plain without annotations or functions
-        if annotation.is_empty() && !some_rules_have_ast_definitions(&group.rules) {
+        if annotation.is_empty()
+          && !some_rules_have_ast_definitions(&group.rules)
+        {
           // For each rule in the group clone the existing rule lists and
           // process each list independently, inserting the new symbols
           // into the existing bodies. We must make sure the indices are
@@ -599,10 +654,12 @@ fn create_rule_vectors<'a>(
             rule_a.ast_definition = Some(Box::new(sherpa::Ascript::new(
               ASTNode::AST_Statements(Box::new(sherpa::AST_Statements::new(
                 vec![ASTNode::AST_Vector(Box::new(sherpa::AST_Vector::new(
-                  vec![ASTNode::AST_NamedReference(Box::new(sherpa::AST_NamedReference {
-                    value: ascript_first_node_id.to_string(),
-                    tok:   tok.clone(),
-                  }))],
+                  vec![ASTNode::AST_NamedReference(Box::new(
+                    sherpa::AST_NamedReference {
+                      value: ascript_first_node_id.to_string(),
+                      tok:   tok.clone(),
+                    },
+                  ))],
                   tok.clone(),
                 )))],
                 tok.clone(),
@@ -614,14 +671,18 @@ fn create_rule_vectors<'a>(
               ASTNode::AST_Statements(Box::new(sherpa::AST_Statements::new(
                 vec![ASTNode::AST_Vector(Box::new(sherpa::AST_Vector::new(
                   vec![
-                    ASTNode::AST_NamedReference(Box::new(sherpa::AST_NamedReference {
-                      value: ascript_first_node_id.to_string(),
-                      tok:   tok.clone(),
-                    })),
-                    ASTNode::AST_NamedReference(Box::new(sherpa::AST_NamedReference {
-                      value: ascript_last_node_id.to_string(),
-                      tok:   tok.clone(),
-                    })),
+                    ASTNode::AST_NamedReference(Box::new(
+                      sherpa::AST_NamedReference {
+                        value: ascript_first_node_id.to_string(),
+                        tok:   tok.clone(),
+                      },
+                    )),
+                    ASTNode::AST_NamedReference(Box::new(
+                      sherpa::AST_NamedReference {
+                        value: ascript_last_node_id.to_string(),
+                        tok:   tok.clone(),
+                      },
+                    )),
                   ],
                   tok.clone(),
                 )))],
@@ -631,13 +692,17 @@ fn create_rule_vectors<'a>(
             )));
 
             if let Some(terminal_symbol) = terminal_symbol {
-              rule_b.symbols.insert(0, ASTNode::Terminal(terminal_symbol.clone()));
+              rule_b
+                .symbols
+                .insert(0, ASTNode::Terminal(terminal_symbol.clone()));
             }
 
             (*list_index) += 1;
 
             let (prod_sym, mut production) = create_ast_production(
-              &(production_name.to_owned() + "_list_" + &(*list_index).to_string()),
+              &(production_name.to_owned()
+                + "_list_"
+                + &(*list_index).to_string()),
               &[Box::new(rule_b), Box::new(rule_a)],
               tok,
             );
@@ -683,10 +748,9 @@ fn create_ast_production(
   token: Token,
 ) -> (ASTNode, sherpa::Production) {
   // Create a virtual production and symbol to go in its place
-  let symbol = ASTNode::Production_Symbol(Box::new(sherpa::Production_Symbol::new(
-    name.to_string(),
-    token.clone(),
-  )));
+  let symbol = ASTNode::Production_Symbol(Box::new(
+    sherpa::Production_Symbol::new(name.to_string(), token.clone()),
+  ));
 
   let production = sherpa::Production::new(
     false,
@@ -739,12 +803,16 @@ fn process_rule<'a>(
       let mut seen = HashSet::new();
 
       for (t, b) in bodies {
-        let sym = RuleId::from_syms(&b.iter().map(|s| s.sym_id).collect::<Vec<_>>());
+        let sym =
+          RuleId::from_syms(&b.iter().map(|s| s.sym_id).collect::<Vec<_>>());
         if !seen.contains(&sym) {
           unique_bodies.push(types::Rule {
             syms: b,
             prod_id: get_production_identifiers(j, g, production).0,
-            ast_definition: rule.ast_definition.as_ref().map(|d| d.as_ref().clone()),
+            ast_definition: rule
+              .ast_definition
+              .as_ref()
+              .map(|d| d.as_ref().clone()),
             tok: t.clone(),
             g_id: g.id.clone(),
             ..Default::default()
@@ -760,7 +828,8 @@ fn process_rule<'a>(
 }
 
 /// Returns the ProductionId  of a production symbol.
-/// Returns an empty ProductionId if the node cannot be resolved to a production symbol.
+/// Returns an empty ProductionId if the node cannot be resolved to a production
+/// symbol.
 ///
 /// ASTNodes that can be resolved to a production symbol:
 /// - [ASTNode::Production_Import_Symbol]
@@ -768,12 +837,17 @@ fn process_rule<'a>(
 /// - [ASTNode::Production]
 /// - [ASTNode::Production_Terminal_Symbol]
 #[inline]
-fn get_prod_id(j: &mut Journal, g: &mut GrammarStore, production: &ASTNode) -> ProductionId {
+fn get_prod_id(
+  j: &mut Journal,
+  g: &mut GrammarStore,
+  production: &ASTNode,
+) -> ProductionId {
   get_production_identifiers_from_node(j, g, production).0
 }
 
-/// Returns the ProductionId, guid name String, and the normal name String of a production symbol.
-/// Returns default values if the node cannot be resolved to a production symbol.
+/// Returns the ProductionId, guid name String, and the normal name String of a
+/// production symbol. Returns default values if the node cannot be resolved to
+/// a production symbol.
 ///
 /// ASTNodes that can be resolved to a production symbol:
 /// - [ASTNode::Production_Import_Symbol]
@@ -799,17 +873,24 @@ fn get_production_identifiers_from_node(
     _ => (Default::default(), Default::default(), Default::default()),
   }
 }
-/// Return the `Production_Import_Symbol` or `Production_Symbol` from a valid node tree.
-/// Accepts
+/// Return the `Production_Import_Symbol` or `Production_Symbol` from a valid
+/// node tree. Accepts
 /// - [ASTNode::Production_Import_Symbol]
 /// - [ASTNode::Production_Symbol]
 /// - [ASTNode::Production]
 /// - [ASTNode::Production_Terminal_Symbol]
-fn get_production_symbol<'a>(node: &'a ASTNode, g: &'a GrammarStore) -> Option<&'a ASTNode> {
+fn get_production_symbol<'a>(
+  node: &'a ASTNode,
+  g: &'a GrammarStore,
+) -> Option<&'a ASTNode> {
   match node {
-    ASTNode::Production_Import_Symbol(..) | ASTNode::Production_Symbol(..) => Some(node),
+    ASTNode::Production_Import_Symbol(..) | ASTNode::Production_Symbol(..) => {
+      Some(node)
+    }
     ASTNode::Production(prod) => get_production_symbol(&prod.name_sym, g),
-    ASTNode::Production_Terminal_Symbol(prod_tok) => get_production_symbol(&prod_tok.production, g),
+    ASTNode::Production_Terminal_Symbol(prod_tok) => {
+      get_production_symbol(&prod_tok.production, g)
+    }
     _ => None,
   }
 }
@@ -857,14 +938,20 @@ fn get_grammar_info_from_node<'a>(
     }
     Some(ASTNode::Production_Symbol(_)) => Some(g.id.clone()),
     _ => {
-      add_unexpected_symbol_error(j, g, node, "in-function get_grammar_info_from_node");
+      add_unexpected_symbol_error(
+        j,
+        g,
+        node,
+        "in-function get_grammar_info_from_node",
+      );
       None
     }
   }
 }
 
-/// Returns the ProductionId, guid name String, and the normal name String of a production.
-/// Returns default values if the node cannot be resolved to a production symbol.
+/// Returns the ProductionId, guid name String, and the normal name String of a
+/// production. Returns default values if the node cannot be resolved to a
+/// production symbol.
 #[inline]
 fn get_production_identifiers(
   j: &mut Journal,
@@ -923,15 +1010,18 @@ fn get_productions_names(
         )),
       }
     }
-    ASTNode::Production_Symbol(prod_sym) => {
-      Some((create_production_guid_name(&g.id.guid_name, &prod_sym.name), prod_sym.name.clone()))
-    }
+    ASTNode::Production_Symbol(prod_sym) => Some((
+      create_production_guid_name(&g.id.guid_name, &prod_sym.name),
+      prod_sym.name.clone(),
+    )),
     _ => {
       j.report_mut().add_error(SherpaError::SourceError {
         loc:        name_sym.to_token(),
         path:       g.id.path.clone(),
         id:         "unresolved-production-symbol",
-        msg:        "Unexpected node: Unable to resolve production name of this node!".into(),
+        msg:
+          "Unexpected node: Unable to resolve production name of this node!"
+            .into(),
         inline_msg: "".into(),
         ps_msg:     "".into(),
         severity:   SherpaErrorSeverity::Critical,
@@ -949,9 +1039,13 @@ pub fn get_terminal_id(string: &String, exclusive: bool) -> SymbolID {
   use SymbolID::*;
   if let Ok(node) = sherpa::ast::type_eval_from(string.into()) {
     match (node.get_type(), exclusive) {
-      (DEFINED_TYPE_IDENT, true) => ExclusiveDefinedIdentifier(StringId::from(string)),
+      (DEFINED_TYPE_IDENT, true) => {
+        ExclusiveDefinedIdentifier(StringId::from(string))
+      }
       (DEFINED_TYPE_IDENT, false) => DefinedIdentifier(StringId::from(string)),
-      (DEFINED_TYPE_NUM, true) => ExclusiveDefinedNumeric(StringId::from(string)),
+      (DEFINED_TYPE_NUM, true) => {
+        ExclusiveDefinedNumeric(StringId::from(string))
+      }
       (DEFINED_TYPE_NUM, false) => DefinedNumeric(StringId::from(string)),
       (_, true) => ExclusiveDefinedSymbol(StringId::from(string)),
       (_, false) => DefinedSymbol(StringId::from(string)),
@@ -981,7 +1075,9 @@ fn record_symbol(
       let string = sherpa::ast::escaped_from(old.into()).unwrap().join("");
       let sym_id = get_terminal_id(&string, terminal.is_exclusive | exclusive);
 
-      if let std::collections::btree_map::Entry::Vacant(e) = g.symbols.entry(sym_id) {
+      if let std::collections::btree_map::Entry::Vacant(e) =
+        g.symbols.entry(sym_id)
+      {
         g.symbol_strings.insert(sym_id, string.clone());
 
         let byte_length = string.bytes().len() as u32;
@@ -1013,7 +1109,9 @@ fn record_symbol(
       "sym" => Some(SymbolID::GenericSymbol),
       _ => Some(SymbolID::Undefined),
     },
-    ASTNode::Production_Terminal_Symbol(token_prod) => process_token_production(j, g, token_prod),
+    ASTNode::Production_Terminal_Symbol(token_prod) => {
+      process_token_production(j, g, token_prod)
+    }
     _ => {
       add_unexpected_symbol_error(
         j,
@@ -1026,7 +1124,11 @@ fn record_symbol(
   }
 }
 
-fn process_production(j: &mut Journal, g: &mut GrammarStore, node: &ASTNode) -> Option<SymbolID> {
+fn process_production(
+  j: &mut Journal,
+  g: &mut GrammarStore,
+  node: &ASTNode,
+) -> Option<SymbolID> {
   match node {
     ASTNode::Production_Symbol(_) | ASTNode::Production_Import_Symbol(_) => {
       let production_id = get_prod_id(j, g, node);
@@ -1065,7 +1167,9 @@ fn get_grammar_name(ast: &Grammar, source_path: &PathBuf) -> String {
       _ => None,
     })
     .next()
-    .or_else(|| -> Option<String> { Some(source_path.file_stem()?.to_str()?.to_string()) })
+    .or_else(|| -> Option<String> {
+      Some(source_path.file_stem()?.to_str()?.to_string())
+    })
     .unwrap_or_else(|| "unnamed".to_string());
   name
 }
@@ -1079,9 +1183,11 @@ fn process_token_production(
   let tok = &node.tok;
   match process_production(j, g, &node.production) {
     Some(SymbolID::Production(prod_id, grammar_id)) => {
-      let scanner_prod_id = ProductionId::from(&create_scanner_name(prod_id, grammar_id));
+      let scanner_prod_id =
+        ProductionId::from(&create_scanner_name(prod_id, grammar_id));
       let guid = SymbolID::Production(scanner_prod_id, grammar_id);
-      let tok_id = SymbolID::TokenProduction(prod_id, grammar_id, scanner_prod_id);
+      let tok_id =
+        SymbolID::TokenProduction(prod_id, grammar_id, scanner_prod_id);
 
       g.production_symbols.insert(tok_id, tok.clone());
 

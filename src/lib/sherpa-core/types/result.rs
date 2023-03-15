@@ -185,6 +185,15 @@ impl<T> SherpaResult<T> {
   }
 }
 
+impl<T> Default for SherpaResult<T>
+where
+  T: Default,
+{
+  fn default() -> Self {
+    Self::Ok(T::default())
+  }
+}
+
 impl<T: Display> Display for SherpaResult<T>
 where
   T: Display,

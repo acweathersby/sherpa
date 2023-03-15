@@ -42,7 +42,8 @@ IGNORE { c:sp }
 
   let states = compile_parse_states(j, get_num_of_available_threads())?;
   let states = optimize_parse_states(j, states);
-  let BytecodeOutput { bytecode, state_name_to_offset, .. } = compile_bytecode(j, &states)?;
+  let BytecodeOutput { bytecode, state_name_to_offset, .. } =
+    compile_bytecode(j, &states)?;
 
   let w = write_rust_bytecode_parser_file(w, &state_name_to_offset, &bytecode)?;
   let w = write_rust_ast(w)?;

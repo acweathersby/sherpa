@@ -11,9 +11,12 @@ use crate::{
 use super::pipeline::PipelineTask;
 
 /// Build artifacts for a Bytecode based parser
-pub fn build_ascript_types_and_functions(source_type: SourceType) -> PipelineTask {
+pub fn build_ascript_types_and_functions(
+  source_type: SourceType,
+) -> PipelineTask {
   PipelineTask {
-    fun: Box::new(move |task_ctx| match source_type {
+    fun: Box::new(move |task_ctx| {
+      match source_type {
       SourceType::Rust => {
         if let Some(store) = task_ctx.get_ascript() {
           let u = create_rust_writer_utils(&store);
@@ -36,6 +39,7 @@ pub fn build_ascript_types_and_functions(source_type: SourceType) -> PipelineTas
         "Not Implemented: Unable to build an AST output for the source type {:?}",
         source_type
       ))]),
+    }
     }),
     require_ascript: true,
     ..Default::default()

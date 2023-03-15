@@ -1,5 +1,10 @@
 use super::utils::{console_debugger, TestConfig};
-use crate::{journal::config::DebugConfig, test::utils::test_runner, Config, SherpaResult};
+use crate::{
+  journal::config::DebugConfig,
+  test::utils::test_runner,
+  Config,
+  SherpaResult,
+};
 
 #[test]
 fn escaped_string() -> SherpaResult<()> {
@@ -27,7 +32,10 @@ fn scientific_number() -> SherpaResult<()> {
     
     <> number > ( '+' | '-' )? c:num(+) ( '.' c:num(+) )? ( ( 'e' | 'E' ) ( '+' | '-' )? c:num(+) )?
     "##,
-    &[("sci_number", r##"2.3e-22"##, true), ("sci_number", r##"0.3e-22"##, true)],
+    &[
+      ("sci_number", r##"2.3e-22"##, true),
+      ("sci_number", r##"0.3e-22"##, true),
+    ],
   )
 }
 

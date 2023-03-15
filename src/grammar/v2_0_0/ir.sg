@@ -2,6 +2,7 @@ NAME ir
 
 IMPORT ./symbol as sym
 IMPORT ./token as tok
+IMPORT ./ascript as ast
 IMPORT ../v1_0_0/comment as cmt
 
 IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
@@ -16,14 +17,26 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
         :ast { t_State, catches:true, id, statement, tok }
 
-<> statement > [ 
-    transitive_statement?^transitive 
-    non_branch_statement(*)^non_branch
-    ( match | goto_sequence | terminal_statement )?^branch
-]
+<> statement >
+
+    transitive_statement^transitive 
+     ( "then" non_branch_statement(+"then")^non_branch )?
+     ( "then" branch_statement^branch )?
 
      :ast { t_Statement, transitive, non_branch, branch }
 
+     |
+
+     non_branch_statement(+"then")^non_branch
+     ( "then" branch_statement^branch )?
+
+     :ast { t_Statement, non_branch, branch }
+
+    | branch_statement^branch 
+
+     :ast { t_Statement, branch }
+
+<> branch_statement > match | goto_sequence | terminal_statement
 
 <> transitive_statement >
 
@@ -49,9 +62,13 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
 <> non_branch_statement > 
 
-    "reduce" tok::int ( "symbols" "to" )? tok::int ( "with" "rule" )? tok::int
+    "reduce" tok::int ( "symbols" "to" )? tok::int ( "with" "rule" )? tok::int^int
         
-        :ast { t_Reduce, len: u32($2), rule_id: u32($6), prod_id: u32($4) }
+        :ast { t_ReduceRaw, len: u32($2), rule_id: u32($int), prod_id: u32($4) }
+
+    | "reduce" tok::int ( "symbols" "to" )? sym::non_terminal^prod ( ":ast" ast::body^ast )?
+        
+        :ast { t_Reduce, len: u32($2), ast,  prod }
 
     | "set-tok" tok::int
 
@@ -85,21 +102,21 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
     "match" ":" tok::id^id ( int_match :ast [$1] | "{" (int_match | default_match | hint)(+) "}" :ast $2  )^m
 
-        :ast { t_Match, mode: str($id), matches:$m }
+        :ast { t_Matches, mode: str($id), matches:$m }
 
 
 <> production_match_block >
 
     "match" ":" "PRODUCTION" ( non_terminal_match :ast [$1] | "{" ( non_terminal_match | hint | default_match )(+) "}" :ast $2 )^m
 
-        :ast { t_Match, mode: str($3), matches:$m }
+        :ast { t_ProductionMatches, matches:$m }
 
 
 <> terminal_match_block >
 
     "match" ":" "TERMINAL" ( terminal_match :ast [$1] | "{" ( terminal_match | hint | default_match )(+) "}" :ast $2 )^m
 
-        :ast { t_Match, mode: str($3), matches:$m }
+        :ast { t_TerminalMatches, matches:$m }
 
 
 <> non_terminal_match > "(" sym::non_terminal^sym ")" "{" statement "}"
@@ -114,7 +131,7 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
 <> int_match > "(" ( c:num :ast u64($1) )(+"|")^vals ")" "{" statement "}"
 
-    :ast { t_TermMatch, vals, statement }
+    :ast { t_IntMatch, vals, statement }
 
 
 <> default_match > "default"? "{" statement "}"

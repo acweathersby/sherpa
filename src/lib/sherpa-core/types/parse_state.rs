@@ -22,8 +22,10 @@ impl ScannerStateId {
 
   /// Create a state id from a set of symbol strings separated by `~~`
   pub fn from_string(name: &str, g: &GrammarStore) -> Self {
-    let symbols =
-      name.split("~~").map(|s| SymbolID::from_string(s, Some(g))).collect::<SymbolSet>();
+    let symbols = name
+      .split("~~")
+      .map(|s| SymbolID::from_string(s, Some(g)))
+      .collect::<SymbolSet>();
     println!(
       "{:?} : {}",
       ScannerStateId::new(&symbols),
@@ -169,7 +171,11 @@ impl ParseState {
   }
 
   pub fn get_code_body(&self) -> String {
-    format!("{}\n{}\n", self.get_scanner_header(), self.code.replace("%%%%", &self.get_name()))
+    format!(
+      "{}\n{}\n",
+      self.get_scanner_header(),
+      self.code.replace("%%%%", &self.get_name())
+    )
   }
 
   pub fn get_comment(&self) -> &String {
@@ -195,7 +201,8 @@ impl ParseState {
   pub fn get_scanner_symbol_set(&self) -> Option<SymbolSet> {
     let (norm, peek) = self.get_symbols();
 
-    let scanner_syms = norm.iter().chain(peek.iter()).cloned().collect::<BTreeSet<_>>();
+    let scanner_syms =
+      norm.iter().chain(peek.iter()).cloned().collect::<BTreeSet<_>>();
 
     if scanner_syms.is_empty() {
       None
@@ -205,7 +212,9 @@ impl ParseState {
   }
 
   pub fn get_scanner_state_name(&self) -> Option<String> {
-    self.get_scanner_symbol_set().map(|symbols| format!("scan_{:02X}", hash_id_value_u64(&symbols)))
+    self
+      .get_scanner_symbol_set()
+      .map(|symbols| format!("scan_{:02X}", hash_id_value_u64(&symbols)))
   }
 
   pub fn compile_ast(&self) -> SherpaResult<IR_STATE> {

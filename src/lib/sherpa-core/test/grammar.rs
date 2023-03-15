@@ -56,14 +56,16 @@ fn test_load_grammar_from_non_existing_directory() {
   let mut j = Journal::new(None);
   GrammarStore::from_path(
     &mut j,
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../test_grammars/load.sg"),
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+      .join("../../test_grammars/load.sg"),
   );
   assert!(j.debug_error_report());
 }
 
 #[test]
 fn test_resolve_cargo_file() {
-  let result = resolve_grammar_path(&Default::default(), &Default::default(), &[]);
+  let result =
+    resolve_grammar_path(&Default::default(), &Default::default(), &[]);
 
   assert!(result.is_faulty());
 
@@ -83,10 +85,11 @@ fn test_resolve_cargo_file() {
 
   assert!(result.is_ok());
 
-  let result =
-    resolve_grammar_path(&PathBuf::from("./Cargo"), &PathBuf::from(env!("CARGO_MANIFEST_DIR")), &[
-      "toml",
-    ]);
+  let result = resolve_grammar_path(
+    &PathBuf::from("./Cargo"),
+    &PathBuf::from(env!("CARGO_MANIFEST_DIR")),
+    &["toml"],
+  );
 
   assert!(result.is_ok());
 }
@@ -102,8 +105,9 @@ fn test_ir_trivial_state() {
 
 #[test]
 fn test_ir_goto_state() {
-  let result =
-    compile_ir_ast("state [ A ] scan-shift then push state [ test ] then goto state [ test ]");
+  let result = compile_ir_ast(
+    "state [ A ] scan-shift then push state [ test ] then goto state [ test ]",
+  );
 
   print!("{:#?}", result);
 
@@ -113,7 +117,8 @@ fn test_ir_goto_state() {
 #[test]
 
 fn test_ir_trivial_branch_state() {
-  let result = compile_ir_ast("state [ A ] assert TOKEN [ 1 ] ( peek-token then pass )");
+  let result =
+    compile_ir_ast("state [ A ] assert TOKEN [ 1 ] ( peek-token then pass )");
 
   print!("{:#?}", result);
 
@@ -189,7 +194,8 @@ fn conversion_of_left_to_right_recursive() -> SherpaResult<()> {
   assert!(!j.debug_error_report());
   let g = g?;
 
-  let left_recursive_prod = g.get_production_by_name("tk:left_recursive").unwrap();
+  let left_recursive_prod =
+    g.get_production_by_name("tk:left_recursive").unwrap();
 
   assert!(!left_recursive_prod.recursion_type.is_left());
 
@@ -200,7 +206,10 @@ fn conversion_of_left_to_right_recursive() -> SherpaResult<()> {
 fn left_to_right_recursive_conversion() -> SherpaResult<()> {
   let mut j = Journal::new(None);
 
-  let g = GrammarStore::from_str(&mut j, "<> B > tk:A  <> A > A 't' 'y' | A 'u' | 'CCC' | 'R' A ");
+  let g = GrammarStore::from_str(
+    &mut j,
+    "<> B > tk:A  <> A > A 't' 'y' | A 'u' | 'CCC' | 'R' A ",
+  );
 
   assert!(!j.debug_error_report());
 
@@ -223,11 +232,17 @@ fn left_to_right_recursive_conversion() -> SherpaResult<()> {
 #[test]
 fn processing_of_any_groups() -> SherpaResult<()> {
   let mut j = Journal::new(None);
-  let g = GrammarStore::from_str(&mut j, "<> A > [ unordered 'g' ? ( 'r' 'l' ) ? ] '\\\\' 'd'");
+  let g = GrammarStore::from_str(
+    &mut j,
+    "<> A > [ unordered 'g' ? ( 'r' 'l' ) ? ] '\\\\' 'd'",
+  );
   assert!(!j.debug_error_report());
   let g = g?;
   let prod = g.get_production_id_by_name("A").unwrap();
-  format!("A \n {}", get_production_start_items(&prod, &g).to_debug_string(&g, "\n"));
+  format!(
+    "A \n {}",
+    get_production_start_items(&prod, &g).to_debug_string(&g, "\n")
+  );
   SherpaResult::Ok(())
 }
 
@@ -286,13 +301,17 @@ EXPORT start as test
 
 fn test_get_production_plain_name() {
   let mut j = Journal::new(None);
-  let g = GrammarStore::from_str(&mut j, "<>billofolious_tantimum>'o'").unwrap();
+  let g =
+    GrammarStore::from_str(&mut j, "<>billofolious_tantimum>'o'").unwrap();
 
   let prod = g.get_production_id_by_name("billofolious_tantimum").unwrap();
 
   assert_eq!(g.get_production_plain_name(&prod), "billofolious_tantimum");
 
-  assert_ne!(g.get_production(&prod).unwrap().guid_name, "billofolious_tantimum");
+  assert_ne!(
+    g.get_production(&prod).unwrap().guid_name,
+    "billofolious_tantimum"
+  );
 }
 
 #[test]
@@ -388,7 +407,8 @@ fn grammar_name_from_preamble() -> SherpaResult<()> {
 fn grammar_with_optional_list() -> SherpaResult<()> {
   let mut j = Journal::new(None);
 
-  let ast = load_from_string(&mut j, r#"<> A > "hello"(*) c:nl"#, Default::default());
+  let ast =
+    load_from_string(&mut j, r#"<> A > "hello"(*) c:nl"#, Default::default());
 
   compile_grammars(&mut j, &ast);
 
@@ -410,8 +430,11 @@ fn grammar_with_optional_list() -> SherpaResult<()> {
 fn grammar_name_from_path() -> SherpaResult<()> {
   let mut j = Journal::new(None);
 
-  let ast =
-    load_from_string(&mut j, r#" IGNORE { "a" } <> A > "h"  "w" "#, "/test_path.test".into());
+  let ast = load_from_string(
+    &mut j,
+    r#" IGNORE { "a" } <> A > "h"  "w" "#,
+    "/test_path.test".into(),
+  );
 
   compile_grammars(&mut j, &ast)?;
 
@@ -442,19 +465,22 @@ fn missing_append_host_error() -> SherpaResult<()> {
 
   assert!(j.debug_error_report());
 
-  assert!(j.get_report(crate::ReportType::GrammarCompile(Default::default()), |r| {
-    let error = &r.errors()[0];
+  assert!(j.get_report(
+    crate::ReportType::GrammarCompile(Default::default()),
+    |r| {
+      let error = &r.errors()[0];
 
-    assert!(matches!(error, SherpaError::SourceError { .. }));
+      assert!(matches!(error, SherpaError::SourceError { .. }));
 
-    let SherpaError::SourceError { id, .. } = error else {
+      let SherpaError::SourceError { id, .. } = error else {
         panic!("Expected a SourceError");
     };
 
-    assert_eq!(*id, "missing-append-host");
+      assert_eq!(*id, "missing-append-host");
 
-    true
-  }));
+      true
+    }
+  ));
 
   SherpaResult::Ok(())
 }
@@ -463,7 +489,10 @@ fn missing_append_host_error() -> SherpaResult<()> {
 fn compile_grammar_with_syntax_definitions() -> SherpaResult<()> {
   let mut j = Journal::new(None);
 
-  j.set_active_report("Grammar Parse", crate::ReportType::GrammarCompile(Default::default()));
+  j.set_active_report(
+    "Grammar Parse",
+    crate::ReportType::GrammarCompile(Default::default()),
+  );
 
   let ast = load_from_string(
     &mut j,
@@ -542,7 +571,10 @@ fn calculate_defined_type() -> SherpaResult<Journal> {
 
 #[test]
 fn group_declare_strings() -> SherpaResult<()> {
-  assert_eq!(sherpa::ast::type_eval_from("a".into())?.get_type(), ASTNodeType::DEFINED_TYPE_IDENT);
+  assert_eq!(
+    sherpa::ast::type_eval_from("a".into())?.get_type(),
+    ASTNodeType::DEFINED_TYPE_IDENT
+  );
   assert_eq!(
     sherpa::ast::type_eval_from("walkies".into())?.get_type(),
     ASTNodeType::DEFINED_TYPE_IDENT
@@ -563,7 +595,10 @@ fn group_declare_strings() -> SherpaResult<()> {
     sherpa::ast::type_eval_from("126943".into())?.get_type(),
     ASTNodeType::DEFINED_TYPE_NUM
   );
-  assert_eq!(sherpa::ast::type_eval_from("12".into())?.get_type(), ASTNodeType::DEFINED_TYPE_NUM);
+  assert_eq!(
+    sherpa::ast::type_eval_from("12".into())?.get_type(),
+    ASTNodeType::DEFINED_TYPE_NUM
+  );
 
   SherpaResult::Ok(())
 }
@@ -571,7 +606,10 @@ fn group_declare_strings() -> SherpaResult<()> {
 #[test]
 fn escaped() -> SherpaResult<()> {
   assert_eq!(
-    sherpa::ast::escaped_from(r#"@vbas_231sd\d3\edd452sd\df\ds#23\g\ f\fd\45"#.into())?.join(""),
+    sherpa::ast::escaped_from(
+      r#"@vbas_231sd\d3\edd452sd\df\ds#23\g\ f\fd\45"#.into()
+    )?
+    .join(""),
     "@vbas_231sdd3edd452sddfds#23g ffd45"
   );
 

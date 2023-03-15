@@ -44,7 +44,8 @@ pub struct PublicFunctions<'a> {
   pub(crate) pre_shift_emit: FunctionValue<'a>,
   pub(crate) prime: FunctionValue<'a>,
   /// LLVM [`memcpy`](https://llvm.org/docs/LangRef.html#llvm-memcpy-intrinsic) intrinsic.
-  /// Copies data of a certain number of bytes from one memory location to another.
+  /// Copies data of a certain number of bytes from one memory location to
+  /// another.
   pub(crate) memcpy: FunctionValue<'a>,
   /// LLVM [`ctlz`](https://llvm.org/docs/LangRef.html#llvm-ctlz-intrinsic) intrinsic.
   /// Counts the number of leading zeros.
@@ -59,11 +60,12 @@ pub struct PublicFunctions<'a> {
   pub(crate) drop: FunctionValue<'a>,
   /// Helper function to join bytes of a UTF-8 encoded codepoint
   pub(crate) merge_utf8_part: FunctionValue<'a>,
-  /// Given a pointer to character data, returns the UTF codepoint based on UTF-8 encoding.
+  /// Given a pointer to character data, returns the UTF codepoint based on
+  /// UTF-8 encoding.
   ///
   /// ### Function signature:
   /// ```ignore
-  ///
+  /// 
   /// #[repr(C)]
   /// struct CodePointInfo {
   ///   codepoint: u32,
@@ -249,7 +251,11 @@ impl CTX_AGGREGATE_INDICES {
     b: &Builder<'a>,
     parse_ctx: PointerValue<'a>,
   ) -> SherpaResult<PointerValue<'a>> {
-    SherpaResult::Ok(b.build_struct_gep(parse_ctx, (*self).into(), &format!("{:?}_ptr", self))?)
+    SherpaResult::Ok(b.build_struct_gep(
+      parse_ctx,
+      (*self).into(),
+      &format!("{:?}_ptr", self),
+    )?)
   }
 
   pub fn load<'a>(
@@ -257,7 +263,8 @@ impl CTX_AGGREGATE_INDICES {
     b: &Builder<'a>,
     parse_ctx: PointerValue<'a>,
   ) -> SherpaResult<BasicValueEnum<'a>> {
-    let val = b.build_load(self.get_ptr(b, parse_ctx)?, &format!("{:?}_val", self));
+    let val =
+      b.build_load(self.get_ptr(b, parse_ctx)?, &format!("{:?}_val", self));
 
     SherpaResult::Ok(val)
   }
@@ -268,9 +275,12 @@ impl CTX_AGGREGATE_INDICES {
     parse_ctx: PointerValue<'a>,
     int: IntType<'a>,
   ) -> SherpaResult<IntValue<'a>> {
-    let val =
-      b.build_load(self.get_ptr(b, parse_ctx)?, &format!("{:?}_val", self)).into_pointer_value();
-    SherpaResult::Ok(b.build_ptr_to_int(val, int, &format!("{:?}_val", self)).into())
+    let val = b
+      .build_load(self.get_ptr(b, parse_ctx)?, &format!("{:?}_val", self))
+      .into_pointer_value();
+    SherpaResult::Ok(
+      b.build_ptr_to_int(val, int, &format!("{:?}_val", self)).into(),
+    )
   }
 
   pub fn store<'a, V>(

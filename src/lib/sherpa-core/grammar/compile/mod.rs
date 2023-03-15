@@ -39,12 +39,16 @@ pub(crate) fn compile_ir_ast(buffer: &str) -> SherpaResult<sherpa::IR_STATE> {
 }
 
 #[allow(dead_code)]
-pub(crate) fn compile_ascript_struct(buffer: &str) -> SherpaResult<sherpa::AST_Struct> {
+pub(crate) fn compile_ascript_struct(
+  buffer: &str,
+) -> SherpaResult<sherpa::AST_Struct> {
   SherpaResult::Ok(*(sherpa::ast::ast_struct_from(buffer.into())?))
 }
 
 #[allow(dead_code)]
-pub(crate) fn compile_grammar_ast(buffer: &str) -> SherpaResult<sherpa::Grammar> {
+pub(crate) fn compile_grammar_ast(
+  buffer: &str,
+) -> SherpaResult<sherpa::Grammar> {
   SherpaResult::Ok(*(sherpa::ast::grammar_from(buffer.into())?))
 }
 
@@ -61,8 +65,11 @@ pub(crate) fn compile_grammars(
       use crate::util::get_num_of_available_threads;
       std::thread::scope(|s| {
         grammars
-          .chunks((grammars.len() as f64 / get_num_of_available_threads() as f64).ceil().max(1.0)
-            as usize)
+          .chunks(
+            (grammars.len() as f64 / get_num_of_available_threads() as f64)
+              .ceil()
+              .max(1.0) as usize,
+          )
           .into_iter()
           .map(|chunk| {
             let mut j = j.transfer();
@@ -70,8 +77,12 @@ pub(crate) fn compile_grammars(
               chunk
                 .iter()
                 .map(|(absolute_path, import_refs, grammar)| {
-                  let grammar =
-                    create_store(&mut j, &grammar, absolute_path.clone(), import_refs.clone());
+                  let grammar = create_store(
+                    &mut j,
+                    &grammar,
+                    absolute_path.clone(),
+                    import_refs.clone(),
+                  );
                   grammar
                 })
                 .collect::<Vec<_>>()
@@ -87,7 +98,8 @@ pub(crate) fn compile_grammars(
     let results = grammars
       .into_iter()
       .map(|(absolute_path, import_refs, grammar)| {
-        let grammar = create_store(j, &grammar, absolute_path.clone(), import_refs.clone());
+        let grammar =
+          create_store(j, &grammar, absolute_path.clone(), import_refs.clone());
         grammar
       })
       .collect::<Vec<_>>();

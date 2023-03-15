@@ -10,7 +10,8 @@ use std::{
   time::Instant,
 };
 
-/// Selection classes for different report types, used to filter reports results.
+/// Selection classes for different report types, used to filter reports
+/// results.
 ///
 /// Some values wrap an identifier type to better specifier searches. To get all
 /// reports of a certain class that use an identifier, use `Default::default()`
@@ -85,7 +86,10 @@ impl Hash for Report {
 
 impl Report {
   ///
-  pub fn display_errors(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+  pub fn display_errors(
+    &self,
+    f: &mut std::fmt::Formatter<'_>,
+  ) -> std::fmt::Result {
     for (_, error) in &self._errors {
       Display::fmt(&error, f)?;
     }
@@ -111,10 +115,14 @@ impl Report {
     self._errors.values().collect()
   }
 
-  /// Returns the `return_val` in `SherpaResult::Ok()` if there are no errors in the report,
-  /// otherwise returns a `SherpResult::Err(SherpaError::Report)` type result.
+  /// Returns the `return_val` in `SherpaResult::Ok()` if there are no errors in
+  /// the report, otherwise returns a `SherpResult::Err(SherpaError::Report)`
+  /// type result.
   #[track_caller]
-  pub fn ok_or_convert_to_error<T>(&mut self, return_val: T) -> SherpaResult<T> {
+  pub fn ok_or_convert_to_error<T>(
+    &mut self,
+    return_val: T,
+  ) -> SherpaResult<T> {
     match (self._errors.len() == 0, self.is_sink) {
       (true, false) => SherpaResult::Ok(return_val),
       (false, false) => {
@@ -127,7 +135,9 @@ impl Report {
         }
         SherpaResult::Err((&*self).into())
       }
-      (_, true) => SherpaResult::Err("Invalid attempt to evaluate a report sink".into()),
+      (_, true) => {
+        SherpaResult::Err("Invalid attempt to evaluate a report sink".into())
+      }
     }
   }
 
@@ -150,7 +160,8 @@ impl Report {
   pub fn debug_error_string(&self) -> Option<String> {
     let errors = self.errors();
     if errors.len() > 0 {
-      let mut string = vec![format!("\n{:=<80}\nReport [{}] errors:", "", self.name)];
+      let mut string =
+        vec![format!("\n{:=<80}\nReport [{}] errors:", "", self.name)];
 
       for err in self.errors() {
         string.push(err.to_string());
@@ -167,7 +178,9 @@ impl Report {
     self
       .notes
       .iter()
-      .find(|(n, _)| (*n.to_ascii_lowercase()) == note_name.to_ascii_lowercase())
+      .find(|(n, _)| {
+        (*n.to_ascii_lowercase()) == note_name.to_ascii_lowercase()
+      })
       .map(|(_, n)| n)
   }
 
@@ -224,7 +237,12 @@ impl Report {
         .collect::<Vec<_>>()
         .join("\n"),
       timings,
-      self._errors.values().map(|err| format!("\n{}", err)).collect::<Vec<_>>().join("\n")
+      self
+        ._errors
+        .values()
+        .map(|err| format!("\n{}", err))
+        .collect::<Vec<_>>()
+        .join("\n")
     )
   }
 
@@ -238,8 +256,16 @@ impl Report {
       *,
     };
     match (discriminant, self.report_type) {
-      (ScannerCompile(any), ScannerCompile(_)) if any == ScannerStateId::default() => true,
-      (GrammarCompile(any), GrammarCompile(_)) if any == GrammarId::default() => true,
+      (ScannerCompile(any), ScannerCompile(_))
+        if any == ScannerStateId::default() =>
+      {
+        true
+      }
+      (GrammarCompile(any), GrammarCompile(_))
+        if any == GrammarId::default() =>
+      {
+        true
+      }
       (PC_LR(any), PC_LR(_)) if any == ProductionId::default() => true,
       (TPC(any), TPC(_)) if any == ProductionId::default() => true,
       (PC(any), PC(_)) if any == ProductionId::default() => true,

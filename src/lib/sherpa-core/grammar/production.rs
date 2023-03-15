@@ -9,7 +9,10 @@ const GUID_NAME_DELIMITER: &str = "_";
 /// Generate a unique scanner production name givin a uuid production
 /// name
 
-pub fn create_scanner_name(production_id: ProductionId, grammar_id: GrammarId) -> String {
+pub fn create_scanner_name(
+  production_id: ProductionId,
+  grammar_id: GrammarId,
+) -> String {
   format!("scan_tok_{:X}_{:X}", production_id.0, grammar_id.0)
 }
 
@@ -21,6 +24,9 @@ pub fn create_defined_scanner_name(uuid_production_name: &String) -> String {
 /// productions name (omitting local import name portion of a
 /// production)
 
-pub fn create_production_guid_name(grammar_uuid_name: &String, production_name: &String) -> String {
+pub fn create_production_guid_name(
+  grammar_uuid_name: &String,
+  production_name: &String,
+) -> String {
   grammar_uuid_name.to_owned() + GUID_NAME_DELIMITER + production_name
 }

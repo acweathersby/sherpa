@@ -44,8 +44,11 @@ impl StateData {
     let mut max_gotos = 0;
 
     for (_, instr) in get_branches(state) {
-      max_gotos =
-        max_gotos.max(instr.iter().fold(0, |a, i| a + (matches!(i, ASTNode::PushGoto(..)) as u32)));
+      max_gotos = max_gotos.max(
+        instr
+          .iter()
+          .fold(0, |a, i| a + (matches!(i, ASTNode::PushGoto(..)) as u32)),
+      );
     }
 
     Self {
@@ -73,7 +76,8 @@ impl StateData {
     self.name.clone()
   }
 }
-/// Compile bytecode data and artifacts from a Vec of state name String and ParseState pairs.
+/// Compile bytecode data and artifacts from a Vec of state name String and
+/// ParseState pairs.
 pub fn compile_bytecode<'a>(
   j: &mut Journal,
   states: &Vec<(String, Box<ParseState>)>,
@@ -92,7 +96,10 @@ pub fn compile_bytecode<'a>(
 
   if j.config().build_disassembly {
     let grammar = j.grammar()?;
-    j.set_active_report(&format!("[{}] Disassembly", &grammar.id.name), ReportType::Disassembly);
+    j.set_active_report(
+      &format!("[{}] Disassembly", &grammar.id.name),
+      ReportType::Disassembly,
+    );
 
     j.report_mut().start_timer("Build Time");
 

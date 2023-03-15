@@ -1,7 +1,20 @@
-use sherpa_runtime::{types::bytecode::InputType, utf8::lookup_table::CodePointClass};
+use sherpa_runtime::{
+  types::bytecode::InputType,
+  utf8::lookup_table::CodePointClass,
+};
 
-use super::{GrammarId, GrammarRef, GrammarStore, ProductionId, SherpaResult, Token};
-use crate::grammar::{compile::finalize::get_scanner_info_from_defined, uuid::hash_id_value_u64};
+use super::{
+  GrammarId,
+  GrammarRef,
+  GrammarStore,
+  ProductionId,
+  SherpaResult,
+  Token,
+};
+use crate::grammar::{
+  compile::finalize::get_scanner_info_from_defined,
+  uuid::hash_id_value_u64,
+};
 
 use std::{
   collections::{BTreeMap, BTreeSet},
@@ -68,8 +81,8 @@ pub enum SymbolID {
   /// the production token specifier, `tk:`, as in `tk:<production_name>`.
   /// - `.0` = The base ProductionID,
   /// - `.1` = The host GrammarID
-  /// - `.2` = The scanner ProductionID. This production is created
-  ///      when the root grammar is finalized
+  /// - `.2` = The scanner ProductionID. This production is created when the
+  ///   root grammar is finalized
   TokenProduction(ProductionId, GrammarId, ProductionId),
 
   /// Represent the grammar symbol `c:sp`.
@@ -157,7 +170,11 @@ impl SymbolID {
       symbol_sym_str => Self::GenericSymbol,
       _ => {
         if let Some(g) = g {
-          match g.symbol_strings.iter().find(|(_, string)| string.as_str() == symbol_string) {
+          match g
+            .symbol_strings
+            .iter()
+            .find(|(_, string)| string.as_str() == symbol_string)
+          {
             Some((sym_id, _)) => *sym_id,
             _ => match g.get_production_by_name(symbol_string) {
               SherpaResult::Ok(prod) => prod.sym_id,
@@ -174,7 +191,9 @@ impl SymbolID {
   /// Returns a human friendly string representation
   pub fn debug_string(&self, g: &GrammarStore) -> String {
     match self {
-      Self::DefinedNumeric(_) | Self::DefinedIdentifier(_) | Self::DefinedSymbol(_) => {
+      Self::DefinedNumeric(_)
+      | Self::DefinedIdentifier(_)
+      | Self::DefinedSymbol(_) => {
         format!("'{}'", g.symbol_strings.get(self).unwrap())
       }
       Self::ExclusiveDefinedNumeric(_)
@@ -182,7 +201,9 @@ impl SymbolID {
       | Self::ExclusiveDefinedSymbol(_) => {
         format!("\"{}\"", g.symbol_strings.get(self).unwrap())
       }
-      Self::Production(prod_id, _) => g.productions.get(prod_id).unwrap().name.to_string(),
+      Self::Production(prod_id, _) => {
+        g.productions.get(prod_id).unwrap().name.to_string()
+      }
       Self::TokenProduction(.., prod_id) => {
         let name = &g.productions.get(prod_id).unwrap().name;
         if name.starts_with("tk:") {
@@ -202,9 +223,10 @@ impl SymbolID {
       Self::GenericIdentifier => id_sym_str.into(),
       Self::GenericNumber => num_sym_str.into(),
       Self::GenericSymbol => symbol_sym_str.into(),
-      Self::Undefined | Self::UndefinedA | Self::UndefinedB | Self::UndefinedC => {
-        "[undefined]".into()
-      }
+      Self::Undefined
+      | Self::UndefinedA
+      | Self::UndefinedB
+      | Self::UndefinedC => "[undefined]".into(),
       _ => "[??]".into(),
     }
   }
@@ -240,8 +262,10 @@ impl SymbolID {
     use SymbolID::*;
     match self {
       EndOfFile => (self.bytecode_id(g), InputType::EndOfFile),
-      GenericSpace | GenericHorizontalTab | GenericNewLine | GenericIdentifier | GenericNumber
-      | GenericSymbol => (self.bytecode_id(g), InputType::Class),
+      GenericSpace | GenericHorizontalTab | GenericNewLine
+      | GenericIdentifier | GenericNumber | GenericSymbol => {
+        (self.bytecode_id(g), InputType::Class)
+      }
       ExclusiveDefinedIdentifier(..)
       | ExclusiveDefinedNumeric(..)
       | ExclusiveDefinedSymbol(..)
@@ -346,13 +370,19 @@ impl SymbolID {
       | Self::DefinedSymbol(_)
       | Self::ExclusiveDefinedNumeric(_)
       | Self::ExclusiveDefinedIdentifier(_)
-      | Self::ExclusiveDefinedSymbol(_) => g.symbols.get(self).unwrap().bytecode_id,
-      Self::TokenProduction(.., prod_id) => {
-        g.get_production(prod_id).unwrap().symbol_bytecode_id.unwrap_or(undefined_symbol_id)
+      | Self::ExclusiveDefinedSymbol(_) => {
+        g.symbols.get(self).unwrap().bytecode_id
       }
-      Self::Production(prod_id, _) => {
-        g.get_production(prod_id).unwrap().bytecode_id.unwrap_or(undefined_symbol_id)
-      }
+      Self::TokenProduction(.., prod_id) => g
+        .get_production(prod_id)
+        .unwrap()
+        .symbol_bytecode_id
+        .unwrap_or(undefined_symbol_id),
+      Self::Production(prod_id, _) => g
+        .get_production(prod_id)
+        .unwrap()
+        .bytecode_id
+        .unwrap_or(undefined_symbol_id),
       Self::Start => undefined_symbol_id,
       Self::ExclusiveEnd | Self::Default => DEFAULT_SYM_ID,
       Self::GenericHorizontalTab => CodePointClass::HorizontalTab as u32,

@@ -10,8 +10,10 @@ NAME token
 
 <> id_tok > ( "-" | "_" | c:id ) ( c:id | "_" | "-" | c:num )(*)
 
-<> string_tok > "\"" ( c:id | c:num | c:nl | c:sym | c:sp | "\\" ( c:id | c:num | c:nl | c:sym | c:sp ) )(+) "\""
+<> string_tok > "\"" ( c:id | c:num | c:nl | c:sym | c:sp | escaped )(*) "\""
 
-<> quote_tok > "\'" ( c:id | c:num | c:nl | c:sym | c:sp | "\\" ( c:id | c:num | c:nl | c:sym | c:sp ) )(+) "\'"
+<> quote_tok > "\'" ( c:id | c:num | c:nl | c:sym | c:sp | escaped )(*) "\'"
 
-<> int_tok >  c:num(+)
+<> escaped > "\\" ( c:id | c:num | c:nl | c:sym | c:sp )
+
+<> int_tok > c:num(+)

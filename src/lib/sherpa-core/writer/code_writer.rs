@@ -117,7 +117,10 @@ impl<W: Write> CodeWriter<W> {
     self.internal_write(string)
   }
 
-  pub fn merge_checkpoint(&mut self, checkpoint: StringBuffer) -> Result<usize> {
+  pub fn merge_checkpoint(
+    &mut self,
+    checkpoint: StringBuffer,
+  ) -> Result<usize> {
     self.indent = checkpoint.indent;
 
     self.output.write(&checkpoint.output)

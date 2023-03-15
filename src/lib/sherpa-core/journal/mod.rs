@@ -24,8 +24,8 @@ struct ScratchPad {
 }
 
 #[derive(Debug)]
-/// A general structure for storing and interacting with data relating to the configuration,
-/// monitoring, and reporting of Sherpa commands and types.
+/// A general structure for storing and interacting with data relating to the
+/// configuration, monitoring, and reporting of Sherpa commands and types.
 pub struct Journal {
   /// A fully compiled grammar.
   grammar: Option<Arc<GrammarStore>>,
@@ -90,19 +90,26 @@ impl Journal {
     SherpaResult::None
   }
 
-  /// Sets the active report to `report_type`, optionally creating a new report of that type
-  /// if one does not already exists. Returns the previously set ReportType.
+  /// Sets the active report to `report_type`, optionally creating a new report
+  /// of that type if one does not already exists. Returns the previously set
+  /// ReportType.
   pub(crate) fn set_active_report(
     &mut self,
     report_name: &str,
     report_type: ReportType,
   ) -> ReportType {
-    fn set_report(p: &mut ScratchPad, n: &str, t: ReportType) -> Option<Box<Report>> {
+    fn set_report(
+      p: &mut ScratchPad,
+      n: &str,
+      t: ReportType,
+    ) -> Option<Box<Report>> {
       match p.reports.contains_key(&t) {
         true => p.reports.remove(&t),
-        false => {
-          Some(Box::new(Report { name: n.to_string(), report_type: t, ..Default::default() }))
-        }
+        false => Some(Box::new(Report {
+          name: n.to_string(),
+          report_type: t,
+          ..Default::default()
+        })),
       }
     }
 
@@ -118,11 +125,16 @@ impl Journal {
     self.report().report_type
   }
 
-  /// Loads one or more reports that match `ReportType` in a closure for read access. If the closure returns `true` then no further
-  /// reports are loaded. Closure is only called if matching reports can be found.
+  /// Loads one or more reports that match `ReportType` in a closure for read
+  /// access. If the closure returns `true` then no further reports are
+  /// loaded. Closure is only called if matching reports can be found.
   ///
   /// Returns `true` if any reports where matched
-  pub fn get_report<T: Fn(&Report) -> bool>(&self, report_type: ReportType, closure: T) -> bool {
+  pub fn get_report<T: Fn(&Report) -> bool>(
+    &self,
+    report_type: ReportType,
+    closure: T,
+  ) -> bool {
     let mut matching_reports = false;
     for report in self.scratch_pad.reports.values() {
       if report.type_matches(report_type) {
@@ -150,9 +162,13 @@ impl Journal {
     matching_reports
   }
 
-  /// Retrieves all reports that match the `report_type` and calls `closure` for each
-  /// one, passing in the matched report as a reference.
-  pub fn get_reports<T: FnMut(&Report)>(&self, report_type: ReportType, mut closure: T) {
+  /// Retrieves all reports that match the `report_type` and calls `closure` for
+  /// each one, passing in the matched report as a reference.
+  pub fn get_reports<T: FnMut(&Report)>(
+    &self,
+    report_type: ReportType,
+    mut closure: T,
+  ) {
     for report in self.scratch_pad.reports.values() {
       if report.type_matches(report_type) {
         closure(report);
@@ -216,7 +232,13 @@ impl Journal {
       let printed_mut = &mut printed;
       self.get_reports(discriminant, move |report| {
         (*printed_mut) |= true;
-        println!("\n{:=<80}\nReport [{}] \n{}\n{:=<80}", "", report.name, report.debug_string(), "")
+        println!(
+          "\n{:=<80}\nReport [{}] \n{}\n{:=<80}",
+          "",
+          report.name,
+          report.debug_string(),
+          ""
+        )
       })
     }
 
@@ -275,8 +297,11 @@ impl Journal {
   /// Returns true if any error in any report has a matching `severity`
   pub fn have_errors_of_type(&self, severity: SherpaErrorSeverity) -> bool {
     if !self.report().have_errors_of_type(severity) {
-      for (_, report) in
-        self.scratch_pad.reports.iter().chain(self.global_pad.read().unwrap().reports.iter())
+      for (_, report) in self
+        .scratch_pad
+        .reports
+        .iter()
+        .chain(self.global_pad.read().unwrap().reports.iter())
       {
         if report.have_errors_of_type(severity) {
           return true;
@@ -362,25 +387,29 @@ impl Journal {
 
   pub(crate) fn _add_occlusions(&mut self, occluding_symbols: SymbolSet) {
     for sym_a in &occluding_symbols {
-      let table =
-        self.scratch_pad._occluding_symbols.entry(*sym_a).or_insert_with(|| BTreeSet::new());
+      let table = self
+        .scratch_pad
+        ._occluding_symbols
+        .entry(*sym_a)
+        .or_insert_with(|| BTreeSet::new());
 
       for sym_b in &occluding_symbols {
         if sym_a == sym_b {
           continue;
         }
-        // The idea here is to add symbols with lower precedence to the occlusion table
-        // of symbols with higher precedence. For example, given this grammar
-        // ```
+        // The idea here is to add symbols with lower precedence to the
+        // occlusion table of symbols with higher precedence. For
+        // example, given this grammar ```
         // <> A > \funct \(
         //    |   tk:id  \{
         //
         // <> id > g:id(+)
         // ```
-        // The DefinedSymbol `\funct` has a higher precedence then TokenProduction symbol `tk:id`.
-        // When using the occlusion table, we force the compiler to consider the symbols as the
-        // "same", which should then cause it to generate a peek state that uses the following
-        // symbols [ \( & \{ ] to resolve the conflict.
+        // The DefinedSymbol `\funct` has a higher precedence then
+        // TokenProduction symbol `tk:id`. When using the occlusion
+        // table, we force the compiler to consider the symbols as the
+        // "same", which should then cause it to generate a peek state that uses
+        // the following symbols [ \( & \{ ] to resolve the conflict.
         match (sym_a, sym_b) {
           (sym, SymbolID::TokenProduction(..)) if sym.is_defined() => {
             table.insert(*sym_b);
@@ -391,7 +420,9 @@ impl Journal {
     }
   }
 
-  pub(crate) fn _get_occlusion_table<'b>(&'b self) -> &'b HashMap<SymbolID, SymbolSet> {
+  pub(crate) fn _get_occlusion_table<'b>(
+    &'b self,
+  ) -> &'b HashMap<SymbolID, SymbolSet> {
     match self.occluding_symbols.as_ref() {
       Some(oc) => oc,
       None => &self.scratch_pad._occluding_symbols,
@@ -442,7 +473,10 @@ impl Debug for Timing {
     if let Some(end) = self.end {
       f.write_fmt(format_args!("{:?}", (end - self.start)))
     } else {
-      f.write_fmt(format_args!("Started {:?} ago", (Instant::now() - self.start)))
+      f.write_fmt(format_args!(
+        "Started {:?} ago",
+        (Instant::now() - self.start)
+      ))
     }
   }
 }

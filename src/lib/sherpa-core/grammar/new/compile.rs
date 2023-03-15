@@ -1,187 +1,259 @@
 #![allow(unused_mut, unused)]
-
-use super::{finalize::finalize_grammar, merge::merge_grammars};
+use super::{
+  finalize::finalize_grammar,
+  load_2::{
+    create_grammar_data,
+    extract_productions,
+    parse_grammar,
+    GrammarData,
+  },
+  merge::merge_grammars,
+  string::{CachedString, IString, StringStore},
+  types::{Array, GrammarIdentity, GrammarSoup, Set},
+};
 use crate::{
-  compile::GrammarStore,
+  compile::{GrammarId, GrammarStore},
   grammar::{
     multitask::WorkVerifier,
-    new::load::{load, pre_load},
+    new::{
+      load::{load, pre_load},
+      load_2::{
+        convert_grammar_data_to_header,
+        process_parse_state,
+        process_prod,
+      },
+      types::GrammarHeader,
+    },
   },
+  tasks::{new_taskman, Spawner, ThreadedFuture},
   Journal,
   ReportType,
+  SherpaError,
   SherpaResult,
 };
 use std::{
   collections::{HashSet, VecDeque},
   path::PathBuf,
-  sync::Mutex,
+  sync::{mpsc::sync_channel, Arc, Mutex, RwLock},
+  time::Duration,
 };
 
-pub fn compile_grammar_from_str(
-  j: &mut Journal,
-  grammar_source: &str,
-  faux_grammar_path: &PathBuf,
-) -> SherpaResult<Box<GrammarStore>> {
-  let (mut store, foreign_grammars) = load_runner(j, grammar_source, faux_grammar_path)?;
+/// Entrypoint for compiling a grammar from a source file.
+pub(crate) async fn compile_grammars_from_path(
+  mut j: Journal,
+  grammar_source_path: PathBuf,
+  grammar_cloud: &GrammarSoup,
+  spawner: &Spawner<SherpaResult<()>>,
+) -> SherpaResult<GrammarIdentity> {
+  let root_id = GrammarIdentity::from_path(
+    &grammar_source_path,
+    &grammar_cloud.string_store,
+  );
 
-  merge_grammars(j, &mut store, &foreign_grammars);
+  let imports = vec![root_id];
 
-  finalize_grammar(j, &mut store);
+  import_grammars(&mut j, imports, spawner, grammar_cloud).await?;
 
-  SherpaResult::Ok(store)
+  SherpaResult::Ok(root_id)
 }
 
-pub fn compile_grammar_from_path(
+async fn import_grammars(
   j: &mut Journal,
-  grammar_path: &PathBuf,
-) -> SherpaResult<Box<GrammarStore>> {
-  match std::fs::read_to_string(grammar_path) {
-    Err(err) => SherpaResult::Err(err.into()),
-    Ok(string) => compile_grammar_from_str(j, &string, grammar_path),
+  imports: Vec<GrammarIdentity>,
+  spawner: &Spawner<SherpaResult<()>>,
+  grammar_cloud: &GrammarSoup,
+) -> SherpaResult<()> {
+  #[derive(Clone, Copy)]
+  enum Task {
+    Todo(GrammarIdentity),
+    Complete,
   }
-}
 
-fn load_runner(
-  j: &mut Journal,
-  grammar_source: &str,
-  path: &PathBuf,
-) -> SherpaResult<(Box<GrammarStore>, Vec<Box<GrammarStore>>)> {
-  let (mut root_store, root_grammar) = pre_load(j, &grammar_source, &path)?;
+  let mut confirmed_imports = Set::new();
 
-  let mut pending_grammar_paths =
-    VecDeque::<PathBuf>::from_iter(root_store.imports.values().map(|i| i.path.clone()));
-  let mut claimed_grammar_paths = HashSet::<PathBuf>::new();
+  let (import_loader, import_reader) = sync_channel(100);
+  let mut pending_count = 0;
 
-  #[cfg(feature = "multithread")]
-  {
-    use crate::util::get_num_of_available_threads;
+  imports.iter().for_each(|i| import_loader.send(Task::Todo(*i)).unwrap());
 
-    let number_of_threads = get_num_of_available_threads();
-    let pending_grammar_paths = Mutex::new(pending_grammar_paths);
-    let claimed_grammar_paths = Mutex::new(claimed_grammar_paths);
-    let work_verifier = Mutex::new(WorkVerifier::new(1));
+  let import_loader = Arc::new(Mutex::new(import_loader));
+  let import_reader = Arc::new(Mutex::new(import_reader));
+  let mut pending_tasks = Array::new();
 
-    let results = std::thread::scope(|s| {
-      let temp_j = j.transfer();
-      let threads = [0..number_of_threads].into_iter().map(|_| {
-        let mut j = temp_j.transfer();
-        let claimed_grammar_paths = &claimed_grammar_paths;
-        let work_verifier = &work_verifier;
-        let pending_grammar_paths = &pending_grammar_paths;
-        j.set_active_report("File Load", ReportType::GrammarCompile(Default::default()));
-        s.spawn(move || {
-          let mut grammars = vec![];
-          loop {
-            match {
-              {
-                let val = pending_grammar_paths
-                  .lock()
-                  .unwrap()
-                  .pop_front()
-                  .and_then(|path| {
-                    (&claimed_grammar_paths).lock().as_mut().map_or(None, |d| {
-                      let mut work_verifier = work_verifier.lock().unwrap();
-                      if d.insert(path.clone()) {
-                        work_verifier.start_one_unit_of_work();
-                        Some(path)
-                      } else {
-                        work_verifier.skip_one_unit_of_work();
-                        None
+  loop {
+    if let Ok(task) = {
+      let import_reader = import_reader.clone();
+      let result =
+        import_reader.lock().unwrap().recv_timeout(Duration::from_millis(2));
+      drop(import_reader);
+      result
+    } {
+      match task {
+        Task::Todo(import_id) => {
+          if confirmed_imports.insert(import_id.guid) {
+            pending_count += 1;
+            let import_loader = import_loader.clone();
+            let spawner = spawner.clone();
+            let g_c = (*grammar_cloud).clone();
+            let mut j = j.transfer();
+            let task = ThreadedFuture::new(
+              async move {
+                let GrammarIdentity { guid, name, path } = import_id;
+
+                let grammar_source_path =
+                  PathBuf::from(path.to_str(&g_c.string_store).as_str());
+
+                match load_from_path(&mut j, grammar_source_path, &g_c) {
+                  SherpaResult::Ok(g_data) => {
+                    {
+                      let mut local_loader = import_loader.lock().unwrap();
+                      if g_data.imports.is_empty() == false {
+                        /* Scope for Mutex lock */
+                        g_data.imports.iter().for_each(|(_, i)| {
+                          local_loader.send(Task::Todo(*i)).unwrap()
+                        });
                       }
-                    })
-                  })
-                  .clone();
-                val
-              }
-            } {
-              Some(path) => {
-                match pre_load(&mut j, &std::fs::read_to_string(&path).unwrap(), &path) {
-                  SherpaResult::Ok((mut store, grammar)) => {
-                    for import in &store.imports {
-                      pending_grammar_paths.lock().unwrap().push_back(import.1.path.clone());
-                      work_verifier.lock().unwrap().add_units_of_work(1);
+                      local_loader.send(Task::Complete).unwrap();
                     }
 
-                    load(&mut j, &mut store, &grammar); // Don't care about result
+                    let (mut prods, mut parse_states) =
+                      extract_productions(&mut j, &g_data, &g_c.string_store)?;
 
-                    grammars.push(store);
+                    for prod in prods {
+                      let prod =
+                        process_prod(prod, &g_data, &g_c.string_store)?;
+
+                      g_c.productions.write().unwrap().insert(prod.id, prod);
+                    }
+
+                    for state in parse_states {
+                      let state =
+                        process_parse_state(state, &g_data, &g_c.string_store)?;
+
+                      g_c
+                        .custom_states
+                        .write()
+                        .unwrap()
+                        .insert(state.id, state);
+                    }
+
+                    {
+                      g_c.grammar_headers.write().unwrap().insert(
+                        guid,
+                        convert_grammar_data_to_header(import_id, g_data),
+                      );
+                    }
+
+                    SherpaResult::Ok(import_id)
                   }
                   SherpaResult::Err(err) => {
-                    j.report_mut().add_error(err);
+                    let mut local_loader = import_loader.lock().unwrap();
+                    local_loader.send(Task::Complete).unwrap();
+
+                    #[cfg(debug_assertions)]
+                    println!("{}", err);
+
+                    SherpaResult::Err(err)
                   }
-                  _ => {}
+                  _ => unreachable!(),
                 }
-
-                work_verifier.lock().unwrap().complete_one_unit_of_work();
-              }
-              None => {
-                if work_verifier.lock().unwrap().is_complete() {
-                  break grammars;
-                }
-              }
-            }
+              },
+              &spawner,
+            );
+            pending_tasks.push(task);
           }
-        })
-      });
-
-      load(j, &mut root_store, &root_grammar);
-
-      (root_store, threads.map(|s| s.join().unwrap()).flatten().collect::<Vec<_>>())
-    });
-
-    SherpaResult::Ok(results)
-  }
-  #[cfg(not(feature = "multithread"))]
-  {
-    load(j, &mut root_store, &root_grammar);
-
-    let mut grammars = vec![];
-
-    while let Some(path) = pending_grammar_paths.pop_back() {
-      if claimed_grammar_paths.insert(path.clone()) {
-        match pre_load(j, &std::fs::read_to_string(&path).unwrap(), &path) {
-          SherpaResult::Ok((mut store, grammar)) => {
-            for import in &store.imports {
-              pending_grammar_paths.push_back(import.1.path.clone());
-            }
-
-            load(j, &mut store, &grammar); // Don't care about result
-
-            grammars.push(store);
+        }
+        Task::Complete => {
+          pending_count -= 1;
+          if pending_count == 0 {
+            break;
           }
-          SherpaResult::Err(err) => {
-            j.report_mut().add_error(err);
-          }
-          _ => {}
         }
       }
+    } else {
+      for task in pending_tasks {
+        // Ensure some progress can be made.
+        task.await?;
+      }
+      pending_tasks = Array::new();
     }
+  }
 
-    SherpaResult::Ok((root_store, grammars))
+  // Wait for any extra tasks.
+  for task in pending_tasks {
+    task.await?;
+  }
+
+  SherpaResult::Ok(())
+}
+
+fn load_from_path(
+  j: &mut Journal,
+  grammar_source_path: PathBuf,
+  grammar_cloud: &GrammarSoup,
+) -> SherpaResult<GrammarData> {
+  match std::fs::read_to_string(&grammar_source_path) {
+    Ok(source) => {
+      let grammar_source = std::fs::read_to_string(&grammar_source_path)?;
+
+      let root_grammar = parse_grammar(&grammar_source)?;
+
+      let g_data = create_grammar_data(
+        j,
+        root_grammar,
+        &grammar_source_path,
+        &grammar_cloud.string_store,
+      )?;
+      SherpaResult::Ok(g_data)
+    }
+    Err(_) => SherpaResult::Err(
+      ("Unable to retrieve a grammar source from this path: ".to_string()
+        + grammar_source_path.as_os_str().to_str().unwrap())
+      .into(),
+    ),
   }
 }
 
 #[test]
 fn load_grammar_from_str() -> SherpaResult<()> {
-  let grammar_source = r#"
-  
-  <> A > "hello" "," "World" pratt_test "!"
+  let grammar_cloud = GrammarSoup::new();
+  let grammar_source_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    .join("../../../test/grammars/load.sg")
+    .canonicalize()
+    .unwrap();
 
-  pratt_test catches => pass
-  
-  "#;
+  //let grammar_source_path = PathBuf::from("/test.sg");
 
   let mut j = Journal::new(None);
-
   j.set_active_report("test", ReportType::Any);
 
-  let store = compile_grammar_from_str(&mut j, grammar_source, &PathBuf::from("/"))?;
+  let (executor, spawner) = new_taskman(1000);
+
+  let local_spawner = spawner.clone();
+  let local_grammar_cloud = grammar_cloud.clone();
+  let mut local_j = j.transfer();
+
+  spawner.spawn(async move {
+    compile_grammars_from_path(
+      local_j.transfer(),
+      grammar_source_path,
+      &local_grammar_cloud,
+      &local_spawner,
+    )
+    .await;
+
+    local_j.flush_reports();
+
+    SherpaResult::Ok(())
+  });
+
+  drop(spawner);
+
+  executor.join();
+
+  println!("{:#?}", grammar_cloud);
 
   j.flush_reports();
-
-  assert!(!j.debug_error_report());
-
-  dbg!(store);
 
   SherpaResult::Ok(())
 }

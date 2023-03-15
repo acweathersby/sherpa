@@ -24,11 +24,12 @@ pub fn build_bytecode_parser() -> PipelineTask {
         return Err(vec![SherpaError::from("Cannot build Bytecode parser: Bytecode is not available")]);
       };
       let writer = CodeWriter::new(vec![]);
-      match write_parser_file(&mut j, writer, bytecode, task_ctx.get_ascript()) {
+      match write_parser_file(&mut j, writer, bytecode, task_ctx.get_ascript())
+      {
         SherpaResult::Err(err) => Err(vec![SherpaError::from(err)]),
-        SherpaResult::Ok(writer) => {
-          Ok(Some((20, unsafe { String::from_utf8_unchecked(writer.into_output()) })))
-        }
+        SherpaResult::Ok(writer) => Ok(Some((20, unsafe {
+          String::from_utf8_unchecked(writer.into_output())
+        }))),
         _ => unreachable!(),
       }
     }),
@@ -43,7 +44,8 @@ fn write_parser_file<W: Write>(
   bytecode_output: &BytecodeOutput,
   ascript: Option<&ascript::types::AScriptStore>,
 ) -> SherpaResult<CodeWriter<W>> {
-  let BytecodeOutput { bytecode, state_name_to_offset: state_lookups, .. } = bytecode_output;
+  let BytecodeOutput { bytecode, state_name_to_offset: state_lookups, .. } =
+    bytecode_output;
   let dummy = AScriptStore::dummy(j).unwrap();
   let store = if let Some(store) = ascript { store } else { &dummy };
   let utils = create_rust_writer_utils(store);

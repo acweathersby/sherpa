@@ -1,17 +1,22 @@
-use std::{hash::Hash, path::PathBuf};
+#![allow(unused)]
+
+use std::{hash::Hash, path::PathBuf, sync::Arc};
 
 use sherpa_runtime::types::{Token, TokenRange};
 
-use crate::grammar::hash_id_value_u64;
+use crate::{compile::ParseState, grammar::hash_id_value_u64};
 
-use super::{parser::State, string::SherpaString};
+use super::{
+  parser::State,
+  string::{CachedString, IString, StringStore},
+};
 
 // Creating type aliases of common collections in the
 // event we decide to use alternate implementations.
 
-pub(crate) type Map<K, V> = std::collections::HashMap<K, V>;
-pub(crate) type Set<K> = std::collections::HashSet<K>;
-pub(crate) type OrderedMap<K, V> = std::collections::BTreeMap<K, V>;
+pub(crate) type Map<K, V> = ::std::collections::HashMap<K, V>;
+pub(crate) type Set<K> = ::std::collections::HashSet<K>;
+pub(crate) type OrderedMap<K, V> = ::std::collections::BTreeMap<K, V>;
 pub(crate) type OrderedSet<K> = std::collections::BTreeSet<K>;
 pub(crate) type Array<V> = ::std::vec::Vec<V>;
 pub(crate) type Queue<V> = ::std::collections::VecDeque<V>;
@@ -61,7 +66,7 @@ pub(crate) struct RuleId(u64);
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub(crate) struct TokenSymbol {
   pub type_: SymbolType,
-  pub val:   SherpaString,
+  pub val:   IString,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -141,7 +146,7 @@ pub(crate) struct Production {
   pub type_: ProductionType,
 
   /// The name of the production as it is found in the source grammar.
-  pub name: SherpaString,
+  pub name: IString,
 
   pub tok: Token,
 
@@ -178,12 +183,12 @@ pub(crate) enum SubProductionType {
 
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub(crate) struct GrammarHeader {
-  identity:           GrammarIdentity,
+  pub identity:  GrammarIdentity,
   /// Productions that are accessible as entry points to this
   /// grammar.
-  public_productions: Array<ProductionId>,
+  pub pub_prods: Array<ProductionId>,
 
-  imports: Array<GrammarId>,
+  pub imports: Array<GrammarId>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -213,18 +218,29 @@ pub(crate) struct GrammarIdentity {
   /// from the source path
   pub guid: GrammarId,
 
-  // A globally unique name to refer to this grammar by. Derived from the
-  // grammar's filepath.
-  //pub guid_name: SherpaString,
-  /// The user defined name. This is either the value of the `@NAME` preamble,
-  /// or the original file name stem if this preamble is not present.
-  pub name: SherpaString,
+  /// A name defined by the grammar author. This is either the value of the
+  /// `@NAME` preamble, or the original file name stem if this preamble is
+  /// not present.
+  pub name: IString,
 
   /// The absolute path of the grammar's source file. This may be empty if the
   /// source code was passed in as a string, as with the case of grammars
   /// compiled with
   /// [compile_grammar_from_string](sherpa_core::grammar::compile_grammar_from_string)).
-  pub path: SherpaString,
+  pub path: IString,
+}
+
+impl GrammarIdentity {
+  pub fn from_path(
+    grammar_source_path: &PathBuf,
+    string_store: &StringStore,
+  ) -> Self {
+    Self {
+      guid: grammar_source_path.into(),
+      path: grammar_source_path.intern(string_store),
+      ..Default::default()
+    }
+  }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -241,4 +257,38 @@ pub(crate) enum SymbolId {
   NonTerminal { id: ProductionId, precedence: u16 },
   NonTerminalToken { id: ProductionId, precedence: u16 },
   Codepoint { val: u32, precedence: u16 },
+}
+
+use ::std::sync;
+/// This contains all grammars, productions, and parser states that have
+/// been derived from source grammar inputs.
+///
+/// This object is generally only created once and then passed to entry
+/// functions for parser, compilers, and analyzers, with which appropriate
+/// derivatives can be created for the respective task.
+#[derive(Clone, Default)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub(crate) struct GrammarSoup {
+  pub grammar_headers: Arc<sync::RwLock<Map<GrammarId, Box<GrammarHeader>>>>,
+  pub productions:     Arc<sync::RwLock<Map<ProductionId, Box<Production>>>>,
+  pub custom_states:   Arc<sync::RwLock<Map<ProductionId, Box<CustomState>>>>,
+  pub string_store:    StringStore,
+}
+
+impl GrammarSoup {
+  pub fn new() -> sync::Arc<Self> {
+    sync::Arc::new(GrammarSoup {
+      grammar_headers: Default::default(),
+      productions:     Default::default(),
+      custom_states:   Default::default(),
+      string_store:    Default::default(),
+    })
+  }
+}
+
+struct ParseBuild {
+  root_grammar: GrammarId,
+  entries:      Vec<ProductionId>,
+  states:       Map<IString, Box<ParseState>>,
+  bytecode:     Option<Vec<u8>>,
 }

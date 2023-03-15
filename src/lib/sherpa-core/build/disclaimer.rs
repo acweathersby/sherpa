@@ -2,7 +2,11 @@ use crate::util::SHERPA_VERSION;
 
 use super::pipeline::PipelineContext;
 
-pub fn DISCLAIMER(file_type: &str, comment_delimiter: &str, ctx: &PipelineContext) -> String {
+pub fn DISCLAIMER(
+  file_type: &str,
+  comment_delimiter: &str,
+  ctx: &PipelineContext,
+) -> String {
   let grammar = ctx.get_journal().grammar().unwrap();
   format!(
     r##"{3} ### `{1}` {2}

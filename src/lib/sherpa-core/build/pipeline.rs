@@ -24,7 +24,9 @@ use super::{
 };
 
 pub type TaskFn = Box<
-  dyn Fn(&mut PipelineContext) -> Result<Option<(u32, String)>, Vec<SherpaError>> + Sync + Send,
+  dyn Fn(&mut PipelineContext) -> Result<Option<(u32, String)>, Vec<SherpaError>>
+    + Sync
+    + Send,
 >;
 
 pub struct PipelineTask {
@@ -46,7 +48,9 @@ impl Default for PipelineTask {
 }
 
 impl PipelineTask {
-  fn _default_tsk_fun(_: &mut PipelineContext) -> Result<Option<(u32, String)>, Vec<SherpaError>> {
+  fn _default_tsk_fun(
+    _: &mut PipelineContext,
+  ) -> Result<Option<(u32, String)>, Vec<SherpaError>> {
     Err(vec![])
   }
 }
@@ -112,10 +116,17 @@ impl<'a> BuildPipeline<'a> {
   }
 
   /// Create a new build pipeline based on a source grammar string.
-  pub fn from_string(grammar_source: &str, base_directory: &PathBuf, config: Config) -> Self {
+  pub fn from_string(
+    grammar_source: &str,
+    base_directory: &PathBuf,
+    config: Config,
+  ) -> Self {
     Self::build_pipeline(
       config,
-      CachedSource::String(grammar_source.to_string(), base_directory.to_owned()),
+      CachedSource::String(
+        grammar_source.to_string(),
+        base_directory.to_owned(),
+      ),
     )
   }
 
@@ -133,9 +144,9 @@ impl<'a> BuildPipeline<'a> {
     self
   }
 
-  /// If set, a source file will be generated in the root of the build directory, containing
-  /// the concatenated source output from the build steps.
-  /// The % character serves as the place holder for the grammar name.
+  /// If set, a source file will be generated in the root of the build
+  /// directory, containing the concatenated source output from the build
+  /// steps. The % character serves as the place holder for the grammar name.
   pub fn set_source_file_name(&mut self, name: &str) -> &mut Self {
     self.source_name = Some(name.to_string());
     self
@@ -188,7 +199,9 @@ impl<'a> BuildPipeline<'a> {
       }
     }
 
-    self.ascript = if self.tasks.iter().any(|t| t.0.require_ascript) && self.ascript.is_none() {
+    self.ascript = if self.tasks.iter().any(|t| t.0.require_ascript)
+      && self.ascript.is_none()
+    {
       match AScriptStore::new(&mut self.journal) {
         SherpaResult::Ok(ascript) => Some(ascript),
         _ => {
@@ -202,7 +215,11 @@ impl<'a> BuildPipeline<'a> {
     };
 
     // Build bytecode if needed.
-    self.states = if self.tasks.iter().any(|t| t.0.require_states || t.0.require_bytecode) {
+    self.states = if self
+      .tasks
+      .iter()
+      .any(|t| t.0.require_states || t.0.require_bytecode)
+    {
       let parse_states = compile_parse_states(&mut self.journal, self.threads);
       self.journal.debug_error_report();
       Some(optimize_parse_states(&mut self.journal, parse_states?))
@@ -266,14 +283,17 @@ impl<'a> BuildPipeline<'a> {
     }
 
     if errors.have_critical() {
-      // Critical errors indicate a breakdown in the build process. Thus, we should
-      // not produce any artifacts and instead exit with an error message.
+      // Critical errors indicate a breakdown in the build process. Thus, we
+      // should not produce any artifacts and instead exit with an error
+      // message.
       eprintln!("Critical errors have occurred, could not complete build")
     } else {
       if let Some(source_name) = self.source_name.as_ref() {
-        let source_name =
-          source_name.to_string().replace("%", &self.journal.grammar().unwrap().id.name);
-        let source_path = self.source_output_dir.join("./".to_string() + &source_name);
+        let source_name = source_name
+          .to_string()
+          .replace("%", &self.journal.grammar().unwrap().id.name);
+        let source_path =
+          self.source_output_dir.join("./".to_string() + &source_name);
         eprintln!("{:?} {:?}", source_path, self.source_output_dir);
         if let Ok(mut parser_data_file) = std::fs::File::create(&source_path) {
           let data = source_parts
@@ -290,7 +310,10 @@ impl<'a> BuildPipeline<'a> {
     }
 
     SherpaResult::Ok((
-      Self::build_pipeline(self.journal.config().clone(), self.cached_source.to_owned()),
+      Self::build_pipeline(
+        self.journal.config().clone(),
+        self.cached_source.to_owned(),
+      ),
       source_parts,
       !errors.have_critical(),
     ))
@@ -298,9 +321,15 @@ impl<'a> BuildPipeline<'a> {
 
   fn build_grammar(&mut self) -> SherpaResult<Arc<GrammarStore>> {
     match &self.cached_source {
-      CachedSource::Path(path) => GrammarStore::from_path(&mut self.journal, path.clone()),
+      CachedSource::Path(path) => {
+        GrammarStore::from_path(&mut self.journal, path.clone())
+      }
       CachedSource::String(string, base_dir) => {
-        GrammarStore::from_str_with_base_dir(&mut self.journal, &string, &base_dir)
+        GrammarStore::from_str_with_base_dir(
+          &mut self.journal,
+          &string,
+          &base_dir,
+        )
       }
     }
   }
@@ -386,13 +415,18 @@ impl<'a> PipelineContext<'a> {
 }
 
 /// Convenience function for building a bytecode based parser. Use this in
-/// build scripts to output a parser source file to `{OUT_DIR}/{grammar_name}.rs`.
-pub fn compile_bytecode_parser(grammar_source_path: &PathBuf, config: Config) -> bool {
+/// build scripts to output a parser source file to
+/// `{OUT_DIR}/{grammar_name}.rs`.
+pub fn compile_bytecode_parser(
+  grammar_source_path: &PathBuf,
+  config: Config,
+) -> bool {
   let out_dir = std::env::var("OUT_DIR").map(|d| PathBuf::from(&d)).unwrap();
 
   create_dir_all(&out_dir).unwrap();
 
-  let mut pipeline = BuildPipeline::from_source(grammar_source_path.to_owned(), config.clone());
+  let mut pipeline =
+    BuildPipeline::from_source(grammar_source_path.to_owned(), config.clone());
 
   pipeline
     .set_source_output_dir(&out_dir)
@@ -417,13 +451,18 @@ pub fn compile_bytecode_parser(grammar_source_path: &PathBuf, config: Config) ->
 }
 #[cfg(feature = "llvm")]
 /// Convenience function for building a llvm machine code parser. Use this in
-/// build scripts to output a parser source file to `{OUT_DIR}/{grammar_name}.rs`.
-pub fn compile_llvm_parser(grammar_source_path: &PathBuf, config: Config) -> bool {
+/// build scripts to output a parser source file to
+/// `{OUT_DIR}/{grammar_name}.rs`.
+pub fn compile_llvm_parser(
+  grammar_source_path: &PathBuf,
+  config: Config,
+) -> bool {
   let out_dir = std::env::var("OUT_DIR").map(|d| PathBuf::from(&d)).unwrap();
 
   create_dir_all(&out_dir).unwrap();
 
-  let mut pipeline = BuildPipeline::from_source(grammar_source_path.to_owned(), config.clone());
+  let mut pipeline =
+    BuildPipeline::from_source(grammar_source_path.to_owned(), config.clone());
 
   pipeline
     .set_source_output_dir(&out_dir)

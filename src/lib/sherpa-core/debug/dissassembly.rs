@@ -1,5 +1,9 @@
 use crate::{bytecode::BytecodeOutput, types::*, Journal};
-use sherpa_runtime::types::bytecode::{InputType, Instruction, FIRST_PARSE_BLOCK_ADDRESS};
+use sherpa_runtime::types::bytecode::{
+  InputType,
+  Instruction,
+  FIRST_PARSE_BLOCK_ADDRESS,
+};
 use std::collections::BTreeSet;
 
 fn header<'a>(address: usize) -> String {
@@ -43,7 +47,10 @@ pub(crate) fn disassemble_parse_block<'a>(
             i.next(),
           )
         } else {
-          (format!("\n{}GOTO {}", dh(i.address()), address_string(address)), i.next())
+          (
+            format!("\n{}GOTO {}", dh(i.address()), address_string(address)),
+            i.next(),
+          )
         }
       }
       PopGoto => {
@@ -66,7 +73,14 @@ pub(crate) fn disassemble_parse_block<'a>(
             i_last,
           )
         } else {
-          (format!("\n{}PUSH {}{string}", dh(i.address()), address_string(address)), i_last)
+          (
+            format!(
+              "\n{}PUSH {}{string}",
+              dh(i.address()),
+              address_string(address)
+            ),
+            i_last,
+          )
         }
       }
       PushExceptionHandler => {
@@ -85,7 +99,14 @@ pub(crate) fn disassemble_parse_block<'a>(
             i_last,
           )
         } else {
-          (format!("\n{}PUSH-CATCH {}{string}", dh(i.address()), address_string(address)), i_last)
+          (
+            format!(
+              "\n{}PUSH-CATCH {}{string}",
+              dh(i.address()),
+              address_string(address)
+            ),
+            i_last,
+          )
         }
       }
       Reduce => {
@@ -136,9 +157,20 @@ pub(crate) fn disassemble_parse_block<'a>(
             .map(|s| s.debug_string(&lu))
             .unwrap_or(tok_id.to_string());
 
-          (format!("\n{}ASSIGN-TK [{} = {}]{string}", dh(i.address()), tok_id, tok_name), i_last)
+          (
+            format!(
+              "\n{}ASSIGN-TK [{} = {}]{string}",
+              dh(i.address()),
+              tok_id,
+              tok_name
+            ),
+            i_last,
+          )
         } else {
-          (format!("\n{}ASSIGN-TK [{}]{string}", dh(i.address()), tok_id), i_last)
+          (
+            format!("\n{}ASSIGN-TK [{}]{string}", dh(i.address()), tok_id),
+            i_last,
+          )
         }
       }
       NoOp => {
@@ -215,8 +247,9 @@ pub(crate) fn generate_table_string<'a>(
     mut table_start_iter,
     ..
   } = i.into();
-  let table_name =
-    matches!(i.get_opcode(), bytecode::Opcode::HashBranch).then_some("HASH").unwrap_or("VECT");
+  let table_name = matches!(i.get_opcode(), bytecode::Opcode::HashBranch)
+    .then_some("HASH")
+    .unwrap_or("VECT");
 
   let mut strings = vec![];
   let mut delta_offsets = BTreeSet::new();
@@ -261,9 +294,12 @@ pub(crate) fn generate_table_string<'a>(
   strings.push(create_default_entry(default_block.address()));
 
   for address in delta_offsets {
-    strings.push(disassemble_parse_block(Some((i.bytecode(), address).into()), lu, bc).0);
+    strings.push(
+      disassemble_parse_block(Some((i.bytecode(), address).into()), lu, bc).0,
+    );
   }
-  let (default_string, offset) = disassemble_parse_block(Some(default_block), lu, bc);
+  let (default_string, offset) =
+    disassemble_parse_block(Some(default_block), lu, bc);
 
   let mut string = format!(
     "\n{}{} JUMP \n{: >7} TYPE {} ",
@@ -274,12 +310,17 @@ pub(crate) fn generate_table_string<'a>(
   );
 
   string += &(if scan_index.address() > 0 {
-    format!("\n{: >7} SCANNER ADDRESS {}", "", address_string(scan_index.address()))
+    format!(
+      "\n{: >7} SCANNER ADDRESS {}",
+      "",
+      address_string(scan_index.address())
+    )
   } else {
     format!("\n{: >7} NO SCANNER", "")
   });
 
-  string += &format!("\n{: >7} LENGTH: {} META: {}", "", table_length, table_meta);
+  string +=
+    &format!("\n{: >7} LENGTH: {} META: {}", "", table_length, table_meta);
 
   string += &strings.join("");
 
@@ -289,7 +330,11 @@ pub(crate) fn generate_table_string<'a>(
 }
 
 fn create_failure_entry(entry_offset: usize, goto_offset: usize) -> String {
-  format!("\n{}---- JUMP TO {} ON FAIL", header(entry_offset), address_string(goto_offset))
+  format!(
+    "\n{}---- JUMP TO {} ON FAIL",
+    header(entry_offset),
+    address_string(goto_offset)
+  )
 }
 fn create_default_entry(goto_offset: usize) -> String {
   format!("\nDEFAULT ---- JUMP TO {} ON FAIL", address_string(goto_offset))
@@ -314,15 +359,22 @@ fn create_normal_entry(
   )
 }
 
-fn get_input_id(g: Option<&GrammarStore>, token_id: u32, input_type: InputType) -> String {
+fn get_input_id(
+  g: Option<&GrammarStore>,
+  token_id: u32,
+  input_type: InputType,
+) -> String {
   if let Some(g) = g {
     match input_type {
       InputType::Production => {
-        let production = &g.get_production_by_bytecode_id(token_id).unwrap().name;
+        let production =
+          &g.get_production_by_bytecode_id(token_id).unwrap().name;
         format!("{:<3} [{:^1}]", token_id, production)
       }
       InputType::Token => {
-        if let SherpaResult::Ok(sym_id) = g.get_symbol_id_by_bytecode_id(token_id) {
+        if let SherpaResult::Ok(sym_id) =
+          g.get_symbol_id_by_bytecode_id(token_id)
+        {
           format!("{:<3} [{:^1}]", token_id, sym_id.debug_string(g))
         } else {
           token_id.to_string()
@@ -374,6 +426,13 @@ pub fn generate_disassembly(output: &BytecodeOutput, j: &Journal) -> String {
   states_strings.join("\n")
 }
 
-fn get_state_name_from_address(output: &BytecodeOutput, address: usize) -> String {
-  output.offset_to_state_name.get(&(address as u32)).cloned().unwrap_or_default()
+fn get_state_name_from_address(
+  output: &BytecodeOutput,
+  address: usize,
+) -> String {
+  output
+    .offset_to_state_name
+    .get(&(address as u32))
+    .cloned()
+    .unwrap_or_default()
 }

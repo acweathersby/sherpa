@@ -1,4 +1,6 @@
 use std::{
+  fmt::Debug,
+  ops::Index,
   path::PathBuf,
   sync::{Arc, LockResult, RwLock, RwLockReadGuard},
 };
@@ -7,18 +9,7 @@ use crate::grammar::hash_id_value_u64;
 
 use super::types::Map;
 
-#[derive(Default, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(debug_assertions, derive(Debug))]
-
-pub(crate) struct StringToken(u64);
-
-impl StringToken {
-  pub fn new(string: &String) -> Self {
-    Self(hash_id_value_u64(string))
-  }
-}
-
-type InnerStringStore = Map<StringToken, String>;
+type InnerStringStore = Map<IString, String>;
 
 #[derive(Default, Clone)]
 #[cfg_attr(debug_assertions, derive(Debug))]
@@ -26,13 +17,10 @@ pub(crate) struct StringStore {
   _data: Arc<RwLock<InnerStringStore>>,
 }
 
-
 impl StringStore {
-  fn intern(&self, string: String) -> StringToken {
-    let token = StringToken::new(&string);
-
+  fn intern(&self, string: String, token: IString) -> IString {
     match self._data.read() {
-      LockResult::Ok( data) => {
+      LockResult::Ok(data) => {
         if data.contains_key(&token) {
           return token;
         }
@@ -42,7 +30,7 @@ impl StringStore {
 
     match self._data.write() {
       LockResult::Ok(mut data) => {
-          data.insert(token, string);
+        data.insert(token, string);
       }
       _ => panic!(),
     }
@@ -50,11 +38,9 @@ impl StringStore {
     token
   }
 
-  fn get_str<'a>(&'a self, token: StringToken) -> Option<GuardedStr<'a>> {
+  fn get_str<'a>(&'a self, token: IString) -> Option<GuardedStr<'a>> {
     match self._data.read() {
-      LockResult::Ok(store) => {
-        Some(GuardedStr(token, None, Some(store)))
-      }
+      LockResult::Ok(store) => Some(GuardedStr(token, None, Some(store))),
       _ => panic!(),
     }
   }
@@ -69,50 +55,113 @@ impl StringStore {
   }
 }
 
-/// A reference to a string interned within a String Store. Maintains
+/// A reference to a string interned within a [StringStore]. Maintains
 /// a read lock to the store as long as this object lives.
 ///
 /// This should never be assigned to any object that outlives it's current
-/// calling context. Should be dropped as soon as possible.
-pub(crate) struct GuardedStr<'a>(StringToken, Option<&'a str>, Option<RwLockReadGuard<'a, InnerStringStore>>);
-
+/// function context. Should be dropped as soon as possible.
+pub(crate) struct GuardedStr<'a>(
+  IString,
+  Option<&'a str>,
+  Option<RwLockReadGuard<'a, InnerStringStore>>,
+);
 
 impl<'a> GuardedStr<'a> {
   pub fn as_str(&'a self) -> &'a str {
-    if(self.1.is_none()) {
+    if self.1.is_none() {
       self.2.as_ref().unwrap().get(&self.0).unwrap().as_str()
-    }else {
+    } else {
       self.1.unwrap()
     }
   }
 }
 
-
+/// An **I**nterned **String** for fast string operations. Combines a small
+/// string type with an interned string type for larger string using
+/// [StringStore].
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(debug_assertions, derive(Debug))]
-pub(crate) enum SherpaString {
-  SmallString { len: u8, data: [u8; 14] },
-  LargeString(StringToken),
-}
 
-impl Default for SherpaString {
+pub(crate) struct IString(u64);
+
+impl Default for IString {
   fn default() -> Self {
-    SherpaString::SmallString { len: 0, data: [0; 14] }
+    Self(0)
+  }
+}
+#[cfg(debug_assertions)]
+impl Debug for IString {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    unsafe {
+      let val_bytes = self as *const IString as *const [u8; 8];
+      if (*val_bytes)[7] & 0x08 != 0 {
+        let mut s = f.debug_tuple("IString::Large");
+        // This is an interned string.
+        s.field(&self.0);
+        s.finish()
+      } else {
+        let mut s = f.debug_tuple("IString::Small");
+        // This is a small string. The upper 7 bits comprise the length of the
+        // string.
+        let len = (*val_bytes)[7];
+        let data = unsafe {
+          let data =
+            std::slice::from_raw_parts(&((*val_bytes)[0]), len as usize);
+          std::str::from_utf8_unchecked(data)
+        };
+        s.field(&data);
+        s.finish()
+      }
+    }
   }
 }
 
-impl SherpaString {
+impl IString {
   pub fn to_string(&self, store: &StringStore) -> String {
     self.to_str(store).as_str().to_string()
   }
 
   pub fn to_str<'a>(&'a self, store: &'a StringStore) -> GuardedStr<'a> {
-    match self {
-      SherpaString::LargeString(token) => store.get_str(*token).unwrap(),
-      SherpaString::SmallString { len, data } => {
-        let slice = &data.as_slice()[0..*len as usize];
-        GuardedStr(StringToken(0), Some(unsafe { std::str::from_utf8_unchecked(slice) }), None)
+    unsafe {
+      let val_bytes = self as *const IString as *const [u8; 8];
+      if (*val_bytes)[7] & 0x08 != 0 {
+        // This is an interned string.
+        store.get_str(*self).unwrap()
+      } else {
+        // This is a small string. The upper 7 bits comprise the length of the
+        // string.
+        let len = (*val_bytes)[7];
+        let data = unsafe {
+          std::slice::from_raw_parts(&((*val_bytes)[0]), len as usize)
+        };
+        GuardedStr(
+          *self,
+          Some(unsafe { std::str::from_utf8_unchecked(data) }),
+          None,
+        )
       }
+    }
+  }
+
+  fn from_bytes(string: &[u8]) -> Self {
+    let byte_len = string.len();
+    if byte_len > 7 {
+      let mut val = hash_id_value_u64(string);
+      unsafe {
+        let mut val_bytes = &mut val as *mut u64 as *mut [u8; 8];
+        (*val_bytes)[7] |= 0x08;
+      }
+      Self(val)
+    } else {
+      let bytes = string;
+      let mut val = 0u64;
+      unsafe {
+        let mut val_bytes = &mut val as *mut u64 as *mut [u8; 8];
+        (*val_bytes)[7] = byte_len as u8;
+        for (off, byte) in bytes.iter().enumerate() {
+          (*val_bytes)[off] = *byte;
+        }
+      }
+      Self(val)
     }
   }
 }
@@ -121,40 +170,19 @@ pub(crate) trait CachedString {
   /// Get the SherpaString representation without interning
   /// the string. This can useful when needing to compare a
   /// SherpaString with a standard string type.
-  fn proxy(&self) -> SherpaString {
-    let len = self.get_bytes().len();
-
-    if len > 14 {
-      SherpaString::LargeString(StringToken(hash_id_value_u64(
-        self.get_string(),
-      )))
-    } else {
-      let mut data = [0; 14];
-      let bytes = self.get_bytes();
-
-      for i in 0..len {
-        data[i] = bytes[i];
-      }
-
-      SherpaString::SmallString { len: len as u8, data }
-    }
+  fn proxy(&self) -> IString {
+    IString::from_bytes(self.get_bytes())
   }
   /// Returns a SherpaString after interning the string within
   /// the given store. Only `LargeString` sub-types are interned.
-  fn intern(&self, store: &StringStore) -> SherpaString {
-    let len = self.get_bytes().len();
+  fn intern(&self, store: &StringStore) -> IString {
+    let bytes = self.get_bytes();
+    let token = IString::from_bytes(bytes);
 
-    if len > 14 {
-      SherpaString::LargeString(store.intern(self.get_string()))
+    if bytes.len() > 7 {
+      store.intern(self.get_string(), token)
     } else {
-      let mut data = [0; 14];
-      let bytes = self.get_bytes();
-
-      for i in 0..len {
-        data[i] = bytes[i];
-      }
-
-      SherpaString::SmallString { len: len as u8, data }
+      token
     }
   }
 
@@ -313,7 +341,7 @@ fn interning_strings_on_different_threads() {
         timidas Venilia. Accipiunt saltem apta modo! Annos tu tale concita nostro
         relicto orbe quid, adit nec possederat simque conprendere defecerat avus
         Cyparisse multarum!";
-        
+
           let large_strB = "2: Lumina eiusdem a sororibus est agant montis tu urbes succedit gavisa dolore
         Perseus incerti, repente pariter. Omnes morsu rediit flores, nisi scelus
         confessis cristati ramis silentum arentis centimanum sacrilegae pone. Silvas

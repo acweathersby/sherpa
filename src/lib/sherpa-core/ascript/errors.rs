@@ -1,6 +1,6 @@
 use super::types::{AScriptProp, AScriptStore, AScriptTypeVal, TaggedType};
 use crate::{
-  grammar::compile::parser::sherpa::{ASTNode, AST_Property},
+  grammar::compile::parser::sherpa::AST_Property,
   types::*,
   Journal,
 };
@@ -11,7 +11,7 @@ use std::collections::BTreeSet;
 ///
 /// # Example
 /// ```hcg
-///
+/// 
 /// <> A > ... :{ t_TypeA, prop: str } // <- `prop` defined as `str` type
 ///
 /// <> B > ... :{ t_TypeA, prop: u32 } // <- `prop` redefined to `u32` type
@@ -45,27 +45,36 @@ pub(crate) fn add_prop_redefinition_error(
       (
         existing_prop.location.clone(),
         existing_prop.grammar_ref.path.clone(),
-        format!("First definition with type [{}]", existing_prop.type_val.debug_string(None)),
+        format!(
+          "First definition with type [{}]",
+          existing_prop.type_val.debug_string(None)
+        ),
       ),
       (
         new_prop.location.clone(),
         new_prop.grammar_ref.path.clone(),
-        format!("Second definition with type [{}]", new_prop.type_val.debug_string(None)),
+        format!(
+          "Second definition with type [{}]",
+          new_prop.type_val.debug_string(None)
+        ),
       ),
     ],
-    msg:      format!("Redefinition of property {} in struct {}", prop_name, struct_type,),
+    msg:      format!(
+      "Redefinition of property {} in struct {}",
+      prop_name, struct_type,
+    ),
     ps_msg:   "".into(),
     severity: SherpaErrorSeverity::Critical,
   });
 }
 
-/// Occurs when a production returns incompatible type values, such numeric values
-/// and Structs, or Strings and Tokens.
+/// Occurs when a production returns incompatible type values, such numeric
+/// values and Structs, or Strings and Tokens.
 ///
 /// # Example
 /// ### HC Grammar
 /// ```hcg
-///
+/// 
 /// <> A > \\r :{ t_TypeA, prop: str }  // <- This rule produces a struct
 ///      | \\t                        // <- This rule produces a Token
 /// ```
@@ -121,8 +130,8 @@ pub(crate) fn add_incompatible_production_scalar_types_error(
     severity: SherpaErrorSeverity::Critical,
   });
 }
-/// Occurs when a production returns incompatible vector type values, such as numeric values
-/// and Structs, or Strings and Tokens.
+/// Occurs when a production returns incompatible vector type values, such as
+/// numeric values and Structs, or Strings and Tokens.
 ///
 /// # Example
 ///
@@ -184,7 +193,7 @@ pub(crate) fn add_incompatible_production_vector_types_error(
 /// # Example
 /// ### HC Grammar
 /// ```hcg
-///
+/// 
 /// <> A > \r :{ t_TypeA, prop: str }  // <- This rule produces a struct
 ///      | \t (+)                    // <- This rule produces a Vector of Tokens
 /// ```
@@ -243,8 +252,11 @@ pub(crate) fn add_incompatible_production_types_error(
 
 /// This error occurs when a values prop's id does not match any reference
 /// names or non-terminals in the respective rule.
-///
-pub(crate) fn add_unmatched_prop_error(j: &mut Journal, rule: &Rule, prop: &AST_Property) {
+pub(crate) fn add_unmatched_prop_error(
+  j: &mut Journal,
+  rule: &Rule,
+  prop: &AST_Property,
+) {
   j.report_mut().add_error(SherpaError::SourceError {
     id:         "unmatched-valueless-prop",
     path:       rule.g_id.path.clone(),

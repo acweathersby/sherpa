@@ -37,7 +37,8 @@ pub fn temp_test1() -> SherpaResult<()> {
 }
 
 #[test]
-pub fn test_production_of_bytecode_for_simple_expression_grammar() -> SherpaResult<()> {
+pub fn test_production_of_bytecode_for_simple_expression_grammar(
+) -> SherpaResult<()> {
   let mut j = Journal::new(None);
   GrammarStore::from_str(
     &mut j,
@@ -167,7 +168,12 @@ IGNORE { c:sp c:nl }
 "#;
 
   test_runner(
-    &[("element_block", "<i -test : soLongMySwanSong - store { test } <i>>", true).into()],
+    &[(
+      "element_block",
+      "<i -test : soLongMySwanSong - store { test } <i>>",
+      true,
+    )
+      .into()],
     None,
     TestConfig {
       grammar_string: Some(input),

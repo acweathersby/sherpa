@@ -21,13 +21,15 @@ use std::{path::PathBuf, str::FromStr, sync::Arc};
 /// Return the full filepath of a grammar stored in
 /// ./tests/grammars/
 pub(super) fn get_test_grammar_path(partial_path: &str) -> PathBuf {
-  let path =
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../test/grammars/").join(partial_path);
+  let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    .join("../../../test/grammars/")
+    .join(partial_path);
   dbg!(&path);
   path.canonicalize().unwrap()
 }
 
-/// Creates and compiles a Journal and GrammarStore from a file path and configuration object.
+/// Creates and compiles a Journal and GrammarStore from a file path and
+/// configuration object.
 pub(super) fn build_grammar_from_file(
   input: PathBuf,
   config: Config,
@@ -41,13 +43,20 @@ pub(super) fn build_grammar_from_file(
 pub(crate) fn path_from_source(source_path: &str) -> SherpaResult<PathBuf> {
   let grammar_path = std::env::var("CARGO_MANIFEST_DIR")
     .map(|val| PathBuf::from_str(&val).unwrap().join("../../"))
-    .unwrap_or_else(|_| std::env::current_dir().unwrap().join(PathBuf::from_str("./src/").unwrap()))
+    .unwrap_or_else(|_| {
+      std::env::current_dir()
+        .unwrap()
+        .join(PathBuf::from_str("./src/").unwrap())
+    })
     .join(source_path);
 
   if let Ok(grammar_path) = grammar_path.canonicalize() {
     SherpaResult::Ok(grammar_path)
   } else {
-    panic!("File path {} not found in file system", grammar_path.to_str().unwrap());
+    panic!(
+      "File path {} not found in file system",
+      grammar_path.to_str().unwrap()
+    );
   }
 }
 
@@ -63,7 +72,8 @@ pub struct TestConfig<'a> {
   pub build_parse_states: bool,
   /// Run state reduction and llvm optimization passes. Defaults to `true`.
   pub optimize: bool,
-  /// Assert that reports do not contain error at every compilation point. Defaults to `true`.
+  /// Assert that reports do not contain error at every compilation point.
+  /// Defaults to `true`.
   pub assert_clean_reports: bool,
   pub print_disassembly: bool,
   /// Prints the parse report for the givin productions
@@ -78,8 +88,9 @@ pub struct TestConfig<'a> {
   pub grammar_string: Option<&'static str>,
   pub journal: Option<Journal>,
   pub num_of_threads: usize,
-  pub debugger_handler:
-    Option<&'a dyn Fn(Arc<GrammarStore>) -> Option<Box<dyn FnMut(&DebugEvent)>>>,
+  pub debugger_handler: Option<
+    &'a dyn Fn(Arc<GrammarStore>) -> Option<Box<dyn FnMut(&DebugEvent)>>,
+  >,
 }
 
 impl<'a> Default for TestConfig<'a> {
@@ -114,7 +125,9 @@ pub struct TestInput<'a> {
 }
 
 impl<'a> From<&(&'a str, &'a str, bool)> for TestInput<'a> {
-  fn from((entry_name, input, should_parse): &(&'a str, &'a str, bool)) -> Self {
+  fn from(
+    (entry_name, input, should_parse): &(&'a str, &'a str, bool),
+  ) -> Self {
     TestInput { entry_name, input, should_succeed: *should_parse }
   }
 }
@@ -131,8 +144,8 @@ impl<'a> From<(&'a str, &'a str, bool)> for TestInput<'a> {
 /// # Arguments
 ///
 /// * `parse_inputs` - A slice of TestInput structs that can be used
-/// to evaluate generated parsers. A tuple of `(entry_name: &str, input: &str, should_succeed:bool)`
-/// can be used instead of declaring TestInput structs.
+/// to evaluate generated parsers. A tuple of `(entry_name: &str, input: &str,
+/// should_succeed:bool)` can be used instead of declaring TestInput structs.
 pub fn test_runner<'a>(
   parse_inputs: &[TestInput],
   config: Option<Config>,
@@ -162,10 +175,14 @@ pub fn test_runner<'a>(
   let run_llvm_parser = llvm_parse;
   let run_bytecode_parser = bytecode_parse;
   let build_llvm_parser = build_llvm || run_llvm_parser;
-  let build_bytecode =
-    build_llvm_parser || run_bytecode_parser || print_disassembly || build_bytecode;
-  let build_states =
-    build_parse_states || build_bytecode || print_states || !report_parse_states.is_empty();
+  let build_bytecode = build_llvm_parser
+    || run_bytecode_parser
+    || print_disassembly
+    || build_bytecode;
+  let build_states = build_parse_states
+    || build_bytecode
+    || print_states
+    || !report_parse_states.is_empty();
 
   let mut j = if let Some(j) = journal { j } else { Journal::new(config) };
 
@@ -173,7 +190,11 @@ pub fn test_runner<'a>(
     SherpaResult::Ok(g)
   } else if let Some(grammar_string) = grammar_string {
     if let Some(grammar_path) = grammar_path {
-      GrammarStore::from_str_with_base_dir(&mut j, grammar_string, &grammar_path)
+      GrammarStore::from_str_with_base_dir(
+        &mut j,
+        grammar_string,
+        &grammar_path,
+      )
     } else {
       GrammarStore::from_str(&mut j, grammar_string)
     }
@@ -217,8 +238,11 @@ Cannot create a GrammarStore without one of these values present. "
 
   let states = states?;
 
-  let states =
-    if optimize { optimize_parse_states(&mut j, states) } else { states.into_iter().collect() };
+  let states = if optimize {
+    optimize_parse_states(&mut j, states)
+  } else {
+    states.into_iter().collect()
+  };
 
   if print_states {
     for state in &states {
@@ -245,13 +269,18 @@ Cannot create a GrammarStore without one of these values present. "
       let Some(prod) = g.get_entry_prod_id_from_name(entry_name)?.into_prod(&g) else {
     return SherpaResult::Err(format!("could not locate production [{}]", entry_name).into())
   };
-      let entry_point = *bc.state_name_to_offset.get(&g.get_entry_name_from_prod_id(&prod.id)?)?;
+      let entry_point = *bc
+        .state_name_to_offset
+        .get(&g.get_entry_name_from_prod_id(&prod.id)?)?;
       let target_production_id = prod.bytecode_id?;
       let mut reader = UTF8StringReader::from_string(input);
       let mut parser = ByteCodeParser::<_, u32>::new(&mut reader, &bc.bytecode);
       let mut debugger = debugger_handler.and_then(|s| s(g.clone()));
-      let result =
-        parser.collect_shifts_and_skips(entry_point, target_production_id, &mut debugger);
+      let result = parser.collect_shifts_and_skips(
+        entry_point,
+        target_production_id,
+        &mut debugger,
+      );
       resolve_shifts_and_skips(result, should_succeed, input, &g, "BYTECODE")?;
     }
   }
@@ -283,10 +312,19 @@ Cannot create a GrammarStore without one of these values present. "
 
         jit_parser.set_reader(&mut r);
 
-        let result =
-          jit_parser.collect_shifts_and_skips(entry_point, target_production_id, &mut debugger);
+        let result = jit_parser.collect_shifts_and_skips(
+          entry_point,
+          target_production_id,
+          &mut debugger,
+        );
 
-        resolve_shifts_and_skips(result, should_succeed, input, &g, "LLVM-JIT")?;
+        resolve_shifts_and_skips(
+          result,
+          should_succeed,
+          input,
+          &g,
+          "LLVM-JIT",
+        )?;
       }
     }
   }
@@ -339,22 +377,32 @@ fn print_parse_state_reports(report_parse_states: &[&str], j: &mut Journal) {
     for name in report_parse_states {
       let mut printed = false;
       if let Some(prod_id) = g.get_production_id_by_name(name) {
-        printed |= j.debug_print_reports(crate::ReportType::ProductionCompile(prod_id));
-        printed |= j.debug_print_reports(crate::ReportType::TokenProductionCompile(prod_id));
+        printed |=
+          j.debug_print_reports(crate::ReportType::ProductionCompile(prod_id));
+        printed |= j.debug_print_reports(
+          crate::ReportType::TokenProductionCompile(prod_id),
+        );
       }
       // Try building a symbol name
       let scanner_id = ScannerStateId::from_string(name, g);
 
-      printed |= j.debug_print_reports(crate::ReportType::ScannerCompile(scanner_id));
+      printed |=
+        j.debug_print_reports(crate::ReportType::ScannerCompile(scanner_id));
 
       if !printed {
-        println!("[Warning] Failed to find parser compile reports for [{}]", name);
+        println!(
+          "[Warning] Failed to find parser compile reports for [{}]",
+          name
+        );
       }
     }
   }
 }
 
-fn assert_reports(assert_clean_reports: bool, j: &mut Journal) -> SherpaResult<()> {
+fn assert_reports(
+  assert_clean_reports: bool,
+  j: &mut Journal,
+) -> SherpaResult<()> {
   if assert_clean_reports {
     j.flush_reports();
     if let Some(reports) = j.get_faulty_reports() {
@@ -399,7 +447,8 @@ pub fn console_debugger<'a>(
   let mut stack = vec![];
   Some(Box::new(move |event| match event {
     DebugEvent::ShiftToken { offset_end, offset_start, string } => {
-      let string = string[*offset_start..(*offset_end).min(string.len())].replace("\n", "\\n");
+      let string = string[*offset_start..(*offset_end).min(string.len())]
+        .replace("\n", "\\n");
       stack.push(string.clone());
       println!(
         "
@@ -454,7 +503,9 @@ Stack:\n    {}\n
       )
     }
     DebugEvent::Complete { production_id, .. } => {
-      if let SherpaResult::Ok(prod) = g.get_production_by_bytecode_id(*production_id) {
+      if let SherpaResult::Ok(prod) =
+        g.get_production_by_bytecode_id(*production_id)
+      {
         println!(
           "
 [Complete] --------------------------------------------------------------------
@@ -466,7 +517,9 @@ Stack:\n    {}\n
       }
     }
 
-    DebugEvent::TokenValue { input_value, start, end, string } if display_input_data => {
+    DebugEvent::TokenValue { input_value, start, end, string }
+      if display_input_data =>
+    {
       println!(
         "
 [Token Input]------------------------------------------------------------------------
@@ -479,7 +532,9 @@ Symbol Length: {}
         end - start
       )
     }
-    DebugEvent::ByteValue { input_value, start, end, string } if display_input_data => {
+    DebugEvent::ByteValue { input_value, start, end, string }
+      if display_input_data =>
+    {
       println!(
         "
 [Byte Input]------------------------------------------------------------------------
@@ -522,7 +577,9 @@ Symbol Length: {}
         end - start
       )
     }
-    DebugEvent::GotoValue { production_id } if display_input_data && display_scanner_output => {
+    DebugEvent::GotoValue { production_id }
+      if display_input_data && display_scanner_output =>
+    {
       println!(
         "
 [GOTO Input]-------------------------------------------------------------------

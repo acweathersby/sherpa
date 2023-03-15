@@ -19,7 +19,8 @@ pub(crate) fn create(
 ) -> SherpaResult<Graph> {
   let mut graph = Graph::new(j.grammar()?, mode);
 
-  let root = graph.create_state(SymbolID::Start, StateType::Start, None, kernel_items);
+  let root =
+    graph.create_state(SymbolID::Start, StateType::Start, None, kernel_items);
 
   graph.enqueue_pending_state(GraphState::Normal, root);
 
@@ -48,8 +49,12 @@ fn handle_kernel_items(
         _ => unreachable!(),
       };
       graph[parent].set_transition_type(transition);
-      let state =
-        graph.create_state(Default::default(), StateType::Start, Some(parent), vec![item]);
+      let state = graph.create_state(
+        Default::default(),
+        StateType::Start,
+        Some(parent),
+        vec![item],
+      );
       graph.enqueue_pending_state(GraphState::Normal, state);
     }
   } else {
@@ -59,7 +64,8 @@ fn handle_kernel_items(
 
     merge_occluding(groups.clone(), &mut groups, j, graph.is_scan());
 
-    let out_items = handle_incomplete_items(j, graph, parent, graph_state, groups, &closure)?;
+    let out_items =
+      handle_incomplete_items(j, graph, parent, graph_state, groups, &closure)?;
 
     if graph_state != GraphState::Peek && !graph.is_scan() {
       handle_goto(j, graph, parent, out_items)?;
@@ -76,13 +82,21 @@ fn create_transition_groups(
 ) -> (BTreeSet<Item>, BTreeMap<SymbolID, BTreeSet<Item>>) {
   let closure = graph[parent].get_closure(g, graph.is_scan());
 
-  let precedence =
-    closure.iter().filter(|i| i.is_completed()).fold(0, |a, i| a.max(i.get_precedence(g)));
+  let precedence = closure
+    .iter()
+    .filter(|i| i.is_completed())
+    .fold(0, |a, i| a.max(i.get_precedence(g)));
 
   let mut groups = hash_group_btreemap(
-    closure.iter().filter(|i| i.get_precedence(g) >= precedence).cloned().collect::<ItemSet>(),
+    closure
+      .iter()
+      .filter(|i| i.get_precedence(g) >= precedence)
+      .cloned()
+      .collect::<ItemSet>(),
     |_, item| match item.get_type(g) {
-      ItemType::ExclusiveCompleted(..) | ItemType::Completed(_) => SymbolID::Default,
+      ItemType::ExclusiveCompleted(..) | ItemType::Completed(_) => {
+        SymbolID::Default
+      }
       ItemType::Terminal(sym) => sym,
       ItemType::NonTerminal(_) => SymbolID::Undefined,
       ItemType::TokenProduction(..) if graph.is_scan() => SymbolID::Undefined,
@@ -101,7 +115,8 @@ fn merge_occluding(
   is_scan: bool,
 ) {
   for (sym, group) in into_groups.iter_mut() {
-    let mut occluding_items = get_set_of_occluding_items(j, sym, group, &from_groups, is_scan);
+    let mut occluding_items =
+      get_set_of_occluding_items(j, sym, group, &from_groups, is_scan);
     group.append(&mut occluding_items);
   }
 }
@@ -119,11 +134,17 @@ fn handle_incomplete_items(
   for (sym, mut group) in groups {
     match (group.len(), graph_state) {
       (1, GraphState::Peek) => {
-        let kernel_items = get_kernel_items_from_peek_item(graph, *group.first()?);
+        let kernel_items =
+          get_kernel_items_from_peek_item(graph, *group.first()?);
 
         match kernel_items[0].origin {
           _ => {
-            let state = graph.create_state(sym, StateType::PeekEnd, Some(parent), kernel_items);
+            let state = graph.create_state(
+              sym,
+              StateType::PeekEnd,
+              Some(parent),
+              kernel_items,
+            );
             graph.enqueue_pending_state(GraphState::Normal, state);
           }
         }
@@ -138,21 +159,39 @@ fn handle_incomplete_items(
           );
           graph.enqueue_pending_state(GraphState::Normal, state);
         } else {
-          let state = graph.create_state(sym, StateType::Peek, Some(parent), group.try_increment());
+          let state = graph.create_state(
+            sym,
+            StateType::Peek,
+            Some(parent),
+            group.try_increment(),
+          );
 
           graph.enqueue_pending_state(graph_state, state);
         }
       }
       (_, GraphState::Normal) => {
-        let out_of_scope = group.drain_filter(|i| i.is_out_of_scope()).collect::<Vec<_>>();
+        let out_of_scope =
+          group.drain_filter(|i| i.is_out_of_scope()).collect::<Vec<_>>();
         let mut in_scope = group;
 
         match (in_scope.len(), out_of_scope.len()) {
           (0, 1..) => {
-            create_out_of_scope_complete_state(out_of_scope, graph, &sym, parent, is_scan);
+            create_out_of_scope_complete_state(
+              out_of_scope,
+              graph,
+              &sym,
+              parent,
+              is_scan,
+            );
           }
           (_, 1..) if is_scan => {
-            create_out_of_scope_complete_state(out_of_scope, graph, &sym, parent, is_scan);
+            create_out_of_scope_complete_state(
+              out_of_scope,
+              graph,
+              &sym,
+              parent,
+              is_scan,
+            );
           }
           (1.., _) => {
             if let Some(shifted_items) = create_call(
@@ -166,8 +205,12 @@ fn handle_incomplete_items(
             ) {
               out_items.append(&mut shifted_items.to_set());
             } else {
-              let state =
-                graph.create_state(sym, StateType::Shift, Some(parent), in_scope.try_increment());
+              let state = graph.create_state(
+                sym,
+                StateType::Shift,
+                Some(parent),
+                in_scope.try_increment(),
+              );
 
               out_items.append(&mut in_scope);
 
@@ -249,8 +292,9 @@ fn handle_completed_items(
   let is_scan = graph.is_scan();
 
   if let Some(completed) = groups.remove(&SymbolID::Default) {
-    let CompletedItemArtifacts { follow_pairs, follow_items, default_only, .. } =
-      get_completed_item_artifacts(j, graph, par, completed.iter())?;
+    let CompletedItemArtifacts {
+      follow_pairs, follow_items, default_only, ..
+    } = get_completed_item_artifacts(j, graph, par, completed.iter())?;
 
     if graph.is_scan() {
       graph[par].add_kernel_items(g, follow_items, is_scan);
@@ -274,12 +318,18 @@ fn handle_completed_items(
         is_scan,
       );
       // */
-      get_oos_follow_from_completed(j, graph, &completed.iter().to_vec(), &mut |follow: Items| {
-        merge_items_into_groups(&follow, g, par, is_scan, groups)
-      })?;
+      get_oos_follow_from_completed(
+        j,
+        graph,
+        &completed.iter().to_vec(),
+        &mut |follow: Items| {
+          merge_items_into_groups(&follow, g, par, is_scan, groups)
+        },
+      )?;
     }
 
-    let default = completed.iter().map(|i| -> FollowPair { (*i, *i).into() }).collect();
+    let default =
+      completed.iter().map(|i| -> FollowPair { (*i, *i).into() }).collect();
     handle_completed_groups(
       j,
       graph,
@@ -294,20 +344,31 @@ fn handle_completed_items(
     if !follow_pairs.is_empty() {
       // If not scanner and there exists any disambiguities, we must use either
       // a peek or breadcrumb resolution strategy to overcome this disambiguity.
-      // If we are doing fork or PEG-like states then we don't have to make these
-      // considerations.
+      // If we are doing fork or PEG-like states then we don't have to make
+      // these considerations.
       let mut completed_groups =
-        hash_group_btreemap(follow_pairs.clone(), |_, fp| match fp.follow.get_type(g) {
-          ItemType::Completed(_) | ItemType::ExclusiveCompleted(..) => {
-            unreachable!("Should be handled outside this path")
+        hash_group_btreemap(follow_pairs.clone(), |_, fp| {
+          match fp.follow.get_type(g) {
+            ItemType::Completed(_) | ItemType::ExclusiveCompleted(..) => {
+              unreachable!("Should be handled outside this path")
+            }
+            ItemType::Terminal(sym) => sym,
+            _ => SymbolID::Undefined,
           }
-          ItemType::Terminal(sym) => sym,
-          _ => SymbolID::Undefined,
         });
       completed_groups.remove(&SymbolID::Undefined);
 
       for (sym, follow_pairs) in completed_groups {
-        handle_completed_groups(j, graph, groups, par, g_state, sym, follow_pairs, &default_only)?;
+        handle_completed_groups(
+          j,
+          graph,
+          groups,
+          par,
+          g_state,
+          sym,
+          follow_pairs,
+          &default_only,
+        )?;
       }
     }
   }
@@ -334,30 +395,49 @@ fn handle_completed_groups(
     }
     (2.., None, GraphState::Normal) => {
       if is_scan {
-        // We may be able to continue parsing using follow items, after we determine
-        // whether we have symbol ambiguities.
-        resolve_conflicting_symbols(j, graph, par, sym, cmpl.to_set(), g_state)?;
+        // We may be able to continue parsing using follow items, after we
+        // determine whether we have symbol ambiguities.
+        resolve_conflicting_symbols(
+          j,
+          graph,
+          par,
+          sym,
+          cmpl.to_set(),
+          g_state,
+        )?;
       } else if cmpl.clone().to_set().to_absolute().len() == 1 {
         // The same production is generated from this completed item, regardless
         // of the origins. This is a valid outcome.
-        handle_completed_item(j, graph, (cmpl[0], vec![cmpl[0]]), par, sym, g_state)?;
+        handle_completed_item(
+          j,
+          graph,
+          (cmpl[0], vec![cmpl[0]]),
+          par,
+          sym,
+          g_state,
+        )?;
       } else if cmpl.iter().all_are_out_of_scope() {
         // We are at the end of a lookahead that results in the completion of
         // some existing item.
         let item = *cmpl.first()?;
         handle_completed_item(j, graph, (item, vec![item]), par, sym, g_state);
       } else {
-        let unfollowed_items: Items =
-          default_only_items.intersection(&cmpl.iter().to_set()).cloned().collect();
+        let unfollowed_items: Items = default_only_items
+          .intersection(&cmpl.iter().to_set())
+          .cloned()
+          .collect();
 
         match unfollowed_items.len() {
           2.. => {
             // Only an issue if there are no follow actions.
-            // And even then, we could try using peek states to handle this outcome.
-            // Reduce Reduce conflict ------------------------------------------------------
-            // Could pick a specific item to reduce based on precedence or some kind of exclusive
-            // weight. Perhaps also walking back up the graph to find a suitable divergent point
-            // add a fork. This would also be a good point to focus on breadcrumb parsing strategies.
+            // And even then, we could try using peek states to handle this
+            // outcome. Reduce Reduce conflict
+            // ------------------------------------------------------
+            // Could pick a specific item to reduce based on precedence or some
+            // kind of exclusive weight. Perhaps also walking back
+            // up the graph to find a suitable divergent point add a
+            // fork. This would also be a good point to focus on breadcrumb
+            // parsing strategies.
             create_reduce_reduce_error(j, graph, cmpl.to_set())?;
           }
           1 => {
@@ -365,7 +445,8 @@ fn handle_completed_groups(
             handle_completed_item(j, graph, (out[0], out), par, sym, g_state)?;
           }
           0 => {
-            //There are lookahead(k=1) style states available, so we don't need to generate a default state.
+            //There are lookahead(k=1) style states available, so we don't need
+            // to generate a default state.
           }
           _ => unreachable!(),
         };
@@ -382,7 +463,9 @@ fn handle_completed_groups(
         "Handle shift-reduce conflict in Scanner state. ------\n Reduce:\n{}\nShift:\n{} \n------",
         completed.to_debug_string(g, "\n"), group.to_debug_string(g, "\n")
       ); */
-      } else if group.iter().all_are_out_of_scope() && cmpl.iter().all_are_out_of_scope() {
+      } else if group.iter().all_are_out_of_scope()
+        && cmpl.iter().all_are_out_of_scope()
+      {
         cmpl.append(&mut group.to_vec());
         create_out_of_scope_complete_state(cmpl, graph, &sym, par, is_scan);
       } else {
@@ -393,8 +476,18 @@ fn handle_completed_groups(
           .collect::<BTreeSet<_>>();
 
         if !unique.is_empty() {
-          group.append(&mut get_set_of_occluding_items(j, &sym, &group, &groups, is_scan));
-          create_peek(graph, sym, par, group.iter(), unique, true, StateType::Peek);
+          group.append(&mut get_set_of_occluding_items(
+            j, &sym, &group, &groups, is_scan,
+          ));
+          create_peek(
+            graph,
+            sym,
+            par,
+            group.iter(),
+            unique,
+            true,
+            StateType::Peek,
+          );
         }
       }
     }
@@ -410,9 +503,10 @@ fn handle_completed_groups(
     }
     (_, None, GraphState::Peek) => {
       if cmpl.iter().follow_items_are_the_same() {
-        // Items are likely a product of a reduce-shift conflict. We'll favor the shift
-        // action as long as there is only one shift, otherwise we have a shift-shift conflict.
-        // Grabbing the original items.
+        // Items are likely a product of a reduce-shift conflict. We'll favor
+        // the shift action as long as there is only one shift,
+        // otherwise we have a shift-shift conflict. Grabbing the
+        // original items.
         let kernel_items = follow_pairs
           .iter()
           .flat_map(|fp| get_kernel_items_from_peek_item(graph, fp.completed))
@@ -422,7 +516,12 @@ fn handle_completed_groups(
         let incomplete = kernel_items.incomplete_items();
 
         if incomplete.len() == 1 {
-          let state = graph.create_state(sym, StateType::PeekEnd, Some(par), incomplete.to_vec());
+          let state = graph.create_state(
+            sym,
+            StateType::PeekEnd,
+            Some(par),
+            incomplete.to_vec(),
+          );
           graph.enqueue_pending_state(GraphState::Normal, state);
         }
       } else {
@@ -499,7 +598,8 @@ fn merge_items_into_groups(
   is_scan: bool,
   groups: &mut BTreeMap<SymbolID, BTreeSet<Item>>,
 ) {
-  // Dumb symbols that could cause termination of parse into the intermiediate item groups
+  // Dumb symbols that could cause termination of parse into the intermiediate
+  // item groups
   for (sym, group) in hash_group_btreemap(
     get_closure(follow.iter(), g, par, is_scan)
       .into_iter()
@@ -524,7 +624,8 @@ fn create_out_of_scope_complete_state(
     (_, true) => StateType::ScannerCompleteOOS,
     _ => StateType::ProductionCompleteOOS,
   };
-  let state = graph.create_state(*sym, transition_type, Some(parent), out_of_scope);
+  let state =
+    graph.create_state(*sym, transition_type, Some(parent), out_of_scope);
   graph.add_leaf_state(state);
 }
 
@@ -560,7 +661,10 @@ fn get_oos_follow_from_completed(
   SherpaResult::Ok(())
 }
 
-fn get_goal_items_from_completed(items: Vec<Item>, graph: &Graph) -> BTreeSet<Item> {
+fn get_goal_items_from_completed(
+  items: Vec<Item>,
+  graph: &Graph,
+) -> BTreeSet<Item> {
   items.into_iter().filter(|i| graph.item_is_goal(*i)).collect()
 }
 
@@ -570,8 +674,10 @@ fn resolve_peek<'a, T: ItemContainerIter<'a>>(
   sym: SymbolID,
   par: StateId,
 ) {
-  let kernel_items = get_kernel_items_from_peek_item(graph, *completed.next().unwrap());
-  let state = graph.create_state(sym, StateType::PeekEnd, Some(par), kernel_items);
+  let kernel_items =
+    get_kernel_items_from_peek_item(graph, *completed.next().unwrap());
+  let state =
+    graph.create_state(sym, StateType::PeekEnd, Some(par), kernel_items);
   graph.enqueue_pending_state(GraphState::Normal, state);
 }
 
@@ -594,13 +700,15 @@ fn resolve_conflicting_symbols(
   }
 
   // Map items according to their symbols
-  let symbol_groups = hash_group_btreemap(completed_items.clone(), |_, i| i.origin.get_symbol());
-  let priority_groups = hash_group_btreemap(symbol_groups, |_, (sym, _)| match sym {
-    sym if sym.is_exclusive() => ExclusiveDefined,
-    sym if sym.is_defined() => Defined,
-    sym if sym.is_production() => Production,
-    _ => Generic,
-  });
+  let symbol_groups =
+    hash_group_btreemap(completed_items.clone(), |_, i| i.origin.get_symbol());
+  let priority_groups =
+    hash_group_btreemap(symbol_groups, |_, (sym, _)| match sym {
+      sym if sym.is_exclusive() => ExclusiveDefined,
+      sym if sym.is_defined() => Defined,
+      sym if sym.is_production() => Production,
+      _ => Generic,
+    });
   use SymbolPriorities::*;
   let completed: Option<&ItemSet>;
 
@@ -618,7 +726,10 @@ fn resolve_conflicting_symbols(
       }
       Defined => {
         if groups.len() > 1 {
-          panic!("Found {} conflicting Defined symbols. Grammar is ambiguous", groups.len());
+          panic!(
+            "Found {} conflicting Defined symbols. Grammar is ambiguous",
+            groups.len()
+          );
         } else {
           completed = Some(groups.values().next().unwrap());
         }
@@ -650,7 +761,10 @@ fn resolve_conflicting_symbols(
       }
       Generic => {
         if groups.len() > 1 {
-          panic!("Found {} conflicting Generic symbols. Grammar is ambiguous", groups.len());
+          panic!(
+            "Found {} conflicting Generic symbols. Grammar is ambiguous",
+            groups.len()
+          );
         } else {
           completed = Some(groups.values().next().unwrap());
         }
@@ -687,18 +801,25 @@ fn handle_goto(
   let out_items: ItemSet = if parent.is_root() {
     out_items
   } else {
-    out_items.into_iter().filter(|i| !kernel_base.contains(i) || i.is_start()).collect()
+    out_items
+      .into_iter()
+      .filter(|i| !kernel_base.contains(i) || i.is_start())
+      .collect()
   };
 
   if !non_terminals.is_empty() && !out_items.is_empty() {
     let mut kernel_prod_ids = kernel_base.iter().to_production_id_set(g);
     let mut used_non_terms = BTreeSet::new();
     let mut seen = BTreeSet::new();
-    let mut queue = VecDeque::from_iter(out_items.iter().map(|i| i.get_prod_id(g)));
+    let mut queue =
+      VecDeque::from_iter(out_items.iter().map(|i| i.get_prod_id(g)));
 
     while let Some(prod_id) = queue.pop_front() {
       if seen.insert(prod_id) {
-        for item in non_terminals.iter().filter(|i| i.get_production_id_at_sym(g) == prod_id) {
+        for item in non_terminals
+          .iter()
+          .filter(|i| i.get_production_id_at_sym(g) == prod_id)
+        {
           used_non_terms.insert(*item);
           if !kernel_base.contains(item) || item.is_start() {
             queue.push_back(item.get_prod_id(g));
@@ -709,14 +830,17 @@ fn handle_goto(
 
     if !used_non_terms.is_empty() {
       if parent.0 == 2 {
-        j.report_mut().add_note("goto-seeds", out_items.to_debug_string(g, "\n\n"));
-        j.report_mut().add_note("goto-results", used_non_terms.to_debug_string(g, "\n\n"));
+        j.report_mut()
+          .add_note("goto-seeds", out_items.to_debug_string(g, "\n\n"));
+        j.report_mut()
+          .add_note("goto-results", used_non_terms.to_debug_string(g, "\n\n"));
       }
 
       graph[parent].set_non_terminals(&used_non_terms);
 
-      let used_goto_groups =
-        hash_group_btreemap(used_non_terms, |_, t| t.get_production_id_at_sym(g));
+      let used_goto_groups = hash_group_btreemap(used_non_terms, |_, t| {
+        t.get_production_id_at_sym(g)
+      });
 
       for (prod_id, items) in &used_goto_groups {
         let sym_id = g.get_production(&prod_id)?.sym_id;
@@ -726,9 +850,9 @@ fn handle_goto(
           .any(|i| -> bool {
             let p = i.get_prod_id(g);
             let recursive = p == i.get_production_id_at_sym(g);
-            recursive
-              .then_some(i.at_start())
-              .unwrap_or(!kernel_base.contains(i) && used_goto_groups.contains_key(&p))
+            recursive.then_some(i.at_start()).unwrap_or(
+              !kernel_base.contains(i) && used_goto_groups.contains_key(&p),
+            )
           })
           .then_some(StateType::GotoLoop)
           .unwrap_or(StateType::KernelGoto);
@@ -737,8 +861,12 @@ fn handle_goto(
         let incomplete = incremented_items.clone().incomplete_items();
         let mut completed = incremented_items.clone().completed_items();
 
-        if kernel_prod_ids.remove(&prod_id) && parent.is_root() && completed.is_empty() {
-          let item: Item = g.get_rule(&g.production_rules.get(prod_id)?[0])?.into();
+        if kernel_prod_ids.remove(&prod_id)
+          && parent.is_root()
+          && completed.is_empty()
+        {
+          let item: Item =
+            g.get_rule(&g.production_rules.get(prod_id)?[0])?.into();
           completed.push(
             item
               .to_complete()
@@ -758,20 +886,41 @@ fn handle_goto(
 
           fp.append(&mut oos_pairs);
 
-          if let Some(s) =
-            create_peek(graph, sym_id, parent, incomplete.iter(), fp, false, transition_type)
-          {
-            let c_p = completed.clone().into_iter().map(|i| (i, i).into()).collect();
+          if let Some(s) = create_peek(
+            graph,
+            sym_id,
+            parent,
+            incomplete.iter(),
+            fp,
+            false,
+            transition_type,
+          ) {
+            let c_p =
+              completed.clone().into_iter().map(|i| (i, i).into()).collect();
             let graph_state = GraphState::Normal;
             let sym = SymbolID::Default;
             let groups = &mut Default::default();
-            let s = graph.create_state(sym, StateType::PeekEnd, Some(s), completed);
+            let s =
+              graph.create_state(sym, StateType::PeekEnd, Some(s), completed);
 
-            handle_completed_groups(j, graph, groups, s, graph_state, sym, c_p, &default)?;
+            handle_completed_groups(
+              j,
+              graph,
+              groups,
+              s,
+              graph_state,
+              sym,
+              c_p,
+              &default,
+            )?;
           }
         } else {
-          let state =
-            graph.create_state(sym_id, transition_type, Some(parent), incremented_items.clone());
+          let state = graph.create_state(
+            sym_id,
+            transition_type,
+            Some(parent),
+            incremented_items.clone(),
+          );
           graph.enqueue_pending_state(GraphState::Normal, state);
         }
       }
@@ -779,7 +928,12 @@ fn handle_goto(
       // The remaining goto productions are accept states for for this goto.
       for prod_id in kernel_prod_ids {
         let prod_sym = g.get_production(&prod_id)?.sym_id;
-        let state = graph.create_state(prod_sym, StateType::GotoPass, Some(parent), vec![]);
+        let state = graph.create_state(
+          prod_sym,
+          StateType::GotoPass,
+          Some(parent),
+          vec![],
+        );
         graph.add_leaf_state(state);
       }
     }
@@ -804,7 +958,9 @@ fn get_goal_items(graph: &Graph, item: &Item) -> Vec<Item> {
 fn is_peg_state(graph_state: GraphState) -> bool {
   matches!(
     graph_state,
-    GraphState::LongestMatch | GraphState::FirstMatch | GraphState::ShortestMatch
+    GraphState::LongestMatch
+      | GraphState::FirstMatch
+      | GraphState::ShortestMatch
   )
 }
 
@@ -819,7 +975,9 @@ fn get_set_of_occluding_items(
   let g = &(j.grammar().unwrap());
 
   if is_scanner {
-    for (from_sym, from_group) in groups.iter().filter(|(other_sym, _)| into_sym != *other_sym) {
+    for (from_sym, from_group) in
+      groups.iter().filter(|(other_sym, _)| into_sym != *other_sym)
+    {
       if symbols_occlude(into_sym, from_sym, g) {
         #[cfg(debug_assertions)]
         {
@@ -861,14 +1019,18 @@ fn create_peek<'a, T: ItemContainerIter<'a>>(
   let existing_items = incomplete_items.clone().to_absolute().to_set();
   let state = graph.create_state(sym, transition_type, Some(parent), vec![]);
 
-  for (_, items) in hash_group_btreemap(completed_item_pairs, |_, fp| fp.completed.rule_id) {
-    // All items here complete the same rule, so we group them all into one goal index.
+  for (_, items) in
+    hash_group_btreemap(completed_item_pairs, |_, fp| fp.completed.rule_id)
+  {
+    // All items here complete the same rule, so we group them all into one goal
+    // index.
     let follow: ItemSet = items
       .iter()
       .filter_map(|FollowPair { follow, .. }| {
         if follow.is_completed() || {
           existing_items.contains(&follow)
-            || (follow.at_start() && existing_prod_ids.contains(&follow.get_prod_id(g)))
+            || (follow.at_start()
+              && existing_prod_ids.contains(&follow.get_prod_id(g)))
         } {
           None
         } else {
@@ -882,14 +1044,20 @@ fn create_peek<'a, T: ItemContainerIter<'a>>(
       for follow in follow {
         kernel_items.push(follow.to_origin(Origin::Peek(index, state)));
       }
-      graph[state].set_peek_resolve_items(index, items.iter().to_completed_set().to_vec());
+      graph[state].set_peek_resolve_items(
+        index,
+        items.iter().to_completed_set().to_vec(),
+      );
     }
   }
 
   let index = hash_id_value_u64(&incomplete_items);
 
   kernel_items.append(
-    &mut incomplete_items.iter().map(|i| i.to_origin(Origin::Peek(index, state))).collect(),
+    &mut incomplete_items
+      .iter()
+      .map(|i| i.to_origin(Origin::Peek(index, state)))
+      .collect(),
   );
   resolve_items.append(&mut incomplete_items);
 
@@ -911,7 +1079,10 @@ fn create_peek<'a, T: ItemContainerIter<'a>>(
   graph.enqueue_pending_state(GraphState::Peek, state)
 }
 
-fn get_kernel_items_from_peek_item(graph: &Graph, peek_item: Item) -> Vec<Item> {
+fn get_kernel_items_from_peek_item(
+  graph: &Graph,
+  peek_item: Item,
+) -> Vec<Item> {
   let Origin::Peek(peek_index, peek_origin) = peek_item.origin else {
         panic!("Invalid peek origin");
     };
@@ -935,12 +1106,16 @@ fn create_call(
     if !graph[parent].conflicting_production_call(prod_id, g, is_scan) {
       let items = closure
         .iter()
-        .filter(|i| i.get_production_id_at_sym(g) == prod_id && i.get_prod_id(g) != prod_id)
+        .filter(|i| {
+          i.get_production_id_at_sym(g) == prod_id
+            && i.get_prod_id(g) != prod_id
+        })
         .cloned()
         .collect::<Vec<_>>();
 
       if items.len() > 0 {
-        if let Some(items) = create_call(&items, graph, graph_state, parent, closure, sym, is_scan)
+        if let Some(items) =
+          create_call(&items, graph, graph_state, parent, closure, sym, is_scan)
         {
           return Some(items);
         } else {
@@ -973,7 +1148,8 @@ fn all_items_come_from_same_production_call(
   g: &std::sync::Arc<GrammarStore>,
 ) -> bool {
   group.iter().all(|i| i.at_start())
-    && group.iter().map(|i| i.get_prod_id(g)).collect::<BTreeSet<_>>().len() == 1
+    && group.iter().map(|i| i.get_prod_id(g)).collect::<BTreeSet<_>>().len()
+      == 1
 }
 
 /// Returns all incomplete items that follow the given completed item,
@@ -1000,14 +1176,19 @@ pub(crate) fn get_follow(
         graph[item.origin_state]
           .get_root_closure(g, graph.is_scan())
           .into_iter()
-          .filter(|i| i.is_out_of_scope() && i.get_production_id_at_sym(g) == prod_id)
+          .filter(|i| {
+            i.is_out_of_scope() && i.get_production_id_at_sym(g) == prod_id
+          })
           .map(|i| i.to_origin(item.origin))
           .collect::<Vec<_>>()
       } else {
         graph[item.origin_state]
           .get_closure(g, graph.is_scan())
           .into_iter()
-          .filter(|i| i.get_production_id_at_sym(g) == prod_id && i.goal_index == item.goal_index)
+          .filter(|i| {
+            i.get_production_id_at_sym(g) == prod_id
+              && i.goal_index == item.goal_index
+          })
           .collect::<Vec<_>>()
       };
 
@@ -1043,17 +1224,26 @@ fn handle_completed_item(
 
   match (completed_item.origin, is_scan) {
     (Origin::GoalCompleteOOS, ..) => {
-      let state = graph.create_state(sym, StateType::ProductionCompleteOOS, Some(parent), vec![]);
+      let state = graph.create_state(
+        sym,
+        StateType::ProductionCompleteOOS,
+        Some(parent),
+        vec![],
+      );
       graph.add_leaf_state(state);
     }
     // Completion of parse tree may be premature
     // or item is not an acceptable completed item
     (_, true) => {
-      //let (follow, completed_set) = get_follow(j, graph, completed_item, is_scan)?;
-      let (follow, completed_items): (Vec<Items>, Vec<Items>) =
-        completed_items.into_iter().map(|i| get_follow(j, graph, i).unwrap()).unzip();
+      //let (follow, completed_set) = get_follow(j, graph, completed_item,
+      // is_scan)?;
+      let (follow, completed_items): (Vec<Items>, Vec<Items>) = completed_items
+        .into_iter()
+        .map(|i| get_follow(j, graph, i).unwrap())
+        .unzip();
       let follow = follow.into_iter().flatten().collect::<Items>();
-      let completed_items = completed_items.into_iter().flatten().collect::<Items>();
+      let completed_items =
+        completed_items.into_iter().flatten().collect::<Items>();
 
       let goals = get_goal_items_from_completed(completed_items, graph);
 
@@ -1063,8 +1253,12 @@ fn handle_completed_item(
       let state = graph.create_state(
         sym,
         match (is_continue, goals.first().map(|d| d.origin)) {
-          (true, Some(Origin::SymGoal(sym_id))) => StateType::AssignAndFollow(sym_id),
-          (false, Some(Origin::SymGoal(sym_id))) => StateType::AssignToken(sym_id),
+          (true, Some(Origin::SymGoal(sym_id))) => {
+            StateType::AssignAndFollow(sym_id)
+          }
+          (false, Some(Origin::SymGoal(sym_id))) => {
+            StateType::AssignToken(sym_id)
+          }
           (true, _) => StateType::Follow,
           (false, _) => StateType::Complete,
         },
@@ -1107,7 +1301,10 @@ fn create_reduce_reduce_error(
   end_items: ItemSet,
 ) -> SherpaResult<()> {
   let g = &(graph.grammar.clone());
-  let goals = end_items.iter().flat_map(|i| get_goal_items(&graph, i)).collect::<BTreeSet<_>>();
+  let goals = end_items
+    .iter()
+    .flat_map(|i| get_goal_items(&graph, i))
+    .collect::<BTreeSet<_>>();
   j.report_mut().add_error(SherpaError::SourcesError {
     id:       "reduce-conflict",
     msg:      "Unresovable parse conflict encountered".into(),

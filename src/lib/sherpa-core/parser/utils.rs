@@ -1,6 +1,6 @@
-//! Private functions that are either used in transition.rs or state.rs, but want
-//! to organize here to keep those file clean. The functions here may also be
-//! general enough to be used in modules other than transition, as well.
+//! Private functions that are either used in transition.rs or state.rs, but
+//! want to organize here to keep those file clean. The functions here may also
+//! be general enough to be used in modules other than transition, as well.
 
 use crate::types::{SymbolID, *};
 use std::{
@@ -10,7 +10,8 @@ use std::{
 };
 
 /// Constructs a Vector of Vectors, each of which contains a set items from the
-/// original vector that have been grouped by the hash of a common distinguisher.
+/// original vector that have been grouped by the hash of a common
+/// distinguisher.
 #[inline]
 pub fn hash_group_vec<
   T: Sized,
@@ -70,47 +71,58 @@ pub fn hash_group_btreemap<
 ///
 /// - `g:id` and any single identifier character.
 /// - `g:num` and any single numeric character.
-/// - `g:sym` and any single character thats not a numeric,
-///   identifier, space, newline, or tab.
+/// - `g:sym` and any single character thats not a numeric, identifier, space,
+///   newline, or tab.
 
-pub fn symbols_occlude(symA: &SymbolID, symB: &SymbolID, g: &GrammarStore) -> bool {
+pub fn symbols_occlude(
+  symA: &SymbolID,
+  symB: &SymbolID,
+  g: &GrammarStore,
+) -> bool {
   match symA {
-    SymbolID::DefinedSymbol(..) => match g.symbol_strings.get(symA).map(|s| s.as_str()) {
-      Some("\n") => match symB {
-        SymbolID::GenericNewLine => true,
-        _ => false,
-      },
-      Some("\t") => match symB {
-        SymbolID::GenericHorizontalTab => true,
-        _ => false,
-      },
-      Some(" ") => match symB {
-        SymbolID::GenericSpace => true,
-        _ => false,
-      },
-      Some(_) => match symB {
-        SymbolID::GenericSymbol => g.symbols.get(symA).unwrap().cp_len == 1,
+    SymbolID::DefinedSymbol(..) => {
+      match g.symbol_strings.get(symA).map(|s| s.as_str()) {
+        Some("\n") => match symB {
+          SymbolID::GenericNewLine => true,
+          _ => false,
+        },
+        Some("\t") => match symB {
+          SymbolID::GenericHorizontalTab => true,
+          _ => false,
+        },
+        Some(" ") => match symB {
+          SymbolID::GenericSpace => true,
+          _ => false,
+        },
+        Some(_) => match symB {
+          SymbolID::GenericSymbol => g.symbols.get(symA).unwrap().cp_len == 1,
+          _ => symA == symB,
+        },
         _ => symA == symB,
-      },
-      _ => symA == symB,
-    },
-    SymbolID::DefinedIdentifier(_) | SymbolID::ExclusiveDefinedIdentifier(_) => {
+      }
+    }
+    SymbolID::DefinedIdentifier(_)
+    | SymbolID::ExclusiveDefinedIdentifier(_) => {
       match g.symbol_strings.get(symA).map(|s| s.as_str()) {
         Some("_") | Some("-") => match symB {
           SymbolID::GenericSymbol => true,
           _ => false,
         },
         Some(_) => match symB {
-          SymbolID::GenericIdentifier => g.symbols.get(symA).unwrap().cp_len == 1,
+          SymbolID::GenericIdentifier => {
+            g.symbols.get(symA).unwrap().cp_len == 1
+          }
           _ => false,
         },
         _ => false,
       }
     }
-    SymbolID::DefinedNumeric(_) | SymbolID::ExclusiveDefinedNumeric(_) => match symB {
-      SymbolID::GenericNumber => g.symbols.get(symA).unwrap().cp_len == 1,
-      _ => false,
-    },
+    SymbolID::DefinedNumeric(_) | SymbolID::ExclusiveDefinedNumeric(_) => {
+      match symB {
+        SymbolID::GenericNumber => g.symbols.get(symA).unwrap().cp_len == 1,
+        _ => false,
+      }
+    }
     symA => *symA == *symB,
   }
 }

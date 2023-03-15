@@ -6,7 +6,10 @@ use std::collections::{BTreeSet, VecDeque};
 /// Retrieve the initial items of a production. Returns vector of
 /// items, one for each rule belonging to the production.
 #[inline]
-pub(crate) fn get_production_start_items(prod_id: &ProductionId, g: &GrammarStore) -> Vec<Item> {
+pub(crate) fn get_production_start_items(
+  prod_id: &ProductionId,
+  g: &GrammarStore,
+) -> Vec<Item> {
   g.production_rules
     .get(prod_id)
     .unwrap()
@@ -36,7 +39,10 @@ pub(crate) fn create_closure(items: &[Item], g: &GrammarStore) -> Vec<Item> {
 
 /// Retrieve the closure of an item that is cached in the grammar store.
 #[inline]
-pub(crate) fn get_closure_cached<'a>(item: &Item, g: &'a GrammarStore) -> &'a Vec<Item> {
+pub(crate) fn get_closure_cached<'a>(
+  item: &Item,
+  g: &'a GrammarStore,
+) -> &'a Vec<Item> {
   static empty_closure: Vec<Item> = vec![];
   if g.closures.get(&item.to_absolute()).is_none() {
     &empty_closure

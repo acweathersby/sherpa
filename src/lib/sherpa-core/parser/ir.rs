@@ -69,7 +69,9 @@ pub(crate) fn convert_graph_to_ir(
       None
     };
 
-    for (id, ir_state) in convert_state_to_ir(j, graph, state, successors, entry_name, goto_name)? {
+    for (id, ir_state) in
+      convert_state_to_ir(j, graph, state, successors, entry_name, goto_name)?
+    {
       match output.entry(id) {
         Entry::Occupied(e) => {
           debug_assert_eq!(e.get().code, ir_state.code)
@@ -105,7 +107,10 @@ fn convert_goto_state_to_ir(
   let g = &(j.grammar()?);
 
   let successors = successors.iter().filter(|s| {
-    matches!(s.get_type(), StateType::GotoPass | StateType::GotoLoop | StateType::KernelGoto)
+    matches!(
+      s.get_type(),
+      StateType::GotoPass | StateType::GotoLoop | StateType::KernelGoto
+    )
   });
 
   let mut w = CodeWriter::new(vec![]);
@@ -115,7 +120,10 @@ fn convert_goto_state_to_ir(
     .map(|s| {
       if let SymbolID::Production(prod_id, _) = s.get_symbol() {
         let prod = g.get_production(&prod_id).unwrap();
-        (prod.bytecode_id.unwrap(), (&prod.name, create_ir_state_name(graph, s), s.get_type()))
+        (
+          prod.bytecode_id.unwrap(),
+          (&prod.name, create_ir_state_name(graph, s), s.get_type()),
+        )
       } else {
         panic!("Invalid production type: {}", s.get_symbol().debug_string(g))
       }
@@ -160,21 +168,28 @@ fn convert_state_to_ir(
   let g = &(j.grammar()?);
   let state_id = state.get_id();
 
-  let successor_groups = hash_group_btreemap(successors.clone(), |_, s| match s.get_type() {
-    StateType::GotoPass | StateType::GotoLoop | StateType::KernelGoto => S_TYPE::GOTO_SUCCESSORS,
-    _ => S_TYPE::SYMBOL_SUCCESSORS,
-  });
+  let successor_groups =
+    hash_group_btreemap(successors.clone(), |_, s| match s.get_type() {
+      StateType::GotoPass | StateType::GotoLoop | StateType::KernelGoto => {
+        S_TYPE::GOTO_SUCCESSORS
+      }
+      _ => S_TYPE::SYMBOL_SUCCESSORS,
+    });
 
-  let base_state = if let Some(successors) = successor_groups.get(&S_TYPE::SYMBOL_SUCCESSORS) {
+  let base_state = if let Some(successors) =
+    successor_groups.get(&S_TYPE::SYMBOL_SUCCESSORS)
+  {
     #[cfg(debug_assertions)]
     {
-      for (byte_code, group) in hash_group_btreemap(successors.clone(), |_, s| {
-        if s.get_type().is_out_of_scope() {
-          OutScopeIndex
-        } else {
-          get_symbol_info(g, is_scanner, s.get_symbol()).0
-        }
-      }) {
+      for (byte_code, group) in
+        hash_group_btreemap(successors.clone(), |_, s| {
+          if s.get_type().is_out_of_scope() {
+            OutScopeIndex
+          } else {
+            get_symbol_info(g, is_scanner, s.get_symbol()).0
+          }
+        })
+      {
         if byte_code != OutScopeIndex {
           assert!(
             group.len() == 1,
@@ -198,7 +213,8 @@ fn convert_state_to_ir(
       .into_iter()
       .map(|s| {
         let sym = s.get_symbol();
-        let (bc_id, assert_type, sym_name) = get_symbol_info(g, is_scanner, sym);
+        let (bc_id, assert_type, sym_name) =
+          get_symbol_info(g, is_scanner, sym);
         debug_assert!(bc_id != 1 || SymbolID::EndOfFile == sym, "WTF {sym:?}",);
         (bc_id, (sym, assert_type, sym_name, s.get_type(), s))
       })
@@ -206,8 +222,9 @@ fn convert_state_to_ir(
       .into_iter()
       .rev()
     {
-      let mut body_string =
-        (default.is_empty().clone()).then_some(vec![]).unwrap_or_else(|| vec![default.clone()]);
+      let mut body_string = (default.is_empty().clone())
+        .then_some(vec![])
+        .unwrap_or_else(|| vec![default.clone()]);
 
       if match s_type {
         StateType::Shift => {
@@ -218,17 +235,28 @@ fn convert_state_to_ir(
               "EOF should not be shifted [{}]",
               assert_type
             );
-            body_string.push(is_scanner.then_some("scan-shift").unwrap_or("shift-token").into());
+            body_string.push(
+              is_scanner
+                .then_some("scan-shift")
+                .unwrap_or("shift-token")
+                .into(),
+            );
           }
           true
         }
         StateType::PeekEnd => {
-          debug_assert!(!is_scanner, "Peek states should not be present in graph");
+          debug_assert!(
+            !is_scanner,
+            "Peek states should not be present in graph"
+          );
           body_string.push("peek-reset".into());
           true
         }
         StateType::Peek => {
-          debug_assert!(!is_scanner, "Peek states should not be present in graph");
+          debug_assert!(
+            !is_scanner,
+            "Peek states should not be present in graph"
+          );
           body_string.push("peek-token".into());
           true
         }
@@ -290,13 +318,23 @@ fn convert_state_to_ir(
         }
 
         match s_type {
-          //Ensure production calls are immediately called before any other gotos.
+          //Ensure production calls are immediately called before any other
+          // gotos.
           StateType::KernelCall(prod_id) | StateType::InternalCall(prod_id) => {
-            body_string.push(format!("push state [ {} ]", create_ir_state_name(graph, successor)));
-            body_string.push(format!("goto state [ {} ]", g.get_production(&prod_id)?.guid_name));
+            body_string.push(format!(
+              "push state [ {} ]",
+              create_ir_state_name(graph, successor)
+            ));
+            body_string.push(format!(
+              "goto state [ {} ]",
+              g.get_production(&prod_id)?.guid_name
+            ));
           }
           _ => {
-            body_string.push(format!("goto state [ {} ]", create_ir_state_name(graph, successor)));
+            body_string.push(format!(
+              "goto state [ {} ]",
+              create_ir_state_name(graph, successor)
+            ));
           }
         }
       }
@@ -313,7 +351,8 @@ fn convert_state_to_ir(
       branches.insert(bc_id, (assert_type.to_string(), body_string));
     }
 
-    let hash_groups = hash_group_vec(branches.clone(), |_, (_, (_, s))| s.clone());
+    let hash_groups =
+      hash_group_vec(branches.clone(), |_, (_, (_, s))| s.clone());
 
     if hash_groups.len() == 1 && hash_groups[0].contains_key(&DEFAULT_SYM_ID) {
       let (_, body_string) = hash_groups[0].get(&DEFAULT_SYM_ID)?;
@@ -342,7 +381,9 @@ fn convert_state_to_ir(
       w,
       state,
       is_token_assertion,
-      successors.iter().any(|s| matches! {s.get_type(), StateType::Peek | StateType::PeekEnd}),
+      successors
+        .iter()
+        .any(|s| matches! {s.get_type(), StateType::Peek | StateType::PeekEnd}),
     )?))
   } else {
     None
@@ -368,7 +409,9 @@ fn convert_state_to_ir(
       }
       StateType::Complete => w.write("pass")?,
 
-      StateType::Reduce(rule_id) => w.write(&create_rule_reduction(g, rule_id))?,
+      StateType::Reduce(rule_id) => {
+        w.write(&create_rule_reduction(g, rule_id))?
+      }
       _ => unreachable!(),
     }
 
@@ -416,18 +459,30 @@ fn convert_state_to_ir(
   SherpaResult::Ok(out)
 }
 
-fn create_rule_reduction(g: &std::sync::Arc<GrammarStore>, rule_id: RuleId) -> String {
+fn create_rule_reduction(
+  g: &std::sync::Arc<GrammarStore>,
+  rule_id: RuleId,
+) -> String {
   let rule = g.rules.get(&rule_id).unwrap();
   let production = g.productions.get(&rule.prod_id).unwrap();
   match (production.bytecode_id, rule.bytecode_id) {
     (Some(prod_bc_id), Some(rule_bc_id)) => {
-      format!("reduce {} symbols to {prod_bc_id} with rule {rule_bc_id}", rule.get_real_len())
+      format!(
+        "reduce {} symbols to {prod_bc_id} with rule {rule_bc_id}",
+        rule.get_real_len()
+      )
     }
     (None, _) => {
-      unreachable!("Expected production {} to be assigned a production id", production.name)
+      unreachable!(
+        "Expected production {} to be assigned a production id",
+        production.name
+      )
     }
     (_, None) => {
-      unreachable!("Expected rule to have a byte code id:\n {}", Item::from(rule).blame_string(g))
+      unreachable!(
+        "Expected rule to have a byte code id:\n {}",
+        Item::from(rule).blame_string(g)
+      )
     }
   }
 }
@@ -445,7 +500,11 @@ fn get_resolved_name(
 }
 
 pub(super) fn create_ir_state_name(graph: &Graph, state: &State) -> String {
-  format!("{}_{:0>6X}", graph.is_scan().then_some("scanner").unwrap_or("parser"), state.get_hash(),)
+  format!(
+    "{}_{:0>6X}",
+    graph.is_scan().then_some("scanner").unwrap_or("parser"),
+    state.get_hash(),
+  )
 }
 
 pub(super) fn create_ir_state(
@@ -458,10 +517,12 @@ pub(super) fn create_ir_state(
 ) -> SherpaResult<ParseState> {
   let g = &(j.grammar()?);
 
-  let (normal_symbols, skip_symbols) = if !is_token_assertion || graph.is_scan() {
+  let (normal_symbols, skip_symbols) = if !is_token_assertion || graph.is_scan()
+  {
     (vec![], vec![])
   } else {
-    let (normal_symbol_set, skip_symbols_set) = get_symbols_from_state(j, graph, state)?;
+    let (normal_symbol_set, skip_symbols_set) =
+      get_symbols_from_state(j, graph, state)?;
 
     if is_token_assertion {
       for symbol_id in &skip_symbols_set {
@@ -473,14 +534,20 @@ pub(super) fn create_ir_state(
       }
     }
 
-    (normal_symbol_set.into_iter().collect(), skip_symbols_set.into_iter().collect())
+    (
+      normal_symbol_set.into_iter().collect(),
+      skip_symbols_set.into_iter().collect(),
+    )
   };
 
   let ir_state = ParseState {
     comment: format!("{}", state.debug_string(g),),
     code: unsafe { String::from_utf8_unchecked(w.into_output()) },
     name: create_ir_state_name(graph, state),
-    state_type: graph.is_scan().then_some(IRStateType::Scanner).unwrap_or(IRStateType::Parser),
+    state_type: graph
+      .is_scan()
+      .then_some(IRStateType::Scanner)
+      .unwrap_or(IRStateType::Parser),
     normal_symbols,
     skip_symbols,
     ..Default::default()
@@ -523,7 +590,9 @@ pub(crate) fn get_symbols_from_state(
         }
       }
 
-      if let Some(ignored_symbols) = g.item_ignore_symbols.get(&item.to_absolute()) {
+      if let Some(ignored_symbols) =
+        g.item_ignore_symbols.get(&item.to_absolute())
+      {
         for ignored_symbol in ignored_symbols {
           ignore_symbol_set.insert(*ignored_symbol);
         }
@@ -531,19 +600,25 @@ pub(crate) fn get_symbols_from_state(
     }
   }
 
-  let ignore_symbol_set =
-    ignore_symbol_set.difference(&normal_symbol_set).cloned().collect::<BTreeSet<_>>();
+  let ignore_symbol_set = ignore_symbol_set
+    .difference(&normal_symbol_set)
+    .cloned()
+    .collect::<BTreeSet<_>>();
 
   SherpaResult::Ok((normal_symbol_set, ignore_symbol_set))
 }
 
-fn get_symbol_info(g: &GrammarStore, is_scanner: bool, sym: SymbolID) -> (u32, InputType, String) {
-  let (symbol_bytecode_id, assert_class, sym_comment) = if is_scanner || sym == SymbolID::EndOfFile
-  {
-    let (bc, class) = sym.shift_info(g);
-    (bc, class, sym.debug_string(g))
-  } else {
-    (sym.bytecode_id(g), InputType::Token, sym.debug_string(g))
-  };
+fn get_symbol_info(
+  g: &GrammarStore,
+  is_scanner: bool,
+  sym: SymbolID,
+) -> (u32, InputType, String) {
+  let (symbol_bytecode_id, assert_class, sym_comment) =
+    if is_scanner || sym == SymbolID::EndOfFile {
+      let (bc, class) = sym.shift_info(g);
+      (bc, class, sym.debug_string(g))
+    } else {
+      (sym.bytecode_id(g), InputType::Token, sym.debug_string(g))
+    };
   (symbol_bytecode_id, assert_class, sym_comment)
 }

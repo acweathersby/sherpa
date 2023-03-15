@@ -1,5 +1,10 @@
 use super::utils::{build_grammar_from_file, get_test_grammar_path};
-use crate::{compile::GrammarStore, types::SherpaErrorSeverity, Journal, SherpaError};
+use crate::{
+  compile::GrammarStore,
+  types::SherpaErrorSeverity,
+  Journal,
+  SherpaError,
+};
 
 /// Error should be generated when an import production is referenced
 /// that doesn't exist in the imported grammar.
@@ -12,25 +17,28 @@ fn missing_import_production() {
 
   assert!(j.debug_error_report(), "Expected to see errors");
 
-  assert!(j.get_report(crate::ReportType::GrammarCompile(Default::default()), |r| {
-    if r.have_errors_of_type(SherpaErrorSeverity::Critical) {
-      let error = &r.errors()[0];
+  assert!(j.get_report(
+    crate::ReportType::GrammarCompile(Default::default()),
+    |r| {
+      if r.have_errors_of_type(SherpaErrorSeverity::Critical) {
+        let error = &r.errors()[0];
 
-      assert!(matches!(error, SherpaError::SourceError { .. }));
+        assert!(matches!(error, SherpaError::SourceError { .. }));
 
-      let SherpaError::SourceError { id, loc, .. } = error else {
+        let SherpaError::SourceError { id, loc, .. } = error else {
         panic!("Expected a SourceError");
       };
 
-      assert_eq!(*id, "nonexistent-import-production");
-      assert_eq!(loc.get_range().start_line, 3);
-      assert_eq!(loc.get_range().start_column, 15);
+        assert_eq!(*id, "nonexistent-import-production");
+        assert_eq!(loc.get_range().start_line, 3);
+        assert_eq!(loc.get_range().start_column, 15);
 
-      true
-    } else {
-      false
+        true
+      } else {
+        false
+      }
     }
-  }));
+  ));
 }
 
 /// Invalid dependency should be generated when the source for an import
@@ -45,21 +53,24 @@ fn invalid_dependency() {
 
   assert!(j.debug_error_report(), "Expected to see errors");
 
-  assert!(j.get_report(crate::ReportType::GrammarCompile((&path).into()), |r| {
-    let error = &r.errors()[0];
+  assert!(j.get_report(
+    crate::ReportType::GrammarCompile((&path).into()),
+    |r| {
+      let error = &r.errors()[0];
 
-    assert!(matches!(error, SherpaError::SourceError { .. }));
+      assert!(matches!(error, SherpaError::SourceError { .. }));
 
-    let SherpaError::SourceError { id, loc, .. } = error else {
+      let SherpaError::SourceError { id, loc, .. } = error else {
         panic!("Expected a SourceError");
     };
 
-    assert_eq!(*id, "invalid-import-source");
-    assert_eq!(loc.get_range().start_line, 1);
-    assert_eq!(loc.get_range().start_column, 1);
+      assert_eq!(*id, "invalid-import-source");
+      assert_eq!(loc.get_range().start_line, 1);
+      assert_eq!(loc.get_range().start_column, 1);
 
-    true
-  }));
+      true
+    }
+  ));
 }
 
 /// Missing production definition is reported
@@ -70,17 +81,20 @@ fn missing_production_definition() {
 
   assert!(j.debug_error_report(), "Expected to see errors");
 
-  assert!(j.get_report(crate::ReportType::GrammarCompile((&path).into()), |r| {
-    let error = &r.errors()[0];
+  assert!(j.get_report(
+    crate::ReportType::GrammarCompile((&path).into()),
+    |r| {
+      let error = &r.errors()[0];
 
-    assert!(matches!(error, SherpaError::SourceError { .. }));
+      assert!(matches!(error, SherpaError::SourceError { .. }));
 
-    let SherpaError::SourceError { id, .. } = error else {
+      let SherpaError::SourceError { id, .. } = error else {
         panic!("Expected a SourceError");
     };
 
-    assert_eq!(*id, "missing-production-definition");
+      assert_eq!(*id, "missing-production-definition");
 
-    true
-  }));
+      true
+    }
+  ));
 }

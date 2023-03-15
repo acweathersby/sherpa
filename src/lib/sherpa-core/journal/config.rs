@@ -12,25 +12,27 @@ pub struct Config {
   /// > !NOT IMPLEMENTED!
   ///
   /// The Parser will produce peek productions for symbols that occlude.
-  /// An extra compile step must be taken to produce the symbol occlusion table.
+  /// An extra compile step must be taken to produce the symbol occlusion
+  /// table.
   ///
   /// Defaults to `false`.
   ///
-  /// The occlusion table maps a symbol to all lower precedent symbols that may occlude it.
+  /// The occlusion table maps a symbol to all lower precedent symbols that may
+  /// occlude it.
   ///
-  /// The idea here is to add symbols with lower precedence to the occlusion table
-  /// of symbols with higher precedence. For example, given this grammar
-  /// ```hcg
+  /// The idea here is to add symbols with lower precedence to the occlusion
+  /// table of symbols with higher precedence. For example, given this
+  /// grammar ```hcg
   /// <> A > \funct \(
   ///    |   tk:id  \{
   ///
   /// <> id > g:id(+)
   /// ```
-  /// The DefinedSymbol `\funct` has a higher precedence then TokenProduction symbol `tk:id`.
-  /// When using the occlusion table, we force the compiler to consider the symbols as the
-  /// "same", which should then cause it to generate a peek state that uses the
-  /// symbols `(` and `{` to resolve the conflict.
-  ///
+  /// The DefinedSymbol `\funct` has a higher precedence then TokenProduction
+  /// symbol `tk:id`. When using the occlusion table, we force the compiler
+  /// to consider the symbols as the "same", which should then cause it to
+  /// generate a peek state that uses the symbols `(` and `{` to resolve the
+  /// conflict.
   pub allow_occluding_tokens: bool,
   /// Convert bytecode into a human readable "disassembly" format. This can be
   /// accessed in the journal through `Disassembly` report type. The main note
@@ -39,7 +41,8 @@ pub struct Config {
   ///
   /// Defaults to `false`.
   pub build_disassembly: bool,
-  /// Add IR states string dump to IR compilation reports. This affects the ReportTypes
+  /// Add IR states string dump to IR compilation reports. This affects the
+  /// ReportTypes
   /// - [ReportType::TokenProductionCompile(ProductionId)](ReportType)
   /// - [ReportType::ScannerCompile(ScannerId)](ReportType)
   /// - [ReportType::ProductionCompile(ProductionId)](ReportType)
@@ -148,7 +151,12 @@ pub enum Architecture {
 }
 
 impl Architecture {
-  pub fn _is_compatible(&self, pl: Platform, ot: Language, rt: Recognizer) -> bool {
+  pub fn _is_compatible(
+    &self,
+    pl: Platform,
+    ot: Language,
+    rt: Recognizer,
+  ) -> bool {
     use Architecture::*;
     use Language::*;
     use Platform::*;

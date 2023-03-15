@@ -3,7 +3,13 @@ use super::parser::{
   *,
 };
 #[allow(unused)]
-use crate::{grammar::multitask::WorkVerifier, types::*, Journal, ReportType, SherpaError};
+use crate::{
+  grammar::multitask::WorkVerifier,
+  types::*,
+  Journal,
+  ReportType,
+  SherpaError,
+};
 #[allow(unused)]
 use std::{
   collections::{HashMap, HashSet, VecDeque},
@@ -31,16 +37,17 @@ pub fn load_from_string(
 pub(crate) fn get_usable_thread_count(requested_count: usize) -> usize {
   NonZeroUsize::min(
     NonZeroUsize::new(usize::max(1, requested_count)).unwrap(),
-    std::thread::available_parallelism().unwrap_or(NonZeroUsize::new(1).unwrap()),
+    std::thread::available_parallelism()
+      .unwrap_or(NonZeroUsize::new(1).unwrap()),
   )
   .get()
 }
 
 const allowed_extensions: [&str; 1] = ["sg"];
 
-/// Loads all grammars that are indirectly or directly referenced from a single filepath.
-/// Returns a vector grammars in no particular order except the first grammar belongs to
-/// the file path
+/// Loads all grammars that are indirectly or directly referenced from a single
+/// filepath. Returns a vector grammars in no particular order except the first
+/// grammar belongs to the file path
 pub(crate) fn load_from_path(
   j: &mut Journal,
   absolute_path: PathBuf,
@@ -61,9 +68,17 @@ pub(crate) fn load_from_path(
           let claimed_grammar_paths = &claimed_grammar_paths;
           let work_verifier = &work_verifier;
           let pending_grammar_paths = &pending_grammar_paths;
-          j.set_active_report("File Load", ReportType::GrammarCompile(Default::default()));
+          j.set_active_report(
+            "File Load",
+            ReportType::GrammarCompile(Default::default()),
+          );
           s.spawn(move || {
-            parse_grammar(&mut j, pending_grammar_paths, claimed_grammar_paths, work_verifier)
+            parse_grammar(
+              &mut j,
+              pending_grammar_paths,
+              claimed_grammar_paths,
+              work_verifier,
+            )
           })
         })
         .map(|s| s.join().unwrap())
@@ -80,7 +95,12 @@ pub(crate) fn load_from_path(
   };
 
   #[cfg(any(feature = "wasm-target", feature = "single-thread"))]
-  let grammars = parse_grammar(j, &pending_grammar_paths, &claimed_grammar_paths, &work_verifier);
+  let grammars = parse_grammar(
+    j,
+    &pending_grammar_paths,
+    &claimed_grammar_paths,
+    &work_verifier,
+  );
 
   j.flush_reports();
 
@@ -140,7 +160,10 @@ fn parse_grammar(
                 loc:        tok.clone(),
                 path:       path.clone(),
                 id:         "invalid-import-source",
-                msg:        format!("Could not resolve filepath {}", base_path.to_str().unwrap()),
+                msg:        format!(
+                  "Could not resolve filepath {}",
+                  base_path.to_str().unwrap()
+                ),
                 inline_msg: "source not found".to_string(),
                 severity:   SherpaErrorSeverity::Critical,
                 ps_msg:     Default::default(),
@@ -166,12 +189,16 @@ fn parse_grammar(
   grammars
 }
 
-/// Loads and parses a grammar file, returning the parsed grammar node and a vector of Import nodes.
+/// Loads and parses a grammar file, returning the parsed grammar node and a
+/// vector of Import nodes.
 fn grammar_from_path(
   j: &mut Journal,
   absolute_path: &PathBuf,
 ) -> SherpaResult<(Box<Grammar>, Vec<Box<sherpa::Import>>)> {
-  j.set_active_report("Grammar Parse", crate::ReportType::GrammarCompile(absolute_path.into()));
+  j.set_active_report(
+    "Grammar Parse",
+    crate::ReportType::GrammarCompile(absolute_path.into()),
+  );
   match std::fs::read_to_string(absolute_path) {
     Ok(buffer) => match sherpa::ast::grammar_from(buffer.as_str().into()) {
       Ok(grammar) => {
@@ -186,7 +213,8 @@ fn grammar_from_path(
         SherpaResult::Ok((grammar, import_paths))
       }
       Err(err) => {
-        j.report_mut().add_error(SherpaError::from_parse_error(err, absolute_path.clone()));
+        j.report_mut()
+          .add_error(SherpaError::from_parse_error(err, absolute_path.clone()));
         SherpaResult::None
       }
     },
@@ -194,15 +222,16 @@ fn grammar_from_path(
   }
 }
 
-/// Resolves and verifies a grammar file path acquired from an `@IMPORT` statement exists.
+/// Resolves and verifies a grammar file path acquired from an `@IMPORT`
+/// statement exists.
 ///
 /// If the file path does not have an extension, attempts are made to assert
-/// the existence of the file path when appended with one of the following extension types
-/// appended to it: `.hc`, `.hcg` `.grammar`.
+/// the existence of the file path when appended with one of the following
+/// extension types appended to it: `.hc`, `.hcg` `.grammar`.
 ///
-/// Additionally, if the given file path is relative, then it is appended to the parent dir
-/// path of the current grammar, whose path is provided by the `cgd`, current grammar dir,
-/// argument.
+/// Additionally, if the given file path is relative, then it is appended to the
+/// parent dir path of the current grammar, whose path is provided by the `cgd`,
+/// current grammar dir, argument.
 pub(crate) fn resolve_grammar_path(
   path: &PathBuf,
   cgd: &PathBuf,
@@ -230,7 +259,10 @@ pub(crate) fn resolve_grammar_path(
           path.canonicalize().ok()
         })
         .next()
-        .ok_or(format!("Tried to load file with these extension {:?}", extension))?,
+        .ok_or(format!(
+          "Tried to load file with these extension {:?}",
+          extension
+        ))?,
 
       // Default
       _ => path.canonicalize()?,
