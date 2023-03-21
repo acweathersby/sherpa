@@ -272,7 +272,7 @@ fn test_taskman() {
 
   sp.spawn(async move {
     let spawner = spawner.clone();
-    let grammar = crate::grammar::new::load_2::parse_grammar(
+    let grammar = crate::grammar::new::load::load::parse_grammar(
       r#"
       <> A > "A" "B" "C"
       <> B > "A" "B" "C"

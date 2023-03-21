@@ -8,6 +8,36 @@ use super::utils::{console_debugger, PrintConfig, TestInput};
 
 /// Test component module wide compilation of the sherpa grammar.
 #[test]
+fn compile_sherpa_grammar_v2_and_parse_simple_expression(
+) -> SherpaResult<Journal> {
+  test_runner(
+    &[TestInput {
+      entry_name:     "grammar",
+      input:          r##"<> t > "\\" "##,
+      should_succeed: true,
+    }],
+    None,
+    TestConfig {
+      grammar_path: Some(path_from_source("grammar/v2_0_0/grammar.sg")?),
+      //llvm_parse: true,
+      bytecode_parse: true,
+      optimize: false,
+      debugger_handler: Some(&|g| {
+        console_debugger(g, PrintConfig {
+          display_scanner_output: true,
+          display_input_data: true,
+          display_instruction: true,
+          display_state: true,
+          ..Default::default()
+        })
+      }),
+      ..Default::default()
+    },
+  )
+}
+
+/// Test component module wide compilation of the sherpa grammar.
+#[test]
 fn compile_sherpa_grammar_and_parse_simple_grammar_expression(
 ) -> SherpaResult<Journal> {
   test_runner(
@@ -95,11 +125,11 @@ fn compile_sherpa_grammar_and_parse_root_sherpa_grammar_file(
   let input = r#"
   NAME sherpa
 
-  IMPORT ./ascript as ast 
   IMPORT ./symbol as sym
   IMPORT ./syntax as syn
   IMPORT ./ir as ir
   IMPORT ./comment as cmt
+  IMPORT ./ascript as ast 
   
   IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
   
@@ -228,11 +258,7 @@ fn compile_sherpa_grammar_and_parse_root_sherpa_grammar_file(
       bytecode_parse: true,
       llvm_parse: true,
       debugger_handler: Some(&|g| {
-        console_debugger(g, PrintConfig {
-          display_input_data: true,
-          display_scanner_output: true,
-          ..Default::default()
-        })
+        console_debugger(g, PrintConfig { ..Default::default() })
       }),
       ..Default::default()
     },

@@ -1,29 +1,18 @@
 use super::{
-  errors::add_invalid_import_source_error,
-  parser::{self as ast, ast::escaped_from, ASTNode, Grammar, Rule},
-  string::{CachedString, IString, StringStore},
-  types::{
-    self,
-    ASTToken,
-    Array,
-    CustomState,
-    GrammarHeader,
-    GrammarId,
-    GrammarIdentity,
-    Map,
-    Production,
-    ProductionId,
-    ProductionType,
-    SubProduction,
-    SymbolId,
-    SymbolType,
-    TokenSymbol,
+  super::{
+    parser::{self as ast, ast::escaped_from, ASTNode, Grammar, Rule},
+    types::*,
   },
   utils::{get_symbol_details, resolve_grammar_path, SymbolData},
 };
 use crate::{
-  ascript::types::{ascript_first_node_id, ascript_last_node_id},
-  grammar::{hash_id_value_u64, new::parser::GetASTNodeType},
+  grammar::{
+    hash_id_value_u64,
+    new::{
+      parser::GetASTNodeType,
+      types::{self, error::add_invalid_import_source_error},
+    },
+  },
   Journal,
   SherpaResult,
 };
@@ -31,16 +20,16 @@ use std::path::PathBuf;
 
 /// Temporary structure to host rule data during
 /// construction.
-pub(super) struct RuleData<'a> {
+pub struct RuleData<'a> {
   symbols: &'a [(usize, &'a ASTNode)],
   ast_ref: Option<ASTToken>,
 }
 
 /// Temporary structure to host production data during
 /// construction.
-pub(super) struct ProductionData<'a> {
+pub struct ProductionData<'a> {
   root_prod_id: ProductionId,
-  syms:         &'a mut Map<SymbolId, TokenSymbol>,
+  syms:         &'a mut Set<SymbolId>,
   sub_prods:    &'a mut Array<Box<SubProduction>>,
   rules:        &'a mut Array<types::Rule>,
   asts:         &'a mut Array<Box<ast::Ascript>>,
@@ -49,7 +38,7 @@ impl<'b> ProductionData<'b> {
   /// Create a new [ProductionData] that references a different
   /// `rules` array, but keeps all other references the same
   /// as `self`.
-  pub(super) fn set_rules<'d>(
+  pub fn set_rules<'d>(
     &'d mut self,
     rules: &'d mut Array<types::Rule>,
   ) -> ProductionData<'d> {
@@ -65,15 +54,15 @@ impl<'b> ProductionData<'b> {
 
 /// Intermediate structure to host grammar data during
 /// construction.
-pub(super) struct GrammarData {
+pub struct GrammarData {
   pub name:      IString,
   pub source_id: GrammarId,
   pub imports:   Map<IString, GrammarIdentity>,
-  pub exports:   Array<ProductionId>,
+  pub exports:   Array<(IString, ProductionId)>,
   pub grammar:   Box<Grammar>,
 }
 
-pub(super) fn convert_grammar_data_to_header(
+pub fn convert_grammar_data_to_header(
   import_id: GrammarIdentity,
   g_data: GrammarData,
 ) -> Box<GrammarHeader> {
@@ -81,22 +70,22 @@ pub(super) fn convert_grammar_data_to_header(
   identity.name = g_data.name;
   Box::new(GrammarHeader {
     identity,
-    pub_prods: g_data.exports,
+    pub_prods: g_data.exports.into_iter().collect(),
     imports: g_data.imports.values().map(|v| v.guid).collect(),
   })
 }
 
 /// Parse grammar string and create a Grammar AST.
-pub(crate) fn parse_grammar(string_data: &str) -> SherpaResult<Box<Grammar>> {
+pub fn parse_grammar(string_data: &str) -> SherpaResult<Box<Grammar>> {
   SherpaResult::Ok(Grammar::from_str(string_data)?)
 }
 
 /// Do an initial preparation of the grammar data.
-pub(super) fn create_grammar_data(
+pub fn create_grammar_data(
   j: &mut Journal,
   grammar: Box<Grammar>,
   grammar_path: &PathBuf,
-  string_store: &StringStore,
+  string_store: &IStringStore,
 ) -> SherpaResult<GrammarData> {
   const exts: [&str; 3] = ["sg", "sherpa", "hcg"];
 
@@ -159,22 +148,22 @@ pub(super) fn create_grammar_data(
     for export in exports {
       let prod_id =
         get_production_id_from_ast_node(&g_data, &export.production)?;
-      g_data.exports.push(prod_id);
+      g_data.exports.push((export.reference.intern(string_store), prod_id));
     }
   } else {
     // Use the fist declared production as the default entry
     let prod = &g_data.grammar.productions[0];
     let prod_id = get_production_id_from_ast_node(&g_data, &prod)?;
-    g_data.exports.push(prod_id);
+    g_data.exports.push(("default".intern(string_store), prod_id));
   }
 
   SherpaResult::Ok(g_data)
 }
 
-pub(super) fn extract_productions<'a>(
+pub fn extract_productions<'a>(
   j: &mut Journal,
   g_data: &'a GrammarData,
-  s_store: &StringStore,
+  s_store: &IStringStore,
 ) -> SherpaResult<(
   Array<(Box<Production>, &'a ASTNode)>,
   Array<Box<CustomState>>,
@@ -212,7 +201,7 @@ pub(super) fn extract_productions<'a>(
             )),
             name:      name_sym.name.intern(s_store),
             g_id:      g_data.source_id,
-            type_:     super::types::ProductionType::ContextFree,
+            type_:     ProductionType::ContextFree,
             rules:     Default::default(),
             sub_prods: Default::default(),
             symbols:   Default::default(),
@@ -230,10 +219,10 @@ pub(super) fn extract_productions<'a>(
   SherpaResult::Ok((productions, parse_states))
 }
 
-pub(super) fn process_parse_state<'a>(
+pub fn process_parse_state<'a>(
   mut parse_state: Box<CustomState>,
   g_data: &GrammarData,
-  s_store: &StringStore,
+  s_store: &IStringStore,
 ) -> SherpaResult<Box<CustomState>> {
   // Extract symbol information from the state.
 
@@ -292,10 +281,10 @@ pub(super) fn process_parse_state<'a>(
   SherpaResult::Ok(parse_state)
 }
 
-pub(super) fn process_prod<'a>(
+pub fn process_prod<'a>(
   (mut production, prod_ast): (Box<Production>, &'a ASTNode),
   g_data: &GrammarData,
-  s_store: &StringStore,
+  s_store: &IStringStore,
 ) -> SherpaResult<Box<Production>> {
   match prod_ast {
     ASTNode::CFProduction(prod) => {
@@ -314,7 +303,7 @@ fn process_rule(
   prod: &mut Production,
   rule: &Rule,
   g_data: &GrammarData,
-  s_store: &StringStore,
+  s_store: &IStringStore,
 ) -> SherpaResult<()> {
   let ast_syms = rule.symbols.iter().enumerate().collect::<Array<_>>();
 
@@ -346,7 +335,7 @@ fn process_rule_symbols(
   rule_data: &RuleData,
   p_data: &mut ProductionData,
   g_data: &GrammarData,
-  s_store: &StringStore,
+  s_store: &IStringStore,
 ) -> SherpaResult<()> {
   let mut rules: Array<types::Rule> = Default::default();
   rules.push(types::Rule {
@@ -372,7 +361,7 @@ fn process_rule_symbols(
     // symbol.
     is_optional.then(|| rules.append(&mut rules.clone()));
 
-    let sym = match sym {
+    let sym = match sym_atom.unwrap() {
       ASTNode::NotEmptySet(set) => {
         let mut pending_rules = vec![];
 
@@ -502,12 +491,12 @@ fn process_rule_symbols(
 
           p_data.sub_prods.push(Box::new(SubProduction {
             id,
-            type_: types::SubProductionType::Group,
+            type_: SubProductionType::Group,
             g_id: g_data.source_id,
             rules: sub_prod_rules,
           }));
 
-          SymbolId::NonTerminal { id, precedence: 0 }
+          id.as_sym()
         }
       }
       ASTNode::List_Production(box ast::List_Production {
@@ -516,14 +505,14 @@ fn process_rule_symbols(
         tok,
         ..
       }) => {
-        use super::parser::*;
+        use super::super::parser::*;
 
         let mut rule_syms = vec![symbol.clone()];
         let mut rules = Default::default();
         let prod_id = p_data.root_prod_id;
         let index = p_data.sub_prods.len();
         let id = ProductionId::from((prod_id, index));
-        let sym = SymbolId::NonTerminal { id, precedence: 0 };
+        let sym = id.as_sym();
 
         if let Some(terminal_symbol) = terminal_symbol {
           rule_syms.insert(0, terminal_symbol.clone());
@@ -561,7 +550,7 @@ fn process_rule_symbols(
         )?;
 
         p_data.sub_prods.push(Box::new(SubProduction {
-          type_: types::SubProductionType::List,
+          type_: SubProductionType::List,
           id,
           g_id: g_data.source_id,
           rules,
@@ -597,7 +586,7 @@ fn record_symbol(
   precedence: u16,
   p_data: &mut ProductionData,
   g_data: &GrammarData,
-  s_store: &StringStore,
+  s_store: &IStringStore,
 ) -> SherpaResult<SymbolId> {
   let id = match sym_node {
     ASTNode::AnnotatedSymbol(box annotated) => {
@@ -607,18 +596,15 @@ fn record_symbol(
     }
     ASTNode::TerminalToken(box terminal) => {
       let string = escaped_from((&terminal.val).into())?.join("");
-      let symbol =
-        TokenSymbol { type_: SymbolType::Token, val: string.intern(s_store) };
+      let val = string.intern(s_store);
+      let id = SymbolId::Token { val, precedence };
 
-      let id = SymbolId::Token { id: hash_id_value_u64(symbol), precedence };
-
-      p_data.syms.entry(id).or_insert(symbol);
+      p_data.syms.insert(id);
 
       id
     }
     ASTNode::Production_Symbol(_) | ASTNode::Production_Import_Symbol(_) => {
-      let id = get_production_id_from_ast_node(g_data, sym_node)?;
-      SymbolId::NonTerminal { id, precedence }
+      get_production_id_from_ast_node(g_data, sym_node)?.as_sym()
     }
     ASTNode::EOFSymbol(_) => SymbolId::EndOfFile { precedence },
     ASTNode::ClassSymbol(gen) => match gen.val.as_str() {
@@ -639,8 +625,9 @@ fn record_symbol(
       }
     },
     ASTNode::Production_Terminal_Symbol(token_prod) => {
-      let id = get_production_id_from_ast_node(g_data, &token_prod.production)?;
-      SymbolId::NonTerminalToken { id, precedence }
+      get_production_id_from_ast_node(g_data, &token_prod.production)?
+        .as_tok_sym()
+        .to_precedence(precedence)
     }
     _ => {
       #[allow(unreachable_code)]
@@ -736,14 +723,14 @@ mod test {
   use std::path::PathBuf;
 
   use crate::{
-    grammar::new::{parser::Grammar, string::StringStore, types::GrammarId},
+    grammar::new::{parser::Grammar, types::*},
     Journal,
     SherpaResult,
   };
 
   fn create_test_data(
     input: &str,
-  ) -> SherpaResult<(Journal, Box<Grammar>, PathBuf, StringStore)> {
+  ) -> SherpaResult<(Journal, Box<Grammar>, PathBuf, IStringStore)> {
     let mut j = Journal::new(None);
     j.set_active_report(
       "test",
@@ -756,7 +743,7 @@ mod test {
       j,
       super::parse_grammar(input)?,
       PathBuf::from("/test.sg"),
-      StringStore::default(),
+      IStringStore::default(),
     ))
   }
   #[test]

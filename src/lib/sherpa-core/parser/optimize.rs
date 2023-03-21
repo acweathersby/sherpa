@@ -582,6 +582,7 @@ pub(crate) fn get_branches<'a>(
   parse_state: &'a ParseState,
 ) -> Vec<(Option<BranchData>, &'a Vec<ASTNode>)> {
   if let SherpaResult::Ok(ast) = &parse_state.ast {
+    #[cfg(debug_assertions)]
     debug_assert!(
       !ast.instructions.is_empty(),
       "Expected parse state to contain instructions

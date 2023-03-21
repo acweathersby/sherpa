@@ -1,12 +1,7 @@
-use super::{
-  errors::{
-    add_missing_append_host_error,
-    add_non_existent_import_production_error,
-  },
-  utils::insert_rules,
-};
+use super::utils::insert_rules;
 use crate::{
   compile::{GrammarId, GrammarStore, SymbolID},
+  grammar::new::types::error::*,
   Journal,
   ReportType,
 };

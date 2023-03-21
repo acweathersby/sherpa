@@ -18,6 +18,7 @@ fn escaped_string() -> SherpaResult<()> {
         "##,
     &[
       ("string", r##""""##, true),
+      ("string", r##""\\""##, true),
       ("string", r##""1234""##, true),
       ("string", r##""12\"34""##, true),
     ],

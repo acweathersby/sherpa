@@ -16,7 +16,6 @@ use crate::{
       add_incompatible_production_types_error,
       add_incompatible_production_vector_types_error,
       add_prop_redefinition_error,
-      add_unmatched_prop_error,
     },
     types::AScriptProp,
   },

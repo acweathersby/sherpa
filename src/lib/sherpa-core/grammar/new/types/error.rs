@@ -1,4 +1,4 @@
-use super::parser::{Import, Production_Import_Symbol};
+use super::super::parser::{Import, Production_Import_Symbol};
 use crate::{
   compile::{GrammarRef, GrammarStore},
   types::{self, SherpaErrorSeverity},

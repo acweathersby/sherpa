@@ -309,6 +309,14 @@ impl SymbolID {
   }
 
   /// TODO: Docs
+  pub fn is_eof(&self) -> bool {
+    match self {
+      Self::EndOfFile => true,
+      _ => false,
+    }
+  }
+
+  /// TODO: Docs
   pub fn is_defined(&self) -> bool {
     match self {
       Self::DefinedNumeric(_)

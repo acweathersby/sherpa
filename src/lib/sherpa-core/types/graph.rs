@@ -549,7 +549,7 @@ pub(crate) enum GraphState {
 pub enum GraphMode {
   /// Classic Recursive Descent Ascent with unlimited lookahead.
   SherpaClimber,
-  // Scanner mode for creating tokens, analagous to regular expressions.
+  // Scanner mode for creating tokens, analogous to regular expressions.
   Scanner,
 }
 

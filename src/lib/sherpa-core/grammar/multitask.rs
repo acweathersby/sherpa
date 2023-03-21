@@ -1,4 +1,4 @@
-pub(crate) struct WorkVerifier {
+pub struct WorkVerifier {
   pub(crate) complete: u32,
   pub(crate) pending:  u32,
   pub(crate) progress: u32,

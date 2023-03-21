@@ -997,7 +997,18 @@ fn get_set_of_occluding_items(
     }
   }
 
+  let precedence = into_group
+    .iter()
+    .filter(|i| {
+      !i.is_completed() && i.increment().unwrap().get_symbol(g).is_eof()
+    })
+    .fold(0, |a, i| a.max(i.get_precedence(g)));
+
   occluding
+    .iter()
+    .filter(|i| i.get_precedence(g) >= precedence)
+    .cloned()
+    .collect::<ItemSet>()
 }
 
 fn create_peek<'a, T: ItemContainerIter<'a>>(

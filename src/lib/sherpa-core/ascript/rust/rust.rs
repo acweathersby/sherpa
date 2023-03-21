@@ -445,7 +445,7 @@ to_numeric!(to_f64, f64);", w.store.ast_type_name)
     let ast_type_name = w.store.ast_type_name.clone();
 
     // Struct declaration
-    w.block(&("#[derive(Debug, Clone)]\npub struct {}".to_string() +  &s.name), "{", "}", &|w| {
+    w.block(&("#[derive(Debug, Clone)]\npub struct ".to_string() +  &s.name), "{", "}", &|w| {
       let prop_declarations = s
         .props
         .iter()

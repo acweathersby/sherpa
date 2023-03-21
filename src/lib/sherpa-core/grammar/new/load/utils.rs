@@ -1,5 +1,4 @@
-use super::{
-  errors::create_missing_import_name_error,
+use super::super::{
   parser::{
     ASTNode,
     CFProduction,
@@ -9,6 +8,7 @@ use super::{
     Production_Symbol,
     State,
   },
+  types::error::create_missing_import_name_error,
 };
 use crate::{
   compile::{GrammarId, GrammarRef, GrammarStore, ProductionId, Rule},
@@ -111,7 +111,7 @@ pub fn get_productions_names_from_ast_node(
   g: &GrammarStore,
   name_sym: &ASTNode,
 ) -> Option<(ProductionGUIDName, ProductionName)> {
-  use super::parser::GetASTNodeType;
+  use super::super::parser::GetASTNodeType;
   match get_production_symbol(name_sym, g) {
     (Some(prod_sym), None) => {
       get_production_names_from_production_symbol(g, prod_sym)

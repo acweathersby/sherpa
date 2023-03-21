@@ -107,7 +107,7 @@ pub(crate) fn load_from_path(
   grammars
 }
 
-fn parse_grammar(
+pub fn parse_grammar(
   j: &mut Journal,
   pending_grammar_paths: &Mutex<VecDeque<PathBuf>>,
   claimed_grammar_paths: &Mutex<HashSet<PathBuf>>,

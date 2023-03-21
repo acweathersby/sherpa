@@ -1,3 +1,5 @@
+use super::Map;
+use crate::grammar::hash_id_value_u64;
 use std::{
   fmt::Debug,
   ops::Index,
@@ -5,19 +7,15 @@ use std::{
   sync::{Arc, LockResult, RwLock, RwLockReadGuard},
 };
 
-use crate::grammar::hash_id_value_u64;
-
-use super::types::Map;
-
 type InnerStringStore = Map<IString, String>;
 
 #[derive(Default, Clone)]
 #[cfg_attr(debug_assertions, derive(Debug))]
-pub(crate) struct StringStore {
+pub struct IStringStore {
   _data: Arc<RwLock<InnerStringStore>>,
 }
 
-impl StringStore {
+impl IStringStore {
   fn intern(&self, string: String, token: IString) -> IString {
     match self._data.read() {
       LockResult::Ok(data) => {
@@ -55,12 +53,12 @@ impl StringStore {
   }
 }
 
-/// A reference to a string interned within a [StringStore]. Maintains
-/// a read lock to the store as long as this object lives.
+/// A reference to a string interned within an [IStringStore]. A read lock on
+/// the store is maintained as long as this object is in scope.
 ///
-/// This should never be assigned to any object that outlives it's current
+/// This should never be assigned to any object that outlives its current
 /// function context. Should be dropped as soon as possible.
-pub(crate) struct GuardedStr<'a>(
+pub struct GuardedStr<'a>(
   IString,
   Option<&'a str>,
   Option<RwLockReadGuard<'a, InnerStringStore>>,
@@ -79,9 +77,9 @@ impl<'a> GuardedStr<'a> {
 /// An **I**nterned **String** for fast string operations. Combines a small
 /// string type with an interned string type for larger string using
 /// [StringStore].
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 
-pub(crate) struct IString(u64);
+pub struct IString(u64);
 
 impl Default for IString {
   fn default() -> Self {
@@ -116,11 +114,17 @@ impl Debug for IString {
 }
 
 impl IString {
-  pub fn to_string(&self, store: &StringStore) -> String {
+  pub fn as_u64(&self) -> u64 {
+    self.0
+  }
+
+  pub fn to_string(&self, store: &IStringStore) -> String {
     self.to_str(store).as_str().to_string()
   }
 
-  pub fn to_str<'a>(&'a self, store: &'a StringStore) -> GuardedStr<'a> {
+  /// Returns a [GuardedStr] that can be used to access the `&str` the [IString]
+  /// token represents.
+  pub fn to_str<'a>(&self, store: &'a IStringStore) -> GuardedStr<'a> {
     unsafe {
       let val_bytes = self as *const IString as *const [u8; 8];
       if (*val_bytes)[7] & 0x08 != 0 {
@@ -166,7 +170,7 @@ impl IString {
   }
 }
 
-pub(crate) trait CachedString {
+pub trait CachedString {
   /// Get the SherpaString representation without interning
   /// the string. This can useful when needing to compare a
   /// SherpaString with a standard string type.
@@ -175,7 +179,7 @@ pub(crate) trait CachedString {
   }
   /// Returns a SherpaString after interning the string within
   /// the given store. Only `LargeString` sub-types are interned.
-  fn intern(&self, store: &StringStore) -> IString {
+  fn intern(&self, store: &IStringStore) -> IString {
     let bytes = self.get_bytes();
     let token = IString::from_bytes(bytes);
 
@@ -198,6 +202,16 @@ impl CachedString for String {
 
   fn get_string(&self) -> String {
     self.clone()
+  }
+}
+
+impl CachedString for &[u8] {
+  fn get_bytes(&self) -> &[u8] {
+    self
+  }
+
+  fn get_string(&self) -> String {
+    String::from_utf8(self.to_vec()).unwrap()
   }
 }
 
@@ -243,7 +257,7 @@ impl CachedString for PathBuf {
 
 #[test]
 fn interning_small_string() {
-  let store = StringStore::default();
+  let store = IStringStore::default();
 
   let small_string = "test";
 
@@ -255,7 +269,7 @@ fn interning_small_string() {
 
 #[test]
 fn interning_large_string() {
-  let store = StringStore::default();
+  let store = IStringStore::default();
 
   let large_string = "
   Lumina eiusdem a sororibus est agant montis tu urbes succedit gavisa dolore
@@ -274,7 +288,7 @@ Cyparisse multarum!";
 
 #[test]
 fn interning_same_large_string() {
-  let store = StringStore::default();
+  let store = IStringStore::default();
 
   let large_str = "
   Lumina eiusdem a sororibus est agant montis tu urbes succedit gavisa dolore
@@ -297,7 +311,7 @@ Cyparisse multarum!";
 
 #[test]
 fn interning_different_large_string() {
-  let store = StringStore::default();
+  let store = IStringStore::default();
 
   let large_strA = "1: Lumina eiusdem a sororibus est agant montis tu urbes succedit gavisa dolore
 Perseus incerti, repente pariter. Omnes morsu rediit flores, nisi scelus
@@ -328,7 +342,7 @@ Cyparisse multarum!";
 
 #[test]
 fn interning_strings_on_different_threads() {
-  let store = StringStore::default();
+  let store = IStringStore::default();
 
   std::thread::scope(|scope| {
     for u in 0..4 {
