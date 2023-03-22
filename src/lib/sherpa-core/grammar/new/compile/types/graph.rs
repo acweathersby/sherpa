@@ -4,18 +4,16 @@ use crate::{
     compile::parser::sherpa::Grammar,
     get_production_start_items,
     hash_id_value_u64,
-    new::{
-      compile::compile_states::FollowSets,
-      types::{
-        Array,
-        CompileDatabase,
-        IndexedProdId,
-        IndexedSymId,
-        Map,
-        OrderedMap,
-        OrderedSet,
-        SymbolId,
-      },
+    new::types::{
+      Array,
+      DBProdKey,
+      DBRuleKey,
+      DBTokenKey,
+      Map,
+      OrderedMap,
+      OrderedSet,
+      ParserDatabase,
+      SymbolId,
     },
   },
 };
@@ -42,9 +40,9 @@ use super::item::{ItemContainer, ItemRef, ItemSet, ItemType, Items};
 pub enum Origin {
   None,
   /// The goal production that this item or it's predecessors will reduce to
-  ProdGoal(IndexedProdId),
+  ProdGoal(DBProdKey),
   /// The goal symbol id that this item or its predecessors will recognize
-  SymGoal(IndexedSymId),
+  SymGoal(DBTokenKey),
   /// The goal origin item set that this item will resolve to
   Peek(u64, StateId),
   // Out of scope item that was generated from the
@@ -64,7 +62,7 @@ impl Default for Origin {
 
 impl Origin {
   #[cfg(debug_assertions)]
-  pub fn debug_string(&self, db: &CompileDatabase) -> String {
+  pub fn debug_string(&self, db: &ParserDatabase) -> String {
     match self {
       Origin::ProdGoal(prod_id) => {
         format!(
@@ -88,9 +86,9 @@ impl Origin {
     matches!(self, Origin::GoalCompleteOOS | Origin::ScanCompleteOOS)
   }
 
-  pub fn get_symbol(&self, db: &CompileDatabase) -> SymbolId {
+  pub fn get_symbol(&self, db: &ParserDatabase) -> SymbolId {
     match self {
-      Origin::SymGoal(sym_id) => sym_id.to_sym(db),
+      Origin::SymGoal(sym_id) => db.sym(*sym_id),
       _ => SymbolId::Undefined,
     }
   }
@@ -110,14 +108,14 @@ pub enum StateType {
   PeekEnd,
   Complete,
   Follow,
-  AssignAndFollow(IndexedSymId),
-  Reduce(IndexedProdId),
-  AssignToken(IndexedSymId),
+  AssignAndFollow(DBTokenKey),
+  Reduce(DBRuleKey),
+  AssignToken(DBTokenKey),
   /// Calls made on items within a state's closure but
   /// are not kernel items.
-  InternalCall(IndexedProdId),
+  InternalCall(DBProdKey),
   /// Calls made on kernel items
-  KernelCall(IndexedProdId),
+  KernelCall(DBProdKey),
   /// Creates a leaf state that has a single `pop` instruction,
   /// with the intent of removing a goto floor state.
   ProductionCompleteOOS,
@@ -151,7 +149,7 @@ impl StateType {
     matches!(self, GotoLoop | GotoPass | KernelGoto)
   }
 
-  fn debug_string(&self, db: &CompileDatabase) -> String {
+  fn debug_string(&self, db: &ParserDatabase) -> String {
     match self {
       Self::KernelCall(prod_id) => {
         format!("KernelCall({prod_id:?})")
@@ -160,10 +158,10 @@ impl StateType {
         format!("InternalCall({prod_id:?})",)
       }
       Self::AssignAndFollow(sym_id) => {
-        format!("AssignAndFollow({})", sym_id.to_sym(db).debug_string(db))
+        format!("AssignAndFollow({})", db.sym(*sym_id).debug_string(db))
       }
       Self::AssignToken(sym_id) => {
-        format!("AssignToken({})", sym_id.to_sym(db).debug_string(db))
+        format!("AssignToken({})", db.sym(*sym_id).debug_string(db))
       }
       Self::Reduce(prod_id) => {
         format!("Reduce({prod_id:?})",)
@@ -304,6 +302,25 @@ impl<'db> State<'db> {
     self.kernel_items.len()
   }
 
+  pub fn get_goto_state(&self) -> Option<Self> {
+    if self.non_terminals.len() > 0 {
+      Some(Self {
+        term_symbol: self.term_symbol,
+        id: self.id.to_goto(),
+        t_type: StateType::KernelGoto,
+        kernel_items: self.non_terminals.clone(),
+        non_terminals: self.kernel_items.clone(),
+        ..Default::default()
+      })
+    } else {
+      None
+    }
+  }
+
+  pub(crate) fn get_symbol(&self) -> SymbolId {
+    self.term_symbol
+  }
+
   pub fn get_root_closure(&self, is_scanner: bool) -> OrderedSet<ItemRef<'db>> {
     self.closure.as_ref().unwrap().clone()
   }
@@ -335,9 +352,9 @@ impl<'db> State<'db> {
   /// to left recursion.
   pub fn conflicting_production_call(
     &self,
-    prod_id: IndexedProdId,
+    prod_id: DBProdKey,
     is_scanner: bool,
-    db: &CompileDatabase,
+    db: &ParserDatabase,
   ) -> bool {
     if self.id.is_root() {
       let prod_ids = self
@@ -358,7 +375,7 @@ impl<'db> State<'db> {
     }
   }
 
-  pub fn debug_string(&self, db: &'db CompileDatabase) -> String {
+  pub fn debug_string(&self, db: &'db ParserDatabase) -> String {
     let mut string = String::new();
     string += &format!("\n\nSTATE -- [{:}] --", self.id.0);
 
@@ -435,15 +452,15 @@ pub struct Graph<'db> {
   pending_states: VecDeque<(GraphState, StateId)>,
   mode: GraphMode,
   state_name_prefix: String,
-  db: &'db CompileDatabase,
-  follow: &'db FollowSets<'db>,
+  db: &'db ParserDatabase,
+  follow: &'db super::super::FollowSets<'db>,
 }
 
 impl<'db> Graph<'db> {
   pub fn new(
-    db: &'db CompileDatabase,
+    db: &'db ParserDatabase,
     mode: GraphMode,
-    follow: &'db FollowSets<'db>,
+    follow: &'db super::super::FollowSets<'db>,
   ) -> Self {
     Self {
       mode,
@@ -502,7 +519,7 @@ impl<'db> Graph<'db> {
     id
   }
 
-  pub fn get_db(&self) -> &'db CompileDatabase {
+  pub fn get_db(&self) -> &'db ParserDatabase {
     self.db
   }
 

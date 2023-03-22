@@ -1,6 +1,11 @@
 #![allow(unused)]
 
-use std::io::{Result, Write};
+use std::{
+  io::{Result, Write},
+  ops::Add,
+};
+
+use crate::grammar::new::types::GuardedStr;
 
 /// Chainable writer for formatted source code
 pub struct CodeWriter<W: Write> {
@@ -14,6 +19,32 @@ pub type StringBuffer = CodeWriter<Vec<u8>>;
 impl<W: Write + Clone> CodeWriter<W> {
   pub fn get_data(&self) -> W {
     self.output.clone()
+  }
+}
+
+impl<'w, W: Write> Add<&str> for &'w mut CodeWriter<W> {
+  type Output = Self;
+
+  fn add(self, rhs: &str) -> Self::Output {
+    self.w(rhs).unwrap()
+  }
+}
+
+impl<'w, W: Write> Add<String> for &'w mut CodeWriter<W> {
+  type Output = Self;
+
+  fn add(self, rhs: String) -> Self::Output {
+    self.w(&rhs).unwrap()
+  }
+}
+
+impl<'w, 'istore: 'w, W: Write> Add<GuardedStr<'istore>>
+  for &'w mut CodeWriter<W>
+{
+  type Output = Self;
+
+  fn add(self, rhs: GuardedStr<'istore>) -> Self::Output {
+    self.w(rhs.as_str()).unwrap()
   }
 }
 
@@ -83,7 +114,7 @@ impl<W: Write> CodeWriter<W> {
   }
 
   /// Chainable shorthand for `write`
-  pub fn wrt(&mut self, string: &str) -> Result<&mut Self> {
+  pub fn w(&mut self, string: &str) -> Result<&mut Self> {
     self.write(string)?;
     Ok(self)
   }

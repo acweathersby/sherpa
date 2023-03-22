@@ -1,8 +1,4 @@
-use std::{
-  ops::{Add, Sub},
-  sync::Arc,
-};
-
+use super::GrammarRef;
 use crate::{
   grammar::{
     compile::parser::sherpa::{ASTNode, Ascript},
@@ -10,8 +6,10 @@ use crate::{
   },
   types::*,
 };
-
-use super::GrammarRef;
+use std::{
+  ops::{Add, Sub},
+  sync::Arc,
+};
 
 #[derive(Clone, Copy, PartialEq, PartialOrd, Debug, Eq, Hash)]
 pub enum ProductionType {

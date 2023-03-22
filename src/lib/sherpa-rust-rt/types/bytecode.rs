@@ -8,37 +8,40 @@ use std::fmt::{Debug, Display};
 pub enum Opcode {
   /// Default value for unrecognized opcode values.
   NoOp = 0,
-  /// A sentinel instruction that ends the execution of a parse block, similar to
-  /// a x86 `ret` instruction.
+  /// A sentinel instruction that ends the execution of a parse block, similar
+  /// to a x86 `ret` instruction.
   ///
   /// This is a single byte instruction.
   Pass,
-  /// Ends the execution of the current parse block, and causes the parser to enter
-  /// exception mode, popping parse blocks of the goto stack until it encounters an
-  /// exception handling parse block that resets the execution mode to normal.
+  /// Ends the execution of the current parse block, and causes the parser to
+  /// enter exception mode, popping parse blocks of the goto stack until it
+  /// encounters an exception handling parse block that resets the execution
+  /// mode to normal.
   ///
-  /// If the execution mode is not reset to normal by the last parse block, then the
-  /// parser emits an `Error` event and halts further parsing.
+  /// If the execution mode is not reset to normal by the last parse block,
+  /// then the parser emits an `Error` event and halts further parsing.
   ///
   /// This is a single byte instruction.
   Fail,
-  /// Increments the `scan_ptr` by the value of `sym_len` and then sets `sym_len` to 0.
+  /// Increments the `scan_ptr` by the value of `sym_len` and then sets
+  /// `sym_len` to 0.
   ///
   /// This is a single byte instruction.
   ScanShift,
-  /// Shifts the current token value, moving  the `anchor_ptr`, `base_ptr`, `scan_ptr`,
-  /// and `head_ptr` to the position of `head_ptr + tok_len`. Also set `tok_id` to 0.
+  /// Shifts the current token value, moving  the `anchor_ptr`, `base_ptr`,
+  /// `scan_ptr`, and `head_ptr` to the position of `head_ptr + tok_len`.
+  /// Also set `tok_id` to 0.
   ///
-  /// This also causes a `Shift` event to be emitted, pausing the parser until it is
-  /// resumed through a call to `next`.
+  /// This also causes a `Shift` event to be emitted, pausing the parser until
+  /// it is resumed through a call to `next`.
   ///
   /// This is a single byte instruction.
   ShiftToken,
   /// Same as `ShiftToken`, but assigns `sym_len` to `tok_len` before
   /// executing the `ShiftToken` instructions.
   ///
-  /// This also causes a `Shift` event to be emitted, pausing the parser until it is
-  /// resumed through a call to `next`.
+  /// This also causes a `Shift` event to be emitted, pausing the parser until
+  /// it is resumed through a call to `next`.
   ///
   /// This is a single byte instruction.
   ShiftTokenScanless,
@@ -52,8 +55,8 @@ pub enum Opcode {
   ///
   /// This is a single byte instruction.
   PeekTokenScanless,
-  /// Assigns `head_ptr + tok_len` to `head_ptr`, `scan_ptr`, and `base_ptr`. Then jumps
-  /// to the first instruction of the current parse block.
+  /// Assigns `head_ptr + tok_len` to `head_ptr`, `scan_ptr`, and `base_ptr`.
+  /// Then jumps to the first instruction of the current parse block.
   ///
   /// This is a single byte instruction.
   SkipToken,
@@ -62,8 +65,8 @@ pub enum Opcode {
   ///
   /// This is a single byte instruction.
   SkipTokenScanless,
-  /// Assigns `head_ptr + tok_len` to `head_ptr` and `scan_ptr`. Then jumps to the first
-  /// instruction of the current arse block.
+  /// Assigns `head_ptr + tok_len` to `head_ptr` and `scan_ptr`. Then jumps to
+  /// the first instruction of the current arse block.
   ///
   /// This is a single byte instruction.
   PeekSkipToken,
@@ -88,7 +91,8 @@ pub enum Opcode {
   /// Pushes the address of a parse block onto the goto stack.
   ///
   /// # Operands
-  /// - u8: Parse Mode - The mode the parser must be in to allow execution of this block.
+  /// - u8: Parse Mode - The mode the parser must be in to allow execution of
+  ///   this block.
   /// - u32: Parse Block Address -The address of the parse block to jump to.
   ///
   /// This is a 6 byte instruction.
@@ -96,7 +100,8 @@ pub enum Opcode {
   /// Pushes the address of an exception handler block onto the goto stack.
   ///
   /// # Operands
-  /// - u8: Parse Mode - The mode the parser must be in to allow execution of this block.
+  /// - u8: Parse Mode - The mode the parser must be in to allow execution of
+  ///   this block.
   /// - u32: Parse Block Address -The address of the parse block to jump to.
   ///
   /// This is a 6 byte instruction.
@@ -104,12 +109,14 @@ pub enum Opcode {
   /// Jumps to the location specified.
   ///
   /// # Operands
-  /// - u8: Parse Mode - The mode the parser must be in to allow execution of this block.
+  /// - u8: Parse Mode - The mode the parser must be in to allow execution of
+  ///   this block.
   /// - u32: Parse Block Address -The address of the parse block to jump to.
   ///
   /// This is a 6 byte instruction.
   Goto,
-  /// Assigns a token_id value to `tok_id` and assigns `scan_ptr - head_ptr` to `tok_len`.
+  /// Assigns a token_id value to `tok_id` and assigns `scan_ptr - head_ptr` to
+  /// `tok_len`.
   ///
   /// # Operands
   /// - u32: TokenID
@@ -117,11 +124,11 @@ pub enum Opcode {
   /// This is a 5 byte instruction.
   AssignToken,
 
-  /// Assigns a production_id to `prod_id`, a rule_id to `rule_id` and the number of values to
-  /// pop of the stack to `sym_len`.
+  /// Assigns a production_id to `prod_id`, a rule_id to `rule_id` and the
+  /// number of values to pop of the stack to `sym_len`.
   ///
-  /// This also causes a `Reduce` event to be emitted, pausing the parser until it is
-  /// resumed through a call to `next`.
+  /// This also causes a `Reduce` event to be emitted, pausing the parser until
+  /// it is resumed through a call to `next`.
   ///
   /// # Operands
   /// - u32: ProductionId - The value that will be assigned to `prod_id`.
@@ -130,16 +137,16 @@ pub enum Opcode {
   ///
   /// This is an 11 byte instruction.
   Reduce,
-  /// This is a complex instruction that branches to sub parse blocks based on an input value, which
-  /// may be:
-  ///
+  /// This is a complex instruction that branches to sub parse blocks based on
+  /// an input value, which may be:
 
   ///
-  /// Using a simple lookup table, one or more expected values are mapped to addresses of parse blocks.
-  /// Execution continues from the block address whose expected value matches the input value.
+  /// Using a simple lookup table, one or more expected values are mapped to
+  /// addresses of parse blocks. Execution continues from the block address
+  /// whose expected value matches the input value.
   ///
-  /// If the input value does not match any of the expected values,then execution jumps to
-  /// a default parse block.
+  /// If the input value does not match any of the expected values,then
+  /// execution jumps to a default parse block.
   ///
   /// # Operands
   /// - `u8`: Input type enum value:
@@ -150,20 +157,24 @@ pub enum Opcode {
   ///   | TOKEN | 1|   The value of `tok_id`|
   ///   | BYTE | 2 | The current byte located at `scan_ptr`|
   ///   | CODEPOINT |3 |  The current ut8 codepoint located at `scan_ptr`|
-  ///   | CLASS |4 |   The sherpa character class of the utf8 value located at `scan_ptr`|
-  /// - `u32`: Default Block Address - The relative offset the table's default block. The absolute address
-  ///   can be calculated by adding this value to the offset of the table instruction.
+  ///   | CLASS |4 |   The sherpa character class of the utf8 value located at
+  /// `scan_ptr`|
+  /// - `u32`: Default Block Address - The relative offset the table's default
+  ///   block. The absolute address can be calculated by adding this value to
+  ///   the offset of the table instruction.
   /// - `u32`: Scanner Address - The address of the scanner parse block or 0.
   /// - `u32`: Lookup Table Size -The byte size of the lookup table.
-  /// - `u32`: offset operand - The right hand operand of the subtract expression used to derive the jump table index from
-  ///    the input value. eg `table_index = <input value>-<offset>`
+  /// - `u32`: offset operand - The right hand operand of the subtract
+  ///   expression used to derive the jump table index from the input value. eg
+  ///   `table_index = <input value>-<offset>`
   ///
   /// This is variable length instruction.
   ///
-  /// The table data starts at offset 18. Table data starts at byte offset (18 + <Lookup Table Size> * 4)
+  /// The table data starts at offset 18. Table data starts at byte offset (18
+  /// + <Lookup Table Size> * 4)
   VectorBranch,
-  /// Same as `VectorBranch` but use a hash table to match input values to sub parse block jump
-  /// locations.
+  /// Same as `VectorBranch` but use a hash table to match input values to sub
+  /// parse block jump locations.
   ///
   /// # Operands
   /// - `u8`: Input type enum value:
@@ -174,17 +185,21 @@ pub enum Opcode {
   ///   | TOKEN | 1|   The value of `tok_id`|
   ///   | BYTE | 2 | The current byte located at `scan_ptr`|
   ///   | CODEPOINT |3 |  The current ut8 codepoint located at `scan_ptr`|
-  ///   | CLASS |4 |   The sherpa character class of the utf8 value located at `scan_ptr`|
-  /// - `u32`: Default Block Address - The relative offset the table's default block. The absolute address
-  ///   can be calculated by adding this value to the offset of the table instruction.
+  ///   | CLASS |4 |   The sherpa character class of the utf8 value located at
+  /// `scan_ptr`|
+  /// - `u32`: Default Block Address - The relative offset the table's default
+  ///   block. The absolute address can be calculated by adding this value to
+  ///   the offset of the table instruction.
   /// - `u32`: Scanner Address - The address of the scanner parse block or 0.
   /// - `u32`: Lookup Table Size -The byte size of the lookup table.
-  /// - `u32`: mod operand - The right hand operand of the modulus expression used to derive the jump table index from
-  ///    the input value. eg `hash_slot = <input value>%<Mod>`
+  /// - `u32`: mod operand - The right hand operand of the modulus expression
+  ///   used to derive the jump table index from the input value. eg `hash_slot
+  ///   = <input value>%<Mod>`
   ///
   /// This is variable length instruction.
   ///
-  /// The table data starts at offset 18. Table data starts at byte offset (18 + <Lookup Table Size> * 4)
+  /// The table data starts at offset 18. Table data starts at byte offset (18
+  /// + `Lookup Table Size` * 4)
   HashBranch,
 }
 
@@ -253,7 +268,6 @@ impl Opcode {
 /// at the start of an instruction opcode byte. This type
 /// can be used to extract varied length octets from the
 /// underlying bytecode buffer object.
-///
 #[derive(Clone, Copy)]
 pub struct Instruction<'a> {
   address: usize,
@@ -304,7 +318,6 @@ impl<'a> Instruction<'a> {
   ///
   /// println!("{:?}", i.get_opcode()); // -> "Opcode::Noop"
   /// ```
-  ///
   pub fn get_opcode(&self) -> Opcode {
     self.bc[self.address].into()
   }
@@ -334,12 +347,16 @@ impl<'a> Instruction<'a> {
         let mut iter = self.iter();
         iter.next_u8(); // Skip the input enum value
         iter.next_u32_le().and_then(|v| {
-          self.is_valid_offset(v as usize).then_some((bytecode, opcode_start + v as usize).into())
+          self
+            .is_valid_offset(v as usize)
+            .then_some((bytecode, opcode_start + v as usize).into())
         })
       }
       op => {
         let op_len = op.len();
-        self.is_valid_offset(op_len).then_some((bytecode, opcode_start + op_len).into())
+        self
+          .is_valid_offset(op_len)
+          .then_some((bytecode, opcode_start + op_len).into())
       }
     }
   }
@@ -359,7 +376,8 @@ impl<'a> Instruction<'a> {
     }
   }
 
-  /// Returns an `InstructionIterator` that can be used to extract operand values
+  /// Returns an `InstructionIterator` that can be used to extract operand
+  /// values
   ///
   /// # Example
   /// ```
@@ -374,7 +392,6 @@ impl<'a> Instruction<'a> {
   /// assert_eq!(iter.next_u8(), Some(2));
   /// assert_eq!(iter.next_u32_le(), Some(0x12345678));
   /// assert_eq!(iter.next_u32_le(), None);
-  ///
   /// ```
   pub fn iter(&self) -> ByteCodeIterator {
     ByteCodeIterator { offset: self.address + 1, bc: self.bc }
@@ -573,11 +590,13 @@ pub fn default_get_branch_selector(
   // Max number of values: 1024 (maximum jump span)
   // Max instruction offset from table header 2042
 
-  let total_instruction_length = branches.iter().map(|b| b.len()).sum::<usize>();
+  let total_instruction_length =
+    branches.iter().map(|b| b.len()).sum::<usize>();
 
   let has_unsupported_value = values.iter().cloned().any(|v| v > 2046);
 
-  if (max_span < 2) || total_instruction_length > 2042 || has_unsupported_value {
+  if (max_span < 2) || total_instruction_length > 2042 || has_unsupported_value
+  {
     BranchSelector::Vector
   } else {
     BranchSelector::Hash

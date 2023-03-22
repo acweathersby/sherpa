@@ -29,7 +29,7 @@ pub struct RuleData<'a> {
 /// construction.
 pub struct ProductionData<'a> {
   root_prod_id: ProductionId,
-  syms:         &'a mut Set<SymbolId>,
+  symbols:      &'a mut Set<SymbolId>,
   sub_prods:    &'a mut Array<Box<SubProduction>>,
   rules:        &'a mut Array<types::Rule>,
   asts:         &'a mut Array<Box<ast::Ascript>>,
@@ -45,7 +45,7 @@ impl<'b> ProductionData<'b> {
     ProductionData {
       rules,
       root_prod_id: self.root_prod_id,
-      syms: &mut self.syms,
+      symbols: &mut self.symbols,
       sub_prods: &mut self.sub_prods,
       asts: &mut self.asts,
     }
@@ -242,10 +242,10 @@ pub fn process_parse_state<'a>(
                   0,
                   &mut ProductionData {
                     root_prod_id: *id,
-                    syms:         symbols,
-                    sub_prods:    &mut Default::default(),
-                    rules:        &mut Default::default(),
-                    asts:         &mut Default::default(),
+                    symbols,
+                    sub_prods: &mut Default::default(),
+                    rules: &mut Default::default(),
+                    asts: &mut Default::default(),
                   },
                   g_data,
                   s_store,
@@ -309,7 +309,7 @@ fn process_rule(
 
   let Production { id, rules, sub_prods, symbols, type_, asts, .. } = prod;
   let mut prod_data =
-    ProductionData { root_prod_id: *id, syms: symbols, sub_prods, rules, asts };
+    ProductionData { root_prod_id: *id, symbols, sub_prods, rules, asts };
 
   let ast_ref = intern_ast(rule, &mut prod_data);
 
@@ -599,22 +599,16 @@ fn record_symbol(
       let val = string.intern(s_store);
       let id = SymbolId::Token { val, precedence };
 
-      p_data.syms.insert(id);
-
       id
-    }
-    ASTNode::Production_Symbol(_) | ASTNode::Production_Import_Symbol(_) => {
-      get_production_id_from_ast_node(g_data, sym_node)?.as_sym()
     }
     ASTNode::EOFSymbol(_) => SymbolId::EndOfFile { precedence },
     ASTNode::ClassSymbol(gen) => match gen.val.as_str() {
-      "sp" => SymbolId::GenericSpace { precedence },
-      "tab" => SymbolId::GenericHorizontalTab { precedence },
-      "nl" => SymbolId::GenericNewLine { precedence },
-      "id" => SymbolId::GenericIdentifier { precedence },
-      "num" => SymbolId::GenericNumber { precedence },
-      "sym" => SymbolId::GenericSymbol { precedence },
-
+      "sp" => SymbolId::ClassSpace { precedence },
+      "tab" => SymbolId::ClassHorizontalTab { precedence },
+      "nl" => SymbolId::ClassNewLine { precedence },
+      "id" => SymbolId::ClassIdentifier { precedence },
+      "num" => SymbolId::ClassNumber { precedence },
+      "sym" => SymbolId::ClassSymbol { precedence },
       _ => {
         #[allow(unreachable_code)]
         {
@@ -624,10 +618,17 @@ fn record_symbol(
         }
       }
     },
+    ASTNode::Production_Symbol(_) | ASTNode::Production_Import_Symbol(_) => {
+      let id = get_production_id_from_ast_node(g_data, sym_node)?.as_sym();
+      /// Bypass the registration of this symbol as a symbol.
+      return SherpaResult::Ok(id);
+    }
     ASTNode::Production_Terminal_Symbol(token_prod) => {
-      get_production_id_from_ast_node(g_data, &token_prod.production)?
+      let id = get_production_id_from_ast_node(g_data, &token_prod.production)?
         .as_tok_sym()
-        .to_precedence(precedence)
+        .to_precedence(precedence);
+      /// Bypass the registration of this symbol as a symbol.
+      return SherpaResult::Ok(id);
     }
     _ => {
       #[allow(unreachable_code)]
@@ -638,6 +639,8 @@ fn record_symbol(
       }
     }
   };
+
+  p_data.symbols.insert(id);
 
   SherpaResult::Ok(id)
 }

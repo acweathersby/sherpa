@@ -6,10 +6,10 @@ use crate::{
     compile::parser::sherpa::Ascript,
     new::types::{
       CachedString,
-      CompileDatabase,
+      DBProdKey,
       IStringStore,
-      IndexedProdId,
       OrderedMap,
+      ParserDatabase,
       ProductionSubType,
       Rule,
     },
@@ -26,12 +26,12 @@ use std::{collections::VecDeque, ops::Index, path::PathBuf, sync::Arc};
 
 pub(crate) async fn verify_productions<'a>() {}
 
-pub(crate) async fn compile_parser<'a>(
+pub(crate) async fn build_compile_db<'a>(
   j: Journal,
   g: GrammarIdentity,
   gs: &'a GrammarSoup,
   spawner: &Spawner<SherpaResult<()>>,
-) -> SherpaResult<CompileDatabase> {
+) -> SherpaResult<ParserDatabase> {
   // Gain read access to all parts of the GrammarCloud.
   // We don't want anything changing during these next steps.
 
@@ -54,7 +54,7 @@ pub(crate) async fn compile_parser<'a>(
   let p_map = &mut prod_map_owned;
 
   // Stores all used rules
-  let mut rule_table_owned: Array<(Rule, IndexedProdId)> = Array::new();
+  let mut rule_table_owned: Array<DBRule> = Array::new();
   let r_table = &mut rule_table_owned;
 
   // Maps prod indices to rules.
@@ -75,8 +75,9 @@ pub(crate) async fn compile_parser<'a>(
       let prod = productions.get(&prod_id)?;
 
       let prod_name = prod.name;
+      let rules = prod.rules.clone();
 
-      add_prod(prod_id.as_sym(), prod.rules.clone(), p_map, r_table, p_r_map);
+      add_prod(prod_id.as_sym(), rules, p_map, r_table, p_r_map, false);
       add_prod_name(prod_name_lu, prod_name);
 
       // Gain references on all sub productions. ----------------------------
@@ -91,7 +92,7 @@ pub(crate) async fn compile_parser<'a>(
             + &index.to_string())
             .intern(s_store);
 
-          add_prod(prod_id.as_sym(), rules, p_map, r_table, p_r_map);
+          add_prod(prod_id.as_sym(), rules, p_map, r_table, p_r_map, false);
           add_prod_name(prod_name_lu, name);
         }
       }
@@ -180,14 +181,22 @@ pub(crate) async fn compile_parser<'a>(
             convert_symbols_to_scanner_symbols(&mut r_rules, s_store);
             convert_symbols_to_scanner_symbols(&mut p_rules, s_store);
 
-            add_prod(prod_id.as_tok_sym(), r_rules, p_map, r_table, p_r_map);
-            add_prod(prime_id.as_tok_sym(), p_rules, p_map, r_table, p_r_map);
+            let prod_id = prod_id.as_tok_sym();
+            let prime_id = prime_id.as_tok_sym();
+
+            add_prod(prod_id, r_rules, p_map, r_table, p_r_map, true);
+            add_prod(prime_id, p_rules, p_map, r_table, p_r_map, true);
           } else {
             p_map.insert(prod_id.as_tok_sym(), r_table.len());
+
             let mut rules = prod.rules.clone();
+
             convert_symbols_to_scanner_symbols(&mut rules, s_store);
             insert_token_production(&mut rules, &mut token_productions);
-            add_prod(prod_id.as_tok_sym(), rules, p_map, r_table, p_r_map);
+
+            let prod_id = prod_id.as_tok_sym();
+
+            add_prod(prod_id, rules, p_map, r_table, p_r_map, true);
           }
         }
       }
@@ -205,58 +214,51 @@ pub(crate) async fn compile_parser<'a>(
           ast:     None,
         }]);
         convert_symbols_to_scanner_symbols(&mut rules, s_store);
-        add_prod(prod_id.as_tok_sym(), rules, p_map, r_table, p_r_map);
+        add_prod(prod_id.as_tok_sym(), rules, p_map, r_table, p_r_map, true);
         add_prod_name(prod_name_lu, *val);
         token_names.insert(prod_id.as_tok_sym(), *val);
+      }
+      sym if sym.is_term() => {
+        let prod_id = sym.to_scanner_prod_id();
+        let rules = Array::from_iter(vec![Rule {
+          symbols: vec![(*sym, 0)],
+          ast:     None,
+        }]);
+        add_prod(prod_id.as_tok_sym(), rules, p_map, r_table, p_r_map, true);
+        add_prod_name(
+          prod_name_lu,
+          (sym.name(s_store) + " " + &sym.precedence().to_string())
+            .intern(s_store),
+        );
       }
       _ => {}
     }
   }
 
+  let sym_lu = convert_index_map_to_vec(symbols.iter().map(|(sym, index)| {
+    let prod_id = sym.to_scanner_prod_id().as_tok_sym();
+    (
+      DBTokenData {
+        prod_id: p_map.get(&prod_id).map(|i| DBProdKey::from(*i)).unwrap(),
+        sym_id:  *sym,
+        tok_id:  *index,
+      },
+      *index,
+    )
+  }));
+
   // Convert convert GUID symbol ids to local indices. ------------------------
-  for (rule, _) in r_table {
-    for (sym, _) in &mut rule.symbols {
-      match *sym {
-        SymbolId::Token { val, precedence } => {
-          let index = symbols.get(sym).unwrap();
-          *sym =
-            SymbolId::IndexedToken { index: (*index as u32).into(), precedence }
-        }
-        SymbolId::NonTerminalToken { id, precedence } => {
-          let index = p_map.get(sym).unwrap();
-          *sym = SymbolId::IndexedNonTerminalToken {
-            index: (*index as u32).into(),
-            sym_index: symbols.get(sym).map(|i| (*i as u32).into()),
-            precedence,
-          }
-        }
-        SymbolId::NonTerminal { .. } => {
-          let index = p_map.get(sym).unwrap();
-          *sym = SymbolId::IndexedNonTerminal { index: (*index as u32).into() };
-        }
-        _ => {}
-      }
-    }
-  }
+  convert_rule_symbols(r_table, p_map, symbols);
 
   let entry_points = root_grammar
     .pub_prods
     .iter()
-    .map(|(name, prod_id)| (*p_map.get(&prod_id.as_sym()).unwrap(), *name))
+    .map(|(name, prod_id)| EntryPoint {
+      prod_id:    DBProdKey::from(*p_map.get(&prod_id.as_sym()).unwrap()),
+      entry_name: *name,
+    })
     .collect::<Array<_>>();
 
-  let sym_lu =
-    convert_index_map_to_vec(symbols.iter().map(|(sym, index)| match sym {
-      SymbolId::Token { .. } => {
-        let prod_id = sym.to_scanner_prod_id().as_tok_sym();
-        ((*sym, p_map.get(&prod_id).map(|i| *i as u32)), *index)
-      }
-      SymbolId::NonTerminalToken { .. } => {
-        let prod_id = sym.to_scanner_prod_id().as_tok_sym();
-        ((*sym, p_map.get(&prod_id).map(|i| *i as u32)), *index)
-      }
-      _ => ((*sym, None), *index),
-    }));
   let prod_lu = convert_index_map_to_vec(prod_map_owned);
   let prod_name_lu = prod_lu
     .iter()
@@ -273,7 +275,7 @@ pub(crate) async fn compile_parser<'a>(
     })
     .collect::<Array<_>>();
 
-  let db = CompileDatabase::new(
+  let db = ParserDatabase::new(
     root_grammar.identity.name,
     prod_lu,
     prod_name_lu_owned,
@@ -284,30 +286,68 @@ pub(crate) async fn compile_parser<'a>(
     s_store.clone(),
   );
 
-  dbg!(&db);
-
   SherpaResult::Ok(db)
+}
+
+fn convert_rule_symbols(
+  r_table: &mut Vec<DBRule>,
+  p_map: &mut Map<SymbolId, usize>,
+  symbols: Map<SymbolId, usize>,
+) {
+  for DBRule { rule, is_scanner, .. } in r_table {
+    for (sym, _) in &mut rule.symbols {
+      match *sym {
+        SymbolId::NonTerminalToken { id, precedence } => {
+          let index = p_map.get(sym).unwrap();
+          *sym = SymbolId::DBNonTerminalToken {
+            prod_key: (*index as u32).into(),
+            sym_key: symbols.get(sym).map(|i| (*i as u32).into()),
+            precedence,
+          }
+        }
+        SymbolId::NonTerminal { .. } => {
+          let index = p_map.get(sym).unwrap();
+          *sym = SymbolId::DBNonTerminal { key: (*index as u32).into() };
+        }
+        sym_id if !*is_scanner => {
+          let index = symbols.get(&sym_id).unwrap();
+          *sym = SymbolId::DBToken { key: (*index as u32).into() }
+        }
+        _ => {}
+      }
+    }
+  }
 }
 
 fn add_prod_name(prod_name_lu: &mut Vec<IString>, name: IString) {
   prod_name_lu.push(name);
 }
 
+fn set_scanner_on_rules(rule_lookup: &mut Array<DBRule>) {
+  for rule in rule_lookup {}
+}
 /// Inserts production rule data into the appropriate lookup tables.
 fn add_prod(
   prod_sym: SymbolId,
   mut prod_rules: Array<Rule>,
   production_map: &mut std::collections::HashMap<SymbolId, usize>,
-  rule_lookup: &mut Array<(Rule, IndexedProdId)>,
-  prod_rule_map: &mut Array<Array<IndexRuleKey>>,
+  rules: &mut Array<DBRule>,
+  prod_rule_map: &mut Array<Array<DBRuleKey>>,
+  is_scanner: bool,
 ) {
   let prod_index = production_map.len();
-  let rules_ids =
-    (rule_lookup.len() as u32)..(rule_lookup.len() + prod_rules.len()) as u32;
+
+  let rules_ids = (rules.len() as u32)..(rules.len() + prod_rules.len()) as u32;
+
   prod_rule_map.push(rules_ids.map(|i| i.into()).collect::<Array<_>>());
-  rule_lookup.append(
-    &mut prod_rules.into_iter().map(|r| (r, prod_index.into())).collect(),
+
+  rules.append(
+    &mut prod_rules
+      .into_iter()
+      .map(|r| DBRule { rule: r, prod_id: prod_index.into(), is_scanner })
+      .collect(),
   );
+
   production_map.insert(prod_sym, prod_index);
 }
 
@@ -403,38 +443,3 @@ fn prod_is_immediate_left_recursive(
   }
   false
 }
-
-// Extract all productions referenced by the entry production of the grammar.
-
-// Merge any outstanding production merges to create finalized productions.
-
-// Extract token information
-
-// Extract all rules.
-
-// Remap any rule that needs to be right recursive (for scanner states)
-
-// Prepare Custom states.
-
-// Merge all tokens into a token set.
-
-// ---------------------------------------------
-
-// For each production. Produce a parse graph and parse state IR.
-
-// For each token production. Produce scanner graph and parse state IR
-
-// For each token set in applicable parse states extract token sets, merge
-// and produce scanner graphs and parse state IRs
-
-// (invariant) Ensure 1 to 1 mappings between parse_state ids and parse state
-// IR.
-
-// (required) Run parse states through one GC pass.
-
-// (optional) Run parse states through optimizer and additional GC passes.
-
-// Return parse state IR as the finalized parser before lowering to
-// executable code.
-
-// --------------------------------------------

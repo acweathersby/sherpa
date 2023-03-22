@@ -50,6 +50,8 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
     | "scan"        :ast { t_Scan }
 
+    | "reset"        :ast { t_Reset }
+
 
 <> terminal_statement >
 
@@ -73,14 +75,6 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
     | "set-tok" tok::int
 
         :ast { t_SetTokenId, id: u32($2) }
-
-    | "set" tok::id tok::int
-    
-        :ast { t_SetVal, id: str($2), val:u32($3)  }
-
-    | "assert"      
-    
-        :ast { t_Assert  }
 
 
 <> goto_sequence > goto_push(*) goto

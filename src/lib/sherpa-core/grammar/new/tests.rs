@@ -7,11 +7,8 @@ use crate::{
   grammar::{
     compile::parser::sherpa::Ascript,
     new::{
-      compile::compile_states::compile_parse_states,
-      load::{
-        compile::compile_grammars_from_path,
-        update_soup::compile_parser,
-      },
+      compile::compile_parse_states,
+      load::{build_db::build_compile_db, compile::compile_grammars_from_path},
     },
   },
   tasks::{new_taskman, Executor, Spawner},
@@ -65,7 +62,7 @@ fn build_parser() -> SherpaResult<()> {
       local_j.flush_reports();
 
       let parser_data =
-        compile_parser(local_j.transfer(), id, &local_soup, &local_spawner)
+        build_compile_db(local_j.transfer(), id, &local_soup, &local_spawner)
           .await?;
 
       SherpaResult::Ok(())
@@ -105,6 +102,8 @@ fn build_states() -> SherpaResult<()> {
       )
       .await?;
 
+      dbg!(&local_soup);
+
       assert_eq!(
         local_soup
           .grammar_headers
@@ -118,7 +117,7 @@ fn build_states() -> SherpaResult<()> {
       );
 
       let db =
-        compile_parser(local_j.transfer(), id, &local_soup, &local_spawner)
+        build_compile_db(local_j.transfer(), id, &local_soup, &local_spawner)
           .await?;
 
       compile_parse_states(local_j.transfer(), &db).await;

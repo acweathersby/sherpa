@@ -9,13 +9,7 @@ use crate::{
   compile::ParseState,
   grammar::{
     compile::parser::sherpa::Ascript,
-    new::types::{
-      CompileDatabase,
-      IString,
-      IndexRuleKey,
-      IndexedProdId,
-      SymbolId,
-    },
+    new::types::{DBProdKey, DBRuleKey, IString, ParserDatabase, SymbolId},
   },
   parser::hash_group_btreemap,
   tasks::{new_taskman, Executor, Spawner},
@@ -26,15 +20,15 @@ use crate::{
 
 pub enum ItemType {
   Terminal(SymbolId),
-  NonTerminal(IndexedProdId),
-  TokenNonTerminal(IndexedProdId, SymbolId),
-  Completed(IndexedProdId),
+  NonTerminal(DBProdKey),
+  TokenNonTerminal(DBProdKey, SymbolId),
+  Completed(DBProdKey),
 }
 
 #[derive(Clone, Copy)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct ItemRef<'db> {
-  db: &'db CompileDatabase,
+  db: &'db ParserDatabase,
   /// The NonTerminal production or symbol that the item directly or indirectly
   /// resolves to
   pub origin: Origin,
@@ -43,7 +37,7 @@ pub struct ItemRef<'db> {
   /// The graph state the item originated from
   pub origin_state: StateId,
   /// The index location of the item's Rule
-  pub rule_id: IndexRuleKey,
+  pub rule_id: DBRuleKey,
   /// The number of symbols that comprise the items's Rule
   pub len: u16,
   /// The index of the active symbol. If `len == sym_index` then
@@ -95,7 +89,7 @@ impl<'db> ItemRef<'db> {
     }
   }
 
-  pub fn get_db(&self) -> &CompileDatabase {
+  pub fn get_db(&self) -> &ParserDatabase {
     self.db
   }
 
@@ -111,7 +105,7 @@ impl<'db> ItemRef<'db> {
     Self { origin_state, ..self.clone() }
   }
 
-  pub fn from_rule(rule_id: IndexRuleKey, db: &'db CompileDatabase) -> Self {
+  pub fn from_rule(rule_id: DBRuleKey, db: &'db ParserDatabase) -> Self {
     let rule = db.rule(rule_id);
     Self {
       db,
@@ -198,7 +192,7 @@ impl<'db> ItemRef<'db> {
     self.db.prod_name(self.prod_index())
   }
 
-  pub fn prod_index(&self) -> IndexedProdId {
+  pub fn prod_index(&self) -> DBProdKey {
     self.db.rule_prod(self.rule_id)
   }
 
@@ -215,14 +209,13 @@ impl<'db> ItemRef<'db> {
       false
     } else {
       match self.rule().symbols[self.sym_index as usize].0 {
-        SymbolId::NonTerminal { .. } | SymbolId::IndexedNonTerminal { .. } => {
-          true
-        }
+        SymbolId::NonTerminal { .. } | SymbolId::DBNonTerminal { .. } => true,
         _ => false,
       }
     }
   }
 
+  /// Returns the item's active symbol.
   pub fn sym(&self) -> SymbolId {
     if self.is_complete() {
       SymbolId::EndOfFile { precedence: 0 }
@@ -233,10 +226,10 @@ impl<'db> ItemRef<'db> {
 
   /// Returns the [IndexedProdId] of the active symbol if the symbol
   /// is a NonTerm or NonTermToken, or return `None`
-  pub fn prod_index_at_sym(&self) -> Option<IndexedProdId> {
+  pub fn prod_index_at_sym(&self) -> Option<DBProdKey> {
     match self.sym() {
-      SymbolId::IndexedNonTerminal { index }
-      | SymbolId::IndexedNonTerminalToken { index, .. } => Some(index),
+      SymbolId::DBNonTerminal { key: index }
+      | SymbolId::DBNonTerminalToken { prod_key: index, .. } => Some(index),
       _ => None,
     }
   }
@@ -248,13 +241,15 @@ impl<'db> ItemRef<'db> {
       Completed(self.prod_index())
     } else {
       match self.sym() {
-        SymbolId::IndexedNonTerminal { index } => NonTerminal(index),
-        SymbolId::IndexedNonTerminalToken { index, sym_index, .. } => {
-          TokenNonTerminal(
-            index,
-            sym_index.map(|i| self.db.sym(i)).unwrap_or(SymbolId::Undefined),
-          )
-        }
+        SymbolId::DBNonTerminal { key: index } => NonTerminal(index),
+        SymbolId::DBNonTerminalToken {
+          prod_key: index,
+          sym_key: sym_index,
+          ..
+        } => TokenNonTerminal(
+          index,
+          sym_index.map(|i| self.db.sym(i)).unwrap_or(SymbolId::Undefined),
+        ),
         sym => Terminal(sym),
         _ => unreachable!(),
       }
@@ -369,14 +364,14 @@ pub trait ItemContainerIter<'a, 'db: 'a>:
     self.map(|i| i.to_absolute()).collect::<ItemSet>().len() == 1
   }
 
-  fn to_production_id_set(&mut self) -> OrderedSet<IndexedProdId> {
+  fn to_production_id_set(&mut self) -> OrderedSet<DBProdKey> {
     self.map(|i| i.prod_index()).collect()
   }
 
   /// Returns the Production of the non-terminal symbol in each item. For items
   /// whose symbol is a terminal or are complete. Items that do not have a
   /// nonterm as the active symbol are skipped.
-  fn to_prod_sym_id_set(&mut self) -> OrderedSet<IndexedProdId> {
+  fn to_prod_sym_id_set(&mut self) -> OrderedSet<DBProdKey> {
     self.filter_map(|i| i.prod_index_at_sym()).collect()
   }
 
@@ -403,9 +398,9 @@ impl<'db> From<ItemRef<'db>> for Items<'db> {
 pub trait ItemContainer<'db>:
   Clone + IntoIterator<Item = ItemRef<'db>> + FromIterator<ItemRef<'db>>
 {
-  /// Given a [CompileDatabase] and [IndexedProdId] returns the initial
+  /// Given a [CompileDatabase] and [DBProdId] returns the initial
   /// items of the production.
-  fn start_items(prod_id: IndexedProdId, db: &'db CompileDatabase) -> Self {
+  fn start_items(prod_id: DBProdKey, db: &'db ParserDatabase) -> Self {
     db.prod_rules(prod_id)
       .unwrap()
       .iter()

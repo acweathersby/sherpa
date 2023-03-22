@@ -12,8 +12,8 @@ NAME token
 
 <> string_tok > "\"" ( c:id | c:num | c:nl | c:sym | c:sp | escaped )(*) "\""
 
-<> quote_tok > "\'" ( c:id | c:num | c:nl | c:sym | c:sp | escaped )(*) "\'"
+<> quote_tok > "'" ( c:id | c:num | c:nl | c:sym | c:sp | escaped )(*) '\''
 
-<> escaped > "\\" ( c:id | c:num | c:nl | c:sym | c:sp )
+<> escaped > "\\" ( c:sym | c:num | c:sp | c:id )
 
 <> int_tok > c:num(+)

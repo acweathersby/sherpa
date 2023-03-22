@@ -124,7 +124,7 @@ impl IString {
 
   /// Returns a [GuardedStr] that can be used to access the `&str` the [IString]
   /// token represents.
-  pub fn to_str<'a>(&self, store: &'a IStringStore) -> GuardedStr<'a> {
+  pub fn to_str<'a>(&'a self, store: &'a IStringStore) -> GuardedStr<'a> {
     unsafe {
       let val_bytes = self as *const IString as *const [u8; 8];
       if (*val_bytes)[7] & 0x08 != 0 {
@@ -265,6 +265,8 @@ fn interning_small_string() {
 
   assert_eq!(tok.to_string(&store), "test");
   assert_eq!(tok.to_string(&store).as_str(), "test");
+  assert_eq!("B".intern(&store).to_string(&store), "B");
+  assert_eq!("B".intern(&store).to_str(&store).as_str(), "B");
 }
 
 #[test]

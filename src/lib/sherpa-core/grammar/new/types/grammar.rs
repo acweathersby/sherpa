@@ -2,9 +2,17 @@
 
 use std::{hash::Hash, path::PathBuf, sync::Arc};
 
-use sherpa_runtime::types::{Token, TokenRange};
+use sherpa_runtime::{
+  types::{Token, TokenRange},
+  utf8::lookup_table::CodePointClass,
+};
 
-use crate::{compile::ParseState, grammar::hash_id_value_u64};
+use crate::{
+  compile::ParseState,
+  grammar::hash_id_value_u64,
+  types::DEFAULT_SYM_ID,
+  writer::code_writer::CodeWriter,
+};
 
 use super::{
   super::parser::State,
@@ -12,10 +20,9 @@ use super::{
   CachedString,
   IString,
   IStringStore,
-  IndexedProdId,
-  IndexedSymId,
   Map,
   Set,
+  SymbolId,
 };
 
 /// A globally unique identifier for a single production.
@@ -36,6 +43,7 @@ pub enum ProductionSubType {
   Parser,
   Scanner,
   ScannerToken,
+  ScannerSym,
 }
 
 impl From<(GrammarId, &str)> for ProductionId {
@@ -176,8 +184,8 @@ pub struct Production {
   /// The unique identifier of the owning GrammarHEader.
   pub g_id: GrammarId,
 
-  /// All symbols that are referenced by the rules of this
-  /// production.
+  /// All symbols that are referenced by the rules of the
+  /// production and its sub-productions.
   pub symbols: Set<SymbolId>,
 
   /// All rules that reduce to this production
@@ -304,150 +312,22 @@ impl GrammarIdentity {
   }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-#[cfg_attr(debug_assertions, derive(Debug))]
-#[repr(u8)]
-pub enum SymbolId {
-  Undefined,
-  Default,
-  EndOfFile {
-    precedence: u16,
-  },
-  GenericSpace {
-    precedence: u16,
-  },
-  GenericHorizontalTab {
-    precedence: u16,
-  },
-  GenericNewLine {
-    precedence: u16,
-  },
-  GenericIdentifier {
-    precedence: u16,
-  },
-  GenericNumber {
-    precedence: u16,
-  },
-  GenericSymbol {
-    precedence: u16,
-  },
-  Token {
-    precedence: u16,
-    val:        IString,
-  },
-  NonTerminal {
-    id: ProductionId,
-  },
-  NonTerminalToken {
-    precedence: u16,
-    id:         ProductionId,
-  },
-  IndexedNonTerminalToken {
-    precedence: u16,
-    index:      IndexedProdId,
-    sym_index:  Option<IndexedSymId>,
-  },
-  IndexedNonTerminal {
-    index: IndexedProdId,
-  },
-  IndexedToken {
-    precedence: u16,
-    index:      IndexedSymId,
-  },
-  Char {
-    char:       u8,
-    precedence: u16,
-  },
-  Codepoint {
-    precedence: u16,
-    val:        u32,
-  },
-}
-
-impl Default for SymbolId {
-  fn default() -> Self {
-    SymbolId::Undefined
-  }
-}
-
-impl SymbolId {
-  /// The start number by which user defined symbols ids will increment from.
-  pub const DefinedSymbolIndexBasis: u32 = 16;
-
-  pub fn precedence(&self) -> u16 {
-    use SymbolId::*;
-    match *self {
-      EndOfFile { precedence } => precedence,
-      GenericSpace { precedence } => precedence,
-      GenericHorizontalTab { precedence } => precedence,
-      GenericNewLine { precedence } => precedence,
-      GenericIdentifier { precedence } => precedence,
-      GenericNumber { precedence } => precedence,
-      GenericSymbol { precedence } => precedence,
-      Token { precedence, .. } => precedence,
-      NonTerminal { .. } => 0,
-      NonTerminalToken { precedence, .. } => precedence,
-      Codepoint { precedence, .. } => precedence,
-      IndexedNonTerminal { index } => 0,
-      IndexedNonTerminalToken { precedence, .. } => precedence,
-      IndexedToken { precedence, .. } => precedence,
-      Char { precedence, .. } => precedence,
-      _ => 0,
-    }
-  }
-
-  pub fn to_precedence(&self, precedence: u16) -> Self {
-    use SymbolId::*;
-    match *self {
-      EndOfFile { .. } => EndOfFile { precedence },
-      GenericSpace { .. } => GenericSpace { precedence },
-      GenericHorizontalTab { .. } => GenericHorizontalTab { precedence },
-      GenericNewLine { .. } => GenericNewLine { precedence },
-      GenericIdentifier { .. } => GenericIdentifier { precedence },
-      GenericNumber { .. } => GenericNumber { precedence },
-      GenericSymbol { .. } => GenericSymbol { precedence },
-      Token { val, .. } => Token { val, precedence },
-      NonTerminal { id, .. } => NonTerminal { id },
-      NonTerminalToken { id, .. } => NonTerminalToken { id, precedence },
-      Codepoint { val, .. } => Codepoint { val, precedence },
-      IndexedNonTerminal { index } => IndexedNonTerminal { index },
-      IndexedNonTerminalToken { index, sym_index, .. } => {
-        IndexedNonTerminalToken { index, sym_index, precedence }
-      }
-      IndexedToken { index, .. } => IndexedToken { index, precedence },
-      Char { char, .. } => Char { char, precedence },
-      Default => Default,
-      _ => Undefined,
-    }
-  }
-
-  pub fn to_scanner_prod_id(&self) -> ProductionId {
-    match self {
-      SymbolId::Token { val, precedence } => {
-        ProductionId::Standard(val.as_u64(), ProductionSubType::ScannerToken)
-      }
-      _ => unimplemented!(),
-    }
-  }
-}
-
+use super::ParserDatabase;
 #[cfg(debug_assertions)]
-use super::CompileDatabase;
 impl SymbolId {
-  #[cfg(debug_assertions)]
-  pub fn debug_string(&self, db: &CompileDatabase) -> String {
+  pub fn debug_string(&self, db: &ParserDatabase) -> String {
     use SymbolId::*;
 
     match *self {
       Undefined => "Undefine".into(),
       Default => "Default".into(),
       EndOfFile { .. } => "{EOF}".into(),
-      GenericSpace { .. } => "c:sp".into(),
-      GenericHorizontalTab { .. } => "c:tab".into(),
-      GenericNewLine { .. } => "c:nl".into(),
-      GenericIdentifier { .. } => "c:id".into(),
-      GenericNumber { .. } => "c:num".into(),
-      GenericSymbol { .. } => "c:sym".into(),
+      ClassSpace { .. } => "c:sp".into(),
+      ClassHorizontalTab { .. } => "c:tab".into(),
+      ClassNewLine { .. } => "c:nl".into(),
+      ClassIdentifier { .. } => "c:id".into(),
+      ClassNumber { .. } => "c:num".into(),
+      ClassSymbol { .. } => "c:sym".into(),
       Token { val, precedence } => {
         format!(
           "[\"{}\"]{{{precedence}}}",
@@ -457,18 +337,18 @@ impl SymbolId {
       NonTerminal { id, .. } => format!("<non-term:{id:?}>"),
       NonTerminalToken { id, .. } => format!("tk:<non-term:{id:?}>"),
       Codepoint { val, .. } => format!("cp:{}", val),
-      IndexedNonTerminal { index } => {
-        let guard_str = db.prod_name_str(index);
+      DBNonTerminal { key } => {
+        let guard_str = db.prod_name_str(key);
         let name = guard_str.as_str();
         format!("{name}")
       }
-      IndexedNonTerminalToken { index, sym_index, precedence } => {
-        let guard_str = db.prod_name_str(index);
+      DBNonTerminalToken { prod_key, sym_key, precedence } => {
+        let guard_str = db.prod_name_str(prod_key);
         let name = guard_str.as_str();
 
         format!("tk:{name}{{{precedence}}}")
       }
-      IndexedToken { index, precedence } => db.sym(index).debug_string(db),
+      DBToken { key: index } => db.sym(index).debug_string(db),
       Char { char, precedence } => {
         if char < 128 {
           format!("[\"{}\"]{{{precedence}}}", char::from(char))
