@@ -4,6 +4,7 @@ use crate::{
   compile::ParseState,
   grammar::{
     compile::parser::sherpa::Ascript,
+    hash_id_value_u64,
     new::types::{
       CachedString,
       DBProdKey,
@@ -215,7 +216,11 @@ pub(crate) async fn build_compile_db<'a>(
         }]);
         convert_symbols_to_scanner_symbols(&mut rules, s_store);
         add_prod(prod_id.as_tok_sym(), rules, p_map, r_table, p_r_map, true);
-        add_prod_name(prod_name_lu, *val);
+        add_prod_name(
+          prod_name_lu,
+          ("tok_".to_string() + &hash_id_value_u64(val).to_string())
+            .intern(s_store),
+        );
         token_names.insert(prod_id.as_tok_sym(), *val);
       }
       sym if sym.is_term() => {
@@ -227,7 +232,7 @@ pub(crate) async fn build_compile_db<'a>(
         add_prod(prod_id.as_tok_sym(), rules, p_map, r_table, p_r_map, true);
         add_prod_name(
           prod_name_lu,
-          (sym.name(s_store) + " " + &sym.precedence().to_string())
+          ("sym_".to_string() + &hash_id_value_u64(sym).to_string())
             .intern(s_store),
         );
       }
@@ -254,7 +259,7 @@ pub(crate) async fn build_compile_db<'a>(
     .pub_prods
     .iter()
     .map(|(name, prod_id)| EntryPoint {
-      prod_id:    DBProdKey::from(*p_map.get(&prod_id.as_sym()).unwrap()),
+      prod_key:   DBProdKey::from(*p_map.get(&prod_id.as_sym()).unwrap()),
       entry_name: *name,
     })
     .collect::<Array<_>>();

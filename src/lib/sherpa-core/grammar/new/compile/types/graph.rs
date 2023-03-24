@@ -36,13 +36,14 @@ use super::item::{ItemContainer, ItemRef, ItemSet, ItemType, Items};
 
 /// Indicates the State type that generated
 /// the item
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub enum Origin {
   None,
   /// The goal production that this item or it's predecessors will reduce to
   ProdGoal(DBProdKey),
   /// The goal symbol id that this item or its predecessors will recognize
-  SymGoal(DBTokenKey),
+  TokenGoal(DBTokenKey),
   /// The goal origin item set that this item will resolve to
   Peek(u64, StateId),
   // Out of scope item that was generated from the
@@ -71,8 +72,8 @@ impl Origin {
           prod_id
         )
       }
-      Origin::SymGoal(sym_id) => {
-        format!("SymGoal[ {} {:?} ]", 0, 0)
+      Origin::TokenGoal(sym_id) => {
+        format!("TokenGoal[ {:?} ]", sym_id)
       }
       _ => format!("{:?}", self),
     }
@@ -88,7 +89,7 @@ impl Origin {
 
   pub fn get_symbol(&self, db: &ParserDatabase) -> SymbolId {
     match self {
-      Origin::SymGoal(sym_id) => db.sym(*sym_id),
+      Origin::TokenGoal(sym_id) => db.sym(*sym_id),
       _ => SymbolId::Undefined,
     }
   }
@@ -96,7 +97,8 @@ impl Origin {
 
 // Transtion Type ----------------------------------------------------
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
+#[derive(Hash, PartialEq, Eq, Clone, Copy)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub enum StateType {
   Undefined,
   Start,
@@ -149,6 +151,7 @@ impl StateType {
     matches!(self, GotoLoop | GotoPass | KernelGoto)
   }
 
+  #[cfg(debug_assertions)]
   fn debug_string(&self, db: &ParserDatabase) -> String {
     match self {
       Self::KernelCall(prod_id) => {
@@ -375,6 +378,7 @@ impl<'db> State<'db> {
     }
   }
 
+  #[cfg(debug_assertions)]
   pub fn debug_string(&self, db: &'db ParserDatabase) -> String {
     let mut string = String::new();
     string += &format!("\n\nSTATE -- [{:}] --", self.id.0);
@@ -427,7 +431,8 @@ impl<'db> State<'db> {
 
 // Graph -------------------------------------------------------------
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub enum GraphState {
   Normal,
   Peek,
@@ -437,7 +442,8 @@ pub enum GraphState {
   //BreadCrumb,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub enum GraphMode {
   /// Classic Recursive Descent Ascent with unlimited lookahead.
   Parser,
@@ -445,7 +451,7 @@ pub enum GraphMode {
   Scanner,
 }
 
-pub struct Graph<'db> {
+pub struct Graph<'follow, 'db: 'follow> {
   state_map: Map<u64, StateId>,
   states: Array<State<'db>>,
   leaf_states: OrderedSet<StateId>,
@@ -453,14 +459,14 @@ pub struct Graph<'db> {
   mode: GraphMode,
   state_name_prefix: String,
   db: &'db ParserDatabase,
-  follow: &'db super::super::FollowSets<'db>,
+  follow: &'follow super::super::FollowSets<'db>,
 }
 
-impl<'db> Graph<'db> {
+impl<'follow, 'db: 'follow> Graph<'follow, 'db> {
   pub fn new(
     db: &'db ParserDatabase,
     mode: GraphMode,
-    follow: &'db super::super::FollowSets<'db>,
+    follow: &'follow super::super::FollowSets<'db>,
   ) -> Self {
     Self {
       mode,
@@ -577,7 +583,8 @@ impl<'db> Graph<'db> {
     &self.states[0].kernel_items
   }
 
-  pub fn __debug_string__(&self) -> String {
+  #[cfg(debug_assertions)]
+  pub fn debug_string(&self) -> String {
     let mut string = String::new();
 
     for state in &self.states {
@@ -594,7 +601,7 @@ impl<'db> Graph<'db> {
   }
 }
 
-impl<'db> Index<usize> for Graph<'db> {
+impl<'follow, 'db: 'follow> Index<usize> for Graph<'follow, 'db> {
   type Output = State<'db>;
 
   fn index(&self, index: usize) -> &Self::Output {
@@ -602,7 +609,7 @@ impl<'db> Index<usize> for Graph<'db> {
   }
 }
 
-impl<'db> Index<StateId> for Graph<'db> {
+impl<'follow, 'db: 'follow> Index<StateId> for Graph<'follow, 'db> {
   type Output = State<'db>;
 
   fn index(&self, index: StateId) -> &Self::Output {
@@ -610,7 +617,7 @@ impl<'db> Index<StateId> for Graph<'db> {
   }
 }
 
-impl<'db> IndexMut<StateId> for Graph<'db> {
+impl<'follow, 'db: 'follow> IndexMut<StateId> for Graph<'follow, 'db> {
   fn index_mut(&mut self, index: StateId) -> &mut Self::Output {
     &mut self.states[index.0 as usize]
   }
@@ -618,7 +625,8 @@ impl<'db> IndexMut<StateId> for Graph<'db> {
 
 // STATE ID -------------------------------------------------------------
 
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub struct StateId(pub u32);
 
 impl Default for StateId {

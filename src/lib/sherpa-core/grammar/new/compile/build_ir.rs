@@ -1,3 +1,5 @@
+use sherpa_runtime::types::bytecode::InputType;
+
 use super::types::*;
 use crate::{
   grammar::new::types::*,
@@ -11,11 +13,11 @@ use std::collections::VecDeque;
 
 type SymbolSet = OrderedSet<SymbolId>;
 
-pub(crate) fn build_ir(
+pub(crate) fn build_ir<'db: 'follow, 'follow>(
   j: &mut Journal,
-  graph: &Graph,
-  entry_name: &str,
-) -> SherpaResult<Array<Box<ParseState>>> {
+  graph: &Graph<'follow, 'db>,
+  entry_name: IString,
+) -> SherpaResult<Array<Box<ParseState<'db>>>> {
   let leaf_states = graph.get_leaf_states();
   let mut queue = VecDeque::from_iter(leaf_states.iter().cloned());
   let mut links: OrderedMap<StateId, Set<&State>> = OrderedMap::new();
@@ -59,11 +61,11 @@ pub(crate) fn build_ir(
       output.entry(id).or_insert(ir_state);
     }
   }
-
+  #[cfg(debug_assertions)]
   debug_assert!(
     !output.is_empty(),
     "This graph did not yield any states! \n{}",
-    graph.__debug_string__()
+    graph.debug_string()
   );
 
   j.report_mut().ok_or_convert_to_error(output.into_values().collect())
@@ -75,39 +77,12 @@ enum S_TYPE {
   SYMBOL_SUCCESSORS,
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
-#[repr(u32)]
-pub enum InputType {
-  Production = 0,
-  Token,
-  EndOfFile,
-  Byte,
-  Codepoint,
-  Class,
-  Default,
-}
-
-impl InputType {
-  fn type_name(&self) -> &'static str {
-    use InputType::*;
-    match self {
-      Production => "PRODUCTION",
-      Token => "TOKEN",
-      EndOfFile => "ENDOFFILE",
-      Byte => "BYTE",
-      Codepoint => "CODEPOINT",
-      Class => "CLASS",
-      Default => "DEFAULT",
-    }
-  }
-}
-
-fn convert_goto_state_to_ir(
+fn convert_goto_state_to_ir<'follow, 'db>(
   j: &mut Journal,
-  graph: &Graph,
+  graph: &Graph<'follow, 'db>,
   state: &State,
   successors: &Set<&State>,
-) -> SherpaResult<(StateId, Box<ParseState>)> {
+) -> SherpaResult<(StateId, Box<ParseState<'db>>)> {
   let db = graph.get_db();
   let successors = successors.iter().filter(|s| {
     matches!(
@@ -118,7 +93,7 @@ fn convert_goto_state_to_ir(
 
   let mut w = CodeWriter::new(vec![]);
 
-  (&mut w + "match: PRODUCTION {").increase_indent();
+  (&mut w + "match: " + InputType::PRODUCTION_STR + " {").increase_indent();
 
   for (bc_id, (_prod_name, s_name, transition_type)) in successors
     .into_iter()
@@ -128,11 +103,13 @@ fn convert_goto_state_to_ir(
         let prod_name = db.prod_name(index);
         (prod_id, (prod_name, create_ir_state_name(graph, s), s.get_type()))
       } else {
+        #[cfg(debug_assertions)]
         panic!(
           "Invalid production type: {:?}  {}",
           s.get_symbol(),
           s.get_symbol().debug_string(db)
-        )
+        );
+        panic!()
       }
     })
     .collect::<OrderedMap<_, _>>()
@@ -156,23 +133,23 @@ fn convert_goto_state_to_ir(
 
   let mut goto = Box::new(create_ir_state(graph, w, state)?);
 
-  goto.name =
-    format!("{}", create_ir_state_name(graph, state)).intern(db.string_store());
+  goto.name = create_ir_state_name(graph, state).intern(db.string_store());
 
   SherpaResult::Ok((state.get_id(), goto))
 }
 
-fn convert_state_to_ir(
+fn convert_state_to_ir<'follow, 'db>(
   j: &mut Journal,
-  graph: &Graph,
+  graph: &Graph<'follow, 'db>,
   state: &State,
   successors: &Set<&State>,
-  entry_name: &str,
+  entry_name: IString,
   goto_state_id: Option<IString>,
-) -> SherpaResult<Vec<(StateId, Box<ParseState>)>> {
+) -> SherpaResult<Vec<(StateId, Box<ParseState<'db>>)>> {
   let is_scanner = graph.is_scan();
   let state_id = state.get_id();
   let db: &ParserDatabase = graph.get_db();
+  let s_store = db.string_store();
 
   let successor_groups =
     hash_group_btreemap(successors.clone(), |_, s| match s.get_type() {
@@ -190,16 +167,13 @@ fn convert_state_to_ir(
 
     w.indent();
 
+    add_tok_expr(successors, &mut w, db);
+
     let mut classes = classify_successors(successors);
 
-    let mut tokens = OrderedSet::new();
-
-    build_branch(&mut w, graph, &mut classes, goto_state_id, &mut tokens);
+    add_match_expr(&mut w, graph, &mut classes, goto_state_id);
 
     let mut state = Box::new(create_ir_state(graph, w, state)?);
-    if !tokens.is_empty() {
-      state.tokens = Some(tokens);
-    }
 
     Some(state)
   } else {
@@ -220,9 +194,10 @@ fn convert_state_to_ir(
     w.insert_newline()?;
 
     match state.get_type() {
-      StateType::AssignAndFollow(sym_id) | StateType::AssignToken(sym_id) => {
-        let bytecode_id = sym_id.to_index();
-        w.write(&format!("set-tok {bytecode_id}"))?;
+      StateType::AssignAndFollow(tok_id) | StateType::AssignToken(tok_id) => {
+        let bytecode_id = tok_id.to_index();
+
+        (&mut w) + "set-tok " + db.tok_id(tok_id).to_string();
       }
       StateType::Complete => w.write("pass")?,
 
@@ -235,14 +210,13 @@ fn convert_state_to_ir(
     if let Some(mut base_state) = base_state {
       if state_id.is_root() {
         base_state.name =
-          (entry_name.to_string() + "_then").intern(db.string_store());
+          (entry_name.to_string(s_store) + "_then").intern(s_store);
       } else {
-        base_state.name = (base_state.name.to_string(db.string_store())
-          + "_then")
-          .intern(db.string_store());
+        base_state.name =
+          (base_state.name.to_string(s_store) + "_then").intern(s_store);
       }
 
-      w.w(" then goto ")?.w(&base_state.name.to_string(db.string_store()))?;
+      w.w(" then goto ")?.w(&base_state.name.to_string(s_store))?;
 
       out.push((state_id.to_post_reduce(), base_state));
     }
@@ -250,17 +224,17 @@ fn convert_state_to_ir(
     let mut ir_state = create_ir_state(graph, w, state)?;
 
     if state_id.is_root() {
-      ir_state.name = entry_name.intern(db.string_store());
+      ir_state.name = entry_name;
     }
 
     out.push((state_id, Box::new(ir_state)));
   } else if let Some(mut base_state) = base_state {
     if state_id.is_root() {
-      base_state.name = entry_name.intern(db.string_store());
+      base_state.name = entry_name;
     }
     out.push((state_id, base_state));
   }
-
+  #[cfg(debug_assertions)]
   debug_assert!(
     !out.is_empty()
       || matches!(
@@ -273,10 +247,39 @@ fn convert_state_to_ir(
       ),
     "Graph state failed to generate ir states:\n{} \nGraph\n{}",
     state.debug_string(db),
-    graph.__debug_string__()
+    graph.debug_string()
   );
 
   SherpaResult::Ok(out)
+}
+
+fn add_tok_expr(
+  successors: &std::collections::HashSet<&State>,
+  w: &mut CodeWriter<Vec<u8>>,
+  db: &ParserDatabase,
+) {
+  let mut set_token = successors
+    .iter()
+    .filter(|s| {
+      matches!(
+        s.get_type(),
+        StateType::AssignToken(..) | StateType::AssignAndFollow(..)
+      )
+    })
+    .collect::<Array<_>>();
+
+  debug_assert!(set_token.len() <= 1);
+
+  if let Some(set_tok) = set_token.pop() {
+    match set_tok.get_type() {
+      StateType::AssignAndFollow(tok_id) | StateType::AssignToken(tok_id) => {
+        let bytecode_id = tok_id.to_index();
+
+        (w + "set-tok " + db.tok_id(tok_id).to_string()).prime_join(" then ");
+      }
+      _ => unreachable!(),
+    }
+  }
 }
 
 fn classify_successors<'graph, 'db>(
@@ -301,12 +304,11 @@ fn classify_successors<'graph, 'db>(
   }))
 }
 
-fn build_branch(
+fn add_match_expr<'follow, 'db>(
   mut w: &mut CodeWriter<Vec<u8>>,
-  graph: &Graph,
+  graph: &Graph<'follow, 'db>,
   branches: &mut VecDeque<(InputType, Set<&State>)>,
   goto_state_id: Option<IString>,
-  tokens: &mut OrderedSet<DBTokenData>,
 ) {
   let is_scanner = graph.is_scan();
   let db = graph.get_db();
@@ -315,10 +317,13 @@ fn build_branch(
     if matches!(input_type, InputType::Default) {
       let successor = successors.into_iter().next().unwrap();
 
-      w =
-        w + build_body(successor, graph, goto_state_id, tokens).join(" then ");
+      let string = build_body(successor, graph, goto_state_id).join(" then ");
+
+      if !string.is_empty() {
+        w + string;
+      }
     } else {
-      w = (w + "\nmatch: " + input_type.type_name() + " {").indent();
+      w = (w + "\nmatch: " + input_type.as_str() + " {").indent();
 
       for s in successors {
         let sym = s.get_symbol();
@@ -330,14 +335,13 @@ fn build_branch(
 
         let s_type = s.get_type();
         w = w + "\n\n( " + sym.to_state_val().to_string() + " ){ ";
-        w =
-          w + build_body(s, graph, goto_state_id, tokens).join(" then ") + " }";
+        w = w + build_body(s, graph, goto_state_id).join(" then ") + " }";
       }
 
       if !branches.is_empty() {
-        w = w + "\n\ndefault { ";
-        build_branch(w, graph, branches, goto_state_id, tokens);
-        w = w + " }";
+        w = (w + "\n\ndefault {").indent();
+        add_match_expr(w, graph, branches, goto_state_id);
+        w = w.dedent() + "\n}";
       }
 
       w.dedent() + "\n}";
@@ -345,11 +349,10 @@ fn build_branch(
   }
 }
 
-fn build_body(
+fn build_body<'follow, 'db>(
   successor: &State,
-  graph: &Graph,
+  graph: &Graph<'follow, 'db>,
   goto_state_id: Option<IString>,
-  tokens: &mut OrderedSet<DBTokenData>,
 ) -> Vec<String> {
   let is_scanner = graph.is_scan();
   let mut body_string = Array::new();
@@ -392,19 +395,7 @@ fn build_body(
       body_string.push(create_rule_reduction(rule_id, db));
       false
     }
-    StateType::AssignAndFollow(sym_id) | StateType::AssignToken(sym_id) => {
-      let tok_id = db.tok_id(sym_id);
-
-      let string: String = "set-tok ".to_string() + &tok_id.to_string();
-
-      if matches!(s_type, StateType::AssignAndFollow(..)) {
-        body_string.push(string);
-        true
-      } else {
-        body_string.push(string);
-        false
-      }
-    }
+    StateType::AssignToken(..) => false,
     StateType::Follow => true,
     StateType::Complete => {
       body_string.push("pass".into());
@@ -449,10 +440,13 @@ fn create_rule_reduction(rule_id: DBRuleKey, db: &ParserDatabase) -> String {
   let prod = db.rule_prod(rule_id);
   let prod_id: usize = prod.into();
   let rule_id: usize = rule_id.into();
-  format!(
-    "reduce {} symbols to {prod_id} with rule {rule_id}",
-    rule.symbols.len(),
-  )
+  let mut w = CodeWriter::new(vec![]);
+
+  &mut w + "reduce " + rule.symbols.len().to_string();
+  &mut w + " symbols to " + prod_id.to_string();
+  &mut w + " with rule " + rule_id.to_string();
+
+  w.to_string()
 }
 
 fn get_resolved_name(
@@ -468,27 +462,25 @@ fn get_resolved_name(
 }
 
 pub(super) fn create_ir_state_name(graph: &Graph, state: &State) -> String {
-  format!(
-    "{}_{:0>6X}",
-    graph.is_scan().then_some("scanner").unwrap_or("parser"),
-    state.get_hash(),
-  )
+  graph.is_scan().then_some("s").unwrap_or("p").to_string()
+    + "_"
+    + &state.get_hash().to_string()
 }
 
-pub(super) fn create_ir_state(
-  graph: &Graph,
+pub(super) fn create_ir_state<'follow, 'db>(
+  graph: &Graph<'follow, 'db>,
   mut w: CodeWriter<Vec<u8>>,
   state: &State,
-) -> SherpaResult<ParseState> {
+) -> SherpaResult<ParseState<'db>> {
   let db = graph.get_db();
 
   let ir_state = ParseState {
-    comment: format!("{}", state.debug_string(db),),
-    code:    unsafe { String::from_utf8_unchecked(w.into_output()) },
-    name:    create_ir_state_name(graph, state)
+    comment:  Default::default(),
+    code:     w.to_string(),
+    name:     create_ir_state_name(graph, state)
       .intern(graph.get_db().string_store()),
-    ast:     SherpaResult::None,
-    tokens:  None,
+    ast:      SherpaResult::None,
+    scanners: None,
   };
 
   SherpaResult::Ok(ir_state)

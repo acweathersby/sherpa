@@ -12,6 +12,7 @@ pub struct CodeWriter<W: Write> {
   output:        W,
   indent:        usize,
   indent_spaces: usize,
+  join:          Option<&'static str>,
 }
 
 pub type StringBuffer = CodeWriter<Vec<u8>>;
@@ -54,7 +55,14 @@ impl<W: Write> CodeWriter<W> {
       output:        B::default(),
       indent:        self.indent,
       indent_spaces: self.indent_spaces,
+      join:          None,
     }
+  }
+}
+
+impl CodeWriter<Vec<u8>> {
+  pub fn to_string(self) -> String {
+    String::from_utf8(self.into_output()).unwrap_or_default()
   }
 }
 
@@ -63,6 +71,24 @@ impl<W: Write> CodeWriter<W> {
     let indent = " ".repeat(self.indent * self.indent_spaces);
 
     let mut encountered_first = false;
+
+    if let Some(join) = self.join {
+      if !string.trim().is_empty() {
+        self.join = None;
+        for section in join.split('\n') {
+          if encountered_first {
+            self.output.write(&[b'\n'])?;
+            self.output.write(indent.as_bytes())?;
+          }
+
+          encountered_first = true;
+
+          if let Err(err) = self.output.write(section.as_bytes()) {
+            return Err(err);
+          }
+        }
+      }
+    }
 
     for section in string.split('\n') {
       if encountered_first {
@@ -79,17 +105,26 @@ impl<W: Write> CodeWriter<W> {
     Ok(())
   }
 
+  pub fn prime_join(&mut self, join: &'static str) {
+    self.join = Some(join)
+  }
+
   /// Sets the number of spaces to use for indentation
   pub fn indent_spaces(&mut self, count: usize) {
     self.indent_spaces = count;
   }
 
   pub fn default() -> StringBuffer {
-    StringBuffer { output: vec![], indent: 0, indent_spaces: 2 }
+    StringBuffer {
+      output:        vec![],
+      indent:        0,
+      indent_spaces: 2,
+      join:          None,
+    }
   }
 
   pub fn new(output: W) -> Self {
-    CodeWriter { output, indent: 0, indent_spaces: 2 }
+    CodeWriter { output, indent: 0, indent_spaces: 2, join: None }
   }
 
   pub fn indent(&mut self) -> &mut Self {

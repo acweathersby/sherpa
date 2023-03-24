@@ -98,15 +98,7 @@ impl Debug for IString {
         s.finish()
       } else {
         let mut s = f.debug_tuple("IString::Small");
-        // This is a small string. The upper 7 bits comprise the length of the
-        // string.
-        let len = (*val_bytes)[7];
-        let data = unsafe {
-          let data =
-            std::slice::from_raw_parts(&((*val_bytes)[0]), len as usize);
-          std::str::from_utf8_unchecked(data)
-        };
-        s.field(&data);
+        s.field(&self.small_to_str());
         s.finish()
       }
     }
@@ -114,8 +106,23 @@ impl Debug for IString {
 }
 
 impl IString {
+  pub(crate) fn from_u64(val: u64) -> Self {
+    Self(val)
+  }
+
   pub fn as_u64(&self) -> u64 {
     self.0
+  }
+
+  pub fn is_small(&self) -> bool {
+    unsafe {
+      let val_bytes = self as *const IString as *const [u8; 8];
+      (*val_bytes)[7] & 0x80 == 0
+    }
+  }
+
+  pub fn is_large(&self) -> bool {
+    !self.is_small()
   }
 
   pub fn to_string(&self, store: &IStringStore) -> String {
@@ -126,33 +133,38 @@ impl IString {
   /// token represents.
   pub fn to_str<'a>(&'a self, store: &'a IStringStore) -> GuardedStr<'a> {
     unsafe {
-      let val_bytes = self as *const IString as *const [u8; 8];
-      if (*val_bytes)[7] & 0x08 != 0 {
-        // This is an interned string.
+      if self.is_large() {
         store.get_str(*self).unwrap()
       } else {
-        // This is a small string. The upper 7 bits comprise the length of the
-        // string.
-        let len = (*val_bytes)[7];
-        let data = unsafe {
-          std::slice::from_raw_parts(&((*val_bytes)[0]), len as usize)
-        };
-        GuardedStr(
-          *self,
-          Some(unsafe { std::str::from_utf8_unchecked(data) }),
-          None,
-        )
+        GuardedStr(*self, Some(unsafe { self.small_to_str() }), None)
       }
     }
   }
 
+  unsafe fn small_to_str<'a>(&'a self) -> &'a str {
+    let val_bytes = self as *const IString as *const [u8; 8];
+    // This is a small string. The upper 7 bits comprise the length of the
+    // string.
+    let mut len = 8;
+
+    for i in 0..8 {
+      if ((*val_bytes)[i] == 0) {
+        len = i;
+        break;
+      }
+    }
+
+    let data = std::slice::from_raw_parts(&((*val_bytes)[0]), len as usize);
+    std::str::from_utf8_unchecked(data)
+  }
+
   fn from_bytes(string: &[u8]) -> Self {
     let byte_len = string.len();
-    if byte_len > 7 {
+    if byte_len > 8 || (byte_len == 8 && (string[7] & 0x80) > 0) {
       let mut val = hash_id_value_u64(string);
       unsafe {
         let mut val_bytes = &mut val as *mut u64 as *mut [u8; 8];
-        (*val_bytes)[7] |= 0x08;
+        (*val_bytes)[7] |= 0x80;
       }
       Self(val)
     } else {
@@ -160,9 +172,11 @@ impl IString {
       let mut val = 0u64;
       unsafe {
         let mut val_bytes = &mut val as *mut u64 as *mut [u8; 8];
-        (*val_bytes)[7] = byte_len as u8;
         for (off, byte) in bytes.iter().enumerate() {
           (*val_bytes)[off] = *byte;
+        }
+        if byte_len <= 7 {
+          (*val_bytes)[byte_len] = 0;
         }
       }
       Self(val)
@@ -171,13 +185,13 @@ impl IString {
 }
 
 pub trait CachedString {
-  /// Get the SherpaString representation without interning
-  /// the string. This can useful when needing to compare a
-  /// SherpaString with a standard string type.
-  fn proxy(&self) -> IString {
+  /// Get the IString representation without interning
+  /// the string. This can be useful when needing to compare an already
+  /// interned IString with a standard string type.
+  fn to_token(&self) -> IString {
     IString::from_bytes(self.get_bytes())
   }
-  /// Returns a SherpaString after interning the string within
+  /// Returns a IString after interning the string within
   /// the given store. Only `LargeString` sub-types are interned.
   fn intern(&self, store: &IStringStore) -> IString {
     let bytes = self.get_bytes();
@@ -267,6 +281,8 @@ fn interning_small_string() {
   assert_eq!(tok.to_string(&store).as_str(), "test");
   assert_eq!("B".intern(&store).to_string(&store), "B");
   assert_eq!("B".intern(&store).to_str(&store).as_str(), "B");
+  assert!("function".intern(&store).is_small());
+  assert_eq!("function".intern(&store).to_str(&store).as_str(), "function");
 }
 
 #[test]
@@ -334,6 +350,8 @@ Cyparisse multarum!";
   let tokA = large_strA.intern(&store);
   let tokB = large_strB.intern(&store);
 
+  assert!(tokA.is_large());
+  assert!(tokB.is_large());
   assert_eq!(tokA.to_string(&store), large_strA);
   assert_eq!(tokB.to_string(&store), large_strB);
   assert_ne!(tokA.to_string(&store), large_strB);

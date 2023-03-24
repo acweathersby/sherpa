@@ -19,13 +19,13 @@ use core::panic;
 use sherpa_runtime::{types::BlameColor, utf8::lookup_table::CodePointClass};
 use std::{collections::VecDeque, ops::Index, path::PathBuf, sync::Arc};
 
-pub(super) fn build_graph<'db>(
+pub(super) fn build_graph<'follow, 'db: 'follow>(
   j: &mut Journal,
   mode: GraphMode,
   kernel_items: Items<'db>,
   db: &'db ParserDatabase,
-  follow: &'db FollowSets<'db>,
-) -> SherpaResult<Graph<'db>> {
+  follow: &'follow FollowSets<'db>,
+) -> SherpaResult<Graph<'follow, 'db>> {
   let mut graph = Graph::new(db, mode, follow);
 
   let root =
@@ -64,9 +64,9 @@ fn handle_kernel_items(
   SherpaResult::Ok(())
 }
 
-fn handle_incomplete_items<'db>(
+fn handle_incomplete_items<'db, 'follow>(
   _j: &mut Journal,
-  graph: &mut Graph<'db>,
+  graph: &mut Graph<'follow, 'db>,
   parent: StateId,
   graph_state: GraphState,
   groups: OrderedMap<SymbolId, ItemSet<'db>>,
@@ -168,9 +168,9 @@ fn handle_incomplete_items<'db>(
   SherpaResult::Ok(out_items)
 }
 
-fn handle_completed_items<'db>(
+fn handle_completed_items<'db, 'follow>(
   j: &mut Journal,
-  graph: &mut Graph<'db>,
+  graph: &mut Graph<'follow, 'db>,
   parent: StateId,
   graph_state: GraphState,
   groups: &mut OrderedMap<SymbolId, ItemSet<'db>>,
@@ -221,9 +221,9 @@ fn handle_completed_items<'db>(
   SherpaResult::Ok(())
 }
 
-fn handle_goto<'db>(
+fn handle_goto<'db, 'follow>(
   j: &mut Journal,
-  graph: &mut Graph<'db>,
+  graph: &mut Graph<'follow, 'db>,
   parent: StateId,
   out_items: ItemSet<'db>,
 ) -> SherpaResult<()> {
@@ -367,8 +367,8 @@ fn handle_goto<'db>(
   SherpaResult::Ok(())
 }
 
-fn create_peek<'a, 'db: 'a, T: ItemContainerIter<'a, 'db>>(
-  graph: &mut Graph<'db>,
+fn create_peek<'a, 'db: 'a, 'follow, T: ItemContainerIter<'a, 'db>>(
+  graph: &mut Graph<'follow, 'db>,
   sym: SymbolId,
   parent: StateId,
   mut incomplete_items: T,
@@ -445,8 +445,8 @@ fn create_peek<'a, 'db: 'a, T: ItemContainerIter<'a, 'db>>(
   graph.enqueue_pending_state(GraphState::Peek, state)
 }
 
-fn get_kernel_items_from_peek<'db>(
-  graph: &Graph<'db>,
+fn get_kernel_items_from_peek<'db, 'follow>(
+  graph: &Graph<'follow, 'db>,
   peek_item: &ItemRef<'db>,
 ) -> Items<'db> {
   let Origin::Peek(peek_index, peek_origin) = peek_item.origin else {
@@ -460,9 +460,9 @@ fn all_items_come_from_same_production_call(group: &Items) -> bool {
   group.iter().all(|i| i.at_start())
     && group.iter().map(|i| i.prod_index()).collect::<Set<_>>().len() == 1
 }
-fn create_call<'db>(
+fn create_call<'db, 'follow>(
   group: &Items<'db>,
-  graph: &mut Graph<'db>,
+  graph: &mut Graph<'follow, 'db>,
   graph_state: GraphState,
   parent: StateId,
   sym: SymbolId,
@@ -513,9 +513,9 @@ fn create_call<'db>(
   None
 }
 
-fn handle_completed_groups<'db>(
+fn handle_completed_groups<'db, 'follow>(
   j: &mut Journal,
-  graph: &mut Graph<'db>,
+  graph: &mut Graph<'follow, 'db>,
   groups: &mut OrderedMap<SymbolId, ItemSet<'db>>,
   par: StateId,
   g_state: GraphState,
@@ -672,6 +672,7 @@ fn handle_completed_groups<'db>(
           .iter()
           .flat_map(|fp| get_kernel_items_from_peek(graph, &fp.completed))
           .collect::<ItemSet>();
+        #[cfg(debug_assertions)]
         unimplemented!(
           "\nCompleted Peek Items On Symbol:[{}]\n \n\nAcceptItems\n{}\n\nPeekItems:\n{}\n\nKernelItems:\n{}\n\nParant State\n{}\n\nGraph:\n{}",
 
@@ -680,8 +681,9 @@ fn handle_completed_groups<'db>(
           cmpl.to_debug_string("\n"),
           kernel_items.to_debug_string("\n"),
           graph[par].debug_string(graph.get_db()),
-          graph.__debug_string__()
-        )
+          graph.debug_string()
+        );
+        unimplemented!()
       }
     }
     (_, Some(group), GraphState::Peek) => {
@@ -691,31 +693,34 @@ fn handle_completed_groups<'db>(
       if combined.iter().all_items_are_from_same_peek_origin() {
         resolve_peek(graph, combined.iter(), sym, par);
       } else {
+        #[cfg(debug_assertions)]
         todo!(
           "Roll the follow states into the group and resubmit to incomplete handler function.\nincomplete:\n{}\ncomplete:\n{}\nfollow:\n{}\n \n {}",
           group.to_debug_string("\n"),
           follow_pairs.iter().to_completed_vec().to_debug_string( "\n"),
           follow_pairs.iter().to_follow_vec().to_debug_string("\n"),
-          graph.__debug_string__()
-
+          graph.debug_string()
         );
+        todo!()
       }
     }
     (len, collide, graph_state) => {
+      #[cfg(debug_assertions)]
       unimplemented!(
         "\nNot Implemented: {graph_state:?} len:{len} collide:{collide:?} sym:{} \n[ {} ]\n\n{}",
         sym.debug_string(db),
         cmpl.to_debug_string( "\n"),
-        graph.__debug_string__()
-      )
+        graph.debug_string()
+      );
+      unimplemented!()
     }
   }
 
   SherpaResult::Ok(())
 }
-fn resolve_conflicting_symbols<'db>(
+fn resolve_conflicting_symbols<'db, 'follow>(
   j: &mut Journal,
-  graph: &mut Graph<'db>,
+  graph: &mut Graph<'follow, 'db>,
   par: StateId,
   sym: SymbolId,
   completed_items: ItemSet<'db>,
@@ -726,7 +731,7 @@ fn resolve_conflicting_symbols<'db>(
     ExclusiveDefined,
     Defined,
     Production,
-    Generic,
+    Class,
   }
 
   // Map items according to their symbols
@@ -735,8 +740,8 @@ fn resolve_conflicting_symbols<'db>(
   });
   let priority_groups =
     hash_group_btreemap(symbol_groups, |_, (sym, _)| match sym {
-      SymbolId::DBToken { .. } => Defined,
-      _ => Generic,
+      sym if sym.is_class() => Class,
+      _ => Defined,
     });
   use SymbolPriorities::*;
   let completed: Option<&ItemSet>;
@@ -753,7 +758,7 @@ fn resolve_conflicting_symbols<'db>(
           completed = Some(groups.values().next().unwrap());
         }
       }
-      Generic => {
+      Class => {
         if groups.len() > 1 {
           panic!(
             "Found {} conflicting Generic symbols. Grammar is ambiguous",
@@ -803,9 +808,9 @@ fn peek_items_are_from_goto_state(cmpl: &Items, graph: &mut Graph) -> bool {
   }
 }
 
-fn create_out_of_scope_complete_state<'db>(
+fn create_out_of_scope_complete_state<'db, 'follow>(
   out_of_scope: Items<'db>,
-  graph: &mut Graph<'db>,
+  graph: &mut Graph<'follow, 'db>,
   sym: &SymbolId,
   parent: StateId,
   is_scan: bool,
@@ -819,7 +824,7 @@ fn create_out_of_scope_complete_state<'db>(
   graph.add_leaf_state(state);
 }
 
-fn merge_occluding<'db>(
+fn merge_occluding<'db, 'follow>(
   j: &mut Journal,
   is_scan: bool,
   from_groups: OrderedMap<SymbolId, ItemSet<'db>>,
@@ -838,7 +843,7 @@ fn merge_occluding<'db>(
   }
 }
 
-fn get_set_of_occluding_items<'db>(
+fn get_set_of_occluding_items<'db, 'follow>(
   j: &mut Journal,
   into_sym: &SymbolId,
   into_group: &ItemSet<'db>,
@@ -883,8 +888,8 @@ fn get_set_of_occluding_items<'db>(
     .collect::<ItemSet>()
 }
 
-fn create_transition_groups<'db>(
-  graph: &mut Graph<'db>,
+fn create_transition_groups<'db, 'follow>(
+  graph: &mut Graph<'follow, 'db>,
   parent: StateId,
 ) -> SherpaResult<OrderedMap<SymbolId, ItemSet<'db>>> {
   let closure = graph[parent].get_closure_ref()?;
@@ -914,9 +919,14 @@ fn create_transition_groups<'db>(
   SherpaResult::Ok(groups)
 }
 
-fn get_completed_item_artifacts<'a, 'db: 'a, T: ItemContainerIter<'a, 'db>>(
+fn get_completed_item_artifacts<
+  'a,
+  'db: 'a,
+  'follow,
+  T: ItemContainerIter<'a, 'db>,
+>(
   j: &mut Journal,
-  graph: &mut Graph<'db>,
+  graph: &mut Graph<'follow, 'db>,
   par: StateId,
   completed: T,
 ) -> SherpaResult<CompletedItemArtifacts<'db>> {
@@ -971,9 +981,9 @@ fn get_completed_item_artifacts<'a, 'db: 'a, T: ItemContainerIter<'a, 'db>>(
 
 /// Returns all incomplete items that follow the given completed item,
 /// and all completed items that were encountered, including the initial item.
-pub(super) fn get_follow<'db>(
+pub(super) fn get_follow<'db, 'follow>(
   _j: &mut Journal,
-  graph: &mut Graph<'db>,
+  graph: &mut Graph<'follow, 'db>,
   item: ItemRef<'db>,
 ) -> SherpaResult<(Items<'db>, Items<'db>)> {
   if !item.is_complete() {
@@ -1028,15 +1038,15 @@ pub(super) fn get_follow<'db>(
   SherpaResult::Ok((follow.to_vec(), completed.to_vec()))
 }
 
-fn get_goal_items_from_completed<'db>(
+fn get_goal_items_from_completed<'db, 'follow>(
   items: &Items<'db>,
-  graph: &Graph<'db>,
+  graph: &Graph<'follow, 'db>,
 ) -> ItemSet<'db> {
   items.iter().filter(|i| graph.item_is_goal(*i)).cloned().collect()
 }
 
-fn get_kernel_items_from_peek_item<'db>(
-  graph: &Graph<'db>,
+fn get_kernel_items_from_peek_item<'db, 'follow>(
+  graph: &Graph<'follow, 'db>,
   peek_item: &ItemRef<'db>,
 ) -> Items<'db> {
   let Origin::Peek(peek_index, peek_origin) = peek_item.origin else {
@@ -1046,8 +1056,8 @@ fn get_kernel_items_from_peek_item<'db>(
   graph[peek_origin].get_resolve_items(peek_index)
 }
 
-fn resolve_peek<'a, 'db: 'a, T: ItemContainerIter<'a, 'db>>(
-  graph: &mut Graph<'db>,
+fn resolve_peek<'a, 'db: 'a, 'follow, T: ItemContainerIter<'a, 'db>>(
+  graph: &mut Graph<'follow, 'db>,
   mut completed: T,
   sym: SymbolId,
   par: StateId,
@@ -1077,9 +1087,9 @@ fn symbols_occlude(
   false
 }
 
-fn handle_completed_item<'db>(
+fn handle_completed_item<'db, 'follow>(
   j: &mut Journal,
-  graph: &mut Graph<'db>,
+  graph: &mut Graph<'follow, 'db>,
   (completed_item, completed_items): (ItemRef<'db>, Items<'db>),
   parent: StateId,
   sym: SymbolId,
@@ -1119,10 +1129,10 @@ fn handle_completed_item<'db>(
       let state = graph.create_state(
         sym,
         match (is_continue, goals.first().map(|d| d.origin)) {
-          (true, Some(Origin::SymGoal(sym_id))) => {
+          (true, Some(Origin::TokenGoal(sym_id))) => {
             StateType::AssignAndFollow(sym_id)
           }
-          (false, Some(Origin::SymGoal(sym_id))) => {
+          (false, Some(Origin::TokenGoal(sym_id))) => {
             StateType::AssignToken(sym_id)
           }
           (true, _) => StateType::Follow,
@@ -1195,12 +1205,12 @@ fn create_reduce_reduce_error(
 
   SherpaResult::Ok(())
 }
-fn get_goal_items<'db>(
-  graph: &'db Graph<'db>,
+fn get_goal_items<'db, 'follow>(
+  graph: &'db Graph<'follow, 'db>,
   item: &ItemRef<'db>,
 ) -> Items<'db> {
   match item.origin {
-    Origin::SymGoal(_) | Origin::ProdGoal(_) => {
+    Origin::TokenGoal(_) | Origin::ProdGoal(_) => {
       vec![graph[0].kernel_items_ref().clone().to_vec()[item.goal as usize]]
     }
     Origin::Peek(..) => get_kernel_items_from_peek_item(graph, item)

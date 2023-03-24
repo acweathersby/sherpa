@@ -596,6 +596,7 @@ fn get_input_value<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
 
       ctx.tok_id as u32
     }
+    _ => unreachable!(),
   }
 }
 
@@ -637,6 +638,7 @@ fn emit_debug_value<R: ByteReader + MutByteReader + UTF8Reader, M>(
         string: ctx.get_str(),
       }),
       InputType::EndOfFile => debug(&DebugEvent::EndOfFile),
+      _ => unreachable!(),
     };
   }
 }

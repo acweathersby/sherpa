@@ -17,7 +17,7 @@ pub struct DBRule {
   pub is_scanner: bool,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct DBTokenData {
   /// The symbol type and precedence.
@@ -31,7 +31,7 @@ pub struct DBTokenData {
 #[derive(Clone, Copy)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct EntryPoint {
-  pub prod_id:    DBProdKey,
+  pub prod_key:   DBProdKey,
   pub entry_name: IString,
 }
 
@@ -88,6 +88,11 @@ impl ParserDatabase {
     }
   }
 
+  /// Returns an array [DBProdKey]s of the entry point productions.
+  pub fn entry_prod_keys(&self) -> Array<DBProdKey> {
+    self.entry_points.iter().map(|k| k.prod_key).collect()
+  }
+
   /// Returns the number of productions stored in the DB
   pub fn prod_len(&self) -> usize {
     self.prod_syms.len()
@@ -126,9 +131,14 @@ impl ParserDatabase {
     self.tokens.get(key.0 as usize).map(|s| s.tok_id).unwrap_or_default()
   }
 
+  /// Given an [DBSymKey] returns the token identifier representing the symbol,
+  pub fn tok_data(&self, key: DBTokenKey) -> &DBTokenData {
+    self.tokens.get(key.0 as usize).as_ref().unwrap()
+  }
+
   /// Given an [DBSymKey] returns the SymbolId representing the scanner
   /// production for the symbol, or None
-  pub fn sym_production(&self, key: DBTokenKey) -> Option<DBProdKey> {
+  pub fn tok_prod(&self, key: DBTokenKey) -> Option<DBProdKey> {
     self.tokens.get(key.0 as usize).map(|s| s.prod_id)
   }
 

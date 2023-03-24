@@ -188,6 +188,7 @@ fn load_from_path(
   grammar_source_path: PathBuf,
   grammar_cloud: &GrammarSoup,
 ) -> SherpaResult<GrammarData> {
+  dbg!(&grammar_source_path);
   match std::fs::read_to_string(&grammar_source_path) {
     Ok(source) => {
       let grammar_source = std::fs::read_to_string(&grammar_source_path)?;
@@ -217,8 +218,6 @@ fn load_grammar_from_str() -> SherpaResult<()> {
     .join("../../../test/grammars/load.sg")
     .canonicalize()
     .unwrap();
-
-  //let grammar_source_path = PathBuf::from("/test.sg");
 
   let mut j = Journal::new(None);
   j.set_active_report("test", ReportType::Any);

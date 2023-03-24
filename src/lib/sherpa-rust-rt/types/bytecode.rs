@@ -512,7 +512,7 @@ pub const TOKEN_ASSIGN_FLAG: u32 = 0x04000000;
 
 pub const END_OF_INPUT_TOKEN_ID: u32 = 0x1;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 #[repr(u32)]
 pub enum InputType {
   Production = 0,
@@ -521,18 +521,33 @@ pub enum InputType {
   Codepoint,
   Byte,
   EndOfFile,
+  Default,
+}
+
+impl InputType {
+  pub const BYTE_STR: &'static str = "_BYTE_";
+  pub const CLASS_STR: &'static str = "_CLASS_";
+  pub const CODEPOINT_STR: &'static str = "_CODEPOINT_";
+  pub const END_OF_FILE_STR: &'static str = "_EOF_";
+  pub const PRODUCTION_STR: &'static str = "_PRODUCTION_";
+  pub const TOKEN_STR: &'static str = "_TOKEN_";
+
+  pub fn as_str(&self) -> &'static str {
+    match self {
+      Self::Production => InputType::PRODUCTION_STR,
+      Self::Token => InputType::TOKEN_STR,
+      Self::Class => InputType::CLASS_STR,
+      Self::Codepoint => InputType::CODEPOINT_STR,
+      Self::Byte => InputType::BYTE_STR,
+      Self::EndOfFile => InputType::END_OF_FILE_STR,
+      Self::Default => "",
+    }
+  }
 }
 
 impl Display for InputType {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    match self {
-      Self::Production => f.write_str("PRODUCTION"),
-      Self::Token => f.write_str("TOKEN"),
-      Self::Class => f.write_str("CLASS"),
-      Self::Codepoint => f.write_str("CODEPOINT"),
-      Self::Byte => f.write_str("BYTE"),
-      Self::EndOfFile => f.write_str("EOF"),
-    }
+    f.write_str(self.as_str())
   }
 }
 

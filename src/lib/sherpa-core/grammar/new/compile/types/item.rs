@@ -444,6 +444,10 @@ pub trait ItemContainer<'db>:
     self.into_iter().map(|i| i.to_absolute()).collect()
   }
 
+  fn to_origin(self, origin: Origin) -> Self {
+    self.into_iter().map(|i| i.to_origin(origin)).collect()
+  }
+
   #[inline(always)]
   fn try_increment(&self) -> Items<'db> {
     self.clone().to_vec().into_iter().map(|i| i.try_increment()).collect()
@@ -528,7 +532,8 @@ fn debug_items<'db, T: IntoIterator<Item = ItemRef<'db>>>(
   }
 }
 
-#[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[derive(Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub struct FollowPair<'db> {
   pub completed: ItemRef<'db>,
   pub follow:    ItemRef<'db>,

@@ -701,7 +701,7 @@ fn get_production_id_from_ast_node(
       Some(ProductionId::from((g_data.source_id, prod.name.as_str())))
     }
     (None, Some(prod)) => {
-      let ref_name = prod.module.proxy();
+      let ref_name = prod.module.to_token();
 
       match g_data.imports.get(&ref_name) {
         Some(GrammarIdentity { guid, .. }) => {

@@ -397,6 +397,7 @@ fn get_input_id(
           token_id.to_string()
         }
       }
+      _ => "DEFAULT".into(),
     }
   } else {
     token_id.to_string()
@@ -417,6 +418,28 @@ pub fn generate_disassembly(output: &BytecodeOutput, j: &Journal) -> String {
     }
 
     let (string, n) = disassemble_parse_block(next, Some(&g), Some(output));
+
+    states_strings.push(string);
+
+    next = n;
+  }
+
+  states_strings.join("\n")
+}
+
+/// Returns a "disassembly"  representation of a bytecode parser's opcodes.
+pub fn generate_disassembly_new(bc: &Vec<u8>, j: &Journal) -> String {
+  let mut states_strings = vec![];
+  let i: Instruction = (bc.as_slice(), 0).into();
+  let mut next = Some(i);
+
+  while let Some(i) = next {
+    if i.address() >= FIRST_PARSE_BLOCK_ADDRESS as usize {
+      states_strings.push("\n".to_string());
+      //states_strings.push(get_state_name_from_address(output, i.address()))
+    }
+
+    let (string, n) = disassemble_parse_block(next, None, None);
 
     states_strings.push(string);
 
