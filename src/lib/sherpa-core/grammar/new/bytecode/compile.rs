@@ -74,7 +74,7 @@ fn remap_goto_addresses(bc: &mut Array<u8>, _goto_to_off: &Array<u32>) {
         } = i.into();
         let default_delta = parse_block_address - i.address();
 
-        if scanner_address.address() != 0 {
+        if scanner_address.address() != u32::MAX as usize {
           set_goto_address(bc, _goto_to_off, i.address() + 6);
         }
 
@@ -154,6 +154,7 @@ fn build_statement<'db>(
     match branch {
       ASTNode::Pass(..) => insert_op(bc, Op::Pass),
       ASTNode::Fail(..) => insert_op(bc, Op::Fail),
+      ASTNode::Accept(..) => insert_op(bc, Op::Accept),
       ASTNode::Gotos(gotos) => {
         for push in gotos.pushes.iter().rev() {
           let proxy_address = get_proxy_address(
@@ -215,8 +216,8 @@ fn build_match<'db>(
 ) -> SherpaResult<()> {
   let mut default = None;
   let mut match_branches = Array::new();
-  let mut input_type_key = 0;
-  let mut scanner_address = 0;
+  let mut input_type_key = InputType::Default as u32;
+  let mut scanner_address = u32::MAX;
 
   let mut mode = match matches {
     ASTNode::Matches(box Matches { matches, mode, meta }) => {

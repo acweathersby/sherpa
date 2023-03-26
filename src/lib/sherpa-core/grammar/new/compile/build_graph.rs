@@ -16,7 +16,10 @@ use crate::{
   SherpaResult,
 };
 use core::panic;
-use sherpa_runtime::{types::BlameColor, utf8::lookup_table::CodePointClass};
+use sherpa_runtime::{
+  types::BlameColor,
+  utf8::{get_token_class_from_codepoint, lookup_table::CodePointClass},
+};
 use std::{collections::VecDeque, ops::Index, path::PathBuf, sync::Arc};
 
 pub(super) fn build_graph<'follow, 'db: 'follow>(
@@ -1084,7 +1087,40 @@ fn symbols_occlude(
   symB: &SymbolId,
   db: &ParserDatabase,
 ) -> bool {
-  false
+  match symA {
+    SymbolId::Char { char, .. } => match symB {
+      SymbolId::ClassNumber { .. } => {
+        (*char < 128)
+          && get_token_class_from_codepoint(*char as u32)
+            == CodePointClass::Number as u32
+      }
+      SymbolId::ClassIdentifier { .. } => {
+        (*char < 128)
+          && get_token_class_from_codepoint(*char as u32)
+            == CodePointClass::Identifier as u32
+      }
+      SymbolId::ClassSymbol { .. } => {
+        (*char < 128)
+          && get_token_class_from_codepoint(*char as u32)
+            == CodePointClass::Symbol as u32
+      }
+      _ => false,
+    },
+    SymbolId::Codepoint { val, .. } => match symB {
+      SymbolId::ClassNumber { .. } => {
+        get_token_class_from_codepoint(*val) == CodePointClass::Number as u32
+      }
+      SymbolId::ClassIdentifier { .. } => {
+        get_token_class_from_codepoint(*val)
+          == CodePointClass::Identifier as u32
+      }
+      SymbolId::ClassSymbol { .. } => {
+        get_token_class_from_codepoint(*val) == CodePointClass::Symbol as u32
+      }
+      _ => false,
+    },
+    _ => false,
+  }
 }
 
 fn handle_completed_item<'db, 'follow>(

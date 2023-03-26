@@ -1,4 +1,9 @@
-use crate::{bytecode::BytecodeOutput, types::*, Journal};
+use crate::{
+  bytecode::BytecodeOutput,
+  grammar::new::types::ParserDatabase,
+  types::*,
+  Journal,
+};
 use sherpa_runtime::types::bytecode::{
   InputType,
   Instruction,
@@ -13,10 +18,11 @@ fn header<'a>(address: usize) -> String {
 pub(crate) fn address_string(bc_address: usize) -> String {
   format!("{:0>6X}", bc_address)
 }
-pub(crate) fn disassemble_parse_block<'a>(
+
+pub fn disassemble_parse_block<'a>(
   i: Option<Instruction<'a>>,
-  g: Option<&GrammarStore>,
-  bc: Option<&BytecodeOutput>,
+  db: Option<&ParserDatabase>,
+  bc: &[u8],
 ) -> (String, Option<Instruction<'a>>) {
   use disassemble_parse_block as ds;
   use header as dh;
@@ -31,18 +37,18 @@ pub(crate) fn disassemble_parse_block<'a>(
     ("".to_string(), None)
   } else {
     match i.get_opcode() {
-      VectorBranch | HashBranch => generate_table_string(i, g, bc),
+      VectorBranch | HashBranch => generate_table_string(i, db, bc),
       Goto => {
         let mut iter = i.iter();
         let _state_mode = iter.next_u8().unwrap();
         let address = iter.next_u32_le().unwrap() as usize;
-        if let Some(bc) = bc {
+        if let Some(db) = db {
           (
             format!(
               "\n{}GOTO {} [ {} ]",
               dh(i.address()),
               address_string(address),
-              get_state_name_from_address(bc, address),
+              get_state_name_from_address(db, address),
             ),
             i.next(),
           )
@@ -54,21 +60,21 @@ pub(crate) fn disassemble_parse_block<'a>(
         }
       }
       PopGoto => {
-        let (string, i_last) = ds(i.next(), g, bc);
+        let (string, i_last) = ds(i.next(), db, bc);
         (format!("\n{}POP{string}", dh(i.address())), i_last)
       }
       PushGoto => {
-        let (string, i_last) = ds(i.next(), g, bc);
+        let (string, i_last) = ds(i.next(), db, bc);
         let mut iter = i.iter();
         let _state_mode = iter.next_u8().unwrap();
         let address = iter.next_u32_le().unwrap() as usize;
-        if let Some(bc) = bc {
+        if let Some(db) = db {
           (
             format!(
               "\n{}PUSH {} [ {} ]{string}",
               dh(i.address()),
               address_string(address),
-              get_state_name_from_address(bc, address),
+              get_state_name_from_address(db, address),
             ),
             i_last,
           )
@@ -84,17 +90,17 @@ pub(crate) fn disassemble_parse_block<'a>(
         }
       }
       PushExceptionHandler => {
-        let (string, i_last) = ds(i.next(), g, bc);
+        let (string, i_last) = ds(i.next(), db, bc);
         let mut iter = i.iter();
         let _state_mode = iter.next_u8().unwrap();
         let address = iter.next_u32_le().unwrap() as usize;
-        if let Some(bc) = bc {
+        if let Some(db) = db {
           (
             format!(
               "\n{}PUSH-CATCH {} [ {} ]{string}",
               dh(i.address()),
               address_string(address),
-              get_state_name_from_address(bc, address),
+              get_state_name_from_address(db, address),
             ),
             i_last,
           )
@@ -110,7 +116,7 @@ pub(crate) fn disassemble_parse_block<'a>(
         }
       }
       Reduce => {
-        let (string, i_last) = ds(i.next(), g, bc);
+        let (string, i_last) = ds(i.next(), db, bc);
         let mut iter = i.iter();
         let prod_id = iter.next_u32_le().unwrap();
         let rule_id = iter.next_u32_le().unwrap();
@@ -118,8 +124,8 @@ pub(crate) fn disassemble_parse_block<'a>(
 
         let pluralized = if symbol_count == 1 { "SYMBOL" } else { "SYMBOLS" };
 
-        if let Some(lu) = g {
-          let name = &lu.get_production_by_bytecode_id(prod_id).unwrap().name;
+        if let Some(db) = db {
+          let name = &db.prod_name(prod_id.into()).to_string(db.string_store());
           (
             format!(
               "\n{}REDUCE-RULE {} TO [ {} ] ( {} {} ){string} ",
@@ -146,23 +152,19 @@ pub(crate) fn disassemble_parse_block<'a>(
         }
       }
       AssignToken => {
-        let (string, i_last) = ds(i.next(), g, bc);
+        let (string, i_last) = ds(i.next(), db, bc);
         let mut iter = i.iter();
         let tok_id = iter.next_u32_le().unwrap();
 
-        if let Some(lu) = g {
-          let tok_name = lu
-            .bytecode_token_lookup
-            .get(&tok_id)
-            .map(|s| s.debug_string(&lu))
-            .unwrap_or(tok_id.to_string());
+        if let Some(db) = db {
+          let tok_str = db.tok_data(tok_id.into()).sym_id.debug_string(db);
 
           (
             format!(
               "\n{}ASSIGN-TK [{} = {}]{string}",
               dh(i.address()),
               tok_id,
-              tok_name
+              tok_str
             ),
             i_last,
           )
@@ -174,7 +176,7 @@ pub(crate) fn disassemble_parse_block<'a>(
         }
       }
       NoOp => {
-        let (string, i_last) = ds(i.next(), g, bc);
+        let (string, i_last) = ds(i.next(), db, bc);
         (
           format!(
             "\n{}NOOP [ASCII: {} 0x{:X}]{string}",
@@ -186,43 +188,43 @@ pub(crate) fn disassemble_parse_block<'a>(
         )
       }
       ScanShift => {
-        let (string, i_last) = ds(i.next(), g, bc);
+        let (string, i_last) = ds(i.next(), db, bc);
         (format!("\n{}SCAN-SHFT{string}", dh(i.address())), i_last)
       }
       ShiftToken => {
-        let (string, i_last) = ds(i.next(), g, bc);
+        let (string, i_last) = ds(i.next(), db, bc);
         (format!("\n{}SHFT-TK{string}", dh(i.address())), i_last)
       }
       ShiftTokenScanless => {
-        let (string, i_last) = ds(i.next(), g, bc);
+        let (string, i_last) = ds(i.next(), db, bc);
         (format!("\n{}SHFT-TK-NO-SCAN{string}", dh(i.address())), i_last)
       }
       PeekToken => {
-        let (string, i_last) = ds(i.next(), g, bc);
+        let (string, i_last) = ds(i.next(), db, bc);
         (format!("\n{}SHFT-PEEK-TK{string}", dh(i.address())), i_last)
       }
       PeekTokenScanless => {
-        let (string, i_last) = ds(i.next(), g, bc);
+        let (string, i_last) = ds(i.next(), db, bc);
         (format!("\n{}SHFT-PEEK-TK-NO-SCAN{string}", dh(i.address())), i_last)
       }
       SkipToken => {
-        let (string, i_last) = ds(i.next(), g, bc);
+        let (string, i_last) = ds(i.next(), db, bc);
         (format!("\n{}SKIP{string}", dh(i.address())), i_last)
       }
       SkipTokenScanless => {
-        let (string, i_last) = ds(i.next(), g, bc);
+        let (string, i_last) = ds(i.next(), db, bc);
         (format!("\n{}SKIP-NO-SCAN{string}", dh(i.address())), i_last)
       }
       PeekSkipToken => {
-        let (string, i_last) = ds(i.next(), g, bc);
+        let (string, i_last) = ds(i.next(), db, bc);
         (format!("\n{}SKIP-PEEK{string}", dh(i.address())), i_last)
       }
       PeekSkipTokenScanless => {
-        let (string, i_last) = ds(i.next(), g, bc);
+        let (string, i_last) = ds(i.next(), db, bc);
         (format!("\n{}SKIP-PEEK-NO-SCAN{string}", dh(i.address())), i_last)
       }
       PeekReset => {
-        let (string, i_last) = ds(i.next(), g, bc);
+        let (string, i_last) = ds(i.next(), db, bc);
         (format!("\n{}PEEK-RESET{string}", dh(i.address())), i_last)
       }
       Fail => (format!("\n{}FAIL", dh(i.address())), i.next()),
@@ -234,8 +236,8 @@ pub(crate) fn disassemble_parse_block<'a>(
 
 pub(crate) fn generate_table_string<'a>(
   i: Instruction<'a>,
-  lu: Option<&GrammarStore>,
-  bc: Option<&BytecodeOutput>,
+  db: Option<&ParserDatabase>,
+  bc: &[u8],
 ) -> (String, Option<Instruction<'a>>) {
   let TableHeaderData {
     input_type,
@@ -282,7 +284,7 @@ pub(crate) fn generate_table_string<'a>(
     } else {
       delta_offsets.insert(address);
       strings.push(create_normal_entry(
-        lu,
+        db,
         val_id,
         input_type,
         entry_offset * 4 + table_start,
@@ -295,11 +297,11 @@ pub(crate) fn generate_table_string<'a>(
 
   for address in delta_offsets {
     strings.push(
-      disassemble_parse_block(Some((i.bytecode(), address).into()), lu, bc).0,
+      disassemble_parse_block(Some((i.bytecode(), address).into()), db, bc).0,
     );
   }
   let (default_string, offset) =
-    disassemble_parse_block(Some(default_block), lu, bc);
+    disassemble_parse_block(Some(default_block), db, bc);
 
   let mut string = format!(
     "\n{}{} JUMP \n{: >7} TYPE {} ",
@@ -341,7 +343,7 @@ fn create_default_entry(goto_offset: usize) -> String {
 }
 
 fn create_normal_entry(
-  lu: Option<&GrammarStore>,
+  lu: Option<&ParserDatabase>,
   token_id: u32,
   input_type: InputType,
   idx: usize,
@@ -360,25 +362,23 @@ fn create_normal_entry(
 }
 
 fn get_input_id(
-  g: Option<&GrammarStore>,
+  db: Option<&ParserDatabase>,
   token_id: u32,
   input_type: InputType,
 ) -> String {
-  if let Some(g) = g {
+  if let Some(db) = db {
     match input_type {
       InputType::Production => {
-        let production =
-          &g.get_production_by_bytecode_id(token_id).unwrap().name;
-        format!("{:<3} [{:^1}]", token_id, production)
+        let prod_name = db.prod_name(token_id.into());
+        format!(
+          "{:<3} [{:^1}]",
+          token_id,
+          prod_name.to_string(db.string_store())
+        )
       }
       InputType::Token => {
-        if let SherpaResult::Ok(sym_id) =
-          g.get_symbol_id_by_bytecode_id(token_id)
-        {
-          format!("{:<3} [{:^1}]", token_id, sym_id.debug_string(g))
-        } else {
-          token_id.to_string()
-        }
+        let sym_id = db.sym(token_id.into());
+        format!("{:<3} [{:^1}]", token_id, sym_id.debug_string(db))
       }
       InputType::EndOfFile => token_id.to_string(),
       InputType::Class => token_id.to_string(),
@@ -404,9 +404,11 @@ fn get_input_id(
   }
 }
 /// Returns a "disassembly"  representation of a bytecode parser's opcodes.
-pub fn generate_disassembly(output: &BytecodeOutput, j: &Journal) -> String {
-  let g = j.grammar().unwrap();
-  let bc = output.bytecode.as_slice();
+pub fn generate_disassembly(
+  bc: &[u8],
+  db: Option<&ParserDatabase>,
+  j: &Journal,
+) -> String {
   let mut states_strings = vec![];
   let i: Instruction = (bc, 0).into();
   let mut next = Some(i);
@@ -414,32 +416,12 @@ pub fn generate_disassembly(output: &BytecodeOutput, j: &Journal) -> String {
   while let Some(i) = next {
     if i.address() >= FIRST_PARSE_BLOCK_ADDRESS as usize {
       states_strings.push("\n".to_string());
-      states_strings.push(get_state_name_from_address(output, i.address()))
+      if let Some(db) = db.as_ref() {
+        states_strings.push(get_state_name_from_address(db, i.address()))
+      }
     }
 
-    let (string, n) = disassemble_parse_block(next, Some(&g), Some(output));
-
-    states_strings.push(string);
-
-    next = n;
-  }
-
-  states_strings.join("\n")
-}
-
-/// Returns a "disassembly"  representation of a bytecode parser's opcodes.
-pub fn generate_disassembly_new(bc: &Vec<u8>, _j: &Journal) -> String {
-  let mut states_strings = vec![];
-  let i: Instruction = (bc.as_slice(), 0).into();
-  let mut next = Some(i);
-
-  while let Some(i) = next {
-    if i.address() >= FIRST_PARSE_BLOCK_ADDRESS as usize {
-      states_strings.push("\n".to_string());
-      //states_strings.push(get_state_name_from_address(output, i.address()))
-    }
-
-    let (string, n) = disassemble_parse_block(next, None, None);
+    let (string, n) = disassemble_parse_block(next, db, bc);
 
     states_strings.push(string);
 
@@ -450,12 +432,13 @@ pub fn generate_disassembly_new(bc: &Vec<u8>, _j: &Journal) -> String {
 }
 
 fn get_state_name_from_address(
-  output: &BytecodeOutput,
+  output: &ParserDatabase,
   address: usize,
 ) -> String {
-  output
-    .offset_to_state_name
-    .get(&(address as u32))
-    .cloned()
-    .unwrap_or_default()
+  "TODO".to_string()
+  /* output
+  .offset_to_state_name
+  .get(&(address as u32))
+  .cloned()
+  .unwrap_or_default() */
 }

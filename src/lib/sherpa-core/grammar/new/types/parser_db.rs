@@ -11,6 +11,7 @@ use super::{
 };
 
 #[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone)]
 pub struct DBRule {
   pub rule:       Rule,
   pub prod_id:    DBProdKey,
@@ -31,14 +32,18 @@ pub struct DBTokenData {
 #[derive(Clone, Copy)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct EntryPoint {
-  pub prod_key:   DBProdKey,
-  pub entry_name: IString,
+  pub prod_key:        DBProdKey,
+  pub prod_name:       IString,
+  pub prod_entry_name: IString,
+  pub prod_exit_name:  IString,
+  pub entry_name:      IString,
 }
 
 /// Data used for the compilation of parse states. contains
 /// additional metadata for compilation of LLVM and Bytecode
 /// parsers.
 #[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone)]
 pub struct ParserDatabase {
   /// The name of the parser as defined by the `NAME <name>` preamble in
   /// the root grammar, or by the filename stem in the path for the root
@@ -88,9 +93,14 @@ impl ParserDatabase {
     }
   }
 
-  /// Returns an array [DBProdKey]s of the entry point productions.
+  /// Returns an array of [DBProdKey]s of the entry point productions.
   pub fn entry_prod_keys(&self) -> Array<DBProdKey> {
     self.entry_points.iter().map(|k| k.prod_key).collect()
+  }
+
+  /// Returns an array of [EntryPoint]s of the entry point productions.
+  pub fn entry_points(&self) -> Array<&EntryPoint> {
+    self.entry_points.iter().map(|k| k).collect()
   }
 
   /// Returns the number of productions stored in the DB

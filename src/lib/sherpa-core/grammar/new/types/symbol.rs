@@ -153,9 +153,10 @@ impl SymbolId {
   pub fn to_scanner_prod_id(&self) -> ProductionId {
     use SymbolId::*;
     match self {
-      Token { val, precedence } => {
-        ProductionId::Standard(val.as_u64(), ProductionSubType::ScannerToken)
-      }
+      Token { val, precedence } => ProductionId::Standard(
+        hash_id_value_u64(self),
+        ProductionSubType::ScannerToken,
+      ),
       ClassSymbol { .. }
       | ClassSpace { .. }
       | ClassHorizontalTab { .. }

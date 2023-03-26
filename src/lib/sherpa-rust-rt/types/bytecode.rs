@@ -462,8 +462,7 @@ impl<'a> ByteCodeIterator<'a> {
     if self.in_bounds(1) {
       let root = self.offset;
       self.offset += 1;
-      let bc = self.bc;
-      Some(bc[root])
+      Some(self.bc[root])
     } else {
       None
     }

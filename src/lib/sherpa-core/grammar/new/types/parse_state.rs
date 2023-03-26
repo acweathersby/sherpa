@@ -11,6 +11,7 @@ use crate::{
 };
 use std::fmt::Debug;
 
+#[derive(Default)]
 /// The IR of a sherpa
 pub struct ParseState<'db> {
   pub name:     IString,
@@ -134,7 +135,10 @@ impl<'db> ParseState<'db> {
       self.name.to_string(db.string_store()),
       &self.code.split("\n").collect::<Vec<_>>().join("\n    "),
       &self.get_ast(),
-      self.scanners
+      self.scanners.as_ref().map(|s| s
+        .iter()
+        .map(|(name, _)| { name.to_string(db.string_store()) })
+        .collect::<Vec<_>>())
     )
   }
 }

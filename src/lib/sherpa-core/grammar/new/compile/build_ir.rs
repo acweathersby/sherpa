@@ -284,36 +284,37 @@ fn add_tok_expr(
 
 fn classify_successors<'graph, 'db>(
   successors: &'graph Set<&'graph State<'db>>,
-) -> VecDeque<(InputType, Set<&'graph State<'db>>)> {
-  VecDeque::from_iter(hash_group_btreemap(successors.clone(), |_, s| {
-    match s.get_symbol() {
-      SymbolId::EndOfFile { .. } => InputType::EndOfFile,
+) -> VecDeque<((u32, InputType), Set<&'graph State<'db>>)> {
+  VecDeque::from_iter(
+    hash_group_btreemap(successors.clone(), |_, s| match s.get_symbol() {
+      SymbolId::EndOfFile { .. } => (0, InputType::EndOfFile),
       SymbolId::DBToken { .. } | SymbolId::DBNonTerminalToken { .. } => {
-        InputType::Token
+        (4, InputType::Token)
       }
-      SymbolId::Char { .. } => InputType::Byte,
-      SymbolId::Codepoint { .. } => InputType::Codepoint,
-      SymbolId::Default => InputType::Default,
-      sym if sym.is_class() => InputType::Class,
+      SymbolId::Char { .. } => (1, InputType::Byte),
+      SymbolId::Codepoint { .. } => (2, InputType::Codepoint),
+      SymbolId::Default => (5, InputType::Default),
+      sym if sym.is_class() => (3, InputType::Class),
       sym => {
         #[cfg(debug_assertions)]
         unreachable!("{sym:?}");
         unreachable!()
       }
-    }
-  }))
+    })
+    .into_iter(),
+  )
 }
 
 fn add_match_expr<'follow, 'db>(
   mut w: &mut CodeWriter<Vec<u8>>,
   graph: &Graph<'follow, 'db>,
-  branches: &mut VecDeque<(InputType, Set<&State>)>,
+  branches: &mut VecDeque<((u32, InputType), Set<&State>)>,
   goto_state_id: Option<IString>,
 ) {
   let is_scanner = graph.is_scan();
   let db = graph.get_db();
 
-  if let Some((input_type, (successors))) = branches.pop_front() {
+  if let Some(((_, input_type), (successors))) = branches.pop_front() {
     if matches!(input_type, InputType::Default) {
       let successor = successors.into_iter().next().unwrap();
 
@@ -395,9 +396,8 @@ fn build_body<'follow, 'db>(
       body_string.push(create_rule_reduction(rule_id, db));
       false
     }
-    StateType::AssignToken(..) => false,
     StateType::Follow => true,
-    StateType::Complete => {
+    StateType::AssignToken(..) | StateType::Complete => {
       body_string.push("pass".into());
       false
     }
@@ -475,12 +475,10 @@ pub(super) fn create_ir_state<'follow, 'db>(
   let db = graph.get_db();
 
   let ir_state = ParseState {
-    comment:  Default::default(),
-    code:     w.to_string(),
-    name:     create_ir_state_name(graph, state)
+    code: w.to_string(),
+    name: create_ir_state_name(graph, state)
       .intern(graph.get_db().string_store()),
-    ast:      SherpaResult::None,
-    scanners: None,
+    ..Default::default()
   };
 
   SherpaResult::Ok(ir_state)

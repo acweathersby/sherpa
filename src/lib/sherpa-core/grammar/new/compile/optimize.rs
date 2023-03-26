@@ -31,10 +31,9 @@ pub fn garbage_collect<
   mut parse_states: Map<IString, Box<ParseState<'db>>>,
 ) -> SherpaResult<R> {
   let mut out = Array::new();
-  let mut queue =
-    VecDeque::from_iter(db.entry_prod_keys().into_iter().map(|key| {
-      (db.prod_name(key), parse_states.remove(&db.prod_name(key)).unwrap())
-    }));
+  let mut queue = VecDeque::from_iter(db.entry_points().iter().map(|p| {
+    (p.prod_entry_name, parse_states.remove(&p.prod_entry_name).unwrap())
+  }));
 
   while let Some((name, mut state)) = queue.pop_front() {
     // traverse the state to find all goto and push references, convert

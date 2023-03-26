@@ -204,41 +204,47 @@ pub(crate) async fn build_compile_db<'a>(
       _ => unreachable!(),
     }
   }
-
+  dbg!(&p_map);
   // Generate symbol productions and symbol indices ---------------------------
   for sym in symbols.keys() {
-    match sym {
-      SymbolId::Token { val, precedence } => {
-        let prod_id = sym.to_scanner_prod_id();
-        let mut rules = Array::from([Rule {
-          symbols: Array::from([(*sym, 0 as usize)]),
-          ast:     None,
-        }]);
-        convert_symbols_to_scanner_symbols(&mut rules, s_store);
-        add_prod(prod_id.as_tok_sym(), rules, p_map, r_table, p_r_map, true);
-        add_prod_name(
-          prod_name_lu,
-          ("tok_".to_string() + &hash_id_value_u64(val).to_string())
-            .intern(s_store),
-        );
-        token_names.insert(prod_id.as_tok_sym(), *val);
+    if !p_map.contains_key(&sym.to_scanner_prod_id().as_tok_sym()) {
+      match sym {
+        SymbolId::Token { val, precedence } => {
+          let prod_id = sym.to_scanner_prod_id();
+          let mut rules = Array::from([Rule {
+            symbols: Array::from([(*sym, 0 as usize)]),
+            ast:     None,
+          }]);
+          convert_symbols_to_scanner_symbols(&mut rules, s_store);
+
+          println!("tok: {:?}", prod_id.as_tok_sym());
+          add_prod(prod_id.as_tok_sym(), rules, p_map, r_table, p_r_map, true);
+          add_prod_name(
+            prod_name_lu,
+            ("tok_".to_string() + &hash_id_value_u64(val).to_string())
+              .intern(s_store),
+          );
+          token_names.insert(prod_id.as_tok_sym(), *val);
+        }
+        sym if sym.is_term() => {
+          let prod_id = sym.to_scanner_prod_id();
+          let rules = Array::from_iter(vec![Rule {
+            symbols: vec![(*sym, 0)],
+            ast:     None,
+          }]);
+          println!("sym: {:?}", prod_id.as_tok_sym());
+          add_prod(prod_id.as_tok_sym(), rules, p_map, r_table, p_r_map, true);
+          add_prod_name(
+            prod_name_lu,
+            ("sym_".to_string() + &hash_id_value_u64(sym).to_string())
+              .intern(s_store),
+          );
+        }
+        _ => {}
       }
-      sym if sym.is_term() => {
-        let prod_id = sym.to_scanner_prod_id();
-        let rules = Array::from_iter(vec![Rule {
-          symbols: vec![(*sym, 0)],
-          ast:     None,
-        }]);
-        add_prod(prod_id.as_tok_sym(), rules, p_map, r_table, p_r_map, true);
-        add_prod_name(
-          prod_name_lu,
-          ("sym_".to_string() + &hash_id_value_u64(sym).to_string())
-            .intern(s_store),
-        );
-      }
-      _ => {}
     }
   }
+  dbg!(&p_map);
 
   let sym_lu = convert_index_map_to_vec(symbols.iter().map(|(sym, index)| {
     let prod_id = sym.to_scanner_prod_id().as_tok_sym();
@@ -258,9 +264,17 @@ pub(crate) async fn build_compile_db<'a>(
   let entry_points = root_grammar
     .pub_prods
     .iter()
-    .map(|(name, prod_id)| EntryPoint {
-      prod_key:   DBProdKey::from(*p_map.get(&prod_id.as_sym()).unwrap()),
-      entry_name: *name,
+    .map(|(name, prod_id)| {
+      let prod_name = productions.get(prod_id).unwrap().name;
+      EntryPoint {
+        prod_key: DBProdKey::from(*p_map.get(&prod_id.as_sym()).unwrap()),
+        entry_name: *name,
+        prod_name,
+        prod_entry_name: (prod_name.to_string(s_store) + "_entry")
+          .intern(s_store),
+        prod_exit_name: (prod_name.to_string(s_store) + "_exit")
+          .intern(s_store),
+      }
     })
     .collect::<Array<_>>();
 
@@ -395,11 +409,9 @@ fn convert_symbols_to_scanner_symbols(
             .iter()
             .enumerate()
             .map(|(i, c)| {
+              eprintln!("NEED TO CHECK FOR CODEPOINTS, NOT JUST BYTES!");
               (
-                SymbolId::Char {
-                  char:       *c,
-                  precedence: if i == last { *precedence } else { 0 },
-                },
+                SymbolId::Char { char: *c, precedence: *precedence },
                 if i == last { *index } else { 99999 },
               )
             })

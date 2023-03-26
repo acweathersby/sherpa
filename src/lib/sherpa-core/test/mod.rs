@@ -22,4 +22,4 @@ mod errors;
 
 mod build;
 
-pub(self) mod utils;
+pub mod utils;

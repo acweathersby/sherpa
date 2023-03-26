@@ -91,7 +91,7 @@ impl Debug for IString {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     unsafe {
       let val_bytes = self as *const IString as *const [u8; 8];
-      if (*val_bytes)[7] & 0x08 != 0 {
+      if self.is_large() {
         let mut s = f.debug_tuple("IString::Large");
         // This is an interned string.
         s.field(&self.0);
@@ -142,9 +142,10 @@ impl IString {
   }
 
   unsafe fn small_to_str<'a>(&'a self) -> &'a str {
-    let val_bytes = self as *const IString as *const [u8; 8];
+    let val_bytes = (&self.0) as *const u64 as *const [u8; 8];
     // This is a small string. The upper 7 bits comprise the length of the
     // string.
+
     let mut len = 8;
 
     for i in 0..8 {
@@ -154,8 +155,10 @@ impl IString {
       }
     }
 
-    let data = std::slice::from_raw_parts(&((*val_bytes)[0]), len as usize);
-    std::str::from_utf8_unchecked(data)
+    let data = std::slice::from_raw_parts(&((*val_bytes)[0]), len);
+    let out = std::str::from_utf8_unchecked(data);
+
+    out
   }
 
   fn from_bytes(string: &[u8]) -> Self {
@@ -175,7 +178,7 @@ impl IString {
         for (off, byte) in bytes.iter().enumerate() {
           (*val_bytes)[off] = *byte;
         }
-        if byte_len <= 7 {
+        if byte_len < 8 {
           (*val_bytes)[byte_len] = 0;
         }
       }

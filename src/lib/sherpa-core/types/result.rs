@@ -22,6 +22,12 @@ pub enum SherpaResult<T> {
   None,
 }
 
+impl<T> Default for SherpaResult<T> {
+  fn default() -> Self {
+    Self::None
+  }
+}
+
 impl<T> SherpaResult<T> {
   /// Return a SherpaResult containing a mutable reference
   /// to the original stored object, or a faulty result if
@@ -182,15 +188,6 @@ impl<T> SherpaResult<T> {
       SherpaResult::None => None,
       SherpaResult::Err(err) => None,
     }
-  }
-}
-
-impl<T> Default for SherpaResult<T>
-where
-  T: Default,
-{
-  fn default() -> Self {
-    Self::Ok(T::default())
   }
 }
 

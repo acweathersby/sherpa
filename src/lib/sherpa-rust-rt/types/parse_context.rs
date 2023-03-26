@@ -334,7 +334,7 @@ pub enum ParseResult<Node: AstObject> {
   Error(TokenRange, Vec<AstSlot<Node>>),
   NeedMoreInput(Vec<AstSlot<Node>>),
 }
-
+#[derive(Debug)]
 pub enum ShiftsAndSkipsResult {
   Accepted {
     shifts: Vec<String>,

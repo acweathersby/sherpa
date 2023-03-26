@@ -202,6 +202,7 @@ fn shift_token<
   ctx.scan_ptr = new_offset;
   ctx.anchor_ptr = new_offset;
   ctx.tok_id = 0;
+  ctx.tok_len = 0;
 
   let (a, b, c) = (new_offset, 0, 0);
   ctx.get_reader_mut().set_cursor_to(a, b, c);

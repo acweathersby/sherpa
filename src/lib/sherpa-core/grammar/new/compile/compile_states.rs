@@ -1,4 +1,4 @@
-use super::{super::types::*, types::*};
+use super::{super::types::*, build_ir::create_ir_state, types::*};
 use crate::{
   ascript::types::AScriptStore,
   grammar::{
@@ -12,6 +12,7 @@ use crate::{
   parser::hash_group_btreemap,
   tasks::{new_taskman, Executor, Spawner},
   types::SherpaErrorSeverity,
+  writer::code_writer::CodeWriter,
   Journal,
   ReportType,
   SherpaError,
@@ -33,6 +34,36 @@ pub async fn compile_parse_states<'db>(
   let follow = super::follow::create_follow_sets(db);
   let mut states = Map::new();
   let mut scanner_groups = OrderedSet::new();
+  let entry_keys = db.entry_prod_keys();
+
+  // Build entry states
+  for EntryPoint { prod_name, prod_entry_name, prod_exit_name, .. } in
+    db.entry_points()
+  {
+    let mut w = CodeWriter::new(Vec::<u8>::with_capacity(512));
+
+    (&mut w) + "push " + prod_exit_name.to_string(db.string_store());
+    (&mut w) + " then goto " + prod_name.to_string(db.string_store());
+
+    let entry_state = ParseState {
+      code: w.to_string(),
+      name: *prod_entry_name,
+      ..Default::default()
+    };
+
+    let mut w = CodeWriter::new(Vec::<u8>::with_capacity(512));
+
+    (&mut w) + "accept";
+
+    let exit_state = ParseState {
+      code: w.to_string(),
+      name: *prod_exit_name,
+      ..Default::default()
+    };
+
+    states.insert(*prod_entry_name, Box::new(entry_state));
+    states.insert(*prod_exit_name, Box::new(exit_state));
+  }
 
   // compile productions
   for (prod_id, prod_sym) in db.productions().iter().enumerate() {
@@ -41,6 +72,35 @@ pub async fn compile_parse_states<'db>(
 
     #[cfg(debug_assertions)]
     start_items.__debug_print__("\n");
+
+    // Build entry states
+    for EntryPoint { prod_name, prod_entry_name, prod_exit_name, .. } in
+      db.entry_points()
+    {
+      let mut w = CodeWriter::new(Vec::<u8>::with_capacity(512));
+
+      (&mut w) + "push " + prod_exit_name.to_string(db.string_store());
+      (&mut w) + " then goto " + prod_name.to_string(db.string_store());
+
+      let entry_state = ParseState {
+        code: w.to_string(),
+        name: *prod_entry_name,
+        ..Default::default()
+      };
+
+      let mut w = CodeWriter::new(Vec::<u8>::with_capacity(512));
+
+      (&mut w) + "accept";
+
+      let exit_state = ParseState {
+        code: w.to_string(),
+        name: *prod_exit_name,
+        ..Default::default()
+      };
+
+      states.insert(*prod_entry_name, Box::new(entry_state));
+      states.insert(*prod_exit_name, Box::new(exit_state));
+    }
 
     match prod_sym {
       SymbolId::NonTerminal { id } => {
@@ -87,7 +147,9 @@ pub async fn compile_parse_states<'db>(
         Items::start_items(s.prod_id, db)
           .to_origin(Origin::TokenGoal(s.tok_id.into()))
       })
-      .collect();
+      .collect::<Array<_>>();
+
+    println!("{}", start_items.to_debug_string("\n"));
 
     //Run scanner
     let graph =
@@ -97,6 +159,7 @@ pub async fn compile_parse_states<'db>(
     let ir = build_ir(&mut j, &graph, scanner_name).unwrap();
 
     for state in ir {
+      println!("{}", state.debug_string(db));
       states.insert(state.name, state);
     }
   }
