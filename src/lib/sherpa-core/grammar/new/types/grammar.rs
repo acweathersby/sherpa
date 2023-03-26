@@ -140,6 +140,7 @@ pub struct TokenProductionRef(u32);
 pub struct Rule {
   /// A list of [SymbolId]s and their position within the source grammar
   pub symbols: Array<(SymbolId, usize)>,
+  pub skipped: Array<SymbolId>,
   pub ast:     Option<ASTToken>,
 }
 

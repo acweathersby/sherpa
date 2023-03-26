@@ -326,17 +326,38 @@ fn add_match_expr<'follow, 'db>(
     } else {
       w = (w + "\nmatch: " + input_type.as_str() + " {").indent();
 
-      for s in successors {
+      for s in &successors {
         let sym = s.get_symbol();
-
-        if input_type == InputType::Token {
-          //TODO: Add skip at this point as well.
-          //  tokens.insert(db.sym_data())
-        }
 
         let s_type = s.get_type();
         w = w + "\n\n( " + sym.to_state_val().to_string() + " ){ ";
         w = w + build_body(s, graph, goto_state_id).join(" then ") + " }";
+      }
+
+      if input_type == InputType::Token {
+        let syms = successors
+          .iter()
+          .map(|s| s.get_symbol().tok_db_key().unwrap())
+          .collect::<Set<_>>();
+
+        let skipped = successors
+          .iter()
+          .flat_map(|s| s.kernel_items_ref())
+          .flat_map(|i| i.get_skipped())
+          .filter_map(|s| {
+            let id = s.tok_db_key().unwrap();
+            (!syms.contains(&id)).then_some(id)
+          })
+          .collect::<Set<_>>();
+
+        if !skipped.is_empty() {
+          let vals = skipped
+            .iter()
+            .map(|v| v.to_state_val().to_string())
+            .collect::<Array<_>>()
+            .join(" | ");
+          w = w + "( " + vals + " ){ skip }";
+        }
       }
 
       if !branches.is_empty() {

@@ -184,6 +184,11 @@ impl<'db> ItemRef<'db> {
     self.sym_index == 0
   }
 
+  pub fn get_skipped(&self) -> &'db Vec<SymbolId> {
+    let rule = self.rule();
+    &rule.skipped
+  }
+
   pub fn rule(&self) -> &'db Rule {
     self.db.rule(self.rule_id)
   }

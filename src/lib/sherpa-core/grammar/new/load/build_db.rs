@@ -213,6 +213,7 @@ pub(crate) async fn build_compile_db<'a>(
           let prod_id = sym.to_scanner_prod_id();
           let mut rules = Array::from([Rule {
             symbols: Array::from([(*sym, 0 as usize)]),
+            skipped: Default::default(),
             ast:     None,
           }]);
           convert_symbols_to_scanner_symbols(&mut rules, s_store);
@@ -230,6 +231,7 @@ pub(crate) async fn build_compile_db<'a>(
           let prod_id = sym.to_scanner_prod_id();
           let rules = Array::from_iter(vec![Rule {
             symbols: vec![(*sym, 0)],
+            skipped: Default::default(),
             ast:     None,
           }]);
           println!("sym: {:?}", prod_id.as_tok_sym());
@@ -315,26 +317,38 @@ fn convert_rule_symbols(
 ) {
   for DBRule { rule, is_scanner, .. } in r_table {
     for (sym, _) in &mut rule.symbols {
-      match *sym {
-        SymbolId::NonTerminalToken { id, precedence } => {
-          let index = p_map.get(sym).unwrap();
-          *sym = SymbolId::DBNonTerminalToken {
-            prod_key: (*index as u32).into(),
-            sym_key: symbols.get(sym).map(|i| (*i as u32).into()),
-            precedence,
-          }
-        }
-        SymbolId::NonTerminal { .. } => {
-          let index = p_map.get(sym).unwrap();
-          *sym = SymbolId::DBNonTerminal { key: (*index as u32).into() };
-        }
-        sym_id if !*is_scanner => {
-          let index = symbols.get(&sym_id).unwrap();
-          *sym = SymbolId::DBToken { key: (*index as u32).into() }
-        }
-        _ => {}
+      convert_rule_symbol(sym, p_map, &symbols, is_scanner);
+    }
+    for sym in &mut rule.skipped {
+      convert_rule_symbol(sym, p_map, &symbols, is_scanner);
+    }
+  }
+}
+
+fn convert_rule_symbol(
+  sym: &mut SymbolId,
+  p_map: &mut std::collections::HashMap<SymbolId, usize>,
+  symbols: &std::collections::HashMap<SymbolId, usize>,
+  is_scanner: &mut bool,
+) {
+  match *sym {
+    SymbolId::NonTerminalToken { id, precedence } => {
+      let index = p_map.get(sym).unwrap();
+      *sym = SymbolId::DBNonTerminalToken {
+        prod_key: (*index as u32).into(),
+        sym_key: symbols.get(sym).map(|i| (*i as u32).into()),
+        precedence,
       }
     }
+    SymbolId::NonTerminal { .. } => {
+      let index = p_map.get(sym).unwrap();
+      *sym = SymbolId::DBNonTerminal { key: (*index as u32).into() };
+    }
+    sym_id if !*is_scanner => {
+      let index = symbols.get(&sym_id).unwrap();
+      *sym = SymbolId::DBToken { key: (*index as u32).into() }
+    }
+    _ => {}
   }
 }
 

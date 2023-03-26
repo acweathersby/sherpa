@@ -37,32 +37,12 @@ pub async fn compile_parse_states<'db>(
   let entry_keys = db.entry_prod_keys();
 
   // Build entry states
-  for EntryPoint { prod_name, prod_entry_name, prod_exit_name, .. } in
-    db.entry_points()
-  {
-    let mut w = CodeWriter::new(Vec::<u8>::with_capacity(512));
+  for entry in db.entry_points() {
+    let ir = build_entry_ir(entry, db)?;
 
-    (&mut w) + "push " + prod_exit_name.to_string(db.string_store());
-    (&mut w) + " then goto " + prod_name.to_string(db.string_store());
-
-    let entry_state = ParseState {
-      code: w.to_string(),
-      name: *prod_entry_name,
-      ..Default::default()
-    };
-
-    let mut w = CodeWriter::new(Vec::<u8>::with_capacity(512));
-
-    (&mut w) + "accept";
-
-    let exit_state = ParseState {
-      code: w.to_string(),
-      name: *prod_exit_name,
-      ..Default::default()
-    };
-
-    states.insert(*prod_entry_name, Box::new(entry_state));
-    states.insert(*prod_exit_name, Box::new(exit_state));
+    for state in ir {
+      states.insert(state.name, state);
+    }
   }
 
   // compile productions
@@ -72,35 +52,6 @@ pub async fn compile_parse_states<'db>(
 
     #[cfg(debug_assertions)]
     start_items.__debug_print__("\n");
-
-    // Build entry states
-    for EntryPoint { prod_name, prod_entry_name, prod_exit_name, .. } in
-      db.entry_points()
-    {
-      let mut w = CodeWriter::new(Vec::<u8>::with_capacity(512));
-
-      (&mut w) + "push " + prod_exit_name.to_string(db.string_store());
-      (&mut w) + " then goto " + prod_name.to_string(db.string_store());
-
-      let entry_state = ParseState {
-        code: w.to_string(),
-        name: *prod_entry_name,
-        ..Default::default()
-      };
-
-      let mut w = CodeWriter::new(Vec::<u8>::with_capacity(512));
-
-      (&mut w) + "accept";
-
-      let exit_state = ParseState {
-        code: w.to_string(),
-        name: *prod_exit_name,
-        ..Default::default()
-      };
-
-      states.insert(*prod_entry_name, Box::new(entry_state));
-      states.insert(*prod_exit_name, Box::new(exit_state));
-    }
 
     match prod_sym {
       SymbolId::NonTerminal { id } => {
@@ -130,7 +81,6 @@ pub async fn compile_parse_states<'db>(
         let ir =
           build_ir(&mut j, &graph, db.prod_name(prod_id.into())).unwrap();
 
-        #[cfg(debug_assertions)]
         for state in ir {
           states.insert(state.name, state);
         }
@@ -177,4 +127,35 @@ pub async fn compile_parse_states<'db>(
   }
 
   SherpaResult::Ok(states)
+}
+
+fn build_entry_ir<'db>(
+  EntryPoint { prod_name, prod_entry_name, prod_exit_name, .. }: &EntryPoint,
+  db: &'db ParserDatabase,
+) -> SherpaResult<Array<Box<ParseState<'db>>>> {
+  let mut w = CodeWriter::new(Vec::<u8>::with_capacity(512));
+
+  (&mut w) + "push " + prod_exit_name.to_string(db.string_store());
+  (&mut w) + " then goto " + prod_name.to_string(db.string_store());
+
+  let entry_state = ParseState {
+    code: w.to_string(),
+    name: *prod_entry_name,
+    ..Default::default()
+  };
+
+  let mut w = CodeWriter::new(Vec::<u8>::with_capacity(512));
+
+  (&mut w) + "accept";
+
+  let exit_state = ParseState {
+    code: w.to_string(),
+    name: *prod_exit_name,
+    ..Default::default()
+  };
+
+  SherpaResult::Ok(Array::from_iter([
+    Box::new(entry_state),
+    Box::new(exit_state),
+  ]))
 }

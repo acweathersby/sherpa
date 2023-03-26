@@ -55,11 +55,12 @@ impl<'b> ProductionData<'b> {
 /// Intermediate structure to host grammar data during
 /// construction.
 pub struct GrammarData {
-  pub name:      IString,
-  pub source_id: GrammarId,
-  pub imports:   Map<IString, GrammarIdentity>,
-  pub exports:   Array<(IString, ProductionId)>,
-  pub grammar:   Box<Grammar>,
+  pub name:           IString,
+  pub source_id:      GrammarId,
+  pub imports:        Map<IString, GrammarIdentity>,
+  pub exports:        Array<(IString, ProductionId)>,
+  pub global_skipped: Array<ASTNode>,
+  pub grammar:        Box<Grammar>,
 }
 
 pub fn convert_grammar_data_to_header(
@@ -92,6 +93,7 @@ pub fn create_grammar_data(
   let source_dir = grammar_path.parent()?.to_owned();
   let mut imports = Map::default();
   let mut exports = Array::default();
+  let mut skipped = Array::default();
   let mut name =
     grammar_path.file_name().and_then(|d| d.to_str()).unwrap_or("default");
 
@@ -119,7 +121,11 @@ pub fn create_grammar_data(
         // be Production_Import_Symbol types.
         exports.push(export.clone());
       }
-      ASTNode::Ignore(_) => {}
+      ASTNode::Ignore(ignore) => {
+        for sym in &ignore.symbols {
+          skipped.push(sym.clone())
+        }
+      }
       ASTNode::Name(name_ast) => {
         name = name_ast.name.as_str();
       }
@@ -137,6 +143,7 @@ pub fn create_grammar_data(
   let mut g_data = GrammarData {
     name: name.intern(string_store),
     source_id: grammar_path.into(),
+    global_skipped: skipped,
     grammar,
     imports,
     exports: Default::default(),
@@ -323,14 +330,6 @@ fn process_rule(
   SherpaResult::Ok(())
 }
 
-fn intern_ast(rule: &Rule, p_data: &mut ProductionData) -> Option<ASTToken> {
-  let ast_ref = rule.ast.as_ref().map(|s| {
-    p_data.asts.push(s.clone());
-    ASTToken::Defined(p_data.root_prod_id, p_data.asts.len() - 1)
-  });
-  ast_ref
-}
-
 fn process_rule_symbols(
   rule_data: &RuleData,
   p_data: &mut ProductionData,
@@ -340,6 +339,7 @@ fn process_rule_symbols(
   let mut rules: Array<types::Rule> = Default::default();
   rules.push(types::Rule {
     symbols: Default::default(),
+    skipped: Default::default(),
     ast:     rule_data.ast_ref,
   });
 
@@ -566,10 +566,31 @@ fn process_rule_symbols(
     }
   }
 
+  let skipped_symbols = g_data
+    .global_skipped
+    .iter()
+    .map(|sym_node| {
+      record_symbol(sym_node, 0, p_data, g_data, s_store).unwrap()
+    })
+    .collect::<Array<_>>();
+
+  for rule in &mut rules {
+    rule.skipped = skipped_symbols.clone();
+  }
+
   p_data.rules.append(&mut rules);
 
   SherpaResult::Ok(())
 }
+
+fn intern_ast(rule: &Rule, p_data: &mut ProductionData) -> Option<ASTToken> {
+  let ast_ref = rule.ast.as_ref().map(|s| {
+    p_data.asts.push(s.clone());
+    ASTToken::Defined(p_data.root_prod_id, p_data.asts.len() - 1)
+  });
+  ast_ref
+}
+
 fn map_symbols_to_unindexed(
   ast_syms: &Array<ASTNode>,
 ) -> Array<(usize, &ASTNode)> {
