@@ -13,6 +13,7 @@ use crate::{
       OrderedMap,
       OrderedSet,
       ParserDatabase,
+      Set,
       SymbolId,
     },
   },
@@ -24,6 +25,7 @@ use std::{
     BTreeMap,
     BTreeSet,
     HashMap,
+    HashSet,
     VecDeque,
   },
   fmt::format,
@@ -68,7 +70,7 @@ impl Origin {
       Origin::ProdGoal(prod_id) => {
         format!(
           "ProdGoal[ {} {:?} ]",
-          db.prod_name_str(*prod_id).as_str(),
+          db.prod_name(*prod_id).to_string(db.string_store()),
           prod_id
         )
       }
@@ -190,6 +192,7 @@ pub struct State<'db> {
   reduce_item: Option<ItemRef<'db>>,
   leaf_state: bool,
   closure: Option<OrderedSet<ItemRef<'db>>>,
+  root_closure: Option<OrderedSet<ItemRef<'db>>>,
 }
 
 impl<'db> Hash for State<'db> {
@@ -253,14 +256,44 @@ impl<'db> State<'db> {
     self.peek_resolve_items.get(&peek_origin_key).unwrap().clone()
   }
 
-  pub fn calculate_closure(&mut self, is_scanner: bool) {
+  pub fn calculate_closure(
+    &mut self,
+    is_scanner: bool,
+    db: &'db ParserDatabase,
+  ) {
     self.closure = None;
     let state_id = self.id;
     let kernel_items = &self.kernel_items;
+    let closure = self.kernel_items.create_closure(is_scanner, state_id);
+
+    if self.id.is_root() {
+      let prods = self
+        .kernel_items
+        .iter()
+        .map(|i| i.prod_index())
+        .collect::<OrderedSet<_>>();
+      let sigs = closure
+        .iter()
+        .map(|i| (i.rule_id, i.sym_index))
+        .collect::<HashSet<_>>();
+      // Get all follow items
+
+      let mut oos_closure = closure.clone();
+
+      for prod in &prods {
+        for item in db.follow_items(*prod) {
+          let i = item;
+          if !sigs.contains(&(i.rule_id, i.sym_index)) {
+            oos_closure.insert(i.to_origin_state(state_id).to_oos_index());
+          }
+        }
+      }
+
+      self.root_closure = Some(oos_closure);
+    }
 
     if !self.kernel_items.is_empty() {
-      self.closure =
-        Some(self.kernel_items.create_closure(is_scanner, state_id));
+      self.closure = Some(closure);
     }
   }
 
@@ -270,6 +303,14 @@ impl<'db> State<'db> {
 
   pub fn get_closure_ref(&self) -> Option<&ItemSet<'db>> {
     return self.closure.as_ref();
+  }
+
+  pub fn get_root_closure_ref(&self) -> Option<&ItemSet<'db>> {
+    if self.id.is_root() {
+      return self.root_closure.as_ref();
+    } else {
+      return self.closure.as_ref();
+    }
   }
 
   pub fn set_reduce_item(&mut self, item: ItemRef<'db>) {
@@ -324,10 +365,6 @@ impl<'db> State<'db> {
     self.term_symbol
   }
 
-  pub fn get_root_closure(&self, is_scanner: bool) -> OrderedSet<ItemRef<'db>> {
-    self.closure.as_ref().unwrap().clone()
-  }
-
   pub fn get_parent(&self) -> StateId {
     self.parent
   }
@@ -340,6 +377,7 @@ impl<'db> State<'db> {
     &mut self,
     kernel_items: T,
     is_scanner: bool,
+    db: &'db ParserDatabase,
   ) {
     let mut kernel_items = kernel_items
       .into_iter()
@@ -348,7 +386,7 @@ impl<'db> State<'db> {
 
     self.kernel_items.append(&mut kernel_items);
 
-    self.calculate_closure(is_scanner);
+    self.calculate_closure(is_scanner, db);
   }
 
   /// Returns true if the the call of the production leads to infinite loop due
@@ -490,6 +528,10 @@ impl<'follow, 'db: 'follow> Graph<'follow, 'db> {
     let id = StateId(self.states.len() as u32);
     let is_scan = self.is_scan();
 
+    if (matches!(symbol, SymbolId::NonTerminalToken { .. })) {
+      panic!("WTF!");
+    }
+
     let mut state = match parent {
       Some(parent) => State {
         id,
@@ -518,6 +560,7 @@ impl<'follow, 'db: 'follow> Graph<'follow, 'db> {
         kernel_items
       },
       is_scan,
+      self.db,
     );
 
     self.states.push(state);

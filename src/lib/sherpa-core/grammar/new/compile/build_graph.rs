@@ -171,6 +171,60 @@ fn handle_incomplete_items<'db, 'follow>(
   SherpaResult::Ok(out_items)
 }
 
+fn merge_items_into_groups<'db>(
+  follow: &Vec<ItemRef<'db>>,
+  par: StateId,
+  is_scan: bool,
+  groups: &mut OrderedMap<SymbolId, ItemSet<'db>>,
+) {
+  // Dumb symbols that could cause termination of parse into the intermediate
+  // item groups
+  for (sym, group) in hash_group_btreemap(
+    follow
+      .create_closure(is_scan, par)
+      .into_iter()
+      .filter(|i| i.is_term())
+      .collect::<OrderedSet<_>>(),
+    |_, i| i.sym(),
+  ) {
+    if !groups.contains_key(&sym) {
+      groups.insert(sym, group);
+    }
+  }
+}
+
+// Inserts out of scope sentinel items into the existing
+// items groups if we are in scanner mode and the item that
+// was completed belongs to the parse state goal set.
+fn get_oos_follow_from_completed<'db, 'follow>(
+  j: &mut Journal,
+  graph: &mut Graph<'follow, 'db>,
+  completed_items: &Items<'db>,
+  handler: &mut dyn FnMut(Items<'db>),
+) -> SherpaResult<()> {
+  let mut out = ItemSet::new();
+  for completed_item in completed_items {
+    if !completed_item.is_out_of_scope() {
+      let (_, completed) = get_follow(j, graph, *completed_item)?;
+
+      let goals: ItemSet = get_goal_items_from_completed(&completed, graph);
+
+      for goal in goals {
+        let (follow, _) = get_follow(
+          j,
+          graph,
+          goal.to_complete().to_origin(Origin::ScanCompleteOOS).to_oos_index(),
+        )?;
+        out.append(&mut follow.to_set());
+      }
+    }
+  }
+  if !out.is_empty() {
+    handler(out.to_vec());
+  }
+  SherpaResult::Ok(())
+}
+
 fn handle_completed_items<'db, 'follow>(
   j: &mut Journal,
   graph: &mut Graph<'follow, 'db>,
@@ -187,9 +241,9 @@ fn handle_completed_items<'db, 'follow>(
       follow_items,
       default_only,
     } = get_completed_item_artifacts(j, graph, parent, completed.iter())?;
-
+    let db = graph.get_db();
     if is_scan {
-      graph[parent].add_kernel_items(follow_items, is_scan);
+      graph[parent].add_kernel_items(follow_items, is_scan, db);
 
       merge_occluding(
         j,
@@ -203,6 +257,15 @@ fn handle_completed_items<'db, 'follow>(
         ),
         groups,
       );
+
+      get_oos_follow_from_completed(
+        j,
+        graph,
+        &completed.iter().to_vec(),
+        &mut |follow: Items<'db>| {
+          merge_items_into_groups(&follow, parent, is_scan, groups)
+        },
+      )?;
     }
 
     let default = completed
@@ -439,11 +502,12 @@ fn create_peek<'a, 'db: 'a, 'follow, T: ItemContainerIter<'a, 'db>>(
     !incomplete_items.iter().any(|i| matches!(i.origin, Origin::Peek(..))),
     "Peek states should not be in the resolution"
   );
-
+  let db = graph.get_db();
   graph[state].set_peek_resolve_items(index, resolve_items);
   graph[state].add_kernel_items(
     if need_increment { kernel_items.try_increment() } else { kernel_items },
     is_scan,
+    db,
   );
   graph.enqueue_pending_state(GraphState::Peek, state)
 }
@@ -529,7 +593,6 @@ fn handle_completed_groups<'db, 'follow>(
   let is_scan = graph.is_scan();
   let mut cmpl = follow_pairs.iter().to_completed_vec();
   let db = graph.get_db();
-
   match (follow_pairs.len(), groups.remove(&sym), g_state) {
     (1, None, GraphState::Normal) => {
       handle_completed_item(j, graph, (cmpl[0], cmpl), par, sym, g_state)?;
@@ -744,6 +807,7 @@ fn resolve_conflicting_symbols<'db, 'follow>(
   let priority_groups =
     hash_group_btreemap(symbol_groups, |_, (sym, _)| match sym {
       sym if sym.is_class() => Class,
+
       _ => Defined,
     });
   use SymbolPriorities::*;
@@ -754,8 +818,9 @@ fn resolve_conflicting_symbols<'db, 'follow>(
       Defined => {
         if groups.len() > 1 {
           panic!(
-            "Found {} conflicting Defined symbols. Grammar is ambiguous",
-            groups.len()
+            "Found {} conflicting Defined symbols. Grammar is ambiguous:\n{}",
+            groups.len(),
+            graph.debug_string()
           );
         } else {
           completed = Some(groups.values().next().unwrap());
@@ -764,8 +829,10 @@ fn resolve_conflicting_symbols<'db, 'follow>(
       Class => {
         if groups.len() > 1 {
           panic!(
-            "Found {} conflicting Generic symbols. Grammar is ambiguous",
-            groups.len()
+            "Found {} conflicting Generic symbols. Grammar is ambiguous:\n{:#?}\n-----\n{}",
+            groups.len(),
+            groups,
+            graph.debug_string()
           );
         } else {
           completed = Some(groups.values().next().unwrap());
@@ -881,7 +948,7 @@ fn get_set_of_occluding_items<'db, 'follow>(
 
   let precedence = into_group
     .iter()
-    .filter(|i| i.is_complete())
+    //.filter(|i| i.is_complete() || i.increment().unwrap().is)
     .fold(0, |a, i| a.max(i.precedence()));
 
   occluding
@@ -1002,7 +1069,7 @@ pub(super) fn get_follow<'db, 'follow>(
       let prod_id = item.prod_index();
       let closure = if item.is_out_of_scope() {
         graph[item.origin_state]
-          .get_closure_ref()?
+          .get_root_closure_ref()?
           .iter()
           .filter(|i| {
             i.is_out_of_scope()
@@ -1104,7 +1171,8 @@ fn symbols_occlude(
           && get_token_class_from_codepoint(*char as u32)
             == CodePointClass::Symbol as u32
       }
-      _ => false,
+      SymbolId::Default => false,
+      symB => *symA == *symB,
     },
     SymbolId::Codepoint { val, .. } => match symB {
       SymbolId::ClassNumber { .. } => {
@@ -1117,9 +1185,11 @@ fn symbols_occlude(
       SymbolId::ClassSymbol { .. } => {
         get_token_class_from_codepoint(*val) == CodePointClass::Symbol as u32
       }
-      _ => false,
+      SymbolId::Default => false,
+      symB => *symA == *symB,
     },
-    _ => false,
+    SymbolId::Default => false,
+    symA => *symA == *symB,
   }
 }
 
@@ -1217,7 +1287,7 @@ fn create_reduce_reduce_error(
     .collect::<OrderedSet<_>>();
   j.report_mut().add_error(SherpaError::SourcesError {
     id:       "reduce-conflict",
-    msg:      "Unresovable parse conflict encountered".into(),
+    msg:      "Unresolvable parse conflict encountered".into(),
     ps_msg:   {
       let mut string = "Enable the following configs to use an alternative parse strategy".into();
 

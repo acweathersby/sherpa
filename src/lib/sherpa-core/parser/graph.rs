@@ -342,8 +342,8 @@ fn handle_completed_items(
     )?;
 
     if !follow_pairs.is_empty() {
-      // If not scanner and there exists any disambiguities, we must use either
-      // a peek or breadcrumb resolution strategy to overcome this disambiguity.
+      // If not scanner and there exists any ambiguity, we must use either
+      // a peek or breadcrumb resolution strategy to overcome this ambiguity.
       // If we are doing fork or PEG-like states then we don't have to make
       // these considerations.
       let mut completed_groups =
@@ -530,7 +530,7 @@ fn handle_completed_groups(
           .flat_map(|fp| get_kernel_items_from_peek_item(graph, fp.completed))
           .collect::<ItemSet>();
         unimplemented!(
-          "\nCompleted Peek Items On Symbol:[{}]\n \n\nAcceptItems\n{}\n\nPeekItems:\n{}\n\nKernelItems:\n{}\n\nParant State\n{}\n\nGraph:\n{}",
+          "\nCompleted Peek Items On Symbol:[{}]\n \n\nAcceptItems\n{}\n\nPeekItems:\n{}\n\nKernelItems:\n{}\n\nParent State\n{}\n\nGraph:\n{}",
 
           sym.debug_string(g),
           graph.goal_items().to_debug_string(g, "\n"),
@@ -598,7 +598,7 @@ fn merge_items_into_groups(
   is_scan: bool,
   groups: &mut BTreeMap<SymbolID, BTreeSet<Item>>,
 ) {
-  // Dumb symbols that could cause termination of parse into the intermiediate
+  // Dumb symbols that could cause termination of parse into the intermediate
   // item groups
   for (sym, group) in hash_group_btreemap(
     get_closure(follow.iter(), g, par, is_scan)
@@ -631,7 +631,7 @@ fn create_out_of_scope_complete_state(
 
 // Inserts out of scope sentinel items into the existing
 // items groups if we are in scanner mode and the item that
-// was completed belongs to the parsestate goal set.
+// was completed belongs to the parse state goal set.
 fn get_oos_follow_from_completed(
   j: &mut Journal,
   graph: &Graph,
@@ -1231,7 +1231,7 @@ fn handle_completed_item(
   graph_state: GraphState,
 ) -> SherpaResult<()> {
   let is_scan = graph.is_scan();
-  // Determin if origin contains GOTO.
+  // Determine if origin contains GOTO.
 
   match (completed_item.origin, is_scan) {
     (Origin::GoalCompleteOOS, ..) => {
@@ -1318,7 +1318,7 @@ fn create_reduce_reduce_error(
     .collect::<BTreeSet<_>>();
   j.report_mut().add_error(SherpaError::SourcesError {
     id:       "reduce-conflict",
-    msg:      "Unresovable parse conflict encountered".into(),
+    msg:      "Unresolvable parse conflict encountered".into(),
     ps_msg:   {
       let mut string = "Enable the following configs to use an alternative parse strategy".into();
 

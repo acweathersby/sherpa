@@ -109,16 +109,25 @@ impl<'db> ParseState<'db> {
   /// May be an `Err` if there was a problem building the ast.
   pub fn build_ast(&mut self, s: &IStringStore) -> SherpaResult<&Box<State>> {
     if self.ast.is_none() {
-      let mut w = CodeWriter::new(vec![]);
-
-      &mut w + self.name.to_str(s) + " =>\n" + self.code.as_str();
-
-      let code = String::from_utf8(w.into_output())?;
+      let code = String::from_utf8(self.source(s))?;
 
       self.ast = SherpaResult::from(parser::ast::ir_from((&code).into()));
     }
 
     self.get_ast()
+  }
+
+  pub fn source(&self, s: &IStringStore) -> Vec<u8> {
+    let mut w = CodeWriter::new(vec![]);
+    let name = self.name.to_string(s);
+
+    &mut w
+      + name.clone()
+      + " =>\n"
+      + self.code.as_str().replace("%%%%", name.as_str());
+
+    let string = w.into_output();
+    string
   }
 }
 

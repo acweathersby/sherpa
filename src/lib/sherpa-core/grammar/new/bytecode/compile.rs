@@ -122,6 +122,7 @@ fn build_statement<'db>(
       ASTNode::Scan(..) => insert_op(bc, Op::ScanShift),
       ASTNode::Reset(..) => insert_op(bc, Op::PeekReset),
       ASTNode::Shift(..) => insert_op(bc, Op::ShiftToken),
+      ASTNode::Peek(..) => insert_op(bc, Op::PeekToken),
       node => {
         #[cfg(debug_assertions)]
         dbg!(node);

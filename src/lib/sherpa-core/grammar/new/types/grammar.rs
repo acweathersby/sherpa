@@ -172,6 +172,7 @@ pub enum ASTToken {
 pub struct CustomState {
   pub id:      ProductionId,
   pub g_id:    GrammarId,
+  pub name:    IString,
   pub symbols: Set<SymbolId>,
   pub state:   Box<State>,
   pub tok:     Token,
@@ -221,6 +222,8 @@ pub struct SubProduction {
   pub id: ProductionId,
 
   pub g_id: GrammarId,
+
+  pub name: IString,
 
   pub rules: Array<Rule>,
 
@@ -343,7 +346,7 @@ impl SymbolId {
         let name = guard_str.as_str();
         format!("{name}")
       }
-      DBNonTerminalToken { prod_key, sym_key, precedence } => {
+      DBNonTerminalToken { prod_key, precedence, .. } => {
         let guard_str = db.prod_name_str(prod_key);
         let name = guard_str.as_str();
 

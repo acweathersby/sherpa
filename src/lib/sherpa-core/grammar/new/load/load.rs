@@ -28,11 +28,12 @@ pub struct RuleData<'a> {
 /// Temporary structure to host production data during
 /// construction.
 pub struct ProductionData<'a> {
-  root_prod_id: ProductionId,
-  symbols:      &'a mut Set<SymbolId>,
-  sub_prods:    &'a mut Array<Box<SubProduction>>,
-  rules:        &'a mut Array<types::Rule>,
-  asts:         &'a mut Array<Box<ast::Ascript>>,
+  root_prod_id:   ProductionId,
+  root_prod_name: IString,
+  symbols:        &'a mut Set<SymbolId>,
+  sub_prods:      &'a mut Array<Box<SubProduction>>,
+  rules:          &'a mut Array<types::Rule>,
+  asts:           &'a mut Array<Box<ast::Ascript>>,
 }
 impl<'b> ProductionData<'b> {
   /// Create a new [ProductionData] that references a different
@@ -44,6 +45,7 @@ impl<'b> ProductionData<'b> {
   ) -> ProductionData<'d> {
     ProductionData {
       rules,
+      root_prod_name: self.root_prod_name,
       root_prod_id: self.root_prod_id,
       symbols: &mut self.symbols,
       sub_prods: &mut self.sub_prods,
@@ -95,7 +97,7 @@ pub fn create_grammar_data(
   let mut exports = Array::default();
   let mut skipped = Array::default();
   let mut name =
-    grammar_path.file_name().and_then(|d| d.to_str()).unwrap_or("default");
+    grammar_path.file_stem().and_then(|d| d.to_str()).unwrap_or("default");
 
   for preamble in &grammar.preamble {
     match preamble {
@@ -139,9 +141,11 @@ pub fn create_grammar_data(
       }
     }
   }
-
   let mut g_data = GrammarData {
-    name: name.intern(string_store),
+    name: (name.to_string()
+      + "_"
+      + &(hash_id_value_u64(grammar_path).to_string()[0..4]))
+      .intern(string_store),
     source_id: grammar_path.into(),
     global_skipped: skipped,
     grammar,
@@ -167,6 +171,25 @@ pub fn create_grammar_data(
   SherpaResult::Ok(g_data)
 }
 
+pub fn prod_name(
+  base_name: &str,
+  g_data: &GrammarData,
+  s_store: &IStringStore,
+) -> IString {
+  (g_data.name.to_string(s_store) + "_" + base_name).intern(s_store)
+}
+
+fn sub_prod_name(
+  sub_name: &str,
+  p_data: &ProductionData,
+  s_store: &IStringStore,
+) -> IString {
+  (p_data.root_prod_name.to_string(s_store)
+    + sub_name
+    + &p_data.sub_prods.len().to_string())
+    .intern(s_store)
+}
+
 pub fn extract_productions<'a>(
   j: &mut Journal,
   g_data: &'a GrammarData,
@@ -184,6 +207,7 @@ pub fn extract_productions<'a>(
           g_data.source_id,
           parse_state.id.name.as_str(),
         )),
+        name:    prod_name(parse_state.id.name.as_str(), g_data, s_store),
         g_id:    g_data.source_id,
         tok:     parse_state.tok.clone(),
         state:   parse_state.clone(),
@@ -206,7 +230,7 @@ pub fn extract_productions<'a>(
               g_data.source_id,
               name_sym.name.as_str(),
             )),
-            name:      name_sym.name.intern(s_store),
+            name:      prod_name(name_sym.name.as_str(), g_data, s_store),
             g_id:      g_data.source_id,
             type_:     ProductionType::ContextFree,
             rules:     Default::default(),
@@ -233,7 +257,7 @@ pub fn process_parse_state<'a>(
 ) -> SherpaResult<Box<CustomState>> {
   // Extract symbol information from the state.
 
-  let CustomState { id, g_id, state, symbols, .. } = parse_state.as_mut();
+  let CustomState { id, g_id, state, symbols, name, .. } = parse_state.as_mut();
   {
     let ast::Statement { branch, non_branch, transitive } =
       state.statement.as_ref();
@@ -249,6 +273,7 @@ pub fn process_parse_state<'a>(
                   0,
                   &mut ProductionData {
                     root_prod_id: *id,
+                    root_prod_name: *name,
                     symbols,
                     sub_prods: &mut Default::default(),
                     rules: &mut Default::default(),
@@ -315,8 +340,14 @@ fn process_rule(
   let ast_syms = rule.symbols.iter().enumerate().collect::<Array<_>>();
 
   let Production { id, rules, sub_prods, symbols, type_, asts, .. } = prod;
-  let mut prod_data =
-    ProductionData { root_prod_id: *id, symbols, sub_prods, rules, asts };
+  let mut prod_data = ProductionData {
+    root_prod_id: *id,
+    symbols,
+    sub_prods,
+    rules,
+    asts,
+    root_prod_name: prod.name,
+  };
 
   let ast_ref = intern_ast(rule, &mut prod_data);
 
@@ -491,6 +522,7 @@ fn process_rule_symbols(
 
           p_data.sub_prods.push(Box::new(SubProduction {
             id,
+            name: sub_prod_name("_group_", p_data, s_store),
             type_: SubProductionType::Group,
             g_id: g_data.source_id,
             rules: sub_prod_rules,
@@ -551,6 +583,7 @@ fn process_rule_symbols(
 
         p_data.sub_prods.push(Box::new(SubProduction {
           type_: SubProductionType::List,
+          name: sub_prod_name("_list_", p_data, s_store),
           id,
           g_id: g_data.source_id,
           rules,

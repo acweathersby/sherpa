@@ -18,6 +18,8 @@ pub(crate) fn build_ir<'db: 'follow, 'follow>(
   graph: &Graph<'follow, 'db>,
   entry_name: IString,
 ) -> SherpaResult<Array<Box<ParseState<'db>>>> {
+  debug_assert!(entry_name.as_u64() != 0);
+
   let leaf_states = graph.get_leaf_states();
   let mut queue = VecDeque::from_iter(leaf_states.iter().cloned());
   let mut links: OrderedMap<StateId, Set<&State>> = OrderedMap::new();
@@ -169,7 +171,7 @@ fn convert_state_to_ir<'follow, 'db>(
 
     add_tok_expr(successors, &mut w, db);
 
-    let mut classes = classify_successors(successors);
+    let mut classes = classify_successors(successors, db);
 
     add_match_expr(&mut w, graph, &mut classes, goto_state_id);
 
@@ -284,6 +286,7 @@ fn add_tok_expr(
 
 fn classify_successors<'graph, 'db>(
   successors: &'graph Set<&'graph State<'db>>,
+  db: &'db ParserDatabase,
 ) -> VecDeque<((u32, InputType), Set<&'graph State<'db>>)> {
   VecDeque::from_iter(
     hash_group_btreemap(successors.clone(), |_, s| match s.get_symbol() {
@@ -297,7 +300,7 @@ fn classify_successors<'graph, 'db>(
       sym if sym.is_class() => (3, InputType::Class),
       sym => {
         #[cfg(debug_assertions)]
-        unreachable!("{sym:?}");
+        unreachable!("{sym:?} {}", s.debug_string(db));
         unreachable!()
       }
     })
@@ -337,7 +340,15 @@ fn add_match_expr<'follow, 'db>(
       if input_type == InputType::Token {
         let syms = successors
           .iter()
-          .map(|s| s.get_symbol().tok_db_key().unwrap())
+          .map(|s| {
+            let db_key = s.get_symbol().tok_db_key();
+            if db_key.is_none() {
+              println!("{}", s.get_symbol().debug_string(db));
+              println!("{}", s.debug_string(db));
+            }
+
+            db_key.unwrap()
+          })
           .collect::<Set<_>>();
 
         let skipped = successors

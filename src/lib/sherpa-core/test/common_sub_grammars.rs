@@ -103,6 +103,7 @@ fn compile_and_run_grammar(
       llvm_parse: true,
       bytecode_parse: true,
       grammar_string: Some(grammar),
+      print_parser_states_compile_reports: &["tk:string_tk_list_1"],
       debugger_handler: Some(&|g| console_debugger(g, Default::default())),
       ..Default::default()
     },

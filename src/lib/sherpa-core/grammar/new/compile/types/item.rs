@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, hash::Hash, ops::Index};
+use std::{collections::VecDeque, fmt::Debug, hash::Hash, ops::Index};
 
 use super::{
   super::super::types::*,
@@ -26,7 +26,6 @@ pub enum ItemType {
 }
 
 #[derive(Clone, Copy)]
-#[cfg_attr(debug_assertions, derive(Debug))]
 pub struct ItemRef<'db> {
   db: &'db ParserDatabase,
   /// The NonTerminal production or symbol that the item directly or indirectly
@@ -45,17 +44,50 @@ pub struct ItemRef<'db> {
   pub sym_index: u16,
 }
 
+#[cfg(debug_assertions)]
+impl<'db> Debug for ItemRef<'db> {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let mut s = f.debug_struct("ItemRef");
+    s.field("val", &self.debug_string());
+    s.field("origin", &self.origin);
+    s.field("goal", &self.goal);
+    s.field("origin_state", &self.origin_state);
+    s.finish()
+  }
+}
+
 impl<'db> Hash for ItemRef<'db> {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-    (self.rule_id, self.origin, self.goal, self.len, self.sym_index).hash(state)
+    (
+      self.rule_id,
+      self.origin,
+      self.origin_state,
+      self.goal,
+      self.len,
+      self.sym_index,
+    )
+      .hash(state)
   }
 }
 
 impl<'a> PartialEq for ItemRef<'a> {
   fn eq(&self, other: &Self) -> bool {
-    let a = (self.rule_id, self.origin, self.goal, self.len, self.sym_index);
-    let b =
-      (other.rule_id, other.origin, other.goal, other.len, other.sym_index);
+    let a = (
+      self.rule_id,
+      self.origin,
+      self.goal,
+      self.len,
+      self.sym_index,
+      self.origin_state,
+    );
+    let b = (
+      other.rule_id,
+      other.origin,
+      other.goal,
+      other.len,
+      other.sym_index,
+      other.origin_state,
+    );
     a == b
   }
 }
@@ -64,9 +96,22 @@ impl<'a> Eq for ItemRef<'a> {}
 
 impl<'a> PartialOrd for ItemRef<'a> {
   fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-    let a = (self.rule_id, self.origin, self.goal, self.len, self.sym_index);
-    let b =
-      (other.rule_id, other.origin, other.goal, other.len, other.sym_index);
+    let a = (
+      self.rule_id,
+      self.origin,
+      self.goal,
+      self.len,
+      self.sym_index,
+      self.origin_state,
+    );
+    let b = (
+      other.rule_id,
+      other.origin,
+      other.goal,
+      other.len,
+      other.sym_index,
+      other.origin_state,
+    );
     Some(a.cmp(&b))
   }
 }
@@ -251,10 +296,7 @@ impl<'db> ItemRef<'db> {
           prod_key: index,
           sym_key: sym_index,
           ..
-        } => TokenNonTerminal(
-          index,
-          sym_index.map(|i| self.db.sym(i)).unwrap_or(SymbolId::Undefined),
-        ),
+        } => TokenNonTerminal(index, self.sym()),
         sym => Terminal(sym),
         _ => unreachable!(),
       }

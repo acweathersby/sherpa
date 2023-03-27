@@ -131,14 +131,9 @@ fn build_states() -> SherpaResult<()> {
 
       let parse_states = garbage_collect::<Array<_>>(&db, parse_states)?;
 
-      /*    for (_, state) in &parse_states {
-        print!("{}", state.debug_string(&db));
-      } */
-
       let (bc, _) = compile_bytecode(&db, parse_states)?;
 
-      println!("{}", generate_disassembly(&bc, Option::Some(&db), &local_j));
-      let input = "12341 234";
+      let input = r##""12\"34""##;
       let mut parser = ByteCodeParser::<UTF8StringReader, u32>::new(
         &mut (input.into()),
         bc.as_ref(),

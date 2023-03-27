@@ -15,4 +15,4 @@ use optimize::*;
 
 pub use compile_states::compile_parse_states;
 pub use optimize::{garbage_collect, optimize};
-pub(crate) use types::ItemRef;
+pub(crate) use types::{ItemRef, ItemSet, Items};

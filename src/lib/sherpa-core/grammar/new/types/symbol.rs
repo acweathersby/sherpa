@@ -80,6 +80,7 @@ impl SymbolId {
     use SymbolId::*;
     match self {
       DBToken { key } => Some(*key),
+      DBNonTerminalToken { sym_key, .. } => *sym_key,
       _ => None,
     }
   }
@@ -153,6 +154,7 @@ impl SymbolId {
   pub fn to_scanner_prod_id(&self) -> ProductionId {
     use SymbolId::*;
     match self {
+      NonTerminalToken { precedence, id } => id.as_scan_prod(),
       Token { val, precedence } => ProductionId::Standard(
         hash_id_value_u64(self),
         ProductionSubType::ScannerToken,
@@ -168,7 +170,11 @@ impl SymbolId {
         hash_id_value_u64(self),
         ProductionSubType::ScannerSym,
       ),
-      _ => unimplemented!(),
+      _ => {
+        #[cfg(debug_assertions)]
+        unimplemented!("{:?}", self);
+        unimplemented!()
+      }
     }
   }
 

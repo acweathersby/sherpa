@@ -74,19 +74,18 @@ pub(crate) async fn build_compile_db<'a>(
   while let Some(prod_id) = production_queue.pop_front() {
     if !p_map.contains_key(&prod_id.as_sym()) {
       let prod = productions.get(&prod_id)?;
-
-      let prod_name = prod.name;
+      let name = prod.name;
       let rules = prod.rules.clone();
 
       add_prod(prod_id.as_sym(), rules, p_map, r_table, p_r_map, false);
-      add_prod_name(prod_name_lu, prod_name);
+      add_prod_name(prod_name_lu, name);
 
       // Gain references on all sub productions. ----------------------------
       for (index, prod) in prod.sub_prods.iter().enumerate() {
         let prod_id = prod.id;
         if !p_map.contains_key(&prod_id.as_sym()) {
           let rules = prod.rules.clone();
-          let name = (prod_name.to_string(s_store)
+          let name = (name.to_string(s_store)
             + "_"
             + &prod.type_.to_string()
             + "_"
@@ -95,6 +94,15 @@ pub(crate) async fn build_compile_db<'a>(
 
           add_prod(prod_id.as_sym(), rules, p_map, r_table, p_r_map, false);
           add_prod_name(prod_name_lu, name);
+          extract_prod_syms(
+            &prod.rules,
+            &mut production_queue,
+            &productions,
+            s_store,
+            &mut symbols,
+            &mut token_names,
+            &mut token_productions,
+          )?;
         }
       }
 
@@ -102,109 +110,151 @@ pub(crate) async fn build_compile_db<'a>(
         insert_symbol(&mut symbols, sym);
       }
 
-      for rule in &prod.rules {
-        for (sym, _) in &rule.symbols {
-          match sym {
-            SymbolId::NonTerminal { id, .. } => match id {
-              ProductionId::Standard(..) => {
-                production_queue.push_back(*id);
-              }
-              ProductionId::Sub(..) => {
-                // We've already merged in the production's sub-productions
+      extract_prod_syms(
+        &prod.rules,
+        &mut production_queue,
+        &productions,
+        s_store,
+        &mut symbols,
+        &mut token_names,
+        &mut token_productions,
+      )?;
+
+      fn extract_prod_syms(
+        rules: &[Rule],
+        production_queue: &mut VecDeque<ProductionId>,
+        productions: &Map<ProductionId, Box<Production>>,
+        s_store: &IStringStore,
+        symbols: &mut Map<SymbolId, usize>,
+        token_names: &mut Map<SymbolId, IString>,
+        token_productions: &mut VecDeque<ProductionId>,
+      ) -> SherpaResult<()> {
+        for rule in rules {
+          for (sym, _) in &rule.symbols {
+            match sym {
+              SymbolId::NonTerminal { id, .. } => match id {
+                ProductionId::Standard(..) => {
+                  production_queue.push_back(*id);
+                }
+                ProductionId::Sub(..) => {
+                  // We've already merged in the production's sub-productions
+                }
+                _ => {}
+              },
+              SymbolId::NonTerminalToken { id, .. } => {
+                let name = productions.get(&id.as_parse_prod())?.name;
+                let name = ("tk:".to_string() + &name.to_string(s_store))
+                  .intern(s_store);
+                insert_symbol(symbols, sym);
+                token_names.insert(id.as_parse_prod().as_tok_sym(), name);
+                token_productions.push_back(id.as_parse_prod());
               }
               _ => {}
-            },
-            SymbolId::NonTerminalToken { id, .. } => {
-              let name = productions.get(&id)?.name;
-              let name = ("tk:".to_string() + name.to_str(s_store).as_str())
-                .intern(s_store);
-              insert_symbol(&mut symbols, sym);
-              token_names.insert(id.as_parse_prod().as_tok_sym(), name);
-              token_productions.push_back(id.as_parse_prod());
             }
-            _ => {}
           }
         }
+        SherpaResult::Ok(())
       }
     }
   }
 
   // Generate token productions -----------------------------------------------
   while let Some(prod_id) = token_productions.pop_front() {
-    match prod_id {
-      ProductionId::Standard(internal_id, ..)
-      | ProductionId::Sub(internal_id, ..) => {
-        let prod = productions.get(&prod_id)?;
-        // Convert any left immediate recursive rules to right.
-        if !p_map.contains_key(&prod_id.as_tok_sym()) {
-          if prod_is_immediate_left_recursive(prod) {
-            let rules = prod.rules.clone();
-
-            let prime_id = ProductionId::Sub(
+    // Convert any left immediate recursive rules to right.
+    if !p_map.contains_key(&prod_id.as_tok_sym()) {
+      let (internal_id, rules, g_id, name) = match prod_id {
+        ProductionId::Standard(internal_id, ..) => {
+          let prod = productions.get(&ProductionId::Standard(
+            internal_id,
+            ProductionSubType::Parser,
+          ))?;
+          (internal_id, &prod.rules, prod.g_id, prod.name)
+        }
+        ProductionId::Sub(internal_id, index, ..) => {
+          let prod = &productions
+            .get(&ProductionId::Standard(
               internal_id,
-              prod.sub_prods.len() as u32,
-              ProductionSubType::Scanner,
-            );
+              ProductionSubType::Parser,
+            ))?
+            .sub_prods[index as usize];
+          (internal_id, &prod.rules, prod.g_id, prod.name)
+        }
+      };
 
-            let mut groups =
-              hash_group_btreemap(rules, |_, r| match r.symbols[0].0 {
-                SymbolId::NonTerminal { id, .. } if id == prod_id => true,
-                _ => false,
-              });
+      let name = ("tk_".to_string() + &name.to_str(s_store).as_str());
+      let name = name.intern(s_store);
 
-            let mut prime_rules = groups.remove(&true)?;
-            let mut r_rules = groups.remove(&false)?;
+      if prod_is_immediate_left_recursive(prod_id, &rules) {
+        let rules = rules.clone();
 
-            let mut p_rules = prime_rules
-              .into_iter()
-              .flat_map(|mut r| {
-                r.symbols.remove(0);
-                let rule_a = r.clone();
-                r.symbols.push((prime_id.as_tok_sym(), 0));
-                [rule_a, r]
-              })
-              .collect();
+        let prime_id = ProductionId::Sub(
+          internal_id,
+          p_map.len() as u32 + 9000,
+          ProductionSubType::Scanner,
+        );
 
-            r_rules.append(
-              &mut r_rules
-                .clone()
-                .into_iter()
-                .map(|mut r| {
-                  r.symbols.push((prime_id.as_tok_sym(), 0));
-                  r
-                })
-                .collect(),
-            );
+        let mut groups =
+          hash_group_btreemap(rules, |_, r| match r.symbols[0].0 {
+            SymbolId::NonTerminal { id, .. } if id == prod_id => true,
+            _ => false,
+          });
 
-            insert_token_production(&mut r_rules, &mut token_productions);
-            insert_token_production(&mut p_rules, &mut token_productions);
+        let mut prime_rules = groups.remove(&true)?;
+        let mut r_rules = groups.remove(&false)?;
 
-            convert_symbols_to_scanner_symbols(&mut r_rules, s_store);
-            convert_symbols_to_scanner_symbols(&mut p_rules, s_store);
+        let mut p_rules = prime_rules
+          .into_iter()
+          .flat_map(|mut r| {
+            r.symbols.remove(0);
+            let rule_a = r.clone();
+            r.symbols.push((prime_id.as_tok_sym(), 0));
+            [rule_a, r]
+          })
+          .collect();
 
-            let prod_id = prod_id.as_tok_sym();
-            let prime_id = prime_id.as_tok_sym();
+        r_rules.append(
+          &mut r_rules
+            .clone()
+            .into_iter()
+            .map(|mut r| {
+              r.symbols.push((prime_id.as_tok_sym(), 0));
+              r
+            })
+            .collect(),
+        );
 
-            add_prod(prod_id, r_rules, p_map, r_table, p_r_map, true);
-            add_prod(prime_id, p_rules, p_map, r_table, p_r_map, true);
-          } else {
-            p_map.insert(prod_id.as_tok_sym(), r_table.len());
+        insert_token_production(&mut r_rules, &mut token_productions);
+        insert_token_production(&mut p_rules, &mut token_productions);
 
-            let mut rules = prod.rules.clone();
+        convert_symbols_to_scanner_symbols(&mut r_rules, s_store);
+        convert_symbols_to_scanner_symbols(&mut p_rules, s_store);
 
-            convert_symbols_to_scanner_symbols(&mut rules, s_store);
-            insert_token_production(&mut rules, &mut token_productions);
+        let prod_id = prod_id.as_tok_sym();
+        let prime_id = prime_id.as_tok_sym();
 
-            let prod_id = prod_id.as_tok_sym();
+        add_prod(prod_id, r_rules, p_map, r_table, p_r_map, true);
+        add_prod_name(prod_name_lu, name);
 
-            add_prod(prod_id, rules, p_map, r_table, p_r_map, true);
-          }
+        add_prod(prime_id, p_rules, p_map, r_table, p_r_map, true);
+        add_prod_name(
+          prod_name_lu,
+          (name.to_string(s_store) + "_prime").intern(s_store),
+        );
+      } else {
+        let prod_id = prod_id.as_tok_sym();
+        if !p_map.contains_key(&prod_id) {
+          let mut rules = rules.clone();
+
+          convert_symbols_to_scanner_symbols(&mut rules, s_store);
+          insert_token_production(&mut rules, &mut token_productions);
+
+          add_prod(prod_id, rules, p_map, r_table, p_r_map, true);
+          add_prod_name(prod_name_lu, name);
         }
       }
-      _ => unreachable!(),
     }
   }
-  dbg!(&p_map);
+
   // Generate symbol productions and symbol indices ---------------------------
   for sym in symbols.keys() {
     if !p_map.contains_key(&sym.to_scanner_prod_id().as_tok_sym()) {
@@ -218,7 +268,6 @@ pub(crate) async fn build_compile_db<'a>(
           }]);
           convert_symbols_to_scanner_symbols(&mut rules, s_store);
 
-          println!("tok: {:?}", prod_id.as_tok_sym());
           add_prod(prod_id.as_tok_sym(), rules, p_map, r_table, p_r_map, true);
           add_prod_name(
             prod_name_lu,
@@ -234,7 +283,6 @@ pub(crate) async fn build_compile_db<'a>(
             skipped: Default::default(),
             ast:     None,
           }]);
-          println!("sym: {:?}", prod_id.as_tok_sym());
           add_prod(prod_id.as_tok_sym(), rules, p_map, r_table, p_r_map, true);
           add_prod_name(
             prod_name_lu,
@@ -246,7 +294,6 @@ pub(crate) async fn build_compile_db<'a>(
       }
     }
   }
-  dbg!(&p_map);
 
   let sym_lu = convert_index_map_to_vec(symbols.iter().map(|(sym, index)| {
     let prod_id = sym.to_scanner_prod_id().as_tok_sym();
@@ -317,10 +364,13 @@ fn convert_rule_symbols(
 ) {
   for DBRule { rule, is_scanner, .. } in r_table {
     for (sym, _) in &mut rule.symbols {
-      convert_rule_symbol(sym, p_map, &symbols, is_scanner);
+      convert_rule_symbol(sym, p_map, &symbols, *is_scanner);
     }
-    for sym in &mut rule.skipped {
-      convert_rule_symbol(sym, p_map, &symbols, is_scanner);
+
+    if !*is_scanner {
+      for sym in &mut rule.skipped {
+        convert_rule_symbol(sym, p_map, &symbols, *is_scanner);
+      }
     }
   }
 }
@@ -329,22 +379,27 @@ fn convert_rule_symbol(
   sym: &mut SymbolId,
   p_map: &mut std::collections::HashMap<SymbolId, usize>,
   symbols: &std::collections::HashMap<SymbolId, usize>,
-  is_scanner: &mut bool,
+  is_scanner: bool,
 ) {
   match *sym {
     SymbolId::NonTerminalToken { id, precedence } => {
-      let index = p_map.get(sym).unwrap();
-      *sym = SymbolId::DBNonTerminalToken {
-        prod_key: (*index as u32).into(),
-        sym_key: symbols.get(sym).map(|i| (*i as u32).into()),
-        precedence,
+      if is_scanner {
+        let index = p_map.get(&id.as_parse_prod().as_tok_sym()).unwrap();
+        *sym = SymbolId::DBNonTerminal { key: (*index as u32).into() }
+      } else {
+        let index = p_map.get(sym).unwrap();
+        *sym = SymbolId::DBNonTerminalToken {
+          prod_key: (*index as u32).into(),
+          sym_key: symbols.get(sym).map(|i| (*i as u32).into()),
+          precedence,
+        }
       }
     }
     SymbolId::NonTerminal { .. } => {
       let index = p_map.get(sym).unwrap();
       *sym = SymbolId::DBNonTerminal { key: (*index as u32).into() };
     }
-    sym_id if !*is_scanner => {
+    sym_id if !is_scanner => {
       let index = symbols.get(&sym_id).unwrap();
       *sym = SymbolId::DBToken { key: (*index as u32).into() }
     }
@@ -381,7 +436,9 @@ fn add_prod(
       .collect(),
   );
 
-  production_map.insert(prod_sym, prod_index);
+  let val = production_map.insert(prod_sym, prod_index);
+
+  debug_assert!(val.is_none());
 }
 
 fn convert_index_map_to_vec<T, C: IntoIterator<Item = (T, usize)>>(
@@ -461,11 +518,12 @@ fn insert_token_production(
 }
 
 fn prod_is_immediate_left_recursive(
-  prod: &super::super::types::Production,
+  prod_id: ProductionId,
+  rules: &[Rule],
 ) -> bool {
-  for rule in prod.rules.iter() {
+  for rule in rules {
     match rule.symbols[0].0 {
-      SymbolId::NonTerminal { id, .. } if id == prod.id => {
+      SymbolId::NonTerminal { id, .. } if id == prod_id => {
         //Convert the production right recursive.
         return true;
       }

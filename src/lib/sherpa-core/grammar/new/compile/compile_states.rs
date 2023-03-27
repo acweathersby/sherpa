@@ -33,7 +33,7 @@ pub async fn compile_parse_states<'db>(
 
   let follow = super::follow::create_follow_sets(db);
   let mut states = Map::new();
-  let mut scanner_groups = OrderedSet::new();
+  let mut scanners = OrderedSet::new();
   let entry_keys = db.entry_prod_keys();
 
   // Build entry states
@@ -50,12 +50,8 @@ pub async fn compile_parse_states<'db>(
     let start_items = Items::start_items((prod_id as u32).into(), db)
       .to_origin(Origin::ProdGoal(prod_id.into()));
 
-    #[cfg(debug_assertions)]
-    start_items.__debug_print__("\n");
-
     match prod_sym {
       SymbolId::NonTerminal { id } => {
-        //Run parser pass
         let graph =
           build_graph(&mut j, GraphMode::Parser, start_items, db, &follow)
             .unwrap();
@@ -66,14 +62,13 @@ pub async fn compile_parse_states<'db>(
         for mut state in ir {
           if let Some(scanner_data) = state.build_scanners(db) {
             for (name, syms) in scanner_data {
-              scanner_groups.insert((*name, syms.clone()));
+              scanners.insert((*name, syms.clone()));
             }
           }
           states.insert(state.name, state);
         }
       }
       SymbolId::NonTerminalToken { id, .. } => {
-        //Run scanner
         let graph =
           build_graph(&mut j, GraphMode::Scanner, start_items, db, &follow)
             .unwrap();
@@ -90,7 +85,7 @@ pub async fn compile_parse_states<'db>(
   }
 
   /// Build Scanners
-  for (scanner_name, group) in scanner_groups {
+  for (scanner, group) in scanners {
     let start_items = group
       .iter()
       .flat_map(|s| {
@@ -99,17 +94,13 @@ pub async fn compile_parse_states<'db>(
       })
       .collect::<Array<_>>();
 
-    println!("{}", start_items.to_debug_string("\n"));
-
-    //Run scanner
     let graph =
       build_graph(&mut j, GraphMode::Scanner, start_items, db, &follow)
         .unwrap();
 
-    let ir = build_ir(&mut j, &graph, scanner_name).unwrap();
+    let ir = build_ir(&mut j, &graph, scanner).unwrap();
 
     for state in ir {
-      println!("{}", state.debug_string(db));
       states.insert(state.name, state);
     }
   }

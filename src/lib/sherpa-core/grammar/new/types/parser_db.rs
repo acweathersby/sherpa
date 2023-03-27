@@ -1,4 +1,9 @@
-use std::ops::Index;
+use std::{collections::VecDeque, ops::Index};
+
+use crate::{
+  grammar::new::compile::{ItemRef, Items},
+  types::Item,
+};
 
 use super::{
   ASTToken,
@@ -7,6 +12,7 @@ use super::{
   IString,
   IStringStore,
   Rule,
+  Set,
   SymbolId,
 };
 
@@ -49,6 +55,8 @@ pub struct ParserDatabase {
   /// the root grammar, or by the filename stem in the path for the root
   /// grammar.
   pub name:     IString,
+  ////
+  follow_items: Array<Option<Array<(DBRuleKey, u32, bool)>>>,
   /// Table of production symbols.
   prod_syms:    Array<SymbolId>,
   /// Table of production names for public productions.
@@ -81,6 +89,8 @@ impl ParserDatabase {
     entry_points: Array<EntryPoint>,
     string_store: IStringStore,
   ) -> Self {
+    let lr_items = construct_follow(&prod_syms, &rules);
+
     Self {
       name,
       prod_syms,
@@ -90,6 +100,7 @@ impl ParserDatabase {
       tokens: token_lu,
       entry_points,
       string_store,
+      follow_items: lr_items,
     }
   }
 
@@ -158,6 +169,11 @@ impl ParserDatabase {
     self.prod_rules.get(key.0 as usize)
   }
 
+  /// Returns the internal Rules
+  pub fn rules(&self) -> &[DBRule] {
+    self.rules.as_slice()
+  }
+
   /// Given an [DBRuleKey] returns an [Rule], or `None` if
   /// the id is invalid.
   pub fn rule(&self, key: DBRuleKey) -> &Rule {
@@ -173,6 +189,59 @@ impl ParserDatabase {
   pub fn string_store(&self) -> &IStringStore {
     &self.string_store
   }
+
+  pub fn follow_items<'db>(&'db self, key: DBProdKey) -> Items<'db> {
+    let mut prod_ids = VecDeque::from_iter(vec![key]);
+    let mut seen = Set::new();
+    let mut items = Items::new();
+
+    while let Some(id) = prod_ids.pop_front() {
+      if seen.insert(id) {
+        if let Some(follow) = self.follow_items.get(id.0 as usize).unwrap() {
+          for (rule, sym_index, is_last) in follow {
+            let mut item = ItemRef::from_rule(*rule, self);
+            item.sym_index = *sym_index as u16;
+            items.push(item);
+
+            if *is_last {
+              prod_ids.push_front(item.prod_index())
+            }
+          }
+        }
+      }
+    }
+
+    items
+  }
+}
+
+fn construct_follow(
+  prod_syms: &Vec<SymbolId>,
+  rules: &Vec<DBRule>,
+) -> Vec<Option<Vec<(DBRuleKey, u32, bool)>>> {
+  let mut follow_items = Array::new();
+  for _ in 0..prod_syms.len() {
+    follow_items.push(None);
+  }
+
+  // Calculates all follow items for all productions
+  for (rule_id, rule) in rules.iter().enumerate() {
+    let last = rule.rule.symbols.len() - 1;
+    for (sym_off, (sym, _)) in rule.rule.symbols.iter().enumerate() {
+      match sym {
+        SymbolId::DBNonTerminalToken { prod_key, .. } if rule.is_scanner => {
+          let val = follow_items[prod_key.0 as usize].get_or_insert(vec![]);
+          val.push((rule_id.into(), sym_off as u32, sym_off == last))
+        }
+        SymbolId::DBNonTerminal { key } => {
+          let val = follow_items[key.0 as usize].get_or_insert(vec![]);
+          val.push((rule_id.into(), sym_off as u32, sym_off == last))
+        }
+        _ => {}
+      }
+    }
+  }
+  follow_items
 }
 
 macro_rules! indexed_id_implementations {
