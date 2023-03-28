@@ -129,6 +129,10 @@ impl<'db> ParseState<'db> {
     let string = w.into_output();
     string
   }
+
+  pub fn source_string(&self, s: &IStringStore) -> String {
+    unsafe { String::from_utf8_unchecked(self.source(s)) }
+  }
 }
 
 #[cfg(debug_assertions)]

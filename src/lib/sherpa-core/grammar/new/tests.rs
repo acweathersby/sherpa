@@ -1,3 +1,5 @@
+// Copyright Anthony Weathersby, 2023 - See license at end of file GPL-3
+
 use core::panic;
 use std::{path::PathBuf, sync::Arc};
 
@@ -88,7 +90,7 @@ fn build_parser() -> SherpaResult<()> {
 fn build_states() -> SherpaResult<()> {
   let grammar_soup = GrammarSoup::new();
   let grammar_source_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-    .join("../../grammar/json/test.sg")
+    .join("../../grammar/json/json.sg")
     .canonicalize()
     .unwrap();
 
@@ -131,9 +133,13 @@ fn build_states() -> SherpaResult<()> {
 
       let parse_states = garbage_collect::<Array<_>>(&db, parse_states)?;
 
+      for state in &parse_states {
+        println!("{}", state.1.source_string(db.string_store()));
+      }
+
       let (bc, _) = compile_bytecode(&db, parse_states)?;
 
-      let input = r##""12\"34""##;
+      let input = r##"{ "test":"12\"34"}"##;
       let mut parser = ByteCodeParser::<UTF8StringReader, u32>::new(
         &mut (input.into()),
         bc.as_ref(),

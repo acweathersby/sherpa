@@ -157,7 +157,7 @@ fn build_statement<'db>(
       ASTNode::Fail(..) => insert_op(bc, Op::Fail),
       ASTNode::Accept(..) => insert_op(bc, Op::Accept),
       ASTNode::Gotos(gotos) => {
-        for push in gotos.pushes.iter().rev() {
+        for push in &gotos.pushes {
           let proxy_address = get_proxy_address(
             push.prod.to_token().to_string().to_token(),
             state_name_to_proxy,
