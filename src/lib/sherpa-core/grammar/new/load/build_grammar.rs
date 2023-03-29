@@ -16,7 +16,7 @@ use crate::{
   Journal,
   SherpaResult,
 };
-use std::path::PathBuf;
+use std::{hash::Hash, path::PathBuf};
 
 /// Temporary structure to host rule data during
 /// construction.
@@ -142,10 +142,7 @@ pub fn create_grammar_data(
     }
   }
   let mut g_data = GrammarData {
-    name: (name.to_string()
-      + "_"
-      + &(hash_id_value_u64(grammar_path).to_string()[0..4]))
-      .intern(string_store),
+    name: grammar_name(name, grammar_path, string_store),
     source_id: grammar_path.into(),
     global_skipped: skipped,
     grammar,
@@ -169,25 +166,6 @@ pub fn create_grammar_data(
   }
 
   SherpaResult::Ok(g_data)
-}
-
-pub fn prod_name(
-  base_name: &str,
-  g_data: &GrammarData,
-  s_store: &IStringStore,
-) -> IString {
-  (g_data.name.to_string(s_store) + "_" + base_name).intern(s_store)
-}
-
-fn sub_prod_name(
-  sub_name: &str,
-  p_data: &ProductionData,
-  s_store: &IStringStore,
-) -> IString {
-  (p_data.root_prod_name.to_string(s_store)
-    + sub_name
-    + &p_data.sub_prods.len().to_string())
-    .intern(s_store)
 }
 
 pub fn extract_productions<'a>(
@@ -522,7 +500,7 @@ fn process_rule_symbols(
 
           p_data.sub_prods.push(Box::new(SubProduction {
             id,
-            name: sub_prod_name("_group_", p_data, s_store),
+            name: sub_prod_name("group", p_data, s_store),
             type_: SubProductionType::Group,
             g_id: g_data.source_id,
             rules: sub_prod_rules,
@@ -583,7 +561,7 @@ fn process_rule_symbols(
 
         p_data.sub_prods.push(Box::new(SubProduction {
           type_: SubProductionType::List,
-          name: sub_prod_name("_list_", p_data, s_store),
+          name: sub_prod_name("list", p_data, s_store),
           id,
           g_id: g_data.source_id,
           rules,
@@ -855,4 +833,63 @@ mod test {
 
     SherpaResult::Ok(())
   }
+}
+
+// NAMES ------------------------------------------------------------------------
+
+/// Creates a globally unique name for a production
+pub fn prod_name(
+  base_name: &str,
+  g_data: &GrammarData,
+  s_store: &IStringStore,
+) -> IString {
+  (g_data.name.to_string(s_store) + "____" + base_name).intern(s_store)
+}
+
+/// Creates a globally unique name for a sub-production.
+/// `sub_name` should be a string indicating the type of symbol that
+/// the sub-production was derived from.
+fn sub_prod_name(
+  sub_name: &str,
+  p_data: &ProductionData,
+  s_store: &IStringStore,
+) -> IString {
+  if p_data.sub_prods.is_empty() {
+    (p_data.root_prod_name.to_string(s_store) + "_" + sub_name).intern(s_store)
+  } else {
+    (p_data.root_prod_name.to_string(s_store)
+      + "_"
+      + sub_name
+      + "_"
+      + &p_data.sub_prods.len().to_string())
+      .intern(s_store)
+  }
+}
+/// Creates a globally unique name for a grammar
+fn grammar_name(
+  name: &str,
+  grammar_path: &PathBuf,
+  string_store: &IStringStore,
+) -> IString {
+  (name.to_string() + "_" + &to_base64_name(grammar_path)).intern(string_store)
+}
+
+fn to_base64_name<T: Hash>(val: T) -> String {
+  let mut string = Vec::new();
+
+  let val = hash_id_value_u64(val);
+
+  for i in 0..4 {
+    let val = (val >> (i * 6)) & 0x3F;
+    let ascii_base = if val < 10 {
+      val + 48
+    } else if val < 36 {
+      val + (65 - 10)
+    } else {
+      val + (97 - 36)
+    };
+    string.push(ascii_base as u8);
+  }
+
+  String::from_utf8(string).unwrap()
 }

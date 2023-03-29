@@ -46,7 +46,7 @@ pub(crate) async fn build_compile_db<'a>(
 
   // Build production list.
 
-  let mut symbols = Map::new();
+  let mut symbols = Map::from_iter(vec![(SymbolId::Default, 0)]);
   let mut production_queue =
     Queue::from_iter(root_grammar.pub_prods.values().cloned());
 
@@ -85,12 +85,7 @@ pub(crate) async fn build_compile_db<'a>(
         let prod_id = prod.id;
         if !p_map.contains_key(&prod_id.as_sym()) {
           let rules = prod.rules.clone();
-          let name = (name.to_string(s_store)
-            + "_"
-            + &prod.type_.to_string()
-            + "_"
-            + &index.to_string())
-            .intern(s_store);
+          let name = prod.name;
 
           add_prod(prod_id.as_sym(), rules, p_map, r_table, p_r_map, false);
           add_prod_name(prod_name_lu, name);
@@ -257,8 +252,12 @@ pub(crate) async fn build_compile_db<'a>(
 
   // Generate symbol productions and symbol indices ---------------------------
   for sym in symbols.keys() {
+    if sym.is_default() {
+      continue;
+    }
     if !p_map.contains_key(&sym.to_scanner_prod_id().as_tok_sym()) {
       match sym {
+        SymbolId::Default => {}
         SymbolId::Token { val, precedence } => {
           let prod_id = sym.to_scanner_prod_id();
           let mut rules = Array::from([Rule {
@@ -296,12 +295,17 @@ pub(crate) async fn build_compile_db<'a>(
   }
 
   let sym_lu = convert_index_map_to_vec(symbols.iter().map(|(sym, index)| {
-    let prod_id = sym.to_scanner_prod_id().as_tok_sym();
     (
       DBTokenData {
-        prod_id: p_map.get(&prod_id).map(|i| DBProdKey::from(*i)).unwrap(),
+        prod_id: if sym.is_default() {
+          Default::default()
+        } else {
+          let prod_id = sym.to_scanner_prod_id().as_tok_sym();
+          p_map.get(&prod_id).map(|i| DBProdKey::from(*i)).unwrap_or_default()
+        },
         sym_id:  *sym,
-        tok_id:  *index,
+        tok_id:  (*index).into(),
+        tok_val: (*index),
       },
       *index,
     )
@@ -474,17 +478,24 @@ fn convert_symbols_to_scanner_symbols(
         SymbolId::Token { val, precedence } => {
           let guarded_str = val.to_str(s_store);
           let string = guarded_str.as_str();
-          let last = string.len() - 1;
+          let last = string.chars().count() - 1;
           let mut characters = string
-            .as_bytes()
-            .iter()
+            .chars()
             .enumerate()
             .map(|(i, c)| {
-              eprintln!("NEED TO CHECK FOR CODEPOINTS, NOT JUST BYTES!");
-              (
-                SymbolId::Char { char: *c, precedence: *precedence },
-                if i == last { *index } else { 99999 },
-              )
+              if c.is_ascii() {
+                let char = c as u8;
+                (
+                  SymbolId::Char { char, precedence: *precedence },
+                  if i == last { *index } else { 99999 },
+                )
+              } else {
+                let val = c as u32;
+                (
+                  SymbolId::Codepoint { precedence: *precedence, val },
+                  if i == last { *index } else { 99999 },
+                )
+              }
             })
             .collect::<Array<_>>();
 

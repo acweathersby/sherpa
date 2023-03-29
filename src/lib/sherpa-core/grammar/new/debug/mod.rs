@@ -43,6 +43,7 @@ pub fn console_debugger<'a>(
     DebugEvent::Reduce { rule_id } => {
       let item = ItemRef::from_rule((*rule_id).into(), &db);
       let prod_name = item.prod_name().to_string(db.string_store());
+      let prod_name = prod_name.split("____").last().unwrap();
 
       let items = stack.drain((stack.len() - item.len as usize)..);
       let symbols = items.collect::<Vec<_>>();

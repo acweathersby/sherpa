@@ -93,6 +93,14 @@ impl SymbolId {
     }
   }
 
+  pub fn is_default(&self) -> bool {
+    use SymbolId::*;
+    match self {
+      Default => true,
+      _ => false,
+    }
+  }
+
   /// True if the SymbolId is a Generic class type
   pub fn is_class(&self) -> bool {
     use SymbolId::*;
@@ -179,7 +187,7 @@ impl SymbolId {
   }
 
   /// Retrieves the binary / bytecode form of the symbol.
-  pub fn to_state_val(&self) -> u32 {
+  pub fn to_state_val(&self, db: &ParserDatabase) -> u32 {
     use SymbolId::*;
     match *self {
       Default => DEFAULT_SYM_ID,
@@ -193,9 +201,9 @@ impl SymbolId {
       Codepoint { val, .. } => val,
       Char { char, .. } => char as u32,
       DBNonTerminal { key } => (Into::<usize>::into(key)) as u32,
-      DBToken { key, .. } => key.to_state_val(),
+      DBToken { key, .. } => key.to_val(db),
       DBNonTerminalToken { prod_key, sym_key, .. } => {
-        sym_key.map(|d| d.to_state_val()).unwrap_or(u32::MAX)
+        sym_key.map(|d| d.to_val(db)).unwrap_or(u32::MAX)
       }
       _ => u32::MAX,
     }

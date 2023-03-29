@@ -133,29 +133,15 @@ fn build_states() -> SherpaResult<()> {
 
       let parse_states = garbage_collect::<Array<_>>(&db, parse_states)?;
 
-      for state in &parse_states {
-        println!("{}", state.1.source_string(db.string_store()));
-      }
-
       let (bc, _) = compile_bytecode(&db, parse_states)?;
 
-      let input = r##"{ "test":"12\"34"}"##;
+      let input = r##"{"test":[{ "test":"12\"34", "test":"12\"34"}]}"##;
       let mut parser = ByteCodeParser::<UTF8StringReader, u32>::new(
         &mut (input.into()),
         bc.as_ref(),
       );
 
-      dbg!(parser.collect_shifts_and_skips(
-        8,
-        0,
-        &mut console_debugger(db.clone(), PrintConfig {
-          display_input_data: true,
-          display_instruction: true,
-          display_scanner_output: true,
-          display_state: true,
-          ..Default::default()
-        })
-      ));
+      dbg!(parser.collect_shifts_and_skips(8, 0, &mut None));
 
       SherpaResult::Ok(())
     },

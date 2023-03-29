@@ -817,23 +817,27 @@ fn resolve_conflicting_symbols<'db, 'follow>(
     match priority {
       Defined => {
         if groups.len() > 1 {
+          #[cfg(debug_assertions)]
           panic!(
             "Found {} conflicting Defined symbols. Grammar is ambiguous:\n{}",
             groups.len(),
             graph.debug_string()
           );
+          panic!()
         } else {
           completed = Some(groups.values().next().unwrap());
         }
       }
       Class => {
         if groups.len() > 1 {
+          #[cfg(debug_assertions)]
           panic!(
             "Found {} conflicting Generic symbols. Grammar is ambiguous:\n{:#?}\n-----\n{}",
             groups.len(),
             groups,
             graph.debug_string()
           );
+          panic!()
         } else {
           completed = Some(groups.values().next().unwrap());
         }
@@ -1235,11 +1239,11 @@ fn handle_completed_item<'db, 'follow>(
       let state = graph.create_state(
         sym,
         match (is_continue, goals.first().map(|d| d.origin)) {
-          (true, Some(Origin::TokenGoal(sym_id))) => {
-            StateType::AssignAndFollow(sym_id)
+          (true, Some(Origin::TokenGoal(tok_id))) => {
+            StateType::AssignAndFollow(tok_id)
           }
-          (false, Some(Origin::TokenGoal(sym_id))) => {
-            StateType::AssignToken(sym_id)
+          (false, Some(Origin::TokenGoal(tok_id))) => {
+            StateType::AssignToken(tok_id)
           }
           (true, _) => StateType::Follow,
           (false, _) => StateType::Complete,

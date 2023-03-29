@@ -89,8 +89,7 @@ pub async fn compile_parse_states<'db>(
     let start_items = group
       .iter()
       .flat_map(|s| {
-        Items::start_items(s.prod_id, db)
-          .to_origin(Origin::TokenGoal(s.tok_id.into()))
+        Items::start_items(s.prod_id, db).to_origin(Origin::TokenGoal(s.tok_id))
       })
       .collect::<Array<_>>();
 

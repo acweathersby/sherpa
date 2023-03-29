@@ -3,7 +3,7 @@
 
 pub(crate) mod compile;
 
-pub(crate) mod load;
+pub(crate) mod build_grammar;
 pub(crate) mod merge;
 pub(crate) mod build_db;
 pub(crate) mod utils;

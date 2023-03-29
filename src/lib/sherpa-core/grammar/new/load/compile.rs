@@ -1,6 +1,6 @@
 #![allow(unused_mut, unused)]
 use super::{
-  load::{
+  build_grammar::{
     create_grammar_data,
     extract_productions,
     parse_grammar,
@@ -13,7 +13,7 @@ use crate::{
   grammar::{
     multitask::WorkVerifier,
     new::{
-      load::load::{
+      load::build_grammar::{
         convert_grammar_data_to_header,
         process_parse_state,
         process_prod,

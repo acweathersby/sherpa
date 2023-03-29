@@ -247,8 +247,8 @@ pub enum SubProductionType {
 impl SubProductionType {
   pub fn to_string(&self) -> String {
     match self {
-      SubProductionType::Group => "group".into(),
-      SubProductionType::List => "list".into(),
+      SubProductionType::Group => "grp".into(),
+      SubProductionType::List => "lst".into(),
     }
   }
 }
@@ -317,50 +317,63 @@ impl GrammarIdentity {
 }
 
 use super::ParserDatabase;
-#[cfg(debug_assertions)]
+
 impl SymbolId {
   pub fn debug_string(&self, db: &ParserDatabase) -> String {
     use SymbolId::*;
-
+    let mut w = CodeWriter::new(vec![]);
     match *self {
-      Undefined => "Undefine".into(),
-      Default => "Default".into(),
-      EndOfFile { .. } => "{EOF}".into(),
-      ClassSpace { .. } => "c:sp".into(),
-      ClassHorizontalTab { .. } => "c:tab".into(),
-      ClassNewLine { .. } => "c:nl".into(),
-      ClassIdentifier { .. } => "c:id".into(),
-      ClassNumber { .. } => "c:num".into(),
-      ClassSymbol { .. } => "c:sym".into(),
+      Undefined => &mut w + "Undefine",
+      Default => &mut w + "Default",
+      EndOfFile { .. } => &mut w + "{EOF}",
+      ClassSpace { .. } => &mut w + "c:sp",
+      ClassHorizontalTab { .. } => &mut w + "c:tab",
+      ClassNewLine { .. } => &mut w + "c:nl",
+      ClassIdentifier { .. } => &mut w + "c:id",
+      ClassNumber { .. } => &mut w + "c:num",
+      ClassSymbol { .. } => &mut w + "c:sym",
       Token { val, precedence } => {
-        format!(
-          "[\"{}\"]{{{precedence}}}",
-          val.to_str(db.string_store()).as_str()
-        )
+        &mut w
+          + "["
+          + val.to_str(db.string_store()).as_str()
+          + "]{"
+          + precedence.to_string()
+          + "}"
       }
-      NonTerminal { id, .. } => format!("<non-term:{id:?}>"),
-      NonTerminalToken { id, .. } => format!("tk:<non-term:{id:?}>"),
-      Codepoint { val, .. } => format!("cp:{}", val),
+      NonTerminal { id, .. } => &mut w + "non_term",
+      NonTerminalToken { id, .. } => &mut w + "tk:" + "non_term",
+      Codepoint { val, precedence } => {
+        &mut w + "[ cp:" + val.to_string() + "]{" + precedence.to_string() + "}"
+      }
       DBNonTerminal { key } => {
         let guard_str = db.prod_name_str(key);
         let name = guard_str.as_str();
-        format!("{name}")
+        &mut w + name
       }
       DBNonTerminalToken { prod_key, precedence, .. } => {
         let guard_str = db.prod_name_str(prod_key);
-        let name = guard_str.as_str();
-
-        format!("tk:{name}{{{precedence}}}")
+        &mut w + "tk:" + guard_str + "{" + precedence.to_string() + "}"
       }
-      DBToken { key: index } => db.sym(index).debug_string(db),
+      DBToken { key: index } => &mut w + db.sym(index).debug_string(db),
       Char { char, precedence } => {
         if char < 128 {
-          format!("[\"{}\"]{{{precedence}}}", char::from(char))
+          &mut w
+            + "[ cp:"
+            + char::from(char).to_string()
+            + "]{"
+            + precedence.to_string()
+            + "}"
         } else {
-          format!("[0x{char:X}]{{{precedence}}}")
+          &mut w
+            + "[ char:"
+            + char.to_string()
+            + "]{"
+            + precedence.to_string()
+            + "}"
         }
       }
-    }
+    };
+    w.to_string()
   }
 }
 

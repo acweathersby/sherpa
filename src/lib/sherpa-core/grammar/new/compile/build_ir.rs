@@ -197,9 +197,7 @@ fn convert_state_to_ir<'follow, 'db>(
 
     match state.get_type() {
       StateType::AssignAndFollow(tok_id) | StateType::AssignToken(tok_id) => {
-        let bytecode_id = tok_id.to_index();
-
-        (&mut w) + "set-tok " + db.tok_id(tok_id).to_string();
+        (&mut w) + "set-tok " + db.tok_val(tok_id).to_string();
       }
       StateType::Complete => w.write("pass")?,
 
@@ -275,9 +273,7 @@ fn add_tok_expr(
   if let Some(set_tok) = set_token.pop() {
     match set_tok.get_type() {
       StateType::AssignAndFollow(tok_id) | StateType::AssignToken(tok_id) => {
-        let bytecode_id = tok_id.to_index();
-
-        (w + "set-tok " + db.tok_id(tok_id).to_string()).prime_join(" then ");
+        (w + "set-tok " + db.tok_val(tok_id).to_string()).prime_join(" then ");
       }
       _ => unreachable!(),
     }
@@ -333,22 +329,14 @@ fn add_match_expr<'follow, 'db>(
         let sym = s.get_symbol();
 
         let s_type = s.get_type();
-        w = w + "\n\n( " + sym.to_state_val().to_string() + " ){ ";
+        w = w + "\n\n( " + sym.to_state_val(db).to_string() + " ){ ";
         w = w + build_body(s, graph, goto_state_id).join(" then ") + " }";
       }
 
       if input_type == InputType::Token {
         let syms = successors
           .iter()
-          .map(|s| {
-            let db_key = s.get_symbol().tok_db_key();
-            if db_key.is_none() {
-              println!("{}", s.get_symbol().debug_string(db));
-              println!("{}", s.debug_string(db));
-            }
-
-            db_key.unwrap()
-          })
+          .map(|s| s.get_symbol().tok_db_key().unwrap())
           .collect::<Set<_>>();
 
         let skipped = successors
@@ -364,7 +352,7 @@ fn add_match_expr<'follow, 'db>(
         if !skipped.is_empty() {
           let vals = skipped
             .iter()
-            .map(|v| v.to_state_val().to_string())
+            .map(|v| v.to_val(db).to_string())
             .collect::<Array<_>>()
             .join(" | ");
           w = w + "( " + vals + " ){ skip }";
