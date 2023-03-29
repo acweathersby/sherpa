@@ -23,7 +23,6 @@ mod grammar;
 mod journal;
 mod llvm;
 mod parser;
-mod tasks;
 mod types;
 mod util;
 mod writer;

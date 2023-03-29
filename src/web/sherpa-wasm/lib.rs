@@ -1,18 +1,4 @@
 use serde::{Deserialize, Serialize};
-use sherpa_core::{
-  compile::{
-    compile_bytecode,
-    compile_parse_states,
-    optimize_parse_states,
-    BytecodeOutput,
-    GrammarStore,
-  },
-  debug,
-  errors,
-  Journal,
-  SherpaError,
-  SherpaResult,
-};
 use sherpa_runtime::{
   bytecode_parser::ByteCodeParser,
   types::{
@@ -56,8 +42,9 @@ pub fn compile_grammar(grammar: JsValue) -> Result<JournalWrap, JsError> {
       let mut j = Journal::new(None);
       GrammarStore::from_str(&mut j, &grammar_source);
       j.flush_reports();
-      let valid_grammar =
-        !j.have_errors_of_type(sherpa_core::errors::SherpaErrorSeverity::Critical);
+      let valid_grammar = !j.have_errors_of_type(
+        sherpa_core::errors::SherpaErrorSeverity::Critical,
+      );
       Ok(JournalWrap {
         _internal_: Box::new(j),
         _states_: None,
@@ -95,10 +82,17 @@ impl JournalWrap {
   pub fn get_grammar_errors(&mut self) -> Result<String, JsError> {
     let mut errors = vec![];
     self._internal_.flush_reports();
-    self._internal_.get_reports(sherpa_core::ReportType::GrammarCompile(Default::default()), |r| {
-      let mut e = r.errors().iter().filter_map(|e| e.convert_to_js_err()).collect::<Vec<_>>();
-      errors.append(&mut e)
-    });
+    self._internal_.get_reports(
+      sherpa_core::ReportType::GrammarCompile(Default::default()),
+      |r| {
+        let mut e = r
+          .errors()
+          .iter()
+          .filter_map(|e| e.convert_to_js_err())
+          .collect::<Vec<_>>();
+        errors.append(&mut e)
+      },
+    );
 
     Ok(format!("[{}]", errors.join(",")))
   }
@@ -184,7 +178,8 @@ pub struct JSGrammarParser {
 #[wasm_bindgen]
 impl JSGrammarParser {
   pub fn new(input: String) -> Self {
-    let mut reader = Rc::new(RefCell::new(StringReader::StringReader::new(input)));
+    let mut reader =
+      Rc::new(RefCell::new(StringReader::StringReader::new(input)));
     let other_reader = reader.clone();
     let reader_ptr = reader.borrow_mut();
     Self {
@@ -208,12 +203,24 @@ impl JSGrammarParser {
       ParseAction::EndOfInput { current_cursor_offset } => {
         serde_wasm_bindgen::to_value(&JsonParseAction::EndOfInput).unwrap()
       }
-      ParseAction::Shift { token_byte_offset, token_byte_length, token_id, .. } => {
-        serde_wasm_bindgen::to_value(&JsonParseAction::Shift { len: token_byte_length }).unwrap()
-      }
-      ParseAction::Skip { token_byte_offset, token_byte_length, token_id, .. } => {
-        serde_wasm_bindgen::to_value(&JsonParseAction::Skip { len: token_byte_length }).unwrap()
-      }
+      ParseAction::Shift {
+        token_byte_offset,
+        token_byte_length,
+        token_id,
+        ..
+      } => serde_wasm_bindgen::to_value(&JsonParseAction::Shift {
+        len: token_byte_length,
+      })
+      .unwrap(),
+      ParseAction::Skip {
+        token_byte_offset,
+        token_byte_length,
+        token_id,
+        ..
+      } => serde_wasm_bindgen::to_value(&JsonParseAction::Skip {
+        len: token_byte_length,
+      })
+      .unwrap(),
       ParseAction::Reduce { production_id, rule_id, symbol_count } => {
         serde_wasm_bindgen::to_value(&JsonParseAction::Reduce {
           len:     symbol_count,
@@ -231,14 +238,17 @@ impl JSGrammarParser {
 #[wasm_bindgen]
 pub fn get_codemirror_parse_tree(input: String) -> JsValue {
   let mut reader = StringReader::StringReader::new(input);
-  let mut bytecode_parser =
-    ByteCodeParser::<'static, _, u32>::new(&mut reader, &sherpa_core::compile::bytecode);
+  let mut bytecode_parser = ByteCodeParser::<'static, _, u32>::new(
+    &mut reader,
+    &sherpa_core::compile::bytecode,
+  );
   bytecode_parser.init_parser(60);
 
   let mut output = vec![];
   let mut acc_stack: Vec<u32> = vec![];
 
-  const LAST_TOKEN_INDEX: usize = sherpa_core::compile::meta::production_names.len();
+  const LAST_TOKEN_INDEX: usize =
+    sherpa_core::compile::meta::production_names.len();
   loop {
     match bytecode_parser.get_next_action(&mut None) {
       ParseAction::Accept { .. } => {
@@ -289,7 +299,10 @@ struct ProdNames(Vec<String>);
 #[wasm_bindgen]
 pub fn get_production_names() -> JsValue {
   serde_wasm_bindgen::to_value(&ProdNames(
-    sherpa_core::compile::meta::production_names.iter().map(|i| (*i).to_string()).collect(),
+    sherpa_core::compile::meta::production_names
+      .iter()
+      .map(|i| (*i).to_string())
+      .collect(),
   ))
   .unwrap()
 }
@@ -306,7 +319,12 @@ pub enum JsonParseAction {
 }
 
 mod StringReader {
-  use sherpa_runtime::types::{ByteReader, MutByteReader, SharedSymbolBuffer, UTF8Reader};
+  use sherpa_runtime::types::{
+    ByteReader,
+    MutByteReader,
+    SharedSymbolBuffer,
+    UTF8Reader,
+  };
 
   #[derive(Debug, Clone)]
   pub struct StringReader {
@@ -404,7 +422,10 @@ mod StringReader {
 
     #[inline(always)]
     fn get_source(&mut self) -> SharedSymbolBuffer {
-      self.source.get_or_insert(SharedSymbolBuffer::new(Vec::from(self.data.clone()))).clone()
+      self
+        .source
+        .get_or_insert(SharedSymbolBuffer::new(Vec::from(self.data.clone())))
+        .clone()
     }
 
     #[inline(always)]
@@ -414,11 +435,17 @@ mod StringReader {
 
     #[inline(always)]
     fn get_length_data(&self) -> u64 {
-      ((self.codepoint_byte_length() as u64) << 32) | self.codepoint_length() as u64
+      ((self.codepoint_byte_length() as u64) << 32)
+        | self.codepoint_length() as u64
     }
 
     #[inline(always)]
-    fn set_cursor_to(&mut self, off: usize, line_num: u32, line_off: u32) -> u64 {
+    fn set_cursor_to(
+      &mut self,
+      off: usize,
+      line_num: u32,
+      line_off: u32,
+    ) -> u64 {
       if self.cursor != off {
         let diff = off as i32 - self.cursor as i32;
 

@@ -129,7 +129,7 @@ dependencies = [
  "js-sys",
  "serde",
  "serde-wasm-bindgen",
- "sherpa_core",
+ "sherpa_core_neuvo",
  "sherpa_runtime",
  "wasm-bindgen",
  "wasm-bindgen-test",
@@ -138,8 +138,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "sherpa_core"
-version = "1.0.0-beta1"
+name = "sherpa_core_neuvo"
+version = "1.0.0-beta2"
 dependencies = [
  "sherpa_runtime",
 ]

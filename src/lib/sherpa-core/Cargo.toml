@@ -1,6 +1,6 @@
 [package]
 name = "sherpa_core"
-version = "1.0.0-beta1"
+version = "1.0.0-beta2"
 edition = "2021"
 authors = ["Anthony Weathersby <acweathersby.codes@gmail.com>"]
 

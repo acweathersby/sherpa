@@ -20,8 +20,8 @@ use std::{
 
 #[no_mangle]
 pub extern "C" fn sherpa_free_stack(ptr: *mut Goto, byte_size: usize) {
-  // Each goto slot is 16bytes, so we shift left num_of_slots by 4 to get the bytes size of
-  // the stack.
+  // Each goto slot is 16bytes, so we shift left num_of_slots by 4 to get the
+  // bytes size of the stack.
   let layout = Layout::from_size_align(byte_size, 16).unwrap();
 
   unsafe { dealloc(ptr as *mut u8, layout) }
@@ -34,8 +34,8 @@ pub extern "C" fn sherpa_get_token_class_from_codepoint(codepoint: u32) -> u32 {
 
 #[no_mangle]
 pub extern "C" fn sherpa_allocate_stack(byte_size: usize) -> *mut Goto {
-  // Each goto slot is 16bytes, so we shift left num_of_slots by 4 to get the bytes size of
-  // the stack.
+  // Each goto slot is 16bytes, so we shift left num_of_slots by 4 to get the
+  // bytes size of the stack.
 
   let layout = Layout::from_size_align(byte_size, 16).unwrap();
 
@@ -47,13 +47,13 @@ pub extern "C" fn sherpa_allocate_stack(byte_size: usize) -> *mut Goto {
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub struct InputInfo(pub *const u8, pub u32, pub bool);
 
 pub trait LLVMByteReader {
   /// Get a pointer to a sequence of bytes that can be read from the input given
-  /// the cursor position. The second tuple values should be the length bytes that
-  ///  can be read from the block.
+  /// the cursor position. The second tuple values should be the length bytes
+  /// that  can be read from the block.
   extern "C" fn get_byte_block_at_cursor_old<T: ByteReader>(
     self_: &mut T,
     start_offset: u32,
@@ -63,7 +63,8 @@ pub trait LLVMByteReader {
     let size = ((self_.len() as i64) - (cursor as i64)).max(0) as u32;
 
     if size > 0 {
-      let ptr = ((self_.get_bytes().as_ptr() as usize) + cursor as usize) as *const u8;
+      let ptr =
+        ((self_.get_bytes().as_ptr() as usize) + cursor as usize) as *const u8;
       InputInfo(ptr, self_.len() as u32, false)
     } else {
       InputInfo(0 as *const u8, self_.len() as u32, false)
@@ -223,5 +224,6 @@ pub unsafe fn llvm_map_shift_action<
     line_off: token_line_offset,
   };
 
-  slots.assign_to_garbage(0, AstSlot(ASTNode::default(), tok, Default::default()));
+  slots
+    .assign_to_garbage(0, AstSlot(ASTNode::default(), tok, Default::default()));
 }

@@ -1,5 +1,8 @@
 use super::*;
-use std::{fmt::Debug, ops::Index};
+use std::ops::Index;
+
+#[cfg(debug_assertions)]
+use std::fmt::Debug;
 
 #[deprecated]
 pub type ReduceFunctionOld<T> = fn(args: &mut Vec<HCObj<T>>, tok: Token);
@@ -12,8 +15,8 @@ pub static DEFAULT_AST_TYPE_NAMES: [&str; 27] = [
   "NONE",
 ];
 
-#[derive(Debug, Clone)]
-
+#[derive(Clone)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub enum HCObj<T: 'static> {
   NONE,
   LAZY(Box<Lazy>),
@@ -248,7 +251,8 @@ impl<T: HCObjTrait> HCObjTrait for HCObj<T> {
   }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 
 pub struct Lazy {
   pub tok:           Token,
@@ -267,9 +271,13 @@ pub struct Lazy {
 pub type Reducer<R, M, Node, const UPWARD_STACK: bool = false> =
   fn(*mut ParseContext<R, M>, &AstStackSlice<AstSlot<Node>, UPWARD_STACK>);
 
+#[cfg(not(debug_assertions))]
+pub trait AstObject: Clone + Default + Sized {}
+#[cfg(debug_assertions)]
 pub trait AstObject: Debug + Clone + Default + Sized {}
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 #[repr(C)]
 pub struct AstSlot<Ast: AstObject>(pub Ast, pub TokenRange, pub TokenRange);
 
@@ -358,6 +366,7 @@ impl<T: AstObject, const STACK_GROWS_UPWARD: bool>
   }
 }
 
+#[cfg(debug_assertions)]
 impl<T: AstObject, const STACK_GROWS_UPWARD: bool> Debug
   for AstStackSlice<T, STACK_GROWS_UPWARD>
 {

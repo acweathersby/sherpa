@@ -4,7 +4,8 @@ use super::{
 };
 
 /// Deconstructed bytecode table information.
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub struct TableHeaderData<'a> {
   pub input_type: InputType,
   pub table_length: u32,
@@ -13,7 +14,6 @@ pub struct TableHeaderData<'a> {
   /// one.
   pub scan_block_instruction: bytecode::Instruction<'a>,
   /// The absolute address of start of the instruction data.
-  ///
   pub default_block: bytecode::Instruction<'a>,
   /// The absolute address of start of the table data.
   ///
@@ -57,7 +57,8 @@ impl<'a> From<Instruction<'a>> for TableHeaderData<'a> {
       } else {
         (i.bytecode(), 0).into()
       },
-      default_block: (i.bytecode(), i.address() + default_delta as usize).into(),
+      default_block: (i.bytecode(), i.address() + default_delta as usize)
+        .into(),
     }
   }
 }

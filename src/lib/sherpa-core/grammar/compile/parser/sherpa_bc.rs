@@ -741,10 +741,7 @@ impl ASTNode {
   pub fn to_AST_NamedReference(self) -> Box<AST_NamedReference> {
     match self {
       Self::AST_NamedReference(val) => val,
-      _ => panic!(
-        "Type {:?} cannot be converted to AST_NamedReference",
-        self.get_type()
-      ),
+      _ => panic!(),
     }
   }
 
@@ -793,7 +790,7 @@ impl ASTNode {
   pub fn to_Reduce(self) -> Box<Reduce> {
     match self {
       Self::Reduce(val) => val,
-      _ => panic!("Type {:?} cannot be converted to Reduce", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -839,7 +836,7 @@ impl ASTNode {
     match self {
       Self::PeekToken(val) => val,
       _ => {
-        panic!("Type {:?} cannot be converted to PeekToken", self.get_type())
+        panic!()
       }
     }
   }
@@ -885,7 +882,7 @@ impl ASTNode {
     match self {
       Self::EOFSymbol(val) => val,
       _ => {
-        panic!("Type {:?} cannot be converted to EOFSymbol", self.get_type())
+        panic!()
       }
     }
   }
@@ -930,7 +927,7 @@ impl ASTNode {
   pub fn to_DEFAULT(self) -> Box<DEFAULT> {
     match self {
       Self::DEFAULT(val) => val,
-      _ => panic!("Type {:?} cannot be converted to DEFAULT", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -978,7 +975,7 @@ impl ASTNode {
   pub fn to_PushGoto(self) -> Box<PushGoto> {
     match self {
       Self::PushGoto(val) => val,
-      _ => panic!("Type {:?} cannot be converted to PushGoto", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -1024,7 +1021,7 @@ impl ASTNode {
     match self {
       Self::TokenAssign(val) => val,
       _ => {
-        panic!("Type {:?} cannot be converted to TokenAssign", self.get_type())
+        panic!()
       }
     }
   }
@@ -1072,7 +1069,7 @@ impl ASTNode {
     match self {
       Self::SkipToken(val) => val,
       _ => {
-        panic!("Type {:?} cannot be converted to SkipToken", self.get_type())
+        panic!()
       }
     }
   }
@@ -1119,7 +1116,7 @@ impl ASTNode {
   pub fn to_AST_Add(self) -> Box<AST_Add> {
     match self {
       Self::AST_Add(val) => val,
-      _ => panic!("Type {:?} cannot be converted to AST_Add", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -1164,7 +1161,7 @@ impl ASTNode {
     match self {
       Self::ScanShift(val) => val,
       _ => {
-        panic!("Type {:?} cannot be converted to ScanShift", self.get_type())
+        panic!()
       }
     }
   }
@@ -1210,7 +1207,7 @@ impl ASTNode {
     match self {
       Self::ShiftToken(val) => val,
       _ => {
-        panic!("Type {:?} cannot be converted to ShiftToken", self.get_type())
+        panic!()
       }
     }
   }
@@ -1256,7 +1253,7 @@ impl ASTNode {
   pub fn to_Syntax(self) -> Box<Syntax> {
     match self {
       Self::Syntax(val) => val,
-      _ => panic!("Type {:?} cannot be converted to Syntax", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -1306,7 +1303,7 @@ impl ASTNode {
     match self {
       Self::SyntaxField(val) => val,
       _ => {
-        panic!("Type {:?} cannot be converted to SyntaxField", self.get_type())
+        panic!()
       }
     }
   }
@@ -1354,7 +1351,7 @@ impl ASTNode {
     match self {
       Self::HASH_NAME(val) => val,
       _ => {
-        panic!("Type {:?} cannot be converted to HASH_NAME", self.get_type())
+        panic!()
       }
     }
   }
@@ -1408,10 +1405,7 @@ impl ASTNode {
   pub fn to_List_Production(self) -> Box<List_Production> {
     match self {
       Self::List_Production(val) => val,
-      _ => panic!(
-        "Type {:?} cannot be converted to List_Production",
-        self.get_type()
-      ),
+      _ => panic!(),
     }
   }
 
@@ -1457,7 +1451,7 @@ impl ASTNode {
     match self {
       Self::PeekReset(val) => val,
       _ => {
-        panic!("Type {:?} cannot be converted to PeekReset", self.get_type())
+        panic!()
       }
     }
   }
@@ -1500,7 +1494,7 @@ impl ASTNode {
   pub fn to_Pop(self) -> Box<Pop> {
     match self {
       Self::Pop(val) => val,
-      _ => panic!("Type {:?} cannot be converted to Pop", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -1546,7 +1540,7 @@ impl ASTNode {
     match self {
       Self::AST_Vector(val) => val,
       _ => {
-        panic!("Type {:?} cannot be converted to AST_Vector", self.get_type())
+        panic!()
       }
     }
   }
@@ -1596,10 +1590,7 @@ impl ASTNode {
   pub fn to_Production_Symbol(self) -> Box<Production_Symbol> {
     match self {
       Self::Production_Symbol(val) => val,
-      _ => panic!(
-        "Type {:?} cannot be converted to Production_Symbol",
-        self.get_type()
-      ),
+      _ => panic!(),
     }
   }
 
@@ -1642,10 +1633,7 @@ impl ASTNode {
   pub fn to_SkipTokenScanless(self) -> Box<SkipTokenScanless> {
     match self {
       Self::SkipTokenScanless(val) => val,
-      _ => panic!(
-        "Type {:?} cannot be converted to SkipTokenScanless",
-        self.get_type()
-      ),
+      _ => panic!(),
     }
   }
 
@@ -1695,7 +1683,7 @@ impl ASTNode {
   pub fn to_Grammar(self) -> Box<Grammar> {
     match self {
       Self::Grammar(val) => val,
-      _ => panic!("Type {:?} cannot be converted to Grammar", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -1748,7 +1736,7 @@ impl ASTNode {
   pub fn to_AST_U64(self) -> Box<AST_U64> {
     match self {
       Self::AST_U64(val) => val,
-      _ => panic!("Type {:?} cannot be converted to AST_U64", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -1791,10 +1779,7 @@ impl ASTNode {
   pub fn to_DEFINED_TYPE_IDENT(self) -> Box<DEFINED_TYPE_IDENT> {
     match self {
       Self::DEFINED_TYPE_IDENT(val) => val,
-      _ => panic!(
-        "Type {:?} cannot be converted to DEFINED_TYPE_IDENT",
-        self.get_type()
-      ),
+      _ => panic!(),
     }
   }
 
@@ -1841,7 +1826,7 @@ impl ASTNode {
   pub fn to_Priority(self) -> Box<Priority> {
     match self {
       Self::Priority(val) => val,
-      _ => panic!("Type {:?} cannot be converted to Priority", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -1885,7 +1870,7 @@ impl ASTNode {
   pub fn to_Pass(self) -> Box<Pass> {
     match self {
       Self::Pass(val) => val,
-      _ => panic!("Type {:?} cannot be converted to Pass", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -1931,7 +1916,7 @@ impl ASTNode {
   pub fn to_ASSERT(self) -> Box<ASSERT> {
     match self {
       Self::ASSERT(val) => val,
-      _ => panic!("Type {:?} cannot be converted to ASSERT", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -1983,7 +1968,7 @@ impl ASTNode {
   pub fn to_Import(self) -> Box<Import> {
     match self {
       Self::Import(val) => val,
-      _ => panic!("Type {:?} cannot be converted to Import", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -2029,7 +2014,7 @@ impl ASTNode {
   pub fn to_Init(self) -> Box<Init> {
     match self {
       Self::Init(val) => val,
-      _ => panic!("Type {:?} cannot be converted to Init", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -2075,10 +2060,7 @@ impl ASTNode {
   pub fn to_AST_IndexReference(self) -> Box<AST_IndexReference> {
     match self {
       Self::AST_IndexReference(val) => val,
-      _ => panic!(
-        "Type {:?} cannot be converted to AST_IndexReference",
-        self.get_type()
-      ),
+      _ => panic!(),
     }
   }
 
@@ -2128,7 +2110,7 @@ impl ASTNode {
   pub fn to_RGBA(self) -> Box<RGBA> {
     match self {
       Self::RGBA(val) => val,
-      _ => panic!("Type {:?} cannot be converted to RGBA", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -2178,7 +2160,7 @@ impl ASTNode {
     match self {
       Self::AST_Member(val) => val,
       _ => {
-        panic!("Type {:?} cannot be converted to AST_Member", self.get_type())
+        panic!()
       }
     }
   }
@@ -2227,10 +2209,7 @@ impl ASTNode {
   pub fn to_Production_Import_Symbol(self) -> Box<Production_Import_Symbol> {
     match self {
       Self::Production_Import_Symbol(val) => val,
-      _ => panic!(
-        "Type {:?} cannot be converted to Production_Import_Symbol",
-        self.get_type()
-      ),
+      _ => panic!(),
     }
   }
 
@@ -2281,7 +2260,7 @@ impl ASTNode {
   pub fn to_AST_I32(self) -> Box<AST_I32> {
     match self {
       Self::AST_I32(val) => val,
-      _ => panic!("Type {:?} cannot be converted to AST_I32", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -2326,7 +2305,7 @@ impl ASTNode {
   pub fn to_Goto(self) -> Box<Goto> {
     match self {
       Self::Goto(val) => val,
-      _ => panic!("Type {:?} cannot be converted to Goto", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -2369,10 +2348,7 @@ impl ASTNode {
   pub fn to_SkipPeekToken(self) -> Box<SkipPeekToken> {
     match self {
       Self::SkipPeekToken(val) => val,
-      _ => panic!(
-        "Type {:?} cannot be converted to SkipPeekToken",
-        self.get_type()
-      ),
+      _ => panic!(),
     }
   }
 
@@ -2417,7 +2393,7 @@ impl ASTNode {
   pub fn to_AST_I8(self) -> Box<AST_I8> {
     match self {
       Self::AST_I8(val) => val,
-      _ => panic!("Type {:?} cannot be converted to AST_I8", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -2463,7 +2439,7 @@ impl ASTNode {
   pub fn to_AST_F32(self) -> Box<AST_F32> {
     match self {
       Self::AST_F32(val) => val,
-      _ => panic!("Type {:?} cannot be converted to AST_F32", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -2509,7 +2485,7 @@ impl ASTNode {
   pub fn to_Symbols(self) -> Box<Symbols> {
     match self {
       Self::Symbols(val) => val,
-      _ => panic!("Type {:?} cannot be converted to Symbols", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -2562,7 +2538,7 @@ impl ASTNode {
     match self {
       Self::AST_Token(val) => val,
       _ => {
-        panic!("Type {:?} cannot be converted to AST_Token", self.get_type())
+        panic!()
       }
     }
   }
@@ -2609,7 +2585,7 @@ impl ASTNode {
   pub fn to_Export(self) -> Box<Export> {
     match self {
       Self::Export(val) => val,
-      _ => panic!("Type {:?} cannot be converted to Export", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -2655,7 +2631,7 @@ impl ASTNode {
   pub fn to_Name(self) -> Box<Name> {
     match self {
       Self::Name(val) => val,
-      _ => panic!("Type {:?} cannot be converted to Name", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -2702,7 +2678,7 @@ impl ASTNode {
   pub fn to_AST_BOOL(self) -> Box<AST_BOOL> {
     match self {
       Self::AST_BOOL(val) => val,
-      _ => panic!("Type {:?} cannot be converted to AST_BOOL", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -2749,10 +2725,7 @@ impl ASTNode {
   pub fn to_Group_Production(self) -> Box<Group_Production> {
     match self {
       Self::Group_Production(val) => val,
-      _ => panic!(
-        "Type {:?} cannot be converted to Group_Production",
-        self.get_type()
-      ),
+      _ => panic!(),
     }
   }
 
@@ -2798,7 +2771,7 @@ impl ASTNode {
   pub fn to_Fail(self) -> Box<Fail> {
     match self {
       Self::Fail(val) => val,
-      _ => panic!("Type {:?} cannot be converted to Fail", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -2843,10 +2816,7 @@ impl ASTNode {
   pub fn to_AST_Statements(self) -> Box<AST_Statements> {
     match self {
       Self::AST_Statements(val) => val,
-      _ => panic!(
-        "Type {:?} cannot be converted to AST_Statements",
-        self.get_type()
-      ),
+      _ => panic!(),
     }
   }
 
@@ -2895,7 +2865,7 @@ impl ASTNode {
   pub fn to_AST_U8(self) -> Box<AST_U8> {
     match self {
       Self::AST_U8(val) => val,
-      _ => panic!("Type {:?} cannot be converted to AST_U8", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -2966,7 +2936,7 @@ impl ASTNode {
     match self {
       Self::Production(val) => val,
       _ => {
-        panic!("Type {:?} cannot be converted to Production", self.get_type())
+        panic!()
       }
     }
   }
@@ -3019,10 +2989,7 @@ impl ASTNode {
   pub fn to_ShiftTokenScanless(self) -> Box<ShiftTokenScanless> {
     match self {
       Self::ShiftTokenScanless(val) => val,
-      _ => panic!(
-        "Type {:?} cannot be converted to ShiftTokenScanless",
-        self.get_type()
-      ),
+      _ => panic!(),
     }
   }
 
@@ -3068,10 +3035,7 @@ impl ASTNode {
   pub fn to_PushExceptHandler(self) -> Box<PushExceptHandler> {
     match self {
       Self::PushExceptHandler(val) => val,
-      _ => panic!(
-        "Type {:?} cannot be converted to PushExceptHandler",
-        self.get_type()
-      ),
+      _ => panic!(),
     }
   }
 
@@ -3116,7 +3080,7 @@ impl ASTNode {
   pub fn to_Ignore(self) -> Box<Ignore> {
     match self {
       Self::Ignore(val) => val,
-      _ => panic!("Type {:?} cannot be converted to Ignore", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -3166,7 +3130,7 @@ impl ASTNode {
     match self {
       Self::AST_STRING(val) => val,
       _ => {
-        panic!("Type {:?} cannot be converted to AST_STRING", self.get_type())
+        panic!()
       }
     }
   }
@@ -3213,7 +3177,7 @@ impl ASTNode {
   pub fn to_AST_U32(self) -> Box<AST_U32> {
     match self {
       Self::AST_U32(val) => val,
-      _ => panic!("Type {:?} cannot be converted to AST_U32", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -3260,7 +3224,7 @@ impl ASTNode {
     match self {
       Self::AST_ClassId(val) => val,
       _ => {
-        panic!("Type {:?} cannot be converted to AST_ClassId", self.get_type())
+        panic!()
       }
     }
   }
@@ -3316,7 +3280,7 @@ impl ASTNode {
   pub fn to_IR_STATE(self) -> Box<IR_STATE> {
     match self {
       Self::IR_STATE(val) => val,
-      _ => panic!("Type {:?} cannot be converted to IR_STATE", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -3369,7 +3333,7 @@ impl ASTNode {
   pub fn to_AST_I64(self) -> Box<AST_I64> {
     match self {
       Self::AST_I64(val) => val,
-      _ => panic!("Type {:?} cannot be converted to AST_I64", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -3412,10 +3376,7 @@ impl ASTNode {
   pub fn to_PeekTokenScanless(self) -> Box<PeekTokenScanless> {
     match self {
       Self::PeekTokenScanless(val) => val,
-      _ => panic!(
-        "Type {:?} cannot be converted to PeekTokenScanless",
-        self.get_type()
-      ),
+      _ => panic!(),
     }
   }
 
@@ -3460,7 +3421,7 @@ impl ASTNode {
   pub fn to_AST_U16(self) -> Box<AST_U16> {
     match self {
       Self::AST_U16(val) => val,
-      _ => panic!("Type {:?} cannot be converted to AST_U16", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -3503,10 +3464,7 @@ impl ASTNode {
   pub fn to_SkipPeekTokenScanless(self) -> Box<SkipPeekTokenScanless> {
     match self {
       Self::SkipPeekTokenScanless(val) => val,
-      _ => panic!(
-        "Type {:?} cannot be converted to SkipPeekTokenScanless",
-        self.get_type()
-      ),
+      _ => panic!(),
     }
   }
 
@@ -3550,7 +3508,7 @@ impl ASTNode {
   pub fn to_Accept(self) -> Box<Accept> {
     match self {
       Self::Accept(val) => val,
-      _ => panic!("Type {:?} cannot be converted to Accept", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -3596,7 +3554,7 @@ impl ASTNode {
     match self {
       Self::ClassSymbol(val) => val,
       _ => {
-        panic!("Type {:?} cannot be converted to ClassSymbol", self.get_type())
+        panic!()
       }
     }
   }
@@ -3643,7 +3601,7 @@ impl ASTNode {
   pub fn to_AST_F64(self) -> Box<AST_F64> {
     match self {
       Self::AST_F64(val) => val,
-      _ => panic!("Type {:?} cannot be converted to AST_F64", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -3690,7 +3648,7 @@ impl ASTNode {
   pub fn to_AST_Map(self) -> Box<AST_Map> {
     match self {
       Self::AST_Map(val) => val,
-      _ => panic!("Type {:?} cannot be converted to AST_Map", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -3738,7 +3696,7 @@ impl ASTNode {
   pub fn to_AnyGroup(self) -> Box<AnyGroup> {
     match self {
       Self::AnyGroup(val) => val,
-      _ => panic!("Type {:?} cannot be converted to AnyGroup", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -3788,7 +3746,7 @@ impl ASTNode {
   pub fn to_Range(self) -> Box<Range> {
     match self {
       Self::Range(val) => val,
-      _ => panic!("Type {:?} cannot be converted to Range", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -3835,7 +3793,7 @@ impl ASTNode {
   pub fn to_AST_I16(self) -> Box<AST_I16> {
     match self {
       Self::AST_I16(val) => val,
-      _ => panic!("Type {:?} cannot be converted to AST_I16", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -3881,7 +3839,7 @@ impl ASTNode {
     match self {
       Self::AST_NUMBER(val) => val,
       _ => {
-        panic!("Type {:?} cannot be converted to AST_NUMBER", self.get_type())
+        panic!()
       }
     }
   }
@@ -3930,7 +3888,7 @@ impl ASTNode {
     match self {
       Self::AST_Struct(val) => val,
       _ => {
-        panic!("Type {:?} cannot be converted to AST_Struct", self.get_type())
+        panic!()
       }
     }
   }
@@ -3978,10 +3936,7 @@ impl ASTNode {
   pub fn to_DEFINED_TYPE_NUM(self) -> Box<DEFINED_TYPE_NUM> {
     match self {
       Self::DEFINED_TYPE_NUM(val) => val,
-      _ => panic!(
-        "Type {:?} cannot be converted to DEFINED_TYPE_NUM",
-        self.get_type()
-      ),
+      _ => panic!(),
     }
   }
 
@@ -4027,7 +3982,7 @@ impl ASTNode {
     match self {
       Self::SyntaxSpec(val) => val,
       _ => {
-        panic!("Type {:?} cannot be converted to SyntaxSpec", self.get_type())
+        panic!()
       }
     }
   }
@@ -4093,7 +4048,7 @@ impl ASTNode {
   pub fn to_Rule(self) -> Box<Rule> {
     match self {
       Self::Rule(val) => val,
-      _ => panic!("Type {:?} cannot be converted to Rule", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -4155,10 +4110,7 @@ impl ASTNode {
   pub fn to_AnnotatedSymbol(self) -> Box<AnnotatedSymbol> {
     match self {
       Self::AnnotatedSymbol(val) => val,
-      _ => panic!(
-        "Type {:?} cannot be converted to AnnotatedSymbol",
-        self.get_type()
-      ),
+      _ => panic!(),
     }
   }
 
@@ -4215,7 +4167,7 @@ impl ASTNode {
     match self {
       Self::AST_Property(val) => val,
       _ => {
-        panic!("Type {:?} cannot be converted to AST_Property", self.get_type())
+        panic!()
       }
     }
   }
@@ -4264,7 +4216,7 @@ impl ASTNode {
   pub fn to_Ascript(self) -> Box<Ascript> {
     match self {
       Self::Ascript(val) => val,
-      _ => panic!("Type {:?} cannot be converted to Ascript", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -4309,7 +4261,7 @@ impl ASTNode {
   pub fn to_Num(self) -> Box<Num> {
     match self {
       Self::Num(val) => val,
-      _ => panic!("Type {:?} cannot be converted to Num", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -4357,10 +4309,7 @@ impl ASTNode {
   ) -> Box<Production_Terminal_Symbol> {
     match self {
       Self::Production_Terminal_Symbol(val) => val,
-      _ => panic!(
-        "Type {:?} cannot be converted to Production_Terminal_Symbol",
-        self.get_type()
-      ),
+      _ => panic!(),
     }
   }
 
@@ -4411,7 +4360,7 @@ impl ASTNode {
   pub fn to_Terminal(self) -> Box<Terminal> {
     match self {
       Self::Terminal(val) => val,
-      _ => panic!("Type {:?} cannot be converted to Terminal", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -4458,7 +4407,7 @@ impl ASTNode {
   pub fn to_Recovery(self) -> Box<Recovery> {
     match self {
       Self::Recovery(val) => val,
-      _ => panic!("Type {:?} cannot be converted to Recovery", self.get_type()),
+      _ => panic!(),
     }
   }
 
@@ -12764,15 +12713,9 @@ impl<R: Reader + UTF8Reader, M, const UP: bool> ReduceFunctions<R, M, UP> {
   }
 }
 
-pub trait Reader:
-  ByteReader + MutByteReader + UTF8Reader + std::fmt::Debug
-{
-}
+pub trait Reader: ByteReader + MutByteReader + UTF8Reader {}
 
-impl<T: ByteReader + MutByteReader + UTF8Reader + std::fmt::Debug> Reader
-  for T
-{
-}
+impl<T: ByteReader + MutByteReader + UTF8Reader> Reader for T {}
 
 pub type Parser<'a, T, UserCTX> =
   sherpa_runtime::bytecode_parser::ByteCodeParser<'a, T, UserCTX>;

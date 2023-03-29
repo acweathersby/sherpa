@@ -8,7 +8,8 @@ use std::{
 };
 
 /// Stores color setting code for terminal text coloring of token blame strings.
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub struct BlameColor {
   highlight: &'static str,
   reset:     &'static str,
@@ -16,9 +17,11 @@ pub struct BlameColor {
 
 impl BlameColor {
   /// Sets the color of the highlight to blue
-  pub const BLUE: Option<BlameColor> = Some(BlameColor::new("\u{001b}[31m", "\u{001b}[0m"));
+  pub const BLUE: Option<BlameColor> =
+    Some(BlameColor::new("\u{001b}[31m", "\u{001b}[0m"));
   /// Sets the color of the highlight to red
-  pub const RED: Option<BlameColor> = Some(BlameColor::new("\u{001b}[31m", "\u{001b}[0m"));
+  pub const RED: Option<BlameColor> =
+    Some(BlameColor::new("\u{001b}[31m", "\u{001b}[0m"));
 
   pub const fn new(highlight: &'static str, reset: &'static str) -> BlameColor {
     Self { highlight, reset }
@@ -84,7 +87,10 @@ impl fmt::Debug for Token {
     } else {
       f.write_fmt(format_args!(
         "Token{{ off:{}, len:{}, line:{}, l_off:{} }}",
-        self.inner.off, self.inner.len, self.inner.line_num, self.inner.line_off,
+        self.inner.off,
+        self.inner.len,
+        self.inner.line_num,
+        self.inner.line_off,
       ))
     }
   }
@@ -307,7 +313,11 @@ impl Token {
     if let Some(input) = &self.input {
       let (adjusted_start, adjusted_end) = self.get_slice_range(start, end);
 
-      unsafe { String::from_utf8_unchecked(Vec::from(&input[adjusted_start..adjusted_end])) }
+      unsafe {
+        String::from_utf8_unchecked(Vec::from(
+          &input[adjusted_start..adjusted_end],
+        ))
+      }
     } else {
       String::default()
     }
@@ -375,7 +385,8 @@ impl Token {
   fn find_next_line(source: &[u8], line: i64) -> i64 {
     let mut i = line;
     let len = source.len() as i64;
-    while i < len && (i < 0 || source[i as usize] as char != '\n' || i == line) {
+    while i < len && (i < 0 || source[i as usize] as char != '\n' || i == line)
+    {
       i += 1;
     }
     i as i64
@@ -394,7 +405,8 @@ impl Token {
   #[inline(always)]
   fn recalculate_line_offset(&mut self) {
     if let Some(source) = self.input.clone() {
-      let prev_line = Self::find_prev_line(&source, (self.inner.off + 1) as i64);
+      let prev_line =
+        Self::find_prev_line(&source, (self.inner.off + 1) as i64);
       self.inner.line_off = prev_line.max(0).min(u32::MAX as i64) as u32;
     }
   }
@@ -403,14 +415,14 @@ impl Token {
   /// source string.
   ///
   /// ### Arguments:
-  /// - `max_pre` - The maximum number of lines to render before the
-  ///   token line(s).
-  /// - `max_post` - The maximum number of lines to render after the
-  ///   token line(s).
+  /// - `max_pre` - The maximum number of lines to render before the token
+  ///   line(s).
+  /// - `max_post` - The maximum number of lines to render after the token
+  ///   line(s).
   ///
   /// ### Returns:
-  /// - `Option<String>` - A `String` of the blame diagram or `None`
-  ///   if source is
+  /// - `Option<String>` - A `String` of the blame diagram or `None` if source
+  ///   is
   /// not defined.
   pub fn blame(
     &self,
@@ -425,9 +437,9 @@ impl Token {
       next_line: i64,
       line_number: usize,
     ) -> String {
-      if let Ok(utf_string) =
-        String::from_utf8(Vec::from(&source[(prev_line + 1) as usize..next_line as usize]))
-      {
+      if let Ok(utf_string) = String::from_utf8(Vec::from(
+        &source[(prev_line + 1) as usize..next_line as usize],
+      )) {
         format!("{: >4}: {}\n", line_number, utf_string,)
       } else {
         String::from("")
@@ -436,11 +448,13 @@ impl Token {
 
     if let Some(source) = self.input.clone() {
       let mut string = String::from("");
-      let mut prev_line = Self::find_prev_line(&source, self.inner.off as i64) as i64;
+      let mut prev_line =
+        Self::find_prev_line(&source, self.inner.off as i64) as i64;
       let mut line_num = (self.inner.line_num + 1) as usize;
       let mut next_line;
       let mut col_diff =
-        (self.inner.off as i64 - prev_line - (prev_line != 0) as i64).max(0) as usize;
+        (self.inner.off as i64 - prev_line - (prev_line != 0) as i64).max(0)
+          as usize;
 
       if source[0] as char == '\n' {
         line_num -= 1;
@@ -456,7 +470,8 @@ impl Token {
           }
           let next_line = prev_line;
           prev_line = Self::find_prev_line(&source, prev_line);
-          string = create_line(&source, prev_line, next_line, line_num - a) + &string;
+          string =
+            create_line(&source, prev_line, next_line, line_num - a) + &string;
         }
       }
 
@@ -469,13 +484,17 @@ impl Token {
         }
 
         if let Ok(utf_string) = String::from_utf8(Vec::from(
-          &source[(prev_line + 1).min(max_size) as usize..next_line.min(max_size) as usize],
+          &source[(prev_line + 1).min(max_size) as usize
+            ..next_line.min(max_size) as usize],
         )) {
           let leading_spaces = utf_string.len() - utf_string.trim_start().len();
           let diff = usize::max(leading_spaces, col_diff);
           let highlight_len = ((utf_string.len() as i64)
             - (diff as i64)
-            - i64::max(0, next_line as i64 - (self.inner.off + self.inner.len) as i64))
+            - i64::max(
+              0,
+              next_line as i64 - (self.inner.off + self.inner.len) as i64,
+            ))
           .max(0) as usize;
 
           let lines_str = format!("{: >4}", line_num);
@@ -490,7 +509,9 @@ impl Token {
                   + &String::from("^").repeat(highlight_len as usize)
                   + " "
               } else {
-                " ".to_string() + &String::from("^").repeat(highlight_len as usize) + " "
+                " ".to_string()
+                  + &String::from("^").repeat(highlight_len as usize)
+                  + " "
               },
           );
 
@@ -498,7 +519,8 @@ impl Token {
           prev_line = next_line;
           col_diff = 0;
 
-          match (next_line >= (self.inner.off + self.inner.len) as i64, colors) {
+          match (next_line >= (self.inner.off + self.inner.len) as i64, colors)
+          {
             (true, Some(BlameColor { reset, .. })) => {
               string += &format!("{}{}\n", inline_comment, reset);
               break;
@@ -525,7 +547,8 @@ impl Token {
         }
         let prev_line = next_line;
         next_line = Self::find_next_line(&source, next_line);
-        string += &create_line(&source, prev_line as i64, next_line, line_num + a);
+        string +=
+          &create_line(&source, prev_line as i64, next_line, line_num + a);
       }
 
       string
@@ -549,7 +572,9 @@ mod test {
   #[test]
   pub fn blame_string_places_cursor_in_correct_position() {
     let tok = Token {
-      input: Some(Arc::new("\n start \n\n test \n final ".to_string().as_bytes().to_vec())),
+      input: Some(Arc::new(
+        "\n start \n\n test \n final ".to_string().as_bytes().to_vec(),
+      )),
       inner: TokenRange { len: 4, off: 11, line_num: 3, line_off: 9 },
     };
 
@@ -570,7 +595,9 @@ mod test {
   #[test]
   pub fn blame_string_places_cursor_in_correct_position2() {
     let tok = Token {
-      input: Some(Arc::new(" start \n\n test \n final ".to_string().as_bytes().to_vec())),
+      input: Some(Arc::new(
+        " start \n\n test \n final ".to_string().as_bytes().to_vec(),
+      )),
       inner: TokenRange { len: 5, off: 1, line_num: 0, line_off: 0 },
     };
 

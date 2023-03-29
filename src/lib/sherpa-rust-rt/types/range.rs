@@ -2,7 +2,8 @@ use std::{ops::Add, str::FromStr};
 
 use super::{ByteReader, Token};
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub struct Range {
   /// The line number at which the range starts
   pub start_line:   u32,
@@ -14,7 +15,8 @@ pub struct Range {
   pub end_column:   u32,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub struct TokenRange {
   pub len:      u32,
   pub off:      u32,

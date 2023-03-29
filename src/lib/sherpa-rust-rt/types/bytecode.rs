@@ -3,7 +3,8 @@
 use std::fmt::{Debug, Display};
 
 /// The current set of instruction opcodes
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 #[repr(u8)]
 pub enum Opcode {
   /// Default value for unrecognized opcode values.
@@ -286,6 +287,7 @@ impl<'a> From<&(&'a [u8], usize)> for Instruction<'a> {
   }
 }
 
+#[cfg(debug_assertions)]
 impl<'a> Debug for Instruction<'a> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let opcode = self.get_opcode();
@@ -408,7 +410,8 @@ impl<'a> Instruction<'a> {
   }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub struct ByteCodeIterator<'a> {
   offset: usize,
   bc:     &'a [u8],
@@ -511,7 +514,8 @@ pub const TOKEN_ASSIGN_FLAG: u32 = 0x04000000;
 
 pub const END_OF_INPUT_TOKEN_ID: u32 = 0x1;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 #[repr(u32)]
 pub enum InputType {
   Production = 0,

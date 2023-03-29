@@ -1,7 +1,8 @@
 use super::*;
 
 #[repr(u32)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub enum ParseActionType {
   None,
   Error,
@@ -25,7 +26,8 @@ impl Into<u64> for ParseActionType {
   }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 #[repr(C, u32)]
 pub enum ParseAction {
   Undefined,

@@ -7,7 +7,8 @@ use super::{
 use crate::bytecode_parser::{DebugEvent, DebugFn};
 use std::{fmt::Debug, rc::*, sync::Arc};
 
-#[derive(Clone, Debug, Copy)]
+#[derive(Clone, Copy)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 #[repr(C)]
 pub struct Goto {
   pub goto_fn: *const usize,
@@ -327,14 +328,15 @@ impl<T: ByteReader + UTF8Reader, M> ParseContext<T, M> {
   }
 }
 
-#[derive(Debug)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 #[repr(C, u64)]
 pub enum ParseResult<Node: AstObject> {
   Complete(AstSlot<Node>),
   Error(TokenRange, Vec<AstSlot<Node>>),
   NeedMoreInput(Vec<AstSlot<Node>>),
 }
-#[derive(Debug)]
+
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub enum ShiftsAndSkipsResult {
   Accepted {
     shifts: Vec<String>,
@@ -574,7 +576,6 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
           if let Some(debug) = debug {
             debug(&DebugEvent::Complete { production_id });
           }
-          dbg!(&cst);
 
           break if cst.len() > 1 {
             eprint!(

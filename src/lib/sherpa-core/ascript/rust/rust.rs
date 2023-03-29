@@ -120,10 +120,7 @@ macro_rules! to_numeric {{
   // --------------------------------------------------------------------------
   // ASTNode Enum
   w.block(
-    &format!(
-      "#[derive(Debug, Clone)]\n#[repr(C, u32)]\npub enum {}",
-      node_type
-    ),
+    &format!("#[derive(Clone)]\n#[cfg_attr(debug_assertions, derive(Debug))]\n#[repr(C, u32)]\npub enum {}", node_type),
     "{",
     "}",
     &|w| {
@@ -174,7 +171,7 @@ macro_rules! to_numeric {{
   // --------------------------------------------------------------------------
   // ASTNodeType Enum
   w.block(
-    &format!("#[derive(Eq, PartialEq, Clone, Copy, Debug, Hash)]\npub enum {node_type}Type"),
+    &format!("#[derive(Eq, PartialEq, Clone, Copy, Hash)]\n #[cfg_attr(debug_assertions, derive(Debug))]\npub enum {node_type}Type"),
     "{",
     "}",
     &|w| {
@@ -445,7 +442,7 @@ to_numeric!(to_f64, f64);", w.store.ast_type_name)
     let ast_type_name = w.store.ast_type_name.clone();
 
     // Struct declaration
-    w.block(&("#[derive(Debug, Clone)]\npub struct ".to_string() +  &s.name), "{", "}", &|w| {
+    w.block(&("#[derive(Clone)]\n#[cfg_attr(debug_assertions, derive(Debug))]\npub struct ".to_string() +  &s.name), "{", "}", &|w| {
       let prop_declarations = s
         .props
         .iter()
@@ -532,7 +529,7 @@ to_numeric!(to_f64, f64);", w.store.ast_type_name)
           w.block("match self", "{", "}", &mut |w| {
             w.stmt(format!("Self::{0}(val) => val,", s.name));
             w.stmt(format!(
-              "_ => panic!(\"Type {{:?}} cannot be converted to {struct_name}\", self.get_type())"
+              "_ => panic!()"
             ));
             SherpaResult::Ok(())
           });
@@ -1636,9 +1633,9 @@ pub(crate) fn write_rust_bytecode_parser_file<'a, W: Write>(
   let ast_type_name = w.store.ast_type_name.clone();
   w.stmt(
     "    
-pub trait Reader: ByteReader + MutByteReader + UTF8Reader + std::fmt::Debug {}
+pub trait Reader: ByteReader + MutByteReader + UTF8Reader {}
 
-impl<T: ByteReader + MutByteReader + UTF8Reader + std::fmt::Debug> Reader for T {}
+impl<T: ByteReader + MutByteReader + UTF8Reader> Reader for T {}
 
 pub type Parser<'a, T, UserCTX> = sherpa_runtime::bytecode_parser::ByteCodeParser<'a, T, UserCTX>;"
       .into(),
@@ -1802,8 +1799,8 @@ extern "C" {{
   fn prime(ctx: *mut u8, start_point: u32);
   fn drop(ctx: *mut u8);
 }}
-pub trait Reader: ByteReader + LLVMByteReader + MutByteReader + std::fmt::Debug {{}}
-impl<T:ByteReader + LLVMByteReader + MutByteReader + std::fmt::Debug > Reader for T {{}}
+pub trait Reader: ByteReader + LLVMByteReader + MutByteReader {{}}
+impl<T:ByteReader + LLVMByteReader + MutByteReader > Reader for T {{}}
 
       
 pub struct Parser<T: Reader, M>(ParseContext<T, M>, T);

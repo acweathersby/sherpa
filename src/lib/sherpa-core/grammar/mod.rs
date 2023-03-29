@@ -4,7 +4,6 @@
 //! grammar source files.
 pub mod item;
 mod multitask;
-pub mod new;
 pub mod production;
 pub mod uuid;
 

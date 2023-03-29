@@ -200,7 +200,15 @@ dependencies = [
 
 [[package]]
 name = "sherpa_core"
-version = "1.0.0-beta1"
+version = "1.0.0-beta2"
+dependencies = [
+ "inkwell",
+ "sherpa_runtime",
+]
+
+[[package]]
+name = "sherpa_core_neuvo"
+version = "1.0.0-beta2"
 dependencies = [
  "inkwell",
  "sherpa_runtime",

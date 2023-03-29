@@ -4,6 +4,7 @@ members = [
     "./sherpa",
     "./sherpa-proc",
     "./sherpa-core",
+    "./sherpa-core-nuevo",
     "./sherpa-rust-rt",
 ]
 

@@ -1,6 +1,7 @@
 use super::*;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub struct UTF8StringReader<'a> {
   len:      usize,
   cursor:   usize,
