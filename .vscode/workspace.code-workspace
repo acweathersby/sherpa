@@ -33,6 +33,10 @@
 			"name": "Grammars"
 		},
 		{
+			"path": "../src/lib/sherpa-core/grammar/new",
+			"name": "New Sherpa"
+		},
+		{
 			"path": ".."
 		}
 	],

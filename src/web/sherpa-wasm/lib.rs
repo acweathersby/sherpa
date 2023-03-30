@@ -1,4 +1,12 @@
 use serde::{Deserialize, Serialize};
+use sherpa_core_neuvo::{
+  compile_grammar_from_str,
+  parser,
+  GrammarSoup,
+  Journal,
+  SherpaError,
+  SherpaResult,
+};
 use sherpa_runtime::{
   bytecode_parser::ByteCodeParser,
   types::{
@@ -18,7 +26,7 @@ use std::{
   cell::{Cell, RefCell},
   rc::Rc,
 };
-use wasm_bindgen::{prelude::*, JsCast};
+use wasm_bindgen::prelude::*;
 
 fn window() -> web_sys::Window {
   web_sys::window().expect("no global `window` exists")
@@ -32,123 +40,56 @@ fn body() -> web_sys::HtmlElement {
   document().body().expect("document should have a body")
 }
 
-/// Compiles a sherpa grammar from a string value.
-///
-/// Returns an error if the `grammar` argument cannot be cast to a string.
+/// A Handle to a grammar soup.
 #[wasm_bindgen]
-pub fn compile_grammar(grammar: JsValue) -> Result<JournalWrap, JsError> {
-  match grammar.as_string() {
-    Some(grammar_source) => {
-      let mut j = Journal::new(None);
-      GrammarStore::from_str(&mut j, &grammar_source);
-      j.flush_reports();
-      let valid_grammar = !j.have_errors_of_type(
-        sherpa_core::errors::SherpaErrorSeverity::Critical,
-      );
-      Ok(JournalWrap {
-        _internal_: Box::new(j),
-        _states_: None,
-        _bytecode_: None,
-        valid_grammar,
-      })
+pub struct JSSoup(Box<GrammarSoup>);
+
+#[wasm_bindgen]
+impl JSSoup {
+  /// Adds a grammar to the soup, or throw's an error
+  /// if the grammar is invalid. Returns the grammar
+  /// name if successful.
+  pub fn add_grammar(
+    &mut self,
+    grammar: String,
+    path: String,
+  ) -> Result<String, JsError> {
+    let mut j = Journal::new(Default::default());
+    match compile_grammar_from_str(
+      &mut j,
+      grammar.as_str(),
+      path.into(),
+      &self.0,
+    ) {
+      SherpaResult::Ok(g_id) => {
+        let soup = &self.0;
+        let name = soup
+          .grammar_headers
+          .read()
+          .unwrap()
+          .get(&g_id)
+          .unwrap()
+          .identity
+          .name
+          .to_string(&soup.string_store);
+        Ok(name)
+      }
+      _ => Err(JsError::new("Failed to build grammar")),
     }
-    None => Err(JsError::new("Could not read grammar string")),
+  }
+
+  /// Adds a production targeting a specific grammar
+  pub fn add_production(
+    &mut self,
+    grammar_name: String,
+  ) -> Result<(), JsError> {
+    Ok(())
   }
 }
 
 #[wasm_bindgen]
-/// A Grammar context created after the parsing of an
-/// input value.
-///
-/// May contain errors and thus be invalid for further
-/// processing.
-pub struct JournalWrap {
-  _internal_:    Box<Journal>,
-  _states_:      Option<Vec<(String, Box<sherpa_core::compile::ParseState>)>>,
-  _bytecode_:    Option<Box<BytecodeOutput>>,
-  valid_grammar: bool,
-}
-
-#[wasm_bindgen]
-impl JournalWrap {
-  /// Returns `true` if the internal Grammar
-  /// is free of critical errors.
-  pub fn is_valid(&self) -> bool {
-    self.valid_grammar
-  }
-
-  /// Returns all grammar errors that were generated when parsing
-  /// the input.
-  pub fn get_grammar_errors(&mut self) -> Result<String, JsError> {
-    let mut errors = vec![];
-    self._internal_.flush_reports();
-    self._internal_.get_reports(
-      sherpa_core::ReportType::GrammarCompile(Default::default()),
-      |r| {
-        let mut e = r
-          .errors()
-          .iter()
-          .filter_map(|e| e.convert_to_js_err())
-          .collect::<Vec<_>>();
-        errors.append(&mut e)
-      },
-    );
-
-    Ok(format!("[{}]", errors.join(",")))
-  }
-
-  pub fn compile_states(&mut self, optimize: bool) {
-    if self._states_.is_none() {
-      let j = &mut self._internal_;
-
-      match compile_parse_states(j, 1) {
-        SherpaResult::Ok(states) => {
-          if optimize {
-            let states = optimize_parse_states(j, states);
-            self._states_ = Some(states);
-          } else {
-            self._states_ = Some(states.into_iter().collect());
-          }
-        }
-        SherpaResult::Err(err) => self._states_ = Some(vec![]),
-        _ => unreachable!(),
-      }
-    }
-  }
-
-  pub fn compile_bytecode(&mut self, optimize: bool) {
-    if self._states_.is_none() {
-      self.compile_bytecode(optimize);
-    }
-
-    if self._bytecode_.is_none() {
-      let bytecode = {
-        let Self { _internal_, _states_, .. } = self;
-        let Some(states) = &_states_ else {
-        return;
-      };
-
-        if states.is_empty() {
-          return;
-        }
-
-        compile_bytecode(_internal_, states).unwrap()
-      };
-
-      self._bytecode_ = Some(Box::new(bytecode));
-    }
-  }
-
-  pub fn generate_disassembly(&mut self) -> Result<JsValue, JsError> {
-    match &self._bytecode_ {
-      Some(bytecode) => {
-        let j = &mut self._internal_;
-        let output = debug::generate_disassembly(&bytecode, &j);
-        Ok(output.into())
-      }
-      None => Ok("Bytecode is not built or not valid".into()),
-    }
-  }
+pub fn create_soup() -> Result<JSSoup, JsError> {
+  Ok(JSSoup(Box::new(Default::default())))
 }
 
 trait JSONError {
@@ -186,7 +127,7 @@ impl JSGrammarParser {
       _reader:         other_reader,
       bytecode_parser: ByteCodeParser::new(
         unsafe { &mut *reader_ptr.as_ptr() },
-        &sherpa_core::compile::bytecode,
+        &parser::bytecode,
       ),
     }
   }
@@ -238,17 +179,14 @@ impl JSGrammarParser {
 #[wasm_bindgen]
 pub fn get_codemirror_parse_tree(input: String) -> JsValue {
   let mut reader = StringReader::StringReader::new(input);
-  let mut bytecode_parser = ByteCodeParser::<'static, _, u32>::new(
-    &mut reader,
-    &sherpa_core::compile::bytecode,
-  );
+  let mut bytecode_parser =
+    ByteCodeParser::<'static, _, u32>::new(&mut reader, &parser::bytecode);
   bytecode_parser.init_parser(60);
 
   let mut output = vec![];
   let mut acc_stack: Vec<u32> = vec![];
 
-  const LAST_TOKEN_INDEX: usize =
-    sherpa_core::compile::meta::production_names.len();
+  const LAST_TOKEN_INDEX: usize = parser::meta::production_names.len();
   loop {
     match bytecode_parser.get_next_action(&mut None) {
       ParseAction::Accept { .. } => {
@@ -299,10 +237,7 @@ struct ProdNames(Vec<String>);
 #[wasm_bindgen]
 pub fn get_production_names() -> JsValue {
   serde_wasm_bindgen::to_value(&ProdNames(
-    sherpa_core::compile::meta::production_names
-      .iter()
-      .map(|i| (*i).to_string())
-      .collect(),
+    parser::meta::production_names.iter().map(|i| (*i).to_string()).collect(),
   ))
   .unwrap()
 }

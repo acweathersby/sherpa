@@ -14,16 +14,16 @@ SHERPA_CLI_DIR=$ROOT_DIR/src/app/cli
 
 pushd $SHERPA_CLI_DIR
 
-cargo +nightly run \
+cargo run \
     --bin sherpa \
-    --release \
+    -Z package-features \
     --features "sherpa_core/llvm" \
     -- build -t bytecode\
      -a \
      --name sherpa_bc \
      -l rust \
      --libout $ROOT_DIR/src/lib/sherpa-core/lib/ \
-     -o $ROOT_DIR/src/lib/sherpa-core/grammar/new/parser/ \
+     -o $ROOT_DIR/src/lib/sherpa-core-nuevo/parser/ \
       $ROOT_DIR/src/grammar/v2_0_0/grammar.sg
 
 

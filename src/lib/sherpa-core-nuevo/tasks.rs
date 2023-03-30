@@ -312,7 +312,7 @@ fn test_taskman() {
     println!("{chunk_1:?}, {chunk_4:?}");
 
     let g = grammar.clone();
-    let A = ThreadedFuture::new(
+    let a = ThreadedFuture::new(
       async move {
         let data = g.productions[0].clone();
         for i in chunk_1 {
@@ -326,7 +326,7 @@ fn test_taskman() {
     .await;
 
     let g = grammar.clone();
-    let B = ThreadedFuture::new(
+    let b = ThreadedFuture::new(
       async move {
         for i in chunk_2 {
           println!("{:#?}", g.productions[i]);
@@ -335,7 +335,7 @@ fn test_taskman() {
       &spawner,
     );
 
-    B.await;
+    b.await;
 
     for i in chunk_3 {
       println!("------------------------");

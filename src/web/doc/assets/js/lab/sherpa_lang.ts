@@ -1,6 +1,6 @@
 import { defineLanguageFacet, Language, LanguageSupport } from "@codemirror/language";
 import { Input, NodeSet, Parser, PartialParse, Tree, TreeFragment, NodeType } from "@lezer/common";
-import init_sherpa, { compile_grammar, JournalWrap, JSGrammarParser, get_codemirror_parse_tree, get_production_names } from "js/sherpa/sherpa_wasm.js";
+import init_sherpa, {   JSGrammarParser, get_codemirror_parse_tree, get_production_names, JSSoup } from "js/sherpa/sherpa_wasm.js";
 import { tags, Tag, styleTags, tagHighlighter } from '@lezer/highlight';
 import { syntaxHighlighting, HighlightStyle, defaultHighlightStyle } from '@codemirror/language';
 
@@ -11,8 +11,11 @@ class SherpaParser extends Parser {
 
     nodeSet: NodeSet;
 
-    constructor() {
+    soup: JSSoup;
+
+    constructor(soup: JSSoup) {
         super();
+        this.soup = soup;
         let names = get_production_names();
         names.push("token");
         this.nodeSet = new NodeSet(names.map((name: string, id: number) => {
@@ -58,10 +61,10 @@ class SherpaParser extends Parser {
     }
 }
 
-export function sherpaLang() {
+export function sherpaLang(soup: JSSoup) {
     return new LanguageSupport(
         new Language(defineLanguageFacet({ commentTokens: { block: { open: "/*", close: "*/" } } }),
-            new SherpaParser(), [
+            new SherpaParser(soup), [
             syntaxHighlighting(
                 HighlightStyle.define([
                     {

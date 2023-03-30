@@ -6,18 +6,33 @@
 #![feature(try_trait_v2)]
 #![feature(box_patterns)]
 
-pub mod bytecode;
-pub mod compile;
-pub mod debug;
-pub mod grammar;
-pub mod journal;
+mod bytecode;
+mod compile;
+mod debug;
+mod grammar;
+mod journal;
 pub mod parser;
-pub mod tasks;
-pub mod types;
+mod tasks;
+mod types;
 mod utils;
-pub mod writer;
+mod writer;
 
 #[cfg(test)]
 mod test;
 
-pub(crate) use utils::*;
+pub use grammar::{compile_grammar_from_str, compile_grammars_from_path};
+pub use journal::{Config, Journal};
+pub use types::{
+  GrammarSoup,
+  IString,
+  IStringStore,
+  ParserDatabase,
+  Production,
+  ProductionId,
+  Rule,
+  SherpaError,
+  SherpaResult,
+  SubProduction,
+  SubProductionType,
+  SymbolId,
+};

@@ -87,7 +87,7 @@ fn build_states() -> SherpaResult<()> {
 
   let local_spawner = spawner.clone();
   let local_soup = grammar_soup.clone();
-  let mut local_j = j.transfer();
+  let local_j = j.transfer();
 
   executor.execute(
     async move {

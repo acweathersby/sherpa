@@ -57,12 +57,11 @@ impl<'b> ProductionData<'b> {
 /// Intermediate structure to host grammar data during
 /// construction.
 pub struct GrammarData {
-  pub name:           IString,
-  pub source_id:      GrammarId,
-  pub imports:        Map<IString, GrammarIdentity>,
-  pub exports:        Array<(IString, ProductionId)>,
+  pub id: GrammarIdentity,
+  pub imports: Map<IString, GrammarIdentity>,
+  pub exports: Array<(IString, ProductionId)>,
   pub global_skipped: Array<ASTNode>,
-  pub grammar:        Box<Grammar>,
+  pub grammar: Box<Grammar>,
 }
 
 pub fn convert_grammar_data_to_header(
@@ -70,7 +69,7 @@ pub fn convert_grammar_data_to_header(
   g_data: GrammarData,
 ) -> Box<GrammarHeader> {
   let mut identity = import_id;
-  identity.name = g_data.name;
+  identity.name = g_data.id.name;
   Box::new(GrammarHeader {
     identity,
     pub_prods: g_data.exports.into_iter().collect(),
@@ -90,7 +89,7 @@ pub fn create_grammar_data(
   grammar_path: &PathBuf,
   string_store: &IStringStore,
 ) -> SherpaResult<GrammarData> {
-  const exts: [&str; 3] = ["sg", "sherpa", "hcg"];
+  const EXTENSIONS: [&str; 3] = ["sg", "sherpa", "hcg"];
 
   let source_dir = grammar_path.parent()?.to_owned();
   let mut imports = Map::default();
@@ -105,7 +104,7 @@ pub fn create_grammar_data(
         let box parser::Import { reference, uri, tok } = import;
         let path = PathBuf::from(uri);
 
-        match resolve_grammar_path(&path, &source_dir, &exts) {
+        match resolve_grammar_path(&path, &source_dir, &EXTENSIONS) {
           SherpaResult::Ok(path) => {
             imports.insert(
               reference.intern(string_store),
@@ -142,8 +141,11 @@ pub fn create_grammar_data(
     }
   }
   let mut g_data = GrammarData {
-    name: grammar_name(name, grammar_path, string_store),
-    source_id: grammar_path.into(),
+    id: GrammarIdentity {
+      guid: grammar_path.into(),
+      name: grammar_name(name, grammar_path, string_store),
+      path: grammar_path.intern(string_store),
+    },
     global_skipped: skipped,
     grammar,
     imports,
@@ -182,11 +184,11 @@ pub fn extract_productions<'a>(
     match production {
       ASTNode::State(parse_state) => parse_states.push(Box::new(CustomState {
         id:      ProductionId::from((
-          g_data.source_id,
+          g_data.id.guid,
           parse_state.id.name.as_str(),
         )),
         name:    prod_name(parse_state.id.name.as_str(), g_data, s_store),
-        g_id:    g_data.source_id,
+        g_id:    g_data.id.guid,
         tok:     parse_state.tok.clone(),
         state:   parse_state.clone(),
         symbols: Default::default(),
@@ -209,11 +211,11 @@ pub fn extract_productions<'a>(
         productions.push((
           Box::new(Production {
             id:        ProductionId::from((
-              g_data.source_id,
+              g_data.id.guid,
               name_sym.name.as_str(),
             )),
             name:      prod_name(name_sym.name.as_str(), g_data, s_store),
-            g_id:      g_data.source_id,
+            g_id:      g_data.id.guid,
             type_:     ProductionType::ContextFree,
             rules:     Default::default(),
             sub_prods: Default::default(),
@@ -239,10 +241,9 @@ pub fn process_parse_state<'a>(
 ) -> SherpaResult<Box<CustomState>> {
   // Extract symbol information from the state.
 
-  let CustomState { id, g_id, state, symbols, name, .. } = parse_state.as_mut();
+  let CustomState { id, state, symbols, name, .. } = parse_state.as_mut();
   {
-    let parser::Statement { branch, non_branch, transitive } =
-      state.statement.as_ref();
+    let parser::Statement { branch, .. } = state.statement.as_ref();
 
     if let Some(branch) = &branch {
       match branch {
@@ -272,7 +273,7 @@ pub fn process_parse_state<'a>(
             }
           }
         }
-        ASTNode::ProductionMatches(prod_matches) => {}
+        ASTNode::ProductionMatches(..) => {}
         ASTNode::Matches(ast_match) => match ast_match.mode.as_str() {
           "TERMINAL" => {}
           _ => {
@@ -513,7 +514,7 @@ fn process_rule_symbols(
             id,
             name: sub_prod_name("group", p_data, s_store),
             type_: SubProductionType::Group,
-            g_id: g_data.source_id,
+            g_id: g_data.id.guid,
             rules: sub_prod_rules,
           }));
 
@@ -576,7 +577,7 @@ fn process_rule_symbols(
           type_: SubProductionType::List,
           name: sub_prod_name("list", p_data, s_store),
           id,
-          g_id: g_data.source_id,
+          g_id: g_data.id.guid,
           rules,
         }));
 
@@ -749,7 +750,7 @@ fn get_production_id_from_ast_node(
 ) -> Option<ProductionId> {
   match get_production_symbol(g_data, node) {
     (Some(prod), None) => {
-      Some(ProductionId::from((g_data.source_id, prod.name.as_str())))
+      Some(ProductionId::from((g_data.id.guid, prod.name.as_str())))
     }
     (None, Some(prod)) => {
       let ref_name = prod.module.to_token();
@@ -859,7 +860,7 @@ pub fn prod_name(
   g_data: &GrammarData,
   s_store: &IStringStore,
 ) -> IString {
-  (g_data.name.to_string(s_store) + "____" + base_name).intern(s_store)
+  (g_data.id.name.to_string(s_store) + "____" + base_name).intern(s_store)
 }
 
 /// Creates a globally unique name for a sub-production.

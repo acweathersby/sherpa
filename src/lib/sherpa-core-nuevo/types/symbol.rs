@@ -177,6 +177,7 @@ impl SymbolId {
       _ => {
         #[cfg(debug_assertions)]
         unimplemented!("{:?}", self);
+        #[cfg(not(debug_assertions))]
         unimplemented!()
       }
     }
