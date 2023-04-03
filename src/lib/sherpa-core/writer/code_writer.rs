@@ -5,6 +5,8 @@ use std::{
   ops::Add,
 };
 
+use crate::types::GuardedStr;
+
 /// Chainable writer for formatted source code
 pub struct CodeWriter<W: Write> {
   output:        W,
@@ -34,6 +36,16 @@ impl<'w, W: Write> Add<String> for &'w mut CodeWriter<W> {
 
   fn add(self, rhs: String) -> Self::Output {
     self.w(&rhs).unwrap()
+  }
+}
+
+impl<'w, 'istore: 'w, W: Write> Add<GuardedStr<'istore>>
+  for &'w mut CodeWriter<W>
+{
+  type Output = Self;
+
+  fn add(self, rhs: GuardedStr<'istore>) -> Self::Output {
+    self.w(rhs.as_str()).unwrap()
   }
 }
 

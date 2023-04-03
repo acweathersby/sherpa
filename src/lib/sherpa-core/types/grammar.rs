@@ -1,580 +1,404 @@
-use super::{item::Item, *};
+#![allow(unused)]
+
+use std::{hash::Hash, path::PathBuf, sync::Arc};
+
+use sherpa_runtime::{
+  types::{Token, TokenRange},
+  utf8::lookup_table::CodePointClass,
+};
+
 use crate::{
-  grammar::{
-    compile::{
-      compile_grammars,
-      parse::{load_from_path, load_from_string},
-      parser::sherpa::{self, ASTNode, Ascript, Reduce},
-    },
-    create_closure,
-    get_closure_cached,
-    get_guid_grammar_name,
-    get_production_start_items,
-    hash_id_value_u64,
-  },
-  journal::Journal,
-};
-use std::{
-  collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
-  fmt::Display,
-  path::PathBuf,
-  sync::Arc,
+  parser,
+  types::*,
+  utils::create_u64_hash,
+  writer::code_writer::CodeWriter,
 };
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
+use super::{Array, CachedString, IString, IStringStore, Map, Set, SymbolId};
 
-/// A Globally Unique Id to quickly distinguish instances of [GrammarStore].
-/// This value is derived from the filepath of the grammar's source code.
-pub struct GrammarId(pub u64);
+/// A globally unique identifier for a single production.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub enum ProductionId {
+  /// Productions directly defined within a grammar.
+  Standard(u64, ProductionSubType),
+  /// Productions derived from grammar symbols such as the
+  /// group `(...)` symbol. All sub productions belong to
+  /// only one "Standard" production
+  Sub(u64, u32, ProductionSubType),
+}
 
-impl Display for GrammarId {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    f.write_str(&self.0.to_string())
+impl Default for ProductionId {
+  fn default() -> Self {
+    ProductionId::Standard(0, ProductionSubType::Parser)
   }
 }
 
-impl From<&PathBuf> for GrammarId {
-  fn from(value: &PathBuf) -> Self {
-    GrammarId(hash_id_value_u64(&get_guid_grammar_name(value)))
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub enum ProductionSubType {
+  Parser,
+  Scanner,
+  ScannerToken,
+  ScannerSym,
+}
+
+impl From<(GrammarId, &str)> for ProductionId {
+  fn from(value: (GrammarId, &str)) -> Self {
+    ProductionId::Standard(create_u64_hash(value), ProductionSubType::Parser)
   }
 }
 
-/// Stores the absolute paths and source code of a `*.hcg` file.
-#[derive(Debug, Clone)]
-pub struct HCGSource {
-  /// The absolute path of a hcg file.
-  pub absolute_path: PathBuf,
-  /// The source code of a hcg file.
-  pub source:        String,
-}
-#[derive(Debug, Clone)]
-pub enum ReduceFunctionType {
-  Generic(Reduce),
-  AscriptOld(Ascript),
-  Ascript(crate::grammar::compile::parser::sherpa::Ascript),
-  Undefined,
-}
-
-impl ReduceFunctionType {
-  pub fn new(node: &ASTNode) -> Self {
-    match node {
-      ASTNode::Reduce(box reduce) => {
-        ReduceFunctionType::Generic(reduce.clone())
-      }
-      ASTNode::Ascript(box ascript) => {
-        ReduceFunctionType::AscriptOld(ascript.clone())
-      }
-      _ => ReduceFunctionType::Undefined,
+impl From<(ProductionId, usize)> for ProductionId {
+  fn from((prod_id, index): (ProductionId, usize)) -> Self {
+    if let ProductionId::Standard(id, sub_type) = prod_id {
+      ProductionId::Sub(id, index as u32, sub_type)
+    } else {
+      unreachable!()
     }
   }
 }
 
+impl ProductionId {
+  pub fn as_sym(&self) -> SymbolId {
+    SymbolId::NonTerminal { id: self.as_parse_prod() }
+  }
+
+  pub fn as_tok_sym(&self) -> SymbolId {
+    SymbolId::NonTerminalToken {
+      id:         self.as_scan_prod(),
+      precedence: 0,
+    }
+  }
+
+  pub fn as_parse_prod(&self) -> ProductionId {
+    match self {
+      ProductionId::Standard(id, _) => {
+        ProductionId::Standard(*id, ProductionSubType::Parser)
+      }
+      ProductionId::Sub(id, index, _) => {
+        ProductionId::Sub(*id, *index, ProductionSubType::Parser)
+      }
+    }
+  }
+
+  pub fn as_scan_prod(&self) -> ProductionId {
+    match self {
+      ProductionId::Standard(id, _) => {
+        ProductionId::Standard(*id, ProductionSubType::Scanner)
+      }
+      ProductionId::Sub(id, index, _) => {
+        ProductionId::Sub(*id, *index, ProductionSubType::Scanner)
+      }
+    }
+  }
+
+  pub fn set_index(&mut self, index: usize) {
+    match self {
+      ProductionId::Standard(id, ..) | ProductionId::Sub(id, ..) => {
+        *id = index as u64;
+      }
+    }
+  }
+}
+
+/// A globally unique identifier for a single grammar file.
+#[derive(Default, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub struct GrammarId(u64);
+
+impl From<&PathBuf> for GrammarId {
+  fn from(value: &PathBuf) -> Self {
+    GrammarId(create_u64_hash(&value))
+  }
+}
+
+#[derive(Default, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub struct RuleId(u64);
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub struct TokenSymbol {
+  pub type_: SymbolType,
+  pub val:   IString,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub struct ProductionRef(u32);
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub struct TokenProductionRef(u32);
+
+#[derive(Clone, PartialEq, Eq)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub struct Rule {
+  /// A list of [SymbolId]s and their position within the source grammar
+  pub symbols: Array<(SymbolId, usize)>,
+  pub skipped: Array<SymbolId>,
+  pub ast:     Option<ASTToken>,
+  pub tok:     Token,
+}
+
+/// A reference to some Ascript AST data that is either automatically generated
+/// depending on the reference type, or is stored on a Production node.
+#[derive(Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub enum ASTToken {
+  /// Represents the ast expression `:ast [ $1 ]`.
+  ///
+  ///
+  /// Automatically generated when when a list production (` A(+) | A(*) `) is
+  /// processed.
+  ListEntry(TokenRange),
+  /// Represents the ast expression `:ast [ $1, $--last-- ]`, where `--last--`
+  /// represents the last symbol in a rule.
+  ///
+  /// Automatically generated when when a list production (` A(+) | A(*) `) is
+  /// processed.
+  ListIterate(TokenRange),
+  /// An AST expression defined within a grammar. `0` Is the production id
+  /// in which a copy if the AST expressions is stored. `1` is the index
+  /// into the Productions's `asts` array for that stored production.
+  Defined(ProductionId, usize),
+}
+
+/// A custom parse state defined within a grammar e.g `state_name => ...`
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub struct CustomState {
+  pub id:      ProductionId,
+  pub g_id:    GrammarId,
+  pub name:    IString,
+  pub symbols: Set<SymbolId>,
+  pub state:   Box<parser::State>,
+  pub tok:     Token,
+}
+
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub struct Production {
+  /// The unique identifier of this production.
+  pub id: ProductionId,
+
+  /// The unique identifier of the owning GrammarHEader.
+  pub g_id: GrammarId,
+
+  /// All symbols that are referenced by the rules of the
+  /// production and its sub-productions.
+  pub symbols: Set<SymbolId>,
+
+  /// All rules that reduce to this production
+  pub rules: Array<Rule>,
+
+  /// Productions generated from the expansion of "production" type
+  /// symbols such as groups & lists. These productions are only referenced
+  /// by the rules defined by this production.
+  pub sub_prods: Array<Box<SubProduction>>,
+
+  /// Productions derived from `tk:` invocations of normal productions.
+  /// These productions have the special characteristic where none of
+  /// their rules contain left recursions
+  pub tok_prods: Array<Box<SubProduction>>,
+
+  /// The type of this production
+  pub type_: ProductionType,
+
+  /// The name of the production as it is found in the source grammar.
+  pub name: IString,
+
+  pub tok: Token,
+
+  pub asts: Array<Box<parser::Ascript>>,
+}
+
+/// Productions generated from the expansion of "production" type
+/// symbols such as groups & lists. These productions are only referenced
+/// by the rules defined by this production.
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub struct SubProduction {
+  pub id: ProductionId,
+
+  pub g_id: GrammarId,
+
+  pub name: IString,
+
+  pub rules: Array<Rule>,
+
+  pub type_: SubProductionType,
+}
+
+/// Types of [SubProduction]s that may be derived from rule symbols.
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub enum SubProductionType {
+  /// List sub productions are left recursive productions
+  /// that are derived from `list` symbols e.g: `A(+) | A(*) | A(+sym) |
+  /// A(*sym)` .
+  List,
+  /// Group productions are derived from group symbols e.g `(...)` and are
+  /// created when they are present in rules that have AST definitions to
+  /// maintain expected behaviors when referencing symbols in an ast
+  /// expression.
+  Group,
+}
+
+impl SubProductionType {
+  pub fn to_string(&self) -> String {
+    match self {
+      SubProductionType::Group => "grp".into(),
+      SubProductionType::List => "lst".into(),
+    }
+  }
+}
+
+/// Data from a single grammar source file
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub struct GrammarHeader {
+  pub identity:  GrammarIdentity,
+  /// Productions that are accessible as entry points to this
+  /// grammar. Contains the global id of the public production
+  /// and its export name.
+  pub pub_prods: Map<IString, ProductionId>,
+
+  pub imports: Array<GrammarId>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub enum SymbolType {
+  /// A single token string
+  Token,
+  /// A single, tokenized, production
+  TokenProduction(TokenProductionRef),
+  Production(ProductionRef),
+}
+
+#[derive(Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub enum ProductionType {
+  ContextFree,
+  Pratt,
+  Peg,
+  ParseSTate,
+}
+
 /// Identifiers for a Grammar
-#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
-pub struct GrammarRef {
-  /// A globally unique name to refer to this grammar by. Derived from the
-  /// grammar's filepath.
-  pub guid_name: String,
-
-  /// The user defined name. This is either the value of the `@NAME` preamble,
-  /// or the original file name stem if this preamble is not present.
-  pub name: String,
-
+#[derive(Default, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub struct GrammarIdentity {
   /// A globally unique identifier for this GrammarStore instance. Derived
   /// from the source path
   pub guid: GrammarId,
+
+  /// A name defined by the grammar author. This is either the value of the
+  /// `@NAME` preamble, or the original file name stem if this preamble is
+  /// not present.
+  pub name: IString,
 
   /// The absolute path of the grammar's source file. This may be empty if the
   /// source code was passed in as a string, as with the case of grammars
   /// compiled with
   /// [compile_grammar_from_string](sherpa_core::grammar::compile_grammar_from_string)).
-  pub path: PathBuf,
+  pub path: IString,
 }
 
-impl GrammarRef {
-  /// Creates a new GrammarRef
-  pub fn new(local_name: String, absolute_path: PathBuf) -> Arc<Self> {
-    let guid_name = get_guid_grammar_name(&absolute_path);
-    Arc::new(GrammarRef {
-      guid: (&absolute_path).into(),
-      guid_name,
-      name: local_name,
-      path: absolute_path,
-    })
-  }
-}
-
-pub type ImportedGrammarReferences = HashMap<String, Arc<GrammarRef>>;
-
-pub type ReduceFunctionTable = BTreeMap<ReduceFunctionId, ReduceFunctionType>;
-
-/// Houses AST and other essential data for the compilation and analysis of a
-/// Sherpa grammar.
-///
-/// # Instantiation
-///
-/// Use one of the following functions to construct a GrammarStore:
-/// - ## [compile_from_path](crate::grammar::compile_from_path)  # Examples
-///   ```ignore use sherpa::compile_grammar_from_path;
-///
-///     let number_of_threads = 1;
-///     let (grammar_store_option, errors) = compile_from_path(
-///         PathBuf::from_str("./my_grammar.hcg"),
-///         number_of_threads
-///     );
-///     ```
-/// - ## [compile_from_string](crate::grammar::compile_from_string)
-
-#[derive(Debug, Clone, Default)]
-pub struct GrammarStore {
-  /// TODO: Docs
-  pub id: Arc<GrammarRef>,
-
-  /// Maps [ProductionId] to a list of [RuleIds](RuleId)
-  pub production_rules: ProductionBodiesTable,
-
-  /// Maps a [ProductionId] to a [Production].
-  pub productions: ProductionTable,
-
-  /// Maps a production's id to it's original name and guid name
-  pub production_names: BTreeMap<ProductionId, (String, String)>,
-
-  /// Maps RuleId to rule data.
-  pub rules: RuleTable,
-
-  /// Maps [SymbolId] to [Symbol] data. Only stores [Symbols](Symbol) that
-  /// represent one of the following:
-  /// - [SymbolID::DefinedNumeric]
-  /// - [SymbolID::DefinedIdentifier]
-  /// - [SymbolID::DefinedSymbol]
-  /// - [SymbolID::TokenProduction]
-  pub symbols: SymbolsTable,
-
-  /// Maps SymbolId to its original source token string.
-  pub symbol_strings: SymbolStringTable,
-
-  /// Store of all production ids encountered in grammar.
-  pub production_symbols: BTreeMap<SymbolID, Token>,
-
-  /// Maps a local import name to an absolute file path and its
-  /// UUID.
-  pub imports: ImportedGrammarReferences,
-
-  /// Closure of all items that can be produced by this grammar.
-  pub(crate) closures: HashMap<Item, Vec<Item>>,
-
-  pub(crate) item_ignore_symbols: HashMap<Item, Vec<SymbolID>>,
-  /// TODO: Docs
-  pub production_ignore_symbols:  HashMap<ProductionId, Vec<SymbolID>>,
-
-  /// A mapping of [ProductionId]s to export names
-  ///
-  /// These export names are generated from the grammar production:
-  ///
-  /// ```hgc
-  /// <> export_preamble > \@EXPORT sym::production_symbol ( t:AS | t:as ) tk:export_id
-  /// ```
-  /// where `tk:export_id` is assigned to the second tuple position.
-  ///
-  /// If no export names are declared in the root grammar, then this will
-  /// contain the id of the first production declared in the root grammar,
-  /// assigned to the name `default`.
-  pub exports: Vec<(ProductionId, GrammarId, String)>,
-
-  /// All items in the grammar that are `B => . A b` for some production `A`.
-  pub(crate) lr_items: BTreeMap<ProductionId, Vec<Item>>,
-
-  /// Production definitions that use the merge symbol `+>`. These extend the
-  /// rules of the target production if such a production exists, or cause a
-  /// `production-not-found` error to be emitted if the target cannot be
-  /// found.
-  pub merge_productions: BTreeMap<ProductionId, (String, Vec<Rule>)>,
-
-  /// All productions that are either entry productions or are reachable from
-  /// the entry productions
-  pub parse_productions: BTreeSet<ProductionId>,
-
-  /// Maps bytecode id to rule id for all rules.
-  pub bytecode_rule_lookup: BTreeMap<u32, RuleId>,
-
-  /// Maps bytecode id to production id for all productions that are reachable
-  /// from the entry productions.
-  pub bytecode_production_lookup: BTreeMap<u32, ProductionId>,
-
-  /// Maps bytecode id to all tokens that can be generated by scanner states.
-  pub bytecode_token_lookup: BTreeMap<u32, SymbolID>,
-}
-
-impl GrammarStore {
-  fn compile_grammars(
-    j: &mut Journal,
-    grammars: Vec<(
-      PathBuf,
-      HashMap<String, Arc<GrammarRef>>,
-      Box<sherpa::Grammar>,
-    )>,
-  ) -> SherpaResult<Arc<GrammarStore>> {
-    j.flush_reports();
-
-    if j.have_errors_of_type(SherpaErrorSeverity::Critical) {
-      return SherpaResult::None;
-    }
-
-    compile_grammars(j, &grammars);
-
-    j.flush_reports();
-
-    if j.have_errors_of_type(SherpaErrorSeverity::Critical) {
-      return SherpaResult::None;
-    }
-
-    SherpaResult::Ok(j.grammar()?)
-  }
-
-  /// Create a GrammarStore from a Grammar file loaded from the filesystem.
-  /// This will load any references within the grammar and compile all grammar
-  /// definitions into a single GrammarStore.
-  ///
-  /// Any errors generated during the parsing or compilation of the grammars
-  /// will be recorded in the Journal.
+impl GrammarIdentity {
   pub fn from_path(
-    j: &mut Journal,
-    path: PathBuf,
-  ) -> SherpaResult<Arc<GrammarStore>> {
-    j.set_active_report(
-      "Entry Grammar Parse",
-      crate::ReportType::GrammarCompile(Default::default()),
-    );
-    let grammars = load_from_path(j, path);
-    Self::compile_grammars(j, grammars)
-  }
-
-  /// Create a GrammarStore from a Grammar defined in a string as if it were
-  /// a file located in the folder defined by `base_dir`.
-  /// This will load any references within the grammar and compile all grammar
-  /// definitions into a single GrammarStore.
-  ///
-  /// Any errors generated during the parsing or compilation of the grammars
-  /// will be recorded in the Journal.
-  pub fn from_str_with_base_dir(
-    j: &mut Journal,
-    string: &str,
-    base_dir: &PathBuf,
-  ) -> SherpaResult<Arc<GrammarStore>> {
-    j.set_active_report(
-      "Entry Grammar Parse",
-      crate::ReportType::GrammarCompile(Default::default()),
-    );
-    let grammars = load_from_string(j, string, base_dir.to_owned());
-    Self::compile_grammars(j, grammars)
-  }
-
-  /// Compile a GrammarStore from a grammar source `str`.
-  ///
-  /// # Example
-  /// ```rust
-  /// use sherpa_core::{Journal, ReportType};
-  /// use sherpa_core::compile::GrammarStore;
-  ///  
-  /// let mut j = Journal::new(None); // Use journal with default config;
-  ///
-  /// let g = GrammarStore::from_str(&mut j,
-  /// r###"
-  /// <> A > "hello" "world"
-  /// "###
-  /// );
-  ///
-  /// // Print the compilation report.
-  /// j.flush_reports();
-  /// j.debug_print_reports(ReportType::GrammarCompile(Default::default()));
-  /// ```
-  pub fn from_str(
-    j: &mut Journal,
-    string: &str,
-  ) -> SherpaResult<Arc<GrammarStore>> {
-    j.set_active_report(
-      "Entry Grammar Parse",
-      crate::ReportType::GrammarCompile(Default::default()),
-    );
-    let grammars = load_from_string(j, string, Default::default());
-    Self::compile_grammars(j, grammars)
-  }
-
-  /// Same as `Self::from_str` except with a `String` type.
-  pub fn from_string(
-    j: &mut Journal,
-    string: String,
-  ) -> SherpaResult<Arc<GrammarStore>> {
-    return Self::from_str(j, string.as_str());
-  }
-
-  /// Returns a reference to a Symbol given a SymbolId
-  pub fn get_symbol(&self, sym_id: &SymbolID) -> Option<&Symbol> {
-    match sym_id {
-      sym if sym.is_defined() => self.symbols.get(sym),
-      sym if sym.is_generic() => Some(*Symbol::generics_lu().get(sym).unwrap()),
-      _ => None,
+    grammar_source_path: &PathBuf,
+    string_store: &IStringStore,
+  ) -> Self {
+    Self {
+      guid: grammar_source_path.into(),
+      path: grammar_source_path.intern(string_store),
+      ..Default::default()
     }
   }
+}
 
-  /// Returns the [Rule] that's mapped to [`rule_id`](RuleId)
-  /// within the grammar
-  pub fn get_rule(&self, rule_id: &RuleId) -> SherpaResult<&Rule> {
-    SherpaResult::Ok(self.rules.get(rule_id)?)
-  }
+use super::ParserDatabase;
 
-  /// Returns the [Production] that's mapped to [`production_id`](ProductionId)
-  /// within the grammar
-  pub fn get_production(
-    &self,
-    production_id: &ProductionId,
-  ) -> SherpaResult<&Production> {
-    SherpaResult::Ok(self.productions.get(production_id)?)
-  }
-
-  /// Returns a list of [ExportedProductions](ExportedProduction) extracted from
-  /// the grammar.
-  #[inline]
-  pub fn get_exported_productions(&self) -> Vec<ExportedProduction> {
-    self
-      .exports
-      .iter()
-      .map(|(id, _, name)| {
-        let production = self.productions.get(id).unwrap();
-        ExportedProduction {
-          export_name: name,
-          guid_name: &production.guid_name,
-          production,
-          export_id: production.export_id.unwrap(),
-        }
-      })
-      .collect::<Vec<_>>()
-  }
-
-  /// Retrieve the non-import and unmangled name of a [Production](Production).
-  pub fn get_production_plain_name(&self, prod_id: &ProductionId) -> &str {
-    if let Some(prod) = self.productions.get(prod_id) {
-      &prod.name
-    } else if let Some((name, _)) = self.production_names.get(prod_id) {
-      name
-    } else {
-      ""
-    }
-  }
-
-  /// Returns GUID entry name for a an entry production, or panics if the
-  /// production is not an entry production
-  pub fn get_entry_name_from_prod_id(
-    &self,
-    prod_id: &ProductionId,
-  ) -> SherpaResult<String> {
-    if let Some(prod) = self.productions.get(prod_id) {
-      if prod.export_id.is_some() {
-        SherpaResult::Ok(prod.guid_name.clone() + "_enter")
-      } else {
-        SherpaResult::Err(SherpaError::SourceError {
-          loc:        prod.loc.clone(),
-          path:       self.id.path.clone(),
-          id:         "invalid-entry-production",
-          msg:        format!(
-            "Production {} is not an exported production.",
-            prod.name
-          ),
-          inline_msg: "".into(),
-          ps_msg:     "".into(),
-          severity:   SherpaErrorSeverity::Critical,
-        })
+impl SymbolId {
+  pub fn debug_string(&self, db: &ParserDatabase) -> String {
+    use SymbolId::*;
+    let mut w = CodeWriter::new(vec![]);
+    match *self {
+      Undefined => &mut w + "Undefine",
+      Default => &mut w + "Default",
+      EndOfFile { .. } => &mut w + "{EOF}",
+      ClassSpace { .. } => &mut w + "c:sp",
+      ClassHorizontalTab { .. } => &mut w + "c:tab",
+      ClassNewLine { .. } => &mut w + "c:nl",
+      ClassIdentifier { .. } => &mut w + "c:id",
+      ClassNumber { .. } => &mut w + "c:num",
+      ClassSymbol { .. } => &mut w + "c:sym",
+      Token { val, precedence } => {
+        &mut w
+          + "["
+          + val.to_str(db.string_store()).as_str()
+          + "]{"
+          + precedence.to_string()
+          + "}"
       }
-    } else {
-      SherpaResult::Err(
-        format!("Could not find entry name for production {:?}", prod_id)
-          .into(),
-      )
-    }
-  }
-
-  /// Retrieve the globally unique name of a [Production](Production).
-  pub fn get_production_guid_name(&self, prod_id: &ProductionId) -> &str {
-    if let Some(prod) = self.productions.get(prod_id) {
-      &prod.guid_name
-    } else if let Some((_, name)) = self.production_names.get(prod_id) {
-      name
-    } else {
-      ""
-    }
-  }
-
-  /// Attempts to retrieve a rule from the grammar with the matching
-  /// bytecode_id.
-  pub fn get_rule_by_bytecode_id(
-    &self,
-    bytecode_id: u32,
-  ) -> SherpaResult<&Rule> {
-    SherpaResult::Ok(
-      self
-        .bytecode_rule_lookup
-        .get(&bytecode_id)
-        .and_then(|prod_id| self.rules.get(prod_id))?,
-    )
-  }
-
-  /// Attempts to retrieve a production from the grammar with the matching
-  /// bytecode_id.
-  pub fn get_production_by_bytecode_id(
-    &self,
-    bytecode_id: u32,
-  ) -> SherpaResult<&Production> {
-    SherpaResult::Ok(
-      self
-        .bytecode_production_lookup
-        .get(&bytecode_id)
-        .and_then(|prod_id| self.productions.get(prod_id))?,
-    )
-  }
-
-  /// Todo: Docs
-  pub fn get_symbol_by_bytecode_id(
-    &self,
-    bytecode_id: u32,
-  ) -> SherpaResult<&Symbol> {
-    SherpaResult::Ok(
-      self
-        .bytecode_token_lookup
-        .get(&bytecode_id)
-        .and_then(|sym_id| self.symbols.get(sym_id))?,
-    )
-  }
-
-  /// Todo: Docs
-  pub fn get_symbol_id_by_bytecode_id(
-    &self,
-    bytecode_id: u32,
-  ) -> SherpaResult<&SymbolID> {
-    SherpaResult::Ok(self.bytecode_token_lookup.get(&bytecode_id)?)
-  }
-
-  /// Attempts to retrieve a production from the grammar with the matching name.
-  /// If the grammar is an aggregate of multiple grammars which define
-  /// productions with the same name, the production that is selected is
-  /// undetermined.
-  pub fn get_production_by_name(
-    &self,
-    name: &str,
-  ) -> SherpaResult<&Production> {
-    for production_id in self.productions.keys() {
-      if name == self.get_production_plain_name(production_id) {
-        return SherpaResult::Ok(self.productions.get(production_id).unwrap());
+      NonTerminal { id, .. } => &mut w + "non_term",
+      NonTerminalToken { id, .. } => &mut w + "tk:" + "non_term",
+      Codepoint { val, precedence } => {
+        &mut w + "[ cp:" + val.to_string() + "]{" + precedence.to_string() + "}"
       }
-    }
-
-    SherpaResult::None
-  }
-
-  /// Returns the ProductionID of a production whose name or export name matches
-  /// `name`.
-  ///
-  /// The matching production must be an exported production  (as it is when
-  /// declared in an `EXPORT` statement), or the first production of the
-  /// grammar that does not have any export declarations.
-  pub fn get_entry_prod_id_from_name(
-    &self,
-    name: &str,
-  ) -> Option<ProductionId> {
-    // See if name is an export name
-    for (prod_id, _, export_name) in &self.exports {
-      if export_name == name {
-        return Some(*prod_id);
+      DBNonTerminal { key } => {
+        let guard_str = db.prod_name_str(key);
+        let name = guard_str.as_str();
+        &mut w + name
       }
-    }
-
-    if let Some(prod) = self
-      .get_production_id_by_name(name)
-      .and_then(|prod_id| self.get_production(&prod_id).to_option())
-      .filter(|p| p.export_id.is_some())
-    {
-      Some(prod.id)
-    } else {
-      None
-    }
-  }
-
-  /// Retrieves first the production_id of the first production
-  /// whose plain or guid name matches the query string.
-  /// Returns None if no production matches the query.
-  pub fn get_production_id_by_name(&self, name: &str) -> Option<ProductionId> {
-    for (prod_id, prod) in self.productions.iter() {
-      if name == self.get_production_plain_name(prod_id) {
-        return Some(prod_id.to_owned());
+      DBNonTerminalToken { prod_key, precedence, .. } => {
+        let guard_str = db.prod_name_str(prod_key);
+        &mut w + "tk:" + guard_str + "{" + precedence.to_string() + "}"
       }
-      if name == prod.guid_name {
-        return Some(prod_id.to_owned());
-      }
-    }
-
-    None
-  }
-
-  /// Evaluates whether a production is recursive. Returns
-  /// a double of booleans.
-  ///
-  /// The first boolean value indicates that production is recursive.
-  ///
-  /// The second boolean value indicates a production has left
-  /// recursive, either directly or indirectly.
-  pub fn get_production_recursion_type(
-    &self,
-    prod_id: ProductionId,
-  ) -> RecursionType {
-    let mut seen = HashSet::<Item>::new();
-
-    let mut pipeline = VecDeque::from_iter(
-      create_closure(&get_production_start_items(&prod_id, self), self)
-        .iter()
-        .map(|i| (0, *i)),
-    );
-
-    let mut recurse_type = RecursionType::NONE;
-
-    while let Some((offset, item)) = pipeline.pop_front() {
-      if !item.is_completed() {
-        let other_prod_id = item.get_production_id_at_sym(self);
-
-        if prod_id == other_prod_id {
-          if offset == 0 {
-            if item.get_prod_id(self) == prod_id {
-              recurse_type = recurse_type + RecursionType::LEFT_DIRECT;
-            } else {
-              recurse_type = recurse_type + RecursionType::LEFT_INDIRECT;
-            }
-          } else {
-            recurse_type = recurse_type + RecursionType::RIGHT;
-          }
-        }
-
-        if seen.insert(item) {
-          let new_item = item.increment().unwrap();
-
-          pipeline.push_back((offset + 1, new_item));
-
-          if let SymbolID::Production(..) = new_item.get_symbol(self) {
-            for item in get_closure_cached(&new_item, self) {
-              pipeline.push_back((offset + 1, *item));
-            }
-          }
+      DBToken { key: index } => &mut w + db.sym(index).debug_string(db),
+      Char { char, precedence } => {
+        if char < 128 {
+          &mut w
+            + "[ cp:"
+            + char::from(char).to_string()
+            + "]{"
+            + precedence.to_string()
+            + "}"
+        } else {
+          &mut w
+            + "[ char:"
+            + char.to_string()
+            + "]{"
+            + precedence.to_string()
+            + "}"
         }
       }
-    }
-    recurse_type
+    };
+    w.to_string()
   }
+}
 
-  //
-  pub(crate) fn get_production_start_items_from_name(
-    &self,
-    name: &str,
-  ) -> Vec<Item> {
-    match self.get_production_id_by_name(name) {
-      Some(prod_id) => get_production_start_items(&prod_id, self),
-      None => vec![],
-    }
+use ::std::sync;
+/// This contains all grammars, productions, and parser states that have
+/// been derived from source grammar inputs.
+///
+/// This object is generally only created once and then passed to entry
+/// functions for parser, compilers, and analyzers, with which appropriate
+/// derivatives can be created for the respective task.
+#[derive(Clone, Default)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub struct GrammarSoup {
+  pub grammar_headers: Arc<sync::RwLock<Map<GrammarId, Box<GrammarHeader>>>>,
+  pub productions:     Arc<sync::RwLock<Map<ProductionId, Box<Production>>>>,
+  pub custom_states:   Arc<sync::RwLock<Map<ProductionId, Box<CustomState>>>>,
+  pub string_store:    IStringStore,
+}
+
+impl GrammarSoup {
+  pub fn new() -> sync::Arc<Self> {
+    sync::Arc::new(GrammarSoup {
+      grammar_headers: Default::default(),
+      productions:     Default::default(),
+      custom_states:   Default::default(),
+      string_store:    Default::default(),
+    })
   }
 }

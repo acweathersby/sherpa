@@ -4,7 +4,7 @@ use super::{
   cst,
   *,
 };
-use crate::bytecode_parser::{DebugEvent, DebugFn};
+use crate::bytecode::{DebugEvent, DebugFn};
 use std::{fmt::Debug, rc::*, sync::Arc};
 
 #[derive(Clone, Copy)]

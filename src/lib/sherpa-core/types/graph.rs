@@ -1,40 +1,24 @@
-use super::{
-  item::{Item, ItemContainer, ItemContainerIter, ItemType},
-  GrammarStore,
-  ItemSet,
-  Items,
-  ProductionId,
-  RuleId,
-  Symbol,
-  SymbolID,
-};
-use crate::grammar::{
-  compile::parser::sherpa::Grammar,
-  get_production_start_items,
-  hash_id_value_u64,
-};
 use std::{
-  collections::{
-    binary_heap::Iter,
-    hash_map::DefaultHasher,
-    BTreeMap,
-    BTreeSet,
-    HashMap,
-    VecDeque,
-  },
-  fmt::format,
+  collections::{hash_map::DefaultHasher, BTreeSet, HashSet, VecDeque},
   hash::{Hash, Hasher},
   ops::{Index, IndexMut},
-  sync::Arc,
 };
+
+use crate::utils::create_u64_hash;
+
+use super::*;
 
 /// Indicates the State type that generated
 /// the item
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum Origin {
+#[derive(Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub enum Origin {
   None,
-  ProdGoal(ProductionId),
-  SymGoal(SymbolID),
+  /// The goal production that this item or it's predecessors will reduce to
+  ProdGoal(DBProdKey),
+  /// The goal symbol id that this item or its predecessors will recognize
+  TokenGoal(DBTokenKey),
+  /// The goal origin item set that this item will resolve to
   Peek(u64, StateId),
   // Out of scope item that was generated from the
   // completion of a token production.
@@ -52,18 +36,18 @@ impl Default for Origin {
 }
 
 impl Origin {
-  pub fn debug_string(&self, g: &GrammarStore) -> String {
+  #[cfg(debug_assertions)]
+  pub fn debug_string(&self, db: &ParserDatabase) -> String {
     match self {
       Origin::ProdGoal(prod_id) => {
-        let prod = g.get_production(&prod_id).unwrap();
-        format!("ProdGoal[ {} {:?} ]", prod.name, prod.bytecode_id)
-      }
-      Origin::SymGoal(sym_id) => {
         format!(
-          "SymGoal[ {} {:?} ]",
-          sym_id.debug_string(g),
-          sym_id.bytecode_id(g)
+          "ProdGoal[ {} {:?} ]",
+          db.prod_name(*prod_id).to_string(db.string_store()),
+          prod_id
         )
+      }
+      Origin::TokenGoal(sym_id) => {
+        format!("TokenGoal[ {:?} ]", sym_id)
       }
       _ => format!("{:?}", self),
     }
@@ -77,18 +61,19 @@ impl Origin {
     matches!(self, Origin::GoalCompleteOOS | Origin::ScanCompleteOOS)
   }
 
-  pub fn get_symbol(&self) -> SymbolID {
+  pub fn get_symbol(&self, db: &ParserDatabase) -> SymbolId {
     match self {
-      Origin::SymGoal(sym_id) => *sym_id,
-      _ => SymbolID::Undefined,
+      Origin::TokenGoal(sym_id) => db.sym(*sym_id),
+      _ => SymbolId::Undefined,
     }
   }
 }
 
 // Transtion Type ----------------------------------------------------
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
-pub(crate) enum StateType {
+#[derive(Hash, PartialEq, Eq, Clone, Copy)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub enum StateType {
   Undefined,
   Start,
   Shift,
@@ -99,25 +84,25 @@ pub(crate) enum StateType {
   PeekEnd,
   Complete,
   Follow,
-  AssignAndFollow(SymbolID),
-  Reduce(RuleId),
-  AssignToken(SymbolID),
+  AssignAndFollow(DBTokenKey),
+  Reduce(DBRuleKey),
+  AssignToken(DBTokenKey),
   /// Calls made on items within a state's closure but
   /// are not kernel items.
-  InternalCall(ProductionId),
+  InternalCall(DBProdKey),
   /// Calls made on kernel items
-  KernelCall(ProductionId),
+  KernelCall(DBProdKey),
   /// Creates a leaf state that has a single `pop` instruction,
   /// with the intent of removing a goto floor state.
   ProductionCompleteOOS,
   /// Creates a leaf state that has a single `pop` instruction,
   /// with the intent of removing a goto floor state.
-  PeekProductionCompleteOOS,
+  _PeekProductionCompleteOOS,
   /// Creates a leaf state that has a single `pass` instruction.
   ScannerCompleteOOS,
-  FirstMatch,
-  LongestMatch,
-  ShortestMatch,
+  _FirstMatch,
+  _LongestMatch,
+  _ShortestMatch,
 }
 
 impl Default for StateType {
@@ -127,63 +112,54 @@ impl Default for StateType {
 }
 
 impl StateType {
-  pub fn is_out_of_scope(&self) -> bool {
-    use StateType::*;
-    matches!(
-      self,
-      ProductionCompleteOOS | ScannerCompleteOOS | PeekProductionCompleteOOS
-    )
-  }
-
   pub fn is_goto(&self) -> bool {
     use StateType::*;
     matches!(self, GotoLoop | GotoPass | KernelGoto)
   }
 
-  fn debug_string(&self, g: &GrammarStore) -> String {
+  #[cfg(debug_assertions)]
+  fn debug_string(&self, db: &ParserDatabase) -> String {
     match self {
       Self::KernelCall(prod_id) => {
-        format!("KernelCall({})", g.get_production_plain_name(prod_id))
+        format!("KernelCall({prod_id:?})")
       }
       Self::InternalCall(prod_id) => {
-        format!("InternalCall({})", g.get_production_plain_name(prod_id))
+        format!("InternalCall({prod_id:?})",)
       }
       Self::AssignAndFollow(sym_id) => {
-        format!("AssignAndFollow({})", sym_id.debug_string(g))
+        format!("AssignAndFollow({})", db.sym(*sym_id).debug_string(db))
       }
       Self::AssignToken(sym_id) => {
-        format!("AssignToken({})", sym_id.debug_string(g))
+        format!("AssignToken({})", db.sym(*sym_id).debug_string(db))
       }
-      Self::Reduce(rule_id) => {
-        format!(
-          "Reduce({})",
-          g.get_production_plain_name(&g.rules.get(rule_id).unwrap().prod_id)
-        )
+      Self::Reduce(prod_id) => {
+        format!("Reduce({prod_id:?})",)
       }
       _ => format!("{:?}", self),
     }
   }
 }
-pub(crate) const OutScopeIndex: u32 = 0xFEEDDEED;
+pub const OUT_SCOPE_INDEX: u32 = 0xFEEDDEED;
 
 // State -------------------------------------------------------------
 
-#[derive(Debug, Default, PartialEq, Eq)]
-pub(crate) struct State {
+#[derive(Default, PartialEq, Eq)]
+pub struct State<'db> {
   id: StateId,
-  term_symbol: SymbolID,
+  term_symbol: SymbolId,
   t_type: StateType,
   parent: StateId,
-  predecessors: BTreeSet<StateId>,
-  kernel_items: BTreeSet<Item>,
-  peek_resolve_items: BTreeMap<u64, Items>,
-  non_terminals: BTreeSet<Item>,
-  reduce_item: Option<Item>,
+  predecessors: OrderedSet<StateId>,
+  kernel_items: ItemSet<'db>,
+  peek_resolve_items: OrderedMap<u64, Items<'db>>,
+  non_terminals: OrderedSet<Item<'db>>,
+  reduce_item: Option<Item<'db>>,
   leaf_state: bool,
-  closure: Option<ItemSet>,
+  closure: Option<OrderedSet<Item<'db>>>,
+  root_closure: Option<OrderedSet<Item<'db>>>,
 }
 
-impl Hash for State {
+impl<'db> Hash for State<'db> {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
     self.t_type.hash(state);
 
@@ -191,7 +167,7 @@ impl Hash for State {
 
     for item in &self.kernel_items {
       item.rule_id.hash(state);
-      item.off.hash(state);
+      item.sym_index.hash(state);
 
       match item.origin {
         Origin::Peek(hash_id, _) => hash_id.hash(state),
@@ -201,7 +177,7 @@ impl Hash for State {
 
     for item in &self.non_terminals {
       item.rule_id.hash(state);
-      item.off.hash(state);
+      item.sym_index.hash(state);
       item.origin.hash(state);
 
       match item.origin {
@@ -211,21 +187,117 @@ impl Hash for State {
     }
 
     for item in
-      &self.peek_resolve_items.values().flatten().collect::<BTreeSet<_>>()
+      &self.peek_resolve_items.values().flatten().collect::<OrderedSet<_>>()
     {
       item.rule_id.hash(state);
-      item.off.hash(state);
+      item.sym_index.hash(state);
     }
 
     if let Some(item) = self.reduce_item {
       item.rule_id.hash(state);
-      item.off.hash(state);
+      item.sym_index.hash(state);
     }
   }
 }
 
-impl State {
-  pub(crate) fn get_goto_state(&self) -> Option<Self> {
+impl<'db> State<'db> {
+  /// Set a group of items that a peek item will resolve to.
+  pub fn set_peek_resolve_items(
+    &mut self,
+    peek_origin_key: u64,
+    items: Items<'db>,
+  ) {
+    self.peek_resolve_items.insert(peek_origin_key, items);
+  }
+
+  pub fn get_hash(&self) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    self.hash(&mut hasher);
+    hasher.finish()
+  }
+
+  pub fn get_resolve_items(&self, peek_origin_key: u64) -> Items<'db> {
+    self.peek_resolve_items.get(&peek_origin_key).unwrap().clone()
+  }
+
+  pub fn calculate_closure(
+    &mut self,
+    is_scanner: bool,
+    db: &'db ParserDatabase,
+  ) {
+    self.closure = None;
+    let state_id = self.id;
+    let closure = self.kernel_items.create_closure(is_scanner, state_id);
+
+    if self.id.is_root() {
+      let prods = self
+        .kernel_items
+        .iter()
+        .map(|i| i.prod_index())
+        .collect::<OrderedSet<_>>();
+      let sigs = closure
+        .iter()
+        .map(|i| (i.rule_id, i.sym_index))
+        .collect::<HashSet<_>>();
+      // Get all follow items
+
+      let mut oos_closure = closure.clone();
+
+      for prod in &prods {
+        for item in db.follow_items(*prod) {
+          let i = item;
+          if !sigs.contains(&(i.rule_id, i.sym_index)) {
+            oos_closure.insert(i.to_origin_state(state_id).to_oos_index());
+          }
+        }
+      }
+
+      self.root_closure = Some(oos_closure);
+    }
+
+    if !self.kernel_items.is_empty() {
+      self.closure = Some(closure);
+    }
+  }
+
+  pub fn kernel_items_ref(&self) -> &ItemSet<'db> {
+    &self.kernel_items
+  }
+
+  pub fn get_closure_ref(&self) -> Option<&ItemSet<'db>> {
+    return self.closure.as_ref();
+  }
+
+  pub fn get_root_closure_ref(&self) -> Option<&ItemSet<'db>> {
+    if self.id.is_root() {
+      return self.root_closure.as_ref();
+    } else {
+      return self.closure.as_ref();
+    }
+  }
+
+  pub fn set_reduce_item(&mut self, item: Item<'db>) {
+    debug_assert!(item.is_complete());
+    self.reduce_item = Some(item);
+  }
+
+  pub fn get_predecessors(&self) -> &BTreeSet<StateId> {
+    &self.predecessors
+  }
+
+  pub fn get_id(&self) -> StateId {
+    self.id
+  }
+
+  pub fn set_non_terminals(&mut self, non_terms: &BTreeSet<Item<'db>>) {
+    self.non_terminals = non_terms.clone();
+  }
+
+  pub fn get_type(&self) -> StateType {
+    self.t_type
+  }
+
+  pub fn get_goto_state(&self) -> Option<Self> {
     if self.non_terminals.len() > 0 {
       Some(Self {
         term_symbol: self.term_symbol,
@@ -240,211 +312,57 @@ impl State {
     }
   }
 
-  pub(crate) fn get_hash(&self) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    self.hash(&mut hasher);
-    hasher.finish()
+  pub(crate) fn get_symbol(&self) -> SymbolId {
+    self.term_symbol
   }
 
-  pub(crate) fn set_reduce_item(&mut self, item: Item) {
-    debug_assert!(item.is_completed());
-    self.reduce_item = Some(item);
+  pub fn get_parent(&self) -> StateId {
+    self.parent
   }
 
-  pub(crate) fn set_transition_type(&mut self, transition_type: StateType) {
-    self.t_type = transition_type;
-  }
-
-  /// Set a group of items that a peek item will resolve to.
-  pub(crate) fn set_peek_resolve_items(
+  pub fn add_kernel_items<T: ItemContainer<'db>>(
     &mut self,
-    peek_origin_key: u64,
-    items: Items,
+    kernel_items: T,
+    is_scanner: bool,
+    db: &'db ParserDatabase,
   ) {
-    self.peek_resolve_items.insert(peek_origin_key, items);
-  }
+    let mut kernel_items =
+      kernel_items.into_iter().map(|i| i.to_origin_state(self.id)).collect();
 
-  pub(crate) fn get_resolve_items(&self, peek_origin_key: u64) -> Items {
-    self.peek_resolve_items.get(&peek_origin_key).unwrap().clone()
-  }
+    self.kernel_items.append(&mut kernel_items);
 
-  pub(crate) fn get_nonterminal_items(&self) -> Items {
-    self.non_terminals.iter().to_vec()
-  }
-
-  pub(crate) fn get_kernel_items_vec(&self) -> Items {
-    self.kernel_items.iter().to_vec()
-  }
-
-  pub(crate) fn get_kernel_items_ref(&self) -> &ItemSet {
-    &self.kernel_items
-  }
-
-  pub(crate) fn get_kernel_items(&self) -> ItemSet {
-    self.kernel_items.clone()
-  }
-
-  pub(crate) fn get_predecessors(&self) -> &BTreeSet<StateId> {
-    &self.predecessors
-  }
-
-  pub(crate) fn get_id(&self) -> StateId {
-    self.id
-  }
-
-  pub(crate) fn is_leaf_state(&self) -> bool {
-    self.leaf_state
-  }
-
-  pub(crate) fn set_non_terminals(&mut self, non_terms: &BTreeSet<Item>) {
-    self.non_terminals = non_terms.clone();
-  }
-
-  pub(crate) fn get_type(&self) -> StateType {
-    self.t_type
-  }
-
-  pub(crate) fn num_of_kernel_items(&self) -> usize {
-    self.kernel_items.len()
-  }
-
-  pub(crate) fn get_closure(
-    &self,
-    g: &GrammarStore,
-    is_scanner: bool,
-  ) -> BTreeSet<Item> {
-    if self.id.is_root() {
-      self.closure.as_ref().unwrap().clone().inscope_items()
-    } else {
-      self.closure.as_ref().unwrap().clone()
-    }
-  }
-
-  pub(crate) fn get_root_closure(
-    &self,
-    g: &GrammarStore,
-    is_scanner: bool,
-  ) -> BTreeSet<Item> {
-    self.closure.as_ref().unwrap().clone()
-  }
-
-  fn compute_closure(&mut self, g: &GrammarStore, is_scanner: bool) {
-    if self.kernel_items.len() > 0 {
-      let origin_state = self.id;
-      let mut closure =
-        get_closure(self.kernel_items.iter(), g, origin_state, is_scanner);
-
-      if origin_state.is_root() {
-        let mut signatures =
-          closure.iter().map(|i| (i.rule_id, i.off)).collect::<BTreeSet<_>>();
-        // Incorporate items that are out of scope within this closure.
-        let mut queue = VecDeque::from_iter(
-          self.kernel_items.iter().map(|i| i.get_prod_id(g)),
-        );
-        let mut seen = BTreeSet::new();
-        while let Some(prod_id) = queue.pop_front() {
-          if seen.insert(prod_id) {
-            if let Some(lr_items) = g.lr_items.get(&prod_id) {
-              for item in lr_items {
-                if signatures.insert((item.get_rule_id(), item.off)) {
-                  if item.increment().unwrap().is_completed() {
-                    queue.push_back(item.get_prod_id(g));
-                  }
-
-                  closure
-                    .insert(item.to_origin_state(origin_state).to_oos_index());
-                }
-              }
-            }
-          }
-        }
-      }
-
-      self.closure = Some(closure);
-    }
+    self.calculate_closure(is_scanner, db);
   }
 
   /// Returns true if the the call of the production leads to infinite loop due
   /// to left recursion.
-  pub(crate) fn conflicting_production_call(
+  pub fn conflicting_production_call(
     &self,
-    prod_id: ProductionId,
-    g: &GrammarStore,
+    prod_id: DBProdKey,
     is_scanner: bool,
+    db: &ParserDatabase,
   ) -> bool {
     if self.id.is_root() {
       let prod_ids = self
         .kernel_items
         .iter()
-        .map(|i| i.get_prod_id(g))
-        .collect::<BTreeSet<_>>();
+        .map(|i| i.prod_index())
+        .collect::<OrderedSet<_>>();
 
-      get_closure(
-        get_production_start_items(&prod_id, g).iter(),
-        g,
-        self.id,
-        is_scanner,
-      )
-      .into_iter()
-      .any(|i| {
-        prod_ids.contains(&i.get_production_id_at_sym(g))
-          || prod_ids.contains(&i.get_prod_id(g))
-      })
+      Items::start_items(prod_id, db)
+        .create_closure(is_scanner, self.id)
+        .into_iter()
+        .any(|i| {
+          prod_ids.contains(&i.prod_index_at_sym().unwrap_or_default())
+            || prod_ids.contains(&i.prod_index())
+        })
     } else {
       false
     }
   }
 
-  pub(crate) fn add_kernel_items<T: ItemContainer>(
-    &mut self,
-    g: &GrammarStore,
-    kernel_items: T,
-    is_scanner: bool,
-  ) {
-    let mut kernel_items = kernel_items
-      .into_iter()
-      .map(|mut i| i.to_origin_state(self.id))
-      .collect();
-
-    self.kernel_items.append(&mut kernel_items);
-
-    self.compute_closure(g, is_scanner);
-  }
-
-  pub(crate) fn set_kernel_items(
-    &mut self,
-    g: &GrammarStore,
-    kernel_items: Items,
-    is_scanner: bool,
-  ) {
-    let kernel_items = kernel_items
-      .into_iter()
-      .map(|mut i| {
-        if i.origin_state.is_invalid() {
-          i.origin_state = self.id;
-        }
-        i
-      })
-      .collect();
-
-    self.kernel_items = kernel_items;
-
-    self.compute_closure(g, is_scanner);
-  }
-
-  pub(crate) fn get_parent(&self) -> StateId {
-    self.parent
-  }
-
-  pub(crate) fn get_reduce_item(&self) -> Option<Item> {
-    self.reduce_item
-  }
-
-  pub(crate) fn get_symbol(&self) -> SymbolID {
-    self.term_symbol
-  }
-
-  pub(crate) fn debug_string(&self, g: &GrammarStore) -> String {
+  #[cfg(debug_assertions)]
+  pub fn debug_string(&self, db: &'db ParserDatabase) -> String {
     let mut string = String::new();
     string += &format!("\n\nSTATE -- [{:}] --", self.id.0);
 
@@ -461,82 +379,44 @@ impl State {
     }
 
     string += &format!(
-      "\n\n Type {:?}; Sym: [{} : {:X}]",
-      self.t_type.debug_string(g),
-      self.term_symbol.debug_string(g),
-      self.term_symbol.bytecode_id(g)
+      "\n\n Type {:?}; Sym: [{}]",
+      self.t_type.debug_string(db),
+      self.term_symbol.debug_string(db),
     );
 
     for (index, items) in &self.peek_resolve_items {
       string += &format!("\n  Peek Resolve: {}", index);
       for item in items {
-        string += &format!("\n   - {}", item.debug_string(g));
+        string += &format!("\n   - {}", item.debug_string());
       }
     }
 
     if !self.non_terminals.is_empty() {
       string += "\n-- non-terms:";
-      for (item) in &self.non_terminals {
-        string += &format!("\n   - {}", item.debug_string(g));
+      for item in &self.non_terminals {
+        string += &format!("\n   - {}", item.debug_string());
       }
     }
 
     if let Some(item) = &self.reduce_item {
       string += &format!("\n  Reduce:");
-      string += &format!("\n   - {}", item.debug_string(g));
+      string += &format!("\n   - {}", item.debug_string());
     }
 
     string += "\n";
 
     for item in &self.kernel_items {
-      string += &format!("\n    {}", item.debug_string(g));
+      string += &format!("\n    {}", item.debug_string());
     }
     string
   }
 }
 
-pub(crate) fn get_closure<'a, T: ItemContainerIter<'a>>(
-  items: T,
-  g: &GrammarStore,
-  origin_state: StateId,
-  is_scanner: bool,
-) -> BTreeSet<Item> {
-  let mut out = BTreeSet::new();
-  let mut queue = VecDeque::from_iter(items.cloned());
-  while let Some(kernel_item) = queue.pop_front() {
-    match kernel_item.get_type(g) {
-      ItemType::ExclusiveCompleted(..)
-      | ItemType::Completed(_)
-      | ItemType::Terminal(_) => {
-        out.insert(kernel_item);
-      }
-      ItemType::TokenProduction(prod_id, sym) => {
-        if out.insert(kernel_item) && is_scanner {
-          for item_in in get_production_start_items(&prod_id, g) {
-            queue.push_back(
-              item_in.align(&kernel_item).to_origin_state(origin_state),
-            );
-          }
-        }
-      }
-      ItemType::NonTerminal(prod_id) => {
-        if out.insert(kernel_item) {
-          for item_in in get_production_start_items(&prod_id, g) {
-            queue.push_back(
-              item_in.align(&kernel_item).to_origin_state(origin_state),
-            );
-          }
-        }
-      }
-    }
-  }
-  out
-}
-
 // Graph -------------------------------------------------------------
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
-pub(crate) enum GraphState {
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub enum GraphState {
   Normal,
   Peek,
   LongestMatch,
@@ -545,65 +425,55 @@ pub(crate) enum GraphState {
   //BreadCrumb,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub enum GraphMode {
   /// Classic Recursive Descent Ascent with unlimited lookahead.
-  SherpaClimber,
+  Parser,
   // Scanner mode for creating tokens, analogous to regular expressions.
   Scanner,
 }
 
-pub(crate) struct Graph {
-  state_map: HashMap<u64, StateId>,
-  states: Vec<State>,
-  leaf_states: BTreeSet<StateId>,
+pub struct Graph<'follow, 'db: 'follow> {
+  state_map: Map<u64, StateId>,
+  states: Array<State<'db>>,
+  leaf_states: OrderedSet<StateId>,
   pending_states: VecDeque<(GraphState, StateId)>,
   mode: GraphMode,
-  state_name_prefix: String,
-  pub grammar: Arc<GrammarStore>,
+  db: &'db ParserDatabase,
+  follow: &'follow FollowSets<'db>,
 }
 
-impl Graph {
-  pub(crate) fn new(grammar: Arc<GrammarStore>, mode: GraphMode) -> Self {
+impl<'follow, 'db: 'follow> Graph<'follow, 'db> {
+  pub fn new(
+    db: &'db ParserDatabase,
+    mode: GraphMode,
+    follow: &'follow FollowSets<'db>,
+  ) -> Self {
     Self {
       mode,
       state_map: Default::default(),
       states: Default::default(),
       leaf_states: Default::default(),
       pending_states: Default::default(),
-      state_name_prefix: Default::default(),
-      grammar,
+      db,
+      follow,
     }
   }
 
-  pub fn is_scan(&self) -> bool {
-    matches!(self.mode, GraphMode::Scanner)
-  }
-
-  pub(crate) fn set_prefix(&mut self, append_string: &str) {
-    let mut hasher = DefaultHasher::new();
-    self.goal_items().hash(&mut hasher);
-    self.state_name_prefix = format!(
-      "s{:0>16X}{}_",
-      hasher.finish(),
-      self.is_scan().then_some("_scan").unwrap_or_default()
-    );
-  }
-
-  pub(crate) fn get_prefix(&self) -> &str {
-    &self.state_name_prefix
-  }
-
-  pub(crate) fn create_state(
+  pub fn create_state(
     &mut self,
-    symbol: SymbolID,
+    symbol: SymbolId,
     t_type: StateType,
     parent: Option<StateId>,
-    kernel_items: Items,
+    kernel_items: Items<'db>,
   ) -> StateId {
-    let id = StateId(self.states.len());
+    let id = StateId(self.states.len() as u32);
     let is_scan = self.is_scan();
-    let g = &(self.grammar.clone());
+
+    if (matches!(symbol, SymbolId::NonTerminalToken { .. })) {
+      panic!("WTF!");
+    }
 
     let mut state = match parent {
       Some(parent) => State {
@@ -617,16 +487,14 @@ impl Graph {
       None => State { id, term_symbol: symbol, t_type, ..Default::default() },
     };
 
-    state.set_kernel_items(
-      g,
+    state.add_kernel_items(
       if self.states.is_empty() {
-        /// Automatically setup lanes a goal values.
+        // Automatically setup lanes a goal values.
         kernel_items
           .into_iter()
           .enumerate()
           .map(|(i, mut item)| {
-            item.goal_index = i as u32;
-            //item.origin = Origin::ProdGoal(i as u16);
+            item.goal = i as u32;
             item
           })
           .collect()
@@ -634,6 +502,7 @@ impl Graph {
         kernel_items
       },
       is_scan,
+      self.db,
     );
 
     self.states.push(state);
@@ -641,58 +510,34 @@ impl Graph {
     id
   }
 
-  pub(crate) fn __debug_print__(&self) {
-    let string = self.__debug_string__();
-    println!(
-      "\n\n\n--------------------------------------------------------
-      Leaf States -- [ {} ]",
-      self
-        .leaf_states
-        .iter()
-        .map(|s| s.0.to_string())
-        .collect::<Vec<_>>()
-        .join(" ")
-    );
-    println!("{string}");
+  pub fn get_db(&self) -> &'db ParserDatabase {
+    self.db
   }
 
-  pub(crate) fn __debug_string__(&self) -> String {
-    let mut string = String::new();
-    let g = &self.grammar;
-
-    for state in &self.states {
-      let is_leaf_state = self.leaf_states.contains(&state.get_id());
-      if is_leaf_state {
-        string += "\nLEAF STATE ----------------------------------";
-        string += &state.debug_string(g);
-        string += "\n---------------------------------------------";
-      } else {
-        string += &state.debug_string(g);
-      }
-    }
-    string
+  pub fn is_scan(&self) -> bool {
+    matches!(self.mode, GraphMode::Scanner)
   }
 
-  pub(crate) fn add_leaf_state(&mut self, state: StateId) {
+  pub fn add_leaf_state(&mut self, state: StateId) {
     self.leaf_states.insert(state);
     self[state].leaf_state = true;
   }
 
-  pub(crate) fn get_leaf_states(&self) -> Vec<&State> {
+  pub fn get_leaf_states(&self) -> Vec<&State> {
     self.leaf_states.iter().map(|s| &self[*s]).collect()
   }
 
-  pub(crate) fn enqueue_pending_state(
+  pub fn enqueue_pending_state(
     &mut self,
     graph_state: GraphState,
     state: StateId,
   ) -> Option<StateId> {
-    let hash_id = hash_id_value_u64(&self[state]);
+    let hash_id = create_u64_hash(&self[state]);
 
     if let Some(original_state) = self.state_map.get(&hash_id).cloned() {
       let parent = self[state].parent;
       self[original_state].predecessors.insert(parent);
-      if state.0 == self.states.len() - 1 {
+      if state.0 == (self.states.len() - 1) as u32 {
         drop(self.states.pop());
       }
       None
@@ -703,61 +548,77 @@ impl Graph {
     }
   }
 
-  pub(crate) fn dequeue_pending_state(
-    &mut self,
-  ) -> Option<(GraphState, StateId)> {
+  pub fn dequeue_pending_state(&mut self) -> Option<(GraphState, StateId)> {
     self.pending_states.pop_front()
   }
 
-  pub(crate) fn goal_items(&self) -> &ItemSet {
-    &self.states[0].kernel_items
-  }
-
-  pub(crate) fn item_is_goal(&self, item: Item) -> bool {
-    if !item.is_completed() {
+  pub fn item_is_goal(&self, item: &Item<'db>) -> bool {
+    if !item.is_complete() {
       return false;
     }
 
     self.states[0].kernel_items.iter().any(|i| i.rule_id == item.rule_id)
   }
+
+  pub fn goal_items(&self) -> &ItemSet {
+    &self.states[0].kernel_items
+  }
+
+  #[cfg(debug_assertions)]
+  pub fn debug_string(&self) -> String {
+    let mut string = String::new();
+
+    for state in &self.states {
+      let is_leaf_state = self.leaf_states.contains(&state.get_id());
+      if is_leaf_state {
+        string += "\nLEAF STATE ----------------------------------";
+        string += &state.debug_string(self.db);
+        string += "\n---------------------------------------------";
+      } else {
+        string += &state.debug_string(self.db);
+      }
+    }
+    string
+  }
 }
 
-impl Index<usize> for Graph {
-  type Output = State;
+impl<'follow, 'db: 'follow> Index<usize> for Graph<'follow, 'db> {
+  type Output = State<'db>;
 
   fn index(&self, index: usize) -> &Self::Output {
     &self.states[index]
   }
 }
 
-impl Index<StateId> for Graph {
-  type Output = State;
+impl<'follow, 'db: 'follow> Index<StateId> for Graph<'follow, 'db> {
+  type Output = State<'db>;
 
   fn index(&self, index: StateId) -> &Self::Output {
-    &self.states[index.0]
+    &self.states[index.0 as usize]
   }
 }
 
-impl IndexMut<StateId> for Graph {
+impl<'follow, 'db: 'follow> IndexMut<StateId> for Graph<'follow, 'db> {
   fn index_mut(&mut self, index: StateId) -> &mut Self::Output {
-    &mut self.states[index.0]
+    &mut self.states[index.0 as usize]
   }
 }
 
 // STATE ID -------------------------------------------------------------
 
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct StateId(pub usize);
+#[derive(Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub struct StateId(pub u32);
 
 impl Default for StateId {
   fn default() -> Self {
-    Self(usize::MAX)
+    Self(u32::MAX)
   }
 }
 
 impl StateId {
   pub fn is_invalid(&self) -> bool {
-    self.0 == usize::MAX
+    self.0 == u32::MAX
   }
 
   pub fn is_root(&self) -> bool {
@@ -765,16 +626,16 @@ impl StateId {
   }
 
   pub fn to_post_reduce(&self) -> Self {
-    Self(self.0 + (usize::MAX >> 2))
+    Self(self.0 + (u32::MAX >> 2))
   }
 
   pub fn to_goto(&self) -> Self {
-    Self(self.0 + (usize::MAX >> 1))
+    Self(self.0 + (u32::MAX >> 1))
   }
 }
 
-impl PartialEq<usize> for State {
-  fn eq(&self, other: &usize) -> bool {
+impl<'db> PartialEq<u32> for State<'db> {
+  fn eq(&self, other: &u32) -> bool {
     self.id.0 == *other
   }
 }

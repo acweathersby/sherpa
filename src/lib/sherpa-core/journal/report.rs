@@ -1,11 +1,12 @@
 #[cfg(not(feature = "wasm-target"))]
 use super::Timing;
 #[allow(unused)]
-use crate::{grammar::hash_id_value_u64, types::*};
+use crate::types::*;
+use crate::utils::create_u64_hash;
 #[allow(unused)]
 use std::{
   collections::{BTreeMap, HashMap},
-  fmt::{Debug, Display},
+  fmt::Display,
   hash::Hash,
   time::Instant,
 };
@@ -16,7 +17,8 @@ use std::{
 /// Some values wrap an identifier type to better specifier searches. To get all
 /// reports of a certain class that use an identifier, use `Default::default()`
 /// (e.g. [ReportType]::GrammarCompile(Default::default())).
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub enum ReportType {
   /// This is a default report that is returned when an active report
   /// is not set. This will not match any report
@@ -27,8 +29,6 @@ pub enum ReportType {
   GrammarCompile(GrammarId),
   /// TODO
   TokenProductionCompile(ProductionId),
-  /// TODO
-  ScannerCompile(ScannerStateId),
   /// TODO
   OcclusionCompile,
   // The following are implemented in in other packages
@@ -52,7 +52,8 @@ pub enum ReportType {
   Optimize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 /// Store information about a certain aspect of grammar compilation.
 pub struct Report {
   pub(crate) name:        String,
@@ -186,7 +187,7 @@ impl Report {
 
   pub(crate) fn add_error(&mut self, error: SherpaError) {
     self.error_level = error.get_severity().max(self.error_level);
-    let id = hash_id_value_u64(&error);
+    let id = create_u64_hash(&error);
     if !self._errors.contains_key(&id) {
       self._errors.insert(id, error);
     }
@@ -256,11 +257,6 @@ impl Report {
       *,
     };
     match (discriminant, self.report_type) {
-      (ScannerCompile(any), ScannerCompile(_))
-        if any == ScannerStateId::default() =>
-      {
-        true
-      }
       (GrammarCompile(any), GrammarCompile(_))
         if any == GrammarId::default() =>
       {
@@ -274,7 +270,6 @@ impl Report {
       | (AnyProductionCompile, PC_LR(_))
       | (AnyProductionCompile, TPC(_))
       | (IntermediateCompile, TokenProductionCompile(_))
-      | (IntermediateCompile, ScannerCompile(_))
       | (IntermediateCompile, ProductionCompile(_))
       | (AScriptCompile, AScriptCompile)
       | (ByteCodeCompile, ByteCodeCompile)

@@ -1,187 +1,167 @@
 use super::{
-  graph::{Origin, OutScopeIndex, State, StateId},
-  *,
+  super::types::*,
+  graph::{Origin, StateId, OUT_SCOPE_INDEX},
 };
-use crate::grammar::{get_closure_cached, get_production_start_items};
-use std::{
-  collections::{
-    btree_set::{self},
-    BTreeSet,
-    VecDeque,
-  },
-  fmt::{format, Display},
-  io::Chain,
-  iter::Filter,
-  slice,
-  vec,
-};
+use std::{collections::VecDeque, fmt::Debug, hash::Hash};
 
-/// Represents a specific point in a parse sequence
-/// defined by a rule and a positional offset that
-/// indicates the next expected terminal or non-terminal.
-#[repr(C, align(64))]
-#[derive(PartialEq, Eq, Debug, Clone, Copy, Hash, PartialOrd, Ord)]
-pub(crate) struct Item {
-  pub(crate) rule_id:      RuleId,
-  pub(crate) len:          u8,
-  pub(crate) off:          u8,
-  pub(crate) is_exclusive: u8,
-  pub(crate) goal_index:   u32,
-  pub(crate) origin:       Origin,
-  pub(crate) origin_state: StateId,
+pub enum ItemType {
+  Terminal(SymbolId),
+  NonTerminal(DBProdKey),
+  TokenNonTerminal(DBProdKey, SymbolId),
+  Completed(DBProdKey),
 }
 
-pub(crate) enum ItemType {
-  Terminal(SymbolID),
-  NonTerminal(ProductionId),
-  TokenProduction(ProductionId, SymbolID),
-  Completed(ProductionId),
-  ExclusiveCompleted(ProductionId, u8),
+#[derive(Clone, Copy)]
+pub struct Item<'db> {
+  db: &'db ParserDatabase,
+  /// The NonTerminal production or symbol that the item directly or indirectly
+  /// resolves to
+  pub origin: Origin,
+  /// The Graph goal
+  pub goal: u32,
+  /// The graph state the item originated from
+  pub origin_state: StateId,
+  /// The index location of the item's Rule
+  pub rule_id: DBRuleKey,
+  /// The number of symbols that comprise the items's Rule
+  pub len: u16,
+  /// The index of the active symbol. If `len == sym_index` then
+  /// the item is considered complete.
+  pub sym_index: u16,
 }
 
-impl Default for Item {
-  fn default() -> Self {
+#[cfg(debug_assertions)]
+impl<'db> Debug for Item<'db> {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let mut s = f.debug_struct("ItemRef");
+    s.field("val", &self.debug_string());
+    s.field("origin", &self.origin);
+    s.field("goal", &self.goal);
+    s.field("origin_state", &self.origin_state);
+    s.finish()
+  }
+}
+
+impl<'db> Hash for Item<'db> {
+  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    (
+      self.rule_id,
+      self.origin,
+      self.origin_state,
+      self.goal,
+      self.len,
+      self.sym_index,
+    )
+      .hash(state)
+  }
+}
+
+impl<'a> PartialEq for Item<'a> {
+  fn eq(&self, other: &Self) -> bool {
+    let a = (
+      self.rule_id,
+      self.origin,
+      self.goal,
+      self.len,
+      self.sym_index,
+      self.origin_state,
+    );
+    let b = (
+      other.rule_id,
+      other.origin,
+      other.goal,
+      other.len,
+      other.sym_index,
+      other.origin_state,
+    );
+    a == b
+  }
+}
+
+impl<'a> Eq for Item<'a> {}
+
+impl<'a> PartialOrd for Item<'a> {
+  fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    let a = (
+      self.rule_id,
+      self.origin,
+      self.goal,
+      self.len,
+      self.sym_index,
+      self.origin_state,
+    );
+    let b = (
+      other.rule_id,
+      other.origin,
+      other.goal,
+      other.len,
+      other.sym_index,
+      other.origin_state,
+    );
+    Some(a.cmp(&b))
+  }
+}
+
+impl<'a> Ord for Item<'a> {
+  fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    self.partial_cmp(other).unwrap()
+  }
+}
+
+impl<'db> Item<'db> {
+  /// Creates a new [ItemRef] with the same rule info as the original, but
+  /// with the meta info of `other`.
+  pub fn align(&self, other: Item<'db>) -> Self {
     Self {
-      len:          0,
-      off:          0,
-      goal_index:   0,
-      is_exclusive: 0,
-      origin:       Default::default(),
-      origin_state: Default::default(),
-      rule_id:      RuleId(0),
-    }
-  }
-}
-
-impl Item {
-  #[inline(always)]
-  pub fn new_null() -> Self {
-    Item { len: 0, rule_id: RuleId::default(), off: 0, ..Default::default() }
-  }
-
-  /// Creates a view of the item useful for debugging
-  pub fn debug_string(&self, g: &GrammarStore) -> String {
-    if self.is_null() {
-      format!("null")
-    } else {
-      let rule = g.rules.get(&self.rule_id).unwrap();
-
-      let mut string =
-        self.origin.is_none().then_some(String::new()).unwrap_or_else(|| {
-          format!(
-            "<[{}-{:?}]  [{:X}] ",
-            self.origin.debug_string(g),
-            self.origin_state,
-            self.goal_index
-          )
-        });
-
-      string += &g.productions.get(&rule.prod_id).unwrap().name;
-
-      string += " >";
-
-      for (index, RuleSymbol { sym_id, .. }) in rule.syms.iter().enumerate() {
-        if index == self.off as usize {
-          string += " •";
-        }
-
-        string += " ";
-
-        string += &sym_id.debug_string(g)
-      }
-
-      if self.is_completed() {
-        string += " •";
-      }
-
-      if self.is_exclusive > 0 {
-        string += &format!(" ⦻[{}]", self.is_exclusive);
-      }
-
-      string.replace("\n", "\\n")
+      rule_id: self.rule_id,
+      len: self.len,
+      sym_index: self.sym_index,
+      ..other
     }
   }
 
-  /// Creates a view of the rule
-  pub fn rule_string(&self, g: &GrammarStore) -> String {
-    if self.is_null() {
-      format!("null")
-    } else {
-      let rule = g.rules.get(&self.rule_id).unwrap();
-
-      let mut string = String::new();
-
-      string += &g.productions.get(&rule.prod_id).unwrap().name;
-
-      string += " =>";
-
-      for (_, RuleSymbol { sym_id, .. }) in rule.syms.iter().enumerate() {
-        string += " ";
-
-        string += &sym_id.debug_string(g)
-      }
-      string
-    }
+  pub fn get_db(&self) -> &ParserDatabase {
+    self.db
   }
 
-  #[inline(always)]
-  pub fn is_null(&self) -> bool {
-    self.rule_id.is_null() && self.len == 0 && self.off == 0
+  pub fn to_origin(&self, origin: Origin) -> Self {
+    Self { origin, ..self.clone() }
   }
 
-  pub fn is_out_of_scope(&self) -> bool {
-    self.goal_index == OutScopeIndex || self.origin.is_out_of_scope()
+  pub fn to_oos_index(&self) -> Self {
+    Self { goal: OUT_SCOPE_INDEX, ..self.clone() }
   }
 
-  #[inline(always)]
-  pub fn to_null(&self) -> Self {
-    Item { ..Default::default() }
+  pub fn to_origin_state(&self, origin_state: StateId) -> Self {
+    Self { origin_state, ..self.clone() }
   }
 
-  ///
-  #[inline(always)]
-  pub fn to_absolute(&self) -> Self {
-    Item {
-      goal_index: Default::default(),
+  pub fn from_rule(rule_id: DBRuleKey, db: &'db ParserDatabase) -> Self {
+    let rule = db.rule(rule_id);
+    Self {
+      db,
+      rule_id,
+      len: rule.symbols.len() as u16,
+      origin_state: StateId::default(),
+      sym_index: 0,
       origin: Default::default(),
-      origin_state: Default::default(),
+      goal: 0,
+    }
+  }
+
+  pub fn to_absolute(&self) -> Self {
+    Self {
+      goal: Default::default(),
+      origin: Default::default(),
       ..self.clone()
     }
   }
 
-  #[inline(always)]
-  pub fn is_completed(&self) -> bool {
-    self.off >= self.len
-  }
-
-  #[inline(always)]
-  pub fn at_start(&self) -> bool {
-    self.off == 0
-  }
-
-  pub fn is_left_recursive(&self, g: &GrammarStore) -> bool {
-    let symA = self.get_prod_id(g);
-    let symB = self.get_production_id_at_sym(g);
-
-    symA == symB && self.is_start()
-  }
-
-  #[inline(always)]
-  pub fn to_start(&self) -> Item {
-    Item { off: 0, ..self.clone() }
-  }
-
-  #[inline(always)]
-  pub fn to_complete(&self) -> Item {
-    Item { off: self.len, ..self.clone() }
-  }
-
-  pub fn increment(&self) -> Option<Item> {
-    if !self.is_completed() {
-      Some(Item {
+  pub fn increment(&self) -> Option<Self> {
+    if !self.is_complete() {
+      Some(Self {
         len: self.len,
-        off: self.off + 1,
-        rule_id: self.rule_id,
+        sym_index: self.sym_index + 1,
         ..self.clone()
       })
     } else {
@@ -191,202 +171,196 @@ impl Item {
 
   /// Increments the Item if it is not in the completed position,
   /// otherwise returns the Item as is.
-  pub fn try_increment(&self) -> Item {
-    if !self.is_completed() {
+  pub fn try_increment(&self) -> Self {
+    if !self.is_complete() {
       self.increment().unwrap()
     } else {
       self.clone()
     }
   }
 
-  pub fn decrement(&self) -> Option<Item> {
+  pub fn is_start(&self) -> bool {
+    self.sym_index == 0
+  }
+
+  pub fn decrement(&self) -> Option<Self> {
     if !self.is_start() {
-      Some(Item {
+      Some(Self {
         len: self.len,
-        off: self.off - 1,
-        rule_id: self.rule_id,
-        ..Default::default()
+        sym_index: self.sym_index - 1,
+        ..self.clone()
       })
     } else {
       None
     }
   }
 
-  pub fn get_precedence(&self, g: &GrammarStore) -> u32 {
-    if self.is_completed() {
-      self.is_exclusive as u32
+  pub fn is_out_of_scope(&self) -> bool {
+    self.goal == OUT_SCOPE_INDEX || self.origin.is_out_of_scope()
+  }
+
+  pub fn to_start(&self) -> Self {
+    Self { sym_index: 0, ..self.clone() }
+  }
+
+  pub fn to_null(&self) -> Self {
+    Self { len: 0, ..self.clone() }
+  }
+
+  pub fn to_complete(&self) -> Self {
+    Self { sym_index: self.len, ..self.clone() }
+  }
+
+  pub fn at_start(&self) -> bool {
+    self.sym_index == 0
+  }
+
+  pub fn get_skipped(&self) -> &'db Vec<SymbolId> {
+    let rule = self.rule();
+    &rule.skipped
+  }
+
+  pub fn rule(&self) -> &'db Rule {
+    self.db.rule(self.rule_id)
+  }
+
+  pub fn prod_name(&self) -> IString {
+    self.db.prod_name(self.prod_index())
+  }
+
+  pub fn prod_index(&self) -> DBProdKey {
+    self.db.rule_prod(self.rule_id)
+  }
+
+  pub fn is_null(&self) -> bool {
+    self.len == 0
+  }
+
+  pub fn is_complete(&self) -> bool {
+    self.len == self.sym_index
+  }
+
+  pub fn is_nonterm(&self) -> bool {
+    if self.is_complete() {
+      false
     } else {
-      self.get_rule(g).unwrap().syms[self.off as usize].precedence
+      match self.rule().symbols[self.sym_index as usize].0 {
+        SymbolId::NonTerminal { .. } | SymbolId::DBNonTerminal { .. } => true,
+        _ => false,
+      }
     }
   }
 
-  /// Creates a view of the item usefully for error reporting.
-  /// > Note: The item's position signifier `•` is not rendered.
-  pub fn blame_string(&self, g: &GrammarStore) -> String {
-    if self.is_null() {
-      format!("{:?} null", self.origin)
+  /// Returns the item's active symbol.
+  pub fn sym(&self) -> SymbolId {
+    if self.is_complete() {
+      SymbolId::EndOfFile { precedence: 0 }
     } else {
-      let rule = g.rules.get(&self.rule_id).unwrap();
+      self.rule().symbols[self.sym_index as usize].0
+    }
+  }
 
-      let mut string = String::new();
+  /// Returns the [IndexedProdId] of the active symbol if the symbol
+  /// is a NonTerm or NonTermToken, or return `None`
+  pub fn prod_index_at_sym(&self) -> Option<DBProdKey> {
+    match self.sym() {
+      SymbolId::DBNonTerminal { key: index }
+      | SymbolId::DBNonTerminalToken { prod_key: index, .. } => Some(index),
+      _ => None,
+    }
+  }
 
-      string += &g.productions.get(&rule.prod_id).unwrap().name;
+  /// Returns the type of item based on the active symbol.
+  pub fn get_type(&self) -> ItemType {
+    use ItemType::*;
+    if self.is_complete() {
+      Completed(self.prod_index())
+    } else {
+      match self.sym() {
+        SymbolId::DBNonTerminal { key: index } => NonTerminal(index),
+        SymbolId::DBNonTerminalToken { prod_key: index, .. } => {
+          TokenNonTerminal(index, self.sym())
+        }
+        sym => Terminal(sym),
+      }
+    }
+  }
 
-      string += " =>";
+  /// Returns the precedence of the active symbol, or returns
+  /// precedence of the last symbol if the ItemRef is complete.
+  pub fn precedence(&self) -> u16 {
+    if self.is_complete() {
+      self.rule().symbols[(self.sym_index - 1) as usize].0.precedence()
+    } else {
+      self.rule().symbols[self.sym_index as usize].0.precedence()
+    }
+  }
 
-      for RuleSymbol { sym_id, .. } in rule.syms.iter() {
+  pub fn is_term(&self) -> bool {
+    if self.is_complete() {
+      false
+    } else {
+      !self.is_nonterm()
+    }
+  }
+
+  #[cfg(debug_assertions)]
+  pub fn debug_string(&self) -> String {
+    if self.is_null() {
+      format!("null")
+    } else {
+      let rule = self.rule();
+      let s_store = self.db.string_store();
+
+      let mut string =
+        self.origin.is_none().then_some(String::new()).unwrap_or_else(|| {
+          format!(
+            "<[{}-{:?}]  [{:X}] ",
+            self.origin.debug_string(self.db),
+            self.origin_state,
+            self.goal
+          )
+        });
+
+      string += &self.prod_name().to_string(s_store);
+
+      string += " >";
+
+      for (index, (sym, _)) in rule.symbols.iter().enumerate() {
+        if index == self.sym_index as usize {
+          string += " •";
+        }
+
         string += " ";
 
-        string += &sym_id.debug_string(g)
+        string += &sym.debug_string(self.db)
       }
 
-      string
-    }
-  }
-
-  pub fn is_start(&self) -> bool {
-    self.off == 0
-  }
-
-  pub fn get_rule_id(&self) -> RuleId {
-    self.rule_id
-  }
-
-  pub fn get_rule<'a>(&self, g: &'a GrammarStore) -> SherpaResult<&'a Rule> {
-    g.get_rule(&self.get_rule_id())
-  }
-
-  #[inline(always)]
-  pub fn get_rule_ref<'a>(
-    &self,
-    g: &'a GrammarStore,
-  ) -> SherpaResult<&'a RuleSymbol> {
-    match (self.is_completed(), self.get_rule(&g)) {
-      (false, SherpaResult::Ok(rule)) => {
-        SherpaResult::Ok(&rule.syms[self.off as usize])
+      if self.is_complete() {
+        string += " •";
       }
-      _ => SherpaResult::None,
-    }
-  }
 
-  #[inline(always)]
-  pub fn len(&self) -> u32 {
-    self.len as u32
-  }
-
-  /// Retrieve the symbol at the items position. This will be
-  /// `SymbolId::Completed` if the item is at the completed position.
-  pub fn get_symbol(&self, g: &GrammarStore) -> SymbolID {
-    if self.is_null() {
-      SymbolID::Undefined
-    } else if self.is_completed() {
-      SymbolID::EndOfFile
-    } else {
-      match g.rules.get(&self.rule_id) {
-        Some(rule) => rule.syms[self.off as usize].sym_id,
-        _ => SymbolID::Undefined,
-      }
-    }
-  }
-
-  /// If the symbol at this item's position is a non-term, then the ProductionId
-  /// for that symbol is returned. Otherwise an invalid ProductionId is
-  /// returned.
-  pub fn get_production_id_at_sym(&self, g: &GrammarStore) -> ProductionId {
-    match self.get_symbol(g) {
-      SymbolID::Production(prod, _) => prod,
-      _ => Default::default(),
-    }
-  }
-
-  pub fn to_oos_index(&self) -> Self {
-    Self { goal_index: OutScopeIndex, ..self.clone() }
-  }
-
-  pub fn to_goal_index(&self, goal_index: u32) -> Self {
-    Self { goal_index, ..self.clone() }
-  }
-
-  pub fn to_origin_state(&self, origin_state: StateId) -> Self {
-    Self { origin_state, ..self.clone() }
-  }
-
-  pub fn to_origin(&self, origin: Origin) -> Self {
-    Self { origin, ..self.clone() }
-  }
-
-  pub fn is_term(&self, g: &GrammarStore) -> bool {
-    if self.is_completed() {
-      false
-    } else {
-      !matches!(self.get_symbol(g), SymbolID::Production(_, _))
-    }
-  }
-
-  pub fn is_nonterm(&self, g: &GrammarStore) -> bool {
-    if self.is_completed() {
-      false
-    } else {
-      !self.is_term(g)
-    }
-  }
-
-  pub fn get_prod_id(&self, g: &GrammarStore) -> ProductionId {
-    g.rules.get(&self.get_rule_id()).unwrap().prod_id
-  }
-
-  pub fn _get_prod_as_sym_id(&self, g: &GrammarStore) -> SymbolID {
-    g.get_production(&g.rules.get(&self.get_rule_id()).unwrap().prod_id)
-      .unwrap()
-      .sym_id
-  }
-
-  pub fn get_type(&self, g: &GrammarStore) -> ItemType {
-    if self.is_completed() {
-      match self.is_exclusive {
-        0 => ItemType::Completed(self.get_prod_id(g)),
-        val => ItemType::ExclusiveCompleted(self.get_prod_id(g), val),
-      }
-    } else {
-      let sym = self.get_symbol(g);
-      match sym {
-        SymbolID::Production(prod_id, _) => ItemType::NonTerminal(prod_id),
-        SymbolID::TokenProduction(.., prod_id) => {
-          ItemType::TokenProduction(prod_id, sym)
-        }
-        sym => ItemType::Terminal(sym),
-      }
-    }
-  }
-
-  pub fn align(&self, other: &Self) -> Self {
-    Self {
-      goal_index: other.goal_index,
-      origin: other.origin,
-      origin_state: other.origin_state,
-      ..self.clone()
+      string.replace("\n", "\\n")
     }
   }
 }
 
-impl From<&Rule> for Item {
-  fn from(rule: &Rule) -> Self {
-    Item {
-      rule_id: rule.id,
-      len: rule.len() as u8,
-      is_exclusive: rule.is_exclusive as u8,
-      ..Default::default()
-    }
-  }
+pub type ItemSet<'db> = OrderedSet<Item<'db>>;
+pub type Items<'db> = Array<Item<'db>>;
+
+impl<'db> ItemContainer<'db> for ItemSet<'db> {}
+impl<'db> ItemContainer<'db> for Items<'db> {}
+
+impl<'a, 'db: 'a> ItemContainerIter<'a, 'db>
+  for std::collections::btree_set::Iter<'a, Item<'db>>
+{
 }
-
-pub(crate) type Items = Vec<Item>;
-pub(crate) type ItemSet = BTreeSet<Item>;
-
-impl<'a> ItemContainerIter<'a> for btree_set::Iter<'a, Item> {}
-impl<'a> ItemContainerIter<'a> for slice::Iter<'a, Item> {}
-pub(crate) trait ItemContainerIter<'a>:
-  Iterator<Item = &'a Item> + Sized
+impl<'a, 'db: 'a> ItemContainerIter<'a, 'db>
+  for std::slice::Iter<'a, Item<'db>>
+{
+}
+pub trait ItemContainerIter<'a, 'db: 'a>:
+  Iterator<Item = &'a Item<'db>> + Sized
 {
   fn contains_out_of_scope(&mut self) -> bool {
     self.any(|i| i.is_out_of_scope())
@@ -396,16 +370,16 @@ pub(crate) trait ItemContainerIter<'a>:
     self.all(|i| i.origin.is_out_of_scope())
   }
 
-  fn to_set(&mut self) -> ItemSet {
+  fn to_set(&mut self) -> ItemSet<'db> {
     self.cloned().collect()
   }
 
-  fn to_vec(&mut self) -> Items {
+  fn to_vec(&mut self) -> Items<'db> {
     self.cloned().collect()
   }
 
   fn all_items_are_from_same_peek_origin(&mut self) -> bool {
-    let origin_set = self.map(|i| i.origin).collect::<BTreeSet<_>>();
+    let origin_set = self.map(|i| i.origin).collect::<OrderedSet<_>>();
     match (origin_set.len(), origin_set.first()) {
       (1, Some(Origin::Peek(..))) => true,
       _ => false,
@@ -417,21 +391,18 @@ pub(crate) trait ItemContainerIter<'a>:
   }
 
   fn follow_items_are_the_same(&mut self) -> bool {
-    self.map(|i| i.to_absolute()).collect::<BTreeSet<_>>().len() == 1
+    self.map(|i| i.to_absolute()).collect::<ItemSet>().len() == 1
   }
 
-  fn to_production_id_set(
-    &mut self,
-    g: &GrammarStore,
-  ) -> BTreeSet<ProductionId> {
-    self.map(|i| i.get_prod_id(g)).collect()
+  fn to_production_id_set(&mut self) -> OrderedSet<DBProdKey> {
+    self.map(|i| i.prod_index()).collect()
   }
 
   /// Returns the Production of the non-terminal symbol in each item. For items
-  /// whose symbol is a terminal or are complete, the Defualt production id is
-  /// used.
-  fn to_prod_sym_id_set(&mut self, g: &GrammarStore) -> BTreeSet<ProductionId> {
-    self.map(|i| i.get_production_id_at_sym(g)).collect()
+  /// whose symbol is a terminal or are complete. Items that do not have a
+  /// nonterm as the active symbol are skipped.
+  fn to_prod_sym_id_set(&mut self) -> OrderedSet<DBProdKey> {
+    self.filter_map(|i| i.prod_index_at_sym()).collect()
   }
 
   fn intersects(&mut self, set: &ItemSet) -> bool {
@@ -439,17 +410,40 @@ pub(crate) trait ItemContainerIter<'a>:
   }
 }
 
-impl ItemContainer for ItemSet {}
-impl ItemContainer for Items {}
-pub(crate) trait ItemContainer:
-  Clone + IntoIterator<Item = Item> + FromIterator<Item>
+impl<'db> From<Item<'db>> for Items<'db> {
+  fn from(value: Item<'db>) -> Self {
+    let db = value.db;
+    if let Some(prod_id) = value.prod_index_at_sym() {
+      db.prod_rules(prod_id)
+        .unwrap()
+        .iter()
+        .map(|r| Item::from_rule(*r, db))
+        .collect()
+    } else {
+      Default::default()
+    }
+  }
+}
+
+pub trait ItemContainer<'db>:
+  Clone + IntoIterator<Item = Item<'db>> + FromIterator<Item<'db>>
 {
-  fn non_term_items(self, g: &GrammarStore) -> Self {
-    self.into_iter().filter(|i| i.is_nonterm(g)).collect()
+  /// Given a [CompileDatabase] and [DBProdId] returns the initial
+  /// items of the production.
+  fn start_items(prod_id: DBProdKey, db: &'db ParserDatabase) -> Self {
+    db.prod_rules(prod_id)
+      .unwrap()
+      .iter()
+      .map(|r| Item::from_rule(*r, db))
+      .collect()
   }
 
-  fn term_items(self, g: &GrammarStore) -> Self {
-    self.into_iter().filter(|i| i.is_term(g)).collect()
+  fn non_term_items(self) -> Self {
+    self.into_iter().filter(|i| i.is_nonterm()).collect()
+  }
+
+  fn term_items(self) -> Self {
+    self.into_iter().filter(|i| i.is_term()).collect()
   }
 
   fn null_items(self) -> Self {
@@ -457,15 +451,11 @@ pub(crate) trait ItemContainer:
   }
 
   fn incomplete_items(self) -> Self {
-    self.into_iter().filter(|i| !i.is_completed()).collect()
-  }
-
-  fn to_production_ids(&self, g: &GrammarStore) -> BTreeSet<ProductionId> {
-    self.clone().into_iter().map(|i| i.get_prod_id(g)).collect()
+    self.into_iter().filter(|i| !i.is_complete()).collect()
   }
 
   fn completed_items(self) -> Self {
-    self.into_iter().filter(|i| i.is_completed()).collect()
+    self.into_iter().filter(|i| i.is_complete()).collect()
   }
 
   fn inscope_items(self) -> Self {
@@ -477,100 +467,146 @@ pub(crate) trait ItemContainer:
   }
 
   fn uncompleted_items(self) -> Self {
-    self.into_iter().filter(|i| !i.is_completed()).collect()
+    self.into_iter().filter(|i| !i.is_complete()).collect()
   }
 
   fn to_absolute(self) -> Self {
     self.into_iter().map(|i| i.to_absolute()).collect()
   }
 
+  fn to_origin(self, origin: Origin) -> Self {
+    self.into_iter().map(|i| i.to_origin(origin)).collect()
+  }
+
   #[inline(always)]
-  fn try_increment(&self) -> Items {
+  fn try_increment(&self) -> Items<'db> {
     self.clone().to_vec().into_iter().map(|i| i.try_increment()).collect()
   }
 
   #[inline(always)]
-  fn try_decrement(&self) -> Items {
+  fn try_decrement(&self) -> Items<'db> {
     self
       .clone()
       .to_vec()
       .into_iter()
-      .map(|i| if i.off > 0 { i.decrement().unwrap() } else { i })
+      .map(|i| if i.sym_index > 0 { i.decrement().unwrap() } else { i })
       .collect()
   }
 
-  #[inline(always)]
-  fn __print_items__(&self, g: &GrammarStore, comment: &str) {
-    debug_items(comment, self.clone(), g);
+  fn __debug_print__(&self, comment: &str) {
+    #[cfg(debug_assertions)]
+    debug_items(comment, self.clone());
   }
 
-  fn to_debug_string(&self, g: &GrammarStore, sep: &str) -> String {
+  #[cfg(debug_assertions)]
+  fn to_debug_string(&self, sep: &str) -> String {
     self
       .clone()
       .to_vec()
       .iter()
-      .map(|i| i.debug_string(g))
+      .map(|i| i.debug_string())
       .collect::<Vec<_>>()
       .join(sep)
   }
 
-  fn to_set(self) -> ItemSet {
+  fn to_set(self) -> ItemSet<'db> {
     self.into_iter().collect()
   }
-  fn to_vec(self) -> Items {
+
+  fn to_vec(self) -> Items<'db> {
     self.into_iter().collect()
+  }
+
+  /// Creates a closure set over the given items.
+  fn create_closure(
+    &self,
+    is_scanner: bool,
+    state_id: StateId,
+  ) -> ItemSet<'db> {
+    let mut closure = ItemSet::new();
+    let mut queue = VecDeque::from_iter(self.clone());
+
+    while let Some(kernel_item) = queue.pop_front() {
+      if closure.insert(kernel_item) {
+        match kernel_item.get_type() {
+          ItemType::TokenNonTerminal(..) => {
+            if is_scanner {
+              for item in Items::from(kernel_item) {
+                queue
+                  .push_back(item.align(kernel_item).to_origin_state(state_id))
+              }
+            }
+          }
+          ItemType::NonTerminal(..) => {
+            for item in Items::from(kernel_item) {
+              queue.push_back(item.align(kernel_item).to_origin_state(state_id))
+            }
+          }
+          _ => {}
+        }
+      }
+    }
+    closure
   }
 }
 
-fn debug_items<T: IntoIterator<Item = Item>>(
+#[allow(unused)]
+#[cfg(debug_assertions)]
+fn debug_items<'db, T: IntoIterator<Item = Item<'db>>>(
   comment: &str,
   items: T,
-  g: &GrammarStore,
 ) {
   println!("{} --> ", comment);
 
   for item in items {
-    println!("    {}", item.debug_string(g));
+    println!("    {}", item.debug_string());
   }
 }
 
-#[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
-pub(crate) struct FollowPair {
-  pub completed: Item,
-  pub follow:    Item,
+#[derive(Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub struct FollowPair<'db> {
+  pub completed: Item<'db>,
+  pub follow:    Item<'db>,
 }
 
-impl From<(Item, Item)> for FollowPair {
-  fn from((completed, follow): (Item, Item)) -> Self {
+impl<'db> From<(Item<'db>, Item<'db>)> for FollowPair<'db> {
+  fn from((completed, follow): (Item<'db>, Item<'db>)) -> Self {
     Self { completed, follow }
   }
 }
 
-impl<'a> FollowPairContainerIter<'a> for btree_set::Iter<'a, FollowPair> {}
-impl<'a> FollowPairContainerIter<'a> for slice::Iter<'a, FollowPair> {}
-pub(crate) trait FollowPairContainerIter<'a>:
-  Iterator<Item = &'a FollowPair> + Sized
-{
-  fn to_completed_set(&mut self) -> BTreeSet<Item> {
-    self.map(|i| i.completed).collect()
-  }
-
-  fn to_completed_vec(&mut self) -> Vec<Item> {
-    self.map(|i| i.completed).collect()
-  }
-
-  fn to_follow_set(&mut self) -> BTreeSet<Item> {
-    self.map(|i| i.follow).collect()
-  }
-
-  fn to_follow_vec(&mut self) -> Vec<Item> {
-    self.map(|i| i.follow).collect()
-  }
+pub struct CompletedItemArtifacts<'db> {
+  pub follow_pairs: OrderedSet<FollowPair<'db>>,
+  pub oos_pairs:    OrderedSet<FollowPair<'db>>,
+  pub follow_items: ItemSet<'db>,
+  pub default_only: ItemSet<'db>,
 }
 
-pub(crate) struct CompletedItemArtifacts {
-  pub follow_pairs: BTreeSet<FollowPair>,
-  pub oos_pairs:    BTreeSet<FollowPair>,
-  pub follow_items: ItemSet,
-  pub default_only: ItemSet,
+impl<'a, 'db: 'a> FollowPairContainerIter<'a, 'db>
+  for std::collections::btree_set::Iter<'a, FollowPair<'db>>
+{
+}
+impl<'a, 'db: 'a> FollowPairContainerIter<'a, 'db>
+  for std::slice::Iter<'a, FollowPair<'db>>
+{
+}
+pub trait FollowPairContainerIter<'a, 'db: 'a>:
+  Iterator<Item = &'a FollowPair<'db>> + Sized
+{
+  fn to_completed_set(&mut self) -> ItemSet<'db> {
+    self.map(|i| i.completed).collect()
+  }
+
+  fn to_completed_vec(&mut self) -> Items<'db> {
+    self.map(|i| i.completed).collect()
+  }
+
+  fn to_follow_set(&mut self) -> ItemSet<'db> {
+    self.map(|i| i.follow).collect()
+  }
+
+  fn to_follow_vec(&mut self) -> Items<'db> {
+    self.map(|i| i.follow).collect()
+  }
 }

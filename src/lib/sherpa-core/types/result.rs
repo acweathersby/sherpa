@@ -186,7 +186,7 @@ impl<T> SherpaResult<T> {
     match self {
       SherpaResult::Ok(val) => Some(val),
       SherpaResult::None => None,
-      SherpaResult::Err(err) => None,
+      SherpaResult::Err(..) => None,
     }
   }
 }

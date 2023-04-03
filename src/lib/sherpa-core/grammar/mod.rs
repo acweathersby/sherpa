@@ -1,14 +1,11 @@
-#![allow(unused)]
-//! Functions for constructing a
-//! [GrammarStore](crate::types::GrammarStore) from various types of
-//! grammar source files.
-pub mod item;
-mod multitask;
-pub mod production;
-pub mod uuid;
+//!
+//! Handles the integration of Grammars into a GrammarSoup
 
-pub mod compile;
+mod build_db;
+mod build_grammar;
+mod compile;
+mod utils;
 
-pub(crate) use item::*;
-pub use production::*;
-pub use uuid::*;
+pub use build_db::build_compile_db;
+pub use build_grammar::{create_grammar_data, parse_grammar};
+pub use compile::{compile_grammar_from_str, compile_grammars_from_path};

@@ -1,532 +1,254 @@
-use sherpa_runtime::{
-  types::bytecode::InputType,
-  utf8::lookup_table::CodePointClass,
-};
+use super::*;
+use crate::{utils::create_u64_hash, writer::code_writer::CodeWriter};
+use sherpa_runtime::utf8::lookup_table::CodePointClass;
 
-use super::{
-  GrammarId,
-  GrammarRef,
-  GrammarStore,
-  ProductionId,
-  SherpaResult,
-  Token,
-};
-use crate::grammar::{
-  compile::finalize::get_scanner_info_from_defined,
-  uuid::hash_id_value_u64,
-};
-
-use std::{
-  collections::{BTreeMap, BTreeSet},
-  fmt::Display,
-  sync::Arc,
-};
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
-pub struct StringId(pub u64);
-
-impl From<&String> for StringId {
-  fn from(string: &String) -> Self {
-    StringId(hash_id_value_u64(string))
-  }
-}
-
-impl Display for StringId {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    f.write_str(&self.0.to_string())
-  }
-}
-
-pub const space_sym_str: &str = "c:sp";
-pub const nl_sym_str: &str = "c:nl";
-pub const symbol_sym_str: &str = "c:sym";
-pub const id_sym_str: &str = "c:id";
-pub const num_sym_str: &str = "c:num";
-pub const gen_rec_marker_str: &str = "c:rec";
-pub const tab_sym_str: &str = "c:tab";
-pub const eof_str: &str = "$eof";
-pub const undefined_symbol_id: u32 = 0xF0000000;
 pub const DEFAULT_SYM_ID: u32 = 0xFDEFA017;
-/// TODO: Docs
-#[derive(Debug, PartialEq, PartialOrd, Clone, Copy, Hash, Eq, Ord)]
-pub enum SymbolID {
-  /// Represents a defined sequence of characters from the set `0-9`.
-  DefinedNumeric(StringId),
 
-  /// Represents a defined sequence of characters that are members of the
-  /// unicode character classes `ID_Start` and `ID_Nonstart`.
-  DefinedIdentifier(StringId),
-
-  /// Represents any defined token sequence that contains a mixture of
-  /// identifier, numeric, and general characters. Examples include
-  /// `ba$$`, `#123`, `$10.20`, and `h3ll0W0rld!`.
-  DefinedSymbol(StringId),
-
-  /// Represents a defined sequence of characters from the set `0-9`.
-  ExclusiveDefinedNumeric(StringId),
-
-  /// Represents a defined sequence of characters that are members of the
-  /// unicode character classes `ID_Start` and `ID_Nonstart`.
-  ExclusiveDefinedIdentifier(StringId),
-
-  /// Represents any defined token sequence that contains a mixture of
-  /// identifier, numeric, and general characters. Examples include
-  /// `ba$$`, `#123`, `$10.20`, and `h3ll0W0rld!`.
-  ExclusiveDefinedSymbol(StringId),
-
-  /// Represents any non-terminal production symbol.
-  Production(ProductionId, GrammarId),
-
-  /// Represents any terminal production symbol defined through
-  /// the production token specifier, `tk:`, as in `tk:<production_name>`.
-  /// - `.0` = The base ProductionID,
-  /// - `.1` = The host GrammarID
-  /// - `.2` = The scanner ProductionID. This production is created when the
-  ///   root grammar is finalized
-  TokenProduction(ProductionId, GrammarId, ProductionId),
-
-  /// Represent the grammar symbol `c:sp`.
-  GenericSpace,
-
-  /// Represent the grammar symbol `c:tab`.
-  GenericHorizontalTab,
-
-  /// Represent the grammar symbol `c:nl`.
-  GenericNewLine,
-
-  /// Represent the grammar symbol `c:id`.
-  GenericIdentifier,
-
-  /// Represent the grammar symbol `c:num`.
-  GenericNumber,
-
-  /// Represent the grammar symbol `c:sym`.
-  GenericSymbol,
-
-  /// Represent the grammar symbol `c:rec`.
-  Recovery,
-  /// Default symbol used when no other symbol type fits.
-  Default,
-  /// Represent end of input. Once encountered the parser can
-  /// no longer peek or shift new tokens.
-  EndOfFile,
-  /// Used to differentiate different completed items in the
-  /// `peek` module.
-  DistinctGroup(u32),
-  /// TODO: Docs
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+#[repr(u8)]
+pub enum SymbolId {
   Undefined,
-  /// TODO: Docs
-  UndefinedA,
-  /// TODO: Docs
-  UndefinedB,
-  /// TODO: Docs
-  UndefinedC,
-  /// TODO: Docs
-  UndefinedD,
-  /// TODO: Docs
-  Start,
-  /// Represents a symbol that does not belong to
-  /// a given closure, used to detect and resolve shift
-  /// conflicts within nested productions.
-  OutOfScope,
-  /// A virtual symbol positioned at the end ExclusiveDefined* rules
-  /// to allow shortcircuit completion of such tokens when encountered
-  /// in the construction of parse graphs.
-  ExclusiveEnd,
+  Default,
+  EndOfFile {
+    precedence: u16,
+  },
+  ClassSpace {
+    precedence: u16,
+  },
+  ClassHorizontalTab {
+    precedence: u16,
+  },
+  ClassNewLine {
+    precedence: u16,
+  },
+  ClassIdentifier {
+    precedence: u16,
+  },
+  ClassNumber {
+    precedence: u16,
+  },
+  ClassSymbol {
+    precedence: u16,
+  },
+  Token {
+    precedence: u16,
+    val:        IString,
+  },
+  NonTerminal {
+    id: ProductionId,
+  },
+  NonTerminalToken {
+    precedence: u16,
+    id:         ProductionId,
+  },
+  DBNonTerminalToken {
+    precedence: u16,
+    prod_key:   DBProdKey,
+    sym_key:    Option<DBTokenKey>,
+  },
+  DBNonTerminal {
+    key: DBProdKey,
+  },
+  DBToken {
+    key: DBTokenKey,
+  },
+  Char {
+    char:       u8,
+    precedence: u16,
+  },
+  Codepoint {
+    precedence: u16,
+    val:        u32,
+  },
 }
 
-impl Default for SymbolID {
+impl Default for SymbolId {
   fn default() -> Self {
-    SymbolID::Undefined
+    SymbolId::Undefined
   }
 }
 
-impl SymbolID {
-  /// The start number by which user defined symbols ids will increment from.
-  pub const DefinedSymbolIndexBasis: u32 = 16;
-  /// TODO: Docs
-  pub const Generics: [SymbolID; 7] = [
-    SymbolID::GenericSpace,
-    SymbolID::GenericHorizontalTab,
-    SymbolID::GenericNewLine,
-    SymbolID::GenericIdentifier,
-    SymbolID::GenericNumber,
-    SymbolID::GenericSymbol,
-    SymbolID::EndOfFile,
-  ];
+impl SymbolId {
+  pub const GEN_SPACE_ID: u32 = 2;
 
-  /// TODO: Docs
-  pub fn from_string(symbol_string: &str, g: Option<&GrammarStore>) -> Self {
-    match symbol_string {
-      "default" => Self::Default,
-      "[??]" => Self::Undefined,
-      gen_rec_marker_str => Self::Recovery,
-      eof_str => Self::EndOfFile,
-      tab_sym_str => Self::GenericHorizontalTab,
-      nl_sym_str => Self::GenericNewLine,
-      space_sym_str => Self::GenericSpace,
-      id_sym_str => Self::GenericIdentifier,
-      num_sym_str => Self::GenericNumber,
-      symbol_sym_str => Self::GenericSymbol,
-      _ => {
-        if let Some(g) = g {
-          match g
-            .symbol_strings
-            .iter()
-            .find(|(_, string)| string.as_str() == symbol_string)
-          {
-            Some((sym_id, _)) => *sym_id,
-            _ => match g.get_production_by_name(symbol_string) {
-              SherpaResult::Ok(prod) => prod.sym_id,
-              _ => SymbolID::Undefined,
-            },
-          }
-        } else {
-          SymbolID::Undefined
-        }
-      }
-    }
-  }
-
-  /// Returns a human friendly string representation
-  pub fn debug_string(&self, g: &GrammarStore) -> String {
+  pub fn tok_db_key(&self) -> Option<DBTokenKey> {
+    use SymbolId::*;
     match self {
-      Self::DefinedNumeric(_)
-      | Self::DefinedIdentifier(_)
-      | Self::DefinedSymbol(_) => {
-        format!("'{}'", g.symbol_strings.get(self).unwrap())
-      }
-      Self::ExclusiveDefinedNumeric(_)
-      | Self::ExclusiveDefinedIdentifier(_)
-      | Self::ExclusiveDefinedSymbol(_) => {
-        format!("\"{}\"", g.symbol_strings.get(self).unwrap())
-      }
-      Self::Production(prod_id, _) => {
-        g.productions.get(prod_id).unwrap().name.to_string()
-      }
-      Self::TokenProduction(.., prod_id) => {
-        let name = &g.productions.get(prod_id).unwrap().name;
-        if name.starts_with("tk:") {
-          name.clone()
-        } else {
-          format!("tk:{}", name)
-        }
-      }
-      Self::Start => "start".into(),
-      Self::Default => "default".into(),
-      Self::ExclusiveEnd => "⦻".into(),
-      Self::Recovery => gen_rec_marker_str.into(),
-      Self::EndOfFile => eof_str.into(),
-      Self::GenericHorizontalTab => tab_sym_str.into(),
-      Self::GenericNewLine => nl_sym_str.into(),
-      Self::GenericSpace => space_sym_str.into(),
-      Self::GenericIdentifier => id_sym_str.into(),
-      Self::GenericNumber => num_sym_str.into(),
-      Self::GenericSymbol => symbol_sym_str.into(),
-      Self::Undefined
-      | Self::UndefinedA
-      | Self::UndefinedB
-      | Self::UndefinedC => "[undefined]".into(),
-      _ => "[??]".into(),
-    }
-  }
-
-  /// TODO: Docs
-  pub fn to_scanner_string(&self) -> String {
-    match self {
-      Self::DefinedNumeric(_)
-      | Self::DefinedIdentifier(_)
-      | Self::DefinedSymbol(_)
-      | Self::ExclusiveDefinedNumeric(_)
-      | Self::ExclusiveDefinedIdentifier(_)
-      | Self::ExclusiveDefinedSymbol(_) => "__defined".into(),
-      Self::Production(..) => "__defined".into(),
-      Self::TokenProduction(..) => "__defined".into(),
-      Self::Default => "__default".into(),
-      Self::Start => "__start".into(),
-      Self::Recovery => "__rec".into(),
-      Self::EndOfFile => "__eof".into(),
-      Self::GenericHorizontalTab => "__tab".into(),
-      Self::GenericNewLine => "__nl".into(),
-      Self::GenericSpace => "__sp".into(),
-      Self::GenericIdentifier => "__id".into(),
-      Self::GenericNumber => "__num".into(),
-      Self::GenericSymbol => "__sym".into(),
-      _ => "__undefined".into(),
-    }
-  }
-
-  /// Returns a tuple indicating the type CLASS of shift that is performed
-  /// on this symbol.
-  pub fn shift_info(&self, g: &GrammarStore) -> (u32, InputType) {
-    use SymbolID::*;
-    match self {
-      EndOfFile => (self.bytecode_id(g), InputType::EndOfFile),
-      GenericSpace | GenericHorizontalTab | GenericNewLine
-      | GenericIdentifier | GenericNumber | GenericSymbol => {
-        (self.bytecode_id(g), InputType::Class)
-      }
-      ExclusiveDefinedIdentifier(..)
-      | ExclusiveDefinedNumeric(..)
-      | ExclusiveDefinedSymbol(..)
-      | DefinedNumeric(..)
-      | DefinedIdentifier(..)
-      | DefinedSymbol(..) => {
-        let symbol = g.symbols.get(self).unwrap();
-        let id = g.symbol_strings.get(self).unwrap();
-        let sym_char = id.as_bytes()[0];
-        if symbol.byte_length > 1 || sym_char > 128 {
-          (symbol.bytecode_id, InputType::Codepoint)
-        } else {
-          (sym_char as u32, InputType::Byte)
-        }
-      }
-      Default | ExclusiveEnd => (DEFAULT_SYM_ID, InputType::Class),
-      _ => (0, InputType::Byte),
-    }
-  }
-
-  /// TODO: Docs
-  pub fn is_token_production(&self) -> bool {
-    match self {
-      Self::TokenProduction(..) => true,
-      _ => false,
-    }
-  }
-
-  /// TODO: Docs
-  pub fn is_generic(&self) -> bool {
-    match self {
-      Self::GenericHorizontalTab
-      | Self::GenericIdentifier
-      | Self::GenericNewLine
-      | Self::GenericNumber
-      | Self::GenericSymbol
-      | Self::GenericSpace
-      | Self::EndOfFile => true,
-      _ => false,
-    }
-  }
-
-  /// TODO: Docs
-  pub fn is_eof(&self) -> bool {
-    match self {
-      Self::EndOfFile => true,
-      _ => false,
-    }
-  }
-
-  /// TODO: Docs
-  pub fn is_defined(&self) -> bool {
-    match self {
-      Self::DefinedNumeric(_)
-      | Self::DefinedIdentifier(_)
-      | Self::DefinedSymbol(_)
-      | Self::ExclusiveDefinedNumeric(_)
-      | Self::ExclusiveDefinedIdentifier(_)
-      | Self::ExclusiveDefinedSymbol(_) => true,
-      _ => false,
-    }
-  }
-
-  /// TODO: Docs
-  pub fn is_exclusive(&self) -> bool {
-    match self {
-      Self::ExclusiveEnd
-      | Self::ExclusiveDefinedNumeric(_)
-      | Self::ExclusiveDefinedIdentifier(_)
-      | Self::ExclusiveDefinedSymbol(_) => true,
-      _ => false,
-    }
-  }
-
-  /// TODO: Docs
-  pub fn is_default(&self) -> bool {
-    match self {
-      Self::Default => true,
-      _ => false,
-    }
-  }
-
-  /// TODO: Docs
-  pub fn is_production(&self) -> bool {
-    self.get_production_id().is_some()
-  }
-
-  /// TODO: Docs
-  pub fn get_production_id(&self) -> Option<ProductionId> {
-    match self {
-      Self::Production(id, _) => Some(*id),
-      Self::TokenProduction(.., id) => Some(*id),
+      DBToken { key } => Some(*key),
+      DBNonTerminalToken { sym_key, .. } => *sym_key,
       _ => None,
     }
   }
 
-  /// TODO: Docs
-  pub fn get_grammar_id(&self) -> GrammarId {
+  pub fn is_term(&self) -> bool {
+    use SymbolId::*;
     match self {
-      Self::Production(_, id) | Self::TokenProduction(.., id, _) => *id,
-      _ => GrammarId::default(),
+      NonTerminal { .. } | DBNonTerminal { .. } => false,
+      _ => true,
     }
   }
 
-  /// TODO: Docs
-  pub fn bytecode_id(&self, g: &GrammarStore) -> u32 {
+  pub fn is_default(&self) -> bool {
+    use SymbolId::*;
     match self {
-      Self::DefinedNumeric(_)
-      | Self::DefinedIdentifier(_)
-      | Self::DefinedSymbol(_)
-      | Self::ExclusiveDefinedNumeric(_)
-      | Self::ExclusiveDefinedIdentifier(_)
-      | Self::ExclusiveDefinedSymbol(_) => {
-        g.symbols.get(self).unwrap().bytecode_id
+      Default => true,
+      _ => false,
+    }
+  }
+
+  /// True if the SymbolId is a Generic class type
+  pub fn is_class(&self) -> bool {
+    use SymbolId::*;
+    match *self {
+      ClassSymbol { .. }
+      | ClassSpace { .. }
+      | ClassHorizontalTab { .. }
+      | ClassNewLine { .. }
+      | ClassIdentifier { .. }
+      | ClassNumber { .. } => true,
+      _ => false,
+    }
+  }
+
+  pub fn precedence(&self) -> u16 {
+    use SymbolId::*;
+    match *self {
+      EndOfFile { precedence } => precedence,
+      ClassSpace { precedence } => precedence,
+      ClassHorizontalTab { precedence } => precedence,
+      ClassNewLine { precedence } => precedence,
+      ClassIdentifier { precedence } => precedence,
+      ClassNumber { precedence } => precedence,
+      ClassSymbol { precedence } => precedence,
+      Token { precedence, .. } => precedence,
+      NonTerminalToken { precedence, .. } => precedence,
+      Codepoint { precedence, .. } => precedence,
+      DBNonTerminalToken { precedence, .. } => precedence,
+      Char { precedence, .. } => precedence,
+      _ => 0,
+    }
+  }
+
+  pub fn to_precedence(&self, precedence: u16) -> Self {
+    use SymbolId::*;
+    match *self {
+      EndOfFile { .. } => EndOfFile { precedence },
+      ClassSpace { .. } => ClassSpace { precedence },
+      ClassHorizontalTab { .. } => ClassHorizontalTab { precedence },
+      ClassNewLine { .. } => ClassNewLine { precedence },
+      ClassIdentifier { .. } => ClassIdentifier { precedence },
+      ClassNumber { .. } => ClassNumber { precedence },
+      ClassSymbol { .. } => ClassSymbol { precedence },
+      Token { val, .. } => Token { val, precedence },
+      NonTerminal { id, .. } => NonTerminal { id },
+      NonTerminalToken { id, .. } => NonTerminalToken { id, precedence },
+      Codepoint { val, .. } => Codepoint { val, precedence },
+      DBNonTerminal { key } => DBNonTerminal { key },
+      DBNonTerminalToken { prod_key, sym_key, .. } => {
+        DBNonTerminalToken { prod_key, sym_key, precedence }
       }
-      Self::TokenProduction(.., prod_id) => g
-        .get_production(prod_id)
-        .unwrap()
-        .symbol_bytecode_id
-        .unwrap_or(undefined_symbol_id),
-      Self::Production(prod_id, _) => g
-        .get_production(prod_id)
-        .unwrap()
-        .bytecode_id
-        .unwrap_or(undefined_symbol_id),
-      Self::Start => undefined_symbol_id,
-      Self::ExclusiveEnd | Self::Default => DEFAULT_SYM_ID,
-      Self::GenericHorizontalTab => CodePointClass::HorizontalTab as u32,
-      Self::GenericNewLine => CodePointClass::NewLine as u32,
-      Self::GenericSpace => CodePointClass::Space as u32,
-      Self::GenericIdentifier => CodePointClass::Identifier as u32,
-      Self::GenericNumber => CodePointClass::Number as u32,
-      Self::GenericSymbol => CodePointClass::Symbol as u32,
-      Self::EndOfFile => CodePointClass::EndOfInput as u32,
-      Self::Default => 0,
-      _ => undefined_symbol_id,
+      DBToken { key } => DBToken { key },
+      Char { char, .. } => Char { char, precedence },
+      Default => Default,
+      _ => Undefined,
     }
   }
-}
 
-pub type SymbolUUID = SymbolID;
+  pub fn to_scanner_prod_id(&self) -> ProductionId {
+    use SymbolId::*;
+    match self {
+      NonTerminalToken { id, .. } => id.as_scan_prod(),
+      Token { .. } => ProductionId::Standard(
+        create_u64_hash(self),
+        ProductionSubType::ScannerToken,
+      ),
+      ClassSymbol { .. }
+      | ClassSpace { .. }
+      | ClassHorizontalTab { .. }
+      | ClassNewLine { .. }
+      | ClassIdentifier { .. }
+      | ClassNumber { .. }
+      | Codepoint { .. }
+      | Char { .. } => ProductionId::Standard(
+        create_u64_hash(self),
+        ProductionSubType::ScannerSym,
+      ),
+      _ => {
+        #[cfg(debug_assertions)]
+        unimplemented!("{:?}", self);
+        #[cfg(not(debug_assertions))]
+        unimplemented!()
+      }
+    }
+  }
 
-/// TODO: Docs
-#[repr(C, align(64))]
-#[derive(Debug, Clone, Default)]
-pub struct Symbol {
-  /// The globally unique identifier of this symbol
-  /// which encapsulates the set of Symbols that are
-  /// unique based on the combination of the symbol's
-  /// class_id,
-  pub guid:          SymbolUUID,
-  /// The unique identifier of the class of this symbol
-  /// which either identifies symbol's generic class id
-  /// i.e (c:sp , c:nl, c:tab, c:id ...) or by the unique
-  /// or the explicit character sequence this symbol represents.
-  pub bytecode_id:   u32,
-  /// The length in bytes of the character sequence
-  /// represented by this symbol
-  pub byte_length:   u32,
-  /// The number of utf8 code points represented by
-  /// this symbol.
-  pub cp_len:        u32,
-  ////
-  /// True if only scanner productions use
-  /// this symbol
-  pub scanner_only:  bool,
-  /// A name that can be used in debug and
-  /// error reports .
-  pub friendly_name: String,
-  /// The first location this symbol was identified
-  pub loc:           Token,
-  /// TODO: Docs
-  pub g_ref:         Option<Arc<GrammarRef>>,
-}
+  /// Retrieves the binary / bytecode form of the symbol.
+  pub fn to_state_val(&self, db: &ParserDatabase) -> u32 {
+    use SymbolId::*;
+    match *self {
+      Default => DEFAULT_SYM_ID,
+      EndOfFile { .. } => CodePointClass::EndOfInput as u32,
+      ClassSymbol { .. } => CodePointClass::Symbol as u32,
+      ClassSpace { .. } => CodePointClass::Space as u32,
+      ClassHorizontalTab { .. } => CodePointClass::HorizontalTab as u32,
+      ClassNewLine { .. } => CodePointClass::NewLine as u32,
+      ClassIdentifier { .. } => CodePointClass::Identifier as u32,
+      ClassNumber { .. } => CodePointClass::Number as u32,
+      Codepoint { val, .. } => val,
+      Char { char, .. } => char as u32,
+      DBNonTerminal { key } => (Into::<usize>::into(key)) as u32,
+      DBToken { key, .. } => key.to_val(db),
+      DBNonTerminalToken { sym_key, .. } => {
+        sym_key.map(|d| d.to_val(db)).unwrap_or(u32::MAX)
+      }
+      _ => u32::MAX,
+    }
+  }
 
-impl Symbol {
-  /// TODO: Docs
-  pub const Generics: [&'static Symbol; 7] = [
-    &Symbol {
-      guid:          SymbolID::EndOfFile,
-      bytecode_id:   CodePointClass::EndOfInput as u32,
-      cp_len:        0,
-      byte_length:   0,
-      friendly_name: String::new(),
-      loc:           Token::empty(),
-      scanner_only:  false,
-      g_ref:         None,
-    },
-    &Symbol {
-      guid:          SymbolID::GenericSpace,
-      bytecode_id:   CodePointClass::Space as u32,
-      cp_len:        1,
-      byte_length:   1,
-      friendly_name: String::new(),
-      loc:           Token::empty(),
-      scanner_only:  false,
-      g_ref:         None,
-    },
-    &Symbol {
-      guid:          SymbolID::GenericHorizontalTab,
-      bytecode_id:   CodePointClass::HorizontalTab as u32,
-      byte_length:   1,
-      cp_len:        1,
-      friendly_name: String::new(),
-      loc:           Token::empty(),
-      scanner_only:  false,
-      g_ref:         None,
-    },
-    &Symbol {
-      guid:          SymbolID::GenericNewLine,
-      bytecode_id:   CodePointClass::NewLine as u32,
-      byte_length:   1,
-      cp_len:        1,
-      friendly_name: String::new(),
-      loc:           Token::empty(),
-      scanner_only:  false,
-      g_ref:         None,
-    },
-    &Symbol {
-      guid:          SymbolID::GenericIdentifier,
-      bytecode_id:   CodePointClass::Identifier as u32,
-      cp_len:        1,
-      byte_length:   0,
-      friendly_name: String::new(),
-      loc:           Token::empty(),
-      scanner_only:  false,
-      g_ref:         None,
-    },
-    &Symbol {
-      guid:          SymbolID::GenericNumber,
-      bytecode_id:   CodePointClass::Number as u32,
-      cp_len:        1,
-      byte_length:   0,
-      friendly_name: String::new(),
-      loc:           Token::empty(),
-      scanner_only:  false,
-      g_ref:         None,
-    },
-    &Symbol {
-      guid:          SymbolID::GenericSymbol,
-      bytecode_id:   CodePointClass::Symbol as u32,
-      cp_len:        1,
-      byte_length:   0,
-      friendly_name: String::new(),
-      loc:           Token::empty(),
-      scanner_only:  false,
-      g_ref:         None,
-    },
-  ];
+  /// Returns `true` if the symbol is `SymbolId::EndOfFile`
+  pub fn is_eof(&self) -> bool {
+    matches!(self, SymbolId::EndOfFile { .. })
+  }
 
-  /// TODO: Docs
-  pub fn generics_lu() -> BTreeMap<SymbolID, &'static Symbol> {
-    BTreeMap::from_iter(Self::Generics.clone().iter().map(|s| (s.guid, *s)))
+  pub fn name(&self, s_store: &IStringStore) -> String {
+    use SymbolId::*;
+    let mut w = CodeWriter::new(vec![]);
+    match *self {
+      Undefined => &mut w + "Undefine",
+      Default => &mut w + "Default",
+      EndOfFile { .. } => &mut w + "{EOF}",
+      ClassSpace { .. } => &mut w + "c:sp",
+      ClassHorizontalTab { .. } => &mut w + "c:tab",
+      ClassNewLine { .. } => &mut w + "c:nl",
+      ClassIdentifier { .. } => &mut w + "c:id",
+      ClassNumber { .. } => &mut w + "c:num",
+      ClassSymbol { .. } => &mut w + "c:sym",
+      Token { val, precedence } => {
+        let _ = &mut w + "[" + val.to_str(s_store) + "]";
+        &mut w + "{ " + precedence.to_string() + " }"
+      }
+      NonTerminal { .. } => &mut w + "<non-term>",
+      NonTerminalToken { precedence, .. } => {
+        let _ = &mut w + "<non-term-token>";
+        &mut w + "[" + precedence.to_string() + "]"
+      }
+      Codepoint { val, .. } => &mut w + "cp:" + val.to_string(),
+      DBNonTerminal { key } => &mut w + "nt-idx:" + key.to_string(),
+      DBNonTerminalToken { prod_key, precedence, .. } => {
+        let _ = &mut w + "nt-ind-tok:" + prod_key.to_string();
+        &mut w + "[" + precedence.to_string() + "]"
+      }
+      DBToken { key } => &mut w + "db-tok:" + key.to_string(),
+      Char { char, .. } => {
+        if char < 128 {
+          &mut w + "char:" + char::from(char).to_string()
+        } else {
+          &mut w + "char:" + char.to_string()
+        }
+      }
+    };
+
+    String::from_utf8(w.into_output()).unwrap()
   }
 }
-
-/// A table that maps a symbol class_id to a utf8 string.
-
-pub type SymbolStringTable = BTreeMap<SymbolID, String>;
-
-/// A table that contains defined symbols () keyed by their [SymbolUUID].
-pub type SymbolsTable = BTreeMap<SymbolUUID, Symbol>;
-
-pub type SymbolSet = BTreeSet<SymbolID>;

@@ -8,7 +8,6 @@ pub use self::{
 };
 use crate::types::*;
 use std::{
-  collections::{BTreeSet, HashMap},
   fmt::{Debug, Display},
   sync::{Arc, LockResult, RwLock},
 };
@@ -16,27 +15,21 @@ use std::{
 #[cfg(not(feature = "wasm-target"))]
 use std::time::Instant;
 
-#[derive(Default, Debug)]
+#[derive(Default)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 struct ScratchPad {
-  pub _occluding_symbols: HashMap<SymbolID, SymbolSet>,
-  pub occlusion_tracking: bool,
-  pub reports: HashMap<ReportType, Box<Report>>,
+  pub reports: Map<ReportType, Box<Report>>,
 }
 
-#[derive(Debug)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 /// A general structure for storing and interacting with data relating to the
 /// configuration, monitoring, and reporting of Sherpa commands and types.
 pub struct Journal {
-  /// A fully compiled grammar.
-  grammar: Option<Arc<GrammarStore>>,
-
   config: Config,
 
   global_pad: Arc<RwLock<ScratchPad>>,
 
   scratch_pad: Box<ScratchPad>,
-
-  occluding_symbols: Option<Arc<HashMap<SymbolID, SymbolSet>>>,
 
   active_report: Option<Box<Report>>,
 
@@ -50,11 +43,9 @@ impl Journal {
   /// Creates a Journal instance.
   pub fn new(config: Option<Config>) -> Journal {
     Self {
-      grammar: None,
       config: config.unwrap_or_default(),
       global_pad: Arc::new(RwLock::new(Default::default())),
       scratch_pad: Default::default(),
-      occluding_symbols: None,
       active_report: None,
       report_sink: Report::create_sink(),
       #[cfg(not(feature = "wasm-target"))]
@@ -65,13 +56,11 @@ impl Journal {
   /// Clone the journal, maintaining a link to the global
   /// pad to upload reports to.
   #[allow(unused)]
-  pub(crate) fn transfer(&self) -> Self {
+  pub fn transfer(&self) -> Self {
     Self {
-      grammar: self.grammar.clone(),
       config: self.config.clone(),
       global_pad: self.global_pad.clone(),
       scratch_pad: Default::default(),
-      occluding_symbols: self.occluding_symbols.clone(),
       active_report: None,
       report_sink: Report::create_sink(),
       #[cfg(not(feature = "wasm-target"))]
@@ -93,7 +82,7 @@ impl Journal {
   /// Sets the active report to `report_type`, optionally creating a new report
   /// of that type if one does not already exists. Returns the previously set
   /// ReportType.
-  pub(crate) fn set_active_report(
+  pub fn set_active_report(
     &mut self,
     report_name: &str,
     report_type: ReportType,
@@ -327,105 +316,6 @@ impl Journal {
       Err(err) => {
         panic!("{}", err);
       }
-    }
-  }
-}
-
-/// Grammar And Symbol Occlusions
-impl Journal {
-  pub(crate) fn occlusion_tracking_mode(&self) -> bool {
-    self.scratch_pad.occlusion_tracking
-  }
-
-  pub(crate) fn set_grammar(&mut self, grammar: Arc<GrammarStore>) {
-    self.grammar = Some(grammar.clone());
-    if self.config.allow_occluding_tokens {
-      unimplemented!("Occluding Tokens is not enabled.")
-      /*
-      self.set_active_report("Occlusion Compilation", ReportType::OcclusionCompile);
-
-      self.report_mut().start_timer("Symbol Occlusion");
-
-      let symbols = grammar
-        .symbols
-        .iter()
-        .filter_map(|(id, sym)| if sym.scanner_only { None } else { Some(id) })
-        .cloned()
-        .collect::<BTreeSet<_>>();
-
-      let items = generate_scanner_symbol_items(symbols, self);
-
-      self.scratch_pad.occlusion_tracking = true;
-
-      match construct_recursive_descent(self, ScanType::ScannerEntry, &items) {
-        SherpaResult::Ok(_) => {
-          self.occluding_symbols = Some(Arc::new(self.scratch_pad.occluding_symbols.clone()));
-        }
-        SherpaResult::Err(err) => {
-          self.report_mut().add_error(err);
-        }
-        // Only expecting single errors to be ejected by these functions.
-        _ => {}
-      };
-
-      self.scratch_pad.occluding_symbols.clear();
-
-      self.scratch_pad.occlusion_tracking = false;
-
-      self.report_mut().stop_timer("Symbol Occlusion");
-
-      self.report_mut().report_duration("Symbol Occlusion");
-
-      self.flush_reports(); */
-    }
-  }
-
-  /// Return an optional Arc ref to the Journal's underlying grammar.
-  pub fn grammar<'b>(&'b self) -> Option<Arc<GrammarStore>> {
-    self.grammar.iter().cloned().next()
-  }
-
-  pub(crate) fn _add_occlusions(&mut self, occluding_symbols: SymbolSet) {
-    for sym_a in &occluding_symbols {
-      let table = self
-        .scratch_pad
-        ._occluding_symbols
-        .entry(*sym_a)
-        .or_insert_with(|| BTreeSet::new());
-
-      for sym_b in &occluding_symbols {
-        if sym_a == sym_b {
-          continue;
-        }
-        // The idea here is to add symbols with lower precedence to the
-        // occlusion table of symbols with higher precedence. For
-        // example, given this grammar ```
-        // <> A > \funct \(
-        //    |   tk:id  \{
-        //
-        // <> id > g:id(+)
-        // ```
-        // The DefinedSymbol `\funct` has a higher precedence then
-        // TokenProduction symbol `tk:id`. When using the occlusion
-        // table, we force the compiler to consider the symbols as the
-        // "same", which should then cause it to generate a peek state that uses
-        // the following symbols [ \( & \{ ] to resolve the conflict.
-        match (sym_a, sym_b) {
-          (sym, SymbolID::TokenProduction(..)) if sym.is_defined() => {
-            table.insert(*sym_b);
-          }
-          _ => {}
-        };
-      }
-    }
-  }
-
-  pub(crate) fn _get_occlusion_table<'b>(
-    &'b self,
-  ) -> &'b HashMap<SymbolID, SymbolSet> {
-    match self.occluding_symbols.as_ref() {
-      Some(oc) => oc,
-      None => &self.scratch_pad._occluding_symbols,
     }
   }
 }

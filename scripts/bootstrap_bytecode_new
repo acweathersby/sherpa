@@ -23,7 +23,7 @@ cargo run \
      --name sherpa_bc \
      -l rust \
      --libout $ROOT_DIR/src/lib/sherpa-core/lib/ \
-     -o $ROOT_DIR/src/lib/sherpa-core-nuevo/parser/ \
+     -o $ROOT_DIR/src/lib/sherpa-core/parser/ \
       $ROOT_DIR/src/grammar/v2_0_0/grammar.sg
 
 

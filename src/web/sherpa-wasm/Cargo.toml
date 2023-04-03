@@ -32,9 +32,8 @@ console_error_panic_hook = { version = "0.1.6", optional = true }
 [dev-dependencies]
 wasm-bindgen-test = "0.3.34"
 
-[dependencies.sherpa_core_neuvo]
-path = "../../lib/sherpa-core-nuevo"
-features = ["wasm-target" ]
+[dependencies.sherpa_core]
+path = "../../lib/sherpa-core"
 
 [dependencies.sherpa_runtime]
 path = "../../lib/sherpa-rust-rt"

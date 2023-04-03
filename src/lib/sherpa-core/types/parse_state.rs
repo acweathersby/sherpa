@@ -1,289 +1,186 @@
+use sherpa_runtime::types::bytecode::InputType;
+
 use super::*;
-use crate::grammar::{
-  compile::{compile_ir_ast, parser::sherpa::IR_STATE},
-  hash_id_value_u64,
-  hash_values,
-};
-use std::{
-  collections::BTreeSet,
-  fmt::{Debug, Display},
-  hash::Hash,
+use crate::{
+  parser::{self, ASTNode, Matches, State, Statement},
+  utils::create_u64_hash,
+  writer::code_writer::CodeWriter,
 };
 
-#[derive(Debug, PartialEq, PartialOrd, Clone, Copy, Hash, Eq, Ord, Default)]
-/// Identifies an IR scanner state for a particular set of SymbolIds
-pub struct ScannerStateId(u64);
+pub type ParseStatesVec<'db> = Array<(IString, Box<ParseState<'db>>)>;
+pub type ParseStatesMap<'db> = Map<IString, Box<ParseState<'db>>>;
 
-impl ScannerStateId {
-  /// TODO: Docs
-  pub fn new(symbol_set: &SymbolSet) -> Self {
-    Self(hash_id_value_u64(symbol_set))
-  }
+#[allow(unused)]
+#[cfg(debug_assertions)]
+use std::fmt::Debug;
 
-  /// Create a state id from a set of symbol strings separated by `~~`
-  pub fn from_string(name: &str, g: &GrammarStore) -> Self {
-    let symbols = name
-      .split("~~")
-      .map(|s| SymbolID::from_string(s, Some(g)))
-      .collect::<SymbolSet>();
-    println!(
-      "{:?} : {}",
-      ScannerStateId::new(&symbols),
-      symbols
-        .iter()
-        .map(|s| { format!("{:?}{}", s, s.debug_string(g)) })
-        .collect::<Vec<_>>()
-        .join("  ")
-    );
-    Self::new(&symbols)
-  }
+#[derive(Default)]
+/// The IR of a sherpa
+pub struct ParseState<'db> {
+  pub name:     IString,
+  pub comment:  String,
+  pub code:     String,
+  pub ast:      SherpaResult<Box<State>>,
+  /// Collections of scanner based on TOKEN match statements
+  pub scanners: Option<Map<IString, OrderedSet<&'db DBTokenData>>>,
 }
 
-#[derive(Debug, PartialEq, PartialOrd, Clone, Copy, Hash, Eq, Ord, Default)]
-/// Identifies an IR state
-pub struct StateId(u64);
-
-impl StateId {
-  /// TODO: Docs
-  pub fn _new(state_name: &String) -> Self {
-    Self(hash_id_value_u64(state_name))
-  }
-}
-
-#[derive(Debug, Hash, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum BranchType {
-  PRODUCTION,
-  TOKEN,
-  BYTE,
-  CLASS,
-  CODEPOINT,
-  UNKNOWN,
-}
-
-impl From<&str> for BranchType {
-  fn from(value: &str) -> Self {
-    match value {
-      "PRODUCTION" => Self::PRODUCTION,
-      "TOKEN" => Self::TOKEN,
-      "BYTE" => Self::BYTE,
-      "CLASS" => Self::CLASS,
-      "CODEPOINT" => Self::CODEPOINT,
-      _ => Self::UNKNOWN,
-    }
-  }
-}
-
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
-pub enum IRStateType {
-  Undefined,
-  ProductionStart,
-  ProductionGoto,
-  ScannerStart,
-  Scanner,
-  Parser,
-  ScannerGoto,
-  ProductionIntermediateState,
-  ScannerIntermediateState,
-  ForkState,
-  ProductionEndState,
-  ScannerEndState,
-}
-
-impl Default for IRStateType {
-  fn default() -> Self {
-    Self::Undefined
-  }
-}
-
-#[derive(Clone)]
-/// Wrapper for the intermediate parser language code and AST
-pub struct ParseState {
-  /// The intermediate representation parse state code as written in ir.rs
-  pub(crate) code: String,
-  pub(crate) name: String,
-  pub(crate) comment: String,
-  pub(crate) hash: u64,
-  pub(crate) normal_symbols: Vec<SymbolID>,
-  pub(crate) skip_symbols: Vec<SymbolID>,
-  pub(crate) ast: SherpaResult<IR_STATE>,
-  pub(crate) state_type: IRStateType,
-}
-
-impl Default for ParseState {
-  fn default() -> Self {
-    Self {
-      state_type: IRStateType::default(),
-      comment: String::default(),
-      code: String::default(),
-      name: String::default(),
-      hash: u64::default(),
-      normal_symbols: Vec::default(),
-      skip_symbols: Vec::default(),
-      ast: SherpaResult::None,
-    }
-  }
-}
-
-impl ParseState {
-  pub fn get_state_name_from_hash(hash: u64) -> String {
-    format!("s{:02x}", hash)
+impl<'db> ParseState<'db> {
+  pub fn get_scanners(
+    &mut self,
+  ) -> Option<&Map<IString, OrderedSet<&'db DBTokenData>>> {
+    self.scanners.as_ref()
   }
 
-  pub fn into_hashed(mut self) -> Self {
-    self.hash = hash_values(&[
-      &|h| {
-        self.code.hash(h);
-      },
-      &|h| {
-        &self.normal_symbols.hash(h);
-      },
-      &|h| {
-        &self.skip_symbols.hash(h);
-      },
-    ]);
-    self
-  }
+  pub fn build_scanners(
+    &mut self,
+    db: &'db ParserDatabase,
+  ) -> Option<&Map<IString, OrderedSet<&'db DBTokenData>>> {
+    fn get_token_scanner_data<'db>(
+      statement: &mut Statement,
+      db: &'db ParserDatabase,
+      scanners: &mut Map<IString, OrderedSet<&'db DBTokenData>>,
+    ) {
+      match &mut statement.branch {
+        Some(ASTNode::Matches(box Matches { mode, matches, meta }))
+          if mode == InputType::TOKEN_STR =>
+        {
+          let mut scanner_data = OrderedSet::new();
+          for m in matches {
+            match m {
+              ASTNode::IntMatch(m) => {
+                for id in &m.vals {
+                  scanner_data.insert(db.tok_data((*id as u32).into()));
+                }
+                get_token_scanner_data(&mut m.statement, db, scanners);
+              }
+              _ => {}
+            }
+          }
+          let name = ParseState::get_interned_scanner_name(
+            &scanner_data,
+            db.string_store(),
+          );
 
-  pub fn get_name(&self) -> String {
-    if self.name.is_empty() {
-      match self.state_type {
-        IRStateType::ProductionGoto | IRStateType::ScannerGoto => {
-          Self::get_state_name_from_hash(self.hash) + "_goto"
+          (*meta) = name.as_u64();
+
+          scanners.insert(name, scanner_data);
         }
-        _ => Self::get_state_name_from_hash(self.hash),
+        _ => {}
       }
-    } else {
-      self.name.clone()
     }
+
+    if self.scanners.is_none() {
+      let mut scanners = Map::new();
+      //Ensure we have build the ast of the IR code.
+      self.build_ast(db.string_store());
+      if let SherpaResult::Ok(ast) = self.get_ast_mut() {
+        get_token_scanner_data(&mut ast.statement, db, &mut scanners);
+      }
+      self.scanners = Some(scanners);
+    }
+    self.scanners.as_ref()
   }
 
-  pub fn get_hash(&self) -> u64 {
-    self.hash
+  pub fn get_interned_scanner_name(
+    scanner_syms: &OrderedSet<&'db DBTokenData>,
+    string_store: &IStringStore,
+  ) -> IString {
+    Self::get_scanner_name(scanner_syms).intern(string_store)
   }
 
-  pub fn get_code(&self) -> String {
-    format!(
-      "{}{}\n{}\n",
-      self.get_state_header(),
-      self.get_scanner_header(),
-      self.code.replace("%%%%", &self.get_name())
+  pub fn get_scanner_name(scanner_syms: &OrderedSet<&DBTokenData>) -> String {
+    ("scan".to_string()
+      + &create_u64_hash(
+        scanner_syms.iter().map(|g| g.sym_id).collect::<OrderedSet<_>>(),
+      )
+      .to_string())
+  }
+
+  /// Should only be used on matches that read results from token scanners.
+  pub fn get_scanner_name_from_matches(
+    matches: &[ASTNode],
+    db: &ParserDatabase,
+  ) -> String {
+    let mut vals = Array::new();
+
+    for val in matches {
+      match val {
+        parser::ASTNode::IntMatch(int_match) => {
+          vals.append(&mut int_match.vals.clone());
+        }
+        _ => {}
+      }
+    }
+
+    Self::get_scanner_name(
+      &vals.into_iter().map(|i| db.tok_data((i as usize).into())).collect(),
     )
   }
 
-  pub fn get_code_body(&self) -> String {
-    format!(
-      "{}\n{}\n",
-      self.get_scanner_header(),
-      self.code.replace("%%%%", &self.get_name())
-    )
+  /// Returns a reference to the AST.
+  ///
+  /// May be `None` if the ast
+  /// has not yet been built through `build_ast`.
+  ///
+  /// May also be an `Err`
+  /// if there was a problem building the ast.
+  pub fn get_ast(&self) -> SherpaResult<&Box<State>> {
+    self.ast.as_ref()
   }
 
-  pub fn get_comment(&self) -> &String {
-    &self.comment
+  pub fn get_ast_mut(&mut self) -> SherpaResult<&mut Box<State>> {
+    self.ast.as_mut()
   }
 
-  pub fn get_state_header(&self) -> String {
-    format!("state [ {} ] \n", self.get_name())
-  }
-
-  pub fn get_scanner_header(&self) -> String {
-    if let Some(name) = self.get_scanner_state_name() {
-      format!(" scanner [ {} ] \n", name)
-    } else {
-      String::new()
-    }
-  }
-
-  pub fn get_symbols(&self) -> (&Vec<SymbolID>, &Vec<SymbolID>) {
-    (&self.normal_symbols, &self.skip_symbols)
-  }
-
-  pub fn get_scanner_symbol_set(&self) -> Option<SymbolSet> {
-    let (norm, peek) = self.get_symbols();
-
-    let scanner_syms =
-      norm.iter().chain(peek.iter()).cloned().collect::<BTreeSet<_>>();
-
-    if scanner_syms.is_empty() {
-      None
-    } else {
-      Some(scanner_syms)
-    }
-  }
-
-  pub fn get_scanner_state_name(&self) -> Option<String> {
-    self
-      .get_scanner_symbol_set()
-      .map(|symbols| format!("scan_{:02X}", hash_id_value_u64(&symbols)))
-  }
-
-  pub fn compile_ast(&self) -> SherpaResult<IR_STATE> {
-    let code = self.get_code();
-    compile_ir_ast(&code)
-  }
-
-  pub fn get_cached_ast(&mut self) -> SherpaResult<&mut IR_STATE> {
+  /// Builds and returns a reference to the AST.
+  ///
+  /// May be an `Err` if there was a problem building the ast.
+  pub fn build_ast(&mut self, s: &IStringStore) -> SherpaResult<&Box<State>> {
     if self.ast.is_none() {
-      self.ast = self.compile_ast();
-      self.get_cached_ast()
-    } else {
-      self.ast.as_mut()
+      let code = String::from_utf8(self.source(s))?;
+
+      self.ast = SherpaResult::from(parser::ast::ir_from((&code).into()));
     }
+
+    self.get_ast()
   }
 
-  /// Return the AST root object if it is already compiled,
-  /// otherwise attempts to compile and return the AST object.
-  /// If an error is encountered during compilation, None is returned.
-  pub fn get_ast_mut(&mut self) -> Option<&mut IR_STATE> {
-    if self.ast.is_ok() {
-      Some(self.ast.as_mut().unwrap())
-    } else {
-      None
-    }
+  pub fn source(&self, s: &IStringStore) -> Vec<u8> {
+    let mut w = CodeWriter::new(vec![]);
+    let name = self.name.to_string(s);
+
+    let _ = &mut w
+      + name.clone()
+      + " =>\n"
+      + self.code.as_str().replace("%%%%", name.as_str());
+
+    let string = w.into_output();
+    string
   }
 
-  /// Return the AST root object if it is already compiled,
-  /// otherwise returns `None`
-  pub fn get_ast(&self) -> Option<&IR_STATE> {
-    if self.ast.is_ok() {
-      Some(self.ast.as_ref().unwrap())
-    } else {
-      None
-    }
-  }
-
-  pub fn is_scanner(&self) -> bool {
-    match self.state_type {
-      IRStateType::ScannerStart
-      | IRStateType::ScannerGoto
-      | IRStateType::Scanner
-      | IRStateType::ScannerIntermediateState
-      | IRStateType::ScannerEndState => true,
-      _ => false,
-    }
+  pub fn source_string(&self, s: &IStringStore) -> String {
+    unsafe { String::from_utf8_unchecked(self.source(s)) }
   }
 }
 
-impl Debug for ParseState {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    f.write_fmt(format_args!(
-      "{}{}/*\n {} \n*/\n{}\n\n\n",
-      self.get_state_header(),
-      self.get_scanner_header(),
-      self.comment,
-      self.code.replace("%%%%", &self.get_name()),
-    ))
-  }
-}
-
-impl Display for ParseState {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    f.write_fmt(format_args!(
-      "{}{}/*\n {} \n*/\n{}\n\n\n",
-      self.get_state_header(),
-      self.get_scanner_header(),
-      self.comment,
-      self.code.replace("%%%%", &self.get_name()),
-    ))
+#[cfg(debug_assertions)]
+impl<'db> ParseState<'db> {
+  pub fn debug_string(&self, db: &ParserDatabase) -> String {
+    format!(
+      "ParseState{{
+  name: {}
+  code: [\n    {}\n  ]
+  ast: {:#?}
+  scan_fn: {:?}
+}}",
+      self.name.to_string(db.string_store()),
+      &self.code.split("\n").collect::<Vec<_>>().join("\n    "),
+      &self.get_ast(),
+      self.scanners.as_ref().map(|s| s
+        .iter()
+        .map(|(name, _)| { name.to_string(db.string_store()) })
+        .collect::<Vec<_>>())
+    )
   }
 }

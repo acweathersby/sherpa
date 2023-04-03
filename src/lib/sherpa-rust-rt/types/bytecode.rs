@@ -202,13 +202,17 @@ pub enum Opcode {
   /// The table data starts at offset 18. Table data starts at byte offset (18
   /// + `Lookup Table Size` * 4)
   HashBranch,
+  // A c-string that can be used to label instructions or states for debugging
+  // purposes. The following byte indicates number of bytes that make up the
+  // string.
+  DebugSymbol,
 }
 
 impl From<u8> for Opcode {
   fn from(value: u8) -> Self {
     use Opcode::*;
 
-    const LU_TABLE: [Opcode; 22] = [
+    const LU_TABLE: [Opcode; 23] = [
       NoOp,
       Pass,
       Fail,
@@ -231,6 +235,7 @@ impl From<u8> for Opcode {
       Reduce,
       VectorBranch,
       HashBranch,
+      DebugSymbol,
     ];
 
     if (value as usize) < LU_TABLE.len() {
@@ -256,6 +261,9 @@ impl Opcode {
       }
       Opcode::VectorBranch => {
         unimplemented!("VectorBranches do not have fixed lengths")
+      }
+      Opcode::DebugSymbol => {
+        unimplemented!("DebugSymbols do not have fixed lengths")
       }
       Opcode::Reduce => 11,
       Opcode::Goto | Opcode::PushGoto | Opcode::PushExceptionHandler => 6,
@@ -342,7 +350,7 @@ impl<'a> Instruction<'a> {
   /// println!("{:?}", i2); // -> "Some(Instruction(Opcode::TokenShift))"
   /// ```
   pub fn next(self) -> Option<Instruction<'a>> {
-    let Instruction { address: opcode_start, bc: bytecode } = self;
+    let Instruction { address: opcode_start, bc } = self;
     match self.get_opcode() {
       Opcode::VectorBranch | Opcode::HashBranch => {
         // Extract the address of the default branch
@@ -351,14 +359,18 @@ impl<'a> Instruction<'a> {
         iter.next_u32_le().and_then(|v| {
           self
             .is_valid_offset(v as usize)
-            .then_some((bytecode, opcode_start + v as usize).into())
+            .then_some((bc, opcode_start + v as usize).into())
         })
+      }
+      Opcode::DebugSymbol => {
+        let d = self.len();
+        self.is_valid_offset(d).then_some((bc, self.address() + d).into())
       }
       op => {
         let op_len = op.len();
         self
           .is_valid_offset(op_len)
-          .then_some((bytecode, opcode_start + op_len).into())
+          .then_some((bc, opcode_start + op_len).into())
       }
     }
   }
@@ -373,6 +385,11 @@ impl<'a> Instruction<'a> {
           .next_u32_le()
           .and_then(|v| self.is_valid_offset(v as usize).then_some(v as usize))
           .unwrap_or(0)
+      }
+      Opcode::DebugSymbol => {
+        let mut iter = self.iter();
+        let len = iter.next_u16_le().unwrap_or(0) as usize; // Skip the input enum value
+        len + 3
       }
       op => op.len(),
     }

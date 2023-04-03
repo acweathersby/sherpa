@@ -1,20 +1,4 @@
-use crate::{
-  ascript::{
-    output_base::AscriptWriter,
-    rust::{create_rust_writer_utils, write_rust_ast},
-    types::AScriptStore,
-  },
-  bytecode::compile_bytecode,
-  compile::GrammarStore,
-  debug::{disassemble_parse_block, generate_disassembly},
-  journal::{config::Config, Journal},
-  parser::{compile_parse_states, optimize_parse_states},
-  types::*,
-  util::get_num_of_available_threads,
-  writer::code_writer::CodeWriter,
-  SherpaResult,
-};
-use sherpa_runtime::bytecode_parser::{ByteCodeParser, DebugEvent};
+use crate::*;
 use std::{path::PathBuf, str::FromStr, sync::Arc};
 
 #[cfg(test)]
@@ -28,39 +12,7 @@ pub(super) fn get_test_grammar_path(partial_path: &str) -> PathBuf {
   path.canonicalize().unwrap()
 }
 
-/// Creates and compiles a Journal and GrammarStore from a file path and
-/// configuration object.
-pub(super) fn build_grammar_from_file(
-  input: PathBuf,
-  config: Config,
-) -> (Journal, SherpaResult<Arc<GrammarStore>>) {
-  let mut j = Journal::new(Some(config));
-  let g = GrammarStore::from_path(&mut j, input);
-  (j, g)
-}
-
-/// Return a path relative to `<sherpa_repo>/src/`
-pub(crate) fn path_from_source(source_path: &str) -> SherpaResult<PathBuf> {
-  let grammar_path = std::env::var("CARGO_MANIFEST_DIR")
-    .map(|val| PathBuf::from_str(&val).unwrap().join("../../"))
-    .unwrap_or_else(|_| {
-      std::env::current_dir()
-        .unwrap()
-        .join(PathBuf::from_str("./src/").unwrap())
-    })
-    .join(source_path);
-
-  if let Ok(grammar_path) = grammar_path.canonicalize() {
-    SherpaResult::Ok(grammar_path)
-  } else {
-    panic!(
-      "File path {} not found in file system",
-      grammar_path.to_str().unwrap()
-    );
-  }
-}
-
-pub struct TestConfig<'a> {
+/* pub struct TestConfig<'a> {
   pub llvm_parse: bool,
   pub bytecode_parse: bool,
   pub print_llvm_ir: bool,
@@ -91,9 +43,9 @@ pub struct TestConfig<'a> {
   pub debugger_handler: Option<
     &'a dyn Fn(Arc<GrammarStore>) -> Option<Box<dyn FnMut(&DebugEvent)>>,
   >,
-}
+} */
 
-impl<'a> Default for TestConfig<'a> {
+/* impl<'a> Default for TestConfig<'a> {
   fn default() -> Self {
     Self {
       llvm_parse: false,
@@ -136,8 +88,8 @@ impl<'a> From<(&'a str, &'a str, bool)> for TestInput<'a> {
   fn from((entry_name, input, should_parse): (&'a str, &'a str, bool)) -> Self {
     TestInput { entry_name, input, should_succeed: should_parse }
   }
-}
-
+} */
+/*
 /// Runs an input grammar through a series of stages determined by
 /// the TestConfig, and reports failure points when they occur.
 ///
@@ -203,7 +155,7 @@ pub fn test_runner<'a>(
   } else {
     return SherpaResult::Err(
       "
-Neither test_cfg.grammar_string nor test_cfg.grammar_path are have been assigned a value. 
+Neither test_cfg.grammar_string nor test_cfg.grammar_path are have been assigned a value.
 Cannot create a GrammarStore without one of these values present. "
         .into(),
     );
@@ -433,224 +385,4 @@ impl Default for PrintConfig {
     }
   }
 }
-
-pub fn console_debugger<'a>(
-  g: Arc<GrammarStore>,
-  PrintConfig {
-    display_scanner_output,
-    display_input_data,
-    input_window_size,
-    display_instruction,
-    display_state,
-  }: PrintConfig,
-) -> Option<Box<dyn FnMut(&DebugEvent)>> {
-  let mut stack = vec![];
-  Some(Box::new(move |event| match event {
-    DebugEvent::ShiftToken { offset_end, offset_start, string } => {
-      let string = string[*offset_start..(*offset_end).min(string.len())]
-        .replace("\n", "\\n");
-      stack.push(string.clone());
-      println!(
-        "
-[Shift] --------------------------------------------------------------------
-
-Pushing token [{string}] to stack
-
-Stack:\n    {}\n
--------------------------------------------------------------------------------",
-        stack
-          .iter()
-          .enumerate()
-          .map(|(i, s)| format!("{}: {s}", i + 1))
-          .collect::<Vec<_>>()
-          .join("\n    ")
-      );
-    }
-    DebugEvent::Reduce { rule_id } => {
-      if let SherpaResult::Ok(rule) = g.get_rule_by_bytecode_id(*rule_id) {
-        let item: Item = rule.into();
-        let prod_name = g.get_production_plain_name(&item.get_prod_id(&g));
-
-        let items = stack.drain((stack.len() - rule.get_real_len() as usize)..);
-        let symbols = items.collect::<Vec<_>>();
-        stack.push(format!("({prod_name}: {})", symbols.join(",")));
-        println!(
-          "
-[REDUCE] ----------------------------------------------------------------------
-
-  Reduce to {prod_name} with rule: 
-  {}
-
-  Stack:\n    {}\n
--------------------------------------------------------------------------------",
-          item.to_complete().debug_string(&g),
-          stack
-            .iter()
-            .enumerate()
-            .map(|(i, s)| format!("{}: {s}", i + 1))
-            .collect::<Vec<_>>()
-            .join("\n    ")
-        )
-      }
-    }
-    DebugEvent::Failure { .. } => {
-      println!(
-        "
-[Failed] --------------------------------------------------------------------
-
-  Failed to recognize input.
--------------------------------------------------------------------------------",
-      )
-    }
-    DebugEvent::Complete { production_id, .. } => {
-      if let SherpaResult::Ok(prod) =
-        g.get_production_by_bytecode_id(*production_id)
-      {
-        println!(
-          "
-[Complete] --------------------------------------------------------------------
-
-  Accepted on production {}.
--------------------------------------------------------------------------------",
-          prod.name
-        )
-      }
-    }
-
-    DebugEvent::TokenValue { input_value, start, end, string }
-      if display_input_data =>
-    {
-      println!(
-        "
-[Token Input]------------------------------------------------------------------------
-
-║{}║
-Input Value: {input_value}
-Symbol Length: {}
--------------------------------------------------------------------------------",
-        &string[(*start)..(*end).min(string.len())].replace("\n", "\\n"),
-        end - start
-      )
-    }
-    DebugEvent::ByteValue { input_value, start, end, string }
-      if display_input_data =>
-    {
-      println!(
-        "
-[Byte Input]------------------------------------------------------------------------
-
-║{}║
-Input Value: {input_value}
-Symbol Length: {}
--------------------------------------------------------------------------------",
-        &string[(*start)..(*end).min(string.len())].replace("\n", "\\n"),
-        end - start
-      )
-    }
-    DebugEvent::CodePointValue { input_value, start, end, string }
-      if display_input_data && display_scanner_output =>
-    {
-      println!(
-        "
-[CodePoint Input]------------------------------------------------------------------------
-
-║{}║
-Input Value: {input_value}
-Symbol Length: {}
--------------------------------------------------------------------------------",
-        &string[(*start)..(*end).min(string.len())].replace("\n", "\\n"),
-        end - start
-      )
-    }
-    DebugEvent::ClassValue { input_value, start, end, string }
-      if display_input_data && display_scanner_output =>
-    {
-      println!(
-        "
-[Class Input]------------------------------------------------------------------------
-
-║{}║
-Input Value: {input_value}
-Symbol Length: {}
--------------------------------------------------------------------------------",
-        &string[(*start)..(*end).min(string.len())].replace("\n", "\\n"),
-        end - start
-      )
-    }
-    DebugEvent::GotoValue { production_id }
-      if display_input_data && display_scanner_output =>
-    {
-      println!(
-        "
-[GOTO Input]-------------------------------------------------------------------
-
-  Production_name: {}
-  BytcodeID: {}
--------------------------------------------------------------------------------",
-        g.get_production_plain_name(g.bytecode_production_lookup.get(production_id).unwrap()),
-        production_id
-      )
-    }
-    DebugEvent::ExecuteState { base_instruction, .. } if display_state => {
-      println!(
-        "
-[State]------------------------------------------------------------------
-
-{}
--------------------------------------------------------------------------------",
-        disassemble_parse_block(Some(*base_instruction), Some(&g), None).0
-      );
-      println!("");
-    }
-    DebugEvent::ExecuteInstruction {
-      instruction,
-      string,
-      sym_len,
-      is_scanner,
-      scan_ptr,
-      tok_id,
-      tok_len,
-      anchor_ptr,
-      base_ptr,
-      end_ptr,
-      head_ptr,
-      ..
-    } if display_instruction => {
-      let active_ptr = if *is_scanner { scan_ptr } else { head_ptr };
-      if !is_scanner || display_scanner_output {
-        if !matches!(
-          instruction.get_opcode(),
-          bytecode::Opcode::VectorBranch | bytecode::Opcode::HashBranch
-        ) {
-          return;
-        }
-        println!(
-          "
-[Instruction]------------------------------------------------------------------
-
-  address:{:0>6X}; tok_len: {} sym_len: {}; tok_id: {};  
-  anchor: {}; base: {}; head: {}; tail: {};  end: {}; 
-
-  ║{: <74}║
-
-{}
--------------------------------------------------------------------------------",
-          instruction.address(),
-          tok_len,
-          sym_len,
-          tok_id,
-          anchor_ptr,
-          base_ptr,
-          head_ptr,
-          scan_ptr,
-          end_ptr,
-          &string[(*active_ptr)..(active_ptr + input_window_size).min(string.len())]
-            .replace("\n", "\\n"),
-          disassemble_parse_block(Some(*instruction), Some(&g), None).0
-        );
-        println!("");
-      }
-    }
-    _ => {}
-  }))
-}
+ */

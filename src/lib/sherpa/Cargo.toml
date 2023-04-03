@@ -7,9 +7,18 @@ edition = "2021"
 path ="./lib.rs"
 
 [dependencies.sherpa_core]
-path = "../../lib/sherpa-core"
+path = "../sherpa-core"
+
+[dependencies.sherpa_ascript]
+path = "../sherpa-ascript"
+
+[dependencies.sherpa_bytecode]
+path = "../sherpa-bytecode"
+
+[dependencies.sherpa_llvm]
+path = "../sherpa-llvm"
 
 [dependencies.sherpa_proc]
-path = "../../lib/sherpa-proc"
+path = "../sherpa-proc"
 
 

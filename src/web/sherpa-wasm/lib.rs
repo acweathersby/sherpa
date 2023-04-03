@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use sherpa_core_neuvo::{
+use sherpa_core::{
   compile_grammar_from_str,
   parser,
   GrammarSoup,
@@ -8,7 +8,7 @@ use sherpa_core_neuvo::{
   SherpaResult,
 };
 use sherpa_runtime::{
-  bytecode_parser::ByteCodeParser,
+  bytecode::ByteCodeParser,
   types::{
     bytecode,
     cst,

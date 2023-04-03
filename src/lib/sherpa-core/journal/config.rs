@@ -1,4 +1,5 @@
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Default, Clone, Copy)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub struct DebugConfig {
   /// Allow further processing of the parse states when
   /// parse states with the same name but different contents
@@ -7,7 +8,8 @@ pub struct DebugConfig {
 }
 
 /// General Compiler Configuration
-#[derive(Debug, Clone)]
+#[derive(Clone)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub struct Config {
   /// > !NOT IMPLEMENTED!
   ///
@@ -76,26 +78,9 @@ pub struct Config {
   /// Enable the generation of AScripT AST code.
   ///
   /// Defaults to `true`
-  pub enable_ascript:  bool,
-  #[cfg(not(feature = "wasm-target"))]
-  /// The language type of non-LLVM outputs
-  ///
-  /// Defaults to [SourceType::Rust]
-  pub source_type:     SourceType,
-  /// Path to the `llvm_ar` executable.
-  ///
-  /// Defaults to `llvm-ar-14`
-  pub llvm_ar_path:    String,
-  /// Path to the `clang` executable.
-  ///
-  /// Defaults to `clang-14`
-  pub llvm_clang_path: String,
-  /// Enable LLVM light link time optimizations
-  ///
-  /// Default to `false`
-  pub llvm_light_lto:  bool,
+  pub enable_ascript: bool,
   /// Configurations when running in debug mode.
-  pub debug:           DebugConfig,
+  pub debug:          DebugConfig,
 }
 
 impl Default for Config {
@@ -108,22 +93,16 @@ impl Default for Config {
       opt_inline_redundant_assertions: false,
       opt_remove_gotos_to_pass_states: true,
       enable_ascript: true,
-      #[cfg(not(feature = "wasm-target"))]
-      source_type: SourceType::Rust,
-      llvm_ar_path: "llvm-ar-14".to_string(),
-      llvm_clang_path: "clang-14".to_string(),
-      llvm_light_lto: false,
       opt_llvm: false,
       debug: Default::default(),
     }
   }
 }
 
-#[cfg(not(feature = "wasm-target"))]
-use crate::build::pipeline::SourceType;
 use std::collections::BTreeSet;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub enum Language {
   Rust,
   _TypeScript,
@@ -132,19 +111,22 @@ pub enum Language {
   _WebAssembly,
   _Java,
 }
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub enum Recognizer {
   _Assembly,
   Bytecode,
 }
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub enum Platform {
   _Windows,
   Linux,
   _MacOS,
   _Android,
 }
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub enum Architecture {
   X8664,
   _Arm64,
@@ -175,7 +157,8 @@ impl Architecture {
     }
   }
 }
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub enum Extension {
   _AVX2,
   _AVX512,

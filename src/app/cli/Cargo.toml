@@ -12,12 +12,9 @@ clap = { version="4.0.29" }
 
 [dependencies.sherpa_core]
 path = "../../lib/sherpa-core"
-features = [ "llvm" ]
 
 [profile.release]
 opt-level=3
 panic = 'abort'
-codegen-units = 1
 lto = true
 debug = 0
-strip = true

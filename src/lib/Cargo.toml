@@ -4,7 +4,10 @@ members = [
     "./sherpa",
     "./sherpa-proc",
     "./sherpa-core",
-    "./sherpa-core-nuevo",
+    "./sherpa-ascript",
+    "./sherpa-bytecode",
+    "./sherpa-llvm",
+    "./sherpa-x86",
     "./sherpa-rust-rt",
 ]
 
