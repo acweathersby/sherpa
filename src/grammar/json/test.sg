@@ -1,0 +1,5 @@
+<> string > tk:string_tk
+        
+<> string_tk > '"' ( c:sym | c:num | c:sp | c:id | escape )(*) "\""
+
+<> escape > "\\"  ( c:sym | c:num | c:sp | c:id )

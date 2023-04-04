@@ -985,7 +985,7 @@ where
 }
 
 /// Compile a LLVM parser module from Sherpa bytecode.
-pub fn compile_llvm_module_from_parse_states<'llvm, 'db: 'llvm>(
+pub fn compile_llvm_module_from_parse_states<'llvm, 'db>(
   j: &mut Journal,
   module: &LLVMParserModule<'llvm>,
   db: &'db ParserDatabase,

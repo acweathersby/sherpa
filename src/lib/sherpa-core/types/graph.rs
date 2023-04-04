@@ -42,7 +42,7 @@ impl Origin {
       Origin::ProdGoal(prod_id) => {
         format!(
           "ProdGoal[ {} {:?} ]",
-          db.prod_name(*prod_id).to_string(db.string_store()),
+          db.prod_guid_name(*prod_id).to_string(db.string_store()),
           prod_id
         )
       }

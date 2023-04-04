@@ -225,7 +225,7 @@ impl<'db> Item<'db> {
   }
 
   pub fn prod_name(&self) -> IString {
-    self.db.prod_name(self.prod_index())
+    self.db.prod_guid_name(self.prod_index())
   }
 
   pub fn prod_index(&self) -> DBProdKey {

@@ -52,21 +52,23 @@ pub fn build_compile_db<'a>(
   while let Some(prod_id) = production_queue.pop_front() {
     if !p_map.contains_key(&prod_id.as_sym()) {
       let prod = productions.get(&prod_id)?;
-      let name = prod.name;
+      let g_name = prod.guid_name;
+      let f_name = prod.friendly_name;
       let rules = prod.rules.clone();
 
       add_prod(prod_id.as_sym(), rules, p_map, r_table, p_r_map, false);
-      add_prod_name(prod_name_lu, name);
+      add_prod_name(prod_name_lu, g_name, f_name);
 
       // Gain references on all sub productions. ----------------------------
       for prod in &prod.sub_prods {
         let prod_id = prod.id;
         if !p_map.contains_key(&prod_id.as_sym()) {
           let rules = prod.rules.clone();
-          let name = prod.name;
+          let g_name = prod.guid_name;
+          let f_name = prod.friendly_name;
 
           add_prod(prod_id.as_sym(), rules, p_map, r_table, p_r_map, false);
-          add_prod_name(prod_name_lu, name);
+          add_prod_name(prod_name_lu, g_name, f_name);
           extract_prod_syms(
             &prod.rules,
             &mut production_queue,
@@ -114,7 +116,7 @@ pub fn build_compile_db<'a>(
                 }
               },
               SymbolId::NonTerminalToken { id, .. } => {
-                let name = productions.get(&id.as_parse_prod())?.name;
+                let name = productions.get(&id.as_parse_prod())?.guid_name;
                 let name = ("tk:".to_string() + &name.to_string(s_store))
                   .intern(s_store);
                 insert_symbol(symbols, sym);
@@ -140,7 +142,7 @@ pub fn build_compile_db<'a>(
             internal_id,
             ProductionSubType::Parser,
           ))?;
-          (internal_id, &prod.rules, prod.name)
+          (internal_id, &prod.rules, prod.guid_name)
         }
         ProductionId::Sub(internal_id, index, ..) => {
           let prod = &productions
@@ -149,11 +151,11 @@ pub fn build_compile_db<'a>(
               ProductionSubType::Parser,
             ))?
             .sub_prods[index as usize];
-          (internal_id, &prod.rules, prod.name)
+          (internal_id, &prod.rules, prod.guid_name)
         }
       };
 
-      let name = "tk_".to_string() + &name.to_str(s_store).as_str();
+      let name = "tk_".to_string() + &name.to_string(s_store).as_str();
       let name = name.intern(s_store);
 
       if prod_is_immediate_left_recursive(prod_id, &rules) {
@@ -205,13 +207,11 @@ pub fn build_compile_db<'a>(
         let prime_id = prime_id.as_tok_sym();
 
         add_prod(prod_id, r_rules, p_map, r_table, p_r_map, true);
-        add_prod_name(prod_name_lu, name);
+        add_prod_name(prod_name_lu, name, name);
 
+        let name = (name.to_string(s_store) + "_prime").intern(s_store);
         add_prod(prime_id, p_rules, p_map, r_table, p_r_map, true);
-        add_prod_name(
-          prod_name_lu,
-          (name.to_string(s_store) + "_prime").intern(s_store),
-        );
+        add_prod_name(prod_name_lu, name, name);
       } else {
         let prod_id = prod_id.as_tok_sym();
         if !p_map.contains_key(&prod_id) {
@@ -221,7 +221,7 @@ pub fn build_compile_db<'a>(
           insert_token_production(&mut rules, &mut token_productions);
 
           add_prod(prod_id, rules, p_map, r_table, p_r_map, true);
-          add_prod_name(prod_name_lu, name);
+          add_prod_name(prod_name_lu, name, name);
         }
       }
     }
@@ -245,12 +245,13 @@ pub fn build_compile_db<'a>(
           }]);
           convert_symbols_to_scanner_symbols(&mut rules, s_store);
 
+          let name = ("tok_".to_string() + &create_u64_hash(val).to_string())
+            .intern(s_store);
+
           add_prod(prod_id.as_tok_sym(), rules, p_map, r_table, p_r_map, true);
-          add_prod_name(
-            prod_name_lu,
-            ("tok_".to_string() + &create_u64_hash(val).to_string())
-              .intern(s_store),
-          );
+
+          add_prod_name(prod_name_lu, name, name);
+
           token_names.insert(prod_id.as_tok_sym(), *val);
         }
         sym if sym.is_term() => {
@@ -261,12 +262,13 @@ pub fn build_compile_db<'a>(
             ast:     None,
             tok:     Default::default(),
           }]);
+
+          let name = ("sym_".to_string() + &create_u64_hash(sym).to_string())
+            .intern(s_store);
+
           add_prod(prod_id.as_tok_sym(), rules, p_map, r_table, p_r_map, true);
-          add_prod_name(
-            prod_name_lu,
-            ("sym_".to_string() + &create_u64_hash(sym).to_string())
-              .intern(s_store),
-          );
+
+          add_prod_name(prod_name_lu, name, name);
         }
         _ => {}
       }
@@ -298,7 +300,7 @@ pub fn build_compile_db<'a>(
     .iter()
     .enumerate()
     .map(|(id, (name, prod_id))| {
-      let prod_name = productions.get(prod_id).unwrap().name;
+      let prod_name = productions.get(prod_id).unwrap().guid_name;
       EntryPoint {
         prod_key: DBProdKey::from(*p_map.get(&prod_id.as_sym()).unwrap()),
         entry_name: *name,
@@ -378,8 +380,12 @@ fn convert_rule_symbol(
   }
 }
 
-fn add_prod_name(prod_name_lu: &mut Vec<IString>, name: IString) {
-  prod_name_lu.push(name);
+fn add_prod_name(
+  prod_name_lu: &mut Vec<(IString, IString)>,
+  guid_name: IString,
+  friendly_name: IString,
+) {
+  prod_name_lu.push((guid_name, friendly_name));
 }
 
 /// Inserts production rule data into the appropriate lookup tables.
@@ -440,8 +446,11 @@ fn convert_symbols_to_scanner_symbols(
       .iter()
       .flat_map(|(sym, index)| match sym {
         SymbolId::Token { val, precedence } => {
-          let guarded_str = val.to_str(s_store);
+          let guarded_str = val.to_string(s_store);
           let string = guarded_str.as_str();
+
+          debug_assert_ne!(string, "");
+
           let last = string.chars().count() - 1;
           string
             .chars()

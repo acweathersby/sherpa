@@ -168,12 +168,12 @@ pub enum ASTToken {
 /// A custom parse state defined within a grammar e.g `state_name => ...`
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct CustomState {
-  pub id:      ProductionId,
-  pub g_id:    GrammarId,
-  pub name:    IString,
-  pub symbols: Set<SymbolId>,
-  pub state:   Box<parser::State>,
-  pub tok:     Token,
+  pub id:        ProductionId,
+  pub g_id:      GrammarId,
+  pub guid_name: IString,
+  pub symbols:   Set<SymbolId>,
+  pub state:     Box<parser::State>,
+  pub tok:       Token,
 }
 
 #[cfg_attr(debug_assertions, derive(Debug))]
@@ -204,8 +204,12 @@ pub struct Production {
   /// The type of this production
   pub type_: ProductionType,
 
+  /// The globally unique name string of the production. Similar to a C++
+  /// mangled name
+  pub guid_name: IString,
+
   /// The name of the production as it is found in the source grammar.
-  pub name: IString,
+  pub friendly_name: IString,
 
   pub tok: Token,
 
@@ -221,7 +225,12 @@ pub struct SubProduction {
 
   pub g_id: GrammarId,
 
-  pub name: IString,
+  /// The globally unique name string of the production. Similar to a C++
+  /// mangled name
+  pub guid_name: IString,
+
+  /// The name of the production as it is found in the source grammar.
+  pub friendly_name: IString,
 
   pub rules: Array<Rule>,
 
@@ -345,12 +354,12 @@ impl SymbolId {
         &mut w + "[ cp:" + val.to_string() + "]{" + precedence.to_string() + "}"
       }
       DBNonTerminal { key } => {
-        let guard_str = db.prod_name_str(key);
+        let guard_str = db.prod_guid_name_string(key);
         let name = guard_str.as_str();
         &mut w + name
       }
       DBNonTerminalToken { prod_key, precedence, .. } => {
-        let guard_str = db.prod_name_str(prod_key);
+        let guard_str = db.prod_guid_name_string(prod_key);
         &mut w + "tk:" + guard_str + "{" + precedence.to_string() + "}"
       }
       DBToken { key: index } => &mut w + db.sym(index).debug_string(db),

@@ -1,5 +1,6 @@
 use crate::{
   ascript_functions::construct_ast_builder,
+  jit_parser::JitParser,
   parse_functions::compile_states,
   *,
 };
@@ -17,6 +18,7 @@ use inkwell::{
   OptimizationLevel,
 };
 use sherpa_core::{
+  proxy::OrderedMap,
   test::{
     frame::{build_parse_states_from_source_str, TestPackage},
     test_reader::TestUTF8StringReader,
@@ -24,9 +26,50 @@ use sherpa_core::{
   *,
 };
 use sherpa_runtime::{
-  llvm_parser::{sherpa_allocate_stack, sherpa_free_stack},
-  types::{Goto, ParseActionType, ParseContext},
+  llvm_parser::{sherpa_allocate_stack, sherpa_free_stack, LLVMByteReader},
+  types::{
+    ast::{AstObject, AstSlot, AstStackSlice},
+    BlameColor,
+    ByteReader,
+    Goto,
+    MutByteReader,
+    ParseActionType,
+    ParseContext,
+    ParseResult,
+    TokenRange,
+  },
 };
+
+// Sorts reduce functions according to their respective
+// rules. This assumes the number of rules in the array
+// matches the number of rules in the parser.
+fn map_reduce_function<'a, R, ExtCTX, ASTNode>(
+  db: &ParserDatabase,
+  fns: Vec<(
+    &str,
+    usize,
+    fn(&mut ParseContext<R, ExtCTX>, &mut AstStackSlice<AstSlot<ASTNode>>),
+  )>,
+) -> Vec<fn(&mut ParseContext<R, ExtCTX>, &mut AstStackSlice<AstSlot<ASTNode>>)>
+where
+  R: ByteReader + LLVMByteReader + MutByteReader,
+  ASTNode: AstObject,
+{
+  fns
+    .into_iter()
+    .filter_map(|(name, rule_number, b)| {
+      let prod = db.prod_from_name(name);
+      if prod != Default::default() {
+        let rule_id = db.prod_rules(prod).unwrap()[rule_number];
+        Some((Into::<usize>::into(rule_id), b))
+      } else {
+        None
+      }
+    })
+    .collect::<OrderedMap<_, _>>()
+    .into_values()
+    .collect::<Vec<_>>()
+}
 
 type Init<R = TestUTF8StringReader<'static>, T = u32> =
   unsafe extern "C" fn(*mut ParseContext<R, T>, *mut R);
@@ -577,7 +620,7 @@ IGNORE { c:sp }
 fn line_tracking_with_scanner_tokens() -> SherpaResult<()> {
   let ctx = Context::create();
 
-  let jit: SherpaResult<JitParser<TestUTF8StringReader, u32, u32>> = ((
+  let mut jit: JitParser<TestUTF8StringReader, u32, u32> = ((
     None,
     r##"
 IGNORE { c:sp c:nl }
@@ -593,19 +636,24 @@ IGNORE { c:sp c:nl }
   ))
     .into();
 
-  let mut jit = jit?;
-  jit.print_states();
-  jit.print_disassembly();
-  jit.print_code();
-
   let mut reduced = 0;
 
   jit.get_ctx_mut().set_meta(&mut reduced);
 
   let result = jit.build_ast(
     0,
-    &mut TestUTF8StringReader::new("\"\nh\n\"\nworld\n\n\ngoodby\n\"\nmango\""),
-    &map_reduce_function(&jit.grammar(), vec![
+    &mut TestUTF8StringReader::new(
+      r##""
+h
+"
+world
+
+
+goodby
+"
+mango""##,
+    ),
+    &map_reduce_function(&jit.db(), vec![
       /* P */
       ("P", 0, |ctx, slots| {
         let counter = unsafe { ctx.get_meta_mut() };
@@ -645,14 +693,14 @@ IGNORE { c:sp c:nl }
         assert_eq!(slots[0].1.to_slice(ctx.get_str()), "\"\nmango\"");
         assert_eq!(
           slots[0].1.line_num, 7,
-          "Line number of `world` should be 7"
+          "Line number of `mango` should be 7"
         );
         assert_eq!(
           slots[0].1.line_off, 20,
-          "Line offset of `world` should be 20"
+          "Line offset of `mango` should be 20"
         );
       }),
-      ("B", 0, |_, _| {}),
+      //("B", 0, |_, _| {}),
     ]),
   );
 
@@ -666,12 +714,12 @@ IGNORE { c:sp c:nl }
 
   SherpaResult::Ok(())
 }
-/*
+
 #[test]
 fn simple_newline_tracking() -> SherpaResult<()> {
   let ctx = Context::create();
 
-  let jit: SherpaResult<JitParser<TestUTF8StringReader, u32, u32>> = ((
+  let mut jit: JitParser<TestUTF8StringReader, u32, u32> = ((
     None,
     r##"
     IGNORE { c:sp c:nl }
@@ -685,14 +733,11 @@ fn simple_newline_tracking() -> SherpaResult<()> {
     &ctx,
   ))
     .into();
-  let mut jit = jit?;
-
-  jit.print_disassembly();
 
   let result = jit.build_ast(
     0,
     &mut TestUTF8StringReader::new("hello\nworld\n\ngoodby\nmango"),
-    &map_reduce_function(&jit.grammar(), vec![
+    &map_reduce_function(&jit.db(), vec![
       ("test", 0, |ctx, slots| {
         assert_eq!(slots[0].1.to_slice(ctx.get_str()), "hello");
         assert_eq!(
@@ -735,13 +780,13 @@ fn simple_newline_tracking() -> SherpaResult<()> {
   assert!(matches!(result, ParseResult::Complete(AstSlot(1010101, ..))));
 
   SherpaResult::Ok(())
-} */
-/*
+}
+
 #[test]
 fn test_compile_from_bytecode1() -> SherpaResult<()> {
   let ctx = Context::create();
 
-  let jit: SherpaResult<JitParser<TestUTF8StringReader, u32, u32>> = ((
+  let mut jit: JitParser<TestUTF8StringReader, u32, u32> = ((
     None,
     "
 IGNORE { c:sp c:nl }
@@ -755,16 +800,13 @@ IGNORE { c:sp c:nl }
     &ctx,
   ))
     .into();
-  let mut jit = jit?;
-
-  let g = &(jit.grammar());
 
   let input = "hello world\ngoodby mango";
 
   let parse_result = jit.build_ast(
     0,
     &mut TestUTF8StringReader::new(input),
-    &map_reduce_function(&g, vec![
+    &map_reduce_function(&jit.db(), vec![
       ("test", 0, |ctx, slots| {
         let _a = slots.take(0);
         let _b = slots.take(1);
@@ -814,45 +856,11 @@ IGNORE { c:sp c:nl }
   SherpaResult::Ok(())
 }
 
-// Sorts reduce functions according to their respective
-// rules. This assumes the number of rules in the array
-// matches the number of rules in the parser.
-fn map_reduce_function<'a, R, ExtCTX, ASTNode>(
-  g: &GrammarStore,
-  fns: Vec<(
-    &str,
-    usize,
-    fn(&mut ParseContext<R, ExtCTX>, &mut AstStackSlice<AstSlot<ASTNode>>),
-  )>,
-) -> Vec<fn(&mut ParseContext<R, ExtCTX>, &mut AstStackSlice<AstSlot<ASTNode>>)>
-where
-  R: ByteReader + LLVMByteReader + MutByteReader,
-  ASTNode: AstObject,
-{
-  fns
-    .into_iter()
-    .filter_map(|(name, rule_number, b)| {
-      let prod = g.get_production_by_name(name).unwrap();
-      let rule_id = g.production_rules.get(&prod.id).unwrap()[rule_number];
-      let rule = g.get_rule(&rule_id).unwrap();
-      if let Some(bc_id) = rule.bytecode_id {
-        Some((bc_id, b))
-      } else {
-        None
-      }
-    })
-    .collect::<BTreeMap<_, _>>()
-    .into_values()
-    .collect::<Vec<_>>()
-} */
-/*
 #[test]
 fn test_compile_json_parser() -> SherpaResult<()> {
-  use crate::llvm::compile_llvm_module_from_parse_states;
   use inkwell::context::Context;
-  let mut j = Journal::new(None);
-  GrammarStore::from_str(
-    &mut j,
+
+  build_parse_states_from_source_str(
     r##"
 IGNORE { c:sp c:nl }
 EXPORT json as entry
@@ -886,26 +894,33 @@ NAME llvm_language_test
 
 <> string > '"' ( c:id | c:sym | c:num | c:sp )(+) "\""
 "##,
-  );
+    "/test.sp".into(),
+    Default::default(),
+    |TestPackage { mut journal, states, db, .. }| {
+      let ctx = Context::create();
 
-  assert!(!j.debug_error_report());
+      let target_machine = crate_target_test_machine()?;
+      let target_data = target_machine.get_target_data();
 
-  let ir_states = compile_parse_states(&mut j, 1)?;
-  let ir_states = optimize_parse_states(&mut j, ir_states);
+      let module = construct_module(
+        &mut journal,
+        &ctx,
+        &target_data,
+        ctx.create_module("test"),
+      );
+      compile_llvm_module_from_parse_states(
+        &mut journal,
+        &module,
+        &db,
+        &states,
+      )?;
 
-  let ctx = Context::create();
+      println!("{}", module.module.to_string());
 
-  let target_machine = crate_target_test_machine()?;
-  let target_data = target_machine.get_target_data();
-
-  let module =
-    construct_module(&mut j, &ctx, &target_data, ctx.create_module("test"));
-  compile_llvm_module_from_parse_states(&mut j, &module, &ir_states)?;
-
-  println!("{}", module.module.to_string());
-
-  SherpaResult::Ok(())
-} */
+      SherpaResult::Ok(())
+    },
+  )
+}
 
 fn crate_target_test_machine() -> SherpaResult<TargetMachine> {
   Target::initialize_native(&InitializationConfig::default())?;

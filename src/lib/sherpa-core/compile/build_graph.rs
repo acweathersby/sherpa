@@ -1280,7 +1280,7 @@ fn create_reduce_reduce_error(
       if !graph.is_scan() {
       } else {
         let prod = &goals.first()?.prod_index();
-        let name = db.prod_name_str(*prod).as_str().to_string();
+        let name = db.prod_guid_name_string(*prod).as_str().to_string();
 
         string += format!(
           "\n - Turn production <{name}> into a PEG by using one of the PEG mode specifiers:",

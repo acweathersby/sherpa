@@ -1,3 +1,5 @@
+use crate::CachedString;
+
 use super::{
   Array,
   GuardedStr,
@@ -64,7 +66,7 @@ pub struct ParserDatabase {
   /// Table of production names for public productions.
   /// This is a 1-to-1 mapping of all production indices, so productions
   /// that are scanner or are sub-productions map to empty strings.
-  prod_names:   Array<IString>,
+  prod_names:   Array<(IString, IString)>,
   /// Table mapping production indices to rule indices.
   prod_rules:   Array<Array<DBRuleKey>>,
   /// Table of all rules within the grammar and the non-terminal they reduce
@@ -82,7 +84,7 @@ impl ParserDatabase {
   pub fn new(
     name: IString,
     prod_syms: Array<SymbolId>,
-    prod_name_lu: Array<IString>,
+    prod_name_lu: Array<(IString, IString)>,
     prod_to_rules: Array<Array<DBRuleKey>>,
     rules: Array<DBRule>,
     token_lu: Array<DBTokenData>,
@@ -126,20 +128,60 @@ impl ParserDatabase {
 
   /// Given an [DBProdKey] returns the SymbolId representing the production,
   /// or [SymbolId::Undefined] if the id is invalid.
+  pub fn prod_from_name(&self, name: &str) -> DBProdKey {
+    let string = name.to_token();
+    self
+      .prod_names
+      .iter()
+      .enumerate()
+      .find_map(|(v, (a, b))| {
+        if *a == string || *b == string {
+          Some(v.into())
+        } else {
+          None
+        }
+      })
+      .unwrap_or_default()
+  }
+
+  /// Given an [DBProdKey] returns the SymbolId representing the production,
+  /// or [SymbolId::Undefined] if the id is invalid.
   pub fn prod_sym(&self, key: DBProdKey) -> SymbolId {
     self.prod_syms.get(key.0 as usize).cloned().unwrap_or_default()
   }
 
   /// Given an [DBProdKey] returns an IString comprising the name of the
   /// production, or an empty string if the id is invalid.
-  pub fn prod_name(&self, key: DBProdKey) -> IString {
-    self.prod_names.get(key.0 as usize).cloned().unwrap_or_default()
+  pub fn prod_guid_name(&self, key: DBProdKey) -> IString {
+    self
+      .prod_names
+      .get(key.0 as usize)
+      .cloned()
+      .map(|(n, _)| n)
+      .unwrap_or_default()
   }
 
   /// Given an [DBProdKey] returns a [GuardedStr] of the production's name.
   /// Returns an empty string if the key is invalid.
-  pub fn prod_name_str<'a>(&'a self, key: DBProdKey) -> GuardedStr<'a> {
-    self.prod_names.get(key.0 as usize).unwrap().to_str(&self.string_store)
+  pub fn prod_guid_name_string<'a>(&'a self, key: DBProdKey) -> String {
+    self.prod_guid_name(key).to_string(&self.string_store)
+  }
+
+  /// Given an [DBProdKey] returns an IString comprising the name of the
+  /// production, or an empty string if the id is invalid.
+  pub fn prod_friendly_name(&self, key: DBProdKey) -> IString {
+    self
+      .prod_names
+      .get(key.0 as usize)
+      .cloned()
+      .map(|(_, n)| n)
+      .unwrap_or_default()
+  }
+
+  /// Given an [DBProdKey] returns a [GuardedStr] of the production's name.
+  /// Returns an empty string if the key is invalid.
+  pub fn prod_friendly_name_string<'a>(&'a self, key: DBProdKey) -> String {
+    self.prod_friendly_name(key).to_string(&self.string_store)
   }
 
   /// Given an [DBSymKey] returns the associated [SymbolId]

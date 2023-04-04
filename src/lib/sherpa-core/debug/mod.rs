@@ -98,7 +98,7 @@ pub fn console_debugger(
   
     Accepted on production {}.
   -------------------------------------------------------------------------------",
-            db.prod_name((*production_id).into()).to_string(db.string_store())
+            db.prod_guid_name((*production_id).into()).to_string(db.string_store())
           )
     }
 
@@ -172,7 +172,7 @@ pub fn console_debugger(
     Production_name: {}
     BytcodeID: {}
   -------------------------------------------------------------------------------",
-      db.prod_name((*production_id).into()).to_string(db.string_store()),
+      db.prod_guid_name((*production_id).into()).to_string(db.string_store()),
         production_id
       )
     }

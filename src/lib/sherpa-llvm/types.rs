@@ -188,7 +188,8 @@ pub enum CTX_AGGREGATE_INDICES {
   /// pub chkp_line_num:  u32,
   /// ```
   chkp_line_num,
-  /// The number of line character recognized that proceed the tail
+  /// The number of ASCII LineFeed characters that proceed the character at
+  /// `end_line_off`
   /// ```ignore
   /// pub end_line_num:   u32,
   /// ```

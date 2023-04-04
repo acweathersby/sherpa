@@ -40,7 +40,7 @@ pub fn compile_parse_states<'db>(
             .unwrap();
 
         let ir =
-          build_ir(&mut j, &graph, db.prod_name(prod_id.into())).unwrap();
+          build_ir(&mut j, &graph, db.prod_guid_name(prod_id.into())).unwrap();
 
         for mut state in ir {
           if let Some(scanner_data) = state.build_scanners(db) {
@@ -57,7 +57,7 @@ pub fn compile_parse_states<'db>(
             .unwrap();
 
         let ir =
-          build_ir(&mut j, &graph, db.prod_name(prod_id.into())).unwrap();
+          build_ir(&mut j, &graph, db.prod_guid_name(prod_id.into())).unwrap();
 
         for state in ir {
           states.insert(state.name, state);

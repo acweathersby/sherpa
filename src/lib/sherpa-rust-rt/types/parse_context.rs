@@ -451,7 +451,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
           }
 
           return Err(SherpaParseError {
-            inline_message: "Failed parse input".into(),
+            inline_message: "Unrecognized Token".into(),
             last_production: 0,
             loc: TokenRange {
               line_num: last_input.line_num,

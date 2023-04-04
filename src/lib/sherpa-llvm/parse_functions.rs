@@ -12,7 +12,7 @@ use sherpa_runtime::types::{
 };
 use std::collections::BTreeMap;
 
-pub struct BuildArgs<'a, 'llvm: 'a, 'db: 'llvm + 'a> {
+pub struct BuildArgs<'a, 'llvm: 'a, 'db: 'a> {
   pub state_name: &'a str,
   pub state:      &'a ParseState<'db>,
   pub j:          &'a Journal,
@@ -22,7 +22,7 @@ pub struct BuildArgs<'a, 'llvm: 'a, 'db: 'llvm + 'a> {
   pub scan_stop:  FunctionValue<'llvm>,
 }
 
-pub(crate) fn compile_states<'llvm, 'db: 'llvm>(
+pub(crate) fn compile_states<'llvm, 'db>(
   j: &mut Journal,
   m: &LLVMParserModule<'llvm>,
   db: &ParserDatabase,
@@ -67,7 +67,7 @@ fn create_scanner_stop_fn<'a>(m: &LLVMParserModule<'a>) -> FunctionValue<'a> {
   null_fn
 }
 
-fn compile_state<'llvm, 'db: 'llvm>(
+fn compile_state<'llvm, 'db>(
   j: &Journal,
   m: &LLVMParserModule<'llvm>,
   db: &ParserDatabase,
@@ -107,7 +107,7 @@ fn compile_state<'llvm, 'db: 'llvm>(
   SherpaResult::Ok(())
 }
 
-fn compile_statement<'a, 'llvm: 'a, 'db: 'llvm + 'a>(
+fn compile_statement<'a, 'llvm: 'a, 'db: 'a>(
   args: &mut BuildArgs<'a, 'llvm, 'db>,
   stmt: &parser::Statement,
   mut p_ctx: PointerValue<'llvm>,
@@ -120,22 +120,20 @@ fn compile_statement<'a, 'llvm: 'a, 'db: 'llvm + 'a>(
 
   if let Some(transitive) = transitive {
     match transitive {
-      parser::ASTNode::Skip(..) => {
-        skip_token(args, p_ctx, true)?;
-        construct_jump_to_table_start(args, start_block);
-        resolved_end = true;
-      }
       parser::ASTNode::Pop(..) => {
         pop_goto(args, p_ctx, state_fun)?;
+        resolved_end = true;
+      }
+      parser::ASTNode::Skip(..) => {
+        transfer_chkp_line_to_start_line(args, p_ctx)?;
+        transfer_start_line_to_end_line(args, p_ctx)?;
+        skip_token(args, p_ctx, state_fun)?;
+        //construct_jump_to_table_start(args, start_block);
         resolved_end = true;
       }
       parser::ASTNode::Scan(..) => {
         incr_scan_ptr_by_sym_len(args, p_ctx)?;
         update_end_line_data(args, p_ctx)?;
-      }
-      parser::ASTNode::Reset(..) => {
-        peek_reset(args, p_ctx)?;
-        transfer_start_line_to_end_line(args, p_ctx)?;
       }
       parser::ASTNode::Shift(..) => {
         if let Some((s, p)) = construct_token_shift(args, p_ctx)? {
@@ -149,31 +147,35 @@ fn compile_statement<'a, 'llvm: 'a, 'db: 'llvm + 'a>(
       parser::ASTNode::Peek(..) => {
         peek_token(args, p_ctx)?;
       }
+      parser::ASTNode::Reset(..) => {
+        peek_reset(args, p_ctx)?;
+        transfer_start_line_to_end_line(args, p_ctx)?;
+      }
       node => {
         #[cfg(debug_assertions)]
         dbg!(node);
         unreachable!();
       }
     }
+  }
 
-    for non_branch in non_branch {
-      match non_branch {
-        parser::ASTNode::ReduceRaw(r) => {
-          if let Some((s, p)) = reduce(r.as_ref(), args, p_ctx, no_reenter)? {
-            args.state_lu.insert(s.get_name().to_str().unwrap().to_string(), s);
-            state_fun = s;
-            p_ctx = p;
-          }
+  for non_branch in non_branch {
+    match non_branch {
+      parser::ASTNode::ReduceRaw(r) => {
+        if let Some((s, p)) = reduce(r.as_ref(), args, p_ctx, no_reenter)? {
+          args.state_lu.insert(s.get_name().to_str().unwrap().to_string(), s);
+          state_fun = s;
+          p_ctx = p;
         }
-        parser::ASTNode::SetTokenId(tok) => {
-          construct_assign_token_id(args, p_ctx, tok.id as u64)?;
-          transfer_end_line_to_chkp_line(args, p_ctx)?;
-        }
-        node => {
-          #[cfg(debug_assertions)]
-          dbg!(node);
-          unreachable!();
-        }
+      }
+      parser::ASTNode::SetTokenId(tok) => {
+        construct_assign_token_id(args, p_ctx, tok.id as u64)?;
+        transfer_end_line_to_chkp_line(args, p_ctx)?;
+      }
+      node => {
+        #[cfg(debug_assertions)]
+        dbg!(node);
+        unreachable!();
       }
     }
   }
@@ -222,16 +224,58 @@ fn compile_statement<'a, 'llvm: 'a, 'db: 'llvm + 'a>(
   SherpaResult::Ok(())
 }
 
-fn compile_match<'a, 'llvm: 'a, 'db: 'llvm + 'a>(
-  matches: &parser::Matches,
+/// Return the difference between the `scan_ptr` and `end_ptr`.
+/// Value type is `iptr`
+pub(crate) fn get_chars_remaining<'a, 'llvm: 'a, 'db: 'a>(
+  args: &mut BuildArgs<'a, 'llvm, 'db>,
+  p_ctx: PointerValue<'a>,
+) -> SherpaResult<IntValue<'a>> {
+  let LLVMParserModule { b, iptr, .. } = args.m;
+  let scan_int = b.build_ptr_to_int(
+    CTX::scan_ptr.load(b, p_ctx)?.into_pointer_value(),
+    *iptr,
+    "",
+  );
+  let end_int = b.build_ptr_to_int(
+    CTX::end_ptr.load(b, p_ctx)?.into_pointer_value(),
+    *iptr,
+    "",
+  );
+  SherpaResult::Ok(b.build_int_sub(end_int, scan_int, "").into())
+}
+
+fn compile_match<'a, 'llvm: 'a, 'db: 'a>(
+  matches_ast: &parser::Matches,
   args: &mut BuildArgs<'a, 'llvm, 'db>,
   p_ctx: PointerValue<'llvm>,
   state_fun: FunctionValue<'llvm>,
   start_block: BasicBlock<'llvm>,
 ) -> SherpaResult<()> {
-  let LLVMParserModule { b, ctx, i32, i8, .. } = args.m;
+  let LLVMParserModule { b, ctx, i64, i32, i8, .. } = args.m;
   let u32_1 = i32.const_int(1, false);
-  let parser::Matches { matches, mode, .. } = matches;
+  let parser::Matches { matches, mode, .. } = matches_ast;
+  let mut is_raw_char = false;
+
+  let symbol_branches_start = ctx.append_basic_block(state_fun, "match");
+  let default_block = ctx.append_basic_block(state_fun, "default");
+
+  if matches!(
+    mode.as_str(),
+    InputType::BYTE_STR | InputType::CLASS_STR | InputType::CODEPOINT_STR
+  ) {
+    check_for_input_acceptability(
+      args,
+      state_fun,
+      p_ctx,
+      i64.const_int(1, false),
+      symbol_branches_start,
+      default_block,
+    )?;
+  } else {
+    b.build_unconditional_branch(symbol_branches_start);
+  }
+
+  b.position_at_end(symbol_branches_start);
 
   let (cp_val, int_type) = match mode.as_str() {
     InputType::PRODUCTION_STR => {
@@ -253,13 +297,26 @@ fn compile_match<'a, 'llvm: 'a, 'db: 'llvm + 'a>(
     }
 
     InputType::BYTE_STR => {
+      is_raw_char = true;
       CTX_AGGREGATE_INDICES::sym_len.store(b, p_ctx, u32_1)?;
       let scan_ptr_cache =
         CTX_AGGREGATE_INDICES::scan_ptr.load(b, p_ctx)?.into_pointer_value();
       (b.build_load(scan_ptr_cache, "").into_int_value(), i8)
     }
 
+    InputType::CODEPOINT_STR => {
+      is_raw_char = true;
+      let scan_ptr_cache =
+        CTX_AGGREGATE_INDICES::scan_ptr.load(b, p_ctx)?.into_pointer_value();
+      let (cp_val, tok_len) =
+        construct_cp_lu_with_token_len_store(args, scan_ptr_cache)?;
+      CTX_AGGREGATE_INDICES::sym_len.store(b, p_ctx, tok_len)?;
+
+      (cp_val, i32)
+    }
+
     InputType::CLASS_STR => {
+      is_raw_char = true;
       let scan_ptr_cache =
         CTX_AGGREGATE_INDICES::scan_ptr.load(b, p_ctx)?.into_pointer_value();
       let (cp_val, tok_len) =
@@ -275,17 +332,6 @@ fn compile_match<'a, 'llvm: 'a, 'db: 'llvm + 'a>(
 
       (cp_val, i32)
     }
-
-    InputType::CODEPOINT_STR => {
-      let scan_ptr_cache =
-        CTX_AGGREGATE_INDICES::scan_ptr.load(b, p_ctx)?.into_pointer_value();
-      let (cp_val, tok_len) =
-        construct_cp_lu_with_token_len_store(args, scan_ptr_cache)?;
-      CTX_AGGREGATE_INDICES::sym_len.store(b, p_ctx, tok_len)?;
-
-      (cp_val, i32)
-    }
-
     InputType::END_OF_FILE_STR => {
       let val = CTX_AGGREGATE_INDICES::tok_id.load(b, p_ctx)?.into_int_value();
       (val, i32)
@@ -293,7 +339,7 @@ fn compile_match<'a, 'llvm: 'a, 'db: 'llvm + 'a>(
     _ => unreachable!(),
   };
 
-  let mut default = None;
+  let mut default_defined = false;
   let mut branches = Array::new();
   let mut pending_build = Array::new();
 
@@ -301,33 +347,39 @@ fn compile_match<'a, 'llvm: 'a, 'db: 'llvm + 'a>(
     match _match {
       parser::ASTNode::DefaultMatch(def) => {
         let stmt = def.statement.as_ref();
-        let default_block = ctx.append_basic_block(state_fun, "default");
-        pending_build.push((default_block, Some(stmt)));
-        default = Some(default_block);
+        pending_build.push((default_block, Some(stmt), false));
+        default_defined = true;
       }
       parser::ASTNode::IntMatch(int_match) => {
+        let mut is_nl = false;
         let statement = &int_match.statement;
         let branch_block = ctx.append_basic_block(state_fun, "branch");
         for val in &int_match.vals {
+          // If we are working with character values (Byte or Codepoint)
+          // add line increment if value is 10 (ASCII Line Feed)
+          if is_raw_char && (*val == 5 || *val == 10) {
+            is_nl = true;
+          }
           branches.push((int_type.const_int(*val, false), branch_block));
         }
-        pending_build.push((branch_block, Some(statement.as_ref())));
+        pending_build.push((branch_block, Some(statement.as_ref()), is_nl));
       }
       _ => {}
     }
   }
 
-  if default.is_none() {
-    let default_block = ctx.append_basic_block(state_fun, "default");
-    default = Some(default_block);
-    pending_build.push((default_block, None));
+  if !default_defined {
+    pending_build.push((default_block, None, false));
   };
 
-  b.build_switch(cp_val, default.unwrap(), &branches);
+  b.build_switch(cp_val, default_block, &branches);
 
-  for (block, maybe_stmt) in pending_build {
+  for (block, maybe_stmt, is_new_line) in pending_build {
     b.position_at_end(block);
     if let Some(stmt) = maybe_stmt {
+      if (is_new_line) {
+        prime_line_data(args, p_ctx, i8.const_int(1, false));
+      }
       compile_statement(args, stmt, p_ctx, state_fun, start_block)?;
     } else {
       fail(args, p_ctx, state_fun);
@@ -337,7 +389,31 @@ fn compile_match<'a, 'llvm: 'a, 'db: 'llvm + 'a>(
   SherpaResult::Ok(())
 }
 
-fn construct_cp_lu_with_token_len_store<'a, 'llvm: 'a, 'db: 'llvm + 'a>(
+fn prime_line_data<'a, 'llvm: 'a, 'db: 'a>(
+  args: &BuildArgs<'a, 'llvm, 'db>,
+  p: PointerValue<'llvm>,
+  increment_amount: IntValue<'llvm>,
+) -> SherpaResult<()> {
+  let LLVMParserModule { ctx, b, .. } = args.m;
+  let i64 = ctx.i64_type();
+  let i32 = ctx.i32_type();
+
+  let beg =
+    b.build_ptr_to_int(CTX::beg_ptr.load(b, p)?.into_pointer_value(), i64, "");
+
+  let scan =
+    b.build_ptr_to_int(CTX::scan_ptr.load(b, p)?.into_pointer_value(), i64, "");
+
+  let val = b.build_int_sub(scan, beg, "");
+  let val = b.build_int_truncate(val, i32, "");
+
+  CTX::end_line_off.store(b, p, val)?;
+  CTX::line_num_incr.store(b, p, increment_amount)?;
+
+  SherpaResult::Ok(())
+}
+
+fn construct_cp_lu_with_token_len_store<'a, 'llvm: 'a, 'db: 'a>(
   args: &BuildArgs<'a, 'llvm, 'db>,
   buffer: PointerValue<'llvm>,
 ) -> SherpaResult<(IntValue<'llvm>, IntValue<'llvm>)> {
@@ -355,7 +431,7 @@ fn construct_cp_lu_with_token_len_store<'a, 'llvm: 'a, 'db: 'llvm + 'a>(
   SherpaResult::Ok((cp_val, cp_byte_len))
 }
 
-fn goto<'a, 'llvm: 'a, 'db: 'llvm + 'a>(
+fn goto<'a, 'llvm: 'a, 'db: 'a>(
   sherpa_core::parser::Goto { prod }: &sherpa_core::parser::Goto,
   args: &BuildArgs<'a, 'llvm, 'db>,
   state_fun: FunctionValue<'llvm>,
@@ -367,7 +443,7 @@ fn goto<'a, 'llvm: 'a, 'db: 'llvm + 'a>(
   )
 }
 
-fn push_goto<'a, 'llvm: 'a, 'db: 'llvm + 'a>(
+fn push_goto<'a, 'llvm: 'a, 'db: 'a>(
   parser::Push { prod, .. }: &parser::Push,
   args: &BuildArgs<'a, 'llvm, 'db>,
   p_ctx: PointerValue,
@@ -453,8 +529,8 @@ pub(crate) fn ensure_space_on_goto_stack<'a>(
     "",
   );
 
-  let extend_block = ctx.append_basic_block(state_fn, "Extend");
-  let ready_block = ctx.append_basic_block(state_fn, "Return");
+  let extend_block = ctx.append_basic_block(state_fn, "extend_goto_stack");
+  let ready_block = ctx.append_basic_block(state_fn, "valid_goto_stack");
 
   b.build_conditional_branch(comparison, ready_block, extend_block);
 
@@ -478,7 +554,7 @@ pub(crate) fn ensure_space_on_goto_stack<'a>(
 
 /// Resets any peek side-effects and builds a tail call return to the
 /// `dispatch_unwind` function.
-fn fail<'a, 'llvm: 'a, 'db: 'llvm + 'a>(
+fn fail<'a, 'llvm: 'a, 'db: 'a>(
   args: &BuildArgs<'a, 'llvm, 'db>,
   p_ctx: PointerValue,
   state_fun: FunctionValue<'db>,
@@ -546,7 +622,7 @@ fn construct_assign_token_id(
   SherpaResult::Ok(())
 }
 
-fn reduce<'a, 'llvm: 'a, 'db: 'llvm + 'a>(
+fn reduce<'a, 'llvm: 'a, 'db: 'a>(
   parser::ReduceRaw { rule_id, prod_id, len, .. }: &parser::ReduceRaw,
   args: &BuildArgs<'a, 'llvm, 'db>,
   p_ctx: PointerValue<'llvm>,
@@ -608,7 +684,7 @@ fn create_parse_function<'a>(
   m.module.add_function(&name, m.types.TAIL_CALLABLE_PARSE_FUNCTION, linkage)
 }
 
-fn construct_token_shift<'a, 'llvm: 'a, 'db: 'llvm + 'a>(
+fn construct_token_shift<'a, 'llvm: 'a, 'db: 'a>(
   args: &BuildArgs<'a, 'llvm, 'db>,
   p_ctx: PointerValue<'llvm>,
 ) -> SherpaResult<Option<(FunctionValue<'llvm>, PointerValue<'llvm>)>> {
@@ -682,7 +758,8 @@ fn peek_reset(args: &BuildArgs, p_ctx: PointerValue) -> SherpaResult<()> {
   SherpaResult::Ok(())
 }
 
-/// Update the `end_line*`  values by incrementing by the `line_incr` and `l`
+/// Update the `end_line*`  values by incrementing by the `line_nume+incr` and
+/// `end_line_num`
 fn update_end_line_data(
   args: &BuildArgs,
   p_ctx: PointerValue,
@@ -736,19 +813,32 @@ fn incr_scan_ptr_by_sym_len(
 fn skip_token(
   args: &BuildArgs,
   p_ctx: PointerValue,
-  is_peek: bool,
+  state_fun: FunctionValue,
 ) -> SherpaResult<()> {
   const __HINT__: Opcode = Opcode::SkipToken;
+  let LLVMParserModule { b, i32, fun, ctx, .. } = args.m;
+
+  let skip_fun = create_parse_function(args.j, args.m, "skip");
+
+  build_fast_call(b, fun.push_state, &[
+    p_ctx.into(),
+    i32.const_int(NORMAL_STATE_FLAG_LLVM as u64, false).into(),
+    skip_fun.as_global_value().as_pointer_value().into(),
+  ])?;
+
+  b.build_return(Some(&i32.const_int(ParseActionType::Skip.into(), false)));
+
+  b.position_at_end(ctx.append_basic_block(skip_fun, "entry"));
+  let p_ctx = skip_fun.get_first_param()?.into_pointer_value();
+
   let offset = get_offset_to_end_of_token(args.m, p_ctx)?;
-  let LLVMParserModule { b, i32, .. } = args.m;
   CTX::scan_ptr.store(b, p_ctx, offset);
   CTX::head_ptr.store(b, p_ctx, offset);
   CTX::tok_id.store(b, p_ctx, i32.const_zero());
 
-  if !is_peek {
-    CTX::base_ptr.store(b, p_ctx, offset);
-  }
-  SherpaResult::Ok(())
+  build_tail_call_with_return(b, skip_fun, state_fun)?;
+
+  validate(skip_fun)
 }
 
 /// Calculates an offset to the end of the current token.
@@ -837,7 +927,7 @@ fn build_push_fn_state<'a>(
   SherpaResult::Ok(())
 }
 
-fn scan_is_less_than_end<'a, 'llvm: 'a, 'db: 'llvm + 'a>(
+fn scan_is_less_than_end<'a, 'llvm: 'a, 'db: 'a>(
   args: &BuildArgs<'a, 'llvm, 'db>,
   p_ctx: PointerValue<'llvm>,
 ) -> SherpaResult<IntValue<'llvm>> {
@@ -860,7 +950,7 @@ fn scan_is_less_than_end<'a, 'llvm: 'a, 'db: 'llvm + 'a>(
   ))
 }
 
-pub(crate) fn check_for_input_acceptability<'a, 'llvm: 'a, 'db: 'llvm + 'a>(
+pub(crate) fn check_for_input_acceptability<'a, 'llvm: 'a, 'db: 'a>(
   args: &BuildArgs<'a, 'llvm, 'db>,
   state_fun: FunctionValue<'llvm>,
   p_ctx: PointerValue<'llvm>,

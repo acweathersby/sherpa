@@ -28,12 +28,13 @@ pub struct RuleData<'a> {
 /// Temporary structure to host production data during
 /// construction.
 pub struct ProductionData<'a> {
-  root_prod_id:   ProductionId,
-  root_prod_name: IString,
-  symbols:        &'a mut Set<SymbolId>,
-  sub_prods:      &'a mut Array<Box<SubProduction>>,
-  rules:          &'a mut Array<Rule>,
-  asts:           &'a mut Array<Box<parser::Ascript>>,
+  root_prod_id: ProductionId,
+  root_g_name:  IString,
+  root_f_name:  IString,
+  symbols:      &'a mut Set<SymbolId>,
+  sub_prods:    &'a mut Array<Box<SubProduction>>,
+  rules:        &'a mut Array<Rule>,
+  asts:         &'a mut Array<Box<parser::Ascript>>,
 }
 impl<'b> ProductionData<'b> {
   /// Create a new [ProductionData] that references a different
@@ -45,7 +46,8 @@ impl<'b> ProductionData<'b> {
   ) -> ProductionData<'d> {
     ProductionData {
       rules,
-      root_prod_name: self.root_prod_name,
+      root_g_name: self.root_g_name,
+      root_f_name: self.root_f_name,
       root_prod_id: self.root_prod_id,
       symbols: &mut self.symbols,
       sub_prods: &mut self.sub_prods,
@@ -143,7 +145,7 @@ pub fn create_grammar_data(
   let mut g_data = GrammarData {
     id: GrammarIdentity {
       guid: grammar_path.into(),
-      name: grammar_name(name, grammar_path, string_store),
+      name: grammar_guid_name(name, grammar_path, string_store),
       path: grammar_path.intern(string_store),
     },
     global_skipped: skipped,
@@ -182,17 +184,21 @@ pub fn extract_productions<'a>(
   let mut parse_states = Array::new();
   for production in &g_data.grammar.productions {
     match production {
-      ASTNode::State(parse_state) => parse_states.push(Box::new(CustomState {
-        id:      ProductionId::from((
-          g_data.id.guid,
-          parse_state.id.name.as_str(),
-        )),
-        name:    prod_name(parse_state.id.name.as_str(), g_data, s_store),
-        g_id:    g_data.id.guid,
-        tok:     parse_state.tok.clone(),
-        state:   parse_state.clone(),
-        symbols: Default::default(),
-      })),
+      ASTNode::State(parse_state) => {
+        let (guid_name, f_name) =
+          prod_names(parse_state.id.name.as_str(), g_data, s_store);
+        parse_states.push(Box::new(CustomState {
+          id: ProductionId::from((
+            g_data.id.guid,
+            parse_state.id.name.as_str(),
+          )),
+          guid_name,
+          g_id: g_data.id.guid,
+          tok: parse_state.tok.clone(),
+          state: parse_state.clone(),
+          symbols: Default::default(),
+        }))
+      }
       ASTNode::PrattProduction(box parser::PrattProduction {
         name_sym,
         rules,
@@ -208,21 +214,21 @@ pub fn extract_productions<'a>(
         rules,
         tok,
       }) => {
+        let (guid_name, f_name) =
+          prod_names(name_sym.name.as_str(), g_data, s_store);
         productions.push((
           Box::new(Production {
-            id:        ProductionId::from((
-              g_data.id.guid,
-              name_sym.name.as_str(),
-            )),
-            name:      prod_name(name_sym.name.as_str(), g_data, s_store),
-            g_id:      g_data.id.guid,
-            type_:     ProductionType::ContextFree,
-            rules:     Default::default(),
+            id: ProductionId::from((g_data.id.guid, name_sym.name.as_str())),
+            guid_name,
+            friendly_name: f_name,
+            g_id: g_data.id.guid,
+            type_: ProductionType::ContextFree,
+            rules: Default::default(),
             sub_prods: Default::default(),
-            symbols:   Default::default(),
+            symbols: Default::default(),
             tok_prods: Default::default(),
-            tok:       tok.clone(),
-            asts:      Default::default(),
+            tok: tok.clone(),
+            asts: Default::default(),
           }),
           production,
         ));
@@ -241,7 +247,7 @@ pub fn process_parse_state<'a>(
 ) -> SherpaResult<Box<CustomState>> {
   // Extract symbol information from the state.
 
-  let CustomState { id, state, symbols, name, .. } = parse_state.as_mut();
+  let CustomState { id, state, symbols, guid_name, .. } = parse_state.as_mut();
   {
     let parser::Statement { branch, .. } = state.statement.as_ref();
 
@@ -256,7 +262,8 @@ pub fn process_parse_state<'a>(
                   0,
                   &mut ProductionData {
                     root_prod_id: *id,
-                    root_prod_name: *name,
+                    root_g_name: *guid_name,
+                    root_f_name: *guid_name,
                     symbols,
                     sub_prods: &mut Default::default(),
                     rules: &mut Default::default(),
@@ -329,7 +336,8 @@ fn process_rule(
     sub_prods,
     rules,
     asts,
-    root_prod_name: prod.name,
+    root_g_name: prod.guid_name,
+    root_f_name: prod.friendly_name,
   };
 
   let ast_ref = intern_ast(rule, &mut prod_data);
@@ -510,9 +518,12 @@ fn process_rule_symbols(
           let index = p_data.sub_prods.len();
           let id = ProductionId::from((prod_id, index));
 
+          let (guid_name, friendly_name) =
+            sub_prod_names("group", p_data, s_store);
           p_data.sub_prods.push(Box::new(SubProduction {
             id,
-            name: sub_prod_name("group", p_data, s_store),
+            guid_name,
+            friendly_name,
             type_: SubProductionType::Group,
             g_id: g_data.id.guid,
             rules: sub_prod_rules,
@@ -572,10 +583,12 @@ fn process_rule_symbols(
           s_store,
           symbol.to_token(),
         )?;
-
+        let (guid_name, friendly_name) =
+          sub_prod_names("list", p_data, s_store);
         p_data.sub_prods.push(Box::new(SubProduction {
           type_: SubProductionType::List,
-          name: sub_prod_name("list", p_data, s_store),
+          guid_name,
+          friendly_name,
           id,
           g_id: g_data.id.guid,
           rules,
@@ -854,36 +867,50 @@ mod test {
 
 // NAMES ------------------------------------------------------------------------
 
-/// Creates a globally unique name for a production
-pub fn prod_name(
+/// Creates a globally unique name and friendly name for a production
+pub fn prod_names(
   base_name: &str,
   g_data: &GrammarData,
   s_store: &IStringStore,
-) -> IString {
-  (g_data.id.name.to_string(s_store) + "____" + base_name).intern(s_store)
+) -> (IString, IString) {
+  (
+    (g_data.id.name.to_string(s_store) + "____" + base_name).intern(s_store),
+    base_name.intern(s_store),
+  )
 }
 
-/// Creates a globally unique name for a sub-production.
+/// Creates a globally unique name and friendly name for a sub-production.
 /// `sub_name` should be a string indicating the type of symbol that
 /// the sub-production was derived from.
-fn sub_prod_name(
+fn sub_prod_names(
   sub_name: &str,
   p_data: &ProductionData,
   s_store: &IStringStore,
-) -> IString {
+) -> (IString, IString) {
   if p_data.sub_prods.is_empty() {
-    (p_data.root_prod_name.to_string(s_store) + "_" + sub_name).intern(s_store)
+    (
+      (p_data.root_g_name.to_string(s_store) + "_" + sub_name).intern(s_store),
+      (p_data.root_f_name.to_string(s_store) + "_" + sub_name).intern(s_store),
+    )
   } else {
-    (p_data.root_prod_name.to_string(s_store)
-      + "_"
-      + sub_name
-      + "_"
-      + &p_data.sub_prods.len().to_string())
-      .intern(s_store)
+    (
+      (p_data.root_g_name.to_string(s_store)
+        + "_"
+        + sub_name
+        + "_"
+        + &p_data.sub_prods.len().to_string())
+        .intern(s_store),
+      (p_data.root_f_name.to_string(s_store)
+        + "_"
+        + sub_name
+        + "_"
+        + &p_data.sub_prods.len().to_string())
+        .intern(s_store),
+    )
   }
 }
 /// Creates a globally unique name for a grammar
-fn grammar_name(
+fn grammar_guid_name(
   name: &str,
   grammar_path: &PathBuf,
   string_store: &IStringStore,
@@ -897,13 +924,15 @@ fn to_base64_name<T: Hash>(val: T) -> String {
   let val = create_u64_hash(val);
 
   for i in 0..4 {
-    let val = (val >> (i * 6)) & 0x3F;
+    let val = (val >> (i * 6)) & 0x3E;
     let ascii_base = if val < 10 {
-      val + 48
+      val + 48 // ASCII numbers
     } else if val < 36 {
-      val + (65 - 10)
+      val - 10 + 65 // Uppercase ASCII letters
+    } else if val < 62 {
+      val - 36 + 97 // Lowercase ASCII letters
     } else {
-      val + (97 - 36)
+      95 // ASCII underscore
     };
     string.push(ascii_base as u8);
   }

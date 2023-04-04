@@ -96,7 +96,7 @@ fn convert_goto_state_to_ir<'follow, 'db>(
     .map(|s| {
       if let SymbolId::DBNonTerminal { key: index } = s.get_symbol() {
         let prod_id: usize = index.into();
-        let prod_name = db.prod_name(index);
+        let prod_name = db.prod_guid_name(index);
         (prod_id, (prod_name, create_ir_state_name(graph, s), s.get_type()))
       } else {
         #[cfg(debug_assertions)]
@@ -343,12 +343,27 @@ fn add_match_expr<'follow, 'db>(
           .collect::<Set<_>>();
 
         if !skipped.is_empty() {
-          let vals = skipped
+          let new_line = skipped
             .iter()
+            .filter(|v| db.tok_data(**v).sym_id.is_linefeed())
             .map(|v| v.to_val(db).to_string())
             .collect::<Array<_>>()
             .join(" | ");
-          w = w + "( " + vals + " ){ skip }";
+
+          if new_line.len() > 0 {
+            w = w + "\n( " + new_line + " ){ skip }";
+          }
+
+          let vals = skipped
+            .iter()
+            .filter(|v| !db.tok_data(**v).sym_id.is_linefeed())
+            .map(|v| v.to_val(db).to_string())
+            .collect::<Array<_>>()
+            .join(" | ");
+
+          if vals.len() > 0 {
+            w = w + "\n( " + vals + " ){ skip }";
+          }
         }
       }
 
@@ -434,7 +449,7 @@ fn build_body<'follow, 'db>(
           .push("push ".to_string() + &create_ir_state_name(graph, successor));
         body_string.push(
           "goto ".to_string()
-            + &db.prod_name(prod_id).to_string(db.string_store()),
+            + &db.prod_guid_name(prod_id).to_string(db.string_store()),
         );
       }
       _ => {

@@ -111,6 +111,15 @@ impl SymbolId {
     }
   }
 
+  pub fn is_linefeed(&self) -> bool {
+    use SymbolId::*;
+    match *self {
+      Token { val, .. } if val == "\n".to_token() => true,
+      ClassNewLine { .. } => true,
+      _ => false,
+    }
+  }
+
   pub fn precedence(&self) -> u16 {
     use SymbolId::*;
     match *self {
