@@ -24,7 +24,8 @@ pub struct Config {
   ///
   /// The idea here is to add symbols with lower precedence to the occlusion
   /// table of symbols with higher precedence. For example, given this
-  /// grammar ```hcg
+  /// grammar
+  /// ```hcg
   /// <> A > \funct \(
   ///    |   tk:id  \{
   ///
@@ -133,12 +134,7 @@ pub enum Architecture {
 }
 
 impl Architecture {
-  pub fn _is_compatible(
-    &self,
-    pl: Platform,
-    ot: Language,
-    rt: Recognizer,
-  ) -> bool {
+  pub fn _is_compatible(&self, pl: Platform, ot: Language, rt: Recognizer) -> bool {
     use Architecture::*;
     use Language::*;
     use Platform::*;

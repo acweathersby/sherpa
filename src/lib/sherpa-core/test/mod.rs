@@ -1,8 +1,9 @@
+mod grammar;
 /* mod top_level;
 
 mod bootstrap;
 
-mod grammar;
+
 #[cfg(all(feature = "llvm", not(feature = "wasm-target")))]
 mod llvm;
 

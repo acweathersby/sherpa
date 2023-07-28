@@ -19,7 +19,7 @@ pub struct LLVMTypes<'a> {
   pub goto_fn: FunctionType<'a>,
   pub cp_info: StructType<'a>,
   /// The form of all functions that can be tail called.
-  pub(crate) TAIL_CALLABLE_PARSE_FUNCTION: FunctionType<'a>,
+  pub(crate) tail_callable_parse_function: FunctionType<'a>,
 }
 
 #[derive(Debug)]
@@ -98,7 +98,7 @@ pub struct LLVMParserModule<'a> {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub enum CTX_AGGREGATE_INDICES {
+pub enum CtxAggregateIndices {
   /// Input data --------------------
   /// ```ignore
   /// pub end_ptr:        *mut u8,
@@ -239,13 +239,13 @@ pub enum CTX_AGGREGATE_INDICES {
   block_is_eoi,
 }
 
-impl Into<u32> for CTX_AGGREGATE_INDICES {
+impl Into<u32> for CtxAggregateIndices {
   fn into(self) -> u32 {
     self as u32
   }
 }
 
-impl CTX_AGGREGATE_INDICES {
+impl CtxAggregateIndices {
   pub fn get_ptr<'a>(
     &self,
     b: &Builder<'a>,

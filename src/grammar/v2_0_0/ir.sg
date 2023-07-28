@@ -72,9 +72,15 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
         
         :ast { t_Reduce, len: u32($2), ast,  prod }
 
-    | "set-tok" tok::int
+    | "set-tok-id" tok::int
 
         :ast { t_SetTokenId, id: u32($2) }
+
+    | "set-tok-len" tok::int
+
+        :ast { t_SetTokenLen, id: u32($2) }
+
+    | "set-line"        :ast { t_SetLine }
 
 
 <> goto_sequence >

@@ -179,7 +179,7 @@ impl Journal {
 
   #[track_caller]
   /// Get a mutable reference to the active report.
-  pub(crate) fn report_mut(&mut self) -> &mut Report {
+  pub fn report_mut(&mut self) -> &mut Report {
     self.active_report.as_mut().map(|r| r.as_mut()).unwrap_or_else(|| {
       #[cfg(debug_assertions)]
       dbg!("Using mutable report sink!");
@@ -340,7 +340,7 @@ impl Drop for Journal {
 
 #[cfg(not(feature = "wasm-target"))]
 #[derive(Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub(super) struct Timing {
+pub struct Timing {
   start: Instant,
   end:   Option<Instant>,
 }

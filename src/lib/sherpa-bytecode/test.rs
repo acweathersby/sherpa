@@ -19,15 +19,13 @@ fn build_states() -> SherpaResult<()> {
     std::fs::read_to_string(grammar_source_path.as_path())?.as_str(),
     grammar_source_path,
     Default::default(),
-    |TestPackage { db, states, .. }| {
+    &|TestPackage { db, states, .. }| {
       let (bc, _) = compile_bytecode(&db, states)?;
 
       let input = r##"{"test":[{ "test":"12\"34", "test":"12\"34"}]}"##;
 
-      let mut parser = ByteCodeParser::<UTF8StringReader, u32>::new(
-        &mut (input.into()),
-        bc.as_ref(),
-      );
+      let mut parser =
+        ByteCodeParser::<UTF8StringReader, u32>::new(&mut (input.into()), bc.as_ref());
 
       dbg!(parser.collect_shifts_and_skips(
         8,

@@ -10,57 +10,21 @@ pub const DEFAULT_SYM_ID: u32 = 0xFDEFA017;
 pub enum SymbolId {
   Undefined,
   Default,
-  EndOfFile {
-    precedence: u16,
-  },
-  ClassSpace {
-    precedence: u16,
-  },
-  ClassHorizontalTab {
-    precedence: u16,
-  },
-  ClassNewLine {
-    precedence: u16,
-  },
-  ClassIdentifier {
-    precedence: u16,
-  },
-  ClassNumber {
-    precedence: u16,
-  },
-  ClassSymbol {
-    precedence: u16,
-  },
-  Token {
-    precedence: u16,
-    val:        IString,
-  },
-  NonTerminal {
-    id: ProductionId,
-  },
-  NonTerminalToken {
-    precedence: u16,
-    id:         ProductionId,
-  },
-  DBNonTerminalToken {
-    precedence: u16,
-    prod_key:   DBProdKey,
-    sym_key:    Option<DBTokenKey>,
-  },
-  DBNonTerminal {
-    key: DBProdKey,
-  },
-  DBToken {
-    key: DBTokenKey,
-  },
-  Char {
-    char:       u8,
-    precedence: u16,
-  },
-  Codepoint {
-    precedence: u16,
-    val:        u32,
-  },
+  EndOfFile { precedence: u16 },
+  ClassSpace { precedence: u16 },
+  ClassHorizontalTab { precedence: u16 },
+  ClassNewLine { precedence: u16 },
+  ClassIdentifier { precedence: u16 },
+  ClassNumber { precedence: u16 },
+  ClassSymbol { precedence: u16 },
+  Token { precedence: u16, val: IString },
+  NonTerminal { id: ProductionId },
+  NonTerminalToken { precedence: u16, id: ProductionId },
+  DBNonTerminalToken { precedence: u16, prod_key: DBProdKey, sym_key: Option<DBTokenKey> },
+  DBNonTerminal { key: DBProdKey },
+  DBToken { key: DBTokenKey },
+  Char { char: u8, precedence: u16 },
+  Codepoint { precedence: u16, val: u32 },
 }
 
 impl Default for SymbolId {
@@ -164,14 +128,15 @@ impl SymbolId {
     }
   }
 
+  /// Returns a ProductionId for a token scanner derived from a standard symbol.
   pub fn to_scanner_prod_id(&self) -> ProductionId {
     use SymbolId::*;
     match self {
+      NonTerminal { id } => id.as_scan_prod(),
       NonTerminalToken { id, .. } => id.as_scan_prod(),
-      Token { .. } => ProductionId::Standard(
-        create_u64_hash(self),
-        ProductionSubType::ScannerToken,
-      ),
+      Token { .. } => {
+        ProductionId::Standard(create_u64_hash(self), ProductionSubType::ScannerToken)
+      }
       ClassSymbol { .. }
       | ClassSpace { .. }
       | ClassHorizontalTab { .. }
@@ -179,10 +144,7 @@ impl SymbolId {
       | ClassIdentifier { .. }
       | ClassNumber { .. }
       | Codepoint { .. }
-      | Char { .. } => ProductionId::Standard(
-        create_u64_hash(self),
-        ProductionSubType::ScannerSym,
-      ),
+      | Char { .. } => ProductionId::Standard(create_u64_hash(self), ProductionSubType::ScannerSym),
       _ => {
         #[cfg(debug_assertions)]
         unimplemented!("{:?}", self);
@@ -208,9 +170,7 @@ impl SymbolId {
       Char { char, .. } => char as u32,
       DBNonTerminal { key } => (Into::<usize>::into(key)) as u32,
       DBToken { key, .. } => key.to_val(db),
-      DBNonTerminalToken { sym_key, .. } => {
-        sym_key.map(|d| d.to_val(db)).unwrap_or(u32::MAX)
-      }
+      DBNonTerminalToken { sym_key, .. } => sym_key.map(|d| d.to_val(db)).unwrap_or(u32::MAX),
       _ => u32::MAX,
     }
   }
@@ -220,6 +180,7 @@ impl SymbolId {
     matches!(self, SymbolId::EndOfFile { .. })
   }
 
+  /// Produce a human friendly string representation of this symbol
   pub fn name(&self, s_store: &IStringStore) -> String {
     use SymbolId::*;
     let mut w = CodeWriter::new(vec![]);

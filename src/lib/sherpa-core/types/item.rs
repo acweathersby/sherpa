@@ -44,36 +44,15 @@ impl<'db> Debug for Item<'db> {
 
 impl<'db> Hash for Item<'db> {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-    (
-      self.rule_id,
-      self.origin,
-      self.origin_state,
-      self.goal,
-      self.len,
-      self.sym_index,
-    )
-      .hash(state)
+    (self.rule_id, self.origin, self.origin_state, self.goal, self.len, self.sym_index).hash(state)
   }
 }
 
 impl<'a> PartialEq for Item<'a> {
   fn eq(&self, other: &Self) -> bool {
-    let a = (
-      self.rule_id,
-      self.origin,
-      self.goal,
-      self.len,
-      self.sym_index,
-      self.origin_state,
-    );
-    let b = (
-      other.rule_id,
-      other.origin,
-      other.goal,
-      other.len,
-      other.sym_index,
-      other.origin_state,
-    );
+    let a = (self.rule_id, self.origin, self.goal, self.len, self.sym_index, self.origin_state);
+    let b =
+      (other.rule_id, other.origin, other.goal, other.len, other.sym_index, other.origin_state);
     a == b
   }
 }
@@ -82,22 +61,9 @@ impl<'a> Eq for Item<'a> {}
 
 impl<'a> PartialOrd for Item<'a> {
   fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-    let a = (
-      self.rule_id,
-      self.origin,
-      self.goal,
-      self.len,
-      self.sym_index,
-      self.origin_state,
-    );
-    let b = (
-      other.rule_id,
-      other.origin,
-      other.goal,
-      other.len,
-      other.sym_index,
-      other.origin_state,
-    );
+    let a = (self.rule_id, self.origin, self.goal, self.len, self.sym_index, self.origin_state);
+    let b =
+      (other.rule_id, other.origin, other.goal, other.len, other.sym_index, other.origin_state);
     Some(a.cmp(&b))
   }
 }
@@ -150,20 +116,12 @@ impl<'db> Item<'db> {
   }
 
   pub fn to_absolute(&self) -> Self {
-    Self {
-      goal: Default::default(),
-      origin: Default::default(),
-      ..self.clone()
-    }
+    Self { goal: Default::default(), origin: Default::default(), ..self.clone() }
   }
 
   pub fn increment(&self) -> Option<Self> {
     if !self.is_complete() {
-      Some(Self {
-        len: self.len,
-        sym_index: self.sym_index + 1,
-        ..self.clone()
-      })
+      Some(Self { len: self.len, sym_index: self.sym_index + 1, ..self.clone() })
     } else {
       None
     }
@@ -185,11 +143,7 @@ impl<'db> Item<'db> {
 
   pub fn decrement(&self) -> Option<Self> {
     if !self.is_start() {
-      Some(Self {
-        len: self.len,
-        sym_index: self.sym_index - 1,
-        ..self.clone()
-      })
+      Some(Self { len: self.len, sym_index: self.sym_index - 1, ..self.clone() })
     } else {
       None
     }
@@ -278,9 +232,7 @@ impl<'db> Item<'db> {
     } else {
       match self.sym() {
         SymbolId::DBNonTerminal { key: index } => NonTerminal(index),
-        SymbolId::DBNonTerminalToken { prod_key: index, .. } => {
-          TokenNonTerminal(index, self.sym())
-        }
+        SymbolId::DBNonTerminalToken { prod_key: index, .. } => TokenNonTerminal(index, self.sym()),
         sym => Terminal(sym),
       }
     }
@@ -312,21 +264,20 @@ impl<'db> Item<'db> {
       let rule = self.rule();
       let s_store = self.db.string_store();
 
-      let mut string =
-        self.origin.is_none().then_some(String::new()).unwrap_or_else(|| {
-          format!(
-            "<[{}-{:?}]  [{:X}] ",
-            self.origin.debug_string(self.db),
-            self.origin_state,
-            self.goal
-          )
-        });
+      let mut string = self.origin.is_none().then_some(String::new()).unwrap_or_else(|| {
+        format!(
+          "<[{}-{:?}]  [{:X}] ",
+          self.origin.debug_string(self.db),
+          self.origin_state,
+          self.goal
+        )
+      });
 
       string += &self.prod_name().to_string(s_store);
 
       string += " >";
 
-      for (index, (sym, _)) in rule.symbols.iter().enumerate() {
+      for (index, (sym, ..)) in rule.symbols.iter().enumerate() {
         if index == self.sym_index as usize {
           string += " •";
         }
@@ -351,17 +302,9 @@ pub type Items<'db> = Array<Item<'db>>;
 impl<'db> ItemContainer<'db> for ItemSet<'db> {}
 impl<'db> ItemContainer<'db> for Items<'db> {}
 
-impl<'a, 'db: 'a> ItemContainerIter<'a, 'db>
-  for std::collections::btree_set::Iter<'a, Item<'db>>
-{
-}
-impl<'a, 'db: 'a> ItemContainerIter<'a, 'db>
-  for std::slice::Iter<'a, Item<'db>>
-{
-}
-pub trait ItemContainerIter<'a, 'db: 'a>:
-  Iterator<Item = &'a Item<'db>> + Sized
-{
+impl<'a, 'db: 'a> ItemContainerIter<'a, 'db> for std::collections::btree_set::Iter<'a, Item<'db>> {}
+impl<'a, 'db: 'a> ItemContainerIter<'a, 'db> for std::slice::Iter<'a, Item<'db>> {}
+pub trait ItemContainerIter<'a, 'db: 'a>: Iterator<Item = &'a Item<'db>> + Sized {
   fn contains_out_of_scope(&mut self) -> bool {
     self.any(|i| i.is_out_of_scope())
   }
@@ -414,11 +357,7 @@ impl<'db> From<Item<'db>> for Items<'db> {
   fn from(value: Item<'db>) -> Self {
     let db = value.db;
     if let Some(prod_id) = value.prod_index_at_sym() {
-      db.prod_rules(prod_id)
-        .unwrap()
-        .iter()
-        .map(|r| Item::from_rule(*r, db))
-        .collect()
+      db.prod_rules(prod_id).unwrap().iter().map(|r| Item::from_rule(*r, db)).collect()
     } else {
       Default::default()
     }
@@ -431,11 +370,7 @@ pub trait ItemContainer<'db>:
   /// Given a [CompileDatabase] and [DBProdId] returns the initial
   /// items of the production.
   fn start_items(prod_id: DBProdKey, db: &'db ParserDatabase) -> Self {
-    db.prod_rules(prod_id)
-      .unwrap()
-      .iter()
-      .map(|r| Item::from_rule(*r, db))
-      .collect()
+    db.prod_rules(prod_id).unwrap().iter().map(|r| Item::from_rule(*r, db)).collect()
   }
 
   fn non_term_items(self) -> Self {
@@ -500,13 +435,7 @@ pub trait ItemContainer<'db>:
 
   #[cfg(debug_assertions)]
   fn to_debug_string(&self, sep: &str) -> String {
-    self
-      .clone()
-      .to_vec()
-      .iter()
-      .map(|i| i.debug_string())
-      .collect::<Vec<_>>()
-      .join(sep)
+    self.clone().to_vec().iter().map(|i| i.debug_string()).collect::<Vec<_>>().join(sep)
   }
 
   fn to_set(self) -> ItemSet<'db> {
@@ -518,11 +447,7 @@ pub trait ItemContainer<'db>:
   }
 
   /// Creates a closure set over the given items.
-  fn create_closure(
-    &self,
-    is_scanner: bool,
-    state_id: StateId,
-  ) -> ItemSet<'db> {
+  fn create_closure(&self, is_scanner: bool, state_id: StateId) -> ItemSet<'db> {
     let mut closure = ItemSet::new();
     let mut queue = VecDeque::from_iter(self.clone());
 
@@ -532,8 +457,7 @@ pub trait ItemContainer<'db>:
           ItemType::TokenNonTerminal(..) => {
             if is_scanner {
               for item in Items::from(kernel_item) {
-                queue
-                  .push_back(item.align(kernel_item).to_origin_state(state_id))
+                queue.push_back(item.align(kernel_item).to_origin_state(state_id))
               }
             }
           }
@@ -552,10 +476,7 @@ pub trait ItemContainer<'db>:
 
 #[allow(unused)]
 #[cfg(debug_assertions)]
-fn debug_items<'db, T: IntoIterator<Item = Item<'db>>>(
-  comment: &str,
-  items: T,
-) {
+fn debug_items<'db, T: IntoIterator<Item = Item<'db>>>(comment: &str, items: T) {
   println!("{} --> ", comment);
 
   for item in items {
@@ -587,10 +508,7 @@ impl<'a, 'db: 'a> FollowPairContainerIter<'a, 'db>
   for std::collections::btree_set::Iter<'a, FollowPair<'db>>
 {
 }
-impl<'a, 'db: 'a> FollowPairContainerIter<'a, 'db>
-  for std::slice::Iter<'a, FollowPair<'db>>
-{
-}
+impl<'a, 'db: 'a> FollowPairContainerIter<'a, 'db> for std::slice::Iter<'a, FollowPair<'db>> {}
 pub trait FollowPairContainerIter<'a, 'db: 'a>:
   Iterator<Item = &'a FollowPair<'db>> + Sized
 {

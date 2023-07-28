@@ -16,8 +16,7 @@ use std::{
 };
 
 struct Task<OutType: 'static + Send> {
-  future:
-    Mutex<Option<Pin<Box<dyn Future<Output = OutType> + 'static + Send>>>>,
+  future:      Mutex<Option<Pin<Box<dyn Future<Output = OutType> + 'static + Send>>>>,
   task_sender: SyncSender<Arc<Task<OutType>>>,
 }
 
@@ -32,10 +31,7 @@ impl<OutType: 'static + Send> Task<OutType> {
   unsafe fn clone(ptr: *const ()) -> RawWaker {
     let ptr = Arc::<Task<OutType>>::from_raw(ptr as *mut Task<OutType>);
     std::mem::forget(ptr.clone());
-    RawWaker::new(
-      Arc::<Task<OutType>>::into_raw(ptr) as *const (),
-      &Task::<OutType>::RAW_VTABLE,
-    )
+    RawWaker::new(Arc::<Task<OutType>>::into_raw(ptr) as *const (), &Task::<OutType>::RAW_VTABLE)
   }
 
   unsafe fn wake(ptr: *const ()) {
@@ -206,8 +202,7 @@ impl<T: 'static + Send> ThreadedFuture<T> {
     future: impl Future<Output = T> + 'static + Send,
     spawner: &Spawner<R>,
   ) -> Self {
-    let shared_state =
-      Arc::new(Mutex::new(SharedState { result: None, waker: None }));
+    let shared_state = Arc::new(Mutex::new(SharedState { result: None, waker: None }));
 
     let own_signal = shared_state.clone();
 
@@ -253,13 +248,9 @@ pub fn new_taskman<OutType: 'static + Send>(
 ) -> (Executor, Spawner<OutType>) {
   let (task_sender, ready_queue) = sync_channel(max_queued_tasks);
 
-  (
-    Executor::new(
-      Arc::new(Mutex::new(ready_queue)),
-      NonZeroUsize::new(8).unwrap(),
-    ),
-    Spawner { task_sender },
-  )
+  (Executor::new(Arc::new(Mutex::new(ready_queue)), NonZeroUsize::new(8).unwrap()), Spawner {
+    task_sender,
+  })
 }
 
 #[test]
@@ -301,8 +292,7 @@ fn test_taskman() {
 
     let grammar = Arc::new(grammar);
 
-    let mut groups =
-      vec.chunks((len as f64 / 4.0).ceil() as usize).collect::<Vec<_>>();
+    let mut groups = vec.chunks((len as f64 / 4.0).ceil() as usize).collect::<Vec<_>>();
 
     let chunk_1 = groups.pop().unwrap().to_vec();
     let chunk_2 = groups.pop().unwrap_or(&[]).to_vec();

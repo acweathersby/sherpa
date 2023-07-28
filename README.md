@@ -4,7 +4,7 @@ Sherpa is new type of parse generator that is
 
 What sherpa is:
 
-- No Lexer
+- Integrated Lexing
 Sherpa dispenses with the notion of a separate lexer process by allowing arbitrary matching on three low level classes of data: bytes, UTF8 codepoints, UTF character classes. 
 
 - Algorithm Agnostic
@@ -47,7 +47,7 @@ sherpa_runtime = { git="https://github.com/acweathersby/sherpa", branch="release
 sherpa build --rust --ast -o ./parser/ ./source_grammar.sg 
 ```
 
-Checkout the [CLI README](./source/app/cli/README.md) for command line based operation of Sherpa. 
+Checkout the [CLI README](./src/app/cli/README.md) for command line based operation of Sherpa. 
 
 ## Learn More
 

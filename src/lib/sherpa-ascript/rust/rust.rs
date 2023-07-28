@@ -37,7 +37,8 @@ use crate::{
   },
 };
 use sherpa_core::{
-  parser::{ASTNode, ASTNodeType, Init},
+  parser::{ASTNode, ASTNodeType, Init, *},
+  Rule,
   *,
 };
 use sherpa_runtime::types::ast::DEFAULT_AST_TYPE_NAMES;
@@ -668,10 +669,12 @@ to_numeric!(to_f64, f64);", w.store.ast_type_name)
   SherpaResult::Ok(w)
 }
 
-pub(crate) fn create_rust_writer_utils(
-  store: &AScriptStore,
-) -> AscriptWriterUtils {
+pub(crate) fn create_rust_writer_utils<'a>(
+  store: &'a AScriptStore,
+  db: &'a ParserDatabase,
+) -> AscriptWriterUtils<'a> {
   let mut u = AscriptWriterUtils {
+    db,
     store,
     // General Assignment
     assignment_writer: &|_, _, name, value, mutable| {
@@ -711,7 +714,7 @@ pub(crate) fn create_rust_writer_utils(
       | AScriptTypeVal::Token => format!(
         "slots.assign(0, AstSlot({}::{}({}), {}, TokenRange::default()));",
         utils.store.ast_type_name,
-        type_.hcobj_type_name(None),
+        type_.hcobj_type_name(),
         &ref_,
         (utils.get_token_name)(0)
       ),
@@ -1261,7 +1264,7 @@ pub(crate) fn create_rust_writer_utils(
     expr: &|u, ast, _, _, type_slot| {
       if let ASTNode::AST_Token(box AST_Token { range, .. }) = ast {
         let ref_ = SlotRef::node_range(u, type_slot);
-        if let Some(box Range { start_trim, end_trim }) = range {
+        if let Some(box parser::Range { start_trim, end_trim }) = range {
           let trimed_ref = ref_.to(
             format!("%%.trim({start_trim}, {end_trim})"),
             AScriptTypeVal::AdjustedTokenRange,
@@ -1281,9 +1284,9 @@ pub(crate) fn create_rust_writer_utils(
         value, ..
       }) = ast
       {
-        match get_indexed_body_ref(rule, *value as usize) {
-          Some((index, sym_id)) => {
-            render_body_symbol(u, sym_id, u.store, index, type_slot)
+        match get_indexed_body_ref(rule, (*value - 1) as usize) {
+          Some((sym_id, _, index)) => {
+            render_body_symbol(u, &sym_id, u.store, index, type_slot)
           }
           None => None,
         }
@@ -1298,9 +1301,9 @@ pub(crate) fn create_rust_writer_utils(
         value, ..
       }) = ast
       {
-        match get_named_body_ref(&u.store.db, rule, value) {
-          Some((index, sym_id)) => {
-            render_body_symbol(u, sym_id, u.store, index, type_slot)
+        match get_named_body_ref(u.db, rule, value) {
+          Some((sym_id, _, index)) => {
+            render_body_symbol(u, &sym_id, u.store, index, type_slot)
           }
           None => None,
         }
@@ -1392,15 +1395,15 @@ pub(crate) fn create_rust_writer_utils(
 
 fn render_body_symbol(
   utils: &AscriptWriterUtils,
-  sym: &RuleSymbol,
+  sym: &SymbolId,
   ast: &AScriptStore,
   slot_index: usize,
   type_slot: usize,
 ) -> Option<SlotRef> {
   use AScriptTypeVal::*;
   let ref_index = slot_index + 1;
-  let ref_ = match &sym.sym_id {
-    SymbolID::Production(prod_id, ..) => {
+  let ref_ = match &sym {
+    SymbolId::DBNonTerminal { key: prod_id } => {
       let types = get_production_types(ast, prod_id);
       let ref_name = (&utils.get_slot_obj_name)(ref_index);
       if types.len() == 1 {
@@ -1536,14 +1539,14 @@ fn convert_numeric<T: AScriptNumericType>(
 
 pub(crate) fn add_ascript_functions_for_rust<W: Write>(
   w: &mut AscriptWriter<W>,
-  g: &GrammarStore,
+  db: &ParserDatabase,
 ) -> Result<(), std::io::Error> {
-  let export_node_data = get_ascript_export_data(g, &w.utils);
+  let export_node_data = get_ascript_export_data(&w.utils);
 
   // Create impl for all exported productions that can be mapped to a ascript
   // single AScripT type. For those that map to multiple outputs, create an
   // impl on the main AST enum for named parsers on those types.
-  for (_, ast_type, ast_type_string, export_name, _) in &export_node_data {
+  for (_, ast_type, ast_type_string, export_name, ..) in &export_node_data {
     let type_name = match ast_type {
       AScriptTypeVal::Struct(id) => {
         let AScriptStruct { type_name, .. } = w.store.structs.get(id).unwrap();
@@ -1590,7 +1593,7 @@ pub(crate) fn add_ascript_functions_for_rust<W: Write>(
   }
 
   w.block("pub trait ASTParse<T>", "{", "}", &|w| {
-    for (_, _, ast_type_string, export_name, _) in &export_node_data {
+    for (_, _, ast_type_string, export_name, _, _) in &export_node_data {
       w.stmt(format!(
         "fn {export_name}_from(input:T) -> Result<{ast_type_string}, SherpaParseError>;",
       ));
@@ -1606,8 +1609,8 @@ pub(crate) fn write_rust_bytecode_parser_file<'a, W: Write>(
   state_lookups: &BTreeMap<String, u32>,
   bc: &Vec<u8>,
 ) -> SherpaResult<AscriptWriter<'a, W>> {
-  let g = &(w.store.db.clone());
   let ast_type_name = w.store.ast_type_name.clone();
+  let parse_productions = w.db.parse_productions();
   w.stmt(
     "    
 pub trait Reader: ByteReader + MutByteReader + UTF8Reader {}
@@ -1623,20 +1626,20 @@ pub type Parser<'a, T, UserCTX> = sherpa_runtime::bytecode_parser::ByteCodeParse
     w.block(
       &format!(
         "pub const production_names: [&'static str;{}] = ",
-        g.parse_productions.len()
+        parse_productions.len()
       ),
       "[",
       "];",
       &|w| {
         w.list(
           ",",
-          g.parse_productions
+          parse_productions
             .iter()
-            .filter_map(|prod_id| {
-              let prod = g.productions.get(prod_id).unwrap();
-              prod.bytecode_id.map(|id| {
-                (id, format!("\"{}::{}\"", prod.g_id.name, prod.name))
-              })
+            .map(|prod_id| {
+              (
+                prod_id,
+                format!("\"{}\"", w.db.prod_friendly_name_string(*prod_id),),
+              )
             })
             .collect::<BTreeMap<_, _>>()
             .into_values()
@@ -1645,11 +1648,15 @@ pub type Parser<'a, T, UserCTX> = sherpa_runtime::bytecode_parser::ByteCodeParse
       },
     )?;
 
-    let symbol_string = g
-      .symbols
+    let symbol_string = w
+      .db
+      .tokens()
       .iter()
-      .map(|(sym_id, sym)| {
-        (sym.bytecode_id, format!("r####\"{}\"####", sym_id.debug_string(g)))
+      .map(|tok| {
+        (
+          tok.tok_id,
+          format!("r####\"{}\"####", tok.sym_id.name(w.db.string_store())),
+        )
       })
       .collect::<BTreeMap<_, _>>();
 
@@ -1662,13 +1669,14 @@ pub type Parser<'a, T, UserCTX> = sherpa_runtime::bytecode_parser::ByteCodeParse
       &move |w| w.list(",", symbol_string.values().collect()),
     )
   })?;
-  for ExportedProduction { export_name, production, .. } in
-    g.get_exported_productions()
+  for EntryPoint { prod_key, prod_entry_name, entry_name, .. } in
+    w.db.entry_points()
   {
-    let bytecode_offset =
-      state_lookups.get(&g.get_entry_name_from_prod_id(&production.id)?)?;
+    let entry_name = entry_name.to_string(w.db.string_store());
+    let prod_entry_name = prod_entry_name.to_string(w.db.string_store());
+    let bytecode_offset = state_lookups.get(&prod_entry_name)?;
     w.method(
-      &format!("pub fn new_{export_name}_parser<'a, T: Reader, UserCTX>"),
+      &format!("pub fn new_{entry_name}_parser<'a, T: Reader, UserCTX>"),
       "(",
       ")",
       ", ",
@@ -1706,7 +1714,7 @@ pub type Parser<'a, T, UserCTX> = sherpa_runtime::bytecode_parser::ByteCodeParse
   .unwrap();
 
   if !w.store.is_dummy {
-    let export_node_data = get_ascript_export_data(g, w.utils);
+    let export_node_data = get_ascript_export_data(w.utils);
 
     w.block("pub mod ast", "{", "}", &|w| {
 
@@ -1717,9 +1725,7 @@ pub type Parser<'a, T, UserCTX> = sherpa_runtime::bytecode_parser::ByteCodeParse
 
       // Create a module that will store convenience functions for compiling AST
       // structures based on on grammar entry points.
-      for (ref_, type_, ast_type_string, export_name, guid_name) in &export_node_data {
-        let prod = &g.get_production_id_by_name(guid_name)?;
-        let state_name = g.get_entry_name_from_prod_id(&prod)?;
+      for (ref_, type_, ast_type_string, export_name, guid_name, prod_entry_name) in &export_node_data {
         w.method(
           &format!("pub fn {export_name}_from<'a>"),
           "(",
@@ -1732,7 +1738,7 @@ pub type Parser<'a, T, UserCTX> = sherpa_runtime::bytecode_parser::ByteCodeParse
           &mut |w| {
             w.stmt(format!("let reduce_functions = ReduceFunctions::<_, u32, true>::new();"))?;
             w.stmt(format!("let mut parser = Parser::new(&mut reader, &bytecode);"))?;
-            w.stmt(format!("parser.init_parser({});", state_lookups.get(&state_name).unwrap()))?;
+            w.stmt(format!("parser.init_parser({});", state_lookups.get(prod_entry_name).unwrap()))?;
 
             w.stmt(
               format!("let AstSlot ({}, __rule_rng__, _) = parser.parse_ast(&reduce_functions.0, &mut None)?;"
@@ -1766,7 +1772,6 @@ pub(crate) fn write_rust_llvm_parser_file<'a, W: Write>(
   grammar_name: &str,
   parser_name: &str,
 ) -> SherpaResult<AscriptWriter<'a, W>> {
-  let g = &(w.store.db.clone());
   w.stmt(format!(
     r###"
 #[link(name = "{parser_name}", kind ="static" )]
@@ -1870,12 +1875,14 @@ pub struct Parser<T: Reader, M>(ParseContext<T, M>, T);
         })
       },
     )?;
-
-    for ExportedProduction { export_name, export_id, .. } in
-      g.get_exported_productions().iter()
+    for EntryPoint { export_id, prod_entry_name, entry_name, .. } in
+      //for ExportedProduction { export_name, export_id, .. } in
+      w.db.entry_points().iter()
     {
+      let entry_name = entry_name.to_string(w.db.string_store());
+      let prod_entry_name = prod_entry_name.to_string(w.db.string_store());
       w.method(
-        &format!("pub fn new_{export_name}_parser"),
+        &format!("pub fn new_{entry_name}_parser"),
         "(",
         ")",
         ", ",
@@ -1940,7 +1947,7 @@ pub struct Parser<T: Reader, M>(ParseContext<T, M>, T);
   })?;
 
   if !w.store.is_dummy {
-    let export_node_data = get_ascript_export_data(g, w.utils);
+    let export_node_data = get_ascript_export_data(w.utils);
     let ast_type_name = w.store.ast_type_name.clone();
 
     w.block("pub mod ast", "{", "}", &|w| {

@@ -1,6 +1,6 @@
 #![allow(unused)]
 
-use std::{hash::Hash, path::PathBuf, sync::Arc};
+use std::{hash::Hash, path::PathBuf, rc::Rc, sync::Arc};
 
 use sherpa_runtime::{
   types::{Token, TokenRange},
@@ -8,7 +8,7 @@ use sherpa_runtime::{
 };
 
 use crate::{
-  parser,
+  parser::{self, ASTNode},
   types::*,
   utils::create_u64_hash,
   writer::code_writer::CodeWriter,
@@ -132,19 +132,20 @@ pub struct ProductionRef(u32);
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct TokenProductionRef(u32);
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct Rule {
   /// A list of [SymbolId]s and their position within the source grammar
-  pub symbols: Array<(SymbolId, usize)>,
+  pub symbols: Array<(SymbolId, IString, usize)>,
   pub skipped: Array<SymbolId>,
   pub ast:     Option<ASTToken>,
   pub tok:     Token,
+  pub g_id:    GrammarIdentity,
 }
 
 /// A reference to some Ascript AST data that is either automatically generated
 /// depending on the reference type, or is stored on a Production node.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub enum ASTToken {
   /// Represents the ast expression `:ast [ $1 ]`.
@@ -156,13 +157,13 @@ pub enum ASTToken {
   /// Represents the ast expression `:ast [ $1, $--last-- ]`, where `--last--`
   /// represents the last symbol in a rule.
   ///
-  /// Automatically generated when when a list production (` A(+) | A(*) `) is
+  /// Automatically generated when a list production (` A(+) | A(*) `) is
   /// processed.
   ListIterate(TokenRange),
   /// An AST expression defined within a grammar. `0` Is the production id
   /// in which a copy if the AST expressions is stored. `1` is the index
   /// into the Productions's `asts` array for that stored production.
-  Defined(ProductionId, usize),
+  Defined(Arc<parser::Ascript>),
 }
 
 /// A custom parse state defined within a grammar e.g `state_name => ...`

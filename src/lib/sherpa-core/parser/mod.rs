@@ -4,4 +4,4 @@
 //#[cfg(not(feature = "sherpa-binary-parser"))]
 mod sherpa_bc;
 //#[cfg(not(feature = "sherpa-binary-parser"))]
-pub use sherpa_bc::{Goto, *};
+pub use sherpa_bc::{Goto, Range, *};

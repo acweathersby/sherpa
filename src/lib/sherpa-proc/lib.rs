@@ -68,16 +68,29 @@ fn parse_token_stream(
     path = None;
     match tree {
       TokenTree::Group(g) => {
-        insert_data(&g.span_open(), g.span_open().source_text().unwrap(), offset, output);
+        insert_data(
+          &g.span_open(),
+          g.span_open().source_text().unwrap(),
+          offset,
+          output,
+        );
         parse_token_stream(g.stream(), offset, output);
-        insert_data(&g.span_close(), g.span_close().source_text().unwrap(), offset, output);
+        insert_data(
+          &g.span_close(),
+          g.span_close().source_text().unwrap(),
+          offset,
+          output,
+        );
       }
       TokenTree::Ident(i) => {
         insert_data(&i.span(), i.to_string(), offset, output);
       }
       TokenTree::Literal(l) => {
         let string = l.span().source_text().unwrap();
-        path = Some((string[1..string.len() - 1].to_string(), l.span().source_file().path()));
+        path = Some((
+          string[1..string.len() - 1].to_string(),
+          l.span().source_file().path(),
+        ));
         insert_data(&l.span(), l.to_string(), offset, output);
       }
       TokenTree::Punct(p) => {
@@ -93,7 +106,12 @@ fn parse_token_stream(
   }
 }
 
-fn insert_data(span: &Span, in_string: String, offset: &mut Offsets, output: &mut Vec<String>) {
+fn insert_data(
+  span: &Span,
+  in_string: String,
+  offset: &mut Offsets,
+  output: &mut Vec<String>,
+) {
   let start = span.start();
   let end = span.end();
   let line_diff = if start.line > offset.line {
@@ -159,7 +177,8 @@ fn insert_data(span: &Span, in_string: String, offset: &mut Offsets, output: &mu
 #[proc_macro]
 pub fn compile_mod(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
   // Convert input into a lookup table
-  let mut offsets = Offsets { col: 0, line: 0, pos: 0, spans: Default::default() };
+  let mut offsets =
+    Offsets { col: 0, line: 0, pos: 0, spans: Default::default() };
   let mut output = vec![];
   let root_dir = std::env::current_dir().map(|d| PathBuf::from(&d)).unwrap();
 
@@ -167,7 +186,9 @@ pub fn compile_mod(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     parse_token_stream(input, &mut offsets, &mut output)
   {
     BuildPipeline::from_source(
-      root_dir.join(source_file_path.parent().unwrap()).join(grammar_source_path),
+      root_dir
+        .join(source_file_path.parent().unwrap())
+        .join(grammar_source_path),
       Default::default(),
     )
   } else {
@@ -177,7 +198,10 @@ pub fn compile_mod(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
   pipeline.add_task(tasks::build_rust_preamble());
 
-  match (ParserType::BYTECODE, std::env::var("OUT_DIR").map(|d| PathBuf::from(&d))) {
+  match (
+    ParserType::BYTECODE,
+    std::env::var("OUT_DIR").map(|d| PathBuf::from(&d)),
+  ) {
     (ParserType::_LLVM, Ok(out_dir)) => pipeline
       .set_build_output_dir(&out_dir)
       .add_task(tasks::build_llvm_parser(None, true, false))
@@ -186,14 +210,16 @@ pub fn compile_mod(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
   };
 
   if true {
-    pipeline.add_task(tasks::build_ascript_types_and_functions(SourceType::Rust));
+    pipeline
+      .add_task(tasks::build_ascript_types_and_functions(SourceType::Rust));
   }
 
   match pipeline.run(|errors| {
     process_errors(errors, offsets);
   }) {
     SherpaResult::Ok((_, artifacts, _)) => {
-      let result = artifacts.into_iter().map(|(_, s)| s).collect::<Vec<_>>().join("\n");
+      let result =
+        artifacts.into_iter().map(|(_, s)| s).collect::<Vec<_>>().join("\n");
       result.parse().unwrap()
     }
     SherpaResult::Err(err) => {

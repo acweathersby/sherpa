@@ -1,6 +1,6 @@
 use std::{
   collections::{hash_map::DefaultHasher, BTreeSet, HashSet, VecDeque},
-  hash::{Hash, Hasher},
+  hash::Hash,
   ops::{Index, IndexMut},
 };
 
@@ -186,9 +186,7 @@ impl<'db> Hash for State<'db> {
       }
     }
 
-    for item in
-      &self.peek_resolve_items.values().flatten().collect::<OrderedSet<_>>()
-    {
+    for item in &self.peek_resolve_items.values().flatten().collect::<OrderedSet<_>>() {
       item.rule_id.hash(state);
       item.sym_index.hash(state);
     }
@@ -202,15 +200,12 @@ impl<'db> Hash for State<'db> {
 
 impl<'db> State<'db> {
   /// Set a group of items that a peek item will resolve to.
-  pub fn set_peek_resolve_items(
-    &mut self,
-    peek_origin_key: u64,
-    items: Items<'db>,
-  ) {
+  pub fn set_peek_resolve_items(&mut self, peek_origin_key: u64, items: Items<'db>) {
     self.peek_resolve_items.insert(peek_origin_key, items);
   }
 
   pub fn get_hash(&self) -> u64 {
+    use std::hash::Hasher;
     let mut hasher = DefaultHasher::new();
     self.hash(&mut hasher);
     hasher.finish()
@@ -220,25 +215,14 @@ impl<'db> State<'db> {
     self.peek_resolve_items.get(&peek_origin_key).unwrap().clone()
   }
 
-  pub fn calculate_closure(
-    &mut self,
-    is_scanner: bool,
-    db: &'db ParserDatabase,
-  ) {
+  pub fn calculate_closure(&mut self, is_scanner: bool, db: &'db ParserDatabase) {
     self.closure = None;
     let state_id = self.id;
     let closure = self.kernel_items.create_closure(is_scanner, state_id);
 
     if self.id.is_root() {
-      let prods = self
-        .kernel_items
-        .iter()
-        .map(|i| i.prod_index())
-        .collect::<OrderedSet<_>>();
-      let sigs = closure
-        .iter()
-        .map(|i| (i.rule_id, i.sym_index))
-        .collect::<HashSet<_>>();
+      let prods = self.kernel_items.iter().map(|i| i.prod_index()).collect::<OrderedSet<_>>();
+      let sigs = closure.iter().map(|i| (i.rule_id, i.sym_index)).collect::<HashSet<_>>();
       // Get all follow items
 
       let mut oos_closure = closure.clone();
@@ -326,8 +310,7 @@ impl<'db> State<'db> {
     is_scanner: bool,
     db: &'db ParserDatabase,
   ) {
-    let mut kernel_items =
-      kernel_items.into_iter().map(|i| i.to_origin_state(self.id)).collect();
+    let mut kernel_items = kernel_items.into_iter().map(|i| i.to_origin_state(self.id)).collect();
 
     self.kernel_items.append(&mut kernel_items);
 
@@ -343,19 +326,12 @@ impl<'db> State<'db> {
     db: &ParserDatabase,
   ) -> bool {
     if self.id.is_root() {
-      let prod_ids = self
-        .kernel_items
-        .iter()
-        .map(|i| i.prod_index())
-        .collect::<OrderedSet<_>>();
+      let prod_ids = self.kernel_items.iter().map(|i| i.prod_index()).collect::<OrderedSet<_>>();
 
-      Items::start_items(prod_id, db)
-        .create_closure(is_scanner, self.id)
-        .into_iter()
-        .any(|i| {
-          prod_ids.contains(&i.prod_index_at_sym().unwrap_or_default())
-            || prod_ids.contains(&i.prod_index())
-        })
+      Items::start_items(prod_id, db).create_closure(is_scanner, self.id).into_iter().any(|i| {
+        prod_ids.contains(&i.prod_index_at_sym().unwrap_or_default())
+          || prod_ids.contains(&i.prod_index())
+      })
     } else {
       false
     }
@@ -369,12 +345,7 @@ impl<'db> State<'db> {
     if self.predecessors.len() > 0 {
       string += &format!(
         r##" preds [{}]"##,
-        self
-          .predecessors
-          .iter()
-          .map(|p| p.0.to_string())
-          .collect::<Vec<_>>()
-          .join(" ")
+        self.predecessors.iter().map(|p| p.0.to_string()).collect::<Vec<_>>().join(" ")
       );
     }
 
@@ -445,11 +416,7 @@ pub struct Graph<'follow, 'db: 'follow> {
 }
 
 impl<'follow, 'db: 'follow> Graph<'follow, 'db> {
-  pub fn new(
-    db: &'db ParserDatabase,
-    mode: GraphMode,
-    follow: &'follow FollowSets<'db>,
-  ) -> Self {
+  pub fn new(db: &'db ParserDatabase, mode: GraphMode, follow: &'follow FollowSets<'db>) -> Self {
     Self {
       mode,
       state_map: Default::default(),

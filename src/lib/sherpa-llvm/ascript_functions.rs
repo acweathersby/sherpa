@@ -2,7 +2,7 @@ use crate::{
   build_fast_call,
   LLVMParserModule,
   LLVMTypes,
-  CTX_AGGREGATE_INDICES,
+  CtxAggregateIndices,
 };
 use inkwell::{
   module::Linkage,
@@ -216,9 +216,9 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: AstObject>(
   b.position_at_end(reduce);
   // Get slice size
   let symbol_count_original =
-    CTX_AGGREGATE_INDICES::sym_len.load(b, parse_ctx)?.into_int_value();
+    CtxAggregateIndices::sym_len.load(b, parse_ctx)?.into_int_value();
   let rule_index =
-    CTX_AGGREGATE_INDICES::rule_id.load(b, parse_ctx)?.into_int_value();
+    CtxAggregateIndices::rule_id.load(b, parse_ctx)?.into_int_value();
 
   // Calculate the position of the first element and the last element.
   let top = b.build_load(stack_top_ptr, "top").into_int_value();

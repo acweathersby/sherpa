@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, process::Output};
 
 use crate::{
   build_compile_db,
@@ -20,14 +20,36 @@ pub struct TestPackage<'a> {
   pub soup:    &'a GrammarSoup,
 }
 
+pub struct DBPackage<'a> {
+  pub journal: Journal,
+  pub db:      &'a ParserDatabase,
+  pub soup:    &'a GrammarSoup,
+}
+
 /// Simple single thread compilation of a grammar source string.
 /// `test_fn` is called after a successful compilation of parse states.
-pub fn build_parse_states_from_source_str<'a>(
+pub fn build_parse_states_from_source_str<'a, T>(
   source: &str,
   source_path: PathBuf,
   config: Config,
-  test_fn: fn(pkg: TestPackage) -> SherpaResult<()>,
-) -> SherpaResult<()> {
+  test_fn: &dyn Fn(TestPackage) -> SherpaResult<T>,
+) -> SherpaResult<T> {
+  build_parse_db_from_source_str(source, source_path, config, &|DBPackage { journal, db, soup }| {
+    let states = compile_parse_states(journal.transfer(), &db)?;
+
+    let states = garbage_collect::<ParseStatesVec>(&db, states)?;
+
+    test_fn(TestPackage { journal, states, db: &db, soup: &soup })
+  })
+}
+
+/// Compile a parser Data base
+pub fn build_parse_db_from_source_str<'a, T>(
+  source: &str,
+  source_path: PathBuf,
+  config: Config,
+  test_fn: &dyn Fn(DBPackage) -> SherpaResult<T>,
+) -> SherpaResult<T> {
   let mut journal = Journal::new(Some(config));
   let soup = GrammarSoup::new();
 
@@ -41,11 +63,5 @@ pub fn build_parse_states_from_source_str<'a>(
 
   journal.flush_reports();
 
-  let states = compile_parse_states(journal.transfer(), &db)?;
-
-  let states = garbage_collect::<ParseStatesVec>(&db, states)?;
-
-  journal.flush_reports();
-
-  test_fn(TestPackage { journal, states, db: &db, soup: &soup })
+  test_fn(DBPackage { journal, db: &db, soup: &soup })
 }

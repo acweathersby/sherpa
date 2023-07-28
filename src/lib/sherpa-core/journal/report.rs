@@ -56,20 +56,20 @@ pub enum ReportType {
 #[cfg_attr(debug_assertions, derive(Debug))]
 /// Store information about a certain aspect of grammar compilation.
 pub struct Report {
-  pub(crate) name:        String,
-  pub(crate) report_type: ReportType,
+  pub name:        String,
+  pub report_type: ReportType,
   /// At table mapping a report note label to a
   /// note body.
-  pub(crate) notes:       Vec<(&'static str, String)>,
-  pub(crate) _errors:     BTreeMap<u64, SherpaError>,
+  pub notes:       Vec<(&'static str, String)>,
+  pub _errors:     BTreeMap<u64, SherpaError>,
 
   #[cfg(not(feature = "wasm-target"))]
-  pub(crate) timings: HashMap<&'static str, Timing>,
+  pub timings: HashMap<&'static str, Timing>,
 
   #[cfg(not(feature = "wasm-target"))]
-  pub(crate) create_time: Instant,
-  pub(crate) error_level: SherpaErrorSeverity,
-  pub(super) is_sink:     bool,
+  pub create_time:    Instant,
+  pub error_level:    SherpaErrorSeverity,
+  pub(super) is_sink: bool,
 }
 
 impl Hash for Report {
@@ -185,7 +185,7 @@ impl Report {
       .map(|(_, n)| n)
   }
 
-  pub(crate) fn add_error(&mut self, error: SherpaError) {
+  pub fn add_error(&mut self, error: SherpaError) {
     self.error_level = error.get_severity().max(self.error_level);
     let id = create_u64_hash(&error);
     if !self._errors.contains_key(&id) {
@@ -193,18 +193,18 @@ impl Report {
     }
   }
 
-  pub(crate) fn add_note(&mut self, note_name: &'static str, note: String) {
+  pub fn add_note(&mut self, note_name: &'static str, note: String) {
     self.notes.push((note_name, note));
   }
 
   #[allow(unused)]
-  pub(crate) fn start_timer(&mut self, timer_label: &'static str) {
+  pub fn start_timer(&mut self, timer_label: &'static str) {
     #[cfg(not(feature = "wasm-target"))]
     self.timings.insert(timer_label, Timing::new());
   }
 
   #[allow(unused)]
-  pub(crate) fn stop_timer(&mut self, timer_label: &'static str) {
+  pub fn stop_timer(&mut self, timer_label: &'static str) {
     #[cfg(not(feature = "wasm-target"))]
     {
       let instant = Instant::now();
@@ -218,7 +218,7 @@ impl Report {
     }
   }
 
-  pub(crate) fn debug_string(&self) -> String {
+  pub fn debug_string(&self) -> String {
     #[cfg(feature = "wasm-target")]
     let timings = "";
     #[cfg(not(feature = "wasm-target"))]

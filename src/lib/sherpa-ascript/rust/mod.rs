@@ -1,3 +1,1 @@
-mod rust;
-
-pub(crate) use rust::*;
+pub mod rust;

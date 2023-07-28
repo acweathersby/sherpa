@@ -1,11 +1,10 @@
 #![allow(unused)]
+use sherpa_core::{parser::AST_Property, *};
+use sherpa_runtime::types::BlameColor;
+
 use super::types::{AScriptProp, AScriptStore, AScriptTypeVal, TaggedType};
-use crate::{
-  grammar::compile::parser::sherpa::AST_Property,
-  types::*,
-  Journal,
-};
-use std::collections::BTreeSet;
+use crate::types::*;
+use std::{collections::BTreeSet, path::PathBuf};
 
 /// This error occurs when multiple definitions of the same Struct
 /// define the same property with different types.
@@ -35,6 +34,7 @@ use std::collections::BTreeSet;
 /// ```
 pub(crate) fn add_prop_redefinition_error(
   j: &mut Journal,
+  db: &ParserDatabase,
   struct_type: String,
   prop_name: String,
   existing_prop: AScriptProp,
@@ -45,18 +45,20 @@ pub(crate) fn add_prop_redefinition_error(
     sources:  vec![
       (
         existing_prop.location.clone(),
-        existing_prop.grammar_ref.path.clone(),
+        PathBuf::from(
+          existing_prop.grammar_ref.path.to_string(db.string_store()),
+        ),
         format!(
           "First definition with type [{}]",
-          existing_prop.type_val.debug_string(None)
+          existing_prop.type_val.debug_string()
         ),
       ),
       (
         new_prop.location.clone(),
-        new_prop.grammar_ref.path.clone(),
+        PathBuf::from(new_prop.grammar_ref.path.to_string(db.string_store())),
         format!(
           "Second definition with type [{}]",
-          new_prop.type_val.debug_string(None)
+          new_prop.type_val.debug_string()
         ),
       ),
     ],
@@ -96,36 +98,36 @@ pub(crate) fn add_prop_redefinition_error(
 pub(crate) fn add_incompatible_production_scalar_types_error(
   j: &mut Journal,
   ast: &mut AScriptStore,
-  prod_id: &ProductionId,
-  (type_a, rules_a): (AScriptTypeVal, Vec<RuleId>),
-  (type_b, rules_b): (AScriptTypeVal, Vec<RuleId>),
+  db: &ParserDatabase,
+  prod_id: &DBProdKey,
+  (type_a, rules_a): (AScriptTypeVal, Vec<DBRuleKey>),
+  (type_b, rules_b): (AScriptTypeVal, Vec<DBRuleKey>),
 ) {
-  let g = &(ast.db.clone());
   let type_names = ast.get_type_names();
   j.report_mut().add_error(SherpaError::SourcesError {
     id:       "incompatible-production-scalar-types",
     sources:  rules_a
       .into_iter()
       .map(|r| {
-        let rule = g.get_rule(&r).unwrap();
+        let rule = db.rule(r);
         (
           rule.tok.clone(),
-          rule.g_id.path.clone(),
-          format!("Rule produces type [{}]", type_a.blame_string(g, &type_names)),
+          PathBuf::from(rule.g_id.path.clone().to_string(db.string_store())),
+          format!("Rule produces type [{}]", type_a.blame_string(&type_names)),
         )
       })
       .chain(rules_b.into_iter().map(|r| {
-        let rule = g.get_rule(&r).unwrap();
+        let rule = db.rule(r);
         (
           rule.tok.clone(),
-          rule.g_id.path.clone(),
-          format!("Rule produces type [{}]", type_b.blame_string(g, &type_names)),
+          PathBuf::from(rule.g_id.path.clone().to_string(db.string_store())),
+          format!("Rule produces type [{}]", type_b.blame_string(&type_names)),
         )
       }))
       .collect(),
     msg:      format!(
       "Incompatible combination of scalar types are produced by production [{}]",
-      g.get_production_plain_name(prod_id)
+      db.prod_friendly_name_string(*prod_id)
     ),
     ps_msg:   "".into(),
     severity: SherpaErrorSeverity::Critical,
@@ -160,28 +162,28 @@ pub(crate) fn add_incompatible_production_scalar_types_error(
 pub(crate) fn add_incompatible_production_vector_types_error(
   j: &mut Journal,
   ast: &mut AScriptStore,
-  prod_id: &ProductionId,
+  db: &ParserDatabase,
+  prod_id: &DBProdKey,
   _types: BTreeSet<TaggedType>,
 ) {
-  let g = &(ast.db.clone());
   let type_names = ast.get_type_names();
   j.report_mut().add_error(SherpaError::SourcesError {
     id:       "incompatible-production-vector-types",
     sources:  _types
       .iter()
       .map(|t| {
-        let rule = g.get_rule(&t.into()).unwrap();
+        let rule = db.rule(t.tag);
         let type_: AScriptTypeVal = t.into();
         (
           rule.tok.clone(),
-          rule.g_id.path.clone(),
-          format!("rule produces vector type {}", type_.blame_string(g, &type_names)),
+          PathBuf::from(rule.g_id.path.clone().to_string(db.string_store())),
+          format!("rule produces vector type {}", type_.blame_string(&type_names)),
         )
       })
       .collect(),
     msg:      format!(
       "Incompatible combination of vector types are produced by production [{}]",
-      g.get_production_plain_name(prod_id)
+      db.prod_friendly_name_string(*prod_id)
     ),
     ps_msg:   "".into(),
     severity: SherpaErrorSeverity::Critical,
@@ -215,36 +217,36 @@ pub(crate) fn add_incompatible_production_vector_types_error(
 pub(crate) fn add_incompatible_production_types_error(
   j: &mut Journal,
   ast: &mut AScriptStore,
-  prod_id: &ProductionId,
-  scalar_types: Vec<(AScriptTypeVal, RuleId)>,
-  vector_types: Vec<(AScriptTypeVal, RuleId)>,
+  db: &ParserDatabase,
+  prod_id: &DBProdKey,
+  scalar_types: Vec<(AScriptTypeVal, DBRuleKey)>,
+  vector_types: Vec<(AScriptTypeVal, DBRuleKey)>,
 ) {
-  let g = &(ast.db.clone());
   let type_names = ast.get_type_names();
   j.report_mut().add_error(SherpaError::SourcesError {
     id:       "incompatible-production-types",
     sources:  scalar_types
       .iter()
       .map(|(t, r)| {
-        let rule = g.get_rule(&r).unwrap();
+        let rule = db.rule(*r);
         (
           rule.tok.clone(),
-          rule.g_id.path.clone(),
-          format!("Rule reduces to scalar type {}", t.blame_string(g, &type_names)),
+          PathBuf::from(rule.g_id.path.clone().to_string(db.string_store())),
+          format!("Rule reduces to scalar type {}", t.blame_string(&type_names)),
         )
       })
       .chain(vector_types.iter().map(|(t, r)| {
-        let rule = g.get_rule(&r).unwrap();
+        let rule = db.rule(*r);
         (
           rule.tok.clone(),
-          rule.g_id.path.clone(),
-          format!("Rule reduces to vector type {}", t.blame_string(g, &type_names)),
+          PathBuf::from(rule.g_id.path.clone().to_string(db.string_store())),
+          format!("Rule reduces to vector type {}", t.blame_string(&type_names)),
         )
       }))
       .collect(),
     msg:      format!(
       "An incompatible combination of vector and scalar types are produced by production [{}]",
-      g.get_production_plain_name(prod_id)
+      db.prod_friendly_name_string(*prod_id)
     ),
     ps_msg:   "".into(),
     severity: SherpaErrorSeverity::Critical,
@@ -256,11 +258,12 @@ pub(crate) fn add_incompatible_production_types_error(
 pub(crate) fn add_unmatched_prop_error(
   j: &mut Journal,
   rule: &Rule,
+  db: &ParserDatabase,
   prop: &AST_Property,
 ) {
   j.report_mut().add_error(SherpaError::SourceError {
     id:         "unmatched-valueless-prop",
-    path:       rule.g_id.path.clone(),
+    path:         PathBuf::from(rule.g_id.path.clone().to_string(db.string_store())),
     inline_msg: Default::default(),
     loc:        prop.tok.clone(),
     msg:        format!("This property does nor resolve to a symbol within it's associated rule",),

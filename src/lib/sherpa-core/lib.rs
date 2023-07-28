@@ -27,13 +27,21 @@ pub use journal::{Config, Journal, Report, ReportType};
 pub use tasks::new_taskman;
 pub use types::{
   proxy,
+  ASTToken,
   CachedString,
+  DBProdKey,
+  DBRule,
+  DBRuleKey,
+  DBTokenData,
+  DBTokenKey,
+  EntryPoint,
   GrammarHeader,
   GrammarId,
   GrammarIdentity,
   GrammarSoup,
   IString,
   IStringStore,
+  Item,
   ParseState,
   ParseStatesMap,
   ParseStatesVec,
@@ -49,6 +57,7 @@ pub use types::{
   SubProductionType,
   SymbolId,
 };
+
 pub use utils::{create_u64_hash as hash_id_value_u64, hash_group_btreemap};
 pub use writer::code_writer::CodeWriter;
 

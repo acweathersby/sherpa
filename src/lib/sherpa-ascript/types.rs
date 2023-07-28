@@ -1,17 +1,18 @@
-use sherpa_core::{parser::ASTNode, *};
+use sherpa_core::{parser::ASTNode, proxy::OrderedMap, *};
 use sherpa_runtime::types::Token;
 
-use super::compile::compile_ascript_store;
 use std::{
-  collections::{BTreeMap, BTreeSet, HashMap},
+  collections::{BTreeMap, BTreeSet},
   fmt::Debug,
   hash::Hash,
   mem::{discriminant, Discriminant},
   sync::Arc,
 };
 
-pub(crate) const ascript_first_node_id: &'static str = "--first--";
-pub(crate) const ascript_last_node_id: &'static str = "--last--";
+use crate::compile::compile_ascript_store;
+
+pub(crate) const ASCRIPT_FIRST_NODE_ID: &'static str = "--first--";
+pub(crate) const ASCRIPT_LAST_NODE_ID: &'static str = "--last--";
 
 #[derive(Hash, Debug, PartialEq, Eq, Clone, PartialOrd, Ord, Copy, Default)]
 pub struct AScriptStructId(u64);
@@ -34,24 +35,54 @@ impl AScriptPropId {
   }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct TaggedType {
   pub type_:        AScriptTypeVal,
-  pub tag:          RuleId,
+  pub tag:          DBRuleKey,
   pub symbol_index: u32,
 }
+
+impl Hash for TaggedType {
+  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    self.type_.hash(state);
+    self.symbol_index.hash(state);
+  }
+}
+
+impl PartialOrd for TaggedType {
+  fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    let s = (&self.type_, self.symbol_index);
+    let o = (&other.type_, other.symbol_index);
+
+    s.partial_cmp(&o)
+  }
+}
+
+impl Ord for TaggedType {
+  fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    self.partial_cmp(other).unwrap()
+  }
+}
+
+impl PartialEq for TaggedType {
+  fn eq(&self, other: &Self) -> bool {
+    self.type_ == other.type_ && self.symbol_index == other.symbol_index
+  }
+}
+
+impl Eq for TaggedType {}
 
 impl TaggedType {
   pub fn sanitize(self) -> Self {
     Self {
       symbol_index: 0,
-      tag:          RuleId::default(),
+      tag:          Default::default(),
       type_:        self.type_,
     }
   }
 
-  pub fn debug_string(&self, g: Option<&ParserDatabase>) -> String {
-    format!("Tagged: [{}] {}", self.symbol_index, self.type_.debug_string(g))
+  pub fn debug_string(&self) -> String {
+    format!("Tagged: [{}] {}", self.symbol_index, self.type_.debug_string())
   }
 }
 
@@ -67,18 +98,17 @@ impl Into<AScriptTypeVal> for &TaggedType {
   }
 }
 
-impl Into<RuleId> for TaggedType {
-  fn into(self) -> RuleId {
+impl Into<DBRuleKey> for TaggedType {
+  fn into(self) -> DBRuleKey {
     self.tag
   }
 }
 
-impl Into<RuleId> for &TaggedType {
-  fn into(self) -> RuleId {
+impl Into<DBRuleKey> for &TaggedType {
+  fn into(self) -> DBRuleKey {
     self.tag
   }
 }
-
 impl Into<AScriptStructId> for &TaggedType {
   fn into(self) -> AScriptStructId {
     match self.type_ {
@@ -132,7 +162,7 @@ pub enum AScriptTypeVal {
   Token,
   TokenRange,
   AdjustedTokenRange,
-  UnresolvedProduction(ProductionId),
+  UnresolvedProduction(DBProdKey),
   Undefined,
   /// A generic struct
   Any,
@@ -149,10 +179,10 @@ impl Default for AScriptTypeVal {
     AScriptTypeVal::Undefined
   }
 }
-
+#[cfg(debug_assertions)]
 impl Debug for AScriptTypeVal {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    f.write_str(&self.debug_string(None))
+    f.write_str(&self.debug_string())
   }
 }
 
@@ -217,10 +247,10 @@ impl AScriptTypeVal {
     matches!(self, AScriptTypeVal::UnresolvedProduction(..))
   }
 
-  pub fn get_production_id(&self) -> ProductionId {
+  pub fn get_production_id(&self) -> DBProdKey {
     match self {
       AScriptTypeVal::UnresolvedProduction(id) => id.clone(),
-      _ => ProductionId::default(),
+      _ => DBProdKey::default(),
     }
   }
 
@@ -229,10 +259,9 @@ impl AScriptTypeVal {
   pub fn is_atom(&self) -> bool {
     use AScriptTypeVal::*;
     match self {
-      Token | TokenRange | AdjustedTokenRange | Struct(..) | String(..)
-      | Bool(..) | F64(..) | F32(..) | I64(..) | I32(..) | I16(..) | I8(..)
-      | U64(..) | U32(..) | U16(..) | U8(..) | F64Vec | F32Vec | I64Vec
-      | I32Vec | I16Vec | I8Vec | U64Vec | U32Vec | U16Vec | U8Vec
+      Token | TokenRange | AdjustedTokenRange | Struct(..) | String(..) | Bool(..) | F64(..)
+      | F32(..) | I64(..) | I32(..) | I16(..) | I8(..) | U64(..) | U32(..) | U16(..) | U8(..)
+      | F64Vec | F32Vec | I64Vec | I32Vec | I16Vec | I8Vec | U64Vec | U32Vec | U16Vec | U8Vec
       | TokenVec | StringVec => true,
       GenericStructVec(nodes) => {
         if nodes.len() == 1 {
@@ -244,19 +273,11 @@ impl AScriptTypeVal {
           false
         }
       }
-      Undefined
-      | GenericVec(..)
-      | GenericStruct(..)
-      | Any
-      | UnresolvedProduction(..) => false,
+      Undefined | GenericVec(..) | GenericStruct(..) | Any | UnresolvedProduction(..) => false,
     }
   }
 
-  pub fn blame_string(
-    &self,
-    g: &GrammarStore,
-    struct_types: &BTreeMap<AScriptStructId, String>,
-  ) -> String {
+  pub fn blame_string(&self, struct_types: &BTreeMap<AScriptStructId, String>) -> String {
     use AScriptTypeVal::*;
     match self {
       GenericVec(vec) => match vec {
@@ -267,7 +288,7 @@ impl AScriptTypeVal {
             .filter_map(|t| {
               match t.into() {
                 Undefined => None,
-                t => Some(t.blame_string(g, struct_types)),
+                t => Some(t.blame_string(struct_types)),
               }
             })
             .collect::<Vec<_>>()
@@ -286,11 +307,11 @@ impl AScriptTypeVal {
       Struct(id) => {
         format!("Struct<{}>", struct_types.get(id).cloned().unwrap_or_default())
       }
-      _ => self.debug_string(Some(g)),
+      _ => self.debug_string(),
     }
   }
 
-  pub fn debug_string(&self, g: Option<&GrammarStore>) -> String {
+  pub fn debug_string(&self) -> String {
     use AScriptTypeVal::*;
     match self {
       GenericVec(vec) => match vec {
@@ -301,7 +322,7 @@ impl AScriptTypeVal {
             .filter_map(|t| {
               match t.into() {
                 Undefined => None,
-                t => Some(t.debug_string(g)),
+                t => Some(t.debug_string()),
               }
             })
             .collect::<Vec<_>>()
@@ -341,17 +362,11 @@ impl AScriptTypeVal {
       Token => "Token".to_string(),
       GenericStruct(_) => "Node".to_string(),
       Any => "Any".to_string(),
-      UnresolvedProduction(id) => match g {
-        Some(g) => {
-          let name = g.get_production_plain_name(id);
-          format!("UnresolvedProduction[{}]", name)
-        }
-        None => format!("UnresolvedProduction[{:?}]", id),
-      },
+      UnresolvedProduction(id) => format!("UnresolvedProduction[{:?}]", id),
     }
   }
 
-  pub fn hcobj_type_name(&self, g: Option<&GrammarStore>) -> String {
+  pub fn hcobj_type_name(&self) -> String {
     use AScriptTypeVal::*;
     match self {
       GenericVec(vec) => match vec {
@@ -359,7 +374,7 @@ impl AScriptTypeVal {
           "GenericVec{}",
           vector
             .iter()
-            .map(|t| { AScriptTypeVal::from(Into::into(t)).hcobj_type_name(g) })
+            .map(|t| { AScriptTypeVal::from(Into::into(t)).hcobj_type_name() })
             .collect::<Vec<_>>()
             .join(", ")
         ),
@@ -395,13 +410,7 @@ impl AScriptTypeVal {
       Token => "TOKEN".to_string(),
       GenericStruct(_) => "Node".to_string(),
       Any => "Any".to_string(),
-      UnresolvedProduction(id) => match g {
-        Some(g) => {
-          let name = g.get_production_plain_name(id);
-          format!("UnresolvedProduction[{}]", name)
-        }
-        None => format!("UnresolvedProduction[{:?}]", id),
-      },
+      UnresolvedProduction(id) => format!("UnresolvedProduction[{:?}]", id),
       _ => "TOKEN_RANGE".to_string(),
     }
   }
@@ -480,10 +489,10 @@ num_type!(AScriptTypeValI8, I8, i8, i8);
 pub struct AScriptProp {
   pub type_val:    TaggedType,
   pub location:    Token,
-  pub grammar_ref: Arc<GrammarIdentity>,
+  pub grammar_ref: GrammarIdentity,
   /// Tracks the number of times this property has been
   /// declared in a struct.
-  pub body_ids:    BTreeSet<RuleId>,
+  pub body_ids:    BTreeSet<DBRuleKey>,
   pub optional:    bool,
 }
 
@@ -493,7 +502,7 @@ pub struct AScriptStruct {
   pub type_name: String,
   pub prop_ids: BTreeSet<AScriptPropId>,
   /// Tracks the number of times this struct has been defined
-  pub rule_ids: BTreeSet<RuleId>,
+  pub rule_ids: BTreeSet<DBRuleKey>,
   pub definition_locations: BTreeSet<Token>,
   /// When true a `tok` property is present in the struct
   /// that has a [sherpa_runtime::type::Token] value comprised of the
@@ -501,47 +510,43 @@ pub struct AScriptStruct {
   pub tokenized: bool,
 }
 
-pub type ProductionTypesTable =
-  BTreeMap<ProductionId, HashMap<TaggedType, BTreeSet<RuleId>>>;
+pub type ProductionTypesTable = OrderedMap<DBProdKey, OrderedMap<TaggedType, BTreeSet<DBRuleKey>>>;
 
 #[derive(Debug, Clone)]
-pub struct AScriptStore<'db> {
+pub struct AScriptStore {
   /// Store of unique AScriptStructs
-  pub structs: BTreeMap<AScriptStructId, AScriptStruct>,
-  pub props: BTreeMap<AScriptPropId, AScriptProp>,
+  pub structs:        OrderedMap<AScriptStructId, AScriptStruct>,
+  pub props:          OrderedMap<AScriptPropId, AScriptProp>,
   // Stores the resolved AST types of all parse productions.
-  pub prod_types: ProductionTypesTable,
-  pub body_reduce_fn: BTreeMap<RuleId, (AScriptTypeVal, ASTNode)>,
+  pub prod_types:     ProductionTypesTable,
+  pub body_reduce_fn: OrderedMap<DBRuleKey, (AScriptTypeVal, ASTNode)>,
   /// The type name of the AST Node enum,
-  pub ast_type_name: String,
-  pub db: &'db ParserDatabase,
+  pub ast_type_name:  String,
   // Maps a struct id to a struct type name
-  pub struct_lookups: Option<Arc<BTreeMap<AScriptStructId, String>>>,
+  pub struct_lookups: Option<Arc<OrderedMap<AScriptStructId, String>>>,
   // True if this store is a standing for actual ascript data.
-  pub is_dummy: bool,
+  pub is_dummy:       bool,
 }
 
-impl<'db> AScriptStore<'db> {
-  pub fn dummy(db: &'db ParserDatabase) -> SherpaResult<Self> {
+impl AScriptStore {
+  pub fn dummy() -> SherpaResult<Self> {
     SherpaResult::Ok(AScriptStore {
-      structs: Default::default(),
-      props: Default::default(),
-      prod_types: Default::default(),
+      structs:        Default::default(),
+      props:          Default::default(),
+      prod_types:     Default::default(),
       body_reduce_fn: Default::default(),
-      ast_type_name: Default::default(),
-      db,
+      ast_type_name:  Default::default(),
       struct_lookups: Default::default(),
-      is_dummy: Default::default(),
+      is_dummy:       Default::default(),
     })
   }
 
-  pub fn new(j: &mut Journal, db: &'db ParserDatabase) -> SherpaResult<Self> {
-    let mut new_self =
-      AScriptStore { db, is_dummy: false, ..Default::default() };
+  pub fn new(j: &mut Journal, db: &ParserDatabase) -> SherpaResult<Self> {
+    let mut new_self = AScriptStore { is_dummy: false, ..Self::dummy()? };
 
     j.set_active_report("Ascript Store Compile", ReportType::AScriptCompile);
 
-    compile_ascript_store(j, &mut new_self);
+    compile_ascript_store(j, &mut new_self, db);
 
     if j.report().have_errors_of_type(SherpaErrorSeverity::Critical) {
       SherpaResult::Err(j.report().into())

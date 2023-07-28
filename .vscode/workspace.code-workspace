@@ -33,18 +33,12 @@
 			"name": "Grammars"
 		},
 		{
-			"path": "../src/lib/sherpa-core/grammar/new",
-			"name": "New Sherpa"
-		},
-		{
 			"path": ".."
 		}
 	],
 	"settings": {
-		"lldb.displayFormat": "auto",
-		"lldb.showDisassembly": "auto",
-		"lldb.dereferencePointers": true,
-		"lldb.consoleMode": "commands",
+		"lldb.dereferencePointers": false,
+		"lldb.consoleMode": "evaluate",
 		"files.exclude": {
 			"**/.git": true,
 			"**/.svn": true,
@@ -53,7 +47,9 @@
 			"**/.DS_Store": true,
 			"**/Thumbs.db": true,
 			"**/target/**": true
-		}
+		},
+		"lldb.displayFormat": "auto",
+		"lldb.showDisassembly": "never"
 	},
 	"launch": {
 		"version": "0.2.0",

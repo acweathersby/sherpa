@@ -1,4 +1,4 @@
-use super::{fastCC, CTX_AGGREGATE_INDICES, FAIL_STATE_FLAG_LLVM};
+use super::{fastCC, CtxAggregateIndices, FAIL_STATE_FLAG_LLVM};
 use crate::{
   parse_functions::{
     compile_states,
@@ -253,7 +253,7 @@ pub(crate) fn construct_module<'a>(
     b: builder,
     ctx,
     types: LLVMTypes {
-      TAIL_CALLABLE_PARSE_FUNCTION: GOTO_STACK_SPEC_FUNCTION,
+      tail_callable_parse_function: GOTO_STACK_SPEC_FUNCTION,
       reader: READER,
       token: TOKEN,
       parse_ctx: CTX,
@@ -284,10 +284,10 @@ pub(crate) unsafe fn construct_emit_end_of_parse(
   let parse_ctx = fn_value.get_nth_param(0)?.into_pointer_value();
   b.position_at_end(entry);
   // Update the active state to be inactive
-  CTX_AGGREGATE_INDICES::is_active.store(b, parse_ctx, bool.const_zero())?;
+  CtxAggregateIndices::is_active.store(b, parse_ctx, bool.const_zero())?;
   let comparison = b.build_int_compare(
     inkwell::IntPredicate::NE,
-    CTX_AGGREGATE_INDICES::state.load(b, parse_ctx)?.into_int_value(),
+    CtxAggregateIndices::state.load(b, parse_ctx)?.into_int_value(),
     i32.const_int(FAIL_STATE_FLAG_LLVM as u64, false).into(),
     "",
   );
@@ -321,28 +321,28 @@ pub(crate) unsafe fn construct_get_adjusted_input_block_function(
   b.position_at_end(entry_block);
   let p_ctx = fn_value.get_nth_param(0)?.into_pointer_value();
   let needed = fn_value.get_nth_param(1)?.into_int_value();
-  CTX_AGGREGATE_INDICES::end_ptr.store(
+  CtxAggregateIndices::end_ptr.store(
     b,
     p_ctx,
     b.build_int_to_ptr(needed, i8.ptr_type(0.into()), ""),
   );
 
-  let beg_ptr = CTX_AGGREGATE_INDICES::beg_ptr.get_ptr(b, p_ctx)?;
-  let anchor_ptr = CTX_AGGREGATE_INDICES::anchor_ptr.get_ptr(b, p_ctx)?;
-  let base_ptr = CTX_AGGREGATE_INDICES::base_ptr.get_ptr(b, p_ctx)?;
-  let head_ptr = CTX_AGGREGATE_INDICES::head_ptr.get_ptr(b, p_ctx)?;
-  let scan_ptr = CTX_AGGREGATE_INDICES::scan_ptr.get_ptr(b, p_ctx)?;
-  let end_ptr = CTX_AGGREGATE_INDICES::end_ptr.get_ptr(b, p_ctx)?;
+  let beg_ptr = CtxAggregateIndices::beg_ptr.get_ptr(b, p_ctx)?;
+  let anchor_ptr = CtxAggregateIndices::anchor_ptr.get_ptr(b, p_ctx)?;
+  let base_ptr = CtxAggregateIndices::base_ptr.get_ptr(b, p_ctx)?;
+  let head_ptr = CtxAggregateIndices::head_ptr.get_ptr(b, p_ctx)?;
+  let scan_ptr = CtxAggregateIndices::scan_ptr.get_ptr(b, p_ctx)?;
+  let end_ptr = CtxAggregateIndices::end_ptr.get_ptr(b, p_ctx)?;
 
   let input_complete = b
     .build_call(
       CallableValue::try_from(
-        CTX_AGGREGATE_INDICES::get_input_info
+        CtxAggregateIndices::get_input_info
           .load(b, p_ctx)?
           .into_pointer_value(),
       )?,
       &[
-        CTX_AGGREGATE_INDICES::reader.load(b, p_ctx)?.into(),
+        CtxAggregateIndices::reader.load(b, p_ctx)?.into(),
         beg_ptr.into(),
         anchor_ptr.into(),
         base_ptr.into(),
@@ -356,7 +356,7 @@ pub(crate) unsafe fn construct_get_adjusted_input_block_function(
     .left()?
     .into_int_value();
 
-  CTX_AGGREGATE_INDICES::block_is_eoi.store(b, p_ctx, input_complete);
+  CtxAggregateIndices::block_is_eoi.store(b, p_ctx, input_complete);
 
   b.build_return(None);
 
@@ -388,7 +388,7 @@ pub(crate) unsafe fn construct_internal_free_stack(
   let empty_stack = ctx.append_basic_block(fn_value, "empty_stack");
   let free_stack = ctx.append_basic_block(fn_value, "free_stack");
   let goto_slot_count =
-    CTX_AGGREGATE_INDICES::goto_size.load(b, parse_ctx)?.into_int_value();
+    CtxAggregateIndices::goto_size.load(b, parse_ctx)?.into_int_value();
   let c = b.build_int_compare(
     inkwell::IntPredicate::NE,
     goto_slot_count,
@@ -405,7 +405,7 @@ pub(crate) unsafe fn construct_internal_free_stack(
   let goto_total_bytes_64 =
     b.build_int_cast(goto_byte_size, ctx.i64_type(), "");
   let goto_free =
-    CTX_AGGREGATE_INDICES::goto_free.load(b, parse_ctx)?.into_int_value();
+    CtxAggregateIndices::goto_free.load(b, parse_ctx)?.into_int_value();
   let goto_free_bytes = b.build_left_shift(
     goto_free,
     ctx.i32_type().const_int(4, false),
@@ -415,7 +415,7 @@ pub(crate) unsafe fn construct_internal_free_stack(
     b.build_int_sub(goto_byte_size, goto_free_bytes, "goto_used_bytes");
   let goto_used_bytes_64 =
     b.build_int_cast(goto_used_bytes, ctx.i64_type(), "");
-  let goto_top_ptr = CTX_AGGREGATE_INDICES::goto_stack_ptr
+  let goto_top_ptr = CtxAggregateIndices::goto_stack_ptr
     .load(b, parse_ctx)?
     .into_pointer_value();
   let goto_base_ptr_int = b.build_int_sub(
@@ -433,7 +433,7 @@ pub(crate) unsafe fn construct_internal_free_stack(
     &[goto_base_ptr.into(), goto_total_bytes_64.into()],
     "",
   );
-  CTX_AGGREGATE_INDICES::goto_size.store(b, parse_ctx, i32.const_zero());
+  CtxAggregateIndices::goto_size.store(b, parse_ctx, i32.const_zero());
   b.build_unconditional_branch(empty_stack);
   b.position_at_end(empty_stack);
   b.build_return(None);
@@ -454,13 +454,13 @@ pub(crate) unsafe fn construct_extend_stack(
 
   // Compare the number of needed slots with the number of available slots
   let goto_free =
-    CTX_AGGREGATE_INDICES::goto_free.load(b, parse_ctx)?.into_int_value();
+    CtxAggregateIndices::goto_free.load(b, parse_ctx)?.into_int_value();
 
   // Create a new stack, copy data from old stack to new one
   // and, if the old stack was not the original stack,
   // delete the old stack.
   let goto_slot_count =
-    CTX_AGGREGATE_INDICES::goto_size.load(b, parse_ctx)?.into_int_value();
+    CtxAggregateIndices::goto_size.load(b, parse_ctx)?.into_int_value();
   let goto_byte_size = b.build_left_shift(
     goto_slot_count,
     ctx.i32_type().const_int(4, false),
@@ -477,7 +477,7 @@ pub(crate) unsafe fn construct_extend_stack(
     b.build_int_sub(goto_byte_size, goto_free_bytes, "goto_used_bytes");
   let goto_used_bytes_64 =
     b.build_int_cast(goto_used_bytes, ctx.i64_type(), "");
-  let goto_top_ptr = CTX_AGGREGATE_INDICES::goto_stack_ptr
+  let goto_top_ptr = CtxAggregateIndices::goto_stack_ptr
     .load(b, parse_ctx)?
     .into_pointer_value();
   let goto_base_ptr_int = b.build_int_sub(
@@ -539,16 +539,16 @@ pub(crate) unsafe fn construct_extend_stack(
     types.goto.ptr_type(0.into()),
     "new_top",
   );
-  CTX_AGGREGATE_INDICES::goto_stack_ptr.store(
+  CtxAggregateIndices::goto_stack_ptr.store(
     b,
     parse_ctx,
     new_stack_top_ptr,
   )?;
-  CTX_AGGREGATE_INDICES::goto_size.store(b, parse_ctx, new_slot_count)?;
+  CtxAggregateIndices::goto_size.store(b, parse_ctx, new_slot_count)?;
 
   let slot_diff = b.build_int_sub(new_slot_count, goto_slot_count, "slot_diff");
   let new_remaining_count = b.build_int_add(slot_diff, goto_free, "remaining");
-  CTX_AGGREGATE_INDICES::goto_free.store(b, parse_ctx, new_remaining_count);
+  CtxAggregateIndices::goto_free.store(b, parse_ctx, new_remaining_count);
 
   b.build_return(Some(&i32.const_int(1, false)));
 
@@ -563,18 +563,18 @@ pub(crate) unsafe fn construct_init(
   let parse_ctx = fn_value.get_first_param().unwrap().into_pointer_value();
   let reader_ptr = fn_value.get_last_param().unwrap().into_pointer_value();
   b.position_at_end(ctx.append_basic_block(fn_value, "Entry"));
-  CTX_AGGREGATE_INDICES::reader.store(b, parse_ctx, reader_ptr)?;
-  CTX_AGGREGATE_INDICES::goto_size.store(
+  CtxAggregateIndices::reader.store(b, parse_ctx, reader_ptr)?;
+  CtxAggregateIndices::goto_size.store(
     b,
     parse_ctx,
     i32.const_int(0, false),
   )?;
-  CTX_AGGREGATE_INDICES::goto_free.store(
+  CtxAggregateIndices::goto_free.store(
     b,
     parse_ctx,
     i32.const_int(0, false),
   )?;
-  CTX_AGGREGATE_INDICES::state.store(
+  CtxAggregateIndices::state.store(
     b,
     parse_ctx,
     i32.const_int(NORMAL_STATE_FLAG_LLVM as u64, false),
@@ -609,14 +609,14 @@ pub(crate) fn add_goto_pop_instructions<'a>(
   let LLVMParserModule { b, i32, .. } = module;
 
   let goto_stack_ptr =
-    CTX_AGGREGATE_INDICES::goto_stack_ptr.get_ptr(b, parse_ctx)?;
+    CtxAggregateIndices::goto_stack_ptr.get_ptr(b, parse_ctx)?;
   let goto_top = b.build_load(goto_stack_ptr, "").into_pointer_value();
   let goto_top = unsafe {
     b.build_gep(goto_top, &[i32.const_int(1, false).const_neg()], "")
   };
   b.build_store(goto_stack_ptr, goto_top);
 
-  let goto_free_ptr = CTX_AGGREGATE_INDICES::goto_free.get_ptr(b, parse_ctx)?;
+  let goto_free_ptr = CtxAggregateIndices::goto_free.get_ptr(b, parse_ctx)?;
   let goto_free = b.build_load(goto_free_ptr, "").into_int_value();
   let goto_free = b.build_int_add(goto_free, i32.const_int(1, false), "");
   b.build_store(goto_free_ptr, goto_free);
@@ -641,7 +641,7 @@ pub(crate) fn construct_push_state_function(
   ensure_space_on_goto_stack(1, module, parse_ctx, fn_value);
 
   let goto_stack_ptr =
-    CTX_AGGREGATE_INDICES::goto_stack_ptr.get_ptr(b, parse_ctx)?;
+    CtxAggregateIndices::goto_stack_ptr.get_ptr(b, parse_ctx)?;
   let goto_top = b.build_load(goto_stack_ptr, "").into_pointer_value();
 
   // Create new goto struct
@@ -659,7 +659,7 @@ pub(crate) fn construct_push_state_function(
   // Store the top slot pointer
   b.build_store(goto_stack_ptr, goto_top);
 
-  let goto_free_ptr = CTX_AGGREGATE_INDICES::goto_free.get_ptr(b, parse_ctx)?;
+  let goto_free_ptr = CtxAggregateIndices::goto_free.get_ptr(b, parse_ctx)?;
   let goto_free = b.build_load(goto_free_ptr, "").into_int_value();
   let goto_free = b.build_int_sub(goto_free, i32.const_int(1, false), "");
 
@@ -871,14 +871,14 @@ pub(crate) unsafe fn construct_dispatch_functions<'a>(
     b.position_at_end(entry_block);
 
     let goto_stack_ptr =
-      CTX_AGGREGATE_INDICES::goto_stack_ptr.get_ptr(b, parse_ctx)?;
+      CtxAggregateIndices::goto_stack_ptr.get_ptr(b, parse_ctx)?;
     let goto_top = b.build_load(goto_stack_ptr, "").into_pointer_value();
     let goto_top =
       b.build_gep(goto_top, &[i32.const_int(1, false).const_neg()], "");
     b.build_store(goto_stack_ptr, goto_top);
 
     let goto_free_ptr =
-      CTX_AGGREGATE_INDICES::goto_free.get_ptr(b, parse_ctx)?;
+      CtxAggregateIndices::goto_free.get_ptr(b, parse_ctx)?;
     let goto_free = b.build_load(goto_free_ptr, "").into_int_value();
     let goto_free = b.build_int_add(goto_free, i32.const_int(1, false), "");
     b.build_store(goto_free_ptr, goto_free);
@@ -913,14 +913,14 @@ pub(crate) unsafe fn construct_dispatch_functions<'a>(
     b.position_at_end(block_dispatch);
 
     let goto_stack_ptr =
-      CTX_AGGREGATE_INDICES::goto_stack_ptr.get_ptr(b, parse_ctx)?;
+      CtxAggregateIndices::goto_stack_ptr.get_ptr(b, parse_ctx)?;
     let goto_top = b.build_load(goto_stack_ptr, "").into_pointer_value();
     let goto_top =
       b.build_gep(goto_top, &[i32.const_int(1, false).const_neg()], "");
     b.build_store(goto_stack_ptr, goto_top);
 
     let goto_free_ptr =
-      CTX_AGGREGATE_INDICES::goto_free.get_ptr(b, parse_ctx)?;
+      CtxAggregateIndices::goto_free.get_ptr(b, parse_ctx)?;
     let goto_free = b.build_load(goto_free_ptr, "").into_int_value();
     let goto_free = b.build_int_add(goto_free, i32.const_int(1, false), "");
     b.build_store(goto_free_ptr, goto_free);

@@ -2,7 +2,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "GDB64",
+             "name": "GDB64",
             "type": "lldb",
             "request": "launch",
             "program": "${workspaceFolder}/target/debug/test_basic_grammar_llvm_bin",

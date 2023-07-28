@@ -1,17 +1,7 @@
 use crate::CachedString;
 
-use super::{
-  Array,
-  GuardedStr,
-  IString,
-  IStringStore,
-  Item,
-  Items,
-  Rule,
-  Set,
-  SymbolId,
-};
-use std::collections::VecDeque;
+use super::{Array, GuardedStr, IString, IStringStore, Item, Items, Rule, Set, SymbolId};
+use std::{collections::VecDeque, iter::FilterMap};
 
 #[cfg_attr(debug_assertions, derive(Debug))]
 #[derive(Clone)]
@@ -134,13 +124,7 @@ impl ParserDatabase {
       .prod_names
       .iter()
       .enumerate()
-      .find_map(|(v, (a, b))| {
-        if *a == string || *b == string {
-          Some(v.into())
-        } else {
-          None
-        }
-      })
+      .find_map(|(v, (a, b))| if *a == string || *b == string { Some(v.into()) } else { None })
       .unwrap_or_default()
   }
 
@@ -153,12 +137,7 @@ impl ParserDatabase {
   /// Given an [DBProdKey] returns an IString comprising the name of the
   /// production, or an empty string if the id is invalid.
   pub fn prod_guid_name(&self, key: DBProdKey) -> IString {
-    self
-      .prod_names
-      .get(key.0 as usize)
-      .cloned()
-      .map(|(n, _)| n)
-      .unwrap_or_default()
+    self.prod_names.get(key.0 as usize).cloned().map(|(n, _)| n).unwrap_or_default()
   }
 
   /// Given an [DBProdKey] returns a [GuardedStr] of the production's name.
@@ -170,12 +149,7 @@ impl ParserDatabase {
   /// Given an [DBProdKey] returns an IString comprising the name of the
   /// production, or an empty string if the id is invalid.
   pub fn prod_friendly_name(&self, key: DBProdKey) -> IString {
-    self
-      .prod_names
-      .get(key.0 as usize)
-      .cloned()
-      .map(|(_, n)| n)
-      .unwrap_or_default()
+    self.prod_names.get(key.0 as usize).cloned().map(|(_, n)| n).unwrap_or_default()
   }
 
   /// Given an [DBProdKey] returns a [GuardedStr] of the production's name.
@@ -187,6 +161,11 @@ impl ParserDatabase {
   /// Given an [DBSymKey] returns the associated [SymbolId]
   pub fn sym(&self, key: DBTokenKey) -> SymbolId {
     self.tokens.get(key.0 as usize).map(|s| s.sym_id).unwrap_or_default()
+  }
+
+  /// Given an [DBSymKey] returns the token identifier representing the symbol,
+  pub fn tokens(&self) -> &Array<DBTokenData> {
+    &self.tokens
   }
 
   /// Given an [DBSymKey] returns the token identifier representing the symbol,
@@ -232,6 +211,19 @@ impl ParserDatabase {
     &self.string_store
   }
 
+  /// Returns all regular (non token) productions.
+  pub fn parse_productions<'db>(&'db self) -> Array<DBProdKey> {
+    self
+      .productions()
+      .iter()
+      .enumerate()
+      .filter_map(|(i, p)| match p {
+        SymbolId::NonTerminal { .. } => Some(DBProdKey(i as u32)),
+        _ => None,
+      })
+      .collect()
+  }
+
   pub fn follow_items<'db>(&'db self, key: DBProdKey) -> Items<'db> {
     let mut prod_ids = VecDeque::from_iter(vec![key]);
     let mut seen = Set::new();
@@ -268,18 +260,20 @@ fn construct_follow(
 
   // Calculates all follow items for all productions
   for (rule_id, rule) in rules.iter().enumerate() {
-    let last = rule.rule.symbols.len() - 1;
-    for (sym_off, (sym, _)) in rule.rule.symbols.iter().enumerate() {
-      match sym {
-        SymbolId::DBNonTerminalToken { prod_key, .. } if rule.is_scanner => {
-          let val = follow_items[prod_key.0 as usize].get_or_insert(vec![]);
-          val.push((rule_id.into(), sym_off as u32, sym_off == last))
+    if !rule.rule.symbols.is_empty() {
+      let last = rule.rule.symbols.len() - 1;
+      for (sym_off, (sym, ..)) in rule.rule.symbols.iter().enumerate() {
+        match sym {
+          SymbolId::DBNonTerminalToken { prod_key, .. } if rule.is_scanner => {
+            let val = follow_items[prod_key.0 as usize].get_or_insert(vec![]);
+            val.push((rule_id.into(), sym_off as u32, sym_off == last))
+          }
+          SymbolId::DBNonTerminal { key } => {
+            let val = follow_items[key.0 as usize].get_or_insert(vec![]);
+            val.push((rule_id.into(), sym_off as u32, sym_off == last))
+          }
+          _ => {}
         }
-        SymbolId::DBNonTerminal { key } => {
-          let val = follow_items[key.0 as usize].get_or_insert(vec![]);
-          val.push((rule_id.into(), sym_off as u32, sym_off == last))
-        }
-        _ => {}
       }
     }
   }

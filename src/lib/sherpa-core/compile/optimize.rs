@@ -30,7 +30,7 @@ pub fn garbage_collect<
     (p.prod_entry_name, parse_states.remove(&p.prod_entry_name).unwrap())
   }));
 
-  while let Some((name, mut state)) = queue.pop_front() {
+  while let Some((name, state)) = queue.pop_front() {
     // traverse the state to find all goto and push references, convert
     // reference name to IString and push respective state to queue
     if let SherpaResult::Ok(ast) = state.get_ast() {
