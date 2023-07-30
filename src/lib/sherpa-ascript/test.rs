@@ -1,48 +1,18 @@
-use std::path::PathBuf;
-
 use sherpa_core::{
-  test::frame::{build_parse_states_from_source_str, TestPackage},
+  test::frame::{
+    build_parse_db_from_source_str,
+    build_parse_states_from_source_str,
+    DBPackage,
+    TestPackage,
+  },
   *,
 };
 
 use crate::{
   output_base::AscriptWriter,
   rust::rust::{create_rust_writer_utils, write_rust_ast},
-  types::{AScriptStore, AScriptTypeVal},
+  types::AScriptStore,
 };
-/*
-#[test]
-fn test_grammar_imported_grammar() -> SherpaResult<()> {
-  let mut j = Journal::new(None);
-  let g = GrammarStore::from_path(
-    &mut j,
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-      .join("../../../test/grammars/script_base.sg")
-      .canonicalize()
-      .unwrap(),
-  )
-  .unwrap();
-
-  let store = AScriptStore::new(&mut j)?;
-
-  assert_eq!(store.prod_types.len(), g.parse_productions.len());
-
-  assert!(store.prod_types.iter().all(|p| {
-    p.1.iter().all(|t| !matches!(t.0.type_, AScriptTypeVal::Undefined))
-  }));
-
-  let u = create_rust_writer_utils(&store);
-  let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
-  let writer = write_rust_ast(w)?;
-
-  println!(
-    "{}",
-    String::from_utf8(writer.into_writer().into_output()).unwrap()
-  );
-
-  SherpaResult::Ok(())
-}
-*/
 
 #[test]
 fn temp_test_grammar() -> SherpaResult<()> {
@@ -223,7 +193,7 @@ fn rust_vector_return_types_print_correctly() -> SherpaResult<()> {
 
 #[test]
 fn group_productions_get_correct_type_information() -> SherpaResult<()> {
-  build_parse_states_from_source_str(
+  build_parse_db_from_source_str(
     r##"
   NAME hc_symbol
 
@@ -231,7 +201,7 @@ fn group_productions_get_correct_type_information() -> SherpaResult<()> {
 
   <> annotated_symbol >
 
-          symbol^s [tk:reference?^r "?"?^o ]!
+          symbol^s [ tk:reference?^r "?"?^o ]
 
               :ast { t_AnnotatedSymbol, symbol:$s, is_optional:bool($o), reference:str($r), tok  }
 
@@ -243,7 +213,7 @@ fn group_productions_get_correct_type_information() -> SherpaResult<()> {
 
           "c:" ( 'num' | 'nl' | 'sp' | 'id' | 'sym' | 'any' )
 
-              :ast { t_Class, c_Symbol , c_Terminal, val:str($2),  tok }
+              :ast { t_Class, val:str($2),  tok }
 
   <> reference >
 
@@ -271,7 +241,7 @@ fn group_productions_get_correct_type_information() -> SherpaResult<()> {
           "##,
     "/test.sg".into(),
     Default::default(),
-    &|TestPackage { mut journal, states, db, soup }| {
+    &|DBPackage { mut journal, db, soup }| {
       let store = AScriptStore::new(&mut journal, &db)?;
 
       let u = create_rust_writer_utils(&store, &db);
@@ -284,315 +254,129 @@ fn group_productions_get_correct_type_information() -> SherpaResult<()> {
   )
 }
 
-// pri
-/*
-#[test]
-fn test_parse_errors_when_production_has_differing_return_types3(
-) -> SherpaResult<()> {
-  let mut j = Journal::new(Option::None);
-
-  GrammarStore::from_str(&mut j, "<> B > c:id(+)").unwrap();
-
-  let store = AScriptStore::new(&mut j).unwrap();
-
-  println!("{:#?}", store);
-
-  let u = create_rust_writer_utils(&store);
-  let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
-  let writer = write_rust_ast(w)?;
-
-  println!(
-    "{}",
-    String::from_utf8(writer.into_writer().into_output()).unwrap()
-  );
-
-  SherpaResult::Ok(())
-}
-
-fn create_dummy_body(id: RuleId) -> Rule {
+/* fn create_dummy_body(id: RuleId) -> Rule {
   Rule { id, ..Default::default() }
 }
-
+ */
 #[test]
 fn test_parse_errors_when_struct_prop_type_is_redefined() -> SherpaResult<()> {
-  let mut j = Journal::new(None);
-  j.set_active_report("test", ReportType::AScriptCompile);
+  build_parse_db_from_source_str(
+    r##"
 
-  let astA = compile_ascript_struct(" { t_TestA, apple: u32 }")?;
-  let astB = compile_ascript_struct(" { t_TestA, apple: i64 }")?;
+  <> a > "a" :ast { t_TestA, apple: u32 } |  "b"  :ast { t_TestA, apple: i64 }
 
-  let mut ast = AScriptStore::default();
+          "##,
+    "/test.sg".into(),
+    Default::default(),
+    &|DBPackage { mut journal, db, .. }| {
+      let results = AScriptStore::new(&mut journal, &db);
 
-  let rule = create_dummy_body(RuleId(0));
+      assert!(results.is_faulty());
 
-  let id = compile_struct_type(&mut j, &mut ast, &astA, &rule);
-  compile_struct_props(&mut j, &mut ast, &id, &astA, &rule);
-
-  assert!(!j.report().debug_error());
-
-  let id = compile_struct_type(&mut j, &mut ast, &astB, &rule);
-  compile_struct_props(&mut j, &mut ast, &id, &astB, &rule);
-
-  assert!(j.report().debug_error());
-
-  SherpaResult::Ok(())
-}
-
-#[test]
-fn test_prop_is_made_optional_when_not_present_or_introduced_in_subsequent_definitions(
-) -> SherpaResult<()> {
-  let mut j = Journal::new(None);
-  j.set_active_report("test", ReportType::AScriptCompile);
-  let mut ast = AScriptStore::default();
-
-  for (i, struct_) in [
-    " { t_TestA, apple: u32, beetle:bool }",
-    " { t_TestA, beetle:bool }",
-    " { t_TestB }",
-    " { t_TestB, apple: u32 }",
-  ]
-  .iter()
-  .map(|input| compile_ascript_struct(input))
-  .enumerate()
-  {
-    assert!(struct_.is_ok());
-
-    let struct_ = struct_.unwrap();
-
-    let rule = create_dummy_body(RuleId(i as u64));
-
-    let id = compile_struct_type(&mut j, &mut ast, &struct_, &rule);
-
-    compile_struct_props(&mut j, &mut ast, &id, &struct_, &rule);
-
-    assert!(!j.report().debug_error());
-  }
-
-  for struct_id in ast.structs.keys().cloned().collect::<Vec<_>>() {
-    verify_property_presence(&mut ast, &struct_id);
-  }
-
-  for prop in &ast.props {
-    if prop.0.name == "beetle" {
-      assert!(
-        !prop.1.optional,
-        "Expected {}~{} to not be optional",
-        ast.structs.get(&prop.0.struct_id).unwrap().type_name,
-        prop.0.name
-      );
-    } else {
-      assert!(
-        prop.1.optional,
-        "Expected {}~{} to be optional",
-        ast.structs.get(&prop.0.struct_id).unwrap().type_name,
-        prop.0.name
-      );
-    }
-  }
-
-  SherpaResult::Ok(())
-}
-
-#[test]
-fn test_parse_errors_when_production_has_differing_return_types() {
-  let mut j = Journal::new(Option::None);
-  GrammarStore::from_str(
-    &mut j,
-    r#"
-  <> A > "1" :ast { t_Test }
-  | 'a'
-  "#,
+      SherpaResult::Ok(())
+    },
   )
-  .unwrap();
-
-  match AScriptStore::new(&mut j) {
-    SherpaResult::Err(_) => {
-      assert!(j.report().debug_error());
-    }
-    _ => unreachable!("This should have generated an error"),
-  }
 }
 
 #[test]
-fn test_ASTs_are_defined_for_ascript_return_functions() -> SherpaResult<()> {
-  let grammar = "<> A > '1' :ast { t_Test, val: str($1) } ";
+fn test_parse_errors_when_production_has_differing_return_types() -> SherpaResult<()> {
+  build_parse_db_from_source_str(
+    r#"<> A > "1" :ast { t_Test } | 'a' "#,
+    "/test.sg".into(),
+    Default::default(),
+    &|DBPackage { mut journal, db, .. }| {
+      let results = AScriptStore::new(&mut journal, &db);
 
-  let grammar_ast = compile_grammar_ast(grammar)?;
+      assert!(results.is_faulty());
 
-  let box sherpa::Production { rules, .. } = &grammar_ast.productions[0];
-  let box sherpa::Rule { ast_definition, .. } = &rules[0];
-
-  if let Some(box sherpa::Ascript { ast, .. }) = &ast_definition {
-    if let ASTNode::AST_Struct(box sherpa::AST_Struct { typ, props, .. }) = ast
-    {
-      assert_eq!(props.len(), 1);
-
-      assert_eq!(typ.to_string(), "t_Test");
-
-      if let ASTNode::AST_Property(box sherpa::AST_Property {
-        id, value, ..
-      }) = &props[0]
-      {
-        assert_eq!(id, "val");
-
-        if let Some(ASTNode::AST_STRING(..)) = value {
-        } else {
-          panic!("Prop is not a string");
-        }
-      } else {
-        panic!("Incorrect prop");
-      }
-    } else {
-      panic!("Script value is not a struct.")
-    }
-  } else {
-    panic!("AScripT expression not found.")
-  }
-
-  SherpaResult::Ok(())
-}
-
-#[test]
-fn test_rust_render() -> SherpaResult<()> {
-  let mut j = Journal::new(None);
-  GrammarStore::from_str(
-    &mut j,
-    "
-  <> statement > adhoc        :ast { t_Expr, v:[$1], t:str(tok<1,1>) }
-      | '{' adhoc(+) '}'      :ast { t_Expr, v:$2 }
-
-  <> adhoc > 'test'           :ast tok
-  ",
-  );
-  assert!(!j.debug_error_report(), "Should not have grammar errors");
-
-  let store = AScriptStore::new(&mut j)?;
-
-  let u = create_rust_writer_utils(&store);
-  let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
-  let writer = write_rust_ast(w)?;
-
-  println!("{}", String::from_utf8(writer.into_writer().into_output())?);
-
-  /*   let writer = build_c(&store, CodeWriter::new(vec![]))?;
-
-  println!("{}", String::from_utf8(writer.into_writer().into_output())?); */
-
-  SherpaResult::Ok(())
-}
-
-#[test]
-fn eof_symbols_should_not_contribute_anything_to_ast() -> SherpaResult<()> {
-  let mut j = Journal::new(None);
-  GrammarStore::from_str(
-    &mut j,
-    "
-      <> A > B $
-
-      <> B > \"2\" :ast u32($1)
-
-      ",
-  );
-  assert!(!j.debug_error_report(), "Should not have grammar errors");
-
-  let store = AScriptStore::new(&mut j)?;
-
-  let u = create_rust_writer_utils(&store);
-  let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
-  let writer = write_rust_ast(w)?;
-
-  println!("{}", String::from_utf8(writer.into_writer().into_output())?);
-
-  let g = &j.grammar()?;
-
-  let t: AScriptTypeVal = store
-    .prod_types
-    .get(&g.get_production_id_by_name("A")?)?
-    .iter()
-    .next()?
-    .0
-    .into();
-
-  assert!(matches!(t, AScriptTypeVal::U32(_)), "{:?} should be a u32 type", t);
-
-  SherpaResult::Ok(())
-}
-
-#[test]
-fn convert_str_to_numeric() -> SherpaResult<()> {
-  let mut j = Journal::new(None);
-  GrammarStore::from_str(
-    &mut j,
-    "
-      <> A > \"1234\" :ast { t_R, d:str($1) }
-
-      <> B > \"1234\" :ast str($1)
-
-      <> C > c:id(+)
-      ",
-  );
-  assert!(!j.debug_error_report(), "Should not have grammar errors");
-
-  let store = AScriptStore::new(&mut j)?;
-
-  let u = create_rust_writer_utils(&store);
-  let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
-  let writer = write_rust_ast(w)?;
-
-  println!("{}", String::from_utf8(writer.into_writer().into_output())?);
-
-  SherpaResult::Ok(())
+      SherpaResult::Ok(())
+    },
+  )
 }
 
 #[test]
 fn token_range_slice() -> SherpaResult<()> {
-  let mut j = Journal::new(None);
-  GrammarStore::from_str(
-    &mut j,
-    "
-      <> A > \"1234\" :ast { t_R, d:str(tok<1,2>) }
+  build_parse_db_from_source_str(
+    r#"<> A > "1234" :ast { t_R, d:str(tok<1,2>) }"#,
+    "/test.sg".into(),
+    Default::default(),
+    &|DBPackage { mut journal, db, .. }| {
+      let store = AScriptStore::new(&mut journal, &db)?;
 
-      ",
-  );
-  assert!(!j.debug_error_report(), "Should not have grammar errors");
+      let u = create_rust_writer_utils(&store, &db);
+      let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
+      let writer = write_rust_ast(w)?;
 
-  let store = AScriptStore::new(&mut j)?;
-
-  let u = create_rust_writer_utils(&store);
-  let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
-  let writer = write_rust_ast(w)?;
-
-  println!("{}", String::from_utf8(writer.into_writer().into_output())?);
-
-  SherpaResult::Ok(())
+      println!("{}", String::from_utf8(writer.into_writer().into_output())?);
+      SherpaResult::Ok(())
+    },
+  )
 }
 
 #[test]
-fn reference_nonterminal_and_reference_names_when_using_valueless_props(
-) -> SherpaResult<()> {
-  let mut j = Journal::new(None);
-  GrammarStore::from_str(
-    &mut j,
-    "
-      <> A > R \"1234\"^num :ast { t_A, num }
+fn reference_nonterminal_and_reference_names_when_using_valueless_props() -> SherpaResult<()> {
+  build_parse_db_from_source_str(
+    r#"      <> A > R "1234"^num :ast { t_A, num }
 
-      <> R > A :ast { t_R, A }
-      ",
-  );
-  assert!(!j.debug_error_report(), "Should not have grammar errors");
+    <> R > A :ast { t_R, A }"#,
+    "/test.sg".into(),
+    Default::default(),
+    &|DBPackage { mut journal, db, .. }| {
+      let store = AScriptStore::new(&mut journal, &db)?;
 
-  let store = AScriptStore::new(&mut j)?;
+      let u = create_rust_writer_utils(&store, &db);
+      let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
+      let writer = write_rust_ast(w)?;
 
-  j.flush_reports();
-
-  assert!(!j.debug_error_report(), "Should not have ascript errors errors");
-
-  let u = create_rust_writer_utils(&store);
-  let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
-  let writer = write_rust_ast(w)?;
-
-  println!("{}", String::from_utf8(writer.into_writer().into_output())?);
-
-  SherpaResult::Ok(())
+      println!("{}", String::from_utf8(writer.into_writer().into_output())?);
+      SherpaResult::Ok(())
+    },
+  )
 }
-*/
+
+#[test]
+fn convert_str_to_numeric() -> SherpaResult<()> {
+  build_parse_db_from_source_str(
+    r#"
+    <> A > "1234" :ast { t_R, d:str($1) }
+
+    <> B > "1234" :ast str($1)
+
+    <> C > c:id(+)"#,
+    "/test.sg".into(),
+    Default::default(),
+    &|DBPackage { mut journal, db, .. }| {
+      let store = AScriptStore::new(&mut journal, &db)?;
+
+      let u = create_rust_writer_utils(&store, &db);
+      let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
+      let writer = write_rust_ast(w)?;
+
+      println!("{}", String::from_utf8(writer.into_writer().into_output())?);
+      SherpaResult::Ok(())
+    },
+  )
+}
+#[test]
+fn test_prop_is_made_optional_when_not_present_or_introduced_in_subsequent_definitions(
+) -> SherpaResult<()> {
+  build_parse_db_from_source_str(
+    r#"
+    <> start > A | B
+
+    <> A > "1234" :ast { t_R, d:str($1) }
+
+    <> B > "1234" :ast { t_R, o: u32 }"#,
+    "/test.sg".into(),
+    Default::default(),
+    &|DBPackage { mut journal, db, .. }| {
+      let store = AScriptStore::new(&mut journal, &db)?;
+
+      for prop in &store.props {
+        assert!(prop.1.optional)
+      }
+
+      SherpaResult::Ok(())
+    },
+  )
+}

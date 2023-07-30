@@ -489,10 +489,11 @@ num_type!(AScriptTypeValI8, I8, i8, i8);
 pub struct AScriptProp {
   pub type_val:    TaggedType,
   pub location:    Token,
+  /// The grammar the property is defined in.
   pub grammar_ref: GrammarIdentity,
   /// Tracks the number of times this property has been
   /// declared in a struct.
-  pub body_ids:    BTreeSet<DBRuleKey>,
+  pub rule_ids:    BTreeSet<DBRuleKey>,
   pub optional:    bool,
 }
 
@@ -519,7 +520,7 @@ pub struct AScriptStore {
   pub props:          OrderedMap<AScriptPropId, AScriptProp>,
   // Stores the resolved AST types of all parse productions.
   pub prod_types:     ProductionTypesTable,
-  pub body_reduce_fn: OrderedMap<DBRuleKey, (AScriptTypeVal, ASTNode)>,
+  pub rule_reduce_fn: OrderedMap<DBRuleKey, (AScriptTypeVal, ASTNode)>,
   /// The type name of the AST Node enum,
   pub ast_type_name:  String,
   // Maps a struct id to a struct type name
@@ -534,7 +535,7 @@ impl AScriptStore {
       structs:        Default::default(),
       props:          Default::default(),
       prod_types:     Default::default(),
-      body_reduce_fn: Default::default(),
+      rule_reduce_fn: Default::default(),
       ast_type_name:  Default::default(),
       struct_lookups: Default::default(),
       is_dummy:       Default::default(),

@@ -25,7 +25,7 @@ use sherpa_core::{
   *,
 };
 use std::{
-  collections::{btree_map, hash_map::Entry, BTreeSet, HashMap, VecDeque},
+  collections::{btree_map, hash_map::Entry, BTreeSet, HashMap, HashSet, VecDeque},
   vec,
 };
 
@@ -154,6 +154,8 @@ fn add_production_type(
   }
 }
 
+/// Walks entire AST graph and resolves the types that any givin production can
+/// reduce to. Creates errors if a production reduces to incompatible types.
 fn resolve_production_reduce_types(
   j: &mut Journal,
   ast: &mut AScriptStore,
@@ -352,17 +354,17 @@ fn resolve_production_reduce_types(
       }
 
       if !prime.type_.is_undefined() {
-        dbg!(&prime);
         new_map.insert(prime, prime_body_ids);
       }
     }
 
+    // Only when the production is fully resolved do
+    // we add the the types to the ast store.resolve_structure_properties.
+    // Otherwise, the production is resubmitted to resolve unresolved derived types.
     if resubmit {
       pending_prods.push_back(prod_id);
       prod_types.insert(prod_id, new_map);
     } else {
-      // Only when the production is fully resolved do
-      // we add the the types to the ast store.resolve_structure_properties
       ast.prod_types.insert(prod_id, new_map);
     }
   }
@@ -467,14 +469,35 @@ fn resolve_structure_properties(j: &mut Journal, store: &mut AScriptStore, db: &
     return;
   }
 
+  let mut undefined_props = HashSet::new();
+
   // Ensure each property entry has a resolved data type.
   for prop_id in store.props.keys().cloned().collect::<Vec<_>>() {
-    let type_val = store.props.get(&prop_id).unwrap().type_val.clone();
-
-    store.props.get_mut(&prop_id).unwrap().type_val = TaggedType {
-      type_: get_resolved_type(store, &type_val.into()),
-      ..Default::default()
-    };
+    let prop = store.props.get(&prop_id).unwrap();
+    match get_resolved_type(store, &prop.type_val.clone().into()) {
+      AScriptTypeVal::Undefined => {
+        undefined_props.insert(prop_id);
+        // Property is undefined and should be removed from its respective
+        // struct. A warning should also be generated indicating the
+        // type is ignored.
+        if let Some(body_id) = prop.rule_ids.first() {
+          eprintln!(
+            "Warning, the property \n{}\n is undefined and will be ignored",
+            db.rule(*body_id).tok.blame(0, 0, "Test", None)
+          );
+        }
+      }
+      type_ => {
+        store.props.get_mut(&prop_id).unwrap().type_val =
+          TaggedType { type_, ..Default::default() };
+      }
+    }
+  }
+  /// Remove undefined properties
+  for struct_ in store.structs.values_mut() {
+    let new_ids =
+      struct_.prop_ids.iter().cloned().filter(|id| !undefined_props.contains(&id)).collect();
+    struct_.prop_ids = new_ids;
   }
 }
 
@@ -482,7 +505,7 @@ pub(crate) fn verify_property_presence(ast: &mut AScriptStore, struct_id: &AScri
   let struct_ = ast.structs.get(&struct_id).unwrap();
   for prop_id in &struct_.prop_ids {
     let prop = ast.props.get_mut(&prop_id).unwrap();
-    if prop.body_ids.len() != struct_.rule_ids.len() {
+    if prop.rule_ids.len() != struct_.rule_ids.len() {
       prop.optional = true;
     }
   }
@@ -865,39 +888,39 @@ pub fn compile_struct_props(
                     ])),
                     ..Default::default()
                   };
-                  existing.body_ids.insert(rule_id);
+                  existing.rule_ids.insert(rule_id);
                 }
                 (GenericStruct(mut btree_set), Struct(_), ..) => {
                   btree_set.insert(prop_type);
                   existing.type_val =
                     TaggedType { type_: GenericStruct(btree_set), ..Default::default() };
-                  existing.body_ids.insert(rule_id);
+                  existing.rule_ids.insert(rule_id);
                 }
                 (Struct(_), GenericStruct(mut btree_set), ..) => {
                   btree_set.insert(existing.type_val.clone());
                   existing.type_val =
                     TaggedType { type_: GenericStruct(btree_set), ..Default::default() };
-                  existing.body_ids.insert(rule_id);
+                  existing.rule_ids.insert(rule_id);
                 }
                 (GenericStructVec(mut vecA), GenericStructVec(mut vecB), ..) => {
                   vecA.append(&mut vecB);
                   existing.type_val =
                     TaggedType { type_: GenericStructVec(vecA), ..Default::default() };
-                  existing.body_ids.insert(rule_id);
+                  existing.rule_ids.insert(rule_id);
                 }
                 (Undefined, _) => {
-                  existing.body_ids.insert(rule_id);
+                  existing.rule_ids.insert(rule_id);
                   existing.type_val = prop_type.to_owned();
                   existing.location = prop.tok.clone();
                   existing.grammar_ref = rule.g_id.clone();
                   existing.optional = true;
                 }
                 (_, Undefined) => {
-                  existing.body_ids.insert(rule_id);
+                  existing.rule_ids.insert(rule_id);
                   existing.optional = true;
                 }
                 (a, b) if a.is_same_type(&b) => {
-                  existing.body_ids.insert(rule_id);
+                  existing.rule_ids.insert(rule_id);
                 }
                 _ => {
                   add_prop_redefinition_error(
@@ -919,7 +942,7 @@ pub fn compile_struct_props(
             _ => {
               store.props.insert(prop_id.clone(), AScriptProp {
                 type_val: prop_type.into(),
-                body_ids: BTreeSet::from_iter(vec![rule_id]),
+                rule_ids: BTreeSet::from_iter(vec![rule_id]),
                 location: prop.tok.clone(),
                 grammar_ref: rule.g_id.clone(),
                 ..Default::default()

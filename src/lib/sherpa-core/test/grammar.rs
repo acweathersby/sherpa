@@ -115,6 +115,11 @@ fn grammar_optional_symbol_with_all_annotations_3() -> R<()> {
 }
 
 #[test]
+fn grammar_token_production() -> R<()> {
+  build("<> a > tk:b <> b > tk:c <> c > 'c'", "".into(), Default::default(), &|_| R::Ok(()))
+}
+
+#[test]
 fn grammar_eof_symbol() -> R<()> {
   build("<> a > c:sp $ ", "".into(), Default::default(), &|_| R::Ok(()))
 }

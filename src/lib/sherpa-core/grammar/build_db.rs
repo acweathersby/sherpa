@@ -348,6 +348,7 @@ fn convert_rule_symbols(
   }
 }
 
+/// Converts an AST symbol into a DB symbol.
 fn convert_rule_symbol(
   sym: &mut SymbolId,
   p_map: &mut std::collections::HashMap<SymbolId, usize>,
@@ -482,7 +483,7 @@ fn insert_token_production(rules: &mut Vec<Rule>, token_productions: &mut VecDeq
       .symbols
       .iter()
       .map(|(sym, annotation, index)| match sym {
-        SymbolId::NonTerminal { id } => {
+        SymbolId::NonTerminalToken { id, .. } | SymbolId::NonTerminal { id } => {
           token_productions.push_back(*id);
           (id.as_tok_sym(), *annotation, *index)
         }

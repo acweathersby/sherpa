@@ -1,11 +1,5 @@
 use sherpa_core::{
-  parser::{
-    ASTNode,
-    ASTNodeType,
-    AST_NamedReference,
-    AST_Struct,
-    GetASTNodeType,
-  },
+  parser::{ASTNode, ASTNodeType, AST_NamedReference, AST_Struct, GetASTNodeType},
   proxy::Array,
   *,
 };
@@ -41,21 +35,11 @@ pub(crate) struct ASTExprHandler<'a> {
   ///      type_slot: usize,
   /// ) -> Option<Ref>
   /// ```
-  pub expr: &'a dyn Fn(
-    &AscriptWriterUtils,
-    &ASTNode,
-    &Rule,
-    &mut usize,
-    usize,
-  ) -> Option<SlotRef>,
+  pub expr: &'a dyn Fn(&AscriptWriterUtils, &ASTNode, &Rule, &mut usize, usize) -> Option<SlotRef>,
 }
 
-pub(crate) type PropHandlerFn = dyn Fn(
-  &AscriptWriterUtils,
-  Option<SlotRef>,
-  &AScriptTypeVal,
-  bool,
-) -> (String, Option<SlotRef>);
+pub(crate) type PropHandlerFn =
+  dyn Fn(&AscriptWriterUtils, Option<SlotRef>, &AScriptTypeVal, bool) -> (String, Option<SlotRef>);
 
 pub(crate) struct AscriptPropHandler<'a> {
   /// ```no_compile
@@ -73,8 +57,7 @@ pub(crate) struct AscriptPropHandler<'a> {
 type AssignmentWriter<'a> =
   dyn Fn(&AscriptWriterUtils, &AScriptTypeVal, String, String, bool) -> String;
 
-type SlotAssign<'a> =
-  dyn Fn(&AscriptWriterUtils, &AScriptTypeVal, String) -> String;
+type SlotAssign<'a> = dyn Fn(&AscriptWriterUtils, &AScriptTypeVal, String) -> String;
 
 /// Called when a Node struct needs to be constructed.
 type StructConstructorExpr = dyn Fn(
@@ -162,11 +145,7 @@ pub(crate) struct AscriptWriterUtils<'a> {
 
 impl<'a> AscriptWriterUtils<'a> {
   #[track_caller]
-  pub fn add_type_handler(
-    &mut self,
-    type_: AScriptTypeVal,
-    handler: AscriptTypeHandler<'a>,
-  ) {
+  pub fn add_type_handler(&mut self, type_: AScriptTypeVal, handler: AscriptTypeHandler<'a>) {
     match self.handlers.type_handlers.entry(type_.get_discriminant()) {
       hash_map::Entry::Occupied(_) => {
         panic!("Type handler already registered for [{}]", type_.debug_string())
@@ -178,11 +157,7 @@ impl<'a> AscriptWriterUtils<'a> {
   }
 
   #[track_caller]
-  pub fn add_ast_handler(
-    &mut self,
-    type_: ASTNodeType,
-    handler: ASTExprHandler<'a>,
-  ) {
+  pub fn add_ast_handler(&mut self, type_: ASTNodeType, handler: ASTExprHandler<'a>) {
     match self.handlers.expr_handlers.entry(type_) {
       hash_map::Entry::Occupied(_) => {
         panic!("Type handler already registered for [{:?}]", type_)
@@ -194,11 +169,7 @@ impl<'a> AscriptWriterUtils<'a> {
   }
 
   #[track_caller]
-  pub fn add_prop_handler(
-    &mut self,
-    type_: AScriptTypeVal,
-    handler: AscriptPropHandler<'a>,
-  ) {
+  pub fn add_prop_handler(&mut self, type_: AScriptTypeVal, handler: AscriptPropHandler<'a>) {
     match self.handlers.prop_handlers.entry(type_.get_discriminant()) {
       hash_map::Entry::Occupied(_) => {
         panic!("Prop handler already registered for [{:?}]", type_)
@@ -215,11 +186,7 @@ impl<'a> AscriptWriterUtils<'a> {
     *ref_index
   }
 
-  pub fn ascript_type_to_string(
-    &self,
-    type_: &AScriptTypeVal,
-    optional: bool,
-  ) -> String {
+  pub fn ascript_type_to_string(&self, type_: &AScriptTypeVal, optional: bool) -> String {
     let discriminant = type_.get_discriminant();
     if let Some(type_handler) = self.handlers.type_handlers.get(&discriminant) {
       (*type_handler.name)(self.store, type_, optional)
@@ -228,11 +195,7 @@ impl<'a> AscriptWriterUtils<'a> {
     }
   }
 
-  pub fn ascript_type_to_default_string(
-    &self,
-    type_: &AScriptTypeVal,
-    optional: bool,
-  ) -> String {
+  pub fn ascript_type_to_default_string(&self, type_: &AScriptTypeVal, optional: bool) -> String {
     let discriminant = type_.get_discriminant();
     if let Some(type_handler) = self.handlers.type_handlers.get(&discriminant) {
       (*type_handler.default)(self.store, type_, optional)
@@ -251,8 +214,7 @@ impl<'a> AscriptWriterUtils<'a> {
   where
     Self: Sized,
   {
-    if let Some(expr_handler) = self.handlers.expr_handlers.get(&ast.get_type())
-    {
+    if let Some(expr_handler) = self.handlers.expr_handlers.get(&ast.get_type()) {
       (*expr_handler.expr)(self, ast, rule, ref_index, type_slot)
     } else {
       panic!("{}", SherpaError::SourceError {
@@ -303,23 +265,17 @@ impl<'a> AscriptWriterUtils<'a> {
             if let Some(ast_prop) = ast_struct_props.get(&prop_id.name) {
               let property = store.props.get(prop_id).unwrap();
 
-              let ref_val =
-                ASTNode::AST_NamedReference(Box::new(AST_NamedReference {
-                  value: ast_prop.id.clone(),
-                  tok:   ast_prop.tok.clone(),
-                }));
+              let ref_val = ASTNode::AST_NamedReference(Box::new(AST_NamedReference {
+                value: ast_prop.id.clone(),
+                tok:   ast_prop.tok.clone(),
+              }));
 
               let value = match &ast_prop.value {
                 Some(value) => value,
                 _ => &ref_val,
               };
 
-              match self.ast_expr_to_ref(
-                value,
-                rule,
-                ref_index,
-                i + type_slot * 100,
-              ) {
+              match self.ast_expr_to_ref(value, rule, ref_index, i + type_slot * 100) {
                 Some(ref_) => {
                   let (string, ref_) = self.create_type_initializer_value(
                     Some(ref_),
@@ -332,22 +288,13 @@ impl<'a> AscriptWriterUtils<'a> {
 
                   string
                 }
-                _ => self.ascript_type_to_default_string(
-                  &(&prop.type_val).into(),
-                  prop.optional,
-                ),
+                _ => self.ascript_type_to_default_string(&(&prop.type_val).into(), prop.optional),
               }
             } else {
-              self.ascript_type_to_default_string(
-                &(&prop.type_val).into(),
-                prop.optional,
-              )
+              self.ascript_type_to_default_string(&(&prop.type_val).into(), prop.optional)
             }
           }
-          _ => self.ascript_type_to_default_string(
-            &(&AScriptTypeVal::Undefined),
-            false,
-          ),
+          _ => self.ascript_type_to_default_string(&(&AScriptTypeVal::Undefined), false),
         };
 
         (prop_id.name.clone(), struct_prop_val, AScriptTypeVal::Undefined)
@@ -387,12 +334,8 @@ impl<'a> AscriptWriterUtils<'a> {
     optional: bool,
   ) -> (String, Option<SlotRef>) {
     match self.handlers.prop_handlers.get(&type_val.get_discriminant()) {
-      Some(AscriptPropHandler { expr }) => {
-        (*expr)(&self, ref_, type_val, optional)
-      }
-      _ => {
-        (ref_.clone().map(|ref_| ref_.get_ref_name()).unwrap_or_default(), ref_)
-      }
+      Some(AscriptPropHandler { expr }) => (*expr)(&self, ref_, type_val, optional),
+      _ => (ref_.clone().map(|ref_| ref_.get_ref_name()).unwrap_or_default(), ref_),
     }
   }
 }
@@ -425,9 +368,7 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
             .filter_map(|p_id| {
               self.store.props.get(p_id).map(|p| StructProp {
                 name:        p_id.name.clone(),
-                type_string: self
-                  .utils
-                  .ascript_type_to_string(&(&p.type_val).into(), p.optional),
+                type_string: self.utils.ascript_type_to_string(&(&p.type_val).into(), p.optional),
                 optional:    p.optional,
                 type_:       &p.type_val,
               })
@@ -506,11 +447,7 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
     SherpaResult::Ok(())
   }
 
-  pub fn list<S: Display>(
-    &mut self,
-    delim: &str,
-    data: Vec<S>,
-  ) -> SherpaResult<()> {
+  pub fn list<S: Display>(&mut self, delim: &str, data: Vec<S>) -> SherpaResult<()> {
     for datum in data {
       self.writer.write_line(&datum.to_string())?;
       self.writer.write(delim)?;
@@ -541,15 +478,11 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
       let (n, t) = (
         match (slot_index, token_indices.contains(&slot_index)) {
           (0, _) => Some((self.utils.get_token_name)(ref_index)),
-          (i, _) if i == (rule.symbols.len() - 1) => {
-            Some((self.utils.get_token_name)(ref_index))
-          }
+          (i, _) if i == (rule.symbols.len() - 1) => Some((self.utils.get_token_name)(ref_index)),
           (_, true) => Some((self.utils.get_token_name)(ref_index)),
           _ => None,
         },
-        obj_indices
-          .contains(&slot_index)
-          .then(|| (&self.utils.get_slot_obj_name)(ref_index)),
+        obj_indices.contains(&slot_index).then(|| (&self.utils.get_slot_obj_name)(ref_index)),
       );
 
       self.writer.wrtln(&(self.utils.slot_extract)(n, t, slot_index))?;
@@ -618,11 +551,7 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
             "\n\nProduction result not been resolved\n[{}] == {}\n\n\n{}\n\n",
             db.prod_friendly_name_string(prod_id),
             rule.tok.blame(1, 1, "", BlameColor::RED),
-            prod_data
-              .iter()
-              .map(|(p, _)| { p.debug_string() })
-              .collect::<Vec<_>>()
-              .join("\n")
+            prod_data.iter().map(|(p, _)| { p.debug_string() }).collect::<Vec<_>>().join("\n")
           )
         };
       }
@@ -692,22 +621,14 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
                   let mut tokens = BTreeSet::new();
                   let mut stmt = w.checkpoint();
 
-                  for (i, statement) in statements.statements.iter().enumerate()
-                  {
-                    match stmt.utils.ast_expr_to_ref(
-                      statement,
-                      rule,
-                      &mut ref_index,
-                      i,
-                    ) {
+                  for (i, statement) in statements.statements.iter().enumerate() {
+                    match stmt.utils.ast_expr_to_ref(statement, rule, &mut ref_index, i) {
                       Some(_ref) => {
                         refs.append(&mut _ref.get_ast_obj_indices());
                         tokens.append(&mut _ref.get_token_indices());
                         return_type = _ref.ast_type.clone();
                         reference = _ref.get_ref_name();
-                        stmt
-                          .writer
-                          .write_line(&_ref.to_init_string(w.utils))?;
+                        stmt.writer.write_line(&_ref.to_init_string(w.utils))?;
                       }
                       _ => panic!("Could not resolve: {statement:?}"),
                     }
@@ -720,31 +641,20 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
                   w.writer.merge_checkpoint(stmt.writer)?;
 
                   let return_type = match return_type {
-                    AScriptTypeVal::Undefined
-                    | AScriptTypeVal::GenericVec(None) => {
+                    AScriptTypeVal::Undefined | AScriptTypeVal::GenericVec(None) => {
                       prod_data.iter().next().unwrap().0.into()
                     }
                     r => r,
                   };
 
-                  w.writer.wrtln(&(w.utils.slot_assign)(
-                    w.utils,
-                    &return_type,
-                    reference,
-                  ))?;
+                  w.writer.wrtln(&(w.utils.slot_assign)(w.utils, &return_type, reference))?;
 
                   SherpaResult::Ok(())
                 }
-                type_ => unreachable!(
-                  "Type {type_:?} should not be a root ascript node."
-                ),
+                type_ => unreachable!("Type {type_:?} should not be a root ascript node."),
               },
-              Some(ASTToken::ListIterate(_)) => {
-                SherpaResult::Ok(())
-              }
-              Some(ASTToken::ListEntry(_)) => {
-                  SherpaResult::Ok(())
-              }
+              Some(ASTToken::ListIterate(_)) => SherpaResult::Ok(()),
+              Some(ASTToken::ListEntry(_)) => SherpaResult::Ok(()),
               _ => unreachable!(),
             }
           }
@@ -807,11 +717,7 @@ impl SlotRef {
     }
   }
 
-  pub(crate) fn token(
-    utils: &AscriptWriterUtils,
-    slot_index: usize,
-    type_slot: usize,
-  ) -> Self {
+  pub(crate) fn token(utils: &AscriptWriterUtils, slot_index: usize, type_slot: usize) -> Self {
     SlotRef {
       slot_type: RefIndex::Tok(slot_index),
       type_slot,
@@ -826,11 +732,7 @@ impl SlotRef {
     }
   }
 
-  pub(crate) fn range(
-    utils: &AscriptWriterUtils,
-    slot_index: usize,
-    type_slot: usize,
-  ) -> Self {
+  pub(crate) fn range(utils: &AscriptWriterUtils, slot_index: usize, type_slot: usize) -> Self {
     SlotRef {
       slot_type: RefIndex::Tok(slot_index),
       type_slot,
@@ -842,17 +744,11 @@ impl SlotRef {
     }
   }
 
-  pub(crate) fn node_token(
-    utils: &AscriptWriterUtils,
-    type_slot: usize,
-  ) -> Self {
+  pub(crate) fn node_token(utils: &AscriptWriterUtils, type_slot: usize) -> Self {
     SlotRef {
       slot_type: RefIndex::Tok(0),
       type_slot,
-      init_expression: (utils.create_token)(
-        (utils.get_token_name)(0),
-        TokenCreationType::Token,
-      ),
+      init_expression: (utils.create_token)((utils.get_token_name)(0), TokenCreationType::Token),
       ast_type: AScriptTypeVal::Token,
       predecessors: None,
       post_init_statements: None,
@@ -860,10 +756,7 @@ impl SlotRef {
     }
   }
 
-  pub(crate) fn node_range(
-    utils: &AscriptWriterUtils,
-    type_slot: usize,
-  ) -> Self {
+  pub(crate) fn node_range(utils: &AscriptWriterUtils, type_slot: usize) -> Self {
     SlotRef {
       slot_type: RefIndex::Tok(0),
       type_slot,
@@ -906,11 +799,7 @@ impl SlotRef {
     self.ast_type.clone()
   }
 
-  pub(crate) fn to(
-    self,
-    conversion_expr: String,
-    ast_type: AScriptTypeVal,
-  ) -> Self {
+  pub(crate) fn to(self, conversion_expr: String, ast_type: AScriptTypeVal) -> Self {
     SlotRef {
       slot_type: self.slot_type,
       type_slot: self.type_slot,
@@ -1027,10 +916,7 @@ impl SlotRef {
     self
   }
 
-  pub(crate) fn add_predecessors(
-    &mut self,
-    predecessors: Vec<SlotRef>,
-  ) -> &mut Self {
+  pub(crate) fn add_predecessors(&mut self, predecessors: Vec<SlotRef>) -> &mut Self {
     let prev = self.predecessors.get_or_insert(vec![]);
 
     for predecessor in predecessors {
@@ -1065,11 +951,7 @@ pub(crate) fn get_ascript_export_data(
             value: ASCRIPT_FIRST_NODE_ID.to_string(),
           })),
           &Rule {
-            symbols: vec![(
-              SymbolId::DBNonTerminal { key: *prod_key },
-              Default::default(),
-              0,
-            )],
+            symbols: vec![(SymbolId::DBNonTerminal { key: *prod_key }, Default::default(), 0)],
             g_id:    db.rule(db.prod_rules(*prod_key).unwrap()[0]).g_id,
             skipped: Default::default(),
             tok:     Default::default(),
