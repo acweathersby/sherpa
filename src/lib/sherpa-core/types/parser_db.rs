@@ -36,6 +36,7 @@ pub struct EntryPoint {
   /// The friendly name of the production as specified in the
   /// `IMPORT <prod_name> as <entry_name>` preamble.
   pub entry_name:      IString,
+  ///
   pub export_id:       usize,
 }
 
@@ -51,9 +52,13 @@ pub struct ParserDatabase {
   pub name:     IString,
   ////
   follow_items: Array<Option<Array<(DBRuleKey, u32, bool)>>>,
-  /// Table of production symbols.
+  /// Table of symbols.
   prod_syms:    Array<SymbolId>,
   /// Table of production names for public productions.
+  ///
+  /// - First tuple member: GUID name,
+  /// - Second member: friendly name.
+  ///
   /// This is a 1-to-1 mapping of all production indices, so productions
   /// that are scanner or are sub-productions map to empty strings.
   prod_names:   Array<(IString, IString)>,

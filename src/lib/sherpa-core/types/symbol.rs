@@ -25,6 +25,7 @@ pub enum SymbolId {
   DBToken { key: DBTokenKey },
   Char { char: u8, precedence: u16 },
   Codepoint { precedence: u16, val: u32 },
+  NonTerminalState { id: ProductionId },
 }
 
 impl Default for SymbolId {
@@ -137,7 +138,8 @@ impl SymbolId {
       Token { .. } => {
         ProductionId::Standard(create_u64_hash(self), ProductionSubType::ScannerToken)
       }
-      ClassSymbol { .. }
+      EndOfFile { .. }
+      | ClassSymbol { .. }
       | ClassSpace { .. }
       | ClassHorizontalTab { .. }
       | ClassNewLine { .. }
@@ -198,6 +200,7 @@ impl SymbolId {
         let _ = &mut w + "[" + val.to_str(s_store) + "]";
         &mut w + "{ " + precedence.to_string() + " }"
       }
+      NonTerminalState { .. } => &mut w + "<non-term-state>",
       NonTerminal { .. } => &mut w + "<non-term>",
       NonTerminalToken { precedence, .. } => {
         let _ = &mut w + "<non-term-token>";

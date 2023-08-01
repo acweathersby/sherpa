@@ -357,9 +357,7 @@ impl<'a> Instruction<'a> {
         let mut iter = self.iter();
         iter.next_u8(); // Skip the input enum value
         iter.next_u32_le().and_then(|v| {
-          self
-            .is_valid_offset(v as usize)
-            .then_some((bc, opcode_start + v as usize).into())
+          self.is_valid_offset(v as usize).then_some((bc, opcode_start + v as usize).into())
         })
       }
       Opcode::DebugSymbol => {
@@ -368,9 +366,7 @@ impl<'a> Instruction<'a> {
       }
       op => {
         let op_len = op.len();
-        self
-          .is_valid_offset(op_len)
-          .then_some((bc, opcode_start + op_len).into())
+        self.is_valid_offset(op_len).then_some((bc, opcode_start + op_len).into())
       }
     }
   }
@@ -524,7 +520,7 @@ pub const FAIL_STATE_FLAG: u32 = 1 << 1;
 /// mode
 pub const NORMAL_STATE_FLAG: u32 = 1 << 0;
 
-/// The offset of the first state within any HC bytecode buffer.
+/// The offset of the first state within any sherpa bytecode buffer.
 pub const FIRST_PARSE_BLOCK_ADDRESS: u32 = 8;
 
 pub const TOKEN_ASSIGN_FLAG: u32 = 0x04000000;
@@ -625,13 +621,11 @@ pub fn default_get_branch_selector(
   // Max number of values: 1024 (maximum jump span)
   // Max instruction offset from table header 2042
 
-  let total_instruction_length =
-    branches.iter().map(|b| b.len()).sum::<usize>();
+  let total_instruction_length = branches.iter().map(|b| b.len()).sum::<usize>();
 
   let has_unsupported_value = values.iter().cloned().any(|v| v > 2046);
 
-  if (max_span < 2) || total_instruction_length > 2042 || has_unsupported_value
-  {
+  if (max_span < 2) || total_instruction_length > 2042 || has_unsupported_value {
     BranchSelector::Vector
   } else {
     BranchSelector::Hash

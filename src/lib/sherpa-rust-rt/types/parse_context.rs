@@ -72,7 +72,7 @@ pub struct ParseContext<T: ByteReader, M = u32> {
   pub reader:         *mut T,
   // User context --------
   pub meta_ctx:       *mut M,
-  pub custom_lex: fn(&mut T, &mut M, &ParseContext<T, M>) -> (u32, u32, u32),
+  pub custom_lex:     fn(&mut T, &mut M, &ParseContext<T, M>) -> (u32, u32, u32),
   // Line info ------------
   /// The offset of the last line character recognized that proceeds the anchor
   pub start_line_off: u32,
@@ -150,8 +150,7 @@ impl<T: ByteReader, M> ParseContext<T, M> {
 
   #[inline]
   pub fn set_fail_mode_to(&mut self, is_in_fail_mode: bool) {
-    self.state =
-      if is_in_fail_mode { FAIL_STATE_FLAG } else { NORMAL_STATE_FLAG }
+    self.state = if is_in_fail_mode { FAIL_STATE_FLAG } else { NORMAL_STATE_FLAG }
   }
 
   #[inline]
@@ -298,11 +297,7 @@ impl<T: ByteReader, M> ParseContext<T, M> {
     false
   }
 
-  pub(crate) fn default_custom_lex(
-    _: &mut T,
-    _: &mut M,
-    _: &Self,
-  ) -> (u32, u32, u32) {
+  pub(crate) fn default_custom_lex(_: &mut T, _: &mut M, _: &Self) -> (u32, u32, u32) {
     (0, 0, 0)
   }
 }
@@ -475,6 +470,34 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
     }
   }
 
+  /// Returns an empty success result if the entire input was successfully
+  /// parsed
+  fn completes(&mut self, entry_point: u32) -> Result<(), SherpaParseError> {
+    self.init_parser(entry_point);
+    let mut debug = None;
+    loop {
+      match self.get_next_action(&mut debug) {
+        ParseAction::Accept { .. } => {
+          break Result::Ok(());
+        }
+
+        ParseAction::Error { last_input, .. } => {
+          let mut token: Token = last_input.to_token(self.get_reader_mut());
+          token.set_source(Arc::new(Vec::from(self.get_input().to_string().as_bytes())));
+          break Result::Err(SherpaParseError {
+            message: "Could not recognize the following input:".to_string(),
+            inline_message: "".to_string(),
+            loc: token,
+            last_production: self.get_production_id(),
+          });
+        }
+        _ => {}
+      }
+    }
+  }
+
+  ///  Gathers all groups of tokens that have been shifted and skipped during
+  /// the parsing of an input.
   fn collect_shifts_and_skips(
     &mut self,
     entry_point: u32,
@@ -511,9 +534,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
           }
           let mut token: Token = last_input.to_token(self.get_reader_mut());
 
-          token.set_source(Arc::new(Vec::from(
-            self.get_input().to_string().as_bytes(),
-          )));
+          token.set_source(Arc::new(Vec::from(self.get_input().to_string().as_bytes())));
           break ShiftsAndSkipsResult::FailedParse(SherpaParseError {
             message: "Could not recognize the following input:".to_string(),
             inline_message: "".to_string(),
@@ -526,8 +547,8 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
         }
         ParseAction::Skip { token_byte_offset, token_byte_length, .. } => {
           skips.push(
-            self.get_input()[token_byte_offset as usize
-              ..(token_byte_offset + token_byte_length) as usize]
+            self.get_input()
+              [token_byte_offset as usize..(token_byte_offset + token_byte_length) as usize]
               .to_string(),
           );
         }
@@ -537,11 +558,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
 
           #[cfg(debug_assertions)]
           if let Some(debug) = debug {
-            debug(&DebugEvent::ShiftToken {
-              offset_start,
-              offset_end,
-              string: self.get_input(),
-            });
+            debug(&DebugEvent::ShiftToken { offset_start, offset_end, string: self.get_input() });
           }
           shifts.push(self.get_input()[offset_start..offset_end].to_string());
         }
@@ -596,9 +613,7 @@ Concrete Syntax Tree structure."
             debug(&DebugEvent::Failure {});
           }
           let mut token: Token = last_input.to_token(self.get_reader_mut());
-          token.set_source(Arc::new(Vec::from(
-            self.get_input().to_string().as_bytes(),
-          )));
+          token.set_source(Arc::new(Vec::from(self.get_input().to_string().as_bytes())));
           break None;
         }
         ParseAction::Fork { .. } => {
@@ -609,12 +624,7 @@ Concrete Syntax Tree structure."
           len += token_byte_length;
           skipped.push(skip);
         }
-        ParseAction::Shift {
-          token_byte_length,
-          token_byte_offset,
-          token_id,
-          ..
-        } => {
+        ParseAction::Shift { token_byte_length, token_byte_offset, token_id, .. } => {
           let token = Rc::new(cst::CST::Terminal {
             byte_len: token_byte_length,
             token_id,
@@ -629,11 +639,7 @@ Concrete Syntax Tree structure."
           if let Some(debug) = debug {
             let offset_start = token_byte_offset as usize;
             let offset_end = (token_byte_offset + token_byte_length) as usize;
-            debug(&DebugEvent::ShiftToken {
-              offset_start,
-              offset_end,
-              string: self.get_input(),
-            });
+            debug(&DebugEvent::ShiftToken { offset_start, offset_end, string: self.get_input() });
           }
         }
         ParseAction::Reduce { rule_id, production_id, symbol_count } => {
@@ -659,10 +665,8 @@ Concrete Syntax Tree structure."
             }
           }
 
-          let non_term = cst::CST::NonTerm {
-            prod_id: vec![(production_id as u16, rule_id as u16)],
-            children,
-          };
+          let non_term =
+            cst::CST::NonTerm { prod_id: vec![(production_id as u16, rule_id as u16)], children };
           cst.push((len, Rc::new(non_term)));
 
           #[cfg(debug_assertions)]

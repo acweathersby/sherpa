@@ -1,4 +1,4 @@
-use sherpa_runtime::types::{BlameColor, Token};
+use sherpa_runtime::types::Token;
 
 use crate::{
   grammar::utils::resolve_grammar_path,
@@ -16,7 +16,7 @@ use super::{
   utils::{get_symbol_details, SymbolData},
 };
 
-use std::{hash::Hash, path::PathBuf, str::FromStr, sync::Arc};
+use std::{hash::Hash, path::PathBuf, sync::Arc};
 
 /// Temporary structure to host rule data during
 /// construction.
@@ -177,10 +177,11 @@ pub fn extract_productions<'a>(
   for production in &g_data.grammar.productions {
     match production {
       ASTNode::State(parse_state) => {
-        let (guid_name, _) = prod_names(parse_state.id.name.as_str(), g_data, s_store);
+        let (guid_name, friendly_name) = prod_names(parse_state.id.name.as_str(), g_data, s_store);
         parse_states.push(Box::new(CustomState {
           id: ProductionId::from((g_data.id.guid, parse_state.id.name.as_str())),
           guid_name,
+          friendly_name,
           g_id: g_data.id.guid,
           tok: parse_state.tok.clone(),
           state: parse_state.clone(),
@@ -320,21 +321,25 @@ pub fn process_parse_state<'a>(
   SherpaResult::Ok(parse_state)
 }
 
-pub fn process_prod<'a>(
+pub fn process_production<'a>(
   (mut production, prod_ast): (Box<Production>, &'a ASTNode),
   g_data: &GrammarData,
   s_store: &IStringStore,
 ) -> SherpaResult<Box<Production>> {
-  match prod_ast {
-    ASTNode::CFProduction(prod) => {
-      production.type_ = ProductionType::ContextFree;
-      for rule in &prod.rules {
-        process_rule(&mut production, rule, g_data, s_store)?;
-      }
-    }
+  let (type_, rules) = match prod_ast {
+    ASTNode::CFProduction(prod) => (ProductionType::ContextFree, &prod.rules),
+    ASTNode::AppendProduction(prod) => (ProductionType::ContextFree, &prod.rules),
+    ASTNode::PrattProduction(prod) => (ProductionType::Pratt, &prod.rules),
+    ASTNode::PegProduction(prod) => (ProductionType::Peg, &prod.rules),
     ast => {
       todo!("Create build for {ast:?}")
     }
+  };
+
+  production.type_ = type_;
+
+  for rule in rules {
+    process_rule(&mut production, rule, g_data, s_store)?;
   }
 
   SherpaResult::Ok(production)
@@ -800,11 +805,11 @@ mod test {
 
     let g_data = super::create_grammar_data(&mut j, g, &path, &s_store)?;
 
-    let (mut prods, ..) = super::extract_productions(&mut j, &g_data, &s_store)?;
+    let (mut prods, parse_) = super::extract_productions(&mut j, &g_data, &s_store)?;
 
     assert_eq!(prods.len(), 1);
 
-    let prod = super::process_prod(prods.pop()?, &g_data, &s_store)?;
+    let prod = super::process_production(prods.pop()?, &g_data, &s_store)?;
 
     dbg!(&prod.symbols);
 

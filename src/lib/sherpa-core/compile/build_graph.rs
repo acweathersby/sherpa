@@ -193,7 +193,9 @@ fn handle_completed_items<'db, 'follow>(
   if let Some(completed) = groups.remove(&SymbolId::Default) {
     let CompletedItemArtifacts { follow_pairs, follow_items, default_only, .. } =
       get_completed_item_artifacts(j, graph, parent, completed.iter())?;
+
     let db = graph.get_db();
+
     if is_scan {
       graph[parent].add_kernel_items(follow_items, is_scan, db);
 
@@ -218,6 +220,7 @@ fn handle_completed_items<'db, 'follow>(
     }
 
     let default = completed.iter().map(|i| -> FollowPair<'db> { (*i, *i).into() }).collect();
+
     handle_completed_groups(
       j,
       graph,
@@ -228,6 +231,34 @@ fn handle_completed_items<'db, 'follow>(
       default,
       &default_only,
     )?;
+
+
+    if !follow_pairs.is_empty() {
+      // Create reduce states for follow items that have not already been covered.
+      let mut completed_groups =
+        hash_group_btreemap(follow_pairs.clone(), |_, fp| match fp.follow.get_type() {
+          ItemType::Completed(_) => {
+            unreachable!("Should be handled outside this path")
+          }
+          ItemType::Terminal(sym) => sym,
+          _ => SymbolId::Undefined,
+        });
+
+      completed_groups.remove(&SymbolId::Undefined);
+
+      for (sym, follow_pairs) in completed_groups {
+        handle_completed_groups(
+          j,
+          graph,
+          groups,
+          parent,
+          graph_state,
+          sym,
+          follow_pairs,
+          &default_only,
+        )?;
+      }
+    }
   }
 
   SherpaResult::Ok(())
@@ -240,6 +271,7 @@ fn handle_goto<'db, 'follow>(
   out_items: ItemSet<'db>,
 ) -> SherpaResult<()> {
   let non_terminals = graph[parent].get_closure_ref()?.clone().non_term_items();
+
   let kernel_base = graph[parent].kernel_items_ref().clone();
   let db = graph.get_db();
 
@@ -316,7 +348,8 @@ fn handle_goto<'db, 'follow>(
           if let Some(s) =
             create_peek(graph, sym_id, parent, incomplete.iter(), fp, false, transition_type)
           {
-            let c_p = completed.clone().into_iter().map(|i| (i, i).into()).collect();
+            let c_p: std::collections::BTreeSet<FollowPair<'_>> =
+              completed.clone().into_iter().map(|i| (i, i).into()).collect();
             let graph_state = GraphState::Normal;
             let sym = SymbolId::Default;
             let groups = &mut Default::default();
@@ -490,6 +523,7 @@ fn handle_completed_groups<'db, 'follow>(
   let is_scan = graph.is_scan();
   let mut cmpl = follow_pairs.iter().to_completed_vec();
   let db = graph.get_db();
+
   match (follow_pairs.len(), groups.remove(&sym), g_state) {
     (1, None, GraphState::Normal) => {
       handle_completed_item(j, graph, (cmpl[0], cmpl), par, sym, g_state)?;
@@ -520,7 +554,7 @@ fn handle_completed_groups<'db, 'follow>(
             // ------------------------------------------------------
             // Could pick a specific item to reduce based on precedence or some
             // kind of exclusive weight. Perhaps also walking back
-            // up the graph to find a suitable divergent point add a
+            // up the graph to find a suitable divergent point and add a
             // fork. This would also be a good point to focus on breadcrumb
             // parsing strategies.
             create_reduce_reduce_error(j, graph, cmpl.to_set())?;
@@ -654,6 +688,7 @@ fn handle_completed_groups<'db, 'follow>(
 
   SherpaResult::Ok(())
 }
+
 fn resolve_conflicting_symbols<'db, 'follow>(
   j: &mut Journal,
   graph: &mut Graph<'follow, 'db>,
@@ -1038,7 +1073,7 @@ fn handle_completed_item<'db, 'follow>(
   graph_state: GraphState,
 ) -> SherpaResult<()> {
   let is_scan = graph.is_scan();
-  // Determin if origin contains GOTO.
+  // Determine if origin contains GOTO.
 
   match (completed_item.origin, is_scan) {
     (Origin::GoalCompleteOOS, ..) => {
@@ -1071,6 +1106,7 @@ fn handle_completed_item<'db, 'follow>(
         Some(parent),
         follow.clone(),
       );
+
       graph[state].set_reduce_item(completed_item);
 
       if is_continue {
@@ -1128,6 +1164,7 @@ fn create_reduce_reduce_error(
 
   SherpaResult::Ok(())
 }
+
 fn get_goal_items<'db, 'follow>(graph: &'db Graph<'follow, 'db>, item: &Item<'db>) -> Items<'db> {
   match item.origin {
     Origin::TokenGoal(_) | Origin::ProdGoal(_) => {

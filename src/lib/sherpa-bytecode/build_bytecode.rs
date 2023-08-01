@@ -5,10 +5,7 @@ use sherpa_runtime::types::{
 };
 use std::collections::VecDeque;
 
-pub fn compile_bytecode<
-  'db,
-  T: IntoIterator<Item = (IString, Box<ParseState<'db>>)>,
->(
+pub fn compile_bytecode<'db, T: IntoIterator<Item = (IString, Box<ParseState<'db>>)>>(
   db: &'db ParserDatabase,
   states: T,
 ) -> SherpaResult<(Array<u8>, Map<IString, usize>)> {
@@ -49,9 +46,7 @@ fn remap_goto_addresses(bc: &mut Array<u8>, _goto_to_off: &Array<u32>) {
       Op::HashBranch => {
         let i: Instruction = (bc.as_slice(), i).into();
         let TableHeaderData {
-          scan_block_instruction: scanner_address,
-          parse_block_address,
-          ..
+          scan_block_instruction: scanner_address, parse_block_address, ..
         } = i.into();
         let default_delta = parse_block_address - i.address();
 
@@ -115,12 +110,7 @@ fn build_statement<'db>(
 
   for non_branch in non_branch {
     match non_branch {
-      parser::ASTNode::ReduceRaw(box parser::ReduceRaw {
-        rule_id,
-        len,
-        prod_id,
-        ..
-      }) => {
+      parser::ASTNode::ReduceRaw(box parser::ReduceRaw { rule_id, len, prod_id, .. }) => {
         insert_op(bc, Op::Reduce);
         insert_u32_le(bc, *prod_id as u32);
         insert_u32_le(bc, *rule_id as u32);
@@ -145,20 +135,16 @@ fn build_statement<'db>(
       parser::ASTNode::Accept(..) => insert_op(bc, Op::Accept),
       parser::ASTNode::Gotos(gotos) => {
         for push in &gotos.pushes {
-          let proxy_address = get_proxy_address(
-            push.prod.to_token().to_string().to_token(),
-            state_name_to_proxy,
-          );
+          let proxy_address =
+            get_proxy_address(push.prod.to_token().to_string().to_token(), state_name_to_proxy);
 
           insert_op(bc, Op::PushGoto);
           insert_u8(bc, NORMAL_STATE_FLAG as u8);
           insert_u32_le(bc, proxy_address);
         }
 
-        let proxy_address = get_proxy_address(
-          gotos.goto.prod.to_token().to_string().to_token(),
-          state_name_to_proxy,
-        );
+        let proxy_address =
+          get_proxy_address(gotos.goto.prod.to_token().to_string().to_token(), state_name_to_proxy);
 
         insert_op(bc, Op::Goto);
         insert_u8(bc, NORMAL_STATE_FLAG as u8);
@@ -188,10 +174,7 @@ fn build_statement<'db>(
   SherpaResult::Ok(())
 }
 
-fn get_proxy_address(
-  name: IString,
-  state_name_to_proxy: &mut OrderedMap<IString, usize>,
-) -> u32 {
+fn get_proxy_address(name: IString, state_name_to_proxy: &mut OrderedMap<IString, usize>) -> u32 {
   let val = state_name_to_proxy.len();
   let proxy_address = (*state_name_to_proxy.entry(name).or_insert(val)) as u32;
   proxy_address
@@ -212,8 +195,7 @@ fn build_match<'db>(
       input_type_key = match mode.as_str() {
         InputType::PRODUCTION_STR => InputType::Production,
         InputType::TOKEN_STR => {
-          scanner_address =
-            get_proxy_address(IString::from_u64(*meta), state_name_to_proxy);
+          scanner_address = get_proxy_address(IString::from_u64(*meta), state_name_to_proxy);
           InputType::Token
         }
         InputType::CLASS_STR => InputType::Class,
@@ -224,16 +206,12 @@ fn build_match<'db>(
       } as u32;
       for m in matches.iter().rev() {
         match m {
-          parser::ASTNode::DefaultMatch(box parser::DefaultMatch {
-            statement,
-            ..
-          }) => {
+          parser::ASTNode::DefaultMatch(box parser::DefaultMatch { statement, .. }) => {
             default = Some(statement.as_ref());
           }
-          parser::ASTNode::IntMatch(box parser::IntMatch {
-            statement,
-            vals,
-          }) => match_branches.push((vals, statement.as_ref())),
+          parser::ASTNode::IntMatch(box parser::IntMatch { statement, vals }) => {
+            match_branches.push((vals, statement.as_ref()))
+          }
           _ => {}
         }
       }
@@ -273,8 +251,7 @@ fn build_match<'db>(
   let mod_base = f64::log2(val_offset_map.len() as f64) as u32;
   let mod_mask = (1 << mod_base) - 1;
 
-  let mut hash_entries =
-    (0..pending_pairs.len()).into_iter().map(|_| 0).collect::<Vec<_>>();
+  let mut hash_entries = (0..pending_pairs.len()).into_iter().map(|_| 0).collect::<Vec<_>>();
 
   let mut leftover_pairs = vec![];
 
@@ -285,8 +262,7 @@ fn build_match<'db>(
     let (val, offset) = pair;
     let hash_index = (val & mod_mask) as usize;
     if hash_entries[hash_index] == 0 {
-      hash_entries[hash_index] =
-        (val & 0x7FF) | ((offset & 0x7FF) << 11) | (512 << 22);
+      hash_entries[hash_index] = (val & 0x7FF) | ((offset & 0x7FF) << 11) | (512 << 22);
     } else {
       leftover_pairs.push(pair);
     }
@@ -314,12 +290,10 @@ fn build_match<'db>(
       if hash_entries[i] == 0 {
         // Update the previous node in the chain with the
         // diff pointer to the new node.
-        hash_entries[prev_node] =
-          ((((i as i32 - prev_node as i32) + 512) as u32 & 0x3FF) << 22)
-            | (hash_entries[prev_node] & ((1 << 22) - 1));
+        hash_entries[prev_node] = ((((i as i32 - prev_node as i32) + 512) as u32 & 0x3FF) << 22)
+          | (hash_entries[prev_node] & ((1 << 22) - 1));
         // Add data for the new node.
-        hash_entries[i] =
-          ((val) & 0x7FF) | ((offset & 0x7FF) << 11) | (512 << 22);
+        hash_entries[i] = ((val) & 0x7FF) | ((offset & 0x7FF) << 11) | (512 << 22);
         break;
       }
     }

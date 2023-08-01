@@ -36,24 +36,23 @@ pub fn console_debugger(
   let mut stack = vec![];
   Some(Box::new(move |event| match event {
     DebugEvent::ShiftToken { offset_end, offset_start, string } => {
-      let string = string[*offset_start..(*offset_end).min(string.len())]
-        .replace("\n", "\\n");
+      let string = string[*offset_start..(*offset_end).min(string.len())].replace("\n", "\\n");
       stack.push(string.clone());
       println!(
-          "
+        "
   [Shift] --------------------------------------------------------------------
   
   Pushing token [{string}] to stack
   
   Stack:\n    {}\n
   -------------------------------------------------------------------------------",
-          stack
-            .iter()
-            .enumerate()
-            .map(|(i, s)| format!("{}: {s}", i + 1))
-            .collect::<Vec<_>>()
-            .join("\n    ")
-        );
+        stack
+          .iter()
+          .enumerate()
+          .map(|(i, s)| format!("{}: {s}", i + 1))
+          .collect::<Vec<_>>()
+          .join("\n    ")
+      );
     }
     DebugEvent::Reduce { rule_id } => {
       let item = Item::from_rule((*rule_id).into(), &db);
@@ -64,7 +63,7 @@ pub fn console_debugger(
       let symbols = items.collect::<Vec<_>>();
       stack.push(format!("({prod_name}: {})", symbols.join(",")));
       println!(
-            "
+        "
   [REDUCE] ----------------------------------------------------------------------
   
     Reduce to {prod_name} with rule: 
@@ -72,99 +71,93 @@ pub fn console_debugger(
   
     Stack:\n    {}\n
   -------------------------------------------------------------------------------",
-            item.to_complete().debug_string(),
-            stack
-              .iter()
-              .enumerate()
-              .map(|(i, s)| format!("{}: {s}", i + 1))
-              .collect::<Vec<_>>()
-              .join("\n    ")
-          )
+        item.to_complete().debug_string(),
+        stack
+          .iter()
+          .enumerate()
+          .map(|(i, s)| format!("{}: {s}", i + 1))
+          .collect::<Vec<_>>()
+          .join("\n    ")
+      )
     }
 
     DebugEvent::Failure { .. } => {
       println!(
-          "
+        "
   [Failed] --------------------------------------------------------------------
   
     Failed to recognize input.
   -------------------------------------------------------------------------------",
-        )
+      )
     }
     DebugEvent::Complete { production_id, .. } => {
       println!(
-            "
+        "
   [Complete] --------------------------------------------------------------------
   
     Accepted on production {}.
   -------------------------------------------------------------------------------",
-            db.prod_guid_name((*production_id).into()).to_string(db.string_store())
-          )
+        db.prod_guid_name((*production_id).into()).to_string(db.string_store())
+      )
     }
 
-    DebugEvent::TokenValue { input_value, start, end, string }
-      if display_input_data =>
-    {
+    DebugEvent::TokenValue { input_value, start, end, string } if display_input_data => {
       println!(
-          "
+        "
   [Token Input]------------------------------------------------------------------------
   
   ║{}║
   Input Value: {input_value}
   Symbol Length: {}
   -------------------------------------------------------------------------------",
-          &string[(*start)..(*end).min(string.len())].replace("\n", "\\n"),
-          end - start
-        )
+        &string[(*start)..(*end).min(string.len())].replace("\n", "\\n"),
+        end - start
+      )
     }
-    DebugEvent::ByteValue { input_value, start, end, string }
-      if display_input_data =>
-    {
+    DebugEvent::ByteValue { input_value, start, end, string } if display_input_data => {
       println!(
-          "
+        "
   [Byte Input]------------------------------------------------------------------------
   
   ║{}║
   Input Value: {input_value}
   Symbol Length: {}
   -------------------------------------------------------------------------------",
-          &string[(*start)..(*end).min(string.len())].replace("\n", "\\n"),
-          end - start
-        )
+        &string[(*start)..(*end).min(string.len())].replace("\n", "\\n"),
+        end - start
+      )
     }
     DebugEvent::CodePointValue { input_value, start, end, string }
       if display_input_data && display_scanner_output =>
     {
       println!(
-          "
+        "
   [CodePoint Input]------------------------------------------------------------------------
   
   ║{}║
   Input Value: {input_value}
   Symbol Length: {}
   -------------------------------------------------------------------------------",
-          &string[(*start)..(*end).min(string.len())].replace("\n", "\\n"),
-          end - start
-        )
+        &string[(*start)..(*end).min(string.len())].replace("\n", "\\n"),
+        end - start
+      )
     }
     DebugEvent::ClassValue { input_value, start, end, string }
       if display_input_data && display_scanner_output =>
     {
       println!(
-          "
+        "
   [Class Input]------------------------------------------------------------------------
   
   ║{}║
   Input Value: {input_value}
   Symbol Length: {}
   -------------------------------------------------------------------------------",
-          &string[(*start)..(*end).min(string.len())].replace("\n", "\\n"),
-          end - start
-        )
+        &string[(*start)..(*end).min(string.len())].replace("\n", "\\n"),
+        end - start
+      )
     }
-    DebugEvent::GotoValue { production_id }
-      if display_input_data && display_scanner_output =>
-    {
+    DebugEvent::GotoValue { production_id } if display_input_data && display_scanner_output => {
       println!(
         "
   [GOTO Input]-------------------------------------------------------------------
@@ -172,19 +165,24 @@ pub fn console_debugger(
     Production_name: {}
     BytcodeID: {}
   -------------------------------------------------------------------------------",
-      db.prod_guid_name((*production_id).into()).to_string(db.string_store()),
+        db.prod_guid_name((*production_id).into()).to_string(db.string_store()),
         production_id
       )
     }
     DebugEvent::ExecuteState { base_instruction, .. } if display_state => {
       println!(
-          "
+        "
   [State]------------------------------------------------------------------
   
-  {}
+  {}{}
   -------------------------------------------------------------------------------",
-          disassemble_parse_block(Some(*base_instruction),base_instruction.bytecode()).0
-        );
+        disassemble_parse_block(Some(*base_instruction), base_instruction.bytecode()).0,
+        disassemble_parse_block(
+          Some(base_instruction.next().unwrap()),
+          base_instruction.bytecode()
+        )
+        .0
+      );
       println!("");
     }
     DebugEvent::ExecuteInstruction {
@@ -203,14 +201,11 @@ pub fn console_debugger(
     } if display_instruction => {
       let active_ptr = if *is_scanner { scan_ptr } else { head_ptr };
       if !is_scanner || display_scanner_output {
-        if !matches!(
-          instruction.get_opcode(),
-          Opcode::VectorBranch | Opcode::HashBranch
-        ) {
+        if !matches!(instruction.get_opcode(), Opcode::VectorBranch | Opcode::HashBranch) {
           return;
         }
         println!(
-            "
+          "
   [Instruction]------------------------------------------------------------------
   
     address:{:0>6X}; tok_len: {} sym_len: {}; tok_id: {};  
@@ -220,19 +215,19 @@ pub fn console_debugger(
   
   {}
   -------------------------------------------------------------------------------",
-            instruction.address(),
-            tok_len,
-            sym_len,
-            tok_id,
-            anchor_ptr,
-            base_ptr,
-            head_ptr,
-            scan_ptr,
-            end_ptr,
-            &string[(*active_ptr)..(active_ptr + input_window_size).min(string.len())]
-              .replace("\n", "\\n"),
-            disassemble_parse_block(Some(*instruction), instruction.bytecode()).0
-          );
+          instruction.address(),
+          tok_len,
+          sym_len,
+          tok_id,
+          anchor_ptr,
+          base_ptr,
+          head_ptr,
+          scan_ptr,
+          end_ptr,
+          &string[(*active_ptr)..(active_ptr + input_window_size).min(string.len())]
+            .replace("\n", "\\n"),
+          disassemble_parse_block(Some(*instruction), instruction.bytecode()).0
+        );
         println!("");
       }
     }

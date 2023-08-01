@@ -216,30 +216,30 @@ impl<'db> State<'db> {
   }
 
   pub fn calculate_closure(&mut self, is_scanner: bool, db: &'db ParserDatabase) {
-    self.closure = None;
-    let state_id = self.id;
-    let closure = self.kernel_items.create_closure(is_scanner, state_id);
+    if !self.kernel_items.is_empty() {
+      self.closure = None;
+      let state_id = self.id;
+      let closure = self.kernel_items.create_closure(is_scanner, state_id);
 
-    if self.id.is_root() {
-      let prods = self.kernel_items.iter().map(|i| i.prod_index()).collect::<OrderedSet<_>>();
-      let sigs = closure.iter().map(|i| (i.rule_id, i.sym_index)).collect::<HashSet<_>>();
-      // Get all follow items
+      if self.id.is_root() {
+        let prods = self.kernel_items.iter().map(|i| i.prod_index()).collect::<OrderedSet<_>>();
+        let sigs = closure.iter().map(|i| (i.rule_id, i.sym_index)).collect::<HashSet<_>>();
+        // Get all follow items
 
-      let mut oos_closure = closure.clone();
+        let mut oos_closure = closure.clone();
 
-      for prod in &prods {
-        for item in db.follow_items(*prod) {
-          let i = item;
-          if !sigs.contains(&(i.rule_id, i.sym_index)) {
-            oos_closure.insert(i.to_origin_state(state_id).to_oos_index());
+        for prod in &prods {
+          for item in db.follow_items(*prod) {
+            let i = item;
+            if !sigs.contains(&(i.rule_id, i.sym_index)) {
+              oos_closure.insert(i.to_origin_state(state_id).to_oos_index());
+            }
           }
         }
+
+        self.root_closure = Some(oos_closure);
       }
 
-      self.root_closure = Some(oos_closure);
-    }
-
-    if !self.kernel_items.is_empty() {
       self.closure = Some(closure);
     }
   }
@@ -302,6 +302,22 @@ impl<'db> State<'db> {
 
   pub fn get_parent(&self) -> StateId {
     self.parent
+  }
+
+  pub fn set_kernal_items<T: ItemContainer<'db>>(
+    &mut self,
+    kernel_items: T,
+    is_scanner: bool,
+    db: &'db ParserDatabase,
+  ) {
+    let mut kernel_items = kernel_items
+      .into_iter()
+      .map(|i| if (i.origin_state.is_invalid()) { i.to_origin_state(self.id) } else { i })
+      .collect();
+
+    self.kernel_items.append(&mut kernel_items);
+
+    self.calculate_closure(is_scanner, db);
   }
 
   pub fn add_kernel_items<T: ItemContainer<'db>>(
@@ -454,7 +470,7 @@ impl<'follow, 'db: 'follow> Graph<'follow, 'db> {
       None => State { id, term_symbol: symbol, t_type, ..Default::default() },
     };
 
-    state.add_kernel_items(
+    state.set_kernal_items(
       if self.states.is_empty() {
         // Automatically setup lanes a goal values.
         kernel_items

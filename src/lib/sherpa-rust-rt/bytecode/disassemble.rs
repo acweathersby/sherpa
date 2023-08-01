@@ -31,9 +31,7 @@ pub fn disassemble_parse_block<'a>(
         let len = i.len() - str_start;
         let index = i.address() + str_start;
         let bytes = bc[index..index + len].to_vec();
-        let sym =
-          format!("\nsym: {}", unsafe { String::from_utf8_unchecked(bytes) });
-
+        let sym = format!("\ndebug: {}", unsafe { String::from_utf8_unchecked(bytes) });
         (sym, i.next())
       }
 
@@ -42,10 +40,7 @@ pub fn disassemble_parse_block<'a>(
         let mut iter = i.iter();
         let _state_mode = iter.next_u8().unwrap();
         let address = iter.next_u32_le().unwrap() as usize;
-        (
-          format!("\n{}GOTO {}", dh(i.address()), address_string(address)),
-          i.next(),
-        )
+        (format!("\n{}GOTO {}", dh(i.address()), address_string(address)), i.next())
       }
       PopGoto => {
         let (string, i_last) = ds(i.next(), bc);
@@ -57,28 +52,14 @@ pub fn disassemble_parse_block<'a>(
         let _state_mode = iter.next_u8().unwrap();
         let address = iter.next_u32_le().unwrap() as usize;
 
-        (
-          format!(
-            "\n{}PUSH {}{string}",
-            dh(i.address()),
-            address_string(address)
-          ),
-          i_last,
-        )
+        (format!("\n{}PUSH {}{string}", dh(i.address()), address_string(address)), i_last)
       }
       PushExceptionHandler => {
         let (string, i_last) = ds(i.next(), bc);
         let mut iter = i.iter();
         let _state_mode = iter.next_u8().unwrap();
         let address = iter.next_u32_le().unwrap() as usize;
-        (
-          format!(
-            "\n{}PUSH-CATCH {}{string}",
-            dh(i.address()),
-            address_string(address)
-          ),
-          i_last,
-        )
+        (format!("\n{}PUSH-CATCH {}{string}", dh(i.address()), address_string(address)), i_last)
       }
       Reduce => {
         let (string, i_last) = ds(i.next(), bc);
@@ -182,8 +163,7 @@ pub(crate) fn generate_table_string<'a>(
     mut table_start_iter,
     ..
   } = i.into();
-  let table_name =
-    matches!(i.get_opcode(), HashBranch).then_some("HASH").unwrap_or("VECT");
+  let table_name = matches!(i.get_opcode(), HashBranch).then_some("HASH").unwrap_or("VECT");
 
   let mut strings = vec![];
   let mut delta_offsets = BTreeSet::new();
@@ -227,12 +207,9 @@ pub(crate) fn generate_table_string<'a>(
   strings.push(create_default_entry(default_block.address()));
 
   for address in delta_offsets {
-    strings.push(
-      disassemble_parse_block(Some((i.bytecode(), address).into()), bc).0,
-    );
+    strings.push(disassemble_parse_block(Some((i.bytecode(), address).into()), bc).0);
   }
-  let (default_string, offset) =
-    disassemble_parse_block(Some(default_block), bc);
+  let (default_string, offset) = disassemble_parse_block(Some(default_block), bc);
 
   let mut string = format!(
     "\n{}{} JUMP \n{: >7} TYPE {} ",
@@ -243,17 +220,12 @@ pub(crate) fn generate_table_string<'a>(
   );
 
   string += &(if scan_index.address() > 0 {
-    format!(
-      "\n{: >7} SCANNER ADDRESS {}",
-      "",
-      address_string(scan_index.address())
-    )
+    format!("\n{: >7} SCANNER ADDRESS {}", "", address_string(scan_index.address()))
   } else {
     format!("\n{: >7} NO SCANNER", "")
   });
 
-  string +=
-    &format!("\n{: >7} LENGTH: {} META: {}", "", table_length, table_meta);
+  string += &format!("\n{: >7} LENGTH: {} META: {}", "", table_length, table_meta);
 
   string += &strings.join("");
 
@@ -263,11 +235,7 @@ pub(crate) fn generate_table_string<'a>(
 }
 
 fn create_failure_entry(entry_offset: usize, goto_offset: usize) -> String {
-  format!(
-    "\n{}---- JUMP TO {} ON FAIL",
-    header(entry_offset),
-    address_string(goto_offset)
-  )
+  format!("\n{}---- JUMP TO {} ON FAIL", header(entry_offset), address_string(goto_offset))
 }
 fn create_default_entry(goto_offset: usize) -> String {
   format!("\nDEFAULT ---- JUMP TO {} ON FAIL", address_string(goto_offset))
@@ -280,7 +248,7 @@ fn create_normal_entry(
   bc_address: usize,
   meta: i64,
 ) -> String {
-  let token_string = "";
+  let token_string = token_id.to_string();
   format!(
     "\n{: >6}---- JUMP TO {} ON {} ( {} ) [{}]",
     header(idx),

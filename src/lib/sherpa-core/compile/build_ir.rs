@@ -51,9 +51,7 @@ pub(crate) fn build_ir<'db: 'follow, 'follow>(
       None
     };
 
-    for (id, ir_state) in
-      convert_state_to_ir(j, graph, state, successors, entry_name, goto_name)?
-    {
+    for (id, ir_state) in convert_state_to_ir(j, graph, state, successors, entry_name, goto_name)? {
       output.entry(id).or_insert(ir_state);
     }
   }
@@ -81,10 +79,7 @@ fn convert_goto_state_to_ir<'follow, 'db>(
 ) -> SherpaResult<(StateId, Box<ParseState<'db>>)> {
   let db = graph.get_db();
   let successors = successors.iter().filter(|s| {
-    matches!(
-      s.get_type(),
-      StateType::GotoPass | StateType::GotoLoop | StateType::KernelGoto
-    )
+    matches!(s.get_type(), StateType::GotoPass | StateType::GotoLoop | StateType::KernelGoto)
   });
 
   let mut w = CodeWriter::new(vec![]);
@@ -117,12 +112,7 @@ fn convert_goto_state_to_ir<'follow, 'db>(
         let _ = (&mut w) + "\n( " + bc_id + " ){ goto " + s_name + " }";
       }
       StateType::GotoLoop => {
-        let _ = (&mut w)
-          + "\n( "
-          + bc_id
-          + " ){ push %%%% then goto "
-          + s_name
-          + " }";
+        let _ = (&mut w) + "\n( " + bc_id + " ){ push %%%% then goto " + s_name + " }";
       }
       StateType::GotoPass => {
         let _ = (&mut w) + "\n( " + bc_id + " ){ pass }";
@@ -152,30 +142,26 @@ fn convert_state_to_ir<'follow, 'db>(
   let db: &ParserDatabase = graph.get_db();
   let s_store = db.string_store();
 
-  let successor_groups =
-    hash_group_btreemap(successors.clone(), |_, s| match s.get_type() {
-      StateType::GotoPass | StateType::GotoLoop | StateType::KernelGoto => {
-        SType::GotoSuccessors
-      }
-      _ => SType::SymbolSuccessors,
-    });
+  let successor_groups = hash_group_btreemap(successors.clone(), |_, s| match s.get_type() {
+    StateType::GotoPass | StateType::GotoLoop | StateType::KernelGoto => SType::GotoSuccessors,
+    _ => SType::SymbolSuccessors,
+  });
 
-  let base_state =
-    if let Some(successors) = successor_groups.get(&SType::SymbolSuccessors) {
-      let mut w = CodeWriter::new(vec![]);
+  let base_state = if let Some(successors) = successor_groups.get(&SType::SymbolSuccessors) {
+    let mut w = CodeWriter::new(vec![]);
 
-      w.indent();
+    w.indent();
 
-      add_tok_expr(successors, &mut w, db);
+    add_tok_expr(successors, &mut w, db);
 
-      let mut classes = classify_successors(successors, db);
+    let mut classes = classify_successors(successors, db);
 
-      add_match_expr(&mut w, graph, &mut classes, goto_state_id);
+    add_match_expr(&mut w, graph, &mut classes, goto_state_id);
 
-      Some(Box::new(create_ir_state(graph, w, state)?))
-    } else {
-      None
-    };
+    Some(Box::new(create_ir_state(graph, w, state)?))
+  } else {
+    None
+  };
 
   let mut out = vec![];
 
@@ -196,19 +182,15 @@ fn convert_state_to_ir<'follow, 'db>(
       }
       StateType::Complete => w.write("pass")?,
 
-      StateType::Reduce(rule_id) => {
-        w.write(&create_rule_reduction(rule_id, db))?
-      }
+      StateType::Reduce(rule_id) => w.write(&create_rule_reduction(rule_id, db))?,
       _ => unreachable!(),
     }
 
     if let Some(mut base_state) = base_state {
       if state_id.is_root() {
-        base_state.name =
-          (entry_name.to_string(s_store) + "_then").intern(s_store);
+        base_state.name = (entry_name.to_string(s_store) + "_then").intern(s_store);
       } else {
-        base_state.name =
-          (base_state.name.to_string(s_store) + "_then").intern(s_store);
+        base_state.name = (base_state.name.to_string(s_store) + "_then").intern(s_store);
       }
 
       w.w(" then goto ")?.w(&base_state.name.to_string(s_store))?;
@@ -255,12 +237,7 @@ fn add_tok_expr(
 ) {
   let mut set_token = successors
     .iter()
-    .filter(|s| {
-      matches!(
-        s.get_type(),
-        StateType::AssignToken(..) | StateType::AssignAndFollow(..)
-      )
-    })
+    .filter(|s| matches!(s.get_type(), StateType::AssignToken(..) | StateType::AssignAndFollow(..)))
     .collect::<Array<_>>();
 
   debug_assert!(set_token.len() <= 1);
@@ -282,9 +259,7 @@ fn classify_successors<'graph, 'db>(
   VecDeque::from_iter(
     hash_group_btreemap(successors.clone(), |_, s| match s.get_symbol() {
       SymbolId::EndOfFile { .. } => (0, InputType::EndOfFile),
-      SymbolId::DBToken { .. } | SymbolId::DBNonTerminalToken { .. } => {
-        (4, InputType::Token)
-      }
+      SymbolId::DBToken { .. } | SymbolId::DBNonTerminalToken { .. } => (4, InputType::Token),
       SymbolId::Char { .. } => (1, InputType::Byte),
       SymbolId::Codepoint { .. } => (2, InputType::Codepoint),
       SymbolId::Default => (5, InputType::Default),
@@ -327,10 +302,8 @@ fn add_match_expr<'follow, 'db>(
       }
 
       if input_type == InputType::Token {
-        let syms = successors
-          .iter()
-          .map(|s| s.get_symbol().tok_db_key().unwrap())
-          .collect::<Set<_>>();
+        let syms =
+          successors.iter().map(|s| s.get_symbol().tok_db_key().unwrap()).collect::<Set<_>>();
 
         let skipped = successors
           .iter()
@@ -435,9 +408,7 @@ fn build_body<'follow, 'db>(
     match (&goto_state_id, s_type) {
       // Kernel calls can bypass gotos.
       (_, StateType::KernelCall(..)) => {}
-      (Some(gt), _) => {
-        body_string.push("push ".to_string() + &gt.to_string(db.string_store()))
-      }
+      (Some(gt), _) => body_string.push("push ".to_string() + &gt.to_string(db.string_store())),
       _ => {}
     }
 
@@ -445,16 +416,12 @@ fn build_body<'follow, 'db>(
       //Ensure production calls are immediately called before any other
       // gotos.
       StateType::KernelCall(prod_id) | StateType::InternalCall(prod_id) => {
+        body_string.push("push ".to_string() + &create_ir_state_name(graph, successor));
         body_string
-          .push("push ".to_string() + &create_ir_state_name(graph, successor));
-        body_string.push(
-          "goto ".to_string()
-            + &db.prod_guid_name(prod_id).to_string(db.string_store()),
-        );
+          .push("goto ".to_string() + &db.prod_guid_name(prod_id).to_string(db.string_store()));
       }
       _ => {
-        body_string
-          .push("goto ".to_string() + &create_ir_state_name(graph, successor));
+        body_string.push("goto ".to_string() + &create_ir_state_name(graph, successor));
       }
     }
   }
@@ -477,9 +444,7 @@ fn create_rule_reduction(rule_id: DBRuleKey, db: &ParserDatabase) -> String {
 }
 
 pub(super) fn create_ir_state_name(graph: &Graph, state: &State) -> String {
-  graph.is_scan().then_some("s").unwrap_or("p").to_string()
-    + "_"
-    + &state.get_hash().to_string()
+  graph.is_scan().then_some("s").unwrap_or("p").to_string() + "_" + &state.get_hash().to_string()
 }
 
 pub(super) fn create_ir_state<'follow, 'db>(
@@ -489,8 +454,7 @@ pub(super) fn create_ir_state<'follow, 'db>(
 ) -> SherpaResult<ParseState<'db>> {
   let ir_state = ParseState {
     code: w.to_string(),
-    name: create_ir_state_name(graph, state)
-      .intern(graph.get_db().string_store()),
+    name: create_ir_state_name(graph, state).intern(graph.get_db().string_store()),
     ..Default::default()
   };
 

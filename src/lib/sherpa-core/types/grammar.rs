@@ -60,36 +60,29 @@ impl From<(ProductionId, usize)> for ProductionId {
 }
 
 impl ProductionId {
+  pub fn as_state_sym(&self) -> SymbolId {
+    SymbolId::NonTerminalState { id: self.as_parse_prod() }
+  }
+
   pub fn as_sym(&self) -> SymbolId {
     SymbolId::NonTerminal { id: self.as_parse_prod() }
   }
 
   pub fn as_tok_sym(&self) -> SymbolId {
-    SymbolId::NonTerminalToken {
-      id:         self.as_scan_prod(),
-      precedence: 0,
-    }
+    SymbolId::NonTerminalToken { id: self.as_scan_prod(), precedence: 0 }
   }
 
   pub fn as_parse_prod(&self) -> ProductionId {
     match self {
-      ProductionId::Standard(id, _) => {
-        ProductionId::Standard(*id, ProductionSubType::Parser)
-      }
-      ProductionId::Sub(id, index, _) => {
-        ProductionId::Sub(*id, *index, ProductionSubType::Parser)
-      }
+      ProductionId::Standard(id, _) => ProductionId::Standard(*id, ProductionSubType::Parser),
+      ProductionId::Sub(id, index, _) => ProductionId::Sub(*id, *index, ProductionSubType::Parser),
     }
   }
 
   pub fn as_scan_prod(&self) -> ProductionId {
     match self {
-      ProductionId::Standard(id, _) => {
-        ProductionId::Standard(*id, ProductionSubType::Scanner)
-      }
-      ProductionId::Sub(id, index, _) => {
-        ProductionId::Sub(*id, *index, ProductionSubType::Scanner)
-      }
+      ProductionId::Standard(id, _) => ProductionId::Standard(*id, ProductionSubType::Scanner),
+      ProductionId::Sub(id, index, _) => ProductionId::Sub(*id, *index, ProductionSubType::Scanner),
     }
   }
 
@@ -169,14 +162,16 @@ pub enum ASTToken {
 /// A custom parse state defined within a grammar e.g `state_name => ...`
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct CustomState {
-  pub id:        ProductionId,
-  pub g_id:      GrammarId,
+  pub id: ProductionId,
+  pub g_id: GrammarId,
   pub guid_name: IString,
-  pub symbols:   Set<SymbolId>,
-  pub state:     Box<parser::State>,
-  pub tok:       Token,
+  pub friendly_name: IString,
+  pub symbols: Set<SymbolId>,
+  pub state: Box<parser::State>,
+  pub tok: Token,
 }
 
+#[derive(Clone)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct Production {
   /// The unique identifier of this production.
@@ -220,6 +215,7 @@ pub struct Production {
 /// Productions generated from the expansion of "production" type
 /// symbols such as groups & lists. These productions are only referenced
 /// by the rules defined by this production.
+#[derive(Clone)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct SubProduction {
   pub id: ProductionId,
@@ -239,6 +235,7 @@ pub struct SubProduction {
 }
 
 /// Types of [SubProduction]s that may be derived from rule symbols.
+#[derive(Clone)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub enum SubProductionType {
   /// List sub productions are left recursive productions
@@ -289,7 +286,7 @@ pub enum ProductionType {
   ContextFree,
   Pratt,
   Peg,
-  ParseSTate,
+  ParseState,
 }
 
 /// Identifiers for a Grammar
@@ -313,10 +310,7 @@ pub struct GrammarIdentity {
 }
 
 impl GrammarIdentity {
-  pub fn from_path(
-    grammar_source_path: &PathBuf,
-    string_store: &IStringStore,
-  ) -> Self {
+  pub fn from_path(grammar_source_path: &PathBuf, string_store: &IStringStore) -> Self {
     Self {
       guid: grammar_source_path.into(),
       path: grammar_source_path.intern(string_store),
@@ -342,13 +336,9 @@ impl SymbolId {
       ClassNumber { .. } => &mut w + "c:num",
       ClassSymbol { .. } => &mut w + "c:sym",
       Token { val, precedence } => {
-        &mut w
-          + "["
-          + val.to_str(db.string_store()).as_str()
-          + "]{"
-          + precedence.to_string()
-          + "}"
+        &mut w + "[" + val.to_str(db.string_store()).as_str() + "]{" + precedence.to_string() + "}"
       }
+      NonTerminalState { id, .. } => &mut w + "non_term_state",
       NonTerminal { id, .. } => &mut w + "non_term",
       NonTerminalToken { id, .. } => &mut w + "tk:" + "non_term",
       Codepoint { val, precedence } => {
@@ -366,19 +356,9 @@ impl SymbolId {
       DBToken { key: index } => &mut w + db.sym(index).debug_string(db),
       Char { char, precedence } => {
         if char < 128 {
-          &mut w
-            + "[ cp:"
-            + char::from(char).to_string()
-            + "]{"
-            + precedence.to_string()
-            + "}"
+          &mut w + "[ cp:" + char::from(char).to_string() + "]{" + precedence.to_string() + "}"
         } else {
-          &mut w
-            + "[ char:"
-            + char.to_string()
-            + "]{"
-            + precedence.to_string()
-            + "}"
+          &mut w + "[ char:" + char.to_string() + "]{" + precedence.to_string() + "}"
         }
       }
     };
@@ -397,7 +377,8 @@ use ::std::sync;
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct GrammarSoup {
   pub grammar_headers: Arc<sync::RwLock<Map<GrammarId, Box<GrammarHeader>>>>,
-  pub productions:     Arc<sync::RwLock<Map<ProductionId, Box<Production>>>>,
+  //pub productions:     Arc<sync::RwLock<Map<ProductionId, Box<Production>>>>,
+  pub productions:     Arc<sync::RwLock<Array<Box<Production>>>>,
   pub custom_states:   Arc<sync::RwLock<Map<ProductionId, Box<CustomState>>>>,
   pub string_store:    IStringStore,
 }

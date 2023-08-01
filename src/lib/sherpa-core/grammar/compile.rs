@@ -1,15 +1,10 @@
 #![allow(unused_mut, unused)]
-use super::build_grammar::{
-  create_grammar_data,
-  extract_productions,
-  parse_grammar,
-  GrammarData,
-};
+use super::build_grammar::{create_grammar_data, extract_productions, parse_grammar, GrammarData};
 use crate::{
   grammar::build_grammar::{
     convert_grammar_data_to_header,
     process_parse_state,
-    process_prod,
+    process_production,
   },
   journal::{Journal, ReportType},
   tasks::{new_taskman, Spawner, ThreadedFuture},
@@ -48,8 +43,7 @@ async fn import_grammars(
   loop {
     if let Ok(task) = {
       let import_reader = import_reader.clone();
-      let result =
-        import_reader.lock().unwrap().recv_timeout(Duration::from_millis(2));
+      let result = import_reader.lock().unwrap().recv_timeout(Duration::from_millis(2));
       drop(import_reader);
       result
     } {
@@ -65,11 +59,9 @@ async fn import_grammars(
               async move {
                 let GrammarIdentity { guid, name, path } = import_id;
 
-                let grammar_source_path =
-                  PathBuf::from(path.to_str(&g_c.string_store).as_str());
+                let grammar_source_path = PathBuf::from(path.to_str(&g_c.string_store).as_str());
 
-                let grammar_data =
-                  load_from_path(&mut j, grammar_source_path, &g_c);
+                let grammar_data = load_from_path(&mut j, grammar_source_path, &g_c);
 
                 match grammar_data {
                   SherpaResult::Ok(g_data) => {
@@ -77,9 +69,10 @@ async fn import_grammars(
                       let mut local_loader = import_loader.lock().unwrap();
                       if g_data.imports.is_empty() == false {
                         /* Scope for Mutex lock */
-                        g_data.imports.iter().for_each(|(_, i)| {
-                          local_loader.send(Task::Todo(*i)).unwrap()
-                        });
+                        g_data
+                          .imports
+                          .iter()
+                          .for_each(|(_, i)| local_loader.send(Task::Todo(*i)).unwrap());
                       }
                       local_loader.send(Task::Complete).unwrap();
                     }
@@ -134,13 +127,13 @@ pub fn compile_grammar_data(
 ) -> SherpaResult<GrammarIdentity> {
   let id = g_data.id;
 
-  let (mut prods, mut parse_states) =
-    extract_productions(j, &g_data, &g_c.string_store)?;
+  let (mut prods, mut parse_states) = extract_productions(j, &g_data, &g_c.string_store)?;
 
   for prod in prods {
-    let prod = process_prod(prod, &g_data, &g_c.string_store)?;
+    let prod = process_production(prod, &g_data, &g_c.string_store)?;
 
-    g_c.productions.write().unwrap().insert(prod.id, prod);
+    //g_c.productions.write().unwrap().insert(prod.id, prod);
+    g_c.productions.write().unwrap().push(prod);
   }
 
   for state in parse_states {
@@ -150,10 +143,11 @@ pub fn compile_grammar_data(
   }
 
   {
-    g_c.grammar_headers.write().unwrap().insert(
-      g_data.id.guid,
-      convert_grammar_data_to_header(g_data.id, g_data),
-    );
+    g_c
+      .grammar_headers
+      .write()
+      .unwrap()
+      .insert(g_data.id.guid, convert_grammar_data_to_header(g_data.id, g_data));
   }
 
   SherpaResult::Ok(id)
@@ -186,8 +180,7 @@ fn load_from_str(
 ) -> SherpaResult<GrammarData> {
   let root_grammar = parse_grammar(&source)?;
 
-  let g_data =
-    create_grammar_data(j, root_grammar, &source_path, &soup.string_store)?;
+  let g_data = create_grammar_data(j, root_grammar, &source_path, &soup.string_store)?;
 
   SherpaResult::Ok(g_data)
 }
@@ -213,10 +206,7 @@ pub async fn compile_grammars_from_path(
   grammar_cloud: &GrammarSoup,
   spawner: &Spawner<SherpaResult<()>>,
 ) -> SherpaResult<GrammarIdentity> {
-  let root_id = GrammarIdentity::from_path(
-    &grammar_source_path,
-    &grammar_cloud.string_store,
-  );
+  let root_id = GrammarIdentity::from_path(&grammar_source_path, &grammar_cloud.string_store);
 
   let imports = vec![root_id];
 

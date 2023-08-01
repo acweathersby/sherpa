@@ -1,4 +1,8 @@
-use crate::{test::frame::build_parse_states_from_source_str as build, SherpaResult as R};
+use crate::{
+  test::frame::{build_parse_states_from_source_str as build, TestPackage as Tp},
+  DBProdKey,
+  SherpaResult as R,
+};
 
 #[test]
 fn grammar_viable_grammar() -> R<()> {
@@ -37,7 +41,19 @@ fn grammar_with_peg_production() -> R<()> {
 
 #[test]
 fn grammar_with_append_production() -> R<()> {
-  build("<> t > \"r\" \n +> t > 'b'", "".into(), Default::default(), &|_| R::Ok(()))
+  build(
+    "<> t > ('r') \n +> t > ( 'b' :ast 1 )",
+    "".into(),
+    Default::default(),
+    &|Tp { db, .. }| {
+      assert_eq!(
+        db.prod_rules(DBProdKey::from(0usize))?.len(),
+        2,
+        "Production `t` should have two rules, one for `'r'` and the other for `'b'`"
+      );
+      R::Ok(())
+    },
+  )
 }
 
 #[test]
@@ -192,6 +208,41 @@ fn grammar_basic_ascript_expression_u16() -> R<()> {
 #[test]
 fn grammar_basic_ascript_expression_u32() -> R<()> {
   build("<> a > \"b\" :ast u32($1)", "".into(), Default::default(), &|_| R::Ok(()))
+}
+
+#[test]
+fn grammar_basic_ascript_expression_u64() -> R<()> {
+  build("<> a > \"b\" :ast u64($1)", "".into(), Default::default(), &|_| R::Ok(()))
+}
+
+#[test]
+fn grammar_basic_ascript_expression_i8() -> R<()> {
+  build("<> a > \"b\" :ast i8($1)", "".into(), Default::default(), &|_| R::Ok(()))
+}
+
+#[test]
+fn grammar_basic_ascript_expression_i16() -> R<()> {
+  build("<> a > \"b\" :ast i16($1)", "".into(), Default::default(), &|_| R::Ok(()))
+}
+
+#[test]
+fn grammar_basic_ascript_expression_i32() -> R<()> {
+  build("<> a > \"b\" :ast i32($1)", "".into(), Default::default(), &|_| R::Ok(()))
+}
+
+#[test]
+fn grammar_basic_ascript_expression_i64() -> R<()> {
+  build("<> a > \"b\" :ast i64($1)", "".into(), Default::default(), &|_| R::Ok(()))
+}
+
+#[test]
+fn grammar_basic_ascript_expression_f32() -> R<()> {
+  build("<> a > \"b\" :ast f32($1)", "".into(), Default::default(), &|_| R::Ok(()))
+}
+
+#[test]
+fn grammar_basic_ascript_expression_f64() -> R<()> {
+  build("<> a > \"b\" :ast f64($1)", "".into(), Default::default(), &|_| R::Ok(()))
 }
 
 #[test]

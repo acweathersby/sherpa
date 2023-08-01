@@ -1,10 +1,9 @@
 use crate::{
   journal::Journal,
-  tasks::Spawner,
   types::*,
   utils::{create_u64_hash, hash_group_btreemap},
 };
-use std::collections::VecDeque;
+use std::collections::{hash_map, VecDeque};
 
 pub fn build_compile_db<'a>(
   mut j: Journal,
@@ -16,9 +15,60 @@ pub fn build_compile_db<'a>(
 
   let mut VALID = true;
 
-  let GrammarSoup { grammar_headers, productions, string_store: s_store, .. } = gs;
+  let GrammarSoup { grammar_headers, productions, string_store: s_store, custom_states, .. } = gs;
 
-  let productions = productions.read()?;
+  let productions: std::sync::RwLockReadGuard<'_, Vec<Box<Production>>> = productions.read()?;
+  let productions = {
+    let mut out_prods = Map::new();
+    for prod in productions.iter() {
+      match out_prods.entry(prod.id) {
+        hash_map::Entry::Vacant(e) => {
+          e.insert(prod.clone());
+        }
+        hash_map::Entry::Occupied(mut e) => {
+          fn remap_sub_prod_offsets(rule: &mut Rule, sub_prod_offset: usize) {
+            for sym in &mut rule.symbols {
+              match sym.0 {
+                SymbolId::NonTerminal { id } => {
+                  if let ProductionId::Sub(p, i, s) = id {
+                    sym.0 = SymbolId::NonTerminal {
+                      id: ProductionId::Sub(p, i + sub_prod_offset as u32, s),
+                    };
+                  }
+                }
+                _ => {}
+              }
+            }
+          }
+
+          let existing_prod = e.get_mut();
+          let sub_prod_offset = existing_prod.sub_prods.len();
+
+          for mut rule in prod.rules.clone() {
+            remap_sub_prod_offsets(&mut rule, sub_prod_offset);
+            existing_prod.rules.push(rule);
+          }
+
+          for mut sub_prod in prod.sub_prods.clone() {
+            if let ProductionId::Sub(p, i, s) = sub_prod.id {
+              sub_prod.id = ProductionId::Sub(p, i + sub_prod_offset as u32, s);
+            }
+
+            for rule in &mut sub_prod.rules {
+              remap_sub_prod_offsets(rule, sub_prod_offset);
+            }
+
+            existing_prod.sub_prods.push(sub_prod);
+          }
+
+          existing_prod.symbols.extend(prod.symbols.iter());
+        }
+      };
+    }
+    out_prods
+  };
+
+  let custom_states = custom_states.read()?;
   let grammar_headers = grammar_headers.read()?;
   let root_grammar = grammar_headers.get(&g.guid)?.as_ref();
 
@@ -61,7 +111,7 @@ pub fn build_compile_db<'a>(
       let f_name = prod.friendly_name;
       let rules = prod.rules.clone();
 
-      add_prod(prod_id.as_sym(), rules, p_map, r_table, p_r_map, false);
+      add_prod_and_rules(prod_id.as_sym(), rules, p_map, r_table, p_r_map, false);
       add_prod_name(prod_name_lu, g_name, f_name);
 
       // Gain references on all sub productions. ----------------------------
@@ -72,7 +122,7 @@ pub fn build_compile_db<'a>(
           let g_name = prod.guid_name;
           let f_name = prod.friendly_name;
 
-          add_prod(prod_id.as_sym(), rules, p_map, r_table, p_r_map, false);
+          add_prod_and_rules(prod_id.as_sym(), rules, p_map, r_table, p_r_map, false);
           add_prod_name(prod_name_lu, g_name, f_name);
 
           extract_prod_syms(
@@ -100,40 +150,6 @@ pub fn build_compile_db<'a>(
         &mut token_names,
         &mut token_productions,
       )?;
-
-      fn extract_prod_syms(
-        rules: &[Rule],
-        production_queue: &mut VecDeque<ProductionId>,
-        productions: &Map<ProductionId, Box<Production>>,
-        s_store: &IStringStore,
-        symbols: &mut Map<SymbolId, usize>,
-        token_names: &mut Map<SymbolId, IString>,
-        token_productions: &mut VecDeque<ProductionId>,
-      ) -> SherpaResult<()> {
-        for rule in rules {
-          for (sym, ..) in &rule.symbols {
-            match sym {
-              SymbolId::NonTerminal { id, .. } => match id {
-                ProductionId::Standard(..) => {
-                  production_queue.push_back(*id);
-                }
-                ProductionId::Sub(..) => {
-                  // We've already merged in the production's sub-productions
-                }
-              },
-              SymbolId::NonTerminalToken { id, .. } => {
-                let name = productions.get(&id.as_parse_prod())?.guid_name;
-                let name = ("tk:".to_string() + &name.to_string(s_store)).intern(s_store);
-                insert_symbol(symbols, sym);
-                token_names.insert(id.as_parse_prod().as_tok_sym(), name);
-                token_productions.push_back(id.as_parse_prod());
-              }
-              _ => {}
-            }
-          }
-        }
-        SherpaResult::Ok(())
-      }
     }
   }
 
@@ -206,11 +222,11 @@ pub fn build_compile_db<'a>(
         let prod_id = prod_id.as_tok_sym();
         let prime_id = prime_id.as_tok_sym();
 
-        add_prod(prod_id, r_rules, p_map, r_table, p_r_map, true);
+        add_prod_and_rules(prod_id, r_rules, p_map, r_table, p_r_map, true);
         add_prod_name(prod_name_lu, name, name);
 
         let name = (name.to_string(s_store) + "_prime").intern(s_store);
-        add_prod(prime_id, p_rules, p_map, r_table, p_r_map, true);
+        add_prod_and_rules(prime_id, p_rules, p_map, r_table, p_r_map, true);
         add_prod_name(prod_name_lu, name, name);
       } else {
         let prod_id = prod_id.as_tok_sym();
@@ -220,7 +236,7 @@ pub fn build_compile_db<'a>(
           convert_symbols_to_scanner_symbols(&mut rules, s_store);
           insert_token_production(&mut rules, &mut token_productions);
 
-          add_prod(prod_id, rules, p_map, r_table, p_r_map, true);
+          add_prod_and_rules(prod_id, rules, p_map, r_table, p_r_map, true);
           add_prod_name(prod_name_lu, name, name);
         }
       }
@@ -250,7 +266,7 @@ pub fn build_compile_db<'a>(
 
           let name = ("tok_".to_string() + &create_u64_hash(val).to_string()).intern(s_store);
 
-          add_prod(prod_id.as_tok_sym(), rules, p_map, r_table, p_r_map, true);
+          add_prod_and_rules(prod_id.as_tok_sym(), rules, p_map, r_table, p_r_map, true);
 
           add_prod_name(prod_name_lu, name, name);
 
@@ -268,7 +284,7 @@ pub fn build_compile_db<'a>(
 
           let name = ("sym_".to_string() + &create_u64_hash(sym).to_string()).intern(s_store);
 
-          add_prod(prod_id.as_tok_sym(), rules, p_map, r_table, p_r_map, true);
+          add_prod_and_rules(prod_id.as_tok_sym(), rules, p_map, r_table, p_r_map, true);
 
           add_prod_name(prod_name_lu, name, name);
         }
@@ -348,6 +364,40 @@ fn convert_rule_symbols(
   }
 }
 
+fn extract_prod_syms(
+  rules: &[Rule],
+  production_queue: &mut VecDeque<ProductionId>,
+  productions: &Map<ProductionId, Box<Production>>,
+  s_store: &IStringStore,
+  symbols: &mut Map<SymbolId, usize>,
+  token_names: &mut Map<SymbolId, IString>,
+  token_productions: &mut VecDeque<ProductionId>,
+) -> SherpaResult<()> {
+  for rule in rules {
+    for (sym, ..) in &rule.symbols {
+      match sym {
+        SymbolId::NonTerminal { id, .. } => match id {
+          ProductionId::Standard(..) => {
+            production_queue.push_back(*id);
+          }
+          ProductionId::Sub(..) => {
+            // We've already merged in the production's sub-productions
+          }
+        },
+        SymbolId::NonTerminalToken { id, .. } => {
+          let name = productions.get(&id.as_parse_prod())?.guid_name;
+          let name = ("tk:".to_string() + &name.to_string(s_store)).intern(s_store);
+          insert_symbol(symbols, sym);
+          token_names.insert(id.as_parse_prod().as_tok_sym(), name);
+          token_productions.push_back(id.as_parse_prod());
+        }
+        _ => {}
+      }
+    }
+  }
+  SherpaResult::Ok(())
+}
+
 /// Converts an AST symbol into a DB symbol.
 fn convert_rule_symbol(
   sym: &mut SymbolId,
@@ -390,7 +440,7 @@ fn add_prod_name(
 }
 
 /// Inserts production rule data into the appropriate lookup tables.
-fn add_prod(
+fn add_prod_and_rules(
   prod_sym: SymbolId,
   prod_rules: Array<Rule>,
   production_map: &mut std::collections::HashMap<SymbolId, usize>,
