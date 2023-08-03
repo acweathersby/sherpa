@@ -27,37 +27,49 @@ pub fn compile_parse_states<'db>(
 
   // compile productions
   for (prod_id, prod_sym) in db.productions().iter().enumerate() {
-    let start_items =
-      Items::start_items((prod_id as u32).into(), db).to_origin(Origin::ProdGoal(prod_id.into()));
+    if let Some(custom_state) = db.custom_state(prod_id.into()) {
+      let name = db.prod_guid_name(prod_id.into());
+      let state = ParseState {
+        name,
+        comment: "Custom State".into(),
+        code: custom_state.tok.to_string(),
+        ast: SherpaResult::Ok(Box::new(custom_state.clone())),
+        scanners: None,
+      };
+      states.insert(name, Box::new(state));
+    } else {
+      let start_items =
+        Items::start_items((prod_id as u32).into(), db).to_origin(Origin::ProdGoal(prod_id.into()));
 
-    match prod_sym {
-      SymbolId::NonTerminal { .. } => {
-        let graph = build_graph(&mut j, GraphMode::Parser, start_items, db, &follow).unwrap();
+      match prod_sym {
+        SymbolId::NonTerminal { .. } => {
+          let graph = build_graph(&mut j, GraphMode::Parser, start_items, db, &follow).unwrap();
 
-        let ir = build_ir(&mut j, &graph, db.prod_guid_name(prod_id.into())).unwrap();
+          let ir = build_ir(&mut j, &graph, db.prod_guid_name(prod_id.into())).unwrap();
 
-        for mut state in ir {
-          if let Some(scanner_data) = state.build_scanners(db) {
-            for (name, syms) in scanner_data {
-              scanners.insert((*name, syms.clone()));
+          for mut state in ir {
+            if let Some(scanner_data) = state.build_scanners(db) {
+              for (name, syms) in scanner_data {
+                scanners.insert((*name, syms.clone()));
+              }
             }
+            states.insert(state.name, state);
           }
-          states.insert(state.name, state);
         }
-      }
-      SymbolId::NonTerminalToken { .. } => {
-        let graph = build_graph(&mut j, GraphMode::Scanner, start_items, db, &follow).unwrap();
+        SymbolId::NonTerminalToken { .. } => {
+          let graph = build_graph(&mut j, GraphMode::Scanner, start_items, db, &follow).unwrap();
 
-        let ir = build_ir(&mut j, &graph, db.prod_guid_name(prod_id.into())).unwrap();
+          let ir = build_ir(&mut j, &graph, db.prod_guid_name(prod_id.into())).unwrap();
 
-        for state in ir {
-          states.insert(state.name, state);
+          for state in ir {
+            states.insert(state.name, state);
+          }
         }
+        SymbolId::NonTerminalState { .. } => {
+          // todo!(load state into the states collection)
+        }
+        _ => unreachable!(),
       }
-      SymbolId::NonTerminalState { .. } => {
-        // todo!(load state into the states collection)
-      }
-      _ => unreachable!(),
     }
   }
 

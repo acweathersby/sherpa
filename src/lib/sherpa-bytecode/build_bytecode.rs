@@ -200,9 +200,14 @@ fn build_match<'db>(
         }
         InputType::CLASS_STR => InputType::Class,
         InputType::CODEPOINT_STR => InputType::Codepoint,
-        InputType::BYTE_STR => InputType::Byte,
+        InputType::BYTE_STR | "BYTE" => InputType::Byte,
         InputType::END_OF_FILE_STR => InputType::EndOfFile,
-        _ => unreachable!(),
+        s => unreachable!("Unexpected match type specifier: {}; Expected one of {:?}", s, [
+          InputType::CLASS_STR,
+          InputType::CODEPOINT_STR,
+          InputType::BYTE_STR,
+          InputType::END_OF_FILE_STR,
+        ]),
       } as u32;
       for m in matches.iter().rev() {
         match m {

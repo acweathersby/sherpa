@@ -4,7 +4,7 @@ use sherpa_core::{
   *,
 };
 use sherpa_runtime::{
-  bytecode::ByteCodeParser,
+  bytecode::{generate_disassembly, ByteCodeParser},
   types::{bytecode::FIRST_PARSE_BLOCK_ADDRESS, SherpaParser, UTF8StringReader},
 };
 use std::path::PathBuf;
@@ -95,6 +95,22 @@ fn parser_of_grammar_with_append_productions() -> SherpaResult<()> {
 }
 
 #[test]
+fn parsing_using_trivial_custom_state() -> SherpaResult<()> {
+  build_states(
+    "A => match : BYTE  (65 /* A */ | 66 /* B */) { shift then pass }",
+    "".into(),
+    Default::default(),
+    &|TestPackage { db, states, .. }| {
+      let (bc, _) = compile_bytecode(&db, states)?;
+      assert!(Parser::new(&mut ("A".into()), &bc).completes(FIRST_PARSE_BLOCK_ADDRESS).is_ok());
+      assert!(Parser::new(&mut ("B".into()), &bc).completes(FIRST_PARSE_BLOCK_ADDRESS).is_ok());
+      assert!(Parser::new(&mut ("C".into()), &bc).completes(FIRST_PARSE_BLOCK_ADDRESS).is_err());
+      SherpaResult::Ok(())
+    },
+  )
+}
+
+#[test]
 fn json_parser() -> SherpaResult<()> {
   use sherpa_core::test::frame::*;
 
@@ -114,18 +130,49 @@ fn json_parser() -> SherpaResult<()> {
 
       let mut parser = ByteCodeParser::<UTF8StringReader, u32>::new(&mut (input.into()), &bc);
 
-      dbg!(parser.collect_shifts_and_skips(
-        8,
-        0,
-        &mut console_debugger(db.clone(), Default::default())
-      ));
+      dbg!(parser.collect_shifts_and_skips(8, 0, &mut None));
       SherpaResult::Ok(())
     },
   )
 }
 
 #[test]
-pub fn test__sgml_like_grammar_parsing() -> SherpaResult<()> {
+fn handles_grammars_that_utilize_eof_symbol() -> SherpaResult<()> {
+  build_states(
+    r##"
+
+EXPORT A as A
+EXPORT B as B
+      
+<> A > "a" "b" "c" $
+
+<> B > "c" "b" "a"      
+
+      "##,
+    "".into(),
+    Default::default(),
+    &|TestPackage { db, states, .. }| {
+      let (bc, state_map) = compile_bytecode(&db, states)?;
+
+      assert!(Parser::new(&mut ("abc ".into()), &bc)
+        .completes(db.get_entry_offset("A", &state_map)? as u32)
+        .is_err());
+      assert!(Parser::new(&mut ("abc".into()), &bc)
+        .completes(db.get_entry_offset("A", &state_map)? as u32)
+        .is_ok());
+      assert!(Parser::new(&mut ("cba".into()), &bc)
+        .completes(db.get_entry_offset("B", &state_map)? as u32)
+        .is_ok());
+      assert!(Parser::new(&mut ("cba ".into()), &bc)
+        .completes(db.get_entry_offset("B", &state_map)? as u32)
+        .is_ok());
+      SherpaResult::Ok(())
+    },
+  )
+}
+
+#[test]
+pub fn test_sgml_like_grammar_parsing() -> SherpaResult<()> {
   let input = r#"
 NAME wick_element
 

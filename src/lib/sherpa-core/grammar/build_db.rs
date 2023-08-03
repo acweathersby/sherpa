@@ -1,5 +1,6 @@
 use crate::{
   journal::Journal,
+  parser,
   types::*,
   utils::{create_u64_hash, hash_group_btreemap},
 };
@@ -16,6 +17,8 @@ pub fn build_compile_db<'a>(
   let mut VALID = true;
 
   let GrammarSoup { grammar_headers, productions, string_store: s_store, custom_states, .. } = gs;
+
+  let custom_states = custom_states.read()?;
 
   let productions: std::sync::RwLockReadGuard<'_, Vec<Box<Production>>> = productions.read()?;
   let productions = {
@@ -68,7 +71,6 @@ pub fn build_compile_db<'a>(
     out_prods
   };
 
-  let custom_states = custom_states.read()?;
   let grammar_headers = grammar_headers.read()?;
   let root_grammar = grammar_headers.get(&g.guid)?.as_ref();
 
@@ -93,37 +95,53 @@ pub fn build_compile_db<'a>(
   let mut prod_name_lu_owned = Array::new();
   let prod_name_lu = &mut prod_name_lu_owned;
 
+  // Processed Custom State
+  let mut c_states_owned = Array::new();
+  let c_states = &mut c_states_owned;
+
   // Keeps track of the names of token_productions.
   let mut token_names = Map::new();
   let mut token_productions = VecDeque::new();
 
   while let Some(prod_id) = production_queue.pop_front() {
     if !p_map.contains_key(&prod_id.as_sym()) {
-      // Determine if the production exists
-      let Some(prod) = productions.get(&prod_id) else {
-        todo!("Need to warn about a missing production and declare the grammar invalid. {prod_id:?}");
-        j.report_mut().add_error(SherpaError::Text("Unable to find production".into()));
-        VALID = false;
-        continue;
-      };
-
-      let g_name = prod.guid_name;
-      let f_name = prod.friendly_name;
-      let rules = prod.rules.clone();
-
-      add_prod_and_rules(prod_id.as_sym(), rules, p_map, r_table, p_r_map, false);
-      add_prod_name(prod_name_lu, g_name, f_name);
-
-      // Gain references on all sub productions. ----------------------------
-      for prod in &prod.sub_prods {
-        let prod_id = prod.id;
-        if !p_map.contains_key(&prod_id.as_sym()) {
-          let rules = prod.rules.clone();
+      match (custom_states.get(&prod_id), productions.get(&prod_id)) {
+        (None, Some(prod)) => {
           let g_name = prod.guid_name;
           let f_name = prod.friendly_name;
+          let rules = prod.rules.clone();
 
           add_prod_and_rules(prod_id.as_sym(), rules, p_map, r_table, p_r_map, false);
           add_prod_name(prod_name_lu, g_name, f_name);
+          add_empty_custom_state(c_states);
+
+          // Gain references on all sub productions. ----------------------------
+          for prod in &prod.sub_prods {
+            let prod_id = prod.id;
+            if !p_map.contains_key(&prod_id.as_sym()) {
+              let rules = prod.rules.clone();
+              let g_name = prod.guid_name;
+              let f_name = prod.friendly_name;
+
+              add_prod_and_rules(prod_id.as_sym(), rules, p_map, r_table, p_r_map, false);
+              add_prod_name(prod_name_lu, g_name, f_name);
+              add_empty_custom_state(c_states);
+
+              extract_prod_syms(
+                &prod.rules,
+                &mut production_queue,
+                &productions,
+                s_store,
+                &mut symbols,
+                &mut token_names,
+                &mut token_productions,
+              )?;
+            }
+          }
+
+          for sym in prod.symbols.iter() {
+            insert_symbol(&mut symbols, sym);
+          }
 
           extract_prod_syms(
             &prod.rules,
@@ -135,21 +153,25 @@ pub fn build_compile_db<'a>(
             &mut token_productions,
           )?;
         }
-      }
-
-      for sym in prod.symbols.iter() {
-        insert_symbol(&mut symbols, sym);
-      }
-
-      extract_prod_syms(
-        &prod.rules,
-        &mut production_queue,
-        &productions,
-        s_store,
-        &mut symbols,
-        &mut token_names,
-        &mut token_productions,
-      )?;
+        (Some(state), None) => {
+          let g_name = state.guid_name;
+          let f_name = state.friendly_name;
+          add_prod_and_rules(prod_id.as_sym(), vec![], p_map, r_table, p_r_map, false);
+          add_prod_name(prod_name_lu, g_name, f_name);
+          add_custom_state(state.state.clone(), c_states);
+        }
+        (Some(_), Some(_)) => {
+          todo!("Create error for incompatible presence of custom state and regular production with same name")
+        }
+        _ => {
+          todo!(
+            "Need to warn about a missing production and declare the grammar invalid. {prod_id:?}"
+          );
+          j.report_mut().add_error(SherpaError::Text("Unable to find production".into()));
+          VALID = false;
+          continue;
+        }
+      };
     }
   }
 
@@ -224,10 +246,12 @@ pub fn build_compile_db<'a>(
 
         add_prod_and_rules(prod_id, r_rules, p_map, r_table, p_r_map, true);
         add_prod_name(prod_name_lu, name, name);
+        add_empty_custom_state(c_states);
 
         let name = (name.to_string(s_store) + "_prime").intern(s_store);
         add_prod_and_rules(prime_id, p_rules, p_map, r_table, p_r_map, true);
         add_prod_name(prod_name_lu, name, name);
+        add_empty_custom_state(c_states);
       } else {
         let prod_id = prod_id.as_tok_sym();
         if !p_map.contains_key(&prod_id) {
@@ -238,13 +262,13 @@ pub fn build_compile_db<'a>(
 
           add_prod_and_rules(prod_id, rules, p_map, r_table, p_r_map, true);
           add_prod_name(prod_name_lu, name, name);
+          add_empty_custom_state(c_states);
         }
       }
     }
   }
 
-  // Generate scanner productions and symbol indices
-  // ---------------------------
+  // Generate scanner productions and symbol indices --------------------------
   for sym in symbols.keys() {
     if sym.is_default() {
       continue;
@@ -269,6 +293,7 @@ pub fn build_compile_db<'a>(
           add_prod_and_rules(prod_id.as_tok_sym(), rules, p_map, r_table, p_r_map, true);
 
           add_prod_name(prod_name_lu, name, name);
+          add_empty_custom_state(c_states);
 
           token_names.insert(prod_id.as_tok_sym(), *val);
         }
@@ -287,6 +312,7 @@ pub fn build_compile_db<'a>(
           add_prod_and_rules(prod_id.as_tok_sym(), rules, p_map, r_table, p_r_map, true);
 
           add_prod_name(prod_name_lu, name, name);
+          add_empty_custom_state(c_states);
         }
         _ => {}
       }
@@ -318,14 +344,21 @@ pub fn build_compile_db<'a>(
     .iter()
     .enumerate()
     .map(|(id, (name, prod_id))| {
-      let prod_name = productions.get(prod_id).unwrap().guid_name;
-      EntryPoint {
-        prod_key: DBProdKey::from(*p_map.get(&prod_id.as_sym()).unwrap()),
-        entry_name: *name,
-        prod_name,
-        prod_entry_name: (prod_name.to_string(s_store) + "_entry").intern(s_store),
-        prod_exit_name: (prod_name.to_string(s_store) + "_exit").intern(s_store),
-        export_id: id,
+      if let Some(prod_name) = productions
+        .get(prod_id)
+        .and_then(|d| Some(d.guid_name))
+        .or_else(|| custom_states.get(prod_id).and_then(|d| Some(d.guid_name)))
+      {
+        EntryPoint {
+          prod_key: DBProdKey::from(*p_map.get(&prod_id.as_sym()).unwrap()),
+          entry_name: *name,
+          prod_name,
+          prod_entry_name: (prod_name.to_string(s_store) + "_entry").intern(s_store),
+          prod_exit_name: (prod_name.to_string(s_store) + "_exit").intern(s_store),
+          export_id: id,
+        }
+      } else {
+        todo!("Handle missing entry point")
       }
     })
     .collect::<Array<_>>();
@@ -341,9 +374,18 @@ pub fn build_compile_db<'a>(
     sym_lu,
     entry_points,
     s_store.clone(),
+    c_states_owned,
   );
 
   SherpaResult::Ok(db)
+}
+
+fn add_custom_state(state: Box<parser::State>, c_states: &mut Vec<Option<Box<parser::State>>>) {
+  c_states.push(Some(state))
+}
+
+fn add_empty_custom_state(c_states: &mut Vec<Option<Box<parser::State>>>) {
+  c_states.push(None)
 }
 
 fn convert_rule_symbols(
