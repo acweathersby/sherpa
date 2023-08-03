@@ -232,7 +232,6 @@ fn handle_completed_items<'db, 'follow>(
       &default_only,
     )?;
 
-
     if !follow_pairs.is_empty() {
       // Create reduce states for follow items that have not already been covered.
       let mut completed_groups =
@@ -873,10 +872,10 @@ fn create_transition_groups<'db, 'follow>(
     closure.iter().filter(|i| i.precedence() >= max_precedence).cloned().collect::<ItemSet>(),
     |_, item| match item.get_type() {
       ItemType::Completed(_) => SymbolId::Default,
-      ItemType::Terminal(sym) => sym,
+      ItemType::Terminal(sym) => sym.to_plain(),
       ItemType::NonTerminal(_) => SymbolId::Undefined,
       ItemType::TokenNonTerminal(..) if graph.is_scan() => SymbolId::Undefined,
-      ItemType::TokenNonTerminal(_, sym) => sym,
+      ItemType::TokenNonTerminal(_, sym) => sym.to_plain(),
     },
   );
 

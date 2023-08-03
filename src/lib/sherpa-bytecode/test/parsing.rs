@@ -236,3 +236,83 @@ IGNORE { c:sp c:nl }
     SherpaResult::Ok(())
   })
 }
+
+#[test]
+fn generic_grammar() -> SherpaResult<()> {
+  let input = r#" 
+  IGNORE { c:sp c:nl } 
+  
+  <> script > block(+)
+
+  <> block > "DECLARE" tk:name "{" declare_content(+) "}"
+
+  <> declare_content > execute_content(+)
+
+  <> execute_content > "aaa"(+)
+
+  <> name > c:id(+)
+
+  "#;
+  build_states(input, "".into(), Default::default(), &|TestPackage { db, states, .. }| {
+    let (bc, _) = compile_bytecode(&db, states)?;
+
+    assert!(Parser::new(
+      &mut (r##"
+
+    DECLARE AS {
+        aaa
+        aaa
+    }
+    
+    DECLARE BS {
+       aaa
+       aaa
+       aaa
+    }
+    
+    DECLARE CS {
+       aaa
+    }
+    
+      "##
+        .into()),
+      &bc
+    )
+    .completes(FIRST_PARSE_BLOCK_ADDRESS)
+    .is_ok());
+
+    SherpaResult::Ok(())
+  })
+}
+
+#[test]
+pub fn intermediate_exclusive_symbols() -> SherpaResult<()> {
+  build_states(
+    r##"
+
+  <> R > tk:A "ly"
+  
+  <> A > "test" | "tester" | 'testing'
+  
+  "##,
+    "".into(),
+    Default::default(),
+    &|TestPackage { db, states, .. }| {
+      let (bc, _) = compile_bytecode(&db, states)?;
+
+      assert!(Parser::new(&mut ("testly".into()), &bc)
+        .completes(FIRST_PARSE_BLOCK_ADDRESS)
+        .is_ok());
+
+      assert!(Parser::new(&mut ("testerly".into()), &bc)
+        .completes(FIRST_PARSE_BLOCK_ADDRESS)
+        .is_ok());
+
+      assert!(Parser::new(&mut ("testingly".into()), &bc)
+        .completes(FIRST_PARSE_BLOCK_ADDRESS)
+        .is_err());
+
+      SherpaResult::Ok(())
+    },
+  )
+}

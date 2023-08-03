@@ -104,6 +104,11 @@ impl SymbolId {
     }
   }
 
+  /// Returns an unprecedented version of the symbol
+  pub fn to_plain(&self) -> Self {
+    self.to_precedence(0)
+  }
+
   pub fn to_precedence(&self, precedence: u16) -> Self {
     use SymbolId::*;
     match *self {
