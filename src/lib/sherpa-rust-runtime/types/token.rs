@@ -276,7 +276,7 @@ impl Token {
   /// # Example
   ///
   /// ```
-  /// # use sherpa_runtime::types::Token;
+  /// # use sherpa_rust_runtime::types::Token;
   /// # use std::path::PathBuf;
   /// # use std::str::FromStr;
   /// let tok = Token::from_vals(5, 20, 9, 11);

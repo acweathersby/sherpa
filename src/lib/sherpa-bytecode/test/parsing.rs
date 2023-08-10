@@ -3,9 +3,9 @@ use sherpa_core::{
   test::frame::{build_parse_states_from_source_str as build_states, TestPackage},
   *,
 };
-use sherpa_runtime::{
-  bytecode::{generate_disassembly, ByteCodeParser},
-  types::{bytecode::FIRST_PARSE_BLOCK_ADDRESS, SherpaParser, UTF8StringReader},
+use sherpa_rust_runtime::{
+  bytecode::ByteCodeParser,
+  types::{SherpaParser, UTF8StringReader},
 };
 use std::path::PathBuf;
 
@@ -13,21 +13,12 @@ type Parser<'a> = ByteCodeParser<'a, UTF8StringReader<'a>, u32>;
 
 #[test]
 pub fn construct_basic_recursive_descent() -> SherpaResult<()> {
-  build_states(
-    r#"<> A > 'h' 'e' 'l' 'l' 'o'"#,
-    "".into(),
-    Default::default(),
-    &|TestPackage { db, states, .. }| {
-      let (bc, _) = compile_bytecode(&db, states)?;
-      assert!(Parser::new(&mut ("hello".into()), &bc).completes(FIRST_PARSE_BLOCK_ADDRESS).is_ok());
-      SherpaResult::Ok(())
-    },
-  )
+  compile_and_run_grammar(r#"<> A > 'h' 'e' 'l' 'l' 'o'"#, &[("default", "hello ", true)])
 }
 
 #[test]
 pub fn construct_descent_on_scanner_symbol() -> SherpaResult<()> {
-  build_states(
+  compile_and_run_grammar(
     r#"
     <> A > tk:B
 
@@ -37,18 +28,13 @@ pub fn construct_descent_on_scanner_symbol() -> SherpaResult<()> {
     
     <> D > 'a' 'b'
 "#,
-    "".into(),
-    Default::default(),
-    &|TestPackage { db, states, .. }| {
-      let (bc, _) = compile_bytecode(&db, states)?;
-      Parser::new(&mut ("aabc".into()), &bc).completes(FIRST_PARSE_BLOCK_ADDRESS).into()
-    },
+    &[("default", "aabc ", true)],
   )
 }
 
 #[test]
 pub fn construct_recursive_ascent() -> SherpaResult<()> {
-  build_states(
+  compile_and_run_grammar(
     r#"
     IGNORE { c:sp } 
       
@@ -59,121 +45,79 @@ pub fn construct_recursive_ascent() -> SherpaResult<()> {
     
     <> Y > 'x' Y?
 "#,
-    "".into(),
-    Default::default(),
-    &|TestPackage { db, states, .. }| {
-      let (bc, _) = compile_bytecode(&db, states)?;
-      assert!(Parser::new(&mut ("xxxxd".into()), &bc).completes(FIRST_PARSE_BLOCK_ADDRESS).is_ok());
-      assert!(Parser::new(&mut ("xxxxc".into()), &bc).completes(FIRST_PARSE_BLOCK_ADDRESS).is_ok());
-      assert!(Parser::new(&mut ("xxxxf".into()), &bc)
-        .completes(FIRST_PARSE_BLOCK_ADDRESS)
-        .is_err());
-      SherpaResult::Ok(())
-    },
+    &[("default", "xxxxd ", true), ("default", "xxxxc", true), ("default", "xxxxf", false)],
   )
 }
 
 #[test]
 fn parser_of_grammar_with_append_productions() -> SherpaResult<()> {
-  build_states(
+  compile_and_run_grammar(
     r#"
   <> A > "B"
   +> A >  "C"
   +> A >  "D"
 "#,
-    "".into(),
-    Default::default(),
-    &|TestPackage { db, states, .. }| {
-      let (bc, _) = compile_bytecode(&db, states)?;
-      assert!(Parser::new(&mut ("B".into()), &bc).completes(FIRST_PARSE_BLOCK_ADDRESS).is_ok());
-      assert!(Parser::new(&mut ("C".into()), &bc).completes(FIRST_PARSE_BLOCK_ADDRESS).is_ok());
-      assert!(Parser::new(&mut ("D".into()), &bc).completes(FIRST_PARSE_BLOCK_ADDRESS).is_ok());
-      assert!(Parser::new(&mut ("d".into()), &bc).completes(FIRST_PARSE_BLOCK_ADDRESS).is_err());
-      SherpaResult::Ok(())
-    },
+    &[
+      ("default", "B ", true),
+      ("default", "C", true),
+      ("default", "D", true),
+      ("default", "d", false),
+    ],
   )
 }
 
 #[test]
 fn parsing_using_trivial_custom_state() -> SherpaResult<()> {
-  build_states(
-    "A => match : BYTE  (65 /* A */ | 66 /* B */) { shift then pass }",
-    "".into(),
-    Default::default(),
-    &|TestPackage { db, states, .. }| {
-      let (bc, _) = compile_bytecode(&db, states)?;
-      assert!(Parser::new(&mut ("A".into()), &bc).completes(FIRST_PARSE_BLOCK_ADDRESS).is_ok());
-      assert!(Parser::new(&mut ("B".into()), &bc).completes(FIRST_PARSE_BLOCK_ADDRESS).is_ok());
-      assert!(Parser::new(&mut ("C".into()), &bc).completes(FIRST_PARSE_BLOCK_ADDRESS).is_err());
-      SherpaResult::Ok(())
-    },
+  compile_and_run_grammar(
+    r##"A => match : BYTE  (65 /* A */ | 66 /* B */) { shift then pass }"##,
+    &[("default", "A ", true), ("default", "B", true), ("default", "C", false)],
   )
 }
 
 #[test]
 fn json_parser() -> SherpaResult<()> {
-  use sherpa_core::test::frame::*;
-
   let grammar_source_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
     .join("../../grammar/json/json.sg")
     .canonicalize()
     .unwrap();
+  compile_and_run_grammar(std::fs::read_to_string(grammar_source_path.as_path())?.as_str(), &[
+    ("entry", r##"{"test":[{ "test":"12\"34", "test":"12\"34"}]}"##, true),
+    ("entry", r##"{"\"":2}"##, true),
+  ])
+}
 
-  build_states(
-    std::fs::read_to_string(grammar_source_path.as_path())?.as_str(),
-    grammar_source_path,
-    Default::default(),
-    &|TestPackage { db, states, .. }| {
-      let (bc, _) = compile_bytecode(&db, states)?;
-
-      let input = r##"{"test":[{ "test":"12\"34", "test":"12\"34"}]}"##;
-
-      let mut parser = ByteCodeParser::<UTF8StringReader, u32>::new(&mut (input.into()), &bc);
-
-      dbg!(parser.collect_shifts_and_skips(8, 0, &mut None));
-      SherpaResult::Ok(())
-    },
-  )
+#[test]
+fn lalr_pop_parser() -> SherpaResult<()> {
+  let grammar_source_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    .join("../../grammar/lalrpop/lalrpop.sg")
+    .canonicalize()
+    .unwrap();
+  compile_and_run_grammar(std::fs::read_to_string(grammar_source_path.as_path())?.as_str(), &[(
+    "entry",
+    r##"grammar ;"##,
+    true,
+  )])
 }
 
 #[test]
 fn handles_grammars_that_utilize_eof_symbol() -> SherpaResult<()> {
-  build_states(
+  compile_and_run_grammar(
     r##"
-
 EXPORT A as A
 EXPORT B as B
       
 <> A > "a" "b" "c" $
 
-<> B > "c" "b" "a"      
-
-      "##,
-    "".into(),
-    Default::default(),
-    &|TestPackage { db, states, .. }| {
-      let (bc, state_map) = compile_bytecode(&db, states)?;
-
-      assert!(Parser::new(&mut ("abc ".into()), &bc)
-        .completes(db.get_entry_offset("A", &state_map)? as u32)
-        .is_err());
-      assert!(Parser::new(&mut ("abc".into()), &bc)
-        .completes(db.get_entry_offset("A", &state_map)? as u32)
-        .is_ok());
-      assert!(Parser::new(&mut ("cba".into()), &bc)
-        .completes(db.get_entry_offset("B", &state_map)? as u32)
-        .is_ok());
-      assert!(Parser::new(&mut ("cba ".into()), &bc)
-        .completes(db.get_entry_offset("B", &state_map)? as u32)
-        .is_ok());
-      SherpaResult::Ok(())
-    },
+<> B > "c" "b" "a"    
+    "##,
+    &[("A", "abc ", false), ("A", "abc", true), ("B", "cba", true), ("B", "cba ", true)],
   )
 }
 
 #[test]
 pub fn test_sgml_like_grammar_parsing() -> SherpaResult<()> {
-  let input = r#"
+  compile_and_run_grammar(
+    r##"
 NAME wick_element
 
 IGNORE { c:sp c:nl }
@@ -224,40 +168,30 @@ IGNORE { c:sp c:nl }
 <> identifier > tk:tok_identifier
 
 <> tok_identifier > ( c:id | c:num )(+)
-"#;
-
-  build_states(input, "".into(), Default::default(), &|TestPackage { db, states, .. }| {
-    let (bc, _) = compile_bytecode(&db, states)?;
-
-    assert!(Parser::new(&mut ("<i -test : soLongMySwanSong - store { test } <i>>".into()), &bc)
-      .completes(FIRST_PARSE_BLOCK_ADDRESS)
-      .is_ok());
-
-    SherpaResult::Ok(())
-  })
+"##,
+    &[("default", "<i -test : soLongMySwanSong - store { test } <i>>", true)],
+  )
 }
 
 #[test]
 fn generic_grammar() -> SherpaResult<()> {
-  let input = r#" 
-  IGNORE { c:sp c:nl } 
-  
-  <> script > block(+)
+  compile_and_run_grammar(
+    r##"
+IGNORE { c:sp c:nl } 
 
-  <> block > "DECLARE" tk:name "{" declare_content(+) "}"
+<> script > block(+)
 
-  <> declare_content > execute_content(+)
+<> block > "DECLARE" tk:name "{" declare_content(+) "}"
 
-  <> execute_content > "aaa"(+)
+<> declare_content > execute_content(+)
 
-  <> name > c:id(+)
+<> execute_content > "aaa"(+)
 
-  "#;
-  build_states(input, "".into(), Default::default(), &|TestPackage { db, states, .. }| {
-    let (bc, _) = compile_bytecode(&db, states)?;
-
-    assert!(Parser::new(
-      &mut (r##"
+<> name > c:id(+)
+"##,
+    &[(
+      "default",
+      r##"
 
     DECLARE AS {
         aaa
@@ -274,45 +208,133 @@ fn generic_grammar() -> SherpaResult<()> {
        aaa
     }
     
-      "##
-        .into()),
-      &bc
-    )
-    .completes(FIRST_PARSE_BLOCK_ADDRESS)
-    .is_ok());
-
-    SherpaResult::Ok(())
-  })
+      "##,
+      true,
+    )],
+  )
 }
 
 #[test]
 pub fn intermediate_exclusive_symbols() -> SherpaResult<()> {
-  build_states(
+  compile_and_run_grammar(
     r##"
 
-  <> R > tk:A "ly"
-  
-  <> A > "test" | "tester" | 'testing'
-  
-  "##,
-    "".into(),
-    Default::default(),
-    &|TestPackage { db, states, .. }| {
-      let (bc, _) = compile_bytecode(&db, states)?;
+<> R > tk:A "ly"
 
-      assert!(Parser::new(&mut ("testly".into()), &bc)
-        .completes(FIRST_PARSE_BLOCK_ADDRESS)
-        .is_ok());
-
-      assert!(Parser::new(&mut ("testerly".into()), &bc)
-        .completes(FIRST_PARSE_BLOCK_ADDRESS)
-        .is_ok());
-
-      assert!(Parser::new(&mut ("testingly".into()), &bc)
-        .completes(FIRST_PARSE_BLOCK_ADDRESS)
-        .is_err());
-
-      SherpaResult::Ok(())
-    },
+<> A > "test" | "tester" | 'testing'
+"##,
+    &[("default", "testly", true), ("default", "testerly", true), ("default", "testingly", false)],
   )
+}
+
+#[test]
+pub fn c_style_comment_blocks() -> SherpaResult<()> {
+  compile_and_run_grammar(
+    r##"
+    <> A > tk:comment
+    
+    <> comment > tk:block  | tk:line  | c:id(+)
+       
+    <> block > "/*"  ( c:sym | c:id | c:sp )(*) "*/"
+    
+    <> line > "//"  ( c:sym | c:id | c:sp )(*) c:nl?
+    "##,
+    &[
+      ("default", r##"//test"##, true),
+      ("default", r##"//\n"##, true),
+      ("default", r##"/* triangle */"##, true),
+      ("default", r##"walker"##, true),
+    ],
+  )
+}
+
+#[test]
+fn json_object_with_specialized_key() -> SherpaResult<()> {
+  compile_and_run_grammar(
+    r##"
+    IGNORE { c:sp c:nl }
+    
+    <> json > '{'  value(*',') '}'
+    
+    <> value > tk:string ':' tk:string
+    
+        | '"test"'{1} ':' c:num
+    
+    <> string > '"' ( c:sym | c:num | c:sp | c:id | escape )(*) '\"'
+        
+    <> escape > "\\"{101}   ( c:sym | c:num | c:sp | c:id | c:nl)
+    "##,
+    &[
+      ("default", r##"{"test":2}"##, true),
+      ("default", r##"{ "tester" : "mango"  }"##, true),
+      ("default", r##"{ "tester" : 2  }"##, false),
+      ("default", r##"{ "test" : "mango"  }"##, false),
+    ],
+  )
+}
+
+#[test]
+fn scientific_number() -> SherpaResult<()> {
+  compile_and_run_grammar(
+    r##"
+    <> sci_number > tk:number
+    
+    <> number > ( '+' | '-' )? c:num(+) ( '.' c:num(+) )? ( ( 'e' | 'E' ) ( '+' | '-' )? c:num(+) )?
+    "##,
+    &[("default", r##"2.3e-22"##, true), ("default", r##"0.3e-22"##, true)],
+  )
+}
+
+#[test]
+fn escaped_string() -> SherpaResult<()> {
+  compile_and_run_grammar(
+    r##"
+        <> string > tk:string_tk
+        
+        <> string_tk > '"' ( c:sym | c:num | c:sp | c:id | escape )(*) "\""
+        
+        <> escape > "\\"  ( c:sym | c:num | c:sp | c:id )
+        "##,
+    &[
+      ("default", r##""""##, true),
+      ("default", r##""\\""##, true),
+      ("default", r##""1234""##, true),
+      ("default", r##""12\"34""##, true),
+    ],
+  )
+}
+
+fn compile_and_run_grammar(source: &str, inputs: &[(&str, &str, bool)]) -> SherpaResult<()> {
+  build_states(source, "".into(), Default::default(), &|TestPackage { db, states, .. }| {
+    let (bc, state_map) = compile_bytecode(&db, states)?;
+
+    for (entry_name, input, should_pass) in inputs {
+      let ok = Parser::new(&mut ((*input).into()), &bc)
+      .completes(
+        db.get_entry_offset(entry_name, &state_map).expect(&format!(
+        "\nCan't find entry offset for entry point [{entry_name}].\nValid entry names are\n    {}\n",
+        db.entry_points().iter().map(|e| {
+          e.entry_name.to_string(db.string_store())
+        }).collect::<Vec<_>>().join(" | ")
+      )) as u32)
+      .is_ok();
+
+      if (ok != *should_pass) {
+        Parser::new(&mut ((*input).into()), &bc)
+      .collect_shifts_and_skips(
+        db.get_entry_offset(entry_name, &state_map).expect(&format!(
+        "\nCan't find entry offset for entry point [{entry_name}].\nValid entry names are\n    {}\n",
+        db.entry_points().iter().map(|e| {
+          e.entry_name.to_string(db.string_store())
+        }).collect::<Vec<_>>().join(" | ")
+      )) as u32, 0, &mut console_debugger(db.to_owned(), Default::default()));
+        panic!(
+          "\n\nParsing of input\n   \"{input}\"\nthrough entry point [{entry_name}] should {}.\n",
+          if *should_pass { "pass" } else { "fail" }
+        );
+      }
+    }
+
+    SherpaResult::Ok(())
+  })
 }

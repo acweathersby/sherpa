@@ -6,7 +6,7 @@ use inkwell::{
   values::{FunctionValue, IntValue, PointerValue},
 };
 use sherpa_core::{proxy::Array, *};
-use sherpa_runtime::types::{
+use sherpa_rust_runtime::types::{
   bytecode::{InputType, Opcode},
   ParseActionType,
 };
@@ -96,13 +96,7 @@ fn compile_state<'llvm, 'db>(
     state_name: &state_name,
   };
 
-  compile_statement(
-    &mut build_args,
-    &state.statement,
-    p_ctx,
-    state_fun,
-    loop_head,
-  )?;
+  compile_statement(&mut build_args, &state.statement, p_ctx, state_fun, loop_head)?;
 
   SherpaResult::Ok(())
 }
@@ -231,16 +225,8 @@ pub(crate) fn get_chars_remaining<'a, 'llvm: 'a, 'db: 'a>(
   p_ctx: PointerValue<'a>,
 ) -> SherpaResult<IntValue<'a>> {
   let LLVMParserModule { b, iptr, .. } = args.m;
-  let scan_int = b.build_ptr_to_int(
-    CTX::scan_ptr.load(b, p_ctx)?.into_pointer_value(),
-    *iptr,
-    "",
-  );
-  let end_int = b.build_ptr_to_int(
-    CTX::end_ptr.load(b, p_ctx)?.into_pointer_value(),
-    *iptr,
-    "",
-  );
+  let scan_int = b.build_ptr_to_int(CTX::scan_ptr.load(b, p_ctx)?.into_pointer_value(), *iptr, "");
+  let end_int = b.build_ptr_to_int(CTX::end_ptr.load(b, p_ctx)?.into_pointer_value(), *iptr, "");
   SherpaResult::Ok(b.build_int_sub(end_int, scan_int, "").into())
 }
 
@@ -259,10 +245,8 @@ fn compile_match<'a, 'llvm: 'a, 'db: 'a>(
   let symbol_branches_start = ctx.append_basic_block(state_fun, "match");
   let default_block = ctx.append_basic_block(state_fun, "default");
 
-  if matches!(
-    mode.as_str(),
-    InputType::BYTE_STR | InputType::CLASS_STR | InputType::CODEPOINT_STR
-  ) {
+  if matches!(mode.as_str(), InputType::BYTE_STR | InputType::CLASS_STR | InputType::CODEPOINT_STR)
+  {
     check_for_input_acceptability(
       args,
       state_fun,
@@ -288,9 +272,7 @@ fn compile_match<'a, 'llvm: 'a, 'db: 'a>(
         &args,
         p_ctx,
         state_fun,
-        *args
-          .state_lu
-          .get(&ParseState::get_scanner_name_from_matches(matches, args.db))?,
+        *args.state_lu.get(&ParseState::get_scanner_name_from_matches(matches, args.db))?,
       )?;
       let val = CtxAggregateIndices::tok_id.load(b, p_ctx)?.into_int_value();
       (val, i32)
@@ -299,17 +281,14 @@ fn compile_match<'a, 'llvm: 'a, 'db: 'a>(
     InputType::BYTE_STR => {
       is_raw_char = true;
       CtxAggregateIndices::sym_len.store(b, p_ctx, u32_1)?;
-      let scan_ptr_cache =
-        CtxAggregateIndices::scan_ptr.load(b, p_ctx)?.into_pointer_value();
+      let scan_ptr_cache = CtxAggregateIndices::scan_ptr.load(b, p_ctx)?.into_pointer_value();
       (b.build_load(scan_ptr_cache, "").into_int_value(), i8)
     }
 
     InputType::CODEPOINT_STR => {
       is_raw_char = true;
-      let scan_ptr_cache =
-        CtxAggregateIndices::scan_ptr.load(b, p_ctx)?.into_pointer_value();
-      let (cp_val, tok_len) =
-        construct_cp_lu_with_token_len_store(args, scan_ptr_cache)?;
+      let scan_ptr_cache = CtxAggregateIndices::scan_ptr.load(b, p_ctx)?.into_pointer_value();
+      let (cp_val, tok_len) = construct_cp_lu_with_token_len_store(args, scan_ptr_cache)?;
       CtxAggregateIndices::sym_len.store(b, p_ctx, tok_len)?;
 
       (cp_val, i32)
@@ -317,15 +296,10 @@ fn compile_match<'a, 'llvm: 'a, 'db: 'a>(
 
     InputType::CLASS_STR => {
       is_raw_char = true;
-      let scan_ptr_cache =
-        CtxAggregateIndices::scan_ptr.load(b, p_ctx)?.into_pointer_value();
-      let (cp_val, tok_len) =
-        construct_cp_lu_with_token_len_store(args, scan_ptr_cache)?;
+      let scan_ptr_cache = CtxAggregateIndices::scan_ptr.load(b, p_ctx)?.into_pointer_value();
+      let (cp_val, tok_len) = construct_cp_lu_with_token_len_store(args, scan_ptr_cache)?;
       CtxAggregateIndices::sym_len.store(b, p_ctx, tok_len)?;
-      let cp_val =
-        build_fast_call(b, args.m.fun.get_token_class_from_codepoint, &[
-          cp_val.into(),
-        ])?
+      let cp_val = build_fast_call(b, args.m.fun.get_token_class_from_codepoint, &[cp_val.into()])?
         .try_as_basic_value()
         .unwrap_left()
         .into_int_value();
@@ -398,11 +372,9 @@ fn prime_line_data<'a, 'llvm: 'a, 'db: 'a>(
   let i64 = ctx.i64_type();
   let i32 = ctx.i32_type();
 
-  let beg =
-    b.build_ptr_to_int(CTX::beg_ptr.load(b, p)?.into_pointer_value(), i64, "");
+  let beg = b.build_ptr_to_int(CTX::beg_ptr.load(b, p)?.into_pointer_value(), i64, "");
 
-  let scan =
-    b.build_ptr_to_int(CTX::scan_ptr.load(b, p)?.into_pointer_value(), i64, "");
+  let scan = b.build_ptr_to_int(CTX::scan_ptr.load(b, p)?.into_pointer_value(), i64, "");
 
   let val = b.build_int_sub(scan, beg, "");
   let val = b.build_int_truncate(val, i32, "");
@@ -418,15 +390,13 @@ fn construct_cp_lu_with_token_len_store<'a, 'llvm: 'a, 'db: 'a>(
   buffer: PointerValue<'llvm>,
 ) -> SherpaResult<(IntValue<'llvm>, IntValue<'llvm>)> {
   let LLVMParserModule { b, fun, .. } = args.m;
-  let cp_info =
-    build_fast_call(b, fun.get_utf8_codepoint_info, &[buffer.into()])?
-      .try_as_basic_value()
-      .unwrap_left()
-      .into_struct_value();
+  let cp_info = build_fast_call(b, fun.get_utf8_codepoint_info, &[buffer.into()])?
+    .try_as_basic_value()
+    .unwrap_left()
+    .into_struct_value();
 
   let cp_val = b.build_extract_value(cp_info, 0, "cp_val")?.into_int_value();
-  let cp_byte_len =
-    b.build_extract_value(cp_info, 1, "cp_len")?.into_int_value();
+  let cp_byte_len = b.build_extract_value(cp_info, 1, "cp_len")?.into_int_value();
 
   SherpaResult::Ok((cp_val, cp_byte_len))
 }
@@ -451,9 +421,7 @@ fn push_goto<'a, 'llvm: 'a, 'db: 'a>(
   add_goto_slot(
     args.m,
     p_ctx,
-    (*args.state_lu.get(&prod.to_token().to_string())?)
-      .as_global_value()
-      .as_pointer_value(),
+    (*args.state_lu.get(&prod.to_token().to_string())?).as_global_value().as_pointer_value(),
     NORMAL_STATE_FLAG_LLVM as u64,
   );
 
@@ -470,20 +438,17 @@ fn add_goto_slot<'a>(
   let goto_state = ctx.i32_type().const_int(goto_state_val, false);
 
   // Get the top slot ptr ptr;
-  let goto_top =
-    CtxAggregateIndices::goto_stack_ptr.load(b, p_ctx)?.into_pointer_value();
+  let goto_top = CtxAggregateIndices::goto_stack_ptr.load(b, p_ctx)?.into_pointer_value();
 
   // Create new goto struct
-  let new_goto =
-    b.build_insert_value(types.goto.get_undef(), goto_state, 1, "")?;
+  let new_goto = b.build_insert_value(types.goto.get_undef(), goto_state, 1, "")?;
   let new_goto = b.build_insert_value(new_goto, goto_fn, 0, "")?;
 
   // Store in the current slot
   b.build_store(goto_top, new_goto);
 
   // Increment the slot
-  let goto_top =
-    unsafe { b.build_gep(goto_top, &[i32.const_int(1, false)], "") };
+  let goto_top = unsafe { b.build_gep(goto_top, &[i32.const_int(1, false)], "") };
 
   // Store the top slot pointer
   CtxAggregateIndices::goto_stack_ptr.store(b, p_ctx, goto_top)?;
@@ -501,11 +466,7 @@ fn update_goto_remaining<'a>(
   // Decrement goto remaining
   let goto_free_ptr = CtxAggregateIndices::goto_free.get_ptr(b, p_ctx)?;
   let goto_free = b.build_load(goto_free_ptr, "").into_int_value();
-  let goto_free = b.build_int_sub(
-    goto_free,
-    i32.const_int(goto_slots_consumed as u64, false),
-    "",
-  );
+  let goto_free = b.build_int_sub(goto_free, i32.const_int(goto_slots_consumed as u64, false), "");
   b.build_store(goto_free_ptr, goto_free);
   SherpaResult::Ok(())
 }
@@ -518,16 +479,10 @@ pub(crate) fn ensure_space_on_goto_stack<'a>(
 ) -> SherpaResult<()> {
   let LLVMParserModule { b, fun, ctx, i32, .. } = m;
   // Compare the number of needed slots with the number of available slots
-  let goto_free =
-    CtxAggregateIndices::goto_free.load(b, p_ctx)?.into_int_value();
+  let goto_free = CtxAggregateIndices::goto_free.load(b, p_ctx)?.into_int_value();
 
   let needed_slots = i32.const_int(needed_slot_count as u64, false);
-  let comparison = b.build_int_compare(
-    inkwell::IntPredicate::UGE,
-    goto_free,
-    needed_slots,
-    "",
-  );
+  let comparison = b.build_int_compare(inkwell::IntPredicate::UGE, goto_free, needed_slots, "");
 
   let extend_block = ctx.append_basic_block(state_fn, "extend_goto_stack");
   let ready_block = ctx.append_basic_block(state_fn, "valid_goto_stack");
@@ -538,12 +493,7 @@ pub(crate) fn ensure_space_on_goto_stack<'a>(
 
   build_fast_call(b, fun.extend_stack, &[
     p_ctx.into(),
-    i32
-      .const_int(
-        (2 << needed_slot_count.checked_ilog2().unwrap_or(0)) as u64,
-        false,
-      )
-      .into(),
+    i32.const_int((2 << needed_slot_count.checked_ilog2().unwrap_or(0)) as u64, false).into(),
   ])?;
 
   b.build_unconditional_branch(ready_block);
@@ -577,10 +527,7 @@ fn accept(args: &BuildArgs) -> SherpaResult<()> {
 }
 
 /// Transfers the `end_line*` values to the `chkp_line*` variables.
-fn transfer_end_line_to_chkp_line(
-  args: &BuildArgs,
-  p_ctx: PointerValue,
-) -> SherpaResult<()> {
+fn transfer_end_line_to_chkp_line(args: &BuildArgs, p_ctx: PointerValue) -> SherpaResult<()> {
   let LLVMParserModule { b, .. } = args.m;
   CtxAggregateIndices::chkp_line_num.store(
     b,
@@ -604,11 +551,7 @@ fn construct_assign_token_id(
 ) -> SherpaResult<()> {
   let LLVMParserModule { b, iptr, i32, .. } = args.m;
   if token_value > 0 {
-    CtxAggregateIndices::tok_id.store(
-      b,
-      p_ctx,
-      i32.const_int(token_value as u64, false),
-    )?;
+    CtxAggregateIndices::tok_id.store(b, p_ctx, i32.const_int(token_value as u64, false))?;
   }
 
   let len = b.build_int_sub(
@@ -632,28 +575,12 @@ fn reduce<'a, 'llvm: 'a, 'db: 'a>(
 
   let LLVMParserModule { b, ctx, fun, i32, .. } = args.m;
 
-  CtxAggregateIndices::sym_len.store(
-    b,
-    p_ctx,
-    i32.const_int(*len as u64, false),
-  )?;
-  CtxAggregateIndices::rule_id.store(
-    b,
-    p_ctx,
-    i32.const_int(*rule_id as u64, false),
-  )?;
-  CtxAggregateIndices::prod_id.store(
-    b,
-    p_ctx,
-    i32.const_int(*prod_id as u64, false),
-  )?;
+  CtxAggregateIndices::sym_len.store(b, p_ctx, i32.const_int(*len as u64, false))?;
+  CtxAggregateIndices::rule_id.store(b, p_ctx, i32.const_int(*rule_id as u64, false))?;
+  CtxAggregateIndices::prod_id.store(b, p_ctx, i32.const_int(*prod_id as u64, false))?;
 
   let f = if !no_reenter {
-    let f = create_parse_function(
-      args.j,
-      args.m,
-      &format!("reduce_{}", args.state_name),
-    );
+    let f = create_parse_function(args.j, args.m, &format!("reduce_{}", args.state_name));
 
     build_fast_call(b, fun.push_state, &[
       p_ctx.into(),
@@ -705,10 +632,7 @@ fn construct_token_shift<'a, 'llvm: 'a, 'db: 'a>(
   SherpaResult::Ok(Some((post_shift, p_ctx)))
 }
 
-fn transfer_chkp_line_to_start_line(
-  args: &BuildArgs,
-  p_ctx: PointerValue,
-) -> SherpaResult<()> {
+fn transfer_chkp_line_to_start_line(args: &BuildArgs, p_ctx: PointerValue) -> SherpaResult<()> {
   let LLVMParserModule { b, .. } = args.m;
   CtxAggregateIndices::start_line_num.store(
     b,
@@ -724,10 +648,7 @@ fn transfer_chkp_line_to_start_line(
 }
 
 /// Assigns start line trackers to  tail trackers
-fn transfer_start_line_to_end_line(
-  args: &BuildArgs,
-  p_ctx: PointerValue,
-) -> SherpaResult<()> {
+fn transfer_start_line_to_end_line(args: &BuildArgs, p_ctx: PointerValue) -> SherpaResult<()> {
   let LLVMParserModule { b, .. } = args.m;
   CtxAggregateIndices::end_line_num.store(
     b,
@@ -747,8 +668,7 @@ fn transfer_start_line_to_end_line(
 fn peek_reset(args: &BuildArgs, p_ctx: PointerValue) -> SherpaResult<()> {
   let LLVMParserModule { b, i32, i8, iptr, .. } = args.m;
   const __HINT__: Opcode = Opcode::PeekReset;
-  let offset =
-    CtxAggregateIndices::base_ptr.load(b, p_ctx)?.into_pointer_value();
+  let offset = CtxAggregateIndices::base_ptr.load(b, p_ctx)?.into_pointer_value();
   CtxAggregateIndices::head_ptr.store(b, p_ctx, offset);
   CtxAggregateIndices::scan_ptr.store(b, p_ctx, offset);
   CtxAggregateIndices::tok_id.store(b, p_ctx, i32.const_zero());
@@ -760,14 +680,10 @@ fn peek_reset(args: &BuildArgs, p_ctx: PointerValue) -> SherpaResult<()> {
 
 /// Update the `end_line*`  values by incrementing by the `line_nume+incr` and
 /// `end_line_num`
-fn update_end_line_data(
-  args: &BuildArgs,
-  p_ctx: PointerValue,
-) -> SherpaResult<()> {
+fn update_end_line_data(args: &BuildArgs, p_ctx: PointerValue) -> SherpaResult<()> {
   let LLVMParserModule { b, i32, i8, .. } = args.m;
   // Increment line number;
-  let val =
-    CtxAggregateIndices::line_num_incr.load(b, p_ctx)?.into_int_value();
+  let val = CtxAggregateIndices::line_num_incr.load(b, p_ctx)?.into_int_value();
   CtxAggregateIndices::line_num_incr.store(b, p_ctx, i8.const_zero())?;
 
   let new_val = b.build_int_add(
@@ -789,13 +705,9 @@ fn update_end_line_data(
 /// the `head_ptr` ( and possibly the `base_ptr`) forward to the end of
 /// the token, and also to issue a `Shift` event with a sized
 /// token.
-fn incr_scan_ptr_by_sym_len(
-  args: &BuildArgs,
-  p_ctx: PointerValue,
-) -> SherpaResult<()> {
+fn incr_scan_ptr_by_sym_len(args: &BuildArgs, p_ctx: PointerValue) -> SherpaResult<()> {
   let LLVMParserModule { b, .. } = args.m;
-  let scan_ptr_cache =
-    CtxAggregateIndices::scan_ptr.load(b, p_ctx)?.into_pointer_value();
+  let scan_ptr_cache = CtxAggregateIndices::scan_ptr.load(b, p_ctx)?.into_pointer_value();
 
   CtxAggregateIndices::scan_ptr.store(b, p_ctx, unsafe {
     b.build_gep(
@@ -810,11 +722,7 @@ fn incr_scan_ptr_by_sym_len(
 
 /// Assigns `head_ptr + tok_len` to head_ptr, scan_ptr, and base_ptr.
 /// Also assign 0  to `tok_id`
-fn skip_token(
-  args: &BuildArgs,
-  p_ctx: PointerValue,
-  state_fun: FunctionValue,
-) -> SherpaResult<()> {
+fn skip_token(args: &BuildArgs, p_ctx: PointerValue, state_fun: FunctionValue) -> SherpaResult<()> {
   const __HINT__: Opcode = Opcode::SkipToken;
   let LLVMParserModule { b, i32, fun, ctx, .. } = args.m;
 
@@ -849,8 +757,7 @@ fn get_offset_to_end_of_token<'a>(
   p_ctx: PointerValue<'a>,
 ) -> SherpaResult<PointerValue<'a>> {
   let LLVMParserModule { b, i8, iptr, .. } = m;
-  let head_ptr =
-    CtxAggregateIndices::head_ptr.load(b, p_ctx)?.into_pointer_value();
+  let head_ptr = CtxAggregateIndices::head_ptr.load(b, p_ctx)?.into_pointer_value();
   let tok_len = CtxAggregateIndices::tok_len.load(b, p_ctx)?.into_int_value();
   let offset = b.build_ptr_to_int(head_ptr, *iptr, "");
   let offset = b.build_int_add(offset, tok_len, "");
@@ -865,11 +772,7 @@ fn construct_jump_to_table_start(args: &BuildArgs, start_block: BasicBlock) {
   args.m.b.build_unconditional_branch(start_block);
 }
 
-fn pop_goto(
-  args: &BuildArgs,
-  p_ctx: PointerValue,
-  state_fun: FunctionValue,
-) -> SherpaResult<()> {
+fn pop_goto(args: &BuildArgs, p_ctx: PointerValue, state_fun: FunctionValue) -> SherpaResult<()> {
   const __HINT__: Opcode = Opcode::PopGoto;
 
   add_goto_pop_instructions(args.m, p_ctx)?;
@@ -878,11 +781,7 @@ fn pop_goto(
 }
 
 /// Builds a tail call return to the `dispatch` function.
-fn pass(
-  args: &BuildArgs,
-  p_ctx: PointerValue,
-  state_fun: FunctionValue,
-) -> SherpaResult<()> {
+fn pass(args: &BuildArgs, p_ctx: PointerValue, state_fun: FunctionValue) -> SherpaResult<()> {
   let LLVMParserModule { b, fun, i32, .. } = args.m;
   b.build_store(
     CtxAggregateIndices::state.get_ptr(b, p_ctx)?,
@@ -893,10 +792,7 @@ fn pass(
 
 /// Assigns the value head_ptr + tok_len to head_ptr and scan_ptr.
 /// Also sets the values of tok_len and tok_id to 0.
-pub(crate) fn peek_token(
-  args: &BuildArgs,
-  p_ctx: PointerValue,
-) -> SherpaResult<()> {
+pub(crate) fn peek_token(args: &BuildArgs, p_ctx: PointerValue) -> SherpaResult<()> {
   const __HINT__: Opcode = Opcode::PeekToken;
   let LLVMParserModule { b, i32, iptr, .. } = args.m;
   let offset = get_offset_to_end_of_token(args.m, p_ctx)?;
@@ -916,11 +812,7 @@ fn build_push_fn_state<'a>(
   let LLVMParserModule { b, fun, i32, .. } = m;
   b.build_call(
     fun.push_state,
-    &[
-      parse_ctx.into(),
-      i32.const_int(state_mask as u64, false).into(),
-      function_ptr.into(),
-    ],
+    &[parse_ctx.into(), i32.const_int(state_mask as u64, false).into(), function_ptr.into()],
     "",
   );
 
@@ -971,32 +863,19 @@ pub(crate) fn check_for_input_acceptability<'a, 'llvm: 'a, 'db: 'a>(
   // Check to see if the EOF flag is set
   // -------------------------------------------------
   b.position_at_end(check_if_eof);
-  let input_complete =
-    CtxAggregateIndices::block_is_eoi.load(b, p_ctx)?.into_int_value();
-  let c = b.build_int_compare(
-    inkwell::IntPredicate::EQ,
-    input_complete,
-    bool.const_int(1, false),
-    "",
-  );
+  let input_complete = CtxAggregateIndices::block_is_eoi.load(b, p_ctx)?.into_int_value();
+  let c =
+    b.build_int_compare(inkwell::IntPredicate::EQ, input_complete, bool.const_int(1, false), "");
   b.build_conditional_branch(c, invalid_input, try_extend);
 
   // Try to get another block of input data
   // ----------------------------------------------
   b.position_at_end(try_extend);
-  build_fast_call(b, fun.get_adjusted_input_block, &[
-    p_ctx.into(),
-    needed_num_bytes.into(),
-  ]);
+  build_fast_call(b, fun.get_adjusted_input_block, &[p_ctx.into(), needed_num_bytes.into()]);
 
   let input_available = get_chars_remaining(args.m, p_ctx)?;
   let input_available = b.build_int_cast(input_available, i64, "");
-  let c = b.build_int_compare(
-    inkwell::IntPredicate::SGE,
-    input_available,
-    needed_num_bytes,
-    "",
-  );
+  let c = b.build_int_compare(inkwell::IntPredicate::SGE, input_available, needed_num_bytes, "");
 
   /// Return the difference between the `scan_ptr` and `end_ptr`.
   /// Value type is `iptr`
@@ -1109,22 +988,14 @@ pub(crate) fn construct_prime_function(
     .filter_map(|p| {
       let name = p.prod_name.to_string(db.string_store());
       let fun = state_lu.get(&name).unwrap();
-      let block =
-        sp.ctx.append_basic_block(fn_value, &format!("prime_{}", name));
+      let block = sp.ctx.append_basic_block(fn_value, &format!("prime_{}", name));
       Some((p.export_id, block, fun))
     })
     .collect::<Vec<_>>();
 
-  build_fast_call(b, funct.extend_stack, &[
-    parse_ctx.into(),
-    i32.const_int(8, false).into(),
-  ]);
+  build_fast_call(b, funct.extend_stack, &[parse_ctx.into(), i32.const_int(8, false).into()]);
 
-  CtxAggregateIndices::is_active.store(
-    b,
-    parse_ctx,
-    bool.const_int(1, false),
-  )?;
+  CtxAggregateIndices::is_active.store(b, parse_ctx, bool.const_int(1, false))?;
 
   // Push the End-Of-Parse goto onto the stack. This will prevent underflow of
   // the stack
@@ -1139,10 +1010,7 @@ pub(crate) fn construct_prime_function(
     b.build_switch(
       selector,
       options[0].1.into(),
-      &options
-        .iter()
-        .map(|b| (i32.const_int(b.0 as u64, false), b.1))
-        .collect::<Vec<_>>(),
+      &options.iter().map(|b| (i32.const_int(b.0 as u64, false), b.1)).collect::<Vec<_>>(),
     );
 
     for (_, block, fn_ptr) in &options {
@@ -1168,9 +1036,7 @@ pub(crate) fn construct_prime_function(
 
 /// Dispatched after a shift event, that is this should be pushed onto the goto
 /// stack before emitting a shift event.
-pub(crate) fn construct_shift_post_emit<'a>(
-  m: &'a LLVMParserModule,
-) -> SherpaResult<()> {
+pub(crate) fn construct_shift_post_emit<'a>(m: &'a LLVMParserModule) -> SherpaResult<()> {
   let LLVMParserModule { b, i32, fun, .. } = m;
   let fn_value = fun.post_shift_emit;
 
@@ -1191,9 +1057,7 @@ pub(crate) fn construct_shift_post_emit<'a>(
 
 /// Dispatched after a shift event, that is this should be pushed onto the goto
 /// stack before emitting a shift event.
-pub(crate) fn construct_shift_pre_emit<'a>(
-  m: &'a LLVMParserModule,
-) -> SherpaResult<()> {
+pub(crate) fn construct_shift_pre_emit<'a>(m: &'a LLVMParserModule) -> SherpaResult<()> {
   let LLVMParserModule { b, fun, .. } = m;
   let fn_value = fun.pre_shift_emit;
 

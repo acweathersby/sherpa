@@ -19,7 +19,7 @@ criterion = "0.4.0"
 [build-dependencies.sherpa]
 path = "../../src/lib/sherpa"
 
-[dependencies.sherpa_runtime]
+[dependencies.sherpa_rust_runtime]
 path = "../../src/lib/sherpa-rust-rt"
 
 [profile.release]

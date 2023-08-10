@@ -2,7 +2,7 @@
 
 use std::{hash::Hash, path::PathBuf, rc::Rc, sync::Arc};
 
-use sherpa_runtime::{
+use sherpa_rust_runtime::{
   types::{Token, TokenRange},
   utf8::lookup_table::CodePointClass,
 };
@@ -320,51 +320,6 @@ impl GrammarIdentity {
 }
 
 use super::ParserDatabase;
-
-impl SymbolId {
-  pub fn debug_string(&self, db: &ParserDatabase) -> String {
-    use SymbolId::*;
-    let mut w = CodeWriter::new(vec![]);
-    match *self {
-      Undefined => &mut w + "Undefine",
-      Default => &mut w + "Default",
-      EndOfFile { .. } => &mut w + "{EOF}",
-      ClassSpace { .. } => &mut w + "c:sp",
-      ClassHorizontalTab { .. } => &mut w + "c:tab",
-      ClassNewLine { .. } => &mut w + "c:nl",
-      ClassIdentifier { .. } => &mut w + "c:id",
-      ClassNumber { .. } => &mut w + "c:num",
-      ClassSymbol { .. } => &mut w + "c:sym",
-      Token { val, precedence } => {
-        &mut w + "[" + val.to_str(db.string_store()).as_str() + "]{" + precedence.to_string() + "}"
-      }
-      NonTerminalState { id, .. } => &mut w + "non_term_state",
-      NonTerminal { id, .. } => &mut w + "non_term",
-      NonTerminalToken { id, .. } => &mut w + "tk:" + "non_term",
-      Codepoint { val, precedence } => {
-        &mut w + "[ cp:" + val.to_string() + "]{" + precedence.to_string() + "}"
-      }
-      DBNonTerminal { key } => {
-        let guard_str = db.prod_guid_name_string(key);
-        let name = guard_str.as_str();
-        &mut w + name
-      }
-      DBNonTerminalToken { prod_key, precedence, .. } => {
-        let guard_str = db.prod_guid_name_string(prod_key);
-        &mut w + "tk:" + guard_str + "{" + precedence.to_string() + "}"
-      }
-      DBToken { key: index } => &mut w + db.sym(index).debug_string(db),
-      Char { char, precedence } => {
-        if char < 128 {
-          &mut w + "[ cp:" + char::from(char).to_string() + "]{" + precedence.to_string() + "}"
-        } else {
-          &mut w + "[ char:" + char.to_string() + "]{" + precedence.to_string() + "}"
-        }
-      }
-    };
-    w.to_string()
-  }
-}
 
 use ::std::sync;
 /// This contains all grammars, productions, and parser states that have

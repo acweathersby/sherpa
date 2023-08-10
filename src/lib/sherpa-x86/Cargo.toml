@@ -11,5 +11,5 @@ path ="./lib.rs"
 path = "../../lib/sherpa-core"
 features = ["wasm-target" ]
 
-[dependencies.sherpa_runtime]
-path = "../../lib/sherpa-rust-rt"
+[dependencies.sherpa_rust_runtime]
+path = "../../lib/sherpa-rust-runtime"

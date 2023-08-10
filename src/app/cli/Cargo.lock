@@ -178,18 +178,47 @@ name = "sherpa-cli"
 version = "1.0.0-beta1"
 dependencies = [
  "clap",
+ "sherpa_ascript",
+ "sherpa_bytecode",
  "sherpa_core",
+ "sherpa_rust_build",
+]
+
+[[package]]
+name = "sherpa_ascript"
+version = "1.0.0-beta1"
+dependencies = [
+ "sherpa_core",
+ "sherpa_rust_runtime",
+]
+
+[[package]]
+name = "sherpa_bytecode"
+version = "1.0.0-beta1"
+dependencies = [
+ "sherpa_core",
+ "sherpa_rust_runtime",
 ]
 
 [[package]]
 name = "sherpa_core"
 version = "1.0.0-beta2"
 dependencies = [
- "sherpa_runtime",
+ "sherpa_rust_runtime",
 ]
 
 [[package]]
-name = "sherpa_runtime"
+name = "sherpa_rust_build"
+version = "1.0.0-beta1"
+dependencies = [
+ "sherpa_ascript",
+ "sherpa_bytecode",
+ "sherpa_core",
+ "sherpa_rust_runtime",
+]
+
+[[package]]
+name = "sherpa_rust_runtime"
 version = "1.0.0-beta1"
 
 [[package]]

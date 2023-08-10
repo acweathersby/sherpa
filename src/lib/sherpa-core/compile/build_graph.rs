@@ -4,7 +4,7 @@ use crate::{
   utils::{create_u64_hash, hash_group_btreemap},
 };
 use core::panic;
-use sherpa_runtime::utf8::{get_token_class_from_codepoint, lookup_table::CodePointClass};
+use sherpa_rust_runtime::utf8::{get_token_class_from_codepoint, lookup_table::CodePointClass};
 use std::collections::VecDeque;
 
 pub(super) fn build_graph<'follow, 'db: 'follow>(
@@ -433,13 +433,16 @@ fn create_peek<'a, 'db: 'a, 'follow, T: ItemContainerIter<'a, 'db>>(
     !incomplete_items.iter().any(|i| matches!(i.origin, Origin::Peek(..))),
     "Peek states should not be in the resolution"
   );
-  let db = graph.get_db();
+  let db: &ParserDatabase = graph.get_db();
+
   graph[state].set_peek_resolve_items(index, resolve_items);
+
   graph[state].add_kernel_items(
     if need_increment { kernel_items.try_increment() } else { kernel_items },
     is_scan,
     db,
   );
+
   graph.enqueue_pending_state(GraphState::Peek, state)
 }
 
@@ -829,6 +832,11 @@ fn get_set_of_occluding_items<'db, 'follow>(
   db: &ParserDatabase,
 ) -> ItemSet<'db> {
   let mut occluding = ItemSet::new();
+  let into_group_precedence = get_max_precedence(into_group);
+
+  if (into_group_precedence >= 9999) {
+    return occluding;
+  }
 
   if is_scanner {
     for (from_sym, from_group) in groups.iter().filter(|(other_sym, _)| into_sym != *other_sym) {
@@ -849,12 +857,7 @@ fn get_set_of_occluding_items<'db, 'follow>(
     }
   }
 
-  let precedence = into_group
-    .iter()
-    //.filter(|i| i.is_complete() || i.increment().unwrap().is)
-    .fold(0, |a, i| a.max(i.precedence()));
-
-  occluding.iter().filter(|i| i.precedence() >= precedence).cloned().collect::<ItemSet>()
+  occluding
 }
 
 fn create_transition_groups<'db, 'follow>(
@@ -1175,4 +1178,8 @@ fn get_goal_items<'db, 'follow>(graph: &'db Graph<'follow, 'db>, item: &Item<'db
       .collect(),
     _ => vec![],
   }
+}
+
+fn get_max_precedence(group: &ItemSet) -> u32 {
+  group.iter().map(|i| i.precedence()).max().unwrap_or_default() as u32
 }

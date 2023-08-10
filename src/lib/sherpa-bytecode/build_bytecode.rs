@@ -1,5 +1,5 @@
 use sherpa_core::{proxy::*, *};
-use sherpa_runtime::types::{
+use sherpa_rust_runtime::types::{
   bytecode::{insert_op, Opcode as Op, *},
   TableHeaderData,
 };

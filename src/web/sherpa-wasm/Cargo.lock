@@ -130,7 +130,7 @@ dependencies = [
  "serde",
  "serde-wasm-bindgen",
  "sherpa_core",
- "sherpa_runtime",
+ "sherpa_rust_runtime",
  "wasm-bindgen",
  "wasm-bindgen-test",
  "web-sys",
@@ -141,11 +141,11 @@ dependencies = [
 name = "sherpa_core"
 version = "1.0.0-beta2"
 dependencies = [
- "sherpa_runtime",
+ "sherpa_rust_runtime",
 ]
 
 [[package]]
-name = "sherpa_runtime"
+name = "sherpa_rust_runtime"
 version = "1.0.0-beta1"
 
 [[package]]

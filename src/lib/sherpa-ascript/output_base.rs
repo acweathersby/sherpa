@@ -3,7 +3,7 @@ use sherpa_core::{
   proxy::Array,
   *,
 };
-use sherpa_runtime::{
+use sherpa_rust_runtime::{
   types::{BlameColor, Token},
   *,
 };
@@ -19,15 +19,15 @@ use std::{
 };
 
 #[derive(Clone)]
-pub(crate) struct AscriptTypeHandler<'a> {
+pub struct AscriptTypeHandler<'a> {
   pub name:    &'a dyn Fn(&AScriptStore, &AScriptTypeVal, bool) -> String,
   pub default: &'a dyn Fn(&AScriptStore, &AScriptTypeVal, bool) -> String,
 }
 
 #[derive(Clone)]
-pub(crate) struct ASTExprHandler<'a> {
+pub struct ASTExprHandler<'a> {
   /// ```no_compile
-  /// pub(crate) fn render_expression(
+  /// pub fn render_expression(
   ///      utils: &AscriptWriterUtils,
   ///      ast: &ASTNode,
   ///      rule: &Rule,
@@ -38,12 +38,12 @@ pub(crate) struct ASTExprHandler<'a> {
   pub expr: &'a dyn Fn(&AscriptWriterUtils, &ASTNode, &Rule, &mut usize, usize) -> Option<SlotRef>,
 }
 
-pub(crate) type PropHandlerFn =
+pub type PropHandlerFn =
   dyn Fn(&AscriptWriterUtils, Option<SlotRef>, &AScriptTypeVal, bool) -> (String, Option<SlotRef>);
 
-pub(crate) struct AscriptPropHandler<'a> {
+pub struct AscriptPropHandler<'a> {
   /// ```no_compile
-  /// pub(crate) fn render_expression(
+  /// pub fn render_expression(
   ///      utils: &AscriptWriterUtils,
   ///      ast: &ASTNode,
   ///      rule: &Rule,
@@ -96,32 +96,32 @@ type SlotExtract = dyn Fn(Option<String>, Option<String>, usize) -> String;
 /// parse slot, or both.
 type CreateToken = dyn Fn(String, TokenCreationType) -> String;
 
-pub(crate) enum TokenCreationType {
+pub enum TokenCreationType {
   #[allow(unused)]
   String,
   Token,
 }
 
-pub(crate) struct StructProp<'db> {
+pub struct StructProp<'db> {
   pub name:        String,
   pub type_string: String,
   pub type_:       &'db TaggedType,
   pub optional:    bool,
 }
-pub(crate) struct StructData<'a> {
+pub struct StructData<'a> {
   pub name:      String,
   pub props:     Vec<StructProp<'a>>,
   pub tokenized: bool,
 }
 
 #[derive(Default)]
-pub(crate) struct Handlers<'db> {
+pub struct Handlers<'db> {
   type_handlers: HashMap<Discriminant<AScriptTypeVal>, AscriptTypeHandler<'db>>,
   prop_handlers: HashMap<Discriminant<AScriptTypeVal>, AscriptPropHandler<'db>>,
   expr_handlers: HashMap<ASTNodeType, ASTExprHandler<'db>>,
 }
 
-pub(crate) struct AscriptWriterUtils<'a> {
+pub struct AscriptWriterUtils<'a> {
   /// Internal use. Assign to `Default::default()`
   pub handlers: Handlers<'a>,
   /// General Assignment
@@ -148,7 +148,9 @@ impl<'a> AscriptWriterUtils<'a> {
   pub fn add_type_handler(&mut self, type_: AScriptTypeVal, handler: AscriptTypeHandler<'a>) {
     match self.handlers.type_handlers.entry(type_.get_discriminant()) {
       hash_map::Entry::Occupied(_) => {
-        panic!("Type handler already registered for [{}]", type_.debug_string())
+        #[cfg(debug_assertions)]
+        panic!("Type handler already registered for [{}]", type_.debug_string());
+        panic!()
       }
       hash_map::Entry::Vacant(e) => {
         e.insert(handler);
@@ -160,7 +162,9 @@ impl<'a> AscriptWriterUtils<'a> {
   pub fn add_ast_handler(&mut self, type_: ASTNodeType, handler: ASTExprHandler<'a>) {
     match self.handlers.expr_handlers.entry(type_) {
       hash_map::Entry::Occupied(_) => {
-        panic!("Type handler already registered for [{:?}]", type_)
+        #[cfg(debug_assertions)]
+        panic!("Type handler already registered for [{:?}]", type_);
+        panic!()
       }
       hash_map::Entry::Vacant(e) => {
         e.insert(handler);
@@ -172,7 +176,9 @@ impl<'a> AscriptWriterUtils<'a> {
   pub fn add_prop_handler(&mut self, type_: AScriptTypeVal, handler: AscriptPropHandler<'a>) {
     match self.handlers.prop_handlers.entry(type_.get_discriminant()) {
       hash_map::Entry::Occupied(_) => {
-        panic!("Prop handler already registered for [{:?}]", type_)
+        #[cfg(debug_assertions)]
+        panic!("Prop handler already registered for [{:?}]", type_);
+        panic!()
       }
       hash_map::Entry::Vacant(e) => {
         e.insert(handler);
@@ -191,7 +197,14 @@ impl<'a> AscriptWriterUtils<'a> {
     if let Some(type_handler) = self.handlers.type_handlers.get(&discriminant) {
       (*type_handler.name)(self.store, type_, optional)
     } else {
-      format!("[UNHANDLED {}]", type_.debug_string())
+      #[cfg(debug_assertions)]
+      {
+        format!("[UNHANDLED {}]", type_.debug_string())
+      }
+      #[cfg(not(debug_assertions))]
+      {
+        "[UNHANDLED]".into()
+      }
     }
   }
 
@@ -200,7 +213,14 @@ impl<'a> AscriptWriterUtils<'a> {
     if let Some(type_handler) = self.handlers.type_handlers.get(&discriminant) {
       (*type_handler.default)(self.store, type_, optional)
     } else {
-      format!("[UNHANDLED {}]", type_.debug_string())
+      #[cfg(debug_assertions)]
+      {
+        format!("[UNHANDLED {}]", type_.debug_string())
+      }
+      #[cfg(not(debug_assertions))]
+      {
+        "[UNHANDLED]".into()
+      }
     }
   }
 
@@ -217,12 +237,26 @@ impl<'a> AscriptWriterUtils<'a> {
     if let Some(expr_handler) = self.handlers.expr_handlers.get(&ast.get_type()) {
       (*expr_handler.expr)(self, ast, rule, ref_index, type_slot)
     } else {
+      #[cfg(debug_assertions)]
+      {
+        panic!("{}", SherpaError::SourceError {
+          loc:        ast.to_token(),
+          path:       PathBuf::from(rule.g_id.path.to_string(self.db.string_store())),
+          id:         "ascript-writer-utils-unhandled-ast-node",
+          msg:        format!("An unhandled ast node has been encountered"),
+          inline_msg: format!("Node type [{:?}] lacks an ASTExprHandler", ast.get_type()),
+          ps_msg:
+            "Add an ASTExprHandler for this type using AscriptWriterUtils::add_ast_handler".into(),
+          severity:   SherpaErrorSeverity::Warning,
+        })
+      }
+      #[cfg(not(debug_assertions))]
       panic!("{}", SherpaError::SourceError {
         loc:        ast.to_token(),
         path:       PathBuf::from(rule.g_id.path.to_string(self.db.string_store())),
         id:         "ascript-writer-utils-unhandled-ast-node",
         msg:        format!("An unhandled ast node has been encountered"),
-        inline_msg: format!("Node type [{:?}] lacks an ASTExprHandler", ast.get_type()),
+        inline_msg: format!("Node type lacks an ASTExprHandler"),
         ps_msg:     "Add an ASTExprHandler for this type using AscriptWriterUtils::add_ast_handler"
           .into(),
         severity:   SherpaErrorSeverity::Warning,
@@ -340,7 +374,7 @@ impl<'a> AscriptWriterUtils<'a> {
   }
 }
 
-pub(crate) struct AscriptWriter<'a, W: Write> {
+pub struct AscriptWriter<'a, W: Write> {
   pub store: &'a AScriptStore,
   pub db:    &'a ParserDatabase,
   pub utils: &'a AscriptWriterUtils<'a>,
@@ -630,7 +664,11 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
                         reference = _ref.get_ref_name();
                         stmt.writer.write_line(&_ref.to_init_string(w.utils))?;
                       }
-                      _ => panic!("Could not resolve: {statement:?}"),
+                      _ => {
+                        #[cfg(debug_assertions)]
+                        panic!("Could not resolve: {statement:?}");
+                        panic!()
+                      }
                     }
                   }
 
@@ -651,7 +689,7 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
 
                   SherpaResult::Ok(())
                 }
-                type_ => unreachable!("Type {type_:?} should not be a root ascript node."),
+                _ => unreachable!("Type should not be a root ascript node."),
               },
               Some(ASTToken::ListIterate(_)) => SherpaResult::Ok(()),
               Some(ASTToken::ListEntry(_)) => SherpaResult::Ok(()),
@@ -683,13 +721,13 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
 //  - Base type info
 
 #[derive(Clone, Copy)]
-pub(crate) enum RefIndex {
+pub enum RefIndex {
   Tok(usize),
   Obj(usize),
 }
 
 #[derive(Clone)]
-pub(crate) struct SlotRef {
+pub struct SlotRef {
   slot_type: RefIndex,
   type_slot: usize,
   init_expression: String,
@@ -717,7 +755,7 @@ impl SlotRef {
     }
   }
 
-  pub(crate) fn token(utils: &AscriptWriterUtils, slot_index: usize, type_slot: usize) -> Self {
+  pub fn token(utils: &AscriptWriterUtils, slot_index: usize, type_slot: usize) -> Self {
     SlotRef {
       slot_type: RefIndex::Tok(slot_index),
       type_slot,
@@ -732,7 +770,7 @@ impl SlotRef {
     }
   }
 
-  pub(crate) fn range(utils: &AscriptWriterUtils, slot_index: usize, type_slot: usize) -> Self {
+  pub fn range(utils: &AscriptWriterUtils, slot_index: usize, type_slot: usize) -> Self {
     SlotRef {
       slot_type: RefIndex::Tok(slot_index),
       type_slot,
@@ -744,7 +782,7 @@ impl SlotRef {
     }
   }
 
-  pub(crate) fn node_token(utils: &AscriptWriterUtils, type_slot: usize) -> Self {
+  pub fn node_token(utils: &AscriptWriterUtils, type_slot: usize) -> Self {
     SlotRef {
       slot_type: RefIndex::Tok(0),
       type_slot,
@@ -756,7 +794,7 @@ impl SlotRef {
     }
   }
 
-  pub(crate) fn node_range(utils: &AscriptWriterUtils, type_slot: usize) -> Self {
+  pub fn node_range(utils: &AscriptWriterUtils, type_slot: usize) -> Self {
     SlotRef {
       slot_type: RefIndex::Tok(0),
       type_slot,
@@ -768,7 +806,7 @@ impl SlotRef {
     }
   }
 
-  pub(crate) fn to_range(self, utils: &AscriptWriterUtils) -> Self {
+  pub fn to_range(self, utils: &AscriptWriterUtils) -> Self {
     let i = match self.get_root_slot_index() {
       RefIndex::Obj(i) | RefIndex::Tok(i) => i,
     };
@@ -776,7 +814,7 @@ impl SlotRef {
     Self::range(utils, i, self.type_slot)
   }
 
-  pub(crate) fn to_token(self, utils: &AscriptWriterUtils) -> Self {
+  pub fn to_token(self, utils: &AscriptWriterUtils) -> Self {
     let i = match self.get_root_slot_index() {
       RefIndex::Obj(i) | RefIndex::Tok(i) => i,
     };
@@ -795,11 +833,11 @@ impl SlotRef {
     }
   }
 
-  pub(crate) fn get_type(&self) -> AScriptTypeVal {
+  pub fn get_type(&self) -> AScriptTypeVal {
     self.ast_type.clone()
   }
 
-  pub(crate) fn to(self, conversion_expr: String, ast_type: AScriptTypeVal) -> Self {
+  pub fn to(self, conversion_expr: String, ast_type: AScriptTypeVal) -> Self {
     SlotRef {
       slot_type: self.slot_type,
       type_slot: self.type_slot,
@@ -813,7 +851,7 @@ impl SlotRef {
 
   /// Unsure the slot type is a ASTNode object, that is, if the current type is
   /// a `TokenRange` convert it into a `Token`
-  pub(crate) fn ensure_ast_obj(self, utils: &AscriptWriterUtils) -> Self {
+  pub fn ensure_ast_obj(self, utils: &AscriptWriterUtils) -> Self {
     if self.is(AScriptTypeVal::TokenRange) {
       self.to_token(utils)
     } else {
@@ -821,23 +859,23 @@ impl SlotRef {
     }
   }
 
-  pub(crate) fn make_mutable(&mut self) -> &mut Self {
+  pub fn make_mutable(&mut self) -> &mut Self {
     self.is_mutable = true;
     self
   }
 
-  pub(crate) fn is(&self, type_: AScriptTypeVal) -> bool {
+  pub fn is(&self, type_: AScriptTypeVal) -> bool {
     self.ast_type == type_
   }
 
-  pub(crate) fn get_ref_name(&self) -> String {
+  pub fn get_ref_name(&self) -> String {
     match self.slot_type {
       RefIndex::Obj(i) => format!("obj_{i}_{}", self.type_slot),
       RefIndex::Tok(i) => format!("tok_{i}_{}", self.type_slot),
     }
   }
 
-  pub(crate) fn get_root_slot_index(&self) -> RefIndex {
+  pub fn get_root_slot_index(&self) -> RefIndex {
     if let Some(predecessors) = &self.predecessors {
       for predecessor in predecessors {
         return predecessor.get_root_slot_index();
@@ -846,7 +884,7 @@ impl SlotRef {
     self.slot_type
   }
 
-  pub(crate) fn get_ast_obj_indices(&self) -> BTreeSet<usize> {
+  pub fn get_ast_obj_indices(&self) -> BTreeSet<usize> {
     let mut set = BTreeSet::new();
 
     if let RefIndex::Obj(index) = self.slot_type {
@@ -861,7 +899,7 @@ impl SlotRef {
     set
   }
 
-  pub(crate) fn get_token_indices(&self) -> BTreeSet<usize> {
+  pub fn get_token_indices(&self) -> BTreeSet<usize> {
     let mut set = BTreeSet::new();
 
     if let RefIndex::Tok(index) = self.slot_type {
@@ -877,14 +915,14 @@ impl SlotRef {
     set
   }
 
-  pub(crate) fn add_post_init_stmt(&mut self, string: String) -> &mut Self {
+  pub fn add_post_init_stmt(&mut self, string: String) -> &mut Self {
     self.post_init_statements.get_or_insert(vec![]).push(string);
     self
   }
 
   /// Convert the ref into a string of statements that convert original
   /// type into it current form.
-  pub(crate) fn to_init_string(&self, utils: &AscriptWriterUtils) -> String {
+  pub fn to_init_string(&self, utils: &AscriptWriterUtils) -> String {
     let mut strings = Vec::new();
 
     if let Some(predecessors) = &self.predecessors {
@@ -910,13 +948,13 @@ impl SlotRef {
     strings.join("\n").replace("%%", &ref_string)
   }
 
-  pub(crate) fn add_predecessor(&mut self, predecessor: SlotRef) -> &mut Self {
+  pub fn add_predecessor(&mut self, predecessor: SlotRef) -> &mut Self {
     self.predecessors.get_or_insert(vec![]).push(Box::new(predecessor));
 
     self
   }
 
-  pub(crate) fn add_predecessors(&mut self, predecessors: Vec<SlotRef>) -> &mut Self {
+  pub fn add_predecessors(&mut self, predecessors: Vec<SlotRef>) -> &mut Self {
     let prev = self.predecessors.get_or_insert(vec![]);
 
     for predecessor in predecessors {
@@ -927,7 +965,7 @@ impl SlotRef {
   }
 }
 
-pub(crate) fn get_ascript_export_data(
+pub fn get_ascript_export_data(
   utils: &AscriptWriterUtils,
 ) -> Vec<(Option<SlotRef>, AScriptTypeVal, String, String, String, String)> {
   let db = utils.db;

@@ -89,7 +89,7 @@ pub enum SherpaError {
   Report(Box<Report>),
 }
 
-use sherpa_runtime::types::{BlameColor, SherpaParseError, Token};
+use sherpa_rust_runtime::types::{BlameColor, SherpaParseError, Token};
 use SherpaError::*;
 
 use crate::journal::Report;
@@ -202,42 +202,33 @@ impl From<SherpaParseError> for SherpaError {
 impl Display for SherpaError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
-      SourceError { msg, id, inline_msg, loc, path, ps_msg, .. } => f
-        .write_fmt(format_args!(
-          "\n{} [{}:{}]\n{}\n\n{}\n\n{}\n",
-          id,
-          path.to_str().unwrap(),
-          loc.loc_stub(),
-          msg.trim(),
-          loc.blame(1, 1, &inline_msg.trim(), BlameColor::RED),
-          ps_msg.trim()
-        )),
-      SourcesError { msg, id, sources, ps_msg, .. } => {
-        f.write_fmt(format_args!(
-          "\n{}\n{}\n{}\n\n{}\n",
-          id,
-          msg.trim(),
-          sources
-            .iter()
-            .map(|(tok, path, inline_message)| format!(
-              "-- in [{}:{}]\n    {}",
-              path.to_str().unwrap(),
-              tok.loc_stub(),
-              tok
-                .blame(1, 1, inline_message, BlameColor::RED)
-                .replace("\n", "\n    ")
-            ))
-            .collect::<Vec<_>>()
-            .join("\n"),
-          ps_msg.trim()
-        ))
-      }
-      PoisonError(err_string) => {
-        f.write_fmt(format_args!("\nPoison Error: {}", err_string))
-      }
-      IOError(err_string) => {
-        f.write_fmt(format_args!("\nIO Error: {}", err_string))
-      }
+      SourceError { msg, id, inline_msg, loc, path, ps_msg, .. } => f.write_fmt(format_args!(
+        "\n{} [{}:{}]\n{}\n\n{}\n\n{}\n",
+        id,
+        path.to_str().unwrap(),
+        loc.loc_stub(),
+        msg.trim(),
+        loc.blame(1, 1, &inline_msg.trim(), BlameColor::RED),
+        ps_msg.trim()
+      )),
+      SourcesError { msg, id, sources, ps_msg, .. } => f.write_fmt(format_args!(
+        "\n{}\n{}\n{}\n\n{}\n",
+        id,
+        msg.trim(),
+        sources
+          .iter()
+          .map(|(tok, path, inline_message)| format!(
+            "-- in [{}:{}]\n    {}",
+            path.to_str().unwrap(),
+            tok.loc_stub(),
+            tok.blame(1, 1, inline_message, BlameColor::RED).replace("\n", "\n    ")
+          ))
+          .collect::<Vec<_>>()
+          .join("\n"),
+        ps_msg.trim()
+      )),
+      PoisonError(err_string) => f.write_fmt(format_args!("\nPoison Error: {}", err_string)),
+      IOError(err_string) => f.write_fmt(format_args!("\nIO Error: {}", err_string)),
       Text(err_string) => f.write_str(&err_string),
       Report(r) => r.display_errors(f),
       Self::Error(error) => Display::fmt(error, f),

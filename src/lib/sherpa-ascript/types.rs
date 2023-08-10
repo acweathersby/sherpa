@@ -1,5 +1,5 @@
 use sherpa_core::{parser::ASTNode, proxy::OrderedMap, *};
-use sherpa_runtime::types::Token;
+use sherpa_rust_runtime::types::Token;
 
 use std::{
   collections::{BTreeMap, BTreeSet},
@@ -14,7 +14,8 @@ use crate::compile::compile_ascript_store;
 pub(crate) const ASCRIPT_FIRST_NODE_ID: &'static str = "--first--";
 pub(crate) const ASCRIPT_LAST_NODE_ID: &'static str = "--last--";
 
-#[derive(Hash, Debug, PartialEq, Eq, Clone, PartialOrd, Ord, Copy, Default)]
+#[derive(Hash, PartialEq, Eq, Clone, PartialOrd, Ord, Copy, Default)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub struct AScriptStructId(u64);
 
 impl AScriptStructId {
@@ -23,7 +24,8 @@ impl AScriptStructId {
   }
 }
 
-#[derive(Hash, Debug, PartialEq, Eq, Clone, PartialOrd, Ord)]
+#[derive(Hash, PartialEq, Eq, Clone, PartialOrd, Ord)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub struct AScriptPropId {
   pub struct_id: AScriptStructId,
   pub name:      String,
@@ -35,7 +37,8 @@ impl AScriptPropId {
   }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Default)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub struct TaggedType {
   pub type_:        AScriptTypeVal,
   pub tag:          DBRuleKey,
@@ -82,7 +85,14 @@ impl TaggedType {
   }
 
   pub fn debug_string(&self) -> String {
-    format!("Tagged: [{}] {}", self.symbol_index, self.type_.debug_string())
+    #[cfg(debug_assertions)]
+    {
+      format!("Tagged: [{}] {}", self.symbol_index, self.type_.debug_string())
+    }
+    #[cfg(not(debug_assertions))]
+    {
+      "Tagged".into()
+    }
   }
 }
 
@@ -307,10 +317,18 @@ impl AScriptTypeVal {
       Struct(id) => {
         format!("Struct<{}>", struct_types.get(id).cloned().unwrap_or_default())
       }
-      _ => self.debug_string(),
+      _ => {
+        #[cfg(debug_assertions)]
+        {
+          self.debug_string()
+        }
+        #[cfg(not(debug_assertions))]
+        "".into()
+      }
     }
   }
 
+  #[cfg(debug_assertions)]
   pub fn debug_string(&self) -> String {
     use AScriptTypeVal::*;
     match self {
@@ -380,7 +398,16 @@ impl AScriptTypeVal {
         ),
         None => "GenericVec".to_string(),
       },
-      Struct(id) => format!("Struct<{:?}>", id),
+      Struct(id) => {
+        #[cfg(debug_assertions)]
+        {
+          format!("Struct<{:?}>", id)
+        }
+        #[cfg(not(debug_assertions))]
+        {
+          "Struct".into()
+        }
+      }
       String(..) => "STRING".to_string(),
       Bool(..) => "BOOL".to_string(),
       F64(..) => "F64".to_string(),
@@ -410,7 +437,16 @@ impl AScriptTypeVal {
       Token => "TOKEN".to_string(),
       GenericStruct(_) => "Node".to_string(),
       Any => "Any".to_string(),
-      UnresolvedProduction(id) => format!("UnresolvedProduction[{:?}]", id),
+      UnresolvedProduction(id) => {
+        #[cfg(debug_assertions)]
+        {
+          format!("UnresolvedProduction[{:?}]", id)
+        }
+        #[cfg(not(debug_assertions))]
+        {
+          "UnresolvedProduction".into()
+        }
+      }
       _ => "TOKEN_RANGE".to_string(),
     }
   }
@@ -485,7 +521,8 @@ num_type!(AScriptTypeValI16, I16, i16, i16);
 
 num_type!(AScriptTypeValI8, I8, i8, i8);
 
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Default)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub struct AScriptProp {
   pub type_val:    TaggedType,
   pub location:    Token,
@@ -497,7 +534,8 @@ pub struct AScriptProp {
   pub optional:    bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub struct AScriptStruct {
   pub id: AScriptStructId,
   pub type_name: String,
@@ -506,14 +544,15 @@ pub struct AScriptStruct {
   pub rule_ids: BTreeSet<DBRuleKey>,
   pub definition_locations: BTreeSet<Token>,
   /// When true a `tok` property is present in the struct
-  /// that has a [sherpa_runtime::type::Token] value comprised of the
+  /// that has a [sherpa_rust_runtime::type::Token] value comprised of the
   /// characters of this struct's reduced rule.
   pub tokenized: bool,
 }
 
 pub type ProductionTypesTable = OrderedMap<DBProdKey, OrderedMap<TaggedType, BTreeSet<DBRuleKey>>>;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub struct AScriptStore {
   /// Store of unique AScriptStructs
   pub structs:        OrderedMap<AScriptStructId, AScriptStruct>,
@@ -543,7 +582,8 @@ impl AScriptStore {
   }
 
   pub fn new(j: &mut Journal, db: &ParserDatabase) -> SherpaResult<Self> {
-    let mut new_self = AScriptStore { is_dummy: false, ..Self::dummy()? };
+    let mut new_self =
+      AScriptStore { is_dummy: false, ast_type_name: "ASTNode".into(), ..Self::dummy()? };
 
     j.set_active_report("Ascript Store Compile", ReportType::AScriptCompile);
 

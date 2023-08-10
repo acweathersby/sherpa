@@ -1,5 +1,5 @@
 [package]
-name = "sherpa_runtime"
+name = "sherpa_rust_runtime"
 version = "1.0.0-beta1"
 edition = "2021"
 

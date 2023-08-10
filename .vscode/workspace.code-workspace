@@ -1,38 +1,39 @@
 {
 	"folders": [
 		{
-			"path": "../src/lib",
-			"name": "Library Sources"
+			"name": "Library Sources",
+			"path": "../src/lib"
 		},
 		{
-			"path": "../src/app/cli",
-			"name": "CLI Source"
+			"name": "CLI Source",
+			"path": "../src/app/cli"
 		},
 		{
-			"path": "../src/web",
-			"name": "Web Sources"
+			"name": "Web Sources",
+			"path": "../src/web"
 		},
 		{
-			"path": "../scripts",
-			"name": "Scripts"
+			"name": "Scripts",
+			"path": "../scripts"
 		},
 		{
-			"path": "../releases",
-			"name": "Releases"
+			"name": "Releases",
+			"path": "../releases"
 		},
 		{
-			"path": "../public",
-			"name": "Web Public"
+			"name": "Web Public",
+			"path": "../public"
 		},
 		{
-			"path": "../test",
-			"name": "Tests"
+			"name": "Tests",
+			"path": "../test"
 		},
 		{
-			"path": "../src/grammar",
-			"name": "Grammars"
+			"name": "Grammars",
+			"path": "../src/grammar"
 		},
 		{
+			"name": "lib_sherpa",
 			"path": ".."
 		}
 	],

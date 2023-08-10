@@ -1,4 +1,4 @@
-use sherpa_runtime::types::bytecode::InputType;
+use sherpa_rust_runtime::types::bytecode::InputType;
 
 use super::*;
 use crate::{
@@ -26,9 +26,7 @@ pub struct ParseState<'db> {
 }
 
 impl<'db> ParseState<'db> {
-  pub fn get_scanners(
-    &mut self,
-  ) -> Option<&Map<IString, OrderedSet<&'db DBTokenData>>> {
+  pub fn get_scanners(&mut self) -> Option<&Map<IString, OrderedSet<&'db DBTokenData>>> {
     self.scanners.as_ref()
   }
 
@@ -57,10 +55,7 @@ impl<'db> ParseState<'db> {
               _ => {}
             }
           }
-          let name = ParseState::get_interned_scanner_name(
-            &scanner_data,
-            db.string_store(),
-          );
+          let name = ParseState::get_interned_scanner_name(&scanner_data, db.string_store());
 
           (*meta) = name.as_u64();
 
@@ -91,17 +86,12 @@ impl<'db> ParseState<'db> {
 
   pub fn get_scanner_name(scanner_syms: &OrderedSet<&DBTokenData>) -> String {
     ("scan".to_string()
-      + &create_u64_hash(
-        scanner_syms.iter().map(|g| g.sym_id).collect::<OrderedSet<_>>(),
-      )
-      .to_string())
+      + &create_u64_hash(scanner_syms.iter().map(|g| g.sym_id).collect::<OrderedSet<_>>())
+        .to_string())
   }
 
   /// Should only be used on matches that read results from token scanners.
-  pub fn get_scanner_name_from_matches(
-    matches: &[ASTNode],
-    db: &ParserDatabase,
-  ) -> String {
+  pub fn get_scanner_name_from_matches(matches: &[ASTNode], db: &ParserDatabase) -> String {
     let mut vals = Array::new();
 
     for val in matches {
@@ -113,9 +103,7 @@ impl<'db> ParseState<'db> {
       }
     }
 
-    Self::get_scanner_name(
-      &vals.into_iter().map(|i| db.tok_data((i as usize).into())).collect(),
-    )
+    Self::get_scanner_name(&vals.into_iter().map(|i| db.tok_data((i as usize).into())).collect())
   }
 
   /// Returns a reference to the AST.
@@ -150,10 +138,7 @@ impl<'db> ParseState<'db> {
     let mut w = CodeWriter::new(vec![]);
     let name = self.name.to_string(s);
 
-    let _ = &mut w
-      + name.clone()
-      + " =>\n"
-      + self.code.as_str().replace("%%%%", name.as_str());
+    let _ = &mut w + name.clone() + " =>\n" + self.code.as_str().replace("%%%%", name.as_str());
 
     let string = w.into_output();
     string

@@ -10,5 +10,5 @@ path ="./lib.rs"
 [dependencies.sherpa_core]
 path = "../sherpa-core"
 
-[dependencies.sherpa_runtime]
-path = "../sherpa-rust-rt"
+[dependencies.sherpa_rust_runtime]
+path = "../sherpa-rust-runtime"

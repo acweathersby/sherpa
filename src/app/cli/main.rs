@@ -1,24 +1,16 @@
-use core::panic;
-use std::path::PathBuf;
-
 use clap::{arg, value_parser, ArgMatches, Command};
 use sherpa_core::{
-  pipeline::{
-    tasks::{
-      build_ascript_types_and_functions,
-      build_bytecode_disassembly,
-      build_bytecode_parser,
-      build_llvm_parser,
-      build_llvm_parser_interface,
-      build_rust_preamble,
-    },
-    SourceType,
-    *,
-  },
+  build_compile_db,
+  compile_grammars_from_path,
+  new_taskman,
   Config,
+  GrammarSoup,
+  Journal,
   SherpaError,
   SherpaResult,
 };
+use sherpa_rust_build::compile_rust_bytecode_parser;
+use std::path::PathBuf;
 
 #[derive(Clone, Debug)]
 enum ParserType {
@@ -96,17 +88,6 @@ fn configure_matches(
   pwd: &PathBuf,
 ) -> (Config, ParserType, PathBuf, PathBuf) {
   let mut config = Config::default();
-  config.source_type = match matches
-    .contains_id("lang")
-    .then(|| matches.get_one::<String>("lang").map(|s| s.as_str()))
-    .flatten()
-  {
-    Some("ts") | Some("typescript") => {
-      panic!("Source type [TypeScript] not yet supported")
-    }
-    _ => SourceType::Rust,
-  };
-
   config.enable_ascript = matches.contains_id("ast");
 
   let parser_type = matches
@@ -130,67 +111,41 @@ fn main() -> SherpaResult<()> {
   if let Some(matches) = matches.subcommand_matches("build") {
     let (config, parser_type, out_dir, lib_out_dir) = configure_matches(matches, &pwd);
 
-    let name = matches.get_one::<String>("name").cloned().unwrap_or("%".to_string());
+    let (executor, spawner) = new_taskman(1000);
 
-    for path in matches.get_many::<PathBuf>("INPUTS").unwrap_or_default() {
-      let path =
-        if !path.is_absolute() { pwd.join(path).canonicalize()? } else { path.canonicalize()? };
+    let matches =
+      matches.get_many::<PathBuf>("INPUTS").unwrap_or_default().cloned().collect::<Vec<_>>();
 
-      let mut pipeline = BuildPipeline::from_source(path, config.clone());
+    let sp = spawner.clone();
 
-      pipeline
-        .set_source_output_dir(&out_dir)
-        .set_build_output_dir(&lib_out_dir)
-        .add_task(build_rust_preamble());
+    sp.clone().spawn(async move {
+      let mut j = Journal::new(Some(config));
+      let soup = GrammarSoup::new();
+      let mut id = SherpaResult::None;
 
-      match config.source_type {
-        _ => pipeline.set_source_file_name(&format!("{name}.rs")),
-      };
-
-      match parser_type {
-        ParserType::LLVM => pipeline
-          .add_task(build_llvm_parser(None, true, false))
-          .add_task(build_llvm_parser_interface()),
-        _ => pipeline.add_task(build_bytecode_parser()),
-      };
-
-      if config.enable_ascript {
-        pipeline.add_task(build_ascript_types_and_functions(config.source_type));
+      for path in matches {
+        id =
+          compile_grammars_from_path(j.transfer(), path.clone(), soup.as_ref(), &spawner.clone())
+            .await;
       }
-      match pipeline.run(|errors| {
-        for error in &errors {
-          eprintln!("{}", error);
-        }
-      }) {
-        SherpaResult::Ok(_) => true,
-        _ => false,
-      };
-    }
+
+      let id: sherpa_core::GrammarIdentity = id?;
+
+      let db = build_compile_db(j.transfer(), id, &soup)?;
+
+      let output = compile_rust_bytecode_parser(&mut j, &db).await?;
+
+      print!("{}", output);
+
+      SherpaResult::Ok(())
+    });
+
+    drop(sp);
+
+    executor.join();
 
     SherpaResult::Ok(())
   } else if let Some(matches) = matches.subcommand_matches("disassemble") {
-    let out_dir = matches.get_one::<PathBuf>("out").unwrap_or(&pwd);
-
-    for path in matches.get_many::<PathBuf>("INPUTS").unwrap_or_default() {
-      let path =
-        if !path.is_absolute() { pwd.join(path).canonicalize()? } else { path.canonicalize()? };
-
-      let mut pipeline = BuildPipeline::from_source(path, Default::default());
-
-      pipeline
-        .set_source_output_dir(&out_dir)
-        .set_build_output_dir(&out_dir)
-        .add_task(build_bytecode_disassembly());
-
-      match pipeline.run(|errors| {
-        for error in &errors {
-          eprintln!("{}", error);
-        }
-      }) {
-        SherpaResult::Ok(_) => true,
-        _ => false,
-      };
-    }
     SherpaResult::Ok(())
   } else {
     SherpaResult::Err(SherpaError::from("Command Not Recognized"))

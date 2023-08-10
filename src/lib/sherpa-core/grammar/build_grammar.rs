@@ -1,4 +1,4 @@
-use sherpa_runtime::types::Token;
+use sherpa_rust_runtime::types::Token;
 
 use crate::{
   grammar::utils::resolve_grammar_path,
@@ -332,7 +332,9 @@ pub fn process_production<'a>(
     ASTNode::PrattProduction(prod) => (ProductionType::Pratt, &prod.rules),
     ASTNode::PegProduction(prod) => (ProductionType::Peg, &prod.rules),
     ast => {
-      todo!("Create build for {ast:?}")
+      #[cfg(debug_assertions)]
+      todo!("Create build for {ast:?}");
+      todo!()
     }
   };
 
@@ -625,6 +627,13 @@ fn process_rule_symbols(
 
   for rule in &mut rules {
     rule.skipped = skipped_symbols.clone();
+
+    if rule.symbols.is_empty() {
+      panic!(
+        "{}",
+        rule.tok.blame(1, 1, &format!("Rules that can derive the empty rule `{} => ε` are currently not allowed in Sherpa Grammars!", p_data.root_f_name.to_str(s_store).as_str()) , None)
+      )
+    }
   }
 
   p_data.rules.append(&mut rules);

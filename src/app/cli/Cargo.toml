@@ -13,6 +13,15 @@ clap = { version="4.0.29" }
 [dependencies.sherpa_core]
 path = "../../lib/sherpa-core"
 
+[dependencies.sherpa_ascript]
+path = "../../lib/sherpa-ascript"
+
+[dependencies.sherpa_bytecode]
+path = "../../lib/sherpa-bytecode"
+
+[dependencies.sherpa_rust_build]
+path = "../../lib/sherpa-rust-build"
+
 [profile.release]
 opt-level=3
 panic = 'abort'

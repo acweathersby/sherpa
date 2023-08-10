@@ -16,13 +16,9 @@ mod types;
 mod utils;
 mod writer;
 
-pub use compile::{compile_parse_states, garbage_collect};
+pub use compile::{compile_parse_states, garbage_collect, optimize};
 
-pub use grammar::{
-  build_compile_db,
-  compile_grammar_from_str,
-  compile_grammars_from_path,
-};
+pub use grammar::{build_compile_db, compile_grammar_from_str, compile_grammars_from_path};
 pub use journal::{Config, Journal, Report, ReportType};
 pub use tasks::new_taskman;
 pub use types::{
@@ -64,4 +60,4 @@ pub use writer::code_writer::CodeWriter;
 #[cfg(debug_assertions)]
 pub mod test;
 
-pub use debug::{console_debugger, PrintConfig};
+pub use debug::{console_debugger, string_debugger, PrintConfig};

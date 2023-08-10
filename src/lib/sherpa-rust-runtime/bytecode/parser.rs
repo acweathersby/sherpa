@@ -1,11 +1,5 @@
 use crate::types::{
-  bytecode::{
-    ByteCodeIterator,
-    InputType,
-    Instruction,
-    Opcode,
-    NORMAL_STATE_FLAG,
-  },
+  bytecode::{ByteCodeIterator, InputType, Instruction, Opcode, NORMAL_STATE_FLAG},
   *,
 };
 
@@ -128,9 +122,7 @@ pub fn dispatch<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
       HashBranch => hash_branch(i, ctx, debug),
       Fail => (FailState, Option::None),
       Pass => (CompleteState, Option::None),
-      Accept => {
-        (ParseAction::Accept { production_id: ctx.prod_id }, Option::None)
-      }
+      Accept => (ParseAction::Accept { production_id: ctx.prod_id }, Option::None),
       NoOp => (None, i.next()),
     } {
       (None, Option::None) => {
@@ -178,18 +170,12 @@ pub fn dispatch<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
   }
 }
 
-fn debug_symbol<'a>(
-  i: Instruction<'a>,
-) -> (ParseAction, Option<Instruction<'a>>) {
+fn debug_symbol<'a>(i: Instruction<'a>) -> (ParseAction, Option<Instruction<'a>>) {
   (ParseAction::None, i.next())
 }
 
 /// Performs the [Opcode::TokenShift] operation
-fn shift_token<
-  'a,
-  R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader,
-  M,
->(
+fn shift_token<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
   i: Instruction<'a>,
   ctx: &mut ParseContext<R, M>,
 ) -> (ParseAction, Option<Instruction<'a>>) {
@@ -219,11 +205,7 @@ fn shift_token<
 }
 
 /// Performs the [Opcode::ShiftTokenScanless] operation
-fn shift_token_scanless<
-  'a,
-  R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader,
-  M,
->(
+fn shift_token_scanless<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
   i: Instruction<'a>,
   ctx: &mut ParseContext<R, M>,
 ) -> (ParseAction, Option<Instruction<'a>>) {
@@ -233,11 +215,7 @@ fn shift_token_scanless<
 }
 
 /// Performs the [Opcode::ScanShift] operation
-fn scan_shift<
-  'a,
-  R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader,
-  M,
->(
+fn scan_shift<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
   i: Instruction<'a>,
   ctx: &mut ParseContext<R, M>,
 ) -> (ParseAction, Option<Instruction<'a>>) {
@@ -252,11 +230,7 @@ fn scan_shift<
 }
 
 /// Performs the [Opcode::PeekToken] operation
-fn peek_token<
-  'a,
-  R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader,
-  M,
->(
+fn peek_token<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
   i: Instruction<'a>,
   ctx: &mut ParseContext<R, M>,
 ) -> (ParseAction, Option<Instruction<'a>>) {
@@ -273,11 +247,7 @@ fn peek_token<
 }
 
 /// Performs the [Opcode::PeekTokenScanless] operation
-fn peek_token_scanless<
-  'a,
-  R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader,
-  M,
->(
+fn peek_token_scanless<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
   i: Instruction<'a>,
   ctx: &mut ParseContext<R, M>,
 ) -> (ParseAction, Option<Instruction<'a>>) {
@@ -286,11 +256,7 @@ fn peek_token_scanless<
   peek_token(i, ctx)
 }
 
-fn __skip_token_core__<
-  'a,
-  R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader,
-  M,
->(
+fn __skip_token_core__<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
   base_instruction: Instruction<'a>,
   ctx: &mut ParseContext<R, M>,
 ) -> (ParseAction, Option<Instruction<'a>>) {
@@ -315,11 +281,7 @@ fn __skip_token_core__<
   )
 }
 /// Performs the [Opcode::SkipToken] operation
-fn skip_token<
-  'a,
-  R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader,
-  M,
->(
+fn skip_token<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
   base_instruction: Instruction<'a>,
   ctx: &mut ParseContext<R, M>,
 ) -> (ParseAction, Option<Instruction<'a>>) {
@@ -330,11 +292,7 @@ fn skip_token<
 }
 
 /// Performs the [Opcode::SkipTokenScanless] operation
-fn skip_token_scanless<
-  'a,
-  R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader,
-  M,
->(
+fn skip_token_scanless<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
   base_instruction: Instruction<'a>,
   ctx: &mut ParseContext<R, M>,
 ) -> (ParseAction, Option<Instruction<'a>>) {
@@ -344,11 +302,7 @@ fn skip_token_scanless<
 }
 
 /// Performs the [Opcode::PeekSkipToken] operation
-fn peek_skip_token<
-  'a,
-  R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader,
-  M,
->(
+fn peek_skip_token<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
   base_instruction: Instruction<'a>,
   ctx: &mut ParseContext<R, M>,
 ) -> (ParseAction, Option<Instruction<'a>>) {
@@ -358,11 +312,7 @@ fn peek_skip_token<
 }
 
 /// Performs the [Opcode::PeekSkipTokenScanless] operation
-fn peek_skip_token_scanless<
-  'a,
-  R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader,
-  M,
->(
+fn peek_skip_token_scanless<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
   base_instruction: Instruction<'a>,
   ctx: &mut ParseContext<R, M>,
 ) -> (ParseAction, Option<Instruction<'a>>) {
@@ -444,11 +394,7 @@ fn pop_goto<'a>(
 }
 
 /// Performs the [Opcode::AssignToken] operation
-fn assign_token<
-  'a,
-  R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader,
-  M,
->(
+fn assign_token<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
   i: Instruction<'a>,
   ctx: &mut ParseContext<R, M>,
 ) -> (ParseAction, Option<Instruction<'a>>) {
@@ -461,11 +407,7 @@ fn assign_token<
 }
 
 /// Performs the [Opcode::PeekReset] operation
-fn peek_reset<
-  'a,
-  R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader,
-  M,
->(
+fn peek_reset<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
   i: Instruction<'a>,
   ctx: &mut ParseContext<R, M>,
 ) -> (ParseAction, Option<Instruction<'a>>) {
@@ -501,8 +443,7 @@ pub fn hash_branch<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
   let hash_mask = (1 << modulo_base) - 1;
 
   loop {
-    let input_value =
-      get_input_value(input_type, scan_block_instruction, ctx, debug);
+    let input_value = get_input_value(input_type, scan_block_instruction, ctx, debug);
 
     #[cfg(debug_assertions)]
     emit_debug_value(ctx, debug, input_type, input_value);
@@ -510,18 +451,14 @@ pub fn hash_branch<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
     let mut hash_index = (input_value & hash_mask) as usize;
 
     loop {
-      let mut iter: ByteCodeIterator =
-        (i.bytecode(), table_start + hash_index * 4).into();
+      let mut iter: ByteCodeIterator = (i.bytecode(), table_start + hash_index * 4).into();
       let cell = iter.next_u32_le().unwrap();
       let value = cell & 0x7FF;
       let off = (cell >> 11) & 0x7FF;
       let next = ((cell >> 22) & 0x3FF) as i32 - 512;
 
       if value == input_value {
-        return (
-          ParseAction::None,
-          Some((i.bytecode(), i.address() + off as usize).into()),
-        );
+        return (ParseAction::None, Some((i.bytecode(), i.address() + off as usize).into()));
       } else if next != 0 {
         hash_index = ((hash_index as i32) + next) as usize;
       } else {
@@ -548,8 +485,7 @@ pub fn vector_branch<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
     ..
   } = i.into();
 
-  let input_value =
-    get_input_value(input_type, scan_block_instruction, ctx, debug);
+  let input_value = get_input_value(input_type, scan_block_instruction, ctx, debug);
 
   #[cfg(debug_assertions)]
   emit_debug_value(ctx, debug, input_type, input_value);
@@ -557,13 +493,9 @@ pub fn vector_branch<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
   let value_index = (input_value as i32 - value_offset as i32) as usize;
 
   if value_index < table_length as usize {
-    let mut iter: ByteCodeIterator =
-      (i.bytecode(), table_start + value_index * 4).into();
+    let mut iter: ByteCodeIterator = (i.bytecode(), table_start + value_index * 4).into();
     let address_offset = iter.next_u32_le().unwrap();
-    (
-      ParseAction::None,
-      Some((i.bytecode(), i.address() + address_offset as usize).into()),
-    )
+    (ParseAction::None, Some((i.bytecode(), i.address() + address_offset as usize).into()))
   } else {
     (ParseAction::None, Some(default_block))
   }
@@ -615,37 +547,23 @@ fn emit_debug_value<R: ByteReader + MutByteReader + UTF8Reader, M>(
   input_type: InputType,
   input_value: u32,
 ) {
-  let start = ctx.head_ptr;
-  let end = ctx.head_ptr + ctx.tok_len;
+  let start = ctx.scan_ptr;
+  let end = ctx.scan_ptr + ctx.tok_len;
   if let Some(debug) = debug {
     match input_type {
-      InputType::Production => {
-        debug(&DebugEvent::GotoValue { production_id: input_value })
+      InputType::Production => debug(&DebugEvent::GotoValue { production_id: input_value }),
+      InputType::Byte => {
+        debug(&DebugEvent::ByteValue { input_value, start, end, string: ctx.get_str() })
       }
-      InputType::Byte => debug(&DebugEvent::ByteValue {
-        input_value,
-        start,
-        end,
-        string: ctx.get_str(),
-      }),
-      InputType::Class => debug(&DebugEvent::ClassValue {
-        input_value,
-        start,
-        end,
-        string: ctx.get_str(),
-      }),
-      InputType::Token => debug(&DebugEvent::TokenValue {
-        input_value,
-        start,
-        end,
-        string: ctx.get_str(),
-      }),
-      InputType::Codepoint => debug(&DebugEvent::CodePointValue {
-        input_value,
-        start,
-        end,
-        string: ctx.get_str(),
-      }),
+      InputType::Class => {
+        debug(&DebugEvent::ClassValue { input_value, start, end, string: ctx.get_str() })
+      }
+      InputType::Token => {
+        debug(&DebugEvent::TokenValue { input_value, start, end, string: ctx.get_str() })
+      }
+      InputType::Codepoint => {
+        debug(&DebugEvent::CodePointValue { input_value, start, end, string: ctx.get_str() })
+      }
       InputType::EndOfFile => debug(&DebugEvent::EndOfFile),
       _ => unreachable!(),
     };
@@ -781,11 +699,7 @@ pub struct ByteCodeParser<'a, R: ByteReader + MutByteReader, M> {
 
 impl<'a, R: ByteReader + MutByteReader, M> ByteCodeParser<'a, R, M> {
   pub fn new(reader: &mut R, bc: &'a [u8]) -> Self {
-    ByteCodeParser {
-      ctx: ParseContext::<R, M>::new_bytecode(reader),
-      stack: vec![],
-      bc,
-    }
+    ByteCodeParser { ctx: ParseContext::<R, M>::new_bytecode(reader), stack: vec![], bc }
   }
 }
 

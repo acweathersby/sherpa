@@ -175,25 +175,28 @@ impl<'db> Hash for State<'db> {
       }
     }
 
-    for item in &self.non_terminals {
-      item.rule_id.hash(state);
-      item.sym_index.hash(state);
-      item.origin.hash(state);
+    #[cfg(full_graph_state_hash)]
+    {
+      for item in &self.non_terminals {
+        item.rule_id.hash(state);
+        item.sym_index.hash(state);
+        item.origin.hash(state);
 
-      match item.origin {
-        Origin::Peek(hash_id, _) => hash_id.hash(state),
-        other => other.hash(state),
+        match item.origin {
+          Origin::Peek(hash_id, _) => hash_id.hash(state),
+          other => other.hash(state),
+        }
       }
-    }
 
-    for item in &self.peek_resolve_items.values().flatten().collect::<OrderedSet<_>>() {
-      item.rule_id.hash(state);
-      item.sym_index.hash(state);
-    }
+      for item in &self.peek_resolve_items.values().flatten().collect::<OrderedSet<_>>() {
+        item.rule_id.hash(state);
+        item.sym_index.hash(state);
+      }
 
-    if let Some(item) = self.reduce_item {
-      item.rule_id.hash(state);
-      item.sym_index.hash(state);
+      if let Some(item) = self.reduce_item {
+        item.rule_id.hash(state);
+        item.sym_index.hash(state);
+      }
     }
   }
 }
@@ -423,6 +426,7 @@ pub enum GraphMode {
 
 pub struct Graph<'follow, 'db: 'follow> {
   state_map: Map<u64, StateId>,
+  state_map_test: Map<u64, StateId>,
   states: Array<State<'db>>,
   leaf_states: OrderedSet<StateId>,
   pending_states: VecDeque<(GraphState, StateId)>,
@@ -436,6 +440,7 @@ impl<'follow, 'db: 'follow> Graph<'follow, 'db> {
     Self {
       mode,
       state_map: Default::default(),
+      state_map_test: Default::default(),
       states: Default::default(),
       leaf_states: Default::default(),
       pending_states: Default::default(),

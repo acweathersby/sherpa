@@ -8,11 +8,7 @@ use crate::{
   },
   bytecode::compile_bytecode,
   debug::generate_disassembly,
-  llvm::{
-    ascript_functions::construct_ast_builder,
-    compile_llvm_module_from_parse_states,
-    *,
-  },
+  llvm::{ascript_functions::construct_ast_builder, compile_llvm_module_from_parse_states, *},
   parser::{compile_parse_states, optimize_parse_states},
   util::get_num_of_available_threads,
   Config,
@@ -23,7 +19,7 @@ use inkwell::{
   context::Context,
   execution_engine::{ExecutionEngine, JitFunction},
 };
-use sherpa_runtime::{
+use sherpa_rust_runtime::{
   llvm_parser::{
     llvm_map_result_action,
     llvm_map_shift_action,
@@ -47,27 +43,21 @@ use sherpa_runtime::{
 
 use super::{GrammarStore, ParseState};
 
-type Init<R, ExtCTX> =
-  unsafe extern "C" fn(*mut ParseContext<R, ExtCTX>, *mut R);
+type Init<R, ExtCTX> = unsafe extern "C" fn(*mut ParseContext<R, ExtCTX>, *mut R);
 type Prime<R, ExtCTX> = unsafe extern "C" fn(*mut ParseContext<R, ExtCTX>, u32);
 type Drop<R, ExtCTX> = unsafe extern "C" fn(*mut ParseContext<R, ExtCTX>);
-type Next<R, ExtCTX> =
-  unsafe extern "C" fn(*mut ParseContext<R, ExtCTX>) -> ParseActionType;
+type Next<R, ExtCTX> = unsafe extern "C" fn(*mut ParseContext<R, ExtCTX>) -> ParseActionType;
 
-type AstBuilder<'a, R, ExtCTX, ASTNode> =
-  unsafe extern "C" fn(
-    *mut ParseContext<R, ExtCTX>,
-    *const fn(
-      ctx: &mut ParseContext<R, ExtCTX>,
-      &mut AstStackSlice<AstSlot<ASTNode>>,
-    ),
-    unsafe fn(&ParseContext<R, ExtCTX>, &mut AstStackSlice<AstSlot<ASTNode>>),
-    unsafe fn(
-      &ParseContext<R, ExtCTX>,
-      ParseActionType,
-      &mut AstStackSlice<AstSlot<ASTNode>>,
-    ) -> ParseResult<ASTNode>,
-  ) -> ParseResult<ASTNode>;
+type AstBuilder<'a, R, ExtCTX, ASTNode> = unsafe extern "C" fn(
+  *mut ParseContext<R, ExtCTX>,
+  *const fn(ctx: &mut ParseContext<R, ExtCTX>, &mut AstStackSlice<AstSlot<ASTNode>>),
+  unsafe fn(&ParseContext<R, ExtCTX>, &mut AstStackSlice<AstSlot<ASTNode>>),
+  unsafe fn(
+    &ParseContext<R, ExtCTX>,
+    ParseActionType,
+    &mut AstStackSlice<AstSlot<ASTNode>>,
+  ) -> ParseResult<ASTNode>,
+) -> ParseResult<ASTNode>;
 
 pub(crate) struct JitParser<'a, R, ExtCTX = u32, ASTNode = u32>
 where
@@ -99,21 +89,13 @@ where
   ) -> SherpaResult<Self> {
     unsafe {
       let module = ctx.create_module("JIT_PARSER");
-      let engine = module
-        .create_jit_execution_engine(inkwell::OptimizationLevel::None)
-        .unwrap();
+      let engine = module.create_jit_execution_engine(inkwell::OptimizationLevel::None).unwrap();
       let target_data = engine.get_target_data();
 
       let mut llvm_mod = construct_module(j, ctx, &target_data, module);
 
-      engine.add_global_mapping(
-        &llvm_mod.fun.allocate_stack,
-        sherpa_allocate_stack as usize,
-      );
-      engine.add_global_mapping(
-        &llvm_mod.fun.free_stack,
-        sherpa_free_stack as usize,
-      );
+      engine.add_global_mapping(&llvm_mod.fun.allocate_stack, sherpa_allocate_stack as usize);
+      engine.add_global_mapping(&llvm_mod.fun.free_stack, sherpa_free_stack as usize);
       engine.add_global_mapping(
         &llvm_mod.fun.get_token_class_from_codepoint,
         sherpa_get_token_class_from_codepoint as usize,
@@ -172,9 +154,7 @@ where
   R: ByteReader + LLVMByteReader,
   ASTNode: AstObject,
 {
-  fn from(
-    (config, string, context): (Option<Config>, &'a str, &'a Context),
-  ) -> Self {
+  fn from((config, string, context): (Option<Config>, &'a str, &'a Context)) -> Self {
     let mut j = Journal::new(config);
     GrammarStore::from_str(&mut j, string)?;
     let states = compile_parse_states(&mut j, get_num_of_available_threads())?;
@@ -226,10 +206,7 @@ where
     &mut self,
     entry_index: u32,
     reader: &mut R,
-    functions: &[fn(
-      &mut ParseContext<R, ExtCTX>,
-      &mut AstStackSlice<AstSlot<ASTNode>>,
-    )],
+    functions: &[fn(&mut ParseContext<R, ExtCTX>, &mut AstStackSlice<AstSlot<ASTNode>>)],
   ) -> ParseResult<ASTNode> {
     unsafe {
       self.ctx.reset();
@@ -247,8 +224,7 @@ where
   }
 }
 
-impl<'a, R, ExtCTX, ASTNode> std::ops::Drop
-  for JitParser<'a, R, ExtCTX, ASTNode>
+impl<'a, R, ExtCTX, ASTNode> std::ops::Drop for JitParser<'a, R, ExtCTX, ASTNode>
 where
   R: ByteReader,
   ASTNode: AstObject,
@@ -319,7 +295,7 @@ impl<'a, R: ByteReader + LLVMByteReader + MutByteReader, M> SherpaParser<R, M>
 
   fn get_next_action(
     &mut self,
-    debug: &mut Option<sherpa_runtime::bytecode_parser::DebugFn>,
+    debug: &mut Option<sherpa_rust_runtime::bytecode_parser::DebugFn>,
   ) -> ParseAction {
     match self.next() {
       ParseActionType::Shift => ParseAction::Shift {
@@ -341,9 +317,7 @@ impl<'a, R: ByteReader + LLVMByteReader + MutByteReader, M> SherpaParser<R, M>
         rule_id:       self.ctx.rule_id,
         symbol_count:  self.ctx.sym_len,
       },
-      ParseActionType::Accept => {
-        ParseAction::Accept { production_id: self.ctx.prod_id }
-      }
+      ParseActionType::Accept => ParseAction::Accept { production_id: self.ctx.prod_id },
       ParseActionType::Error => ParseAction::Error {
         last_production: self.ctx.prod_id,
         last_input:      TokenRange {

@@ -13,5 +13,5 @@ inkwell = { git = "https://github.com/TheDan64/inkwell", rev="3c5d7706861aac0750
 [dependencies.sherpa_core]
 path = "../sherpa-core"
 
-[dependencies.sherpa_runtime]
-path = "../sherpa-rust-rt"
+[dependencies.sherpa_rust_runtime]
+path = "../sherpa-rust-runtime"

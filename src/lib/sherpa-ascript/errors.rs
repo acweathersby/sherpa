@@ -1,6 +1,6 @@
 #![allow(unused)]
 use sherpa_core::{parser::AST_Property, *};
-use sherpa_runtime::types::BlameColor;
+use sherpa_rust_runtime::types::BlameColor;
 
 use super::types::{AScriptProp, AScriptStore, AScriptTypeVal, TaggedType};
 use crate::types::*;
@@ -45,27 +45,16 @@ pub(crate) fn add_prop_redefinition_error(
     sources:  vec![
       (
         existing_prop.location.clone(),
-        PathBuf::from(
-          existing_prop.grammar_ref.path.to_string(db.string_store()),
-        ),
-        format!(
-          "First definition with type [{}]",
-          existing_prop.type_val.debug_string()
-        ),
+        PathBuf::from(existing_prop.grammar_ref.path.to_string(db.string_store())),
+        format!("First definition with type [{}]", existing_prop.type_val.debug_string()),
       ),
       (
         new_prop.location.clone(),
         PathBuf::from(new_prop.grammar_ref.path.to_string(db.string_store())),
-        format!(
-          "Second definition with type [{}]",
-          new_prop.type_val.debug_string()
-        ),
+        format!("Second definition with type [{}]", new_prop.type_val.debug_string()),
       ),
     ],
-    msg:      format!(
-      "Redefinition of property {} in struct {}",
-      prop_name, struct_type,
-    ),
+    msg:      format!("Redefinition of property {} in struct {}", prop_name, struct_type,),
     ps_msg:   "".into(),
     severity: SherpaErrorSeverity::Critical,
   });
@@ -263,7 +252,7 @@ pub(crate) fn add_unmatched_prop_error(
 ) {
   j.report_mut().add_error(SherpaError::SourceError {
     id:         "unmatched-valueless-prop",
-    path:         PathBuf::from(rule.g_id.path.clone().to_string(db.string_store())),
+    path:       PathBuf::from(rule.g_id.path.clone().to_string(db.string_store())),
     inline_msg: Default::default(),
     loc:        prop.tok.clone(),
     msg:        format!("This property does nor resolve to a symbol within it's associated rule",),

@@ -4,8 +4,8 @@ use crate::{
   utils::hash_group_btreemap,
   writer::code_writer::CodeWriter,
 };
-use sherpa_runtime::types::bytecode::InputType;
-use std::collections::VecDeque;
+use sherpa_rust_runtime::types::bytecode::InputType;
+use std::collections::{BTreeMap, VecDeque};
 
 pub(crate) fn build_ir<'db: 'follow, 'follow>(
   j: &mut Journal,
@@ -295,12 +295,16 @@ fn add_match_expr<'follow, 'db>(
     } else {
       w = (w + "\nmatch: " + input_type.as_str() + " {").indent();
 
-      for s in &successors {
-        let sym = s.get_symbol();
-        w = w + "\n\n( " + sym.to_state_val(db).to_string() + " ){ ";
+      // Sort successors
+
+      for (state_val, s) in
+        successors.iter().map(|s| (s.get_symbol().to_state_val(db), s)).collect::<BTreeMap<_, _>>()
+      {
+        w = w + "\n\n( " + state_val.to_string() + " ){ ";
         w = w + build_body(s, graph, goto_state_id).join(" then ") + " }";
       }
 
+      // Add skips
       if input_type == InputType::Token {
         let syms =
           successors.iter().map(|s| s.get_symbol().tok_db_key().unwrap()).collect::<Set<_>>();
@@ -343,7 +347,8 @@ fn add_match_expr<'follow, 'db>(
       if !branches.is_empty() {
         w = (w + "\n\ndefault {").indent();
         add_match_expr(w, graph, branches, goto_state_id);
-        w = w.dedent() + "\n}";
+        w = w + " }";
+        w = w.dedent();
       }
 
       w.dedent() + "\n}";

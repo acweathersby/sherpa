@@ -320,7 +320,7 @@ impl<'a> Instruction<'a> {
   /// # Example
   ///
   /// ```
-  /// use sherpa_runtime::types::bytecode::*;
+  /// use sherpa_rust_runtime::types::bytecode::*;
   ///
   /// let bc = [0u8];
   ///
@@ -337,7 +337,7 @@ impl<'a> Instruction<'a> {
   /// # Example
   ///
   /// ```
-  /// use sherpa_runtime::types::bytecode::*;
+  /// use sherpa_rust_runtime::types::bytecode::*;
   ///
   /// let bc = [1u8,1];
   ///
@@ -396,7 +396,7 @@ impl<'a> Instruction<'a> {
   ///
   /// # Example
   /// ```
-  /// use sherpa_runtime::types::bytecode::*;
+  /// use sherpa_rust_runtime::types::bytecode::*;
   ///
   /// let bc = [0u8,0x10,0x32,2, 0x78, 0x56, 0x34, 0x12];
   ///

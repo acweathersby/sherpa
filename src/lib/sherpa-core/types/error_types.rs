@@ -3,7 +3,7 @@ use super::{
   GrammarIdentity,
 };
 use crate::{journal::Journal, types::*};
-use sherpa_runtime::types::Token;
+use sherpa_rust_runtime::types::Token;
 use std::path::PathBuf;
 
 /// This error occurs when a values prop's id does not match any reference
@@ -19,10 +19,7 @@ pub(crate) fn add_invalid_import_source_error(
     loc:        tok.clone(),
     path:       import_path.clone(),
     id:         "invalid-import-source",
-    msg:        format!(
-      "Could not resolve filepath {}",
-      base_path.to_str().unwrap()
-    ),
+    msg:        format!("Could not resolve filepath {}", base_path.to_str().unwrap()),
     inline_msg: "source not found".to_string(),
     severity:   SherpaErrorSeverity::Critical,
     ps_msg:     Default::default(),
@@ -59,16 +56,8 @@ pub fn add_production_redefinition_error(
   j.report_mut().add_error(SherpaError::SourcesError {
     id:       "production-redefinition",
     sources:  vec![
-      (
-        old_loc,
-        grammar_path.clone(),
-        format!("First definition of {} occurs here.", plain_name),
-      ),
-      (
-        new_loc,
-        grammar_path.clone(),
-        format!("Redefinition of {} occurs here.", plain_name),
-      ),
+      (old_loc, grammar_path.clone(), format!("First definition of {} occurs here.", plain_name)),
+      (new_loc, grammar_path.clone(), format!("Redefinition of {} occurs here.", plain_name)),
     ],
     msg:      format!("Redefinition of {} is not allowed", plain_name),
     ps_msg:   Default::default(),
@@ -93,11 +82,7 @@ pub fn add_missing_production_definition_error(
   });
 }
 
-pub fn add_missing_append_host_error(
-  j: &mut Journal,
-  name: String,
-  rules: &[Rule],
-) {
+pub fn add_missing_append_host_error(j: &mut Journal, name: String, rules: &[Rule]) {
   j.report_mut().add_error(SherpaError::SourceError {
     id:         "missing-append-host",
     msg:        format!(

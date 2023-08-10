@@ -164,9 +164,12 @@ pub fn build_compile_db<'a>(
           todo!("Create error for incompatible presence of custom state and regular production with same name")
         }
         _ => {
+          #[cfg(debug_assertions)]
           todo!(
             "Need to warn about a missing production and declare the grammar invalid. {prod_id:?}"
           );
+          todo!();
+          
           j.report_mut().add_error(SherpaError::Text("Unable to find production".into()));
           VALID = false;
           continue;

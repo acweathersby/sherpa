@@ -1,6 +1,6 @@
 use super::*;
 use crate::{utils::create_u64_hash, writer::code_writer::CodeWriter};
-use sherpa_runtime::utf8::lookup_table::CodePointClass;
+use sherpa_rust_runtime::utf8::lookup_table::CodePointClass;
 
 pub const DEFAULT_SYM_ID: u32 = 0xFDEFA017;
 
@@ -211,7 +211,13 @@ impl SymbolId {
         let _ = &mut w + "<non-term-token>";
         &mut w + "[" + precedence.to_string() + "]"
       }
-      Codepoint { val, .. } => &mut w + "cp:" + val.to_string(),
+      Codepoint { val, precedence } => {
+        if precedence > 0 {
+          &mut w + "" + val.to_string() + "{" + precedence.to_string() + "}"
+        } else {
+          &mut w + "" + val.to_string()
+        }
+      }
       DBNonTerminal { key } => &mut w + "nt-idx:" + key.to_string(),
       DBNonTerminalToken { prod_key, precedence, .. } => {
         let _ = &mut w + "nt-ind-tok:" + prod_key.to_string();
@@ -228,5 +234,54 @@ impl SymbolId {
     };
 
     String::from_utf8(w.into_output()).unwrap()
+  }
+
+  pub fn debug_string(&self, db: &ParserDatabase) -> String {
+    use SymbolId::*;
+    let mut w = CodeWriter::new(vec![]);
+    match *self {
+      Undefined => &mut w + "Undefine",
+      Default => &mut w + "Default",
+      EndOfFile { .. } => &mut w + "{EOF}",
+      ClassSpace { .. } => &mut w + "c:sp",
+      ClassHorizontalTab { .. } => &mut w + "c:tab",
+      ClassNewLine { .. } => &mut w + "c:nl",
+      ClassIdentifier { .. } => &mut w + "c:id",
+      ClassNumber { .. } => &mut w + "c:num",
+      ClassSymbol { .. } => &mut w + "c:sym",
+      Token { val, precedence } => {
+        &mut w + "[" + val.to_str(db.string_store()).as_str() + "]" + print_precedence(precedence)
+      }
+      NonTerminalState { id, .. } => &mut w + "non_term_state",
+      NonTerminal { id, .. } => &mut w + "non_term",
+      NonTerminalToken { id, .. } => &mut w + "tk:" + "non_term",
+      Codepoint { val, precedence } => &mut w + "" + val.to_string() + print_precedence(precedence),
+      DBNonTerminal { key } => {
+        let guard_str = db.prod_guid_name_string(key);
+        let name = guard_str.as_str();
+        &mut w + name
+      }
+      DBNonTerminalToken { prod_key, precedence, .. } => {
+        let guard_str = db.prod_guid_name_string(prod_key);
+        &mut w + "tk:" + guard_str + print_precedence(precedence)
+      }
+      DBToken { key: index } => &mut w + db.sym(index).debug_string(db),
+      Char { char, precedence } => {
+        if char < 128 {
+          &mut w + "" + char::from(char).to_string() + print_precedence(precedence)
+        } else {
+          &mut w + "[ char:" + char.to_string() + "]{" + precedence.to_string() + "}"
+        }
+      }
+    };
+    w.to_string()
+  }
+}
+
+fn print_precedence(precedence: u16) -> String {
+  if precedence > 0 {
+    "{".to_string() + &precedence.to_string() + "}"
+  } else {
+    "".to_string()
   }
 }

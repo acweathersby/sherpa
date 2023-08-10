@@ -35,7 +35,7 @@ wasm-bindgen-test = "0.3.34"
 [dependencies.sherpa_core]
 path = "../../lib/sherpa-core"
 
-[dependencies.sherpa_runtime]
+[dependencies.sherpa_rust_runtime]
 path = "../../lib/sherpa-rust-rt"
 
 [profile.release]

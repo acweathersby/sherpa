@@ -8,7 +8,7 @@ authors = ["Anthony Weathersby <acweathersby.codes@gmail.com>"]
 path = "./lib.rs"
 
 [dependencies]
-sherpa_runtime = {path = "../sherpa-rust-rt"}
+sherpa_rust_runtime = {path = "../sherpa-rust-runtime"}
 
 [features]
 

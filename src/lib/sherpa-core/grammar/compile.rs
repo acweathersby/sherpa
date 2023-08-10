@@ -195,7 +195,7 @@ pub fn compile_grammar_from_str(
   let root_id = GrammarIdentity::from_path(&source_path, &soup.string_store);
 
   let g_data = load_from_str(j, source, source_path, soup)?;
-
+  
   compile_grammar_data(j, g_data, soup)
 }
 

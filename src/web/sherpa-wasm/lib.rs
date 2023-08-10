@@ -7,7 +7,7 @@ use sherpa_core::{
   SherpaError,
   SherpaResult,
 };
-use sherpa_runtime::{
+use sherpa_rust_runtime::{
   bytecode::ByteCodeParser,
   types::{
     bytecode,
@@ -49,18 +49,9 @@ impl JSSoup {
   /// Adds a grammar to the soup, or throw's an error
   /// if the grammar is invalid. Returns the grammar
   /// name if successful.
-  pub fn add_grammar(
-    &mut self,
-    grammar: String,
-    path: String,
-  ) -> Result<String, JsError> {
+  pub fn add_grammar(&mut self, grammar: String, path: String) -> Result<String, JsError> {
     let mut j = Journal::new(Default::default());
-    match compile_grammar_from_str(
-      &mut j,
-      grammar.as_str(),
-      path.into(),
-      &self.0,
-    ) {
+    match compile_grammar_from_str(&mut j, grammar.as_str(), path.into(), &self.0) {
       SherpaResult::Ok(g_id) => {
         let soup = &self.0;
         let name = soup
@@ -79,10 +70,7 @@ impl JSSoup {
   }
 
   /// Adds a production targeting a specific grammar
-  pub fn add_production(
-    &mut self,
-    grammar_name: String,
-  ) -> Result<(), JsError> {
+  pub fn add_production(&mut self, grammar_name: String) -> Result<(), JsError> {
     Ok(())
   }
 }
@@ -119,16 +107,12 @@ pub struct JSGrammarParser {
 #[wasm_bindgen]
 impl JSGrammarParser {
   pub fn new(input: String) -> Self {
-    let mut reader =
-      Rc::new(RefCell::new(StringReader::StringReader::new(input)));
+    let mut reader = Rc::new(RefCell::new(StringReader::StringReader::new(input)));
     let other_reader = reader.clone();
     let reader_ptr = reader.borrow_mut();
     Self {
       _reader:         other_reader,
-      bytecode_parser: ByteCodeParser::new(
-        unsafe { &mut *reader_ptr.as_ptr() },
-        &parser::bytecode,
-      ),
+      bytecode_parser: ByteCodeParser::new(unsafe { &mut *reader_ptr.as_ptr() }, &parser::bytecode),
     }
   }
 
@@ -144,24 +128,12 @@ impl JSGrammarParser {
       ParseAction::EndOfInput { current_cursor_offset } => {
         serde_wasm_bindgen::to_value(&JsonParseAction::EndOfInput).unwrap()
       }
-      ParseAction::Shift {
-        token_byte_offset,
-        token_byte_length,
-        token_id,
-        ..
-      } => serde_wasm_bindgen::to_value(&JsonParseAction::Shift {
-        len: token_byte_length,
-      })
-      .unwrap(),
-      ParseAction::Skip {
-        token_byte_offset,
-        token_byte_length,
-        token_id,
-        ..
-      } => serde_wasm_bindgen::to_value(&JsonParseAction::Skip {
-        len: token_byte_length,
-      })
-      .unwrap(),
+      ParseAction::Shift { token_byte_offset, token_byte_length, token_id, .. } => {
+        serde_wasm_bindgen::to_value(&JsonParseAction::Shift { len: token_byte_length }).unwrap()
+      }
+      ParseAction::Skip { token_byte_offset, token_byte_length, token_id, .. } => {
+        serde_wasm_bindgen::to_value(&JsonParseAction::Skip { len: token_byte_length }).unwrap()
+      }
       ParseAction::Reduce { production_id, rule_id, symbol_count } => {
         serde_wasm_bindgen::to_value(&JsonParseAction::Reduce {
           len:     symbol_count,
@@ -179,8 +151,7 @@ impl JSGrammarParser {
 #[wasm_bindgen]
 pub fn get_codemirror_parse_tree(input: String) -> JsValue {
   let mut reader = StringReader::StringReader::new(input);
-  let mut bytecode_parser =
-    ByteCodeParser::<'static, _, u32>::new(&mut reader, &parser::bytecode);
+  let mut bytecode_parser = ByteCodeParser::<'static, _, u32>::new(&mut reader, &parser::bytecode);
   bytecode_parser.init_parser(60);
 
   let mut output = vec![];
@@ -254,12 +225,7 @@ pub enum JsonParseAction {
 }
 
 mod StringReader {
-  use sherpa_runtime::types::{
-    ByteReader,
-    MutByteReader,
-    SharedSymbolBuffer,
-    UTF8Reader,
-  };
+  use sherpa_rust_runtime::types::{ByteReader, MutByteReader, SharedSymbolBuffer, UTF8Reader};
 
   #[derive(Debug, Clone)]
   pub struct StringReader {
@@ -357,10 +323,7 @@ mod StringReader {
 
     #[inline(always)]
     fn get_source(&mut self) -> SharedSymbolBuffer {
-      self
-        .source
-        .get_or_insert(SharedSymbolBuffer::new(Vec::from(self.data.clone())))
-        .clone()
+      self.source.get_or_insert(SharedSymbolBuffer::new(Vec::from(self.data.clone()))).clone()
     }
 
     #[inline(always)]
@@ -370,17 +333,11 @@ mod StringReader {
 
     #[inline(always)]
     fn get_length_data(&self) -> u64 {
-      ((self.codepoint_byte_length() as u64) << 32)
-        | self.codepoint_length() as u64
+      ((self.codepoint_byte_length() as u64) << 32) | self.codepoint_length() as u64
     }
 
     #[inline(always)]
-    fn set_cursor_to(
-      &mut self,
-      off: usize,
-      line_num: u32,
-      line_off: u32,
-    ) -> u64 {
+    fn set_cursor_to(&mut self, off: usize, line_num: u32, line_off: u32) -> u64 {
       if self.cursor != off {
         let diff = off as i32 - self.cursor as i32;
 

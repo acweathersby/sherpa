@@ -31,7 +31,7 @@ pub fn disassemble_parse_block<'a>(
         let len = i.len() - str_start;
         let index = i.address() + str_start;
         let bytes = bc[index..index + len].to_vec();
-        let sym = format!("\ndebug: {}", unsafe { String::from_utf8_unchecked(bytes) });
+        let sym = format!("{}: {}", dh(i.address()), unsafe { String::from_utf8_unchecked(bytes) });
         (sym, i.next())
       }
 

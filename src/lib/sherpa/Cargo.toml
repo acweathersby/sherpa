@@ -18,7 +18,7 @@ path = "../sherpa-bytecode"
 [dependencies.sherpa_llvm]
 path = "../sherpa-llvm"
 
-[dependencies.sherpa_proc]
-path = "../sherpa-proc"
+[dependencies.sherpa_rust_build]
+path = "../sherpa-rust-build"
 
 

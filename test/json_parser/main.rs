@@ -1,5 +1,5 @@
 use json_test_parser::*;
-use sherpa_runtime::types::{ParseAction, UTF8StringReader};
+use sherpa_rust_runtime::types::{ParseAction, UTF8StringReader};
 use std::time::Instant;
 pub fn main() {
   let mut messages = Vec::<String>::with_capacity(10);

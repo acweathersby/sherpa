@@ -5,6 +5,7 @@ use crate::{
   compile_grammar_from_str,
   compile_parse_states,
   garbage_collect,
+  optimize,
   Config,
   GrammarSoup,
   Journal,
@@ -37,7 +38,7 @@ pub fn build_parse_states_from_source_str<'a, T>(
   build_parse_db_from_source_str(source, source_path, config, &|DBPackage { journal, db, soup }| {
     let states = compile_parse_states(journal.transfer(), &db)?;
 
-    let states = garbage_collect::<ParseStatesVec>(&db, states)?;
+    let states = optimize::<ParseStatesVec>(&db, states)?;
 
     test_fn(TestPackage { journal, states, db: &db, soup: &soup })
   })

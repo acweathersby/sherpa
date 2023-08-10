@@ -80,11 +80,15 @@ pub fn compile_parse_states<'db>(
       .flat_map(|s| Items::start_items(s.prod_id, db).to_origin(Origin::TokenGoal(s.tok_id)))
       .collect::<Array<_>>();
 
+    //    start_items.__debug_print__("Scanner Items");
+
     let graph = build_graph(&mut j, GraphMode::Scanner, start_items, db, &follow).unwrap();
 
     let ir = build_ir(&mut j, &graph, scanner).unwrap();
-
+    // println!("{}", graph.debug_string());
     for state in ir {
+      //  println!("{} {}", state.name.to_str(db.string_store()).as_str(),
+      // state.code);
       states.insert(state.name, state);
     }
   }
