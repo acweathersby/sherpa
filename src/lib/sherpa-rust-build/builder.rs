@@ -1174,7 +1174,9 @@ pub(crate) fn create_rust_writer_utils<'a>(
     expr: &|u, ast, rule, _, type_slot| {
       if let ASTNode::AST_IndexReference(box AST_IndexReference { value, .. }) = ast {
         match get_indexed_body_ref(rule, (*value - 1) as usize) {
-          Some((sym_id, _, index)) => render_body_symbol(u, &sym_id, u.store, index, type_slot),
+          Some(SymbolRef { id, index, .. }) => {
+            render_body_symbol(u, &id, u.store, index, type_slot)
+          }
           None => None,
         }
       } else {
@@ -1186,7 +1188,9 @@ pub(crate) fn create_rust_writer_utils<'a>(
     expr: &|u, ast, rule, _, type_slot| {
       if let ASTNode::AST_NamedReference(box AST_NamedReference { value, .. }) = ast {
         match get_named_body_ref(u.db, rule, value) {
-          Some((sym_id, _, index)) => render_body_symbol(u, &sym_id, u.store, index, type_slot),
+          Some(SymbolRef { id, index, .. }) => {
+            render_body_symbol(u, &id, u.store, index, type_slot)
+          }
           None => None,
         }
       } else {

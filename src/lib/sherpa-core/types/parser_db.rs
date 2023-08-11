@@ -11,6 +11,7 @@ use super::{
   Rule,
   Set,
   SymbolId,
+  SymbolRef,
 };
 use std::{
   collections::{hash_map, HashMap, VecDeque},
@@ -305,7 +306,7 @@ fn construct_follow(
   for (rule_id, rule) in rules.iter().enumerate() {
     if !rule.rule.symbols.is_empty() {
       let last = rule.rule.symbols.len() - 1;
-      for (sym_off, (sym, ..)) in rule.rule.symbols.iter().enumerate() {
+      for (sym_off, SymbolRef { id: sym, .. }) in rule.rule.symbols.iter().enumerate() {
         match sym {
           SymbolId::DBNonTerminalToken { prod_key, .. } if rule.is_scanner => {
             let val = follow_items[prod_key.0 as usize].get_or_insert(vec![]);

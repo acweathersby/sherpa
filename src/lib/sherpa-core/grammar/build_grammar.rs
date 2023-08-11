@@ -57,7 +57,7 @@ impl<'b> ProductionData<'b> {
 pub struct GrammarData {
   pub id: GrammarIdentity,
   pub imports: Map<IString, GrammarIdentity>,
-  pub exports: Array<(IString, ProductionId)>,
+  pub exports: Array<(IString, (ProductionId, Token))>,
   pub global_skipped: Array<ASTNode>,
   pub grammar: Box<Grammar>,
 }
@@ -99,7 +99,7 @@ pub fn create_grammar_data(
   for preamble in &grammar.preamble {
     match preamble {
       ASTNode::Import(import) => {
-        let box parser::Import { reference, uri, tok } = import;
+        let box parser::Import { reference, uri, .. } = import;
         let path = PathBuf::from(uri);
 
         match resolve_grammar_path(&path, &source_dir, &EXTENSIONS) {
@@ -155,13 +155,15 @@ pub fn create_grammar_data(
   if exports.is_empty() != true {
     for export in exports {
       let prod_id = get_production_id_from_ast_node(&g_data, &export.production)?;
-      g_data.exports.push((export.reference.intern(string_store), prod_id));
+      g_data
+        .exports
+        .push((export.reference.intern(string_store), (prod_id, export.production.to_token())));
     }
   } else {
     // Use the fist declared production as the default entry
     let prod = &g_data.grammar.productions[0];
     let prod_id = get_production_id_from_ast_node(&g_data, &prod)?;
-    g_data.exports.push(("default".intern(string_store), prod_id));
+    g_data.exports.push(("default".intern(string_store), (prod_id, prod.to_token())));
   }
 
   SherpaResult::Ok(g_data)
@@ -344,6 +346,15 @@ pub fn process_production<'a>(
     process_rule(&mut production, rule, g_data, s_store)?;
   }
 
+  for rule in &production.rules {
+    if rule.symbols.is_empty() {
+      panic!(
+        "{}",
+        rule.tok.blame(1, 1, &format!("Rules that can derive the empty rule `{} => ε` are currently not allowed in Sherpa Grammars!", production.friendly_name.to_str(s_store).as_str()) , None)
+      )
+    }
+  }
+
   SherpaResult::Ok(production)
 }
 
@@ -404,7 +415,7 @@ fn process_rule_symbols(
     // symbol.
     is_optional.then(|| rules.append(&mut rules.clone()));
 
-    let sym = match sym_atom.unwrap() {
+    let (sym, tok) = match sym_atom.unwrap() {
       ASTNode::NotEmptySet(set) => {
         let mut pending_rules = vec![];
 
@@ -498,7 +509,7 @@ fn process_rule_symbols(
           for pending_rule in &mut p {
             // The last symbol in each of these new bodies is set
             // with the original symbol id
-            pending_rule.symbols.last_mut()?.2 = *index;
+            pending_rule.symbols.last_mut()?.index = *index;
             for rule in &mut rules[original_bodies.clone()] {
               let mut new_rule = rule.clone();
               new_rule.symbols.extend(pending_rule.symbols.iter().cloned());
@@ -543,7 +554,7 @@ fn process_rule_symbols(
             rules: sub_prod_rules,
           }));
 
-          id.as_sym()
+          (id.as_sym(), group.tok.clone())
         }
       }
       ASTNode::List_Production(box parser::List_Production {
@@ -580,8 +591,14 @@ fn process_rule_symbols(
         // to the beginning of each rule, making the
         // resulting list production left recursive.
         for rule in &mut rules {
-          rule.symbols.insert(0, (sym, annotation.intern(s_store), 0));
-          for (i, (_, _, index)) in rule.symbols.iter_mut().enumerate() {
+          rule.symbols.insert(0, SymbolRef {
+            id:         sym,
+            annotation: annotation.intern(s_store),
+            tok:        tok.clone(),
+            index:      0,
+          });
+
+          for (i, SymbolRef { index, .. }) in rule.symbols.iter_mut().enumerate() {
             *index = i;
           }
         }
@@ -609,13 +626,18 @@ fn process_rule_symbols(
           rules,
         }));
 
-        sym
+        (sym, tok.clone())
       }
-      _ => record_symbol(sym, precedence as u16, p_data, g_data, s_store)?,
+      sym_atom => (record_symbol(sym, precedence as u16, p_data, g_data, s_store)?, sym_atom.to_token()),
     };
 
     for rule in &mut rules[original_bodies] {
-      rule.symbols.push((sym, annotation.intern(s_store), *index));
+      rule.symbols.push(SymbolRef {
+        id:         sym,
+        annotation: annotation.intern(s_store),
+        tok:        tok.clone(),
+        index:      *index,
+      });
     }
   }
 
@@ -627,13 +649,6 @@ fn process_rule_symbols(
 
   for rule in &mut rules {
     rule.skipped = skipped_symbols.clone();
-
-    if rule.symbols.is_empty() {
-      panic!(
-        "{}",
-        rule.tok.blame(1, 1, &format!("Rules that can derive the empty rule `{} => ε` are currently not allowed in Sherpa Grammars!", p_data.root_f_name.to_str(s_store).as_str()) , None)
-      )
-    }
   }
 
   p_data.rules.append(&mut rules);

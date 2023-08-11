@@ -52,6 +52,7 @@ pub use types::{
   SubProduction,
   SubProductionType,
   SymbolId,
+  SymbolRef,
 };
 
 pub use utils::{create_u64_hash as hash_id_value_u64, hash_group_btreemap};

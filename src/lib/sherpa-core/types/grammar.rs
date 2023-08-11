@@ -125,11 +125,31 @@ pub struct ProductionRef(u32);
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct TokenProductionRef(u32);
 
+#[derive(Clone, Default)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub struct SymbolRef {
+  pub id:         SymbolId,
+  pub annotation: IString,
+  pub tok:        Token,
+  pub index:      usize,
+}
+
+impl Hash for SymbolRef {
+  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    //`tok` is ignored since it does not contribute to
+    // the uniqueness of a symbol.
+
+    self.id.hash(state);
+    self.annotation.hash(state);
+    self.index.hash(state);
+  }
+}
+
 #[derive(Clone)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct Rule {
   /// A list of [SymbolId]s and their position within the source grammar
-  pub symbols: Array<(SymbolId, IString, usize)>,
+  pub symbols: Array<SymbolRef>,
   pub skipped: Array<SymbolId>,
   pub ast:     Option<ASTToken>,
   pub tok:     Token,
@@ -265,7 +285,7 @@ pub struct GrammarHeader {
   /// Productions that are accessible as entry points to this
   /// grammar. Contains the global id of the public production
   /// and its export name.
-  pub pub_prods: Map<IString, ProductionId>,
+  pub pub_prods: Map<IString, (ProductionId, Token)>,
 
   pub imports: Array<GrammarId>,
 }

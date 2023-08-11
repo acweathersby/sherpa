@@ -989,7 +989,10 @@ pub fn get_ascript_export_data(
             value: ASCRIPT_FIRST_NODE_ID.to_string(),
           })),
           &Rule {
-            symbols: vec![(SymbolId::DBNonTerminal { key: *prod_key }, Default::default(), 0)],
+            symbols: vec![SymbolRef {
+              id: SymbolId::DBNonTerminal { key: *prod_key },
+              ..Default::default()
+            }],
             g_id:    db.rule(db.prod_rules(*prod_key).unwrap()[0]).g_id,
             skipped: Default::default(),
             tok:     Default::default(),

@@ -235,6 +235,7 @@ impl Display for SherpaError {
     }
   }
 }
+
 #[derive(Default)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct ErrorGroups {

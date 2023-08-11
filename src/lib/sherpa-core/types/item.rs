@@ -198,7 +198,7 @@ impl<'db> Item<'db> {
     if self.is_complete() {
       false
     } else {
-      match self.rule().symbols[self.sym_index as usize].0 {
+      match self.rule().symbols[self.sym_index as usize].id {
         SymbolId::NonTerminal { .. } | SymbolId::DBNonTerminal { .. } => true,
         _ => false,
       }
@@ -210,7 +210,7 @@ impl<'db> Item<'db> {
     if self.is_complete() {
       SymbolId::EndOfFile { precedence: 0 }
     } else {
-      self.rule().symbols[self.sym_index as usize].0
+      self.rule().symbols[self.sym_index as usize].id
     }
   }
 
@@ -242,9 +242,9 @@ impl<'db> Item<'db> {
   /// precedence of the last symbol if the ItemRef is complete.
   pub fn precedence(&self) -> u16 {
     if self.is_complete() {
-      self.rule().symbols[(self.sym_index - 1) as usize].0.precedence()
+      self.rule().symbols[(self.sym_index - 1) as usize].id.precedence()
     } else {
-      self.rule().symbols[self.sym_index as usize].0.precedence()
+      self.rule().symbols[self.sym_index as usize].id.precedence()
     }
   }
 
@@ -277,14 +277,14 @@ impl<'db> Item<'db> {
 
       string += " >";
 
-      for (index, (sym, ..)) in rule.symbols.iter().enumerate() {
+      for (index, SymbolRef { id, .. }) in rule.symbols.iter().enumerate() {
         if index == self.sym_index as usize {
           string += " •";
         }
 
         string += " ";
 
-        string += &sym.debug_string(self.db)
+        string += &id.debug_string(self.db)
       }
 
       if self.is_complete() {

@@ -30,4 +30,4 @@ NAME json
 
 <> string > "\"" ( c:id | c:sym | c:num | c:sp | c:nl | escaped )(*) "\""
 
-<> escaped > "\\" ( c:id | c:sym | c:num | c:sp | c:nl )
+<> escaped > "\\"{9999} ( c:id | c:sym | c:num | c:sp | c:nl )

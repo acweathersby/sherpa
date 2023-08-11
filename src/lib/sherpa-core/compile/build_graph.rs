@@ -723,11 +723,7 @@ fn resolve_conflicting_symbols<'db, 'follow>(
       Defined => {
         if groups.len() > 1 {
           #[cfg(debug_assertions)]
-          panic!(
-            "Found {} conflicting Defined symbols. Grammar is ambiguous:\n{}",
-            groups.len(),
-            graph.debug_string()
-          );
+          panic!("Found {} conflicting Defined symbols. Grammar is ambiguous:\n", groups.len());
           #[cfg(not(debug_assertions))]
           panic!()
         } else {

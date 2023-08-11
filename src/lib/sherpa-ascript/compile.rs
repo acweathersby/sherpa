@@ -121,7 +121,7 @@ fn gather_ascript_info_from_grammar(
         }
       }
     } else {
-      match rule.rule.symbols.last().unwrap().0 {
+      match rule.rule.symbols.last().unwrap().id {
         SymbolId::DBNonTerminal { key: id } => add_production_type(prod_types, &rule, TaggedType {
           type_:        AScriptTypeVal::UnresolvedProduction(id),
           tag:          rule_id,
@@ -742,7 +742,7 @@ pub fn compile_expression_type(
 
 /// A rule symbols and it's offset based on a reference value
 /// e.g `$name` or `$3`
-type RefResult = Option<(SymbolId, IString, usize)>;
+type RefResult = Option<SymbolRef>;
 
 fn convert_ref_result(
   ref_result: RefResult,
@@ -753,7 +753,7 @@ fn convert_ref_result(
   use AScriptTypeVal::*;
   let rule = db.rule(rule_id);
   match ref_result {
-    Some((id, _, index)) => match id {
+    Some(SymbolRef { id, index, .. }) => match id {
       SymbolId::DBNonTerminal { key } => match store.prod_types.get(&key) {
         Some(types) => types
           .keys()
@@ -1116,7 +1116,7 @@ pub fn get_body_symbol_reference<'a>(
 ///
 /// Returns `None` if the index is greater then the number of symbols.  
 pub fn get_indexed_body_ref(rule: &Rule, i: usize) -> RefResult {
-  rule.symbols.iter().filter(|(_, _, original_index)| *original_index == i).last().cloned()
+  rule.symbols.iter().filter(|sym_ref| sym_ref.index == i).last().cloned()
 }
 
 pub fn get_named_body_ref(db: &ParserDatabase, rule: &Rule, val: &str) -> RefResult {
@@ -1125,12 +1125,13 @@ pub fn get_named_body_ref(db: &ParserDatabase, rule: &Rule, val: &str) -> RefRes
   } else if val == ASCRIPT_LAST_NODE_ID {
     Some(rule.symbols.last().unwrap().clone())
   } else {
-    match rule.symbols.iter().filter(|(_, a, _)| *a == val.to_token()).last() {
-      Some(result) => Some(*result),
+    match rule.symbols.iter().filter(|SymbolRef { annotation: a, .. }| *a == val.to_token()).last()
+    {
+      Some(result) => Some(result.clone()),
       _ => rule
         .symbols
         .iter()
-        .filter_map(|sym| match sym.0 {
+        .filter_map(|sym| match sym.id {
           SymbolId::DBNonTerminal { key } => {
             (db.prod_friendly_name(key) == val.to_token()).then(|| sym)
           }
