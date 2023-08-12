@@ -232,7 +232,7 @@ pub fn build_compile_db<'a>(
           .flat_map(|mut r| {
             r.symbols.remove(0);
             let rule_a = r.clone();
-            r.symbols.push(SymbolRef { id: prime_id.as_tok_sym(), index:0, ..Default::default() });
+            r.symbols.push(SymbolRef { id: prime_id.as_tok_sym(), index: 0, ..Default::default() });
             [rule_a, r]
           })
           .collect();
@@ -242,7 +242,11 @@ pub fn build_compile_db<'a>(
             .clone()
             .into_iter()
             .map(|mut r| {
-              r.symbols.push(SymbolRef { id: prime_id.as_tok_sym(), index:0, ..Default::default() });
+              r.symbols.push(SymbolRef {
+                id: prime_id.as_tok_sym(),
+                index: 0,
+                ..Default::default()
+              });
               r
             })
             .collect(),

@@ -446,7 +446,7 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
     }
   }
 
-  // Writes a single stmt string on a new line.
+  /// Writes a single stmt string on a new line.
   pub fn stmt(&mut self, stmt: String) -> SherpaResult<()> {
     self.writer.write_line(&stmt)?;
     SherpaResult::Ok(())

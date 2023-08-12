@@ -1071,8 +1071,8 @@ fn handle_completed_item<'db, 'follow>(
   graph_state: GraphState,
 ) -> SherpaResult<()> {
   let is_scan = graph.is_scan();
-  // Determine if origin contains GOTO.
 
+  // Determine if origin contains GOTOs.
   match (completed_item.origin, is_scan) {
     (Origin::GoalCompleteOOS, ..) => {
       let state = graph.create_state(sym, StateType::ProductionCompleteOOS, Some(parent), vec![]);
@@ -1081,8 +1081,6 @@ fn handle_completed_item<'db, 'follow>(
     // Completion of parse tree may be premature
     // or item is not an acceptable completed item
     (_, true) => {
-      //let (follow, completed_set) = get_follow(j, graph, completed_item,
-      // is_scan)?;
       let (follow, completed_items): (Vec<Items>, Vec<Items>) =
         completed_items.into_iter().map(|i| get_follow(j, graph, i).unwrap()).unzip();
       let follow = follow.into_iter().flatten().collect::<Items>();
