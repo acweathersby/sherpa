@@ -159,7 +159,7 @@ pub struct Rule {
   pub skipped: Array<SymbolId>,
   pub ast:     Option<ASTToken>,
   pub tok:     Token,
-  pub g_id:    GrammarIdentity,
+  pub g_id:    GrammarIdentities,
 }
 
 /// A reference to some Ascript AST data that is either automatically generated
@@ -287,7 +287,7 @@ impl SubProductionType {
 /// Data from a single grammar source file
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct GrammarHeader {
-  pub identity:  GrammarIdentity,
+  pub identity:  GrammarIdentities,
   /// Productions that are accessible as entry points to this
   /// grammar. Contains the global id of the public production
   /// and its export name.
@@ -318,7 +318,7 @@ pub enum ProductionType {
 /// Set of identifiers for a single grammar source
 #[derive(Default, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(debug_assertions, derive(Debug))]
-pub struct GrammarIdentity {
+pub struct GrammarIdentities {
   /// A globally unique identifier for this GrammarStore instance. Derived
   /// from the source path. Assumes the source path is an absolute path
   /// to a grammar source file.
@@ -336,7 +336,7 @@ pub struct GrammarIdentity {
   pub path: IString,
 }
 
-impl GrammarIdentity {
+impl GrammarIdentities {
   pub fn from_path(grammar_source_path: &PathBuf, string_store: &IStringStore) -> Self {
     Self {
       guid: grammar_source_path.into(),

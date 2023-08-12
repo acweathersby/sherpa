@@ -129,7 +129,7 @@ fn main() -> SherpaResult<()> {
             .await;
       }
 
-      let id: sherpa_core::GrammarIdentity = id?;
+      let id: sherpa_core::GrammarIdentities = id?;
 
       let db = build_compile_db(j.transfer(), id, &soup)?;
 

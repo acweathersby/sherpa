@@ -55,15 +55,15 @@ impl<'b> ProductionData<'b> {
 /// Intermediate structure to host grammar data during
 /// construction.
 pub struct GrammarData {
-  pub id: GrammarIdentity,
-  pub imports: Map<IString, GrammarIdentity>,
+  pub id: GrammarIdentities,
+  pub imports: Map<IString, GrammarIdentities>,
   pub exports: Array<(IString, (ProductionId, Token))>,
   pub global_skipped: Array<ASTNode>,
   pub grammar: Box<Grammar>,
 }
 
 pub fn convert_grammar_data_to_header(
-  import_id: GrammarIdentity,
+  import_id: GrammarIdentities,
   g_data: GrammarData,
 ) -> Box<GrammarHeader> {
   let mut identity = import_id;
@@ -106,7 +106,7 @@ pub fn create_grammar_data(
           SherpaResult::Ok(path) => {
             imports.insert(
               reference.intern(string_store),
-              GrammarIdentity::from_path(&path, string_store),
+              GrammarIdentities::from_path(&path, string_store),
             );
           }
           _ => {
@@ -139,7 +139,7 @@ pub fn create_grammar_data(
     }
   }
   let mut g_data = GrammarData {
-    id: GrammarIdentity {
+    id: GrammarIdentities {
       guid: grammar_path.into(),
       name: grammar_guid_name(name, grammar_path, string_store),
       path: grammar_path.intern(string_store),
@@ -628,7 +628,9 @@ fn process_rule_symbols(
 
         (sym, tok.clone())
       }
-      sym_atom => (record_symbol(sym, precedence as u16, p_data, g_data, s_store)?, sym_atom.to_token()),
+      sym_atom => {
+        (record_symbol(sym, precedence as u16, p_data, g_data, s_store)?, sym_atom.to_token())
+      }
     };
 
     for rule in &mut rules[original_bodies] {
@@ -785,7 +787,9 @@ fn get_production_id_from_ast_node(g_data: &GrammarData, node: &ASTNode) -> Opti
       let ref_name = prod.module.to_token();
 
       match g_data.imports.get(&ref_name) {
-        Some(GrammarIdentity { guid, .. }) => Some(ProductionId::from((*guid, prod.name.as_str()))),
+        Some(GrammarIdentities { guid, .. }) => {
+          Some(ProductionId::from((*guid, prod.name.as_str())))
+        }
         _ => None,
       }
     }

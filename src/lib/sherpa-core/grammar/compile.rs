@@ -19,13 +19,13 @@ use std::{
 
 async fn import_grammars(
   j: &mut Journal,
-  imports: Vec<GrammarIdentity>,
+  imports: Vec<GrammarIdentities>,
   spawner: &Spawner<SherpaResult<()>>,
   grammar_cloud: &GrammarSoup,
 ) -> SherpaResult<()> {
   #[derive(Clone, Copy)]
   enum Task {
-    Todo(GrammarIdentity),
+    Todo(GrammarIdentities),
     Complete,
   }
 
@@ -57,7 +57,7 @@ async fn import_grammars(
             let mut j = j.transfer();
             let task = ThreadedFuture::new(
               async move {
-                let GrammarIdentity { guid, name, path } = import_id;
+                let GrammarIdentities { guid, name, path } = import_id;
 
                 let grammar_source_path = PathBuf::from(path.to_str(&g_c.string_store).as_str());
 
@@ -124,7 +124,7 @@ pub fn compile_grammar_data(
   j: &mut Journal,
   g_data: GrammarData,
   g_c: &GrammarSoup,
-) -> SherpaResult<GrammarIdentity> {
+) -> SherpaResult<GrammarIdentities> {
   let id = g_data.id;
 
   let (mut prods, mut parse_states) = extract_productions(j, &g_data, &g_c.string_store)?;
@@ -191,11 +191,11 @@ pub fn compile_grammar_from_str(
   source: &str,
   source_path: PathBuf,
   soup: &GrammarSoup,
-) -> SherpaResult<GrammarIdentity> {
-  let root_id = GrammarIdentity::from_path(&source_path, &soup.string_store);
+) -> SherpaResult<GrammarIdentities> {
+  let root_id = GrammarIdentities::from_path(&source_path, &soup.string_store);
 
   let g_data = load_from_str(j, source, source_path, soup)?;
-  
+
   compile_grammar_data(j, g_data, soup)
 }
 
@@ -205,8 +205,8 @@ pub async fn compile_grammars_from_path(
   grammar_source_path: PathBuf,
   grammar_cloud: &GrammarSoup,
   spawner: &Spawner<SherpaResult<()>>,
-) -> SherpaResult<GrammarIdentity> {
-  let root_id = GrammarIdentity::from_path(&grammar_source_path, &grammar_cloud.string_store);
+) -> SherpaResult<GrammarIdentities> {
+  let root_id = GrammarIdentities::from_path(&grammar_source_path, &grammar_cloud.string_store);
 
   let imports = vec![root_id];
 

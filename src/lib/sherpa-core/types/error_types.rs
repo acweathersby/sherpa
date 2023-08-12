@@ -1,6 +1,6 @@
 use super::{
   super::parser::{Import, Production_Import_Symbol},
-  GrammarIdentity,
+  GrammarIdentities,
 };
 use crate::{journal::Journal, types::*};
 use sherpa_rust_runtime::types::Token;
@@ -28,7 +28,7 @@ pub(crate) fn add_invalid_import_source_error(
 
 pub fn create_missing_import_name_error(
   j: &mut Journal,
-  g: &GrammarIdentity,
+  g: &GrammarIdentities,
   s_store: &IStringStore,
   prod_import_sym: &Production_Import_Symbol,
 ) {
@@ -68,7 +68,7 @@ pub fn add_production_redefinition_error(
 pub fn add_missing_production_definition_error(
   j: &mut Journal,
   tok: Token,
-  g_id: &GrammarIdentity,
+  g_id: &GrammarIdentities,
   s_store: &IStringStore,
 ) {
   j.report_mut().add_error(SherpaError::SourceError {
@@ -110,8 +110,8 @@ expression, e.g: `<> {0} > symA ... symN`
 
 pub fn add_non_existent_import_production_error(
   j: &mut Journal,
-  import_id: &GrammarIdentity,
-  host_id: &GrammarIdentity,
+  import_id: &GrammarIdentities,
+  host_id: &GrammarIdentities,
   tok: Token,
   s_store: &IStringStore,
 ) {

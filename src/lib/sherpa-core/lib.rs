@@ -38,7 +38,7 @@ pub use types::{
   EntryPoint,
   GrammarHeader,
   GrammarId,
-  GrammarIdentity,
+  GrammarIdentities,
   GrammarSoup,
   IString,
   IStringStore,

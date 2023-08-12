@@ -527,7 +527,7 @@ pub struct AScriptProp {
   pub type_val:    TaggedType,
   pub location:    Token,
   /// The grammar the property is defined in.
-  pub grammar_ref: GrammarIdentity,
+  pub grammar_ref: GrammarIdentities,
   /// Tracks the number of times this property has been
   /// declared in a struct.
   pub rule_ids:    BTreeSet<DBRuleKey>,

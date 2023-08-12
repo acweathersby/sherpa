@@ -10,7 +10,7 @@ use std::collections::{hash_map, VecDeque};
 
 pub fn build_compile_db<'a>(
   mut j: Journal,
-  g: GrammarIdentity,
+  g: GrammarIdentities,
   gs: &'a GrammarSoup,
 ) -> SherpaResult<ParserDatabase> {
   // Gain read access to all parts of the GrammarCloud.
