@@ -1,14 +1,6 @@
-function getTop(ele: HTMLElement | null) {
-    let top = 0;
-
-    while (ele) {
-        top += ele.offsetTop;
-        ele = ele.parentElement;
-    }
-
-    return top;
-}
-
+/**
+ * A custom scrollbar implementation
+ */
 
 export class ScrollHandler {
     private ele?: HTMLElement;
@@ -31,8 +23,6 @@ export class ScrollHandler {
 
     private bound_handle_wheel: (evnt: any) => void;
     private bound_handle_scroll: (evnt: any) => void;
-
-
 
 
     constructor(ele: HTMLElement, scroll_host: HTMLElement = ele) {
@@ -216,4 +206,15 @@ export class ScrollHandler {
         this.set_handle_pos_diff(Math.sign(e.deltaY) * 50 * this.scroll_box_ratio);
     }
 
+}
+
+function getTop(ele: HTMLElement | null) {
+    let top = 0;
+
+    while (ele) {
+        top += ele.offsetTop;
+        ele = ele.parentElement;
+    }
+
+    return top;
 }

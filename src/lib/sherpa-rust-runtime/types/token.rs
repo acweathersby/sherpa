@@ -171,11 +171,6 @@ impl Token {
     self.input = Some(source);
   }
 
-  pub fn get_line_char(&mut self) -> usize {
-    if let Some(..) = self.input.clone() {}
-    0
-  }
-
   pub fn trim(&self, trim_head: u32, trim_tail: u32) -> Token {
     Token {
       inner: self.inner.trim(trim_head, trim_tail),

@@ -82,23 +82,13 @@ impl Journal {
   /// Sets the active report to `report_type`, optionally creating a new report
   /// of that type if one does not already exists. Returns the previously set
   /// ReportType.
-  pub fn set_active_report(
-    &mut self,
-    report_name: &str,
-    report_type: ReportType,
-  ) -> ReportType {
-    fn set_report(
-      p: &mut ScratchPad,
-      n: &str,
-      t: ReportType,
-    ) -> Option<Box<Report>> {
+  pub fn set_active_report(&mut self, report_name: &str, report_type: ReportType) -> ReportType {
+    fn set_report(p: &mut ScratchPad, n: &str, t: ReportType) -> Option<Box<Report>> {
       match p.reports.contains_key(&t) {
         true => p.reports.remove(&t),
-        false => Some(Box::new(Report {
-          name: n.to_string(),
-          report_type: t,
-          ..Default::default()
-        })),
+        false => {
+          Some(Box::new(Report { name: n.to_string(), report_type: t, ..Default::default() }))
+        }
       }
     }
 
@@ -119,11 +109,7 @@ impl Journal {
   /// loaded. Closure is only called if matching reports can be found.
   ///
   /// Returns `true` if any reports where matched
-  pub fn get_report<T: Fn(&Report) -> bool>(
-    &self,
-    report_type: ReportType,
-    closure: T,
-  ) -> bool {
+  pub fn get_report<T: Fn(&Report) -> bool>(&self, report_type: ReportType, closure: T) -> bool {
     let mut matching_reports = false;
     for report in self.scratch_pad.reports.values() {
       if report.type_matches(report_type) {
@@ -153,11 +139,7 @@ impl Journal {
 
   /// Retrieves all reports that match the `report_type` and calls `closure` for
   /// each one, passing in the matched report as a reference.
-  pub fn get_reports<T: FnMut(&Report)>(
-    &self,
-    report_type: ReportType,
-    mut closure: T,
-  ) {
+  pub fn get_reports<T: FnMut(&Report)>(&self, report_type: ReportType, mut closure: T) {
     for report in self.scratch_pad.reports.values() {
       if report.type_matches(report_type) {
         closure(report);
@@ -221,13 +203,7 @@ impl Journal {
       let printed_mut = &mut printed;
       self.get_reports(discriminant, move |report| {
         (*printed_mut) |= true;
-        println!(
-          "\n{:=<80}\nReport [{}] \n{}\n{:=<80}",
-          "",
-          report.name,
-          report.debug_string(),
-          ""
-        )
+        println!("\n{:=<80}\nReport [{}] \n{}\n{:=<80}", "", report.name, report.debug_string(), "")
       })
     }
 
@@ -286,11 +262,8 @@ impl Journal {
   /// Returns true if any error in any report has a matching `severity`
   pub fn have_errors_of_type(&self, severity: SherpaErrorSeverity) -> bool {
     if !self.report().have_errors_of_type(severity) {
-      for (_, report) in self
-        .scratch_pad
-        .reports
-        .iter()
-        .chain(self.global_pad.read().unwrap().reports.iter())
+      for (_, report) in
+        self.scratch_pad.reports.iter().chain(self.global_pad.read().unwrap().reports.iter())
       {
         if report.have_errors_of_type(severity) {
           return true;
@@ -363,10 +336,7 @@ impl Debug for Timing {
     if let Some(end) = self.end {
       f.write_fmt(format_args!("{:?}", (end - self.start)))
     } else {
-      f.write_fmt(format_args!(
-        "Started {:?} ago",
-        (Instant::now() - self.start)
-      ))
+      f.write_fmt(format_args!("Started {:?} ago", (Instant::now() - self.start)))
     }
   }
 }

@@ -16,7 +16,9 @@ pub fn build_compile_db<'a>(
   // Gain read access to all parts of the GrammarCloud.
   // We don't want anything changing during these next steps.
 
-  let mut VALID = true;
+  j.set_active_report("DBCompile", crate::ReportType::GrammarCompile(g.guid));
+
+  let mut is_valid = true;
 
   let GrammarSoup { grammar_headers, productions, string_store: s_store, custom_states, .. } = gs;
 
@@ -164,24 +166,29 @@ pub fn build_compile_db<'a>(
           add_custom_state(state.state.clone(), c_states);
         }
         (Some(_), Some(_)) => {
-          todo!("Create error for incompatible presence of custom state and regular production with same name")
+          j.report_mut().add_error(SherpaError::Text(
+            "Cannot resolve grammar that has production definitions and state definitions with the same name: ".to_string() + &name.to_string(),
+          ));
+          is_valid = false;
         }
         _ => {
-          #[cfg(debug_assertions)]
-          todo!(
-            "Need to warn about a missing production and declare the grammar invalid. {prod_id:?}"
-          );
-          todo!();
-
-          j.report_mut().add_error(SherpaError::Text("Unable to find production".into()));
-          VALID = false;
-          continue;
+          let r = name.get_range();
+          j.report_mut().add_error(SherpaError::Text(
+            "Cannot find definition for production [".to_string()
+              + &name.to_string()
+              + "] ("
+              + &r.start_line.to_string()
+              + ", "
+              + &r.start_column.to_string()
+              + ")",
+          ));
+          is_valid = false;
         }
       };
     }
   }
 
-  if !VALID {
+  if !is_valid {
     return SherpaResult::None;
   }
 

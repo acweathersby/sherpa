@@ -16,7 +16,7 @@ sherpa_rust_runtime = {path = "../sherpa-rust-runtime"}
 # have been built for the current platform before it can be used.
 sherpa-binary-parser = []
 
-# Disable portions of the code base that incompatable with a wasm target
+# Disable code that is incompatible with wasm-build
 wasm-target = []
 
 # Enable multi-threading code

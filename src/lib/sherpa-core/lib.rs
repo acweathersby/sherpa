@@ -18,7 +18,12 @@ mod writer;
 
 pub use compile::{compile_parse_states, garbage_collect, optimize};
 
-pub use grammar::{build_compile_db, compile_grammar_from_str, compile_grammars_from_path};
+pub use grammar::{
+  build_compile_db,
+  compile_grammar_from_str,
+  compile_grammars_from_path,
+  remove_grammar_mut,
+};
 pub use journal::{Config, Journal, Report, ReportType};
 pub use tasks::new_taskman;
 pub use types::{

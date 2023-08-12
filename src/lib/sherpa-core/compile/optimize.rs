@@ -105,7 +105,7 @@ fn enqueue_state<'db>(
 
 pub struct _OptConfig {}
 
-/// Performance various transformation of the parse state graph
+/// Performance various transformation on the parse state graph
 /// to reduce number of steps between transient actions, and to the
 /// reduce number of parse states overall.
 pub fn optimize<'db, R: FromIterator<(IString, Box<ParseState<'db>>)>>(

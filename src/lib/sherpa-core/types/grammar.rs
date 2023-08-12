@@ -106,6 +106,12 @@ impl From<&PathBuf> for GrammarId {
   }
 }
 
+impl From<&String> for GrammarId {
+  fn from(value: &String) -> Self {
+    GrammarId(create_u64_hash(&value))
+  }
+}
+
 #[derive(Default, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct RuleId(u64);
@@ -309,12 +315,13 @@ pub enum ProductionType {
   ParseState,
 }
 
-/// Identifiers for a Grammar
+/// Set of identifiers for a single grammar source
 #[derive(Default, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct GrammarIdentity {
   /// A globally unique identifier for this GrammarStore instance. Derived
-  /// from the source path
+  /// from the source path. Assumes the source path is an absolute path
+  /// to a grammar source file.
   pub guid: GrammarId,
 
   /// A name defined by the grammar author. This is either the value of the

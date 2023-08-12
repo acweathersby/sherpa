@@ -19,6 +19,9 @@ path = "../../lib/sherpa-ascript"
 [dependencies.sherpa_bytecode]
 path = "../../lib/sherpa-bytecode"
 
+[dependencies.sherpa_llvm]
+path = "../../lib/sherpa-llvm"
+
 [dependencies.sherpa_rust_build]
 path = "../../lib/sherpa-rust-build"
 

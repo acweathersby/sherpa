@@ -944,3 +944,34 @@ fn to_base64_name<T: Hash>(val: T) -> String {
 
   String::from_utf8(string).unwrap()
 }
+
+/// Remove artifacts related to a single grammar from a soup through mutation.
+pub fn remove_grammar_mut(id: GrammarId, soup: &mut GrammarSoup) -> SherpaResult<()> {
+  let GrammarSoup { grammar_headers, productions, custom_states, .. } = soup;
+
+  {
+    let mut grammar_headers = grammar_headers.write()?;
+
+    if grammar_headers.remove(&id).is_none() {
+      return SherpaResult::Ok(());
+    }
+  }
+
+  {
+    let mut productions = productions.write()?;
+
+    let productions_temp = productions.drain(..).collect::<Vec<_>>();
+
+    productions.extend(productions_temp.into_iter().filter(|p| p.g_id != id))
+  }
+
+  {
+    let mut custom_states = custom_states.write()?;
+
+    let custom_states_temp = custom_states.drain().collect::<Vec<_>>();
+
+    custom_states.extend(custom_states_temp.into_iter().filter(|(_, s)| s.g_id != id))
+  }
+
+  SherpaResult::Ok(())
+}

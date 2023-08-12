@@ -1,4 +1,5 @@
-{{- $labScript := resources.Get "js/lab/index.ts" | js.Build (dict "target" "esnext" "format" "esm")  | minify -}}
+{{- $labScript := resources.Get "js/lab/index.ts" | js.Build (dict "target" "esnext" "format" "esm" "sourcemap"
+"inline") -}}
 <!doctype html>
 <html lang="{{ .Site.Params.languageTag | default " en-US" }}">
 {{ partial "head/head.html" . }}

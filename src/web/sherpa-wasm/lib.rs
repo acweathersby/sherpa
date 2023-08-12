@@ -1,31 +1,24 @@
 use serde::{Deserialize, Serialize};
+
+pub mod grammar;
+
+use grammar::{JSGrammarIdentities, JSSoup};
+use sherpa_bytecode::compile_bytecode;
 use sherpa_core::{
-  compile_grammar_from_str,
+  build_compile_db,
+  compile_parse_states,
+  optimize,
   parser,
-  GrammarSoup,
   Journal,
   SherpaError,
   SherpaResult,
 };
 use sherpa_rust_runtime::{
-  bytecode::ByteCodeParser,
-  types::{
-    bytecode,
-    cst,
-    ByteReader,
-    MutByteReader,
-    ParseAction,
-    SherpaParseError,
-    SherpaParser,
-    UTF8Reader,
-    UTF8StringReader,
-  },
+  bytecode::{generate_disassembly, ByteCodeParser},
+  types::{ParseAction, SherpaParser},
 };
-use std::{
-  borrow::BorrowMut,
-  cell::{Cell, RefCell},
-  rc::Rc,
-};
+
+use std::{borrow::BorrowMut, cell::RefCell, rc::Rc};
 use wasm_bindgen::prelude::*;
 
 fn window() -> web_sys::Window {
@@ -40,44 +33,43 @@ fn body() -> web_sys::HtmlElement {
   document().body().expect("document should have a body")
 }
 
-/// A Handle to a grammar soup.
+/// Temporary simple disassembly implementation.
 #[wasm_bindgen]
-pub struct JSSoup(Box<GrammarSoup>);
+pub fn create_bytecode_disassembly(
+  grammar_id: &JSGrammarIdentities,
+  soup: &JSSoup,
+) -> Result<String, JsError> {
+  let mut j = Journal::new(None);
 
-#[wasm_bindgen]
-impl JSSoup {
-  /// Adds a grammar to the soup, or throw's an error
-  /// if the grammar is invalid. Returns the grammar
-  /// name if successful.
-  pub fn add_grammar(&mut self, grammar: String, path: String) -> Result<String, JsError> {
-    let mut j = Journal::new(Default::default());
-    match compile_grammar_from_str(&mut j, grammar.as_str(), path.into(), &self.0) {
-      SherpaResult::Ok(g_id) => {
-        let soup = &self.0;
-        let name = soup
-          .grammar_headers
-          .read()
-          .unwrap()
-          .get(&g_id)
-          .unwrap()
-          .identity
-          .name
-          .to_string(&soup.string_store);
-        Ok(name)
-      }
-      _ => Err(JsError::new("Failed to build grammar")),
-    }
-  }
+  j.set_active_report("bytecode compile", sherpa_core::ReportType::Any);
 
-  /// Adds a production targeting a specific grammar
-  pub fn add_production(&mut self, grammar_name: String) -> Result<(), JsError> {
-    Ok(())
-  }
-}
+  let gs = soup.0.as_ref();
 
-#[wasm_bindgen]
-pub fn create_soup() -> Result<JSSoup, JsError> {
-  Ok(JSSoup(Box::new(Default::default())))
+  let id = grammar_id.0.as_ref().to_owned();
+
+  let SherpaResult::Ok(db) = build_compile_db(j.transfer(), id, gs) else {
+    
+    j.flush_reports();
+
+    return match j.string_error_report() {
+      Some(str) => Result::Err(JsError::new(str.as_str())),
+      _ => Result::Err(JsError::new("Failed to build parser_db"))
+    };
+  };
+
+  let SherpaResult::Ok(parser_states) = compile_parse_states(j.transfer(), &db) else {
+    return Result::Err(JsError::new("Failed to compile parser states"));
+  };
+
+  let SherpaResult::Ok(parser_states) = optimize::<Vec<_>>(&db, parser_states) else {
+    return Result::Err(JsError::new("Failed to compile parser states"));
+  };
+
+  let SherpaResult::Ok((bc, _)) = compile_bytecode(&db, parser_states) else {
+    return Result::Err(JsError::new("Failed to compile bytecode"));
+  };
+
+  Ok(generate_disassembly(&bc))
 }
 
 trait JSONError {
@@ -98,6 +90,7 @@ impl JSONError for SherpaError {
   }
 }
 
+/// A step-able parser
 #[wasm_bindgen]
 pub struct JSGrammarParser {
   _reader:         Rc<RefCell<StringReader::StringReader>>,
@@ -149,6 +142,7 @@ impl JSGrammarParser {
   }
 }
 #[wasm_bindgen]
+
 pub fn get_codemirror_parse_tree(input: String) -> JsValue {
   let mut reader = StringReader::StringReader::new(input);
   let mut bytecode_parser = ByteCodeParser::<'static, _, u32>::new(&mut reader, &parser::bytecode);
@@ -192,7 +186,10 @@ pub fn get_codemirror_parse_tree(input: String) -> JsValue {
         output.push(end_offset);
         output.push(adjust_size as u32 + 4);
       }
-      action => panic!("Unexpected Action! {:?}", action),
+      action => {
+        //panic!("Unexpected Action! {:?}", action)
+        panic!("Unexpected Action!")
+      }
     }
   }
 
