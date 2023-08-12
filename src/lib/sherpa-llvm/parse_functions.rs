@@ -720,8 +720,8 @@ fn incr_scan_ptr_by_sym_len(args: &BuildArgs, p_ctx: PointerValue) -> SherpaResu
   SherpaResult::Ok(())
 }
 
-/// Assigns `head_ptr + tok_len` to head_ptr, scan_ptr, and base_ptr.
-/// Also assign 0  to `tok_id`
+/// Assigns `head_ptr + tok_len` to `head_ptr`, `scan_ptr`, and `base_ptr`.
+/// Also assign __0__ to `tok_id`
 fn skip_token(args: &BuildArgs, p_ctx: PointerValue, state_fun: FunctionValue) -> SherpaResult<()> {
   const __HINT__: Opcode = Opcode::SkipToken;
   let LLVMParserModule { b, i32, fun, ctx, .. } = args.m;

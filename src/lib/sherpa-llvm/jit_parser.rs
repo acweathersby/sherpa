@@ -239,7 +239,7 @@ where
   }
 }
 
-impl<'llvm, R: ByteReader + LLVMByteReader + MutByteReader, M> SherpaParser<R, M>
+impl<'llvm, R: ByteReader + LLVMByteReader + MutByteReader, M> SherpaParser<R, M, true>
   for JitParser<'llvm, R, M>
 {
   fn get_ctx(&self) -> &ParseContext<R, M> {

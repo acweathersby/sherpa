@@ -1,4 +1,5 @@
 use crate::types::{
+  ast::{AstObject, AstSlot, AstStackSlice},
   bytecode::{ByteCodeIterator, InputType, Instruction, Opcode, NORMAL_STATE_FLAG},
   *,
 };
@@ -189,6 +190,11 @@ fn shift_token<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
     token_id:          ctx.tok_id,
   };
 
+  ctx.start_line_num = ctx.chkp_line_num;
+  ctx.start_line_off = ctx.chkp_line_off;
+  ctx.end_line_num = ctx.start_line_num;
+  ctx.end_line_off = ctx.end_line_off;
+
   let new_offset = ctx.head_ptr + ctx.tok_len;
 
   ctx.base_ptr = new_offset;
@@ -273,8 +279,8 @@ fn __skip_token_core__<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Read
     ParseAction::Skip {
       token_byte_offset: original_offset as u32,
       token_byte_length: tok_len as u32,
-      token_line_offset: 0,
-      token_line_count:  0,
+      token_line_count:  ctx.start_line_num,
+      token_line_offset: ctx.start_line_off,
       token_id:          token_id as u32,
     },
     Some(base_instruction),
@@ -287,6 +293,10 @@ fn skip_token<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
 ) -> (ParseAction, Option<Instruction<'a>>) {
   const __HINT__: Opcode = Opcode::SkipToken;
   let result = __skip_token_core__(base_instruction, ctx);
+  ctx.start_line_num = ctx.chkp_line_num;
+  ctx.start_line_off = ctx.chkp_line_off;
+  ctx.end_line_num = ctx.start_line_num;
+  ctx.end_line_off = ctx.end_line_off;
   ctx.base_ptr = ctx.head_ptr;
   result
 }
@@ -401,8 +411,9 @@ fn assign_token<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
   const __HINT__: Opcode = Opcode::AssignToken;
   let mut iter = i.iter();
   ctx.tok_id = iter.next_u32_le().unwrap();
-
   ctx.tok_len = ctx.scan_ptr - ctx.head_ptr;
+  ctx.chkp_line_num = ctx.end_line_num;
+  ctx.chkp_line_off = ctx.end_line_off;
   (ParseAction::None, i.next())
 }
 
@@ -522,6 +533,11 @@ fn get_input_value<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
     }
     InputType::Byte => {
       let byte = ctx.get_reader().byte();
+
+      if byte == 10 {
+        ctx.end_line_num += 1;
+        ctx.end_line_off = ctx.scan_ptr as u32;
+      }
 
       if byte > 0 {
         ctx.sym_len = 1;
@@ -703,7 +719,7 @@ impl<'a, R: ByteReader + MutByteReader, M> ByteCodeParser<'a, R, M> {
   }
 }
 
-impl<'a, R: ByteReader + MutByteReader + UTF8Reader, M> SherpaParser<R, M>
+impl<'a, R: ByteReader + MutByteReader + UTF8Reader, M> SherpaParser<R, M, true>
   for ByteCodeParser<'a, R, M>
 {
   fn get_ctx(&self) -> &ParseContext<R, M> {

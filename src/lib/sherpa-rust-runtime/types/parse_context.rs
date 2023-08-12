@@ -348,7 +348,7 @@ pub enum ShiftsAndSkipsResult {
   FailedParse(SherpaParseError),
 }
 
-pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
+pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: bool> {
   /// Returns true of the `head_ptr` is positioned at the end of the input.
   ///
   /// That is `head_ptr - beg_ptr == input.len()`
@@ -396,9 +396,10 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M> {
 
   fn parse_cst() {}
 
+  // Givin a shift and reduce function, compile an AST struct
   fn parse_ast<Node: AstObject>(
     &mut self,
-    reducers: &[Reducer<R, M, Node, true>],
+    reducers: &[Reducer<R, M, Node, UPWARD_STACK>],
     debug: &mut Option<DebugFn>,
   ) -> Result<AstSlot<Node>, SherpaParseError> {
     let mut ast_stack: Vec<AstSlot<Node>> = vec![];

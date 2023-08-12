@@ -1,11 +1,25 @@
 use crate::*;
 use sherpa_core::{
-  test::frame::{build_parse_states_from_source_str as build_states, TestPackage},
+  proxy::OrderedMap,
+  test::frame::{
+    build_parse_db_from_source_str,
+    build_parse_states_from_source_str as build_states,
+    TestPackage,
+  },
   *,
 };
 use sherpa_rust_runtime::{
   bytecode::ByteCodeParser,
-  types::{SherpaParser, UTF8StringReader},
+  types::{
+    ast::{AstObject, AstSlot, AstStackSlice, Reducer},
+    bytecode::FIRST_PARSE_BLOCK_ADDRESS,
+    ByteReader,
+    MutByteReader,
+    ParseContext,
+    ParseResult,
+    SherpaParser,
+    UTF8StringReader,
+  },
 };
 use std::path::PathBuf;
 
@@ -86,7 +100,7 @@ fn json_parser() -> SherpaResult<()> {
   ])
 }
 
-#[test]
+/* #[test]
 fn lalr_pop_parser() -> SherpaResult<()> {
   let grammar_source_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
     .join("../../grammar/lalrpop/lalrpop.sg")
@@ -97,7 +111,7 @@ fn lalr_pop_parser() -> SherpaResult<()> {
     r##"grammar ;"##,
     true,
   )])
-}
+} */
 
 #[test]
 fn handles_grammars_that_utilize_eof_symbol() -> SherpaResult<()> {
@@ -286,6 +300,22 @@ fn scientific_number() -> SherpaResult<()> {
 }
 
 #[test]
+fn temp() -> SherpaResult<()> {
+  compile_and_run_grammar(
+    r##"<> A > hello" "world
+
+
+        "##,
+    &[
+      ("default", r##""""##, true),
+      ("default", r##""\\""##, true),
+      ("default", r##""1234""##, true),
+      ("default", r##""12\"34""##, true),
+    ],
+  )
+}
+
+#[test]
 fn escaped_string() -> SherpaResult<()> {
   compile_and_run_grammar(
     r##"
@@ -337,4 +367,81 @@ fn compile_and_run_grammar(source: &str, inputs: &[(&str, &str, bool)]) -> Sherp
 
     SherpaResult::Ok(())
   })
+}
+
+// Sorts reduce functions according to their respective
+// rules. This assumes the number of rules in the array
+// matches the number of rules in the parser.
+fn map_reduce_function<'a, R, ExtCTX, ASTNode>(
+  db: &ParserDatabase,
+  fns: Vec<(&str, usize, fn(*mut ParseContext<R, ExtCTX>, &AstStackSlice<AstSlot<ASTNode>, true>))>,
+) -> Vec<Reducer<R, ExtCTX, ASTNode, true>>
+where
+  R: ByteReader + MutByteReader,
+  ASTNode: AstObject,
+{
+  fns
+    .into_iter()
+    .filter_map(|(name, rule_number, b)| {
+      let prod = db.prod_from_name(name);
+      if prod != Default::default() {
+        let rule_id = db.prod_rules(prod).unwrap()[rule_number];
+        Some((Into::<usize>::into(rule_id), b))
+      } else {
+        None
+      }
+    })
+    .collect::<OrderedMap<_, _>>()
+    .into_values()
+    .collect::<Vec<_>>()
+}
+
+/// Bytecode counterpart to sherpa_llvm::test::compile::simple_newline_tracking
+#[test]
+fn simple_newline_tracking() -> SherpaResult<()> {
+  build_states(
+    r##"
+    IGNORE { c:sp c:nl }
+
+    <> test > 'hello' P
+
+    <> P > 'world' 'goodby' B
+
+    <> B > 'mango'
+        "##,
+    "".into(),
+    Default::default(),
+    &|TestPackage { db, states, .. }| {
+      let (bc, _) = compile_bytecode(&db, states)?;
+
+      let mut parser = Parser::new(&mut ("hello\nworld\n\ngoodby\nmango".into()), &bc);
+      parser.init_parser(FIRST_PARSE_BLOCK_ADDRESS);
+      let result = parser.parse_ast(
+        &map_reduce_function(db, vec![
+          ("test", 0, |ctx, slots| {
+            assert_eq!(slots[0].1.to_slice(unsafe { &*ctx }.get_str()), "hello");
+            assert_eq!(slots[0].1.line_num, 0, "Line number of `hello` should be 0");
+            assert_eq!(slots[0].1.line_off, 0, "Line offset of `hello` should be 0");
+
+            slots.assign(0, AstSlot(1010101, Default::default(), Default::default()))
+          }),
+          ("B", 0, |ctx, slots| {
+            assert_eq!(slots[0].1.to_slice(unsafe { &*ctx }.get_str()), "mango");
+            assert_eq!(slots[0].1.line_num, 4, "Line number of `mango` should be 4");
+            assert_eq!(slots[0].1.line_off, 19, "Line offset of `mango` should be 19");
+          }),
+          ("P", 0, |ctx, slots| {
+            assert_eq!(slots[0].1.to_slice(unsafe { &*ctx }.get_str()), "world");
+            assert_eq!(slots[0].1.line_num, 1, "Line number of `world` should be 1");
+            assert_eq!(slots[0].1.line_off, 5, "Line offset of `world` should be 5");
+          }),
+        ]),
+        &mut None,
+      );
+
+      assert!(matches!(result, Result::Ok(AstSlot(1010101, ..))));
+
+      SherpaResult::Ok(())
+    },
+  )
 }

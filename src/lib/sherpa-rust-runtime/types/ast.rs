@@ -9,10 +9,9 @@ pub type ReduceFunctionOld<T> = fn(args: &mut Vec<HCObj<T>>, tok: Token);
 
 /// Names of default AST types
 pub static DEFAULT_AST_TYPE_NAMES: [&str; 27] = [
-  "NODES", "STRING", "STRINGS", "F64", "F32", "I64", "I32", "I16", "I8", "U64",
-  "U32", "U16", "U8", "F32Vec", "F64Vec", "I64Vec", "I32Vec", "I16Vec",
-  "I8Vec", "U64Vec", "U32Vec", "U16Vec", "U8Vec", "TOKEN", "TOKENS", "BOOL",
-  "NONE",
+  "NODES", "STRING", "STRINGS", "F64", "F32", "I64", "I32", "I16", "I8", "U64", "U32", "U16", "U8",
+  "F32Vec", "F64Vec", "I64Vec", "I32Vec", "I16Vec", "I8Vec", "U64Vec", "U32Vec", "U16Vec", "U8Vec",
+  "TOKEN", "TOKENS", "BOOL", "NONE",
 ];
 
 #[derive(Clone)]
@@ -65,9 +64,7 @@ macro_rules! into_vec {
 macro_rules! to_numeric {
   ($fn_name:ident,  $Num:ty) => {
     fn $fn_name(&self) -> $Num {
-      if self.is_numeric()
-        || matches!(self, HCObj::STRING(..) | HCObj::TOKEN(..))
-      {
+      if self.is_numeric() || matches!(self, HCObj::STRING(..) | HCObj::TOKEN(..)) {
         match self {
           HCObj::STRING(str) => str.parse::<i64>().unwrap_or(0) as $Num,
           HCObj::TOKEN(tok) => tok.to_numeric_or_length() as $Num,
@@ -292,9 +289,7 @@ pub struct AstStackSlice<T: AstObject, const STACK_GROWS_UPWARD: bool = false> {
   stack_grows_upward: bool,
 }
 
-impl<T: AstObject, const STACK_GROWS_UPWARD: bool>
-  AstStackSlice<T, STACK_GROWS_UPWARD>
-{
+impl<T: AstObject, const STACK_GROWS_UPWARD: bool> AstStackSlice<T, STACK_GROWS_UPWARD> {
   #[inline(always)]
   fn get_pointer(&self, position: usize) -> *mut T {
     #[cfg(debug_assertions)]
@@ -328,10 +323,7 @@ impl<T: AstObject, const STACK_GROWS_UPWARD: bool>
   /// the slot may contain. This is only used when shifting token data into
   /// an "empty" slot through the Shift action.
   pub unsafe fn assign_to_garbage(&self, position: usize, val: T) {
-    std::mem::forget(std::mem::replace(
-      &mut (*self.get_pointer(position)),
-      val,
-    ));
+    std::mem::forget(std::mem::replace(&mut (*self.get_pointer(position)), val));
   }
 
   pub fn assign(&self, position: usize, val: T) {
@@ -367,9 +359,7 @@ impl<T: AstObject, const STACK_GROWS_UPWARD: bool>
 }
 
 #[cfg(debug_assertions)]
-impl<T: AstObject, const STACK_GROWS_UPWARD: bool> Debug
-  for AstStackSlice<T, STACK_GROWS_UPWARD>
-{
+impl<T: AstObject, const STACK_GROWS_UPWARD: bool> Debug for AstStackSlice<T, STACK_GROWS_UPWARD> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let mut dbgstr = f.debug_struct("SlotSlice");
     dbgstr.field("stack_size", &self.stack_size);
@@ -392,11 +382,7 @@ impl<T: AstObject, const STACK_GROWS_UPWARD: bool> Index<usize>
   fn index(&self, index: usize) -> &Self::Output {
     #[cfg(debug_assertions)]
     if index > self.len() {
-      panic!(
-        "Index {} out of bounds in an AstStackSlice of len {}",
-        index,
-        self.len()
-      );
+      panic!("Index {} out of bounds in an AstStackSlice of len {}", index, self.len());
     }
 
     unsafe { &*self.get_pointer(index) }
