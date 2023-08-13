@@ -47,6 +47,269 @@ use std::{
   io::Write,
 };
 
+pub(crate) fn write_rust_ast2<W: Write>(mut w: AscriptWriter<W>) -> SherpaResult<AscriptWriter<W>> {
+  let node_type = &w.store.ast_type_name;
+
+  // --------------------------------------------------------------------------
+  // Struct Types
+  w.write_struct_data(&|w, s| {
+    let struct_name = s.name.clone();
+    let ast_type_name = w.store.ast_type_name.clone();
+
+    // Struct declaration
+    w.block(
+      &("#[derive(Clone)]\n#[cfg_attr(debug_assertions, derive(Debug))]\npub struct ".to_string()
+        + &s.name),
+      "{",
+      "}",
+      &|w| {
+        let prop_declarations = s.props.iter().map(|StructProp { name, type_string, .. }| {
+          "pub ".to_string() + name + ":" + type_string
+        });
+        w.list(
+          ", ",
+          prop_declarations
+            .chain(
+              vec![s.tokenized].into_iter().filter_map(|v| v.then_some("pub tok: Token".into())),
+            )
+            .collect(),
+        );
+        SherpaResult::Ok(())
+      },
+    );
+
+    // Struct implementation
+    w.block(&("impl ".to_string() + &s.name), "{", "}", &|w| {
+      w.method(
+        "pub fn new",
+        "(",
+        ")",
+        ", ",
+        &|_| {
+          s.props
+            .iter()
+            .map(|p| match (p.optional, p.type_.into()) {
+              (true, AScriptTypeVal::Struct(..) | AScriptTypeVal::GenericStruct(..)) => {
+                p.name.clone() + ": " + &p.type_string
+              }
+              (true, _) => format!("{}: {}", p.name, p.type_string),
+              _ => p.name.clone() + ": " + &p.type_string,
+            })
+            .chain(vec![s.tokenized].into_iter().filter_map(|v| v.then_some("tok: Token".into())))
+            .collect()
+        },
+        "-> Self",
+        "{",
+        "}",
+        &mut |w| {
+          w.block("Self", "{", "}", &|w| {
+            w.list(
+              ",",
+              s.props
+                .iter()
+                .map(|p| p.name.clone())
+                .chain(vec![s.tokenized].into_iter().filter_map(|v| v.then_some("tok".into())))
+                .collect(),
+            );
+            SherpaResult::Ok(())
+          })?;
+          SherpaResult::Ok(())
+        },
+      );
+
+      w.method(
+        "pub fn get_type",
+        "(",
+        ")",
+        ",",
+        &|_| vec!["&self".to_string()],
+        &format!("-> {ast_type_name}Type"),
+        "{",
+        "}",
+        &mut |w| {
+          w.stmt(format!("{ast_type_name}Type::{struct_name}"))?;
+          SherpaResult::Ok(())
+        },
+      );
+      SherpaResult::Ok(())
+    });
+
+    // Struct type implementation
+    w.block(&format!("impl {ast_type_name}"), "{", "}", &|w| {
+      w.method(
+        &format!("pub fn to_{struct_name}"),
+        "(",
+        ")",
+        ", ",
+        &|_| vec!["self".into()],
+        &format!("-> Box::<{struct_name}>"),
+        "{",
+        "}",
+        &mut |w| {
+          w.block("match self", "{", "}", &mut |w| {
+            w.stmt(format!("Self::{0}(val) => val,", s.name));
+            w.stmt(format!("_ => panic!()"));
+            SherpaResult::Ok(())
+          });
+          SherpaResult::Ok(())
+        },
+      )?;
+      w.method(
+        &format!("pub fn as_{struct_name}"),
+        "(",
+        ")",
+        ", ",
+        &|_| vec!["&self".into()],
+        &format!("-> Option<&{struct_name}>"),
+        "{",
+        "}",
+        &mut |w| {
+          w.block("match self", "{", "}", &mut |w| {
+            w.stmt(format!("Self::{0}(val) => Some(val.as_ref()),", s.name))?;
+            w.stmt(format!("_ => None"))?;
+            SherpaResult::Ok(())
+          });
+          SherpaResult::Ok(())
+        },
+      )?;
+      w.method(
+        &format!("pub fn as_{struct_name}_mut"),
+        "(",
+        ")",
+        ",",
+        &|_| vec!["&mut self".into()],
+        &format!("-> Option<&mut {struct_name}>"),
+        "{",
+        "}",
+        &mut |w| {
+          w.block("match self", "{", "}", &mut |w| {
+            w.stmt(format!("Self::{struct_name}(val) => Some(val.as_mut()),"))?;
+            w.stmt(format!("_ => None"))?;
+            SherpaResult::Ok(())
+          });
+          SherpaResult::Ok(())
+        },
+      )?;
+      SherpaResult::Ok(())
+    });
+
+    // Struct hash implementation
+    w.block(&format!("impl Hash for {struct_name}"), "{", "}", &|w| {
+      w.method(
+        &format!("fn hash<H: std::hash::Hasher>"),
+        "(",
+        ")",
+        ",",
+        &|_| vec!["&self".into(), "hasher: &mut H".into()],
+        "",
+        "{",
+        "}",
+        &mut |w| {
+          w.stmt("self.get_type().hash(hasher);".into())?;
+          for StructProp { name, type_, .. } in &s.props {
+            use AScriptTypeVal::*;
+            match (*type_).into() {
+              F64(..) | F32(..) => {
+                w.stmt(format!("self.{name}.to_le_bytes().hash(hasher);"))?;
+              }
+              F64Vec | F32Vec => {
+                w.block(&format!("for val in &self.{name}"), "{", "}", &|w| {
+                  w.stmt(format!("val.to_le_bytes().hash(hasher);"))?;
+                  SherpaResult::Ok(())
+                })?;
+              }
+              GenericStruct(..) | Struct(..) | Bool(..) | StringVec | U8Vec | I8Vec
+              | String(..) | U64Vec | I64Vec | U32Vec | I32Vec | U16Vec | I16Vec | U64(..)
+              | I64(..) | U32(..) | I32(..) | U16(..) | I16(..) | U8(..) | I8(..) => {
+                w.stmt(format!("self.{name}.hash(hasher);"))?;
+              }
+              GenericStructVec(..) => {
+                w.block(&format!("for val in &self.{name}"), "{", "}", &|w| {
+                  w.stmt(format!("val.hash(hasher);"))?;
+                  SherpaResult::Ok(())
+                })?;
+              }
+              TokenVec => {
+                w.block(&format!("for val in &self.{name}"), "{", "}", &|w| {
+                  w.stmt(format!(
+                    "val.to_string().replace(\" \", \"\").replace(\"\\n\", \"\").hash(hasher);"
+                  ))?;
+                  SherpaResult::Ok(())
+                })?;
+              }
+              Token => {
+                w.stmt(format!(
+                  "self.{name}.to_string().replace(\" \", \"\").replace(\"\\n\", \"\").hash(hasher);"
+                ))?;
+              }
+              Undefined => { /* Ignore undefined properties */  }
+              _ => unreachable!("Did not expect node in this context when creating struct definition: {struct_name}"),
+            }
+          }
+          SherpaResult::Ok(())
+        },
+      );
+      SherpaResult::Ok(())
+    });
+
+    SherpaResult::Ok(())
+  });
+
+  // --------------------------------------------------------------------------
+  // Reduce Functions
+  w.write_reduce_functions(
+    "fn %% <R: Reader + UTF8Reader, M, const UP: bool>",
+    "(",
+    ")",
+    ",",
+    &|w| {
+      vec![
+        "_ctx_: *mut ParseContext<R, M>".to_string(),
+        format!("slots: &AstStackSlice<AstSlot<{}>, UP>", w.store.ast_type_name),
+      ]
+    },
+    "",
+    "{",
+    "}",
+    &|w, reduce_functions_map| {
+      w.block(
+        "struct ReduceFunctions<R: Reader + UTF8Reader, M, const UP: bool>",
+        "(",
+        ");",
+        &|w| {
+          w.stmt(format!(
+            "pub [Reducer<R, M, {0}, UP>; {1}]",
+            w.utils.store.ast_type_name,
+            reduce_functions_map.len()
+          ));
+          SherpaResult::Ok(())
+        },
+      )?;
+      w.block(
+        "impl<R: Reader + UTF8Reader, M, const UP: bool> ReduceFunctions<R, M, UP>",
+        "{",
+        "}",
+        &|w| {
+          w.method("pub const fn new", "(", ")", ",", &|_| vec![], "-> Self", "{", "}", &mut |w| {
+            w.block("Self", "([", "])", &|w| {
+              w.list(
+                ",",
+                reduce_functions_map.iter().map(|f| format!("{f}::<R, M, UP>")).collect(),
+              );
+              SherpaResult::Ok(())
+            });
+            SherpaResult::Ok(())
+          });
+          SherpaResult::Ok(())
+        },
+      )?;
+      SherpaResult::Ok(())
+    },
+  );
+
+  SherpaResult::Ok(w)
+}
+
 pub(crate) fn write_rust_ast<W: Write>(mut w: AscriptWriter<W>) -> SherpaResult<AscriptWriter<W>> {
   let node_type = &w.store.ast_type_name;
   // --------------------------------------------------------------------------

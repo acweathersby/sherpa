@@ -68,16 +68,16 @@ pub enum DebugEvent<'a> {
   EndOfFile,
 }
 
-pub type DebugFn = Box<dyn FnMut(&DebugEvent)>;
+pub type DebugFn = dyn FnMut(&DebugEvent);
 
 /// Yields parser Actions from parsing an input using the
 /// current active grammar bytecode.
-pub fn dispatch<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
+pub fn dispatch<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
   base_address: usize,
   ctx: &mut ParseContext<R, M>,
   stack: &mut Vec<u32>,
   bc: &'a [u8],
-  debug: &mut Option<DebugFn>,
+  debug: &mut Option<&'debug mut DebugFn>,
 ) -> (ParseAction, Option<Instruction<'a>>) {
   use ParseAction::*;
 
@@ -181,6 +181,15 @@ fn shift_token<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
   ctx: &mut ParseContext<R, M>,
 ) -> (ParseAction, Option<Instruction<'a>>) {
   const __HINT__: Opcode = Opcode::ShiftToken;
+
+  debug_assert!(
+    ctx.start_line_off as usize <= ctx.head_ptr,
+    "
+The start line offset should never be advanced further than the head_ptr at this point
+head_ptr: {}  start_line_off:{}",
+    ctx.head_ptr,
+    ctx.start_line_off
+  );
 
   let action = ParseAction::Shift {
     token_byte_offset: ctx.head_ptr as u32,
@@ -429,15 +438,17 @@ fn peek_reset<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
   ctx.tok_id = 0;
   ctx.tok_len = 0;
   ctx.sym_len = 0;
+  ctx.end_line_off = ctx.start_line_off;
+  ctx.end_line_num = ctx.end_line_num;
   ctx.get_reader_mut().set_cursor_to(offset, 0, 0);
   (ParseAction::None, i.next())
 }
 
 /// Performs the [Opcode::HashBranch] operation
-pub fn hash_branch<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
+pub fn hash_branch<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
   i: Instruction<'a>,
   ctx: &mut ParseContext<R, M>,
-  debug: &mut Option<DebugFn>,
+  debug: &mut Option<&'debug mut DebugFn>,
 ) -> (ParseAction, Option<Instruction<'a>>) {
   const __HINT__: Opcode = Opcode::HashBranch;
 
@@ -479,10 +490,10 @@ pub fn hash_branch<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
   }
 }
 
-pub fn vector_branch<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
+pub fn vector_branch<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
   i: Instruction<'a>,
   ctx: &mut ParseContext<R, M>,
-  debug: &mut Option<DebugFn>,
+  debug: &mut Option<&'debug mut DebugFn>,
 ) -> (ParseAction, Option<Instruction<'a>>) {
   // Decode data
 
@@ -512,11 +523,11 @@ pub fn vector_branch<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
   }
 }
 
-fn get_input_value<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
+fn get_input_value<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
   input_type: InputType,
   scan_index: Instruction<'a>,
   ctx: &mut ParseContext<R, M>,
-  debug: &mut Option<DebugFn>,
+  debug: &mut Option<&'debug mut DebugFn>,
 ) -> u32 {
   match input_type {
     InputType::Production => ctx.get_production() as u32,
@@ -557,9 +568,9 @@ fn get_input_value<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
   }
 }
 
-fn emit_debug_value<R: ByteReader + MutByteReader + UTF8Reader, M>(
+fn emit_debug_value<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
   ctx: &mut ParseContext<R, M>,
-  debug: &mut Option<Box<dyn FnMut(&DebugEvent)>>,
+  debug: &mut Option<&'debug mut DebugFn>,
   input_type: InputType,
   input_value: u32,
 ) {
@@ -586,10 +597,10 @@ fn emit_debug_value<R: ByteReader + MutByteReader + UTF8Reader, M>(
   }
 }
 
-fn token_scan<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
+fn token_scan<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
   scan_index: Instruction<'a>,
   ctx: &mut ParseContext<R, M>,
-  debug: &mut Option<DebugFn>,
+  debug: &mut Option<&'debug mut DebugFn>,
 ) {
   ctx.tok_id = 0;
   ctx.scan_ptr = ctx.head_ptr;
@@ -655,11 +666,11 @@ fn token_scan<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
 }
 
 /// Start or continue a parse on an input
-pub fn get_next_action<'a, R: ByteReader + MutByteReader + UTF8Reader, M>(
+pub fn get_next_action<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
   ctx: &'a mut ParseContext<R, M>,
   stack: &mut Vec<u32>,
   bc: &[u8],
-  debug: &mut Option<DebugFn>,
+  debug: &mut Option<&'debug mut DebugFn>,
 ) -> ParseAction {
   let mut address = stack.pop().unwrap();
   let mut state = stack.pop().unwrap();
@@ -781,7 +792,7 @@ impl<'a, R: ByteReader + MutByteReader + UTF8Reader, M> SherpaParser<R, M, true>
     self.get_reader_mut().next(0);
   }
 
-  fn get_next_action(&mut self, debug: &mut Option<DebugFn>) -> ParseAction {
+  fn get_next_action<'debug>(&mut self, debug: &mut Option<&'debug mut DebugFn>) -> ParseAction {
     let ByteCodeParser { ctx, stack, bc } = self;
     get_next_action(ctx, stack, bc, debug)
   }

@@ -178,7 +178,16 @@ fn load_from_str(
   source_path: PathBuf,
   soup: &GrammarSoup,
 ) -> SherpaResult<GrammarData> {
-  let root_grammar = parse_grammar(&source)?;
+  j.set_active_report("Load From String", ReportType::GrammarParse);
+
+  let root_grammar = match parse_grammar(&source) {
+    SherpaResult::Ok(root_grammar) => root_grammar,
+    SherpaResult::Err(err) => {
+      j.report_mut().add_error(err);
+      return SherpaResult::Err(SherpaError::from("Failed Parse"));
+    }
+    _ => return SherpaResult::Err(SherpaError::from("Failed Parse")),
+  };
 
   let g_data = create_grammar_data(j, root_grammar, &source_path, &soup.string_store)?;
 

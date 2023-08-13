@@ -12,14 +12,18 @@ pub(crate) fn address_string(bc_address: usize) -> String {
 
 pub fn disassemble_parse_block<'a>(
   i: Option<Instruction<'a>>,
-  bc: &[u8],
+  recursive: bool,
 ) -> (String, Option<Instruction<'a>>) {
   use disassemble_parse_block as ds;
   use header as dh;
 
+  let r = recursive;
+
   let Some(i) = i  else {
     return ("".to_string(), None)
   };
+
+  let bc = i.bytecode();
 
   if !i.is_valid() {
     ("".to_string(), None)
@@ -31,11 +35,12 @@ pub fn disassemble_parse_block<'a>(
         let len = i.len() - str_start;
         let index = i.address() + str_start;
         let bytes = bc[index..index + len].to_vec();
-        let sym = format!("{}: {}", dh(i.address()), unsafe { String::from_utf8_unchecked(bytes) });
+        let sym =
+          format!("\n{}: {}", dh(i.address()), unsafe { String::from_utf8_unchecked(bytes) });
         (sym, i.next())
       }
 
-      VectorBranch | HashBranch => generate_table_string(i, bc),
+      VectorBranch | HashBranch => generate_table_string(i, r),
       Goto => {
         let mut iter = i.iter();
         let _state_mode = iter.next_u8().unwrap();
@@ -43,11 +48,11 @@ pub fn disassemble_parse_block<'a>(
         (format!("\n{}GOTO {}", dh(i.address()), address_string(address)), i.next())
       }
       PopGoto => {
-        let (string, i_last) = ds(i.next(), bc);
+        let (string, i_last) = if r { ds(i.next(), r) } else { Default::default() };
         (format!("\n{}POP{string}", dh(i.address())), i_last)
       }
       PushGoto => {
-        let (string, i_last) = ds(i.next(), bc);
+        let (string, i_last) = if r { ds(i.next(), r) } else { Default::default() };
         let mut iter = i.iter();
         let _state_mode = iter.next_u8().unwrap();
         let address = iter.next_u32_le().unwrap() as usize;
@@ -55,14 +60,14 @@ pub fn disassemble_parse_block<'a>(
         (format!("\n{}PUSH {}{string}", dh(i.address()), address_string(address)), i_last)
       }
       PushExceptionHandler => {
-        let (string, i_last) = ds(i.next(), bc);
+        let (string, i_last) = if r { ds(i.next(), r) } else { Default::default() };
         let mut iter = i.iter();
         let _state_mode = iter.next_u8().unwrap();
         let address = iter.next_u32_le().unwrap() as usize;
         (format!("\n{}PUSH-CATCH {}{string}", dh(i.address()), address_string(address)), i_last)
       }
       Reduce => {
-        let (string, i_last) = ds(i.next(), bc);
+        let (string, i_last) = if r { ds(i.next(), r) } else { Default::default() };
         let mut iter = i.iter();
         let prod_id = iter.next_u32_le().unwrap();
         let rule_id = iter.next_u32_le().unwrap();
@@ -83,14 +88,14 @@ pub fn disassemble_parse_block<'a>(
         )
       }
       AssignToken => {
-        let (string, i_last) = ds(i.next(), bc);
+        let (string, i_last) = if r { ds(i.next(), r) } else { Default::default() };
         let mut iter = i.iter();
         let tok_id = iter.next_u32_le().unwrap();
 
         (format!("\n{}ASSIGN-TK [{}]{string}", dh(i.address()), tok_id), i_last)
       }
       NoOp => {
-        let (string, i_last) = ds(i.next(), bc);
+        let (string, i_last) = if r { ds(i.next(), r) } else { Default::default() };
         (
           format!(
             "\n{}NOOP [ASCII: {} 0x{:X}]{string}",
@@ -102,43 +107,43 @@ pub fn disassemble_parse_block<'a>(
         )
       }
       ScanShift => {
-        let (string, i_last) = ds(i.next(), bc);
+        let (string, i_last) = if r { ds(i.next(), r) } else { Default::default() };
         (format!("\n{}SCAN-SHFT{string}", dh(i.address())), i_last)
       }
       ShiftToken => {
-        let (string, i_last) = ds(i.next(), bc);
+        let (string, i_last) = if r { ds(i.next(), r) } else { Default::default() };
         (format!("\n{}SHFT-TK{string}", dh(i.address())), i_last)
       }
       ShiftTokenScanless => {
-        let (string, i_last) = ds(i.next(), bc);
+        let (string, i_last) = if r { ds(i.next(), r) } else { Default::default() };
         (format!("\n{}SHFT-TK-NO-SCAN{string}", dh(i.address())), i_last)
       }
       PeekToken => {
-        let (string, i_last) = ds(i.next(), bc);
+        let (string, i_last) = if r { ds(i.next(), r) } else { Default::default() };
         (format!("\n{}SHFT-PEEK-TK{string}", dh(i.address())), i_last)
       }
       PeekTokenScanless => {
-        let (string, i_last) = ds(i.next(), bc);
+        let (string, i_last) = if r { ds(i.next(), r) } else { Default::default() };
         (format!("\n{}SHFT-PEEK-TK-NO-SCAN{string}", dh(i.address())), i_last)
       }
       SkipToken => {
-        let (string, i_last) = ds(i.next(), bc);
+        let (string, i_last) = if r { ds(i.next(), r) } else { Default::default() };
         (format!("\n{}SKIP{string}", dh(i.address())), i_last)
       }
       SkipTokenScanless => {
-        let (string, i_last) = ds(i.next(), bc);
+        let (string, i_last) = if r { ds(i.next(), r) } else { Default::default() };
         (format!("\n{}SKIP-NO-SCAN{string}", dh(i.address())), i_last)
       }
       PeekSkipToken => {
-        let (string, i_last) = ds(i.next(), bc);
+        let (string, i_last) = if r { ds(i.next(), r) } else { Default::default() };
         (format!("\n{}SKIP-PEEK{string}", dh(i.address())), i_last)
       }
       PeekSkipTokenScanless => {
-        let (string, i_last) = ds(i.next(), bc);
+        let (string, i_last) = if r { ds(i.next(), r) } else { Default::default() };
         (format!("\n{}SKIP-PEEK-NO-SCAN{string}", dh(i.address())), i_last)
       }
       PeekReset => {
-        let (string, i_last) = ds(i.next(), bc);
+        let (string, i_last) = if r { ds(i.next(), r) } else { Default::default() };
         (format!("\n{}PEEK-RESET{string}", dh(i.address())), i_last)
       }
       Fail => (format!("\n{}FAIL", dh(i.address())), i.next()),
@@ -150,7 +155,7 @@ pub fn disassemble_parse_block<'a>(
 
 pub(crate) fn generate_table_string<'a>(
   i: Instruction<'a>,
-  bc: &[u8],
+  recursive: bool,
 ) -> (String, Option<Instruction<'a>>) {
   use Opcode::*;
   let TableHeaderData {
@@ -204,12 +209,8 @@ pub(crate) fn generate_table_string<'a>(
       ));
     }
   }
-  strings.push(create_default_entry(default_block.address()));
 
-  for address in delta_offsets {
-    strings.push(disassemble_parse_block(Some((i.bytecode(), address).into()), bc).0);
-  }
-  let (default_string, offset) = disassemble_parse_block(Some(default_block), bc);
+  strings.push(create_default_entry(default_block.address()));
 
   let mut string = format!(
     "\n{}{} JUMP \n{: >7} TYPE {} ",
@@ -229,9 +230,19 @@ pub(crate) fn generate_table_string<'a>(
 
   string += &strings.join("");
 
-  string += &default_string;
+  if recursive {
+    for address in delta_offsets {
+      string += &disassemble_parse_block(Some((i.bytecode(), address).into()), recursive).0;
+    }
 
-  (string, offset)
+    let (default_string, offset) = disassemble_parse_block(Some(default_block), recursive);
+
+    string += &default_string;
+
+    (string, offset)
+  } else {
+    (string, None)
+  }
 }
 
 fn create_failure_entry(entry_offset: usize, goto_offset: usize) -> String {
@@ -260,7 +271,7 @@ fn create_normal_entry(
 }
 
 /// Returns a "disassembly"  representation of a bytecode parser's opcodes.
-pub fn generate_disassembly(bc: &[u8]) -> String {
+pub fn disassemble_bytecode(bc: &[u8]) -> String {
   let mut states_strings = vec![];
   let i: Instruction = (bc, 0).into();
   let mut next = Some(i);
@@ -270,7 +281,7 @@ pub fn generate_disassembly(bc: &[u8]) -> String {
       states_strings.push("\n".to_string());
     }
 
-    let (string, n) = disassemble_parse_block(next, bc);
+    let (string, n) = disassemble_parse_block(next, true);
 
     states_strings.push(string);
 

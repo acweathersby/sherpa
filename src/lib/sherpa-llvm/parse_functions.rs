@@ -12,9 +12,9 @@ use sherpa_rust_runtime::types::{
 };
 use std::collections::BTreeMap;
 
-pub struct BuildArgs<'a, 'llvm: 'a, 'db: 'a> {
+pub struct BuildArgs<'a, 'llvm: 'a> {
   pub state_name: &'a str,
-  pub state:      &'a ParseState<'db>,
+  pub state:      &'a ParseState,
   pub j:          &'a Journal,
   pub db:         &'a ParserDatabase,
   pub m:          &'a LLVMParserModule<'llvm>,
@@ -26,7 +26,7 @@ pub(crate) fn compile_states<'llvm, 'db>(
   j: &mut Journal,
   m: &LLVMParserModule<'llvm>,
   db: &ParserDatabase,
-  states: &ParseStatesVec<'db>,
+  states: &ParseStatesVec,
 ) -> SherpaResult<()> {
   let mut state_lu = states
     .iter()
@@ -71,7 +71,7 @@ fn compile_state<'llvm, 'db>(
   j: &Journal,
   m: &LLVMParserModule<'llvm>,
   db: &ParserDatabase,
-  parse_state: &ParseState<'db>,
+  parse_state: &ParseState,
   state_lu: &mut BTreeMap<String, FunctionValue<'llvm>>,
   scan_stop: FunctionValue<'llvm>,
 ) -> SherpaResult<()> {
@@ -101,8 +101,8 @@ fn compile_state<'llvm, 'db>(
   SherpaResult::Ok(())
 }
 
-fn compile_statement<'a, 'llvm: 'a, 'db: 'a>(
-  args: &mut BuildArgs<'a, 'llvm, 'db>,
+fn compile_statement<'a, 'llvm: 'a>(
+  args: &mut BuildArgs<'a, 'llvm>,
   stmt: &parser::Statement,
   mut p_ctx: PointerValue<'llvm>,
   mut state_fun: FunctionValue<'llvm>,
@@ -220,8 +220,8 @@ fn compile_statement<'a, 'llvm: 'a, 'db: 'a>(
 
 /// Return the difference between the `scan_ptr` and `end_ptr`.
 /// Value type is `iptr`
-pub(crate) fn get_chars_remaining<'a, 'llvm: 'a, 'db: 'a>(
-  args: &mut BuildArgs<'a, 'llvm, 'db>,
+pub(crate) fn get_chars_remaining<'a, 'llvm: 'a>(
+  args: &mut BuildArgs<'a, 'llvm>,
   p_ctx: PointerValue<'a>,
 ) -> SherpaResult<IntValue<'a>> {
   let LLVMParserModule { b, iptr, .. } = args.m;
@@ -230,9 +230,9 @@ pub(crate) fn get_chars_remaining<'a, 'llvm: 'a, 'db: 'a>(
   SherpaResult::Ok(b.build_int_sub(end_int, scan_int, "").into())
 }
 
-fn compile_match<'a, 'llvm: 'a, 'db: 'a>(
+fn compile_match<'a, 'llvm: 'a>(
   matches_ast: &parser::Matches,
-  args: &mut BuildArgs<'a, 'llvm, 'db>,
+  args: &mut BuildArgs<'a, 'llvm>,
   p_ctx: PointerValue<'llvm>,
   state_fun: FunctionValue<'llvm>,
   start_block: BasicBlock<'llvm>,
@@ -363,8 +363,8 @@ fn compile_match<'a, 'llvm: 'a, 'db: 'a>(
   SherpaResult::Ok(())
 }
 
-fn prime_line_data<'a, 'llvm: 'a, 'db: 'a>(
-  args: &BuildArgs<'a, 'llvm, 'db>,
+fn prime_line_data<'a, 'llvm: 'a>(
+  args: &BuildArgs<'a, 'llvm>,
   p: PointerValue<'llvm>,
   increment_amount: IntValue<'llvm>,
 ) -> SherpaResult<()> {
@@ -385,8 +385,8 @@ fn prime_line_data<'a, 'llvm: 'a, 'db: 'a>(
   SherpaResult::Ok(())
 }
 
-fn construct_cp_lu_with_token_len_store<'a, 'llvm: 'a, 'db: 'a>(
-  args: &BuildArgs<'a, 'llvm, 'db>,
+fn construct_cp_lu_with_token_len_store<'a, 'llvm: 'a>(
+  args: &BuildArgs<'a, 'llvm>,
   buffer: PointerValue<'llvm>,
 ) -> SherpaResult<(IntValue<'llvm>, IntValue<'llvm>)> {
   let LLVMParserModule { b, fun, .. } = args.m;
@@ -401,9 +401,9 @@ fn construct_cp_lu_with_token_len_store<'a, 'llvm: 'a, 'db: 'a>(
   SherpaResult::Ok((cp_val, cp_byte_len))
 }
 
-fn goto<'a, 'llvm: 'a, 'db: 'a>(
+fn goto<'a, 'llvm: 'a>(
   sherpa_core::parser::Goto { prod }: &sherpa_core::parser::Goto,
-  args: &BuildArgs<'a, 'llvm, 'db>,
+  args: &BuildArgs<'a, 'llvm>,
   state_fun: FunctionValue<'llvm>,
 ) -> SherpaResult<()> {
   build_tail_call_with_return(
@@ -413,9 +413,9 @@ fn goto<'a, 'llvm: 'a, 'db: 'a>(
   )
 }
 
-fn push_goto<'a, 'llvm: 'a, 'db: 'a>(
+fn push_goto<'a, 'llvm: 'a>(
   parser::Push { prod, .. }: &parser::Push,
-  args: &BuildArgs<'a, 'llvm, 'db>,
+  args: &BuildArgs<'a, 'llvm>,
   p_ctx: PointerValue,
 ) -> SherpaResult<()> {
   add_goto_slot(
@@ -504,10 +504,10 @@ pub(crate) fn ensure_space_on_goto_stack<'a>(
 
 /// Resets any peek side-effects and builds a tail call return to the
 /// `dispatch_unwind` function.
-fn fail<'a, 'llvm: 'a, 'db: 'a>(
-  args: &BuildArgs<'a, 'llvm, 'db>,
+fn fail<'a, 'llvm: 'a>(
+  args: &BuildArgs<'a, 'llvm>,
   p_ctx: PointerValue,
-  state_fun: FunctionValue<'db>,
+  state_fun: FunctionValue<'a>,
 ) -> SherpaResult<()> {
   let LLVMParserModule { b, fun, i32, .. } = args.m;
   peek_reset(args, p_ctx)?;
@@ -565,9 +565,9 @@ fn construct_assign_token_id(
   SherpaResult::Ok(())
 }
 
-fn reduce<'a, 'llvm: 'a, 'db: 'a>(
+fn reduce<'a, 'llvm: 'a>(
   parser::ReduceRaw { rule_id, prod_id, len, .. }: &parser::ReduceRaw,
-  args: &BuildArgs<'a, 'llvm, 'db>,
+  args: &BuildArgs<'a, 'llvm>,
   p_ctx: PointerValue<'llvm>,
   no_reenter: bool,
 ) -> SherpaResult<Option<(FunctionValue<'llvm>, PointerValue<'llvm>)>> {
@@ -611,8 +611,8 @@ fn create_parse_function<'a>(
   m.module.add_function(&name, m.types.tail_callable_parse_function, linkage)
 }
 
-fn construct_token_shift<'a, 'llvm: 'a, 'db: 'a>(
-  args: &BuildArgs<'a, 'llvm, 'db>,
+fn construct_token_shift<'a, 'llvm: 'a>(
+  args: &BuildArgs<'a, 'llvm>,
   p_ctx: PointerValue<'llvm>,
 ) -> SherpaResult<Option<(FunctionValue<'llvm>, PointerValue<'llvm>)>> {
   let LLVMParserModule { b, i32, fun, .. } = args.m;
@@ -819,8 +819,8 @@ fn build_push_fn_state<'a>(
   SherpaResult::Ok(())
 }
 
-fn scan_is_less_than_end<'a, 'llvm: 'a, 'db: 'a>(
-  args: &BuildArgs<'a, 'llvm, 'db>,
+fn scan_is_less_than_end<'a, 'llvm: 'a>(
+  args: &BuildArgs<'a, 'llvm>,
   p_ctx: PointerValue<'llvm>,
 ) -> SherpaResult<IntValue<'llvm>> {
   let LLVMParserModule { b, iptr, .. } = args.m;
@@ -842,8 +842,8 @@ fn scan_is_less_than_end<'a, 'llvm: 'a, 'db: 'a>(
   ))
 }
 
-pub(crate) fn check_for_input_acceptability<'a, 'llvm: 'a, 'db: 'a>(
-  args: &BuildArgs<'a, 'llvm, 'db>,
+pub(crate) fn check_for_input_acceptability<'a, 'llvm: 'a>(
+  args: &BuildArgs<'a, 'llvm>,
   state_fun: FunctionValue<'llvm>,
   p_ctx: PointerValue<'llvm>,
   needed_num_bytes: IntValue<'llvm>,

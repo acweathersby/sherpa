@@ -38,6 +38,9 @@ features = [
   'wasm-target',
 ]
 
+[dependencies.sherpa_rust_build]
+path = "../../lib/sherpa-rust-build"
+
 [dependencies.sherpa_rust_runtime]
 path = "../../lib/sherpa-rust-runtime"
 

@@ -11,7 +11,7 @@ pub(crate) fn build_ir<'db: 'follow, 'follow>(
   j: &mut Journal,
   graph: &Graph<'follow, 'db>,
   entry_name: IString,
-) -> SherpaResult<Array<Box<ParseState<'db>>>> {
+) -> SherpaResult<Array<Box<ParseState>>> {
   debug_assert!(entry_name.as_u64() != 0);
 
   let leaf_states = graph.get_leaf_states();
@@ -76,7 +76,7 @@ fn convert_goto_state_to_ir<'follow, 'db>(
   graph: &Graph<'follow, 'db>,
   state: &State,
   successors: &Set<&State>,
-) -> SherpaResult<(StateId, Box<ParseState<'db>>)> {
+) -> SherpaResult<(StateId, Box<ParseState>)> {
   let db = graph.get_db();
   let successors = successors.iter().filter(|s| {
     matches!(s.get_type(), StateType::GotoPass | StateType::GotoLoop | StateType::KernelGoto)
@@ -137,7 +137,7 @@ fn convert_state_to_ir<'follow, 'db>(
   successors: &Set<&State>,
   entry_name: IString,
   goto_state_id: Option<IString>,
-) -> SherpaResult<Vec<(StateId, Box<ParseState<'db>>)>> {
+) -> SherpaResult<Vec<(StateId, Box<ParseState>)>> {
   let state_id = state.get_id();
   let db: &ParserDatabase = graph.get_db();
   let s_store = db.string_store();
@@ -456,7 +456,7 @@ pub(super) fn create_ir_state<'follow, 'db>(
   graph: &Graph<'follow, 'db>,
   w: CodeWriter<Vec<u8>>,
   state: &State,
-) -> SherpaResult<ParseState<'db>> {
+) -> SherpaResult<ParseState> {
   let ir_state = ParseState {
     code: w.to_string(),
     name: create_ir_state_name(graph, state).intern(graph.get_db().string_store()),

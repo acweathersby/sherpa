@@ -21,9 +21,9 @@ use std::collections::{BTreeMap, VecDeque};
 
 /// Removes any states that are not referenced, directly or indirectly, by
 /// at least one of the entry states.
-pub fn garbage_collect<'db, R: FromIterator<(IString, Box<ParseState<'db>>)>>(
+pub fn garbage_collect<'db, R: FromIterator<(IString, Box<ParseState>)>>(
   db: &'db ParserDatabase,
-  mut parse_states: Map<IString, Box<ParseState<'db>>>,
+  mut parse_states: Map<IString, Box<ParseState>>,
 ) -> SherpaResult<R> {
   let mut out = Array::new();
   let mut queue = VecDeque::from_iter(
@@ -48,8 +48,8 @@ pub fn garbage_collect<'db, R: FromIterator<(IString, Box<ParseState<'db>>)>>(
 
 fn traverse_statement<'db>(
   stmt: &Statement,
-  parse_states: &mut Map<IString, Box<ParseState<'db>>>,
-  queue: &mut VecDeque<(IString, Box<ParseState<'db>>)>,
+  parse_states: &mut Map<IString, Box<ParseState>>,
+  queue: &mut VecDeque<(IString, Box<ParseState>)>,
 ) {
   if let Some(branch) = &stmt.branch {
     match branch {
@@ -90,8 +90,8 @@ fn traverse_statement<'db>(
 
 fn enqueue_state<'db>(
   name: IString,
-  parse_states: &mut Map<IString, Box<ParseState<'db>>>,
-  queue: &mut VecDeque<(IString, Box<ParseState<'db>>)>,
+  parse_states: &mut Map<IString, Box<ParseState>>,
+  queue: &mut VecDeque<(IString, Box<ParseState>)>,
   push_front: bool,
 ) {
   if let Some(state) = parse_states.remove(&name) {
@@ -108,11 +108,11 @@ pub struct _OptConfig {}
 /// Performance various transformation on the parse state graph
 /// to reduce number of steps between transient actions, and to the
 /// reduce number of parse states overall.
-pub fn optimize<'db, R: FromIterator<(IString, Box<ParseState<'db>>)>>(
+pub fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
   db: &'db ParserDatabase,
-  parse_states: Map<IString, Box<ParseState<'db>>>,
+  parse_states: Map<IString, Box<ParseState>>,
 ) -> SherpaResult<R> {
-  let mut parse_states: Map<IString, Box<ParseState<'db>>> = garbage_collect(db, parse_states)?;
+  let mut parse_states: Map<IString, Box<ParseState>> = garbage_collect(db, parse_states)?;
 
   // Proceed through each state and apply optimizations them. If any optimizations
   // occur that can may change inter-state references, garbage collect and
@@ -175,7 +175,7 @@ pub fn optimize<'db, R: FromIterator<(IString, Box<ParseState<'db>>)>>(
 
 pub fn __print_states__<'db>(
   db: &'db ParserDatabase,
-  parse_states: &Map<IString, Box<ParseState<'db>>>,
+  parse_states: &Map<IString, Box<ParseState>>,
 ) {
   for (_, state) in parse_states {
     println!("\n{}\n", state.code)

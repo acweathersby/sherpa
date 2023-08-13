@@ -7,7 +7,12 @@ mod test;
 
 mod builder;
 
-use builder::{create_rust_writer_utils, write_rust_ast, write_rust_bytecode_parser_file};
+use builder::{
+  create_rust_writer_utils,
+  write_rust_ast,
+  write_rust_ast2,
+  write_rust_bytecode_parser_file,
+};
 use sherpa_ascript::{output_base::AscriptWriter, types::AScriptStore};
 use sherpa_bytecode::compile_bytecode;
 use sherpa_core::{
@@ -19,10 +24,13 @@ use sherpa_core::{
   SherpaResult,
 };
 
-pub fn build_rust(db: &ParserDatabase, store: &AScriptStore) -> SherpaResult<String> {
+pub fn build_rust(mut j: Journal, db: &ParserDatabase) -> SherpaResult<String> {
+  j.set_active_report("Rust AST Compile", sherpa_core::ReportType::Any);
+
+  let store = AScriptStore::new(&mut j, &db)?;
   let u = create_rust_writer_utils(&store, &db);
   let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
-  let writer = write_rust_ast(w)?;
+  let writer = write_rust_ast2(w)?;
 
   String::from_utf8(writer.into_writer().into_output()).into()
 }
@@ -39,7 +47,7 @@ pub async fn compile_rust_bytecode_parser(
 
     let states = optimize::<Vec<_>>(&db, states)?;
 
-    compile_bytecode(&db, states)
+    compile_bytecode(&db, states.iter())
   };
 
   let store = async move { AScriptStore::new(&mut j2, &db) };

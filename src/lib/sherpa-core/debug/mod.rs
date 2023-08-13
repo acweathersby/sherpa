@@ -176,12 +176,8 @@ BytcodeID: {}
 
 {}{}
 -------------------------------------------------------------------------------",
-        disassemble_parse_block(Some(*base_instruction), base_instruction.bytecode()).0,
-        disassemble_parse_block(
-          Some(base_instruction.next().unwrap()),
-          base_instruction.bytecode()
-        )
-        .0
+        disassemble_parse_block(Some(*base_instruction), true).0,
+        disassemble_parse_block(Some(base_instruction.next().unwrap()), true).0
       );
       println!("");
     }
@@ -226,7 +222,7 @@ BytcodeID: {}
           end_ptr,
           &string[(*active_ptr)..(active_ptr + input_window_size).min(string.len())]
             .replace("\n", "\\n"),
-          disassemble_parse_block(Some(*instruction), instruction.bytecode()).0
+          disassemble_parse_block(Some(*instruction), true).0
         );
         println!("");
       }
@@ -389,12 +385,8 @@ pub fn string_debugger(
   
   {}{}
   -------------------------------------------------------------------------------",
-        disassemble_parse_block(Some(*base_instruction), base_instruction.bytecode()).0,
-        disassemble_parse_block(
-          Some(base_instruction.next().unwrap()),
-          base_instruction.bytecode()
-        )
-        .0
+        disassemble_parse_block(Some(*base_instruction), true).0,
+        disassemble_parse_block(Some(base_instruction.next().unwrap()), true).0
       );
       println!("");
     }
@@ -439,7 +431,7 @@ pub fn string_debugger(
           end_ptr,
           &string[(*active_ptr)..(active_ptr + input_window_size).min(string.len())]
             .replace("\n", "\\n"),
-          disassemble_parse_block(Some(*instruction), instruction.bytecode()).0
+          disassemble_parse_block(Some(*instruction), true).0
         );
         println!("");
       }

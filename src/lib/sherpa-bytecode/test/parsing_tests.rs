@@ -300,22 +300,6 @@ fn scientific_number() -> SherpaResult<()> {
 }
 
 #[test]
-fn temp() -> SherpaResult<()> {
-  compile_and_run_grammar(
-    r##"<> A > hello" "world
-
-
-        "##,
-    &[
-      ("default", r##""""##, true),
-      ("default", r##""\\""##, true),
-      ("default", r##""1234""##, true),
-      ("default", r##""12\"34""##, true),
-    ],
-  )
-}
-
-#[test]
 fn escaped_string() -> SherpaResult<()> {
   compile_and_run_grammar(
     r##"
@@ -336,7 +320,7 @@ fn escaped_string() -> SherpaResult<()> {
 
 fn compile_and_run_grammar(source: &str, inputs: &[(&str, &str, bool)]) -> SherpaResult<()> {
   build_states(source, "".into(), Default::default(), &|TestPackage { db, states, .. }| {
-    let (bc, state_map) = compile_bytecode(&db, states)?;
+    let (bc, state_map) = compile_bytecode(&db, states.iter())?;
 
     for (entry_name, input, should_pass) in inputs {
       let ok = Parser::new(&mut ((*input).into()), &bc)
@@ -349,6 +333,8 @@ fn compile_and_run_grammar(source: &str, inputs: &[(&str, &str, bool)]) -> Sherp
       )) as u32)
       .is_ok();
 
+      let mut cd = console_debugger(db.to_owned(), Default::default());
+
       if (ok != *should_pass) {
         Parser::new(&mut ((*input).into()), &bc)
       .collect_shifts_and_skips(
@@ -357,7 +343,7 @@ fn compile_and_run_grammar(source: &str, inputs: &[(&str, &str, bool)]) -> Sherp
         db.entry_points().iter().map(|e| {
           e.entry_name.to_string(db.string_store())
         }).collect::<Vec<_>>().join(" | ")
-      )) as u32, 0, &mut console_debugger(db.to_owned(), Default::default()));
+      )) as u32, 0, &mut cd.as_deref_mut());
         panic!(
           "\n\nParsing of input\n   \"{input}\"\nthrough entry point [{entry_name}] should {}.\n",
           if *should_pass { "pass" } else { "fail" }
@@ -412,7 +398,7 @@ fn simple_newline_tracking() -> SherpaResult<()> {
     "".into(),
     Default::default(),
     &|TestPackage { db, states, .. }| {
-      let (bc, _) = compile_bytecode(&db, states)?;
+      let (bc, _) = compile_bytecode(&db, states.iter())?;
 
       let mut parser = Parser::new(&mut ("hello\nworld\n\ngoodby\nmango".into()), &bc);
       parser.init_parser(FIRST_PARSE_BLOCK_ADDRESS);

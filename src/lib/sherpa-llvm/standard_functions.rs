@@ -832,7 +832,7 @@ pub fn compile_llvm_module_from_parse_states<'llvm, 'db>(
   j: &mut Journal,
   module: &LLVMParserModule<'llvm>,
   db: &'db ParserDatabase,
-  states: &ParseStatesVec<'db>,
+  states: &ParseStatesVec,
 ) -> SherpaResult<()> {
   unsafe {
     construct_init(module)?;

@@ -95,7 +95,8 @@ impl ProductionId {
   }
 }
 
-/// A globally unique identifier for a single grammar file.
+/// A globally unique identifier for a single grammar source file. Derived from
+/// the source's absolute resource path.
 #[derive(Default, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct GrammarId(u64);

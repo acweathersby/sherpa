@@ -5,7 +5,7 @@ use sherpa_rust_runtime::types::{
 };
 use std::collections::VecDeque;
 
-pub fn compile_bytecode<'db, T: IntoIterator<Item = (IString, Box<ParseState<'db>>)>>(
+pub fn compile_bytecode<'a, 'db, T: Iterator<Item = &'a (IString, Box<ParseState>)>>(
   db: &'db ParserDatabase,
   states: T,
 ) -> SherpaResult<(Array<u8>, Map<IString, usize>)> {
@@ -16,7 +16,7 @@ pub fn compile_bytecode<'db, T: IntoIterator<Item = (IString, Box<ParseState<'db
   bytecode.append(&mut Array::from(bytecode_header()));
 
   for (name, state) in states {
-    state_name_to_address.insert(name, bytecode.len());
+    state_name_to_address.insert(*name, bytecode.len());
     insert_debug_symbol(&mut bytecode, name.to_string(db.string_store()));
     build_state(db, state.as_ref(), &mut bytecode, &mut state_name_to_proxy)?;
   }
@@ -74,7 +74,7 @@ fn set_goto_address(bc: &mut Vec<u8>, _goto_to_off: &[u32], offset: usize) {
 
 fn build_state<'db>(
   db: &'db ParserDatabase,
-  state: &ParseState<'db>,
+  state: &ParseState,
   bytecode: &mut Array<u8>,
   state_name_to_proxy: &mut OrderedMap<IString, usize>,
 ) -> SherpaResult<()> {

@@ -7,37 +7,33 @@ use crate::{
   writer::code_writer::CodeWriter,
 };
 
-pub type ParseStatesVec<'db> = Array<(IString, Box<ParseState<'db>>)>;
-pub type ParseStatesMap<'db> = Map<IString, Box<ParseState<'db>>>;
+pub type ParseStatesVec = Array<(IString, Box<ParseState>)>;
+pub type ParseStatesMap = Map<IString, Box<ParseState>>;
 
 #[allow(unused)]
 #[cfg(debug_assertions)]
 use std::fmt::Debug;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 /// The IR of a sherpa
-pub struct ParseState<'db> {
+pub struct ParseState {
   pub name:     IString,
   pub comment:  String,
   pub code:     String,
   pub ast:      SherpaResult<Box<State>>,
   /// Collections of scanner based on TOKEN match statements
-  pub scanners: Option<Map<IString, OrderedSet<&'db DBTokenData>>>,
+  pub scanners: Option<Map<IString, OrderedSet<DBTokenData>>>,
 }
 
-impl<'db> ParseState<'db> {
-  pub fn get_scanners(&mut self) -> Option<&Map<IString, OrderedSet<&'db DBTokenData>>> {
-    self.scanners.as_ref()
-  }
-
+impl<'db> ParseState {
   pub fn build_scanners(
     &mut self,
     db: &'db ParserDatabase,
-  ) -> Option<&Map<IString, OrderedSet<&'db DBTokenData>>> {
-    fn get_token_scanner_data<'db>(
+  ) -> Option<&Map<IString, OrderedSet<DBTokenData>>> {
+    fn get_token_scanner_data(
       statement: &mut Statement,
-      db: &'db ParserDatabase,
-      scanners: &mut Map<IString, OrderedSet<&'db DBTokenData>>,
+      db: &ParserDatabase,
+      scanners: &mut Map<IString, OrderedSet<DBTokenData>>,
     ) {
       match &mut statement.branch {
         Some(ASTNode::Matches(box Matches { mode, matches, meta }))
@@ -48,7 +44,7 @@ impl<'db> ParseState<'db> {
             match m {
               ASTNode::IntMatch(m) => {
                 for id in &m.vals {
-                  scanner_data.insert(db.tok_data((*id as u32).into()));
+                  scanner_data.insert(db.tok_data((*id as u32).into()).clone());
                 }
                 get_token_scanner_data(&mut m.statement, db, scanners);
               }
@@ -78,13 +74,13 @@ impl<'db> ParseState<'db> {
   }
 
   pub fn get_interned_scanner_name(
-    scanner_syms: &OrderedSet<&'db DBTokenData>,
+    scanner_syms: &OrderedSet<DBTokenData>,
     string_store: &IStringStore,
   ) -> IString {
     Self::get_scanner_name(scanner_syms).intern(string_store)
   }
 
-  pub fn get_scanner_name(scanner_syms: &OrderedSet<&DBTokenData>) -> String {
+  pub fn get_scanner_name(scanner_syms: &OrderedSet<DBTokenData>) -> String {
     ("scan".to_string()
       + &create_u64_hash(scanner_syms.iter().map(|g| g.sym_id).collect::<OrderedSet<_>>())
         .to_string())
@@ -103,7 +99,9 @@ impl<'db> ParseState<'db> {
       }
     }
 
-    Self::get_scanner_name(&vals.into_iter().map(|i| db.tok_data((i as usize).into())).collect())
+    Self::get_scanner_name(
+      &vals.into_iter().map(|i| db.tok_data((i as usize).into()).clone()).collect(),
+    )
   }
 
   /// Returns a reference to the AST.
@@ -150,7 +148,7 @@ impl<'db> ParseState<'db> {
 }
 
 #[cfg(debug_assertions)]
-impl<'db> ParseState<'db> {
+impl ParseState {
   pub fn debug_string(&self, db: &ParserDatabase) -> String {
     format!(
       "ParseState{{

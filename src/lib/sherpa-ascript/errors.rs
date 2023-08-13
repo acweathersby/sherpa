@@ -44,17 +44,17 @@ pub(crate) fn add_prop_redefinition_error(
     id:       "property-redefinition",
     sources:  vec![
       (
-        existing_prop.location.clone(),
+        existing_prop.loc.clone(),
         PathBuf::from(existing_prop.grammar_ref.path.to_string(db.string_store())),
-        format!("First definition with type [{}]", existing_prop.type_val.debug_string()),
+        "First definition with type [".to_string() + &existing_prop.type_val.debug_string() + "]",
       ),
       (
-        new_prop.location.clone(),
+        new_prop.loc.clone(),
         PathBuf::from(new_prop.grammar_ref.path.to_string(db.string_store())),
-        format!("Second definition with type [{}]", new_prop.type_val.debug_string()),
+        "Second definition with type [".to_string() + &new_prop.type_val.debug_string() + "]",
       ),
     ],
-    msg:      format!("Redefinition of property {} in struct {}", prop_name, struct_type,),
+    msg:      "Redefinition of property ".to_string() + &prop_name + " in struct " + &struct_type,
     ps_msg:   "".into(),
     severity: SherpaErrorSeverity::Critical,
   });
@@ -93,8 +93,9 @@ pub(crate) fn add_incompatible_production_scalar_types_error(
   (type_b, rules_b): (AScriptTypeVal, Vec<DBRuleKey>),
 ) {
   let type_names = ast.get_type_names();
+
   j.report_mut().add_error(SherpaError::SourcesError {
-    id:       "incompatible-production-scalar-types",
+    id:       "incompatible-production-scalar-types [401]",
     sources:  rules_a
       .into_iter()
       .map(|r| {

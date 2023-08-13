@@ -375,7 +375,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
 
   /// Parse input up to the next required parse action and return
   /// its value.
-  fn get_next_action(&mut self, debug: &mut Option<DebugFn>) -> ParseAction;
+  fn get_next_action<'debug>(&mut self, debug: &mut Option<&'debug mut DebugFn>) -> ParseAction;
 
   /// Returns a reference to the internal Reader
   fn get_reader(&self) -> &R;
@@ -397,10 +397,10 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
   fn parse_cst() {}
 
   // Givin a shift and reduce function, compile an AST struct
-  fn parse_ast<Node: AstObject>(
+  fn parse_ast<'a, 'debug, Node: AstObject>(
     &mut self,
     reducers: &[Reducer<R, M, Node, UPWARD_STACK>],
-    debug: &mut Option<DebugFn>,
+    debug: &mut Option<&'debug mut DebugFn>,
   ) -> Result<AstSlot<Node>, SherpaParseError> {
     let mut ast_stack: Vec<AstSlot<Node>> = vec![];
     loop {
@@ -456,7 +456,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
               off:      start as u32,
             }
             .to_token(self.get_reader_mut()),
-            message: Default::default(),
+            message: "Unrecognized Token".into(),
           });
         }
         _ => {
@@ -464,7 +464,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
             inline_message: Default::default(),
             last_production: 0,
             loc: Default::default(),
-            message: Default::default(),
+            message: "Unrecognized Token".into(),
           });
         }
       }
@@ -499,11 +499,11 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
 
   ///  Gathers all groups of tokens that have been shifted and skipped during
   /// the parsing of an input.
-  fn collect_shifts_and_skips(
+  fn collect_shifts_and_skips<'debug>(
     &mut self,
     entry_point: u32,
     target_production_id: u32,
-    debug: &mut Option<DebugFn>,
+    debug: &mut Option<&'debug mut DebugFn>,
   ) -> ShiftsAndSkipsResult {
     self.init_parser(entry_point);
 
@@ -575,11 +575,11 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
     }
   }
 
-  fn create_cst(
+  fn create_cst<'debug>(
     &mut self,
     entry_point: u32,
     target_production_id: u32,
-    debug: &mut Option<DebugFn>,
+    debug: &mut Option<&'debug mut DebugFn>,
   ) -> Option<Rc<cst::CST>> {
     self.init_parser(entry_point);
 

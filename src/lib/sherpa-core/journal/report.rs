@@ -27,6 +27,8 @@ pub enum ReportType {
   /// if [GrammarId] is `GrammarId::default`, then matches all grammar
   /// compilation reports
   GrammarCompile(GrammarId),
+  /// Initial parsing of a grammar source input.
+  GrammarParse,
   /// TODO
   TokenProductionCompile(ProductionId),
   /// TODO

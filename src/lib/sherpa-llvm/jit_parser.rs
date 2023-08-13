@@ -295,9 +295,9 @@ impl<'llvm, R: ByteReader + LLVMByteReader + MutByteReader, M> SherpaParser<R, M
     self.prime(entry_point);
   }
 
-  fn get_next_action(
+  fn get_next_action<'debug>(
     &mut self,
-    debug: &mut Option<sherpa_rust_runtime::bytecode::DebugFn>,
+    debug: &mut Option<&'debug mut sherpa_rust_runtime::bytecode::DebugFn>,
   ) -> ParseAction {
     match self.next() {
       ParseActionType::Shift => ParseAction::Shift {

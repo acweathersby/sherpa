@@ -138,6 +138,7 @@ pub fn create_grammar_data(
       }
     }
   }
+
   let mut g_data = GrammarData {
     id: GrammarIdentities {
       guid: grammar_path.into(),

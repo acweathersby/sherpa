@@ -525,7 +525,8 @@ num_type!(AScriptTypeValI8, I8, i8, i8);
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct AScriptProp {
   pub type_val:    TaggedType,
-  pub location:    Token,
+  /// Location in the source grammar of the effected symbol
+  pub loc:         Token,
   /// The grammar the property is defined in.
   pub grammar_ref: GrammarIdentities,
   /// Tracks the number of times this property has been

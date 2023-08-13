@@ -9,8 +9,8 @@ use core::panic;
 pub fn compile_parse_states<'db>(
   mut j: Journal,
   db: &'db ParserDatabase,
-) -> SherpaResult<ParseStatesMap<'db>> {
-  j.set_active_report("test", ReportType::ProductionCompile(Default::default()));
+) -> SherpaResult<ParseStatesMap> {
+  j.set_active_report("State Compile", ReportType::ProductionCompile(Default::default()));
 
   let follow = create_follow_sets(db);
   let mut states = Map::new();
@@ -43,9 +43,9 @@ pub fn compile_parse_states<'db>(
 
       match prod_sym {
         SymbolId::NonTerminal { .. } => {
-          let graph = build_graph(&mut j, GraphMode::Parser, start_items, db, &follow).unwrap();
+          let graph = build_graph(&mut j, GraphMode::Parser, start_items, db, &follow)?;
 
-          let ir = build_ir(&mut j, &graph, db.prod_guid_name(prod_id.into())).unwrap();
+          let ir = build_ir(&mut j, &graph, db.prod_guid_name(prod_id.into()))?;
 
           for mut state in ir {
             if let Some(scanner_data) = state.build_scanners(db) {
@@ -57,9 +57,9 @@ pub fn compile_parse_states<'db>(
           }
         }
         SymbolId::NonTerminalToken { .. } => {
-          let graph = build_graph(&mut j, GraphMode::Scanner, start_items, db, &follow).unwrap();
+          let graph = build_graph(&mut j, GraphMode::Scanner, start_items, db, &follow)?;
 
-          let ir = build_ir(&mut j, &graph, db.prod_guid_name(prod_id.into())).unwrap();
+          let ir = build_ir(&mut j, &graph, db.prod_guid_name(prod_id.into()))?;
 
           for state in ir {
             states.insert(state.name, state);
@@ -80,11 +80,9 @@ pub fn compile_parse_states<'db>(
       .flat_map(|s| Items::start_items(s.prod_id, db).to_origin(Origin::TokenGoal(s.tok_id)))
       .collect::<Array<_>>();
 
-    //    start_items.__debug_print__("Scanner Items");
+    let graph = build_graph(&mut j, GraphMode::Scanner, start_items, db, &follow)?;
 
-    let graph = build_graph(&mut j, GraphMode::Scanner, start_items, db, &follow).unwrap();
-
-    let ir = build_ir(&mut j, &graph, scanner).unwrap();
+    let ir = build_ir(&mut j, &graph, scanner)?;
     // println!("{}", graph.debug_string());
     for state in ir {
       //  println!("{} {}", state.name.to_str(db.string_store()).as_str(),
@@ -97,9 +95,7 @@ pub fn compile_parse_states<'db>(
     // Warn of failed parses
     match state.build_ast(db.string_store()) {
       SherpaResult::Err(err) => {
-        #[cfg(debug_assertions)]
-        panic!("[Internal Error] Failed to create parse state:\n{}", err);
-        panic!("[Internal Error] Failed to create parse state");
+        todo!("Add State compile error to Journal");
       }
       _ => {}
     }
@@ -111,7 +107,7 @@ pub fn compile_parse_states<'db>(
 fn build_entry_ir<'db>(
   EntryPoint { prod_name, prod_entry_name, prod_exit_name, .. }: &EntryPoint,
   db: &'db ParserDatabase,
-) -> SherpaResult<Array<Box<ParseState<'db>>>> {
+) -> SherpaResult<Array<Box<ParseState>>> {
   let mut w = CodeWriter::new(Vec::<u8>::with_capacity(512));
 
   let _ = (&mut w) + "push " + prod_exit_name.to_string(db.string_store());

@@ -16,7 +16,7 @@ use crate::{
 };
 pub struct TestPackage<'a> {
   pub journal: Journal,
-  pub states:  ParseStatesVec<'a>,
+  pub states:  ParseStatesVec,
   pub db:      &'a ParserDatabase,
   pub soup:    &'a GrammarSoup,
 }

@@ -108,7 +108,7 @@ pub fn build_compile_db<'a>(
   let mut token_names = Map::new();
   let mut token_productions = VecDeque::new();
 
-  while let Some((name, prod_id)) = production_queue.pop_front() {
+  while let Some((loc, prod_id)) = production_queue.pop_front() {
     if !p_map.contains_key(&prod_id.as_sym()) {
       match (custom_states.get(&prod_id), productions.get(&prod_id)) {
         (None, Some(prod)) => {
@@ -166,22 +166,27 @@ pub fn build_compile_db<'a>(
           add_custom_state(state.state.clone(), c_states);
         }
         (Some(_), Some(_)) => {
-          j.report_mut().add_error(SherpaError::Text(
-            "Cannot resolve grammar that has production definitions and state definitions with the same name: ".to_string() + &name.to_string(),
-          ));
+          j.report_mut().add_error(SherpaError::SourceError {
+            loc,
+            path: Default::default(),
+            id: "[2002]",
+            inline_msg: Default::default(),
+            msg:"Cannot resolve grammar that has production definitions and state definitions with the same name: ".to_string(),
+            ps_msg: Default::default(),
+            severity: SherpaErrorSeverity::Critical
+          });
           is_valid = false;
         }
         _ => {
-          let r = name.get_range();
-          j.report_mut().add_error(SherpaError::Text(
-            "Cannot find definition for production [".to_string()
-              + &name.to_string()
-              + "] ("
-              + &r.start_line.to_string()
-              + ", "
-              + &r.start_column.to_string()
-              + ")",
-          ));
+          j.report_mut().add_error(SherpaError::SourceError {
+            loc,
+            path: Default::default(),
+            id: "[2001]",
+            inline_msg: Default::default(),
+            msg: "Cannot find definition for production".into(),
+            ps_msg: Default::default(),
+            severity: SherpaErrorSeverity::Critical,
+          });
           is_valid = false;
         }
       };
@@ -402,6 +407,7 @@ pub fn build_compile_db<'a>(
     entry_points,
     s_store.clone(),
     c_states_owned,
+    is_valid,
   );
 
   SherpaResult::Ok(db)

@@ -35,13 +35,20 @@
                     <div id="tab-debugger" class="tab"> Debugger </div>
                 </div>
                 <div id="panel-bytecode" class="panel active">
-                    <code><pre id="output"></pre></code>
+                    <code><pre id="bytecode-output" class="output"></pre></code>
                 </div>
                 <div id="panel-ast" class="panel">
-                    <h1> AST </h1>
+                    <code><pre id="ast-output" class="output"></pre></code>
                 </div>
                 <div id="panel-cst" class="panel">
                     <h1> cst </h1>
+                </div>
+                <div id="panel-debugger" class="panel">
+                    <button id="debugger-step-button">step</button>
+                    <button id="debugger-into-button">step-into</button>
+                    <button id="debugger-start-stop-button">start</button>
+                    <h1> Debugger </h1>
+                    <pre id="debugger-output"></pre>
                 </div>
             </div>
         </div>
@@ -52,12 +59,18 @@
         // Connect docs handler to iframe manage interaction between
         // docs and lab.
         docs_handler(document.getElementById("documents-frame"), document.getElementById("documents-host"));
-        new ScrollHandler(document.getElementById("output"), document.getElementById("panel-bytecode"));
+        new ScrollHandler(document.getElementById("bytecode-output"), document.getElementById("panel-bytecode"));
+        new ScrollHandler(document.getElementById("ast-output"), document.getElementById("panel-ast"));
 
         engine({
             codemirror_grammar_host: document.getElementById("panel-grammar"),
-            codemirror_syntax_host: document.getElementById("panel-parser"),
-            disassembly_output: document.getElementById("output"),
+            codemirror_parser_host: document.getElementById("panel-parser"),
+            disassembly_output: document.getElementById("bytecode-output"),
+            debugger_start_stop_button: document.getElementById("debugger-start-stop-button"),
+            debugger_step_button: document.getElementById("debugger-step-button"),
+            debugger_into_button: document.getElementById("debugger-into-button"),
+            debugger_out_button: document.getElementById("debugger-out-button"),
+            debugger_output: document.getElementById("debugger-output"),
         }).then(() => {
             for (const scroller of Array.from(document.getElementsByClassName("cm-scroller"))) {
 

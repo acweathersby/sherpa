@@ -90,6 +90,10 @@ pub struct ParserDatabase {
   string_store:  IStringStore,
   /// Custom states that should be integrated into the final parsers
   custom_states: Array<Option<Box<parser::State>>>,
+  /// True if the database represents a valid set of rules. This may not be
+  /// the case if, for example, the database is comprised of rules that
+  /// reference non-existant productions.
+  valid:         bool,
 }
 
 impl ParserDatabase {
@@ -103,6 +107,7 @@ impl ParserDatabase {
     entry_points: Array<EntryPoint>,
     string_store: IStringStore,
     custom_states: Array<Option<Box<parser::State>>>,
+    valid: bool,
   ) -> Self {
     let lr_items = construct_follow(&prod_syms, &rules);
 
@@ -117,7 +122,12 @@ impl ParserDatabase {
       string_store,
       follow_items: lr_items,
       custom_states,
+      valid,
     }
+  }
+
+  pub fn is_valid(&self) -> bool {
+    self.valid
   }
 
   /// Returns an array of [DBProdKey]s of the entry point productions.

@@ -911,7 +911,7 @@ pub fn compile_struct_props(
                 (Undefined, _) => {
                   existing.rule_ids.insert(rule_id);
                   existing.type_val = prop_type.to_owned();
-                  existing.location = prop.tok.clone();
+                  existing.loc = prop.tok.clone();
                   existing.grammar_ref = rule.g_id.clone();
                   existing.optional = true;
                 }
@@ -931,7 +931,7 @@ pub fn compile_struct_props(
                     existing.clone(),
                     AScriptProp {
                       type_val: prop_type.into(),
-                      location: prop.tok.clone(),
+                      loc: prop.tok.clone(),
                       grammar_ref: rule.g_id.clone(),
                       ..Default::default()
                     },
@@ -943,7 +943,7 @@ pub fn compile_struct_props(
               store.props.insert(prop_id.clone(), AScriptProp {
                 type_val: prop_type.into(),
                 rule_ids: BTreeSet::from_iter(vec![rule_id]),
-                location: prop.tok.clone(),
+                loc: prop.tok.clone(),
                 grammar_ref: rule.g_id.clone(),
                 ..Default::default()
               });
@@ -1065,28 +1065,28 @@ pub fn get_specified_vector_from_generic_vec_values(
       AScriptTypeVal::Undefined
     }
   } else {
-    match vals.first().unwrap() {
-      AScriptTypeVal::Struct(id) => {
+    match vals.first() {
+      Some(AScriptTypeVal::Struct(id)) => {
         AScriptTypeVal::GenericStructVec(BTreeSet::from_iter(vec![TaggedType {
           type_: AScriptTypeVal::Struct(*id),
           ..Default::default()
         }]))
       }
-      AScriptTypeVal::GenericStruct(ids) => {
+      Some(AScriptTypeVal::GenericStruct(ids)) => {
         AScriptTypeVal::GenericStructVec(ids.iter().cloned().collect())
       }
-      AScriptTypeVal::U8(..) => AScriptTypeVal::U8Vec,
-      AScriptTypeVal::U16(..) => AScriptTypeVal::U16Vec,
-      AScriptTypeVal::U32(..) => AScriptTypeVal::U32Vec,
-      AScriptTypeVal::U64(..) => AScriptTypeVal::U64Vec,
-      AScriptTypeVal::I8(..) => AScriptTypeVal::I8Vec,
-      AScriptTypeVal::I16(..) => AScriptTypeVal::I16Vec,
-      AScriptTypeVal::I32(..) => AScriptTypeVal::I32Vec,
-      AScriptTypeVal::I64(..) => AScriptTypeVal::I64Vec,
-      AScriptTypeVal::F32(..) => AScriptTypeVal::F32Vec,
-      AScriptTypeVal::F64(..) => AScriptTypeVal::F64Vec,
-      AScriptTypeVal::Token => AScriptTypeVal::TokenVec,
-      AScriptTypeVal::String(..) => AScriptTypeVal::StringVec,
+      Some(AScriptTypeVal::U8(..)) => AScriptTypeVal::U8Vec,
+      Some(AScriptTypeVal::U16(..)) => AScriptTypeVal::U16Vec,
+      Some(AScriptTypeVal::U32(..)) => AScriptTypeVal::U32Vec,
+      Some(AScriptTypeVal::U64(..)) => AScriptTypeVal::U64Vec,
+      Some(AScriptTypeVal::I8(..)) => AScriptTypeVal::I8Vec,
+      Some(AScriptTypeVal::I16(..)) => AScriptTypeVal::I16Vec,
+      Some(AScriptTypeVal::I32(..)) => AScriptTypeVal::I32Vec,
+      Some(AScriptTypeVal::I64(..)) => AScriptTypeVal::I64Vec,
+      Some(AScriptTypeVal::F32(..)) => AScriptTypeVal::F32Vec,
+      Some(AScriptTypeVal::F64(..)) => AScriptTypeVal::F64Vec,
+      Some(AScriptTypeVal::Token) => AScriptTypeVal::TokenVec,
+      Some(AScriptTypeVal::String(..)) => AScriptTypeVal::StringVec,
       _ => AScriptTypeVal::Undefined,
     }
   }
@@ -1121,9 +1121,9 @@ pub fn get_indexed_body_ref(rule: &Rule, i: usize) -> RefResult {
 
 pub fn get_named_body_ref(db: &ParserDatabase, rule: &Rule, val: &str) -> RefResult {
   if val == ASCRIPT_FIRST_NODE_ID {
-    Some(rule.symbols.first().unwrap().clone())
+    Some(rule.symbols.first()?.clone())
   } else if val == ASCRIPT_LAST_NODE_ID {
-    Some(rule.symbols.last().unwrap().clone())
+    Some(rule.symbols.last()?.clone())
   } else {
     match rule.symbols.iter().filter(|SymbolRef { annotation: a, .. }| *a == val.to_token()).last()
     {

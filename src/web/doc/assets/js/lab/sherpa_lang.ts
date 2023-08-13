@@ -4,9 +4,11 @@
 
 import { defineLanguageFacet, Language, LanguageSupport } from "@codemirror/language";
 import { Input, NodeSet, Parser, PartialParse, Tree, TreeFragment, NodeType } from "@lezer/common";
-import {   JSGrammarParser, get_codemirror_parse_tree, get_production_names, JSSoup, create_bytecode_disassembly } from "js/sherpa/sherpa_wasm.js";
+import * as sherpa from "js/sherpa/sherpa_wasm.js";
 import { tags, Tag, styleTags, tagHighlighter } from '@lezer/highlight';
 import { syntaxHighlighting, HighlightStyle, defaultHighlightStyle } from '@codemirror/language';
+import { linter, Diagnostic } from "@codemirror/lint";
+import { GrammarContext } from "./grammar_context";
 
 class SherpaParser extends Parser {
 
@@ -16,14 +18,14 @@ class SherpaParser extends Parser {
 
     nodeSet: NodeSet;
 
-    soup: JSSoup;
+    ctx: GrammarContext;
 
-    constructor(soup: JSSoup) {
+    constructor(ctx: GrammarContext) {
         super();
-        
-        this.soup = soup;
 
-        let names = get_production_names();
+        this.ctx = ctx;
+
+        let names = sherpa.get_production_names();
         names.push("token");
         this.nodeSet = new NodeSet(names.map((name: string, id: number) => {
             return NodeType.define({ id, top: name == "sherpa::grammar", name: name.replace("::", "-") });
@@ -34,38 +36,22 @@ class SherpaParser extends Parser {
             "sherpa_symbol-class!": tags.className,
         }));
 
-        this.names = get_production_names();
+        this.names = sherpa.get_production_names();
     }
-    
 
-    createBytecodeDisassembly(grammar_source: string): string {
-        console.log(grammar_source);
-        try { 
-            let g_id = this.soup.add_grammar(grammar_source, "/");
-
-            // Build the soup.
-            console.log(create_bytecode_disassembly(g_id, this.soup));
-        } catch(e){
-            console.log(e);
-        }
-
-
-        return ""
-    }
 
     createParse(input: Input | any | string, fragments: TreeFragment[], ranges: { from: number, to: number; }[]): PartialParse {
-        
+
         let input_string = input.read(ranges[0].from, ranges[0].to);
 
-        this.createBytecodeDisassembly(input_string)
+        let parser = sherpa.JSGrammarParser.new(input_string);
+        let stack = sherpa.get_codemirror_parse_tree(input_string);
 
-        let parser = JSGrammarParser.new(input_string);
-        let stack = get_codemirror_parse_tree(input_string);
+        this.ctx.addGrammar(input_string, "/");
 
         stack[stack.length - 4] = 4;
+
         let nodeSet = this.nodeSet;
-
-
         let len = input_string.length;
 
         return {
@@ -87,10 +73,77 @@ class SherpaParser extends Parser {
     }
 }
 
-export function sherpaLang(soup: JSSoup) {
+/// Responsible for building the ParserDB for a given grammar or producing semantic errors. 
+/// Used in conjunction with the SherpaParser to produce a viable ParserBase.
+function SherpaLinter(ctx: GrammarContext) {
+    return linter((view) => {
+        console.log("Linting!")
+
+        let messages: Diagnostic[] = [];
+
+        let parser_errors = ctx.parse_errors;
+
+        if (parser_errors.length > 0) {
+            convertPosErrorsToDiagnostics(parser_errors, "parser", messages);
+        } else if (!ctx.createDB("/")) {
+            convertPosErrorsToDiagnostics(ctx.db_errors, "semantic-evaluator", messages);
+        } else {
+
+            let db = ctx.db;
+
+            if (!db)
+                return messages;
+
+            // Now that we have a db we can kick off jobs to further process
+            // the data on to 
+            console.log("DB Created")
+
+            try {
+                // Build the soup.
+                let output = document.getElementById("ast-output");
+                if (output) {
+                    output.innerText = sherpa.create_rust_ast_output(db);
+                }
+            } catch (e) {
+                if (e instanceof sherpa.PositionedErrors) {
+                    convertPosErrorsToDiagnostics(e, "ast-compiler", messages);
+                    e.free();
+                } else {
+                    console.log(e)
+                }
+            }
+
+        }
+
+        return messages;
+    }, {
+        delay: 130,
+    })
+}
+
+function convertPosErrorsToDiagnostics(e: sherpa.PositionedErrors | sherpa.JSSherpaSourceError[], source: string, messages: Diagnostic[] = []): Diagnostic[] {
+    for (let i = 0; i < e.length; i++) {
+        let error = (Array.isArray(e)) ? e[i] : e.get_error_at(i);;
+        if (error) {
+            messages.push({
+                from: error.start_offset,
+                to: error.end_offset,
+                severity: "error",
+                source,
+                message: error.message,
+            });
+        }
+    }
+
+    return messages;
+}
+
+export function sherpaLang(ctx: GrammarContext) {
+    let lang_sys = new SherpaParser(ctx);
     return new LanguageSupport(
         new Language(defineLanguageFacet({ commentTokens: { block: { open: "/*", close: "*/" } } }),
-            new SherpaParser(soup), [
+            lang_sys, [
+            SherpaLinter(ctx),
             syntaxHighlighting(
                 HighlightStyle.define([
                     {
@@ -114,3 +167,4 @@ export function sherpaLang(soup: JSSoup) {
             "sherpa"), [
     ]);
 }
+
