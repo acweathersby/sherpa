@@ -1,5 +1,4 @@
 use crate::types::{
-  ast::{AstObject, AstSlot, AstStackSlice},
   bytecode::{ByteCodeIterator, InputType, Instruction, Opcode, NORMAL_STATE_FLAG},
   *,
 };
@@ -10,7 +9,6 @@ pub enum DebugEvent<'a> {
   },
   ExecuteInstruction {
     instruction: Instruction<'a>,
-    string:      &'a str,
     is_scanner:  bool,
     end_ptr:     usize,
     head_ptr:    usize,
@@ -24,36 +22,30 @@ pub enum DebugEvent<'a> {
   SkipToken {
     offset_start: usize,
     offset_end:   usize,
-    string:       &'a str,
   },
   ShiftToken {
     offset_start: usize,
     offset_end:   usize,
-    string:       &'a str,
   },
   ByteValue {
     input_value: u32,
     start:       usize,
     end:         usize,
-    string:      &'a str,
   },
   CodePointValue {
     input_value: u32,
     start:       usize,
     end:         usize,
-    string:      &'a str,
   },
   ClassValue {
     input_value: u32,
     start:       usize,
     end:         usize,
-    string:      &'a str,
   },
   TokenValue {
     input_value: u32,
     start:       usize,
     end:         usize,
-    string:      &'a str,
   },
   GotoValue {
     production_id: u32,
@@ -68,7 +60,7 @@ pub enum DebugEvent<'a> {
   EndOfFile,
 }
 
-pub type DebugFn = dyn FnMut(&DebugEvent);
+pub type DebugFn = dyn FnMut(&DebugEvent, &str);
 
 /// Yields parser Actions from parsing an input using the
 /// current active grammar bytecode.
@@ -85,7 +77,7 @@ pub fn dispatch<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
 
   #[cfg(debug_assertions)]
   if let Some(debug) = debug.as_mut() {
-    debug(&DebugEvent::ExecuteState { base_instruction: block_base });
+    debug(&DebugEvent::ExecuteState { base_instruction: block_base }, ctx.get_str());
   }
 
   let mut i: Instruction = block_base.clone();
@@ -94,6 +86,7 @@ pub fn dispatch<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
     use Opcode::*;
 
     i = match match i.get_opcode() {
+      DebugExpectedSymbols => debug_expected_symbols(i),
       DebugSymbol => debug_symbol(i),
       ShiftToken => shift_token(i, ctx),
       ShiftTokenScanless => shift_token_scanless(i, ctx),
@@ -111,7 +104,7 @@ pub fn dispatch<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
         block_base = new_state;
         #[cfg(debug_assertions)]
         if let Some(debug) = debug.as_mut() {
-          debug(&DebugEvent::ExecuteState { base_instruction: block_base });
+          debug(&DebugEvent::ExecuteState { base_instruction: block_base }, ctx.get_str());
         }
         (parse_action, Some(new_state))
       }
@@ -132,43 +125,51 @@ pub fn dispatch<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
       (None, Some(next_instruction)) => {
         #[cfg(debug_assertions)]
         if let Some(debug) = debug {
-          debug(&DebugEvent::ExecuteInstruction {
-            string:      ctx.get_str(),
-            instruction: i,
-            is_scanner:  ctx.is_scanner(),
-            end_ptr:     ctx.end_ptr,
-            head_ptr:    ctx.head_ptr,
-            scan_ptr:    ctx.scan_ptr,
-            base_ptr:    ctx.base_ptr,
-            anchor_ptr:  ctx.anchor_ptr,
-            tok_id:      ctx.tok_id,
-            sym_len:     ctx.sym_len,
-            tok_len:     ctx.tok_len,
-          });
+          debug(
+            &DebugEvent::ExecuteInstruction {
+              instruction: i,
+              is_scanner:  ctx.is_scanner(),
+              end_ptr:     ctx.end_ptr,
+              head_ptr:    ctx.head_ptr,
+              scan_ptr:    ctx.scan_ptr,
+              base_ptr:    ctx.base_ptr,
+              anchor_ptr:  ctx.anchor_ptr,
+              tok_id:      ctx.tok_id,
+              sym_len:     ctx.sym_len,
+              tok_len:     ctx.tok_len,
+            },
+            ctx.get_str(),
+          );
         }
         next_instruction
       }
       (any, out) => {
         #[cfg(debug_assertions)]
         if let Some(debug) = debug {
-          debug(&DebugEvent::ExecuteInstruction {
-            string:      ctx.get_str(),
-            instruction: i,
-            is_scanner:  ctx.is_scanner(),
-            end_ptr:     ctx.end_ptr,
-            head_ptr:    ctx.head_ptr,
-            scan_ptr:    ctx.scan_ptr,
-            base_ptr:    ctx.base_ptr,
-            anchor_ptr:  ctx.anchor_ptr,
-            tok_id:      ctx.tok_id,
-            sym_len:     ctx.sym_len,
-            tok_len:     ctx.tok_len,
-          });
+          debug(
+            &DebugEvent::ExecuteInstruction {
+              instruction: i,
+              is_scanner:  ctx.is_scanner(),
+              end_ptr:     ctx.end_ptr,
+              head_ptr:    ctx.head_ptr,
+              scan_ptr:    ctx.scan_ptr,
+              base_ptr:    ctx.base_ptr,
+              anchor_ptr:  ctx.anchor_ptr,
+              tok_id:      ctx.tok_id,
+              sym_len:     ctx.sym_len,
+              tok_len:     ctx.tok_len,
+            },
+            ctx.get_str(),
+          );
         }
         break (any, out);
       }
     }
   }
+}
+
+fn debug_expected_symbols<'a>(i: Instruction<'a>) -> (ParseAction, Option<Instruction<'a>>) {
+  (ParseAction::None, i.next())
 }
 
 fn debug_symbol<'a>(i: Instruction<'a>) -> (ParseAction, Option<Instruction<'a>>) {
@@ -578,20 +579,16 @@ fn emit_debug_value<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
   let end = ctx.scan_ptr + ctx.tok_len;
   if let Some(debug) = debug {
     match input_type {
-      InputType::Production => debug(&DebugEvent::GotoValue { production_id: input_value }),
-      InputType::Byte => {
-        debug(&DebugEvent::ByteValue { input_value, start, end, string: ctx.get_str() })
+      InputType::Production => {
+        debug(&DebugEvent::GotoValue { production_id: input_value }, ctx.get_str())
       }
-      InputType::Class => {
-        debug(&DebugEvent::ClassValue { input_value, start, end, string: ctx.get_str() })
-      }
-      InputType::Token => {
-        debug(&DebugEvent::TokenValue { input_value, start, end, string: ctx.get_str() })
-      }
+      InputType::Byte => debug(&DebugEvent::ByteValue { input_value, start, end }, ctx.get_str()),
+      InputType::Class => debug(&DebugEvent::ClassValue { input_value, start, end }, ctx.get_str()),
+      InputType::Token => debug(&DebugEvent::TokenValue { input_value, start, end }, ctx.get_str()),
       InputType::Codepoint => {
-        debug(&DebugEvent::CodePointValue { input_value, start, end, string: ctx.get_str() })
+        debug(&DebugEvent::CodePointValue { input_value, start, end }, ctx.get_str())
       }
-      InputType::EndOfFile => debug(&DebugEvent::EndOfFile),
+      InputType::EndOfFile => debug(&DebugEvent::EndOfFile, ctx.get_str()),
       _ => unreachable!(),
     };
   }

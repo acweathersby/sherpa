@@ -30,6 +30,7 @@ pub fn disassemble_parse_block<'a>(
   } else {
     use Opcode::*;
     match i.get_opcode() {
+      DebugExpectedSymbols => (String::default(), i.next()),
       DebugSymbol => {
         let str_start = 3;
         let len = i.len() - str_start;

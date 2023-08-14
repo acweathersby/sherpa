@@ -103,7 +103,7 @@ export function parserHost(ctx: GrammarContext, {
             debugger_steps.length = 0;
 
             parser = sherpa.JSByteCodeParser.new(view.state.doc.toString(), bytecode);
-            parser.init("default", bytecode, ctx.db);
+            parser.init("entry", bytecode, ctx.db);
 
             view.dispatch({ userEvent: "debugger.start" })
             PARSING = true;
@@ -112,8 +112,12 @@ export function parserHost(ctx: GrammarContext, {
         }
     }
 
+    let active_search_symbols: Set<string> = new Set()
+
     function step_forward() {
         if (view && parser && states && bytecode && ctx.db && PARSING) {
+
+            let db = ctx.db;
             debugger_offset += 1;
 
             if (debugger_offset >= debugger_steps.length) {
@@ -131,10 +135,25 @@ export function parserHost(ctx: GrammarContext, {
             let step;
             outer: while ((step = debugger_steps[debugger_offset])) {
                 switch (step.type) {
+                    case "ShiftToken":
+                        active_search_symbols.clear();
+                        break;
                     case "ExecuteInstruction": {
+
+                        if (!step.is_scanner) {
+                            let debug_symbols: number[] = sherpa.get_debug_symbol_ids(step.instruction, bytecode);
+                            if (debug_symbols.length > 0) {
+                                debug_symbols.forEach(s => active_search_symbols.add(sherpa.get_symbol_name_from_id(s, db)));
+                            }
+                        }
+
                         debugger_output.innerText = JSON.stringify(step, undefined, 2)
                             + "\n\n"
-                            + sherpa.create_instruction_disassembly(step.instruction, bytecode);
+                            + [...active_search_symbols]
+                            + "\n\n"
+                            + sherpa.create_instruction_disassembly(step.instruction, bytecode)
+                            ;
+
                         let effects: any[] = [filter_effects.of((from, to) => false)]
 
                         let { head_ptr, scan_ptr } = step;
@@ -162,7 +181,7 @@ export function parserHost(ctx: GrammarContext, {
             clearInterval(play_interval);
             play_interval = -1;
         } else if (PARSING) {
-            play_interval = setInterval(step_forward, 10);
+            play_interval = setInterval(step_forward, 1);
         }
     }
 

@@ -1,6 +1,9 @@
 use super::types::ParserDatabase;
 use crate::types::*;
-use sherpa_rust_runtime::{bytecode::*, types::bytecode::Opcode};
+use sherpa_rust_runtime::{
+  bytecode::{DebugFn, *},
+  types::bytecode::Opcode,
+};
 
 #[derive(Debug, Clone)]
 pub struct PrintConfig {
@@ -32,10 +35,10 @@ pub fn console_debugger(
     display_instruction,
     display_state,
   }: PrintConfig,
-) -> Option<Box<dyn FnMut(&DebugEvent)>> {
+) -> Option<Box<DebugFn>> {
   let mut stack = vec![];
-  Some(Box::new(move |event| match event {
-    DebugEvent::ShiftToken { offset_end, offset_start, string } => {
+  Some(Box::new(move |event, string| match event {
+    DebugEvent::ShiftToken { offset_end, offset_start } => {
       let string = string[*offset_start..(*offset_end).min(string.len())].replace("\n", "\\n");
       stack.push(string.clone());
       println!(
@@ -101,7 +104,7 @@ Failed to recognize input.
       )
     }
 
-    DebugEvent::TokenValue { input_value, start, end, string } if display_input_data => {
+    DebugEvent::TokenValue { input_value, start, end } if display_input_data => {
       println!(
         "
 [Token Input]------------------------------------------------------------------------
@@ -114,7 +117,7 @@ Symbol Length: {}
         end - start
       )
     }
-    DebugEvent::ByteValue { input_value, start, end, string } if display_input_data => {
+    DebugEvent::ByteValue { input_value, start, end } if display_input_data => {
       println!(
         "
 [Byte Input]------------------------------------------------------------------------
@@ -127,7 +130,7 @@ Symbol Length: {}
         end - start
       )
     }
-    DebugEvent::CodePointValue { input_value, start, end, string }
+    DebugEvent::CodePointValue { input_value, start, end }
       if display_input_data && display_scanner_output =>
     {
       println!(
@@ -142,7 +145,7 @@ Symbol Length: {}
         end - start
       )
     }
-    DebugEvent::ClassValue { input_value, start, end, string }
+    DebugEvent::ClassValue { input_value, start, end }
       if display_input_data && display_scanner_output =>
     {
       println!(
@@ -183,7 +186,6 @@ BytcodeID: {}
     }
     DebugEvent::ExecuteInstruction {
       instruction,
-      string,
       sym_len,
       is_scanner,
       scan_ptr,
@@ -241,10 +243,10 @@ pub fn string_debugger(
     display_state,
   }: PrintConfig,
   strings: &mut Vec<String>,
-) -> Option<Box<dyn FnMut(&DebugEvent)>> {
+) -> Option<Box<DebugFn>> {
   let mut stack = vec![];
-  Some(Box::new(move |event| match event {
-    DebugEvent::ShiftToken { offset_end, offset_start, string } => {
+  Some(Box::new(move |event, string| match event {
+    DebugEvent::ShiftToken { offset_end, offset_start } => {
       let string = string[*offset_start..(*offset_end).min(string.len())].replace("\n", "\\n");
       stack.push(string.clone());
       println!(
@@ -310,7 +312,7 @@ pub fn string_debugger(
       )
     }
 
-    DebugEvent::TokenValue { input_value, start, end, string } if display_input_data => {
+    DebugEvent::TokenValue { input_value, start, end } if display_input_data => {
       println!(
         "
   [Token Input]------------------------------------------------------------------------
@@ -323,7 +325,7 @@ pub fn string_debugger(
         end - start
       )
     }
-    DebugEvent::ByteValue { input_value, start, end, string } if display_input_data => {
+    DebugEvent::ByteValue { input_value, start, end } if display_input_data => {
       println!(
         "
   [Byte Input]------------------------------------------------------------------------
@@ -336,7 +338,7 @@ pub fn string_debugger(
         end - start
       )
     }
-    DebugEvent::CodePointValue { input_value, start, end, string }
+    DebugEvent::CodePointValue { input_value, start, end }
       if display_input_data && display_scanner_output =>
     {
       println!(
@@ -351,7 +353,7 @@ pub fn string_debugger(
         end - start
       )
     }
-    DebugEvent::ClassValue { input_value, start, end, string }
+    DebugEvent::ClassValue { input_value, start, end }
       if display_input_data && display_scanner_output =>
     {
       println!(
@@ -392,7 +394,6 @@ pub fn string_debugger(
     }
     DebugEvent::ExecuteInstruction {
       instruction,
-      string,
       sym_len,
       is_scanner,
       scan_ptr,

@@ -206,13 +206,17 @@ pub enum Opcode {
   // purposes. The following byte indicates number of bytes that make up the
   // string.
   DebugSymbol,
+
+  /// An array of 32bit values representing the expected symbol indices that are
+  /// expected to be produced by a scanner.
+  DebugExpectedSymbols,
 }
 
 impl From<u8> for Opcode {
   fn from(value: u8) -> Self {
     use Opcode::*;
 
-    const LU_TABLE: [Opcode; 23] = [
+    const LU_TABLE: [Opcode; 24] = [
       NoOp,
       Pass,
       Fail,
@@ -236,6 +240,7 @@ impl From<u8> for Opcode {
       VectorBranch,
       HashBranch,
       DebugSymbol,
+      DebugExpectedSymbols,
     ];
 
     if (value as usize) < LU_TABLE.len() {
@@ -264,6 +269,9 @@ impl Opcode {
       }
       Opcode::DebugSymbol => {
         unimplemented!("DebugSymbols do not have fixed lengths")
+      }
+      Opcode::DebugExpectedSymbols => {
+        unimplemented!("DebugExpectedSymbols do not have fixed lengths")
       }
       Opcode::Reduce => 11,
       Opcode::Goto | Opcode::PushGoto | Opcode::PushExceptionHandler => 6,
@@ -360,7 +368,7 @@ impl<'a> Instruction<'a> {
           self.is_valid_offset(v as usize).then_some((bc, opcode_start + v as usize).into())
         })
       }
-      Opcode::DebugSymbol => {
+      Opcode::DebugSymbol | Opcode::DebugExpectedSymbols => {
         let d = self.len();
         self.is_valid_offset(d).then_some((bc, self.address() + d).into())
       }
@@ -387,7 +395,28 @@ impl<'a> Instruction<'a> {
         let len = iter.next_u16_le().unwrap_or(0) as usize; // Skip the input enum value
         len + 3
       }
+      Opcode::DebugExpectedSymbols => {
+        let mut iter = self.iter();
+        let len: usize = iter.next_u16_le().unwrap_or(0) as usize; // Skip the input enum value
+        len * 4 + 3
+      }
       op => op.len(),
+    }
+  }
+
+  pub fn get_debug_symbols(&self) -> Vec<u32> {
+    if self.get_opcode() == Opcode::DebugExpectedSymbols {
+      let mut iter = self.iter();
+      let len: usize = iter.next_u16_le().unwrap_or(0) as usize;
+      let mut syms = Vec::with_capacity(len);
+
+      for _ in 0..len {
+        syms.push(iter.next_u32_le().unwrap_or(0))
+      }
+
+      syms
+    } else {
+      Default::default()
     }
   }
 

@@ -1,3 +1,4 @@
+use js_sys::Array;
 use sherpa_bytecode::compile_bytecode;
 use sherpa_core::{
   compile_grammar_from_str,
@@ -9,7 +10,7 @@ use sherpa_core::{
   SherpaResult, build_compile_db, compile_parse_states, optimize, SherpaError, ParseState, ParseStatesMap, ParseStatesVec, proxy::Map, IString,
 };
 use sherpa_rust_build::build_rust;
-use sherpa_rust_runtime::bytecode::{disassemble_bytecode, disassemble_parse_block};
+use sherpa_rust_runtime::{bytecode::{disassemble_bytecode, disassemble_parse_block}, types::bytecode::Instruction};
 use std::{path::PathBuf, sync::LockResult};
 use wasm_bindgen::prelude::*;
 
@@ -209,3 +210,21 @@ pub fn create_instruction_disassembly(address: u32, bytecode: &JSBytecode) -> St
   disassemble_parse_block(Some((bytecode.0.0.as_slice(), address as usize).into()), false).0
 }
 
+
+/// Return a list of symbols ids if the opcode of the instruction is Op::DebugExpectedSymbols
+#[wasm_bindgen]
+pub fn get_debug_symbol_ids(address: u32, bytecode: &JSBytecode) -> JsValue{ 
+
+let i: Instruction = (bytecode.0.0.as_slice(), address as usize).into();
+
+let vec = i.get_debug_symbols();
+
+  Array::from_iter(vec.iter().map(|i| JsValue::from_f64(*i as f64))).into()
+}
+
+
+/// Givin an symbol index, returns the symbol's friendly name.
+#[wasm_bindgen]
+pub fn get_symbol_name_from_id(id: u32, db: &JSParserDB) -> JsValue{ 
+  db.0.token(id.into()).sym_id.debug_string(&db.0).into()
+}

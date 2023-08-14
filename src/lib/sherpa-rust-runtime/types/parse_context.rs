@@ -515,7 +515,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
         ParseAction::Accept { production_id } => {
           #[cfg(debug_assertions)]
           if let Some(debug) = debug {
-            debug(&DebugEvent::Complete { production_id });
+            debug(&DebugEvent::Complete { production_id }, self.get_input());
           }
           break if production_id != target_production_id {
             ShiftsAndSkipsResult::IncorrectProduction {
@@ -531,7 +531,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
         ParseAction::Error { last_input, .. } => {
           #[cfg(debug_assertions)]
           if let Some(debug) = debug {
-            debug(&DebugEvent::Failure {});
+            debug(&DebugEvent::Failure {}, self.get_input());
           }
           let mut token: Token = last_input.to_token(self.get_reader_mut());
 
@@ -559,7 +559,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
 
           #[cfg(debug_assertions)]
           if let Some(debug) = debug {
-            debug(&DebugEvent::ShiftToken { offset_start, offset_end, string: self.get_input() });
+            debug(&DebugEvent::ShiftToken { offset_start, offset_end }, self.get_input());
           }
           shifts.push(self.get_input()[offset_start..offset_end].to_string());
         }
@@ -567,7 +567,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
         {
           #[cfg(debug_assertions)]
           if let Some(debug) = debug {
-            debug(&DebugEvent::Reduce { rule_id });
+            debug(&DebugEvent::Reduce { rule_id }, self.get_input());
           }
         }
         _ => panic!("Unexpected Action!"),
@@ -592,7 +592,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
         ParseAction::Accept { production_id } => {
           #[cfg(debug_assertions)]
           if let Some(debug) = debug {
-            debug(&DebugEvent::Complete { production_id });
+            debug(&DebugEvent::Complete { production_id }, self.get_input());
           }
 
           break if cst.len() > 1 {
@@ -611,7 +611,7 @@ Concrete Syntax Tree structure."
         ParseAction::Error { last_input, .. } => {
           #[cfg(debug_assertions)]
           if let Some(debug) = debug {
-            debug(&DebugEvent::Failure {});
+            debug(&DebugEvent::Failure {}, self.get_input());
           }
           let mut token: Token = last_input.to_token(self.get_reader_mut());
           token.set_source(Arc::new(Vec::from(self.get_input().to_string().as_bytes())));
@@ -640,7 +640,7 @@ Concrete Syntax Tree structure."
           if let Some(debug) = debug {
             let offset_start = token_byte_offset as usize;
             let offset_end = (token_byte_offset + token_byte_length) as usize;
-            debug(&DebugEvent::ShiftToken { offset_start, offset_end, string: self.get_input() });
+            debug(&DebugEvent::ShiftToken { offset_start, offset_end }, self.get_input());
           }
         }
         ParseAction::Reduce { rule_id, production_id, symbol_count } => {
@@ -672,7 +672,7 @@ Concrete Syntax Tree structure."
 
           #[cfg(debug_assertions)]
           if let Some(debug) = debug {
-            debug(&DebugEvent::Reduce { rule_id });
+            debug(&DebugEvent::Reduce { rule_id }, self.get_input());
           }
         }
         _ => panic!("Unexpected Action!"),

@@ -60,7 +60,7 @@ fn remap_goto_addresses(bc: &mut Array<u8>, _goto_to_off: &Array<u32>) {
         set_goto_address(bc, _goto_to_off, i + 2);
         op.len()
       }
-      Op::DebugSymbol => Instruction::from((bc.as_slice(), i)).len(),
+      Op::DebugSymbol | Op::DebugExpectedSymbols => Instruction::from((bc.as_slice(), i)).len(),
       op => op.len(),
     }
   }
@@ -232,6 +232,12 @@ fn build_match<'db>(
   let mut val_offset_map = Map::new();
   let mut sub_bcs = Array::new();
 
+  //#[cfg(debug_assertions)]
+  insert_debug_expected_symbols(
+    bc,
+    match_branches.iter().map(|(ids, _)| ids.clone()).flatten().collect::<Vec<_>>(),
+  );
+
   for (ids, stmt) in match_branches {
     for id in ids {
       val_offset_map.insert(*id as u32, offset);
@@ -335,6 +341,15 @@ fn insert_debug_symbol(bc: &mut Array<u8>, symbol: String) {
 
   for byte in symbol.as_bytes() {
     insert_u8(bc, *byte);
+  }
+}
+
+fn insert_debug_expected_symbols(bc: &mut Array<u8>, symbols: Vec<&u64>) {
+  let len = symbols.len() as u16;
+  insert_op(bc, Op::DebugExpectedSymbols);
+  insert_u16_le(bc, len);
+  for sym in symbols {
+    insert_u32_le(bc, *sym as u32);
   }
 }
 

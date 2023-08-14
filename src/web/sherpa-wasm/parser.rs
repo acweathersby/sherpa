@@ -3,7 +3,7 @@ use js_sys::Array;
 use serde::{Deserialize, Serialize};
 use sherpa_core::parser;
 use sherpa_rust_runtime::{
-  bytecode::{ByteCodeParser, DebugEvent},
+  bytecode::{ByteCodeParser, DebugEvent, DebugFn},
   types::{ParseAction, SherpaParser},
 };
 use std::{
@@ -112,10 +112,10 @@ impl JSByteCodeParser {
     let values = Rc::new(RwLock::new(vec![]));
 
     {
-      let values = values.clone();
+      let v = values.clone();
 
-      let mut debugger: Option<Box<dyn FnMut(&DebugEvent)>> = Some(Box::new(move |e| {
-        if let LockResult::Ok(mut values) = values.write() {
+      let mut debugger: Option<Box<DebugFn>> = Some(Box::new(move |e: &DebugEvent<'_>, _| {
+        if let LockResult::Ok(mut values) = v.write() {
           values.push(JSDebugEvent::from(e));
         }
       }));
@@ -129,6 +129,12 @@ impl JSByteCodeParser {
           serde_wasm_bindgen::to_value(&JsonParseAction::EndOfInput).unwrap()
         }
         ParseAction::Shift { token_byte_offset, token_byte_length, token_id, .. } => {
+          if let LockResult::Ok(mut values) = values.write() {
+            values.push(JSDebugEvent::from(JSDebugEvent::ShiftToken {
+              offset_end:   (token_byte_offset + token_byte_length) as usize,
+              offset_start: token_byte_offset as usize,
+            }));
+          }
           serde_wasm_bindgen::to_value(&JsonParseAction::Shift { len: token_byte_length }).unwrap()
         }
         ParseAction::Skip { token_byte_offset, token_byte_length, token_id, .. } => {
@@ -249,7 +255,6 @@ pub enum JSDebugEvent {
   },
   ExecuteInstruction {
     instruction: u32,
-    string:      String,
     is_scanner:  bool,
     end_ptr:     usize,
     head_ptr:    usize,
@@ -263,36 +268,30 @@ pub enum JSDebugEvent {
   SkipToken {
     offset_start: usize,
     offset_end:   usize,
-    string:       String,
   },
   ShiftToken {
     offset_start: usize,
     offset_end:   usize,
-    string:       String,
   },
   ByteValue {
     input_value: u32,
     start:       usize,
     end:         usize,
-    string:      String,
   },
   CodePointValue {
     input_value: u32,
     start:       usize,
     end:         usize,
-    string:      String,
   },
   ClassValue {
     input_value: u32,
     start:       usize,
     end:         usize,
-    string:      String,
   },
   TokenValue {
     input_value: u32,
     start:       usize,
     end:         usize,
-    string:      String,
   },
   GotoValue {
     production_id: u32,
@@ -315,7 +314,6 @@ impl<'a> From<&DebugEvent<'a>> for JSDebugEvent {
       }
       DebugEvent::ExecuteInstruction {
         instruction,
-        string,
         is_scanner,
         end_ptr,
         head_ptr,
@@ -327,7 +325,6 @@ impl<'a> From<&DebugEvent<'a>> for JSDebugEvent {
         sym_len,
       } => JSDebugEvent::ExecuteInstruction {
         instruction: instruction.address() as u32,
-        string: string.to_string(),
         is_scanner,
         end_ptr,
         head_ptr,
@@ -338,23 +335,23 @@ impl<'a> From<&DebugEvent<'a>> for JSDebugEvent {
         tok_id,
         sym_len,
       },
-      DebugEvent::SkipToken { offset_start, offset_end, string } => {
-        JSDebugEvent::SkipToken { offset_start, offset_end, string: string.to_string() }
+      DebugEvent::SkipToken { offset_start, offset_end } => {
+        JSDebugEvent::SkipToken { offset_start, offset_end }
       }
-      DebugEvent::ShiftToken { offset_start, offset_end, string } => {
-        JSDebugEvent::ShiftToken { offset_start, offset_end, string: string.to_string() }
+      DebugEvent::ShiftToken { offset_start, offset_end } => {
+        JSDebugEvent::ShiftToken { offset_start, offset_end }
       }
-      DebugEvent::ByteValue { input_value, start, end, string } => {
-        JSDebugEvent::ByteValue { input_value, start, end, string: string.to_string() }
+      DebugEvent::ByteValue { input_value, start, end } => {
+        JSDebugEvent::ByteValue { input_value, start, end }
       }
-      DebugEvent::CodePointValue { input_value, start, end, string } => {
-        JSDebugEvent::CodePointValue { input_value, start, end, string: string.to_string() }
+      DebugEvent::CodePointValue { input_value, start, end } => {
+        JSDebugEvent::CodePointValue { input_value, start, end }
       }
-      DebugEvent::ClassValue { input_value, start, end, string } => {
-        JSDebugEvent::ClassValue { input_value, start, end, string: string.to_string() }
+      DebugEvent::ClassValue { input_value, start, end } => {
+        JSDebugEvent::ClassValue { input_value, start, end }
       }
-      DebugEvent::TokenValue { input_value, start, end, string } => {
-        JSDebugEvent::TokenValue { input_value, start, end, string: string.to_string() }
+      DebugEvent::TokenValue { input_value, start, end } => {
+        JSDebugEvent::TokenValue { input_value, start, end }
       }
       DebugEvent::GotoValue { production_id } => JSDebugEvent::GotoValue { production_id },
       DebugEvent::Reduce { rule_id } => JSDebugEvent::Reduce { rule_id },
