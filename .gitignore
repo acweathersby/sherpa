@@ -25,8 +25,9 @@ src/lib/sherpa-core/grammar/compile/parser/sherpa.rs
 
 # public site folders
 **/public/
-!./src/web/lab/public
 src/web/lab/public/index.js
+# but keep the root public folder.
+!./src/web/lab/public
 
 # folders tagged with --ignore--
 **/*--ignore--*/

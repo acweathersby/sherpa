@@ -5,6 +5,7 @@ use crate::{
   parser,
   types::*,
   utils::{create_u64_hash, hash_group_btreemap},
+  CodeWriter,
 };
 use std::collections::{hash_map, VecDeque};
 
@@ -361,8 +362,45 @@ pub fn build_compile_db<'a>(
           p_map.get(&prod_id).map(|i| DBProdKey::from(*i)).unwrap_or_default()
         },
         sym_id:  *sym,
+        name:    {
+          use SymbolId::*;
+          match sym {
+            Undefined => "Undefine".intern(s_store),
+            Default => "Default".intern(s_store),
+            EndOfFile { .. } => "{EOF}".intern(s_store),
+            ClassSpace { .. } => "c:sp".intern(s_store),
+            ClassHorizontalTab { .. } => "c:tab".intern(s_store),
+            ClassNewLine { .. } => "c:nl".intern(s_store),
+            ClassIdentifier { .. } => "c:id".intern(s_store),
+            ClassNumber { .. } => "c:num".intern(s_store),
+            ClassSymbol { .. } => "c:sym".intern(s_store),
+            Token { val, .. } => {
+              ("\"".to_string() + &val.to_string(&s_store) + "\"").intern(s_store)
+            }
+            NonTerminalState { id } | NonTerminal { id, .. } | NonTerminalToken { id, .. } => {
+              let name =
+                productions.get(&id.as_parse_prod()).unwrap().friendly_name.to_string(s_store);
+
+              ("<".to_string() + &name + ">").intern(s_store)
+            }
+            Codepoint { val, precedence } => {
+              if *precedence > 0 {
+                (val.to_string() + "{" + &precedence.to_string() + "}").intern(s_store)
+              } else {
+                val.to_string().intern(s_store)
+              }
+            }
+            Char { char, .. } => {
+              if *char < 128 {
+                ("[".to_string() + &char::from(*char).to_string() + "]").intern(s_store)
+              } else {
+                ("[".to_string() + &char.to_string() + "]").intern(s_store)
+              }
+            }
+            _ => "".intern(s_store),
+          }
+        },
         tok_id:  (*index).into(),
-        tok_val: (*index),
       },
       *index,
     )
@@ -421,6 +459,7 @@ fn add_empty_custom_state(c_states: &mut Vec<Option<Box<parser::State>>>) {
   c_states.push(None)
 }
 
+/// Converts AST Symbols into DB symbols
 fn convert_rule_symbols(
   r_table: &mut Vec<DBRule>,
   p_map: &mut Map<SymbolId, usize>,
@@ -428,14 +467,47 @@ fn convert_rule_symbols(
 ) {
   for DBRule { rule, is_scanner, .. } in r_table {
     for SymbolRef { id: sym, .. } in &mut rule.symbols {
-      convert_rule_symbol(sym, p_map, &symbols, *is_scanner);
+      *sym = convert_symbol(sym, p_map, &symbols, *is_scanner);
     }
 
     if !*is_scanner {
       for sym in &mut rule.skipped {
-        convert_rule_symbol(sym, p_map, &symbols, *is_scanner);
+        *sym = convert_symbol(sym, p_map, &symbols, *is_scanner);
       }
     }
+  }
+}
+
+/// Converts an AST symbol into a DB symbol.
+fn convert_symbol(
+  sym: &SymbolId,
+  p_map: &mut std::collections::HashMap<SymbolId, usize>,
+  symbols: &std::collections::HashMap<SymbolId, usize>,
+  is_scanner: bool,
+) -> SymbolId {
+  match *sym {
+    SymbolId::NonTerminalToken { id, precedence } => {
+      if is_scanner {
+        let index = p_map.get(&id.as_parse_prod().as_tok_sym()).unwrap();
+        SymbolId::DBNonTerminal { key: (*index as u32).into() }
+      } else {
+        let index = p_map.get(sym).unwrap();
+        SymbolId::DBNonTerminalToken {
+          prod_key: (*index as u32).into(),
+          sym_key: symbols.get(sym).map(|i| (*i as u32).into()),
+          precedence,
+        }
+      }
+    }
+    SymbolId::NonTerminal { .. } => {
+      let index = p_map.get(sym).unwrap();
+      SymbolId::DBNonTerminal { key: (*index as u32).into() }
+    }
+    sym_id if !is_scanner => {
+      let index = symbols.get(&sym_id).unwrap();
+      SymbolId::DBToken { key: (*index as u32).into() }
+    }
+    _ => *sym,
   }
 }
 
@@ -471,39 +543,6 @@ fn extract_prod_syms(
     }
   }
   SherpaResult::Ok(())
-}
-
-/// Converts an AST symbol into a DB symbol.
-fn convert_rule_symbol(
-  sym: &mut SymbolId,
-  p_map: &mut std::collections::HashMap<SymbolId, usize>,
-  symbols: &std::collections::HashMap<SymbolId, usize>,
-  is_scanner: bool,
-) {
-  match *sym {
-    SymbolId::NonTerminalToken { id, precedence } => {
-      if is_scanner {
-        let index = p_map.get(&id.as_parse_prod().as_tok_sym()).unwrap();
-        *sym = SymbolId::DBNonTerminal { key: (*index as u32).into() }
-      } else {
-        let index = p_map.get(sym).unwrap();
-        *sym = SymbolId::DBNonTerminalToken {
-          prod_key: (*index as u32).into(),
-          sym_key: symbols.get(sym).map(|i| (*i as u32).into()),
-          precedence,
-        }
-      }
-    }
-    SymbolId::NonTerminal { .. } => {
-      let index = p_map.get(sym).unwrap();
-      *sym = SymbolId::DBNonTerminal { key: (*index as u32).into() };
-    }
-    sym_id if !is_scanner => {
-      let index = symbols.get(&sym_id).unwrap();
-      *sym = SymbolId::DBToken { key: (*index as u32).into() }
-    }
-    _ => {}
-  }
 }
 
 fn add_prod_name(

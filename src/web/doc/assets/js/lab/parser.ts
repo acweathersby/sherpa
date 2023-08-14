@@ -149,7 +149,7 @@ export function parserHost(ctx: GrammarContext, {
 
                         debugger_output.innerText = JSON.stringify(step, undefined, 2)
                             + "\n\n"
-                            + [...active_search_symbols]
+                            + [...active_search_symbols].join(" | ")
                             + "\n\n"
                             + sherpa.create_instruction_disassembly(step.instruction, bytecode)
                             ;

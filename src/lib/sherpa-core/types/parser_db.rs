@@ -31,11 +31,12 @@ pub struct DBRule {
 pub struct DBTokenData {
   /// The symbol type and precedence.
   pub sym_id:  SymbolId,
-  /// The scanner production id of this symbol.
+  /// The friendly name of this token.
+  pub name:    IString,
+  /// The scanner production id of this token.
   pub prod_id: DBProdKey,
   /// The id of the symbol when used as a lexer token.
   pub tok_id:  DBTokenKey,
-  pub tok_val: usize,
 }
 
 #[derive(Clone, Copy)]
@@ -150,7 +151,7 @@ impl ParserDatabase {
     &self.prod_syms
   }
 
-  /// Given an [DBProdKey] returns the SymbolId representing the production,
+  /// Given a [DBProdKey] returns the SymbolId representing the production,
   /// or [SymbolId::Undefined] if the id is invalid.
   pub fn prod_from_name(&self, name: &str) -> DBProdKey {
     let string = name.to_token();
@@ -176,63 +177,79 @@ impl ParserDatabase {
       .cloned()
   }
 
-  /// Given an [DBProdKey] returns the SymbolId representing the production,
+  /// Given a [DBProdKey] returns the SymbolId representing the production,
   /// or [SymbolId::Undefined] if the id is invalid.
   pub fn prod_sym(&self, key: DBProdKey) -> SymbolId {
-    self.prod_syms.get(key.0 as usize).cloned().unwrap_or_default()
+    debug_assert!((key.0 as usize) < self.prod_syms.len(), "Invalid DBProdKey received");
+    self.prod_syms[(key.0 as usize)].clone()
   }
 
-  /// Given an [DBProdKey] returns an IString comprising the name of the
+  /// Given a [DBProdKey] returns an IString comprising the name of the
   /// production, or an empty string if the id is invalid.
   pub fn prod_guid_name(&self, key: DBProdKey) -> IString {
     self.prod_names.get(key.0 as usize).cloned().map(|(n, _)| n).unwrap_or_default()
   }
 
-  /// Given an [DBProdKey] returns a [GuardedStr] of the production's name.
+  /// Given a [DBProdKey] returns a [GuardedStr] of the production's name.
   /// Returns an empty string if the key is invalid.
   pub fn prod_guid_name_string<'a>(&'a self, key: DBProdKey) -> String {
     self.prod_guid_name(key).to_string(&self.string_store)
   }
 
-  /// Given an [DBProdKey] returns an IString comprising the name of the
+  /// Given a [DBProdKey] returns an IString comprising the name of the
   /// production, or an empty string if the id is invalid.
   pub fn prod_friendly_name(&self, key: DBProdKey) -> IString {
     self.prod_names.get(key.0 as usize).cloned().map(|(_, n)| n).unwrap_or_default()
   }
 
-  /// Given an [DBProdKey] returns a [GuardedStr] of the production's name.
+  /// Given a [DBProdKey] returns a [GuardedStr] of the production's name.
   /// Returns an empty string if the key is invalid.
   pub fn prod_friendly_name_string<'a>(&'a self, key: DBProdKey) -> String {
     self.prod_friendly_name(key).to_string(&self.string_store)
   }
 
-  /// Given an [DBSymKey] returns the associated [SymbolId]
-  pub fn sym(&self, key: DBTokenKey) -> SymbolId {
-    self.tokens.get(key.0 as usize).map(|s| s.sym_id).unwrap_or_default()
+  /// Given a [DBSymKey] returns the token identifier representing the symbol,
+  pub fn token(&self, key: DBTokenKey) -> DBTokenData {
+    debug_assert!((key.0 as usize) < self.tokens.len(), "Invalid DBSymKey received");
+    self.tokens[key.0 as usize]
   }
 
-  /// Given an [DBSymKey] returns the token identifier representing the symbol,
+  /// Given a [DBSymKey] returns the token identifier representing the symbol,
   pub fn tokens(&self) -> &Array<DBTokenData> {
     &self.tokens
   }
 
-  /// Given an [DBSymKey] returns the token identifier representing the symbol,
+  /// Given a [DBSymKey] returns the token identifier representing the symbol,
   pub fn tok_val(&self, key: DBTokenKey) -> usize {
-    self.tokens.get(key.0 as usize).map(|s| s.tok_val).unwrap_or_default()
+    #[cfg(debug_assertions)]
+    {
+      let val = self.token(key).tok_id.0 as usize;
+      debug_assert!((key.0 as usize) == val);
+      val
+    }
+    #[cfg(not(debug_assertions))]
+    {
+      key.0 as usize
+    }
   }
 
-  /// Given an [DBSymKey] returns the token identifier representing the symbol,
+  /// Given a [DBSymKey] returns the token identifier representing the symbol,
   pub fn tok_data(&self, key: DBTokenKey) -> &DBTokenData {
     self.tokens.get(key.0 as usize).as_ref().unwrap()
   }
 
-  /// Given an [DBSymKey] returns the SymbolId representing the scanner
+  /// Given a [DBSymKey] returns the SymbolId representing the scanner
   /// production for the symbol, or None
   pub fn tok_prod(&self, key: DBTokenKey) -> Option<DBProdKey> {
     self.tokens.get(key.0 as usize).map(|s| s.prod_id)
   }
 
-  /// Given an [DBProdKey] returns an [Array] of [DBRuleKey], or `None`
+  /// Given a [DBSymKey] returns the associated [SymbolId]
+  pub fn sym(&self, key: DBTokenKey) -> SymbolId {
+    self.tokens.get(key.0 as usize).map(|s| s.sym_id).unwrap_or_default()
+  }
+
+  /// Given a [DBProdKey] returns an [Array] of [DBRuleKey], or `None`
   /// if the id is invalid.
   pub fn prod_rules(&self, key: DBProdKey) -> Option<&Array<DBRuleKey>> {
     self.prod_rules.get(key.0 as usize)
@@ -243,19 +260,19 @@ impl ParserDatabase {
     self.rules.as_slice()
   }
 
-  /// Given an [DBRuleKey] returns an [Rule], or `None` if
+  /// Given a [DBRuleKey] returns an [Rule], or `None` if
   /// the id is invalid.
   pub fn rule(&self, key: DBRuleKey) -> &Rule {
     self.rules.get(key.0 as usize).map(|e| &e.rule).unwrap()
   }
 
-  /// Given an [DBRuleKey] returns an [Rule], or `None` if
+  /// Given a [DBRuleKey] returns an [Rule], or `None` if
   /// the id is invalid.
   pub fn custom_state(&self, key: DBProdKey) -> Option<&parser::State> {
     self.custom_states.get(key.0 as usize).unwrap().as_deref()
   }
 
-  /// Given an [DBRuleKey] returns the [DBProdKey] the rule reduces to.
+  /// Given a [DBRuleKey] returns the [DBProdKey] the rule reduces to.
   pub fn rule_prod(&self, key: DBRuleKey) -> DBProdKey {
     self.rules.get(key.0 as usize).map(|e| e.prod_id).unwrap_or_default()
   }

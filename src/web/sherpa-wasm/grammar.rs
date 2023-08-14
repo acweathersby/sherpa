@@ -226,5 +226,5 @@ let vec = i.get_debug_symbols();
 /// Givin an symbol index, returns the symbol's friendly name.
 #[wasm_bindgen]
 pub fn get_symbol_name_from_id(id: u32, db: &JSParserDB) -> JsValue{ 
-  db.0.token(id.into()).sym_id.debug_string(&db.0).into()
+  db.0.token(id.into()).name.to_string(db.0.string_store()).into()
 }
