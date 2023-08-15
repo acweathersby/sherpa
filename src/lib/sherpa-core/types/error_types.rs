@@ -6,8 +6,7 @@ use crate::{journal::Journal, types::*};
 use sherpa_rust_runtime::types::Token;
 use std::path::PathBuf;
 
-/// This error occurs when a values prop's id does not match any reference
-/// names or non-terminals in the respective rule.
+/// This error occurs when source of an imported grammar cannot be found.
 pub(crate) fn add_invalid_import_source_error(
   j: &mut Journal,
   import: &Import,

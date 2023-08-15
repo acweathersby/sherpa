@@ -1,6 +1,7 @@
-use crate::types::AScriptStore;
+use crate::types::{AScriptStore, AScriptTypeVal};
 
 use sherpa_core::{
+  parser::ASTNodeType,
   test::frame::{build_parse_db_from_source_str, DBPackage},
   *,
 };
@@ -10,7 +11,7 @@ use sherpa_core::{
 }
  */
 #[test]
-fn test_parse_errors_when_struct_prop_type_is_redefined() -> SherpaResult<()> {
+fn parse_errors_when_struct_prop_type_is_redefined() -> SherpaResult<()> {
   build_parse_db_from_source_str(
     r##"
 
@@ -30,7 +31,7 @@ fn test_parse_errors_when_struct_prop_type_is_redefined() -> SherpaResult<()> {
 }
 
 #[test]
-fn test_parse_errors_when_production_has_differing_return_types() -> SherpaResult<()> {
+fn parse_errors_when_production_has_differing_return_types() -> SherpaResult<()> {
   build_parse_db_from_source_str(
     r#"<> A > "1" :ast { t_Test } | 'a' "#,
     "/test.sg".into(),
@@ -46,7 +47,7 @@ fn test_parse_errors_when_production_has_differing_return_types() -> SherpaResul
 }
 
 #[test]
-fn test_prop_is_made_optional_when_not_present_or_introduced_in_subsequent_definitions(
+fn prop_is_made_optional_when_not_present_or_introduced_in_subsequent_definitions(
 ) -> SherpaResult<()> {
   build_parse_db_from_source_str(
     r#"
@@ -63,6 +64,25 @@ fn test_prop_is_made_optional_when_not_present_or_introduced_in_subsequent_defin
       for prop in &store.props {
         assert!(prop.1.optional)
       }
+
+      SherpaResult::Ok(())
+    },
+  )
+}
+
+#[test]
+fn group_rules_as_vectors() -> SherpaResult<()> {
+  build_parse_db_from_source_str(
+    r#"<> A > ( "1" :ast u32($1) )(+"|") "#,
+    "/test.sg".into(),
+    Default::default(),
+    &|DBPackage { mut journal, db, .. }| {
+      let results = AScriptStore::new(&mut journal, &db)?;
+
+      assert_eq!(
+        results.prod_types.first_key_value()?.1.first_key_value()?.0.type_,
+        AScriptTypeVal::U32Vec
+      );
 
       SherpaResult::Ok(())
     },

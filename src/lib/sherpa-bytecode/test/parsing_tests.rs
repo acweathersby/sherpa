@@ -2,7 +2,7 @@ use crate::*;
 use sherpa_core::{
   proxy::OrderedMap,
   test::frame::{
-    build_parse_db_from_source_str,
+    build_parse_states_from_multi_sources,
     build_parse_states_from_source_str as build_states,
     TestPackage,
   },
@@ -16,7 +16,6 @@ use sherpa_rust_runtime::{
     ByteReader,
     MutByteReader,
     ParseContext,
-    ParseResult,
     SherpaParser,
     UTF8StringReader,
   },
@@ -27,13 +26,13 @@ type Parser<'a> = ByteCodeParser<'a, UTF8StringReader<'a>, u32>;
 
 #[test]
 pub fn construct_basic_recursive_descent() -> SherpaResult<()> {
-  compile_and_run_grammar(r#"<> A > 'h' 'e' 'l' 'l' 'o'"#, &[("default", "hello ", true)])
+  compile_and_run_grammars(&[r#"<> A > 'h' 'e' 'l' 'l' 'o'"#], &[("default", "hello ", true)])
 }
 
 #[test]
 pub fn construct_descent_on_scanner_symbol() -> SherpaResult<()> {
-  compile_and_run_grammar(
-    r#"
+  compile_and_run_grammars(
+    &[r#"
     <> A > tk:B
 
     <> B > C | D
@@ -41,15 +40,15 @@ pub fn construct_descent_on_scanner_symbol() -> SherpaResult<()> {
     <> C > 'a' D 'c'
     
     <> D > 'a' 'b'
-"#,
+"#],
     &[("default", "aabc ", true)],
   )
 }
 
 #[test]
 pub fn construct_recursive_ascent() -> SherpaResult<()> {
-  compile_and_run_grammar(
-    r#"
+  compile_and_run_grammars(
+    &[r#"
     IGNORE { c:sp } 
       
     <> A > X 'c'
@@ -58,33 +57,67 @@ pub fn construct_recursive_ascent() -> SherpaResult<()> {
     <> X > 'x' X?
     
     <> Y > 'x' Y?
-"#,
+"#],
     &[("default", "xxxxd ", true), ("default", "xxxxc", true), ("default", "xxxxf", false)],
   )
 }
 
 #[test]
+pub fn local_rule_append() -> SherpaResult<()> {
+  compile_and_run_grammars(
+    &[r#"
+    IGNORE { c:sp } 
+      
+    <> A > "one"
+    
+    +> A > "two"
+"#],
+    &[("default", "one ", true), ("default", "two", true)],
+  )
+}
+
+#[test]
+pub fn cross_source_rule_append() -> SherpaResult<()> {
+  compile_and_run_grammars(
+    &[
+      r#"
+IMPORT B as B
+IGNORE { c:sp }
+  
+<> A > "one"
+"#,
+      r#"
+IMPORT A as A
+
++> A::A > "two"
+"#,
+    ],
+    &[("default", "one ", true), ("default", "two", true)],
+  )
+}
+
+#[test]
 pub fn skipped_symbol() -> SherpaResult<()> {
-  compile_and_run_grammar(
-    r#"
+  compile_and_run_grammars(
+    &[r#"
     IGNORE { "A" } 
       
     <> A > "B" "T"
-"#,
+"#],
     &[("default", "BAT ", true), ("default", "BT", true), ("default", "BA AT", false)],
   )
 }
 
 #[test]
 pub fn skipped_nonterm_token_symbol() -> SherpaResult<()> {
-  compile_and_run_grammar(
-    r#"
+  compile_and_run_grammars(
+    &[r#"
     IGNORE { tk:vowels } 
       
     <> A > "B" "T"
 
     <> vowels > "A" | "E" | "I" | "O" | "U" | "Y"
-"#,
+"#],
     &[
       ("default", "BAT ", true),
       ("default", "BIT", true),
@@ -97,12 +130,12 @@ pub fn skipped_nonterm_token_symbol() -> SherpaResult<()> {
 
 #[test]
 fn parser_of_grammar_with_append_productions() -> SherpaResult<()> {
-  compile_and_run_grammar(
-    r#"
+  compile_and_run_grammars(
+    &[r#"
   <> A > "B"
   +> A >  "C"
   +> A >  "D"
-"#,
+"#],
     &[
       ("default", "B ", true),
       ("default", "C", true),
@@ -114,8 +147,8 @@ fn parser_of_grammar_with_append_productions() -> SherpaResult<()> {
 
 #[test]
 fn parsing_using_trivial_custom_state() -> SherpaResult<()> {
-  compile_and_run_grammar(
-    r##"A => match : BYTE  (65 /* A */ | 66 /* B */) { shift then pass }"##,
+  compile_and_run_grammars(
+    &[r##"A => match : BYTE  (65 /* A */ | 66 /* B */) { shift then pass }"##],
     &[("default", "A ", true), ("default", "B", true), ("default", "C", false)],
   )
 }
@@ -126,7 +159,7 @@ fn json_parser() -> SherpaResult<()> {
     .join("../../grammar/json/json.sg")
     .canonicalize()
     .unwrap();
-  compile_and_run_grammar(std::fs::read_to_string(grammar_source_path.as_path())?.as_str(), &[
+  compile_and_run_grammars(&[std::fs::read_to_string(grammar_source_path.as_path())?.as_str()], &[
     ("entry", r##"{"test":[{ "test":"12\"34", "test":"12\"34"}]}"##, true),
     ("entry", r##"{"\"":2}"##, true),
   ])
@@ -147,23 +180,23 @@ fn lalr_pop_parser() -> SherpaResult<()> {
 
 #[test]
 fn handles_grammars_that_utilize_eof_symbol() -> SherpaResult<()> {
-  compile_and_run_grammar(
-    r##"
+  compile_and_run_grammars(
+    &[r##"
 EXPORT A as A
 EXPORT B as B
       
 <> A > "a" "b" "c" $
 
 <> B > "c" "b" "a"    
-    "##,
+    "##],
     &[("A", "abc ", false), ("A", "abc", true), ("B", "cba", true), ("B", "cba ", true)],
   )
 }
 
 #[test]
 pub fn test_sgml_like_grammar_parsing() -> SherpaResult<()> {
-  compile_and_run_grammar(
-    r##"
+  compile_and_run_grammars(
+    &[r##"
 NAME wick_element
 
 IGNORE { c:sp c:nl }
@@ -214,15 +247,15 @@ IGNORE { c:sp c:nl }
 <> identifier > tk:tok_identifier
 
 <> tok_identifier > ( c:id | c:num )(+)
-"##,
+"##],
     &[("default", "<i -test : soLongMySwanSong - store { test } <i>>", true)],
   )
 }
 
 #[test]
 fn generic_grammar() -> SherpaResult<()> {
-  compile_and_run_grammar(
-    r##"
+  compile_and_run_grammars(
+    &[r##"
 IGNORE { c:sp c:nl } 
 
 <> script > block(+)
@@ -234,7 +267,7 @@ IGNORE { c:sp c:nl }
 <> execute_content > "aaa"(+)
 
 <> name > c:id(+)
-"##,
+"##],
     &[(
       "default",
       r##"
@@ -262,21 +295,21 @@ IGNORE { c:sp c:nl }
 
 #[test]
 pub fn intermediate_exclusive_symbols() -> SherpaResult<()> {
-  compile_and_run_grammar(
-    r##"
+  compile_and_run_grammars(
+    &[r##"
 
 <> R > tk:A "ly"
 
 <> A > "test" | "tester" | 'testing'
-"##,
+"##],
     &[("default", "testly", true), ("default", "testerly", true), ("default", "testingly", false)],
   )
 }
 
 #[test]
 pub fn c_style_comment_blocks() -> SherpaResult<()> {
-  compile_and_run_grammar(
-    r##"
+  compile_and_run_grammars(
+    &[r##"
     <> A > tk:comment
     
     <> comment > tk:block  | tk:line  | c:id(+)
@@ -284,7 +317,7 @@ pub fn c_style_comment_blocks() -> SherpaResult<()> {
     <> block > "/*"  ( c:sym | c:id | c:sp )(*) "*/"
     
     <> line > "//"  ( c:sym | c:id | c:sp )(*) c:nl?
-    "##,
+    "##],
     &[
       ("default", r##"//test"##, true),
       ("default", r##"//\n"##, true),
@@ -296,8 +329,8 @@ pub fn c_style_comment_blocks() -> SherpaResult<()> {
 
 #[test]
 fn json_object_with_specialized_key() -> SherpaResult<()> {
-  compile_and_run_grammar(
-    r##"
+  compile_and_run_grammars(
+    &[r##"
     IGNORE { c:sp c:nl }
     
     <> json > '{'  value(*',') '}'
@@ -309,7 +342,7 @@ fn json_object_with_specialized_key() -> SherpaResult<()> {
     <> string > '"' ( c:sym | c:num | c:sp | c:id | escape )(*) '\"'
         
     <> escape > "\\"{101}   ( c:sym | c:num | c:sp | c:id | c:nl)
-    "##,
+    "##],
     &[
       ("default", r##"{"test":2}"##, true),
       ("default", r##"{ "tester" : "mango"  }"##, true),
@@ -321,26 +354,26 @@ fn json_object_with_specialized_key() -> SherpaResult<()> {
 
 #[test]
 fn scientific_number() -> SherpaResult<()> {
-  compile_and_run_grammar(
-    r##"
+  compile_and_run_grammars(
+    &[r##"
     <> sci_number > tk:number
     
     <> number > ( '+' | '-' )? c:num(+) ( '.' c:num(+) )? ( ( 'e' | 'E' ) ( '+' | '-' )? c:num(+) )?
-    "##,
+    "##],
     &[("default", r##"2.3e-22"##, true), ("default", r##"0.3e-22"##, true)],
   )
 }
 
 #[test]
 fn escaped_string() -> SherpaResult<()> {
-  compile_and_run_grammar(
-    r##"
+  compile_and_run_grammars(
+    &[r##"
         <> string > tk:string_tk
         
         <> string_tk > '"' ( c:sym | c:num | c:sp | c:id | escape )(*) "\""
         
         <> escape > "\\"  ( c:sym | c:num | c:sp | c:id )
-        "##,
+        "##],
     &[
       ("default", r##""""##, true),
       ("default", r##""\\""##, true),
@@ -350,12 +383,16 @@ fn escaped_string() -> SherpaResult<()> {
   )
 }
 
-fn compile_and_run_grammar(source: &str, inputs: &[(&str, &str, bool)]) -> SherpaResult<()> {
-  build_states(source, "".into(), Default::default(), &|TestPackage { db, states, .. }| {
-    let (bc, state_map) = compile_bytecode(&db, states.iter())?;
+fn compile_and_run_grammars(source: &[&str], inputs: &[(&str, &str, bool)]) -> SherpaResult<()> {
+  build_parse_states_from_multi_sources(
+    source,
+    "".into(),
+    Default::default(),
+    &|TestPackage { db, states, .. }| {
+      let (bc, state_map) = compile_bytecode(&db, states.iter())?;
 
-    for (entry_name, input, should_pass) in inputs {
-      let ok = Parser::new(&mut ((*input).into()), &bc)
+      for (entry_name, input, should_pass) in inputs {
+        let ok = Parser::new(&mut ((*input).into()), &bc)
       .completes(
         db.get_entry_offset(entry_name, &state_map).expect(&format!(
         "\nCan't find entry offset for entry point [{entry_name}].\nValid entry names are\n    {}\n",
@@ -365,10 +402,10 @@ fn compile_and_run_grammar(source: &str, inputs: &[(&str, &str, bool)]) -> Sherp
       )) as u32)
       .is_ok();
 
-      let mut cd = console_debugger(db.to_owned(), Default::default());
+        let mut cd = console_debugger(db.to_owned(), Default::default());
 
-      if (ok != *should_pass) {
-        Parser::new(&mut ((*input).into()), &bc)
+        if (ok != *should_pass) {
+          Parser::new(&mut ((*input).into()), &bc)
       .collect_shifts_and_skips(
         db.get_entry_offset(entry_name, &state_map).expect(&format!(
         "\nCan't find entry offset for entry point [{entry_name}].\nValid entry names are\n    {}\n",
@@ -376,15 +413,16 @@ fn compile_and_run_grammar(source: &str, inputs: &[(&str, &str, bool)]) -> Sherp
           e.entry_name.to_string(db.string_store())
         }).collect::<Vec<_>>().join(" | ")
       )) as u32, 0, &mut cd.as_deref_mut());
-        panic!(
-          "\n\nParsing of input\n   \"{input}\"\nthrough entry point [{entry_name}] should {}.\n",
-          if *should_pass { "pass" } else { "fail" }
-        );
+          panic!(
+            "\n\nParsing of input\n   \"{input}\"\nthrough entry point [{entry_name}] should {}.\n",
+            if *should_pass { "pass" } else { "fail" }
+          );
+        }
       }
-    }
 
-    SherpaResult::Ok(())
-  })
+      SherpaResult::Ok(())
+    },
+  )
 }
 
 // Sorts reduce functions according to their respective

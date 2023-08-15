@@ -39,10 +39,7 @@ pub(crate) fn resolve_grammar_path(
           path.canonicalize().ok()
         })
         .next()
-        .ok_or(format!(
-          "Tried to load file with these extension {:?}",
-          extension
-        ))?,
+        .ok_or(format!("Tried to load file with these extension {:?}", extension))?,
 
       // Default
       _ => path.canonicalize()?,

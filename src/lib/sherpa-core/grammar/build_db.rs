@@ -123,6 +123,7 @@ pub fn build_compile_db<'a>(
           // Gain references on all sub productions. ----------------------------
           for prod in &prod.sub_prods {
             let prod_id = prod.id;
+
             if !p_map.contains_key(&prod_id.as_sym()) {
               let rules = prod.rules.clone();
               let g_name = prod.guid_name;
