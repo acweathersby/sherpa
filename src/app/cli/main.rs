@@ -10,7 +10,7 @@ use sherpa_core::{
   SherpaResult,
 };
 use sherpa_rust_build::compile_rust_bytecode_parser;
-use std::path::PathBuf;
+use std::{fs::File, io::Write, path::PathBuf};
 
 #[derive(Clone, Debug)]
 enum ParserType {
@@ -113,29 +113,78 @@ fn main() -> SherpaResult<()> {
 
     let (executor, spawner) = new_taskman(1000);
 
-    let matches =
+    let output =
       matches.get_many::<PathBuf>("INPUTS").unwrap_or_default().cloned().collect::<Vec<_>>();
 
     let sp = spawner.clone();
 
+    let name = matches.get_one::<String>("name").cloned();
+
     sp.clone().spawn(async move {
       let mut j = Journal::new(Some(config));
       let soup = GrammarSoup::new();
-      let mut id = SherpaResult::None;
+      let mut id = None;
 
-      for path in matches {
-        id =
-          compile_grammars_from_path(j.transfer(), path.clone(), soup.as_ref(), &spawner.clone())
-            .await;
+      for path in output {
+        match compile_grammars_from_path(
+          j.transfer(),
+          path.clone(),
+          soup.as_ref(),
+          &spawner.clone(),
+        )
+        .await
+        {
+          SherpaResult::Ok(id_) => {
+            id = Some(id_);
+          }
+          SherpaResult::Err(err) => {
+            println!("{err}");
+          }
+          SherpaResult::None => {}
+        }
+      }
+
+      j.flush_reports();
+      if j.debug_error_report() {
+        panic!("Failed To parse due to the above errors")
       }
 
       let id: sherpa_core::GrammarIdentities = id?;
 
-      let db = build_compile_db(j.transfer(), id, &soup)?;
+      let db = build_compile_db(j.transfer(), id, &soup);
 
-      let output = compile_rust_bytecode_parser(&mut j, &db).await?;
+      j.flush_reports();
+      if j.debug_error_report() {
+        panic!("Failed To parse due to the above errors")
+      }
 
-      print!("{}", output);
+      let db = db.unwrap();
+
+      let output = compile_rust_bytecode_parser(&mut j, &db).await;
+
+      j.flush_reports();
+      if j.debug_error_report() {
+        panic!("Failed To parse due to the above errors")
+      }
+
+      let output = output?;
+
+      //Write to file
+
+      dbg!(&name);
+
+      println!("{:?}", id.name);
+      println!("{:?}", id.guid_name);
+
+      let out_filepath = out_dir.join(
+        name.or(Some(id.name.to_string(db.string_store()))).unwrap_or("parser".to_string()) + ".rs",
+      );
+
+      dbg!(&out_filepath);
+
+      let mut file = File::create(out_filepath)?;
+
+      file.write_all(output.as_bytes())?;
 
       SherpaResult::Ok(())
     });

@@ -57,7 +57,7 @@ async fn import_grammars(
             let mut j = j.transfer();
             let task = ThreadedFuture::new(
               async move {
-                let GrammarIdentities { guid, name, path } = import_id;
+                let GrammarIdentities { guid, guid_name, path, .. } = import_id;
 
                 let grammar_source_path = PathBuf::from(path.to_str(&g_c.string_store).as_str());
 
@@ -211,15 +211,15 @@ pub fn compile_grammar_from_str(
 /// Entrypoint for compiling a collection of grammars from a source file.
 pub async fn compile_grammars_from_path(
   mut j: Journal,
-  grammar_source_path: PathBuf,
-  grammar_cloud: &GrammarSoup,
+  source_path: PathBuf,
+  gs: &GrammarSoup,
   spawner: &Spawner<SherpaResult<()>>,
 ) -> SherpaResult<GrammarIdentities> {
-  let root_id = GrammarIdentities::from_path(&grammar_source_path, &grammar_cloud.string_store);
+  let root_id = GrammarIdentities::from_path(&source_path, &gs.string_store);
 
   let imports = vec![root_id];
 
-  import_grammars(&mut j, imports, spawner, grammar_cloud).await?;
+  import_grammars(&mut j, imports, spawner, gs).await?;
 
-  SherpaResult::Ok(root_id)
+  SherpaResult::Ok(gs.grammar_headers.read().map(|h| h.get(&root_id.guid).map(|g| g.identity))??)
 }

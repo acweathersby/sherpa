@@ -325,8 +325,11 @@ pub struct GrammarIdentities {
   /// to a grammar source file.
   pub guid: GrammarId,
 
+  /// A globally unique name for this grammar.
+  pub guid_name: IString,
+
   /// A name defined by the grammar author. This is either the value of the
-  /// `@NAME` preamble, or the original file name stem if this preamble is
+  /// `NAME` preamble, or the original file name stem if this preamble is
   /// not present.
   pub name: IString,
 

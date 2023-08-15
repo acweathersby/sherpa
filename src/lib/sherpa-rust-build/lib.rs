@@ -8,6 +8,7 @@ mod test;
 mod builder;
 
 use builder::{
+  add_ascript_functions_for_rust,
   create_rust_writer_utils,
   write_rust_ast,
   write_rust_ast2,
@@ -29,7 +30,8 @@ pub fn build_rust(mut j: Journal, db: &ParserDatabase) -> SherpaResult<String> {
 
   let store = AScriptStore::new(&mut j, &db)?;
   let u = create_rust_writer_utils(&store, &db);
-  let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
+  let mut w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
+
   let writer = write_rust_ast2(w)?;
 
   String::from_utf8(writer.into_writer().into_output()).into()
@@ -53,6 +55,7 @@ pub async fn compile_rust_bytecode_parser(
   let store = async move { AScriptStore::new(&mut j2, &db) };
 
   let (bytecode, state_lookups) = a.await?;
+
   let mut store: AScriptStore = store.await?;
 
   j.flush_reports();
@@ -64,11 +67,57 @@ pub async fn compile_rust_bytecode_parser(
     .map(|(name, offset)| (name.to_string(db.string_store()), offset as u32))
     .collect();
 
-  dbg!(&state_lookups);
-
   let u = create_rust_writer_utils(&store, &db);
-  let writer = write_rust_ast(AscriptWriter::new(&u, CodeWriter::new(vec![])))?;
-  let w = write_rust_bytecode_parser_file(writer, &state_lookups, &bytecode)?;
 
-  SherpaResult::Ok(w.into_writer().to_string())
+  let mut writer = AscriptWriter::new(&u, CodeWriter::new(vec![]));
+
+  writer.stmt(
+    r###"/// ### `sherpa` Rust Parser
+///
+/// - **GENERATOR**: sherpa 1.0.0-beta2
+/// - **SOURCE**: /home/work/projects/lib_sherpa/src/grammar/v2_0_0/grammar.sg
+///
+/// #### WARNING:
+///
+/// This is a generated file. Any changes to this file may be **overwritten
+/// without notice**.
+///
+/// #### License:
+/// Copyright (c) 2023 Anthony Weathersby
+///
+/// Permission is hereby granted, free of charge, to any person obtaining a copy
+/// of this software and associated documentation files (the "Software"), to
+/// deal in the Software without restriction, including without limitation the
+/// rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+/// sell copies of the Software, and to permit persons to whom the Software is
+/// furnished to do so, subject to the following conditions:
+///
+/// The above copyright notice and this permission notice shall be included in
+/// all copies or substantial portions of the Software.
+///
+/// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+/// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+/// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+/// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+/// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+/// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+/// IN THE SOFTWARE.
+
+// 
+use std::hash::Hash;
+use sherpa_rust_runtime::{
+  llvm_parser::*,
+  types::{ast::*, *},
+};
+"###
+      .to_string(),
+  )?;
+
+  add_ascript_functions_for_rust(&mut writer, db)?;
+  
+  let mut writer = write_rust_ast(writer)?;
+
+  let writer = write_rust_bytecode_parser_file(writer, &state_lookups, &bytecode)?;
+
+  SherpaResult::Ok(writer.into_writer().to_string())
 }

@@ -64,6 +64,38 @@ pub fn construct_recursive_ascent() -> SherpaResult<()> {
 }
 
 #[test]
+pub fn skipped_symbol() -> SherpaResult<()> {
+  compile_and_run_grammar(
+    r#"
+    IGNORE { "A" } 
+      
+    <> A > "B" "T"
+"#,
+    &[("default", "BAT ", true), ("default", "BT", true), ("default", "BA AT", false)],
+  )
+}
+
+#[test]
+pub fn skipped_nonterm_token_symbol() -> SherpaResult<()> {
+  compile_and_run_grammar(
+    r#"
+    IGNORE { tk:vowels } 
+      
+    <> A > "B" "T"
+
+    <> vowels > "A" | "E" | "I" | "O" | "U" | "Y"
+"#,
+    &[
+      ("default", "BAT ", true),
+      ("default", "BIT", true),
+      ("default", "BUT", true),
+      ("default", "BOT", true),
+      ("default", "BYTE", true),
+    ],
+  )
+}
+
+#[test]
 fn parser_of_grammar_with_append_productions() -> SherpaResult<()> {
   compile_and_run_grammar(
     r#"

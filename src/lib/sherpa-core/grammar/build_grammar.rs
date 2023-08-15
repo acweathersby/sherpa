@@ -67,7 +67,7 @@ pub fn convert_grammar_data_to_header(
   g_data: GrammarData,
 ) -> Box<GrammarHeader> {
   let mut identity = import_id;
-  identity.name = g_data.id.name;
+  identity.guid_name = g_data.id.guid_name;
   Box::new(GrammarHeader {
     identity,
     pub_prods: g_data.exports.into_iter().collect(),
@@ -141,9 +141,10 @@ pub fn create_grammar_data(
 
   let mut g_data = GrammarData {
     id: GrammarIdentities {
-      guid: grammar_path.into(),
-      name: grammar_guid_name(name, grammar_path, string_store),
-      path: grammar_path.intern(string_store),
+      guid:      grammar_path.into(),
+      guid_name: grammar_guid_name(name, grammar_path, string_store),
+      name:      name.intern(string_store),
+      path:      grammar_path.intern(string_store),
     },
     global_skipped: skipped,
     grammar,
@@ -673,7 +674,7 @@ fn some_rules_have_ast_definitions(rules: &[Box<parser::Rule>]) -> bool {
 }
 
 /// Converts a Symbol AST node into a symbol object and
-/// inventories the symbol into the grammar store.
+/// records the symbol in the grammar store.
 fn record_symbol(
   sym_node: &ASTNode,
   precedence: u16,
@@ -686,6 +687,7 @@ fn record_symbol(
       let p = annotated.precedence.as_ref().map(|p| p.val as u16).unwrap_or_default();
       record_symbol(&annotated.symbol, p, p_data, g_data, s_store)?
     }
+
     ASTNode::TerminalToken(box terminal) => {
       let string = escaped_from((&terminal.val).into())?.join("");
       let val = string.intern(s_store);
@@ -693,6 +695,7 @@ fn record_symbol(
 
       id
     }
+
     ASTNode::EOFSymbol(_) => SymbolId::EndOfFile { precedence },
 
     ASTNode::ClassSymbol(gen) => match gen.val.as_str() {
@@ -711,11 +714,13 @@ fn record_symbol(
         }
       }
     },
+
     ASTNode::Production_Symbol(_) | ASTNode::Production_Import_Symbol(_) => {
       let id = get_production_id_from_ast_node(g_data, sym_node)?.as_sym();
       // Bypass the registration of this symbol as a symbol.
       return SherpaResult::Ok(id);
     }
+
     ASTNode::Production_Terminal_Symbol(token_prod) => {
       let id = get_production_id_from_ast_node(g_data, &token_prod.production)?
         .as_tok_sym()
@@ -723,6 +728,7 @@ fn record_symbol(
       // Bypass the registration of this symbol as a symbol.
       return SherpaResult::Ok(id);
     }
+
     _ => {
       #[allow(unreachable_code)]
       {
@@ -771,6 +777,7 @@ fn get_production_symbol<'a>(
     _ => unreachable!(),
   }
 }
+
 /// Return the `ProductionId` from a valid production like node.
 ///
 /// Valid Node:
@@ -888,7 +895,7 @@ pub fn prod_names(
   s_store: &IStringStore,
 ) -> (IString, IString) {
   (
-    (g_data.id.name.to_string(s_store) + "____" + base_name).intern(s_store),
+    (g_data.id.guid_name.to_string(s_store) + "____" + base_name).intern(s_store),
     base_name.intern(s_store),
   )
 }
