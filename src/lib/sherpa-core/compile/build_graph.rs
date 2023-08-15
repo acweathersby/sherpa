@@ -701,46 +701,44 @@ fn resolve_conflicting_symbols<'db, 'follow>(
 ) -> SherpaResult<()> {
   #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
   enum SymbolPriorities {
-    ExclusiveDefined,
     Defined,
-    Production,
     Class,
   }
+
+  let db = graph.get_db();
 
   // Map items according to their symbols
   let symbol_groups =
     hash_group_btreemap(completed_items.clone(), |_, i| i.origin.get_symbol(graph.get_db()));
+
   let priority_groups = hash_group_btreemap(symbol_groups, |_, (sym, _)| match sym {
     sym if sym.is_class() => Class,
-
     _ => Defined,
   });
+
   use SymbolPriorities::*;
   let completed: Option<&ItemSet>;
 
   for (priority, groups) in priority_groups {
     match priority {
-      Defined => {
+      Defined | Class => {
         if groups.len() > 1 {
-          #[cfg(debug_assertions)]
-          panic!("Found {} conflicting Defined symbols. Grammar is ambiguous:\n", groups.len());
-          #[cfg(not(debug_assertions))]
-          panic!()
-        } else {
-          completed = Some(groups.values().next().unwrap());
-        }
-      }
-      Class => {
-        if groups.len() > 1 {
-          #[cfg(debug_assertions)]
-          panic!(
-            "Found {} conflicting Generic symbols. Grammar is ambiguous:\n{:#?}\n-----\n{}",
-            groups.len(),
-            groups,
-            graph.debug_string()
-          );
-          #[cfg(not(debug_assertions))]
-          panic!()
+          j.report_mut().add_error(SherpaError::SourcesError {
+            id:       "conflicting-symbols",
+            msg:      "Found ".to_string()
+              + &groups.len().to_string()
+              + " conflicting Defined symbols. Grammar is ambiguous",
+            ps_msg:   Default::default(),
+            severity: SherpaErrorSeverity::Critical,
+            sources:  groups
+              .iter()
+              .map(|(sym, items)| {
+                items.iter().map(|i| (i.rule().tok.clone(), Default::default(), Default::default()))
+              })
+              .flatten()
+              .collect(),
+          });
+          return SherpaResult::Err(SherpaError::Text("Grammar conflicts".to_string()));
         } else {
           completed = Some(groups.values().next().unwrap());
         }

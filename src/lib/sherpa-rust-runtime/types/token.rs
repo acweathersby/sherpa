@@ -526,7 +526,7 @@ impl Token {
 
       string
     } else {
-      format!("[Token Source Not Valid]\n{:?}", self)
+      "[Token Source Not Valid]\n   ".to_string() + inline_comment
     }
   }
 }

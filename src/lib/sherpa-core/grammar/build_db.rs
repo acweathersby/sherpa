@@ -1,11 +1,10 @@
-use sherpa_rust_runtime::types::Token;
+use sherpa_rust_runtime::types::{Token, TokenRange};
 
 use crate::{
   journal::Journal,
   parser,
   types::*,
   utils::{create_u64_hash, hash_group_btreemap},
-  CodeWriter,
 };
 use std::collections::{hash_map, VecDeque};
 
@@ -17,7 +16,7 @@ pub fn build_compile_db<'a>(
   // Gain read access to all parts of the GrammarCloud.
   // We don't want anything changing during these next steps.
 
-  j.set_active_report("DBCompile", crate::ReportType::GrammarCompile(g.guid));
+  j.set_active_report("Database Compile", crate::ReportType::GrammarCompile(g.guid));
 
   let mut is_valid = true;
 
@@ -300,8 +299,25 @@ pub fn build_compile_db<'a>(
     if !p_map.contains_key(&sym.to_scanner_prod_id().as_tok_sym()) {
       match sym {
         SymbolId::Default => {}
-        SymbolId::Token { val, .. } => {
+
+        SymbolId::Token { val, precedence } => {
           let prod_id = sym.to_scanner_prod_id();
+
+          let s = &val.to_string(s_store);
+          let o = if *precedence < 1 {
+            "<> '".to_string() + s + "' > " + s
+          } else {
+            "<> \"".to_string() + s + "\" > " + s
+          };
+
+          let tok = TokenRange {
+            len:      s.len() as u32,
+            off:      s.len() as u32 + 8,
+            line_num: 0,
+            line_off: 0,
+          }
+          .to_token_with_string(&o);
+
           let mut rules = Array::from([Rule {
             symbols: Array::from([SymbolRef {
               id:         *sym,
@@ -310,10 +326,11 @@ pub fn build_compile_db<'a>(
               tok:        Token::default(),
             }]),
             skipped: Default::default(),
-            ast:     None,
-            tok:     Default::default(),
-            g_id:    g,
+            ast: None,
+            tok,
+            g_id: g,
           }]);
+
           convert_symbols_to_scanner_symbols(&mut rules, s_store);
 
           let name = ("tok_".to_string() + &create_u64_hash(val).to_string()).intern(s_store);
@@ -325,6 +342,7 @@ pub fn build_compile_db<'a>(
 
           token_names.insert(prod_id.as_tok_sym(), *val);
         }
+
         sym if sym.is_term() => {
           let prod_id = sym.to_scanner_prod_id();
           let rules = Array::from_iter(vec![Rule {
@@ -336,7 +354,7 @@ pub fn build_compile_db<'a>(
             }],
             skipped: Default::default(),
             ast:     None,
-            tok:     Default::default(),
+            tok:     Token::default(),
             g_id:    g,
           }]);
 
@@ -436,7 +454,7 @@ pub fn build_compile_db<'a>(
   let prod_lu = convert_index_map_to_vec(prod_map_owned);
 
   let db = ParserDatabase::new(
-    root_grammar.identity.name,
+    root_grammar.identity.guid_name,
     prod_lu,
     prod_name_lu_owned,
     p_r_map_owned,
@@ -466,7 +484,7 @@ fn convert_rule_symbols(
   symbols: Map<SymbolId, usize>,
 ) {
   for DBRule { rule, is_scanner, .. } in r_table {
-    for SymbolRef { id: sym, .. } in &mut rule.symbols {
+    for SymbolRef { id: sym, index, .. } in &mut rule.symbols {
       *sym = convert_symbol(sym, p_map, &symbols, *is_scanner);
     }
 
@@ -521,11 +539,16 @@ fn extract_prod_syms(
   token_productions: &mut VecDeque<ProductionId>,
 ) -> SherpaResult<()> {
   for rule in rules {
-    for SymbolRef { id: sym, tok, .. } in &rule.symbols {
+    for (sym, tok) in rule
+      .symbols
+      .iter()
+      .map(|s| (s.id, s.tok.clone()))
+      .chain(rule.skipped.iter().map(|s| (*s, Default::default())))
+    {
       match sym {
         SymbolId::NonTerminal { id, .. } => match id {
           ProductionId::Standard(..) => {
-            production_queue.push_back((tok.clone(), *id));
+            production_queue.push_back((tok.clone(), id));
           }
           ProductionId::Sub(..) => {
             // We've already merged in the production's sub-productions
@@ -534,7 +557,7 @@ fn extract_prod_syms(
         SymbolId::NonTerminalToken { id, .. } => {
           let name = productions.get(&id.as_parse_prod())?.guid_name;
           let name = ("tk:".to_string() + &name.to_string(s_store)).intern(s_store);
-          insert_symbol(symbols, sym);
+          insert_symbol(symbols, &sym);
           token_names.insert(id.as_parse_prod().as_tok_sym(), name);
           token_productions.push_back(id.as_parse_prod());
         }

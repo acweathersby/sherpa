@@ -1,4 +1,4 @@
-use std::{ops::Add, str::FromStr};
+use std::{ops::Add, str::FromStr, sync::Arc};
 
 use super::{ByteReader, Token};
 
@@ -168,6 +168,12 @@ impl TokenRange {
   pub fn to_token(&self, reader: &mut dyn ByteReader) -> Token {
     let mut tok: Token = (*self).into();
     tok.set_source(reader.get_source());
+    tok
+  }
+
+  pub fn to_token_with_string(&self, original_string: &str) -> Token {
+    let mut tok: Token = (*self).into();
+    tok.set_source(Arc::new(original_string.to_string().as_bytes().to_vec()));
     tok
   }
 
