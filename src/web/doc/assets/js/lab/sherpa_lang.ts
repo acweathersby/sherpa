@@ -85,7 +85,9 @@ function SherpaLinter(ctx: GrammarContext) {
 
         if (parser_errors.length > 0) {
             convertPosErrorsToDiagnostics(parser_errors, "parser", messages);
-        } else if (!ctx.createDB("/")) {
+        }
+
+        if (!ctx.createDB("/")) {
             convertPosErrorsToDiagnostics(ctx.db_errors, "semantic-evaluator", messages);
         } else {
 
@@ -112,7 +114,6 @@ function SherpaLinter(ctx: GrammarContext) {
                     console.log(e)
                 }
             }
-
         }
 
         return messages;

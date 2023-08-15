@@ -135,9 +135,13 @@ pub struct TokenProductionRef(u32);
 #[derive(Clone, Default)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct SymbolRef {
+  /// The type of this symbol.
   pub id:         SymbolId,
+  /// The original location of this symbol within the grammar source
+  pub loc:        Token,
+  /// The reference name of this symbol
   pub annotation: IString,
-  pub tok:        Token,
+  /// The original position index of the symbol within it's rule
   pub index:      usize,
 }
 

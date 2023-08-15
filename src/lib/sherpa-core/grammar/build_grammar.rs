@@ -614,7 +614,7 @@ fn process_rule_symbols(
           rule.symbols.insert(0, SymbolRef {
             id:         sym,
             annotation: annotation.intern(s_store),
-            tok:        tok.clone(),
+            loc:        tok.clone(),
             index:      0,
           });
 
@@ -656,7 +656,7 @@ fn process_rule_symbols(
       rule.symbols.push(SymbolRef {
         id:         sym,
         annotation: annotation.intern(s_store),
-        tok:        tok.clone(),
+        loc:        tok.clone(),
         index:      *index,
       });
     }

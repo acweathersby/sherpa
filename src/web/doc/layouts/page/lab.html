@@ -47,6 +47,7 @@
                     <button id="debugger-step-button">step</button>
                     <button id="debugger-into-button">step-into</button>
                     <button id="debugger-start-stop-button">start</button>
+                    <select id="debugger-entry-dropdown"></select>
                     <h1> Debugger </h1>
                     <pre id="debugger-output"></pre>
                 </div>
@@ -71,6 +72,7 @@
             debugger_into_button: document.getElementById("debugger-into-button"),
             debugger_out_button: document.getElementById("debugger-out-button"),
             debugger_output: document.getElementById("debugger-output"),
+            debugger_entry_selection: document.getElementById("debugger-entry-dropdown"),
         }).then(() => {
             for (const scroller of Array.from(document.getElementsByClassName("cm-scroller"))) {
 

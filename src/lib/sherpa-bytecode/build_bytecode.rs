@@ -2,6 +2,7 @@ use sherpa_core::{proxy::*, *};
 use sherpa_rust_runtime::types::{
   bytecode::{insert_op, Opcode as Op, *},
   TableHeaderData,
+  Token,
 };
 use std::collections::VecDeque;
 
@@ -60,7 +61,7 @@ fn remap_goto_addresses(bc: &mut Array<u8>, _goto_to_off: &Array<u32>) {
         set_goto_address(bc, _goto_to_off, i + 2);
         op.len()
       }
-      Op::DebugSymbol | Op::DebugExpectedSymbols => Instruction::from((bc.as_slice(), i)).len(),
+      Op::DebugStateName | Op::DebugExpectedSymbols => Instruction::from((bc.as_slice(), i)).len(),
       op => op.len(),
     }
   }
@@ -93,6 +94,8 @@ fn build_statement<'db>(
   let parser::Statement { branch, non_branch, transitive } = stmt;
 
   if let Some(transitive) = transitive {
+    insert_tok_debug(bc, transitive.to_token());
+
     match transitive {
       parser::ASTNode::Skip(..) => insert_op(bc, Op::SkipToken),
       parser::ASTNode::Pop(..) => insert_op(bc, Op::PopGoto),
@@ -109,6 +112,8 @@ fn build_statement<'db>(
   }
 
   for non_branch in non_branch {
+    insert_tok_debug(bc, non_branch.to_token());
+
     match non_branch {
       parser::ASTNode::ReduceRaw(box parser::ReduceRaw { rule_id, len, prod_id, .. }) => {
         insert_op(bc, Op::Reduce);
@@ -334,9 +339,15 @@ fn build_match<'db>(
   SherpaResult::Ok(())
 }
 
+fn insert_tok_debug(bc: &mut Array<u8>, tok: Token) {
+  insert_op(bc, Op::DebugTokenLocation);
+  insert_u32_le(bc, tok.get_start() as u32);
+  insert_u32_le(bc, tok.get_end() as u32);
+}
+
 fn insert_debug_symbol(bc: &mut Array<u8>, symbol: String) {
   let len = symbol.as_bytes().len() as u16;
-  insert_op(bc, Op::DebugSymbol);
+  insert_op(bc, Op::DebugStateName);
   insert_u16_le(bc, len);
 
   for byte in symbol.as_bytes() {

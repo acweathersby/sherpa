@@ -21,12 +21,14 @@ export function parserHost(ctx: GrammarContext, {
     debugger_into_button,
     debugger_out_button,
     debugger_output,
+    debugger_entry_selection,
 }: {
     debugger_start_stop_button: HTMLButtonElement,
     debugger_step_button: HTMLButtonElement,
     debugger_into_button: HTMLButtonElement,
     debugger_out_button: HTMLButtonElement,
-    debugger_output: HTMLDivElement
+    debugger_output: HTMLDivElement,
+    debugger_entry_selection: HTMLSelectElement,
 }) {
     let view: EditorView | null = null;
     let bytecode: sherpa.JSBytecode | null = null;
@@ -36,32 +38,40 @@ export function parserHost(ctx: GrammarContext, {
     let debugger_steps: any[] = [];
     let debugger_offset: number = -1;
     let play_interval = -1;
+    let active_search_symbols: Set<string> = new Set();
+    let active_state_source = '';
+    let active_scanner_state_source = '';
 
     ctx.addListener(EventType.GrammarAdded, ctx => {
         console.log("Grammar Added")
+        states = null;
     })
 
     ctx.addListener(EventType.DBDeleted, ctx => {
         console.log("DBDeleted")
+        if (states) {
+            states.free()
+            states = null;
+        }
     })
 
     ctx.addListener(EventType.DBCreated, ctx => {
         console.log("DBCreated")
 
-        if (states) {
-            states.free()
-            states = null;
-        }
-
-        if (bytecode) {
-            bytecode.free()
-            bytecode = null;
-        }
-
         // Now we can create a parser. 
         let db = ctx.db;
 
         if (!db) return;
+
+        configure_entry_options(db);
+    })
+
+    function create_parser_data() {
+
+        if (states) return;
+        if (!ctx.db) return;
+
+        let db = ctx.db;
 
         try {
             states = sherpa.create_parser_states(db, false);
@@ -75,7 +85,19 @@ export function parserHost(ctx: GrammarContext, {
         } catch (e) {
             console.log(e)
         }
-    })
+        if (db) return;
+    }
+
+    function configure_entry_options(db: sherpa.JSParserDB) {
+        debugger_entry_selection.innerHTML = "";
+
+        for (const entry_name of sherpa.get_entry_names(db)) {
+            let option = document.createElement("option");
+            option.innerText = entry_name;
+            option.value = entry_name;
+            debugger_entry_selection.appendChild(option);
+        }
+    }
 
     function destroy_parser() {
         if (parser) {
@@ -84,35 +106,50 @@ export function parserHost(ctx: GrammarContext, {
         }
     }
 
+    function create_parser() {
+        if (!(view && bytecode && ctx.db)) return;
+        destroy_parser()
+        parser = sherpa.JSByteCodeParser.new(view.state.doc.toString(), bytecode);
+        parser.init(debugger_entry_selection.value, bytecode, ctx.db);
+
+    }
+
     function stop_parser() {
+        if (!PARSING) return;
         destroy_parser();
         toggle_play(true);
         PARSING = false;
         debugger_start_stop_button.innerHTML = "start";
         debugger_start_stop_button.classList.remove("started");
-        debugger_output.innerText = "";
     }
 
     function start_parser() {
-        if (view && states && bytecode && ctx.db && !PARSING) {
-            debugger_start_stop_button.innerHTML = "stop";
-            debugger_start_stop_button.classList.add("started");
-            destroy_parser();
 
-            debugger_offset = -1;
-            debugger_steps.length = 0;
+        if (!(view && ctx.db && !PARSING)) return;
 
-            parser = sherpa.JSByteCodeParser.new(view.state.doc.toString(), bytecode);
-            parser.init("entry", bytecode, ctx.db);
+        create_parser_data();
 
-            view.dispatch({ userEvent: "debugger.start" })
-            PARSING = true;
+        if (!(states && bytecode)) return;
 
-            step_forward();
-        }
+        debugger_start_stop_button.innerHTML = "stop";
+        debugger_start_stop_button.classList.add("started");
+
+        create_parser();
+
+        if (!parser) return;
+
+        debugger_offset = -1;
+        active_search_symbols.clear();
+        debugger_steps.length = 0;
+        debugger_output.innerText = "";
+        active_state_source = "";
+        active_scanner_state_source = "";
+
+        view.dispatch({ userEvent: "debugger.start" })
+        PARSING = true;
+
+        step_forward();
     }
-
-    let active_search_symbols: Set<string> = new Set()
 
     function step_forward() {
         if (view && parser && states && bytecode && ctx.db && PARSING) {
@@ -140,10 +177,29 @@ export function parserHost(ctx: GrammarContext, {
                         break;
                     case "ExecuteInstruction": {
 
+
+
                         if (!step.is_scanner) {
+                            active_scanner_state_source = "";
+
                             let debug_symbols: number[] = sherpa.get_debug_symbol_ids(step.instruction, bytecode);
+
                             if (debug_symbols.length > 0) {
                                 debug_symbols.forEach(s => active_search_symbols.add(sherpa.get_symbol_name_from_id(s, db)));
+                                break
+                            }
+
+                            let name = sherpa.get_debug_state_name(step.instruction, bytecode);
+                            if (name) {
+                                active_state_source = sherpa.get_state_source_string(name, states, db);
+                                break
+                            }
+
+                        } else {
+                            let name = sherpa.get_debug_state_name(step.instruction, bytecode);
+                            if (name) {
+                                active_scanner_state_source = sherpa.get_state_source_string(name, states, db);
+                                break
                             }
                         }
 
@@ -152,7 +208,11 @@ export function parserHost(ctx: GrammarContext, {
                             + [...active_search_symbols].join(" | ")
                             + "\n\n"
                             + sherpa.create_instruction_disassembly(step.instruction, bytecode)
-                            ;
+                            + "\n\n"
+                            + active_state_source
+                            + "\n\n"
+                            + active_scanner_state_source
+
 
                         let effects: any[] = [filter_effects.of((from, to) => false)]
 
@@ -194,6 +254,10 @@ export function parserHost(ctx: GrammarContext, {
             stop_parser();
         else
             start_parser();
+    });
+
+    debugger_entry_selection.addEventListener("change", e => {
+        stop_parser();
     });
 
     stop_parser();

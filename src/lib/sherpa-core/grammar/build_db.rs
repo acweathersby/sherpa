@@ -324,7 +324,7 @@ pub fn build_compile_db<'a>(
               id:         *sym,
               annotation: IString::default(),
               index:      0,
-              tok:        Token::default(),
+              loc:        Token::default(),
             }]),
             skipped: Default::default(),
             ast: None,
@@ -351,7 +351,7 @@ pub fn build_compile_db<'a>(
               id:         *sym,
               annotation: IString::default(),
               index:      0,
-              tok:        Token::default(),
+              loc:        Token::default(),
             }],
             skipped: Default::default(),
             ast:     None,
@@ -543,7 +543,7 @@ fn extract_prod_syms(
     for (sym, tok) in rule
       .symbols
       .iter()
-      .map(|s| (s.id, s.tok.clone()))
+      .map(|s| (s.id, s.loc.clone()))
       .chain(rule.skipped.iter().map(|s| (*s, Default::default())))
     {
       match sym {

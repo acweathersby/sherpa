@@ -87,7 +87,7 @@ pub fn dispatch<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
 
     i = match match i.get_opcode() {
       DebugExpectedSymbols => debug_expected_symbols(i),
-      DebugSymbol => debug_symbol(i),
+      DebugStateName => debug_symbol(i),
       ShiftToken => shift_token(i, ctx),
       ShiftTokenScanless => shift_token_scanless(i, ctx),
       ScanShift => scan_shift(i, ctx),
@@ -117,7 +117,7 @@ pub fn dispatch<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
       Fail => (FailState, Option::None),
       Pass => (CompleteState, Option::None),
       Accept => (ParseAction::Accept { production_id: ctx.prod_id }, Option::None),
-      NoOp => (None, i.next()),
+      NoOp | DebugTokenLocation => (None, i.next()),
     } {
       (None, Option::None) => {
         unreachable!("Expected next instruction!")

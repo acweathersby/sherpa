@@ -7,7 +7,7 @@ use sherpa_core::{
   GrammarSoup,
   Journal,
   ParserDatabase,
-  SherpaResult, build_compile_db, compile_parse_states, optimize, SherpaError, ParseState, ParseStatesMap, ParseStatesVec, proxy::Map, IString,
+  SherpaResult, build_compile_db, compile_parse_states, optimize, SherpaError, ParseState, ParseStatesMap, ParseStatesVec, proxy::Map, IString, CachedString,
 };
 use sherpa_rust_build::build_rust;
 use sherpa_rust_runtime::{bytecode::{disassemble_bytecode, disassemble_parse_block}, types::bytecode::Instruction};
@@ -223,8 +223,55 @@ let vec = i.get_debug_symbols();
 }
 
 
+/// Return a list of symbols ids if the opcode of the instruction is Op::DebugExpectedSymbols
+#[wasm_bindgen]
+pub fn get_debug_state_name(address: u32, bytecode: &JSBytecode) -> JsValue{ 
+  let i: Instruction = (bytecode.0.0.as_slice(), address as usize).into();
+
+  i.get_active_state_name().into()
+}
+
+#[wasm_bindgen]
+#[derive(Default)]
+pub struct TokenOffsets {
+  pub start: u32,
+  pub end:u32
+}
+
+/// Return a list of symbols ids if the opcode of the instruction is Op::DebugExpectedSymbols
+#[wasm_bindgen]
+pub fn get_debug_tok_offsets(address: u32, bytecode: &JSBytecode) -> JsValue{ 
+  let i: Instruction = (bytecode.0.0.as_slice(), address as usize).into();
+  match i.get_debug_tok_offsets() {
+    Some((start, end)) => 
+    (TokenOffsets{
+      start, end
+    }).into(),
+    None => Default::default()
+  }
+}
+
+#[wasm_bindgen]
+pub fn get_state_source_string(name: String, states: &JSParseStates, db: &JSParserDB) -> JsValue { 
+  let lu_name:IString = name.to_token();
+
+  let code = states.0.iter().find(|f| f.0 == lu_name).map(|f| f.1.source_string(db.0.string_store()));
+
+  code.into()
+}
+
+
+
 /// Givin an symbol index, returns the symbol's friendly name.
 #[wasm_bindgen]
 pub fn get_symbol_name_from_id(id: u32, db: &JSParserDB) -> JsValue{ 
   db.0.token(id.into()).name.to_string(db.0.string_store()).into()
+}
+
+
+
+/// Returns a list of entrypoint names
+#[wasm_bindgen]
+pub fn get_entry_names(db: &JSParserDB) -> JsValue{ 
+  db.0.entry_points().iter().map(|ep| JsValue::from(ep.entry_name.to_string(db.0.string_store()))).collect::<Array>().into()
 }

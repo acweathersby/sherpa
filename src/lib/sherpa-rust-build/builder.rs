@@ -1770,7 +1770,7 @@ pub type Parser<'a, T, UserCTX> = sherpa_rust_runtime::bytecode_parser::ByteCode
       .db
       .tokens()
       .iter()
-      .map(|tok| (tok.tok_id, format!("r####\"{}\"####", tok.sym_id.name(w.db.string_store()))))
+      .map(|tok| (tok.tok_id, format!("r####\"{}\"####", tok.sym_id.debug_string(w.db))))
       .collect::<BTreeMap<_, _>>();
 
     let len = symbol_string.len();

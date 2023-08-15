@@ -187,55 +187,6 @@ impl SymbolId {
     matches!(self, SymbolId::EndOfFile { .. })
   }
 
-  /// Produce a human friendly string representation of this symbol
-  pub fn name(&self, s_store: &IStringStore) -> String {
-    use SymbolId::*;
-    let mut w = CodeWriter::new(vec![]);
-    match *self {
-      Undefined => &mut w + "Undefine",
-      Default => &mut w + "Default",
-      EndOfFile { .. } => &mut w + "{EOF}",
-      ClassSpace { .. } => &mut w + "c:sp",
-      ClassHorizontalTab { .. } => &mut w + "c:tab",
-      ClassNewLine { .. } => &mut w + "c:nl",
-      ClassIdentifier { .. } => &mut w + "c:id",
-      ClassNumber { .. } => &mut w + "c:num",
-      ClassSymbol { .. } => &mut w + "c:sym",
-      Token { val, precedence } => {
-        let _ = &mut w + "[" + val.to_str(s_store) + "]";
-        &mut w + "{ " + precedence.to_string() + " }"
-      }
-      NonTerminalState { .. } => &mut w + "<non-term-state>",
-      NonTerminal { .. } => &mut w + "<non-term>",
-      NonTerminalToken { precedence, .. } => {
-        let _ = &mut w + "<non-term-token>";
-        &mut w + "[" + precedence.to_string() + "]"
-      }
-      Codepoint { val, precedence } => {
-        if precedence > 0 {
-          &mut w + "" + val.to_string() + "{" + precedence.to_string() + "}"
-        } else {
-          &mut w + "" + val.to_string()
-        }
-      }
-      DBNonTerminal { key } => &mut w + "nt-idx:" + key.to_string(),
-      DBNonTerminalToken { prod_key, precedence, .. } => {
-        let _ = &mut w + "nt-ind-tok:" + prod_key.to_string();
-        &mut w + "[" + precedence.to_string() + "]"
-      }
-      DBToken { key } => &mut w + "db-tok:" + key.to_string(),
-      Char { char, .. } => {
-        if char < 128 {
-          &mut w + "char:" + char::from(char).to_string()
-        } else {
-          &mut w + "char:" + char.to_string()
-        }
-      }
-    };
-
-    String::from_utf8(w.into_output()).unwrap()
-  }
-
   pub fn debug_string(&self, db: &ParserDatabase) -> String {
     use SymbolId::*;
     let mut w = CodeWriter::new(vec![]);
