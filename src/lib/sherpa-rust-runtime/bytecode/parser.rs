@@ -210,7 +210,6 @@ head_ptr: {}  start_line_off:{}",
   ctx.base_ptr = new_offset;
   ctx.head_ptr = new_offset;
   ctx.scan_ptr = new_offset;
-  ctx.anchor_ptr = new_offset;
   ctx.tok_id = 0;
   ctx.tok_len = 0;
 
@@ -307,7 +306,7 @@ fn skip_token<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
   ctx.start_line_off = ctx.chkp_line_off;
   ctx.end_line_num = ctx.start_line_num;
   ctx.end_line_off = ctx.end_line_off;
-  ctx.base_ptr = ctx.head_ptr;
+  //ctx.base_ptr = ctx.head_ptr;
   result
 }
 
