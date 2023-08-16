@@ -409,7 +409,7 @@ fn goto<'a, 'llvm: 'a>(
   build_tail_call_with_return(
     &args.m.b,
     state_fun,
-    *args.state_lu.get(&prod.to_token().to_string())?,
+    *args.state_lu.get(&get_goto_target_name(prod))?,
   )
 }
 
@@ -421,7 +421,7 @@ fn push_goto<'a, 'llvm: 'a>(
   add_goto_slot(
     args.m,
     p_ctx,
-    (*args.state_lu.get(&prod.to_token().to_string())?).as_global_value().as_pointer_value(),
+    (*args.state_lu.get(&get_goto_target_name(prod))?).as_global_value().as_pointer_value(),
     NORMAL_STATE_FLAG_LLVM as u64,
   );
 

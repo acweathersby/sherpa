@@ -6,10 +6,7 @@ use crate::{
 };
 use core::panic;
 
-pub fn compile_parse_states<'db>(
-  mut j: Journal,
-  db: &'db ParserDatabase,
-) -> SherpaResult<ParseStatesMap> {
+pub fn compile_parse_states<'db>(mut j: Journal, db: &'db ParserDatabase) -> SherpaResult<ParseStatesMap> {
   j.set_active_report("State Compile", ReportType::ProductionCompile(Default::default()));
 
   let follow = create_follow_sets(db);
@@ -38,8 +35,7 @@ pub fn compile_parse_states<'db>(
       };
       states.insert(name, Box::new(state));
     } else {
-      let start_items =
-        Items::start_items((prod_id as u32).into(), db).to_origin(Origin::ProdGoal(prod_id.into()));
+      let start_items = Items::start_items((prod_id as u32).into(), db).to_origin(Origin::ProdGoal(prod_id.into()));
 
       match prod_sym {
         SymbolId::NonTerminal { .. } => {
@@ -75,10 +71,8 @@ pub fn compile_parse_states<'db>(
 
   // Build Scanners
   for (scanner, group) in scanners {
-    let start_items = group
-      .iter()
-      .flat_map(|s| Items::start_items(s.prod_id, db).to_origin(Origin::TokenGoal(s.tok_id)))
-      .collect::<Array<_>>();
+    let start_items =
+      group.iter().flat_map(|s| Items::start_items(s.prod_id, db).to_origin(Origin::TokenGoal(s.tok_id))).collect::<Array<_>>();
 
     let graph = build_graph(&mut j, GraphMode::Scanner, start_items, db, &follow)?;
 
@@ -93,7 +87,7 @@ pub fn compile_parse_states<'db>(
 
   for (_, state) in &mut states {
     // Warn of failed parses
-    match state.build_ast(db.string_store()) {
+    match state.build_ast(db) {
       SherpaResult::Err(err) => {
         todo!("Add State compile error to Journal {err}");
       }
@@ -113,8 +107,7 @@ fn build_entry_ir<'db>(
   let _ = (&mut w) + "push " + prod_exit_name.to_string(db.string_store());
   let _ = (&mut w) + " then goto " + prod_name.to_string(db.string_store());
 
-  let entry_state =
-    ParseState { code: w.to_string(), name: *prod_entry_name, ..Default::default() };
+  let entry_state = ParseState { code: w.to_string(), name: *prod_entry_name, ..Default::default() };
 
   let mut w = CodeWriter::new(Vec::<u8>::with_capacity(512));
   ///let _ = (&mut w) + "match: _CLASS_ { (0) { accept } }";

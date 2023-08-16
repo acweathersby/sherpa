@@ -358,10 +358,7 @@ fn reduce<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
 }
 
 /// Performs the [Opcode::PushGoto] operation
-fn push_goto<'a>(
-  i: Instruction<'a>,
-  stack: &mut Vec<u32>,
-) -> (ParseAction, Option<Instruction<'a>>) {
+fn push_goto<'a>(i: Instruction<'a>, stack: &mut Vec<u32>) -> (ParseAction, Option<Instruction<'a>>) {
   const __HINT__: Opcode = Opcode::PushGoto;
   let mut iter = i.iter();
   let state_mode = iter.next_u8().unwrap();
@@ -374,10 +371,7 @@ fn push_goto<'a>(
 }
 
 /// Performs the [Opcode::PushExceptionHandler] operation
-fn push_exception_handler<'a>(
-  i: Instruction<'a>,
-  stack: &mut Vec<u32>,
-) -> (ParseAction, Option<Instruction<'a>>) {
+fn push_exception_handler<'a>(i: Instruction<'a>, stack: &mut Vec<u32>) -> (ParseAction, Option<Instruction<'a>>) {
   const __HINT__: Opcode = Opcode::PushExceptionHandler;
   let mut iter = i.iter();
   let state_mode = iter.next_u8().unwrap();
@@ -400,10 +394,7 @@ fn goto<'a>(i: Instruction<'a>) -> (ParseAction, Option<Instruction<'a>>) {
 }
 
 /// Performs the [Opcode::PopGoto] operation
-fn pop_goto<'a>(
-  i: Instruction<'a>,
-  stack: &mut Vec<u32>,
-) -> (ParseAction, Option<Instruction<'a>>) {
+fn pop_goto<'a>(i: Instruction<'a>, stack: &mut Vec<u32>) -> (ParseAction, Option<Instruction<'a>>) {
   const __HINT__: Opcode = Opcode::PopGoto;
 
   stack.pop();
@@ -535,11 +526,13 @@ fn get_input_value<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
     InputType::Class => {
       let scan_len = ctx.get_reader().codepoint_byte_length();
       ctx.sym_len = scan_len;
+      //ctx.tok_len = scan_len as usize;
       ctx.get_reader().class() as u32
     }
     InputType::Codepoint => {
       let scan_len = ctx.get_reader().codepoint_byte_length();
       ctx.sym_len = scan_len;
+      //ctx.tok_len = scan_len as usize;
       ctx.get_reader().codepoint() as u32
     }
     InputType::Byte => {
@@ -552,6 +545,7 @@ fn get_input_value<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
 
       if byte > 0 {
         ctx.sym_len = 1;
+        //ctx.tok_len = 1;
       } else {
         ctx.sym_len = 0;
       }
@@ -578,15 +572,11 @@ fn emit_debug_value<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
   let end = ctx.scan_ptr + ctx.tok_len;
   if let Some(debug) = debug {
     match input_type {
-      InputType::Production => {
-        debug(&DebugEvent::GotoValue { production_id: input_value }, ctx.get_str())
-      }
+      InputType::Production => debug(&DebugEvent::GotoValue { production_id: input_value }, ctx.get_str()),
       InputType::Byte => debug(&DebugEvent::ByteValue { input_value, start, end }, ctx.get_str()),
       InputType::Class => debug(&DebugEvent::ClassValue { input_value, start, end }, ctx.get_str()),
       InputType::Token => debug(&DebugEvent::TokenValue { input_value, start, end }, ctx.get_str()),
-      InputType::Codepoint => {
-        debug(&DebugEvent::CodePointValue { input_value, start, end }, ctx.get_str())
-      }
+      InputType::Codepoint => debug(&DebugEvent::CodePointValue { input_value, start, end }, ctx.get_str()),
       InputType::EndOfFile => debug(&DebugEvent::EndOfFile, ctx.get_str()),
       _ => unreachable!(),
     };
@@ -726,9 +716,7 @@ impl<'a, R: ByteReader + MutByteReader, M> ByteCodeParser<'a, R, M> {
   }
 }
 
-impl<'a, R: ByteReader + MutByteReader + UTF8Reader, M> SherpaParser<R, M, true>
-  for ByteCodeParser<'a, R, M>
-{
+impl<'a, R: ByteReader + MutByteReader + UTF8Reader, M> SherpaParser<R, M, true> for ByteCodeParser<'a, R, M> {
   fn get_ctx(&self) -> &ParseContext<R, M> {
     &self.ctx
   }

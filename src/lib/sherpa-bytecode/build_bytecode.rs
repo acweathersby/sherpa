@@ -1,4 +1,4 @@
-use sherpa_core::{proxy::*, *};
+use sherpa_core::{optimize, parser::ASTNode, proxy::*, *};
 use sherpa_rust_runtime::types::{
   bytecode::{insert_op, Opcode as Op, *},
   TableHeaderData,
@@ -119,7 +119,7 @@ fn build_statement<'db>(
         insert_u32_le(bc, *rule_id as u32);
         insert_u16_le(bc, *len as u16);
       }
-      parser::ASTNode::SetTokenId(box parser::SetTokenId { id,.. }) => {
+      parser::ASTNode::SetTokenId(box parser::SetTokenId { id, .. }) => {
         insert_op(bc, Op::AssignToken);
         insert_u32_le(bc, *id);
       }
@@ -137,7 +137,7 @@ fn build_statement<'db>(
       parser::ASTNode::Gotos(gotos) => {
         for push in &gotos.pushes {
           let proxy_address =
-            get_proxy_address(push.prod.to_token().to_string().to_token(), state_name_to_proxy);
+            get_proxy_address(get_goto_target_name(&push.prod).to_token(), state_name_to_proxy);
 
           insert_op(bc, Op::PushGoto);
           insert_u8(bc, NORMAL_STATE_FLAG as u8);
@@ -145,7 +145,7 @@ fn build_statement<'db>(
         }
 
         let proxy_address =
-          get_proxy_address(gotos.goto.prod.to_token().to_string().to_token(), state_name_to_proxy);
+          get_proxy_address(get_goto_target_name(&gotos.goto.prod).to_token(), state_name_to_proxy);
 
         insert_op(bc, Op::Goto);
         insert_u8(bc, NORMAL_STATE_FLAG as u8);

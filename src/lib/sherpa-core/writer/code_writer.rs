@@ -5,7 +5,7 @@ use std::{
   ops::Add,
 };
 
-use crate::types::GuardedStr;
+use crate::{types::GuardedStr, IString, ParserDatabase};
 
 /// Chainable writer for formatted source code
 pub struct CodeWriter<W: Write> {
@@ -31,6 +31,14 @@ impl<'w, W: Write> Add<&str> for &'w mut CodeWriter<W> {
   }
 }
 
+impl<'w, W: Write> Add<&String> for &'w mut CodeWriter<W> {
+  type Output = Self;
+
+  fn add(self, rhs: &String) -> Self::Output {
+    self.w(rhs).unwrap()
+  }
+}
+
 impl<'w, W: Write> Add<String> for &'w mut CodeWriter<W> {
   type Output = Self;
 
@@ -39,13 +47,19 @@ impl<'w, W: Write> Add<String> for &'w mut CodeWriter<W> {
   }
 }
 
-impl<'w, 'istore: 'w, W: Write> Add<GuardedStr<'istore>>
-  for &'w mut CodeWriter<W>
-{
+impl<'w, 'istore: 'w, W: Write> Add<GuardedStr<'istore>> for &'w mut CodeWriter<W> {
   type Output = Self;
 
   fn add(self, rhs: GuardedStr<'istore>) -> Self::Output {
     self.w(rhs.as_str()).unwrap()
+  }
+}
+
+impl<'w, 'db: 'w, W: Write> Add<(IString, &'db ParserDatabase)> for &'w mut CodeWriter<W> {
+  type Output = Self;
+
+  fn add(self, (istring, db): (IString, &'db ParserDatabase)) -> Self::Output {
+    self.w(istring.to_str(db.string_store()).as_str()).unwrap()
   }
 }
 
@@ -183,10 +197,7 @@ impl<W: Write> CodeWriter<W> {
     self.internal_write(string)
   }
 
-  pub fn merge_checkpoint(
-    &mut self,
-    checkpoint: StringBuffer,
-  ) -> Result<usize> {
+  pub fn merge_checkpoint(&mut self, checkpoint: StringBuffer) -> Result<usize> {
     self.indent = checkpoint.indent;
 
     self.output.write(&checkpoint.output)

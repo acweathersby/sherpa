@@ -6,4 +6,4 @@ mod build_states;
 mod optimize;
 
 pub use build_states::compile_parse_states;
-pub use optimize::{garbage_collect, optimize};
+pub use optimize::{garbage_collect, get_goto_target_name, optimize};

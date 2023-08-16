@@ -43,11 +43,7 @@ type AstBuilder<'llvm, R, ExtCTX, ASTNode> = unsafe extern "C" fn(
   *mut ParseContext<R, ExtCTX>,
   *const fn(ctx: &mut ParseContext<R, ExtCTX>, &mut AstStackSlice<AstSlot<ASTNode>>),
   unsafe fn(&ParseContext<R, ExtCTX>, &mut AstStackSlice<AstSlot<ASTNode>>),
-  unsafe fn(
-    &ParseContext<R, ExtCTX>,
-    ParseActionType,
-    &mut AstStackSlice<AstSlot<ASTNode>>,
-  ) -> ParseResult<ASTNode>,
+  unsafe fn(&ParseContext<R, ExtCTX>, ParseActionType, &mut AstStackSlice<AstSlot<ASTNode>>) -> ParseResult<ASTNode>,
 ) -> ParseResult<ASTNode>;
 
 pub(crate) struct JitParser<'llvm, R, ExtCTX = u32, ASTNode = u32>
@@ -73,11 +69,7 @@ where
   R: ByteReader + LLVMByteReader,
   ASTNode: AstObject,
 {
-  pub(crate) fn new<'db>(
-    j: &mut Journal,
-    db: ParserDatabase,
-    ctx: &'llvm Context,
-  ) -> SherpaResult<Self> {
+  pub(crate) fn new<'db>(j: &mut Journal, db: ParserDatabase, ctx: &'llvm Context) -> SherpaResult<Self> {
     unsafe {
       let module = ctx.create_module("JIT_PARSER");
       let engine = module.create_jit_execution_engine(inkwell::OptimizationLevel::None).unwrap();
@@ -87,13 +79,10 @@ where
 
       engine.add_global_mapping(&llvm_mod.fun.allocate_stack, sherpa_allocate_stack as usize);
       engine.add_global_mapping(&llvm_mod.fun.free_stack, sherpa_free_stack as usize);
-      engine.add_global_mapping(
-        &llvm_mod.fun.get_token_class_from_codepoint,
-        sherpa_get_token_class_from_codepoint as usize,
-      );
+      engine.add_global_mapping(&llvm_mod.fun.get_token_class_from_codepoint, sherpa_get_token_class_from_codepoint as usize);
 
       let states = compile_parse_states(j.transfer(), &db).unwrap();
-      let states = garbage_collect::<ParseStatesVec>(&db, states).unwrap();
+      let states = garbage_collect::<ParseStatesVec>(&db, states, "jit").unwrap();
       compile_llvm_module_from_parse_states(j, &llvm_mod, &db, &states)?;
 
       construct_ast_builder::<ASTNode>(&llvm_mod)?;
@@ -141,8 +130,7 @@ where
   }
 }
 
-impl<'llvm, R, ExtCTX, ASTNode> From<(Option<Config>, &'llvm str, &'llvm Context)>
-  for JitParser<'llvm, R, ExtCTX, ASTNode>
+impl<'llvm, R, ExtCTX, ASTNode> From<(Option<Config>, &'llvm str, &'llvm Context)> for JitParser<'llvm, R, ExtCTX, ASTNode>
 where
   R: ByteReader + LLVMByteReader,
   ASTNode: AstObject,
@@ -198,7 +186,7 @@ where
   #[cfg(debug_assertions)]
   pub(crate) fn print_states(&mut self) {
     let states = compile_parse_states(self.j.transfer(), &self.db).unwrap();
-    let states = garbage_collect::<ParseStatesVec>(&self.db, states).unwrap();
+    let states = garbage_collect::<ParseStatesVec>(&self.db, states, "jit").unwrap();
     for (_, state) in &states {
       println!("{}", state.debug_string(&self.db))
     }
@@ -239,9 +227,7 @@ where
   }
 }
 
-impl<'llvm, R: ByteReader + LLVMByteReader + MutByteReader, M> SherpaParser<R, M, true>
-  for JitParser<'llvm, R, M>
-{
+impl<'llvm, R: ByteReader + LLVMByteReader + MutByteReader, M> SherpaParser<R, M, true> for JitParser<'llvm, R, M> {
   fn get_ctx(&self) -> &ParseContext<R, M> {
     &self.ctx
   }
@@ -295,10 +281,7 @@ impl<'llvm, R: ByteReader + LLVMByteReader + MutByteReader, M> SherpaParser<R, M
     self.prime(entry_point);
   }
 
-  fn get_next_action<'debug>(
-    &mut self,
-    debug: &mut Option<&'debug mut sherpa_rust_runtime::bytecode::DebugFn>,
-  ) -> ParseAction {
+  fn get_next_action<'debug>(&mut self, debug: &mut Option<&'debug mut sherpa_rust_runtime::bytecode::DebugFn>) -> ParseAction {
     match self.next() {
       ParseActionType::Shift => ParseAction::Shift {
         token_byte_offset: self.get_token_offset(),

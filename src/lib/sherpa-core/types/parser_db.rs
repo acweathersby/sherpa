@@ -1,22 +1,6 @@
-use crate::{parser, CachedString, ParseState};
-
-use super::{
-  Array,
-  CustomState,
-  GuardedStr,
-  IString,
-  IStringStore,
-  Item,
-  Items,
-  Rule,
-  Set,
-  SymbolId,
-  SymbolRef,
-};
-use std::{
-  collections::{hash_map, HashMap, VecDeque},
-  iter::FilterMap,
-};
+use super::{Array, IString, IStringStore, Item, Items, Rule, Set, SymbolId, SymbolRef};
+use crate::{parser, CachedString};
+use std::collections::{HashMap, VecDeque};
 
 #[cfg_attr(debug_assertions, derive(Debug))]
 #[derive(Clone)]
@@ -163,18 +147,9 @@ impl ParserDatabase {
       .unwrap_or_default()
   }
 
-  pub fn get_entry_offset(
-    &self,
-    entry_name: &str,
-    hash_map: &HashMap<IString, usize>,
-  ) -> Option<usize> {
+  pub fn get_entry_offset(&self, entry_name: &str, hash_map: &HashMap<IString, usize>) -> Option<usize> {
     let string = entry_name.to_token();
-    self
-      .entry_points()
-      .iter()
-      .find(|e| e.entry_name == string)
-      .and_then(|e| hash_map.get(&e.prod_entry_name))
-      .cloned()
+    self.entry_points().iter().find(|e| e.entry_name == string).and_then(|e| hash_map.get(&e.prod_entry_name)).cloned()
   }
 
   /// Given a [DBProdKey] returns the SymbolId representing the production,
@@ -320,10 +295,7 @@ impl ParserDatabase {
   }
 }
 
-fn construct_follow(
-  prod_syms: &Vec<SymbolId>,
-  rules: &Vec<DBRule>,
-) -> Vec<Option<Vec<(DBRuleKey, u32, bool)>>> {
+fn construct_follow(prod_syms: &Vec<SymbolId>, rules: &Vec<DBRule>) -> Vec<Option<Vec<(DBRuleKey, u32, bool)>>> {
   let mut follow_items = Array::new();
   for _ in 0..prod_syms.len() {
     follow_items.push(None);
@@ -417,7 +389,7 @@ impl DBTokenKey {
     Self(0)
   }
 
-  /// Retrieves the binary / bytecode cd   of the symbol.
+  /// Retrieves the binary / bytecode id of the symbol.
   pub fn to_val(&self, db: &ParserDatabase) -> u32 {
     db.tok_val(*self) as u32
   }

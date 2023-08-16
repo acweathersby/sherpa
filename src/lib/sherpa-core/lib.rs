@@ -16,7 +16,7 @@ mod types;
 mod utils;
 mod writer;
 
-pub use compile::{compile_parse_states, garbage_collect, optimize};
+pub use compile::{compile_parse_states, garbage_collect, get_goto_target_name, optimize};
 
 pub use grammar::{
   build_compile_db,

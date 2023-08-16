@@ -124,9 +124,7 @@ impl SymbolId {
       NonTerminalToken { id, .. } => NonTerminalToken { id, precedence },
       Codepoint { val, .. } => Codepoint { val, precedence },
       DBNonTerminal { key } => DBNonTerminal { key },
-      DBNonTerminalToken { prod_key, sym_key, .. } => {
-        DBNonTerminalToken { prod_key, sym_key, precedence }
-      }
+      DBNonTerminalToken { prod_key, sym_key, .. } => DBNonTerminalToken { prod_key, sym_key, precedence },
       DBToken { key } => DBToken { key },
       Char { char, .. } => Char { char, precedence },
       Default => Default,
@@ -140,9 +138,7 @@ impl SymbolId {
     match self {
       NonTerminal { id } => id.as_scan_prod(),
       NonTerminalToken { id, .. } => id.as_scan_prod(),
-      Token { .. } => {
-        ProductionId::Standard(create_u64_hash(self), ProductionSubType::ScannerToken)
-      }
+      Token { .. } => ProductionId::Standard(create_u64_hash(self), ProductionSubType::ScannerToken),
       EndOfFile { .. }
       | ClassSymbol { .. }
       | ClassSpace { .. }
@@ -178,6 +174,13 @@ impl SymbolId {
       DBNonTerminal { key } => (Into::<usize>::into(key)) as u32,
       DBToken { key, .. } => key.to_val(db),
       DBNonTerminalToken { sym_key, .. } => sym_key.map(|d| d.to_val(db)).unwrap_or(u32::MAX),
+      Token { precedence, val } => {
+        let val = val.to_string(db.string_store());
+        match val.chars().next() {
+          Some(char) => char as u32,
+          _ => u32::MAX,
+        }
+      }
       _ => u32::MAX,
     }
   }
@@ -200,9 +203,7 @@ impl SymbolId {
       ClassIdentifier { .. } => &mut w + "c:id",
       ClassNumber { .. } => &mut w + "c:num",
       ClassSymbol { .. } => &mut w + "c:sym",
-      Token { val, precedence } => {
-        &mut w + "[" + val.to_str(db.string_store()).as_str() + "]" + print_precedence(precedence)
-      }
+      Token { val, precedence } => &mut w + "[" + val.to_str(db.string_store()).as_str() + "]" + print_precedence(precedence),
       NonTerminalState { id, .. } => &mut w + "non_term_state",
       NonTerminal { id, .. } => &mut w + "non_term",
       NonTerminalToken { id, .. } => &mut w + "tk:" + "non_term",
