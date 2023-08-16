@@ -50,7 +50,7 @@ fn gather_ascript_info_from_grammar(
   // Separate all bodies into a list of  of tuple of RuleId's and
   // Ascript reference nodes.
 
-  let normal_parse_bodies = db
+  let normal_parse_rules_refs = db
     .rules()
     .iter()
     .enumerate()
@@ -65,74 +65,75 @@ fn gather_ascript_info_from_grammar(
   // types.
 
   let mut struct_bodies: Vec<(DBRuleKey, &Ascript)> = vec![];
-  for (rule_id, rule) in normal_parse_bodies {
-    if let Some(ast) = &rule.rule.ast {
-      match ast {
-        ASTToken::Defined(ascript) => match &ascript.ast {
-          ASTNode::AST_Struct(ast_struct) => {
-            let id = compile_struct_type(j, store, db, ast_struct, rule_id);
-            struct_bodies.push((rule_id, ascript));
-            add_production_type(prod_types, &rule, TaggedType {
-              type_:        AScriptTypeVal::Struct(id),
-              tag:          rule_id,
-              symbol_index: 0,
-            });
-          }
-          ASTNode::AST_Statements(ast_stmts) => {
-            for sub_type in
-              compile_expression_type(j, store, db, ast_stmts.statements.last().unwrap(), rule_id)
-            {
-              add_production_type(prod_types, &rule, sub_type);
-            }
-          }
-          ast_expr => {
-            for sub_type in compile_expression_type(j, store, db, ast_expr, rule_id) {
-              add_production_type(prod_types, &rule, sub_type);
-            }
-          }
-        },
-        ASTToken::ListEntry(_) => {
-          // Create a vector node that contains the first symbol of this rule.
-          add_production_type(prod_types, &rule, TaggedType {
-            type_:        AScriptTypeVal::GenericVec(Some(OrderedSet::from_iter(
-              convert_ref_result(get_indexed_body_ref(&rule.rule, 0), store, db, rule_id),
-            ))),
+  for (rule_id, rule_ref) in normal_parse_rules_refs {
+    match &rule_ref.rule.ast {
+      Some(ASTToken::Defined(ascript)) => match &ascript.ast {
+        ASTNode::AST_Struct(ast_struct) => {
+          let id = compile_struct_type(j, store, db, ast_struct, rule_id);
+          struct_bodies.push((rule_id, ascript));
+          add_production_type(prod_types, &rule_ref, TaggedType {
+            type_:        AScriptTypeVal::Struct(id),
             tag:          rule_id,
             symbol_index: 0,
-          })
+          });
         }
-        ASTToken::ListIterate(_) => {
-          // Create a vector that contains the first and last symbols of the
-          // rule.
-          // Create a vector node that contains the first symbol of this rule.
-          let mut types =
-            convert_ref_result(get_indexed_body_ref(&rule.rule, 0), store, db, rule_id);
-          types.append(&mut convert_ref_result(
-            get_indexed_body_ref(&rule.rule, rule.rule.symbols.len() - 1),
-            store,
-            db,
-            rule_id,
-          ));
-          add_production_type(prod_types, &rule, TaggedType {
-            type_:        AScriptTypeVal::GenericVec(Some(OrderedSet::from_iter(types))),
-            tag:          rule_id,
-            symbol_index: 0,
-          })
+        ASTNode::AST_Statements(ast_stmts) => {
+          for sub_type in
+            compile_expression_type(j, store, db, ast_stmts.statements.last().unwrap(), rule_id)
+          {
+            add_production_type(prod_types, &rule_ref, sub_type);
+          }
         }
+        ast_expr => {
+          for sub_type in compile_expression_type(j, store, db, ast_expr, rule_id) {
+            add_production_type(prod_types, &rule_ref, sub_type);
+          }
+        }
+      },
+      Some(ASTToken::ListEntry(_)) => {
+        // Create a vector node that contains the first symbol of this rule.
+        add_production_type(prod_types, &rule_ref, TaggedType {
+          type_:        AScriptTypeVal::GenericVec(Some(OrderedSet::from_iter(
+            convert_ref_result(get_indexed_body_ref(&rule_ref.rule, 0), store, db, rule_id),
+          ))),
+          tag:          rule_id,
+          symbol_index: 0,
+        })
       }
-    } else {
-      match rule.rule.symbols.last().unwrap().id {
-        SymbolId::DBNonTerminal { key: id } => add_production_type(prod_types, &rule, TaggedType {
-          type_:        AScriptTypeVal::UnresolvedProduction(id),
+      Some(ASTToken::ListIterate(_)) => {
+        // Create a vector that contains the first and last symbols of the
+        // rule.
+        // Create a vector node that contains the first symbol of this rule.
+        let mut types =
+          convert_ref_result(get_indexed_body_ref(&rule_ref.rule, 0), store, db, rule_id);
+        types.append(&mut convert_ref_result(
+          get_indexed_body_ref(&rule_ref.rule, rule_ref.rule.symbols.len() - 1),
+          store,
+          db,
+          rule_id,
+        ));
+        add_production_type(prod_types, &rule_ref, TaggedType {
+          type_:        AScriptTypeVal::GenericVec(Some(OrderedSet::from_iter(types))),
           tag:          rule_id,
-          symbol_index: (rule.rule.symbols.len() - 1) as u32,
-        }),
-        _ => add_production_type(prod_types, &rule, TaggedType {
-          type_:        AScriptTypeVal::Token,
-          tag:          rule_id,
-          symbol_index: (rule.rule.symbols.len() - 1) as u32,
-        }),
-      };
+          symbol_index: 0,
+        })
+      }
+      _ => {
+        match rule_ref.rule.symbols.last().unwrap().id {
+          SymbolId::DBNonTerminal { key: id } => {
+            add_production_type(prod_types, &rule_ref, TaggedType {
+              type_:        AScriptTypeVal::UnresolvedProduction(id),
+              tag:          rule_id,
+              symbol_index: (rule_ref.rule.symbols.len() - 1) as u32,
+            })
+          }
+          _ => add_production_type(prod_types, &rule_ref, TaggedType {
+            type_:        AScriptTypeVal::Token,
+            tag:          rule_id,
+            symbol_index: (rule_ref.rule.symbols.len() - 1) as u32,
+          }),
+        };
+      }
     }
   }
 }
@@ -742,7 +743,7 @@ pub fn compile_expression_type(
 
 /// A rule symbols and it's offset based on a reference value
 /// e.g `$name` or `$3`
-type RefResult = Option<SymbolRef>;
+type RefResult = Option<(usize, SymbolRef)>;
 
 fn convert_ref_result(
   ref_result: RefResult,
@@ -753,7 +754,7 @@ fn convert_ref_result(
   use AScriptTypeVal::*;
   let rule = db.rule(rule_id);
   match ref_result {
-    Some(SymbolRef { id, index, .. }) => match id {
+    Some((index, SymbolRef { id, .. })) => match id {
       SymbolId::DBNonTerminal { key } => match store.prod_types.get(&key) {
         Some(types) => types
           .keys()
@@ -1092,6 +1093,7 @@ pub fn get_specified_vector_from_generic_vec_values(
   }
 }
 
+/// Returns the symbol annotated with the givin reference name
 pub fn get_body_symbol_reference<'a>(
   db: &ParserDatabase,
   rule_id: DBRuleKey,
@@ -1112,33 +1114,54 @@ pub fn get_body_symbol_reference<'a>(
 /// rule, and matches it to a symbol within the givin rule, returning the
 /// matching symbol and its original index.
 ///
+/// Note: This matches the _original_ index of the symbol, which may be
+/// different than the actual positional index of the symbol.
+///
+/// Example: In the case of a derived rule `<> A > B D` generated from the
+/// original rule `<> A > B C? D`, the symbol B has an original index of 0, and
+/// the symbol D has an original index of 2, since the removed symbol `C`
+/// occupied the original index 1.
+///
 /// The returned index will be in the range [0..n)
 ///
 /// Returns `None` if the index is greater then the number of symbols.  
 pub fn get_indexed_body_ref(rule: &Rule, i: usize) -> RefResult {
-  rule.symbols.iter().filter(|sym_ref| sym_ref.index == i).last().cloned()
+  rule
+    .symbols
+    .iter()
+    .enumerate()
+    .filter(|(_, sym_ref)| sym_ref.original_index == i)
+    .map(|(a, b)| (a, b.clone()))
+    .last()
 }
 
 pub fn get_named_body_ref(db: &ParserDatabase, rule: &Rule, val: &str) -> RefResult {
   if val == ASCRIPT_FIRST_NODE_ID {
-    Some(rule.symbols.first()?.clone())
+    Some((0, rule.symbols.first()?.clone()))
   } else if val == ASCRIPT_LAST_NODE_ID {
-    Some(rule.symbols.last()?.clone())
+    Some((rule.symbols.len(), rule.symbols.last()?.clone()))
   } else {
-    match rule.symbols.iter().filter(|SymbolRef { annotation: a, .. }| *a == val.to_token()).last()
+    match rule
+      .symbols
+      .iter()
+      .enumerate()
+      .filter(|(_, SymbolRef { annotation: a, .. })| *a == val.to_token())
+      .last()
     {
-      Some(result) => Some(result.clone()),
+      // The symbols annotation matched
+      Some((i, result)) => Some((i, result.clone())),
+      // The production name matched.
       _ => rule
         .symbols
         .iter()
-        .filter_map(|sym| match sym.id {
+        .enumerate()
+        .filter_map(|(i, sym)| match sym.id {
           SymbolId::DBNonTerminal { key } => {
-            (db.prod_friendly_name(key) == val.to_token()).then(|| sym)
+            (db.prod_friendly_name(key) == val.to_token()).then(|| (i, sym.clone()))
           }
           _ => None,
         })
-        .last()
-        .cloned(),
+        .last(),
     }
   }
 }

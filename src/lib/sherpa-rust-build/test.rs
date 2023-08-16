@@ -314,3 +314,26 @@ fn convert_str_to_numeric() -> SherpaResult<()> {
     },
   )
 }
+
+#[test]
+fn temp() -> SherpaResult<()> {
+  build_parse_db_from_source_str(
+    r#"
+    <> non_branch_statement > A (+) "t" :ast $1
+
+    <> A > c:num  :ast u32($1)
+    "#,
+    "/test.sg".into(),
+    Default::default(),
+    &|DBPackage { mut journal, db, .. }| {
+      let store = AScriptStore::new(&mut journal, &db)?;
+
+      let u = create_rust_writer_utils(&store, &db);
+      let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
+      let writer = write_rust_ast(w)?;
+
+      println!("{}", String::from_utf8(writer.into_writer().into_output())?);
+      SherpaResult::Ok(())
+    },
+  )
+}

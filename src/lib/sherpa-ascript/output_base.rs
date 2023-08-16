@@ -1,5 +1,14 @@
+use crate::slot_ref::{SlotIndex, SlotRef};
 use sherpa_core::{
-  parser::{ASTNode, ASTNodeType, AST_NamedReference, AST_Struct, GetASTNodeType},
+  parser::{
+    ASTNode,
+    ASTNodeType,
+    AST_IndexReference,
+    AST_NamedReference,
+    AST_Struct,
+    AST_Vector,
+    GetASTNodeType,
+  },
   proxy::Array,
   *,
 };
@@ -57,7 +66,7 @@ pub struct AscriptPropHandler<'a> {
 type AssignmentWriter<'a> =
   dyn Fn(&AscriptWriterUtils, &AScriptTypeVal, String, String, bool) -> String;
 
-type SlotAssign<'a> = dyn Fn(&AscriptWriterUtils, &AScriptTypeVal, String) -> String;
+type SlotAssign<'a> = dyn Fn(&AscriptWriterUtils, &AScriptTypeVal, String, bool) -> String;
 
 /// Called when a Node struct needs to be constructed.
 type StructConstructorExpr = dyn Fn(
@@ -82,7 +91,7 @@ type StructConstructorExpr = dyn Fn(
 /// ```
 type TokenConcat = dyn Fn(String, String) -> String;
 
-type GetName = dyn Fn(usize) -> String;
+type GetName = dyn Fn(SlotIndex) -> String;
 
 /// Slot Extraction:
 ///
@@ -130,8 +139,8 @@ pub struct AscriptWriterUtils<'a> {
   pub token_concat: &'a TokenConcat,
   /// Slot Extraction:
   ///
-  /// Expression to extract and assign either the node value or token from a
-  /// parse slot, or both.
+  /// Expression to extract and assign either the node value or token, or both,
+  /// from a parse slot.
   pub slot_extract: &'a SlotExtract,
   pub create_token: &'a CreateToken,
   /// Name used for token variables
@@ -264,6 +273,8 @@ impl<'a> AscriptWriterUtils<'a> {
     }
   }
 
+  /// Creates struct constructor from a specific struct configuration.
+  /// Per configuration, certain props may or may not be initialized.
   pub fn build_struct_constructor(
     &self,
     rule: &Rule,
@@ -335,6 +346,7 @@ impl<'a> AscriptWriterUtils<'a> {
       })
       .collect();
 
+    println!("{:?}", prop_assignments);
     let mut writer = CodeWriter::new(vec![]);
 
     (self.struct_construction)(
@@ -347,8 +359,10 @@ impl<'a> AscriptWriterUtils<'a> {
 
     (*ref_index) += 1;
 
+    println!("{ref_index}");
+
     let mut ref_ = SlotRef::ast_obj(
-      *ref_index,
+      SlotIndex::Constructed(*ref_index),
       type_slot,
       String::from_utf8(writer.into_output()).unwrap(),
       AScriptTypeVal::Struct(*struct_type),
@@ -504,22 +518,22 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
   fn write_slot_extraction(
     &mut self,
     rule: &Rule,
-    obj_indices: BTreeSet<usize>,
-    token_indices: BTreeSet<usize>,
+    obj_indices: BTreeSet<SlotIndex>,
+    token_indices: BTreeSet<SlotIndex>,
   ) -> SherpaResult<()> {
-    for slot_index in 0..rule.symbols.len() {
-      let ref_index = slot_index + 1;
-      let (n, t) = (
-        match (slot_index, token_indices.contains(&slot_index)) {
-          (0, _) => Some((self.utils.get_token_name)(ref_index)),
-          (i, _) if i == (rule.symbols.len() - 1) => Some((self.utils.get_token_name)(ref_index)),
-          (_, true) => Some((self.utils.get_token_name)(ref_index)),
+    for (slot_index, _) in rule.symbols.iter().enumerate() {
+      let slot_id = SlotIndex::Sym(slot_index);
+      let (token_ref, node_ref) = (
+        match (slot_index, token_indices.contains(&slot_id)) {
+          (0, _) => Some((self.utils.get_token_name)(slot_id)),
+          (i, _) if i == (rule.symbols.len() - 1) => Some((self.utils.get_token_name)(slot_id)),
+          (_, true) => Some((self.utils.get_token_name)(slot_id)),
           _ => None,
         },
-        obj_indices.contains(&slot_index).then(|| (&self.utils.get_slot_obj_name)(ref_index)),
+        obj_indices.contains(&slot_id).then(|| (&self.utils.get_slot_obj_name)(slot_id)),
       );
 
-      self.writer.wrtln(&(self.utils.slot_extract)(n, t, slot_index))?;
+      self.writer.wrtln(&(self.utils.slot_extract)(token_ref, node_ref, slot_index))?;
     }
     SherpaResult::Ok(())
   }
@@ -529,14 +543,14 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
     let string = (self.utils.assignment_writer)(
       self.utils,
       &type_,
-      (self.utils.get_token_name)(0),
+      (self.utils.get_token_name)(SlotIndex::Rule),
       if rule.symbols.len() > 1 {
         (self.utils.token_concat)(
-          (self.utils.get_token_name)(1),
-          (self.utils.get_token_name)(rule.symbols.len()),
+          (self.utils.get_token_name)(SlotIndex::Sym(0)),
+          (self.utils.get_token_name)(SlotIndex::Sym(rule.symbols.len() - 1)),
         )
       } else {
-        (self.utils.get_token_name)(1)
+        (self.utils.get_token_name)(SlotIndex::Sym(0))
       },
       false,
     );
@@ -594,7 +608,11 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
       let fn_name = format!("reducer_{:0>3}", bc_id);
 
       match w.method(
-        &format!("{}", preamble.replace("%%", &fn_name)),
+        &format!(
+          "\n/* {} */\n{}",
+          rule.tok.to_string().replace("*/", "* /"),
+          preamble.replace("%%", &fn_name)
+        ),
         args_open_delim,
         args_close_delim,
         args_seperator,
@@ -603,97 +621,150 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
         open_delim,
         closing_delim,
         &mut move |w| -> SherpaResult<()> {
-          if rule.ast.is_none() {
-            let last_index = rule.symbols.len() - 1;
-            let last_index_name = (&w.utils.get_slot_obj_name)(last_index + 1);
-            w.write_slot_extraction(
-              rule,
-              BTreeSet::from_iter(vec![last_index]),
-              BTreeSet::from_iter(vec![0, last_index]),
-            )?;
-            w.write_node_token(rule)?;
-            w.writer.wrtln(&(w.utils.slot_assign)(
-              w.utils,
-              &AScriptTypeVal::Any,
-              last_index_name,
-            ))?;
-            SherpaResult::Ok(())
-          } else {
-            let mut ref_index = rule.symbols.len();
-            match rule.ast.as_ref() {
-              Some(ASTToken::Defined(ascript)) => match &ascript.ast {
-                ASTNode::AST_Struct(box ast_struct) => {
-                  if let AScriptTypeVal::Struct(struct_type) =
-                    get_struct_type_from_node(&ast_struct)
-                  {
-                    let _ref = w.utils.build_struct_constructor(
-                      rule,
-                      &struct_type,
-                      &ast_struct,
-                      &mut ref_index,
-                      0,
-                    )?;
+          let mut ref_index = rule.symbols.len();
+          match &rule.ast {
+            Some(ASTToken::Defined(ascript)) => match &ascript.ast {
+              ASTNode::AST_Struct(box ast_struct) => {
+                if let AScriptTypeVal::Struct(struct_type) = get_struct_type_from_node(&ast_struct)
+                {
+                  let _ref = w.utils.build_struct_constructor(
+                    rule,
+                    &struct_type,
+                    &ast_struct,
+                    &mut ref_index,
+                    0,
+                  )?;
 
-                    let obj_indices = _ref.get_ast_obj_indices();
-                    let token_indices = _ref.get_token_indices();
+                  let obj_indices = _ref.get_ast_obj_indices();
+                  let token_indices = _ref.get_token_indices();
 
-                    w.write_slot_extraction(rule, obj_indices, token_indices)?;
-                    w.write_node_token(rule)?;
-                    w.writer.write_line(&_ref.to_init_string(w.utils))?;
-                    w.writer.wrtln(&(w.utils.slot_assign)(
-                      w.utils,
-                      &AScriptTypeVal::Struct(struct_type),
-                      _ref.get_ref_name(),
-                    ))?;
-                  }
-                  SherpaResult::Ok(())
-                }
-                ASTNode::AST_Statements(box statements) => {
-                  let mut reference = String::new();
-                  let mut return_type = AScriptTypeVal::Undefined;
-                  let mut refs = BTreeSet::new();
-                  let mut tokens = BTreeSet::new();
-                  let mut stmt = w.checkpoint();
-
-                  for (i, statement) in statements.statements.iter().enumerate() {
-                    match stmt.utils.ast_expr_to_ref(statement, rule, &mut ref_index, i) {
-                      Some(_ref) => {
-                        refs.append(&mut _ref.get_ast_obj_indices());
-                        tokens.append(&mut _ref.get_token_indices());
-                        return_type = _ref.ast_type.clone();
-                        reference = _ref.get_ref_name();
-                        stmt.writer.write_line(&_ref.to_init_string(w.utils))?;
-                      }
-                      _ => {
-                        #[cfg(debug_assertions)]
-                        panic!("Could not resolve: {statement:?}");
-                        panic!()
-                      }
-                    }
-                  }
-
-                  w.write_slot_extraction(rule, refs, tokens)?;
-
+                  w.write_slot_extraction(rule, obj_indices, token_indices)?;
                   w.write_node_token(rule)?;
-
-                  w.writer.merge_checkpoint(stmt.writer)?;
-
-                  let return_type = match return_type {
-                    AScriptTypeVal::Undefined | AScriptTypeVal::GenericVec(None) => {
-                      prod_data.iter().next().unwrap().0.into()
-                    }
-                    r => r,
-                  };
-
-                  w.writer.wrtln(&(w.utils.slot_assign)(w.utils, &return_type, reference))?;
-
-                  SherpaResult::Ok(())
+                  w.writer.write_line(&_ref.to_init_string(w.utils))?;
+                  w.writer.wrtln(&(w.utils.slot_assign)(
+                    w.utils,
+                    &AScriptTypeVal::Struct(struct_type),
+                    _ref.get_ref_name(),
+                    _ref.is_local(),
+                  ))?;
                 }
-                _ => unreachable!("Type should not be a root ascript node."),
-              },
-              Some(ASTToken::ListIterate(_)) => SherpaResult::Ok(()),
-              Some(ASTToken::ListEntry(_)) => SherpaResult::Ok(()),
-              _ => unreachable!(),
+                SherpaResult::Ok(())
+              }
+              ASTNode::AST_Statements(box statements) => {
+                let mut reference = String::new();
+                let mut return_type = AScriptTypeVal::Undefined;
+                let mut refs = BTreeSet::new();
+                let mut tokens = BTreeSet::new();
+                let mut stmt = w.checkpoint();
+                let mut is_local: bool = false;
+
+                for (i, statement) in statements.statements.iter().enumerate() {
+                  match stmt.utils.ast_expr_to_ref(statement, rule, &mut ref_index, i) {
+                    Some(_ref) => {
+                      dbg!(&_ref);
+                      refs.append(&mut _ref.get_ast_obj_indices());
+                      tokens.append(&mut _ref.get_token_indices());
+                      return_type = _ref.ast_type.clone();
+                      reference = _ref.get_ref_name();
+                      is_local = _ref.is_local();
+                      stmt.writer.write_line(&_ref.to_init_string(w.utils))?;
+                    }
+                    _ => {
+                      #[cfg(debug_assertions)]
+                      panic!("Could not resolve: {statement:?}");
+                      panic!()
+                    }
+                  }
+                }
+
+                w.write_slot_extraction(rule, refs, tokens)?;
+                w.write_node_token(rule)?;
+                w.writer.merge_checkpoint(stmt.writer)?;
+
+                let return_type = match return_type {
+                  AScriptTypeVal::Undefined | AScriptTypeVal::GenericVec(None) => {
+                    prod_data.iter().next().unwrap().0.into()
+                  }
+                  r => r,
+                };
+
+                w.writer.wrtln(&(w.utils.slot_assign)(
+                  w.utils,
+                  &return_type,
+                  reference,
+                  is_local,
+                ))?;
+
+                SherpaResult::Ok(())
+              }
+              _ => unreachable!("Type should not be a root ascript node."),
+            },
+
+            Some(ASTToken::ListIterate(_)) | Some(ASTToken::ListEntry(_)) => {
+              let mut items = vec![ASTNode::AST_IndexReference(Box::new(AST_IndexReference::new(
+                1,
+                Default::default(),
+              )))];
+
+              if matches!(rule.ast, Some(ASTToken::ListIterate(_))) {
+                items.push(ASTNode::AST_IndexReference(Box::new(AST_IndexReference::new(
+                  (rule.symbols.len()) as i64,
+                  Default::default(),
+                ))));
+              }
+
+              let node = ASTNode::AST_Vector(Box::new(AST_Vector::new(items, Default::default())));
+              let mut reference = String::new();
+              let mut return_type = AScriptTypeVal::Undefined;
+              let mut refs = BTreeSet::new();
+              let mut tokens = BTreeSet::new();
+              let mut stmt = w.checkpoint();
+              let mut is_local: bool = false;
+
+              match stmt.utils.ast_expr_to_ref(&node, rule, &mut ref_index, 0) {
+                Some(_ref) => {
+                  dbg!(&_ref);
+                  refs.append(&mut _ref.get_ast_obj_indices());
+                  tokens.append(&mut _ref.get_token_indices());
+                  return_type = _ref.ast_type.clone();
+                  reference = _ref.get_ref_name();
+                  is_local = _ref.is_local();
+                  stmt.writer.write_line(&_ref.to_init_string(w.utils))?;
+                }
+                _ => unreachable!(),
+              }
+
+              w.write_slot_extraction(rule, refs, tokens)?;
+              w.write_node_token(rule)?;
+              w.writer.merge_checkpoint(stmt.writer)?;
+
+              let return_type = match return_type {
+                AScriptTypeVal::Undefined | AScriptTypeVal::GenericVec(None) => {
+                  prod_data.iter().next().unwrap().0.into()
+                }
+                r => r,
+              };
+
+              w.writer.wrtln(&(w.utils.slot_assign)(w.utils, &return_type, reference, is_local))?;
+
+              SherpaResult::Ok(())
+            }
+            None => {
+              let last_index = rule.symbols.len() - 1;
+              let last_index_name = (&w.utils.get_slot_obj_name)(SlotIndex::Sym(last_index));
+              w.write_slot_extraction(
+                rule,
+                BTreeSet::from_iter(vec![SlotIndex::Sym(last_index)]),
+                BTreeSet::from_iter(vec![SlotIndex::Rule, SlotIndex::Sym(last_index)]),
+              )?;
+              w.write_node_token(rule)?;
+              w.writer.wrtln(&(w.utils.slot_assign)(
+                w.utils,
+                &AScriptTypeVal::Any,
+                last_index_name,
+                false,
+              ))?;
+              SherpaResult::Ok(())
             }
           }
         },
@@ -716,255 +787,6 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
   }
 }
 
-// Writing stages.
-// Preamble data -
-//  - Base type info
-
-#[derive(Clone, Copy)]
-pub enum RefIndex {
-  Tok(usize),
-  Obj(usize),
-}
-
-#[derive(Clone)]
-pub struct SlotRef {
-  slot_type: RefIndex,
-  type_slot: usize,
-  init_expression: String,
-  pub ast_type: AScriptTypeVal,
-  predecessors: Option<Vec<Box<SlotRef>>>,
-  post_init_statements: Option<Vec<String>>,
-  is_mutable: bool,
-}
-
-impl SlotRef {
-  pub fn ast_obj(
-    slot_index: usize,
-    type_slot: usize,
-    init_expression: String,
-    ast_type: AScriptTypeVal,
-  ) -> Self {
-    SlotRef {
-      slot_type: RefIndex::Obj(slot_index),
-      type_slot,
-      init_expression,
-      ast_type,
-      predecessors: None,
-      post_init_statements: None,
-      is_mutable: false,
-    }
-  }
-
-  pub fn token(utils: &AscriptWriterUtils, slot_index: usize, type_slot: usize) -> Self {
-    SlotRef {
-      slot_type: RefIndex::Tok(slot_index),
-      type_slot,
-      init_expression: (utils.create_token)(
-        (utils.get_token_name)(slot_index + 1),
-        TokenCreationType::Token,
-      ),
-      ast_type: AScriptTypeVal::Token,
-      predecessors: None,
-      post_init_statements: None,
-      is_mutable: false,
-    }
-  }
-
-  pub fn range(utils: &AscriptWriterUtils, slot_index: usize, type_slot: usize) -> Self {
-    SlotRef {
-      slot_type: RefIndex::Tok(slot_index),
-      type_slot,
-      init_expression: (utils.get_token_name)(slot_index + 1),
-      ast_type: AScriptTypeVal::TokenRange,
-      predecessors: None,
-      post_init_statements: None,
-      is_mutable: false,
-    }
-  }
-
-  pub fn node_token(utils: &AscriptWriterUtils, type_slot: usize) -> Self {
-    SlotRef {
-      slot_type: RefIndex::Tok(0),
-      type_slot,
-      init_expression: (utils.create_token)((utils.get_token_name)(0), TokenCreationType::Token),
-      ast_type: AScriptTypeVal::Token,
-      predecessors: None,
-      post_init_statements: None,
-      is_mutable: false,
-    }
-  }
-
-  pub fn node_range(utils: &AscriptWriterUtils, type_slot: usize) -> Self {
-    SlotRef {
-      slot_type: RefIndex::Tok(0),
-      type_slot,
-      init_expression: (utils.get_token_name)(0),
-      ast_type: AScriptTypeVal::TokenRange,
-      predecessors: None,
-      post_init_statements: None,
-      is_mutable: false,
-    }
-  }
-
-  pub fn to_range(self, utils: &AscriptWriterUtils) -> Self {
-    let i = match self.get_root_slot_index() {
-      RefIndex::Obj(i) | RefIndex::Tok(i) => i,
-    };
-
-    Self::range(utils, i, self.type_slot)
-  }
-
-  pub fn to_token(self, utils: &AscriptWriterUtils) -> Self {
-    let i = match self.get_root_slot_index() {
-      RefIndex::Obj(i) | RefIndex::Tok(i) => i,
-    };
-
-    SlotRef {
-      slot_type: RefIndex::Tok(i),
-      type_slot: self.type_slot,
-      init_expression: (utils.create_token)(
-        (utils.get_token_name)(i + 1),
-        TokenCreationType::Token,
-      ),
-      ast_type: AScriptTypeVal::Token,
-      predecessors: None,
-      post_init_statements: None,
-      is_mutable: false,
-    }
-  }
-
-  pub fn get_type(&self) -> AScriptTypeVal {
-    self.ast_type.clone()
-  }
-
-  pub fn to(self, conversion_expr: String, ast_type: AScriptTypeVal) -> Self {
-    SlotRef {
-      slot_type: self.slot_type,
-      type_slot: self.type_slot,
-      init_expression: conversion_expr,
-      ast_type,
-      predecessors: Some(vec![Box::new(self)]),
-      post_init_statements: None,
-      is_mutable: false,
-    }
-  }
-
-  /// Unsure the slot type is a ASTNode object, that is, if the current type is
-  /// a `TokenRange` convert it into a `Token`
-  pub fn ensure_ast_obj(self, utils: &AscriptWriterUtils) -> Self {
-    if self.is(AScriptTypeVal::TokenRange) {
-      self.to_token(utils)
-    } else {
-      self
-    }
-  }
-
-  pub fn make_mutable(&mut self) -> &mut Self {
-    self.is_mutable = true;
-    self
-  }
-
-  pub fn is(&self, type_: AScriptTypeVal) -> bool {
-    self.ast_type == type_
-  }
-
-  pub fn get_ref_name(&self) -> String {
-    match self.slot_type {
-      RefIndex::Obj(i) => format!("obj_{i}_{}", self.type_slot),
-      RefIndex::Tok(i) => format!("tok_{i}_{}", self.type_slot),
-    }
-  }
-
-  pub fn get_root_slot_index(&self) -> RefIndex {
-    if let Some(predecessors) = &self.predecessors {
-      for predecessor in predecessors {
-        return predecessor.get_root_slot_index();
-      }
-    }
-    self.slot_type
-  }
-
-  pub fn get_ast_obj_indices(&self) -> BTreeSet<usize> {
-    let mut set = BTreeSet::new();
-
-    if let RefIndex::Obj(index) = self.slot_type {
-      set.insert(index);
-    }
-    if let Some(predecessors) = &self.predecessors {
-      for predecessor in predecessors {
-        set.append(&mut predecessor.get_ast_obj_indices());
-      }
-    }
-
-    set
-  }
-
-  pub fn get_token_indices(&self) -> BTreeSet<usize> {
-    let mut set = BTreeSet::new();
-
-    if let RefIndex::Tok(index) = self.slot_type {
-      set.insert(index);
-    } else {
-      if let Some(predecessors) = &self.predecessors {
-        for predecessor in predecessors {
-          set.append(&mut predecessor.get_token_indices());
-        }
-      }
-    }
-
-    set
-  }
-
-  pub fn add_post_init_stmt(&mut self, string: String) -> &mut Self {
-    self.post_init_statements.get_or_insert(vec![]).push(string);
-    self
-  }
-
-  /// Convert the ref into a string of statements that convert original
-  /// type into it current form.
-  pub fn to_init_string(&self, utils: &AscriptWriterUtils) -> String {
-    let mut strings = Vec::new();
-
-    if let Some(predecessors) = &self.predecessors {
-      for predecessor in predecessors {
-        strings.push(predecessor.to_init_string(utils));
-      }
-    }
-
-    let ref_string = self.get_ref_name();
-
-    strings.push((utils.assignment_writer)(
-      utils,
-      &self.ast_type,
-      ref_string.clone(),
-      self.init_expression.replace("%%", &ref_string),
-      self.is_mutable,
-    ));
-
-    if let Some(statements) = &self.post_init_statements {
-      strings.append(&mut statements.clone());
-    }
-
-    strings.join("\n").replace("%%", &ref_string)
-  }
-
-  pub fn add_predecessor(&mut self, predecessor: SlotRef) -> &mut Self {
-    self.predecessors.get_or_insert(vec![]).push(Box::new(predecessor));
-
-    self
-  }
-
-  pub fn add_predecessors(&mut self, predecessors: Vec<SlotRef>) -> &mut Self {
-    let prev = self.predecessors.get_or_insert(vec![]);
-
-    for predecessor in predecessors {
-      prev.push(Box::new(predecessor))
-    }
-
-    self
-  }
-}
-
 pub fn get_ascript_export_data(
   utils: &AscriptWriterUtils,
 ) -> Vec<(Option<SlotRef>, AScriptTypeVal, String, String, String, String)> {
@@ -972,47 +794,37 @@ pub fn get_ascript_export_data(
   let export_node_data = db
     .entry_points()
     .iter()
-    .map(
-      |EntryPoint {
-         entry_name,
-         export_id,
-         prod_name,
-         prod_entry_name,
-         prod_exit_name,
-         prod_key,
-         ..
-       }| {
-        let mut ref_index = 0;
-        let ref_ = utils.ast_expr_to_ref(
-          &ASTNode::AST_NamedReference(Box::new(AST_NamedReference {
-            tok:   Token::default(),
-            value: ASCRIPT_FIRST_NODE_ID.to_string(),
-          })),
-          &Rule {
-            symbols: vec![SymbolRef {
-              id: SymbolId::DBNonTerminal { key: *prod_key },
-              ..Default::default()
-            }],
-            g_id:    db.rule(db.prod_rules(*prod_key).unwrap()[0]).g_id,
-            skipped: Default::default(),
-            tok:     Default::default(),
-            ast:     None,
-          },
-          &mut ref_index,
-          0,
-        );
-        let ast_type = ref_.as_ref().unwrap().get_type();
-        let ast_type_string = utils.ascript_type_to_string(&ast_type, false);
-        (
-          ref_,
-          ast_type,
-          ast_type_string,
-          entry_name.to_string(db.string_store()).to_string(),
-          prod_name.to_string(db.string_store()).to_string(),
-          prod_entry_name.to_string(db.string_store()).to_string(),
-        )
-      },
-    )
+    .map(|EntryPoint { entry_name, prod_name, prod_entry_name, prod_key, .. }| {
+      let mut ref_index = 0;
+      let ref_ = utils.ast_expr_to_ref(
+        &ASTNode::AST_NamedReference(Box::new(AST_NamedReference {
+          tok:   Token::default(),
+          value: ASCRIPT_FIRST_NODE_ID.to_string(),
+        })),
+        &Rule {
+          symbols: vec![SymbolRef {
+            id: SymbolId::DBNonTerminal { key: *prod_key },
+            ..Default::default()
+          }],
+          g_id:    db.rule(db.prod_rules(*prod_key).unwrap()[0]).g_id,
+          skipped: Default::default(),
+          tok:     Default::default(),
+          ast:     None,
+        },
+        &mut ref_index,
+        0,
+      );
+      let ast_type = ref_.as_ref().unwrap().get_type();
+      let ast_type_string = utils.ascript_type_to_string(&ast_type, false);
+      (
+        ref_,
+        ast_type,
+        ast_type_string,
+        entry_name.to_string(db.string_store()).to_string(),
+        prod_name.to_string(db.string_store()).to_string(),
+        prod_entry_name.to_string(db.string_store()).to_string(),
+      )
+    })
     .collect::<Vec<_>>();
   export_node_data
 }

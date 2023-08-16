@@ -238,7 +238,11 @@ pub fn build_compile_db<'a>(
           .flat_map(|mut r| {
             r.symbols.remove(0);
             let rule_a = r.clone();
-            r.symbols.push(SymbolRef { id: prime_id.as_tok_sym(), index: 0, ..Default::default() });
+            r.symbols.push(SymbolRef {
+              id: prime_id.as_tok_sym(),
+              original_index: 0,
+              ..Default::default()
+            });
             [rule_a, r]
           })
           .collect();
@@ -250,7 +254,7 @@ pub fn build_compile_db<'a>(
             .map(|mut r| {
               r.symbols.push(SymbolRef {
                 id: prime_id.as_tok_sym(),
-                index: 0,
+                original_index: 0,
                 ..Default::default()
               });
               r
@@ -321,10 +325,10 @@ pub fn build_compile_db<'a>(
 
           let mut rules = Array::from([Rule {
             symbols: Array::from([SymbolRef {
-              id:         *sym,
+              id: *sym,
               annotation: IString::default(),
-              index:      0,
-              loc:        Token::default(),
+              original_index: 0,
+              loc: Token::default(),
             }]),
             skipped: Default::default(),
             ast: None,
@@ -332,7 +336,7 @@ pub fn build_compile_db<'a>(
             g_id: g,
           }]);
 
-          convert_symbols_to_scanner_symbols(&mut rules, s_store);
+          convert_symbols_to_scanner_symbols(&mut rules, s_store, true);
 
           let name = ("tok_".to_string() + &create_u64_hash(val).to_string()).intern(s_store);
 
@@ -348,10 +352,10 @@ pub fn build_compile_db<'a>(
           let prod_id = sym.to_scanner_prod_id();
           let rules = Array::from_iter(vec![Rule {
             symbols: vec![SymbolRef {
-              id:         *sym,
+              id: *sym,
               annotation: IString::default(),
-              index:      0,
-              loc:        Token::default(),
+              original_index: 0,
+              loc: Token::default(),
             }],
             skipped: Default::default(),
             ast:     None,
@@ -485,7 +489,7 @@ fn convert_rule_symbols(
   symbols: Map<SymbolId, usize>,
 ) {
   for DBRule { rule, is_scanner, .. } in r_table {
-    for SymbolRef { id: sym, index, .. } in &mut rule.symbols {
+    for SymbolRef { id: sym, original_index: index, .. } in &mut rule.symbols {
       *sym = convert_symbol(sym, p_map, &symbols, *is_scanner);
     }
 
@@ -644,11 +648,11 @@ fn convert_symbols_to_scanner_symbols(rules: &mut [Rule], s_store: &IStringStore
               if c.is_ascii() {
                 let char = c as u8;
                 tok_sym_ref.id = SymbolId::Char { char, precedence: precedence };
-                tok_sym_ref.index = if i == last { sym_ref.index } else { 99999 };
+                tok_sym_ref.original_index = if i == last { sym_ref.original_index } else { 99999 };
               } else {
                 let val = c as u32;
                 tok_sym_ref.id = SymbolId::Codepoint { precedence: precedence, val };
-                tok_sym_ref.index = if i == last { sym_ref.index } else { 99999 };
+                tok_sym_ref.original_index = if i == last { sym_ref.original_index } else { 99999 };
               }
               tok_sym_ref
             })

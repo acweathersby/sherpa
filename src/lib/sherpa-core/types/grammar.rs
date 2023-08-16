@@ -136,13 +136,13 @@ pub struct TokenProductionRef(u32);
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct SymbolRef {
   /// The type of this symbol.
-  pub id:         SymbolId,
+  pub id: SymbolId,
   /// The original location of this symbol within the grammar source
-  pub loc:        Token,
+  pub loc: Token,
   /// The reference name of this symbol
   pub annotation: IString,
-  /// The original position index of the symbol within it's rule
-  pub index:      usize,
+  /// The original positional index of the symbol within the original base rule.
+  pub original_index: usize,
 }
 
 impl Hash for SymbolRef {
@@ -152,7 +152,7 @@ impl Hash for SymbolRef {
 
     self.id.hash(state);
     self.annotation.hash(state);
-    self.index.hash(state);
+    self.original_index.hash(state);
   }
 }
 

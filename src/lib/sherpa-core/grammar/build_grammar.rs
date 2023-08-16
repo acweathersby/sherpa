@@ -521,7 +521,7 @@ fn process_rule_symbols(
           for pending_rule in &mut p {
             // The last symbol in each of these new bodies is set
             // with the original symbol id
-            pending_rule.symbols.last_mut()?.index = *index;
+            pending_rule.symbols.last_mut()?.original_index = *index;
             for rule in &mut rules[original_bodies.clone()] {
               let mut new_rule = rule.clone();
               new_rule.symbols.extend(pending_rule.symbols.iter().cloned());
@@ -612,13 +612,13 @@ fn process_rule_symbols(
           rule.tok = tok.clone();
 
           rule.symbols.insert(0, SymbolRef {
-            id:         sym,
+            id: sym,
             annotation: annotation.intern(s_store),
-            loc:        tok.clone(),
-            index:      0,
+            loc: tok.clone(),
+            original_index: 0,
           });
 
-          for (i, SymbolRef { index, .. }) in rule.symbols.iter_mut().enumerate() {
+          for (i, SymbolRef { original_index: index, .. }) in rule.symbols.iter_mut().enumerate() {
             *index = i;
           }
         }
@@ -626,7 +626,8 @@ fn process_rule_symbols(
         if terminal_symbol.is_some() {
           for rule in &mut rules {
             rule.symbols.remove(0);
-            for (i, SymbolRef { index, .. }) in rule.symbols.iter_mut().enumerate() {
+            for (i, SymbolRef { original_index: index, .. }) in rule.symbols.iter_mut().enumerate()
+            {
               *index = i;
             }
           }
@@ -654,10 +655,10 @@ fn process_rule_symbols(
 
     for rule in &mut rules[original_bodies] {
       rule.symbols.push(SymbolRef {
-        id:         sym,
+        id: sym,
         annotation: annotation.intern(s_store),
-        loc:        tok.clone(),
-        index:      *index,
+        loc: tok.clone(),
+        original_index: *index,
       });
     }
   }

@@ -14,10 +14,10 @@ use sherpa_ascript::{
     AscriptTypeHandler,
     AscriptWriter,
     AscriptWriterUtils,
-    SlotRef,
     StructProp,
     TokenCreationType,
   },
+  slot_ref::{SlotIndex, SlotRef},
   types::{
     AScriptNumericType,
     AScriptStore,
@@ -48,8 +48,6 @@ use std::{
 };
 
 pub(crate) fn write_rust_ast2<W: Write>(mut w: AscriptWriter<W>) -> SherpaResult<AscriptWriter<W>> {
-  let node_type = &w.store.ast_type_name;
-
   // --------------------------------------------------------------------------
   // Struct Types
   w.write_struct_data(&|w, s| {
@@ -934,7 +932,7 @@ pub(crate) fn create_rust_writer_utils<'a>(
       }
     },
     // Slot Assignment
-    slot_assign: &|utils, type_, ref_| match type_ {
+    slot_assign: &|utils, type_, ref_, local_var: bool| match type_ {
       AScriptTypeVal::GenericStructVec(..)
       | AScriptTypeVal::TokenVec
       | AScriptTypeVal::StringVec
@@ -965,27 +963,41 @@ pub(crate) fn create_rust_writer_utils<'a>(
         utils.store.ast_type_name,
         type_.hcobj_type_name(),
         &ref_,
-        (utils.get_token_name)(0)
+        (utils.get_token_name)(SlotIndex::Rule)
       ),
       AScriptTypeVal::Struct(struct_id) => {
-        let struct_name = utils.store.structs.get(struct_id).unwrap();
-        format!(
-          "slots.assign(0, AstSlot({}::{}(Box::new({})), {}, TokenRange::default()));",
-          utils.store.ast_type_name,
-          struct_name.type_name,
-          ref_,
-          (utils.get_token_name)(0)
-        )
+        if local_var {
+          let struct_name = utils.store.structs.get(struct_id).unwrap();
+          format!(
+            "slots.assign(0, AstSlot({}::{}(Box::new({})), {}, TokenRange::default()));",
+            utils.store.ast_type_name,
+            struct_name.type_name,
+            ref_,
+            (utils.get_token_name)(SlotIndex::Rule)
+          )
+        } else {
+          format!(
+            "slots.assign(0, AstSlot({}, {}, TokenRange::default()));",
+            ref_,
+            (utils.get_token_name)(SlotIndex::Rule)
+          )
+        }
       }
       AScriptTypeVal::Any => format!(
         "slots.assign(0, AstSlot({}, {}, TokenRange::default()));",
         &ref_,
-        (utils.get_token_name)(0)
+        (utils.get_token_name)(SlotIndex::Rule)
       ),
-      _ => "INVALID_ASSIGNMENT".to_string(),
+      type_ => {
+        #[cfg(debug_assertions)]
+        {
+          dbg!(type_, ref_, &utils.store.ast_type_name);
+        }
+        "INVALID_ASSIGNMENT".to_string()
+      }
     },
     token_concat: &|first, last| format!("{first} + {last}"),
-    // Slot Extraction
+
     slot_extract: &|token, node, index| match (node, token) {
       (Some(n), Some(t)) => {
         format!("let AstSlot ({n}, {t}, _) = slots.take({});", index)
@@ -1008,17 +1020,23 @@ pub(crate) fn create_rust_writer_utils<'a>(
       }
     },
 
-    get_token_name: &|i| match i {
-      0 => "__rule_rng__".into(),
-      _ => format!("__tok_rng_{i}"),
+    get_token_name: &|i: SlotIndex| match i {
+      SlotIndex::Rule => "__rule_rng__".into(),
+      SlotIndex::Sym(i) | SlotIndex::Constructed(i) => "__tok_rng_".to_string() + &i.to_string(),
     },
-    get_slot_obj_name: &|i| format!("obj{i}"),
+    get_slot_obj_name: &|i| match i {
+      SlotIndex::Rule => unreachable!(),
+      SlotIndex::Sym(i) => format!("ref_{i}"),
+      SlotIndex::Constructed(i) => format!("var_{i}"),
+    },
     struct_construction: &|u, w, node_name, prop_assignments, tokenized| {
       w.write(&format!("{node_name}::new("))?;
       let mut entries: Vec<String> =
         prop_assignments.iter().map(|(_, val, _)| val.to_string()).collect();
       if tokenized {
-        entries.push((u.get_token_name)(0) + ".to_token(unsafe{{&mut*_ctx_}}.get_reader_mut())")
+        entries.push(
+          (u.get_token_name)(SlotIndex::Rule) + ".to_token(unsafe{{&mut*_ctx_}}.get_reader_mut())",
+        )
       }
       if entries.len() > 0 {
         w.increase_indent();
@@ -1194,20 +1212,20 @@ pub(crate) fn create_rust_writer_utils<'a>(
     expr: &|u, ast, r, ref_index, type_slot| match ast {
       ASTNode::AST_BOOL(box AST_BOOL { value, initializer, .. }) => match initializer {
         None => Some(SlotRef::ast_obj(
-          u.bump_ref_index(ref_index),
+          SlotIndex::Sym(u.bump_ref_index(ref_index)),
           type_slot,
           format!("{}", value),
           AScriptTypeVal::Bool(Some(*value)),
         )),
         Some(box init) => match u.ast_expr_to_ref(&init.expression, r, ref_index, type_slot) {
           Some(_) => Some(SlotRef::ast_obj(
-            u.bump_ref_index(ref_index),
+            SlotIndex::Sym(u.bump_ref_index(ref_index)),
             type_slot,
             "true".to_string(),
             AScriptTypeVal::Bool(Some(true)),
           )),
           None => Some(SlotRef::ast_obj(
-            u.bump_ref_index(ref_index),
+            SlotIndex::Sym(u.bump_ref_index(ref_index)),
             type_slot,
             "false".to_string(),
             AScriptTypeVal::Bool(Some(false)),
@@ -1223,7 +1241,7 @@ pub(crate) fn create_rust_writer_utils<'a>(
       ASTNode::AST_STRING(box AST_STRING { value, .. }) => {
         match value {
           None => Some(SlotRef::ast_obj(
-            u.bump_ref_index(ref_index),
+            SlotIndex::Sym(u.bump_ref_index(ref_index)),
             type_slot,
             "String::new()".to_string(),
             AScriptTypeVal::String(None),
@@ -1231,7 +1249,7 @@ pub(crate) fn create_rust_writer_utils<'a>(
           Some(box init) => {
             match &init.expression {
               ASTNode::AST_NUMBER(box AST_NUMBER { value, .. }) => Some(SlotRef::ast_obj(
-                u.bump_ref_index(ref_index),
+                SlotIndex::Sym(u.bump_ref_index(ref_index)),
                 type_slot,
                 format!("\"{}\".to_string()", value),
                 AScriptTypeVal::String(Some(value.to_string())),
@@ -1376,7 +1394,7 @@ pub(crate) fn create_rust_writer_utils<'a>(
 
         if results.is_empty() {
           Some(SlotRef::ast_obj(
-            utils.bump_ref_index(ref_index),
+            SlotIndex::Sym(utils.bump_ref_index(ref_index)),
             type_slot,
             "vec![];".to_string(),
             AScriptTypeVal::GenericVec(None),
@@ -1388,7 +1406,7 @@ pub(crate) fn create_rust_writer_utils<'a>(
             results.pop_front().unwrap()
           } else {
             SlotRef::ast_obj(
-              utils.bump_ref_index(ref_index),
+              SlotIndex::Sym(utils.bump_ref_index(ref_index)),
               type_slot,
               "vec![]".to_string(),
               get_specified_vector_from_generic_vec_values(&types),
@@ -1437,8 +1455,8 @@ pub(crate) fn create_rust_writer_utils<'a>(
     expr: &|u, ast, rule, _, type_slot| {
       if let ASTNode::AST_IndexReference(box AST_IndexReference { value, .. }) = ast {
         match get_indexed_body_ref(rule, (*value - 1) as usize) {
-          Some(SymbolRef { id, index, .. }) => {
-            render_body_symbol(u, &id, u.store, index, type_slot)
+          Some((index, SymbolRef { id, .. })) => {
+            render_body_symbol(u, &id, u.store, SlotIndex::Sym(index), type_slot)
           }
           None => None,
         }
@@ -1451,8 +1469,8 @@ pub(crate) fn create_rust_writer_utils<'a>(
     expr: &|u, ast, rule, _, type_slot| {
       if let ASTNode::AST_NamedReference(box AST_NamedReference { value, .. }) = ast {
         match get_named_body_ref(u.db, rule, value) {
-          Some(SymbolRef { id, index, .. }) => {
-            render_body_symbol(u, &id, u.store, index, type_slot)
+          Some((index, SymbolRef { id, .. })) => {
+            render_body_symbol(u, &id, u.store, SlotIndex::Sym(index), type_slot)
           }
           None => None,
         }
@@ -1535,15 +1553,14 @@ fn render_body_symbol(
   utils: &AscriptWriterUtils,
   sym: &SymbolId,
   ast: &AScriptStore,
-  slot_index: usize,
+  slot_index: SlotIndex,
   type_slot: usize,
 ) -> Option<SlotRef> {
   use AScriptTypeVal::*;
-  let ref_index = slot_index + 1;
   let ref_ = match &sym {
     SymbolId::DBNonTerminal { key: prod_id } => {
       let types = get_production_types(ast, prod_id);
-      let ref_name = (&utils.get_slot_obj_name)(ref_index);
+      let ref_name = (&utils.get_slot_obj_name)(slot_index);
       if types.len() == 1 {
         let _type = types.first().unwrap().clone();
         if Token == _type {
@@ -1590,7 +1607,7 @@ fn render_body_symbol(
         }
       } else if production_types_are_structs(&types) {
         SlotRef::ast_obj(
-          ref_index,
+          slot_index,
           type_slot,
           ref_name,
           GenericStruct(extract_struct_types(&types)),
@@ -1616,7 +1633,7 @@ fn extract_struct_types(types: &BTreeSet<AScriptTypeVal>) -> BTreeSet<TaggedType
 }
 
 fn convert_numeric<T: AScriptNumericType>(
-  utils: &AscriptWriterUtils,
+  u: &AscriptWriterUtils,
   init: &Option<Box<Init>>,
   rule: &Rule,
   ref_index: &mut usize,
@@ -1630,13 +1647,13 @@ fn convert_numeric<T: AScriptNumericType>(
     None => None,
     Some(init) => match &init.expression {
       ASTNode::AST_NUMBER(box AST_NUMBER { value, .. }) => Some(SlotRef::ast_obj(
-        utils.bump_ref_index(ref_index),
+        SlotIndex::Sym(u.bump_ref_index(ref_index)),
         type_slot,
         format!("{}{}", T::string_from_f64(*value), rust_type,),
         T::from_f64(*value),
       )),
       expr => {
-        let ref_ = utils.ast_expr_to_ref(expr, rule, ref_index, type_slot)?;
+        let ref_ = u.ast_expr_to_ref(expr, rule, ref_index, type_slot)?;
 
         match ref_.ast_type {
           AScriptTypeVal::F64(..)
@@ -1743,7 +1760,7 @@ pub trait Reader: ByteReader + MutByteReader + UTF8Reader {}
 
 impl<T: ByteReader + MutByteReader + UTF8Reader> Reader for T {}
 
-pub type Parser<'a, T, UserCTX> = sherpa_rust_runtime::bytecode_parser::ByteCodeParser<'a, T, UserCTX>;"
+pub type Parser<'a, T, UserCTX> = sherpa_rust_runtime::bytecode::ByteCodeParser<'a, T, UserCTX>;"
       .into(),
   )
   .unwrap();
@@ -1843,7 +1860,7 @@ pub type Parser<'a, T, UserCTX> = sherpa_rust_runtime::bytecode_parser::ByteCode
 
             w.stmt(
               format!("let AstSlot ({}, __rule_rng__, _) = parser.parse_ast(&reduce_functions.0, &mut None)?;"
-              ,(&w.utils.get_slot_obj_name)(1)),
+              ,(&w.utils.get_slot_obj_name)(SlotIndex::Sym(0))),
             )?;
             if ref_.is_some() {
               let (ref_name, ref_) =
@@ -2064,7 +2081,7 @@ extern "C" {{
             w.stmt(format!("let ctx_ptr = (&mut ctx.0) as *const ParseContext<UTF8StringReader, u32>;"))?;
 
             w.block("match unsafe{ ast_parse(ctx_ptr as *mut u8, reducers_ptr, shifter_ptr, result_ptr) }", "{", "}", &|w|{
-              w.block(&format!("ParseResult::Complete(AstSlot({}, _, _))  =>", (&w.utils.get_slot_obj_name)(1)), "{", "}", &|w|{
+              w.block(&format!("ParseResult::Complete(AstSlot({}, _, _))  =>", (&w.utils.get_slot_obj_name)(SlotIndex::Sym(0))), "{", "}", &|w|{
                 if ref_.is_some() {
                   let (ref_name, ref_) =
                     w.utils.create_type_initializer_value(ref_.clone(), type_, false);
