@@ -8,7 +8,7 @@ NAME token
 
 <> int > tk:int_tok
 
-<> id_tok > ( "-" | "_" | c:id ) ( c:id | "_" | "-" | c:num )(*)
+<> id_tok > ( "-" | "_" | c:id ) ( c:id | '_' | '-' | c:num )(*)
 
 <> string_tok > "\"" ( c:id | c:num | c:nl | c:sym | c:sp | escaped )(*) "\""
 

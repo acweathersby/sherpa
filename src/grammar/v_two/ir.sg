@@ -3,7 +3,7 @@ NAME ir
 IMPORT ./symbol as sym
 IMPORT ./token as tok
 IMPORT ./ascript as ast
-IMPORT ../v1_0_0/comment as cmt
+IMPORT ../v_one/comment as cmt
 
 IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
@@ -78,7 +78,7 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
     | "set-tok-len" tok::int
 
-        :ast { t_SetTokenLen, id: u32($2), tok }
+        :ast { t_SetTokenLen, id: u32($2) }
 
     | "set-line"        :ast { t_SetLine, tok }
 
@@ -87,10 +87,10 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
         goto_push(+"then") "then" goto
 
-            :ast { t_Gotos, pushes: $1, goto, tok }
+            :ast { t_Gotos, pushes: $1, goto }
     |  goto
 
-            :ast { t_Gotos, goto, tok }
+            :ast { t_Gotos, goto }
 
 <> goto_push > "push" sym::non_terminal
 

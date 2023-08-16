@@ -7,7 +7,7 @@ IMPORT ./token as tok
 
 <> annotated_symbol > 
 
-    list^s [unordered tk:reference?^r "?" ?^o  precedence?^p ]
+    list^s [tk:reference?^r "?" ?^o  precedence?^p ]!
 
         :ast { t_AnnotatedSymbol, precedence:$p, symbol:$s, is_optional:bool($o), reference:str($r), tok  }
 

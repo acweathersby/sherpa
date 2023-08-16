@@ -4,8 +4,8 @@ IMPORT ./ir as ir
 IMPORT ./symbol as sym
 IMPORT ./token as tok
 IMPORT ./ascript as ast
-IMPORT ../v1_0_0/comment as cmt
-IMPORT ../v1_0_0/defined_type_eval as dt
+IMPORT ../v_one/comment as cmt
+IMPORT ../v_one/defined_type_eval as dt
 
 IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
@@ -21,7 +21,7 @@ EXPORT dt::escaped_string as escaped
 
     preamble(*) ( cf_production | pratt_production | peg_production | append_production | ir::state )(+)
 
-        :ast { t_Grammar, c_Version_2_0, preamble:$1, productions:$2, tok }
+        :ast { t_Grammar, preamble:$1, productions:$2, tok }
 
 
 <> preamble >

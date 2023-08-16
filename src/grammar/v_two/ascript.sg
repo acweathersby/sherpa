@@ -152,7 +152,7 @@ IMPORT ./token as token
 
 <> token > 
 
-    ( "tk" | 'tok' | "token" ) range?
+    ( "tk" | "tok" | "token" ) range?
         :ast { t_AST_Token, range: $2 }
 
 <> range > "<" token::int ( ","  token::int  )? ">"
