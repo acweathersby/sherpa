@@ -633,6 +633,12 @@ fn handle_completed_groups<'db, 'follow>(
         || cmpl.iter().all_items_are_from_same_peek_origin()
         || peek_items_are_from_goto_state(&cmpl, graph) =>
     {
+      if !cmpl.iter().all_are_out_of_scope()
+      /* && sym.is_default() */
+      {
+        cmpl = cmpl.into_iter().filter(|i| !i.is_out_of_scope()).collect();
+      }
+
       resolve_peek(graph, cmpl.iter(), sym, par);
     }
     (_, None, GraphState::Peek) => {
