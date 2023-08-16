@@ -96,8 +96,6 @@ pub fn create_grammar_data(
   let mut skipped = Array::default();
   let mut name = grammar_path.file_stem().and_then(|d| d.to_str()).unwrap_or("default");
 
-  println!("{:#?}", grammar);
-
   for preamble in &grammar.preamble {
     match preamble {
       ASTNode::Import(import) => {

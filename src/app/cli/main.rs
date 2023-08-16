@@ -170,17 +170,9 @@ fn main() -> SherpaResult<()> {
       let output = output?;
 
       //Write to file
-
-      dbg!(&name);
-
-      println!("{:?}", id.name);
-      println!("{:?}", id.guid_name);
-
       let out_filepath = out_dir.join(
         name.or(Some(id.name.to_string(db.string_store()))).unwrap_or("parser".to_string()) + ".rs",
       );
-
-      dbg!(&out_filepath);
 
       let mut file = File::create(out_filepath)?;
 

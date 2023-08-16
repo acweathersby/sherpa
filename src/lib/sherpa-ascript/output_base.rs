@@ -346,7 +346,6 @@ impl<'a> AscriptWriterUtils<'a> {
       })
       .collect();
 
-    println!("{:?}", prop_assignments);
     let mut writer = CodeWriter::new(vec![]);
 
     (self.struct_construction)(
@@ -358,8 +357,6 @@ impl<'a> AscriptWriterUtils<'a> {
     );
 
     (*ref_index) += 1;
-
-    println!("{ref_index}");
 
     let mut ref_ = SlotRef::ast_obj(
       SlotIndex::Constructed(*ref_index),
@@ -661,7 +658,6 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
                 for (i, statement) in statements.statements.iter().enumerate() {
                   match stmt.utils.ast_expr_to_ref(statement, rule, &mut ref_index, i) {
                     Some(_ref) => {
-                      dbg!(&_ref);
                       refs.append(&mut _ref.get_ast_obj_indices());
                       tokens.append(&mut _ref.get_token_indices());
                       return_type = _ref.ast_type.clone();
@@ -723,7 +719,6 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
 
               match stmt.utils.ast_expr_to_ref(&node, rule, &mut ref_index, 0) {
                 Some(_ref) => {
-                  dbg!(&_ref);
                   refs.append(&mut _ref.get_ast_obj_indices());
                   tokens.append(&mut _ref.get_token_indices());
                   return_type = _ref.ast_type.clone();
