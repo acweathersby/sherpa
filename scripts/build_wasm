@@ -26,6 +26,8 @@ fi
 
 # Move the wasm data to out lab directory
 
+mkdir -p $SHERPA_LAB_SRC_DIR
+mkdir -p $SHERPA_LAB_PUB_DIR
 cp ./pkg/* $SHERPA_LAB_SRC_DIR
 cp $SHERPA_LAB_SRC_DIR/sherpa_wasm_bg.wasm $SHERPA_LAB_PUB_DIR/
 
