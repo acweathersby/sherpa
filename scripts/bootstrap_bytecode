@@ -16,13 +16,10 @@ pushd $SHERPA_CLI_DIR
 
 cargo run \
     --bin sherpa \
-    --release \
-    -Z package-features \
-    --features "sherpa_core/llvm" \
     -- build -t bytecode\
      -a \
      --name sherpa_bc \
      -l rust \
      --libout $ROOT_DIR/src/lib/sherpa-core/lib/ \
-     -o $ROOT_DIR/src/lib/sherpa-core/grammar/compile/parser/ \
-      $ROOT_DIR/src/grammar/v1_0_0/grammar.sg
+     -o $ROOT_DIR/src/lib/sherpa-core/parser/ \
+      $ROOT_DIR/src/grammar/v_two/grammar.sg
