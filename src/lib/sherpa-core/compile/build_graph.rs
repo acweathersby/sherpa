@@ -5,7 +5,7 @@ use crate::{
 };
 use core::panic;
 use sherpa_rust_runtime::utf8::{get_token_class_from_codepoint, lookup_table::CodePointClass};
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 pub(super) fn build_graph<'follow, 'db: 'follow>(
   j: &mut Journal,
@@ -43,7 +43,21 @@ fn handle_kernel_items(
 
   let mut groups = create_transition_groups(graph, parent)?;
 
-  handle_completed_items(j, graph, parent, graph_state, &mut groups)?;
+  let (max_precedence) = handle_completed_items(j, graph, parent, graph_state, &mut groups)?;
+
+  if max_precedence > 0 {
+    groups = groups
+      .into_iter()
+      .filter_map(|(s, g)| {
+        let g = g.into_iter().filter(|i| i.precedence() >= max_precedence).collect::<BTreeSet<_>>();
+        if g.is_empty() {
+          None
+        } else {
+          Some((s, g))
+        }
+      })
+      .collect();
+  }
 
   merge_occluding(j, graph.is_scan(), groups.clone(), &mut groups);
 
@@ -187,10 +201,14 @@ fn handle_completed_items<'db, 'follow>(
   parent: StateId,
   graph_state: GraphState,
   groups: &mut OrderedMap<SymbolId, ItemSet<'db>>,
-) -> SherpaResult<()> {
+) -> SherpaResult<u16> {
   let is_scan = graph.is_scan();
 
+  let mut max_precedence = 0;
+
   if let Some(completed) = groups.remove(&SymbolId::Default) {
+    max_precedence = max_precedence.max(get_max_precedence(&completed) as u16);
+
     let CompletedItemArtifacts { follow_pairs, follow_items, default_only, .. } =
       get_completed_item_artifacts(j, graph, parent, completed.iter())?;
 
@@ -260,7 +278,7 @@ fn handle_completed_items<'db, 'follow>(
     }
   }
 
-  SherpaResult::Ok(())
+  SherpaResult::Ok(max_precedence)
 }
 
 fn handle_goto<'db, 'follow>(
@@ -705,8 +723,6 @@ fn resolve_conflicting_symbols<'db, 'follow>(
     Class,
   }
 
-  let db = graph.get_db();
-
   // Map items according to their symbols
   let symbol_groups =
     hash_group_btreemap(completed_items.clone(), |_, i| i.origin.get_symbol(graph.get_db()));
@@ -720,6 +736,14 @@ fn resolve_conflicting_symbols<'db, 'follow>(
   let completed: Option<&ItemSet>;
 
   for (priority, groups) in priority_groups {
+    let max_precedence = groups.keys().map(|i| i.precedence()).max().unwrap_or_default();
+
+    // Filter out members with lower precedences
+    let groups = groups
+      .into_iter()
+      .filter(|(i, _)| i.precedence() >= max_precedence)
+      .collect::<BTreeMap<_, _>>();
+
     match priority {
       Defined | Class => {
         if groups.len() > 1 {
@@ -826,7 +850,7 @@ fn get_set_of_occluding_items<'db, 'follow>(
   db: &ParserDatabase,
 ) -> ItemSet<'db> {
   let mut occluding = ItemSet::new();
-  let into_group_precedence = get_max_precedence(into_group);
+  let into_group_precedence = get_max_exclusivity(into_group);
 
   if (into_group_precedence >= 9999) {
     return occluding;
@@ -860,23 +884,37 @@ fn create_transition_groups<'db, 'follow>(
 ) -> SherpaResult<OrderedMap<SymbolId, ItemSet<'db>>> {
   let closure = graph[parent].get_closure_ref()?;
 
-  let max_precedence = closure
-    .iter()
-    .filter(|i| i.is_complete())
-    .fold(0, |a, i| a.max(i.decrement().unwrap().precedence()));
-
-  let mut groups = hash_group_btreemap(
-    closure.iter().filter(|i| i.precedence() >= max_precedence).cloned().collect::<ItemSet>(),
-    |_, item| match item.get_type() {
+  let mut groups = hash_group_btreemap(closure.iter().cloned().collect::<ItemSet>(), |_, item| {
+    match item.get_type() {
       ItemType::Completed(_) => SymbolId::Default,
       ItemType::Terminal(sym) => sym.to_plain(),
       ItemType::NonTerminal(_) => SymbolId::Undefined,
       ItemType::TokenNonTerminal(..) if graph.is_scan() => SymbolId::Undefined,
       ItemType::TokenNonTerminal(_, sym) => sym.to_plain(),
-    },
-  );
+    }
+  });
 
   groups.remove(&SymbolId::Undefined);
+
+  if graph.is_scan() {
+    groups = groups
+      .into_iter()
+      .filter_map(|(s, g)| {
+        let max_exclusivity = g.iter().map(|i| i.exclusivity()).max().unwrap_or_default();
+
+        let g = g
+          .clone()
+          .into_iter()
+          .filter(|i| i.exclusivity() >= max_exclusivity)
+          .collect::<BTreeSet<_>>();
+        if g.is_empty() {
+          None
+        } else {
+          Some((s, g))
+        }
+      })
+      .collect();
+  }
 
   SherpaResult::Ok(groups)
 }
@@ -1174,4 +1212,8 @@ fn get_goal_items<'db, 'follow>(graph: &'db Graph<'follow, 'db>, item: &Item<'db
 
 fn get_max_precedence(group: &ItemSet) -> u32 {
   group.iter().map(|i| i.precedence()).max().unwrap_or_default() as u32
+}
+
+fn get_max_exclusivity(group: &ItemSet) -> u32 {
+  group.iter().map(|i| i.exclusivity()).max().unwrap_or_default() as u32
 }

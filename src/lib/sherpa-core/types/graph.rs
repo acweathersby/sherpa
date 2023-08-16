@@ -459,9 +459,7 @@ impl<'follow, 'db: 'follow> Graph<'follow, 'db> {
     let id = StateId(self.states.len() as u32);
     let is_scan = self.is_scan();
 
-    if (matches!(symbol, SymbolId::NonTerminalToken { .. })) {
-      panic!("WTF!");
-    }
+    debug_assert!(!matches!(symbol, SymbolId::NonTerminalToken { .. }));
 
     let mut state = match parent {
       Some(parent) => State {

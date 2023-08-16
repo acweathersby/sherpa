@@ -25,6 +25,11 @@ use std::path::PathBuf;
 type Parser<'a> = ByteCodeParser<'a, UTF8StringReader<'a>, u32>;
 
 #[test]
+pub fn symbols_requiring_peek() -> SherpaResult<()> {
+  compile_and_run_grammars(&[r#"<> A > 'h' A "#], &[("default", "hh ", true)])
+}
+
+#[test]
 pub fn construct_basic_recursive_descent() -> SherpaResult<()> {
   compile_and_run_grammars(&[r#"<> A > 'h' 'e' 'l' 'l' 'o'"#], &[("default", "hello ", true)])
 }
@@ -33,7 +38,9 @@ pub fn construct_basic_recursive_descent() -> SherpaResult<()> {
 pub fn construct_descent_on_scanner_symbol() -> SherpaResult<()> {
   compile_and_run_grammars(
     &[r#"
-    <> A > tk:B
+    IGNORE { c:sp  } 
+
+    <> A > tk:B 'c'
 
     <> B > C | D
     
@@ -58,7 +65,19 @@ pub fn construct_recursive_ascent() -> SherpaResult<()> {
     
     <> Y > 'x' Y?
 "#],
-    &[("default", "xxxxd ", true), ("default", "xxxxc", true), ("default", "xxxxf", false)],
+    &[("default", "xxxxd", true), ("default", "xxxxc", true), ("default", "xxxxf", false)],
+  )
+}
+
+#[test]
+pub fn tokens_with_hyphens_and_underscores() -> SherpaResult<()> {
+  compile_and_run_grammars(
+    &[r#"
+    <> id > tk:id_tok{100} " a"
+
+    <> id_tok > ( "-" | "_" | c:id ) ( c:id | c:num | '_' | '-'  )(*)
+"#],
+    &[("default", "test-test a", true)],
   )
 }
 
@@ -337,11 +356,11 @@ fn json_object_with_specialized_key() -> SherpaResult<()> {
     
     <> value > tk:string ':' tk:string
     
-        | '"test"'{1} ':' c:num
+        | "\"test\"" ':' c:num
     
     <> string > '"' ( c:sym | c:num | c:sp | c:id | escape )(*) '\"'
         
-    <> escape > "\\"{101}   ( c:sym | c:num | c:sp | c:id | c:nl)
+    <> escape > "\\"   ( c:sym | c:num | c:sp | c:id | c:nl)
     "##],
     &[
       ("default", r##"{"test":2}"##, true),

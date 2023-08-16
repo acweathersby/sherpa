@@ -164,7 +164,7 @@ impl Journal {
   pub fn report_mut(&mut self) -> &mut Report {
     self.active_report.as_mut().map(|r| r.as_mut()).unwrap_or_else(|| {
       #[cfg(debug_assertions)]
-      dbg!("Using mutable report sink!");
+      eprintln!("Using mutable report sink!");
       &mut self.report_sink
     })
   }

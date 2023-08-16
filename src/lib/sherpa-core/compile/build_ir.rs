@@ -345,7 +345,7 @@ fn add_match_expr<'follow, 'db>(
       }
 
       if !branches.is_empty() {
-        w = (w + "\n\ndefault {").indent();
+        w = (w + "\n\ndefault { ").indent();
         add_match_expr(w, graph, branches, goto_state_id);
         w = w + " }";
         w = w.dedent();

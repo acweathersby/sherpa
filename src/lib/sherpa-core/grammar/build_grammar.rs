@@ -96,6 +96,8 @@ pub fn create_grammar_data(
   let mut skipped = Array::default();
   let mut name = grammar_path.file_stem().and_then(|d| d.to_str()).unwrap_or("default");
 
+  println!("{:#?}", grammar);
+
   for preamble in &grammar.preamble {
     match preamble {
       ASTNode::Import(import) => {
@@ -834,80 +836,6 @@ fn get_production_id_from_ast_node(g_data: &GrammarData, node: &ASTNode) -> Opti
   }
 }
 
-#[cfg(test)]
-mod test {
-  use std::path::PathBuf;
-
-  use crate::{
-    journal::{Journal, ReportType},
-    parser::Grammar,
-    types::*,
-  };
-
-  fn create_test_data(input: &str) -> SherpaResult<(Journal, Box<Grammar>, PathBuf, IStringStore)> {
-    let mut j = Journal::new(None);
-    j.set_active_report("test", ReportType::GrammarCompile(Default::default()));
-
-    SherpaResult::Ok((
-      j,
-      super::parse_grammar(input)?,
-      PathBuf::from("/test.sg"),
-      IStringStore::default(),
-    ))
-  }
-  #[test]
-  fn extract_productions() -> SherpaResult<()> {
-    let (mut j, g, path, s_store) = create_test_data(
-      r##"  <> test-sweet-home-alabama > c:id{3} | ("test"{2} "2" :ast $1 ) :ast $1 "##,
-    )?;
-
-    let g_data = super::create_grammar_data(&mut j, g, &path, &s_store)?;
-
-    let (mut prods, parse_) = super::extract_productions(&mut j, &g_data, &s_store)?;
-
-    assert_eq!(prods.len(), 1);
-
-    let prod = super::process_production(prods.pop()?, &g_data, &s_store)?;
-
-    dbg!(&prod.symbols);
-
-    assert_eq!(prod.sub_prods.len(), 1);
-    assert_eq!(prod.symbols.len(), 3);
-
-    SherpaResult::Ok(())
-  }
-
-  #[test]
-  fn process_custom_parse_state() -> SherpaResult<()> {
-    let (mut j, g, path, s_store) = create_test_data(
-      r##" 
-      
-      test-sweet-home-alabama =!> match: TERMINAL {
-          ( "test" ) { reduce 2 symbols to data :ast { t_Test } then pass }
-          ( "failed" ) { fail }
-          ( "accepted in kind" ) { accept }
-      }
-      
-       "##,
-    )?;
-
-    let g_data = super::create_grammar_data(&mut j, g, &path, &s_store)?;
-
-    let (productions, mut parse_states) = super::extract_productions(&mut j, &g_data, &s_store)?;
-
-    assert_eq!(productions.len(), 0);
-    assert_eq!(parse_states.len(), 1);
-
-    let parse_state = super::process_parse_state(parse_states.pop()?, &g_data, &s_store)?;
-
-    dbg!(&parse_state, &s_store);
-
-    assert_eq!(parse_state.symbols.len(), 3);
-
-    SherpaResult::Ok(())
-  }
-}
-
 // NAMES ------------------------------------------------------------------------
 
 /// Creates a globally unique name and friendly name for a production
@@ -1008,4 +936,78 @@ pub fn remove_grammar_mut(id: GrammarId, soup: &mut GrammarSoup) -> SherpaResult
   }
 
   SherpaResult::Ok(())
+}
+
+#[cfg(test)]
+mod test {
+  use std::path::PathBuf;
+
+  use crate::{
+    journal::{Journal, ReportType},
+    parser::Grammar,
+    types::*,
+  };
+
+  fn create_test_data(input: &str) -> SherpaResult<(Journal, Box<Grammar>, PathBuf, IStringStore)> {
+    let mut j = Journal::new(None);
+    j.set_active_report("test", ReportType::GrammarCompile(Default::default()));
+
+    SherpaResult::Ok((
+      j,
+      super::parse_grammar(input)?,
+      PathBuf::from("/test.sg"),
+      IStringStore::default(),
+    ))
+  }
+  #[test]
+  fn extract_productions() -> SherpaResult<()> {
+    let (mut j, g, path, s_store) = create_test_data(
+      r##"  <> test-sweet-home-alabama > c:id{3} | ("test"{2} "2" :ast $1 ) :ast $1 "##,
+    )?;
+
+    let g_data = super::create_grammar_data(&mut j, g, &path, &s_store)?;
+
+    let (mut prods, parse_) = super::extract_productions(&mut j, &g_data, &s_store)?;
+
+    assert_eq!(prods.len(), 1);
+
+    let prod = super::process_production(prods.pop()?, &g_data, &s_store)?;
+
+    dbg!(&prod.symbols);
+
+    assert_eq!(prod.sub_prods.len(), 1);
+    assert_eq!(prod.symbols.len(), 3);
+
+    SherpaResult::Ok(())
+  }
+
+  #[test]
+  fn process_custom_parse_state() -> SherpaResult<()> {
+    let (mut j, g, path, s_store) = create_test_data(
+      r##" 
+      
+      test-sweet-home-alabama =!> match: TERMINAL {
+          ( "test" ) { reduce 2 symbols to data :ast { t_Test } then pass }
+          ( "failed" ) { fail }
+          ( "accepted in kind" ) { accept }
+      }
+      
+       "##,
+    )?;
+
+    let g_data = super::create_grammar_data(&mut j, g, &path, &s_store)?;
+
+    let (productions, mut parse_states) = super::extract_productions(&mut j, &g_data, &s_store)?;
+
+    assert_eq!(productions.len(), 0);
+    assert_eq!(parse_states.len(), 1);
+
+    let parse_state = super::process_parse_state(parse_states.pop()?, &g_data, &s_store)?;
+
+    dbg!(&parse_state, &s_store);
+
+    assert_eq!(parse_state.symbols.len(), 3);
+
+    SherpaResult::Ok(())
+  }
 }

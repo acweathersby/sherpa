@@ -95,7 +95,7 @@ pub fn compile_parse_states<'db>(
     // Warn of failed parses
     match state.build_ast(db.string_store()) {
       SherpaResult::Err(err) => {
-        todo!("Add State compile error to Journal");
+        todo!("Add State compile error to Journal {err}");
       }
       _ => {}
     }
@@ -117,7 +117,7 @@ fn build_entry_ir<'db>(
     ParseState { code: w.to_string(), name: *prod_entry_name, ..Default::default() };
 
   let mut w = CodeWriter::new(Vec::<u8>::with_capacity(512));
-
+  ///let _ = (&mut w) + "match: _CLASS_ { (0) { accept } }";
   let _ = (&mut w) + "accept";
 
   let exit_state = ParseState { code: w.to_string(), name: *prod_exit_name, ..Default::default() };

@@ -103,9 +103,7 @@ fn build_statement<'db>(
       parser::ASTNode::Reset(..) => insert_op(bc, Op::PeekReset),
       parser::ASTNode::Shift(..) => insert_op(bc, Op::ShiftToken),
       parser::ASTNode::Peek(..) => insert_op(bc, Op::PeekToken),
-      node => {
-        #[cfg(debug_assertions)]
-        dbg!(node);
+      _ => {
         unreachable!();
       }
     }
@@ -121,13 +119,11 @@ fn build_statement<'db>(
         insert_u32_le(bc, *rule_id as u32);
         insert_u16_le(bc, *len as u16);
       }
-      parser::ASTNode::SetTokenId(box parser::SetTokenId { id }) => {
+      parser::ASTNode::SetTokenId(box parser::SetTokenId { id,.. }) => {
         insert_op(bc, Op::AssignToken);
         insert_u32_le(bc, *id);
       }
-      node => {
-        #[cfg(debug_assertions)]
-        dbg!(node);
+      _ => {
         unreachable!();
       }
     }
@@ -227,8 +223,6 @@ fn build_match<'db>(
       }
     }
     node => {
-      #[cfg(debug_assertions)]
-      dbg!(node);
       unreachable!();
     }
   };

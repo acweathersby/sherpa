@@ -265,8 +265,8 @@ pub fn build_compile_db<'a>(
         insert_token_production(&mut r_rules, &mut token_productions);
         insert_token_production(&mut p_rules, &mut token_productions);
 
-        convert_symbols_to_scanner_symbols(&mut r_rules, s_store);
-        convert_symbols_to_scanner_symbols(&mut p_rules, s_store);
+        convert_symbols_to_scanner_symbols(&mut r_rules, s_store, false);
+        convert_symbols_to_scanner_symbols(&mut p_rules, s_store, false);
 
         let prod_id = prod_id.as_tok_sym();
         let prime_id = prime_id.as_tok_sym();
@@ -284,7 +284,7 @@ pub fn build_compile_db<'a>(
         if !p_map.contains_key(&prod_id) {
           let mut rules = rules.clone();
 
-          convert_symbols_to_scanner_symbols(&mut rules, s_store);
+          convert_symbols_to_scanner_symbols(&mut rules, s_store, false);
           insert_token_production(&mut rules, &mut token_productions);
 
           add_prod_and_rules(prod_id, rules, p_map, r_table, p_r_map, true);
@@ -514,7 +514,7 @@ fn convert_symbol(
         let index = p_map.get(&id.as_parse_prod().as_tok_sym()).unwrap();
         SymbolId::DBNonTerminal { key: (*index as u32).into() }
       } else {
-        let index = p_map.get(sym).unwrap();
+        let index = p_map.get(&sym.to_plain()).unwrap();
         SymbolId::DBNonTerminalToken {
           prod_key: (*index as u32).into(),
           sym_key: symbols.get(sym).map(|i| (*i as u32).into()),
@@ -627,13 +627,15 @@ fn insert_symbol(symbol_map: &mut Map<SymbolId, usize>, sym: &SymbolId) {
 /// Symbols are converted into individual character/byte values that allow
 /// scanner parsers to scan a single character/byte/codepoint at time to
 /// recognize a token.
-fn convert_symbols_to_scanner_symbols(rules: &mut [Rule], s_store: &IStringStore) {
+fn convert_symbols_to_scanner_symbols(rules: &mut [Rule], s_store: &IStringStore, is_token: bool) {
   for rule in rules {
     let syms = rule
       .symbols
       .iter()
       .flat_map(|sym_ref| match sym_ref.id {
         SymbolId::Token { val, precedence } => {
+          let precedence = (!is_token).then(|| precedence).unwrap_or_default();
+
           let guarded_str = val.to_string(s_store);
           let string = guarded_str.as_str();
 

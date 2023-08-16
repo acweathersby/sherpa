@@ -402,7 +402,7 @@ fn construct_cp_lu_with_token_len_store<'a, 'llvm: 'a>(
 }
 
 fn goto<'a, 'llvm: 'a>(
-  sherpa_core::parser::Goto { prod }: &sherpa_core::parser::Goto,
+  sherpa_core::parser::Goto { prod, .. }: &sherpa_core::parser::Goto,
   args: &BuildArgs<'a, 'llvm>,
   state_fun: FunctionValue<'llvm>,
 ) -> SherpaResult<()> {

@@ -241,6 +241,25 @@ impl<'db> Item<'db> {
   /// Returns the precedence of the active symbol, or returns
   /// precedence of the last symbol if the ItemRef is complete.
   pub fn precedence(&self) -> u16 {
+    if self.is_complete() || true {
+      //self.rule().symbols[(self.sym_index - 1) as usize].id.precedence();
+
+      let p = match self.origin {
+        Origin::TokenGoal(s) => self.db.token(s).sym_id.precedence(),
+        Origin::ProdGoal(p) => self.db.prod_sym(p).precedence(),
+        _ => 0,
+      };
+
+      //println!("{} {{{}}}", self.debug_string(), p);
+
+      p
+    } else {
+      0
+      //self.rule().symbols[self.sym_index as usize].id.precedence()
+    }
+  }
+
+  pub fn exclusivity(&self) -> u16 {
     if self.is_complete() {
       self.rule().symbols[(self.sym_index - 1) as usize].id.precedence()
     } else {
