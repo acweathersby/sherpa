@@ -9,7 +9,7 @@ use inkwell::{
 };
 use sherpa_core::{
   proxy::OrderedMap,
-  test::frame::{build_parse_states_from_source_str, TestPackage},
+  test::utils::{build_parse_states_from_source_str, TestPackage},
   *,
 };
 use sherpa_rust_runtime::{

@@ -1,7 +1,7 @@
 use crate::*;
 use sherpa_core::{
   proxy::OrderedMap,
-  test::frame::{
+  test::utils::{
     build_parse_states_from_multi_sources,
     build_parse_states_from_source_str as build_states,
     TestPackage,
@@ -26,7 +26,45 @@ type Parser<'a> = ByteCodeParser<'a, UTF8StringReader<'a>, u32>;
 
 #[test]
 pub fn symbols_requiring_peek() -> SherpaResult<()> {
-  compile_and_run_grammars(&[r#"<> A > 'h' A "#], &[("default", "hh ", true)])
+  compile_and_run_grammars(
+    &[r#"
+
+IGNORE { c:sp  } 
+
+<> A > gs(+">>") ">>" ge
+
+<> gs > "t:" tk:name
+
+<> ge > "e:" tk:name
+
+<> name > c:id(+)
+
+"#],
+    &[("default", "t:a >> e:b", true)],
+  )
+}
+
+#[test]
+pub fn symbols_requiring_peek2() -> SherpaResult<()> {
+  compile_and_run_grammars(
+    &[r#"
+IGNORE { c:sp  } 
+
+<> A > ( B | ":" C )(+)
+
+<> B > id "=>" c:id
+
+<> C > a_id(+)
+
+<> a_id > id "!"? 
+
+<> id > tk:id_tok
+
+<> id_tok > c:id
+
+"#],
+    &[("default", ":t! t t => g :t!", true)],
+  )
 }
 
 #[test]
@@ -48,7 +86,7 @@ pub fn construct_descent_on_scanner_symbol() -> SherpaResult<()> {
     
     <> D > 'a' 'b'
 "#],
-    &[("default", "aabc ", true)],
+    &[("default", "aabcc", true)],
   )
 }
 
@@ -384,6 +422,21 @@ fn scientific_number() -> SherpaResult<()> {
 }
 
 #[test]
+fn escaped_values() -> SherpaResult<()> {
+  compile_and_run_grammars(
+    &[r##"
+<> escaped_string > ( escaped_vals  )(+)
+
+<> escaped_vals > c:num | c:id | c:sym | c:nl | c:sp | escaped
+
+<> escaped > '\\' ( c:num | c:id | c:sym | c:nl | c:sp )
+           | '\\'
+        "##],
+    &[("default", r##"\"##, true)],
+  )
+}
+
+#[test]
 fn escaped_string() -> SherpaResult<()> {
   compile_and_run_grammars(
     &[r##"
@@ -400,75 +453,6 @@ fn escaped_string() -> SherpaResult<()> {
       ("default", r##""12\"34""##, true),
     ],
   )
-}
-
-fn compile_and_run_grammars(source: &[&str], inputs: &[(&str, &str, bool)]) -> SherpaResult<()> {
-  build_parse_states_from_multi_sources(
-    source,
-    "".into(),
-    Default::default(),
-    &|TestPackage { db, states, .. }| {
-      let (bc, state_map) = compile_bytecode(&db, states.iter())?;
-
-      for (entry_name, input, should_pass) in inputs {
-        let ok = Parser::new(&mut ((*input).into()), &bc)
-      .completes(
-        db.get_entry_offset(entry_name, &state_map).expect(&format!(
-        "\nCan't find entry offset for entry point [{entry_name}].\nValid entry names are\n    {}\n",
-        db.entry_points().iter().map(|e| {
-          e.entry_name.to_string(db.string_store())
-        }).collect::<Vec<_>>().join(" | ")
-      )) as u32)
-      .is_ok();
-
-        let mut cd = console_debugger(db.to_owned(), Default::default());
-
-        if (ok != *should_pass) {
-          Parser::new(&mut ((*input).into()), &bc)
-      .collect_shifts_and_skips(
-        db.get_entry_offset(entry_name, &state_map).expect(&format!(
-        "\nCan't find entry offset for entry point [{entry_name}].\nValid entry names are\n    {}\n",
-        db.entry_points().iter().map(|e| {
-          e.entry_name.to_string(db.string_store())
-        }).collect::<Vec<_>>().join(" | ")
-      )) as u32, 0, &mut cd.as_deref_mut());
-          panic!(
-            "\n\nParsing of input\n   \"{input}\"\nthrough entry point [{entry_name}] should {}.\n",
-            if *should_pass { "pass" } else { "fail" }
-          );
-        }
-      }
-
-      SherpaResult::Ok(())
-    },
-  )
-}
-
-// Sorts reduce functions according to their respective
-// rules. This assumes the number of rules in the array
-// matches the number of rules in the parser.
-fn map_reduce_function<'a, R, ExtCTX, ASTNode>(
-  db: &ParserDatabase,
-  fns: Vec<(&str, usize, fn(*mut ParseContext<R, ExtCTX>, &AstStackSlice<AstSlot<ASTNode>, true>))>,
-) -> Vec<Reducer<R, ExtCTX, ASTNode, true>>
-where
-  R: ByteReader + MutByteReader,
-  ASTNode: AstObject,
-{
-  fns
-    .into_iter()
-    .filter_map(|(name, rule_number, b)| {
-      let prod = db.prod_from_name(name);
-      if prod != Default::default() {
-        let rule_id = db.prod_rules(prod).unwrap()[rule_number];
-        Some((Into::<usize>::into(rule_id), b))
-      } else {
-        None
-      }
-    })
-    .collect::<OrderedMap<_, _>>()
-    .into_values()
-    .collect::<Vec<_>>()
 }
 
 /// Bytecode counterpart to sherpa_llvm::test::compile::simple_newline_tracking
@@ -519,4 +503,80 @@ fn simple_newline_tracking() -> SherpaResult<()> {
       SherpaResult::Ok(())
     },
   )
+}
+
+fn compile_and_run_grammars(source: &[&str], inputs: &[(&str, &str, bool)]) -> SherpaResult<()> {
+  build_parse_states_from_multi_sources(
+    source,
+    "".into(),
+    Default::default(),
+    &|TestPackage { db, states, .. }| {
+      // states.iter().for_each(|(_, s)| println!("{}\n\n",
+      // s.source_string(db.string_store())));
+
+      let (bc, state_map) = compile_bytecode(&db, states.iter())?;
+
+      for (entry_name, input, should_pass) in inputs {
+        let ok = Parser::new(&mut ((*input).into()), &bc)
+      .completes(
+        db.get_entry_offset(entry_name, &state_map).expect(&format!(
+        "\nCan't find entry offset for entry point [{entry_name}].\nValid entry names are\n    {}\n",
+        db.entry_points().iter().map(|e| {
+          e.entry_name.to_string(db.string_store())
+        }).collect::<Vec<_>>().join(" | ")
+      )) as u32)
+      .is_ok();
+
+        let mut cd = console_debugger(db.to_owned(), PrintConfig {
+          display_scanner_output: true,
+          display_instruction: true,
+          ..Default::default()
+        });
+
+        if (ok != *should_pass) {
+          Parser::new(&mut ((*input).into()), &bc)
+      .collect_shifts_and_skips(
+        db.get_entry_offset(entry_name, &state_map).expect(&format!(
+        "\nCan't find entry offset for entry point [{entry_name}].\nValid entry names are\n    {}\n",
+        db.entry_points().iter().map(|e| {
+          e.entry_name.to_string(db.string_store())
+        }).collect::<Vec<_>>().join(" | ")
+      )) as u32, 0, &mut cd.as_deref_mut());
+          panic!(
+            "\n\nParsing of input\n   \"{input}\"\nthrough entry point [{entry_name}] should {}.\n",
+            if *should_pass { "pass" } else { "fail" }
+          );
+        }
+      }
+
+      SherpaResult::Ok(())
+    },
+  )
+}
+
+// Sorts reduce functions according to their respective
+// rules. This assumes the number of rules in the array
+// matches the number of rules in the parser.
+fn map_reduce_function<'a, R, ExtCTX, ASTNode>(
+  db: &ParserDatabase,
+  fns: Vec<(&str, usize, fn(*mut ParseContext<R, ExtCTX>, &AstStackSlice<AstSlot<ASTNode>, true>))>,
+) -> Vec<Reducer<R, ExtCTX, ASTNode, true>>
+where
+  R: ByteReader + MutByteReader,
+  ASTNode: AstObject,
+{
+  fns
+    .into_iter()
+    .filter_map(|(name, rule_number, b)| {
+      let prod = db.prod_from_name(name);
+      if prod != Default::default() {
+        let rule_id = db.prod_rules(prod).unwrap()[rule_number];
+        Some((Into::<usize>::into(rule_id), b))
+      } else {
+        None
+      }
+    })
+    .collect::<OrderedMap<_, _>>()
+    .into_values()
+    .collect::<Vec<_>>()
 }
