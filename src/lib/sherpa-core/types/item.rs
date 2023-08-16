@@ -179,7 +179,7 @@ impl<'db> Item<'db> {
   }
 
   pub fn prod_name(&self) -> IString {
-    self.db.prod_guid_name(self.prod_index())
+    self.db.prod_friendly_name(self.prod_index())
   }
 
   pub fn prod_index(&self) -> DBProdKey {
@@ -329,7 +329,7 @@ pub trait ItemContainerIter<'a, 'db: 'a>: Iterator<Item = &'a Item<'db>> + Sized
   }
 
   fn all_are_out_of_scope(&mut self) -> bool {
-    self.all(|i| i.origin.is_out_of_scope())
+    self.all(|i| i.origin.is_out_of_scope() || i.is_out_of_scope())
   }
 
   fn to_set(&mut self) -> ItemSet<'db> {

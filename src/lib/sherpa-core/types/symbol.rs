@@ -208,12 +208,12 @@ impl SymbolId {
       NonTerminalToken { id, .. } => &mut w + "tk:" + "non_term",
       Codepoint { val, precedence } => &mut w + "" + val.to_string() + print_precedence(precedence),
       DBNonTerminal { key } => {
-        let guard_str = db.prod_guid_name_string(key);
+        let guard_str = db.prod_friendly_name_string(key);
         let name = guard_str.as_str();
         &mut w + name
       }
       DBNonTerminalToken { prod_key, precedence, .. } => {
-        let guard_str = db.prod_guid_name_string(prod_key);
+        let guard_str = db.prod_friendly_name_string(prod_key);
         &mut w + "tk:" + guard_str + print_precedence(precedence)
       }
       DBToken { key: index } => &mut w + db.sym(index).debug_string(db),
