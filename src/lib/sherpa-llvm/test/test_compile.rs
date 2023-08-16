@@ -466,6 +466,8 @@ IGNORE { c:sp }
     "/test".into(),
     Default::default(),
     &|TestPackage { mut journal, db, states, .. }| {
+      let states = optimize::<ParseStatesVec>(&db, states)?;
+
       let context = Context::create();
       let target_machine = crate_target_test_machine()?;
       let target_data = target_machine.get_target_data();
@@ -498,6 +500,8 @@ IGNORE { c:sp }
     &|TestPackage { mut journal, states, db, soup }| {
       let context = Context::create();
       let module = context.create_module("test");
+
+      let states = optimize::<ParseStatesVec>(&db, states)?;
 
       unsafe {
         let engine = setup_exec_engine(&module);
@@ -794,6 +798,8 @@ NAME llvm_language_test
     Default::default(),
     &|TestPackage { mut journal, states, db, .. }| {
       let ctx = Context::create();
+
+      let states = optimize::<ParseStatesVec>(&db, states)?;
 
       let target_machine = crate_target_test_machine()?;
       let target_data = target_machine.get_target_data();

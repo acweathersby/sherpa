@@ -6,6 +6,7 @@ use crate::{
   Config,
   GrammarSoup,
   Journal,
+  ParseStatesMap,
   ParseStatesVec,
   ParserDatabase,
   ReportType,
@@ -14,7 +15,7 @@ use crate::{
 use std::path::PathBuf;
 pub struct TestPackage<'a> {
   pub journal: Journal,
-  pub states:  ParseStatesVec,
+  pub states:  ParseStatesMap,
   pub db:      &'a ParserDatabase,
   pub soup:    &'a GrammarSoup,
 }
@@ -36,13 +37,13 @@ pub fn build_parse_states_from_source_str<'a, T>(
   build_parse_db_from_source_str(source, source_path, config, &|DBPackage { journal, db, soup }| {
     let states = compile_parse_states(journal.transfer(), &db)?;
 
-    let states = optimize::<ParseStatesVec>(&db, states)?;
-
     test_fn(TestPackage { journal, states, db: &db, soup: &soup })
   })
 }
 
-/// Builds a set of states from a  sourec file
+/// Builds a set of states from one or more source strings.
+/// Each `source` is mapped to a single character  name in this sequence
+/// `ABCDEFGHIJKLMNOPQRSTUVWXYZ`
 pub fn build_parse_states_from_multi_sources<'a, T>(
   sources: &[&str],
   source_path: PathBuf,
@@ -57,7 +58,8 @@ pub fn build_parse_states_from_multi_sources<'a, T>(
   journal.set_active_report("Compile Grammars", ReportType::Any);
 
   for (index, source) in sources.iter().enumerate() {
-    let source_path = source_path.join(["A", "B", "C", "D", "E", "F"][index]);
+    let source_path =
+      source_path.join("ABCDEFGHIJKLMNOPQRSTUVWXYZ".chars().nth(index)?.to_string());
     let id = compile_grammar_from_str(&mut journal, source, source_path, &gs)?;
 
     if root_id.is_none() {
@@ -70,8 +72,6 @@ pub fn build_parse_states_from_multi_sources<'a, T>(
   let db = build_compile_db(journal.transfer(), root_id?, &gs)?;
 
   let states = compile_parse_states(journal.transfer(), &db)?;
-
-  let states = optimize::<ParseStatesVec>(&db, states)?;
 
   test_fn(TestPackage { journal, states, db: &db, soup: &gs })
 }

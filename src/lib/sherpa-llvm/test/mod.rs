@@ -1,1 +1,1 @@
-mod compile;
+mod test_compile;
