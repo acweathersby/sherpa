@@ -280,7 +280,7 @@ impl Opcode {
       Opcode::Reduce => 11,
       Opcode::Goto | Opcode::PushGoto | Opcode::PushExceptionHandler => 6,
       Opcode::AssignToken => 5,
-      Opcode::AssignToken => 1 + 8,
+      Opcode::DebugTokenLocation => 1 + 8,
       _ => 1,
     }
   }
