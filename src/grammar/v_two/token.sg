@@ -14,6 +14,6 @@ NAME token
 
 <> quote_tok > "'" ( c:id | c:num | c:nl | c:sym | c:sp | escaped )(*) '\''
 
-<> escaped > "\\" ( c:sym | c:num | c:sp | c:id )
+<> escaped > "\\"{9999} ( c:sym | c:num | c:sp | c:id )
 
 <> int_tok > c:num(+)

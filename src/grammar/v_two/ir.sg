@@ -104,9 +104,9 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
 <> generic_match_block >
 
-    "match" ":" tok::id^id ( int_match :ast [$1] | "{" (int_match | default_match | hint)(+) "}" :ast $2  )^m
+    "match" ":" tok::id^id ( ":" sym::non_terminal )?^scanner ( int_match :ast [$1] | "{" (int_match | default_match | hint)(+) "}" :ast $2  )^m
 
-        :ast { t_Matches, mode: str($id), matches:$m, meta:u64 }
+        :ast { t_Matches, mode: str($id), matches:$m, scanner:$scanner }
 
 
 <> production_match_block >
