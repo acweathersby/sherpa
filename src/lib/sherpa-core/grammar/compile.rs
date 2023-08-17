@@ -1,11 +1,7 @@
 #![allow(unused_mut, unused)]
 use super::build_grammar::{create_grammar_data, extract_productions, parse_grammar, GrammarData};
 use crate::{
-  grammar::build_grammar::{
-    convert_grammar_data_to_header,
-    process_parse_state,
-    process_production,
-  },
+  grammar::build_grammar::{convert_grammar_data_to_header, process_parse_state, process_production},
   journal::{Journal, ReportType},
   tasks::{new_taskman, Spawner, ThreadedFuture},
   types::*,
@@ -69,10 +65,7 @@ async fn import_grammars(
                       let mut local_loader = import_loader.lock().unwrap();
                       if g_data.imports.is_empty() == false {
                         /* Scope for Mutex lock */
-                        g_data
-                          .imports
-                          .iter()
-                          .for_each(|(_, i)| local_loader.send(Task::Todo(*i)).unwrap());
+                        g_data.imports.iter().for_each(|(_, i)| local_loader.send(Task::Todo(*i)).unwrap());
                       }
                       local_loader.send(Task::Complete).unwrap();
                     }
@@ -120,11 +113,7 @@ async fn import_grammars(
   SherpaResult::Ok(())
 }
 
-pub fn compile_grammar_data(
-  j: &mut Journal,
-  g_data: GrammarData,
-  g_c: &GrammarSoup,
-) -> SherpaResult<GrammarIdentities> {
+pub fn compile_grammar_data(j: &mut Journal, g_data: GrammarData, g_c: &GrammarSoup) -> SherpaResult<GrammarIdentities> {
   let id = g_data.id;
 
   let (mut prods, mut parse_states) = extract_productions(j, &g_data, &g_c.string_store)?;
@@ -143,41 +132,25 @@ pub fn compile_grammar_data(
   }
 
   {
-    g_c
-      .grammar_headers
-      .write()
-      .unwrap()
-      .insert(g_data.id.guid, convert_grammar_data_to_header(g_data.id, g_data));
+    g_c.grammar_headers.write().unwrap().insert(g_data.id.guid, convert_grammar_data_to_header(g_data.id, g_data));
   }
 
   SherpaResult::Ok(id)
 }
 
-fn load_from_path(
-  j: &mut Journal,
-  source_path: PathBuf,
-  soup: &GrammarSoup,
-) -> SherpaResult<GrammarData> {
-  dbg!(&source_path);
+fn load_from_path(j: &mut Journal, source_path: PathBuf, soup: &GrammarSoup) -> SherpaResult<GrammarData> {
   match std::fs::read_to_string(&source_path) {
     Ok(source) => {
       let source = std::fs::read_to_string(&source_path)?;
       load_from_str(j, source.as_str(), source_path, soup)
     }
     Err(_) => SherpaResult::Err(
-      ("Unable to retrieve a grammar source from this path: ".to_string()
-        + source_path.as_os_str().to_str().unwrap())
-      .into(),
+      ("Unable to retrieve a grammar source from this path: ".to_string() + source_path.as_os_str().to_str().unwrap()).into(),
     ),
   }
 }
 
-fn load_from_str(
-  j: &mut Journal,
-  source: &str,
-  source_path: PathBuf,
-  soup: &GrammarSoup,
-) -> SherpaResult<GrammarData> {
+fn load_from_str(j: &mut Journal, source: &str, source_path: PathBuf, soup: &GrammarSoup) -> SherpaResult<GrammarData> {
   j.set_active_report("Load From String", ReportType::GrammarParse);
 
   let root_grammar = match parse_grammar(&source) {

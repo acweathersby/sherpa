@@ -21,9 +21,13 @@ path = "../../lib/sherpa-bytecode"
 
 [dependencies.sherpa_llvm]
 path = "../../lib/sherpa-llvm"
+optional = true
 
 [dependencies.sherpa_rust_build]
 path = "../../lib/sherpa-rust-build"
+
+# Enable builds using llvm 
+llvm = ["dep:sherpa_llvm"]
 
 [profile.release]
 opt-level=3

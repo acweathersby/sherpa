@@ -140,9 +140,6 @@ IMPORT ./token as token
     | token::int
         :ast { t_AST_NUMBER, value:f64($1) }
 
-    | ( token::quote | token::string )
-        :ast { t_AST_STRING, value:str($1) }
-
 <> reference > 
 
     "$" token::id 

@@ -6,13 +6,9 @@ use crate::{
   types::*,
   utils::{create_u64_hash, hash_group_btreemap},
 };
-use std::collections::{hash_map, VecDeque};
+use std::collections::{btree_map, hash_map, VecDeque};
 
-pub fn build_compile_db<'a>(
-  mut j: Journal,
-  g: GrammarIdentities,
-  gs: &'a GrammarSoup,
-) -> SherpaResult<ParserDatabase> {
+pub fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a GrammarSoup) -> SherpaResult<ParserDatabase> {
   // Gain read access to all parts of the GrammarCloud.
   // We don't want anything changing during these next steps.
 
@@ -26,21 +22,19 @@ pub fn build_compile_db<'a>(
 
   let productions: std::sync::RwLockReadGuard<'_, Vec<Box<Production>>> = productions.read()?;
   let productions = {
-    let mut out_prods = Map::new();
+    let mut out_prods = OrderedMap::new();
     for prod in productions.iter() {
       match out_prods.entry(prod.id) {
-        hash_map::Entry::Vacant(e) => {
+        btree_map::Entry::Vacant(e) => {
           e.insert(prod.clone());
         }
-        hash_map::Entry::Occupied(mut e) => {
+        btree_map::Entry::Occupied(mut e) => {
           fn remap_sub_prod_offsets(rule: &mut Rule, sub_prod_offset: usize) {
             for sym_ref in &mut rule.symbols {
               match sym_ref.id {
                 SymbolId::NonTerminal { id } => {
                   if let ProductionId::Sub(p, i, s) = id {
-                    sym_ref.id = SymbolId::NonTerminal {
-                      id: ProductionId::Sub(p, i + sub_prod_offset as u32, s),
-                    };
+                    sym_ref.id = SymbolId::NonTerminal { id: ProductionId::Sub(p, i + sub_prod_offset as u32, s) };
                   }
                 }
                 _ => {}
@@ -80,12 +74,11 @@ pub fn build_compile_db<'a>(
 
   // Build production list.
 
-  let mut symbols = Map::from_iter(vec![(SymbolId::Default, 0)]);
-  let mut production_queue =
-    Queue::from_iter(root_grammar.pub_prods.iter().map(|(_, p)| (p.1.clone(), p.0)));
+  let mut symbols = OrderedMap::from_iter(vec![(SymbolId::Default, 0)]);
+  let mut production_queue = Queue::from_iter(root_grammar.pub_prods.iter().map(|(_, p)| (p.1.clone(), p.0)));
 
   // Maps production sym IDs to indices.
-  let mut prod_map_owned = Map::with_capacity(productions.len());
+  let mut prod_map_owned = OrderedMap::new();
   let p_map = &mut prod_map_owned;
 
   // Stores all used rules
@@ -105,7 +98,7 @@ pub fn build_compile_db<'a>(
   let c_states = &mut c_states_owned;
 
   // Keeps track of the names of token_productions.
-  let mut token_names = Map::new();
+  let mut token_names = OrderedMap::new();
   let mut token_productions = VecDeque::new();
 
   while let Some((loc, prod_id)) = production_queue.pop_front() {
@@ -172,9 +165,9 @@ pub fn build_compile_db<'a>(
             path: Default::default(),
             id: "[2002]",
             inline_msg: Default::default(),
-            msg:"Cannot resolve grammar that has production definitions and state definitions with the same name: ".to_string(),
+            msg: "Cannot resolve grammar that has production definitions and state definitions with the same name: ".to_string(),
             ps_msg: Default::default(),
-            severity: SherpaErrorSeverity::Critical
+            severity: SherpaErrorSeverity::Critical,
           });
           is_valid = false;
         }
@@ -204,14 +197,11 @@ pub fn build_compile_db<'a>(
     if !p_map.contains_key(&prod_id.as_tok_sym()) {
       let (internal_id, rules, name) = match prod_id {
         ProductionId::Standard(internal_id, ..) => {
-          let prod =
-            productions.get(&ProductionId::Standard(internal_id, ProductionSubType::Parser))?;
+          let prod = productions.get(&ProductionId::Standard(internal_id, ProductionSubType::Parser))?;
           (internal_id, &prod.rules, prod.guid_name)
         }
         ProductionId::Sub(internal_id, index, ..) => {
-          let prod = &productions
-            .get(&ProductionId::Standard(internal_id, ProductionSubType::Parser))?
-            .sub_prods[index as usize];
+          let prod = &productions.get(&ProductionId::Standard(internal_id, ProductionSubType::Parser))?.sub_prods[index as usize];
           (internal_id, &prod.rules, prod.guid_name)
         }
       };
@@ -222,8 +212,7 @@ pub fn build_compile_db<'a>(
       if prod_is_immediate_left_recursive(prod_id, &rules) {
         let rules = rules.clone();
 
-        let prime_id =
-          ProductionId::Sub(internal_id, p_map.len() as u32 + 9000, ProductionSubType::Scanner);
+        let prime_id = ProductionId::Sub(internal_id, p_map.len() as u32 + 9000, ProductionSubType::Scanner);
 
         let mut groups = hash_group_btreemap(rules, |_, r| match r.symbols[0].id {
           SymbolId::NonTerminal { id, .. } if id == prod_id => true,
@@ -238,11 +227,7 @@ pub fn build_compile_db<'a>(
           .flat_map(|mut r| {
             r.symbols.remove(0);
             let rule_a = r.clone();
-            r.symbols.push(SymbolRef {
-              id: prime_id.as_tok_sym(),
-              original_index: 0,
-              ..Default::default()
-            });
+            r.symbols.push(SymbolRef { id: prime_id.as_tok_sym(), original_index: 0, ..Default::default() });
             [rule_a, r]
           })
           .collect();
@@ -252,11 +237,7 @@ pub fn build_compile_db<'a>(
             .clone()
             .into_iter()
             .map(|mut r| {
-              r.symbols.push(SymbolRef {
-                id: prime_id.as_tok_sym(),
-                original_index: 0,
-                ..Default::default()
-              });
+              r.symbols.push(SymbolRef { id: prime_id.as_tok_sym(), original_index: 0, ..Default::default() });
               r
             })
             .collect(),
@@ -309,11 +290,7 @@ pub fn build_compile_db<'a>(
           let prod_id = sym.to_scanner_prod_id();
 
           let s = &val.to_string(s_store);
-          let o = if *precedence < 1 {
-            "<> '".to_string() + s + "' > " + s
-          } else {
-            "<> \"".to_string() + s + "\" > " + s
-          };
+          let o = if *precedence < 1 { "<> '".to_string() + s + "' > " + s } else { "<> \"".to_string() + s + "\" > " + s };
 
           let tok = TokenRange {
             len:      s.len() as u32,
@@ -375,7 +352,7 @@ pub fn build_compile_db<'a>(
     }
   }
 
-  let sym_lu = convert_index_map_to_vec(symbols.iter().map(|(sym, index)| {
+  let tokens = convert_index_map_to_vec(symbols.iter().map(|(sym, index)| {
     (
       DBTokenData {
         prod_id: if sym.is_default() {
@@ -397,12 +374,9 @@ pub fn build_compile_db<'a>(
             ClassIdentifier { .. } => "c:id".intern(s_store),
             ClassNumber { .. } => "c:num".intern(s_store),
             ClassSymbol { .. } => "c:sym".intern(s_store),
-            Token { val, .. } => {
-              ("\"".to_string() + &val.to_string(&s_store) + "\"").intern(s_store)
-            }
+            Token { val, .. } => ("\"".to_string() + &val.to_string(&s_store) + "\"").intern(s_store),
             NonTerminalState { id } | NonTerminal { id, .. } | NonTerminalToken { id, .. } => {
-              let name =
-                productions.get(&id.as_parse_prod()).unwrap().friendly_name.to_string(s_store);
+              let name = productions.get(&id.as_parse_prod()).unwrap().friendly_name.to_string(s_store);
 
               ("<".to_string() + &name + ">").intern(s_store)
             }
@@ -464,7 +438,7 @@ pub fn build_compile_db<'a>(
     prod_name_lu_owned,
     p_r_map_owned,
     rule_table_owned,
-    sym_lu,
+    tokens,
     entry_points,
     s_store.clone(),
     c_states_owned,
@@ -485,8 +459,8 @@ fn add_empty_custom_state(c_states: &mut Vec<Option<Box<parser::State>>>) {
 /// Converts AST Symbols into DB symbols
 fn convert_rule_symbols(
   r_table: &mut Vec<DBRule>,
-  p_map: &mut Map<SymbolId, usize>,
-  symbols: Map<SymbolId, usize>,
+  p_map: &mut OrderedMap<SymbolId, usize>,
+  symbols: OrderedMap<SymbolId, usize>,
 ) {
   for DBRule { rule, is_scanner, .. } in r_table {
     for SymbolRef { id: sym, original_index: index, .. } in &mut rule.symbols {
@@ -504,8 +478,8 @@ fn convert_rule_symbols(
 /// Converts an AST symbol into a DB symbol.
 fn convert_symbol(
   sym: &SymbolId,
-  p_map: &mut std::collections::HashMap<SymbolId, usize>,
-  symbols: &std::collections::HashMap<SymbolId, usize>,
+  p_map: &mut OrderedMap<SymbolId, usize>,
+  symbols: &OrderedMap<SymbolId, usize>,
   is_scanner: bool,
 ) -> SymbolId {
   match *sym {
@@ -537,18 +511,15 @@ fn convert_symbol(
 fn extract_prod_syms(
   rules: &[Rule],
   production_queue: &mut VecDeque<(Token, ProductionId)>,
-  productions: &Map<ProductionId, Box<Production>>,
+  productions: &OrderedMap<ProductionId, Box<Production>>,
   s_store: &IStringStore,
-  symbols: &mut Map<SymbolId, usize>,
-  token_names: &mut Map<SymbolId, IString>,
+  symbols: &mut OrderedMap<SymbolId, usize>,
+  token_names: &mut OrderedMap<SymbolId, IString>,
   token_productions: &mut VecDeque<ProductionId>,
 ) -> SherpaResult<()> {
   for rule in rules {
-    for (sym, tok) in rule
-      .symbols
-      .iter()
-      .map(|s| (s.id, s.loc.clone()))
-      .chain(rule.skipped.iter().map(|s| (*s, Default::default())))
+    for (sym, tok) in
+      rule.symbols.iter().map(|s| (s.id, s.loc.clone())).chain(rule.skipped.iter().map(|s| (*s, Default::default())))
     {
       match sym {
         SymbolId::NonTerminal { id, .. } => match id {
@@ -573,11 +544,7 @@ fn extract_prod_syms(
   SherpaResult::Ok(())
 }
 
-fn add_prod_name(
-  prod_name_lu: &mut Vec<(IString, IString)>,
-  guid_name: IString,
-  friendly_name: IString,
-) {
+fn add_prod_name(prod_name_lu: &mut Vec<(IString, IString)>, guid_name: IString, friendly_name: IString) {
   prod_name_lu.push((guid_name, friendly_name));
 }
 
@@ -585,7 +552,7 @@ fn add_prod_name(
 fn add_prod_and_rules(
   prod_sym: SymbolId,
   prod_rules: Array<Rule>,
-  production_map: &mut std::collections::HashMap<SymbolId, usize>,
+  production_map: &mut OrderedMap<SymbolId, usize>,
   rules: &mut Array<DBRule>,
   prod_rule_map: &mut Array<Array<DBRuleKey>>,
   is_scanner: bool,
@@ -596,12 +563,7 @@ fn add_prod_and_rules(
 
   prod_rule_map.push(rules_ids.map(|i| i.into()).collect::<Array<_>>());
 
-  rules.append(
-    &mut prod_rules
-      .into_iter()
-      .map(|r| DBRule { rule: r, prod_id: prod_index.into(), is_scanner })
-      .collect(),
-  );
+  rules.append(&mut prod_rules.into_iter().map(|r| DBRule { rule: r, prod_id: prod_index.into(), is_scanner }).collect());
 
   let val = production_map.insert(prod_sym, prod_index);
 
@@ -609,15 +571,10 @@ fn add_prod_and_rules(
 }
 
 fn convert_index_map_to_vec<T, C: IntoIterator<Item = (T, usize)>>(production_map: C) -> Array<T> {
-  production_map
-    .into_iter()
-    .map(|(k, v)| (v, k))
-    .collect::<OrderedMap<_, _>>()
-    .into_values()
-    .collect::<Array<_>>()
+  production_map.into_iter().map(|(k, v)| (v, k)).collect::<OrderedMap<_, _>>().into_values().collect::<Array<_>>()
 }
 
-fn insert_symbol(symbol_map: &mut Map<SymbolId, usize>, sym: &SymbolId) {
+fn insert_symbol(symbol_map: &mut OrderedMap<SymbolId, usize>, sym: &SymbolId) {
   if !symbol_map.contains_key(sym) {
     symbol_map.insert(*sym, symbol_map.len());
   }

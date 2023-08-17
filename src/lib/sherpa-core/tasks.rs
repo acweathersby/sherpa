@@ -70,7 +70,7 @@ impl Worker {
 
           if let Ok(task) = task {
             // Wait for a pending thread.
-
+            #[cfg(debug_assertions)]
             println!("Thread {} received task", id);
 
             //Dispatch the task on the respective thread.

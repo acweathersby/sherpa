@@ -42,6 +42,8 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
     "peek"          :ast { t_Peek, tok }
 
+    | "peek-skip"   :ast { t_PeekSkip, tok }
+
     | "shift"       :ast { t_Shift, tok }
 
     | "skip"        :ast { t_Skip, tok }
@@ -50,7 +52,7 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
     | "scan"        :ast { t_Scan, tok }
 
-    | "reset"        :ast { t_Reset, tok }
+    | "reset"       :ast { t_Reset, tok }
 
 
 <> terminal_statement >
@@ -94,19 +96,19 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
 <> goto_push > "push" sym::non_terminal
 
-    :ast { t_Push, prod: $2, tok }
+    :ast { t_Push, prod: $2, name:str($2), tok }
 
 <> goto > "goto" sym::non_terminal
 
-    :ast { t_Goto, prod: $2, tok }
+    :ast { t_Goto, prod: $2, name:str($2), tok }
 
 <> match > generic_match_block | production_match_block | terminal_match_block
 
 <> generic_match_block >
 
-    "match" ":" tok::id^id ( ":" sym::non_terminal )?^scanner ( int_match :ast [$1] | "{" (int_match | default_match | hint)(+) "}" :ast $2  )^m
+    "match" ":" tok::id^id ( ":" tok::id :ast str($2) )?^scanner ( int_match :ast [$1] | "{" ( int_match | default_match | hint )(+) "}" :ast $2  )^m
 
-        :ast { t_Matches, mode: str($id), matches:$m, scanner:$scanner }
+        :ast { t_Matches, mode: str($id), matches:$m, scanner, tok }
 
 
 <> production_match_block >

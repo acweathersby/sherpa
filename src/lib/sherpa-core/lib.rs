@@ -1,8 +1,14 @@
 //! Sherpa Core
 //!
+//! A Parser Compiler Framework
+//!
 //! This library contains all functions and types needed to create
-//! an update Sherpa grammars, and to generate Sherpa parser IR states
+//! and update Sherpa grammars, generate Sherpa parser IR states, and
+//! optimize to create the best parsers possible.
+//!
+//! Visit [Sherpa Docs](https://localhost:1313) to learn more about Sherpa.
 
+#![allow(non_snake_case)]
 #![feature(try_trait_v2)]
 #![feature(box_patterns)]
 

@@ -44,9 +44,9 @@ pub fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
 
   let parse_states = combine_state_branches(db, parse_states)?;
 
-  let parse_states = create_byte_chains(db, parse_states)?;
-
-  let parse_states = inline_matches(db, parse_states)?;
+  // let parse_states = create_byte_chains(db, parse_states)?;
+  //
+  // let parse_states = inline_matches(db, parse_states)?;
 
   start_complexity.print_comparison(&ComplexityMarker::new(db, parse_states.iter()), "Total optimization result");
 
@@ -89,8 +89,6 @@ impl ComplexityMarker {
     );
   }
 }
-
-pub fn calculateComplexity() {}
 
 /// Extract the target name of a goto or push statement
 pub fn get_goto_target_name(node: &ASTNode) -> String {

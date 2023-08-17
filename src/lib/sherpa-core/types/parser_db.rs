@@ -85,27 +85,27 @@ impl ParserDatabase {
   pub fn new(
     name: IString,
     prod_syms: Array<SymbolId>,
-    prod_name_lu: Array<(IString, IString)>,
-    prod_to_rules: Array<Array<DBRuleKey>>,
+    prod_names: Array<(IString, IString)>,
+    prod_rules: Array<Array<DBRuleKey>>,
     rules: Array<DBRule>,
-    token_lu: Array<DBTokenData>,
+    tokens: Array<DBTokenData>,
     entry_points: Array<EntryPoint>,
     string_store: IStringStore,
     custom_states: Array<Option<Box<parser::State>>>,
     valid: bool,
   ) -> Self {
-    let lr_items = construct_follow(&prod_syms, &rules);
+    let follow_items = construct_follow(&prod_syms, &rules);
 
     Self {
       name,
       prod_syms,
-      prod_names: prod_name_lu,
-      prod_rules: prod_to_rules,
+      prod_names,
+      prod_rules,
       rules,
-      tokens: token_lu,
+      tokens,
       entry_points,
       string_store,
-      follow_items: lr_items,
+      follow_items,
       custom_states,
       valid,
     }

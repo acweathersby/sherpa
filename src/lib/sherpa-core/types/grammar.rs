@@ -197,7 +197,7 @@ pub struct CustomState {
   pub g_id: GrammarId,
   pub guid_name: IString,
   pub friendly_name: IString,
-  pub symbols: Set<SymbolId>,
+  pub symbols: OrderedSet<SymbolId>,
   pub state: Box<parser::State>,
   pub tok: Token,
 }
@@ -213,7 +213,7 @@ pub struct Production {
 
   /// All symbols that are referenced by the rules of the
   /// production and its sub-productions.
-  pub symbols: Set<SymbolId>,
+  pub symbols: OrderedSet<SymbolId>,
 
   /// All rules that reduce to this production
   pub rules: Array<Rule>,

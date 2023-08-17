@@ -36,7 +36,7 @@ impl<'db> ParseState {
       scanners: &mut Map<IString, OrderedSet<DBTokenData>>,
     ) {
       match &mut statement.branch {
-        Some(ASTNode::Matches(box Matches { mode, matches, meta })) if mode == InputType::TOKEN_STR => {
+        Some(ASTNode::Matches(box Matches { mode, matches, meta, .. })) if mode == InputType::TOKEN_STR => {
           let mut scanner_data = OrderedSet::new();
           for m in matches {
             match m {
@@ -255,10 +255,10 @@ fn renderIR<T: Write>(db: &ParserDatabase, mut w: &mut CodeWriter<T>, node: &AST
     ASTNode::Fail(..) => w.write(" fail")?,
     ASTNode::Pass(..) => w.write(" pass")?,
     ASTNode::Accept(..) => w.write(" accept")?,
-    ASTNode::ReduceRaw(box parser::ReduceRaw { len, prod_id, rule_id }) => {
+    ASTNode::ReduceRaw(box parser::ReduceRaw { len, prod_id, rule_id, .. }) => {
       w = (w + " reduce " + len.to_string() + " symbols to " + prod_id.to_string() + " with rule " + rule_id.to_string());
     }
-    ASTNode::SetTokenId(box parser::SetTokenId { id }) => {
+    ASTNode::SetTokenId(box parser::SetTokenId { id, .. }) => {
       w = (w + " set-tok " + id.to_string());
     }
 
