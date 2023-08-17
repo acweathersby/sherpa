@@ -16,14 +16,7 @@ use builder::{
 };
 use sherpa_ascript::{output_base::AscriptWriter, types::AScriptStore};
 use sherpa_bytecode::compile_bytecode;
-use sherpa_core::{
-  compile_parse_states,
-  optimize,
-  CodeWriter,
-  Journal,
-  ParserDatabase,
-  SherpaResult,
-};
+use sherpa_core::{compile_parse_states, optimize, CodeWriter, Journal, ParserDatabase, SherpaResult};
 
 pub fn build_rust(mut j: Journal, db: &ParserDatabase) -> SherpaResult<String> {
   j.set_active_report("Rust AST Compile", sherpa_core::ReportType::Any);
@@ -37,19 +30,16 @@ pub fn build_rust(mut j: Journal, db: &ParserDatabase) -> SherpaResult<String> {
   String::from_utf8(writer.into_writer().into_output()).into()
 }
 
-pub async fn compile_rust_bytecode_parser(
-  j: &mut Journal,
-  db: &ParserDatabase,
-) -> SherpaResult<String> {
+pub async fn compile_rust_bytecode_parser(j: &mut Journal, db: &ParserDatabase) -> SherpaResult<String> {
   let j1 = j.transfer();
   let mut j2 = j.transfer();
 
   let a = async move {
     let states = compile_parse_states(j1, &db)?;
 
-    let states = optimize::<Vec<_>>(&db, states)?;
+    let states = optimize::<Vec<_>>(&db, states, false)?;
 
-    compile_bytecode(&db, states.iter())
+    compile_bytecode(&db, states.iter(), false)
   };
 
   let store = async move { AScriptStore::new(&mut j2, &db) };
@@ -62,10 +52,8 @@ pub async fn compile_rust_bytecode_parser(
 
   assert!(!j.have_errors_of_type(sherpa_core::SherpaErrorSeverity::Critical));
 
-  let state_lookups = state_lookups
-    .into_iter()
-    .map(|(name, offset)| (name.to_string(db.string_store()), offset as u32))
-    .collect();
+  let state_lookups =
+    state_lookups.into_iter().map(|(name, offset)| (name.to_string(db.string_store()), offset as u32)).collect();
 
   let u = create_rust_writer_utils(&store, &db);
 
@@ -114,7 +102,7 @@ use sherpa_rust_runtime::{
   )?;
 
   add_ascript_functions_for_rust(&mut writer, db)?;
-  
+
   let mut writer = write_rust_ast(writer)?;
 
   let writer = write_rust_bytecode_parser_file(writer, &state_lookups, &bytecode)?;

@@ -10,7 +10,7 @@ pub fn compile_parse_states<'db>(mut j: Journal, db: &'db ParserDatabase) -> She
   j.set_active_report("State Compile", ReportType::ProductionCompile(Default::default()));
 
   let follow = create_follow_sets(db);
-  let mut states = Map::new();
+  let mut states = OrderedMap::new();
   let mut scanners = OrderedSet::new();
 
   // Build entry states

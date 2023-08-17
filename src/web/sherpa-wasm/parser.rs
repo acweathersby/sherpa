@@ -39,12 +39,8 @@ impl JSGrammarParser {
 
   pub fn next(&mut self) -> JsValue {
     match self.bytecode_parser.get_next_action(&mut None) {
-      ParseAction::Accept { production_id } => {
-        serde_wasm_bindgen::to_value(&JsonParseAction::Accept).unwrap()
-      }
-      ParseAction::EndOfInput { current_cursor_offset } => {
-        serde_wasm_bindgen::to_value(&JsonParseAction::EndOfInput).unwrap()
-      }
+      ParseAction::Accept { production_id } => serde_wasm_bindgen::to_value(&JsonParseAction::Accept).unwrap(),
+      ParseAction::EndOfInput { current_cursor_offset } => serde_wasm_bindgen::to_value(&JsonParseAction::EndOfInput).unwrap(),
       ParseAction::Shift { token_byte_offset, token_byte_length, token_id, .. } => {
         serde_wasm_bindgen::to_value(&JsonParseAction::Shift { len: token_byte_length }).unwrap()
       }
@@ -52,15 +48,9 @@ impl JSGrammarParser {
         serde_wasm_bindgen::to_value(&JsonParseAction::Skip { len: token_byte_length }).unwrap()
       }
       ParseAction::Reduce { production_id, rule_id, symbol_count } => {
-        serde_wasm_bindgen::to_value(&JsonParseAction::Reduce {
-          len:     symbol_count,
-          prod_id: production_id,
-        })
-        .unwrap()
+        serde_wasm_bindgen::to_value(&JsonParseAction::Reduce { len: symbol_count, prod_id: production_id }).unwrap()
       }
-      ParseAction::Error { last_production, last_input } => {
-        serde_wasm_bindgen::to_value(&JsonParseAction::Error).unwrap()
-      }
+      ParseAction::Error { last_production, last_input } => serde_wasm_bindgen::to_value(&JsonParseAction::Error).unwrap(),
       _ => panic!("Unexpected Action!"),
     }
   }
@@ -90,15 +80,12 @@ impl JSByteCodeParser {
       running:         false,
       _reader:         other_reader,
       _bytecode:       other_bytecode,
-      bytecode_parser: ByteCodeParser::new(unsafe { &mut *reader_ptr.as_ptr() }, unsafe {
-        &*bytecode_ptr.as_ptr()
-      }),
+      bytecode_parser: ByteCodeParser::new(unsafe { &mut *reader_ptr.as_ptr() }, unsafe { &*bytecode_ptr.as_ptr() }),
     }
   }
 
   pub fn init(&mut self, entry_name: String, bytecode: &JSBytecode, db: &JSParserDB) {
-    let offset =
-      db.0.get_entry_offset(&entry_name, &bytecode.0 .1).expect("Could not find entry point");
+    let offset = db.0.get_entry_offset(&entry_name, &bytecode.0 .1).expect("Could not find entry point");
 
     self.bytecode_parser.init_parser(offset as u32);
 
@@ -125,9 +112,7 @@ impl JSByteCodeParser {
           self.running = false;
           serde_wasm_bindgen::to_value(&JsonParseAction::Accept).unwrap()
         }
-        ParseAction::EndOfInput { current_cursor_offset } => {
-          serde_wasm_bindgen::to_value(&JsonParseAction::EndOfInput).unwrap()
-        }
+        ParseAction::EndOfInput { current_cursor_offset } => serde_wasm_bindgen::to_value(&JsonParseAction::EndOfInput).unwrap(),
         ParseAction::Shift { token_byte_offset, token_byte_length, token_id, .. } => {
           if let LockResult::Ok(mut values) = values.write() {
             values.push(JSDebugEvent::from(JSDebugEvent::ShiftToken {
@@ -141,11 +126,7 @@ impl JSByteCodeParser {
           serde_wasm_bindgen::to_value(&JsonParseAction::Skip { len: token_byte_length }).unwrap()
         }
         ParseAction::Reduce { production_id, rule_id, symbol_count } => {
-          serde_wasm_bindgen::to_value(&JsonParseAction::Reduce {
-            len:     symbol_count,
-            prod_id: production_id,
-          })
-          .unwrap()
+          serde_wasm_bindgen::to_value(&JsonParseAction::Reduce { len: symbol_count, prod_id: production_id }).unwrap()
         }
         ParseAction::Error { last_production, last_input } => {
           self.running = false;
@@ -155,14 +136,7 @@ impl JSByteCodeParser {
       }
     };
 
-    let val = unsafe {
-      Rc::try_unwrap(values)
-        .unwrap_unchecked()
-        .into_inner()
-        .expect("to work")
-        .into_iter()
-        .collect::<Vec<_>>()
-    };
+    let val = unsafe { Rc::try_unwrap(values).unwrap_unchecked().into_inner().expect("to work").into_iter().collect::<Vec<_>>() };
 
     serde_wasm_bindgen::to_value(&val).unwrap()
   }
@@ -171,8 +145,9 @@ impl JSByteCodeParser {
 #[wasm_bindgen]
 pub fn get_codemirror_parse_tree(input: String) -> JsValue {
   let mut reader = StringReader::StringReader::new(input);
-  let mut bytecode_parser = ByteCodeParser::<'static, _, u32>::new(&mut reader, &parser::bytecode);
-  bytecode_parser.init_parser(60);
+  let mut bytecode_parser: ByteCodeParser<'_, StringReader::StringReader, u32> =
+    ByteCodeParser::<'static, _, u32>::new(&mut reader, &parser::bytecode);
+  bytecode_parser.init_parser(93016);
 
   let mut output = vec![];
   let mut acc_stack: Vec<u32> = vec![];
@@ -224,10 +199,7 @@ pub fn get_codemirror_parse_tree(input: String) -> JsValue {
 
 #[wasm_bindgen]
 pub fn get_production_names() -> JsValue {
-  serde_wasm_bindgen::to_value(&ProdNames(
-    parser::meta::production_names.iter().map(|i| (*i).to_string()).collect(),
-  ))
-  .unwrap()
+  serde_wasm_bindgen::to_value(&ProdNames(parser::meta::production_names.iter().map(|i| (*i).to_string()).collect())).unwrap()
 }
 
 #[derive(Serialize, Deserialize)]
@@ -335,24 +307,12 @@ impl<'a> From<&DebugEvent<'a>> for JSDebugEvent {
         tok_id,
         sym_len,
       },
-      DebugEvent::SkipToken { offset_start, offset_end } => {
-        JSDebugEvent::SkipToken { offset_start, offset_end }
-      }
-      DebugEvent::ShiftToken { offset_start, offset_end } => {
-        JSDebugEvent::ShiftToken { offset_start, offset_end }
-      }
-      DebugEvent::ByteValue { input_value, start, end } => {
-        JSDebugEvent::ByteValue { input_value, start, end }
-      }
-      DebugEvent::CodePointValue { input_value, start, end } => {
-        JSDebugEvent::CodePointValue { input_value, start, end }
-      }
-      DebugEvent::ClassValue { input_value, start, end } => {
-        JSDebugEvent::ClassValue { input_value, start, end }
-      }
-      DebugEvent::TokenValue { input_value, start, end } => {
-        JSDebugEvent::TokenValue { input_value, start, end }
-      }
+      DebugEvent::SkipToken { offset_start, offset_end } => JSDebugEvent::SkipToken { offset_start, offset_end },
+      DebugEvent::ShiftToken { offset_start, offset_end } => JSDebugEvent::ShiftToken { offset_start, offset_end },
+      DebugEvent::ByteValue { input_value, start, end } => JSDebugEvent::ByteValue { input_value, start, end },
+      DebugEvent::CodePointValue { input_value, start, end } => JSDebugEvent::CodePointValue { input_value, start, end },
+      DebugEvent::ClassValue { input_value, start, end } => JSDebugEvent::ClassValue { input_value, start, end },
+      DebugEvent::TokenValue { input_value, start, end } => JSDebugEvent::TokenValue { input_value, start, end },
       DebugEvent::GotoValue { production_id } => JSDebugEvent::GotoValue { production_id },
       DebugEvent::Reduce { rule_id } => JSDebugEvent::Reduce { rule_id },
       DebugEvent::Complete { production_id } => JSDebugEvent::Complete { production_id },

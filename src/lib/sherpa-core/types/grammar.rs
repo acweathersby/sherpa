@@ -296,7 +296,7 @@ pub struct GrammarHeader {
   /// Productions that are accessible as entry points to this
   /// grammar. Contains the global id of the public production
   /// and its export name.
-  pub pub_prods: Map<IString, (ProductionId, Token)>,
+  pub pub_prods: OrderedMap<IString, (ProductionId, Token)>,
 
   pub imports: Array<GrammarId>,
 }
@@ -366,7 +366,7 @@ use ::std::sync;
 #[derive(Clone, Default)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct GrammarSoup {
-  pub grammar_headers: Arc<sync::RwLock<Map<GrammarId, Box<GrammarHeader>>>>,
+  pub grammar_headers: Arc<sync::RwLock<OrderedMap<GrammarId, Box<GrammarHeader>>>>,
   //pub productions:     Arc<sync::RwLock<Map<ProductionId, Box<Production>>>>,
   pub productions:     Arc<sync::RwLock<Array<Box<Production>>>>,
   pub custom_states:   Arc<sync::RwLock<Map<ProductionId, Box<CustomState>>>>,

@@ -22,14 +22,9 @@ mod types;
 mod utils;
 mod writer;
 
-pub use compile::{compile_parse_states, garbage_collect, get_goto_target_name, optimize};
+pub use compile::{compile_parse_states, garbage_collect, optimize};
 
-pub use grammar::{
-  build_compile_db,
-  compile_grammar_from_str,
-  compile_grammars_from_path,
-  remove_grammar_mut,
-};
+pub use grammar::{build_compile_db, compile_grammar_from_str, compile_grammars_from_path, remove_grammar_mut};
 pub use journal::{Config, Journal, Report, ReportType};
 pub use tasks::new_taskman;
 pub use types::{

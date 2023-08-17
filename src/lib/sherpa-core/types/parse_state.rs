@@ -2,14 +2,13 @@ use sherpa_rust_runtime::types::bytecode::InputType;
 
 use super::*;
 use crate::{
-  get_goto_target_name,
-  parser::{self, ASTNode, DefaultMatch, Matches, State, Statement},
+  parser::{self, ASTNode, Matches, State, Statement},
   utils::create_u64_hash,
-  writer::code_writer::{self, CodeWriter},
+  writer::code_writer::CodeWriter,
 };
 
 pub type ParseStatesVec = Array<(IString, Box<ParseState>)>;
-pub type ParseStatesMap = Map<IString, Box<ParseState>>;
+pub type ParseStatesMap = OrderedMap<IString, Box<ParseState>>;
 
 #[allow(unused)]
 #[cfg(debug_assertions)]
@@ -36,7 +35,7 @@ impl<'db> ParseState {
       scanners: &mut Map<IString, OrderedSet<DBTokenData>>,
     ) {
       match &mut statement.branch {
-        Some(ASTNode::Matches(box Matches { mode, matches, meta, .. })) if mode == InputType::TOKEN_STR => {
+        Some(ASTNode::Matches(box Matches { mode, matches, scanner, .. })) if mode == InputType::TOKEN_STR => {
           let mut scanner_data = OrderedSet::new();
           for m in matches {
             match m {
@@ -51,7 +50,7 @@ impl<'db> ParseState {
           }
           let name = ParseState::get_interned_scanner_name(&scanner_data, db.string_store());
 
-          (*meta) = name.as_u64();
+          (*scanner) = name.to_string(db.string_store());
 
           scanners.insert(name, scanner_data);
         }
@@ -150,7 +149,7 @@ impl<'db> ParseState {
     if let SherpaResult::Ok(ast) = self.get_ast() {
       let mut cw = CodeWriter::new(vec![]);
 
-      renderIR(db, &mut cw, &ASTNode::State(ast.clone()), print_header)?;
+      render_IR(db, &mut cw, &ASTNode::State(ast.clone()), print_header)?;
 
       unsafe { SherpaResult::Ok(String::from_utf8_unchecked(cw.into_output())) }
     } else {
@@ -189,13 +188,13 @@ impl ParseState {
 }
 
 /// Renders a string from an IR AST
-fn renderIR<T: Write>(db: &ParserDatabase, mut w: &mut CodeWriter<T>, node: &ASTNode, add_header: bool) -> SherpaResult<()> {
+fn render_IR<T: Write>(db: &ParserDatabase, mut w: &mut CodeWriter<T>, node: &ASTNode, add_header: bool) -> SherpaResult<()> {
   match node {
-    ASTNode::State(box parser::State { catches, id, statement, .. }) => {
+    ASTNode::State(box parser::State { id, statement, .. }) => {
       if add_header {
-        w = (w + &id.name + " =>");
+        w = w + &id.name + " =>";
       }
-      renderIR(db, w, &ASTNode::Statement(statement.clone()), false);
+      render_IR(db, w, &ASTNode::Statement(statement.clone()), false);
     }
     ASTNode::Statement(box parser::Statement { branch, non_branch, transitive }) => {
       let mut nodes = vec![];
@@ -213,18 +212,26 @@ fn renderIR<T: Write>(db: &ParserDatabase, mut w: &mut CodeWriter<T>, node: &AST
       }
 
       for (i, node) in nodes.iter().enumerate() {
-        renderIR(db, w, node, false)?;
+        render_IR(db, w, node, false)?;
         if i < nodes.len() - 1 {
           w = w + " then";
         }
       }
     }
-    ASTNode::Matches(box parser::Matches { matches, mode, .. }) => {
-      w = (w.indent().newline()? + "match: " + mode + " {").indent();
+    ASTNode::Matches(box parser::Matches { matches, scanner, mode, .. }) => {
+      w = w.indent().newline()? + "match: " + mode;
+
+      if !scanner.is_empty() {
+        w = w + " :" + scanner;
+      }
+
+      w = w + " {";
+
+      w.indent();
 
       for m in matches {
         w = w.newline()?;
-        renderIR(db, w, m, false)?;
+        render_IR(db, w, m, false)?;
       }
 
       w = (w.dedent().newline()? + "}").dedent().newline()?;
@@ -233,7 +240,7 @@ fn renderIR<T: Write>(db: &ParserDatabase, mut w: &mut CodeWriter<T>, node: &AST
     ASTNode::DefaultMatch(box parser::DefaultMatch { statement, .. }) => {
       w = w + "default {";
 
-      renderIR(db, w, &ASTNode::Statement(statement.clone()), false);
+      render_IR(db, w, &ASTNode::Statement(statement.clone()), false);
 
       w = w + " }";
     }
@@ -242,10 +249,11 @@ fn renderIR<T: Write>(db: &ParserDatabase, mut w: &mut CodeWriter<T>, node: &AST
       w = w + "( " + vals.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(" | ") + " )";
       w = w + " {";
 
-      renderIR(db, w, &ASTNode::Statement(statement.clone()), false);
+      render_IR(db, w, &ASTNode::Statement(statement.clone()), false);
 
       w = w + " }";
     }
+    ASTNode::PeekSkip(..) => w.write(" peek-skip")?,
     ASTNode::Peek(..) => w.write(" peek")?,
     ASTNode::Shift(..) => w.write(" shift")?,
     ASTNode::Skip(..) => w.write(" skip")?,
@@ -256,25 +264,25 @@ fn renderIR<T: Write>(db: &ParserDatabase, mut w: &mut CodeWriter<T>, node: &AST
     ASTNode::Pass(..) => w.write(" pass")?,
     ASTNode::Accept(..) => w.write(" accept")?,
     ASTNode::ReduceRaw(box parser::ReduceRaw { len, prod_id, rule_id, .. }) => {
-      w = (w + " reduce " + len.to_string() + " symbols to " + prod_id.to_string() + " with rule " + rule_id.to_string());
+      w = w + " reduce " + len.to_string() + " symbols to " + prod_id.to_string() + " with rule " + rule_id.to_string();
     }
     ASTNode::SetTokenId(box parser::SetTokenId { id, .. }) => {
-      w = (w + " set-tok " + id.to_string());
+      w = w + " set-tok " + id.to_string();
     }
 
     ASTNode::Gotos(box parser::Gotos { goto, pushes }) => {
       if pushes.len() > 1 {
         w.indent().newline()?;
         for push in pushes {
-          w = (w + " push " + get_goto_target_name(&push.prod) + " then").newline()?;
+          w = (w + " push " + &push.name + " then").newline()?;
         }
-        w = (w + " goto " + get_goto_target_name(&goto.prod));
+        w = w + " goto " + &goto.name;
         w.dedent().newline()?;
       } else {
         for push in pushes {
-          w = (w + " push " + get_goto_target_name(&push.prod) + " then");
+          w = w + " push " + &push.name + " then";
         }
-        w = (w + " goto " + get_goto_target_name(&goto.prod));
+        w = w + " goto " + &goto.name;
       }
     }
     _ => {}

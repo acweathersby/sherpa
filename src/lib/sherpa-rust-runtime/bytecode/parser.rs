@@ -186,8 +186,8 @@ fn shift_token<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
   debug_assert!(
     ctx.start_line_off as usize <= ctx.head_ptr,
     "
-The start line offset should never be advanced further than the head_ptr at this point
-head_ptr: {}  start_line_off:{}",
+  The `start_line_offset` should not be advanced further than the `head_ptr` at this point
+  head_ptr: {}  start_line_off:{}",
     ctx.head_ptr,
     ctx.start_line_off
   );
@@ -597,12 +597,14 @@ fn emit_debug_value<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
   if let Some(debug) = debug {
     match input_type {
       InputType::Production => debug(&DebugEvent::GotoValue { production_id: input_value }, ctx.get_str()),
-      InputType::Byte => debug(&DebugEvent::ByteValue { input_value, start, end }, ctx.get_str()),
-      InputType::Class => debug(&DebugEvent::ClassValue { input_value, start, end }, ctx.get_str()),
+      InputType::Byte | InputType::ByteScanless => debug(&DebugEvent::ByteValue { input_value, start, end }, ctx.get_str()),
+      InputType::Class | InputType::ClassScanless => debug(&DebugEvent::ClassValue { input_value, start, end }, ctx.get_str()),
       InputType::Token => debug(&DebugEvent::TokenValue { input_value, start, end }, ctx.get_str()),
-      InputType::Codepoint => debug(&DebugEvent::CodePointValue { input_value, start, end }, ctx.get_str()),
+      InputType::Codepoint | InputType::CodepointScanless => {
+        debug(&DebugEvent::CodePointValue { input_value, start, end }, ctx.get_str())
+      }
       InputType::EndOfFile => debug(&DebugEvent::EndOfFile, ctx.get_str()),
-      _ => unreachable!(),
+      _ => unreachable!("Invalid input type selector"),
     };
   }
 }

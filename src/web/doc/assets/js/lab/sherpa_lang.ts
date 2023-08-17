@@ -9,6 +9,7 @@ import { tags, Tag, styleTags, tagHighlighter } from '@lezer/highlight';
 import { syntaxHighlighting, HighlightStyle, defaultHighlightStyle } from '@codemirror/language';
 import { linter, Diagnostic } from "@codemirror/lint";
 import { GrammarContext } from "./grammar_context";
+import { set_grammar } from "./session_storage";
 
 class SherpaParser extends Parser {
 
@@ -78,6 +79,8 @@ class SherpaParser extends Parser {
 function SherpaLinter(ctx: GrammarContext) {
     return linter((view) => {
         console.log("Linting!")
+
+        set_grammar(view.state.doc.toString());
 
         let messages: Diagnostic[] = [];
 

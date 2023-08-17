@@ -13,12 +13,7 @@ use sherpa_core::{
   *,
 };
 use sherpa_rust_runtime::{
-  llvm_parser::{
-    sherpa_allocate_stack,
-    sherpa_free_stack,
-    sherpa_get_token_class_from_codepoint,
-    LLVMByteReader,
-  },
+  llvm_parser::{sherpa_allocate_stack, sherpa_free_stack, sherpa_get_token_class_from_codepoint, LLVMByteReader},
   types::{
     ast::{AstObject, AstSlot, AstStackSlice},
     BlameColor,
@@ -60,19 +55,14 @@ where
     .collect::<Vec<_>>()
 }
 
-type Init<R = UTF8StringReader<'static>, T = u32> =
-  unsafe extern "C" fn(*mut ParseContext<R, T>, *mut R);
-type PushState<R = UTF8StringReader<'static>, T = u32> =
-  unsafe extern "C" fn(*mut ParseContext<R, T>, u32, usize);
+type Init<R = UTF8StringReader<'static>, T = u32> = unsafe extern "C" fn(*mut ParseContext<R, T>, *mut R);
+type PushState<R = UTF8StringReader<'static>, T = u32> = unsafe extern "C" fn(*mut ParseContext<R, T>, u32, usize);
 
-type Next<R = UTF8StringReader<'static>, T = u32> =
-  unsafe extern "C" fn(*mut ParseContext<R, T>) -> ParseActionType;
+type Next<R = UTF8StringReader<'static>, T = u32> = unsafe extern "C" fn(*mut ParseContext<R, T>) -> ParseActionType;
 
-type Prime<R = UTF8StringReader<'static>, T = u32> =
-  unsafe extern "C" fn(*mut ParseContext<R, T>, u32);
+type Prime<R = UTF8StringReader<'static>, T = u32> = unsafe extern "C" fn(*mut ParseContext<R, T>, u32);
 
-type Extend<R = UTF8StringReader<'static>, T = u32> =
-  unsafe extern "C" fn(*mut ParseContext<R, T>, u32);
+type Extend<R = UTF8StringReader<'static>, T = u32> = unsafe extern "C" fn(*mut ParseContext<R, T>, u32);
 
 type Drop<R = UTF8StringReader<'static>, T = u32> = unsafe extern "C" fn(*mut ParseContext<R, T>);
 
@@ -87,21 +77,14 @@ fn setup_exec_engine<'a>(module: &Module<'a>) -> ExecutionEngine<'a> {
   module.create_jit_execution_engine(inkwell::OptimizationLevel::Aggressive).unwrap()
 }
 
-fn build_fast_call_shim<'a>(
-  module: &LLVMParserModule<'a>,
-  fun: inkwell::values::FunctionValue<'a>,
-) -> SherpaResult<()> {
+fn build_fast_call_shim<'a>(module: &LLVMParserModule<'a>, fun: inkwell::values::FunctionValue<'a>) -> SherpaResult<()> {
   let name = fun.get_name().to_str().unwrap();
   let builder = &module.b;
   let shim = module.module.add_function(&format!("{}_shim", name), fun.get_type(), None);
   shim.set_call_conventions(7);
   builder.position_at_end(module.ctx.append_basic_block(shim, "Entry"));
 
-  let result = build_fast_call(
-    &module.b,
-    fun,
-    &shim.get_params().into_iter().map(|i| i.into()).collect::<Vec<_>>(),
-  )?;
+  let result = build_fast_call(&module.b, fun, &shim.get_params().into_iter().map(|i| i.into()).collect::<Vec<_>>())?;
 
   match result.try_as_basic_value().left() {
     Some(value) => builder.build_return(Some(&value)),
@@ -116,12 +99,7 @@ fn verify_construction_of_init_function() -> SherpaResult<()> {
   let context = Context::create();
   let target_machine = crate_target_test_machine()?;
   let target_data = target_machine.get_target_data();
-  let module = construct_module(
-    &mut Journal::new(None),
-    &context,
-    &target_data,
-    context.create_module("test"),
-  );
+  let module = construct_module(&mut Journal::new(None), &context, &target_data, context.create_module("test"));
 
   unsafe { assert!(construct_init(&module).is_ok()) }
 
@@ -135,12 +113,7 @@ fn verify_construction_of_ast_builder() -> SherpaResult<()> {
   let context = Context::create();
   let target_machine = crate_target_test_machine()?;
   let target_data = target_machine.get_target_data();
-  let module = construct_module(
-    &mut Journal::new(None),
-    &context,
-    &target_data,
-    context.create_module("test"),
-  );
+  let module = construct_module(&mut Journal::new(None), &context, &target_data, context.create_module("test"));
 
   unsafe { assert!(construct_ast_builder::<u32>(&module).is_ok()) }
 
@@ -154,12 +127,7 @@ fn verify_construction_of_push_state_function() -> SherpaResult<()> {
   let context = Context::create();
   let target_machine = crate_target_test_machine()?;
   let target_data = target_machine.get_target_data();
-  let module = construct_module(
-    &mut Journal::new(None),
-    &context,
-    &target_data,
-    context.create_module("test"),
-  );
+  let module = construct_module(&mut Journal::new(None), &context, &target_data, context.create_module("test"));
 
   assert!(construct_push_state_function(&module).is_ok());
 
@@ -210,10 +178,7 @@ fn should_push_new_state() -> SherpaResult<()> {
     push_state_fn.call(&mut rt_ctx, NORMAL_STATE_FLAG_LLVM, 0x01010101_10101010);
 
     let stack = std::slice::from_raw_parts(
-      {
-        (rt_ctx.goto_stack_ptr as usize - ((rt_ctx.goto_size - rt_ctx.goto_free) << 4) as usize)
-          as *mut Goto
-      },
+      { (rt_ctx.goto_stack_ptr as usize - ((rt_ctx.goto_size - rt_ctx.goto_free) << 4) as usize) as *mut Goto },
       rt_ctx.goto_size as usize,
     );
 
@@ -237,12 +202,7 @@ fn verify_construction_of_get_adjusted_input_block_function() -> SherpaResult<()
   let context = Context::create();
   let target_machine = crate_target_test_machine()?;
   let target_data = target_machine.get_target_data();
-  let module = construct_module(
-    &mut Journal::new(None),
-    &context,
-    &target_data,
-    context.create_module("test"),
-  );
+  let module = construct_module(&mut Journal::new(None), &context, &target_data, context.create_module("test"));
 
   unsafe { assert!(construct_get_adjusted_input_block_function(&module).is_ok()) }
 
@@ -256,12 +216,7 @@ fn verify_construction_of_emit_eop_function() -> SherpaResult<()> {
   let context = Context::create();
   let target_machine = crate_target_test_machine()?;
   let target_data = target_machine.get_target_data();
-  let module = construct_module(
-    &mut Journal::new(None),
-    &context,
-    &target_data,
-    context.create_module("test"),
-  );
+  let module = construct_module(&mut Journal::new(None), &context, &target_data, context.create_module("test"));
 
   unsafe { assert!(construct_emit_end_of_parse(&module).is_ok()) }
 
@@ -275,12 +230,7 @@ fn should_initialize_context() -> SherpaResult<()> {
   let context = Context::create();
   let target_machine = crate_target_test_machine()?;
   let target_data = target_machine.get_target_data();
-  let module = construct_module(
-    &mut Journal::new(None),
-    &context,
-    &target_data,
-    context.create_module("test"),
-  );
+  let module = construct_module(&mut Journal::new(None), &context, &target_data, context.create_module("test"));
 
   unsafe { assert!(construct_init(&module).is_ok()) };
 
@@ -306,12 +256,7 @@ fn verify_utf8_lookup_functions() -> SherpaResult<()> {
   let context = Context::create();
   let target_machine = crate_target_test_machine()?;
   let target_data = target_machine.get_target_data();
-  let module = construct_module(
-    &mut Journal::new(None),
-    &context,
-    &target_data,
-    context.create_module("test"),
-  );
+  let module = construct_module(&mut Journal::new(None), &context, &target_data, context.create_module("test"));
 
   assert!(construct_utf8_lookup_function(&module).is_ok());
 
@@ -327,12 +272,7 @@ fn should_yield_correct_cp_values_for_inputs() -> SherpaResult<()> {
   let context = Context::create();
   let target_machine = crate_target_test_machine()?;
   let target_data = target_machine.get_target_data();
-  let module = construct_module(
-    &mut Journal::new(None),
-    &context,
-    &target_data,
-    context.create_module("test"),
-  );
+  let module = construct_module(&mut Journal::new(None), &context, &target_data, context.create_module("test"));
 
   assert!(construct_utf8_lookup_function(&module).is_ok());
   unsafe { assert!(construct_merge_utf8_part_function(&module).is_ok()) }
@@ -351,8 +291,7 @@ fn should_yield_correct_cp_values_for_inputs() -> SherpaResult<()> {
 
     let jit_engine = setup_exec_engine(&module.module);
 
-    let get_code_point =
-      get_parse_function::<GetUtf8CP>(&jit_engine, "get_utf8_codepoint_info_shim").unwrap();
+    let get_code_point = get_parse_function::<GetUtf8CP>(&jit_engine, "get_utf8_codepoint_info_shim").unwrap();
 
     dbg!(get_code_point.call(" ".as_ptr()));
     assert_eq!(get_code_point.call(" ".as_ptr()).val, 32);
@@ -369,12 +308,7 @@ fn verify_construct_extend_stack() -> SherpaResult<()> {
   let context = Context::create();
   let target_machine = crate_target_test_machine()?;
   let target_data = target_machine.get_target_data();
-  let module = construct_module(
-    &mut Journal::new(None),
-    &context,
-    &target_data,
-    context.create_module("test"),
-  );
+  let module = construct_module(&mut Journal::new(None), &context, &target_data, context.create_module("test"));
 
   unsafe { assert!(construct_extend_stack(&module).is_ok()) }
 
@@ -388,12 +322,7 @@ fn should_extend_stack() -> SherpaResult<()> {
   let context = Context::create();
   let target_machine = crate_target_test_machine()?;
   let target_data = target_machine.get_target_data();
-  let module = construct_module(
-    &mut Journal::new(None),
-    &context,
-    &target_data,
-    context.create_module("test"),
-  );
+  let module = construct_module(&mut Journal::new(None), &context, &target_data, context.create_module("test"));
 
   unsafe {
     let jit_engine = setup_exec_engine(&module.module);
@@ -438,8 +367,7 @@ fn should_extend_stack() -> SherpaResult<()> {
     assert_eq!(rt_ctx.goto_size - rt_ctx.goto_free, (34 << 1));
 
     let stack = {
-      let ptr = (rt_ctx.goto_stack_ptr as usize)
-        - (((rt_ctx.goto_size as usize) - (rt_ctx.goto_free as usize)) << 4);
+      let ptr = (rt_ctx.goto_stack_ptr as usize) - (((rt_ctx.goto_size as usize) - (rt_ctx.goto_free as usize)) << 4);
       std::slice::from_raw_parts(ptr as *const Goto, rt_ctx.goto_size as usize)
     };
 
@@ -466,17 +394,12 @@ IGNORE { c:sp }
     "/test".into(),
     Default::default(),
     &|TestPackage { mut journal, db, states, .. }| {
-      let states = optimize::<ParseStatesVec>(&db, states)?;
+      let states = optimize::<ParseStatesVec>(&db, states, false)?;
 
       let context = Context::create();
       let target_machine = crate_target_test_machine()?;
       let target_data = target_machine.get_target_data();
-      let module = construct_module(
-        &mut Journal::new(None),
-        &context,
-        &target_data,
-        context.create_module("test"),
-      );
+      let module = construct_module(&mut Journal::new(None), &context, &target_data, context.create_module("test"));
 
       compile_states(&mut journal, &module, db, &states)?;
 
@@ -501,7 +424,7 @@ IGNORE { c:sp }
       let context = Context::create();
       let module = context.create_module("test");
 
-      let states = optimize::<ParseStatesVec>(&db, states)?;
+      let states = optimize::<ParseStatesVec>(&db, states, false)?;
 
       unsafe {
         let engine = setup_exec_engine(&module);
@@ -512,10 +435,7 @@ IGNORE { c:sp }
 
         engine.add_global_mapping(&module.fun.free_stack, sherpa_free_stack as usize);
 
-        engine.add_global_mapping(
-          &module.fun.get_token_class_from_codepoint,
-          sherpa_get_token_class_from_codepoint as usize,
-        );
+        engine.add_global_mapping(&module.fun.get_token_class_from_codepoint, sherpa_get_token_class_from_codepoint as usize);
 
         compile_llvm_module_from_parse_states(&mut journal, &module, db, &states)?;
 
@@ -721,12 +641,7 @@ IGNORE { c:sp c:nl }
 
         println!(
           "{}",
-          final_token.to_token(unsafe { &mut *ctx.reader }).blame(
-            0,
-            0,
-            "Completed Parse of [test]",
-            BlameColor::RED
-          )
+          final_token.to_token(unsafe { &mut *ctx.reader }).blame(0, 0, "Completed Parse of [test]", BlameColor::RED)
         );
 
         slots.assign(0, AstSlot(0, final_token, TokenRange::default()));
@@ -799,7 +714,7 @@ NAME llvm_language_test
     &|TestPackage { mut journal, states, db, .. }| {
       let ctx = Context::create();
 
-      let states = optimize::<ParseStatesVec>(&db, states)?;
+      let states = optimize::<ParseStatesVec>(&db, states, false)?;
 
       let target_machine = crate_target_test_machine()?;
       let target_data = target_machine.get_target_data();
@@ -821,12 +736,5 @@ fn crate_target_test_machine() -> SherpaResult<TargetMachine> {
   let reloc = RelocMode::PIC;
   let model = CodeModel::Small;
   let opt = OptimizationLevel::None;
-  SherpaResult::Ok(target.create_target_machine(
-    &native_triple,
-    "generic",
-    "",
-    opt,
-    reloc,
-    model,
-  )?)
+  SherpaResult::Ok(target.create_target_machine(&native_triple, "generic", "", opt, reloc, model)?)
 }

@@ -24,7 +24,8 @@ use std::collections::{HashMap, VecDeque};
 /// reduce the number of parse states overall.
 pub fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
   db: &'db ParserDatabase,
-  parse_states: Map<IString, Box<ParseState>>,
+  parse_states: ParseStatesMap,
+  optimize_for_debugging: bool,
 ) -> SherpaResult<R> {
   let start_complexity = ComplexityMarker::new(db, parse_states.iter());
 
@@ -50,18 +51,19 @@ pub fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
 
   start_complexity.print_comparison(&ComplexityMarker::new(db, parse_states.iter()), "Total optimization result");
 
-  // Can only do this once we can map scanner ids back to match statements
-  // otherwise scanner states will be dropped.
-  /*   let parse_states = parse_states
-  .into_iter()
-  .map(|(name, state)| {
-    let mut state = state.remap_source(db).unwrap();
-    state.build_ast(db).unwrap();
-    (name, Box::new(state))
-  })
-  .collect(); */
+  if optimize_for_debugging {
+    // Can only do this once we can map scanner ids back to match statements
+    // otherwise scanner states will be dropped.
+    let parse_states = parse_states.into_iter().map(|(name, state)| {
+      let mut state = state.remap_source(db).unwrap();
+      state.build_ast(db).unwrap();
+      (name, Box::new(state))
+    });
 
-  SherpaResult::Ok(parse_states.into_iter().collect())
+    garbage_collect(db, parse_states.collect(), "debug-cleanup")
+  } else {
+    garbage_collect(db, parse_states, "cleanup")
+  }
 }
 
 struct ComplexityMarker {
@@ -90,15 +92,6 @@ impl ComplexityMarker {
   }
 }
 
-/// Extract the target name of a goto or push statement
-pub fn get_goto_target_name(node: &ASTNode) -> String {
-  match node {
-    ASTNode::Goto(box parser::Goto { prod, .. }) | ASTNode::Push(box parser::Push { prod, .. }) => get_goto_target_name(prod),
-    ASTNode::Production_Symbol(box parser::Production_Symbol { name, .. }) => name.clone(),
-    _ => unreachable!(),
-  }
-}
-
 fn get_match_statement_mut(node: &mut ASTNode) -> SherpaResult<&mut parser::Statement> {
   match node {
     ASTNode::TermMatch(box TermMatch { statement, .. })
@@ -120,31 +113,22 @@ fn get_match_statement(node: &ASTNode) -> SherpaResult<&parser::Statement> {
 }
 
 /// Inline trivial scanners.
-fn inline_matches<'db>(
-  db: &'db ParserDatabase,
-  mut parse_states: Map<IString, Box<ParseState>>,
-) -> SherpaResult<Map<IString, Box<ParseState>>> {
+fn inline_matches<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
   garbage_collect(db, parse_states, "byte-chains")
 }
 
 /// Create chained matching scanners that can scan and shift multiple
 /// characters simultaneously.
-fn create_byte_chains<'db>(
-  db: &'db ParserDatabase,
-  mut parse_states: Map<IString, Box<ParseState>>,
-) -> SherpaResult<Map<IString, Box<ParseState>>> {
+fn create_byte_chains<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
   garbage_collect(db, parse_states, "byte-chains")
 }
 
 /// Inline trivial scanners.
-fn inline_scanners<'db>(
-  db: &'db ParserDatabase,
-  mut parse_states: Map<IString, Box<ParseState>>,
-) -> SherpaResult<Map<IString, Box<ParseState>>> {
+fn inline_scanners<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
   fn inline_scanners(db: &ParserDatabase, statement: &mut parser::Statement) -> SherpaResult<()> {
     let parser::Statement { branch, .. } = statement;
 
-    if let Some(parser::Matches { mode, meta, matches, .. }) = branch.as_mut().and_then(|b| b.as_Matches_mut()) {
+    if let Some(parser::Matches { mode, scanner, matches, .. }) = branch.as_mut().and_then(|b| b.as_Matches_mut()) {
       if !matches!(mode.as_str(), InputType::TOKEN_STR) {
         return SherpaResult::Ok(());
       };
@@ -193,7 +177,8 @@ fn inline_scanners<'db>(
               .collect();
 
             if !queue.is_empty() {
-              let mut matches = parser::Matches::new(Default::default(), Default::default(), Default::default());
+              let mut matches =
+                parser::Matches::new(Default::default(), Default::default(), Default::default(), Default::default());
 
               setup_match(db, queue, &mut matches, default);
 
@@ -208,13 +193,13 @@ fn inline_scanners<'db>(
           }
         }
 
-        let mut match_stmt = parser::Matches::new(Default::default(), Default::default(), Default::default());
+        let mut match_stmt = parser::Matches::new(Default::default(), Default::default(), Default::default(), Default::default());
         let mut queue = VecDeque::from_iter(id_groups.into_iter());
 
         setup_match(db, &mut queue, &mut match_stmt, default);
 
         *mode = match_stmt.mode;
-        *meta = 0;
+        *scanner = Default::default();
         *matches = match_stmt.matches;
       }
     }
@@ -231,10 +216,7 @@ fn inline_scanners<'db>(
 }
 
 /// Inline statements of states that don't have transitive actions or matches.
-fn inline_states<'db>(
-  db: &'db ParserDatabase,
-  mut parse_states: Map<IString, Box<ParseState>>,
-) -> SherpaResult<Map<IString, Box<ParseState>>> {
+fn inline_states<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
   // Get a reference to all root level branches.
 
   let mut naked_state_lookup = HashMap::new();
@@ -262,7 +244,7 @@ fn inline_states<'db>(
         let parser::Statement { branch, non_branch, transitive, .. } = statement;
         loop {
           if let Some(own_gotos) = branch.as_mut().and_then(|b| b.as_Gotos_mut()) {
-            let name = get_goto_target_name(&own_gotos.goto.prod).to_token();
+            let name = own_gotos.goto.name.to_token();
 
             if let Some(parser::Statement { branch: b, non_branch: nb, transitive: t, .. }) = stmt_lu.get(&name) {
               let replace_branch = match b {
@@ -294,7 +276,8 @@ fn inline_states<'db>(
                   // New gotos, we can continue the loop
                   continue;
                 } else if own_gotos.pushes.len() > 0 {
-                  own_gotos.goto = Box::new(parser::Goto::new(own_gotos.pushes.last()?.prod.clone()));
+                  own_gotos.goto =
+                    Box::new(parser::Goto::new(own_gotos.pushes.last()?.name.clone(), Default::default(), Default::default()));
                   own_gotos.pushes.pop();
                   // Gotos changed, we can continue the loop
                   continue;
@@ -324,10 +307,7 @@ fn inline_states<'db>(
 
 /// Merges matching branches of states that consist only of goto/push
 /// transitions.
-fn merge_branches<'db>(
-  db: &'db ParserDatabase,
-  mut parse_states: Map<IString, Box<ParseState>>,
-) -> SherpaResult<Map<IString, Box<ParseState>>> {
+fn merge_branches<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
   // Get a reference to all root level branches.
 
   let mut state_branch_lookup = HashMap::new();
@@ -372,7 +352,7 @@ fn merge_branches<'db>(
                 if vals.len() == 1 && transitive.is_none() && non_branch.is_empty() {
                   let val = vals[0];
                   if let Some(gotos) = branch.as_mut().and_then(|b| b.as_Gotos_mut()) {
-                    let name = get_goto_target_name(&gotos.goto.prod);
+                    let name = gotos.goto.name.clone();
                     let id = (name.to_token(), mode.to_token(), val);
 
                     if let Some(stmt) = state_branch_lookup.get(&id) {
@@ -409,10 +389,7 @@ fn merge_branches<'db>(
 /// joined branches include the default branch, all other item info is
 /// scrubbed. Match blocks that only have a default match are lowered into
 /// their respective contexts.
-fn combine_state_branches<'db>(
-  db: &'db ParserDatabase,
-  mut parse_states: Map<IString, Box<ParseState>>,
-) -> SherpaResult<Map<IString, Box<ParseState>>> {
+fn combine_state_branches<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
   fn merge_statements(from: parser::Statement, to: &mut parser::Statement) {
     let parser::Statement { branch, mut non_branch, transitive } = from;
 
@@ -492,7 +469,7 @@ fn combine_state_branches<'db>(
 // hash, e.i: states that differ in name only.
 fn canonicalize_states<'db, R: FromIterator<(IString, Box<ParseState>)>>(
   db: &'db ParserDatabase,
-  mut parse_states: Map<IString, Box<ParseState>>,
+  mut parse_states: ParseStatesMap,
   gc_label: Option<&str>,
 ) -> SherpaResult<R> {
   let mut state_name_to_canonical_state_name = HashMap::new();
@@ -504,20 +481,12 @@ fn canonicalize_states<'db, R: FromIterator<(IString, Box<ParseState>)>>(
     state_name_to_canonical_state_name.insert(*name, canonical_name);
   }
 
-  fn canonicalize_goto_prod(db: &ParserDatabase, prod: ASTNode, name_lu: &HashMap<IString, IString>) -> SherpaResult<ASTNode> {
-    let name = get_goto_target_name(&prod);
+  fn canonicalize_goto_name(db: &ParserDatabase, name: String, name_lu: &HashMap<IString, IString>) -> SherpaResult<String> {
     let iname = name.to_token();
     let canonical_name = *name_lu.get(&iname)?;
 
-    let prod = if iname != canonical_name {
-      ASTNode::Production_Symbol(Box::new(parser::Production_Symbol::new(
-        canonical_name.to_string(db.string_store()),
-        prod.to_token().clone(),
-      )))
-    } else {
-      prod
-    };
-    SherpaResult::Ok(prod)
+    let name = if iname != canonical_name { canonical_name.to_string(db.string_store()) } else { name };
+    SherpaResult::Ok(name)
   }
 
   fn canonicalize_statement(
@@ -530,10 +499,10 @@ fn canonicalize_states<'db, R: FromIterator<(IString, Box<ParseState>)>>(
       match branch {
         ASTNode::Gotos(box parser::Gotos { goto, pushes }) => {
           for push in pushes.iter_mut() {
-            push.prod = canonicalize_goto_prod(db, push.prod.clone(), &name_lu)?;
+            push.name = canonicalize_goto_name(db, push.name.clone(), &name_lu)?;
           }
 
-          goto.prod = canonicalize_goto_prod(db, goto.prod.clone(), &name_lu)?;
+          goto.name = canonicalize_goto_name(db, goto.name.clone(), &name_lu)?;
         }
         ASTNode::Matches(box parser::Matches { matches, .. }) => {
           for m in matches {
@@ -564,7 +533,7 @@ fn canonicalize_states<'db, R: FromIterator<(IString, Box<ParseState>)>>(
 /// at least one of the entry states.
 pub fn garbage_collect<'db, R: FromIterator<(IString, Box<ParseState>)>>(
   db: &'db ParserDatabase,
-  mut parse_states: Map<IString, Box<ParseState>>,
+  mut parse_states: ParseStatesMap,
   reason: &str,
 ) -> SherpaResult<R> {
   let start_complexity = ComplexityMarker::new(db, parse_states.iter());
@@ -591,13 +560,13 @@ pub fn garbage_collect<'db, R: FromIterator<(IString, Box<ParseState>)>>(
 
 fn traverse_statement<'db>(
   stmt: &Statement,
-  parse_states: &mut Map<IString, Box<ParseState>>,
+  parse_states: &mut ParseStatesMap,
   queue: &mut VecDeque<(IString, Box<ParseState>)>,
 ) -> SherpaResult<()> {
   if let Some(branch) = &stmt.branch {
     match branch {
-      ASTNode::Matches(box Matches { meta, mode, .. }) if mode.as_str() == InputType::TOKEN_STR => {
-        enqueue_state(IString::from_u64(*meta), parse_states, queue, false)
+      ASTNode::Matches(box Matches { scanner, mode, .. }) if mode.as_str() == InputType::TOKEN_STR => {
+        enqueue_state(scanner.to_token(), parse_states, queue, false)
       }
       _ => {}
     }
@@ -617,10 +586,10 @@ fn traverse_statement<'db>(
       }
       ASTNode::Gotos(gotos) => {
         for push in gotos.pushes.iter().rev() {
-          let name = get_goto_target_name(&push.prod).to_token();
+          let name = push.name.to_token();
           enqueue_state(name, parse_states, queue, true);
         }
-        let name = get_goto_target_name(&gotos.goto.prod).to_token();
+        let name = gotos.goto.name.to_token();
         enqueue_state(name, parse_states, queue, true);
       }
       _ => {}
@@ -631,7 +600,7 @@ fn traverse_statement<'db>(
 
 fn enqueue_state<'db>(
   name: IString,
-  parse_states: &mut Map<IString, Box<ParseState>>,
+  parse_states: &mut ParseStatesMap,
   queue: &mut VecDeque<(IString, Box<ParseState>)>,
   push_front: bool,
 ) {

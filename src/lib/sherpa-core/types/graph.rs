@@ -40,11 +40,7 @@ impl Origin {
   pub fn debug_string(&self, db: &ParserDatabase) -> String {
     match self {
       Origin::ProdGoal(prod_id) => {
-        format!(
-          "ProdGoal[ {} {:?} ]",
-          db.prod_guid_name(*prod_id).to_string(db.string_store()),
-          prod_id
-        )
+        format!("ProdGoal[ {} {:?} ]", db.prod_guid_name(*prod_id).to_string(db.string_store()), prod_id)
       }
       Origin::TokenGoal(sym_id) => {
         format!("TokenGoal[ {:?} ]", sym_id)
@@ -71,7 +67,7 @@ impl Origin {
 
 // Transtion Type ----------------------------------------------------
 
-#[derive(Hash, PartialEq, Eq, Clone, Copy)]
+#[derive(Hash, PartialEq, Eq, Clone, Copy, PartialOrd, Ord)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub enum StateType {
   Undefined,
@@ -143,7 +139,7 @@ pub const OUT_SCOPE_INDEX: u32 = 0xFEEDDEED;
 
 // State -------------------------------------------------------------
 
-#[derive(Default, PartialEq, Eq)]
+#[derive(Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct State<'db> {
   id: StateId,
   term_symbol: SymbolId,
@@ -307,28 +303,16 @@ impl<'db> State<'db> {
     self.parent
   }
 
-  pub fn set_kernal_items<T: ItemContainer<'db>>(
-    &mut self,
-    kernel_items: T,
-    is_scanner: bool,
-    db: &'db ParserDatabase,
-  ) {
-    let mut kernel_items = kernel_items
-      .into_iter()
-      .map(|i| if (i.origin_state.is_invalid()) { i.to_origin_state(self.id) } else { i })
-      .collect();
+  pub fn set_kernal_items<T: ItemContainer<'db>>(&mut self, kernel_items: T, is_scanner: bool, db: &'db ParserDatabase) {
+    let mut kernel_items =
+      kernel_items.into_iter().map(|i| if (i.origin_state.is_invalid()) { i.to_origin_state(self.id) } else { i }).collect();
 
     self.kernel_items.append(&mut kernel_items);
 
     self.calculate_closure(is_scanner, db);
   }
 
-  pub fn add_kernel_items<T: ItemContainer<'db>>(
-    &mut self,
-    kernel_items: T,
-    is_scanner: bool,
-    db: &'db ParserDatabase,
-  ) {
+  pub fn add_kernel_items<T: ItemContainer<'db>>(&mut self, kernel_items: T, is_scanner: bool, db: &'db ParserDatabase) {
     let mut kernel_items = kernel_items.into_iter().map(|i| i.to_origin_state(self.id)).collect();
 
     self.kernel_items.append(&mut kernel_items);
@@ -338,19 +322,14 @@ impl<'db> State<'db> {
 
   /// Returns true if the the call of the production leads to infinite loop due
   /// to left recursion.
-  pub fn conflicting_production_call(
-    &self,
-    prod_id: DBProdKey,
-    is_scanner: bool,
-    db: &ParserDatabase,
-  ) -> bool {
+  pub fn conflicting_production_call(&self, prod_id: DBProdKey, is_scanner: bool, db: &ParserDatabase) -> bool {
     if self.id.is_root() {
       let prod_ids = self.kernel_items.iter().map(|i| i.prod_index()).collect::<OrderedSet<_>>();
 
-      Items::start_items(prod_id, db).create_closure(is_scanner, self.id).into_iter().any(|i| {
-        prod_ids.contains(&i.prod_index_at_sym().unwrap_or_default())
-          || prod_ids.contains(&i.prod_index())
-      })
+      Items::start_items(prod_id, db)
+        .create_closure(is_scanner, self.id)
+        .into_iter()
+        .any(|i| prod_ids.contains(&i.prod_index_at_sym().unwrap_or_default()) || prod_ids.contains(&i.prod_index()))
     } else {
       false
     }
@@ -362,17 +341,10 @@ impl<'db> State<'db> {
     string += &format!("\n\nSTATE -- [{:}] --", self.id.0);
 
     if self.predecessors.len() > 0 {
-      string += &format!(
-        r##" preds [{}]"##,
-        self.predecessors.iter().map(|p| p.0.to_string()).collect::<Vec<_>>().join(" ")
-      );
+      string += &format!(r##" preds [{}]"##, self.predecessors.iter().map(|p| p.0.to_string()).collect::<Vec<_>>().join(" "));
     }
 
-    string += &format!(
-      "\n\n Type {:?}; Sym: [{}]",
-      self.t_type.debug_string(db),
-      self.term_symbol.debug_string(db),
-    );
+    string += &format!("\n\n Type {:?}; Sym: [{}]", self.t_type.debug_string(db), self.term_symbol.debug_string(db),);
 
     for (index, items) in &self.peek_resolve_items {
       string += &format!("\n  Peek Resolve: {}", index);
@@ -425,8 +397,8 @@ pub enum GraphMode {
 }
 
 pub struct Graph<'follow, 'db: 'follow> {
-  state_map: Map<u64, StateId>,
-  state_map_test: Map<u64, StateId>,
+  state_map: OrderedMap<u64, StateId>,
+  state_map_test: OrderedMap<u64, StateId>,
   states: Array<State<'db>>,
   leaf_states: OrderedSet<StateId>,
   pending_states: VecDeque<(GraphState, StateId)>,
@@ -513,11 +485,7 @@ impl<'follow, 'db: 'follow> Graph<'follow, 'db> {
     self.leaf_states.iter().map(|s| &self[*s]).collect()
   }
 
-  pub fn enqueue_pending_state(
-    &mut self,
-    graph_state: GraphState,
-    state: StateId,
-  ) -> Option<StateId> {
+  pub fn enqueue_pending_state(&mut self, graph_state: GraphState, state: StateId) -> Option<StateId> {
     let hash_id = create_u64_hash(&self[state]);
 
     if let Some(original_state) = self.state_map.get(&hash_id).cloned() {

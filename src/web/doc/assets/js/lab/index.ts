@@ -6,6 +6,7 @@ import docs_handler from './docs_handler';
 import { sherpaLang } from './sherpa_lang';
 import { parserHost } from './parser';
 import { GrammarContext } from './grammar_context';
+import { get_grammar, get_input } from "./session_storage";
 
 export { docs_handler, ScrollHandler };
 
@@ -34,7 +35,6 @@ export default async function (
         debugger_optimize_checkbox: HTMLInputElement,
     }
 ) {
-    const default_grammar = get_grammar();
 
     try {
         await init_sherpa();
@@ -46,7 +46,7 @@ export default async function (
     const ctx = new GrammarContext();
 
     const parser_editor = new EditorView({
-        doc: "test",
+        doc: get_input(),
         extensions: [basicSetup, parserHost(ctx, {
             debugger_start_stop_button,
             debugger_step_button,
@@ -60,7 +60,7 @@ export default async function (
     });
 
     const grammar_editor = new EditorView({
-        doc: default_grammar,
+        doc: get_grammar(),
 
         extensions: [basicSetup,
             sherpaLang(ctx),
@@ -71,9 +71,3 @@ export default async function (
 
 }
 
-
-function get_grammar() {
-    // Check for url encoded grammar
-    let sessionText = sessionStorage.getItem("lab-data");
-    return sessionText || `<> A > 'B' C? \n\n<> C > "D"`;
-}

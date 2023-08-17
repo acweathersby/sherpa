@@ -33,12 +33,7 @@ pub(super) fn build_graph<'follow, 'db: 'follow>(
   j.report_mut().ok_or_convert_to_error(graph)
 }
 
-fn handle_kernel_items(
-  j: &mut Journal,
-  graph: &mut Graph,
-  parent: StateId,
-  graph_state: GraphState,
-) -> SherpaResult<()> {
+fn handle_kernel_items(j: &mut Journal, graph: &mut Graph, parent: StateId, graph_state: GraphState) -> SherpaResult<()> {
   // TODO: PEG stuff
 
   let mut groups = create_transition_groups(graph, parent)?;
@@ -93,12 +88,8 @@ fn handle_incomplete_items<'db, 'follow>(
       }
       (2.., GraphState::Peek) => {
         if group.iter().all_items_are_from_same_peek_origin() {
-          let state = graph.create_state(
-            sym,
-            StateType::PeekEnd,
-            Some(parent),
-            get_kernel_items_from_peek_item(graph, group.first()?),
-          );
+          let state =
+            graph.create_state(sym, StateType::PeekEnd, Some(parent), get_kernel_items_from_peek_item(graph, group.first()?));
           graph.enqueue_pending_state(GraphState::Normal, state);
         } else {
           let state = graph.create_state(sym, StateType::Peek, Some(parent), group.try_increment());
@@ -118,13 +109,10 @@ fn handle_incomplete_items<'db, 'follow>(
             create_out_of_scope_complete_state(out_of_scope, graph, &sym, parent, is_scan);
           }
           (1.., _) => {
-            if let Some(shifted_items) =
-              create_call(&in_scope.clone().to_vec(), graph, graph_state, parent, sym, is_scan)
-            {
+            if let Some(shifted_items) = create_call(&in_scope.clone().to_vec(), graph, graph_state, parent, sym, is_scan) {
               out_items.append(&mut shifted_items.to_set());
             } else {
-              let state =
-                graph.create_state(sym, StateType::Shift, Some(parent), in_scope.try_increment());
+              let state = graph.create_state(sym, StateType::Shift, Some(parent), in_scope.try_increment());
 
               out_items.append(&mut in_scope);
 
@@ -150,11 +138,7 @@ fn merge_items_into_groups<'db>(
   // Dumb symbols that could cause termination of parse into the intermediate
   // item groups
   for (sym, group) in hash_group_btreemap(
-    follow
-      .create_closure(is_scan, par)
-      .into_iter()
-      .filter(|i| i.is_term())
-      .collect::<OrderedSet<_>>(),
+    follow.create_closure(is_scan, par).into_iter().filter(|i| i.is_term()).collect::<OrderedSet<_>>(),
     |_, i| i.sym(),
   ) {
     if !groups.contains_key(&sym) {
@@ -180,11 +164,7 @@ fn get_oos_follow_from_completed<'db, 'follow>(
       let goals: ItemSet = get_goal_items_from_completed(&completed, graph);
 
       for goal in goals {
-        let (follow, _) = get_follow(
-          j,
-          graph,
-          goal.to_complete().to_origin(Origin::ScanCompleteOOS).to_oos_index(),
-        )?;
+        let (follow, _) = get_follow(j, graph, goal.to_complete().to_origin(Origin::ScanCompleteOOS).to_oos_index())?;
         out.append(&mut follow.to_set());
       }
     }
@@ -220,60 +200,36 @@ fn handle_completed_items<'db, 'follow>(
       merge_occluding(
         j,
         is_scan,
-        hash_group_btreemap(
-          follow_pairs.iter().map(|fp| fp.follow).collect::<ItemSet>(),
-          |_, item| match item.get_type() {
-            ItemType::Terminal(sym) => sym,
-            _ => SymbolId::Undefined,
-          },
-        ),
+        hash_group_btreemap(follow_pairs.iter().map(|fp| fp.follow).collect::<ItemSet>(), |_, item| match item.get_type() {
+          ItemType::Terminal(sym) => sym,
+          _ => SymbolId::Undefined,
+        }),
         groups,
       );
 
-      get_oos_follow_from_completed(j, graph, &completed.iter().to_vec(), &mut |follow: Items<
-        'db,
-      >| {
+      get_oos_follow_from_completed(j, graph, &completed.iter().to_vec(), &mut |follow: Items<'db>| {
         merge_items_into_groups(&follow, parent, is_scan, groups)
       })?;
     }
 
     let default = completed.iter().map(|i| -> FollowPair<'db> { (*i, *i).into() }).collect();
 
-    handle_completed_groups(
-      j,
-      graph,
-      groups,
-      parent,
-      graph_state,
-      SymbolId::Default,
-      default,
-      &default_only,
-    )?;
+    handle_completed_groups(j, graph, groups, parent, graph_state, SymbolId::Default, default, &default_only)?;
 
     if !follow_pairs.is_empty() {
       // Create reduce states for follow items that have not already been covered.
-      let mut completed_groups =
-        hash_group_btreemap(follow_pairs.clone(), |_, fp| match fp.follow.get_type() {
-          ItemType::Completed(_) => {
-            unreachable!("Should be handled outside this path")
-          }
-          ItemType::Terminal(sym) => sym,
-          _ => SymbolId::Undefined,
-        });
+      let mut completed_groups = hash_group_btreemap(follow_pairs.clone(), |_, fp| match fp.follow.get_type() {
+        ItemType::Completed(_) => {
+          unreachable!("Should be handled outside this path")
+        }
+        ItemType::Terminal(sym) => sym,
+        _ => SymbolId::Undefined,
+      });
 
       completed_groups.remove(&SymbolId::Undefined);
 
       for (sym, follow_pairs) in completed_groups {
-        handle_completed_groups(
-          j,
-          graph,
-          groups,
-          parent,
-          graph_state,
-          sym,
-          follow_pairs,
-          &default_only,
-        )?;
+        handle_completed_groups(j, graph, groups, parent, graph_state, sym, follow_pairs, &default_only)?;
       }
     }
   }
@@ -318,8 +274,7 @@ fn handle_goto<'db, 'follow>(
     if !used_non_terms.is_empty() {
       graph[parent].set_non_terminals(&used_non_terms);
 
-      let used_goto_groups =
-        hash_group_btreemap(used_non_terms, |_, t| t.prod_index_at_sym().unwrap_or_default());
+      let used_goto_groups = hash_group_btreemap(used_non_terms, |_, t| t.prod_index_at_sym().unwrap_or_default());
 
       for (prod_id, items) in &used_goto_groups {
         let sym_id = prod_id.to_sym();
@@ -329,9 +284,7 @@ fn handle_goto<'db, 'follow>(
           .any(|i| -> bool {
             let p = i.prod_index();
             let recursive = p == i.prod_index_at_sym().unwrap_or_default();
-            recursive
-              .then_some(i.at_start())
-              .unwrap_or(!kernel_base.contains(i) && used_goto_groups.contains_key(&p))
+            recursive.then_some(i.at_start()).unwrap_or(!kernel_base.contains(i) && used_goto_groups.contains_key(&p))
           })
           .then_some(StateType::GotoLoop)
           .unwrap_or(StateType::KernelGoto);
@@ -343,30 +296,17 @@ fn handle_goto<'db, 'follow>(
         if kernel_prod_ids.remove(&prod_id) && parent.is_root() && completed.is_empty() {
           let item = Item::from_rule(db.prod_rules(*prod_id)?[0], db);
 
-          completed.push(
-            item
-              .to_complete()
-              .to_origin(Origin::GoalCompleteOOS)
-              .to_oos_index()
-              .to_origin_state(parent),
-          );
+          completed.push(item.to_complete().to_origin(Origin::GoalCompleteOOS).to_oos_index().to_origin_state(parent));
         }
 
         if completed.len() > 0 && incomplete.len() > 0 {
-          let CompletedItemArtifacts {
-            follow_pairs: mut fp,
-            mut oos_pairs,
-            default_only: default,
-            ..
-          } = get_completed_item_artifacts(j, graph, parent, completed.iter())?;
+          let CompletedItemArtifacts { follow_pairs: mut fp, mut oos_pairs, default_only: default, .. } =
+            get_completed_item_artifacts(j, graph, parent, completed.iter())?;
 
           fp.append(&mut oos_pairs);
 
-          if let Some(s) =
-            create_peek(graph, sym_id, parent, incomplete.iter(), fp, false, transition_type)
-          {
-            let c_p: std::collections::BTreeSet<FollowPair<'_>> =
-              completed.clone().into_iter().map(|i| (i, i).into()).collect();
+          if let Some(s) = create_peek(graph, sym_id, parent, incomplete.iter(), fp, false, transition_type) {
+            let c_p: std::collections::BTreeSet<FollowPair<'_>> = completed.clone().into_iter().map(|i| (i, i).into()).collect();
             let graph_state = GraphState::Normal;
             let sym = SymbolId::Default;
             let groups = &mut Default::default();
@@ -375,8 +315,7 @@ fn handle_goto<'db, 'follow>(
             handle_completed_groups(j, graph, groups, s, graph_state, sym, c_p, &default)?;
           }
         } else {
-          let state =
-            graph.create_state(sym_id, transition_type, Some(parent), incremented_items.clone());
+          let state = graph.create_state(sym_id, transition_type, Some(parent), incremented_items.clone());
           graph.enqueue_pending_state(GraphState::Normal, state);
         }
       }
@@ -417,8 +356,7 @@ fn create_peek<'a, 'db: 'a, 'follow, T: ItemContainerIter<'a, 'db>>(
       .iter()
       .filter_map(|FollowPair { follow, .. }| {
         if follow.is_complete() || {
-          existing_items.contains(&follow)
-            || (follow.at_start() && existing_prod_ids.contains(&follow.prod_index()))
+          existing_items.contains(&follow) || (follow.at_start() && existing_prod_ids.contains(&follow.prod_index()))
         } {
           None
         } else {
@@ -438,9 +376,7 @@ fn create_peek<'a, 'db: 'a, 'follow, T: ItemContainerIter<'a, 'db>>(
 
   let index = create_u64_hash(&incomplete_items);
 
-  kernel_items.append(
-    &mut incomplete_items.iter().map(|i| i.to_origin(Origin::Peek(index, state))).collect(),
-  );
+  kernel_items.append(&mut incomplete_items.iter().map(|i| i.to_origin(Origin::Peek(index, state))).collect());
   resolve_items.append(&mut incomplete_items);
 
   debug_assert!(
@@ -455,19 +391,12 @@ fn create_peek<'a, 'db: 'a, 'follow, T: ItemContainerIter<'a, 'db>>(
 
   graph[state].set_peek_resolve_items(index, resolve_items);
 
-  graph[state].add_kernel_items(
-    if need_increment { kernel_items.try_increment() } else { kernel_items },
-    is_scan,
-    db,
-  );
+  graph[state].add_kernel_items(if need_increment { kernel_items.try_increment() } else { kernel_items }, is_scan, db);
 
   graph.enqueue_pending_state(GraphState::Peek, state)
 }
 
-fn get_kernel_items_from_peek<'db, 'follow>(
-  graph: &Graph<'follow, 'db>,
-  peek_item: &Item<'db>,
-) -> Items<'db> {
+fn get_kernel_items_from_peek<'db, 'follow>(graph: &Graph<'follow, 'db>, peek_item: &Item<'db>) -> Items<'db> {
   let Origin::Peek(peek_index, peek_origin) = peek_item.origin else {
         panic!("Invalid peek origin");
     };
@@ -476,8 +405,7 @@ fn get_kernel_items_from_peek<'db, 'follow>(
 }
 
 fn all_items_come_from_same_production_call(group: &Items) -> bool {
-  group.iter().all(|i| i.at_start())
-    && group.iter().map(|i| i.prod_index()).collect::<Set<_>>().len() == 1
+  group.iter().all(|i| i.at_start()) && group.iter().map(|i| i.prod_index()).collect::<Set<_>>().len() == 1
 }
 fn create_call<'db, 'follow>(
   group: &Items<'db>,
@@ -511,11 +439,7 @@ fn create_call<'db, 'follow>(
 
           let state = graph.create_state(
             sym,
-            if kernel_item_call {
-              StateType::KernelCall(prod_id)
-            } else {
-              StateType::InternalCall(prod_id)
-            },
+            if kernel_item_call { StateType::KernelCall(prod_id) } else { StateType::InternalCall(prod_id) },
             Some(parent),
             items.try_increment(),
           );
@@ -563,8 +487,7 @@ fn handle_completed_groups<'db, 'follow>(
         let item = *cmpl.first()?;
         handle_completed_item(j, graph, (item, vec![item]), par, sym, g_state);
       } else {
-        let unfollowed_items: Items =
-          default_only_items.intersection(&cmpl.iter().to_set()).cloned().collect();
+        let unfollowed_items: Items = default_only_items.intersection(&cmpl.iter().to_set()).cloned().collect();
 
         match unfollowed_items.len() {
           2.. => {
@@ -607,20 +530,11 @@ fn handle_completed_groups<'db, 'follow>(
         create_out_of_scope_complete_state(cmpl, graph, &sym, par, is_scan);
       } else {
         let cardinal = group.clone().to_absolute();
-        let unique = follow_pairs
-          .into_iter()
-          .filter(|fp| !cardinal.contains(&&fp.follow.to_absolute()))
-          .collect::<OrderedSet<_>>();
+        let unique =
+          follow_pairs.into_iter().filter(|fp| !cardinal.contains(&&fp.follow.to_absolute())).collect::<OrderedSet<_>>();
 
         if !unique.is_empty() {
-          group.append(&mut get_set_of_occluding_items(
-            j,
-            &sym,
-            &group,
-            &groups,
-            is_scan,
-            graph.get_db(),
-          ));
+          group.append(&mut get_set_of_occluding_items(j, &sym, &group, &groups, is_scan, graph.get_db()));
           create_peek(graph, sym, par, group.iter(), unique, true, StateType::Peek);
         }
       }
@@ -647,10 +561,8 @@ fn handle_completed_groups<'db, 'follow>(
         // the shift action as long as there is only one shift,
         // otherwise we have a shift-shift conflict. Grabbing the
         // original items.
-        let kernel_items = follow_pairs
-          .iter()
-          .flat_map(|fp| get_kernel_items_from_peek(graph, &fp.completed))
-          .collect::<ItemSet>();
+        let kernel_items =
+          follow_pairs.iter().flat_map(|fp| get_kernel_items_from_peek(graph, &fp.completed)).collect::<ItemSet>();
 
         //let completed = kernel_items.clone().completed_items();
         let incomplete = kernel_items.incomplete_items();
@@ -660,10 +572,8 @@ fn handle_completed_groups<'db, 'follow>(
           graph.enqueue_pending_state(GraphState::Normal, state);
         }
       } else {
-        let kernel_items = follow_pairs
-          .iter()
-          .flat_map(|fp| get_kernel_items_from_peek(graph, &fp.completed))
-          .collect::<ItemSet>();
+        let kernel_items =
+          follow_pairs.iter().flat_map(|fp| get_kernel_items_from_peek(graph, &fp.completed)).collect::<ItemSet>();
         #[cfg(debug_assertions)]
         unimplemented!(
           "\nCompleted Peek Items On Symbol:[{}]\n \n\nAcceptItems\n{}\n\nPeekItems:\n{}\n\nKernelItems:\n{}\n\nParant State\n{}\n\nGraph:\n{}",
@@ -730,8 +640,7 @@ fn resolve_conflicting_symbols<'db, 'follow>(
   }
 
   // Map items according to their symbols
-  let symbol_groups =
-    hash_group_btreemap(completed_items.clone(), |_, i| i.origin.get_symbol(graph.get_db()));
+  let symbol_groups = hash_group_btreemap(completed_items.clone(), |_, i| i.origin.get_symbol(graph.get_db()));
 
   let priority_groups = hash_group_btreemap(symbol_groups, |_, (sym, _)| match sym {
     sym if sym.is_class() => Class,
@@ -745,26 +654,19 @@ fn resolve_conflicting_symbols<'db, 'follow>(
     let max_precedence = groups.keys().map(|i| i.precedence()).max().unwrap_or_default();
 
     // Filter out members with lower precedences
-    let groups = groups
-      .into_iter()
-      .filter(|(i, _)| i.precedence() >= max_precedence)
-      .collect::<BTreeMap<_, _>>();
+    let groups = groups.into_iter().filter(|(i, _)| i.precedence() >= max_precedence).collect::<BTreeMap<_, _>>();
 
     match priority {
       Defined | Class => {
         if groups.len() > 1 {
           j.report_mut().add_error(SherpaError::SourcesError {
             id:       "conflicting-symbols",
-            msg:      "Found ".to_string()
-              + &groups.len().to_string()
-              + " conflicting Defined symbols. Grammar is ambiguous",
+            msg:      "Found ".to_string() + &groups.len().to_string() + " conflicting Defined symbols. Grammar is ambiguous",
             ps_msg:   Default::default(),
             severity: SherpaErrorSeverity::Critical,
             sources:  groups
               .iter()
-              .map(|(sym, items)| {
-                items.iter().map(|i| (i.rule().tok.clone(), Default::default(), Default::default()))
-              })
+              .map(|(sym, items)| items.iter().map(|i| (i.rule().tok.clone(), Default::default(), Default::default())))
               .flatten()
               .collect(),
           });
@@ -777,14 +679,7 @@ fn resolve_conflicting_symbols<'db, 'follow>(
     }
 
     if let Some(completed_items) = completed {
-      handle_completed_item(
-        j,
-        graph,
-        (*(completed_items.first()?), completed_items.clone().to_vec()),
-        par,
-        sym,
-        g_state,
-      );
+      handle_completed_item(j, graph, (*(completed_items.first()?), completed_items.clone().to_vec()), par, sym, g_state);
       break;
     } else {
       panic!("Could not resolve Symbol ambiguities!")
@@ -835,14 +730,7 @@ fn merge_occluding<'db, 'follow>(
   into_groups: &mut OrderedMap<SymbolId, ItemSet<'db>>,
 ) {
   for (sym, group) in into_groups.iter_mut() {
-    let mut occluding_items = get_set_of_occluding_items(
-      j,
-      sym,
-      group,
-      &from_groups,
-      is_scan,
-      group.first().unwrap().get_db(),
-    );
+    let mut occluding_items = get_set_of_occluding_items(j, sym, group, &from_groups, is_scan, group.first().unwrap().get_db());
     group.append(&mut occluding_items);
   }
 }
@@ -867,14 +755,16 @@ fn get_set_of_occluding_items<'db, 'follow>(
       if symbols_occlude(into_sym, from_sym, db) {
         #[cfg(debug_assertions)]
         {
-          j.report_mut().add_note("Symbol Group Merge", 
+          j.report_mut().add_note(
+            "Symbol Group Merge",
             format!(
-            "\nDue to the ambiguous symbols [{} ≈ {}] the group [\n\n{}\n\n] will be merged into [\n\n{}\n\n]\n",
-            into_sym.debug_string(db),
-            from_sym.debug_string(db),
-            from_group.to_debug_string("\n"),
-            into_group.to_debug_string("\n")
-          ));
+              "\nDue to the ambiguous symbols [{} ≈ {}] the group [\n\n{}\n\n] will be merged into [\n\n{}\n\n]\n",
+              into_sym.debug_string(db),
+              from_sym.debug_string(db),
+              from_group.to_debug_string("\n"),
+              into_group.to_debug_string("\n")
+            ),
+          );
         }
         occluding.append(&mut from_group.clone());
       }
@@ -890,14 +780,12 @@ fn create_transition_groups<'db, 'follow>(
 ) -> SherpaResult<OrderedMap<SymbolId, ItemSet<'db>>> {
   let closure = graph[parent].get_closure_ref()?;
 
-  let mut groups = hash_group_btreemap(closure.iter().cloned().collect::<ItemSet>(), |_, item| {
-    match item.get_type() {
-      ItemType::Completed(_) => SymbolId::Default,
-      ItemType::Terminal(sym) => sym.to_plain(),
-      ItemType::NonTerminal(_) => SymbolId::Undefined,
-      ItemType::TokenNonTerminal(..) if graph.is_scan() => SymbolId::Undefined,
-      ItemType::TokenNonTerminal(_, sym) => sym.to_plain(),
-    }
+  let mut groups = hash_group_btreemap(closure.iter().cloned().collect::<ItemSet>(), |_, item| match item.get_type() {
+    ItemType::Completed(_) => SymbolId::Default,
+    ItemType::Terminal(sym) => sym.to_plain(),
+    ItemType::NonTerminal(_) => SymbolId::Undefined,
+    ItemType::TokenNonTerminal(..) if graph.is_scan() => SymbolId::Undefined,
+    ItemType::TokenNonTerminal(_, sym) => sym.to_plain(),
   });
 
   groups.remove(&SymbolId::Undefined);
@@ -908,11 +796,7 @@ fn create_transition_groups<'db, 'follow>(
       .filter_map(|(s, g)| {
         let max_exclusivity = g.iter().map(|i| i.exclusivity()).max().unwrap_or_default();
 
-        let g = g
-          .clone()
-          .into_iter()
-          .filter(|i| i.exclusivity() >= max_exclusivity)
-          .collect::<BTreeSet<_>>();
+        let g = g.clone().into_iter().filter(|i| i.exclusivity() >= max_exclusivity).collect::<BTreeSet<_>>();
         if g.is_empty() {
           None
         } else {
@@ -943,11 +827,7 @@ fn get_completed_item_artifacts<'a, 'db: 'a, 'follow, T: ItemContainerIter<'a, '
       default_only_items.insert(*c_i);
     } else {
       follow_pairs.append(
-        &mut f
-          .create_closure(graph.is_scan(), par)
-          .into_iter()
-          .map(|i| (*c_i, i.to_origin(c_i.origin)).into())
-          .collect(),
+        &mut f.create_closure(graph.is_scan(), par).into_iter().map(|i| (*c_i, i.to_origin(c_i.origin)).into()).collect(),
       );
       follow_items.append(&mut f.to_set());
     }
@@ -956,14 +836,8 @@ fn get_completed_item_artifacts<'a, 'db: 'a, 'follow, T: ItemContainerIter<'a, '
       let goals: ItemSet = get_goal_items_from_completed(&c, graph);
 
       for goal in goals {
-        let (follow, _) = get_follow(
-          j,
-          graph,
-          goal.to_complete().to_origin(Origin::ScanCompleteOOS).to_oos_index(),
-        )?;
-        oos_pairs.append(
-          &mut follow.create_closure(false, par).into_iter().map(|i| (*c_i, i).into()).collect(),
-        );
+        let (follow, _) = get_follow(j, graph, goal.to_complete().to_origin(Origin::ScanCompleteOOS).to_oos_index())?;
+        oos_pairs.append(&mut follow.create_closure(false, par).into_iter().map(|i| (*c_i, i).into()).collect());
       }
     }
   }
@@ -1029,17 +903,11 @@ pub(super) fn get_follow<'db, 'follow>(
   SherpaResult::Ok((follow.to_vec(), completed.to_vec()))
 }
 
-fn get_goal_items_from_completed<'db, 'follow>(
-  items: &Items<'db>,
-  graph: &Graph<'follow, 'db>,
-) -> ItemSet<'db> {
+fn get_goal_items_from_completed<'db, 'follow>(items: &Items<'db>, graph: &Graph<'follow, 'db>) -> ItemSet<'db> {
   items.iter().filter(|i| graph.item_is_goal(*i)).cloned().collect()
 }
 
-fn get_kernel_items_from_peek_item<'db, 'follow>(
-  graph: &Graph<'follow, 'db>,
-  peek_item: &Item<'db>,
-) -> Items<'db> {
+fn get_kernel_items_from_peek_item<'db, 'follow>(graph: &Graph<'follow, 'db>, peek_item: &Item<'db>) -> Items<'db> {
   let Origin::Peek(peek_index, peek_origin) = peek_item.origin else {
         panic!("Invalid peek origin");
     };
@@ -1072,30 +940,21 @@ fn symbols_occlude(symA: &SymbolId, symB: &SymbolId, db: &ParserDatabase) -> boo
   match symA {
     SymbolId::Char { char, .. } => match symB {
       SymbolId::ClassNumber { .. } => {
-        (*char < 128)
-          && get_token_class_from_codepoint(*char as u32) == CodePointClass::Number as u32
+        (*char < 128) && get_token_class_from_codepoint(*char as u32) == CodePointClass::Number as u32
       }
       SymbolId::ClassIdentifier { .. } => {
-        (*char < 128)
-          && get_token_class_from_codepoint(*char as u32) == CodePointClass::Identifier as u32
+        (*char < 128) && get_token_class_from_codepoint(*char as u32) == CodePointClass::Identifier as u32
       }
       SymbolId::ClassSymbol { .. } => {
-        (*char < 128)
-          && get_token_class_from_codepoint(*char as u32) == CodePointClass::Symbol as u32
+        (*char < 128) && get_token_class_from_codepoint(*char as u32) == CodePointClass::Symbol as u32
       }
       SymbolId::Default => false,
       symB => *symA == *symB,
     },
     SymbolId::Codepoint { val, .. } => match symB {
-      SymbolId::ClassNumber { .. } => {
-        get_token_class_from_codepoint(*val) == CodePointClass::Number as u32
-      }
-      SymbolId::ClassIdentifier { .. } => {
-        get_token_class_from_codepoint(*val) == CodePointClass::Identifier as u32
-      }
-      SymbolId::ClassSymbol { .. } => {
-        get_token_class_from_codepoint(*val) == CodePointClass::Symbol as u32
-      }
+      SymbolId::ClassNumber { .. } => get_token_class_from_codepoint(*val) == CodePointClass::Number as u32,
+      SymbolId::ClassIdentifier { .. } => get_token_class_from_codepoint(*val) == CodePointClass::Identifier as u32,
+      SymbolId::ClassSymbol { .. } => get_token_class_from_codepoint(*val) == CodePointClass::Symbol as u32,
       SymbolId::Default => false,
       symB => *symA == *symB,
     },
@@ -1159,8 +1018,7 @@ fn handle_completed_item<'db, 'follow>(
     }
     // Normal reduction state with no other actions.
     _ => {
-      let state =
-        graph.create_state(sym, StateType::Reduce(completed_item.rule_id), Some(parent), vec![]);
+      let state = graph.create_state(sym, StateType::Reduce(completed_item.rule_id), Some(parent), vec![]);
       graph[state].set_reduce_item(completed_item);
       graph.add_leaf_state(state);
     }
@@ -1169,11 +1027,7 @@ fn handle_completed_item<'db, 'follow>(
   SherpaResult::Ok(())
 }
 
-fn create_reduce_reduce_error(
-  j: &mut Journal,
-  graph: &Graph,
-  end_items: ItemSet,
-) -> SherpaResult<()> {
+fn create_reduce_reduce_error(j: &mut Journal, graph: &Graph, end_items: ItemSet) -> SherpaResult<()> {
   let db = graph.get_db();
   let goals = end_items.iter().flat_map(|i| get_goal_items(&graph, i)).collect::<OrderedSet<_>>();
   j.report_mut().add_error(SherpaError::SourcesError {
@@ -1187,10 +1041,7 @@ fn create_reduce_reduce_error(
         let prod = &goals.first()?.prod_index();
         let name = db.prod_guid_name_string(*prod).as_str().to_string();
 
-        string += format!(
-          "\n - Turn production <{name}> into a PEG by using one of the PEG mode specifiers:",
-        )
-        .as_str();
+        string += format!("\n - Turn production <{name}> into a PEG by using one of the PEG mode specifiers:",).as_str();
         string += "\n    [ FIRST_MATCH | LONGEST_MATCH | SHORTEST_MATCH ]";
         string += format!("\n\n    Example: <> {name} FIRST_MATCH >  ...",).as_str();
       }
@@ -1208,10 +1059,7 @@ fn get_goal_items<'db, 'follow>(graph: &'db Graph<'follow, 'db>, item: &Item<'db
     Origin::TokenGoal(_) | Origin::ProdGoal(_) => {
       vec![graph[0].kernel_items_ref().clone().to_vec()[item.goal as usize]]
     }
-    Origin::Peek(..) => get_kernel_items_from_peek_item(graph, item)
-      .iter()
-      .flat_map(|_| get_goal_items(graph, item))
-      .collect(),
+    Origin::Peek(..) => get_kernel_items_from_peek_item(graph, item).iter().flat_map(|_| get_goal_items(graph, item)).collect(),
     _ => vec![],
   }
 }

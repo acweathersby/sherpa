@@ -6,6 +6,7 @@ import { EventType, GrammarContext } from "./grammar_context";
 import { ViewPlugin, DecorationSet, ViewUpdate } from "@codemirror/view"
 import { StateField, StateEffect, Range } from "@codemirror/state"
 import { EditorView, Decoration } from "@codemirror/view"
+import { set_input } from "./session_storage";
 
 
 const head_dec = Decoration.mark({ attributes: { style: "background-color: red" } });
@@ -44,6 +45,8 @@ export function parserHost(ctx: GrammarContext, {
     let active_search_symbols: Set<string> = new Set();
     let active_state_source = '';
     let active_scanner_state_source = '';
+    let parser_off: [number, number] = [0, 0];
+    let scanner_off: [number, number] = [0, 0];
 
     ctx.addListener(EventType.GrammarAdded, ctx => {
         console.log("Grammar Added")
@@ -186,12 +189,17 @@ export function parserHost(ctx: GrammarContext, {
                     case "ExecuteInstruction": {
 
 
-
                         if (!step.is_scanner) {
                             active_scanner_state_source = "";
 
-                            let debug_symbols: number[] = sherpa.get_debug_symbol_ids(step.instruction, bytecode);
+                            let token_offset = sherpa.get_debug_tok_offsets(step.instruction, bytecode);
+                            if (token_offset) {
+                                parser_off[0] = token_offset.start - 1;
+                                parser_off[1] = token_offset.end - 1;
+                                break;
+                            }
 
+                            let debug_symbols: number[] = sherpa.get_debug_symbol_ids(step.instruction, bytecode);
                             if (debug_symbols.length > 0) {
                                 debug_symbols.forEach(s => active_search_symbols.add(sherpa.get_symbol_name_from_id(s, db)));
                                 break
@@ -202,8 +210,15 @@ export function parserHost(ctx: GrammarContext, {
                                 active_state_source = sherpa.get_state_source_string(name, states, db);
                                 break
                             }
-
                         } else {
+                            let token_offset = sherpa.get_debug_tok_offsets(step.instruction, bytecode);
+                            if (token_offset) {
+                                scanner_off[0] = token_offset.start - 1;
+                                scanner_off[1] = token_offset.end - 1;
+                                break;
+                            }
+
+
                             let name = sherpa.get_debug_state_name(step.instruction, bytecode);
                             if (name) {
                                 active_scanner_state_source = sherpa.get_state_source_string(name, states, db);
@@ -217,9 +232,9 @@ export function parserHost(ctx: GrammarContext, {
                             + "\n\n"
                             + sherpa.create_instruction_disassembly(step.instruction, bytecode)
                             + "\n\n"
-                            + active_state_source
+                            + markSource(active_state_source, parser_off)
                             + "\n\n"
-                            + active_scanner_state_source
+                            + markSource(active_scanner_state_source, scanner_off)
 
 
                         let effects: any[] = [filter_effects.of((from, to) => false)]
@@ -241,6 +256,10 @@ export function parserHost(ctx: GrammarContext, {
 
                 debugger_offset++;
             }
+        }
+
+        function markSource(source: string, offsets: [number, number]) {
+            return source.slice(0, offsets[0]) + "|" + source.slice(...offsets) + "|" + source.slice(offsets[1]);
         }
     }
 
@@ -287,6 +306,7 @@ export function parserHost(ctx: GrammarContext, {
             }
         }, {}),
         EditorView.updateListener.of(function (e) {
+            set_input(e.state.doc.toString());
             view = e.view;
         }),
         StateField.define({

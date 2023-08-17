@@ -451,9 +451,9 @@ fn simple_newline_tracking() -> SherpaResult<()> {
     "".into(),
     Default::default(),
     &|TestPackage { db, states, .. }| {
-      let states = optimize::<ParseStatesVec>(&db, states)?;
+      let states = optimize::<ParseStatesVec>(&db, states, false)?;
 
-      let (bc, _) = compile_bytecode(&db, states.iter())?;
+      let (bc, _) = compile_bytecode(&db, states.iter(), true)?;
 
       let mut parser = TestParser::new(&mut ("hello\nworld\n\ngoodby\nmango".into()), &bc);
       parser.init_parser(FIRST_PARSE_BLOCK_ADDRESS);
@@ -480,7 +480,7 @@ fn simple_newline_tracking() -> SherpaResult<()> {
         &mut None,
       );
 
-      assert!(matches!(result, Result::Ok(AstSlot(1010101, ..))));
+      assert!(matches!(result, Result::Ok(AstSlot(1010101, ..))), "{:?}", result);
 
       SherpaResult::Ok(())
     },

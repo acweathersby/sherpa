@@ -10,22 +10,7 @@ use crate::{
 #[test]
 fn basic_optimize_unknown() -> R<()> {
   build_parse_states_from_multi_sources(
-    &[r##"
-
-    <> A > ( B | ":" C )(+)
-
-    <> B > id "=>" c:id
-    
-    <> C > a_id(+)
-    
-    <> a_id > id "!"? 
-    
-    <> id > tk:id_tok
-    
-    <> id_tok > c:id
-    
-
-    "##],
+    &[r##" <> A > 'B' C? <> C > "D" "##],
     "/".into(),
     Default::default(),
     &|Tp { states, db, .. }| {
@@ -33,7 +18,7 @@ fn basic_optimize_unknown() -> R<()> {
       //  println!("A: store{:#}\n", state.1.source_string(db.string_store()))
       // }
 
-      let states = optimize::<ParseStatesVec>(db, states)?;
+      let states = optimize::<ParseStatesVec>(db, states, false)?;
 
       println!("AFTER -------------------");
 

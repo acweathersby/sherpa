@@ -156,7 +156,7 @@ pub fn create_parser_states(js_db: &JSParserDB, optimize_states: bool) -> Result
   };
 
   let states: ParseStatesVec = if optimize_states {
-    let SherpaResult::Ok(states) =optimize( &db, states)else {
+    let SherpaResult::Ok(states) =optimize( &db, states, true)else {
       return Result::Err(convert_journal_errors(&mut j));
     };
     states
@@ -190,7 +190,7 @@ pub fn create_bytecode(js_db: &JSParserDB, states: &JSParseStates) -> Result<JSB
   let db = &js_db.0;
 
 
-  let SherpaResult::Ok((bc, state_lu)) = compile_bytecode(&db, states.states.iter()) else {
+  let SherpaResult::Ok((bc, state_lu)) = compile_bytecode(&db, states.states.iter(), true) else {
     return Result::Err(convert_journal_errors(&mut j));
   };
 

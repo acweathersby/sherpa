@@ -1,9 +1,4 @@
-use crate::{
-  journal::Journal,
-  types::*,
-  utils::hash_group_btreemap,
-  writer::code_writer::CodeWriter,
-};
+use crate::{journal::Journal, types::*, utils::hash_group_btreemap, writer::code_writer::CodeWriter};
 use sherpa_rust_runtime::types::bytecode::InputType;
 use std::collections::{BTreeMap, VecDeque};
 
@@ -16,10 +11,10 @@ pub(crate) fn build_ir<'db: 'follow, 'follow>(
 
   let leaf_states = graph.get_leaf_states();
   let mut queue = VecDeque::from_iter(leaf_states.iter().cloned());
-  let mut links: OrderedMap<StateId, Set<&State>> = OrderedMap::new();
+  let mut links: OrderedMap<StateId, OrderedSet<&State>> = OrderedMap::new();
   let mut output = OrderedMap::<StateId, Box<ParseState>>::new();
   let mut seen = OrderedSet::new();
-  let empty_hash = Set::new();
+  let empty_hash = OrderedSet::new();
 
   while let Some(state) = queue.pop_front() {
     if !seen.insert(state.get_id()) {
@@ -27,7 +22,7 @@ pub(crate) fn build_ir<'db: 'follow, 'follow>(
     }
     let predecessors = state.get_predecessors().clone();
     for predecessor in &predecessors {
-      links.entry(*predecessor).or_insert(Set::new()).insert(state);
+      links.entry(*predecessor).or_insert(OrderedSet::new()).insert(state);
       queue.push_back(&graph[*predecessor]);
     }
   }
@@ -56,11 +51,7 @@ pub(crate) fn build_ir<'db: 'follow, 'follow>(
     }
   }
   #[cfg(debug_assertions)]
-  debug_assert!(
-    !output.is_empty(),
-    "This graph did not yield any states! \n{}",
-    graph.debug_string()
-  );
+  debug_assert!(!output.is_empty(), "This graph did not yield any states! \n{}", graph.debug_string());
 
   j.report_mut().ok_or_convert_to_error(output.into_values().collect())
 }
@@ -75,12 +66,11 @@ fn convert_goto_state_to_ir<'follow, 'db>(
   j: &mut Journal,
   graph: &Graph<'follow, 'db>,
   state: &State,
-  successors: &Set<&State>,
+  successors: &OrderedSet<&State>,
 ) -> SherpaResult<(StateId, Box<ParseState>)> {
   let db = graph.get_db();
-  let successors = successors.iter().filter(|s| {
-    matches!(s.get_type(), StateType::GotoPass | StateType::GotoLoop | StateType::KernelGoto)
-  });
+  let successors =
+    successors.iter().filter(|s| matches!(s.get_type(), StateType::GotoPass | StateType::GotoLoop | StateType::KernelGoto));
 
   let mut w = CodeWriter::new(vec![]);
 
@@ -95,11 +85,7 @@ fn convert_goto_state_to_ir<'follow, 'db>(
         (prod_id, (prod_name, create_ir_state_name(graph, s), s.get_type()))
       } else {
         #[cfg(debug_assertions)]
-        panic!(
-          "Invalid production type: {:?}  {}",
-          s.get_symbol(),
-          s.get_symbol().debug_string(db)
-        );
+        panic!("Invalid production type: {:?}  {}", s.get_symbol(), s.get_symbol().debug_string(db));
         #[cfg(not(debug_assertions))]
         panic!()
       }
@@ -134,7 +120,7 @@ fn convert_state_to_ir<'follow, 'db>(
   j: &mut Journal,
   graph: &Graph<'follow, 'db>,
   state: &State,
-  successors: &Set<&State>,
+  successors: &OrderedSet<&State>,
   entry_name: IString,
   goto_state_id: Option<IString>,
 ) -> SherpaResult<Vec<(StateId, Box<ParseState>)>> {
@@ -167,10 +153,7 @@ fn convert_state_to_ir<'follow, 'db>(
 
   if matches!(
     state.get_type(),
-    StateType::Complete
-      | StateType::AssignAndFollow(..)
-      | StateType::AssignToken(..)
-      | StateType::Reduce(..)
+    StateType::Complete | StateType::AssignAndFollow(..) | StateType::AssignToken(..) | StateType::Reduce(..)
   ) {
     let mut w = CodeWriter::new(vec![]);
     w.increase_indent();
@@ -230,11 +213,7 @@ fn convert_state_to_ir<'follow, 'db>(
   SherpaResult::Ok(out)
 }
 
-fn add_tok_expr(
-  successors: &std::collections::HashSet<&State>,
-  w: &mut CodeWriter<Vec<u8>>,
-  db: &ParserDatabase,
-) {
+fn add_tok_expr(successors: &OrderedSet<&State>, w: &mut CodeWriter<Vec<u8>>, db: &ParserDatabase) {
   let mut set_token = successors
     .iter()
     .filter(|s| matches!(s.get_type(), StateType::AssignToken(..) | StateType::AssignAndFollow(..)))
@@ -253,9 +232,9 @@ fn add_tok_expr(
 }
 
 fn classify_successors<'graph, 'db>(
-  successors: &'graph Set<&'graph State<'db>>,
+  successors: &'graph OrderedSet<&'graph State<'db>>,
   db: &'db ParserDatabase,
-) -> VecDeque<((u32, InputType), Set<&'graph State<'db>>)> {
+) -> VecDeque<((u32, InputType), OrderedSet<&'graph State<'db>>)> {
   VecDeque::from_iter(
     hash_group_btreemap(successors.clone(), |_, s| match s.get_symbol() {
       SymbolId::EndOfFile { .. } => (0, InputType::EndOfFile),
@@ -278,7 +257,7 @@ fn classify_successors<'graph, 'db>(
 fn add_match_expr<'follow, 'db>(
   mut w: &mut CodeWriter<Vec<u8>>,
   graph: &Graph<'follow, 'db>,
-  branches: &mut VecDeque<((u32, InputType), Set<&State>)>,
+  branches: &mut VecDeque<((u32, InputType), OrderedSet<&State>)>,
   goto_state_id: Option<IString>,
 ) {
   let db = graph.get_db();
@@ -297,17 +276,16 @@ fn add_match_expr<'follow, 'db>(
 
       // Sort successors
 
-      for (state_val, s) in
-        successors.iter().map(|s| (s.get_symbol().to_state_val(db), s)).collect::<BTreeMap<_, _>>()
-      {
+      let peeking = successors.iter().any(|s| matches!(s.get_type(), StateType::PeekEnd | StateType::Peek));
+
+      for (state_val, s) in successors.iter().map(|s| (s.get_symbol().to_state_val(db), s)).collect::<BTreeMap<_, _>>() {
         w = w + "\n\n( " + state_val.to_string() + " ){ ";
         w = w + build_body(s, graph, goto_state_id).join(" then ") + " }";
       }
 
       // Add skips
       if input_type == InputType::Token {
-        let syms =
-          successors.iter().map(|s| s.get_symbol().tok_db_key().unwrap()).collect::<Set<_>>();
+        let syms = successors.iter().map(|s| s.get_symbol().tok_db_key().unwrap()).collect::<OrderedSet<_>>();
 
         let skipped = successors
           .iter()
@@ -317,7 +295,7 @@ fn add_match_expr<'follow, 'db>(
             let id = s.tok_db_key().unwrap();
             (!syms.contains(&id)).then_some(id)
           })
-          .collect::<Set<_>>();
+          .collect::<OrderedSet<_>>();
 
         if !skipped.is_empty() {
           let new_line = skipped
@@ -328,7 +306,7 @@ fn add_match_expr<'follow, 'db>(
             .join(" | ");
 
           if new_line.len() > 0 {
-            w = w + "\n( " + new_line + " ){ skip }";
+            w = w + "\n( " + new_line + " ){ " + peeking.then_some("peek-skip").unwrap_or("skip") + " }";
           }
 
           let vals = skipped
@@ -339,7 +317,7 @@ fn add_match_expr<'follow, 'db>(
             .join(" | ");
 
           if vals.len() > 0 {
-            w = w + "\n( " + vals + " ){ skip }";
+            w = w + "\n( " + vals + " ){ " + peeking.then_some("peek-skip").unwrap_or("skip") + " }";
           }
         }
       }
@@ -351,16 +329,12 @@ fn add_match_expr<'follow, 'db>(
         w = w.dedent();
       }
 
-      w.dedent() + "\n}";
+      let _ = w.dedent() + "\n}";
     }
   }
 }
 
-fn build_body<'follow, 'db>(
-  successor: &State,
-  graph: &Graph<'follow, 'db>,
-  goto_state_id: Option<IString>,
-) -> Vec<String> {
+fn build_body<'follow, 'db>(successor: &State, graph: &Graph<'follow, 'db>, goto_state_id: Option<IString>) -> Vec<String> {
   let is_scanner = graph.is_scan();
   let mut body_string = Array::new();
   let s_type = successor.get_type();
@@ -382,18 +356,12 @@ fn build_body<'follow, 'db>(
       true
     }
     StateType::ProductionCompleteOOS => {
-      debug_assert!(
-        !is_scanner,
-        "ProductionCompleteOOS states should only exist in normal parse graphs"
-      );
+      debug_assert!(!is_scanner, "ProductionCompleteOOS states should only exist in normal parse graphs");
       body_string.push("pop".into());
       false
     }
     StateType::ScannerCompleteOOS => {
-      debug_assert!(
-        is_scanner,
-        "ScannerCompleteOOS states should only exist in scanner parse graphs"
-      );
+      debug_assert!(is_scanner, "ScannerCompleteOOS states should only exist in scanner parse graphs");
       body_string.push("pass".into());
       false
     }
@@ -422,8 +390,7 @@ fn build_body<'follow, 'db>(
       // gotos.
       StateType::KernelCall(prod_id) | StateType::InternalCall(prod_id) => {
         body_string.push("push ".to_string() + &create_ir_state_name(graph, successor));
-        body_string
-          .push("goto ".to_string() + &db.prod_guid_name(prod_id).to_string(db.string_store()));
+        body_string.push("goto ".to_string() + &db.prod_guid_name(prod_id).to_string(db.string_store()));
       }
       _ => {
         body_string.push("goto ".to_string() + &create_ir_state_name(graph, successor));

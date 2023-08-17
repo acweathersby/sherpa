@@ -57,11 +57,7 @@ impl IStringStore {
 ///
 /// This should never be assigned to any object that outlives its current
 /// function context. Should be dropped as soon as possible.
-pub struct GuardedStr<'a>(
-  IString,
-  Option<&'a str>,
-  Option<RwLockReadGuard<'a, InnerStringStore>>,
-);
+pub struct GuardedStr<'a>(IString, Option<&'a str>, Option<RwLockReadGuard<'a, InnerStringStore>>);
 
 impl<'a> GuardedStr<'a> {
   pub fn as_str(&'a self) -> &'a str {
@@ -184,7 +180,7 @@ impl IString {
 }
 
 pub trait CachedString {
-  /// Get the IString representation without interning
+  /// Derive the IString representation without interning
   /// the string. This can be useful when needing to compare an already
   /// interned IString with a standard string type.
   fn to_token(&self) -> IString {
@@ -375,7 +371,7 @@ fn interning_strings_on_different_threads() {
         relicto orbe quid, adit nec possederat simque conprendere defecerat avus
         Cyparisse multarum!";
 
-          let large_str_b = "2: Lumina eiusdem a sororibus est agant montis tu urbes succedit gavisa dolore
+        let large_str_b = "2: Lumina eiusdem a sororibus est agant montis tu urbes succedit gavisa dolore
         Perseus incerti, repente pariter. Omnes morsu rediit flores, nisi scelus
         confessis cristati ramis silentum arentis centimanum sacrilegae pone. Silvas
         dieque ire *fuit*, resides videt quodcumque illi circumflua petii laeva ne

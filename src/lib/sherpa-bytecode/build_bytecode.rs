@@ -6,9 +6,37 @@ use sherpa_rust_runtime::types::{
 };
 use std::collections::VecDeque;
 
+/// Compiles bytecode from a set of parser states.
+///
+/// # Example
+///
+/// ```
+/// # use sherpa_core::{
+/// #   GrammarSoup, Journal, SherpaResult,ParseStatesVec,
+/// #   compile_parse_states, optimize,
+/// #   build_compile_db, compile_grammar_from_str
+/// # };
+/// #
+/// # use sherpa_bytecode::{compile_bytecode};
+/// #
+/// # fn main() -> SherpaResult<()> {
+/// # let mut j = Journal::new(Default::default());
+/// # let soup = GrammarSoup::new();
+/// # let root_id = compile_grammar_from_str(&mut j, "<> A > 'Hello' 'World' ", Default::default(), &soup)?;
+/// # let db = build_compile_db(j.transfer(), root_id, &soup)?;
+/// # let states = compile_parse_states(j.transfer(), &db)?;
+/// # let states = optimize::<ParseStatesVec>(&db, states, false)?;
+/// let (bytecode, state_lu) = compile_bytecode(&db, states.iter(), true)?;
+///
+/// assert_eq!(bytecode.len(), 1076);
+///
+/// # SherpaResult::Ok(())
+/// # }
+/// ```
 pub fn compile_bytecode<'a, 'db, T: Iterator<Item = &'a (IString, Box<ParseState>)>>(
   db: &'db ParserDatabase,
   states: T,
+  add_debug_symbols: bool,
 ) -> SherpaResult<(Array<u8>, Map<IString, usize>)> {
   let mut bytecode = Array::new();
   let mut state_name_to_proxy = OrderedMap::new();
@@ -18,8 +46,10 @@ pub fn compile_bytecode<'a, 'db, T: Iterator<Item = &'a (IString, Box<ParseState
 
   for (name, state) in states {
     state_name_to_address.insert(*name, bytecode.len());
-    insert_debug_symbol(&mut bytecode, name.to_string(db.string_store()));
-    build_state(db, state.as_ref(), &mut bytecode, &mut state_name_to_proxy)?;
+
+    insert_debug_symbol(&mut bytecode, name.to_string(db.string_store()), add_debug_symbols);
+
+    build_state(db, state.as_ref(), &mut bytecode, &mut state_name_to_proxy, add_debug_symbols)?;
   }
 
   let proxy_to_address = state_name_to_proxy
@@ -74,10 +104,11 @@ fn build_state<'db>(
   state: &ParseState,
   bytecode: &mut Array<u8>,
   state_name_to_proxy: &mut OrderedMap<IString, usize>,
+  add_debug_symbols: bool,
 ) -> SherpaResult<()> {
   let state = state.get_ast()?;
   let stmt = &state.statement;
-  build_statement(db, stmt.as_ref(), bytecode, state_name_to_proxy);
+  build_statement(db, stmt.as_ref(), bytecode, state_name_to_proxy, add_debug_symbols);
   SherpaResult::Ok(())
 }
 
@@ -86,11 +117,12 @@ fn build_statement<'db>(
   stmt: &parser::Statement,
   bc: &mut Array<u8>,
   state_name_to_proxy: &mut OrderedMap<IString, usize>,
+  add_debug_symbols: bool,
 ) -> SherpaResult<()> {
   let parser::Statement { branch, non_branch, transitive } = stmt;
 
   if let Some(transitive) = transitive {
-    insert_tok_debug(bc, transitive.to_token());
+    insert_tok_debug(bc, transitive.to_token(), add_debug_symbols);
 
     match transitive {
       parser::ASTNode::Skip(..) => insert_op(bc, Op::SkipToken),
@@ -99,6 +131,7 @@ fn build_statement<'db>(
       parser::ASTNode::Reset(..) => insert_op(bc, Op::PeekReset),
       parser::ASTNode::Shift(..) => insert_op(bc, Op::ShiftToken),
       parser::ASTNode::Peek(..) => insert_op(bc, Op::PeekToken),
+      parser::ASTNode::PeekSkip(..) => insert_op(bc, Op::PeekSkipToken),
       _ => {
         unreachable!();
       }
@@ -106,7 +139,7 @@ fn build_statement<'db>(
   }
 
   for non_branch in non_branch {
-    insert_tok_debug(bc, non_branch.to_token());
+    insert_tok_debug(bc, non_branch.to_token(), add_debug_symbols);
 
     match non_branch {
       parser::ASTNode::ReduceRaw(box parser::ReduceRaw { rule_id, len, prod_id, .. }) => {
@@ -126,27 +159,32 @@ fn build_statement<'db>(
   }
 
   if let Some(branch) = branch {
+    if add_debug_symbols && matches!(branch, parser::ASTNode::Gotos(..)) {
+      insert_tok_debug(bc, branch.to_token(), add_debug_symbols);
+    }
+
     match branch {
       parser::ASTNode::Pass(..) => insert_op(bc, Op::Pass),
       parser::ASTNode::Fail(..) => insert_op(bc, Op::Fail),
       parser::ASTNode::Accept(..) => insert_op(bc, Op::Accept),
       parser::ASTNode::Gotos(gotos) => {
         for push in &gotos.pushes {
-          let proxy_address = get_proxy_address(get_goto_target_name(&push.prod).to_token(), state_name_to_proxy);
+          insert_tok_debug(bc, push.tok.clone(), add_debug_symbols);
+          let proxy_address = get_proxy_address(push.name.to_token(), state_name_to_proxy);
 
           insert_op(bc, Op::PushGoto);
           insert_u8(bc, NORMAL_STATE_FLAG as u8);
           insert_u32_le(bc, proxy_address);
         }
-
-        let proxy_address = get_proxy_address(get_goto_target_name(&gotos.goto.prod).to_token(), state_name_to_proxy);
+        insert_tok_debug(bc, gotos.goto.tok.clone(), add_debug_symbols);
+        let proxy_address = get_proxy_address(gotos.goto.name.to_token(), state_name_to_proxy);
 
         insert_op(bc, Op::Goto);
         insert_u8(bc, NORMAL_STATE_FLAG as u8);
         insert_u32_le(bc, proxy_address);
       }
       matches => {
-        build_match(db, matches, bc, state_name_to_proxy)?;
+        build_match(db, matches, bc, state_name_to_proxy, add_debug_symbols)?;
       }
     }
   }
@@ -179,6 +217,7 @@ fn build_match<'db>(
   matches: &parser::ASTNode,
   bc: &mut Array<u8>,
   state_name_to_proxy: &mut OrderedMap<IString, usize>,
+  add_debug_symbols: bool,
 ) -> SherpaResult<()> {
   let mut default = None;
   let mut match_branches = Array::new();
@@ -186,10 +225,10 @@ fn build_match<'db>(
   let input_type_key;
 
   match matches {
-    parser::ASTNode::Matches(box parser::Matches { matches, mode, meta }) => {
+    parser::ASTNode::Matches(box parser::Matches { matches, mode, scanner, .. }) => {
       input_type_key = match mode.as_str() {
         InputType::TOKEN_STR => {
-          scanner_address = get_proxy_address(IString::from_u64(*meta), state_name_to_proxy);
+          scanner_address = get_proxy_address(scanner.to_token(), state_name_to_proxy);
           InputType::Token
         }
         s => InputType::from(s),
@@ -204,17 +243,20 @@ fn build_match<'db>(
         }
       }
     }
-    node => {
+    _ => {
       unreachable!();
     }
   };
 
   let mut offset = 0;
-  let mut val_offset_map = Map::new();
+  let mut val_offset_map = OrderedMap::new();
   let mut sub_bcs = Array::new();
 
   //#[cfg(debug_assertions)]
-  insert_debug_expected_symbols(bc, match_branches.iter().map(|(ids, _)| ids.clone()).flatten().collect::<Vec<_>>());
+
+  if input_type_key == InputType::Token as u32 {
+    insert_debug_expected_symbols(bc, match_branches.iter().map(|(ids, _)| *ids).flatten(), add_debug_symbols);
+  }
 
   for (ids, stmt) in match_branches {
     for id in ids {
@@ -222,7 +264,7 @@ fn build_match<'db>(
     }
 
     let mut sub_bc = Array::new();
-    build_statement(db, stmt, &mut sub_bc, state_name_to_proxy)?;
+    build_statement(db, stmt, &mut sub_bc, state_name_to_proxy, add_debug_symbols)?;
     offset += sub_bc.len() as u32;
     sub_bcs.push(sub_bc);
   }
@@ -301,7 +343,7 @@ fn build_match<'db>(
   }
 
   if let Some(stmt) = default {
-    build_statement(db, stmt, bc, state_name_to_proxy)?;
+    build_statement(db, stmt, bc, state_name_to_proxy, add_debug_symbols)?;
   } else {
     insert_op(bc, Op::Fail)
   }
@@ -309,13 +351,19 @@ fn build_match<'db>(
   SherpaResult::Ok(())
 }
 
-fn insert_tok_debug(bc: &mut Array<u8>, tok: Token) {
+fn insert_tok_debug(bc: &mut Array<u8>, tok: Token, add_debug_symbols: bool) {
+  if !add_debug_symbols {
+    return;
+  }
   insert_op(bc, Op::DebugTokenLocation);
   insert_u32_le(bc, tok.get_start() as u32);
   insert_u32_le(bc, tok.get_end() as u32);
 }
 
-fn insert_debug_symbol(bc: &mut Array<u8>, symbol: String) {
+fn insert_debug_symbol(bc: &mut Array<u8>, symbol: String, add_debug_symbols: bool) {
+  if !add_debug_symbols {
+    return;
+  }
   let len = symbol.as_bytes().len() as u16;
   insert_op(bc, Op::DebugStateName);
   insert_u16_le(bc, len);
@@ -325,10 +373,18 @@ fn insert_debug_symbol(bc: &mut Array<u8>, symbol: String) {
   }
 }
 
-fn insert_debug_expected_symbols(bc: &mut Array<u8>, symbols: Vec<&u64>) {
+fn insert_debug_expected_symbols<'i, I: Iterator<Item = &'i u64>>(bc: &mut Array<u8>, symbols: I, add_debug_symbols: bool) {
+  if !add_debug_symbols {
+    return;
+  }
+
+  let symbols = symbols.collect::<Vec<_>>();
+
   let len = symbols.len() as u16;
+
   insert_op(bc, Op::DebugExpectedSymbols);
   insert_u16_le(bc, len);
+
   for sym in symbols {
     insert_u32_le(bc, *sym as u32);
   }
