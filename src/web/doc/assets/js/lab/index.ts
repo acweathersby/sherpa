@@ -18,7 +18,9 @@ export default async function (
         debugger_step_button,
         debugger_into_button,
         debugger_out_button,
-        debugger_output, debugger_entry_selection
+        debugger_output,
+        debugger_entry_selection,
+        debugger_optimize_checkbox
     }: {
         codemirror_grammar_host: Element;
         codemirror_parser_host: Element;
@@ -28,7 +30,8 @@ export default async function (
         debugger_into_button: HTMLButtonElement,
         debugger_out_button: HTMLButtonElement,
         debugger_output: HTMLDivElement,
-        debugger_entry_selection: HTMLSelectElement
+        debugger_entry_selection: HTMLSelectElement,
+        debugger_optimize_checkbox: HTMLInputElement,
     }
 ) {
     const default_grammar = get_grammar();
@@ -49,8 +52,9 @@ export default async function (
             debugger_step_button,
             debugger_into_button,
             debugger_out_button,
-            debugger_output, 
-            debugger_entry_selection
+            debugger_output,
+            debugger_entry_selection,
+            debugger_optimize_checkbox
         })],
         parent: codemirror_parser_host
     });

@@ -48,6 +48,8 @@
                     <button id="debugger-into-button">step-into</button>
                     <button id="debugger-start-stop-button">start</button>
                     <select id="debugger-entry-dropdown"></select>
+                    <label> optimize </label>
+                    <input type="checkbox" id="debugger-optimize-checkbox"></input>
                     <h1> Debugger </h1>
                     <pre id="debugger-output"></pre>
                 </div>
@@ -73,6 +75,7 @@
             debugger_out_button: document.getElementById("debugger-out-button"),
             debugger_output: document.getElementById("debugger-output"),
             debugger_entry_selection: document.getElementById("debugger-entry-dropdown"),
+            debugger_optimize_checkbox: document.getElementById("debugger-optimize-checkbox"),
         }).then(() => {
             for (const scroller of Array.from(document.getElementsByClassName("cm-scroller"))) {
 

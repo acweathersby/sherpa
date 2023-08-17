@@ -26,7 +26,7 @@ pub struct JSParserDB(pub(crate) Box<ParserDatabase>);
 
 /// Parser states generated from the compilation of parser db
 #[wasm_bindgen]
-pub struct JSParseStates(pub(crate) Box<ParseStatesVec>);
+pub struct JSParseStates{ pub(crate) states:  Box<ParseStatesVec>, pub num_of_states: u32  }
 
 /// An arbitrary collection of grammars
 #[wasm_bindgen]
@@ -155,7 +155,7 @@ pub fn create_parser_states(js_db: &JSParserDB, optimize_states: bool) -> Result
       return Result::Err(convert_journal_errors(&mut j));
   };
 
-  let states = if optimize_states {
+  let states: ParseStatesVec = if optimize_states {
     let SherpaResult::Ok(states) =optimize( &db, states)else {
       return Result::Err(convert_journal_errors(&mut j));
     };
@@ -164,7 +164,7 @@ pub fn create_parser_states(js_db: &JSParserDB, optimize_states: bool) -> Result
     states.into_iter().collect()
   };
 
-  Ok(JSParseStates(Box::new(states)))
+  Ok(JSParseStates{ num_of_states: states.len() as u32, states:Box::new(states)})
 }
 
 
@@ -190,7 +190,7 @@ pub fn create_bytecode(js_db: &JSParserDB, states: &JSParseStates) -> Result<JSB
   let db = &js_db.0;
 
 
-  let SherpaResult::Ok((bc, state_lu)) = compile_bytecode(&db, states.0.iter()) else {
+  let SherpaResult::Ok((bc, state_lu)) = compile_bytecode(&db, states.states.iter()) else {
     return Result::Err(convert_journal_errors(&mut j));
   };
 
@@ -255,7 +255,7 @@ pub fn get_debug_tok_offsets(address: u32, bytecode: &JSBytecode) -> JsValue{
 pub fn get_state_source_string(name: String, states: &JSParseStates, db: &JSParserDB) -> JsValue { 
   let lu_name:IString = name.to_token();
 
-  let code = states.0.iter().find(|f| f.0 == lu_name).map(|f| f.1.source_string(db.0.string_store()));
+  let code = states.states.iter().find(|f| f.0 == lu_name).map(|f| f.1.print(&db.0, true).unwrap());
 
   code.into()
 }

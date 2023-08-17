@@ -22,6 +22,7 @@ export function parserHost(ctx: GrammarContext, {
     debugger_out_button,
     debugger_output,
     debugger_entry_selection,
+    debugger_optimize_checkbox
 }: {
     debugger_start_stop_button: HTMLButtonElement,
     debugger_step_button: HTMLButtonElement,
@@ -29,6 +30,7 @@ export function parserHost(ctx: GrammarContext, {
     debugger_out_button: HTMLButtonElement,
     debugger_output: HTMLDivElement,
     debugger_entry_selection: HTMLSelectElement,
+    debugger_optimize_checkbox: HTMLInputElement,
 }) {
     let view: EditorView | null = null;
     let bytecode: sherpa.JSBytecode | null = null;
@@ -38,6 +40,7 @@ export function parserHost(ctx: GrammarContext, {
     let debugger_steps: any[] = [];
     let debugger_offset: number = -1;
     let play_interval = -1;
+    let optimize = false;
     let active_search_symbols: Set<string> = new Set();
     let active_state_source = '';
     let active_scanner_state_source = '';
@@ -49,10 +52,7 @@ export function parserHost(ctx: GrammarContext, {
 
     ctx.addListener(EventType.DBDeleted, ctx => {
         console.log("DBDeleted")
-        if (states) {
-            states.free()
-            states = null;
-        }
+        destroy_states();
     })
 
     ctx.addListener(EventType.DBCreated, ctx => {
@@ -74,7 +74,8 @@ export function parserHost(ctx: GrammarContext, {
         let db = ctx.db;
 
         try {
-            states = sherpa.create_parser_states(db, false);
+            states = sherpa.create_parser_states(db, optimize);
+            console.log(states);
             bytecode = sherpa.create_bytecode(db, states);
             // Build the soup.
             let output = document.getElementById("bytecode-output");
@@ -103,6 +104,13 @@ export function parserHost(ctx: GrammarContext, {
         if (parser) {
             parser.free();
             parser = null;
+        }
+    }
+
+    function destroy_states() {
+        if (states) {
+            states.free();
+            states = null;
         }
     }
 
@@ -244,6 +252,12 @@ export function parserHost(ctx: GrammarContext, {
             play_interval = setInterval(step_forward, 1);
         }
     }
+
+    debugger_optimize_checkbox.addEventListener("change", e => {
+        stop_parser();
+        destroy_states();
+        optimize = debugger_optimize_checkbox.checked;
+    })
 
     debugger_step_button.addEventListener("click", step_forward);
 
