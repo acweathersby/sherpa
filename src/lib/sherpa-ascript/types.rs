@@ -234,9 +234,7 @@ impl AScriptTypeVal {
         F32Vec => vec![AScriptTypeVal::F32(None)],
         F64Vec => vec![AScriptTypeVal::F64(None)],
         StringVec => vec![AScriptTypeVal::String(None)],
-        GenericVec(Some(vals)) | GenericStructVec(vals) => {
-          vals.iter().map(|t| &t.type_).cloned().collect()
-        }
+        GenericVec(Some(vals)) | GenericStructVec(vals) => vals.iter().map(|t| &t.type_).cloned().collect(),
         GenericVec(_) => vec![],
         _ => unreachable!(),
       }
@@ -269,10 +267,9 @@ impl AScriptTypeVal {
   pub fn is_atom(&self) -> bool {
     use AScriptTypeVal::*;
     match self {
-      Token | TokenRange | AdjustedTokenRange | Struct(..) | String(..) | Bool(..) | F64(..)
-      | F32(..) | I64(..) | I32(..) | I16(..) | I8(..) | U64(..) | U32(..) | U16(..) | U8(..)
-      | F64Vec | F32Vec | I64Vec | I32Vec | I16Vec | I8Vec | U64Vec | U32Vec | U16Vec | U8Vec
-      | TokenVec | StringVec => true,
+      Token | TokenRange | AdjustedTokenRange | Struct(..) | String(..) | Bool(..) | F64(..) | F32(..) | I64(..) | I32(..)
+      | I16(..) | I8(..) | U64(..) | U32(..) | U16(..) | U8(..) | F64Vec | F32Vec | I64Vec | I32Vec | I16Vec | I8Vec | U64Vec
+      | U32Vec | U16Vec | U8Vec | TokenVec | StringVec => true,
       GenericStructVec(nodes) => {
         if nodes.len() == 1 {
           match nodes.first() {
@@ -308,11 +305,7 @@ impl AScriptTypeVal {
       },
       GenericStructVec(nodes) => format!(
         "Structs<[{}]>",
-        nodes
-          .iter()
-          .map(|id| struct_types.get(&id.into()).cloned().unwrap_or_default())
-          .collect::<Vec<_>>()
-          .join(", ")
+        nodes.iter().map(|id| struct_types.get(&id.into()).cloned().unwrap_or_default()).collect::<Vec<_>>().join(", ")
       ),
       Struct(id) => {
         format!("Struct<{}>", struct_types.get(id).cloned().unwrap_or_default())
@@ -390,11 +383,7 @@ impl AScriptTypeVal {
       GenericVec(vec) => match vec {
         Some(vector) => format!(
           "GenericVec{}",
-          vector
-            .iter()
-            .map(|t| { AScriptTypeVal::from(Into::into(t)).hcobj_type_name() })
-            .collect::<Vec<_>>()
-            .join(", ")
+          vector.iter().map(|t| { AScriptTypeVal::from(Into::into(t)).hcobj_type_name() }).collect::<Vec<_>>().join(", ")
         ),
         None => "GenericVec".to_string(),
       },
@@ -583,12 +572,11 @@ impl AScriptStore {
   }
 
   pub fn new(j: &mut Journal, db: &ParserDatabase) -> SherpaResult<Self> {
-    let mut new_self =
-      AScriptStore { is_dummy: false, ast_type_name: "ASTNode".into(), ..Self::dummy()? };
+    let mut new_self = AScriptStore { is_dummy: false, ast_type_name: "ASTNode".into(), ..Self::dummy()? };
 
     j.set_active_report("Ascript Store Compile", ReportType::AScriptCompile);
 
-    compile_ascript_store(j, &mut new_self, db);
+    compile_ascript_store(j, &mut new_self, db)?;
 
     if j.report().have_errors_of_type(SherpaErrorSeverity::Critical) {
       SherpaResult::Err(j.report().into())
@@ -601,13 +589,7 @@ impl AScriptStore {
     self
       .struct_lookups
       .get_or_insert_with(|| {
-        Arc::new(
-          self
-            .structs
-            .iter()
-            .map(|(_, struct_)| (struct_.id.clone(), struct_.type_name.clone()))
-            .collect(),
-        )
+        Arc::new(self.structs.iter().map(|(_, struct_)| (struct_.id.clone(), struct_.type_name.clone())).collect())
       })
       .clone()
   }
