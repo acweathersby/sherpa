@@ -369,9 +369,7 @@ impl<'a> Instruction<'a> {
         // Extract the address of the default branch
         let mut iter = self.iter();
         iter.next_u8(); // Skip the input enum value
-        iter.next_u32_le().and_then(|v| {
-          self.is_valid_offset(v as usize).then_some((bc, opcode_start + v as usize).into())
-        })
+        iter.next_u32_le().and_then(|v| self.is_valid_offset(v as usize).then_some((bc, opcode_start + v as usize).into()))
       }
       Opcode::DebugStateName | Opcode::DebugExpectedSymbols => {
         let d = self.len();
@@ -390,10 +388,7 @@ impl<'a> Instruction<'a> {
         // Extract the address of the default branch
         let mut iter = self.iter();
         iter.next_u8(); // Skip the input enum value
-        iter
-          .next_u32_le()
-          .and_then(|v| self.is_valid_offset(v as usize).then_some(v as usize))
-          .unwrap_or(0)
+        iter.next_u32_le().and_then(|v| self.is_valid_offset(v as usize).then_some(v as usize)).unwrap_or(0)
       }
       Opcode::DebugStateName => {
         let mut iter = self.iter();
@@ -511,12 +506,7 @@ impl<'a> ByteCodeIterator<'a> {
       let root = self.offset;
       self.offset += 4;
       let bc = self.bc;
-      Some(
-        bc[root] as u32
-          | ((bc[root + 1] as u32) << 8)
-          | ((bc[root + 2] as u32) << 16)
-          | ((bc[root + 3] as u32) << 24),
-      )
+      Some(bc[root] as u32 | ((bc[root + 1] as u32) << 8) | ((bc[root + 2] as u32) << 16) | ((bc[root + 3] as u32) << 24))
     } else {
       None
     }
@@ -586,6 +576,7 @@ pub const TOKEN_ASSIGN_FLAG: u32 = 0x04000000;
 
 pub const END_OF_INPUT_TOKEN_ID: u32 = 0x1;
 
+/// Internal input types used in IR [parser::Matches] statements.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 #[repr(u32)]
@@ -597,11 +588,17 @@ pub enum InputType {
   Byte,
   EndOfFile,
   Default,
+  ByteScanless,
+  CodepointScanless,
+  ClassScanless,
 }
 
 impl InputType {
+  pub const BYTE_SCANLESS_STR: &'static str = "_BYTE_SCANLESS_";
   pub const BYTE_STR: &'static str = "_BYTE_";
+  pub const CLASS_SCANLESS_STR: &'static str = "_CLASS_SCANLESS_";
   pub const CLASS_STR: &'static str = "_CLASS_";
+  pub const CODEPOINT_SCANLESS_STR: &'static str = "_CODEPOINT_SCANLESS_";
   pub const CODEPOINT_STR: &'static str = "_CODEPOINT_";
   pub const END_OF_FILE_STR: &'static str = "_EOF_";
   pub const PRODUCTION_STR: &'static str = "_PRODUCTION_";
@@ -612,10 +609,22 @@ impl InputType {
       Self::Production => InputType::PRODUCTION_STR,
       Self::Token => InputType::TOKEN_STR,
       Self::Class => InputType::CLASS_STR,
+      Self::ClassScanless => InputType::CLASS_SCANLESS_STR,
       Self::Codepoint => InputType::CODEPOINT_STR,
+      Self::CodepointScanless => InputType::CODEPOINT_SCANLESS_STR,
       Self::Byte => InputType::BYTE_STR,
+      Self::ByteScanless => InputType::BYTE_SCANLESS_STR,
       Self::EndOfFile => InputType::END_OF_FILE_STR,
       Self::Default => "",
+    }
+  }
+
+  pub fn to_scanless(&self) -> Self {
+    match self {
+      Self::Class => Self::ClassScanless,
+      Self::Byte => Self::ByteScanless,
+      Self::Codepoint => Self::CodepointScanless,
+      _ => *self,
     }
   }
 }
@@ -635,6 +644,9 @@ impl From<u32> for InputType {
       3 => Self::Codepoint,
       4 => Self::Byte,
       5 => Self::EndOfFile,
+      7 => Self::ByteScanless,
+      8 => Self::CodepointScanless,
+      9 => Self::ClassScanless,
       _ => unreachable!(),
     }
   }
@@ -643,13 +655,32 @@ impl From<u32> for InputType {
 impl From<&str> for InputType {
   fn from(value: &str) -> Self {
     match value {
+      Self::BYTE_SCANLESS_STR => Self::ByteScanless,
+      Self::BYTE_STR => Self::Byte,
+      Self::CLASS_SCANLESS_STR => Self::ClassScanless,
+      Self::CLASS_STR => Self::Class,
+      Self::CODEPOINT_SCANLESS_STR => Self::CodepointScanless,
+      Self::CODEPOINT_STR => Self::Codepoint,
+      Self::END_OF_FILE_STR => Self::EndOfFile,
+      Self::PRODUCTION_STR => Self::Production,
+      Self::TOKEN_STR => Self::Token,
       "PRODUCTION" => Self::Production,
       "TOKEN" => Self::Token,
       "CLASS" => Self::Class,
       "CODEPOINT" => Self::Codepoint,
       "BYTE" => Self::Byte,
       "EOF" => Self::EndOfFile,
-      _ => unreachable!(),
+      _ => {
+        #[cfg(debug_assertions)]
+        unreachable!("Unexpected InputType (for IR Matches) specifier: [{}];\nExpected one of {:?}", value, [
+          InputType::CLASS_STR,
+          InputType::CODEPOINT_STR,
+          InputType::BYTE_STR,
+          InputType::END_OF_FILE_STR,
+        ]);
+        #[cfg(not(debug_assertions))]
+        unreachable!()
+      }
     }
   }
 }
@@ -667,14 +698,9 @@ pub enum BranchSelector {
 
 /// values - The set of keys used to select a branch to jump to.
 /// branches - An vector of branch bytecode vectors.
-pub type GetBranchSelector =
-  fn(values: &[u32], max_span: u32, branches: &[Vec<u8>]) -> BranchSelector;
+pub type GetBranchSelector = fn(values: &[u32], max_span: u32, branches: &[Vec<u8>]) -> BranchSelector;
 
-pub fn default_get_branch_selector(
-  values: &[u32],
-  max_span: u32,
-  branches: &[Vec<u8>],
-) -> BranchSelector {
+pub fn default_get_branch_selector(values: &[u32], max_span: u32, branches: &[Vec<u8>]) -> BranchSelector {
   // Hash table limitations:
   // Max supported item value: 2046 with skip set to 2048
   // Max number of values: 1024 (maximum jump span)

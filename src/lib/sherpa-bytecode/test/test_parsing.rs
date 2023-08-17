@@ -32,7 +32,7 @@ IGNORE { c:sp  }
 }
 
 #[test]
-pub fn symbols_requiring_peek2() -> SherpaResult<()> {
+pub fn other_symbols_requiring_peek() -> SherpaResult<()> {
   compile_and_run_grammars(
     &[r#"
 IGNORE { c:sp  } 
@@ -180,29 +180,22 @@ fn parser_of_grammar_with_append_productions() -> SherpaResult<()> {
   +> A >  "C"
   +> A >  "D"
 "#],
-    &[
-      ("default", "B ", true),
-      ("default", "C", true),
-      ("default", "D", true),
-      ("default", "d", false),
-    ],
+    &[("default", "B ", true), ("default", "C", true), ("default", "D", true), ("default", "d", false)],
   )
 }
 
 #[test]
 fn parsing_using_trivial_custom_state() -> SherpaResult<()> {
-  compile_and_run_grammars(
-    &[r##"A => match : BYTE  (65 /* A */ | 66 /* B */) { shift then pass }"##],
-    &[("default", "A ", true), ("default", "B", true), ("default", "C", false)],
-  )
+  compile_and_run_grammars(&[r##"A => match : BYTE  (65 /* A */ | 66 /* B */) { shift then pass }"##], &[
+    ("default", "A ", true),
+    ("default", "B", true),
+    ("default", "C", false),
+  ])
 }
 
 #[test]
 fn json_parser() -> SherpaResult<()> {
-  let grammar_source_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-    .join("../../grammar/json/json.sg")
-    .canonicalize()
-    .unwrap();
+  let grammar_source_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammar/json/json.sg").canonicalize().unwrap();
   compile_and_run_grammars(&[std::fs::read_to_string(grammar_source_path.as_path())?.as_str()], &[
     ("entry", r##"{"test":[{ "test":"12\"34", "test":"12\"34"}]}"##, true),
     ("entry", r##"{"\"":2}"##, true),
@@ -459,7 +452,7 @@ fn simple_newline_tracking() -> SherpaResult<()> {
     Default::default(),
     &|TestPackage { db, states, .. }| {
       let states = optimize::<ParseStatesVec>(&db, states)?;
-      
+
       let (bc, _) = compile_bytecode(&db, states.iter())?;
 
       let mut parser = TestParser::new(&mut ("hello\nworld\n\ngoodby\nmango".into()), &bc);

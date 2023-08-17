@@ -26,6 +26,8 @@ pub fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
   db: &'db ParserDatabase,
   parse_states: Map<IString, Box<ParseState>>,
 ) -> SherpaResult<R> {
+  let start_complexity = ComplexityMarker::new(db, parse_states.iter());
+
   let parse_states = garbage_collect(db, parse_states, "initial purge")?;
 
   let parse_states = canonicalize_states(db, parse_states, None)?;
@@ -38,11 +40,15 @@ pub fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
 
   let parse_states = inline_states(db, parse_states)?;
 
-  //let parse_states = inline_scanners(db, parse_states)?;
+  let parse_states = inline_scanners(db, parse_states)?;
+
+  let parse_states = combine_state_branches(db, parse_states)?;
 
   let parse_states = create_byte_chains(db, parse_states)?;
 
   let parse_states = inline_matches(db, parse_states)?;
+
+  start_complexity.print_comparison(&ComplexityMarker::new(db, parse_states.iter()), "Total optimization result");
 
   // Can only do this once we can map scanner ids back to match statements
   // otherwise scanner states will be dropped.
@@ -55,8 +61,36 @@ pub fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
   })
   .collect(); */
 
-  garbage_collect(db, parse_states, "finalize")
+  SherpaResult::Ok(parse_states.into_iter().collect())
 }
+
+struct ComplexityMarker {
+  num_of_states:   usize,
+  code_complexity: f64,
+}
+
+impl ComplexityMarker {
+  pub fn new<'i, I: Iterator<Item = (&'i IString, &'i Box<ParseState>)>>(db: &ParserDatabase, states: I) -> Self {
+    let (num_of_states, code_complexity) = states
+      .enumerate()
+      .map(|(i, (_, s))| (i, s.print(db, false).unwrap().len()))
+      .fold((0, 0), |(a, c), (b, d)| (a.max(b), c + d));
+    Self { num_of_states, code_complexity: code_complexity as f64 }
+  }
+
+  pub fn print_comparison(&self, other: &Self, label: &str) {
+    println!(
+      "Opt {} ---- {} -> {} State Reduction: {}% Complexity Reduction: {}%",
+      label,
+      self.num_of_states,
+      other.num_of_states,
+      ((1.0 - other.num_of_states as f64 / self.num_of_states as f64) * 100.0).round(),
+      ((1.0 - other.code_complexity / self.code_complexity) * 100.0).round()
+    );
+  }
+}
+
+pub fn calculateComplexity() {}
 
 /// Extract the target name of a goto or push statement
 pub fn get_goto_target_name(node: &ASTNode) -> String {
@@ -113,7 +147,7 @@ fn inline_scanners<'db>(
     let parser::Statement { branch, .. } = statement;
 
     if let Some(parser::Matches { mode, meta, matches, .. }) = branch.as_mut().and_then(|b| b.as_Matches_mut()) {
-      if mode.as_str() != InputType::TOKEN_STR {
+      if !matches!(mode.as_str(), InputType::TOKEN_STR) {
         return SherpaResult::Ok(());
       };
 
@@ -121,49 +155,57 @@ fn inline_scanners<'db>(
         .iter()
         .map(|m| match m {
           ASTNode::IntMatch(box IntMatch { statement, vals, .. }) => {
-            vals.clone().into_iter().map(|v| (v, statement)).collect::<Vec<_>>()
+            vals.clone().into_iter().map(|v| (db.token((v as u32).into()).sym_id, statement)).collect::<Vec<_>>()
           }
+          ASTNode::DefaultMatch(box parser::DefaultMatch { statement }) => vec![(SymbolId::Default, statement)],
           _ => vec![],
         })
         .flatten()
-        .map(|(i, stmt)| (db.token((i as u32).into()), stmt))
         .collect::<Vec<_>>();
 
-      if tok_ids.iter().all(|(i, _)| match i.sym_id {
+      if tok_ids.iter().all(|(i, _)| match *i {
         SymbolId::Token { val, .. } => val.to_str(db.string_store()).as_str().len() == 1,
         sym if sym.is_class() => true,
+        SymbolId::Default => true,
         _ => false,
       }) {
         // convert each match into a local branch
-        let id_groups = hash_group_btreemap(tok_ids, |_, (i, _)| match i.sym_id {
+        let mut id_groups = hash_group_btreemap(tok_ids, |_, (i, _)| match *i {
+          SymbolId::Default => InputType::Default,
           sym if sym.is_class() => InputType::Class,
+          sym if sym.is_codepoint(db.string_store()) => InputType::Codepoint,
           _ => InputType::Byte,
         });
 
+        // Remove the default statement if present. This will be appended to the end of
+        // the last Matches block.
+        let default = id_groups.remove(&InputType::Default).and_then(|d| d.into_iter().next());
+
         fn setup_match<'db>(
           db: &'db ParserDatabase,
-          queue: &mut VecDeque<(InputType, Vec<(DBTokenData, &Box<Statement>)>)>,
+          queue: &mut VecDeque<(InputType, Vec<(SymbolId, &Box<Statement>)>)>,
           match_stmt: &mut Matches,
+          default: Option<(SymbolId, &Box<parser::Statement>)>,
         ) {
           if let Some((mode, group)) = queue.pop_back() {
-            match_stmt.mode = mode.as_str().to_string();
+            match_stmt.mode = mode.to_scanless().as_str().to_string();
             match_stmt.matches = group
               .into_iter()
-              .map(|(val, stmt)| {
-                ASTNode::IntMatch(Box::new(IntMatch::new(stmt.clone(), vec![val.sym_id.to_state_val(db) as u64])))
-              })
+              .map(|(val, stmt)| ASTNode::IntMatch(Box::new(IntMatch::new(stmt.clone(), vec![val.to_state_val(db) as u64]))))
               .collect();
 
             if !queue.is_empty() {
               let mut matches = parser::Matches::new(Default::default(), Default::default(), Default::default());
 
-              setup_match(db, queue, &mut matches);
+              setup_match(db, queue, &mut matches, default);
 
               let matches = ASTNode::Matches(Box::new(matches));
               let stmt = Box::new(parser::Statement::new(Some(matches), Default::default(), Default::default()));
               let default = ASTNode::DefaultMatch(Box::new(parser::DefaultMatch::new(stmt)));
 
               match_stmt.matches.push(default);
+            } else if let Some((_, statement)) = default {
+              match_stmt.matches.push(ASTNode::DefaultMatch(Box::new(DefaultMatch { statement: statement.clone() })))
             }
           }
         }
@@ -171,7 +213,7 @@ fn inline_scanners<'db>(
         let mut match_stmt = parser::Matches::new(Default::default(), Default::default(), Default::default());
         let mut queue = VecDeque::from_iter(id_groups.into_iter());
 
-        setup_match(db, &mut queue, &mut match_stmt);
+        setup_match(db, &mut queue, &mut match_stmt, default);
 
         *mode = match_stmt.mode;
         *meta = 0;
@@ -520,10 +562,6 @@ fn canonicalize_states<'db, R: FromIterator<(IString, Box<ParseState>)>>(
   garbage_collect(db, parse_states, gc_label.unwrap_or("conanicalize"))
 }
 
-pub fn get_complexity<'db>(db: &'db ParserDatabase, states: &Map<IString, Box<ParseState>>) -> f64 {
-  states.iter().map(|(_, s)| s.print(db, false).unwrap().len()).fold(0, |a, b| a + b) as f64
-}
-
 /// Removes any states that are not referenced, directly or indirectly, by
 /// at least one of the entry states.
 pub fn garbage_collect<'db, R: FromIterator<(IString, Box<ParseState>)>>(
@@ -531,8 +569,7 @@ pub fn garbage_collect<'db, R: FromIterator<(IString, Box<ParseState>)>>(
   mut parse_states: Map<IString, Box<ParseState>>,
   reason: &str,
 ) -> SherpaResult<R> {
-  let start_len = parse_states.len();
-  let start_complexity = get_complexity(db, &parse_states);
+  let start_complexity = ComplexityMarker::new(db, parse_states.iter());
 
   let mut out = Array::new();
   let mut queue =
@@ -549,13 +586,7 @@ pub fn garbage_collect<'db, R: FromIterator<(IString, Box<ParseState>)>>(
     out.push((name, state));
   }
 
-  println!(
-    "GC {} ---- {} -> {} Complexity Reduction: {}%",
-    reason,
-    start_len,
-    out.len(),
-    ((1.0 - get_complexity(db, &out.clone().into_iter().collect()) / start_complexity) * 100.0).round()
-  );
+  start_complexity.print_comparison(&ComplexityMarker::new(db, out.iter().map(|(i, b)| (i, b))), reason);
 
   SherpaResult::Ok(R::from_iter(out))
 }

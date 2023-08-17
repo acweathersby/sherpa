@@ -62,6 +62,26 @@ impl SymbolId {
     }
   }
 
+  /// True if the SymbolId is a Unicode code point. This is true
+  /// if the code point is single character token, and it's Unicode value
+  /// is greater than the ASCII code points.
+  pub fn is_codepoint(&self, st: &IStringStore) -> bool {
+    use SymbolId::*;
+    match *self {
+      Token { val, .. } => {
+        let guard_string = val.to_str(st);
+        let string = guard_string.as_str();
+
+        if string.len() > 1 {
+          false
+        } else {
+          string.chars().next().is_some_and(|v| v as u32 > 127)
+        }
+      }
+      _ => false,
+    }
+  }
+
   /// True if the SymbolId is a Generic class type
   pub fn is_class(&self) -> bool {
     use SymbolId::*;

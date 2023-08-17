@@ -526,7 +526,11 @@ fn get_input_value<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
     InputType::Class => {
       let scan_len = ctx.get_reader().codepoint_byte_length();
       ctx.sym_len = scan_len;
-      //ctx.tok_len = scan_len as usize;
+      ctx.get_reader().class() as u32
+    }
+    InputType::ClassScanless => {
+      let scan_len = ctx.get_reader().codepoint_byte_length();
+      ctx.tok_len = scan_len as usize;
       ctx.get_reader().class() as u32
     }
     InputType::Codepoint => {
@@ -534,6 +538,26 @@ fn get_input_value<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
       ctx.sym_len = scan_len;
       //ctx.tok_len = scan_len as usize;
       ctx.get_reader().codepoint() as u32
+    }
+    InputType::CodepointScanless => {
+      let scan_len = ctx.get_reader().codepoint_byte_length();
+      ctx.tok_len = scan_len as usize;
+      ctx.get_reader().codepoint() as u32
+    }
+    InputType::ByteScanless => {
+      let byte = ctx.get_reader().byte();
+
+      if byte == 10 {
+        ctx.end_line_num += 1;
+        ctx.end_line_off = ctx.scan_ptr as u32;
+      }
+
+      if byte > 0 {
+        ctx.tok_len = 1;
+      } else {
+        ctx.tok_len = 0;
+      }
+      byte as u32
     }
     InputType::Byte => {
       let byte = ctx.get_reader().byte();
