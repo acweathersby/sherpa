@@ -4,14 +4,46 @@ use crate::{
   types::*,
   writer::code_writer::CodeWriter,
 };
-use core::panic;
+type States = OrderedMap<IString, Box<ParseState>>;
+type Scanners = OrderedSet<(IString, OrderedSet<DBTokenData>)>;
+use rayon::prelude::*;
 
-pub fn compile_parse_states<'db>(mut j: Journal, db: &'db ParserDatabase) -> SherpaResult<ParseStatesMap> {
+pub fn compile_parse_states(mut j: Journal, db: &ParserDatabase) -> SherpaResult<ParseStatesMap> {
   j.set_active_report("State Compile", ReportType::ProductionCompile(Default::default()));
 
   let follow = create_follow_sets(db);
-  let mut states = OrderedMap::new();
-  let mut scanners = OrderedSet::new();
+
+  let results = db
+    .productions()
+    .iter()
+    .cloned()
+    .enumerate()
+    .collect::<Vec<_>>()
+    .chunks(10)
+    .map(|chunks| (j.transfer(), chunks))
+    .par_bridge()
+    .into_par_iter()
+    .map(|(mut local_j, chunks)| {
+      let mut states = States::new();
+      let mut scanners = Scanners::new();
+
+      for (prod_id, prod_sym) in chunks {
+        match create_parse_states_from_prod(&mut local_j, db, &follow, *prod_id, *prod_sym, &mut states, &mut scanners) {
+          SherpaResult::Ok(output) => output,
+          SherpaResult::Err(err) => {}
+          _ => unreachable!(),
+        }
+      }
+      (states, scanners)
+    })
+    .collect::<Vec<_>>();
+
+  let (mut states, scanners) =
+    results.into_iter().fold((States::new(), Scanners::new()), |(mut st_to, mut sc_to), (mut st_from, mut sc_from)| {
+      st_to.append(&mut st_from);
+      sc_to.append(&mut sc_from);
+      (st_to, sc_to)
+    });
 
   // Build entry states
   for entry in db.entry_points() {
@@ -19,53 +51,6 @@ pub fn compile_parse_states<'db>(mut j: Journal, db: &'db ParserDatabase) -> She
 
     for state in ir {
       states.insert(state.name, state);
-    }
-  }
-
-  // compile productions
-  for (prod_id, prod_sym) in db.productions().iter().enumerate() {
-    if let Some(custom_state) = db.custom_state(prod_id.into()) {
-      let name = db.prod_guid_name(prod_id.into());
-      let state = ParseState {
-        name,
-        comment: "Custom State".into(),
-        code: custom_state.tok.to_string(),
-        ast: SherpaResult::Ok(Box::new(custom_state.clone())),
-        scanners: None,
-      };
-      states.insert(name, Box::new(state));
-    } else {
-      let start_items = Items::start_items((prod_id as u32).into(), db).to_origin(Origin::ProdGoal(prod_id.into()));
-
-      match prod_sym {
-        SymbolId::NonTerminal { .. } => {
-          let graph = build_graph(&mut j, GraphMode::Parser, start_items, db, &follow)?;
-
-          let ir = build_ir(&mut j, &graph, db.prod_guid_name(prod_id.into()))?;
-
-          for mut state in ir {
-            if let Some(scanner_data) = state.build_scanners(db) {
-              for (name, syms) in scanner_data {
-                scanners.insert((*name, syms.clone()));
-              }
-            }
-            states.insert(state.name, state);
-          }
-        }
-        SymbolId::NonTerminalToken { .. } => {
-          let graph = build_graph(&mut j, GraphMode::Scanner, start_items, db, &follow)?;
-
-          let ir = build_ir(&mut j, &graph, db.prod_guid_name(prod_id.into()))?;
-
-          for state in ir {
-            states.insert(state.name, state);
-          }
-        }
-        SymbolId::NonTerminalState { .. } => {
-          // todo!(load state into the states collection)
-        }
-        _ => unreachable!(),
-      }
     }
   }
 
@@ -96,6 +81,64 @@ pub fn compile_parse_states<'db>(mut j: Journal, db: &'db ParserDatabase) -> She
   }
 
   SherpaResult::Ok(states)
+}
+
+pub fn create_parse_states_from_prod<'db>(
+  j: &mut Journal,
+  db: &'db ParserDatabase,
+  follow: &Vec<OrderedSet<Item<'db>>>,
+  prod_id: usize,
+  prod_sym: SymbolId,
+  states: &mut States,
+  scanners: &mut Scanners,
+) -> SherpaResult<()> {
+  j.set_active_report("Production Compile", ReportType::ProductionCompile(prod_sym.to_prod_id()));
+
+  if let Some(custom_state) = db.custom_state(prod_id.into()) {
+    let name = db.prod_guid_name(prod_id.into());
+    let state = ParseState {
+      name,
+      comment: "Custom State".into(),
+      code: custom_state.tok.to_string(),
+      ast: SherpaResult::Ok(Box::new(custom_state.clone())),
+      scanners: None,
+    };
+    states.insert(name, Box::new(state));
+  } else {
+    let start_items = Items::start_items((prod_id as u32).into(), db).to_origin(Origin::ProdGoal(prod_id.into()));
+
+    match prod_sym {
+      SymbolId::NonTerminal { .. } => {
+        let graph = build_graph(j, GraphMode::Parser, start_items, db, &follow)?;
+
+        let ir = build_ir(j, &graph, db.prod_guid_name(prod_id.into()))?;
+
+        for mut state in ir {
+          if let Some(scanner_data) = state.build_scanners(db) {
+            for (name, syms) in scanner_data {
+              scanners.insert((*name, syms.clone()));
+            }
+          }
+          states.insert(state.name, state);
+        }
+      }
+      SymbolId::NonTerminalToken { .. } => {
+        let graph = build_graph(j, GraphMode::Scanner, start_items, db, &follow)?;
+
+        let ir = build_ir(j, &graph, db.prod_guid_name(prod_id.into()))?;
+
+        for state in ir {
+          states.insert(state.name, state);
+        }
+      }
+      SymbolId::NonTerminalState { .. } => {
+        // todo!(load state into the states collection)
+      }
+      _ => unreachable!(),
+    }
+  }
+
+  SherpaResult::Ok(())
 }
 
 fn build_entry_ir<'db>(
