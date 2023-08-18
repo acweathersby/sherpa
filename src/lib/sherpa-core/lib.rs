@@ -11,6 +11,7 @@
 #![allow(non_snake_case)]
 #![feature(try_trait_v2)]
 #![feature(box_patterns)]
+#![feature(is_some_and)]
 
 mod compile;
 mod debug;
