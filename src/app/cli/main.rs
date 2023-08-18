@@ -106,7 +106,7 @@ fn main() -> SherpaResult<()> {
   let matches = command();
 
   if let Some(matches) = matches.subcommand_matches("build") {
-    let (config, parser_type, out_dir, ..) = configure_matches(matches, &pwd);
+    let (config, parser_type, out_dir, _lib_out_dir) = configure_matches(matches, &pwd);
 
     let (executor, spawner) = new_taskman(1000);
 
@@ -163,7 +163,8 @@ fn main() -> SherpaResult<()> {
           #[cfg(feature = "llvm")]
           {
             println!("Building!!!!");
-            match sherpa_llvm::llvm_parser_build::build_llvm_parser(j.transfer(), &name, &db, &states, &lib_out_dir, None, true) {
+            match sherpa_llvm::llvm_parser_build::build_llvm_parser(j.transfer(), &name, &db, &states, &_lib_out_dir, None, true)
+            {
               SherpaResult::Err(err) => {
                 panic!("{}", err);
               }

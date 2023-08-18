@@ -440,7 +440,6 @@ impl ASTNode{
       ASTNode::Goto(node) => node.tok.clone(),
       ASTNode::AST_I8(node) => node.tok.clone(),
       ASTNode::AST_F32(node) => node.tok.clone(),
-      ASTNode::TerminalMatches(node) => node.tok.clone(),
       ASTNode::Shift(node) => node.tok.clone(),
       ASTNode::AST_BOOL(node) => node.tok.clone(),
       ASTNode::Fail(node) => node.tok.clone(),
@@ -2646,16 +2645,14 @@ impl Hash for Gotos{
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct TerminalMatches{
   pub matches:Vec<ASTNode>, 
-  pub tok: Token, 
 }
 
 impl TerminalMatches{
   
-  pub fn new (matches: Vec<ASTNode>, tok: Token)-> Self {
+  pub fn new (matches: Vec<ASTNode>)-> Self {
     
     Self{
       matches,
-      tok,
     }
   }
   
@@ -8154,7 +8151,7 @@ fn reducer_213 <R: Reader + UTF8Reader, M, const UP: bool> (_ctx_: *mut ParseCon
 
 /* "match" ":" "TERMINAL" ( terminal_match :ast [$1] | "{" ( terminal_match | hint | default_match )(+) "}" :ast $2 )^m
 
-        :ast { t_TerminalMatches, matches:$m, tok } */
+        :ast { t_TerminalMatches, matches:$m } */
 fn reducer_214 <R: Reader + UTF8Reader, M, const UP: bool> (_ctx_: *mut ParseContext<R, M>,slots: &AstStackSlice<AstSlot<ASTNode>, UP>) {
   let AstSlot (_, __tok_rng_0, _) = slots.take(0);
   slots.take(1);
@@ -8164,7 +8161,6 @@ fn reducer_214 <R: Reader + UTF8Reader, M, const UP: bool> (_ctx_: *mut ParseCon
   let obj_3_0 = ref_3.into_nodes();
   let var_5_0 = TerminalMatches::new(
     obj_3_0,
-    __rule_rng__.to_token(unsafe{{&mut*_ctx_}}.get_reader_mut()),
   );
   slots.assign(0, AstSlot(ASTNode::TerminalMatches(Box::new(var_5_0)), __rule_rng__, TokenRange::default()));
 }

@@ -1765,6 +1765,7 @@ pub struct Parser<T: Reader, M>(ParseContext<T, M>, T);
     {
       let entry_name = entry_name.to_string(w.db.string_store());
       let _prod_entry_name = prod_entry_name.to_string(w.db.string_store());
+      w.stmt("#[inline(always)]".into())?;
       w.method(
         &format!("pub fn new_{entry_name}_parser"),
         "(",

@@ -8,7 +8,7 @@ use inkwell::{
 };
 use sherpa_core::{Journal, ParseStatesVec, ParserDatabase, SherpaError, SherpaResult};
 use sherpa_rust_runtime::types::{ast::AstObject, Token};
-use std::{path::PathBuf, process::Command};
+use std::{io::Write, path::PathBuf, process::Command};
 /// Constructs a task that outputs a Rust parse context interface
 /// for the llvm parser.
 
@@ -69,6 +69,7 @@ pub fn build_llvm_parser(
   let _bitcode_path = output_dir.join("lib".to_string() + &parser_name + ".bc");
   let object_path = output_dir.join("lib".to_string() + &parser_name + ".o");
   let archive_path = output_dir.join("lib".to_string() + &parser_name + ".a");
+  let ll_file_path = output_dir.join(parser_name.to_string() + ".ll");
   let ctx = Context::create();
 
   let (target_data, target_machine, target_triple) = create_target(target_triple);
@@ -89,6 +90,11 @@ pub fn build_llvm_parser(
   }
 
   apply_llvm_optimizations(opt, &sherpa_mod);
+
+  if let Ok(mut file) = std::fs::File::create(&ll_file_path) {
+    file.write_all(sherpa_mod.module.to_string().as_bytes())?;
+    file.flush()?;
+  }
 
   match target_machine.write_to_file(&sherpa_mod.module, FileType::Object, &object_path) {
     Ok(_) => {

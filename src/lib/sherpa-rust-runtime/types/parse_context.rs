@@ -34,7 +34,7 @@ impl Default for Goto {
 /// will be after some external event occurs, then the tail pointer
 /// should be set to usize::Max and `false` returned.
 type GetBlockFunction<T> = extern "C" fn(
-  self_: &mut T,
+  self_: *mut T,
   &mut *const u8,
   &mut *const u8,
   &mut *const u8,
@@ -286,7 +286,7 @@ impl<T: ByteReader, M> ParseContext<T, M> {
   }
 
   extern "C" fn default_get_input_info(
-    _: &mut T,
+    _: *mut T,
     _: &mut *const u8,
     _: &mut *const u8,
     _: &mut *const u8,
@@ -333,17 +333,9 @@ pub enum ParseResult<Node: AstObject> {
 
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub enum ShiftsAndSkipsResult {
-  Accepted {
-    shifts: Vec<String>,
-    skips:  Vec<String>,
-  },
+  Accepted { shifts: Vec<String>, skips: Vec<String> },
 
-  IncorrectProduction {
-    shifts: Vec<String>,
-    skips: Vec<String>,
-    expected_prod_id: u32,
-    actual_prod_id: u32,
-  },
+  IncorrectProduction { shifts: Vec<String>, skips: Vec<String>, expected_prod_id: u32, actual_prod_id: u32 },
 
   FailedParse(SherpaParseError),
 }
@@ -412,10 +404,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
           let reduce_fn = reducers[rule_id as usize];
           let len = ast_stack.len();
           let count = symbol_count as usize;
-          reduce_fn(
-            self.get_ctx_mut(),
-            &AstStackSlice::from_slice(&mut ast_stack[(len - count)..len]),
-          );
+          reduce_fn(self.get_ctx_mut(), &AstStackSlice::from_slice(&mut ast_stack[(len - count)..len]));
           ast_stack.resize(len - (count - 1), AstSlot::<Node>::default());
         }
         ParseAction::Skip { .. } => {}
@@ -547,11 +536,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
           panic!("No implementation of fork resolution is available")
         }
         ParseAction::Skip { token_byte_offset, token_byte_length, .. } => {
-          skips.push(
-            self.get_input()
-              [token_byte_offset as usize..(token_byte_offset + token_byte_length) as usize]
-              .to_string(),
-          );
+          skips.push(self.get_input()[token_byte_offset as usize..(token_byte_offset + token_byte_length) as usize].to_string());
         }
         ParseAction::Shift { token_byte_length, token_byte_offset, .. } => {
           let offset_start = token_byte_offset as usize;
@@ -666,8 +651,7 @@ Concrete Syntax Tree structure."
             }
           }
 
-          let non_term =
-            cst::CST::NonTerm { prod_id: vec![(production_id as u16, rule_id as u16)], children };
+          let non_term = cst::CST::NonTerm { prod_id: vec![(production_id as u16, rule_id as u16)], children };
           cst.push((len, Rc::new(non_term)));
 
           #[cfg(debug_assertions)]

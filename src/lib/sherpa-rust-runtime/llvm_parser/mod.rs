@@ -67,7 +67,7 @@ pub trait LLVMByteReader {
   }
 
   extern "C" fn get_byte_block_at_cursor<T: ByteReader>(
-    self_: &mut T,
+    self_: *mut T,
     beg_ptr: &mut *const u8,
     anchor_ptr: &mut *const u8,
     base_ptr: &mut *const u8,
@@ -81,15 +81,17 @@ pub trait LLVMByteReader {
     let base_delta = (*base_ptr as usize) - (*anchor_ptr as usize);
     let needed = *end_ptr_and_needed as usize;
 
-    let size = (((self_.len() as i64) + 1) - ((anchor_offset + scan_delta + needed as usize) as i64)).max(0) as u32;
+    let _self_ = unsafe { self_.as_mut().unwrap() };
+
+    let size = (((_self_.len() as i64) + 1) - ((anchor_offset + scan_delta + needed as usize) as i64)).max(0) as u32;
 
     if size > 0 {
-      let beg = self_.get_bytes().as_ptr();
+      let beg = _self_.get_bytes().as_ptr();
       let anchor = beg as usize + anchor_offset;
       let head = (anchor + head_delta) as *const u8;
       let scan = (anchor + scan_delta) as *const u8;
       let base = (anchor + base_delta) as *const u8;
-      let end = (beg as usize + self_.len()) as *const u8;
+      let end = (beg as usize + _self_.len()) as *const u8;
       (*beg_ptr) = beg;
       (*anchor_ptr) = anchor as *const u8;
       (*base_ptr) = base;
@@ -97,11 +99,11 @@ pub trait LLVMByteReader {
       (*scan_ptr) = scan;
       (*end_ptr_and_needed) = end;
     } else {
-      let beg = self_.get_bytes().as_ptr();
+      let beg = _self_.get_bytes().as_ptr();
       let anchor = beg as usize + anchor_offset;
       let head = (anchor + head_delta) as *const u8;
       let base = (anchor + base_delta) as *const u8;
-      let end = (beg as usize + self_.len()) as *const u8;
+      let end = (beg as usize + _self_.len()) as *const u8;
       (*beg_ptr) = beg;
       (*anchor_ptr) = anchor as *const u8;
       (*base_ptr) = base;

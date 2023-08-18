@@ -122,6 +122,7 @@ fn compile_statement<'a, 'llvm: 'a>(
       parser::ASTNode::PeekSkip(..) => {
         if is_scanless {
           incr_scan_ptr_by_sym_len(args, p_ctx)?;
+          construct_assign_token_id(args, p_ctx, 0)?;
         }
         skip_token(args, p_ctx, state_fun)?;
         resolved_end = true;
@@ -129,6 +130,7 @@ fn compile_statement<'a, 'llvm: 'a>(
       parser::ASTNode::Skip(..) => {
         if is_scanless {
           incr_scan_ptr_by_sym_len(args, p_ctx)?;
+          construct_assign_token_id(args, p_ctx, 0)?;
         }
         transfer_chkp_line_to_start_line(args, p_ctx)?;
         transfer_start_line_to_end_line(args, p_ctx)?;
@@ -143,6 +145,7 @@ fn compile_statement<'a, 'llvm: 'a>(
       parser::ASTNode::Shift(..) => {
         if is_scanless {
           incr_scan_ptr_by_sym_len(args, p_ctx)?;
+          construct_assign_token_id(args, p_ctx, 0)?;
         }
         if let Some((s, p)) = construct_token_shift(args, p_ctx)? {
           args.state_lu.insert(s.get_name().to_str().unwrap().to_string(), s);
@@ -155,6 +158,7 @@ fn compile_statement<'a, 'llvm: 'a>(
       parser::ASTNode::Peek(..) => {
         if is_scanless {
           incr_scan_ptr_by_sym_len(args, p_ctx)?;
+          construct_assign_token_id(args, p_ctx, 0)?;
         }
         peek_token(args, p_ctx)?;
       }
@@ -250,7 +254,15 @@ fn compile_match<'a, 'llvm: 'a>(
   let symbol_branches_start = ctx.append_basic_block(state_fun, "match");
   let default_block = ctx.append_basic_block(state_fun, "default");
 
-  if matches!(mode.as_str(), InputType::BYTE_STR | InputType::CLASS_STR | InputType::CODEPOINT_STR) {
+  if matches!(
+    mode.as_str(),
+    InputType::BYTE_STR
+      | InputType::CLASS_STR
+      | InputType::CODEPOINT_STR
+      | InputType::BYTE_SCANLESS_STR
+      | InputType::CLASS_SCANLESS_STR
+      | InputType::CODEPOINT_SCANLESS_STR
+  ) {
     check_for_input_acceptability(args, state_fun, p_ctx, i64.const_int(1, false), symbol_branches_start, default_block)?;
   } else {
     b.build_unconditional_branch(symbol_branches_start);

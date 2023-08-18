@@ -9622,36 +9622,42 @@ impl<T: Reader, M> Parser<T, M>{
       drop(_ptr as *mut u8);
     }
   }
+  #[inline(always)]
   
   pub fn new_ir_parser (reader: T)-> Self {
     let mut ctx = Self::new(reader);
     ctx.set_start_point(0);
     ctx
   }
+  #[inline(always)]
   
   pub fn new_escaped_parser (reader: T)-> Self {
     let mut ctx = Self::new(reader);
     ctx.set_start_point(1);
     ctx
   }
+  #[inline(always)]
   
   pub fn new_grammar_parser (reader: T)-> Self {
     let mut ctx = Self::new(reader);
     ctx.set_start_point(2);
     ctx
   }
+  #[inline(always)]
   
   pub fn new_type_eval_parser (reader: T)-> Self {
     let mut ctx = Self::new(reader);
     ctx.set_start_point(3);
     ctx
   }
+  #[inline(always)]
   
   pub fn new_ast_expression_parser (reader: T)-> Self {
     let mut ctx = Self::new(reader);
     ctx.set_start_point(4);
     ctx
   }
+  #[inline(always)]
   
   pub fn new_ast_struct_parser (reader: T)-> Self {
     let mut ctx = Self::new(reader);
