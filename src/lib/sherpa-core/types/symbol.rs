@@ -207,7 +207,7 @@ impl SymbolId {
       DBNonTerminal { key } => (Into::<usize>::into(key)) as u32,
       DBToken { key, .. } => key.to_val(db),
       DBNonTerminalToken { sym_key, .. } => sym_key.map(|d| d.to_val(db)).unwrap_or(u32::MAX),
-      Token { precedence, val } => {
+      Token { precedence: _, val } => {
         let val = val.to_string(db.string_store());
         match val.chars().next() {
           Some(char) => char as u32,
@@ -237,9 +237,9 @@ impl SymbolId {
       ClassNumber { .. } => &mut w + "c:num",
       ClassSymbol { .. } => &mut w + "c:sym",
       Token { val, precedence } => &mut w + "[" + val.to_str(db.string_store()).as_str() + "]" + print_precedence(precedence),
-      NonTerminalState { id, .. } => &mut w + "non_term_state",
-      NonTerminal { id, .. } => &mut w + "non_term",
-      NonTerminalToken { id, .. } => &mut w + "tk:" + "non_term",
+      NonTerminalState {  .. } => &mut w + "non_term_state",
+      NonTerminal {  .. } => &mut w + "non_term",
+      NonTerminalToken {  .. } => &mut w + "tk:" + "non_term",
       Codepoint { val, precedence } => &mut w + "" + val.to_string() + print_precedence(precedence),
       DBNonTerminal { key } => {
         let guard_str = db.prod_friendly_name_string(key);

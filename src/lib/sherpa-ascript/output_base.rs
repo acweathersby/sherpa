@@ -14,7 +14,6 @@ use sherpa_core::{
 };
 use sherpa_rust_runtime::{
   types::{BlameColor, Token},
-  *,
 };
 
 use super::{compile::get_struct_type_from_node, types::*};

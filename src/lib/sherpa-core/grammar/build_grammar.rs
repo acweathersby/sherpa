@@ -166,7 +166,7 @@ pub fn create_grammar_data(
 }
 
 pub fn extract_productions<'a>(
-  j: &mut Journal,
+  _j: &mut Journal,
   g_data: &'a GrammarData,
   s_store: &IStringStore,
 ) -> SherpaResult<(Array<(Box<Production>, &'a ASTNode)>, Array<Box<CustomState>>)> {
@@ -254,7 +254,7 @@ pub fn extract_productions<'a>(
           _ => unreachable!(),
         };
       }
-      ast => unreachable!("Unrecognized node "),
+      _ast => unreachable!("Unrecognized node "),
     }
   }
 
@@ -369,7 +369,7 @@ pub fn process_production<'a>(
 fn process_rule(prod: &mut Production, rule: &parser::Rule, g_data: &GrammarData, s_store: &IStringStore) -> SherpaResult<()> {
   let ast_syms = rule.symbols.iter().enumerate().collect::<Array<_>>();
 
-  let Production { id, rules, sub_prods, symbols, type_, asts, .. } = prod;
+  let Production { id, rules, sub_prods, symbols,   .. } = prod;
   let mut prod_data = ProductionData {
     root_prod_id: *id,
     symbols,
@@ -640,7 +640,7 @@ fn process_rule_symbols(
   SherpaResult::Ok(())
 }
 
-fn intern_ast(rule: &parser::Rule, p_data: &mut ProductionData) -> Option<ASTToken> {
+fn intern_ast(rule: &parser::Rule, _p_data: &mut ProductionData) -> Option<ASTToken> {
   let ast_ref = rule.ast.as_ref().map(|s| ASTToken::Defined(Arc::new(*s.clone())));
   ast_ref
 }

@@ -15,15 +15,12 @@ use builder::{
   write_rust_bytecode_parser_file,
 };
 use sherpa_ascript::{output_base::AscriptWriter, types::AScriptStore};
-use sherpa_bytecode::compile_bytecode;
+
 use sherpa_core::{
-  compile_parse_states,
-  optimize,
   proxy::Map,
   CodeWriter,
   IString,
   Journal,
-  ParseStatesVec,
   ParserDatabase,
   SherpaResult,
 };
@@ -35,7 +32,7 @@ pub fn build_rust(mut j: Journal, db: &ParserDatabase) -> SherpaResult<String> {
 
   let store = AScriptStore::new(j.transfer(), &db)?;
   let u = create_rust_writer_utils(&store, &db);
-  let mut w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
+  let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
 
   let writer = write_rust_ast2(w)?;
 
@@ -107,7 +104,7 @@ use sherpa_rust_runtime::{
 
   add_ascript_functions_for_rust(&mut writer, db)?;
 
-  let mut writer = write_rust_ast(writer)?;
+  let writer = write_rust_ast(writer)?;
 
   let writer = write_rust_bytecode_parser_file(writer, &state_lookups, bytecode)?;
 
@@ -178,7 +175,7 @@ use sherpa_rust_runtime::{
 
   add_ascript_functions_for_rust(&mut writer, db)?;
 
-  let mut writer = write_rust_ast(writer)?;
+  let writer = write_rust_ast(writer)?;
 
   let writer = write_rust_llvm_parser_file(writer, grammar_name, parser_name)?;
 

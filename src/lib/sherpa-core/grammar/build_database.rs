@@ -6,7 +6,7 @@ use crate::{
   types::*,
   utils::{create_u64_hash, hash_group_btreemap},
 };
-use std::collections::{btree_map, hash_map, VecDeque};
+use std::collections::{btree_map, VecDeque};
 
 pub fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a GrammarSoup) -> SherpaResult<ParserDatabase> {
   // Gain read access to all parts of the GrammarCloud.
@@ -463,7 +463,7 @@ fn convert_rule_symbols(
   symbols: OrderedMap<SymbolId, usize>,
 ) {
   for DBRule { rule, is_scanner, .. } in r_table {
-    for SymbolRef { id: sym, original_index: index, .. } in &mut rule.symbols {
+    for SymbolRef { id: sym, original_index: _index, .. } in &mut rule.symbols {
       *sym = convert_symbol(sym, p_map, &symbols, *is_scanner);
     }
 

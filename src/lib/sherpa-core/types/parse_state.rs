@@ -75,7 +75,7 @@ impl<'db> ParseState {
   }
 
   pub fn get_scanner_name(scanner_syms: &OrderedSet<DBTokenData>) -> String {
-    ("scan".to_string() + &create_u64_hash(scanner_syms.iter().map(|g| g.sym_id).collect::<OrderedSet<_>>()).to_string())
+    "scan".to_string() + &create_u64_hash(scanner_syms.iter().map(|g| g.sym_id).collect::<OrderedSet<_>>()).to_string()
   }
 
   /// Should only be used on matches that read results from token scanners.

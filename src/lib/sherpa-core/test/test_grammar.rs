@@ -41,19 +41,14 @@ fn grammar_with_peg_production() -> R<()> {
 
 #[test]
 fn grammar_with_append_production() -> R<()> {
-  build(
-    "<> t > ('r') \n +> t > ( 'b' :ast 1 )",
-    "".into(),
-    Default::default(),
-    &|Tp { db, .. }| {
-      assert_eq!(
-        db.prod_rules(DBProdKey::from(0usize))?.len(),
-        2,
-        "Production `t` should have two rules, one for `'r'` and the other for `'b'`"
-      );
-      R::Ok(())
-    },
-  )
+  build("<> t > ('r') \n +> t > ( 'b' :ast 1 )", "".into(), Default::default(), &|Tp { db, .. }| {
+    assert_eq!(
+      db.prod_rules(DBProdKey::from(0usize))?.len(),
+      2,
+      "Production `t` should have two rules, one for `'r'` and the other for `'b'`"
+    );
+    R::Ok(())
+  })
 }
 
 #[test]

@@ -156,7 +156,7 @@ impl ParserDatabase {
   /// or [SymbolId::Undefined] if the id is invalid.
   pub fn prod_sym(&self, key: DBProdKey) -> SymbolId {
     debug_assert!((key.0 as usize) < self.prod_syms.len(), "Invalid DBProdKey received");
-    self.prod_syms[(key.0 as usize)].clone()
+    self.prod_syms[key.0 as usize].clone()
   }
 
   /// Given a [DBProdKey] returns an IString comprising the name of the

@@ -113,13 +113,13 @@ fn get_match_statement(node: &ASTNode) -> SherpaResult<&parser::Statement> {
 }
 
 /// Inline trivial scanners.
-fn inline_matches<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
+fn inline_matches<'db>(db: &'db ParserDatabase, parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
   garbage_collect(db, parse_states, "byte-chains")
 }
 
 /// Create chained matching scanners that can scan and shift multiple
 /// characters simultaneously.
-fn create_byte_chains<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
+fn create_byte_chains<'db>(db: &'db ParserDatabase, parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
   garbage_collect(db, parse_states, "byte-chains")
 }
 
@@ -307,7 +307,7 @@ fn inline_states<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap)
 
 /// Merges matching branches of states that only consist of goto/push
 /// transitions.
-fn merge_branches<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
+fn merge_branches<'db>(_db: &'db ParserDatabase, mut parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
   // Get a reference to all root level branches.
 
   let mut state_branch_lookup = HashMap::new();
@@ -346,7 +346,7 @@ fn merge_branches<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap
         for m in matches {
           match m {
             ASTNode::IntMatch(box parser::IntMatch { statement, vals }) => {
-              let r = statement.clone();
+              let _r = statement.clone();
               loop {
                 let parser::Statement { branch, non_branch, transitive, .. } = statement.as_mut();
                 if vals.len() == 1 && transitive.is_none() && non_branch.is_empty() {
@@ -374,7 +374,7 @@ fn merge_branches<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap
                 break;
               }
             }
-            ASTNode::DefaultMatch(box parser::DefaultMatch { statement }) => {}
+            ASTNode::DefaultMatch(box parser::DefaultMatch { statement: _ }) => {}
             _ => {}
           }
         }
@@ -430,7 +430,7 @@ fn combine_state_branches<'db>(db: &'db ParserDatabase, mut parse_states: ParseS
             }
           }
 
-          if (new_matches.len() != matches.len()) {
+          if new_matches.len() != matches.len() {
             matches.clear();
             matches.append(&mut new_matches);
           }
@@ -455,7 +455,7 @@ fn combine_state_branches<'db>(db: &'db ParserDatabase, mut parse_states: ParseS
   }
 
   for state in parse_states.values_mut() {
-    if let SherpaResult::Ok(box parser::State { statement, tok, .. }) = &mut state.ast {
+    if let SherpaResult::Ok(box parser::State { statement, tok: _, .. }) = &mut state.ast {
       if let Some(from) = combine_branches(db, statement)? {
         merge_statements(from, statement);
       }

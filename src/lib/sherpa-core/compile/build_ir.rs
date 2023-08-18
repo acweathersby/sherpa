@@ -63,7 +63,7 @@ enum SType {
 }
 
 fn convert_goto_state_to_ir<'follow, 'db>(
-  j: &mut Journal,
+  _j: &mut Journal,
   graph: &Graph<'follow, 'db>,
   state: &State,
   successors: &OrderedSet<&State>,
@@ -117,7 +117,7 @@ fn convert_goto_state_to_ir<'follow, 'db>(
 }
 
 fn convert_state_to_ir<'follow, 'db>(
-  j: &mut Journal,
+  _j: &mut Journal,
   graph: &Graph<'follow, 'db>,
   state: &State,
   successors: &OrderedSet<&State>,

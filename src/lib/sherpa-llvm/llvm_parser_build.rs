@@ -8,7 +8,7 @@ use inkwell::{
 };
 use sherpa_core::{Journal, ParseStatesVec, ParserDatabase, SherpaError, SherpaResult};
 use sherpa_rust_runtime::types::{ast::AstObject, Token};
-use std::{io::Write, path::PathBuf, process::Command};
+use std::{path::PathBuf, process::Command};
 /// Constructs a task that outputs a Rust parse context interface
 /// for the llvm parser.
 
@@ -64,8 +64,8 @@ pub fn build_llvm_parser(
   enable_ascript: bool,
 ) -> SherpaResult<()> {
   let ar_command = "llvm-ar-14";
-  let ll_file_path = output_path.join(parser_name.to_string() + ".ll");
-  let bitcode_path = output_path.join("lib".to_string() + &parser_name + ".bc");
+  let _ll_file_path = output_path.join(parser_name.to_string() + ".ll");
+  let _bitcode_path = output_path.join("lib".to_string() + &parser_name + ".bc");
   let object_path = output_path.join("lib".to_string() + &parser_name + ".o");
   let archive_path = output_path.join(format!("./lib{}.a", &parser_name));
   let ctx = Context::create();

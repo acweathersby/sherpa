@@ -305,7 +305,7 @@ impl<'db> State<'db> {
 
   pub fn set_kernal_items<T: ItemContainer<'db>>(&mut self, kernel_items: T, is_scanner: bool, db: &'db ParserDatabase) {
     let mut kernel_items =
-      kernel_items.into_iter().map(|i| if (i.origin_state.is_invalid()) { i.to_origin_state(self.id) } else { i }).collect();
+      kernel_items.into_iter().map(|i| if i.origin_state.is_invalid() { i.to_origin_state(self.id) } else { i }).collect();
 
     self.kernel_items.append(&mut kernel_items);
 

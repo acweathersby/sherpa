@@ -123,7 +123,7 @@ impl SherpaError {
 
   /// Compares the friendly name of an error with a string,
   /// returning `true` if the two match.
-  pub fn is(&self, friendly_name: &str) -> bool {
+  pub fn is(&self, _friendly_name: &str) -> bool {
     match self {
       _ => false,
     }

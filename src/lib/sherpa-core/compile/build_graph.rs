@@ -38,7 +38,7 @@ fn handle_kernel_items(j: &mut Journal, graph: &mut Graph, parent: StateId, grap
 
   let mut groups = create_transition_groups(graph, parent)?;
 
-  let (max_precedence) = handle_completed_items(j, graph, parent, graph_state, &mut groups)?;
+  let max_precedence = handle_completed_items(j, graph, parent, graph_state, &mut groups)?;
 
   if max_precedence > 0 {
     groups = groups
@@ -666,7 +666,7 @@ fn resolve_conflicting_symbols<'db, 'follow>(
             severity: SherpaErrorSeverity::Critical,
             sources:  groups
               .iter()
-              .map(|(sym, items)| items.iter().map(|i| (i.rule().tok.clone(), Default::default(), Default::default())))
+              .map(|(_sym, items)| items.iter().map(|i| (i.rule().tok.clone(), Default::default(), Default::default())))
               .flatten()
               .collect(),
           });
@@ -746,7 +746,7 @@ fn get_set_of_occluding_items<'db, 'follow>(
   let mut occluding = ItemSet::new();
   let into_group_precedence = get_max_exclusivity(into_group);
 
-  if (into_group_precedence >= 9999) {
+  if into_group_precedence >= 9999 {
     return occluding;
   }
 
@@ -936,7 +936,7 @@ fn resolve_peek<'a, 'db: 'a, 'follow, T: ItemContainerIter<'a, 'db>>(
 /// - `g:sym` and any single character thats not a numeric, identifier, space,
 ///   newline, or tab.
 
-fn symbols_occlude(symA: &SymbolId, symB: &SymbolId, db: &ParserDatabase) -> bool {
+fn symbols_occlude(symA: &SymbolId, symB: &SymbolId, _db: &ParserDatabase) -> bool {
   match symA {
     SymbolId::Char { char, .. } => match symB {
       SymbolId::ClassNumber { .. } => {

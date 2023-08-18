@@ -358,7 +358,7 @@ fn compile_match<'a, 'llvm: 'a>(
   for (block, maybe_stmt, is_new_line) in pending_build {
     b.position_at_end(block);
     if let Some(stmt) = maybe_stmt {
-      if (is_new_line) {
+      if is_new_line {
         prime_line_data(args, p_ctx, i8.const_int(1, false));
       }
       compile_statement(args, stmt, p_ctx, state_fun, start_block, is_scanless)?;
@@ -871,7 +871,7 @@ pub(crate) fn construct_scan(
 /// stack, and also insert the first GOTO entry that will initiate the parser to
 /// start parsing based on an entry production id.
 pub(crate) fn construct_prime_function(
-  j: &mut Journal,
+  _j: &mut Journal,
   db: &ParserDatabase,
   sp: &LLVMParserModule,
   state_lu: &BTreeMap<String, FunctionValue>,

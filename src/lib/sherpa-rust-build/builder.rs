@@ -1499,7 +1499,7 @@ fn convert_numeric<T: AScriptNumericType>(
 
 pub(crate) fn add_ascript_functions_for_rust<W: Write>(
   w: &mut AscriptWriter<W>,
-  db: &ParserDatabase,
+  _db: &ParserDatabase,
 ) -> Result<(), std::io::Error> {
   let export_node_data = get_ascript_export_data(&w.utils);
 
@@ -1606,7 +1606,7 @@ pub type Parser<'a, T, UserCTX> = sherpa_rust_runtime::bytecode::ByteCodeParser<
       w.list(",", symbol_string.values().collect())
     })
   })?;
-  for EntryPoint { prod_key, prod_entry_name, entry_name, .. } in w.db.entry_points() {
+  for EntryPoint { prod_key: _, prod_entry_name, entry_name, .. } in w.db.entry_points() {
     let entry_name = entry_name.to_string(w.db.string_store());
     let prod_entry_name = prod_entry_name.to_string(w.db.string_store());
     let bytecode_offset = state_lookups.get(&prod_entry_name)?;
@@ -1649,7 +1649,7 @@ pub type Parser<'a, T, UserCTX> = sherpa_rust_runtime::bytecode::ByteCodeParser<
 
       // Create a module that will store convenience functions for compiling AST
       // structures based on on grammar entry points.
-      for (ref_, type_, ast_type_string, export_name, guid_name, prod_entry_name) in &export_node_data {
+      for (ref_, type_, ast_type_string, export_name, _guid_name, prod_entry_name) in &export_node_data {
         w.method(
           &format!("pub fn {export_name}_from<'a>"),
           "(",
@@ -1764,7 +1764,7 @@ pub struct Parser<T: Reader, M>(ParseContext<T, M>, T);
       w.db.entry_points().iter()
     {
       let entry_name = entry_name.to_string(w.db.string_store());
-      let prod_entry_name = prod_entry_name.to_string(w.db.string_store());
+      let _prod_entry_name = prod_entry_name.to_string(w.db.string_store());
       w.method(
         &format!("pub fn new_{entry_name}_parser"),
         "(",

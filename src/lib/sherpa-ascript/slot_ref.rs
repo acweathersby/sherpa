@@ -1,14 +1,8 @@
 use crate::{
   output_base::{AscriptWriterUtils, TokenCreationType},
-  types::{AScriptTypeVal, ASCRIPT_FIRST_NODE_ID},
+  types::{AScriptTypeVal},
 };
-use sherpa_core::{
-  parser::{ASTNode, AST_NamedReference},
-  EntryPoint,
-  Rule,
-  SymbolId,
-  SymbolRef,
-};
+
 use std::collections::BTreeSet;
 
 // Writing stages.
@@ -130,7 +124,7 @@ impl SlotRef {
 
   pub fn is_local(&self) -> bool {
     match self.slot_type {
-      RefIndex::Obj(SlotIndex::Constructed(i)) | RefIndex::Tok(SlotIndex::Constructed(i)) => true,
+      RefIndex::Obj(SlotIndex::Constructed(_i)) | RefIndex::Tok(SlotIndex::Constructed(_i)) => true,
       _ => false,
     }
   }

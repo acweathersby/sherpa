@@ -242,7 +242,7 @@ pub fn string_debugger(
     display_instruction,
     display_state,
   }: PrintConfig,
-  strings: &mut Vec<String>,
+  _strings: &mut Vec<String>,
 ) -> Option<Box<DebugFn>> {
   let mut stack = vec![];
   Some(Box::new(move |event, string| match event {
