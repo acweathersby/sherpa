@@ -305,7 +305,7 @@ fn inline_states<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap)
   garbage_collect(db, parse_states, "inline")
 }
 
-/// Merges matching branches of states that consist only of goto/push
+/// Merges matching branches of states that only consist of goto/push
 /// transitions.
 fn merge_branches<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
   // Get a reference to all root level branches.
@@ -465,8 +465,8 @@ fn combine_state_branches<'db>(db: &'db ParserDatabase, mut parse_states: ParseS
   SherpaResult::Ok(parse_states)
 }
 
-// Create canonical states by aliasing states that  generate the same canonical
-// hash, e.i: states that differ in name only.
+/// Create canonical states by aliasing states that  generate the same canonical
+/// hash, e.i: states that differ in name only.
 fn canonicalize_states<'db, R: FromIterator<(IString, Box<ParseState>)>>(
   db: &'db ParserDatabase,
   mut parse_states: ParseStatesMap,

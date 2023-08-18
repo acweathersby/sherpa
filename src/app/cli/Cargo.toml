@@ -7,6 +7,10 @@ edition = "2021"
 name = "sherpa"
 path = "./main.rs"
 
+[features]
+# Enable builds using llvm 
+llvm = ["dep:sherpa_llvm"]
+
 [dependencies]
 clap = { version="4.0.29" }
 
@@ -26,8 +30,7 @@ optional = true
 [dependencies.sherpa_rust_build]
 path = "../../lib/sherpa-rust-build"
 
-# Enable builds using llvm 
-llvm = ["dep:sherpa_llvm"]
+
 
 [profile.release]
 opt-level=3

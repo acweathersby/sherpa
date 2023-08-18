@@ -1,11 +1,6 @@
 use sherpa_ascript::{output_base::AscriptWriter, types::AScriptStore};
 use sherpa_core::{
-  test::utils::{
-    build_parse_db_from_source_str,
-    build_parse_states_from_source_str,
-    DBPackage,
-    TestPackage,
-  },
+  test::utils::{build_parse_db_from_source_str, build_parse_states_from_source_str, DBPackage, TestPackage},
   *,
 };
 
@@ -24,7 +19,7 @@ fn temp_test_grammar() -> SherpaResult<()> {
     "/test.sg".into(),
     Default::default(),
     &|TestPackage { mut journal, soup, states, db }| {
-      let store = AScriptStore::new(&mut journal, &db)?;
+      let store = AScriptStore::new(journal.transfer(), &db)?;
 
       journal.flush_reports();
 
@@ -68,7 +63,7 @@ fn test_grammar() -> SherpaResult<()> {
     "/test.sg".into(),
     Default::default(),
     &|TestPackage { mut journal, db, .. }| {
-      let store = AScriptStore::new(&mut journal, &db)?;
+      let store = AScriptStore::new(journal.transfer(), &db)?;
 
       journal.flush_reports();
 
@@ -98,7 +93,7 @@ fn test_add_hoc_vector_prop_merged_with_vector_production() -> SherpaResult<()> 
     "/test.sg".into(),
     Default::default(),
     &|TestPackage { mut journal, states, db, soup }| {
-      let store = AScriptStore::new(&mut journal, &db)?;
+      let store = AScriptStore::new(journal.transfer(), &db)?;
 
       let u = create_rust_writer_utils(&store, &db);
       let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
@@ -122,7 +117,7 @@ fn handles_multipart_arraysd() -> SherpaResult<()> {
     "/test.sg".into(),
     Default::default(),
     &|TestPackage { mut journal, states, db, soup }| {
-      let store = AScriptStore::new(&mut journal, &db)?;
+      let store = AScriptStore::new(journal.transfer(), &db)?;
 
       let u = create_rust_writer_utils(&store, &db);
       let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
@@ -155,7 +150,7 @@ fn handles_multipart_arrays() -> SherpaResult<()> {
     "/test.sg".into(),
     Default::default(),
     &|TestPackage { mut journal, states, db, soup }| {
-      let store = AScriptStore::new(&mut journal, &db)?;
+      let store = AScriptStore::new(journal.transfer(), &db)?;
 
       let u = create_rust_writer_utils(&store, &db);
       let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
@@ -176,7 +171,7 @@ fn rust_vector_return_types_print_correctly() -> SherpaResult<()> {
     "/test.sg".into(),
     Default::default(),
     &|TestPackage { mut journal, states, db, soup }| {
-      let store = AScriptStore::new(&mut journal, &db)?;
+      let store = AScriptStore::new(journal.transfer(), &db)?;
 
       let u = create_rust_writer_utils(&store, &db);
       let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
@@ -239,7 +234,7 @@ fn group_productions_get_correct_type_information() -> SherpaResult<()> {
     "/test.sg".into(),
     Default::default(),
     &|DBPackage { mut journal, db, soup }| {
-      let store = AScriptStore::new(&mut journal, &db)?;
+      let store = AScriptStore::new(journal.transfer(), &db)?;
 
       let u = create_rust_writer_utils(&store, &db);
       let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
@@ -258,7 +253,7 @@ fn token_range_slice() -> SherpaResult<()> {
     "/test.sg".into(),
     Default::default(),
     &|DBPackage { mut journal, db, .. }| {
-      let store = AScriptStore::new(&mut journal, &db)?;
+      let store = AScriptStore::new(journal.transfer(), &db)?;
 
       let u = create_rust_writer_utils(&store, &db);
       let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
@@ -279,7 +274,7 @@ fn reference_nonterminal_and_reference_names_when_using_valueless_props() -> She
     "/test.sg".into(),
     Default::default(),
     &|DBPackage { mut journal, db, .. }| {
-      let store = AScriptStore::new(&mut journal, &db)?;
+      let store = AScriptStore::new(journal.transfer(), &db)?;
 
       let u = create_rust_writer_utils(&store, &db);
       let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
@@ -303,7 +298,7 @@ fn convert_str_to_numeric() -> SherpaResult<()> {
     "/test.sg".into(),
     Default::default(),
     &|DBPackage { mut journal, db, .. }| {
-      let store = AScriptStore::new(&mut journal, &db)?;
+      let store = AScriptStore::new(journal.transfer(), &db)?;
 
       let u = create_rust_writer_utils(&store, &db);
       let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
@@ -326,7 +321,7 @@ fn temp() -> SherpaResult<()> {
     "/test.sg".into(),
     Default::default(),
     &|DBPackage { mut journal, db, .. }| {
-      let store = AScriptStore::new(&mut journal, &db)?;
+      let store = AScriptStore::new(journal.transfer(), &db)?;
 
       let u = create_rust_writer_utils(&store, &db);
       let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));

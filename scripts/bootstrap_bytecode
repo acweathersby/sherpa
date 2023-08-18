@@ -16,6 +16,7 @@ pushd $SHERPA_CLI_DIR
 
 cargo run \
     --bin sherpa \
+    --release \
     -- build -t bytecode\
      -a \
      --name sherpa_bc \

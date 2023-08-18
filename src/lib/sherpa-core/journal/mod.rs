@@ -86,9 +86,7 @@ impl Journal {
     fn set_report(p: &mut ScratchPad, n: &str, t: ReportType) -> Option<Box<Report>> {
       match p.reports.contains_key(&t) {
         true => p.reports.remove(&t),
-        false => {
-          Some(Box::new(Report { name: n.to_string(), report_type: t, ..Default::default() }))
-        }
+        false => Some(Box::new(Report { name: n.to_string(), report_type: t, ..Default::default() })),
       }
     }
 
@@ -262,9 +260,7 @@ impl Journal {
   /// Returns true if any error in any report has a matching `severity`
   pub fn have_errors_of_type(&self, severity: SherpaErrorSeverity) -> bool {
     if !self.report().have_errors_of_type(severity) {
-      for (_, report) in
-        self.scratch_pad.reports.iter().chain(self.global_pad.read().unwrap().reports.iter())
-      {
+      for (_, report) in self.scratch_pad.reports.iter().chain(self.global_pad.read().unwrap().reports.iter()) {
         if report.have_errors_of_type(severity) {
           return true;
         }
@@ -303,9 +299,7 @@ impl Drop for Journal {
   fn drop(&mut self) {
     // Merge thread local report data into the global_pad, but only
     // if there is more than one active journal instance.
-    if (self.scratch_pad.reports.len() > 0 || self.active_report.is_some())
-      && Arc::strong_count(&self.global_pad) > 1
-    {
+    if (self.scratch_pad.reports.len() > 0 || self.active_report.is_some()) && Arc::strong_count(&self.global_pad) > 1 {
       self.flush_reports();
     }
   }

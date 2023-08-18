@@ -75,7 +75,7 @@ pub fn dispatch<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
 
   let mut block_base: Instruction = (bc, base_address).into();
 
-  #[cfg(debug_assertions)]
+  #[cfg(any(debug_assertions, feature = "wasm-lab"))]
   if let Some(debug) = debug.as_mut() {
     debug(&DebugEvent::ExecuteState { base_instruction: block_base }, ctx.get_str());
   }
@@ -102,7 +102,7 @@ pub fn dispatch<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
       Goto => {
         let (parse_action, Some(new_state)) = goto(i) else { unreachable!()};
         block_base = new_state;
-        #[cfg(debug_assertions)]
+        #[cfg(any(debug_assertions, feature = "wasm-lab"))]
         if let Some(debug) = debug.as_mut() {
           debug(&DebugEvent::ExecuteState { base_instruction: block_base }, ctx.get_str());
         }
@@ -123,7 +123,7 @@ pub fn dispatch<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
         unreachable!("Expected next instruction!")
       }
       (None, Some(next_instruction)) => {
-        #[cfg(debug_assertions)]
+        #[cfg(any(debug_assertions, feature = "wasm-lab"))]
         if let Some(debug) = debug {
           debug(
             &DebugEvent::ExecuteInstruction {
@@ -144,7 +144,7 @@ pub fn dispatch<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
         next_instruction
       }
       (any, out) => {
-        #[cfg(debug_assertions)]
+        #[cfg(any(debug_assertions, feature = "wasm-lab"))]
         if let Some(debug) = debug {
           debug(
             &DebugEvent::ExecuteInstruction {
@@ -458,7 +458,7 @@ pub fn hash_branch<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
   loop {
     let input_value = get_input_value(input_type, scan_block_instruction, ctx, debug);
 
-    #[cfg(debug_assertions)]
+    #[cfg(any(debug_assertions, feature = "wasm-lab"))]
     emit_debug_value(ctx, debug, input_type, input_value);
 
     let mut hash_index = (input_value & hash_mask) as usize;
@@ -500,7 +500,7 @@ pub fn vector_branch<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
 
   let input_value = get_input_value(input_type, scan_block_instruction, ctx, debug);
 
-  #[cfg(debug_assertions)]
+  #[cfg(any(debug_assertions, feature = "wasm-lab"))]
   emit_debug_value(ctx, debug, input_type, input_value);
 
   let value_index = (input_value as i32 - value_offset as i32) as usize;

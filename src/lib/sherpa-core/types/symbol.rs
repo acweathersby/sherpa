@@ -153,11 +153,24 @@ impl SymbolId {
   }
 
   /// Returns a ProductionId for a token scanner derived from a standard symbol.
+  pub fn to_prod_id(&self) -> ProductionId {
+    use SymbolId::*;
+    match self {
+      NonTerminal { id } | NonTerminalToken { id, .. } => *id,
+      _ => {
+        #[cfg(debug_assertions)]
+        unimplemented!("{:?}", self);
+        #[cfg(not(debug_assertions))]
+        unimplemented!()
+      }
+    }
+  }
+
+  /// Returns a ProductionId for a token scanner derived from a standard symbol.
   pub fn to_scanner_prod_id(&self) -> ProductionId {
     use SymbolId::*;
     match self {
-      NonTerminal { id } => id.as_scan_prod(),
-      NonTerminalToken { id, .. } => id.as_scan_prod(),
+      NonTerminal { id } | NonTerminalToken { id, .. } => id.as_scan_prod(),
       Token { .. } => ProductionId::Standard(create_u64_hash(self), ProductionSubType::ScannerToken),
       EndOfFile { .. }
       | ClassSymbol { .. }

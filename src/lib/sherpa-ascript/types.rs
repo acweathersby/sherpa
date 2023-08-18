@@ -571,12 +571,12 @@ impl AScriptStore {
     })
   }
 
-  pub fn new(j: &mut Journal, db: &ParserDatabase) -> SherpaResult<Self> {
+  pub fn new(mut j: Journal, db: &ParserDatabase) -> SherpaResult<Self> {
     let mut new_self = AScriptStore { is_dummy: false, ast_type_name: "ASTNode".into(), ..Self::dummy()? };
 
     j.set_active_report("Ascript Store Compile", ReportType::AScriptCompile);
 
-    compile_ascript_store(j, &mut new_self, db)?;
+    compile_ascript_store(&mut j, &mut new_self, db)?;
 
     if j.report().have_errors_of_type(SherpaErrorSeverity::Critical) {
       SherpaResult::Err(j.report().into())

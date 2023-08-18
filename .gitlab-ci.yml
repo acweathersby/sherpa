@@ -92,7 +92,7 @@ pages:
     paths:
       - public
 
-test_sherpa:
+test_sherpa_binary_parser:
   stage: test
   image: $CI_REGISTRY/anthony/sherpa/sherpa-build:latest
   needs:
@@ -100,4 +100,14 @@ test_sherpa:
   rules:
     - when: on_success
   script:
-    - ./scripts/run_tests
+    - ./scripts/run_binary_tests
+
+test_sherpa_bytecode_parser:
+  stage: test
+  image: $CI_REGISTRY/anthony/sherpa/sherpa-build:latest
+  needs:
+    - "build_core"
+  rules:
+    - when: on_success
+  script:
+    - ./scripts/run_bytecode_tests

@@ -10,13 +10,9 @@ use std::path::PathBuf;
 /// extension types appended to it: `.hc`, `.hcg` `.grammar`.
 ///
 /// Additionally, if the given file path is relative, then it is appended to the
-/// parent dir path of the current grammar, whose path is provided by the `cgd`,
-/// current grammar dir, argument.
-pub(crate) fn resolve_grammar_path(
-  path: &PathBuf,
-  cgd: &PathBuf,
-  extension: &[&str],
-) -> SherpaResult<PathBuf> {
+/// parent dir path of the current grammar, whose path is provided by the
+/// current grammar dir argument.
+pub(crate) fn resolve_grammar_path(path: &PathBuf, current_grammar_dir: &PathBuf, extension: &[&str]) -> SherpaResult<PathBuf> {
   SherpaResult::Ok(
     match (
       path.is_file(),
@@ -24,7 +20,7 @@ pub(crate) fn resolve_grammar_path(
       // Ensure path is is an absolute path
       match path.is_absolute() {
         true => (path.to_owned(), false),
-        false => (cgd.join(&path), cgd.join(&path).is_file()),
+        false => (current_grammar_dir.join(&path), current_grammar_dir.join(&path).is_file()),
       },
     ) {
       // Path is relative to the given cgd

@@ -21,7 +21,7 @@ fn parse_errors_when_struct_prop_type_is_redefined() -> SherpaResult<()> {
     "/test.sg".into(),
     Default::default(),
     &|DBPackage { mut journal, db, .. }| {
-      let results = AScriptStore::new(&mut journal, &db);
+      let results = AScriptStore::new(journal, &db);
 
       assert!(results.is_faulty());
 
@@ -37,7 +37,7 @@ fn parse_errors_when_production_has_differing_return_types() -> SherpaResult<()>
     "/test.sg".into(),
     Default::default(),
     &|DBPackage { mut journal, db, .. }| {
-      let results = AScriptStore::new(&mut journal, &db);
+      let results = AScriptStore::new(journal, &db);
 
       assert!(results.is_faulty());
 
@@ -47,8 +47,7 @@ fn parse_errors_when_production_has_differing_return_types() -> SherpaResult<()>
 }
 
 #[test]
-fn prop_is_made_optional_when_not_present_or_introduced_in_subsequent_definitions(
-) -> SherpaResult<()> {
+fn prop_is_made_optional_when_not_present_or_introduced_in_subsequent_definitions() -> SherpaResult<()> {
   build_parse_db_from_source_str(
     r#"
     <> start > A | B
@@ -59,7 +58,7 @@ fn prop_is_made_optional_when_not_present_or_introduced_in_subsequent_definition
     "/test.sg".into(),
     Default::default(),
     &|DBPackage { mut journal, db, .. }| {
-      let store = AScriptStore::new(&mut journal, &db)?;
+      let store = AScriptStore::new(journal, &db)?;
 
       for prop in &store.props {
         assert!(prop.1.optional)
@@ -77,12 +76,9 @@ fn group_rules_as_vectors() -> SherpaResult<()> {
     "/test.sg".into(),
     Default::default(),
     &|DBPackage { mut journal, db, .. }| {
-      let results = AScriptStore::new(&mut journal, &db)?;
+      let results = AScriptStore::new(journal, &db)?;
 
-      assert_eq!(
-        results.prod_types.first_key_value()?.1.first_key_value()?.0.type_,
-        AScriptTypeVal::U32Vec
-      );
+      assert_eq!(results.prod_types.first_key_value()?.1.first_key_value()?.0.type_, AScriptTypeVal::U32Vec);
 
       SherpaResult::Ok(())
     },

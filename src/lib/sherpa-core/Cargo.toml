@@ -4,20 +4,25 @@ version = "1.0.0-beta2"
 edition = "2021"
 authors = ["Anthony Weathersby <acweathersby.codes@gmail.com>"]
 
+build="./link_binary_parser.rs"
+
 [lib]
 path = "./lib.rs"
 
 [dependencies]
 sherpa_rust_runtime = {path = "../sherpa-rust-runtime"}
+rayon = "1.7.0"
 
 [features]
-
 # Uses the binary parser instead of the bytecode parser. This parser needs
-# have been built for the current platform before it can be used.
-sherpa-binary-parser = []
+# to be built first, as it is not included with the sherpa source code.
+binary-parser = []
 
 # Enables code compatibility with wasm-build
 wasm-target = []
+
+# Enable features for use in the browser based lab
+wasm-lab = ["wasm-target"]
 
 # Enable multi-threading code
 multithread = []

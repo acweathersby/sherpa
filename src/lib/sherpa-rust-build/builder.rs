@@ -56,21 +56,15 @@ pub(crate) fn write_rust_ast2<W: Write>(mut w: AscriptWriter<W>) -> SherpaResult
 
     // Struct declaration
     w.block(
-      &("#[derive(Clone)]\n#[cfg_attr(debug_assertions, derive(Debug))]\npub struct ".to_string()
-        + &s.name),
+      &("#[derive(Clone)]\n#[cfg_attr(debug_assertions, derive(Debug))]\npub struct ".to_string() + &s.name),
       "{",
       "}",
       &|w| {
-        let prop_declarations = s.props.iter().map(|StructProp { name, type_string, .. }| {
-          "pub ".to_string() + name + ":" + type_string
-        });
+        let prop_declarations =
+          s.props.iter().map(|StructProp { name, type_string, .. }| "pub ".to_string() + name + ":" + type_string);
         w.list(
           ", ",
-          prop_declarations
-            .chain(
-              vec![s.tokenized].into_iter().filter_map(|v| v.then_some("pub tok: Token".into())),
-            )
-            .collect(),
+          prop_declarations.chain(vec![s.tokenized].into_iter().filter_map(|v| v.then_some("pub tok: Token".into()))).collect(),
         );
         SherpaResult::Ok(())
       },
@@ -87,9 +81,7 @@ pub(crate) fn write_rust_ast2<W: Write>(mut w: AscriptWriter<W>) -> SherpaResult
           s.props
             .iter()
             .map(|p| match (p.optional, p.type_.into()) {
-              (true, AScriptTypeVal::Struct(..) | AScriptTypeVal::GenericStruct(..)) => {
-                p.name.clone() + ": " + &p.type_string
-              }
+              (true, AScriptTypeVal::Struct(..) | AScriptTypeVal::GenericStruct(..)) => p.name.clone() + ": " + &p.type_string,
               (true, _) => format!("{}: {}", p.name, p.type_string),
               _ => p.name.clone() + ": " + &p.type_string,
             })
@@ -216,9 +208,8 @@ pub(crate) fn write_rust_ast2<W: Write>(mut w: AscriptWriter<W>) -> SherpaResult
                   SherpaResult::Ok(())
                 })?;
               }
-              GenericStruct(..) | Struct(..) | Bool(..) | StringVec | U8Vec | I8Vec
-              | String(..) | U64Vec | I64Vec | U32Vec | I32Vec | U16Vec | I16Vec | U64(..)
-              | I64(..) | U32(..) | I32(..) | U16(..) | I16(..) | U8(..) | I8(..) => {
+              GenericStruct(..) | Struct(..) | Bool(..) | StringVec | U8Vec | I8Vec | String(..) | U64Vec | I64Vec | U32Vec
+              | I32Vec | U16Vec | I16Vec | U64(..) | I64(..) | U32(..) | I32(..) | U16(..) | I16(..) | U8(..) | I8(..) => {
                 w.stmt(format!("self.{name}.hash(hasher);"))?;
               }
               GenericStructVec(..) => {
@@ -229,18 +220,14 @@ pub(crate) fn write_rust_ast2<W: Write>(mut w: AscriptWriter<W>) -> SherpaResult
               }
               TokenVec => {
                 w.block(&format!("for val in &self.{name}"), "{", "}", &|w| {
-                  w.stmt(format!(
-                    "val.to_string().replace(\" \", \"\").replace(\"\\n\", \"\").hash(hasher);"
-                  ))?;
+                  w.stmt(format!("val.to_string().replace(\" \", \"\").replace(\"\\n\", \"\").hash(hasher);"))?;
                   SherpaResult::Ok(())
                 })?;
               }
               Token => {
-                w.stmt(format!(
-                  "self.{name}.to_string().replace(\" \", \"\").replace(\"\\n\", \"\").hash(hasher);"
-                ))?;
+                w.stmt(format!("self.{name}.to_string().replace(\" \", \"\").replace(\"\\n\", \"\").hash(hasher);"))?;
               }
-              Undefined => { /* Ignore undefined properties */  }
+              Undefined => { /* Ignore undefined properties */ }
               _ => unreachable!("Did not expect node in this context when creating struct definition: {struct_name}"),
             }
           }
@@ -261,46 +248,26 @@ pub(crate) fn write_rust_ast2<W: Write>(mut w: AscriptWriter<W>) -> SherpaResult
     ")",
     ",",
     &|w| {
-      vec![
-        "_ctx_: *mut ParseContext<R, M>".to_string(),
-        format!("slots: &AstStackSlice<AstSlot<{}>, UP>", w.store.ast_type_name),
-      ]
+      vec!["_ctx_: *mut ParseContext<R, M>".to_string(), format!("slots: &AstStackSlice<AstSlot<{}>, UP>", w.store.ast_type_name)]
     },
     "",
     "{",
     "}",
     &|w, reduce_functions_map| {
-      w.block(
-        "struct ReduceFunctions<R: Reader + UTF8Reader, M, const UP: bool>",
-        "(",
-        ");",
-        &|w| {
-          w.stmt(format!(
-            "pub [Reducer<R, M, {0}, UP>; {1}]",
-            w.utils.store.ast_type_name,
-            reduce_functions_map.len()
-          ));
-          SherpaResult::Ok(())
-        },
-      )?;
-      w.block(
-        "impl<R: Reader + UTF8Reader, M, const UP: bool> ReduceFunctions<R, M, UP>",
-        "{",
-        "}",
-        &|w| {
-          w.method("pub const fn new", "(", ")", ",", &|_| vec![], "-> Self", "{", "}", &mut |w| {
-            w.block("Self", "([", "])", &|w| {
-              w.list(
-                ",",
-                reduce_functions_map.iter().map(|f| format!("{f}::<R, M, UP>")).collect(),
-              );
-              SherpaResult::Ok(())
-            });
+      w.block("struct ReduceFunctions<R: Reader + UTF8Reader, M, const UP: bool>", "(", ");", &|w| {
+        w.stmt(format!("pub [Reducer<R, M, {0}, UP>; {1}]", w.utils.store.ast_type_name, reduce_functions_map.len()));
+        SherpaResult::Ok(())
+      })?;
+      w.block("impl<R: Reader + UTF8Reader, M, const UP: bool> ReduceFunctions<R, M, UP>", "{", "}", &|w| {
+        w.method("pub const fn new", "(", ")", ",", &|_| vec![], "-> Self", "{", "}", &mut |w| {
+          w.block("Self", "([", "])", &|w| {
+            w.list(",", reduce_functions_map.iter().map(|f| format!("{f}::<R, M, UP>")).collect());
             SherpaResult::Ok(())
           });
           SherpaResult::Ok(())
-        },
-      )?;
+        });
+        SherpaResult::Ok(())
+      })?;
       SherpaResult::Ok(())
     },
   );
@@ -361,12 +328,7 @@ macro_rules! to_numeric {{
     "{",
     "}",
     &|w| {
-      let structs: Vec<_> = w
-        .store
-        .structs
-        .values()
-        .map(|s| format!("{0}(Box<{0}>)", s.type_name))
-        .collect();
+      let structs: Vec<_> = w.store.structs.values().map(|s| format!("{0}(Box<{0}>)", s.type_name)).collect();
       w.list(
         ",",
         vec![
@@ -408,7 +370,9 @@ macro_rules! to_numeric {{
   // --------------------------------------------------------------------------
   // ASTNodeType Enum
   w.block(
-    &format!("#[derive(Eq, PartialEq, Clone, Copy, Hash)]\n #[cfg_attr(debug_assertions, derive(Debug))]\npub enum {node_type}Type"),
+    &format!(
+      "#[derive(Eq, PartialEq, Clone, Copy, Hash)]\n #[cfg_attr(debug_assertions, derive(Debug))]\npub enum {node_type}Type"
+    ),
     "{",
     "}",
     &|w| {
@@ -421,8 +385,8 @@ macro_rules! to_numeric {{
   // --------------------------------------------------------------------------
   // AstType Implementation
   w.block(&format!("impl {node_type}"), "{", "}", &|w| {
-    w.stmt(
-      format!("
+    w.stmt(format!(
+      "
 into_vec!(into_nodes, {0}, NODES);
 into_vec!(into_f64_vec, f64, F64Vec);
 into_vec!(into_f32_vec, f32, F32Vec);
@@ -444,134 +408,62 @@ to_numeric!(to_u16, u16);
 to_numeric!(to_u32, u32);
 to_numeric!(to_u64, u64);
 to_numeric!(to_f32, f32);
-to_numeric!(to_f64, f64);", w.store.ast_type_name)
-    );
-    w.method(
-      "pub fn is_numeric",
-      "(",
-      ")",
-      ",",
-      &|_| vec!["&self".into()],
-      "-> bool",
-      "{",
-      "}",
-      &mut |w| {
-        w.stmt(format!("use {node_type}::*;").into())?;
-        w.stmt(
-          "matches!(self, F64(_) | F32(_)| I64(_)| I32(_)| I16(_)| I8(_)| U64(_)| U32(_)| U16(_)| U8(_))"
-          .into(),
-        )
-      },
-    );
+to_numeric!(to_f64, f64);",
+      w.store.ast_type_name
+    ));
+    w.method("pub fn is_numeric", "(", ")", ",", &|_| vec!["&self".into()], "-> bool", "{", "}", &mut |w| {
+      w.stmt(format!("use {node_type}::*;").into())?;
+      w.stmt("matches!(self, F64(_) | F32(_)| I64(_)| I32(_)| I16(_)| I8(_)| U64(_)| U32(_)| U16(_)| U8(_))".into())
+    });
 
-    w.method(
-      "pub fn to_bool",
-      "(",
-      ")",
-      ",",
-      &|_| vec!["&self".into()],
-      "-> bool",
-      "{",
-      "}",
-      &mut |w| {
-        w.stmt("self.to_u8() != 0".into())
-      },
-    );
+    w.method("pub fn to_bool", "(", ")", ",", &|_| vec!["&self".into()], "-> bool", "{", "}", &mut |w| {
+      w.stmt("self.to_u8() != 0".into())
+    });
 
-    w.method(
-      "pub fn into_strings",
-      "(",
-      ")",
-      ",",
-      &|_| vec!["self".into()],
-      "-> Vec<String>",
-      "{",
-      "}",
-      &mut |w| {
-        w.block("match self", "{", "}", &|w| {
-          w.list(",", vec![
-            format!("{}::STRINGS(strings) => strings", w.store.ast_type_name),
-            "_ => Default::default()".into(),
-          ])
-        })
-      },
-    );
+    w.method("pub fn into_strings", "(", ")", ",", &|_| vec!["self".into()], "-> Vec<String>", "{", "}", &mut |w| {
+      w.block("match self", "{", "}", &|w| {
+        w.list(",", vec![format!("{}::STRINGS(strings) => strings", w.store.ast_type_name), "_ => Default::default()".into()])
+      })
+    });
 
-    w.method(
-      "pub fn to_string",
-      "(",
-      ")",
-      ",",
-      &|_| vec!["&self".into()],
-      "-> String",
-      "{",
-      "}",
-      &mut |w| {
-        w.block("match self", "{", "}", &|w| {
-          w.list(",", vec![
-            format!("{}::BOOL(val) => val.to_string()", w.store.ast_type_name),
-            format!("{}::STRING(string) => string.to_owned()", w.store.ast_type_name),
-            format!("{}::TOKEN(val) => val.to_string()", w.store.ast_type_name),
-            "_ => self.to_token().to_string()".into(),
-          ])
-        })
-      },
-    );
+    w.method("pub fn to_string", "(", ")", ",", &|_| vec!["&self".into()], "-> String", "{", "}", &mut |w| {
+      w.block("match self", "{", "}", &|w| {
+        w.list(",", vec![
+          format!("{}::BOOL(val) => val.to_string()", w.store.ast_type_name),
+          format!("{}::STRING(string) => string.to_owned()", w.store.ast_type_name),
+          format!("{}::TOKEN(val) => val.to_string()", w.store.ast_type_name),
+          "_ => self.to_token().to_string()".into(),
+        ])
+      })
+    });
 
-    w.method(
-      "pub fn to_token",
-      "(",
-      ")",
-      ",",
-      &|_| vec!["&self".into()],
-      "-> Token",
-      "{",
-      "}",
-      &mut |w| {
-        w.block("match self", "{", "}", &|w| {
-          w.write_struct_data(&|w, s| {
-            if s.tokenized {
-              w.stmt(format!("{}::{}(node) => node.tok.clone(),", w.store.ast_type_name, s.name))?;
-            }
-            SherpaResult::Ok(())
-          });
-          w.list(",", vec![
-            format!("{}::TOKEN(val) => val.to_owned()", w.store.ast_type_name),
-            "_ => Token::empty()".into(),
-          ])
-        })
-      },
-    )
+    w.method("pub fn to_token", "(", ")", ",", &|_| vec!["&self".into()], "-> Token", "{", "}", &mut |w| {
+      w.block("match self", "{", "}", &|w| {
+        w.write_struct_data(&|w, s| {
+          if s.tokenized {
+            w.stmt(format!("{}::{}(node) => node.tok.clone(),", w.store.ast_type_name, s.name))?;
+          }
+          SherpaResult::Ok(())
+        });
+        w.list(",", vec![format!("{}::TOKEN(val) => val.to_owned()", w.store.ast_type_name), "_ => Token::empty()".into()])
+      })
+    })
   })?;
 
   // --------------------------------------------------------------------------
   // Get NodeType trait
-  w.block(&format!("pub trait Get{node_type}Type"), "{", "}", &|w| {
-    w.stmt(format!("fn get_type(&self) -> {node_type}Type;"))
-  });
+  w.block(&format!("pub trait Get{node_type}Type"), "{", "}", &|w| w.stmt(format!("fn get_type(&self) -> {node_type}Type;")));
 
   // --------------------------------------------------------------------------
   // Get NodeType trait implementation
   w.block(&format!("impl Get{node_type}Type for {node_type}"), "{", "}", &|w| {
     let extended_type = node_type.clone() + "Type";
-    w.method(
-      "fn get_type",
-      "(",
-      ")",
-      ",",
-      &|_| vec!["&self".into()],
-      &format!("-> {extended_type}"),
-      "{",
-      "}",
-      &mut |w| {
-        w.block("match self", "{", "}", &|w| {
-          w.write_struct_data(&|w, s| {
-            w.stmt(format!("{node_type}::{0}(..) => {extended_type}::{0},", s.name))
-          });
-          w.stmt(format!("_ => {extended_type}::NONE,"))
-        })
-      },
-    )
+    w.method("fn get_type", "(", ")", ",", &|_| vec!["&self".into()], &format!("-> {extended_type}"), "{", "}", &mut |w| {
+      w.block("match self", "{", "}", &|w| {
+        w.write_struct_data(&|w, s| w.stmt(format!("{node_type}::{0}(..) => {extended_type}::{0},", s.name)));
+        w.stmt(format!("_ => {extended_type}::NONE,"))
+      })
+    })
   })?;
 
   // --------------------------------------------------------------------------
@@ -597,8 +489,7 @@ to_numeric!(to_f64, f64);", w.store.ast_type_name)
       &mut |w| {
         w.stmt("use ASTNode::*;".into())?;
         w.block("match self", "{", "}", &|w| {
-          let structs =
-            w.store.structs.values().map(|s| format!("{}(node) => node.hash(hasher)", s.type_name));
+          let structs = w.store.structs.values().map(|s| format!("{}(node) => node.hash(hasher)", s.type_name));
           w.list(
             ",",
             vec![
@@ -631,15 +522,11 @@ to_numeric!(to_f64, f64);", w.store.ast_type_name)
             .collect::<Vec<_>>(),
           );
           w.block("TOKEN(tk) =>", "{", "}", &|w| {
-            w.stmt(
-              "tk.to_string().replace(\" \", \"\").replace(\"\\n\", \"\").hash(hasher);".into(),
-            )
+            w.stmt("tk.to_string().replace(\" \", \"\").replace(\"\\n\", \"\").hash(hasher);".into())
           })?;
           w.block("TOKENS(tks) =>", "{", "}", &|w| {
             w.block("for tk in tks", "{", "}", &|w| {
-              w.stmt(
-                "tk.to_string().replace(\" \", \"\").replace(\"\\n\", \"\").hash(hasher);".into(),
-              )
+              w.stmt("tk.to_string().replace(\" \", \"\").replace(\"\\n\", \"\").hash(hasher);".into())
             })
           })?;
           w.block("NODES(nodes) =>", "{", "}", &|w| {
@@ -664,21 +551,15 @@ to_numeric!(to_f64, f64);", w.store.ast_type_name)
 
     // Struct declaration
     w.block(
-      &("#[derive(Clone)]\n#[cfg_attr(debug_assertions, derive(Debug))]\npub struct ".to_string()
-        + &s.name),
+      &("#[derive(Clone)]\n#[cfg_attr(debug_assertions, derive(Debug))]\npub struct ".to_string() + &s.name),
       "{",
       "}",
       &|w| {
-        let prop_declarations = s.props.iter().map(|StructProp { name, type_string, .. }| {
-          "pub ".to_string() + name + ":" + type_string
-        });
+        let prop_declarations =
+          s.props.iter().map(|StructProp { name, type_string, .. }| "pub ".to_string() + name + ":" + type_string);
         w.list(
           ", ",
-          prop_declarations
-            .chain(
-              vec![s.tokenized].into_iter().filter_map(|v| v.then_some("pub tok: Token".into())),
-            )
-            .collect(),
+          prop_declarations.chain(vec![s.tokenized].into_iter().filter_map(|v| v.then_some("pub tok: Token".into()))).collect(),
         );
         SherpaResult::Ok(())
       },
@@ -695,9 +576,7 @@ to_numeric!(to_f64, f64);", w.store.ast_type_name)
           s.props
             .iter()
             .map(|p| match (p.optional, p.type_.into()) {
-              (true, AScriptTypeVal::Struct(..) | AScriptTypeVal::GenericStruct(..)) => {
-                p.name.clone() + ": " + &p.type_string
-              }
+              (true, AScriptTypeVal::Struct(..) | AScriptTypeVal::GenericStruct(..)) => p.name.clone() + ": " + &p.type_string,
               (true, _) => format!("{}: {}", p.name, p.type_string),
               _ => p.name.clone() + ": " + &p.type_string,
             })
@@ -824,9 +703,8 @@ to_numeric!(to_f64, f64);", w.store.ast_type_name)
                   SherpaResult::Ok(())
                 })?;
               }
-              GenericStruct(..) | Struct(..) | Bool(..) | StringVec | U8Vec | I8Vec
-              | String(..) | U64Vec | I64Vec | U32Vec | I32Vec | U16Vec | I16Vec | U64(..)
-              | I64(..) | U32(..) | I32(..) | U16(..) | I16(..) | U8(..) | I8(..) => {
+              GenericStruct(..) | Struct(..) | Bool(..) | StringVec | U8Vec | I8Vec | String(..) | U64Vec | I64Vec | U32Vec
+              | I32Vec | U16Vec | I16Vec | U64(..) | I64(..) | U32(..) | I32(..) | U16(..) | I16(..) | U8(..) | I8(..) => {
                 w.stmt(format!("self.{name}.hash(hasher);"))?;
               }
               GenericStructVec(..) => {
@@ -837,18 +715,14 @@ to_numeric!(to_f64, f64);", w.store.ast_type_name)
               }
               TokenVec => {
                 w.block(&format!("for val in &self.{name}"), "{", "}", &|w| {
-                  w.stmt(format!(
-                    "val.to_string().replace(\" \", \"\").replace(\"\\n\", \"\").hash(hasher);"
-                  ))?;
+                  w.stmt(format!("val.to_string().replace(\" \", \"\").replace(\"\\n\", \"\").hash(hasher);"))?;
                   SherpaResult::Ok(())
                 })?;
               }
               Token => {
-                w.stmt(format!(
-                  "self.{name}.to_string().replace(\" \", \"\").replace(\"\\n\", \"\").hash(hasher);"
-                ))?;
+                w.stmt(format!("self.{name}.to_string().replace(\" \", \"\").replace(\"\\n\", \"\").hash(hasher);"))?;
               }
-              Undefined => { /* Ignore undefined properties */  }
+              Undefined => { /* Ignore undefined properties */ }
               _ => unreachable!("Did not expect node in this context when creating struct definition: {struct_name}"),
             }
           }
@@ -869,46 +743,26 @@ to_numeric!(to_f64, f64);", w.store.ast_type_name)
     ")",
     ",",
     &|w| {
-      vec![
-        "_ctx_: *mut ParseContext<R, M>".to_string(),
-        format!("slots: &AstStackSlice<AstSlot<{}>, UP>", w.store.ast_type_name),
-      ]
+      vec!["_ctx_: *mut ParseContext<R, M>".to_string(), format!("slots: &AstStackSlice<AstSlot<{}>, UP>", w.store.ast_type_name)]
     },
     "",
     "{",
     "}",
     &|w, reduce_functions_map| {
-      w.block(
-        "struct ReduceFunctions<R: Reader + UTF8Reader, M, const UP: bool>",
-        "(",
-        ");",
-        &|w| {
-          w.stmt(format!(
-            "pub [Reducer<R, M, {0}, UP>; {1}]",
-            w.utils.store.ast_type_name,
-            reduce_functions_map.len()
-          ));
-          SherpaResult::Ok(())
-        },
-      )?;
-      w.block(
-        "impl<R: Reader + UTF8Reader, M, const UP: bool> ReduceFunctions<R, M, UP>",
-        "{",
-        "}",
-        &|w| {
-          w.method("pub const fn new", "(", ")", ",", &|_| vec![], "-> Self", "{", "}", &mut |w| {
-            w.block("Self", "([", "])", &|w| {
-              w.list(
-                ",",
-                reduce_functions_map.iter().map(|f| format!("{f}::<R, M, UP>")).collect(),
-              );
-              SherpaResult::Ok(())
-            });
+      w.block("struct ReduceFunctions<R: Reader + UTF8Reader, M, const UP: bool>", "(", ");", &|w| {
+        w.stmt(format!("pub [Reducer<R, M, {0}, UP>; {1}]", w.utils.store.ast_type_name, reduce_functions_map.len()));
+        SherpaResult::Ok(())
+      })?;
+      w.block("impl<R: Reader + UTF8Reader, M, const UP: bool> ReduceFunctions<R, M, UP>", "{", "}", &|w| {
+        w.method("pub const fn new", "(", ")", ",", &|_| vec![], "-> Self", "{", "}", &mut |w| {
+          w.block("Self", "([", "])", &|w| {
+            w.list(",", reduce_functions_map.iter().map(|f| format!("{f}::<R, M, UP>")).collect());
             SherpaResult::Ok(())
           });
           SherpaResult::Ok(())
-        },
-      )?;
+        });
+        SherpaResult::Ok(())
+      })?;
       SherpaResult::Ok(())
     },
   );
@@ -916,10 +770,7 @@ to_numeric!(to_f64, f64);", w.store.ast_type_name)
   SherpaResult::Ok(w)
 }
 
-pub(crate) fn create_rust_writer_utils<'a>(
-  store: &'a AScriptStore,
-  db: &'a ParserDatabase,
-) -> AscriptWriterUtils<'a> {
+pub(crate) fn create_rust_writer_utils<'a>(store: &'a AScriptStore, db: &'a ParserDatabase) -> AscriptWriterUtils<'a> {
   let mut u = AscriptWriterUtils {
     db,
     store,
@@ -976,18 +827,12 @@ pub(crate) fn create_rust_writer_utils<'a>(
             (utils.get_token_name)(SlotIndex::Rule)
           )
         } else {
-          format!(
-            "slots.assign(0, AstSlot({}, {}, TokenRange::default()));",
-            ref_,
-            (utils.get_token_name)(SlotIndex::Rule)
-          )
+          format!("slots.assign(0, AstSlot({}, {}, TokenRange::default()));", ref_, (utils.get_token_name)(SlotIndex::Rule))
         }
       }
-      AScriptTypeVal::Any => format!(
-        "slots.assign(0, AstSlot({}, {}, TokenRange::default()));",
-        &ref_,
-        (utils.get_token_name)(SlotIndex::Rule)
-      ),
+      AScriptTypeVal::Any => {
+        format!("slots.assign(0, AstSlot({}, {}, TokenRange::default()));", &ref_, (utils.get_token_name)(SlotIndex::Rule))
+      }
       type_ => {
         #[cfg(debug_assertions)]
         {
@@ -1031,12 +876,9 @@ pub(crate) fn create_rust_writer_utils<'a>(
     },
     struct_construction: &|u, w, node_name, prop_assignments, tokenized| {
       w.write(&format!("{node_name}::new("))?;
-      let mut entries: Vec<String> =
-        prop_assignments.iter().map(|(_, val, _)| val.to_string()).collect();
+      let mut entries: Vec<String> = prop_assignments.iter().map(|(_, val, _)| val.to_string()).collect();
       if tokenized {
-        entries.push(
-          (u.get_token_name)(SlotIndex::Rule) + ".to_token(unsafe{{&mut*_ctx_}}.get_reader_mut())",
-        )
+        entries.push((u.get_token_name)(SlotIndex::Rule) + ".to_token(unsafe{{&mut*_ctx_}}.get_reader_mut())")
       }
       if entries.len() > 0 {
         w.increase_indent();
@@ -1257,23 +1099,20 @@ pub(crate) fn create_rust_writer_utils<'a>(
               expr => {
                 let ref_ = u.ast_expr_to_ref(expr, r, ref_index, type_slot)?;
                 match ref_.ast_type {
-                  AScriptTypeVal::AdjustedTokenRange => Some(ref_.to(
-                    "%%.to_slice(unsafe{&*_ctx_}.get_str()).to_string()".to_string(),
-                    AScriptTypeVal::String(None),
-                  )),
-                  AScriptTypeVal::Struct(..)
-                  | AScriptTypeVal::TokenRange
-                  | AScriptTypeVal::GenericStruct(..) => Some(ref_.to_range(u).to(
-                    "%%.to_slice(unsafe{&*_ctx_}.get_str()).to_string()".to_string(),
-                    AScriptTypeVal::String(None),
-                  )),
+                  AScriptTypeVal::AdjustedTokenRange => {
+                    Some(ref_.to("%%.to_slice(unsafe{&*_ctx_}.get_str()).to_string()".to_string(), AScriptTypeVal::String(None)))
+                  }
+                  AScriptTypeVal::Struct(..) | AScriptTypeVal::TokenRange | AScriptTypeVal::GenericStruct(..) => Some(
+                    ref_
+                      .to_range(u)
+                      .to("%%.to_slice(unsafe{&*_ctx_}.get_str()).to_string()".to_string(), AScriptTypeVal::String(None)),
+                  ),
                   AScriptTypeVal::TokenVec => {
                     // Merge the last and first token together
                     // get the string value from the resulting span of the union
-                    Some(ref_.to(
-                      "(%%.first().unwrap() + %%.last().unwrap()).to_string()".to_string(),
-                      AScriptTypeVal::String(None),
-                    ))
+                    Some(
+                      ref_.to("(%%.first().unwrap() + %%.last().unwrap()).to_string()".to_string(), AScriptTypeVal::String(None)),
+                    )
                   }
                   AScriptTypeVal::String(..) => Some(ref_),
                   _ => Some(ref_.to("%%.to_string()".to_string(), AScriptTypeVal::String(None))),
@@ -1387,10 +1226,8 @@ pub(crate) fn create_rust_writer_utils<'a>(
   u.add_ast_handler(ASTNodeType::AST_Vector, ASTExprHandler {
     expr: &|utils, ast, rule, ref_index, type_slot| {
       if let ASTNode::AST_Vector(box AST_Vector { initializer, .. }) = ast {
-        let mut results = initializer
-          .iter()
-          .filter_map(|n| utils.ast_expr_to_ref(n, rule, ref_index, type_slot))
-          .collect::<VecDeque<_>>();
+        let mut results =
+          initializer.iter().filter_map(|n| utils.ast_expr_to_ref(n, rule, ref_index, type_slot)).collect::<VecDeque<_>>();
 
         if results.is_empty() {
           Some(SlotRef::ast_obj(
@@ -1440,8 +1277,7 @@ pub(crate) fn create_rust_writer_utils<'a>(
       if let ASTNode::AST_Token(box AST_Token { range, .. }) = ast {
         let ref_ = SlotRef::node_range(u, type_slot);
         if let Some(box parser::Range { start_trim, end_trim }) = range {
-          let trimed_ref = ref_
-            .to(format!("%%.trim({start_trim}, {end_trim})"), AScriptTypeVal::AdjustedTokenRange);
+          let trimed_ref = ref_.to(format!("%%.trim({start_trim}, {end_trim})"), AScriptTypeVal::AdjustedTokenRange);
           Some(trimed_ref)
         } else {
           Some(ref_)
@@ -1455,9 +1291,7 @@ pub(crate) fn create_rust_writer_utils<'a>(
     expr: &|u, ast, rule, _, type_slot| {
       if let ASTNode::AST_IndexReference(box AST_IndexReference { value, .. }) = ast {
         match get_indexed_body_ref(rule, (*value - 1) as usize) {
-          Some((index, SymbolRef { id, .. })) => {
-            render_body_symbol(u, &id, u.store, SlotIndex::Sym(index), type_slot)
-          }
+          Some((index, SymbolRef { id, .. })) => render_body_symbol(u, &id, u.store, SlotIndex::Sym(index), type_slot),
           None => None,
         }
       } else {
@@ -1469,9 +1303,7 @@ pub(crate) fn create_rust_writer_utils<'a>(
     expr: &|u, ast, rule, _, type_slot| {
       if let ASTNode::AST_NamedReference(box AST_NamedReference { value, .. }) = ast {
         match get_named_body_ref(u.db, rule, value) {
-          Some((index, SymbolRef { id, .. })) => {
-            render_body_symbol(u, &id, u.store, SlotIndex::Sym(index), type_slot)
-          }
+          Some((index, SymbolRef { id, .. })) => render_body_symbol(u, &id, u.store, SlotIndex::Sym(index), type_slot),
           None => None,
         }
       } else {
@@ -1482,26 +1314,23 @@ pub(crate) fn create_rust_writer_utils<'a>(
 
   // Convert Vec<AstNode> to Vec<<Specific Node>> when the Generic Structs Vecs
   // only have one type.
-  u.add_prop_handler(
-    AScriptTypeVal::GenericStructVec(Default::default()),
-    AscriptPropHandler {
-      expr: &|u, ref_, prop_type_, _|
-        match ref_ {
-        Some(ref_) => match prop_type_ {
-            AScriptTypeVal::GenericStructVec(structs_ids) if structs_ids.len() == 1 => {
-                (format!(
-                      "{}.into_iter().map(|v|match v {{ {}::{}(node) => node, _ => panic!(\"could not convert\")}}).collect::<Vec<_>>()",
-                      ref_.get_ref_name(),
-                      u.store.ast_type_name,
-                      u.store.structs.get(&structs_ids.first().unwrap().into()).unwrap().type_name
-                    ), Some(ref_))
-              }
-              _ => (ref_.get_ref_name(), Some(ref_)),
-        }
-        None => ("Default::default()".into(), Default::default()),
-      }
+  u.add_prop_handler(AScriptTypeVal::GenericStructVec(Default::default()), AscriptPropHandler {
+    expr: &|u, ref_, prop_type_, _| match ref_ {
+      Some(ref_) => match prop_type_ {
+        AScriptTypeVal::GenericStructVec(structs_ids) if structs_ids.len() == 1 => (
+          format!(
+            "{}.into_iter().map(|v|match v {{ {}::{}(node) => node, _ => panic!(\"could not convert\")}}).collect::<Vec<_>>()",
+            ref_.get_ref_name(),
+            u.store.ast_type_name,
+            u.store.structs.get(&structs_ids.first().unwrap().into()).unwrap().type_name
+          ),
+          Some(ref_),
+        ),
+        _ => (ref_.get_ref_name(), Some(ref_)),
+      },
+      None => ("Default::default()".into(), Default::default()),
     },
-      );
+  });
   fn handle_struct_props(
     utils: &AscriptWriterUtils,
     ref_: Option<SlotRef>,
@@ -1539,13 +1368,9 @@ pub(crate) fn create_rust_writer_utils<'a>(
     }
   }
 
-  u.add_prop_handler(AScriptTypeVal::Struct(Default::default()), AscriptPropHandler {
-    expr: &handle_struct_props,
-  });
+  u.add_prop_handler(AScriptTypeVal::Struct(Default::default()), AscriptPropHandler { expr: &handle_struct_props });
 
-  u.add_prop_handler(AScriptTypeVal::GenericStruct(Default::default()), AscriptPropHandler {
-    expr: &handle_struct_props,
-  });
+  u.add_prop_handler(AScriptTypeVal::GenericStruct(Default::default()), AscriptPropHandler { expr: &handle_struct_props });
   u
 }
 
@@ -1598,20 +1423,15 @@ fn render_body_symbol(
             SlotRef::ast_obj(slot_index, type_slot, init_string, _type)
           } else {
             SlotRef::ast_obj(slot_index, type_slot, "".to_string(), match _type.to_owned() {
-              GenericVec(types) => get_specified_vector_from_generic_vec_values(
-                &types.unwrap().iter().map(|t| t.into()).collect(),
-              ),
+              GenericVec(types) => {
+                get_specified_vector_from_generic_vec_values(&types.unwrap().iter().map(|t| t.into()).collect())
+              }
               _type => _type,
             })
           }
         }
       } else if production_types_are_structs(&types) {
-        SlotRef::ast_obj(
-          slot_index,
-          type_slot,
-          ref_name,
-          GenericStruct(extract_struct_types(&types)),
-        )
+        SlotRef::ast_obj(slot_index, type_slot, ref_name, GenericStruct(extract_struct_types(&types)))
       } else {
         SlotRef::token(utils, slot_index, type_slot)
       }
@@ -1666,13 +1486,10 @@ fn convert_numeric<T: AScriptNumericType>(
           | AScriptTypeVal::U8(..)
           | AScriptTypeVal::U16(..)
           | AScriptTypeVal::U32(..)
-          | AScriptTypeVal::U64(..) => {
-            Some(ref_.to(format!("%% as {}", rust_type), T::from_f64(0.0)))
+          | AScriptTypeVal::U64(..) => Some(ref_.to(format!("%% as {}", rust_type), T::from_f64(0.0))),
+          AScriptTypeVal::TokenRange => {
+            Some(ref_.to(format!("%%.{}(unsafe{{&*_ctx_}}.get_str())", range_conversion_fn), T::from_f64(0.0)))
           }
-          AScriptTypeVal::TokenRange => Some(ref_.to(
-            format!("%%.{}(unsafe{{&*_ctx_}}.get_str())", range_conversion_fn),
-            T::from_f64(0.0),
-          )),
           _ => Some(ref_.to(format!("%%.{}()", tok_conversion_fn), T::from_f64(0.0))),
         }
       }
@@ -1737,9 +1554,7 @@ pub(crate) fn add_ascript_functions_for_rust<W: Write>(
 
   w.block("pub trait ASTParse<T>", "{", "}", &|w| {
     for (_, _, ast_type_string, export_name, ..) in &export_node_data {
-      w.stmt(format!(
-        "fn {export_name}_from(input:T) -> Result<{ast_type_string}, SherpaParseError>;",
-      ));
+      w.stmt(format!("fn {export_name}_from(input:T) -> Result<{ast_type_string}, SherpaParseError>;",));
     }
     SherpaResult::Ok(())
   });
@@ -1766,22 +1581,17 @@ pub type Parser<'a, T, UserCTX> = sherpa_rust_runtime::bytecode::ByteCodeParser<
   .unwrap();
 
   w.block("pub mod meta", "{", "}", &|w| {
-    w.block(
-      &format!("pub const production_names: [&'static str;{}] = ", parse_productions.len()),
-      "[",
-      "];",
-      &|w| {
-        w.list(
-          ",",
-          parse_productions
-            .iter()
-            .map(|prod_id| (prod_id, format!("\"{}\"", w.db.prod_friendly_name_string(*prod_id),)))
-            .collect::<BTreeMap<_, _>>()
-            .into_values()
-            .collect(),
-        )
-      },
-    )?;
+    w.block(&format!("pub const production_names: [&'static str;{}] = ", parse_productions.len()), "[", "];", &|w| {
+      w.list(
+        ",",
+        parse_productions
+          .iter()
+          .map(|prod_id| (prod_id, format!("\"{}\"", w.db.prod_friendly_name_string(*prod_id),)))
+          .collect::<BTreeMap<_, _>>()
+          .into_values()
+          .collect(),
+      )
+    })?;
 
     let symbol_string = w
       .db
@@ -1822,10 +1632,7 @@ pub type Parser<'a, T, UserCTX> = sherpa_rust_runtime::bytecode::ByteCodeParser<
   w.block(&format!("pub static bytecode: [u8; {}] = ", bc.len()), "[", "];", &|w| {
     w.list(
       ", ",
-      bc.chunks(60)
-        .into_iter()
-        .map(|i| i.into_iter().map(|i| format!("{i}")).collect::<Vec<_>>().join(","))
-        .collect(),
+      bc.chunks(60).into_iter().map(|i| i.into_iter().map(|i| format!("{i}")).collect::<Vec<_>>().join(",")).collect(),
     );
     SherpaResult::Ok(())
   })
@@ -1835,7 +1642,6 @@ pub type Parser<'a, T, UserCTX> = sherpa_rust_runtime::bytecode::ByteCodeParser<
     let export_node_data = get_ascript_export_data(w.utils);
 
     w.block("pub mod ast", "{", "}", &|w| {
-
       w.stmt(format!("impl AstObject for {ast_type_name} {{}}"))?;
       w.stmt(format!("type ASTSlot = ({ast_type_name}, TokenRange, TokenRange);"))?;
       w.stmt("use super::*; ".into()).unwrap();
@@ -1858,13 +1664,12 @@ pub type Parser<'a, T, UserCTX> = sherpa_rust_runtime::bytecode::ByteCodeParser<
             w.stmt(format!("let mut parser = Parser::new(&mut reader, &bytecode);"))?;
             w.stmt(format!("parser.init_parser({});", state_lookups.get(prod_entry_name).unwrap()))?;
 
-            w.stmt(
-              format!("let AstSlot ({}, __rule_rng__, _) = parser.parse_ast(&reduce_functions.0, &mut None)?;"
-              ,(&w.utils.get_slot_obj_name)(SlotIndex::Sym(0))),
-            )?;
+            w.stmt(format!(
+              "let AstSlot ({}, __rule_rng__, _) = parser.parse_ast(&reduce_functions.0, &mut None)?;",
+              (&w.utils.get_slot_obj_name)(SlotIndex::Sym(0))
+            ))?;
             if ref_.is_some() {
-              let (ref_name, ref_) =
-                w.utils.create_type_initializer_value(ref_.clone(), type_, false);
+              let (ref_name, ref_) = w.utils.create_type_initializer_value(ref_.clone(), type_, false);
               if let Some(ref_) = ref_ {
                 w.stmt(ref_.to_init_string(w.utils))?;
                 w.stmt(format!("Ok({ref_name})"))
@@ -1913,21 +1718,11 @@ pub struct Parser<T: Reader, M>(ParseContext<T, M>, T);
     /// the grammar `{grammar_name}"
     ))?;
     w.stmt("#[inline(always)]".into())?;
-    w.method(
-      "fn new",
-      "(",
-      ")",
-      ", ",
-      &|_| vec!["mut reader: T".into()],
-      "-> Self",
-      "{",
-      "}",
-      &mut |w| {
-        w.stmt("let mut parser = Self(ParseContext::<T, M>::new_llvm(), reader);".into())?;
-        w.stmt("parser.construct_context();".into())?;
-        w.stmt("parser".into())
-      },
-    )?;
+    w.method("fn new", "(", ")", ", ", &|_| vec!["mut reader: T".into()], "-> Self", "{", "}", &mut |w| {
+      w.stmt("let mut parser = Self(ParseContext::<T, M>::new_llvm(), reader);".into())?;
+      w.stmt("parser.construct_context();".into())?;
+      w.stmt("parser".into())
+    })?;
     w.stmt(
       "/// Initialize the parser to recognize the given starting production
       /// within the input. This method is chainable."
@@ -1952,38 +1747,18 @@ pub struct Parser<T: Reader, M>(ParseContext<T, M>, T);
       },
     )?;
     w.stmt("#[inline(always)]".into())?;
-    w.method(
-      "fn construct_context",
-      "(",
-      ")",
-      ", ",
-      &|_| vec!["&mut self".into()],
-      "",
-      "{",
-      "}",
-      &mut |w| {
-        w.block("unsafe", "{", "}", &|w| {
-          w.stmt("let _ptr = &mut self.0 as *const ParseContext<T, M>;".into())?;
-          w.stmt("let _rdr = &mut self.1 as *const T;".into())?;
-          w.stmt("init(_ptr as *mut u8, _rdr as *mut u8);".into())
-        })
-      },
-    )?;
-    w.stmt("#[inline(always)]".into())?;
-    w.method(
-      "fn destroy_context",
-      "(",
-      ")",
-      ", ",
-      &|_| vec!["&mut self".into()],
-      "",
-      "{",
-      "}",
-      &mut |w| {
+    w.method("fn construct_context", "(", ")", ", ", &|_| vec!["&mut self".into()], "", "{", "}", &mut |w| {
+      w.block("unsafe", "{", "}", &|w| {
         w.stmt("let _ptr = &mut self.0 as *const ParseContext<T, M>;".into())?;
-        w.block("unsafe", "{", "}", &|w| w.stmt("drop(_ptr as *mut u8);".into()))
-      },
-    )?;
+        w.stmt("let _rdr = &mut self.1 as *const T;".into())?;
+        w.stmt("init(_ptr as *mut u8, _rdr as *mut u8);".into())
+      })
+    })?;
+    w.stmt("#[inline(always)]".into())?;
+    w.method("fn destroy_context", "(", ")", ", ", &|_| vec!["&mut self".into()], "", "{", "}", &mut |w| {
+      w.stmt("let _ptr = &mut self.0 as *const ParseContext<T, M>;".into())?;
+      w.block("unsafe", "{", "}", &|w| w.stmt("drop(_ptr as *mut u8);".into()))
+    })?;
     for EntryPoint { export_id, prod_entry_name, entry_name, .. } in
       //for ExportedProduction { export_name, export_id, .. } in
       w.db.entry_points().iter()
@@ -2012,25 +1787,15 @@ pub struct Parser<T: Reader, M>(ParseContext<T, M>, T);
   w.block("impl<T: Reader, M> Iterator for Parser<T, M> ", "{", "}", &|w| {
     w.stmt("type Item = ParseActionType;".into());
     w.stmt("#[inline(always)]".into());
-    w.method(
-      "fn next",
-      "(",
-      ")",
-      ", ",
-      &|_| vec!["&mut self".into()],
-      "-> Option<Self::Item>",
-      "{",
-      "}",
-      &mut |w| {
-        w.block("unsafe", "{", "}", &|w| {
-          w.block("if !self.0.is_active", "{", "}", &|w| w.stmt("None".into()))?;
-          w.block("else", "{", "}", &|w| {
-            w.stmt("let _ptr = &mut self.0 as *const ParseContext<T, M>;".into())?;
-            w.stmt("Some(next(_ptr as *mut u8))".into())
-          })
+    w.method("fn next", "(", ")", ", ", &|_| vec!["&mut self".into()], "-> Option<Self::Item>", "{", "}", &mut |w| {
+      w.block("unsafe", "{", "}", &|w| {
+        w.block("if !self.0.is_active", "{", "}", &|w| w.stmt("None".into()))?;
+        w.block("else", "{", "}", &|w| {
+          w.stmt("let _ptr = &mut self.0 as *const ParseContext<T, M>;".into())?;
+          w.stmt("Some(next(_ptr as *mut u8))".into())
         })
-      },
-    )
+      })
+    })
   })?;
 
   w.block("impl<T: Reader, M> Drop for Parser<T, M> ", "{", "}", &|w| {
