@@ -173,7 +173,7 @@ fn resolve_production_reduce_types(
     let mut resubmit = false;
     let mut new_map = OrderedMap::new();
     let mut vector_types = prod_types.remove(&prod_id).unwrap().into_iter().collect::<Vec<_>>();
-    let scalar_types = vector_types.drain_filter(|(a, _)| !a.type_.is_vec()).collect::<Vec<_>>();
+    let (vector_types, scalar_types) = vector_types.into_iter().partition::<Vec<_>, _>(|(a, _)| a.type_.is_vec());
 
     if !scalar_types.is_empty() {
       use AScriptTypeVal::*;
@@ -268,17 +268,17 @@ fn resolve_production_reduce_types(
       let (mut prime, mut prime_body_ids) = (TaggedType::default(), BTreeSet::new());
       let mut vector_types = VecDeque::from_iter(vector_types);
 
-      let mut remap_vector = |mut known_types: BTreeSet<TaggedType>,
+      let mut remap_vector = | known_types: BTreeSet<TaggedType>,
                               vector_types: &mut VecDeque<(TaggedType, BTreeSet<DBRuleKey>)>|
        -> BTreeSet<TaggedType> {
-        vector_types.extend(
-          known_types
-            .drain_filter(|t| matches!(t.into(), GenericVec(..)))
-            .map(|t| (t.into(), BTreeSet::new()))
-            .collect::<VecDeque<_>>(),
-        );
+        let (vectors, known_types) = known_types.into_iter().partition::<Vec<_>, _>(|t| matches!(t.into(), GenericVec(..)));
 
-        for production in known_types.drain_filter(|t| matches!(t.into(), UnresolvedProduction(..))) {
+        vector_types.extend(vectors.into_iter().map(|t| (t.into(), BTreeSet::new())).collect::<VecDeque<_>>());
+
+        let (unresolved_prods, known_types) =
+          known_types.into_iter().partition::<BTreeSet<_>, _>(|t| matches!(t.into(), UnresolvedProduction(..)));
+
+        for production in unresolved_prods {
           if let UnresolvedProduction(foreign_prod_id) = production.type_.clone() {
             if foreign_prod_id != prod_id {
               match ast.prod_types.get(&foreign_prod_id) {
@@ -354,8 +354,8 @@ fn resolve_production_reduce_types(
 
   // Do final check for incompatible types
   for prod_id in ast.prod_types.keys().cloned().collect::<Vec<_>>() {
-    let mut vector_types = ast.prod_types.get(&prod_id).unwrap().iter().collect::<Vec<_>>();
-    let scalar_types = vector_types.drain_filter(|(a, ..)| !a.type_.is_vec()).collect::<Vec<_>>();
+    let  vector_types = ast.prod_types.get(&prod_id).unwrap().iter().collect::<Vec<_>>();
+    let (vector_types, scalar_types) = vector_types.into_iter().partition::<Vec<_>, _>(|(a, ..)| a.type_.is_vec());
 
     debug_assert!(
       !scalar_types.iter().any(|(a, _)| matches!((*a).into(), AScriptTypeVal::UnresolvedProduction(_))),
@@ -479,12 +479,9 @@ pub(crate) fn verify_property_presence(ast: &mut AScriptStore, struct_id: &AScri
 pub fn get_resolved_type(ascript: &AScriptStore, base_type: &AScriptTypeVal) -> AScriptTypeVal {
   match base_type {
     AScriptTypeVal::UnresolvedProduction(production_id) => {
-      let Some(types) = ascript
-        .prod_types
-        .get(production_id)
-        .and_then(|t| Some(t.keys().cloned().collect::<Vec<_>>())) else {
-          return base_type.clone()
-        };
+      let Some(types) = ascript.prod_types.get(production_id).and_then(|t| Some(t.keys().cloned().collect::<Vec<_>>())) else {
+        return base_type.clone();
+      };
 
       if types.len() == 1 {
         (&types[0]).into()

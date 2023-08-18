@@ -1,6 +1,4 @@
 #![feature(box_patterns)]
-#![feature(drain_filter)]
-#![feature(btree_drain_filter)]
 
 #[cfg(test)]
 mod test;
@@ -16,14 +14,7 @@ use builder::{
 };
 use sherpa_ascript::{output_base::AscriptWriter, types::AScriptStore};
 
-use sherpa_core::{
-  proxy::Map,
-  CodeWriter,
-  IString,
-  Journal,
-  ParserDatabase,
-  SherpaResult,
-};
+use sherpa_core::{proxy::Map, CodeWriter, IString, Journal, ParserDatabase, SherpaResult};
 
 use crate::builder::write_rust_llvm_parser_file;
 

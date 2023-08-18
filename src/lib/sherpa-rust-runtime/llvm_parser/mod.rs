@@ -54,17 +54,12 @@ pub trait LLVMByteReader {
   /// Get a pointer to a sequence of bytes that can be read from the input given
   /// the cursor position. The second tuple values should be the length bytes
   /// that  can be read from the block.
-  extern "C" fn get_byte_block_at_cursor_old<T: ByteReader>(
-    self_: &mut T,
-    start_offset: u32,
-    _end_offset: u32,
-  ) -> InputInfo {
+  extern "C" fn get_byte_block_at_cursor_old<T: ByteReader>(self_: &mut T, start_offset: u32, _end_offset: u32) -> InputInfo {
     let cursor = start_offset;
     let size = ((self_.len() as i64) - (cursor as i64)).max(0) as u32;
 
     if size > 0 {
-      let ptr =
-        ((self_.get_bytes().as_ptr() as usize) + cursor as usize) as *const u8;
+      let ptr = ((self_.get_bytes().as_ptr() as usize) + cursor as usize) as *const u8;
       InputInfo(ptr, self_.len() as u32, false)
     } else {
       InputInfo(0 as *const u8, self_.len() as u32, false)
@@ -86,9 +81,7 @@ pub trait LLVMByteReader {
     let base_delta = (*base_ptr as usize) - (*anchor_ptr as usize);
     let needed = *end_ptr_and_needed as usize;
 
-    let size = (((self_.len() as i64) + 1)
-      - ((anchor_offset + scan_delta + needed as usize) as i64))
-      .max(0) as u32;
+    let size = (((self_.len() as i64) + 1) - ((anchor_offset + scan_delta + needed as usize) as i64)).max(0) as u32;
 
     if size > 0 {
       let beg = self_.get_bytes().as_ptr();
@@ -174,38 +167,24 @@ impl AstObject for u32 {}
 
 impl<V: AstObject> AstObject for (V, TokenRange, TokenRange) {}
 
-pub unsafe fn llvm_map_result_action<
-  'a,
-  T: LLVMByteReader + ByteReader + MutByteReader,
-  M,
-  Node: AstObject,
->(
+pub unsafe fn llvm_map_result_action<'a, T: LLVMByteReader + ByteReader + MutByteReader, M, Node: AstObject>(
   _ctx: &ParseContext<T, M>,
   action: ParseActionType,
   slots: &mut AstStackSlice<AstSlot<Node>>,
 ) -> ParseResult<Node> {
   match action {
-    ParseActionType::Accept =>{
-      ParseResult::Complete(slots.take(0))
-    }
+    ParseActionType::Accept => ParseResult::Complete(slots.take(0)),
     ParseActionType::Error => {
       let vec = slots.to_vec();
       let last_input = vec.last().cloned().unwrap_or_default().1;
       ParseResult::Error(last_input, vec)
     }
-    ParseActionType::NeedMoreInput => {
-      ParseResult::NeedMoreInput(slots.to_vec())
-    }
+    ParseActionType::NeedMoreInput => ParseResult::NeedMoreInput(slots.to_vec()),
     _ => unreachable!("This function should only be called when the parse action is  [Error, Accept, or EndOfInput]"),
   }
 }
 
-pub unsafe fn llvm_map_shift_action<
-  'a,
-  R: LLVMByteReader + ByteReader + MutByteReader,
-  ExtCTX,
-  ASTNode: AstObject,
->(
+pub unsafe fn llvm_map_shift_action<'a, R: LLVMByteReader + ByteReader + MutByteReader, ExtCTX, ASTNode: AstObject>(
   ctx: &ParseContext<R, ExtCTX>,
   slots: &mut AstStackSlice<AstSlot<ASTNode>>,
 ) {
@@ -215,7 +194,10 @@ pub unsafe fn llvm_map_shift_action<
     token_line_offset,
     token_line_count,
     ..
-  } = ctx.get_shift_data() else {unreachable!()};
+  } = ctx.get_shift_data()
+  else {
+    unreachable!()
+  };
 
   let tok = TokenRange {
     len:      token_byte_length,
@@ -224,6 +206,5 @@ pub unsafe fn llvm_map_shift_action<
     line_off: token_line_offset,
   };
 
-  slots
-    .assign_to_garbage(0, AstSlot(ASTNode::default(), tok, Default::default()));
+  slots.assign_to_garbage(0, AstSlot(ASTNode::default(), tok, Default::default()));
 }
