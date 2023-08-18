@@ -1,5 +1,4 @@
 use crate::grammar::{JSBytecode, JSParserDB};
-use js_sys::Array;
 use serde::{Deserialize, Serialize};
 use sherpa_core::parser;
 use sherpa_rust_runtime::{

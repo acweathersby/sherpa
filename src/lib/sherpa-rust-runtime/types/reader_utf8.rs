@@ -91,10 +91,7 @@ impl<'a> ByteReader for UTF8StringReader<'a> {
 
   #[inline(always)]
   fn get_source(&mut self) -> SharedSymbolBuffer {
-    self
-      .source
-      .get_or_insert(SharedSymbolBuffer::new(Vec::from(self.data.clone())))
-      .clone()
+    self.source.get_or_insert(SharedSymbolBuffer::new(Vec::from(self.data))).clone()
   }
 
   #[inline(always)]
@@ -104,8 +101,7 @@ impl<'a> ByteReader for UTF8StringReader<'a> {
 
   #[inline(always)]
   fn get_length_data(&self) -> u64 {
-    ((self.codepoint_byte_length() as u64) << 32)
-      | self.codepoint_length() as u64
+    ((self.codepoint_byte_length() as u64) << 32) | self.codepoint_length() as u64
   }
 
   #[inline(always)]

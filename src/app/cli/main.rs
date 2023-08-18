@@ -106,7 +106,7 @@ fn main() -> SherpaResult<()> {
   let matches = command();
 
   if let Some(matches) = matches.subcommand_matches("build") {
-    let (config, parser_type, out_dir, lib_out_dir) = configure_matches(matches, &pwd);
+    let (config, parser_type, out_dir, ..) = configure_matches(matches, &pwd);
 
     let (executor, spawner) = new_taskman(1000);
 
@@ -151,11 +151,8 @@ fn main() -> SherpaResult<()> {
 
       let name = name.or(Some(id.name.to_string(db.string_store()))).unwrap_or("parser".to_string());
 
-      let mut j1 = j.transfer();
-      let j2 = j.transfer();
-
       let states = async {
-        let states = compile_parse_states(j2, &db)?;
+        let states = compile_parse_states(j.transfer(), &db)?;
 
         optimize::<Vec<_>>(&db, states, false)
       }
@@ -181,7 +178,7 @@ fn main() -> SherpaResult<()> {
         }
         _ => {
           let (bc, lu) = compile_bytecode(&db, states.iter(), false)?;
-          compile_rust_bytecode_parser(j1, &db, &bc, &lu).await
+          compile_rust_bytecode_parser(j.transfer(), &db, &bc, &lu).await
         }
       };
 
@@ -208,7 +205,7 @@ fn main() -> SherpaResult<()> {
     executor.join();
 
     SherpaResult::Ok(())
-  } else if let Some(matches) = matches.subcommand_matches("disassemble") {
+  } else if matches.subcommand_matches("disassemble").is_some() {
     SherpaResult::Ok(())
   } else {
     SherpaResult::Err(SherpaError::from("Command Not Recognized"))

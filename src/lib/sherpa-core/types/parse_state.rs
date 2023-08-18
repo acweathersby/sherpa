@@ -234,7 +234,7 @@ fn render_IR<T: Write>(db: &ParserDatabase, mut w: &mut CodeWriter<T>, node: &AS
         render_IR(db, w, m, false)?;
       }
 
-      w = (w.dedent().newline()? + "}").dedent().newline()?;
+      _ = (w.dedent().newline()? + "}").dedent().newline()?;
     }
 
     ASTNode::DefaultMatch(box parser::DefaultMatch { statement, .. }) => {
@@ -242,7 +242,7 @@ fn render_IR<T: Write>(db: &ParserDatabase, mut w: &mut CodeWriter<T>, node: &AS
 
       render_IR(db, w, &ASTNode::Statement(statement.clone()), false);
 
-      w = w + " }";
+      _ = w + " }";
     }
 
     ASTNode::IntMatch(box parser::IntMatch { vals, statement, .. }) => {
@@ -251,7 +251,7 @@ fn render_IR<T: Write>(db: &ParserDatabase, mut w: &mut CodeWriter<T>, node: &AS
 
       render_IR(db, w, &ASTNode::Statement(statement.clone()), false);
 
-      w = w + " }";
+      _ = w + " }";
     }
     ASTNode::PeekSkip(..) => w.write(" peek-skip")?,
     ASTNode::Peek(..) => w.write(" peek")?,
@@ -264,10 +264,10 @@ fn render_IR<T: Write>(db: &ParserDatabase, mut w: &mut CodeWriter<T>, node: &AS
     ASTNode::Pass(..) => w.write(" pass")?,
     ASTNode::Accept(..) => w.write(" accept")?,
     ASTNode::ReduceRaw(box parser::ReduceRaw { len, prod_id, rule_id, .. }) => {
-      w = w + " reduce " + len.to_string() + " symbols to " + prod_id.to_string() + " with rule " + rule_id.to_string();
+      _ = w + " reduce " + len.to_string() + " symbols to " + prod_id.to_string() + " with rule " + rule_id.to_string();
     }
     ASTNode::SetTokenId(box parser::SetTokenId { id, .. }) => {
-      w = w + " set-tok " + id.to_string();
+      _ = w + " set-tok " + id.to_string();
     }
 
     ASTNode::Gotos(box parser::Gotos { goto, pushes }) => {
@@ -282,7 +282,7 @@ fn render_IR<T: Write>(db: &ParserDatabase, mut w: &mut CodeWriter<T>, node: &AS
         for push in pushes {
           w = w + " push " + &push.name + " then";
         }
-        w = w + " goto " + &goto.name;
+        _ = w + " goto " + &goto.name;
       }
     }
     _ => {}

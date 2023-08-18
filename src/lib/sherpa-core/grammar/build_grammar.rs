@@ -336,6 +336,7 @@ pub fn process_production<'a>(
     ast => {
       #[cfg(debug_assertions)]
       todo!("Create build for {ast:?}");
+      #[cfg(not(debug_assertions))]
       todo!()
     }
   };
@@ -369,7 +370,7 @@ pub fn process_production<'a>(
 fn process_rule(prod: &mut Production, rule: &parser::Rule, g_data: &GrammarData, s_store: &IStringStore) -> SherpaResult<()> {
   let ast_syms = rule.symbols.iter().enumerate().collect::<Array<_>>();
 
-  let Production { id, rules, sub_prods, symbols,   .. } = prod;
+  let Production { id, rules, sub_prods, symbols, .. } = prod;
   let mut prod_data = ProductionData {
     root_prod_id: *id,
     symbols,
@@ -890,7 +891,7 @@ mod test {
 
     let g_data = super::create_grammar_data(&mut j, g, &path, &s_store)?;
 
-    let (mut prods, parse_) = super::extract_productions(&mut j, &g_data, &s_store)?;
+    let (mut prods, ..) = super::extract_productions(&mut j, &g_data, &s_store)?;
 
     assert_eq!(prods.len(), 1);
 

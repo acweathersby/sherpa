@@ -1,3 +1,4 @@
+#![allow(non_snake_case)]
 use super::types::{
   AScriptPropId,
   AScriptStore,
@@ -172,7 +173,7 @@ fn resolve_production_reduce_types(
 
     let mut resubmit = false;
     let mut new_map = OrderedMap::new();
-    let mut vector_types = prod_types.remove(&prod_id).unwrap().into_iter().collect::<Vec<_>>();
+    let vector_types = prod_types.remove(&prod_id).unwrap().into_iter().collect::<Vec<_>>();
     let (vector_types, scalar_types) = vector_types.into_iter().partition::<Vec<_>, _>(|(a, _)| a.type_.is_vec());
 
     if !scalar_types.is_empty() {
@@ -268,7 +269,7 @@ fn resolve_production_reduce_types(
       let (mut prime, mut prime_body_ids) = (TaggedType::default(), BTreeSet::new());
       let mut vector_types = VecDeque::from_iter(vector_types);
 
-      let mut remap_vector = | known_types: BTreeSet<TaggedType>,
+      let mut remap_vector = |known_types: BTreeSet<TaggedType>,
                               vector_types: &mut VecDeque<(TaggedType, BTreeSet<DBRuleKey>)>|
        -> BTreeSet<TaggedType> {
         let (vectors, known_types) = known_types.into_iter().partition::<Vec<_>, _>(|t| matches!(t.into(), GenericVec(..)));
@@ -354,7 +355,7 @@ fn resolve_production_reduce_types(
 
   // Do final check for incompatible types
   for prod_id in ast.prod_types.keys().cloned().collect::<Vec<_>>() {
-    let  vector_types = ast.prod_types.get(&prod_id).unwrap().iter().collect::<Vec<_>>();
+    let vector_types = ast.prod_types.get(&prod_id).unwrap().iter().collect::<Vec<_>>();
     let (vector_types, scalar_types) = vector_types.into_iter().partition::<Vec<_>, _>(|(a, ..)| a.type_.is_vec());
 
     debug_assert!(
@@ -455,7 +456,7 @@ fn resolve_structure_properties(j: &mut Journal, store: &mut AScriptStore, db: &
       }
     }
   }
-  /// Remove undefined properties
+  // Remove undefined properties
   for struct_ in store.structs.values_mut() {
     let new_ids = struct_.prop_ids.iter().cloned().filter(|id| !undefined_props.contains(&id)).collect();
     struct_.prop_ids = new_ids;

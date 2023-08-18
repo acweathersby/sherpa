@@ -113,13 +113,13 @@ fn get_match_statement(node: &ASTNode) -> SherpaResult<&parser::Statement> {
 }
 
 /// Inline trivial scanners.
-fn inline_matches<'db>(db: &'db ParserDatabase, parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
+fn _inline_matches<'db>(db: &'db ParserDatabase, parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
   garbage_collect(db, parse_states, "byte-chains")
 }
 
 /// Create chained matching scanners that can scan and shift multiple
 /// characters simultaneously.
-fn create_byte_chains<'db>(db: &'db ParserDatabase, parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
+fn _create_byte_chains<'db>(db: &'db ParserDatabase, parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
   garbage_collect(db, parse_states, "byte-chains")
 }
 

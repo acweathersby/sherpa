@@ -50,7 +50,10 @@
 			"**/target/**": true
 		},
 		"lldb.displayFormat": "auto",
-		"lldb.showDisassembly": "never"
+		"lldb.showDisassembly": "auto",
+		"cSpell.words": [
+			"ascript"
+		]
 	},
 	"launch": {
 		"version": "0.2.0",

@@ -1,3 +1,4 @@
+
 use inkwell::{
   builder::Builder,
   context::Context,
@@ -246,25 +247,12 @@ impl Into<u32> for CtxAggregateIndices {
 }
 
 impl CtxAggregateIndices {
-  pub fn get_ptr<'a>(
-    &self,
-    b: &Builder<'a>,
-    parse_ctx: PointerValue<'a>,
-  ) -> SherpaResult<PointerValue<'a>> {
-    SherpaResult::Ok(b.build_struct_gep(
-      parse_ctx,
-      (*self).into(),
-      &format!("{:?}_ptr", self),
-    )?)
+  pub fn get_ptr<'a>(&self, b: &Builder<'a>, parse_ctx: PointerValue<'a>) -> SherpaResult<PointerValue<'a>> {
+    SherpaResult::Ok(b.build_struct_gep(parse_ctx, (*self).into(), &format!("{:?}_ptr", self))?)
   }
 
-  pub fn load<'a>(
-    &self,
-    b: &Builder<'a>,
-    parse_ctx: PointerValue<'a>,
-  ) -> SherpaResult<BasicValueEnum<'a>> {
-    let val =
-      b.build_load(self.get_ptr(b, parse_ctx)?, &format!("{:?}_val", self));
+  pub fn load<'a>(&self, b: &Builder<'a>, parse_ctx: PointerValue<'a>) -> SherpaResult<BasicValueEnum<'a>> {
+    let val = b.build_load(self.get_ptr(b, parse_ctx)?, &format!("{:?}_val", self));
 
     SherpaResult::Ok(val)
   }
@@ -275,20 +263,11 @@ impl CtxAggregateIndices {
     parse_ctx: PointerValue<'a>,
     int: IntType<'a>,
   ) -> SherpaResult<IntValue<'a>> {
-    let val = b
-      .build_load(self.get_ptr(b, parse_ctx)?, &format!("{:?}_val", self))
-      .into_pointer_value();
-    SherpaResult::Ok(
-      b.build_ptr_to_int(val, int, &format!("{:?}_val", self)).into(),
-    )
+    let val = b.build_load(self.get_ptr(b, parse_ctx)?, &format!("{:?}_val", self)).into_pointer_value();
+    SherpaResult::Ok(b.build_ptr_to_int(val, int, &format!("{:?}_val", self)).into())
   }
 
-  pub fn store<'a, V>(
-    &self,
-    b: &Builder<'a>,
-    parse_ctx: PointerValue<'a>,
-    value: V,
-  ) -> SherpaResult<()>
+  pub fn store<'a, V>(&self, b: &Builder<'a>, parse_ctx: PointerValue<'a>, value: V) -> SherpaResult<()>
   where
     V: BasicValue<'a>,
   {

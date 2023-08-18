@@ -7,12 +7,7 @@ use sherpa_rust_runtime::types::Token;
 use std::path::PathBuf;
 
 /// This error occurs when source of an imported grammar cannot be found.
-pub(crate) fn add_invalid_import_source_error(
-  j: &mut Journal,
-  import: &Import,
-  import_path: &PathBuf,
-  base_path: &PathBuf,
-) {
+pub(crate) fn add_invalid_import_source_error(j: &mut Journal, import: &Import, import_path: &PathBuf, base_path: &PathBuf) {
   let Import { tok, .. } = import;
   j.report_mut().add_error(SherpaError::SourceError {
     loc:        tok.clone(),
@@ -25,7 +20,7 @@ pub(crate) fn add_invalid_import_source_error(
   });
 }
 
-pub fn create_missing_import_name_error(
+pub fn _create_missing_import_name_error(
   j: &mut Journal,
   g: &GrammarIdentities,
   s_store: &IStringStore,
@@ -45,7 +40,7 @@ pub fn create_missing_import_name_error(
   });
 }
 
-pub fn add_production_redefinition_error(
+pub fn _add_production_redefinition_error(
   j: &mut Journal,
   grammar_path: &PathBuf,
   old_loc: Token,
@@ -64,12 +59,7 @@ pub fn add_production_redefinition_error(
   });
 }
 
-pub fn add_missing_production_definition_error(
-  j: &mut Journal,
-  tok: Token,
-  g_id: &GrammarIdentities,
-  s_store: &IStringStore,
-) {
+pub fn _add_missing_production_definition_error(j: &mut Journal, tok: Token, g_id: &GrammarIdentities, s_store: &IStringStore) {
   j.report_mut().add_error(SherpaError::SourceError {
     id:         "missing-production-definition",
     msg:        format!("Could not find a definition for this production."),
@@ -81,7 +71,7 @@ pub fn add_missing_production_definition_error(
   });
 }
 
-pub fn add_missing_append_host_error(j: &mut Journal, name: String, rules: &[Rule]) {
+pub fn _add_missing_append_host_error(j: &mut Journal, name: String, rules: &[Rule]) {
   j.report_mut().add_error(SherpaError::SourceError {
     id:         "missing-append-host",
     msg:        format!(
@@ -94,12 +84,7 @@ expression, e.g: `<> {0} > symA ... symN`
 ",
       name
     ),
-    inline_msg: (if rules.len() > 1 {
-      "These rules are unreachable"
-    } else {
-      "This rule is unreachable"
-    })
-    .to_string(),
+    inline_msg: (if rules.len() > 1 { "These rules are unreachable" } else { "This rule is unreachable" }).to_string(),
     loc:        (&rules[0].tok + &rules.last().unwrap().tok).clone(),
     path:       Default::default(),
     severity:   SherpaErrorSeverity::Critical,
@@ -107,7 +92,7 @@ expression, e.g: `<> {0} > symA ... symN`
   })
 }
 
-pub fn add_non_existent_import_production_error(
+pub fn _add_non_existent_import_production_error(
   j: &mut Journal,
   import_id: &GrammarIdentities,
   host_id: &GrammarIdentities,
@@ -116,10 +101,7 @@ pub fn add_non_existent_import_production_error(
 ) {
   j.report_mut().add_error(SherpaError::SourceError {
     id:         "nonexistent-import-production",
-    msg:        format!(
-      "Could not locate production in imported grammar {}",
-      import_id.path.to_string(s_store)
-    ),
+    msg:        format!("Could not locate production in imported grammar {}", import_id.path.to_string(s_store)),
     inline_msg: "could not find".to_string(),
     loc:        tok,
     path:       host_id.path.to_string(s_store).into(),

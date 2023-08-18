@@ -1,20 +1,10 @@
 use crate::slot_ref::{SlotIndex, SlotRef};
 use sherpa_core::{
-  parser::{
-    ASTNode,
-    ASTNodeType,
-    AST_IndexReference,
-    AST_NamedReference,
-    AST_Struct,
-    AST_Vector,
-    GetASTNodeType,
-  },
+  parser::{ASTNode, ASTNodeType, AST_IndexReference, AST_NamedReference, AST_Struct, AST_Vector, GetASTNodeType},
   proxy::Array,
   *,
 };
-use sherpa_rust_runtime::{
-  types::{BlameColor, Token},
-};
+use sherpa_rust_runtime::types::{BlameColor, Token};
 
 use super::{compile::get_struct_type_from_node, types::*};
 use std::{
@@ -46,8 +36,7 @@ pub struct ASTExprHandler<'a> {
   pub expr: &'a dyn Fn(&AscriptWriterUtils, &ASTNode, &Rule, &mut usize, usize) -> Option<SlotRef>,
 }
 
-pub type PropHandlerFn =
-  dyn Fn(&AscriptWriterUtils, Option<SlotRef>, &AScriptTypeVal, bool) -> (String, Option<SlotRef>);
+pub type PropHandlerFn = dyn Fn(&AscriptWriterUtils, Option<SlotRef>, &AScriptTypeVal, bool) -> (String, Option<SlotRef>);
 
 pub struct AscriptPropHandler<'a> {
   /// ```no_compile
@@ -62,19 +51,13 @@ pub struct AscriptPropHandler<'a> {
   pub expr: &'a PropHandlerFn,
 }
 
-type AssignmentWriter<'a> =
-  dyn Fn(&AscriptWriterUtils, &AScriptTypeVal, String, String, bool) -> String;
+type AssignmentWriter<'a> = dyn Fn(&AscriptWriterUtils, &AScriptTypeVal, String, String, bool) -> String;
 
 type SlotAssign<'a> = dyn Fn(&AscriptWriterUtils, &AScriptTypeVal, String, bool) -> String;
 
 /// Called when a Node struct needs to be constructed.
-type StructConstructorExpr = dyn Fn(
-  &AscriptWriterUtils,
-  &mut CodeWriter<Vec<u8>>,
-  String,
-  Vec<(String, String, AScriptTypeVal)>,
-  bool,
-) -> SherpaResult<()>;
+type StructConstructorExpr =
+  dyn Fn(&AscriptWriterUtils, &mut CodeWriter<Vec<u8>>, String, Vec<(String, String, AScriptTypeVal)>, bool) -> SherpaResult<()>;
 
 /// Token Concatenation
 ///
@@ -158,6 +141,7 @@ impl<'a> AscriptWriterUtils<'a> {
       hash_map::Entry::Occupied(_) => {
         #[cfg(debug_assertions)]
         panic!("Type handler already registered for [{}]", type_.debug_string());
+        #[cfg(not(debug_assertions))]
         panic!()
       }
       hash_map::Entry::Vacant(e) => {
@@ -172,6 +156,7 @@ impl<'a> AscriptWriterUtils<'a> {
       hash_map::Entry::Occupied(_) => {
         #[cfg(debug_assertions)]
         panic!("Type handler already registered for [{:?}]", type_);
+        #[cfg(not(debug_assertions))]
         panic!()
       }
       hash_map::Entry::Vacant(e) => {
@@ -186,6 +171,7 @@ impl<'a> AscriptWriterUtils<'a> {
       hash_map::Entry::Occupied(_) => {
         #[cfg(debug_assertions)]
         panic!("Prop handler already registered for [{:?}]", type_);
+        #[cfg(not(debug_assertions))]
         panic!()
       }
       hash_map::Entry::Vacant(e) => {
@@ -232,13 +218,7 @@ impl<'a> AscriptWriterUtils<'a> {
     }
   }
 
-  pub fn ast_expr_to_ref(
-    &self,
-    ast: &ASTNode,
-    rule: &Rule,
-    ref_index: &mut usize,
-    type_slot: usize,
-  ) -> Option<SlotRef>
+  pub fn ast_expr_to_ref(&self, ast: &ASTNode, rule: &Rule, ref_index: &mut usize, type_slot: usize) -> Option<SlotRef>
   where
     Self: Sized,
   {
@@ -253,8 +233,7 @@ impl<'a> AscriptWriterUtils<'a> {
           id:         "ascript-writer-utils-unhandled-ast-node",
           msg:        format!("An unhandled ast node has been encountered"),
           inline_msg: format!("Node type [{:?}] lacks an ASTExprHandler", ast.get_type()),
-          ps_msg:
-            "Add an ASTExprHandler for this type using AscriptWriterUtils::add_ast_handler".into(),
+          ps_msg:     "Add an ASTExprHandler for this type using AscriptWriterUtils::add_ast_handler".into(),
           severity:   SherpaErrorSeverity::Warning,
         })
       }
@@ -265,8 +244,7 @@ impl<'a> AscriptWriterUtils<'a> {
         id:         "ascript-writer-utils-unhandled-ast-node",
         msg:        format!("An unhandled ast node has been encountered"),
         inline_msg: format!("Node type lacks an ASTExprHandler"),
-        ps_msg:     "Add an ASTExprHandler for this type using AscriptWriterUtils::add_ast_handler"
-          .into(),
+        ps_msg:     "Add an ASTExprHandler for this type using AscriptWriterUtils::add_ast_handler".into(),
         severity:   SherpaErrorSeverity::Warning,
       })
     }
@@ -287,13 +265,7 @@ impl<'a> AscriptWriterUtils<'a> {
     let ast_struct_props = ast_struct
       .props
       .iter()
-      .filter_map(|p| {
-        if let ASTNode::AST_Property(prop) = p {
-          Some((prop.id.clone(), prop))
-        } else {
-          None
-        }
-      })
+      .filter_map(|p| if let ASTNode::AST_Property(prop) = p { Some((prop.id.clone(), prop)) } else { None })
       .collect::<BTreeMap<_, _>>();
 
     let mut predecessors = vec![];
@@ -321,11 +293,8 @@ impl<'a> AscriptWriterUtils<'a> {
 
               match self.ast_expr_to_ref(value, rule, ref_index, i + type_slot * 100) {
                 Some(ref_) => {
-                  let (string, ref_) = self.create_type_initializer_value(
-                    Some(ref_),
-                    &(&property.type_val).into(),
-                    property.optional,
-                  );
+                  let (string, ref_) =
+                    self.create_type_initializer_value(Some(ref_), &(&property.type_val).into(), property.optional);
                   if let Some(ref_) = ref_ {
                     predecessors.push(ref_);
                   }
@@ -604,11 +573,7 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
       let fn_name = format!("reducer_{:0>3}", bc_id);
 
       match w.method(
-        &format!(
-          "\n/* {} */\n{}",
-          rule.tok.to_string().replace("*/", "* /"),
-          preamble.replace("%%", &fn_name)
-        ),
+        &format!("\n/* {} */\n{}", rule.tok.to_string().replace("*/", "* /"), preamble.replace("%%", &fn_name)),
         args_open_delim,
         args_close_delim,
         args_seperator,
@@ -621,15 +586,8 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
           match &rule.ast {
             Some(ASTToken::Defined(ascript)) => match &ascript.ast {
               ASTNode::AST_Struct(box ast_struct) => {
-                if let AScriptTypeVal::Struct(struct_type) = get_struct_type_from_node(&ast_struct)
-                {
-                  let _ref = w.utils.build_struct_constructor(
-                    rule,
-                    &struct_type,
-                    &ast_struct,
-                    &mut ref_index,
-                    0,
-                  )?;
+                if let AScriptTypeVal::Struct(struct_type) = get_struct_type_from_node(&ast_struct) {
+                  let _ref = w.utils.build_struct_constructor(rule, &struct_type, &ast_struct, &mut ref_index, 0)?;
 
                   let obj_indices = _ref.get_ast_obj_indices();
                   let token_indices = _ref.get_token_indices();
@@ -667,6 +625,7 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
                     _ => {
                       #[cfg(debug_assertions)]
                       panic!("Could not resolve: {statement:?}");
+                      #[cfg(not(debug_assertions))]
                       panic!()
                     }
                   }
@@ -677,18 +636,11 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
                 w.writer.merge_checkpoint(stmt.writer)?;
 
                 let return_type = match return_type {
-                  AScriptTypeVal::Undefined | AScriptTypeVal::GenericVec(None) => {
-                    prod_data.iter().next().unwrap().0.into()
-                  }
+                  AScriptTypeVal::Undefined | AScriptTypeVal::GenericVec(None) => prod_data.iter().next().unwrap().0.into(),
                   r => r,
                 };
 
-                w.writer.wrtln(&(w.utils.slot_assign)(
-                  w.utils,
-                  &return_type,
-                  reference,
-                  is_local,
-                ))?;
+                w.writer.wrtln(&(w.utils.slot_assign)(w.utils, &return_type, reference, is_local))?;
 
                 SherpaResult::Ok(())
               }
@@ -696,10 +648,7 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
             },
 
             Some(ASTToken::ListIterate(_)) | Some(ASTToken::ListEntry(_)) => {
-              let mut items = vec![ASTNode::AST_IndexReference(Box::new(AST_IndexReference::new(
-                1,
-                Default::default(),
-              )))];
+              let mut items = vec![ASTNode::AST_IndexReference(Box::new(AST_IndexReference::new(1, Default::default())))];
 
               if matches!(rule.ast, Some(ASTToken::ListIterate(_))) {
                 items.push(ASTNode::AST_IndexReference(Box::new(AST_IndexReference::new(
@@ -709,12 +658,12 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
               }
 
               let node = ASTNode::AST_Vector(Box::new(AST_Vector::new(items, Default::default())));
-              let mut reference = String::new();
-              let mut return_type = AScriptTypeVal::Undefined;
               let mut refs = BTreeSet::new();
               let mut tokens = BTreeSet::new();
               let mut stmt = w.checkpoint();
-              let mut is_local: bool = false;
+              let reference: String;
+              let return_type: AScriptTypeVal;
+              let is_local: bool;
 
               match stmt.utils.ast_expr_to_ref(&node, rule, &mut ref_index, 0) {
                 Some(_ref) => {
@@ -733,9 +682,7 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
               w.writer.merge_checkpoint(stmt.writer)?;
 
               let return_type = match return_type {
-                AScriptTypeVal::Undefined | AScriptTypeVal::GenericVec(None) => {
-                  prod_data.iter().next().unwrap().0.into()
-                }
+                AScriptTypeVal::Undefined | AScriptTypeVal::GenericVec(None) => prod_data.iter().next().unwrap().0.into(),
                 r => r,
               };
 
@@ -752,12 +699,7 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
                 BTreeSet::from_iter(vec![SlotIndex::Rule, SlotIndex::Sym(last_index)]),
               )?;
               w.write_node_token(rule)?;
-              w.writer.wrtln(&(w.utils.slot_assign)(
-                w.utils,
-                &AScriptTypeVal::Any,
-                last_index_name,
-                false,
-              ))?;
+              w.writer.wrtln(&(w.utils.slot_assign)(w.utils, &AScriptTypeVal::Any, last_index_name, false))?;
               SherpaResult::Ok(())
             }
           }
@@ -796,10 +738,7 @@ pub fn get_ascript_export_data(
           value: ASCRIPT_FIRST_NODE_ID.to_string(),
         })),
         &Rule {
-          symbols: vec![SymbolRef {
-            id: SymbolId::DBNonTerminal { key: *prod_key },
-            ..Default::default()
-          }],
+          symbols: vec![SymbolRef { id: SymbolId::DBNonTerminal { key: *prod_key }, ..Default::default() }],
           g_id:    db.rule(db.prod_rules(*prod_key).unwrap()[0]).g_id,
           skipped: Default::default(),
           tok:     Default::default(),

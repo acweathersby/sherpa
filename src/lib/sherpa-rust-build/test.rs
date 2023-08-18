@@ -18,7 +18,7 @@ fn temp_test_grammar() -> SherpaResult<()> {
   ",
     "/test.sg".into(),
     Default::default(),
-    &|TestPackage { mut journal, soup, states, db }| {
+    &|TestPackage { mut journal, db, .. }| {
       let store = AScriptStore::new(journal.transfer(), &db)?;
 
       journal.flush_reports();
@@ -92,7 +92,7 @@ fn test_add_hoc_vector_prop_merged_with_vector_production() -> SherpaResult<()> 
   ",
     "/test.sg".into(),
     Default::default(),
-    &|TestPackage { mut journal, states, db, soup }| {
+    &|TestPackage { journal, db, .. }| {
       let store = AScriptStore::new(journal.transfer(), &db)?;
 
       let u = create_rust_writer_utils(&store, &db);
@@ -116,7 +116,7 @@ fn handles_multipart_arraysd() -> SherpaResult<()> {
     "##,
     "/test.sg".into(),
     Default::default(),
-    &|TestPackage { mut journal, states, db, soup }| {
+    &|TestPackage { journal, db, .. }| {
       let store = AScriptStore::new(journal.transfer(), &db)?;
 
       let u = create_rust_writer_utils(&store, &db);
@@ -149,7 +149,7 @@ fn handles_multipart_arrays() -> SherpaResult<()> {
     "##,
     "/test.sg".into(),
     Default::default(),
-    &|TestPackage { mut journal, states, db, soup }| {
+    &|TestPackage { journal, db, .. }| {
       let store = AScriptStore::new(journal.transfer(), &db)?;
 
       let u = create_rust_writer_utils(&store, &db);
@@ -170,7 +170,7 @@ fn rust_vector_return_types_print_correctly() -> SherpaResult<()> {
           ",
     "/test.sg".into(),
     Default::default(),
-    &|TestPackage { mut journal, states, db, soup }| {
+    &|TestPackage { journal, db, .. }| {
       let store = AScriptStore::new(journal.transfer(), &db)?;
 
       let u = create_rust_writer_utils(&store, &db);
@@ -233,7 +233,7 @@ fn group_productions_get_correct_type_information() -> SherpaResult<()> {
           "##,
     "/test.sg".into(),
     Default::default(),
-    &|DBPackage { mut journal, db, soup }| {
+    &|DBPackage { journal, db, .. }| {
       let store = AScriptStore::new(journal.transfer(), &db)?;
 
       let u = create_rust_writer_utils(&store, &db);
@@ -252,7 +252,7 @@ fn token_range_slice() -> SherpaResult<()> {
     r#"<> A > "1234" :ast { t_R, d:str(tok<1,2>) }"#,
     "/test.sg".into(),
     Default::default(),
-    &|DBPackage { mut journal, db, .. }| {
+    &|DBPackage { journal, db, .. }| {
       let store = AScriptStore::new(journal.transfer(), &db)?;
 
       let u = create_rust_writer_utils(&store, &db);
@@ -273,7 +273,7 @@ fn reference_nonterminal_and_reference_names_when_using_valueless_props() -> She
     <> R > A :ast { t_R, A }"#,
     "/test.sg".into(),
     Default::default(),
-    &|DBPackage { mut journal, db, .. }| {
+    &|DBPackage { journal, db, .. }| {
       let store = AScriptStore::new(journal.transfer(), &db)?;
 
       let u = create_rust_writer_utils(&store, &db);
@@ -297,7 +297,7 @@ fn convert_str_to_numeric() -> SherpaResult<()> {
     <> C > c:id(+)"#,
     "/test.sg".into(),
     Default::default(),
-    &|DBPackage { mut journal, db, .. }| {
+    &|DBPackage { journal, db, .. }| {
       let store = AScriptStore::new(journal.transfer(), &db)?;
 
       let u = create_rust_writer_utils(&store, &db);
@@ -320,8 +320,8 @@ fn temp() -> SherpaResult<()> {
     "#,
     "/test.sg".into(),
     Default::default(),
-    &|DBPackage { mut journal, db, .. }| {
-      let store = AScriptStore::new(journal.transfer(), &db)?;
+    &|DBPackage { journal, db, .. }| {
+      let store: AScriptStore = AScriptStore::new(journal.transfer(), &db)?;
 
       let u = create_rust_writer_utils(&store, &db);
       let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));

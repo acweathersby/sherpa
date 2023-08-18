@@ -56,8 +56,7 @@ pub fn build_parse_states_from_multi_sources<'a, T>(
   journal.set_active_report("Compile Grammars", ReportType::Any);
 
   for (index, source) in sources.iter().enumerate() {
-    let source_path =
-      source_path.join("ABCDEFGHIJKLMNOPQRSTUVWXYZ".chars().nth(index)?.to_string());
+    let source_path = source_path.join("ABCDEFGHIJKLMNOPQRSTUVWXYZ".chars().nth(index)?.to_string());
     let id = compile_grammar_from_str(&mut journal, source, source_path, &gs)?;
 
     if root_id.is_none() {
@@ -95,14 +94,4 @@ pub fn build_parse_db_from_source_str<'a, T>(
   journal.flush_reports();
 
   test_fn(DBPackage { journal, db: &db, soup: &soup })
-}
-
-#[cfg(test)]
-/// Return the full filepath of a grammar stored in
-/// ./tests/grammars/
-pub(super) fn get_test_grammar_path(partial_path: &str) -> PathBuf {
-  let path =
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../test/grammars/").join(partial_path);
-  dbg!(&path);
-  path.canonicalize().unwrap()
 }

@@ -275,8 +275,8 @@ impl SherpaErrorContainer for Vec<SherpaError> {
     for error in self {
       match error.get_severity() {
         _Critical => groups.critical.push(error.clone()),
-        _Warning => groups.warnings.push(error.clone()),
-        _Hint => groups.critical.push(error.clone()),
+        //_Warning => groups.warnings.push(error.clone()),
+        //_Hint => groups.critical.push(error.clone()),
       }
     }
 

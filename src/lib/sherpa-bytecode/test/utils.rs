@@ -41,7 +41,7 @@ pub fn compile_and_run_grammars(source: &[&str], inputs: &[(&str, &str, bool)]) 
         ..Default::default()
       });
 
-      if (ok != *should_pass) {
+      if ok != *should_pass {
         TestParser::new(&mut ((*input).into()), &bc).collect_shifts_and_skips(
           db.get_entry_offset(entry_name, &state_map).expect(&format!(
             "\nCan't find entry offset for entry point [{entry_name}].\nValid entry names are\n    {}\n",

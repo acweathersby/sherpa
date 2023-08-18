@@ -235,18 +235,6 @@ fn compile_statement<'a, 'llvm: 'a>(
   SherpaResult::Ok(())
 }
 
-/// Return the difference between the `scan_ptr` and `end_ptr`.
-/// Value type is `iptr`
-pub(crate) fn get_chars_remaining<'a, 'llvm: 'a>(
-  args: &mut BuildArgs<'a, 'llvm>,
-  p_ctx: PointerValue<'a>,
-) -> SherpaResult<IntValue<'a>> {
-  let LLVMParserModule { b, iptr, .. } = args.m;
-  let scan_int = b.build_ptr_to_int(CTX::scan_ptr.load(b, p_ctx)?.into_pointer_value(), *iptr, "");
-  let end_int = b.build_ptr_to_int(CTX::end_ptr.load(b, p_ctx)?.into_pointer_value(), *iptr, "");
-  SherpaResult::Ok(b.build_int_sub(end_int, scan_int, "").into())
-}
-
 fn compile_match<'a, 'llvm: 'a>(
   matches_ast: &parser::Matches,
   args: &mut BuildArgs<'a, 'llvm>,
@@ -704,12 +692,6 @@ fn get_offset_to_end_of_token<'a>(m: &'a LLVMParserModule, p_ctx: PointerValue<'
   let offset = b.build_int_to_ptr(offset, i8.ptr_type(0.into()), "");
   CtxAggregateIndices::tok_len.store(b, p_ctx, iptr.const_zero())?;
   SherpaResult::Ok(offset)
-}
-
-/// Causes the execution to jump back to the beginning of the `loop_start`
-/// block.
-fn construct_jump_to_table_start(args: &BuildArgs, start_block: BasicBlock) {
-  args.m.b.build_unconditional_branch(start_block);
 }
 
 fn pop_goto(args: &BuildArgs, p_ctx: PointerValue, state_fun: FunctionValue) -> SherpaResult<()> {

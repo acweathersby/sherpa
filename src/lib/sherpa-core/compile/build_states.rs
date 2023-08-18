@@ -11,8 +11,6 @@ use rayon::prelude::*;
 pub fn compile_parse_states(mut j: Journal, db: &ParserDatabase) -> SherpaResult<ParseStatesMap> {
   j.set_active_report("State Compile", ReportType::ProductionCompile(Default::default()));
 
-  let follow = create_follow_sets(db);
-
   let results = db
     .productions()
     .iter()
@@ -28,7 +26,7 @@ pub fn compile_parse_states(mut j: Journal, db: &ParserDatabase) -> SherpaResult
       let mut scanners = Scanners::new();
 
       for (prod_id, prod_sym) in chunks {
-        match create_parse_states_from_prod(&mut local_j, db, &follow, *prod_id, *prod_sym, &mut states, &mut scanners) {
+        match create_parse_states_from_prod(&mut local_j, db, *prod_id, *prod_sym, &mut states, &mut scanners) {
           SherpaResult::Ok(output) => output,
           SherpaResult::Err(_err) => {}
           _ => unreachable!(),
@@ -59,7 +57,7 @@ pub fn compile_parse_states(mut j: Journal, db: &ParserDatabase) -> SherpaResult
     let start_items =
       group.iter().flat_map(|s| Items::start_items(s.prod_id, db).to_origin(Origin::TokenGoal(s.tok_id))).collect::<Array<_>>();
 
-    let graph = build_graph(&mut j, GraphMode::Scanner, start_items, db, &follow)?;
+    let graph = build_graph(&mut j, GraphMode::Scanner, start_items, db)?;
 
     let ir = build_ir(&mut j, &graph, scanner)?;
     // println!("{}", graph.debug_string());
@@ -86,7 +84,6 @@ pub fn compile_parse_states(mut j: Journal, db: &ParserDatabase) -> SherpaResult
 pub fn create_parse_states_from_prod<'db>(
   j: &mut Journal,
   db: &'db ParserDatabase,
-  follow: &Vec<OrderedSet<Item<'db>>>,
   prod_id: usize,
   prod_sym: SymbolId,
   states: &mut States,
@@ -109,7 +106,7 @@ pub fn create_parse_states_from_prod<'db>(
 
     match prod_sym {
       SymbolId::NonTerminal { .. } => {
-        let graph = build_graph(j, GraphMode::Parser, start_items, db, &follow)?;
+        let graph = build_graph(j, GraphMode::Parser, start_items, db)?;
 
         let ir = build_ir(j, &graph, db.prod_guid_name(prod_id.into()))?;
 
@@ -123,7 +120,7 @@ pub fn create_parse_states_from_prod<'db>(
         }
       }
       SymbolId::NonTerminalToken { .. } => {
-        let graph = build_graph(j, GraphMode::Scanner, start_items, db, &follow)?;
+        let graph = build_graph(j, GraphMode::Scanner, start_items, db)?;
 
         let ir = build_ir(j, &graph, db.prod_guid_name(prod_id.into()))?;
 
@@ -153,7 +150,7 @@ fn build_entry_ir<'db>(
   let entry_state = ParseState { code: w.to_string(), name: *prod_entry_name, ..Default::default() };
 
   let mut w = CodeWriter::new(Vec::<u8>::with_capacity(512));
-  ///let _ = (&mut w) + "match: _CLASS_ { (0) { accept } }";
+
   let _ = (&mut w) + "accept";
 
   let exit_state = ParseState { code: w.to_string(), name: *prod_exit_name, ..Default::default() };

@@ -381,10 +381,10 @@ impl<'db> State<'db> {
 pub enum GraphState {
   Normal,
   Peek,
-  LongestMatch,
-  ShortestMatch,
-  FirstMatch,
-  //BreadCrumb,
+  _LongestMatch,
+  _ShortestMatch,
+  _FirstMatch,
+  _BreadCrumb,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -396,28 +396,24 @@ pub enum GraphMode {
   Scanner,
 }
 
-pub struct Graph<'follow, 'db: 'follow> {
+pub struct Graph<'db> {
   state_map: OrderedMap<u64, StateId>,
-  state_map_test: OrderedMap<u64, StateId>,
   states: Array<State<'db>>,
   leaf_states: OrderedSet<StateId>,
   pending_states: VecDeque<(GraphState, StateId)>,
   mode: GraphMode,
   db: &'db ParserDatabase,
-  follow: &'follow FollowSets<'db>,
 }
 
-impl<'follow, 'db: 'follow> Graph<'follow, 'db> {
-  pub fn new(db: &'db ParserDatabase, mode: GraphMode, follow: &'follow FollowSets<'db>) -> Self {
+impl<'follow, 'db: 'follow> Graph<'db> {
+  pub fn new(db: &'db ParserDatabase, mode: GraphMode) -> Self {
     Self {
       mode,
       state_map: Default::default(),
-      state_map_test: Default::default(),
       states: Default::default(),
       leaf_states: Default::default(),
       pending_states: Default::default(),
       db,
-      follow,
     }
   }
 
@@ -536,7 +532,7 @@ impl<'follow, 'db: 'follow> Graph<'follow, 'db> {
   }
 }
 
-impl<'follow, 'db: 'follow> Index<usize> for Graph<'follow, 'db> {
+impl<'db> Index<usize> for Graph<'db> {
   type Output = State<'db>;
 
   fn index(&self, index: usize) -> &Self::Output {
@@ -544,7 +540,7 @@ impl<'follow, 'db: 'follow> Index<usize> for Graph<'follow, 'db> {
   }
 }
 
-impl<'follow, 'db: 'follow> Index<StateId> for Graph<'follow, 'db> {
+impl<'db> Index<StateId> for Graph<'db> {
   type Output = State<'db>;
 
   fn index(&self, index: StateId) -> &Self::Output {
@@ -552,7 +548,7 @@ impl<'follow, 'db: 'follow> Index<StateId> for Graph<'follow, 'db> {
   }
 }
 
-impl<'follow, 'db: 'follow> IndexMut<StateId> for Graph<'follow, 'db> {
+impl<'db> IndexMut<StateId> for Graph<'db> {
   fn index_mut(&mut self, index: StateId) -> &mut Self::Output {
     &mut self.states[index.0 as usize]
   }

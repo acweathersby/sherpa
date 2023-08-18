@@ -2,11 +2,7 @@ use crate::{journal::Journal, types::*, utils::hash_group_btreemap, writer::code
 use sherpa_rust_runtime::types::bytecode::InputType;
 use std::collections::{BTreeMap, VecDeque};
 
-pub(crate) fn build_ir<'db: 'follow, 'follow>(
-  j: &mut Journal,
-  graph: &Graph<'follow, 'db>,
-  entry_name: IString,
-) -> SherpaResult<Array<Box<ParseState>>> {
+pub(crate) fn build_ir<'db>(j: &mut Journal, graph: &Graph<'db>, entry_name: IString) -> SherpaResult<Array<Box<ParseState>>> {
   debug_assert!(entry_name.as_u64() != 0);
 
   let leaf_states = graph.get_leaf_states();
@@ -62,9 +58,9 @@ enum SType {
   SymbolSuccessors,
 }
 
-fn convert_goto_state_to_ir<'follow, 'db>(
+fn convert_goto_state_to_ir<'db>(
   _j: &mut Journal,
-  graph: &Graph<'follow, 'db>,
+  graph: &Graph<'db>,
   state: &State,
   successors: &OrderedSet<&State>,
 ) -> SherpaResult<(StateId, Box<ParseState>)> {
@@ -116,9 +112,9 @@ fn convert_goto_state_to_ir<'follow, 'db>(
   SherpaResult::Ok((state.get_id(), goto))
 }
 
-fn convert_state_to_ir<'follow, 'db>(
+fn convert_state_to_ir<'db>(
   _j: &mut Journal,
-  graph: &Graph<'follow, 'db>,
+  graph: &Graph<'db>,
   state: &State,
   successors: &OrderedSet<&State>,
   entry_name: IString,
@@ -254,9 +250,9 @@ fn classify_successors<'graph, 'db>(
   )
 }
 
-fn add_match_expr<'follow, 'db>(
+fn add_match_expr<'db>(
   mut w: &mut CodeWriter<Vec<u8>>,
-  graph: &Graph<'follow, 'db>,
+  graph: &Graph<'db>,
   branches: &mut VecDeque<((u32, InputType), OrderedSet<&State>)>,
   goto_state_id: Option<IString>,
 ) {
@@ -334,7 +330,7 @@ fn add_match_expr<'follow, 'db>(
   }
 }
 
-fn build_body<'follow, 'db>(successor: &State, graph: &Graph<'follow, 'db>, goto_state_id: Option<IString>) -> Vec<String> {
+fn build_body<'db>(successor: &State, graph: &Graph<'db>, goto_state_id: Option<IString>) -> Vec<String> {
   let is_scanner = graph.is_scan();
   let mut body_string = Array::new();
   let s_type = successor.get_type();
@@ -419,11 +415,7 @@ pub(super) fn create_ir_state_name(graph: &Graph, state: &State) -> String {
   graph.is_scan().then_some("s").unwrap_or("p").to_string() + "_" + &state.get_hash().to_string()
 }
 
-pub(super) fn create_ir_state<'follow, 'db>(
-  graph: &Graph<'follow, 'db>,
-  w: CodeWriter<Vec<u8>>,
-  state: &State,
-) -> SherpaResult<ParseState> {
+pub(super) fn create_ir_state<'db>(graph: &Graph<'db>, w: CodeWriter<Vec<u8>>, state: &State) -> SherpaResult<ParseState> {
   let ir_state = ParseState {
     code: w.to_string(),
     name: create_ir_state_name(graph, state).intern(graph.get_db().string_store()),
