@@ -57,7 +57,7 @@ build_site_node:
 
 build_site_hugo:
   stage: build-site
-  image: klakegg/hugo:0.107.0-ext-alpine-ci
+  image: $CI_REGISTRY/anthony/sherpa/hugo-build:latest
   needs:
     - build_site_node
     - build_wasm
