@@ -59,15 +59,16 @@ pub fn build_llvm_parser(
   parser_name: &str,
   db: &ParserDatabase,
   states: &ParseStatesVec,
-  output_path: &PathBuf,
+  output_dir: &PathBuf,
   target_triple: Option<String>,
   enable_ascript: bool,
 ) -> SherpaResult<()> {
   let ar_command = "llvm-ar-14";
-  let _ll_file_path = output_path.join(parser_name.to_string() + ".ll");
-  let _bitcode_path = output_path.join("lib".to_string() + &parser_name + ".bc");
-  let object_path = output_path.join("lib".to_string() + &parser_name + ".o");
-  let archive_path = output_path.join(format!("./lib{}.a", &parser_name));
+  std::fs::create_dir_all(output_dir)?;
+  let _ll_file_path = output_dir.join(parser_name.to_string() + ".ll");
+  let _bitcode_path = output_dir.join("lib".to_string() + &parser_name + ".bc");
+  let object_path = output_dir.join("lib".to_string() + &parser_name + ".o");
+  let archive_path = output_dir.join("lib".to_string() + &parser_name + ".a");
   let ctx = Context::create();
 
   let (target_data, target_machine, target_triple) = create_target(target_triple);
