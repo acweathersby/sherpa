@@ -1,0 +1,25 @@
+name: test
+
+on:
+  push: 
+    branches: [ release ]
+  pull_request
+
+
+env: 
+  CARGO_TERM_COLOR_ALWAYS
+
+jobs:
+  build:
+
+    runs-on: debian-latest
+
+    step:
+      - uses: actions/checkout@v3
+      - name: Build 
+      - run: ./scripts/build_bytecode
+      - name: Test
+      - run: ./scripts/run_tests 
+
+
+  
