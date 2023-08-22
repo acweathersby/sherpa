@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Bootstrap bytecode parser
-        run: cd ./src/app/cli
+        working-directory: src/app/cli
         run: cargo run --bin sherpa --release  -- build -t bytecode -a --name sherpa_bc -l rust -o ../../src/lib/sherpa-core/parser/ ../../grammar/v_two/grammar.sg
       - name: Test
         run: ./scripts/run_bytecode_tests 
