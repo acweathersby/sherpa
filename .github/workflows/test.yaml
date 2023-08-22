@@ -2,15 +2,15 @@ name: test
 
 on: push
 
-env: 
-  CARGO_TERM_COLOR_ALWAYS
+env:
+  CARGO_TERM_COLOR_ALWAYS: always
 
 jobs:
   build:
 
     runs-on: debian-latest
 
-    step:
+    steps:
       - uses: actions/checkout@v3
       - name: Build 
       - run: ./scripts/build_bytecode
