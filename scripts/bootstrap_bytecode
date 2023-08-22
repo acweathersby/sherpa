@@ -1,4 +1,4 @@
-#! /usr/zsh
+#! /bin/zsh
 
 # This script is used to rebuild the base sherpa bytecode parser
 # This should only every need to be done if:
