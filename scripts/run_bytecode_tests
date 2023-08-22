@@ -1,4 +1,4 @@
-#! /usr/bin/bash
+#! /usr/zsh
 
 # The default parser for sherpa is the bytecode parse, which is not ideal
 # for performance demanding builds. This script uses the base bytecode sherpa

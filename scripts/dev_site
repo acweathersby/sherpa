@@ -1,4 +1,4 @@
-#! /usr/bin/bash
+#! /usr/zsh
 
 # Move to project root
 pushd .
