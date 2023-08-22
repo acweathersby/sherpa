@@ -3,7 +3,7 @@ name: test
 on: push
 
 env:
-  CARGO_TERM_COLOR_ALWAYS: always
+  CARGO_TERM_COLOR: always
   FORCE_COLOR: 1
 
 jobs:
