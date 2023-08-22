@@ -1,10 +1,10 @@
 #! /bin/zsh
 
 # This script is used to rebuild the base sherpa bytecode parser
-# This should only every need to be done if:
+# This should only ever need to be done if:
 # 1. The sherpa grammar is extended or modified
 # 2. New features are added to bytecode parsers that need to 
-#    be incorporated in the sherpa grammar parser.
+#    be incorporated into the sherpa grammar parser.
 
 pushd ${0:a:h}/..
 
@@ -23,4 +23,4 @@ cargo run \
      -l rust \
      --libout $ROOT_DIR/src/lib/sherpa-core/lib/ \
      -o $ROOT_DIR/src/lib/sherpa-core/parser/ \
-      $ROOT_DIR/src/grammar/v_two/grammar.sg
+      $ROOT_DIR/src/grammar/sherpa/2.0.0/grammar.sg

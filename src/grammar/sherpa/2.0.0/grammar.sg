@@ -4,8 +4,8 @@ IMPORT ./ir as ir
 IMPORT ./symbol as sym
 IMPORT ./token as tok
 IMPORT ./ascript as ast
-IMPORT ../v_one/comment as cmt
-IMPORT ../v_one/defined_type_eval as dt
+IMPORT ../1.0.0/comment as cmt
+IMPORT ../1.0.0/defined_type_eval as dt
 
 IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
@@ -44,7 +44,7 @@ EXPORT dt::escaped_string as escaped
 
 <> import_clause >
 
-    "IMPORT" ( c:id | c:sym )(+) c:sp ( "AS" | "as" ) tok::id
+    "IMPORT" ( c:id | c:sym | c:num )(+) c:sp ( "AS" | "as" ) tok::id
 
         :ast { t_Import, uri: str($2), reference:str($5), tok }
 

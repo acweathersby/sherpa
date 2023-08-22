@@ -3,7 +3,7 @@ NAME ir
 IMPORT ./symbol as sym
 IMPORT ./token as tok
 IMPORT ./ascript as ast
-IMPORT ../v_one/comment as cmt
+IMPORT ../1.0.0/comment as cmt
 
 IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
