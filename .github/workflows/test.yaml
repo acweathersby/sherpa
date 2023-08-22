@@ -13,9 +13,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Build 
-      - run: ./scripts/build_bytecode
+        run: ./scripts/bootstrap_bytecode
       - name: Test
-      - run: ./scripts/run_tests 
-
-
-  
+        run: ./scripts/run_bytecode_tests 
