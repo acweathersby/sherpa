@@ -23,4 +23,4 @@ cargo run \
      -l rust \
      --libout $ROOT_DIR/src/lib/sherpa-core/lib/ \
      -o $ROOT_DIR/src/lib/sherpa-core/parser/ \
-      $ROOT_DIR/src/grammar/2.0.0/grammar.sg
+      $ROOT_DIR/src/grammar/sherpa/2.0.0/grammar.sg
