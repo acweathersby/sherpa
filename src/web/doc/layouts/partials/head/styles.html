@@ -1,4 +1,5 @@
-{{ $main_style := resources.Get "sass/main.sass" | resources.ToCSS -}}
+{{ $sassTemplate := resources.Get "sass/main_template.sass" }}
+{{ $main_style := $sassTemplate | resources.ExecuteAsTemplate "main.scss" . | resources.ToCSS -}}
 <link rel="stylesheet" type="text/css" href="{{ $main_style.Permalink }}">
 {{- if eq .Layout "lab" -}}
 {{ $lab := resources.Get "sass/lab.sass" | resources.ToCSS -}}
