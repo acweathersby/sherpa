@@ -1,9 +1,9 @@
 {{ $main_style := resources.Get "sass/main.sass" | resources.ToCSS -}}
-<link rel="stylesheet" type="text/css" href="{{ $main_style.RelPermalink }}">
+<link rel="stylesheet" type="text/css" href="{{ $main_style.Permalink }}">
 {{- if eq .Layout "lab" -}}
 {{ $lab := resources.Get "sass/lab.sass" | resources.ToCSS -}}
-<link rel="stylesheet" type="text/css" href="{{ $lab.RelPermalink }}">
+<link rel="stylesheet" type="text/css" href="{{ $lab.Permalink }}">
 {{- else if .IsHome }}
 {{ $home := resources.Get "sass/home.sass" | resources.ToCSS -}}
-<link rel="stylesheet" type="text/css" href="{{ $home.RelPermalink }}">
+<link rel="stylesheet" type="text/css" href="{{ $home.Permalink }}">
 {{- end }}

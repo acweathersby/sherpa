@@ -69,7 +69,7 @@ build_site_hugo:
     - cp ./src/web/sherpa-wasm/pkg/* ./src/web/doc/assets/js/sherpa
     - mv ./src/web/doc/assets/js/sherpa/sherpa_wasm_bg.wasm ./src/web/doc/static/js/lab
     - cd ./src/web/doc
-    - hugo
+    - hugo -b $CI_PAGES_URL
   artifacts:
     untracked: false
     when: on_success
