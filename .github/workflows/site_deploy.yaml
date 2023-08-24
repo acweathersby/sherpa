@@ -44,18 +44,18 @@ jobs:
         run: mkdir -p $LAB_SRC_DIR && mkdir -p $LAB_PUB_DIR & mkdir -p $STAGED_PUB_DIR
       
       - name: Build Sherpa WASM
-        working-directory: $WASM_DIR
+        working-directory: ${{ env.WASM_DIR }}
         run: wasm-pack build --target web
       
       - name: Copy WASM to HUGO build environment
         run: mkdir cp $WASM_DIR/pkg/* $LAB_PUB_DIR/
 
       - name: Get Node Packages
-        working-directory: $WEB_SOURCE_DIR
+        working-directory: ${{ env.WEB_SOURCE_DIR }}
         run: npm install
 
       - name: Build Site
-        working-directory: $WEB_SOURCE_DIR
+        working-directory: ${{ env.WEB_SOURCE_DIR }}
         run: hugo
 
       - name: Copy Public Folder To Root
@@ -65,7 +65,7 @@ jobs:
         uses: peaceiris/actions-gh-pages@v3
         with:
           personal_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: $STAGED_PUB_DIR
+          publish_dir: ${{ env.STAGED_PUB_DIR }}
           #   keep_files: true
           publish_branch: docs
 
