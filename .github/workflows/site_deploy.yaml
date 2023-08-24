@@ -1,0 +1,72 @@
+name: site_deploy
+
+on: push
+
+env:
+  CARGO_TERM_COLOR: always
+  FORCE_COLOR: 1
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    
+    env:
+      WASM_DIR: ./src/web/sherpa-wasm
+      WEB_SOURCE_DIR: ./src/web/doc
+      LAB_SRC_DIR: $WEB_SOURCE_DIR/assets/js/sherpa
+      LAB_PUB_DIR: $WEB_SOURCE_DIR/static/js/lab
+      DOC_PUB_DIR: $WEB_SOURCE_DIR/public
+      STAGED_PUB_DIR: ./public
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install latest nightly
+        uses: actions-rs/toolchain@v1
+        with:
+            toolchain: nightly
+            override: true
+            components: rustfmt, clippy, wasm-pack
+      
+      - name: Cargo's version is
+        run: cargo --version
+
+      - name: Install HUGO
+        run: curl -LJOo hugo.deb  .deb https://github.com/gohugoio/hugo/releases/download/v0.117.0/hugo_extended_0.117.0_linux-amd64.deb && dpkg -i hugo.deb
+
+      - name: HUGO's version is
+        run: hugo version
+      
+      - name: Create Base Directories
+        run: mkdir -p $LAB_SRC_DIR && mkdir -p $LAB_PUB_DIR & mkdir -p $STAGED_PUB_DIR
+      
+      - name: Build Sherpa WASM
+        working-directory: $WASM_DIR
+        run: wasm-pack build --target web
+      
+      - name: Copy WASM to HUGO build environment
+        run: mkdir cp $WASM_DIR/pkg/* $LAB_PUB_DIR/
+
+      - name: Get Node Packages Site
+        working-directory: $WEB_SOURCE_DIR
+        run: npm install
+
+      - name: Build Site
+        working-directory: $WEB_SOURCE_DIR
+        run: hugo
+
+      - name: Copy Public Folder To Root
+        run: cp -fr $DOC_PUB_DIR/* $STAGED_PUB_DIR
+
+      - name: Deploy
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          personal_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: $STAGED_PUB_DIR
+          #   keep_files: true
+          publish_branch: docs
+
+
+      
+        
+      
