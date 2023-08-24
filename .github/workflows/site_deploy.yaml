@@ -14,10 +14,12 @@ jobs:
     env:
       WASM_DIR: ./src/web/sherpa-wasm
       WEB_SOURCE_DIR: ./src/web/doc
-      LAB_SRC_DIR: $WEB_SOURCE_DIR/assets/js/sherpa
-      LAB_PUB_DIR: $WEB_SOURCE_DIR/static/js/lab
-      DOC_PUB_DIR: $WEB_SOURCE_DIR/public
       STAGED_PUB_DIR: ./public
+
+    env: 
+      LAB_SRC_DIR: ${{ env.WEB_SOURCE_DIR + "/assets/js/sherpa" }}
+      LAB_PUB_DIR: ${{ env.WEB_SOURCE_DIR + "/static/js/lab" }}
+      DOC_PUB_DIR: ${{ env.WEB_SOURCE_DIR + "/public" }}
 
     steps:
       - uses: actions/checkout@v3
