@@ -42,17 +42,17 @@ jobs:
       
       - name: Create Base Directories
         run: mkdir -p $LAB_SRC_DIR && mkdir -p $LAB_PUB_DIR & mkdir -p $STAGED_PUB_DIR
-      
+
+      - name: Get Node Packages
+        working-directory: ${{ env.WEB_SOURCE_DIR }}
+        run: npm install
+            
       - name: Build Sherpa WASM
         working-directory: ${{ env.WASM_DIR }}
         run: wasm-pack build --target web
       
       - name: Copy WASM to HUGO build environment
-        run: mkdir cp $WASM_DIR/pkg/* $LAB_PUB_DIR/
-
-      - name: Get Node Packages
-        working-directory: ${{ env.WEB_SOURCE_DIR }}
-        run: npm install
+        run: cp $WASM_DIR/pkg/* $LAB_PUB_DIR/
 
       - name: Build Site
         working-directory: ${{ env.WEB_SOURCE_DIR }}
