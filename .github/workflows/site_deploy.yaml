@@ -26,10 +26,13 @@ jobs:
         with:
             toolchain: nightly
             override: true
-            components: rustfmt, clippy, wasm-pack
-      
+            components: rustfmt, clippy
+
       - name: Cargo's version is
         run: cargo --version
+
+      - name: Install Wasm-Pack
+        run: cargo install wasm-pack
 
       - name: Install HUGO
         run: curl -LJOo hugo.deb  .deb https://github.com/gohugoio/hugo/releases/download/v0.117.0/hugo_extended_0.117.0_linux-amd64.deb && dpkg -i hugo.deb
