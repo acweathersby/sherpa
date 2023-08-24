@@ -253,78 +253,81 @@ fn handle_goto<'db, 'follow>(
     out_items.into_iter().filter(|i| !kernel_base.contains(i) || i.is_start()).collect()
   };
 
-  if !non_terminals.is_empty() && !out_items.is_empty() {
-    let mut kernel_prod_ids = kernel_base.iter().to_production_id_set();
-    let mut used_non_terms = OrderedSet::new();
-    let mut seen = OrderedSet::new();
-    let mut queue = VecDeque::from_iter(out_items.iter().map(|i| i.prod_index()));
+  if non_terminals.is_empty() || out_items.is_empty() {
+    return SherpaResult::Ok(());
+  }
 
-    while let Some(prod_id) = queue.pop_front() {
-      if seen.insert(prod_id) {
-        for item in non_terminals.iter().filter(|i| i.prod_index_at_sym().unwrap() == prod_id) {
-          used_non_terms.insert(*item);
-          if !kernel_base.contains(item) || item.is_start() {
-            queue.push_back(item.prod_index());
-          }
+  let mut kernel_prod_ids = kernel_base.iter().to_production_id_set();
+  let mut used_non_terms = OrderedSet::new();
+  let mut seen = OrderedSet::new();
+  let mut queue = VecDeque::from_iter(out_items.iter().map(|i| i.prod_index()));
+
+  while let Some(prod_id) = queue.pop_front() {
+    if seen.insert(prod_id) {
+      for item in non_terminals.iter().filter(|i| i.prod_index_at_sym().unwrap() == prod_id) {
+        used_non_terms.insert(*item);
+        if !kernel_base.contains(item) || item.is_start() {
+          queue.push_back(item.prod_index());
         }
       }
     }
+  }
 
-    if !used_non_terms.is_empty() {
-      graph[parent].set_non_terminals(&used_non_terms);
+  if used_non_terms.is_empty() {
+    return SherpaResult::Ok(());
+  }
 
-      let used_goto_groups = hash_group_btreemap(used_non_terms, |_, t| t.prod_index_at_sym().unwrap_or_default());
+  graph[parent].set_non_terminals(&used_non_terms);
 
-      for (prod_id, items) in &used_goto_groups {
-        let sym_id = prod_id.to_sym();
+  let used_goto_groups = hash_group_btreemap(used_non_terms, |_, t| t.prod_index_at_sym().unwrap_or_default());
 
-        let transition_type = items
-          .iter()
-          .any(|i| -> bool {
-            let p = i.prod_index();
-            let recursive = p == i.prod_index_at_sym().unwrap_or_default();
-            recursive.then_some(i.at_start()).unwrap_or(!kernel_base.contains(i) && used_goto_groups.contains_key(&p))
-          })
-          .then_some(StateType::GotoLoop)
-          .unwrap_or(StateType::KernelGoto);
+  for (prod_id, items) in &used_goto_groups {
+    let sym_id = prod_id.to_sym();
 
-        let incremented_items = items.try_increment();
-        let incomplete = incremented_items.clone().incomplete_items();
-        let mut completed = incremented_items.clone().completed_items();
+    let contains_recursive_items = items.iter().any(|i| i.is_at_initial() && i.is_left_recursive());
+    let contains_kernel_items = items.iter().any(|i| kernel_base.contains(i));
+    let at_root_goto = parent.is_root();
 
-        if kernel_prod_ids.remove(&prod_id) && parent.is_root() && completed.is_empty() {
-          let item = Item::from_rule(db.prod_rules(*prod_id)?[0], db);
+    let transition_type = (contains_recursive_items && (at_root_goto || !contains_kernel_items))
+      // Allow the parser to leap back to this state after completing an item.
+      .then_some(StateType::GotoLoop)
+      // Allow this state to drop after completing an item.
+      .unwrap_or(StateType::KernelGoto);
 
-          completed.push(item.to_complete().to_origin(Origin::GoalCompleteOOS).to_oos_index().to_origin_state(parent));
-        }
+    let incremented_items = items.try_increment();
+    let incomplete = incremented_items.clone().incomplete_items();
+    let mut completed = incremented_items.clone().completed_items();
 
-        if completed.len() > 0 && incomplete.len() > 0 {
-          let CompletedItemArtifacts { follow_pairs: mut fp, mut oos_pairs, default_only: default, .. } =
-            get_completed_item_artifacts(j, graph, parent, completed.iter())?;
-
-          fp.append(&mut oos_pairs);
-
-          if let Some(s) = create_peek(graph, sym_id, parent, incomplete.iter(), fp, false, transition_type) {
-            let c_p: std::collections::BTreeSet<FollowPair<'_>> = completed.clone().into_iter().map(|i| (i, i).into()).collect();
-            let graph_state = GraphState::Normal;
-            let sym = SymbolId::Default;
-            let groups = &mut Default::default();
-            let s = graph.create_state(sym, StateType::PeekEnd, Some(s), completed);
-
-            handle_completed_groups(j, graph, groups, s, graph_state, sym, c_p, &default)?;
-          }
-        } else {
-          let state = graph.create_state(sym_id, transition_type, Some(parent), incremented_items.clone());
-          graph.enqueue_pending_state(GraphState::Normal, state);
-        }
-      }
-
-      // The remaining goto productions are accept states for for this goto.
-      for prod_id in kernel_prod_ids {
-        let state = graph.create_state(prod_id.to_sym(), StateType::GotoPass, Some(parent), vec![]);
-        graph.add_leaf_state(state);
-      }
+    if kernel_prod_ids.remove(&prod_id) && parent.is_root() && completed.is_empty() {
+      let item = Item::from_rule(db.prod_rules(*prod_id)?[0], db);
+      completed.push(item.to_complete().to_origin(Origin::GoalCompleteOOS).to_oos_index().to_origin_state(parent));
     }
+
+    if completed.len() > 0 && incomplete.len() > 0 {
+      let CompletedItemArtifacts { follow_pairs: mut fp, mut oos_pairs, default_only: default, .. } =
+        get_completed_item_artifacts(j, graph, parent, completed.iter())?;
+
+      fp.append(&mut oos_pairs);
+
+      if let Some(s) = create_peek(graph, sym_id, parent, incomplete.iter(), fp, false, transition_type) {
+        let c_p: std::collections::BTreeSet<FollowPair<'_>> = completed.clone().into_iter().map(|i| (i, i).into()).collect();
+        let graph_state = GraphState::Normal;
+        let sym = SymbolId::Default;
+        let groups = &mut Default::default();
+        let s = graph.create_state(sym, StateType::PeekEnd, Some(s), completed);
+
+        handle_completed_groups(j, graph, groups, s, graph_state, sym, c_p, &default)?;
+      }
+    } else {
+      let state = graph.create_state(sym_id, transition_type, Some(parent), incremented_items.clone());
+      graph.enqueue_pending_state(GraphState::Normal, state);
+    }
+  }
+
+  // The remaining goto productions are accept states for for this goto.
+  for prod_id in kernel_prod_ids {
+    let state = graph.create_state(prod_id.to_sym(), StateType::GotoPass, Some(parent), vec![]);
+    graph.add_leaf_state(state);
   }
 
   SherpaResult::Ok(())
@@ -355,7 +358,7 @@ fn create_peek<'a, 'db: 'a, 'follow, T: ItemContainerIter<'a, 'db>>(
       .iter()
       .filter_map(|FollowPair { follow, .. }| {
         if follow.is_complete() || {
-          existing_items.contains(&follow) || (follow.at_start() && existing_prod_ids.contains(&follow.prod_index()))
+          existing_items.contains(&follow) || (follow.is_at_initial() && existing_prod_ids.contains(&follow.prod_index()))
         } {
           None
         } else {
@@ -404,7 +407,7 @@ fn get_kernel_items_from_peek<'db, 'follow>(graph: &Graph<'db>, peek_item: &Item
 }
 
 fn all_items_come_from_same_production_call(group: &Items) -> bool {
-  group.iter().all(|i| i.at_start()) && group.iter().map(|i| i.prod_index()).collect::<Set<_>>().len() == 1
+  group.iter().all(|i| i.is_at_initial()) && group.iter().map(|i| i.prod_index()).collect::<Set<_>>().len() == 1
 }
 fn create_call<'db, 'follow>(
   group: &Items<'db>,
@@ -1033,7 +1036,8 @@ fn create_reduce_reduce_error(j: &mut Journal, graph: &Graph, end_items: ItemSet
         let prod = &goals.first()?.prod_index();
         let name = db.prod_guid_name_string(*prod).as_str().to_string();
 
-        string += format!("\n - Turn production <{name}> into a PEG by using one of the PEG mode specifiers:",).as_str();
+        string +=
+          ("\n - Turn production <".to_string() + &name + " > into a PEG by using one of the PEG mode specifiers:").as_str();
         string += "\n    [ FIRST_MATCH | LONGEST_MATCH | SHORTEST_MATCH ]";
         string += format!("\n\n    Example: <> {name} FIRST_MATCH >  ...",).as_str();
       }

@@ -73,7 +73,9 @@ pub enum StateType {
   Undefined,
   Start,
   Shift,
+  /// The completion of this branch will complete one or more kernel items.
   KernelGoto,
+  /// The completion of this branch will complete one or more intermediary goto items. 
   GotoLoop,
   GotoPass,
   Peek,

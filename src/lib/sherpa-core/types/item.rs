@@ -51,8 +51,7 @@ impl<'db> Hash for Item<'db> {
 impl<'a> PartialEq for Item<'a> {
   fn eq(&self, other: &Self) -> bool {
     let a = (self.rule_id, self.origin, self.goal, self.len, self.sym_index, self.origin_state);
-    let b =
-      (other.rule_id, other.origin, other.goal, other.len, other.sym_index, other.origin_state);
+    let b = (other.rule_id, other.origin, other.goal, other.len, other.sym_index, other.origin_state);
     a == b
   }
 }
@@ -62,8 +61,7 @@ impl<'a> Eq for Item<'a> {}
 impl<'a> PartialOrd for Item<'a> {
   fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
     let a = (self.rule_id, self.origin, self.goal, self.len, self.sym_index, self.origin_state);
-    let b =
-      (other.rule_id, other.origin, other.goal, other.len, other.sym_index, other.origin_state);
+    let b = (other.rule_id, other.origin, other.goal, other.len, other.sym_index, other.origin_state);
     Some(a.cmp(&b))
   }
 }
@@ -165,7 +163,8 @@ impl<'db> Item<'db> {
     Self { sym_index: self.len, ..self.clone() }
   }
 
-  pub fn at_start(&self) -> bool {
+  /// Returns `true` if the item is in the initial position
+  pub fn is_at_initial(&self) -> bool {
     self.sym_index == 0
   }
 
@@ -182,8 +181,15 @@ impl<'db> Item<'db> {
     self.db.prod_friendly_name(self.prod_index())
   }
 
+  /// The production ID the rule reduces to
   pub fn prod_index(&self) -> DBProdKey {
     self.db.rule_prod(self.rule_id)
+  }
+
+  /// Return `true` if the item is from a left recursive rule.
+  pub fn is_left_recursive(&self) -> bool {
+    let p = self.prod_index();
+    p == self.to_start().prod_index_at_sym().unwrap_or_default()
   }
 
   pub fn is_null(&self) -> bool {
@@ -218,8 +224,7 @@ impl<'db> Item<'db> {
   /// is a NonTerm or NonTermToken, or return `None`
   pub fn prod_index_at_sym(&self) -> Option<DBProdKey> {
     match self.sym() {
-      SymbolId::DBNonTerminal { key: index }
-      | SymbolId::DBNonTerminalToken { prod_key: index, .. } => Some(index),
+      SymbolId::DBNonTerminal { key: index } | SymbolId::DBNonTerminalToken { prod_key: index, .. } => Some(index),
       _ => None,
     }
   }
@@ -283,14 +288,11 @@ impl<'db> Item<'db> {
       let rule = self.rule();
       let s_store = self.db.string_store();
 
-      let mut string = self.origin.is_none().then_some(String::new()).unwrap_or_else(|| {
-        format!(
-          "<[{}-{:?}]  [{:X}] ",
-          self.origin.debug_string(self.db),
-          self.origin_state,
-          self.goal
-        )
-      });
+      let mut string = self
+        .origin
+        .is_none()
+        .then_some(String::new())
+        .unwrap_or_else(|| format!("<[{}-{:?}]  [{:X}] ", self.origin.debug_string(self.db), self.origin_state, self.goal));
 
       string += &self.prod_name().to_string(s_store);
 
@@ -355,7 +357,7 @@ pub trait ItemContainerIter<'a, 'db: 'a>: Iterator<Item = &'a Item<'db>> + Sized
   fn follow_items_are_the_same(&mut self) -> bool {
     self.map(|i| i.to_absolute()).collect::<ItemSet>().len() == 1
   }
-
+  /// Returns a set of all production IDs the items reduce to.
   fn to_production_id_set(&mut self) -> OrderedSet<DBProdKey> {
     self.map(|i| i.prod_index()).collect()
   }
@@ -383,9 +385,7 @@ impl<'db> From<Item<'db>> for Items<'db> {
   }
 }
 
-pub trait ItemContainer<'db>:
-  Clone + IntoIterator<Item = Item<'db>> + FromIterator<Item<'db>>
-{
+pub trait ItemContainer<'db>: Clone + IntoIterator<Item = Item<'db>> + FromIterator<Item<'db>> {
   /// Given a [CompileDatabase] and [DBProdId] returns the initial
   /// items of the production.
   fn start_items(prod_id: DBProdKey, db: &'db ParserDatabase) -> Self {
@@ -439,12 +439,7 @@ pub trait ItemContainer<'db>:
 
   #[inline(always)]
   fn try_decrement(&self) -> Items<'db> {
-    self
-      .clone()
-      .to_vec()
-      .into_iter()
-      .map(|i| if i.sym_index > 0 { i.decrement().unwrap() } else { i })
-      .collect()
+    self.clone().to_vec().into_iter().map(|i| if i.sym_index > 0 { i.decrement().unwrap() } else { i }).collect()
   }
 
   fn __debug_print__(&self, comment: &str) {
@@ -523,14 +518,9 @@ pub struct CompletedItemArtifacts<'db> {
   pub default_only: ItemSet<'db>,
 }
 
-impl<'a, 'db: 'a> FollowPairContainerIter<'a, 'db>
-  for std::collections::btree_set::Iter<'a, FollowPair<'db>>
-{
-}
+impl<'a, 'db: 'a> FollowPairContainerIter<'a, 'db> for std::collections::btree_set::Iter<'a, FollowPair<'db>> {}
 impl<'a, 'db: 'a> FollowPairContainerIter<'a, 'db> for std::slice::Iter<'a, FollowPair<'db>> {}
-pub trait FollowPairContainerIter<'a, 'db: 'a>:
-  Iterator<Item = &'a FollowPair<'db>> + Sized
-{
+pub trait FollowPairContainerIter<'a, 'db: 'a>: Iterator<Item = &'a FollowPair<'db>> + Sized {
   fn to_completed_set(&mut self) -> ItemSet<'db> {
     self.map(|i| i.completed).collect()
   }
