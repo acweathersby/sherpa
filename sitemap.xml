@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+  xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>http://example.org/docs/get-started/</loc>
+    <lastmod>2023-03-01T18:56:57-07:00</lastmod>
+  </url><url>
+    <loc>http://example.org/docs/grammar/</loc>
+  </url><url>
+    <loc>http://example.org/docs/ascript/</loc>
+    <lastmod>2023-03-01T18:56:57-07:00</lastmod>
+  </url><url>
+    <loc>http://example.org/docs/ascript/grammar/</loc>
+    <lastmod>2023-03-01T18:56:57-07:00</lastmod>
+  </url><url>
+    <loc>http://example.org/docs/get-started/grammar/</loc>
+    <lastmod>2023-03-01T18:56:57-07:00</lastmod>
+  </url><url>
+    <loc>http://example.org/docs/</loc>
+    <lastmod>2023-03-01T18:56:57-07:00</lastmod>
+  </url><url>
+    <loc>http://example.org/</loc>
+    <lastmod>2023-03-01T18:56:57-07:00</lastmod>
+  </url><url>
+    <loc>http://example.org/categories/</loc>
+  </url><url>
+    <loc>http://example.org/lab/</loc>
+  </url><url>
+    <loc>http://example.org/docs/grammar/grammar/</loc>
+  </url><url>
+    <loc>http://example.org/tags/</loc>
+  </url>
+</urlset>

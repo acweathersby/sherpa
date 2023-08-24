@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang=" en-US">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    
+    <title>Sherpa | LAB</title>
+    <script src="https://kit.fontawesome.com/fd18cdf3ef.js" crossorigin="anonymous"></script>
+
+    <link rel="stylesheet" type="text/css" href="../sass/main.css"><link rel="stylesheet" type="text/css" href="../sass/lab.css">
+</head>
+
+<body class="lab">
+    <script>
+    document.body.classList.add("loading");
+    window.addEventListener("load", e => {
+        document.body.classList.remove("loading");
+    });
+    window.addEventListener("beforeunload", () => {
+        document.body.classList.add("unloading");
+    });
+</script>
+    
+    <header>
+    <a href="../">
+        <img id="header-logo" src="../img/sherpa_logo_hori_full_color.svg" />
+    </a>
+    
+    <div id="page-category"><span id="page-category-name">lab </span></div>
+    
+    
+</header>
+    <main id="lab">
+        <div id="shadow-backer"></div>
+        <div id="documents-host" class="loading">
+            <iframe id="documents-frame" class="frame"></iframe>
+        </div>
+        <div id="left-column">
+            <div class="panel-host">
+                <div class="tabs-header">
+                    <div id="tab-grammar" class="tab active"> Grammar </div>
+                    <div id="tab-parser" class="tab"> Parser Data </div>
+                </div>
+                <div id="panel-grammar" class="panel active codemirror-host">
+                </div>
+                <div id="panel-parser" class="panel codemirror-host">
+                </div>
+            </div>
+        </div>
+
+        <div id="right-column">
+            <div class="panel-host">
+                <div class="tabs-header">
+                    <div id="tab-bytecode" class="tab active"> Bytecode </div>
+                    <div id="tab-ast" class="tab"> AST </div>
+                    <div id="tab-cst" class="tab"> CST </div>
+                    <div id="tab-debugger" class="tab"> Debugger </div>
+                </div>
+                <div id="panel-bytecode" class="panel active">
+                    <code><pre id="bytecode-output" class="output"></pre></code>
+                </div>
+                <div id="panel-ast" class="panel">
+                    <code><pre id="ast-output" class="output"></pre></code>
+                </div>
+                <div id="panel-cst" class="panel">
+                    <h1> cst </h1>
+                </div>
+                <div id="panel-debugger" class="panel">
+                    <button id="debugger-step-button">step</button>
+                    <button id="debugger-into-button">step-into</button>
+                    <button id="debugger-start-stop-button">start</button>
+                    <select id="debugger-entry-dropdown"></select>
+                    <label> optimize </label>
+                    <input type="checkbox" id="debugger-optimize-checkbox"></input>
+                    <h1> Debugger </h1>
+                    <pre id="debugger-output"></pre>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script type="module">
+        import engine, { docs_handler, ScrollHandler } from "..\/js\/lab\/index.js";
+        
+        
+        docs_handler(document.getElementById("documents-frame"), document.getElementById("documents-host"));
+        new ScrollHandler(document.getElementById("bytecode-output"), document.getElementById("panel-bytecode"));
+        new ScrollHandler(document.getElementById("ast-output"), document.getElementById("panel-ast"));
+
+        engine({
+            codemirror_grammar_host: document.getElementById("panel-grammar"),
+            codemirror_parser_host: document.getElementById("panel-parser"),
+            disassembly_output: document.getElementById("bytecode-output"),
+            debugger_start_stop_button: document.getElementById("debugger-start-stop-button"),
+            debugger_step_button: document.getElementById("debugger-step-button"),
+            debugger_into_button: document.getElementById("debugger-into-button"),
+            debugger_out_button: document.getElementById("debugger-out-button"),
+            debugger_output: document.getElementById("debugger-output"),
+            debugger_entry_selection: document.getElementById("debugger-entry-dropdown"),
+            debugger_optimize_checkbox: document.getElementById("debugger-optimize-checkbox"),
+        }).then(() => {
+            for (const scroller of Array.from(document.getElementsByClassName("cm-scroller"))) {
+
+                new ScrollHandler(scroller, scroller.parentElement);
+            }
+        });
+
+
+        for (const input_host of Array.from(document.getElementsByClassName("panel-host"))) {
+            let panels = Array.from(input_host.getElementsByClassName("panel"));
+            let tabs = Array.from(input_host.getElementsByClassName("tab"));
+
+            let pairs = panels.map(p => {
+                let id_matcher = p.id.replace("panel-", "");
+                let tab = tabs.filter(t => t.id.replace("tab-", "") == id_matcher).pop();
+                return { panel: p, tab };
+            });
+
+            for (const { panel, tab } of pairs) {
+                if (panel && tab) {
+                    tab.addEventListener("pointerdown", () => {
+                        panels.forEach(p => p.classList.remove("active"));
+                        tabs.forEach(p => p.classList.remove("active"));
+                        tab.classList.add("active");
+                        panel.classList.add("active");
+                    });
+                }
+            }
+        }
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,40 @@
+body {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  align-content: center;
+  justify-items: center;
+  justify-content: center;
+  flex-direction: column;
+  position: relative;
+  font-size: 12px; }
+
+button {
+  font-size: 14px; }
+
+#hero {
+  position: relative;
+  color: black;
+  width: 70vh;
+  height: 70vh;
+  margin-bottom: 15vh;
+  border-radius: 3px; }
+  #hero img {
+    box-sizing: content-box;
+    width: 90%;
+    margin: 0 5%; }
+  #hero h1 {
+    font-family: LexandDeca;
+    text-align: center;
+    box-sizing: content-box;
+    font-size: 20vh;
+    margin: 0;
+    line-height: .6em;
+    font-weight: 400; }
+
+Sherpa turns this .feature-card {
+  position: relative;
+  width: 200px;
+  height: 300px;
+  background-color: red;
+  margin: 20px; }

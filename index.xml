@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Sherpa | Modern Parsing Defined on Sherpa</title>
+    <link>http://example.org/</link>
+    <description>Recent content in Sherpa | Modern Parsing Defined on Sherpa</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
+    <lastBuildDate>Wed, 01 Mar 2023 18:56:57 -0700</lastBuildDate><atom:link href="http://example.org/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>Getting Started</title>
+      <link>http://example.org/docs/ascript/grammar/</link>
+      <pubDate>Wed, 01 Mar 2023 18:56:57 -0700</pubDate>
+      
+      <guid>http://example.org/docs/ascript/grammar/</guid>
+      <description>TODO Now That you know how to do things, feel free to get better acquainted with your new parsing buddy.</description>
+    </item>
+    
+    <item>
+      <title>Getting Started</title>
+      <link>http://example.org/docs/get-started/grammar/</link>
+      <pubDate>Wed, 01 Mar 2023 18:56:57 -0700</pubDate>
+      
+      <guid>http://example.org/docs/get-started/grammar/</guid>
+      <description>Getting Started With Sherpa Well, no time like the present to get started! Check this out,
+Run in Lab &amp;lt;&amp;gt; A &amp;gt; &amp;#34;hello&amp;#34; &amp;#34;world&amp;#34; Cool huh, you&amp;rsquo;ll notice we are now in the Sherpa &amp;ldquo;lab&amp;rdquo;.
+Note: these documents are integrated with Sherpa lab. Whenever you see the (TODO: Beaker symbol), you can click on it to open the lab to start experimenting with the related subject. Better yet, you won&amp;rsquo;t lose your place in the docs, since lab comes a documents view, which will update to whatever place you were when you clicked on the (TODO: Beaker symbol)!</description>
+    </item>
+    
+    <item>
+      <title>Sherpa Grammar</title>
+      <link>http://example.org/docs/grammar/grammar/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>http://example.org/docs/grammar/grammar/</guid>
+      <description>Repeating Characters (+) &amp;amp; (+&amp;lt;symbol&amp;gt;) - One or more (*) &amp;amp; (*&amp;lt;symbol&amp;gt;) - Zero or more ? - Optional </description>
+    </item>
+    
+  </channel>
+</rss>
