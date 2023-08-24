@@ -32,7 +32,7 @@ jobs:
         run: cargo --version
 
       - name: Install Wasm-Pack
-        run: cargo install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
       - name: Install HUGO
         run: curl -LJOo hugo.deb  .deb https://github.com/gohugoio/hugo/releases/download/v0.117.0/hugo_extended_0.117.0_linux-amd64.deb && dpkg -i hugo.deb
@@ -50,7 +50,7 @@ jobs:
       - name: Copy WASM to HUGO build environment
         run: mkdir cp $WASM_DIR/pkg/* $LAB_PUB_DIR/
 
-      - name: Get Node Packages Site
+      - name: Get Node Packages
         working-directory: $WEB_SOURCE_DIR
         run: npm install
 
