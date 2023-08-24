@@ -1,8 +1,9 @@
-name: test
+name: bootstrap
 
 on: 
   push:
     branches: 
+      - github-workflow
       - release
       - 'releases/**'
       - '*candidate*'
