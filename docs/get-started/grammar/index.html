@@ -8,10 +8,8 @@
     <title>Getting Started</title>
     <script src="https://kit.fontawesome.com/fd18cdf3ef.js" crossorigin="anonymous"></script>
 
-    <link rel="stylesheet" type="text/css" href="../../../sass/main.css">
+    <link rel="stylesheet" type="text/css" href="http://example.org/sass/main.css">
 </head>
-
-
 
 <body class="docs">
     <script>
@@ -36,25 +34,25 @@
         <sidebar class="docs-nav">
     
     <ul>
-<li class=" nav-par">
-    <a href="../../../docs/get-started/"> Tutorial </a>
+<li class="">
+    <a href="http://example.org/docs/get-started/"> Tutorial </a>
     <ul>
 <li class="nav-host">
-    <a href="../../../docs/get-started/grammar/"> Getting Started </a>
+    <a href="http://example.org/docs/get-started/grammar/"> Getting Started </a>
     </li>
     </ul></li>
 <li class="">
-    <a href="../../../docs/grammar/"> Grammar Reference </a>
+    <a href="http://example.org/docs/grammar/"> Grammar Reference </a>
     <ul>
 <li class="">
-    <a href="../../../docs/grammar/grammar/"> Sherpa Grammar </a>
+    <a href="http://example.org/docs/grammar/grammar/"> Sherpa Grammar </a>
     </li>
     </ul></li>
 <li class="">
-    <a href="../../../docs/ascript/"> Ascript </a>
+    <a href="http://example.org/docs/ascript/"> Ascript </a>
     <ul>
 <li class="">
-    <a href="../../../docs/ascript/grammar/"> Getting Started </a>
+    <a href="http://example.org/docs/ascript/grammar/"> Getting Started </a>
     </li>
     </ul></li>
     </ul>
@@ -62,11 +60,13 @@
         <content>
             <h1 id="getting-started-with-sherpa">Getting Started With Sherpa</h1>
 <p>Well, no time like the present to get started! Check this out,</p>
-
-<a onclick="sessionStorage.setItem('lab-data', document.getElementById('5b7a908436c6d9f1').innerText)"
-    href="../../../lab#page:..%2fdocs%2fget-started%2fgrammar%2f#5b7a908436c6d9f1"><i class="icon-beaker"></i>
+<a class=lab-candidate data-id="1cc045c4332c54d1" onclick="lab_anchor_click(this)"
+    href="../../../lab#page:aHR0cDovL2V4YW1wbGUub3JnL2RvY3MvZ2V0LXN0YXJ0ZWQvZ3JhbW1hci8jMWNjMDQ1YzQzMzJjNTRkMQ=="><i class="icon-beaker"></i>
     Run in Lab </a>
-<pre id="5b7a908436c6d9f1">&lt;&gt; A &gt; &#34;hello&#34; &#34;world&#34;</pre>
+<pre id="1cc045c4332c54d1">IGNORE { c:sp }
+
+&lt;&gt; A &gt; &#34;hello&#34; &#34;world&#34;</pre>
+<pre id="1cc045c4332c54d1-parser" hidden>hello world</pre>
 <blockquote>
 <p>Cool huh, you&rsquo;ll notice we are now in the Sherpa &ldquo;lab&rdquo;.</p>
 </blockquote>
@@ -96,11 +96,10 @@ aliquem, temo dolore stridentemque Oete.</p>
 </blockquote>
 <p>Sherpa is perfectly at home creating LR based parsers. For example, this grammar
 is inherently LR:</p>
-
-<a onclick="sessionStorage.setItem('lab-data', document.getElementById('b452d7e782b4387c').innerText)"
-    href="../../../lab#page:..%2fdocs%2fget-started%2fgrammar%2f#b452d7e782b4387c"><i class="icon-beaker"></i>
+<a class=lab-candidate data-id="f91897686a9182ef" onclick="lab_anchor_click(this)"
+    href="../../../lab#page:aHR0cDovL2V4YW1wbGUub3JnL2RvY3MvZ2V0LXN0YXJ0ZWQvZ3JhbW1hci8jZjkxODk3Njg2YTkxODJlZg=="><i class="icon-beaker"></i>
     Run in Lab </a>
-<pre id="b452d7e782b4387c">IGNORE { c:sp } 
+<pre id="f91897686a9182ef">IGNORE { c:sp } 
 
 &lt;&gt; A &gt;   X &#39;c&#39;
 | Y &#39;d&#39;
@@ -108,15 +107,15 @@ is inherently LR:</p>
 &lt;&gt; X &gt; &#39;x&#39; X?
 
 &lt;&gt; Y &gt; &#39;x&#39; Y?</pre>
+<pre id="f91897686a9182ef-parser" hidden>xxxxxxxc</pre>
 <blockquote>
 <p>Inlab YOu&rsquo;ll notice XYZ</p>
 </blockquote>
 <h4 id="check-out-this-json">Check out this JSON</h4>
-
-<a onclick="sessionStorage.setItem('lab-data', document.getElementById('0699d9419bec4d44').innerText)"
-    href="../../../lab#page:..%2fdocs%2fget-started%2fgrammar%2f#0699d9419bec4d44"><i class="icon-beaker"></i>
+<a class=lab-candidate data-id="093e725c73e4ce9e" onclick="lab_anchor_click(this)"
+    href="../../../lab#page:aHR0cDovL2V4YW1wbGUub3JnL2RvY3MvZ2V0LXN0YXJ0ZWQvZ3JhbW1hci8jMDkzZTcyNWM3M2U0Y2U5ZQ=="><i class="icon-beaker"></i>
     Run in Lab </a>
-<pre id="0699d9419bec4d44">IGNORE { c:sp c:nl }
+<pre id="093e725c73e4ce9e">IGNORE { c:sp c:nl }
 EXPORT json as entry
 NAME json
 
@@ -149,6 +148,33 @@ NAME json
 &lt;&gt; string &gt; &#34;\&#34;&#34; ( c:id | c:sym | c:num | c:sp | c:nl | escaped )(*) &#34;\&#34;&#34;
 
 &lt;&gt; escaped &gt; &#34;\\&#34; ( c:id | c:sym | c:num | c:sp | c:nl )</pre>
+<pre id="093e725c73e4ce9e-parser" hidden>{&#34;menu&#34;: {
+    &#34;header&#34;: &#34;SVG Viewer&#34;,
+    &#34;items&#34;: [
+        {&#34;id&#34;: &#34;Open&#34;},
+        {&#34;id&#34;: &#34;OpenNew&#34;, &#34;label&#34;: &#34;Open New&#34;},
+        null,
+        {&#34;id&#34;: &#34;ZoomIn&#34;, &#34;label&#34;: &#34;Zoom In&#34;},
+        {&#34;id&#34;: &#34;ZoomOut&#34;, &#34;label&#34;: &#34;Zoom Out&#34;},
+        {&#34;id&#34;: &#34;OriginalView&#34;, &#34;label&#34;: &#34;Original View&#34;},
+        null,
+        {&#34;id&#34;: &#34;Quality&#34;},
+        {&#34;id&#34;: &#34;Pause&#34;},
+        {&#34;id&#34;: &#34;Mute&#34;},
+        null,
+        {&#34;id&#34;: &#34;Find&#34;, &#34;label&#34;: &#34;Find...&#34;},
+        {&#34;id&#34;: &#34;FindAgain&#34;, &#34;label&#34;: &#34;Find Again&#34;},
+        {&#34;id&#34;: &#34;Copy&#34;},
+        {&#34;id&#34;: &#34;CopyAgain&#34;, &#34;label&#34;: &#34;Copy Again&#34;},
+        {&#34;id&#34;: &#34;CopySVG&#34;, &#34;label&#34;: &#34;Copy SVG&#34;},
+        {&#34;id&#34;: &#34;ViewSVG&#34;, &#34;label&#34;: &#34;View SVG&#34;},
+        {&#34;id&#34;: &#34;ViewSource&#34;, &#34;label&#34;: &#34;View Source&#34;},
+        {&#34;id&#34;: &#34;SaveAs&#34;, &#34;label&#34;: &#34;Save As&#34;},
+        null,
+        {&#34;id&#34;: &#34;Help&#34;},
+        {&#34;id&#34;: &#34;About&#34;, &#34;label&#34;: &#34;About Adobe CVG Viewer...&#34;}
+    ]
+}}</pre>
 <h2 id="stetimus-induco">Stetimus induco</h2>
 <p>Intumuere scire nulla, atque manent est Medusae situs nescio aequoreae tellusque
 praebet omnes miserere. Et genua, vulgata miserum montibus clipeo latet.</p>
@@ -167,11 +193,11 @@ erat vetustas operire aut purus <a href="http://quam.io/vulnera">luctus</a>, fid
 <strong>dolor</strong> et aspicite socio recepit. Ulixe fer. Nam locus redditque non, mihi
 ossibus inmeritam sola Melaneus nescio. Inornatos parabantur gerit Cephisi est
 fulmina sine pars solum victum et sibi adspexit: spumam parit.</p>
-
-<a onclick="sessionStorage.setItem('lab-data', document.getElementById('5b7a908436c6d9f1').innerText)"
-    href="../../../lab#page:..%2fdocs%2fget-started%2fgrammar%2f#5b7a908436c6d9f1"><i class="icon-beaker"></i>
+<a class=lab-candidate data-id="5b7a908436c6d9f1" onclick="lab_anchor_click(this)"
+    href="../../../lab#page:aHR0cDovL2V4YW1wbGUub3JnL2RvY3MvZ2V0LXN0YXJ0ZWQvZ3JhbW1hci8jNWI3YTkwODQzNmM2ZDlmMQ=="><i class="icon-beaker"></i>
     Run in Lab </a>
 <pre id="5b7a908436c6d9f1">&lt;&gt; A &gt; &#34;hello&#34; &#34;world&#34;</pre>
+<pre id="5b7a908436c6d9f1-parser" hidden></pre>
 <p>Mensis ferunt <strong>ignes defrenato</strong> infitianda aetas deorum <strong>perquirere</strong> agnovit
 nescio in. Aiax eligit non possunt, iam quantaque iunctis <a href="http://tempus-crine.io/">ardesceret victus
 pondus</a>.</p>
@@ -191,6 +217,7 @@ pondus</a>.</p>
 </nav>
 </sidebar>
     </main>
+    <script type="module" src="http://example.org/js/lab/docs_handler.js"></script>
 </body>
 
 

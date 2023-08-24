@@ -12,7 +12,9 @@
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
       <guid>http://example.org/docs/grammar/grammar/</guid>
-      <description>Repeating Characters (+) &amp;amp; (+&amp;lt;symbol&amp;gt;) - One or more (*) &amp;amp; (*&amp;lt;symbol&amp;gt;) - Zero or more ? - Optional </description>
+      <description>Writing A Hydrocarbon Grammar 7 min read
+A Hydrocarbon grammar file is a document written in a BNF influenced syntax that describes a parser or set of parsers. Hydrocarbon grammars are modular in that then can be defined in multiple files, productions from different files can be combined in numerous ways, and multiple sub-grammars that can be exposed as separate parsers from the same compiled package.
+A Brief Introduction A single grammar is composed of one or more productions that define how a particular subset of grammar should be parsed.</description>
     </item>
     
   </channel>

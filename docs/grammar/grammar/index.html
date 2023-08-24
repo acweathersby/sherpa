@@ -8,10 +8,8 @@
     <title>Sherpa Grammar</title>
     <script src="https://kit.fontawesome.com/fd18cdf3ef.js" crossorigin="anonymous"></script>
 
-    <link rel="stylesheet" type="text/css" href="../../../sass/main.css">
+    <link rel="stylesheet" type="text/css" href="http://example.org/sass/main.css">
 </head>
-
-
 
 <body class="docs">
     <script>
@@ -37,58 +35,136 @@
     
     <ul>
 <li class="">
-    <a href="../../../docs/get-started/"> Tutorial </a>
+    <a href="http://example.org/docs/get-started/"> Tutorial </a>
     <ul>
 <li class="">
-    <a href="../../../docs/get-started/grammar/"> Getting Started </a>
+    <a href="http://example.org/docs/get-started/grammar/"> Getting Started </a>
     </li>
     </ul></li>
-<li class=" nav-par">
-    <a href="../../../docs/grammar/"> Grammar Reference </a>
+<li class="">
+    <a href="http://example.org/docs/grammar/"> Grammar Reference </a>
     <ul>
 <li class="nav-host">
-    <a href="../../../docs/grammar/grammar/"> Sherpa Grammar </a>
+    <a href="http://example.org/docs/grammar/grammar/"> Sherpa Grammar </a>
     </li>
     </ul></li>
 <li class="">
-    <a href="../../../docs/ascript/"> Ascript </a>
+    <a href="http://example.org/docs/ascript/"> Ascript </a>
     <ul>
 <li class="">
-    <a href="../../../docs/ascript/grammar/"> Getting Started </a>
+    <a href="http://example.org/docs/ascript/grammar/"> Getting Started </a>
     </li>
     </ul></li>
     </ul>
 </sidebar>
         <content>
-            <h3 id="repeating-characters">Repeating Characters</h3>
-<ul>
-<li>
-<h3 id="--symbol----one-or-more"><code>(+)</code> &amp; <code>(+&lt;symbol&gt;)</code> -  One or more</h3>
-</li>
-<li>
-<h3 id="--symbol----zero-or-more"><code>(*)</code> &amp; <code>(*&lt;symbol&gt;)</code> -  Zero or more</h3>
-</li>
-<li>
-<h3 id="----optional"><code>?</code> -  Optional</h3>
-</li>
-</ul>
+            <h1 id="writing-a-hydrocarbon-grammar">Writing A Hydrocarbon Grammar</h1>
+<p><em>7 min read</em></p>
+<p>A Hydrocarbon grammar file is a document written in a <a href="https://en.wikipedia.org/wiki/Backus%E2%80%93Naur_form">BNF</a> influenced
+syntax that describes a parser or set of parsers. Hydrocarbon grammars are modular in that then can be defined in multiple files,
+productions from different files can be combined in numerous ways, and  multiple sub-grammars that can be exposed as separate parsers
+from the same compiled package.</p>
+<h2 id="a-brief-introduction">A Brief Introduction</h2>
+<p>A single grammar is composed of one or more productions that define how a particular subset of grammar should be parsed. The syntax
+of a basic production is <code>&quot;&lt;&gt;&quot; &lt;production_name&gt; &quot;&gt;&quot; &lt;production_bodies&gt;</code>, where <code>production_name</code> is a sequence of alphanumeric
+and/or <code>_</code> underscore characters, and <code>production_bodies</code> is one or more production bodies separated by a <code>|</code> character:</p>
+<pre tabindex="0"><code class="language-hydrocarbon" data-lang="hydrocarbon">&lt;&gt; Start_Production &gt; body1 | body2 | body3 | ...
+</code></pre><p>Production bodies are comprised of symbols that can represent sequences of characters, known as <em>terminal</em> symbols,
+and/or identifiers that refer to other productions, called <em>non-terminal</em> symbols.</p>
+<pre tabindex="0"><code class="language-hydrocarbon" data-lang="hydrocarbon">&lt;&gt; ... &gt; \im_a_terminal_symbol t:im_also_a_terminal_symbol im_a_non_terminal_symbol
+</code></pre><!-- raw HTML omitted -->
+<p>Terminal symbols can be defined in <em>escaped literal</em> form by preceding a sequence of characters with a <code>\</code> character and following that character
+sequence with a newline or space. An example of this is the sequence <code>\hello \world </code>, which defines the terminal symbols
+<code>hello</code> and <code>world</code>, which is differs from <code>\hello\world </code>, which defines the single terminal symbol <code>hello\world</code>.</p>
+<blockquote>
+<p>An alternate terminal symbol syntax, <em>exclusive literal</em>, uses the prefix <code>t:</code> define a sequence of characters, e.g.
+<code>t:hello t:world</code>. There certain cases where you would want to define an <em>exclusive literal</em> over an <em>escaped literal</em>. Check
+out <a href="./api.symbols.index.md#exclusive-terminal-symbol">grammar symbols</a> to find out about the use cases for these symbol types.</p>
+</blockquote>
+<h4 id="a-simple-grammar">A Simple Grammar</h4>
+<p>Let&rsquo;s create a simple grammar to demonstrate the process of writing a Hydrocarbon grammar. In order to produce a parser that can
+recognize simple arithmetic expressions, such as <code>1+2+3</code>, one could write the following grammar:</p>
+<pre tabindex="0"><code class="language-hydrocarbon" data-lang="hydrocarbon">
+&lt;&gt; sum &gt; sum \+ num | num 
+
+&lt;&gt; num &gt; \1 | \2 | \3 | \4 | \5 | \6 | \7 | \8 | \9 | \0
+</code></pre><p>In this grammar, the production <code>sum</code> contains two bodies. The first, <code>sum \+ \num</code>, has two non-terminals <code>sum</code> and <code>num</code>, and
+on terminal symbol <code>+</code>. The second body of <code>sum</code>, following the <code>|</code> symbol, contains a single non-terminal <code>num</code>.</p>
+<p>The second production <code>num</code> contains multiple bodies, each with a single terminal symbol representing a character in the range [0..9].</p>
+<blockquote>
+<p>One thing to note about this grammar is the use of left recursion to represent repeated sequences of productions. In this
+case, the production <code>&lt;&gt; sum &gt; sum + num</code> is left recursive, where the first <em>terminal symbol</em> <code>sum</code> directly references the production
+in which it is a part of.</p>
+<p>Certain parser compiling algorithms, such as parsers in the LL family and recursive descent parsers,
+are unable to parse such productions in that form, as this would let to an infinite recursion. There a methods to
+transform such productions, however Hydrocarbon is able to directly work with left recursive grammars without transformations.
+It is actually encouraged to use left recursion, since this leads to the compilation of a more efficient parser.</p>
+</blockquote>
+<p>Hydrocarbon provides some modifiers and built in symbols that make it easier to write complex grammars. In our example
+grammar, we can use the <em>generated</em> symbol <code>g:num</code> to represent a character in the range [0..9].</p>
+<pre tabindex="0"><code class="language-hydrocarbon" data-lang="hydrocarbon">&lt;&gt; num &gt; g:num
+</code></pre><p>We may also to replace the trivial non-terminal <code>num</code> with this generated symbol, which in turn allows us to remove the
+<code>num</code> production entirely.</p>
+<pre tabindex="0"><code class="language-hydrocarbon" data-lang="hydrocarbon">&lt;&gt; sum &gt; sum \+ g:num | g:num
+</code></pre><p>We can represent a sequence that repeats zero or more times with the symbol <em>modifier</em> <code>(*)</code>. To apply a modifier to a sequence
+of symbols, we can wrap them in <code>(</code> <code>)</code> parenthetic brackets. Applying this syntax to our grammar, we can re-write it as:</p>
+<pre tabindex="0"><code class="language-hydrocarbon" data-lang="hydrocarbon">&lt;&gt; sum &gt; g:num ( \+ g:num )(*)
+</code></pre><p>This single production represents the same grammar as our first version, but more compactly.</p>
+<h4 id="functions">Functions</h4>
+<p>As it is, this grammar will produce a parser that can do nothing more than tell us if a givin input can be produced by the grammar,
+in effect the parser can only recognize an input as being part of the grammar. However, if we want are parser to do something more
+interesting, we can provide reduce functions that act on the recognized symbols of the grammar symbols. Hydrocarbon calls a reduce
+function when the parser recognizes an input as being part of a particular production body. Going back to an early iteration of our
+grammar, we can add a reduce function to the <code>num</code> production&rsquo;s body to convert the <code>g:num</code> symbol into a numeric object:</p>
+<pre tabindex="0"><code class="language-hydrocarbon" data-lang="hydrocarbon">&lt;&gt; num &gt; g:num f:r { parseInt($1 + &#34;&#34;) }
+</code></pre><blockquote>
+<p>When a <em>terminal-symbol</em> is passed to a reduce function, it is represented by a <a href="#todo">Token</a> object. This object provides several utility
+methods useful when analyzing and transforming an AST into other forms.</p>
+</blockquote>
+<p>We&rsquo;re using JavaScript expressions to define action used in the reduce function <code>f:r { ... }</code>. Hydrocarbon supports other syntaxes, but
+its native form is JavaScript, so we&rsquo;ll stick with that. The contents of a reduce function is an expression that takes the parsed symbols
+of a production body, modifies them in some way, and returns a new object or primitive. Inside a reduce function symbols are referenced
+by the syntax <code>\$ g:num</code>, where <code>g:num</code> is the one-based index position of the symbol.</p>
+<p>An alternative to using the <code>\$ g:num</code> syntax to reference a symbol in a production body is to use <em>annotated</em> symbols and define a
+reference name for a symbol:</p>
+<pre tabindex="0"><code class="language-hydrocarbon" data-lang="hydrocarbon">&lt;&gt; num &gt; g:num^number f:r { parseInt(number + &#34;&#34;) }
+</code></pre><p>The <code>g:num</code> symbol has been annotated with the reference annotation <code>^number</code>, which can now be used within the reduce function to
+refer to that symbol. We can also add a reduce function to the <code>sum</code> grammar production. We&rsquo;ll also use an previous iteration of this
+production to apply the reduce function:</p>
+<pre tabindex="0"><code class="language-hydrocarbon" data-lang="hydrocarbon">&lt;&gt; sum &gt;    sum^operandA \+ num^operandB   f:r { operandA + operandB }
+        
+        |   num
+</code></pre><p>Note in the second production <code>|  num</code> we do not need to apply a parse action, as Hydrocarbon will automatically pass the value of
+number primitive when it completed the production <code>&lt;&gt; num &gt; g:num^number f:r { parseInt(number + &quot;&quot;) }</code></p>
+<blockquote>
+<p>By default, Hydrocarbon will return the last symbol within a production body when it recognizes that body.</p>
+</blockquote>
+<p>Likewise, the value of num in <code>... \+ num^operandB ...</code> is the numeric literal that was created when the production <code>num</code> was completed.</p>
+<p>Now our grammar looks like this:</p>
+<pre tabindex="0"><code>&lt;&gt; sum &gt;    sum^operandA \+ num^operandB   f:r { operandA + operandB }
+        |   num
+
+&lt;&gt; num &gt; g:num^number f:r { parseInt(number + &#34;&#34;) }
+</code></pre><p>A parse produced by this grammar will now be able to take an input such as <code>&quot;1+2+3&quot;</code> and return a numeric literal <code>6</code>.</p>
+<h2 id="what-next">What Next</h2>
+<p>Checkout <a href="./tutorial.bash_parser.index.md">creating the bash parser</a> if you desire a thorough guide on generating a parser with Hydrocarbon.</p>
+<p>You can also checkout the Grammar API to gain an in-depth understanding of grammar constructs.</p>
 
         </content>
         <sidebar class="doc-nav">
     <nav id="TableOfContents">
   <ul>
-    <li>
+    <li><a href="#a-brief-introduction">A Brief Introduction</a>
       <ul>
-        <li><a href="#repeating-characters">Repeating Characters</a></li>
-        <li><a href="#--symbol----one-or-more"><code>(+)</code> &amp; <code>(+&lt;symbol&gt;)</code> -  One or more</a></li>
-        <li><a href="#--symbol----zero-or-more"><code>(*)</code> &amp; <code>(*&lt;symbol&gt;)</code> -  Zero or more</a></li>
-        <li><a href="#----optional"><code>?</code> -  Optional</a></li>
+        <li></li>
       </ul>
     </li>
+    <li><a href="#what-next">What Next</a></li>
   </ul>
 </nav>
 </sidebar>
     </main>
+    <script type="module" src="http://example.org/js/lab/docs_handler.js"></script>
 </body>
 
 
