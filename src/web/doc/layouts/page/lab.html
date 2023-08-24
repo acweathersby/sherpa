@@ -1,5 +1,4 @@
-{{- $labScript := resources.Get "js/lab/index.ts" | js.Build (dict "target" "esnext" "format" "esm" "sourcemap"
-"inline") -}}
+{{- $labScript := resources.Get "js/lab/index.ts" | js.Build (dict "target" "esnext" "format" "esm" "sourcemap" "inline") -}}
 <!doctype html>
 <html lang="{{ .Site.Params.languageTag | default " en-US" }}">
 {{ partial "head/head.html" . }}
@@ -58,7 +57,7 @@
     </main>
 
     <script type="module">
-        import engine, { docs_handler, ScrollHandler } from "..{{ $labScript.RelPermalink }}";
+        import engine, { docs_handler, ScrollHandler } from "{{ $labScript.Permalink }}";
         // Connect docs handler to iframe manage interaction between
         // docs and lab.
         docs_handler(document.getElementById("documents-frame"), document.getElementById("documents-host"));

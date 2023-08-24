@@ -1,9 +1,11 @@
 {{ if isset .Attributes "lab" -}}
-{{ $id := slicestr (md5 .Inner) 0 16 }}
-<a onclick="sessionStorage.setItem('lab-data', document.getElementById('{{$id}}').innerText)"
-    href="{{ relURL "/lab"}}#page:..{{ .Page.RelPermalink  }}#{{$id}}"><i class="icon-beaker"></i>
+{{- $id := slicestr (md5 .Inner) 0 16 -}}
+{{- $data := split .Inner "============" -}}
+<a class=lab-candidate data-id="{{$id}}" onclick="lab_anchor_click(this)"
+    href="{{ relURL "/lab"}}#page:{{ (printf "%s#%s" .Page.Permalink $id )| base64Encode  | safeURL  }}"><i class="icon-beaker"></i>
     Run in Lab </a>
-<pre id="{{$id}}">{{ .Inner }}</pre>
+<pre id="{{$id}}">{{ trim (index $data 0) " \n" }}</pre>
+<pre id="{{$id}}-parser" hidden>{{ trim (index $data 1) " \n" }}</pre>
 {{ else -}}
 <pre>{{ .Inner }}</pre>
 {{end -}}

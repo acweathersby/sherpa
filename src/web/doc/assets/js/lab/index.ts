@@ -6,7 +6,7 @@ import docs_handler from './docs_handler';
 import { sherpaLang } from './sherpa_lang';
 import { parserHost } from './parser';
 import { GrammarContext } from './grammar_context';
-import { get_grammar, get_input } from "./session_storage";
+import { get_grammar, get_input, init, set_grammar_update_handler, set_parser_update_handler } from "./session_storage";
 
 export { docs_handler, ScrollHandler };
 
@@ -43,7 +43,21 @@ export default async function (
         alert("Sherpa Failed to Load");
     }
 
+    init(window);
+
     const ctx = new GrammarContext();
+
+    const grammar_editor = new EditorView({
+        doc: get_grammar(),
+
+        extensions: [basicSetup,
+            sherpaLang(ctx),
+            EditorView.editorAttributes.of({ class: "Codemirror" }),
+        ],
+        parent: codemirror_grammar_host
+    });
+
+    set_grammar_update_handler(grammar_str => grammar_editor.dispatch({ changes: { from: 0, to: grammar_editor.state.doc.length, insert: grammar_str } }));
 
     const parser_editor = new EditorView({
         doc: get_input(),
@@ -59,15 +73,7 @@ export default async function (
         parent: codemirror_parser_host
     });
 
-    const grammar_editor = new EditorView({
-        doc: get_grammar(),
-
-        extensions: [basicSetup,
-            sherpaLang(ctx),
-            EditorView.editorAttributes.of({ class: "Codemirror" }),
-        ],
-        parent: codemirror_grammar_host
-    });
+    set_parser_update_handler(parser_str => { console.log(parser_str); parser_editor.dispatch({ changes: { from: 0, to: parser_editor.state.doc.length, insert: parser_str } }) });
 
 }
 

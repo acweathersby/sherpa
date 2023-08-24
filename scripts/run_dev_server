@@ -15,6 +15,8 @@ pushd ${0:a:h}/..
 ## Startup dev environment
 pushd $SHERPA_WEB_SOURCE_DIR
 echo $PWD
+npm install
+
 hugo version
 hugo server --disableFastRender
 
