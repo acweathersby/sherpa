@@ -3,16 +3,16 @@ name: test
 on: 
   push:
     branches: 
-      - candidate
       - release
       - 'releases/**'
+      - '*candidate*'
 
 env:
   CARGO_TERM_COLOR: always
   FORCE_COLOR: 1
 
 jobs:
-  build:
+  bootstrap-and-test:
 
     runs-on: ubuntu-latest
 
@@ -29,7 +29,7 @@ jobs:
         run: cargo --version
       - name: Bootstrapping bytecode parser
         working-directory: src/app/cli
-        run: cargo run --bin sherpa --release  -- build -t bytecode -a --name sherpa_bc -l rust -o ../../src/lib/sherpa-core/parser/ ../../grammar/v_two/grammar.sg
+        run: cargo run --bin sherpa --release  -- build -t bytecode -a --name sherpa_bc -l rust -o ../../src/lib/sherpa-core/parser/ ../../grammar/2.0.0/grammar.sg
       - name: Test bytecode parser
         working-directory: src/lib
         run: cargo test --workspace
