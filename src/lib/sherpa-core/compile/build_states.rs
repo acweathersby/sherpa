@@ -29,7 +29,6 @@ pub fn compile_parse_states(mut j: Journal, db: &ParserDatabase) -> SherpaResult
         match create_parse_states_from_prod(&mut local_j, db, *prod_id, *prod_sym, &mut states, &mut scanners) {
           SherpaResult::Ok(output) => output,
           SherpaResult::Err(_err) => {}
-          _ => unreachable!(),
         }
       }
       (states, scanners)

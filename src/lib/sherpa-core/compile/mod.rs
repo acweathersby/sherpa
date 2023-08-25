@@ -1,9 +1,6 @@
 //! Handles the compilation of a grammar.
 
-mod build_graph;
-mod build_ir;
-mod build_states;
-mod optimize;
-
-pub use build_states::compile_parse_states;
-pub use optimize::{garbage_collect, optimize};
+pub(crate) mod build_graph;
+pub(crate) mod build_ir;
+pub(crate) mod build_states;
+pub(crate) mod optimize;

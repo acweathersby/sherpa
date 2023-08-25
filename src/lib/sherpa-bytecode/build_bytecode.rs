@@ -11,33 +11,29 @@ use std::collections::VecDeque;
 /// # Example
 ///
 /// ```
-/// # use sherpa_core::{
-/// #   GrammarSoup, Journal, SherpaResult,ParseStatesVec,
-/// #   compile_parse_states, optimize,
-/// #   build_compile_db, compile_grammar_from_str
-/// # };
-/// #
+/// # use sherpa_core::*;
+/// # use std::path::PathBuf;
 /// # use sherpa_bytecode::{compile_bytecode};
 /// #
 /// # fn main() -> SherpaResult<()> {
-/// # let mut j = Journal::new(Default::default());
-/// # let soup = GrammarSoup::new();
-/// # let root_id = compile_grammar_from_str(&mut j, "<> A > 'Hello' 'World' ", Default::default(), &soup)?;
-/// # let db = build_compile_db(j.transfer(), root_id, &soup)?;
-/// # let states = compile_parse_states(j.transfer(), &db)?;
-/// # let states = optimize::<ParseStatesVec>(&db, states, false)?;
-/// let (bytecode, state_lu) = compile_bytecode(&db, states.iter(), true)?;
 ///
-/// assert_eq!(bytecode.len(), 1076);
+/// let parser = SherpaGrammarBuilder::new()
+///   .add_grammar_from_string( "<> A > 'Hello' 'World' ", &PathBuf::default())?
+///   .build_db(&PathBuf::default())?
+///   .build_parser()?
+///   .optimize(false)?;
+///
+/// let (bytecode, state_lu) = compile_bytecode(&parser, true)?;
+///
+/// assert_eq!(bytecode.len(), 1080);
 ///
 /// # SherpaResult::Ok(())
 /// # }
 /// ```
-pub fn compile_bytecode<'a, 'db, T: Iterator<Item = &'a (IString, Box<ParseState>)>>(
-  db: &'db ParserDatabase,
-  states: T,
-  add_debug_symbols: bool,
-) -> SherpaResult<(Array<u8>, Map<IString, usize>)> {
+pub fn compile_bytecode<T: ParserStore>(store: &T, add_debug_symbols: bool) -> SherpaResult<(Array<u8>, Map<IString, usize>)> {
+  let states = store.get_states();
+  let db = store.get_db();
+
   let mut bytecode = Array::new();
   let mut state_name_to_proxy = OrderedMap::new();
   let mut state_name_to_address = Map::new();
@@ -108,7 +104,7 @@ fn build_state<'db>(
 ) -> SherpaResult<()> {
   let state = state.get_ast()?;
   let stmt = &state.statement;
-  build_statement(db, stmt.as_ref(), bytecode, state_name_to_proxy, add_debug_symbols);
+  build_statement(db, stmt.as_ref(), bytecode, state_name_to_proxy, add_debug_symbols)?;
   SherpaResult::Ok(())
 }
 

@@ -879,7 +879,7 @@ mod test {
   };
 
   fn create_test_data(input: &str) -> SherpaResult<(Journal, Box<Grammar>, PathBuf, IStringStore)> {
-    let mut j = Journal::new(None);
+    let mut j = Journal::new();
     j.set_active_report("test", ReportType::GrammarCompile(Default::default()));
 
     SherpaResult::Ok((j, super::parse_grammar(input)?, PathBuf::from("/test.sg"), IStringStore::default()))

@@ -79,7 +79,7 @@ export function parserHost(ctx: GrammarContext, {
         try {
             states = sherpa.create_parser_states(db, optimize);
             console.log(states);
-            bytecode = sherpa.create_bytecode(db, states);
+            bytecode = sherpa.create_bytecode(states);
             // Build the soup.
             let output = document.getElementById("bytecode-output");
             if (output) {
@@ -207,7 +207,7 @@ export function parserHost(ctx: GrammarContext, {
 
                             let name = sherpa.get_debug_state_name(step.instruction, bytecode);
                             if (name) {
-                                active_state_source = sherpa.get_state_source_string(name, states, db);
+                                active_state_source = sherpa.get_state_source_string(name, states);
                                 break
                             }
                         } else {
@@ -221,7 +221,7 @@ export function parserHost(ctx: GrammarContext, {
 
                             let name = sherpa.get_debug_state_name(step.instruction, bytecode);
                             if (name) {
-                                active_scanner_state_source = sherpa.get_state_source_string(name, states, db);
+                                active_scanner_state_source = sherpa.get_state_source_string(name, states);
                                 break
                             }
                         }

@@ -7,11 +7,7 @@ use inkwell::{
   targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine},
   OptimizationLevel,
 };
-use sherpa_core::{
-  proxy::OrderedMap,
-  test::utils::{build_parse_states_from_source_str, TestPackage},
-  *,
-};
+use sherpa_core::{proxy::OrderedMap, test::utils::build_parse_states_from_source_str, *};
 use sherpa_rust_runtime::{
   llvm_parser::{sherpa_allocate_stack, sherpa_free_stack, sherpa_get_token_class_from_codepoint, LLVMByteReader},
   types::{
@@ -99,7 +95,7 @@ fn verify_construction_of_init_function() -> SherpaResult<()> {
   let context = Context::create();
   let target_machine = crate_target_test_machine()?;
   let target_data = target_machine.get_target_data();
-  let module = construct_module(&mut Journal::new(None), &context, &target_data, context.create_module("test"));
+  let module = construct_module(&context, &target_data, context.create_module("test"));
 
   unsafe { assert!(construct_init(&module).is_ok()) }
 
@@ -113,7 +109,7 @@ fn verify_construction_of_ast_builder() -> SherpaResult<()> {
   let context = Context::create();
   let target_machine = crate_target_test_machine()?;
   let target_data = target_machine.get_target_data();
-  let module = construct_module(&mut Journal::new(None), &context, &target_data, context.create_module("test"));
+  let module = construct_module(&context, &target_data, context.create_module("test"));
 
   unsafe { assert!(construct_ast_builder::<u32>(&module).is_ok()) }
 
@@ -127,7 +123,7 @@ fn verify_construction_of_push_state_function() -> SherpaResult<()> {
   let context = Context::create();
   let target_machine = crate_target_test_machine()?;
   let target_data = target_machine.get_target_data();
-  let module = construct_module(&mut Journal::new(None), &context, &target_data, context.create_module("test"));
+  let module = construct_module(&context, &target_data, context.create_module("test"));
 
   assert!(construct_push_state_function(&module).is_ok());
 
@@ -145,7 +141,7 @@ fn should_push_new_state() -> SherpaResult<()> {
 
   unsafe {
     let jit_engine = setup_exec_engine(&module);
-    let module = construct_module(&mut Journal::new(None), &context, &target_data, module);
+    let module = construct_module(&context, &target_data, module);
 
     jit_engine.add_global_mapping(&module.fun.allocate_stack, sherpa_allocate_stack as usize);
     jit_engine.add_global_mapping(&module.fun.free_stack, sherpa_free_stack as usize);
@@ -202,7 +198,7 @@ fn verify_construction_of_get_adjusted_input_block_function() -> SherpaResult<()
   let context = Context::create();
   let target_machine = crate_target_test_machine()?;
   let target_data = target_machine.get_target_data();
-  let module = construct_module(&mut Journal::new(None), &context, &target_data, context.create_module("test"));
+  let module = construct_module(&context, &target_data, context.create_module("test"));
 
   unsafe { assert!(construct_get_adjusted_input_block_function(&module).is_ok()) }
 
@@ -216,7 +212,7 @@ fn verify_construction_of_emit_eop_function() -> SherpaResult<()> {
   let context = Context::create();
   let target_machine = crate_target_test_machine()?;
   let target_data = target_machine.get_target_data();
-  let module = construct_module(&mut Journal::new(None), &context, &target_data, context.create_module("test"));
+  let module = construct_module(&context, &target_data, context.create_module("test"));
 
   unsafe { assert!(construct_emit_end_of_parse(&module).is_ok()) }
 
@@ -230,7 +226,7 @@ fn should_initialize_context() -> SherpaResult<()> {
   let context = Context::create();
   let target_machine = crate_target_test_machine()?;
   let target_data = target_machine.get_target_data();
-  let module = construct_module(&mut Journal::new(None), &context, &target_data, context.create_module("test"));
+  let module = construct_module(&context, &target_data, context.create_module("test"));
 
   unsafe { assert!(construct_init(&module).is_ok()) };
 
@@ -256,7 +252,7 @@ fn verify_utf8_lookup_functions() -> SherpaResult<()> {
   let context = Context::create();
   let target_machine = crate_target_test_machine()?;
   let target_data = target_machine.get_target_data();
-  let module = construct_module(&mut Journal::new(None), &context, &target_data, context.create_module("test"));
+  let module = construct_module(&context, &target_data, context.create_module("test"));
 
   assert!(construct_utf8_lookup_function(&module).is_ok());
 
@@ -272,7 +268,7 @@ fn should_yield_correct_cp_values_for_inputs() -> SherpaResult<()> {
   let context = Context::create();
   let target_machine = crate_target_test_machine()?;
   let target_data = target_machine.get_target_data();
-  let module = construct_module(&mut Journal::new(None), &context, &target_data, context.create_module("test"));
+  let module = construct_module(&context, &target_data, context.create_module("test"));
 
   assert!(construct_utf8_lookup_function(&module).is_ok());
   unsafe { assert!(construct_merge_utf8_part_function(&module).is_ok()) }
@@ -308,7 +304,7 @@ fn verify_construct_extend_stack() -> SherpaResult<()> {
   let context = Context::create();
   let target_machine = crate_target_test_machine()?;
   let target_data = target_machine.get_target_data();
-  let module = construct_module(&mut Journal::new(None), &context, &target_data, context.create_module("test"));
+  let module = construct_module(&context, &target_data, context.create_module("test"));
 
   unsafe { assert!(construct_extend_stack(&module).is_ok()) }
 
@@ -322,7 +318,7 @@ fn should_extend_stack() -> SherpaResult<()> {
   let context = Context::create();
   let target_machine = crate_target_test_machine()?;
   let target_data = target_machine.get_target_data();
-  let module = construct_module(&mut Journal::new(None), &context, &target_data, context.create_module("test"));
+  let module = construct_module(&context, &target_data, context.create_module("test"));
 
   unsafe {
     let jit_engine = setup_exec_engine(&module.module);
@@ -393,15 +389,13 @@ IGNORE { c:sp }
   ",
     "/test".into(),
     Default::default(),
-    &|TestPackage { mut journal, db, states, .. }| {
-      let states = optimize::<ParseStatesVec>(&db, states, false)?;
-
+    &|tp| {
       let context = Context::create();
       let target_machine = crate_target_test_machine()?;
       let target_data = target_machine.get_target_data();
-      let module = construct_module(&mut Journal::new(None), &context, &target_data, context.create_module("test"));
+      let module = construct_module(&context, &target_data, context.create_module("test"));
 
-      compile_states(&mut journal, &module, db, &states)?;
+      compile_states(&tp, &module)?;
 
       println!("{}", module.module.to_string());
 
@@ -420,16 +414,14 @@ IGNORE { c:sp }
   ",
     "/test.sp".into(),
     Default::default(),
-    &|TestPackage { mut journal, states, db, soup }| {
+    &|tp| {
       let context = Context::create();
       let module = context.create_module("test");
-
-      let states = optimize::<ParseStatesVec>(&db, states, false)?;
 
       unsafe {
         let engine = setup_exec_engine(&module);
         let target_data = engine.get_target_data();
-        let module = construct_module(&mut Journal::new(None), &context, &target_data, module);
+        let module = construct_module(&context, &target_data, module);
 
         engine.add_global_mapping(&module.fun.allocate_stack, sherpa_allocate_stack as usize);
 
@@ -437,7 +429,7 @@ IGNORE { c:sp }
 
         engine.add_global_mapping(&module.fun.get_token_class_from_codepoint, sherpa_get_token_class_from_codepoint as usize);
 
-        compile_llvm_module_from_parse_states(&mut journal, &module, db, &states)?;
+        compile_llvm_module_from_parse_states(&tp, &module)?;
 
         let init_fn = get_parse_function::<Init>(&engine, "init")?;
         let prime_fn = get_parse_function::<Prime>(&engine, "prime")?;
@@ -487,7 +479,6 @@ fn line_tracking_with_scanner_tokens() -> SherpaResult<()> {
   let ctx = Context::create();
 
   let mut jit: JitParser<UTF8StringReader, u32, u32> = ((
-    None,
     r##"
 IGNORE { c:sp c:nl }
 <> A > tk:B P
@@ -544,7 +535,7 @@ mango""##,
         *counter += 1;
         println!("Reduced C");
         assert_eq!(slots[0].1.to_slice(ctx.get_str()), "\"\nmango\"");
-        assert_eq!(slots[0].1.line_num, 7, "Line number of `mango` should be 7");
+        assert_eq!(slots[0].1.line_num, 8, "Line number of `mango` should be 8");
         assert_eq!(slots[0].1.line_off, 20, "Line offset of `mango` should be 20");
       }),
       //("B", 0, |_, _| {}),
@@ -563,7 +554,6 @@ fn simple_newline_tracking() -> SherpaResult<()> {
   let ctx = Context::create();
 
   let mut jit: JitParser<UTF8StringReader, u32, u32> = ((
-    None,
     r##"
     IGNORE { c:sp c:nl }
 
@@ -611,7 +601,6 @@ fn test_compile_from_bytecode1() -> SherpaResult<()> {
   let ctx = Context::create();
 
   let mut jit: JitParser<UTF8StringReader, u32, u32> = ((
-    None,
     "
 IGNORE { c:sp c:nl }
 
@@ -711,16 +700,14 @@ NAME llvm_language_test
 "##,
     "/test.sp".into(),
     Default::default(),
-    &|TestPackage { mut journal, states, db, .. }| {
+    &|tp| {
       let ctx = Context::create();
-
-      let states = optimize::<ParseStatesVec>(&db, states, false)?;
 
       let target_machine = crate_target_test_machine()?;
       let target_data = target_machine.get_target_data();
 
-      let module = construct_module(&mut journal, &ctx, &target_data, ctx.create_module("test"));
-      compile_llvm_module_from_parse_states(&mut journal, &module, &db, &states)?;
+      let module = construct_module(&ctx, &target_data, ctx.create_module("test"));
+      compile_llvm_module_from_parse_states(&tp, &module)?;
 
       println!("{}", module.module.to_string());
 

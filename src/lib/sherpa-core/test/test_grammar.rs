@@ -1,8 +1,4 @@
-use crate::{
-  test::utils::{build_parse_states_from_source_str as build, TestPackage as Tp},
-  DBProdKey,
-  SherpaResult as R,
-};
+use crate::{test::utils::build_parse_states_from_source_str as build, DBProdKey, SherpaResult as R, TestPackage};
 
 #[test]
 fn grammar_viable_grammar() -> R<()> {
@@ -41,7 +37,7 @@ fn grammar_with_peg_production() -> R<()> {
 
 #[test]
 fn grammar_with_append_production() -> R<()> {
-  build("<> t > ('r') \n +> t > ( 'b' :ast 1 )", "".into(), Default::default(), &|Tp { db, .. }| {
+  build("<> t > ('r') \n +> t > ( 'b' :ast 1 )", "".into(), Default::default(), &|TestPackage { db, .. }| {
     assert_eq!(
       db.prod_rules(DBProdKey::from(0usize))?.len(),
       2,

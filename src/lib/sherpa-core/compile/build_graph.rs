@@ -58,7 +58,7 @@ fn handle_kernel_items(j: &mut Journal, graph: &mut Graph, parent: StateId, grap
   let out_items = handle_incomplete_items(j, graph, parent, graph_state, groups)?;
 
   if graph_state != GraphState::Peek && !graph.is_scan() {
-    handle_goto(j, graph, parent, out_items);
+    handle_goto(j, graph, parent, out_items)?;
   }
 
   SherpaResult::Ok(())
@@ -495,7 +495,7 @@ fn handle_completed_groups<'db, 'follow>(
         // some existing item.
         let item = *o_to_r(cmpl.first(), "Item list is empty")?;
 
-        handle_completed_item(j, graph, (item, vec![item]), par, sym, g_state);
+        handle_completed_item(j, graph, (item, vec![item]), par, sym, g_state)?;
       } else {
         let unfollowed_items: Items = default_only_items.intersection(&cmpl.iter().to_set()).cloned().collect();
 
@@ -691,7 +691,7 @@ fn resolve_conflicting_symbols<'db, 'follow>(
         par,
         sym,
         g_state,
-      );
+      )?;
       break;
     } else {
       panic!("Could not resolve Symbol ambiguities!")

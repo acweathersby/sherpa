@@ -6,7 +6,7 @@ use inkwell::{
   targets::{CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetData, TargetMachine, TargetTriple},
   OptimizationLevel,
 };
-use sherpa_core::{Journal, ParseStatesVec, ParserDatabase, SherpaError, SherpaResult};
+use sherpa_core::{ParserStore, SherpaError, SherpaResult};
 use sherpa_rust_runtime::types::{ast::AstObject, Token};
 use std::{io::Write, path::PathBuf, process::Command};
 /// Constructs a task that outputs a Rust parse context interface
@@ -54,11 +54,9 @@ impl AstObject for DummyASTEnum {}
 ///
 /// `output_llvm_ir_file` - Output a purely decorational version of the LLVM
 /// code in intermediate representational form.
-pub fn build_llvm_parser(
-  mut j: Journal,
+pub fn build_llvm_parser<T: ParserStore>(
+  store: &T,
   parser_name: &str,
-  db: &ParserDatabase,
-  states: &ParseStatesVec,
   output_dir: &PathBuf,
   target_triple: Option<String>,
   enable_ascript: bool,
@@ -77,11 +75,11 @@ pub fn build_llvm_parser(
   let module = ctx.create_module(&parser_name);
   module.set_triple(&target_triple);
   module.set_data_layout(&target_data.get_data_layout());
-  let sherpa_mod = &construct_module(&mut j, &ctx, &target_data, module);
+  let sherpa_mod = &construct_module(&ctx, &target_data, module);
 
   let opt = OptimizationLevel::Aggressive;
 
-  compile_llvm_module_from_parse_states(&mut j, sherpa_mod, db, states)?;
+  compile_llvm_module_from_parse_states(store, sherpa_mod)?;
 
   if enable_ascript {
     unsafe {

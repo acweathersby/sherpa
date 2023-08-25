@@ -3,11 +3,7 @@
 use crate::types::*;
 
 /// A result type that uses the [SherpaError] enum type for errors values.
-pub type SherpaResult<T: Default> = std::result::Result<T, SherpaError>;
-
-pub const fn SherpaResult_None<T>() -> SherpaResult<T> {
-  SherpaResult::Err(SherpaError::StaticText("Undefined Error"))
-}
+pub type SherpaResult<T> = std::result::Result<T, SherpaError>;
 
 pub const fn SherpaResult_Err<T>(text: &'static str) -> SherpaResult<T> {
   SherpaResult::Err(SherpaError::StaticText(text))

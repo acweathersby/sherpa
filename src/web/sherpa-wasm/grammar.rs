@@ -1,27 +1,12 @@
 use js_sys::Array;
 use sherpa_bytecode::compile_bytecode;
-use sherpa_core::{
-  build_compile_db,
-  compile_grammar_from_str,
-  compile_parse_states,
-  optimize,
-  proxy::Map,
-  remove_grammar_mut,
-  CachedString,
-  GrammarIdentities,
-  GrammarSoup,
-  IString,
-  Journal,
-  ParseStatesVec,
-  ParserDatabase,
-  SherpaResult,
-};
+use sherpa_core::{proxy::Map, *};
 use sherpa_rust_build::build_rust;
 use sherpa_rust_runtime::{
   bytecode::{disassemble_bytecode, disassemble_parse_block},
   types::bytecode::Instruction,
 };
-use std::{path::PathBuf, sync::LockResult};
+use std::path::PathBuf;
 use wasm_bindgen::prelude::*;
 
 use crate::error::PositionedErrors;
@@ -32,47 +17,51 @@ pub struct JSGrammarIdentities(pub(crate) Box<GrammarIdentities>);
 
 /// A Parser database derived from grammar defined in a JSSoup
 #[wasm_bindgen]
-pub struct JSParserDB(pub(crate) Box<ParserDatabase>);
+pub struct JSParserDB(pub(crate) Box<SherpaDatabaseBuilder>);
 
 /// Parser states generated from the compilation of parser db
 #[wasm_bindgen]
 pub struct JSParseStates {
-  pub(crate) states: Box<ParseStatesVec>,
+  pub(crate) states: Box<SherpaParserBuilder>,
   pub num_of_states: u32,
 }
 
 /// An arbitrary collection of grammars
 #[wasm_bindgen]
-pub struct JSSoup(pub(crate) Box<GrammarSoup>);
+pub struct JSSoup(pub(crate) Box<Option<SherpaGrammarBuilder>>);
 
 /// Bytecode produced from parse states
 #[wasm_bindgen]
 pub struct JSBytecode(pub(crate) Box<(Vec<u8>, Map<IString, usize>)>);
+
+fn to_err(e: SherpaError) -> PositionedErrors {
+  (&vec![e]).into()
+}
 
 #[wasm_bindgen]
 impl JSSoup {
   /// Adds or replaces grammar in the soup, or throws an error
   /// if the grammar is invalid. Returns the grammar
   /// id if successful.
-  pub fn add_grammar(&mut self, grammar: String, path: String) -> Result<JSGrammarIdentities, PositionedErrors> {
-    let mut j = Journal::new(Default::default());
+  pub fn add_grammar(&mut self, grammar_source: String, path: String) -> Result<JSGrammarIdentities, PositionedErrors> {
+    let path = &PathBuf::from(&path);
+    if let Some(grammar) = self.0.take() {
+      let grammar = grammar.remove_grammar(&path).map_err(to_err)?;
 
-    j.set_active_report("grammar parse", sherpa_core::ReportType::Any);
+      let grammar = grammar.add_source_from_string(&grammar_source, &path).map_err(to_err)?;
 
-    if remove_grammar_mut((&PathBuf::from(&path)).into(), &mut self.0).is_err() {
-      return Result::Err(convert_journal_errors(&mut j));
-    }
+      let id: GrammarIdentities = grammar.path_to_id(path);
 
-    match compile_grammar_from_str(&mut j, grammar.as_str(), path.into(), &self.0) {
-      SherpaResult::Ok(g_id) => Ok(JSGrammarIdentities(Box::new(g_id))),
-      _ => {
-        return Result::Err(convert_journal_errors(&mut j));
-      }
+      self.0.replace(grammar);
+
+      Ok(JSGrammarIdentities(Box::new(id)))
+    } else {
+      Err((&vec![SherpaError::StaticText("Failed To Load Grammar")]).into())
     }
   }
 
   /// Adds a production targeting a specific grammar
-  pub fn add_production(&mut self, grammar_name: String) -> Result<(), JsError> {
+  pub fn add_production(&mut self, _grammar_name: String) -> Result<(), JsError> {
     Ok(())
   }
 }
@@ -84,53 +73,26 @@ impl JSSoup {
 /// and construct ASCript AST and CST structures.
 #[wasm_bindgen]
 pub fn create_soup() -> Result<JSSoup, JsError> {
-  Ok(JSSoup(Box::new(Default::default())))
+  Ok(JSSoup(Box::new(Some(SherpaGrammarBuilder::new()))))
 }
 
 /// Creates a parser db from a soup and a root grammar, or returns semantic
 /// errors.
 #[wasm_bindgen]
 pub fn create_parse_db(grammar_id: String, soup: &JSSoup) -> Result<JSParserDB, PositionedErrors> {
-  let mut j = Journal::new(None);
+  if let Some(grammar) = soup.0.as_ref() {
+    let parser_db = grammar.build_db(&PathBuf::from(grammar_id)).map_err(to_err)?;
 
-  let db = if let LockResult::Ok(headers) = soup.0.grammar_headers.read() {
-    match headers.get(&(&PathBuf::from(&grammar_id)).into()) {
-      Some(g_id) => {
-        j.set_active_report("ParserDB Compile", sherpa_core::ReportType::Any);
-
-        let gs = soup.0.as_ref();
-
-        let id = g_id.identity;
-
-        let SherpaResult::Ok(db) = build_compile_db(j.transfer(), id, gs) else {
-          j.flush_reports();
-
-          let mut errors = PositionedErrors::default();
-
-          if let Some(reports) = j.get_faulty_reports() {
-            for report in &reports {
-              errors.extend_from_refs(&report.errors());
-            }
-          }
-
-          return Result::Err(errors);
-        };
-
-        db
-      }
-      _ => return Err(Default::default()),
-    }
+    Ok(JSParserDB(Box::new(parser_db)))
   } else {
-    return Err(Default::default());
-  };
-
-  return Ok(JSParserDB(Box::new(db)));
+    Err(Default::default())
+  }
 }
 
 /// Temporary simple AST output implementation.
 #[wasm_bindgen]
 pub fn create_rust_ast_output(js_db: &JSParserDB) -> Result<String, PositionedErrors> {
-  let mut j = Journal::new(None);
+  let mut j = Journal::new();
   j.set_active_report("ast compile", sherpa_core::ReportType::Any);
 
   let db = &js_db.0;
@@ -145,26 +107,20 @@ pub fn create_rust_ast_output(js_db: &JSParserDB) -> Result<String, PositionedEr
 /// Temporary simple AST output implementation.
 #[wasm_bindgen]
 pub fn create_parser_states(js_db: &JSParserDB, optimize_states: bool) -> Result<JSParseStates, PositionedErrors> {
-  let mut j = Journal::new(None);
+  let mut j = Journal::new();
 
   j.set_active_report("state construction", sherpa_core::ReportType::Any);
 
-  let db = &js_db.0;
+  let db = js_db.0.as_ref();
 
-  let SherpaResult::Ok(states) = compile_parse_states(j.transfer(), &db) else {
-    return Result::Err(convert_journal_errors(&mut j));
-  };
+  let parser = db.build_parser().map_err(to_err)?;
 
-  let states: ParseStatesVec = if optimize_states {
-    let SherpaResult::Ok(states) = optimize(&db, states, true) else {
-      return Result::Err(convert_journal_errors(&mut j));
-    };
-    states
-  } else {
-    states.into_iter().collect()
-  };
+  let parser = if optimize_states { parser.optimize(true).map_err(to_err)? } else { parser };
 
-  Ok(JSParseStates { num_of_states: states.len() as u32, states: Box::new(states) })
+  Ok(JSParseStates {
+    num_of_states: parser.get_states().len() as u32,
+    states:        Box::new(parser),
+  })
 }
 
 fn convert_journal_errors(j: &mut Journal) -> PositionedErrors {
@@ -181,14 +137,12 @@ fn convert_journal_errors(j: &mut Journal) -> PositionedErrors {
 
 /// Temporary simple disassembly implementation.
 #[wasm_bindgen]
-pub fn create_bytecode(js_db: &JSParserDB, states: &JSParseStates) -> Result<JSBytecode, PositionedErrors> {
-  let mut j = Journal::new(None);
+pub fn create_bytecode(states: &JSParseStates) -> Result<JSBytecode, PositionedErrors> {
+  let mut j = Journal::new();
 
   j.set_active_report("bytecode compile", sherpa_core::ReportType::Any);
 
-  let db = &js_db.0;
-
-  let SherpaResult::Ok((bc, state_lu)) = compile_bytecode(&db, states.states.iter(), true) else {
+  let SherpaResult::Ok((bc, state_lu)) = compile_bytecode(states.states.as_ref(), true) else {
     return Result::Err(convert_journal_errors(&mut j));
   };
 
@@ -246,10 +200,12 @@ pub fn get_debug_tok_offsets(address: u32, bytecode: &JSBytecode) -> JsValue {
 }
 
 #[wasm_bindgen]
-pub fn get_state_source_string(name: String, states: &JSParseStates, db: &JSParserDB) -> JsValue {
+pub fn get_state_source_string(name: String, states: &JSParseStates) -> JsValue {
   let lu_name: IString = name.to_token();
 
-  let code = states.states.iter().find(|f| f.0 == lu_name).map(|f| f.1.print(&db.0, true).unwrap());
+  let parser = states.states.as_ref();
+
+  let code = parser.get_states().iter().find(|f| f.0 == lu_name).map(|f| f.1.print(parser.get_db(), true).unwrap());
 
   code.into()
 }
@@ -257,11 +213,13 @@ pub fn get_state_source_string(name: String, states: &JSParseStates, db: &JSPars
 /// Givin an symbol index, returns the symbol's friendly name.
 #[wasm_bindgen]
 pub fn get_symbol_name_from_id(id: u32, db: &JSParserDB) -> JsValue {
-  db.0.token(id.into()).name.to_string(db.0.string_store()).into()
+  let db = db.0.as_ref().get_db();
+  db.token(id.into()).name.to_string(db.string_store()).into()
 }
 
 /// Returns a list of entrypoint names
 #[wasm_bindgen]
 pub fn get_entry_names(db: &JSParserDB) -> JsValue {
-  db.0.entry_points().iter().map(|ep| JsValue::from(ep.entry_name.to_string(db.0.string_store()))).collect::<Array>().into()
+  let db = db.0.as_ref().get_db();
+  db.entry_points().iter().map(|ep| JsValue::from(ep.entry_name.to_string(db.string_store()))).collect::<Array>().into()
 }

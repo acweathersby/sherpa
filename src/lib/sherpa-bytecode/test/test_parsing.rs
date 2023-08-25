@@ -2,10 +2,7 @@ use crate::{
   test::utils::{map_reduce_function, TestParser},
   *,
 };
-use sherpa_core::{
-  test::utils::{build_parse_states_from_source_str as build_states, TestPackage},
-  *,
-};
+use sherpa_core::{test::utils::build_parse_states_from_source_str as build_states, *};
 use sherpa_rust_runtime::types::{ast::AstSlot, bytecode::FIRST_PARSE_BLOCK_ADDRESS, SherpaParser};
 use std::path::PathBuf;
 
@@ -475,16 +472,16 @@ fn simple_newline_tracking() -> SherpaResult<()> {
     <> B > 'mango'
         "##,
     "".into(),
-    Default::default(),
-    &|TestPackage { db, states, .. }| {
-      let states = optimize::<ParseStatesVec>(&db, states, false)?;
+    true,
+    &|tp| {
+      let (bc, _) = compile_bytecode(&tp, true)?;
 
-      let (bc, _) = compile_bytecode(&db, states.iter(), true)?;
+      let TestPackage { db, .. } = tp;
 
       let mut parser = TestParser::new(&mut ("hello\nworld\n\ngoodby\nmango".into()), &bc);
       parser.init_parser(FIRST_PARSE_BLOCK_ADDRESS);
       let result = parser.parse_ast(
-        &map_reduce_function(db, vec![
+        &map_reduce_function(&db, vec![
           ("test", 0, |ctx, slots| {
             assert_eq!(slots[0].1.to_slice(unsafe { &*ctx }.get_str()), "hello");
             assert_eq!(slots[0].1.line_num, 0, "Line number of `hello` should be 0");

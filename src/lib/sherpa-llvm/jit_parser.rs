@@ -25,7 +25,10 @@ use sherpa_rust_runtime::{
     TokenRange,
   },
 };
-use std::{path::Path, sync::Arc};
+use std::{
+  path::{Path, PathBuf},
+  sync::Arc,
+};
 
 use crate::{
   ascript_functions::construct_ast_builder,
@@ -39,6 +42,7 @@ type Prime<R, ExtCTX> = unsafe extern "C" fn(*mut ParseContext<R, ExtCTX>, u32);
 type Drop<R, ExtCTX> = unsafe extern "C" fn(*mut ParseContext<R, ExtCTX>);
 type Next<R, ExtCTX> = unsafe extern "C" fn(*mut ParseContext<R, ExtCTX>) -> ParseActionType;
 
+#[allow(improper_ctypes_definitions)]
 type AstBuilder<'llvm, R, ExtCTX, ASTNode> = unsafe extern "C" fn(
   *mut ParseContext<R, ExtCTX>,
   *const fn(ctx: &mut ParseContext<R, ExtCTX>, &mut AstStackSlice<AstSlot<ASTNode>>),
@@ -60,8 +64,7 @@ where
   drop_fn:   JitFunction<'llvm, Drop<R, ExtCTX>>,
   engine:    ExecutionEngine<'llvm>,
   ctx:       ParseContext<R, ExtCTX>,
-  j:         Journal,
-  db:        ParserDatabase,
+  store:     SherpaParserBuilder,
 }
 
 impl<'llvm, R, ExtCTX, ASTNode> JitParser<'llvm, R, ExtCTX, ASTNode>
@@ -69,21 +72,19 @@ where
   R: ByteReader + LLVMByteReader,
   ASTNode: AstObject,
 {
-  pub(crate) fn new<'db>(j: &mut Journal, db: ParserDatabase, ctx: &'llvm Context) -> SherpaResult<Self> {
+  pub(crate) fn new<'db>(store: SherpaParserBuilder, ctx: &'llvm Context) -> SherpaResult<Self> {
     unsafe {
       let module = ctx.create_module("JIT_PARSER");
       let engine = module.create_jit_execution_engine(inkwell::OptimizationLevel::None).unwrap();
       let target_data = engine.get_target_data();
 
-      let mut llvm_mod = construct_module(j, ctx, &target_data, module);
+      let mut llvm_mod = construct_module(ctx, &target_data, module);
 
       engine.add_global_mapping(&llvm_mod.fun.allocate_stack, sherpa_allocate_stack as usize);
       engine.add_global_mapping(&llvm_mod.fun.free_stack, sherpa_free_stack as usize);
       engine.add_global_mapping(&llvm_mod.fun.get_token_class_from_codepoint, sherpa_get_token_class_from_codepoint as usize);
 
-      let states = compile_parse_states(j.transfer(), &db).unwrap();
-      let states = garbage_collect::<ParseStatesVec>(&db, states, "jit").unwrap();
-      compile_llvm_module_from_parse_states(j, &llvm_mod, &db, &states)?;
+      compile_llvm_module_from_parse_states(&store, &llvm_mod)?;
 
       construct_ast_builder::<ASTNode>(&llvm_mod)?;
 
@@ -94,7 +95,7 @@ where
       let prime_fn = engine.get_function("prime").unwrap();
 
       SherpaResult::Ok(Self {
-        db,
+        store,
         reader: (0 as usize) as *mut R,
         init_fn,
         prime_fn,
@@ -104,13 +105,12 @@ where
         next_fn,
         module: llvm_mod,
         ctx: ParseContext::<R, ExtCTX>::new_llvm(),
-        j: j.transfer(),
       })
     }
   }
 
   pub(crate) fn db(&self) -> &ParserDatabase {
-    &self.db
+    self.store.get_db()
   }
 
   pub(crate) fn get_ctx_mut(&mut self) -> &mut ParseContext<R, ExtCTX> {
@@ -130,29 +130,25 @@ where
   }
 }
 
-impl<'llvm, R, ExtCTX, ASTNode> From<(Option<Config>, &'llvm str, &'llvm Context)> for JitParser<'llvm, R, ExtCTX, ASTNode>
+impl<'llvm, R, ExtCTX, ASTNode> From<(&'llvm str, &'llvm Context)> for JitParser<'llvm, R, ExtCTX, ASTNode>
 where
   R: ByteReader + LLVMByteReader,
   ASTNode: AstObject,
 {
-  fn from((config, source, context): (Option<Config>, &'llvm str, &'llvm Context)) -> Self {
-    let mut journal = Journal::new(config);
+  fn from((source, context): (&'llvm str, &'llvm Context)) -> Self {
+    let default_path = PathBuf::default();
+    let parser = SherpaGrammarBuilder::new()
+      .add_source_from_string(source, &default_path)
+      .and_then(|d| d.build_db(&default_path))
+      .and_then(|d| d.build_parser())
+      .and_then(|d| d.optimize(false))
+      .unwrap();
 
-    let soup = GrammarSoup::new();
+    if parser.dump_errors() {
+      panic!("Errors occurred creating the parser");
+    }
 
-    journal.set_active_report("test", ReportType::Any);
-
-    let id = compile_grammar_from_str(&mut journal, source, "/grammar.sg".into(), &soup).unwrap();
-
-    journal.flush_reports();
-
-    journal.flush_reports();
-
-    let db = build_compile_db(journal.transfer(), id, &soup).unwrap();
-
-    journal.flush_reports();
-
-    JitParser::new(&mut journal, db, &context).unwrap()
+    JitParser::new(parser, &context).unwrap()
   }
 }
 
@@ -185,10 +181,8 @@ where
   /// has occurred then the states may not represent the actual parser.
   #[cfg(debug_assertions)]
   pub(crate) fn print_states(&mut self) {
-    let states = compile_parse_states(self.j.transfer(), &self.db).unwrap();
-    let states = garbage_collect::<ParseStatesVec>(&self.db, states, "jit").unwrap();
-    for (_, state) in &states {
-      println!("{}", state.debug_string(&self.db))
+    for (_, state) in self.store.get_states() {
+      println!("{}", state.debug_string(&self.store.get_db()))
     }
   }
 

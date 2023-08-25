@@ -322,7 +322,7 @@ impl<'a> AscriptWriterUtils<'a> {
       archetype_struct.type_name.clone(),
       prop_assignments,
       archetype_struct.tokenized,
-    );
+    )?;
 
     (*ref_index) += 1;
 

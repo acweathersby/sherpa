@@ -1,43 +1,39 @@
 use crate::{
-  build_compile_db,
-  compile_grammar_from_str,
-  compile_parse_states,
-  types::o_to_r,
-  Config,
+  DBPackage,
   GrammarSoup,
   Journal,
   ParseStatesMap,
   ParserDatabase,
   ReportType,
+  SherpaGrammarBuilder,
+  SherpaParserBuilder,
   SherpaResult,
+  TestPackage,
 };
 use std::path::PathBuf;
-pub struct TestPackage<'a> {
-  pub journal: Journal,
-  pub states:  ParseStatesMap,
-  pub db:      &'a ParserDatabase,
-  pub soup:    &'a GrammarSoup,
-}
-
-pub struct DBPackage<'a> {
-  pub journal: Journal,
-  pub db:      &'a ParserDatabase,
-  pub soup:    &'a GrammarSoup,
-}
 
 /// Simple single thread compilation of a grammar source string.
 /// `test_fn` is called after a successful compilation of parse states.
 pub fn build_parse_states_from_source_str<'a, T>(
   source: &str,
   source_path: PathBuf,
-  config: Config,
+  optimize: bool,
   test_fn: &dyn Fn(TestPackage) -> SherpaResult<T>,
 ) -> SherpaResult<T> {
-  build_parse_db_from_source_str(source, source_path, config, &|DBPackage { journal, db, soup }| {
-    let states = compile_parse_states(journal.transfer(), &db)?;
-
-    test_fn(TestPackage { journal, states, db: &db, soup: &soup })
-  })
+  if optimize {
+    test_fn(
+      SherpaGrammarBuilder::new()
+        .add_source_from_string(source, &source_path)?
+        .build_db(&source_path)?
+        .build_parser()?
+        .optimize(false)?
+        .into(),
+    )
+  } else {
+    test_fn(
+      SherpaGrammarBuilder::new().add_source_from_string(source, &source_path)?.build_db(&source_path)?.build_parser()?.into(),
+    )
+  }
 }
 
 /// Builds a set of states from one or more source strings.
@@ -46,53 +42,30 @@ pub fn build_parse_states_from_source_str<'a, T>(
 pub fn build_parse_states_from_multi_sources<'a, T>(
   sources: &[&str],
   source_path: PathBuf,
-  config: Config,
+  optimize: bool,
   test_fn: &dyn Fn(TestPackage) -> SherpaResult<T>,
 ) -> SherpaResult<T> {
-  let mut journal = Journal::new(Some(config));
-  let gs = GrammarSoup::new();
-
-  let mut root_id = None;
-
-  journal.set_active_report("Compile Grammars", ReportType::Any);
+  let mut grammar = SherpaGrammarBuilder::new();
 
   for (index, source) in sources.iter().enumerate() {
     let source_path = source_path.join("ABCDEFGHIJKLMNOPQRSTUVWXYZ".chars().nth(index).unwrap().to_string());
-    let id = compile_grammar_from_str(&mut journal, source, source_path, &gs)?;
-
-    if root_id.is_none() {
-      root_id = Some(id);
-    }
+    grammar = grammar.add_source_from_string(source, &source_path)?;
   }
 
-  journal.flush_reports();
+  let root_path = source_path.join("A");
 
-  let db = build_compile_db(journal.transfer(), o_to_r(root_id, "Root id is invalid")?, &gs)?;
-
-  let states = compile_parse_states(journal.transfer(), &db)?;
-
-  test_fn(TestPackage { journal, states, db: &db, soup: &gs })
+  if optimize {
+    test_fn(grammar.build_db(&root_path)?.build_parser()?.optimize(false)?.into())
+  } else {
+    test_fn(grammar.build_db(&root_path)?.build_parser()?.into())
+  }
 }
 
 /// Compile a parser Data base
 pub fn build_parse_db_from_source_str<'a, T>(
   source: &str,
   source_path: PathBuf,
-  config: Config,
   test_fn: &dyn Fn(DBPackage) -> SherpaResult<T>,
 ) -> SherpaResult<T> {
-  let mut journal = Journal::new(Some(config));
-  let soup = GrammarSoup::new();
-
-  journal.set_active_report("test", ReportType::Any);
-
-  let id = compile_grammar_from_str(&mut journal, source, source_path, &soup)?;
-
-  journal.flush_reports();
-
-  let db = build_compile_db(journal.transfer(), id, &soup)?;
-
-  journal.flush_reports();
-
-  test_fn(DBPackage { journal, db: &db, soup: &soup })
+  test_fn(SherpaGrammarBuilder::new().add_source_from_string(source, &source_path)?.build_db(&source_path)?.into())
 }

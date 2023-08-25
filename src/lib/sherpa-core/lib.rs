@@ -11,21 +11,17 @@
 #![allow(non_snake_case)]
 #![feature(box_patterns)]
 
+mod builder;
 mod compile;
 mod debug;
 mod grammar;
 mod journal;
 pub mod parser;
-mod tasks;
 mod types;
 mod utils;
 mod writer;
 
-pub use compile::{compile_parse_states, garbage_collect, optimize};
-
-pub use grammar::{build_compile_db, compile_grammar_from_str, compile_grammars_from_path, remove_grammar_mut};
-pub use journal::{Config, Journal, Report, ReportType};
-pub use tasks::new_taskman;
+pub use journal::{Journal, Report, ReportType};
 pub use types::{
   o_to_r,
   proxy,
@@ -43,7 +39,6 @@ pub use types::{
   GrammarSoup,
   IString,
   IStringStore,
-  Item,
   ParseState,
   ParseStatesMap,
   ParseStatesVec,
@@ -51,7 +46,6 @@ pub use types::{
   Production,
   ProductionId,
   Rule,
-  RuleId,
   SherpaError,
   SherpaErrorSeverity,
   SherpaResult,
@@ -61,6 +55,7 @@ pub use types::{
   SymbolRef,
 };
 
+pub use builder::*;
 pub use utils::{create_u64_hash as hash_id_value_u64, hash_group_btreemap};
 pub use writer::code_writer::CodeWriter;
 

@@ -11,13 +11,13 @@ pub type SharedSymbolBuffer = Arc<Vec<u8>>;
 ///
 /// - The byte offset and Unicode codepoint offset of the cursor.
 /// - The 8bit value of the current byte
-/// - The Unicode codepoint value at the cursor, if there is a valid symbol there.
-/// - The Hydrocarbon character class of the current symbol, if
-///   available.
+/// - The Unicode codepoint value at the cursor, if there is a valid symbol
+///   there.
+/// - The Sherpa character class of the current symbol, if available.
 /// This loosely correlates to certain Unicode character classes.
 /// - The UTF8 codepoint length, if it exists.
-/// - The number of newline characters encountered up until the
-///   current location of the cursor.
+/// - The number of newline characters encountered up until the current location
+///   of the cursor.
 /// - Both the codepoint offset and byte offset of the last line
 /// encountered in the input.
 pub trait ByteReader {
@@ -171,9 +171,7 @@ pub trait UTF8Reader {
           dword |= (byte as u32) << offset;
         }
 
-        for i in (((self_.cursor() as i32) - amount) as usize + 1)
-          ..std::cmp::min(self_.len() as usize, self_.cursor() + 1)
-        {
+        for i in (((self_.cursor() as i32) - amount) as usize + 1)..std::cmp::min(self_.len() as usize, self_.cursor() + 1) {
           let byte = self_.get_bytes()[i as usize];
 
           if byte == 10 {

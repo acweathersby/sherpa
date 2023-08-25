@@ -24,7 +24,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 /// Performance various transformation on the parse state graph
 /// to reduce number of steps between transient actions, and to
 /// reduce the number of parse states overall.
-pub fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
+pub(crate) fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
   db: &'db ParserDatabase,
   parse_states: ParseStatesMap,
   optimize_for_debugging: bool,
@@ -92,7 +92,6 @@ impl ComplexityMarker {
   }
 
   pub fn print_comparison(&self, other: &Self, label: &str) {
-    #[cfg(debug_assertions)]
     println!(
       "Opt {} ---- {} -> {} State Reduction: {}% Complexity Reduction: {}%",
       label,
@@ -225,7 +224,7 @@ fn remove_redundant_defaults<'db>(db: &'db ParserDatabase, mut parse_states: Par
 
 /// Create chained matching scanners that can scan sequences of
 /// characters simultaneously.
-fn create_byte_sequences<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
+fn _create_byte_sequences<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
   let mut single_byte_state = HashMap::new();
 
   for (name, state) in &parse_states {
@@ -242,7 +241,7 @@ fn create_byte_sequences<'db>(db: &'db ParserDatabase, mut parse_states: ParseSt
     }
   }
 
-  for (name, state) in &mut parse_states {
+  for (_, state) in &mut parse_states {
     let Some(box parser::State { statement, .. }) = state.ast.as_mut() else { continue };
 
     let Some(ASTNode::Matches(box parser::Matches { mode, matches, .. })) = &mut statement.branch else { continue };
@@ -602,7 +601,7 @@ fn combine_state_branches<'db>(db: &'db ParserDatabase, mut parse_states: ParseS
     if let Some(branch) = branch {
       match branch {
         ASTNode::Matches(box parser::Matches { matches, .. }) => {
-          if let Some(default) = matches.iter_mut().filter_map(|d| d.as_DefaultMatch_mut()).next() {
+          if let Some(_) = matches.iter_mut().filter_map(|d| d.as_DefaultMatch_mut()).next() {
             //combine_branches(db, &mut default.statement)?;
           }
 
@@ -727,7 +726,7 @@ fn canonicalize_states<'db, R: FromIterator<(IString, Box<ParseState>)>>(
 
   for state in parse_states.values_mut() {
     if let Some(box parser::State { statement, .. }) = &mut state.as_mut().ast {
-      canonicalize_statement(db, statement, &state_name_to_canonical_state_name);
+      canonicalize_statement(db, statement, &state_name_to_canonical_state_name)?;
     }
   }
 
@@ -739,9 +738,9 @@ fn canonicalize_states<'db, R: FromIterator<(IString, Box<ParseState>)>>(
 pub fn garbage_collect<'db, R: FromIterator<(IString, Box<ParseState>)>>(
   db: &'db ParserDatabase,
   mut parse_states: ParseStatesMap,
-  reason: &str,
+  _reason: &str,
 ) -> SherpaResult<R> {
-  let start_complexity = ComplexityMarker::new(db, parse_states.iter());
+  // let start_complexity = ComplexityMarker::new(db, parse_states.iter());
 
   let mut out = Array::new();
   let mut queue =
@@ -752,13 +751,14 @@ pub fn garbage_collect<'db, R: FromIterator<(IString, Box<ParseState>)>>(
     // reference name to IString and push respective state to queue
     if let SherpaResult::Ok(ast) = state.get_ast() {
       let stmt = &ast.statement;
-      traverse_statement(stmt, &mut parse_states, &mut queue);
+      traverse_statement(stmt, &mut parse_states, &mut queue)?;
     }
 
     out.push((name, state));
   }
 
-  start_complexity.print_comparison(&ComplexityMarker::new(db, out.iter().map(|(i, b)| (i, b))), reason);
+  //start_complexity.print_comparison(&ComplexityMarker::new(db,
+  // out.iter().map(|(i, b)| (i, b))), reason);
 
   SherpaResult::Ok(R::from_iter(out))
 }

@@ -21,6 +21,7 @@ export class GrammarContext {
     private RUNNING_EVENTS: boolean;
 
     private current_parse_errors: sherpa.JSSherpaSourceError[];
+
     private current_db_errors: sherpa.JSSherpaSourceError[];
 
     /// Should only be called after sherpa is initialized
@@ -60,6 +61,7 @@ export class GrammarContext {
             this.signal(EventType.GrammarAdded);
         } catch (e) {
             if (e instanceof sherpa.PositionedErrors) {
+                console.log(e)
                 for (let i = 0; i < e.length; i++) {
                     let error = e.get_error_at(i);
                     if (error)

@@ -62,7 +62,8 @@ impl<'db> ParseState {
     if self.scanners.is_none() {
       let mut scanners = Map::new();
       //Ensure we have build the ast of the IR code.
-      self.build_ast(db);
+      let Ok(_) = self.build_ast(db) else { return None };
+
       if let SherpaResult::Ok(ast) = self.get_ast_mut() {
         get_token_scanner_data(&mut ast.statement, db, &mut scanners);
       }
@@ -206,7 +207,7 @@ fn render_IR<T: Write>(db: &ParserDatabase, mut w: &mut CodeWriter<T>, node: &AS
       if add_header {
         w = w + &id.name + " =>";
       }
-      render_IR(db, w, &ASTNode::Statement(statement.clone()), false);
+      render_IR(db, w, &ASTNode::Statement(statement.clone()), false)?;
     }
     ASTNode::Statement(box parser::Statement { branch, non_branch, transitive }) => {
       let mut nodes = vec![];
@@ -252,7 +253,7 @@ fn render_IR<T: Write>(db: &ParserDatabase, mut w: &mut CodeWriter<T>, node: &AS
     ASTNode::DefaultMatch(box parser::DefaultMatch { statement, .. }) => {
       w = w + "default {";
 
-      render_IR(db, w, &ASTNode::Statement(statement.clone()), false);
+      render_IR(db, w, &ASTNode::Statement(statement.clone()), false)?;
 
       _ = w + " }";
     }
@@ -261,7 +262,7 @@ fn render_IR<T: Write>(db: &ParserDatabase, mut w: &mut CodeWriter<T>, node: &AS
       w = w + "( " + vals.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(" | ") + " )";
       w = w + " {";
 
-      render_IR(db, w, &ASTNode::Statement(statement.clone()), false);
+      render_IR(db, w, &ASTNode::Statement(statement.clone()), false)?;
 
       _ = w + " }";
     }

@@ -65,10 +65,10 @@ pub(crate) fn write_rust_ast2<W: Write>(mut w: AscriptWriter<W>) -> SherpaResult
         w.list(
           ", ",
           prop_declarations.chain(vec![s.tokenized].into_iter().filter_map(|v| v.then_some("pub tok: Token".into()))).collect(),
-        );
+        )?;
         SherpaResult::Ok(())
       },
-    );
+    )?;
 
     // Struct implementation
     w.block(&("impl ".to_string() + &s.name), "{", "}", &|w| {
@@ -100,12 +100,12 @@ pub(crate) fn write_rust_ast2<W: Write>(mut w: AscriptWriter<W>) -> SherpaResult
                 .map(|p| p.name.clone())
                 .chain(vec![s.tokenized].into_iter().filter_map(|v| v.then_some("tok".into())))
                 .collect(),
-            );
+            )?;
             SherpaResult::Ok(())
           })?;
           SherpaResult::Ok(())
         },
-      );
+      )?;
 
       w.method(
         "pub fn get_type",
@@ -120,9 +120,9 @@ pub(crate) fn write_rust_ast2<W: Write>(mut w: AscriptWriter<W>) -> SherpaResult
           w.stmt(format!("{ast_type_name}Type::{struct_name}"))?;
           SherpaResult::Ok(())
         },
-      );
+      )?;
       SherpaResult::Ok(())
-    });
+    })?;
 
     // Struct type implementation
     w.block(&format!("impl {ast_type_name}"), "{", "}", &|w| {
@@ -137,10 +137,10 @@ pub(crate) fn write_rust_ast2<W: Write>(mut w: AscriptWriter<W>) -> SherpaResult
         "}",
         &mut |w| {
           w.block("match self", "{", "}", &mut |w| {
-            w.stmt(format!("Self::{0}(val) => val,", s.name));
-            w.stmt(format!("_ => panic!()"));
+            w.stmt(format!("Self::{0}(val) => val,", s.name))?;
+            w.stmt(format!("_ => panic!()"))?;
             SherpaResult::Ok(())
-          });
+          })?;
           SherpaResult::Ok(())
         },
       )?;
@@ -158,7 +158,7 @@ pub(crate) fn write_rust_ast2<W: Write>(mut w: AscriptWriter<W>) -> SherpaResult
             w.stmt(format!("Self::{0}(val) => Some(val.as_ref()),", s.name))?;
             w.stmt(format!("_ => None"))?;
             SherpaResult::Ok(())
-          });
+          })?;
           SherpaResult::Ok(())
         },
       )?;
@@ -176,12 +176,12 @@ pub(crate) fn write_rust_ast2<W: Write>(mut w: AscriptWriter<W>) -> SherpaResult
             w.stmt(format!("Self::{struct_name}(val) => Some(val.as_mut()),"))?;
             w.stmt(format!("_ => None"))?;
             SherpaResult::Ok(())
-          });
+          })?;
           SherpaResult::Ok(())
         },
       )?;
       SherpaResult::Ok(())
-    });
+    })?;
 
     // Struct hash implementation
     w.block(&format!("impl Hash for {struct_name}"), "{", "}", &|w| {
@@ -233,12 +233,12 @@ pub(crate) fn write_rust_ast2<W: Write>(mut w: AscriptWriter<W>) -> SherpaResult
           }
           SherpaResult::Ok(())
         },
-      );
+      )?;
       SherpaResult::Ok(())
-    });
+    })?;
 
     SherpaResult::Ok(())
-  });
+  })?;
 
   // --------------------------------------------------------------------------
   // Reduce Functions
@@ -255,22 +255,22 @@ pub(crate) fn write_rust_ast2<W: Write>(mut w: AscriptWriter<W>) -> SherpaResult
     "}",
     &|w, reduce_functions_map| {
       w.block("struct ReduceFunctions<R: Reader + UTF8Reader, M, const UP: bool>", "(", ");", &|w| {
-        w.stmt(format!("pub [Reducer<R, M, {0}, UP>; {1}]", w.utils.store.ast_type_name, reduce_functions_map.len()));
+        w.stmt(format!("pub [Reducer<R, M, {0}, UP>; {1}]", w.utils.store.ast_type_name, reduce_functions_map.len()))?;
         SherpaResult::Ok(())
       })?;
       w.block("impl<R: Reader + UTF8Reader, M, const UP: bool> ReduceFunctions<R, M, UP>", "{", "}", &|w| {
         w.method("pub const fn new", "(", ")", ",", &|_| vec![], "-> Self", "{", "}", &mut |w| {
           w.block("Self", "([", "])", &|w| {
-            w.list(",", reduce_functions_map.iter().map(|f| format!("{f}::<R, M, UP>")).collect());
+            w.list(",", reduce_functions_map.iter().map(|f| format!("{f}::<R, M, UP>")).collect())?;
             SherpaResult::Ok(())
-          });
+          })?;
           SherpaResult::Ok(())
-        });
+        })?;
         SherpaResult::Ok(())
       })?;
       SherpaResult::Ok(())
     },
-  );
+  )?;
 
   SherpaResult::Ok(w)
 }
@@ -376,11 +376,11 @@ macro_rules! to_numeric {{
     "{",
     "}",
     &|w| {
-      w.list(",", DEFAULT_AST_TYPE_NAMES.to_vec());
+      w.list(",", DEFAULT_AST_TYPE_NAMES.to_vec())?;
       // Write Struct Types
       w.write_struct_data(&|w, s| w.stmt(format!("{},", s.name)))
     },
-  );
+  )?;
 
   // --------------------------------------------------------------------------
   // AstType Implementation
@@ -410,21 +410,21 @@ to_numeric!(to_u64, u64);
 to_numeric!(to_f32, f32);
 to_numeric!(to_f64, f64);",
       w.store.ast_type_name
-    ));
+    ))?;
     w.method("pub fn is_numeric", "(", ")", ",", &|_| vec!["&self".into()], "-> bool", "{", "}", &mut |w| {
       w.stmt(format!("use {node_type}::*;").into())?;
       w.stmt("matches!(self, F64(_) | F32(_)| I64(_)| I32(_)| I16(_)| I8(_)| U64(_)| U32(_)| U16(_)| U8(_))".into())
-    });
+    })?;
 
     w.method("pub fn to_bool", "(", ")", ",", &|_| vec!["&self".into()], "-> bool", "{", "}", &mut |w| {
       w.stmt("self.to_u8() != 0".into())
-    });
+    })?;
 
     w.method("pub fn into_strings", "(", ")", ",", &|_| vec!["self".into()], "-> Vec<String>", "{", "}", &mut |w| {
       w.block("match self", "{", "}", &|w| {
         w.list(",", vec![format!("{}::STRINGS(strings) => strings", w.store.ast_type_name), "_ => Default::default()".into()])
       })
-    });
+    })?;
 
     w.method("pub fn to_string", "(", ")", ",", &|_| vec!["&self".into()], "-> String", "{", "}", &mut |w| {
       w.block("match self", "{", "}", &|w| {
@@ -435,7 +435,7 @@ to_numeric!(to_f64, f64);",
           "_ => self.to_token().to_string()".into(),
         ])
       })
-    });
+    })?;
 
     w.method("pub fn to_token", "(", ")", ",", &|_| vec!["&self".into()], "-> Token", "{", "}", &mut |w| {
       w.block("match self", "{", "}", &|w| {
@@ -444,7 +444,7 @@ to_numeric!(to_f64, f64);",
             w.stmt(format!("{}::{}(node) => node.tok.clone(),", w.store.ast_type_name, s.name))?;
           }
           SherpaResult::Ok(())
-        });
+        })?;
         w.list(",", vec![format!("{}::TOKEN(val) => val.to_owned()", w.store.ast_type_name), "_ => Token::empty()".into()])
       })
     })
@@ -452,7 +452,7 @@ to_numeric!(to_f64, f64);",
 
   // --------------------------------------------------------------------------
   // Get NodeType trait
-  w.block(&format!("pub trait Get{node_type}Type"), "{", "}", &|w| w.stmt(format!("fn get_type(&self) -> {node_type}Type;")));
+  w.block(&format!("pub trait Get{node_type}Type"), "{", "}", &|w| w.stmt(format!("fn get_type(&self) -> {node_type}Type;")))?;
 
   // --------------------------------------------------------------------------
   // Get NodeType trait implementation
@@ -460,7 +460,7 @@ to_numeric!(to_f64, f64);",
     let extended_type = node_type.clone() + "Type";
     w.method("fn get_type", "(", ")", ",", &|_| vec!["&self".into()], &format!("-> {extended_type}"), "{", "}", &mut |w| {
       w.block("match self", "{", "}", &|w| {
-        w.write_struct_data(&|w, s| w.stmt(format!("{node_type}::{0}(..) => {extended_type}::{0},", s.name)));
+        w.write_struct_data(&|w, s| w.stmt(format!("{node_type}::{0}(..) => {extended_type}::{0},", s.name)))?;
         w.stmt(format!("_ => {extended_type}::NONE,"))
       })
     })
@@ -472,7 +472,7 @@ to_numeric!(to_f64, f64);",
     w.method("fn default", "(", ")", ",", &|_| vec![], "-> Self", "{", "}", &mut |w| {
       w.stmt(format!("{}::NONE", w.store.ast_type_name))
     })
-  });
+  })?;
 
   // --------------------------------------------------------------------------
   // Hash Trait implementation
@@ -520,7 +520,7 @@ to_numeric!(to_f64, f64);",
             .map(|s| s.into())
             .chain(structs)
             .collect::<Vec<_>>(),
-          );
+          )?;
           w.block("TOKEN(tk) =>", "{", "}", &|w| {
             w.stmt("tk.to_string().replace(\" \", \"\").replace(\"\\n\", \"\").hash(hasher);".into())
           })?;
@@ -560,10 +560,10 @@ to_numeric!(to_f64, f64);",
         w.list(
           ", ",
           prop_declarations.chain(vec![s.tokenized].into_iter().filter_map(|v| v.then_some("pub tok: Token".into()))).collect(),
-        );
+        )?;
         SherpaResult::Ok(())
       },
-    );
+    )?;
 
     // Struct implementation
     w.block(&("impl ".to_string() + &s.name), "{", "}", &|w| {
@@ -595,12 +595,12 @@ to_numeric!(to_f64, f64);",
                 .map(|p| p.name.clone())
                 .chain(vec![s.tokenized].into_iter().filter_map(|v| v.then_some("tok".into())))
                 .collect(),
-            );
+            )?;
             SherpaResult::Ok(())
           })?;
           SherpaResult::Ok(())
         },
-      );
+      )?;
 
       w.method(
         "pub fn get_type",
@@ -615,9 +615,9 @@ to_numeric!(to_f64, f64);",
           w.stmt(format!("{ast_type_name}Type::{struct_name}"))?;
           SherpaResult::Ok(())
         },
-      );
+      )?;
       SherpaResult::Ok(())
-    });
+    })?;
 
     // Struct type implementation
     w.block(&format!("impl {ast_type_name}"), "{", "}", &|w| {
@@ -632,10 +632,10 @@ to_numeric!(to_f64, f64);",
         "}",
         &mut |w| {
           w.block("match self", "{", "}", &mut |w| {
-            w.stmt(format!("Self::{0}(val) => val,", s.name));
-            w.stmt(format!("_ => panic!()"));
+            w.stmt(format!("Self::{0}(val) => val,", s.name))?;
+            w.stmt(format!("_ => panic!()"))?;
             SherpaResult::Ok(())
-          });
+          })?;
           SherpaResult::Ok(())
         },
       )?;
@@ -653,7 +653,7 @@ to_numeric!(to_f64, f64);",
             w.stmt(format!("Self::{0}(val) => Some(val.as_ref()),", s.name))?;
             w.stmt(format!("_ => None"))?;
             SherpaResult::Ok(())
-          });
+          })?;
           SherpaResult::Ok(())
         },
       )?;
@@ -671,12 +671,12 @@ to_numeric!(to_f64, f64);",
             w.stmt(format!("Self::{struct_name}(val) => Some(val.as_mut()),"))?;
             w.stmt(format!("_ => None"))?;
             SherpaResult::Ok(())
-          });
+          })?;
           SherpaResult::Ok(())
         },
       )?;
       SherpaResult::Ok(())
-    });
+    })?;
 
     // Struct hash implementation
     w.block(&format!("impl Hash for {struct_name}"), "{", "}", &|w| {
@@ -728,12 +728,12 @@ to_numeric!(to_f64, f64);",
           }
           SherpaResult::Ok(())
         },
-      );
+      )?;
       SherpaResult::Ok(())
-    });
+    })?;
 
     SherpaResult::Ok(())
-  });
+  })?;
 
   // --------------------------------------------------------------------------
   // Reduce Functions
@@ -750,22 +750,22 @@ to_numeric!(to_f64, f64);",
     "}",
     &|w, reduce_functions_map| {
       w.block("struct ReduceFunctions<R: Reader + UTF8Reader, M, const UP: bool>", "(", ");", &|w| {
-        w.stmt(format!("pub [Reducer<R, M, {0}, UP>; {1}]", w.utils.store.ast_type_name, reduce_functions_map.len()));
+        w.stmt(format!("pub [Reducer<R, M, {0}, UP>; {1}]", w.utils.store.ast_type_name, reduce_functions_map.len()))?;
         SherpaResult::Ok(())
       })?;
       w.block("impl<R: Reader + UTF8Reader, M, const UP: bool> ReduceFunctions<R, M, UP>", "{", "}", &|w| {
         w.method("pub const fn new", "(", ")", ",", &|_| vec![], "-> Self", "{", "}", &mut |w| {
           w.block("Self", "([", "])", &|w| {
-            w.list(",", reduce_functions_map.iter().map(|f| format!("{f}::<R, M, UP>")).collect());
+            w.list(",", reduce_functions_map.iter().map(|f| format!("{f}::<R, M, UP>")).collect())?;
             SherpaResult::Ok(())
-          });
+          })?;
           SherpaResult::Ok(())
-        });
+        })?;
         SherpaResult::Ok(())
       })?;
       SherpaResult::Ok(())
     },
-  );
+  )?;
 
   SherpaResult::Ok(w)
 }
@@ -1630,7 +1630,7 @@ pub type Parser<'a, T, UserCTX> = sherpa_rust_runtime::bytecode::ByteCodeParser<
     w.list(
       ", ",
       bc.chunks(60).into_iter().map(|i| i.into_iter().map(|i| format!("{i}")).collect::<Vec<_>>().join(",")).collect(),
-    );
+    )?;
     SherpaResult::Ok(())
   })
   .unwrap();
@@ -1681,7 +1681,7 @@ pub type Parser<'a, T, UserCTX> = sherpa_rust_runtime::bytecode::ByteCodeParser<
         .unwrap();
       }
       SherpaResult::Ok(())
-    });
+    })?;
   }
 
   SherpaResult::Ok(w)
@@ -1783,8 +1783,8 @@ pub struct Parser<T: Reader, M>(ParseContext<T, M>, T);
   })?;
 
   w.block("impl<T: Reader, M> Iterator for Parser<T, M> ", "{", "}", &|w| {
-    w.stmt("type Item = ParseActionType;".into());
-    w.stmt("#[inline(always)]".into());
+    w.stmt("type Item = ParseActionType;".into())?;
+    w.stmt("#[inline(always)]".into())?;
     w.method("fn next", "(", ")", ", ", &|_| vec!["&mut self".into()], "-> Option<Self::Item>", "{", "}", &mut |w| {
       w.block("unsafe", "{", "}", &|w| {
         w.block("if !self.0.is_active", "{", "}", &|w| w.stmt("None".into()))?;
@@ -1876,7 +1876,7 @@ extern "C" {{
         )?;
       }
       SherpaResult::Ok(())
-    });
+    })?;
 
     // Create a module that will store convince functions for compiling AST
     // structures based on on grammar entry points.

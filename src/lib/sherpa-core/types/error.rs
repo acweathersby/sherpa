@@ -91,6 +91,9 @@ pub enum SherpaError {
 
   /// Errors stored in a Journal Report
   Report(Box<Report>),
+
+  /// Multiple Errors
+  Multi(Vec<SherpaError>),
 }
 
 use sherpa_rust_runtime::types::{BlameColor, SherpaParseError, Token};
@@ -237,6 +240,12 @@ impl Display for SherpaError {
       StaticText(err_string) => f.write_str(err_string),
       Report(r) => r.display_errors(f),
       Self::Error(error) => Display::fmt(error, f),
+      Multi(errors) => {
+        for error in errors {
+          Display::fmt(error, f)?;
+        }
+        std::fmt::Result::Ok(())
+      }
     }
   }
 }

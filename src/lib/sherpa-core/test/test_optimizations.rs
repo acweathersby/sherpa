@@ -1,10 +1,11 @@
 use super::utils::build_parse_states_from_multi_sources;
 use crate::{
-  optimize,
-  test::utils::{build_parse_states_from_source_str as build, TestPackage as Tp},
+  compile::optimize,
+  test::utils::build_parse_states_from_source_str as build,
   DBProdKey,
   ParseStatesVec,
   SherpaResult as R,
+  TestPackage,
 };
 
 #[test]
@@ -25,17 +26,17 @@ fn basic_optimize_unknown() -> R<()> {
     "##],
     "/".into(),
     Default::default(),
-    &|Tp { states, db, .. }| {
+    &|TestPackage { states, db, .. }| {
       //for state in &states {
       //  println!("A: store{:#}\n", state.1.source_string(db.string_store()))
       // }
 
-      let states = optimize::<ParseStatesVec>(db, states, false)?;
+      let states = optimize::optimize::<ParseStatesVec>(&db, states.into_iter().collect(), false)?;
 
       println!("AFTER -------------------");
 
       for state in states {
-        println!("B: {} {:#}\n", state.1.get_canonical_hash(db), state.1.print(db, true)?)
+        println!("B: {} {:#}\n", state.1.get_canonical_hash(&db), state.1.print(&db, true)?)
       }
 
       R::Ok(())

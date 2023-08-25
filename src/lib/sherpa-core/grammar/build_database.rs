@@ -8,7 +8,7 @@ use crate::{
 };
 use std::collections::{btree_map, VecDeque};
 
-pub fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a GrammarSoup) -> SherpaResult<ParserDatabase> {
+pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a GrammarSoup) -> SherpaResult<ParserDatabase> {
   // Gain read access to all parts of the GrammarCloud.
   // We don't want anything changing during these next steps.
 
@@ -188,7 +188,7 @@ pub fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a Gramma
   }
 
   if !is_valid {
-    return SherpaResult_Err("Invalid Grammar");
+    return Ok(ParserDatabase::default());
   }
 
   // Generate token productions -----------------------------------------------

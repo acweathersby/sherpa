@@ -2,7 +2,7 @@ use super::Map;
 use crate::utils::create_u64_hash;
 use std::{
   fmt::Debug,
-  path::PathBuf,
+  path::{Path, PathBuf},
   sync::{Arc, LockResult, RwLock, RwLockReadGuard},
 };
 
@@ -255,6 +255,16 @@ impl CachedString for &PathBuf {
 }
 
 impl CachedString for PathBuf {
+  fn get_bytes(&self) -> &[u8] {
+    self.to_str().unwrap().as_bytes()
+  }
+
+  fn get_string(&self) -> String {
+    self.to_str().unwrap().to_owned()
+  }
+}
+
+impl CachedString for &Path {
   fn get_bytes(&self) -> &[u8] {
     self.to_str().unwrap().as_bytes()
   }

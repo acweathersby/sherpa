@@ -1,17 +1,6 @@
 use clap::{arg, value_parser, ArgMatches, Command};
 use sherpa_bytecode::compile_bytecode;
-use sherpa_core::{
-  build_compile_db,
-  compile_grammars_from_path,
-  compile_parse_states,
-  new_taskman,
-  optimize,
-  Config,
-  GrammarSoup,
-  Journal,
-  SherpaError,
-  SherpaResult,
-};
+use sherpa_core::{JournalReporter, SherpaError, SherpaGrammarBuilder, SherpaResult};
 use sherpa_rust_build::compile_rust_bytecode_parser;
 use std::{fs::File, io::Write, path::PathBuf};
 
@@ -86,10 +75,7 @@ pub fn command() -> ArgMatches {
     .get_matches()
 }
 
-fn configure_matches(matches: &ArgMatches, pwd: &PathBuf) -> (Config, ParserType, PathBuf, PathBuf) {
-  let mut config = Config::default();
-  config.enable_ascript = matches.contains_id("ast");
-
+fn configure_matches(matches: &ArgMatches, pwd: &PathBuf) -> (ParserType, PathBuf, PathBuf) {
   let parser_type =
     matches.contains_id("type").then(|| matches.get_one::<ParserType>("type").cloned()).flatten().unwrap_or(ParserType::Bytecode);
 
@@ -97,7 +83,7 @@ fn configure_matches(matches: &ArgMatches, pwd: &PathBuf) -> (Config, ParserType
 
   let lib_out_dir = matches.get_one::<PathBuf>("libout").unwrap_or(out_dir);
 
-  (config, parser_type, out_dir.clone(), lib_out_dir.clone())
+  (parser_type, out_dir.clone(), lib_out_dir.clone())
 }
 
 fn main() -> SherpaResult<()> {
@@ -106,104 +92,66 @@ fn main() -> SherpaResult<()> {
   let matches = command();
 
   if let Some(matches) = matches.subcommand_matches("build") {
-    let (config, parser_type, out_dir, _lib_out_dir) = configure_matches(matches, &pwd);
-
-    let (executor, spawner) = new_taskman(1000);
+    let (parser_type, out_dir, _lib_out_dir) = configure_matches(matches, &pwd);
 
     let output = matches.get_many::<PathBuf>("INPUTS").unwrap_or_default().cloned().collect::<Vec<_>>();
 
-    let sp = spawner.clone();
-
     let name = matches.get_one::<String>("name").cloned();
 
-    sp.clone().spawn(async move {
-      let mut j = Journal::new(Some(config));
-      let soup = GrammarSoup::new();
-      let mut id = None;
+    let mut grammar = SherpaGrammarBuilder::new();
 
-      for path in output {
-        match compile_grammars_from_path(j.transfer(), path.clone(), soup.as_ref(), &spawner.clone()).await {
-          SherpaResult::Ok(id_) => {
-            id = Some(id_);
-          }
-          SherpaResult::Err(err) => {
-            println!("{err}");
-          }
-          SherpaResult::None => {}
-        }
-      }
+    for path in &output {
+      grammar = grammar.add_source(path)?;
+    }
 
-      j.flush_reports();
-      if j.debug_error_report() {
-        panic!("Failed To parse due to the above errors")
-      }
+    if grammar.dump_errors() {
+      panic!("Failed To parse due to the above errors")
+    }
 
-      let id: sherpa_core::GrammarIdentities = id?;
+    let db = grammar.build_db(output.first().unwrap())?;
 
-      let db = build_compile_db(j.transfer(), id, &soup);
+    if db.dump_errors() {
+      panic!("Failed To parse due to the above errors")
+    }
 
-      j.flush_reports();
-      if j.debug_error_report() {
-        panic!("Failed To parse due to the above errors")
-      }
+    let parser = db.build_parser()?.optimize(false)?;
 
-      let db = db.unwrap();
+    if parser.dump_errors() {
+      panic!("Failed To parse due to the above errors")
+    }
 
-      let name = name.or(Some(id.name.to_string(db.string_store()))).unwrap_or("parser".to_string());
-
-      let states = async {
-        let states = compile_parse_states(j.transfer(), &db)?;
-
-        optimize::<Vec<_>>(&db, states, false)
-      }
-      .await?;
-
-      let output = match parser_type {
-        ParserType::LLVM => {
-          #[cfg(feature = "llvm")]
-          {
-            println!("Building!!!!");
-            match sherpa_llvm::llvm_parser_build::build_llvm_parser(j.transfer(), &name, &db, &states, &_lib_out_dir, None, true)
-            {
-              SherpaResult::Err(err) => {
-                panic!("{}", err);
-              }
-              _ => {}
+    let output = match parser_type {
+      ParserType::LLVM => {
+        #[cfg(feature = "llvm")]
+        {
+          println!("Building!!!!");
+          match sherpa_llvm::llvm_parser_build::build_llvm_parser(j.transfer(), &name, &db, &states, &_lib_out_dir, None, true) {
+            SherpaResult::Err(err) => {
+              panic!("{}", err);
             }
-
-            println!("---");
-            sherpa_rust_build::compile_rust_llvm_parser(j.transfer(), &db, &name, &name).await
+            _ => {}
           }
-          #[cfg(not(feature = "llvm"))]
-          Default::default()
-        }
-        _ => {
-          let (bc, lu) = compile_bytecode(&db, states.iter(), false)?;
-          compile_rust_bytecode_parser(j.transfer(), &db, &bc, &lu).await
-        }
-      };
 
-      j.flush_reports();
-
-      if j.debug_error_report() {
-        panic!("Failed To parse due to the above errors")
+          println!("---");
+          sherpa_rust_build::compile_rust_llvm_parser(j.transfer(), &db, &name, &name).await
+        }
+        #[cfg(not(feature = "llvm"))]
+        SherpaResult::Err("LLVM based compilation not supported not supported".into())
       }
+      _ => {
+        let (bc, lu) = compile_bytecode(&parser, false)?;
+        compile_rust_bytecode_parser(parser, &bc, &lu)
+      }
+    };
 
-      let output = output?;
+    let output = output?;
 
-      //Write to file
-      let out_filepath = out_dir.join(name + ".rs");
+    //Write to file
+    let out_filepath = out_dir.join(name.unwrap() + ".rs");
 
-      let mut file = File::create(out_filepath)?;
+    let mut file = File::create(out_filepath)?;
 
-      file.write_all(output.as_bytes())?;
-
-      SherpaResult::Ok(())
-    });
-
-    drop(sp);
-
-    executor.join();
+    file.write_all(output.as_bytes())?;
 
     SherpaResult::Ok(())
   } else if matches.subcommand_matches("disassemble").is_some() {

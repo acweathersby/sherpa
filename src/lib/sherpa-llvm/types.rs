@@ -1,4 +1,3 @@
-
 use inkwell::{
   builder::Builder,
   context::Context,
@@ -277,4 +276,4 @@ impl CtxAggregateIndices {
   }
 }
 /// Index value for a tail calling convention
-pub const fastCC: u32 = 8;
+pub const FAST_CC: u32 = 8;

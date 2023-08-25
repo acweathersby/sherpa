@@ -66,9 +66,9 @@ impl PositionedErrors {
 
 fn convert_error(err: &SherpaError) -> Vec<JSSherpaSourceError> {
   match err {
-    SherpaError::SourcesError { sources, id, msg: base_message, ps_msg, severity } => sources
+    SherpaError::SourcesError { sources, msg: base_message, .. } => sources
       .iter()
-      .map(|(loc, path, msg)| {
+      .map(|(loc, _, msg)| {
         let range = loc.get_range();
         JSSherpaSourceError {
           col:          range.start_column,
@@ -81,7 +81,7 @@ fn convert_error(err: &SherpaError) -> Vec<JSSherpaSourceError> {
       })
       .collect(),
 
-    SherpaError::SourceError { loc, path, id, msg, inline_msg, ps_msg, severity } => {
+    SherpaError::SourceError { loc, msg, .. } => {
       let range = loc.get_range();
       vec![JSSherpaSourceError {
         col:          range.start_column,
@@ -92,6 +92,13 @@ fn convert_error(err: &SherpaError) -> Vec<JSSherpaSourceError> {
         message:      msg.clone(),
       }]
     }
+    SherpaError::StaticText(text) => {
+      vec![JSSherpaSourceError { message: text.to_string(), ..Default::default() }]
+    }
+    SherpaError::Text(text) => {
+      vec![JSSherpaSourceError { message: text.to_string(), ..Default::default() }]
+    }
+    SherpaError::Multi(errors) => errors.iter().map(|e| convert_error(e)).flatten().collect(),
     _ => Default::default(),
   }
 }

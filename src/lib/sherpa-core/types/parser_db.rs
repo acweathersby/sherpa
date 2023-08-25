@@ -43,7 +43,7 @@ pub struct EntryPoint {
 /// Data used for the compilation of parse states. contains
 /// additional metadata for compilation of LLVM and Bytecode
 /// parsers.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct ParserDatabase {
   /// The name of the parser as defined by the `NAME <name>` preamble in

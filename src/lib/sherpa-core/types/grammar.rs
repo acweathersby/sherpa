@@ -1,6 +1,11 @@
 #![allow(unused)]
 
-use std::{hash::Hash, path::PathBuf, rc::Rc, sync::Arc};
+use std::{
+  hash::Hash,
+  path::{Path, PathBuf},
+  rc::Rc,
+  sync::Arc,
+};
 
 use sherpa_rust_runtime::{
   types::{Token, TokenRange},
@@ -103,6 +108,12 @@ pub struct GrammarId(u64);
 
 impl From<&PathBuf> for GrammarId {
   fn from(value: &PathBuf) -> Self {
+    GrammarId(create_u64_hash(&value))
+  }
+}
+
+impl From<&Path> for GrammarId {
+  fn from(value: &Path) -> Self {
     GrammarId(create_u64_hash(&value))
   }
 }
@@ -345,7 +356,7 @@ pub struct GrammarIdentities {
 }
 
 impl GrammarIdentities {
-  pub fn from_path(grammar_source_path: &PathBuf, string_store: &IStringStore) -> Self {
+  pub fn from_path(grammar_source_path: &std::path::Path, string_store: &IStringStore) -> Self {
     Self {
       guid: grammar_source_path.into(),
       path: grammar_source_path.intern(string_store),

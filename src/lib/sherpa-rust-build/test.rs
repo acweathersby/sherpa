@@ -1,6 +1,6 @@
 use sherpa_ascript::{output_base::AscriptWriter, types::AScriptStore};
 use sherpa_core::{
-  test::utils::{build_parse_db_from_source_str, build_parse_states_from_source_str, DBPackage, TestPackage},
+  test::utils::{build_parse_db_from_source_str, build_parse_states_from_source_str},
   *,
 };
 
@@ -102,7 +102,7 @@ fn test_add_hoc_vector_prop_merged_with_vector_production() -> SherpaResult<()> 
       println!("{}", String::from_utf8(writer.into_writer().into_output())?);
       SherpaResult::Ok(())
     },
-  );
+  )?;
 
   SherpaResult::Ok(())
 }
@@ -232,7 +232,6 @@ fn group_productions_get_correct_type_information() -> SherpaResult<()> {
           | c:id
           "##,
     "/test.sg".into(),
-    Default::default(),
     &|DBPackage { journal, db, .. }| {
       let store = AScriptStore::new(journal.transfer(), &db)?;
 
@@ -251,7 +250,6 @@ fn token_range_slice() -> SherpaResult<()> {
   build_parse_db_from_source_str(
     r#"<> A > "1234" :ast { t_R, d:str(tok<1,2>) }"#,
     "/test.sg".into(),
-    Default::default(),
     &|DBPackage { journal, db, .. }| {
       let store = AScriptStore::new(journal.transfer(), &db)?;
 
@@ -272,7 +270,6 @@ fn reference_nonterminal_and_reference_names_when_using_valueless_props() -> She
 
     <> R > A :ast { t_R, A }"#,
     "/test.sg".into(),
-    Default::default(),
     &|DBPackage { journal, db, .. }| {
       let store = AScriptStore::new(journal.transfer(), &db)?;
 
@@ -296,7 +293,6 @@ fn convert_str_to_numeric() -> SherpaResult<()> {
 
     <> C > c:id(+)"#,
     "/test.sg".into(),
-    Default::default(),
     &|DBPackage { journal, db, .. }| {
       let store = AScriptStore::new(journal.transfer(), &db)?;
 
@@ -319,7 +315,6 @@ fn temp() -> SherpaResult<()> {
     <> A > c:num  :ast u32($1)
     "#,
     "/test.sg".into(),
-    Default::default(),
     &|DBPackage { journal, db, .. }| {
       let store: AScriptStore = AScriptStore::new(journal.transfer(), &db)?;
 

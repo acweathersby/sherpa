@@ -14,15 +14,15 @@ use builder::{
 };
 use sherpa_ascript::{output_base::AscriptWriter, types::AScriptStore};
 
-use sherpa_core::{proxy::Map, CodeWriter, IString, Journal, ParserDatabase, SherpaResult};
+use sherpa_core::{proxy::Map, CodeWriter, IString, Journal, ParserDatabase, ParserStore, SherpaDatabaseBuilder, SherpaResult};
 
 use crate::builder::write_rust_llvm_parser_file;
 
-pub fn build_rust(mut j: Journal, db: &ParserDatabase) -> SherpaResult<String> {
+pub fn build_rust(mut j: Journal, db: &SherpaDatabaseBuilder) -> SherpaResult<String> {
   j.set_active_report("Rust AST Compile", sherpa_core::ReportType::Any);
 
-  let store = AScriptStore::new(j.transfer(), &db)?;
-  let u = create_rust_writer_utils(&store, &db);
+  let store = AScriptStore::new(j.transfer(), db.get_db())?;
+  let u = create_rust_writer_utils(&store, db.get_db());
   let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
 
   let writer = write_rust_ast2(w)?;
@@ -30,15 +30,17 @@ pub fn build_rust(mut j: Journal, db: &ParserDatabase) -> SherpaResult<String> {
   String::from_utf8(writer.into_writer().into_output()).map_err(|e| e.into())
 }
 
-pub async fn compile_rust_bytecode_parser(
-  mut j: Journal,
-  db: &ParserDatabase,
+pub fn compile_rust_bytecode_parser<T: ParserStore>(
+  store: T,
   bytecode: &Vec<u8>,
   state_lookups: &Map<IString, usize>,
 ) -> SherpaResult<String> {
-  let store = async { AScriptStore::new(j.transfer(), &db) };
+  let db = store.get_db();
+  let mut j = store.get_journal().transfer();
 
-  let store: AScriptStore = store.await?;
+  let store = AScriptStore::new(j.transfer(), &db);
+
+  let store: AScriptStore = store?;
 
   j.flush_reports();
 

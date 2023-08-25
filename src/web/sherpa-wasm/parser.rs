@@ -16,14 +16,14 @@ use wasm_bindgen::prelude::*;
 /// A stepable parser for the sherpa grammar
 #[wasm_bindgen]
 pub struct JSGrammarParser {
-  _reader:         Rc<RefCell<StringReader::StringReader>>,
-  bytecode_parser: ByteCodeParser<'static, StringReader::StringReader, u32>,
+  _reader:         Rc<RefCell<string_reader::StringReader>>,
+  bytecode_parser: ByteCodeParser<'static, string_reader::StringReader, u32>,
 }
 
 #[wasm_bindgen]
 impl JSGrammarParser {
   pub fn new(input: String) -> Self {
-    let mut reader = Rc::new(RefCell::new(StringReader::StringReader::new(input)));
+    let mut reader = Rc::new(RefCell::new(string_reader::StringReader::new(input)));
     let other_reader = reader.clone();
     let reader_ptr = reader.borrow_mut();
     Self {
@@ -38,18 +38,18 @@ impl JSGrammarParser {
 
   pub fn next(&mut self) -> JsValue {
     match self.bytecode_parser.get_next_action(&mut None) {
-      ParseAction::Accept { production_id } => serde_wasm_bindgen::to_value(&JsonParseAction::Accept).unwrap(),
-      ParseAction::EndOfInput { current_cursor_offset } => serde_wasm_bindgen::to_value(&JsonParseAction::EndOfInput).unwrap(),
-      ParseAction::Shift { token_byte_offset, token_byte_length, token_id, .. } => {
+      ParseAction::Accept { .. } => serde_wasm_bindgen::to_value(&JsonParseAction::Accept).unwrap(),
+      ParseAction::EndOfInput { .. } => serde_wasm_bindgen::to_value(&JsonParseAction::EndOfInput).unwrap(),
+      ParseAction::Shift { token_byte_length, .. } => {
         serde_wasm_bindgen::to_value(&JsonParseAction::Shift { len: token_byte_length }).unwrap()
       }
-      ParseAction::Skip { token_byte_offset, token_byte_length, token_id, .. } => {
+      ParseAction::Skip { token_byte_length, .. } => {
         serde_wasm_bindgen::to_value(&JsonParseAction::Skip { len: token_byte_length }).unwrap()
       }
-      ParseAction::Reduce { production_id, rule_id, symbol_count } => {
+      ParseAction::Reduce { production_id, symbol_count, .. } => {
         serde_wasm_bindgen::to_value(&JsonParseAction::Reduce { len: symbol_count, prod_id: production_id }).unwrap()
       }
-      ParseAction::Error { last_production, last_input } => serde_wasm_bindgen::to_value(&JsonParseAction::Error).unwrap(),
+      ParseAction::Error { .. } => serde_wasm_bindgen::to_value(&JsonParseAction::Error).unwrap(),
       _ => panic!("Unexpected Action!"),
     }
   }
@@ -60,14 +60,14 @@ impl JSGrammarParser {
 pub struct JSByteCodeParser {
   running:         bool,
   _bytecode:       Rc<RefCell<Vec<u8>>>,
-  _reader:         Rc<RefCell<StringReader::StringReader>>,
-  bytecode_parser: ByteCodeParser<'static, StringReader::StringReader, u32>,
+  _reader:         Rc<RefCell<string_reader::StringReader>>,
+  bytecode_parser: ByteCodeParser<'static, string_reader::StringReader, u32>,
 }
 
 #[wasm_bindgen]
 impl JSByteCodeParser {
   pub fn new(input: String, bytecode: &JSBytecode) -> Self {
-    let mut reader = Rc::new(RefCell::new(StringReader::StringReader::new(input)));
+    let mut reader = Rc::new(RefCell::new(string_reader::StringReader::new(input)));
     let other_reader = reader.clone();
     let reader_ptr = reader.borrow_mut();
 
@@ -84,7 +84,9 @@ impl JSByteCodeParser {
   }
 
   pub fn init(&mut self, entry_name: String, bytecode: &JSBytecode, db: &JSParserDB) {
-    let offset = db.0.get_entry_offset(&entry_name, &bytecode.0 .1).expect("Could not find entry point");
+    let db = db.0.as_ref().get_db();
+
+    let offset = db.get_entry_offset(&entry_name, &bytecode.0 .1).expect("Could not find entry point");
 
     self.bytecode_parser.init_parser(offset as u32);
 
@@ -107,12 +109,12 @@ impl JSByteCodeParser {
       }));
 
       match self.bytecode_parser.get_next_action(&mut debugger.as_deref_mut()) {
-        ParseAction::Accept { production_id } => {
+        ParseAction::Accept { .. } => {
           self.running = false;
           serde_wasm_bindgen::to_value(&JsonParseAction::Accept).unwrap()
         }
-        ParseAction::EndOfInput { current_cursor_offset } => serde_wasm_bindgen::to_value(&JsonParseAction::EndOfInput).unwrap(),
-        ParseAction::Shift { token_byte_offset, token_byte_length, token_id, .. } => {
+        ParseAction::EndOfInput { .. } => serde_wasm_bindgen::to_value(&JsonParseAction::EndOfInput).unwrap(),
+        ParseAction::Shift { token_byte_offset, token_byte_length, .. } => {
           if let LockResult::Ok(mut values) = values.write() {
             values.push(JSDebugEvent::from(JSDebugEvent::ShiftToken {
               offset_end:   (token_byte_offset + token_byte_length) as usize,
@@ -121,13 +123,13 @@ impl JSByteCodeParser {
           }
           serde_wasm_bindgen::to_value(&JsonParseAction::Shift { len: token_byte_length }).unwrap()
         }
-        ParseAction::Skip { token_byte_offset, token_byte_length, token_id, .. } => {
+        ParseAction::Skip { token_byte_length, .. } => {
           serde_wasm_bindgen::to_value(&JsonParseAction::Skip { len: token_byte_length }).unwrap()
         }
-        ParseAction::Reduce { production_id, rule_id, symbol_count } => {
+        ParseAction::Reduce { production_id, symbol_count, .. } => {
           serde_wasm_bindgen::to_value(&JsonParseAction::Reduce { len: symbol_count, prod_id: production_id }).unwrap()
         }
-        ParseAction::Error { last_production, last_input } => {
+        ParseAction::Error { .. } => {
           self.running = false;
           serde_wasm_bindgen::to_value(&JsonParseAction::Error).unwrap()
         }
@@ -143,8 +145,8 @@ impl JSByteCodeParser {
 
 #[wasm_bindgen]
 pub fn get_codemirror_parse_tree(input: String) -> JsValue {
-  let mut reader = StringReader::StringReader::new(input);
-  let mut bytecode_parser: ByteCodeParser<'_, StringReader::StringReader, u32> =
+  let mut reader = string_reader::StringReader::new(input);
+  let mut bytecode_parser: ByteCodeParser<'_, string_reader::StringReader, u32> =
     ByteCodeParser::<'static, _, u32>::new(&mut reader, &parser::bytecode);
   bytecode_parser.init_parser(93016);
 
@@ -186,7 +188,7 @@ pub fn get_codemirror_parse_tree(input: String) -> JsValue {
         output.push(end_offset);
         output.push(adjust_size as u32 + 4);
       }
-      action => {
+      _ => {
         //panic!("Unexpected Action! {:?}", action)
         panic!("Unexpected Action!")
       }
@@ -321,7 +323,7 @@ impl<'a> From<&DebugEvent<'a>> for JSDebugEvent {
   }
 }
 
-mod StringReader {
+mod string_reader {
   use sherpa_rust_runtime::types::{ByteReader, MutByteReader, SharedSymbolBuffer, UTF8Reader};
 
   #[derive(Debug, Clone)]
@@ -450,10 +452,6 @@ mod StringReader {
   }
 
   impl StringReader {
-    pub fn from_string(string: String) -> Self {
-      Self::new(string)
-    }
-
     ///
     pub fn new(data: String) -> StringReader {
       let len = data.len();

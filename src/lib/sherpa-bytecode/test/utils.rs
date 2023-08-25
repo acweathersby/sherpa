@@ -1,9 +1,5 @@
 use crate::*;
-use sherpa_core::{
-  proxy::OrderedMap,
-  test::utils::{build_parse_states_from_multi_sources, TestPackage},
-  *,
-};
+use sherpa_core::{proxy::OrderedMap, test::utils::build_parse_states_from_multi_sources, *};
 use sherpa_rust_runtime::{
   bytecode::ByteCodeParser,
   types::{
@@ -19,13 +15,13 @@ use sherpa_rust_runtime::{
 pub type TestParser<'a> = ByteCodeParser<'a, UTF8StringReader<'a>, u32>;
 
 pub fn compile_and_run_grammars(source: &[&str], inputs: &[(&str, &str, bool)]) -> SherpaResult<()> {
-  build_parse_states_from_multi_sources(source, "".into(), Default::default(), &|TestPackage { db, states, .. }| {
+  build_parse_states_from_multi_sources(source, "".into(), true, &|tp| {
     // states.iter().for_each(|(_, s)| println!("{}\n\n",
     // s.source_string(db.string_store())));
 
-    let states = optimize::<ParseStatesVec>(&db, states, false)?;
+    let (bc, state_map) = compile_bytecode(&tp, true)?;
 
-    let (bc, state_map) = compile_bytecode(&db, states.iter(), true)?;
+    let TestPackage { db, .. } = tp;
 
     for (entry_name, input, should_pass) in inputs {
       let ok = TestParser::new(&mut ((*input).into()), &bc)

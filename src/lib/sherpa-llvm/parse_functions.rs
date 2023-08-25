@@ -22,12 +22,12 @@ pub struct BuildArgs<'a, 'llvm: 'a> {
   pub scan_stop:  FunctionValue<'llvm>,
 }
 
-pub(crate) fn compile_states<'llvm, 'db>(
-  j: &mut Journal,
-  m: &LLVMParserModule<'llvm>,
-  db: &ParserDatabase,
-  states: &ParseStatesVec,
-) -> SherpaResult<()> {
+pub(crate) fn compile_states<'llvm, T: ParserStore>(store: &T, m: &LLVMParserModule<'llvm>) -> SherpaResult<()> {
+  let states = store.get_states();
+  let mut j = store.get_journal().transfer();
+  let j = &mut j;
+  let db = store.get_db();
+
   let mut state_lu = states
     .iter()
     .map(|(name, _)| {
@@ -59,7 +59,7 @@ fn create_scanner_stop_fn<'a>(m: &LLVMParserModule<'a>) -> FunctionValue<'a> {
     m.i32.fn_type(&[m.types.parse_ctx.ptr_type(0.into()).into()], false),
     Some(Linkage::Private),
   );
-  null_fn.set_call_conventions(fastCC);
+  null_fn.set_call_conventions(FAST_CC);
   let entry = m.ctx.append_basic_block(null_fn, "Entry");
   m.b.position_at_end(entry);
   m.b.build_return(Some(&m.i32.const_zero()));
@@ -233,7 +233,7 @@ fn compile_statement<'a, 'llvm: 'a>(
   }
 
   if !resolved_end {
-    pass(args, p_ctx, state_fun);
+    pass(args, p_ctx, state_fun)?;
   }
 
   SherpaResult::Ok(())
@@ -359,11 +359,11 @@ fn compile_match<'a, 'llvm: 'a>(
     b.position_at_end(block);
     if let Some(stmt) = maybe_stmt {
       if is_new_line {
-        prime_line_data(args, p_ctx, i8.const_int(1, false));
+        prime_line_data(args, p_ctx, i8.const_int(1, false))?;
       }
       compile_statement(args, stmt, p_ctx, state_fun, start_block, is_scanless)?;
     } else {
-      fail(args, p_ctx, state_fun);
+      fail(args, p_ctx, state_fun)?;
     }
   }
 
@@ -424,7 +424,7 @@ fn push_goto<'a, 'llvm: 'a>(
     p_ctx,
     (*args.state_lu.get(name).unwrap()).as_global_value().as_pointer_value(),
     NORMAL_STATE_FLAG_LLVM as u64,
-  );
+  )?;
 
   SherpaResult::Ok(())
 }
@@ -580,8 +580,8 @@ fn reduce<'a, 'llvm: 'a>(
   SherpaResult::Ok(f)
 }
 
-fn create_parse_function<'a>(j: &Journal, m: &LLVMParserModule<'a>, name: &str) -> FunctionValue<'a> {
-  let linkage = if j.config().opt_llvm { Some(Linkage::Private) } else { None };
+fn create_parse_function<'a>(_j: &Journal, m: &LLVMParserModule<'a>, name: &str) -> FunctionValue<'a> {
+  let linkage = None;
   m.module.add_function(&name, m.types.tail_callable_parse_function, linkage)
 }
 
@@ -624,12 +624,12 @@ fn peek_reset(args: &BuildArgs, p_ctx: PointerValue) -> SherpaResult<()> {
   let LLVMParserModule { b, i32, i8, iptr, .. } = args.m;
   const __HINT__: Opcode = Opcode::PeekReset;
   let offset = CtxAggregateIndices::base_ptr.load(b, p_ctx)?.into_pointer_value();
-  CtxAggregateIndices::head_ptr.store(b, p_ctx, offset);
-  CtxAggregateIndices::scan_ptr.store(b, p_ctx, offset);
-  CtxAggregateIndices::tok_id.store(b, p_ctx, i32.const_zero());
-  CtxAggregateIndices::tok_len.store(b, p_ctx, iptr.const_zero());
-  CtxAggregateIndices::sym_len.store(b, p_ctx, i32.const_zero());
-  CtxAggregateIndices::line_num_incr.store(b, p_ctx, i8.const_zero());
+  CtxAggregateIndices::head_ptr.store(b, p_ctx, offset)?;
+  CtxAggregateIndices::scan_ptr.store(b, p_ctx, offset)?;
+  CtxAggregateIndices::tok_id.store(b, p_ctx, i32.const_zero())?;
+  CtxAggregateIndices::tok_len.store(b, p_ctx, iptr.const_zero())?;
+  CtxAggregateIndices::sym_len.store(b, p_ctx, i32.const_zero())?;
+  CtxAggregateIndices::line_num_incr.store(b, p_ctx, i8.const_zero())?;
   SherpaResult::Ok(())
 }
 
@@ -663,7 +663,7 @@ fn incr_scan_ptr_by_sym_len(args: &BuildArgs, p_ctx: PointerValue) -> SherpaResu
 
   CtxAggregateIndices::scan_ptr.store(b, p_ctx, unsafe {
     b.build_gep(scan_ptr_cache, &[CtxAggregateIndices::sym_len.load(b, p_ctx)?.into_int_value()], "")
-  });
+  })?;
 
   SherpaResult::Ok(())
 }
@@ -688,9 +688,9 @@ fn skip_token(args: &BuildArgs, p_ctx: PointerValue, state_fun: FunctionValue) -
   let p_ctx = skip_fun.get_first_param().unwrap().into_pointer_value();
 
   let offset = get_offset_to_end_of_token(args.m, p_ctx)?;
-  CTX::scan_ptr.store(b, p_ctx, offset);
-  CTX::head_ptr.store(b, p_ctx, offset);
-  CTX::tok_id.store(b, p_ctx, i32.const_zero());
+  CTX::scan_ptr.store(b, p_ctx, offset)?;
+  CTX::head_ptr.store(b, p_ctx, offset)?;
+  CTX::tok_id.store(b, p_ctx, i32.const_zero())?;
 
   build_tail_call_with_return(b, skip_fun, state_fun)?;
 
@@ -732,10 +732,10 @@ pub(crate) fn peek_token(args: &BuildArgs, p_ctx: PointerValue) -> SherpaResult<
   const __HINT__: Opcode = Opcode::PeekToken;
   let LLVMParserModule { b, i32, iptr, .. } = args.m;
   let offset = get_offset_to_end_of_token(args.m, p_ctx)?;
-  CtxAggregateIndices::scan_ptr.store(b, p_ctx, offset);
-  CtxAggregateIndices::head_ptr.store(b, p_ctx, offset);
-  CtxAggregateIndices::tok_id.store(b, p_ctx, i32.const_zero());
-  CtxAggregateIndices::tok_len.store(b, p_ctx, iptr.const_zero());
+  CtxAggregateIndices::scan_ptr.store(b, p_ctx, offset)?;
+  CtxAggregateIndices::head_ptr.store(b, p_ctx, offset)?;
+  CtxAggregateIndices::tok_id.store(b, p_ctx, i32.const_zero())?;
+  CtxAggregateIndices::tok_len.store(b, p_ctx, iptr.const_zero())?;
   SherpaResult::Ok(())
 }
 
@@ -789,7 +789,7 @@ pub(crate) fn check_for_input_acceptability<'a, 'llvm: 'a>(
   // Try to get another block of input data
   // ----------------------------------------------
   b.position_at_end(try_extend);
-  build_fast_call(b, fun.get_adjusted_input_block, &[p_ctx.into(), needed_num_bytes.into()]);
+  build_fast_call(b, fun.get_adjusted_input_block, &[p_ctx.into(), needed_num_bytes.into()])?;
 
   let input_available = get_chars_remaining(args.m, p_ctx)?;
   let input_available = b.build_int_cast(input_available, i64, "");
@@ -857,10 +857,10 @@ pub(crate) fn construct_scan(
   b.build_call(fun.dispatch, &[p_ctx.into()], "");
 
   // Ensure the the local context state is reset.
-  CtxAggregateIndices::state.store(b, p_ctx, local_state);
+  CtxAggregateIndices::state.store(b, p_ctx, local_state)?;
 
   // Reset scanner back to head
-  CtxAggregateIndices::scan_ptr.store(b, p_ctx, CtxAggregateIndices::head_ptr.load(b, p_ctx)?.into_pointer_value());
+  CtxAggregateIndices::scan_ptr.store(b, p_ctx, CtxAggregateIndices::head_ptr.load(b, p_ctx)?.into_pointer_value())?;
 
   SherpaResult::Ok(())
 }
@@ -896,7 +896,7 @@ pub(crate) fn construct_prime_function(
     })
     .collect::<Vec<_>>();
 
-  build_fast_call(b, funct.extend_stack, &[parse_ctx.into(), i32.const_int(8, false).into()]);
+  build_fast_call(b, funct.extend_stack, &[parse_ctx.into(), i32.const_int(8, false).into()])?;
 
   CtxAggregateIndices::is_active.store(b, parse_ctx, bool.const_int(1, false))?;
 
@@ -907,7 +907,7 @@ pub(crate) fn construct_prime_function(
     parse_ctx,
     sp.fun.handle_eop.as_global_value().as_pointer_value(),
     NORMAL_STATE_FLAG_LLVM | FAIL_STATE_FLAG_LLVM,
-  );
+  )?;
 
   if !options.is_empty() {
     b.build_switch(
@@ -948,10 +948,10 @@ pub(crate) fn construct_shift_post_emit<'a>(m: &'a LLVMParserModule) -> SherpaRe
   let p_ctx = fn_value.get_first_param().unwrap().into_pointer_value();
 
   let offset = get_offset_to_end_of_token(m, p_ctx)?;
-  CtxAggregateIndices::scan_ptr.store(b, p_ctx, offset);
-  CtxAggregateIndices::head_ptr.store(b, p_ctx, offset);
-  CtxAggregateIndices::base_ptr.store(b, p_ctx, offset);
-  CtxAggregateIndices::tok_id.store(b, p_ctx, i32.const_zero());
+  CtxAggregateIndices::scan_ptr.store(b, p_ctx, offset)?;
+  CtxAggregateIndices::head_ptr.store(b, p_ctx, offset)?;
+  CtxAggregateIndices::base_ptr.store(b, p_ctx, offset)?;
+  CtxAggregateIndices::tok_id.store(b, p_ctx, i32.const_zero())?;
 
   build_tail_call_with_return(b, fn_value, fun.dispatch)?;
 
@@ -970,8 +970,8 @@ pub(crate) fn construct_shift_pre_emit<'a>(m: &'a LLVMParserModule) -> SherpaRes
   let goto_fn = fn_value.get_last_param().unwrap().into_pointer_value();
 
   ensure_space_on_goto_stack(2, m, p_ctx, fn_value)?;
-  add_goto_slot(m, p_ctx, goto_fn.into(), NORMAL_STATE_FLAG_LLVM as u64);
-  add_goto_slot(m, p_ctx, fun.post_shift_emit.as_global_value().as_pointer_value().into(), NORMAL_STATE_FLAG_LLVM as u64);
+  add_goto_slot(m, p_ctx, goto_fn.into(), NORMAL_STATE_FLAG_LLVM as u64)?;
+  add_goto_slot(m, p_ctx, fun.post_shift_emit.as_global_value().as_pointer_value().into(), NORMAL_STATE_FLAG_LLVM as u64)?;
   update_goto_remaining(2, m, p_ctx)?;
 
   b.build_return(None);

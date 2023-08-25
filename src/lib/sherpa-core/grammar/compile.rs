@@ -3,7 +3,6 @@ use super::build_grammar::{create_grammar_data, extract_productions, parse_gramm
 use crate::{
   grammar::build_grammar::{convert_grammar_data_to_header, process_parse_state, process_production},
   journal::{Journal, ReportType},
-  tasks::{new_taskman, Spawner, ThreadedFuture},
   types::*,
 };
 use std::{
@@ -13,129 +12,70 @@ use std::{
   time::Duration,
 };
 
-async fn import_grammars(
+/// Entrypoint for compiling a single of grammar from a source file.
+pub fn compile_grammar_from_str(
   j: &mut Journal,
-  imports: Vec<GrammarIdentities>,
-  spawner: &Spawner<()>,
-  grammar_cloud: &GrammarSoup,
-) -> SherpaResult<()> {
-  #[derive(Clone, Copy)]
-  enum Task {
-    Todo(GrammarIdentities),
-    Complete,
-  }
+  source: &str,
+  source_path: PathBuf,
+  soup: &GrammarSoup,
+) -> SherpaResult<(GrammarIdentities, Vec<GrammarIdentities>)> {
+  let root_id = GrammarIdentities::from_path(&source_path, &soup.string_store);
 
-  let mut confirmed_imports = Set::new();
+  let g_data = load_from_str(j, source, source_path, soup)?;
 
-  let (import_loader, import_reader) = sync_channel(100);
-  let mut pending_count = 0;
+  let imports = g_data.imports.values().cloned().collect();
 
-  imports.iter().for_each(|i| import_loader.send(Task::Todo(*i)).unwrap());
+  let grammar_id = compile_grammar_data(j, g_data, soup)?;
 
-  let import_loader = Arc::new(Mutex::new(import_loader));
-  let import_reader = Arc::new(Mutex::new(import_reader));
-  let mut pending_tasks = Array::new();
-
-  loop {
-    if let Ok(task) = {
-      let import_reader = import_reader.clone();
-      let result = import_reader.lock().unwrap().recv_timeout(Duration::from_millis(2));
-      drop(import_reader);
-      result
-    } {
-      match task {
-        Task::Todo(import_id) => {
-          if confirmed_imports.insert(import_id.guid) {
-            pending_count += 1;
-            let import_loader = import_loader.clone();
-            let spawner = spawner.clone();
-            let g_c = (*grammar_cloud).clone();
-            let mut j = j.transfer();
-            let task = ThreadedFuture::new(
-              async move {
-                let GrammarIdentities { guid, guid_name, path, .. } = import_id;
-
-                let grammar_source_path = PathBuf::from(path.to_str(&g_c.string_store).as_str());
-
-                let grammar_data = load_from_path(&mut j, grammar_source_path, &g_c);
-
-                match grammar_data {
-                  SherpaResult::Ok(g_data) => {
-                    {
-                      let mut local_loader = import_loader.lock().unwrap();
-                      if g_data.imports.is_empty() == false {
-                        /* Scope for Mutex lock */
-                        g_data.imports.iter().for_each(|(_, i)| local_loader.send(Task::Todo(*i)).unwrap());
-                      }
-                      local_loader.send(Task::Complete).unwrap();
-                    }
-
-                    match compile_grammar_data(&mut j, g_data, &g_c) {
-                      Ok(result) => Some(result),
-                      Err(err) => {
-                        j.report_mut().add_error(err);
-                        None
-                      }
-                    };
-                  }
-                  SherpaResult::Err(err) => {
-                    let mut local_loader = import_loader.lock().unwrap();
-                    local_loader.send(Task::Complete).unwrap();
-
-                    j.report_mut().add_error(err);
-                  }
-                  _ => unreachable!(),
-                }
-              },
-              &spawner,
-            );
-            pending_tasks.push(task);
-          }
-        }
-        Task::Complete => {
-          pending_count -= 1;
-          if pending_count == 0 {
-            break;
-          }
-        }
-      }
-    } else {
-      for task in pending_tasks {
-        // Ensure some progress can be made.
-        task.await;
-      }
-      pending_tasks = Array::new();
-    }
-  }
-
-  // Wait for any extra tasks.
-  for task in pending_tasks {
-    task.await;
-  }
-
-  SherpaResult::Ok(())
+  Ok((grammar_id, imports))
 }
 
-pub fn compile_grammar_data(j: &mut Journal, g_data: GrammarData, g_c: &GrammarSoup) -> SherpaResult<GrammarIdentities> {
+/// Imports a single grammar from a source location and merges it into the soup.
+/// Returns a list of grammars that are imported by the source grammar
+pub fn load_grammar(j: &mut Journal, import_id: GrammarIdentities, g_c: &GrammarSoup) -> SherpaResult<Vec<GrammarIdentities>> {
+  let GrammarIdentities { guid, guid_name, path, .. } = import_id;
+
+  j.set_active_report("Load Grammar From Path", ReportType::GrammarCompile(guid));
+  j.report_mut().add_note("File Path", path.to_string(&g_c.string_store));
+
+  let grammar_source_path = PathBuf::from(path.to_str(&g_c.string_store).as_str());
+
+  match load_from_path(j, grammar_source_path, &g_c) {
+    SherpaResult::Ok(g_data) => {
+      let imports = g_data.imports.values().cloned().collect();
+
+      match compile_grammar_data(j, g_data, &g_c) {
+        Ok(result) => Some(result),
+        Err(err) => {
+          j.report_mut().add_error(err);
+          None
+        }
+      };
+
+      Ok(imports)
+    }
+    SherpaResult::Err(err) => {
+      j.report_mut().add_error(err.clone());
+      Err(err)
+    }
+  }
+}
+
+fn compile_grammar_data(j: &mut Journal, g_data: GrammarData, g_s: &GrammarSoup) -> SherpaResult<GrammarIdentities> {
   let id = g_data.id;
 
-  let (mut prods, mut parse_states) = extract_productions(j, &g_data, &g_c.string_store)?;
+  let (mut prods, mut parse_states) = extract_productions(j, &g_data, &g_s.string_store)?;
 
   for prod in prods {
-    let prod = process_production(prod, &g_data, &g_c.string_store)?;
-
-    //g_c.productions.write().unwrap().insert(prod.id, prod);
-    g_c.productions.write().unwrap().push(prod);
+    g_s.productions.write().unwrap().push(process_production(prod, &g_data, &g_s.string_store)?);
   }
 
   for state in parse_states {
-    let state = process_parse_state(state, &g_data, &g_c.string_store)?;
-
-    g_c.custom_states.write().unwrap().insert(state.id, state);
+    g_s.custom_states.write().unwrap().insert(state.id, process_parse_state(state, &g_data, &g_s.string_store)?);
   }
 
   {
-    g_c.grammar_headers.write().unwrap().insert(g_data.id.guid, convert_grammar_data_to_header(g_data.id, g_data));
+    g_s.grammar_headers.write().unwrap().insert(g_data.id.guid, convert_grammar_data_to_header(g_data.id, g_data));
   }
 
   SherpaResult::Ok(id)
@@ -147,9 +87,11 @@ fn load_from_path(j: &mut Journal, source_path: PathBuf, soup: &GrammarSoup) -> 
       let source = std::fs::read_to_string(&source_path)?;
       load_from_str(j, source.as_str(), source_path, soup)
     }
-    Err(_) => SherpaResult::Err(
-      ("Unable to retrieve a grammar source from this path: ".to_string() + source_path.as_os_str().to_str().unwrap()).into(),
-    ),
+    Err(_) => SherpaResult::Err(if source_path.as_os_str().is_empty() {
+      ("Source path for grammar is empty").into()
+    } else {
+      ("Unable to retrieve a grammar source from this path: ".to_string() + source_path.as_os_str().to_str().unwrap()).into()
+    }),
   }
 }
 
@@ -168,34 +110,4 @@ fn load_from_str(j: &mut Journal, source: &str, source_path: PathBuf, soup: &Gra
   let g_data = create_grammar_data(j, root_grammar, &source_path, &soup.string_store)?;
 
   SherpaResult::Ok(g_data)
-}
-
-/// Entrypoint for compiling a single of grammar from a source file.
-pub fn compile_grammar_from_str(
-  j: &mut Journal,
-  source: &str,
-  source_path: PathBuf,
-  soup: &GrammarSoup,
-) -> SherpaResult<GrammarIdentities> {
-  let root_id = GrammarIdentities::from_path(&source_path, &soup.string_store);
-
-  let g_data = load_from_str(j, source, source_path, soup)?;
-
-  compile_grammar_data(j, g_data, soup)
-}
-
-/// Entrypoint for compiling a collection of grammars from a source file.
-pub async fn compile_grammars_from_path(
-  mut j: Journal,
-  source_path: PathBuf,
-  gs: &GrammarSoup,
-  spawner: &Spawner<()>,
-) -> SherpaResult<GrammarIdentities> {
-  let root_id = GrammarIdentities::from_path(&source_path, &gs.string_store);
-
-  let imports = vec![root_id];
-
-  import_grammars(&mut j, imports, spawner, gs).await?;
-
-  SherpaResult::Ok(gs.grammar_headers.read().map(|h| o_to_r(h.get(&root_id.guid).map(|g| g.identity), ""))??)
 }

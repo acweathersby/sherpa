@@ -1,4 +1,4 @@
-use super::{fastCC, CtxAggregateIndices, FAIL_STATE_FLAG_LLVM};
+use super::{CtxAggregateIndices, FAIL_STATE_FLAG_LLVM, FAST_CC};
 use crate::{
   parse_functions::{compile_states, construct_shift_post_emit, construct_shift_pre_emit, ensure_space_on_goto_stack},
   *,
@@ -7,12 +7,7 @@ use inkwell::{builder::Builder, context::Context, module::*, targets::TargetData
 use sherpa_core::*;
 use sherpa_rust_runtime::types::ParseActionType;
 
-pub(crate) fn construct_module<'a>(
-  j: &mut Journal,
-  ctx: &'a Context,
-  target_data: &TargetData,
-  module: Module<'a>,
-) -> LLVMParserModule<'a> {
+pub(crate) fn construct_module<'a>(ctx: &'a Context, target_data: &TargetData, module: Module<'a>) -> LLVMParserModule<'a> {
   let builder = ctx.create_builder();
   let i8 = ctx.i8_type();
   let i8_ptr = i8.ptr_type(0.into()).into();
@@ -28,7 +23,7 @@ pub(crate) fn construct_module<'a>(
   let GOTO = ctx.opaque_struct_type("s.Goto");
   let TOKEN = ctx.opaque_struct_type("s.Token");
   let CTX_PTR = CTX.ptr_type(0.into());
-  let internal_linkage = if j.config().opt_llvm { Some(Linkage::Private) } else { None };
+  let internal_linkage = None;
   let GOTO_STACK_SPEC_FUNCTION = i32.fn_type(&[CTX_PTR.into()], false);
   let GOTO_FN = i32.fn_type(&[CTX_PTR.into()], false);
 
@@ -207,18 +202,18 @@ pub(crate) fn construct_module<'a>(
     ),
   };
   // Set all functions that are not part of the public interface to fastCC.
-  fun.post_shift_emit.set_call_conventions(fastCC);
-  fun.pre_shift_emit.set_call_conventions(fastCC);
-  fun.dispatch.set_call_conventions(fastCC);
-  fun.dispatch_unwind.set_call_conventions(fastCC);
-  fun.internal_free_stack.set_call_conventions(fastCC);
-  fun.handle_eop.set_call_conventions(fastCC);
-  fun.pop_state.set_call_conventions(fastCC);
-  fun.push_state.set_call_conventions(fastCC);
-  fun.get_utf8_codepoint_info.set_call_conventions(fastCC);
-  fun.get_token_class_from_codepoint.set_call_conventions(fastCC);
-  fun.get_adjusted_input_block.set_call_conventions(fastCC);
-  fun.extend_stack.set_call_conventions(fastCC);
+  fun.post_shift_emit.set_call_conventions(FAST_CC);
+  fun.pre_shift_emit.set_call_conventions(FAST_CC);
+  fun.dispatch.set_call_conventions(FAST_CC);
+  fun.dispatch_unwind.set_call_conventions(FAST_CC);
+  fun.internal_free_stack.set_call_conventions(FAST_CC);
+  fun.handle_eop.set_call_conventions(FAST_CC);
+  fun.pop_state.set_call_conventions(FAST_CC);
+  fun.push_state.set_call_conventions(FAST_CC);
+  fun.get_utf8_codepoint_info.set_call_conventions(FAST_CC);
+  fun.get_token_class_from_codepoint.set_call_conventions(FAST_CC);
+  fun.get_adjusted_input_block.set_call_conventions(FAST_CC);
+  fun.extend_stack.set_call_conventions(FAST_CC);
   LLVMParserModule {
     b: builder,
     ctx,
@@ -282,7 +277,7 @@ pub(crate) unsafe fn construct_get_adjusted_input_block_function(m: &LLVMParserM
   b.position_at_end(entry_block);
   let p_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
   let needed = fn_value.get_nth_param(1).unwrap().into_int_value();
-  CtxAggregateIndices::end_ptr.store(b, p_ctx, b.build_int_to_ptr(needed, i8.ptr_type(0.into()), ""));
+  CtxAggregateIndices::end_ptr.store(b, p_ctx, b.build_int_to_ptr(needed, i8.ptr_type(0.into()), ""))?;
 
   let beg_ptr = CtxAggregateIndices::beg_ptr.get_ptr(b, p_ctx)?;
   let anchor_ptr = CtxAggregateIndices::anchor_ptr.get_ptr(b, p_ctx)?;
@@ -310,7 +305,7 @@ pub(crate) unsafe fn construct_get_adjusted_input_block_function(m: &LLVMParserM
     .unwrap()
     .into_int_value();
 
-  CtxAggregateIndices::block_is_eoi.store(b, p_ctx, input_complete);
+  CtxAggregateIndices::block_is_eoi.store(b, p_ctx, input_complete)?;
 
   b.build_return(None);
 
@@ -322,7 +317,7 @@ pub(crate) unsafe fn construct_drop(module: &LLVMParserModule) -> SherpaResult<(
   let fn_value = funct.drop;
   let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
   b.position_at_end(ctx.append_basic_block(fn_value, "Entry"));
-  build_fast_call(b, funct.internal_free_stack, &[parse_ctx.into()]);
+  build_fast_call(b, funct.internal_free_stack, &[parse_ctx.into()])?;
   b.build_return(None);
   if funct.drop.verify(true) {
     SherpaResult::Ok(())
@@ -353,7 +348,7 @@ pub(crate) unsafe fn construct_internal_free_stack(module: &LLVMParserModule) ->
     b.build_int_sub(b.build_ptr_to_int(goto_top_ptr, ctx.i64_type().into(), ""), goto_used_bytes_64, "goto_base");
   let goto_base_ptr = b.build_int_to_ptr(goto_base_ptr_int, types.goto.ptr_type(0.into()), "goto_base");
   b.build_call(funct.free_stack, &[goto_base_ptr.into(), goto_total_bytes_64.into()], "");
-  CtxAggregateIndices::goto_size.store(b, parse_ctx, i32.const_zero());
+  CtxAggregateIndices::goto_size.store(b, parse_ctx, i32.const_zero())?;
   b.build_unconditional_branch(empty_stack);
   b.position_at_end(empty_stack);
   b.build_return(None);
@@ -415,7 +410,7 @@ pub(crate) unsafe fn construct_extend_stack(module: &LLVMParserModule) -> Sherpa
     "",
   );
   // Free the old stack
-  build_fast_call(b, funct.internal_free_stack, &[parse_ctx.into()]);
+  build_fast_call(b, funct.internal_free_stack, &[parse_ctx.into()])?;
 
   // Update parse context values for the goto stack.
 
@@ -427,7 +422,7 @@ pub(crate) unsafe fn construct_extend_stack(module: &LLVMParserModule) -> Sherpa
 
   let slot_diff = b.build_int_sub(new_slot_count, goto_slot_count, "slot_diff");
   let new_remaining_count = b.build_int_add(slot_diff, goto_free, "remaining");
-  CtxAggregateIndices::goto_free.store(b, parse_ctx, new_remaining_count);
+  CtxAggregateIndices::goto_free.store(b, parse_ctx, new_remaining_count)?;
 
   b.build_return(Some(&i32.const_int(1, false)));
 
@@ -493,7 +488,7 @@ pub(crate) fn construct_push_state_function(module: &LLVMParserModule) -> Sherpa
 
   b.position_at_end(entry);
 
-  ensure_space_on_goto_stack(1, module, parse_ctx, fn_value);
+  ensure_space_on_goto_stack(1, module, parse_ctx, fn_value)?;
 
   let goto_stack_ptr = CtxAggregateIndices::goto_stack_ptr.get_ptr(b, parse_ctx)?;
   let goto_top = b.build_load(goto_stack_ptr, "").into_pointer_value();
@@ -651,7 +646,7 @@ pub(crate) unsafe fn construct_next_function<'a>(module: &'a LLVMParserModule) -
   let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
   let call_site = b.build_call(fun.dispatch, &[parse_ctx.into()], "");
   call_site.set_tail_call(false);
-  call_site.set_call_convention(fastCC);
+  call_site.set_call_convention(FAST_CC);
   b.build_return(Some(&call_site.try_as_basic_value().left().unwrap().into_int_value()));
 
   validate(fn_value)
@@ -683,7 +678,7 @@ pub(crate) unsafe fn construct_dispatch_functions<'a>(m: &'a LLVMParserModule) -
 
     let parse_function = CallableValue::try_from(b.build_extract_value(goto, 0, "").unwrap().into_pointer_value()).unwrap();
 
-    build_tail_call_with_return(&m.b, fn_value, parse_function);
+    build_tail_call_with_return(&m.b, fn_value, parse_function)?;
 
     validate(fn_value)?;
   }
@@ -724,7 +719,7 @@ pub(crate) unsafe fn construct_dispatch_functions<'a>(m: &'a LLVMParserModule) -
     b.build_conditional_branch(condition, block_is_fail_state, block_dispatch);
     b.position_at_end(block_is_fail_state);
     let parse_function = CallableValue::try_from(b.build_extract_value(goto, 0, "").unwrap().into_pointer_value()).unwrap();
-    build_tail_call_with_return(&m.b, fn_value, parse_function);
+    build_tail_call_with_return(&m.b, fn_value, parse_function)?;
 
     validate(fn_value)
   }
@@ -739,7 +734,7 @@ where
   T: Into<CallableValue<'a>>,
 {
   let call_site = builder.build_call(callee_fun, args, "FAST_CALL_SITE");
-  call_site.set_call_convention(fastCC);
+  call_site.set_call_convention(FAST_CC);
   SherpaResult::Ok(call_site)
 }
 
@@ -754,7 +749,7 @@ where
   let call_site =
     builder.build_call(destination_fun, &[source_fun.get_nth_param(0).unwrap().into_pointer_value().into()], "TAIL_CALL_SITE");
   call_site.set_tail_call(true);
-  call_site.set_call_convention(fastCC);
+  call_site.set_call_convention(FAST_CC);
 
   let value = call_site.try_as_basic_value().left().unwrap().into_int_value();
 
@@ -764,11 +759,9 @@ where
 }
 
 /// Compile a LLVM parser module from Sherpa bytecode.
-pub fn compile_llvm_module_from_parse_states<'llvm, 'db>(
-  j: &mut Journal,
+pub fn compile_llvm_module_from_parse_states<'llvm, T: ParserStore>(
+  store: &T,
   module: &LLVMParserModule<'llvm>,
-  db: &'db ParserDatabase,
-  states: &ParseStatesVec,
 ) -> SherpaResult<()> {
   unsafe {
     construct_init(module)?;
@@ -783,9 +776,9 @@ pub fn compile_llvm_module_from_parse_states<'llvm, 'db>(
     construct_next_function(module)?;
     construct_internal_free_stack(module)?;
     construct_drop(module)?;
-    construct_shift_pre_emit(module);
-    construct_shift_post_emit(module);
-    compile_states(j, module, db, states)?;
+    construct_shift_pre_emit(module)?;
+    construct_shift_post_emit(module)?;
+    compile_states(store, module)?;
   }
   module
     .fun

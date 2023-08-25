@@ -1,9 +1,6 @@
 use crate::types::{AScriptStore, AScriptTypeVal};
 
-use sherpa_core::{
-  test::utils::{build_parse_db_from_source_str, DBPackage},
-  *,
-};
+use sherpa_core::{test::utils::build_parse_db_from_source_str, *};
 
 /* fn create_dummy_body(id: RuleId) -> Rule {
   Rule { id, ..Default::default() }
@@ -18,7 +15,6 @@ fn parse_errors_when_struct_prop_type_is_redefined() -> SherpaResult<()> {
 
           "##,
     "/test.sg".into(),
-    Default::default(),
     &|DBPackage { journal, db, .. }| {
       let results = AScriptStore::new(journal, &db);
 
@@ -34,7 +30,6 @@ fn parse_errors_when_production_has_differing_return_types() -> SherpaResult<()>
   build_parse_db_from_source_str(
     r#"<> A > "1" :ast { t_Test } | 'a' "#,
     "/test.sg".into(),
-    Default::default(),
     &|DBPackage { journal, db, .. }| {
       let results = AScriptStore::new(journal, &db);
 
@@ -55,7 +50,6 @@ fn prop_is_made_optional_when_not_present_or_introduced_in_subsequent_definition
 
     <> B > "1234" :ast { t_R, o: u32 }"#,
     "/test.sg".into(),
-    Default::default(),
     &|DBPackage { journal, db, .. }| {
       let store = AScriptStore::new(journal, &db)?;
 
@@ -73,7 +67,6 @@ fn group_rules_as_vectors() -> SherpaResult<()> {
   build_parse_db_from_source_str(
     r#"<> A > ( "1" :ast u32($1) )(+"|") "#,
     "/test.sg".into(),
-    Default::default(),
     &|DBPackage { journal, db, .. }| {
       let results = AScriptStore::new(journal, &db)?;
 
