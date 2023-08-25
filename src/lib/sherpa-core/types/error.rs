@@ -85,6 +85,10 @@ pub enum SherpaError {
   Error(std::fmt::Error),
   /// Plaintext error message
   Text(String),
+
+  /// Plaintext error message
+  StaticText(&'static str),
+
   /// Errors stored in a Journal Report
   Report(Box<Report>),
 }
@@ -230,6 +234,7 @@ impl Display for SherpaError {
       PoisonError(err_string) => f.write_fmt(format_args!("\nPoison Error: {}", err_string)),
       IOError(err_string) => f.write_fmt(format_args!("\nIO Error: {}", err_string)),
       Text(err_string) => f.write_str(&err_string),
+      StaticText(err_string) => f.write_str(err_string),
       Report(r) => r.display_errors(f),
       Self::Error(error) => Display::fmt(error, f),
     }

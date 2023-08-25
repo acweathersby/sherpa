@@ -97,7 +97,8 @@ pub fn create_parse_states_from_prod<'db>(
       name,
       comment: "Custom State".into(),
       code: custom_state.tok.to_string(),
-      ast: SherpaResult::Ok(Box::new(custom_state.clone())),
+      ast: Some(Box::new(custom_state.clone())),
+      compile_error: None,
       scanners: None,
     };
     states.insert(name, Box::new(state));

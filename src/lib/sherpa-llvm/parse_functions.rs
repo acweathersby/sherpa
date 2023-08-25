@@ -78,8 +78,8 @@ fn compile_state<'llvm, 'db>(
   let LLVMParserModule { ctx, b, .. } = m;
   let state = parse_state.get_ast()?;
   let state_name = state.id.tok.to_string();
-  let state_fun = *state_lu.get(&state_name)?;
-  let p_ctx = state_fun.get_first_param()?.into_pointer_value();
+  let state_fun = *state_lu.get(&state_name).unwrap();
+  let p_ctx = state_fun.get_first_param().unwrap().into_pointer_value();
   let entry_block = ctx.append_basic_block(state_fun, "entry");
   let loop_head = ctx.append_basic_block(state_fun, "loop_head");
   b.position_at_end(entry_block);
@@ -277,7 +277,7 @@ fn compile_match<'a, 'llvm: 'a>(
     }
 
     InputType::TOKEN_STR => {
-      construct_scan(&args, p_ctx, state_fun, *args.state_lu.get(scanner)?)?;
+      construct_scan(&args, p_ctx, state_fun, *args.state_lu.get(scanner).unwrap())?;
       let val = CtxAggregateIndices::tok_id.load(b, p_ctx)?.into_int_value();
       (val, i32)
     }
@@ -400,8 +400,8 @@ fn construct_cp_lu_with_token_len_store<'a, 'llvm: 'a>(
   let cp_info =
     build_fast_call(b, fun.get_utf8_codepoint_info, &[buffer.into()])?.try_as_basic_value().unwrap_left().into_struct_value();
 
-  let cp_val = b.build_extract_value(cp_info, 0, "cp_val")?.into_int_value();
-  let cp_byte_len = b.build_extract_value(cp_info, 1, "cp_len")?.into_int_value();
+  let cp_val = b.build_extract_value(cp_info, 0, "cp_val").unwrap().into_int_value();
+  let cp_byte_len = b.build_extract_value(cp_info, 1, "cp_len").unwrap().into_int_value();
 
   SherpaResult::Ok((cp_val, cp_byte_len))
 }
@@ -411,7 +411,7 @@ fn goto<'a, 'llvm: 'a>(
   args: &BuildArgs<'a, 'llvm>,
   state_fun: FunctionValue<'llvm>,
 ) -> SherpaResult<()> {
-  build_tail_call_with_return(&args.m.b, state_fun, *args.state_lu.get(name)?)
+  build_tail_call_with_return(&args.m.b, state_fun, *args.state_lu.get(name).unwrap())
 }
 
 fn push_goto<'a, 'llvm: 'a>(
@@ -419,7 +419,12 @@ fn push_goto<'a, 'llvm: 'a>(
   args: &BuildArgs<'a, 'llvm>,
   p_ctx: PointerValue,
 ) -> SherpaResult<()> {
-  add_goto_slot(args.m, p_ctx, (*args.state_lu.get(name)?).as_global_value().as_pointer_value(), NORMAL_STATE_FLAG_LLVM as u64);
+  add_goto_slot(
+    args.m,
+    p_ctx,
+    (*args.state_lu.get(name).unwrap()).as_global_value().as_pointer_value(),
+    NORMAL_STATE_FLAG_LLVM as u64,
+  );
 
   SherpaResult::Ok(())
 }
@@ -437,8 +442,8 @@ fn add_goto_slot<'a>(
   let goto_top = CtxAggregateIndices::goto_stack_ptr.load(b, p_ctx)?.into_pointer_value();
 
   // Create new goto struct
-  let new_goto = b.build_insert_value(types.goto.get_undef(), goto_state, 1, "")?;
-  let new_goto = b.build_insert_value(new_goto, goto_fn, 0, "")?;
+  let new_goto = b.build_insert_value(types.goto.get_undef(), goto_state, 1, "").unwrap();
+  let new_goto = b.build_insert_value(new_goto, goto_fn, 0, "").unwrap();
 
   // Store in the current slot
   b.build_store(goto_top, new_goto);
@@ -564,7 +569,7 @@ fn reduce<'a, 'llvm: 'a>(
     b.build_return(Some(&i32.const_int(ParseActionType::Reduce.into(), false)));
 
     b.position_at_end(ctx.append_basic_block(f, "entry"));
-    let p_ctx = f.get_first_param()?.into_pointer_value();
+    let p_ctx = f.get_first_param().unwrap().into_pointer_value();
 
     Some((f, p_ctx))
   } else {
@@ -593,7 +598,7 @@ fn construct_token_shift<'a, 'llvm: 'a>(
   b.build_return(Some(&i32.const_int(ParseActionType::Shift.into(), false)));
 
   b.position_at_end(args.m.ctx.append_basic_block(post_shift, "entry"));
-  let p_ctx = post_shift.get_first_param()?.into_pointer_value();
+  let p_ctx = post_shift.get_first_param().unwrap().into_pointer_value();
 
   SherpaResult::Ok(Some((post_shift, p_ctx)))
 }
@@ -680,7 +685,7 @@ fn skip_token(args: &BuildArgs, p_ctx: PointerValue, state_fun: FunctionValue) -
   b.build_return(Some(&i32.const_int(ParseActionType::Skip.into(), false)));
 
   b.position_at_end(ctx.append_basic_block(skip_fun, "entry"));
-  let p_ctx = skip_fun.get_first_param()?.into_pointer_value();
+  let p_ctx = skip_fun.get_first_param().unwrap().into_pointer_value();
 
   let offset = get_offset_to_end_of_token(args.m, p_ctx)?;
   CTX::scan_ptr.store(b, p_ctx, offset);
@@ -940,7 +945,7 @@ pub(crate) fn construct_shift_post_emit<'a>(m: &'a LLVMParserModule) -> SherpaRe
 
   b.position_at_end(m.ctx.append_basic_block(fn_value, "entry"));
 
-  let p_ctx = fn_value.get_first_param()?.into_pointer_value();
+  let p_ctx = fn_value.get_first_param().unwrap().into_pointer_value();
 
   let offset = get_offset_to_end_of_token(m, p_ctx)?;
   CtxAggregateIndices::scan_ptr.store(b, p_ctx, offset);
@@ -961,8 +966,8 @@ pub(crate) fn construct_shift_pre_emit<'a>(m: &'a LLVMParserModule) -> SherpaRes
 
   b.position_at_end(m.ctx.append_basic_block(fn_value, "entry"));
 
-  let p_ctx = fn_value.get_first_param()?.into_pointer_value();
-  let goto_fn = fn_value.get_last_param()?.into_pointer_value();
+  let p_ctx = fn_value.get_first_param().unwrap().into_pointer_value();
+  let goto_fn = fn_value.get_last_param().unwrap().into_pointer_value();
 
   ensure_space_on_goto_stack(2, m, p_ctx, fn_value)?;
   add_goto_slot(m, p_ctx, goto_fn.into(), NORMAL_STATE_FLAG_LLVM as u64);

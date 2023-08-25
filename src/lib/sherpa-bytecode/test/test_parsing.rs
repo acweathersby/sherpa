@@ -12,6 +12,32 @@ use std::path::PathBuf;
 use super::utils::compile_and_run_grammars;
 
 #[test]
+pub fn recursive_production() -> SherpaResult<()> {
+  compile_and_run_grammars(
+    &[r#"
+  
+      <> expr > expr "+" expr
+        | c:num 
+  "#],
+    &[("default", "1+2+3+1", true)],
+  )
+}
+
+#[test]
+pub fn precedence() -> SherpaResult<()> {
+  compile_and_run_grammars(
+    &[r#"
+
+    <> expr > expr "+" expr
+    | expr "*" expr
+    | c:num
+
+"#],
+    &[("default", "1+2*3+1", true)],
+  )
+}
+
+#[test]
 pub fn symbols_requiring_peek() -> SherpaResult<()> {
   compile_and_run_grammars(
     &[r#"

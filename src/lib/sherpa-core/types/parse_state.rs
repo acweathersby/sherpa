@@ -19,12 +19,13 @@ use std::io::Write;
 
 /// The intermediate representation of a sherpa parser
 pub struct ParseState {
-  pub name:     IString,
-  pub comment:  String,
-  pub code:     String,
-  pub ast:      SherpaResult<Box<State>>,
+  pub name:          IString,
+  pub comment:       String,
+  pub code:          String,
+  pub ast:           Option<Box<State>>,
+  pub compile_error: Option<SherpaError>,
   /// Collections of scanner based on TOKEN match statements
-  pub scanners: Option<Map<IString, OrderedSet<DBTokenData>>>,
+  pub scanners:      Option<Map<IString, OrderedSet<DBTokenData>>>,
 }
 
 impl<'db> ParseState {
@@ -102,11 +103,19 @@ impl<'db> ParseState {
   /// May also be an `Err`
   /// if there was a problem building the ast.
   pub fn get_ast(&self) -> SherpaResult<&Box<State>> {
-    self.ast.as_ref()
+    match (self.compile_error.as_ref(), self.ast.as_ref()) {
+      (Some(err), None) => SherpaResult::Err(err.clone()),
+      (None, Some(ast)) => SherpaResult::Ok(ast),
+      _ => unreachable!(),
+    }
   }
 
   pub fn get_ast_mut(&mut self) -> SherpaResult<&mut Box<State>> {
-    self.ast.as_mut()
+    match (self.compile_error.as_ref(), self.ast.as_mut()) {
+      (Some(err), None) => SherpaResult::Err(err.clone()),
+      (None, Some(ast)) => SherpaResult::Ok(ast),
+      _ => unreachable!(),
+    }
   }
 
   /// Returns the hash of the body of the state, ignore the state declaration
@@ -127,7 +136,10 @@ impl<'db> ParseState {
     if self.ast.is_none() {
       let code = String::from_utf8(self.source(db))?;
 
-      self.ast = SherpaResult::from(parser::ast::ir_from((&code).into()));
+      match parser::ast::ir_from((&code).into()) {
+        Ok(ast) => self.ast = Some(ast),
+        Err(err) => self.compile_error = Some(err.into()),
+      }
     }
 
     self.get_ast()
@@ -148,15 +160,13 @@ impl<'db> ParseState {
   }
 
   pub fn print(&self, db: &ParserDatabase, print_header: bool) -> SherpaResult<String> {
-    if let SherpaResult::Ok(ast) = self.get_ast() {
-      let mut cw = CodeWriter::new(vec![]);
+    let ast = self.get_ast()?;
 
-      render_IR(db, &mut cw, &ASTNode::State(ast.clone()), print_header)?;
+    let mut cw = CodeWriter::new(vec![]);
 
-      unsafe { SherpaResult::Ok(String::from_utf8_unchecked(cw.into_output())) }
-    } else {
-      Default::default()
-    }
+    render_IR(db, &mut cw, &ASTNode::State(ast.clone()), print_header)?;
+
+    unsafe { SherpaResult::Ok(String::from_utf8_unchecked(cw.into_output())) }
   }
 
   /// Creates a new version of this State with a source that matches the

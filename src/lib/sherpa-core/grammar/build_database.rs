@@ -70,7 +70,7 @@ pub fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a Gramma
   };
 
   let grammar_headers = grammar_headers.read()?;
-  let root_grammar = grammar_headers.get(&g.guid)?.as_ref();
+  let root_grammar = o_to_r(grammar_headers.get(&g.guid), "Could not find grammar")?.as_ref();
 
   // Build production list.
 
@@ -188,7 +188,7 @@ pub fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a Gramma
   }
 
   if !is_valid {
-    return SherpaResult::None;
+    return SherpaResult_Err("Invalid Grammar");
   }
 
   // Generate token productions -----------------------------------------------
@@ -197,11 +197,18 @@ pub fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a Gramma
     if !p_map.contains_key(&prod_id.as_tok_sym()) {
       let (internal_id, rules, name) = match prod_id {
         ProductionId::Standard(internal_id, ..) => {
-          let prod = productions.get(&ProductionId::Standard(internal_id, ProductionSubType::Parser))?;
+          let prod = o_to_r(
+            productions.get(&ProductionId::Standard(internal_id, ProductionSubType::Parser)),
+            "Could not find production",
+          )?;
           (internal_id, &prod.rules, prod.guid_name)
         }
         ProductionId::Sub(internal_id, index, ..) => {
-          let prod = &productions.get(&ProductionId::Standard(internal_id, ProductionSubType::Parser))?.sub_prods[index as usize];
+          let prod = o_to_r(
+            productions.get(&ProductionId::Standard(internal_id, ProductionSubType::Parser)),
+            "Could not find production",
+          )?;
+          let prod = &prod.sub_prods[index as usize];
           (internal_id, &prod.rules, prod.guid_name)
         }
       };
@@ -219,8 +226,8 @@ pub fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a Gramma
           _ => false,
         });
 
-        let prime_rules = groups.remove(&true)?;
-        let mut r_rules = groups.remove(&false)?;
+        let prime_rules = o_to_r(groups.remove(&true), "")?;
+        let mut r_rules = o_to_r(groups.remove(&false), "")?;
 
         let mut p_rules = prime_rules
           .into_iter()
@@ -531,7 +538,7 @@ fn extract_prod_syms(
           }
         },
         SymbolId::NonTerminalToken { id, .. } => {
-          let name = productions.get(&id.as_parse_prod())?.guid_name;
+          let name = o_to_r(productions.get(&id.as_parse_prod()), "Production not found")?.guid_name;
           let name = ("tk:".to_string() + &name.to_string(s_store)).intern(s_store);
           insert_symbol(symbols, &sym);
           token_names.insert(id.as_parse_prod().as_tok_sym(), name);

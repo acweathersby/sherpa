@@ -22,7 +22,7 @@ fn parse_errors_when_struct_prop_type_is_redefined() -> SherpaResult<()> {
     &|DBPackage { journal, db, .. }| {
       let results = AScriptStore::new(journal, &db);
 
-      assert!(results.is_faulty());
+      assert!(results.is_err());
 
       SherpaResult::Ok(())
     },
@@ -38,7 +38,7 @@ fn parse_errors_when_production_has_differing_return_types() -> SherpaResult<()>
     &|DBPackage { journal, db, .. }| {
       let results = AScriptStore::new(journal, &db);
 
-      assert!(results.is_faulty());
+      assert!(results.is_err());
 
       SherpaResult::Ok(())
     },
@@ -77,7 +77,7 @@ fn group_rules_as_vectors() -> SherpaResult<()> {
     &|DBPackage { journal, db, .. }| {
       let results = AScriptStore::new(journal, &db)?;
 
-      assert_eq!(results.prod_types.first_key_value()?.1.first_key_value()?.0.type_, AScriptTypeVal::U32Vec);
+      assert_eq!(results.prod_types.first_key_value().unwrap().1.first_key_value().unwrap().0.type_, AScriptTypeVal::U32Vec);
 
       SherpaResult::Ok(())
     },

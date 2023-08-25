@@ -27,7 +27,7 @@ pub fn build_rust(mut j: Journal, db: &ParserDatabase) -> SherpaResult<String> {
 
   let writer = write_rust_ast2(w)?;
 
-  String::from_utf8(writer.into_writer().into_output()).into()
+  String::from_utf8(writer.into_writer().into_output()).map_err(|e| e.into())
 }
 
 pub async fn compile_rust_bytecode_parser(

@@ -1497,10 +1497,7 @@ fn convert_numeric<T: AScriptNumericType>(
   }
 }
 
-pub(crate) fn add_ascript_functions_for_rust<W: Write>(
-  w: &mut AscriptWriter<W>,
-  _db: &ParserDatabase,
-) -> Result<(), std::io::Error> {
+pub(crate) fn add_ascript_functions_for_rust<W: Write>(w: &mut AscriptWriter<W>, _db: &ParserDatabase) -> SherpaResult<()> {
   let export_node_data = get_ascript_export_data(&w.utils);
 
   // Create impl for all exported productions that can be mapped to a ascript
@@ -1516,7 +1513,7 @@ pub(crate) fn add_ascript_functions_for_rust<W: Write>(
     };
 
     w.block(&format!("impl {type_name}"), "{", "}", &|w| {
-      w.stmt(format!("/// Create a [{type_name}] node from a `String` input."));
+      w.stmt(format!("/// Create a [{type_name}] node from a `String` input."))?;
       w.method(
         "pub fn from_string",
         "(",
@@ -1531,10 +1528,10 @@ pub(crate) fn add_ascript_functions_for_rust<W: Write>(
           w.stmt(format!("ast::{export_name}_from(reader)"))
         },
       )
-    });
+    })?;
 
     w.block(&format!("impl {type_name}"), "{", "}", &|w| {
-      w.stmt(format!("/// Create a [{type_name}] node from a `String` input."));
+      w.stmt(format!("/// Create a [{type_name}] node from a `String` input."))?;
       w.method(
         "pub fn from_str",
         "(",
@@ -1549,15 +1546,15 @@ pub(crate) fn add_ascript_functions_for_rust<W: Write>(
           w.stmt(format!("ast::{export_name}_from(reader)"))
         },
       )
-    });
+    })?;
   }
 
   w.block("pub trait ASTParse<T>", "{", "}", &|w| {
     for (_, _, ast_type_string, export_name, ..) in &export_node_data {
-      w.stmt(format!("fn {export_name}_from(input:T) -> Result<{ast_type_string}, SherpaParseError>;",));
+      w.stmt(format!("fn {export_name}_from(input:T) -> Result<{ast_type_string}, SherpaParseError>;",))?;
     }
     SherpaResult::Ok(())
-  });
+  })?;
 
   Result::Ok(())
 }
@@ -1609,7 +1606,7 @@ pub type Parser<'a, T, UserCTX> = sherpa_rust_runtime::bytecode::ByteCodeParser<
   for EntryPoint { prod_key: _, prod_entry_name, entry_name, .. } in w.db.entry_points() {
     let entry_name = entry_name.to_string(w.db.string_store());
     let prod_entry_name = prod_entry_name.to_string(w.db.string_store());
-    let bytecode_offset = state_lookups.get(&prod_entry_name)?;
+    let bytecode_offset = o_to_r(state_lookups.get(&prod_entry_name), "could not find state")?;
     w.method(
       &format!("pub fn new_{entry_name}_parser<'a, T: Reader, UserCTX>"),
       "(",

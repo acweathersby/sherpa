@@ -157,7 +157,7 @@ pub fn create_grammar_data(
   } else {
     // Use the fist declared production as the default entry
     let prod = &g_data.grammar.productions[0];
-    if let Some(prod_id) = get_production_id_from_ast_node(&g_data, &prod) {
+    if let Ok(prod_id) = get_production_id_from_ast_node(&g_data, &prod) {
       g_data.exports.push(("default".intern(string_store), (prod_id, prod.to_token())));
     }
   }
@@ -231,7 +231,7 @@ pub fn extract_productions<'a>(
           (_, Some(name_sym)) => {
             let import_grammar_name = name_sym.module.to_string().intern(s_store);
 
-            let import_g_id = g_data.imports.get(&import_grammar_name)?;
+            let import_g_id = o_to_r(g_data.imports.get(&import_grammar_name), "could not find grammar")?;
 
             let (guid_name, f_name) = prod_names(name_sym.name.as_str(), import_g_id, s_store);
             productions.push((
@@ -504,7 +504,7 @@ fn process_rule_symbols(
           for pending_rule in &mut p {
             // The last symbol in each of these new bodies is set
             // with the original symbol id
-            pending_rule.symbols.last_mut()?.original_index = *index;
+            pending_rule.symbols.last_mut().expect("There should be at least one symbol").original_index = *index;
             for rule in &mut rules[original_bodies.clone()] {
               let mut new_rule = rule.clone();
               new_rule.symbols.extend(pending_rule.symbols.iter().cloned());
@@ -765,15 +765,15 @@ fn get_production_symbol<'a>(
 /// - [ASTNode::PrattProduction]
 /// - [ASTNode::PegProduction]
 /// - [ASTNode::CFProduction]
-fn get_production_id_from_ast_node(g_data: &GrammarData, node: &ASTNode) -> Option<ProductionId> {
+fn get_production_id_from_ast_node(g_data: &GrammarData, node: &ASTNode) -> SherpaResult<ProductionId> {
   match get_production_symbol(g_data, node) {
-    (Some(prod), None) => Some(ProductionId::from((g_data.id.guid, prod.name.as_str()))),
+    (Some(prod), None) => Ok(ProductionId::from((g_data.id.guid, prod.name.as_str()))),
     (None, Some(prod)) => {
       let ref_name = prod.module.to_token();
 
       match g_data.imports.get(&ref_name) {
-        Some(GrammarIdentities { guid, .. }) => Some(ProductionId::from((*guid, prod.name.as_str()))),
-        _ => None,
+        Some(GrammarIdentities { guid, .. }) => Ok(ProductionId::from((*guid, prod.name.as_str()))),
+        _ => SherpaResult_Err("Could not retrieve ProductionID from node"),
       }
     }
     _ => {
@@ -895,7 +895,7 @@ mod test {
 
     assert_eq!(prods.len(), 1);
 
-    let prod = super::process_production(prods.pop()?, &g_data, &s_store)?;
+    let prod = super::process_production(o_to_r(prods.pop(), "")?, &g_data, &s_store)?;
 
     dbg!(&prod.symbols);
 
@@ -926,7 +926,7 @@ mod test {
     assert_eq!(productions.len(), 0);
     assert_eq!(parse_states.len(), 1);
 
-    let parse_state = super::process_parse_state(parse_states.pop()?, &g_data, &s_store)?;
+    let parse_state = super::process_parse_state(parse_states.pop().unwrap(), &g_data, &s_store)?;
 
     dbg!(&parse_state, &s_store);
 

@@ -249,7 +249,7 @@ pub(crate) unsafe fn construct_emit_end_of_parse(module: &LLVMParserModule) -> S
   let entry = ctx.append_basic_block(fn_value, "Entry");
   let success = ctx.append_basic_block(fn_value, "SuccessfulParse");
   let failure = ctx.append_basic_block(fn_value, "FailedParse");
-  let parse_ctx = fn_value.get_nth_param(0)?.into_pointer_value();
+  let parse_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
   b.position_at_end(entry);
   // Update the active state to be inactive
   CtxAggregateIndices::is_active.store(b, parse_ctx, bool.const_zero())?;
@@ -280,8 +280,8 @@ pub(crate) unsafe fn construct_get_adjusted_input_block_function(m: &LLVMParserM
   let entry_block = ctx.append_basic_block(fn_value, "entry");
 
   b.position_at_end(entry_block);
-  let p_ctx = fn_value.get_nth_param(0)?.into_pointer_value();
-  let needed = fn_value.get_nth_param(1)?.into_int_value();
+  let p_ctx = fn_value.get_nth_param(0).unwrap().into_pointer_value();
+  let needed = fn_value.get_nth_param(1).unwrap().into_int_value();
   CtxAggregateIndices::end_ptr.store(b, p_ctx, b.build_int_to_ptr(needed, i8.ptr_type(0.into()), ""));
 
   let beg_ptr = CtxAggregateIndices::beg_ptr.get_ptr(b, p_ctx)?;
@@ -306,7 +306,8 @@ pub(crate) unsafe fn construct_get_adjusted_input_block_function(m: &LLVMParserM
       "",
     )
     .try_as_basic_value()
-    .left()?
+    .left()
+    .unwrap()
     .into_int_value();
 
   CtxAggregateIndices::block_is_eoi.store(b, p_ctx, input_complete);
@@ -651,7 +652,7 @@ pub(crate) unsafe fn construct_next_function<'a>(module: &'a LLVMParserModule) -
   let call_site = b.build_call(fun.dispatch, &[parse_ctx.into()], "");
   call_site.set_tail_call(false);
   call_site.set_call_convention(fastCC);
-  b.build_return(Some(&call_site.try_as_basic_value().left()?.into_int_value()));
+  b.build_return(Some(&call_site.try_as_basic_value().left().unwrap().into_int_value()));
 
   validate(fn_value)
 }
@@ -715,7 +716,7 @@ pub(crate) unsafe fn construct_dispatch_functions<'a>(m: &'a LLVMParserModule) -
     b.build_store(goto_free_ptr, goto_free);
 
     let goto = b.build_load(goto_top, "").into_struct_value();
-    let goto_state = b.build_extract_value(goto, 1, "")?;
+    let goto_state = b.build_extract_value(goto, 1, "").unwrap();
 
     let masked_state = b.build_and(i32.const_int(FAIL_STATE_FLAG_LLVM as u64, false), goto_state.into_int_value(), "");
 
@@ -751,11 +752,11 @@ where
   T: Into<CallableValue<'a>>,
 {
   let call_site =
-    builder.build_call(destination_fun, &[source_fun.get_nth_param(0)?.into_pointer_value().into()], "TAIL_CALL_SITE");
+    builder.build_call(destination_fun, &[source_fun.get_nth_param(0).unwrap().into_pointer_value().into()], "TAIL_CALL_SITE");
   call_site.set_tail_call(true);
   call_site.set_call_convention(fastCC);
 
-  let value = call_site.try_as_basic_value().left()?.into_int_value();
+  let value = call_site.try_as_basic_value().left().unwrap().into_int_value();
 
   builder.build_return(Some(&value));
 

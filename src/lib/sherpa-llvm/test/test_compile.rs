@@ -736,5 +736,5 @@ fn crate_target_test_machine() -> SherpaResult<TargetMachine> {
   let reloc = RelocMode::PIC;
   let model = CodeModel::Small;
   let opt = OptimizationLevel::None;
-  SherpaResult::Ok(target.create_target_machine(&native_triple, "generic", "", opt, reloc, model)?)
+  SherpaResult::Ok(target.create_target_machine(&native_triple, "generic", "", opt, reloc, model).unwrap())
 }

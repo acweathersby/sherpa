@@ -233,15 +233,15 @@ impl<'db> State<'db> {
     &self.kernel_items
   }
 
-  pub fn get_closure_ref(&self) -> Option<&ItemSet<'db>> {
-    return self.closure.as_ref();
+  pub fn get_closure_ref(&self) -> SherpaResult<&ItemSet<'db>> {
+    return o_to_r(self.closure.as_ref(), "Closure Not Created");
   }
 
-  pub fn get_root_closure_ref(&self) -> Option<&ItemSet<'db>> {
+  pub fn get_root_closure_ref(&self) -> SherpaResult<&ItemSet<'db>> {
     if self.id.is_root() {
-      return self.root_closure.as_ref();
+      return o_to_r(self.root_closure.as_ref(), "Root Closure Not Created");
     } else {
-      return self.closure.as_ref();
+      return o_to_r(self.closure.as_ref(), "Closure Not Created");
     }
   }
 

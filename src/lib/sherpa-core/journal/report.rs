@@ -167,11 +167,7 @@ impl Report {
 
   /// Get contents of the first note whose name matches `note_name`
   pub fn get_note<'a>(&'a self, note_name: &str) -> Option<&'a String> {
-    self
-      .notes
-      .iter()
-      .find(|(n, _)| (*n.to_ascii_lowercase()) == note_name.to_ascii_lowercase())
-      .map(|(_, n)| n)
+    self.notes.iter().find(|(n, _)| (*n.to_ascii_lowercase()) == note_name.to_ascii_lowercase()).map(|(_, n)| n)
   }
 
   pub fn add_error(&mut self, error: SherpaError) {
@@ -211,21 +207,12 @@ impl Report {
     #[cfg(feature = "wasm-target")]
     let timings = "";
     #[cfg(not(feature = "wasm-target"))]
-    let timings = self
-      .timings
-      .iter()
-      .map(|(label, body)| format!("---------------\n{}:\n{:?}", label, body))
-      .collect::<Vec<_>>()
-      .join("\n");
+    let timings =
+      self.timings.iter().map(|(label, body)| format!("---------------\n{}:\n{:?}", label, body)).collect::<Vec<_>>().join("\n");
 
     format!(
       "Notes:\n{}\nTimings:\n{}\nErrors:\n{}",
-      self
-        .notes
-        .iter()
-        .map(|(label, body)| format!("---------------\n{}:\n{}", label, body))
-        .collect::<Vec<_>>()
-        .join("\n"),
+      self.notes.iter().map(|(label, body)| format!("---------------\n{}:\n{}", label, body)).collect::<Vec<_>>().join("\n"),
       timings,
       self._errors.values().map(|err| format!("\n{}", err)).collect::<Vec<_>>().join("\n")
     )

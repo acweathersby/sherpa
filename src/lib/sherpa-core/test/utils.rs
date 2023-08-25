@@ -2,6 +2,7 @@ use crate::{
   build_compile_db,
   compile_grammar_from_str,
   compile_parse_states,
+  types::o_to_r,
   Config,
   GrammarSoup,
   Journal,
@@ -56,7 +57,7 @@ pub fn build_parse_states_from_multi_sources<'a, T>(
   journal.set_active_report("Compile Grammars", ReportType::Any);
 
   for (index, source) in sources.iter().enumerate() {
-    let source_path = source_path.join("ABCDEFGHIJKLMNOPQRSTUVWXYZ".chars().nth(index)?.to_string());
+    let source_path = source_path.join("ABCDEFGHIJKLMNOPQRSTUVWXYZ".chars().nth(index).unwrap().to_string());
     let id = compile_grammar_from_str(&mut journal, source, source_path, &gs)?;
 
     if root_id.is_none() {
@@ -66,7 +67,7 @@ pub fn build_parse_states_from_multi_sources<'a, T>(
 
   journal.flush_reports();
 
-  let db = build_compile_db(journal.transfer(), root_id?, &gs)?;
+  let db = build_compile_db(journal.transfer(), o_to_r(root_id, "Root id is invalid")?, &gs)?;
 
   let states = compile_parse_states(journal.transfer(), &db)?;
 

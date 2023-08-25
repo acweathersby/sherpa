@@ -76,7 +76,7 @@ fn handle_incomplete_items<'db, 'follow>(
   for (sym, group) in groups {
     match (group.len(), graph_state) {
       (1, GraphState::Peek) => {
-        let kernel_items = get_kernel_items_from_peek_item(graph, group.first()?);
+        let kernel_items = get_kernel_items_from_peek_item(graph, group.first().unwrap());
 
         match kernel_items[0].origin {
           _ => {
@@ -87,8 +87,12 @@ fn handle_incomplete_items<'db, 'follow>(
       }
       (2.., GraphState::Peek) => {
         if group.iter().all_items_are_from_same_peek_origin() {
-          let state =
-            graph.create_state(sym, StateType::PeekEnd, Some(parent), get_kernel_items_from_peek_item(graph, group.first()?));
+          let state = graph.create_state(
+            sym,
+            StateType::PeekEnd,
+            Some(parent),
+            get_kernel_items_from_peek_item(graph, group.first().unwrap()),
+          );
           graph.enqueue_pending_state(GraphState::Normal, state);
         } else {
           let state = graph.create_state(sym, StateType::Peek, Some(parent), group.try_increment());
@@ -409,6 +413,7 @@ fn get_kernel_items_from_peek<'db, 'follow>(graph: &Graph<'db>, peek_item: &Item
 fn all_items_come_from_same_production_call(group: &Items) -> bool {
   group.iter().all(|i| i.is_at_initial()) && group.iter().map(|i| i.prod_index()).collect::<Set<_>>().len() == 1
 }
+
 fn create_call<'db, 'follow>(
   group: &Items<'db>,
   graph: &mut Graph<'db>,
@@ -422,15 +427,17 @@ fn create_call<'db, 'follow>(
     let db = group[0].get_db();
 
     if !graph[parent].conflicting_production_call(prod_id, is_scan, db) {
-      let items = graph[parent]
-        .get_closure_ref()?
-        .iter()
-        .filter(|i| match i.prod_index_at_sym() {
-          Some(id) => id == prod_id && i.prod_index() != prod_id,
-          _ => false,
-        })
-        .cloned()
-        .collect::<Vec<_>>();
+      let Ok(items) = graph[parent].get_closure_ref().map(|i| {
+        i.iter()
+          .filter(|i| match i.prod_index_at_sym() {
+            Some(id) => id == prod_id && i.prod_index() != prod_id,
+            _ => false,
+          })
+          .cloned()
+          .collect::<Vec<_>>()
+      }) else {
+        return None;
+      };
 
       if items.len() > 0 {
         if let Some(items) = create_call(&items, graph, graph_state, parent, sym, is_scan) {
@@ -486,7 +493,8 @@ fn handle_completed_groups<'db, 'follow>(
       } else if cmpl.iter().all_are_out_of_scope() {
         // We are at the end of a lookahead that results in the completion of
         // some existing item.
-        let item = *cmpl.first()?;
+        let item = *o_to_r(cmpl.first(), "Item list is empty")?;
+
         handle_completed_item(j, graph, (item, vec![item]), par, sym, g_state);
       } else {
         let unfollowed_items: Items = default_only_items.intersection(&cmpl.iter().to_set()).cloned().collect();
@@ -676,7 +684,14 @@ fn resolve_conflicting_symbols<'db, 'follow>(
     }
 
     if let Some(completed_items) = completed {
-      handle_completed_item(j, graph, (*(completed_items.first()?), completed_items.clone().to_vec()), par, sym, g_state);
+      handle_completed_item(
+        j,
+        graph,
+        (*(o_to_r(completed_items.first(), "")?), completed_items.clone().to_vec()),
+        par,
+        sym,
+        g_state,
+      );
       break;
     } else {
       panic!("Could not resolve Symbol ambiguities!")
@@ -1033,7 +1048,7 @@ fn create_reduce_reduce_error(j: &mut Journal, graph: &Graph, end_items: ItemSet
 
       if !graph.is_scan() {
       } else {
-        let prod = &goals.first()?.prod_index();
+        let prod = &goals.first().expect("Should have at least one goal").prod_index();
         let name = db.prod_guid_name_string(*prod).as_str().to_string();
 
         string +=

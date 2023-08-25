@@ -9,7 +9,6 @@
 //! Visit [Sherpa Docs](https://localhost:1313) to learn more about Sherpa.
 
 #![allow(non_snake_case)]
-#![feature(try_trait_v2)]
 #![feature(box_patterns)]
 
 mod compile;
@@ -28,6 +27,7 @@ pub use grammar::{build_compile_db, compile_grammar_from_str, compile_grammars_f
 pub use journal::{Config, Journal, Report, ReportType};
 pub use tasks::new_taskman;
 pub use types::{
+  o_to_r,
   proxy,
   ASTToken,
   CachedString,

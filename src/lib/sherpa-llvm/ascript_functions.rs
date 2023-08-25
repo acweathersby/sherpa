@@ -11,9 +11,7 @@ use sherpa_rust_runtime::types::{
   ParseResult,
 };
 
-pub(crate) unsafe fn construct_ast_builder<ASTNode: AstObject>(
-  module: &LLVMParserModule,
-) -> SherpaResult<()> {
+pub(crate) unsafe fn construct_ast_builder<ASTNode: AstObject>(module: &LLVMParserModule) -> SherpaResult<()> {
   let slot_size = std::mem::size_of::<AstSlot<ASTNode>>() as u32;
 
   let LLVMParserModule { ctx, types, b, .. } = module;
@@ -31,26 +29,19 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: AstObject>(
 
   // Struct Definitions --------------------------------------------------
 
-  ast_slot_stack_slice
-    .set_body(&[ast_slot.ptr_type(0.into()).into(), i32.into(), i8.into()], false);
+  ast_slot_stack_slice.set_body(&[ast_slot.ptr_type(0.into()).into(), i32.into(), i8.into()], false);
 
-  parse_result
-    .set_body(&[i8.array_type((std::mem::size_of::<ParseResult<ASTNode>>()) as u32).into()], false);
+  parse_result.set_body(&[i8.array_type((std::mem::size_of::<ParseResult<ASTNode>>()) as u32).into()], false);
 
   ast_slot.set_body(&[i8.array_type(slot_size).into()], false);
 
   // Injected Functions ---------------------------------------------------
 
-  let reducer_function = ctx
-    .void_type()
-    .fn_type(&[CTX_PTR.into(), ast_slot_stack_slice.ptr_type(0.into()).into()], false);
+  let reducer_function = ctx.void_type().fn_type(&[CTX_PTR.into(), ast_slot_stack_slice.ptr_type(0.into()).into()], false);
 
-  let shift_handler = ctx
-    .void_type()
-    .fn_type(&[CTX_PTR.into(), ast_slot_stack_slice.ptr_type(0.into()).into()], false);
+  let shift_handler = ctx.void_type().fn_type(&[CTX_PTR.into(), ast_slot_stack_slice.ptr_type(0.into()).into()], false);
 
-  let result_handler = parse_result
-    .fn_type(&[CTX_PTR.into(), i32.into(), ast_slot_stack_slice.ptr_type(0.into()).into()], false);
+  let result_handler = parse_result.fn_type(&[CTX_PTR.into(), i32.into(), ast_slot_stack_slice.ptr_type(0.into()).into()], false);
 
   // Main Function ---------------------------------------------------
 
@@ -68,10 +59,10 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: AstObject>(
     Some(Linkage::External),
   );
 
-  let parse_ctx = ast_builder.get_nth_param(0)?.into_pointer_value();
-  let reducers = ast_builder.get_nth_param(1)?.into_pointer_value();
-  let shift_handler = ast_builder.get_nth_param(2)?.into_pointer_value();
-  let result_handler = ast_builder.get_nth_param(3)?.into_pointer_value();
+  let parse_ctx = ast_builder.get_nth_param(0).unwrap().into_pointer_value();
+  let reducers = ast_builder.get_nth_param(1).unwrap().into_pointer_value();
+  let shift_handler = ast_builder.get_nth_param(2).unwrap().into_pointer_value();
+  let result_handler = ast_builder.get_nth_param(3).unwrap().into_pointer_value();
 
   b.position_at_end(ctx.append_basic_block(ast_builder, "Preamble"));
 
@@ -109,10 +100,8 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: AstObject>(
   b.position_at_end(parse_loop);
   // Begin by calling the dispatch function.
 
-  let discriminant = build_fast_call(b, module.fun.dispatch, &[parse_ctx.into()])?
-    .try_as_basic_value()
-    .left()?
-    .into_int_value();
+  let discriminant =
+    build_fast_call(b, module.fun.dispatch, &[parse_ctx.into()])?.try_as_basic_value().left().unwrap().into_int_value();
 
   b.build_switch(discriminant, default, &[
     (i32.const_int(ParseActionType::Skip.into(), false), skip),
@@ -178,11 +167,7 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: AstObject>(
   let slot_length = b.build_struct_gep(ast_slot_slice_ptr, 1, "")?;
   b.build_store(slot_length, i32.const_int(1, false));
 
-  b.build_call(
-    CallableValue::try_from(shift_handler)?,
-    &[parse_ctx.into(), ast_slot_slice_ptr.into()],
-    "",
-  );
+  b.build_call(CallableValue::try_from(shift_handler)?, &[parse_ctx.into(), ast_slot_slice_ptr.into()], "");
   b.build_unconditional_branch(parse_loop);
   // REDUCE --------------------------------------------------------
   b.position_at_end(reduce);
@@ -214,11 +199,7 @@ pub(crate) unsafe fn construct_ast_builder<ASTNode: AstObject>(
   let slot_lookup_size_ptr = b.build_struct_gep(ast_slot_slice_ptr, 1, "")?;
   b.build_store(slot_lookup_size_ptr, symbol_count_original);
 
-  b.build_call(
-    CallableValue::try_from(reducer)?,
-    &[parse_ctx.into(), ast_slot_slice_ptr.into()],
-    "",
-  );
+  b.build_call(CallableValue::try_from(reducer)?, &[parse_ctx.into(), ast_slot_slice_ptr.into()], "");
 
   b.build_unconditional_branch(parse_loop);
 

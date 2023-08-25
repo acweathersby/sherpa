@@ -75,8 +75,8 @@ impl Journal {
 
   /// Returns a vector of all new errors that have encountered since the last
   /// time this function was called.
-  pub fn errors_since_last_check() -> SherpaResult<Vec<SherpaError>> {
-    SherpaResult::None
+  pub fn errors_since_last_check() -> Option<Vec<SherpaError>> {
+    None
   }
 
   /// Sets the active report to `report_type`, optionally creating a new report

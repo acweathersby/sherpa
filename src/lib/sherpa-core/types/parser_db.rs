@@ -1,5 +1,5 @@
-use super::{Array, IString, IStringStore, Item, Items, Rule, Set, SymbolId, SymbolRef};
-use crate::{parser, CachedString};
+use super::{o_to_r, Array, IString, IStringStore, Item, Items, Rule, Set, SymbolId, SymbolRef};
+use crate::{parser, CachedString, SherpaResult};
 use std::collections::{HashMap, VecDeque};
 
 #[cfg_attr(debug_assertions, derive(Debug))]
@@ -226,8 +226,8 @@ impl ParserDatabase {
 
   /// Given a [DBProdKey] returns an [Array] of [DBRuleKey], or `None`
   /// if the id is invalid.
-  pub fn prod_rules(&self, key: DBProdKey) -> Option<&Array<DBRuleKey>> {
-    self.prod_rules.get(key.0 as usize)
+  pub fn prod_rules(&self, key: DBProdKey) -> SherpaResult<&Array<DBRuleKey>> {
+    o_to_r(self.prod_rules.get(key.0 as usize), "Could not find rule")
   }
 
   /// Returns the internal Rules

@@ -59,7 +59,7 @@ impl JSSoup {
 
     j.set_active_report("grammar parse", sherpa_core::ReportType::Any);
 
-    if remove_grammar_mut((&PathBuf::from(&path)).into(), &mut self.0).is_faulty() {
+    if remove_grammar_mut((&PathBuf::from(&path)).into(), &mut self.0).is_err() {
       return Result::Err(convert_journal_errors(&mut j));
     }
 

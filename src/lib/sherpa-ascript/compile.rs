@@ -81,7 +81,13 @@ fn gather_ascript_info_from_grammar(
           });
         }
         ASTNode::AST_Statements(ast_stmts) => {
-          for sub_type in compile_expression_type(j, store, db, ast_stmts.statements.last()?, rule_id) {
+          for sub_type in compile_expression_type(
+            j,
+            store,
+            db,
+            ast_stmts.statements.last().expect("There should be at least one symbol"),
+            rule_id,
+          ) {
             add_production_type(prod_types, &rule_ref, sub_type);
           }
         }
@@ -122,7 +128,7 @@ fn gather_ascript_info_from_grammar(
         })
       }
       _ => {
-        match rule_ref.rule.symbols.last()?.id {
+        match rule_ref.rule.symbols.last().expect("There should be at least one symbol").id {
           SymbolId::DBNonTerminal { key: id } => add_production_type(prod_types, &rule_ref, TaggedType {
             type_:        AScriptTypeVal::UnresolvedProduction(id),
             tag:          rule_id,

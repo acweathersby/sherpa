@@ -16,7 +16,7 @@ use std::{
 async fn import_grammars(
   j: &mut Journal,
   imports: Vec<GrammarIdentities>,
-  spawner: &Spawner<SherpaResult<()>>,
+  spawner: &Spawner<()>,
   grammar_cloud: &GrammarSoup,
 ) -> SherpaResult<()> {
   #[derive(Clone, Copy)]
@@ -70,16 +70,19 @@ async fn import_grammars(
                       local_loader.send(Task::Complete).unwrap();
                     }
 
-                    compile_grammar_data(&mut j, g_data, &g_c)
+                    match compile_grammar_data(&mut j, g_data, &g_c) {
+                      Ok(result) => Some(result),
+                      Err(err) => {
+                        j.report_mut().add_error(err);
+                        None
+                      }
+                    };
                   }
                   SherpaResult::Err(err) => {
                     let mut local_loader = import_loader.lock().unwrap();
                     local_loader.send(Task::Complete).unwrap();
 
-                    #[cfg(debug_assertions)]
-                    println!("{}", err);
-
-                    SherpaResult::Err(err)
+                    j.report_mut().add_error(err);
                   }
                   _ => unreachable!(),
                 }
@@ -99,7 +102,7 @@ async fn import_grammars(
     } else {
       for task in pending_tasks {
         // Ensure some progress can be made.
-        task.await?;
+        task.await;
       }
       pending_tasks = Array::new();
     }
@@ -107,7 +110,7 @@ async fn import_grammars(
 
   // Wait for any extra tasks.
   for task in pending_tasks {
-    task.await?;
+    task.await;
   }
 
   SherpaResult::Ok(())
@@ -186,7 +189,7 @@ pub async fn compile_grammars_from_path(
   mut j: Journal,
   source_path: PathBuf,
   gs: &GrammarSoup,
-  spawner: &Spawner<SherpaResult<()>>,
+  spawner: &Spawner<()>,
 ) -> SherpaResult<GrammarIdentities> {
   let root_id = GrammarIdentities::from_path(&source_path, &gs.string_store);
 
@@ -194,5 +197,5 @@ pub async fn compile_grammars_from_path(
 
   import_grammars(&mut j, imports, spawner, gs).await?;
 
-  SherpaResult::Ok(gs.grammar_headers.read().map(|h| h.get(&root_id.guid).map(|g| g.identity))??)
+  SherpaResult::Ok(gs.grammar_headers.read().map(|h| o_to_r(h.get(&root_id.guid).map(|g| g.identity), ""))??)
 }

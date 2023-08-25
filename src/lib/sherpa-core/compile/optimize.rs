@@ -104,23 +104,23 @@ impl ComplexityMarker {
   }
 }
 
-fn get_match_statement_mut(node: &mut ASTNode) -> SherpaResult<&mut parser::Statement> {
+fn get_match_statement_mut(node: &mut ASTNode) -> Option<&mut parser::Statement> {
   match node {
     ASTNode::TermMatch(box TermMatch { statement, .. })
     | ASTNode::DefaultMatch(box DefaultMatch { statement, .. })
     | ASTNode::IntMatch(box IntMatch { statement, .. })
-    | ASTNode::NonTermMatch(box NonTermMatch { statement, .. }) => SherpaResult::Ok(statement.as_mut()),
-    _ => SherpaResult::None,
+    | ASTNode::NonTermMatch(box NonTermMatch { statement, .. }) => Some(statement.as_mut()),
+    _ => None,
   }
 }
 
-fn get_match_statement(node: &ASTNode) -> SherpaResult<&parser::Statement> {
+fn get_match_statement(node: &ASTNode) -> Option<&parser::Statement> {
   match node {
     ASTNode::TermMatch(box TermMatch { statement, .. })
     | ASTNode::DefaultMatch(box DefaultMatch { statement, .. })
     | ASTNode::IntMatch(box IntMatch { statement, .. })
-    | ASTNode::NonTermMatch(box NonTermMatch { statement, .. }) => SherpaResult::Ok(statement.as_ref()),
-    _ => SherpaResult::None,
+    | ASTNode::NonTermMatch(box NonTermMatch { statement, .. }) => Some(statement.as_ref()),
+    _ => None,
   }
 }
 
@@ -137,7 +137,7 @@ fn remove_redundant_defaults<'db>(db: &'db ParserDatabase, mut parse_states: Par
   let mut state_branch_lookup: HashMap<IString, HashSet<(u64, String, u64)>> = HashMap::new();
 
   for (name, state) in &parse_states {
-    if let SherpaResult::Ok(box parser::State { statement, .. }) = state.ast.as_ref() {
+    if let Some(box parser::State { statement, .. }) = state.ast.as_ref() {
       let mut queue = VecDeque::from_iter([statement.as_ref()]);
       let def_matches = state_branch_lookup.entry(*name).or_insert(Default::default());
 
@@ -215,7 +215,7 @@ fn remove_redundant_defaults<'db>(db: &'db ParserDatabase, mut parse_states: Par
 
   for (state_id, state) in &mut parse_states {
     let info = state.print(db, true)?;
-    if let SherpaResult::Ok(box parser::State { statement, .. }) = &mut state.as_mut().ast {
+    if let Some(box parser::State { statement, .. }) = &mut state.as_mut().ast {
       remove_redundant_defaults(db, *state_id, statement.as_mut(), &state_branch_lookup, &info);
     }
   }
@@ -231,7 +231,7 @@ fn create_byte_sequences<'db>(db: &'db ParserDatabase, mut parse_states: ParseSt
   for (name, state) in &parse_states {
     // Only statements with branches that are not Matches can be considered as
     // naked.
-    if let SherpaResult::Ok(box parser::State { statement, .. }) = state.ast.as_ref() {
+    if let Some(box parser::State { statement, .. }) = state.ast.as_ref() {
       if let Some(ASTNode::Matches(box parser::Matches { mode, matches, .. })) = &statement.branch {
         if matches!(mode.as_str(), InputType::BYTE_STR | InputType::CODEPOINT_STR) && matches.len() == 1 {
           if let Some(ASTNode::IntMatch(int_match)) = matches.first() {
@@ -243,7 +243,7 @@ fn create_byte_sequences<'db>(db: &'db ParserDatabase, mut parse_states: ParseSt
   }
 
   for (name, state) in &mut parse_states {
-    let SherpaResult::Ok(box parser::State { statement, .. }) = state.ast.as_mut() else { continue };
+    let Some(box parser::State { statement, .. }) = state.ast.as_mut() else { continue };
 
     let Some(ASTNode::Matches(box parser::Matches { mode, matches, .. })) = &mut statement.branch else { continue };
 
@@ -389,7 +389,7 @@ fn inline_scanners<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMa
   }
 
   for (_, state) in &mut parse_states {
-    if let SherpaResult::Ok(box parser::State { statement, .. }) = &mut state.as_mut().ast {
+    if let Some(box parser::State { statement, .. }) = &mut state.as_mut().ast {
       inline_scanners(db, statement)?;
     }
   }
@@ -406,7 +406,7 @@ fn inline_states<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap)
   for (name, state) in &parse_states {
     // Only statements with branches that are not Matches can be considered as
     // naked.
-    if let SherpaResult::Ok(box parser::State { statement, .. }) = state.ast.as_ref() {
+    if let Some(box parser::State { statement, .. }) = state.ast.as_ref() {
       if !matches!(statement.branch, Some(ASTNode::Matches(..))) {
         naked_state_lookup.insert(*name, *statement.clone());
       }
@@ -422,7 +422,7 @@ fn inline_states<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap)
 
     if let Some(parser::Matches { matches, .. }) = branch.as_mut().and_then(|b| b.as_Matches_mut()) {
       for m in matches {
-        let statement = get_match_statement_mut(m)?;
+        let Some(statement) = get_match_statement_mut(m) else { continue };
         let parser::Statement { branch, non_branch, transitive, .. } = statement;
         loop {
           if let Some(own_gotos) = branch.as_mut().and_then(|b| b.as_Gotos_mut()) {
@@ -458,8 +458,11 @@ fn inline_states<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap)
                   // New gotos, we can continue the loop
                   continue;
                 } else if own_gotos.pushes.len() > 0 {
-                  own_gotos.goto =
-                    Box::new(parser::Goto::new(own_gotos.pushes.last()?.name.clone(), Default::default(), Default::default()));
+                  own_gotos.goto = Box::new(parser::Goto::new(
+                    own_gotos.pushes.last().expect("Should have at least one item").name.clone(),
+                    Default::default(),
+                    Default::default(),
+                  ));
                   own_gotos.pushes.pop();
                   // Gotos changed, we can continue the loop
                   continue;
@@ -479,7 +482,7 @@ fn inline_states<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap)
   }
 
   for (_, state) in &mut parse_states {
-    if let SherpaResult::Ok(box parser::State { statement, .. }) = &mut state.as_mut().ast {
+    if let Some(box parser::State { statement, .. }) = &mut state.as_mut().ast {
       inline_statement(db, statement, &naked_state_lookup)?;
     }
   }
@@ -495,7 +498,7 @@ fn merge_branches<'db>(_db: &'db ParserDatabase, mut parse_states: ParseStatesMa
   let mut state_branch_lookup: HashMap<(IString, IString, u64), Statement> = HashMap::new();
 
   for (name, state) in &parse_states {
-    if let SherpaResult::Ok(box parser::State { statement, .. }) = state.ast.as_ref() {
+    if let Some(box parser::State { statement, .. }) = state.ast.as_ref() {
       let mut queue = VecDeque::from_iter([statement.as_ref()]);
 
       while let Some(statement) = queue.pop_front() {
@@ -569,7 +572,7 @@ fn merge_branches<'db>(_db: &'db ParserDatabase, mut parse_states: ParseStatesMa
   }
 
   for (_, state) in &mut parse_states {
-    if let SherpaResult::Ok(box parser::State { statement, .. }) = &mut state.as_mut().ast {
+    if let Some(box parser::State { statement, .. }) = &mut state.as_mut().ast {
       merge_branches(_db, statement.as_mut(), &state_branch_lookup)
     }
   }
@@ -604,9 +607,7 @@ fn combine_state_branches<'db>(db: &'db ParserDatabase, mut parse_states: ParseS
           }
 
           let groups = hash_group_btreemap(matches.clone(), |_, node| {
-            get_match_statement(node)
-              .to_option()
-              .map(|s| hash_id_value_u64(print_IR(&ASTNode::Statement(Box::new(s.clone())), db).unwrap()))
+            get_match_statement(node).map(|s| hash_id_value_u64(print_IR(&ASTNode::Statement(Box::new(s.clone())), db).unwrap()))
           });
 
           let mut new_matches = vec![];
@@ -619,9 +620,11 @@ fn combine_state_branches<'db>(db: &'db ParserDatabase, mut parse_states: ParseS
               } else {
                 let vals =
                   group.iter().flat_map(|m| m.as_IntMatch().map(|i| i.vals.clone()).unwrap_or(Default::default())).collect();
-                let mut first = group.into_iter().next()?;
+                let mut first = group.into_iter().next().expect("Should have at least one item");
+
                 // At this point, all matches expressions should have been converted to Int
-                first.as_IntMatch_mut()?.vals = vals;
+                first.as_IntMatch_mut().unwrap().vals = vals;
+
                 new_matches.push(first);
               }
             } else {
@@ -635,8 +638,10 @@ fn combine_state_branches<'db>(db: &'db ParserDatabase, mut parse_states: ParseS
           }
 
           for m in matches.iter_mut() {
-            if let Some(statement) = combine_branches(db, get_match_statement_mut(m)?)? {
-              merge_statements(statement, get_match_statement_mut(m)?)
+            let Some(stmt) = get_match_statement_mut(m) else { continue };
+            if let Some(statement) = combine_branches(db, stmt)? {
+              let Some(stmt) = get_match_statement_mut(m) else { continue };
+              merge_statements(statement, stmt)
             }
           }
 
@@ -654,7 +659,7 @@ fn combine_state_branches<'db>(db: &'db ParserDatabase, mut parse_states: ParseS
   }
 
   for state in parse_states.values_mut() {
-    if let SherpaResult::Ok(box parser::State { statement, tok: _, .. }) = &mut state.ast {
+    if let Some(box parser::State { statement, tok: _, .. }) = &mut state.ast {
       if let Some(from) = combine_branches(db, statement)? {
         merge_statements(from, statement);
       }
@@ -682,7 +687,7 @@ fn canonicalize_states<'db, R: FromIterator<(IString, Box<ParseState>)>>(
 
   fn canonicalize_goto_name(db: &ParserDatabase, name: String, name_lu: &HashMap<IString, IString>) -> SherpaResult<String> {
     let iname = name.to_token();
-    let canonical_name = *name_lu.get(&iname)?;
+    let canonical_name = *name_lu.get(&iname).expect("State name should exist");
 
     let name = if iname != canonical_name { canonical_name.to_string(db.string_store()) } else { name };
     SherpaResult::Ok(name)
@@ -707,7 +712,8 @@ fn canonicalize_states<'db, R: FromIterator<(IString, Box<ParseState>)>>(
           for m in matches {
             match m {
               ASTNode::TermMatch(..) | ASTNode::DefaultMatch(..) | ASTNode::IntMatch(..) | ASTNode::NonTermMatch(..) => {
-                canonicalize_statement(db, get_match_statement_mut(m)?, name_lu)?;
+                let Some(stmt) = get_match_statement_mut(m) else { continue };
+                canonicalize_statement(db, stmt, name_lu)?;
               }
               _ => {}
             }
@@ -720,7 +726,7 @@ fn canonicalize_states<'db, R: FromIterator<(IString, Box<ParseState>)>>(
   }
 
   for state in parse_states.values_mut() {
-    if let SherpaResult::Ok(box parser::State { statement, .. }) = &mut state.as_mut().ast {
+    if let Some(box parser::State { statement, .. }) = &mut state.as_mut().ast {
       canonicalize_statement(db, statement, &state_name_to_canonical_state_name);
     }
   }
@@ -775,9 +781,10 @@ fn traverse_statement<'db>(
       | ASTNode::ProductionMatches(box ProductionMatches { matches, .. })
       | ASTNode::TerminalMatches(box TerminalMatches { matches, .. }) => {
         for m in matches.iter().rev() {
+          let Some(stmt) = get_match_statement(m) else { continue };
           match m {
             ASTNode::TermMatch(..) | ASTNode::DefaultMatch(..) | ASTNode::IntMatch(..) | ASTNode::NonTermMatch(..) => {
-              traverse_statement(get_match_statement(m)?, parse_states, queue)?;
+              traverse_statement(stmt, parse_states, queue)?;
             }
             _ => {}
           }
