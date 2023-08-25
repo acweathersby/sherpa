@@ -111,11 +111,13 @@ impl<'db> ParseState {
 
   /// Returns the hash of the body of the state, ignore the state declaration
   /// header.
-  pub fn get_canonical_hash(&self) -> u64 {
-    match self.get_ast() {
-      SherpaResult::Ok(box State { statement, .. }) => create_u64_hash(statement),
-      _ => 0,
-    }
+  pub fn get_canonical_hash(&self, db: &ParserDatabase) -> u64 {
+    create_u64_hash(self.print(db, false).unwrap())
+
+    //match self.get_ast() {
+    //  SherpaResult::Ok(box State { statement, .. }) =>
+    // create_u64_hash(statement),  _ => 0,
+    //}
   }
 
   /// Builds and returns a reference to the AST.
@@ -289,4 +291,12 @@ fn render_IR<T: Write>(db: &ParserDatabase, mut w: &mut CodeWriter<T>, node: &AS
   };
 
   SherpaResult::Ok(())
+}
+
+pub fn print_IR(node: &ASTNode, db: &ParserDatabase) -> SherpaResult<String> {
+  let mut cw = CodeWriter::new(vec![]);
+
+  render_IR(db, &mut cw, node, false)?;
+
+  unsafe { SherpaResult::Ok(String::from_utf8_unchecked(cw.into_output())) }
 }

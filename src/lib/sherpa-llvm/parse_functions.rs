@@ -248,7 +248,7 @@ fn compile_match<'a, 'llvm: 'a>(
 ) -> SherpaResult<()> {
   let LLVMParserModule { b, ctx, i64, i32, i8, .. } = args.m;
   let u32_1 = i32.const_int(1, false);
-  let parser::Matches { matches, mode, .. } = matches_ast;
+  let parser::Matches { matches, mode, scanner, .. } = matches_ast;
   let mut is_raw_char = false;
 
   let symbol_branches_start = ctx.append_basic_block(state_fun, "match");
@@ -277,7 +277,7 @@ fn compile_match<'a, 'llvm: 'a>(
     }
 
     InputType::TOKEN_STR => {
-      construct_scan(&args, p_ctx, state_fun, *args.state_lu.get(&ParseState::get_scanner_name_from_matches(matches, args.db))?)?;
+      construct_scan(&args, p_ctx, state_fun, *args.state_lu.get(scanner)?)?;
       let val = CtxAggregateIndices::tok_id.load(b, p_ctx)?.into_int_value();
       (val, i32)
     }

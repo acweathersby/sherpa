@@ -10,7 +10,7 @@ use super::*;
 
 /// Indicates the State type that generated
 /// the item
-#[derive(Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub enum Origin {
   None,
@@ -27,6 +27,12 @@ pub enum Origin {
   /// Goal productions are determined by the
   /// root state (`StateId(0)`) kernel items
   GoalCompleteOOS,
+}
+
+impl Hash for Origin {
+  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    std::mem::discriminant(self).hash(state)
+  }
 }
 
 impl Default for Origin {
@@ -75,7 +81,8 @@ pub enum StateType {
   Shift,
   /// The completion of this branch will complete one or more kernel items.
   KernelGoto,
-  /// The completion of this branch will complete one or more intermediary goto items. 
+  /// The completion of this branch will complete one or more intermediary goto
+  /// items.
   GotoLoop,
   GotoPass,
   Peek,
@@ -166,35 +173,12 @@ impl<'db> Hash for State<'db> {
     for item in &self.kernel_items {
       item.rule_id.hash(state);
       item.sym_index.hash(state);
+      item.origin.hash(state);
 
-      match item.origin {
+      /*       match item.origin {
         Origin::Peek(hash_id, _) => hash_id.hash(state),
         other => other.hash(state),
-      }
-    }
-
-    #[cfg(full_graph_state_hash)]
-    {
-      for item in &self.non_terminals {
-        item.rule_id.hash(state);
-        item.sym_index.hash(state);
-        item.origin.hash(state);
-
-        match item.origin {
-          Origin::Peek(hash_id, _) => hash_id.hash(state),
-          other => other.hash(state),
-        }
-      }
-
-      for item in &self.peek_resolve_items.values().flatten().collect::<OrderedSet<_>>() {
-        item.rule_id.hash(state);
-        item.sym_index.hash(state);
-      }
-
-      if let Some(item) = self.reduce_item {
-        item.rule_id.hash(state);
-        item.sym_index.hash(state);
-      }
+      } */
     }
   }
 }
@@ -340,7 +324,7 @@ impl<'db> State<'db> {
   #[cfg(debug_assertions)]
   pub fn debug_string(&self, db: &'db ParserDatabase) -> String {
     let mut string = String::new();
-    string += &format!("\n\nSTATE -- [{:}] --", self.id.0);
+    string += &format!("\n\nSTATE -- [{:}][{:X}] --", self.id.0, self.get_hash());
 
     if self.predecessors.len() > 0 {
       string += &format!(r##" preds [{}]"##, self.predecessors.iter().map(|p| p.0.to_string()).collect::<Vec<_>>().join(" "));

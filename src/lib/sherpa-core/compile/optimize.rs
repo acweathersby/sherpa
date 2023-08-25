@@ -4,7 +4,9 @@ use crate::{
   parser::{
     self,
     ASTNode,
+    ASTNodeType,
     DefaultMatch,
+    GetASTNodeType,
     Gotos,
     IntMatch,
     Matches,
@@ -17,7 +19,7 @@ use crate::{
   types::*,
 };
 use sherpa_rust_runtime::types::bytecode::InputType;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Performance various transformation on the parse state graph
 /// to reduce number of steps between transient actions, and to
@@ -43,11 +45,20 @@ pub fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
 
   let parse_states = inline_scanners(db, parse_states)?;
 
+  //let parse_states = create_byte_sequences(db, parse_states)?;
+
+  let parse_states = merge_branches(db, parse_states)?;
+
+  let parse_states = remove_redundant_defaults(db, parse_states)?;
+
+  let parse_states = canonicalize_states(db, parse_states, Some("state combine"))?;
+
   let parse_states = combine_state_branches(db, parse_states)?;
 
-  // let parse_states = create_byte_chains(db, parse_states)?;
   //
   // let parse_states = inline_matches(db, parse_states)?;
+
+  let parse_states: ParseStatesMap = parse_states;
 
   start_complexity.print_comparison(&ComplexityMarker::new(db, parse_states.iter()), "Total optimization result");
 
@@ -81,8 +92,9 @@ impl ComplexityMarker {
   }
 
   pub fn print_comparison(&self, other: &Self, label: &str) {
+    #[cfg(debug_assertions)]
     println!(
-      "Opt {} ---- {} -> {} State Reduction: {}% Complexity Reduction: {}%",
+      "Opt {} ---- {} -> {} State Reduction: {}% {} -> {}  Complexity Reduction: {}%",
       label,
       self.num_of_states,
       other.num_of_states,
@@ -117,10 +129,180 @@ fn _inline_matches<'db>(db: &'db ParserDatabase, parse_states: ParseStatesMap) -
   garbage_collect(db, parse_states, "byte-chains")
 }
 
-/// Create chained matching scanners that can scan and shift multiple
+/// Remove default branches that transition to match states that are identical
+/// to the root branches.
+fn remove_redundant_defaults<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
+  // Get a reference to all root level branches.
+
+  let mut state_branch_lookup: HashMap<IString, HashSet<(u64, String, u64)>> = HashMap::new();
+
+  for (name, state) in &parse_states {
+    if let SherpaResult::Ok(box parser::State { statement, .. }) = state.ast.as_ref() {
+      let mut queue = VecDeque::from_iter([statement.as_ref()]);
+      let def_matches = state_branch_lookup.entry(*name).or_insert(Default::default());
+
+      while let Some(statement) = queue.pop_front() {
+        let parser::Statement { transitive, non_branch, branch, .. } = statement;
+
+        if transitive.is_none() && non_branch.is_empty() {
+          if let Some(parser::Matches { matches, mode, .. }) = branch.as_ref().and_then(|b| b.as_Matches()) {
+            for m in matches {
+              match m {
+                ASTNode::IntMatch(box parser::IntMatch { statement, vals }) => {
+                  for val in vals {
+                    def_matches.insert((
+                      *val,
+                      mode.to_string(),
+                      hash_id_value_u64(print_IR(&ASTNode::Statement(statement.clone()), db)?),
+                    ));
+                  }
+                }
+                ASTNode::DefaultMatch(box parser::DefaultMatch { statement }) => queue.push_back(statement.as_ref()),
+                _ => {}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  fn remove_redundant_defaults<'db>(
+    db: &'db ParserDatabase,
+    state: IString,
+    root_statement: &mut parser::Statement,
+    state_branch_lookup: &HashMap<IString, HashSet<(u64, String, u64)>>,
+    info: &String,
+  ) -> bool {
+    if let Some(parser::Matches { matches, .. }) = root_statement.branch.as_mut().and_then(|m| m.as_Matches_mut()) {
+      let leaf_default = matches.iter_mut().filter(|m| m.get_type() == ASTNodeType::DefaultMatch).next();
+      if let Some(ASTNode::DefaultMatch(box parser::DefaultMatch { statement })) = leaf_default {
+        if remove_redundant_defaults(db, state, statement, state_branch_lookup, info) {
+          let clone = matches.clone();
+          matches.clear();
+          matches.append(&mut clone.into_iter().filter(|d| d.get_type() != ASTNodeType::DefaultMatch).collect());
+        }
+        return false;
+      }
+    }
+
+    let statement = root_statement;
+
+    if statement.transitive.is_some() || !statement.non_branch.is_empty() {
+      return false;
+    };
+
+    let Some(parser::Gotos { goto, pushes }) = statement.branch.as_mut().and_then(|s| s.as_Gotos_mut()) else {
+      return false;
+    };
+
+    if pushes.len() > 0 {
+      return false;
+    }
+
+    let goto = goto.name.to_token();
+
+    let Some(own) = state_branch_lookup.get(&state) else {
+      return false;
+    };
+
+    let Some(theirs) = state_branch_lookup.get(&goto) else {
+      return false;
+    };
+
+    return theirs.is_subset(own);
+  }
+
+  for (state_id, state) in &mut parse_states {
+    let info = state.print(db, true)?;
+    if let SherpaResult::Ok(box parser::State { statement, .. }) = &mut state.as_mut().ast {
+      remove_redundant_defaults(db, *state_id, statement.as_mut(), &state_branch_lookup, &info);
+    }
+  }
+
+  garbage_collect(db, parse_states, "redundant-defaults")
+}
+
+/// Create chained matching scanners that can scan sequences of
 /// characters simultaneously.
-fn _create_byte_chains<'db>(db: &'db ParserDatabase, parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
-  garbage_collect(db, parse_states, "byte-chains")
+fn create_byte_sequences<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
+  let mut single_byte_state = HashMap::new();
+
+  for (name, state) in &parse_states {
+    // Only statements with branches that are not Matches can be considered as
+    // naked.
+    if let SherpaResult::Ok(box parser::State { statement, .. }) = state.ast.as_ref() {
+      if let Some(ASTNode::Matches(box parser::Matches { mode, matches, .. })) = &statement.branch {
+        if matches!(mode.as_str(), InputType::BYTE_STR | InputType::CODEPOINT_STR) && matches.len() == 1 {
+          if let Some(ASTNode::IntMatch(int_match)) = matches.first() {
+            single_byte_state.insert(*name, (**int_match).clone());
+          }
+        }
+      }
+    }
+  }
+
+  for (name, state) in &mut parse_states {
+    let SherpaResult::Ok(box parser::State { statement, .. }) = state.ast.as_mut() else { continue };
+
+    let Some(ASTNode::Matches(box parser::Matches { mode, matches, .. })) = &mut statement.branch else { continue };
+
+    if !matches!(mode.as_str(), InputType::BYTE_STR | InputType::CODEPOINT_STR) {
+      continue;
+    }
+
+    if matches.len() > 2 || (matches.len() == 2 && !matches.iter().any(|m| m.get_type() == ASTNodeType::DefaultMatch)) {
+      continue;
+    };
+
+    let Some(first_match) = matches.iter_mut().filter(|m| m.get_type() == ASTNodeType::IntMatch).next() else { continue };
+
+    let ASTNode::IntMatch(box parser::IntMatch { statement, vals }) = first_match else { continue };
+
+    let mut iter = 0;
+    let mut new_vals = vals.clone();
+    let mut active_statement = statement.as_ref();
+    let transitive_type = statement.transitive.as_ref().map(|t| t.get_type());
+
+    loop {
+      let Some(ASTNode::Gotos(box parser::Gotos { goto, pushes })) = &active_statement.branch else { break };
+
+      if pushes.len() > 0 {
+        break;
+      };
+
+      let id = goto.name.to_token();
+
+      let Some(IntMatch { statement, vals }) = single_byte_state.get(&id) else { break };
+
+      if statement.transitive.as_ref().map(|t| t.get_type()) != transitive_type {
+        break;
+      };
+
+      new_vals.append(&mut vals.clone());
+
+      iter += 1;
+
+      active_statement = statement.as_ref();
+
+      if statement.non_branch.len() > 0 {
+        break;
+      }
+    }
+
+    if iter > 0 {
+      let Statement { branch, non_branch, .. } = active_statement.clone();
+
+      statement.branch = branch;
+      statement.non_branch = non_branch;
+      vals.clear();
+      vals.append(&mut new_vals);
+
+      *mode = "_BYTE_SEQUENCE_".to_string();
+    }
+  }
+
+  garbage_collect(db, parse_states, "byte-sequences")
 }
 
 /// Inline trivial scanners.
@@ -254,7 +436,7 @@ fn inline_states<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap)
                 Some(ASTNode::Pass(..)) | Some(ASTNode::Fail(..)) | Some(ASTNode::Accept(..)) if own_gotos.pushes.is_empty() => {
                   true
                 }
-                Some(ASTNode::Pass(..)) | Some(ASTNode::Gotos(..)) | None => false,
+                Some(ASTNode::Gotos(..)) | None => false,
                 _ => break,
               };
 
@@ -310,7 +492,7 @@ fn inline_states<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap)
 fn merge_branches<'db>(_db: &'db ParserDatabase, mut parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
   // Get a reference to all root level branches.
 
-  let mut state_branch_lookup = HashMap::new();
+  let mut state_branch_lookup: HashMap<(IString, IString, u64), Statement> = HashMap::new();
 
   for (name, state) in &parse_states {
     if let SherpaResult::Ok(box parser::State { statement, .. }) = state.ast.as_ref() {
@@ -338,47 +520,57 @@ fn merge_branches<'db>(_db: &'db ParserDatabase, mut parse_states: ParseStatesMa
     }
   }
 
-  for (_, state) in &mut parse_states {
-    if let SherpaResult::Ok(box parser::State { statement, .. }) = &mut state.as_mut().ast {
-      let parser::Statement { branch, .. } = statement.as_mut();
+  fn merge_branches<'db>(
+    db: &'db ParserDatabase,
+    statement: &mut parser::Statement,
+    state_branch_lookup: &HashMap<(IString, IString, u64), Statement>,
+  ) {
+    let parser::Statement { branch, .. } = statement;
 
-      if let Some(parser::Matches { matches, mode, .. }) = branch.as_mut().and_then(|b| b.as_Matches_mut()) {
-        for m in matches {
-          match m {
-            ASTNode::IntMatch(box parser::IntMatch { statement, vals }) => {
-              let _r = statement.clone();
-              loop {
-                let parser::Statement { branch, non_branch, transitive, .. } = statement.as_mut();
-                if vals.len() == 1 && transitive.is_none() && non_branch.is_empty() {
-                  let val = vals[0];
-                  if let Some(gotos) = branch.as_mut().and_then(|b| b.as_Gotos_mut()) {
-                    let name = gotos.goto.name.clone();
-                    let id = (name.to_token(), mode.to_token(), val);
+    if let Some(parser::Matches { matches, mode, .. }) = branch.as_mut().and_then(|b| b.as_Matches_mut()) {
+      for m in matches {
+        match m {
+          ASTNode::IntMatch(box parser::IntMatch { statement, vals }) => {
+            let _r = statement.clone();
+            loop {
+              let parser::Statement { branch, non_branch, transitive, .. } = statement.as_mut();
+              if vals.len() == 1 && transitive.is_none() && non_branch.is_empty() {
+                let val = vals[0];
+                if let Some(gotos) = branch.as_mut().and_then(|b| b.as_Gotos_mut()) {
+                  let name = gotos.goto.name.clone();
+                  let id = (name.to_token(), mode.to_token(), val);
 
-                    if let Some(stmt) = state_branch_lookup.get(&id) {
-                      let parser::Statement { branch: b, non_branch: mut nb, transitive: t, .. } = stmt.clone();
+                  if let Some(stmt) = state_branch_lookup.get(&id) {
+                    let parser::Statement { branch: b, non_branch: mut nb, transitive: t, .. } = stmt.clone();
 
-                      match b {
-                        Some(ASTNode::Gotos(box Gotos { goto, mut pushes })) => {
-                          gotos.goto = goto;
-                          gotos.pushes.append(&mut pushes);
-                          non_branch.append(&mut nb);
-                          *transitive = t;
-                          continue;
-                        }
-                        _ => {}
+                    match b {
+                      Some(ASTNode::Gotos(box Gotos { goto, mut pushes })) => {
+                        gotos.goto = goto;
+                        gotos.pushes.append(&mut pushes);
+                        non_branch.append(&mut nb);
+                        *transitive = t;
+                        continue;
                       }
+                      _ => {}
                     }
                   }
                 }
-                break;
               }
+              break;
             }
-            ASTNode::DefaultMatch(box parser::DefaultMatch { statement: _ }) => {}
-            _ => {}
           }
+          ASTNode::DefaultMatch(box parser::DefaultMatch { statement }) => {
+            merge_branches(db, statement, state_branch_lookup);
+          }
+          _ => {}
         }
       }
+    }
+  }
+
+  for (_, state) in &mut parse_states {
+    if let SherpaResult::Ok(box parser::State { statement, .. }) = &mut state.as_mut().ast {
+      merge_branches(_db, statement.as_mut(), &state_branch_lookup)
     }
   }
 
@@ -407,8 +599,15 @@ fn combine_state_branches<'db>(db: &'db ParserDatabase, mut parse_states: ParseS
     if let Some(branch) = branch {
       match branch {
         ASTNode::Matches(box parser::Matches { matches, .. }) => {
-          let groups =
-            hash_group_btreemap(matches.clone(), |_, node| get_match_statement(node).to_option().map(|s| hash_id_value_u64(s)));
+          if let Some(default) = matches.iter_mut().filter_map(|d| d.as_DefaultMatch_mut()).next() {
+            //combine_branches(db, &mut default.statement)?;
+          }
+
+          let groups = hash_group_btreemap(matches.clone(), |_, node| {
+            get_match_statement(node)
+              .to_option()
+              .map(|s| hash_id_value_u64(print_IR(&ASTNode::Statement(Box::new(s.clone())), db).unwrap()))
+          });
 
           let mut new_matches = vec![];
 
@@ -476,7 +675,7 @@ fn canonicalize_states<'db, R: FromIterator<(IString, Box<ParseState>)>>(
   let mut hash_to_name_set = HashMap::new();
 
   for (name, state) in &parse_states {
-    let hash = state.get_canonical_hash();
+    let hash = state.get_canonical_hash(db);
     let canonical_name = hash_to_name_set.entry(hash).or_insert(*name).clone();
     state_name_to_canonical_state_name.insert(*name, canonical_name);
   }

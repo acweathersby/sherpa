@@ -78,7 +78,7 @@ fn convert_goto_state_to_ir<'db>(
       if let SymbolId::DBNonTerminal { key: index } = s.get_symbol() {
         let prod_id: usize = index.into();
         let prod_name = db.prod_guid_name(index);
-        (prod_id, (prod_name, create_ir_state_name(graph, s), s.get_type()))
+        (prod_id, (prod_name, create_ir_state_name(graph, None, s), s.get_type()))
       } else {
         #[cfg(debug_assertions)]
         panic!("Invalid production type: {:?}  {}", s.get_symbol(), s.get_symbol().debug_string(db));
@@ -107,7 +107,7 @@ fn convert_goto_state_to_ir<'db>(
 
   let mut goto = Box::new(create_ir_state(graph, w, state)?);
 
-  goto.name = create_ir_state_name(graph, state).intern(db.string_store());
+  goto.name = create_ir_state_name(graph, None, state).intern(db.string_store());
 
   SherpaResult::Ok((state.get_id(), goto))
 }
@@ -138,7 +138,7 @@ fn convert_state_to_ir<'db>(
 
     let mut classes = classify_successors(successors, db);
 
-    add_match_expr(&mut w, graph, &mut classes, goto_state_id);
+    add_match_expr(&mut w, state, graph, &mut classes, goto_state_id);
 
     Some(Box::new(create_ir_state(graph, w, state)?))
   } else {
@@ -252,6 +252,8 @@ fn classify_successors<'graph, 'db>(
 
 fn add_match_expr<'db>(
   mut w: &mut CodeWriter<Vec<u8>>,
+
+  state: &State,
   graph: &Graph<'db>,
   branches: &mut VecDeque<((u32, InputType), OrderedSet<&State>)>,
   goto_state_id: Option<IString>,
@@ -262,7 +264,7 @@ fn add_match_expr<'db>(
     if matches!(input_type, InputType::Default) {
       let successor = successors.into_iter().next().unwrap();
 
-      let string = build_body(successor, graph, goto_state_id).join(" then ");
+      let string = build_body(state, successor, graph, goto_state_id).join(" then ");
 
       if !string.is_empty() {
         let _ = w + string;
@@ -276,7 +278,7 @@ fn add_match_expr<'db>(
 
       for (state_val, s) in successors.iter().map(|s| (s.get_symbol().to_state_val(db), s)).collect::<BTreeMap<_, _>>() {
         w = w + "\n\n( " + state_val.to_string() + " ){ ";
-        w = w + build_body(s, graph, goto_state_id).join(" then ") + " }";
+        w = w + build_body(state, s, graph, goto_state_id).join(" then ") + " }";
       }
 
       // Add skips
@@ -320,7 +322,7 @@ fn add_match_expr<'db>(
 
       if !branches.is_empty() {
         w = (w + "\n\ndefault { ").indent();
-        add_match_expr(w, graph, branches, goto_state_id);
+        add_match_expr(w, state, graph, branches, goto_state_id);
         w = w + " }";
         w = w.dedent();
       }
@@ -330,9 +332,9 @@ fn add_match_expr<'db>(
   }
 }
 
-fn build_body<'db>(successor: &State, graph: &Graph<'db>, goto_state_id: Option<IString>) -> Vec<String> {
+fn build_body<'db>(state: &State, successor: &State, graph: &Graph<'db>, goto_state_id: Option<IString>) -> Vec<String> {
   let is_scanner = graph.is_scan();
-  let mut body_string = Array::new();
+  let mut body_string: Vec<String> = Array::new();
   let s_type = successor.get_type();
   let db = graph.get_db();
 
@@ -385,11 +387,11 @@ fn build_body<'db>(successor: &State, graph: &Graph<'db>, goto_state_id: Option<
       //Ensure production calls are immediately called before any other
       // gotos.
       StateType::KernelCall(prod_id) | StateType::InternalCall(prod_id) => {
-        body_string.push("push ".to_string() + &create_ir_state_name(graph, successor));
+        body_string.push("push ".to_string() + &create_ir_state_name(graph, Some(state), successor));
         body_string.push("goto ".to_string() + &db.prod_guid_name(prod_id).to_string(db.string_store()));
       }
       _ => {
-        body_string.push("goto ".to_string() + &create_ir_state_name(graph, successor));
+        body_string.push("goto ".to_string() + &create_ir_state_name(graph, Some(state), successor));
       }
     }
   }
@@ -411,14 +413,18 @@ fn create_rule_reduction(rule_id: DBRuleKey, db: &ParserDatabase) -> String {
   w.to_string()
 }
 
-pub(super) fn create_ir_state_name(graph: &Graph, state: &State) -> String {
-  graph.is_scan().then_some("s").unwrap_or("p").to_string() + "_" + &state.get_hash().to_string()
+pub(super) fn create_ir_state_name(graph: &Graph, origin_state: Option<&State>, target_state: &State) -> String {
+  if origin_state.is_some_and(|s| s.get_id() == target_state.get_id()) {
+    "%%%%".to_string()
+  } else {
+    graph.is_scan().then_some("s").unwrap_or("p").to_string() + "_" + &target_state.get_hash().to_string()
+  }
 }
 
 pub(super) fn create_ir_state<'db>(graph: &Graph<'db>, w: CodeWriter<Vec<u8>>, state: &State) -> SherpaResult<ParseState> {
   let ir_state = ParseState {
     code: w.to_string(),
-    name: create_ir_state_name(graph, state).intern(graph.get_db().string_store()),
+    name: create_ir_state_name(graph, None, state).intern(graph.get_db().string_store()),
     ..Default::default()
   };
 

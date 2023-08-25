@@ -1,4 +1,8 @@
-use std::fmt::{Debug, Display};
+
+#[cfg(debug_assertions)]
+use std::fmt::Debug;
+
+use std::fmt::Display;
 
 use crate::types::BlameColor;
 
@@ -15,10 +19,6 @@ pub struct SherpaParseError {
 impl Display for SherpaParseError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let SherpaParseError { message, inline_message, loc, .. } = self;
-    f.write_fmt(format_args!(
-      "{}\n{}",
-      message,
-      loc.blame(1, 1, inline_message, BlameColor::RED)
-    ))
+    f.write_fmt(format_args!("{}\n{}", message, loc.blame(1, 1, inline_message, BlameColor::RED)))
   }
 }

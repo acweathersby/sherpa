@@ -591,10 +591,12 @@ pub enum InputType {
   ByteScanless,
   CodepointScanless,
   ClassScanless,
+  ByteSequence,
 }
 
 impl InputType {
   pub const BYTE_SCANLESS_STR: &'static str = "_BYTE_SCANLESS_";
+  pub const BYTE_SEQUENCE_STR: &'static str = "_BYTE_SEQUENCE_";
   pub const BYTE_STR: &'static str = "_BYTE_";
   pub const CLASS_SCANLESS_STR: &'static str = "_CLASS_SCANLESS_";
   pub const CLASS_STR: &'static str = "_CLASS_";
@@ -615,6 +617,7 @@ impl InputType {
       Self::Byte => InputType::BYTE_STR,
       Self::ByteScanless => InputType::BYTE_SCANLESS_STR,
       Self::EndOfFile => InputType::END_OF_FILE_STR,
+      Self::ByteSequence => InputType::BYTE_SEQUENCE_STR,
       Self::Default => "",
     }
   }
@@ -647,6 +650,7 @@ impl From<u32> for InputType {
       7 => Self::ByteScanless,
       8 => Self::CodepointScanless,
       9 => Self::ClassScanless,
+      10 => Self::ByteSequence,
       _ => unreachable!(),
     }
   }
@@ -664,6 +668,7 @@ impl From<&str> for InputType {
       Self::END_OF_FILE_STR => Self::EndOfFile,
       Self::PRODUCTION_STR => Self::Production,
       Self::TOKEN_STR => Self::Token,
+      Self::BYTE_SEQUENCE_STR => Self::ByteSequence,
       "PRODUCTION" => Self::Production,
       "TOKEN" => Self::Token,
       "CLASS" => Self::Class,
