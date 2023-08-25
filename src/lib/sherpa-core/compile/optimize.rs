@@ -94,7 +94,7 @@ impl ComplexityMarker {
   pub fn print_comparison(&self, other: &Self, label: &str) {
     #[cfg(debug_assertions)]
     println!(
-      "Opt {} ---- {} -> {} State Reduction: {}% {} -> {}  Complexity Reduction: {}%",
+      "Opt {} ---- {} -> {} State Reduction: {}% Complexity Reduction: {}%",
       label,
       self.num_of_states,
       other.num_of_states,

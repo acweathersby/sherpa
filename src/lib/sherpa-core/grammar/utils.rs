@@ -88,12 +88,12 @@ pub fn get_symbol_details<'a>(mut sym: &'a ASTNode) -> SymbolData<'a> {
         data.is_group = true;
         break;
       }
-      ASTNode::List_Production(box p) => {
+      ASTNode::List_Production( p) => {
         data.is_list = true;
         data.is_optional |= p.optional;
         break;
       }
-      ASTNode::TerminalToken(box t) => {
+      ASTNode::TerminalToken( t) => {
         data.precedence = data.precedence.max(t.is_exclusive as u32);
         break;
       }

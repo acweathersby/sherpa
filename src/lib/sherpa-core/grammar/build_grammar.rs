@@ -96,7 +96,7 @@ pub fn create_grammar_data(
   for preamble in &grammar.preamble {
     match preamble {
       ASTNode::Import(import) => {
-        let box parser::Import { reference, uri, .. } = import;
+        let parser::Import { reference, uri, .. } = import.as_ref();
         let path = PathBuf::from(uri);
 
         match resolve_grammar_path(&path, &source_dir, &EXTENSIONS) {
@@ -668,12 +668,12 @@ fn record_symbol(
   s_store: &IStringStore,
 ) -> SherpaResult<SymbolId> {
   let id = match sym_node {
-    ASTNode::AnnotatedSymbol(box annotated) => {
-      let p = annotated.precedence.as_ref().map(|p| p.val as u16).unwrap_or_default();
+    ASTNode::AnnotatedSymbol(annotated) => {
+      let p = (*annotated).precedence.as_ref().map(|p| p.val as u16).unwrap_or_default();
       record_symbol(&annotated.symbol, p, p_data, g_data, s_store)?
     }
 
-    ASTNode::TerminalToken(box terminal) => {
+    ASTNode::TerminalToken(terminal) => {
       let string = escaped_from((&terminal.val).into())?.join("");
       let val = string.intern(s_store);
       let id = SymbolId::Token { val, precedence };
