@@ -27,6 +27,16 @@ pub trait JournalReporter {
 pub trait ParserStore: JournalReporter {
   fn get_states(&self) -> &ParseStatesVec;
   fn get_db(&self) -> &ParserDatabase;
+
+  #[cfg(debug_assertions)]
+  fn print_states(&self) {
+    let states = self.get_states();
+    for state in states {
+      if let Ok(string) = state.1.print(self.get_db(), true) {
+        println!("{}", string);
+      }
+    }
+  }
 }
 
 /** Builds and maintains a grammar compilation context */
