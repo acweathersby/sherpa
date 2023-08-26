@@ -4,7 +4,7 @@ use sherpa_core::{
   proxy::Array,
   *,
 };
-use sherpa_rust_runtime::types::{BlameColor, Token};
+use sherpa_rust_runtime::types::Token;
 
 use super::{compile::get_struct_type_from_node, types::*};
 use std::{
@@ -563,7 +563,7 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
           unreachable!(
             "\n\nProduction result not been resolved\n[{}] == {}\n\n\n{}\n\n",
             db.prod_friendly_name_string(prod_id),
-            rule.tok.blame(1, 1, "", BlameColor::RED),
+            rule.tok.blame(1, 1, "", sherpa_rust_runtime::types::BlameColor::RED),
             prod_data.iter().map(|(p, _)| { p.debug_string() }).collect::<Vec<_>>().join("\n")
           )
         };

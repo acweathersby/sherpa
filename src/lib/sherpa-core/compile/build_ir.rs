@@ -229,7 +229,7 @@ fn add_tok_expr(successors: &OrderedSet<&State>, w: &mut CodeWriter<Vec<u8>>, db
 
 fn classify_successors<'graph, 'db>(
   successors: &'graph OrderedSet<&'graph State<'db>>,
-  db: &'db ParserDatabase,
+  _db: &'db ParserDatabase,
 ) -> VecDeque<((u32, InputType), OrderedSet<&'graph State<'db>>)> {
   VecDeque::from_iter(
     hash_group_btreemap(successors.clone(), |_, s| match s.get_symbol() {
@@ -239,9 +239,9 @@ fn classify_successors<'graph, 'db>(
       SymbolId::Codepoint { .. } => (2, InputType::Codepoint),
       SymbolId::Default => (5, InputType::Default),
       sym if sym.is_class() => (3, InputType::Class),
-      sym => {
+      _sym => {
         #[cfg(debug_assertions)]
-        unreachable!("{sym:?} {}", s.debug_string(db));
+        unreachable!("{_sym:?} {}", s.debug_string(_db));
         #[cfg(not(debug_assertions))]
         unreachable!()
       }

@@ -1,13 +1,3 @@
-use sherpa_rust_runtime::types::Token;
-
-use crate::{
-  grammar::utils::resolve_grammar_path,
-  journal::Journal,
-  parser::{ast::escaped_from, GetASTNodeType},
-  types::error_types::add_invalid_import_source_error,
-  utils::create_u64_hash,
-};
-
 use super::{
   super::{
     parser::{self, ASTNode, Grammar},
@@ -15,7 +5,16 @@ use super::{
   },
   utils::{get_symbol_details, SymbolData},
 };
-
+use crate::{
+  grammar::utils::resolve_grammar_path,
+  journal::Journal,
+  parser::ast::escaped_from,
+  types::error_types::add_invalid_import_source_error,
+  utils::create_u64_hash,
+};
+#[cfg(debug_assertions)]
+use parser::GetASTNodeType;
+use sherpa_rust_runtime::types::Token;
 use std::{hash::Hash, path::PathBuf, sync::Arc};
 
 /// Temporary structure to host rule data during
@@ -333,9 +332,9 @@ pub fn process_production<'a>(
     ASTNode::AppendProduction(prod) => (ProductionType::ContextFree, &prod.rules),
     ASTNode::PrattProduction(prod) => (ProductionType::Pratt, &prod.rules),
     ASTNode::PegProduction(prod) => (ProductionType::Peg, &prod.rules),
-    ast => {
+    _ast => {
       #[cfg(debug_assertions)]
-      todo!("Create build for {ast:?}");
+      todo!("Create build for {_ast:?}");
       #[cfg(not(debug_assertions))]
       todo!()
     }

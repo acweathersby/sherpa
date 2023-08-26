@@ -5,7 +5,7 @@ pub mod report;
 pub use self::report::{Report, ReportType};
 use crate::types::*;
 use std::{
-  fmt::{Debug, Display},
+  fmt::Display,
   sync::{Arc, LockResult, RwLock},
 };
 
@@ -13,12 +13,12 @@ use std::{
 use std::time::Instant;
 
 #[derive(Default)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[cfg_attr(debug_assertions, derive(std::fmt::Debug))]
 struct ScratchPad {
   pub reports: Map<ReportType, Box<Report>>,
 }
 
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[cfg_attr(debug_assertions, derive(std::fmt::Debug))]
 /// A general structure for storing and interacting with data relating to the
 /// configuration, monitoring, and reporting of Sherpa commands and types.
 pub struct Journal {
@@ -330,7 +330,7 @@ impl Timing {
 }
 
 #[cfg(not(feature = "wasm-target"))]
-impl Debug for Timing {
+impl std::fmt::Debug for Timing {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     if let Some(end) = self.end {
       f.write_fmt(format_args!("{:?}", (end - self.start)))
@@ -343,6 +343,6 @@ impl Debug for Timing {
 #[cfg(not(feature = "wasm-target"))]
 impl Display for Timing {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    Debug::fmt(&self, f)
+    std::fmt::Debug::fmt(&self, f)
   }
 }

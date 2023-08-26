@@ -3,7 +3,6 @@ use sherpa_rust_runtime::types::Token;
 
 use std::{
   collections::{BTreeMap, BTreeSet},
-  fmt::Debug,
   hash::Hash,
   mem::{discriminant, Discriminant},
   sync::Arc,
@@ -190,7 +189,7 @@ impl Default for AScriptTypeVal {
   }
 }
 #[cfg(debug_assertions)]
-impl Debug for AScriptTypeVal {
+impl std::fmt::Debug for AScriptTypeVal {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.write_str(&self.debug_string())
   }
@@ -387,10 +386,10 @@ impl AScriptTypeVal {
         ),
         None => "GenericVec".to_string(),
       },
-      Struct(id) => {
+      Struct(_id) => {
         #[cfg(debug_assertions)]
         {
-          format!("Struct<{:?}>", id)
+          format!("Struct<{:?}>", _id)
         }
         #[cfg(not(debug_assertions))]
         {
@@ -426,10 +425,10 @@ impl AScriptTypeVal {
       Token => "TOKEN".to_string(),
       GenericStruct(_) => "Node".to_string(),
       Any => "Any".to_string(),
-      UnresolvedProduction(id) => {
+      UnresolvedProduction(_id) => {
         #[cfg(debug_assertions)]
         {
-          format!("UnresolvedProduction[{:?}]", id)
+          format!("UnresolvedProduction[{:?}]", _id)
         }
         #[cfg(not(debug_assertions))]
         {

@@ -496,6 +496,7 @@ impl<'follow, 'db: 'follow> Graph<'db> {
     self.states[0].kernel_items.iter().any(|i| i.rule_id == item.rule_id)
   }
 
+  #[allow(unused)]
   pub fn goal_items(&self) -> &ItemSet {
     &self.states[0].kernel_items
   }

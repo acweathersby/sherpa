@@ -620,10 +620,10 @@ fn handle_completed_groups<'db, 'follow>(
         todo!()
       }
     }
-    (len, collide, graph_state) => {
+    (_len, _collide, _graph_state) => {
       #[cfg(debug_assertions)]
       unimplemented!(
-        "\nNot Implemented: {graph_state:?} len:{len} collide:{collide:?} sym:{} \n[ {} ]\n\n{}",
+        "\nNot Implemented: {_graph_state:?} len:{_len} collide:{_collide:?} sym:{} \n[ {} ]\n\n{}",
         sym.debug_string(graph.get_db()),
         cmpl.to_debug_string("\n"),
         graph.debug_string()
@@ -747,7 +747,7 @@ fn merge_occluding<'db, 'follow>(
 }
 
 fn get_set_of_occluding_items<'db, 'follow>(
-  j: &mut Journal,
+  _j: &mut Journal,
   into_sym: &SymbolId,
   into_group: &ItemSet<'db>,
   groups: &OrderedMap<SymbolId, ItemSet<'db>>,
@@ -766,7 +766,7 @@ fn get_set_of_occluding_items<'db, 'follow>(
       if symbols_occlude(into_sym, from_sym, db) {
         #[cfg(debug_assertions)]
         {
-          j.report_mut().add_note(
+          _j.report_mut().add_note(
             "Symbol Group Merge",
             format!(
               "\nDue to the ambiguous symbols [{} ≈ {}] the group [\n\n{}\n\n] will be merged into [\n\n{}\n\n]\n",

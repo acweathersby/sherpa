@@ -1,7 +1,6 @@
 use super::Map;
 use crate::utils::create_u64_hash;
 use std::{
-  fmt::Debug,
   path::{Path, PathBuf},
   sync::{Arc, LockResult, RwLock, RwLockReadGuard},
 };
@@ -9,7 +8,7 @@ use std::{
 type InnerStringStore = Map<IString, String>;
 
 #[derive(Default, Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[cfg_attr(debug_assertions, derive(std::fmt::Debug))]
 pub struct IStringStore {
   _data: Arc<RwLock<InnerStringStore>>,
 }
@@ -82,7 +81,7 @@ impl Default for IString {
   }
 }
 #[cfg(debug_assertions)]
-impl Debug for IString {
+impl std::fmt::Debug for IString {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     unsafe {
       if self.is_large() {

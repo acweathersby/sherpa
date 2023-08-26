@@ -833,10 +833,10 @@ pub(crate) fn create_rust_writer_utils<'a>(store: &'a AScriptStore, db: &'a Pars
       AScriptTypeVal::Any => {
         format!("slots.assign(0, AstSlot({}, {}, TokenRange::default()));", &ref_, (utils.get_token_name)(SlotIndex::Rule))
       }
-      type_ => {
+      _type => {
         #[cfg(debug_assertions)]
         {
-          dbg!(type_, ref_, &utils.store.ast_type_name);
+          dbg!(_type, ref_, &utils.store.ast_type_name);
         }
         "INVALID_ASSIGNMENT".to_string()
       }

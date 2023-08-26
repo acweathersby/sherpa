@@ -552,11 +552,11 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
           }
           shifts.push(self.get_input()[offset_start..offset_end].to_string());
         }
-        ParseAction::Reduce { rule_id, .. } =>
+        ParseAction::Reduce { rule_id: _rule_id, .. } =>
         {
           #[cfg(debug_assertions)]
           if let Some(debug) = debug {
-            debug(&DebugEvent::Reduce { rule_id }, self.get_input());
+            debug(&DebugEvent::Reduce { rule_id: _rule_id }, self.get_input());
           }
         }
         _ => panic!("Unexpected Action!"),
@@ -614,7 +614,7 @@ Concrete Syntax Tree structure."
           len += token_byte_length;
           skipped.push(skip);
         }
-        ParseAction::Shift { token_byte_length, token_byte_offset, token_id, .. } => {
+        ParseAction::Shift { token_byte_length, token_byte_offset: _token_byte_offset, token_id, .. } => {
           let token = Rc::new(cst::CST::Terminal {
             byte_len: token_byte_length,
             token_id,
@@ -627,8 +627,8 @@ Concrete Syntax Tree structure."
 
           #[cfg(debug_assertions)]
           if let Some(debug) = debug {
-            let offset_start = token_byte_offset as usize;
-            let offset_end = (token_byte_offset + token_byte_length) as usize;
+            let offset_start = _token_byte_offset as usize;
+            let offset_end = (_token_byte_offset + token_byte_length) as usize;
             debug(&DebugEvent::ShiftToken { offset_start, offset_end }, self.get_input());
           }
         }

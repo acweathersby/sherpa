@@ -2,7 +2,7 @@ use super::{
   super::types::*,
   graph::{Origin, StateId, OUT_SCOPE_INDEX},
 };
-use std::{collections::VecDeque, fmt::Debug, hash::Hash};
+use std::{collections::VecDeque, hash::Hash};
 
 pub enum ItemType {
   Terminal(SymbolId),
@@ -31,7 +31,7 @@ pub struct Item<'db> {
 }
 
 #[cfg(debug_assertions)]
-impl<'db> Debug for Item<'db> {
+impl<'db> std::fmt::Debug for Item<'db> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let mut s = f.debug_struct("ItemRef");
     s.field("val", &self.debug_string());
@@ -447,9 +447,9 @@ pub trait ItemContainer<'db>: Clone + IntoIterator<Item = Item<'db>> + FromItera
     self.clone().to_vec().into_iter().map(|i| if i.sym_index > 0 { i.decrement().unwrap() } else { i }).collect()
   }
 
-  fn __debug_print__(&self, comment: &str) {
+  fn __debug_print__(&self, _comment: &str) {
     #[cfg(debug_assertions)]
-    debug_items(comment, self.clone());
+    debug_items(_comment, self.clone());
   }
 
   #[cfg(debug_assertions)]
@@ -504,7 +504,7 @@ fn debug_items<'db, T: IntoIterator<Item = Item<'db>>>(comment: &str, items: T) 
 }
 
 #[derive(Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[cfg_attr(debug_assertions, derive(std::fmt::Debug))]
 pub struct FollowPair<'db> {
   pub completed: Item<'db>,
   pub follow:    Item<'db>,
