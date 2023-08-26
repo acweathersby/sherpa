@@ -18,7 +18,7 @@ use std::collections::VecDeque;
 /// # fn main() -> SherpaResult<()> {
 ///
 /// let parser = SherpaGrammarBuilder::new()
-///   .add_grammar_from_string( "<> A > 'Hello' 'World' ", &PathBuf::default())?
+///   .add_source_from_string( "<> A > 'Hello' 'World' ", &PathBuf::default())?
 ///   .build_db(&PathBuf::default())?
 ///   .build_parser()?
 ///   .optimize(false)?;
@@ -148,6 +148,7 @@ fn build_statement<'db>(
         insert_op(bc, Op::AssignToken);
         insert_u32_le(bc, *id);
       }
+      parser::ASTNode::SetLine(_) => { /* ignored in bytecode parsers */ }
       _ => {
         unreachable!();
       }

@@ -101,6 +101,8 @@ impl SymbolId {
     match *self {
       Token { val, .. } if val == "\n".to_token() => true,
       ClassNewLine { .. } => true,
+      Char { char, .. } if char == "\n".chars().next().unwrap_or_default() as u8 => true,
+      Codepoint { val, .. } if val == "\n".chars().next().unwrap_or_default() as u32 => true,
       _ => false,
     }
   }
@@ -237,9 +239,9 @@ impl SymbolId {
       ClassNumber { .. } => &mut w + "c:num",
       ClassSymbol { .. } => &mut w + "c:sym",
       Token { val, precedence } => &mut w + "[" + val.to_str(db.string_store()).as_str() + "]" + print_precedence(precedence),
-      NonTerminalState {  .. } => &mut w + "non_term_state",
-      NonTerminal {  .. } => &mut w + "non_term",
-      NonTerminalToken {  .. } => &mut w + "tk:" + "non_term",
+      NonTerminalState { .. } => &mut w + "non_term_state",
+      NonTerminal { .. } => &mut w + "non_term",
+      NonTerminalToken { .. } => &mut w + "tk:" + "non_term",
       Codepoint { val, precedence } => &mut w + "" + val.to_string() + print_precedence(precedence),
       DBNonTerminal { key } => {
         let guard_str = db.prod_friendly_name_string(key);

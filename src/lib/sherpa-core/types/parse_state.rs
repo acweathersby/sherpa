@@ -271,6 +271,7 @@ fn render_IR<T: Write>(db: &ParserDatabase, mut w: &mut CodeWriter<T>, node: &AS
     ASTNode::Fail(..) => w.write(" fail")?,
     ASTNode::Pass(..) => w.write(" pass")?,
     ASTNode::Accept(..) => w.write(" accept")?,
+    ASTNode::SetLine(..) => w.write(" set-line")?,
     ASTNode::ReduceRaw(box parser::ReduceRaw { len, prod_id, rule_id, .. }) => {
       _ = w + " reduce " + len.to_string() + " symbols to " + prod_id.to_string() + " with rule " + rule_id.to_string();
     }

@@ -128,33 +128,62 @@ fn compile_statement<'a, 'llvm: 'a>(
         resolved_end = true;
       }
       parser::ASTNode::Skip(..) => {
+        let is_newline = matches!(non_branch.get(0), Some(parser::ASTNode::SetLine(_)));
         if is_scanless {
           incr_scan_ptr_by_sym_len(args, p_ctx)?;
           construct_assign_token_id(args, p_ctx, 0)?;
+          if is_newline {
+            increment_end_line_data(args, p_ctx)?;
+          }
         }
-        transfer_chkp_line_to_start_line(args, p_ctx)?;
-        transfer_start_line_to_end_line(args, p_ctx)?;
+
+        if is_scanless {
+          if is_newline {
+            transfer_end_line_to_start_line(args, p_ctx)?;
+            transfer_start_line_to_chkp_line(args, p_ctx)?;
+          }
+        } else {
+          transfer_chkp_line_to_start_line(args, p_ctx)?;
+          transfer_start_line_to_end_line(args, p_ctx)?;
+        }
+
         skip_token(args, p_ctx, state_fun)?;
         //construct_jump_to_table_start(args, start_block);
         resolved_end = true;
       }
-      parser::ASTNode::Scan(..) => {
-        incr_scan_ptr_by_sym_len(args, p_ctx)?;
-        update_end_line_data(args, p_ctx)?;
-      }
       parser::ASTNode::Shift(..) => {
+        let is_newline = matches!(non_branch.get(0), Some(parser::ASTNode::SetLine(_)));
         if is_scanless {
           incr_scan_ptr_by_sym_len(args, p_ctx)?;
           construct_assign_token_id(args, p_ctx, 0)?;
+          if is_newline {
+            increment_end_line_data(args, p_ctx)?;
+          }
         }
+
         if let Some((s, p)) = construct_token_shift(args, p_ctx)? {
           args.state_lu.insert(s.get_name().to_str().unwrap().to_string(), s);
           state_fun = s;
           p_ctx = p;
         }
-        transfer_chkp_line_to_start_line(args, p_ctx)?;
-        transfer_start_line_to_end_line(args, p_ctx)?;
+
+        if is_scanless {
+          if is_newline {
+            transfer_end_line_to_start_line(args, p_ctx)?;
+            transfer_start_line_to_chkp_line(args, p_ctx)?;
+          }
+        } else {
+          transfer_chkp_line_to_start_line(args, p_ctx)?;
+          transfer_start_line_to_end_line(args, p_ctx)?;
+        }
       }
+      parser::ASTNode::Scan(..) => {
+        if let Some(parser::ASTNode::SetLine(_)) = non_branch.get(0) {
+          increment_end_line_data(args, p_ctx)?;
+        }
+        incr_scan_ptr_by_sym_len(args, p_ctx)?;
+      }
+
       parser::ASTNode::Peek(..) => {
         if is_scanless {
           incr_scan_ptr_by_sym_len(args, p_ctx)?;
@@ -183,6 +212,7 @@ fn compile_statement<'a, 'llvm: 'a>(
           p_ctx = p;
         }
       }
+      parser::ASTNode::SetLine(_) => { /* do nothing: handled in transitive actions */ }
       parser::ASTNode::SetTokenId(tok) => {
         construct_assign_token_id(args, p_ctx, tok.id as u64)?;
         transfer_end_line_to_chkp_line(args, p_ctx)?;
@@ -239,6 +269,9 @@ fn compile_statement<'a, 'llvm: 'a>(
   SherpaResult::Ok(())
 }
 
+// #############################################################################
+// ###### Match Construction
+
 fn compile_match<'a, 'llvm: 'a>(
   matches_ast: &parser::Matches,
   args: &mut BuildArgs<'a, 'llvm>,
@@ -249,7 +282,6 @@ fn compile_match<'a, 'llvm: 'a>(
   let LLVMParserModule { b, ctx, i64, i32, i8, .. } = args.m;
   let u32_1 = i32.const_int(1, false);
   let parser::Matches { matches, mode, scanner, .. } = matches_ast;
-  let mut is_raw_char = false;
 
   let symbol_branches_start = ctx.append_basic_block(state_fun, "match");
   let default_block = ctx.append_basic_block(state_fun, "default");
@@ -283,14 +315,12 @@ fn compile_match<'a, 'llvm: 'a>(
     }
 
     InputType::BYTE_STR | InputType::BYTE_SCANLESS_STR => {
-      is_raw_char = true;
       CtxAggregateIndices::sym_len.store(b, p_ctx, u32_1)?;
       let scan_ptr_cache = CtxAggregateIndices::scan_ptr.load(b, p_ctx)?.into_pointer_value();
       (b.build_load(scan_ptr_cache, "").into_int_value(), i8)
     }
 
     InputType::CODEPOINT_STR | InputType::CODEPOINT_SCANLESS_STR => {
-      is_raw_char = true;
       let scan_ptr_cache = CtxAggregateIndices::scan_ptr.load(b, p_ctx)?.into_pointer_value();
       let (cp_val, tok_len) = construct_cp_lu_with_token_len_store(args, scan_ptr_cache)?;
       CtxAggregateIndices::sym_len.store(b, p_ctx, tok_len)?;
@@ -299,7 +329,6 @@ fn compile_match<'a, 'llvm: 'a>(
     }
 
     InputType::CLASS_STR | InputType::CLASS_SCANLESS_STR => {
-      is_raw_char = true;
       let scan_ptr_cache = CtxAggregateIndices::scan_ptr.load(b, p_ctx)?.into_pointer_value();
       let (cp_val, tok_len) = construct_cp_lu_with_token_len_store(args, scan_ptr_cache)?;
       CtxAggregateIndices::sym_len.store(b, p_ctx, tok_len)?;
@@ -328,66 +357,35 @@ fn compile_match<'a, 'llvm: 'a>(
     match _match {
       parser::ASTNode::DefaultMatch(def) => {
         let stmt = def.statement.as_ref();
-        pending_build.push((default_block, Some(stmt), false));
+        pending_build.push((default_block, Some(stmt)));
         default_defined = true;
       }
       parser::ASTNode::IntMatch(int_match) => {
-        let mut is_nl = false;
         let statement = &int_match.statement;
         let branch_block = ctx.append_basic_block(state_fun, "branch");
         for val in &int_match.vals {
-          // If we are working with character values (Byte or Codepoint)
-          // add line increment if value is 10 (ASCII Line Feed)
-          if is_raw_char && (*val == 5 || *val == 10) {
-            is_nl = true;
-          }
           branches.push((int_type.const_int(*val, false), branch_block));
         }
-        pending_build.push((branch_block, Some(statement.as_ref()), is_nl));
+        pending_build.push((branch_block, Some(statement.as_ref())));
       }
       _ => {}
     }
   }
 
   if !default_defined {
-    pending_build.push((default_block, None, false));
+    pending_build.push((default_block, None));
   };
 
   b.build_switch(cp_val, default_block, &branches);
 
-  for (block, maybe_stmt, is_new_line) in pending_build {
+  for (block, maybe_stmt) in pending_build {
     b.position_at_end(block);
     if let Some(stmt) = maybe_stmt {
-      if is_new_line {
-        prime_line_data(args, p_ctx, i8.const_int(1, false))?;
-      }
       compile_statement(args, stmt, p_ctx, state_fun, start_block, is_scanless)?;
     } else {
       fail(args, p_ctx, state_fun)?;
     }
   }
-
-  SherpaResult::Ok(())
-}
-
-fn prime_line_data<'a, 'llvm: 'a>(
-  args: &BuildArgs<'a, 'llvm>,
-  p: PointerValue<'llvm>,
-  increment_amount: IntValue<'llvm>,
-) -> SherpaResult<()> {
-  let LLVMParserModule { ctx, b, .. } = args.m;
-  let i64 = ctx.i64_type();
-  let i32 = ctx.i32_type();
-
-  let beg = b.build_ptr_to_int(CTX::beg_ptr.load(b, p)?.into_pointer_value(), i64, "");
-
-  let scan = b.build_ptr_to_int(CTX::scan_ptr.load(b, p)?.into_pointer_value(), i64, "");
-
-  let val = b.build_int_sub(scan, beg, "");
-  let val = b.build_int_truncate(val, i32, "");
-
-  CTX::end_line_off.store(b, p, val)?;
-  CTX::line_num_incr.store(b, p, increment_amount)?;
 
   SherpaResult::Ok(())
 }
@@ -516,14 +514,6 @@ fn accept(args: &BuildArgs) -> SherpaResult<()> {
   SherpaResult::Ok(())
 }
 
-/// Transfers the `end_line*` values to the `chkp_line*` variables.
-fn transfer_end_line_to_chkp_line(args: &BuildArgs, p_ctx: PointerValue) -> SherpaResult<()> {
-  let LLVMParserModule { b, .. } = args.m;
-  CtxAggregateIndices::chkp_line_num.store(b, p_ctx, CtxAggregateIndices::end_line_num.load(b, p_ctx)?.into_int_value())?;
-  CtxAggregateIndices::chkp_line_off.store(b, p_ctx, CtxAggregateIndices::end_line_off.load(b, p_ctx)?.into_int_value())?;
-  SherpaResult::Ok(())
-}
-
 /// Transfers the difference between `scan_ptr` and `head_ptr` to `tok_len`.
 /// If `token_value` is not 0, then assigns it's value to `tok_id`.
 fn construct_assign_token_id(args: &BuildArgs, p_ctx: PointerValue, token_value: u64) -> SherpaResult<()> {
@@ -603,6 +593,53 @@ fn construct_token_shift<'a, 'llvm: 'a>(
   SherpaResult::Ok(Some((post_shift, p_ctx)))
 }
 
+// #############################################################################
+// ###### Line manipulation functions
+
+/// Increments the line counter by one and sets the line offset to the current
+/// index position of the scan offset.
+fn increment_end_line_data<'a, 'llvm: 'a>(args: &BuildArgs<'a, 'llvm>, p: PointerValue<'llvm>) -> SherpaResult<()> {
+  let LLVMParserModule { ctx, b, .. } = args.m;
+  let i64 = ctx.i64_type();
+  let i32 = ctx.i32_type();
+  let increment_amount = i32.const_int(1, false);
+  // Calculate the offset from the beg pointer to the scan pointer. This will
+  // give us the offset of the newline character
+
+  let beg = b.build_ptr_to_int(CTX::beg_ptr.load(b, p)?.into_pointer_value(), i64, "");
+  let scan = b.build_ptr_to_int(CTX::scan_ptr.load(b, p)?.into_pointer_value(), i64, "");
+  let val = b.build_int_sub(scan, beg, "");
+  let val = b.build_int_truncate(val, i32, "");
+
+  CTX::end_line_off.store(b, p, val)?;
+
+  // Increment the the end line counter.
+
+  let new_val = b.build_int_add(
+    CtxAggregateIndices::end_line_num.load(b, p)?.into_int_value(),
+    b.build_int_z_extend(increment_amount, i32, ""),
+    "",
+  );
+  CtxAggregateIndices::end_line_num.store(b, p, new_val)?;
+
+  SherpaResult::Ok(())
+}
+
+/// Transfers the `end_line*` values to the `chkp_line*` variables.
+fn transfer_end_line_to_chkp_line(args: &BuildArgs, p_ctx: PointerValue) -> SherpaResult<()> {
+  let LLVMParserModule { b, .. } = args.m;
+  CtxAggregateIndices::chkp_line_num.store(b, p_ctx, CtxAggregateIndices::end_line_num.load(b, p_ctx)?.into_int_value())?;
+  CtxAggregateIndices::chkp_line_off.store(b, p_ctx, CtxAggregateIndices::end_line_off.load(b, p_ctx)?.into_int_value())?;
+  SherpaResult::Ok(())
+}
+
+fn transfer_end_line_to_start_line(args: &BuildArgs, p_ctx: PointerValue) -> SherpaResult<()> {
+  let LLVMParserModule { b, .. } = args.m;
+  CtxAggregateIndices::start_line_num.store(b, p_ctx, CtxAggregateIndices::end_line_num.load(b, p_ctx)?.into_int_value())?;
+  CtxAggregateIndices::start_line_off.store(b, p_ctx, CtxAggregateIndices::end_line_off.load(b, p_ctx)?.into_int_value())?;
+  SherpaResult::Ok(())
+}
+
 fn transfer_chkp_line_to_start_line(args: &BuildArgs, p_ctx: PointerValue) -> SherpaResult<()> {
   let LLVMParserModule { b, .. } = args.m;
   CtxAggregateIndices::start_line_num.store(b, p_ctx, CtxAggregateIndices::chkp_line_num.load(b, p_ctx)?.into_int_value())?;
@@ -618,6 +655,13 @@ fn transfer_start_line_to_end_line(args: &BuildArgs, p_ctx: PointerValue) -> She
   SherpaResult::Ok(())
 }
 
+fn transfer_start_line_to_chkp_line(args: &BuildArgs, p_ctx: PointerValue) -> SherpaResult<()> {
+  let LLVMParserModule { b, .. } = args.m;
+  CtxAggregateIndices::chkp_line_num.store(b, p_ctx, CtxAggregateIndices::start_line_num.load(b, p_ctx)?.into_int_value())?;
+  CtxAggregateIndices::chkp_line_off.store(b, p_ctx, CtxAggregateIndices::start_line_off.load(b, p_ctx)?.into_int_value())?;
+  SherpaResult::Ok(())
+}
+
 /// Resets peek side-effects by assigning `base_ptr` to `head_ptr` and
 /// `scan_ptr`. Also
 fn peek_reset(args: &BuildArgs, p_ctx: PointerValue) -> SherpaResult<()> {
@@ -630,21 +674,6 @@ fn peek_reset(args: &BuildArgs, p_ctx: PointerValue) -> SherpaResult<()> {
   CtxAggregateIndices::tok_len.store(b, p_ctx, iptr.const_zero())?;
   CtxAggregateIndices::sym_len.store(b, p_ctx, i32.const_zero())?;
   CtxAggregateIndices::line_num_incr.store(b, p_ctx, i8.const_zero())?;
-  SherpaResult::Ok(())
-}
-
-/// Update the `end_line*`  values by incrementing by the `line_nume+incr` and
-/// `end_line_num`
-fn update_end_line_data(args: &BuildArgs, p_ctx: PointerValue) -> SherpaResult<()> {
-  let LLVMParserModule { b, i32, i8, .. } = args.m;
-  // Increment line number;
-  let val = CtxAggregateIndices::line_num_incr.load(b, p_ctx)?.into_int_value();
-  CtxAggregateIndices::line_num_incr.store(b, p_ctx, i8.const_zero())?;
-
-  let new_val =
-    b.build_int_add(CtxAggregateIndices::end_line_num.load(b, p_ctx)?.into_int_value(), b.build_int_z_extend(val, *i32, ""), "");
-  CtxAggregateIndices::end_line_num.store(b, p_ctx, new_val)?;
-
   SherpaResult::Ok(())
 }
 

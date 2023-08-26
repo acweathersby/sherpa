@@ -296,24 +296,7 @@ fn add_match_expr<'db>(
           .collect::<OrderedSet<_>>();
 
         if !skipped.is_empty() {
-          let new_line = skipped
-            .iter()
-            .filter(|v| db.tok_data(**v).sym_id.is_linefeed())
-            .map(|v| v.to_val(db).to_string())
-            .collect::<Array<_>>()
-            .join(" | ");
-
-          if new_line.len() > 0 {
-            w = w + "\n( " + new_line + " ){ " + peeking.then_some("peek-skip").unwrap_or("skip") + " }";
-          }
-
-          let vals = skipped
-            .iter()
-            .filter(|v| !db.tok_data(**v).sym_id.is_linefeed())
-            .map(|v| v.to_val(db).to_string())
-            .collect::<Array<_>>()
-            .join(" | ");
-
+          let vals = skipped.iter().map(|v| v.to_val(db).to_string()).collect::<Array<_>>().join(" | ");
           if vals.len() > 0 {
             w = w + "\n( " + vals + " ){ " + peeking.then_some("peek-skip").unwrap_or("skip") + " }";
           }
@@ -340,7 +323,8 @@ fn build_body<'db>(state: &State, successor: &State, graph: &Graph<'db>, goto_st
 
   if match s_type {
     StateType::Shift => {
-      body_string.push(is_scanner.then_some("scan").unwrap_or("shift").into());
+      let scan_expr = successor.get_symbol().is_linefeed().then_some("scan then set-line").unwrap_or("scan");
+      body_string.push(is_scanner.then_some(scan_expr).unwrap_or("shift").into());
       true
     }
     StateType::PeekEnd => {

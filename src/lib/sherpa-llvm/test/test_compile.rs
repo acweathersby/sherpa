@@ -517,8 +517,8 @@ mango""##,
         *counter += 1;
         println!("Reduced P");
         assert_eq!(slots[0].1.to_slice(ctx.get_str()), "world");
+        assert_eq!(slots[0].1.line_off, 5, "Line offset of `world` should be 5");
         assert_eq!(slots[0].1.line_num, 3, "Line number of `world` should be 3");
-        assert_eq!(slots[0].1.line_off, 5, "Line offset of `world` should be 4");
       }),
       ("A", 0 /* A */, |ctx, slots| {
         let counter = unsafe { ctx.get_meta_mut() };
@@ -535,7 +535,7 @@ mango""##,
         *counter += 1;
         println!("Reduced C");
         assert_eq!(slots[0].1.to_slice(ctx.get_str()), "\"\nmango\"");
-        assert_eq!(slots[0].1.line_num, 8, "Line number of `mango` should be 8");
+        assert_eq!(slots[0].1.line_num, 7, "Line number of `mango` should be 7");
         assert_eq!(slots[0].1.line_off, 20, "Line offset of `mango` should be 20");
       }),
       //("B", 0, |_, _| {}),
