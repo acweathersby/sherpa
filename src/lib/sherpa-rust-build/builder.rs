@@ -1574,8 +1574,7 @@ impl<T: ByteReader + MutByteReader + UTF8Reader> Reader for T {}
 
 pub type Parser<'a, T, UserCTX> = sherpa_rust_runtime::bytecode::ByteCodeParser<'a, T, UserCTX>;"
       .into(),
-  )
-  .unwrap();
+  )?;
 
   w.block("pub mod meta", "{", "}", &|w| {
     w.block(&format!("pub const production_names: [&'static str;{}] = ", parse_productions.len()), "[", "];", &|w| {
@@ -1621,8 +1620,7 @@ pub type Parser<'a, T, UserCTX> = sherpa_rust_runtime::bytecode::ByteCodeParser<
         w.stmt(format!("parser.init_parser({bytecode_offset});"))?;
         w.stmt(format!("parser"))
       },
-    )
-    .unwrap();
+    )?;
   }
 
   // Export
@@ -1632,8 +1630,7 @@ pub type Parser<'a, T, UserCTX> = sherpa_rust_runtime::bytecode::ByteCodeParser<
       bc.chunks(60).into_iter().map(|i| i.into_iter().map(|i| format!("{i}")).collect::<Vec<_>>().join(",")).collect(),
     )?;
     SherpaResult::Ok(())
-  })
-  .unwrap();
+  })?;
 
   if !w.store.is_dummy {
     let export_node_data = get_ascript_export_data(w.utils);
@@ -1641,8 +1638,8 @@ pub type Parser<'a, T, UserCTX> = sherpa_rust_runtime::bytecode::ByteCodeParser<
     w.block("pub mod ast", "{", "}", &|w| {
       w.stmt(format!("impl AstObject for {ast_type_name} {{}}"))?;
       w.stmt(format!("type ASTSlot = ({ast_type_name}, TokenRange, TokenRange);"))?;
-      w.stmt("use super::*; ".into()).unwrap();
-      w.stmt(format!("type Node = {};", w.store.ast_type_name)).unwrap();
+      w.stmt("use super::*; ".into())?;
+      w.stmt(format!("type Node = {};", w.store.ast_type_name))?;
 
       // Create a module that will store convenience functions for compiling AST
       // structures based on on grammar entry points.
@@ -1677,8 +1674,7 @@ pub type Parser<'a, T, UserCTX> = sherpa_rust_runtime::bytecode::ByteCodeParser<
               w.stmt("Ok(i0)".to_string())
             }
           },
-        )
-        .unwrap();
+        )?;
       }
       SherpaResult::Ok(())
     })?;
@@ -1807,7 +1803,7 @@ pub struct Parser<T: Reader, M>(ParseContext<T, M>, T);
     let ast_type_name = w.store.ast_type_name.clone();
 
     w.block("pub mod ast", "{", "}", &|w| {
-      w.stmt("use super::*; ".into()).unwrap();
+      w.stmt("use super::*; ".into())?;
       w.stmt(format!(
         r##"
 impl AstObject for {ast_type_name} {{}}

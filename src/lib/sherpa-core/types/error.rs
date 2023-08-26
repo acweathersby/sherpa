@@ -241,6 +241,7 @@ impl Display for SherpaError {
       Report(r) => r.display_errors(f),
       Self::Error(error) => Display::fmt(error, f),
       Multi(errors) => {
+        let mut f = f;
         for error in errors {
           Display::fmt(error, f)?;
         }

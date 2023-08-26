@@ -629,7 +629,12 @@ fn process_rule_symbols(
   let skipped_symbols = g_data
     .global_skipped
     .iter()
-    .map(|sym_node| record_symbol(sym_node, 0, p_data, g_data, s_store).unwrap())
+    .map(|sym_node| {
+      let Ok(data) = record_symbol(sym_node, 0, p_data, g_data, s_store) else {
+        panic!("Could not record symbol");
+      };
+      data
+    })
     .collect::<Array<_>>();
 
   for rule in &mut rules {

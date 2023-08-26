@@ -1,6 +1,8 @@
 //! Convenient types for working with bytecode parser data.
 
-use std::fmt::{Debug, Display};
+#[cfg(debug_assertions)]
+use std::fmt::Debug;
+use std::fmt::Display;
 
 /// The current set of instruction opcodes
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

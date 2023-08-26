@@ -205,7 +205,7 @@ pub fn get_state_source_string(name: String, states: &JSParseStates) -> JsValue 
 
   let parser = states.states.as_ref();
 
-  let code = parser.get_states().iter().find(|f| f.0 == lu_name).map(|f| f.1.print(parser.get_db(), true).unwrap());
+  let code = parser.get_states().iter().find(|f| f.0 == lu_name).map(|f| f.1.print(parser.get_db(), true).unwrap_or_default());
 
   code.into()
 }

@@ -4,8 +4,12 @@ use super::{
   cst,
   *,
 };
-use crate::bytecode::{DebugEvent, DebugFn};
-use std::{fmt::Debug, rc::*, sync::Arc};
+#[cfg(debug_assertions)]
+use crate::bytecode::DebugEvent;
+use crate::bytecode::DebugFn;
+#[cfg(debug_assertions)]
+use std::fmt::Debug;
+use std::{rc::*, sync::Arc};
 
 #[derive(Clone, Copy)]
 #[cfg_attr(debug_assertions, derive(Debug))]

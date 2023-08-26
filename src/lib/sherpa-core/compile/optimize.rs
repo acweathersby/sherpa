@@ -66,8 +66,10 @@ pub(crate) fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
     // Can only do this once we can map scanner ids back to match statements
     // otherwise scanner states will be dropped.
     let parse_states = parse_states.into_iter().map(|(name, state)| {
-      let mut state = state.remap_source(db).unwrap();
-      state.build_ast(db).unwrap();
+      let mut state = state.remap_source(db).unwrap_or(Default::default());
+      if let Err(_) = state.build_ast(db) {
+        panic!("Failed to build AST")
+      }
       (name, Box::new(state))
     });
 
@@ -86,7 +88,7 @@ impl ComplexityMarker {
   pub fn new<'i, I: Iterator<Item = (&'i IString, &'i Box<ParseState>)>>(db: &ParserDatabase, states: I) -> Self {
     let (num_of_states, code_complexity) = states
       .enumerate()
-      .map(|(i, (_, s))| (i, s.print(db, false).unwrap().len()))
+      .map(|(i, (_, s))| (i, s.print(db, false).unwrap_or_default().len()))
       .fold((0, 0), |(a, c), (b, d)| (a.max(b), c + d));
     Self { num_of_states, code_complexity: code_complexity as f64 }
   }
@@ -606,7 +608,8 @@ fn combine_state_branches<'db>(db: &'db ParserDatabase, mut parse_states: ParseS
           }
 
           let groups = hash_group_btreemap(matches.clone(), |_, node| {
-            get_match_statement(node).map(|s| hash_id_value_u64(print_IR(&ASTNode::Statement(Box::new(s.clone())), db).unwrap()))
+            get_match_statement(node)
+              .map(|s| hash_id_value_u64(print_IR(&ASTNode::Statement(Box::new(s.clone())), db).unwrap_or_default()))
           });
 
           let mut new_matches = vec![];
@@ -679,7 +682,7 @@ fn canonicalize_states<'db, R: FromIterator<(IString, Box<ParseState>)>>(
   let mut hash_to_name_set = HashMap::new();
 
   for (name, state) in &parse_states {
-    let hash = state.get_canonical_hash(db);
+    let hash = state.get_canonical_hash(db)?;
     let canonical_name = hash_to_name_set.entry(hash).or_insert(*name).clone();
     state_name_to_canonical_state_name.insert(*name, canonical_name);
   }

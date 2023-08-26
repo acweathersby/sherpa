@@ -739,7 +739,7 @@ pub fn get_ascript_export_data(
         })),
         &Rule {
           symbols: vec![SymbolRef { id: SymbolId::DBNonTerminal { key: *prod_key }, ..Default::default() }],
-          g_id:    db.rule(db.prod_rules(*prod_key).unwrap()[0]).g_id,
+          g_id:    db.rule(db.prod_rules(*prod_key).unwrap_or_else(|_| panic!("Incorrect db key"))[0]).g_id,
           skipped: Default::default(),
           tok:     Default::default(),
           ast:     None,

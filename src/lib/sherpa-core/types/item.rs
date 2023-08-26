@@ -378,7 +378,11 @@ impl<'db> From<Item<'db>> for Items<'db> {
   fn from(value: Item<'db>) -> Self {
     let db = value.db;
     if let Some(prod_id) = value.prod_index_at_sym() {
-      db.prod_rules(prod_id).unwrap().iter().map(|r| Item::from_rule(*r, db)).collect()
+      if let Ok(rules) = db.prod_rules(prod_id) {
+        rules.iter().map(|r| Item::from_rule(*r, db)).collect()
+      } else {
+        Default::default()
+      }
     } else {
       Default::default()
     }
@@ -389,7 +393,8 @@ pub trait ItemContainer<'db>: Clone + IntoIterator<Item = Item<'db>> + FromItera
   /// Given a [CompileDatabase] and [DBProdId] returns the initial
   /// items of the production.
   fn start_items(prod_id: DBProdKey, db: &'db ParserDatabase) -> Self {
-    db.prod_rules(prod_id).unwrap().iter().map(|r| Item::from_rule(*r, db)).collect()
+    let Ok(rules) = db.prod_rules(prod_id) else { panic!("Could not get rules") };
+    rules.iter().map(|r| Item::from_rule(*r, db)).collect()
   }
 
   fn non_term_items(self) -> Self {

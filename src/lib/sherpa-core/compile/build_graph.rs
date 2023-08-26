@@ -475,7 +475,6 @@ fn handle_completed_groups<'db, 'follow>(
 ) -> SherpaResult<()> {
   let is_scan = graph.is_scan();
   let mut cmpl = follow_pairs.iter().to_completed_vec();
-  let db = graph.get_db();
 
   match (follow_pairs.len(), groups.remove(&sym), g_state) {
     (1, None, GraphState::Normal) => {
@@ -582,19 +581,21 @@ fn handle_completed_groups<'db, 'follow>(
           graph.enqueue_pending_state(GraphState::Normal, state);
         }
       } else {
-        let kernel_items =
-          follow_pairs.iter().flat_map(|fp| get_kernel_items_from_peek(graph, &fp.completed)).collect::<ItemSet>();
         #[cfg(debug_assertions)]
-        unimplemented!(
-          "\nCompleted Peek Items On Symbol:[{}]\n \n\nAcceptItems\n{}\n\nPeekItems:\n{}\n\nKernelItems:\n{}\n\nParant State\n{}\n\nGraph:\n{}",
+        {
+          let kernel_items =
+            follow_pairs.iter().flat_map(|fp| get_kernel_items_from_peek(graph, &fp.completed)).collect::<ItemSet>();
+          unimplemented!(
+            "\nCompleted Peek Items On Symbol:[{}]\n \n\nAcceptItems\n{}\n\nPeekItems:\n{}\n\nKernelItems:\n{}\n\nParant State\n{}\n\nGraph:\n{}",
 
-          sym.debug_string(db),
-          graph.goal_items().to_debug_string( "\n"),
-          cmpl.to_debug_string("\n"),
-          kernel_items.to_debug_string("\n"),
-          graph[par].debug_string(graph.get_db()),
-          graph.debug_string()
-        );
+            sym.debug_string(graph.get_db()),
+            graph.goal_items().to_debug_string( "\n"),
+            cmpl.to_debug_string("\n"),
+            kernel_items.to_debug_string("\n"),
+            graph[par].debug_string(graph.get_db()),
+            graph.debug_string()
+          );
+        }
         #[cfg(not(debug_assertions))]
         unimplemented!()
       }
@@ -623,7 +624,7 @@ fn handle_completed_groups<'db, 'follow>(
       #[cfg(debug_assertions)]
       unimplemented!(
         "\nNot Implemented: {graph_state:?} len:{len} collide:{collide:?} sym:{} \n[ {} ]\n\n{}",
-        sym.debug_string(db),
+        sym.debug_string(graph.get_db()),
         cmpl.to_debug_string("\n"),
         graph.debug_string()
       );
@@ -992,8 +993,13 @@ fn handle_completed_item<'db, 'follow>(
     // Completion of parse tree may be premature
     // or item is not an acceptable completed item
     (_, true) => {
-      let (follow, completed_items): (Vec<Items>, Vec<Items>) =
-        completed_items.into_iter().map(|i| get_follow(j, graph, i).unwrap()).unzip();
+      let (follow, completed_items): (Vec<Items>, Vec<Items>) = completed_items
+        .into_iter()
+        .map(|i| {
+          let Ok(result) = get_follow(j, graph, i) else { panic!("could not get follow data") };
+          result
+        })
+        .unzip();
       let follow = follow.into_iter().flatten().collect::<Items>();
       let completed_items = completed_items.into_iter().flatten().collect::<Items>();
 
