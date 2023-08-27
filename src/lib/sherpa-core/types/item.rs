@@ -250,8 +250,8 @@ impl<'db> Item<'db> {
       //self.rule().symbols[(self.sym_index - 1) as usize].id.precedence();
 
       let p = match self.origin {
-        Origin::TokenGoal(s) => self.db.token(s).sym_id.precedence(),
-        Origin::ProdGoal(p) => self.db.prod_sym(p).precedence(),
+        Origin::TokenGoal(s) => self.db.token(s).sym_id.precedence(self.db),
+        Origin::ProdGoal(p) => self.db.prod_sym(p).precedence(self.db),
         _ => 0,
       };
 
@@ -264,11 +264,29 @@ impl<'db> Item<'db> {
     }
   }
 
+  pub fn symbol_precedence(&self) -> u16 {
+    if self.is_complete() {
+      //self.rule().symbols[(self.sym_index - 1) as usize].id.precedence();
+
+      let p = match self.origin {
+        Origin::TokenGoal(s) => self.db.token(s).sym_id.precedence(self.db),
+        Origin::ProdGoal(p) => self.db.prod_sym(p).precedence(self.db),
+        _ => 0,
+      };
+
+      //println!("{} {{{}}}", self.debug_string(), p);
+
+      p
+    } else {
+      self.rule().symbols[self.sym_index as usize].id.precedence(self.db)
+    }
+  }
+
   pub fn exclusivity(&self) -> u16 {
     if self.is_complete() {
-      self.rule().symbols[(self.sym_index - 1) as usize].id.precedence()
+      self.rule().symbols[(self.sym_index - 1) as usize].id.precedence(self.db)
     } else {
-      self.rule().symbols[self.sym_index as usize].id.precedence()
+      self.rule().symbols[self.sym_index as usize].id.precedence(self.db)
     }
   }
 
@@ -323,55 +341,143 @@ pub type Items<'db> = Array<Item<'db>>;
 impl<'db> ItemContainer<'db> for ItemSet<'db> {}
 impl<'db> ItemContainer<'db> for Items<'db> {}
 
-impl<'a, 'db: 'a> ItemContainerIter<'a, 'db> for std::collections::btree_set::Iter<'a, Item<'db>> {}
-impl<'a, 'db: 'a> ItemContainerIter<'a, 'db> for std::slice::Iter<'a, Item<'db>> {}
-pub trait ItemContainerIter<'a, 'db: 'a>: Iterator<Item = &'a Item<'db>> + Sized {
-  fn contains_out_of_scope(&mut self) -> bool {
-    self.any(|i| i.is_out_of_scope())
-  }
+impl<'a, 'db: 'a, T: Iterator<Item = &'a Item<'db>>> ItemRefContainerIter<'a, 'db> for T {}
+impl<'a, 'db: 'a, T: Iterator<Item = Item<'db>>> ItemContainerIter<'a, 'db> for T {}
 
-  fn all_are_out_of_scope(&mut self) -> bool {
-    self.all(|i| i.origin.is_out_of_scope() || i.is_out_of_scope())
-  }
-
-  fn to_set(&mut self) -> ItemSet<'db> {
-    self.cloned().collect()
-  }
-
-  fn to_vec(&mut self) -> Items<'db> {
-    self.cloned().collect()
-  }
-
-  fn all_items_are_from_same_peek_origin(&mut self) -> bool {
-    let origin_set = self.map(|i| i.origin).collect::<OrderedSet<_>>();
-    match (origin_set.len(), origin_set.first()) {
-      (1, Some(Origin::Peek(..))) => true,
-      _ => false,
+macro_rules! common_iter_functions {
+  () => {
+    fn get_max_precedence(self) -> u32 {
+      self.map(|i| i.precedence()).max().unwrap_or_default() as u32
     }
+
+    fn get_max_sym_precedence(self) -> u32 {
+      self.map(|i| i.symbol_precedence()).max().unwrap_or_default() as u32
+    }
+
+    fn get_max_exclusivity(self) -> u32 {
+      self.map(|i| i.exclusivity()).max().unwrap_or_default() as u32
+    }
+
+    fn intersects(&mut self, set: &ItemSet) -> bool {
+      self.any(|i| set.contains(&i))
+    }
+
+    #[cfg(debug_assertions)]
+    fn debug_print(self, _comment: &str) {
+      println!("------>{} \n {}", _comment, self.to_debug_string("\n\n"));
+    }
+
+    #[cfg(debug_assertions)]
+    fn to_debug_string(self, sep: &str) -> String {
+      self.map(|i| i.debug_string()).collect::<Vec<_>>().join(sep)
+    }
+
+    /// Returns the Production of the non-terminal symbol in each item. For items
+    /// whose symbol is a terminal or are complete. Items that do not have a
+    /// nonterm as the active symbol are skipped.
+    fn to_prod_sym_id_set(self) -> OrderedSet<DBProdKey> {
+      self.filter_map(|i| i.prod_index_at_sym()).collect()
+    }
+
+    fn peek_is_resolved(&mut self) -> bool {
+      self.all_items_are_from_same_peek_origin()
+    }
+
+    fn follow_items_are_the_same(&mut self) -> bool {
+      self.map(|i| i.to_absolute()).collect::<ItemSet>().len() == 1
+    }
+
+    fn contains_out_of_scope(&mut self) -> bool {
+      self.any(|i| i.is_out_of_scope())
+    }
+
+    fn all_are_out_of_scope(&mut self) -> bool {
+      self.all(|i| i.origin.is_out_of_scope() || i.is_out_of_scope())
+    }
+
+    fn all_items_are_from_same_peek_origin(&mut self) -> bool {
+      let origin_set = self.map(|i| i.origin).collect::<OrderedSet<_>>();
+      match (origin_set.len(), origin_set.first()) {
+        (1, Some(Origin::Peek(..))) => true,
+        _ => false,
+      }
+    }
+
+    fn non_term_items<T: ItemContainer<'db>>(self) -> T {
+      self.filter_map(|i| i.is_nonterm().then(|| i.clone())).collect()
+    }
+
+    fn term_items<T: ItemContainer<'db>>(self) -> T {
+      self.filter_map(|i| i.is_term().then(|| i.clone())).collect()
+    }
+
+    fn null_items<T: ItemContainer<'db>>(self) -> T {
+      self.filter_map(|i| i.is_null().then(|| i.clone())).collect()
+    }
+
+    fn incomplete_items<T: ItemContainer<'db>>(self) -> T {
+      self.filter_map(|i| (!i.is_complete()).then(|| i.clone())).collect()
+    }
+
+    fn completed_items<T: ItemContainer<'db>>(self) -> T {
+      self.filter_map(|i| (i.is_complete()).then(|| i.clone())).collect()
+    }
+
+    fn inscope_items<T: ItemContainer<'db>>(self) -> T {
+      self.filter_map(|i| (!i.is_out_of_scope()).then(|| i.clone())).collect()
+    }
+
+    fn outscope_items<T: ItemContainer<'db>>(self) -> T {
+      self.filter_map(|i| (!i.is_out_of_scope()).then(|| i.clone())).collect()
+    }
+
+    fn to_absolute<T: ItemContainer<'db>>(self) -> T {
+      self.map(|i| i.to_absolute()).collect()
+    }
+
+    fn to_origin<T: ItemContainer<'db>>(self, origin: Origin) -> T {
+      self.map(|i| i.to_origin(origin)).collect()
+    }
+
+    #[inline(always)]
+    fn try_increment(self) -> Items<'db> {
+      self.map(|i| i.try_increment()).collect()
+    }
+
+    #[inline(always)]
+    fn try_decrement(self) -> Items<'db> {
+      self.map(|i| if i.sym_index > 0 { i.decrement().unwrap() } else { i.clone() }).collect()
+    }
+  };
+}
+
+pub trait ItemContainerIter<'a, 'db: 'a>: Iterator<Item = Item<'db>> + Sized {
+  fn to_set(self) -> ItemSet<'db> {
+    self.collect()
   }
 
-  fn peek_is_resolved(&mut self) -> bool {
-    self.all_items_are_from_same_peek_origin()
+  fn to_vec(self) -> Items<'db> {
+    self.collect()
   }
 
-  fn follow_items_are_the_same(&mut self) -> bool {
-    self.map(|i| i.to_absolute()).collect::<ItemSet>().len() == 1
+  common_iter_functions!();
+}
+
+pub trait ItemRefContainerIter<'a, 'db: 'a>: Iterator<Item = &'a Item<'db>> + Sized {
+  fn to_set(self) -> ItemSet<'db> {
+    self.cloned().collect()
   }
+
+  fn to_vec(self) -> Items<'db> {
+    self.cloned().collect()
+  }
+
   /// Returns a set of all production IDs the items reduce to.
   fn to_production_id_set(&mut self) -> OrderedSet<DBProdKey> {
     self.map(|i| i.prod_index()).collect()
   }
 
-  /// Returns the Production of the non-terminal symbol in each item. For items
-  /// whose symbol is a terminal or are complete. Items that do not have a
-  /// nonterm as the active symbol are skipped.
-  fn to_prod_sym_id_set(&mut self) -> OrderedSet<DBProdKey> {
-    self.filter_map(|i| i.prod_index_at_sym()).collect()
-  }
-
-  fn intersects(&mut self, set: &ItemSet) -> bool {
-    self.any(|i| set.contains(i))
-  }
+  common_iter_functions!();
 }
 
 impl<'db> From<Item<'db>> for Items<'db> {
@@ -447,8 +553,8 @@ pub trait ItemContainer<'db>: Clone + IntoIterator<Item = Item<'db>> + FromItera
     self.clone().to_vec().into_iter().map(|i| if i.sym_index > 0 { i.decrement().unwrap() } else { i }).collect()
   }
 
-  fn __debug_print__(&self, _comment: &str) {
-    #[cfg(debug_assertions)]
+  #[cfg(debug_assertions)]
+  fn debug_print(&self, _comment: &str) {
     debug_items(_comment, self.clone());
   }
 
@@ -496,7 +602,7 @@ pub trait ItemContainer<'db>: Clone + IntoIterator<Item = Item<'db>> + FromItera
 #[allow(unused)]
 #[cfg(debug_assertions)]
 fn debug_items<'db, T: IntoIterator<Item = Item<'db>>>(comment: &str, items: T) {
-  println!("{} --> ", comment);
+  println!("\n {} --> ", comment);
 
   for item in items {
     println!("    {}", item.debug_string());

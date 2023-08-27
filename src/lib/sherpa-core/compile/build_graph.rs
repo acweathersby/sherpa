@@ -128,25 +128,37 @@ fn handle_goto<'db, 'follow>(
     let incomplete = incremented_items.clone().incomplete_items();
     let mut completed = incremented_items.clone().completed_items();
 
+    // TODO(Anthony): Explain what's going on here.
     if kernel_prod_ids.remove(&prod_id) && parent.is_root() && completed.is_empty() {
       let item = Item::from_rule(db.prod_rules(*prod_id)?[0], db);
       completed.push(item.to_complete().to_origin(Origin::GoalCompleteOOS).to_oos_index().to_origin_state(parent));
     }
 
     if completed.len() > 0 && incomplete.len() > 0 {
-      let CompletedItemArtifacts { follow_pairs: mut fp, mut oos_pairs, default_only: default, .. } =
-        get_completed_item_artifacts(j, graph, parent, completed.iter())?;
+      // TODO(Anthony): Determine when peeking is required vs creating parser states.
 
-      fp.append(&mut oos_pairs);
+      // Peeking require when -- Dealing with out of scope items. only this condition?
 
-      if let Some(s) = create_peek(graph, sym_id, parent, incomplete.iter(), fp, false, transition_type) {
-        let c_p: std::collections::BTreeSet<FollowPair<'_>> = completed.clone().into_iter().map(|i| (i, i).into()).collect();
-        let graph_state = GraphState::Normal;
-        let sym = SymbolId::Default;
-        let groups = &mut Default::default();
-        let s = graph.create_state(sym, StateType::PeekEnd, Some(s), completed);
+      if completed.clone().outscope_items().len() == 0 {
+        let state = graph.create_state(sym_id, transition_type, Some(parent), incremented_items);
+        graph.enqueue_pending_state(GraphState::Normal, state);
+      } else {
+        // Shift-Reduce problem?
 
-        handle_completed_groups(j, graph, groups, s, graph_state, sym, c_p, &default)?;
+        let CompletedItemArtifacts { follow_pairs: mut fp, mut oos_pairs, default_only: default, .. } =
+          get_completed_item_artifacts(j, graph, parent, completed.iter())?;
+
+        fp.append(&mut oos_pairs);
+
+        if let Some(s) = create_peek(graph, sym_id, parent, incomplete.iter(), fp, false, transition_type) {
+          let c_p: std::collections::BTreeSet<FollowPair<'_>> = completed.clone().into_iter().map(|i| (i, i).into()).collect();
+          let graph_state = GraphState::Normal;
+          let sym = SymbolId::Default;
+          let groups = &mut Default::default();
+          let s = graph.create_state(sym, StateType::PeekEnd, Some(s), completed);
+
+          handle_completed_groups(j, graph, groups, s, graph_state, sym, c_p, &default)?;
+        }
       }
     } else {
       let state = graph.create_state(sym_id, transition_type, Some(parent), incremented_items.clone());
@@ -171,64 +183,329 @@ fn handle_incomplete_items<'db, 'follow>(
   groups: OrderedMap<SymbolId, ItemSet<'db>>,
 ) -> SherpaResult<ItemSet<'db>> {
   let mut out_items = OrderedSet::new();
-  let is_scan = graph.is_scan();
+
   for (sym, group) in groups {
-    match (group.len(), graph_state) {
-      (1, GraphState::Peek) => {
-        let kernel_items = get_kernel_items_from_peek_item(graph, group.first().unwrap());
-
-        match kernel_items[0].origin {
-          _ => {
-            let state = graph.create_state(sym, StateType::PeekEnd, Some(parent), kernel_items);
-            graph.enqueue_pending_state(GraphState::Normal, state);
-          }
-        }
-      }
-      (2.., GraphState::Peek) => {
-        if group.iter().all_items_are_from_same_peek_origin() {
-          let state = graph.create_state(
-            sym,
-            StateType::PeekEnd,
-            Some(parent),
-            get_kernel_items_from_peek_item(graph, group.first().unwrap()),
-          );
-          graph.enqueue_pending_state(GraphState::Normal, state);
-        } else {
-          let state = graph.create_state(sym, StateType::Peek, Some(parent), group.try_increment());
-
-          graph.enqueue_pending_state(graph_state, state);
-        }
-      }
-      (_, GraphState::Normal) => {
-        let out_of_scope = group.clone().outscope_items().to_vec();
-        let mut in_scope = group.inscope_items();
-
-        match (in_scope.len(), out_of_scope.len()) {
-          (0, 1..) => {
-            create_out_of_scope_complete_state(out_of_scope, graph, &sym, parent, is_scan);
-          }
-          (_, 1..) if is_scan => {
-            create_out_of_scope_complete_state(out_of_scope, graph, &sym, parent, is_scan);
-          }
-          (1.., _) => {
-            if let Some(shifted_items) = create_call(&in_scope.clone().to_vec(), graph, graph_state, parent, sym, is_scan) {
-              out_items.append(&mut shifted_items.to_set());
-            } else {
-              let state = graph.create_state(sym, StateType::Shift, Some(parent), in_scope.try_increment());
-
-              out_items.append(&mut in_scope);
-
-              graph.enqueue_pending_state(graph_state, state);
-            }
-          }
-          _ => unreachable!(),
-        }
-      }
-      _ => {}
-    }
+    out_items.append(&mut handle_incomplete_items_internal(graph, parent, sym, group, graph_state)?);
   }
 
   SherpaResult::Ok(out_items)
+}
+
+fn handle_incomplete_items_internal<'db>(
+  graph: &mut Graph<'db>,
+  parent: StateId,
+  sym: SymbolId,
+  group: BTreeSet<Item<'db>>,
+  graph_state: GraphState,
+) -> SherpaResult<ItemSet<'db>> {
+  let mut out_items: BTreeSet<Item<'_>> = OrderedSet::new();
+  let is_scan = graph.is_scan();
+  match (group.len(), graph_state) {
+    (1, GraphState::Peek) => {
+      let kernel_items = get_kernel_items_from_peek_item(graph, group.first().unwrap());
+
+      match kernel_items[0].origin {
+        _ => {
+          let state = graph.create_state(sym, StateType::PeekEnd, Some(parent), kernel_items);
+          graph.enqueue_pending_state(GraphState::Normal, state);
+        }
+      }
+    }
+    (2.., GraphState::Peek) => {
+      if group.iter().all_items_are_from_same_peek_origin() {
+        let state = graph.create_state(
+          sym,
+          StateType::PeekEnd,
+          Some(parent),
+          get_kernel_items_from_peek_item(graph, group.first().unwrap()),
+        );
+        graph.enqueue_pending_state(GraphState::Normal, state);
+      } else {
+        let state = graph.create_state(sym, StateType::Peek, Some(parent), group.try_increment());
+
+        graph.enqueue_pending_state(graph_state, state);
+      }
+    }
+    (_, GraphState::Normal) => {
+      let out_of_scope = group.clone().outscope_items().to_vec();
+      let mut in_scope = group.inscope_items();
+
+      match (in_scope.len(), out_of_scope.len()) {
+        (0, 1..) => {
+          create_out_of_scope_complete_state(out_of_scope, graph, &sym, parent, is_scan);
+        }
+        (_, 1..) if is_scan => {
+          create_out_of_scope_complete_state(out_of_scope, graph, &sym, parent, is_scan);
+        }
+        (1.., _) => {
+          if let Some(shifted_items) = create_call(&in_scope.clone().to_vec(), graph, graph_state, parent, sym, is_scan) {
+            out_items.append(&mut shifted_items.to_set());
+          } else {
+            let state = graph.create_state(sym, StateType::Shift, Some(parent), in_scope.try_increment());
+
+            out_items.append(&mut in_scope);
+
+            graph.enqueue_pending_state(graph_state, state);
+          }
+        }
+        _ => unreachable!(),
+      }
+    }
+    _ => {}
+  }
+
+  SherpaResult::Ok(out_items)
+}
+
+enum ConflictResolution {
+  Shift,
+  Reduce,
+  Peek,
+  Fork,
+  NoResolution,
+}
+
+fn resolve_shift_reduce_conflict<
+  'a,
+  'db: 'a,
+  A: Clone + ItemRefContainerIter<'a, 'db>,
+  B: Clone + ItemRefContainerIter<'a, 'db>,
+>(
+  incom_items: A,
+  comp1_items: B,
+) -> ConflictResolution {
+  let incom_nterm_set = incom_items.clone().to_production_id_set();
+  let compl_nterm_set = comp1_items.clone().map(|i| i.decrement().unwrap()).to_prod_sym_id_set();
+  let nterm_sets_are_equal = incom_nterm_set.len() == 1 && incom_nterm_set.is_superset(&compl_nterm_set);
+
+  if nterm_sets_are_equal && {
+    // If all the shift items reduce to the same nterm and all comp items where
+    // completed after shifting the same nterm, then the precedence of the shift
+    // items determines whether we should shift first or reduce.
+    let compl_prec = comp1_items.try_decrement().iter().get_max_sym_precedence().max(1);
+    let incom_prec = incom_items.get_max_sym_precedence();
+    incom_prec > compl_prec
+  } {
+    ConflictResolution::Shift
+  } else if nterm_sets_are_equal {
+    ConflictResolution::Reduce
+  } else {
+    unimplemented!();
+    ConflictResolution::Peek
+  }
+}
+
+fn handle_completed_groups<'db, 'follow>(
+  j: &mut Journal,
+  graph: &mut Graph<'db>,
+  groups: &mut OrderedMap<SymbolId, ItemSet<'db>>,
+  parent: StateId,
+  graph_state: GraphState,
+  sym: SymbolId,
+  follow_pairs: OrderedSet<FollowPair<'db>>,
+  default_only_items: &ItemSet<'db>,
+) -> SherpaResult<()> {
+  let is_scan = graph.is_scan();
+  let mut cmpl = follow_pairs.iter().to_completed_vec();
+
+  match (follow_pairs.len(), groups.remove(&sym), graph_state) {
+    (1, None, GraphState::Normal) => {
+      handle_completed_item(j, graph, (cmpl[0], cmpl), parent, sym, graph_state)?;
+    }
+    (2.., None, GraphState::Normal) => {
+      if is_scan {
+        // We may be able to continue parsing using follow items, after we
+        // determine whether we have symbol ambiguities.
+        resolve_conflicting_tokens(j, graph, parent, sym, cmpl.to_set(), graph_state)?;
+      } else if cmpl.clone().to_set().to_absolute().len() == 1 {
+        // The same production is generated from this completed item, regardless
+        // of the origins. This is a valid outcome.
+        handle_completed_item(j, graph, (cmpl[0], vec![cmpl[0]]), parent, sym, graph_state)?;
+      } else if cmpl.iter().all_are_out_of_scope() {
+        // We are at the end of a lookahead that results in the completion of
+        // some existing item.
+        let item = *o_to_r(cmpl.first(), "Item list is empty")?;
+
+        handle_completed_item(j, graph, (item, vec![item]), parent, sym, graph_state)?;
+      } else {
+        let unfollowed_items: Items = default_only_items.intersection(&cmpl.iter().to_set()).cloned().collect();
+
+        match unfollowed_items.len() {
+          2.. => {
+            // Only an issue if there are no follow actions.
+            // And even then, we could try using peek states to handle this
+            // outcome. Reduce Reduce conflict
+            // ------------------------------------------------------
+            // Could pick a specific item to reduce based on precedence or some
+            // kind of exclusive weight. Perhaps also walking back
+            // up the graph to find a suitable divergent point and add a
+            // fork. This would also be a good point to focus on breadcrumb
+            // parsing strategies.
+            create_reduce_reduce_error(j, graph, cmpl.to_set())?;
+          }
+          1 => {
+            let out = unfollowed_items;
+            handle_completed_item(j, graph, (out[0], out), parent, sym, graph_state)?;
+          }
+          0 => {
+            //There are lookahead(k=1) style states available, so we don't need
+            // to generate a default state.
+          }
+          _ => unreachable!(),
+        };
+      }
+    }
+    (_, Some(mut group), GraphState::Normal) => {
+      // Create A Peek Path to handle this
+      if is_scan {
+        let mut group = group.to_vec();
+        let item = cmpl[0];
+        group.append(&mut cmpl);
+        handle_completed_item(j, graph, (item, group), parent, sym, graph_state)?;
+      /*     todo!(
+        "Handle shift-reduce conflict in Scanner state. ------\n Reduce:\n{}\nShift:\n{} \n------",
+        completed.to_debug_string(g, "\n"), group.to_debug_string(g, "\n")
+      ); */
+      } else if group.iter().all_are_out_of_scope() && cmpl.iter().all_are_out_of_scope() {
+        cmpl.append(&mut group.to_vec());
+        create_out_of_scope_complete_state(cmpl, graph, &sym, parent, is_scan);
+      } else {
+        // WE can use precedence to resolve shift reduce conflicts.  For now favor
+        // shift.
+
+        let cardinal = group.clone().to_absolute();
+        let unique =
+          follow_pairs.into_iter().filter(|fp| !cardinal.contains(&&fp.follow.to_absolute())).collect::<OrderedSet<_>>();
+
+        if !unique.is_empty() {
+          match resolve_shift_reduce_conflict(group.iter(), cmpl.iter()) {
+            ConflictResolution::Shift => {
+              create_differed_reduce(j, graph, parent, sym, group.iter(), cmpl.iter(), graph_state)?;
+            }
+            ConflictResolution::Reduce => {
+              handle_completed_items(
+                j,
+                graph,
+                parent,
+                graph_state,
+                &mut BTreeMap::from_iter([(SymbolId::Default, cmpl.to_set())]),
+              )?;
+            }
+            ConflictResolution::Peek => {
+              group.append(&mut get_set_of_occluding_items(j, &sym, &group, &groups, is_scan, graph.get_db()));
+              create_peek(graph, sym, parent, group.iter(), unique, true, StateType::Peek);
+            }
+            _ => unreachable!(),
+          }
+        } else {
+          groups.insert(sym, group);
+        }
+      }
+    }
+    (1, None, GraphState::Peek) => {
+      resolve_peek(graph, cmpl.iter(), sym, parent);
+    }
+    (_, None, GraphState::Peek)
+      if cmpl.iter().all_are_out_of_scope()
+        || cmpl.iter().all_items_are_from_same_peek_origin()
+        || peek_items_are_from_goto_state(&cmpl, graph) =>
+    {
+      if !cmpl.iter().all_are_out_of_scope() {
+        cmpl = cmpl.into_iter().filter(|i| !i.is_out_of_scope()).collect();
+      }
+
+      resolve_peek(graph, cmpl.iter(), sym, parent);
+    }
+    (_, None, GraphState::Peek) => {
+      if cmpl.iter().follow_items_are_the_same() {
+        // Items are likely a product of a reduce-shift conflict. We'll favor
+        // the shift action as long as there is only one shift,
+        // otherwise we have a shift-shift conflict. Grabbing the
+        // original items.
+        let kernel_items =
+          follow_pairs.iter().flat_map(|fp| get_kernel_items_from_peek(graph, &fp.completed)).collect::<ItemSet>();
+
+        //let completed = kernel_items.clone().completed_items();
+        let incomplete = kernel_items.incomplete_items();
+
+        if incomplete.len() == 1 {
+          let state = graph.create_state(sym, StateType::PeekEnd, Some(parent), incomplete.to_vec());
+          graph.enqueue_pending_state(GraphState::Normal, state);
+        }
+      } else {
+        #[cfg(debug_assertions)]
+        {
+          let kernel_items =
+            follow_pairs.iter().flat_map(|fp| get_kernel_items_from_peek(graph, &fp.completed)).collect::<ItemSet>();
+          unimplemented!(
+            "\nCompleted Peek Items On Symbol:[{}]\n \n\nAcceptItems\n{}\n\nPeekItems:\n{}\n\nKernelItems:\n{}\n\nParant State\n{}\n\nGraph:\n{}",
+
+            sym.debug_string(graph.get_db()),
+            graph.goal_items().to_debug_string( "\n"),
+            cmpl.to_debug_string("\n"),
+            kernel_items.to_debug_string("\n"),
+            graph[parent].debug_string(graph.get_db()),
+            graph.debug_string()
+          );
+        }
+        #[cfg(not(debug_assertions))]
+        unimplemented!()
+      }
+    }
+    (_, Some(group), GraphState::Peek) => {
+      let mut combined = group.clone();
+      combined.append(&mut follow_pairs.iter().to_follow_set());
+
+      if combined.iter().all_items_are_from_same_peek_origin() {
+        resolve_peek(graph, combined.iter(), sym, parent);
+      } else {
+        #[cfg(debug_assertions)]
+        todo!(
+          "Roll the follow states into the group and resubmit to incomplete handler function.\nincomplete:\n{}\ncomplete:\n{}\nfollow:\n{}\n \n {}",
+          group.to_debug_string("\n"),
+          follow_pairs.iter().to_completed_vec().to_debug_string( "\n"),
+          follow_pairs.iter().to_follow_vec().to_debug_string("\n"),
+          graph.debug_string()
+        );
+
+        #[cfg(not(debug_assertions))]
+        todo!()
+      }
+    }
+    (_len, _collide, _graph_state) => {
+      #[cfg(debug_assertions)]
+      unimplemented!(
+        "\nNot Implemented: {_graph_state:?} len:{_len} collide:{_collide:?} sym:{} \n[ {} ]\n\n{}",
+        sym.debug_string(graph.get_db()),
+        cmpl.to_debug_string("\n"),
+        graph.debug_string()
+      );
+      #[cfg(not(debug_assertions))]
+      unimplemented!()
+    }
+  }
+
+  SherpaResult::Ok(())
+}
+
+fn create_differed_reduce<'a, 'db: 'a, A: Clone + ItemRefContainerIter<'a, 'db>, B: Clone + ItemRefContainerIter<'a, 'db>>(
+  j: &mut Journal,
+  graph: &mut Graph<'db>,
+  parent: StateId,
+  sym: SymbolId,
+  incom: A,
+  compl: B,
+  graph_state: GraphState,
+) -> Result<(), SherpaError> {
+  let differ =
+    graph.create_state(sym, StateType::DifferedReduce, Some(parent), incom.clone().chain(compl.clone().into_iter()).to_vec());
+
+  let shift_prefix = graph.create_state(sym, StateType::ShiftPrefix, Some(differ), incom.clone().to_vec());
+  let reduce_postfix = graph.create_state(sym, StateType::ReducePostfix, Some(differ), compl.clone().to_vec());
+
+  handle_completed_items(j, graph, reduce_postfix, graph_state, &mut BTreeMap::from_iter([(SymbolId::Default, compl.to_set())]))?;
+  handle_incomplete_items_internal(graph, shift_prefix, sym, incom.to_set(), graph_state)?;
+  Ok(())
 }
 
 fn handle_completed_items<'db, 'follow>(
@@ -293,195 +570,7 @@ fn handle_completed_items<'db, 'follow>(
   SherpaResult::Ok(max_precedence)
 }
 
-enum ConflictResolution<'a> {
-  Shift(ItemSet<'a>),
-  Reduce(ItemSet<'a>),
-  Peek(ItemSet<'a>, OrderedSet<FollowPair<'a>>),
-  Fork,
-  NoResolution,
-}
-
-fn resolve_shift_reduce_conflict<'a>(
-  shift_items: ItemSet<'a>,
-  reduce_items: OrderedSet<FollowPair<'a>>,
-) -> ConflictResolution<'a> {
-  return ConflictResolution::Shift(shift_items);
-}
-
-fn handle_completed_groups<'db, 'follow>(
-  j: &mut Journal,
-  graph: &mut Graph<'db>,
-  groups: &mut OrderedMap<SymbolId, ItemSet<'db>>,
-  par: StateId,
-  g_state: GraphState,
-  sym: SymbolId,
-  follow_pairs: OrderedSet<FollowPair<'db>>,
-  default_only_items: &ItemSet<'db>,
-) -> SherpaResult<()> {
-  let is_scan = graph.is_scan();
-  let mut cmpl = follow_pairs.iter().to_completed_vec();
-
-  match (follow_pairs.len(), groups.remove(&sym), g_state) {
-    (1, None, GraphState::Normal) => {
-      handle_completed_item(j, graph, (cmpl[0], cmpl), par, sym, g_state)?;
-    }
-    (2.., None, GraphState::Normal) => {
-      if is_scan {
-        // We may be able to continue parsing using follow items, after we
-        // determine whether we have symbol ambiguities.
-        resolve_conflicting_symbols(j, graph, par, sym, cmpl.to_set(), g_state)?;
-      } else if cmpl.clone().to_set().to_absolute().len() == 1 {
-        // The same production is generated from this completed item, regardless
-        // of the origins. This is a valid outcome.
-        handle_completed_item(j, graph, (cmpl[0], vec![cmpl[0]]), par, sym, g_state)?;
-      } else if cmpl.iter().all_are_out_of_scope() {
-        // We are at the end of a lookahead that results in the completion of
-        // some existing item.
-        let item = *o_to_r(cmpl.first(), "Item list is empty")?;
-
-        handle_completed_item(j, graph, (item, vec![item]), par, sym, g_state)?;
-      } else {
-        let unfollowed_items: Items = default_only_items.intersection(&cmpl.iter().to_set()).cloned().collect();
-
-        match unfollowed_items.len() {
-          2.. => {
-            // Only an issue if there are no follow actions.
-            // And even then, we could try using peek states to handle this
-            // outcome. Reduce Reduce conflict
-            // ------------------------------------------------------
-            // Could pick a specific item to reduce based on precedence or some
-            // kind of exclusive weight. Perhaps also walking back
-            // up the graph to find a suitable divergent point and add a
-            // fork. This would also be a good point to focus on breadcrumb
-            // parsing strategies.
-            create_reduce_reduce_error(j, graph, cmpl.to_set())?;
-          }
-          1 => {
-            let out = unfollowed_items;
-            handle_completed_item(j, graph, (out[0], out), par, sym, g_state)?;
-          }
-          0 => {
-            //There are lookahead(k=1) style states available, so we don't need
-            // to generate a default state.
-          }
-          _ => unreachable!(),
-        };
-      }
-    }
-    (_, Some(mut group), GraphState::Normal) => {
-      // Create A Peek Path to handle this
-      if is_scan {
-        let mut group = group.to_vec();
-        let item = cmpl[0];
-        group.append(&mut cmpl);
-        handle_completed_item(j, graph, (item, group), par, sym, g_state)?;
-      /*     todo!(
-        "Handle shift-reduce conflict in Scanner state. ------\n Reduce:\n{}\nShift:\n{} \n------",
-        completed.to_debug_string(g, "\n"), group.to_debug_string(g, "\n")
-      ); */
-      } else if group.iter().all_are_out_of_scope() && cmpl.iter().all_are_out_of_scope() {
-        cmpl.append(&mut group.to_vec());
-        create_out_of_scope_complete_state(cmpl, graph, &sym, par, is_scan);
-      } else {
-        let cardinal = group.clone().to_absolute();
-        let unique =
-          follow_pairs.into_iter().filter(|fp| !cardinal.contains(&&fp.follow.to_absolute())).collect::<OrderedSet<_>>();
-
-        if !unique.is_empty() {
-          group.append(&mut get_set_of_occluding_items(j, &sym, &group, &groups, is_scan, graph.get_db()));
-          create_peek(graph, sym, par, group.iter(), unique, true, StateType::Peek);
-        }
-      }
-    }
-    (1, None, GraphState::Peek) => {
-      resolve_peek(graph, cmpl.iter(), sym, par);
-    }
-    (_, None, GraphState::Peek)
-      if cmpl.iter().all_are_out_of_scope()
-        || cmpl.iter().all_items_are_from_same_peek_origin()
-        || peek_items_are_from_goto_state(&cmpl, graph) =>
-    {
-      if !cmpl.iter().all_are_out_of_scope()
-      /* && sym.is_default() */
-      {
-        cmpl = cmpl.into_iter().filter(|i| !i.is_out_of_scope()).collect();
-      }
-
-      resolve_peek(graph, cmpl.iter(), sym, par);
-    }
-    (_, None, GraphState::Peek) => {
-      if cmpl.iter().follow_items_are_the_same() {
-        // Items are likely a product of a reduce-shift conflict. We'll favor
-        // the shift action as long as there is only one shift,
-        // otherwise we have a shift-shift conflict. Grabbing the
-        // original items.
-        let kernel_items =
-          follow_pairs.iter().flat_map(|fp| get_kernel_items_from_peek(graph, &fp.completed)).collect::<ItemSet>();
-
-        //let completed = kernel_items.clone().completed_items();
-        let incomplete = kernel_items.incomplete_items();
-
-        if incomplete.len() == 1 {
-          let state = graph.create_state(sym, StateType::PeekEnd, Some(par), incomplete.to_vec());
-          graph.enqueue_pending_state(GraphState::Normal, state);
-        }
-      } else {
-        #[cfg(debug_assertions)]
-        {
-          let kernel_items =
-            follow_pairs.iter().flat_map(|fp| get_kernel_items_from_peek(graph, &fp.completed)).collect::<ItemSet>();
-          unimplemented!(
-            "\nCompleted Peek Items On Symbol:[{}]\n \n\nAcceptItems\n{}\n\nPeekItems:\n{}\n\nKernelItems:\n{}\n\nParant State\n{}\n\nGraph:\n{}",
-
-            sym.debug_string(graph.get_db()),
-            graph.goal_items().to_debug_string( "\n"),
-            cmpl.to_debug_string("\n"),
-            kernel_items.to_debug_string("\n"),
-            graph[par].debug_string(graph.get_db()),
-            graph.debug_string()
-          );
-        }
-        #[cfg(not(debug_assertions))]
-        unimplemented!()
-      }
-    }
-    (_, Some(group), GraphState::Peek) => {
-      let mut combined = group.clone();
-      combined.append(&mut follow_pairs.iter().to_follow_set());
-
-      if combined.iter().all_items_are_from_same_peek_origin() {
-        resolve_peek(graph, combined.iter(), sym, par);
-      } else {
-        #[cfg(debug_assertions)]
-        todo!(
-          "Roll the follow states into the group and resubmit to incomplete handler function.\nincomplete:\n{}\ncomplete:\n{}\nfollow:\n{}\n \n {}",
-          group.to_debug_string("\n"),
-          follow_pairs.iter().to_completed_vec().to_debug_string( "\n"),
-          follow_pairs.iter().to_follow_vec().to_debug_string("\n"),
-          graph.debug_string()
-        );
-
-        #[cfg(not(debug_assertions))]
-        todo!()
-      }
-    }
-    (_len, _collide, _graph_state) => {
-      #[cfg(debug_assertions)]
-      unimplemented!(
-        "\nNot Implemented: {_graph_state:?} len:{_len} collide:{_collide:?} sym:{} \n[ {} ]\n\n{}",
-        sym.debug_string(graph.get_db()),
-        cmpl.to_debug_string("\n"),
-        graph.debug_string()
-      );
-      #[cfg(not(debug_assertions))]
-      unimplemented!()
-    }
-  }
-
-  SherpaResult::Ok(())
-}
-
-fn create_peek<'a, 'db: 'a, 'follow, T: ItemContainerIter<'a, 'db>>(
+fn create_peek<'a, 'db: 'a, 'follow, T: ItemRefContainerIter<'a, 'db>>(
   graph: &mut Graph<'db>,
   sym: SymbolId,
   parent: StateId,
@@ -666,6 +755,8 @@ fn resolve_conflicting_tokens<'db, 'follow>(
     Class,
   }
 
+  let db = graph.get_db();
+
   // Map items according to their symbols
   let symbol_groups = hash_group_btreemap(completed_items.clone(), |_, i| i.origin.get_symbol(graph.get_db()));
 
@@ -678,10 +769,10 @@ fn resolve_conflicting_tokens<'db, 'follow>(
   let completed: Option<&ItemSet>;
 
   for (_, groups) in priority_groups {
-    let max_precedence = groups.keys().map(|i| i.precedence()).max().unwrap_or_default();
+    let max_precedence = groups.keys().map(|i| i.precedence(db)).max().unwrap_or_default();
 
     // Filter out members with lower precedences
-    let groups = groups.into_iter().filter(|(i, _)| i.precedence() >= max_precedence).collect::<BTreeMap<_, _>>();
+    let groups = groups.into_iter().filter(|(i, _)| i.precedence(db) >= max_precedence).collect::<BTreeMap<_, _>>();
 
     if groups.len() > 1 {
       // Filter out
@@ -841,7 +932,7 @@ fn create_transition_groups<'db, 'follow>(
   SherpaResult::Ok(groups)
 }
 
-fn get_completed_item_artifacts<'a, 'db: 'a, 'follow, T: ItemContainerIter<'a, 'db>>(
+fn get_completed_item_artifacts<'a, 'db: 'a, 'follow, T: ItemRefContainerIter<'a, 'db>>(
   j: &mut Journal,
   graph: &mut Graph<'db>,
   par: StateId,
@@ -947,7 +1038,7 @@ fn get_kernel_items_from_peek_item<'db, 'follow>(graph: &Graph<'db>, peek_item: 
   graph[peek_origin].get_resolve_items(peek_index)
 }
 
-fn resolve_peek<'a, 'db: 'a, 'follow, T: ItemContainerIter<'a, 'db>>(
+fn resolve_peek<'a, 'db: 'a, 'follow, T: ItemRefContainerIter<'a, 'db>>(
   graph: &mut Graph<'db>,
   mut completed: T,
   sym: SymbolId,
@@ -1104,6 +1195,10 @@ fn get_goal_items<'db, 'follow>(graph: &'db Graph<'db>, item: &Item<'db>) -> Ite
 
 fn get_max_precedence(group: &ItemSet) -> u32 {
   group.iter().map(|i| i.precedence()).max().unwrap_or_default() as u32
+}
+
+fn get_max_precedence2(group: &ItemSet) -> u32 {
+  group.iter().map(|i| i.symbol_precedence()).max().unwrap_or_default() as u32
 }
 
 fn get_max_exclusivity(group: &ItemSet) -> u32 {

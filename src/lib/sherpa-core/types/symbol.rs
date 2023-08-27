@@ -107,7 +107,7 @@ impl SymbolId {
     }
   }
 
-  pub fn precedence(&self) -> u16 {
+  pub fn precedence(&self, db: &ParserDatabase) -> u16 {
     use SymbolId::*;
     match *self {
       EndOfFile { precedence } => precedence,
@@ -121,6 +121,7 @@ impl SymbolId {
       NonTerminalToken { precedence, .. } => precedence,
       Codepoint { precedence, .. } => precedence,
       DBNonTerminalToken { precedence, .. } => precedence,
+      DBToken { key: index } => db.sym(index).precedence(db),
       Char { precedence, .. } => precedence,
       _ => 0,
     }

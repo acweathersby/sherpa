@@ -89,6 +89,9 @@ pub enum StateType {
   PeekEnd,
   Complete,
   Follow,
+  DifferedReduce,
+  ShiftPrefix,
+  ReducePostfix,
   AssignAndFollow(DBTokenKey),
   Reduce(DBRuleKey),
   AssignToken(DBTokenKey),
@@ -515,7 +518,17 @@ impl<'follow, 'db: 'follow> Graph<'db> {
         string += &state.debug_string(self.db);
       }
     }
+
     string
+  }
+
+  #[allow(unused)]
+  #[inline(always)]
+  pub fn debug_print(&self) {
+    #[cfg(debug_assertions)]
+    {
+      println!("{}", self.debug_string());
+    }
   }
 }
 

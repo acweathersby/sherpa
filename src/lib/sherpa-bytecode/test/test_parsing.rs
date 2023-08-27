@@ -16,7 +16,7 @@ pub fn recursive_production() -> SherpaResult<()> {
       <> expr > expr "+" expr
         | c:num 
   "#],
-    &[("default", "1+2+3+1", true)],
+    &[("default", "1+2+3", true)],
   )
 }
 
@@ -25,12 +25,15 @@ pub fn precedence() -> SherpaResult<()> {
   compile_and_run_grammars(
     &[r#"
 
-    <> expr > expr "+" expr
-    | expr "*" expr
+    <> expr > expr "+"{1} expr{1}
+    | expr "^"{4} expr{4}
+    | expr "*"{3} expr{3}
+    | expr "/"{2} expr{2}
+    | expr "-"{1} expr{1}
     | c:num
 
 "#],
-    &[("default", "1+2*3+1", true)],
+    &[("default", "3*2/1+1", true)],
   )
 }
 

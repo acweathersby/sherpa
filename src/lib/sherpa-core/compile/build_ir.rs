@@ -1,3 +1,4 @@
+//! Functions for translating parse graphs into Sherpa IR code.
 use crate::{journal::Journal, types::*, utils::hash_group_btreemap, writer::code_writer::CodeWriter};
 use sherpa_rust_runtime::types::bytecode::InputType;
 use std::collections::{BTreeMap, VecDeque};
@@ -184,10 +185,20 @@ fn convert_state_to_ir<'db>(
     }
 
     out.push((state_id, Box::new(ir_state)));
+  } else if state.get_type() == StateType::DifferedReduce {
+    let (shifts, reduces): (Vec<_>, Vec<_>) = successors.iter().cloned().partition(|s| s.get_type() == StateType::ShiftPrefix);
+    let mut w = CodeWriter::new(vec![]);
+
+    w.w(" push ")?.w(&create_ir_state_name(graph, Some(state), &reduces[0]))?;
+    w.w(" then goto ")?.w(&create_ir_state_name(graph, Some(state), &shifts[0]))?;
+    let base_state = Box::new(create_ir_state(graph, w, state)?);
+
+    out.push((state_id.to_post_reduce(), base_state));
   } else if let Some(mut base_state) = base_state {
     if state_id.is_root() {
       base_state.name = entry_name;
     }
+
     out.push((state_id, base_state));
   }
   #[cfg(debug_assertions)]
@@ -252,7 +263,6 @@ fn classify_successors<'graph, 'db>(
 
 fn add_match_expr<'db>(
   mut w: &mut CodeWriter<Vec<u8>>,
-
   state: &State,
   graph: &Graph<'db>,
   branches: &mut VecDeque<((u32, InputType), OrderedSet<&State>)>,

@@ -1192,7 +1192,7 @@ impl Hash for AST_Add{
 #[derive(Clone)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct Precedence{
-  pub val:u32, 
+  pub sym_prec:u32, 
 }
 
 impl Precedence{
@@ -1200,7 +1200,7 @@ impl Precedence{
   pub fn new (val: u32)-> Self {
     
     Self{
-      val,
+      sym_prec: val,
     }
   }
   
@@ -1240,7 +1240,7 @@ impl Hash for Precedence{
   
   fn hash<H: std::hash::Hasher> (&self,hasher: &mut H) {
     self.get_type().hash(hasher);
-    self.val.hash(hasher);
+    self.sym_prec.hash(hasher);
   }
 }
 
