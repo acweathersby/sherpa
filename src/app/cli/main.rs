@@ -93,70 +93,86 @@ fn main() -> SherpaResult<()> {
 
   if let Some(matches) = matches.subcommand_matches("build") {
     let (parser_type, out_dir, _lib_out_dir) = configure_matches(matches, &pwd);
-
-    let output = matches.get_many::<PathBuf>("INPUTS").unwrap_or_default().cloned().collect::<Vec<_>>();
-
+    let grammar_sources = matches.get_many::<PathBuf>("INPUTS").unwrap_or_default().cloned().collect::<Vec<_>>();
     let name = matches.get_one::<String>("name").cloned();
 
-    let mut grammar = SherpaGrammarBuilder::new();
-
-    for path in &output {
-      grammar = grammar.add_source(path)?;
-    }
-
-    if grammar.dump_errors() {
-      panic!("Failed To parse due to the above errors")
-    }
-
-    let db = grammar.build_db(output.first().unwrap())?;
-
-    if db.dump_errors() {
-      panic!("Failed To parse due to the above errors")
-    }
-
-    let parser = db.build_parser()?.optimize(false)?;
-
-    if parser.dump_errors() {
-      panic!("Failed To parse due to the above errors")
-    }
-
-    let output = match parser_type {
-      ParserType::LLVM => {
-        #[cfg(feature = "llvm")]
-        {
-          println!("Building!!!!");
-          match sherpa_llvm::llvm_parser_build::build_llvm_parser(j.transfer(), &name, &db, &states, &_lib_out_dir, None, true) {
-            SherpaResult::Err(err) => {
-              panic!("{}", err);
-            }
-            _ => {}
-          }
-
-          println!("---");
-          sherpa_rust_build::compile_rust_llvm_parser(j.transfer(), &db, &name, &name).await
-        }
-        #[cfg(not(feature = "llvm"))]
-        SherpaResult::Err("LLVM based compilation not supported not supported".into())
-      }
-      _ => {
-        let (bc, lu) = compile_bytecode(&parser, false)?;
-        compile_rust_bytecode_parser(parser, &bc, &lu)
-      }
-    };
-
-    let output = output?;
-
-    //Write to file
-    let out_filepath = out_dir.join(name.unwrap() + ".rs");
-
-    let mut file = File::create(out_filepath)?;
-
-    file.write_all(output.as_bytes())?;
-
-    SherpaResult::Ok(())
+    build_parser(grammar_sources.as_slice(), parser_type, name, _lib_out_dir, out_dir)
   } else if matches.subcommand_matches("disassemble").is_some() {
     SherpaResult::Ok(())
   } else {
     SherpaResult::Err(SherpaError::from("Command Not Recognized"))
   }
+}
+
+fn build_parser(
+  grammar_sources: &[PathBuf],
+  parser_type: ParserType,
+  name: Option<String>,
+  _lib_out_dir: PathBuf,
+  out_dir: PathBuf,
+) -> SherpaResult<()> {
+  let mut grammar = SherpaGrammarBuilder::new();
+
+  for path in grammar_sources {
+    grammar = grammar.add_source(path)?;
+  }
+
+  if grammar.dump_errors() {
+    panic!("Failed To parse due to the above errors")
+  }
+
+  let db = grammar.build_db(grammar_sources.first().unwrap())?;
+
+  if db.dump_errors() {
+    panic!("Failed To parse due to the above errors")
+  }
+
+  let parser = db.build_parser()?.optimize(false)?;
+
+  if parser.dump_errors() {
+    panic!("Failed To parse due to the above errors")
+  }
+
+  let output = match parser_type {
+    ParserType::LLVM => {
+      #[cfg(feature = "llvm")]
+      {
+        println!("Building!!!!");
+        match sherpa_llvm::llvm_parser_build::build_llvm_parser(j.transfer(), &name, &db, &states, &_lib_out_dir, None, true) {
+          SherpaResult::Err(err) => {
+            panic!("{}", err);
+          }
+          _ => {}
+        }
+
+        println!("---");
+        sherpa_rust_build::compile_rust_llvm_parser(j.transfer(), &db, &name, &name);
+      }
+      #[cfg(not(feature = "llvm"))]
+      SherpaResult::Err("LLVM based compilation not supported not supported".into())
+    }
+    _ => {
+      let (bc, lu) = compile_bytecode(&parser, false)?;
+      compile_rust_bytecode_parser(parser, &bc, &lu)
+    }
+  };
+
+  let output = output?;
+
+  //Write to file
+  let out_filepath = out_dir.join(name.unwrap() + ".rs");
+
+  let mut file = File::create(out_filepath)?;
+
+  file.write_all(output.as_bytes())?;
+
+  SherpaResult::Ok(())
+}
+
+#[test]
+fn test_sherpa_bytecode_bootstrap() -> SherpaResult<()> {
+  let sherpa_grammar =
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammar/sherpa/2.0.0/grammar.sg").canonicalize().unwrap();
+
+  build_parser(&[sherpa_grammar], ParserType::Bytecode, Some("test_sherpa".into()), std::env::temp_dir(), std::env::temp_dir())
 }

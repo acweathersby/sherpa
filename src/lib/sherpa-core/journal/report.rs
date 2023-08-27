@@ -120,16 +120,7 @@ impl Report {
   pub fn ok_or_convert_to_error<T>(&mut self, return_val: T) -> SherpaResult<T> {
     match (self._errors.len() == 0, self.is_sink) {
       (true, false) => SherpaResult::Ok(return_val),
-      (false, false) => {
-        #[cfg(not(feature = "wasm-target"))]
-        {
-          let instant = Instant::now();
-          for timer in self.timings.values_mut() {
-            timer.set_end(instant)
-          }
-        }
-        SherpaResult::Err((&*self).into())
-      }
+      (false, false) => Err(SherpaError::Multi(self.errors().into_iter().cloned().collect())),
       (_, true) => SherpaResult::Err("Invalid attempt to evaluate a report sink".into()),
     }
   }

@@ -577,11 +577,7 @@ impl AScriptStore {
 
     compile_ascript_store(&mut j, &mut new_self, db)?;
 
-    if j.report().have_errors_of_type(SherpaErrorSeverity::Critical) {
-      SherpaResult::Err(j.report().into())
-    } else {
-      SherpaResult::Ok(new_self)
-    }
+    j.report_mut().ok_or_convert_to_error(new_self)
   }
 
   pub fn get_type_names(&mut self) -> Arc<BTreeMap<AScriptStructId, String>> {

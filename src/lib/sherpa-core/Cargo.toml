@@ -26,3 +26,6 @@ wasm-lab = ["wasm-target"]
 
 # Enable multi-threading code
 multithread = []
+
+# Enable the debug printing of errors
+auto_print_errors = []

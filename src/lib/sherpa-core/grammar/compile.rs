@@ -101,8 +101,8 @@ fn load_from_str(j: &mut Journal, source: &str, source_path: PathBuf, soup: &Gra
   let root_grammar = match parse_grammar(&source) {
     SherpaResult::Ok(root_grammar) => root_grammar,
     SherpaResult::Err(err) => {
-      j.report_mut().add_error(err);
-      return SherpaResult::Err(SherpaError::from("Failed Parse"));
+      j.report_mut().add_error(err.clone());
+      return Err(err);
     }
     _ => return SherpaResult::Err(SherpaError::from("Failed Parse")),
   };

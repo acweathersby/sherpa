@@ -1472,7 +1472,7 @@ fn convert_numeric<T: AScriptNumericType>(
     Some(SlotRef::ast_obj(
       SlotIndex::Sym(u.bump_ref_index(ref_index)),
       type_slot,
-      format!("0.0 {}", rust_type,),
+      format!("0 as {}", rust_type,),
       T::from_f64(0.0),
     ))
   }

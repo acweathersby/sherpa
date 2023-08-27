@@ -16,6 +16,7 @@ clap = { version="4.0.29" }
 
 [dependencies.sherpa_core]
 path = "../../lib/sherpa-core"
+features = ["auto_print_errors"]
 
 [dependencies.sherpa_ascript]
 path = "../../lib/sherpa-ascript"

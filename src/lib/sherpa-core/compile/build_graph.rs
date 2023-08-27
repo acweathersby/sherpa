@@ -25,8 +25,10 @@ pub(super) fn build_graph<'follow, 'db: 'follow>(
 
   graph.enqueue_pending_state(GraphState::Normal, root);
 
+  let mut have_errors = false;
+
   while let Some((graph_state, parent)) = graph.dequeue_pending_state() {
-    handle_kernel_items(j, &mut graph, parent, graph_state)?;
+    have_errors |= handle_kernel_items(j, &mut graph, parent, graph_state).is_err();
   }
 
   j.report_mut().ok_or_convert_to_error(graph)
@@ -650,7 +652,7 @@ fn create_call<'db, 'follow>(
   None
 }
 
-fn resolve_conflicting_symbols<'db, 'follow>(
+fn resolve_conflicting_tokens<'db, 'follow>(
   j: &mut Journal,
   graph: &mut Graph<'db>,
   par: StateId,
@@ -682,9 +684,11 @@ fn resolve_conflicting_symbols<'db, 'follow>(
     let groups = groups.into_iter().filter(|(i, _)| i.precedence() >= max_precedence).collect::<BTreeMap<_, _>>();
 
     if groups.len() > 1 {
-      j.report_mut().add_error(SherpaError::SourcesError {
+      // Filter out
+
+      let error: SherpaError = SherpaError::SourcesError {
         id:       "conflicting-symbols",
-        msg:      "Found ".to_string() + &groups.len().to_string() + " conflicting Defined symbols. Grammar is ambiguous",
+        msg:      "Found ".to_string() + &groups.len().to_string() + " conflicting tokens. This grammar has an ambiguous scanner",
         ps_msg:   Default::default(),
         severity: SherpaErrorSeverity::Critical,
         sources:  groups
@@ -692,8 +696,11 @@ fn resolve_conflicting_symbols<'db, 'follow>(
           .map(|(_sym, items)| items.iter().map(|i| (i.rule().tok.clone(), Default::default(), Default::default())))
           .flatten()
           .collect(),
-      });
-      return SherpaResult::Err(SherpaError::Text("Grammar conflicts".to_string()));
+      };
+
+      j.report_mut().add_error(error.clone());
+
+      return SherpaResult::Err(error);
     } else {
       completed = Some(groups.values().next().unwrap());
     }

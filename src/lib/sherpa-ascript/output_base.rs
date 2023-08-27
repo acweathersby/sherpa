@@ -624,7 +624,15 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
                     }
                     _ => {
                       #[cfg(debug_assertions)]
-                      panic!("Could not resolve: {statement:?}");
+                      panic!("{}", SherpaError::SourceError {
+                        loc:        statement.to_token(),
+                        id:         Default::default(),
+                        msg:        "Could not resolve this expression".to_string(),
+                        inline_msg: Default::default(),
+                        ps_msg:     Default::default(),
+                        severity:   Default::default(),
+                        path:       Default::default(),
+                      });
                       #[cfg(not(debug_assertions))]
                       panic!()
                     }

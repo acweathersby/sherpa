@@ -104,7 +104,7 @@ use sherpa_rust_runtime::{
   SherpaResult::Ok(writer.into_writer().to_string())
 }
 
-pub async fn compile_rust_llvm_parser(
+pub fn compile_rust_llvm_parser(
   mut j: Journal,
   db: &ParserDatabase,
   grammar_name: &str,
@@ -112,9 +112,9 @@ pub async fn compile_rust_llvm_parser(
 ) -> SherpaResult<String> {
   let j2 = j.transfer();
 
-  let store = async move { AScriptStore::new(j2, &db) };
+  let store = AScriptStore::new(j2, &db);
 
-  let store: AScriptStore = store.await?;
+  let store: AScriptStore = store?;
 
   j.flush_reports();
 
