@@ -1463,8 +1463,22 @@ fn convert_numeric<T: AScriptNumericType>(
   let tok_conversion_fn = T::to_fn_name();
   let range_conversion_fn = T::from_tok_range_name();
 
+  fn default_value<T: AScriptNumericType>(
+    u: &AscriptWriterUtils,
+    ref_index: &mut usize,
+    rust_type: &str,
+    type_slot: usize,
+  ) -> Option<SlotRef> {
+    Some(SlotRef::ast_obj(
+      SlotIndex::Sym(u.bump_ref_index(ref_index)),
+      type_slot,
+      format!("0.0 {}", rust_type,),
+      T::from_f64(0.0),
+    ))
+  }
+
   match init {
-    None => None,
+    None => default_value::<T>(u, ref_index, rust_type, type_slot),
     Some(init) => match &init.expression {
       ASTNode::AST_NUMBER(box AST_NUMBER { value, .. }) => Some(SlotRef::ast_obj(
         SlotIndex::Sym(u.bump_ref_index(ref_index)),
@@ -1472,10 +1486,8 @@ fn convert_numeric<T: AScriptNumericType>(
         format!("{}{}", T::string_from_f64(*value), rust_type,),
         T::from_f64(*value),
       )),
-      expr => {
-        let ref_ = u.ast_expr_to_ref(expr, rule, ref_index, type_slot)?;
-
-        match ref_.ast_type {
+      expr => match u.ast_expr_to_ref(expr, rule, ref_index, type_slot) {
+        Some(ref_) => match ref_.ast_type {
           AScriptTypeVal::F64(..)
           | AScriptTypeVal::F32(..)
           | AScriptTypeVal::Bool(..)
@@ -1491,8 +1503,9 @@ fn convert_numeric<T: AScriptNumericType>(
             Some(ref_.to(format!("%%.{}(unsafe{{&*_ctx_}}.get_str())", range_conversion_fn), T::from_f64(0.0)))
           }
           _ => Some(ref_.to(format!("%%.{}()", tok_conversion_fn), T::from_f64(0.0))),
-        }
-      }
+        },
+        _ => default_value::<T>(u, ref_index, rust_type, type_slot),
+      },
     },
   }
 }
