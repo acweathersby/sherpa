@@ -3,7 +3,7 @@
 //! A Parser Compiler Framework
 //!
 //! This library contains all functions and types needed to create
-//! and update Sherpa grammars, generate Sherpa parser IR states, and
+//! and update Sherpa grammars, generate IR parsers, and
 //! optimize to create the best parsers possible.
 //!
 //! Visit [Sherpa Docs](https://localhost:1313) to learn more about Sherpa.

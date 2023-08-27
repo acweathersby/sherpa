@@ -1,64 +1,44 @@
 # Sherpa
 
-Sherpa is new type of parse generator that is 
+The recursive parser compiler. 
 
-What sherpa is:
+Recurse is 
+- LL Compatible
+- LR Compatible
+- Peg Compatible
+- Hybrid Ready
 
-- Integrated Lexing
-Sherpa dispenses with the notion of a separate lexer process by allowing arbitrary matching on three low level classes of data: bytes, UTF8 codepoints, UTF character classes. 
+Sherpa is a general purpose parser compiler that provides a rich set of tools and features to easily create, use, and anaylize powerful parsers. Using an algorithm agnostic intermediate representation (IR) to define parsing methods, Sherpa is able to create parsers from a verietty of gammars, including context free LL and LR grammars and PEG grammars, as well as a limited set of context sensitive grammars. The Sherpa Grammar Syntax allows for quick and easy writing of programming languages, and provides direct access to the IR to create fully customizable parsers to suite any need. 
 
-- Algorithm Agnostic
-- Low Level
+The primary goals of the Sherpa project are to privide useful tools for
 
+- Language design and anaylsis
+- Syntax highlighting
+- Linting and formatting
+- AST and CST construction and traversal
 
-Sherpa is parse algorithm agnostic. At its core is a parser programming language that is design simplify the creation
-of parsers that can handle a large number of grammatical constructs. It is able to describe (G)LL, (G)LR, Recursive Descent,
-Recursive Ascent, Pratt, and Peg parser, to name few common ones. Not only that, the language design allows arbitrary mixing
-of these algorithms. 
+# Docs 
 
-Sherpa also provides a general AST  AST specification language that allows both the language specification and its AST structures. 
+Checkout out the online documentation [here](https://acweathersby.github.io/sherpa/docs).
 
-It provides a flexible way to defining parsers through language grammar, AST specifications, and IR code definitions. It can target LLVM, allowing it to be used in languages other Rust (eventually including Python, C++, and Js). 
+API documentation can be found here. 
 
-## Usage 
+# Contribute
 
-> Sherpa compiler requires an installation of the LLVM library to build native 
-> parsers. Please review the [LLVM parsers guide](./doc/llvm_parser_guide.md) to make sure you're able to build
-> these type of parsers. 
+> # *TODO*
 
-Currently Sherpa is only available as a direct download of the Github Repo . It can be included in existing cargo projects by adding the following to the Cargo.toml file:
+# Similar Projects
 
-```toml
+## Recursive Ascent and Descent Compilers
 
-[build-dependencies]
-sherpa = { git="https://github.com/acweathersby/sherpa", branch="release" }
+## LR Compilers
+- [LALRPOP](https://github.com/lalrpop/lalrpop) (rust) - LR(1) parser generator for Rust
+- [tree-sitter](https://github.com/tree-sitter/tree-sitter) (C / JavaScript) - An incremental parsing system for programming tools
 
-[dependencies]
-sherpa_runtime = { git="https://github.com/acweathersby/sherpa", branch="release" }
+## Parsing Expression Grammar (PEG) Compilers
 
-```
-> `v1.*.*+` releases of Sherpa will be made available through crates.io
+- [Pest](https://github.com/pest-parser/pest) (rust) - The Elegant Parser
 
-### CLI
+## Abstract and Concrete Syntax Trees
 
-#### Basic usage
-
-```bash
-sherpa build --rust --ast -o ./parser/ ./source_grammar.sg 
-```
-
-Checkout the [CLI README](./src/app/cli/README.md) for command line based operation of Sherpa. 
-
-## Learn More
-
-- [Using Sherpa](doc/introductory_tutorial.md)
-
-- [What is a parser generator](doc/parser_generator.md)
-
-- [Creating AST source code with AScript](doc/ascript.md)
-
-## License
-
-The source code of Sherpa is licensed under the [GPL-v3](./LICENSE.md) license. 
-
-All artifacts produced by the Sherpa compiler are licensed under the [MIT](./ARTIFACT_LICENSE.md) license.
+- [Rowan](https://github.com/rust-analyzer/rowan) (rust) - lossless syntax trees
