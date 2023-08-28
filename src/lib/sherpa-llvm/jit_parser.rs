@@ -254,8 +254,8 @@ impl<'llvm, R: ByteReader + LLVMByteReader + MutByteReader, M> SherpaParser<R, M
     self.ctx.get_token_line_offset()
   }
 
-  fn get_production_id(&self) -> u32 {
-    self.ctx.prod_id
+  fn get_nonterminal_id(&self) -> u32 {
+    self.ctx.nterm
   }
 
   fn get_reader(&self) -> &R {
@@ -292,14 +292,14 @@ impl<'llvm, R: ByteReader + LLVMByteReader + MutByteReader, M> SherpaParser<R, M
         token_id:          self.get_token_length(),
       },
       ParseActionType::Reduce => ParseAction::Reduce {
-        production_id: self.ctx.prod_id,
-        rule_id:       self.ctx.rule_id,
-        symbol_count:  self.ctx.sym_len,
+        nonterminal_id: self.ctx.nterm,
+        rule_id:        self.ctx.rule_id,
+        symbol_count:   self.ctx.sym_len,
       },
-      ParseActionType::Accept => ParseAction::Accept { production_id: self.ctx.prod_id },
+      ParseActionType::Accept => ParseAction::Accept { nonterminal_id: self.ctx.nterm },
       ParseActionType::Error => ParseAction::Error {
-        last_production: self.ctx.prod_id,
-        last_input:      TokenRange {
+        last_nonterminal: self.ctx.nterm,
+        last_input:       TokenRange {
           len:      self.get_token_length(),
           off:      self.get_token_offset(),
           line_num: self.get_token_line_number(),

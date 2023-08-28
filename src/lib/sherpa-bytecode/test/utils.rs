@@ -15,9 +15,8 @@ use sherpa_rust_runtime::{
 pub type TestParser<'a> = ByteCodeParser<'a, UTF8StringReader<'a>, u32>;
 
 pub fn compile_and_run_grammars(source: &[&str], inputs: &[(&str, &str, bool)]) -> SherpaResult<()> {
-  build_parse_states_from_multi_sources(source, "".into(), true, &|tp| {
-    // states.iter().for_each(|(_, s)| println!("{}\n\n",
-    // s.source_string(db.string_store())));
+  build_parse_states_from_multi_sources(source, "".into(), false, &|tp| {
+    tp.print_states();
 
     let (bc, state_map) = compile_bytecode(&tp, true)?;
 
@@ -31,13 +30,13 @@ pub fn compile_and_run_grammars(source: &[&str], inputs: &[(&str, &str, bool)]) 
         )) as u32)
         .is_ok();
 
-      let mut cd = console_debugger(db.to_owned(), PrintConfig {
-        display_scanner_output: true,
-        display_instruction: true,
-        ..Default::default()
-      });
-
       if ok != *should_pass {
+        let mut cd = console_debugger(db.to_owned(), PrintConfig {
+          display_scanner_output: true,
+          display_instruction: true,
+          ..Default::default()
+        });
+
         TestParser::new(&mut ((*input).into()), &bc).collect_shifts_and_skips(
           db.get_entry_offset(entry_name, &state_map).expect(&format!(
             "\nCan't find entry offset for entry point [{entry_name}].\nValid entry names are\n    {}\n",
@@ -49,6 +48,23 @@ pub fn compile_and_run_grammars(source: &[&str], inputs: &[(&str, &str, bool)]) 
         panic!(
           "\n\nParsing of input\n   \"{input}\"\nthrough entry point [{entry_name}] should {}.\n",
           if *should_pass { "pass" } else { "fail" }
+        );
+      } else {
+        let mut cd = console_debugger(db.to_owned(), PrintConfig {
+          display_scanner_output: false,
+          display_instruction: false,
+          display_input_data: false,
+          display_state: false,
+          ..Default::default()
+        });
+
+        TestParser::new(&mut ((*input).into()), &bc).collect_shifts_and_skips(
+          db.get_entry_offset(entry_name, &state_map).expect(&format!(
+            "\nCan't find entry offset for entry point [{entry_name}].\nValid entry names are\n    {}\n",
+            db.entry_points().iter().map(|e| { e.entry_name.to_string(db.string_store()) }).collect::<Vec<_>>().join(" | ")
+          )) as u32,
+          0,
+          &mut cd.as_deref_mut(),
         );
       }
     }
@@ -71,9 +87,9 @@ where
   fns
     .into_iter()
     .filter_map(|(name, rule_number, b)| {
-      let prod = db.prod_from_name(name);
-      if prod != Default::default() {
-        let rule_id = db.prod_rules(prod).unwrap()[rule_number];
+      let nterm = db.nonterm_from_name(name);
+      if nterm != Default::default() {
+        let rule_id = db.nonterm_rules(nterm).unwrap()[rule_number];
         Some((Into::<usize>::into(rule_id), b))
       } else {
         None

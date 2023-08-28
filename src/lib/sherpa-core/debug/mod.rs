@@ -49,38 +49,28 @@ Pushing token [{string}] to stack
 
 Stack:\n    {}\n
 -------------------------------------------------------------------------------",
-        stack
-          .iter()
-          .enumerate()
-          .map(|(i, s)| format!("{}: {s}", i + 1))
-          .collect::<Vec<_>>()
-          .join("\n    ")
+        stack.iter().enumerate().map(|(i, s)| format!("{}: {s}", i + 1)).collect::<Vec<_>>().join("\n    ")
       );
     }
     DebugEvent::Reduce { rule_id } => {
       let item = Item::from_rule((*rule_id).into(), &db);
-      let prod_name = item.prod_name().to_string(db.string_store());
-      let prod_name = prod_name.split("____").last().unwrap();
-
+      let nterm_name = item.nonterm_name().to_string(db.string_store());
+      let nterm_name = nterm_name.split("____").last().unwrap();
       let items = stack.drain((stack.len() - item.len as usize)..);
       let symbols = items.collect::<Vec<_>>();
-      stack.push(format!("({prod_name}: {})", symbols.join(",")));
+      stack.push(format!("({nterm_name}: {})", symbols.join(",")));
+
       println!(
         "
 [REDUCE] ----------------------------------------------------------------------
 
-Reduce to {prod_name} with rule: 
+Reduce to {nterm_name} with rule: 
 {}
 
 Stack:\n    {}\n
 -------------------------------------------------------------------------------",
         /* item.to_complete().debug_string() */ "",
-        stack
-          .iter()
-          .enumerate()
-          .map(|(i, s)| format!("{}: {s}", i + 1))
-          .collect::<Vec<_>>()
-          .join("\n    ")
+        stack.iter().enumerate().map(|(i, s)| format!("{}: {s}", i + 1)).collect::<Vec<_>>().join("\n    ")
       )
     }
 
@@ -93,14 +83,17 @@ Failed to recognize input.
 -------------------------------------------------------------------------------",
       )
     }
-    DebugEvent::Complete { production_id, .. } => {
+    DebugEvent::Complete { nonterminal_id, .. } => {
       println!(
         "
   [Complete] --------------------------------------------------------------------
   
-    Accepted on production {}.
+    Accepted on non-terminal {}.
+  
+    Stack:\n    {}\n
   -------------------------------------------------------------------------------",
-        db.prod_guid_name((*production_id).into()).to_string(db.string_store())
+        db.nonterm_guid_name((*nonterminal_id).into()).to_string(db.string_store()),
+        stack.iter().enumerate().map(|(i, s)| format!("{}: {s}", i + 1)).collect::<Vec<_>>().join("\n    ")
       )
     }
 
@@ -130,9 +123,7 @@ Symbol Length: {}
         end - start
       )
     }
-    DebugEvent::CodePointValue { input_value, start, end }
-      if display_input_data && display_scanner_output =>
-    {
+    DebugEvent::CodePointValue { input_value, start, end } if display_input_data && display_scanner_output => {
       println!(
         "
 [CodePoint Input]------------------------------------------------------------------------
@@ -145,9 +136,7 @@ Symbol Length: {}
         end - start
       )
     }
-    DebugEvent::ClassValue { input_value, start, end }
-      if display_input_data && display_scanner_output =>
-    {
+    DebugEvent::ClassValue { input_value, start, end } if display_input_data && display_scanner_output => {
       println!(
         "
 [Class Input]------------------------------------------------------------------------
@@ -160,16 +149,16 @@ Symbol Length: {}
         end - start
       )
     }
-    DebugEvent::GotoValue { production_id } if display_input_data && display_scanner_output => {
+    DebugEvent::GotoValue { nonterminal_id } if display_input_data && display_scanner_output => {
       println!(
         "
 [GOTO Input]-------------------------------------------------------------------
 
-Production_name: {}
+Non-terminal_name: {}
 BytcodeID: {}
 -------------------------------------------------------------------------------",
-        db.prod_guid_name((*production_id).into()).to_string(db.string_store()),
-        production_id
+        db.nonterm_guid_name((*nonterminal_id).into()).to_string(db.string_store()),
+        nonterminal_id
       )
     }
     DebugEvent::ExecuteState { base_instruction, .. } if display_state => {
@@ -222,8 +211,7 @@ BytcodeID: {}
           head_ptr,
           scan_ptr,
           end_ptr,
-          &string[(*active_ptr)..(active_ptr + input_window_size).min(string.len())]
-            .replace("\n", "\\n"),
+          &string[(*active_ptr)..(active_ptr + input_window_size).min(string.len())].replace("\n", "\\n"),
           disassemble_parse_block(Some(*instruction), true).0
         );
         println!("");
@@ -257,38 +245,28 @@ pub fn string_debugger(
   
   Stack:\n    {}\n
   -------------------------------------------------------------------------------",
-        stack
-          .iter()
-          .enumerate()
-          .map(|(i, s)| format!("{}: {s}", i + 1))
-          .collect::<Vec<_>>()
-          .join("\n    ")
+        stack.iter().enumerate().map(|(i, s)| format!("{}: {s}", i + 1)).collect::<Vec<_>>().join("\n    ")
       );
     }
     DebugEvent::Reduce { rule_id } => {
       let item = Item::from_rule((*rule_id).into(), &db);
-      let prod_name = item.prod_name().to_string(db.string_store());
-      let prod_name = prod_name.split("____").last().unwrap();
+      let nterm_name = item.nonterm_name().to_string(db.string_store());
+      let nterm_name = nterm_name.split("____").last().unwrap();
 
       let items = stack.drain((stack.len() - item.len as usize)..);
       let symbols = items.collect::<Vec<_>>();
-      stack.push(format!("({prod_name}: {})", symbols.join(",")));
+      stack.push(format!("({nterm_name}: {})", symbols.join(",")));
       println!(
         "
   [REDUCE] ----------------------------------------------------------------------
   
-    Reduce to {prod_name} with rule: 
+    Reduce to {nterm_name} with rule: 
     {}
   
     Stack:\n    {}\n
   -------------------------------------------------------------------------------",
         /* item.to_complete().debug_string() */ "",
-        stack
-          .iter()
-          .enumerate()
-          .map(|(i, s)| format!("{}: {s}", i + 1))
-          .collect::<Vec<_>>()
-          .join("\n    ")
+        stack.iter().enumerate().map(|(i, s)| format!("{}: {s}", i + 1)).collect::<Vec<_>>().join("\n    ")
       )
     }
 
@@ -301,14 +279,14 @@ pub fn string_debugger(
   -------------------------------------------------------------------------------",
       )
     }
-    DebugEvent::Complete { production_id, .. } => {
+    DebugEvent::Complete { nonterminal_id, .. } => {
       println!(
         "
   [Complete] --------------------------------------------------------------------
   
-    Accepted on production {}.
+    Accepted on non-terminal {}.
   -------------------------------------------------------------------------------",
-        db.prod_guid_name((*production_id).into()).to_string(db.string_store())
+        db.nonterm_guid_name((*nonterminal_id).into()).to_string(db.string_store())
       )
     }
 
@@ -338,9 +316,7 @@ pub fn string_debugger(
         end - start
       )
     }
-    DebugEvent::CodePointValue { input_value, start, end }
-      if display_input_data && display_scanner_output =>
-    {
+    DebugEvent::CodePointValue { input_value, start, end } if display_input_data && display_scanner_output => {
       println!(
         "
   [CodePoint Input]------------------------------------------------------------------------
@@ -353,9 +329,7 @@ pub fn string_debugger(
         end - start
       )
     }
-    DebugEvent::ClassValue { input_value, start, end }
-      if display_input_data && display_scanner_output =>
-    {
+    DebugEvent::ClassValue { input_value, start, end } if display_input_data && display_scanner_output => {
       println!(
         "
   [Class Input]------------------------------------------------------------------------
@@ -368,16 +342,16 @@ pub fn string_debugger(
         end - start
       )
     }
-    DebugEvent::GotoValue { production_id } if display_input_data && display_scanner_output => {
+    DebugEvent::GotoValue { nonterminal_id } if display_input_data && display_scanner_output => {
       println!(
         "
   [GOTO Input]-------------------------------------------------------------------
   
-    Production_name: {}
+    Non-terminal_name: {}
     BytcodeID: {}
   -------------------------------------------------------------------------------",
-        db.prod_guid_name((*production_id).into()).to_string(db.string_store()),
-        production_id
+        db.nonterm_guid_name((*nonterminal_id).into()).to_string(db.string_store()),
+        nonterminal_id
       )
     }
     DebugEvent::ExecuteState { base_instruction, .. } if display_state => {
@@ -430,8 +404,7 @@ pub fn string_debugger(
           head_ptr,
           scan_ptr,
           end_ptr,
-          &string[(*active_ptr)..(active_ptr + input_window_size).min(string.len())]
-            .replace("\n", "\\n"),
+          &string[(*active_ptr)..(active_ptr + input_window_size).min(string.len())].replace("\n", "\\n"),
           disassemble_parse_block(Some(*instruction), true).0
         );
         println!("");

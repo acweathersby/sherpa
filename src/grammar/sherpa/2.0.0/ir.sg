@@ -9,11 +9,11 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
 <> state > 
 
-    sym::production_symbol^id "=>" statement
+    sym::nonterminal_symbol^id "=>" statement
 
         :ast { t_State, id, statement, tok }
 
-    | sym::production_symbol^id "=!>" statement
+    | sym::nonterminal_symbol^id "=!>" statement
 
         :ast { t_State, catches:true, id, statement, tok }
 
@@ -68,11 +68,11 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
     "reduce" tok::int ( "symbols" "to" )? tok::int ( "with" "rule" )? tok::int^int
         
-        :ast { t_ReduceRaw, len: u32($2), rule_id: u32($int), prod_id: u32($4), tok }
+        :ast { t_ReduceRaw, len: u32($2), rule_id: u32($int), nonterminal_id: u32($4), tok }
 
-    | "reduce" tok::int ( "symbols" "to" )? sym::non_terminal^prod ( ":ast" ast::body^ast )?
+    | "reduce" tok::int ( "symbols" "to" )? sym::nonterminal^nonterminal ( ":ast" ast::body^ast )?
         
-        :ast { t_Reduce, len: u32($2), ast,  prod, tok }
+        :ast { t_Reduce, len: u32($2), ast,  nonterminal, tok }
 
     | "set-tok" tok::int
 
@@ -94,15 +94,15 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
             :ast { t_Gotos, goto }
 
-<> goto_push > "push" sym::non_terminal
+<> goto_push > "push" sym::nonterminal
 
-    :ast { t_Push, prod: $2, name:str($2), tok }
+    :ast { t_Push, nonterminal: $2, name:str($2), tok }
 
-<> goto > "goto" sym::non_terminal
+<> goto > "goto" sym::nonterminal
 
-    :ast { t_Goto, prod: $2, name:str($2), tok }
+    :ast { t_Goto, nonterminal: $2, name:str($2), tok }
 
-<> match > generic_match_block | production_match_block | terminal_match_block
+<> match > generic_match_block | nonterminal_match_block | terminal_match_block
 
 <> generic_match_block >
 
@@ -111,9 +111,9 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
         :ast { t_Matches, mode: str($id), matches:$m, scanner, tok }
 
 
-<> production_match_block >
+<> nonterminal_match_block >
 
-    "match" ":" "PRODUCTION" ( non_terminal_match :ast [$1] | "{" ( non_terminal_match | hint | default_match )(+) "}" :ast $2 )^m
+    "match" ":" "PRODUCTION" ( nonterminal_match :ast [$1] | "{" ( nonterminal_match | hint | default_match )(+) "}" :ast $2 )^m
 
         :ast { t_ProductionMatches, matches:$m }
 
@@ -125,7 +125,7 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
         :ast { t_TerminalMatches, matches:$m }
 
 
-<> non_terminal_match > "(" sym::non_terminal^sym ")" "{" statement "}"
+<> nonterminal_match > "(" sym::nonterminal^sym ")" "{" statement "}"
 
     :ast { t_NonTermMatch, sym, statement }
 

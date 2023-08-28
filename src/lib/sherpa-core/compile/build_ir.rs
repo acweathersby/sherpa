@@ -71,18 +71,18 @@ fn convert_goto_state_to_ir<'db>(
 
   let mut w = CodeWriter::new(vec![]);
 
-  (&mut w + "match: " + InputType::PRODUCTION_STR + " {").increase_indent();
+  (&mut w + "match: " + InputType::NONTERMINAL_STR + " {").increase_indent();
 
-  for (bc_id, (_prod_name, s_name, transition_type)) in successors
+  for (bc_id, (_nterm_name, s_name, transition_type)) in successors
     .into_iter()
     .map(|s| {
       if let SymbolId::DBNonTerminal { key: index } = s.get_symbol() {
-        let prod_id: usize = index.into();
-        let prod_name = db.prod_guid_name(index);
-        (prod_id, (prod_name, create_ir_state_name(graph, None, s), s.get_type()))
+        let nterm: usize = index.into();
+        let nterm_name = db.nonterm_guid_name(index);
+        (nterm, (nterm_name, create_ir_state_name(graph, None, s), s.get_type()))
       } else {
         #[cfg(debug_assertions)]
-        panic!("Invalid production type: {:?}  {}", s.get_symbol(), s.get_symbol().debug_string(db));
+        panic!("Invalid non-terminal type: {:?}  {}", s.get_symbol(), s.get_symbol().debug_string(db));
         #[cfg(not(debug_assertions))]
         panic!()
       }
@@ -207,7 +207,7 @@ fn convert_state_to_ir<'db>(
       || matches!(
         state.get_type(),
         StateType::GotoPass
-          | StateType::ProductionCompleteOOS
+          | StateType::NonTermCompleteOOS
           | StateType::ScannerCompleteOOS
           | StateType::Complete
           | StateType::AssignToken(..)
@@ -351,8 +351,8 @@ fn build_body<'db>(state: &State, successor: &State, graph: &Graph<'db>, goto_st
       body_string.push("peek".into());
       true
     }
-    StateType::ProductionCompleteOOS => {
-      debug_assert!(!is_scanner, "ProductionCompleteOOS states should only exist in normal parse graphs");
+    StateType::NonTermCompleteOOS => {
+      debug_assert!(!is_scanner, "NonTermCompleteOOS states should only exist in normal parse graphs");
       body_string.push("pop".into());
       false
     }
@@ -382,11 +382,11 @@ fn build_body<'db>(state: &State, successor: &State, graph: &Graph<'db>, goto_st
     }
 
     match s_type {
-      //Ensure production calls are immediately called before any other
+      //Ensure non-terminal calls are immediately called before any other
       // gotos.
-      StateType::KernelCall(prod_id) | StateType::InternalCall(prod_id) => {
+      StateType::KernelCall(nterm) | StateType::InternalCall(nterm) => {
         body_string.push("push ".to_string() + &create_ir_state_name(graph, Some(state), successor));
-        body_string.push("goto ".to_string() + &db.prod_guid_name(prod_id).to_string(db.string_store()));
+        body_string.push("goto ".to_string() + &db.nonterm_guid_name(nterm).to_string(db.string_store()));
       }
       _ => {
         body_string.push("goto ".to_string() + &create_ir_state_name(graph, Some(state), successor));
@@ -399,13 +399,13 @@ fn build_body<'db>(state: &State, successor: &State, graph: &Graph<'db>, goto_st
 
 fn create_rule_reduction(rule_id: DBRuleKey, db: &ParserDatabase) -> String {
   let rule = db.rule(rule_id);
-  let prod = db.rule_prod(rule_id);
-  let prod_id: usize = prod.into();
+  let nterm = db.rule_nonterm(rule_id);
+  let nterm: usize = nterm.into();
   let rule_id: usize = rule_id.into();
   let mut w = CodeWriter::new(vec![]);
 
   let _ = &mut w + "reduce " + rule.symbols.len().to_string();
-  let _ = &mut w + " symbols to " + prod_id.to_string();
+  let _ = &mut w + " symbols to " + nterm.to_string();
   let _ = &mut w + " with rule " + rule_id.to_string();
 
   w.to_string()

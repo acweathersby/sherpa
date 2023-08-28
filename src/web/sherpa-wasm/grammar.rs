@@ -60,14 +60,14 @@ impl JSSoup {
     }
   }
 
-  /// Adds a production targeting a specific grammar
-  pub fn add_production(&mut self, _grammar_name: String) -> Result<(), JsError> {
+  /// Adds a non-terminal targeting a specific grammar
+  pub fn add_nonterminal(&mut self, _grammar_name: String) -> Result<(), JsError> {
     Ok(())
   }
 }
 
 /// Creates an empty grammar soup object.
-/// Use soup modifiers to add grammars and productions
+/// Use soup modifiers to add grammars and nonterminals
 ///
 /// Pass soup to parser compiler functions to create parsers, generate bytecode,
 /// and construct ASCript AST and CST structures.

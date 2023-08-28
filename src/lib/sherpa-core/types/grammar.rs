@@ -21,50 +21,50 @@ use crate::{
 
 use super::{Array, CachedString, IString, IStringStore, Map, Set, SymbolId};
 
-/// A globally unique identifier for a single production.
+/// A globally unique identifier for a single non-terminal.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[cfg_attr(debug_assertions, derive(Debug))]
-pub enum ProductionId {
-  /// Productions directly defined within a grammar.
-  Standard(u64, ProductionSubType),
-  /// Productions derived from grammar symbols such as the
-  /// group `(...)` symbol. All sub productions belong to
-  /// only one "Standard" production
-  Sub(u64, u32, ProductionSubType),
+pub enum NonTermId {
+  /// Non-terminals directly defined within a grammar.
+  Standard(u64, NonTermSubType),
+  /// Non-terminals derived from grammar symbols such as the
+  /// group `(...)` symbol. All sub nonterminals belong to
+  /// only one "Standard" non-terminal
+  Sub(u64, u32, NonTermSubType),
 }
 
-impl Default for ProductionId {
+impl Default for NonTermId {
   fn default() -> Self {
-    ProductionId::Standard(0, ProductionSubType::Parser)
+    NonTermId::Standard(0, NonTermSubType::Parser)
   }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[cfg_attr(debug_assertions, derive(Debug))]
-pub enum ProductionSubType {
+pub enum NonTermSubType {
   Parser,
   Scanner,
   ScannerToken,
   ScannerSym,
 }
 
-impl From<(GrammarId, &str)> for ProductionId {
+impl From<(GrammarId, &str)> for NonTermId {
   fn from(value: (GrammarId, &str)) -> Self {
-    ProductionId::Standard(create_u64_hash(value), ProductionSubType::Parser)
+    NonTermId::Standard(create_u64_hash(value), NonTermSubType::Parser)
   }
 }
 
-impl From<(ProductionId, usize)> for ProductionId {
-  fn from((prod_id, index): (ProductionId, usize)) -> Self {
-    if let ProductionId::Standard(id, sub_type) = prod_id {
-      ProductionId::Sub(id, index as u32, sub_type)
+impl From<(NonTermId, usize)> for NonTermId {
+  fn from((nterm, index): (NonTermId, usize)) -> Self {
+    if let NonTermId::Standard(id, sub_type) = nterm {
+      NonTermId::Sub(id, index as u32, sub_type)
     } else {
       unreachable!()
     }
   }
 }
 
-impl ProductionId {
+impl NonTermId {
   pub fn as_state_sym(&self) -> SymbolId {
     SymbolId::NonTerminalState { id: self.as_parse_prod() }
   }
@@ -77,23 +77,23 @@ impl ProductionId {
     SymbolId::NonTerminalToken { id: self.as_scan_prod() }
   }
 
-  pub fn as_parse_prod(&self) -> ProductionId {
+  pub fn as_parse_prod(&self) -> NonTermId {
     match self {
-      ProductionId::Standard(id, _) => ProductionId::Standard(*id, ProductionSubType::Parser),
-      ProductionId::Sub(id, index, _) => ProductionId::Sub(*id, *index, ProductionSubType::Parser),
+      NonTermId::Standard(id, _) => NonTermId::Standard(*id, NonTermSubType::Parser),
+      NonTermId::Sub(id, index, _) => NonTermId::Sub(*id, *index, NonTermSubType::Parser),
     }
   }
 
-  pub fn as_scan_prod(&self) -> ProductionId {
+  pub fn as_scan_prod(&self) -> NonTermId {
     match self {
-      ProductionId::Standard(id, _) => ProductionId::Standard(*id, ProductionSubType::Scanner),
-      ProductionId::Sub(id, index, _) => ProductionId::Sub(*id, *index, ProductionSubType::Scanner),
+      NonTermId::Standard(id, _) => NonTermId::Standard(*id, NonTermSubType::Scanner),
+      NonTermId::Sub(id, index, _) => NonTermId::Sub(*id, *index, NonTermSubType::Scanner),
     }
   }
 
   pub fn set_index(&mut self, index: usize) {
     match self {
-      ProductionId::Standard(id, ..) | ProductionId::Sub(id, ..) => {
+      NonTermId::Standard(id, ..) | NonTermId::Sub(id, ..) => {
         *id = index as u64;
       }
     }
@@ -137,11 +137,11 @@ pub struct TokenSymbol {
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(debug_assertions, derive(Debug))]
-pub struct ProductionRef(u32);
+pub struct NontermRef(u32);
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(debug_assertions, derive(Debug))]
-pub struct TokenProductionRef(u32);
+pub struct TokenNonTermRef(u32);
 
 #[derive(Clone, Default)]
 #[cfg_attr(debug_assertions, derive(Debug))]
@@ -182,32 +182,32 @@ pub struct Rule {
 }
 
 /// A reference to some Ascript AST data that is either automatically generated
-/// depending on the reference type, or is stored on a Production node.
+/// depending on the reference type, or is stored on a NonTerminal node.
 #[derive(Clone)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub enum ASTToken {
   /// Represents the ast expression `:ast [ $1 ]`.
   ///
   ///
-  /// Automatically generated when when a list production (` A(+) | A(*) `) is
+  /// Automatically generated when when a list non-terminal (` A(+) | A(*) `) is
   /// processed.
   ListEntry(TokenRange),
   /// Represents the ast expression `:ast [ $1, $--last-- ]`, where `--last--`
   /// represents the last symbol in a rule.
   ///
-  /// Automatically generated when a list production (` A(+) | A(*) `) is
+  /// Automatically generated when a list non-terminal (` A(+) | A(*) `) is
   /// processed.
   ListIterate(TokenRange),
-  /// An AST expression defined within a grammar. `0` Is the production id
+  /// An AST expression defined within a grammar. `0` Is the non-terminal id
   /// in which a copy if the AST expressions is stored. `1` is the index
-  /// into the Productions's `asts` array for that stored production.
+  /// into the Non-terminals's `asts` array for that stored non-terminal.
   Defined(Arc<parser::Ascript>),
 }
 
 /// A custom parse state defined within a grammar e.g `state_name => ...`
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct CustomState {
-  pub id: ProductionId,
+  pub id: NonTermId,
   pub g_id: GrammarId,
   pub guid_name: IString,
   pub friendly_name: IString,
@@ -218,38 +218,38 @@ pub struct CustomState {
 
 #[derive(Clone)]
 #[cfg_attr(debug_assertions, derive(Debug))]
-pub struct Production {
-  /// The unique identifier of this production.
-  pub id: ProductionId,
+pub struct NonTerminal {
+  /// The unique identifier of this non-terminal.
+  pub id: NonTermId,
 
   /// The unique identifier of the owning GrammarHEader.
   pub g_id: GrammarId,
 
   /// All symbols that are referenced by the rules of the
-  /// production and its sub-productions.
+  /// non-terminal and its sub-nonterminals.
   pub symbols: OrderedSet<SymbolId>,
 
-  /// All rules that reduce to this production
+  /// All rules that reduce to this non-terminal
   pub rules: Array<Rule>,
 
-  /// Productions generated from the expansion of "production" type
-  /// symbols such as groups & lists. These productions are only referenced
-  /// by the rules defined by this production.
-  pub sub_prods: Array<Box<SubProduction>>,
+  /// Non-terminals generated from the expansion of "non-terminal" type
+  /// symbols such as groups & lists. These nonterminals are only referenced
+  /// by the rules defined by this non-terminal.
+  pub sub_nterms: Array<Box<SubNonTerminal>>,
 
-  /// Productions derived from `tk:` invocations of normal productions.
-  /// These productions have the special characteristic where none of
+  /// Non-terminals derived from `tk:` invocations of normal nonterminals.
+  /// These nonterminals have the special characteristic where none of
   /// their rules contain left recursions
-  pub tok_prods: Array<Box<SubProduction>>,
+  pub tok_nterms: Array<Box<SubNonTerminal>>,
 
-  /// The type of this production
-  pub type_: ProductionType,
+  /// The type of this non-terminal
+  pub type_: NonTermType,
 
-  /// The globally unique name string of the production. Similar to a C++
+  /// The globally unique name string of the non-terminal. Similar to a C++
   /// mangled name
   pub guid_name: IString,
 
-  /// The name of the production as it is found in the source grammar.
+  /// The name of the non-terminal as it is found in the source grammar.
   pub friendly_name: IString,
 
   pub tok: Token,
@@ -257,48 +257,48 @@ pub struct Production {
   pub asts: Array<Box<parser::Ascript>>,
 }
 
-/// Productions generated from the expansion of "production" type
-/// symbols such as groups & lists. These productions are only referenced
-/// by the rules defined by this production.
+/// Non-terminals generated from the expansion of "non-terminal" type
+/// symbols such as groups & lists. These nonterminals are only referenced
+/// by the rules defined by this non-terminal.
 #[derive(Clone)]
 #[cfg_attr(debug_assertions, derive(Debug))]
-pub struct SubProduction {
-  pub id: ProductionId,
+pub struct SubNonTerminal {
+  pub id: NonTermId,
 
   pub g_id: GrammarId,
 
-  /// The globally unique name string of the production. Similar to a C++
+  /// The globally unique name string of the non-terminal. Similar to a C++
   /// mangled name
   pub guid_name: IString,
 
-  /// The name of the production as it is found in the source grammar.
+  /// The name of the non-terminal as it is found in the source grammar.
   pub friendly_name: IString,
 
   pub rules: Array<Rule>,
 
-  pub type_: SubProductionType,
+  pub type_: SubNonTermType,
 }
 
-/// Types of [SubProduction]s that may be derived from rule symbols.
+/// Types of [SubNonTerminal]s that may be derived from rule symbols.
 #[derive(Clone)]
 #[cfg_attr(debug_assertions, derive(Debug))]
-pub enum SubProductionType {
-  /// List sub productions are left recursive productions
+pub enum SubNonTermType {
+  /// List sub nonterminals are left recursive nonterminals
   /// that are derived from `list` symbols e.g: `A(+) | A(*) | A(+sym) |
   /// A(*sym)` .
   List,
-  /// Group productions are derived from group symbols e.g `(...)` and are
+  /// Group nonterminals are derived from group symbols e.g `(...)` and are
   /// created when they are present in rules that have AST definitions to
   /// maintain expected behaviors when referencing symbols in an ast
   /// expression.
   Group,
 }
 
-impl SubProductionType {
+impl SubNonTermType {
   pub fn to_string(&self) -> String {
     match self {
-      SubProductionType::Group => "grp".into(),
-      SubProductionType::List => "lst".into(),
+      SubNonTermType::Group => "grp".into(),
+      SubNonTermType::List => "lst".into(),
     }
   }
 }
@@ -306,11 +306,11 @@ impl SubProductionType {
 /// Data from a single grammar source file
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct GrammarHeader {
-  pub identity:  GrammarIdentities,
-  /// Productions that are accessible as entry points to this
-  /// grammar. Contains the global id of the public production
+  pub identity:   GrammarIdentities,
+  /// Non-terminals that are accessible as entry points to this
+  /// grammar. Contains the global id of the public non-terminal
   /// and its export name.
-  pub pub_prods: OrderedMap<IString, (ProductionId, Token)>,
+  pub pub_nterms: OrderedMap<IString, (NonTermId, Token)>,
 
   pub imports: Array<GrammarId>,
 }
@@ -320,14 +320,14 @@ pub struct GrammarHeader {
 pub enum SymbolType {
   /// A single token string
   Token,
-  /// A single, tokenized, production
-  TokenProduction(TokenProductionRef),
-  Production(ProductionRef),
+  /// A single, tokenized, non-terminal
+  TokenNonterminal(TokenNonTermRef),
+  NonTerminal(NontermRef),
 }
 
 #[derive(Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 #[cfg_attr(debug_assertions, derive(Debug))]
-pub enum ProductionType {
+pub enum NonTermType {
   ContextFree,
   Pratt,
   Peg,
@@ -371,7 +371,7 @@ impl GrammarIdentities {
 use super::ParserDatabase;
 
 use ::std::sync;
-/// This contains all grammars, productions, and parser states that have
+/// This contains all grammars, nonterminals, and parser states that have
 /// been derived from source grammar inputs.
 ///
 /// This object is generally only created once and then passed to entry
@@ -381,9 +381,9 @@ use ::std::sync;
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct GrammarSoup {
   pub grammar_headers: Arc<sync::RwLock<OrderedMap<GrammarId, Box<GrammarHeader>>>>,
-  //pub productions:     Arc<sync::RwLock<Map<ProductionId, Box<Production>>>>,
-  pub productions:     Arc<sync::RwLock<Array<Box<Production>>>>,
-  pub custom_states:   Arc<sync::RwLock<Map<ProductionId, Box<CustomState>>>>,
+  //pub nonterminals:     Arc<sync::RwLock<Map<Non-terminalId, Box<Non-terminal>>>>,
+  pub nonterminals:    Arc<sync::RwLock<Array<Box<NonTerminal>>>>,
+  pub custom_states:   Arc<sync::RwLock<Map<NonTermId, Box<CustomState>>>>,
   pub string_store:    IStringStore,
 }
 
@@ -391,7 +391,7 @@ impl GrammarSoup {
   pub fn new() -> sync::Arc<Self> {
     sync::Arc::new(GrammarSoup {
       grammar_headers: Default::default(),
-      productions:     Default::default(),
+      nonterminals:    Default::default(),
       custom_states:   Default::default(),
       string_store:    Default::default(),
     })

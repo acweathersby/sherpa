@@ -18,14 +18,14 @@ pub enum SymbolId {
   ClassNumber,
   ClassSymbol,
   Token { val: IString },
-  NonTerminal { id: ProductionId },
-  NonTerminalToken { id: ProductionId },
-  DBNonTerminalToken { prod_key: DBProdKey, sym_key: Option<DBTokenKey> },
-  DBNonTerminal { key: DBProdKey },
-  DBToken { key: DBTokenKey },
+  NonTerminal { id: NonTermId },
+  NonTerminalToken { id: NonTermId },
+  DBNonTerminalToken { nonterm_key: DBNonTermKey, sym_key: Option<DBTermKey> },
+  DBNonTerminal { key: DBNonTermKey },
+  DBToken { key: DBTermKey },
   Char { char: u8 },
   Codepoint { val: u32 },
-  NonTerminalState { id: ProductionId },
+  NonTerminalState { id: NonTermId },
 }
 
 impl Default for SymbolId {
@@ -37,7 +37,7 @@ impl Default for SymbolId {
 impl SymbolId {
   pub const GEN_SPACE_ID: u32 = 2;
 
-  pub fn tok_db_key(&self) -> Option<DBTokenKey> {
+  pub fn tok_db_key(&self) -> Option<DBTermKey> {
     use SymbolId::*;
     match self {
       DBToken { key } => Some(*key),
@@ -107,8 +107,9 @@ impl SymbolId {
     }
   }
 
-  /// Returns a ProductionId for a token scanner derived from a standard symbol.
-  pub fn to_prod_id(&self) -> ProductionId {
+  /// Returns a Non-terminalId for a token scanner derived from a standard
+  /// symbol.
+  pub fn to_nterm(&self) -> NonTermId {
     use SymbolId::*;
     match self {
       NonTerminal { id } | NonTerminalToken { id, .. } => *id,
@@ -121,12 +122,13 @@ impl SymbolId {
     }
   }
 
-  /// Returns a ProductionId for a token scanner derived from a standard symbol.
-  pub fn to_scanner_prod_id(&self) -> ProductionId {
+  /// Returns a Non-terminalId for a token scanner derived from a standard
+  /// symbol.
+  pub fn to_scanner_nterm(&self) -> NonTermId {
     use SymbolId::*;
     match self {
       NonTerminal { id } | NonTerminalToken { id, .. } => id.as_scan_prod(),
-      Token { .. } => ProductionId::Standard(create_u64_hash(self), ProductionSubType::ScannerToken),
+      Token { .. } => NonTermId::Standard(create_u64_hash(self), NonTermSubType::ScannerToken),
       EndOfFile { .. }
       | ClassSymbol { .. }
       | ClassSpace { .. }
@@ -135,7 +137,7 @@ impl SymbolId {
       | ClassIdentifier { .. }
       | ClassNumber { .. }
       | Codepoint { .. }
-      | Char { .. } => ProductionId::Standard(create_u64_hash(self), ProductionSubType::ScannerSym),
+      | Char { .. } => NonTermId::Standard(create_u64_hash(self), NonTermSubType::ScannerSym),
       _ => {
         #[cfg(debug_assertions)]
         unimplemented!("{:?}", self);
@@ -197,12 +199,12 @@ impl SymbolId {
       NonTerminalToken { .. } => &mut w + "tk:" + "non_term",
       Codepoint { val } => &mut w + "" + val.to_string(),
       DBNonTerminal { key } => {
-        let guard_str = db.prod_friendly_name_string(key);
+        let guard_str = db.nonterm_friendly_name_string(key);
         let name = guard_str.as_str();
         &mut w + name
       }
-      DBNonTerminalToken { prod_key, .. } => {
-        let guard_str = db.prod_friendly_name_string(prod_key);
+      DBNonTerminalToken { nonterm_key: nterm_key, .. } => {
+        let guard_str = db.nonterm_friendly_name_string(nterm_key);
         &mut w + "tk:" + guard_str
       }
       DBToken { key: index } => &mut w + db.sym(index).debug_string(db),

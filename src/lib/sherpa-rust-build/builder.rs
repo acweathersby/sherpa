@@ -2,10 +2,10 @@ use sherpa_ascript::{
   compile::{
     get_indexed_body_ref,
     get_named_body_ref,
-    get_production_types,
+    get_nonterm_types,
     get_specified_vector_from_generic_vec_values,
     get_struct_type_from_node,
-    production_types_are_structs,
+    nonterminal_types_are_structs,
   },
   output_base::{
     get_ascript_export_data,
@@ -1383,8 +1383,8 @@ fn render_body_symbol(
 ) -> Option<SlotRef> {
   use AScriptTypeVal::*;
   let ref_ = match &sym {
-    SymbolId::DBNonTerminal { key: prod_id } => {
-      let types = get_production_types(ast, prod_id);
+    SymbolId::DBNonTerminal { key: nterm } => {
+      let types = get_nonterm_types(ast, nterm);
       let ref_name = (&utils.get_slot_obj_name)(slot_index);
       if types.len() == 1 {
         let _type = types.first().unwrap().clone();
@@ -1430,7 +1430,7 @@ fn render_body_symbol(
             })
           }
         }
-      } else if production_types_are_structs(&types) {
+      } else if nonterminal_types_are_structs(&types) {
         SlotRef::ast_obj(slot_index, type_slot, ref_name, GenericStruct(extract_struct_types(&types)))
       } else {
         SlotRef::token(utils, slot_index, type_slot)
@@ -1513,7 +1513,7 @@ fn convert_numeric<T: AScriptNumericType>(
 pub(crate) fn add_ascript_functions_for_rust<W: Write>(w: &mut AscriptWriter<W>, _db: &ParserDatabase) -> SherpaResult<()> {
   let export_node_data = get_ascript_export_data(&w.utils);
 
-  // Create impl for all exported productions that can be mapped to a ascript
+  // Create impl for all exported non-terminals that can be mapped to a ascript
   // single AScripT type. For those that map to multiple outputs, create an
   // impl on the main AST enum for named parsers on those types.
   for (_, ast_type, ast_type_string, export_name, ..) in &export_node_data {
@@ -1578,7 +1578,7 @@ pub(crate) fn write_rust_bytecode_parser_file<'a, W: Write>(
   bc: &Vec<u8>,
 ) -> SherpaResult<AscriptWriter<'a, W>> {
   let ast_type_name = w.store.ast_type_name.clone();
-  let parse_productions = w.db.parse_productions();
+  let parse_nonterms = w.db.parser_nonterms();
   w.stmt(
     "    
 pub trait Reader: ByteReader + MutByteReader + UTF8Reader {}
@@ -1590,12 +1590,12 @@ pub type Parser<'a, T, UserCTX> = sherpa_rust_runtime::bytecode::ByteCodeParser<
   )?;
 
   w.block("pub mod meta", "{", "}", &|w| {
-    w.block(&format!("pub const production_names: [&'static str;{}] = ", parse_productions.len()), "[", "];", &|w| {
+    w.block(&format!("pub const nonterm_names: [&'static str;{}] = ", parse_nonterms.len()), "[", "];", &|w| {
       w.list(
         ",",
-        parse_productions
+        parse_nonterms
           .iter()
-          .map(|prod_id| (prod_id, format!("\"{}\"", w.db.prod_friendly_name_string(*prod_id),)))
+          .map(|nonterm| (nonterm, format!("\"{}\"", w.db.nonterm_friendly_name_string(*nonterm),)))
           .collect::<BTreeMap<_, _>>()
           .into_values()
           .collect(),
@@ -1615,10 +1615,10 @@ pub type Parser<'a, T, UserCTX> = sherpa_rust_runtime::bytecode::ByteCodeParser<
       w.list(",", symbol_string.values().collect())
     })
   })?;
-  for EntryPoint { prod_key: _, prod_entry_name, entry_name, .. } in w.db.entry_points() {
+  for EntryPoint { nonterm_entry_name, entry_name, .. } in w.db.entry_points() {
     let entry_name = entry_name.to_string(w.db.string_store());
-    let prod_entry_name = prod_entry_name.to_string(w.db.string_store());
-    let bytecode_offset = o_to_r(state_lookups.get(&prod_entry_name), "could not find state")?;
+    let nonterm_entry_name = nonterm_entry_name.to_string(w.db.string_store());
+    let bytecode_offset = o_to_r(state_lookups.get(&nonterm_entry_name), "could not find state")?;
     w.method(
       &format!("pub fn new_{entry_name}_parser<'a, T: Reader, UserCTX>"),
       "(",
@@ -1656,7 +1656,7 @@ pub type Parser<'a, T, UserCTX> = sherpa_rust_runtime::bytecode::ByteCodeParser<
 
       // Create a module that will store convenience functions for compiling AST
       // structures based on on grammar entry points.
-      for (ref_, type_, ast_type_string, export_name, _guid_name, prod_entry_name) in &export_node_data {
+      for (ref_, type_, ast_type_string, export_name, _guid_name, nonterm_entry_name) in &export_node_data {
         w.method(
           &format!("pub fn {export_name}_from<'a>"),
           "(",
@@ -1669,7 +1669,7 @@ pub type Parser<'a, T, UserCTX> = sherpa_rust_runtime::bytecode::ByteCodeParser<
           &mut |w| {
             w.stmt(format!("let reduce_functions = ReduceFunctions::<_, u32, true>::new();"))?;
             w.stmt(format!("let mut parser = Parser::new(&mut reader, &bytecode);"))?;
-            w.stmt(format!("parser.init_parser({});", state_lookups.get(prod_entry_name).unwrap()))?;
+            w.stmt(format!("parser.init_parser({});", state_lookups.get(nonterm_entry_name).unwrap()))?;
 
             w.stmt(format!(
               "let AstSlot ({}, __rule_rng__, _) = parser.parse_ast(&reduce_functions.0, &mut None)?;",
@@ -1730,7 +1730,7 @@ pub struct Parser<T: Reader, M>(ParseContext<T, M>, T);
       w.stmt("parser".into())
     })?;
     w.stmt(
-      "/// Initialize the parser to recognize the given starting production
+      "/// Initialize the parser to recognize the given starting non-terminal
       /// within the input. This method is chainable."
         .into(),
     )?;
@@ -1765,12 +1765,12 @@ pub struct Parser<T: Reader, M>(ParseContext<T, M>, T);
       w.stmt("let _ptr = &mut self.0 as *const ParseContext<T, M>;".into())?;
       w.block("unsafe", "{", "}", &|w| w.stmt("drop(_ptr as *mut u8);".into()))
     })?;
-    for EntryPoint { export_id, prod_entry_name, entry_name, .. } in
-      //for ExportedProduction { export_name, export_id, .. } in
+    for EntryPoint { export_id, nonterm_entry_name, entry_name, .. } in
+      //for ExportedNon-terminal { export_name, export_id, .. } in
       w.db.entry_points().iter()
     {
       let entry_name = entry_name.to_string(w.db.string_store());
-      let _prod_entry_name = prod_entry_name.to_string(w.db.string_store());
+      let _nonterm_entry_name = nonterm_entry_name.to_string(w.db.string_store());
       w.stmt("#[inline(always)]".into())?;
       w.method(
         &format!("pub fn new_{entry_name}_parser"),
@@ -1872,7 +1872,7 @@ extern "C" {{
                   w.block("SherpaParseError", "{", "}", &|w| {
                     w.list(",", vec![
                       "inline_message: \"Token not recognized\".to_string()",
-                      "last_production: 0",
+                      "last_nonterm: 0",
                       "loc: err_tok.to_token(&mut ctx.1)",
                       "message: \"Failed to parse\".to_string()",
                     ])

@@ -38,9 +38,9 @@ where
   fns
     .into_iter()
     .filter_map(|(name, rule_number, b)| {
-      let prod = db.prod_from_name(name);
-      if prod != Default::default() {
-        let rule_id = db.prod_rules(prod).unwrap()[rule_number];
+      let nterm = db.nonterm_from_name(name);
+      if nterm != Default::default() {
+        let rule_id = db.nonterm_rules(nterm).unwrap()[rule_number];
         Some((Into::<usize>::into(rule_id), b))
       } else {
         None
@@ -542,7 +542,7 @@ mango""##,
     ]),
   );
 
-  assert_eq!(unsafe { *jit.get_ctx().get_meta() }, 3, "Number of reduced productions should be 3");
+  assert_eq!(unsafe { *jit.get_ctx().get_meta() }, 3, "Number of reduced non-terminals should be 3");
 
   assert!(matches!(result, ParseResult::Complete(AstSlot(1010101, ..))));
 

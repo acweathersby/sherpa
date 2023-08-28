@@ -24,29 +24,29 @@ pub struct RuleData<'a> {
   ast_ref: Option<ASTToken>,
 }
 
-/// Temporary structure to host production data during
+/// Temporary structure to host non-terminal data during
 /// construction.
-pub struct ProductionData<'a> {
-  root_prod_id: ProductionId,
-  root_g_name:  IString,
-  root_f_name:  IString,
-  symbols:      &'a mut OrderedSet<SymbolId>,
-  sub_prods:    &'a mut Array<Box<SubProduction>>,
-  rules:        &'a mut Array<Rule>,
+pub struct NonTermData<'a> {
+  root_nterm:     NonTermId,
+  root_g_name:    IString,
+  root_f_name:    IString,
+  symbols:        &'a mut OrderedSet<SymbolId>,
+  sub_nterminals: &'a mut Array<Box<SubNonTerminal>>,
+  rules:          &'a mut Array<Rule>,
 }
 
-impl<'b> ProductionData<'b> {
+impl<'b> NonTermData<'b> {
   /// Create a new [ProductionData] that references a different
   /// `rules` array, but keeps all other references the same
   /// as `self`.
-  pub fn set_rules<'d>(&'d mut self, rules: &'d mut Array<Rule>) -> ProductionData<'d> {
-    ProductionData {
+  pub fn set_rules<'d>(&'d mut self, rules: &'d mut Array<Rule>) -> NonTermData<'d> {
+    NonTermData {
       rules,
       root_g_name: self.root_g_name,
       root_f_name: self.root_f_name,
-      root_prod_id: self.root_prod_id,
+      root_nterm: self.root_nterm,
       symbols: &mut self.symbols,
-      sub_prods: &mut self.sub_prods,
+      sub_nterminals: &mut self.sub_nterminals,
     }
   }
 }
@@ -56,7 +56,7 @@ impl<'b> ProductionData<'b> {
 pub struct GrammarData {
   pub id: GrammarIdentities,
   pub imports: Map<IString, GrammarIdentities>,
-  pub exports: Array<(IString, (ProductionId, Token))>,
+  pub exports: Array<(IString, (NonTermId, Token))>,
   pub global_skipped: Array<ASTNode>,
   pub grammar: Box<Grammar>,
 }
@@ -66,7 +66,7 @@ pub fn convert_grammar_data_to_header(import_id: GrammarIdentities, g_data: Gram
   identity.guid_name = g_data.id.guid_name;
   Box::new(GrammarHeader {
     identity,
-    pub_prods: g_data.exports.into_iter().collect(),
+    pub_nterms: g_data.exports.into_iter().collect(),
     imports: g_data.imports.values().map(|v| v.guid).collect(),
   })
 }
@@ -150,33 +150,33 @@ pub fn create_grammar_data(
   // our exports into ProductionIds.
   if exports.is_empty() != true {
     for export in exports {
-      let prod_id = get_production_id_from_ast_node(&g_data, &export.production)?;
-      g_data.exports.push((export.reference.intern(string_store), (prod_id, export.production.to_token())));
+      let nterm = get_nonterminal_id_from_ast_node(&g_data, &export.production)?;
+      g_data.exports.push((export.reference.intern(string_store), (nterm, export.production.to_token())));
     }
   } else {
-    // Use the fist declared production as the default entry
-    let prod = &g_data.grammar.productions[0];
-    if let Ok(prod_id) = get_production_id_from_ast_node(&g_data, &prod) {
-      g_data.exports.push(("default".intern(string_store), (prod_id, prod.to_token())));
+    // Use the fist declared non-terminal as the default entry
+    let nterm = &g_data.grammar.productions[0];
+    if let Ok(nterm_id) = get_nonterminal_id_from_ast_node(&g_data, &nterm) {
+      g_data.exports.push(("default".intern(string_store), (nterm_id, nterm.to_token())));
     }
   }
 
   SherpaResult::Ok(g_data)
 }
 
-pub fn extract_productions<'a>(
+pub fn extract_nonterminals<'a>(
   _j: &mut Journal,
   g_data: &'a GrammarData,
   s_store: &IStringStore,
-) -> SherpaResult<(Array<(Box<Production>, &'a ASTNode)>, Array<Box<CustomState>>)> {
-  let mut productions = Array::new();
+) -> SherpaResult<(Array<(Box<NonTerminal>, &'a ASTNode)>, Array<Box<CustomState>>)> {
+  let mut nterms = Array::new();
   let mut parse_states = Array::new();
-  for production in &g_data.grammar.productions {
-    match production {
+  for nterm in &g_data.grammar.productions {
+    match nterm {
       ASTNode::State(parse_state) => {
-        let (guid_name, friendly_name) = prod_names(parse_state.id.name.as_str(), &g_data.id, s_store);
+        let (guid_name, friendly_name) = nterm_names(parse_state.id.name.as_str(), &g_data.id, s_store);
         parse_states.push(Box::new(CustomState {
-          id: ProductionId::from((g_data.id.guid, parse_state.id.name.as_str())),
+          id: NonTermId::from((g_data.id.guid, parse_state.id.name.as_str())),
           guid_name,
           friendly_name,
           g_id: g_data.id.guid,
@@ -188,43 +188,43 @@ pub fn extract_productions<'a>(
       ASTNode::PrattProduction(box parser::PrattProduction { name_sym, rules: _, tok })
       | ASTNode::CFProduction(box parser::CFProduction { name_sym, rules: _, tok })
       | ASTNode::PegProduction(box parser::PegProduction { name_sym, rules: _, tok }) => {
-        let (guid_name, f_name) = prod_names(name_sym.name.as_str(), &g_data.id, s_store);
-        productions.push((
-          Box::new(Production {
-            id: ProductionId::from((g_data.id.guid, name_sym.name.as_str())),
+        let (guid_name, f_name) = nterm_names(name_sym.name.as_str(), &g_data.id, s_store);
+        nterms.push((
+          Box::new(NonTerminal {
+            id: NonTermId::from((g_data.id.guid, name_sym.name.as_str())),
             guid_name,
             friendly_name: f_name,
             g_id: g_data.id.guid,
-            type_: ProductionType::ContextFree,
+            type_: NonTermType::ContextFree,
             rules: Default::default(),
-            sub_prods: Default::default(),
+            sub_nterms: Default::default(),
             symbols: Default::default(),
-            tok_prods: Default::default(),
+            tok_nterms: Default::default(),
             tok: tok.clone(),
             asts: Default::default(),
           }),
-          production,
+          nterm,
         ));
       }
       ASTNode::AppendProduction(box parser::AppendProduction { name_sym, rules: _, tok }) => {
-        match get_production_symbol(g_data, name_sym) {
+        match get_nonterminal_symbol(g_data, &name_sym) {
           (Some(name_sym), _) => {
-            let (guid_name, f_name) = prod_names(name_sym.name.as_str(), &g_data.id, s_store);
-            productions.push((
-              Box::new(Production {
-                id: ProductionId::from((g_data.id.guid, name_sym.name.as_str())),
+            let (guid_name, f_name) = nterm_names(name_sym.name.as_str(), &g_data.id, s_store);
+            nterms.push((
+              Box::new(NonTerminal {
+                id: NonTermId::from((g_data.id.guid, name_sym.name.as_str())),
                 guid_name,
                 friendly_name: f_name,
                 g_id: g_data.id.guid,
-                type_: ProductionType::ContextFree,
+                type_: NonTermType::ContextFree,
                 rules: Default::default(),
-                sub_prods: Default::default(),
+                sub_nterms: Default::default(),
                 symbols: Default::default(),
-                tok_prods: Default::default(),
+                tok_nterms: Default::default(),
                 tok: tok.clone(),
                 asts: Default::default(),
               }),
-              production,
+              nterm,
             ));
           }
           (_, Some(name_sym)) => {
@@ -232,22 +232,22 @@ pub fn extract_productions<'a>(
 
             let import_g_id = o_to_r(g_data.imports.get(&import_grammar_name), "could not find grammar")?;
 
-            let (guid_name, f_name) = prod_names(name_sym.name.as_str(), import_g_id, s_store);
-            productions.push((
-              Box::new(Production {
-                id: ProductionId::from((import_g_id.guid, name_sym.name.as_str())),
+            let (guid_name, f_name) = nterm_names(name_sym.name.as_str(), import_g_id, s_store);
+            nterms.push((
+              Box::new(NonTerminal {
+                id: NonTermId::from((import_g_id.guid, name_sym.name.as_str())),
                 guid_name,
                 friendly_name: f_name,
                 g_id: import_g_id.guid,
-                type_: ProductionType::ContextFree,
+                type_: NonTermType::ContextFree,
                 rules: Default::default(),
-                sub_prods: Default::default(),
+                sub_nterms: Default::default(),
                 symbols: Default::default(),
-                tok_prods: Default::default(),
+                tok_nterms: Default::default(),
                 tok: tok.clone(),
                 asts: Default::default(),
               }),
-              production,
+              nterm,
             ));
           }
           _ => unreachable!(),
@@ -257,7 +257,7 @@ pub fn extract_productions<'a>(
     }
   }
 
-  SherpaResult::Ok((productions, parse_states))
+  SherpaResult::Ok((nterms, parse_states))
 }
 
 pub fn process_parse_state<'a>(
@@ -279,12 +279,12 @@ pub fn process_parse_state<'a>(
               ASTNode::TermMatch(term_match) => {
                 record_symbol(
                   &term_match.sym,
-                  &mut ProductionData {
-                    root_prod_id: *id,
+                  &mut NonTermData {
+                    root_nterm: *id,
                     root_g_name: *guid_name,
                     root_f_name: *guid_name,
                     symbols,
-                    sub_prods: &mut Default::default(),
+                    sub_nterminals: &mut Default::default(),
                     rules: &mut Default::default(),
                   },
                   g_data,
@@ -321,16 +321,16 @@ pub fn process_parse_state<'a>(
   SherpaResult::Ok(parse_state)
 }
 
-pub fn process_production<'a>(
-  (mut production, prod_ast): (Box<Production>, &'a ASTNode),
+pub fn process_nonterminal<'a>(
+  (mut nterm, nterm_ast): (Box<NonTerminal>, &'a ASTNode),
   g_data: &GrammarData,
   s_store: &IStringStore,
-) -> SherpaResult<Box<Production>> {
-  let (type_, rules) = match prod_ast {
-    ASTNode::CFProduction(prod) => (ProductionType::ContextFree, &prod.rules),
-    ASTNode::AppendProduction(prod) => (ProductionType::ContextFree, &prod.rules),
-    ASTNode::PrattProduction(prod) => (ProductionType::Pratt, &prod.rules),
-    ASTNode::PegProduction(prod) => (ProductionType::Peg, &prod.rules),
+) -> SherpaResult<Box<NonTerminal>> {
+  let (type_, rules) = match nterm_ast {
+    ASTNode::CFProduction(nterm) => (NonTermType::ContextFree, &nterm.rules),
+    ASTNode::AppendProduction(nterm) => (NonTermType::ContextFree, &nterm.rules),
+    ASTNode::PrattProduction(nterm) => (NonTermType::Pratt, &nterm.rules),
+    ASTNode::PegProduction(nterm) => (NonTermType::Peg, &nterm.rules),
     _ast => {
       #[cfg(debug_assertions)]
       todo!("Create build for {_ast:?}");
@@ -339,13 +339,13 @@ pub fn process_production<'a>(
     }
   };
 
-  production.type_ = type_;
+  nterm.type_ = type_;
 
   for rule in rules {
-    process_rule(&mut production, rule, g_data, s_store)?;
+    process_rule(&mut nterm, rule, g_data, s_store)?;
   }
 
-  for rule in &production.rules {
+  for rule in &nterm.rules {
     if rule.symbols.is_empty() {
       panic!(
         "{}",
@@ -354,7 +354,7 @@ pub fn process_production<'a>(
           1,
           &format!(
             "Rules that can derive the empty rule `{} => ε` are currently not allowed in Sherpa Grammars!",
-            production.friendly_name.to_str(s_store).as_str()
+            nterm.friendly_name.to_str(s_store).as_str()
           ),
           None
         )
@@ -362,32 +362,32 @@ pub fn process_production<'a>(
     }
   }
 
-  SherpaResult::Ok(production)
+  SherpaResult::Ok(nterm)
 }
 
-fn process_rule(prod: &mut Production, rule: &parser::Rule, g_data: &GrammarData, s_store: &IStringStore) -> SherpaResult<()> {
+fn process_rule(nterm: &mut NonTerminal, rule: &parser::Rule, g_data: &GrammarData, s_store: &IStringStore) -> SherpaResult<()> {
   let ast_syms = rule.symbols.iter().enumerate().collect::<Array<_>>();
 
-  let Production { id, rules, sub_prods, symbols, .. } = prod;
-  let mut prod_data = ProductionData {
-    root_prod_id: *id,
+  let NonTerminal { id, rules, sub_nterms, symbols, .. } = nterm;
+  let mut nterm_data = NonTermData {
+    root_nterm: *id,
     symbols,
-    sub_prods,
+    sub_nterminals: sub_nterms,
     rules,
-    root_g_name: prod.guid_name,
-    root_f_name: prod.friendly_name,
+    root_g_name: nterm.guid_name,
+    root_f_name: nterm.friendly_name,
   };
 
-  let ast_ref = intern_ast(rule, &mut prod_data);
+  let ast_ref = intern_ast(rule, &mut nterm_data);
 
-  process_rule_symbols(&RuleData { symbols: &ast_syms, ast_ref }, &mut prod_data, g_data, s_store, rule.tok.clone())?;
+  process_rule_symbols(&RuleData { symbols: &ast_syms, ast_ref }, &mut nterm_data, g_data, s_store, rule.tok.clone())?;
 
   SherpaResult::Ok(())
 }
 
 fn process_rule_symbols(
   rule_data: &RuleData,
-  p_data: &mut ProductionData,
+  p_data: &mut NonTermData,
   g_data: &GrammarData,
   s_store: &IStringStore,
   tok: Token,
@@ -490,7 +490,7 @@ fn process_rule_symbols(
           // process each list independently, inserting the new symbols
           // into the existing bodies. We must make sure the indices are
           // preserved since only the last symbol in each rule can be bound
-          // to the index of the group production symbol.
+          // to the index of the group non-terminal symbol.
 
           let mut p = vec![];
 
@@ -524,29 +524,29 @@ fn process_rule_symbols(
           // so we'll skip the rest of the loop
           continue;
         } else {
-          let mut sub_prod_rules = Default::default();
+          let mut sub_nterm_rules = Default::default();
 
           for rule in &group.rules {
             let n_rule = &RuleData {
               symbols: &rule.symbols.iter().enumerate().collect::<Array<_>>(),
               ast_ref: intern_ast(rule, p_data),
             };
-            process_rule_symbols(n_rule, &mut p_data.set_rules(&mut sub_prod_rules), g_data, s_store, rule.tok.clone())?
+            process_rule_symbols(n_rule, &mut p_data.set_rules(&mut sub_nterm_rules), g_data, s_store, rule.tok.clone())?
           }
 
-          let prod_id = p_data.root_prod_id;
-          let index = p_data.sub_prods.len();
-          let id = ProductionId::from((prod_id, index));
+          let nterm = p_data.root_nterm;
+          let index = p_data.sub_nterminals.len();
+          let id = NonTermId::from((nterm, index));
 
-          let (guid_name, friendly_name) = sub_prod_names("group", p_data, s_store);
+          let (guid_name, friendly_name) = sub_nterm_names("group", p_data, s_store);
 
-          p_data.sub_prods.push(Box::new(SubProduction {
+          p_data.sub_nterminals.push(Box::new(SubNonTerminal {
             id,
             guid_name,
             friendly_name,
-            type_: SubProductionType::Group,
+            type_: SubNonTermType::Group,
             g_id: g_data.id.guid,
-            rules: sub_prod_rules,
+            rules: sub_nterm_rules,
           }));
 
           (id.as_sym(), group.tok.clone())
@@ -567,16 +567,16 @@ fn process_rule_symbols(
 
         process_rule_symbols(r_data, &mut p_data.set_rules(&mut rules), g_data, s_store, symbol.to_token().clone())?;
 
-        let prod_id = p_data.root_prod_id;
-        let prod_index = p_data.sub_prods.len();
-        let id = ProductionId::from((prod_id, prod_index));
+        let nterm = p_data.root_nterm;
+        let nterm_index = p_data.sub_nterminals.len();
+        let id = NonTermId::from((nterm, nterm_index));
         let sym = id.as_sym();
 
         let mut secondary_rules = rules.clone();
 
         // Add the ProductionID as a non-term symbol
         // to the beginning of each rule, making the
-        // resulting list production left recursive.
+        // resulting list non-terminal left recursive.
         for rule in &mut secondary_rules {
           rule.ast = Some(ASTToken::ListIterate(tok.get_tok_range()));
 
@@ -606,10 +606,10 @@ fn process_rule_symbols(
 
         rules.append(&mut secondary_rules);
 
-        let (guid_name, friendly_name) = sub_prod_names("list", p_data, s_store);
+        let (guid_name, friendly_name) = sub_nterm_names("list", p_data, s_store);
 
-        p_data.sub_prods.push(Box::new(SubProduction {
-          type_: SubProductionType::List,
+        p_data.sub_nterminals.push(Box::new(SubNonTerminal {
+          type_: SubNonTermType::List,
           guid_name,
           friendly_name,
           id,
@@ -654,7 +654,7 @@ fn process_rule_symbols(
   SherpaResult::Ok(())
 }
 
-fn intern_ast(rule: &parser::Rule, _p_data: &mut ProductionData) -> Option<ASTToken> {
+fn intern_ast(rule: &parser::Rule, _p_data: &mut NonTermData) -> Option<ASTToken> {
   let ast_ref = rule.ast.as_ref().map(|s| ASTToken::Defined(Arc::new(*s.clone())));
   ast_ref
 }
@@ -675,7 +675,7 @@ fn some_rules_have_ast_definitions(rules: &[Box<parser::Rule>]) -> bool {
 /// records the symbol in the grammar store.
 fn record_symbol(
   sym_node: &ASTNode,
-  p_data: &mut ProductionData,
+  p_data: &mut NonTermData,
   g_data: &GrammarData,
   s_store: &IStringStore,
 ) -> SherpaResult<SymbolId> {
@@ -710,13 +710,13 @@ fn record_symbol(
     },
 
     ASTNode::Production_Symbol(_) | ASTNode::Production_Import_Symbol(_) => {
-      let id = get_production_id_from_ast_node(g_data, sym_node)?.as_sym();
+      let id = get_nonterminal_id_from_ast_node(g_data, sym_node)?.as_sym();
       // Bypass the registration of this symbol as a symbol.
       return SherpaResult::Ok(id);
     }
 
     ASTNode::Production_Terminal_Symbol(token_prod) => {
-      let id = get_production_id_from_ast_node(g_data, &token_prod.production)?.as_tok_sym();
+      let id = get_nonterminal_id_from_ast_node(g_data, &token_prod.production)?.as_tok_sym();
       // Bypass the registration of this symbol as a symbol.
       return SherpaResult::Ok(id);
     }
@@ -737,7 +737,7 @@ fn record_symbol(
 }
 
 /// Returns `(None, Some(&Production_Import_Symbol))` or
-/// `(Some(&Production_Symbol), None)`from a valid production like node.
+/// `(Some(&Production_Symbol), None)`from a valid non-terminal like node.
 ///
 /// Valid Node:
 /// - [ASTNode::Production_Import_Symbol]
@@ -747,24 +747,24 @@ fn record_symbol(
 /// - [ASTNode::PrattProduction]
 /// - [ASTNode::PegProduction]
 /// - [ASTNode::CFProduction]
-fn get_production_symbol<'a>(
+fn get_nonterminal_symbol<'a>(
   g_data: &GrammarData,
   node: &'a ASTNode,
 ) -> (Option<&'a parser::Production_Symbol>, Option<&'a parser::Production_Import_Symbol>) {
   match node {
     ASTNode::Production_Import_Symbol(prod_import) => (None, Some(prod_import.as_ref())),
     ASTNode::Production_Symbol(prod_sym) => (Some(prod_sym.as_ref()), None),
-    ASTNode::Production_Terminal_Symbol(prod_tok) => get_production_symbol(g_data, &prod_tok.production),
+    ASTNode::Production_Terminal_Symbol(prod_tok) => get_nonterminal_symbol(g_data, &prod_tok.production),
     ASTNode::State(box parser::State { id, .. })
     | ASTNode::PrattProduction(box parser::PrattProduction { name_sym: id, .. })
     | ASTNode::PegProduction(box parser::PegProduction { name_sym: id, .. })
     | ASTNode::CFProduction(box parser::CFProduction { name_sym: id, .. }) => (Some(id.as_ref()), None),
-    ASTNode::AppendProduction(box parser::AppendProduction { name_sym, .. }) => get_production_symbol(g_data, name_sym),
+    ASTNode::AppendProduction(box parser::AppendProduction { name_sym, .. }) => get_nonterminal_symbol(g_data, name_sym),
     _ => unreachable!(),
   }
 }
 
-/// Return the `ProductionId` from a valid production like node.
+/// Return the `ProductionId` from a valid non-terminal like node.
 ///
 /// Valid Node:
 /// - [ASTNode::Production_Import_Symbol]
@@ -774,14 +774,14 @@ fn get_production_symbol<'a>(
 /// - [ASTNode::PrattProduction]
 /// - [ASTNode::PegProduction]
 /// - [ASTNode::CFProduction]
-fn get_production_id_from_ast_node(g_data: &GrammarData, node: &ASTNode) -> SherpaResult<ProductionId> {
-  match get_production_symbol(g_data, node) {
-    (Some(prod), None) => Ok(ProductionId::from((g_data.id.guid, prod.name.as_str()))),
-    (None, Some(prod)) => {
-      let ref_name = prod.module.to_token();
+fn get_nonterminal_id_from_ast_node(g_data: &GrammarData, node: &ASTNode) -> SherpaResult<NonTermId> {
+  match get_nonterminal_symbol(g_data, node) {
+    (Some(nterm), None) => Ok(NonTermId::from((g_data.id.guid, nterm.name.as_str()))),
+    (None, Some(nterm)) => {
+      let ref_name = nterm.module.to_token();
 
       match g_data.imports.get(&ref_name) {
-        Some(GrammarIdentities { guid, .. }) => Ok(ProductionId::from((*guid, prod.name.as_str()))),
+        Some(GrammarIdentities { guid, .. }) => Ok(NonTermId::from((*guid, nterm.name.as_str()))),
         _ => SherpaResult_Err("Could not retrieve ProductionID from node"),
       }
     }
@@ -798,24 +798,24 @@ fn get_production_id_from_ast_node(g_data: &GrammarData, node: &ASTNode) -> Sher
 
 // NAMES ------------------------------------------------------------------------
 
-/// Creates a globally unique name and friendly name for a production
-pub fn prod_names(base_name: &str, g_data: &GrammarIdentities, s_store: &IStringStore) -> (IString, IString) {
+/// Creates a globally unique name and friendly name for a non-terminal
+pub fn nterm_names(base_name: &str, g_data: &GrammarIdentities, s_store: &IStringStore) -> (IString, IString) {
   ((g_data.guid_name.to_string(s_store) + "____" + base_name).intern(s_store), base_name.intern(s_store))
 }
 
-/// Creates a globally unique name and friendly name for a sub-production.
+/// Creates a globally unique name and friendly name for a sub-non-terminal.
 /// `sub_name` should be a string indicating the type of symbol that
-/// the sub-production was derived from.
-fn sub_prod_names(sub_name: &str, p_data: &ProductionData, s_store: &IStringStore) -> (IString, IString) {
-  if p_data.sub_prods.is_empty() {
+/// the sub-non-terminal was derived from.
+fn sub_nterm_names(sub_name: &str, p_data: &NonTermData, s_store: &IStringStore) -> (IString, IString) {
+  if p_data.sub_nterminals.is_empty() {
     (
       (p_data.root_g_name.to_string(s_store) + "_" + sub_name).intern(s_store),
       (p_data.root_f_name.to_string(s_store) + "_" + sub_name).intern(s_store),
     )
   } else {
     (
-      (p_data.root_g_name.to_string(s_store) + "_" + sub_name + "_" + &p_data.sub_prods.len().to_string()).intern(s_store),
-      (p_data.root_f_name.to_string(s_store) + "_" + sub_name + "_" + &p_data.sub_prods.len().to_string()).intern(s_store),
+      (p_data.root_g_name.to_string(s_store) + "_" + sub_name + "_" + &p_data.sub_nterminals.len().to_string()).intern(s_store),
+      (p_data.root_f_name.to_string(s_store) + "_" + sub_name + "_" + &p_data.sub_nterminals.len().to_string()).intern(s_store),
     )
   }
 }
@@ -848,7 +848,7 @@ fn to_base64_name<T: Hash>(val: T) -> String {
 
 /// Remove artifacts related to a single grammar from a soup through mutation.
 pub fn remove_grammar_mut(id: GrammarId, soup: &mut GrammarSoup) -> SherpaResult<()> {
-  let GrammarSoup { grammar_headers, productions, custom_states, .. } = soup;
+  let GrammarSoup { grammar_headers, nonterminals, custom_states, .. } = soup;
 
   {
     let mut grammar_headers = grammar_headers.write()?;
@@ -859,11 +859,11 @@ pub fn remove_grammar_mut(id: GrammarId, soup: &mut GrammarSoup) -> SherpaResult
   }
 
   {
-    let mut productions = productions.write()?;
+    let mut nonterminals = nonterminals.write()?;
 
-    let productions_temp = productions.drain(..).collect::<Vec<_>>();
+    let nonterminals_temp = nonterminals.drain(..).collect::<Vec<_>>();
 
-    productions.extend(productions_temp.into_iter().filter(|p| p.g_id != id))
+    nonterminals.extend(nonterminals_temp.into_iter().filter(|p| p.g_id != id))
   }
 
   {
@@ -894,22 +894,22 @@ mod test {
     SherpaResult::Ok((j, super::parse_grammar(input)?, PathBuf::from("/test.sg"), IStringStore::default()))
   }
   #[test]
-  fn extract_productions() -> SherpaResult<()> {
+  fn extract_nonterminals() -> SherpaResult<()> {
     let (mut j, g, path, s_store) =
       create_test_data(r##"  <> test-sweet-home-alabama > c:id{3} | ("test"{2} "2" :ast $1 ) :ast $1 "##)?;
 
     let g_data = super::create_grammar_data(&mut j, g, &path, &s_store)?;
 
-    let (mut prods, ..) = super::extract_productions(&mut j, &g_data, &s_store)?;
+    let (mut nterms, ..) = super::extract_nonterminals(&mut j, &g_data, &s_store)?;
 
-    assert_eq!(prods.len(), 1);
+    assert_eq!(nterms.len(), 1);
 
-    let prod = super::process_production(o_to_r(prods.pop(), "")?, &g_data, &s_store)?;
+    let nterm = super::process_nonterminal(o_to_r(nterms.pop(), "")?, &g_data, &s_store)?;
 
-    dbg!(&prod.symbols);
+    dbg!(&nterm.symbols);
 
-    assert_eq!(prod.sub_prods.len(), 1);
-    assert_eq!(prod.symbols.len(), 3);
+    assert_eq!(nterm.sub_nterms.len(), 1);
+    assert_eq!(nterm.symbols.len(), 3);
 
     SherpaResult::Ok(())
   }
@@ -930,9 +930,9 @@ mod test {
 
     let g_data = super::create_grammar_data(&mut j, g, &path, &s_store)?;
 
-    let (productions, mut parse_states) = super::extract_productions(&mut j, &g_data, &s_store)?;
+    let (nonterminals, mut parse_states) = super::extract_nonterminals(&mut j, &g_data, &s_store)?;
 
-    assert_eq!(productions.len(), 0);
+    assert_eq!(nonterminals.len(), 0);
     assert_eq!(parse_states.len(), 1);
 
     let parse_state = super::process_parse_state(parse_states.pop().unwrap(), &g_data, &s_store)?;

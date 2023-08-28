@@ -1,4 +1,3 @@
-
 #[cfg(debug_assertions)]
 use std::fmt::Debug;
 
@@ -13,7 +12,7 @@ pub struct SherpaParseError {
   pub message: String,
   pub inline_message: String,
   pub loc: Token,
-  pub last_production: u32,
+  pub last_nonterminal: u32,
 }
 
 impl Display for SherpaParseError {

@@ -95,8 +95,8 @@ pub struct ParseContext<T: ByteReader, M = u32> {
   pub sym_len:        u32,
   /// Tracks whether the context is a fail mode or not.
   pub state:          u32,
-  /// Set to the value of a production when a rule is reduced, or
-  pub prod_id:        u32,
+  /// Set to the value of a non-terminal when a rule is reduced, or
+  pub nterm:          u32,
   /// Set to the value of a token when one is recognized. Also stores the
   /// number of symbols that are to be reduced.
   pub tok_id:         u32,
@@ -168,13 +168,13 @@ impl<T: ByteReader, M> ParseContext<T, M> {
   }
 
   #[inline]
-  pub fn get_production(&self) -> u32 {
-    self.prod_id
+  pub fn get_nonterminal(&self) -> u32 {
+    self.nterm
   }
 
   #[inline]
-  pub fn set_production_to(&mut self, production: u32) {
-    self.prod_id = production;
+  pub fn set_nonterminal_to(&mut self, non_terminal: u32) {
+    self.nterm = non_terminal;
   }
 
   #[inline]
@@ -214,8 +214,8 @@ impl<T: ByteReader, M> ParseContext<T, M> {
     self.start_line_off
   }
 
-  pub fn get_production_id(&self) -> u32 {
-    self.prod_id
+  pub fn get_nonterminal_id(&self) -> u32 {
+    self.nterm
   }
 
   /// Returns shift data from current context state.
@@ -252,7 +252,7 @@ impl<T: ByteReader, M> Default for ParseContext<T, M> {
       head_ptr:       0,
       base_ptr:       0,
       end_ptr:        0,
-      prod_id:        0,
+      nterm:          0,
       begin_ptr:      0,
       end_line_num:   0,
       start_line_num: 0,
@@ -339,7 +339,7 @@ pub enum ParseResult<Node: AstObject> {
 pub enum ShiftsAndSkipsResult {
   Accepted { shifts: Vec<String>, skips: Vec<String> },
 
-  IncorrectProduction { shifts: Vec<String>, skips: Vec<String>, expected_prod_id: u32, actual_prod_id: u32 },
+  IncorrectNonTerminal { shifts: Vec<String>, skips: Vec<String>, expected_nterm: u32, actual_nterm: u32 },
 
   FailedParse(SherpaParseError),
 }
@@ -366,8 +366,8 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
   /// the active token
   fn get_token_line_offset(&self) -> u32;
 
-  /// Returns the production id of the most recently reduced symbols
-  fn get_production_id(&self) -> u32;
+  /// Returns the non-terminal id of the most recently reduced symbols
+  fn get_nonterminal_id(&self) -> u32;
 
   /// Parse input up to the next required parse action and return
   /// its value.
@@ -441,7 +441,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
 
           return Err(SherpaParseError {
             inline_message: "Unrecognized Token".into(),
-            last_production: 0,
+            last_nonterminal: 0,
             loc: TokenRange {
               line_num: last_input.line_num,
               line_off: last_input.line_off,
@@ -455,7 +455,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
         _ => {
           return Err(SherpaParseError {
             inline_message: Default::default(),
-            last_production: 0,
+            last_nonterminal: 0,
             loc: Default::default(),
             message: "Unrecognized Token".into(),
           });
@@ -482,7 +482,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
             message: "Could not recognize the following input:".to_string(),
             inline_message: "".to_string(),
             loc: token,
-            last_production: self.get_production_id(),
+            last_nonterminal: self.get_nonterminal_id(),
           });
         }
         _ => {}
@@ -495,7 +495,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
   fn collect_shifts_and_skips<'debug>(
     &mut self,
     entry_point: u32,
-    target_production_id: u32,
+    target_nonterminal_id: u32,
     debug: &mut Option<&'debug mut DebugFn>,
   ) -> ShiftsAndSkipsResult {
     self.init_parser(entry_point);
@@ -505,17 +505,17 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
 
     loop {
       match self.get_next_action(debug) {
-        ParseAction::Accept { production_id } => {
+        ParseAction::Accept { nonterminal_id } => {
           #[cfg(debug_assertions)]
           if let Some(debug) = debug {
-            debug(&DebugEvent::Complete { production_id }, self.get_input());
+            debug(&DebugEvent::Complete { nonterminal_id }, self.get_input());
           }
-          break if production_id != target_production_id {
-            ShiftsAndSkipsResult::IncorrectProduction {
+          break if nonterminal_id != target_nonterminal_id {
+            ShiftsAndSkipsResult::IncorrectNonTerminal {
               shifts,
               skips,
-              expected_prod_id: target_production_id,
-              actual_prod_id: production_id,
+              expected_nterm: target_nonterminal_id,
+              actual_nterm: nonterminal_id,
             }
           } else {
             ShiftsAndSkipsResult::Accepted { shifts, skips }
@@ -533,7 +533,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
             message: "Could not recognize the following input:".to_string(),
             inline_message: "".to_string(),
             loc: token,
-            last_production: self.get_production_id(),
+            last_nonterminal: self.get_nonterminal_id(),
           });
         }
         ParseAction::Fork { .. } => {
@@ -567,7 +567,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
   fn create_cst<'debug>(
     &mut self,
     entry_point: u32,
-    target_production_id: u32,
+    target_nonterminal_id: u32,
     debug: &mut Option<&'debug mut DebugFn>,
   ) -> Option<Rc<cst::CST>> {
     self.init_parser(entry_point);
@@ -578,10 +578,10 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
 
     loop {
       match self.get_next_action(debug) {
-        ParseAction::Accept { production_id } => {
+        ParseAction::Accept { nonterminal_id } => {
           #[cfg(debug_assertions)]
           if let Some(debug) = debug {
-            debug(&DebugEvent::Complete { production_id }, self.get_input());
+            debug(&DebugEvent::Complete { nonterminal_id }, self.get_input());
           }
 
           break if cst.len() > 1 {
@@ -591,7 +591,7 @@ originating grammar not supporting error recovery. Unable to provide a viable
 Concrete Syntax Tree structure."
             );
             None
-          } else if production_id != target_production_id {
+          } else if nonterminal_id != target_nonterminal_id {
             None
           } else {
             cst.pop().map(|c| c.1)
@@ -632,7 +632,7 @@ Concrete Syntax Tree structure."
             debug(&DebugEvent::ShiftToken { offset_start, offset_end }, self.get_input());
           }
         }
-        ParseAction::Reduce { rule_id, production_id, symbol_count } => {
+        ParseAction::Reduce { rule_id, nonterminal_id, symbol_count } => {
           let mut children = vec![];
           let mut len = 0;
           for child in cst.drain((cst.len() - symbol_count as usize)..) {
@@ -643,8 +643,8 @@ Concrete Syntax Tree structure."
           if children.len() == 1 {
             match children.pop() {
               Some((len, mut child)) => match Rc::get_mut(&mut child) {
-                Some(cst::CST::NonTerm { prod_id, .. }) => {
-                  prod_id.push((production_id as u16, rule_id as u16));
+                Some(cst::CST::NonTerm { nterm, .. }) => {
+                  nterm.push((nonterminal_id as u16, rule_id as u16));
                   cst.push((len, child));
                   continue;
                 }
@@ -655,7 +655,7 @@ Concrete Syntax Tree structure."
             }
           }
 
-          let non_term = cst::CST::NonTerm { prod_id: vec![(production_id as u16, rule_id as u16)], children };
+          let non_term = cst::CST::NonTerm { nterm: vec![(nonterminal_id as u16, rule_id as u16)], children };
           cst.push((len, Rc::new(non_term)));
 
           #[cfg(debug_assertions)]

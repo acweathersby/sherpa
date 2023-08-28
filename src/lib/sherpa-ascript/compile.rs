@@ -5,16 +5,16 @@ use super::types::{
   AScriptStruct,
   AScriptStructId,
   AScriptTypeVal,
-  ProductionTypesTable,
+  NonTerminalTypesTable,
   TaggedType,
   ASCRIPT_FIRST_NODE_ID,
   ASCRIPT_LAST_NODE_ID,
 };
 use crate::{
   errors::{
-    add_incompatible_production_scalar_types_error,
-    add_incompatible_production_types_error,
-    add_incompatible_production_vector_types_error,
+    add_incompatible_nonterm_scalar_types_error,
+    add_incompatible_nonterm_types_error,
+    add_incompatible_nonterm_vector_types_error,
     add_prop_redefinition_error,
   },
   types::AScriptProp,
@@ -31,11 +31,11 @@ use std::{
 };
 
 pub(crate) fn compile_ascript_store(j: &mut Journal, ast: &mut AScriptStore, db: &ParserDatabase) -> SherpaResult<()> {
-  let mut temp_production_types = ProductionTypesTable::new();
+  let mut temp_nonterm_types = NonTerminalTypesTable::new();
 
-  gather_ascript_info_from_grammar(j, ast, db, &mut temp_production_types)?;
+  gather_ascript_info_from_grammar(j, ast, db, &mut temp_nonterm_types)?;
 
-  resolve_production_reduce_types(j, ast, db, temp_production_types);
+  resolve_nonterm_reduce_types(j, ast, db, temp_nonterm_types);
 
   if !j.report().have_errors_of_type(SherpaErrorSeverity::Critical) {
     resolve_structure_properties(j, ast, db);
@@ -48,7 +48,7 @@ fn gather_ascript_info_from_grammar(
   j: &mut Journal,
   store: &mut AScriptStore,
   db: &ParserDatabase,
-  prod_types: &mut ProductionTypesTable,
+  nterm_types: &mut NonTerminalTypesTable,
 ) -> SherpaResult<()> {
   // Separate all bodies into a list of  of tuple of RuleId's and
   // Ascript reference nodes.
@@ -62,9 +62,9 @@ fn gather_ascript_info_from_grammar(
 
   // For reduce function in each rule divide into those that resolve
   // into atomic types and those that don't (those that resolve into
-  // productions). Add the types of the atomic functions to the
-  // production types. Add any structs encountered i    nto a separate
-  // table, again adding these atomic struct types to the production
+  // nonterminals). Add the types of the atomic functions to the
+  // non-terminal types. Add any structs encountered i    nto a separate
+  // table, again adding these atomic struct types to the non-terminal
   // types.
 
   let mut struct_bodies: Vec<(DBRuleKey, &Ascript)> = vec![];
@@ -74,7 +74,7 @@ fn gather_ascript_info_from_grammar(
         ASTNode::AST_Struct(ast_struct) => {
           let id = compile_struct_type(j, store, db, ast_struct, rule_id);
           struct_bodies.push((rule_id, ascript));
-          add_production_type(prod_types, &rule_ref, TaggedType {
+          add_nonterm_type(nterm_types, &rule_ref, TaggedType {
             type_:        AScriptTypeVal::Struct(id),
             tag:          rule_id,
             symbol_index: 0,
@@ -88,18 +88,18 @@ fn gather_ascript_info_from_grammar(
             ast_stmts.statements.last().expect("There should be at least one symbol"),
             rule_id,
           ) {
-            add_production_type(prod_types, &rule_ref, sub_type);
+            add_nonterm_type(nterm_types, &rule_ref, sub_type);
           }
         }
         ast_expr => {
           for sub_type in compile_expression_type(j, store, db, ast_expr, rule_id) {
-            add_production_type(prod_types, &rule_ref, sub_type);
+            add_nonterm_type(nterm_types, &rule_ref, sub_type);
           }
         }
       },
       Some(ASTToken::ListEntry(_)) => {
         // Create a vector node that contains the first symbol of this rule.
-        add_production_type(prod_types, &rule_ref, TaggedType {
+        add_nonterm_type(nterm_types, &rule_ref, TaggedType {
           type_:        AScriptTypeVal::GenericVec(Some(OrderedSet::from_iter(convert_ref_result(
             get_indexed_body_ref(&rule_ref.rule, 0),
             store,
@@ -121,7 +121,7 @@ fn gather_ascript_info_from_grammar(
           db,
           rule_id,
         ));
-        add_production_type(prod_types, &rule_ref, TaggedType {
+        add_nonterm_type(nterm_types, &rule_ref, TaggedType {
           type_:        AScriptTypeVal::GenericVec(Some(OrderedSet::from_iter(types))),
           tag:          rule_id,
           symbol_index: 0,
@@ -129,12 +129,12 @@ fn gather_ascript_info_from_grammar(
       }
       _ => {
         match rule_ref.rule.symbols.last().expect("There should be at least one symbol").id {
-          SymbolId::DBNonTerminal { key: id } => add_production_type(prod_types, &rule_ref, TaggedType {
-            type_:        AScriptTypeVal::UnresolvedProduction(id),
+          SymbolId::DBNonTerminal { key: id } => add_nonterm_type(nterm_types, &rule_ref, TaggedType {
+            type_:        AScriptTypeVal::UnresolvedNonTerminal(id),
             tag:          rule_id,
             symbol_index: (rule_ref.rule.symbols.len() - 1) as u32,
           }),
-          _ => add_production_type(prod_types, &rule_ref, TaggedType {
+          _ => add_nonterm_type(nterm_types, &rule_ref, TaggedType {
             type_:        AScriptTypeVal::Token,
             tag:          rule_id,
             symbol_index: (rule_ref.rule.symbols.len() - 1) as u32,
@@ -147,8 +147,8 @@ fn gather_ascript_info_from_grammar(
   SherpaResult::Ok(())
 }
 
-fn add_production_type(prod_types: &mut ProductionTypesTable, rule: &DBRule, new_return_type: TaggedType) {
-  let table = prod_types.entry(rule.prod_id).or_insert_with(OrderedMap::new);
+fn add_nonterm_type(nterm_types: &mut NonTerminalTypesTable, rule: &DBRule, new_return_type: TaggedType) {
+  let table = nterm_types.entry(rule.nonterm).or_insert_with(OrderedMap::new);
 
   match table.entry(new_return_type.clone()) {
     btree_map::Entry::Occupied(mut entry) => {
@@ -160,44 +160,45 @@ fn add_production_type(prod_types: &mut ProductionTypesTable, rule: &DBRule, new
   }
 }
 
-/// Walks entire AST graph and resolves the types that any givin production can
-/// reduce to. Creates errors if a production reduces to incompatible types.
-fn resolve_production_reduce_types(
+/// Walks entire AST graph and resolves the types that any givin non-terminal
+/// can reduce to. Creates errors if a non-terminal reduces to incompatible
+/// types.
+fn resolve_nonterm_reduce_types(
   j: &mut Journal,
   ast: &mut AScriptStore,
   db: &ParserDatabase,
-  mut prod_types: ProductionTypesTable,
+  mut nterm_types: NonTerminalTypesTable,
 ) {
-  let mut pending_prods = VecDeque::from_iter(db.parse_productions().into_iter().rev());
+  let mut pending_nterms = VecDeque::from_iter(db.parser_nonterms().into_iter().rev());
 
-  while let Some(prod_id) = pending_prods.pop_front() {
+  while let Some(nterm) = pending_nterms.pop_front() {
     debug_assert!(
-      prod_types.contains_key(&prod_id),
-      "All production should be accounted for.\nProduction [{}] does not have an associated return type",
-      db.prod_friendly_name_string(prod_id)
+      nterm_types.contains_key(&nterm),
+      "All non-terminal should be accounted for.\nNon-terminal [{}] does not have an associated return type",
+      db.nonterm_friendly_name_string(nterm)
     );
 
     let mut resubmit = false;
     let mut new_map = OrderedMap::new();
-    let vector_types = prod_types.remove(&prod_id).unwrap().into_iter().collect::<Vec<_>>();
+    let vector_types = nterm_types.remove(&nterm).unwrap().into_iter().collect::<Vec<_>>();
     let (vector_types, scalar_types) = vector_types.into_iter().partition::<Vec<_>, _>(|(a, _)| a.type_.is_vec());
 
     if !scalar_types.is_empty() {
       use AScriptTypeVal::*;
       let (mut prime, mut prime_body_ids) = (TaggedType::default(), OrderedSet::new());
 
-      let mut insert_production_types =
-        |ast: &mut AScriptStore, foreign_prod_id: DBProdKey, original: TaggedType, body_ids: OrderedSet<DBRuleKey>| {
-          if foreign_prod_id != prod_id {
-            match ast.prod_types.get(&foreign_prod_id) {
+      let mut insert_nonterm_types =
+        |ast: &mut AScriptStore, foreign_nterm: DBNonTermKey, original: TaggedType, body_ids: OrderedSet<DBRuleKey>| {
+          if foreign_nterm != nterm {
+            match ast.nonterm_types.get(&foreign_nterm) {
               Some(types_) if !types_.is_empty() => {
                 new_map.extend(types_.clone());
               }
               Some(_) => {
-                panic!("Production [{}] does not produce any types", db.prod_friendly_name_string(foreign_prod_id))
+                panic!("Non-terminal [{}] does not produce any types", db.nonterm_friendly_name_string(foreign_nterm))
               }
               _ => {
-                // Remap the production type and resubmit
+                // Remap the non-terminal type and resubmit
                 new_map.insert(original, body_ids);
               }
             }
@@ -235,12 +236,12 @@ fn resolve_production_reduce_types(
               ..Default::default()
             }
           }
-          (_, UnresolvedProduction(foreign_prod_id)) => {
-            resubmit = resubmit.max(insert_production_types(ast, *foreign_prod_id, other, body_ids));
+          (_, UnresolvedNonTerminal(foreign_nterm)) => {
+            resubmit = resubmit.max(insert_nonterm_types(ast, *foreign_nterm, other, body_ids));
             prime
           }
-          (UnresolvedProduction(foreign_prod_id), _) => {
-            resubmit = resubmit.max(insert_production_types(ast, *foreign_prod_id, prime, prime_body_ids.clone()));
+          (UnresolvedNonTerminal(foreign_nterm), _) => {
+            resubmit = resubmit.max(insert_nonterm_types(ast, *foreign_nterm, prime, prime_body_ids.clone()));
             other
           }
           (Undefined, _) => {
@@ -252,11 +253,11 @@ fn resolve_production_reduce_types(
             prime
           }
           (a, b) => {
-            add_incompatible_production_scalar_types_error(
+            add_incompatible_nonterm_scalar_types_error(
               j,
               ast,
               db,
-              &prod_id,
+              &nterm,
               (a.clone(), prime_body_ids.iter().cloned().collect()),
               (b.clone(), body_ids.iter().cloned().collect()),
             );
@@ -282,26 +283,26 @@ fn resolve_production_reduce_types(
 
         vector_types.extend(vectors.into_iter().map(|t| (t.into(), BTreeSet::new())).collect::<VecDeque<_>>());
 
-        let (unresolved_prods, known_types) =
-          known_types.into_iter().partition::<BTreeSet<_>, _>(|t| matches!(t.into(), UnresolvedProduction(..)));
+        let (unresolved_nterms, known_types) =
+          known_types.into_iter().partition::<BTreeSet<_>, _>(|t| matches!(t.into(), UnresolvedNonTerminal(..)));
 
-        for production in unresolved_prods {
-          if let UnresolvedProduction(foreign_prod_id) = production.type_.clone() {
-            if foreign_prod_id != prod_id {
-              match ast.prod_types.get(&foreign_prod_id) {
-                Some(other_production_types) => {
+        for nonterminal in unresolved_nterms {
+          if let UnresolvedNonTerminal(foreign_nterm) = nonterminal.type_.clone() {
+            if foreign_nterm != nterm {
+              match ast.nonterm_types.get(&foreign_nterm) {
+                Some(other_nonterm_types) => {
                   new_map.insert(
                     TaggedType {
-                      type_: AScriptTypeVal::GenericVec(Some(other_production_types.keys().cloned().collect())),
+                      type_: AScriptTypeVal::GenericVec(Some(other_nonterm_types.keys().cloned().collect())),
                       ..Default::default()
                     },
-                    other_production_types.values().flatten().cloned().collect(),
+                    other_nonterm_types.values().flatten().cloned().collect(),
                   );
                 }
                 None => {
                   new_map.insert(
                     TaggedType {
-                      type_: AScriptTypeVal::GenericVec(Some(BTreeSet::from_iter(vec![production]))),
+                      type_: AScriptTypeVal::GenericVec(Some(BTreeSet::from_iter(vec![nonterminal]))),
                       ..Default::default()
                     },
                     BTreeSet::new(),
@@ -318,7 +319,7 @@ fn resolve_production_reduce_types(
       while let Some((other, mut body_ids)) = vector_types.pop_front() {
         prime = match (prime.type_, other.type_) {
           (GenericVec(Some(vecA)), GenericVec(Some(vecB))) => {
-            // Check for compatibility, and extract productions from vectors
+            // Check for compatibility, and extract nonterminals from vectors
             let mut known_types = remap_vector(vecB, &mut vector_types);
             known_types.extend(vecA);
             prime_body_ids.append(&mut body_ids);
@@ -345,38 +346,39 @@ fn resolve_production_reduce_types(
       }
     }
 
-    // Only when the production is fully resolved do
+    // Only when the non-terminal is fully resolved do
     // we add the the types to the ast store.resolve_structure_properties.
-    // Otherwise, the production is resubmitted to resolve unresolved derived types.
+    // Otherwise, the non-terminal is resubmitted to resolve unresolved derived
+    // types.
     if resubmit {
-      pending_prods.push_back(prod_id);
-      prod_types.insert(prod_id, new_map);
+      pending_nterms.push_back(nterm);
+      nterm_types.insert(nterm, new_map);
     } else {
-      ast.prod_types.insert(prod_id, new_map);
+      ast.nonterm_types.insert(nterm, new_map);
     }
   }
 
-  // Ensure all non-scanner productions have been added to the ascript data.
-  debug_assert_eq!(ast.prod_types.len(), db.parse_productions().len());
+  // Ensure all non-scanner nonterminals have been added to the ascript data.
+  debug_assert_eq!(ast.nonterm_types.len(), db.parser_nonterms().len());
 
   // Do final check for incompatible types
-  for prod_id in ast.prod_types.keys().cloned().collect::<Vec<_>>() {
-    let vector_types = ast.prod_types.get(&prod_id).unwrap().iter().collect::<Vec<_>>();
+  for nterm in ast.nonterm_types.keys().cloned().collect::<Vec<_>>() {
+    let vector_types = ast.nonterm_types.get(&nterm).unwrap().iter().collect::<Vec<_>>();
     let (vector_types, scalar_types) = vector_types.into_iter().partition::<Vec<_>, _>(|(a, ..)| a.type_.is_vec());
 
     debug_assert!(
-      !scalar_types.iter().any(|(a, _)| matches!((*a).into(), AScriptTypeVal::UnresolvedProduction(_))),
-      "Production [{}] has not been fully resolved \n{:#?}",
-      db.prod_friendly_name_string(prod_id),
-      ast.prod_types.get(&prod_id).unwrap().iter().map(|(t, _)| { t.debug_string() }).collect::<Vec<_>>()
+      !scalar_types.iter().any(|(a, _)| matches!((*a).into(), AScriptTypeVal::UnresolvedNonTerminal(_))),
+      "Non-terminal [{}] has not been fully resolved \n{:#?}",
+      db.nonterm_friendly_name_string(nterm),
+      ast.nonterm_types.get(&nterm).unwrap().iter().map(|(t, _)| { t.debug_string() }).collect::<Vec<_>>()
     );
     match (!vector_types.is_empty(), !scalar_types.is_empty()) {
       (true, true) => {
-        add_incompatible_production_types_error(
+        add_incompatible_nonterm_types_error(
           j,
           ast,
           db,
-          &prod_id,
+          &nterm,
           scalar_types
             .iter()
             .flat_map(|(type_, bodies)| bodies.iter().map(|b| ((*type_).into(), *b)).collect::<Vec<_>>())
@@ -388,16 +390,16 @@ fn resolve_production_reduce_types(
         );
       }
       (true, false) => {
-        debug_assert!(vector_types.len() == 1, "Failed Invariant: All productions should have a single resolved type");
+        debug_assert!(vector_types.len() == 1, "Failed Invariant: All nonterminals should have a single resolved type");
         let (_type, tokens) = vector_types.into_iter().next().unwrap();
         match _type.into() {
           AScriptTypeVal::GenericVec(Some(_types)) => {
             let resolved_vector_type = get_specified_vector_from_generic_vec_values(&_types.iter().map(|v| v.into()).collect());
             if resolved_vector_type.is_undefined() {
-              add_incompatible_production_vector_types_error(j, ast, db, &prod_id, _types);
+              add_incompatible_nonterm_vector_types_error(j, ast, db, &nterm, _types);
             } else {
-              ast.prod_types.insert(
-                prod_id,
+              ast.nonterm_types.insert(
+                nterm,
                 OrderedMap::from_iter(vec![(
                   TaggedType { type_: resolved_vector_type, ..Default::default() },
                   tokens.to_owned(),
@@ -481,12 +483,12 @@ pub(crate) fn verify_property_presence(ast: &mut AScriptStore, struct_id: &AScri
 
 /// Retrieve the resolved type of the base type. For most ascript types
 /// this returns a clone of the `base_type`. For vectors and unresolved
-/// productions types, this attempts to replace such types with resolved
+/// nonterminals types, this attempts to replace such types with resolved
 /// versions
 pub fn get_resolved_type(ascript: &AScriptStore, base_type: &AScriptTypeVal) -> AScriptTypeVal {
   match base_type {
-    AScriptTypeVal::UnresolvedProduction(production_id) => {
-      let Some(types) = ascript.prod_types.get(production_id).and_then(|t| Some(t.keys().cloned().collect::<Vec<_>>())) else {
+    AScriptTypeVal::UnresolvedNonTerminal(nonterm_id) => {
+      let Some(types) = ascript.nonterm_types.get(nonterm_id).and_then(|t| Some(t.keys().cloned().collect::<Vec<_>>())) else {
         return base_type.clone();
       };
 
@@ -537,7 +539,7 @@ pub fn get_resolved_vec_contents(store: &AScriptStore, base_type: &AScriptTypeVa
     GenericVec(Some(types)) => types.iter().flat_map(|t| get_resolved_vec_contents(store, &t.into())).collect(),
     TokenVec => vec![Token],
     StringVec => vec![String(None)],
-    UnresolvedProduction(_) => get_resolved_vec_contents(store, &get_resolved_type(store, base_type)),
+    UnresolvedNonTerminal(_) => get_resolved_vec_contents(store, &get_resolved_type(store, base_type)),
     none_vec_type => {
       vec![none_vec_type.clone()]
     }
@@ -704,7 +706,7 @@ fn convert_ref_result(
   let rule = db.rule(rule_id);
   match ref_result {
     Some((index, SymbolRef { id, .. })) => match id {
-      SymbolId::DBNonTerminal { key } => match store.prod_types.get(&key) {
+      SymbolId::DBNonTerminal { key } => match store.nonterm_types.get(&key) {
         Some(types) => types
           .keys()
           .map(|t| TaggedType {
@@ -716,7 +718,7 @@ fn convert_ref_result(
         None => vec![TaggedType {
           symbol_index: index as u32,
           tag:          rule_id,
-          type_:        UnresolvedProduction(key),
+          type_:        UnresolvedNonTerminal(key),
         }],
       },
       _ => {
@@ -731,7 +733,7 @@ fn convert_ref_result(
   }
 }
 
-/// Compiles a struct type from a production rule and
+/// Compiles a struct type from a non-terminal rule and
 /// ascript struct node.
 pub fn compile_struct_type(
   j: &mut Journal,
@@ -908,8 +910,8 @@ pub fn compile_struct_props(
   AScriptTypeVal::Struct(id.clone())
 }
 
-pub fn get_production_types(store: &AScriptStore, prod_id: &DBProdKey) -> BTreeSet<AScriptTypeVal> {
-  store.prod_types.get(prod_id).unwrap().keys().map(|t| t.into()).collect::<BTreeSet<_>>()
+pub fn get_nonterm_types(store: &AScriptStore, nterm: &DBNonTermKey) -> BTreeSet<AScriptTypeVal> {
+  store.nonterm_types.get(nterm).unwrap().keys().map(|t| t.into()).collect::<BTreeSet<_>>()
 }
 
 /// Returns a specified vector type from a generic vector
@@ -1055,13 +1057,13 @@ pub fn get_named_body_ref(db: &ParserDatabase, rule: &Rule, val: &str) -> RefRes
     match rule.symbols.iter().enumerate().filter(|(_, SymbolRef { annotation: a, .. })| *a == val.to_token()).last() {
       // The symbols annotation matched
       Some((i, result)) => Some((i, result.clone())),
-      // The production name matched.
+      // The nonterminal name matched.
       _ => rule
         .symbols
         .iter()
         .enumerate()
         .filter_map(|(i, sym)| match sym.id {
-          SymbolId::DBNonTerminal { key } => (db.prod_friendly_name(key) == val.to_token()).then(|| (i, sym.clone())),
+          SymbolId::DBNonTerminal { key } => (db.nonterm_friendly_name(key) == val.to_token()).then(|| (i, sym.clone())),
           _ => None,
         })
         .last(),
@@ -1077,6 +1079,6 @@ pub fn get_struct_type_from_node(ast_struct: &AST_Struct) -> AScriptTypeVal {
   AScriptTypeVal::Struct(AScriptStructId::new(&get_struct_name_from_node(ast_struct)))
 }
 
-pub fn production_types_are_structs(production_types: &BTreeSet<AScriptTypeVal>) -> bool {
-  production_types.iter().all(|t| matches!(t.clone(), AScriptTypeVal::Struct(..)))
+pub fn nonterminal_types_are_structs(nonterm_types: &BTreeSet<AScriptTypeVal>) -> bool {
+  nonterm_types.iter().all(|t| matches!(t.clone(), AScriptTypeVal::Struct(..)))
 }

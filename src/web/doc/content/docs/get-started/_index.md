@@ -17,9 +17,9 @@ weight: 1
     strings within a grammar.
 
 ## Rule - 
-    An ordered set of symbols that when match produce a specific production
+    An ordered set of symbols that when match produce a specific non-terminal
 
-## Production - 
+## Non-terminal - 
     A group of rules that all represent a single distinguishable grammatical construct.
 
 ## Optional Symbol

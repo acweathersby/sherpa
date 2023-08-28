@@ -30,7 +30,7 @@ pub enum ReportType {
   /// Initial parsing of a grammar source input.
   GrammarParse,
   /// TODO
-  TokenProductionCompile(ProductionId),
+  TokenNonTermCompile(NonTermId),
   /// TODO
   OcclusionCompile,
   // The following are implemented in in other packages
@@ -40,14 +40,14 @@ pub enum ReportType {
   ByteCodeCompile,
   /// Matches all report types.
   Any,
-  /// Matches all production compilation reports.
-  AnyProductionCompile,
+  /// Matches all non-terminal compilation reports.
+  AnyNonTermCompile,
   /// Matches all IR compiling reports
   IntermediateCompile,
   /// Matches the dissassembly generation report.
   Disassembly,
   /// TODO
-  ProductionCompile(ProductionId),
+  NonTerminalCompile(NonTermId),
   /// TODO
   Optimize,
 }
@@ -212,17 +212,17 @@ impl Report {
   /// Returns `true` if the type of this Report either completely or partially
   /// matches the `discriminant`.
   pub fn type_matches(&self, discriminant: ReportType) -> bool {
-    use ReportType::{ProductionCompile as PC, TokenProductionCompile as TPC, *};
+    use ReportType::{NonTerminalCompile as PC, TokenNonTermCompile as TPC, *};
     match (discriminant, self.report_type) {
       (GrammarCompile(any), GrammarCompile(_)) if any == GrammarId::default() => true,
-      (PC(any), PC(_)) if any == ProductionId::default() => true,
-      (TPC(any), TPC(_)) if any == ProductionId::default() => true,
-      (PC(any), PC(_)) if any == ProductionId::default() => true,
+      (PC(any), PC(_)) if any == NonTermId::default() => true,
+      (TPC(any), TPC(_)) if any == NonTermId::default() => true,
+      (PC(any), PC(_)) if any == NonTermId::default() => true,
 
-      (AnyProductionCompile, PC(_))
-      | (AnyProductionCompile, TPC(_))
-      | (IntermediateCompile, TokenProductionCompile(_))
-      | (IntermediateCompile, ProductionCompile(_))
+      (AnyNonTermCompile, PC(_))
+      | (AnyNonTermCompile, TPC(_))
+      | (IntermediateCompile, TokenNonTermCompile(_))
+      | (IntermediateCompile, NonTerminalCompile(_))
       | (AScriptCompile, AScriptCompile)
       | (ByteCodeCompile, ByteCodeCompile)
       | (OcclusionCompile, OcclusionCompile) => true,

@@ -205,11 +205,11 @@ pub enum CtxAggregateIndices {
   /// pub state:           u32,
   /// ```
   state,
-  /// Set to the value of a production when a rule is reduced, or
+  /// Set to the value of a non-terminal when a rule is reduced, or
   /// ```ignore
-  /// pub prod_id:  u32,
+  /// pub nterm:  u32,
   /// ```
-  prod_id,
+  nonterm_id,
   /// Set to the value of a token when one is recognized.
   /// ```ignore
   /// pub tok_id:  u32,

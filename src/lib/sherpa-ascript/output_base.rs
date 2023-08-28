@@ -542,8 +542,8 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
       .iter()
       .enumerate()
       .filter_map(|(id, rule)| {
-        let prod_sym = db.prod_sym(rule.prod_id);
-        match prod_sym {
+        let nterm_sym = db.nonterm_sym(rule.nonterm);
+        match nterm_sym {
           SymbolId::NonTerminal { .. } => Some((id, rule)),
           _ => None,
         }
@@ -553,18 +553,18 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
     let mut reduce_functions_map = Vec::new();
 
     for (bc_id, rule) in &ordered_rules {
-      let prod_id = rule.prod_id;
-      let prod_data = store.prod_types.get(&prod_id).unwrap();
+      let nterm = rule.nonterm;
+      let nterm_data = store.nonterm_types.get(&nterm).unwrap();
       let rule = &rule.rule;
 
       #[cfg(debug_assertions)]
       {
-        if prod_data.len() != 1 {
+        if nterm_data.len() != 1 {
           unreachable!(
-            "\n\nProduction result not been resolved\n[{}] == {}\n\n\n{}\n\n",
-            db.prod_friendly_name_string(prod_id),
+            "\n\nNon-terminal result not been resolved\n[{}] == {}\n\n\n{}\n\n",
+            db.nonterm_friendly_name_string(nterm),
             rule.tok.blame(1, 1, "", sherpa_rust_runtime::types::BlameColor::RED),
-            prod_data.iter().map(|(p, _)| { p.debug_string() }).collect::<Vec<_>>().join("\n")
+            nterm_data.iter().map(|(p, _)| { p.debug_string() }).collect::<Vec<_>>().join("\n")
           )
         };
       }
@@ -644,7 +644,7 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
                 w.writer.merge_checkpoint(stmt.writer)?;
 
                 let return_type = match return_type {
-                  AScriptTypeVal::Undefined | AScriptTypeVal::GenericVec(None) => prod_data.iter().next().unwrap().0.into(),
+                  AScriptTypeVal::Undefined | AScriptTypeVal::GenericVec(None) => nterm_data.iter().next().unwrap().0.into(),
                   r => r,
                 };
 
@@ -690,7 +690,7 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
               w.writer.merge_checkpoint(stmt.writer)?;
 
               let return_type = match return_type {
-                AScriptTypeVal::Undefined | AScriptTypeVal::GenericVec(None) => prod_data.iter().next().unwrap().0.into(),
+                AScriptTypeVal::Undefined | AScriptTypeVal::GenericVec(None) => nterm_data.iter().next().unwrap().0.into(),
                 r => r,
               };
 
@@ -738,7 +738,7 @@ pub fn get_ascript_export_data(
   let export_node_data = db
     .entry_points()
     .iter()
-    .map(|EntryPoint { entry_name, prod_name, prod_entry_name, prod_key, .. }| {
+    .map(|EntryPoint { entry_name, nonterm_name, nonterm_entry_name, nonterm_key, .. }| {
       let mut ref_index = 0;
       let ref_ = utils.ast_expr_to_ref(
         &ASTNode::AST_NamedReference(Box::new(AST_NamedReference {
@@ -746,8 +746,11 @@ pub fn get_ascript_export_data(
           value: ASCRIPT_FIRST_NODE_ID.to_string(),
         })),
         &Rule {
-          symbols: vec![SymbolRef { id: SymbolId::DBNonTerminal { key: *prod_key }, ..Default::default() }],
-          g_id:    db.rule(db.prod_rules(*prod_key).unwrap_or_else(|_| panic!("Incorrect db key"))[0]).g_id,
+          symbols: vec![SymbolRef {
+            id: SymbolId::DBNonTerminal { key: *nonterm_key },
+            ..Default::default()
+          }],
+          g_id:    db.rule(db.nonterm_rules(*nonterm_key).unwrap_or_else(|_| panic!("Incorrect db key"))[0]).g_id,
           skipped: Default::default(),
           tok:     Default::default(),
           ast:     None,
@@ -762,8 +765,8 @@ pub fn get_ascript_export_data(
         ast_type,
         ast_type_string,
         entry_name.to_string(db.string_store()).to_string(),
-        prod_name.to_string(db.string_store()).to_string(),
-        prod_entry_name.to_string(db.string_store()).to_string(),
+        nonterm_name.to_string(db.string_store()).to_string(),
+        nonterm_entry_name.to_string(db.string_store()).to_string(),
       )
     })
     .collect::<Vec<_>>();

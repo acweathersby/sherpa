@@ -26,18 +26,18 @@ class SherpaParser extends Parser {
 
         this.ctx = ctx;
 
-        let names = sherpa.get_production_names();
+        let names = sherpa.get_nonterminal_names();
         names.push("token");
         this.nodeSet = new NodeSet(names.map((name: string, id: number) => {
             return NodeType.define({ id, top: name == "sherpa::grammar", name: name.replace("::", "-") });
         })).extend(styleTags({
-            "sherpa_symbol-production_symbol!": tags.definitionKeyword,
+            "sherpa_symbol-nonterminal_symbol!": tags.definitionKeyword,
             "sherpa_symbol-terminal!": tags.string,
-            "sherpa-production/...": tags.definitionOperator,
+            "sherpa-non-terminal/...": tags.definitionOperator,
             "sherpa_symbol-class!": tags.className,
         }));
 
-        this.names = sherpa.get_production_names();
+        this.names = sherpa.get_nonterminal_names();
     }
 
 

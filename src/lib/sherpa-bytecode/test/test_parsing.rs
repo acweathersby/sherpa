@@ -9,12 +9,11 @@ use std::path::PathBuf;
 use super::utils::compile_and_run_grammars;
 
 #[test]
-pub fn recursive_production() -> SherpaResult<()> {
+pub fn recursive_nonterminal() -> SherpaResult<()> {
   compile_and_run_grammars(
     &[r#"
   
-      <> expr > expr "+" expr
-        | c:num 
+      <> expr > expr "+" expr        | c:num 
   "#],
     &[("default", "1+2+3", true)],
   )
@@ -33,7 +32,7 @@ pub fn precedence() -> SherpaResult<()> {
     | c:num
 
 "#],
-    &[("default", "3*2/1+1", true)],
+    &[("default", "3+2-1^1/1", true)],
   )
 }
 
@@ -199,7 +198,7 @@ pub fn skipped_nonterm_token_symbol() -> SherpaResult<()> {
 }
 
 #[test]
-fn parser_of_grammar_with_append_productions() -> SherpaResult<()> {
+fn parser_of_grammar_with_append_nonterminals() -> SherpaResult<()> {
   compile_and_run_grammars(
     &[r#"
   <> A > "B"
@@ -400,7 +399,7 @@ fn json_object_with_specialized_key() -> SherpaResult<()> {
     
     <> value > tk:string ':' tk:string
     
-        | "\"test\"" ':' c:num
+        | "\"test\""{:} ':' c:num
     
     <> string > '"' ( c:sym | c:num | c:sp | c:id | escape )(*) '\"'
         
@@ -450,7 +449,7 @@ fn escaped_string() -> SherpaResult<()> {
         
         <> string_tk > '"' ( c:sym | c:num | c:sp | c:id | escape )(*) "\""
         
-        <> escape > "\\"  ( c:sym | c:num | c:sp | c:id )
+        <> escape > "\\"{:9999}  ( c:sym | c:num | c:sp | c:id )
         "##],
     &[
       ("default", r##""""##, true),

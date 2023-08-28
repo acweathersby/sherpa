@@ -1,7 +1,7 @@
 #![allow(unused_mut, unused)]
-use super::build_grammar::{create_grammar_data, extract_productions, parse_grammar, GrammarData};
+use super::build_grammar::{create_grammar_data, extract_nonterminals, parse_grammar, GrammarData};
 use crate::{
-  grammar::build_grammar::{convert_grammar_data_to_header, process_parse_state, process_production},
+  grammar::build_grammar::{convert_grammar_data_to_header, process_nonterminal, process_parse_state},
   journal::{Journal, ReportType},
   types::*,
 };
@@ -64,10 +64,10 @@ pub fn load_grammar(j: &mut Journal, import_id: GrammarIdentities, g_c: &Grammar
 fn compile_grammar_data(j: &mut Journal, g_data: GrammarData, g_s: &GrammarSoup) -> SherpaResult<GrammarIdentities> {
   let id = g_data.id;
 
-  let (mut prods, mut parse_states) = extract_productions(j, &g_data, &g_s.string_store)?;
+  let (mut nterms, mut parse_states) = extract_nonterminals(j, &g_data, &g_s.string_store)?;
 
-  for prod in prods {
-    g_s.productions.write().unwrap().push(process_production(prod, &g_data, &g_s.string_store)?);
+  for nterm in nterms {
+    g_s.nonterminals.write().unwrap().push(process_nonterminal(nterm, &g_data, &g_s.string_store)?);
   }
 
   for state in parse_states {

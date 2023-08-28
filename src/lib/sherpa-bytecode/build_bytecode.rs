@@ -138,9 +138,9 @@ fn build_statement<'db>(
     insert_tok_debug(bc, non_branch.to_token(), add_debug_symbols);
 
     match non_branch {
-      parser::ASTNode::ReduceRaw(box parser::ReduceRaw { rule_id, len, prod_id, .. }) => {
+      parser::ASTNode::ReduceRaw(box parser::ReduceRaw { rule_id, len, prod_id: nterm, .. }) => {
         insert_op(bc, Op::Reduce);
-        insert_u32_le(bc, *prod_id as u32);
+        insert_u32_le(bc, *nterm as u32);
         insert_u32_le(bc, *rule_id as u32);
         insert_u16_le(bc, *len as u16);
       }

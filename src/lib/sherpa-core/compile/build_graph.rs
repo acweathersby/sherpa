@@ -5,7 +5,7 @@ use crate::{
 };
 use core::panic;
 use sherpa_rust_runtime::utf8::{get_token_class_from_codepoint, lookup_table::CodePointClass};
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{BTreeSet, VecDeque};
 
 pub(super) fn build_graph<'follow, 'db: 'follow>(
   j: &mut Journal,
@@ -99,21 +99,21 @@ fn handle_nonterminal_shift<'db, 'follow>(
     return SherpaResult::Ok(());
   }
 
-  let mut kernel_prod_ids = kernel_base.iter().to_production_id_set();
+  let mut kernel_nterms = kernel_base.iter().to_nonterminal_id_set();
 
   // NonTerms that appear in to the the right side of the specifier in
   // used_non_term_items.
   let mut used_non_terms = OrderedSet::new();
 
   let mut seen = OrderedSet::new();
-  let mut queue = VecDeque::from_iter(out_items.iter().map(|i| i.prod_index()));
+  let mut queue = VecDeque::from_iter(out_items.iter().map(|i| i.nonterm_index()));
 
-  while let Some(prod_id) = queue.pop_front() {
-    if seen.insert(prod_id) {
-      for item in non_terminals.iter().filter(|i| i.prod_index_at_sym().unwrap() == prod_id) {
+  while let Some(nterm) = queue.pop_front() {
+    if seen.insert(nterm) {
+      for item in non_terminals.iter().filter(|i| i.nonterm_index_at_sym().unwrap() == nterm) {
         used_non_terms.insert(*item);
         if !kernel_base.contains(item) || item.is_at_initial() {
-          queue.push_back(item.prod_index());
+          queue.push_back(item.nonterm_index());
         }
       }
     }
@@ -125,17 +125,17 @@ fn handle_nonterminal_shift<'db, 'follow>(
 
   graph[parent].set_non_terminals(&used_non_terms);
 
-  let used_goto_groups = hash_group_btreemap(used_non_terms, |_, t| t.prod_index_at_sym().unwrap_or_default());
+  let used_goto_groups = hash_group_btreemap(used_non_terms, |_, t| t.nonterm_index_at_sym().unwrap_or_default());
 
-  for (prod_id, items) in &used_goto_groups {
-    println!("-- {}", graph.get_db().prod_friendly_name_string(*prod_id));
+  for (nterm, items) in &used_goto_groups {
+    println!("-- {}", graph.get_db().nonterm_friendly_name_string(*nterm));
 
-    let are_shifting_a_goal_nonterm = parent.is_root() && graph.goal_items().iter().to_production_id_set().contains(&prod_id);
+    let are_shifting_a_goal_nonterm = parent.is_root() && graph.goal_items().iter().to_nonterminal_id_set().contains(&nterm);
 
     let transition_type = {
       let completes_nonterm_present_in_this_goto_state = items.iter().any(|i| -> bool {
         (i.is_left_recursive() && i.is_at_initial())
-          || (used_goto_groups.contains_key(&i.prod_index()) && !kernel_base.contains(i))
+          || (used_goto_groups.contains_key(&i.nonterm_index()) && !kernel_base.contains(i))
       });
 
       let contains_completed_kernel_items = items.iter().any(|i| kernel_base.contains(i) && i.increment().unwrap().is_complete());
@@ -150,15 +150,15 @@ fn handle_nonterminal_shift<'db, 'follow>(
     let mut completed = incremented_items.clone().completed_items();
 
     // TODO(Anthony): Explain what's going on here.
-    if kernel_prod_ids.remove(&prod_id) && parent.is_root() && completed.is_empty() {
-      let item = Item::from_rule(db.prod_rules(*prod_id)?[0], db);
+    if kernel_nterms.remove(&nterm) && parent.is_root() && completed.is_empty() {
+      let item = Item::from_rule(db.nonterm_rules(*nterm)?[0], db);
       completed.push(item.to_complete().to_origin(Origin::GoalCompleteOOS).to_oos_index().to_origin_state(parent));
     }
 
-    let state = graph.create_state(prod_id.to_sym(), StateType::GotoLoop, Some(parent), incremented_items.clone());
+    let state = graph.create_state(nterm.to_sym(), StateType::GotoLoop, Some(parent), incremented_items.clone());
 
     if (are_shifting_a_goal_nonterm && completed.is_empty()) {
-      let state = graph.create_state(SymbolId::Default, StateType::ProductionCompleteOOS, Some(state), Default::default());
+      let state = graph.create_state(SymbolId::Default, StateType::NonTermCompleteOOS, Some(state), Default::default());
       graph.add_leaf_state(state);
     }
 
@@ -166,7 +166,7 @@ fn handle_nonterminal_shift<'db, 'follow>(
   }
 
   // The remaining non-terminals are accept symbols for this state.
-  for nonterm_id in kernel_prod_ids {
+  for nonterm_id in kernel_nterms {
     let state = graph.create_state(nonterm_id.to_sym(), StateType::GotoPass, Some(parent), vec![]);
     graph.add_leaf_state(state);
   }
@@ -377,7 +377,7 @@ fn handle_completed_groups<'db, 'follow>(
         // determine whether we have symbol ambiguities.
         resolve_conflicting_tokens(j, graph, parent, sym, cmpl.to_set(), graph_state)?;
       } else if cmpl.clone().to_set().to_absolute().len() == 1 {
-        // The same production is generated from this completed item, regardless
+        // The same non-terminal is generated from this completed item, regardless
         // of the origins. This is a valid outcome.
         let is_non_term_completer = is_nt_completer(non_term_accept, cmpl[0]);
         handle_completed_item(j, graph, (cmpl[0], vec![cmpl[0]]), parent, sym, graph_state, is_non_term_completer)?;
@@ -568,8 +568,8 @@ fn resolve_shift_reduce_conflict<
   incom_items: A,
   comp1_items: B,
 ) -> ConflictResolution {
-  let incom_nterm_set = incom_items.clone().to_production_id_set();
-  let compl_nterm_set = comp1_items.clone().map(|i| i.decrement().unwrap()).to_prod_sym_id_set();
+  let incom_nterm_set = incom_items.clone().to_nonterminal_id_set();
+  let compl_nterm_set = comp1_items.clone().map(|i| i.decrement().unwrap()).to_nonterm_id_set();
   let nterm_sets_are_equal = incom_nterm_set.len() == 1 && incom_nterm_set.is_superset(&compl_nterm_set);
 
   if nterm_sets_are_equal && {
@@ -608,7 +608,7 @@ fn create_peek<'a, 'db: 'a, 'follow, T: ItemRefContainerIter<'a, 'db>>(
   let mut resolve_items = Array::default();
   let mut incomplete_items = incomplete_items.to_vec();
 
-  let existing_prod_ids = incomplete_items.iter().to_production_id_set();
+  let existing_nterms = incomplete_items.iter().to_nonterminal_id_set();
   let existing_items = incomplete_items.clone().to_absolute().to_set();
   let state = graph.create_state(sym, transition_type, Some(parent), Array::default());
 
@@ -619,7 +619,7 @@ fn create_peek<'a, 'db: 'a, 'follow, T: ItemRefContainerIter<'a, 'db>>(
       .iter()
       .filter_map(|FollowPair { follow, .. }| {
         if follow.is_complete() || {
-          existing_items.contains(&follow) || (follow.is_at_initial() && existing_prod_ids.contains(&follow.prod_index()))
+          existing_items.contains(&follow) || (follow.is_at_initial() && existing_nterms.contains(&follow.nonterm_index()))
         } {
           None
         } else {
@@ -712,8 +712,8 @@ fn get_kernel_items_from_peek<'db, 'follow>(graph: &Graph<'db>, peek_item: &Item
   graph[peek_origin].get_resolve_items(peek_index)
 }
 
-fn all_items_come_from_same_production_call(group: &Items) -> bool {
-  group.iter().all(|i| i.is_at_initial()) && group.iter().map(|i| i.prod_index()).collect::<Set<_>>().len() == 1
+fn all_items_come_from_same_nonterminal_call(group: &Items) -> bool {
+  group.iter().all(|i| i.is_at_initial()) && group.iter().map(|i| i.nonterm_index()).collect::<Set<_>>().len() == 1
 }
 
 fn create_call<'db, 'follow>(
@@ -724,15 +724,15 @@ fn create_call<'db, 'follow>(
   sym: SymbolId,
   is_scan: bool,
 ) -> Option<Items<'db>> {
-  if all_items_come_from_same_production_call(group) {
-    let prod_id = group[0].prod_index();
+  if all_items_come_from_same_nonterminal_call(group) {
+    let nterm = group[0].nonterm_index();
     let db = group[0].get_db();
 
-    if !graph[parent].conflicting_production_call(prod_id, is_scan, db) {
+    if !graph[parent].conflicting_nonterminal_call(nterm, is_scan, db) {
       let Ok(items) = graph[parent].get_closure_ref().map(|i| {
         i.iter()
-          .filter(|i| match i.prod_index_at_sym() {
-            Some(id) => id == prod_id && i.prod_index() != prod_id,
+          .filter(|i| match i.nonterm_index_at_sym() {
+            Some(id) => id == nterm && i.nonterm_index() != nterm,
             _ => false,
           })
           .cloned()
@@ -750,7 +750,7 @@ fn create_call<'db, 'follow>(
 
           let state = graph.create_state(
             sym,
-            if kernel_item_call { StateType::KernelCall(prod_id) } else { StateType::InternalCall(prod_id) },
+            if kernel_item_call { StateType::KernelCall(nterm) } else { StateType::InternalCall(nterm) },
             Some(parent),
             items.try_increment(),
           );
@@ -867,7 +867,7 @@ fn create_out_of_scope_complete_state<'db, 'follow>(
 ) {
   let transition_type = match (out_of_scope[0].origin, is_scan) {
     (_, true) => StateType::ScannerCompleteOOS,
-    _ => StateType::ProductionCompleteOOS,
+    _ => StateType::NonTermCompleteOOS,
   };
   let state = graph.create_state(*sym, transition_type, Some(parent), out_of_scope);
   graph.add_leaf_state(state);
@@ -1013,19 +1013,19 @@ pub(super) fn get_follow<'db, 'follow>(
 
   while let Some(item) = queue.pop_front() {
     if completed.insert(item) {
-      let prod_id = item.prod_index();
+      let nterm = item.nonterm_index();
       let closure = if item.is_out_of_scope() {
         graph[item.origin_state]
           .get_root_closure_ref()?
           .iter()
-          .filter(|i| i.is_out_of_scope() && i.prod_index_at_sym().unwrap_or_default() == prod_id)
+          .filter(|i| i.is_out_of_scope() && i.nonterm_index_at_sym().unwrap_or_default() == nterm)
           .map(|i| i.to_origin(item.origin))
           .collect::<Array<_>>()
       } else {
         graph[item.origin_state]
           .get_closure_ref()?
           .into_iter()
-          .filter(|i| i.prod_index_at_sym().unwrap_or_default() == prod_id && i.goal == item.goal)
+          .filter(|i| i.nonterm_index_at_sym().unwrap_or_default() == nterm && i.goal == item.goal)
           .cloned()
           .collect::<Array<_>>()
       };
@@ -1123,7 +1123,7 @@ fn handle_completed_item<'db, 'follow>(
   // Determine if origin contains GOTOs.
   match (completed_item.origin, is_scan) {
     (Origin::GoalCompleteOOS, ..) => {
-      let state = graph.create_state(sym, StateType::ProductionCompleteOOS, Some(parent), vec![]);
+      let state = graph.create_state(sym, StateType::NonTermCompleteOOS, Some(parent), vec![]);
       graph.add_leaf_state(state);
     }
     // Completion of parse tree may be premature
@@ -1147,8 +1147,8 @@ fn handle_completed_item<'db, 'follow>(
       let state = graph.create_state(
         sym,
         match (is_continue, goals.first().map(|d| d.origin)) {
-          (true, Some(Origin::TokenGoal(tok_id))) => StateType::AssignAndFollow(tok_id),
-          (false, Some(Origin::TokenGoal(tok_id))) => StateType::AssignToken(tok_id),
+          (true, Some(Origin::TerminalGoal(tok_id))) => StateType::AssignAndFollow(tok_id),
+          (false, Some(Origin::TerminalGoal(tok_id))) => StateType::AssignToken(tok_id),
           (true, _) => StateType::Follow,
           (false, _) => StateType::Complete,
         },
@@ -1191,11 +1191,11 @@ fn create_reduce_reduce_error(j: &mut Journal, graph: &Graph, end_items: ItemSet
 
       if !graph.is_scanner() {
       } else {
-        let prod = &goals.first().expect("Should have at least one goal").prod_index();
-        let name = db.prod_guid_name_string(*prod).as_str().to_string();
+        let nterm = &goals.first().expect("Should have at least one goal").nonterm_index();
+        let name = db.nonterm_guid_name_string(*nterm).as_str().to_string();
 
         string +=
-          ("\n - Turn production <".to_string() + &name + " > into a PEG by using one of the PEG mode specifiers:").as_str();
+          ("\n - Turn non-terminal <".to_string() + &name + " > into a PEG by using one of the PEG mode specifiers:").as_str();
         string += "\n    [ FIRST_MATCH | LONGEST_MATCH | SHORTEST_MATCH ]";
         string += format!("\n\n    Example: <> {name} FIRST_MATCH >  ...",).as_str();
       }
@@ -1210,7 +1210,7 @@ fn create_reduce_reduce_error(j: &mut Journal, graph: &Graph, end_items: ItemSet
 
 fn get_goal_items<'db, 'follow>(graph: &'db Graph<'db>, item: &Item<'db>) -> Items<'db> {
   match item.origin {
-    Origin::TokenGoal(_) | Origin::ProdGoal(_) => {
+    Origin::TerminalGoal(_) | Origin::NonTermGoal(_) => {
       vec![graph[0].kernel_items_ref().clone().to_vec()[item.goal as usize]]
     }
     Origin::Peek(..) => get_kernel_items_from_peek_item(graph, item).iter().flat_map(|_| get_goal_items(graph, item)).collect(),

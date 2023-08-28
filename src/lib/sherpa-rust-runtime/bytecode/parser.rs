@@ -48,13 +48,13 @@ pub enum DebugEvent<'a> {
     end:         usize,
   },
   GotoValue {
-    production_id: u32,
+    nonterminal_id: u32,
   },
   Reduce {
     rule_id: u32,
   },
   Complete {
-    production_id: u32,
+    nonterminal_id: u32,
   },
   Failure {},
   EndOfFile,
@@ -100,7 +100,7 @@ pub fn dispatch<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
       PeekReset => peek_reset(i, ctx),
       Reduce => reduce(i, ctx),
       Goto => {
-        let (parse_action, Some(new_state)) = goto(i) else { unreachable!()};
+        let (parse_action, Some(new_state)) = goto(i) else { unreachable!() };
         block_base = new_state;
         #[cfg(any(debug_assertions, feature = "wasm-lab"))]
         if let Some(debug) = debug.as_mut() {
@@ -116,7 +116,7 @@ pub fn dispatch<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
       HashBranch => hash_branch(i, ctx, debug),
       Fail => (FailState, Option::None),
       Pass => (CompleteState, Option::None),
-      Accept => (ParseAction::Accept { production_id: ctx.prod_id }, Option::None),
+      Accept => (ParseAction::Accept { nonterminal_id: ctx.nterm }, Option::None),
       NoOp | DebugTokenLocation => (None, i.next()),
     } {
       (None, Option::None) => {
@@ -347,14 +347,14 @@ fn reduce<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
 ) -> (ParseAction, Option<Instruction<'a>>) {
   const __HINT__: Opcode = Opcode::Reduce;
   let mut iter = i.iter();
-  let production_id = iter.next_u32_le().unwrap();
+  let nonterminal_id = iter.next_u32_le().unwrap();
   let rule_id = iter.next_u32_le().unwrap();
   let symbol_count = iter.next_u16_le().unwrap() as u32;
 
   ctx.sym_len = symbol_count;
-  ctx.prod_id = production_id;
+  ctx.nterm = nonterminal_id;
 
-  (ParseAction::Reduce { production_id, rule_id, symbol_count }, i.next())
+  (ParseAction::Reduce { nonterminal_id, rule_id, symbol_count }, i.next())
 }
 
 /// Performs the [Opcode::PushGoto] operation
@@ -521,7 +521,7 @@ fn get_input_value<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
   debug: &mut Option<&'debug mut DebugFn>,
 ) -> u32 {
   match input_type {
-    InputType::Production => ctx.get_production() as u32,
+    InputType::NonTerminal => ctx.get_nonterminal() as u32,
     InputType::EndOfFile => (ctx.scan_ptr >= ctx.end_ptr) as u32,
     InputType::Class => {
       let scan_len = ctx.get_reader().codepoint_byte_length();
@@ -596,7 +596,7 @@ fn emit_debug_value<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
   let end = ctx.scan_ptr + ctx.tok_len;
   if let Some(debug) = debug {
     match input_type {
-      InputType::Production => debug(&DebugEvent::GotoValue { production_id: input_value }, ctx.get_str()),
+      InputType::NonTerminal => debug(&DebugEvent::GotoValue { nonterminal_id: input_value }, ctx.get_str()),
       InputType::Byte | InputType::ByteScanless => debug(&DebugEvent::ByteValue { input_value, start, end }, ctx.get_str()),
       InputType::Class | InputType::ClassScanless => debug(&DebugEvent::ClassValue { input_value, start, end }, ctx.get_str()),
       InputType::Token => debug(&DebugEvent::TokenValue { input_value, start, end }, ctx.get_str()),
@@ -691,8 +691,8 @@ pub fn get_next_action<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M
     if state < 1 {
       //Accept never encountered.
       break ParseAction::Error {
-        last_production: ctx.prod_id,
-        last_input:      TokenRange {
+        last_nonterminal: ctx.nterm,
+        last_input:       TokenRange {
           len:      ctx.tok_len as u32,
           off:      ctx.head_ptr as u32,
           line_num: 0,
@@ -775,8 +775,8 @@ impl<'a, R: ByteReader + MutByteReader + UTF8Reader, M> SherpaParser<R, M, true>
     self.ctx.start_line_off
   }
 
-  fn get_production_id(&self) -> u32 {
-    self.ctx.prod_id
+  fn get_nonterminal_id(&self) -> u32 {
+    self.ctx.nterm
   }
 
   fn get_reader(&self) -> &R {

@@ -52,7 +52,11 @@
 		"lldb.displayFormat": "auto",
 		"lldb.showDisassembly": "auto",
 		"cSpell.words": [
-			"ascript"
+			"ascript",
+			"nonterm",
+			"nonterminal",
+			"nterm",
+			"nterms"
 		]
 	},
 	"launch": {

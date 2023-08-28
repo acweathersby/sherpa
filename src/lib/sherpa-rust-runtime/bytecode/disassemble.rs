@@ -10,18 +10,13 @@ pub(crate) fn address_string(bc_address: usize) -> String {
   format!("{:0>6X}", bc_address)
 }
 
-pub fn disassemble_parse_block<'a>(
-  i: Option<Instruction<'a>>,
-  recursive: bool,
-) -> (String, Option<Instruction<'a>>) {
+pub fn disassemble_parse_block<'a>(i: Option<Instruction<'a>>, recursive: bool) -> (String, Option<Instruction<'a>>) {
   use disassemble_parse_block as ds;
   use header as dh;
 
   let r = recursive;
 
-  let Some(i) = i  else {
-    return ("".to_string(), None)
-  };
+  let Some(i) = i else { return ("".to_string(), None) };
 
   let bc = i.bytecode();
 
@@ -36,8 +31,7 @@ pub fn disassemble_parse_block<'a>(
         let len = i.len() - str_start;
         let index = i.address() + str_start;
         let bytes = bc[index..index + len].to_vec();
-        let sym =
-          format!("\n{}: {}", dh(i.address()), unsafe { String::from_utf8_unchecked(bytes) });
+        let sym = format!("\n{}: {}", dh(i.address()), unsafe { String::from_utf8_unchecked(bytes) });
         (sym, i.next())
       }
       VectorBranch | HashBranch => generate_table_string(i, r),
@@ -69,21 +63,14 @@ pub fn disassemble_parse_block<'a>(
       Reduce => {
         let (string, i_last) = if r { ds(i.next(), r) } else { Default::default() };
         let mut iter = i.iter();
-        let prod_id = iter.next_u32_le().unwrap();
+        let nterm = iter.next_u32_le().unwrap();
         let rule_id = iter.next_u32_le().unwrap();
         let symbol_count = iter.next_u16_le().unwrap() as u32;
 
         let pluralized = if symbol_count == 1 { "SYMBOL" } else { "SYMBOLS" };
 
         (
-          format!(
-            "\n{}REDUCE-RULE {} TO [ {} ] ( {} {} ){string} ",
-            dh(i.address()),
-            rule_id,
-            prod_id,
-            symbol_count,
-            pluralized,
-          ),
+          format!("\n{}REDUCE-RULE {} TO [ {} ] ( {} {} ){string} ", dh(i.address()), rule_id, nterm, symbol_count, pluralized,),
           i_last,
         )
       }
@@ -153,10 +140,7 @@ pub fn disassemble_parse_block<'a>(
   }
 }
 
-pub(crate) fn generate_table_string<'a>(
-  i: Instruction<'a>,
-  recursive: bool,
-) -> (String, Option<Instruction<'a>>) {
+pub(crate) fn generate_table_string<'a>(i: Instruction<'a>, recursive: bool) -> (String, Option<Instruction<'a>>) {
   use Opcode::*;
   let TableHeaderData {
     input_type,
@@ -173,10 +157,7 @@ pub(crate) fn generate_table_string<'a>(
   let mut strings = vec![];
   let mut delta_offsets = BTreeSet::new();
 
-  let states = (0..table_length)
-    .into_iter()
-    .map(|_| table_start_iter.next_u32_le().unwrap())
-    .collect::<Vec<_>>();
+  let states = (0..table_length).into_iter().map(|_| table_start_iter.next_u32_le().unwrap()).collect::<Vec<_>>();
 
   for entry_offset in 0..table_length as usize {
     let entry = states[entry_offset];
@@ -200,25 +181,14 @@ pub(crate) fn generate_table_string<'a>(
       strings.push(create_failure_entry(entry_offset, default_block.address()));
     } else {
       delta_offsets.insert(address);
-      strings.push(create_normal_entry(
-        val_id,
-        input_type,
-        entry_offset * 4 + table_start,
-        address,
-        meta,
-      ));
+      strings.push(create_normal_entry(val_id, input_type, entry_offset * 4 + table_start, address, meta));
     }
   }
 
   strings.push(create_default_entry(default_block.address()));
 
-  let mut string = format!(
-    "\n{}{} JUMP \n{: >7} TYPE {} ",
-    header(i.address()),
-    table_name,
-    "",
-    InputType::from(input_type).to_string(),
-  );
+  let mut string =
+    format!("\n{}{} JUMP \n{: >7} TYPE {} ", header(i.address()), table_name, "", InputType::from(input_type).to_string(),);
 
   string += &(if scan_index.address() > 0 {
     format!("\n{: >7} SCANNER ADDRESS {}", "", address_string(scan_index.address()))
@@ -252,13 +222,7 @@ fn create_default_entry(goto_offset: usize) -> String {
   format!("\nDEFAULT ---- JUMP TO {} ON FAIL", address_string(goto_offset))
 }
 
-fn create_normal_entry(
-  token_id: u32,
-  input_type: InputType,
-  idx: usize,
-  bc_address: usize,
-  meta: i64,
-) -> String {
+fn create_normal_entry(token_id: u32, input_type: InputType, idx: usize, bc_address: usize, meta: i64) -> String {
   let token_string = token_id.to_string();
   format!(
     "\n{: >6}---- JUMP TO {} ON {} ( {} ) [{}]",

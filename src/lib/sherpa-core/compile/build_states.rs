@@ -9,10 +9,10 @@ type Scanners = OrderedSet<(IString, OrderedSet<DBTokenData>)>;
 use rayon::prelude::*;
 
 pub fn compile_parse_states(mut j: Journal, db: &ParserDatabase) -> SherpaResult<ParseStatesMap> {
-  j.set_active_report("State Compile", ReportType::ProductionCompile(Default::default()));
+  j.set_active_report("State Compile", ReportType::NonTerminalCompile(Default::default()));
 
   let results = db
-    .productions()
+    .nonterms()
     .iter()
     .cloned()
     .enumerate()
@@ -25,8 +25,8 @@ pub fn compile_parse_states(mut j: Journal, db: &ParserDatabase) -> SherpaResult
       let mut states = States::new();
       let mut scanners = Scanners::new();
 
-      for (prod_id, prod_sym) in chunks {
-        match create_parse_states_from_prod(&mut local_j, db, *prod_id, *prod_sym, &mut states, &mut scanners) {
+      for (nterm, nterm_sym) in chunks {
+        match create_parse_states_from_prod(&mut local_j, db, *nterm, *nterm_sym, &mut states, &mut scanners) {
           SherpaResult::Ok(output) => output,
           SherpaResult::Err(_err) => {}
         }
@@ -53,8 +53,10 @@ pub fn compile_parse_states(mut j: Journal, db: &ParserDatabase) -> SherpaResult
 
   // Build Scanners
   for (scanner, group) in scanners {
-    let start_items =
-      group.iter().flat_map(|s| Items::start_items(s.prod_id, db).to_origin(Origin::TokenGoal(s.tok_id))).collect::<Array<_>>();
+    let start_items = group
+      .iter()
+      .flat_map(|s| Items::start_items(s.nonterm_id, db).to_origin(Origin::TerminalGoal(s.tok_id)))
+      .collect::<Array<_>>();
 
     let graph = build_graph(&mut j, GraphMode::Scanner, start_items, db)?;
 
@@ -83,15 +85,15 @@ pub fn compile_parse_states(mut j: Journal, db: &ParserDatabase) -> SherpaResult
 pub fn create_parse_states_from_prod<'db>(
   j: &mut Journal,
   db: &'db ParserDatabase,
-  prod_id: usize,
-  prod_sym: SymbolId,
+  nterm: usize,
+  nterm_sym: SymbolId,
   states: &mut States,
   scanners: &mut Scanners,
 ) -> SherpaResult<()> {
-  j.set_active_report("Production Compile", ReportType::ProductionCompile(prod_sym.to_prod_id()));
+  j.set_active_report("Non-terminal Compile", ReportType::NonTerminalCompile(nterm_sym.to_nterm()));
 
-  if let Some(custom_state) = db.custom_state(prod_id.into()) {
-    let name = db.prod_guid_name(prod_id.into());
+  if let Some(custom_state) = db.custom_state(nterm.into()) {
+    let name = db.nonterm_guid_name(nterm.into());
     let state = ParseState {
       name,
       comment: "Custom State".into(),
@@ -102,13 +104,13 @@ pub fn create_parse_states_from_prod<'db>(
     };
     states.insert(name, Box::new(state));
   } else {
-    let start_items = Items::start_items((prod_id as u32).into(), db).to_origin(Origin::ProdGoal(prod_id.into()));
+    let start_items = Items::start_items((nterm as u32).into(), db).to_origin(Origin::NonTermGoal(nterm.into()));
 
-    match prod_sym {
+    match nterm_sym {
       SymbolId::NonTerminal { .. } => {
         let graph = build_graph(j, GraphMode::Parser, start_items, db)?;
 
-        let ir = build_ir(j, &graph, db.prod_guid_name(prod_id.into()))?;
+        let ir = build_ir(j, &graph, db.nonterm_guid_name(nterm.into()))?;
 
         for mut state in ir {
           if let Some(scanner_data) = state.build_scanners(db) {
@@ -122,7 +124,7 @@ pub fn create_parse_states_from_prod<'db>(
       SymbolId::NonTerminalToken { .. } => {
         let graph = build_graph(j, GraphMode::Scanner, start_items, db)?;
 
-        let ir = build_ir(j, &graph, db.prod_guid_name(prod_id.into()))?;
+        let ir = build_ir(j, &graph, db.nonterm_guid_name(nterm.into()))?;
 
         for state in ir {
           states.insert(state.name, state);
@@ -139,21 +141,26 @@ pub fn create_parse_states_from_prod<'db>(
 }
 
 fn build_entry_ir<'db>(
-  EntryPoint { prod_name, prod_entry_name, prod_exit_name, .. }: &EntryPoint,
+  EntryPoint {
+    nonterm_name: nterm_name,
+    nonterm_entry_name: nterm_entry_name,
+    nonterm_exit_name: nterm_exit_name,
+    ..
+  }: &EntryPoint,
   db: &'db ParserDatabase,
 ) -> SherpaResult<Array<Box<ParseState>>> {
   let mut w = CodeWriter::new(Vec::<u8>::with_capacity(512));
 
-  let _ = (&mut w) + "push " + prod_exit_name.to_string(db.string_store());
-  let _ = (&mut w) + " then goto " + prod_name.to_string(db.string_store());
+  let _ = (&mut w) + "push " + nterm_exit_name.to_string(db.string_store());
+  let _ = (&mut w) + " then goto " + nterm_name.to_string(db.string_store());
 
-  let entry_state = ParseState { code: w.to_string(), name: *prod_entry_name, ..Default::default() };
+  let entry_state = ParseState { code: w.to_string(), name: *nterm_entry_name, ..Default::default() };
 
   let mut w = CodeWriter::new(Vec::<u8>::with_capacity(512));
 
   let _ = (&mut w) + "accept";
 
-  let exit_state = ParseState { code: w.to_string(), name: *prod_exit_name, ..Default::default() };
+  let exit_state = ParseState { code: w.to_string(), name: *nterm_exit_name, ..Default::default() };
 
   SherpaResult::Ok(Array::from_iter([Box::new(entry_state), Box::new(exit_state)]))
 }

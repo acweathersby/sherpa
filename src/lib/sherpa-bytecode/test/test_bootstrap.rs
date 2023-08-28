@@ -139,9 +139,9 @@ fn compile_sherpa_grammar_and_parse_root_sherpa_grammar_file() -> SherpaResult<(
 
   <> grammar >
 
-          preamble(*) ( production | append_production )(+)
+          preamble(*) ( non-terminal | append_nonterminal )(+)
 
-              :ast { t_Grammar, c_Version_1_0, preamble:$1, productions:$2, tok }
+              :ast { t_Grammar, c_Version_1_0, preamble:$1, nonterminals:$2, tok }
 
   <> preamble >
 
@@ -157,7 +157,7 @@ fn compile_sherpa_grammar_and_parse_root_sherpa_grammar_file() -> SherpaResult<(
 
           "EXPORT" sym::non_terminal (( "AS" | "as" ) sym::identifier)?
 
-              :ast { t_Export, c_Preamble, production:$2, reference:$3 }
+              :ast { t_Export, c_Preamble, non-terminal:$2, reference:$3 }
 
   <> import_clause >
 
@@ -177,17 +177,17 @@ fn compile_sherpa_grammar_and_parse_root_sherpa_grammar_file() -> SherpaResult<(
 
               :ast { t_Name, c_Preamble, name: str($2) }
 
-  <> production >
+  <> non-terminal >
 
           "<"  (template_name)(*",")^t ">" "lazy"?^l sym::priority?^p sym::non_terminal^n">" rules^r
 
-              :ast { t_Production, is_lazy:bool($l), priority:$p, name:str($n), name_sym:$n, rules: $r, template_names:$t, tok }
+              :ast { t_Non-terminal, is_lazy:bool($l), priority:$p, name:str($n), name_sym:$n, rules: $r, template_names:$t, tok }
 
-  <> append_production >
+  <> append_nonterminal >
 
           "+>" sym::priority?^p sym::non_terminal^n ">" rules^r
 
-              :ast { t_Production, is_append: true, priority:$p, name:str($n), name_sym:$n, rules: $r, tok }
+              :ast { t_Non-terminal, is_append: true, priority:$p, name:str($n), name_sym:$n, rules: $r, tok }
 
   <> template_name >
 
@@ -237,7 +237,7 @@ fn compile_sherpa_grammar_and_parse_root_sherpa_grammar_file() -> SherpaResult<(
 
           "(" rules ")"{1}
 
-              :ast { t_Group_Production, c_Symbol, rules:$2,  tok }
+              :ast { t_Group_Non-terminal, c_Symbol, rules:$2,  tok }
 
   <> any_group >
 

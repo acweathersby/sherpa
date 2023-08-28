@@ -37,7 +37,7 @@ pub enum ParseAction {
   Fork {
     states_start_offset: u32,
     num_of_states:       u32,
-    target_production:   u32,
+    target_nonterminal:  u32,
   },
   Shift {
     token_byte_offset: u32,
@@ -54,22 +54,22 @@ pub enum ParseAction {
     token_id:          u32,
   },
   Reduce {
-    production_id: u32,
-    rule_id:       u32,
-    symbol_count:  u32,
+    nonterminal_id: u32,
+    rule_id:        u32,
+    symbol_count:   u32,
   },
   Accept {
-    production_id: u32,
+    nonterminal_id: u32,
     // reached_EOF:   bool,
   },
   Error {
-    last_production: u32,
-    last_input:      TokenRange,
+    last_nonterminal: u32,
+    last_input:       TokenRange,
   },
   EndOfInput {
     current_cursor_offset: u32,
   },
-  ProductionParseStart,
+  NonTerminalParseStart,
   None,
 }
 

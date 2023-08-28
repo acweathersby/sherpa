@@ -24,23 +24,23 @@ pub fn _create_missing_import_name_error(
   j: &mut Journal,
   g: &GrammarIdentities,
   s_store: &IStringStore,
-  prod_import_sym: &Production_Import_Symbol,
+  nterm_import_sym: &Production_Import_Symbol,
 ) {
   j.report_mut().add_error(SherpaError::SourceError {
-    loc:        prod_import_sym.tok.clone(),
+    loc:        nterm_import_sym.tok.clone(),
     path:       g.path.to_string(s_store).into(),
-    id:         "nonexistent-import-production",
+    id:         "nonexistent-import-non-terminal",
     msg:        format!(
-      "The production {} cannot be found in the imported grammar {}.",
-      prod_import_sym.name, prod_import_sym.module
+      "The non-terminal {} cannot be found in the imported grammar {}.",
+      nterm_import_sym.name, nterm_import_sym.module
     ),
-    inline_msg: "Could not locate this production".to_string(),
+    inline_msg: "Could not locate this non-terminal".to_string(),
     ps_msg:     Default::default(),
     severity:   SherpaErrorSeverity::Critical,
   });
 }
 
-pub fn _add_production_redefinition_error(
+pub fn _add_nonterminal_redefinition_error(
   j: &mut Journal,
   grammar_path: &PathBuf,
   old_loc: Token,
@@ -48,7 +48,7 @@ pub fn _add_production_redefinition_error(
   plain_name: &str,
 ) {
   j.report_mut().add_error(SherpaError::SourcesError {
-    id:       "production-redefinition",
+    id:       "non-terminal-redefinition",
     sources:  vec![
       (old_loc, grammar_path.clone(), format!("First definition of {} occurs here.", plain_name)),
       (new_loc, grammar_path.clone(), format!("Redefinition of {} occurs here.", plain_name)),
@@ -59,10 +59,10 @@ pub fn _add_production_redefinition_error(
   });
 }
 
-pub fn _add_missing_production_definition_error(j: &mut Journal, tok: Token, g_id: &GrammarIdentities, s_store: &IStringStore) {
+pub fn _add_missing_nonterminal_definition_error(j: &mut Journal, tok: Token, g_id: &GrammarIdentities, s_store: &IStringStore) {
   j.report_mut().add_error(SherpaError::SourceError {
-    id:         "missing-production-definition",
-    msg:        format!("Could not find a definition for this production."),
+    id:         "missing-non-terminal-definition",
+    msg:        format!("Could not find a definition for this non-terminal."),
     inline_msg: "could not find".to_string(),
     loc:        tok,
     path:       g_id.path.to_string(s_store).into(),
@@ -76,10 +76,10 @@ pub fn _add_missing_append_host_error(j: &mut Journal, name: String, rules: &[Ru
     id:         "missing-append-host",
     msg:        format!(
       "
-Target production for appended rules does not exist.
+Target non-terminal for appended rules does not exist.
 
-Append productions must reference an existing production. In this case, the 
-production [{0}] should have been defined with a normal production definition 
+Append nonterminals must reference an existing non-terminal. In this case, the 
+non-terminal [{0}] should have been defined with a normal non-terminal definition 
 expression, e.g: `<> {0} > symA ... symN`
 ",
       name
@@ -92,7 +92,7 @@ expression, e.g: `<> {0} > symA ... symN`
   })
 }
 
-pub fn _add_non_existent_import_production_error(
+pub fn _add_non_existent_import_nonterminal_error(
   j: &mut Journal,
   import_id: &GrammarIdentities,
   host_id: &GrammarIdentities,
@@ -100,8 +100,8 @@ pub fn _add_non_existent_import_production_error(
   s_store: &IStringStore,
 ) {
   j.report_mut().add_error(SherpaError::SourceError {
-    id:         "nonexistent-import-production",
-    msg:        format!("Could not locate production in imported grammar {}", import_id.path.to_string(s_store)),
+    id:         "nonexistent-import-non-terminal",
+    msg:        format!("Could not locate non-terminal in imported grammar {}", import_id.path.to_string(s_store)),
     inline_msg: "could not find".to_string(),
     loc:        tok,
     path:       host_id.path.to_string(s_store).into(),

@@ -2,7 +2,7 @@ use super::utils::build_parse_states_from_multi_sources;
 use crate::{
   compile::optimize,
   test::utils::build_parse_states_from_source_str as build,
-  DBProdKey,
+  DBNonTermKey,
   ParseStatesVec,
   SherpaResult as R,
   TestPackage,

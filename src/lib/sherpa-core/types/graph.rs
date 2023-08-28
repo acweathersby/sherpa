@@ -14,17 +14,17 @@ use super::*;
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub enum Origin {
   None,
-  /// The goal production that this item or it's predecessors will reduce to
-  ProdGoal(DBProdKey),
+  /// The goal non-terminal that this item or it's predecessors will reduce to
+  NonTermGoal(DBNonTermKey),
   /// The goal symbol id that this item or its predecessors will recognize
-  TokenGoal(DBTokenKey),
+  TerminalGoal(DBTermKey),
   /// The goal origin item set that this item will resolve to
   Peek(u64, StateId),
   // Out of scope item that was generated from the
-  // completion of a token production.
+  // completion of a token non-terminal.
   ScanCompleteOOS,
-  /// Generated when the a goal production is completed.
-  /// Goal productions are determined by the
+  /// Generated when the a goal non-terminal is completed.
+  /// Goal nonterminals are determined by the
   /// root state (`StateId(0)`) kernel items
   GoalCompleteOOS,
 }
@@ -45,10 +45,10 @@ impl Origin {
   #[cfg(debug_assertions)]
   pub fn debug_string(&self, db: &ParserDatabase) -> String {
     match self {
-      Origin::ProdGoal(prod_id) => {
-        format!("ProdGoal[ {} {:?} ]", db.prod_guid_name(*prod_id).to_string(db.string_store()), prod_id)
+      Origin::NonTermGoal(nterm) => {
+        format!("ProdGoal[ {} {:?} ]", db.nonterm_guid_name(*nterm).to_string(db.string_store()), nterm)
       }
-      Origin::TokenGoal(sym_id) => {
+      Origin::TerminalGoal(sym_id) => {
         format!("TokenGoal[ {:?} ]", sym_id)
       }
       _ => format!("{:?}", self),
@@ -65,7 +65,7 @@ impl Origin {
 
   pub fn get_symbol(&self, db: &ParserDatabase) -> SymbolId {
     match self {
-      Origin::TokenGoal(sym_id) => db.sym(*sym_id),
+      Origin::TerminalGoal(sym_id) => db.sym(*sym_id),
       _ => SymbolId::Undefined,
     }
   }
@@ -91,21 +91,20 @@ pub enum StateType {
   Follow,
   DifferedReduce,
   ShiftPrefix,
-  ReducePostfix,
-  AssignAndFollow(DBTokenKey),
+  AssignAndFollow(DBTermKey),
   Reduce(DBRuleKey),
-  AssignToken(DBTokenKey),
+  AssignToken(DBTermKey),
   /// Calls made on items within a state's closure but
   /// are not kernel items.
-  InternalCall(DBProdKey),
+  InternalCall(DBNonTermKey),
   /// Calls made on kernel items
-  KernelCall(DBProdKey),
+  KernelCall(DBNonTermKey),
   /// Creates a leaf state that has a single `pop` instruction. This represents
   /// the completion of a non-terminal that had a left recursive rule.
-  ProductionCompleteOOS,
+  NonTermCompleteOOS,
   /// Creates a leaf state that has a single `pop` instruction,
   /// with the intent of removing a goto floor state.
-  _PeekProductionCompleteOOS,
+  _PeekNonTerminalCompleteOOS,
   /// Creates a leaf state that has a single `pass` instruction.
   ScannerCompleteOOS,
   _FirstMatch,
@@ -128,11 +127,11 @@ impl StateType {
   #[cfg(debug_assertions)]
   fn debug_string(&self, db: &ParserDatabase) -> String {
     match self {
-      Self::KernelCall(prod_id) => {
-        format!("KernelCall({prod_id:?})")
+      Self::KernelCall(nterm) => {
+        format!("KernelCall({nterm:?})")
       }
-      Self::InternalCall(prod_id) => {
-        format!("InternalCall({prod_id:?})",)
+      Self::InternalCall(nterm) => {
+        format!("InternalCall({nterm:?})",)
       }
       Self::AssignAndFollow(sym_id) => {
         format!("AssignAndFollow({})", db.sym(*sym_id).debug_string(db))
@@ -140,8 +139,8 @@ impl StateType {
       Self::AssignToken(sym_id) => {
         format!("AssignToken({})", db.sym(*sym_id).debug_string(db))
       }
-      Self::Reduce(prod_id) => {
-        format!("Reduce({prod_id:?})",)
+      Self::Reduce(nterm) => {
+        format!("Reduce({nterm:?})",)
       }
       _ => format!("{:?}", self),
     }
@@ -220,14 +219,14 @@ impl<'db> State<'db> {
       let closure = self.kernel_items.create_closure(is_scanner, state_id);
 
       if self.id.is_root() {
-        let prods = self.kernel_items.iter().map(|i| i.prod_index()).collect::<OrderedSet<_>>();
+        let nterms = self.kernel_items.iter().map(|i| i.nonterm_index()).collect::<OrderedSet<_>>();
         let sigs = closure.iter().map(|i| (i.rule_id, i.sym_index)).collect::<HashSet<_>>();
         // Get all follow items
 
         let mut oos_closure = closure.clone();
 
-        for prod in &prods {
-          for item in db.follow_items(*prod) {
+        for nterm in &nterms {
+          for item in db.follow_items(*nterm) {
             let i = item;
             if !sigs.contains(&(i.rule_id, i.sym_index)) {
               oos_closure.insert(i.to_origin_state(state_id).to_oos_index());
@@ -319,16 +318,16 @@ impl<'db> State<'db> {
     self.calculate_closure(is_scanner, db);
   }
 
-  /// Returns true if the the call of the production leads to infinite loop due
-  /// to left recursion.
-  pub fn conflicting_production_call(&self, prod_id: DBProdKey, is_scanner: bool, db: &ParserDatabase) -> bool {
+  /// Returns true if the the call of the non-terminal leads to infinite loop
+  /// due to left recursion.
+  pub fn conflicting_nonterminal_call(&self, nterm: DBNonTermKey, is_scanner: bool, db: &ParserDatabase) -> bool {
     if self.id.is_root() {
-      let prod_ids = self.kernel_items.iter().map(|i| i.prod_index()).collect::<OrderedSet<_>>();
+      let nterms = self.kernel_items.iter().map(|i| i.nonterm_index()).collect::<OrderedSet<_>>();
 
-      Items::start_items(prod_id, db)
+      Items::start_items(nterm, db)
         .create_closure(is_scanner, self.id)
         .into_iter()
-        .any(|i| prod_ids.contains(&i.prod_index_at_sym().unwrap_or_default()) || prod_ids.contains(&i.prod_index()))
+        .any(|i| nterms.contains(&i.nonterm_index_at_sym().unwrap_or_default()) || nterms.contains(&i.nonterm_index()))
     } else {
       false
     }

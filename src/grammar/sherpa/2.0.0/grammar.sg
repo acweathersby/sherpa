@@ -19,9 +19,9 @@ EXPORT dt::escaped_string as escaped
 
 <> grammar >
 
-    preamble(*) ( cf_production | pratt_production | peg_production | append_production | ir::state )(+)
+    preamble(*) ( cf_rules | pratt_rules | peg_rules | append_rules | ir::state )(+)
 
-        :ast { t_Grammar, preamble:$1, productions:$2, tok }
+        :ast { t_Grammar, preamble:$1, rules:$2, tok }
 
 
 <> preamble >
@@ -39,7 +39,7 @@ EXPORT dt::escaped_string as escaped
 
     "EXPORT" sym::non_terminal (( "AS" | "as" ) tok::id)?
 
-        :ast { t_Export, production:$2, reference:str($3) } 
+        :ast { t_Export, nonterminal:$2, reference:str($3) } 
 
 
 <> import_clause >
@@ -62,32 +62,32 @@ EXPORT dt::escaped_string as escaped
         :ast { t_Name, name: str($2) }
 
 
-<> cf_production > 
+<> cf_rules > 
 
-    "<>" sym::production_symbol^n ">" rules^r
+    "<>" sym::nonterminal_symbol^n ">" rules^r
 
-        :ast { t_CFProduction, name_sym:$n, rules: $r, tok }
-
-
-<> peg_production >
-
-    ":>" sym::production_symbol^n ">" rules^r
-
-        :ast { t_PegProduction, name_sym:$n, rules: $r, tok }
+        :ast { t_CFRules, name_sym:$n, rules: $r, tok }
 
 
-<> pratt_production >
+<> peg_rules >
 
-    "#>" sym::production_symbol^n ">" rules^r
+    ":>" sym::nonterminal_symbol^n ">" rules^r
 
-        :ast { t_PrattProduction, name_sym:$n, rules: $r, tok }
+        :ast { t_PegRules, name_sym:$n, rules: $r, tok }
 
 
-<> append_production >
+<> pratt_rules >
 
-    "+>" sym::non_terminal^n ">" rules^r
+    "#>" sym::nonterminal_symbol^n ">" rules^r
 
-        :ast { t_AppendProduction,  name_sym:$n, rules: $r, tok }
+        :ast { t_PrattRules, name_sym:$n, rules: $r, tok }
+
+
+<> append_rules >
+
+    "+>" sym::nonterminal^n ">" rules^r
+
+        :ast { t_AppendRules,  name_sym:$n, rules: $r, tok }
 
 <> rules >  rule(+"|")
 
@@ -113,18 +113,18 @@ EXPORT dt::escaped_string as escaped
             :ast  { t_Ascript, ast:$ast, tok }
 
 
-+> sym::non_terminal >
++> sym::nonterminal >
 
     "(" rules ")"{1}
 
-        :ast { t_GroupProduction, rules:$2,  tok }
+        :ast { t_Grouped_Rules, rules:$2,  tok }
 
 
 +> sym::terminal >
 
     "tk:(" rules ")"{1}
 
-        :ast { t_TokenGroupProduction, rules:$2,  tok }
+        :ast { t_TokenGroupRules, rules:$2,  tok }
 
 
 <> not_empty >

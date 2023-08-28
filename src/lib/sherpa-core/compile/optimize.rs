@@ -746,8 +746,9 @@ pub fn garbage_collect<'db, R: FromIterator<(IString, Box<ParseState>)>>(
   // let start_complexity = ComplexityMarker::new(db, parse_states.iter());
 
   let mut out = Array::new();
-  let mut queue =
-    VecDeque::from_iter(db.entry_points().iter().map(|p| (p.prod_entry_name, parse_states.remove(&p.prod_entry_name).unwrap())));
+  let mut queue = VecDeque::from_iter(
+    db.entry_points().iter().map(|p| (p.nonterm_entry_name, parse_states.remove(&p.nonterm_entry_name).unwrap())),
+  );
 
   while let Some((name, state)) = queue.pop_front() {
     // traverse the state to find all goto and push references, convert

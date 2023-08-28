@@ -23,33 +23,33 @@ IMPORT ./token as tok
 
     symbol "(+" ( token | class )? ')'
 
-            :ast { t_List_Production, c_Symbol, terminal_symbol:$3, symbol:$1, tok }
+            :ast { t_List_Rules, terminal_symbol:$3, symbol:$1, tok }
 
     | symbol "(*" ( token | class )? ')'
 
-            :ast { t_List_Production, c_Symbol, terminal_symbol:$3, symbol:$1, tok, optional:true }
+            :ast { t_List_Rules, terminal_symbol:$3, symbol:$1, tok, optional:true }
 
     | symbol
 
 
-<> symbol > non_terminal | terminal
+<> symbol > nonterminal | terminal
 
 
-<> non_terminal > production_symbol | import_production_symbol
+<> nonterminal > nonterminal_symbol | import_nonterminal_symbol
 
 
-<> production_symbol > 
+<> nonterminal_symbol > 
 
     tok::id
 
-            :ast { t_Production_Symbol , c_Symbol, name:str($1), tok}
+            :ast { t_NonTerminal_Symbol, name:str($1), tok}
 
 
-<> import_production_symbol>
+<> import_nonterminal_symbol>
 
     tok::id '::' tok::id
 
-        :ast { t_Production_Import_Symbol , c_Symbol , module:str($1), name:str($3), tok}
+        :ast { t_NonTerminal_Import_Symbol, module:str($1), name:str($3), tok}
 
 
 <> terminal > token | token_non_terminal | class
@@ -59,28 +59,28 @@ IMPORT ./token as tok
 
     "c:" ( 'num' | 'nl' | 'sp' | 'id' | 'sym' | 'any' | 'tab' | 'htab' )
 
-        :ast { t_ClassSymbol, c_Symbol , val:str($2),  tok }
+        :ast { t_ClassSymbol, val:str($2),  tok }
 
 
 <> token_non_terminal >
 
     "tk:" non_terminal
 
-        :ast { t_Production_Terminal_Symbol , c_Symbol , production:$2, tok }
+        :ast { t_NonTerminal_Terminal_Symbol, nonterminal:$2, tok }
 
 
 <> token >
 
     tok::string
 
-        :ast { t_TerminalToken, c_Symbol , val:str(tok<1,1>), tok, is_exclusive:true } 
+        :ast { t_TerminalToken, val:str(tok<1,1>), tok, is_exclusive:true } 
 
     |  tok::quote
 
-        :ast { t_TerminalToken , c_Symbol , val:str(tok<1,1>), tok }
+        :ast { t_TerminalToken, val:str(tok<1,1>), tok }
 
 
 <> reference > "^" tok::id
 
 
-<> end_of_input > "$" :ast { t_EOFSymbol, c_Symbol , tok }
+<> end_of_input > "$" :ast { t_EOFSymbol, tok }

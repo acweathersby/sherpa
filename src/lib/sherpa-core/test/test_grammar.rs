@@ -1,4 +1,4 @@
-use crate::{test::utils::build_parse_states_from_source_str as build, DBProdKey, SherpaResult as R, TestPackage};
+use crate::{test::utils::build_parse_states_from_source_str as build, DBNonTermKey, SherpaResult as R, TestPackage};
 
 #[test]
 fn grammar_viable_grammar() -> R<()> {
@@ -26,22 +26,22 @@ fn grammar_with_name_clause() -> R<()> {
 }
 
 #[test]
-fn grammar_with_pratt_production() -> R<()> {
+fn grammar_with_pratt_nonterminal() -> R<()> {
   build("#> a > 'b'", "".into(), Default::default(), &|_| R::Ok(()))
 }
 
 #[test]
-fn grammar_with_peg_production() -> R<()> {
+fn grammar_with_peg_nonterminal() -> R<()> {
   build(":> a > 'b'", "".into(), Default::default(), &|_| R::Ok(()))
 }
 
 #[test]
-fn grammar_with_append_production() -> R<()> {
+fn grammar_with_append_nonterminal() -> R<()> {
   build("<> t > ('r') \n +> t > ( 'b' :ast 1 )", "".into(), Default::default(), &|TestPackage { db, .. }| {
     assert_eq!(
-      db.prod_rules(DBProdKey::from(0usize))?.len(),
+      db.nonterm_rules(DBNonTermKey::from(0usize))?.len(),
       2,
-      "Production `t` should have two rules, one for `'r'` and the other for `'b'`"
+      "Non-terminal `t` should have two rules, one for `'r'` and the other for `'b'`"
     );
     R::Ok(())
   })
@@ -122,7 +122,7 @@ fn grammar_optional_symbol_with_all_annotations_3() -> R<()> {
 }
 
 #[test]
-fn grammar_token_production() -> R<()> {
+fn grammar_token_nonterminal() -> R<()> {
   build("<> a > tk:b <> b > tk:c <> c > 'c'", "".into(), Default::default(), &|_| R::Ok(()))
 }
 
@@ -142,7 +142,7 @@ fn grammar_unordered_variable_set() -> R<()> {
 }
 
 #[test]
-fn grammar_anonymous_production() -> R<()> {
+fn grammar_anonymous_nonterminal() -> R<()> {
   build("<> a > [ c:sp? c:num? ]!", "".into(), Default::default(), &|_| R::Ok(()))
 }
 
@@ -272,11 +272,11 @@ fn grammar_basic_ascript_member() -> R<()> {
 }
 
 #[test]
-fn grammar_ir_state_production() -> R<()> {
+fn grammar_ir_state_nonterminal() -> R<()> {
   build("test => pass", "".into(), Default::default(), &|_| R::Ok(()))
 }
 
 #[test]
-fn grammar_ir_catch_state_production() -> R<()> {
+fn grammar_ir_catch_state_nonterminal() -> R<()> {
   build("test =!> fail", "".into(), Default::default(), &|_| R::Ok(()))
 }

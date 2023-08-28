@@ -303,8 +303,8 @@ fn compile_match<'a, 'llvm: 'a>(
   b.position_at_end(symbol_branches_start);
 
   let (cp_val, int_type) = match mode.as_str() {
-    InputType::PRODUCTION_STR => {
-      let val = CtxAggregateIndices::prod_id.load(b, p_ctx)?.into_int_value();
+    InputType::NONTERMINAL_STR => {
+      let val = CtxAggregateIndices::nonterm_id.load(b, p_ctx)?.into_int_value();
       (val, i32)
     }
 
@@ -534,7 +534,7 @@ fn construct_assign_token_id(args: &BuildArgs, p_ctx: PointerValue, token_value:
 }
 
 fn reduce<'a, 'llvm: 'a>(
-  parser::ReduceRaw { rule_id, prod_id, len, .. }: &parser::ReduceRaw,
+  parser::ReduceRaw { rule_id, prod_id: nterm, len, .. }: &parser::ReduceRaw,
   args: &BuildArgs<'a, 'llvm>,
   p_ctx: PointerValue<'llvm>,
   no_reenter: bool,
@@ -545,7 +545,7 @@ fn reduce<'a, 'llvm: 'a>(
 
   CtxAggregateIndices::sym_len.store(b, p_ctx, i32.const_int(*len as u64, false))?;
   CtxAggregateIndices::rule_id.store(b, p_ctx, i32.const_int(*rule_id as u64, false))?;
-  CtxAggregateIndices::prod_id.store(b, p_ctx, i32.const_int(*prod_id as u64, false))?;
+  CtxAggregateIndices::nonterm_id.store(b, p_ctx, i32.const_int(*nterm as u64, false))?;
 
   let f = if !no_reenter {
     let f = create_parse_function(args.j, args.m, &format!("reduce_{}", args.state_name));
@@ -897,7 +897,7 @@ pub(crate) fn construct_scan(
 /// The prime function's purpose is fist create a base goto state that emits a
 /// failure to prevent stack underflow when descending to the bottom of the goto
 /// stack, and also insert the first GOTO entry that will initiate the parser to
-/// start parsing based on an entry production id.
+/// start parsing based on an entry non-terminal id.
 pub(crate) fn construct_prime_function(
   _j: &mut Journal,
   db: &ParserDatabase,
@@ -918,7 +918,7 @@ pub(crate) fn construct_prime_function(
     .entry_points()
     .iter()
     .filter_map(|p| {
-      let name = p.prod_name.to_string(db.string_store());
+      let name = p.nonterm_name.to_string(db.string_store());
       let fun = state_lu.get(&name).unwrap();
       let block = sp.ctx.append_basic_block(fn_value, &format!("prime_{}", name));
       Some((p.export_id, block, fun))

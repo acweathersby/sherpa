@@ -46,8 +46,8 @@ impl JSGrammarParser {
       ParseAction::Skip { token_byte_length, .. } => {
         serde_wasm_bindgen::to_value(&JsonParseAction::Skip { len: token_byte_length }).unwrap()
       }
-      ParseAction::Reduce { production_id, symbol_count, .. } => {
-        serde_wasm_bindgen::to_value(&JsonParseAction::Reduce { len: symbol_count, prod_id: production_id }).unwrap()
+      ParseAction::Reduce { nonterminal_id, symbol_count, .. } => {
+        serde_wasm_bindgen::to_value(&JsonParseAction::Reduce { len: symbol_count, nterm: nonterminal_id }).unwrap()
       }
       ParseAction::Error { .. } => serde_wasm_bindgen::to_value(&JsonParseAction::Error).unwrap(),
       _ => panic!("Unexpected Action!"),
@@ -126,8 +126,8 @@ impl JSByteCodeParser {
         ParseAction::Skip { token_byte_length, .. } => {
           serde_wasm_bindgen::to_value(&JsonParseAction::Skip { len: token_byte_length }).unwrap()
         }
-        ParseAction::Reduce { production_id, symbol_count, .. } => {
-          serde_wasm_bindgen::to_value(&JsonParseAction::Reduce { len: symbol_count, prod_id: production_id }).unwrap()
+        ParseAction::Reduce { nonterminal_id, symbol_count, .. } => {
+          serde_wasm_bindgen::to_value(&JsonParseAction::Reduce { len: symbol_count, nterm: nonterminal_id }).unwrap()
         }
         ParseAction::Error { .. } => {
           self.running = false;
@@ -173,7 +173,7 @@ pub fn get_codemirror_parse_tree(input: String) -> JsValue {
         acc_stack.push(1);
       }
       ParseAction::Skip { .. } => {}
-      ParseAction::Reduce { production_id, symbol_count, .. } => {
+      ParseAction::Reduce { nonterminal_id, symbol_count, .. } => {
         let len = acc_stack.len();
         let mut total_nodes = 0;
         for size in acc_stack.drain(len - symbol_count as usize..) {
@@ -183,7 +183,7 @@ pub fn get_codemirror_parse_tree(input: String) -> JsValue {
         let adjust_size = total_nodes as usize * 4;
         let start_offset = output[output.len() - adjust_size + 1];
         let end_offset = output[output.len() - 2];
-        output.push(production_id);
+        output.push(nonterminal_id);
         output.push(start_offset);
         output.push(end_offset);
         output.push(adjust_size as u32 + 4);
@@ -199,7 +199,7 @@ pub fn get_codemirror_parse_tree(input: String) -> JsValue {
 }
 
 #[wasm_bindgen]
-pub fn get_production_names() -> JsValue {
+pub fn get_nonterminal_names() -> JsValue {
   serde_wasm_bindgen::to_value(&ProdNames(parser::meta::production_names.iter().map(|i| (*i).to_string()).collect())).unwrap()
 }
 
@@ -216,7 +216,7 @@ pub enum JsonParseAction {
   EndOfInput,
   Shift { len: u32 },
   Skip { len: u32 },
-  Reduce { len: u32, prod_id: u32 },
+  Reduce { len: u32, nterm: u32 },
   Error,
 }
 
@@ -267,13 +267,13 @@ pub enum JSDebugEvent {
     end:         usize,
   },
   GotoValue {
-    production_id: u32,
+    nonterminal_id: u32,
   },
   Reduce {
     rule_id: u32,
   },
   Complete {
-    production_id: u32,
+    nonterminal_id: u32,
   },
   Failure {},
   EndOfFile,
@@ -314,9 +314,9 @@ impl<'a> From<&DebugEvent<'a>> for JSDebugEvent {
       DebugEvent::CodePointValue { input_value, start, end } => JSDebugEvent::CodePointValue { input_value, start, end },
       DebugEvent::ClassValue { input_value, start, end } => JSDebugEvent::ClassValue { input_value, start, end },
       DebugEvent::TokenValue { input_value, start, end } => JSDebugEvent::TokenValue { input_value, start, end },
-      DebugEvent::GotoValue { production_id } => JSDebugEvent::GotoValue { production_id },
+      DebugEvent::GotoValue { nonterminal_id } => JSDebugEvent::GotoValue { nonterminal_id },
       DebugEvent::Reduce { rule_id } => JSDebugEvent::Reduce { rule_id },
-      DebugEvent::Complete { production_id } => JSDebugEvent::Complete { production_id },
+      DebugEvent::Complete { nonterminal_id } => JSDebugEvent::Complete { nonterminal_id },
       DebugEvent::Failure {} => JSDebugEvent::Failure {},
       DebugEvent::EndOfFile => JSDebugEvent::EndOfFile,
     }

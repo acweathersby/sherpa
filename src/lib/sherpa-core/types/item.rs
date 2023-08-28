@@ -6,16 +6,16 @@ use std::{collections::VecDeque, hash::Hash};
 
 pub enum ItemType {
   Terminal(SymbolId),
-  NonTerminal(DBProdKey),
-  TokenNonTerminal(DBProdKey, SymbolId),
-  Completed(DBProdKey),
+  NonTerminal(DBNonTermKey),
+  TokenNonTerminal(DBNonTermKey, SymbolId),
+  Completed(DBNonTermKey),
 }
 
 #[derive(Clone, Copy)]
 pub struct Item<'db> {
   db: &'db ParserDatabase,
-  /// The NonTerminal production or symbol that the item directly or indirectly
-  /// resolves to
+  /// The NonTerminal non-terminal or symbol that the item directly or
+  /// indirectly resolves to
   pub origin: Origin,
   /// The Graph goal
   pub goal: u32,
@@ -187,19 +187,19 @@ impl<'db> Item<'db> {
     self.db.rule(self.rule_id)
   }
 
-  pub fn prod_name(&self) -> IString {
-    self.db.prod_friendly_name(self.prod_index())
+  pub fn nonterm_name(&self) -> IString {
+    self.db.nonterm_friendly_name(self.nonterm_index())
   }
 
   /// The NonTerm the rule reduces to
-  pub fn prod_index(&self) -> DBProdKey {
-    self.db.rule_prod(self.rule_id)
+  pub fn nonterm_index(&self) -> DBNonTermKey {
+    self.db.rule_nonterm(self.rule_id)
   }
 
   /// Return `true` if the item is from a left recursive rule.
   pub fn is_left_recursive(&self) -> bool {
-    let p = self.prod_index();
-    p == self.to_start().prod_index_at_sym().unwrap_or_default()
+    let p = self.nonterm_index();
+    p == self.to_start().nonterm_index_at_sym().unwrap_or_default()
   }
 
   pub fn is_null(&self) -> bool {
@@ -232,9 +232,9 @@ impl<'db> Item<'db> {
 
   /// Returns the [IndexedProdId] of the active symbol if the symbol
   /// is a NonTerm or NonTermToken, or return `None`
-  pub fn prod_index_at_sym(&self) -> Option<DBProdKey> {
+  pub fn nonterm_index_at_sym(&self) -> Option<DBNonTermKey> {
     match self.sym() {
-      SymbolId::DBNonTerminal { key: index } | SymbolId::DBNonTerminalToken { prod_key: index, .. } => Some(index),
+      SymbolId::DBNonTerminal { key: index } | SymbolId::DBNonTerminalToken { nonterm_key: index, .. } => Some(index),
       _ => None,
     }
   }
@@ -243,11 +243,11 @@ impl<'db> Item<'db> {
   pub fn get_type(&self) -> ItemType {
     use ItemType::*;
     if self.is_complete() {
-      Completed(self.prod_index())
+      Completed(self.nonterm_index())
     } else {
       match self.sym() {
         SymbolId::DBNonTerminal { key: index } => NonTerminal(index),
-        SymbolId::DBNonTerminalToken { prod_key: index, .. } => TokenNonTerminal(index, self.sym()),
+        SymbolId::DBNonTerminalToken { nonterm_key: index, .. } => TokenNonTerminal(index, self.sym()),
         sym => Terminal(sym),
       }
     }
@@ -298,7 +298,7 @@ impl<'db> Item<'db> {
         .then_some(String::new())
         .unwrap_or_else(|| format!("<[{}-{:?}]  [{:X}] ", self.origin.debug_string(self.db), self.origin_state, self.goal));
 
-      string += &self.prod_name().to_string(s_store);
+      string += &self.nonterm_name().to_string(s_store);
 
       string += " >";
 
@@ -376,11 +376,11 @@ macro_rules! common_iter_functions {
       self.map(|i| i.debug_string()).collect::<Vec<_>>().join(sep)
     }
 
-    /// Returns the Production of the non-terminal symbol in each item. For items
+    /// Returns the Non-terminal of the non-terminal symbol in each item. For items
     /// whose symbol is a terminal or are complete. Items that do not have a
     /// nonterm as the active symbol are skipped.
-    fn to_prod_sym_id_set(self) -> OrderedSet<DBProdKey> {
-      self.filter_map(|i| i.prod_index_at_sym()).collect()
+    fn to_nonterm_id_set(self) -> OrderedSet<DBNonTermKey> {
+      self.filter_map(|i| i.nonterm_index_at_sym()).collect()
     }
 
     fn peek_is_resolved(&mut self) -> bool {
@@ -477,8 +477,8 @@ pub trait ItemRefContainerIter<'a, 'db: 'a>: Iterator<Item = &'a Item<'db>> + Si
   }
 
   /// Returns a set of all non-terminal ids the items reduce to.
-  fn to_production_id_set(&mut self) -> OrderedSet<DBProdKey> {
-    self.map(|i| i.prod_index()).collect()
+  fn to_nonterminal_id_set(&mut self) -> OrderedSet<DBNonTermKey> {
+    self.map(|i| i.nonterm_index()).collect()
   }
 
   common_iter_functions!();
@@ -487,8 +487,8 @@ pub trait ItemRefContainerIter<'a, 'db: 'a>: Iterator<Item = &'a Item<'db>> + Si
 impl<'db> From<Item<'db>> for Items<'db> {
   fn from(value: Item<'db>) -> Self {
     let db = value.db;
-    if let Some(prod_id) = value.prod_index_at_sym() {
-      if let Ok(rules) = db.prod_rules(prod_id) {
+    if let Some(nterm) = value.nonterm_index_at_sym() {
+      if let Ok(rules) = db.nonterm_rules(nterm) {
         rules.iter().map(|r| Item::from_rule(*r, db)).collect()
       } else {
         Default::default()
@@ -501,9 +501,9 @@ impl<'db> From<Item<'db>> for Items<'db> {
 
 pub trait ItemContainer<'db>: Clone + IntoIterator<Item = Item<'db>> + FromIterator<Item<'db>> {
   /// Given a [CompileDatabase] and [DBProdId] returns the initial
-  /// items of the production.
-  fn start_items(prod_id: DBProdKey, db: &'db ParserDatabase) -> Self {
-    let Ok(rules) = db.prod_rules(prod_id) else { panic!("Could not get rules") };
+  /// items of the non-terminal.
+  fn start_items(nterm: DBNonTermKey, db: &'db ParserDatabase) -> Self {
+    let Ok(rules) = db.nonterm_rules(nterm) else { panic!("Could not get rules") };
     rules.iter().map(|r| Item::from_rule(*r, db)).collect()
   }
 

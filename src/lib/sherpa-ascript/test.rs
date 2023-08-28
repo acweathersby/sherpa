@@ -26,7 +26,7 @@ fn parse_errors_when_struct_prop_type_is_redefined() -> SherpaResult<()> {
 }
 
 #[test]
-fn parse_errors_when_production_has_differing_return_types() -> SherpaResult<()> {
+fn parse_errors_when_nonterminal_has_differing_return_types() -> SherpaResult<()> {
   build_parse_db_from_source_str(
     r#"<> A > "1" :ast { t_Test } | 'a' "#,
     "/test.sg".into(),
@@ -70,7 +70,7 @@ fn group_rules_as_vectors() -> SherpaResult<()> {
     &|DBPackage { journal, db, .. }| {
       let results = AScriptStore::new(journal, &db)?;
 
-      assert_eq!(results.prod_types.first_key_value().unwrap().1.first_key_value().unwrap().0.type_, AScriptTypeVal::U32Vec);
+      assert_eq!(results.nonterm_types.first_key_value().unwrap().1.first_key_value().unwrap().0.type_, AScriptTypeVal::U32Vec);
 
       SherpaResult::Ok(())
     },

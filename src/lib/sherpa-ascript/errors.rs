@@ -60,8 +60,8 @@ pub(crate) fn add_prop_redefinition_error(
   });
 }
 
-/// Occurs when a production returns incompatible type values, such numeric
-/// values and Structs, or Strings and Tokens.
+/// Occurs when a non-terminal rule returns incompatible type values, such
+/// numeric values and Structs, or Strings and Tokens.
 ///
 /// # Example
 /// ### HC Grammar
@@ -84,18 +84,18 @@ pub(crate) fn add_prop_redefinition_error(
 ///
 /// # Ok(())
 /// ```
-pub(crate) fn add_incompatible_production_scalar_types_error(
+pub(crate) fn add_incompatible_nonterm_scalar_types_error(
   j: &mut Journal,
   ast: &mut AScriptStore,
   db: &ParserDatabase,
-  prod_id: &DBProdKey,
+  nterm: &DBNonTermKey,
   (type_a, rules_a): (AScriptTypeVal, Vec<DBRuleKey>),
   (type_b, rules_b): (AScriptTypeVal, Vec<DBRuleKey>),
 ) {
   let type_names = ast.get_type_names();
 
   j.report_mut().add_error(SherpaError::SourcesError {
-    id:       "incompatible-production-scalar-types [401]",
+    id:       "incompatible-non-terminal-scalar-types [401]",
     sources:  rules_a
       .into_iter()
       .map(|r| {
@@ -116,14 +116,14 @@ pub(crate) fn add_incompatible_production_scalar_types_error(
       }))
       .collect(),
     msg:      format!(
-      "Incompatible combination of scalar types are produced by production [{}]",
-      db.prod_friendly_name_string(*prod_id)
+      "Incompatible combination of scalar types are produced by non-terminal [{}]",
+      db.nonterm_friendly_name_string(*nterm)
     ),
     ps_msg:   "".into(),
     severity: SherpaErrorSeverity::Critical,
   });
 }
-/// Occurs when a production returns incompatible vector type values, such as
+/// Occurs when a non-terminal returns incompatible vector type values, such as
 /// numeric values and Structs, or Strings and Tokens.
 ///
 /// # Example
@@ -149,16 +149,16 @@ pub(crate) fn add_incompatible_production_scalar_types_error(
 /// # Ok(())
 /// ```
 
-pub(crate) fn add_incompatible_production_vector_types_error(
+pub(crate) fn add_incompatible_nonterm_vector_types_error(
   j: &mut Journal,
   ast: &mut AScriptStore,
   db: &ParserDatabase,
-  prod_id: &DBProdKey,
+  nterm: &DBNonTermKey,
   _types: BTreeSet<TaggedType>,
 ) {
   let type_names = ast.get_type_names();
   j.report_mut().add_error(SherpaError::SourcesError {
-    id:       "incompatible-production-vector-types",
+    id:       "incompatible-non-terminal-vector-types",
     sources:  _types
       .iter()
       .map(|t| {
@@ -172,8 +172,8 @@ pub(crate) fn add_incompatible_production_vector_types_error(
       })
       .collect(),
     msg:      format!(
-      "Incompatible combination of vector types are produced by production [{}]",
-      db.prod_friendly_name_string(*prod_id)
+      "Incompatible combination of vector types are produced by non-terminal [{}]",
+      db.nonterm_friendly_name_string(*nterm)
     ),
     ps_msg:   "".into(),
     severity: SherpaErrorSeverity::Critical,
@@ -181,7 +181,7 @@ pub(crate) fn add_incompatible_production_vector_types_error(
 }
 
 /// This error occurs when there are a mixture of Vector and Scalar return
-/// types on a production.
+/// types on a non-terminal.
 ///
 /// # Example
 /// ### HC Grammar
@@ -204,17 +204,17 @@ pub(crate) fn add_incompatible_production_vector_types_error(
 ///
 /// # Ok(())
 /// ```
-pub(crate) fn add_incompatible_production_types_error(
+pub(crate) fn add_incompatible_nonterm_types_error(
   j: &mut Journal,
   ast: &mut AScriptStore,
   db: &ParserDatabase,
-  prod_id: &DBProdKey,
+  nterm: &DBNonTermKey,
   scalar_types: Vec<(AScriptTypeVal, DBRuleKey)>,
   vector_types: Vec<(AScriptTypeVal, DBRuleKey)>,
 ) {
   let type_names = ast.get_type_names();
   j.report_mut().add_error(SherpaError::SourcesError {
-    id:       "incompatible-production-types",
+    id:       "incompatible-non-terminal-types",
     sources:  scalar_types
       .iter()
       .map(|(t, r)| {
@@ -235,8 +235,8 @@ pub(crate) fn add_incompatible_production_types_error(
       }))
       .collect(),
     msg:      format!(
-      "An incompatible combination of vector and scalar types are produced by production [{}]",
-      db.prod_friendly_name_string(*prod_id)
+      "An incompatible combination of vector and scalar types are produced by non-terminal [{}]",
+      db.nonterm_friendly_name_string(*nterm)
     ),
     ps_msg:   "".into(),
     severity: SherpaErrorSeverity::Critical,
@@ -245,12 +245,7 @@ pub(crate) fn add_incompatible_production_types_error(
 
 /// This error occurs when a values prop's id does not match any reference
 /// names or non-terminals in the respective rule.
-pub(crate) fn add_unmatched_prop_error(
-  j: &mut Journal,
-  rule: &Rule,
-  db: &ParserDatabase,
-  prop: &AST_Property,
-) {
+pub(crate) fn add_unmatched_prop_error(j: &mut Journal, rule: &Rule, db: &ParserDatabase, prop: &AST_Property) {
   j.report_mut().add_error(SherpaError::SourceError {
     id:         "unmatched-valueless-prop",
     path:       PathBuf::from(rule.g_id.path.clone().to_string(db.string_store())),

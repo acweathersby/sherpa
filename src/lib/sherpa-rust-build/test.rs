@@ -82,7 +82,7 @@ fn test_grammar() -> SherpaResult<()> {
 }
 
 #[test]
-fn test_add_hoc_vector_prop_merged_with_vector_production() -> SherpaResult<()> {
+fn test_add_hoc_vector_prop_merged_with_vector_nonterminal() -> SherpaResult<()> {
   build_parse_states_from_source_str(
     "
   <> statement > adhoc        :ast { t_Expr, v:[$1] }
@@ -184,7 +184,7 @@ fn rust_vector_return_types_print_correctly() -> SherpaResult<()> {
 }
 
 #[test]
-fn group_productions_get_correct_type_information() -> SherpaResult<()> {
+fn group_nonterminals_get_correct_type_information() -> SherpaResult<()> {
   build_parse_db_from_source_str(
     r##"
   NAME hc_symbol

@@ -171,7 +171,7 @@ pub enum AScriptTypeVal {
   Token,
   TokenRange,
   AdjustedTokenRange,
-  UnresolvedProduction(DBProdKey),
+  UnresolvedNonTerminal(DBNonTermKey),
   Undefined,
   /// A generic struct
   Any,
@@ -250,14 +250,14 @@ impl AScriptTypeVal {
     matches!(self, AScriptTypeVal::Undefined)
   }
 
-  pub fn is_unresolved_production(&self) -> bool {
-    matches!(self, AScriptTypeVal::UnresolvedProduction(..))
+  pub fn is_unresolved_nonterm(&self) -> bool {
+    matches!(self, AScriptTypeVal::UnresolvedNonTerminal(..))
   }
 
-  pub fn get_production_id(&self) -> DBProdKey {
+  pub fn get_nonterm_id(&self) -> DBNonTermKey {
     match self {
-      AScriptTypeVal::UnresolvedProduction(id) => id.clone(),
-      _ => DBProdKey::default(),
+      AScriptTypeVal::UnresolvedNonTerminal(id) => id.clone(),
+      _ => DBNonTermKey::default(),
     }
   }
 
@@ -279,7 +279,7 @@ impl AScriptTypeVal {
           false
         }
       }
-      Undefined | GenericVec(..) | GenericStruct(..) | Any | UnresolvedProduction(..) => false,
+      Undefined | GenericVec(..) | GenericStruct(..) | Any | UnresolvedNonTerminal(..) => false,
     }
   }
 
@@ -372,7 +372,7 @@ impl AScriptTypeVal {
       Token => "Token".to_string(),
       GenericStruct(_) => "Node".to_string(),
       Any => "Any".to_string(),
-      UnresolvedProduction(id) => format!("UnresolvedProduction[{:?}]", id),
+      UnresolvedNonTerminal(id) => format!("UnresolvedNon-terminal[{:?}]", id),
     }
   }
 
@@ -425,14 +425,14 @@ impl AScriptTypeVal {
       Token => "TOKEN".to_string(),
       GenericStruct(_) => "Node".to_string(),
       Any => "Any".to_string(),
-      UnresolvedProduction(_id) => {
+      UnresolvedNonTerminal(_id) => {
         #[cfg(debug_assertions)]
         {
-          format!("UnresolvedProduction[{:?}]", _id)
+          format!("UnresolvedNon-terminal[{:?}]", _id)
         }
         #[cfg(not(debug_assertions))]
         {
-          "UnresolvedProduction".into()
+          "UnresolvedNon-terminal".into()
         }
       }
       _ => "TOKEN_RANGE".to_string(),
@@ -538,7 +538,7 @@ pub struct AScriptStruct {
   pub tokenized: bool,
 }
 
-pub type ProductionTypesTable = OrderedMap<DBProdKey, OrderedMap<TaggedType, BTreeSet<DBRuleKey>>>;
+pub type NonTerminalTypesTable = OrderedMap<DBNonTermKey, OrderedMap<TaggedType, BTreeSet<DBRuleKey>>>;
 
 #[derive(Clone)]
 #[cfg_attr(debug_assertions, derive(Debug))]
@@ -546,8 +546,8 @@ pub struct AScriptStore {
   /// Store of unique AScriptStructs
   pub structs:        OrderedMap<AScriptStructId, AScriptStruct>,
   pub props:          OrderedMap<AScriptPropId, AScriptProp>,
-  // Stores the resolved AST types of all parse productions.
-  pub prod_types:     ProductionTypesTable,
+  // Stores the resolved AST types of all parse non-terminals.
+  pub nonterm_types:  NonTerminalTypesTable,
   pub rule_reduce_fn: OrderedMap<DBRuleKey, (AScriptTypeVal, ASTNode)>,
   /// The type name of the AST Node enum,
   pub ast_type_name:  String,
@@ -562,7 +562,7 @@ impl AScriptStore {
     SherpaResult::Ok(AScriptStore {
       structs:        Default::default(),
       props:          Default::default(),
-      prod_types:     Default::default(),
+      nonterm_types:  Default::default(),
       rule_reduce_fn: Default::default(),
       ast_type_name:  Default::default(),
       struct_lookups: Default::default(),
@@ -577,7 +577,7 @@ impl AScriptStore {
 
     compile_ascript_store(&mut j, &mut new_self, db)?;
 
-    j.report_mut().ok_or_convert_to_error(new_self)
+    j.report_mut().wrap_ok_or_return_errors(new_self)
   }
 
   pub fn get_type_names(&mut self) -> Arc<BTreeMap<AScriptStructId, String>> {

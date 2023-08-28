@@ -127,14 +127,14 @@ pub enum Opcode {
   /// This is a 5 byte instruction.
   AssignToken,
 
-  /// Assigns a production_id to `prod_id`, a rule_id to `rule_id` and the
+  /// Assigns a nonterminal_id to `nterm`, a rule_id to `rule_id` and the
   /// number of values to pop of the stack to `sym_len`.
   ///
   /// This also causes a `Reduce` event to be emitted, pausing the parser until
   /// it is resumed through a call to `next`.
   ///
   /// # Operands
-  /// - u32: ProductionId - The value that will be assigned to `prod_id`.
+  /// - u32: Non-terminalId - The value that will be assigned to `nterm`.
   /// - u32: RuleId -The value that will be assigned to `rule_id`.
   /// - u16: Num of Symbols - The value that will be assigned to `sym_len`
   ///
@@ -156,7 +156,7 @@ pub enum Opcode {
   ///
   ///   | Input Type | enum val | |
   ///   |:-|:-:|:-|
-  ///   | PRODUCTION | 0 |  The value of `prod_id`|
+  ///   | PRODUCTION | 0 |  The value of `nterm`|
   ///   | TOKEN | 1|   The value of `tok_id`|
   ///   | BYTE | 2 | The current byte located at `scan_ptr`|
   ///   | CODEPOINT |3 |  The current ut8 codepoint located at `scan_ptr`|
@@ -184,7 +184,7 @@ pub enum Opcode {
   ///
   ///   | Input Type | enum val | |
   ///   |:-|:-:|:-|
-  ///   | PRODUCTION | 0 |  The value of `prod_id`|
+  ///   | PRODUCTION | 0 |  The value of `nterm`|
   ///   | TOKEN | 1|   The value of `tok_id`|
   ///   | BYTE | 2 | The current byte located at `scan_ptr`|
   ///   | CODEPOINT |3 |  The current ut8 codepoint located at `scan_ptr`|
@@ -583,7 +583,7 @@ pub const END_OF_INPUT_TOKEN_ID: u32 = 0x1;
 #[cfg_attr(debug_assertions, derive(Debug))]
 #[repr(u32)]
 pub enum InputType {
-  Production = 0,
+  NonTerminal = 0,
   Token,
   Class,
   Codepoint,
@@ -605,12 +605,12 @@ impl InputType {
   pub const CODEPOINT_SCANLESS_STR: &'static str = "_CODEPOINT_SCANLESS_";
   pub const CODEPOINT_STR: &'static str = "_CODEPOINT_";
   pub const END_OF_FILE_STR: &'static str = "_EOF_";
-  pub const PRODUCTION_STR: &'static str = "_PRODUCTION_";
+  pub const NONTERMINAL_STR: &'static str = "_PRODUCTION_";
   pub const TOKEN_STR: &'static str = "_TOKEN_";
 
   pub fn as_str(&self) -> &'static str {
     match self {
-      Self::Production => InputType::PRODUCTION_STR,
+      Self::NonTerminal => InputType::NONTERMINAL_STR,
       Self::Token => InputType::TOKEN_STR,
       Self::Class => InputType::CLASS_STR,
       Self::ClassScanless => InputType::CLASS_SCANLESS_STR,
@@ -643,7 +643,7 @@ impl Display for InputType {
 impl From<u32> for InputType {
   fn from(value: u32) -> Self {
     match value {
-      0 => Self::Production,
+      0 => Self::NonTerminal,
       1 => Self::Token,
       2 => Self::Class,
       3 => Self::Codepoint,
@@ -668,10 +668,10 @@ impl From<&str> for InputType {
       Self::CODEPOINT_SCANLESS_STR => Self::CodepointScanless,
       Self::CODEPOINT_STR => Self::Codepoint,
       Self::END_OF_FILE_STR => Self::EndOfFile,
-      Self::PRODUCTION_STR => Self::Production,
+      Self::NONTERMINAL_STR => Self::NonTerminal,
       Self::TOKEN_STR => Self::Token,
       Self::BYTE_SEQUENCE_STR => Self::ByteSequence,
-      "PRODUCTION" => Self::Production,
+      "PRODUCTION" => Self::NonTerminal,
       "TOKEN" => Self::Token,
       "CLASS" => Self::Class,
       "CODEPOINT" => Self::Codepoint,
