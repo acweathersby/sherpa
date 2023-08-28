@@ -14,7 +14,7 @@ IMPORT ./token as tok
     | list
 
 
-<> precedence > "{" tk:precedence_num? ( : tk:precedence_num? :ast u32($2) )? '}' :ast { t_Precedence, sym_prec: u32($2), tok_prec: $3 }
+<> precedence > "{" tk:precedence_num? ( ":" tk:precedence_num? :ast u32($2) )? '}' :ast { t_Precedence, sym_prec: u32($2), kot_prec: $3 }
 
 <> precedence_num > c:num(+)
 
