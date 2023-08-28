@@ -476,7 +476,7 @@ pub trait ItemRefContainerIter<'a, 'db: 'a>: Iterator<Item = &'a Item<'db>> + Si
     self.cloned().collect()
   }
 
-  /// Returns a set of all production IDs the items reduce to.
+  /// Returns a set of all non-terminal ids the items reduce to.
   fn to_production_id_set(&mut self) -> OrderedSet<DBProdKey> {
     self.map(|i| i.prod_index()).collect()
   }

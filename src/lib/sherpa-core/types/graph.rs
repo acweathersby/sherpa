@@ -100,8 +100,8 @@ pub enum StateType {
   InternalCall(DBProdKey),
   /// Calls made on kernel items
   KernelCall(DBProdKey),
-  /// Creates a leaf state that has a single `pop` instruction,
-  /// with the intent of removing a goto floor state.
+  /// Creates a leaf state that has a single `pop` instruction. This represents
+  /// the completion of a non-terminal that had a left recursive rule.
   ProductionCompleteOOS,
   /// Creates a leaf state that has a single `pop` instruction,
   /// with the intent of removing a goto floor state.
@@ -165,6 +165,7 @@ pub struct State<'db> {
   leaf_state: bool,
   closure: Option<OrderedSet<Item<'db>>>,
   root_closure: Option<OrderedSet<Item<'db>>>,
+  is_nonterminal_completer: bool,
 }
 
 impl<'db> Hash for State<'db> {
@@ -172,6 +173,7 @@ impl<'db> Hash for State<'db> {
     self.t_type.hash(state);
 
     self.term_symbol.hash(state);
+    self.is_nonterminal_completer.hash(state);
 
     for item in &self.kernel_items {
       item.rule_id.hash(state);
@@ -187,6 +189,14 @@ impl<'db> Hash for State<'db> {
 }
 
 impl<'db> State<'db> {
+  pub fn set_nonterm_complete(&mut self, is_nonterminal_completer: bool) {
+    self.is_nonterminal_completer = is_nonterminal_completer;
+  }
+
+  pub fn is_nonterminal_completer(&self) -> bool {
+    self.is_nonterminal_completer
+  }
+
   /// Set a group of items that a peek item will resolve to.
   pub fn set_peek_resolve_items(&mut self, peek_origin_key: u64, items: Items<'db>) {
     self.peek_resolve_items.insert(peek_origin_key, items);

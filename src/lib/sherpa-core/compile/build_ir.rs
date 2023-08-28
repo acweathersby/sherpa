@@ -331,6 +331,10 @@ fn build_body<'db>(state: &State, successor: &State, graph: &Graph<'db>, goto_st
   let s_type = successor.get_type();
   let db = graph.get_db();
 
+  if successor.is_nonterminal_completer() {
+    body_string.push("pop".into());
+  }
+
   if match s_type {
     StateType::Shift => {
       let scan_expr = successor.get_symbol().is_linefeed().then_some("scan then set-line").unwrap_or("scan");
