@@ -279,7 +279,6 @@ pub fn process_parse_state<'a>(
               ASTNode::TermMatch(term_match) => {
                 record_symbol(
                   &term_match.sym,
-                  0,
                   &mut ProductionData {
                     root_prod_id: *id,
                     root_g_name: *guid_name,
@@ -405,7 +404,14 @@ fn process_rule_symbols(
 
   for (index, sym) in rule_data.symbols.iter() {
     let original_bodies = 0..rules.len();
-    let SymbolData { annotation, is_optional, precedence, sym_atom, .. } = get_symbol_details(sym);
+    let SymbolData {
+      annotation,
+      is_optional,
+      sym_precedence: symbol_precedence,
+      tok_precedence: token_precedence,
+      sym_atom,
+      ..
+    } = get_symbol_details(sym);
 
     // If the symbol is optional, then we create new set
     // of rule symbols that will not contain the optional
@@ -503,7 +509,7 @@ fn process_rule_symbols(
           for pending_rule in &mut p {
             // The last symbol in each of these new bodies is set
             // with the original symbol id
-            pending_rule.symbols.last_mut().expect("There should be at least one symbol").original_index = *index;
+            pending_rule.symbols.last_mut().expect("There should be at least one symbol").original_index = *index as u32;
             for rule in &mut rules[original_bodies.clone()] {
               let mut new_rule = rule.clone();
               new_rule.symbols.extend(pending_rule.symbols.iter().cloned());
@@ -581,10 +587,11 @@ fn process_rule_symbols(
             annotation: annotation.intern(s_store),
             loc: tok.clone(),
             original_index: 0,
+            ..Default::default()
           });
 
           for (i, SymbolRef { original_index: index, .. }) in rule.symbols.iter_mut().enumerate() {
-            *index = i;
+            *index = i as u32;
           }
         }
 
@@ -592,7 +599,7 @@ fn process_rule_symbols(
           for rule in &mut rules {
             rule.symbols.remove(0);
             for (i, SymbolRef { original_index: index, .. }) in rule.symbols.iter_mut().enumerate() {
-              *index = i;
+              *index = i as u32;
             }
           }
         }
@@ -612,7 +619,7 @@ fn process_rule_symbols(
 
         (sym, tok.clone())
       }
-      sym_atom => (record_symbol(sym, precedence as u16, p_data, g_data, s_store)?, sym_atom.to_token()),
+      sym_atom => (record_symbol(sym, p_data, g_data, s_store)?, sym_atom.to_token()),
     };
 
     for rule in &mut rules[original_bodies] {
@@ -620,7 +627,9 @@ fn process_rule_symbols(
         id: sym,
         annotation: annotation.intern(s_store),
         loc: tok.clone(),
-        original_index: *index,
+        original_index: *index as u32,
+        token_precedence,
+        symbol_precedence,
       });
     }
   }
@@ -629,7 +638,7 @@ fn process_rule_symbols(
     .global_skipped
     .iter()
     .map(|sym_node| {
-      let Ok(data) = record_symbol(sym_node, 0, p_data, g_data, s_store) else {
+      let Ok(data) = record_symbol(sym_node, p_data, g_data, s_store) else {
         panic!("Could not record symbol");
       };
       data
@@ -666,34 +675,30 @@ fn some_rules_have_ast_definitions(rules: &[Box<parser::Rule>]) -> bool {
 /// records the symbol in the grammar store.
 fn record_symbol(
   sym_node: &ASTNode,
-  precedence: u16,
   p_data: &mut ProductionData,
   g_data: &GrammarData,
   s_store: &IStringStore,
 ) -> SherpaResult<SymbolId> {
   let id = match sym_node {
-    ASTNode::AnnotatedSymbol(annotated) => {
-      let p = (*annotated).precedence.as_ref().map(|p| p.val as u16).unwrap_or_default();
-      record_symbol(&annotated.symbol, p, p_data, g_data, s_store)?
-    }
+    ASTNode::AnnotatedSymbol(annotated) => record_symbol(&annotated.symbol, p_data, g_data, s_store)?,
 
     ASTNode::TerminalToken(terminal) => {
       let string = escaped_from((&terminal.val).into())?.join("");
       let val = string.intern(s_store);
-      let id = SymbolId::Token { val, precedence };
+      let id = SymbolId::Token { val };
 
       id
     }
 
-    ASTNode::EOFSymbol(_) => SymbolId::EndOfFile { precedence },
+    ASTNode::EOFSymbol(_) => SymbolId::EndOfFile {},
 
     ASTNode::ClassSymbol(gen) => match gen.val.as_str() {
-      "sp" => SymbolId::ClassSpace { precedence },
-      "tab" => SymbolId::ClassHorizontalTab { precedence },
-      "nl" => SymbolId::ClassNewLine { precedence },
-      "id" => SymbolId::ClassIdentifier { precedence },
-      "num" => SymbolId::ClassNumber { precedence },
-      "sym" => SymbolId::ClassSymbol { precedence },
+      "sp" => SymbolId::ClassSpace {},
+      "tab" => SymbolId::ClassHorizontalTab {},
+      "nl" => SymbolId::ClassNewLine {},
+      "id" => SymbolId::ClassIdentifier {},
+      "num" => SymbolId::ClassNumber {},
+      "sym" => SymbolId::ClassSymbol {},
       _ => {
         #[allow(unreachable_code)]
         {
@@ -711,7 +716,7 @@ fn record_symbol(
     }
 
     ASTNode::Production_Terminal_Symbol(token_prod) => {
-      let id = get_production_id_from_ast_node(g_data, &token_prod.production)?.as_tok_sym().to_precedence(precedence);
+      let id = get_production_id_from_ast_node(g_data, &token_prod.production)?.as_tok_sym();
       // Bypass the registration of this symbol as a symbol.
       return SherpaResult::Ok(id);
     }

@@ -253,8 +253,8 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
         insert_token_production(&mut r_rules, &mut token_productions);
         insert_token_production(&mut p_rules, &mut token_productions);
 
-        convert_symbols_to_scanner_symbols(&mut r_rules, s_store, false);
-        convert_symbols_to_scanner_symbols(&mut p_rules, s_store, false);
+        convert_sym_refs_to_token_sym_refs(&mut r_rules, s_store);
+        convert_sym_refs_to_token_sym_refs(&mut p_rules, s_store);
 
         let prod_id = prod_id.as_tok_sym();
         let prime_id = prime_id.as_tok_sym();
@@ -272,7 +272,7 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
         if !p_map.contains_key(&prod_id) {
           let mut rules = rules.clone();
 
-          convert_symbols_to_scanner_symbols(&mut rules, s_store, false);
+          convert_sym_refs_to_token_sym_refs(&mut rules, s_store);
           insert_token_production(&mut rules, &mut token_productions);
 
           add_prod_and_rules(prod_id, rules, p_map, r_table, p_r_map, true);
@@ -293,11 +293,11 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
       match sym {
         SymbolId::Default => {}
 
-        SymbolId::Token { val, precedence } => {
+        SymbolId::Token { val } => {
           let prod_id = sym.to_scanner_prod_id();
 
           let s = &val.to_string(s_store);
-          let o = if *precedence < 1 { "<> '".to_string() + s + "' > " + s } else { "<> \"".to_string() + s + "\" > " + s };
+          let o = { "<> \"".to_string() + s + "\" > " + s };
 
           let tok = TokenRange {
             len:      s.len() as u32,
@@ -308,19 +308,14 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
           .to_token_with_string(&o);
 
           let mut rules = Array::from([Rule {
-            symbols: Array::from([SymbolRef {
-              id: *sym,
-              annotation: IString::default(),
-              original_index: 0,
-              loc: Token::default(),
-            }]),
+            symbols: Array::from([SymbolRef { id: *sym, ..Default::default() }]),
             skipped: Default::default(),
             ast: None,
             tok,
             g_id: g,
           }]);
 
-          convert_symbols_to_scanner_symbols(&mut rules, s_store, true);
+          convert_sym_refs_to_token_sym_refs(&mut rules, s_store);
 
           let name = ("tok_".to_string() + &create_u64_hash(val).to_string()).intern(s_store);
 
@@ -335,12 +330,7 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
         sym if sym.is_term() => {
           let prod_id = sym.to_scanner_prod_id();
           let rules = Array::from_iter(vec![Rule {
-            symbols: vec![SymbolRef {
-              id: *sym,
-              annotation: IString::default(),
-              original_index: 0,
-              loc: Token::default(),
-            }],
+            symbols: vec![SymbolRef { id: *sym, ..Default::default() }],
             skipped: Default::default(),
             ast:     None,
             tok:     Token::default(),
@@ -387,13 +377,7 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
 
               ("<".to_string() + &name + ">").intern(s_store)
             }
-            Codepoint { val, precedence } => {
-              if *precedence > 0 {
-                (val.to_string() + "{" + &precedence.to_string() + "}").intern(s_store)
-              } else {
-                val.to_string().intern(s_store)
-              }
-            }
+            Codepoint { val } => val.to_string().intern(s_store),
             Char { char, .. } => {
               if *char < 128 {
                 ("[".to_string() + &char::from(*char).to_string() + "]").intern(s_store)
@@ -411,7 +395,7 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
   }));
 
   // Convert convert GUID symbol ids to local indices. ------------------------
-  convert_rule_symbols(r_table, p_map, symbols);
+  convert_rule_symbol_ids(r_table, p_map, symbols);
 
   let entry_points = root_grammar
     .pub_prods
@@ -464,42 +448,41 @@ fn add_empty_custom_state(c_states: &mut Vec<Option<Box<parser::State>>>) {
 }
 
 /// Converts AST Symbols into DB symbols
-fn convert_rule_symbols(
+fn convert_rule_symbol_ids(
   r_table: &mut Vec<DBRule>,
   p_map: &mut OrderedMap<SymbolId, usize>,
   symbols: OrderedMap<SymbolId, usize>,
 ) {
   for DBRule { rule, is_scanner, .. } in r_table {
     for SymbolRef { id: sym, original_index: _index, .. } in &mut rule.symbols {
-      *sym = convert_symbol(sym, p_map, &symbols, *is_scanner);
+      *sym = convert_symbol_into_db_symbol(sym, p_map, &symbols, *is_scanner);
     }
 
     if !*is_scanner {
       for sym in &mut rule.skipped {
-        *sym = convert_symbol(sym, p_map, &symbols, *is_scanner);
+        *sym = convert_symbol_into_db_symbol(sym, p_map, &symbols, *is_scanner);
       }
     }
   }
 }
 
 /// Converts an AST symbol into a DB symbol.
-fn convert_symbol(
+fn convert_symbol_into_db_symbol(
   sym: &SymbolId,
   p_map: &mut OrderedMap<SymbolId, usize>,
   symbols: &OrderedMap<SymbolId, usize>,
   is_scanner: bool,
 ) -> SymbolId {
   match *sym {
-    SymbolId::NonTerminalToken { id, precedence } => {
+    SymbolId::NonTerminalToken { id } => {
       if is_scanner {
         let index = p_map.get(&id.as_parse_prod().as_tok_sym()).unwrap();
         SymbolId::DBNonTerminal { key: (*index as u32).into() }
       } else {
-        let index = p_map.get(&sym.to_plain()).unwrap();
+        let index = p_map.get(&sym).unwrap();
         SymbolId::DBNonTerminalToken {
           prod_key: (*index as u32).into(),
-          sym_key: symbols.get(sym).map(|i| (*i as u32).into()),
-          precedence,
+          sym_key:  symbols.get(sym).map(|i| (*i as u32).into()),
         }
       }
     }
@@ -591,15 +574,13 @@ fn insert_symbol(symbol_map: &mut OrderedMap<SymbolId, usize>, sym: &SymbolId) {
 /// Symbols are converted into individual character/byte values that allow
 /// scanner parsers to scan a single character/byte/codepoint at time to
 /// recognize a token.
-fn convert_symbols_to_scanner_symbols(rules: &mut [Rule], s_store: &IStringStore, is_token: bool) {
+fn convert_sym_refs_to_token_sym_refs(rules: &mut [Rule], s_store: &IStringStore) {
   for rule in rules {
     let syms = rule
       .symbols
       .iter()
       .flat_map(|sym_ref| match sym_ref.id {
-        SymbolId::Token { val, precedence } => {
-          let precedence = (!is_token).then(|| precedence).unwrap_or_default();
-
+        SymbolId::Token { val } => {
           let guarded_str = val.to_string(s_store);
           let string = guarded_str.as_str();
 
@@ -613,11 +594,11 @@ fn convert_symbols_to_scanner_symbols(rules: &mut [Rule], s_store: &IStringStore
               let mut tok_sym_ref = sym_ref.clone();
               if c.is_ascii() {
                 let char = c as u8;
-                tok_sym_ref.id = SymbolId::Char { char, precedence: precedence };
+                tok_sym_ref.id = SymbolId::Char { char };
                 tok_sym_ref.original_index = if i == last { sym_ref.original_index } else { 99999 };
               } else {
                 let val = c as u32;
-                tok_sym_ref.id = SymbolId::Codepoint { precedence: precedence, val };
+                tok_sym_ref.id = SymbolId::Codepoint { val };
                 tok_sym_ref.original_index = if i == last { sym_ref.original_index } else { 99999 };
               }
               tok_sym_ref

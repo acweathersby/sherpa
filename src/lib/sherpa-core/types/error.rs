@@ -1,4 +1,3 @@
-use ::std::fmt::Display;
 use std::{
   path::PathBuf,
   string::{FromUtf16Error, FromUtf8Error},
@@ -6,7 +5,6 @@ use std::{
 };
 
 pub(crate) mod severity {
-  use std::default;
 
   /// Severity types of SherpaErrors
   #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]

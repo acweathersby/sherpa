@@ -50,7 +50,7 @@ pub(crate) fn build_ir<'db>(j: &mut Journal, graph: &Graph<'db>, entry_name: ISt
   #[cfg(debug_assertions)]
   debug_assert!(!output.is_empty(), "This graph did not yield any states! \n{}", graph.debug_string());
 
-  j.report_mut().ok_or_convert_to_error(output.into_values().collect())
+  j.report_mut().wrap_ok_or_return_errors(output.into_values().collect())
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -326,7 +326,7 @@ fn add_match_expr<'db>(
 }
 
 fn build_body<'db>(state: &State, successor: &State, graph: &Graph<'db>, goto_state_id: Option<IString>) -> Vec<String> {
-  let is_scanner = graph.is_scan();
+  let is_scanner = graph.is_scanner();
   let mut body_string: Vec<String> = Array::new();
   let s_type = successor.get_type();
   let db = graph.get_db();
@@ -411,7 +411,7 @@ pub(super) fn create_ir_state_name(graph: &Graph, origin_state: Option<&State>, 
   if origin_state.is_some_and(|s| s.get_id() == target_state.get_id()) {
     "%%%%".to_string()
   } else {
-    graph.is_scan().then_some("s").unwrap_or("p").to_string() + "_" + &target_state.get_hash().to_string()
+    graph.is_scanner().then_some("s").unwrap_or("p").to_string() + "_" + &target_state.get_hash().to_string()
   }
 }
 

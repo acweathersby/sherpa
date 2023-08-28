@@ -1043,7 +1043,7 @@ pub fn get_body_symbol_reference<'a>(db: &ParserDatabase, rule_id: DBRuleKey, re
 ///
 /// Returns `None` if the index is greater then the number of symbols.  
 pub fn get_indexed_body_ref(rule: &Rule, i: usize) -> RefResult {
-  rule.symbols.iter().enumerate().filter(|(_, sym_ref)| sym_ref.original_index == i).map(|(a, b)| (a, b.clone())).last()
+  rule.symbols.iter().enumerate().filter(|(_, sym_ref)| sym_ref.original_index == i as u32).map(|(a, b)| (a, b.clone())).last()
 }
 
 pub fn get_named_body_ref(db: &ParserDatabase, rule: &Rule, val: &str) -> RefResult {

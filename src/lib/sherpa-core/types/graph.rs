@@ -414,7 +414,7 @@ impl<'follow, 'db: 'follow> Graph<'db> {
     kernel_items: Items<'db>,
   ) -> StateId {
     let id = StateId(self.states.len() as u32);
-    let is_scan = self.is_scan();
+    let is_scan = self.is_scanner();
 
     debug_assert!(!matches!(symbol, SymbolId::NonTerminalToken { .. }));
 
@@ -457,7 +457,7 @@ impl<'follow, 'db: 'follow> Graph<'db> {
     self.db
   }
 
-  pub fn is_scan(&self) -> bool {
+  pub fn is_scanner(&self) -> bool {
     matches!(self.mode, GraphMode::Scanner)
   }
 
@@ -497,6 +497,10 @@ impl<'follow, 'db: 'follow> Graph<'db> {
     }
 
     self.states[0].kernel_items.iter().any(|i| i.rule_id == item.rule_id)
+  }
+
+  pub fn get_mode(&self) -> GraphMode {
+    self.mode
   }
 
   #[allow(unused)]

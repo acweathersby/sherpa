@@ -74,7 +74,7 @@ impl ProductionId {
   }
 
   pub fn as_tok_sym(&self) -> SymbolId {
-    SymbolId::NonTerminalToken { id: self.as_scan_prod(), precedence: 0 }
+    SymbolId::NonTerminalToken { id: self.as_scan_prod() }
   }
 
   pub fn as_parse_prod(&self) -> ProductionId {
@@ -153,14 +153,17 @@ pub struct SymbolRef {
   /// The reference name of this symbol
   pub annotation: IString,
   /// The original positional index of the symbol within the original base rule.
-  pub original_index: usize,
+  pub original_index: u32,
+  /// The precedence of this symbol when present in a scanner state
+  pub token_precedence: u16,
+  /// Precedence of this symbol when present in a parser state
+  pub symbol_precedence: u16,
 }
 
 impl Hash for SymbolRef {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
     //`tok` is ignored since it does not contribute to
     // the uniqueness of a symbol.
-
     self.id.hash(state);
     self.annotation.hash(state);
     self.original_index.hash(state);

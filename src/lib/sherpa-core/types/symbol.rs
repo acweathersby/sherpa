@@ -10,21 +10,21 @@ pub const DEFAULT_SYM_ID: u32 = 0xFDEFA017;
 pub enum SymbolId {
   Undefined,
   Default,
-  EndOfFile { precedence: u16 },
-  ClassSpace { precedence: u16 },
-  ClassHorizontalTab { precedence: u16 },
-  ClassNewLine { precedence: u16 },
-  ClassIdentifier { precedence: u16 },
-  ClassNumber { precedence: u16 },
-  ClassSymbol { precedence: u16 },
-  Token { precedence: u16, val: IString },
+  EndOfFile,
+  ClassSpace,
+  ClassHorizontalTab,
+  ClassNewLine,
+  ClassIdentifier,
+  ClassNumber,
+  ClassSymbol,
+  Token { val: IString },
   NonTerminal { id: ProductionId },
-  NonTerminalToken { precedence: u16, id: ProductionId },
-  DBNonTerminalToken { precedence: u16, prod_key: DBProdKey, sym_key: Option<DBTokenKey> },
+  NonTerminalToken { id: ProductionId },
+  DBNonTerminalToken { prod_key: DBProdKey, sym_key: Option<DBTokenKey> },
   DBNonTerminal { key: DBProdKey },
   DBToken { key: DBTokenKey },
-  Char { char: u8, precedence: u16 },
-  Codepoint { precedence: u16, val: u32 },
+  Char { char: u8 },
+  Codepoint { val: u32 },
   NonTerminalState { id: ProductionId },
 }
 
@@ -107,54 +107,6 @@ impl SymbolId {
     }
   }
 
-  pub fn precedence(&self, db: &ParserDatabase) -> u16 {
-    use SymbolId::*;
-    match *self {
-      EndOfFile { precedence } => precedence,
-      ClassSpace { precedence } => precedence,
-      ClassHorizontalTab { precedence } => precedence,
-      ClassNewLine { precedence } => precedence,
-      ClassIdentifier { precedence } => precedence,
-      ClassNumber { precedence } => precedence,
-      ClassSymbol { precedence } => precedence,
-      Token { precedence, .. } => precedence,
-      NonTerminalToken { precedence, .. } => precedence,
-      Codepoint { precedence, .. } => precedence,
-      DBNonTerminalToken { precedence, .. } => precedence,
-      DBToken { key: index } => db.sym(index).precedence(db),
-      Char { precedence, .. } => precedence,
-      _ => 0,
-    }
-  }
-
-  /// Returns an unprecedented version of the symbol
-  pub fn to_plain(&self) -> Self {
-    self.to_precedence(0)
-  }
-
-  pub fn to_precedence(&self, precedence: u16) -> Self {
-    use SymbolId::*;
-    match *self {
-      EndOfFile { .. } => EndOfFile { precedence },
-      ClassSpace { .. } => ClassSpace { precedence },
-      ClassHorizontalTab { .. } => ClassHorizontalTab { precedence },
-      ClassNewLine { .. } => ClassNewLine { precedence },
-      ClassIdentifier { .. } => ClassIdentifier { precedence },
-      ClassNumber { .. } => ClassNumber { precedence },
-      ClassSymbol { .. } => ClassSymbol { precedence },
-      Token { val, .. } => Token { val, precedence },
-      NonTerminal { id, .. } => NonTerminal { id },
-      NonTerminalToken { id, .. } => NonTerminalToken { id, precedence },
-      Codepoint { val, .. } => Codepoint { val, precedence },
-      DBNonTerminal { key } => DBNonTerminal { key },
-      DBNonTerminalToken { prod_key, sym_key, .. } => DBNonTerminalToken { prod_key, sym_key, precedence },
-      DBToken { key } => DBToken { key },
-      Char { char, .. } => Char { char, precedence },
-      Default => Default,
-      _ => Undefined,
-    }
-  }
-
   /// Returns a ProductionId for a token scanner derived from a standard symbol.
   pub fn to_prod_id(&self) -> ProductionId {
     use SymbolId::*;
@@ -210,8 +162,8 @@ impl SymbolId {
       DBNonTerminal { key } => (Into::<usize>::into(key)) as u32,
       DBToken { key, .. } => key.to_val(db),
       DBNonTerminalToken { sym_key, .. } => sym_key.map(|d| d.to_val(db)).unwrap_or(u32::MAX),
-      Token { precedence: _, val } => {
-        let val = val.to_string(db.string_store());
+      Token { val } => {
+        let val: String = val.to_string(db.string_store());
         match val.chars().next() {
           Some(char) => char as u32,
           _ => u32::MAX,
@@ -239,37 +191,29 @@ impl SymbolId {
       ClassIdentifier { .. } => &mut w + "c:id",
       ClassNumber { .. } => &mut w + "c:num",
       ClassSymbol { .. } => &mut w + "c:sym",
-      Token { val, precedence } => &mut w + "[" + val.to_str(db.string_store()).as_str() + "]" + print_precedence(precedence),
+      Token { val } => &mut w + "[" + val.to_str(db.string_store()).as_str() + "]",
       NonTerminalState { .. } => &mut w + "non_term_state",
       NonTerminal { .. } => &mut w + "non_term",
       NonTerminalToken { .. } => &mut w + "tk:" + "non_term",
-      Codepoint { val, precedence } => &mut w + "" + val.to_string() + print_precedence(precedence),
+      Codepoint { val } => &mut w + "" + val.to_string(),
       DBNonTerminal { key } => {
         let guard_str = db.prod_friendly_name_string(key);
         let name = guard_str.as_str();
         &mut w + name
       }
-      DBNonTerminalToken { prod_key, precedence, .. } => {
+      DBNonTerminalToken { prod_key, .. } => {
         let guard_str = db.prod_friendly_name_string(prod_key);
-        &mut w + "tk:" + guard_str + print_precedence(precedence)
+        &mut w + "tk:" + guard_str
       }
       DBToken { key: index } => &mut w + db.sym(index).debug_string(db),
-      Char { char, precedence } => {
+      Char { char } => {
         if char < 128 {
-          &mut w + "" + char::from(char).to_string() + print_precedence(precedence)
+          &mut w + "" + char::from(char).to_string()
         } else {
-          &mut w + "[ char:" + char.to_string() + "]{" + precedence.to_string() + "}"
+          &mut w + "[ char:" + char.to_string() + "]"
         }
       }
     };
     w.to_string()
-  }
-}
-
-fn print_precedence(precedence: u16) -> String {
-  if precedence > 0 {
-    "{".to_string() + &precedence.to_string() + "}"
-  } else {
-    "".to_string()
   }
 }

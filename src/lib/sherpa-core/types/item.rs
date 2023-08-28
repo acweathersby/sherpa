@@ -44,7 +44,17 @@ impl<'db> std::fmt::Debug for Item<'db> {
 
 impl<'db> Hash for Item<'db> {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-    (self.rule_id, self.origin, self.origin_state, self.goal, self.len, self.sym_index).hash(state)
+    (
+      self.rule_id,
+      self.origin,
+      self.origin_state,
+      self.goal,
+      self.len,
+      self.sym_index,
+      self.token_precedence(),
+      self.symbol_precedence(),
+    )
+      .hash(state)
   }
 }
 
@@ -181,7 +191,7 @@ impl<'db> Item<'db> {
     self.db.prod_friendly_name(self.prod_index())
   }
 
-  /// The production ID the rule reduces to
+  /// The NonTerm the rule reduces to
   pub fn prod_index(&self) -> DBProdKey {
     self.db.rule_prod(self.rule_id)
   }
@@ -214,7 +224,7 @@ impl<'db> Item<'db> {
   /// Returns the item's active symbol.
   pub fn sym(&self) -> SymbolId {
     if self.is_complete() {
-      SymbolId::EndOfFile { precedence: 0 }
+      SymbolId::EndOfFile
     } else {
       self.rule().symbols[self.sym_index as usize].id
     }
@@ -243,50 +253,27 @@ impl<'db> Item<'db> {
     }
   }
 
-  /// Returns the precedence of the active symbol, or returns
-  /// precedence of the last symbol if the ItemRef is complete.
-  pub fn precedence(&self) -> u16 {
-    if self.is_complete() || true {
-      //self.rule().symbols[(self.sym_index - 1) as usize].id.precedence();
+  /// Get the precedence appropriate for the graph mode
+  pub fn precedence(&self, mode: GraphMode) -> u16 {
+    match mode {
+      GraphMode::Parser => self.symbol_precedence(),
+      GraphMode::Scanner => self.token_precedence(),
+    }
+  }
 
-      let p = match self.origin {
-        Origin::TokenGoal(s) => self.db.token(s).sym_id.precedence(self.db),
-        Origin::ProdGoal(p) => self.db.prod_sym(p).precedence(self.db),
-        _ => 0,
-      };
-
-      //println!("{} {{{}}}", self.debug_string(), p);
-
-      p
+  pub fn token_precedence(&self) -> u16 {
+    if self.is_complete() {
+      self.rule().symbols[(self.sym_index - 1) as usize].token_precedence
     } else {
-      0
-      //self.rule().symbols[self.sym_index as usize].id.precedence()
+      self.rule().symbols[self.sym_index as usize].token_precedence
     }
   }
 
   pub fn symbol_precedence(&self) -> u16 {
     if self.is_complete() {
-      //self.rule().symbols[(self.sym_index - 1) as usize].id.precedence();
-
-      let p = match self.origin {
-        Origin::TokenGoal(s) => self.db.token(s).sym_id.precedence(self.db),
-        Origin::ProdGoal(p) => self.db.prod_sym(p).precedence(self.db),
-        _ => 0,
-      };
-
-      //println!("{} {{{}}}", self.debug_string(), p);
-
-      p
+      self.rule().symbols[(self.sym_index - 1) as usize].symbol_precedence as u16
     } else {
-      self.rule().symbols[self.sym_index as usize].id.precedence(self.db)
-    }
-  }
-
-  pub fn exclusivity(&self) -> u16 {
-    if self.is_complete() {
-      self.rule().symbols[(self.sym_index - 1) as usize].id.precedence(self.db)
-    } else {
-      self.rule().symbols[self.sym_index as usize].id.precedence(self.db)
+      self.rule().symbols[self.sym_index as usize].symbol_precedence as u16
     }
   }
 
@@ -303,7 +290,6 @@ impl<'db> Item<'db> {
     if self.is_null() {
       format!("null")
     } else {
-      let rule = self.rule();
       let s_store = self.db.string_store();
 
       let mut string = self
@@ -316,14 +302,29 @@ impl<'db> Item<'db> {
 
       string += " >";
 
-      for (index, SymbolRef { id, .. }) in rule.symbols.iter().enumerate() {
-        if index == self.sym_index as usize {
+      let mut item = Some(self.to_start());
+
+      while let Some(i) = item.clone() {
+        if i.is_complete() {
+          break;
+        };
+
+        if i.sym_index == self.sym_index {
           string += " •";
         }
 
         string += " ";
 
-        string += &id.debug_string(self.db)
+        string += &i.sym().debug_string(self.db);
+
+        string += &match (i.symbol_precedence(), i.token_precedence()) {
+          (0, 0) => String::default(),
+          (sym, 0) => "{".to_string() + &sym.to_string() + "}",
+          (0, tok) => "{:".to_string() + &tok.to_string() + "}",
+          (sym, tok) => "{".to_string() + &sym.to_string() + ":" + &tok.to_string() + "}",
+        };
+
+        item = i.increment();
       }
 
       if self.is_complete() {
@@ -346,16 +347,19 @@ impl<'a, 'db: 'a, T: Iterator<Item = Item<'db>>> ItemContainerIter<'a, 'db> for 
 
 macro_rules! common_iter_functions {
   () => {
-    fn get_max_precedence(self) -> u32 {
-      self.map(|i| i.precedence()).max().unwrap_or_default() as u32
+    fn get_max_precedence(self, mode: GraphMode) -> u16 {
+      match mode {
+        GraphMode::Parser => self.get_max_symbol_precedence(),
+        GraphMode::Scanner => self.get_max_token_precedence(),
+      }
     }
 
-    fn get_max_sym_precedence(self) -> u32 {
-      self.map(|i| i.symbol_precedence()).max().unwrap_or_default() as u32
+    fn get_max_token_precedence(self) -> u16 {
+      self.map(|i| i.token_precedence()).max().unwrap_or_default()
     }
 
-    fn get_max_exclusivity(self) -> u32 {
-      self.map(|i| i.exclusivity()).max().unwrap_or_default() as u32
+    fn get_max_symbol_precedence(self) -> u16 {
+      self.map(|i| i.symbol_precedence()).max().unwrap_or_default()
     }
 
     fn intersects(&mut self, set: &ItemSet) -> bool {

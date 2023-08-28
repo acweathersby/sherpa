@@ -43,6 +43,7 @@ pub(crate) fn resolve_grammar_path(path: &PathBuf, current_grammar_dir: &PathBuf
   )
 }
 
+#[derive(Default)]
 pub struct SymbolData<'a> {
   pub annotation:       String,
   pub is_list:          bool,
@@ -50,38 +51,22 @@ pub struct SymbolData<'a> {
   pub is_optional:      bool,
   pub is_shift_nothing: bool,
   pub is_eof:           bool,
-  pub precedence:       u32,
+  pub sym_precedence:   u16,
+  pub tok_precedence:   u16,
   pub sym_atom:         Option<&'a ASTNode>,
 }
 
 /// Get a flattened view of a symbol's immediate AST
 pub fn get_symbol_details<'a>(mut sym: &'a ASTNode) -> SymbolData<'a> {
-  let mut data = SymbolData {
-    annotation:       String::new(),
-    is_list:          false,
-    is_group:         false,
-    is_optional:      false,
-    is_shift_nothing: false,
-    is_eof:           false,
-    precedence:       0,
-    sym_atom:         None,
-  };
+  let mut data = SymbolData::default();
 
   loop {
     match sym {
       ASTNode::AnnotatedSymbol(annotated) => {
-        if annotated.reference.len() > 0 {
-
-          debug_assert_eq!(
-            &annotated.reference[0..1], "^",
-            "Annotation values are no longer prefixed with \"^\". The following line needs to be changed to:
-            data.annotation = annotated.reference.clone(); 
-            This assert can be removed after the change is made.");
-
-            data.annotation = annotated.reference[1..].to_string();
-          }
-        //data.precedence = annotated.precedence.is_some();
         data.is_optional |= annotated.is_optional;
+        let (sym_prec, tok_prec) = annotated.precedence.as_ref().and_then(|p| Some((p.sym_prec, p.kot_prec)) ).unwrap_or_default();
+        data.sym_precedence = sym_prec as u16;
+        data.tok_precedence = tok_prec as u16;
         sym = &annotated.symbol;
       }
       ASTNode::GroupProduction(_) => {
@@ -94,7 +79,7 @@ pub fn get_symbol_details<'a>(mut sym: &'a ASTNode) -> SymbolData<'a> {
         break;
       }
       ASTNode::TerminalToken( t) => {
-        data.precedence = data.precedence.max(t.is_exclusive as u32);
+        data.tok_precedence = data.tok_precedence.max(t.is_exclusive as u16);
         break;
       }
       ASTNode::EOFSymbol(_) => {

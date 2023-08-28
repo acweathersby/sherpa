@@ -113,11 +113,11 @@ impl Report {
     self._errors.values().collect()
   }
 
-  /// Returns the `return_val` in `SherpaResult::Ok()` if there are no errors in
-  /// the report, otherwise returns a `SherpResult::Err(SherpaError::Report)`
-  /// type result.
+  /// Returns the `return_val` as `SherpaResult::Ok(return_val)` if there are no
+  /// errors in the active report. Otherwise returns a
+  /// `SherpaResult::Err<SherpaErrors::Multi>` result.
   #[track_caller]
-  pub fn ok_or_convert_to_error<T>(&mut self, return_val: T) -> SherpaResult<T> {
+  pub fn wrap_ok_or_return_errors<T>(&mut self, return_val: T) -> SherpaResult<T> {
     match (self._errors.len() == 0, self.is_sink) {
       (true, false) => SherpaResult::Ok(return_val),
       (false, false) => Err(SherpaError::Multi(self.errors().into_iter().cloned().collect())),
