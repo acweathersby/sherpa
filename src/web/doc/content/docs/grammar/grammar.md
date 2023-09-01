@@ -7,16 +7,95 @@ draft: false
 
 # Writing A Sherpa Grammar
 
-A Sherpa grammar file is a document written in a [BNF](https://en.wikipedia.org/wiki/Backus%E2%80%93Naur_form) influenced 
-syntax that describes a parser or set of parsers. Sherpa grammars are modular in that then can be defined in multiple files, 
-productions from different files can be combined in numerous ways, and  multiple sub-grammars that can be exposed as separate parsers 
-from the same compiled package.
+A Sherpa grammar file is a document, written in a syntax inspired by [EBNF](https://en.wikipedia.org/wiki/Extended_Backus%E2%80%93Naur_form) and common regex expressions, that is used to define a specific language. Sherpa uses grammars to create parsers and fuzzer
 
-## A Brief Introduction
+## A Brief Introduction To Grammars
 
-A single grammar is composed of one or more productions that define how a particular subset of grammar should be parsed. The syntax
-of a basic production is `"<>" <production_name> ">" <production_rules>`, where `production_name` is a sequence of alphanumeric 
- and/or `_` underscore characters, and `production_rules` is one or more production rules separated by a `|` character:
+> If you are familia with grammars you may want to skip to [here](#sherpa-rules) to get to the meat of things.
+
+A grammar is composed of one or more rules, with each rule defining how two sets of symbols relate to each other. The general form of a rule is  `A -> a` where the `->` separating the left part of the rule from its right. 
+
+When we replace the set of symbols on the left part of the rule with the symbols on the right part, we say we are generating a string in the language the grammar defines. 
+
+> e.g. With the rules `feline -> "tiger"` and `canine -> "wolf"` and `hybrid -> feline canine` we can construct a new string belonging to this language, and in this case the only string that belongs to the langauge, by performing a sequence of transformations like this:
+>
+> hybrid
+>
+> feline canine
+>
+> `"tiger"` canine
+>
+> [`"tigerwolf"`](https://en.wikipedia.org/wiki/Thylacine)
+
+When the right part of a rule is replaced by its left side, we are discovering whether a particular string belongs to the language, or to put it another way, whether the string can be _recognized_ as a member of the language. If we are able to replace all parts of a string with the left parts of various rules, and are then able to iteratively repeat this process until we are left with the left part of a single rule, designated as the start rule, then we can be certain the original string belonged to our language. This process is the heart of parsing.
+
+> e.g. In this case, givin the rules 
+> - `mountain ->  "Everest"`
+> - `range    ->  "Himalayas"`
+> - `sentence ->  mountain " is in the" range " range` 
+>
+> when we have the string `"Everest is in the Himalayas"` it can be replaced with the left parts of our rules in a sequence like this: 
+> 
+> `"Everest is in the Himalayas"` 
+> 
+> mountain `" is in the Himalayas"` 
+>
+> mountain `" is in the "` range
+>
+> sentence
+
+ In general, the number of symbols on either side of the rule is unlimited, but Sherpa grammars are based on Context Free Grammars, and as such restrict the number of symbols on the left to just one. The symbol on the left side of a rule is called a _non-terminal_, and the symbols on the right side can be a mixture of other _non-terminals_ ( including the _non-terminal_ on the left part of a rule ) and _terminals_, which are the atomic parts of the grammar and cannot  the left part of a rule and hence cannont be expanded into other symbols. 
+ 
+ So to reiterate, to generate a string in a language defined by a grammar we start with a single _non-terminal_, and replace it through an iterative process of applying grammars rules from left to right until we are left with only _terminal_ symbols. 
+ 
+ Going in the opposite direction, we can take a string and find all matching _terminal_ symbols in  that string. Then we can go through an iterative process of applying our grammar rules from right to left,  replacing both  _terminals_ and _non-terminal_ with other _non-terminals_. If we get to a point where we are left with a single _non-terminal_ that happens to be our goal, then the string has been successfully parsed.
+
+
+### The Sherpa Style
+
+A rule in a Sherpa grammar looks appears like this 
+
+```
+<> name > sym1 sym2 ... symN
+``` 
+
+where `name` on the left of `>` is our _nonterminal_ symbol, and the `sym*`s to the right of the `>` represent other _nonterminals_ and/or _terminals_ symbols. 
+
+
+## Sherpa Rules
+
+### Multiple Rule Bodies
+
+### Grouping
+
+### Lists
+
+## Symbols
+
+### Tokens
+
+### Classes
+
+### Token Nonterminals
+
+### 
+
+## The Preamble
+
+### Exporting Entrypoints
+
+### Importing Grammars
+
+### Ignored Symbols
+
+## Imported Grammars
+
+
+
+
+> The process outlined above is how Concrete Syntax Trees are created, where every part of the input is defined within the context of a _nonterminal_. Other representations of a parsed input usually involve abstracting away details of the input, or performing further transformations beyond the basic reduce operation
+
+of a basic production is `"<>" <production_name> ">" <production_rules>`, where `production_name` is a sequence of alphanumeric and/or `_` underscore characters, and `production_rules` is one or more production rules separated by a `|` character:
 
 ```shepa
 <> Start_Production > rule1 | rule2 | rule3 | ...
