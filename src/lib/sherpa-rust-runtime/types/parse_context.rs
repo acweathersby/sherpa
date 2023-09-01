@@ -466,11 +466,10 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
 
   /// Returns an empty success result if the entire input was successfully
   /// parsed
-  fn completes(&mut self, entry_point: u32) -> Result<(), SherpaParseError> {
+  fn completes<'debug>(&mut self, entry_point: u32, debug: &mut Option<&'debug mut DebugFn>) -> Result<(), SherpaParseError> {
     self.init_parser(entry_point);
-    let mut debug = None;
     loop {
-      match self.get_next_action(&mut debug) {
+      match self.get_next_action(debug) {
         ParseAction::Accept { .. } => {
           break Result::Ok(());
         }
@@ -517,6 +516,13 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
               expected_nterm: target_nonterminal_id,
               actual_nterm: nonterminal_id,
             }
+          } else if !self.head_at_end() {
+            ShiftsAndSkipsResult::FailedParse(SherpaParseError {
+              inline_message: "Failed to read entire input".to_string(),
+              last_nonterminal: nonterminal_id,
+              loc: Default::default(),
+              message: "Failed to read entire input".to_string(),
+            })
           } else {
             ShiftsAndSkipsResult::Accepted { shifts, skips }
           };
@@ -542,13 +548,13 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
         ParseAction::Skip { token_byte_offset, token_byte_length, .. } => {
           skips.push(self.get_input()[token_byte_offset as usize..(token_byte_offset + token_byte_length) as usize].to_string());
         }
-        ParseAction::Shift { token_byte_length, token_byte_offset, .. } => {
+        ParseAction::Shift { token_byte_length, token_byte_offset, token_id, .. } => {
           let offset_start = token_byte_offset as usize;
           let offset_end = (token_byte_offset + token_byte_length) as usize;
 
           #[cfg(debug_assertions)]
           if let Some(debug) = debug {
-            debug(&DebugEvent::ShiftToken { offset_start, offset_end }, self.get_input());
+            debug(&DebugEvent::ShiftToken { offset_start, offset_end, token_id }, self.get_input());
           }
           shifts.push(self.get_input()[offset_start..offset_end].to_string());
         }
@@ -629,7 +635,7 @@ Concrete Syntax Tree structure."
           if let Some(debug) = debug {
             let offset_start = _token_byte_offset as usize;
             let offset_end = (_token_byte_offset + token_byte_length) as usize;
-            debug(&DebugEvent::ShiftToken { offset_start, offset_end }, self.get_input());
+            debug(&DebugEvent::ShiftToken { offset_start, offset_end, token_id }, self.get_input());
           }
         }
         ParseAction::Reduce { rule_id, nonterminal_id, symbol_count } => {

@@ -8,6 +8,8 @@ use crate::utils::create_u64_hash;
 
 use super::*;
 
+pub const OUT_SCOPE_INDEX: u32 = 0xFEEDDEED;
+
 /// Indicates the State type that generated
 /// the item
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -17,9 +19,11 @@ pub enum Origin {
   /// The goal non-terminal that this item or it's predecessors will reduce to
   NonTermGoal(DBNonTermKey),
   /// The goal symbol id that this item or its predecessors will recognize
-  TerminalGoal(DBTermKey),
+  TerminalGoal(DBTermKey, u16),
   /// The goal origin item set that this item will resolve to
   Peek(u64, StateId),
+  /// The goal is a goto kernel
+  Goto(StateId),
   // Out of scope item that was generated from the
   // completion of a token non-terminal.
   ScanCompleteOOS,
@@ -46,10 +50,10 @@ impl Origin {
   pub fn debug_string(&self, db: &ParserDatabase) -> String {
     match self {
       Origin::NonTermGoal(nterm) => {
-        format!("ProdGoal[ {} {:?} ]", db.nonterm_guid_name(*nterm).to_string(db.string_store()), nterm)
+        format!("NonTermGoal[ {} {:?} ]", db.nonterm_guid_name(*nterm).to_string(db.string_store()), nterm)
       }
-      Origin::TerminalGoal(sym_id) => {
-        format!("TokenGoal[ {:?} ]", sym_id)
+      Origin::TerminalGoal(sym_id, prec) => {
+        format!("TerminalGoal[ {:?} {prec} ]", sym_id)
       }
       _ => format!("{:?}", self),
     }
@@ -65,7 +69,7 @@ impl Origin {
 
   pub fn get_symbol(&self, db: &ParserDatabase) -> SymbolId {
     match self {
-      Origin::TerminalGoal(sym_id) => db.sym(*sym_id),
+      Origin::TerminalGoal(sym_id, ..) => db.sym(*sym_id),
       _ => SymbolId::Undefined,
     }
   }
@@ -79,20 +83,22 @@ pub enum StateType {
   Undefined,
   Start,
   Shift,
+  /// Shifts that occur on kernel items.
+  KernelShift,
   /// The completion of this branch will complete one or more kernel items.
-  KernelGoto,
+  NonTerminalResolve,
   /// The completion of this branch will complete one or more intermediary goto
   /// items.
-  GotoLoop,
-  GotoPass,
+  NonTerminalShiftLoop,
+  NonTerminalComplete,
   Peek,
-  PeekEnd,
+  PeekEndComplete,
   Complete,
   Follow,
   DifferedReduce,
   ShiftPrefix,
   AssignAndFollow(DBTermKey),
-  Reduce(DBRuleKey),
+  Reduce(DBRuleKey, usize),
   AssignToken(DBTermKey),
   /// Calls made on items within a state's closure but
   /// are not kernel items.
@@ -121,17 +127,17 @@ impl Default for StateType {
 impl StateType {
   pub fn is_goto(&self) -> bool {
     use StateType::*;
-    matches!(self, GotoLoop | GotoPass | KernelGoto)
+    matches!(self, NonTerminalShiftLoop | NonTerminalComplete | NonTerminalResolve)
   }
 
   #[cfg(debug_assertions)]
   fn debug_string(&self, db: &ParserDatabase) -> String {
     match self {
       Self::KernelCall(nterm) => {
-        format!("KernelCall({nterm:?})")
+        format!("KernelCall({})", db.nonterm_friendly_name_string(*nterm))
       }
       Self::InternalCall(nterm) => {
-        format!("InternalCall({nterm:?})",)
+        format!("InternalCall({})", db.nonterm_friendly_name_string(*nterm))
       }
       Self::AssignAndFollow(sym_id) => {
         format!("AssignAndFollow({})", db.sym(*sym_id).debug_string(db))
@@ -139,32 +145,30 @@ impl StateType {
       Self::AssignToken(sym_id) => {
         format!("AssignToken({})", db.sym(*sym_id).debug_string(db))
       }
-      Self::Reduce(nterm) => {
+      Self::Reduce(nterm, _) => {
         format!("Reduce({nterm:?})",)
       }
       _ => format!("{:?}", self),
     }
   }
 }
-pub const OUT_SCOPE_INDEX: u32 = 0xFEEDDEED;
 
 // State -------------------------------------------------------------
 
 #[derive(Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct State<'db> {
   id: StateId,
-  term_symbol: SymbolId,
+  term_symbol: PrecedentSymbol,
   t_type: StateType,
   parent: StateId,
   predecessors: OrderedSet<StateId>,
   kernel_items: ItemSet<'db>,
-  peek_resolve_items: OrderedMap<u64, Items<'db>>,
+  peek_resolve_items: OrderedMap<u64, ItemSet<'db>>,
   non_terminals: OrderedSet<Item<'db>>,
   reduce_item: Option<Item<'db>>,
   leaf_state: bool,
   closure: Option<OrderedSet<Item<'db>>>,
   root_closure: Option<OrderedSet<Item<'db>>>,
-  is_nonterminal_completer: bool,
 }
 
 impl<'db> Hash for State<'db> {
@@ -172,33 +176,28 @@ impl<'db> Hash for State<'db> {
     self.t_type.hash(state);
 
     self.term_symbol.hash(state);
-    self.is_nonterminal_completer.hash(state);
 
     for item in &self.kernel_items {
       item.rule_id.hash(state);
       item.sym_index.hash(state);
       item.origin.hash(state);
-
-      /*       match item.origin {
-        Origin::Peek(hash_id, _) => hash_id.hash(state),
-        other => other.hash(state),
-      } */
+      item.goto_distance.hash(state);
     }
   }
 }
 
 impl<'db> State<'db> {
-  pub fn set_nonterm_complete(&mut self, is_nonterminal_completer: bool) {
-    self.is_nonterminal_completer = is_nonterminal_completer;
-  }
-
-  pub fn is_nonterminal_completer(&self) -> bool {
-    self.is_nonterminal_completer
-  }
-
   /// Set a group of items that a peek item will resolve to.
-  pub fn set_peek_resolve_items(&mut self, peek_origin_key: u64, items: Items<'db>) {
-    self.peek_resolve_items.insert(peek_origin_key, items);
+  pub fn set_peek_resolve_state(&mut self, peek_origin_key: u64, state: ItemSet<'db>) {
+    self.peek_resolve_items.insert(peek_origin_key, state);
+  }
+
+  pub fn get_resolve_state(&self, peek_origin_key: u64) -> ItemSet<'db> {
+    self.peek_resolve_items.get(&peek_origin_key).unwrap().clone()
+  }
+
+  pub fn peek_resolve_state_len(&self) -> usize {
+    self.peek_resolve_items.len()
   }
 
   pub fn get_hash(&self) -> u64 {
@@ -206,10 +205,6 @@ impl<'db> State<'db> {
     let mut hasher = DefaultHasher::new();
     self.hash(&mut hasher);
     hasher.finish()
-  }
-
-  pub fn get_resolve_items(&self, peek_origin_key: u64) -> Items<'db> {
-    self.peek_resolve_items.get(&peek_origin_key).unwrap().clone()
   }
 
   pub fn calculate_closure(&mut self, is_scanner: bool, db: &'db ParserDatabase) {
@@ -226,7 +221,7 @@ impl<'db> State<'db> {
         let mut oos_closure = closure.clone();
 
         for nterm in &nterms {
-          for item in db.follow_items(*nterm) {
+          for item in db.nonterm_follow_items(*nterm) {
             let i = item;
             if !sigs.contains(&(i.rule_id, i.sym_index)) {
               oos_closure.insert(i.to_origin_state(state_id).to_oos_index());
@@ -270,6 +265,10 @@ impl<'db> State<'db> {
     self.id
   }
 
+  pub fn get_skipped(&self) -> OrderedSet<SymbolId> {
+    self.kernel_items_ref().iter().filter_map(|i| i.get_skipped()).flatten().cloned().collect()
+  }
+
   pub fn set_non_terminals(&mut self, non_terms: &BTreeSet<Item<'db>>) {
     self.non_terminals = non_terms.clone();
   }
@@ -278,12 +277,16 @@ impl<'db> State<'db> {
     self.t_type
   }
 
+  pub fn has_goto_state(&self) -> bool {
+    self.non_terminals.len() > 0
+  }
+
   pub fn get_goto_state(&self) -> Option<Self> {
     if self.non_terminals.len() > 0 {
       Some(Self {
         term_symbol: self.term_symbol,
         id: self.id.to_goto(),
-        t_type: StateType::KernelGoto,
+        t_type: StateType::NonTerminalResolve,
         kernel_items: self.non_terminals.clone(),
         non_terminals: self.kernel_items.clone(),
         ..Default::default()
@@ -293,7 +296,7 @@ impl<'db> State<'db> {
     }
   }
 
-  pub(crate) fn get_symbol(&self) -> SymbolId {
+  pub(crate) fn get_symbol(&self) -> PrecedentSymbol {
     self.term_symbol
   }
 
@@ -301,7 +304,8 @@ impl<'db> State<'db> {
     self.parent
   }
 
-  pub fn set_kernal_items<T: ItemContainer<'db>>(&mut self, kernel_items: T, is_scanner: bool, db: &'db ParserDatabase) {
+  /// Add kernel items without adjusting their origin
+  pub fn set_kernel_items<T: ItemContainer<'db>>(&mut self, kernel_items: T, is_scanner: bool, db: &'db ParserDatabase) {
     let mut kernel_items =
       kernel_items.into_iter().map(|i| if i.origin_state.is_invalid() { i.to_origin_state(self.id) } else { i }).collect();
 
@@ -310,6 +314,7 @@ impl<'db> State<'db> {
     self.calculate_closure(is_scanner, db);
   }
 
+  /// Add kernel items and set their origin to this state.
   pub fn add_kernel_items<T: ItemContainer<'db>>(&mut self, kernel_items: T, is_scanner: bool, db: &'db ParserDatabase) {
     let mut kernel_items = kernel_items.into_iter().map(|i| i.to_origin_state(self.id)).collect();
 
@@ -318,8 +323,8 @@ impl<'db> State<'db> {
     self.calculate_closure(is_scanner, db);
   }
 
-  /// Returns true if the the call of the non-terminal leads to infinite loop
-  /// due to left recursion.
+  /// Returns true if the the call of the non-terminal can lead to an infinite
+  /// loop due to left recursion.
   pub fn conflicting_nonterminal_call(&self, nterm: DBNonTermKey, is_scanner: bool, db: &ParserDatabase) -> bool {
     if self.id.is_root() {
       let nterms = self.kernel_items.iter().map(|i| i.nonterm_index()).collect::<OrderedSet<_>>();
@@ -327,7 +332,7 @@ impl<'db> State<'db> {
       Items::start_items(nterm, db)
         .create_closure(is_scanner, self.id)
         .into_iter()
-        .any(|i| nterms.contains(&i.nonterm_index_at_sym().unwrap_or_default()) || nterms.contains(&i.nonterm_index()))
+        .any(|i| nterms.contains(&i.nontermlike_index_at_sym().unwrap_or_default()) || nterms.contains(&i.nonterm_index()))
     } else {
       false
     }
@@ -336,26 +341,23 @@ impl<'db> State<'db> {
   #[cfg(debug_assertions)]
   pub fn debug_string(&self, db: &'db ParserDatabase) -> String {
     let mut string = String::new();
-    string += &format!("\n\nSTATE -- [{:}][{:X}] --", self.id.0, self.get_hash());
+    string += &format!("\n\nSTATE -- [{:}][{:}] --", self.id.0, self.get_hash());
 
     if self.predecessors.len() > 0 {
       string += &format!(r##" preds [{}]"##, self.predecessors.iter().map(|p| p.0.to_string()).collect::<Vec<_>>().join(" "));
     }
 
-    string += &format!("\n\n Type {:?}; Sym: [{}]", self.t_type.debug_string(db), self.term_symbol.debug_string(db),);
+    string += &format!(
+      "\n\n Type {:?}; Sym: [{}|{}]",
+      self.t_type.debug_string(db),
+      self.term_symbol.sym().debug_string(db),
+      self.term_symbol.precedence()
+    );
 
-    for (index, items) in &self.peek_resolve_items {
+    for (index, state) in &self.peek_resolve_items {
       string += &format!("\n  Peek Resolve: {}", index);
-      for item in items {
-        string += &format!("\n   - {}", item.debug_string());
-      }
-    }
 
-    if !self.non_terminals.is_empty() {
-      string += "\n-- non-terms:";
-      for item in &self.non_terminals {
-        string += &format!("\n   - {}", item.debug_string());
-      }
+      string += &format!("\n   - {:?}", state);
     }
 
     if let Some(item) = &self.reduce_item {
@@ -363,10 +365,19 @@ impl<'db> State<'db> {
       string += &format!("\n   - {}", item.debug_string());
     }
 
-    string += "\n";
-
+    string += "\n-- kernel-items:";
     for item in &self.kernel_items {
-      string += &format!("\n    {}", item.debug_string());
+      string += &format!("\n   - {}", item.debug_string());
+    }
+
+    if !self.non_terminals.is_empty() {
+      if let Some(goto_hash) = self.get_goto_state().and_then(|s| Some(s.get_hash())) {
+        string += &format!("\n\nGOTO -- [{:}][{:}] --", self.id.0, goto_hash);
+      }
+      string += "\n-- non-terms:";
+      for item in &self.non_terminals {
+        string += &format!("\n   - {}", item.debug_string());
+      }
     }
     string
   }
@@ -378,7 +389,8 @@ impl<'db> State<'db> {
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub enum GraphState {
   Normal,
-  Peek,
+  NormalGoto,
+  Peek(usize),
   _LongestMatch,
   _ShortestMatch,
   _FirstMatch,
@@ -394,17 +406,35 @@ pub enum GraphMode {
   Scanner,
 }
 
-pub struct Graph<'db> {
+use GraphState::*;
+impl GraphState {
+  pub fn peek_level(&self) -> usize {
+    match self {
+      Peek(level) => *level,
+      _ => 0,
+    }
+  }
+
+  pub fn currently_peeking(&self) -> bool {
+    match self {
+      Peek(_) => true,
+      _ => false,
+    }
+  }
+}
+
+pub struct GraphHost<'db> {
   state_map: OrderedMap<u64, StateId>,
   states: Array<State<'db>>,
   leaf_states: OrderedSet<StateId>,
   pending_states: VecDeque<(GraphState, StateId)>,
   mode: GraphMode,
   db: &'db ParserDatabase,
+  name: IString,
 }
 
-impl<'follow, 'db: 'follow> Graph<'db> {
-  pub fn new(db: &'db ParserDatabase, mode: GraphMode) -> Self {
+impl<'follow, 'db: 'follow> GraphHost<'db> {
+  pub fn new(db: &'db ParserDatabase, mode: GraphMode, name: IString) -> Self {
     Self {
       mode,
       state_map: Default::default(),
@@ -412,12 +442,13 @@ impl<'follow, 'db: 'follow> Graph<'db> {
       leaf_states: Default::default(),
       pending_states: Default::default(),
       db,
+      name,
     }
   }
 
   pub fn create_state(
     &mut self,
-    symbol: SymbolId,
+    symbol: PrecedentSymbol,
     t_type: StateType,
     parent: Option<StateId>,
     kernel_items: Items<'db>,
@@ -425,7 +456,7 @@ impl<'follow, 'db: 'follow> Graph<'db> {
     let id = StateId(self.states.len() as u32);
     let is_scan = self.is_scanner();
 
-    debug_assert!(!matches!(symbol, SymbolId::NonTerminalToken { .. }));
+    debug_assert!(!matches!(symbol.sym(), SymbolId::NonTerminalToken { .. }));
 
     let mut state = match parent {
       Some(parent) => State {
@@ -439,7 +470,7 @@ impl<'follow, 'db: 'follow> Graph<'db> {
       None => State { id, term_symbol: symbol, t_type, ..Default::default() },
     };
 
-    state.set_kernal_items(
+    state.set_kernel_items(
       if self.states.is_empty() {
         // Automatically setup lanes a goal values.
         kernel_items
@@ -496,6 +527,10 @@ impl<'follow, 'db: 'follow> Graph<'db> {
     }
   }
 
+  pub fn goal_nonterm_index_is(&self, index: u32) -> bool {
+    self.goal_items().iter().next().unwrap().nonterm_index().to_val() == index
+  }
+
   pub fn dequeue_pending_state(&mut self) -> Option<(GraphState, StateId)> {
     self.pending_states.pop_front()
   }
@@ -515,6 +550,16 @@ impl<'follow, 'db: 'follow> Graph<'db> {
   #[allow(unused)]
   pub fn goal_items(&self) -> &ItemSet {
     &self.states[0].kernel_items
+  }
+
+  pub fn get_state_name(&self, state: StateId) -> String {
+    if state.is_goto() {
+      format!("{}__S{:0>4}_gt", self.name.to_string(self.get_db().string_store()), state.core().0)
+    } else if state.is_post_reduce() {
+      format!("{}__S{:0>4}_pr", self.name.to_string(self.get_db().string_store()), state.core().0)
+    } else {
+      format!("{}__S{:0>4}", self.name.to_string(self.get_db().string_store()), state.0)
+    }
   }
 
   #[cfg(debug_assertions)]
@@ -545,7 +590,7 @@ impl<'follow, 'db: 'follow> Graph<'db> {
   }
 }
 
-impl<'db> Index<usize> for Graph<'db> {
+impl<'db> Index<usize> for GraphHost<'db> {
   type Output = State<'db>;
 
   fn index(&self, index: usize) -> &Self::Output {
@@ -553,7 +598,7 @@ impl<'db> Index<usize> for Graph<'db> {
   }
 }
 
-impl<'db> Index<StateId> for Graph<'db> {
+impl<'db> Index<StateId> for GraphHost<'db> {
   type Output = State<'db>;
 
   fn index(&self, index: StateId) -> &Self::Output {
@@ -561,7 +606,7 @@ impl<'db> Index<StateId> for Graph<'db> {
   }
 }
 
-impl<'db> IndexMut<StateId> for Graph<'db> {
+impl<'db> IndexMut<StateId> for GraphHost<'db> {
   fn index_mut(&mut self, index: StateId) -> &mut Self::Output {
     &mut self.states[index.0 as usize]
   }
@@ -592,8 +637,24 @@ impl StateId {
     Self(self.0 + (u32::MAX >> 2))
   }
 
+  pub fn is_post_reduce(&self) -> bool {
+    self.0 >= (u32::MAX >> 2) && !self.is_goto()
+  }
+
   pub fn to_goto(&self) -> Self {
     Self(self.0 + (u32::MAX >> 1))
+  }
+
+  pub fn is_goto(&self) -> bool {
+    self.0 >= (u32::MAX >> 1)
+  }
+
+  pub fn core(&self) -> StateId {
+    if self.is_goto() {
+      StateId(self.0 - (u32::MAX >> 1))
+    } else {
+      StateId(self.0 - (u32::MAX >> 2))
+    }
   }
 }
 

@@ -19,7 +19,7 @@ EXPORT dt::escaped_string as escaped
 
 <> grammar >
 
-    preamble(*) ( cf_rules | pratt_rules | peg_rules | append_rules | ir::state )(+)
+    [preamble(*) ( cf_rules | pratt_rules | peg_rules | append_rules | ir::state )(*)]
 
         :ast { t_Grammar, preamble:$1, rules:$2, tok }
 
@@ -37,7 +37,7 @@ EXPORT dt::escaped_string as escaped
 
 <> export_clause >
 
-    "EXPORT" sym::non_terminal (( "AS" | "as" ) tok::id)?
+    "EXPORT" sym::nonterminal (( "AS" | "as" ) tok::id)?
 
         :ast { t_Export, nonterminal:$2, reference:str($3) } 
 

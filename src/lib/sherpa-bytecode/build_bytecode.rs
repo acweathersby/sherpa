@@ -25,7 +25,7 @@ use std::collections::VecDeque;
 ///
 /// let (bytecode, state_lu) = compile_bytecode(&parser, true)?;
 ///
-/// assert_eq!(bytecode.len(), 1080);
+/// assert_eq!(bytecode.len(), 1078);
 ///
 /// # SherpaResult::Ok(())
 /// # }
@@ -149,6 +149,7 @@ fn build_statement<'db>(
         insert_u32_le(bc, *id);
       }
       parser::ASTNode::SetLine(_) => { /* ignored in bytecode parsers */ }
+      parser::ASTNode::SetTokenLen(_) => insert_op(bc, Op::PopGoto),
       _ => {
         unreachable!();
       }
@@ -209,6 +210,7 @@ fn get_proxy_address(name: IString, state_name_to_proxy: &mut OrderedMap<IString
   let proxy_address = (*state_name_to_proxy.entry(name).or_insert(val)) as u32;
   proxy_address
 }
+
 fn build_match<'db>(
   db: &'db ParserDatabase,
   matches: &parser::ASTNode,

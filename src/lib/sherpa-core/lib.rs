@@ -10,6 +10,7 @@
 
 #![allow(non_snake_case)]
 #![feature(box_patterns)]
+#![feature(core_intrinsics)]
 
 mod builder;
 mod compile;
@@ -62,4 +63,8 @@ pub use writer::code_writer::CodeWriter;
 #[cfg(debug_assertions)]
 pub mod test;
 
-pub use debug::{console_debugger, string_debugger, PrintConfig};
+#[cfg(debug_assertions)]
+pub use debug::{console_debugger, PrintConfig};
+
+#[cfg(debug_assertions)]
+pub use debug::file_debugger;

@@ -69,3 +69,26 @@ pub fn build_parse_db_from_source_str<'a, T>(
 ) -> SherpaResult<T> {
   test_fn(SherpaGrammarBuilder::new().add_source_from_string(source, &source_path)?.build_db(&source_path)?.into())
 }
+
+/// Writes to a debug file for testing
+#[cfg(debug_assertions)]
+pub fn write_debug_file<FileName: AsRef<std::path::Path>, Data: AsRef<[u8]>>(
+  db: &ParserDatabase,
+  file_name: FileName,
+  data: Data,
+  append: bool,
+) -> SherpaResult<()> {
+  use std::{env::*, fs::*, io::Write};
+
+  let file_dir = temp_dir().join("sherpa_testing").join(db.name_string());
+
+  let file_path = file_dir.join(file_name);
+
+  create_dir_all(file_dir)?;
+
+  let mut file = OpenOptions::new().append(append).truncate(!append).write(true).create(true).open(file_path)?;
+  file.write_all(data.as_ref())?;
+  file.flush()?;
+
+  Ok(())
+}

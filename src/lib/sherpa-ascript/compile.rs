@@ -448,16 +448,11 @@ fn resolve_structure_properties(j: &mut Journal, store: &mut AScriptStore, db: &
     let prop = store.props.get(&prop_id).unwrap();
     match get_resolved_type(store, &prop.type_val.clone().into()) {
       AScriptTypeVal::Undefined => {
-        undefined_props.insert(prop_id);
+        undefined_props.insert(prop_id.clone());
         // Property is undefined and should be removed from its respective
         // struct. A warning should also be generated indicating the
         // type is ignored.
-        if let Some(body_id) = prop.rule_ids.first() {
-          eprintln!(
-            "Warning, the property \n{}\n is undefined and will be ignored",
-            db.rule(*body_id).tok.blame(0, 0, "Test", None)
-          );
-        }
+        eprintln!("Warning, the property \n{}\n is undefined and will be ignored", prop.loc.blame(0, 0, "Test", None));
       }
       type_ => {
         store.props.get_mut(&prop_id).unwrap().type_val = TaggedType { type_, ..Default::default() };

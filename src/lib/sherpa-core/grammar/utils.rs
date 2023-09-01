@@ -1,5 +1,5 @@
 use super::super::parser::ASTNode;
-use crate::types::SherpaResult;
+use crate::types::*;
 use std::path::PathBuf;
 
 /// Resolves and verifies a grammar file path acquired from an `@IMPORT`
@@ -45,16 +45,17 @@ pub(crate) fn resolve_grammar_path(path: &PathBuf, current_grammar_dir: &PathBuf
 
 #[derive(Default)]
 pub struct SymbolData<'a> {
-  pub annotation:       String,
-  pub is_list:          bool,
-  pub is_group:         bool,
-  pub is_optional:      bool,
+  pub annotation: String,
+  pub is_list: bool,
+  pub is_group: bool,
+  pub is_optional: bool,
   pub is_shift_nothing: bool,
-  pub is_eof:           bool,
-  pub sym_precedence:   u16,
-  pub tok_precedence:   u16,
-  pub sym_atom:         Option<&'a ASTNode>,
+  pub is_eof: bool,
+  pub symbol_precedence: u16,
+  pub token_precedence: u16,
+  pub sym_atom: Option<&'a ASTNode>,
 }
+
 
 /// Get a flattened view of a symbol's immediate AST
 pub fn get_symbol_details<'a>(mut sym: &'a ASTNode) -> SymbolData<'a> {
@@ -63,10 +64,28 @@ pub fn get_symbol_details<'a>(mut sym: &'a ASTNode) -> SymbolData<'a> {
   loop {
     match sym {
       ASTNode::AnnotatedSymbol(annotated) => {
+        
         data.is_optional |= annotated.is_optional;
+
         let (sym_prec, tok_prec) = annotated.precedence.as_ref().and_then(|p| Some((p.sym_prec, p.kot_prec)) ).unwrap_or_default();
-        data.sym_precedence = sym_prec as u16;
-        data.tok_precedence = tok_prec as u16;
+        
+        data.symbol_precedence = sym_prec as u16;
+
+        if tok_prec > 0 {
+          data.token_precedence = data.token_precedence.max(tok_prec as u16 + CUSTOM_TOKEN_PRECEDENCE_BASELINE);
+        }
+
+        if !annotated.reference.is_empty() {
+
+        debug_assert_eq!(
+          &annotated.reference[0..1], "^",
+          "Annotation values are no longer prefixed with \"^\". The following line needs to be changed to:
+          data.annotation = annotated.reference.clone(); 
+          This assert can be removed after the change is made.");
+
+          data.annotation = annotated.reference[1..].to_string();
+        }
+        
         sym = &annotated.symbol;
       }
       ASTNode::GroupProduction(_) => {
@@ -79,19 +98,27 @@ pub fn get_symbol_details<'a>(mut sym: &'a ASTNode) -> SymbolData<'a> {
         break;
       }
       ASTNode::TerminalToken( t) => {
-        data.tok_precedence = data.tok_precedence.max(t.is_exclusive as u16);
+        data.token_precedence = data.token_precedence.max(TERMINAL_TOKEN_PRECEDENCE).max((t.is_exclusive as u16) * EXCLUSIVE_TERMINAL_TOKEN_PRECEDENCE);
         break;
       }
       ASTNode::EOFSymbol(_) => {
         data.is_eof = true;
+        data.token_precedence = u16::MAX;
+        break;
+      }
+      ASTNode::Production_Terminal_Symbol(_) => {
+        data.token_precedence = data.token_precedence.max(NON_TERMINAL_TOKEN_PRECEDENCE);
+        break;
+      }
+      ASTNode::ClassSymbol(_) => {
+        data.token_precedence = data.token_precedence.max(CLASS_TOKEN_PRECEDENCE);
         break;
       }
       // This symbol types are "real" symbols, in as much
       // as they represent actual parsable entities which are
       // submitted to the bytecode compiler for evaluation
-      ASTNode::ClassSymbol(_)
-      | ASTNode::NotEmptySet(_)
-      | ASTNode::Production_Terminal_Symbol(_)
+       ASTNode::NotEmptySet(_)
+
       //| ASTNode::TemplateProductionSymbol(_)
       | ASTNode::Production_Symbol(_)
       | ASTNode::Production_Import_Symbol(_) => {

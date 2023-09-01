@@ -26,6 +26,7 @@ pub enum DebugEvent<'a> {
   ShiftToken {
     offset_start: usize,
     offset_end:   usize,
+    token_id:     u32,
   },
   ByteValue {
     input_value: u32,
@@ -686,6 +687,8 @@ pub fn get_next_action<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M
 ) -> ParseAction {
   let mut address = stack.pop().unwrap();
   let mut state = stack.pop().unwrap();
+
+  debug_assert!(bc.len() > 0, "Bytecode is empty!");
 
   loop {
     if state < 1 {

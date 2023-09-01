@@ -31,23 +31,25 @@ pub(crate) fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
 ) -> SherpaResult<R> {
   let start_complexity = ComplexityMarker::new(db, parse_states.iter());
 
+  //return garbage_collect(db, parse_states, "initial purge");
+
   let parse_states = garbage_collect(db, parse_states, "initial purge")?;
 
   let parse_states = canonicalize_states(db, parse_states, None)?;
 
-  let parse_states = merge_branches(db, parse_states)?;
+  //let parse_states = merge_branches(db, parse_states)?;
 
   let parse_states = combine_state_branches(db, parse_states)?;
 
   let parse_states = canonicalize_states(db, parse_states, Some("state combine"))?;
 
-  let parse_states = inline_states(db, parse_states)?;
+  //let parse_states = inline_states(db, parse_states)?;
 
   let parse_states = inline_scanners(db, parse_states)?;
 
-  //let parse_states = create_byte_sequences(db, parse_states)?;
+  //let parse_states = _create_byte_sequences(db, parse_states)?;
 
-  let parse_states = merge_branches(db, parse_states)?;
+  //let parse_states = merge_branches(db, parse_states)?;
 
   let parse_states = remove_redundant_defaults(db, parse_states)?;
 
@@ -430,22 +432,32 @@ fn inline_states<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap)
             let name = own_gotos.goto.name.to_token();
 
             if let Some(parser::Statement { branch: b, non_branch: nb, transitive: t, .. }) = stmt_lu.get(&name) {
+              let mut t = t.clone();
+
+              // Pop the last goto (if present) if the incoming transitive action is `POP`
+              if own_gotos.pushes.len() > 0 && t.as_ref().is_some_and(|t| t.as_Pop().is_some()) {
+                t = None;
+                own_gotos.pushes.pop();
+              }
+
               let replace_branch = match b {
                 // We do not want to replace GOTOS if we have a Fail or Accept branch, so we make sure
                 // our push list is empty, allowing the only goto instruction to be replaced by the incoming
                 // statement's branch.
-                Some(ASTNode::Pass(..)) | Some(ASTNode::Fail(..)) | Some(ASTNode::Accept(..)) if own_gotos.pushes.is_empty() => {
+                Some(ASTNode::Pass(..)) | Some(ASTNode::Fail(..)) | Some(ASTNode::Accept(..) | ASTNode::Pop(..))
+                  if own_gotos.pushes.is_empty() =>
+                {
                   true
                 }
                 Some(ASTNode::Gotos(..)) | None => false,
                 _ => break,
               };
 
-              if match (&transitive, t) {
+              if match (&transitive, t.as_ref()) {
                 (Some(..), Some(..)) => false,
                 (None, None) | (Some(..), None) => true,
                 (None, Some(..)) => {
-                  *transitive = t.clone();
+                  *transitive = t;
                   true
                 }
               } {
@@ -681,10 +693,22 @@ fn canonicalize_states<'db, R: FromIterator<(IString, Box<ParseState>)>>(
   let mut state_name_to_canonical_state_name = HashMap::new();
   let mut hash_to_name_set = HashMap::new();
 
+  // Prefer root names.
   for (name, state) in &parse_states {
-    let hash = state.get_canonical_hash(db)?;
-    let canonical_name = hash_to_name_set.entry(hash).or_insert(*name).clone();
-    state_name_to_canonical_state_name.insert(*name, canonical_name);
+    if state.root {
+      let hash = state.get_canonical_hash(db)?;
+      let canonical_name = hash_to_name_set.entry(hash).or_insert(*name).clone();
+      println!("{}", canonical_name.to_string(db.string_store()));
+      state_name_to_canonical_state_name.insert(*name, canonical_name);
+    }
+  }
+
+  for (name, state) in &parse_states {
+    if !state.root {
+      let hash = state.get_canonical_hash(db)?;
+      let canonical_name = hash_to_name_set.entry(hash).or_insert(*name).clone();
+      state_name_to_canonical_state_name.insert(*name, canonical_name);
+    }
   }
 
   fn canonicalize_goto_name(db: &ParserDatabase, name: String, name_lu: &HashMap<IString, IString>) -> SherpaResult<String> {

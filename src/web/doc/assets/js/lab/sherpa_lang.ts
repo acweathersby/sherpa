@@ -46,6 +46,7 @@ class SherpaParser extends Parser {
         let input_string = input.read(ranges[0].from, ranges[0].to);
 
         let parser = sherpa.JSGrammarParser.new(input_string);
+
         let stack = sherpa.get_codemirror_parse_tree(input_string);
 
         this.ctx.addGrammar(input_string, "/");

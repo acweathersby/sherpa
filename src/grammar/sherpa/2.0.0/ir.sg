@@ -48,8 +48,6 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
     | "skip"        :ast { t_Skip, tok }
 
-    | "pop"         :ast { t_Pop, tok }
-
     | "scan"        :ast { t_Scan, tok }
 
     | "reset"       :ast { t_Reset, tok }
@@ -83,6 +81,9 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
         :ast { t_SetTokenLen, id: u32($2) }
 
     | "set-line"        :ast { t_SetLine, tok }
+
+
+    | "pop" tok::int?    :ast { t_Pop, popped_state: u32($2), tok }
 
 
 <> goto_sequence >

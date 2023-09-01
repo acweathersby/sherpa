@@ -1,9 +1,13 @@
 //! Functions for translating parse graphs into Sherpa IR code.
 use crate::{journal::Journal, types::*, utils::hash_group_btreemap, writer::code_writer::CodeWriter};
 use sherpa_rust_runtime::types::bytecode::InputType;
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-pub(crate) fn build_ir<'db>(j: &mut Journal, graph: &Graph<'db>, entry_name: IString) -> SherpaResult<Array<Box<ParseState>>> {
+pub(crate) fn build_ir<'db>(
+  j: &mut Journal,
+  graph: &GraphHost<'db>,
+  entry_name: IString,
+) -> SherpaResult<Array<Box<ParseState>>> {
   debug_assert!(entry_name.as_u64() != 0);
 
   let leaf_states = graph.get_leaf_states();
@@ -35,8 +39,8 @@ pub(crate) fn build_ir<'db>(j: &mut Journal, graph: &Graph<'db>, entry_name: ISt
     let successors = links.get(&state.get_id()).unwrap_or(&empty_hash);
 
     let goto_name = if let Some(goto) = state.get_goto_state() {
-      let goto_pair = convert_goto_state_to_ir(j, graph, &goto, successors)?;
-      let out = Some(goto_pair.1.name.clone());
+      let goto_pair = convert_nonterm_shift_state_to_ir(j, graph, &goto, successors)?;
+      let out = Some(goto_pair.1.hash_name.clone());
       output.insert(goto_pair.0, goto_pair.1);
       out
     } else {
@@ -59,15 +63,16 @@ enum SType {
   SymbolSuccessors,
 }
 
-fn convert_goto_state_to_ir<'db>(
+fn convert_nonterm_shift_state_to_ir<'db>(
   _j: &mut Journal,
-  graph: &Graph<'db>,
+  graph: &GraphHost<'db>,
   state: &State,
   successors: &OrderedSet<&State>,
 ) -> SherpaResult<(StateId, Box<ParseState>)> {
   let db = graph.get_db();
-  let successors =
-    successors.iter().filter(|s| matches!(s.get_type(), StateType::GotoPass | StateType::GotoLoop | StateType::KernelGoto));
+  let successors = successors.iter().filter(|s| {
+    matches!(s.get_type(), StateType::NonTerminalComplete | StateType::NonTerminalShiftLoop | StateType::NonTerminalResolve)
+  });
 
   let mut w = CodeWriter::new(vec![]);
 
@@ -76,13 +81,13 @@ fn convert_goto_state_to_ir<'db>(
   for (bc_id, (_nterm_name, s_name, transition_type)) in successors
     .into_iter()
     .map(|s| {
-      if let SymbolId::DBNonTerminal { key: index } = s.get_symbol() {
+      if let SymbolId::DBNonTerminal { key: index } = s.get_symbol().sym() {
         let nterm: usize = index.into();
         let nterm_name = db.nonterm_guid_name(index);
         (nterm, (nterm_name, create_ir_state_name(graph, None, s), s.get_type()))
       } else {
         #[cfg(debug_assertions)]
-        panic!("Invalid non-terminal type: {:?}  {}", s.get_symbol(), s.get_symbol().debug_string(db));
+        panic!("Invalid non-terminal type: {:?}  {}", s.get_symbol().sym(), s.get_symbol().sym().debug_string(db));
         #[cfg(not(debug_assertions))]
         panic!()
       }
@@ -91,13 +96,13 @@ fn convert_goto_state_to_ir<'db>(
   {
     let bc_id = bc_id.to_string();
     match transition_type {
-      StateType::KernelGoto => {
+      StateType::NonTerminalResolve => {
         let _ = (&mut w) + "\n( " + bc_id + " ){ goto " + s_name + " }";
       }
-      StateType::GotoLoop => {
+      StateType::NonTerminalShiftLoop => {
         let _ = (&mut w) + "\n( " + bc_id + " ){ push %%%% then goto " + s_name + " }";
       }
-      StateType::GotoPass => {
+      StateType::NonTerminalComplete => {
         let _ = (&mut w) + "\n( " + bc_id + " ){ pass }";
       }
       _ => unreachable!(),
@@ -106,16 +111,16 @@ fn convert_goto_state_to_ir<'db>(
 
   let _ = w.dedent() + "\n}";
 
-  let mut goto = Box::new(create_ir_state(graph, w, state)?);
+  let mut goto = Box::new(create_ir_state(graph, w, state, None)?);
 
-  goto.name = create_ir_state_name(graph, None, state).intern(db.string_store());
+  goto.hash_name = create_ir_state_name(graph, None, state).intern(db.string_store());
 
   SherpaResult::Ok((state.get_id(), goto))
 }
 
 fn convert_state_to_ir<'db>(
   _j: &mut Journal,
-  graph: &Graph<'db>,
+  graph: &GraphHost<'db>,
   state: &State,
   successors: &OrderedSet<&State>,
   entry_name: IString,
@@ -126,7 +131,7 @@ fn convert_state_to_ir<'db>(
   let s_store = db.string_store();
 
   let successor_groups = hash_group_btreemap(successors.clone(), |_, s| match s.get_type() {
-    StateType::GotoPass | StateType::GotoLoop | StateType::KernelGoto => SType::GotoSuccessors,
+    StateType::NonTerminalComplete | StateType::NonTerminalShiftLoop | StateType::NonTerminalResolve => SType::GotoSuccessors,
     _ => SType::SymbolSuccessors,
   });
 
@@ -135,13 +140,13 @@ fn convert_state_to_ir<'db>(
 
     w.indent();
 
-    add_tok_expr(successors, &mut w, db);
+    add_tok_expr(graph, state, successors, &mut w);
 
     let mut classes = classify_successors(successors, db);
 
-    add_match_expr(&mut w, state, graph, &mut classes, goto_state_id);
+    let scanner_data = add_match_expr(&mut w, state, graph, &mut classes, goto_state_id);
 
-    Some(Box::new(create_ir_state(graph, w, state)?))
+    Some(Box::new(create_ir_state(graph, w, state, scanner_data)?))
   } else {
     None
   };
@@ -162,26 +167,35 @@ fn convert_state_to_ir<'db>(
       }
       StateType::Complete => w.write("pass")?,
 
-      StateType::Reduce(rule_id) => w.write(&create_rule_reduction(rule_id, db))?,
+      StateType::Reduce(rule_id, completes) => {
+        debug_assert!(!state.kernel_items_ref().iter().any(|i| i.is_out_of_scope()));
+
+        w.write(&create_rule_reduction(rule_id, db))?;
+
+        for _ in 0..completes {
+          w.write("then set-tok-len 0".into())?;
+        }
+      }
       _ => unreachable!(),
     }
 
     if let Some(mut base_state) = base_state {
       if state_id.is_root() {
-        base_state.name = (entry_name.to_string(s_store) + "_then").intern(s_store);
+        base_state.hash_name = (entry_name.to_string(s_store) + "_then").intern(s_store);
       } else {
-        base_state.name = (base_state.name.to_string(s_store) + "_then").intern(s_store);
+        base_state.hash_name = (base_state.hash_name.to_string(s_store) + "_then").intern(s_store);
       }
 
-      w.w(" then goto ")?.w(&base_state.name.to_string(s_store))?;
+      w.w(" then goto ")?.w(&base_state.hash_name.to_string(s_store))?;
 
       out.push((state_id.to_post_reduce(), base_state));
     }
 
-    let mut ir_state = create_ir_state(graph, w, state)?;
+    let mut ir_state = create_ir_state(graph, w, state, None)?;
 
     if state_id.is_root() {
-      ir_state.name = entry_name;
+      ir_state.hash_name = entry_name;
+      ir_state.root = true;
     }
 
     out.push((state_id, Box::new(ir_state)));
@@ -191,12 +205,12 @@ fn convert_state_to_ir<'db>(
 
     w.w(" push ")?.w(&create_ir_state_name(graph, Some(state), &reduces[0]))?;
     w.w(" then goto ")?.w(&create_ir_state_name(graph, Some(state), &shifts[0]))?;
-    let base_state = Box::new(create_ir_state(graph, w, state)?);
+    let base_state = Box::new(create_ir_state(graph, w, state, None)?);
 
     out.push((state_id.to_post_reduce(), base_state));
   } else if let Some(mut base_state) = base_state {
     if state_id.is_root() {
-      base_state.name = entry_name;
+      base_state.hash_name = entry_name;
     }
 
     out.push((state_id, base_state));
@@ -206,7 +220,7 @@ fn convert_state_to_ir<'db>(
     !out.is_empty()
       || matches!(
         state.get_type(),
-        StateType::GotoPass
+        StateType::NonTerminalComplete
           | StateType::NonTermCompleteOOS
           | StateType::ScannerCompleteOOS
           | StateType::Complete
@@ -220,21 +234,24 @@ fn convert_state_to_ir<'db>(
   SherpaResult::Ok(out)
 }
 
-fn add_tok_expr(successors: &OrderedSet<&State>, w: &mut CodeWriter<Vec<u8>>, db: &ParserDatabase) {
-  let mut set_token = successors
-    .iter()
-    .filter(|s| matches!(s.get_type(), StateType::AssignToken(..) | StateType::AssignAndFollow(..)))
-    .collect::<Array<_>>();
+fn add_tok_expr(graph: &GraphHost, state: &State, successors: &OrderedSet<&State>, w: &mut CodeWriter<Vec<u8>>) {
+  let db = graph.get_db();
+  let mut set_token = successors.iter().filter_map(|s| match s.get_type() {
+    StateType::AssignToken(tok) | StateType::AssignAndFollow(tok) => Some(tok),
+    _ => None,
+  });
 
-  debug_assert!(set_token.len() <= 1);
+  if let Some(tok_id) = set_token.next() {
+    #[cfg(debug_assertions)]
+    debug_assert!(
+      set_token.all(|tok| tok == tok_id),
+      "[INTERNAL ERROR] Expected a single token assignment, got [ {} ]\n in scanner state: \n{}. \n Successor:{}",
+      set_token.map(|tok| db.token(tok).name.to_string(db.string_store())).collect::<Vec<_>>().join(" | "),
+      state.debug_string(db),
+      successors.iter().map(|s| { s.debug_string(db) }).collect::<Vec<_>>().join("\n")
+    );
 
-  if let Some(set_tok) = set_token.pop() {
-    match set_tok.get_type() {
-      StateType::AssignAndFollow(tok_id) | StateType::AssignToken(tok_id) => {
-        (w + "set-tok " + db.tok_val(tok_id).to_string()).prime_join(" then ");
-      }
-      _ => unreachable!(),
-    }
+    (w + "set-tok " + db.tok_val(tok_id).to_string()).prime_join(" then ");
   }
 }
 
@@ -243,7 +260,7 @@ fn classify_successors<'graph, 'db>(
   _db: &'db ParserDatabase,
 ) -> VecDeque<((u32, InputType), OrderedSet<&'graph State<'db>>)> {
   VecDeque::from_iter(
-    hash_group_btreemap(successors.clone(), |_, s| match s.get_symbol() {
+    hash_group_btreemap(successors.clone(), |_, s| match s.get_symbol().sym() {
       SymbolId::EndOfFile { .. } => (0, InputType::EndOfFile),
       SymbolId::DBToken { .. } | SymbolId::DBNonTerminalToken { .. } => (4, InputType::Token),
       SymbolId::Char { .. } => (1, InputType::Byte),
@@ -264,10 +281,10 @@ fn classify_successors<'graph, 'db>(
 fn add_match_expr<'db>(
   mut w: &mut CodeWriter<Vec<u8>>,
   state: &State,
-  graph: &Graph<'db>,
+  graph: &GraphHost<'db>,
   branches: &mut VecDeque<((u32, InputType), OrderedSet<&State>)>,
   goto_state_id: Option<IString>,
-) {
+) -> Option<(IString, BTreeSet<PrecedentDBTerm>)> {
   let db = graph.get_db();
 
   if let Some(((_, input_type), successors)) = branches.pop_front() {
@@ -279,32 +296,57 @@ fn add_match_expr<'db>(
       if !string.is_empty() {
         let _ = w + string;
       }
+
+      None
     } else {
-      w = (w + "\nmatch: " + input_type.as_str() + " {").indent();
+      let (symbols, skipped) = if input_type == InputType::Token {
+        let syms = successors.iter().map(|s| s.get_symbol().sym().tok_db_key().unwrap()).collect::<OrderedSet<_>>();
 
-      // Sort successors
-
-      let peeking = successors.iter().any(|s| matches!(s.get_type(), StateType::PeekEnd | StateType::Peek));
-
-      for (state_val, s) in successors.iter().map(|s| (s.get_symbol().to_state_val(db), s)).collect::<BTreeMap<_, _>>() {
-        w = w + "\n\n( " + state_val.to_string() + " ){ ";
-        w = w + build_body(state, s, graph, goto_state_id).join(" then ") + " }";
-      }
-
-      // Add skips
-      if input_type == InputType::Token {
-        let syms = successors.iter().map(|s| s.get_symbol().tok_db_key().unwrap()).collect::<OrderedSet<_>>();
-
-        let skipped = successors
+        let skipped = state
+          .get_skipped()
           .iter()
-          .flat_map(|s| s.kernel_items_ref())
-          .flat_map(|i| i.get_skipped())
           .filter_map(|s| {
             let id = s.tok_db_key().unwrap();
             (!syms.contains(&id)).then_some(id)
           })
           .collect::<OrderedSet<_>>();
 
+        // Build scanner collection
+        let mut symbols = BTreeSet::default();
+
+        for state in &successors {
+          symbols.insert(PrecedentDBTerm::from(state.get_symbol(), db));
+        }
+
+        for sym in &skipped {
+          symbols.insert((*sym, 0).into());
+        }
+
+        let skipped = if successors.iter().all(|s| matches!(s.get_type(), StateType::Reduce(..))) { None } else { Some(skipped) };
+
+        (Some((ParseState::get_interned_scanner_name(&symbols, graph.get_db().string_store()), symbols)), skipped)
+      } else {
+        (None, None)
+      };
+
+      w = w + "\nmatch: " + input_type.as_str();
+
+      if let Some((name, _)) = &symbols {
+        w = w + ":" + name.to_str(db.string_store()).as_str();
+      }
+
+      w = (w + " {").indent();
+
+      // Sort successors
+      let peeking = successors.iter().any(|s| matches!(s.get_type(), StateType::PeekEndComplete | StateType::Peek));
+
+      for (state_val, s) in successors.iter().map(|s| (s.get_symbol().sym().to_state_val(db), s)).collect::<BTreeMap<_, _>>() {
+        w = w + "\n\n( " + state_val.to_string() + " ){ ";
+        w = w + build_body(state, s, graph, goto_state_id).join(" then ") + " }";
+      }
+
+      // Add skips
+      if let Some(skipped) = skipped {
         if !skipped.is_empty() {
           let vals = skipped.iter().map(|v| v.to_val(db).to_string()).collect::<Array<_>>().join(" | ");
           if vals.len() > 0 {
@@ -321,27 +363,27 @@ fn add_match_expr<'db>(
       }
 
       let _ = w.dedent() + "\n}";
+
+      symbols
     }
+  } else {
+    None
   }
 }
 
-fn build_body<'db>(state: &State, successor: &State, graph: &Graph<'db>, goto_state_id: Option<IString>) -> Vec<String> {
+fn build_body<'db>(state: &State, successor: &State, graph: &GraphHost<'db>, goto_state_id: Option<IString>) -> Vec<String> {
   let is_scanner = graph.is_scanner();
   let mut body_string: Vec<String> = Array::new();
   let s_type = successor.get_type();
   let db = graph.get_db();
 
-  if successor.is_nonterminal_completer() {
-    body_string.push("pop".into());
-  }
-
   if match s_type {
-    StateType::Shift => {
-      let scan_expr = successor.get_symbol().is_linefeed().then_some("scan then set-line").unwrap_or("scan");
+    StateType::Shift | StateType::KernelShift => {
+      let scan_expr = successor.get_symbol().sym().is_linefeed().then_some("scan then set-line").unwrap_or("scan");
       body_string.push(is_scanner.then_some(scan_expr).unwrap_or("shift").into());
       true
     }
-    StateType::PeekEnd => {
+    StateType::PeekEndComplete => {
       debug_assert!(!is_scanner, "Peek states should not be present in graph");
       body_string.push("reset".into());
       true
@@ -361,8 +403,15 @@ fn build_body<'db>(state: &State, successor: &State, graph: &Graph<'db>, goto_st
       body_string.push("pass".into());
       false
     }
-    StateType::Reduce(rule_id) => {
+    StateType::Reduce(rule_id, completes) => {
+      debug_assert!(!successor.kernel_items_ref().iter().any(|i| i.is_out_of_scope()));
+
       body_string.push(create_rule_reduction(rule_id, db));
+
+      for _ in 0..completes {
+        body_string.push("set-tok-len 0".into());
+      }
+
       false
     }
     StateType::Follow => true,
@@ -376,7 +425,7 @@ fn build_body<'db>(state: &State, successor: &State, graph: &Graph<'db>, goto_st
 
     match (&goto_state_id, s_type) {
       // Kernel calls can bypass gotos.
-      (_, StateType::KernelCall(..)) => {}
+      //  (_, StateType::KernelCall(..)) => {}
       (Some(gt), _) => body_string.push("push ".to_string() + &gt.to_string(db.string_store())),
       _ => {}
     }
@@ -411,18 +460,26 @@ fn create_rule_reduction(rule_id: DBRuleKey, db: &ParserDatabase) -> String {
   w.to_string()
 }
 
-pub(super) fn create_ir_state_name(graph: &Graph, origin_state: Option<&State>, target_state: &State) -> String {
+pub(super) fn create_ir_state_name(graph: &GraphHost, origin_state: Option<&State>, target_state: &State) -> String {
   if origin_state.is_some_and(|s| s.get_id() == target_state.get_id()) {
     "%%%%".to_string()
+  } else if false {
+    graph.get_state_name(target_state.get_id())
   } else {
     graph.is_scanner().then_some("s").unwrap_or("p").to_string() + "_" + &target_state.get_hash().to_string()
   }
 }
 
-pub(super) fn create_ir_state<'db>(graph: &Graph<'db>, w: CodeWriter<Vec<u8>>, state: &State) -> SherpaResult<ParseState> {
+pub(super) fn create_ir_state<'db>(
+  graph: &GraphHost<'db>,
+  w: CodeWriter<Vec<u8>>,
+  state: &State,
+  scanner: Option<(IString, BTreeSet<PrecedentDBTerm>)>,
+) -> SherpaResult<ParseState> {
   let ir_state = ParseState {
     code: w.to_string(),
-    name: create_ir_state_name(graph, None, state).intern(graph.get_db().string_store()),
+    hash_name: create_ir_state_name(graph, None, state).intern(graph.get_db().string_store()),
+    scanner,
     ..Default::default()
   };
 

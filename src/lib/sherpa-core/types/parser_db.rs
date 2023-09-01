@@ -79,6 +79,8 @@ pub struct ParserDatabase {
   /// the case if, for example, the database is comprised of rules that
   /// reference non-extant non-terminals.
   valid: bool,
+  /// All items that follow a non-terminal
+  follow_db_items: Array<Array<(DBRuleKey, u16)>>,
 }
 
 impl ParserDatabase {
@@ -108,7 +110,17 @@ impl ParserDatabase {
       follow_items,
       custom_states,
       valid,
+      follow_db_items: Default::default(),
     }
+  }
+
+  /// Prints token ids and their friendly names to the console
+  #[cfg(debug_assertions)]
+  pub fn print_tokens(&self) {
+    let token_strings =
+      self.tokens.iter().enumerate().map(|(idx, t)| format!("{:>0000}: {}", idx, t.name.to_str(&self.string_store).as_str()));
+
+    println!("{}", token_strings.collect::<Vec<_>>().join("\n"))
   }
 
   pub fn is_valid(&self) -> bool {
@@ -150,6 +162,11 @@ impl ParserDatabase {
   pub fn get_entry_offset(&self, entry_name: &str, hash_map: &HashMap<IString, usize>) -> Option<usize> {
     let string = entry_name.to_token();
     self.entry_points().iter().find(|e| e.entry_name == string).and_then(|e| hash_map.get(&e.nonterm_entry_name)).cloned()
+  }
+
+  /// Returns the name of the database as a string.
+  pub fn name_string(&self) -> String {
+    self.name.to_string(&self.string_store)
   }
 
   /// Given a [DBNonTermKey] returns the SymbolId representing the non-terminal,
@@ -270,7 +287,7 @@ impl ParserDatabase {
       .collect()
   }
 
-  pub fn follow_items<'db>(&'db self, key: DBNonTermKey) -> Items<'db> {
+  pub fn nonterm_follow_items<'db>(&'db self, key: DBNonTermKey) -> Items<'db> {
     let mut nonterm_ids = VecDeque::from_iter(vec![key]);
     let mut seen = Set::new();
     let mut items = Items::new();
@@ -301,7 +318,7 @@ fn construct_follow(nonterm_symbols: &Vec<SymbolId>, rules: &Vec<DBRule>) -> Vec
     follow_items.push(None);
   }
 
-  // Calculates all follow items for all nonterminals
+  // Calculates all follow items for all non-terminals
   for (rule_id, rule) in rules.iter().enumerate() {
     if !rule.rule.symbols.is_empty() {
       let last = rule.rule.symbols.len() - 1;
@@ -374,6 +391,11 @@ impl DBNonTermKey {
   /// Returns the symbol representation of this index.
   pub fn to_sym(&self) -> SymbolId {
     SymbolId::DBNonTerminal { key: *self }
+  }
+
+  /// Retrieves the binary / bytecode id of the nonterminal.
+  pub fn to_val(&self) -> u32 {
+    self.0 as u32
   }
 }
 

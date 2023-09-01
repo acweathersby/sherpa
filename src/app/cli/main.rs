@@ -137,23 +137,15 @@ fn build_parser(
     ParserType::LLVM => {
       #[cfg(feature = "llvm")]
       {
-        println!("Building!!!!");
-        match sherpa_llvm::llvm_parser_build::build_llvm_parser(j.transfer(), &name, &db, &states, &_lib_out_dir, None, true) {
-          SherpaResult::Err(err) => {
-            panic!("{}", err);
-          }
-          _ => {}
-        }
-
-        println!("---");
-        sherpa_rust_build::compile_rust_llvm_parser(j.transfer(), &db, &name, &name);
+        sherpa_llvm::llvm_parser_build::build_llvm_parser(&parser, &name, &_lib_out_dir, None, true)?;
+        sherpa_rust_build::compile_rust_llvm_parser(&parser, &name, &name)
       }
       #[cfg(not(feature = "llvm"))]
       SherpaResult::Err("LLVM based compilation not supported not supported".into())
     }
     _ => {
       let (bc, lu) = compile_bytecode(&parser, false)?;
-      compile_rust_bytecode_parser(parser, &bc, &lu)
+      compile_rust_bytecode_parser(&parser, &bc, &lu)
     }
   };
 

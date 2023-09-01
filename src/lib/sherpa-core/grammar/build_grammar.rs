@@ -27,12 +27,12 @@ pub struct RuleData<'a> {
 /// Temporary structure to host non-terminal data during
 /// construction.
 pub struct NonTermData<'a> {
-  root_nterm:     NonTermId,
-  root_g_name:    IString,
-  root_f_name:    IString,
-  symbols:        &'a mut OrderedSet<SymbolId>,
-  sub_nterminals: &'a mut Array<Box<SubNonTerminal>>,
-  rules:          &'a mut Array<Rule>,
+  root_nterm: NonTermId,
+  root_g_name: IString,
+  root_f_name: IString,
+  symbols: &'a mut OrderedSet<SymbolId>,
+  sub_nonterminals: &'a mut Array<Box<SubNonTerminal>>,
+  rules: &'a mut Array<Rule>,
 }
 
 impl<'b> NonTermData<'b> {
@@ -46,7 +46,7 @@ impl<'b> NonTermData<'b> {
       root_f_name: self.root_f_name,
       root_nterm: self.root_nterm,
       symbols: &mut self.symbols,
-      sub_nterminals: &mut self.sub_nterminals,
+      sub_nonterminals: &mut self.sub_nonterminals,
     }
   }
 }
@@ -284,7 +284,7 @@ pub fn process_parse_state<'a>(
                     root_g_name: *guid_name,
                     root_f_name: *guid_name,
                     symbols,
-                    sub_nterminals: &mut Default::default(),
+                    sub_nonterminals: &mut Default::default(),
                     rules: &mut Default::default(),
                   },
                   g_data,
@@ -372,7 +372,7 @@ fn process_rule(nterm: &mut NonTerminal, rule: &parser::Rule, g_data: &GrammarDa
   let mut nterm_data = NonTermData {
     root_nterm: *id,
     symbols,
-    sub_nterminals: sub_nterms,
+    sub_nonterminals: sub_nterms,
     rules,
     root_g_name: nterm.guid_name,
     root_f_name: nterm.friendly_name,
@@ -405,12 +405,7 @@ fn process_rule_symbols(
   for (index, sym) in rule_data.symbols.iter() {
     let original_bodies = 0..rules.len();
     let SymbolData {
-      annotation,
-      is_optional,
-      sym_precedence: symbol_precedence,
-      tok_precedence: token_precedence,
-      sym_atom,
-      ..
+      annotation, is_optional, symbol_precedence, token_precedence, sym_atom, ..
     } = get_symbol_details(sym);
 
     // If the symbol is optional, then we create new set
@@ -535,12 +530,12 @@ fn process_rule_symbols(
           }
 
           let nterm = p_data.root_nterm;
-          let index = p_data.sub_nterminals.len();
+          let index = p_data.sub_nonterminals.len();
           let id = NonTermId::from((nterm, index));
 
           let (guid_name, friendly_name) = sub_nterm_names("group", p_data, s_store);
 
-          p_data.sub_nterminals.push(Box::new(SubNonTerminal {
+          p_data.sub_nonterminals.push(Box::new(SubNonTerminal {
             id,
             guid_name,
             friendly_name,
@@ -568,7 +563,7 @@ fn process_rule_symbols(
         process_rule_symbols(r_data, &mut p_data.set_rules(&mut rules), g_data, s_store, symbol.to_token().clone())?;
 
         let nterm = p_data.root_nterm;
-        let nterm_index = p_data.sub_nterminals.len();
+        let nterm_index = p_data.sub_nonterminals.len();
         let id = NonTermId::from((nterm, nterm_index));
         let sym = id.as_sym();
 
@@ -608,7 +603,7 @@ fn process_rule_symbols(
 
         let (guid_name, friendly_name) = sub_nterm_names("list", p_data, s_store);
 
-        p_data.sub_nterminals.push(Box::new(SubNonTerminal {
+        p_data.sub_nonterminals.push(Box::new(SubNonTerminal {
           type_: SubNonTermType::List,
           guid_name,
           friendly_name,
@@ -807,15 +802,15 @@ pub fn nterm_names(base_name: &str, g_data: &GrammarIdentities, s_store: &IStrin
 /// `sub_name` should be a string indicating the type of symbol that
 /// the sub-non-terminal was derived from.
 fn sub_nterm_names(sub_name: &str, p_data: &NonTermData, s_store: &IStringStore) -> (IString, IString) {
-  if p_data.sub_nterminals.is_empty() {
+  if p_data.sub_nonterminals.is_empty() {
     (
       (p_data.root_g_name.to_string(s_store) + "_" + sub_name).intern(s_store),
       (p_data.root_f_name.to_string(s_store) + "_" + sub_name).intern(s_store),
     )
   } else {
     (
-      (p_data.root_g_name.to_string(s_store) + "_" + sub_name + "_" + &p_data.sub_nterminals.len().to_string()).intern(s_store),
-      (p_data.root_f_name.to_string(s_store) + "_" + sub_name + "_" + &p_data.sub_nterminals.len().to_string()).intern(s_store),
+      (p_data.root_g_name.to_string(s_store) + "_" + sub_name + "_" + &p_data.sub_nonterminals.len().to_string()).intern(s_store),
+      (p_data.root_f_name.to_string(s_store) + "_" + sub_name + "_" + &p_data.sub_nonterminals.len().to_string()).intern(s_store),
     )
   }
 }

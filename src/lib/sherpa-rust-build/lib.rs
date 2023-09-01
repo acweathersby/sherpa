@@ -14,7 +14,7 @@ use builder::{
 };
 use sherpa_ascript::{output_base::AscriptWriter, types::AScriptStore};
 
-use sherpa_core::{proxy::Map, CodeWriter, IString, Journal, ParserDatabase, ParserStore, SherpaDatabaseBuilder, SherpaResult};
+use sherpa_core::{proxy::Map, CodeWriter, IString, Journal, ParserStore, SherpaDatabaseBuilder, SherpaResult};
 
 use crate::builder::write_rust_llvm_parser_file;
 
@@ -31,7 +31,7 @@ pub fn build_rust(mut j: Journal, db: &SherpaDatabaseBuilder) -> SherpaResult<St
 }
 
 pub fn compile_rust_bytecode_parser<T: ParserStore>(
-  store: T,
+  store: &T,
   bytecode: &Vec<u8>,
   state_lookups: &Map<IString, usize>,
 ) -> SherpaResult<String> {
@@ -104,12 +104,10 @@ use sherpa_rust_runtime::{
   SherpaResult::Ok(writer.into_writer().to_string())
 }
 
-pub fn compile_rust_llvm_parser(
-  mut j: Journal,
-  db: &ParserDatabase,
-  grammar_name: &str,
-  parser_name: &str,
-) -> SherpaResult<String> {
+pub fn compile_rust_llvm_parser<T: ParserStore>(store: &T, grammar_name: &str, parser_name: &str) -> SherpaResult<String> {
+  let db = store.get_db();
+  let mut j = store.get_journal().transfer();
+
   let j2 = j.transfer();
 
   let store = AScriptStore::new(j2, &db);

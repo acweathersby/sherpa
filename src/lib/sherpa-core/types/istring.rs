@@ -122,6 +122,10 @@ impl IString {
     self.to_str(store).as_str().to_string()
   }
 
+  pub fn to_path(&self, store: &IStringStore) -> PathBuf {
+    PathBuf::from(self.to_str(store).as_str().to_string())
+  }
+
   /// Returns a [GuardedStr] that can be used to access the `&str` the [IString]
   /// token represents.
   pub fn to_str<'a>(&'a self, store: &'a IStringStore) -> GuardedStr<'a> {

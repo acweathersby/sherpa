@@ -28,6 +28,8 @@ pub struct Item<'db> {
   /// The index of the active symbol. If `len == sym_index` then
   /// the item is considered complete.
   pub sym_index: u16,
+  ////
+  pub goto_distance: u16,
 }
 
 #[cfg(debug_assertions)]
@@ -120,11 +122,40 @@ impl<'db> Item<'db> {
       sym_index: 0,
       origin: Default::default(),
       goal: 0,
+      goto_distance: 0,
     }
   }
 
   pub fn to_absolute(&self) -> Self {
     Self { goal: Default::default(), origin: Default::default(), ..self.clone() }
+  }
+
+  /// Returns the canonical item, that is an item that does not have any other
+  /// attributes aside from a rule id and a symbol offset
+  pub fn to_canonical(&self) -> Self {
+    Self {
+      goal: Default::default(),
+      origin: Default::default(),
+      origin_state: StateId::default(),
+      ..self.clone()
+    }
+  }
+
+  /// Calculates the number of GOTO states that would be pushed to the stack
+  /// following the state this item originated from.
+  pub fn calculate_goto_distance(&self, parent: StateId, graph: &GraphHost<'db>) -> Self {
+    let mut state = parent;
+    let mut goto_distance = 0;
+
+    while state != self.origin_state {
+      debug_assert!(!state.is_root());
+      if graph[state].has_goto_state() {
+        goto_distance += 1;
+      }
+      state = graph[state].get_parent();
+    }
+
+    Self { goto_distance, ..self.clone() }
   }
 
   pub fn increment(&self) -> Option<Self> {
@@ -178,9 +209,13 @@ impl<'db> Item<'db> {
     self.sym_index == 0
   }
 
-  pub fn get_skipped(&self) -> &'db Vec<SymbolId> {
-    let rule = self.rule();
-    &rule.skipped
+  pub fn get_skipped(&self) -> Option<&'db Vec<SymbolId>> {
+    if self.is_complete() {
+      None
+    } else {
+      let rule = self.rule();
+      Some(&rule.skipped)
+    }
   }
 
   pub fn rule(&self) -> &'db Rule {
@@ -191,7 +226,7 @@ impl<'db> Item<'db> {
     self.db.nonterm_friendly_name(self.nonterm_index())
   }
 
-  /// The NonTerm the rule reduces to
+  /// The non-terminal the rule reduces to
   pub fn nonterm_index(&self) -> DBNonTermKey {
     self.db.rule_nonterm(self.rule_id)
   }
@@ -199,7 +234,7 @@ impl<'db> Item<'db> {
   /// Return `true` if the item is from a left recursive rule.
   pub fn is_left_recursive(&self) -> bool {
     let p = self.nonterm_index();
-    p == self.to_start().nonterm_index_at_sym().unwrap_or_default()
+    p == self.to_start().nontermlike_index_at_sym().unwrap_or_default()
   }
 
   pub fn is_null(&self) -> bool {
@@ -208,6 +243,10 @@ impl<'db> Item<'db> {
 
   pub fn is_complete(&self) -> bool {
     self.len == self.sym_index
+  }
+
+  pub fn is_penultimate(&self) -> bool {
+    (self.len - 1) == self.sym_index
   }
 
   pub fn is_nonterm(&self) -> bool {
@@ -232,9 +271,18 @@ impl<'db> Item<'db> {
 
   /// Returns the [IndexedProdId] of the active symbol if the symbol
   /// is a NonTerm or NonTermToken, or return `None`
-  pub fn nonterm_index_at_sym(&self) -> Option<DBNonTermKey> {
+  pub fn nontermlike_index_at_sym(&self) -> Option<DBNonTermKey> {
     match self.sym() {
       SymbolId::DBNonTerminal { key: index } | SymbolId::DBNonTerminalToken { nonterm_key: index, .. } => Some(index),
+      _ => None,
+    }
+  }
+
+  /// Returns the [IndexedProdId] of the active symbol if the symbol
+  /// is a NonTerm, or return `None`
+  pub fn nonterm_index_at_sym(&self) -> Option<DBNonTermKey> {
+    match self.sym() {
+      SymbolId::DBNonTerminal { key: index } => Some(index),
       _ => None,
     }
   }
@@ -258,6 +306,13 @@ impl<'db> Item<'db> {
     match mode {
       GraphMode::Parser => self.symbol_precedence(),
       GraphMode::Scanner => self.token_precedence(),
+    }
+  }
+
+  pub fn origin_precedence(&self) -> u16 {
+    match self.origin {
+      Origin::TerminalGoal(_, prec) => prec,
+      _ => 0,
     }
   }
 
@@ -331,6 +386,10 @@ impl<'db> Item<'db> {
         string += " •";
       }
 
+      if self.goto_distance >= 0 {
+        string += &(" [".to_string() + &self.goto_distance.to_string() + "]");
+      }
+
       string.replace("\n", "\\n")
     }
   }
@@ -342,8 +401,8 @@ pub type Items<'db> = Array<Item<'db>>;
 impl<'db> ItemContainer<'db> for ItemSet<'db> {}
 impl<'db> ItemContainer<'db> for Items<'db> {}
 
-impl<'a, 'db: 'a, T: Iterator<Item = &'a Item<'db>>> ItemRefContainerIter<'a, 'db> for T {}
-impl<'a, 'db: 'a, T: Iterator<Item = Item<'db>>> ItemContainerIter<'a, 'db> for T {}
+impl<'a, 'db: 'a, T: Clone + Iterator<Item = &'a Item<'db>>> ItemRefContainerIter<'a, 'db> for T {}
+impl<'a, 'db: 'a, T: Clone + Iterator<Item = Item<'db>>> ItemContainerIter<'a, 'db> for T {}
 
 macro_rules! common_iter_functions {
   () => {
@@ -352,6 +411,10 @@ macro_rules! common_iter_functions {
         GraphMode::Parser => self.get_max_symbol_precedence(),
         GraphMode::Scanner => self.get_max_token_precedence(),
       }
+    }
+
+    fn get_max_origin_precedence(self) -> u16 {
+      self.map(|i| i.origin_precedence()).max().unwrap_or_default()
     }
 
     fn get_max_token_precedence(self) -> u16 {
@@ -376,11 +439,15 @@ macro_rules! common_iter_functions {
       self.map(|i| i.debug_string()).collect::<Vec<_>>().join(sep)
     }
 
-    /// Returns the Non-terminal of the non-terminal symbol in each item. For items
-    /// whose symbol is a terminal or are complete. Items that do not have a
-    /// nonterm as the active symbol are skipped.
-    fn to_nonterm_id_set(self) -> OrderedSet<DBNonTermKey> {
+    /// Returns the [DBNonTermKey] of the symbol in non-terminal items. Items that
+    /// do not have a nonterm as the active symbol are skipped.
+    fn nonterm_ids_at_index(self) -> OrderedSet<DBNonTermKey> {
       self.filter_map(|i| i.nonterm_index_at_sym()).collect()
+    }
+
+    /// Returns a set of all non-terminal ids the items reduce to.
+    fn rule_nonterm_ids(&mut self) -> OrderedSet<DBNonTermKey> {
+      self.map(|i| i.nonterm_index()).collect()
     }
 
     fn peek_is_resolved(&mut self) -> bool {
@@ -439,6 +506,10 @@ macro_rules! common_iter_functions {
       self.map(|i| i.to_absolute()).collect()
     }
 
+    fn to_canonical<T: ItemContainer<'db>>(self) -> T {
+      self.map(|i| i.to_canonical()).collect()
+    }
+
     fn to_origin<T: ItemContainer<'db>>(self, origin: Origin) -> T {
       self.map(|i| i.to_origin(origin)).collect()
     }
@@ -452,10 +523,40 @@ macro_rules! common_iter_functions {
     fn try_decrement(self) -> Items<'db> {
       self.map(|i| if i.sym_index > 0 { i.decrement().unwrap() } else { i.clone() }).collect()
     }
+
+    fn terminals(self) -> OrderedSet<SymbolId> {
+      self.filter_map(|i| (!i.is_nonterm()).then_some(i.sym())).collect()
+    }
+
+    fn closure<T: ItemContainer<'db>>(self, is_scanner: bool, state_id: StateId) -> T {
+      let mut closure = ItemSet::from_iter(self.clone().map(|i| i.clone()));
+      let mut queue = VecDeque::from_iter(self.map(|i| i.clone()));
+
+      while let Some(kernel_item) = queue.pop_front() {
+        if closure.insert(kernel_item) {
+          match kernel_item.get_type() {
+            ItemType::TokenNonTerminal(..) => {
+              if is_scanner {
+                for item in Items::from(kernel_item) {
+                  queue.push_back(item.align(kernel_item).to_origin_state(state_id))
+                }
+              }
+            }
+            ItemType::NonTerminal(..) => {
+              for item in Items::from(kernel_item) {
+                queue.push_back(item.align(kernel_item).to_origin_state(state_id))
+              }
+            }
+            _ => {}
+          }
+        }
+      }
+      closure.into_iter().collect()
+    }
   };
 }
 
-pub trait ItemContainerIter<'a, 'db: 'a>: Iterator<Item = Item<'db>> + Sized {
+pub trait ItemContainerIter<'a, 'db: 'a>: Iterator<Item = Item<'db>> + Sized + Clone {
   fn to_set(self) -> ItemSet<'db> {
     self.collect()
   }
@@ -467,18 +568,13 @@ pub trait ItemContainerIter<'a, 'db: 'a>: Iterator<Item = Item<'db>> + Sized {
   common_iter_functions!();
 }
 
-pub trait ItemRefContainerIter<'a, 'db: 'a>: Iterator<Item = &'a Item<'db>> + Sized {
+pub trait ItemRefContainerIter<'a, 'db: 'a>: Iterator<Item = &'a Item<'db>> + Sized + Clone {
   fn to_set(self) -> ItemSet<'db> {
     self.cloned().collect()
   }
 
   fn to_vec(self) -> Items<'db> {
     self.cloned().collect()
-  }
-
-  /// Returns a set of all non-terminal ids the items reduce to.
-  fn to_nonterminal_id_set(&mut self) -> OrderedSet<DBNonTermKey> {
-    self.map(|i| i.nonterm_index()).collect()
   }
 
   common_iter_functions!();
@@ -487,7 +583,7 @@ pub trait ItemRefContainerIter<'a, 'db: 'a>: Iterator<Item = &'a Item<'db>> + Si
 impl<'db> From<Item<'db>> for Items<'db> {
   fn from(value: Item<'db>) -> Self {
     let db = value.db;
-    if let Some(nterm) = value.nonterm_index_at_sym() {
+    if let Some(nterm) = value.nontermlike_index_at_sym() {
       if let Ok(rules) = db.nonterm_rules(nterm) {
         rules.iter().map(|r| Item::from_rule(*r, db)).collect()
       } else {
@@ -539,12 +635,12 @@ pub trait ItemContainer<'db>: Clone + IntoIterator<Item = Item<'db>> + FromItera
     self.into_iter().filter(|i| !i.is_complete()).collect()
   }
 
-  fn to_absolute(self) -> Self {
-    self.into_iter().map(|i| i.to_absolute()).collect()
-  }
-
   fn to_origin(self, origin: Origin) -> Self {
     self.into_iter().map(|i| i.to_origin(origin)).collect()
+  }
+
+  fn to_origin_state(self, origin: StateId) -> Self {
+    self.into_iter().map(|i| i.to_origin_state(origin)).collect()
   }
 
   #[inline(always)]
@@ -613,6 +709,9 @@ fn debug_items<'db, T: IntoIterator<Item = Item<'db>>>(comment: &str, items: T) 
   }
 }
 
+/// A tuple like type comprised of a completed item an one
+/// other item that transitions on the nonterminal the completed item
+/// reduces to.
 #[derive(Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 #[cfg_attr(debug_assertions, derive(std::fmt::Debug))]
 pub struct FollowPair<'db> {

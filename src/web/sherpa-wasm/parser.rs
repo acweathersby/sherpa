@@ -148,7 +148,7 @@ pub fn get_codemirror_parse_tree(input: String) -> JsValue {
   let mut reader = string_reader::StringReader::new(input);
   let mut bytecode_parser: ByteCodeParser<'_, string_reader::StringReader, u32> =
     ByteCodeParser::<'static, _, u32>::new(&mut reader, &parser::bytecode);
-  bytecode_parser.init_parser(93016);
+  bytecode_parser.init_parser(46600);
 
   let mut output = vec![];
   let mut acc_stack: Vec<u32> = vec![];
@@ -309,7 +309,7 @@ impl<'a> From<&DebugEvent<'a>> for JSDebugEvent {
         sym_len,
       },
       DebugEvent::SkipToken { offset_start, offset_end } => JSDebugEvent::SkipToken { offset_start, offset_end },
-      DebugEvent::ShiftToken { offset_start, offset_end } => JSDebugEvent::ShiftToken { offset_start, offset_end },
+      DebugEvent::ShiftToken { offset_start, offset_end, .. } => JSDebugEvent::ShiftToken { offset_start, offset_end },
       DebugEvent::ByteValue { input_value, start, end } => JSDebugEvent::ByteValue { input_value, start, end },
       DebugEvent::CodePointValue { input_value, start, end } => JSDebugEvent::CodePointValue { input_value, start, end },
       DebugEvent::ClassValue { input_value, start, end } => JSDebugEvent::ClassValue { input_value, start, end },

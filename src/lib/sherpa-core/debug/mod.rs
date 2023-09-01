@@ -5,7 +5,7 @@ use sherpa_rust_runtime::{
   types::bytecode::Opcode,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct PrintConfig {
   pub display_scanner_output: bool,
   pub display_input_data:     bool,
@@ -26,31 +26,100 @@ impl Default for PrintConfig {
   }
 }
 
-pub fn console_debugger(
-  db: ParserDatabase,
-  PrintConfig {
+#[derive(Default)]
+
+pub struct Node {
+  string:   String,
+  offset:   u32,
+  children: Vec<Node>,
+}
+
+impl Node {
+  pub fn draw(&self, offset: u32) -> String {
+    let mut string = format!("{}{}", " ".repeat(offset as usize), self.string);
+
+    if self.is_single() {
+      let child_strings = self.children.iter().map(|c| c.draw(0)).collect::<Vec<_>>().join("");
+      if !child_strings.is_empty() {
+        string += &child_strings;
+      }
+    } else {
+      let child_strings = self.children.iter().map(|c| c.draw(offset + self.offset)).collect::<Vec<_>>().join("\n");
+      if !child_strings.is_empty() {
+        string += &("\n".to_string() + &child_strings);
+      }
+    }
+    string
+  }
+
+  pub fn is_single(&self) -> bool {
+    self.children.len() <= 1 && self.children.iter().all(|c| c.is_single())
+  }
+}
+
+#[cfg(all(debug_assertions))]
+#[allow(unused)]
+pub fn file_debugger(db: ParserDatabase, print_config: PrintConfig) -> Option<Box<DebugFn>> {
+  let mut stack = vec![];
+  crate::test::utils::write_debug_file(&db, "parser_output.tmp", "    ", false);
+  Some(Box::new(move |event, string| {
+    let string = diagram_constructor(event, string, &mut stack, &db, &print_config);
+
+    if !string.is_empty() {
+      crate::test::utils::write_debug_file(&db, "parser_output.tmp", string, true);
+    }
+  }))
+}
+
+#[cfg(debug_assertions)]
+#[allow(unused)]
+pub fn console_debugger(db: ParserDatabase, print_config: PrintConfig) -> Option<Box<DebugFn>> {
+  let mut stack = vec![];
+  Some(Box::new(move |event, string| {
+    let string = diagram_constructor(event, string, &mut stack, &db, &print_config);
+
+    if !string.is_empty() {
+      println!("{string}");
+    }
+  }))
+}
+
+#[cfg(debug_assertions)]
+#[allow(unused)]
+fn diagram_constructor(
+  event: &DebugEvent<'_>,
+  string: &str,
+  stack: &mut Vec<Node>,
+  db: &ParserDatabase,
+  pc: &PrintConfig,
+) -> String {
+  let PrintConfig {
     display_scanner_output,
     display_input_data,
     input_window_size,
     display_instruction,
     display_state,
-  }: PrintConfig,
-) -> Option<Box<DebugFn>> {
-  let mut stack = vec![];
-  Some(Box::new(move |event, string| match event {
-    DebugEvent::ShiftToken { offset_end, offset_start } => {
+  } = *pc;
+  match event {
+    DebugEvent::ShiftToken { offset_end, offset_start, token_id } => {
       let string = string[*offset_start..(*offset_end).min(string.len())].replace("\n", "\\n");
-      stack.push(string.clone());
-      println!(
+      stack.push(Node { string: " ".to_string() + &string, offset: 0, ..Default::default() });
+      format!(
         "
 [Shift] --------------------------------------------------------------------
 
-Pushing token [{string}] to stack
+Pushing token [{}] to stack
 
-Stack:\n    {}\n
+Stack:\n{}\n
 -------------------------------------------------------------------------------",
-        stack.iter().enumerate().map(|(i, s)| format!("{}: {s}", i + 1)).collect::<Vec<_>>().join("\n    ")
-      );
+        db.token((*token_id).into()).name.to_string(db.string_store()),
+        stack
+          .iter()
+          .enumerate()
+          .map(|(i, s)| format!("{: >4}: {}", i + 1, s.draw(0).split("\n").collect::<Vec<_>>().join("\n       ")))
+          .collect::<Vec<_>>()
+          .join("\n")
+      )
     }
     DebugEvent::Reduce { rule_id } => {
       let item = Item::from_rule((*rule_id).into(), &db);
@@ -58,24 +127,34 @@ Stack:\n    {}\n
       let nterm_name = nterm_name.split("____").last().unwrap();
       let items = stack.drain((stack.len() - item.len as usize)..);
       let symbols = items.collect::<Vec<_>>();
-      stack.push(format!("({nterm_name}: {})", symbols.join(",")));
 
-      println!(
+      stack.push(Node {
+        string:   format!("({})", nterm_name.to_string()),
+        children: symbols,
+        offset:   2,
+      });
+
+      format!(
         "
 [REDUCE] ----------------------------------------------------------------------
 
 Reduce to {nterm_name} with rule: 
 {}
 
-Stack:\n    {}\n
+Stack:\n{}\n
 -------------------------------------------------------------------------------",
-        /* item.to_complete().debug_string() */ "",
-        stack.iter().enumerate().map(|(i, s)| format!("{}: {s}", i + 1)).collect::<Vec<_>>().join("\n    ")
+        item.to_complete().debug_string(),
+        stack
+          .iter()
+          .enumerate()
+          .map(|(i, s)| format!("{: >4}: {}", i + 1, s.draw(0).split("\n").collect::<Vec<_>>().join("\n       ")))
+          .collect::<Vec<_>>()
+          .join("\n")
       )
     }
 
     DebugEvent::Failure { .. } => {
-      println!(
+      format!(
         "
 [Failed] --------------------------------------------------------------------
 
@@ -84,21 +163,26 @@ Failed to recognize input.
       )
     }
     DebugEvent::Complete { nonterminal_id, .. } => {
-      println!(
+      format!(
         "
   [Complete] --------------------------------------------------------------------
   
     Accepted on non-terminal {}.
   
-    Stack:\n    {}\n
+    Stack:\n{}\n
   -------------------------------------------------------------------------------",
         db.nonterm_guid_name((*nonterminal_id).into()).to_string(db.string_store()),
-        stack.iter().enumerate().map(|(i, s)| format!("{}: {s}", i + 1)).collect::<Vec<_>>().join("\n    ")
+        stack
+          .iter()
+          .enumerate()
+          .map(|(i, s)| format!("{: >4}: {}", i + 1, s.draw(0).split("\n").collect::<Vec<_>>().join("\n       ")))
+          .collect::<Vec<_>>()
+          .join("\n")
       )
     }
 
     DebugEvent::TokenValue { input_value, start, end } if display_input_data => {
-      println!(
+      format!(
         "
 [Token Input]------------------------------------------------------------------------
 
@@ -111,7 +195,7 @@ Symbol Length: {}
       )
     }
     DebugEvent::ByteValue { input_value, start, end } if display_input_data => {
-      println!(
+      format!(
         "
 [Byte Input]------------------------------------------------------------------------
 
@@ -124,7 +208,7 @@ Symbol Length: {}
       )
     }
     DebugEvent::CodePointValue { input_value, start, end } if display_input_data && display_scanner_output => {
-      println!(
+      format!(
         "
 [CodePoint Input]------------------------------------------------------------------------
 
@@ -137,7 +221,7 @@ Symbol Length: {}
       )
     }
     DebugEvent::ClassValue { input_value, start, end } if display_input_data && display_scanner_output => {
-      println!(
+      format!(
         "
 [Class Input]------------------------------------------------------------------------
 
@@ -150,7 +234,7 @@ Symbol Length: {}
       )
     }
     DebugEvent::GotoValue { nonterminal_id } if display_input_data && display_scanner_output => {
-      println!(
+      format!(
         "
 [GOTO Input]-------------------------------------------------------------------
 
@@ -162,16 +246,15 @@ BytcodeID: {}
       )
     }
     DebugEvent::ExecuteState { base_instruction, .. } if display_state => {
-      println!(
+      format!(
         "
 [State]------------------------------------------------------------------
 
 {}{}
 -------------------------------------------------------------------------------",
         disassemble_parse_block(Some(*base_instruction), true).0,
-        disassemble_parse_block(Some(base_instruction.next().unwrap()), true).0
-      );
-      println!("");
+        disassemble_parse_block(base_instruction.next(), true).0
+      )
     }
     DebugEvent::ExecuteInstruction {
       instruction,
@@ -189,9 +272,9 @@ BytcodeID: {}
       let active_ptr = if *is_scanner { scan_ptr } else { head_ptr };
       if !is_scanner || display_scanner_output {
         if !matches!(instruction.get_opcode(), Opcode::VectorBranch | Opcode::HashBranch) {
-          return;
+          Default::default()
         }
-        println!(
+        format!(
           "
 [Instruction]------------------------------------------------------------------
 
@@ -213,203 +296,11 @@ BytcodeID: {}
           end_ptr,
           &string[(*active_ptr)..(active_ptr + input_window_size).min(string.len())].replace("\n", "\\n"),
           disassemble_parse_block(Some(*instruction), true).0
-        );
-        println!("");
+        )
+      } else {
+        Default::default()
       }
     }
-    _ => {}
-  }))
-}
-
-pub fn string_debugger(
-  db: ParserDatabase,
-  PrintConfig {
-    display_scanner_output,
-    display_input_data,
-    input_window_size,
-    display_instruction,
-    display_state,
-  }: PrintConfig,
-  _strings: &mut Vec<String>,
-) -> Option<Box<DebugFn>> {
-  let mut stack = vec![];
-  Some(Box::new(move |event, string| match event {
-    DebugEvent::ShiftToken { offset_end, offset_start } => {
-      let string = string[*offset_start..(*offset_end).min(string.len())].replace("\n", "\\n");
-      stack.push(string.clone());
-      println!(
-        "
-  [Shift] --------------------------------------------------------------------
-  
-  Pushing token [{string}] to stack
-  
-  Stack:\n    {}\n
-  -------------------------------------------------------------------------------",
-        stack.iter().enumerate().map(|(i, s)| format!("{}: {s}", i + 1)).collect::<Vec<_>>().join("\n    ")
-      );
-    }
-    DebugEvent::Reduce { rule_id } => {
-      let item = Item::from_rule((*rule_id).into(), &db);
-      let nterm_name = item.nonterm_name().to_string(db.string_store());
-      let nterm_name = nterm_name.split("____").last().unwrap();
-
-      let items = stack.drain((stack.len() - item.len as usize)..);
-      let symbols = items.collect::<Vec<_>>();
-      stack.push(format!("({nterm_name}: {})", symbols.join(",")));
-      println!(
-        "
-  [REDUCE] ----------------------------------------------------------------------
-  
-    Reduce to {nterm_name} with rule: 
-    {}
-  
-    Stack:\n    {}\n
-  -------------------------------------------------------------------------------",
-        /* item.to_complete().debug_string() */ "",
-        stack.iter().enumerate().map(|(i, s)| format!("{}: {s}", i + 1)).collect::<Vec<_>>().join("\n    ")
-      )
-    }
-
-    DebugEvent::Failure { .. } => {
-      println!(
-        "
-  [Failed] --------------------------------------------------------------------
-  
-    Failed to recognize input.
-  -------------------------------------------------------------------------------",
-      )
-    }
-    DebugEvent::Complete { nonterminal_id, .. } => {
-      println!(
-        "
-  [Complete] --------------------------------------------------------------------
-  
-    Accepted on non-terminal {}.
-  -------------------------------------------------------------------------------",
-        db.nonterm_guid_name((*nonterminal_id).into()).to_string(db.string_store())
-      )
-    }
-
-    DebugEvent::TokenValue { input_value, start, end } if display_input_data => {
-      println!(
-        "
-  [Token Input]------------------------------------------------------------------------
-  
-  ║{}║
-  Input Value: {input_value}
-  Symbol Length: {}
-  -------------------------------------------------------------------------------",
-        &string[(*start)..(*end).min(string.len())].replace("\n", "\\n"),
-        end - start
-      )
-    }
-    DebugEvent::ByteValue { input_value, start, end } if display_input_data => {
-      println!(
-        "
-  [Byte Input]------------------------------------------------------------------------
-  
-  ║{}║
-  Input Value: {input_value}
-  Symbol Length: {}
-  -------------------------------------------------------------------------------",
-        &string[(*start)..(*end).min(string.len())].replace("\n", "\\n"),
-        end - start
-      )
-    }
-    DebugEvent::CodePointValue { input_value, start, end } if display_input_data && display_scanner_output => {
-      println!(
-        "
-  [CodePoint Input]------------------------------------------------------------------------
-  
-  ║{}║
-  Input Value: {input_value}
-  Symbol Length: {}
-  -------------------------------------------------------------------------------",
-        &string[(*start)..(*end).min(string.len())].replace("\n", "\\n"),
-        end - start
-      )
-    }
-    DebugEvent::ClassValue { input_value, start, end } if display_input_data && display_scanner_output => {
-      println!(
-        "
-  [Class Input]------------------------------------------------------------------------
-  
-  ║{}║
-  Input Value: {input_value}
-  Symbol Length: {}
-  -------------------------------------------------------------------------------",
-        &string[(*start)..(*end).min(string.len())].replace("\n", "\\n"),
-        end - start
-      )
-    }
-    DebugEvent::GotoValue { nonterminal_id } if display_input_data && display_scanner_output => {
-      println!(
-        "
-  [GOTO Input]-------------------------------------------------------------------
-  
-    Non-terminal_name: {}
-    BytcodeID: {}
-  -------------------------------------------------------------------------------",
-        db.nonterm_guid_name((*nonterminal_id).into()).to_string(db.string_store()),
-        nonterminal_id
-      )
-    }
-    DebugEvent::ExecuteState { base_instruction, .. } if display_state => {
-      println!(
-        "
-  [State]------------------------------------------------------------------
-  
-  {}{}
-  -------------------------------------------------------------------------------",
-        disassemble_parse_block(Some(*base_instruction), true).0,
-        disassemble_parse_block(Some(base_instruction.next().unwrap()), true).0
-      );
-      println!("");
-    }
-    DebugEvent::ExecuteInstruction {
-      instruction,
-      sym_len,
-      is_scanner,
-      scan_ptr,
-      tok_id,
-      tok_len,
-      anchor_ptr,
-      base_ptr,
-      end_ptr,
-      head_ptr,
-      ..
-    } if display_instruction => {
-      let active_ptr = if *is_scanner { scan_ptr } else { head_ptr };
-      if !is_scanner || display_scanner_output {
-        if !matches!(instruction.get_opcode(), Opcode::VectorBranch | Opcode::HashBranch) {
-          return;
-        }
-        println!(
-          "
-  [Instruction]------------------------------------------------------------------
-  
-    address:{:0>6X}; tok_len: {} sym_len: {}; tok_id: {};  
-    anchor: {}; base: {}; head: {}; tail: {};  end: {}; 
-  
-    ║{: <74}║
-  
-  {}
-  -------------------------------------------------------------------------------",
-          instruction.address(),
-          tok_len,
-          sym_len,
-          tok_id,
-          anchor_ptr,
-          base_ptr,
-          head_ptr,
-          scan_ptr,
-          end_ptr,
-          &string[(*active_ptr)..(active_ptr + input_window_size).min(string.len())].replace("\n", "\\n"),
-          disassemble_parse_block(Some(*instruction), true).0
-        );
-        println!("");
-      }
-    }
-    _ => {}
-  }))
+    _ => Default::default(),
+  }
 }

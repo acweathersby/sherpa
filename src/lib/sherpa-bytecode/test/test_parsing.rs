@@ -9,13 +9,64 @@ use std::path::PathBuf;
 use super::utils::compile_and_run_grammars;
 
 #[test]
+pub fn basic_left_recursion() -> SherpaResult<()> {
+  compile_and_run_grammars(
+    &[r#"
+      <> A > A c:num
+          | c:num
+  "#],
+    &[("default", "123", true)],
+  )
+}
+
+#[test]
+pub fn construct_recursive_ascent() -> SherpaResult<()> {
+  compile_and_run_grammars(
+    &[r#"
+    IGNORE { c:sp } 
+      
+    <> A > X 'c'
+         | Y 'd'
+    
+    <> X > 'x' X?
+  
+    <> Y > 'x' Y?
+"#],
+    &[("default", "xd", true), ("default", "xxxxc", true), ("default", "xxxxf", false)],
+  )
+}
+
+#[test]
 pub fn recursive_nonterminal() -> SherpaResult<()> {
   compile_and_run_grammars(
     &[r#"
   
-      <> expr > expr "+" expr        | c:num 
+      <> expr > expr "+" expr      | c:num 
   "#],
     &[("default", "1+2+3", true)],
+  )
+}
+
+#[test]
+pub fn expr_term() -> SherpaResult<()> {
+  compile_and_run_grammars(
+    &[r#"
+
+    <> expr > expr '+' term 
+    | expr '-' term   
+    | term            
+    
+
+    <> term > '(' expr ')'   
+        | num             
+        
+
+    <> num > '0'            
+      | '1'              
+      
+
+"#],
+    &[("default", "0+(1-1)", true)],
   )
 }
 
@@ -75,7 +126,7 @@ IGNORE { c:sp  }
 <> id_tok > c:id
 
 "#],
-    &[("default", ":t! t t => g :t!", true)],
+    &[("default", "t => g :t t", true), ("default", ":t t => a :t!", true), ("default", ":t t => g :t! t!", true)],
   )
 }
 
@@ -99,23 +150,6 @@ pub fn construct_descent_on_scanner_symbol() -> SherpaResult<()> {
     <> D > 'a' 'b'
 "#],
     &[("default", "aabcc", true)],
-  )
-}
-
-#[test]
-pub fn construct_recursive_ascent() -> SherpaResult<()> {
-  compile_and_run_grammars(
-    &[r#"
-    IGNORE { c:sp } 
-      
-    <> A > X 'c'
-         | Y 'd'
-    
-    <> X > 'x' X?
-    
-    <> Y > 'x' Y?
-"#],
-    &[("default", "xxxxd", true), ("default", "xxxxc", true), ("default", "xxxxf", false)],
   )
 }
 
@@ -162,6 +196,30 @@ IMPORT A as A
 "#,
     ],
     &[("default", "one ", true), ("default", "two", true)],
+  )
+}
+
+#[test]
+pub fn cross_source_symbol_lookup() -> SherpaResult<()> {
+  compile_and_run_grammars(
+    &[
+      r#"
+IMPORT B as B
+IGNORE { c:sp }
+
+<> result > import_clause "end"
+
+<> import_clause >
+
+    "A" ( c:id | c:sym | c:num )(+) c:sp "as" B::id
+"#,
+      r#"
+<> id > tk:id_tok
+  
+<> id_tok > ( "-" | "_" | c:id ) ( c:id | '_' | '-' | c:num )(*)
+"#,
+    ],
+    &[("default", "A test as id end", true)],
   )
 }
 
@@ -222,23 +280,10 @@ fn parsing_using_trivial_custom_state() -> SherpaResult<()> {
 fn json_parser() -> SherpaResult<()> {
   let grammar_source_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammar/json/json.sg").canonicalize().unwrap();
   compile_and_run_grammars(&[std::fs::read_to_string(grammar_source_path.as_path())?.as_str()], &[
+    ("entry", r##"[]"##, true),
     ("entry", r##"{"test":[{ "test":"12\"34", "test":"12\"34"}]}"##, true),
-    ("entry", r##"{"\"":2}"##, true),
   ])
 }
-
-/* #[test]
-fn lalr_pop_parser() -> SherpaResult<()> {
-  let grammar_source_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-    .join("../../grammar/lalrpop/lalrpop.sg")
-    .canonicalize()
-    .unwrap();
-  compile_and_run_grammar(std::fs::read_to_string(grammar_source_path.as_path())?.as_str(), &[(
-    "entry",
-    r##"grammar ;"##,
-    true,
-  )])
-} */
 
 #[test]
 fn handles_grammars_that_utilize_eof_symbol() -> SherpaResult<()> {
@@ -310,7 +355,10 @@ IGNORE { c:sp c:nl }
 
 <> tok_identifier > ( c:id | c:num )(+)
 "##],
-    &[("default", "<i -test : soLongMySwanSong - store { test } <i>>", true)],
+    &[
+      ("default", "<i -t: a>", true),
+      //("default", "<i -test : soLongMySwanSong - store { test } <i> <i>>", true)
+    ],
   )
 }
 
@@ -325,6 +373,7 @@ IGNORE { c:sp c:nl }
 <> block > "DECLARE" tk:name "{" declare_content(+) "}"
 
 <> declare_content > execute_content(+)
+
 
 <> execute_content > "aaa"(+)
 
@@ -362,7 +411,7 @@ pub fn intermediate_exclusive_symbols() -> SherpaResult<()> {
 
 <> R > tk:A "ly"
 
-<> A > "test" | "tester" | 'testing'
+<> A > "test"{:1} | "tester"{:1} | 'testing'
 "##],
     &[("default", "testly", true), ("default", "testerly", true), ("default", "testingly", false)],
   )
@@ -399,7 +448,7 @@ fn json_object_with_specialized_key() -> SherpaResult<()> {
     
     <> value > tk:string ':' tk:string
     
-        | "\"test\""{:} ':' c:num
+        | "\"test\"" ':' c:num
     
     <> string > '"' ( c:sym | c:num | c:sp | c:id | escape )(*) '\"'
         

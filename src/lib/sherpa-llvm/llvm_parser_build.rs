@@ -55,7 +55,7 @@ impl AstObject for DummyASTEnum {}
 /// `output_llvm_ir_file` - Output a purely decorational version of the LLVM
 /// code in intermediate representational form.
 pub fn build_llvm_parser<T: ParserStore>(
-  store: &T,
+  parse_store: &T,
   parser_name: &str,
   output_dir: &PathBuf,
   target_triple: Option<String>,
@@ -79,7 +79,7 @@ pub fn build_llvm_parser<T: ParserStore>(
 
   let opt = OptimizationLevel::Aggressive;
 
-  compile_llvm_module_from_parse_states(store, sherpa_mod)?;
+  compile_llvm_module_from_parse_states(parse_store, sherpa_mod)?;
 
   if enable_ascript {
     unsafe {

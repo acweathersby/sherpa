@@ -77,7 +77,8 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
   // Build non-terminal list.
 
   let mut symbols = OrderedMap::from_iter(vec![(SymbolId::Default, 0)]);
-  let mut nonterminal_queue = Queue::from_iter(root_grammar.pub_nterms.iter().map(|(_, p)| (p.1.clone(), p.0)));
+  let mut nonterminal_queue =
+    Queue::from_iter(root_grammar.pub_nterms.iter().map(|(_, p)| (p.1.clone(), root_grammar.identity.path, p.0)));
 
   // Maps non-terminal sym IDs to indices.
   let mut nterm_map_owned = OrderedMap::new();
@@ -103,7 +104,7 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
   let mut token_names = OrderedMap::new();
   let mut token_nonterminals = VecDeque::new();
 
-  while let Some((loc, nterm_id)) = nonterminal_queue.pop_front() {
+  while let Some((loc, path, nterm_id)) = nonterminal_queue.pop_front() {
     if !p_map.contains_key(&nterm_id.as_sym()) {
       match (custom_states.get(&nterm_id), nonterminals.get(&nterm_id)) {
         (None, Some(nterm)) => {
@@ -164,7 +165,7 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
         (Some(_), Some(_)) => {
           j.report_mut().add_error(SherpaError::SourceError {
             loc,
-            path: Default::default(),
+            path: path.to_path(s_store),
             id: "[2002]",
             inline_msg: Default::default(),
             msg: "Cannot resolve grammar that has non-terminal definitions and state definitions with the same name: "
@@ -177,7 +178,7 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
         _ => {
           j.report_mut().add_error(SherpaError::SourceError {
             loc,
-            path: Default::default(),
+            path: path.to_path(s_store),
             id: "[2001]",
             inline_msg: Default::default(),
             msg: "Cannot find definition for non-terminal".into(),
@@ -252,8 +253,8 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
         insert_token_nonterminal(&mut r_rules, &mut token_nonterminals);
         insert_token_nonterminal(&mut p_rules, &mut token_nonterminals);
 
-        convert_sym_refs_to_token_sym_refs(&mut r_rules, s_store);
-        convert_sym_refs_to_token_sym_refs(&mut p_rules, s_store);
+        convert_sym_refs_to_token_sym_refs(&mut r_rules, s_store, 0);
+        convert_sym_refs_to_token_sym_refs(&mut p_rules, s_store, 0);
 
         let nterm = nterm.as_tok_sym();
         let prime_id = prime_id.as_tok_sym();
@@ -271,7 +272,7 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
         if !p_map.contains_key(&nterm) {
           let mut rules = rules.clone();
 
-          convert_sym_refs_to_token_sym_refs(&mut rules, s_store);
+          convert_sym_refs_to_token_sym_refs(&mut rules, s_store, 0);
           insert_token_nonterminal(&mut rules, &mut token_nonterminals);
 
           add_nterm_and_rules(nterm, rules, p_map, r_table, p_r_map, true);
@@ -314,7 +315,7 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
             g_id: g,
           }]);
 
-          convert_sym_refs_to_token_sym_refs(&mut rules, s_store);
+          convert_sym_refs_to_token_sym_refs(&mut rules, s_store, 0);
 
           let name = ("tok_".to_string() + &create_u64_hash(val).to_string()).intern(s_store);
 
@@ -499,7 +500,7 @@ fn convert_symbol_into_db_symbol(
 
 fn extract_nterm_syms(
   rules: &[Rule],
-  nonterminal_queue: &mut VecDeque<(Token, NonTermId)>,
+  nonterminal_queue: &mut VecDeque<(Token, IString, NonTermId)>,
   nonterminals: &OrderedMap<NonTermId, Box<NonTerminal>>,
   s_store: &IStringStore,
   symbols: &mut OrderedMap<SymbolId, usize>,
@@ -513,7 +514,7 @@ fn extract_nterm_syms(
       match sym {
         SymbolId::NonTerminal { id, .. } => match id {
           NonTermId::Standard(..) => {
-            nonterminal_queue.push_back((tok.clone(), id));
+            nonterminal_queue.push_back((tok.clone(), rule.g_id.path, id));
           }
           NonTermId::Sub(..) => {
             // We've already merged in the non-terminal's sub-nonterminals
@@ -573,7 +574,7 @@ fn insert_symbol(symbol_map: &mut OrderedMap<SymbolId, usize>, sym: &SymbolId) {
 /// Symbols are converted into individual character/byte values that allow
 /// scanner parsers to scan a single character/byte/codepoint at time to
 /// recognize a token.
-fn convert_sym_refs_to_token_sym_refs(rules: &mut [Rule], s_store: &IStringStore) {
+fn convert_sym_refs_to_token_sym_refs(rules: &mut [Rule], s_store: &IStringStore, _precedence: u16) {
   for rule in rules {
     let syms = rule
       .symbols
@@ -600,6 +601,7 @@ fn convert_sym_refs_to_token_sym_refs(rules: &mut [Rule], s_store: &IStringStore
                 tok_sym_ref.id = SymbolId::Codepoint { val };
                 tok_sym_ref.original_index = if i == last { sym_ref.original_index } else { 99999 };
               }
+              tok_sym_ref.token_precedence = sym_ref.token_precedence;
               tok_sym_ref
             })
             .collect::<Array<_>>()

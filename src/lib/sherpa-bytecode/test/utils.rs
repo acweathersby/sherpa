@@ -15,56 +15,44 @@ use sherpa_rust_runtime::{
 pub type TestParser<'a> = ByteCodeParser<'a, UTF8StringReader<'a>, u32>;
 
 pub fn compile_and_run_grammars(source: &[&str], inputs: &[(&str, &str, bool)]) -> SherpaResult<()> {
-  build_parse_states_from_multi_sources(source, "".into(), false, &|tp| {
-    tp.print_states();
+  build_parse_states_from_multi_sources(source, "".into(), true, &|tp| {
+    #[cfg(all(debug_assertions, not(feature = "wasm-target")))]
+    tp.write_states_to_temp_file()?;
 
     let (bc, state_map) = compile_bytecode(&tp, true)?;
-
     let TestPackage { db, .. } = tp;
 
     for (entry_name, input, should_pass) in inputs {
-      let ok = TestParser::new(&mut ((*input).into()), &bc)
-        .completes(db.get_entry_offset(entry_name, &state_map).expect(&format!(
-          "\nCan't find entry offset for entry point [{entry_name}].\nValid entry names are\n    {}\n",
+      TestParser::new(&mut ((*input).into()), &bc).collect_shifts_and_skips(
+        db.get_entry_offset(entry_name, &state_map).expect(&format!(
+          "\nCan't find entry offset for entry point [default].\nValid entry names are\n    {}\n",
           db.entry_points().iter().map(|e| { e.entry_name.to_string(db.string_store()) }).collect::<Vec<_>>().join(" | ")
-        )) as u32)
+        )) as u32,
+        4,
+        &mut sherpa_core::file_debugger(db.to_owned(), PrintConfig {
+          display_scanner_output: false,
+          display_instruction: false,
+          display_input_data: true,
+          display_state: true,
+          ..Default::default()
+        })
+        .as_deref_mut(),
+      );
+
+      let ok = TestParser::new(&mut ((*input).into()), &bc)
+        .completes(
+          db.get_entry_offset(entry_name, &state_map).expect(&format!(
+            "\nCan't find entry offset for entry point [{entry_name}].\nValid entry names are\n    {}\n",
+            db.entry_points().iter().map(|e| { e.entry_name.to_string(db.string_store()) }).collect::<Vec<_>>().join(" | ")
+          )) as u32,
+          &mut None,
+        )
         .is_ok();
 
       if ok != *should_pass {
-        let mut cd = console_debugger(db.to_owned(), PrintConfig {
-          display_scanner_output: true,
-          display_instruction: true,
-          ..Default::default()
-        });
-
-        TestParser::new(&mut ((*input).into()), &bc).collect_shifts_and_skips(
-          db.get_entry_offset(entry_name, &state_map).expect(&format!(
-            "\nCan't find entry offset for entry point [{entry_name}].\nValid entry names are\n    {}\n",
-            db.entry_points().iter().map(|e| { e.entry_name.to_string(db.string_store()) }).collect::<Vec<_>>().join(" | ")
-          )) as u32,
-          0,
-          &mut cd.as_deref_mut(),
-        );
         panic!(
           "\n\nParsing of input\n   \"{input}\"\nthrough entry point [{entry_name}] should {}.\n",
           if *should_pass { "pass" } else { "fail" }
-        );
-      } else {
-        let mut cd = console_debugger(db.to_owned(), PrintConfig {
-          display_scanner_output: false,
-          display_instruction: false,
-          display_input_data: false,
-          display_state: false,
-          ..Default::default()
-        });
-
-        TestParser::new(&mut ((*input).into()), &bc).collect_shifts_and_skips(
-          db.get_entry_offset(entry_name, &state_map).expect(&format!(
-            "\nCan't find entry offset for entry point [{entry_name}].\nValid entry names are\n    {}\n",
-            db.entry_points().iter().map(|e| { e.entry_name.to_string(db.string_store()) }).collect::<Vec<_>>().join(" | ")
-          )) as u32,
-          0,
-          &mut cd.as_deref_mut(),
         );
       }
     }

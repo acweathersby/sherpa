@@ -64,7 +64,7 @@ IMPORT ./token as tok
 
 <> token_non_terminal >
 
-    "tk:" non_terminal
+    "tk:" nonterminal
 
         :ast { t_NonTerminal_Terminal_Symbol, nonterminal:$2, tok }
 

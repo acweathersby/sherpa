@@ -1,8 +1,16 @@
+use std::hash::Hash;
+
 use super::*;
 use crate::{utils::create_u64_hash, writer::code_writer::CodeWriter};
 use sherpa_rust_runtime::utf8::lookup_table::CodePointClass;
 
 pub const DEFAULT_SYM_ID: u32 = 0xFDEFA017;
+
+pub const CUSTOM_TOKEN_PRECEDENCE_BASELINE: u16 = 5;
+pub const EXCLUSIVE_TERMINAL_TOKEN_PRECEDENCE: u16 = 4;
+pub const TERMINAL_TOKEN_PRECEDENCE: u16 = 3;
+pub const NON_TERMINAL_TOKEN_PRECEDENCE: u16 = 2;
+pub const CLASS_TOKEN_PRECEDENCE: u16 = 1;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[cfg_attr(debug_assertions, derive(Debug))]
@@ -93,6 +101,15 @@ impl SymbolId {
       | ClassIdentifier { .. }
       | ClassNumber { .. } => true,
       _ => false,
+    }
+  }
+
+  pub fn base_token_precedence(&self) -> u16 {
+    match self {
+      Self::Token { .. } => TERMINAL_TOKEN_PRECEDENCE,
+      Self::NonTerminalToken { .. } => NON_TERMINAL_TOKEN_PRECEDENCE,
+      _ if self.is_class() => CLASS_TOKEN_PRECEDENCE,
+      _ => 0,
     }
   }
 
@@ -193,7 +210,7 @@ impl SymbolId {
       ClassIdentifier { .. } => &mut w + "c:id",
       ClassNumber { .. } => &mut w + "c:num",
       ClassSymbol { .. } => &mut w + "c:sym",
-      Token { val } => &mut w + "[" + val.to_str(db.string_store()).as_str() + "]",
+      Token { val } => &mut w + " " + val.to_str(db.string_store()).as_str() + " ",
       NonTerminalState { .. } => &mut w + "non_term_state",
       NonTerminal { .. } => &mut w + "non_term",
       NonTerminalToken { .. } => &mut w + "tk:" + "non_term",
@@ -217,5 +234,54 @@ impl SymbolId {
       }
     };
     w.to_string()
+  }
+}
+
+#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
+pub struct PrecedentSymbol(SymbolId, u16);
+
+impl PrecedentSymbol {
+  #[allow(unused)]
+  pub fn precedence(&self) -> u16 {
+    self.1
+  }
+
+  pub fn sym(&self) -> SymbolId {
+    self.0
+  }
+}
+
+impl From<(SymbolId, u16)> for PrecedentSymbol {
+  fn from(value: (SymbolId, u16)) -> Self {
+    PrecedentSymbol(value.0, value.1)
+  }
+}
+
+#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
+pub struct PrecedentDBTerm(DBTermKey, u16);
+
+impl PrecedentDBTerm {
+  #[allow(unused)]
+  pub fn precedence(&self) -> u16 {
+    self.1
+  }
+
+  pub fn tok(&self) -> DBTermKey {
+    self.0
+  }
+
+  pub fn from(sym: PrecedentSymbol, db: &ParserDatabase) -> Self {
+    Self(sym.sym().to_state_val(db).into(), sym.precedence())
+  }
+}
+
+impl From<(DBTermKey, u16)> for PrecedentDBTerm {
+  fn from(value: (DBTermKey, u16)) -> Self {
+    /*    if value.0.to_index() as u32 > 5 && value.1 == 0 {
+      panic!("WTIF!");
+    } */
+    PrecedentDBTerm(value.0, value.1)
   }
 }

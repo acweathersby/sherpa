@@ -2,7 +2,7 @@ use sherpa_rust_runtime::types::bytecode::InputType;
 
 use super::*;
 use crate::{
-  parser::{self, ASTNode, Matches, State, Statement},
+  parser::{self, ASTNode, State},
   utils::create_u64_hash,
   writer::code_writer::CodeWriter,
 };
@@ -19,81 +19,29 @@ use std::io::Write;
 
 /// The intermediate representation of a sherpa parser
 pub struct ParseState {
-  pub name:          IString,
-  pub comment:       String,
-  pub code:          String,
-  pub ast:           Option<Box<State>>,
+  pub hash_name: IString,
+  pub name: IString,
+  pub precedence: u32,
+  pub comment: String,
+  pub code: String,
+  pub ast: Option<Box<State>>,
   pub compile_error: Option<SherpaError>,
   /// Collections of scanner based on TOKEN match statements
-  pub scanners:      Option<Map<IString, OrderedSet<DBTokenData>>>,
+  pub(crate) scanner: Option<(IString, OrderedSet<PrecedentDBTerm>)>,
+  pub root: bool,
 }
 
 impl<'db> ParseState {
-  pub fn build_scanners(&mut self, db: &'db ParserDatabase) -> Option<&Map<IString, OrderedSet<DBTokenData>>> {
-    fn get_token_scanner_data(
-      statement: &mut Statement,
-      db: &ParserDatabase,
-      scanners: &mut Map<IString, OrderedSet<DBTokenData>>,
-    ) {
-      match &mut statement.branch {
-        Some(ASTNode::Matches(box Matches { mode, matches, scanner, .. })) if mode == InputType::TOKEN_STR => {
-          let mut scanner_data = OrderedSet::new();
-          for m in matches {
-            match m {
-              ASTNode::IntMatch(m) => {
-                for id in &m.vals {
-                  scanner_data.insert(db.tok_data((*id as u32).into()).clone());
-                }
-                get_token_scanner_data(&mut m.statement, db, scanners);
-              }
-              _ => {}
-            }
-          }
-          let name = ParseState::get_interned_scanner_name(&scanner_data, db.string_store());
-
-          (*scanner) = name.to_string(db.string_store());
-
-          scanners.insert(name, scanner_data);
-        }
-        _ => {}
-      }
-    }
-
-    if self.scanners.is_none() {
-      let mut scanners = Map::new();
-      //Ensure we have build the ast of the IR code.
-      let Ok(_) = self.build_ast(db) else { return None };
-
-      if let SherpaResult::Ok(ast) = self.get_ast_mut() {
-        get_token_scanner_data(&mut ast.statement, db, &mut scanners);
-      }
-      self.scanners = Some(scanners);
-    }
-    self.scanners.as_ref()
+  pub(crate) fn get_scanner(&mut self) -> Option<&(IString, OrderedSet<PrecedentDBTerm>)> {
+    self.scanner.as_ref()
   }
 
-  pub fn get_interned_scanner_name(scanner_syms: &OrderedSet<DBTokenData>, string_store: &IStringStore) -> IString {
+  pub fn get_interned_scanner_name(scanner_syms: &OrderedSet<PrecedentDBTerm>, string_store: &IStringStore) -> IString {
     Self::get_scanner_name(scanner_syms).intern(string_store)
   }
 
-  pub fn get_scanner_name(scanner_syms: &OrderedSet<DBTokenData>) -> String {
-    "scan".to_string() + &create_u64_hash(scanner_syms.iter().map(|g| g.sym_id).collect::<OrderedSet<_>>()).to_string()
-  }
-
-  /// Should only be used on matches that read results from token scanners.
-  pub fn get_scanner_name_from_matches(matches: &[ASTNode], db: &ParserDatabase) -> String {
-    let mut vals = Array::new();
-
-    for val in matches {
-      match val {
-        parser::ASTNode::IntMatch(int_match) => {
-          vals.append(&mut int_match.vals.clone());
-        }
-        _ => {}
-      }
-    }
-
-    Self::get_scanner_name(&vals.into_iter().map(|i| db.tok_data((i as usize).into()).clone()).collect())
+  pub fn get_scanner_name(scanner_syms: &OrderedSet<PrecedentDBTerm>) -> String {
+    "scan".to_string() + &create_u64_hash(scanner_syms).to_string()
   }
 
   /// Returns a reference to the AST.
@@ -143,7 +91,7 @@ impl<'db> ParseState {
 
   pub fn source(&self, db: &ParserDatabase) -> Vec<u8> {
     let mut w = CodeWriter::new(vec![]);
-    let name = self.name.to_string(db.string_store());
+    let name = self.hash_name.to_string(db.string_store());
 
     let _ = &mut w + name.clone() + " =>\n" + self.code.as_str().replace("%%%%", name.as_str());
 
@@ -160,7 +108,7 @@ impl<'db> ParseState {
 
     let mut cw = CodeWriter::new(vec![]);
 
-    render_IR(db, &mut cw, &ASTNode::State(ast.clone()), print_header)?;
+    render_IR(db, &mut cw, &ASTNode::State(ast.clone()), print_header, InputType::Default)?;
 
     unsafe { SherpaResult::Ok(String::from_utf8_unchecked(cw.into_output())) }
   }
@@ -169,9 +117,9 @@ impl<'db> ParseState {
   /// original state's AST.
   pub fn remap_source(&self, db: &'db ParserDatabase) -> SherpaResult<Self> {
     SherpaResult::Ok(Self {
-      scanners: self.scanners.clone(),
+      scanner: self.scanner.clone(),
       code: self.print(db, false)?,
-      name: self.name,
+      hash_name: self.hash_name,
       ..Default::default()
     })
   }
@@ -185,24 +133,30 @@ impl ParseState {
   name: {}
   code: [\n    {}\n  ]
   ast: {:#?}
-  scan_fn: {:?}
+  scanner: {:?}
 }}",
-      self.name.to_string(db.string_store()),
+      self.hash_name.to_string(db.string_store()),
       &self.code.split("\n").collect::<Vec<_>>().join("\n    "),
       &self.get_ast(),
-      self.scanners.as_ref().map(|s| s.iter().map(|(name, _)| { name.to_string(db.string_store()) }).collect::<Vec<_>>())
+      self.scanner.as_ref().map(|(name, _)| { name.to_string(db.string_store()) })
     )
   }
 }
 
 /// Renders a string from an IR AST
-fn render_IR<T: Write>(db: &ParserDatabase, mut w: &mut CodeWriter<T>, node: &ASTNode, add_header: bool) -> SherpaResult<()> {
+fn render_IR<T: Write>(
+  db: &ParserDatabase,
+  mut w: &mut CodeWriter<T>,
+  node: &ASTNode,
+  add_header: bool,
+  match_type: InputType,
+) -> SherpaResult<()> {
   match node {
     ASTNode::State(box parser::State { id, statement, .. }) => {
       if add_header {
         w = w + &id.name + " =>";
       }
-      render_IR(db, w, &ASTNode::Statement(statement.clone()), false)?;
+      render_IR(db, w, &ASTNode::Statement(statement.clone()), false, match_type)?;
     }
     ASTNode::Statement(box parser::Statement { branch, non_branch, transitive }) => {
       let mut nodes = vec![];
@@ -220,7 +174,7 @@ fn render_IR<T: Write>(db: &ParserDatabase, mut w: &mut CodeWriter<T>, node: &AS
       }
 
       for (i, node) in nodes.iter().enumerate() {
-        render_IR(db, w, node, false)?;
+        render_IR(db, w, node, false, match_type)?;
         if i < nodes.len() - 1 {
           w = w + " then";
         }
@@ -239,7 +193,7 @@ fn render_IR<T: Write>(db: &ParserDatabase, mut w: &mut CodeWriter<T>, node: &AS
 
       for m in matches {
         w = w.newline()?;
-        render_IR(db, w, m, false)?;
+        render_IR(db, w, m, false, InputType::from(mode.as_str()))?;
       }
 
       _ = (w.dedent().newline()? + "}").dedent().newline()?;
@@ -248,16 +202,59 @@ fn render_IR<T: Write>(db: &ParserDatabase, mut w: &mut CodeWriter<T>, node: &AS
     ASTNode::DefaultMatch(box parser::DefaultMatch { statement, .. }) => {
       w = w + "default {";
 
-      render_IR(db, w, &ASTNode::Statement(statement.clone()), false)?;
+      render_IR(db, w, &ASTNode::Statement(statement.clone()), false, InputType::Default)?;
 
       _ = w + " }";
     }
 
     ASTNode::IntMatch(box parser::IntMatch { vals, statement, .. }) => {
-      w = w + "( " + vals.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(" | ") + " )";
+      match match_type {
+        InputType::Token => {
+          w = w
+            + "( "
+            + vals
+              .iter()
+              .map(|v| {
+                v.to_string()
+                  + " /*"
+                  + &db.token((*v as usize).into()).name.to_string(db.string_store()).replace("*/", "//")
+                  + "*/"
+              })
+              .collect::<Vec<_>>()
+              .join(" | ")
+            + " )";
+        }
+        InputType::Byte | InputType::ByteScanless => {
+          w = w
+            + "( "
+            + vals
+              .iter()
+              .map(|v| {
+                v.to_string()
+                  + " /*"
+                  + &char::from_u32(*v as u32).map(|v| v.to_string()).unwrap_or(v.to_string()).replace("*/", "//")
+                  + "*/"
+              })
+              .collect::<Vec<_>>()
+              .join(" | ")
+            + " )";
+        }
+        InputType::NonTerminal => {
+          w = w
+            + "( "
+            + vals
+              .iter()
+              .map(|v| v.to_string() + " /*" + &db.nonterm_friendly_name_string((*v as usize).into()).replace("*/", "//") + "*/")
+              .collect::<Vec<_>>()
+              .join(" | ")
+            + " )";
+        }
+        _ => w = w + "( " + vals.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(" | ") + " )",
+      };
+
       w = w + " {";
 
-      render_IR(db, w, &ASTNode::Statement(statement.clone()), false)?;
+      render_IR(db, w, &ASTNode::Statement(statement.clone()), false, InputType::Default)?;
 
       _ = w + " }";
     }
@@ -274,6 +271,9 @@ fn render_IR<T: Write>(db: &ParserDatabase, mut w: &mut CodeWriter<T>, node: &AS
     ASTNode::SetLine(..) => w.write(" set-line")?,
     ASTNode::ReduceRaw(box parser::ReduceRaw { len, prod_id: nterm, rule_id, .. }) => {
       _ = w + " reduce " + len.to_string() + " symbols to " + nterm.to_string() + " with rule " + rule_id.to_string();
+    }
+    ASTNode::SetTokenLen(_) => {
+      _ = w + " pop";
     }
     ASTNode::SetTokenId(box parser::SetTokenId { id, .. }) => {
       _ = w + " set-tok " + id.to_string();
@@ -303,7 +303,7 @@ fn render_IR<T: Write>(db: &ParserDatabase, mut w: &mut CodeWriter<T>, node: &AS
 pub fn print_IR(node: &ASTNode, db: &ParserDatabase) -> SherpaResult<String> {
   let mut cw = CodeWriter::new(vec![]);
 
-  render_IR(db, &mut cw, node, false)?;
+  render_IR(db, &mut cw, node, false, InputType::Default)?;
 
   unsafe { SherpaResult::Ok(String::from_utf8_unchecked(cw.into_output())) }
 }
