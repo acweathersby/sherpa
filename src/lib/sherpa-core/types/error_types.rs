@@ -1,14 +1,16 @@
-use super::{
-  super::parser::{Import, Production_Import_Symbol},
-  GrammarIdentities,
-};
+use super::{super::*, GrammarIdentities};
 use crate::{journal::Journal, types::*};
 use sherpa_rust_runtime::types::Token;
 use std::path::PathBuf;
 
 /// This error occurs when source of an imported grammar cannot be found.
-pub(crate) fn add_invalid_import_source_error(j: &mut Journal, import: &Import, import_path: &PathBuf, base_path: &PathBuf) {
-  let Import { tok, .. } = import;
+pub(crate) fn add_invalid_import_source_error(
+  j: &mut Journal,
+  import: &parser::Import,
+  import_path: &PathBuf,
+  base_path: &PathBuf,
+) {
+  let parser::Import { tok, .. } = import;
   j.report_mut().add_error(SherpaError::SourceError {
     loc:        tok.clone(),
     path:       import_path.clone(),
@@ -24,7 +26,7 @@ pub fn _create_missing_import_name_error(
   j: &mut Journal,
   g: &GrammarIdentities,
   s_store: &IStringStore,
-  nterm_import_sym: &Production_Import_Symbol,
+  nterm_import_sym: &parser::NonTerminal_Import_Symbol,
 ) {
   j.report_mut().add_error(SherpaError::SourceError {
     loc:        nterm_import_sym.tok.clone(),

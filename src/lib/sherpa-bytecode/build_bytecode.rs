@@ -122,7 +122,6 @@ fn build_statement<'db>(
 
     match transitive {
       parser::ASTNode::Skip(..) => insert_op(bc, Op::SkipToken),
-      parser::ASTNode::Pop(..) => insert_op(bc, Op::PopGoto),
       parser::ASTNode::Scan(..) => insert_op(bc, Op::ScanShift),
       parser::ASTNode::Reset(..) => insert_op(bc, Op::PeekReset),
       parser::ASTNode::Shift(..) => insert_op(bc, Op::ShiftToken),
@@ -138,9 +137,9 @@ fn build_statement<'db>(
     insert_tok_debug(bc, non_branch.to_token(), add_debug_symbols);
 
     match non_branch {
-      parser::ASTNode::ReduceRaw(box parser::ReduceRaw { rule_id, len, prod_id: nterm, .. }) => {
+      parser::ASTNode::ReduceRaw(box parser::ReduceRaw { rule_id, len, nonterminal_id, .. }) => {
         insert_op(bc, Op::Reduce);
-        insert_u32_le(bc, *nterm as u32);
+        insert_u32_le(bc, *nonterminal_id as u32);
         insert_u32_le(bc, *rule_id as u32);
         insert_u16_le(bc, *len as u16);
       }
@@ -149,7 +148,11 @@ fn build_statement<'db>(
         insert_u32_le(bc, *id);
       }
       parser::ASTNode::SetLine(_) => { /* ignored in bytecode parsers */ }
-      parser::ASTNode::SetTokenLen(_) => insert_op(bc, Op::PopGoto),
+      parser::ASTNode::Pop(box parser::Pop { popped_state, .. }) => {
+        for _ in 0..(*popped_state).max(1) {
+          insert_op(bc, Op::PopGoto)
+        }
+      }
       _ => {
         unreachable!();
       }

@@ -19,7 +19,7 @@ fn build_sherpa_grammar_and_parse(input: &str) -> SherpaResult<()> {
 
   let parser = database.build_parser()?.optimize(false)?;
 
-  #[cfg(all(debug_assertions, not(feature = "wasm-target")))]
+  #[cfg(all(debug_assertions))]
   parser.write_states_to_temp_file()?;
 
   let (bc, state_map) = compile_bytecode(&parser, true)?;

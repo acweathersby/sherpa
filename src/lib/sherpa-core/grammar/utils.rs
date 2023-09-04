@@ -88,11 +88,11 @@ pub fn get_symbol_details<'a>(mut sym: &'a ASTNode) -> SymbolData<'a> {
         
         sym = &annotated.symbol;
       }
-      ASTNode::GroupProduction(_) => {
+      ASTNode::Grouped_Rules(_) => {
         data.is_group = true;
         break;
       }
-      ASTNode::List_Production( p) => {
+      ASTNode::List_Rules( p) => {
         data.is_list = true;
         data.is_optional |= p.optional;
         break;
@@ -106,7 +106,7 @@ pub fn get_symbol_details<'a>(mut sym: &'a ASTNode) -> SymbolData<'a> {
         data.token_precedence = u16::MAX;
         break;
       }
-      ASTNode::Production_Terminal_Symbol(_) => {
+      ASTNode::NonTerminal_Terminal_Symbol(_) => {
         data.token_precedence = data.token_precedence.max(NON_TERMINAL_TOKEN_PRECEDENCE);
         break;
       }
@@ -119,9 +119,9 @@ pub fn get_symbol_details<'a>(mut sym: &'a ASTNode) -> SymbolData<'a> {
       // submitted to the bytecode compiler for evaluation
        ASTNode::NotEmptySet(_)
 
-      //| ASTNode::TemplateProductionSymbol(_)
-      | ASTNode::Production_Symbol(_)
-      | ASTNode::Production_Import_Symbol(_) => {
+      //| ASTNode::TemplateNonTerminalSymbol(_)
+      | ASTNode::NonTerminal_Symbol(_)
+      | ASTNode::NonTerminal_Import_Symbol(_) => {
         break;
       }
       _ => unreachable!()

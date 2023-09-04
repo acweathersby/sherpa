@@ -150,12 +150,12 @@ pub fn create_grammar_data(
   // our exports into ProductionIds.
   if exports.is_empty() != true {
     for export in exports {
-      let nterm = get_nonterminal_id_from_ast_node(&g_data, &export.production)?;
-      g_data.exports.push((export.reference.intern(string_store), (nterm, export.production.to_token())));
+      let nterm = get_nonterminal_id_from_ast_node(&g_data, &export.nonterminal)?;
+      g_data.exports.push((export.reference.intern(string_store), (nterm, export.nonterminal.to_token())));
     }
   } else {
     // Use the fist declared non-terminal as the default entry
-    let nterm = &g_data.grammar.productions[0];
+    let nterm = &g_data.grammar.rules[0];
     if let Ok(nterm_id) = get_nonterminal_id_from_ast_node(&g_data, &nterm) {
       g_data.exports.push(("default".intern(string_store), (nterm_id, nterm.to_token())));
     }
@@ -171,8 +171,8 @@ pub fn extract_nonterminals<'a>(
 ) -> SherpaResult<(Array<(Box<NonTerminal>, &'a ASTNode)>, Array<Box<CustomState>>)> {
   let mut nterms = Array::new();
   let mut parse_states = Array::new();
-  for nterm in &g_data.grammar.productions {
-    match nterm {
+  for prod_rule in &g_data.grammar.rules {
+    match prod_rule {
       ASTNode::State(parse_state) => {
         let (guid_name, friendly_name) = nterm_names(parse_state.id.name.as_str(), &g_data.id, s_store);
         parse_states.push(Box::new(CustomState {
@@ -185,9 +185,9 @@ pub fn extract_nonterminals<'a>(
           symbols: Default::default(),
         }))
       }
-      ASTNode::PrattProduction(box parser::PrattProduction { name_sym, rules: _, tok })
-      | ASTNode::CFProduction(box parser::CFProduction { name_sym, rules: _, tok })
-      | ASTNode::PegProduction(box parser::PegProduction { name_sym, rules: _, tok }) => {
+      ASTNode::PrattRules(box parser::PrattRules { name_sym, rules: _, tok })
+      | ASTNode::CFRules(box parser::CFRules { name_sym, rules: _, tok })
+      | ASTNode::PegRules(box parser::PegRules { name_sym, rules: _, tok }) => {
         let (guid_name, f_name) = nterm_names(name_sym.name.as_str(), &g_data.id, s_store);
         nterms.push((
           Box::new(NonTerminal {
@@ -203,10 +203,10 @@ pub fn extract_nonterminals<'a>(
             tok: tok.clone(),
             asts: Default::default(),
           }),
-          nterm,
+          prod_rule,
         ));
       }
-      ASTNode::AppendProduction(box parser::AppendProduction { name_sym, rules: _, tok }) => {
+      ASTNode::AppendRules(box parser::AppendRules { name_sym, rules: _, tok }) => {
         match get_nonterminal_symbol(g_data, &name_sym) {
           (Some(name_sym), _) => {
             let (guid_name, f_name) = nterm_names(name_sym.name.as_str(), &g_data.id, s_store);
@@ -224,7 +224,7 @@ pub fn extract_nonterminals<'a>(
                 tok: tok.clone(),
                 asts: Default::default(),
               }),
-              nterm,
+              prod_rule,
             ));
           }
           (_, Some(name_sym)) => {
@@ -247,7 +247,7 @@ pub fn extract_nonterminals<'a>(
                 tok: tok.clone(),
                 asts: Default::default(),
               }),
-              nterm,
+              prod_rule,
             ));
           }
           _ => unreachable!(),
@@ -327,10 +327,10 @@ pub fn process_nonterminal<'a>(
   s_store: &IStringStore,
 ) -> SherpaResult<Box<NonTerminal>> {
   let (type_, rules) = match nterm_ast {
-    ASTNode::CFProduction(nterm) => (NonTermType::ContextFree, &nterm.rules),
-    ASTNode::AppendProduction(nterm) => (NonTermType::ContextFree, &nterm.rules),
-    ASTNode::PrattProduction(nterm) => (NonTermType::Pratt, &nterm.rules),
-    ASTNode::PegProduction(nterm) => (NonTermType::Peg, &nterm.rules),
+    ASTNode::CFRules(nterm) => (NonTermType::ContextFree, &nterm.rules),
+    ASTNode::AppendRules(nterm) => (NonTermType::ContextFree, &nterm.rules),
+    ASTNode::PrattRules(nterm) => (NonTermType::Pratt, &nterm.rules),
+    ASTNode::PegRules(nterm) => (NonTermType::Peg, &nterm.rules),
     _ast => {
       #[cfg(debug_assertions)]
       todo!("Create build for {_ast:?}");
@@ -478,7 +478,7 @@ fn process_rule_symbols(
         // the next iteration.
         continue;
       }
-      ASTNode::GroupProduction(group) => {
+      ASTNode::Grouped_Rules(group) => {
         // All bodies are plain without annotations or functions
         if annotation.is_empty() && !some_rules_have_ast_definitions(&group.rules) {
           // For each rule in the group clone the existing rule lists and
@@ -547,7 +547,7 @@ fn process_rule_symbols(
           (id.as_sym(), group.tok.clone())
         }
       }
-      ASTNode::List_Production(box parser::List_Production { symbol, terminal_symbol, tok, .. }) => {
+      ASTNode::List_Rules(box parser::List_Rules { symbol, terminal_symbol, tok, .. }) => {
         let mut rule_syms = vec![symbol.clone()];
         let mut rules = Default::default();
 
@@ -704,14 +704,14 @@ fn record_symbol(
       }
     },
 
-    ASTNode::Production_Symbol(_) | ASTNode::Production_Import_Symbol(_) => {
+    ASTNode::NonTerminal_Symbol(_) | ASTNode::NonTerminal_Import_Symbol(_) => {
       let id = get_nonterminal_id_from_ast_node(g_data, sym_node)?.as_sym();
       // Bypass the registration of this symbol as a symbol.
       return SherpaResult::Ok(id);
     }
 
-    ASTNode::Production_Terminal_Symbol(token_prod) => {
-      let id = get_nonterminal_id_from_ast_node(g_data, &token_prod.production)?.as_tok_sym();
+    ASTNode::NonTerminal_Terminal_Symbol(token_prod) => {
+      let id = get_nonterminal_id_from_ast_node(g_data, &token_prod.nonterminal)?.as_tok_sym();
       // Bypass the registration of this symbol as a symbol.
       return SherpaResult::Ok(id);
     }
@@ -745,16 +745,16 @@ fn record_symbol(
 fn get_nonterminal_symbol<'a>(
   g_data: &GrammarData,
   node: &'a ASTNode,
-) -> (Option<&'a parser::Production_Symbol>, Option<&'a parser::Production_Import_Symbol>) {
+) -> (Option<&'a parser::NonTerminal_Symbol>, Option<&'a parser::NonTerminal_Import_Symbol>) {
   match node {
-    ASTNode::Production_Import_Symbol(prod_import) => (None, Some(prod_import.as_ref())),
-    ASTNode::Production_Symbol(prod_sym) => (Some(prod_sym.as_ref()), None),
-    ASTNode::Production_Terminal_Symbol(prod_tok) => get_nonterminal_symbol(g_data, &prod_tok.production),
+    ASTNode::NonTerminal_Import_Symbol(prod_import) => (None, Some(prod_import.as_ref())),
+    ASTNode::NonTerminal_Symbol(prod_sym) => (Some(prod_sym.as_ref()), None),
+    ASTNode::NonTerminal_Terminal_Symbol(prod_tok) => get_nonterminal_symbol(g_data, &prod_tok.nonterminal),
     ASTNode::State(box parser::State { id, .. })
-    | ASTNode::PrattProduction(box parser::PrattProduction { name_sym: id, .. })
-    | ASTNode::PegProduction(box parser::PegProduction { name_sym: id, .. })
-    | ASTNode::CFProduction(box parser::CFProduction { name_sym: id, .. }) => (Some(id.as_ref()), None),
-    ASTNode::AppendProduction(box parser::AppendProduction { name_sym, .. }) => get_nonterminal_symbol(g_data, name_sym),
+    | ASTNode::PrattRules(box parser::PrattRules { name_sym: id, .. })
+    | ASTNode::PegRules(box parser::PegRules { name_sym: id, .. })
+    | ASTNode::CFRules(box parser::CFRules { name_sym: id, .. }) => (Some(id.as_ref()), None),
+    ASTNode::AppendRules(box parser::AppendRules { name_sym, .. }) => get_nonterminal_symbol(g_data, name_sym),
     _ => unreachable!(),
   }
 }

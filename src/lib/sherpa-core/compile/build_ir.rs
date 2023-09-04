@@ -172,8 +172,8 @@ fn convert_state_to_ir<'db>(
 
         w.write(&create_rule_reduction(rule_id, db))?;
 
-        for _ in 0..completes {
-          w.write("then set-tok-len 0".into())?;
+        if completes > 0 {
+          let _ = (&mut w) + "pop " + completes.to_string();
         }
       }
       _ => unreachable!(),
@@ -408,8 +408,8 @@ fn build_body<'db>(state: &State, successor: &State, graph: &GraphHost<'db>, got
 
       body_string.push(create_rule_reduction(rule_id, db));
 
-      for _ in 0..completes {
-        body_string.push("set-tok-len 0".into());
+      if completes > 0 {
+        body_string.push("pop ".to_string() + &completes.to_string());
       }
 
       false

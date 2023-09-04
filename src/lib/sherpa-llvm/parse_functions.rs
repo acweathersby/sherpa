@@ -534,7 +534,7 @@ fn construct_assign_token_id(args: &BuildArgs, p_ctx: PointerValue, token_value:
 }
 
 fn reduce<'a, 'llvm: 'a>(
-  parser::ReduceRaw { rule_id, prod_id: nterm, len, .. }: &parser::ReduceRaw,
+  parser::ReduceRaw { rule_id, nonterminal_id, len, .. }: &parser::ReduceRaw,
   args: &BuildArgs<'a, 'llvm>,
   p_ctx: PointerValue<'llvm>,
   no_reenter: bool,
@@ -545,7 +545,7 @@ fn reduce<'a, 'llvm: 'a>(
 
   CtxAggregateIndices::sym_len.store(b, p_ctx, i32.const_int(*len as u64, false))?;
   CtxAggregateIndices::rule_id.store(b, p_ctx, i32.const_int(*rule_id as u64, false))?;
-  CtxAggregateIndices::nonterm_id.store(b, p_ctx, i32.const_int(*nterm as u64, false))?;
+  CtxAggregateIndices::nonterm_id.store(b, p_ctx, i32.const_int(*nonterminal_id as u64, false))?;
 
   let f = if !no_reenter {
     let f = create_parse_function(args.j, args.m, &format!("reduce_{}", args.state_name));

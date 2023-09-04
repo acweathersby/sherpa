@@ -29,7 +29,7 @@ pub trait ParserStore: JournalReporter {
   fn get_db(&self) -> &ParserDatabase;
 
   /// Writes the parser IR states to a file in the temp directory
-  #[cfg(all(debug_assertions, not(feature = "wasm-target")))]
+  #[cfg(all(debug_assertions))]
   fn write_states_to_temp_file(&self) -> SherpaResult<()> {
     let db = self.get_db();
 

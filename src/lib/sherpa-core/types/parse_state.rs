@@ -262,18 +262,17 @@ fn render_IR<T: Write>(
     ASTNode::Peek(..) => w.write(" peek")?,
     ASTNode::Shift(..) => w.write(" shift")?,
     ASTNode::Skip(..) => w.write(" skip")?,
-    ASTNode::Pop(..) => w.write(" pop")?,
+    ASTNode::Pop(pop) => {
+      w.w(" pop ")?.w(&(pop.popped_state.max(1)).to_string())?;
+    }
     ASTNode::Scan(..) => w.write(" scan")?,
     ASTNode::Reset(..) => w.write(" reset")?,
     ASTNode::Fail(..) => w.write(" fail")?,
     ASTNode::Pass(..) => w.write(" pass")?,
     ASTNode::Accept(..) => w.write(" accept")?,
     ASTNode::SetLine(..) => w.write(" set-line")?,
-    ASTNode::ReduceRaw(box parser::ReduceRaw { len, prod_id: nterm, rule_id, .. }) => {
-      _ = w + " reduce " + len.to_string() + " symbols to " + nterm.to_string() + " with rule " + rule_id.to_string();
-    }
-    ASTNode::SetTokenLen(_) => {
-      _ = w + " pop";
+    ASTNode::ReduceRaw(box parser::ReduceRaw { len, nonterminal_id, rule_id, .. }) => {
+      _ = w + " reduce " + len.to_string() + " symbols to " + nonterminal_id.to_string() + " with rule " + rule_id.to_string();
     }
     ASTNode::SetTokenId(box parser::SetTokenId { id, .. }) => {
       _ = w + " set-tok " + id.to_string();
