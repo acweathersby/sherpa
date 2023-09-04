@@ -453,24 +453,30 @@ pub(crate) unsafe fn construct_pop_function(module: &LLVMParserModule) -> Sherpa
 
   b.position_at_end(entry_block);
 
-  add_goto_pop_instructions(module, parse_ctx)?;
+  add_goto_pop_instructions(module, parse_ctx, 1)?;
 
   build_tail_call_with_return(b, fn_value, funct.dispatch)?;
 
   validate(fn_value)
 }
 
-pub(crate) fn add_goto_pop_instructions<'a>(module: &'a LLVMParserModule, parse_ctx: PointerValue<'a>) -> SherpaResult<()> {
+pub(crate) fn add_goto_pop_instructions<'a>(
+  module: &'a LLVMParserModule,
+  parse_ctx: PointerValue<'a>,
+  pop_count: u64,
+) -> SherpaResult<()> {
   let LLVMParserModule { b, i32, .. } = module;
+
+  let amount = i32.const_int(pop_count.max(1), false);
 
   let goto_stack_ptr = CtxAggregateIndices::goto_stack_ptr.get_ptr(b, parse_ctx)?;
   let goto_top = b.build_load(goto_stack_ptr, "").into_pointer_value();
-  let goto_top = unsafe { b.build_gep(goto_top, &[i32.const_int(1, false).const_neg()], "") };
+  let goto_top = unsafe { b.build_gep(goto_top, &[amount.const_neg()], "") };
   b.build_store(goto_stack_ptr, goto_top);
 
   let goto_free_ptr = CtxAggregateIndices::goto_free.get_ptr(b, parse_ctx)?;
   let goto_free = b.build_load(goto_free_ptr, "").into_int_value();
-  let goto_free = b.build_int_add(goto_free, i32.const_int(1, false), "");
+  let goto_free = b.build_int_add(goto_free, amount, "");
   b.build_store(goto_free_ptr, goto_free);
 
   SherpaResult::Ok(())

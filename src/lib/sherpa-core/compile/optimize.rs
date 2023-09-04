@@ -37,7 +37,7 @@ pub(crate) fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
 
   let parse_states = canonicalize_states(db, parse_states, None)?;
 
-  //let parse_states = merge_branches(db, parse_states)?;
+  let parse_states = merge_branches(db, parse_states)?;
 
   let parse_states = combine_state_branches(db, parse_states)?;
 
@@ -49,7 +49,7 @@ pub(crate) fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
 
   //let parse_states = _create_byte_sequences(db, parse_states)?;
 
-  //let parse_states = merge_branches(db, parse_states)?;
+  let parse_states = merge_branches(db, parse_states)?;
 
   let parse_states = remove_redundant_defaults(db, parse_states)?;
 

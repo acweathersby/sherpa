@@ -115,8 +115,8 @@ fn compile_statement<'a, 'llvm: 'a>(
 
   if let Some(transitive) = transitive {
     match transitive {
-      parser::ASTNode::Pop(..) => {
-        pop_goto(args, p_ctx, state_fun)?;
+      parser::ASTNode::Pop(pop) => {
+        pop_goto(args, p_ctx, state_fun, pop.popped_state.max(1) as u64)?;
         resolved_end = true;
       }
       parser::ASTNode::PeekSkip(..) => {
@@ -740,10 +740,10 @@ fn get_offset_to_end_of_token<'a>(m: &'a LLVMParserModule, p_ctx: PointerValue<'
   SherpaResult::Ok(offset)
 }
 
-fn pop_goto(args: &BuildArgs, p_ctx: PointerValue, state_fun: FunctionValue) -> SherpaResult<()> {
+fn pop_goto(args: &BuildArgs, p_ctx: PointerValue, state_fun: FunctionValue, pop_count: u64) -> SherpaResult<()> {
   const __HINT__: Opcode = Opcode::PopGoto;
 
-  add_goto_pop_instructions(args.m, p_ctx)?;
+  add_goto_pop_instructions(args.m, p_ctx, pop_count)?;
 
   pass(args, p_ctx, state_fun)
 }

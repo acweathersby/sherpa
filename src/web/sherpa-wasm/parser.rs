@@ -148,12 +148,12 @@ pub fn get_codemirror_parse_tree(input: String) -> JsValue {
   let mut reader = string_reader::StringReader::new(input);
   let mut bytecode_parser: ByteCodeParser<'_, string_reader::StringReader, u32> =
     ByteCodeParser::<'static, _, u32>::new(&mut reader, &parser::bytecode);
-  bytecode_parser.init_parser(46600);
+  bytecode_parser.init_parser(31287);
 
   let mut output = vec![];
   let mut acc_stack: Vec<u32> = vec![];
 
-  const LAST_TOKEN_INDEX: usize = parser::meta::production_names.len();
+  const LAST_TOKEN_INDEX: usize = parser::meta::nonterm_names.len();
   loop {
     match bytecode_parser.get_next_action(&mut None) {
       ParseAction::Accept { .. } => {
@@ -200,7 +200,7 @@ pub fn get_codemirror_parse_tree(input: String) -> JsValue {
 
 #[wasm_bindgen]
 pub fn get_nonterminal_names() -> JsValue {
-  serde_wasm_bindgen::to_value(&ProdNames(parser::meta::production_names.iter().map(|i| (*i).to_string()).collect())).unwrap()
+  serde_wasm_bindgen::to_value(&ProdNames(parser::meta::nonterm_names.iter().map(|i| (*i).to_string()).collect())).unwrap()
 }
 
 #[derive(Serialize, Deserialize)]

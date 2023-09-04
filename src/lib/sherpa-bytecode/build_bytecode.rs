@@ -292,6 +292,8 @@ fn build_match<'db>(
     let (val, offset) = pair;
     let hash_index = (val & mod_mask) as usize;
     if hash_entries[hash_index] == 0 {
+      debug_assert!(offset <= 0x7FF, "Hash table offset overflow. Offsets [{}] overflow bounds by [{}]", offset, offset - 0x7FF);
+      debug_assert!(val <= 0x7FF, "Hash table value overflow. Value [{}] overflow bounds by [{}]", val, val - 0x7FF);
       hash_entries[hash_index] = (val & 0x7FF) | ((offset & 0x7FF) << 11) | (512 << 22);
     } else {
       leftover_pairs.push(pair);
