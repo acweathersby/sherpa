@@ -87,9 +87,9 @@ fn convert_nonterm_shift_state_to_ir<'db>(
         (nterm, (nterm_name, create_ir_state_name(graph, None, s), s.get_type()))
       } else {
         #[cfg(debug_assertions)]
-        panic!("Invalid non-terminal type: {:?}  {}", s.get_symbol().sym(), s.get_symbol().sym().debug_string(db));
+        unreachable!("Invalid non-terminal type: {:?}  {}", s.get_symbol().sym(), s.get_symbol().sym().debug_string(db));
         #[cfg(not(debug_assertions))]
-        panic!()
+        unreachable!()
       }
     })
     .collect::<OrderedMap<_, _>>()

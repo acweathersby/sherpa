@@ -9,7 +9,7 @@ use crate::{
   grammar::utils::resolve_grammar_path,
   journal::Journal,
   parser::ast::escaped_from,
-  types::error_types::add_invalid_import_source_error,
+  types::error_types::{add_invalid_import_source_error, empty_rule_error},
   utils::create_u64_hash,
 };
 #[cfg(debug_assertions)]
@@ -347,15 +347,7 @@ pub fn process_nonterminals<'a>(
 
   for rule in &nterm.rules {
     if rule.symbols.is_empty() {
-      return Err(SherpaError::SourceError {
-        loc:        rule.tok.clone(),
-        path:       rule.g_id.path.to_path(s_store),
-        id:         "[todo]",
-        msg:        "Rules that can derive the empty rule `{} => ε` are currently not allowed in Sherpa Grammars!".into(),
-        inline_msg: "This symbol is optional leads to a derivation of this rule that lacks any symbols".into(),
-        ps_msg:     "Consider changing this rule to (+)".into(),
-        severity:   SherpaErrorSeverity::Critical,
-      });
+      return Err(empty_rule_error(rule, s_store));
     }
   }
 

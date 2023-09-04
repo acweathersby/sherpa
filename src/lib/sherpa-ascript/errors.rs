@@ -6,6 +6,10 @@ use super::types::{AScriptProp, AScriptStore, AScriptTypeVal, TaggedType};
 use crate::types::*;
 use std::{collections::BTreeSet, path::PathBuf};
 
+pub const fn ascript_error_class() -> ErrorClass {
+  ErrorClass::Extended(1)
+}
+
 /// This error occurs when multiple definitions of the same Struct
 /// define the same property with different types.
 ///
@@ -41,7 +45,7 @@ pub(crate) fn add_prop_redefinition_error(
   new_prop: AScriptProp,
 ) {
   j.report_mut().add_error(SherpaError::SourcesError {
-    id:       "property-redefinition",
+    id:       (ascript_error_class(), 1, "property-redefinition").into(),
     sources:  vec![
       (
         existing_prop.loc.clone(),
@@ -95,7 +99,7 @@ pub(crate) fn add_incompatible_nonterm_scalar_types_error(
   let type_names = ast.get_type_names();
 
   j.report_mut().add_error(SherpaError::SourcesError {
-    id:       "incompatible-non-terminal-scalar-types [401]",
+    id:       (ascript_error_class(), 2, "incompatible-non-terminal-scalar-types").into(),
     sources:  rules_a
       .into_iter()
       .map(|r| {
@@ -158,7 +162,7 @@ pub(crate) fn add_incompatible_nonterm_vector_types_error(
 ) {
   let type_names = ast.get_type_names();
   j.report_mut().add_error(SherpaError::SourcesError {
-    id:       "incompatible-non-terminal-vector-types",
+    id:       (ascript_error_class(), 3, "incompatible-non-terminal-vector-types").into(),
     sources:  _types
       .iter()
       .map(|t| {
@@ -214,7 +218,7 @@ pub(crate) fn add_incompatible_nonterm_types_error(
 ) {
   let type_names = ast.get_type_names();
   j.report_mut().add_error(SherpaError::SourcesError {
-    id:       "incompatible-non-terminal-types",
+    id:       (ascript_error_class(), 4, "incompatible-non-terminal-types").into(),
     sources:  scalar_types
       .iter()
       .map(|(t, r)| {
@@ -247,7 +251,7 @@ pub(crate) fn add_incompatible_nonterm_types_error(
 /// names or non-terminals in the respective rule.
 pub(crate) fn add_unmatched_prop_error(j: &mut Journal, rule: &Rule, db: &ParserDatabase, prop: &AST_Property) {
   j.report_mut().add_error(SherpaError::SourceError {
-    id:         "unmatched-valueless-prop",
+    id:         (ascript_error_class(), 5, "unmatched-valueless-prop").into(),
     path:       PathBuf::from(rule.g_id.path.clone().to_string(db.string_store())),
     inline_msg: Default::default(),
     loc:        prop.tok.clone(),

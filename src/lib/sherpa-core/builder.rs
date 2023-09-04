@@ -2,8 +2,8 @@ use crate::{
   compile::{build_states::compile_parse_states, optimize::optimize},
   grammar::{build_compile_db, compile_grammar_from_str, load_grammar, remove_grammar_mut},
   o_to_r,
-  proxy::{Queue, Set},
-  types::ParserConfig,
+  proxy::{Array, DeduplicateIterator, Queue, Set},
+  types::{ErrorContainerIter, ParserConfig},
   GrammarIdentities,
   GrammarSoup,
   Journal,
@@ -195,16 +195,26 @@ impl SherpaDatabaseBuilder {
   pub fn build_parser(&self, config: ParserConfig) -> SherpaResult<SherpaParserBuilder> {
     let SherpaDatabaseBuilder { j, db } = self;
 
-    let states = compile_parse_states(j.transfer(), db, config)?;
+    match compile_parse_states(j.transfer(), db, config) {
+      Ok(states) => {
+        j.transfer().flush_reports();
 
-    j.transfer().flush_reports();
-
-    Ok(SherpaParserBuilder {
-      j: j.transfer(),
-      db: db.clone(),
-      states: states.into_iter().collect(),
-      optimized_states: None,
-    })
+        Ok(SherpaParserBuilder {
+          j: j.transfer(),
+          db: db.clone(),
+          states: states.into_iter().collect(),
+          optimized_states: None,
+        })
+      }
+      Err(err) => {
+        let mut errors = err.flatten();
+        if errors.len() > 1 {
+          Err(errors.into_iter().dedup::<Array<_>>().into_iter().into_multi())
+        } else {
+          Err(errors.pop().unwrap())
+        }
+      }
+    }
   }
 
   pub fn print_terminals(&self) {

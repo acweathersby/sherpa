@@ -143,12 +143,16 @@ impl<'db> Item<'db> {
   }
 
   /// Returns the reduce type of the item.
-  pub fn resolve_type(&self) -> ReductionType {
+  pub fn reduction_type(&self) -> ReductionType {
     self.db.get_reduce_type(self.rule_id)
   }
 
   pub fn to_absolute(&self) -> Self {
     Self { goal: Default::default(), origin: Default::default(), ..self.clone() }
+  }
+
+  pub fn is_canonical(&self) -> bool {
+    *self == self.to_canonical()
   }
 
   /// Returns the canonical item, that is an item that does not have any other
@@ -158,6 +162,7 @@ impl<'db> Item<'db> {
       goal: Default::default(),
       origin: Default::default(),
       origin_state: StateId::default(),
+      goto_distance: 0,
       ..self.clone()
     }
   }
@@ -393,12 +398,14 @@ impl<'db> Item<'db> {
 
         string += &i.sym().debug_string(self.db);
 
-        string += &match (i.symbol_precedence(), i.token_precedence()) {
-          (0, 0) => String::default(),
-          (sym, 0) => "{".to_string() + &sym.to_string() + "}",
-          (0, tok) => "{:".to_string() + &tok.to_string() + "}",
-          (sym, tok) => "{".to_string() + &sym.to_string() + ":" + &tok.to_string() + "}",
-        };
+        if !self.is_canonical() {
+          string += &match (i.symbol_precedence(), i.token_precedence()) {
+            (0, 0) => String::default(),
+            (sym, 0) => "{".to_string() + &sym.to_string() + "}",
+            (0, tok) => "{:".to_string() + &tok.to_string() + "}",
+            (sym, tok) => "{".to_string() + &sym.to_string() + ":" + &tok.to_string() + "}",
+          };
+        }
 
         item = i.increment();
       }
@@ -407,7 +414,9 @@ impl<'db> Item<'db> {
         string += " •";
       }
 
-      string += &(" [".to_string() + &self.goto_distance.to_string() + "]");
+      if !self.is_canonical() {
+        string += &(" [".to_string() + &self.goto_distance.to_string() + "]");
+      }
 
       string.replace("\n", "\\n")
     }

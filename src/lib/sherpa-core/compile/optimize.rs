@@ -43,7 +43,7 @@ pub(crate) fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
 
   let parse_states = canonicalize_states(db, parse_states, Some("state combine"))?;
 
-  //let parse_states = inline_states(db, parse_states)?;
+  //let parse_states = _inline_states(db, parse_states)?;
 
   let parse_states = inline_scanners(db, parse_states)?;
 
@@ -401,7 +401,7 @@ fn inline_scanners<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMa
 }
 
 /// Inline statements of states that don't have transitive actions or matches.
-fn inline_states<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
+fn _inline_states<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
   // Get a reference to all root level branches.
 
   let mut naked_state_lookup = HashMap::new();

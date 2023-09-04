@@ -279,9 +279,6 @@ impl PrecedentDBTerm {
 
 impl From<(DBTermKey, u16)> for PrecedentDBTerm {
   fn from(value: (DBTermKey, u16)) -> Self {
-    /*    if value.0.to_index() as u32 > 5 && value.1 == 0 {
-      panic!("WTIF!");
-    } */
     PrecedentDBTerm(value.0, value.1)
   }
 }

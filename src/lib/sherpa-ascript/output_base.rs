@@ -1,4 +1,7 @@
-use crate::slot_ref::{SlotIndex, SlotRef};
+use crate::{
+  errors::ascript_error_class,
+  slot_ref::{SlotIndex, SlotRef},
+};
 use sherpa_core::{
   parser::{ASTNode, ASTNodeType, AST_IndexReference, AST_NamedReference, AST_Struct, AST_Vector, GetASTNodeType},
   proxy::Array,
@@ -230,7 +233,7 @@ impl<'a> AscriptWriterUtils<'a> {
         panic!("{}", SherpaError::SourceError {
           loc:        ast.to_token(),
           path:       PathBuf::from(rule.g_id.path.to_string(self.db.string_store())),
-          id:         "ascript-writer-utils-unhandled-ast-node",
+          id:         (ascript_error_class(), 0, "ascript-writer-utils-unhandled-ast-node").into(),
           msg:        format!("An unhandled ast node has been encountered"),
           inline_msg: format!("Node type [{:?}] lacks an ASTExprHandler", ast.get_type()),
           ps_msg:     "Add an ASTExprHandler for this type using AscriptWriterUtils::add_ast_handler".into(),
@@ -241,7 +244,7 @@ impl<'a> AscriptWriterUtils<'a> {
       panic!("{}", SherpaError::SourceError {
         loc:        ast.to_token(),
         path:       PathBuf::from(rule.g_id.path.to_string(self.db.string_store())),
-        id:         "ascript-writer-utils-unhandled-ast-node",
+        id:         (ascript_error_class(), 0, "ascript-writer-utils-unhandled-ast-node").into(),
         msg:        format!("An unhandled ast node has been encountered"),
         inline_msg: format!("Node type lacks an ASTExprHandler"),
         ps_msg:     "Add an ASTExprHandler for this type using AscriptWriterUtils::add_ast_handler".into(),
@@ -626,7 +629,7 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
                       #[cfg(debug_assertions)]
                       panic!("{}", SherpaError::SourceError {
                         loc:        statement.to_token(),
-                        id:         Default::default(),
+                        id:         (ascript_error_class(), 2, "invalid-expression-value").into(),
                         msg:        "Could not resolve this expression".to_string(),
                         inline_msg: Default::default(),
                         ps_msg:     Default::default(),

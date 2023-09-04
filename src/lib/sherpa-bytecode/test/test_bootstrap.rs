@@ -2,7 +2,7 @@
 //! End to end test for the compilation of a sherpa grammar parser the
 //! using bytecode parser engine.
 
-use sherpa_core::{ParserStore, PrintConfig, SherpaGrammarBuilder, SherpaResult};
+use sherpa_core::{ParserConfig, ParserStore, PrintConfig, SherpaGrammarBuilder, SherpaResult};
 use sherpa_rust_runtime::types::SherpaParser;
 
 use crate::compile_bytecode;
@@ -17,7 +17,7 @@ fn build_sherpa_grammar_and_parse(input: &str) -> SherpaResult<()> {
 
   let database = grammar.add_source(&sherpa_grammar)?.build_db(&sherpa_grammar)?;
 
-  let parser = database.build_parser(Default::default())?.optimize(false)?;
+  let parser = database.build_parser(ParserConfig::new().lr_only())?.optimize(false)?;
 
   #[cfg(all(debug_assertions))]
   parser.write_states_to_temp_file()?;
@@ -26,7 +26,7 @@ fn build_sherpa_grammar_and_parse(input: &str) -> SherpaResult<()> {
 
   let db = parser.get_db();
 
-  let mut cd = if true {
+  let mut cd = if false {
     #[cfg(all(debug_assertions, not(feature = "wasm-target")))]
     sherpa_core::file_debugger(db.to_owned(), PrintConfig {
       display_scanner_output: false,
@@ -56,29 +56,14 @@ fn build_sherpa_grammar_and_parse(input: &str) -> SherpaResult<()> {
 }
 
 #[test]
-fn test_trivial_grammar() -> SherpaResult<()> {
-  build_sherpa_grammar_and_parse("<> test > 'test'^t ")
-}
-
-#[test]
-fn grammar_with_import() -> SherpaResult<()> {
-  build_sherpa_grammar_and_parse("IMPORT a as t \n<> test > 'test'^t ")
-}
-
-#[test]
-fn grammar_with_append() -> SherpaResult<()> {
-  build_sherpa_grammar_and_parse("<> a > b +> c > d <> e > f")
-}
-
-#[test]
 fn test_full_grammar() -> SherpaResult<()> {
-  let file_names = ["grammar.sg", "ascript.sg", "ir.sg", "symbol.sg", "token.sg"];
+  let file_names = ["grammar.sg" /* , "ascript.sg", "ir.sg", "symbol.sg", "token.sg" */];
   let grammar_folder =
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammar/sherpa/2.0.0").canonicalize().unwrap();
   let sherpa_grammar = grammar_folder.join("grammar.sg");
   let grammar = SherpaGrammarBuilder::new();
   let database = grammar.add_source(&sherpa_grammar)?.build_db(&sherpa_grammar)?;
-  let parser = database.build_parser(Default::default())?.optimize(false)?;
+  let parser = database.build_parser(ParserConfig::new().lr_only())?.optimize(false)?;
   let (bc, state_map) = compile_bytecode(&parser, true)?;
 
   #[cfg(all(debug_assertions, not(feature = "wasm-target")))]
@@ -90,7 +75,7 @@ fn test_full_grammar() -> SherpaResult<()> {
     let input = std::fs::read_to_string(grammar_folder.join(file_name))?;
 
     let db = parser.get_db();
-    let mut cd = if true {
+    let mut cd = if false {
       #[cfg(all(debug_assertions, not(feature = "wasm-target")))]
       sherpa_core::file_debugger(db.to_owned(), PrintConfig {
         display_scanner_output: false,

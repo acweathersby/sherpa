@@ -1,4 +1,6 @@
 use crate::{
+  journal::config::DebugConfig,
+  types::ParserConfig,
   DBPackage,
   GrammarSoup,
   Journal,
@@ -41,7 +43,7 @@ pub fn build_parse_states_from_source_str<'a, T>(
 }
 
 /// Builds a set of states from one or more source strings.
-/// Each `source` is mapped to a single character  name in this sequence
+/// Each _"file"_ source is mapped to a single character name in this sequence
 /// `ABCDEFGHIJKLMNOPQRSTUVWXYZ`
 pub fn build_parse_states_from_multi_sources<'a, T>(
   sources: &[&str],
@@ -58,10 +60,12 @@ pub fn build_parse_states_from_multi_sources<'a, T>(
 
   let root_path = source_path.join("A");
 
+  let config = ParserConfig::new();
+
   if optimize {
-    test_fn(grammar.build_db(&root_path)?.build_parser(Default::default())?.optimize(false)?.into())
+    test_fn(grammar.build_db(&root_path)?.build_parser(config)?.optimize(false)?.into())
   } else {
-    test_fn(grammar.build_db(&root_path)?.build_parser(Default::default())?.into())
+    test_fn(grammar.build_db(&root_path)?.build_parser(config)?.into())
   }
 }
 

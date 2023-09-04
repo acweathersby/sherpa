@@ -3,7 +3,10 @@ use sherpa_rust_runtime::types::{Token, TokenRange};
 use crate::{
   journal::Journal,
   parser,
-  types::*,
+  types::{
+    error_types::{invalid_nonterminal_alias, missing_nonterminal_rules},
+    *,
+  },
   utils::{create_u64_hash, hash_group_btreemap},
 };
 use std::collections::{btree_map, VecDeque};
@@ -163,28 +166,11 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
           add_custom_state(state.state.clone(), c_states);
         }
         (Some(_), Some(_)) => {
-          j.report_mut().add_error(SherpaError::SourceError {
-            loc,
-            path: path.to_path(s_store),
-            id: "[2002]",
-            inline_msg: Default::default(),
-            msg: "Cannot resolve grammar that has non-terminal definitions and state definitions with the same name: "
-              .to_string(),
-            ps_msg: Default::default(),
-            severity: SherpaErrorSeverity::Critical,
-          });
+          j.report_mut().add_error(invalid_nonterminal_alias(loc, path, s_store));
           is_valid = false;
         }
         _ => {
-          j.report_mut().add_error(SherpaError::SourceError {
-            loc,
-            path: path.to_path(s_store),
-            id: "[2001]",
-            inline_msg: Default::default(),
-            msg: "Cannot find definition for non-terminal".into(),
-            ps_msg: Default::default(),
-            severity: SherpaErrorSeverity::Critical,
-          });
+          j.report_mut().add_error(missing_nonterminal_rules(loc, path, s_store));
           is_valid = false;
         }
       };

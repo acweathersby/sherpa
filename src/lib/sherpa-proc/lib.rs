@@ -27,22 +27,6 @@ fn process_errors(errors: Vec<SherpaError>, _offsets: Offsets) {
 
   for err in errors {
     match err {
-      /*      grammar_err { message, loc, .. } => {
-        let start = loc.get_start();
-        let end = loc.get_end();
-        match (offsets.spans.get(&start), offsets.spans.get(&end)) {
-          (Some(start_span), Some(end_span)) => {
-            let span = start_span.join(*end_span).unwrap();
-            Diagnostic::spanned(span, proc_macro::Level::Error, message)
-              .note(format!(
-                "Create the definition \"<> {} > ...\" in the grammar",
-                loc.to_string()
-              ))
-              .emit();
-          }
-          _ => panic!("no dice"),
-        }
-      } */
       _ => panic!("{}", err),
     }
   }
@@ -55,11 +39,7 @@ struct Offsets {
   spans: BTreeMap<usize, Span>,
 }
 
-fn parse_token_stream(
-  stream: TokenStream,
-  offset: &mut Offsets,
-  output: &mut Vec<String>,
-) -> Option<(String, PathBuf)> {
+fn parse_token_stream(stream: TokenStream, offset: &mut Offsets, output: &mut Vec<String>) -> Option<(String, PathBuf)> {
   let mut len = 0;
   let mut path = None;
   for tree in stream {

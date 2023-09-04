@@ -164,11 +164,11 @@ pub struct State<'db> {
   predecessors: OrderedSet<StateId>,
   kernel_items: ItemSet<'db>,
   peek_resolve_items: OrderedMap<u64, ItemSet<'db>>,
-  non_terminals: OrderedSet<Item<'db>>,
+  nonterm_items: ItemSet<'db>,
   reduce_item: Option<Item<'db>>,
   leaf_state: bool,
-  closure: Option<OrderedSet<Item<'db>>>,
-  root_closure: Option<OrderedSet<Item<'db>>>,
+  closure: Option<ItemSet<'db>>,
+  root_closure: Option<ItemSet<'db>>,
 }
 
 impl<'db> Hash for State<'db> {
@@ -194,6 +194,10 @@ impl<'db> State<'db> {
 
   pub fn get_resolve_state(&self, peek_origin_key: u64) -> ItemSet<'db> {
     self.peek_resolve_items.get(&peek_origin_key).unwrap().clone()
+  }
+
+  pub fn get_resolve_states(&self) -> impl Iterator<Item = &ItemSet<'db>> + Clone {
+    self.peek_resolve_items.values()
   }
 
   pub fn peek_resolve_state_len(&self) -> usize {
@@ -269,8 +273,12 @@ impl<'db> State<'db> {
     self.kernel_items_ref().iter().filter_map(|i| i.get_skipped()).flatten().cloned().collect()
   }
 
-  pub fn set_non_terminals(&mut self, non_terms: &BTreeSet<Item<'db>>) {
-    self.non_terminals = non_terms.clone();
+  pub fn set_nonterm_items(&mut self, nonterm_items: &ItemSet<'db>) {
+    self.nonterm_items = nonterm_items.clone();
+  }
+
+  pub fn get_nonterm_items(&self) -> &ItemSet<'db> {
+    &self.nonterm_items
   }
 
   pub fn get_type(&self) -> StateType {
@@ -278,17 +286,17 @@ impl<'db> State<'db> {
   }
 
   pub fn has_goto_state(&self) -> bool {
-    self.non_terminals.len() > 0
+    self.nonterm_items.len() > 0
   }
 
   pub fn get_goto_state(&self) -> Option<Self> {
-    if self.non_terminals.len() > 0 {
+    if self.nonterm_items.len() > 0 {
       Some(Self {
         term_symbol: self.term_symbol,
         id: self.id.to_goto(),
         t_type: StateType::NonTerminalResolve,
-        kernel_items: self.non_terminals.clone(),
-        non_terminals: self.kernel_items.clone(),
+        kernel_items: self.nonterm_items.clone(),
+        nonterm_items: self.kernel_items.clone(),
         ..Default::default()
       })
     } else {
@@ -355,12 +363,12 @@ impl<'db> State<'db> {
       string += &format!("\n   - {}", item.debug_string());
     }
 
-    if !self.non_terminals.is_empty() {
+    if !self.nonterm_items.is_empty() {
       if let Some(goto_hash) = self.get_goto_state().and_then(|s| Some(s.get_hash())) {
         string += &format!("\n\nGOTO -- [{:}][{:}] --", self.id.0, goto_hash);
       }
       string += "\n-- non-terms:";
-      for item in &self.non_terminals {
+      for item in &self.nonterm_items {
         string += &format!("\n   - {}", item.debug_string());
       }
     }
@@ -516,8 +524,12 @@ impl<'follow, 'db: 'follow> GraphHost<'db> {
     }
   }
 
+  pub fn get_goal_nonterm_index(&self) -> DBNonTermKey {
+    self.goal_items().iter().next().unwrap().nonterm_index()
+  }
+
   pub fn goal_nonterm_index_is(&self, index: u32) -> bool {
-    self.goal_items().iter().next().unwrap().nonterm_index().to_val() == index
+    self.get_goal_nonterm_index().to_val() == index
   }
 
   pub fn dequeue_pending_state(&mut self) -> Option<(GraphState, StateId)> {

@@ -125,14 +125,26 @@ Stack:\n{}\n
       let item = Item::from_rule((*rule_id).into(), &db);
       let nterm_name = item.nonterm_name().to_string(db.string_store());
       let nterm_name = nterm_name.split("____").last().unwrap();
-      let items = stack.drain((stack.len() - item.len as usize)..);
-      let symbols = items.collect::<Vec<_>>();
 
-      stack.push(Node {
-        string:   format!("({})", nterm_name.to_string()),
-        children: symbols,
-        offset:   2,
-      });
+      match item.reduction_type() {
+        ReductionType::LeftRecursive => {
+          let mut items = stack.drain((stack.len() - item.len as usize)..);
+          let mut first = items.next().unwrap();
+          first.children.extend(items);
+          stack.push(first);
+        }
+        t @ ReductionType::SemanticAction | t @ ReductionType::Mixed | t @ ReductionType::SingleTerminal => {
+          let items = stack.drain((stack.len() - item.len as usize)..);
+          let symbols = items.collect::<Vec<_>>();
+
+          stack.push(Node {
+            string:   format!("({})", nterm_name.to_string()),
+            children: symbols,
+            offset:   2,
+          });
+        }
+        _ => {}
+      }
 
       format!(
         "

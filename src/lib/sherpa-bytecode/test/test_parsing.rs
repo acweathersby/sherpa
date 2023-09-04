@@ -309,47 +309,34 @@ NAME wick_element
 IGNORE { c:sp c:nl }
 
 <> element_block > '<' component_identifier
-    ( element_attribute(+)  :ast { t_Attributes, c_Attribute, attributes: $1 } )?
+    ( element_attribute(+) )?
     ( element_attributes | general_data | element_block | general_binding )(*)
     ">"
 
-                                                                :ast { t_Element, id:$2, children: [$3, $4], tok }
 <> component_identifier >
     identifier ( ':' identifier )?
-                                                                :ast { t_Ident, name:str($1), sub_name:str($2), tok }
 
 <> element_attributes >c:nl element_attribute(+)
-                                                                :ast { t_Attributes, c_Attribute, attributes: $2 }
 
 <> element_attribute > '-' identifier attribute_chars c:sp
 
-                                                                :ast { t_GeneralAttr, c_Attribute, key:str($2), val1: str($3) }
 
     | '-' identifier ':' identifier
-                                                                :ast { t_BindingAttr, c_Attribute, key:str($2), val2: str($4) }
 
     | '-' "store" '{' local_values? '}'
-                                                                :ast { t_StoreAttr, c_Attribute, children: $4 }
     | '-' "local" '{' local_values? '}'
-                                                                :ast { t_LocalAttr, c_Attribute, children: $4 }
     | '-' "param" '{' local_values? '}'
-                                                                :ast { t_ParamAttr, c_Attribute, children: $4 }
     | '-' "model" '{' local_values? '}'
-                                                                :ast { t_ModelAttr, c_Attribute, children: $4 }
 
 <> general_binding > ':' identifier
-                                                                :ast { t_OutputBinding, val3:str($2) }
 
 <> local_values > local_value(+)
 
 <> local_value > identifier ( '`' identifier )? ( '='  c:num )? ( ',' )(*)
 
-                                                                :ast { t_Var, c_Attribute, name:str($1), meta:str($2), value:$3 }
 
 <> attribute_chars > ( c:id | c:num | c:sym  )(+)
-                                                                :ast { t_AttributeData, tok }
 <> general_data > ( c:id | c:num  | c:nl  )(+)
-                                                                :ast { t_GeneralData, tok }
 
 <> identifier > tk:tok_identifier
 

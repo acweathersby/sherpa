@@ -115,10 +115,6 @@ fn compile_statement<'a, 'llvm: 'a>(
 
   if let Some(transitive) = transitive {
     match transitive {
-      parser::ASTNode::Pop(pop) => {
-        pop_goto(args, p_ctx, state_fun, pop.popped_state.max(1) as u64)?;
-        resolved_end = true;
-      }
       parser::ASTNode::PeekSkip(..) => {
         if is_scanless {
           incr_scan_ptr_by_sym_len(args, p_ctx)?;
@@ -216,6 +212,10 @@ fn compile_statement<'a, 'llvm: 'a>(
       parser::ASTNode::SetTokenId(tok) => {
         construct_assign_token_id(args, p_ctx, tok.id as u64)?;
         transfer_end_line_to_chkp_line(args, p_ctx)?;
+      }
+      parser::ASTNode::Pop(pop) => {
+        pop_goto(args, p_ctx, state_fun, pop.popped_state.max(1) as u64)?;
+        resolved_end = true;
       }
       node => {
         #[cfg(debug_assertions)]

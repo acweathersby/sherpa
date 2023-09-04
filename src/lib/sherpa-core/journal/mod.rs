@@ -267,7 +267,7 @@ impl Journal {
         }
       }
       Err(err) => {
-        panic!("{}", err);
+        panic!("{err}");
       }
     }
 
@@ -288,7 +288,7 @@ impl Journal {
         }
       }
       Err(err) => {
-        panic!("{}", err);
+        panic!("{err}");
       }
     }
   }

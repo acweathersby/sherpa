@@ -6,6 +6,7 @@ use crate::{
 };
 type States = OrderedMap<IString, Box<ParseState>>;
 type Scanners = OrderedSet<(IString, OrderedSet<PrecedentDBTerm>)>;
+type Errors = Array<SherpaError>;
 use rayon::prelude::*;
 
 pub fn compile_parse_states(mut j: Journal, db: &ParserDatabase, config: ParserConfig) -> SherpaResult<ParseStatesMap> {
@@ -30,23 +31,35 @@ pub fn compile_parse_states(mut j: Journal, db: &ParserDatabase, config: ParserC
     .map(|(mut local_j, chunks)| {
       let mut states = States::new();
       let mut scanners = Scanners::new();
+      let mut errors = Errors::new();
 
       for (nterm, nterm_sym) in chunks {
         match create_parse_states_from_prod(&mut local_j, db, *nterm, *nterm_sym, &mut states, &mut scanners, config) {
-          SherpaResult::Ok(output) => output,
-          SherpaResult::Err(_err) => {}
+          SherpaResult::Ok(_) => {}
+          SherpaResult::Err(err) => errors.push(err),
         }
       }
-      (states, scanners)
+      (states, scanners, errors)
     })
     .collect::<Vec<_>>();
 
-  let (mut states, scanners) =
-    results.into_iter().fold((States::new(), Scanners::new()), |(mut st_to, mut sc_to), (mut st_from, mut sc_from)| {
+  let (mut states, scanners, mut errors) = results.into_iter().fold(
+    (States::new(), Scanners::new(), Errors::new()),
+    |(mut st_to, mut sc_to, mut er_to), (mut st_from, mut sc_from, mut er_from)| {
       st_to.append(&mut st_from);
       sc_to.append(&mut sc_from);
-      (st_to, sc_to)
-    });
+      er_to.append(&mut er_from);
+      (st_to, sc_to, er_to)
+    },
+  );
+
+  if errors.len() > 0 {
+    if errors.len() == 1 {
+      return Err(errors.pop().unwrap());
+    } else {
+      return Err(SherpaError::Multi(errors));
+    }
+  }
 
   // Build entry states
   for entry in db.entry_points() {

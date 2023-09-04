@@ -20,12 +20,12 @@ use std::collections::VecDeque;
 /// let parser = SherpaGrammarBuilder::new()
 ///   .add_source_from_string( "<> A > 'Hello' 'World' ", &PathBuf::default())?
 ///   .build_db(&PathBuf::default())?
-///   .build_parser()?
+///   .build_parser(Default::default())?
 ///   .optimize(false)?;
 ///
 /// let (bytecode, state_lu) = compile_bytecode(&parser, true)?;
 ///
-/// assert_eq!(bytecode.len(), 1078);
+/// assert_eq!(bytecode.len(), 1229);
 ///
 /// # SherpaResult::Ok(())
 /// # }

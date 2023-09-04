@@ -1,5 +1,5 @@
 use super::{
-  errors::create_reduce_reduce_error,
+  errors::{conflicting_symbols_error, create_reduce_reduce_error, lr_disabled_error},
   items::{
     all_items_come_from_same_nonterminal_call,
     all_items_transition_on_same_nonterminal,
@@ -12,11 +12,11 @@ use super::{
   },
 };
 use crate::{
+  compile::build_graph::errors::peek_not_allowed_error,
   journal::Journal,
   types::*,
   utils::{create_u64_hash, hash_group_btreemap},
 };
-use core::panic;
 use std::collections::{BTreeSet, VecDeque};
 
 const _ALLOW_PEEKING: bool = true;
@@ -67,16 +67,12 @@ pub(crate) fn build<'follow, 'db: 'follow>(
     crate::test::utils::write_debug_file(db, "scanner_graph.tmp", graph.debug_string(), true)?;
   }
 
-  if graph.goal_nonterm_index_is(4) {
-    //panic!()
-  }
-
   j.report_mut().wrap_ok_or_return_errors(graph)
 }
 
 fn handle_kernel_items<'db>(graph: &mut GraphHost<'db>, parent: StateId, graph_state: GraphState) -> SherpaResult<()> {
   if false
-    && graph.config().ALLOW_LL_RECURSIVE_DESCENT_CALLS
+    && graph.config().ALLOW_RECURSIVE_DESCENT_CALLS
     && !graph.is_scanner()
     && graph_state != NormalGoto
     && create_kernel_call(
@@ -111,16 +107,12 @@ fn handle_goto_states<'db>(
   out_items: BTreeSet<Item<'db>>,
   pending_states: Vec<(GraphState, StateId)>,
 ) -> SherpaResult<()> {
-  match (!graph.is_scanner() && !graph_state.currently_peeking()) && handle_nonterminal_shift(graph, parent, out_items)? {
-    true => {
-      if !graph.config().ALLOW_LR_RECURSIVE_ASCENT {
-        #[cfg(debug_assertions)]
-        {
-          let items = graph[parent].kernel_items_ref().iter().nonterm_items::<Vec<_>>();
-          if items.is_empty() { graph[parent].kernel_items_ref().iter().cloned().collect() } else { items }
-            .debug_print("These items are LR");
-        }
-        panic!("Recursive Ascent / LR parsing must be enabled to compile a parser for this grammar. ")
+  match (!graph.is_scanner() && !graph_state.currently_peeking()).then(|| handle_nonterminal_shift(graph, parent, out_items)) {
+    Some(Err(err)) => Err(err),
+    Some(Ok(true)) => {
+      //TODO(anthony): Move this into a function located in the errors file.
+      if graph.config().ALLOW_LR_RECURSIVE_ASCENT == false {
+        lr_disabled_error(graph, parent)?;
       }
 
       let db = graph.get_db();
@@ -130,15 +122,15 @@ fn handle_goto_states<'db>(
         graph[state].set_kernel_items(incremented, db);
         graph.enqueue_pending_state(NormalGoto, state);
       }
+      Ok(())
     }
-    false => {
+    None | Some(Ok(false)) => {
       for (graph_state, state) in pending_states {
         graph.enqueue_pending_state(graph_state, state);
       }
+      Ok(())
     }
   }
-
-  Ok(())
 }
 
 fn handle_scanner_items<'db>(
@@ -205,7 +197,7 @@ fn handle_nonterminal_shift<'db, 'follow>(
     return Ok(false);
   }
 
-  graph[parent].set_non_terminals(&used_nterm_items);
+  graph[parent].set_nonterm_items(&used_nterm_items);
 
   let used_nterm_groups = hash_group_btreemap(used_nterm_items, |_, t| t.nonterm_index_at_sym().unwrap_or_default());
 
@@ -343,7 +335,7 @@ fn get_used_nonterms<'db>(
   nterm_items: BTreeSet<Item<'db>>,
   kernel_base: &BTreeSet<Item<'db>>,
 ) -> BTreeSet<Item<'db>> {
-  let mut used_nterm_items = OrderedSet::new();
+  let mut used_nterm_items = ItemSet::new();
 
   let mut seen = OrderedSet::new();
   let mut queue = VecDeque::from_iter(out_items.iter().map(|i| i.nonterm_index()));
@@ -369,7 +361,7 @@ fn handle_incomplete_items<'nt_set, 'db: 'nt_set>(
   graph_state: GraphState,
   groups: TransitionGroups<'db>,
 ) -> SherpaResult<(ItemSet<'db>, PendingStates)> {
-  let mut out_items = OrderedSet::new();
+  let mut out_items = ItemSet::new();
   let mut pending_states = PendingStates::new();
 
   for (sym, group) in groups {
@@ -424,7 +416,7 @@ fn handle_incomplete_items_internal<'nt_set, 'db: 'nt_set>(
           out_items.append(&mut in_scope)
         }
         (1.., _) => {
-          if let Some((shifted_items, pending_state)) = (graph.config().ALLOW_LL_RECURSIVE_DESCENT_CALLS || graph.is_scanner())
+          if let Some((shifted_items, pending_state)) = (graph.config().ALLOW_RECURSIVE_DESCENT_CALLS || graph.is_scanner())
             .then(|| create_call(in_scope.iter(), graph, graph_state, parent, prec_sym))
             .flatten()
           {
@@ -570,7 +562,7 @@ fn handle_completed_groups<'nsp, 'db: 'nsp, 'follow>(
             // up the graph to find a suitable divergent point and add a
             // fork. This would also be a good point to focus on breadcrumb
             // parsing strategies.
-            create_reduce_reduce_error(graph, cmpl.to_set())?;
+            return Err(create_reduce_reduce_error(graph, cmpl.to_set()));
           }
           1 => {
             let out = unfollowed_items;
@@ -815,7 +807,11 @@ fn create_peek<
 
   graph[state].add_kernel_items(if need_increment { kernel_items.try_increment() } else { kernel_items }, db);
 
-  Ok(graph.enqueue_pending_state(Peek(0), state))
+  if graph.config().ALLOW_PEEKING == false {
+    Err(peek_not_allowed_error(graph, state))
+  } else {
+    Ok(graph.enqueue_pending_state(Peek(0), state))
+  }
 }
 
 fn resolve_peek<'a, 'db: 'a, 'follow, T: ItemRefContainerIter<'a, 'db>>(
@@ -833,7 +829,7 @@ fn resolve_peek<'a, 'db: 'a, 'follow, T: ItemRefContainerIter<'a, 'db>>(
 
 pub(super) fn get_kernel_state_from_peek_item<'db, 'follow>(graph: &GraphHost<'db>, peek_item: &Item<'db>) -> ItemSet<'db> {
   let Origin::Peek(peek_index, peek_origin) = peek_item.origin else {
-    panic!("Invalid peek origin");
+    unreachable!("Invalid peek origin");
   };
 
   graph[peek_origin].get_resolve_state(peek_index)
@@ -971,17 +967,7 @@ fn resolve_conflicting_tokens<'db, 'follow>(
       let cmpl_pair = (*(o_to_r(completed_items.first(), "")?), completed_items.clone().to_vec());
       handle_completed_item(graph, cmpl_pair, par, (sym, 0).into(), g_state)
     } else {
-      Err(SherpaError::SourcesError {
-        id:       "conflicting-symbols",
-        msg:      "Found ".to_string() + &groups.len().to_string() + " conflicting tokens. This grammar has an ambiguous scanner",
-        ps_msg:   Default::default(),
-        severity: SherpaErrorSeverity::Critical,
-        sources:  groups
-          .iter()
-          .map(|(_sym, items)| items.iter().map(|i| (i.rule().tok.clone(), Default::default(), Default::default())))
-          .flatten()
-          .collect(),
-      })
+      Err(conflicting_symbols_error(graph, groups))
     }
   } else {
     Ok(())
@@ -1071,7 +1057,7 @@ fn handle_completed_item<'db, 'follow>(
       let (follow, completed_items): (Vec<Items>, Vec<Items>) = completed_items
         .into_iter()
         .map(|i| {
-          let Ok(result) = get_follow(graph, i) else { panic!("could not get follow data") };
+          let Ok(result) = get_follow(graph, i) else { unreachable!("could not get follow data") };
           result
         })
         .unzip();

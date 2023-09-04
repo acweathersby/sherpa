@@ -118,15 +118,18 @@ impl ParserDatabase {
       //-------------------------------------------------------------------------------------------
       // Use completed items to file out the reduce types table.
       if item.is_complete() {
-        let rule = item.rule();
-        if rule.ast.is_some() {
-          reduce_types[item.rule_id.0 as usize] = ReductionType::SemanticAction
+        reduce_types[item.rule_id.0 as usize] = if item.is_left_recursive() {
+          ReductionType::LeftRecursive
+        } else if item.rule().ast.as_ref().is_some_and(|a| matches!(a, ASTToken::Defined(..))) {
+          ReductionType::SemanticAction
         } else if item.len == 1 {
-          match item.decrement().is_some_and(|i| i.is_term()) {
-            true => reduce_types[item.rule_id.0 as usize] = ReductionType::SingleTerminal,
-            false => reduce_types[item.rule_id.0 as usize] = ReductionType::SingleNonTerminal,
+          match item.to_start().is_term() {
+            true => ReductionType::SingleTerminal,
+            false => ReductionType::SingleNonTerminal,
           }
-        }
+        } else {
+          ReductionType::Mixed
+        };
       }
 
       //-------------------------------------------------------------------------------------------
@@ -491,6 +494,8 @@ pub enum ReductionType {
   SingleTerminal,
   /// A reduction of single nonterminal symbol to another nonterminal
   SingleNonTerminal,
+  /// A reduction of a left-recursive rule
+  LeftRecursive,
   #[default]
   /// A reduction of more than one symbol to a nonterminal
   Mixed,
