@@ -1,6 +1,16 @@
-use super::{o_to_r, Array, IString, IStringStore, Item, Items, Rule, Set, SymbolId, SymbolRef};
+use super::*;
 use crate::{parser, CachedString, SherpaResult};
 use std::collections::{HashMap, VecDeque};
+
+#[derive(Default, Clone, Copy)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub enum RecursionType {
+  #[default]
+  None = 0,
+  LeftRecursive = 1,
+  RightRecursive = 2,
+  LeftRightRecursive = 3,
+}
 
 #[cfg_attr(debug_assertions, derive(Debug))]
 #[derive(Clone)]
@@ -50,8 +60,6 @@ pub struct ParserDatabase {
   /// the root grammar, or by the filename stem in the path for the root
   /// grammar.
   pub name: IString,
-  ////
-  follow_items: Array<Option<Array<(DBRuleKey, u32, bool)>>>,
   /// Table of symbols.
   nonterm_symbols: Array<SymbolId>,
   /// Table of non-terminal names for public non-terminal.
@@ -80,7 +88,11 @@ pub struct ParserDatabase {
   /// reference non-extant non-terminals.
   valid: bool,
   /// All items that follow a non-terminal
-  follow_db_items: Array<Array<(DBRuleKey, u16)>>,
+  follow_items: Array<Array<StaticItem>>,
+  /// Item closures
+  item_closures: Array<Array<Array<StaticItem>>>,
+  ///NonTerminal Recursion Type
+  recursion_types: Array<u8>,
 }
 
 impl ParserDatabase {
@@ -96,9 +108,7 @@ impl ParserDatabase {
     custom_states: Array<Option<Box<parser::State>>>,
     valid: bool,
   ) -> Self {
-    let follow_items = construct_follow(&nonterm_symbols, &rules);
-
-    Self {
+    let mut db = Self {
       name,
       nonterm_symbols,
       nonterm_names,
@@ -107,11 +117,116 @@ impl ParserDatabase {
       tokens,
       entry_points,
       string_store,
-      follow_items,
       custom_states,
       valid,
-      follow_db_items: Default::default(),
+      follow_items: Default::default(),
+      item_closures: Default::default(),
+      recursion_types: Default::default(),
+    };
+
+    db.process_data();
+
+    db
+  }
+
+  fn process_data(&mut self) {
+    let mut recursion_types: Vec<u8> = vec![Default::default(); self.nonterms_len()];
+    let mut follow_items_base: Vec<Array<StaticItem>> = vec![Default::default(); self.nonterms_len()];
+    let mut follow_items_final: Vec<Array<StaticItem>> = vec![Default::default(); self.nonterms_len()];
+    let mut closure_map = Vec::with_capacity(self.rules.len());
+
+    // Calculate closure for all items, and follow sets and recursion type for all
+    // non-terminals.
+
+    for (index, rule) in self.rules.iter().enumerate() {
+      closure_map.insert(index, Vec::with_capacity(rule.rule.symbols.len()))
     }
+
+    for item in self.rules().iter().enumerate().map(|(id, _)| Item::from_rule(DBRuleKey(id as u32), self)).flat_map(|mut i| {
+      let mut out = Vec::with_capacity(i.len as usize);
+      out.push(i);
+      while let Some(inc) = i.increment() {
+        out.push(inc);
+        i = inc
+      }
+      out
+    }) {
+      let is_scanner = matches!(self.nonterm_sym(item.nonterm_index()), SymbolId::DBNonTerminalToken { .. });
+
+      match item.get_type() {
+        ItemType::TokenNonTerminal(nonterm, _) if is_scanner => {
+          follow_items_base[nonterm.0 as usize].push((item.rule_id, item.sym_index))
+        }
+        ItemType::NonTerminal(nonterm) => follow_items_base[nonterm.0 as usize].push((item.rule_id, item.sym_index)),
+        _ => {}
+      }
+
+      let root_nonterm = item.nonterm_index();
+      let mut recursion_encountered = false;
+
+      if item.is_complete() {
+        continue;
+      }
+
+      let mut closure = ItemSet::from_iter([]);
+      let mut queue = VecDeque::from_iter([item]);
+
+      while let Some(kernel_item) = queue.pop_front() {
+        if closure.insert(kernel_item) {
+          match kernel_item.get_type() {
+            ItemType::TokenNonTerminal(nonterm, _) => {
+              if is_scanner {
+                for item in Items::from(kernel_item) {
+                  recursion_encountered |= nonterm == root_nonterm;
+                  queue.push_back(item.align(kernel_item))
+                }
+              }
+            }
+            ItemType::NonTerminal(nonterm) => {
+              for item in Items::from(kernel_item) {
+                recursion_encountered |= nonterm == root_nonterm;
+                queue.push_back(item.align(kernel_item))
+              }
+            }
+            _ => {}
+          }
+        }
+      }
+
+      if recursion_encountered {
+        if item.is_at_initial() {
+          recursion_types[root_nonterm.0 as usize] |= RecursionType::LeftRecursive as u8;
+        } else {
+          recursion_types[root_nonterm.0 as usize] |= RecursionType::RightRecursive as u8;
+        }
+      }
+
+      closure_map
+        .get_mut(item.rule_id.0 as usize)
+        .unwrap()
+        .insert(item.sym_index as usize, closure.into_iter().map(|i| (i.rule_id, i.sym_index)).collect::<Array<_>>());
+    }
+
+    for (base_id, _) in self.nonterm_symbols.iter().enumerate() {
+      let mut nonterm_ids = VecDeque::from_iter([base_id]);
+      let mut seen = Set::new();
+
+      while let Some(id) = nonterm_ids.pop_front() {
+        if seen.insert(id) {
+          for static_item in &follow_items_base[id] {
+            follow_items_final[base_id].push(*static_item);
+            let item = Item::from_static(*static_item, self);
+            if item.is_penultimate() {
+              nonterm_ids.push_back(item.nonterm_index().0 as usize)
+            }
+          }
+        }
+      }
+    }
+
+    self.item_closures = closure_map;
+    self.recursion_types = recursion_types;
+    self.follow_items = follow_items_final;
   }
 
   /// Prints token ids and their friendly names to the console
@@ -274,6 +389,19 @@ impl ParserDatabase {
     &self.string_store
   }
 
+  pub fn nonterm_recursion_type(&self, nonterm: DBNonTermKey) -> RecursionType {
+    match self.recursion_types[nonterm.0 as usize] {
+      3 => RecursionType::LeftRightRecursive,
+      2 => RecursionType::RightRecursive,
+      1 => RecursionType::LeftRecursive,
+      _ => RecursionType::None,
+    }
+  }
+
+  pub fn get_closure<'db>(&'db self, rule: DBRuleKey, sym_index: usize) -> impl Iterator<Item = Item<'db>> {
+    self.item_closures[rule.0 as usize][sym_index as usize].iter().map(|s| Item::from_static(*s, self))
+  }
+
   /// Returns all regular (non token) nonterminals.
   pub fn parser_nonterms<'db>(&'db self) -> Array<DBNonTermKey> {
     self
@@ -287,57 +415,12 @@ impl ParserDatabase {
       .collect()
   }
 
-  pub fn nonterm_follow_items<'db>(&'db self, key: DBNonTermKey) -> Items<'db> {
-    let mut nonterm_ids = VecDeque::from_iter(vec![key]);
-    let mut seen = Set::new();
-    let mut items = Items::new();
-
-    while let Some(id) = nonterm_ids.pop_front() {
-      if seen.insert(id) {
-        if let Some(follow) = self.follow_items.get(id.0 as usize).unwrap() {
-          for (rule, sym_index, is_last) in follow {
-            let mut item = Item::from_rule(*rule, self);
-            item.sym_index = *sym_index as u16;
-            items.push(item);
-
-            if *is_last {
-              nonterm_ids.push_front(item.nonterm_index())
-            }
-          }
-        }
-      }
-    }
-
-    items
+  /// Returns an iterator of all items that transition on a givin nonterminal,
+  /// including items that are derived from reducing to another non-terminal
+  /// after transitioning over the initial non-terminal
+  pub fn nonterm_follow_items<'db>(&'db self, nonterm: DBNonTermKey) -> impl Iterator<Item = Item<'db>> {
+    self.follow_items[nonterm.0 as usize].iter().map(|i| Item::from_static(*i, self))
   }
-}
-
-fn construct_follow(nonterm_symbols: &Vec<SymbolId>, rules: &Vec<DBRule>) -> Vec<Option<Vec<(DBRuleKey, u32, bool)>>> {
-  let mut follow_items = Array::new();
-  for _ in 0..nonterm_symbols.len() {
-    follow_items.push(None);
-  }
-
-  // Calculates all follow items for all non-terminals
-  for (rule_id, rule) in rules.iter().enumerate() {
-    if !rule.rule.symbols.is_empty() {
-      let last = rule.rule.symbols.len() - 1;
-      for (sym_off, SymbolRef { id: sym, .. }) in rule.rule.symbols.iter().enumerate() {
-        match sym {
-          SymbolId::DBNonTerminalToken { nonterm_key: nterm_key, .. } if rule.is_scanner => {
-            let val = follow_items[nterm_key.0 as usize].get_or_insert(vec![]);
-            val.push((rule_id.into(), sym_off as u32, sym_off == last))
-          }
-          SymbolId::DBNonTerminal { key } => {
-            let val = follow_items[key.0 as usize].get_or_insert(vec![]);
-            val.push((rule_id.into(), sym_off as u32, sym_off == last))
-          }
-          _ => {}
-        }
-      }
-    }
-  }
-  follow_items
 }
 
 macro_rules! indexed_id_implementations {

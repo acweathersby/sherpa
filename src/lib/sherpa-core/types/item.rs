@@ -11,6 +11,8 @@ pub enum ItemType {
   Completed(DBNonTermKey),
 }
 
+pub type StaticItem = (DBRuleKey, u16);
+
 #[derive(Clone, Copy)]
 pub struct Item<'db> {
   db: &'db ParserDatabase,
@@ -120,6 +122,20 @@ impl<'db> Item<'db> {
       len: rule.symbols.len() as u16,
       origin_state: StateId::default(),
       sym_index: 0,
+      origin: Default::default(),
+      goal: 0,
+      goto_distance: 0,
+    }
+  }
+
+  pub fn from_static((rule_id, sym_index): StaticItem, db: &'db ParserDatabase) -> Self {
+    let rule = db.rule(rule_id);
+    Self {
+      db,
+      rule_id,
+      len: rule.symbols.len() as u16,
+      origin_state: StateId::default(),
+      sym_index,
       origin: Default::default(),
       goal: 0,
       goto_distance: 0,
@@ -386,9 +402,7 @@ impl<'db> Item<'db> {
         string += " •";
       }
 
-      if self.goto_distance >= 0 {
-        string += &(" [".to_string() + &self.goto_distance.to_string() + "]");
-      }
+      string += &(" [".to_string() + &self.goto_distance.to_string() + "]");
 
       string.replace("\n", "\\n")
     }
@@ -474,7 +488,7 @@ macro_rules! common_iter_functions {
       }
     }
 
-    fn non_term_items<T: ItemContainer<'db>>(self) -> T {
+    fn nonterm_items<T: ItemContainer<'db>>(self) -> T {
       self.filter_map(|i| i.is_nonterm().then(|| i.clone())).collect()
     }
 
@@ -528,29 +542,16 @@ macro_rules! common_iter_functions {
       self.filter_map(|i| (!i.is_nonterm()).then_some(i.sym())).collect()
     }
 
-    fn closure<T: ItemContainer<'db>>(self, is_scanner: bool, state_id: StateId) -> T {
+    fn closure<T: ItemContainer<'db>>(self, state_id: StateId) -> T {
       let mut closure = ItemSet::from_iter(self.clone().map(|i| i.clone()));
-      let mut queue = VecDeque::from_iter(self.map(|i| i.clone()));
-
-      while let Some(kernel_item) = queue.pop_front() {
-        if closure.insert(kernel_item) {
-          match kernel_item.get_type() {
-            ItemType::TokenNonTerminal(..) => {
-              if is_scanner {
-                for item in Items::from(kernel_item) {
-                  queue.push_back(item.align(kernel_item).to_origin_state(state_id))
-                }
-              }
-            }
-            ItemType::NonTerminal(..) => {
-              for item in Items::from(kernel_item) {
-                queue.push_back(item.align(kernel_item).to_origin_state(state_id))
-              }
-            }
-            _ => {}
-          }
-        }
-      }
+      closure.extend(self.filter(|i| !i.is_complete()).flat_map(|i| {
+        let a = i.to_owned().to_canonical();
+        let b = i.to_owned();
+        i.db
+          .get_closure(i.rule_id, i.sym_index as usize)
+          .filter(move |i| i.to_canonical() != a)
+          .map(move |a| a.align(b).to_origin_state(state_id))
+      }));
       closure.into_iter().collect()
     }
   };
@@ -603,7 +604,7 @@ pub trait ItemContainer<'db>: Clone + IntoIterator<Item = Item<'db>> + FromItera
     rules.iter().map(|r| Item::from_rule(*r, db)).collect()
   }
 
-  fn non_term_items(self) -> Self {
+  fn nonterm_items(self) -> Self {
     self.into_iter().filter(|i| i.is_nonterm()).collect()
   }
 
@@ -672,7 +673,7 @@ pub trait ItemContainer<'db>: Clone + IntoIterator<Item = Item<'db>> + FromItera
   }
 
   /// Creates a closure set over the given items.
-  fn create_closure(&self, is_scanner: bool, state_id: StateId) -> ItemSet<'db> {
+  fn _create_closure(&self, is_scanner: bool, state_id: StateId) -> ItemSet<'db> {
     let mut closure = ItemSet::new();
     let mut queue = VecDeque::from_iter(self.clone());
 
@@ -727,7 +728,6 @@ impl<'db> From<(Item<'db>, Item<'db>)> for FollowPair<'db> {
 
 pub struct CompletedItemArtifacts<'db> {
   pub follow_pairs: OrderedSet<FollowPair<'db>>,
-  pub oos_pairs:    OrderedSet<FollowPair<'db>>,
   pub follow_items: ItemSet<'db>,
   pub default_only: ItemSet<'db>,
 }

@@ -211,9 +211,9 @@ impl SymbolId {
       ClassNumber { .. } => &mut w + "c:num",
       ClassSymbol { .. } => &mut w + "c:sym",
       Token { val } => &mut w + " " + val.to_str(db.string_store()).as_str() + " ",
-      NonTerminalState { .. } => &mut w + "non_term_state",
-      NonTerminal { .. } => &mut w + "non_term",
-      NonTerminalToken { .. } => &mut w + "tk:" + "non_term",
+      NonTerminalState { .. } => &mut w + "nonterm_state",
+      NonTerminal { .. } => &mut w + "nonterm",
+      NonTerminalToken { .. } => &mut w + "tk:" + "nonterm",
       Codepoint { val } => &mut w + "" + val.to_string(),
       DBNonTerminal { key } => {
         let guard_str = db.nonterm_friendly_name_string(key);

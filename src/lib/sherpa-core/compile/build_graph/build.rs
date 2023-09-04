@@ -75,8 +75,7 @@ pub(crate) fn build<'follow, 'db: 'follow>(
 }
 
 fn handle_kernel_items<'db>(graph: &mut GraphHost<'db>, parent: StateId, graph_state: GraphState) -> SherpaResult<()> {
-  if false
-    && _ALLOW_LL_RECURSIVE_DESCENT_CALLS
+  if _ALLOW_LL_RECURSIVE_DESCENT_CALLS
     && !graph.is_scanner()
     && graph_state != NormalGoto
     && create_kernel_call(
@@ -116,17 +115,16 @@ fn handle_goto_states<'db>(
       if !_ALLOW_LR_RECURSIVE_ASCENT {
         #[cfg(debug_assertions)]
         {
-          graph[parent].kernel_items_ref().iter().debug_print("From this kernel");
-          pending_states.iter().flat_map(|(_, s)| graph[*s].kernel_items_ref()).debug_print("These items are LR");
+          graph[parent].kernel_items_ref().iter().nonterm_items::<Vec<_>>().debug_print("These items are LR");
         }
         panic!("Recursive Ascent / LR parsing must be enabled to compile a parser for this grammar. ")
       }
 
       let db = graph.get_db();
-      for (graph_state, state) in pending_states {
+      for (_, state) in pending_states {
         let incremented: Items =
           graph[state].kernel_items_ref().iter().map(|i| i.calculate_goto_distance(parent, graph)).collect();
-        graph[state].set_kernel_items(incremented, false, db);
+        graph[state].set_kernel_items(incremented, db);
         graph.enqueue_pending_state(NormalGoto, state);
       }
     }
@@ -177,7 +175,7 @@ fn handle_nonterminal_shift<'db, 'follow>(
   out_items: ItemSet<'db>,
 ) -> SherpaResult<bool> {
   let db = graph.get_db();
-  let nterm_items: ItemSet = graph[parent].get_closure_ref()?.clone().non_term_items().inscope_items();
+  let nterm_items: ItemSet = graph[parent].get_closure_ref()?.clone().nonterm_items().inscope_items();
   let kernel_base: ItemSet = graph[parent].kernel_items_ref().iter().inscope_items();
 
   debug_assert!(!graph.is_scanner());
@@ -193,18 +191,16 @@ fn handle_nonterminal_shift<'db, 'follow>(
   }
 
   // Get all the nonterminal symbols that are shifted in the kernel
-  let mut kernel_nterm_ids = kernel_base.iter().non_term_items::<ItemSet>().iter().nonterm_ids_at_index();
-  kernel_nterm_ids.extend(kernel_base.iter().non_term_items::<ItemSet>().iter().rule_nonterm_ids());
+  let mut kernel_nterm_ids = kernel_base.iter().nonterm_items::<ItemSet>().iter().nonterm_ids_at_index();
+  kernel_nterm_ids.extend(kernel_base.iter().nonterm_items::<ItemSet>().iter().rule_nonterm_ids());
 
   // NonTerms that appear in to the the right side of the specifier in
-  // used_non_term_items.
+  // used_nonterm_items.
   let used_nterm_items = get_used_nonterms(out_items, nterm_items, &kernel_base);
 
   if used_nterm_items.is_empty() {
     return Ok(false);
   }
-
-  let mut kernel_base_rule_ids: Option<Set<(DBRuleKey, usize)>> = None;
 
   graph[parent].set_non_terminals(&used_nterm_items);
 
@@ -224,9 +220,7 @@ fn handle_nonterminal_shift<'db, 'follow>(
       let contains_left_recursive_items = items.iter().any(|i| i.is_left_recursive());
 
       if is_at_root && contains_left_recursive_items {
-        let items: ItemSet = items.iter().to_canonical();
         let local_nterms = incremented_items.iter().nonterm_ids_at_index();
-        let kernel_ids = kernel_base_rule_ids.get_or_insert(items.iter().map(|i| (i.rule_id, i.sym_index as usize)).collect());
         //let item = Item::from_rule(db.nonterm_rules(*nterm)?[0], db);
         //incremented_items.push(item.to_complete().to_origin(Origin::GoalCompleteOOS).
         // to_oos_index().to_origin_state(parent));`
@@ -261,11 +255,7 @@ fn handle_nonterminal_shift<'db, 'follow>(
               ItemType::NonTerminal(non_terminal) => {
                 if !local_nterms.contains(&non_terminal) {
                   oos_items.extend(
-                    db.nonterm_rules(non_terminal)?
-                      .iter()
-                      .map(|r| Item::from_rule(*r, db))
-                      .closure::<Items>(false, parent)
-                      .term_items(),
+                    db.nonterm_rules(non_terminal)?.iter().map(|r| Item::from_rule(*r, db)).closure::<Items>(parent).term_items(),
                   );
                 }
               }
@@ -289,7 +279,7 @@ fn handle_nonterminal_shift<'db, 'follow>(
           oos_items
             .clone()
             .terminals()
-            .intersection(&incremented_items.iter().closure::<ItemSet>(false, parent).iter().terminals())
+            .intersection(&incremented_items.iter().closure::<ItemSet>(parent).iter().terminals())
             .next()
             .is_some()
         };
@@ -322,7 +312,7 @@ fn handle_nonterminal_shift<'db, 'follow>(
     } else {
       let state = graph.create_state((nterm.to_sym(), 0).into(), nterm_shift_type, Some(parent), vec![]);
 
-      graph[state].set_kernel_items(incremented_items, false, db);
+      graph[state].set_kernel_items(incremented_items, db);
 
       handle_kernel_items(graph, state, NormalGoto)?;
 
@@ -482,7 +472,7 @@ fn handle_completed_items<'nt_set, 'db: 'nt_set>(
     let db = graph.get_db();
 
     if is_scan {
-      graph[parent].add_kernel_items(follow_items, is_scan, db);
+      graph[parent].add_kernel_items(follow_items, db);
 
       merge_occluding_token_items(
         hash_group_btreemap(follow_pairs.iter().map(|fp| fp.follow).collect::<ItemSet>(), |_, item| match item.get_type() {
@@ -496,7 +486,7 @@ fn handle_completed_items<'nt_set, 'db: 'nt_set>(
       );
 
       get_oos_follow_from_completed(graph, &completed.1.iter().to_vec(), &mut |follow: Items<'db>| {
-        merge_items_into_groups(&follow, parent, is_scan, groups)
+        merge_items_into_groups(&follow, parent, groups)
       })?;
     }
 
@@ -507,9 +497,6 @@ fn handle_completed_items<'nt_set, 'db: 'nt_set>(
     } else {
       completed.1.iter().map(|i| -> FollowPair<'db> { (*i, *i).into() }).collect()
     };
-
-    // TODO(anthony): If this creates an accept non-terminal for a non-terminal
-    // shift then we should make this a pop to drop the non-terminal shift
 
     handle_completed_groups(graph, groups, parent, graph_state, SymbolId::Default, default, &default_only)?;
 
@@ -770,7 +757,6 @@ fn create_peek<
   need_increment: bool,
   transition_type: StateType,
 ) -> SherpaResult<Option<StateId>> {
-  let is_scan = graph.is_scanner();
   let mut kernel_items = Array::default();
 
   let existing_nterms = incomplete_items.clone().rule_nonterm_ids();
@@ -824,7 +810,7 @@ fn create_peek<
   );
   let db: &ParserDatabase = graph.get_db();
 
-  graph[state].add_kernel_items(if need_increment { kernel_items.try_increment() } else { kernel_items }, is_scan, db);
+  graph[state].add_kernel_items(if need_increment { kernel_items.try_increment() } else { kernel_items }, db);
 
   Ok(graph.enqueue_pending_state(Peek(0), state))
 }
@@ -857,14 +843,13 @@ fn create_kernel_call<'a, 'db: 'a, T: ItemRefContainerIter<'a, 'db> + Clone>(
   parent: StateId,
   sym: PrecedentSymbol,
 ) -> Option<()> {
-  let is_scan = graph.is_scanner();
   let Some(first) = group.clone().next() else { return None };
   let db = graph.get_db();
 
-  create_call_internal(
+  if let Some((_, (graph_state, state))) = create_call_internal(
     if all_items_transition_on_same_nonterminal(group.clone()) {
       let nterm = first.nonterm_index_at_sym()?;
-      if !graph[parent].conflicting_nonterminal_call(nterm, is_scan, db) {
+      if !matches!(db.nonterm_recursion_type(nterm), RecursionType::LeftRecursive | RecursionType::LeftRightRecursive) {
         Some((group.to_vec(), nterm))
       } else {
         None
@@ -876,8 +861,12 @@ fn create_kernel_call<'a, 'db: 'a, T: ItemRefContainerIter<'a, 'db> + Clone>(
     parent,
     sym,
     graph_state,
-  )
-  .and(Some(()))
+  ) {
+    graph.enqueue_pending_state(graph_state, state);
+    Some(())
+  } else {
+    None
+  }
 }
 
 fn create_call<'a, 'db: 'a, T: ItemRefContainerIter<'a, 'db> + Clone>(
@@ -887,7 +876,6 @@ fn create_call<'a, 'db: 'a, T: ItemRefContainerIter<'a, 'db> + Clone>(
   parent: StateId,
   sym: PrecedentSymbol,
 ) -> Option<(Vec<Item<'db>>, PendingState)> {
-  let is_scan = graph.is_scanner();
   let Some(first) = group.clone().next() else { return None };
   let db = graph.get_db();
 
@@ -895,7 +883,7 @@ fn create_call<'a, 'db: 'a, T: ItemRefContainerIter<'a, 'db> + Clone>(
     if all_items_come_from_same_nonterminal_call(group.clone()) {
       let nterm = first.nonterm_index();
 
-      if !graph[parent].conflicting_nonterminal_call(nterm, is_scan, db) {
+      if !matches!(db.nonterm_recursion_type(nterm), RecursionType::LeftRecursive | RecursionType::LeftRightRecursive) {
         let Ok(items) = graph[parent].get_closure_ref().map(|i| {
           i.iter()
             .filter(|i| match i.nontermlike_index_at_sym() {
@@ -1040,39 +1028,23 @@ fn get_completed_item_artifacts<'a, 'db: 'a, 'follow, T: ItemRefContainerIter<'a
   par: StateId,
   completed: T,
 ) -> SherpaResult<CompletedItemArtifacts<'db>> {
-  let mut oos_pairs = OrderedSet::new();
   let mut follow_pairs = OrderedSet::new();
   let mut follow_items = ItemSet::new();
   let mut default_only_items = ItemSet::new();
 
   for c_i in completed {
-    let (f, c) = get_follow(graph, *c_i)?;
+    let (f, ..) = get_follow(graph, *c_i)?;
 
     if f.is_empty() {
       default_only_items.insert(*c_i);
     } else {
-      follow_pairs.append(
-        &mut f.create_closure(graph.is_scanner(), par).into_iter().map(|i| (*c_i, i.to_origin(c_i.origin)).into()).collect(),
-      );
+      follow_pairs
+        .append(&mut f.iter().closure::<ItemSet>(par).into_iter().map(|i| (*c_i, i.to_origin(c_i.origin)).into()).collect());
       follow_items.append(&mut f.to_set());
-    }
-
-    if !c_i.is_out_of_scope() {
-      let goals: ItemSet = get_goal_items_from_completed(&c, graph);
-
-      for goal in goals {
-        let (follow, _) = get_follow(graph, goal.to_complete().to_origin(Origin::ScanCompleteOOS).to_oos_index())?;
-        oos_pairs.append(&mut follow.create_closure(false, par).into_iter().map(|i| (*c_i, i).into()).collect());
-      }
     }
   }
 
-  SherpaResult::Ok(CompletedItemArtifacts {
-    follow_items,
-    follow_pairs,
-    default_only: default_only_items,
-    oos_pairs,
-  })
+  SherpaResult::Ok(CompletedItemArtifacts { follow_items, follow_pairs, default_only: default_only_items })
 }
 
 fn handle_completed_item<'db, 'follow>(

@@ -661,8 +661,8 @@ Concrete Syntax Tree structure."
             }
           }
 
-          let non_term = cst::CST::NonTerm { nterm: vec![(nonterminal_id as u16, rule_id as u16)], children };
-          cst.push((len, Rc::new(non_term)));
+          let nonterm = cst::CST::NonTerm { nterm: vec![(nonterminal_id as u16, rule_id as u16)], children };
+          cst.push((len, Rc::new(nonterm)));
 
           #[cfg(debug_assertions)]
           if let Some(debug) = debug {

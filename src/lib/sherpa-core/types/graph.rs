@@ -207,11 +207,11 @@ impl<'db> State<'db> {
     hasher.finish()
   }
 
-  pub fn calculate_closure(&mut self, is_scanner: bool, db: &'db ParserDatabase) {
+  pub fn calculate_closure(&mut self, db: &'db ParserDatabase) {
     if !self.kernel_items.is_empty() {
       self.closure = None;
       let state_id = self.id;
-      let closure = self.kernel_items.create_closure(is_scanner, state_id);
+      let closure = self.kernel_items.iter().closure::<ItemSet>(state_id);
 
       if self.id.is_root() {
         let nterms = self.kernel_items.iter().map(|i| i.nonterm_index()).collect::<OrderedSet<_>>();
@@ -305,37 +305,22 @@ impl<'db> State<'db> {
   }
 
   /// Add kernel items without adjusting their origin
-  pub fn set_kernel_items<T: ItemContainer<'db>>(&mut self, kernel_items: T, is_scanner: bool, db: &'db ParserDatabase) {
+  pub fn set_kernel_items<T: ItemContainer<'db>>(&mut self, kernel_items: T, db: &'db ParserDatabase) {
     let mut kernel_items =
       kernel_items.into_iter().map(|i| if i.origin_state.is_invalid() { i.to_origin_state(self.id) } else { i }).collect();
 
     self.kernel_items.append(&mut kernel_items);
 
-    self.calculate_closure(is_scanner, db);
+    self.calculate_closure(db);
   }
 
   /// Add kernel items and set their origin to this state.
-  pub fn add_kernel_items<T: ItemContainer<'db>>(&mut self, kernel_items: T, is_scanner: bool, db: &'db ParserDatabase) {
+  pub fn add_kernel_items<T: ItemContainer<'db>>(&mut self, kernel_items: T, db: &'db ParserDatabase) {
     let mut kernel_items = kernel_items.into_iter().map(|i| i.to_origin_state(self.id)).collect();
 
     self.kernel_items.append(&mut kernel_items);
 
-    self.calculate_closure(is_scanner, db);
-  }
-
-  /// Returns true if the the call of the non-terminal can lead to an infinite
-  /// loop due to left recursion.
-  pub fn conflicting_nonterminal_call(&self, nterm: DBNonTermKey, is_scanner: bool, db: &ParserDatabase) -> bool {
-    if self.id.is_root() {
-      let nterms = self.kernel_items.iter().map(|i| i.nonterm_index()).collect::<OrderedSet<_>>();
-
-      Items::start_items(nterm, db)
-        .create_closure(is_scanner, self.id)
-        .into_iter()
-        .any(|i| nterms.contains(&i.nontermlike_index_at_sym().unwrap_or_default()) || nterms.contains(&i.nonterm_index()))
-    } else {
-      false
-    }
+    self.calculate_closure(db);
   }
 
   #[cfg(debug_assertions)]
@@ -454,7 +439,6 @@ impl<'follow, 'db: 'follow> GraphHost<'db> {
     kernel_items: Items<'db>,
   ) -> StateId {
     let id = StateId(self.states.len() as u32);
-    let is_scan = self.is_scanner();
 
     debug_assert!(!matches!(symbol.sym(), SymbolId::NonTerminalToken { .. }));
 
@@ -484,7 +468,6 @@ impl<'follow, 'db: 'follow> GraphHost<'db> {
       } else {
         kernel_items
       },
-      is_scan,
       self.db,
     );
 

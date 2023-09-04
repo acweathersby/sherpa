@@ -88,16 +88,11 @@ pub(super) fn get_goal_items_from_completed<'db, 'follow>(items: &Items<'db>, gr
   items.iter().filter(|i| graph.item_is_goal(*i)).cloned().collect()
 }
 
-pub(super) fn merge_items_into_groups<'db>(
-  follow: &Vec<Item<'db>>,
-  par: StateId,
-  is_scan: bool,
-  groups: &mut TransitionGroups<'db>,
-) {
+pub(super) fn merge_items_into_groups<'db>(follow: &Vec<Item<'db>>, par: StateId, groups: &mut TransitionGroups<'db>) {
   // Dumb symbols that could cause termination of parse into the intermediate
   // item groups
   for (sym, group) in hash_group_btreemap(
-    follow.create_closure(is_scan, par).into_iter().filter(|i| i.is_term()).collect::<OrderedSet<_>>(),
+    follow.iter().closure::<ItemSet>(par).into_iter().filter(|i| i.is_term()).collect::<OrderedSet<_>>(),
     |_, i| i.sym(),
   ) {
     if !groups.contains_key(&sym) {
