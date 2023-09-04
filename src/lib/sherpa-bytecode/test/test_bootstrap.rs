@@ -17,7 +17,7 @@ fn build_sherpa_grammar_and_parse(input: &str) -> SherpaResult<()> {
 
   let database = grammar.add_source(&sherpa_grammar)?.build_db(&sherpa_grammar)?;
 
-  let parser = database.build_parser()?.optimize(false)?;
+  let parser = database.build_parser(Default::default())?.optimize(false)?;
 
   #[cfg(all(debug_assertions))]
   parser.write_states_to_temp_file()?;
@@ -78,7 +78,7 @@ fn test_full_grammar() -> SherpaResult<()> {
   let sherpa_grammar = grammar_folder.join("grammar.sg");
   let grammar = SherpaGrammarBuilder::new();
   let database = grammar.add_source(&sherpa_grammar)?.build_db(&sherpa_grammar)?;
-  let parser = database.build_parser()?.optimize(false)?;
+  let parser = database.build_parser(Default::default())?.optimize(false)?;
   let (bc, state_map) = compile_bytecode(&parser, true)?;
 
   #[cfg(all(debug_assertions, not(feature = "wasm-target")))]

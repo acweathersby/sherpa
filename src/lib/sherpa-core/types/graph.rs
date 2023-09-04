@@ -20,7 +20,7 @@ pub enum Origin {
   NonTermGoal(DBNonTermKey),
   /// The goal symbol id that this item or its predecessors will recognize
   TerminalGoal(DBTermKey, u16),
-  /// The goal origin item set that this item will resolve to
+  /// The hash and state of the goal items set the peek item will resolve to
   Peek(u64, StateId),
   /// The goal is a goto kernel
   Goto(StateId),
@@ -416,10 +416,11 @@ pub struct GraphHost<'db> {
   mode: GraphMode,
   db: &'db ParserDatabase,
   name: IString,
+  config: ParserConfig,
 }
 
 impl<'follow, 'db: 'follow> GraphHost<'db> {
-  pub fn new(db: &'db ParserDatabase, mode: GraphMode, name: IString) -> Self {
+  pub fn new(db: &'db ParserDatabase, mode: GraphMode, name: IString, config: ParserConfig) -> Self {
     Self {
       mode,
       state_map: Default::default(),
@@ -428,6 +429,7 @@ impl<'follow, 'db: 'follow> GraphHost<'db> {
       pending_states: Default::default(),
       db,
       name,
+      config,
     }
   }
 
@@ -474,6 +476,10 @@ impl<'follow, 'db: 'follow> GraphHost<'db> {
     self.states.push(state);
 
     id
+  }
+
+  pub fn config(&self) -> &ParserConfig {
+    &self.config
   }
 
   pub fn get_db(&self) -> &'db ParserDatabase {

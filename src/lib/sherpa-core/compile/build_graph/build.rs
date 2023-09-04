@@ -19,8 +19,7 @@ use crate::{
 use core::panic;
 use std::collections::{BTreeSet, VecDeque};
 
-const _ALLOW_LL_RECURSIVE_DESCENT_CALLS: bool = false;
-const _ALLOW_LR_RECURSIVE_ASCENT: bool = true;
+const _ALLOW_PEEKING: bool = true;
 
 type PendingState = (GraphState, StateId);
 type PendingStates = Vec<PendingState>;
@@ -35,6 +34,7 @@ pub(crate) fn build<'follow, 'db: 'follow>(
   mode: GraphMode,
   kernel_items: Items<'db>,
   db: &'db ParserDatabase,
+  config: ParserConfig,
 ) -> SherpaResult<GraphHost<'db>> {
   for item in &kernel_items {
     if item.len == 0 {
@@ -42,7 +42,7 @@ pub(crate) fn build<'follow, 'db: 'follow>(
     }
   }
 
-  let mut graph = GraphHost::new(db, mode, name);
+  let mut graph = GraphHost::new(db, mode, name, config);
 
   let root = graph.create_state((SymbolId::Default, 0).into(), StateType::Start, None, kernel_items);
 
@@ -75,7 +75,8 @@ pub(crate) fn build<'follow, 'db: 'follow>(
 }
 
 fn handle_kernel_items<'db>(graph: &mut GraphHost<'db>, parent: StateId, graph_state: GraphState) -> SherpaResult<()> {
-  if _ALLOW_LL_RECURSIVE_DESCENT_CALLS
+  if false
+    && graph.config().ALLOW_LL_RECURSIVE_DESCENT_CALLS
     && !graph.is_scanner()
     && graph_state != NormalGoto
     && create_kernel_call(
@@ -112,10 +113,12 @@ fn handle_goto_states<'db>(
 ) -> SherpaResult<()> {
   match (!graph.is_scanner() && !graph_state.currently_peeking()) && handle_nonterminal_shift(graph, parent, out_items)? {
     true => {
-      if !_ALLOW_LR_RECURSIVE_ASCENT {
+      if !graph.config().ALLOW_LR_RECURSIVE_ASCENT {
         #[cfg(debug_assertions)]
         {
-          graph[parent].kernel_items_ref().iter().nonterm_items::<Vec<_>>().debug_print("These items are LR");
+          let items = graph[parent].kernel_items_ref().iter().nonterm_items::<Vec<_>>();
+          if items.is_empty() { graph[parent].kernel_items_ref().iter().cloned().collect() } else { items }
+            .debug_print("These items are LR");
         }
         panic!("Recursive Ascent / LR parsing must be enabled to compile a parser for this grammar. ")
       }
@@ -421,7 +424,7 @@ fn handle_incomplete_items_internal<'nt_set, 'db: 'nt_set>(
           out_items.append(&mut in_scope)
         }
         (1.., _) => {
-          if let Some((shifted_items, pending_state)) = (_ALLOW_LL_RECURSIVE_DESCENT_CALLS || graph.is_scanner())
+          if let Some((shifted_items, pending_state)) = (graph.config().ALLOW_LL_RECURSIVE_DESCENT_CALLS || graph.is_scanner())
             .then(|| create_call(in_scope.iter(), graph, graph_state, parent, prec_sym))
             .flatten()
           {

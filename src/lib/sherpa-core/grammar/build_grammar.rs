@@ -321,7 +321,7 @@ pub fn process_parse_state<'a>(
   SherpaResult::Ok(parse_state)
 }
 
-pub fn process_nonterminal<'a>(
+pub fn process_nonterminals<'a>(
   (mut nterm, nterm_ast): (Box<NonTerminal>, &'a ASTNode),
   g_data: &GrammarData,
   s_store: &IStringStore,
@@ -347,18 +347,15 @@ pub fn process_nonterminal<'a>(
 
   for rule in &nterm.rules {
     if rule.symbols.is_empty() {
-      panic!(
-        "{}",
-        rule.tok.blame(
-          1,
-          1,
-          &format!(
-            "Rules that can derive the empty rule `{} => ε` are currently not allowed in Sherpa Grammars!",
-            nterm.friendly_name.to_str(s_store).as_str()
-          ),
-          None
-        )
-      )
+      return Err(SherpaError::SourceError {
+        loc:        rule.tok.clone(),
+        path:       rule.g_id.path.to_path(s_store),
+        id:         "[todo]",
+        msg:        "Rules that can derive the empty rule `{} => ε` are currently not allowed in Sherpa Grammars!".into(),
+        inline_msg: "This symbol is optional leads to a derivation of this rule that lacks any symbols".into(),
+        ps_msg:     "Consider changing this rule to (+)".into(),
+        severity:   SherpaErrorSeverity::Critical,
+      });
     }
   }
 
@@ -899,7 +896,7 @@ mod test {
 
     assert_eq!(nterms.len(), 1);
 
-    let nterm = super::process_nonterminal(o_to_r(nterms.pop(), "")?, &g_data, &s_store)?;
+    let nterm = super::process_nonterminals(o_to_r(nterms.pop(), "")?, &g_data, &s_store)?;
 
     dbg!(&nterm.symbols);
 

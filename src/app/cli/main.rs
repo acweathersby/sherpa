@@ -127,7 +127,7 @@ fn build_parser(
     panic!("Failed To parse due to the above errors")
   }
 
-  let parser = db.build_parser()?.optimize(false)?;
+  let parser = db.build_parser(Default::default())?.optimize(false)?;
 
   if parser.dump_errors() {
     panic!("Failed To parse due to the above errors")

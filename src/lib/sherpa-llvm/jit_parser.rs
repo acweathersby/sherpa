@@ -140,7 +140,7 @@ where
     let parser = SherpaGrammarBuilder::new()
       .add_source_from_string(source, &default_path)
       .and_then(|d| d.build_db(&default_path))
-      .and_then(|d| d.build_parser())
+      .and_then(|d| d.build_parser(Default::default()))
       .and_then(|d| d.optimize(false))
       .unwrap();
 

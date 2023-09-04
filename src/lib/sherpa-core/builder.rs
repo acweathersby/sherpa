@@ -2,7 +2,8 @@ use crate::{
   compile::{build_states::compile_parse_states, optimize::optimize},
   grammar::{build_compile_db, compile_grammar_from_str, load_grammar, remove_grammar_mut},
   o_to_r,
-  proxy::Set,
+  proxy::{Queue, Set},
+  types::ParserConfig,
   GrammarIdentities,
   GrammarSoup,
   Journal,
@@ -83,7 +84,7 @@ impl SherpaGrammarBuilder {
 
     let SherpaGrammarBuilder { soup, mut j } = self;
 
-    let mut queue = std::collections::VecDeque::from_iter([id]);
+    let mut queue = Queue::from_iter([id]);
 
     let mut known_imports = Set::from_iter(soup.grammar_headers.read().map_err(|e| SherpaError::from(e))?.iter().map(|i| *i.0));
 
@@ -128,7 +129,7 @@ impl SherpaGrammarBuilder {
 
       known_imports.insert(id.guid);
 
-      let mut queue = std::collections::VecDeque::from_iter(ids);
+      let mut queue = Queue::from_iter(ids);
 
       while let Some(id) = queue.pop_front() {
         if known_imports.insert(id.guid) {
@@ -191,10 +192,10 @@ impl SherpaDatabaseBuilder {
     &self.db
   }
 
-  pub fn build_parser(&self) -> SherpaResult<SherpaParserBuilder> {
+  pub fn build_parser(&self, config: ParserConfig) -> SherpaResult<SherpaParserBuilder> {
     let SherpaDatabaseBuilder { j, db } = self;
 
-    let states = compile_parse_states(j.transfer(), db)?;
+    let states = compile_parse_states(j.transfer(), db, config)?;
 
     j.transfer().flush_reports();
 
@@ -347,18 +348,22 @@ pub fn build_db() -> SherpaResult<()> {
 pub fn build_states() -> SherpaResult<()> {
   let grammar_source_path =
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammar/json/json.sg").canonicalize().unwrap();
-  assert!(SherpaGrammarBuilder::new().add_source(&grammar_source_path)?.build_db(&grammar_source_path)?.build_parser().is_ok());
+  assert!(SherpaGrammarBuilder::new()
+    .add_source(&grammar_source_path)?
+    .build_db(&grammar_source_path)?
+    .build_parser(Default::default())
+    .is_ok());
   Ok(())
 }
 
 #[test]
-pub fn build_optmized_states() -> SherpaResult<()> {
+pub fn build_with_optimized_states() -> SherpaResult<()> {
   let grammar_source_path =
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammar/json/json.sg").canonicalize().unwrap();
   assert!(SherpaGrammarBuilder::new()
     .add_source(&grammar_source_path)?
     .build_db(&grammar_source_path)?
-    .build_parser()?
+    .build_parser(Default::default())?
     .optimize(false)?
     .get_optimized_states()
     .is_some());

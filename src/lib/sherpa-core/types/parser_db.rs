@@ -2,54 +2,6 @@ use super::*;
 use crate::{parser, CachedString, SherpaResult};
 use std::collections::{HashMap, VecDeque};
 
-#[derive(Default, Clone, Copy)]
-#[cfg_attr(debug_assertions, derive(Debug))]
-pub enum RecursionType {
-  #[default]
-  None = 0,
-  LeftRecursive = 1,
-  RightRecursive = 2,
-  LeftRightRecursive = 3,
-}
-
-#[cfg_attr(debug_assertions, derive(Debug))]
-#[derive(Clone)]
-pub struct DBRule {
-  pub rule:       Rule,
-  pub nonterm:    DBNonTermKey,
-  pub is_scanner: bool,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-#[cfg_attr(debug_assertions, derive(Debug))]
-pub struct DBTokenData {
-  /// The symbol type and precedence.
-  pub sym_id:     SymbolId,
-  /// The friendly name of this token.
-  pub name:       IString,
-  /// The scanner non-terminal id of this token.
-  pub nonterm_id: DBNonTermKey,
-  /// The id of the symbol when used as a lexer token.
-  pub tok_id:     DBTermKey,
-}
-
-#[derive(Clone, Copy)]
-#[cfg_attr(debug_assertions, derive(Debug))]
-pub struct EntryPoint {
-  pub nonterm_key:        DBNonTermKey,
-  /// The GUID name of the non-terminal.
-  pub nonterm_name:       IString,
-  /// The GUID name of the non-terminal's entry state.
-  pub nonterm_entry_name: IString,
-  /// The GUID name of the non-terminal's exit state.
-  pub nonterm_exit_name:  IString,
-  /// The friendly name of the non-terminal as specified in the
-  /// `IMPORT <nonterm> as <entry_name>` preamble.
-  pub entry_name:         IString,
-  ///
-  pub export_id:          usize,
-}
-
 /// Data used for the compilation of parse states. contains
 /// additional metadata for compilation of LLVM and Bytecode
 /// parsers.
@@ -93,6 +45,8 @@ pub struct ParserDatabase {
   item_closures: Array<Array<Array<StaticItem>>>,
   ///NonTerminal Recursion Type
   recursion_types: Array<u8>,
+  /// Reduction types
+  reduction_types: Array<ReductionType>,
 }
 
 impl ParserDatabase {
@@ -108,7 +62,7 @@ impl ParserDatabase {
     custom_states: Array<Option<Box<parser::State>>>,
     valid: bool,
   ) -> Self {
-    let mut db = Self {
+    Self {
       name,
       nonterm_symbols,
       nonterm_names,
@@ -122,19 +76,19 @@ impl ParserDatabase {
       follow_items: Default::default(),
       item_closures: Default::default(),
       recursion_types: Default::default(),
-    };
-
-    db.process_data();
-
-    db
+      reduction_types: Default::default(),
+    }
+    .process_data()
   }
 
-  fn process_data(&mut self) {
-    let mut recursion_types: Vec<u8> = vec![Default::default(); self.nonterms_len()];
-    let mut follow_items_base: Vec<Array<StaticItem>> = vec![Default::default(); self.nonterms_len()];
-    let mut follow_items_final: Vec<Array<StaticItem>> = vec![Default::default(); self.nonterms_len()];
-    let mut closure_map = Vec::with_capacity(self.rules.len());
+  fn process_data(mut self) -> Self {
+    let mut recursion_types: Array<u8> = vec![Default::default(); self.nonterms_len()];
+    let mut follow_items_base: Array<Array<StaticItem>> = vec![Default::default(); self.nonterms_len()];
+    let mut follow_items_final: Array<Array<StaticItem>> = vec![Default::default(); self.nonterms_len()];
+    let mut reduce_types: Array<ReductionType> = vec![Default::default(); self.rules.len()];
+    let mut closure_map = Array::with_capacity(self.rules.len());
 
+    let db = &self;
     // Calculate closure for all items, and follow sets and recursion type for all
     // non-terminals.
 
@@ -142,7 +96,7 @@ impl ParserDatabase {
       closure_map.insert(index, Vec::with_capacity(rule.rule.symbols.len()))
     }
 
-    for item in self.rules().iter().enumerate().map(|(id, _)| Item::from_rule(DBRuleKey(id as u32), self)).flat_map(|mut i| {
+    for item in self.rules().iter().enumerate().map(|(id, _)| Item::from_rule(DBRuleKey(id as u32), db)).flat_map(|mut i| {
       let mut out = Vec::with_capacity(i.len as usize);
       out.push(i);
       while let Some(inc) = i.increment() {
@@ -161,13 +115,25 @@ impl ParserDatabase {
         _ => {}
       }
 
-      let root_nonterm = item.nonterm_index();
-      let mut recursion_encountered = false;
-
+      //-------------------------------------------------------------------------------------------
+      // Use completed items to file out the reduce types table.
       if item.is_complete() {
-        continue;
+        let rule = item.rule();
+        if rule.ast.is_some() {
+          reduce_types[item.rule_id.0 as usize] = ReductionType::SemanticAction
+        } else if item.len == 1 {
+          match item.decrement().is_some_and(|i| i.is_term()) {
+            true => reduce_types[item.rule_id.0 as usize] = ReductionType::SingleTerminal,
+            false => reduce_types[item.rule_id.0 as usize] = ReductionType::SingleNonTerminal,
+          }
+        }
       }
 
+      //-------------------------------------------------------------------------------------------
+      // Calculate closures for uncompleted items.
+
+      let root_nonterm = item.nonterm_index();
+      let mut recursion_encountered = false;
       let mut closure = ItemSet::from_iter([]);
       let mut queue = VecDeque::from_iter([item]);
 
@@ -193,6 +159,13 @@ impl ParserDatabase {
         }
       }
 
+      closure_map
+        .get_mut(item.rule_id.0 as usize)
+        .unwrap()
+        .insert(item.sym_index as usize, closure.into_iter().map(|i| (i.rule_id, i.sym_index)).collect::<Array<_>>());
+
+      //-------------------------------------------------------------------------------------------
+      // Update recursion type
       if recursion_encountered {
         if item.is_at_initial() {
           recursion_types[root_nonterm.0 as usize] |= RecursionType::LeftRecursive as u8;
@@ -200,13 +173,10 @@ impl ParserDatabase {
           recursion_types[root_nonterm.0 as usize] |= RecursionType::RightRecursive as u8;
         }
       }
-
-      closure_map
-        .get_mut(item.rule_id.0 as usize)
-        .unwrap()
-        .insert(item.sym_index as usize, closure.into_iter().map(|i| (i.rule_id, i.sym_index)).collect::<Array<_>>());
     }
 
+    // Update nonterminal follow lists with items of non-terminals that arise from
+    // items that are completed after shifting over the initial non-terminal
     for (base_id, _) in self.nonterm_symbols.iter().enumerate() {
       let mut nonterm_ids = VecDeque::from_iter([base_id]);
       let mut seen = Set::new();
@@ -215,7 +185,7 @@ impl ParserDatabase {
         if seen.insert(id) {
           for static_item in &follow_items_base[id] {
             follow_items_final[base_id].push(*static_item);
-            let item = Item::from_static(*static_item, self);
+            let item = Item::from_static(*static_item, db);
             if item.is_penultimate() {
               nonterm_ids.push_back(item.nonterm_index().0 as usize)
             }
@@ -227,6 +197,8 @@ impl ParserDatabase {
     self.item_closures = closure_map;
     self.recursion_types = recursion_types;
     self.follow_items = follow_items_final;
+    self.reduction_types = reduce_types;
+    self
   }
 
   /// Prints token ids and their friendly names to the console
@@ -389,6 +361,11 @@ impl ParserDatabase {
     &self.string_store
   }
 
+  /// Returns a reference to the [IStringStore]
+  pub fn get_reduce_type<'db>(&'db self, rule_id: DBRuleKey) -> ReductionType {
+    self.reduction_types[rule_id.0 as usize]
+  }
+
   pub fn nonterm_recursion_type(&self, nonterm: DBNonTermKey) -> RecursionType {
     match self.recursion_types[nonterm.0 as usize] {
       3 => RecursionType::LeftRightRecursive,
@@ -502,4 +479,68 @@ impl DBTermKey {
   pub fn to_index(&self) -> usize {
     (self.0) as usize
   }
+}
+
+#[derive(Default, Clone, Copy)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub enum ReductionType {
+  /// Any reduction resulting in the execution of a some kind of semantic
+  /// action. At this point only `:ast` semantic actions are available.
+  SemanticAction,
+  /// A reduction of a terminal symbol to a nonterminal
+  SingleTerminal,
+  /// A reduction of single nonterminal symbol to another nonterminal
+  SingleNonTerminal,
+  #[default]
+  /// A reduction of more than one symbol to a nonterminal
+  Mixed,
+}
+
+// The type of recursion that can occur for a given rule.
+#[derive(Default, Clone, Copy)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub enum RecursionType {
+  #[default]
+  None = 0,
+  LeftRecursive = 1,
+  RightRecursive = 2,
+  LeftRightRecursive = 3,
+}
+
+#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone)]
+pub struct DBRule {
+  pub rule:       Rule,
+  pub nonterm:    DBNonTermKey,
+  pub is_scanner: bool,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub struct DBTokenData {
+  /// The symbol type and precedence.
+  pub sym_id:     SymbolId,
+  /// The friendly name of this token.
+  pub name:       IString,
+  /// The scanner non-terminal id of this token.
+  pub nonterm_id: DBNonTermKey,
+  /// The id of the symbol when used as a lexer token.
+  pub tok_id:     DBTermKey,
+}
+
+#[derive(Clone, Copy)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub struct EntryPoint {
+  pub nonterm_key:        DBNonTermKey,
+  /// The GUID name of the non-terminal.
+  pub nonterm_name:       IString,
+  /// The GUID name of the non-terminal's entry state.
+  pub nonterm_entry_name: IString,
+  /// The GUID name of the non-terminal's exit state.
+  pub nonterm_exit_name:  IString,
+  /// The friendly name of the non-terminal as specified in the
+  /// `IMPORT <nonterm> as <entry_name>` preamble.
+  pub entry_name:         IString,
+  ///
+  pub export_id:          usize,
 }

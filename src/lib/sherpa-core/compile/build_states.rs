@@ -8,7 +8,7 @@ type States = OrderedMap<IString, Box<ParseState>>;
 type Scanners = OrderedSet<(IString, OrderedSet<PrecedentDBTerm>)>;
 use rayon::prelude::*;
 
-pub fn compile_parse_states(mut j: Journal, db: &ParserDatabase) -> SherpaResult<ParseStatesMap> {
+pub fn compile_parse_states(mut j: Journal, db: &ParserDatabase, config: ParserConfig) -> SherpaResult<ParseStatesMap> {
   j.set_active_report("State Compile", ReportType::NonTerminalCompile(Default::default()));
 
   #[cfg(all(debug_assertions, not(feature = "wasm-target")))]
@@ -32,7 +32,7 @@ pub fn compile_parse_states(mut j: Journal, db: &ParserDatabase) -> SherpaResult
       let mut scanners = Scanners::new();
 
       for (nterm, nterm_sym) in chunks {
-        match create_parse_states_from_prod(&mut local_j, db, *nterm, *nterm_sym, &mut states, &mut scanners) {
+        match create_parse_states_from_prod(&mut local_j, db, *nterm, *nterm_sym, &mut states, &mut scanners, config) {
           SherpaResult::Ok(output) => output,
           SherpaResult::Err(_err) => {}
         }
@@ -64,7 +64,7 @@ pub fn compile_parse_states(mut j: Journal, db: &ParserDatabase) -> SherpaResult
       .flat_map(|s| Items::start_items(db.token(s.tok()).nonterm_id, db).to_origin(Origin::TerminalGoal(s.tok(), s.precedence())))
       .collect::<Array<_>>();
 
-    let graph = build(&mut j, scanner, GraphMode::Scanner, start_items, db)?;
+    let graph = build(&mut j, scanner, GraphMode::Scanner, start_items, db, config)?;
 
     let ir = build_ir(&mut j, &graph, scanner)?;
     // println!("{}", graph.debug_string());
@@ -95,6 +95,7 @@ fn create_parse_states_from_prod<'db>(
   nterm_sym: SymbolId,
   states: &mut States,
   scanners: &mut Scanners,
+  config: ParserConfig,
 ) -> SherpaResult<()> {
   j.set_active_report("Non-terminal Compile", ReportType::NonTerminalCompile(nterm_sym.to_nterm()));
 
@@ -117,7 +118,7 @@ fn create_parse_states_from_prod<'db>(
 
     match nterm_sym {
       SymbolId::NonTerminal { .. } => {
-        let graph = build(j, db.nonterm_guid_name(nterm.into()), GraphMode::Parser, start_items, db)?;
+        let graph = build(j, db.nonterm_guid_name(nterm.into()), GraphMode::Parser, start_items, db, config)?;
 
         let ir = build_ir(j, &graph, db.nonterm_guid_name(nterm.into()))?;
 
@@ -129,7 +130,7 @@ fn create_parse_states_from_prod<'db>(
         }
       }
       SymbolId::NonTerminalToken { .. } => {
-        let graph = build(j, db.nonterm_guid_name(nterm.into()), GraphMode::Scanner, start_items, db)?;
+        let graph = build(j, db.nonterm_guid_name(nterm.into()), GraphMode::Scanner, start_items, db, config)?;
 
         let ir = build_ir(j, &graph, db.nonterm_guid_name(nterm.into()))?;
 

@@ -113,7 +113,7 @@ pub fn create_parser_states(js_db: &JSParserDB, optimize_states: bool) -> Result
 
   let db = js_db.0.as_ref();
 
-  let parser = db.build_parser().map_err(to_err)?;
+  let parser = db.build_parser(Default::default()).map_err(to_err)?;
 
   let parser = if optimize_states { parser.optimize(true).map_err(to_err)? } else { parser };
 

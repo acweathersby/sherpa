@@ -3,7 +3,7 @@
 pub struct DebugConfig {
   /// Allow further processing of the parse states when
   /// parse states with the same name but different contents
-  /// are encourntered
+  /// are encountered
   pub allow_parse_state_name_collisions: bool,
 }
 

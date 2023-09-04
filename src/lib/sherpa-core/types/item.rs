@@ -31,7 +31,7 @@ pub struct Item<'db> {
   /// the item is considered complete.
   pub sym_index: u16,
   ////
-  pub goto_distance: u16,
+  pub goto_distance: u8,
 }
 
 #[cfg(debug_assertions)]
@@ -140,6 +140,11 @@ impl<'db> Item<'db> {
       goal: 0,
       goto_distance: 0,
     }
+  }
+
+  /// Returns the reduce type of the item.
+  pub fn resolve_type(&self) -> ReductionType {
+    self.db.get_reduce_type(self.rule_id)
   }
 
   pub fn to_absolute(&self) -> Self {

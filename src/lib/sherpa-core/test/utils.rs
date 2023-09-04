@@ -25,13 +25,17 @@ pub fn build_parse_states_from_source_str<'a, T>(
       SherpaGrammarBuilder::new()
         .add_source_from_string(source, &source_path)?
         .build_db(&source_path)?
-        .build_parser()?
+        .build_parser(Default::default())?
         .optimize(false)?
         .into(),
     )
   } else {
     test_fn(
-      SherpaGrammarBuilder::new().add_source_from_string(source, &source_path)?.build_db(&source_path)?.build_parser()?.into(),
+      SherpaGrammarBuilder::new()
+        .add_source_from_string(source, &source_path)?
+        .build_db(&source_path)?
+        .build_parser(Default::default())?
+        .into(),
     )
   }
 }
@@ -55,9 +59,9 @@ pub fn build_parse_states_from_multi_sources<'a, T>(
   let root_path = source_path.join("A");
 
   if optimize {
-    test_fn(grammar.build_db(&root_path)?.build_parser()?.optimize(false)?.into())
+    test_fn(grammar.build_db(&root_path)?.build_parser(Default::default())?.optimize(false)?.into())
   } else {
-    test_fn(grammar.build_db(&root_path)?.build_parser()?.into())
+    test_fn(grammar.build_db(&root_path)?.build_parser(Default::default())?.into())
   }
 }
 
