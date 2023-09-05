@@ -144,8 +144,8 @@ fn build_parser(
       SherpaResult::Err("LLVM based compilation not supported not supported".into())
     }
     _ => {
-      let (bc, lu) = compile_bytecode(&parser, false)?;
-      compile_rust_bytecode_parser(&parser, &bc, &lu)
+      let pkg = compile_bytecode(&parser, false)?;
+      compile_rust_bytecode_parser(&parser, &pkg)
     }
   };
 

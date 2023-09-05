@@ -3,65 +3,18 @@ use crate::types::{
   *,
 };
 
-pub enum DebugEvent<'a> {
-  ExecuteState {
-    base_instruction: Instruction<'a>,
-  },
-  ExecuteInstruction {
-    instruction: Instruction<'a>,
-    is_scanner:  bool,
-    end_ptr:     usize,
-    head_ptr:    usize,
-    scan_ptr:    usize,
-    base_ptr:    usize,
-    anchor_ptr:  usize,
-    tok_len:     usize,
-    tok_id:      u32,
-    sym_len:     u32,
-  },
-  SkipToken {
-    offset_start: usize,
-    offset_end:   usize,
-  },
-  ShiftToken {
-    offset_start: usize,
-    offset_end:   usize,
-    token_id:     u32,
-  },
-  ByteValue {
-    input_value: u32,
-    start:       usize,
-    end:         usize,
-  },
-  CodePointValue {
-    input_value: u32,
-    start:       usize,
-    end:         usize,
-  },
-  ClassValue {
-    input_value: u32,
-    start:       usize,
-    end:         usize,
-  },
-  TokenValue {
-    input_value: u32,
-    start:       usize,
-    end:         usize,
-  },
-  GotoValue {
-    nonterminal_id: u32,
-  },
-  Reduce {
-    rule_id: u32,
-  },
-  Complete {
-    nonterminal_id: u32,
-  },
-  Failure {},
+pub enum DebugEvent<'ctx> {
+  ExecuteState { base_instruction: Instruction<'ctx> },
+  ExecuteInstruction { instruction: Instruction<'ctx> },
+  Complete { nonterminal_id: u32 },
+  ActionShift { offset_start: usize, offset_end: usize, token_id: u32 },
+  ActionReduce { rule_id: u32 },
+  ActionAccept,
+  ActionError,
   EndOfFile,
 }
 
-pub type DebugFn = dyn FnMut(&DebugEvent, &str);
+pub type DebugFn<R, M> = dyn FnMut(&DebugEvent, &ParseContext<R, M>);
 
 /// Yields parser Actions from parsing an input using the
 /// current active grammar bytecode.
@@ -70,7 +23,7 @@ pub fn dispatch<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
   ctx: &mut ParseContext<R, M>,
   stack: &mut Vec<u32>,
   bc: &'a [u8],
-  debug: &mut Option<&'debug mut DebugFn>,
+  debug: &mut Option<&'debug mut DebugFn<R, M>>,
 ) -> (ParseAction, Option<Instruction<'a>>) {
   use ParseAction::*;
 
@@ -78,7 +31,7 @@ pub fn dispatch<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
 
   #[cfg(any(debug_assertions, feature = "wasm-lab"))]
   if let Some(debug) = debug.as_mut() {
-    debug(&DebugEvent::ExecuteState { base_instruction: block_base }, ctx.get_str());
+    debug(&DebugEvent::ExecuteState { base_instruction: block_base }, ctx);
   }
 
   let mut i: Instruction = block_base.clone();
@@ -87,8 +40,6 @@ pub fn dispatch<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
     use Opcode::*;
 
     i = match match i.get_opcode() {
-      DebugExpectedSymbols => debug_expected_symbols(i),
-      DebugStateName => debug_symbol(i),
       ShiftToken => shift_token(i, ctx),
       ShiftTokenScanless => shift_token_scanless(i, ctx),
       ScanShift => scan_shift(i, ctx),
@@ -105,7 +56,7 @@ pub fn dispatch<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
         block_base = new_state;
         #[cfg(any(debug_assertions, feature = "wasm-lab"))]
         if let Some(debug) = debug.as_mut() {
-          debug(&DebugEvent::ExecuteState { base_instruction: block_base }, ctx.get_str());
+          debug(&DebugEvent::ExecuteState { base_instruction: block_base }, ctx);
         }
         (parse_action, Some(new_state))
       }
@@ -118,7 +69,7 @@ pub fn dispatch<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
       Fail => (FailState, Option::None),
       Pass => (CompleteState, Option::None),
       Accept => (ParseAction::Accept { nonterminal_id: ctx.nterm }, Option::None),
-      NoOp | DebugTokenLocation => (None, i.next()),
+      NoOp => (None, i.next()),
     } {
       (None, Option::None) => {
         unreachable!("Expected next instruction!")
@@ -126,55 +77,19 @@ pub fn dispatch<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
       (None, Some(next_instruction)) => {
         #[cfg(any(debug_assertions, feature = "wasm-lab"))]
         if let Some(debug) = debug {
-          debug(
-            &DebugEvent::ExecuteInstruction {
-              instruction: i,
-              is_scanner:  ctx.is_scanner(),
-              end_ptr:     ctx.end_ptr,
-              head_ptr:    ctx.head_ptr,
-              scan_ptr:    ctx.scan_ptr,
-              base_ptr:    ctx.base_ptr,
-              anchor_ptr:  ctx.anchor_ptr,
-              tok_id:      ctx.tok_id,
-              sym_len:     ctx.sym_len,
-              tok_len:     ctx.tok_len,
-            },
-            ctx.get_str(),
-          );
+          debug(&DebugEvent::ExecuteInstruction { instruction: i }, ctx);
         }
         next_instruction
       }
       (any, out) => {
         #[cfg(any(debug_assertions, feature = "wasm-lab"))]
         if let Some(debug) = debug {
-          debug(
-            &DebugEvent::ExecuteInstruction {
-              instruction: i,
-              is_scanner:  ctx.is_scanner(),
-              end_ptr:     ctx.end_ptr,
-              head_ptr:    ctx.head_ptr,
-              scan_ptr:    ctx.scan_ptr,
-              base_ptr:    ctx.base_ptr,
-              anchor_ptr:  ctx.anchor_ptr,
-              tok_id:      ctx.tok_id,
-              sym_len:     ctx.sym_len,
-              tok_len:     ctx.tok_len,
-            },
-            ctx.get_str(),
-          );
+          debug(&DebugEvent::ExecuteInstruction { instruction: i }, ctx);
         }
         break (any, out);
       }
     }
   }
-}
-
-fn debug_expected_symbols<'a>(i: Instruction<'a>) -> (ParseAction, Option<Instruction<'a>>) {
-  (ParseAction::None, i.next())
-}
-
-fn debug_symbol<'a>(i: Instruction<'a>) -> (ParseAction, Option<Instruction<'a>>) {
-  (ParseAction::None, i.next())
 }
 
 /// Performs the [Opcode::TokenShift] operation
@@ -440,7 +355,7 @@ fn peek_reset<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
 pub fn hash_branch<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
   i: Instruction<'a>,
   ctx: &mut ParseContext<R, M>,
-  debug: &mut Option<&'debug mut DebugFn>,
+  debug: &mut Option<&'debug mut DebugFn<R, M>>,
 ) -> (ParseAction, Option<Instruction<'a>>) {
   const __HINT__: Opcode = Opcode::HashBranch;
 
@@ -458,9 +373,6 @@ pub fn hash_branch<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
 
   loop {
     let input_value = get_input_value(input_type, scan_block_instruction, ctx, debug);
-
-    #[cfg(any(debug_assertions, feature = "wasm-lab"))]
-    emit_debug_value(ctx, debug, input_type, input_value);
 
     let mut hash_index = (input_value & hash_mask) as usize;
 
@@ -485,7 +397,7 @@ pub fn hash_branch<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
 pub fn vector_branch<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
   i: Instruction<'a>,
   ctx: &mut ParseContext<R, M>,
-  debug: &mut Option<&'debug mut DebugFn>,
+  debug: &mut Option<&'debug mut DebugFn<R, M>>,
 ) -> (ParseAction, Option<Instruction<'a>>) {
   // Decode data
 
@@ -500,9 +412,6 @@ pub fn vector_branch<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
   } = i.into();
 
   let input_value = get_input_value(input_type, scan_block_instruction, ctx, debug);
-
-  #[cfg(any(debug_assertions, feature = "wasm-lab"))]
-  emit_debug_value(ctx, debug, input_type, input_value);
 
   let value_index = (input_value as i32 - value_offset as i32) as usize;
 
@@ -519,7 +428,7 @@ fn get_input_value<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
   input_type: InputType,
   scan_index: Instruction<'a>,
   ctx: &mut ParseContext<R, M>,
-  debug: &mut Option<&'debug mut DebugFn>,
+  debug: &mut Option<&'debug mut DebugFn<R, M>>,
 ) -> u32 {
   match input_type {
     InputType::NonTerminal => ctx.get_nonterminal() as u32,
@@ -587,33 +496,10 @@ fn get_input_value<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
   }
 }
 
-fn emit_debug_value<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
-  ctx: &mut ParseContext<R, M>,
-  debug: &mut Option<&'debug mut DebugFn>,
-  input_type: InputType,
-  input_value: u32,
-) {
-  let start = ctx.scan_ptr;
-  let end = ctx.scan_ptr + ctx.tok_len;
-  if let Some(debug) = debug {
-    match input_type {
-      InputType::NonTerminal => debug(&DebugEvent::GotoValue { nonterminal_id: input_value }, ctx.get_str()),
-      InputType::Byte | InputType::ByteScanless => debug(&DebugEvent::ByteValue { input_value, start, end }, ctx.get_str()),
-      InputType::Class | InputType::ClassScanless => debug(&DebugEvent::ClassValue { input_value, start, end }, ctx.get_str()),
-      InputType::Token => debug(&DebugEvent::TokenValue { input_value, start, end }, ctx.get_str()),
-      InputType::Codepoint | InputType::CodepointScanless => {
-        debug(&DebugEvent::CodePointValue { input_value, start, end }, ctx.get_str())
-      }
-      InputType::EndOfFile => debug(&DebugEvent::EndOfFile, ctx.get_str()),
-      _ => unreachable!("Invalid input type selector"),
-    };
-  }
-}
-
 fn token_scan<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
   scan_index: Instruction<'a>,
   ctx: &mut ParseContext<R, M>,
-  debug: &mut Option<&'debug mut DebugFn>,
+  debug: &mut Option<&'debug mut DebugFn<R, M>>,
 ) {
   ctx.tok_id = 0;
   ctx.scan_ptr = ctx.head_ptr;
@@ -679,14 +565,15 @@ fn token_scan<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
 }
 
 /// Start or continue a parse on an input
-pub fn get_next_action<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
+pub fn get_next_action<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M, ByteCode: AsRef<[u8]>>(
   ctx: &'a mut ParseContext<R, M>,
   stack: &mut Vec<u32>,
-  bc: &[u8],
-  debug: &mut Option<&'debug mut DebugFn>,
+  bc: &'a ByteCode,
+  debug: &mut Option<&'debug mut DebugFn<R, M>>,
 ) -> ParseAction {
   let mut address = stack.pop().unwrap();
   let mut state = stack.pop().unwrap();
+  let bc = bc.as_ref();
 
   debug_assert!(bc.len() > 0, "Bytecode is empty!");
 
@@ -733,19 +620,21 @@ pub fn get_next_action<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M
   }
 }
 
-pub struct ByteCodeParser<'a, R: ByteReader + MutByteReader, M> {
+pub struct ByteCodeParser<R: ByteReader + MutByteReader, M, ByteCode: AsRef<[u8]>> {
   ctx:   ParseContext<R, M>,
   stack: Vec<u32>,
-  bc:    &'a [u8],
+  bc:    ByteCode,
 }
 
-impl<'a, R: ByteReader + MutByteReader, M> ByteCodeParser<'a, R, M> {
-  pub fn new(reader: &mut R, bc: &'a [u8]) -> Self {
+impl<'a, R: ByteReader + MutByteReader, M, ByteCode: AsRef<[u8]>> ByteCodeParser<R, M, ByteCode> {
+  pub fn new(reader: &mut R, bc: ByteCode) -> Self {
     ByteCodeParser { ctx: ParseContext::<R, M>::new_bytecode(reader), stack: vec![], bc }
   }
 }
 
-impl<'a, R: ByteReader + MutByteReader + UTF8Reader, M> SherpaParser<R, M, true> for ByteCodeParser<'a, R, M> {
+impl<'a, R: ByteReader + MutByteReader + UTF8Reader, M, ByteCode: AsRef<[u8]>> SherpaParser<R, M, true>
+  for ByteCodeParser<R, M, ByteCode>
+{
   fn get_ctx(&self) -> &ParseContext<R, M> {
     &self.ctx
   }
@@ -805,7 +694,7 @@ impl<'a, R: ByteReader + MutByteReader + UTF8Reader, M> SherpaParser<R, M, true>
     self.get_reader_mut().next(0);
   }
 
-  fn get_next_action<'debug>(&mut self, debug: &mut Option<&'debug mut DebugFn>) -> ParseAction {
+  fn get_next_action<'debug>(&mut self, debug: &mut Option<&'debug mut DebugFn<R, M>>) -> ParseAction {
     let ByteCodeParser { ctx, stack, bc } = self;
     get_next_action(ctx, stack, bc, debug)
   }

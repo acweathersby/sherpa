@@ -249,9 +249,13 @@ impl ParserDatabase {
       .unwrap_or_default()
   }
 
-  pub fn get_entry_offset(&self, entry_name: &str, hash_map: &HashMap<IString, usize>) -> Option<usize> {
+  pub fn get_entry_offset(&self, entry_name: &str, hash_map: &HashMap<IString, u32>) -> Option<usize> {
     let string = entry_name.to_token();
-    self.entry_points().iter().find(|e| e.entry_name == string).and_then(|e| hash_map.get(&e.nonterm_entry_name)).cloned()
+    self
+      .entry_points()
+      .iter()
+      .find(|e| e.entry_name == string)
+      .and_then(|e| hash_map.get(&e.nonterm_entry_name).map(|v| (*v) as usize))
   }
 
   /// Returns the name of the database as a string.

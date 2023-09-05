@@ -1,4 +1,4 @@
-use crate::grammar::{JSBytecode, JSParserDB};
+use crate::grammar::{JSBytecodePackage, JSParserDB};
 use serde::{Deserialize, Serialize};
 use sherpa_core::parser;
 use sherpa_rust_runtime::{
@@ -17,7 +17,7 @@ use wasm_bindgen::prelude::*;
 #[wasm_bindgen]
 pub struct JSGrammarParser {
   _reader:         Rc<RefCell<string_reader::StringReader>>,
-  bytecode_parser: ByteCodeParser<'static, string_reader::StringReader, u32>,
+  bytecode_parser: ByteCodeParser<string_reader::StringReader, u32, &'static [u8]>,
 }
 
 #[wasm_bindgen]
@@ -28,7 +28,7 @@ impl JSGrammarParser {
     let reader_ptr = reader.borrow_mut();
     Self {
       _reader:         other_reader,
-      bytecode_parser: ByteCodeParser::new(unsafe { &mut *reader_ptr.as_ptr() }, &parser::bytecode),
+      bytecode_parser: ByteCodeParser::new(unsafe { &mut *reader_ptr.as_ptr() }, parser::bytecode.as_slice()),
     }
   }
 
@@ -59,34 +59,29 @@ impl JSGrammarParser {
 #[wasm_bindgen]
 pub struct JSByteCodeParser {
   running:         bool,
-  _bytecode:       Rc<RefCell<Vec<u8>>>,
+  _bytecode:       JSBytecodePackage,
   _reader:         Rc<RefCell<string_reader::StringReader>>,
-  bytecode_parser: ByteCodeParser<'static, string_reader::StringReader, u32>,
+  bytecode_parser: ByteCodeParser<string_reader::StringReader, u32, JSBytecodePackage>,
 }
 
 #[wasm_bindgen]
 impl JSByteCodeParser {
-  pub fn new(input: String, bytecode: &JSBytecode) -> Self {
+  pub fn new(input: String, bytecode: &JSBytecodePackage) -> Self {
     let mut reader = Rc::new(RefCell::new(string_reader::StringReader::new(input)));
     let other_reader = reader.clone();
     let reader_ptr = reader.borrow_mut();
-
-    let mut bytecode = Rc::new(RefCell::new(bytecode.0 .0.clone()));
-    let other_bytecode = bytecode.clone();
-    let bytecode_ptr = bytecode.borrow_mut();
-
     Self {
       running:         false,
       _reader:         other_reader,
-      _bytecode:       other_bytecode,
-      bytecode_parser: ByteCodeParser::new(unsafe { &mut *reader_ptr.as_ptr() }, unsafe { &*bytecode_ptr.as_ptr() }),
+      _bytecode:       bytecode.clone(),
+      bytecode_parser: ByteCodeParser::new(unsafe { &mut *reader_ptr.as_ptr() }, bytecode.clone()),
     }
   }
 
-  pub fn init(&mut self, entry_name: String, bytecode: &JSBytecode, db: &JSParserDB) {
+  pub fn init(&mut self, entry_name: String, bytecode: &JSBytecodePackage, db: &JSParserDB) {
     let db = db.0.as_ref().get_db();
 
-    let offset = db.get_entry_offset(&entry_name, &bytecode.0 .1).expect("Could not find entry point");
+    let offset = db.get_entry_offset(&entry_name, &bytecode.0.state_name_to_address).expect("Could not find entry point");
 
     self.bytecode_parser.init_parser(offset as u32);
 
@@ -146,8 +141,8 @@ impl JSByteCodeParser {
 #[wasm_bindgen]
 pub fn get_codemirror_parse_tree(input: String) -> JsValue {
   let mut reader = string_reader::StringReader::new(input);
-  let mut bytecode_parser: ByteCodeParser<'_, string_reader::StringReader, u32> =
-    ByteCodeParser::<'static, _, u32>::new(&mut reader, &parser::bytecode);
+  let mut bytecode_parser: ByteCodeParser<string_reader::StringReader, u32, _> =
+    ByteCodeParser::<_, u32, _>::new(&mut reader, parser::bytecode.as_slice());
   bytecode_parser.init_parser(31287);
 
   let mut output = vec![];

@@ -275,7 +275,10 @@ impl<'llvm, R: ByteReader + LLVMByteReader + MutByteReader, M> SherpaParser<R, M
     self.prime(entry_point);
   }
 
-  fn get_next_action<'debug>(&mut self, debug: &mut Option<&'debug mut sherpa_rust_runtime::bytecode::DebugFn>) -> ParseAction {
+  fn get_next_action<'debug>(
+    &mut self,
+    debug: &mut Option<&'debug mut sherpa_rust_runtime::bytecode::DebugFn<R, M>>,
+  ) -> ParseAction {
     match self.next() {
       ParseActionType::Shift => ParseAction::Shift {
         token_byte_offset: self.get_token_offset(),

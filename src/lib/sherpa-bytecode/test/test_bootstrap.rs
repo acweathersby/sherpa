@@ -11,14 +11,14 @@ use super::utils::TestParser;
 
 #[test]
 fn test_full_grammar() -> SherpaResult<()> {
-  let file_names = ["grammar.sg" /* , "ascript.sg", "ir.sg", "symbol.sg", "token.sg" */];
+  let file_names = ["grammar.sg", "ascript.sg", "ir.sg", "symbol.sg", "token.sg"];
   let grammar_folder =
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammar/sherpa/2.0.0").canonicalize().unwrap();
   let sherpa_grammar = grammar_folder.join("grammar.sg");
   let grammar = SherpaGrammarBuilder::new();
   let database = grammar.add_source(&sherpa_grammar)?.build_db(&sherpa_grammar)?;
   let parser = database.build_parser(ParserConfig::new().lr_only())?.optimize(false)?;
-  let (bc, state_map) = compile_bytecode(&parser, true)?;
+  let pkg = compile_bytecode(&parser, true)?;
 
   #[cfg(all(debug_assertions, not(feature = "wasm-target")))]
   parser.write_states_to_temp_file()?;
@@ -42,8 +42,8 @@ fn test_full_grammar() -> SherpaResult<()> {
       None
     };
 
-    match TestParser::new(&mut ((&input).into()), &bc).collect_shifts_and_skips(
-      db.get_entry_offset("grammar", &state_map).expect(&format!(
+    match TestParser::new(&mut ((&input).into()), &pkg).collect_shifts_and_skips(
+      db.get_entry_offset("grammar", &pkg.state_name_to_address).expect(&format!(
         "\nCan't find entry offset for entry point [default].\nValid entry names are\n    {}\n",
         db.entry_points().iter().map(|e| { e.entry_name.to_string(db.string_store()) }).collect::<Vec<_>>().join(" | ")
       )) as u32,

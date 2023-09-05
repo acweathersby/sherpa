@@ -12,19 +12,19 @@ use sherpa_rust_runtime::{
   },
 };
 
-pub type TestParser<'a> = ByteCodeParser<'a, UTF8StringReader<'a>, u32>;
+pub type TestParser<'a, Bytecode> = ByteCodeParser<UTF8StringReader<'a>, u32, Bytecode>;
 
 pub fn compile_and_run_grammars(source: &[&str], inputs: &[(&str, &str, bool)]) -> SherpaResult<()> {
   build_parse_states_from_multi_sources(source, "".into(), true, &|tp| {
     #[cfg(all(debug_assertions, not(feature = "wasm-target")))]
     tp.write_states_to_temp_file()?;
 
-    let (bc, state_map) = compile_bytecode(&tp, true)?;
+    let pkg = compile_bytecode(&tp, true)?;
     let TestPackage { db, .. } = tp;
 
     for (entry_name, input, should_pass) in inputs {
-      TestParser::new(&mut ((*input).into()), &bc).collect_shifts_and_skips(
-        db.get_entry_offset(entry_name, &state_map).expect(&format!(
+      TestParser::new(&mut ((*input).into()), &pkg).collect_shifts_and_skips(
+        db.get_entry_offset(entry_name, &pkg.state_name_to_address).expect(&format!(
           "\nCan't find entry offset for entry point [default].\nValid entry names are\n    {}\n",
           db.entry_points().iter().map(|e| { e.entry_name.to_string(db.string_store()) }).collect::<Vec<_>>().join(" | ")
         )) as u32,
@@ -39,9 +39,9 @@ pub fn compile_and_run_grammars(source: &[&str], inputs: &[(&str, &str, bool)]) 
         .as_deref_mut(),
       );
 
-      let ok = TestParser::new(&mut ((*input).into()), &bc)
+      let ok = TestParser::new(&mut ((*input).into()), &pkg)
         .completes(
-          db.get_entry_offset(entry_name, &state_map).expect(&format!(
+          db.get_entry_offset(entry_name, &pkg.state_name_to_address).expect(&format!(
             "\nCan't find entry offset for entry point [{entry_name}].\nValid entry names are\n    {}\n",
             db.entry_points().iter().map(|e| { e.entry_name.to_string(db.string_store()) }).collect::<Vec<_>>().join(" | ")
           )) as u32,

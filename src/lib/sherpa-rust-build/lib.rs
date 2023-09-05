@@ -14,7 +14,8 @@ use builder::{
 };
 use sherpa_ascript::{output_base::AscriptWriter, types::AScriptStore};
 
-use sherpa_core::{proxy::Map, CodeWriter, IString, Journal, ParserStore, SherpaDatabaseBuilder, SherpaResult};
+use sherpa_bytecode::BytecodePackage;
+use sherpa_core::{CodeWriter, Journal, ParserStore, SherpaDatabaseBuilder, SherpaResult};
 
 use crate::builder::write_rust_llvm_parser_file;
 
@@ -30,11 +31,7 @@ pub fn build_rust(mut j: Journal, db: &SherpaDatabaseBuilder) -> SherpaResult<St
   String::from_utf8(writer.into_writer().into_output()).map_err(|e| e.into())
 }
 
-pub fn compile_rust_bytecode_parser<T: ParserStore>(
-  store: &T,
-  bytecode: &Vec<u8>,
-  state_lookups: &Map<IString, usize>,
-) -> SherpaResult<String> {
+pub fn compile_rust_bytecode_parser<T: ParserStore>(store: &T, pkg: &BytecodePackage) -> SherpaResult<String> {
   let db = store.get_db();
   let mut j = store.get_journal().transfer();
 
@@ -47,7 +44,7 @@ pub fn compile_rust_bytecode_parser<T: ParserStore>(
   assert!(!j.have_errors_of_type(sherpa_core::SherpaErrorSeverity::Critical));
 
   let state_lookups =
-    state_lookups.into_iter().map(|(name, offset)| (name.to_string(db.string_store()), *offset as u32)).collect();
+    pkg.state_name_to_address.iter().map(|(name, offset)| (name.to_string(db.string_store()), *offset as u32)).collect();
 
   let u = create_rust_writer_utils(&store, &db);
 
@@ -99,7 +96,7 @@ use sherpa_rust_runtime::{
 
   let writer = write_rust_ast(writer)?;
 
-  let writer = write_rust_bytecode_parser_file(writer, &state_lookups, bytecode)?;
+  let writer = write_rust_bytecode_parser_file(writer, &state_lookups, &pkg.bytecode)?;
 
   SherpaResult::Ok(writer.into_writer().to_string())
 }

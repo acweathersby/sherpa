@@ -531,11 +531,11 @@ fn simple_newline_tracking() -> SherpaResult<()> {
     "".into(),
     true,
     &|tp| {
-      let (bc, _) = compile_bytecode(&tp, true)?;
+      let pkg = compile_bytecode(&tp, true)?;
 
       let TestPackage { db, .. } = tp;
 
-      let mut parser = TestParser::new(&mut ("hello\nworld\n\ngoodby\nmango".into()), &bc);
+      let mut parser = TestParser::new(&mut ("hello\nworld\n\ngoodby\nmango".into()), &pkg);
       parser.init_parser(FIRST_PARSE_BLOCK_ADDRESS);
       let result = parser.parse_ast(
         &map_reduce_function(&db, vec![

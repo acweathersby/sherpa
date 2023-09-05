@@ -9712,7 +9712,7 @@ pub trait Reader: ByteReader + MutByteReader + UTF8Reader {}
 
 impl<T: ByteReader + MutByteReader + UTF8Reader> Reader for T {}
 
-pub type Parser<'a, T, UserCTX> = sherpa_rust_runtime::bytecode::ByteCodeParser<'a, T, UserCTX>;
+pub type Parser<'a, T, UserCTX, Bytecode> = sherpa_rust_runtime::bytecode::ByteCodeParser<T, UserCTX, Bytecode>;
 
 pub mod meta{
   
@@ -9947,38 +9947,38 @@ pub mod meta{
   ];
 }
 
-pub fn new_ir_parser<'a, T: Reader, UserCTX> (reader: &'a mut T)-> Parser<'a, T, UserCTX> {
-  let mut parser = Parser::new(reader, &bytecode);
+pub fn new_ir_parser<'a, T: Reader, UserCTX> (reader: &'a mut T)-> Parser<'a, T, UserCTX, &'static [u8]> {
+  let mut parser = Parser::new(reader, bytecode.as_slice());
   parser.init_parser(8);
   parser
 }
 
-pub fn new_escaped_parser<'a, T: Reader, UserCTX> (reader: &'a mut T)-> Parser<'a, T, UserCTX> {
-  let mut parser = Parser::new(reader, &bytecode);
+pub fn new_escaped_parser<'a, T: Reader, UserCTX> (reader: &'a mut T)-> Parser<'a, T, UserCTX, &'static [u8]> {
+  let mut parser = Parser::new(reader, bytecode.as_slice());
   parser.init_parser(30547);
   parser
 }
 
-pub fn new_grammar_parser<'a, T: Reader, UserCTX> (reader: &'a mut T)-> Parser<'a, T, UserCTX> {
-  let mut parser = Parser::new(reader, &bytecode);
+pub fn new_grammar_parser<'a, T: Reader, UserCTX> (reader: &'a mut T)-> Parser<'a, T, UserCTX, &'static [u8]> {
+  let mut parser = Parser::new(reader, bytecode.as_slice());
   parser.init_parser(31287);
   parser
 }
 
-pub fn new_type_eval_parser<'a, T: Reader, UserCTX> (reader: &'a mut T)-> Parser<'a, T, UserCTX> {
-  let mut parser = Parser::new(reader, &bytecode);
+pub fn new_type_eval_parser<'a, T: Reader, UserCTX> (reader: &'a mut T)-> Parser<'a, T, UserCTX, &'static [u8]> {
+  let mut parser = Parser::new(reader, bytecode.as_slice());
   parser.init_parser(51642);
   parser
 }
 
-pub fn new_ast_expression_parser<'a, T: Reader, UserCTX> (reader: &'a mut T)-> Parser<'a, T, UserCTX> {
-  let mut parser = Parser::new(reader, &bytecode);
+pub fn new_ast_expression_parser<'a, T: Reader, UserCTX> (reader: &'a mut T)-> Parser<'a, T, UserCTX, &'static [u8]> {
+  let mut parser = Parser::new(reader, bytecode.as_slice());
   parser.init_parser(51878);
   parser
 }
 
-pub fn new_ast_struct_parser<'a, T: Reader, UserCTX> (reader: &'a mut T)-> Parser<'a, T, UserCTX> {
-  let mut parser = Parser::new(reader, &bytecode);
+pub fn new_ast_struct_parser<'a, T: Reader, UserCTX> (reader: &'a mut T)-> Parser<'a, T, UserCTX, &'static [u8]> {
+  let mut parser = Parser::new(reader, bytecode.as_slice());
   parser.init_parser(52613);
   parser
 }

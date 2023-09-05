@@ -1,12 +1,12 @@
 use js_sys::Array;
-use sherpa_bytecode::compile_bytecode;
-use sherpa_core::{proxy::Map, *};
+use sherpa_bytecode::{compile_bytecode, BytecodePackage};
+use sherpa_core::*;
 use sherpa_rust_build::build_rust;
 use sherpa_rust_runtime::{
   bytecode::{disassemble_bytecode, disassemble_parse_block},
   types::bytecode::Instruction,
 };
-use std::path::PathBuf;
+use std::{path::PathBuf, rc::Rc};
 use wasm_bindgen::prelude::*;
 
 use crate::error::PositionedErrors;
@@ -32,7 +32,14 @@ pub struct JSSoup(pub(crate) Box<Option<SherpaGrammarBuilder>>);
 
 /// Bytecode produced from parse states
 #[wasm_bindgen]
-pub struct JSBytecode(pub(crate) Box<(Vec<u8>, Map<IString, usize>)>);
+#[derive(Clone)]
+pub struct JSBytecodePackage(pub(crate) Rc<BytecodePackage>);
+
+impl AsRef<[u8]> for JSBytecodePackage {
+  fn as_ref(&self) -> &[u8] {
+    self.0.as_ref().as_ref()
+  }
+}
 
 fn to_err(e: SherpaError) -> PositionedErrors {
   (&vec![e]).into()
@@ -137,35 +144,35 @@ fn convert_journal_errors(j: &mut Journal) -> PositionedErrors {
 
 /// Temporary simple disassembly implementation.
 #[wasm_bindgen]
-pub fn create_bytecode(states: &JSParseStates) -> Result<JSBytecode, PositionedErrors> {
+pub fn create_bytecode(states: &JSParseStates) -> Result<JSBytecodePackage, PositionedErrors> {
   let mut j = Journal::new();
 
   j.set_active_report("bytecode compile", sherpa_core::ReportType::Any);
 
-  let SherpaResult::Ok((bc, state_lu)) = compile_bytecode(states.states.as_ref(), true) else {
+  let SherpaResult::Ok(pkg) = compile_bytecode(states.states.as_ref(), true) else {
     return Result::Err(convert_journal_errors(&mut j));
   };
 
-  Ok(JSBytecode(Box::new((bc, state_lu))))
+  Ok(JSBytecodePackage(Rc::new(pkg)))
 }
 
 /// Temporary simple disassembly implementation.
 #[wasm_bindgen]
-pub fn create_bytecode_disassembly(bytecode: &JSBytecode) -> Result<String, PositionedErrors> {
-  Ok(disassemble_bytecode(&bytecode.0 .0))
+pub fn create_bytecode_disassembly(pkg: &JSBytecodePackage) -> Result<String, PositionedErrors> {
+  Ok(disassemble_bytecode(&pkg.0.bytecode))
 }
 
 /// Temporary simple disassembly of a single instruction
 #[wasm_bindgen]
-pub fn create_instruction_disassembly(address: u32, bytecode: &JSBytecode) -> String {
-  disassemble_parse_block(Some((bytecode.0 .0.as_slice(), address as usize).into()), false).0
+pub fn create_instruction_disassembly(address: u32, pkg: &JSBytecodePackage) -> String {
+  disassemble_parse_block(Some((pkg.0.bytecode.as_slice(), address as usize).into()), false).0
 }
 
 /// Return a list of symbols ids if the opcode of the instruction is
 /// Op::DebugExpectedSymbols
 #[wasm_bindgen]
-pub fn get_debug_symbol_ids(address: u32, bytecode: &JSBytecode) -> JsValue {
-  let i: Instruction = (bytecode.0 .0.as_slice(), address as usize).into();
+pub fn get_debug_symbol_ids(address: u32, pkg: &JSBytecodePackage) -> JsValue {
+  let i: Instruction = (pkg.0.bytecode.as_slice(), address as usize).into();
 
   let vec = i.get_debug_symbols();
 
@@ -175,8 +182,8 @@ pub fn get_debug_symbol_ids(address: u32, bytecode: &JSBytecode) -> JsValue {
 /// Return a list of symbols ids if the opcode of the instruction is
 /// Op::DebugExpectedSymbols
 #[wasm_bindgen]
-pub fn get_debug_state_name(address: u32, bytecode: &JSBytecode) -> JsValue {
-  let i: Instruction = (bytecode.0 .0.as_slice(), address as usize).into();
+pub fn get_debug_state_name(address: u32, pkg: &JSBytecodePackage) -> JsValue {
+  let i: Instruction = (pkg.0.bytecode.as_slice(), address as usize).into();
 
   i.get_active_state_name().into()
 }
@@ -191,8 +198,8 @@ pub struct TokenOffsets {
 /// Return a list of symbols ids if the opcode of the instruction is
 /// Op::DebugExpectedSymbols
 #[wasm_bindgen]
-pub fn get_debug_tok_offsets(address: u32, bytecode: &JSBytecode) -> JsValue {
-  let i: Instruction = (bytecode.0 .0.as_slice(), address as usize).into();
+pub fn get_debug_tok_offsets(address: u32, pkg: &JSBytecodePackage) -> JsValue {
+  let i: Instruction = (pkg.0.bytecode.as_slice(), address as usize).into();
   match i.get_debug_tok_offsets() {
     Some((start, end)) => (TokenOffsets { start, end }).into(),
     None => Default::default(),

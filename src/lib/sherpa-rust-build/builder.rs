@@ -1585,7 +1585,7 @@ pub trait Reader: ByteReader + MutByteReader + UTF8Reader {}
 
 impl<T: ByteReader + MutByteReader + UTF8Reader> Reader for T {}
 
-pub type Parser<'a, T, UserCTX> = sherpa_rust_runtime::bytecode::ByteCodeParser<'a, T, UserCTX>;"
+pub type Parser<T, UserCTX, Bytecode> = sherpa_rust_runtime::bytecode::ByteCodeParser<T, UserCTX, Bytecode>;"
       .into(),
   )?;
 
@@ -1625,7 +1625,7 @@ pub type Parser<'a, T, UserCTX> = sherpa_rust_runtime::bytecode::ByteCodeParser<
       ")",
       ", ",
       &|_| vec!["reader: &'a mut T".into()],
-      "-> Parser<'a, T, UserCTX>",
+      "-> Parser<T, UserCTX, &'static [u8]>",
       "{",
       "}",
       &mut |w| {

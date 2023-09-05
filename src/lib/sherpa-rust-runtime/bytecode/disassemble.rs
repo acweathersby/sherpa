@@ -18,22 +18,11 @@ pub fn disassemble_parse_block<'a>(i: Option<Instruction<'a>>, recursive: bool) 
 
   let Some(i) = i else { return ("".to_string(), None) };
 
-  let bc = i.bytecode();
-
   if !i.is_valid() {
     ("".to_string(), None)
   } else {
     use Opcode::*;
     match i.get_opcode() {
-      DebugExpectedSymbols | DebugTokenLocation => (String::default(), i.next()),
-      DebugStateName => {
-        let str_start = 3;
-        let len = i.len() - str_start;
-        let index = i.address() + str_start;
-        let bytes = bc[index..index + len].to_vec();
-        let sym = format!("\n{}: {}", dh(i.address()), unsafe { String::from_utf8_unchecked(bytes) });
-        (sym, i.next())
-      }
       VectorBranch | HashBranch => generate_table_string(i, r),
       Goto => {
         let mut iter = i.iter();
