@@ -28,7 +28,7 @@ pub enum Origin {
   // completion of a token non-terminal.
   ScanCompleteOOS,
   /// Generated when the a goal non-terminal is completed.
-  /// Goal nonterminals are determined by the
+  /// Goal non-terminals are determined by the
   /// root state (`StateId(0)`) kernel items
   GoalCompleteOOS,
 }

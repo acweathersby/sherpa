@@ -426,6 +426,25 @@ pub fn c_style_comment_blocks() -> SherpaResult<()> {
 }
 
 #[test]
+pub fn recursive_skipped_comments() -> SherpaResult<()> {
+  compile_and_run_grammars(
+    &[r##"
+    IGNORE { tk:comment c:sp }
+
+    <> A > "hello" "world"
+
+    <> comment > "/*" comment_body "*/"{:9999}
+
+    <> comment_body >  ( c:nl | c:sym | c:num | c:sp | c:id | comment )(+)
+    "##],
+    &[
+      ("default", r##"hello /* This is the only way to go /* to */ the moon */ world"##, true),
+      ("default", r##"hello /* This is the only way to go /* to */ the moon / world"##, false),
+    ],
+  )
+}
+
+#[test]
 fn json_object_with_specialized_key() -> SherpaResult<()> {
   compile_and_run_grammars(
     &[r##"

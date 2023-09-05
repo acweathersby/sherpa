@@ -25,11 +25,17 @@ export class ScrollHandler {
     private bound_handle_scroll: (evnt: any) => void;
 
 
-    constructor(ele: HTMLElement, scroll_host: HTMLElement = ele) {
+    constructor(ele: HTMLElement, scroll_host: HTMLElement) {
+
+        if (ele == scroll_host) {
+            throw "Scroll bar host element must be different than scrolling element"
+        }
 
         this.scroll_host = scroll_host;
 
         this.scroll = document.createElement("div");
+
+        this.scroll.classList.add("no-scroll");
         this.scroll.classList.add("scroll");
 
 
@@ -55,7 +61,11 @@ export class ScrollHandler {
         this.resize_obs = new ResizeObserver(this.handle_resize.bind(this));
         this.mutate_obs = new MutationObserver(this.handle_resize.bind(this));
 
-        this.resize_obs.observe(scroll_host);
+
+        this.resize_obs.observe(ele);
+
+        if (ele != scroll_host)
+            this.resize_obs.observe(scroll_host);
 
         this.bound_handle_wheel = this.handle_wheel.bind(this);
         this.bound_handle_scroll = this.handle_scroll.bind(this);
@@ -84,14 +94,16 @@ export class ScrollHandler {
         }
 
         this.resize_obs.observe(target);
+
+
         this.mutate_obs.observe(target, {
-            subtree: true,
-            attributes: true,
+            subtree: this.ele != this.scroll_host,
+            attributes: this.ele != this.scroll_host,
             childList: true
         });
 
-        for (const ele of Array.from(target.children))
-            this.resize_obs.observe(ele);
+        //for (const ele of Array.from(target.children))
+        //    this.resize_obs.observe(ele);
 
         target.addEventListener("wheel", this.bound_handle_wheel);
         target.addEventListener("scroll", this.bound_handle_scroll);
@@ -103,11 +115,11 @@ export class ScrollHandler {
 
     handle_resize() {
         if (this.ele) {
-
             const clientHeight = this.ele.clientHeight;
+
             this.scroll_amount = this.ele.scrollHeight - clientHeight;
             this.scroll_box_ratio = clientHeight / this.ele.scrollHeight;
-            this.target_height = (this.scroll_box_ratio * this.scroll.clientHeight);
+            this.target_height = Math.max(this.scroll_box_ratio * this.scroll.clientHeight, 75);
             this.target_pos = ((this.ele.scrollTop / this.scroll_amount) * (this.scroll.clientHeight - this.target_height));
             this.sb_distance = (this.scroll.clientHeight - this.target_height);
 

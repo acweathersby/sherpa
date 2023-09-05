@@ -7,6 +7,7 @@ import { ViewPlugin, DecorationSet, ViewUpdate } from "@codemirror/view"
 import { StateField, StateEffect, Range } from "@codemirror/state"
 import { EditorView, Decoration } from "@codemirror/view"
 import { set_input } from "./session_storage";
+import { DebuggerButton } from "./debugger_buttons";
 
 
 const head_dec = Decoration.mark({ attributes: { style: "background-color: red" } });
@@ -17,18 +18,10 @@ const highlight_effect = StateEffect.define<Range<Decoration>[]>();
 const filter_effects = StateEffect.define<((from: number, to: number) => boolean)>();
 
 export function parserHost(ctx: GrammarContext, {
-    debugger_start_stop_button,
-    debugger_step_button,
-    debugger_into_button,
-    debugger_out_button,
     debugger_output,
     debugger_entry_selection,
     debugger_optimize_checkbox
 }: {
-    debugger_start_stop_button: HTMLButtonElement,
-    debugger_step_button: HTMLButtonElement,
-    debugger_into_button: HTMLButtonElement,
-    debugger_out_button: HTMLButtonElement,
     debugger_output: HTMLDivElement,
     debugger_entry_selection: HTMLSelectElement,
     debugger_optimize_checkbox: HTMLInputElement,
@@ -38,6 +31,7 @@ export function parserHost(ctx: GrammarContext, {
     let states: sherpa.JSParseStates | null = null;
     let parser: sherpa.JSByteCodeParser | null = null;
     let PARSING: boolean = false;
+    let PARSER_VALID: boolean = false;
     let debugger_steps: any[] = [];
     let debugger_offset: number = -1;
     let play_interval = -1;
@@ -125,16 +119,8 @@ export function parserHost(ctx: GrammarContext, {
 
     }
 
-    function stop_parser() {
-        if (!PARSING) return;
-        destroy_parser();
-        toggle_play(true);
-        PARSING = false;
-        debugger_start_stop_button.innerHTML = "start";
-        debugger_start_stop_button.classList.remove("started");
-    }
-
-    function start_parser() {
+    function build_parser() {
+        if (PARSER_VALID) return;
 
         if (!(view && ctx.db && !PARSING)) return;
 
@@ -142,12 +128,62 @@ export function parserHost(ctx: GrammarContext, {
 
         if (!(states && bytecode)) return;
 
-        debugger_start_stop_button.innerHTML = "stop";
-        debugger_start_stop_button.classList.add("started");
-
         create_parser();
 
         if (!parser) return;
+
+        PARSER_VALID = true;
+
+        enableParserButtons()
+    }
+
+    function invalidate_parser() {
+        stop_parser();
+        destroy_states();
+        disableParserButtons();
+        PARSER_VALID = false;
+    }
+
+    function disableParserButtons() {
+        DebuggerButton.get("step").disable = true;
+        DebuggerButton.get("step-action").disable = true;
+        DebuggerButton.get("play").disable = true;
+        DebuggerButton.get("restart").disable = true;
+        DebuggerButton.get("build").active = false;
+        DebuggerButton.get("build").disable = false;
+    }
+
+    function enableParserButtons() {
+        DebuggerButton.get("step").disable = false;
+        DebuggerButton.get("step-action").disable = false;
+        DebuggerButton.get("play").disable = false;
+        DebuggerButton.get("restart").disable = false;
+        DebuggerButton.get("build").active = true;
+        DebuggerButton.get("build").disable = true;
+    }
+
+    function stop_parser() {
+        if (!PARSING) return;
+        destroy_parser();
+        toggle_play(true);
+        PARSING = false;
+    }
+
+    function restart_parser() {
+        stop_parser();
+        start_parser();
+    }
+
+    function start_parser() {
+
+        if (!PARSER_VALID)
+            return;
+
+        if (PARSING) {
+            destroy_parser();
+        }
+
+        create_parser();
 
         debugger_offset = -1;
         active_search_symbols.clear();
@@ -156,13 +192,17 @@ export function parserHost(ctx: GrammarContext, {
         active_state_source = "";
         active_scanner_state_source = "";
 
-        view.dispatch({ userEvent: "debugger.start" })
+        if (view)
+            view.dispatch({ userEvent: "debugger.start" })
+
         PARSING = true;
 
         step_forward();
     }
 
     function step_forward() {
+
+
         if (view && parser && states && bytecode && ctx.db && PARSING) {
 
             let db = ctx.db;
@@ -265,35 +305,82 @@ export function parserHost(ctx: GrammarContext, {
 
     function toggle_play(force_stop: boolean = false) {
         if (play_interval >= 0 || force_stop) {
-            clearInterval(play_interval);
-            play_interval = -1;
+            if (play_interval >= 0) {
+                clearInterval(play_interval);
+                play_interval = -1;
+            }
+            DebuggerButton.get("play").active = false;
         } else if (PARSING) {
             play_interval = setInterval(step_forward, 1);
+            DebuggerButton.get("play").active = true;
+        } else {
+            restart_parser()
+            toggle_play();
         }
     }
 
     debugger_optimize_checkbox.addEventListener("change", e => {
-        stop_parser();
-        destroy_states();
+        invalidate_parser();
         optimize = debugger_optimize_checkbox.checked;
     })
 
-    debugger_step_button.addEventListener("click", step_forward);
+    DebuggerButton.get("restart").addEventListener("click", restart_parser);
 
-    debugger_into_button.addEventListener("click", e => toggle_play());
+    DebuggerButton.get("step").addEventListener("click", step_forward);
 
-    debugger_start_stop_button.addEventListener("click", e => {
-        if (PARSING)
-            stop_parser();
-        else
-            start_parser();
+    DebuggerButton.get("play").addEventListener("click", e => toggle_play());
+
+    DebuggerButton.get("build").addEventListener("click", e => {
+        build_parser();
+        start_parser();
     });
 
-    debugger_entry_selection.addEventListener("change", e => {
-        stop_parser();
-    });
+    window.addEventListener("keydown", e => {
+        if (e.altKey) {
+            console.log(e.code, e.key)
+            switch (e.key) {
+                case "r":
+                    if (PARSING) {
+                        toggle_play(true);
+                        restart_parser();
+                    }
+                    e.stopImmediatePropagation();
+                    e.stopPropagation();
+                    e.preventDefault();
+                    return false
+                case "b":
+                    if (!PARSER_VALID) {
+                        build_parser();
+                        start_parser();
+                    }
+                    e.stopImmediatePropagation();
+                    e.stopPropagation();
+                    e.preventDefault();
+                    return false
+                case "n":
+                    if (PARSING) {
+                        toggle_play(true);
+                        step_forward();
+                    }
+                    e.stopImmediatePropagation();
+                    e.stopPropagation();
+                    e.preventDefault();
+                    return false
+                case " ":
+                    if (PARSING) {
+                        toggle_play();
+                    }
+                    e.stopImmediatePropagation();
+                    e.stopPropagation();
+                    e.preventDefault();
+                    return false
+            }
+        }
 
-    stop_parser();
+    })
+
+
+    invalidate_parser();
 
     return [
         ViewPlugin.fromClass(class {
@@ -301,7 +388,7 @@ export function parserHost(ctx: GrammarContext, {
                 if (update.transactions.find(e => e.isUserEvent("debugger.start"))) {
                     console.log("Started");
                 } else if (update.docChanged) {
-                    stop_parser();
+                    invalidate_parser();
                 }
             }
         }, {}),

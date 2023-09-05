@@ -7,6 +7,9 @@ import { sherpaLang } from './sherpa_lang';
 import { parserHost } from './parser';
 import { GrammarContext } from './grammar_context';
 import { get_grammar, get_input, init, set_grammar_update_handler, set_parser_update_handler } from "./session_storage";
+import { DebuggerButton } from "./debugger_buttons";
+
+
 
 export { docs_handler, ScrollHandler };
 
@@ -15,10 +18,6 @@ export default async function (
         codemirror_grammar_host,
         codemirror_parser_host,
         disassembly_output,
-        debugger_start_stop_button,
-        debugger_step_button,
-        debugger_into_button,
-        debugger_out_button,
         debugger_output,
         debugger_entry_selection,
         debugger_optimize_checkbox
@@ -26,16 +25,11 @@ export default async function (
         codemirror_grammar_host: Element;
         codemirror_parser_host: Element;
         disassembly_output: Element;
-        debugger_start_stop_button: HTMLButtonElement,
-        debugger_step_button: HTMLButtonElement,
-        debugger_into_button: HTMLButtonElement,
-        debugger_out_button: HTMLButtonElement,
         debugger_output: HTMLDivElement,
         debugger_entry_selection: HTMLSelectElement,
         debugger_optimize_checkbox: HTMLInputElement,
     }
 ) {
-
     try {
         await init_sherpa();
         log("Sherpa WASM Runtime initialized");
@@ -43,7 +37,10 @@ export default async function (
         alert("Sherpa Failed to Load");
     }
 
+    DebuggerButton.gatherButtons();
+
     init(window);
+
 
     const ctx = new GrammarContext();
 
@@ -62,10 +59,6 @@ export default async function (
     const parser_editor = new EditorView({
         doc: get_input(),
         extensions: [basicSetup, parserHost(ctx, {
-            debugger_start_stop_button,
-            debugger_step_button,
-            debugger_into_button,
-            debugger_out_button,
             debugger_output,
             debugger_entry_selection,
             debugger_optimize_checkbox

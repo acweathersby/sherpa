@@ -16,7 +16,7 @@ pub type StaticItem = (DBRuleKey, u16);
 #[derive(Clone, Copy)]
 pub struct Item<'db> {
   db: &'db ParserDatabase,
-  /// The NonTerminal non-terminal or symbol that the item directly or
+  /// The non-terminal or token that the item directly or
   /// indirectly resolves to
   pub origin: Origin,
   /// The Graph goal

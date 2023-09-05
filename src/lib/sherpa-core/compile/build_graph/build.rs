@@ -19,15 +19,14 @@ use crate::{
 };
 use std::collections::{BTreeSet, VecDeque};
 
-const _ALLOW_PEEKING: bool = true;
+use GraphState::*;
 
 type PendingState = (GraphState, StateId);
 type PendingStates = Vec<PendingState>;
 
-use GraphState::*;
-
 pub(crate) type TransitionGroup<'db> = (u16, ItemSet<'db>);
 pub(crate) type TransitionGroups<'db> = OrderedMap<SymbolId, TransitionGroup<'db>>;
+
 pub(crate) fn build<'follow, 'db: 'follow>(
   j: &mut Journal,
   name: IString,
@@ -215,7 +214,7 @@ fn handle_nonterminal_shift<'db, 'follow>(
       let contains_left_recursive_items = items.iter().any(|i| i.is_left_recursive());
 
       if is_at_root && contains_left_recursive_items {
-        let local_nterms = incremented_items.iter().nonterm_ids_at_index();
+        let local_nonterms = incremented_items.iter().nonterm_ids_at_index();
         //let item = Item::from_rule(db.nonterm_rules(*nterm)?[0], db);
         //incremented_items.push(item.to_complete().to_origin(Origin::GoalCompleteOOS).
         // to_oos_index().to_origin_state(parent));`
@@ -232,23 +231,23 @@ fn handle_nonterminal_shift<'db, 'follow>(
 
         // Collects the follow terminal items items from a non-terminal
         // TODO(anthony): Move this to DB creation.
-        let mut nonterminals = Queue::from_iter([*nterm]);
+        let mut nonterms = Queue::from_iter([*nterm]);
         let mut seen = Set::from_iter([*nterm]);
-        seen.extend(local_nterms.iter());
+        seen.extend(local_nonterms.iter());
 
         let mut oos_items = ItemSet::new();
 
-        while let Some(_nterm) = nonterminals.pop_front() {
+        while let Some(_nterm) = nonterms.pop_front() {
           for item in db.nonterm_follow_items(_nterm) {
             let item = item.try_increment().to_origin_state(parent);
             match item.get_type() {
               ItemType::Completed(_nterm) => {
                 if seen.insert(_nterm) {
-                  nonterminals.push_back(_nterm)
+                  nonterms.push_back(_nterm)
                 }
               }
               ItemType::NonTerminal(non_terminal) => {
-                if !local_nterms.contains(&non_terminal) {
+                if !local_nonterms.contains(&non_terminal) {
                   oos_items.extend(
                     db.nonterm_rules(non_terminal)?.iter().map(|r| Item::from_rule(*r, db)).closure::<Items>(parent).term_items(),
                   );

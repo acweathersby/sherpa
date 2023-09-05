@@ -16,43 +16,80 @@
             <div class="panel-host">
                 <div class="tabs-header">
                     <div id="tab-grammar" class="tab active"> Grammar </div>
-                    <div id="tab-parser" class="tab"> Parser Data </div>
+                    <div id="tab-formatting" class="tab"> Formatting </div>
+                    <div id="tab-syntax" class="tab"> Highlighting </div>
                 </div>
                 <div id="panel-grammar" class="panel active codemirror-host">
                 </div>
-                <div id="panel-parser" class="panel codemirror-host">
+                <div id="panel-formatting" class="panel codemirror-host">
+                </div>
+                <div id="panel-syntax" class="panel codemirror-host">
+                </div>
+            </div>
+            <div class="panel-host">
+                <div class="tabs-header">
+                    <div id="tab-input" class="tab active"> Input </div>
+                </div>
+                <div id="panel-input" class="panel active codemirror-host">
                 </div>
             </div>
         </div>
 
         <div id="right-column">
-            <div class="panel-host">
-                <div class="tabs-header">
-                    <div id="tab-bytecode" class="tab active"> Bytecode </div>
-                    <div id="tab-ast" class="tab"> AST </div>
-                    <div id="tab-cst" class="tab"> CST </div>
-                    <div id="tab-debugger" class="tab"> Debugger </div>
-                </div>
-                <div id="panel-bytecode" class="panel active">
+            <div id="parser-code">
+                <div class="scroller" id="parser-scoller">
                     <code><pre id="bytecode-output" class="output"></pre></code>
                 </div>
-                <div id="panel-ast" class="panel">
-                    <code><pre id="ast-output" class="output"></pre></code>
-                </div>
-                <div id="panel-cst" class="panel">
-                    <h1> cst </h1>
-                </div>
-                <div id="panel-debugger" class="panel">
-                    <button id="debugger-step-button">step</button>
-                    <button id="debugger-into-button">step-into</button>
-                    <button id="debugger-start-stop-button">start</button>
-                    <select id="debugger-entry-dropdown"></select>
-                    <label> optimize </label>
-                    <input type="checkbox" id="debugger-optimize-checkbox"></input>
-                    <h1> Debugger </h1>
-                    <pre id="debugger-output"></pre>
+            </div>
+            <div id="syntax-trees">
+                    <div class="scroller" id="syntax-trees-scroller">
+                    <code id="syntax-output"><pre id="ast-output"></pre></code>
                 </div>
             </div>
+            <div class="controls">
+                <div class="debugger-button" id="profile" title="profile parser ( alt+p )">
+                    <i class="fa-solid fa-chart-line active hover inactive"></i>
+                </div>
+                <div class="debugger-button" id="build" title="build parser ( alt+b )">
+                    <i class="fa-solid fa-wrench hover inactive"></i>
+                    <i class="fa-solid fa-check  active"></i>
+                </div>
+                <div class="debugger-button" id="restart" title="restart parser ( alt+r )">
+                    <i class="fa-solid fa-rotate-left active hover inactive"></i>
+                </div>
+                <div class="debugger-button" id="step"  title="step to next instruction ( alt+n )">
+                    <i class="fa-solid fa-forward-step active hover inactive"></i>
+                </div>
+                <div class="debugger-button" id="step-action" title="step to next parser action ( alt+a )">
+                    <i class="fa-solid fa-forward-fast hover inactive active"></i>
+                </div>
+                <div class="debugger-button" id="play" title="continue parsing ( alt+space )" >
+                    <i class="fa-solid fa-forward hover inactive "></i>
+                    <i class="fa-solid fa-pause active"></i>
+                </div>
+                <select id="debugger-entry-dropdown"></select>
+                <label title="optimize parser IR">  
+                    <input type="checkbox" id="debugger-optimize-checkbox"></input>
+                    optimize
+                </label>
+                <label title="enable LR style parsing">
+                    <input type="checkbox" id="debugger-optimize-checkbox"></input>
+                    RA/LR
+                </label>
+                <label title="enable recursive descent style parsing">
+                    <input type="checkbox" id="debugger-optimize-checkbox"></input>
+                    RD
+                </label>
+                <label title="enable a look ahead greater than k=1"> 
+                    <input type="checkbox" id="debugger-optimize-checkbox"></input>
+                    PK
+                </label>
+
+                <h1> Debugger </h1>
+                <pre id="debugger-output"></pre>
+
+            </div>
+            
         </div>
     </main>
 
@@ -61,17 +98,13 @@
         // Connect docs handler to iframe manage interaction between
         // docs and lab.
         docs_handler(document.getElementById("documents-frame"), document.getElementById("documents-host"));
-        new ScrollHandler(document.getElementById("bytecode-output"), document.getElementById("panel-bytecode"));
-        new ScrollHandler(document.getElementById("ast-output"), document.getElementById("panel-ast"));
+        new ScrollHandler(document.getElementById("syntax-trees-scroller"), document.getElementById("syntax-trees"));
+        new ScrollHandler(document.getElementById("parser-scoller"), document.getElementById("parser-code"));
 
         engine({
             codemirror_grammar_host: document.getElementById("panel-grammar"),
-            codemirror_parser_host: document.getElementById("panel-parser"),
+            codemirror_parser_host: document.getElementById("panel-input"),
             disassembly_output: document.getElementById("bytecode-output"),
-            debugger_start_stop_button: document.getElementById("debugger-start-stop-button"),
-            debugger_step_button: document.getElementById("debugger-step-button"),
-            debugger_into_button: document.getElementById("debugger-into-button"),
-            debugger_out_button: document.getElementById("debugger-out-button"),
             debugger_output: document.getElementById("debugger-output"),
             debugger_entry_selection: document.getElementById("debugger-entry-dropdown"),
             debugger_optimize_checkbox: document.getElementById("debugger-optimize-checkbox"),
