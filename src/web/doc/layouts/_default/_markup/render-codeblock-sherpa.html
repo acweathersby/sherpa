@@ -1,11 +1,15 @@
 {{ if isset .Attributes "lab" -}}
 {{- $id := slicestr (md5 .Inner) 0 16 -}}
 {{- $data := split .Inner "============" -}}
-<a class=lab-candidate data-id="{{$id}}" onclick="lab_anchor_click(this)"
-    href="{{ relURL "/lab"}}#page:{{ (printf "%s#%s" .Page.Permalink $id )| base64Encode  | safeURL  }}"><i class="icon-beaker"></i>
-    Run in Lab </a>
-<pre id="{{$id}}">{{ trim (index $data 0) " \n" }}</pre>
-<pre id="{{$id}}-parser" hidden>{{ trim (index $data 1) " \n" }}</pre>
+<div class=code-block>
+    <pre id="{{$id}}">{{ trim (index $data 0) " \n" }}</pre>
+    <pre id="{{$id}}-parser" hidden>{{ trim (index $data 1) " \n" }}</pre>
+    <a class=lab-candidate data-id="{{$id}}" onclick="lab_anchor_click(this)"
+        href="{{ relURL "/lab"}}#page:{{ (printf "%s#%s" .Page.Permalink $id )| base64Encode  | safeURL  }}"><i class="icon-beaker"></i>
+        <i class="fa-solid fa-flask"></i> run in lab </a>
+</div>
 {{ else -}}
-<pre>{{ .Inner }}</pre>
+<div class=code-block>
+    <pre>{{ .Inner }}</pre>
+</div>
 {{end -}}
