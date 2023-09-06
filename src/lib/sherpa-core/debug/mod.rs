@@ -58,11 +58,15 @@ impl Node {
 
 #[cfg(all(debug_assertions))]
 #[allow(unused)]
-pub fn file_debugger<R: ByteReader + UTF8Reader, M>(db: ParserDatabase, print_config: PrintConfig) -> Option<Box<DebugFn<R, M>>> {
+pub fn file_debugger<R: ByteReader + UTF8Reader, M>(
+  db: ParserDatabase,
+  print_config: PrintConfig,
+  state_lu: Map<u32, IString>,
+) -> Option<Box<DebugFn<R, M>>> {
   let mut stack = vec![];
   crate::test::utils::write_debug_file(&db, "parser_output.tmp", "    ", false);
   Some(Box::new(move |event, ctx| {
-    let string = diagram_constructor(event, ctx, &mut stack, &db, &print_config);
+    let string = diagram_constructor(event, ctx, &mut stack, &db, &print_config, &state_lu);
 
     if !string.is_empty() {
       crate::test::utils::write_debug_file(&db, "parser_output.tmp", string, true);
@@ -75,10 +79,11 @@ pub fn file_debugger<R: ByteReader + UTF8Reader, M>(db: ParserDatabase, print_co
 pub fn console_debugger<R: ByteReader + UTF8Reader, M>(
   db: ParserDatabase,
   print_config: PrintConfig,
+  state_lu: Map<u32, IString>,
 ) -> Option<Box<DebugFn<R, M>>> {
   let mut stack = vec![];
   Some(Box::new(move |event, ctx| {
-    let string = diagram_constructor(event, ctx, &mut stack, &db, &print_config);
+    let string = diagram_constructor(event, ctx, &mut stack, &db, &print_config, &state_lu);
 
     if !string.is_empty() {
       println!("{string}");
@@ -94,6 +99,7 @@ fn diagram_constructor<R: ByteReader + UTF8Reader, M>(
   stack: &mut Vec<Node>,
   db: &ParserDatabase,
   pc: &PrintConfig,
+  state_lu: &Map<u32, IString>,
 ) -> String {
   let PrintConfig {
     display_scanner_output,
@@ -103,6 +109,23 @@ fn diagram_constructor<R: ByteReader + UTF8Reader, M>(
     display_state,
   } = *pc;
   match event {
+    DebugEvent::ExecuteState { base_instruction } => {
+      let i = base_instruction.address() as u32;
+      if let Some(state_name) = state_lu.get(&i) {
+        let name = state_name.to_str(db.string_store());
+        let name = name.as_str();
+
+        format!(
+          "
+  [STATE] --------------------------------------------------------------------
+  {}
+  -------------------------------------------------------------------------------",
+          name
+        )
+      } else {
+        Default::default()
+      }
+    }
     DebugEvent::ActionShift { offset_end, offset_start, token_id } => {
       let string = ctx.get_str()[*offset_start..(*offset_end).min(ctx.get_str().len())].replace("\n", "\\n");
       stack.push(Node { string: " ".to_string() + &string, offset: 0, ..Default::default() });

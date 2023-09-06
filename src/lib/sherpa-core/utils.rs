@@ -6,6 +6,33 @@ use std::{
 };
 
 #[inline]
+pub fn hash_group_btreemap_iter<
+  C: Extend<T> + Default,
+  T: Sized,
+  R: Hash + Sized + Ord + Eq,
+  I: Iterator<Item = T>,
+  Function: FnMut(usize, &T) -> R,
+>(
+  iter: I,
+  mut hash_yielder: Function,
+) -> BTreeMap<R, C> {
+  let mut hash_groups = BTreeMap::<R, C>::new();
+
+  for (i, val) in iter.enumerate() {
+    match hash_groups.entry(hash_yielder(i, &val)) {
+      Entry::Vacant(e) => {
+        let mut new_container = C::default();
+        new_container.extend(vec![val]);
+        e.insert(new_container);
+      }
+      Entry::Occupied(mut e) => e.get_mut().extend(vec![val]),
+    }
+  }
+
+  hash_groups
+}
+
+#[inline]
 pub fn hash_group_btreemap<
   T: Sized,
   R: Hash + Sized + Ord + Eq,

@@ -31,13 +31,17 @@ fn test_full_grammar() -> SherpaResult<()> {
     let db = parser.get_db();
     let mut cd = if false {
       #[cfg(all(debug_assertions, not(feature = "wasm-target")))]
-      sherpa_core::file_debugger(db.to_owned(), PrintConfig {
-        display_scanner_output: false,
-        display_instruction: false,
-        display_input_data: true,
-        display_state: true,
-        ..Default::default()
-      })
+      sherpa_core::file_debugger(
+        db.to_owned(),
+        PrintConfig {
+          display_scanner_output: false,
+          display_instruction: false,
+          display_input_data: true,
+          display_state: true,
+          ..Default::default()
+        },
+        pkg.address_to_state_name.clone(),
+      )
     } else {
       None
     };

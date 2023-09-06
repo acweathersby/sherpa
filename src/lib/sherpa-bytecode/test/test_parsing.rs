@@ -342,10 +342,7 @@ IGNORE { c:sp c:nl }
 
 <> tok_identifier > ( c:id | c:num )(+)
 "##],
-    &[
-      ("default", "<i -t: a>", true),
-      //("default", "<i -test : soLongMySwanSong - store { test } <i> <i>>", true)
-    ],
+    &[("default", "<i -t: a>", true), ("default", "<i -test : soLongMySwanSong - store { test } <i> <i>>", true)],
   )
 }
 

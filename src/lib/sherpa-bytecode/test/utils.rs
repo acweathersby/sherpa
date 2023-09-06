@@ -29,13 +29,17 @@ pub fn compile_and_run_grammars(source: &[&str], inputs: &[(&str, &str, bool)]) 
           db.entry_points().iter().map(|e| { e.entry_name.to_string(db.string_store()) }).collect::<Vec<_>>().join(" | ")
         )) as u32,
         4,
-        &mut sherpa_core::file_debugger(db.to_owned(), PrintConfig {
-          display_scanner_output: false,
-          display_instruction: false,
-          display_input_data: true,
-          display_state: true,
-          ..Default::default()
-        })
+        &mut sherpa_core::file_debugger(
+          db.to_owned(),
+          PrintConfig {
+            display_scanner_output: false,
+            display_instruction: false,
+            display_input_data: true,
+            display_state: true,
+            ..Default::default()
+          },
+          pkg.address_to_state_name.clone(),
+        )
         .as_deref_mut(),
       );
 

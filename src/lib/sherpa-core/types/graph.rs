@@ -22,8 +22,6 @@ pub enum Origin {
   TerminalGoal(DBTermKey, u16),
   /// The hash and state of the goal items set the peek item will resolve to
   Peek(u64, StateId),
-  /// The goal is a goto kernel
-  Goto(StateId),
   // Out of scope item that was generated from the
   // completion of a token non-terminal.
   ScanCompleteOOS,
@@ -35,6 +33,9 @@ pub enum Origin {
 
 impl Hash for Origin {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    if let Origin::Peek(resolve_id, _) = self {
+      resolve_id.hash(state)
+    }
     std::mem::discriminant(self).hash(state)
   }
 }
@@ -157,18 +158,18 @@ impl StateType {
 
 #[derive(Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct State<'db> {
-  id: StateId,
-  term_symbol: PrecedentSymbol,
-  t_type: StateType,
-  parent: StateId,
-  predecessors: OrderedSet<StateId>,
-  kernel_items: ItemSet<'db>,
-  peek_resolve_items: OrderedMap<u64, ItemSet<'db>>,
-  nonterm_items: ItemSet<'db>,
-  reduce_item: Option<Item<'db>>,
-  leaf_state: bool,
-  closure: Option<ItemSet<'db>>,
-  root_closure: Option<ItemSet<'db>>,
+  pub id: StateId,
+  pub term_symbol: PrecedentSymbol,
+  pub t_type: StateType,
+  pub parent: StateId,
+  pub predecessors: OrderedSet<StateId>,
+  pub kernel_items: ItemSet<'db>,
+  pub peek_resolve_items: OrderedMap<u64, ItemSet<'db>>,
+  pub nonterm_items: ItemSet<'db>,
+  pub reduce_item: Option<Item<'db>>,
+  pub leaf_state: bool,
+  pub closure: Option<ItemSet<'db>>,
+  pub root_closure: Option<ItemSet<'db>>,
 }
 
 impl<'db> Hash for State<'db> {
@@ -220,7 +221,7 @@ impl<'db> State<'db> {
       if self.id.is_root() {
         let nterms = self.kernel_items.iter().map(|i| i.nonterm_index()).collect::<OrderedSet<_>>();
         let sigs = closure.iter().map(|i| (i.rule_id, i.sym_index)).collect::<HashSet<_>>();
-        // Get all follow items
+        // Get all items that follow the nonterminal
 
         let mut oos_closure = closure.clone();
 
@@ -350,7 +351,7 @@ impl<'db> State<'db> {
     for (index, state) in &self.peek_resolve_items {
       string += &format!("\n  Peek Resolve: {}", index);
 
-      string += &format!("\n   - {:?}", state);
+      string += &format!("\n   - {}", state.to_debug_string("\n     "));
     }
 
     if let Some(item) = &self.reduce_item {

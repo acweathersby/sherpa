@@ -53,10 +53,12 @@
 		"lldb.showDisassembly": "auto",
 		"cSpell.words": [
 			"ascript",
+			"gotos",
 			"nonterm",
 			"nonterminal",
 			"nterm",
-			"nterms"
+			"nterms",
+			"prec"
 		]
 	},
 	"launch": {

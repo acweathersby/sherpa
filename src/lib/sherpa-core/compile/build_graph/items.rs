@@ -1,4 +1,4 @@
-use super::{get_kernel_state_from_peek_item, symbols::symbols_occlude, TransitionGroup, TransitionGroups};
+use super::{get_kernel_items_from_peek_item, symbols::symbols_occlude, TransitionGroup, TransitionGroups};
 /// Returns all incomplete items that follow the given completed item,
 use crate::{types::*, utils::hash_group_btreemap};
 use std::collections::VecDeque;
@@ -17,11 +17,14 @@ pub(super) fn get_follow<'db, 'follow>(graph: &mut GraphHost<'db>, item: Item<'d
     if completed.insert(item) {
       let nterm = item.nonterm_index();
       let closure = if item.is_out_of_scope() {
-        graph[item.origin_state]
-          .get_root_closure_ref()?
-          .iter()
-          .filter(|i| i.is_out_of_scope() && i.nontermlike_index_at_sym().unwrap_or_default() == nterm)
-          .map(|i| i.to_origin(item.origin))
+        graph
+          .get_db()
+          .nonterm_follow_items(nterm)
+          //graph[item.origin_state]
+          //  .get_root_closure_ref()?
+          //.iter()
+          .filter(|i| /* i.is_out_of_scope() && */ i.nontermlike_index_at_sym().unwrap_or_default() == nterm)
+          .map(|i| i.to_origin(item.origin).to_oos_index().to_origin_state(StateId(0)))
           .collect::<Array<_>>()
       } else {
         graph[item.origin_state]
@@ -44,6 +47,9 @@ pub(super) fn get_follow<'db, 'follow>(graph: &mut GraphHost<'db>, item: Item<'d
       } else if !item.origin_state.is_root() {
         let parent_state = graph[item.origin_state].get_parent();
         queue.push_back(item.to_origin_state(parent_state));
+      } else if !graph.is_scanner() && !item.is_out_of_scope() {
+        let item: Item<'_> = item.to_oos_index();
+        queue.push_back(item);
       }
     }
   }
@@ -140,7 +146,7 @@ pub(super) fn get_goal_items<'db, 'follow>(graph: &'db GraphHost<'db>, item: &It
     Origin::TerminalGoal(..) | Origin::NonTermGoal(_) => {
       vec![graph[0].kernel_items_ref().clone().to_vec()[item.goal as usize]]
     }
-    Origin::Peek(..) => get_kernel_state_from_peek_item(graph, item).iter().cloned().collect(),
+    Origin::Peek(..) => get_kernel_items_from_peek_item(graph, item).iter().cloned().collect(),
     _ => vec![],
   }
 }

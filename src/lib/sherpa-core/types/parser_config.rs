@@ -7,13 +7,12 @@ pub struct ParserConfig {
   /// allowing more advanced grammar constructs to be parsed, such
   /// as left recursive rules.
   ///
-  /// When disabled, grammars that rules that require LR style parse states
+  /// When disabled, grammars with rules that require LR style parse states
   /// will be rejected, and relevant errors will be reported.
   pub ALLOW_LR_RECURSIVE_ASCENT: bool,
-  /// When enabled, advanced unrestricted peek lookahead states states will
-  /// be generated
+  /// When enabled, unrestricted lookahead states states will be generated
   ///
-  /// When disabled, grammars that rules that require a lookahead that is
+  /// When disabled, grammars with rules that require a lookahead that is
   ///  `k>1` will be rejected, and relevant errors will be reported.
   pub ALLOW_PEEKING: bool,
 }

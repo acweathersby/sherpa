@@ -19,7 +19,7 @@ EXPORT dt::escaped_string as escaped
 
 <> grammar >
 
-    [preamble(*) ( cf_rules | pratt_rules | peg_rules | append_rules | ir::state )(*)]
+    [preamble(*) ( cf_rules | peg_rules | append_rules | ir::state )(*)]
 
         :ast { t_Grammar, preamble:$1, rules:$2, tok }
 
@@ -75,14 +75,6 @@ EXPORT dt::escaped_string as escaped
 
         :ast { t_PegRules, name_sym:$n, rules: $r, tok }
 
-
-<> pratt_rules >
-
-    "#>" sym::nonterminal_symbol^n ">" rules^r
-
-        :ast { t_PrattRules, name_sym:$n, rules: $r, tok }
-
-
 <> append_rules >
 
     "+>" sym::nonterminal^n ">" rules^r
@@ -90,12 +82,6 @@ EXPORT dt::escaped_string as escaped
         :ast { t_AppendRules,  name_sym:$n, rules: $r, tok }
 
 <> rules >  rule(+"|")
-
-
-<> pratt_rule > sym::annotated_symbol(+)^s ast_definition?^a
-
-    :ast { t_PrattRule, symbols:$s, ast:$a }
-
 
 <> rule >
 
