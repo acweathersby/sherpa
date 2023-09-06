@@ -28,24 +28,26 @@
             </div>
             <div class="panel-host">
                 <div class="tabs-header">
-                    <div id="tab-input" class="tab active"> Input </div>
+                    <div id="tab-input" class="tab active"> Parser Input </div>
+                    <div id="tab-ast-source" class="tab"> ASCript </div>
+                    <div id="tab-bytecode-source" class="tab"> Disassembly </div>
                 </div>
                 <div id="panel-input" class="panel active codemirror-host">
+                </div>
+                <div id="panel-bytecode-source" class="panel codemirror-host">
+                    <div class="scroller" id="parser-scoller">
+                        <code><pre id="bytecode-output" class="output"></pre></code>
+                    </div>
+                </div>
+                <div id="panel-ast-source" class="panel codemirror-host">
+                    <div class="scroller" id="syntax-trees-scroller">
+                        <code id="syntax-output"><pre id="ast-source"></pre></code>
+                    </div>
                 </div>
             </div>
         </div>
 
         <div id="right-column">
-            <div id="parser-code">
-                <div class="scroller" id="parser-scoller">
-                    <code><pre id="bytecode-output" class="output"></pre></code>
-                </div>
-            </div>
-            <div id="syntax-trees">
-                    <div class="scroller" id="syntax-trees-scroller">
-                    <code id="syntax-output"><pre id="ast-output"></pre></code>
-                </div>
-            </div>
             <div class="controls">
                 <div class="debugger-button" id="profile" title="profile parser ( alt+p )">
                     <i class="fa-solid fa-chart-line active hover inactive"></i>
@@ -67,28 +69,43 @@
                     <i class="fa-solid fa-forward hover inactive "></i>
                     <i class="fa-solid fa-pause active"></i>
                 </div>
-                <select id="debugger-entry-dropdown"></select>
+                <select id="debugger-entry-dropdown" title="exported entrypoint"></select>
                 <label title="optimize parser IR">  
-                    <input type="checkbox" id="debugger-optimize-checkbox"></input>
+                    <input class="debugger-checkbox" type="checkbox" id="optimize"></input>
                     optimize
                 </label>
                 <label title="enable LR style parsing">
-                    <input type="checkbox" id="debugger-optimize-checkbox"></input>
+                    <input class="debugger-checkbox" type="checkbox" id="lr-enable"></input>
                     RA/LR
                 </label>
                 <label title="enable recursive descent style parsing">
-                    <input type="checkbox" id="debugger-optimize-checkbox"></input>
+                    <input class="debugger-checkbox" type="checkbox" id="ll-enable"></input>
                     RD
                 </label>
                 <label title="enable a look ahead greater than k=1"> 
-                    <input type="checkbox" id="debugger-optimize-checkbox"></input>
+                    <input class="debugger-checkbox" type="checkbox" id="peek-enable"></input>
                     PK
                 </label>
 
-                <h1> Debugger </h1>
-                <pre id="debugger-output"></pre>
-
             </div>
+            <div id="debugger-output" class="debug-area"> 
+                <div id="debugger-stats">
+                    <div id="debugger-metrics"></div>
+                    <div id="debugger-disassembly"></div>
+                </div>
+                <div id="debugger-ir-state"></div>
+                
+            </div>
+            <div id="syntax-trees" class="debug-area">
+                <div id="debugger-cst-output">test</div>
+                <div id="ast-output">test</div>
+            </div>
+            <div id="parser-code" class="debug-area">
+            
+
+         
+            </div>
+            
             
         </div>
     </main>
@@ -98,23 +115,19 @@
         // Connect docs handler to iframe manage interaction between
         // docs and lab.
         docs_handler(document.getElementById("documents-frame"), document.getElementById("documents-host"));
-        new ScrollHandler(document.getElementById("syntax-trees-scroller"), document.getElementById("syntax-trees"));
         new ScrollHandler(document.getElementById("parser-scoller"), document.getElementById("parser-code"));
 
         engine({
             codemirror_grammar_host: document.getElementById("panel-grammar"),
             codemirror_parser_host: document.getElementById("panel-input"),
             disassembly_output: document.getElementById("bytecode-output"),
-            debugger_output: document.getElementById("debugger-output"),
             debugger_entry_selection: document.getElementById("debugger-entry-dropdown"),
-            debugger_optimize_checkbox: document.getElementById("debugger-optimize-checkbox"),
         }).then(() => {
             for (const scroller of Array.from(document.getElementsByClassName("cm-scroller"))) {
 
                 new ScrollHandler(scroller, scroller.parentElement);
             }
         });
-
 
         for (const input_host of Array.from(document.getElementsByClassName("panel-host"))) {
             let panels = Array.from(input_host.getElementsByClassName("panel"));

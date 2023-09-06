@@ -4,7 +4,10 @@ use sherpa_core::*;
 use sherpa_rust_build::build_rust;
 use sherpa_rust_runtime::{
   bytecode::{disassemble_bytecode, disassemble_parse_block},
-  types::bytecode::Instruction,
+  types::{
+    bytecode::{ByteCodeIterator, Instruction, Opcode},
+    TableHeaderData,
+  },
 };
 use std::{path::PathBuf, rc::Rc};
 use wasm_bindgen::prelude::*;
@@ -169,23 +172,33 @@ pub fn create_instruction_disassembly(address: u32, pkg: &JSBytecodePackage) -> 
 }
 
 /// Return a list of symbols ids if the opcode of the instruction is
-/// Op::DebugExpectedSymbols
+/// HashTable or VecTable
 #[wasm_bindgen]
 pub fn get_debug_symbol_ids(address: u32, pkg: &JSBytecodePackage) -> JsValue {
-  let i: Instruction = (pkg.0.bytecode.as_slice(), address as usize).into();
+  let bc = pkg.0.bytecode.as_slice();
+  let i: Instruction = (bc, address as usize).into();
 
-  let vec = i.get_debug_symbols();
-
-  Array::from_iter(vec.iter().map(|i| JsValue::from_f64(*i as f64))).into()
+  if i.get_opcode() == Opcode::HashBranch {
+    let TableHeaderData { table_start, table_length, .. } = i.into();
+    let vals = (0..table_length as usize).map(|offset| {
+      let mut iter: ByteCodeIterator = (bc, table_start + offset * 4).into();
+      let cell = iter.next_u32_le().unwrap();
+      let value = cell & 0x7FF;
+      JsValue::from_f64(value as f64)
+    });
+    Array::from_iter(vals).into()
+  } else {
+    Default::default()
+  }
 }
 
-/// Return a list of symbols ids if the opcode of the instruction is
-/// Op::DebugExpectedSymbols
 #[wasm_bindgen]
-pub fn get_debug_state_name(address: u32, pkg: &JSBytecodePackage) -> JsValue {
-  let i: Instruction = (pkg.0.bytecode.as_slice(), address as usize).into();
-
-  i.get_active_state_name().into()
+pub fn get_debug_state_name(address: u32, pkg: &JSBytecodePackage, db: &JSParserDB) -> JsValue {
+  if let Some(name) = pkg.0.address_to_state_name.get(&(address)) {
+    name.to_string(db.0.get_db().string_store()).into()
+  } else {
+    "".into()
+  }
 }
 
 #[wasm_bindgen]
@@ -199,10 +212,10 @@ pub struct TokenOffsets {
 /// Op::DebugExpectedSymbols
 #[wasm_bindgen]
 pub fn get_debug_tok_offsets(address: u32, pkg: &JSBytecodePackage) -> JsValue {
-  let i: Instruction = (pkg.0.bytecode.as_slice(), address as usize).into();
-  match i.get_debug_tok_offsets() {
-    Some((start, end)) => (TokenOffsets { start, end }).into(),
-    None => Default::default(),
+  if let Some(token) = pkg.0.ir_token_lookup.get(&(address)) {
+    (TokenOffsets { start: token.get_start() as u32, end: token.get_end() as u32 }).into()
+  } else {
+    Default::default()
   }
 }
 
@@ -229,4 +242,65 @@ pub fn get_symbol_name_from_id(id: u32, db: &JSParserDB) -> JsValue {
 pub fn get_entry_names(db: &JSParserDB) -> JsValue {
   let db = db.0.as_ref().get_db();
   db.entry_points().iter().map(|ep| JsValue::from(ep.entry_name.to_string(db.string_store()))).collect::<Array>().into()
+}
+
+#[wasm_bindgen]
+pub fn get_nonterminal_name_from_id(id: u32, db: &JSParserDB) -> String {
+  let db = db.0.get_db();
+  if (id as usize) < db.nonterms_len() {
+    let id = DBNonTermKey::from(id);
+    db.nonterm_friendly_name_string(id)
+  } else {
+    Default::default()
+  }
+}
+
+#[wasm_bindgen]
+pub fn get_rule_expression_string(id: u32, db: &JSParserDB) -> String {
+  let db = db.0.get_db();
+  if (id as usize) < db.rules().len() {
+    let item = Item::from_rule(DBRuleKey::from(id), db);
+    item.to_canonical().to_complete().debug_string()
+  } else {
+    Default::default()
+  }
+}
+
+#[wasm_bindgen]
+#[derive(Default, Clone, Copy)]
+pub enum JSReductionType {
+  /// Any reduction resulting in the execution of a some kind of semantic
+  /// action. At this point only `:ast` semantic actions are available.
+  SemanticAction,
+  /// A reduction of a terminal symbol to a nonterminal
+  SingleTerminal,
+  /// A reduction of single nonterminal symbol to another nonterminal
+  SingleNonTerminal,
+  /// A reduction of a left-recursive rule
+  LeftRecursive,
+  /// A reduction of more than one symbol to a nonterminal
+  #[default]
+  Mixed,
+}
+
+impl From<ReductionType> for JSReductionType {
+  fn from(value: ReductionType) -> Self {
+    match value {
+      ReductionType::SemanticAction => JSReductionType::SemanticAction,
+      ReductionType::SingleTerminal => JSReductionType::SingleTerminal,
+      ReductionType::SingleNonTerminal => JSReductionType::SingleNonTerminal,
+      ReductionType::LeftRecursive => JSReductionType::LeftRecursive,
+      ReductionType::Mixed => JSReductionType::Mixed,
+    }
+  }
+}
+
+#[wasm_bindgen]
+pub fn get_rule_reduce_type(id: u32, db: &JSParserDB) -> JSReductionType {
+  let db = db.0.get_db();
+  if (id as usize) < db.rules().len() {
+    JSReductionType::from(db.get_reduce_type(DBRuleKey::from(id)))
+  } else {
+    JSReductionType::default()
+  }
 }

@@ -3,14 +3,16 @@ use serde::{Deserialize, Serialize};
 use sherpa_core::parser;
 use sherpa_rust_runtime::{
   bytecode::{ByteCodeParser, DebugEvent, DebugFn},
-  types::{ParseAction, SherpaParser},
+  types::{ByteReader, ParseAction, ParseContext, SherpaParser, UTF8Reader},
 };
+
 use std::{
   borrow::BorrowMut,
   cell::RefCell,
   rc::Rc,
   sync::{LockResult, RwLock},
 };
+
 use wasm_bindgen::prelude::*;
 
 /// A stepable parser for the sherpa grammar
@@ -97,38 +99,54 @@ impl JSByteCodeParser {
     {
       let v = values.clone();
 
-      let mut debugger: Option<Box<DebugFn>> = Some(Box::new(move |e: &DebugEvent<'_>, _| {
+      let mut debugger: Option<Box<DebugFn<_, _>>> = Some(Box::new(move |e, ctx| {
         if let LockResult::Ok(mut values) = v.write() {
-          values.push(JSDebugEvent::from(e));
+          values.push(JSDebugEvent::from((e, ctx)));
         }
       }));
 
       match self.bytecode_parser.get_next_action(&mut debugger.as_deref_mut()) {
-        ParseAction::Accept { .. } => {
+        ParseAction::Accept { nonterminal_id } => {
           self.running = false;
-          serde_wasm_bindgen::to_value(&JsonParseAction::Accept).unwrap()
+          if let LockResult::Ok(mut values) = values.write() {
+            values.push(JSDebugEvent::Complete { nonterminal_id, ctx: self.bytecode_parser.get_ctx().into() });
+          }
         }
-        ParseAction::EndOfInput { .. } => serde_wasm_bindgen::to_value(&JsonParseAction::EndOfInput).unwrap(),
+        ParseAction::EndOfInput { .. } => {
+          if let LockResult::Ok(mut values) = values.write() {
+            values.push(JSDebugEvent::EndOfFile {});
+          }
+        }
         ParseAction::Shift { token_byte_offset, token_byte_length, .. } => {
           if let LockResult::Ok(mut values) = values.write() {
-            values.push(JSDebugEvent::from(JSDebugEvent::ShiftToken {
+            values.push(JSDebugEvent::Shift {
               offset_end:   (token_byte_offset + token_byte_length) as usize,
               offset_start: token_byte_offset as usize,
-            }));
+            });
           }
-          serde_wasm_bindgen::to_value(&JsonParseAction::Shift { len: token_byte_length }).unwrap()
         }
-        ParseAction::Skip { token_byte_length, .. } => {
-          serde_wasm_bindgen::to_value(&JsonParseAction::Skip { len: token_byte_length }).unwrap()
+        ParseAction::Skip { token_byte_length, token_byte_offset, .. } => {
+          if let LockResult::Ok(mut values) = values.write() {
+            values.push(JSDebugEvent::Skip {
+              offset_end:   (token_byte_offset + token_byte_length) as usize,
+              offset_start: token_byte_offset as usize,
+            });
+          }
         }
-        ParseAction::Reduce { nonterminal_id, symbol_count, .. } => {
-          serde_wasm_bindgen::to_value(&JsonParseAction::Reduce { len: symbol_count, nterm: nonterminal_id }).unwrap()
+        ParseAction::Reduce { nonterminal_id, rule_id, symbol_count, .. } => {
+          if let LockResult::Ok(mut values) = values.write() {
+            values.push(JSDebugEvent::Reduce { nonterminal_id, rule_id, symbol_count });
+          }
         }
         ParseAction::Error { .. } => {
           self.running = false;
-          serde_wasm_bindgen::to_value(&JsonParseAction::Error).unwrap()
+          if let LockResult::Ok(mut values) = values.write() {
+            values.push(JSDebugEvent::Error {});
+          }
         }
-        _ => panic!("Unexpected Action!"),
+        _ => {
+          panic!("Unexpected Action!")
+        }
       }
     };
 
@@ -216,104 +234,60 @@ pub enum JsonParseAction {
 }
 
 #[derive(Serialize, Deserialize)]
-#[serde(tag = "type")]
-pub enum JSDebugEvent {
-  ExecuteState {
-    base_instruction: usize,
-  },
-  ExecuteInstruction {
-    instruction: u32,
-    is_scanner:  bool,
-    end_ptr:     usize,
-    head_ptr:    usize,
-    scan_ptr:    usize,
-    base_ptr:    usize,
-    anchor_ptr:  usize,
-    tok_len:     usize,
-    tok_id:      u32,
-    sym_len:     u32,
-  },
-  SkipToken {
-    offset_start: usize,
-    offset_end:   usize,
-  },
-  ShiftToken {
-    offset_start: usize,
-    offset_end:   usize,
-  },
-  ByteValue {
-    input_value: u32,
-    start:       usize,
-    end:         usize,
-  },
-  CodePointValue {
-    input_value: u32,
-    start:       usize,
-    end:         usize,
-  },
-  ClassValue {
-    input_value: u32,
-    start:       usize,
-    end:         usize,
-  },
-  TokenValue {
-    input_value: u32,
-    start:       usize,
-    end:         usize,
-  },
-  GotoValue {
-    nonterminal_id: u32,
-  },
-  Reduce {
-    rule_id: u32,
-  },
-  Complete {
-    nonterminal_id: u32,
-  },
-  Failure {},
-  EndOfFile,
+#[wasm_bindgen]
+pub struct JSCTXState {
+  pub is_scanner: bool,
+  pub end_ptr:    usize,
+  pub head_ptr:   usize,
+  pub scan_ptr:   usize,
+  pub base_ptr:   usize,
+  pub anchor_ptr: usize,
+  pub tok_len:    usize,
+  pub tok_id:     u32,
+  pub sym_len:    u32,
 }
 
-impl<'a> From<&DebugEvent<'a>> for JSDebugEvent {
-  fn from(value: &DebugEvent<'a>) -> Self {
+impl<R: ByteReader + UTF8Reader, M> From<&ParseContext<R, M>> for JSCTXState {
+  fn from(ctx: &ParseContext<R, M>) -> Self {
+    Self {
+      anchor_ptr: ctx.anchor_ptr,
+      base_ptr:   ctx.base_ptr,
+      end_ptr:    ctx.end_ptr,
+      head_ptr:   ctx.head_ptr,
+      is_scanner: ctx.is_scanner(),
+      scan_ptr:   ctx.scan_ptr,
+      sym_len:    ctx.sym_len,
+      tok_id:     ctx.tok_id,
+      tok_len:    ctx.tok_len,
+    }
+  }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum JSDebugEvent {
+  ExecuteState { instruction: usize, ctx: JSCTXState },
+  ExecuteInstruction { instruction: u32, ctx: JSCTXState },
+  Skip { offset_start: usize, offset_end: usize },
+  Shift { offset_start: usize, offset_end: usize },
+  Reduce { nonterminal_id: u32, rule_id: u32, symbol_count: u32 },
+  Complete { nonterminal_id: u32, ctx: JSCTXState },
+  Error {},
+  EndOfFile,
+  Undefined,
+}
+
+impl<'a, R: ByteReader + UTF8Reader, M> From<(&DebugEvent<'a>, &ParseContext<R, M>)> for JSDebugEvent {
+  fn from((value, ctx): (&DebugEvent<'a>, &ParseContext<R, M>)) -> Self {
     match *value {
       DebugEvent::ExecuteState { base_instruction } => {
-        JSDebugEvent::ExecuteState { base_instruction: base_instruction.address() }
+        JSDebugEvent::ExecuteState { instruction: base_instruction.address(), ctx: ctx.into() }
       }
-      DebugEvent::ExecuteInstruction {
-        instruction,
-        is_scanner,
-        end_ptr,
-        head_ptr,
-        scan_ptr,
-        base_ptr,
-        anchor_ptr,
-        tok_len,
-        tok_id,
-        sym_len,
-      } => JSDebugEvent::ExecuteInstruction {
-        instruction: instruction.address() as u32,
-        is_scanner,
-        end_ptr,
-        head_ptr,
-        scan_ptr,
-        base_ptr,
-        anchor_ptr,
-        tok_len,
-        tok_id,
-        sym_len,
-      },
-      DebugEvent::SkipToken { offset_start, offset_end } => JSDebugEvent::SkipToken { offset_start, offset_end },
-      DebugEvent::ShiftToken { offset_start, offset_end, .. } => JSDebugEvent::ShiftToken { offset_start, offset_end },
-      DebugEvent::ByteValue { input_value, start, end } => JSDebugEvent::ByteValue { input_value, start, end },
-      DebugEvent::CodePointValue { input_value, start, end } => JSDebugEvent::CodePointValue { input_value, start, end },
-      DebugEvent::ClassValue { input_value, start, end } => JSDebugEvent::ClassValue { input_value, start, end },
-      DebugEvent::TokenValue { input_value, start, end } => JSDebugEvent::TokenValue { input_value, start, end },
-      DebugEvent::GotoValue { nonterminal_id } => JSDebugEvent::GotoValue { nonterminal_id },
-      DebugEvent::Reduce { rule_id } => JSDebugEvent::Reduce { rule_id },
-      DebugEvent::Complete { nonterminal_id } => JSDebugEvent::Complete { nonterminal_id },
-      DebugEvent::Failure {} => JSDebugEvent::Failure {},
+      DebugEvent::ExecuteInstruction { instruction } => {
+        JSDebugEvent::ExecuteInstruction { instruction: instruction.address() as u32, ctx: ctx.into() }
+      }
       DebugEvent::EndOfFile => JSDebugEvent::EndOfFile,
+      _ => JSDebugEvent::Undefined,
     }
   }
 }

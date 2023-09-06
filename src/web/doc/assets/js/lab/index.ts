@@ -7,7 +7,7 @@ import { sherpaLang } from './sherpa_lang';
 import { parserHost } from './parser';
 import { GrammarContext } from './grammar_context';
 import { get_grammar, get_input, init, set_grammar_update_handler, set_parser_update_handler } from "./session_storage";
-import { DebuggerButton } from "./debugger_buttons";
+import { DebuggerButton, DebuggerCheckbox } from "./debugger_buttons";
 
 
 
@@ -20,14 +20,12 @@ export default async function (
         disassembly_output,
         debugger_output,
         debugger_entry_selection,
-        debugger_optimize_checkbox
     }: {
         codemirror_grammar_host: Element;
         codemirror_parser_host: Element;
         disassembly_output: Element;
         debugger_output: HTMLDivElement,
         debugger_entry_selection: HTMLSelectElement,
-        debugger_optimize_checkbox: HTMLInputElement,
     }
 ) {
     try {
@@ -38,6 +36,7 @@ export default async function (
     }
 
     DebuggerButton.gatherButtons();
+    DebuggerCheckbox.gatherCheckBoxes();
 
     init(window);
 
@@ -61,7 +60,6 @@ export default async function (
         extensions: [basicSetup, parserHost(ctx, {
             debugger_output,
             debugger_entry_selection,
-            debugger_optimize_checkbox
         })],
         parent: codemirror_parser_host
     });

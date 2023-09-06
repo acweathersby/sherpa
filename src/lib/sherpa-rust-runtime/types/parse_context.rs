@@ -371,7 +371,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
 
   /// Parse input up to the next required parse action and return
   /// its value.
-  fn get_next_action<'debug>(&mut self, debug: &mut Option<&'debug mut DebugFn>) -> ParseAction;
+  fn get_next_action<'debug>(&mut self, debug: &mut Option<&'debug mut DebugFn<R, M>>) -> ParseAction;
 
   /// Returns a reference to the internal Reader
   fn get_reader(&self) -> &R;
@@ -396,7 +396,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
   fn parse_ast<'a, 'debug, Node: AstObject>(
     &mut self,
     reducers: &[Reducer<R, M, Node, UPWARD_STACK>],
-    debug: &mut Option<&'debug mut DebugFn>,
+    debug: &mut Option<&'debug mut DebugFn<R, M>>,
   ) -> Result<AstSlot<Node>, SherpaParseError> {
     let mut ast_stack: Vec<AstSlot<Node>> = vec![];
     loop {
@@ -466,7 +466,11 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
 
   /// Returns an empty success result if the entire input was successfully
   /// parsed
-  fn completes<'debug>(&mut self, entry_point: u32, debug: &mut Option<&'debug mut DebugFn>) -> Result<(), SherpaParseError> {
+  fn completes<'debug>(
+    &mut self,
+    entry_point: u32,
+    debug: &mut Option<&'debug mut DebugFn<R, M>>,
+  ) -> Result<(), SherpaParseError> {
     self.init_parser(entry_point);
     loop {
       match self.get_next_action(debug) {
@@ -495,7 +499,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
     &mut self,
     entry_point: u32,
     target_nonterminal_id: u32,
-    debug: &mut Option<&'debug mut DebugFn>,
+    debug: &mut Option<&'debug mut DebugFn<R, M>>,
   ) -> ShiftsAndSkipsResult {
     self.init_parser(entry_point);
 
@@ -507,7 +511,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
         ParseAction::Accept { nonterminal_id } => {
           #[cfg(debug_assertions)]
           if let Some(debug) = debug {
-            debug(&DebugEvent::Complete { nonterminal_id }, self.get_input());
+            debug(&DebugEvent::ActionAccept {}, self.get_ctx());
           }
           break if nonterminal_id != target_nonterminal_id {
             ShiftsAndSkipsResult::IncorrectNonTerminal {
@@ -530,7 +534,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
         ParseAction::Error { last_input, .. } => {
           #[cfg(debug_assertions)]
           if let Some(debug) = debug {
-            debug(&DebugEvent::Failure {}, self.get_input());
+            debug(&DebugEvent::ActionError {}, self.get_ctx());
           }
           let mut token: Token = last_input.to_token(self.get_reader_mut());
 
@@ -554,7 +558,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
 
           #[cfg(debug_assertions)]
           if let Some(debug) = debug {
-            debug(&DebugEvent::ShiftToken { offset_start, offset_end, token_id }, self.get_input());
+            debug(&DebugEvent::ActionShift { offset_start, offset_end, token_id }, self.get_ctx());
           }
           shifts.push(self.get_input()[offset_start..offset_end].to_string());
         }
@@ -562,7 +566,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
         {
           #[cfg(debug_assertions)]
           if let Some(debug) = debug {
-            debug(&DebugEvent::Reduce { rule_id: _rule_id }, self.get_input());
+            debug(&DebugEvent::ActionReduce { rule_id: _rule_id }, self.get_ctx());
           }
         }
         _ => panic!("Unexpected Action!"),
@@ -574,7 +578,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
     &mut self,
     entry_point: u32,
     target_nonterminal_id: u32,
-    debug: &mut Option<&'debug mut DebugFn>,
+    debug: &mut Option<&'debug mut DebugFn<R, M>>,
   ) -> Option<Rc<cst::CST>> {
     self.init_parser(entry_point);
 
@@ -587,7 +591,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
         ParseAction::Accept { nonterminal_id } => {
           #[cfg(debug_assertions)]
           if let Some(debug) = debug {
-            debug(&DebugEvent::Complete { nonterminal_id }, self.get_input());
+            debug(&DebugEvent::ActionAccept {}, self.get_ctx());
           }
 
           break if cst.len() > 1 {
@@ -606,7 +610,7 @@ Concrete Syntax Tree structure."
         ParseAction::Error { last_input, .. } => {
           #[cfg(debug_assertions)]
           if let Some(debug) = debug {
-            debug(&DebugEvent::Failure {}, self.get_input());
+            debug(&DebugEvent::ActionError {}, self.get_ctx());
           }
           let mut token: Token = last_input.to_token(self.get_reader_mut());
           token.set_source(Arc::new(Vec::from(self.get_input().to_string().as_bytes())));
@@ -635,7 +639,7 @@ Concrete Syntax Tree structure."
           if let Some(debug) = debug {
             let offset_start = _token_byte_offset as usize;
             let offset_end = (_token_byte_offset + token_byte_length) as usize;
-            debug(&DebugEvent::ShiftToken { offset_start, offset_end, token_id }, self.get_input());
+            debug(&DebugEvent::ActionShift { offset_start, offset_end, token_id }, self.get_ctx());
           }
         }
         ParseAction::Reduce { rule_id, nonterminal_id, symbol_count } => {
@@ -666,7 +670,7 @@ Concrete Syntax Tree structure."
 
           #[cfg(debug_assertions)]
           if let Some(debug) = debug {
-            debug(&DebugEvent::Reduce { rule_id }, self.get_input());
+            debug(&DebugEvent::ActionReduce { rule_id: rule_id }, self.get_ctx());
           }
         }
         _ => panic!("Unexpected Action!"),

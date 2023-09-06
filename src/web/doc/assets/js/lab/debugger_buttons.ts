@@ -8,8 +8,8 @@ export class DebuggerButton {
         this.ele = ele;
         this.addEventListener = ele.addEventListener.bind(ele);
     }
+
     addEventListener<K extends keyof HTMLElementEventMap>(type: K, listener: (this: HTMLElement, ev: HTMLElementEventMap[K]) => any, options?: boolean | AddEventListenerOptions | undefined) { }
-    // addEventListener(event: string, listener: (...e: any) => void) { }
 
     set active(active: boolean) {
         if (active)
@@ -34,5 +34,48 @@ export class DebuggerButton {
 
     static get(button_name: string): DebuggerButton {
         return <any>DebuggerButton.buttons.get(button_name);
+    }
+}
+
+
+export class DebuggerCheckbox {
+    static buttons: Map<string, DebuggerCheckbox> = new Map();
+
+    public _ele: HTMLInputElement
+
+    constructor(ele: HTMLInputElement) {
+        this._ele = ele;
+        this.addEventListener = ele.addEventListener.bind(ele);
+    }
+
+    addEventListener<K extends keyof HTMLElementEventMap>(type: K, listener: (this: HTMLElement, ev: HTMLElementEventMap[K]) => any, options?: boolean | AddEventListenerOptions | undefined) { }
+
+    set active(active: boolean) {
+        if (active)
+            this._ele.classList.add("active")
+        else
+            this._ele.classList.remove("active")
+    }
+
+    set disable(active: boolean) {
+        if (active)
+            this._ele.classList.add("disable")
+        else
+            this._ele.classList.remove("disable")
+    }
+
+    get ele(): HTMLInputElement {
+        return this._ele;
+    }
+
+    static gatherCheckBoxes() {
+        for (const ele of Array.from(document.getElementsByClassName("debugger-checkbox"))) {
+            console.log(ele)
+            DebuggerCheckbox.buttons.set(ele.id, new DebuggerCheckbox(<HTMLInputElement>ele));
+        }
+    }
+
+    static get(check_box_name: string): DebuggerCheckbox {
+        return <any>DebuggerCheckbox.buttons.get(check_box_name);
     }
 }

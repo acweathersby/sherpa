@@ -156,7 +156,7 @@ impl<'db> Item<'db> {
   }
 
   /// Returns the canonical item, that is an item that does not have any other
-  /// attributes aside from a rule id and a symbol offset
+  /// attributes aside from its rule id and symbol offset
   pub fn to_canonical(&self) -> Self {
     Self {
       goal: Default::default(),
@@ -366,18 +366,20 @@ impl<'db> Item<'db> {
     }
   }
 
-  #[cfg(debug_assertions)]
   pub fn debug_string(&self) -> String {
     if self.is_null() {
-      format!("null")
+      "null".to_string()
     } else {
       let s_store = self.db.string_store();
 
+      #[cfg(debug_assertions)]
       let mut string = self
         .origin
         .is_none()
         .then_some(String::new())
         .unwrap_or_else(|| format!("<[{}-{:?}]  [{:X}] ", self.origin.debug_string(self.db), self.origin_state, self.goal));
+      #[cfg(not(debug_assertions))]
+      let mut string = String::new();
 
       string += &self.nonterm_name().to_string(s_store);
 

@@ -266,7 +266,6 @@ impl std::fmt::Display for SherpaError {
   }
 }
 
-#[cfg(any(debug_assertions, feature = "auto_print_errors"))]
 impl std::fmt::Debug for SherpaError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {

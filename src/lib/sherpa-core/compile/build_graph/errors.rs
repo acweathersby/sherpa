@@ -40,7 +40,7 @@ pub(super) fn lr_disabled_error<'db>(graph: &mut GraphHost<'db>, parent: StateId
   let nonterms = graph[parent].get_nonterm_items();
 
   if nonterms.len() == 1 {
-    let first = o_to_r(nonterms.first(), "").unwrap();
+    let first = nonterms.first().unwrap();
     if first.is_left_recursive() {
       return Err(SherpaError::SourceError {
         loc:        first.rule().tok.clone(),

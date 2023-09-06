@@ -1,0 +1,46 @@
+
+.scroller
+    position: relative
+    display: block
+    overflow: hidden
+    height: 100%
+    width: 100%
+
+.scroll
+    position: absolute
+    width: 14px
+    top: 0px
+    bottom: 0px
+    right: 0
+    z-index: 10000
+    transition: opacity 150ms
+
+    .scroll-handle
+        top: 0
+        box-sizing: border-box
+        position: absolute
+        width: 1%
+        left: 50%
+        border-radius: 2px
+        background: #7390a3
+        transition: left 100ms, width 100ms
+
+    &:hover .scroll-handle
+        width: 100%
+        left: 0
+
+    .scroll-end, .scroll-begin
+        width: 3px
+        height: 3px
+        border-radius: 1.5px
+        left: 4px
+        position: absolute
+
+    .scroll-begin
+        top: 0
+
+    .scroll-end
+        bottom: 0
+
+    &.no-scroll
+        opacity: 0

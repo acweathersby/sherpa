@@ -2,8 +2,7 @@ $border-color: #e4e4e4
 $tab-header-col: #4d4c4c
 $active-panel-col: #16718D
 $hover-panel-col: #0e5b72
-
-$tab-height: 20px
+$tab-height: 24px
 
 %tabs-bottom-border
     border-bottom: 1px solid $active-panel-col
@@ -146,45 +145,6 @@ pre
     padding: 20px
     box-sizing: border-box
 
-.scroll
-    position: absolute
-    width: 14px
-    top: 0px
-    bottom: 0px
-    right: 0
-    z-index: 10000
-    transition: opacity 150ms
-
-    .scroll-handle
-        top: 0
-        box-sizing: border-box
-        position: absolute
-        width: 1%
-        left: 50%
-        border-radius: 2px
-        background: #7390a3
-        transition: left 100ms, width 100ms
-
-    &:hover .scroll-handle
-        width: 100%
-        left: 0
-
-    .scroll-end, .scroll-begin
-        width: 3px
-        height: 3px
-        border-radius: 1.5px
-        left: 4px
-        position: absolute
-
-    .scroll-begin
-        top: 0
-
-    .scroll-end
-        bottom: 0
-
-    &.no-scroll
-        opacity: 0
-
 #left-column
     display: inline-flex
     position: relative
@@ -206,13 +166,14 @@ pre
     display: grid
     flex-direction: column
     grid-template-columns: repeat(1, 1fr)
-    grid-template-rows: repeat( 3, minmax(0, 1fr))
+    grid-template-rows: $tab-height minmax(0, 1fr) minmax(0, 2fr)
     grid-template-rows:
     grid-column-gap: 0px
     grid-row-gap: 0px
 
-    & > div
-        border: 2px solid #EEE
+    & > .debug-area
+        border-bottom: 1px solid #EEE
+        border-left: 1px solid #EEE
 
     .output
         overflow: hidden
@@ -236,100 +197,214 @@ pre
     #panel-ast
         overflow: hidden
 
-    #syntax-trees, #parser-code
-        display: block
+    #syntax-trees
         position: relative
+        display: flex
+        flex-direction: row
+        font-family: 'Courier New', Courier, monospace
         height: 100%
+
+        &> div
+            position: relative
+            border: 0.5px solid $border-color
+            width: 100%
+            overflow: auto
+            padding: 5px
+            box-sizing: border-box
+            white-space: pre
+
+        .cst-node
+            position: relative
+            margin-left: 15px
+            width: 100%
+            user-select: none
+
+            .cst-name
+                cursor: pointer
+
+            &.terminal
+                color: green
+
+            &.nonterminal > .cst-name
+                position: relative
+                background-color: #b5afa9
+                color: white
+                font-weight: bold
+                border-radius: 8px
+                padding: 2px 8px
+                width: fit-content
+                font-size: 11px
+                left: -8px
+                margin: 2px 0px
+
+            .cst-rule-item-expression
+                display: none
+                padding-left: 10px
+
+            &:hover >
+                .cst-name .cst-rule-item-expression
+                    display: inline-block
+                    color: rgb(216, 216, 216)
+
+            &.close > .cst-children
+                display: none
+
+            &.open
+                &.nonterminal > .cst-name
+                    background-color: #77736f
+
+                    .cst-rule-item-expression
+                        display: inline-block
+                        color: rgb(226, 172, 172)
+
+                > .cst-children
+                    display: block
 
     #syntax-output
         position: relative
         display: block
         height: 100%
 
-.scroller
-    position: relative
-    display: block
-    overflow: hidden
-    height: 100%
-    width: 100%
+    #debugger-output
+        position: relative
+        display: flex
+        flex-direction: row
+        font-family: 'Courier New', Courier, monospace
 
-.debugger-button
-    position: relative
-    display: inline-block
+        &> div
+            position: relative
+            border: 0.5px solid $border-color
+            width: 100%
+            overflow: auto
+            padding: 5px
+            box-sizing: border-box
+            white-space: pre
 
-    width: 15px
-    height: 15px
-    font-size: 15px
+        #debugger-stats
+            width: 320px
+            flex-shrink: 0
 
-    margin: 0 5px
+            #debugger-disassembly
+                font-size: 10px
 
-    color: $hover-panel-col
+        #debugger-ir-state
+            color: gray
+            .source-match
+                border-radius: 3px
+                border: 1px solid #ebeae1
+                background-color: #ff98001c
+                color: black
 
-    text-align: center
+.controls
+    height: $tab-height
+    padding: 1px
+    box-sizing: border-box
+    border-bottom: 1px solid #ED5E3F
+    font-size: 12px
+    vertical-align: middle
+    line-height: 20px
     user-select: none
 
-    &.disable
-        pointer-events: none
-        opacity: 0.4
+    select
+        border: none
+        width: 100px
+        text-align: right
+        margin: 0
+        background: none
+        outline: none
 
-    i
-        vertical-align: middle
-        line-height: 20px
-        display: block
-        position: absolute
-        top: 0
-        left: 0
-        width: 100%
-        height: 100%
-        pointer-events: none
-        opacity: 0.7
+    select:hover
+        background: #EEE
 
-    i.active
-        display: none
-    i.hover
-        display: none
-    i.inactive
-        display: block
+    label
+        position: relative
+        height: 17px
+        display: inline-flex
+        /* line-height: 20px; */
+        /* vertical-align: middle; */
+        /* font-size: 12px; */
 
-    &.active
-        i.inactive
-            display: none
-        i.hover
-            display: none
-        i.active
-            display: block
+    input:active
+        background-color: red
 
-    &:hover
-        cursor: pointer
+    .debugger-button
+        position: relative
+        display: inline-block
 
-        i.inactive
-            display: none
-        i.active
-            display: none
-        i.hover
-            display: block
+        width: 15px
+        height: 15px
+        font-size: 15px
+
+        margin: 0 5px
+
+        color: $hover-panel-col
+
+        text-align: center
+        user-select: none
+
+        &.disable
+            pointer-events: none
+            opacity: 0.4
+
         i
-            opacity: 1.0
+            vertical-align: middle
+            line-height: 20px
+            display: block
+            position: absolute
+            top: 0
+            left: 0
+            width: 100%
+            height: 100%
+            pointer-events: none
+            opacity: 0.7
 
-    &.active:hover
-        i.inactive
+        i.active
             display: none
         i.hover
             display: none
-        i.active
+        i.inactive
             display: block
 
-    &:active
-        i
-            font-size: 0.9em
-            opacity: 0.8
+        &.active
+            i.inactive
+                display: none
+            i.hover
+                display: none
+            i.active
+                display: block
 
-    &#restart
-        color: green
+        &:hover
+            cursor: pointer
 
-    &#build
-        color: orange
-    &#build.active
-        color: green
+            i.inactive
+                display: none
+            i.active
+                display: none
+            i.hover
+                display: block
+            i
+                opacity: 1.0
+
+        &.active:hover
+            i.inactive
+                display: none
+            i.hover
+                display: none
+            i.active
+                display: block
+
+        &:active
+            i
+                font-size: 0.9em
+                opacity: 0.8
+
+        &#restart
+            color: green
+
+        &#build
+            color: orange
+        &#build.active
+            color: green
 
 @import "./codemirror"
+@import "./scroll"

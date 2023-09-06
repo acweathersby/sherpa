@@ -204,24 +204,13 @@ pub enum Opcode {
   /// The table data starts at offset 18. Table data starts at byte offset (18
   /// + `Lookup Table Size` * 4)
   HashBranch,
-  // A c-string that can be used to label instructions or states for debugging
-  // purposes. The following byte indicates number of bytes that make up the
-  // string.
-  DebugStateName,
-
-  /// An array of 32bit values representing the expected symbol indices that are
-  /// expected to be produced by a scanner.
-  DebugExpectedSymbols,
-
-  /// A Location within the source code.
-  DebugTokenLocation,
 }
 
 impl From<u8> for Opcode {
   fn from(value: u8) -> Self {
     use Opcode::*;
 
-    const LU_TABLE: [Opcode; 25] = [
+    const LU_TABLE: [Opcode; 22] = [
       NoOp,
       Pass,
       Fail,
@@ -244,9 +233,6 @@ impl From<u8> for Opcode {
       Reduce,
       VectorBranch,
       HashBranch,
-      DebugStateName,
-      DebugExpectedSymbols,
-      DebugTokenLocation,
     ];
 
     if (value as usize) < LU_TABLE.len() {
@@ -273,16 +259,9 @@ impl Opcode {
       Opcode::VectorBranch => {
         unimplemented!("VectorBranches do not have fixed lengths")
       }
-      Opcode::DebugStateName => {
-        unimplemented!("DebugStateName do not have fixed lengths")
-      }
-      Opcode::DebugExpectedSymbols => {
-        unimplemented!("DebugExpectedSymbols do not have fixed lengths")
-      }
       Opcode::Reduce => 11,
       Opcode::Goto | Opcode::PushGoto | Opcode::PushExceptionHandler => 6,
       Opcode::AssignToken => 5,
-      Opcode::DebugTokenLocation => 1 + 8,
       _ => 1,
     }
   }
@@ -373,10 +352,6 @@ impl<'a> Instruction<'a> {
         iter.next_u8(); // Skip the input enum value
         iter.next_u32_le().and_then(|v| self.is_valid_offset(v as usize).then_some((bc, opcode_start + v as usize).into()))
       }
-      Opcode::DebugStateName | Opcode::DebugExpectedSymbols => {
-        let d = self.len();
-        self.is_valid_offset(d).then_some((bc, self.address() + d).into())
-      }
       op => {
         let op_len = op.len();
         self.is_valid_offset(op_len).then_some((bc, opcode_start + op_len).into())
@@ -392,58 +367,7 @@ impl<'a> Instruction<'a> {
         iter.next_u8(); // Skip the input enum value
         iter.next_u32_le().and_then(|v| self.is_valid_offset(v as usize).then_some(v as usize)).unwrap_or(0)
       }
-      Opcode::DebugStateName => {
-        let mut iter = self.iter();
-        let len = iter.next_u16_le().unwrap_or(0) as usize; // Skip the input enum value
-        len + 3
-      }
-      Opcode::DebugExpectedSymbols => {
-        let mut iter = self.iter();
-        let len: usize = iter.next_u16_le().unwrap_or(0) as usize; // Skip the input enum value
-        len * 4 + 3
-      }
       op => op.len(),
-    }
-  }
-
-  pub fn get_debug_symbols(&self) -> Vec<u32> {
-    if self.get_opcode() == Opcode::DebugExpectedSymbols {
-      let mut iter = self.iter();
-      let len: usize = iter.next_u16_le().unwrap_or(0) as usize;
-      let mut syms = Vec::with_capacity(len);
-
-      for _ in 0..len {
-        syms.push(iter.next_u32_le().unwrap_or(0))
-      }
-
-      syms
-    } else {
-      Default::default()
-    }
-  }
-
-  pub fn get_active_state_name(&self) -> String {
-    if self.get_opcode() == Opcode::DebugStateName {
-      let mut iter = self.iter();
-      let len: usize = iter.next_u16_le().unwrap_or(0) as usize;
-      let mut name: Vec<_> = Vec::with_capacity(len);
-
-      for _ in 0..len {
-        name.push(iter.next_u8().unwrap_or(0))
-      }
-
-      unsafe { String::from_utf8_unchecked(name) }
-    } else {
-      Default::default()
-    }
-  }
-
-  pub fn get_debug_tok_offsets(&self) -> Option<(u32, u32)> {
-    if self.get_opcode() == Opcode::DebugTokenLocation {
-      let mut iter = self.iter();
-      Some((iter.next_u32_le().unwrap_or_default(), iter.next_u32_le().unwrap_or_default()))
-    } else {
-      Default::default()
     }
   }
 
@@ -570,6 +494,8 @@ pub const FAIL_STATE_FLAG: u32 = 1 << 1;
 /// Bit mask for bytecode states that are active during normal parse
 /// mode
 pub const NORMAL_STATE_FLAG: u32 = 1 << 0;
+
+pub const STATE_HEADER: u32 = 1 << 2;
 
 /// The offset of the first state within any sherpa bytecode buffer.
 pub const FIRST_PARSE_BLOCK_ADDRESS: u32 = 8;

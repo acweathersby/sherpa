@@ -106,7 +106,7 @@ function SherpaLinter(ctx: GrammarContext) {
 
             try {
                 // Build the soup.
-                let output = document.getElementById("ast-output");
+                let output = document.getElementById("ast-source");
                 if (output) {
                     output.innerText = sherpa.create_rust_ast_output(db);
                 }

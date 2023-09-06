@@ -176,7 +176,7 @@ fn build_statement<'db>(
   }
 
   if let Some(branch) = branch {
-    if add_debug_symbols && matches!(branch, parser::ASTNode::Gotos(..)) {
+    if add_debug_symbols && !matches!(branch, parser::ASTNode::Gotos(..)) {
       insert_tok_debug(pkg, branch.to_token(), add_debug_symbols);
     }
 
