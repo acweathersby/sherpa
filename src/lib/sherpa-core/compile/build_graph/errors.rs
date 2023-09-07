@@ -1,11 +1,11 @@
-use super::items::get_goal_items;
+use super::{graph::*, items::get_goal_items};
 use crate::types::*;
 
 use ErrorClass::*;
 
-pub(super) fn create_reduce_reduce_error(graph: &GraphHost, end_items: ItemSet) -> SherpaError {
-  let _db = graph.get_db();
-  let _goals = end_items.iter().flat_map(|i| get_goal_items(&graph, i)).collect::<OrderedSet<_>>();
+pub(super) fn create_reduce_reduce_error(iter: &GraphBuilder, end_items: ItemSet) -> SherpaError {
+  let _db = iter.graph().get_db();
+  let _goals = end_items.iter().flat_map(|i| get_goal_items(iter, i)).collect::<OrderedSet<_>>();
   /*   j.report_mut().add_error(SherpaError::SourcesError {
     id:       "reduce-conflict",
     msg:      "Unresolvable parse conflict encountered".into(),
@@ -32,12 +32,12 @@ pub(super) fn create_reduce_reduce_error(graph: &GraphHost, end_items: ItemSet) 
 }
 
 /// Produces errors that result the banning of LR states.
-pub(super) fn lr_disabled_error<'db>(graph: &mut GraphHost<'db>, parent: StateId) -> SherpaResult<()> {
-  let db = graph.get_db();
+pub(super) fn lr_disabled_error<'db>(iter: &GraphBuilder) -> SherpaResult<()> {
+  let db = iter.graph().get_db();
 
   let s_store = db.string_store();
 
-  let nonterms = graph[parent].get_nonterm_items();
+  let nonterms = iter.graph()[iter.state_id()].get_nonterm_items();
 
   if nonterms.len() == 1 {
     let first = nonterms.first().unwrap();
@@ -66,17 +66,14 @@ pub(super) fn lr_disabled_error<'db>(graph: &mut GraphHost<'db>, parent: StateId
     id:       (ForbiddenLR, 1, "goto-states-forbidden").into(),
     msg:      "Since LR parsing is disabled could not construct goto state to handle the parsing of the nonterminal ["
       .to_string()
-      + &db.nonterm_friendly_name_string(graph.get_goal_nonterm_index())
+      + &db.nonterm_friendly_name_string(iter.graph().get_goal_nonterm_index())
       + "]",
     ps_msg:   "Consider enabling lr parsing through the parser config object".into(),
     severity: SherpaErrorSeverity::Critical,
   });
 }
 
-pub fn conflicting_symbols_error<'db>(
-  graph: &mut GraphHost<'db>,
-  groups: OrderedMap<(u16, SymbolId), ItemSet<'db>>,
-) -> SherpaError {
+pub fn conflicting_symbols_error<'db>(graph: &GraphHost<'db>, groups: OrderedMap<(u16, SymbolId), ItemSet<'db>>) -> SherpaError {
   let db = graph.get_db();
   SherpaError::SourcesError {
     id:       (GraphConstruction, 0, "conflicting-symbols").into(),
@@ -93,7 +90,7 @@ pub fn conflicting_symbols_error<'db>(
   }
 }
 
-pub fn peek_not_allowed_error<'db>(graph: &mut GraphHost<'db>, parent: StateId) -> SherpaError {
+pub fn peek_not_allowed_error<'db>(graph: &GraphHost<'db>, parent: StateId) -> SherpaError {
   let state = &graph[parent];
   let parent = &graph[graph[parent].get_parent()];
 

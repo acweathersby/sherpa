@@ -1,7 +1,15 @@
 //! Functions for translating parse graphs into Sherpa IR code.
-use crate::{journal::Journal, types::*, utils::hash_group_btreemap, writer::code_writer::CodeWriter};
+use crate::{
+  compile::build_graph::graph::{State, StateId, StateType},
+  journal::Journal,
+  types::*,
+  utils::hash_group_btreemap,
+  writer::code_writer::CodeWriter,
+};
 use sherpa_rust_runtime::types::bytecode::InputType;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+
+use super::build_graph::graph::GraphHost;
 
 pub(crate) fn build_ir<'db>(
   j: &mut Journal,
@@ -378,7 +386,7 @@ fn build_body<'db>(state: &State, successor: &State, graph: &GraphHost<'db>, got
   let db = graph.get_db();
 
   if match s_type {
-    StateType::Shift | StateType::KernelShift => {
+    StateType::Shift => {
       let scan_expr = successor.get_symbol().sym().is_linefeed().then_some("scan then set-line").unwrap_or("scan");
       body_string.push(is_scanner.then_some(scan_expr).unwrap_or("shift").into());
       true

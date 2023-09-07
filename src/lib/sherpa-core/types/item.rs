@@ -1,7 +1,5 @@
-use super::{
-  super::types::*,
-  graph::{Origin, StateId, OUT_SCOPE_INDEX},
-};
+use super::super::types::*;
+use crate::compile::build_graph::graph::*;
 use std::{collections::VecDeque, hash::Hash};
 
 pub enum ItemType {
@@ -169,16 +167,16 @@ impl<'db> Item<'db> {
 
   /// Calculates the number of GOTO states that would be pushed to the stack
   /// following the state this item originated from.
-  pub fn calculate_goto_distance(&self, parent: StateId, graph: &GraphHost<'db>) -> Self {
-    let mut state = parent;
+  pub(crate) fn calculate_goto_distance(&self, iter: &GraphBuilder, parent_id: StateId) -> Self {
+    let mut state = parent_id;
     let mut goto_distance = 0;
 
     while state != self.origin_state {
       debug_assert!(!state.is_root());
-      if graph[state].has_goto_state() {
+      if iter.graph()[state].has_goto_state() {
         goto_distance += 1;
       }
-      state = graph[state].get_parent();
+      state = iter.graph()[state].get_parent();
     }
 
     Self { goto_distance, ..self.clone() }
@@ -328,10 +326,10 @@ impl<'db> Item<'db> {
   }
 
   /// Get the precedence appropriate for the graph mode
-  pub fn precedence(&self, mode: GraphMode) -> u16 {
+  pub fn precedence(&self, mode: GraphType) -> u16 {
     match mode {
-      GraphMode::Parser => self.symbol_precedence(),
-      GraphMode::Scanner => self.token_precedence(),
+      GraphType::Parser => self.symbol_precedence(),
+      GraphType::Scanner => self.token_precedence(),
     }
   }
 
@@ -436,10 +434,10 @@ impl<'a, 'db: 'a, T: Clone + Iterator<Item = Item<'db>>> ItemContainerIter<'a, '
 
 macro_rules! common_iter_functions {
   () => {
-    fn get_max_precedence(self, mode: GraphMode) -> u16 {
+    fn get_max_precedence(self, mode: GraphType) -> u16 {
       match mode {
-        GraphMode::Parser => self.get_max_symbol_precedence(),
-        GraphMode::Scanner => self.get_max_token_precedence(),
+        GraphType::Parser => self.get_max_symbol_precedence(),
+        GraphType::Scanner => self.get_max_token_precedence(),
       }
     }
 

@@ -1,4 +1,10 @@
-use super::{build_graph::build, build_ir::build_ir};
+use super::{
+  build_graph::{
+    build,
+    graph::{GraphType, Origin},
+  },
+  build_ir::build_ir,
+};
 use crate::{
   journal::{Journal, ReportType},
   types::*,
@@ -77,7 +83,7 @@ pub fn compile_parse_states(mut j: Journal, db: &ParserDatabase, config: ParserC
       .flat_map(|s| Items::start_items(db.token(s.tok()).nonterm_id, db).to_origin(Origin::TerminalGoal(s.tok(), s.precedence())))
       .collect::<Array<_>>();
 
-    let graph = build(&mut j, scanner, GraphMode::Scanner, start_items, db, config)?;
+    let graph = build(&mut j, scanner, GraphType::Scanner, start_items, db, config)?;
 
     let ir = build_ir(&mut j, &graph, scanner)?;
     // println!("{}", graph.debug_string());
@@ -131,7 +137,7 @@ fn create_parse_states_from_prod<'db>(
 
     match nterm_sym {
       SymbolId::NonTerminal { .. } => {
-        let graph = build(j, db.nonterm_guid_name(nterm.into()), GraphMode::Parser, start_items, db, config)?;
+        let graph = build(j, db.nonterm_guid_name(nterm.into()), GraphType::Parser, start_items, db, config)?;
 
         let ir = build_ir(j, &graph, db.nonterm_guid_name(nterm.into()))?;
 
@@ -143,7 +149,7 @@ fn create_parse_states_from_prod<'db>(
         }
       }
       SymbolId::NonTerminalToken { .. } => {
-        let graph = build(j, db.nonterm_guid_name(nterm.into()), GraphMode::Scanner, start_items, db, config)?;
+        let graph = build(j, db.nonterm_guid_name(nterm.into()), GraphType::Scanner, start_items, db, config)?;
 
         let ir = build_ir(j, &graph, db.nonterm_guid_name(nterm.into()))?;
 

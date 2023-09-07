@@ -1,10 +1,15 @@
-use super::{get_kernel_items_from_peek_item, symbols::symbols_occlude, TransitionGroup, TransitionGroups};
+use super::{
+  build::{TransitionGroup, TransitionGroups},
+  graph::*,
+  peek::get_kernel_items_from_peek_item,
+  symbols::symbols_occlude,
+};
 /// Returns all incomplete items that follow the given completed item,
 use crate::{types::*, utils::hash_group_btreemap};
 use std::collections::VecDeque;
 
 /// and all completed items that were encountered, including the initial item.
-pub(super) fn get_follow<'db, 'follow>(graph: &mut GraphHost<'db>, item: Item<'db>) -> SherpaResult<(Items<'db>, Items<'db>)> {
+pub(super) fn get_follow<'db>(gb: &GraphBuilder<'db>, item: Item<'db>) -> SherpaResult<(Items<'db>, Items<'db>)> {
   if !item.is_complete() {
     return SherpaResult::Ok((vec![item], vec![]));
   }
@@ -17,17 +22,17 @@ pub(super) fn get_follow<'db, 'follow>(graph: &mut GraphHost<'db>, item: Item<'d
     if completed.insert(item) {
       let nterm = item.nonterm_index();
       let closure = if item.is_out_of_scope() {
-        graph
+        gb.graph()
           .get_db()
           .nonterm_follow_items(nterm)
           //graph[item.origin_state]
           //  .get_root_closure_ref()?
           //.iter()
           .filter(|i| /* i.is_out_of_scope() && */ i.nontermlike_index_at_sym().unwrap_or_default() == nterm)
-          .map(|i| i.to_origin(item.origin).to_oos_index().to_origin_state(StateId(0)))
+          .map(|i| i.to_origin(item.origin).to_oos_index().to_origin_state(StateId::root()))
           .collect::<Array<_>>()
       } else {
-        graph[item.origin_state]
+        gb.graph()[item.origin_state]
           .get_closure_ref()?
           .into_iter()
           .filter(|i| i.nontermlike_index_at_sym().unwrap_or_default() == nterm && i.goal == item.goal)
@@ -45,9 +50,9 @@ pub(super) fn get_follow<'db, 'follow>(graph: &mut GraphHost<'db>, item: Item<'d
           }
         }
       } else if !item.origin_state.is_root() {
-        let parent_state = graph[item.origin_state].get_parent();
+        let parent_state = gb.graph()[item.origin_state].get_parent();
         queue.push_back(item.to_origin_state(parent_state));
-      } else if !graph.is_scanner() && !item.is_out_of_scope() {
+      } else if !gb.is_scanner() && !item.is_out_of_scope() {
         let item: Item<'_> = item.to_oos_index();
         queue.push_back(item);
       }
@@ -61,23 +66,23 @@ pub(super) fn get_follow<'db, 'follow>(graph: &mut GraphHost<'db>, item: Item<'d
 // items groups if we are in scanner mode and the item that
 // was completed belongs to the parse state goal set.
 pub(super) fn get_oos_follow_from_completed<'db, 'follow>(
-  graph: &mut GraphHost<'db>,
+  gb: &GraphBuilder<'db>,
   completed_items: &Items<'db>,
   handler: &mut dyn FnMut(Items<'db>),
 ) -> SherpaResult<()> {
   let mut out = ItemSet::new();
   for completed_item in completed_items {
     if !completed_item.is_out_of_scope() {
-      let (_, completed) = get_follow(graph, *completed_item)?;
+      let (_, completed) = get_follow(gb, *completed_item)?;
 
-      let goals: ItemSet = get_goal_items_from_completed(&completed, graph);
+      let goals: ItemSet = get_goal_items_from_completed(&completed, gb.graph());
 
       for goal in goals {
         let (follow, _) = get_follow(
-          graph,
+          gb,
           goal
             .to_complete()
-            .to_origin(if graph.is_scanner() { Origin::ScanCompleteOOS } else { Origin::GoalCompleteOOS })
+            .to_origin(if gb.is_scanner() { Origin::ScanCompleteOOS } else { Origin::GoalCompleteOOS })
             .to_oos_index(),
         )?;
         out.append(&mut follow.to_set());
@@ -121,7 +126,7 @@ pub(super) fn all_items_transition_on_same_nonterminal<'a, 'db: 'a, T: ItemRefCo
   group.all(|f| f.nontermlike_index_at_sym() == Some(nonterm))
 }
 
-pub(super) fn peek_items_are_from_goto_state(cmpl: &Items, graph: &mut GraphHost) -> bool {
+pub(super) fn peek_items_are_from_goto_state(cmpl: &Items, graph: &GraphHost) -> bool {
   debug_assert_eq!(
     cmpl
       .iter()
@@ -141,12 +146,12 @@ pub(super) fn peek_items_are_from_goto_state(cmpl: &Items, graph: &mut GraphHost
   }
 }
 
-pub(super) fn get_goal_items<'db, 'follow>(graph: &'db GraphHost<'db>, item: &Item<'db>) -> Items<'db> {
+pub(super) fn get_goal_items<'db, 'follow>(iter: &GraphBuilder<'db>, item: &Item<'db>) -> Items<'db> {
   match item.origin {
     Origin::TerminalGoal(..) | Origin::NonTermGoal(_) => {
-      vec![graph[0].kernel_items_ref().clone().to_vec()[item.goal as usize]]
+      vec![iter.graph()[0].kernel_items_ref().clone().to_vec()[item.goal as usize]]
     }
-    Origin::Peek(..) => get_kernel_items_from_peek_item(graph, item).iter().cloned().collect(),
+    Origin::Peek(..) => get_kernel_items_from_peek_item(iter, item).iter().cloned().collect(),
     _ => vec![],
   }
 }
