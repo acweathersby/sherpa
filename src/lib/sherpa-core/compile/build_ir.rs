@@ -346,7 +346,7 @@ fn add_match_expr<'db>(
       w = (w + " {").indent();
 
       // Sort successors
-      let peeking = successors.iter().any(|s| matches!(s.get_type(), StateType::PeekEndComplete | StateType::Peek));
+      let peeking = successors.iter().any(|s| matches!(s.get_type(), StateType::PeekEndComplete(_) | StateType::Peek));
 
       for (state_val, s) in successors.iter().map(|s| (s.get_symbol().sym().to_state_val(db), s)).collect::<BTreeMap<_, _>>() {
         w = w + "\n\n( " + state_val.to_string() + " ){ ";
@@ -391,7 +391,7 @@ fn build_body<'db>(state: &State, successor: &State, graph: &GraphHost<'db>, got
       body_string.push(is_scanner.then_some(scan_expr).unwrap_or("shift").into());
       true
     }
-    StateType::PeekEndComplete => {
+    StateType::PeekEndComplete(_) => {
       debug_assert!(!is_scanner, "Peek states should not be present in graph");
       body_string.push("reset".into());
       true

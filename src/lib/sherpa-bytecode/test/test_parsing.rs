@@ -20,6 +20,28 @@ pub fn basic_left_recursion() -> SherpaResult<()> {
 }
 
 #[test]
+pub fn bread_crumb_parsing() -> SherpaResult<()> {
+  compile_and_run_grammars(
+    &[r#"
+      IGNORE { c:sp } 
+
+      <> E > A " A-test" | B " B-test"
+
+      <> B > R "=>" "()"
+
+      <> A > O "=>" "()"
+
+      <> O > I
+
+      <> R > I
+
+      <> I > "id"
+  "#],
+    &[("default", "id=>() A-test", true)],
+  )
+}
+
+#[test]
 pub fn construct_recursive_ascent() -> SherpaResult<()> {
   compile_and_run_grammars(
     &[r#"

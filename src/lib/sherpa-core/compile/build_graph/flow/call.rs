@@ -1,4 +1,4 @@
-use super::{
+use super::super::{
   graph::*,
   items::{all_items_come_from_same_nonterminal_call, all_items_transition_on_same_nonterminal},
 };
@@ -6,7 +6,7 @@ use crate::types::*;
 
 use GraphState::*;
 
-pub(super) fn create_call<'a, 'db: 'a, T: ItemRefContainerIter<'a, 'db> + Clone>(
+pub(crate) fn create_call<'a, 'db: 'a, T: ItemRefContainerIter<'a, 'db> + Clone>(
   iter: &mut GraphBuilder<'db>,
   group: T,
   sym: PrecedentSymbol,
@@ -46,7 +46,7 @@ pub(super) fn create_call<'a, 'db: 'a, T: ItemRefContainerIter<'a, 'db> + Clone>
   create_call_internal(iter, call_data, sym)
 }
 
-pub(super) fn create_call_internal<'db>(
+pub(crate) fn create_call_internal<'db>(
   gb: &mut GraphBuilder<'db>,
   call_pack: Option<(Vec<Item<'db>>, DBNonTermKey)>,
   sym: PrecedentSymbol,
@@ -67,7 +67,7 @@ pub(super) fn create_call_internal<'db>(
   }
 }
 
-pub(super) fn create_kernel_call<'a, 'db: 'a>(gb: &mut GraphBuilder<'db>, sym: PrecedentSymbol) -> Option<()> {
+pub(crate) fn create_kernel_call<'a, 'db: 'a>(gb: &mut GraphBuilder<'db>, sym: PrecedentSymbol) -> Option<()> {
   let group = gb.current_state().kernel_items_ref().clone();
   let group = group.iter();
   let Some(first) = group.clone().next() else { return None };

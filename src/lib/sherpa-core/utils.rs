@@ -6,7 +6,7 @@ use std::{
 };
 
 #[inline]
-pub fn hash_group_btreemap_iter<
+pub fn hash_group_btree_iter<
   C: Extend<T> + Default,
   T: Sized,
   R: Hash + Sized + Ord + Eq,

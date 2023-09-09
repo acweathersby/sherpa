@@ -1,7 +1,7 @@
 use super::{
   build::{TransitionGroup, TransitionGroups},
+  flow::get_kernel_items_from_peek_item,
   graph::*,
-  peek::get_kernel_items_from_peek_item,
   symbols::symbols_occlude,
 };
 /// Returns all incomplete items that follow the given completed item,

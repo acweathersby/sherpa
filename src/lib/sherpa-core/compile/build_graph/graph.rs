@@ -19,6 +19,9 @@ pub enum Origin {
   TerminalGoal(DBTermKey, u16),
   /// The hash and state of the goal items set the peek item will resolve to
   Peek(u64, StateId),
+  /// The item
+  BreadCrumb(DBRuleKey),
+  PEG(DBNonTermKey),
   // Out of scope item that was generated from the
   // completion of a token non-terminal.
   ScanCompleteOOS,
@@ -52,6 +55,10 @@ impl Origin {
       }
       Origin::TerminalGoal(sym_id, prec) => {
         format!("TerminalGoal[ {:?} {prec} ]", sym_id)
+      }
+      Origin::BreadCrumb(rule_id) => {
+        let item = Item::from_rule(*rule_id, db);
+        format!("BreadCrumb[ {:?} ]", item.debug_string())
       }
       _ => format!("{:?}", self),
     }
@@ -88,7 +95,9 @@ pub enum StateType {
   NonTerminalShiftLoop,
   NonTerminalComplete,
   Peek,
-  PeekEndComplete,
+  /// A peek path has been resolved to a single peek group located in the peek
+  /// origin state.
+  PeekEndComplete(u64),
   Complete,
   Follow,
   DifferedReduce,
@@ -315,6 +324,8 @@ pub enum GraphState {
   Normal,
   NormalGoto,
   Peek(u16),
+  PEG,
+  BreadCrumb(u16),
   Leaf,
   _LongestMatch,
   _ShortestMatch,
@@ -331,6 +342,7 @@ pub enum GraphType {
   Scanner,
 }
 
+use sherpa_rust_runtime::types::SharedSymbolBuffer;
 use GraphState::*;
 
 use super::build::handle_kernel_items;
@@ -768,6 +780,21 @@ impl<'db> GraphBuilder<'db> {
       }
       self.enqueue_pending_state(state);
     }
+  }
+
+  #[cfg(debug_assertions)]
+  pub fn _print_state_(&self) {
+    println!("{}", self.get_state(self.state_id).debug_string(self.db));
+  }
+
+  #[cfg(debug_assertions)]
+  pub fn _print_graph_(&self) {
+    self.graph._debug_print_()
+  }
+
+  #[cfg(debug_assertions)]
+  pub fn _is_nonterminal_state_(&self, nterm_id: u32, state_id: u32) -> bool {
+    self.graph._goal_nonterm_index_is_(nterm_id) && self.state_id().0 == state_id
   }
 }
 
