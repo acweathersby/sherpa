@@ -74,6 +74,7 @@ pub fn expr_term() -> SherpaResult<()> {
 pub fn precedence() -> SherpaResult<()> {
   compile_and_run_grammars(
     &[r#"
+    IGNORE { tk:space }
 
     <> expr > expr "+"{1} expr{1}
     | expr "^"{4} expr{4}
@@ -82,8 +83,10 @@ pub fn precedence() -> SherpaResult<()> {
     | expr "-"{1} expr{1}
     | c:num
 
+    <> space > c:sp(+)
+
 "#],
-    &[("default", "3+2-1^1/1", true)],
+    &[("default", "1 + 2 * 2 * 2 + 2 * 2 + 1 +                                                     1", true)],
   )
 }
 
@@ -430,12 +433,12 @@ pub fn recursive_skipped_comments() -> SherpaResult<()> {
 
     <> A > "hello" "world"
 
-    <> comment > "/*" comment_body "*/"{:9999}
+    <> comment > "/*"{:9999} comment_body '*'{:1} "/"{:9999}
 
-    <> comment_body >  ( c:nl | c:sym | c:num | c:sp | c:id | comment )(+)
+    <> comment_body >  ( c:nl | c:sym{:1} | c:num | c:sp | c:id | comment )(+)
     "##],
     &[
-      ("default", r##"hello /* This is the only way to go /* to */ the moon */ world"##, true),
+      ("default", r##"hello /* This is the * only way to go /* to */ the moon */ world"##, true),
       ("default", r##"hello /* This is the only way to go /* to */ the moon / world"##, false),
     ],
   )

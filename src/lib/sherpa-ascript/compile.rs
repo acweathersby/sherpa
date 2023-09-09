@@ -16,6 +16,7 @@ use crate::{
     add_incompatible_nonterm_types_error,
     add_incompatible_nonterm_vector_types_error,
     add_prop_redefinition_error,
+    ascript_error_class,
   },
   types::AScriptProp,
 };
@@ -27,6 +28,7 @@ use sherpa_core::{
 };
 use std::{
   collections::{btree_map, BTreeSet, HashSet, VecDeque},
+  fmt::format,
   vec,
 };
 
@@ -35,7 +37,7 @@ pub(crate) fn compile_ascript_store(j: &mut Journal, ast: &mut AScriptStore, db:
 
   gather_ascript_info_from_grammar(j, ast, db, &mut temp_nonterm_types)?;
 
-  resolve_nonterm_reduce_types(j, ast, db, temp_nonterm_types);
+  resolve_nonterm_reduce_types(j, ast, db, temp_nonterm_types)?;
 
   if !j.report().have_errors_of_type(SherpaErrorSeverity::Critical) {
     resolve_structure_properties(j, ast, db);
@@ -81,14 +83,12 @@ fn gather_ascript_info_from_grammar(
           });
         }
         ASTNode::AST_Statements(ast_stmts) => {
-          for sub_type in compile_expression_type(
-            j,
-            store,
-            db,
-            ast_stmts.statements.last().expect("There should be at least one symbol"),
-            rule_id,
-          ) {
-            add_nonterm_type(nterm_types, &rule_ref, sub_type);
+          if let Some(sym) = ast_stmts.statements.last() {
+            for sub_type in compile_expression_type(j, store, db, sym, rule_id) {
+              add_nonterm_type(nterm_types, &rule_ref, sub_type);
+            }
+          } else {
+            j.report_mut().add_error(SherpaError::Text("There should be at least one symbol".into()))
           }
         }
         ast_expr => {
@@ -128,17 +128,18 @@ fn gather_ascript_info_from_grammar(
         })
       }
       _ => {
-        match rule_ref.rule.symbols.last().expect("There should be at least one symbol").id {
-          SymbolId::DBNonTerminal { key: id } => add_nonterm_type(nterm_types, &rule_ref, TaggedType {
+        match rule_ref.rule.symbols.last().map(|s| s.id) {
+          Some(SymbolId::DBNonTerminal { key: id }) => add_nonterm_type(nterm_types, &rule_ref, TaggedType {
             type_:        AScriptTypeVal::UnresolvedNonTerminal(id),
             tag:          rule_id,
             symbol_index: (rule_ref.rule.symbols.len() - 1) as u32,
           }),
-          _ => add_nonterm_type(nterm_types, &rule_ref, TaggedType {
+          Some(_) => add_nonterm_type(nterm_types, &rule_ref, TaggedType {
             type_:        AScriptTypeVal::Token,
             tag:          rule_id,
             symbol_index: (rule_ref.rule.symbols.len() - 1) as u32,
           }),
+          None => j.report_mut().add_error(SherpaError::Text("[1] There should be at least one symbol".into())),
         };
       }
     }
@@ -168,19 +169,25 @@ fn resolve_nonterm_reduce_types(
   ast: &mut AScriptStore,
   db: &ParserDatabase,
   mut nterm_types: NonTerminalTypesTable,
-) {
+) -> SherpaResult<()> {
   let mut pending_nterms = VecDeque::from_iter(db.parser_nonterms().into_iter().rev());
 
   while let Some(nterm) = pending_nterms.pop_front() {
-    debug_assert!(
+    /* debug_assert!(
       nterm_types.contains_key(&nterm),
       "All non-terminal should be accounted for.\nNon-terminal [{}] does not have an associated return type",
       db.nonterm_friendly_name_string(nterm)
-    );
+    ); */
 
     let mut resubmit = false;
     let mut new_map = OrderedMap::new();
-    let vector_types = nterm_types.remove(&nterm).unwrap().into_iter().collect::<Vec<_>>();
+
+    let Some(vector_types) = nterm_types.remove(&nterm) else {
+      j.report_mut().add_error(SherpaError::Text("Could not get type of nterm".into()));
+      continue;
+    };
+
+    let vector_types = vector_types.into_iter().collect::<Vec<_>>();
     let (vector_types, scalar_types) = vector_types.into_iter().partition::<Vec<_>, _>(|(a, _)| a.type_.is_vec());
 
     if !scalar_types.is_empty() {
@@ -195,7 +202,10 @@ fn resolve_nonterm_reduce_types(
                 new_map.extend(types_.clone());
               }
               Some(_) => {
-                panic!("Non-terminal [{}] does not produce any types", db.nonterm_friendly_name_string(foreign_nterm))
+                return Err(SherpaError::Text(format!(
+                  "Non-terminal [{}] does not produce any types",
+                  db.nonterm_friendly_name_string(foreign_nterm)
+                )));
               }
               _ => {
                 // Remap the non-terminal type and resubmit
@@ -203,9 +213,9 @@ fn resolve_nonterm_reduce_types(
               }
             }
 
-            true
+            Ok(true)
           } else {
-            false
+            Ok(false)
           }
         };
 
@@ -237,11 +247,11 @@ fn resolve_nonterm_reduce_types(
             }
           }
           (_, UnresolvedNonTerminal(foreign_nterm)) => {
-            resubmit = resubmit.max(insert_nonterm_types(ast, *foreign_nterm, other, body_ids));
+            resubmit = resubmit.max(insert_nonterm_types(ast, *foreign_nterm, other, body_ids)?);
             prime
           }
           (UnresolvedNonTerminal(foreign_nterm), _) => {
-            resubmit = resubmit.max(insert_nonterm_types(ast, *foreign_nterm, prime, prime_body_ids.clone()));
+            resubmit = resubmit.max(insert_nonterm_types(ast, *foreign_nterm, prime, prime_body_ids.clone())?);
             other
           }
           (Undefined, _) => {
@@ -337,7 +347,11 @@ fn resolve_nonterm_reduce_types(
             prime_body_ids.append(&mut body_ids);
             TaggedType { type_: GenericVec(None), ..Default::default() }
           }
-          _ => unreachable!("Failed Invariant: Only GenericVector types should be encountered at this point."),
+          _ => {
+            return Err(SherpaError::Text(format!(
+              "Failed Invariant: Only GenericVector types should be encountered at this point."
+            )))
+          }
         }
       }
 
@@ -359,81 +373,92 @@ fn resolve_nonterm_reduce_types(
   }
 
   // Ensure all non-scanner nonterminals have been added to the ascript data.
-  debug_assert_eq!(ast.nonterm_types.len(), db.parser_nonterms().len());
+  //debug_assert_eq!(ast.nonterm_types.len(), db.parser_nonterms().len());
 
   // Do final check for incompatible types
   for nterm in ast.nonterm_types.keys().cloned().collect::<Vec<_>>() {
-    let vector_types = ast.nonterm_types.get(&nterm).unwrap().iter().collect::<Vec<_>>();
-    let (vector_types, scalar_types) = vector_types.into_iter().partition::<Vec<_>, _>(|(a, ..)| a.type_.is_vec());
+    if let Some(vector_types) = ast.nonterm_types.get(&nterm) {
+      let vector_types = vector_types.iter().collect::<Vec<_>>();
+      let (vector_types, scalar_types) = vector_types.into_iter().partition::<Vec<_>, _>(|(a, ..)| a.type_.is_vec());
 
-    debug_assert!(
-      !scalar_types.iter().any(|(a, _)| matches!((*a).into(), AScriptTypeVal::UnresolvedNonTerminal(_))),
-      "Non-terminal [{}] has not been fully resolved \n{:#?}",
-      db.nonterm_friendly_name_string(nterm),
-      ast.nonterm_types.get(&nterm).unwrap().iter().map(|(t, _)| { t.debug_string() }).collect::<Vec<_>>()
-    );
-    match (!vector_types.is_empty(), !scalar_types.is_empty()) {
-      (true, true) => {
-        add_incompatible_nonterm_types_error(
-          j,
-          ast,
-          db,
-          &nterm,
-          scalar_types
-            .iter()
-            .flat_map(|(type_, bodies)| bodies.iter().map(|b| ((*type_).into(), *b)).collect::<Vec<_>>())
-            .collect(),
-          vector_types
-            .iter()
-            .flat_map(|(type_, bodies)| bodies.iter().map(|b| ((*type_).into(), *b)).collect::<Vec<_>>())
-            .collect(),
-        );
-      }
-      (true, false) => {
-        debug_assert!(vector_types.len() == 1, "Failed Invariant: All nonterminals should have a single resolved type");
-        let (_type, tokens) = vector_types.into_iter().next().unwrap();
-        match _type.into() {
-          AScriptTypeVal::GenericVec(Some(_types)) => {
-            let resolved_vector_type = get_specified_vector_from_generic_vec_values(&_types.iter().map(|v| v.into()).collect());
-            if resolved_vector_type.is_undefined() {
-              add_incompatible_nonterm_vector_types_error(j, ast, db, &nterm, _types);
-            } else {
-              ast.nonterm_types.insert(
-                nterm,
-                OrderedMap::from_iter(vec![(
-                  TaggedType { type_: resolved_vector_type, ..Default::default() },
-                  tokens.to_owned(),
-                )]),
-              );
-            }
-          }
-          _ => {}
+      /*   debug_assert!(
+        !scalar_types.iter().any(|(a, _)| matches!((*a).into(), AScriptTypeVal::UnresolvedNonTerminal(_))),
+        "Non-terminal [{}] has not been fully resolved \n{:#?}",
+        db.nonterm_friendly_name_string(nterm),
+        ast.nonterm_types.get(&nterm).unwrap().iter().map(|(t, _)| { t.debug_string() }).collect::<Vec<_>>()
+      ); */
+      match (!vector_types.is_empty(), !scalar_types.is_empty()) {
+        (true, true) => {
+          add_incompatible_nonterm_types_error(
+            j,
+            ast,
+            db,
+            &nterm,
+            scalar_types
+              .iter()
+              .flat_map(|(type_, bodies)| bodies.iter().map(|b| ((*type_).into(), *b)).collect::<Vec<_>>())
+              .collect(),
+            vector_types
+              .iter()
+              .flat_map(|(type_, bodies)| bodies.iter().map(|b| ((*type_).into(), *b)).collect::<Vec<_>>())
+              .collect(),
+          );
         }
+        (true, false) => {
+          debug_assert!(vector_types.len() == 1, "Failed Invariant: All nonterminals should have a single resolved type");
+          let (_type, tokens) = vector_types.into_iter().next().unwrap();
+          match _type.into() {
+            AScriptTypeVal::GenericVec(Some(_types)) => {
+              let resolved_vector_type = get_specified_vector_from_generic_vec_values(&_types.iter().map(|v| v.into()).collect());
+              if resolved_vector_type.is_undefined() {
+                add_incompatible_nonterm_vector_types_error(j, ast, db, &nterm, _types);
+              } else {
+                ast.nonterm_types.insert(
+                  nterm,
+                  OrderedMap::from_iter(vec![(
+                    TaggedType { type_: resolved_vector_type, ..Default::default() },
+                    tokens.to_owned(),
+                  )]),
+                );
+              }
+            }
+            _ => {}
+          }
+        }
+        (false, true) => {}
+        _ => {}
       }
-      (false, true) => {}
-      _ => {}
+    } else {
+      j.report_mut().add_error(SherpaError::Text(format!("Could not extract nterm type")));
     }
   }
+
+  Ok(())
 }
 
 fn resolve_structure_properties(j: &mut Journal, store: &mut AScriptStore, db: &ParserDatabase) {
   for struct_id in store.structs.keys().cloned().collect::<Vec<_>>() {
-    let rules = store.structs.get(&struct_id).unwrap().rule_ids.clone();
-    for rule_id in rules {
-      let rule = db.rule(rule_id);
-      match &rule.ast {
-        Some(ASTToken::Defined(ast)) => match &ast.ast {
-          ASTNode::AST_Struct(ast_struct) => {
-            compile_struct_props(j, store, db, &struct_id, ast_struct, rule_id);
-          }
+    if let Some(strct) = store.structs.get(&struct_id) {
+      let rules = strct.rule_ids.clone();
+      for rule_id in rules {
+        let rule = db.rule(rule_id);
+        match &rule.ast {
+          Some(ASTToken::Defined(ast)) => match &ast.ast {
+            ASTNode::AST_Struct(ast_struct) => match compile_struct_props(j, store, db, &struct_id, ast_struct, rule_id) {
+              Ok(_) => {}
+              Err(err) => j.report_mut().add_error(err),
+            },
+            _ => {}
+          },
           _ => {}
-        },
-        _ => {}
+        }
       }
-    }
 
-    if !j.report().have_errors_of_type(SherpaErrorSeverity::Critical) {
-      verify_property_presence(store, &struct_id);
+      if !j.report().have_errors_of_type(SherpaErrorSeverity::Critical) {
+        verify_property_presence(store, &struct_id);
+      }
+    } else {
+      j.report_mut().add_error(SherpaError::Text(format!("Could not extract nterm type")));
     }
   }
 
@@ -445,17 +470,18 @@ fn resolve_structure_properties(j: &mut Journal, store: &mut AScriptStore, db: &
 
   // Ensure each property entry has a resolved data type.
   for prop_id in store.props.keys().cloned().collect::<Vec<_>>() {
-    let prop = store.props.get(&prop_id).unwrap();
-    match get_resolved_type(store, &prop.type_val.clone().into()) {
-      AScriptTypeVal::Undefined => {
-        undefined_props.insert(prop_id.clone());
-        // Property is undefined and should be removed from its respective
-        // struct. A warning should also be generated indicating the
-        // type is ignored.
-        eprintln!("Warning, the property \n{}\n is undefined and will be ignored", prop.loc.blame(0, 0, "Test", None));
-      }
-      type_ => {
-        store.props.get_mut(&prop_id).unwrap().type_val = TaggedType { type_, ..Default::default() };
+    if let Some(prop) = store.props.get(&prop_id) {
+      match get_resolved_type(store, &prop.type_val.clone().into()) {
+        AScriptTypeVal::Undefined => {
+          undefined_props.insert(prop_id.clone());
+          // Property is undefined and should be removed from its respective
+          // struct. A warning should also be generated indicating the
+          // type is ignored.
+          eprintln!("Warning, the property \n{}\n is undefined and will be ignored", prop.loc.blame(0, 0, "Test", None));
+        }
+        type_ => {
+          store.props.get_mut(&prop_id).unwrap().type_val = TaggedType { type_, ..Default::default() };
+        }
       }
     }
   }
@@ -467,11 +493,13 @@ fn resolve_structure_properties(j: &mut Journal, store: &mut AScriptStore, db: &
 }
 
 pub(crate) fn verify_property_presence(ast: &mut AScriptStore, struct_id: &AScriptStructId) {
-  let struct_ = ast.structs.get(&struct_id).unwrap();
-  for prop_id in &struct_.prop_ids {
-    let prop = ast.props.get_mut(&prop_id).unwrap();
-    if prop.rule_ids.len() != struct_.rule_ids.len() {
-      prop.optional = true;
+  if let Some(struct_) = ast.structs.get(&struct_id) {
+    for prop_id in &struct_.prop_ids {
+      if let Some(prop) = ast.props.get_mut(&prop_id) {
+        if prop.rule_ids.len() != struct_.rule_ids.len() {
+          prop.optional = true;
+        }
+      }
     }
   }
 }
@@ -790,7 +818,7 @@ pub fn compile_struct_props(
   id: &AScriptStructId,
   ast: &AST_Struct,
   rule_id: DBRuleKey,
-) -> AScriptTypeVal {
+) -> SherpaResult<AScriptTypeVal> {
   // Check to see if this struct is already defined. If so, we'll
   // append new properties to it. otherwise we create a new
   // struct entry and add props.
@@ -898,11 +926,19 @@ pub fn compile_struct_props(
       struct_.tokenized = include_token || struct_.tokenized;
     }
     btree_map::Entry::Vacant(_) => {
-      unreachable!("Struct should be defined at this point")
+      return Err(SherpaError::SourceError {
+        loc:        ast.tok.clone(),
+        path:       rule.g_id.path.to_path(db.string_store()),
+        id:         (ascript_error_class(), 0, "undefined-struct").into(),
+        msg:        "Struct should be defined at this point".into(),
+        inline_msg: Default::default(),
+        ps_msg:     Default::default(),
+        severity:   SherpaErrorSeverity::Critical,
+      });
     }
   }
 
-  AScriptTypeVal::Struct(id.clone())
+  Ok(AScriptTypeVal::Struct(id.clone()))
 }
 
 pub fn get_nonterm_types(store: &AScriptStore, nterm: &DBNonTermKey) -> BTreeSet<AScriptTypeVal> {

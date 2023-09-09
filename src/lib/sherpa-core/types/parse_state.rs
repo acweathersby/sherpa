@@ -217,7 +217,7 @@ fn render_IR<T: Write>(
               .map(|v| {
                 v.to_string()
                   + " /*"
-                  + &db.token((*v as usize).into()).name.to_string(db.string_store()).replace("*/", "//")
+                  + &db.token((*v as usize).into()).name.to_string(db.string_store()).replace("*", "%asterisk%")
                   + "*/"
               })
               .collect::<Vec<_>>()
@@ -232,7 +232,7 @@ fn render_IR<T: Write>(
               .map(|v| {
                 v.to_string()
                   + " /*"
-                  + &char::from_u32(*v as u32).map(|v| v.to_string()).unwrap_or(v.to_string()).replace("*/", "//")
+                  + &char::from_u32(*v as u32).map(|v| v.to_string()).unwrap_or(v.to_string()).replace("*", "%asterisk%")
                   + "*/"
               })
               .collect::<Vec<_>>()
@@ -244,7 +244,9 @@ fn render_IR<T: Write>(
             + "( "
             + vals
               .iter()
-              .map(|v| v.to_string() + " /*" + &db.nonterm_friendly_name_string((*v as usize).into()).replace("*/", "//") + "*/")
+              .map(|v| {
+                v.to_string() + " /*" + &db.nonterm_friendly_name_string((*v as usize).into()).replace("*", "%asterisk%") + "*/"
+              })
               .collect::<Vec<_>>()
               .join(" | ")
             + " )";

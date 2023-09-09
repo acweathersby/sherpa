@@ -25,7 +25,7 @@ pub fn build_parse_states_from_source_str<'a, T>(
   if optimize {
     test_fn(
       SherpaGrammarBuilder::new()
-        .add_source_from_string(source, &source_path)?
+        .add_source_from_string(source, &source_path, false)?
         .build_db(&source_path)?
         .build_parser(Default::default())?
         .optimize(false)?
@@ -34,7 +34,7 @@ pub fn build_parse_states_from_source_str<'a, T>(
   } else {
     test_fn(
       SherpaGrammarBuilder::new()
-        .add_source_from_string(source, &source_path)?
+        .add_source_from_string(source, &source_path, false)?
         .build_db(&source_path)?
         .build_parser(Default::default())?
         .into(),
@@ -55,7 +55,7 @@ pub fn build_parse_states_from_multi_sources<'a, T>(
 
   for (index, source) in sources.iter().enumerate() {
     let source_path = source_path.join("ABCDEFGHIJKLMNOPQRSTUVWXYZ".chars().nth(index).unwrap().to_string());
-    grammar = grammar.add_source_from_string(source, &source_path)?;
+    grammar.add_source_from_string(source, &source_path, false)?;
   }
 
   let root_path = source_path.join("A");
@@ -75,7 +75,7 @@ pub fn build_parse_db_from_source_str<'a, T>(
   source_path: PathBuf,
   test_fn: &dyn Fn(DBPackage) -> SherpaResult<T>,
 ) -> SherpaResult<T> {
-  test_fn(SherpaGrammarBuilder::new().add_source_from_string(source, &source_path)?.build_db(&source_path)?.into())
+  test_fn(SherpaGrammarBuilder::new().add_source_from_string(source, &source_path, false)?.build_db(&source_path)?.into())
 }
 
 /// Writes to a debug file for testing

@@ -99,6 +99,8 @@ fn convert_error(err: &SherpaError) -> Vec<JSSherpaSourceError> {
       vec![JSSherpaSourceError { message: text.to_string(), ..Default::default() }]
     }
     SherpaError::Multi(errors) => errors.iter().map(|e| convert_error(e)).flatten().collect(),
-    _ => Default::default(),
+    SherpaError::PoisonError(..) => vec![JSSherpaSourceError { message: "Poison Error".into(), ..Default::default() }],
+    SherpaError::IOError(..) => vec![JSSherpaSourceError { message: "Io Error".into(), ..Default::default() }],
+    SherpaError::Error(err) => vec![JSSherpaSourceError { message: err.to_string(), ..Default::default() }],
   }
 }

@@ -161,11 +161,13 @@ impl Report {
     self.notes.iter().find(|(n, _)| (*n.to_ascii_lowercase()) == note_name.to_ascii_lowercase()).map(|(_, n)| n)
   }
 
-  pub fn add_error(&mut self, error: SherpaError) {
-    self.error_level = error.get_severity().max(self.error_level);
-    let id = create_u64_hash(&error);
-    if !self._errors.contains_key(&id) {
-      self._errors.insert(id, error);
+  pub fn add_error<T: IntoIterator<Item = SherpaError>>(&mut self, error: T) {
+    for error in error.into_iter() {
+      self.error_level = error.get_severity().max(self.error_level);
+      let id = create_u64_hash(&error);
+      if !self._errors.contains_key(&id) {
+        self._errors.insert(id, error);
+      }
     }
   }
 

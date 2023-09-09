@@ -138,7 +138,7 @@ where
   fn from((source, context): (&'llvm str, &'llvm Context)) -> Self {
     let default_path = PathBuf::default();
     let parser = SherpaGrammarBuilder::new()
-      .add_source_from_string(source, &default_path)
+      .add_source_from_string(source, &default_path, false)
       .and_then(|d| d.build_db(&default_path))
       .and_then(|d| d.build_parser(Default::default()))
       .and_then(|d| d.optimize(false))

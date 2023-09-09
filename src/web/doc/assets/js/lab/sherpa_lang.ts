@@ -31,10 +31,10 @@ class SherpaParser extends Parser {
         this.nodeSet = new NodeSet(names.map((name: string, id: number) => {
             return NodeType.define({ id, top: name == "sherpa::grammar", name: name.replace("::", "-") });
         })).extend(styleTags({
-            "sherpa_symbol-nonterminal_symbol!": tags.definitionKeyword,
-            "sherpa_symbol-terminal!": tags.string,
-            "sherpa-non-terminal/...": tags.definitionOperator,
-            "sherpa_symbol-class!": tags.className,
+            "nonterminal_symbol!": tags.definitionKeyword,
+            "terminal!": tags.string,
+            "nonterminal/...": tags.definitionOperator,
+            "class!": tags.className,
         }));
 
         this.names = sherpa.get_nonterminal_names();

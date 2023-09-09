@@ -69,8 +69,8 @@ pub(crate) fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
     // otherwise scanner states will be dropped.
     let parse_states = parse_states.into_iter().map(|(name, state)| {
       let mut state = state.remap_source(db).unwrap_or(Default::default());
-      if let Err(_) = state.build_ast(db) {
-        panic!("Failed to build AST")
+      if let Err(err) = state.build_ast(db) {
+        todo!("Failed to build AST {}", err)
       }
       (name, Box::new(state))
     });

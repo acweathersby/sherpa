@@ -17,22 +17,25 @@ pub fn compile_grammar_from_str(
   j: &mut Journal,
   source: &str,
   source_path: PathBuf,
-  soup: &GrammarSoup,
-) -> SherpaResult<(GrammarIdentities, Vec<GrammarIdentities>)> {
+  s_store: IStringStore,
+) -> SherpaResult<(Arc<GrammarSoup>, Vec<GrammarIdentities>)> {
+  let mut soup = GrammarSoup::from_string_store(s_store);
+
   let root_id = GrammarIdentities::from_path(&source_path, &soup.string_store);
 
-  let g_data = load_from_str(j, source, source_path, soup)?;
+  let g_data = load_from_str(j, source, source_path, &soup)?;
 
   let imports = g_data.imports.values().cloned().collect();
 
-  let grammar_id = compile_grammar_data(j, g_data, soup)?;
+  let grammar_id = compile_grammar_data(j, g_data, &soup)?;
 
-  Ok((grammar_id, imports))
+  Ok((soup, imports))
 }
 
 /// Imports a single grammar from a source location and merges it into the soup.
 /// Returns a list of grammars that are imported by the source grammar
-pub fn load_grammar(j: &mut Journal, import_id: GrammarIdentities, g_c: &GrammarSoup) -> SherpaResult<Vec<GrammarIdentities>> {
+pub fn load_grammar(j: &mut Journal, import_id: GrammarIdentities) -> SherpaResult<(Arc<GrammarSoup>, Vec<GrammarIdentities>)> {
+  let mut g_c: Arc<GrammarSoup> = GrammarSoup::new();
   let GrammarIdentities { guid, guid_name, path, .. } = import_id;
 
   j.set_active_report("Load Grammar From Path", ReportType::GrammarCompile(guid));
@@ -52,7 +55,7 @@ pub fn load_grammar(j: &mut Journal, import_id: GrammarIdentities, g_c: &Grammar
         }
       };
 
-      Ok(imports)
+      Ok((g_c, imports))
     }
     SherpaResult::Err(err) => {
       j.report_mut().add_error(err.clone());

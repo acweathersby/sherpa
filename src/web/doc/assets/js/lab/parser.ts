@@ -251,8 +251,6 @@ export function parserHost(ctx: GrammarContext, {
 
     function start_parser() {
 
-
-
         if (!PARSER_VALID)
             return;
 
@@ -593,7 +591,7 @@ export function parserHost(ctx: GrammarContext, {
                 if (update.transactions.find(e => e.isUserEvent("debugger.start"))) {
                     console.log("Started");
                 } else if (update.docChanged) {
-                    invalidate_parser();
+                    stop_parser();
                 }
             }
         }, {}),

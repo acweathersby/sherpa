@@ -15,7 +15,7 @@ fn test_full_grammar() -> SherpaResult<()> {
   let grammar_folder =
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammar/sherpa/2.0.0").canonicalize().unwrap();
   let sherpa_grammar = grammar_folder.join("grammar.sg");
-  let grammar = SherpaGrammarBuilder::new();
+  let mut grammar = SherpaGrammarBuilder::new();
   let database = grammar.add_source(&sherpa_grammar)?.build_db(&sherpa_grammar)?;
   let parser = database.build_parser(ParserConfig::new().lr_only())?.optimize(false)?;
   let pkg = compile_bytecode(&parser, true)?;

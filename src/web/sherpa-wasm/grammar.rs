@@ -55,14 +55,10 @@ impl JSSoup {
   /// id if successful.
   pub fn add_grammar(&mut self, grammar_source: String, path: String) -> Result<JSGrammarIdentities, PositionedErrors> {
     let path = &PathBuf::from(&path);
-    if let Some(grammar) = self.0.take() {
-      let grammar = grammar.remove_grammar(&path).map_err(to_err)?;
-
-      let grammar = grammar.add_source_from_string(&grammar_source, &path).map_err(to_err)?;
+    if let Some(grammar) = self.0.as_mut() {
+      grammar.add_source_from_string(&grammar_source, &path, true).map_err(to_err)?;
 
       let id: GrammarIdentities = grammar.path_to_id(path);
-
-      self.0.replace(grammar);
 
       Ok(JSGrammarIdentities(Box::new(id)))
     } else {

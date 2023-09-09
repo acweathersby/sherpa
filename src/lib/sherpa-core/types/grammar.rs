@@ -388,12 +388,16 @@ pub struct GrammarSoup {
 }
 
 impl GrammarSoup {
-  pub fn new() -> sync::Arc<Self> {
+  pub fn from_string_store(string_store: IStringStore) -> sync::Arc<Self> {
     sync::Arc::new(GrammarSoup {
       grammar_headers: Default::default(),
-      nonterminals:    Default::default(),
-      custom_states:   Default::default(),
-      string_store:    Default::default(),
+      nonterminals: Default::default(),
+      custom_states: Default::default(),
+      string_store,
     })
+  }
+
+  pub fn new() -> sync::Arc<Self> {
+    Self::from_string_store(Default::default())
   }
 }

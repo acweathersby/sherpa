@@ -154,6 +154,18 @@ pub enum SherpaError {
   Multi(Vec<SherpaError>),
 }
 
+impl IntoIterator for SherpaError {
+  type IntoIter = std::vec::IntoIter<Self::Item>;
+  type Item = SherpaError;
+
+  fn into_iter(self) -> Self::IntoIter {
+    match self {
+      Multi(errors) => errors.into_iter(),
+      err => vec![err].into_iter(),
+    }
+  }
+}
+
 impl SherpaError {
   /// Return the Errors severity
   pub fn get_severity(&self) -> SherpaErrorSeverity {
